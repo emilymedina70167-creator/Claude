@@ -1,19 +1,14 @@
 // 入口：artifact 里引入 la-kit.js 后，自动渲染 <script type="text/markdown"> 里的课件
 import css from './styles.css';
+import katexCss from 'virtual:katex-css';
 import { renderLesson, mdToHtml } from './render.js';
 import { blocks } from './blocks/index.js';
 
-const KATEX_CSS = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
-
 function injectStyles() {
   if (document.getElementById('la-kit-style')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = KATEX_CSS;
-  document.head.appendChild(link);
   const style = document.createElement('style');
   style.id = 'la-kit-style';
-  style.textContent = css;
+  style.textContent = katexCss + '\n' + css;
   document.head.appendChild(style);
   if (!document.querySelector('meta[name="viewport"]')) {
     const m = document.createElement('meta');
@@ -41,7 +36,9 @@ function renderAll() {
   sources.forEach((s) => {
     const article = document.createElement('article');
     article.className = 'la-lesson';
-    s.after(article);
+    // 课件脚本可能被解析进 <head>（页面没写 <body> 时），那就放进 body
+    if (s.closest('head')) document.body.appendChild(article);
+    else s.after(article);
     renderLesson(dedent(s.textContent), article);
   });
 }

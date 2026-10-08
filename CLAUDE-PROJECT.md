@@ -1,30 +1,37 @@
 # 线代学习台 · 课件格式说明
 
-我用「线代学习台」组件库学习线性代数（iPad 上看）。**讲课、讲例题、出练习时，请做成一个 HTML artifact**，用下面的固定模板，把课件内容写在 `<script type="text/markdown">` 里，组件库会自动把它渲染成互动课件（变换动画、可拖动向量、逐步行化简、练习题、记忆卡等）。
+我用「线代学习台」组件库学习线性代数（在 iPad 上看）。**讲课、讲例题、出练习时，请做成一个 artifact**，课件内容用 Markdown 写在 `<script type="text/markdown">` 里，组件库会把它渲染成互动课件（变换动画、可拖动向量、逐步行化简、练习题、记忆卡等）。
 
-## artifact 模板（必须原样使用）
+## 组件库在哪里
+
+组件库是我的 artifact「线代学习台」里的文件 `la-kit.js`：
+
+- 组件库 artifact：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
+- 文件路径：`la-kit.js`
+
+artifact 不能从 GitHub 或其他网站加载脚本，所以**每次发布课件 artifact 时，都要用 `files` 参数把这个文件从组件库 artifact 复制过来**（服务器端复制，不需要下载，也不要自己写或粘贴 `la-kit.js` 的内容）：
+
+```json
+{ "la-kit.js": { "artifact": "https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF", "path": "la-kit.js" } }
+```
+
+## 课件页面模板（必须照这个写）
 
 ```html
-<!doctype html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="https://cdn.jsdelivr.net/gh/emilymedina70167-creator/Claude@0d29556135ff7cdb5fd6bd9d92d0af7322a16a8c/kit/dist/la-kit.js"></script>
-</head>
-<body>
+<title>第 3 课 · 特征值</title>
+<script src="la-kit.js"></script>
 <script type="text/markdown">
-# 课件标题
+# 第 3 课：特征值与特征向量
 
 正文……
 </script>
-</body>
-</html>
 ```
+
+页面就是这几行，不需要 `<!doctype>`、`<html>`、`<head>`、`<body>`。`<title>` 写简短的课名。
 
 ## 规则
 
-1. artifact 类型用 **HTML**（不要用 React）。不要自己写 CSS、JavaScript 或 SVG，也不要改模板里的 `<script src>` 地址——所有样式和互动都由组件库负责。你只写 `<script type="text/markdown">` 里的内容。
+1. 不要自己写 CSS、JavaScript 或 SVG，也不要从 CDN 加载任何库——样式、公式、互动全部由 `la-kit.js` 负责。你只写 `<script type="text/markdown">` 里的内容。
 2. 内容第一行是 `# 标题`，用 `##` 分节。正文是普通 Markdown，不需要转义 `<`、`&`。不要在内容里写 `</script>`。
 3. 公式用 `$...$`（行内）和 `$$...$$`（独立成行）。
 4. 互动组件就是带特定语言名的代码块（见下方「组件一览」）。组件里每行一个 `key: value`，可以续行。矩阵写成 `[[1, 2], [3, 4]]`，可以用分数 `1/2`。
@@ -33,8 +40,9 @@
 7. 习题解答放进 `solution`，提示放进 `hint`，让我先自己想。易错点用 `warning`。
 8. 每节课结尾放 2–4 张 `card` 记忆卡，总结本节最重要的概念。
 9. 中文讲解，术语第一次出现时附英文（我在美国上大学，考试是英文），例如「特征值 eigenvalue」。
-10. 一节课太长时可以分成几个 artifact（例如「上」「下」）。简短的问答、闲聊照常在对话里回复，不用做 artifact。
-11. 如果 artifact 显示「组件出错」，说明某个组件写法不对，请对照下方格式修正后重新生成。
+10. 每节课发布成一个新的 artifact；太长时可以分成「上」「下」两个。简短的问答、闲聊照常在对话里回复，不用做 artifact。
+11. 如果页面显示「组件出错」，说明某个组件写法不对，请对照下方格式修正后重新发布。如果整页只显示 Markdown 原文，说明 `la-kit.js` 没有复制成功，请检查 `files` 参数。
+12. 不要修改、重新发布或删除组件库 artifact 本身。
 
 ## 组件一览
 

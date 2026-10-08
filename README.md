@@ -22,15 +22,11 @@ Claude 只负责写课件内容（Markdown 加组件标记），画图、互动�
 
 ## artifact 是怎么加载组件库的
 
-`CLAUDE-PROJECT.md` 模板里的这一行会通过 jsDelivr 从本仓库加载组件库：
+claude.ai 的 artifact 不能从 GitHub 加载脚本，也不能加载外部样式和字体，所以组件库打包成一个完全自包含的文件 `kit/dist/la-kit.js`（含 markdown-it、KaTeX 和内嵌字体），发布在 artifact「线代学习台」里：
 
-```html
-<script src="https://cdn.jsdelivr.net/gh/emilymedina70167-creator/Claude@<提交号>/kit/dist/la-kit.js"></script>
-```
+https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
 
-`@` 后面是一个**提交号（commit hash）**，指向固定的一份代码，不需要版本标签，也永远不会变。组件库加载后，会自动把 `<script type="text/markdown">` 里的课件渲染出来。
-
-组件库更新时，`CLAUDE-PROJECT.md` 里的提交号也会一起更新，把新的内容重新粘贴到 Claude 项目指令即可。
+这个 artifact 的页面是示例课，`la-kit.js` 是它的附带文件。Claude 发布每节课时，用 `files` 参数在服务器端把 `la-kit.js` 复制进新的课件 artifact，页面里只需要 `<script src="la-kit.js">`。
 
 ## 仓库结构
 
@@ -54,4 +50,4 @@ npm test          # 单元测试
 npm run build     # 重新生成 kit/dist/la-kit.js
 ```
 
-提交并推送后，把 `CLAUDE-PROJECT.md` 里的提交号换成包含新 `la-kit.js` 的那次提交。
+然后重新发布组件库 artifact（同一个地址，页面是 `kit/examples/demo.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`）。之后新生成的课件会自动用上新版；已经生成的课件保留当时复制的版本。
