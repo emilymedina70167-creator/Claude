@@ -1,0 +1,56 @@
+// 页面里调用 Claude：新版 artifact 用 claude.use("sample")，
+// 旧版对话 artifact 用 window.claude.complete。都没有就返回 null（相关功能隐藏）。
+let pending = null;
+
+export function getAI() {
+  if (pending) return pending;
+  pending = (async () => {
+    const c = window.claude;
+    if (!c) return null;
+    if (typeof c.use === 'function') {
+      let sample = null;
+      try { sample = await c.use('sample'); } catch { sample = null; }
+      if (!sample) return null;
+      let toolsOk = false;
+      try { toolsOk = !!(await sample.limits())?.tools; } catch { toolsOk = false; }
+      return {
+        tools: toolsOk,
+        ask: (input, opts = {}) => sample(input, opts).then((r) => r.text),
+        json: (input, opts = {}) => sample.json(input, opts),
+      };
+    }
+    if (typeof c.complete === 'function') {
+      const flat = (input) => (typeof input === 'string' ? input : input.map((t) => `${t.role === 'user' ? '学生/页面' : '助教'}：${t.content}`).join('\n\n'));
+      const ask = async (input, opts = {}) => {
+        const text = await c.complete(flat(input));
+        opts.onText?.({ text, delta: text });
+        return text;
+      };
+      return {
+        tools: false,
+        ask,
+        json: async (input) => {
+          const text = await c.complete(flat(input));
+          const m = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+          if (!m) throw { code: 'invalid_json', message: 'no json', text };
+          return JSON.parse(m[0]);
+        },
+      };
+    }
+    return null;
+  })();
+  return pending;
+}
+
+export function errorText(e) {
+  const code = e?.code;
+  if (code === 'not_granted' || code === 'sampling_disabled' || code === 'not_declared' || code === 'capability_disabled') return '这个页面没有获得调用 Claude 的权限。';
+  if (code === 'rate_limited') return '调用太频繁或额度用完了，稍后再试。';
+  if (code === 'session_expired') return '登录已过期，请重新登录 Claude。';
+  if (code === 'refused') return 'Claude 没有回答这个问题，换个问法试试。';
+  if (code === 'invalid_json') return 'Claude 的回复格式不对，请再试一次。';
+  if (code === 'cancelled') return '已停止。';
+  return '连接出了问题，请再试一次。';
+}
+
+export const AI_PERMANENT = new Set(['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed']);

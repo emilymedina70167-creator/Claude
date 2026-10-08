@@ -16,6 +16,7 @@ export function createPlane(container, { range = 5 } = {}) {
     Y: (y) => SIZE / 2 - (y / p.range) * (SIZE / 2),
     clear() {
       svg.innerHTML = `<defs><clipPath id="${clipId}"><rect width="${SIZE}" height="${SIZE}"/></clipPath></defs>`;
+      p.placed = [];
       p.layer = el('g', { 'clip-path': `url(#${clipId})` });
       svg.appendChild(p.layer);
       p.top = el('g');
@@ -33,6 +34,7 @@ export function createPlane(container, { range = 5 } = {}) {
       if (minor) {
         p.text([R - 0.35, -0.45], 'x', 'axis-label');
         p.text([0.3, R - 0.5], 'y', 'axis-label');
+        p.placed.push(box(p.X(R - 0.35) + 4, p.Y(-0.45) - 5, 12), box(p.X(0.3) + 4, p.Y(R - 0.5) - 5, 12));
       }
     },
     line(a, b, cls, extra = {}) {
@@ -53,10 +55,29 @@ export function createPlane(container, { range = 5 } = {}) {
       add(g, 'line', { x1, y1, x2: bx, y2: by, 'stroke-width': width, class: dashed ? 'vec-line dashed' : 'vec-line' });
       add(g, 'polygon', { points: `${x2},${y2} ${bx - uy * h * 0.45},${by + ux * h * 0.45} ${bx + uy * h * 0.45},${by - ux * h * 0.45}`, class: 'vec-head' });
       if (label) {
-        const t = add(g, 'text', { x: x2 + ux * 24, y: y2 + uy * 24, class: 'vec-label', 'text-anchor': ux < -0.3 ? 'end' : ux > 0.3 ? 'start' : 'middle', 'dominant-baseline': 'middle' });
+        const [cx, cy] = p.placeLabel(x2, y2, ux, uy, label);
+        const t = add(g, 'text', { x: cx, y: cy, class: 'vec-label', 'text-anchor': 'middle', 'dominant-baseline': 'central' });
         t.textContent = label;
       }
       return g;
+    },
+    // 给标签找一个不和已有标签重叠、也不出界的位置
+    placeLabel(x, y, ux, uy, label) {
+      const w = textWidth(label);
+      const along = 14 + (w / 2) * Math.abs(ux) + 10 * Math.abs(uy);
+      const cands = [
+        [x + ux * along, y + uy * along],
+        [x + ux * 10 - uy * (w / 2 + 12), y + uy * 10 + ux * 22],
+        [x + ux * 10 + uy * (w / 2 + 12), y + uy * 10 - ux * 22],
+        [x + ux * (along + 22), y + uy * (along + 22)],
+        [x - uy * (w / 2 + 16), y + ux * 26],
+        [x + uy * (w / 2 + 16), y - ux * 26],
+      ];
+      const inside = ([cx, cy]) => cx - w / 2 > 2 && cx + w / 2 < SIZE - 2 && cy > 12 && cy < SIZE - 10;
+      const free = (c) => !p.placed.some((b) => overlap(b, box(c[0], c[1], w)));
+      const pick = cands.find((c) => inside(c) && free(c)) || cands.find(inside) || cands[0];
+      p.placed.push(box(pick[0], pick[1], w));
+      return pick;
     },
     dot(pt, cls = 'dot', r = 5) {
       return add(p.layer, 'circle', { cx: p.X(pt[0]), cy: p.Y(pt[1]), r, class: cls });
@@ -118,6 +139,11 @@ function add(parent, tag, attrs) {
   parent.appendChild(e);
   return e;
 }
+
+// 粗略估算标签宽度（中文字更宽）
+const textWidth = (s) => [...String(s)].reduce((w, ch) => w + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 17 : /[₀-₉]/.test(ch) ? 7 : 10), 0);
+const box = (cx, cy, w) => ({ l: cx - w / 2 - 2, r: cx + w / 2 + 2, t: cy - 11, b: cy + 11 });
+const overlap = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
 
 export const snap = (v, step) => {
   const r = Math.round(v);

@@ -68,7 +68,7 @@ export function mdToHtml(src, { inline = false } = {}) {
   return unmask(html, store);
 }
 
-// 渲染整篇课件并挂载互动组件
+// 渲染一段课件并挂载互动组件
 export function renderLesson(src, root) {
   const pending = [];
   const defaultFence = md.renderer.rules.fence;
@@ -100,4 +100,38 @@ export function renderLesson(src, root) {
 export function lessonTitle(src) {
   const m = String(src).match(/^\s*#\s+(.+)$/m);
   return m ? m[1].replace(/\$[^$]*\$/g, (x) => x.slice(1, -1)).trim() : '未命名课件';
+}
+
+// 课件开头可选的设置块：
+// ---
+// mode: guided
+// ---
+export function frontMatter(src) {
+  const m = String(src).match(/^\s*---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/);
+  if (!m) return { meta: {}, body: src };
+  const meta = {};
+  for (const line of m[1].split('\n')) {
+    const kv = line.match(/^\s*([\w-]+)\s*[:：]\s*(.*)$/);
+    if (kv) meta[kv[1].toLowerCase()] = kv[2].trim();
+  }
+  return { meta, body: src.slice(m[0].length) };
+}
+
+// 按二级标题切成小节（跳过代码块里的 ##）
+export function splitStages(src) {
+  const stages = [];
+  let cur = { title: '', lines: [] };
+  let fence = null;
+  for (const line of String(src).split('\n')) {
+    const f = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length && line.trim() === f[1]) fence = null; }
+    else if (f) fence = f[1];
+    else if (/^##\s+/.test(line)) {
+      if (cur.lines.join('').trim() || cur.title) stages.push(cur);
+      cur = { title: line.replace(/^##\s+/, '').trim(), lines: [] };
+    }
+    cur.lines.push(line);
+  }
+  stages.push(cur);
+  return stages.map((s) => ({ title: s.title, src: s.lines.join('\n') }));
 }

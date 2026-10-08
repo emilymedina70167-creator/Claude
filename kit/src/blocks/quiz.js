@@ -2,6 +2,7 @@
 import { parseFields } from '../parse.js';
 import { Frac } from '../linalg.js';
 import { widget, mdToHtml } from './common.js';
+import { session } from '../session.js';
 
 export function quiz(el, src) {
   const { fields, lines } = parseFields(src);
@@ -23,14 +24,29 @@ export function quiz(el, src) {
     <div class="q-feedback" hidden></div>`;
 
   const fb = body.querySelector('.q-feedback');
+  const gateDone = session.gate(el, fields.title || '练习');
+  const qText = q.replace(/\s+/g, ' ').slice(0, 120);
+  let tries = 0;
+  const wrongPicks = [];
+  let closed = false;
+  const settle = (ok) => {
+    if (closed) return;
+    closed = true;
+    gateDone();
+    session.record({ type: 'quiz', q: qText, ok, attempts: tries, wrong: wrongPicks, stage: session.stageOf(el) });
+  };
   const explain = fields.explain || fields.explanation || '';
-  const feedback = (ok, extra = '') => {
+  const feedback = (ok, extra = '', picked = '') => {
+    tries++;
+    if (!ok && picked) wrongPicks.push(picked);
+    if (ok) settle(true);
     fb.hidden = false;
     fb.className = `q-feedback ${ok ? 'is-ok' : 'is-bad'}`;
     fb.innerHTML = `<div class="q-verdict">${ok ? '✓ 正确' : '✗ 再想想'}</div>${extra}${explain && ok ? mdToHtml(explain) : ''}${!ok ? '<button type="button" class="link-btn q-reveal">看解析</button>' : ''}`;
     fb.querySelector('.q-reveal')?.addEventListener('click', () => reveal());
   };
   const reveal = () => {
+    settle(false);
     body.querySelectorAll('.q-opt').forEach((b, i) => options[i].correct && b.classList.add('is-answer'));
     if (fields.answer !== undefined) {
       fb.innerHTML = `<div>答案：${mdToHtml(fields.answer, { inline: true })}</div>${explain ? mdToHtml(explain) : ''}`;
@@ -45,7 +61,7 @@ export function quiz(el, src) {
       const ok = options[+btn.dataset.i].correct;
       body.querySelectorAll('.q-opt').forEach((b) => b.classList.remove('is-right', 'is-wrong'));
       btn.classList.add(ok ? 'is-right' : 'is-wrong');
-      feedback(ok);
+      feedback(ok, '', options[+btn.dataset.i].text.slice(0, 60));
     }));
   } else if (multi) {
     body.querySelectorAll('.q-opt').forEach((btn) => btn.addEventListener('click', () => {
@@ -59,7 +75,7 @@ export function quiz(el, src) {
         if (picked !== options[i].correct) ok = false;
         if (picked) b.classList.add(options[i].correct ? 'is-right' : 'is-wrong');
       });
-      feedback(ok);
+      feedback(ok, '', ok ? '' : [...body.querySelectorAll('.q-opt.is-picked')].map((b) => options[+b.dataset.i].text.slice(0, 40)).join(' + '));
     });
   } else {
     const input = body.querySelector('.q-input');
@@ -67,7 +83,7 @@ export function quiz(el, src) {
       const ok = matches(input.value, fields.answer);
       input.classList.toggle('is-wrong', !ok);
       input.classList.toggle('is-right', ok);
-      feedback(ok);
+      feedback(ok, '', ok ? '' : input.value.trim());
     };
     body.querySelector('.q-check').addEventListener('click', check);
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') check(); });

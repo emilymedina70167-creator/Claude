@@ -1,0 +1,218 @@
+<title>线代学习台</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+mode: guided
+unit: 单元 1 · 矩阵乘向量
+---
+
+# 单元 1 · 矩阵乘向量：矩阵到底对向量做了什么？
+
+这一单元**不先给结论**。你会先算几个数、在图上拖几下，然后用自己的话说出规律。每一节完成练习后，才会出现「继续」。
+
+先只需要知道一条计算规则：**$A\mathbf x$ 的第 $i$ 个分量 = $A$ 的第 $i$ 行与 $\mathbf x$ 的点积**（对应分量相乘再相加）。
+
+$$
+\begin{bmatrix} 2 & -1 \\ 1 & 3 \end{bmatrix}\begin{bmatrix} 3 \\ 1 \end{bmatrix}
+= \begin{bmatrix} 2\cdot 3 + (-1)\cdot 1 \\ 1\cdot 3 + 3\cdot 1 \end{bmatrix}
+= \begin{bmatrix} 5 \\ 6 \end{bmatrix}
+$$
+
+```answer
+title: 热身
+q: 用同一个矩阵 $A = \begin{bmatrix} 2 & -1 \\ 1 & 3 \end{bmatrix}$，计算 $A\begin{bmatrix} 1 \\ 2 \end{bmatrix}$。
+let A = [[2, -1], [1, 3]]
+answer: A*[1, 2]
+before: A\begin{bmatrix}1\\2\end{bmatrix} =
+hint: 第一个分量是第一行 $(2, -1)$ 和 $(1, 2)$ 的点积：$2\cdot1 + (-1)\cdot 2$。
+explain: 第一行：$2\cdot 1 + (-1)\cdot 2 = 0$；第二行：$1\cdot 1 + 3\cdot 2 = 7$。
+```
+
+## 1. 两个特别的向量
+
+还是这个矩阵 $A = \begin{bmatrix} 2 & -1 \\ 1 & 3 \end{bmatrix}$。这次乘两个最简单的向量：$\hat\imath = \begin{bmatrix}1\\0\end{bmatrix}$ 和 $\hat\jmath = \begin{bmatrix}0\\1\end{bmatrix}$。
+
+```answer
+title: 算一算 A·î
+let A = [[2, -1], [1, 3]]
+answer: A*[1, 0]
+before: A\begin{bmatrix}1\\0\end{bmatrix} =
+explain: 第一行：$2\cdot 1 + (-1)\cdot 0 = 2$；第二行：$1\cdot 1 + 3\cdot 0 = 1$。
+```
+
+```answer
+title: 算一算 A·ĵ
+let A = [[2, -1], [1, 3]]
+answer: A*[0, 1]
+before: A\begin{bmatrix}0\\1\end{bmatrix} =
+explain: 第一行：$2\cdot 0 + (-1)\cdot 1 = -1$；第二行：$1\cdot 0 + 3\cdot 1 = 3$。
+```
+
+```conjecture
+title: 你发现了什么？
+q: 把你刚算出的两个结果和矩阵 $A$ 本身对比一下。你注意到什么？为什么会这样？
+rubric: 要点：(1) $A\hat\imath$ 正好是 $A$ 的第一列，$A\hat\jmath$ 正好是第二列；(2) 原因：乘 $(1,0)$ 时，每一行里第二列的元素都乘了 0，只留下第一列的元素（反之亦然）。说出 (1) 算部分正确，说出 (1)(2) 算正确。
+answer: $A\hat\imath$ 就是 $A$ 的**第一列**，$A\hat\jmath$ 就是**第二列**。因为乘 $(1,0)$ 时，每一行的第二个元素都乘了 0，只剩第一列的元素。一般地，$A\mathbf e_j$ = $A$ 的第 $j$ 列。
+```
+
+```answer
+title: 检验你的猜想（不用算）
+q: 如果你的发现是对的，那下面这个就不需要计算了，直接写出来：
+$$\begin{bmatrix} 1 & 4 & -2 \\ 0 & 3 & 5 \\ 2 & -1 & 6 \end{bmatrix}\begin{bmatrix} 0 \\ 0 \\ 1 \end{bmatrix} = \ ?$$
+answer: [-2, 5, 6]
+hint: $(0, 0, 1)$ 只「选中」了第三个位置。
+explain: $(0,0,1)$ 只保留第三列，所以结果就是第三列 $(-2, 5, 6)$。
+```
+
+## 2. 在图上看
+
+把 $A$ 看成一个**变换 transformation**：它把平面上的每个向量 $\mathbf x$ 送到 $A\mathbf x$。上一节你发现：$\hat\imath$ 被送到第一列 $\mathbf a_1$，$\hat\jmath$ 被送到第二列 $\mathbf a_2$。
+
+```predict
+title: 先猜：A 把 (1, 1) 送到哪里？
+q: 图上画出了 $\mathbf a_1$（$\hat\imath$ 的去向）和 $\mathbf a_2$（$\hat\jmath$ 的去向），灰色虚线是 $\mathbf x = (1, 1)$。**不要计算**，拖动紫色圆点到你认为 $A\mathbf x$ 所在的位置。
+let A = [[2, -1], [1, 3]]
+grid lerp(I, A, t) after
+vector col(A, 1) color=blue label=a1
+vector col(A, 2) color=orange label=a2
+vector [1, 1] color=gray dashed label=x before
+vector A*[1, 1] color=green label=Ax after
+answer: A*[1, 1]
+explain: $(1,1) = \hat\imath + \hat\jmath$。网格变形后，「往右一格再往上一格」就变成了「沿 $\mathbf a_1$ 走一步，再沿 $\mathbf a_2$ 走一步」，所以 $A\mathbf x = \mathbf a_1 + \mathbf a_2 = (1, 4)$。
+```
+
+```scene
+title: 让 Ax 命中目标
+q: 拖动 $\mathbf x$，让绿色的 $A\mathbf x$ 落到目标点 $(3, 5)$。蓝色网格是变换后的网格：原来的每个格子被变成了一个平行四边形。
+let A = [[2, -1], [1, 3]]
+let x = [1, 0] drag
+grid A faint
+point [3, 5] color=green label=目标
+vector col(A, 1) color=blue label=a1 thin
+vector col(A, 2) color=orange label=a2 thin
+vector x color=gray label=x
+vector A*x color=green label=Ax
+show $\mathbf x = {x}$，$A\mathbf x = {A*x}$
+goal A*x = [3, 5] msg="命中！看看现在的 x，再数一数：目标点在变形后的网格上是沿 a₁ 走几步、沿 a₂ 走几步？"
+```
+
+## 3. 为什么是这样？
+
+$\mathbf x = (x_1, x_2)$ 可以拆成 $x_1\hat\imath + x_2\hat\jmath$。拖动下面两个滑块，比较两件事：**沿 $\mathbf a_1$ 走 $x_1$ 步再沿 $\mathbf a_2$ 走 $x_2$ 步**，和**直接算 $A\mathbf x$**。
+
+```scene
+title: 两种算法，同一个结果
+let A = [[2, -1], [1, 3]]
+slider x1 -2 2 = 1 step=0.5 label="x₁"
+slider x2 -2 2 = 1 step=0.5 label="x₂"
+grid A faint
+vector A*[x1, x2] color=green label=Ax width=7
+vector x1*col(A, 1) color=blue label="x₁a₁"
+vector x2*col(A, 2) from x1*col(A, 1) color=orange label="x₂a₂"
+show $x_1\mathbf a_1 + x_2\mathbf a_2 = {x1*col(A, 1) + x2*col(A, 2)}$
+show $A\mathbf x = {A*[x1, x2]}$
+```
+
+```conjecture
+title: 写出一般规律
+q: 用 $A$ 的两列 $\mathbf a_1, \mathbf a_2$ 和 $\mathbf x$ 的分量 $x_1, x_2$，写出 $A\mathbf x$ 的一般公式，并说说为什么成立。
+placeholder: 我觉得 Ax = …… 因为……
+rubric: 要点：(1) $A\mathbf x = x_1\mathbf a_1 + x_2\mathbf a_2$（$A\mathbf x$ 是 $A$ 的列的线性组合，系数是 $\mathbf x$ 的分量）；(2) 理由二选一即可：按行展开计算后按列重新整理；或者 $\mathbf x = x_1\hat\imath + x_2\hat\jmath$，而 $A\hat\imath = \mathbf a_1$、$A\hat\jmath = \mathbf a_2$。只写出公式算部分正确。
+answer: $A\mathbf x = x_1\mathbf a_1 + x_2\mathbf a_2$。理由：$\mathbf x = x_1\hat\imath + x_2\hat\jmath$，而 $A$ 把 $\hat\imath$ 送到 $\mathbf a_1$、把 $\hat\jmath$ 送到 $\mathbf a_2$，网格线保持平行等距，所以「走 $x_1$ 步 $\hat\imath$、$x_2$ 步 $\hat\jmath$」变成「走 $x_1$ 步 $\mathbf a_1$、$x_2$ 步 $\mathbf a_2$」。
+```
+
+## 4. 把结论写下来
+
+```theorem
+title: 矩阵乘向量的列观点 Column view
+若 $A = \begin{bmatrix} \mathbf a_1 & \mathbf a_2 & \cdots & \mathbf a_n \end{bmatrix}$，$\mathbf x = (x_1, \dots, x_n)$，则
+$$A\mathbf x = x_1\mathbf a_1 + x_2\mathbf a_2 + \cdots + x_n\mathbf a_n.$$
+$A\mathbf x$ 是 $A$ 的列的**线性组合 linear combination**，组合系数就是 $\mathbf x$ 的分量。特别地，$A\mathbf e_j = \mathbf a_j$。
+```
+
+```key
+一个矩阵完全由「它把每个基向量送到哪里」决定：**第 $j$ 列 = $\mathbf e_j$ 的去向**。所以读一个矩阵，就是读出 $\hat\imath$、$\hat\jmath$ 被送到了哪里。
+```
+
+反过来试试：下面这张图只画了变换后的网格，以及 $\hat\imath$、$\hat\jmath$ 的去向，没有标数字。
+
+```scene
+title: 读图：这是哪个矩阵？
+let B = [[1, -1], [2, 1]]
+grid B
+vector col(B, 1) color=blue label="î 的去向"
+vector col(B, 2) color=orange label="ĵ 的去向"
+```
+
+```answer
+title: 写出这个矩阵
+q: 根据上图写出变换矩阵 $B$。
+answer: [[1, -1], [2, 1]]
+before: B =
+hint: 第一列是 $\hat\imath$ 落到的格点坐标，第二列是 $\hat\jmath$ 落到的格点坐标。数格子时看浅灰色的原始网格。
+explain: $\hat\imath \mapsto (1, 2)$ 是第一列，$\hat\jmath \mapsto (-1, 1)$ 是第二列：$B = \begin{bmatrix} 1 & -1 \\ 2 & 1 \end{bmatrix}$。
+```
+
+## 5. 练习
+
+题目由程序随机生成，答案由程序计算，可以一直练。两种算法（按行点积、按列组合）都试试，看哪种更顺手。
+
+```practice
+type: matvec, columns, combo
+count: 4
+```
+
+## 6. 单元检测
+
+```quiz
+q: 若矩阵 $A$ 的第二列全是 0，那么 $A$ 把 $\hat\jmath$ 送到哪里？
+- [ ] $\hat\jmath$ 本身，不动
+- [x] 原点（零向量）
+- [ ] 第一列的位置
+- [ ] 取决于第一列
+explain: $A\hat\jmath$ = 第二列 = $\mathbf 0$。整个 $\hat\jmath$ 方向都被压到了原点。
+```
+
+```quiz
+q: $A$ 是 $3\times 2$ 矩阵。下列哪项正确？
+- [ ] $\mathbf x$ 要有 3 个分量，$A\mathbf x$ 有 2 个分量
+- [x] $\mathbf x$ 要有 2 个分量，$A\mathbf x$ 有 3 个分量
+- [ ] $\mathbf x$ 和 $A\mathbf x$ 都有 3 个分量
+explain: $A\mathbf x = x_1\mathbf a_1 + x_2\mathbf a_2$：有 2 列，所以需要 2 个系数；每一列在 $\mathbb R^3$ 里，所以结果有 3 个分量。
+```
+
+```answer
+title: 不知道矩阵，也能算
+q: 某个矩阵 $A$ 满足 $A\hat\imath = \begin{bmatrix} 2 \\ 5 \end{bmatrix}$，$A\hat\jmath = \begin{bmatrix} -1 \\ 3 \end{bmatrix}$。求 $A\begin{bmatrix} 3 \\ -2 \end{bmatrix}$。
+answer: 3*[2, 5] - 2*[-1, 3]
+before: A\begin{bmatrix}3\\-2\end{bmatrix} =
+hint: $(3, -2) = 3\hat\imath - 2\hat\jmath$。
+explain: $A\mathbf x = 3\begin{bmatrix}2\\5\end{bmatrix} - 2\begin{bmatrix}-1\\3\end{bmatrix} = \begin{bmatrix}8\\9\end{bmatrix}$。
+```
+
+```conjecture
+title: 讲给同学听
+q: 用一两句话向同学解释：为什么只要知道 $A$ 把 $\hat\imath$ 和 $\hat\jmath$ 送到哪里，就能知道 $A$ 把**任何**向量送到哪里？
+rubric: 要点：任何向量都能写成 $x_1\hat\imath + x_2\hat\jmath$；$A\mathbf x = x_1 A\hat\imath + x_2 A\hat\jmath$（列的线性组合），所以只要知道 $A\hat\imath$、$A\hat\jmath$（也就是 $A$ 的两列），就能算出任何 $A\mathbf x$。
+answer: 任何 $\mathbf x$ 都是 $x_1\hat\imath + x_2\hat\jmath$，而 $A\mathbf x = x_1(A\hat\imath) + x_2(A\hat\jmath)$。所以 $\hat\imath$、$\hat\jmath$ 的去向（就是 $A$ 的两列）决定了一切。
+```
+
+```card
+front: $A$ 的第 $j$ 列是什么？
+back: 第 $j$ 个标准基向量的去向：$\mathbf a_j = A\mathbf e_j$。
+```
+
+```card
+front: $A\mathbf x$ 的列观点
+back: $A\mathbf x = x_1\mathbf a_1 + \cdots + x_n\mathbf a_n$，即 $A$ 的列以 $\mathbf x$ 的分量为系数的线性组合。
+```
+
+```card
+front: $m\times n$ 矩阵乘向量，$\mathbf x$ 和 $A\mathbf x$ 各有几个分量？
+back: $\mathbf x \in \mathbb R^n$（每列一个系数），$A\mathbf x \in \mathbb R^m$（每列有 $m$ 个分量）。
+```
+
+```summary
+text: 这一单元你自己发现了：**矩阵的列就是基向量的去向**，**$A\mathbf x$ 是列的线性组合**。下一单元会用这个观点看方程组 $A\mathbf x = \mathbf b$：它问的就是「$\mathbf b$ 能不能由 $A$ 的列组合出来」。
+```
+</script>

@@ -1,8 +1,12 @@
 // 入口：artifact 里引入 la-kit.js 后，自动渲染 <script type="text/markdown"> 里的课件
 import css from './styles.css';
 import katexCss from 'virtual:katex-css';
-import { renderLesson, mdToHtml } from './render.js';
+import { renderLesson, mdToHtml, frontMatter, lessonTitle } from './render.js';
 import { blocks } from './blocks/index.js';
+import { session } from './session.js';
+import { renderGuided } from './guided.js';
+import { initTutor } from './tutor.js';
+import { recordText } from './record.js';
 
 function injectStyles() {
   if (document.getElementById('la-kit-style')) return;
@@ -39,12 +43,19 @@ function renderAll() {
     // 课件脚本可能被解析进 <head>（页面没写 <body> 时），那就放进 body
     if (s.closest('head')) document.body.appendChild(article);
     else s.after(article);
-    renderLesson(dedent(s.textContent), article);
+    const { meta, body } = frontMatter(dedent(s.textContent));
+    session.reset(meta.unit || lessonTitle(body));
+    if (/^(guided|引导)$/i.test(meta.mode || '')) renderGuided(body, article, meta);
+    else {
+      session.stages = [{ title: '', src: body, el: article }];
+      renderLesson(body, article);
+    }
   });
+  initTutor();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', renderAll);
 else renderAll();
 
 // 留给高级用法：window.LAKit.render(markdown, element)
-window.LAKit = { render: (md, el) => { injectStyles(); el.classList.add('la-lesson'); renderLesson(md, el); }, mdToHtml, blocks: Object.keys(blocks) };
+window.LAKit = { render: (md, el) => { injectStyles(); el.classList.add('la-lesson'); renderLesson(md, el); }, mdToHtml, blocks: Object.keys(blocks), session, recordText };

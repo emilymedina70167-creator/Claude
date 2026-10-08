@@ -31,7 +31,7 @@ const banner = `/*! 线代学习台 la-kit | https://github.com/emilymedina70167
 await build({
   entryPoints: ['kit/src/main.js'],
   bundle: true,
-  minify: true,
+  minify: !process.env.DEBUG,
   format: 'iife',
   target: ['safari16', 'chrome110', 'firefox110'],
   loader: { '.css': 'text' },
