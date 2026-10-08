@@ -22,13 +22,15 @@ Claude 只负责写课件内容（Markdown 加组件标记），画图、互动�
 
 ## artifact 是怎么加载组件库的
 
-artifact 里的这一行：
+`CLAUDE-PROJECT.md` 模板里的这一行会通过 jsDelivr 从本仓库加载组件库：
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/emilymedina70167-creator/Claude@1/kit/dist/la-kit.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/emilymedina70167-creator/Claude@<提交号>/kit/dist/la-kit.js"></script>
 ```
 
-会通过 jsDelivr 加载本仓库 `v1.x.x` 标签下最新的 `kit/dist/la-kit.js`。组件库加载后，会自动把 `<script type="text/markdown">` 里的课件渲染出来。
+`@` 后面是一个**提交号（commit hash）**，指向固定的一份代码，不需要版本标签，也永远不会变。组件库加载后，会自动把 `<script type="text/markdown">` 里的课件渲染出来。
+
+组件库更新时，`CLAUDE-PROJECT.md` 里的提交号也会一起更新，把新的内容重新粘贴到 Claude 项目指令即可。
 
 ## 仓库结构
 
@@ -52,6 +54,4 @@ npm test          # 单元测试
 npm run build     # 重新生成 kit/dist/la-kit.js
 ```
 
-提交后打一个新标签（例如 `v1.0.1`）并推送。jsDelivr 会在几小时内切到新版本。想立刻生效，可以在浏览器打开
-`https://purge.jsdelivr.net/gh/emilymedina70167-creator/Claude@1/kit/dist/la-kit.js` 清掉缓存。
-如果改动会破坏已有课件的写法，就把大版本号升到 `v2.0.0`，并同步修改 `CLAUDE-PROJECT.md` 里的地址。
+提交并推送后，把 `CLAUDE-PROJECT.md` 里的提交号换成包含新 `la-kit.js` 的那次提交。

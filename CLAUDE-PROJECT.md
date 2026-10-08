@@ -10,7 +10,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="https://cdn.jsdelivr.net/gh/emilymedina70167-creator/Claude@1/kit/dist/la-kit.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/emilymedina70167-creator/Claude@0d29556135ff7cdb5fd6bd9d92d0af7322a16a8c/kit/dist/la-kit.js"></script>
 </head>
 <body>
 <script type="text/markdown">
