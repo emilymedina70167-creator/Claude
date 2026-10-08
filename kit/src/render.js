@@ -2,6 +2,7 @@
 import MarkdownIt from 'markdown-it';
 import katex from 'katex';
 import { blocks } from './blocks/index.js';
+import { session } from './session.js';
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: false, typographer: false });
 
@@ -79,6 +80,11 @@ export function renderLesson(src, root) {
       pending.push({ name, src: tok.content });
       return `<div class="block block-${name}" data-block="${pending.length - 1}"></div>\n`;
     }
+    const near = name.length >= 3 && Object.keys(blocks).find((b) => b !== name && editDistance(b, name) <= 2);
+    if (near) {
+      pending.push({ name: '_typo', src: tok.content, near, wrong: name });
+      return `<div class="block" data-block="${pending.length - 1}"></div>\n`;
+    }
     return defaultFence(tokens, idx, opts, env, self);
   };
   try {
@@ -87,12 +93,18 @@ export function renderLesson(src, root) {
     md.renderer.rules.fence = defaultFence;
   }
   root.querySelectorAll('[data-block]').forEach((el) => {
-    const { name, src: body } = pending[+el.dataset.block];
+    const { name, src: body, near, wrong } = pending[+el.dataset.block];
+    if (name === '_typo') {
+      el.innerHTML = `<div class="block-error"><strong>没有「${escapeHtml(wrong)}」组件</strong>，是不是想写 <code>${near}</code>？<pre>${escapeHtml(body)}</pre></div>`;
+      session.problem(el, wrong, `没有「${wrong}」组件，是不是想写 ${near}？`);
+      return;
+    }
     try {
       blocks[name](el, body);
     } catch (e) {
       console.error(e);
       el.innerHTML = `<div class="block-error"><strong>「${name}」组件出错：</strong>${escapeHtml(e.message)}<pre>${escapeHtml(body)}</pre></div>`;
+      session.problem(el, name, e.message);
     }
   });
 }
@@ -134,4 +146,13 @@ export function splitStages(src) {
   }
   stages.push(cur);
   return stages.map((s) => ({ title: s.title, src: s.lines.join('\n') }));
+}
+
+function editDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  }
+  return d[a.length][b.length];
 }

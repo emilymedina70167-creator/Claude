@@ -6,7 +6,8 @@ import { blocks } from './blocks/index.js';
 import { session } from './session.js';
 import { renderGuided } from './guided.js';
 import { initTutor } from './tutor.js';
-import { recordText } from './record.js';
+import { recordText, toast } from './record.js';
+import { escapeHtml } from './render.js';
 
 function injectStyles() {
   if (document.getElementById('la-kit-style')) return;
@@ -50,8 +51,28 @@ function renderAll() {
       session.stages = [{ title: '', src: body, el: article }];
       renderLesson(body, article);
     }
+    showProblems(article);
   });
   initTutor();
+}
+
+// 课件本身写错的地方集中列在顶部，方便复制给 Claude 修改
+function showProblems(article) {
+  const ps = session.problems;
+  if (!ps.length) return;
+  const where = (p) => (session.stages.length > 1 ? `第 ${p.stage + 1} 节${p.title ? `「${p.title}」` : ''}` : '');
+  const text = `课件「${session.title}」里有 ${ps.length} 处组件写法错误，请对照组件说明修正后重新发布：\n` + ps.map((p, i) => `${i + 1}. ${where(p)} ${p.kind}：${p.msg}`).join('\n');
+  const box = document.createElement('div');
+  box.className = 'lint';
+  box.innerHTML = `<div class="lint-head"><strong>这份课件有 ${ps.length} 处写法错误</strong><button type="button" class="btn btn-sm lint-copy">复制给 Claude</button></div>
+    <ol>${ps.map((p) => `<li>${escapeHtml(`${where(p)} ${p.kind}：${p.msg}`)}</li>`).join('')}</ol>
+    <p class="muted">把错误信息粘贴到对话里，让 Claude 改好后重新发布。下面出错的组件会显示红框。</p>`;
+  const bar = article.querySelector('.g-bar');
+  if (bar) bar.after(box); else article.prepend(box);
+  box.querySelector('.lint-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(text); toast('已复制，去对话里粘贴给 Claude'); }
+    catch { box.querySelector('ol').insertAdjacentHTML('afterend', `<textarea class="lint-text" readonly>${escapeHtml(text)}</textarea>`); }
+  });
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', renderAll);

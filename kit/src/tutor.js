@@ -60,7 +60,6 @@ export async function initTutor() {
     bubble.innerHTML = '<span class="muted">思考中…</span>';
     msgs.appendChild(bubble);
     msgs.scrollTop = msgs.scrollHeight;
-    session.record({ type: 'ask', question: q.slice(0, 200), stage });
     turns.push({ role: 'user', content: q });
     ctl = new AbortController();
     send.textContent = '停止';
@@ -74,10 +73,12 @@ export async function initTutor() {
       const text = await ai.ask([{ role: 'user', content: rules(stage, ai.tools) }, ...turns.slice(-12)], opts);
       bubble.innerHTML = mdToHtml(text);
       turns.push({ role: 'assistant', content: text });
+      session.record({ type: 'ask', question: q.slice(0, 200), answer: text.replace(/\s+/g, ' ').slice(0, 160), stage });
     } catch (err) {
       const kept = err?.text ? mdToHtml(err.text) : '';
       bubble.innerHTML = `${kept}<div class="muted">${errorText(err)}</div>`;
       if (err?.text) turns.push({ role: 'assistant', content: err.text });
+      session.record({ type: 'ask', question: q.slice(0, 200), stage });
       if (AI_PERMANENT.has(err?.code)) { fab.remove(); document.body.classList.remove('ai-on'); document.querySelectorAll('.stage-ask').forEach((b) => (b.hidden = true)); }
     } finally {
       ctl = null;
@@ -105,6 +106,7 @@ function rules(stage, tools) {
 ${tools && scenes.length ? `- 需要演示时，可以调用 set_variable 改动页面上的图（例如换一个矩阵、移动向量），改完告诉学生看哪张图的哪里。` : ''}
 
 课程：${session.title}
+${session.context ? `\n老师提供的背景资料（来自学生的教材和学习档案，回答时以此为准）：\n${session.context.slice(0, 5000)}\n` : ''}
 学生当前所在小节：${st.title || '开头'}
 这一小节的内容（课件原文）：
 ${st.src.slice(0, 3500)}

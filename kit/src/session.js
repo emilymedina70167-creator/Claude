@@ -9,12 +9,16 @@ export const session = {
   log: [], // 学习记录
   scenes: new Map(), // id -> {api, title, stage}
   ai: null, // 可用时是 ask 函数
+  problems: [], // 课件本身的错误（写法不对），集中显示给作者
+  context: '', // context 块：给页面里的 Claude 的背景资料
 
   reset(title) {
     this.title = title;
     this.stages = [];
     this.gates = [];
     this.scenes.clear();
+    this.problems = [];
+    this.context = '';
     this.log = load(title)?.log || [];
   },
 
@@ -50,6 +54,12 @@ export const session = {
 
   stageDone(i) {
     return this.gates.filter((g) => g.stage === i).every((g) => g.done);
+  },
+
+  problem(el, kind, msg) {
+    const i = this.stageOf(el);
+    this.problems.push({ stage: i, title: this.stages[i]?.title || '', kind, msg });
+    emit();
   },
 
   on(f) { listeners.add(f); return () => listeners.delete(f); },

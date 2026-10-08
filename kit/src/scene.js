@@ -12,6 +12,7 @@
 import { compile, isNum, isVec, isMat, valueTeX, numText } from './expr.js';
 import { createPlane, snap as snapTo } from './plot.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
+import { session } from './session.js';
 
 const COLOR = {
   blue: 'var(--v1)', orange: 'var(--v2)', green: 'var(--v3)', purple: 'var(--v4)', gold: 'var(--v5)',
@@ -329,6 +330,7 @@ export function createScene(container, src, opts = {}) {
   });
 
   draw();
+  if (lastError) session.problem(container, opts.kind || 'scene', `图形描述有误：${lastError}`);
 
   const goals = cmds.filter((c) => c.kind === 'goal').length;
   return {

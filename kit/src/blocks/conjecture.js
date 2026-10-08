@@ -66,7 +66,7 @@ export function conjecture(el, src) {
     const prompt = `你是一位耐心的线性代数助教，正在批改学生在探究活动中写下的发现。学生在美国读大学，用中文交流，术语可以附英文。
 
 课程：${session.title}
-当前小节内容（供参考）：
+${session.context ? `背景资料：\n${session.context.slice(0, 3000)}\n` : ''}当前小节内容（供参考）：
 ${(session.stages[session.stageOf(el)]?.src || '').slice(0, 2500)}
 
 问题：${q}

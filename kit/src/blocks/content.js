@@ -1,5 +1,6 @@
 // 纯内容类组件：定义/定理/重点/易错 提示框，可折叠的提示/解答，翻转卡片
 import { parseFields } from '../parse.js';
+import { session } from '../session.js';
 import { mdToHtml } from './common.js';
 
 const CALLOUTS = {
@@ -39,4 +40,10 @@ export function card(el, src) {
     </button>`;
   const btn = el.querySelector('.flashcard');
   btn.addEventListener('click', () => btn.classList.toggle('flipped'));
+}
+
+// context：不显示，只作为页面里 Claude 的背景资料（资料原文、学生情况等）
+export function context(el, src) {
+  session.context += (session.context ? '\n\n' : '') + src.trim();
+  el.remove();
 }

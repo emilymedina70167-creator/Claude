@@ -21,7 +21,7 @@ export function recordText() {
     if (e.type === 'predict') lines.push(`预测「${e.title}」：猜 (${e.guess}) ，实际 (${e.answer.map((x) => Math.round(x * 100) / 100)})，${e.ok ? '猜得很准' : '偏差较大'}`);
     if (e.type === 'conjecture' || e.type === 'conjecture-try') lines.push(`猜想「${e.title}」：我写「${e.answer}」→ ${e.verdict}`);
     if (e.type === 'quiz') lines.push(`选择题「${e.q}」：${e.ok ? (e.attempts === 1 ? '一次答对' : `第 ${e.attempts} 次答对`) : '看了解析'}${e.wrong?.length ? `｜选错过：${e.wrong.join('；')}` : ''}`);
-    if (e.type === 'ask') lines.push(`问了 Claude：「${e.question}」`);
+    if (e.type === 'ask') lines.push(`问了 Claude：「${e.question}」${e.answer ? `→ 它答：「${e.answer}${e.answer.length >= 160 ? '…' : ''}」` : ''}`);
   }
   if (lines.length === 1) lines.push('（还没有记录）');
   lines.push('请根据这些记录判断我哪里还没掌握，针对性地追问或补讲。');

@@ -3,7 +3,7 @@ import { vectors } from './vectors.js';
 import { rref } from './rref.js';
 import { matmul } from './matmul.js';
 import { quiz } from './quiz.js';
-import { callouts, folds, card } from './content.js';
+import { callouts, folds, card, context } from './content.js';
 import { scene } from './scene.js';
 import { predict } from './predict.js';
 import { answer } from './answer.js';
@@ -14,5 +14,5 @@ import { summary } from './summary.js';
 // 代码块语言名 → 组件
 export const blocks = {
   transform2d, vectors, rref, matmul, quiz, card, ...callouts, ...folds,
-  scene, predict, answer, conjecture, practice, summary,
+  scene, predict, answer, conjecture, practice, summary, context,
 };
