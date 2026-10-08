@@ -5,7 +5,7 @@ import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import { answerWidget, plain, plainValue } from './answer.js';
 
-const NAMES = { matvec: '矩阵乘向量', columns: '由基向量的去向写矩阵', combo: '列的线性组合', det2: '2×2 行列式', matmul: '矩阵乘法', nullspace: '零空间的基' };
+const NAMES = { matvec: '矩阵乘向量', columns: '由基向量的去向写矩阵', combo: '列的线性组合', det2: '2×2 行列式', matmul: '矩阵乘法', nullspace: '零空间的基', shellpass: '希尔排序一趟', shellgroup: '希尔排序的子表划分' };
 
 export function practice(el, src) {
   const { fields } = parseFields(src);
@@ -38,12 +38,12 @@ export function practice(el, src) {
     const box = body.querySelector('.pr-problem');
     next.hidden = true;
     skip.hidden = false;
-    answerWidget(box, p, (r) => {
+    answerWidget(box, { ...p, qhtml: p.qhtml ? `<div class="arr-box">${p.qhtml}</div>` : '' }, (r) => {
       total++;
       const ok = r.ok && r.attempts === 1;
       results.push(r.ok);
       if (r.ok) right++;
-      session.record({ type: 'practice', title: NAMES[p.type] || p.type, q: plain(p.q.replace(/\$/g, '')), ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(p.answer), firstTry: ok, stage: session.stageOf(el) });
+      session.record({ type: 'practice', title: NAMES[p.gen] || p.gen, q: plain((p.recordQ || p.q).replace(/\$/g, '')), ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(p.answer), firstTry: ok, stage: session.stageOf(el) });
       if (right >= need) done();
       status();
       next.hidden = false;

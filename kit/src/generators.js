@@ -1,5 +1,6 @@
 // 练习题生成器：题目由代码随机构造，答案由代码算出，保证正确、数字干净
 import { mul, det, valueTeX, numTeX } from './expr.js';
+import { SORT_GENERATORS } from './sorting.js';
 
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const nz = (a, b) => { let x; do x = rnd(a, b); while (x === 0); return x; };
@@ -90,8 +91,11 @@ export const GENERATORS = {
   },
 };
 
+Object.assign(GENERATORS, SORT_GENERATORS);
+
 export function generate(type, level) {
   const g = GENERATORS[type];
   if (!g) throw new Error(`没有「${type}」题型，可用：${Object.keys(GENERATORS).join(', ')}`);
-  return { type, ...g(level) };
+  // gen 是题型名；type 留给作答类型（basis、array 等），两者不能混用
+  return { type, ...g(level), gen: type };
 }

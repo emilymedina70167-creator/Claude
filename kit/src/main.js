@@ -46,6 +46,7 @@ function renderAll() {
     else s.after(article);
     const { meta, body } = frontMatter(dedent(s.textContent));
     session.reset(meta.unit || lessonTitle(body));
+    session.subject = meta.subject || '线性代数';
     if (/^(guided|引导)$/i.test(meta.mode || '')) renderGuided(body, article, meta);
     else {
       session.stages = [{ title: '', src: body, el: article }];

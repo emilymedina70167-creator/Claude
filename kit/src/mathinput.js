@@ -11,6 +11,9 @@ export function mathInput(container, shape) {
   function render() {
     if (shape.kind === 'number') {
       root.innerHTML = cell(0, 0, 'mi-single');
+    } else if (shape.kind === 'array') {
+      root.classList.add('mi-array');
+      root.innerHTML = `<div class="mi-arr" style="--cols:${shape.n}">${Array.from({ length: shape.n }, (_, i) => cell(i, 0, 'mi-acell')).join('')}${Array.from({ length: shape.n }, (_, i) => `<div class="mi-aidx">${i + 1}</div>`).join('')}</div>`;
     } else if (shape.kind === 'vector') {
       root.innerHTML = grid(shape.n, 1);
     } else if (shape.kind === 'matrix') {
@@ -40,7 +43,7 @@ export function mathInput(container, shape) {
       };
       const at = (k) => [...root.querySelectorAll(`.mi-cell[data-k="${k}"]`)];
       if (shape.kind === 'number') return val(at(0)[0]);
-      if (shape.kind === 'vector') return at(0).map(val);
+      if (shape.kind === 'vector' || shape.kind === 'array') return at(0).map(val);
       if (shape.kind === 'matrix') {
         const cells = at(0);
         return Array.from({ length: shape.r }, (_, i) => cells.slice(i * shape.c, (i + 1) * shape.c).map(val));

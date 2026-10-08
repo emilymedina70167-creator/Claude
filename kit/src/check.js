@@ -11,6 +11,10 @@ export function shapeOf(answer, type) {
     return { kind: 'vectors', n: vs[0].length, count: vs.length };
   }
   if (type === 'direction' || type === 'eigvec') return { kind: 'vector', n: answer.length };
+  if (type === 'array') {
+    if (!isVec(answer)) throw new Error('type: array 的答案要是一串数');
+    return { kind: 'array', n: answer.length };
+  }
   if (isNum(answer)) return { kind: 'number' };
   if (isMat(answer)) return { kind: 'matrix', r: answer.length, c: answer[0].length };
   if (isVec(answer)) return { kind: 'vector', n: answer.length };
@@ -36,7 +40,8 @@ export function check(given, answer, type) {
   }
   const wrong = [];
   answer.forEach((x, i) => { if (Math.abs(N(given[i]) - x) > EPS) wrong.push({ i, j: 0 }); });
-  return { ok: !wrong.length, wrong, msg: wrong.length ? `有 ${wrong.length} 个分量不对（已标红）。` : '' };
+  const unit = type === 'array' ? '位置' : '分量';
+  return { ok: !wrong.length, wrong, msg: wrong.length ? `有 ${wrong.length} 个${unit}不对（已标红）。` : '' };
 }
 
 function checkBasis(given, ref) {

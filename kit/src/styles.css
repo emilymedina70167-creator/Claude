@@ -493,3 +493,61 @@ body.has-keypad .tutor-fab { display: none; }
 .lint ol { margin: 8px 0; padding-left: 1.4em; color: var(--text); }
 .lint p { margin: 0; }
 .lint-text { width: 100%; height: 140px; margin-top: 8px; font-size: 13px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+
+/* —— 排序课：数组、希尔排序演示、横排作答 —— */
+:root { --g1: #2a74d4; --g2: #e0602f; --g3: #219463; --g4: #8452d1; --g5: #b88a12; --g6: #c2417a; --grp-ink: #ffffff; --cell: 46px; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --g1: #5ea2ff; --g2: #ff8a5c; --g3: #4fd394; --g4: #b48cff; --g5: #f0c34a; --g6: #ff7fb0; --grp-ink: #111215; }
+}
+:root[data-theme="dark"] { --g1: #5ea2ff; --g2: #ff8a5c; --g3: #4fd394; --g4: #b48cff; --g5: #f0c34a; --g6: #ff7fb0; --grp-ink: #111215; }
+@media (max-width: 560px) { :root { --cell: 36px; } }
+
+.widget.no-title .w-body { padding-top: 18px; }
+.arr-box { overflow-x: auto; padding: 4px 0 8px; -webkit-overflow-scrolling: touch; }
+.arr { display: grid; gap: 4px; width: max-content; }
+.arr + .arr { margin-top: 14px; }
+.arr-row { display: grid; grid-template-columns: repeat(var(--cols), var(--cell)); gap: 4px; align-items: center; }
+.arr-split .arr-row { grid-template-columns: repeat(calc(var(--cols) - 1), var(--cell)) auto; }
+.arr-cell {
+  height: var(--cell); display: flex; align-items: center; justify-content: center;
+  border-radius: 8px; font-weight: 650; font-variant-numeric: tabular-nums;
+  background: var(--accent-soft); color: var(--text); border: 1.5px solid transparent;
+  transition: background .2s, color .2s, opacity .2s, transform .2s;
+}
+.arr-cell u { text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.arr-cell.arr-empty { background: transparent; border: 1.5px dashed var(--border); }
+.arr-cell.arr-zero { border-style: solid; border-color: var(--border); background: var(--surface-2); }
+.arr-cell.grp { color: var(--grp-ink); }
+.arr-cell.grp-1 { background: var(--g1); } .arr-cell.grp-2 { background: var(--g2); } .arr-cell.grp-3 { background: var(--g3); }
+.arr-cell.grp-4 { background: var(--g4); } .arr-cell.grp-5 { background: var(--g5); } .arr-cell.grp-6 { background: var(--g6); }
+.arr-cell.arr-done { background: var(--ok); color: var(--grp-ink); }
+.arr-cell.arr-dim { opacity: .28; }
+.arr-cell.arr-cmp { border-color: var(--text); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
+.arr-cell.arr-moved { transform: translateY(-4px); box-shadow: 0 0 0 3px var(--hl); }
+.arr-cell.arr-placed { transform: translateY(-4px); box-shadow: 0 0 0 3px var(--ok); }
+.arr-idx > div, .arr-ptr > div { text-align: center; font-size: 13px; color: var(--muted); line-height: 1.2; }
+.arr-ptr > div { font-weight: 700; color: var(--text); font-size: 14px; }
+.arr-ptr span { display: block; font-size: 11px; color: var(--accent); }
+.arr-gap { height: var(--cell); }
+.arr-label { font-size: 14px; color: var(--muted); padding-left: 8px; white-space: nowrap; }
+
+.shellsort .ss-wrap { display: grid; gap: 18px; }
+
+.shellsort pre.ss-code { margin: 0; font: 13px/1.65 ui-monospace, "SF Mono", Menlo, monospace; background: var(--surface-2); border-radius: 10px; padding: 10px 0; overflow-x: auto; }
+.ss-line { display: block; padding: 0 12px; white-space: pre; border-left: 3px solid transparent; }
+.ss-line.on { background: var(--hl); border-left-color: var(--v5); }
+.ss-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ss-gaps { font-size: 14px; }
+.ss-vars { display: flex; flex-wrap: wrap; gap: 8px; min-height: 30px; }
+.ss-chip { font-size: 14px; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); font-variant-numeric: tabular-nums; }
+.ss-chip b { color: var(--muted); font-weight: 600; margin-right: 2px; }
+.ss-msg { min-height: 3.4em; font-size: 16px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); }
+.ss-ctrl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ss-count { font-size: 14px; }
+.ss-jump { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-size: 15px; }
+
+.mi-array { overflow-x: auto; max-width: 100%; }
+.mi-arr { display: grid; grid-template-columns: repeat(var(--cols), var(--cell)); gap: 4px; padding: 2px; }
+.mi .mi-acell { width: var(--cell); min-width: 0; height: var(--cell); padding: 0; text-align: center; }
+.mi-aidx { text-align: center; font-size: 13px; color: var(--muted); }
+.sortpass .ans-row { margin-top: 2px; }

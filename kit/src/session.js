@@ -11,6 +11,7 @@ export const session = {
   ai: null, // 可用时是 ask 函数
   problems: [], // 课件本身的错误（写法不对），集中显示给作者
   context: '', // context 块：给页面里的 Claude 的背景资料
+  subject: '线性代数', // 课件开头 subject: 可改（如 数据结构）
 
   reset(title) {
     this.title = title;

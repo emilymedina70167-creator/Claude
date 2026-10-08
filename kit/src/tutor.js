@@ -23,7 +23,7 @@ export async function initTutor() {
   panel.innerHTML = `
     <div class="tutor-head"><div><strong>问 Claude</strong><div class="tutor-ctx muted"></div></div><button type="button" class="btn btn-sm tutor-close">收起</button></div>
     <div class="tutor-msgs"><div class="tutor-empty muted">有哪里没懂就直接问。Claude 能看到你正在学的这一节和你的作答情况${ai.tools ? '，必要时还会直接改动图形给你演示' : ''}。</div></div>
-    <form class="tutor-form"><textarea rows="2" placeholder="比如：为什么 A 乘 (1,0) 正好是第一列？"></textarea><button type="submit" class="btn btn-primary tutor-send">发送</button></form>`;
+    <form class="tutor-form"><textarea rows="2" placeholder="${session.subject === '线性代数' ? '比如：为什么 A 乘 (1,0) 正好是第一列？' : '比如：这一步为什么要这样做？'}"></textarea><button type="submit" class="btn btn-primary tutor-send">发送</button></form>`;
   document.body.appendChild(panel);
   const msgs = panel.querySelector('.tutor-msgs');
   const ta = panel.querySelector('textarea');
@@ -97,7 +97,7 @@ function currentStage() {
 function rules(stage, tools) {
   const st = session.stages[stage] || { title: '', src: '' };
   const scenes = [...session.scenes.entries()].filter(([, s]) => s.stage <= stage);
-  return `你是「线代学习台」里的助教，正在陪一位在美国读大学的学生学线性代数。用中文交流，术语第一次出现时附英文。
+  return `你是「学习台」里的助教，正在陪一位在美国读大学的学生学${session.subject}。用中文交流，术语第一次出现时附英文。
 
 教学方式：
 - 引导式：先弄清学生卡在哪里，用一个具体的小例子或一个提问帮他自己想明白，而不是直接灌输结论。

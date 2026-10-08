@@ -13,6 +13,7 @@ export function answerWidget(body, spec, onDone) {
   body._spec = spec; // 方便调试和自动化测试
   body.innerHTML = `
     ${spec.q ? `<div class="w-q">${mdToHtml(spec.q)}</div>` : ''}
+    ${spec.qhtml || ''}
     <div class="ans-row">
       ${spec.before ? `<span class="ans-before">${tex2html(spec.before)}</span>` : ''}
       <div class="ans-input"></div>

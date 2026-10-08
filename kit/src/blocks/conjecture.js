@@ -63,7 +63,7 @@ export function conjecture(el, src) {
     fb.hidden = false;
     fb.className = 'cj-feedback is-wait';
     fb.textContent = 'Claude 正在看你的回答…';
-    const prompt = `你是一位耐心的线性代数助教，正在批改学生在探究活动中写下的发现。学生在美国读大学，用中文交流，术语可以附英文。
+    const prompt = `你是一位耐心的${session.subject}助教，正在批改学生在探究活动中写下的发现。学生在美国读大学，用中文交流，术语可以附英文。
 
 课程：${session.title}
 ${session.context ? `背景资料：\n${session.context.slice(0, 3000)}\n` : ''}当前小节内容（供参考）：
