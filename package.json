@@ -1,0 +1,18 @@
+{
+  "name": "la-kit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "线代学习台组件库：在 Claude artifact 里渲染互动线性代数课件",
+  "type": "module",
+  "scripts": {
+    "build": "node kit/build.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "katex": "0.16.9",
+    "markdown-it": "14.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}

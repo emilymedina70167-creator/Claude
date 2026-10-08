@@ -53,7 +53,7 @@ export function createPlane(container, { range = 5 } = {}) {
       add(g, 'line', { x1, y1, x2: bx, y2: by, 'stroke-width': width, class: dashed ? 'vec-line dashed' : 'vec-line' });
       add(g, 'polygon', { points: `${x2},${y2} ${bx - uy * h * 0.45},${by + ux * h * 0.45} ${bx + uy * h * 0.45},${by - ux * h * 0.45}`, class: 'vec-head' });
       if (label) {
-        const t = add(g, 'text', { x: x2 + ux * 10, y: y2 + uy * 12, class: 'vec-label', 'text-anchor': ux < -0.3 ? 'end' : ux > 0.3 ? 'start' : 'middle', 'dominant-baseline': uy > 0.3 ? 'hanging' : uy < -0.3 ? 'auto' : 'middle' });
+        const t = add(g, 'text', { x: x2 + ux * 24, y: y2 + uy * 24, class: 'vec-label', 'text-anchor': ux < -0.3 ? 'end' : ux > 0.3 ? 'start' : 'middle', 'dominant-baseline': 'middle' });
         t.textContent = label;
       }
       return g;

@@ -40,12 +40,13 @@ export function vectors(el, src) {
     let m = Math.max(...vecs.flat().map(Math.abs));
     if (vecs.length >= 2) m = Math.max(m, Math.abs(vecs[0][0] + vecs[1][0]), Math.abs(vecs[0][1] + vecs[1][1]));
     if (target) m = Math.max(m, ...target.map(Math.abs));
-    if (mode === 'combo') m *= 1.6;
-    return Math.min(10, Math.max(4, Math.ceil(m + 1)));
+    if (mode === 'combo') m *= 1.3;
+    return Math.min(10, Math.max(3, Math.ceil(m + 1)));
   }
 
   function draw() {
     plane.clear();
+    plane.grid();
     const [u, v] = vecs;
     let info = '';
     if (mode === 'span') {

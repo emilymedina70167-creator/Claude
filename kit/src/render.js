@@ -1,7 +1,9 @@
 // Markdown + KaTeX 渲染，自定义代码块变成互动组件
+import MarkdownIt from 'markdown-it';
+import katex from 'katex';
 import { blocks } from './blocks/index.js';
 
-const md = window.markdownit({ html: false, linkify: true, breaks: false, typographer: false });
+const md = new MarkdownIt({ html: false, linkify: true, breaks: false, typographer: false });
 
 const MATH_RE = /(`+)[\s\S]*?\1|\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$(?!\s)((?:\\.|[^$\\\n])+?)(?<!\s)\$/g;
 
@@ -12,14 +14,14 @@ function maskMath(src, store) {
   let buf = [];
   const flush = () => {
     if (!buf.length) return;
-    let text = buf.join('\n').replace(/\\\$/g, '');
+    let text = buf.join('\n').replace(/\\\$/g, '\uE000');
     text = text.replace(MATH_RE, (m, tick, dd, br, pr, inl) => {
       if (tick) return m;
       const display = dd !== undefined || br !== undefined;
       store.push({ tex: dd ?? br ?? pr ?? inl, display });
-      return `${store.length - 1}`;
+      return `\uE001${store.length - 1}\uE002`;
     });
-    out.push(text.replace(//g, '\\$'));
+    out.push(text.replace(/\uE000/g, '\\$'));
     buf = [];
   };
   for (const line of src.split('\n')) {
@@ -40,15 +42,17 @@ function maskMath(src, store) {
 }
 
 function unmask(html, store) {
-  return html.replace(/(\d+)/g, (_, i) => {
-    const { tex, display } = store[+i];
-    return tex2html(tex, display);
-  }).replace(/<p>(<span class="katex-display">[\s\S]*?<\/span>)<\/p>/g, '$1');
+  return html
+    .replace(/<p>\s*\uE001(\d+)\uE002\s*<\/p>/g, (m, i) => (store[+i].display ? `\uE001${i}\uE002` : m))
+    .replace(/\uE001(\d+)\uE002/g, (_, i) => {
+      const { tex, display } = store[+i];
+      return tex2html(tex, display);
+    });
 }
 
 export function tex2html(tex, display = false) {
   try {
-    return window.katex.renderToString(tex, { displayMode: display, throwOnError: false, strict: false, trust: false });
+    return katex.renderToString(tex, { displayMode: display, throwOnError: false, strict: false, trust: false });
   } catch (e) {
     return `<code class="tex-error">${escapeHtml(tex)}</code>`;
   }

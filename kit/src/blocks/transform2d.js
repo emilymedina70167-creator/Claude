@@ -93,7 +93,7 @@ export function transform2d(el, src) {
     let info = '';
     if (show.has('det') || show.has('area')) {
       const d = detOf(M);
-      info += `<div>${tex2html(`\\det = ${fmt(d)}`)}<span class="muted">　${Math.abs(d) < 1e-9 ? '压扁成一条线（或一个点）：不可逆' : d < 0 ? '面积放大 ' + fmt(Math.abs(d)) + ' 倍，方向翻转' : '面积放大 ' + fmt(d) + ' 倍'}</span></div>`;
+      info += `<div>${tex2html(`\\det = ${fmt(d)}`)}<span class="muted">　${areaText(d)}</span></div>`;
     }
     if (show.has('eigen')) {
       const e = eigen2(A);
@@ -152,6 +152,13 @@ export function transform2d(el, src) {
   fitRange();
   syncInputs();
   draw();
+}
+
+function areaText(d) {
+  if (Math.abs(d) < 1e-9) return '压扁成一条线（或一个点）：不可逆';
+  const k = Math.abs(d);
+  const scale = Math.abs(k - 1) < 1e-9 ? '面积不变' : k > 1 ? `面积放大到 ${fmt(k)} 倍` : `面积缩小到 ${fmt(k)} 倍`;
+  return d < 0 ? `${scale}，方向翻转` : scale;
 }
 
 function toVecs(a) {
