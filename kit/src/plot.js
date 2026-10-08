@@ -45,18 +45,20 @@ export function createPlane(container, { range = 5 } = {}) {
     },
     // 带箭头的向量
     arrow(from, to, color, { width = 3.5, label, dashed = false, layer } = {}) {
-      const g = add(layer || p.layer, 'g', { class: 'vec', style: `--vc:${color}` });
+      const drawIn = p.drawIn && !dashed;
+      const g = add(layer || p.layer, 'g', { class: drawIn ? 'vec vec-in' : 'vec', style: `--vc:${color}` });
       const x1 = p.X(from[0]), y1 = p.Y(from[1]), x2 = p.X(to[0]), y2 = p.Y(to[1]);
       const len = Math.hypot(x2 - x1, y2 - y1);
       if (len < 1) return g;
       const ux = (x2 - x1) / len, uy = (y2 - y1) / len;
-      const h = Math.min(14, len * 0.6);
+      const h = Math.min(19, len * 0.6);
       const bx = x2 - ux * h, by = y2 - uy * h;
-      add(g, 'line', { x1, y1, x2: bx, y2: by, 'stroke-width': width, class: dashed ? 'vec-line dashed' : 'vec-line' });
-      add(g, 'polygon', { points: `${x2},${y2} ${bx - uy * h * 0.45},${by + ux * h * 0.45} ${bx + uy * h * 0.45},${by - ux * h * 0.45}`, class: 'vec-head' });
+      add(g, 'line', { x1, y1, x2: bx, y2: by, 'stroke-width': width, class: dashed ? 'vec-line dashed' : 'vec-line', ...(drawIn ? { pathLength: 1 } : {}) });
+      add(g, 'polygon', { points: `${x2},${y2} ${bx - uy * h * 0.48},${by + ux * h * 0.48} ${bx + uy * h * 0.48},${by - ux * h * 0.48}`, class: 'vec-head' });
       if (label) {
         const [cx, cy] = p.placeLabel(x2, y2, ux, uy, label);
-        const t = add(g, 'text', { x: cx, y: cy, class: 'vec-label', 'text-anchor': 'middle', 'dominant-baseline': 'central' });
+        // 标签不套粉笔滤镜，保持清楚
+        const t = add(layer || p.layer, 'text', { x: cx, y: cy, class: drawIn ? 'vec-label vec-label-in' : 'vec-label', style: `--vc:${color}`, 'text-anchor': 'middle', 'dominant-baseline': 'central' });
         t.textContent = label;
       }
       return g;
@@ -64,7 +66,7 @@ export function createPlane(container, { range = 5 } = {}) {
     // 给标签找一个不和已有标签重叠、也不出界的位置
     placeLabel(x, y, ux, uy, label) {
       const w = textWidth(label);
-      const along = 14 + (w / 2) * Math.abs(ux) + 10 * Math.abs(uy);
+      const along = 16 + (w / 2) * Math.abs(ux) + 14 * Math.abs(uy);
       const cands = [
         [x + ux * along, y + uy * along],
         [x + ux * 10 - uy * (w / 2 + 12), y + uy * 10 + ux * 22],
@@ -73,7 +75,7 @@ export function createPlane(container, { range = 5 } = {}) {
         [x - uy * (w / 2 + 16), y + ux * 26],
         [x + uy * (w / 2 + 16), y - ux * 26],
       ];
-      const inside = ([cx, cy]) => cx - w / 2 > 2 && cx + w / 2 < SIZE - 2 && cy > 12 && cy < SIZE - 10;
+      const inside = ([cx, cy]) => cx - w / 2 > 2 && cx + w / 2 < SIZE - 2 && cy > 16 && cy < SIZE - 14;
       const free = (c) => !p.placed.some((b) => overlap(b, box(c[0], c[1], w)));
       const pick = cands.find((c) => inside(c) && free(c)) || cands.find(inside) || cands[0];
       p.placed.push(box(pick[0], pick[1], w));
@@ -141,8 +143,8 @@ function add(parent, tag, attrs) {
 }
 
 // 粗略估算标签宽度（中文字更宽）
-const textWidth = (s) => [...String(s)].reduce((w, ch) => w + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 17 : /[₀-₉]/.test(ch) ? 7 : 10), 0);
-const box = (cx, cy, w) => ({ l: cx - w / 2 - 2, r: cx + w / 2 + 2, t: cy - 11, b: cy + 11 });
+const textWidth = (s) => [...String(s)].reduce((w, ch) => w + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 30 : /[₀-₉]/.test(ch) ? 11 : 16), 0);
+const box = (cx, cy, w) => ({ l: cx - w / 2 - 2, r: cx + w / 2 + 2, t: cy - 15, b: cy + 15 });
 const overlap = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
 
 export const snap = (v, step) => {

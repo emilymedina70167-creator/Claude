@@ -13,9 +13,10 @@ export function practice(el, src) {
   const need = Math.max(1, Number(fields.count) || 3);
   const level = Number(fields.level) || 1;
   types.forEach((t) => generate(t, level)); // 先检查题型名
-  const title = fields.title || `练习 Practice · ${types.map((t) => NAMES[t] || t).join(' / ')}`;
+  const title = fields.title || '练习 Practice';
   const body = widget(el, { title: escapeHtml(title), cls: 'practice' });
   body.innerHTML = `
+    <div class="pr-types muted">${types.map((t) => escapeHtml(NAMES[t] || t)).join(' · ')}　·　程序出题，可以一直练</div>
     ${fields.note ? `<div class="w-note">${mdToHtml(fields.note)}</div>` : ''}
     <div class="pr-head"><div class="pr-dots"></div><span class="pr-count muted"></span></div>
     <div class="pr-problem"></div>

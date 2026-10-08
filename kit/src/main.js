@@ -9,8 +9,32 @@ import { initTutor } from './tutor.js';
 import { recordText, toast } from './record.js';
 import { escapeHtml } from './render.js';
 
+// 粉笔手写体：数字和字母用 Caveat（1 和 7 容易分辨），中文用龙藏体。
+// Google Fonts 是 artifact 唯一允许的外部样式来源；加载不到时退回系统楷体
+const HAND_FONT = 'https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Long+Cang&display=swap';
+
+// 粉笔质感滤镜：给线条加颗粒和毛边
+const CHALK_FILTER = `<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <filter id="la-chalk" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="7" result="n"/>
+    <feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 -1.4 1.25" result="speck"/>
+    <feComposite in="SourceGraphic" in2="speck" operator="in" result="grain"/>
+    <feDisplacementMap in="grain" in2="n" scale="2" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="la-chalk-v" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence type="fractalNoise" baseFrequency="1.3" numOctaves="2" seed="3" result="n"/>
+    <feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 -0.9 1.45" result="speck"/>
+    <feComposite in="SourceGraphic" in2="speck" operator="in" result="grain"/>
+    <feDisplacementMap in="grain" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/>
+  </filter></defs></svg>`;
+
 function injectStyles() {
   if (document.getElementById('la-kit-style')) return;
+  const font = document.createElement('link');
+  font.rel = 'stylesheet';
+  font.href = HAND_FONT;
+  document.head.appendChild(font);
+  document.body.insertAdjacentHTML('afterbegin', CHALK_FILTER);
   const style = document.createElement('style');
   style.id = 'la-kit-style';
   style.textContent = katexCss + '\n' + css;
@@ -53,6 +77,7 @@ function renderAll() {
       renderLesson(body, article);
     }
     showProblems(article);
+    article.insertAdjacentHTML('beforeend', '<div class="la-tray" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i><i class="eraser"></i></div>');
   });
   initTutor();
 }

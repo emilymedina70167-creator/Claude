@@ -92,6 +92,10 @@ export function renderLesson(src, root) {
   } finally {
     md.renderer.rules.fence = defaultFence;
   }
+  root.querySelectorAll('h2').forEach((h) => {
+    const m = h.innerHTML.match(/^\s*(\d{1,2})\s*[.、．:：]\s*/);
+    if (m) h.innerHTML = `<span class="h-num">${m[1]}</span><span>${h.innerHTML.slice(m[0].length)}</span>`;
+  });
   root.querySelectorAll('[data-block]').forEach((el) => {
     const { name, src: body, near, wrong } = pending[+el.dataset.block];
     if (name === '_typo') {

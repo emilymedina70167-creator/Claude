@@ -21,8 +21,12 @@ export function matrixHtml(M, { rowCls = {}, colCls = {}, cellCls = {}, augmente
 const cell = (x) => (x instanceof Frac ? x.toTeX() : typeof x === 'number' ? fmtNum(x) : String(x));
 const fmtNum = (x) => (Math.abs(x - Math.round(x)) < 1e-9 ? String(Math.round(x)) : String(Number(x.toFixed(2))));
 
+// 需要学生动手的组件用粉笔圈出来，讲解类直接写在黑板上
+const ACT = new Set(['answer', 'practice', 'quiz', 'conjecture', 'predict', 'summary', 'sortpass']);
+
 export function widget(el, { title, cls = '' } = {}) {
-  el.innerHTML = `<div class="widget ${cls}">${title ? `<div class="w-title">${mdToHtml(title, { inline: true })}</div>` : ''}<div class="w-body"></div></div>`;
+  const act = cls.split(/\s+/).some((c) => ACT.has(c)) ? ' act' : '';
+  el.innerHTML = `<div class="widget ${cls}${act}">${title ? `<div class="w-title">${mdToHtml(title, { inline: true })}</div>` : ''}<div class="w-body"></div></div>`;
   return el.querySelector('.w-body');
 }
 

@@ -15,8 +15,9 @@ import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { session } from './session.js';
 
 const COLOR = {
-  blue: 'var(--v1)', orange: 'var(--v2)', green: 'var(--v3)', purple: 'var(--v4)', gold: 'var(--v5)',
-  red: 'var(--bad)', gray: 'var(--muted)', grey: 'var(--muted)',
+  blue: 'var(--blue)', pink: 'var(--pink)', yellow: 'var(--yellow)', green: 'var(--green)',
+  purple: 'var(--lav)', orange: 'var(--orange)', red: 'var(--coral)', white: 'var(--chalk)',
+  gray: 'var(--muted)', grey: 'var(--muted)', gold: 'var(--yellow)',
   1: 'var(--v1)', 2: 'var(--v2)', 3: 'var(--v3)', 4: 'var(--v4)', 5: 'var(--v5)',
 };
 const FLAGS = ['drag', 'dashed', 'faint', 'play', 'after', 'before', 'thin'];
@@ -232,7 +233,7 @@ export function createScene(container, src, opts = {}) {
       case 'vector': {
         const to = vec2(c.expr(v), 'vector ');
         const from = c.from ? vec2(c.from(v), 'from ') : [0, 0];
-        plane.arrow(from, [from[0] + to[0], from[1] + to[1]], color(c), { label: lab, dashed: !!c.mods.dashed, width: c.mods.thin ? 2 : Number(c.mods.width) || 3.5 });
+        plane.arrow(from, [from[0] + to[0], from[1] + to[1]], color(c), { label: lab, dashed: !!c.mods.dashed, width: c.mods.thin ? 3.2 : Number(c.mods.width) || 5 });
         break;
       }
       case 'point': {
@@ -329,7 +330,9 @@ export function createScene(container, src, opts = {}) {
     draw();
   });
 
+  plane.drawIn = true;
   draw();
+  plane.drawIn = false;
   if (lastError) session.problem(container, opts.kind || 'scene', `图形描述有误：${lastError}`);
 
   const goals = cmds.filter((c) => c.kind === 'goal').length;

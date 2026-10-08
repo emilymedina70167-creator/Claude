@@ -79,24 +79,24 @@ q: 图上画出了 $\mathbf a_1$（$\hat\imath$ 的去向）和 $\mathbf a_2$（
 let A = [[2, -1], [1, 3]]
 grid lerp(I, A, t) after
 vector col(A, 1) color=blue label=a1
-vector col(A, 2) color=orange label=a2
+vector col(A, 2) color=pink label=a2
 vector [1, 1] color=gray dashed label=x before
-vector A*[1, 1] color=green label=Ax after
+vector A*[1, 1] color=yellow label=Ax after
 answer: A*[1, 1]
 explain: $(1,1) = \hat\imath + \hat\jmath$。网格变形后，「往右一格再往上一格」就变成了「沿 $\mathbf a_1$ 走一步，再沿 $\mathbf a_2$ 走一步」，所以 $A\mathbf x = \mathbf a_1 + \mathbf a_2 = (1, 4)$。
 ```
 
 ```scene
 title: 让 Ax 命中目标
-q: 拖动 $\mathbf x$，让绿色的 $A\mathbf x$ 落到目标点 $(3, 5)$。蓝色网格是变换后的网格：原来的每个格子被变成了一个平行四边形。
+q: 拖动 $\mathbf x$，让黄色的 $A\mathbf x$ 落到目标点 $(3, 5)$。蓝色网格是变换后的网格：原来的每个格子被变成了一个平行四边形。
 let A = [[2, -1], [1, 3]]
 let x = [1, 0] drag
 grid A faint
-point [3, 5] color=green label=目标
+point [3, 5] color=yellow label=目标
 vector col(A, 1) color=blue label=a1 thin
-vector col(A, 2) color=orange label=a2 thin
+vector col(A, 2) color=pink label=a2 thin
 vector x color=gray label=x
-vector A*x color=green label=Ax
+vector A*x color=yellow label=Ax
 show $\mathbf x = {x}$，$A\mathbf x = {A*x}$
 goal A*x = [3, 5] msg="命中！看看现在的 x，再数一数：目标点在变形后的网格上是沿 a₁ 走几步、沿 a₂ 走几步？"
 ```
@@ -111,9 +111,9 @@ let A = [[2, -1], [1, 3]]
 slider x1 -2 2 = 1 step=0.5 label="x₁"
 slider x2 -2 2 = 1 step=0.5 label="x₂"
 grid A faint
-vector A*[x1, x2] color=green label=Ax width=7
+vector A*[x1, x2] color=yellow label=Ax width=7
 vector x1*col(A, 1) color=blue label="x₁a₁"
-vector x2*col(A, 2) from x1*col(A, 1) color=orange label="x₂a₂"
+vector x2*col(A, 2) from x1*col(A, 1) color=pink label="x₂a₂"
 show $x_1\mathbf a_1 + x_2\mathbf a_2 = {x1*col(A, 1) + x2*col(A, 2)}$
 show $A\mathbf x = {A*[x1, x2]}$
 ```
@@ -146,7 +146,7 @@ title: 读图：这是哪个矩阵？
 let B = [[1, -1], [2, 1]]
 grid B
 vector col(B, 1) color=blue label="î 的去向"
-vector col(B, 2) color=orange label="ĵ 的去向"
+vector col(B, 2) color=pink label="ĵ 的去向"
 ```
 
 ```answer

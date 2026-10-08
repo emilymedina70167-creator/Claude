@@ -85,7 +85,7 @@ export function vectors(el, src) {
         const hit = Math.hypot(s[0] - target[0], s[1] - target[1]) < 0.051;
         info += hit
           ? `<div class="ok">命中目标！${tex2html(`a=${fmt(a)},\\ b=${fmt(b)}`)}</div>`
-          : `<div class="muted">调整 ${tex2html('a')}、${tex2html('b')}，让绿色箭头指向目标 ${tex2html(vtex(target))}</div>`;
+          : `<div class="muted">调整 ${tex2html('a')}、${tex2html('b')}，让黄色箭头指向目标 ${tex2html(vtex(target))}</div>`;
       }
     }
     vecs.forEach((w, i) => {
