@@ -12,10 +12,16 @@ const CALLOUTS = {
   intuition: '直觉 Intuition',
 };
 
-// 第一行写 `title: ...` 可以自定义标题
+// 开头几行可以写 `title: ...`（自定义标题）和 `id: ...`（组件 id，课堂和实时黑板里用），顺序不限，都不显示成正文
 function splitTitle(src) {
-  const m = src.match(/^\s*title\s*[:：]\s*(.*)\n?/i);
-  return m ? [m[1].trim(), src.slice(m[0].length)] : [null, src];
+  let title = null, rest = src;
+  for (;;) {
+    const m = rest.match(/^\s*(title|id)\s*[:：]\s*(.*)\n?/i);
+    if (!m) break;
+    if (m[1].toLowerCase() === 'title') title = m[2].trim();
+    rest = rest.slice(m[0].length);
+  }
+  return [title, rest];
 }
 
 export const callouts = Object.fromEntries(Object.entries(CALLOUTS).map(([name, label]) => [name, (el, src) => {

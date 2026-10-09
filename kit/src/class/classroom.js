@@ -547,6 +547,9 @@ export async function renderClass(root, meta) {
 
   // 草稿里的组件先显示成占位（确认之后才真正画出来）
   function previewMd(md) {
+    // 末尾还没写完的 $…（公式没闭合）先不显示，免得露出半截 TeX
+    const dollars = (md.replace(/\\\$/g, '').match(/\$/g) || []).length;
+    if (dollars % 2) md = md.slice(0, md.lastIndexOf('$')) + ' …';
     return md.replace(/^(\s{0,3})(`{3,}|~{3,})\s*([\w-]+)[^\n]*\n[\s\S]*?(?:^\s{0,3}\2\s*$|$(?![\s\S]))/gm, (m, sp, f, name) => `\n> ⏳ ${name}（确认后出现）\n`);
   }
 

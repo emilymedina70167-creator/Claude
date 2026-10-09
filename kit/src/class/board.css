@@ -6,8 +6,15 @@
 .class-seg .stage-body > h2:first-child { margin-top: 22px; }
 .class-board > .class-seg:first-child .stage-body > h2:first-child::before { display: none; }
 
-/* 开课前的欢迎牌 */
-.class-welcome { text-align: center; padding: 14vh 16px 10vh; }
+/* 课堂里黑板一直往下写，底部对话条本身就是粉笔槽，不再画课件末尾的粉笔槽 */
+.is-class .la-tray { display: none; }
+
+/* 开课前的欢迎牌：在黑板可见区域里居中 */
+.class-welcome {
+  text-align: center; padding: 24px 16px;
+  min-height: calc(100svh - var(--class-bar-h, 200px) - 120px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
 .class-welcome[hidden] { display: none; }
 .class-welcome-text { font-family: var(--hand); font-size: 30px; line-height: 1.5; color: var(--chalk); opacity: .9; margin: 0 0 26px; text-wrap: balance; }
 .class-welcome-text code { font-size: 14px; font-family: var(--mono); }
@@ -16,19 +23,23 @@
 /* 生成中的草稿：确认是 Opus 5.5 之前，内容只是半透明的粉笔草稿，组件不会真的画出来 */
 .class-draft { margin: 26px 0 8px; display: grid; gap: 14px; }
 .class-draft-card {
-  position: relative; padding: 14px 18px 10px; border-radius: 16px;
-  border: 1.5px dashed rgba(238, 240, 230, 0.32); background: rgba(0, 0, 0, 0.08);
-  color: var(--body); opacity: .72; animation: draftIn .35s ease both;
+  position: relative; padding: 14px 20px 14px; border-radius: 16px;
+  border: 1.5px dashed rgba(238, 240, 230, 0.4); background: rgba(0, 0, 0, 0.1);
+  color: var(--body); opacity: .82; animation: draftIn .35s ease both;
 }
 .class-draft-card.is-writing::after {
   content: ""; position: absolute; right: 16px; bottom: 12px; width: 18px; height: 5px; border-radius: 3px;
   background: var(--chalk); opacity: .7; filter: url(#la-chalk); animation: chalkWrite 1s ease-in-out infinite;
 }
-.class-draft-tag { font-family: var(--hand); font-size: 19px; color: var(--muted); margin-bottom: 4px; }
+.class-draft-tag { display: inline-flex; align-items: center; gap: 8px; font-family: var(--hand); font-size: 20px; color: var(--yellow); opacity: .85; margin-bottom: 6px; }
+.class-draft-tag::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); opacity: .8; }
+.class-draft-card.is-writing .class-draft-tag::before { animation: draftDot 1.2s ease-in-out infinite; }
+@keyframes draftDot { 0%, 100% { opacity: .25; } 50% { opacity: .95; } }
+.class-draft-card .katex { opacity: .95; }
 .class-draft-card h2 { font-size: 28px; margin: 4px 0 8px; padding-top: 0; }
 .class-draft-card h2::before { display: none; }
 .class-draft-card blockquote { margin: 10px 0; padding: 8px 14px; border-left: 3px dashed rgba(242, 220, 133, 0.5); color: var(--muted); font-family: var(--hand); font-size: 21px; }
-@keyframes draftIn { from { opacity: 0; transform: translateY(6px); } to { opacity: .72; transform: none; } }
+@keyframes draftIn { from { opacity: 0; transform: translateY(6px); } to { opacity: .82; transform: none; } }
 @keyframes chalkWrite { 0%, 100% { transform: translateX(0) rotate(-6deg); } 50% { transform: translateX(-10px) rotate(4deg); } }
 
 /* 重写两次还画不出来的段 */
@@ -42,5 +53,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .class-seg, .class-draft-card { animation: none; }
-  .class-draft-card.is-writing::after { animation: none; }
+  .class-draft-card.is-writing::after, .class-draft-card.is-writing .class-draft-tag::before { animation: none; }
 }
