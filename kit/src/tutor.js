@@ -69,8 +69,9 @@ export async function initTutor() {
     if (prefill && !ta.value) ta.value = prefill;
     setTimeout(() => ta.focus(), 50);
   };
-  session.openTutor = (i, prefill, image) => {
-    if (image && ai.images) setAttach(image);
+  let attachFrom = null; // 附件来自哪个组件（草稿区），记录时对应上
+  session.openTutor = (i, prefill, image, fromEl) => {
+    if (image && ai.images) { setAttach(image); attachFrom = fromEl || null; }
     open(i, prefill ?? `我对「${session.stages[i]?.title || '这一节'}」有疑问：`);
   };
   fab.addEventListener('click', () => open());
@@ -87,7 +88,10 @@ export async function initTutor() {
     ta.value = '';
     panel.querySelector('.tutor-empty')?.remove();
     msgs.insertAdjacentHTML('beforeend', `<div class="msg msg-user">${escapeHtml(q)}${img ? `<img class="msg-img" src="${attachUrl}" alt="手写内容">` : ''}</div>`);
+    const from = attachFrom;
+    if (img) session.keepImages(from || 'tutor', img);
     attach = null;
+    attachFrom = null;
     attachBox.hidden = true;
     const bubble = document.createElement('div');
     bubble.className = 'msg msg-ai';
@@ -108,12 +112,13 @@ export async function initTutor() {
       const text = await ai.ask([{ role: 'user', content: rules(stage, ai.tools) }, ...turns.slice(-12)], opts);
       bubble.innerHTML = mdToHtml(text);
       turns.push({ role: 'assistant', content: text });
-      session.record({ type: 'ask', question: q.slice(0, 200), answer: text.replace(/\s+/g, ' ').slice(0, 160), stage });
+      session.record({ type: 'ask', question: q.slice(0, 200), answer: text.replace(/\s+/g, ' ').slice(0, 160), stage, block: from ? session.blockOf(from) : 'tutor', step: session.stages[stage]?.id });
+      session.event('ask', from, { question: q.slice(0, 1000), answer: text.slice(0, 2000), stage: session.stages[stage]?.id });
     } catch (err) {
       const kept = err?.text ? mdToHtml(err.text) : '';
       bubble.innerHTML = `${kept}<div class="muted">${errorText(err)}</div>`;
       if (err?.text) turns.push({ role: 'assistant', content: err.text });
-      session.record({ type: 'ask', question: q.slice(0, 200), stage });
+      session.record({ type: 'ask', question: q.slice(0, 200), stage, block: from ? session.blockOf(from) : 'tutor', step: session.stages[stage]?.id });
       if (AI_PERMANENT.has(err?.code)) { fab.remove(); document.body.classList.remove('ai-on'); document.querySelectorAll('.stage-ask').forEach((b) => (b.hidden = true)); }
     } finally {
       ctl = null;
@@ -124,7 +129,7 @@ export async function initTutor() {
 }
 
 function currentStage() {
-  // 已解锁的最后一节
+  // 已解锁的最后一节（live 模式下是最新写上黑板的一段）
   const secs = [...document.querySelectorAll('.stage:not([hidden])')];
   return secs.length ? Number(secs[secs.length - 1].dataset.stage) : 0;
 }
@@ -138,7 +143,7 @@ function rules(stage, tools) {
 - 引导式：先弄清学生卡在哪里，用一个具体的小例子或一个提问帮他自己想明白，而不是直接灌输结论。
 - 回答简短，一般不超过 150 字，一次只讲一个点。公式用 $...$ 包起来。
 - 不要提前讲后面小节的内容；学生做练习时不要直接报出答案，先给提示。
-${tools && scenes.length ? `- 需要演示时，可以调用 set_variable 改动页面上的图（例如换一个矩阵、移动向量），改完告诉学生看哪张图的哪里。` : ''}
+${session.live ? '- 你只是黑板旁的助手：只给提示，不给答案；不要说学生已经掌握或可以往下走了，这个判断由对话里的老师来做。\n' : ''}${tools && scenes.length ? `- 需要演示时，可以调用 set_variable 改动页面上的图（例如换一个矩阵、移动向量），改完告诉学生看哪张图的哪里。` : ''}
 
 课程：${session.title}
 ${session.context ? `\n老师提供的背景资料（来自学生的教材和学习档案，回答时以此为准）：\n${session.context.slice(0, 5000)}\n` : ''}

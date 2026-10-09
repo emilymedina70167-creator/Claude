@@ -109,7 +109,7 @@ export function shellsort(el, src) {
     btnNext.disabled = k === steps.length - 1;
     if (k === steps.length - 1) {
       stop();
-      if (done) { done(); session.record({ type: 'scene', title, ok: true, stage: session.stageOf(el) }); }
+      if (done) { done(); session.record({ type: 'scene', title, ok: true, el }); }
     }
   }
   const go = (to) => { k = Math.max(0, Math.min(steps.length - 1, to)); draw(); };
@@ -189,7 +189,7 @@ export function sortpass(el, src) {
     explain,
     before: fields.before,
   }, (r) => {
-    session.record({ type: 'answer', title, q: plain(`${q.replace(/\$/g, '')}｜初始：${items.map(fmt).join(' ')}`), ok: r.ok, attempts: r.attempts, first: r.first, expected: `(${run.result.map(fmt).join(', ')})`, revealed: r.revealed, stage: session.stageOf(el) });
+    session.record({ type: 'answer', title, q: plain(`${q.replace(/\$/g, '')}｜初始：${items.map(fmt).join(' ')}`), ok: r.ok, attempts: r.attempts, first: r.first, expected: `(${run.result.map(fmt).join(', ')})`, revealed: r.revealed, el });
     done();
   });
 }

@@ -49,7 +49,7 @@ export function predict(el, src) {
     status.innerHTML = `${close ? '猜得很准！' : '和真实位置差了一些。'}真实位置是 ${tex2html(`(${target.map(numText).join(', ')})`)}，你猜的是 ${tex2html(`(${extra.guess.map((x) => Number(x.toFixed(1))).join(', ')})`)}。`;
     if (fields.explain) status.insertAdjacentHTML('afterend', `<div class="w-note">${mdToHtml(fields.explain)}</div>`);
     go.remove();
-    session.record({ type: 'predict', title: titleText, q: plain(fields.q), guess: extra.guess, answer: target, ok: close, stage: session.stageOf(el) });
+    session.record({ type: 'predict', title: titleText, q: plain(fields.q), guess: extra.guess, answer: target, ok: close, el });
     done();
   });
 }

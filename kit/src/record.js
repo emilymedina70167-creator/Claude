@@ -5,7 +5,7 @@ export function recordText() {
   const L = session.log;
   const lines = [`【学习记录】${session.title}`];
   const st = session.stages.length;
-  if (st > 1) lines.push(`进度：已解锁 ${Math.min(st, session.progress + 1)} / ${st} 节`);
+  if (st > 1 && !session.live) lines.push(`进度：已解锁 ${Math.min(st, session.progress + 1)} / ${st} 节`);
   const prac = L.filter((e) => e.type === 'practice');
   if (prac.length) {
     const byType = {};
@@ -21,6 +21,10 @@ export function recordText() {
     if (e.type === 'predict') lines.push(`预测「${e.title}」：猜 (${e.guess}) ，实际 (${e.answer.map((x) => Math.round(x * 100) / 100)})，${e.ok ? '猜得很准' : '偏差较大'}`);
     if (e.type === 'conjecture' || e.type === 'conjecture-try') lines.push(`猜想「${e.title}」：我写${e.via ? `（${e.via === '截图' ? '手写截图' : 'Pencil 手写'}转写）` : ''}「${e.answer}」→ ${e.verdict}`);
     if (e.type === 'quiz') lines.push(`选择题「${e.q}」：${e.ok ? (e.attempts === 1 ? '一次答对' : `第 ${e.attempts} 次答对`) : '看了解析'}${e.wrong?.length ? `｜选错过：${e.wrong.join('；')}` : ''}`);
+    if (e.type === 'steps') lines.push(`例题「${e.title}」${e.detail}：${e.giveup ? '想不出来' : e.value !== undefined ? `选「${e.value}」${e.ok === true ? '（对）' : e.ok === false ? '（错）' : ''}` : `我写「${e.text || ''}」`}${e.via ? `（${e.via}转写）` : ''}${e.ms ? `，用时 ${Math.round(e.ms / 1000)} 秒` : ''}`);
+    if (e.type === 'recognize') lines.push(`认方法「${e.q}」：选「${e.value}」${e.ok ? '✓' : `✗（应为 ${e.expected}）`}${e.text ? `，理由「${e.text}」` : ''}，${Math.round((e.ms || 0) / 1000)} 秒`);
+    if (e.type === 'recognize-sum') lines.push(`认方法「${e.title}」小结：${e.value}，${e.detail}`);
+    if (e.type === 'findbug') lines.push(`找错「${e.title}」：${e.value}${e.ok ? '（找对了）' : ''}，正确是${e.expected}${e.text ? `｜我说错在：「${e.text}」` : ''}`);
     if (e.type === 'ask') lines.push(`问了 Claude：「${e.question}」${e.answer ? `→ 它答：「${e.answer}${e.answer.length >= 160 ? '…' : ''}」` : ''}`);
   }
   if (lines.length === 1) lines.push('（还没有记录）');

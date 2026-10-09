@@ -26,7 +26,7 @@ export function draft(el, src) {
     b.textContent = '拿给 Claude 看';
     b.disabled = pad.isEmpty();
     b.addEventListener('click', async () => {
-      session.openTutor?.(session.stageOf(el), '这是我的演算过程，帮我看看哪里不对，或者下一步该怎么做？', await pad.toBlob());
+      session.openTutor?.(session.stageOf(el), '这是我的演算过程，帮我看看哪里不对，或者下一步该怎么做？', await pad.toBlob(), el);
     });
     pad.el.querySelector('.pad-bar').appendChild(b);
     new MutationObserver(() => (b.disabled = pad.isEmpty())).observe(pad.el.querySelector('.pad-hint'), { attributes: true });

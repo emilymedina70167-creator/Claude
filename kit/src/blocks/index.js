@@ -12,10 +12,14 @@ import { practice } from './practice.js';
 import { summary } from './summary.js';
 import { draft } from './draft.js';
 import { array, shellsort, sortpass } from './sorting.js';
+import { steps } from './steps.js';
+import { recognize } from './recognize.js';
+import { findbug } from './findbug.js';
+import { graph, space } from './figures.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
   transform2d, vectors, rref, matmul, quiz, card, ...callouts, ...folds,
   scene, predict, answer, conjecture, practice, summary, context, draft,
-  array, shellsort, sortpass,
+  array, shellsort, sortpass, steps, recognize, findbug, graph, space,
 };

@@ -97,7 +97,7 @@ unit: 单元 3 · 特征值
 
 组件就是带特定语言名的代码块。块里每行写一个 `字段: 值`，下一行没有字段名就算续行。公式用 `$...$` 和 `$$...$$`。
 
-**关卡**：`answer`、`predict`、`conjecture`、`practice`、`quiz`、带 `goal` 的 `scene`，完成后才能继续。其余组件不拦人。
+**关卡**：`answer`、`predict`、`conjecture`、`practice`、`quiz`、`steps`、`recognize`、`findbug`、带 `goal` 的 `scene`，完成后才能继续（guided 课件）。其余组件不拦人。实时黑板里没有关卡。
 
 ### scene：可交互的图（描述式，不写代码）
 
@@ -134,12 +134,14 @@ goal A*x = [3, 5] msg="命中！"
 | `text "文字" at 点` | 文字 |
 | `show 文本` | 侧栏读数，`{表达式}` 会换成当前值，可以写在公式里 |
 | `goal 表达式 = 目标` | 达成后显示 `msg="…"` 并完成关卡（容差 `tol=0.05`） |
+| `curve 表达式 for s 0 360` | 参数曲线：s 从 0 走到 360，画出点的轨迹。单位圆的像：`curve A*[cos(s), sin(s)]`（省略 `for` 时默认 `s 0 360`） |
+| `eigen A` | 画出 2×2 矩阵 A 的特征向量方向（虚线）并标上 λ；没有实特征值时注明「会转」 |
 
-修饰词 `after` / `before`：只在 `predict` 揭晓之后 / 之前显示。标签末尾的数字自动变下标（`a1` → a₁）。
+修饰词 `after` / `before`：只在 `predict` 揭晓之后 / 之前显示。`from=k` / `until=k`：图绑定了 `steps`（写 `link:`）时，揭开到第 k 步起 / 为止才显示，见下文 `steps`。标签末尾的数字自动变下标（`a1` → a₁）。
 
 颜色（彩色粉笔）：`blue`、`pink`、`yellow`、`green`、`purple`、`orange`、`red`、`white`、`gray`。**全课程统一含义**：`blue` = 第一列 / $\hat\imath$ 的去向 / 定义，`pink` = 第二列 / $\hat\jmath$ 的去向，`yellow` = 结果和重点（如 $A\mathbf x$、目标点），`gray` = 原始向量或辅助线，`purple` 留给「你的猜测」。文字里提到颜色时要和图一致（比如「拖动 x，让黄色的 Ax……」）。
 
-**表达式**：数、向量 `[1, 2]`、矩阵按行写 `[[1, 2], [3, 4]]`，运算 `+ - * / ^`（`A^-1` 是逆），`A'` 是转置，`2u` 可以省略乘号。函数：`det` `inv` `T` `col(A, j)` `row(A, i)`（从 1 开始数）、`dot` `norm` `|v|` `proj(u, v)` `cross` `rot(角度)` `lerp(a, b, t)` `mat(列1, 列2, …)`（由列组成矩阵）、`I`（单位矩阵）、`sqrt` `sin` `cos`（角度制）。
+**表达式**：数、向量 `[1, 2]`、矩阵按行写 `[[1, 2], [3, 4]]`，运算 `+ - * / ^`（`A^-1` 是逆），`A'` 是转置，`2u` 可以省略乘号。函数：`det` `inv` `T` `col(A, j)` `row(A, i)`（从 1 开始数）、`dot` `norm` `|v|` `proj(u, v)` `cross` `rot(角度)` `lerp(a, b, t)` `mat(列1, 列2, …)`（由列组成矩阵）、`I`（单位矩阵）、`sqrt` `abs` `sin` `cos` `tan`（角度制）、`exp` `ln` `log` `floor` `min` `max` `round`，常数 `pi` `e`。比较 `<` `<=` `>` `>=` `==` 成立得 1、不成立得 0（可以写分段函数 `(x>0)*x`）。概率：`choose(n, k)` `fact(n)` `normpdf(x, μ, σ)` `normcdf(x, μ, σ)` `binompmf(k, n, p)` `poissonpmf(k, λ)` `exppdf(x, λ)` `unifpdf(x, a, b)`。
 
 ### predict：先猜，再揭晓
 
@@ -176,7 +178,7 @@ explain: 第一行 $2\cdot1 + (-1)\cdot2 = 0$，第二行 $1\cdot1 + 3\cdot2 = 7
 - 答错两次后会出现「看答案」。
 - 「截图作答」和「✎ 手写作答」：我在笔记软件里手写后截图上传，或直接用 Apple Pencil 在页面手写板上写解答；Claude 读出最终答案填进格子，我核对后自己点「检查」。它认出的解答过程会进学习记录（「过程（手写转写）」），请据此找我错在哪一步。所以 `answer` 的 `q` 要把题目写完整，Claude 读手写时只看得到 `q`。
 
-### conjecture：说出你的发现（由页面里的 Claude 批改）
+### conjecture：说出你的发现（由页面里的 Claude 批改；`grade: off` 只记录不批改）
 
 ```conjecture
 title: 你发现了什么？
@@ -249,6 +251,153 @@ height: 260
 
 所以设计计算题时，可以鼓励我「先在草稿区写出完整过程，再填答案」。
 
+### steps：一步步揭开的例题（带着动脑，最推荐）
+
+我不看一整道写好的例题，而是**每一步揭开前，先写下下一步要做什么、为什么**（打字、Pencil 手写或截图），然后才看到真实的一步。我的想法留在原处，和真实步骤并排对照。
+
+```steps
+id: ex-rank1
+title: 例2.1 求 Aⁿ
+q: 设 $\boldsymbol\alpha=[1,2]^{\mathrm T}$，$\boldsymbol\beta=[1,1]^{\mathrm T}$，$A=\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}$，求 $A^n$。
+
+step: 写出 $A^2$
+ask: 先别算矩阵。$A^2$ 用 $\boldsymbol\alpha$、$\boldsymbol\beta$ 怎么写？
+show: $A^2=(\boldsymbol\alpha\boldsymbol\beta^{\mathrm T})(\boldsymbol\alpha\boldsymbol\beta^{\mathrm T})$
+
+step: 换个括号
+ask: 中间哪两个可以先乘？乘出来是什么形状？
+choices: 一个数 | 一个 2×2 矩阵 | 一个 1×2 行向量
+answer: 一个数
+show: 结合律：$=\boldsymbol\alpha(\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)\boldsymbol\beta^{\mathrm T}$，$\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是一个数。
+
+step: 推到 n 次
+do: true
+answer: $(\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)^{n-1}A$
+show: $A^n=(\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)^{n-1}A$
+```
+
+- 开头的 `id:`（必写，同一单元不重复）、`title:`、`q:`（题目，一直显示）。
+- 每个 `step:` 开始一步，后面是这一步的小标题。`ask:` 是揭开前问我的问题。我必须先交一次想法，才能点「揭开这一步」。自由回答旁有「想不出来」：点了直接揭开，并记一条「放弃」。想不出来也是有用的信息。
+- `choices:` 用 `|` 分隔，变成选项按钮；`answer:` 是正确选项，选完立刻显示对错，不管对错都能揭开。
+- `show:` 是揭开后显示的真实步骤。
+- `do: true`：这一步不揭开，要我自己做出来，做完可以「对照答案」。`answer:` 能算出数 / 向量 / 矩阵时（如 `answer: [1, 2]`），我在格子里填、程序判对错；是式子时我自由作答，再对照 `answer` / `show`。
+- **逐步撤掉脚手架**：同一种题，第一道全部揭开，第二道最后一步 `do: true`，第三道全部 `do: true`。
+
+**图跟着步骤动**：`scene`（以及下面的 `graph`、`space`）写 `link: steps 的 id`，图就固定在这道题旁边（宽屏在右侧，窄屏在上方吸顶），并且：
+
+- 表达式里可以用 `step`（已经揭开的步数：开始是 0，揭开第 1 步后是 1）。
+- 命令后加 `from=k` / `until=k`：揭开到第 k 步起 / 为止才显示。
+- 每揭开一步，变量 `t` 从 0 动到 1（约 0.8 秒），做过渡动画，比如 `grid lerp(I, A, t) from=1`。
+
+```scene
+title: 秩一矩阵把平面压成一条线
+link: ex-rank1
+let A = [[1, 1], [2, 2]]
+let x = [2, -0.5] drag
+line [0, 0] dir [1, 2] color=yellow from=1
+grid lerp(I, A, t) faint from=1
+vector x color=blue label=x
+vector A*x color=pink label=Ax from=1
+vector A*A*x color=yellow label=A²x from=2
+```
+
+### recognize：认方法快练（只认方法，不计算）
+
+我最大的问题是学完了、做题时认不出该用哪个方法。这个组件一次出一题，我点一个方法，再写一句「凭题目里的什么特征」，马上看对错、标准方法和原因。每题计时（不扣分），做完有小结，可以「只重做错的」。
+
+```recognize
+id: rec-power-1
+title: 认方法
+methods: 秩一公式 | 试算低次幂 | 拆 kE+B 二项展开 | 分块对角 | 其他
+reason: true
+shuffle: true
+
+item: $A=\begin{bmatrix}1&-1&1\\-1&1&-1\\1&-1&1\end{bmatrix}$，求 $A^{10}$
+answer: 秩一公式
+why: 三行成比例，$A^n=[\operatorname{tr}A]^{n-1}A$
+
+item: $A=\begin{bmatrix}2&1\\0&2\end{bmatrix}$，求 $A^{8}$
+answer: 拆 kE+B 二项展开 | 试算低次幂
+why: $A=2E+N$，$N^2=O$
+```
+
+`answer:` 可以用 `|` 写多个可接受的方法（必须是 `methods` 里的名字）。`reason: true` 时要写理由，`shuffle: true` 打乱题序。
+
+### findbug：找错
+
+给一份有错的解答，我先点第一处错的那一行，再写错在哪（打字或手写）。点对了显示 `why:`；点错了提示「这一行是对的」，第二次错后可以看答案。题源最好用我错题档案里的真实错误。
+
+```findbug
+id: bug-ata
+title: 这份解答错在哪？
+q: $A$ 为 $5\times3$，三列长 1、2、3，第 1、2 列垂直，第 2、3 列垂直，第 1、3 列夹角 $120^\circ$。写出 $A^{\mathrm T}A$。
+line: $A^{\mathrm T}A$ 的 $(i,j)$ 位是第 $i$ 列和第 $j$ 列的内积
+line: 对角线是每列和自己的内积，填 $1, 2, 3$
+line: $(1,3)$ 位 $=1\cdot3\cdot\cos120^\circ=-\tfrac32$
+line: 其余非对角位是 $0$
+bug: 2
+why: 每列和自己的内积是长度的**平方**，对角线应为 $1, 4, 9$。
+```
+
+`bug:` 是第一处错的行号（从 1 数）。可选 `rubric:`：写了的话，页面里的 Claude 会对我写的说明给一句提示（只提示，不判过关）。
+
+### graph：函数图（概率分布、面积、函数性质）
+
+坐标窗口可以不对称，适合画密度函数、分布律、累积概率。
+
+```graph
+title: 正态分布：拖动 a 看累积概率
+x: -4 4
+slider mu -2 2 = 0 label="μ"
+slider s 0.5 2 = 1 label="σ"
+let a = 1 drag
+shade normpdf(x, mu, s) -inf a color=yellow
+plot normpdf(x, mu, s) color=blue label=f(x)
+plot normpdf(x) color=gray dashed thin
+show $P(X \le {a}) = {normcdf(a, mu, s)}$
+```
+
+字段：`x: 最小 最大`、`y: 最小 最大`（不写则按曲线自动取）、`xlabel`、`ylabel`、`title`、`q`、`note`、`link`。
+
+| 命令 | 作用 |
+|---|---|
+| `plot f(x)` | 曲线 y = f(x)。可选 `color=` `label=` `dashed` `thin` |
+| `shade f(x) a b` | x 从 a 到 b，曲线与 x 轴之间涂色（a、b 可写 `-inf` / `inf` 或变量） |
+| `bars f(k) for k 0 10` | 离散分布的柱子。`highlight=k<=3` 让满足条件的柱子更亮 |
+| `let a = 1 drag` | 一条可以左右拖的竖线（`snap=0.5` 设步长） |
+| `vline 表达式` / `hline 表达式` | 竖 / 横参考线，可加 `label=` |
+| `point [x, y]`、`segment [x1,y1], [x2,y2]`、`text "文字" at [x, y]` | 点、线段、文字 |
+| `let`、`slider`、`show` | 同 `scene` |
+
+### space：三维图（可以拖动旋转）
+
+三维向量、张成的平面、平行六面体（体积 = 行列式）。我可以用手指或 Pencil 拖动旋转，还有「正视角」「转一转」按钮。
+
+```space
+title: 两个向量张成一个平面
+let u = [1, 0, 1]
+let v = [0, 1, 1]
+slider a -2 2 = 1
+slider b -2 2 = 1
+span u, v color=blue
+vector u color=blue label=u
+vector v color=pink label=v
+vector a*u + b*v color=yellow label=w drop
+show $\mathbf w = a\mathbf u + b\mathbf v = {a*u + b*v}$
+```
+
+| 命令 | 作用 |
+|---|---|
+| `vector 表达式`（`from 点`） | 三维箭头。`drop` 加一条到地面的虚线，帮助看高度 |
+| `point P, …`、`segment P, Q`、`line P dir d` | 点、线段、直线 |
+| `span u, v` | 过原点的平面（u、v 共线时画成直线；三个向量张成全空间时注明） |
+| `plane normal n at P` | 过 P、法向量为 n 的平面（省略 `at` 则过原点） |
+| `box u, v, w` | u、v、w 张成的平行六面体 |
+| `grid M` | 地面网格（z = 0）在 3×3 矩阵 M 下的像 |
+| `text "文字" at P`、`let`、`slider`、`show` | 同上 |
+
+字段：`range`（坐标范围，默认自动）、`view: 方位角 仰角`（默认 `-32 22`）、`spin: true`（打开时慢慢转）、`title`、`q`、`note`、`link`。
+
 ### summary：单元结尾（必放）
 
 ```summary
@@ -282,3 +431,63 @@ text: 这一单元你发现了……下一单元会……
 ```
 
 请重点看：第一次填错的答案（错误的模式是什么，比如行列搞反、符号错误）、被判「部分正确」的猜想（缺了哪个要点）、偏差大的预测（几何直觉哪里不对）、我主动问过的问题。先用一两个问题确认我的理解，再决定是补讲、出补充练习，还是进入下一个单元。
+
+---
+
+## 五、实时黑板（mode: live）：一段一段带着我学
+
+guided 课件是一次写完的。实时黑板换一种方式：**课件页面只是一个壳，你一段一段往黑板上写**。我在黑板上作答，作答（包括手写原图）存进这个 artifact 的数据库；我回对话说「做完了」，你读我的作答，再决定下一段写什么。**往下走的决定权在你这里，不在页面里。**页面里的 Claude 只当助手：转写手写、给小提示、算对错，不判断我「过没过」。
+
+### 发布黑板
+
+每个单元发布一个 live artifact：
+
+```html
+<title>秩一方阵</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+mode: live
+unit: 第2讲 §2 · 秩一方阵
+---
+</script>
+```
+
+- `files`：同上，从组件库复制 `la-kit.js`。
+- `capabilities`：`{ "sample": { "images": true }, "db": {}, "assets": {} }`。`db` 存黑板内容和作答，`assets` 存我的手写原图。
+
+### 往黑板上写
+
+用 `ArtifactData` 工具（`url` 是这块黑板的地址）：
+
+- 写一段：`action: "set"`，`collection: "steps"`，`doc_id: "s1"`，`data: { "seq": 1, "md": "这一段的课件 Markdown", "title": "可选的小标题" }`。`seq` 递增，决定顺序；`md` 和 guided 课件里一节的写法完全一样，可以含任何组件。一次写好几段用 `batch`。
+- **每段只放一件要我动脑的事**：一道 `steps` 例题（可带联动的图）、一轮 `recognize`、一道 `findbug`、一个 `conjecture`……不要把一整个单元一次写上去。
+- 改一段：`update`（带上读到的 `if_version`）。我还没在那段作答，页面直接换成新内容；我已经作答，页面会提示「Claude 改了这一段」，我点了才替换。
+- 撤回写错的一段：`update` 成 `{ "hidden": true }`。
+- 单元设置：`collection: "meta"`，`doc_id: "board"`，`data: { "unit": "单元名", "context": "给页面里 Claude 的背景资料（教材原文、我的薄弱点）", "updatedAt": 时间戳 }`。`context` 等同 guided 课件里的 `context` 块。
+- 每个会产生作答的组件都写 `id:`（同一块黑板里不重复）。漏写时页面会在那一段顶部提示。
+
+黑板还没有内容时，页面显示「黑板还是空的，回对话里让 Claude 开始」。新的一段出现时，页面会滚过去并提示「黑板上有新内容」。每段末尾有「这段做完了」按钮。
+
+### 读我的作答
+
+我说「做完了」时：
+
+- `ArtifactData` 的 `query`：`collection: "answers"`，`query: { "where": [["step", "==", "s1"]] }`（或按 `block` 过滤）。每次尝试都是一条，不只最后一次。字段：
+  - `step`、`block`：哪一段、哪个组件（组件的 `id`）
+  - `kind`：`answer` `practice` `conjecture` `quiz` `predict` `steps` `recognize` `recognize-sum` `findbug` `ask` 等
+  - `q`（题面）、`text`（我写的文字：打字的或手写转出来的）、`value`（我填的值 / 选的选项）、`ok`（程序能判的 true / false，判不了是 null）
+  - `attempts`、`first`、`transcript`（手写转写）、`via`（"手写" / "截图"）、`aiFeedback`（页面 Claude 的提示）、`ms`（用时）、`detail`（如 `steps` 的「第 2 步」）、`giveup`（想不出来）、`final: true`（这道题的最终结果）
+  - `images`：手写 / 截图原图的 asset id。转写可能有错，要看原图时用 `Artifact` 工具 `action: "read"`，`url` 是黑板地址，`path` 是这个 id。
+- `query` `collection: "events"`：`type` 是 `open`（打开黑板）、`reveal`（揭开一步）、`giveup`（想不出来）、`done`（点了「这段做完了」）、`ask`（在「问 Claude」里问了什么，`detail` 里有问题和回答）。
+
+### 根据作答决定下一段
+
+- 答对了但理由歪了、`steps` 里放弃了、`recognize` 认错或用时很长 → 补讲，或者换一道同类题再走一遍。
+- 缺的是知识 → 先讲清楚再练；缺的是思路 → 用 `steps` 让我自己走一遍，逐步撤掉脚手架。
+- 掌握了 → 进入新内容。
+- 不要说「你已经掌握了」之类的话，除非作答确实证明了。
+
+页面上 `conjecture` 在实时黑板里默认 `grade: off`：只记录不批改，由你来看（guided 课件里也可以写 `grade: off`）。
+
+**本地试用**：在页面地址后面加 `?dev`（只在本地打开的页面有效），会出现「开发面板」，可以扮演你往黑板上写段落、查看作答。

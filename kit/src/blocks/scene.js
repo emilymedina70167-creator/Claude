@@ -2,10 +2,23 @@
 import { createScene } from '../scene.js';
 import { session } from '../session.js';
 import { widget, mdToHtml } from './common.js';
+import { link } from '../link.js';
 
 export function scene(el, src) {
   const body = widget(el, { title: null });
-  const api = createScene(body, src);
+  // link: 某个 steps 的 id → 表达式里可以用 step（已揭开的步数）和 t（每揭开一步从 0 动到 1）
+  const linkId = (src.match(/^\s*link\s*[:：]\s*(\S+)\s*$/m) || [])[1];
+  const extra = linkId ? { step: link(linkId).step, t: 1 } : {};
+  const api = createScene(body, src, { extraVars: extra });
+  if (linkId) {
+    el.dataset.link = linkId;
+    link(linkId).on((n) => {
+      extra.step = n;
+      extra.t = 0;
+      api.draw();
+      api.animate('t', 0, 1, 800);
+    });
+  }
   const { fields } = api;
   const titleText = fields.title || '探索 Explore';
   el.querySelector('.widget').insertAdjacentHTML('afterbegin', `<div class="w-title">${mdToHtml(titleText, { inline: true })}</div>`);
@@ -20,7 +33,7 @@ export function scene(el, src) {
       hit++;
       if (hit >= api.goals) {
         done();
-        session.record({ type: 'scene', title: titleText, ok: true, stage: session.stageOf(el) });
+        session.record({ type: 'scene', title: titleText, ok: true, el });
       }
     });
   }

@@ -22,7 +22,7 @@ const cell = (x) => (x instanceof Frac ? x.toTeX() : typeof x === 'number' ? fmt
 const fmtNum = (x) => (Math.abs(x - Math.round(x)) < 1e-9 ? String(Math.round(x)) : String(Number(x.toFixed(2))));
 
 // 需要学生动手的组件用粉笔圈出来，讲解类直接写在黑板上
-const ACT = new Set(['answer', 'practice', 'quiz', 'conjecture', 'predict', 'summary', 'sortpass']);
+const ACT = new Set(['answer', 'practice', 'quiz', 'conjecture', 'predict', 'summary', 'sortpass', 'steps', 'recognize', 'findbug']);
 
 export function widget(el, { title, cls = '' } = {}) {
   const act = cls.split(/\s+/).some((c) => ACT.has(c)) ? ' act' : '';

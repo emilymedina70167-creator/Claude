@@ -43,13 +43,16 @@ export function initBoardInk(article) {
     const ss = [...article.querySelectorAll('.stage')];
     return ss.length ? ss : [article];
   };
+  // 笔画记在哪一节：实时黑板按段的 id（段会陆续加进来），其他按序号
+  const keyOf = (el, i) => el.dataset?.step || i;
+  const anchorEl = (k) => { const as = anchors(); return as.find((a, i) => keyOf(a, i) === k) || as[0]; };
   function anchorAt(clientY) {
     const as = anchors();
     for (let i = as.length - 1; i >= 0; i--) {
       if (as[i].hidden) continue;
-      if (as[i].getBoundingClientRect().top <= clientY) return i;
+      if (as[i].getBoundingClientRect().top <= clientY) return keyOf(as[i], i);
     }
-    return 0;
+    return keyOf(as[0], 0);
   }
 
   let queued = false;
@@ -63,9 +66,9 @@ export function initBoardInk(article) {
       if (st.hidden) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const as = anchors();
-      const rects = as.map((a) => (a.hidden ? null : a.getBoundingClientRect()));
+      const rects = new Map(as.map((a, i) => [keyOf(a, i), a.hidden ? null : a.getBoundingClientRect()]));
       for (const s of strokes) {
-        const r = rects[s.a] || rects[0];
+        const r = rects.has(s.a) ? rects.get(s.a) : rects.get(keyOf(as[0], 0));
         if (!r) continue;
         const b = s.bbox;
         if (b[3] + r.top < 0 || b[1] + r.top > innerHeight) continue;
@@ -171,7 +174,7 @@ export function initBoardInk(article) {
     try { document.documentElement.setPointerCapture(e.pointerId); } catch { /* 部分浏览器不支持 */ }
     cursor.hidden = true;
     const a = anchorAt(e.clientY);
-    const r = anchors()[a].getBoundingClientRect();
+    const r = anchorEl(a).getBoundingClientRect();
     if (st.tool === 'eraser') {
       st.drawing = null;
       st.eraseBatch = [];
@@ -242,7 +245,7 @@ export function initBoardInk(article) {
   function eraseOne(cx, cy) {
     const e = { clientX: cx, clientY: cy };
     const a = anchorAt(e.clientY);
-    const r = anchors()[a].getBoundingClientRect();
+    const r = anchorEl(a).getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
     const hit = strokes.filter((s) => s.a === a && hitStroke(s, x, y, ERASER_R));
     if (!hit.length) return;

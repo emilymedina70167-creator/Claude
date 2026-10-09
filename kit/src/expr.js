@@ -24,8 +24,34 @@ const FUNCS = {
   min: (...a) => Math.min(...a.map(num)),
   max: (...a) => Math.max(...a.map(num)),
   round: (x, n = 0) => { const k = 10 ** num(n); return Math.round(num(x) * k) / k; },
+  tan: (deg) => Math.tan((num(deg) * Math.PI) / 180),
+  atan2: (y, x) => (Math.atan2(num(y), num(x)) * 180) / Math.PI, // 角度（度）
+  exp: (x) => Math.exp(num(x)),
+  ln: (x) => Math.log(num(x)),
+  log: (x, b = 10) => Math.log(num(x)) / Math.log(num(b)),
+  floor: (x) => Math.floor(num(x)),
+  ceil: (x) => Math.ceil(num(x)),
+  sign: (x) => Math.sign(num(x)),
+  // 概率统计
+  fact: (n) => fact(num(n)),
+  choose: (n, k) => choose(num(n), num(k)),
+  normpdf: (x, mu = 0, s = 1) => Math.exp(-(((num(x) - num(mu)) / num(s)) ** 2) / 2) / (num(s) * Math.sqrt(2 * Math.PI)),
+  normcdf: (x, mu = 0, s = 1) => 0.5 * (1 + erf((num(x) - num(mu)) / (num(s) * Math.SQRT2))),
+  binompmf: (k, n, p) => (Number.isInteger(num(k)) && num(k) >= 0 && num(k) <= num(n) ? choose(num(n), num(k)) * num(p) ** num(k) * (1 - num(p)) ** (num(n) - num(k)) : 0),
+  poissonpmf: (k, l) => (Number.isInteger(num(k)) && num(k) >= 0 ? Math.exp(-num(l)) * num(l) ** num(k) / fact(num(k)) : 0),
+  exppdf: (x, l = 1) => (num(x) < 0 ? 0 : num(l) * Math.exp(-num(l) * num(x))),
+  unifpdf: (x, a = 0, b = 1) => (num(x) >= num(a) && num(x) <= num(b) ? 1 / (num(b) - num(a)) : 0),
 };
-const CONSTS = { pi: Math.PI };
+const CONSTS = { pi: Math.PI, e: Math.E };
+
+function fact(n) { let r = 1; for (let i = 2; i <= n; i++) r *= i; return r; }
+function choose(n, k) { if (k < 0 || k > n) return 0; let r = 1; for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i; return r; }
+// 误差函数（Abramowitz–Stegun 7.1.26，误差 < 1.5e-7）
+function erf(x) {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return x >= 0 ? y : -y;
+}
 
 export function evaluate(src, vars = {}) {
   const p = new Parser(String(src));
@@ -67,7 +93,15 @@ class Parser {
   eat(v) { if (this.peek()?.v === v) { this.i++; return true; } return false; }
   expect(v) { if (!this.eat(v)) throw new Error(`缺少 “${v}”`); }
   expectEnd() { if (this.i < this.toks.length) throw new Error(`多余的内容：${this.toks.slice(this.i).map((t) => t.v).join('')}`); }
+  // 比较：a < b 等，成立是 1、不成立是 0（用于 highlight=k<=3、分段函数 (x>0)*x 等）
   parseExpr() {
+    const a = this.parseSum();
+    const op = ['<=', '>=', '==', '!=', '<', '>'].find((o) => this.peek()?.v === o);
+    if (!op) return a;
+    this.i++;
+    return { t: 'bin', op, a, b: this.parseSum() };
+  }
+  parseSum() {
     let a = this.parseTerm();
     for (;;) {
       if (this.eat('+')) a = { t: 'bin', op: '+', a, b: this.parseTerm() };
@@ -136,10 +170,10 @@ class Parser {
 
 function tokenize(s) {
   const out = [];
-  const re = /\s*(?:(\d+\.?\d*|\.\d+)|([A-Za-z_Ͱ-Ͽ][\wͰ-Ͽ]*)|(\*\*|[-+*/^()[\],'|·]))/y;
+  const re = /\s*(?:(\d+\.?\d*|\.\d+)|([A-Za-z_Ͱ-Ͽ][\wͰ-Ͽ]*)|(\*\*|<=|>=|==|!=|[-+*/^()[\],'|·<>]))/y;
   let m;
   let pos = 0;
-  s = s.replace(/−/g, '-').replace(/×/g, '*');
+  s = s.replace(/−/g, '-').replace(/×/g, '*').replace(/≤/g, '<=').replace(/≥/g, '>=').replace(/≠/g, '!=');
   while (pos < s.length) {
     re.lastIndex = pos;
     if (/^\s*$/.test(s.slice(pos))) break;
@@ -177,6 +211,14 @@ function run(n, vars) {
       if (n.op === '*') return mul(a, b);
       if (n.op === '/') { if (!isNum(b)) throw new Error('只能除以数'); return scale(1 / b, a); }
       if (n.op === '^') return power(a, b);
+      if (!isNum(a) || !isNum(b)) throw new Error('只能比较两个数');
+      const eps = 1e-9;
+      if (n.op === '<') return +(a < b - eps);
+      if (n.op === '<=') return +(a <= b + eps);
+      if (n.op === '>') return +(a > b + eps);
+      if (n.op === '>=') return +(a >= b - eps);
+      if (n.op === '==') return +(Math.abs(a - b) <= eps);
+      if (n.op === '!=') return +(Math.abs(a - b) > eps);
     }
   }
   throw new Error('表达式错误');

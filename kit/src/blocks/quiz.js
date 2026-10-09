@@ -33,7 +33,7 @@ export function quiz(el, src) {
     if (closed) return;
     closed = true;
     gateDone();
-    session.record({ type: 'quiz', q: qText, ok, attempts: tries, wrong: wrongPicks, stage: session.stageOf(el) });
+    session.record({ type: 'quiz', q: qText, ok, attempts: tries, wrong: wrongPicks, el });
   };
   const explain = fields.explain || fields.explanation || '';
   const feedback = (ok, extra = '', picked = '') => {

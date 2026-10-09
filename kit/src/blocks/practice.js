@@ -31,6 +31,7 @@ export function practice(el, src) {
 
   function status() {
     dots.innerHTML = results.map((r) => `<span class="pr-dot ${r ? 'ok' : 'bad'}"></span>`).join('') + Array.from({ length: Math.max(0, need - right) }, () => '<span class="pr-dot"></span>').join('');
+    if (session.live) { count.textContent = total ? `答对 ${right} / 做了 ${total}` : `做 ${need} 道左右`; return; }
     count.textContent = right >= need ? `已过关（答对 ${right} / 做了 ${total}），可以继续练` : `还需答对 ${need - right} 道`;
   }
 
@@ -39,12 +40,15 @@ export function practice(el, src) {
     const box = body.querySelector('.pr-problem');
     next.hidden = true;
     skip.hidden = false;
-    answerWidget(box, { ...p, qhtml: p.qhtml ? `<div class="arr-box">${p.qhtml}</div>` : '' }, (r) => {
+    const t0 = Date.now();
+    const rq = plain((p.recordQ || p.q).replace(/\$/g, ''));
+    const onTry = (t) => session.record({ type: 'practice', liveOnly: true, title: NAMES[p.gen] || p.gen, q: rq, value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, ms: Date.now() - t0, el });
+    answerWidget(box, { ...p, onTry, qhtml: p.qhtml ? `<div class="arr-box">${p.qhtml}</div>` : '' }, (r) => {
       total++;
       const ok = r.ok && r.attempts === 1;
       results.push(r.ok);
       if (r.ok) right++;
-      session.record({ type: 'practice', title: NAMES[p.gen] || p.gen, q: plain((p.recordQ || p.q).replace(/\$/g, '')), ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(p.answer), firstTry: ok, work: r.work || undefined, stage: session.stageOf(el) });
+      session.record({ type: 'practice', final: true, ms: Date.now() - t0, title: NAMES[p.gen] || p.gen, q: rq, ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(p.answer), firstTry: ok, work: r.work || undefined, el });
       if (right >= need) done();
       status();
       next.hidden = false;

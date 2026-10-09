@@ -40,6 +40,9 @@ export function createPlane(container, { range = 5 } = {}) {
     line(a, b, cls, extra = {}) {
       return add(p.layer, 'line', { x1: p.X(a[0]), y1: p.Y(a[1]), x2: p.X(b[0]), y2: p.Y(b[1]), class: cls, ...extra });
     },
+    path(pts, cls) {
+      return add(p.layer, 'polyline', { points: pts.map(([x, y]) => `${p.X(x)},${p.Y(y)}`).join(' '), class: cls });
+    },
     poly(pts, cls) {
       return add(p.layer, 'polygon', { points: pts.map(([x, y]) => `${p.X(x)},${p.Y(y)}`).join(' '), class: cls });
     },

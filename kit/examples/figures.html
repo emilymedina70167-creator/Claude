@@ -1,0 +1,58 @@
+<title>图形示范</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+# 新图形示范
+
+```scene
+title: 单位圆变成椭圆
+let A = [[2, 1], [1, 2]]
+slider t 0 1 = 1 play
+curve [cos(s), sin(s)] color=gray dashed
+curve lerp(I, A, t)*[cos(s), sin(s)] for s 0 360 color=yellow label=像
+eigen A
+grid lerp(I, A, t) faint
+```
+
+```space
+title: 两个向量张成一个平面
+let u = [1, 0, 1]
+let v = [0, 1, 1]
+slider a -2 2 = 1
+slider b -2 2 = 1
+span u, v color=blue
+vector u color=blue label=u
+vector v color=pink label=v
+vector a*u + b*v color=yellow label=w drop
+show $\mathbf w = a\mathbf u + b\mathbf v = {a*u + b*v}$
+```
+
+```space
+title: 行列式 = 体积
+let A = [[1, 0.5, 0], [0, 1, 0.3], [0.2, 0, 1.2]]
+box col(A,1), col(A,2), col(A,3) color=yellow
+vector col(A,1) color=blue label=a1
+vector col(A,2) color=pink label=a2
+vector col(A,3) color=green label=a3
+show $\det A = {det(A)}$
+```
+
+```graph
+title: 正态分布：拖动 a 看累积概率
+x: -4 4
+slider mu -2 2 = 0
+slider s 0.5 2 = 1
+let a = 1 drag
+shade normpdf(x, mu, s) -inf a color=yellow
+plot normpdf(x, mu, s) color=blue label=f(x)
+plot normpdf(x) color=gray dashed thin
+show $P(X \le {a}) = {normcdf(a, mu, s)}$
+```
+
+```graph
+title: 二项分布
+x: -0.5 10.5
+slider p 0 1 = 0.3
+bars binompmf(k, 10, p) for k 0 10 color=pink highlight=k<=3
+show $E X = 10p = {10*p}$
+```
+</script>

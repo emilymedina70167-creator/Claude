@@ -48,7 +48,9 @@ export function conjecture(el, src) {
             label: '转成文字', primary: true, onClick: async (p) => {
               status.textContent = 'Claude 正在看你写的内容…';
               try {
-                const text = await transcribe([await p.toBlob()], q);
+                const blob = await p.toBlob();
+                session.keepImages(body, blob);
+                const text = await transcribe([blob], q);
                 if (!text) { status.textContent = '没认出文字，写清楚一点再试一次，或者直接打字。'; return; }
                 ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + text;
                 ta.dispatchEvent(new Event('input'));
@@ -77,12 +79,14 @@ export function conjecture(el, src) {
   let finished = false;
   let aiDown = false;
   let via = ''; // 回答来自截图 / 手写板转写（记录里注明）
+  const grading = !/^(off|no|false|否|不)$/i.test(fields.grade || (session.live ? 'off' : 'on'));
 
   // 截图作答：转写到文本框里，学生核对、修改后再提交
   photoPicker(ta, {
     root: body,
     async onPick(files, ui) {
       ui.status('Claude 正在认你的手写…', 'is-wait');
+      session.keepImages(body, files);
       try {
         const t = await transcribe(files, q);
         if (!t) { ui.status('没认出文字。换一张清楚点的截图，或者直接打字。', 'is-bad'); return; }
@@ -98,7 +102,7 @@ export function conjecture(el, src) {
 
   const finish = (entry) => {
     if (!finished) { finished = true; done(); }
-    session.record({ type: 'conjecture', title, q: plain(q), stage: session.stageOf(el), via: via || undefined, ...entry });
+    session.record({ type: 'conjecture', title, q: plain(q), el, via: via || undefined, ...entry });
   };
 
   function showReference(selfCheck) {
@@ -122,6 +126,16 @@ export function conjecture(el, src) {
     const text = ta.value.trim();
     if (text.length < 4) { fb.hidden = false; fb.className = 'cj-feedback is-bad'; fb.textContent = '先写下你的想法，哪怕不确定也没关系。'; return; }
     attempts++;
+    // grade: off（live 模式默认）：只交给对话里的 Claude 看，页面不批改
+    if (!grading) {
+      fb.hidden = false;
+      fb.className = 'cj-feedback is-wait';
+      fb.innerHTML = `已交${attempts > 1 ? `（第 ${attempts} 次）` : ''}。回对话说一声，等 Claude 看。`;
+      if (!finished) { finished = true; done(); }
+      session.record({ type: 'conjecture', title, q: plain(q), answer: text, attempts, verdict: '已交，等 Claude 看', el, via: via || undefined });
+      btn.textContent = '改了再交';
+      return;
+    }
     const ai = aiDown ? null : await getAI();
     if (!ai) { fb.hidden = true; showReference(true); btn.disabled = true; return; }
     btn.disabled = true;
@@ -138,7 +152,7 @@ ${(session.stages[session.stageOf(el)]?.src || '').slice(0, 2500)}
 评分要点：${fields.rubric || fields.answer || '（根据问题判断）'}
 学生的回答（第 ${attempts} 次）：${text}
 
-请判断学生是否抓住了要点。只回复一个 JSON 对象：
+请判断学生是否抓住了要点。反馈只给提示，不给完整答案；不要说学生已经掌握。只回复一个 JSON 对象：
 {"verdict": "correct" | "partial" | "incorrect", "feedback": "给学生的反馈，1-3 句：先肯定说对的部分，再指出缺什么或哪里不准确；不完全正确时不要直接说出完整答案，而是给方向", "followup": "一个能推动学生多想一步的问题；没有就写空字符串"}
 公式用 $...$ 包起来。`;
     try {
@@ -154,7 +168,7 @@ ${(session.stages[session.stageOf(el)]?.src || '').slice(0, 2500)}
       } else {
         btn.textContent = '修改后再提交';
         if (attempts >= 2) btnRef.hidden = false;
-        session.record({ type: 'conjecture-try', title, q: plain(q), answer: text, via: via || undefined, verdict: `Claude：${verdict === 'partial' ? '部分正确' : '不正确'}`, feedback: r.feedback, stage: session.stageOf(el) });
+        session.record({ type: 'conjecture-try', title, q: plain(q), answer: text, via: via || undefined, verdict: `Claude：${verdict === 'partial' ? '部分正确' : '不正确'}`, feedback: r.feedback, el });
       }
     } catch (e) {
       if (AI_PERMANENT.has(e?.code)) { aiDown = true; fb.hidden = true; showReference(true); return; }

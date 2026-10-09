@@ -46,6 +46,7 @@ export function answerWidget(body, spec, onDone) {
     async onPick(files, ui) {
       if (finished) return;
       ui.status('Claude 正在读你的解答…', 'is-wait');
+      session.keepImages(body, files);
       try {
         const r = await readFinal(files, plainQ, shape);
         if (r.transcript) work = r.transcript;
@@ -81,6 +82,7 @@ export function answerWidget(body, spec, onDone) {
     attempts++;
     if (first === null) first = input.text();
     const r = check(given, spec.answer, spec.type);
+    spec.onTry?.({ text: input.text(), ok: r.ok, attempts, work });
     if (r.ok) {
       input.markAll('is-right');
       show('is-ok', `<div class="q-verdict">✓ 正确${attempts > 1 ? `（第 ${attempts} 次）` : ''}</div>${r.msg ? `<div>${r.msg}</div>` : ''}${spec.explain ? mdToHtml(spec.explain) : ''}`);
@@ -154,7 +156,9 @@ function addHandwriting(body, shape, input, question, { isFinished, onWork }) {
       if (isFinished()) return;
       say('Claude 正在看你写的解答…', 'is-wait');
       try {
-        const r = await readFinal([await p.toBlob()], question, shape);
+        const blob = await p.toBlob();
+        session.keepImages(body, blob);
+        const r = await readFinal([blob], question, shape);
         if (r.transcript) onWork(r.transcript);
         const flat = flatFinal(r.final, shape);
         if (!flat) {
@@ -183,8 +187,9 @@ export function answer(el, src) {
   const title = fields.title || '动手算 Try it';
   const body = widget(el, { title, cls: 'answer' });
   const done = session.gate(el, title);
-  answerWidget(body, { ...fields, answer: value, type: (fields.type || '').toLowerCase() }, (r) => {
-    session.record({ type: 'answer', title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(value), revealed: r.revealed, work: r.work || undefined, stage: session.stageOf(el) });
+  const onTry = (t) => session.record({ type: 'answer', liveOnly: true, title, q: plain(fields.q), value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, el });
+  answerWidget(body, { ...fields, answer: value, type: (fields.type || '').toLowerCase(), onTry }, (r) => {
+    session.record({ type: 'answer', final: true, title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(value), revealed: r.revealed, work: r.work || undefined, el });
     done();
   });
 }

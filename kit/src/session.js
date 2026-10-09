@@ -12,6 +12,8 @@ export const session = {
   problems: [], // 课件本身的错误（写法不对），集中显示给作者
   context: '', // context 块：给页面里的 Claude 的背景资料
   subject: '线性代数', // 课件开头 subject: 可改（如 数据结构）
+  live: false, // 实时黑板模式（作答同时写进数据库，由对话里的 Claude 决定往下讲什么）
+  sink: null, // live 模式下接收每条作答 / 事件 / 手写原图：{ record(entry), event(e), images(key, blobs) }
 
   reset(title) {
     this.title = title;
@@ -40,12 +42,40 @@ export const session = {
     };
   },
 
+  // 记一条作答。entry.el：组件所在元素（自动补上小节、组件 id、用时）；
+  // entry.liveOnly：只写进数据库（比如每一次尝试），不进本地学习记录
   record(entry) {
-    this.log.push({ ...entry, stage: entry.stage ?? null, at: Date.now() });
-    if (this.log.length > 300) this.log.splice(0, this.log.length - 300);
-    save(this.title, { log: this.log });
+    const { el, liveOnly, ...rest } = entry;
+    if (el) {
+      rest.stage ??= this.stageOf(el);
+      rest.block ??= this.blockOf(el);
+      rest.step ??= this.stepOf(el);
+      const t0 = Number(el.closest?.('[data-t0]')?.dataset.t0);
+      if (rest.ms === undefined && t0) rest.ms = Date.now() - t0;
+    }
+    const e = { ...rest, stage: rest.stage ?? null, at: Date.now() };
+    if (!liveOnly) {
+      this.log.push(e);
+      if (this.log.length > 300) this.log.splice(0, this.log.length - 300);
+      save(this.title, { log: this.log });
+    }
+    this.sink?.record(e);
     emit();
   },
+
+  // 学生的动作（这段做完了、揭开一步、想不出来、提问……），只在 live 模式下写进数据库
+  event(type, el, detail) {
+    this.sink?.event({ type, step: el ? this.stepOf(el) : undefined, block: el ? this.blockOf(el) : undefined, detail });
+  },
+
+  // 交给 Claude 识别的手写 / 截图原图：live 模式下存进 assets，附在这个组件的下一条作答上
+  keepImages(key, blobs) {
+    const list = (Array.isArray(blobs) ? blobs : [blobs]).filter(Boolean);
+    if (list.length) this.sink?.images(typeof key === 'string' ? key : this.blockOf(key) || 'page', list);
+  },
+
+  blockOf(el) { return el?.closest?.('[data-bid]')?.dataset.bid; },
+  stepOf(el) { return el?.closest?.('[data-step]')?.dataset.step; },
 
   registerScene(el, api, title) {
     const id = `图${this.scenes.size + 1}`;

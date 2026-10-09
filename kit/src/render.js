@@ -70,8 +70,12 @@ export function mdToHtml(src, { inline = false } = {}) {
 }
 
 // 渲染一段课件并挂载互动组件
+// 会产生作答的组件（live 模式下要有稳定的 id）
+const ANSWERING = new Set(['answer', 'conjecture', 'quiz', 'predict', 'practice', 'steps', 'recognize', 'findbug', 'draft', 'sortpass']);
+
 export function renderLesson(src, root) {
   const pending = [];
+  let seq = 0;
   const defaultFence = md.renderer.rules.fence;
   md.renderer.rules.fence = (tokens, idx, opts, env, self) => {
     const tok = tokens[idx];
@@ -103,6 +107,12 @@ export function renderLesson(src, root) {
       session.problem(el, wrong, `没有「${wrong}」组件，是不是想写 ${near}？`);
       return;
     }
+    // 组件 id：作答记录按它对应。课件里写了 id: 就用它，没写就按「小节 + 序号」生成
+    const own = body.match(/^\s*id\s*[:：]\s*([\w\-.~:@+]+)\s*$/m);
+    const prefix = root.closest?.('[data-step]')?.dataset.step || `s${session.stageOf(root)}`;
+    el.dataset.bid = own ? own[1] : `${prefix}-${++seq}`;
+    el.dataset.t0 = Date.now();
+    if (!own && session.live && ANSWERING.has(name)) session.problem(el, name, `这个组件没写 id:，作答记录暂时按 ${el.dataset.bid} 存。请加一行 id:（同一个单元里不重复）`);
     try {
       blocks[name](el, body);
     } catch (e) {
@@ -110,6 +120,19 @@ export function renderLesson(src, root) {
       el.innerHTML = `<div class="block-error"><strong>「${name}」组件出错：</strong>${escapeHtml(e.message)}<pre>${escapeHtml(body)}</pre></div>`;
       session.problem(el, name, e.message);
     }
+  });
+  pairLinked(root);
+}
+
+// 绑定了 steps 的 scene（link: 某个 steps 的 id）放到那道题旁边，做题时一直看得到图
+function pairLinked(root) {
+  root.querySelectorAll('.block-scene[data-link], .block-graph[data-link], .block-space[data-link]').forEach((sc) => {
+    const st = root.querySelector(`.block-steps[data-bid="${CSS.escape(sc.dataset.link)}"]`);
+    if (!st || sc.closest('.steps-pair')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'steps-pair';
+    st.before(wrap);
+    wrap.append(st, sc);
   });
 }
 

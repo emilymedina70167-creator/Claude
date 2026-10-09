@@ -20,7 +20,7 @@ const COLOR = {
   gray: 'var(--muted)', grey: 'var(--muted)', gold: 'var(--yellow)',
   1: 'var(--v1)', 2: 'var(--v2)', 3: 'var(--v3)', 4: 'var(--v4)', 5: 'var(--v5)',
 };
-const FLAGS = ['drag', 'dashed', 'faint', 'play', 'after', 'before', 'thin'];
+const FLAGS = ['drag', 'dashed', 'faint', 'play', 'after', 'before', 'thin', 'drop'];
 const SUB = '₀₁₂₃₄₅₆₇₈₉';
 
 // 把一行末尾的修饰（color=… label="…" drag 等）拆出来
@@ -60,12 +60,12 @@ export function parseScene(src) {
     const line = raw.replace(/\s+#\s.*$/, '').trimEnd();
     if (!line.trim()) { if (lastField) fields[lastField] += '\n'; continue; }
     const f = line.match(/^([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/);
-    if (f && !/^(let|vector|point|segment|line|span|grid|area|polygon|text|show|goal|slider)\b/.test(line)) {
+    if (f && !/^(let|vector|point|segment|line|span|grid|area|polygon|text|show|goal|slider|curve|eigen)\b/.test(line)) {
       lastField = f[1].toLowerCase();
       fields[lastField] = f[2];
       continue;
     }
-    const c = line.trim().match(/^(let|vector|point|segment|line|span|grid|area|polygon|text|show|goal|slider)\s+(.*)$/i);
+    const c = line.trim().match(/^(let|vector|point|segment|line|span|grid|area|polygon|text|show|goal|slider|curve|eigen)\s+(.*)$/i);
     if (c) { cmds.push(parseCmd(c[1].toLowerCase(), c[2])); lastField = null; continue; }
     if (lastField) fields[lastField] += '\n' + line;
     else if (/^\s*-\s*\[[ xX]\]/.test(line)) (fields._options ||= []).push(line);
@@ -103,6 +103,13 @@ function parseCmd(kind, rest) {
   if (kind === 'vector') {
     const [what, from] = body.split(/\s+from\s+/);
     return { kind, expr: compile(what), from: from ? compile(from) : null, mods };
+  }
+  if (kind === 'curve') {
+    // curve 表达式 for s 0 360：参数 s 从 0 走到 360（sin、cos 用角度），画出点的轨迹
+    const [what, range] = body.split(/\s+for\s+/);
+    const m = (range || 's 0 360').trim().match(/^([A-Za-z_]\w*)\s+(\S+)\s+(\S+)$/);
+    if (!m) throw new Error('curve 的写法：curve A*[cos(s), sin(s)] for s 0 360');
+    return { kind, expr: compile(what), param: m[1], from: compile(m[2]), to: compile(m[3]), mods };
   }
   if (kind === 'line') {
     const [p, d] = body.split(/\s+dir\s+/);
@@ -189,7 +196,10 @@ export function createScene(container, src, opts = {}) {
     });
   }
 
-  const visible = (c) => !(c.mods.after && !state.revealed) && !(c.mods.before && state.revealed);
+  // after / before：predict 揭晓前后；from=k / until=k：绑定的 steps 揭开到第 k 步起 / 为止
+  const visible = (c) => !(c.mods.after && !state.revealed) && !(c.mods.before && state.revealed)
+    && !(c.mods.from !== undefined && !((extra.step ?? 0) >= Number(c.mods.from)))
+    && !(c.mods.until !== undefined && !((extra.step ?? 0) <= Number(c.mods.until)));
   const color = (c, d = 'var(--v1)') => COLOR[String(c.mods.color || '').toLowerCase()] || d;
   const vec2 = (p, what) => { if (!isVec(p) || p.length !== 2) throw new Error(`${what}需要是二维向量`); return p; };
 
@@ -296,6 +306,44 @@ export function createScene(container, src, opts = {}) {
       }
       case 'text': {
         plane.text(vec2(c.at(v), 'text '), c.label, 'plot-text');
+        break;
+      }
+      case 'curve': {
+        const a = Number(c.from(v)), b = Number(c.to(v));
+        const N = Number(c.mods.samples) || 160;
+        const pts = [];
+        for (let i = 0; i <= N; i++) {
+          const p = c.expr({ ...v, [c.param]: a + ((b - a) * i) / N });
+          pts.push(vec2(p, 'curve '));
+        }
+        const el = plane.path(pts, `curve${c.mods.dashed ? ' dashed' : ''}`);
+        el.style.stroke = color(c, 'var(--v3)');
+        if (c.mods.fill) el.style.fill = color(c, 'var(--v3)');
+        if (lab) plane.text(pts[Math.floor(N * 0.12)], lab, 'plot-text curve-label').style.fill = color(c, 'var(--v3)');
+        break;
+      }
+      case 'eigen': {
+        // 特征向量方向：画出经过原点的直线，标上特征值
+        const M = c.exprs[0](v);
+        if (!isMat(M) || M.length !== 2 || M[0].length !== 2) throw new Error('eigen 需要 2×2 矩阵');
+        const [[a, b], [cc, d]] = M;
+        const tr = a + d, dt = a * d - b * cc, disc = tr * tr - 4 * dt;
+        if (disc < -1e-9) { plane.text([-plane.range + 0.3, plane.range - 0.6], '没有实特征向量（会转）', 'plot-text eig-note'); break; }
+        const ls = disc < 1e-9 ? [tr / 2] : [(tr + Math.sqrt(disc)) / 2, (tr - Math.sqrt(disc)) / 2];
+        const R = plane.range * 3;
+        const cols = [color(c, 'var(--lav)'), c.mods.color2 ? COLOR[c.mods.color2] : 'var(--orange)'];
+        ls.forEach((l, i) => {
+          let e = Math.hypot(b, l - a) > 1e-9 ? [b, l - a] : Math.hypot(l - d, cc) > 1e-9 ? [l - d, cc] : null;
+          if (!e) { plane.text([-plane.range + 0.3, plane.range - 0.6], `每个方向都是特征向量（λ=${numText(round(l))}）`, 'plot-text eig-note'); return; }
+          const n = Math.hypot(...e);
+          e = [e[0] / n, e[1] / n];
+          const ln = plane.line([-e[0] * R, -e[1] * R], [e[0] * R, e[1] * R], 'eig-line');
+          ln.style.stroke = cols[i];
+          const tip = [e[0] * plane.range * 0.78, e[1] * plane.range * 0.78];
+          const flip = tip[1] < -plane.range * 0.5 || tip[0] < -plane.range * 0.6 ? -1 : 1;
+          const t = plane.text([tip[0] * flip, tip[1] * flip], `λ=${numText(round(l))}`, 'plot-text eig-label');
+          t.style.fill = cols[i];
+        });
         break;
       }
     }
