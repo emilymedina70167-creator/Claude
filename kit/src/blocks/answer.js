@@ -5,6 +5,7 @@ import { mathInput } from '../mathinput.js';
 import { shapeOf, check } from '../check.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, tex2html } from './common.js';
+import { photoPicker, readFinal, flatFinal, photoError, transcriptHtml } from '../photo.js';
 
 // 通用作答组件：spec = {q, answer, type, before, hint, explain, solution}
 // onDone({ok, attempts, revealed, first})
@@ -33,6 +34,32 @@ export function answerWidget(body, spec, onDone) {
   let attempts = 0;
   let first = null;
   let finished = false;
+  let work = ''; // 截图里认出的解答过程（进学习记录）
+
+  // 截图作答：Claude 读出最终答案填进格子，学生核对后自己点「检查」
+  const plainQ = String(spec.q || '').replace(/\s+/g, ' ').slice(0, 600) || body.querySelector('.arr-box, .w-q')?.textContent?.slice(0, 600) || '';
+  const photo = photoPicker(body.querySelector('.ans-actions'), {
+    label: '截图作答',
+    root: body,
+    async onPick(files, ui) {
+      if (finished) return;
+      ui.status('Claude 正在读你的解答…', 'is-wait');
+      try {
+        const r = await readFinal(files, plainQ, shape);
+        if (r.transcript) work = r.transcript;
+        const flat = flatFinal(r.final, shape);
+        if (!flat) {
+          ui.status(`没找到符合格式的最终答案。把最终结果在截图里写清楚（或圈出来）再传一次，也可以直接填格子。${r.transcript ? transcriptHtml(r.transcript) : ''}`, 'is-bad');
+          return;
+        }
+        input.clear();
+        input.fill(flat);
+        ui.status(`已把截图里的最终答案填进格子。核对一遍，没认错就点「检查」。${r.transcript ? transcriptHtml(r.transcript) : ''}`, 'is-ok');
+      } catch (e) {
+        ui.status(photoError(e), 'is-bad');
+      }
+    },
+  });
 
   const show = (cls, html) => { fb.hidden = false; fb.className = `ans-feedback ${cls}`; fb.innerHTML = html; };
   const finish = (ok, revealed) => {
@@ -41,7 +68,8 @@ export function answerWidget(body, spec, onDone) {
     btnCheck.disabled = true;
     input.lock();
     btnReveal.hidden = true;
-    onDone?.({ ok, attempts, revealed, first, last: input.text() });
+    photo.disable();
+    onDone?.({ ok, attempts, revealed, first, last: input.text(), work });
   };
 
   function doCheck() {
@@ -90,7 +118,7 @@ export function answer(el, src) {
   const body = widget(el, { title, cls: 'answer' });
   const done = session.gate(el, title);
   answerWidget(body, { ...fields, answer: value, type: (fields.type || '').toLowerCase() }, (r) => {
-    session.record({ type: 'answer', title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(value), revealed: r.revealed, stage: session.stageOf(el) });
+    session.record({ type: 'answer', title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(value), revealed: r.revealed, work: r.work || undefined, stage: session.stageOf(el) });
     done();
   });
 }

@@ -591,3 +591,19 @@ body.has-keypad .tutor-fab { display: none; }
   .stage-enter, .plane .vec-in .vec-line, .plane .vec-in .vec-head, .plane .vec-in .vec-label { animation: none; stroke-dashoffset: 0; opacity: 1; }
   .fc-inner { transition: none; }
 }
+
+/* 截图作答 */
+.ph { margin: 12px 0 4px; display: grid; gap: 10px; }
+.ph-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.ph-tip { font-size: 14px; }
+.ph-thumbs { display: flex; flex-wrap: wrap; gap: 10px; }
+.ph-thumbs:empty { display: none; }
+.ph-thumbs img { height: 84px; max-width: 100%; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); object-fit: contain; }
+.ph-status { font-size: 16px; color: var(--body); padding: 2px 0 2px 14px; border-left: 3px solid rgba(166, 214, 239, 0.45); }
+.ph-status.is-wait { color: var(--muted); font-family: var(--hand); font-size: 22px; border-left-color: var(--faint); }
+.ph-status.is-ok { border-left-color: var(--ok); }
+.ph-status.is-bad { border-left-color: var(--bad); }
+.ph-transcript { margin-top: 8px; }
+.ph-transcript summary { cursor: pointer; color: var(--blue); font-family: var(--hand); font-size: 21px; }
+.ph-render { margin-top: 8px; overflow-x: auto; }
+.ph-render p:last-child { margin-bottom: 0; }

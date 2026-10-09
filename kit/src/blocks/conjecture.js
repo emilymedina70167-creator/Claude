@@ -5,6 +5,7 @@ import { getAI, errorText, AI_PERMANENT } from '../ai.js';
 import { session } from '../session.js';
 import { widget, mdToHtml } from './common.js';
 import { plain } from './answer.js';
+import { photoPicker, transcribe, photoError, transcriptHtml } from '../photo.js';
 
 export function conjecture(el, src) {
   const { fields } = parseFields(src);
@@ -30,10 +31,29 @@ export function conjecture(el, src) {
   let attempts = 0;
   let finished = false;
   let aiDown = false;
+  let viaPhoto = false; // 回答来自截图转写（记录里注明）
+
+  // 截图作答：转写到文本框里，学生核对、修改后再提交
+  photoPicker(ta, {
+    root: body,
+    async onPick(files, ui) {
+      ui.status('Claude 正在认你的手写…', 'is-wait');
+      try {
+        const t = await transcribe(files, q);
+        if (!t) { ui.status('没认出文字。换一张清楚点的截图，或者直接打字。', 'is-bad'); return; }
+        ta.value = ta.value.trim() ? `${ta.value.trim()}\n${t}` : t;
+        ta.dispatchEvent(new Event('input'));
+        viaPhoto = true;
+        ui.status(`已经转写到上面的框里。对照下面渲染出来的公式核对有没有认错，改好再点「提交」。${transcriptHtml(t, true)}`, 'is-ok');
+      } catch (e) {
+        ui.status(photoError(e), 'is-bad');
+      }
+    },
+  });
 
   const finish = (entry) => {
     if (!finished) { finished = true; done(); }
-    session.record({ type: 'conjecture', title, q: plain(q), stage: session.stageOf(el), ...entry });
+    session.record({ type: 'conjecture', title, q: plain(q), stage: session.stageOf(el), via: viaPhoto ? '截图' : undefined, ...entry });
   };
 
   function showReference(selfCheck) {
@@ -89,7 +109,7 @@ ${(session.stages[session.stageOf(el)]?.src || '').slice(0, 2500)}
       } else {
         btn.textContent = '修改后再提交';
         if (attempts >= 2) btnRef.hidden = false;
-        session.record({ type: 'conjecture-try', title, q: plain(q), answer: text, verdict: `Claude：${verdict === 'partial' ? '部分正确' : '不正确'}`, feedback: r.feedback, stage: session.stageOf(el) });
+        session.record({ type: 'conjecture-try', title, q: plain(q), answer: text, via: viaPhoto ? '截图' : undefined, verdict: `Claude：${verdict === 'partial' ? '部分正确' : '不正确'}`, feedback: r.feedback, stage: session.stageOf(el) });
       }
     } catch (e) {
       if (AI_PERMANENT.has(e?.code)) { aiDown = true; fb.hidden = true; showReference(true); return; }

@@ -11,10 +11,12 @@ export function getAI() {
       let sample = null;
       try { sample = await c.use('sample'); } catch { sample = null; }
       if (!sample) return null;
-      let toolsOk = false;
-      try { toolsOk = !!(await sample.limits())?.tools; } catch { toolsOk = false; }
+      let limits = null;
+      try { limits = await sample.limits(); } catch { limits = null; }
       return {
-        tools: toolsOk,
+        tools: !!limits?.tools,
+        // 能发图片时是 {maxCount, mediaTypes, ...}；课件要声明 capabilities: {"sample": {"images": true}}
+        images: limits?.images || null,
         ask: (input, opts = {}) => sample(input, opts).then((r) => r.text),
         json: (input, opts = {}) => sample.json(input, opts),
       };
@@ -28,6 +30,7 @@ export function getAI() {
       };
       return {
         tools: false,
+        images: null,
         ask,
         json: async (input) => {
           const text = await c.complete(flat(input));

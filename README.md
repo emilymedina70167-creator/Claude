@@ -15,6 +15,7 @@
   课件里：动手算 → 拖动图形 → 说出猜想（Claude 批改、追问）→ 先猜再揭晓
          → 这时才给出定理 → 程序出题练习 → 单元检测
          → 哪里没懂，点「问 Claude」：它看得到当前小节和你的作答，还能直接改图演示
+         → 不想打字：在笔记软件里手写，截图上传，Claude 转写后你核对再提交
   学完：复制「学习记录」粘贴回对话 → Claude 根据错题和猜想追问、补讲
 ```
 
@@ -41,7 +42,7 @@
 
 ## artifact 怎么加载组件库
 
-artifact 不能从 GitHub 加载脚本，也不能加载外部样式和字体。所以组件库打包成一个完全自包含的文件 `kit/dist/la-kit.js`（含 markdown-it、KaTeX 和内嵌字体），作为附带文件发布在上面那个示范 artifact 里。Claude 发布课件时，用 `files` 参数在服务器端把它复制过去，并声明 `capabilities: {"sample": {}}`，页面里的「问 Claude」和猜想批改就能用了。
+artifact 不能从 GitHub 加载脚本，也不能加载外部样式和字体。所以组件库打包成一个完全自包含的文件 `kit/dist/la-kit.js`（含 markdown-it、KaTeX 和内嵌字体），作为附带文件发布在上面那个示范 artifact 里。Claude 发布课件时，用 `files` 参数在服务器端把它复制过去，并声明 `capabilities: {"sample": {"images": true}}`，页面里的「问 Claude」、猜想批改和截图作答就能用了。
 
 ## 仓库结构
 
@@ -55,6 +56,7 @@ kit/src/
   check.js  mathinput.js 判分（等价答案）、作答输入和数字小键盘
   generators.js          练习题生成器
   ai.js  tutor.js        页面里调用 Claude、助教面板
+  photo.js               截图作答：上传/粘贴手写截图，Claude 转写、读出最终答案
   record.js              学习记录
   blocks/                各个组件
   linalg.js              精确分数、行化简
@@ -72,4 +74,4 @@ npm test          # 单元测试
 npm run build     # 重新生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 ```
 
-然后重新发布组件库 artifact（同一个地址，页面是 `kit/examples/unit-matrix-vector.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`capabilities: {"sample": {}}`）。之后新发布的课件会自动用上新版；已经发布的课件保留当时复制的版本。
+然后重新发布组件库 artifact（同一个地址，页面是 `kit/examples/unit-matrix-vector.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`capabilities: {"sample": {"images": true}}`）。之后新发布的课件会自动用上新版；已经发布的课件保留当时复制的版本。

@@ -44,7 +44,7 @@ export function practice(el, src) {
       const ok = r.ok && r.attempts === 1;
       results.push(r.ok);
       if (r.ok) right++;
-      session.record({ type: 'practice', title: NAMES[p.gen] || p.gen, q: plain((p.recordQ || p.q).replace(/\$/g, '')), ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(p.answer), firstTry: ok, stage: session.stageOf(el) });
+      session.record({ type: 'practice', title: NAMES[p.gen] || p.gen, q: plain((p.recordQ || p.q).replace(/\$/g, '')), ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(p.answer), firstTry: ok, work: r.work || undefined, stage: session.stageOf(el) });
       if (right >= need) done();
       status();
       next.hidden = false;
