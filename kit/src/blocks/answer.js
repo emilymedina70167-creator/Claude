@@ -5,8 +5,9 @@ import { mathInput } from '../mathinput.js';
 import { shapeOf, check } from '../check.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, tex2html } from './common.js';
-import { getAI, errorText } from '../ai.js';
+import { getAI } from '../ai.js';
 import { createPad } from '../ink/pad.js';
+import { photoPicker, readFinal, flatFinal, photoError, transcriptHtml } from '../photo.js';
 
 // 通用作答组件：spec = {q, answer, type, before, hint, explain, solution}
 // onDone({ok, attempts, revealed, first})
@@ -35,6 +36,32 @@ export function answerWidget(body, spec, onDone) {
   let attempts = 0;
   let first = null;
   let finished = false;
+  let work = ''; // 截图里认出的解答过程（进学习记录）
+
+  // 截图作答：Claude 读出最终答案填进格子，学生核对后自己点「检查」
+  const plainQ = String(spec.q || '').replace(/\s+/g, ' ').slice(0, 600) || body.querySelector('.arr-box, .w-q')?.textContent?.slice(0, 600) || '';
+  const photo = photoPicker(body.querySelector('.ans-actions'), {
+    label: '截图作答',
+    root: body,
+    async onPick(files, ui) {
+      if (finished) return;
+      ui.status('Claude 正在读你的解答…', 'is-wait');
+      try {
+        const r = await readFinal(files, plainQ, shape);
+        if (r.transcript) work = r.transcript;
+        const flat = flatFinal(r.final, shape);
+        if (!flat) {
+          ui.status(`没找到符合格式的最终答案。把最终结果在截图里写清楚（或圈出来）再传一次，也可以直接填格子。${r.transcript ? transcriptHtml(r.transcript) : ''}`, 'is-bad');
+          return;
+        }
+        input.clear();
+        input.fill(flat);
+        ui.status(`已把截图里的最终答案填进格子。核对一遍，没认错就点「检查」。${r.transcript ? transcriptHtml(r.transcript) : ''}`, 'is-ok');
+      } catch (e) {
+        ui.status(photoError(e), 'is-bad');
+      }
+    },
+  });
 
   const show = (cls, html) => { fb.hidden = false; fb.className = `ans-feedback ${cls}`; fb.innerHTML = html; };
   const finish = (ok, revealed) => {
@@ -43,7 +70,8 @@ export function answerWidget(body, spec, onDone) {
     btnCheck.disabled = true;
     input.lock();
     btnReveal.hidden = true;
-    onDone?.({ ok, attempts, revealed, first, last: input.text() });
+    photo.disable();
+    onDone?.({ ok, attempts, revealed, first, last: input.text(), work });
   };
 
   function doCheck() {
@@ -67,7 +95,7 @@ export function answerWidget(body, spec, onDone) {
 
   btnCheck.addEventListener('click', doCheck);
   input.onEnter(doCheck);
-  addHandwriting(body, shape, input, () => finished);
+  addHandwriting(body, shape, input, plainQ, { isFinished: () => finished, onWork: (t) => (work = t) });
   btnHint?.addEventListener('click', () => {
     btnHint.remove();
     fb.insertAdjacentHTML('afterend', `<div class="w-note ans-hint-box"><strong>提示：</strong>${mdToHtml(spec.hint)}</div>`);
@@ -82,17 +110,16 @@ export function answerWidget(body, spec, onDone) {
 
 const display = (v) => (Array.isArray(v) ? v.map(display) : numText(v));
 
-// 手写作答：在手写板上写答案 → Claude 看图转写 → 填进格子，学生确认后再点「检查」
-const SHAPE_TEXT = {
+// 手写作答：在手写板上写解答 → Claude 读出最终答案填进格子（过程进学习记录），学生确认后再点「检查」
+const SHAPE_HINT = {
   number: () => '一个数',
-  vector: (s) => `一个有 ${s.n} 个分量的列向量（从上到下）`,
-  matrix: (s) => `一个 ${s.r} 行 ${s.c} 列的矩阵（逐行，每行从左到右）`,
-  array: (s) => `一行 ${s.n} 个数（从左到右）`,
+  vector: (s) => `${s.n} 个分量的向量`,
+  matrix: (s) => `${s.r}×${s.c} 矩阵`,
+  array: (s) => `${s.n} 个数`,
 };
-const cellCount = (s) => (s.kind === 'number' ? 1 : s.kind === 'matrix' ? s.r * s.c : s.n);
 
-function addHandwriting(body, shape, input, isFinished) {
-  if (!SHAPE_TEXT[shape.kind]) return;
+function addHandwriting(body, shape, input, question, { isFinished, onWork }) {
+  if (!SHAPE_HINT[shape.kind]) return;
   getAI().then((ai) => {
     if (!ai?.images || isFinished()) return;
     const actions = body.querySelector('.ans-actions');
@@ -106,41 +133,41 @@ function addHandwriting(body, shape, input, isFinished) {
     box.hidden = true;
     actions.after(box);
     const status = document.createElement('div');
-    status.className = 'pad-status muted';
+    status.className = 'ph-status';
+    status.hidden = true;
+    box.after(status);
+    const say = (html, cls) => { status.hidden = !html; status.className = `ph-status ${cls || ''}`; status.innerHTML = html || ''; };
     let pad = null;
     btn.addEventListener('click', () => {
       if (!pad) {
         pad = createPad(box, {
-          height: shape.kind === 'matrix' ? 240 : 200,
-          hint: `用 Apple Pencil 写出答案：${SHAPE_TEXT[shape.kind](shape)}`,
+          height: shape.kind === 'number' ? 200 : 260,
+          hint: `用 Apple Pencil 写解答，最后写出答案（${SHAPE_HINT[shape.kind](shape)}）`,
           actions: [{ label: '识别并填入', primary: true, onClick: recognize }],
         });
-        box.appendChild(status);
       }
       box.hidden = !box.hidden;
+      body.classList.toggle('pad-open', !box.hidden); // 手写板打开时先收起截图那一行，界面不挤
     });
 
     async function recognize(p) {
-      status.textContent = 'Claude 正在看你写的答案…';
-      const n = cellCount(shape);
-      const prompt = `图片是学生用 Apple Pencil 手写的数学答案（白底黑字）。请把它原样转写成数字。
-答案的形状：${SHAPE_TEXT[shape.kind](shape)}，共 ${n} 个数。
-只回复一个 JSON 对象：{"cells": [${Array.from({ length: Math.min(n, 3) }, (_, i) => `"第${i + 1}个"`).join(', ')}${n > 3 ? ', ...' : ''}]}
-- cells 按上面说的顺序列出全部 ${n} 个数，用字符串写，例如 "3"、"-1/2"、"0.25"。分数线写成 /。
-- 原样转写，不要计算、不要纠正；看不清的写 ""。`;
+      if (isFinished()) return;
+      say('Claude 正在看你写的解答…', 'is-wait');
       try {
-        const r = await ai.json(prompt, { images: await p.toBlob(), modelTier: 'default' });
-        const cells = Array.isArray(r?.cells) ? r.cells.map((c) => String(c ?? '').trim()) : [];
-        if (!cells.length) throw { code: 'invalid_json' };
+        const r = await readFinal([await p.toBlob()], question, shape);
+        if (r.transcript) onWork(r.transcript);
+        const flat = flatFinal(r.final, shape);
+        if (!flat) {
+          say(`没找到符合格式的最终答案。把最终结果写清楚（或圈出来）再识别一次，也可以直接填格子。${r.transcript ? transcriptHtml(r.transcript) : ''}`, 'is-bad');
+          return;
+        }
         input.clear();
-        input.fill(cells.slice(0, n));
-        const unclear = cells.filter((c) => !c).length + Math.max(0, n - cells.length);
-        status.textContent = unclear ? `填好了，但有 ${unclear} 个没看清，请补上后再点「检查」。` : '填好了。确认和你写的一样，再点「检查」。';
+        input.fill(flat);
         box.hidden = true;
-        body.querySelector('.ans-feedback').insertAdjacentElement('beforebegin', status);
-        p.clear();
+        body.classList.remove('pad-open');
+        say(`已把你写的最终答案填进格子。核对一遍，没认错就点「检查」。${r.transcript ? transcriptHtml(r.transcript) : ''}`, 'is-ok');
       } catch (e) {
-        status.textContent = errorText(e);
+        say(photoError(e), 'is-bad');
       }
     }
   });
@@ -157,7 +184,7 @@ export function answer(el, src) {
   const body = widget(el, { title, cls: 'answer' });
   const done = session.gate(el, title);
   answerWidget(body, { ...fields, answer: value, type: (fields.type || '').toLowerCase() }, (r) => {
-    session.record({ type: 'answer', title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(value), revealed: r.revealed, stage: session.stageOf(el) });
+    session.record({ type: 'answer', title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(value), revealed: r.revealed, work: r.work || undefined, stage: session.stageOf(el) });
     done();
   });
 }

@@ -6,6 +6,7 @@ import { createPad } from '../ink/pad.js';
 import { session } from '../session.js';
 import { widget, mdToHtml } from './common.js';
 import { plain } from './answer.js';
+import { photoPicker, transcribe, photoError, transcriptHtml } from '../photo.js';
 
 export function conjecture(el, src) {
   const { fields } = parseFields(src);
@@ -47,19 +48,24 @@ export function conjecture(el, src) {
             label: '转成文字', primary: true, onClick: async (p) => {
               status.textContent = 'Claude 正在看你写的内容…';
               try {
-                const text = await ai.ask('图片是学生用 Apple Pencil 手写的一段话（白底黑字），可能夹着数学式子。请原样转写成文字：中文照写，数学部分用 $...$ 的 LaTeX，画的箭头写成 →。不要改写、不要评价，只输出转写结果。', { images: await p.toBlob(), modelTier: 'default' });
-                ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + text.trim();
+                const text = await transcribe([await p.toBlob()], q);
+                if (!text) { status.textContent = '没认出文字，写清楚一点再试一次，或者直接打字。'; return; }
+                ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + text;
+                ta.dispatchEvent(new Event('input'));
+                via = '手写';
                 status.textContent = '已转成文字，看看对不对，再点「提交」。';
                 p.clear();
                 box.hidden = true;
+                body.classList.remove('pad-open');
                 ta.focus();
-              } catch (e) { status.textContent = errorText(e); }
+              } catch (e) { status.textContent = photoError(e); }
             },
           }],
         });
         box.appendChild(status);
       }
       box.hidden = !box.hidden;
+      body.classList.toggle('pad-open', !box.hidden);
     });
   });
   const btn = body.querySelector('.cj-submit');
@@ -70,10 +76,29 @@ export function conjecture(el, src) {
   let attempts = 0;
   let finished = false;
   let aiDown = false;
+  let via = ''; // 回答来自截图 / 手写板转写（记录里注明）
+
+  // 截图作答：转写到文本框里，学生核对、修改后再提交
+  photoPicker(ta, {
+    root: body,
+    async onPick(files, ui) {
+      ui.status('Claude 正在认你的手写…', 'is-wait');
+      try {
+        const t = await transcribe(files, q);
+        if (!t) { ui.status('没认出文字。换一张清楚点的截图，或者直接打字。', 'is-bad'); return; }
+        ta.value = ta.value.trim() ? `${ta.value.trim()}\n${t}` : t;
+        ta.dispatchEvent(new Event('input'));
+        via = '截图';
+        ui.status(`已经转写到上面的框里。对照下面渲染出来的公式核对有没有认错，改好再点「提交」。${transcriptHtml(t, true)}`, 'is-ok');
+      } catch (e) {
+        ui.status(photoError(e), 'is-bad');
+      }
+    },
+  });
 
   const finish = (entry) => {
     if (!finished) { finished = true; done(); }
-    session.record({ type: 'conjecture', title, q: plain(q), stage: session.stageOf(el), ...entry });
+    session.record({ type: 'conjecture', title, q: plain(q), stage: session.stageOf(el), via: via || undefined, ...entry });
   };
 
   function showReference(selfCheck) {
@@ -129,7 +154,7 @@ ${(session.stages[session.stageOf(el)]?.src || '').slice(0, 2500)}
       } else {
         btn.textContent = '修改后再提交';
         if (attempts >= 2) btnRef.hidden = false;
-        session.record({ type: 'conjecture-try', title, q: plain(q), answer: text, verdict: `Claude：${verdict === 'partial' ? '部分正确' : '不正确'}`, feedback: r.feedback, stage: session.stageOf(el) });
+        session.record({ type: 'conjecture-try', title, q: plain(q), answer: text, via: via || undefined, verdict: `Claude：${verdict === 'partial' ? '部分正确' : '不正确'}`, feedback: r.feedback, stage: session.stageOf(el) });
       }
     } catch (e) {
       if (AI_PERMANENT.has(e?.code)) { aiDown = true; fb.hidden = true; showReference(true); return; }

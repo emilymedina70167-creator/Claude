@@ -13,19 +13,26 @@ export function recordText() {
     for (const [t, es] of Object.entries(byType)) {
       const first = es.filter((e) => e.firstTry).length;
       lines.push(`练习「${t}」：做了 ${es.length} 道，一次答对 ${first} 道`);
-      es.filter((e) => !e.firstTry).slice(-3).forEach((e) => lines.push(`  · 错题：${e.q}｜我第一次填 ${e.first}，正确是 ${e.expected}${e.ok ? '（后来改对了）' : ''}`));
+      es.filter((e) => !e.firstTry).slice(-3).forEach((e) => lines.push(`  · 错题：${e.q}｜我第一次填 ${e.first}，正确是 ${e.expected}${e.ok ? '（后来改对了）' : ''}${work(e)}`));
     }
   }
   for (const e of L) {
-    if (e.type === 'answer') lines.push(`作答「${e.title}」：${e.ok ? (e.attempts === 1 ? '一次答对' : `第 ${e.attempts} 次答对`) : '看了答案'}${e.ok && e.attempts === 1 ? '' : `｜第一次填 ${e.first}，正确是 ${e.expected}`}`);
+    if (e.type === 'answer') lines.push(`作答「${e.title}」：${e.ok ? (e.attempts === 1 ? '一次答对' : `第 ${e.attempts} 次答对`) : '看了答案'}${e.ok && e.attempts === 1 ? '' : `｜第一次填 ${e.first}，正确是 ${e.expected}`}${work(e)}`);
     if (e.type === 'predict') lines.push(`预测「${e.title}」：猜 (${e.guess}) ，实际 (${e.answer.map((x) => Math.round(x * 100) / 100)})，${e.ok ? '猜得很准' : '偏差较大'}`);
-    if (e.type === 'conjecture' || e.type === 'conjecture-try') lines.push(`猜想「${e.title}」：我写「${e.answer}」→ ${e.verdict}`);
+    if (e.type === 'conjecture' || e.type === 'conjecture-try') lines.push(`猜想「${e.title}」：我写${e.via ? `（${e.via === '截图' ? '手写截图' : 'Pencil 手写'}转写）` : ''}「${e.answer}」→ ${e.verdict}`);
     if (e.type === 'quiz') lines.push(`选择题「${e.q}」：${e.ok ? (e.attempts === 1 ? '一次答对' : `第 ${e.attempts} 次答对`) : '看了解析'}${e.wrong?.length ? `｜选错过：${e.wrong.join('；')}` : ''}`);
     if (e.type === 'ask') lines.push(`问了 Claude：「${e.question}」${e.answer ? `→ 它答：「${e.answer}${e.answer.length >= 160 ? '…' : ''}」` : ''}`);
   }
   if (lines.length === 1) lines.push('（还没有记录）');
   lines.push('请根据这些记录判断我哪里还没掌握，针对性地追问或补讲。');
   return lines.join('\n');
+}
+
+// 截图作答时 Claude 认出的解答过程
+function work(e) {
+  if (!e.work) return '';
+  const w = e.work.replace(/\s*\n\s*/g, ' / ');
+  return `\n  过程（手写转写）：${w.length > 400 ? `${w.slice(0, 400)}…` : w}`;
 }
 
 export async function copyRecord(toast) {

@@ -659,3 +659,29 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .tutor-attach .link-btn { font-size: 18px; margin-left: auto; }
 .tutor-pen { min-width: 46px; padding: 0 10px; font-size: 22px; }
 .msg-img { display: block; max-width: 100%; max-height: 200px; margin-top: 8px; border-radius: 8px; background: #fff; }
+
+/* 截图作答 */
+.ph { margin: 12px 0 4px; display: grid; gap: 10px; }
+.ph-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.ph-paste {
+  flex: 1 1 240px; min-width: 0; min-height: 48px; padding: 12px 16px; border-radius: 12px;
+  outline: 2px dashed rgba(238, 240, 230, 0.35); outline-offset: -2px; background: rgba(0, 0, 0, 0.14);
+  color: var(--chalk); font: 16px/1.4 var(--sans); caret-color: transparent; overflow: hidden; max-height: 120px;
+}
+.ph-paste:empty::before { content: "截图后长按这里，选「粘贴」"; color: var(--muted); }
+.ph-paste:focus { outline-color: rgba(242, 220, 133, 0.75); }
+.ph-paste:focus:empty::before { content: "现在可以粘贴截图了"; color: var(--yellow); }
+.ph-paste.is-over { outline-color: var(--yellow); background: var(--accent-soft); }
+.ph-paste img { max-height: 60px; }
+.ph-thumbs { display: flex; flex-wrap: wrap; gap: 10px; }
+.ph-thumbs:empty { display: none; }
+.ph-thumbs img { height: 84px; max-width: 100%; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); object-fit: contain; }
+.ph-status { font-size: 16px; color: var(--body); padding: 2px 0 2px 14px; border-left: 3px solid rgba(166, 214, 239, 0.45); }
+.ph-status.is-wait { color: var(--muted); font-family: var(--hand); font-size: 22px; border-left-color: var(--faint); }
+.ph-status.is-ok { border-left-color: var(--ok); }
+.ph-status.is-bad { border-left-color: var(--bad); }
+.ph-transcript { margin-top: 8px; }
+.ph-transcript summary { cursor: pointer; color: var(--blue); font-family: var(--hand); font-size: 21px; }
+.ph-render { margin-top: 8px; overflow-x: auto; }
+.ph-render p:last-child { margin-bottom: 0; }
+.pad-open > .ph { display: none !important; }

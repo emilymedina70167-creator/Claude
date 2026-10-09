@@ -15,7 +15,8 @@ export function getAI() {
       try { limits = await sample.limits(); } catch { limits = null; }
       return {
         tools: !!limits?.tools,
-        images: !!limits?.images, // 课件声明了 capabilities: {sample: {images: true}} 才有
+        // 能发图片时是 {maxCount, mediaTypes, ...}；课件要声明 capabilities: {"sample": {"images": true}}
+        images: limits?.images || null,
         ask: (input, opts = {}) => sample(input, opts).then((r) => r.text),
         json: (input, opts = {}) => sample.json(input, opts),
       };
@@ -29,7 +30,7 @@ export function getAI() {
       };
       return {
         tools: false,
-        images: false,
+        images: null,
         ask,
         json: async (input) => {
           const text = await c.complete(flat(input));
@@ -52,8 +53,6 @@ export function errorText(e) {
   if (code === 'refused') return 'Claude 没有回答这个问题，换个问法试试。';
   if (code === 'invalid_json') return 'Claude 的回复格式不对，请再试一次。';
   if (code === 'cancelled') return '已停止。';
-  if (code === 'images_unavailable') return '这份课件没有开启「发送图片给 Claude」，手写内容发不出去。';
-  if (code === 'image_rejected') return '图片太大或格式不对，擦掉一些再试。';
   return '连接出了问题，请再试一次。';
 }
 
