@@ -42,6 +42,8 @@ export const PROTOCOL_DOC = doc`
 
 **外层一律用 4 个反引号**：开头一行是 4 个反引号紧跟 board 和指令，结尾单独一行 4 个反引号（见下面的例子）。块里的组件照常用 3 个反引号，这样组件的结尾不会把外层提前关掉。
 
+下面例子里的 id（b3、b4、fig-b3……）只是示范，不在黑板上；黑板上实际有什么，看「黑板现状」。
+
 ### add：在黑板末尾加一段
 
 ˋˋˋˋboard add id=b3 title="Ax 落在哪"
@@ -295,7 +297,7 @@ function resultLine(r, blockId) {
   let s = typeof r === 'string' ? r : actionText(r);
   s = String(s).replace(/^\[(作答|动作)\]\s*/, '');
   if (blockId) {
-    const m = new RegExp(`^[^：\\n]*?(?:^|\\s|的)${escRe(blockId)}(?:「[^」]*」)?\\s*(?:的\\s*)?`).exec(s);
+    const m = new RegExp(`^[^：\\n]*?(?:^|\\s|的)${escRe(blockId)}(?![\\w\\-.~:@+])(?:「[^」]*」)?\\s*(?:的\\s*)?`).exec(s);
     if (m) s = s.slice(m[0].length).replace(/^[：:，,]\s*/, '');
   }
   return oneLine(s, 300);
@@ -402,8 +404,9 @@ const tail = (...bits) => bits.filter(Boolean).join('，');
 function stepsRecord(a) {
   const n = /第\s*(\d+)\s*步/.exec(String(a.detail ?? ''))?.[1];
   const stepTitle = String(a.q ?? '').split('｜')[0].trim();
-  const sub = n ? ` 第 ${n} 步${stepTitle ? `（${short(stepTitle, 24)}）` : ''}` : '';
-  const head = `[作答] ${where(a, 'steps')}${sub}：`;
+  const loc = where(a, 'steps');
+  const sub = n ? `${loc.endsWith('」') ? '' : ' '}第 ${n} 步${stepTitle ? `（${short(stepTitle, 24)}）` : ''}` : '';
+  const head = `[作答] ${loc}${sub}：`;
   const txt = a.text ?? a.answer;
   let what;
   if (a.giveup) what = `想不出来${txt ? `，写了「${short(txt)}」${viaNote(a.via)}` : ''}`;
