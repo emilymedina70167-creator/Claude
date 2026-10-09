@@ -12,8 +12,8 @@ export function photoPicker(anchor, { label = '上传手写截图', root, onPick
   box.hidden = true;
   box.innerHTML = `
     <div class="ph-row">
+      <div class="ph-paste" contenteditable="true" role="textbox" aria-label="在这里粘贴截图" spellcheck="false" autocorrect="off" autocapitalize="off"></div>
       <button type="button" class="btn ph-btn">${label}</button>
-      <span class="ph-tip muted">在笔记软件里写好，截图后点这里选图，或者直接粘贴截图</span>
       <input type="file" class="ph-file" accept="image/*" multiple hidden>
     </div>
     <div class="ph-thumbs"></div>
@@ -23,6 +23,7 @@ export function photoPicker(anchor, { label = '上传手写截图', root, onPick
   const file = box.querySelector('.ph-file');
   const thumbs = box.querySelector('.ph-thumbs');
   const statusEl = box.querySelector('.ph-status');
+  const pasteZone = box.querySelector('.ph-paste');
   let maxCount = 4;
   let busy = false;
 
@@ -37,6 +38,7 @@ export function photoPicker(anchor, { label = '上传手写截图', root, onPick
 
   async function take(list) {
     const files = [...list].filter((f) => f && /^image\//.test(f.type)).slice(0, maxCount);
+    pasteZone.innerHTML = '';
     if (!files.length || busy) return;
     busy = true;
     btn.disabled = true;
@@ -46,9 +48,46 @@ export function photoPicker(anchor, { label = '上传手写截图', root, onPick
 
   btn.addEventListener('click', () => file.click());
   file.addEventListener('change', () => take(file.files));
-  (root || box.parentElement).addEventListener('paste', (e) => {
+  // 粘贴：iPad 上要先有一个可编辑的地方才会出现「粘贴」菜单，所以放一个粘贴框；
+  // 截图在剪贴板里通常以 items 出现（files 可能是空的），两个都看。
+  const clipImages = (dt) => {
+    const out = [];
+    for (const it of dt?.items || []) if (it.kind === 'file' && /^image\//.test(it.type)) { const f = it.getAsFile(); if (f) out.push(f); }
+    if (!out.length) for (const f of dt?.files || []) if (/^image\//.test(f.type)) out.push(f);
+    return out;
+  };
+  const onPaste = (e) => {
     if (box.hidden) return;
-    const imgs = [...(e.clipboardData?.files || [])].filter((f) => /^image\//.test(f.type));
+    const imgs = clipImages(e.clipboardData);
+    if (!imgs.length) {
+      if (e.currentTarget === pasteZone) { e.preventDefault(); ui.status('剪贴板里没有图片。先在笔记软件里截图或拷贝图片，再到这里粘贴。', 'is-bad'); }
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    take(imgs);
+  };
+  pasteZone.addEventListener('paste', onPaste);
+  (root || box.parentElement).addEventListener('paste', onPaste);
+  // 有的浏览器不给 paste 事件里的图片、而是直接把 <img> 插进框里：从插进来的图取出来
+  pasteZone.addEventListener('input', async () => {
+    const img = pasteZone.querySelector('img');
+    pasteZone.innerHTML = '';
+    if (!img) return;
+    try {
+      const blob = await imgToBlob(img.src);
+      if (blob) take([blob]);
+      else ui.status('没能读到这张图。换成「上传」按钮选图试试。', 'is-bad');
+    } catch { ui.status('没能读到这张图。换成「上传」按钮选图试试。', 'is-bad'); }
+  });
+  // 只接收图片，不让在框里打字
+  pasteZone.addEventListener('beforeinput', (e) => { if (!/^insertFromPaste|^insertFromDrop/.test(e.inputType)) e.preventDefault(); });
+  // iPad 分屏时可以把图片从笔记里直接拖过来
+  box.addEventListener('dragover', (e) => { if (!box.hidden) { e.preventDefault(); pasteZone.classList.add('is-over'); } });
+  box.addEventListener('dragleave', () => pasteZone.classList.remove('is-over'));
+  box.addEventListener('drop', (e) => {
+    pasteZone.classList.remove('is-over');
+    const imgs = clipImages(e.dataTransfer);
     if (!imgs.length) return;
     e.preventDefault();
     take(imgs);
@@ -61,6 +100,21 @@ export function photoPicker(anchor, { label = '上传手写截图', root, onPick
     if (ai.images.mediaTypes?.length) file.accept = ai.images.mediaTypes.join(',');
   });
   return { box, ui, disable() { box.hidden = true; } };
+}
+
+// 把粘贴进来的 <img>（blob: 或 data: 地址）画到画布上，转成 PNG
+function imgToBlob(src) {
+  return new Promise((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = im.naturalWidth; c.height = im.naturalHeight;
+      c.getContext('2d').drawImage(im, 0, 0);
+      c.toBlob((b) => resolve(b), 'image/png');
+    };
+    im.onerror = reject;
+    im.src = src;
+  });
 }
 
 const RULES = `图片是学生在笔记软件里手写后截的图。只转写学生写下的内容：原样照抄，包括写错的地方；不要纠正、不要补全、不要计算、不要评价。公式用 $...$（LaTeX），矩阵用 \\begin{bmatrix}...\\end{bmatrix}，分行的推导保留分行。划掉的内容不转写。看不清的地方写「[看不清]」。`;

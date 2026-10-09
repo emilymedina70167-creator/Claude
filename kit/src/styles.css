@@ -595,7 +595,16 @@ body.has-keypad .tutor-fab { display: none; }
 /* 截图作答 */
 .ph { margin: 12px 0 4px; display: grid; gap: 10px; }
 .ph-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
-.ph-tip { font-size: 14px; }
+.ph-paste {
+  flex: 1 1 240px; min-width: 0; min-height: 48px; padding: 12px 16px; border-radius: 12px;
+  outline: 2px dashed rgba(238, 240, 230, 0.35); outline-offset: -2px; background: rgba(0, 0, 0, 0.14);
+  color: var(--chalk); font: 16px/1.4 var(--sans); caret-color: transparent; overflow: hidden; max-height: 120px;
+}
+.ph-paste:empty::before { content: "截图后长按这里，选「粘贴」"; color: var(--muted); }
+.ph-paste:focus { outline-color: rgba(242, 220, 133, 0.75); }
+.ph-paste:focus:empty::before { content: "现在可以粘贴截图了"; color: var(--yellow); }
+.ph-paste.is-over { outline-color: var(--yellow); background: var(--accent-soft); }
+.ph-paste img { max-height: 60px; }
 .ph-thumbs { display: flex; flex-wrap: wrap; gap: 10px; }
 .ph-thumbs:empty { display: none; }
 .ph-thumbs img { height: 84px; max-width: 100%; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); object-fit: contain; }
