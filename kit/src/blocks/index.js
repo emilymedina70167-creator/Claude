@@ -10,11 +10,12 @@ import { answer } from './answer.js';
 import { conjecture } from './conjecture.js';
 import { practice } from './practice.js';
 import { summary } from './summary.js';
+import { draft } from './draft.js';
 import { array, shellsort, sortpass } from './sorting.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
   transform2d, vectors, rref, matmul, quiz, card, ...callouts, ...folds,
-  scene, predict, answer, conjecture, practice, summary, context,
+  scene, predict, answer, conjecture, practice, summary, context, draft,
   array, shellsort, sortpass,
 };

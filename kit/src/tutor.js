@@ -4,6 +4,7 @@ import { getAI, errorText, AI_PERMANENT } from './ai.js';
 import { session } from './session.js';
 import { mdToHtml, escapeHtml } from './render.js';
 import { recordText } from './record.js';
+import { createPad } from './ink/pad.js';
 
 export async function initTutor() {
   const ai = await getAI();
@@ -23,7 +24,9 @@ export async function initTutor() {
   panel.innerHTML = `
     <div class="tutor-head"><div><strong>问 Claude</strong><div class="tutor-ctx muted"></div></div><button type="button" class="btn btn-sm tutor-close">收起</button></div>
     <div class="tutor-msgs"><div class="tutor-empty muted">有哪里没懂就直接问。Claude 能看到你正在学的这一节和你的作答情况${ai.tools ? '，必要时还会直接改动图形给你演示' : ''}。</div></div>
-    <form class="tutor-form"><textarea rows="2" placeholder="${session.subject === '线性代数' ? '比如：为什么 A 乘 (1,0) 正好是第一列？' : '比如：这一步为什么要这样做？'}"></textarea><button type="submit" class="btn btn-primary tutor-send">发送</button></form>`;
+    <div class="tutor-padbox" hidden></div>
+    <div class="tutor-attach" hidden><img alt="附上的手写内容"><span>已附上手写内容</span><button type="button" class="link-btn tutor-unattach">去掉</button></div>
+    <form class="tutor-form">${ai.images ? '<button type="button" class="btn btn-sm tutor-pen" title="用 Apple Pencil 手写" aria-label="手写">✎</button>' : ''}<textarea rows="2" placeholder="${session.subject === '线性代数' ? '比如：为什么 A 乘 (1,0) 正好是第一列？' : '比如：这一步为什么要这样做？'}"></textarea><button type="submit" class="btn btn-primary tutor-send">发送</button></form>`;
   document.body.appendChild(panel);
   const msgs = panel.querySelector('.tutor-msgs');
   const ta = panel.querySelector('textarea');
@@ -33,6 +36,31 @@ export async function initTutor() {
   let stage = currentStage();
   let ctl = null;
 
+  // 手写附件：在面板里写，或者从草稿区带过来
+  let attach = null;
+  let attachUrl = '';
+  const attachBox = panel.querySelector('.tutor-attach');
+  const padBox = panel.querySelector('.tutor-padbox');
+  let pad = null;
+  function setAttach(blob) {
+    if (attachUrl) URL.revokeObjectURL(attachUrl);
+    attach = blob || null;
+    attachUrl = attach ? URL.createObjectURL(attach) : '';
+    attachBox.hidden = !attach;
+    if (attach) attachBox.querySelector('img').src = attachUrl;
+  }
+  panel.querySelector('.tutor-unattach').addEventListener('click', () => setAttach(null));
+  panel.querySelector('.tutor-pen')?.addEventListener('click', () => {
+    if (!pad) {
+      pad = createPad(padBox, {
+        height: 170,
+        hint: '写下你的算式或问题，写完点「附上」',
+        actions: [{ label: '附上', primary: true, onClick: async (p) => { setAttach(await p.toBlob()); p.clear(); padBox.hidden = true; ta.focus(); } }],
+      });
+    }
+    padBox.hidden = !padBox.hidden;
+  });
+
   const open = (i, prefill) => {
     stage = i ?? currentStage();
     ctxEl.textContent = `当前：${session.stages[stage]?.title || session.title}`;
@@ -41,7 +69,10 @@ export async function initTutor() {
     if (prefill && !ta.value) ta.value = prefill;
     setTimeout(() => ta.focus(), 50);
   };
-  session.openTutor = (i) => open(i, `我对「${session.stages[i]?.title || '这一节'}」有疑问：`);
+  session.openTutor = (i, prefill, image) => {
+    if (image && ai.images) setAttach(image);
+    open(i, prefill ?? `我对「${session.stages[i]?.title || '这一节'}」有疑问：`);
+  };
   fab.addEventListener('click', () => open());
   panel.querySelector('.tutor-close').addEventListener('click', () => { panel.hidden = true; fab.hidden = false; ctl?.abort(); });
 
@@ -50,17 +81,20 @@ export async function initTutor() {
   panel.querySelector('form').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (ctl) { ctl.abort(); return; }
-    const q = ta.value.trim();
+    const img = attach;
+    const q = ta.value.trim() || (img ? '请看看我手写的内容。' : '');
     if (!q) return;
     ta.value = '';
     panel.querySelector('.tutor-empty')?.remove();
-    msgs.insertAdjacentHTML('beforeend', `<div class="msg msg-user">${escapeHtml(q)}</div>`);
+    msgs.insertAdjacentHTML('beforeend', `<div class="msg msg-user">${escapeHtml(q)}${img ? `<img class="msg-img" src="${attachUrl}" alt="手写内容">` : ''}</div>`);
+    attach = null;
+    attachBox.hidden = true;
     const bubble = document.createElement('div');
     bubble.className = 'msg msg-ai';
     bubble.innerHTML = '<span class="muted">思考中…</span>';
     msgs.appendChild(bubble);
     msgs.scrollTop = msgs.scrollHeight;
-    turns.push({ role: 'user', content: q });
+    turns.push({ role: 'user', content: img ? `${q}\n（附了一张我的手写图片，黑字白底，是我用 Apple Pencil 写的。）` : q });
     ctl = new AbortController();
     send.textContent = '停止';
     const opts = {
@@ -69,6 +103,7 @@ export async function initTutor() {
       onText: ({ text }) => { bubble.innerHTML = mdToHtml(text); msgs.scrollTop = msgs.scrollHeight; },
     };
     if (ai.tools && [...session.scenes.values()].some((sc) => sc.stage <= stage)) opts.tools = sceneTools(stage);
+    if (img) opts.images = img;
     try {
       const text = await ai.ask([{ role: 'user', content: rules(stage, ai.tools) }, ...turns.slice(-12)], opts);
       bubble.innerHTML = mdToHtml(text);

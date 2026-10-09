@@ -80,8 +80,17 @@ export function mathInput(container, shape) {
 let pad = null;
 let target = null;
 
+// 用 Apple Pencil 点输入框时不弹数字键盘：iPadOS 的「随手写」(Scribble) 可以直接把手写变成文字
+let lastPointer = '';
+document.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType; }, true);
+
 function attachKeypad(inp) {
-  inp.addEventListener('focus', () => { target = inp; showPad(); });
+  inp.addEventListener('focus', () => {
+    target = inp;
+    if (lastPointer === 'pen') { inp.setAttribute('inputmode', 'decimal'); return; }
+    inp.setAttribute('inputmode', 'none');
+    showPad();
+  });
   inp.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); nextCell(true); }
   });

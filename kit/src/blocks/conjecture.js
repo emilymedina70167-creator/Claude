@@ -2,6 +2,7 @@
 // 页面没有调用 Claude 的权限时，改为对照参考答案自评。
 import { parseFields } from '../parse.js';
 import { getAI, errorText, AI_PERMANENT } from '../ai.js';
+import { createPad } from '../ink/pad.js';
 import { session } from '../session.js';
 import { widget, mdToHtml } from './common.js';
 import { plain } from './answer.js';
@@ -22,6 +23,45 @@ export function conjecture(el, src) {
     <div class="cj-feedback" hidden></div>
     <div class="cj-reference" hidden></div>`;
   const ta = body.querySelector('.cj-text');
+  // 手写：写在手写板上，Claude 转成文字放进输入框，你检查后再提交
+  getAI().then((ai) => {
+    if (!ai?.images) return;
+    const pbtn = document.createElement('button');
+    pbtn.type = 'button';
+    pbtn.className = 'btn cj-pen';
+    pbtn.textContent = '✎ 手写';
+    body.querySelector('.ans-actions').appendChild(pbtn);
+    const box = document.createElement('div');
+    box.className = 'cj-padbox';
+    box.hidden = true;
+    ta.after(box);
+    const status = document.createElement('div');
+    status.className = 'pad-status muted';
+    let pad = null;
+    pbtn.addEventListener('click', () => {
+      if (!pad) {
+        pad = createPad(box, {
+          height: 230,
+          hint: '用 Apple Pencil 写下你的发现，可以写公式、画箭头',
+          actions: [{
+            label: '转成文字', primary: true, onClick: async (p) => {
+              status.textContent = 'Claude 正在看你写的内容…';
+              try {
+                const text = await ai.ask('图片是学生用 Apple Pencil 手写的一段话（白底黑字），可能夹着数学式子。请原样转写成文字：中文照写，数学部分用 $...$ 的 LaTeX，画的箭头写成 →。不要改写、不要评价，只输出转写结果。', { images: await p.toBlob(), modelTier: 'default' });
+                ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + text.trim();
+                status.textContent = '已转成文字，看看对不对，再点「提交」。';
+                p.clear();
+                box.hidden = true;
+                ta.focus();
+              } catch (e) { status.textContent = errorText(e); }
+            },
+          }],
+        });
+        box.appendChild(status);
+      }
+      box.hidden = !box.hidden;
+    });
+  });
   const btn = body.querySelector('.cj-submit');
   const btnRef = body.querySelector('.cj-ref');
   const fb = body.querySelector('.cj-feedback');

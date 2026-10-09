@@ -8,6 +8,13 @@
 
 黑板风格：墨绿黑板带粉笔灰质感，标题、标签、按钮和手写数字用粉笔手写体（数字和字母用 Caveat，中文用龙藏体，都来自 Google Fonts），正文用系统字体。讲解和图形直接写在黑板上，需要动手的地方用粉笔圈出来。图里的向量第一次出现时会一笔一笔画出来。粉笔颜色含义固定：蓝 = 第一列，粉 = 第二列，黄 = 结果和重点。
 
+## Apple Pencil
+
+- **板书**：左下角「板书」按钮。打开后用 Pencil 在整页课件上书写，压感控制粗细，笔身倾斜写出粉笔侧锋的宽笔画；手指照常滚动和点按（防误触）；笔尖悬停时显示落笔位置。两指轻点撤销、三指轻点重做，橡皮按整笔擦除。笔迹跟着所在小节走，保存在这台设备上。
+- **手写作答**：作答框旁「✎ 手写作答」，写完由页面里的 Claude 识别并填进格子，确认后再提交。也可以直接在作答框里用 iPadOS 的「随手写」（用笔点输入框时不弹数字键盘）。
+- **手写猜想 / 草稿 / 提问附图**：`conjecture` 可以手写后转文字；`draft` 草稿区可以演算并「拿给 Claude 看」；助教面板可以附手写内容。
+- 网页拿不到 Pencil Pro 的双击、捏压和触感反馈（Apple 只开放给原生 App），所以用两指 / 三指轻点代替最常用的撤销 / 重做。
+
 ## 一个单元是怎么学的
 
 ```
@@ -41,7 +48,7 @@
 
 ## artifact 怎么加载组件库
 
-artifact 不能从 GitHub 加载脚本，也不能加载外部样式和字体。所以组件库打包成一个完全自包含的文件 `kit/dist/la-kit.js`（含 markdown-it、KaTeX 和内嵌字体），作为附带文件发布在上面那个示范 artifact 里。Claude 发布课件时，用 `files` 参数在服务器端把它复制过去，并声明 `capabilities: {"sample": {}}`，页面里的「问 Claude」和猜想批改就能用了。
+artifact 不能从 GitHub 加载脚本，也不能加载外部样式和字体。所以组件库打包成一个完全自包含的文件 `kit/dist/la-kit.js`（含 markdown-it、KaTeX 和内嵌字体），作为附带文件发布在上面那个示范 artifact 里。Claude 发布课件时，用 `files` 参数在服务器端把它复制过去，并声明 `capabilities: {"sample": {"images": true}}`，页面里的「问 Claude」、猜想批改和手写识别就能用了。
 
 ## 仓库结构
 
@@ -72,4 +79,4 @@ npm test          # 单元测试
 npm run build     # 重新生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 ```
 
-然后重新发布组件库 artifact（同一个地址，页面是 `kit/examples/unit-matrix-vector.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`capabilities: {"sample": {}}`）。之后新发布的课件会自动用上新版；已经发布的课件保留当时复制的版本。
+然后重新发布组件库 artifact（同一个地址，页面是 `kit/examples/unit-matrix-vector.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`capabilities: {"sample": {"images": true}}`）。之后新发布的课件会自动用上新版；已经发布的课件保留当时复制的版本。
