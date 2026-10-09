@@ -92,9 +92,13 @@ unit: 第2讲 §2 · 秩一方阵
 - **学生在黑板上作答时自动发起一轮**：提交后等 1.5 秒（学生可能连着操作），把这期间的所有动作合成一条消息发出去。学生点了「想不出来」「没懂」立即发。
 - **手写和截图**：图片随这一轮的 `images` 一起发，同时存进 `assets`（和现在一样）。
 - **长度控制**：`maxPromptBytes` 是 256 KiB。资料包预算约 120 KiB。对话超过约 80 KiB 时，让课堂里的 Claude 先写一段「到目前为止的课堂摘要」（学生卡在哪、错过什么、已经讲到哪），用摘要替换最早的那部分对话，最近 20 轮保留原文。
-- **模型（学生已明确指定）**：课堂里的 Claude 用 **Opus 5.5**：每次调用传 `model: "claude-opus-5-5"`，同时传 `modelTier: "complex"` 作为退路（指定的模型用不了时，平台会不报错地退到这个档）。`effort` 默认不传（用平台的常规思考量）；资料包 `pack/main` 里可以写 `model` / `effort` 覆盖。
-  - 每次返回后看 `modelApplied`：等于 `"claude-opus-5-5"` 才是 Opus 5.5 在讲。对话条上常驻一个小标记「Opus 5.5 授课」；某一轮退到了别的模型（`modelApplied` 缺失），标记改成「这一轮由备用模型回答（complex 档）」，并把这件事记进 `class/turns` 的那一轮。
-  - 其他小活不必用 Opus：手写转写用 `"default"` 档；后台的长度摘要可以用 `"default"` 档。
+- **模型（学生明确要求，必须遵守）**：课堂里的 Claude **只能是 Opus 5.5、effort 为 high**。每次讲课调用都传 `model: "claude-opus-5-5"`、`effort: "high"`、`modelTier: "complex"`（`modelTier` 只是平台要求的必填退路）。
+  - **不接受退路模型讲课。**平台在 Opus 5.5 用不了时会不报错地改由 complex 档回答，所以每次返回都要检查 `modelApplied`：不等于 `"claude-opus-5-5"`，这一轮的输出**一律丢弃**：不显示、不执行任何黑板指令、不写进对话历史，只在 `class/turns` 里记一条「Opus 5.5 不可用，这一轮作废」。对话条显示「Opus 5.5 暂时用不了，稍后点重试」和一个「重试」按钮。不自动循环重试。
+  - 流式显示时，`modelApplied` 要到结束才知道：生成过程中先把内容显示成「草稿」样式（不执行黑板指令），确认是 Opus 5.5 后再正式执行指令、转成正常样式；确认不是则整段撤掉。
+  - 对话条常驻小标记「Opus 5.5 · high」。
+  - high 会想得更久，第一个字出来前可能要等十几秒到几十秒：等待时显示「Claude 在想…」，不要让学生以为卡死了。
+  - 只有不讲课的小活可以用别的档：手写转写、对话太长时的后台摘要，用 `"default"` 档。
+  - 资料包里不要再提供覆盖模型的字段，模型由这一条固定。
 - **出错**：`rate_limited` 时显示「请求太频繁，等一下再说」；`not_granted` 时说明需要允许页面使用 Claude。不要自动循环重试。
 
 ### 2.4 可选：工具
@@ -109,7 +113,7 @@ unit: 第2讲 §2 · 秩一方阵
 
 | 路径 | 内容 |
 |---|---|
-| `pack/main` | `{ unit, goal, scope, textbook, plan, student, rules?, model?, effort?, updatedAt }`，字段都是长文本 |
+| `pack/main` | `{ unit, goal, scope, textbook, plan, student, rules?, updatedAt }`，字段都是长文本 |
 | `pack/problems` | `{ items: [...] }`：这节课可用的题（题面、答案、考点、来源），课堂里的 Claude 从里面取，也可以自己改数 |
 
 - `goal`：这节课要学生最后能做到什么，例如「看到行成比例的方阵能认出秩一，并用 tr 写出 Aⁿ，能说清为什么」。
