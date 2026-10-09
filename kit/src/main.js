@@ -10,6 +10,9 @@ import { recordText, toast } from './record.js';
 import { escapeHtml } from './render.js';
 import { initBoardInk } from './ink/overlay.js';
 import { renderLive } from './live/live.js';
+import { renderClass } from './class/classroom.js';
+import classCss from './class/class.css';
+import classBoardCss from './class/board.css';
 
 // 粉笔手写体：数字和字母用 Caveat（1 和 7 容易分辨），中文用龙藏体。
 // Google Fonts 是 artifact 唯一允许的外部样式来源；加载不到时退回系统楷体
@@ -39,7 +42,7 @@ function injectStyles() {
   document.body.insertAdjacentHTML('afterbegin', CHALK_FILTER);
   const style = document.createElement('style');
   style.id = 'la-kit-style';
-  style.textContent = katexCss + '\n' + css;
+  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss;
   document.head.appendChild(style);
   if (!document.querySelector('meta[name="viewport"]')) {
     const m = document.createElement('meta');
@@ -73,7 +76,8 @@ function renderAll() {
     const { meta, body } = frontMatter(dedent(s.textContent));
     session.reset(meta.unit || lessonTitle(body));
     session.subject = meta.subject || '线性代数';
-    if (/^(live|实时)$/i.test(meta.mode || '')) renderLive(article, meta);
+    if (/^(class|课堂)$/i.test(meta.mode || '')) renderClass(article, meta);
+    else if (/^(live|实时)$/i.test(meta.mode || '')) renderLive(article, meta);
     else if (/^(guided|引导)$/i.test(meta.mode || '')) renderGuided(body, article, meta);
     else {
       session.stages = [{ title: '', src: body, el: article }];
@@ -83,7 +87,8 @@ function renderAll() {
     article.insertAdjacentHTML('beforeend', '<div class="la-tray" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i><i class="eraser"></i></div>');
     if (!window.LAKit?.ink) (window.LAKit ||= {}).ink = initBoardInk(article);
   });
-  initTutor();
+  // 课堂模式里「问 Claude」就是底部对话框，不再单独出现
+  if (session.mode !== 'class') initTutor();
 }
 
 // 课件本身写错的地方集中列在顶部，方便复制给 Claude 修改

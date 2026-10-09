@@ -32,7 +32,11 @@
 
 另一种学法：课件页面只是一个壳，对话里的 Claude 一段一段往黑板上写（写进这个 artifact 的数据库）。你在黑板上作答，每次尝试、手写原图、揭开 / 放弃 / 做完都存进数据库；你回对话说「做完了」，Claude 读你的作答，再决定下一段写什么：补讲、换一道、追问，或者往下走。往下走的决定权在对话里。说明见 `CLAUDE-PROJECT.md` 第五节、需求原文见 [`docs/live-board-spec.md`](docs/live-board-spec.md)。
 
-本地试用：打开 `kit/examples/live-demo.html?dev`（`la-kit.js` 放在同一目录），右上角的「开发面板」可以扮演对话里的 Claude 往黑板上写、查看作答。
+### 课堂模式（mode: class）
+
+页面底部是对话框，「课堂里的 Claude」（只用 Opus 5.5、effort high）一边说话，一边用组件库现场画黑板；你在黑板上作答，它马上接着教。项目对话里的 Claude 课前写资料包（`pack/main`、`pack/problems`），课后读课堂记录（`class_turns`、`class_notes`）。说明见 `CLAUDE-PROJECT.md` 第六节，需求原文见 [`docs/classroom-spec.md`](docs/classroom-spec.md)。本地试用：`kit/examples/class-demo.html?dev`（模拟老师按剧本回放，不花额度）。
+
+本地试用实时黑板：打开 `kit/examples/live-demo.html?dev`（`la-kit.js` 放在同一目录），右上角的「开发面板」可以扮演对话里的 Claude 往黑板上写、查看作答。
 
 ## 设置
 
@@ -67,6 +71,7 @@ kit/src/
   main.js                入口：渲染 <script type="text/markdown"> 里的课件
   guided.js              分节解锁、进度条
   live/                  实时黑板：数据库连接、本地替身（?dev）、开发面板、作答写回
+  class/                 课堂模式：输出解析（protocol）、提示词（prompt）、底部对话条（bar）、控制器（classroom）、模拟老师
   graph.js  space.js     函数图、三维图
   link.js                steps 和图的联动
   session.js             关卡、学习记录、图形注册

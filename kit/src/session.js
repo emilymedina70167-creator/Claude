@@ -12,6 +12,7 @@ export const session = {
   problems: [], // 课件本身的错误（写法不对），集中显示给作者
   context: '', // context 块：给页面里的 Claude 的背景资料
   subject: '线性代数', // 课件开头 subject: 可改（如 数据结构）
+  mode: 'plain', // plain | guided | live | class
   live: false, // 实时黑板模式（作答同时写进数据库，由对话里的 Claude 决定往下讲什么）
   sink: null, // live 模式下接收每条作答 / 事件 / 手写原图：{ record(entry), event(e), images(key, blobs) }
 
@@ -20,6 +21,7 @@ export const session = {
     this.stages = [];
     this.gates = [];
     this.scenes.clear();
+    this.sceneSeq = 0;
     this.problems = [];
     this.context = '';
     this.log = load(title)?.log || [];
@@ -78,7 +80,9 @@ export const session = {
   stepOf(el) { return el?.closest?.('[data-step]')?.dataset.step; },
 
   registerScene(el, api, title) {
-    const id = `图${this.scenes.size + 1}`;
+    // 编号只增不减：段落被替换、图被移除后，新图不会和还在的图撞号
+    this.sceneSeq = Math.max(this.sceneSeq || 0, this.scenes.size) + 1;
+    const id = `图${this.sceneSeq}`;
     this.scenes.set(id, { api, title: title || id, stage: this.stageOf(el), el });
     return id;
   },
@@ -87,9 +91,10 @@ export const session = {
     return this.gates.filter((g) => g.stage === i).every((g) => g.done);
   },
 
-  problem(el, kind, msg) {
+  // soft：只是提醒（比如组件没写 id，已自动生成），不算写错，课堂模式不会因此要求重写
+  problem(el, kind, msg, { soft = false } = {}) {
     const i = this.stageOf(el);
-    this.problems.push({ stage: i, title: this.stages[i]?.title || '', kind, msg });
+    this.problems.push({ stage: i, title: this.stages[i]?.title || '', kind, msg, soft, bid: el?.closest?.('[data-bid]')?.dataset.bid });
     emit();
   },
 

@@ -7,7 +7,7 @@ import { toast } from '../record.js';
 const SIZES = { fine: 1.6, mid: 2.6, bold: 4.2 };
 const ERASER_R = 14;
 // 这些地方的点按始终交给界面本身（工具栏、进度条、助教、键盘……）
-const CHROME = '.ink-bar, .ink-fab, .g-bar, .tutor, .tutor-fab, .keypad, .record-fallback, .ink-pad';
+const CHROME = '.ink-bar, .ink-fab, .g-bar, .tutor, .tutor-fab, .keypad, .record-fallback, .ink-pad, .class-bar, .dev-panel';
 
 const icon = {
   pen: '<svg viewBox="0 0 24 24"><path d="M4 20l1.2-4.4L15.6 5.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.4 18.8z"/><path d="M13.8 7l3.2 3.2"/></svg>',

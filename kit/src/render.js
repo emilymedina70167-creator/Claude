@@ -72,6 +72,8 @@ export function mdToHtml(src, { inline = false } = {}) {
 // 渲染一段课件并挂载互动组件
 // 会产生作答的组件（live 模式下要有稳定的 id）
 const ANSWERING = new Set(['answer', 'conjecture', 'quiz', 'predict', 'practice', 'steps', 'recognize', 'findbug', 'draft', 'sortpass']);
+// 课堂模式里 figure 指令要按 id 找图
+const FIGURES = new Set(['scene', 'graph', 'space']);
 
 export function renderLesson(src, root) {
   const pending = [];
@@ -112,7 +114,7 @@ export function renderLesson(src, root) {
     const prefix = root.closest?.('[data-step]')?.dataset.step || `s${session.stageOf(root)}`;
     el.dataset.bid = own ? own[1] : `${prefix}-${++seq}`;
     el.dataset.t0 = Date.now();
-    if (!own && session.live && ANSWERING.has(name)) session.problem(el, name, `这个组件没写 id:，作答记录暂时按 ${el.dataset.bid} 存。请加一行 id:（同一个单元里不重复）`);
+    if (!own && session.live && (ANSWERING.has(name) || FIGURES.has(name))) session.problem(el, name, `这个组件没写 id:，暂时按 ${el.dataset.bid} 记。请加一行 id:（同一个单元里不重复）`, { soft: true });
     try {
       blocks[name](el, body);
     } catch (e) {

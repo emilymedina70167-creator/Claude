@@ -4,6 +4,8 @@ import { build } from 'esbuild';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { componentDocs } from './build-docs.js';
 
 const require = createRequire(import.meta.url);
 const katexDist = path.dirname(require.resolve('katex/dist/katex.min.css'));
@@ -25,6 +27,21 @@ const katexCssPlugin = {
   },
 };
 
+// 课堂模式的组件手册：从 CLAUDE-PROJECT.md 第三节截出来（见 build-docs.js），以文本打包。
+// 用单独的 namespace：上面 katex 插件的 onLoad 会接管 'virtual' namespace 里的所有路径
+const projectDoc = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'CLAUDE-PROJECT.md');
+const componentDocsPlugin = {
+  name: 'component-docs',
+  setup(b) {
+    b.onResolve({ filter: /^virtual:component-docs$/ }, () => ({ path: projectDoc, namespace: 'component-docs' }));
+    b.onLoad({ filter: /.*/, namespace: 'component-docs' }, () => ({
+      contents: componentDocs(readFileSync(projectDoc, 'utf8')),
+      loader: 'text',
+      watchFiles: [projectDoc],
+    }));
+  },
+};
+
 const banner = `/*! 线代学习台 la-kit | https://github.com/emilymedina70167-creator/Claude
  *  bundles markdown-it (MIT) and KaTeX (MIT, fonts SIL OFL) */`;
 
@@ -35,7 +52,7 @@ await build({
   format: 'iife',
   target: ['safari16', 'chrome110', 'firefox110'],
   loader: { '.css': 'text' },
-  plugins: [katexCssPlugin],
+  plugins: [katexCssPlugin, componentDocsPlugin],
   banner: { js: banner },
   outfile: 'kit/dist/la-kit.js',
   logLevel: 'info',

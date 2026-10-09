@@ -491,3 +491,63 @@ unit: 第2讲 §2 · 秩一方阵
 页面上 `conjecture` 在实时黑板里默认 `grade: off`：只记录不批改，由你来看（guided 课件里也可以写 `grade: off`）。
 
 **本地试用**：在页面地址后面加 `?dev`（只在本地打开的页面有效），会出现「开发面板」，可以扮演你往黑板上写段落、查看作答。
+
+---
+
+## 六、课堂模式（mode: class）：课堂里的 Claude 现场出画面
+
+实时黑板的每一段都是你提前写好的：我在第 2 步卡住，后面几步照样摆着。课堂模式换成「课堂里的 Claude」现场教：页面底部是对话框，它一边说话，一边用组件库在黑板上现场写公式、出能拖的图、出一步步揭开的题。我在黑板上的任何作答（选择、填数、拖点、手写、「想不出来」）它马上看到，接着往下教。
+
+课堂里的 Claude 没有我的全局记忆，只有**这节课的资料包**（你课前写进数据库）和**这节课本身的对话**。你只在课前（备资料包）和课后（读课堂记录、判断掌握、更新记忆）出场，上课过程中不需要你。
+
+### 发布课堂
+
+```html
+<title>秩一方阵</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+mode: class
+unit: 第2讲 §2 · 秩一方阵
+---
+</script>
+```
+
+- `files`：同上，从组件库复制 `la-kit.js`。
+- `capabilities`：`{ "sample": { "images": true }, "db": {}, "assets": {} }`。
+- 新发布的 artifact 自动用最新的运行环境。如果是给**以前发布的** artifact 换成课堂模式，发布时加 `contract: "latest"`：指定模型（Opus 5.5）要较新的运行环境才支持。
+
+### 课前：写资料包
+
+用 `ArtifactData` 的 `set`（`url` 是这个课堂的地址）：
+
+- `collection: "pack"`，`doc_id: "main"`，`data`：
+  - `unit`：单元名。
+  - `goal`：这节课要我最后能做到什么，例如「看到行成比例的方阵能认出秩一，并用 tr 写出 Aⁿ，能说清为什么」。
+  - `scope`：文稿规定的范围和详略、考试口径。超出范围的课堂里不讲。
+  - `textbook`：教材原文的定义、公式、例题（逐字或忠实转写，数字准确）。**课堂里的 Claude 只能用这里的教材内容**，这里没有的它会说「课后问对话里的 Claude」。
+  - `plan`：建议的推进顺序，以及每一步想让我动脑的点。只是建议，课堂里的 Claude 会按我的实际情况调整。
+  - `student`：我和这节课相关的弱点、过去的典型错误、上一次停在哪。
+  - `rules`（可选）：覆盖组件库内置的「角色与红线」。一般不用写。
+  - `updatedAt`：时间戳。
+- `collection: "pack"`，`doc_id: "problems"`，`data: { "items": [ { "q": "题面", "answer": "答案", "point": "考点", "source": "来源" }, … ] }`：这节课可用的题。课堂里的 Claude 从里面取题，也可以自己改数。
+- 资料包合起来控制在约 120 KB 以内，超出部分会被截断。课中你也可以改资料包，下一轮自动用新版本。
+- 模型是固定的：课堂里的 Claude 只用 Opus 5.5（effort high）。平台临时换成别的模型时，那一轮整段作废，我会看到「Opus 5.5 暂时用不了，稍后点重试」。资料包里不要写模型相关的字段。
+
+### 课后：读课堂记录
+
+我说「下课了」时，用 `ArtifactData` 读：
+
+- `collection: "class_turns"`（`query`，`order_by: seq`）：每一轮一条，`{ seq, role, text, actions, images, boardOps, kind, discarded, at }`。
+  - `role: "student"`：我说的话（`say`）和我在黑板上的动作（`actions`，每条一行，比如「[作答] b7 里的 steps 第 3 步：选了『跑到线外去』（错），用时 44 秒」）；`images` 是我附的手写 / 截图原图的 asset id。
+  - `role: "claude"`：课堂里的 Claude 的完整输出（话 + 黑板指令原文）；`boardOps` 是实际执行了哪些指令（add / replace / hide / figure 及 id，`ok: false` 的没执行成功）。
+  - `role: "system"`：页面发给它的系统消息，比如写法错误要求重写（`kind: "lint"`）、Opus 不可用这一轮作废（`kind: "fallback"`，`discarded: true`）、对话太长时的摘要（`kind: "summary"`）、下课小结（`kind: "closing"`）。
+- `collection: "class_notes"`：课堂里的 Claude 记的观察（`kind: "note"`），以及下课时写的小结（`kind: "summary"`：讲了什么、我哪里卡住、哪里看起来懂了但证据不够、建议下一节怎么接）。
+- `collection: "steps"`：黑板上出现过的每一段（`by: "class"`，`md` 是原文，`hidden: true` 是被撤回的）。
+- `collection: "answers"`、`"events"`：和实时黑板一样，每次作答、揭开、放弃、拖动都有记录；手写原图用 `Artifact` 工具 `action: "read"`、`path` 填 asset id 取回。
+
+读完后判断我是真的掌握了，还是只是跟着做下来；把弱点和典型错误更新进记忆，决定下一节从哪里接（写进下一节资料包的 `student` 和 `plan`）。
+
+（需求文档里写的 `class/turns/{seq}`、`class/notes/{id}` 在数据库路径规则下不是合法的文档路径，实际用的是 `class_turns` 和 `class_notes` 两个集合。）
+
+**本地试用**：打开 `kit/examples/class-demo.html?dev`，「模拟老师」会按剧本回放几轮（含一段故意写错、会被自动重写的组件），不调用 Claude；开发面板可以写资料包、看课堂记录、模拟 Opus 5.5 不可用。

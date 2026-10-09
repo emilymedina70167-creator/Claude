@@ -45,13 +45,14 @@ export function createSink(store) {
   }
 
   return {
+    // 返回每张图上传后的 asset id（Promise，失败为 null），课堂模式记进 class_turns
     images(key, blobs) {
-      if (!store.assets) return;
+      if (!store.assets) return [];
       const list = pending.get(key) || [];
-      for (const b of blobs) {
-        list.push(store.assets.upload(b, { type: b.type || 'image/png' }).then((r) => r.id).catch(() => null));
-      }
+      const ups = blobs.map((b) => store.assets.upload(b, { type: b.type || 'image/png' }).then((r) => r.id).catch(() => null));
+      list.push(...ups);
       pending.set(key, list);
+      return ups;
     },
 
     async record(e) {
@@ -65,6 +66,9 @@ export function createSink(store) {
     event(e) {
       return put('events', { ...e, detail: e.detail ?? null, at: Date.now() });
     },
+
+    // 课堂模式：黑板段落、课堂记录、课后小结（失败同样标「没存上」）
+    put,
   };
 }
 
