@@ -9,9 +9,17 @@ export function createPlane(container, { range = 5 } = {}) {
   const clipId = 'clip' + Math.random().toString(36).slice(2);
   container.appendChild(svg);
 
+  // 画每条命令前设 p.cmd = 序号，这期间画出的元素都带上 data-cmd，课堂里 highlight 靠它找到要闪的东西
+  const put = (parent, tag, attrs) => {
+    const e = add(parent, tag, attrs);
+    if (p.cmd != null) e.setAttribute('data-cmd', p.cmd);
+    return e;
+  };
+
   const p = {
     svg,
     range,
+    cmd: null,
     X: (x) => SIZE / 2 + (x / p.range) * (SIZE / 2),
     Y: (y) => SIZE / 2 - (y / p.range) * (SIZE / 2),
     clear() {
@@ -38,30 +46,30 @@ export function createPlane(container, { range = 5 } = {}) {
       }
     },
     line(a, b, cls, extra = {}) {
-      return add(p.layer, 'line', { x1: p.X(a[0]), y1: p.Y(a[1]), x2: p.X(b[0]), y2: p.Y(b[1]), class: cls, ...extra });
+      return put(p.layer, 'line', { x1: p.X(a[0]), y1: p.Y(a[1]), x2: p.X(b[0]), y2: p.Y(b[1]), class: cls, ...extra });
     },
     path(pts, cls) {
-      return add(p.layer, 'polyline', { points: pts.map(([x, y]) => `${p.X(x)},${p.Y(y)}`).join(' '), class: cls });
+      return put(p.layer, 'polyline', { points: pts.map(([x, y]) => `${p.X(x)},${p.Y(y)}`).join(' '), class: cls });
     },
     poly(pts, cls) {
-      return add(p.layer, 'polygon', { points: pts.map(([x, y]) => `${p.X(x)},${p.Y(y)}`).join(' '), class: cls });
+      return put(p.layer, 'polygon', { points: pts.map(([x, y]) => `${p.X(x)},${p.Y(y)}`).join(' '), class: cls });
     },
     // 带箭头的向量
     arrow(from, to, color, { width = 3.5, label, dashed = false, layer } = {}) {
       const drawIn = p.drawIn && !dashed;
-      const g = add(layer || p.layer, 'g', { class: drawIn ? 'vec vec-in' : 'vec', style: `--vc:${color}` });
+      const g = put(layer || p.layer, 'g', { class: drawIn ? 'vec vec-in' : 'vec', style: `--vc:${color}` });
       const x1 = p.X(from[0]), y1 = p.Y(from[1]), x2 = p.X(to[0]), y2 = p.Y(to[1]);
       const len = Math.hypot(x2 - x1, y2 - y1);
       if (len < 1) return g;
       const ux = (x2 - x1) / len, uy = (y2 - y1) / len;
       const h = Math.min(19, len * 0.6);
       const bx = x2 - ux * h, by = y2 - uy * h;
-      add(g, 'line', { x1, y1, x2: bx, y2: by, 'stroke-width': width, class: dashed ? 'vec-line dashed' : 'vec-line', ...(drawIn ? { pathLength: 1 } : {}) });
-      add(g, 'polygon', { points: `${x2},${y2} ${bx - uy * h * 0.48},${by + ux * h * 0.48} ${bx + uy * h * 0.48},${by - ux * h * 0.48}`, class: 'vec-head' });
+      put(g, 'line', { x1, y1, x2: bx, y2: by, 'stroke-width': width, class: dashed ? 'vec-line dashed' : 'vec-line', ...(drawIn ? { pathLength: 1 } : {}) });
+      put(g, 'polygon', { points: `${x2},${y2} ${bx - uy * h * 0.48},${by + ux * h * 0.48} ${bx + uy * h * 0.48},${by - ux * h * 0.48}`, class: 'vec-head' });
       if (label) {
         const [cx, cy] = p.placeLabel(x2, y2, ux, uy, label);
         // 标签不套粉笔滤镜，保持清楚
-        const t = add(layer || p.layer, 'text', { x: cx, y: cy, class: drawIn ? 'vec-label vec-label-in' : 'vec-label', style: `--vc:${color}`, 'text-anchor': 'middle', 'dominant-baseline': 'central' });
+        const t = put(layer || p.layer, 'text', { x: cx, y: cy, class: drawIn ? 'vec-label vec-label-in' : 'vec-label', style: `--vc:${color}`, 'text-anchor': 'middle', 'dominant-baseline': 'central' });
         t.textContent = label;
       }
       return g;
@@ -85,16 +93,16 @@ export function createPlane(container, { range = 5 } = {}) {
       return pick;
     },
     dot(pt, cls = 'dot', r = 5) {
-      return add(p.layer, 'circle', { cx: p.X(pt[0]), cy: p.Y(pt[1]), r, class: cls });
+      return put(p.layer, 'circle', { cx: p.X(pt[0]), cy: p.Y(pt[1]), r, class: cls });
     },
     text(pt, str, cls = 'plot-text') {
-      const t = add(p.top, 'text', { x: p.X(pt[0]), y: p.Y(pt[1]), class: cls });
+      const t = put(p.top, 'text', { x: p.X(pt[0]), y: p.Y(pt[1]), class: cls });
       t.textContent = str;
       return t;
     },
     // 拖动把手：大一点方便手指
     handle(pt, id, color) {
-      const c = add(p.top, 'circle', { cx: p.X(pt[0]), cy: p.Y(pt[1]), r: 18, class: 'handle', 'data-handle': id, style: `--vc:${color}` });
+      const c = put(p.top, 'circle', { cx: p.X(pt[0]), cy: p.Y(pt[1]), r: 18, class: 'handle', 'data-handle': id, style: `--vc:${color}` });
       return c;
     },
     toMath(evt) {
@@ -103,35 +111,51 @@ export function createPlane(container, { range = 5 } = {}) {
       const sy = ((evt.clientY - r.top) / r.height) * SIZE;
       return [((sx - SIZE / 2) / (SIZE / 2)) * p.range, -((sy - SIZE / 2) / (SIZE / 2)) * p.range];
     },
-    // onDrag(id, [x, y], phase)
+    // onDrag(id, [x, y], phase)，phase 是 'start' | 'move' | 'end'
     draggable(onDrag) {
-      let active = null;
-      svg.addEventListener('pointerdown', (e) => {
-        const id = e.target.getAttribute && e.target.getAttribute('data-handle');
-        if (!id) return;
-        active = id;
-        svg.setPointerCapture(e.pointerId);
-        svg.classList.add('dragging');
-        e.preventDefault();
-        onDrag(active, p.toMath(e), 'start');
-      });
-      svg.addEventListener('pointermove', (e) => {
-        if (!active) return;
-        e.preventDefault();
-        onDrag(active, p.toMath(e), 'move');
-      });
-      const end = (e) => {
-        if (!active) return;
-        onDrag(active, p.toMath(e), 'end');
-        active = null;
-        svg.classList.remove('dragging');
-      };
-      svg.addEventListener('pointerup', end);
-      svg.addEventListener('pointercancel', end);
+      dragHandles(svg, p.toMath, onDrag);
     },
   };
   p.clear();
   return p;
+}
+
+// 拖把手（带 data-handle 的元素）：scene 的点和 graph 的竖线共用。
+// 只认按下把手的那根手指 / 笔：iPad 上手掌、第二根手指的事件不会把点抢走；
+// pointercancel（系统接管手势）时坐标不可靠，用最后一次移动到的位置收尾
+export function dragHandles(svg, toPoint, onDrag) {
+  let active = null, pid = null, last = null;
+  const finish = (e) => {
+    if (active == null || (e && e.pointerId !== pid)) return;
+    const id = active;
+    const pt = e?.type === 'pointerup' ? toPoint(e) : last;
+    active = null;
+    pid = null;
+    svg.classList.remove('dragging');
+    onDrag(id, pt, 'end');
+  };
+  svg.addEventListener('pointerdown', (e) => {
+    const id = e.target.getAttribute?.('data-handle');
+    if (!id) return;
+    // 上一次拖动没收到抬起（比如换了一支笔）：先按松手收尾，再开始新的
+    if (active != null) finish();
+    active = id;
+    pid = e.pointerId;
+    try { svg.setPointerCapture(e.pointerId); } catch { /* 合成事件没有真的指针 */ }
+    svg.classList.add('dragging');
+    e.preventDefault();
+    last = toPoint(e);
+    onDrag(id, last, 'start');
+  });
+  svg.addEventListener('pointermove', (e) => {
+    if (active == null || e.pointerId !== pid) return;
+    e.preventDefault();
+    last = toPoint(e);
+    onDrag(active, last, 'move');
+  });
+  svg.addEventListener('pointerup', finish);
+  svg.addEventListener('pointercancel', finish);
+  svg.addEventListener('lostpointercapture', finish);
 }
 
 function el(tag, attrs = {}) {
@@ -157,3 +181,296 @@ export const snap = (v, step) => {
 };
 
 export const COLORS = ['var(--v1)', 'var(--v2)', 'var(--v3)', 'var(--v4)', 'var(--v5)'];
+
+// —— 课堂指令共用（scene / graph / space）：play、set、highlight、vars、事件 ——
+
+// 闪烁时长：highlight 让某条命令画出的东西亮这么久
+export const FLASH_MS = 1600;
+// play 最长 30 秒：写错单位（比如 play t 0 1 1500s）也不会让图卡住半天
+const MAX_PLAY_MS = 30000;
+const ease = (k) => (k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
+const now = () => (globalThis.performance?.now ? performance.now() : Date.now());
+const reducedMotion = () => { try { return !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
+
+// 值的形状：'n' 是数，'[n,n]' 是二维向量，'[[n,n],[n,n]]' 是 2×2 矩阵；不是有限的数 / 数组时为 null
+export function shapeOf(x) {
+  if (typeof x === 'number') return Number.isFinite(x) ? 'n' : null;
+  if (!Array.isArray(x) || !x.length) return null;
+  const parts = x.map(shapeOf);
+  return parts.includes(null) ? null : `[${parts.join(',')}]`;
+}
+
+// 两个形状相同的值之间插值（k = 0 是 a，k = 1 是 b）
+export function lerpValue(a, b, k) {
+  if (Array.isArray(a)) return a.map((x, i) => lerpValue(x, b[i], k));
+  return k >= 1 ? b : a + (b - a) * k;
+}
+
+// 记录 / 发给 Claude 时保留两位小数
+export function round2(x) {
+  if (Array.isArray(x)) return x.map(round2);
+  return typeof x === 'number' ? Math.round(x * 100) / 100 : x;
+}
+
+export function sameValue(a, b, tol = 1e-9) {
+  if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) <= tol;
+  return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => sameValue(x, b[i], tol));
+}
+
+// 给报错用的中文说法
+export function describeValue(x) {
+  const s = shapeOf(x);
+  if (s === 'n') return '一个数';
+  if (s && x.every((r) => typeof r === 'number')) return `${x.length} 维向量`;
+  if (s && x.every((r) => Array.isArray(r) && r.length === x[0].length)) return `${x.length}×${x[0].length} 矩阵`;
+  return '这样的值';
+}
+
+// 光晕用的模糊滤镜，第一次闪烁时放进页面（和粉笔滤镜一样放在一个不占地方的 svg 里，各张图都能引用）。
+// 滤镜区域按用户坐标给一大块：水平 / 竖直的线包围盒高度是 0，按包围盒算区域的话光晕会整个消失
+const GLOW = '<svg class="la-glow-defs" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>'
+  + '<filter id="la-glow" filterUnits="userSpaceOnUse" x="-400" y="-400" width="1500" height="1300"><feGaussianBlur stdDeviation="4.5"/></filter>'
+  + '</defs></svg>';
+function ensureGlow() {
+  if (typeof document === 'undefined' || document.getElementById('la-glow') || !document.body) return;
+  document.body.insertAdjacentHTML('beforeend', GLOW);
+}
+
+const clone = (x) => (Array.isArray(x) ? x.map(clone) : x);
+const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+// "2"、" -1.5 " 这样的字符串也当数
+const asNum = (x) => (typeof x === 'string' && x.trim() !== '' && Number.isFinite(Number(x)) ? Number(x) : x);
+
+/**
+ * 一张图的课堂操作。图自己画、自己管状态，这里管：变量放在哪、怎么写进去、补间动画、命令闪烁、事件。
+ *   root      图的容器（找 data-cmd 元素、判断图还在不在页面上）
+ *   cmds      解析出的命令（第 i 条命令的序号是 i + 1）
+ *   state     { slider, drag, override }：滑块值、拖动点的位置、被 set 覆盖的 let
+ *   extra     外部变量（link 来的 step / t，predict 的 t / guess）
+ *   env()     求出当前全部变量；draw() 重画
+ *   dragValue 可拖的 let 怎么校验新值（scene：二维向量；graph：一个数）；不给就当普通 let（space 没有拖动）
+ * 图的 draw() 里：画第 i 条命令时给元素加 data-cmd，画完调用 ctl.mark()；检查 goal 前看 ctl.quiet
+ */
+export function figureControls({ root, cmds, state, extra, env, draw, dragValue }) {
+  const listeners = {};
+  const anims = new Map(); // 变量名 → { slot, from, to, ms, t0, quiet, resolve }
+  let pending = null; // 下一帧：{ raf, timer }
+  let quietNow = false;
+  let flash = null; // { i, t0 }
+  let flashTimer = 0;
+
+  // 变量放在哪：滑块 / 可拖的点 / 普通 let / 外部变量。create：内部动画（▶、link）允许新建外部变量，和以前一样
+  function locate(name, { create = false } = {}) {
+    const c = cmds.find((k) => (k.kind === 'slider' || k.kind === 'let') && k.name === name);
+    if (c?.kind === 'slider') return { kind: 'slider', c };
+    if (c) return { kind: c.mods.drag && dragValue ? 'drag' : 'let', c };
+    if (has(extra, name) || create) return { kind: 'extra' };
+    return null;
+  }
+  const mapOf = (slot) => (slot.kind === 'slider' ? state.slider : slot.kind === 'drag' ? state.drag : slot.kind === 'let' ? state.override : extra);
+  function write(slot, name, val, silent = false) {
+    mapOf(slot)[name] = val;
+    if (slot.kind === 'slider' && !silent) slot.c.sync?.();
+  }
+  function current(name) {
+    try { return env()[name]; } catch { return undefined; }
+  }
+  function redraw(quiet) {
+    quietNow = quiet;
+    try { draw(); } finally { quietNow = false; }
+  }
+
+  // —— 补间：同一个变量再动时打断上一次（停在当前值），所有变量一帧只重画一次 ——
+  function stop(name) {
+    const a = anims.get(name);
+    if (!a) return;
+    anims.delete(name);
+    a.resolve();
+  }
+  function tween(name, slot, from, to, ms, quiet) {
+    stop(name);
+    if (!(ms > 0)) {
+      write(slot, name, to);
+      redraw(quiet);
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      anims.set(name, { slot, from, to, ms, t0: now(), quiet, resolve });
+      write(slot, name, from);
+      redraw(quiet);
+      schedule();
+    });
+  }
+  function schedule() {
+    if (pending || !anims.size) return;
+    const raf = globalThis.requestAnimationFrame;
+    const run = () => {
+      if (!pending) return;
+      if (pending.raf) globalThis.cancelAnimationFrame?.(pending.raf);
+      clearTimeout(pending.timer);
+      pending = null;
+      step();
+    };
+    // 页面在后台时 requestAnimationFrame 停了：靠定时器接着走，保证动画会走完、变量停在终点
+    pending = { raf: raf ? raf(run) : 0, timer: setTimeout(run, raf ? 120 : 16) };
+  }
+  function step() {
+    const t = now();
+    const done = [];
+    let quiet = false;
+    for (const [name, a] of anims) {
+      const k = Math.min(1, (t - a.t0) / a.ms);
+      write(a.slot, name, k >= 1 ? a.to : lerpValue(a.from, a.to, ease(k)));
+      quiet ||= a.quiet;
+      if (k >= 1) { anims.delete(name); done.push(a); }
+    }
+    // 图已经从页面上拿掉（段落被替换）：不再画，直接收尾
+    if (root.isConnected !== false) redraw(quiet);
+    else for (const [name, a] of anims) { write(a.slot, name, a.to); anims.delete(name); done.push(a); }
+    done.forEach((a) => a.resolve());
+    schedule();
+  }
+
+  // 动画还没走完时，vars / snapshot 报变量要停在的值（课堂 Claude 按终值往下算）
+  function withTargets(fn) {
+    if (!anims.size) return fn();
+    const saved = [];
+    for (const [name, a] of anims) {
+      const m = mapOf(a.slot);
+      saved.push([m, name, has(m, name), m[name]]);
+      m[name] = a.to;
+    }
+    try { return fn(); } finally {
+      for (const [m, name, had, val] of saved.reverse()) { if (had) m[name] = val; else delete m[name]; }
+    }
+  }
+
+  // —— 闪烁：画面元素后面垫一层模糊的粉笔黄光晕；HTML 行（滑块、读数）加背景高亮 ——
+  function unmark() {
+    root.querySelectorAll?.('.cmd-halo').forEach((h) => h.remove());
+    root.querySelectorAll?.('.cmd-flash').forEach((e) => { e.classList.remove('cmd-flash'); e.style?.removeProperty('--flash-delay'); });
+  }
+  function mark() {
+    if (!flash) return false;
+    const elapsed = now() - flash.t0;
+    if (elapsed >= FLASH_MS) { flash = null; return false; }
+    const sel = `[data-cmd="${flash.i}"]`;
+    const els = [...(root.querySelectorAll?.(sel) || [])].filter((e) => !e.parentElement?.closest?.(sel));
+    // 重画会新建元素：用负的 animation-delay 接上已经闪到的地方，节奏不会被打断
+    const delay = `${-Math.round(elapsed)}ms`;
+    if (els.some((e) => e.namespaceURI === NS)) ensureGlow();
+    for (const e of els) {
+      if (e.classList.contains('cmd-flash')) continue;
+      e.classList.add('cmd-flash');
+      e.style.setProperty('--flash-delay', delay);
+      if (e.namespaceURI === NS) {
+        const h = e.cloneNode(true);
+        for (const x of [h, ...h.querySelectorAll('*')]) {
+          x.removeAttribute('data-cmd');
+          x.removeAttribute('data-handle');
+          x.removeAttribute('id');
+          x.classList.remove('vec-in', 'vec-label-in', 'cmd-flash');
+        }
+        h.classList.add('cmd-halo');
+        h.setAttribute('aria-hidden', 'true');
+        e.before(h);
+      }
+    }
+    return els.length > 0;
+  }
+
+  const ctl = {
+    get quiet() { return quietNow; },
+    mark,
+    stop,
+    withTargets,
+    on(ev, f) {
+      (listeners[ev] ||= []).push(f);
+      return () => { const l = listeners[ev]; const i = l.indexOf(f); if (i >= 0) l.splice(i, 1); };
+    },
+    emit(ev, ...args) {
+      for (const f of [...(listeners[ev] || [])]) {
+        try { f(...args); } catch (e) { console.error(e); }
+      }
+    },
+
+    // 图自己的动画（滑块的 ▶、link 揭开一步时的 t）：和以前一样，不认识的名字当外部变量
+    animate(name, from, to, ms) {
+      return tween(name, locate(name, { create: true }), from, to, Math.max(0, Number(ms) || 0), false);
+    },
+
+    // 课堂：变量从 from 动到 to（数，或形状相同的向量 / 矩阵）。动画走完 resolve；被打断也 resolve
+    play(name, from = 0, to = 1, ms = 1200) {
+      name = String(name ?? '').trim();
+      if (!name) throw new Error('play 要写变量名，比如 play t');
+      const slot = locate(name);
+      if (!slot) throw new Error(`图里没有变量 ${name}`);
+      from = asNum(from ?? 0);
+      to = asNum(to ?? 1);
+      const shape = shapeOf(from);
+      if (!shape || shape !== shapeOf(to)) throw new Error('play 的起点和终点要是数（或形状相同的向量），比如 play t 0 1');
+      const cur = current(name);
+      if (shapeOf(cur) && shapeOf(cur) !== shape) {
+        const what = describeValue(cur);
+        throw new Error(`${name} 是${what}，play 只能让它在两个${what}之间动；要直接换一个值请用 set`);
+      }
+      if (slot.kind === 'drag') { dragValue(name, from); dragValue(name, to); }
+      let d = Number(asNum(ms));
+      if (!Number.isFinite(d) || d < 0) d = 1200;
+      return tween(name, slot, clone(from), clone(to), Math.min(d, MAX_PLAY_MS), true);
+    },
+
+    // 改一个变量（value 已经求好）。形状没变时用不到半秒滑过去，学生看得出改了什么；opts.ms = 0 直接跳
+    set(name, value, { ms = 450 } = {}) {
+      name = String(name ?? '').trim();
+      const slot = locate(name);
+      if (!slot) throw new Error(`图里没有变量 ${name}`);
+      let val = asNum(value);
+      if (slot.kind === 'slider') {
+        if (typeof val !== 'number' || !Number.isFinite(val)) throw new Error(`滑块 ${name} 要设成一个数`);
+      } else if (slot.kind === 'drag') val = dragValue(name, val);
+      else if (!shapeOf(val)) throw new Error(`${name} 要设成数、向量或矩阵`);
+      val = clone(val);
+      const cur = current(name);
+      if (ms > 0 && !reducedMotion() && shapeOf(cur) && shapeOf(cur) === shapeOf(val) && !sameValue(cur, val)) {
+        return tween(name, slot, clone(cur), val, ms, true);
+      }
+      stop(name);
+      write(slot, name, val);
+      redraw(true);
+      return Promise.resolve();
+    },
+
+    // 当前全部变量：外部变量 + let + 滑块（完整精度；动画中报终值）
+    vars() {
+      return withTargets(() => {
+        const out = {};
+        for (const k of Object.keys(extra)) if (shapeOf(extra[k])) out[k] = clone(extra[k]);
+        let v = null;
+        try { v = env(); } catch { v = null; }
+        for (const c of cmds) {
+          if (c.kind !== 'let' && c.kind !== 'slider') continue;
+          let val = v?.[c.name];
+          // 有的 let 求不出来时，至少把滑块、拖动点、set 过的值报上
+          if (!v) val = c.kind === 'slider' ? state.slider[c.name] : has(state.override, c.name) ? state.override[c.name] : state.drag?.[c.name];
+          if (shapeOf(val)) out[c.name] = clone(val);
+        }
+        return out;
+      });
+    },
+
+    // 第 index 条命令（从 1 数，只数命令行）画出的东西闪约 1.6 秒。返回有没有东西可闪（let 这类不画东西的命令返回 false）
+    highlight(index) {
+      const i = Number(asNum(index));
+      if (!Number.isInteger(i) || i < 1) throw new Error('highlight 后面要写命令序号（从 1 数），比如 highlight 3');
+      if (i > cmds.length) throw new Error(cmds.length ? `图里只有 ${cmds.length} 条命令，没有第 ${i} 条（只数命令行，从 1 数）` : '这张图里没有命令');
+      clearTimeout(flashTimer);
+      unmark();
+      flash = { i, t0: now() };
+      const hit = mark();
+      flashTimer = setTimeout(() => { flash = null; unmark(); }, FLASH_MS);
+      return hit;
+    },
+  };
+  return ctl;
+}

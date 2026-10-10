@@ -12,7 +12,7 @@ const STATES = new Set(['idle', 'thinking', 'writing', 'error', 'notice']);
 const ROLES = new Set(['claude', 'student', 'system', 'action']);
 const MAX_SIDE = 2400;
 const EMPTY = '有话直接说，或者在黑板上作答——Claude 都看得到。';
-const PLACEHOLDER = { on: '想说什么，打在这里', images: '想说什么打在这里，也可以粘贴截图', off: '现在没法和 Claude 说话' };
+const PLACEHOLDER = { on: '想说什么，打在这里', images: '说点什么，或者粘贴截图', short: '说点什么…', off: '现在没法和 Claude 说话' };
 
 // —— 纯函数（不碰 DOM，单元测试直接测）——
 
@@ -94,6 +94,13 @@ export function clipboardImages(dt) {
   }
   if (!out.length) for (const f of dt?.files || []) if (/^image\//.test(f.type || '')) out.push(f);
   return out;
+}
+
+// 有的应用拷贝出来的图只在 text/html 里（一个 <img>），取出它的地址
+export function htmlImageSrcs(html) {
+  return [...String(html ?? '').matchAll(/<img\b[^>]*?\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)')/gi)]
+    .map((m) => (m[1] || m[2]).replace(/&amp;/g, '&'))
+    .filter((src) => /^(data:image\/|blob:|https?:)/i.test(src));
 }
 
 // 多行输入框自动增高：最多 maxLines 行，再多就在框里滚动
@@ -242,7 +249,8 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     if (open) pinned = nearBottom();
     log.classList.toggle('is-clipped', msgs.scrollTop > 2);
   }, { passive: true });
-  on(el, 'keydown', (e) => { if (e.key === 'Escape' && open) setOpen(false); });
+  // Esc 收起（焦点不一定在对话条里，所以挂在 document 上；只在展开时才管）
+  on(document, 'keydown', (e) => { if (e.key === 'Escape' && open) setOpen(false); });
 
   function renderBody(m, role, html) {
     if (role === 'action') {
@@ -327,7 +335,9 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   function syncControls() {
     pills.forEach((b) => (b.disabled = busy || !enabled));
     ta.disabled = !enabled;
-    ta.placeholder = !enabled ? PLACEHOLDER.off : images ? PLACEHOLDER.images : PLACEHOLDER.on;
+    // 手机竖屏输入框窄，长的占位文字放不下
+    const narrow = window.innerWidth < 560;
+    ta.placeholder = !enabled ? PLACEHOLDER.off : narrow ? PLACEHOLDER.short : images ? PLACEHOLDER.images : PLACEHOLDER.on;
     endBtn.disabled = !enabled;
     const full = attached.length >= MAX_IMAGES;
     penBtn.disabled = !enabled || full;
@@ -355,7 +365,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     onSend?.({ text, images: imgs });
   }
   on(form, 'submit', (e) => { e.preventDefault(); submit(); });
-  // 停止按钮不走表单提交：生成中在框里回车只换行不发送，免得误停
+  // 生成中按回车既不发送也不停止（免得误停）：字留在框里，这一轮说完再发
   on(ta, 'keydown', (e) => {
     if (!isSendKey(e)) return;
     e.preventDefault();
@@ -417,7 +427,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     if (room <= 0) { flashNote(`最多附 ${MAX_IMAGES} 张图`); return 0; }
     const out = [];
     for (const f of all.slice(0, room)) {
-      try { out.push(await toPng(f)); } catch { /* 读不出来的跳过 */ }
+      try { out.push(await (typeof f === 'string' ? srcToPng(f) : toPng(f))); } catch { /* 读不出来的跳过 */ }
     }
     if (!out.length) { showNote('这张图读不出来，换一张截图试试'); return 0; }
     const n = attachBlobs(out);
@@ -431,9 +441,14 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   }
   on(shotBtn, 'click', () => fileInput.click());
   on(fileInput, 'change', async () => { await takeFiles(fileInput.files || []); fileInput.value = ''; });
+  // 剪贴板 / 拖进来的东西里的图：文件优先，没有文件再看 html 里的 <img>
+  const dataImages = (dt) => {
+    const files = clipboardImages(dt);
+    return files.length ? files : htmlImageSrcs(dt?.getData?.('text/html'));
+  };
   on(ta, 'paste', (e) => {
     if (!images) return;
-    const imgs = clipboardImages(e.clipboardData);
+    const imgs = dataImages(e.clipboardData);
     if (!imgs.length) return; // 粘贴文字照常
     e.preventDefault();
     takeFiles(imgs);
@@ -443,7 +458,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   on(el, 'drop', (e) => {
     el.classList.remove('is-drop');
     if (!images || !enabled) return;
-    const imgs = clipboardImages(e.dataTransfer);
+    const imgs = dataImages(e.dataTransfer);
     if (!imgs.length) return;
     e.preventDefault();
     takeFiles(imgs);
@@ -494,14 +509,18 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
 
   // —— iPad 软键盘：把对话条抬到键盘上面 ——
   const vv = window.visualViewport;
+  let lastLift = -1;
   function lift() {
     const n = keyboardLift(window.innerHeight, vv);
+    if (n === lastLift) return; // iPad 上滚动时 scroll 事件很密，没变就不碰样式
+    lastLift = n;
     el.style.setProperty('--cb-lift', n + 'px');
     el.classList.toggle('is-lifted', n > 0);
     if (open) layoutLog();
   }
   if (vv) { on(vv, 'resize', lift); on(vv, 'scroll', lift); }
-  on(window, 'resize', () => { lift(); if (open) layoutLog(); });
+  on(window, 'resize', () => { lift(); syncControls(); if (open) layoutLog(); });
+  lift();
 
   setStatus('idle');
   syncControls();
@@ -552,26 +571,31 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
 }
 
 // 用浏览器解码图片（iPad 的 Safari 能解 PNG、JPEG、HEIC、TIFF），画到白底画布上导出 PNG，太大的按比例缩小
-function toPng(file) {
+async function toPng(file) {
+  const url = URL.createObjectURL(file);
+  try { return await srcToPng(url); } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+}
+
+function srcToPng(src) {
   return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
     const im = new Image();
-    const done = () => setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (/^https?:/i.test(src)) im.crossOrigin = 'anonymous'; // 别的网站的图：没有跨域许可就画不出来，下面会报错
     im.onload = () => {
-      done();
-      const w = im.naturalWidth || im.width, h = im.naturalHeight || im.height;
-      if (!w || !h) { reject(new Error('empty image')); return; }
-      const k = Math.min(1, MAX_SIDE / Math.max(w, h));
-      const c = document.createElement('canvas');
-      c.width = Math.round(w * k);
-      c.height = Math.round(h * k);
-      const g = c.getContext('2d');
-      g.fillStyle = '#ffffff';
-      g.fillRect(0, 0, c.width, c.height);
-      g.drawImage(im, 0, 0, c.width, c.height);
-      c.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png');
+      try {
+        const w = im.naturalWidth || im.width, h = im.naturalHeight || im.height;
+        if (!w || !h) throw new Error('empty image');
+        const k = Math.min(1, MAX_SIDE / Math.max(w, h));
+        const c = document.createElement('canvas');
+        c.width = Math.round(w * k);
+        c.height = Math.round(h * k);
+        const g = c.getContext('2d');
+        g.fillStyle = '#ffffff';
+        g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(im, 0, 0, c.width, c.height);
+        c.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png');
+      } catch (e) { reject(e); }
     };
-    im.onerror = () => { done(); reject(new Error('decode failed')); };
-    im.src = url;
+    im.onerror = () => reject(new Error('decode failed'));
+    im.src = src;
   });
 }

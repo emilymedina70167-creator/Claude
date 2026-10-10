@@ -12,6 +12,7 @@
 import { compile, isNum, isVec, numText } from './expr.js';
 import { splitMods, splitTop, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
+import { figureControls } from './plot.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const SIZE = 480;
@@ -93,7 +94,7 @@ const vec3 = (p, what) => { if (!isVec(p) || p.length !== 3) throw new Error(`${
 export function createSpace(container, src, opts = {}) {
   const { fields, cmds } = typeof src === 'string' ? parseSpace(src) : src;
   const extra = opts.extraVars || {};
-  const state = { slider: {}, yaw: -32, pitch: 22, spinning: /^(true|yes|1|是)$/i.test(fields.spin || '') };
+  const state = { slider: {}, drag: {}, override: {}, yaw: -32, pitch: 22, spinning: /^(true|yes|1|是)$/i.test(fields.spin || '') };
   const view = String(fields.view || '').split(/[\s,，]+/).map(Number);
   if (view.length === 2 && view.every(Number.isFinite)) [state.yaw, state.pitch] = view;
   const home = [state.yaw, state.pitch];
@@ -108,7 +109,7 @@ export function createSpace(container, src, opts = {}) {
 
   const env = () => {
     const v = { ...extra, ...state.slider };
-    for (const c of cmds) if (c.kind === 'let') v[c.name] = c.expr(v);
+    for (const c of cmds) if (c.kind === 'let') v[c.name] = Object.hasOwn(state.override, c.name) ? state.override[c.name] : c.expr(v);
     return v;
   };
 
@@ -140,11 +141,20 @@ export function createSpace(container, src, opts = {}) {
   }
   const color = (c, d) => COLOR[String(c.mods.color || '').toLowerCase()] || d;
   const visible = (c) => !(c.mods.from !== undefined && !((extra.step ?? 0) >= Number(c.mods.from))) && !(c.mods.until !== undefined && !((extra.step ?? 0) <= Number(c.mods.until)));
-  const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+  // cur：正在画第几条命令。画出的元素带 data-cmd，课堂里 highlight 靠它找。
+  // 三维图先收集、按远近排序再画，所以命令序号跟着每一项走（push / labels 记下当时的 cur）
+  let cur = null;
+  const el = (tag, attrs, parent = svg) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (cur != null) e.setAttribute('data-cmd', cur);
+    parent.appendChild(e);
+    return e;
+  };
 
   let items = [];
   let labels = [];
-  const push = (depth, fn) => items.push({ depth, fn });
+  const push = (depth, fn) => items.push({ depth, fn, cmd: cur });
 
   // 平面片：以 p0 为中心、两个正交方向 e1 e2 张成的正方形
   function patch(p0, e1, e2, cls, col, half = R * 0.95) {
@@ -179,7 +189,7 @@ export function createSpace(container, src, opts = {}) {
       el('line', { x1: A[0], y1: A[1], x2: bx, y2: by, 'stroke-width': width, class: dashed ? 'vec-line dashed' : 'vec-line' }, g);
       el('polygon', { points: `${B[0]},${B[1]} ${bx - uy * h * 0.48},${by + ux * h * 0.48} ${bx + uy * h * 0.48},${by - ux * h * 0.48}`, class: 'vec-head' }, g);
     });
-    if (label) labels.push({ x: B[0], y: B[1], ux: B[0] - A[0], uy: B[1] - A[1], text: label, col });
+    if (label) labels.push({ x: B[0], y: B[1], ux: B[0] - A[0], uy: B[1] - A[1], text: label, col, cmd: cur });
   }
 
   function axes() {
@@ -206,23 +216,30 @@ export function createSpace(container, src, opts = {}) {
     const errs = [];
     let v = null;
     try { v = env(); } catch (e) { errs.push(e.message); }
+    cur = null;
     axes();
     if (v) {
-      for (const c of cmds) {
-        if (!visible(c)) continue;
+      cmds.forEach((c, i) => {
+        if (!visible(c)) return;
+        cur = i + 1;
         try { drawCmd(c, v); } catch (e) { errs.push(e.message); }
-      }
+      });
     }
-    items.sort((a, b) => b.depth - a.depth).forEach((it) => it.fn());
+    items.sort((a, b) => b.depth - a.depth).forEach((it) => { cur = it.cmd; it.fn(); });
     placeLabels();
-    if (v) side.querySelector('.r-show').innerHTML = cmds.filter((c) => c.kind === 'show' && visible(c)).map((c) => `<div>${mdToHtml(fillValues(c.text, v, errs), { inline: true })}</div>`).join('');
+    cur = null;
+    if (v) side.querySelector('.r-show').innerHTML = cmds.map((c, i) => (c.kind === 'show' && visible(c) ? `<div data-cmd="${i + 1}">${mdToHtml(fillValues(c.text, v, errs), { inline: true })}</div>` : '')).join('');
     const msg = errs.join('；');
     if (msg !== lastErr) {
       lastErr = msg;
       let box = container.querySelector('.scene-error');
       if (msg) { if (!box) { box = document.createElement('div'); box.className = 'block-error scene-error'; side.appendChild(box); } box.textContent = '图形描述有误：' + msg; } else box?.remove();
     }
+    ctl.mark();
   }
+
+  // 课堂操作（play / set / highlight / vars）：见 plot.js 的 figureControls。三维图没有拖动点，不发 dragend
+  const ctl = figureControls({ root: container, cmds, state, extra, env, draw: () => draw() });
 
   function drawCmd(c, v) {
     const lab = c.mods.label ? prettyLabel(c.mods.label) : undefined;
@@ -241,7 +258,7 @@ export function createSpace(container, src, opts = {}) {
           const p = vec3(e(v), 'point ');
           const P = proj(p);
           push(P[2], () => { el('circle', { cx: P[0], cy: P[1], r: 6, class: 'pt' }).style.fill = color(c, 'var(--chalk)'); });
-          if (lab) labels.push({ x: P[0], y: P[1], ux: 1, uy: -1, text: lab, col: color(c, 'var(--chalk)') });
+          if (lab) labels.push({ x: P[0], y: P[1], ux: 1, uy: -1, text: lab, col: color(c, 'var(--chalk)'), cmd: cur });
           if (c.mods.drop) seg3(p, [p[0], p[1], 0], 'guide', color(c, 'var(--muted)'));
         }
         break;
@@ -266,7 +283,7 @@ export function createSpace(container, src, opts = {}) {
         if (!other) { const u = mul(R * 1.4, e1); seg3(mul(-1, u), u, 'span-line', color(c, 'var(--v4)')); break; }
         const e2 = unit(other);
         // 三个向量张成整个空间：不画（会挡住一切），在读数里说明
-        if (vs.length >= 3 && vs.slice(2).some((w) => Math.abs(dot(w, cross(e1, e2))) > 1e-6)) { labels.push({ x: 14, y: 24, ux: 0, uy: 0, text: '张成整个空间', col: color(c, 'var(--v4)'), fixed: true }); break; }
+        if (vs.length >= 3 && vs.slice(2).some((w) => Math.abs(dot(w, cross(e1, e2))) > 1e-6)) { labels.push({ x: 14, y: 24, ux: 0, uy: 0, text: '张成整个空间', col: color(c, 'var(--v4)'), fixed: true, cmd: cur }); break; }
         patch([0, 0, 0], e1, e2, 'sp-plane', color(c, 'var(--v4)'));
         break;
       }
@@ -309,7 +326,7 @@ export function createSpace(container, src, opts = {}) {
       }
       case 'text': {
         const P = proj(vec3(c.at(v), 'text '));
-        labels.push({ x: P[0], y: P[1], ux: 0, uy: 0, text: c.label, col: color(c, 'var(--chalk)') });
+        labels.push({ x: P[0], y: P[1], ux: 0, uy: 0, text: c.label, col: color(c, 'var(--chalk)'), cmd: cur });
         break;
       }
     }
@@ -327,6 +344,7 @@ export function createSpace(container, src, opts = {}) {
       const ok = ([x, y]) => x - w / 2 > 2 && x + w / 2 < SIZE - 2 && y > 14 && y < SIZE - 8 && !placed.some((b) => Math.abs(b[0] - x) < (b[2] + w) / 2 + 2 && Math.abs(b[1] - y) < 24);
       const [x, y] = cands.find(ok) || cands[0];
       placed.push([x, y, w]);
+      cur = L.cmd ?? null;
       const t = el('text', { x, y, class: L.axis ? 'axis-label' : 'vec-label', 'text-anchor': 'middle', 'dominant-baseline': 'central', style: `--vc:${L.col}` });
       t.textContent = L.text;
     }
@@ -378,45 +396,37 @@ export function createSpace(container, src, opts = {}) {
     requestAnimationFrame(step);
   }
 
-  // 滑块
-  for (const c of cmds.filter((k) => k.kind === 'slider')) {
+  // 滑块（行上记下命令序号：highlight 这条 slider 时让这一行闪）
+  for (const [i, c] of cmds.entries()) {
+    if (c.kind !== 'slider') continue;
     const row = document.createElement('div');
     row.className = 'coef';
+    row.dataset.cmd = i + 1;
     row.innerHTML = `${c.mods.play ? '<button type="button" class="btn btn-sm btn-play">▶</button>' : ''}<span class="coef-name">${c.mods.label ? escapeHtml(c.mods.label) : tex2html(c.name)}</span><input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.init}" aria-label="${escapeHtml(c.name)}"><output></output>`;
     const input = row.querySelector('input');
     const out = row.querySelector('output');
     const sync = () => { input.value = state.slider[c.name]; out.textContent = numText(Math.round(state.slider[c.name] * 100) / 100); };
-    input.addEventListener('input', () => { state.slider[c.name] = Number(input.value); sync(); draw(); });
-    row.querySelector('.btn-play')?.addEventListener('click', () => animate(c.name, c.min, c.max, 1600, sync));
+    // 学生自己拖滑块时，停下正在播放的动画
+    input.addEventListener('input', () => { ctl.stop(c.name); state.slider[c.name] = Number(input.value); sync(); draw(); });
+    row.querySelector('.btn-play')?.addEventListener('click', () => ctl.animate(c.name, c.min, c.max, 1600));
+    c.sync = sync;
     sync();
     side.querySelector('.sliders').appendChild(row);
-  }
-  function animate(name, from, to, dur, sync) {
-    const t0 = performance.now();
-    const step = (now) => {
-      const k = Math.min(1, (now - t0) / dur);
-      const val = from + (to - from) * (k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
-      if (name in state.slider) state.slider[name] = val; else extra[name] = val;
-      sync?.();
-      draw();
-      if (k < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
   }
 
   draw();
   if (state.spinning) spin();
   return {
-    fields, draw, animate,
+    fields, draw,
+    animate: ctl.animate,
+    on: ctl.on,
     get view() { return [state.yaw, state.pitch]; },
-    snapshot() { try { const v = env(); const o = {}; for (const c of cmds) if (c.kind === 'let' || c.kind === 'slider') o[c.name] = v[c.name]; return o; } catch { return {}; } },
-    set(name, value) {
-      const c = cmds.find((k) => (k.kind === 'let' || k.kind === 'slider') && k.name === name);
-      if (!c) throw new Error(`图里没有变量 ${name}`);
-      if (c.kind === 'slider') state.slider[name] = Number(value);
-      else { c.expr = () => value; }
-      draw();
-    },
+    snapshot() { return ctl.withTargets(() => { try { const v = env(); const o = {}; for (const c of cmds) if (c.kind === 'let' || c.kind === 'slider') o[c.name] = v[c.name]; return o; } catch { return {}; } }); },
+    // 课堂操作：set / play / highlight / vars（scene、graph、space 一样）
+    set: ctl.set,
+    play: ctl.play,
+    highlight: ctl.highlight,
+    vars: ctl.vars,
     get error() { return lastErr; },
   };
 }

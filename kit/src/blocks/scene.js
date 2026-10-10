@@ -3,6 +3,7 @@ import { createScene } from '../scene.js';
 import { session } from '../session.js';
 import { widget, mdToHtml } from './common.js';
 import { link } from '../link.js';
+import { round2 } from '../plot.js';
 
 export function scene(el, src) {
   const body = widget(el, { title: null });
@@ -26,6 +27,8 @@ export function scene(el, src) {
   if (fields.note) body.querySelector('.w-side').insertAdjacentHTML('beforeend', `<div class="w-note">${mdToHtml(fields.note)}</div>`);
   if (body.querySelector('.handle')) body.querySelector('.w-side').insertAdjacentHTML('beforeend', '<div class="w-hint">拖动圆点可以移动它。</div>');
   const id = session.registerScene(el, api, titleText);
+  // 学生拖完一个点（真的挪了位置才算）：课堂 / 实时黑板记成一个动作，数保留两位小数
+  api.on('dragend', (name, value) => session.event('drag', el, { name, value: round2(value) }));
   if (api.goals) {
     const done = session.gate(el, titleText);
     let hit = 0;

@@ -4,6 +4,7 @@ import { createSpace } from '../space.js';
 import { session } from '../session.js';
 import { link } from '../link.js';
 import { widget, mdToHtml } from './common.js';
+import { round2 } from '../plot.js';
 
 function figure(el, src, create, { cls, title }) {
   const body = widget(el, { title: null, cls });
@@ -17,6 +18,8 @@ function figure(el, src, create, { cls, title }) {
   if (fields.note) body.querySelector('.w-side').insertAdjacentHTML('beforeend', `<div class="w-note">${mdToHtml(fields.note)}</div>`);
   if (api.error) session.problem(el, cls, `图形描述有误：${api.error}`);
   el.dataset.scene = session.registerScene(el, api, titleText);
+  // 学生拖完竖线（graph 的 let … drag）：课堂 / 实时黑板记成一个动作；三维图只能转，不发这个事件
+  api.on('dragend', (name, value) => session.event('drag', el, { name, value: round2(value) }));
   if (linkId) {
     el.dataset.link = linkId;
     link(linkId).on((n) => { extra.step = n; extra.t = 0; api.draw(); api.animate('t', 0, 1, 800); });

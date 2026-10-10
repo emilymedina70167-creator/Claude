@@ -10,7 +10,7 @@
 //   show $A\mathbf x = {A*x}$
 //   goal A*x = [3, 2] msg="命中！"
 import { compile, isNum, isVec, isMat, valueTeX, numText } from './expr.js';
-import { createPlane, snap as snapTo } from './plot.js';
+import { createPlane, snap as snapTo, figureControls } from './plot.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { session } from './session.js';
 
@@ -125,7 +125,6 @@ export function createScene(container, src, opts = {}) {
   const { fields, cmds } = typeof src === 'string' ? parseScene(src) : src;
   const state = { drag: {}, slider: {}, override: {}, revealed: false, goalsHit: new Set() };
   const extra = opts.extraVars || {};
-  const listeners = { goal: [], change: [] };
 
   container.innerHTML = `<div class="w-plot"></div><div class="w-side"><div class="sliders"></div><div class="readout r-show"></div><div class="goal-msg" hidden></div></div>`;
   const side = container.querySelector('.w-side');
@@ -139,8 +138,8 @@ export function createScene(container, src, opts = {}) {
     Object.assign(v, state.slider);
     for (const c of cmds) {
       if (c.kind !== 'let') continue;
-      if (c.name in state.override) v[c.name] = state.override[c.name];
-      else if (c.mods.drag && c.name in state.drag) v[c.name] = state.drag[c.name];
+      if (Object.hasOwn(state.override, c.name)) v[c.name] = state.override[c.name];
+      else if (c.mods.drag && Object.hasOwn(state.drag, c.name)) v[c.name] = state.drag[c.name];
       else {
         v[c.name] = c.expr(v);
         if (c.mods.drag) state.drag[c.name] = v[c.name];
@@ -148,6 +147,15 @@ export function createScene(container, src, opts = {}) {
     }
     return v;
   }
+
+  // 课堂操作（play / set / highlight / vars / dragend）：见 plot.js 的 figureControls
+  const ctl = figureControls({
+    root: container, cmds, state, extra, env, draw: () => draw(),
+    dragValue: (name, p) => {
+      if (!isVec(p) || p.length !== 2) throw new Error(`${name} 是可以拖的点，要设成二维向量，比如 [1, 2]`);
+      return p;
+    },
+  });
 
   if (!fields.range) {
     const v = env();
@@ -164,37 +172,24 @@ export function createScene(container, src, opts = {}) {
     plane.range = Math.min(10, Math.max(3, Math.ceil(m + 1)));
   }
 
-  // 滑块
+  // 滑块（行上记下命令序号：highlight 这条 slider 时让这一行闪）
   const sliderBox = side.querySelector('.sliders');
-  for (const c of cmds.filter((c) => c.kind === 'slider')) {
+  cmds.forEach((c, i) => {
+    if (c.kind !== 'slider') return;
     const row = document.createElement('div');
     row.className = 'coef';
+    row.dataset.cmd = i + 1;
     row.innerHTML = `${c.mods.play ? '<button type="button" class="btn btn-sm btn-play">▶</button>' : ''}<span class="coef-name">${c.mods.label ? escapeHtml(c.mods.label) : tex2html(c.name)}</span><input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.init}" aria-label="${escapeHtml(c.name)}"><output></output>`;
     const input = row.querySelector('input');
     const out = row.querySelector('output');
     const sync = () => { input.value = state.slider[c.name]; out.textContent = numText(Math.round(state.slider[c.name] * 100) / 100); };
-    input.addEventListener('input', () => { state.slider[c.name] = Number(input.value); out.textContent = numText(Math.round(state.slider[c.name] * 100) / 100); draw(); });
-    row.querySelector('.btn-play')?.addEventListener('click', () => animate(c.name, c.min, c.max, 1400, sync));
+    // 学生自己拖滑块时，停下正在播放的动画（不然下一帧又被拉回去）
+    input.addEventListener('input', () => { ctl.stop(c.name); state.slider[c.name] = Number(input.value); out.textContent = numText(Math.round(state.slider[c.name] * 100) / 100); draw(); });
+    row.querySelector('.btn-play')?.addEventListener('click', () => ctl.animate(c.name, c.min, c.max, 1400));
     c.sync = sync;
     sync();
     sliderBox.appendChild(row);
-  }
-
-  function animate(name, from, to, dur, sync) {
-    const start = performance.now();
-    return new Promise((done) => {
-      const step = (now) => {
-        const k = Math.min(1, (now - start) / dur);
-        const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
-        const val = from + (to - from) * e;
-        if (name in state.slider) state.slider[name] = val; else extra[name] = val;
-        sync?.();
-        draw();
-        if (k < 1) requestAnimationFrame(step); else done();
-      };
-      requestAnimationFrame(step);
-    });
-  }
+  });
 
   // after / before：predict 揭晓前后；from=k / until=k：绑定的 steps 揭开到第 k 步起 / 为止
   const visible = (c) => !(c.mods.after && !state.revealed) && !(c.mods.before && state.revealed)
@@ -211,20 +206,26 @@ export function createScene(container, src, opts = {}) {
     const errors = [];
     try { v = env(); } catch (e) { errors.push(e.message); v = null; }
     if (v) {
-      for (const c of cmds) {
-        if (!visible(c)) continue;
+      // 画第 i 条命令时 plane.cmd = i + 1：画出的元素带 data-cmd，highlight 靠它找
+      cmds.forEach((c, i) => {
+        if (!visible(c)) return;
+        plane.cmd = i + 1;
         try { drawCmd(c, v); } catch (e) { errors.push(e.message); }
-      }
-      // 拖动把手
-      for (const c of cmds) {
-        if (c.kind === 'let' && c.mods.drag && visible(c) && !(c.name in state.override)) {
-          plane.handle(vec2(v[c.name], c.name), c.name, color(c, 'var(--accent)'));
+      });
+      // 拖动把手（算在 let … drag 那一条命令上）
+      cmds.forEach((c, i) => {
+        if (c.kind === 'let' && c.mods.drag && visible(c) && !Object.hasOwn(state.override, c.name)) {
+          plane.cmd = i + 1;
+          try { plane.handle(vec2(v[c.name], c.name), c.name, color(c, 'var(--accent)')); } catch (e) { errors.push(e.message); }
         }
-      }
+      });
+      plane.cmd = null;
       if (opts.afterDraw) opts.afterDraw(plane, v);
       showReadouts(v, errors);
-      checkGoals(v);
+      // 课堂 Claude 用 set / play 改的变量不算学生达成目标
+      if (!ctl.quiet) checkGoals(v);
     }
+    plane.cmd = null;
     const errText = errors.join('；');
     if (errText !== lastError) {
       lastError = errText;
@@ -234,7 +235,8 @@ export function createScene(container, src, opts = {}) {
         box.textContent = '图形描述有误：' + errText;
       } else box?.remove();
     }
-    listeners.change.forEach((f) => f(v));
+    ctl.mark();
+    ctl.emit('change', v);
   }
 
   function drawCmd(c, v) {
@@ -351,8 +353,7 @@ export function createScene(container, src, opts = {}) {
 
   // show 行：{表达式} 换成数值（公式里用 TeX，公式外也自动包成公式）
   function showReadouts(v, errors) {
-    const lines = cmds.filter((c) => c.kind === 'show' && visible(c));
-    side.querySelector('.r-show').innerHTML = lines.map((c) => `<div>${mdToHtml(fillValues(c.text, v, errors), { inline: true })}</div>`).join('');
+    side.querySelector('.r-show').innerHTML = cmds.map((c, i) => (c.kind === 'show' && visible(c) ? `<div data-cmd="${i + 1}">${mdToHtml(fillValues(c.text, v, errors), { inline: true })}</div>` : '')).join('');
   }
 
   function checkGoals(v) {
@@ -365,17 +366,25 @@ export function createScene(container, src, opts = {}) {
         const box = side.querySelector('.goal-msg');
         box.hidden = false;
         box.innerHTML = mdToHtml(c.mods.msg || '做到了！', { inline: true });
-        listeners.goal.forEach((f) => f(i, c));
+        ctl.emit('goal', i, c);
       }
     });
   }
 
-  plane.draggable((name, [x, y]) => {
+  // 拖把手。松手时如果点真的挪了位置，发 dragend（课堂 / 实时黑板记成学生的动作）
+  let dragFrom = null;
+  plane.draggable((name, [x, y], phase) => {
+    if (opts.dragTargets && Object.hasOwn(opts.dragTargets, name)) { opts.dragTargets[name]([x, y]); draw(); return; }
     const c = cmds.find((k) => k.kind === 'let' && k.name === name);
+    if (phase === 'start') { ctl.stop(name); dragFrom = state.drag[name]; }
     const step = Number(c?.mods.snap) || 0.5;
-    if (name in (opts.dragTargets || {})) opts.dragTargets[name]([x, y]);
-    else state.drag[name] = [snapTo(x, step), snapTo(y, step)];
+    state.drag[name] = [snapTo(x, step), snapTo(y, step)];
     draw();
+    if (phase === 'end' && c) {
+      const to = state.drag[name];
+      if (!close(to, dragFrom)) ctl.emit('dragend', name, [...to]);
+      dragFrom = null;
+    }
   });
 
   plane.drawIn = true;
@@ -389,25 +398,24 @@ export function createScene(container, src, opts = {}) {
     plane,
     goals,
     draw,
-    animate,
-    on(ev, f) { listeners[ev].push(f); },
+    animate: ctl.animate,
+    on: ctl.on,
     reveal() { state.revealed = true; draw(); },
     get revealed() { return state.revealed; },
-    // 给助教用：当前变量
+    // 给助教用：当前变量（取三位小数）
     snapshot() {
-      const v = (() => { try { return env(); } catch { return {}; } })();
-      const out = {};
-      for (const c of cmds) if ((c.kind === 'let' || c.kind === 'slider') && c.name in v) out[c.name] = round(v[c.name]);
-      return out;
+      return ctl.withTargets(() => {
+        const v = (() => { try { return env(); } catch { return {}; } })();
+        const out = {};
+        for (const c of cmds) if ((c.kind === 'let' || c.kind === 'slider') && c.name in v) out[c.name] = round(v[c.name]);
+        return out;
+      });
     },
-    set(name, value) {
-      const c = cmds.find((k) => (k.kind === 'let' || k.kind === 'slider') && k.name === name);
-      if (!c) throw new Error(`图里没有变量 ${name}`);
-      if (c.kind === 'slider') { state.slider[name] = Number(value); c.sync?.(); }
-      else if (c.mods.drag) state.drag[name] = value;
-      else state.override[name] = value;
-      draw();
-    },
+    // 课堂操作：set / play / highlight / vars（scene、graph、space 一样）
+    set: ctl.set,
+    play: ctl.play,
+    highlight: ctl.highlight,
+    vars: ctl.vars,
   };
 }
 

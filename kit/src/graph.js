@@ -13,6 +13,7 @@
 import { compile, isNum, numText } from './expr.js';
 import { splitMods, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
+import { figureControls, dragHandles } from './plot.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const W = 640, H = 400, ML = 52, MR = 18, MT = 18, MB = 40;
@@ -99,7 +100,7 @@ const fmtTick = (v, step) => { const d = Math.max(0, -Math.floor(Math.log10(step
 export function createGraph(container, src, opts = {}) {
   const { fields, cmds, xr, yr: yrGiven } = typeof src === 'string' ? parseGraph(src) : src;
   const extra = opts.extraVars || {};
-  const state = { slider: {}, drag: {} };
+  const state = { slider: {}, drag: {}, override: {} };
   cmds.filter((c) => c.kind === 'slider').forEach((c) => (state.slider[c.name] = c.init));
   container.innerHTML = '<div class="w-plot g-plot"></div><div class="w-side"><div class="sliders"></div><div class="readout r-show"></div></div>';
   const side = container.querySelector('.w-side');
@@ -110,7 +111,11 @@ export function createGraph(container, src, opts = {}) {
 
   const env = () => {
     const v = { ...extra, ...state.slider };
-    for (const c of cmds) if (c.kind === 'let') v[c.name] = c.mods.drag && c.name in state.drag ? state.drag[c.name] : c.expr(v);
+    for (const c of cmds) {
+      if (c.kind !== 'let') continue;
+      v[c.name] = Object.hasOwn(state.override, c.name) ? state.override[c.name]
+        : c.mods.drag && Object.hasOwn(state.drag, c.name) ? state.drag[c.name] : c.expr(v);
+    }
     return v;
   };
   const at = (f, v, x, name = 'x') => { const y = f({ ...v, [name]: x }); if (!isNum(y)) throw new Error('函数值要是一个数'); return y; };
@@ -133,7 +138,15 @@ export function createGraph(container, src, opts = {}) {
   const X = (x) => ML + ((x - xr[0]) / (xr[1] - xr[0])) * (W - ML - MR);
   const Y = (y) => H - MB - ((y - yr[0]) / (yr[1] - yr[0])) * (H - MT - MB);
   const clampY = (y) => Math.max(MT - 4, Math.min(H - MB + 4, Y(y)));
-  const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+  // cur：正在画第几条命令。这期间画出的元素带 data-cmd，课堂里 highlight 靠它找
+  let cur = null;
+  const el = (tag, attrs, parent = svg) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (cur != null) e.setAttribute('data-cmd', cur);
+    parent.appendChild(e);
+    return e;
+  };
   const color = (c, d) => COLOR[String(c.mods.color || '').toLowerCase()] || d;
   const visible = (c) => !(c.mods.from !== undefined && !((extra.step ?? 0) >= Number(c.mods.from))) && !(c.mods.until !== undefined && !((extra.step ?? 0) <= Number(c.mods.until)));
 
@@ -165,8 +178,9 @@ export function createGraph(container, src, opts = {}) {
     const top = el('g', {});
     if (v) {
       const N = 240;
-      for (const c of cmds) {
+      for (const [i, c] of cmds.entries()) {
         if (!visible(c)) continue;
+        cur = i + 1;
         try {
           const col = color(c, 'var(--v1)');
           if (c.kind === 'plot' || c.kind === 'shade') {
@@ -225,16 +239,19 @@ export function createGraph(container, src, opts = {}) {
           }
         } catch (e) { errs.push(e.message); }
       }
-      // 可以拖的竖线：let a = 1 drag
-      for (const c of cmds) {
+      // 可以拖的竖线：let a = 1 drag（算在这条 let 上）
+      for (const [i, c] of cmds.entries()) {
         if (c.kind !== 'let' || !c.mods.drag || !visible(c)) continue;
+        cur = i + 1;
         const x = v[c.name];
         el('line', { x1: X(x), y1: MT, x2: X(x), y2: H - MB, class: 'g-drag-line' }, top);
         el('circle', { cx: X(x), cy: H - MB, r: 15, class: 'handle', 'data-handle': c.name, style: `--vc:${color(c, 'var(--yellow)')}` }, top);
         el('text', { x: X(x), y: H - MB + 4, class: 'g-handle-label', 'text-anchor': 'middle', 'pointer-events': 'none' }, top).textContent = c.mods.label || c.name;
       }
-      side.querySelector('.r-show').innerHTML = cmds.filter((c) => c.kind === 'show' && visible(c)).map((c) => `<div>${mdToHtml(fillValues(c.text, v, errs), { inline: true })}</div>`).join('');
+      cur = null;
+      side.querySelector('.r-show').innerHTML = cmds.map((c, i) => (c.kind === 'show' && visible(c) ? `<div data-cmd="${i + 1}">${mdToHtml(fillValues(c.text, v, errs), { inline: true })}</div>` : '')).join('');
     }
+    cur = null;
     svg.appendChild(top);
     const msg = errs.join('；');
     if (msg !== lastErr) {
@@ -242,67 +259,72 @@ export function createGraph(container, src, opts = {}) {
       let box = container.querySelector('.scene-error');
       if (msg) { if (!box) { box = document.createElement('div'); box.className = 'block-error scene-error'; side.appendChild(box); } box.textContent = '图形描述有误：' + msg; } else box?.remove();
     }
+    ctl.mark();
   }
 
-  // 滑块
-  for (const c of cmds.filter((k) => k.kind === 'slider')) {
+  // 课堂操作（play / set / highlight / vars / dragend）：见 plot.js 的 figureControls
+  const ctl = figureControls({
+    root: container, cmds, state, extra, env, draw: () => draw(),
+    // 可拖的竖线只有横坐标；设到窗口外就停在边上（和手拖一样）
+    dragValue: (name, x) => {
+      const n = Array.isArray(x) && x.length === 1 ? x[0] : x;
+      if (typeof n !== 'number' || !Number.isFinite(n)) throw new Error(`${name} 是可以拖的竖线，要设成一个数`);
+      return Math.max(xr[0], Math.min(xr[1], n));
+    },
+  });
+
+  // 滑块（行上记下命令序号：highlight 这条 slider 时让这一行闪）
+  for (const [i, c] of cmds.entries()) {
+    if (c.kind !== 'slider') continue;
     const row = document.createElement('div');
     row.className = 'coef';
+    row.dataset.cmd = i + 1;
     row.innerHTML = `${c.mods.play ? '<button type="button" class="btn btn-sm btn-play">▶</button>' : ''}<span class="coef-name">${c.mods.label ? escapeHtml(c.mods.label) : tex2html(c.name)}</span><input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.init}" aria-label="${escapeHtml(c.name)}"><output></output>`;
     const input = row.querySelector('input');
     const out = row.querySelector('output');
     const sync = () => { input.value = state.slider[c.name]; out.textContent = numText(Math.round(state.slider[c.name] * 1000) / 1000); };
-    input.addEventListener('input', () => { state.slider[c.name] = Number(input.value); sync(); draw(); });
-    row.querySelector('.btn-play')?.addEventListener('click', () => animate(c.name, c.min, c.max, 1600, sync));
+    // 学生自己拖滑块时，停下正在播放的动画
+    input.addEventListener('input', () => { ctl.stop(c.name); state.slider[c.name] = Number(input.value); sync(); draw(); });
+    row.querySelector('.btn-play')?.addEventListener('click', () => ctl.animate(c.name, c.min, c.max, 1600));
+    c.sync = sync;
     sync();
     side.querySelector('.sliders').appendChild(row);
   }
 
-  function animate(name, from, to, dur, sync) {
-    const t0 = performance.now();
-    const step = (now) => {
-      const k = Math.min(1, (now - t0) / dur);
-      const val = from + (to - from) * (k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
-      if (name in state.slider) state.slider[name] = val; else extra[name] = val;
-      sync?.();
-      draw();
-      if (k < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }
-
-  // 拖竖线
-  let active = null;
+  // 拖竖线：按下时停掉这条线上的动画；松手时线真的挪了才发 dragend
   const toX = (e) => { const r = svg.getBoundingClientRect(); return xr[0] + (((e.clientX - r.left) / r.width) * W - ML) / (W - ML - MR) * (xr[1] - xr[0]); };
-  svg.addEventListener('pointerdown', (e) => {
-    const id = e.target.getAttribute?.('data-handle');
-    if (!id) return;
-    active = id;
-    try { svg.setPointerCapture(e.pointerId); } catch { /* 合成事件 */ }
-    e.preventDefault();
+  let dragFrom = null;
+  dragHandles(svg, toX, (name, x, phase) => {
+    const c = cmds.find((k) => k.kind === 'let' && k.name === name);
+    if (!c) return;
+    if (phase === 'start') {
+      ctl.stop(name);
+      dragFrom = (() => { try { return env()[name]; } catch { return state.drag[name]; } })();
+      return; // 只是按住，不跳到手指的位置（竖线的把手在底边，按下去不该挪动）
+    }
+    if (phase === 'move') {
+      const step = Number(c.mods.snap) || niceStep(xr[1] - xr[0], 8) / 10;
+      state.drag[name] = Math.max(xr[0], Math.min(xr[1], Math.round(x / step) * step));
+      draw();
+    }
+    if (phase === 'end') {
+      const to = Object.hasOwn(state.drag, name) ? state.drag[name] : dragFrom;
+      if (typeof to === 'number' && !(Math.abs(to - dragFrom) < 1e-9)) ctl.emit('dragend', name, to);
+      dragFrom = null;
+    }
   });
-  svg.addEventListener('pointermove', (e) => {
-    if (!active) return;
-    e.preventDefault();
-    const c = cmds.find((k) => k.kind === 'let' && k.name === active);
-    const step = Number(c.mods.snap) || niceStep(xr[1] - xr[0], 8) / 10;
-    state.drag[active] = Math.max(xr[0], Math.min(xr[1], Math.round(toX(e) / step) * step));
-    draw();
-  });
-  const end = () => { active = null; };
-  svg.addEventListener('pointerup', end);
-  svg.addEventListener('pointercancel', end);
 
   draw();
   return {
-    fields, draw, animate,
-    snapshot() { try { const v = env(); const o = {}; for (const c of cmds) if (c.kind === 'let' || c.kind === 'slider') o[c.name] = v[c.name]; return o; } catch { return {}; } },
-    set(name, value) {
-      const c = cmds.find((k) => (k.kind === 'let' || k.kind === 'slider') && k.name === name);
-      if (!c) throw new Error(`图里没有变量 ${name}`);
-      if (c.kind === 'slider') state.slider[name] = Number(value); else state.drag[name] = Number(value);
-      draw();
-    },
+    fields, draw,
+    animate: ctl.animate,
+    on: ctl.on,
+    snapshot() { return ctl.withTargets(() => { try { const v = env(); const o = {}; for (const c of cmds) if (c.kind === 'let' || c.kind === 'slider') o[c.name] = v[c.name]; return o; } catch { return {}; } }); },
+    // 课堂操作：set / play / highlight / vars（scene、graph、space 一样）
+    set: ctl.set,
+    play: ctl.play,
+    highlight: ctl.highlight,
+    vars: ctl.vars,
     get error() { return lastErr; },
   };
 }
