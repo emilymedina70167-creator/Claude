@@ -92,7 +92,7 @@ hint: 第一个分量是第一行和 $(3, -1)$ 的点积。
 
 ### figure：让黑板上已有的图动起来
 
-ˋtarget=ˋ 是图的 ˋid:ˋ（ˋsceneˋ、ˋgraphˋ、ˋspaceˋ、ˋpredictˋ 都行）。块里不写内容，下一行直接闭合。
+ˋtarget=ˋ 是图的 ˋid:ˋ（ˋsceneˋ、ˋgraphˋ、ˋspaceˋ、ˋpredictˋ 都行）。块里不写内容，下一行直接闭合。ˋpredictˋ 里学生拖的猜测点（ˋguessˋ）不能改；标了 ˋafterˋ 的东西要等学生点「确定」之后才出现，在那之前 highlight 不到。
 
 ˋˋˋˋboard figure target=fig-b3 set x=[1, 1]
 ˋˋˋˋ

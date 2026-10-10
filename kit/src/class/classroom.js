@@ -751,7 +751,7 @@ export async function renderClass(root, meta) {
     if (code === 'image_rejected' || code === 'images_unavailable') {
       // 再发同样的图还是会被拒：重试时不带图
       lastImages = { seq: lastImages.seq, blobs: [] };
-      if (code === 'images_unavailable') off.images = true;
+      if (code === 'images_unavailable') { off.images = true; bar.setImages?.(false); } // 这个查看方式发不了图：收起手写 / 截图按钮
       return bar.setStatus('error', code === 'image_rejected' ? '图片发不出去（格式或大小不对），点重试会不带图再问一次。' : '这个查看方式发不了图片，点重试会只发文字。');
     }
     if (code === 'tools_unavailable') { off.tools = true; return bar.setStatus('error', '这一轮没成功，点重试。'); }

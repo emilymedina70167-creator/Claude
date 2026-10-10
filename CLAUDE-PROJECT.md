@@ -126,7 +126,7 @@ goal A*x = [3, 5] msg="命中！"
 | `vector 表达式` | 从原点出发的箭头。`from 表达式` 指定起点（首尾相接）。可选 `color=`、`label=`、`dashed`、`thin`、`width=` |
 | `point 表达式, …` | 点。可选 `color=`、`label=` |
 | `segment P, Q` | 线段（`dashed` 为虚线） |
-| `line P dir d` | 过点 P、方向 d 的直线 |
+| `line P dir d` | 过点 P、方向 d 的直线（`dashed` 为虚线） |
 | `span u, v` | 张成空间：一条线，或者整个平面（自动判断） |
 | `grid M` | 被 2×2 矩阵 M 变换后的网格（`faint` 更淡）。动画：配合 `slider t 0 1 = 0 play` 写 `grid lerp(I, A, t)` |
 | `area u, v` | u、v 张成的平行四边形（行列式面积，负的显示为红色） |
@@ -538,11 +538,12 @@ unit: 第2讲 §2 · 秩一方阵
 
 我说「下课了」时，用 `ArtifactData` 读：
 
-- `collection: "class_turns"`（`query`，`order_by: seq`）：每一轮一条，`{ seq, role, text, actions, images, boardOps, kind, discarded, at }`。
-  - `role: "student"`：我说的话（`say`）和我在黑板上的动作（`actions`，每条一行，比如「[作答] b7 里的 steps 第 3 步：选了『跑到线外去』（错），用时 44 秒」）；`images` 是我附的手写 / 截图原图的 asset id。
-  - `role: "claude"`：课堂里的 Claude 的完整输出（话 + 黑板指令原文）；`boardOps` 是实际执行了哪些指令（add / replace / hide / figure 及 id，`ok: false` 的没执行成功）。
-  - `role: "system"`：页面发给它的系统消息，比如写法错误要求重写（`kind: "lint"`）、Opus 不可用这一轮作废（`kind: "fallback"`，`discarded: true`）、对话太长时的摘要（`kind: "summary"`）、下课小结（`kind: "closing"`）。
-- `collection: "class_notes"`：课堂里的 Claude 记的观察（`kind: "note"`），以及下课时写的小结（`kind: "summary"`：讲了什么、我哪里卡住、哪里看起来懂了但证据不够、建议下一节怎么接）。
+- `collection: "class_turns"`（`query`，`order_by: seq`）：每一轮一条，按 `seq` 排起来就是整节课。字段：`seq`、`role`、`text`、`kind`、`discarded`、`at`，以及下面各自的字段。
+  - `role: "student"`：`say` 是我说的话（打字或快捷按钮）；`actions` 是我在黑板上的动作，每条一行，比如「[作答] b7 里的 steps 第 3 步：选了『跑到线外去』（错），用时 44 秒」；`images` 是我附的手写 / 截图原图的 asset id；`text` 是发给课堂 Claude 的完整内容。
+  - `role: "claude"`：`text` 是课堂里的 Claude 的完整输出（话 + 黑板指令原文）；`boardOps` 是实际执行了哪些指令（`op`：add / replace / hide / figure，`id`，`ok: false` 的没执行成功，`error` 是原因）；`tools` 是它调用过的工具（如果有）；`modelApplied` 一定是 `claude-opus-5-5`。
+  - `role: "system"`：页面发给它的系统消息。`kind` 有：`lint`（它写的组件有写法错误，没显示，要求重写）、`note`（指令没执行之类的提醒）、`images`（它要看的手写原图，附在这一轮）、`summary`（对话太长时的摘要，`upTo` 是摘要覆盖到第几轮）、`closing`（下课小结）、`fallback`（Opus 5.5 不可用，这一轮作废）、`error`（这一轮出错或我点了停止，`code` 是原因）。
+  - `discarded: true` 的轮没有进入课堂对话：内容没给我看，黑板也没动。读的时候跳过它们的内容，只当作「这里卡过一下」。
+- `collection: "class_notes"`：课堂里的 Claude 记的观察（`kind: "note"`，`turn` 是在第几轮记的），以及下课时写的小结（`kind: "summary"`：讲了什么、我哪里卡住、哪里看起来懂了但证据不够、建议下一节怎么接）。
 - `collection: "steps"`：黑板上出现过的每一段（`by: "class"`，`md` 是原文，`hidden: true` 是被撤回的）。
 - `collection: "answers"`、`"events"`：和实时黑板一样，每次作答、揭开、放弃、拖动都有记录；手写原图用 `Artifact` 工具 `action: "read"`、`path` 填 asset id 取回。
 

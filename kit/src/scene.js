@@ -52,6 +52,8 @@ export function splitTop(s, sep = ',') {
 const prettyLabel = (s) => String(s).replace(/([A-Za-z])(\d+)$/, (_, a, d) => a + [...d].map((c) => SUB[c]).join(''));
 
 // 解析整段描述。字段（key: value）和命令分开返回
+const ONE_LINE = new Set(['id', 'title', 'link', 'range', 'view', 'answer', 'type', 'tol', 'snap']);
+
 export function parseScene(src) {
   const fields = {};
   const cmds = [];
@@ -67,7 +69,8 @@ export function parseScene(src) {
     }
     const c = line.trim().match(/^(let|vector|point|segment|line|span|grid|area|polygon|text|show|goal|slider|curve|eigen)\s+(.*)$/i);
     if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2]), srcLine: line.trim() }); lastField = null; continue; }
-    if (lastField) fields[lastField] += '\n' + line;
+    // 只有说明类字段（q、note、explain……）可以续行；id、title 这类一行字段后面跟着看不懂的行，多半是命令写错了
+    if (lastField && !ONE_LINE.has(lastField)) fields[lastField] += '\n' + line;
     else if (/^\s*-\s*\[[ xX]\]/.test(line)) (fields._options ||= []).push(line);
     else throw new Error(`看不懂这一行：${line.trim()}`);
   }
