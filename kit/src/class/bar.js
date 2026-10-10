@@ -1,6 +1,7 @@
 // 课堂模式的底部对话条：黑板下沿的一条木制粉笔槽。
 // 从上到下：消息区（默认只露最近一两句，可展开）→ 快捷按钮（Claude 在想 / 在写时换成状态）+「Opus 5.5 · high」+「下课」→ 输入行。
 // 木条上挂两个小木把手：左边「板书」（整页手写，从页面右下角收进来），中间「展开」。
+// 还没开口时（一条消息也没有）对话条收得很矮：只有一行提示和输入行，快捷按钮、「下课」等第一句话出来再出现。
 // 对话条只收集输入、显示消息；学生的话由课堂控制器在真正发出时再 addMessage（排队、合并动作都在控制器里）。
 import { createPad } from '../ink/pad.js';
 
@@ -8,11 +9,12 @@ export const QUICK = ['没懂', '想不出来', '换个说法', '继续'];
 export const MAX_IMAGES = 4;
 export const MODEL_TAG = 'Opus 5.5 · high';
 export const CONFIRM_MS = 3000;
+export const LONG_WAIT_MS = 12000; // 第一个字迟迟不来：黑板上换一句「想得细一点」的话，别让人以为卡死了
 const STATUS_TEXT = { thinking: 'Claude 在想…', writing: 'Claude 正在写黑板…', error: '这一轮没成功。' };
 const STATES = new Set(['idle', 'thinking', 'writing', 'error', 'notice']);
 const ROLES = new Set(['claude', 'student', 'system', 'action']);
 const MAX_SIDE = 2400;
-const EMPTY = '有话直接说，或者在黑板上作答——Claude 都看得到。';
+const HINT = '在这里和 Claude 说话<span class="cb-hint-more">，黑板上的作答它也看得到</span>';
 const PLACEHOLDER = { on: '想说什么，打在这里', images: '说点什么，或者粘贴截图', short: '说点什么…', off: '现在没法和 Claude 说话' };
 
 // —— 纯函数（不碰 DOM，单元测试直接测）——
@@ -160,11 +162,18 @@ export function elapsedText(ms) {
   return s < 60 ? `${s} 秒` : `${Math.floor(s / 60)} 分 ${s % 60} 秒`;
 }
 
+// 展开消息区最多多高：不超过可视高度的一半，也不能顶到页面上方的进度条（木把手还要露出来）
+// vh：可视区高度；rest：对话条里消息区以外的高度；head：进度条下沿到可视区顶部的距离
+export function openLogMax({ vh, rest, head = 0 }) {
+  const HANDLE = 26 + 10; // 「收起」把手 + 和进度条之间的空
+  return Math.max(120, Math.round(Math.min(vh * 0.5, vh - rest - Math.max(0, head) - HANDLE)));
+}
+
 // —— 对话条 ——
 
 export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images = false } = {}) {
   const el = document.createElement('div');
-  el.className = 'class-bar';
+  el.className = 'class-bar is-quiet'; // 一开始就是没开口的样子（不从展开的高度缩下来）
   el.setAttribute('role', 'region');
   el.setAttribute('aria-label', '课堂对话');
   el.innerHTML = `
@@ -174,14 +183,13 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     </div>
     <div class="cb-ledge" aria-hidden="true"><i class="cb-stick s1"></i><i class="cb-stick s2"></i><i class="cb-stick s3"></i><i class="cb-eraser"></i></div>
     <div class="cb-dock"></div>
-    <button type="button" class="cb-toggle" hidden aria-expanded="false">展开 ▴</button>
+    <button type="button" class="cb-toggle" hidden aria-expanded="false"><span class="cb-toggle-t">展开</span><svg class="cb-chev" viewBox="0 0 14 9" aria-hidden="true"><path d="M2 7.2 7 2.2l5 5"/></svg></button>
     <div class="cb-inner">
       <div class="cb-log">
-        <div class="cb-msgs" role="log" aria-live="polite" aria-label="课堂对话记录">
-          <p class="cb-empty">${EMPTY}</p>
-        </div>
+        <div class="cb-msgs" role="log" aria-live="polite" aria-label="课堂对话记录"></div>
       </div>
       <div class="cb-meta">
+        <p class="cb-hint">${HINT}</p>
         <div class="cb-quick" role="group" aria-label="快捷回答">${QUICK.map((q) => `<button type="button" class="cb-pill" data-q="${q}">${q}</button>`).join('')}</div>
         <div class="cb-status" data-state="idle">
           <span class="cb-ind" aria-hidden="true"><i class="cb-dot"></i><i class="cb-dot"></i><i class="cb-dot"></i><svg class="cb-scribble" viewBox="0 0 30 14"><path d="M2 9.5c3-6 5.5 2.5 8.5-2.5s4.5 4 8-1 5 3.5 9.5-.5"/></svg></span>
@@ -210,6 +218,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   const log = $('.cb-log');
   const msgs = $('.cb-msgs');
   const toggle = $('.cb-toggle');
+  const toggleText = $('.cb-toggle-t');
   const statusEl = $('.cb-status');
   const statusText = $('.cb-status-text');
   const elapsedEl = $('.cb-elapsed');
@@ -245,9 +254,6 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
 
   msgs.id = `cb-log-${Math.random().toString(36).slice(2, 8)}`;
   toggle.setAttribute('aria-controls', msgs.id);
-  el.classList.toggle('no-images', !images);
-  penBtn.hidden = !images;
-  shotBtn.hidden = !images;
 
   // —— 消息区 ——
   const items = () => [...msgs.querySelectorAll('.cb-msg')];
@@ -264,12 +270,14 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   }
 
   // 收起时露哪几条：最近两条都整条放得下就露两条，否则只露最后一条。
-  // 不露半截的气泡（看起来像排版坏了），宁可少露一条，展开能看全部
+  // 不露半截的气泡（看起来像排版坏了），宁可少露一条，展开能看全部。
+  // 按收起时该有的高度（--cb-log-h）算，不按眼下的高度：第一句话出来时消息区正从 0 长高
   function pickPeek(list) {
     if (list.length < 2) return list;
     log.classList.add('is-measuring');
     const cs = getComputedStyle(msgs);
-    const room = msgs.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+    const target = parseFloat(getComputedStyle(el).getPropertyValue('--cb-log-h')) || msgs.clientHeight;
+    const room = target - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
     const gap = parseFloat(cs.rowGap) || 0;
     const tail = list.slice(-2);
     const [a, b] = tail.map((m) => m.offsetHeight);
@@ -280,12 +288,15 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   function layoutLog({ follow = false } = {}) {
     const list = items();
     log.classList.toggle('is-empty', !list.length);
+    el.classList.toggle('is-quiet', !list.length);
     let hidden = 0, clip = '';
     if (open) {
-      // 展开：高度贴合内容，最多半屏，并且留出顶上的进度条（键盘弹出时按剩下的可视高度算）
-      const vh = window.visualViewport?.height || window.innerHeight;
+      // 展开：高度贴合内容，最多半屏，并且留出顶上的进度条和「收起」把手（键盘弹出时按剩下的可视高度算）
+      const vv = window.visualViewport;
+      const vh = vv?.height || window.innerHeight;
       const rest = el.offsetHeight - log.offsetHeight;
-      const max = Math.max(120, Math.min(vh * 0.5, vh - rest - 76));
+      const head = (document.querySelector('.g-bar')?.getBoundingClientRect().bottom || 0) - (vv?.offsetTop || 0);
+      const max = openLogMax({ vh, rest, head });
       log.style.height = Math.ceil(Math.min(Math.max(contentHeight(), 40), max)) + 'px';
       list.forEach((m) => m.classList.remove('is-peek', 'is-lead'));
       if (follow || pinned) msgs.scrollTop = msgs.scrollHeight;
@@ -315,12 +326,14 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     pinned = true;
     log.classList.toggle('is-open', open);
     el.classList.toggle('log-open', open);
-    toggle.textContent = open ? '收起 ▾' : '展开 ▴';
+    toggleText.textContent = open ? '收起' : '展开';
     toggle.setAttribute('aria-expanded', String(open));
     layoutLog({ follow: true });
   }
 
   on(toggle, 'click', (e) => { e.stopPropagation(); setOpen(!open); });
+  // 第一句话出来时消息区从 0 长到收起高度：长完再排一次（长的过程中量到的高度不准）
+  on(log, 'transitionend', (e) => { if (e.target === log && e.propertyName === 'height' && !open) layoutLog(); });
   // 收起时点消息区也能展开（iPad 上比找那个小按钮顺手）
   on(log, 'click', (e) => { if (!open && !toggle.hidden && !e.target.closest('a, button')) setOpen(true); });
   on(msgs, 'scroll', () => {
@@ -330,6 +343,8 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   }, { passive: true });
   // Esc 收起（焦点不一定在对话条里，所以挂在 document 上；只在展开时才管）
   on(document, 'keydown', (e) => { if (e.key === 'Escape' && open) setOpen(false); });
+  // 展开的消息区盖住了大半块黑板：学生回到黑板上点、写（手指或笔按下），就收起来让开
+  on(document, 'pointerdown', (e) => { if (open && e.target instanceof Element && !el.contains(e.target)) setOpen(false); }, { passive: true });
 
   function renderBody(m, role, html) {
     if (role === 'action') {
@@ -342,7 +357,6 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
 
   function addMessage({ role = 'claude', html = '', draft = false } = {}) {
     const r = ROLES.has(role) ? role : 'system';
-    msgs.querySelector('.cb-empty')?.remove();
     const node = document.createElement('div');
     node.className = `cb-msg cb-${r}`;
     if (r === 'claude') node.innerHTML = '<span class="cb-who">Claude</span><div class="cb-body"></div><span class="cb-draft-tag">草稿</span>';
@@ -370,14 +384,9 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
         if (node.classList.contains('is-draft')) swappedAt = performance.now();
         node.remove();
         msgs.setAttribute('aria-busy', String(!!msgs.querySelector('.is-draft')));
-        layoutLog();
-        // 撤下的是最后一条：等这一轮的正式消息（同一个任务里紧接着加）没来，再显示空白提示
-        queueMicrotask(() => {
-          if (count() || msgs.querySelector('.cb-empty')) return;
-          setOpen(false);
-          msgs.innerHTML = `<p class="cb-empty">${EMPTY}</p>`;
-          layoutLog();
-        });
+        // 撤下的是最后一条：等这一轮的正式消息（同一个任务里紧接着加）没来，再收回没开口时的样子
+        if (count()) layoutLog();
+        else queueMicrotask(() => { if (!count()) setOpen(false); });
       },
     };
     node.classList.toggle('is-draft', !!draft);
@@ -397,11 +406,17 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     // 在想 / 在写时快捷按钮反正点不了：那一格换成状态，不多占一行
     el.classList.toggle('is-live', next.live);
     statusText.textContent = next.text;
-    retryBtn.hidden = !next.retry;
+    // 对话条整个停用时（没有 Claude 可用），点重试也没用：不给这个按钮
+    retryBtn.hidden = !next.retry || !enabled;
     clearInterval(tick);
     elapsedEl.textContent = '';
+    el.classList.remove('is-long-wait');
     if (next.state === 'thinking') {
-      const upd = () => { elapsedEl.textContent = elapsedText(Date.now() - thinkingSince); };
+      const upd = () => {
+        const ms = Date.now() - thinkingSince;
+        elapsedEl.textContent = elapsedText(ms);
+        el.classList.toggle('is-long-wait', ms >= LONG_WAIT_MS);
+      };
       upd();
       tick = setInterval(upd, 1000);
     }
@@ -583,6 +598,20 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   on(penBtn, 'click', () => openSlate(slate.hidden));
   on($('.cb-slate-x'), 'click', () => openSlate(false));
 
+  // —— 能不能发图：这个查看方式发不了图片时（images_unavailable），手写、截图两个按钮都收起来 ——
+  // 还没发出去的附图也发不出去了，一起撤掉（免得学生以为会随下一句话发出）
+  function setImages(v) {
+    images = !!v;
+    el.classList.toggle('no-images', !images);
+    penBtn.hidden = !images;
+    shotBtn.hidden = !images;
+    if (!images) {
+      openSlate(false);
+      if (attached.length) clearAttach();
+    }
+    syncControls();
+  }
+
   // —— 高度：留出底部空白，黑板最下面的组件不被挡住 ——
   const root = document.documentElement;
   let lastH = -1;
@@ -638,9 +667,11 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     if (dy) window.scrollBy({ top: dy, behavior: reduceMotion() ? 'auto' : 'smooth' });
   }
   on(document, 'focusin', (e) => {
+    const t = e.target;
+    // 黑板上的东西拿到焦点（键盘切换过去）：展开的消息区先收起，别盖住它
+    if (open && t instanceof Element && !el.contains(t)) setOpen(false);
     lift();
     // 等浏览器自己的「滚到焦点」和键盘弹出先做完，再补一下
-    const t = e.target;
     setTimeout(() => keepClear(t), 120);
   });
   on(document, 'focusout', () => setTimeout(lift, 0));
@@ -658,8 +689,9 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     inkWatch.observe(document.body, { childList: true });
   }
 
+  setImages(images);
   setStatus('idle');
-  syncControls();
+  layoutLog();
   grow();
 
   return {
@@ -667,6 +699,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     addMessage,
     setStatus,
     setBusy(v) { busy = !!v; syncControls(); },
+    setImages,
     // 外部附上的图（草稿区「拿给 Claude 看」等）：PNG 直接用，其他格式先转成白底 PNG
     async attach(blob) {
       if (!blob || !images) return false;
@@ -690,6 +723,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     setEnabled(v) {
       enabled = !!v;
       if (!enabled) { openSlate(false); disarmEnd(); }
+      retryBtn.hidden = !status.retry || !enabled;
       syncControls();
     },
     get height() { return el.offsetHeight; },

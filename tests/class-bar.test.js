@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  QUICK, MAX_IMAGES, MODEL_TAG, CONFIRM_MS,
+  QUICK, MAX_IMAGES, MODEL_TAG, CONFIRM_MS, LONG_WAIT_MS,
   statusView, isSendKey, keyboardLift, mergePrefill, createConfirm,
   actionTone, actionItems, addImages, clipboardImages, htmlImageSrcs, growHeight, elapsedText,
-  plainMath, clearScroll, FIELD,
+  plainMath, clearScroll, FIELD, openLogMax,
 } from '../kit/src/class/bar.js';
 
 // 对话条的 DOM 行为用 Playwright 在浏览器里验证（见模块说明）；这里测不碰 DOM 的部分
@@ -14,6 +14,8 @@ test('常量：快捷按钮、模型标记、附图上限', () => {
   assert.equal(MODEL_TAG, 'Opus 5.5 · high');
   assert.equal(MAX_IMAGES, 4);
   assert.equal(CONFIRM_MS, 3000);
+  // 「想得细，要等一会儿」在已经显示秒数之后才出现
+  assert.ok(LONG_WAIT_MS >= 6000 && LONG_WAIT_MS <= 20000);
 });
 
 test('statusView：默认文字、未知状态、重试按钮', () => {
@@ -203,4 +205,16 @@ test('elapsedText：等太久才显示已经等了多久', () => {
   assert.equal(elapsedText(42500), '42 秒');
   assert.equal(elapsedText(65000), '1 分 5 秒');
   assert.equal(elapsedText(undefined), '');
+});
+
+test('openLogMax：展开的消息区不超过半屏，也不顶到进度条和「收起」把手', () => {
+  // iPad 竖屏：半屏说了算
+  assert.equal(openLogMax({ vh: 1180, rest: 126, head: 61 }), 590);
+  // 横屏 + 软键盘：只剩 426 高，要给进度条（61）和把手（36）让位
+  assert.equal(openLogMax({ vh: 426, rest: 189, head: 61 }), 140);
+  // 进度条已经被系统滚出可视区（head 为负）：不倒扣
+  assert.equal(openLogMax({ vh: 426, rest: 189, head: -40 }), 201);
+  // 再小也留 120 能看一两句
+  assert.equal(openLogMax({ vh: 300, rest: 250, head: 61 }), 120);
+  assert.equal(openLogMax({ vh: 900, rest: 126 }), 450);
 });

@@ -29,16 +29,19 @@ body:has(.class-bar.is-live) .is-class .class-board:empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
 }
 body:has(.class-bar.is-live) .is-class .class-board:empty::before {
-  content: ""; width: 150px; height: 12px; opacity: .8;
+  content: ""; width: 132px; height: 16px; opacity: .85;
   background:
-    radial-gradient(circle at 25px 6px, var(--chalk) 0 5px, transparent 5.5px),
-    radial-gradient(circle at 75px 6px, var(--yellow) 0 5px, transparent 5.5px),
-    radial-gradient(circle at 125px 6px, var(--pink) 0 5px, transparent 5.5px);
+    radial-gradient(circle at 22px 8px, var(--chalk) 0 6.5px, transparent 7px),
+    radial-gradient(circle at 66px 8px, var(--yellow) 0 6.5px, transparent 7px),
+    radial-gradient(circle at 110px 8px, var(--pink) 0 6.5px, transparent 7px);
   filter: url(#la-chalk); animation: classBreathe 1.6s ease-in-out infinite;
 }
 body:has(.class-bar.is-live) .is-class .class-board:empty::after {
-  content: "Claude 在想怎么讲…"; font-family: var(--hand); font-size: clamp(26px, 3.8vw, 32px); line-height: 1.4; color: var(--chalk); opacity: .85;
+  content: "Claude 在想怎么讲…"; padding: 0 16px; text-align: center; text-wrap: balance;
+  font-family: var(--hand); font-size: clamp(26px, 3.8vw, 32px); line-height: 1.4; color: var(--chalk); opacity: .85;
 }
+/* 等了十几秒还没有第一个字（Opus 5.5 · high 想得久）：换一句话，告诉学生这是正常的 */
+body:has(.class-bar.is-long-wait) .is-class .class-board:empty::after { content: "Claude 想得细，第一句话要等一会儿…"; }
 body:has(.class-bar[data-state="writing"]) .is-class .class-board:empty::after { content: "Claude 在说…"; }
 @keyframes classBreathe { 0%, 100% { opacity: .35; transform: scale(.96); } 50% { opacity: .9; transform: none; } }
 
@@ -71,6 +74,14 @@ body:has(.class-bar[data-state="writing"]) .is-class .class-board:empty::after {
 .class-draft-card blockquote p { margin: 0; color: inherit; }
 @keyframes draftIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes chalkWrite { 0%, 100% { transform: translateX(0) rotate(-6deg); } 50% { transform: translateX(-14px) rotate(4deg); } }
+
+/* 绑定了题的图（吸附在旁边的那张）：整张都要露在顶上进度条和底部对话条之间，
+   不然图下面的读数、提示永远藏在对话条后面。宽屏按剩下的高度压低图；
+   图框保持正方形（宽度跟着高度缩），拖动换算坐标才和手指对得上 */
+.is-class .steps-pair > .block:not(.block-steps) .w-plot svg { width: auto; max-width: 100%; margin: 0 auto; }
+@media (min-width: 901px) {
+  .is-class .steps-pair > .block:not(.block-steps) .w-plot svg { max-height: max(240px, calc(100svh - var(--class-bar-h, 200px) - 270px)); }
+}
 
 /* 重写两次还画不出来的段 */
 .class-failed-box {

@@ -39,6 +39,15 @@ body.has-keypad .class-bar, .class-bar.is-away {
     linear-gradient(#8b6845, #6f5035 55%, #563b24);
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.28), 0 4px 10px rgba(0, 0, 0, 0.22);
 }
+/* Claude 在想、在写的时候：木条上沿那道高光里有一小段黄粉笔光慢慢走过去（高 effort 第一个字要等很久，一眼看得出还活着） */
+.cb-ledge::after {
+  content: ""; position: absolute; left: 0; top: 0; width: 36%; height: 2px; opacity: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(242, 220, 133, 0.95) 50%, transparent);
+  box-shadow: 0 0 10px rgba(242, 220, 133, 0.45); transform: translateX(-100%); transition: opacity .4s ease;
+}
+.class-bar.is-live .cb-ledge::after { opacity: 1; animation: cbSweep 2.8s cubic-bezier(.45, 0, .55, 1) infinite; }
+@keyframes cbSweep { from { transform: translateX(-100%); } to { transform: translateX(280%); } }
+
 /* 槽上的粉笔和板擦（只是装饰）：都放在右边，左边留给「板书」把手 */
 .cb-stick { position: absolute; top: -4px; height: 7px; border-radius: 4px; box-shadow: 0 2px 2px rgba(0, 0, 0, 0.35), inset 0 -1.5px 0 rgba(0, 0, 0, 0.12); }
 .cb-stick.s1 { right: calc(var(--cb-edge) + 150px); width: 40px; background: #f1efe6; transform: rotate(-1.5deg); }
@@ -65,7 +74,9 @@ body.has-keypad .class-bar, .class-bar.is-away {
   color: #f6eedc; font: 19px/1 var(--hand); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
   transition: color .2s, background .2s;
 }
-.cb-toggle { position: absolute; left: 50%; top: -25px; z-index: 1; translate: -50% 0; }
+.cb-toggle { position: absolute; left: 50%; top: -25px; z-index: 1; translate: -50% 0; gap: 7px; padding: 0 14px 0 17px; }
+.cb-chev { flex: none; width: 13px; height: 9px; margin-top: 1px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.35)); transition: transform .22s var(--cb-ease); }
+.cb-toggle[aria-expanded="true"] .cb-chev { transform: rotate(180deg); }
 /* 触控面积够 44px（看得见的把手只有 26px 高） */
 .cb-toggle::after, .class-bar .ink-fab::after { content: ""; position: absolute; inset: -10px -6px -9px; }
 .cb-toggle:focus-visible, .class-bar .ink-fab:focus-visible { outline: 2px solid var(--yellow); outline-offset: 3px; }
@@ -87,7 +98,9 @@ body.has-keypad .class-bar, .class-bar.is-away {
 }
 
 /* —— 消息区：收起时只露最近一两条（整条露，不露半截），展开后可滚动 —— */
-.cb-log { position: relative; height: var(--cb-log-h); transition: height .22s var(--cb-ease); }
+.cb-log { position: relative; height: var(--cb-log-h); transition: height .22s var(--cb-ease), margin .22s var(--cb-ease); }
+/* 还没开口：没有消息可露，消息区收起来（对话条只剩一行提示和输入行，不和欢迎牌抢眼） */
+.class-bar.is-quiet .cb-log { height: 0; margin-bottom: -5px; }
 .cb-msgs {
   position: relative; height: 100%; overflow: hidden; overscroll-behavior: contain;
   display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 3px;
@@ -103,11 +116,11 @@ body.has-keypad .class-bar, .class-bar.is-away {
 .cb-log.is-clip-top .cb-msgs { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 26px); mask-image: linear-gradient(to bottom, transparent 0, #000 26px); }
 .cb-log.is-clip-bottom .cb-msgs { -webkit-mask-image: linear-gradient(to top, transparent 0, #000 22px); mask-image: linear-gradient(to top, transparent 0, #000 22px); }
 .cb-log.can-open { cursor: pointer; }
-.cb-empty { margin: 0 0 6px; text-align: center; font: 21px/1.3 var(--hand); color: rgba(238, 240, 230, 0.42); text-wrap: balance; }
 
 .cb-msg { position: relative; flex: none; font: 16px/1.6 var(--sans); color: var(--body); overflow-wrap: anywhere; animation: cbIn .24s var(--cb-ease) both; }
 .cb-msg.no-anim { animation: none; }
 .cb-msg p { margin: 0 0 3px; }
+.cb-log.is-open .cb-msg p { margin-bottom: 7px; }
 .cb-msg p:last-child, .cb-msg ul:last-child, .cb-msg ol:last-child { margin-bottom: 0; }
 .cb-msg ul, .cb-msg ol { margin: 2px 0 4px; padding-left: 1.3em; }
 .cb-msg strong { color: var(--yellow); font-weight: 600; }
@@ -172,6 +185,11 @@ body.has-keypad .class-bar, .class-bar.is-away {
 
 .cb-quick { grid-area: lead; display: flex; gap: 4px; min-width: 0; }
 .cb-status { grid-area: lead; }
+/* 没开口时那一格写一行提示；快捷按钮（「没懂」…）和「下课」等第一句话出来再出现 */
+.cb-hint { grid-area: lead; margin: 0; min-width: 0; font: 20px/1.25 var(--hand); color: rgba(238, 240, 230, 0.5); text-wrap: balance; }
+.class-bar:not(.is-quiet) .cb-hint, .class-bar.is-disabled .cb-hint, .class-bar.is-live .cb-hint { display: none; }
+.class-bar.is-quiet .cb-quick { opacity: 0; visibility: hidden; }
+.class-bar.is-quiet .cb-end { display: none; }
 .class-bar[data-state="error"] .cb-status, .class-bar[data-state="notice"] .cb-status { grid-area: status; }
 /* 同一格里两样东西轮流出现：淡入淡出，高度不变 */
 .cb-quick, .cb-status { transition: opacity .2s ease, visibility 0s; }
@@ -202,6 +220,7 @@ body.has-keypad .class-bar, .class-bar.is-away {
   font-size: 16px; line-height: 1.45; color: var(--body);
 }
 .cb-status-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.class-bar.is-live .cb-status-text { font: 22px/1.25 var(--hand); color: var(--chalk); letter-spacing: .02em; }
 .cb-elapsed { flex: none; font: 19px/1 var(--hand); color: var(--muted); font-variant-numeric: tabular-nums; }
 .cb-elapsed:empty { display: none; }
 /* 出错 / 提示：单独一行，淡淡的底色，「重试」放在最右边 */
@@ -218,7 +237,10 @@ body.has-keypad .class-bar, .class-bar.is-away {
 .cb-ind { flex: none; position: relative; display: none; align-items: center; justify-content: center; gap: 5px; width: 34px; height: 14px; }
 .cb-status:not([data-state="idle"]) .cb-ind { display: inline-flex; }
 .cb-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); }
-.cb-scribble { position: absolute; inset: 0; width: 100%; height: 100%; display: none; overflow: visible; }
+.cb-scribble { position: absolute; left: 0; top: 0; width: 34px; height: 14px; display: none; overflow: visible; }
+/* 在想 / 在写：指示占「Claude」那一栏，状态文字和上面 Claude 说的话左边对齐 */
+.class-bar.is-live .cb-ind { width: calc(2.9 * 21px); justify-content: flex-start; }
+.class-bar.is-live .cb-status { gap: 12px; }
 .cb-scribble path { fill: none; stroke: var(--yellow); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 48; stroke-dashoffset: 48; filter: url(#la-chalk-v); }
 .cb-status[data-state="thinking"] .cb-dot { animation: cbBreathe 1.4s ease-in-out infinite; }
 .cb-status[data-state="thinking"] .cb-dot:nth-child(2) { animation-delay: .18s; }
@@ -301,7 +323,8 @@ body.has-keypad .class-bar, .class-bar.is-away {
 .cb-field textarea::placeholder { color: rgba(238, 240, 230, 0.4); font: 20px/1.3 var(--hand); }
 .cb-field textarea:focus { outline: 2px dashed rgba(242, 220, 133, 0.6); outline-offset: -2px; background: rgba(0, 0, 0, 0.3); }
 .cb-field textarea:disabled { opacity: .5; }
-.cb-send { flex: none; min-width: 84px; height: 46px; min-height: 46px; padding: 0 18px; font-size: 23px; transition: opacity .2s, color .2s, background .2s, transform .1s ease; }
+/* 「发送」和「■ 停止」一样宽：每一轮开始、结束时输入框不跟着伸缩 */
+.cb-send { flex: none; width: 100px; height: 46px; min-height: 46px; padding: 0 10px; font-size: 23px; transition: opacity .2s, color .2s, background .2s, transform .1s ease; }
 .cb-send.is-empty { opacity: .5; }
 .cb-send.is-stop { color: var(--coral); background: rgba(255, 158, 140, 0.08); --frame: rgba(255, 158, 140, 0.75); }
 .cb-send.is-stop::after { content: ""; order: -1; width: 10px; height: 10px; border-radius: 2px; background: currentColor; }
@@ -351,10 +374,12 @@ body.class-on .dev-body { max-height: calc(100svh - var(--class-bar-h, 220px) - 
   .cb-model { font-size: 11.5px; padding: 5px 8px 6px; }
   .cb-tool span { display: none; }
   .cb-tool { padding: 0; }
-  .cb-send { min-width: 70px; padding: 0 14px; }
+  .cb-send { width: 88px; padding: 0 8px; }
   .cb-claude { column-gap: 9px; }
+  .class-bar.is-live .cb-status { gap: 9px; }
   .cb-claude.is-draft .cb-body { margin-left: -9px; padding-left: 7px; }
   .cb-stick, .cb-eraser { display: none; }
+  .cb-hint-more { display: none; }
 }
 @media (max-width: 440px) { .class-bar { --cb-pad: 12px; } }
 /* 横屏的 iPad：屏幕矮，消息区收起时正好两行，上下再紧一点 */
@@ -370,4 +395,7 @@ body.class-on .dev-body { max-height: calc(100svh - var(--class-bar-h, 220px) - 
   .cb-status[data-state="writing"] .cb-scribble path { animation: none; stroke-dashoffset: 0; }
   .cb-claude.is-draft .cb-body > :last-child::after { animation: none; opacity: .6; }
   .cb-end.is-armed::after { animation: none; }
+  /* 木条上的黄光不走动，常亮一道淡的 */
+  .class-bar.is-live .cb-ledge::after { animation: none; transform: none; width: 100%; opacity: .55; }
+  .cb-chev, .cb-log { transition: none; }
 }
