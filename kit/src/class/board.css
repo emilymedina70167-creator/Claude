@@ -50,6 +50,8 @@ body:has(.class-bar[data-state="writing"]) .is-class .class-board:empty::after {
    挂在卡片上的话每一帧都从头播，卡片一直停在透明（看不见） */
 .class-draft { margin: 26px 0 8px; display: grid; gap: 14px; animation: draftIn .35s ease both; }
 .class-draft-card {
+  /* 写的过程中会自动滚到最新的草稿：停在对话条上面，不钻到它后面 */
+  scroll-margin-bottom: calc(var(--class-bar-h, 200px) + 16px); scroll-margin-top: 96px;
   position: relative; padding: 14px 20px 16px; border-radius: 16px;
   border: 1.5px dashed rgba(238, 240, 230, 0.36); background: rgba(0, 0, 0, 0.1);
   color: var(--body); opacity: .84;

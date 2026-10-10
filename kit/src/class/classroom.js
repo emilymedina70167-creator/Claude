@@ -501,6 +501,14 @@ export async function renderClass(root, meta) {
     return c.textContent.replace(/\s+/g, ' ').trim();
   }
 
+  // 截短但不把公式截成半截（$ 要成对）
+  function clipTex(t, n) {
+    if (t.length <= n) return t;
+    let c = t.slice(0, n);
+    if ((c.match(/(?<!\\)\$/g) || []).length % 2) c = c.slice(0, c.lastIndexOf('$'));
+    return c.trimEnd() + '…';
+  }
+
   function boardState() {
     return [...segs.values()].sort((a, b) => a.seq - b.seq).map((seg) => {
       const blocks = seg.sec && !seg.failed ? [...seg.sec.querySelectorAll('.block[data-bid]')].map((b) => ({
@@ -510,7 +518,7 @@ export async function renderClass(root, meta) {
         results: (results.get(b.dataset.bid) || []).slice(-6).map((r) => r.line),
       })) : [];
       const text = texText(seg.sec?.querySelector('.stage-body > p'));
-      const summary = [text.slice(0, 80), seg.softNotes?.length ? `（${seg.softNotes.join('；')}）` : ''].filter(Boolean).join(' ');
+      const summary = [clipTex(text, 140), seg.softNotes?.length ? `（${seg.softNotes.join('；')}）` : ''].filter(Boolean).join(' ');
       return { id: seg.id, title: seg.title || seg.sec?.querySelector('h2')?.textContent?.replace(/^\d+/, '').trim() || '', summary, hidden: seg.hidden, pending: !!seg.pending, failed: !!seg.failed, blocks };
     });
   }

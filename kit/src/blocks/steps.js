@@ -141,7 +141,7 @@ export function steps(el, src) {
       fb.hidden = true;
       rec({ text, via: tb.via || undefined, ok: null });
       revealBtn.disabled = false;
-      revealBtn.focus({ preventScroll: true });
+      if (!session.replaying) revealBtn.focus({ preventScroll: true });
     });
     giveup.addEventListener('click', () => {
       s.mine = { giveup: true, text: tb.value };
