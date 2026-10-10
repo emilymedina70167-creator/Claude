@@ -13,6 +13,7 @@ export const session = {
   context: '', // context 块：给页面里的 Claude 的背景资料
   subject: '线性代数', // 课件开头 subject: 可改（如 数据结构）
   mode: 'plain', // plain | guided | live | class
+  replaying: false, // 课堂刷新后把学生的作答重放回组件时为 true：这期间不记录、不发给 Claude
   live: false, // 实时黑板模式（作答同时写进数据库，由对话里的 Claude 决定往下讲什么）
   sink: null, // live 模式下接收每条作答 / 事件 / 手写原图：{ record(entry), event(e), images(key, blobs) }
 
@@ -47,6 +48,7 @@ export const session = {
   // 记一条作答。entry.el：组件所在元素（自动补上小节、组件 id、用时）；
   // entry.liveOnly：只写进数据库（比如每一次尝试），不进本地学习记录
   record(entry) {
+    if (this.replaying) return; // 刷新后照着记录把作答重放回组件：不再记一遍
     const { el, liveOnly, ...rest } = entry;
     if (el) {
       rest.stage ??= this.stageOf(el);
@@ -67,11 +69,13 @@ export const session = {
 
   // 学生的动作（这段做完了、揭开一步、想不出来、提问……），只在 live 模式下写进数据库
   event(type, el, detail) {
+    if (this.replaying) return;
     this.sink?.event({ type, step: el ? this.stepOf(el) : undefined, block: el ? this.blockOf(el) : undefined, detail });
   },
 
   // 交给 Claude 识别的手写 / 截图原图：live 模式下存进 assets，附在这个组件的下一条作答上
   keepImages(key, blobs) {
+    if (this.replaying) return;
     const list = (Array.isArray(blobs) ? blobs : [blobs]).filter(Boolean);
     if (list.length) this.sink?.images(typeof key === 'string' ? key : this.blockOf(key) || 'page', list);
   },

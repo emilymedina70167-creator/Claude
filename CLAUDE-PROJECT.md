@@ -515,6 +515,7 @@ unit: 第2讲 §2 · 秩一方阵
 
 - `files`：同上，从组件库复制 `la-kit.js`。
 - `capabilities`：`{ "sample": { "images": true }, "db": {}, "assets": {} }`。
+- **每节课发布一个新的课堂 artifact。**重新打开同一个课堂会接着上次的黑板和对话往下上（刷新也一样），所以新的一节不要复用旧的。
 - 新发布的 artifact 自动用最新的运行环境。如果是给**以前发布的** artifact 换成课堂模式，发布时加 `contract: "latest"`：指定模型（Opus 5.5）要较新的运行环境才支持。
 
 ### 课前：写资料包
@@ -531,24 +532,24 @@ unit: 第2讲 §2 · 秩一方阵
   - `rules`（可选）：覆盖组件库内置的「角色与红线」。一般不用写。
   - `updatedAt`：时间戳。
 - `collection: "pack"`，`doc_id: "problems"`，`data: { "items": [ { "q": "题面", "answer": "答案", "point": "考点", "source": "来源" }, … ] }`：这节课可用的题。课堂里的 Claude 从里面取题，也可以自己改数。
-- 资料包合起来控制在约 120 KB 以内，超出部分会被截断。课中你也可以改资料包，下一轮自动用新版本。
+- 资料包合起来控制在约 120 KB 以内，超出部分会被截断。课中你也可以改资料包，下一轮自动用新版本：先 `get` 读到 `version`，再带上 `if_version` 用 `update` 或 `set`（已有的文档不带 `if_version` 会被拒绝）。
 - 模型是固定的：课堂里的 Claude 只用 Opus 5.5（effort high）。平台临时换成别的模型时，那一轮整段作废，我会看到「Opus 5.5 暂时用不了，稍后点重试」。资料包里不要写模型相关的字段。
 
 ### 课后：读课堂记录
 
 我说「下课了」时，用 `ArtifactData` 读：
 
-- `collection: "class_turns"`（`query`，`order_by: seq`）：每一轮一条，按 `seq` 排起来就是整节课。字段：`seq`、`role`、`text`、`kind`、`discarded`、`at`，以及下面各自的字段。
+- `collection: "class_turns"`（`query`，`order_by: seq`，**`limit: 1000`**——不写 limit 只返回前 100 条，长的课会被截掉；记录多时加 `out_dir` 存成文件再读）：每一轮一条，按 `seq` 排起来就是整节课。字段：`seq`、`role`、`text`、`kind`、`discarded`、`at`，以及下面各自的字段。
   - `role: "student"`：`say` 是我说的话（打字或快捷按钮）；`actions` 是我在黑板上的动作，每条一行，比如「[作答] b7 里的 steps 第 3 步：选了『跑到线外去』（错），用时 44 秒」；`images` 是我附的手写 / 截图原图的 asset id；`text` 是发给课堂 Claude 的完整内容。
-  - `role: "claude"`：`text` 是课堂里的 Claude 的完整输出（话 + 黑板指令原文）；`boardOps` 是实际执行了哪些指令（`op`：add / replace / hide / figure，`id`，`ok: false` 的没执行成功，`error` 是原因）；`tools` 是它调用过的工具（如果有）；`modelApplied` 一定是 `claude-opus-5-5`。
+  - `role: "claude"`：`text` 是课堂里的 Claude 的完整输出（话 + 黑板指令原文）；`boardOps` 是实际执行了哪些指令（`op`：add / replace / hide / figure，`id`，`ok: false` 的没执行成功，`error` 是原因；figure 还有 `action`：set / play / highlight 和 `args`）；`truncated: true` 表示这一轮太长被截断了；`tools` 是它调用过的工具（如果有）；`modelApplied` 一定是 `claude-opus-5-5`。
   - `role: "system"`：页面发给它的系统消息。`kind` 有：`lint`（它写的组件有写法错误，没显示，要求重写）、`note`（指令没执行之类的提醒）、`images`（它要看的手写原图，附在这一轮）、`summary`（对话太长时的摘要，`upTo` 是摘要覆盖到第几轮）、`closing`（下课小结）、`fallback`（Opus 5.5 不可用，这一轮作废）、`error`（这一轮出错或我点了停止，`code` 是原因）。
   - `discarded: true` 的轮没有进入课堂对话：内容没给我看，黑板也没动。读的时候跳过它们的内容，只当作「这里卡过一下」。
-- `collection: "class_notes"`：课堂里的 Claude 记的观察（`kind: "note"`，`turn` 是在第几轮记的），以及下课时写的小结（`kind: "summary"`：讲了什么、我哪里卡住、哪里看起来懂了但证据不够、建议下一节怎么接）。
-- `collection: "steps"`：黑板上出现过的每一段（`by: "class"`，`md` 是原文，`hidden: true` 是被撤回的）。
-- `collection: "answers"`、`"events"`：和实时黑板一样，每次作答、揭开、放弃、拖动都有记录；手写原图用 `Artifact` 工具 `action: "read"`、`path` 填 asset id 取回。
+- `collection: "class_notes"`：课堂里的 Claude 记的观察（`kind: "note"`，`turn` 是在第几轮记的），以及下课时写的小结（`kind: "summary"`：讲了什么、我哪里卡住、哪里看起来懂了但证据不够、建议下一节怎么接）。**小结只有我点了「下课」才有**；直接关掉页面不会写（关页面时来不及等 Claude 写完），这时你就从 `class_turns` 自己读。
+- `collection: "steps"`：黑板上出现过的每一段（`by: "class"`，`md` 是这一段**最后的版本**，改写前的版本在 `class_turns` 的 Claude 输出里；`hidden: true` 是被撤回的；`failed: true` 是重写两次还画不出来、我看到的是「这段没画出来」）。
+- `collection: "answers"`、`"events"`：和实时黑板一样，每次作答、揭开、放弃都有记录；课堂里 `events` 还有 `drag`（我在图里拖动的变量和最后的位置）和 `end`（点了「下课」）。手写原图用 `Artifact` 工具 `action: "read"`、`path` 填 asset id 取回。
 
 读完后判断我是真的掌握了，还是只是跟着做下来；把弱点和典型错误更新进记忆，决定下一节从哪里接（写进下一节资料包的 `student` 和 `plan`）。
 
 （需求文档里写的 `class/turns/{seq}`、`class/notes/{id}` 在数据库路径规则下不是合法的文档路径，实际用的是 `class_turns` 和 `class_notes` 两个集合。）
 
-**本地试用**：打开 `kit/examples/class-demo.html?dev`，「模拟老师」会按剧本回放几轮（含一段故意写错、会被自动重写的组件），不调用 Claude；开发面板可以写资料包、看课堂记录、模拟 Opus 5.5 不可用。
+**本地试用**：把 `kit/dist/la-kit.js` 放在 `kit/examples/class-demo.html` 同一个文件夹里，打开 `class-demo.html?dev`，「模拟老师」会按剧本回放几轮（含一段故意写错、会被自动重写的组件），不调用 Claude；开发面板可以写资料包、看课堂记录、模拟 Opus 5.5 不可用。

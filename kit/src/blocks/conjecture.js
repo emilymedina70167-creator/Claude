@@ -130,7 +130,7 @@ export function conjecture(el, src) {
     if (!grading) {
       fb.hidden = false;
       fb.className = 'cj-feedback is-wait';
-      fb.innerHTML = `已交${attempts > 1 ? `（第 ${attempts} 次）` : ''}。回对话说一声，等 Claude 看。`;
+      fb.innerHTML = `已交${attempts > 1 ? `（第 ${attempts} 次）` : ''}。${session.mode === 'class' ? 'Claude 会看到，等它接着讲。' : '回对话说一声，等 Claude 看。'}`;
       if (!finished) { finished = true; done(); }
       session.record({ type: 'conjecture', title, q: plain(q), answer: text, attempts, verdict: '已交，等 Claude 看', el, via: via || undefined });
       btn.textContent = '改了再交';

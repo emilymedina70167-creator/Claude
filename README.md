@@ -34,7 +34,7 @@
 
 ### 课堂模式（mode: class）
 
-页面底部是对话框，「课堂里的 Claude」（只用 Opus 5.5、effort high）一边说话，一边用组件库现场画黑板；你在黑板上作答，它马上接着教。项目对话里的 Claude 课前写资料包（`pack/main`、`pack/problems`），课后读课堂记录（`class_turns`、`class_notes`）。说明见 `CLAUDE-PROJECT.md` 第六节，需求原文见 [`docs/classroom-spec.md`](docs/classroom-spec.md)。本地试用：`kit/examples/class-demo.html?dev`（模拟老师按剧本回放，不花额度）。
+页面底部是对话框，「课堂里的 Claude」（只用 Opus 5.5、effort high）一边说话，一边用组件库现场画黑板；你在黑板上作答，它马上接着教。项目对话里的 Claude 课前写资料包（`pack/main`、`pack/problems`），课后读课堂记录（`class_turns`、`class_notes`）。说明见 `CLAUDE-PROJECT.md` 第六节，需求原文见 [`docs/classroom-spec.md`](docs/classroom-spec.md)。本地试用：把 `kit/dist/la-kit.js` 放在同一个文件夹，打开 `kit/examples/class-demo.html?dev`（模拟老师按剧本回放，不花额度）。
 
 本地试用实时黑板：打开 `kit/examples/live-demo.html?dev`（`la-kit.js` 放在同一目录），右上角的「开发面板」可以扮演对话里的 Claude 往黑板上写、查看作答。
 

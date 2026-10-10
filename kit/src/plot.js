@@ -108,9 +108,11 @@ export function createPlane(container, { range = 5 } = {}) {
       return c;
     },
     toMath(evt) {
+      // SVG 按 viewBox 等比缩放、居中：图框不是正方形（比如窄屏吸顶的图）时，x、y 要用同一个比例换算，拖动才跟手
       const r = svg.getBoundingClientRect();
-      const sx = ((evt.clientX - r.left) / r.width) * SIZE;
-      const sy = ((evt.clientY - r.top) / r.height) * SIZE;
+      const k = Math.min(r.width, r.height) / SIZE || 1;
+      const sx = (evt.clientX - r.left - (r.width - SIZE * k) / 2) / k;
+      const sy = (evt.clientY - r.top - (r.height - SIZE * k) / 2) / k;
       return [((sx - SIZE / 2) / (SIZE / 2)) * p.range, -((sy - SIZE / 2) / (SIZE / 2)) * p.range];
     },
     // onDrag(id, [x, y], phase)，phase 是 'start' | 'move' | 'end'

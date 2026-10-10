@@ -97,3 +97,9 @@ body:has(.class-bar[data-state="writing"]) .is-class .class-board:empty::after {
   .class-draft:has(.class-draft-card.is-writing)::after { animation: none; }
   body:has(.class-bar.is-live) .is-class .class-board:empty::before { animation: none; }
 }
+
+/* 刷新后：组件下面注明刷新前学生已经怎么作答的（组件本身回到初始状态） */
+.class-prev { margin: 10px 0 0; padding: 8px 14px 8px 16px; border-left: 3px solid rgba(166, 214, 239, 0.45); background: rgba(166, 214, 239, 0.04); border-radius: 0 10px 10px 0; font-size: 15px; color: var(--body); }
+.class-prev-tag { font-family: var(--hand); font-size: 19px; color: var(--blue); margin-bottom: 2px; }
+.class-prev ul { margin: 0; padding-left: 1.2em; }
+.class-prev li + li { margin-top: 2px; }

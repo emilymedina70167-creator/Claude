@@ -152,6 +152,30 @@ export function steps(el, src) {
     });
   }
 
+  // 课堂刷新后：照着数据库里的记录（作答 + 揭开事件，按时间排好）把学生走过的步骤重放一遍。
+  // 走的是和学生点按一样的路，所以对照、联动的图都会回到原样；session.replaying 期间不会再记录
+  el._replay = (entries) => {
+    for (const r of entries) {
+      const k = Number(r.source === 'event' ? r.detail?.step ?? r.step : String(r.detail || '').match(/\d+/)?.[0]) - 1;
+      const st = list[k];
+      if (!st || st.li.hidden) continue;
+      const li = st.li;
+      if (r.source === 'event') {
+        if (r.type === 'reveal') { const b = li.querySelector('.st-reveal'); if (b && !b.disabled) b.click(); }
+        continue;
+      }
+      if (st.mine || li.classList.contains('is-revealed')) continue;
+      if (r.giveup) { li.querySelector('.st-giveup')?.click(); continue; }
+      if (st.choices && r.value != null) {
+        const i = st.choices.indexOf(String(r.value));
+        li.querySelector(`.st-choice[data-i="${i}"]`)?.click();
+      } else if (r.text) {
+        const ta = li.querySelector('.tb-text');
+        if (ta) { ta.value = r.text; li.querySelector('.st-submit')?.click(); }
+      }
+    }
+  };
+
   function reveal(k) {
     const s = list[k];
     const li = s.li;
@@ -174,7 +198,7 @@ export function steps(el, src) {
     L?.set(revealed);
     if (k + 1 < list.length) {
       mount(k + 1);
-      requestAnimationFrame(() => list[k + 1].li.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+      if (!session.replaying) requestAnimationFrame(() => list[k + 1].li.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
     } else {
       body.querySelector('.st-end').hidden = false;
       done();

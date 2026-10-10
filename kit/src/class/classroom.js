@@ -125,7 +125,7 @@ export async function renderClass(root, meta) {
 
   // 草稿区「拿给 Claude 看」、手写附件：都进底部对话框
   session.openTutor = (i, prefill, image) => {
-    if (image) bar.attach(image);
+    if (image && bar.attach(image) === false) toast(teacher.images ? '图已经附满了，先发出去再附' : '这个查看方式发不了图片，请用文字说');
     if (prefill) bar.prefill(prefill);
     bar.focus();
   };
@@ -143,7 +143,8 @@ export async function renderClass(root, meta) {
     },
   };
 
-  setChip('on', mock ? '课堂 · 模拟老师' : '课堂');
+  if (teacher.available) setChip('on', mock ? '课堂 · 模拟老师' : '课堂');
+  else setChip('off', '课堂开不了');
   if (dev) initClassDevPanel({ db, root, setFallback: (on) => { if (mock) mock = createDevTeacher({ fallback: on }); }, history: () => history, stats: () => lastPrompt });
 
   // —— 资料包（课前由项目对话写入；课中改了，下一轮自动用新版）——
@@ -181,14 +182,72 @@ export async function renderClass(root, meta) {
         ...ev.docs.map((d) => d.data()).map((e) => ({ source: 'event', ...(e.detail && typeof e.detail === 'object' ? e.detail : {}), ...e })),
       ].sort((a, b) => (a.at || 0) - (b.at || 0));
       recs.forEach((a) => { if (reportable(a)) addResult(a); });
+      replayStudentWork(recs);
     } catch (e) {
       console.error(e);
       toast('课堂记录没读出来，先从头开始');
     }
-    history.slice(-30).forEach(showTurn);
+    history.slice(-300).forEach(showTurn);
     started = history.length > 0;
     refresh();
     if (pendingTurn(history) && teacher.available) bar.setStatus('error', '上一轮 Claude 还没回完，点重试接着上。');
+  }
+
+  // —— 刷新后把学生的作答放回黑板 ——
+  // steps 照记录重放（对照、联动的图都回到原样）；图恢复到刷新前的样子（老师的 figure set / play、学生的拖动）；
+  // 别的组件在下面注明「刷新前的作答」。重放期间 session.replaying：不记录、不发给 Claude
+  function replayStudentWork(recs) {
+    const byBlock = new Map();
+    for (const r of recs) if (r.block) { if (!byBlock.has(r.block)) byBlock.set(r.block, []); byBlock.get(r.block).push(r); }
+    const on = (bid, sel = '') => board.querySelector(`.class-seg:not([hidden]) .block${sel}[data-bid="${CSS.escape(bid)}"]`);
+    session.replaying = true;
+    try {
+      for (const [bid, list] of byBlock) {
+        const el = on(bid, '.block-steps');
+        if (!el?._replay) continue;
+        try { el._replay(list.filter((r) => r.type === 'steps' || (r.source === 'event' && r.type === 'reveal'))); } catch (e) { console.warn('steps 没能重放', e); }
+      }
+      restoreFigures(recs);
+    } finally {
+      session.replaying = false;
+    }
+    for (const [bid] of byBlock) {
+      const el = on(bid);
+      if (!el || ['block-steps', 'block-scene', 'block-graph', 'block-space'].some((c) => el.classList.contains(c))) continue;
+      const lines = (results.get(bid) || []).map((r) => r.line.replace(/^[^：]*：/, '')).filter(Boolean);
+      if (!lines.length) continue;
+      el.insertAdjacentHTML('beforeend', `<div class="class-prev"><div class="class-prev-tag">刷新前的作答</div><ul>${lines.slice(-4).map((l) => `<li>${mdToHtml(l, { inline: true })}</li>`).join('')}</ul></div>`);
+    }
+  }
+
+  function restoreFigures(recs) {
+    const tl = [];
+    for (const t of history) {
+      if (t.role !== 'claude' || t.discarded || !Array.isArray(t.boardOps)) continue;
+      t.boardOps.forEach((o, i) => {
+        if (!o?.ok) return;
+        const at = (t.at || 0) + i / 1000; // 同一轮里的先后
+        if (o.op === 'add' || o.op === 'replace') tl.push({ at, kind: 'render', seg: o.id });
+        else if (o.op === 'figure' && (o.action === 'set' || o.action === 'play')) tl.push({ at, kind: o.action, target: o.id, args: o.args });
+      });
+    }
+    for (const r of recs) if (r.source === 'event' && r.type === 'drag' && r.block) tl.push({ at: r.at || 0, kind: 'drag', target: r.block, name: r.name, value: r.value });
+    tl.sort((a, b) => a.at - b.at);
+    const rendered = new Map();
+    for (const e of tl) if (e.kind === 'render') rendered.set(e.seg, e.at);
+    for (const e of tl) {
+      if (e.kind === 'render') continue;
+      const el = board.querySelector(`.class-seg:not([hidden]) [data-bid="${CSS.escape(e.target)}"][data-scene]`);
+      const api = el && session.scenes.get(el.dataset.scene)?.api;
+      if (!api) continue;
+      // 这张图所在的段后来整段重画过：重画之前的改动不算
+      if (e.at <= (rendered.get(el.closest('[data-step]')?.dataset.step) ?? -Infinity)) continue;
+      try {
+        if (e.kind === 'drag') api.set(e.name, e.value);
+        else if (e.kind === 'play') api.set(e.args?.name, e.args?.to ?? 1);
+        else for (const [name, src] of Object.entries(e.args?.assigns || {})) api.set(name, compile(src)((api.vars || api.snapshot)?.call(api) || {}));
+      } catch { /* 恢复不了就保持初始的样子 */ }
+    }
   }
 
   function showTurn(t) {
@@ -401,7 +460,8 @@ export async function renderClass(root, meta) {
     const vis = [...board.querySelectorAll('.class-seg')].filter((s) => !s.hidden);
     welcome.hidden = vis.length > 0 || busy;
     if (!vis.length && !busy) {
-      welcomeText.innerHTML = started ? '黑板现在是空的。在下面说一句话，Claude 会接着讲。' : '准备好了就点「开始上课」。<br>Claude 会一边讲，一边在黑板上出题、画图；你在黑板上作答，它马上接着教。';
+      welcomeText.innerHTML = !teacher.available ? '课堂现在开不了：这个页面用不了 Claude。<br>看看底部的提示。'
+        : started ? '黑板现在是空的。在下面说一句话，Claude 会接着讲。' : '准备好了就点「开始上课」。<br>Claude 会一边讲，一边在黑板上出题、画图；你在黑板上作答，它马上接着教。';
       root.querySelector('.class-start').hidden = started || !teacher.available;
     }
     vis.forEach((sec, k) => {
@@ -430,6 +490,17 @@ export async function renderClass(root, meta) {
     return Object.keys(v).filter((k) => !(b.classList.contains('block-predict') && k === 'guess'));
   }
 
+  // 一段文字给课堂 Claude 看：公式换回 $TeX$（KaTeX 渲染后的文字是乱的，比如「x\mathbf xx」）
+  function texText(p) {
+    if (!p) return '';
+    const c = p.cloneNode(true);
+    c.querySelectorAll('.katex').forEach((k) => {
+      const tex = k.querySelector('annotation[encoding="application/x-tex"]')?.textContent;
+      k.replaceWith(tex ? `$${tex}$` : k.textContent);
+    });
+    return c.textContent.replace(/\s+/g, ' ').trim();
+  }
+
   function boardState() {
     return [...segs.values()].sort((a, b) => a.seq - b.seq).map((seg) => {
       const blocks = seg.sec && !seg.failed ? [...seg.sec.querySelectorAll('.block[data-bid]')].map((b) => ({
@@ -438,7 +509,7 @@ export async function renderClass(root, meta) {
         vars: figureVars(b),
         results: (results.get(b.dataset.bid) || []).slice(-6).map((r) => r.line),
       })) : [];
-      const text = seg.sec?.querySelector('.stage-body > p')?.textContent?.trim() || '';
+      const text = texText(seg.sec?.querySelector('.stage-body > p'));
       const summary = [text.slice(0, 80), seg.softNotes?.length ? `（${seg.softNotes.join('；')}）` : ''].filter(Boolean).join(' ');
       return { id: seg.id, title: seg.title || seg.sec?.querySelector('h2')?.textContent?.replace(/^\d+/, '').trim() || '', summary, hidden: seg.hidden, pending: !!seg.pending, failed: !!seg.failed, blocks };
     });
@@ -535,7 +606,7 @@ export async function renderClass(root, meta) {
       const say = texts.join('\n');
       const ids = (await Promise.all(imgs.map((x) => x.id))).filter(Boolean);
       let text = [actions.length ? actionsMessage(actions) : '', say].filter(Boolean).join('\n\n');
-      if (imgs.length) text += `\n（附了 ${imgs.length} 张图：学生的手写或截图，白底黑字。）`;
+      if (imgs.length) text += teacher.images ? `\n（附了 ${imgs.length} 张图：学生的手写或截图，白底黑字。）` : `\n（学生附了 ${imgs.length} 张图，但这个查看方式发不了图，你看不到；需要的话请学生用文字说。）`;
       const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), images: ids });
       showTurn(turn);
       const blobs = imgs.map((x) => x.blob);
@@ -752,6 +823,12 @@ export async function renderClass(root, meta) {
       // 再发同样的图还是会被拒：重试时不带图
       lastImages = { seq: lastImages.seq, blobs: [] };
       if (code === 'images_unavailable') { off.images = true; bar.setImages?.(false); } // 这个查看方式发不了图：收起手写 / 截图按钮
+      // 还在等回答的那条学生发言里说「附了图」：改成没发出去，重试时 Claude 不会去找看不到的图
+      const p = pendingTurn(history);
+      if (p?.role === 'student' && /附了 \d+ 张图/.test(p.text)) {
+        p.text = p.text.replace(/（附了 (\d+) 张图[^）]*）/, '（学生附了 $1 张图，但没发出去，你看不到；需要的话请学生用文字说。）');
+        sink.put('class_turns', { id: pad6(p.seq), ...p });
+      }
       return bar.setStatus('error', code === 'image_rejected' ? '图片发不出去（格式或大小不对），点重试会不带图再问一次。' : '这个查看方式发不了图片，点重试会只发文字。');
     }
     if (code === 'tools_unavailable') { off.tools = true; return bar.setStatus('error', '这一轮没成功，点重试。'); }
@@ -762,6 +839,9 @@ export async function renderClass(root, meta) {
 
   // —— 流式草稿：话和黑板内容边生成边出现（确认是 Opus 5.5 之前都是草稿，不执行指令）——
   let raf = 0, pendingText = '';
+  // 生成过程中学生自己滚动了页面（往回看黑板）：草稿就不再自动滚过去
+  let userScrolled = false;
+  for (const ev of ['wheel', 'touchmove']) window.addEventListener(ev, () => { if (busy) userScrolled = true; }, { passive: true });
   function drawDraft(text) {
     pendingText = text;
     if (raf) return;
@@ -771,7 +851,7 @@ export async function renderClass(root, meta) {
         const { segments } = parseOutput(pendingText);
         const speech = segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n');
         const boards = segments.filter((s) => s.type === 'board');
-        bar.setStatus('writing', boards.some((b) => !b.closed) ? 'Claude 正在写黑板…' : 'Claude 在说…');
+        bar.setStatus('writing', 'Claude 正在写黑板…');
         if (speech.trim()) {
           if (!draftMsg) draftMsg = bar.addMessage({ role: 'claude', html: '', draft: true });
           draftMsg.setHtml(mdToHtml(speech));
@@ -784,6 +864,8 @@ export async function renderClass(root, meta) {
             welcome.hidden = true;
           }
           draftBox.innerHTML = boards.map(draftCard).join('');
+          // 黑板上正在写的草稿要看得见：跟着往下滚（学生自己往上翻了就不打扰）
+          if (!userScrolled) draftBox.lastElementChild?.scrollIntoView({ block: 'end', behavior: 'smooth' });
         }
       } catch (e) {
         // 草稿只是预览：画不出来就先不画，等这一轮结束
@@ -799,15 +881,21 @@ export async function renderClass(root, meta) {
     return `<section class="class-draft-card${b.closed ? '' : ' is-writing'}"><div class="class-draft-tag">草稿 · ${label}${op.title ? `「${escapeHtml(op.title)}」` : ''}</div>${body}</section>`;
   }
 
+  const KIND_NAME = {
+    steps: '分步例题', scene: '图', graph: '函数图', space: '三维图', predict: '先猜一猜', answer: '算一算', practice: '练习',
+    quiz: '选择题', conjecture: '说说你的发现', recognize: '认方法', findbug: '找错', draft: '草稿区', key: '重点',
+    definition: '定义', theorem: '定理', warning: '易错', example: '例题', intuition: '直觉', hint: '提示', card: '记忆卡',
+  };
   // 草稿里的组件先显示成占位（确认之后才真正画出来）
   function previewMd(md) {
     // 末尾还没写完的 $…（公式没闭合）先不显示，免得露出半截 TeX
     const dollars = (md.replace(/\\\$/g, '').match(/\$/g) || []).length;
     if (dollars % 2) md = md.slice(0, md.lastIndexOf('$')) + ' …';
-    return md.replace(/^(\s{0,3})(`{3,}|~{3,})\s*([\w-]+)[^\n]*\n[\s\S]*?(?:^\s{0,3}\2\s*$|$(?![\s\S]))/gm, (m, sp, f, name) => `\n> ⏳ ${name}（确认后出现）\n`);
+    return md.replace(/^(\s{0,3})(`{3,}|~{3,})\s*([\w-]+)[^\n]*\n[\s\S]*?(?:^\s{0,3}\2\s*$|$(?![\s\S]))/gm, (m, sp, f, name) => `\n> ${KIND_NAME[name] || name} · 写完就出现\n`);
   }
 
   function clearDraft() {
+    userScrolled = false;
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
     draftMsg?.remove();
     draftMsg = null;
