@@ -3,10 +3,13 @@
 // 转写结果先给学生核对，再走原来的提交 / 检查流程，所以判分逻辑不变。
 import { getAI, errorText } from './ai.js';
 import { mdToHtml } from './render.js';
+import { FEATURES } from './features.js';
 
 // 在 anchor 后面插入一行：按钮 + 提示 + 缩略图 + 状态。
 // onPick(files, ui) 在学生选好或粘贴图片后调用；ui.status(html, cls) 用来显示进度和结果。
 export function photoPicker(anchor, { label = '上传手写截图', root, onPick }) {
+  // 暂时关掉（见 features.js）：不放粘贴框，也不接管粘贴、拖放
+  if (!FEATURES.photo) return { box: null, ui: { status() {}, lock() {} }, disable() {} };
   const box = document.createElement('div');
   box.className = 'ph';
   box.hidden = true;

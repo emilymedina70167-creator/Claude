@@ -7,6 +7,7 @@ import { session } from '../session.js';
 import { widget, mdToHtml } from './common.js';
 import { plain } from './answer.js';
 import { photoPicker, transcribe, photoError, transcriptHtml } from '../photo.js';
+import { FEATURES } from '../features.js';
 
 export function conjecture(el, src) {
   const { fields } = parseFields(src);
@@ -26,7 +27,7 @@ export function conjecture(el, src) {
   const ta = body.querySelector('.cj-text');
   // 手写：写在手写板上，Claude 转成文字放进输入框，你检查后再提交
   getAI().then((ai) => {
-    if (!ai?.images) return;
+    if (!FEATURES.handwriting || !ai?.images) return;
     const pbtn = document.createElement('button');
     pbtn.type = 'button';
     pbtn.className = 'btn cj-pen';

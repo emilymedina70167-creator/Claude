@@ -5,6 +5,7 @@ import { createPad } from '../ink/pad.js';
 import { photoPicker, transcribe, photoError } from '../photo.js';
 import { session } from '../session.js';
 import { escapeHtml } from './common.js';
+import { FEATURES } from '../features.js';
 
 export function thinkBox(host, { placeholder = '我觉得……', rows = 2, q = '', owner, padHeight = 200, padHint = '用 Apple Pencil 写，写完点「转成文字」' } = {}) {
   const wrap = document.createElement('div');
@@ -34,8 +35,11 @@ export function thinkBox(host, { placeholder = '我觉得……', rows = 2, q = 
   };
 
   getAI().then((ai) => {
-    if (!ai?.images) return;
+    if (!ai?.images || !(FEATURES.handwriting || FEATURES.photo)) return;
     wrap.querySelector('.tb-tools').hidden = false;
+    wrap.querySelector('.tb-pen').hidden = !FEATURES.handwriting;
+    wrap.querySelector('.tb-shot').hidden = !FEATURES.photo;
+    if (!FEATURES.photo) return;
     // 截图一行平时收起来，点「截图」才展开；直接粘贴（在这个组件里）任何时候都可以
     anchor = document.createElement('div');
     photoBox.appendChild(anchor);

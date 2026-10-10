@@ -5,6 +5,7 @@ import { session } from './session.js';
 import { mdToHtml, escapeHtml } from './render.js';
 import { recordText } from './record.js';
 import { createPad } from './ink/pad.js';
+import { FEATURES } from './features.js';
 
 export async function initTutor() {
   const ai = await getAI();
@@ -26,7 +27,7 @@ export async function initTutor() {
     <div class="tutor-msgs"><div class="tutor-empty muted">有哪里没懂就直接问。Claude 能看到你正在学的这一节和你的作答情况${ai.tools ? '，必要时还会直接改动图形给你演示' : ''}。</div></div>
     <div class="tutor-padbox" hidden></div>
     <div class="tutor-attach" hidden><img alt="附上的手写内容"><span>已附上手写内容</span><button type="button" class="link-btn tutor-unattach">去掉</button></div>
-    <form class="tutor-form">${ai.images ? '<button type="button" class="btn btn-sm tutor-pen" title="用 Apple Pencil 手写" aria-label="手写">✎</button>' : ''}<textarea rows="2" placeholder="${session.subject === '线性代数' ? '比如：为什么 A 乘 (1,0) 正好是第一列？' : '比如：这一步为什么要这样做？'}"></textarea><button type="submit" class="btn btn-primary tutor-send">发送</button></form>`;
+    <form class="tutor-form">${ai.images && FEATURES.handwriting ? '<button type="button" class="btn btn-sm tutor-pen" title="用 Apple Pencil 手写" aria-label="手写">✎</button>' : ''}<textarea rows="2" placeholder="${session.subject === '线性代数' ? '比如：为什么 A 乘 (1,0) 正好是第一列？' : '比如：这一步为什么要这样做？'}"></textarea><button type="submit" class="btn btn-primary tutor-send">发送</button></form>`;
   document.body.appendChild(panel);
   const msgs = panel.querySelector('.tutor-msgs');
   const ta = panel.querySelector('textarea');
@@ -71,7 +72,7 @@ export async function initTutor() {
   };
   let attachFrom = null; // 附件来自哪个组件（草稿区），记录时对应上
   session.openTutor = (i, prefill, image, fromEl) => {
-    if (image && ai.images) { setAttach(image); attachFrom = fromEl || null; }
+    if (image && ai.images && FEATURES.handwriting) { setAttach(image); attachFrom = fromEl || null; }
     open(i, prefill ?? `我对「${session.stages[i]?.title || '这一节'}」有疑问：`);
   };
   fab.addEventListener('click', () => open());

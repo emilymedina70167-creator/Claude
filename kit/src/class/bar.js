@@ -1,21 +1,21 @@
-// 课堂模式的底部对话条：黑板下沿的一条木制粉笔槽。
-// 从上到下：消息区（默认只露最近一两句，可展开）→ 快捷按钮（Claude 在想 / 在写时换成状态）+「Opus 5.5 · high」+「下课」→ 输入行。
-// 木条上挂两个小木把手：左边「板书」（整页手写，从页面右下角收进来），中间「展开」。
-// 还没开口时（一条消息也没有）对话条收得很矮：只有一行提示和输入行，快捷按钮、「下课」等第一句话出来再出现。
-// 对话条只收集输入、显示消息；学生的话由课堂控制器在真正发出时再 addMessage（排队、合并动作都在控制器里）。
+// 课堂模式的底部输入框：黑板下面浮着的一条粉笔框，只用来对 Claude 说话。
+// Claude 说的话、画的东西都写在黑板上（课堂控制器负责），这里不显示消息。
+// 一行：手写 · 截图 · 输入框 · 发送（生成中变「停止」）·「⋯」菜单（板书、复制学习记录、下课、模型标记）。
+// 只在需要时多出东西：附上的图（输入框上沿一排小照片）、出错 / 提示（输入框上面一条，带「重试」）、手写板。
+// 「Claude 在想 / 在写」的指示（indicator）由这里更新，但放在黑板末尾（控制器把它挂上去），眼睛不用离开黑板。
 import { createPad } from '../ink/pad.js';
+import { FEATURES } from '../features.js';
 
 export const QUICK = ['没懂', '想不出来', '换个说法', '继续'];
 export const MAX_IMAGES = 4;
 export const MODEL_TAG = 'Opus 5.5 · high';
 export const CONFIRM_MS = 3000;
-export const LONG_WAIT_MS = 12000; // 第一个字迟迟不来：黑板上换一句「想得细一点」的话，别让人以为卡死了
+export const LONG_WAIT_MS = 12000; // 第一个字迟迟不来：换一句「想得细一点」的话，别让人以为卡死了
 const STATUS_TEXT = { thinking: 'Claude 在想…', writing: 'Claude 正在写黑板…', error: '这一轮没成功。' };
+const LONG_WAIT_TEXT = 'Claude 想得细，第一句话要等一会儿…';
 const STATES = new Set(['idle', 'thinking', 'writing', 'error', 'notice']);
-const ROLES = new Set(['claude', 'student', 'system', 'action']);
 const MAX_SIDE = 2400;
-const HINT = '在这里和 Claude 说话<span class="cb-hint-more">，黑板上的作答它也看得到</span>';
-const PLACEHOLDER = { on: '想说什么，打在这里', images: '说点什么，或者粘贴截图', short: '说点什么…', off: '现在没法和 Claude 说话' };
+const PLACEHOLDER = { on: '和 Claude 说点什么，黑板上的作答它也看得到', images: '和 Claude 说点什么，也可以粘贴截图', short: '和 Claude 说点什么…', off: '现在没法和 Claude 说话' };
 
 // —— 纯函数（不碰 DOM，单元测试直接测）——
 
@@ -77,53 +77,6 @@ export function createConfirm(ms = CONFIRM_MS, now = () => Date.now()) {
   };
 }
 
-// 作答 / 动作的对错，只用来给小粉笔条上色
-export function actionTone(text) {
-  const t = String(text ?? '');
-  if (/[（(]错|想不出来|没做对|看了答案|放弃/.test(t)) return 'bad';
-  if (/[（(]对|做对了/.test(t)) return 'ok';
-  return '';
-}
-
-// 控制器给的动作消息是用 <br> 连起来的几行「[作答] …」「[动作] …」：拆成一行一个小粉笔条
-export function actionItems(html) {
-  return String(html ?? '').split(/<br\s*\/?>|\n/i).map((s) => s.trim()).filter(Boolean).map((line) => {
-    const m = line.match(/^\[(作答|动作|系统)\]\s*/);
-    const body = plainMath(m ? line.slice(m[0].length) : line);
-    return { tag: m ? m[1] : '', html: body, tone: actionTone(body) };
-  });
-}
-
-// 动作条只有一行小字，放不下 KaTeX：题目标题里的 TeX（A\mathbf x、\boldsymbol\beta^{\mathrm T}）换成能直接读的字符
-const GREEK = {
-  alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε', zeta: 'ζ', eta: 'η', theta: 'θ', lambda: 'λ',
-  mu: 'μ', nu: 'ν', xi: 'ξ', pi: 'π', rho: 'ρ', sigma: 'σ', tau: 'τ', phi: 'φ', varphi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω',
-  Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Sigma: 'Σ', Phi: 'Φ', Omega: 'Ω',
-};
-const SYMBOL = {
-  cdot: '·', times: '×', le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', to: '→', rightarrow: '→', infty: '∞',
-  pm: '±', approx: '≈', in: '∈', ldots: '…', cdots: '⋯', dots: '…', quad: ' ', qquad: ' ', perp: '⊥', sqrt: '√',
-  tr: 'tr', det: 'det', rank: 'rank', dim: 'dim', sin: 'sin', cos: 'cos', ln: 'ln', log: 'log', left: '', right: '',
-};
-const SUP = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', n: 'ⁿ', k: 'ᵏ', T: 'ᵀ', '-': '⁻', '+': '⁺' };
-const SUB = { 0: '₀', 1: '₁', 2: '₂', 3: '₃', 4: '₄', 5: '₅', 6: '₆', 7: '₇', 8: '₈', 9: '₉', i: 'ᵢ', j: 'ⱼ', n: 'ₙ', k: 'ₖ' };
-const script = (map) => (m, a, b) => {
-  const s = a ?? b;
-  return [...s].every((c) => map[c]) ? [...s].map((c) => map[c]).join('') : m;
-};
-export function plainMath(s) {
-  return String(s ?? '')
-    .replace(/\$+/g, '')
-    .replace(/\\(?:mathrm|text|operatorname)\s*\{\s*T\s*\}/g, 'T')
-    .replace(/\\(?:mathbf|boldsymbol|bm|mathrm|mathit|text|operatorname|vec)\s*\{([^{}]*)\}/g, '$1')
-    .replace(/\\(?:mathbf|boldsymbol|bm|mathrm|mathit|vec)\s*(\\[A-Za-z]+|[A-Za-z0-9])/g, '$1')
-    .replace(/\\([A-Za-z]+)/g, (m, w) => GREEK[w] ?? SYMBOL[w] ?? m)
-    .replace(/\\[,;:! ]/g, ' ')
-    .replace(/\^\{([^{}]{1,4})\}|\^([0-9nkT])/g, script(SUP))
-    .replace(/_\{([^{}]{1,3})\}|_([0-9ijnk])/g, script(SUB))
-    .replace(/[{}]/g, '');
-}
-
 // 附图：最多 max 张，多出来的不要
 export function addImages(list, blobs, max = MAX_IMAGES) {
   const room = Math.max(0, max - list.length);
@@ -162,69 +115,85 @@ export function elapsedText(ms) {
   return s < 60 ? `${s} 秒` : `${Math.floor(s / 60)} 分 ${s % 60} 秒`;
 }
 
-// 展开消息区最多多高：不超过可视高度的一半，也不能顶到页面上方的进度条（木把手还要露出来）
-// vh：可视区高度；rest：对话条里消息区以外的高度；head：进度条下沿到可视区顶部的距离
-export function openLogMax({ vh, rest, head = 0 }) {
-  const HANDLE = 26 + 10; // 「收起」把手 + 和进度条之间的空
-  return Math.max(120, Math.round(Math.min(vh * 0.5, vh - rest - Math.max(0, head) - HANDLE)));
+// 在想的时候指示上写什么：等太久、而且写的还是默认那句时，换成「想得细」的说法（别的说法，比如「在整理前面的内容」，照原样）
+export function waitText(text, ms) {
+  const t = String(text ?? '').trim() || STATUS_TEXT.thinking;
+  return ms >= LONG_WAIT_MS && t === STATUS_TEXT.thinking ? LONG_WAIT_TEXT : t;
 }
 
-// —— 对话条 ——
+// 占位文字：窄屏放不下长的
+export function placeholderFor({ enabled = true, narrow = false, images = false } = {}) {
+  if (!enabled) return PLACEHOLDER.off;
+  if (narrow) return PLACEHOLDER.short;
+  return images ? PLACEHOLDER.images : PLACEHOLDER.on;
+}
 
-export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images = false } = {}) {
+
+// —— 输入框 ——
+
+const ICON = {
+  pen: '<svg viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L15.8 4.8a2 2 0 0 1 2.9 0l.5.5a2 2 0 0 1 0 2.9L8.6 18.8z"/><path d="M13.8 6.8l3.4 3.4"/></svg>',
+  shot: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17l4.5-4.2 3 2.7 3-3.3L19.5 16"/></svg>',
+  send: '<svg viewBox="0 0 24 24"><path d="M12 19V5.5"/><path d="M6 11l6-6 6 6"/></svg>',
+  stop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>',
+  more: '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
+  copy: '<svg viewBox="0 0 24 24"><rect x="8" y="8" width="11.5" height="12" rx="2"/><path d="M15.5 8V6a2 2 0 0 0-2-2H6.5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2H8"/></svg>',
+  bell: '<svg viewBox="0 0 24 24"><path d="M5 19.5h14"/><path d="M7 19.5V11a5 5 0 0 1 10 0v8.5"/><path d="M12 3.5V6"/></svg>',
+};
+
+export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images = false, tag = MODEL_TAG } = {}) {
   const el = document.createElement('div');
-  el.className = 'class-bar is-quiet'; // 一开始就是没开口的样子（不从展开的高度缩下来）
+  el.className = 'class-bar';
   el.setAttribute('role', 'region');
-  el.setAttribute('aria-label', '课堂对话');
+  el.setAttribute('aria-label', '和 Claude 说话');
   el.innerHTML = `
     <div class="cb-slate" hidden role="dialog" aria-label="手写板">
       <div class="cb-slate-head"><strong>手写</strong><span>写完点「附上」，和下一句话一起发给 Claude</span><button type="button" class="cb-slate-x" aria-label="收起手写板">收起</button></div>
       <div class="cb-slate-pad"></div>
     </div>
-    <div class="cb-ledge" aria-hidden="true"><i class="cb-stick s1"></i><i class="cb-stick s2"></i><i class="cb-stick s3"></i><i class="cb-eraser"></i></div>
-    <div class="cb-dock"></div>
-    <button type="button" class="cb-toggle" hidden aria-expanded="false"><span class="cb-toggle-t">展开</span><svg class="cb-chev" viewBox="0 0 14 9" aria-hidden="true"><path d="M2 7.2 7 2.2l5 5"/></svg></button>
-    <div class="cb-inner">
-      <div class="cb-log">
-        <div class="cb-msgs" role="log" aria-live="polite" aria-label="课堂对话记录"></div>
-      </div>
-      <div class="cb-meta">
-        <p class="cb-hint">${HINT}</p>
-        <div class="cb-quick" role="group" aria-label="快捷回答">${QUICK.map((q) => `<button type="button" class="cb-pill" data-q="${q}">${q}</button>`).join('')}</div>
-        <div class="cb-status" data-state="idle">
-          <span class="cb-ind" aria-hidden="true"><i class="cb-dot"></i><i class="cb-dot"></i><i class="cb-dot"></i><svg class="cb-scribble" viewBox="0 0 30 14"><path d="M2 9.5c3-6 5.5 2.5 8.5-2.5s4.5 4 8-1 5 3.5 9.5-.5"/></svg></span>
-          <span class="cb-status-text" role="status"></span>
-          <span class="cb-elapsed"></span>
-          <button type="button" class="cb-retry" hidden>重试</button>
-        </div>
-        <div class="cb-side">
-          <span class="cb-model" title="课堂里的 Claude 固定用 Opus 5.5，effort 为 high">${MODEL_TAG}</span>
-          <button type="button" class="cb-end">下课</button>
-        </div>
+    <div class="cb-status" data-state="idle" hidden>
+      <i class="cb-dot" aria-hidden="true"></i>
+      <span class="cb-status-text" role="status"></span>
+      <button type="button" class="cb-retry" hidden>重试</button>
+    </div>
+    <div class="cb-pill">
+      <div class="cb-menu" hidden role="menu" aria-label="课堂菜单">
+        <div class="cb-dock"></div>
+        <button type="button" class="cb-item cb-copy" role="menuitem">${ICON.copy}<span>复制学习记录</span></button>
+        <button type="button" class="cb-item cb-end" role="menuitem">${ICON.bell}<span>下课</span></button>
+        <div class="cb-tag" title="课堂里的 Claude 固定用 Opus 5.5，effort 为 high">${tag}</div>
       </div>
       <div class="cb-attach" hidden></div>
       <form class="cb-form">
-        <button type="button" class="cb-tool cb-pen" aria-label="手写" title="用 Apple Pencil 手写"><svg viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L15.8 4.8a2 2 0 0 1 2.9 0l.5.5a2 2 0 0 1 0 2.9L8.6 18.8z"/><path d="M13.8 6.8l3.4 3.4"/></svg><span>手写</span></button>
-        <button type="button" class="cb-tool cb-shot" aria-label="截图" title="选一张截图或照片"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17l4.5-4.2 3 2.7 3-3.3L19.5 16"/></svg><span>截图</span></button>
+        <button type="button" class="cb-tool cb-pen" aria-label="手写" title="用 Apple Pencil 手写，附在下一句话里">${ICON.pen}</button>
+        <button type="button" class="cb-tool cb-shot" aria-label="截图" title="附一张截图或照片">${ICON.shot}</button>
         <div class="cb-field"><textarea rows="1" enterkeyhint="send" aria-label="对 Claude 说"></textarea></div>
-        <button type="submit" class="btn btn-primary cb-send">发送</button>
+        <button type="submit" class="cb-send" aria-label="发送">${ICON.send}</button>
+        <button type="button" class="cb-tool cb-more" aria-label="更多" aria-haspopup="menu" aria-expanded="false" title="板书、复制学习记录、下课">${ICON.more}</button>
         <input type="file" class="cb-file" accept="image/*" multiple hidden>
       </form>
     </div>`;
   document.body.appendChild(el);
   document.body.classList.add('class-on');
 
+  // 「Claude 在想 / 在写」：放在黑板末尾（控制器挂上去），这里只更新它
+  const indicator = document.createElement('div');
+  indicator.className = 'class-thinking';
+  indicator.hidden = true;
+  indicator.innerHTML = `<span class="ct-ind" aria-hidden="true"><i></i><i></i><i></i><svg class="ct-scribble" viewBox="0 0 30 14"><path d="M2 9.5c3-6 5.5 2.5 8.5-2.5s4.5 4 8-1 5 3.5 9.5-.5"/></svg></span><span class="ct-text" role="status"></span><span class="ct-elapsed"></span>`;
+  const indText = indicator.querySelector('.ct-text');
+  const indElapsed = indicator.querySelector('.ct-elapsed');
+
   const $ = (s) => el.querySelector(s);
-  const log = $('.cb-log');
-  const msgs = $('.cb-msgs');
-  const toggle = $('.cb-toggle');
-  const toggleText = $('.cb-toggle-t');
   const statusEl = $('.cb-status');
   const statusText = $('.cb-status-text');
-  const elapsedEl = $('.cb-elapsed');
   const retryBtn = $('.cb-retry');
+  const pill = $('.cb-pill');
+  const menu = $('.cb-menu');
+  const moreBtn = $('.cb-more');
+  const copyBtn = $('.cb-copy');
   const endBtn = $('.cb-end');
-  const pills = [...el.querySelectorAll('.cb-pill')];
+  const endText = endBtn.querySelector('span');
   const form = $('.cb-form');
   const ta = $('textarea');
   const send = $('.cb-send');
@@ -235,8 +204,6 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   const slate = $('.cb-slate');
   const dock = $('.cb-dock');
 
-  let open = false;      // 消息区展开
-  let pinned = true;     // 展开时学生没往上翻：新内容来了跟到底
   let busy = false;
   let enabled = true;
   let attached = [];     // [{ blob, url }]
@@ -244,220 +211,104 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   let status = statusView('idle');
   let thinkingSince = 0;
   let tick = 0;
-  let swappedAt = -1e9;  // 草稿刚撤下的时刻：紧接着换上的正式消息不再播一遍出场动画
   const confirmEnd = createConfirm(CONFIRM_MS);
   let endTimer = 0;
   const cleanups = [];
   const on = (target, type, fn, opts) => { target.addEventListener(type, fn, opts); cleanups.push(() => target.removeEventListener(type, fn, opts)); };
+  // 手写板、截图（含粘贴、拖进来）各有一个开关：查看方式能发图，并且功能没被暂时关掉（features.js）
+  const canPen = () => images && FEATURES.handwriting;
+  const canPhoto = () => images && FEATURES.photo;
   const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const focusVisible = (t) => { try { return t.matches(':focus-visible'); } catch { return true; } }; // 老 Safari 不认这个选择器
 
-  msgs.id = `cb-log-${Math.random().toString(36).slice(2, 8)}`;
-  toggle.setAttribute('aria-controls', msgs.id);
-
-  // —— 消息区 ——
-  const items = () => [...msgs.querySelectorAll('.cb-msg')];
-  const count = () => msgs.querySelectorAll('.cb-msg').length;
-  const nearBottom = () => msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 28;
-
-  // 消息内容本身有多高（不受消息区当前高度影响：scrollHeight 至少等于容器高，收不回来）
-  function contentHeight() {
-    const kids = msgs.children;
-    if (!kids.length) return 0;
-    const first = kids[0], last = kids[kids.length - 1];
-    const cs = getComputedStyle(msgs);
-    return last.offsetTop + last.offsetHeight - first.offsetTop + (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+  // —— 状态：在想 / 在写写在黑板末尾的指示上；出错 / 提示是输入框上面的一条 ——
+  function paintWait() {
+    const ms = Date.now() - thinkingSince;
+    indText.textContent = waitText(status.text, ms);
+    indElapsed.textContent = elapsedText(ms);
+    el.classList.toggle('is-long-wait', ms >= LONG_WAIT_MS);
   }
-
-  // 收起时露哪几条：最近两条都整条放得下就露两条，否则只露最后一条。
-  // 不露半截的气泡（看起来像排版坏了），宁可少露一条，展开能看全部。
-  // 按收起时该有的高度（--cb-log-h）算，不按眼下的高度：第一句话出来时消息区正从 0 长高
-  function pickPeek(list) {
-    if (list.length < 2) return list;
-    log.classList.add('is-measuring');
-    const cs = getComputedStyle(msgs);
-    const target = parseFloat(getComputedStyle(el).getPropertyValue('--cb-log-h')) || msgs.clientHeight;
-    const room = target - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
-    const gap = parseFloat(cs.rowGap) || 0;
-    const tail = list.slice(-2);
-    const [a, b] = tail.map((m) => m.offsetHeight);
-    log.classList.remove('is-measuring');
-    return a + gap + b <= room + 1 ? tail : tail.slice(-1);
-  }
-
-  function layoutLog({ follow = false } = {}) {
-    const list = items();
-    log.classList.toggle('is-empty', !list.length);
-    el.classList.toggle('is-quiet', !list.length);
-    let hidden = 0, clip = '';
-    if (open) {
-      // 展开：高度贴合内容，最多半屏，并且留出顶上的进度条和「收起」把手（键盘弹出时按剩下的可视高度算）
-      const vv = window.visualViewport;
-      const vh = vv?.height || window.innerHeight;
-      const rest = el.offsetHeight - log.offsetHeight;
-      const head = (document.querySelector('.g-bar')?.getBoundingClientRect().bottom || 0) - (vv?.offsetTop || 0);
-      const max = openLogMax({ vh, rest, head });
-      log.style.height = Math.ceil(Math.min(Math.max(contentHeight(), 40), max)) + 'px';
-      list.forEach((m) => m.classList.remove('is-peek', 'is-lead'));
-      if (follow || pinned) msgs.scrollTop = msgs.scrollHeight;
-      if (msgs.scrollTop > 2) clip = 'top';
-    } else {
-      log.style.height = '';
-      const peek = pickPeek(list);
-      hidden = list.length - peek.length;
-      list.forEach((m) => { m.classList.toggle('is-peek', peek.includes(m)); m.classList.remove('is-lead'); });
-      peek[0]?.classList.add('is-lead');
-      const last = list[list.length - 1];
-      if (msgs.scrollHeight > msgs.clientHeight + 2) {
-        // 一条就放不下：正在写的草稿跟着最新的字走；写完的长话先露开头，剩下的展开看
-        if (last?.classList.contains('is-draft')) { msgs.scrollTop = msgs.scrollHeight; clip = 'top'; } else { msgs.scrollTop = 0; clip = 'bottom'; }
-      } else {
-        msgs.scrollTop = 0;
-      }
-    }
-    toggle.hidden = !open && !hidden && !clip;
-    log.classList.toggle('is-clip-top', clip === 'top');
-    log.classList.toggle('is-clip-bottom', clip === 'bottom');
-    log.classList.toggle('can-open', !open && !toggle.hidden);
-  }
-
-  function setOpen(v) {
-    open = !!v && count() > 0;
-    pinned = true;
-    log.classList.toggle('is-open', open);
-    el.classList.toggle('log-open', open);
-    toggleText.textContent = open ? '收起' : '展开';
-    toggle.setAttribute('aria-expanded', String(open));
-    layoutLog({ follow: true });
-  }
-
-  on(toggle, 'click', (e) => { e.stopPropagation(); setOpen(!open); });
-  // 第一句话出来时消息区从 0 长到收起高度：长完再排一次（长的过程中量到的高度不准）
-  on(log, 'transitionend', (e) => { if (e.target === log && e.propertyName === 'height' && !open) layoutLog(); });
-  // 收起时点消息区也能展开（iPad 上比找那个小按钮顺手）
-  on(log, 'click', (e) => { if (!open && !toggle.hidden && !e.target.closest('a, button')) setOpen(true); });
-  on(msgs, 'scroll', () => {
-    if (!open) return;
-    pinned = nearBottom();
-    log.classList.toggle('is-clip-top', msgs.scrollTop > 2);
-  }, { passive: true });
-  // Esc 收起（焦点不一定在对话条里，所以挂在 document 上；只在展开时才管）
-  on(document, 'keydown', (e) => { if (e.key === 'Escape' && open) setOpen(false); });
-  // 展开的消息区盖住了大半块黑板：学生回到黑板上点、写（手指或笔按下），就收起来让开
-  on(document, 'pointerdown', (e) => { if (open && e.target instanceof Element && !el.contains(e.target)) setOpen(false); }, { passive: true });
-
-  function renderBody(m, role, html) {
-    if (role === 'action') {
-      m.body.innerHTML = actionItems(html).map((a) => `<span class="cb-chip"${a.tone ? ` data-tone="${a.tone}"` : ''}>${a.tag ? `<b>${a.tag}</b>` : ''}<span>${a.html}</span></span>`).join('');
-      m.body.querySelectorAll('.cb-chip > span').forEach((s) => (s.parentElement.title = s.textContent));
-    } else {
-      m.body.innerHTML = html || '';
-    }
-  }
-
-  function addMessage({ role = 'claude', html = '', draft = false } = {}) {
-    const r = ROLES.has(role) ? role : 'system';
-    const node = document.createElement('div');
-    node.className = `cb-msg cb-${r}`;
-    if (r === 'claude') node.innerHTML = '<span class="cb-who">Claude</span><div class="cb-body"></div><span class="cb-draft-tag">草稿</span>';
-    else node.innerHTML = '<div class="cb-body"></div>';
-    const m = { el: node, body: node.querySelector('.cb-body') };
-    renderBody(m, r, html);
-    if (r === 'claude' && msgs.lastElementChild?.classList.contains('cb-claude')) node.classList.add('is-cont');
-    // 草稿确认后由控制器撤下、换成正式的同一段话：原地换掉，不再淡入一次（否则每轮结尾都闪一下）
-    if (r === 'claude' && !draft && performance.now() - swappedAt < 400) node.classList.add('no-anim');
-    msgs.appendChild(node);
-    const handle = {
-      el: node,
-      setHtml(h) {
-        const follow = !open || pinned || nearBottom();
-        renderBody(m, r, h);
-        layoutLog({ follow });
-      },
-      setDraft(v) {
-        node.classList.toggle('is-draft', !!v);
-        msgs.setAttribute('aria-busy', String(!!msgs.querySelector('.is-draft')));
-        layoutLog();
-      },
-      remove() {
-        if (!node.isConnected) return;
-        if (node.classList.contains('is-draft')) swappedAt = performance.now();
-        node.remove();
-        msgs.setAttribute('aria-busy', String(!!msgs.querySelector('.is-draft')));
-        // 撤下的是最后一条：等这一轮的正式消息（同一个任务里紧接着加）没来，再收回没开口时的样子
-        if (count()) layoutLog();
-        else queueMicrotask(() => { if (!count()) setOpen(false); });
-      },
-    };
-    node.classList.toggle('is-draft', !!draft);
-    msgs.setAttribute('aria-busy', String(!!msgs.querySelector('.is-draft')));
-    pinned = true;
-    layoutLog({ follow: true });
-    return handle;
-  }
-
-  // —— 状态行 ——
   function setStatus(state, text) {
     const next = statusView(state, text);
     if (next.state === 'thinking' && status.state !== 'thinking') thinkingSince = Date.now();
     status = next;
-    statusEl.dataset.state = next.state;
     el.dataset.state = next.state;
-    // 在想 / 在写时快捷按钮反正点不了：那一格换成状态，不多占一行
     el.classList.toggle('is-live', next.live);
-    statusText.textContent = next.text;
-    // 对话条整个停用时（没有 Claude 可用），点重试也没用：不给这个按钮
-    retryBtn.hidden = !next.retry || !enabled;
+    indicator.hidden = !next.live;
+    indicator.dataset.state = next.state;
     clearInterval(tick);
-    elapsedEl.textContent = '';
+    indElapsed.textContent = '';
     el.classList.remove('is-long-wait');
     if (next.state === 'thinking') {
-      const upd = () => {
-        const ms = Date.now() - thinkingSince;
-        elapsedEl.textContent = elapsedText(ms);
-        el.classList.toggle('is-long-wait', ms >= LONG_WAIT_MS);
-      };
-      upd();
-      tick = setInterval(upd, 1000);
+      paintWait();
+      tick = setInterval(paintWait, 1000);
+    } else {
+      indText.textContent = next.live ? next.text : '';
     }
+    const strip = next.state === 'error' || next.state === 'notice';
+    statusEl.hidden = !strip;
+    statusEl.dataset.state = next.state;
+    statusText.textContent = strip ? next.text : '';
+    // 输入框整个停用时（没有 Claude 可用），点重试也没用：不给这个按钮
+    retryBtn.hidden = !next.retry || !enabled;
   }
   on(retryBtn, 'click', () => onRetry?.());
+
+  // —— 「⋯」菜单：板书、复制学习记录、下课，最下面一行模型标记 ——
+  let menuOpen = false;
+  function setMenu(v) {
+    menuOpen = !!v;
+    menu.hidden = !menuOpen;
+    moreBtn.classList.toggle('on', menuOpen);
+    moreBtn.setAttribute('aria-expanded', String(menuOpen));
+    if (!menuOpen) disarmEnd();
+  }
+  on(moreBtn, 'click', (e) => {
+    e.stopPropagation();
+    if (!menuOpen) openSlate(false);
+    setMenu(!menuOpen);
+  });
+  on(document, 'pointerdown', (e) => { if (menuOpen && e.target instanceof Element && !menu.contains(e.target) && !moreBtn.contains(e.target)) setMenu(false); }, { passive: true });
+  on(document, 'keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (menuOpen) { setMenu(false); moreBtn.focus({ preventScroll: true }); } else if (!slate.hidden) openSlate(false);
+  });
+  on(copyBtn, 'click', () => { setMenu(false); onCopy?.(); });
+  // 板书按钮（板书层自己管开关）：点了就收起菜单，让开黑板
+  on(dock, 'click', (e) => { if (e.target.closest('.ink-fab')) setTimeout(() => setMenu(false), 0); });
 
   // —— 下课：第一次点变「确定下课？」，3 秒内再点才算 ——
   function disarmEnd() {
     clearTimeout(endTimer);
     confirmEnd.reset();
     endBtn.classList.remove('is-armed');
-    endBtn.textContent = '下课';
+    endText.textContent = '下课';
   }
   on(endBtn, 'click', () => {
-    if (confirmEnd.tap() === 'fire') { disarmEnd(); onEnd?.(); return; }
+    if (confirmEnd.tap() === 'fire') { disarmEnd(); setMenu(false); onEnd?.(); return; }
     endBtn.classList.add('is-armed');
-    endBtn.textContent = '确定下课？';
+    endText.textContent = '确定下课？再点一下';
     clearTimeout(endTimer);
     endTimer = setTimeout(disarmEnd, CONFIRM_MS);
   });
 
-  // —— 快捷按钮、发送 / 停止 ——
+  // —— 发送 / 停止 ——
   function syncControls() {
-    pills.forEach((b) => (b.disabled = busy || !enabled));
     ta.disabled = !enabled;
-    // 手机竖屏输入框窄，长的占位文字放不下
-    const narrow = window.innerWidth < 560;
-    ta.placeholder = !enabled ? PLACEHOLDER.off : narrow ? PLACEHOLDER.short : images ? PLACEHOLDER.images : PLACEHOLDER.on;
+    ta.placeholder = placeholderFor({ enabled, narrow: window.innerWidth < 560, images: canPhoto() });
     endBtn.disabled = !enabled;
     const full = attached.length >= MAX_IMAGES;
     penBtn.disabled = !enabled || full;
     shotBtn.disabled = !enabled || full;
     send.disabled = !enabled && !busy;
     send.classList.toggle('is-stop', busy);
-    send.textContent = busy ? '停止' : '发送';
+    send.innerHTML = busy ? ICON.stop : ICON.send;
     send.setAttribute('aria-label', busy ? '停止这一轮' : '发送');
+    send.title = busy ? '停止这一轮' : '发送（回车）';
     send.classList.toggle('is-empty', !busy && !ta.value.trim() && !attached.length);
     el.classList.toggle('is-busy', busy);
     el.classList.toggle('is-disabled', !enabled);
   }
-  pills.forEach((b) => on(b, 'click', () => { if (!busy && enabled) onQuick?.(b.dataset.q); }));
 
   function submit() {
     if (busy) { onStop?.(); return; }
@@ -490,6 +341,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     ta.style.overflowY = g.scroll ? 'auto' : 'hidden';
   }
   on(ta, 'input', () => { grow(); syncControls(); });
+  on(ta, 'focus', () => setMenu(false));
 
   // —— 附图：手写板、截图、粘贴、拖进来 ——
   function renderAttach() {
@@ -554,26 +406,26 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     return files.length ? files : htmlImageSrcs(dt?.getData?.('text/html'));
   };
   on(ta, 'paste', (e) => {
-    if (!images) return;
+    if (!canPhoto()) return;
     const imgs = dataImages(e.clipboardData);
     if (!imgs.length) return; // 粘贴文字照常
     e.preventDefault();
     takeFiles(imgs);
   });
-  on(el, 'dragover', (e) => { if (images && enabled && [...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); el.classList.add('is-drop'); } });
-  on(el, 'dragleave', (e) => { if (!el.contains(e.relatedTarget)) el.classList.remove('is-drop'); });
-  on(el, 'drop', (e) => {
+  on(pill, 'dragover', (e) => { if (canPhoto() && enabled && [...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); el.classList.add('is-drop'); } });
+  on(pill, 'dragleave', (e) => { if (!pill.contains(e.relatedTarget)) el.classList.remove('is-drop'); });
+  on(pill, 'drop', (e) => {
     el.classList.remove('is-drop');
-    if (!images || !enabled) return;
+    if (!canPhoto() || !enabled) return;
     const imgs = dataImages(e.dataTransfer);
     if (!imgs.length) return;
     e.preventDefault();
     takeFiles(imgs);
   });
 
-  // 手写板：像一块小石板从粉笔槽上弹起来
+  // 手写板：从输入框上面弹起来的一小块石板
   function openSlate(v) {
-    const show = !!v && images && enabled;
+    const show = !!v && canPen() && enabled;
     if (show && !pad) {
       pad = createPad($('.cb-slate-pad'), {
         height: 220,
@@ -589,7 +441,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
         }],
       });
     }
-    if (show) { setOpen(false); ta.blur(); }
+    if (show) { setMenu(false); ta.blur(); }
     slate.hidden = !show;
     el.classList.toggle('slate-open', show);
     penBtn.classList.toggle('on', show);
@@ -599,12 +451,13 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   on($('.cb-slate-x'), 'click', () => openSlate(false));
 
   // —— 能不能发图：这个查看方式发不了图片时（images_unavailable），手写、截图两个按钮都收起来 ——
+  // （草稿区「拿给 Claude 看」这类从外面附进来的图不受这两个按钮的开关管，只看能不能发图）
   // 还没发出去的附图也发不出去了，一起撤掉（免得学生以为会随下一句话发出）
   function setImages(v) {
     images = !!v;
-    el.classList.toggle('no-images', !images);
-    penBtn.hidden = !images;
-    shotBtn.hidden = !images;
+    el.classList.toggle('no-images', !canPen() && !canPhoto());
+    penBtn.hidden = !canPen();
+    shotBtn.hidden = !canPhoto();
     if (!images) {
       openSlate(false);
       if (attached.length) clearAttach();
@@ -628,8 +481,8 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   }
   publishHeight();
 
-  // —— iPad 软键盘：在对话条里打字时把它抬到键盘上面；在黑板上的输入框里打字时让开 ——
-  // 键盘只留下小半个屏幕：对话条再抬上来，正在填的那一格就被盖住了。所以那时对话条收到键盘后面去，
+  // —— iPad 软键盘：在输入框里打字时把它抬到键盘上面；在黑板上的输入框里打字时让开 ——
+  // 键盘只留下小半个屏幕：输入框再抬上来，正在填的那一格就被盖住了。所以那时输入框收到键盘后面去，
   // 键盘收起再回来（和黑板上的数字小键盘一样）
   const vv = window.visualViewport;
   let lastLift = -1, lastAway = false;
@@ -643,47 +496,50 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     el.style.setProperty('--cb-lift', (away ? 0 : n) + 'px');
     el.classList.toggle('is-lifted', n > 0 && !away);
     el.classList.toggle('is-away', away);
+    if (away) setMenu(false);
     // 键盘盖住的高度也留成页面底部空白：黑板最下面的输入框才滚得到键盘上面
     if (n > 0) root.style.setProperty('--class-kb', n + 'px'); else root.style.removeProperty('--class-kb');
-    if (open) layoutLog();
     if (away) setTimeout(() => keepClear(document.activeElement), 60);
   }
   if (vv) { on(vv, 'resize', lift); on(vv, 'scroll', lift); }
-  on(window, 'resize', () => { lift(); syncControls(); layoutLog(); });
+  on(window, 'resize', () => { lift(); syncControls(); });
   lift();
 
-  // 黑板上获得焦点的输入框、按钮（键盘切换焦点时）不能藏在对话条后面：滚到对话条上面、顶上进度条下面。
+  // 黑板上获得焦点的输入框、按钮（键盘切换焦点时）不能藏在输入框后面：滚到输入框上面。
   // 用鼠标或手指点的按钮本来就在眼前，不去动页面
   function keepClear(t) {
     if (!(t instanceof Element) || !t.isConnected || document.activeElement !== t || el.contains(t)) return;
     if (t.closest('.keypad, .dev-panel, .ink-bar, .record-fallback') || t.classList.contains('mi-cell')) return; // 数字小键盘自己会滚
     if (!boardField(t) && !focusVisible(t)) return;
     const top0 = vv?.offsetTop || 0;
-    const head = document.querySelector('.g-bar')?.getBoundingClientRect();
-    const minTop = Math.max(top0, head && head.bottom > 0 ? head.bottom : 0) + 10;
+    const minTop = top0 + 10;
     const covered = !el.classList.contains('is-away') && !document.body.classList.contains('has-keypad');
-    const maxBottom = Math.min(top0 + (vv?.height || window.innerHeight), covered ? el.getBoundingClientRect().top : Infinity) - 14;
+    const maxBottom = Math.min(top0 + (vv?.height || window.innerHeight), covered ? pill.getBoundingClientRect().top : Infinity) - 14;
     const dy = clearScroll(t.getBoundingClientRect(), minTop, maxBottom);
     if (dy) window.scrollBy({ top: dy, behavior: reduceMotion() ? 'auto' : 'smooth' });
   }
   on(document, 'focusin', (e) => {
     const t = e.target;
-    // 黑板上的东西拿到焦点（键盘切换过去）：展开的消息区先收起，别盖住它
-    if (open && t instanceof Element && !el.contains(t)) setOpen(false);
     lift();
     // 等浏览器自己的「滚到焦点」和键盘弹出先做完，再补一下
     setTimeout(() => keepClear(t), 120);
   });
   on(document, 'focusout', () => setTimeout(lift, 0));
 
-  // —— 「板书」：本来是页面左下角的浮动按钮，会压住黑板最下面的题。挂到木条左边当一个小把手 ——
+  // —— 「板书」：本来是页面左下角的浮动按钮，会压住黑板最下面的题。收进「⋯」菜单 ——
   function adoptInk() {
     const fab = document.querySelector('body > .ink-fab');
     if (!fab) return false;
+    fab.setAttribute('role', 'menuitemcheckbox');
     dock.appendChild(fab);
+    // 板书开着时「⋯」上亮一个小黄点：收起菜单也看得出来
+    const sync = () => moreBtn.classList.toggle('has-ink', fab.classList.contains('on'));
+    inkClass = new MutationObserver(sync);
+    inkClass.observe(fab, { attributes: true, attributeFilter: ['class'] });
+    sync();
     return true;
   }
-  let inkWatch = null;
+  let inkWatch = null, inkClass = null;
   if (!adoptInk() && typeof MutationObserver === 'function') {
     inkWatch = new MutationObserver(() => { if (adoptInk()) { inkWatch.disconnect(); inkWatch = null; } });
     inkWatch.observe(document.body, { childList: true });
@@ -691,15 +547,16 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
 
   setImages(images);
   setStatus('idle');
-  layoutLog();
   grow();
 
   return {
     el,
-    addMessage,
+    indicator,
     setStatus,
+    get state() { return status.state; },
     setBusy(v) { busy = !!v; syncControls(); },
     setImages,
+    setTag(text) { $('.cb-tag').textContent = text || MODEL_TAG; },
     // 外部附上的图（草稿区「拿给 Claude 看」等）：PNG 直接用，其他格式先转成白底 PNG
     async attach(blob) {
       if (!blob || !images) return false;
@@ -727,15 +584,17 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
       syncControls();
     },
     get height() { return el.offsetHeight; },
-    // 测试和热重载用：撤掉对话条和它挂的监听
+    // 测试和热重载用：撤掉输入框和它挂的监听
     destroy() {
       cleanups.forEach((f) => f());
       ro?.disconnect();
       inkWatch?.disconnect();
+      inkClass?.disconnect();
       clearInterval(tick);
       clearTimeout(endTimer);
       const fab = dock.querySelector('.ink-fab');
-      if (fab) document.body.appendChild(fab); // 板书按钮还给页面
+      if (fab) { fab.removeAttribute('role'); document.body.appendChild(fab); } // 板书按钮还给页面
+      indicator.remove();
       el.remove();
       document.body.classList.remove('class-on');
       root.style.removeProperty('--class-bar-h');

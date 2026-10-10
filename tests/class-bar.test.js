@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {
   QUICK, MAX_IMAGES, MODEL_TAG, CONFIRM_MS, LONG_WAIT_MS,
   statusView, isSendKey, keyboardLift, mergePrefill, createConfirm,
-  actionTone, actionItems, addImages, clipboardImages, htmlImageSrcs, growHeight, elapsedText,
-  plainMath, clearScroll, FIELD, openLogMax,
+  addImages, clipboardImages, htmlImageSrcs, growHeight, elapsedText,
+  clearScroll, FIELD, waitText, placeholderFor,
 } from '../kit/src/class/bar.js';
 
-// 对话条的 DOM 行为用 Playwright 在浏览器里验证（见模块说明）；这里测不碰 DOM 的部分
+// 输入框的 DOM 行为在浏览器里实际操作验证；这里测不碰 DOM 的部分
 
 test('常量：快捷按钮、模型标记、附图上限', () => {
   assert.deepEqual(QUICK, ['没懂', '想不出来', '换个说法', '继续']);
@@ -86,52 +86,6 @@ test('createConfirm：「下课」要 3 秒内点两次', () => {
   assert.equal(c.tap(), 'arm');
 });
 
-test('actionTone：对错给小粉笔条上色', () => {
-  assert.equal(actionTone('b7 里的 steps「例2.1」第 3 步：选了『跑到线外去』（错），用时 44 秒'), 'bad');
-  assert.equal(actionTone('b3 的 answer：填了 (1, 4)（对，第 2 次）'), 'ok');
-  assert.equal(actionTone('b3 的 answer：填了 (4, 2)（错，第 1 次），用时 31 秒'), 'bad');
-  assert.equal(actionTone('选了「a」（错，应为「b」）'), 'bad');
-  assert.equal(actionTone('b2 里的 steps ex-1 第 2 步：想不出来，直接揭开了'), 'bad');
-  assert.equal(actionTone('「一道题」做对了（共 2 次）'), 'ok');
-  assert.equal(actionTone('在 b2 的图里把 x 拖到 [2, -1]'), '');
-  assert.equal(actionTone(''), '');
-  assert.equal(actionTone(undefined), '');
-});
-
-test('actionItems：按 <br> 拆成一行一个，认出 [作答] / [动作]', () => {
-  const html = '[作答] b1 里的 steps ex-1「例2.1」第 1 步：选了『一个数』（对），用时 12 秒<br>[动作] 在 b1 的图里把 x 拖到 [2, -1]';
-  assert.deepEqual(actionItems(html), [
-    { tag: '作答', html: 'b1 里的 steps ex-1「例2.1」第 1 步：选了『一个数』（对），用时 12 秒', tone: 'ok' },
-    { tag: '动作', html: '在 b1 的图里把 x 拖到 [2, -1]', tone: '' },
-  ]);
-  assert.equal(actionItems('a<br/>b<BR >c\nd').length, 4);
-  assert.deepEqual(actionItems('点了 b5 的「这段做完了」'), [{ tag: '', html: '点了 b5 的「这段做完了」', tone: '' }]);
-  // 已转义的内容原样保留（控制器负责转义）
-  assert.equal(actionItems('[作答] 写了「a &lt; b」')[0].html, '写了「a &lt; b」');
-  assert.deepEqual(actionItems(''), []);
-  assert.deepEqual(actionItems('<br><br>'), []);
-  assert.deepEqual(actionItems(null), []);
-  // 题目标题里的 TeX 在小粉笔条里换成能直接读的字符
-  assert.equal(actionItems('[作答] b1 里的 steps ex-1「A 再作用一次」第 1 步（先看 A\\mathbf x）：选了『一个数』（对）')[0].html,
-    'b1 里的 steps ex-1「A 再作用一次」第 1 步（先看 Ax）：选了『一个数』（对）');
-});
-
-test('plainMath：小粉笔条里的 TeX 换成普通字符', () => {
-  assert.equal(plainMath('A\\mathbf x'), 'Ax');
-  assert.equal(plainMath('\\boldsymbol\\beta^{\\mathrm T}\\mathbf x'), 'βᵀx');
-  assert.equal(plainMath('\\alpha\\beta^\\mathrm{T}'), 'αβᵀ');
-  assert.equal(plainMath('$A^{10} = 3^9 A$'), 'A¹⁰ = 3⁹ A');
-  assert.equal(plainMath('A^{-1}，x_1 + x_{2}'), 'A⁻¹，x₁ + x₂');
-  assert.equal(plainMath('\\operatorname{tr} A \\cdot \\lambda \\ne 0'), 'tr A · λ ≠ 0');
-  assert.equal(plainMath('\\mathbf{x} \\to \\boldsymbol{\\alpha}'), 'x → α');
-  // 认不出来的命令原样留着；上标太长不硬转
-  assert.equal(plainMath('\\int f'), '\\int f');
-  assert.equal(plainMath('e^{abc}'), 'e^abc');
-  // 普通文字和已转义的 HTML 不动
-  assert.equal(plainMath('写了「a &lt; b」（对）'), '写了「a &lt; b」（对）');
-  assert.equal(plainMath(undefined), '');
-});
-
 test('clearScroll：黑板上获得焦点的东西滚到对话条上面、进度条下面', () => {
   // 藏在对话条后面：往下滚，露出整个，离对话条留空
   assert.equal(clearScroll({ top: 1000, bottom: 1046 }, 80, 960), 86);
@@ -207,14 +161,18 @@ test('elapsedText：等太久才显示已经等了多久', () => {
   assert.equal(elapsedText(undefined), '');
 });
 
-test('openLogMax：展开的消息区不超过半屏，也不顶到进度条和「收起」把手', () => {
-  // iPad 竖屏：半屏说了算
-  assert.equal(openLogMax({ vh: 1180, rest: 126, head: 61 }), 590);
-  // 横屏 + 软键盘：只剩 426 高，要给进度条（61）和把手（36）让位
-  assert.equal(openLogMax({ vh: 426, rest: 189, head: 61 }), 140);
-  // 进度条已经被系统滚出可视区（head 为负）：不倒扣
-  assert.equal(openLogMax({ vh: 426, rest: 189, head: -40 }), 201);
-  // 再小也留 120 能看一两句
-  assert.equal(openLogMax({ vh: 300, rest: 250, head: 61 }), 120);
-  assert.equal(openLogMax({ vh: 900, rest: 126 }), 450);
+test('waitText：等太久时把默认的「在想」换成「想得细」；别的说法照原样', () => {
+  assert.equal(waitText('', 0), 'Claude 在想…');
+  assert.equal(waitText('Claude 在想…', LONG_WAIT_MS - 1), 'Claude 在想…');
+  assert.equal(waitText('Claude 在想…', LONG_WAIT_MS), 'Claude 想得细，第一句话要等一会儿…');
+  assert.equal(waitText(undefined, LONG_WAIT_MS + 5000), 'Claude 想得细，第一句话要等一会儿…');
+  assert.equal(waitText('对话有点长了，先整理一下前面的内容…', LONG_WAIT_MS * 3), '对话有点长了，先整理一下前面的内容…');
+});
+
+test('placeholderFor：停用、窄屏、能不能粘贴截图', () => {
+  assert.equal(placeholderFor({ enabled: false, images: true }), '现在没法和 Claude 说话');
+  assert.equal(placeholderFor({ narrow: true, images: true }), '和 Claude 说点什么…');
+  assert.match(placeholderFor({ images: true }), /粘贴截图/);
+  assert.doesNotMatch(placeholderFor({ images: false }), /截图/);
+  assert.equal(placeholderFor(), placeholderFor({ enabled: true, narrow: false, images: false }));
 });

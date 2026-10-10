@@ -35,7 +35,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 |---|---|---|
 | `guided` | `guided.js` | 一整个单元，按 `##` 分节解锁；学习记录复制回对话 |
 | `live` | `live/` | 对话里的 Claude 一段一段写进 artifact 数据库，页面实时显示；作答写回数据库 |
-| `class` | `class/` | 页面底部对话条，课堂里的 Claude 边说边画；学生作答自动发给它 |
+| `class` | `class/` | 页面底部只有输入框，课堂里的 Claude 说的话和画的东西都写在黑板上；学生作答自动发给它 |
 
 - `render.js`：Markdown（markdown-it + KaTeX）+ 围栏组件 → DOM。组件在 `blocks/`，注册在 `blocks/index.js`。
 - `session.js`：全局状态（关卡、作答记录、图形注册 `session.scenes`、写法错误 `session.problems`）。
@@ -43,6 +43,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - 判分：`check.js`、`mathinput.js`；精确分数和行化简：`linalg.js`。
 - 页面里调用 Claude：`ai.js`（`window.claude.use('sample')`，旧接口 `window.claude.complete`）。
 - 手写：`ink/`（整页板书 overlay、手写板 pad）；截图作答：`photo.js`。
+- `features.js`：暂时关掉的功能开关。手写识别和截图粘贴目前关着（Notability 圈选拷贝粘贴不上来，待修），入口都不出现，代码保留。
 - 样式：`styles.css`（黑板主题，自动适配深色），课堂模式另有 `class/class.css`、`class/board.css`。
 
 ### 课堂模式（`kit/src/class/`）
@@ -51,7 +52,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - `protocol.js`：解析课堂 Claude 的输出。普通文字是对学生说的话；```` ```board ```` 围栏块是黑板指令（add / replace / hide / figure）。纯函数，支持流式前缀。
 - `prompt.js`：每一轮发给课堂 Claude 的内容（红线 `DEFAULT_RULES`、黑板指令说明 `PROTOCOL_DOC`、组件手册、资料包、黑板现状、对话历史和压缩）。纯函数。
 - `docs.js` + `kit/build-docs.js`：构建时从 `CLAUDE-PROJECT.md` 第三节截出组件手册打包进去。
-- `bar.js`：底部对话条（消息区、快捷按钮、附图、手写板、iPad 软键盘）。
+- `bar.js`：底部输入框（附图、手写板、「⋯」菜单、iPad 软键盘）。不显示消息：Claude 的话由 `classroom.js` 写在黑板上，按 `data-key` 和段落排先后。
 - `devteacher.js`：`?dev` 的模拟老师；`devpanel.js`：开发面板。
 - 数据（artifact 数据库）：`steps` 黑板段落，`class_turns` 每一轮，`class_notes` 观察和下课小结，`answers` / `events` 作答，`pack/main`、`pack/problems` 资料包。
 

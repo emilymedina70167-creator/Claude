@@ -1,19 +1,98 @@
 /* ===== 课堂模式：黑板区 ===== */
-/* 黑板上有内容以后才撑高（空着的时候欢迎牌要在可见区域里居中，不能被挤到对话条后面） */
-.is-class .class-board:not(:empty) { min-height: 40vh; }
+/* 没有顶栏：课名是黑板最上面的一行粉笔标题，跟着内容滚走 */
+.class-head { padding-top: env(safe-area-inset-top, 0px); }
+.la-lesson .class-title { font-size: clamp(32px, 5vw, 44px); margin: 22px 0 6px; padding-bottom: 12px; background-size: min(240px, 60%) 12px; }
+.class-title .katex { font-size: .75em; }
+
 .class-seg { animation: stageIn .5s ease both; }
 .class-seg.class-pending { visibility: hidden; animation: none; }
 .class-seg + .class-seg { margin-top: 6px; }
 .class-seg .stage-body > h2:first-child { margin-top: 22px; }
 .class-board > .class-seg:first-child .stage-body > h2:first-child::before { display: none; }
 
-/* 课堂里黑板一直往下写，底部对话条本身就是粉笔槽，不再画课件末尾的粉笔槽 */
+/* 课堂里黑板一直往下写，不再画课件末尾的粉笔槽 */
 .is-class .la-tray { display: none; }
 
-/* 开课前的欢迎牌：在进度条和对话条之间的可见区域里居中（不出滚动条，「开始上课」一眼看得到） */
+/* —— Claude 说的话：直接写在黑板上，和正文一样的字，左边一道淡淡的黄粉笔线表示「这是老师在说」 —— */
+.class-say {
+  position: relative; margin: 20px 0 6px; padding: 2px 0 2px 18px; color: var(--chalk);
+  animation: sayIn .45s ease both;
+}
+.class-say::before {
+  content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 2px;
+  background: rgba(242, 220, 133, 0.55); filter: url(#la-chalk);
+}
+.class-say > :last-child { margin-bottom: 0; }
+.class-say p { color: var(--chalk); }
+.class-say .katex-display { margin: 8px 0; overflow-x: auto; overflow-y: hidden; }
+/* 紧跟着一段黑板内容的话（这一轮先画后说）：和上面的段隔开一点 */
+.class-seg + .class-say { margin-top: 26px; }
+@keyframes sayIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* —— 学生说的话：靠右一小行手写体，像在黑板边上记了一笔，回看时知道 Claude 在回答什么 —— */
+.class-said { display: flex; justify-content: flex-end; margin: 22px 0 4px; animation: sayIn .3s ease both; }
+.class-said p {
+  position: relative; max-width: min(80%, 560px); margin: 0; padding: 3px 14px 5px; border-radius: 14px 14px 4px 14px;
+  font: 22px/1.4 var(--hand); color: var(--blue); white-space: pre-wrap; overflow-wrap: anywhere;
+  background: rgba(166, 214, 239, 0.06);
+}
+.class-said p::before { content: ""; position: absolute; inset: 0; border: 1.5px solid rgba(166, 214, 239, 0.32); border-radius: inherit; filter: url(#la-chalk); pointer-events: none; }
+.class-said-img { display: inline-block; margin-left: 8px; font-size: 18px; color: var(--muted); }
+.class-said-img:first-child { margin-left: 0; }
+
+/* —— 下课小结 —— */
+.class-closing { margin-top: 34px; padding: 14px 18px 16px 22px; border-radius: 4px 16px 16px 4px; background: rgba(242, 220, 133, 0.04); }
+.class-closing::before { top: 0; bottom: 0; background: rgba(242, 220, 133, 0.8); }
+.class-closing-tag { font: 26px/1.3 var(--hand); color: var(--yellow); margin-bottom: 6px; }
+
+/* —— 黑板末尾：生成中的草稿、「Claude 在想」、快捷回答（都跟着内容走，不占底部的位置） —— */
+.class-tail { display: flex; flex-direction: column; }
+.class-thinking {
+  display: flex; align-items: center; gap: 12px; margin: 22px 0 4px; padding-left: 18px; min-height: 32px;
+  font: 23px/1.3 var(--hand); color: var(--chalk); opacity: .9;
+}
+.ct-ind { flex: none; position: relative; display: inline-flex; align-items: center; gap: 5px; width: 34px; height: 14px; }
+.ct-ind i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); animation: ctBreathe 1.4s ease-in-out infinite; }
+.ct-ind i:nth-child(2) { animation-delay: .18s; background: var(--chalk); }
+.ct-ind i:nth-child(3) { animation-delay: .36s; background: var(--pink); }
+.ct-scribble { position: absolute; left: 0; top: 0; width: 34px; height: 14px; display: none; overflow: visible; }
+.ct-scribble path { fill: none; stroke: var(--yellow); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 48; stroke-dashoffset: 48; filter: url(#la-chalk-v); animation: ctScribble 1.5s ease-in-out infinite; }
+.class-thinking[data-state="writing"] .ct-ind i { display: none; }
+.class-thinking[data-state="writing"] .ct-scribble { display: block; }
+.ct-elapsed { font-size: 19px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ct-elapsed:empty { display: none; }
+@keyframes ctBreathe { 0%, 100% { transform: scale(.7); opacity: .35; } 50% { transform: scale(1.1); opacity: 1; } }
+@keyframes ctScribble { 0% { stroke-dashoffset: 48; opacity: 1; } 65% { stroke-dashoffset: 0; opacity: 1; } 90%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+
+/* 第一轮：黑板还是空的（effort high 第一个字可能要等十几秒）：「Claude 在想」写大，放在可见区域中间 */
+.class-tail.is-hero .class-thinking {
+  min-height: calc(100svh - var(--class-bar-h, 96px) - 160px); margin: 0; padding: 0 16px;
+  flex-direction: column; justify-content: center; gap: 22px; text-align: center; text-wrap: balance;
+  font-size: clamp(26px, 3.8vw, 32px); opacity: .88;
+}
+.class-tail.is-hero .ct-ind { width: 132px; height: 16px; gap: 30px; justify-content: center; }
+.class-tail.is-hero .ct-ind i { width: 13px; height: 13px; filter: url(#la-chalk); }
+.class-tail.is-hero .ct-scribble { left: 34px; width: 64px; height: 16px; }
+
+/* 快捷回答：黑板末尾一排淡淡的粉笔圈，点了等于对 Claude 说这句话 */
+.class-quick { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 18px 0 0; padding-left: 12px; animation: sayIn .4s ease both; }
+.class-pill {
+  position: relative; flex: none; min-height: 44px; padding: 0 14px 1px; border: 0; background: none; cursor: pointer;
+  color: rgba(238, 240, 230, 0.78); font: 21px/1 var(--hand); white-space: nowrap;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: transform .12s ease, color .2s;
+}
+.class-pill::before {
+  content: ""; position: absolute; inset: 5px 0; border-radius: 17px 19px 16px 18px; pointer-events: none;
+  border: 1.6px dashed rgba(238, 240, 230, 0.32); transition: border-color .2s, background .2s;
+}
+@media (hover: hover) { .class-pill:hover { color: var(--chalk); } .class-pill:hover::before { border-color: rgba(238, 240, 230, 0.6); } }
+.class-pill:active { transform: scale(.95); }
+.class-pill:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; border-radius: 18px; }
+
+/* 开课前的欢迎牌：在可见区域里居中（不出滚动条，「开始上课」一眼看得到） */
 .class-welcome {
   text-align: center; padding: 16px 16px 8px;
-  min-height: calc(100svh - var(--class-bar-h, 200px) - 132px);
+  min-height: calc(100svh - var(--class-bar-h, 96px) - 160px);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
 .class-welcome[hidden] { display: none; }
@@ -22,36 +101,16 @@
 .class-welcome-text code { font-size: 14px; font-family: var(--mono); }
 .class-start { min-width: 210px; }
 
-/* 第一轮：黑板还是空的，Claude 在想（effort high 第一个字可能要等十几秒）、或者先在说话还没动黑板：
-   黑板中间写一行字，三个粉笔点一起呼吸，别让人以为卡住了 */
-body:has(.class-bar.is-live) .is-class .class-board:empty {
-  min-height: calc(100svh - var(--class-bar-h, 200px) - 132px);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
-}
-body:has(.class-bar.is-live) .is-class .class-board:empty::before {
-  content: ""; width: 132px; height: 16px; opacity: .85;
-  background:
-    radial-gradient(circle at 22px 8px, var(--chalk) 0 6.5px, transparent 7px),
-    radial-gradient(circle at 66px 8px, var(--yellow) 0 6.5px, transparent 7px),
-    radial-gradient(circle at 110px 8px, var(--pink) 0 6.5px, transparent 7px);
-  filter: url(#la-chalk); animation: classBreathe 1.6s ease-in-out infinite;
-}
-body:has(.class-bar.is-live) .is-class .class-board:empty::after {
-  content: "Claude 在想怎么讲…"; padding: 0 16px; text-align: center; text-wrap: balance;
-  font-family: var(--hand); font-size: clamp(26px, 3.8vw, 32px); line-height: 1.4; color: var(--chalk); opacity: .85;
-}
-/* 等了十几秒还没有第一个字（Opus 5.5 · high 想得久）：换一句话，告诉学生这是正常的 */
-body:has(.class-bar.is-long-wait) .is-class .class-board:empty::after { content: "Claude 想得细，第一句话要等一会儿…"; }
-body:has(.class-bar[data-state="writing"]) .is-class .class-board:empty::after { content: "Claude 在说…"; }
-@keyframes classBreathe { 0%, 100% { opacity: .35; transform: scale(.96); } 50% { opacity: .9; transform: none; } }
-
 /* 生成中的草稿：确认是 Opus 5.5 之前，内容只是半透明的粉笔草稿，组件不会真的画出来。
    控制器每一帧都整块重画草稿卡片，所以出场动画、写字动画都挂在每轮只建一次的 .class-draft 上：
    挂在卡片上的话每一帧都从头播，卡片一直停在透明（看不见） */
 .class-draft { margin: 26px 0 8px; display: grid; gap: 14px; animation: draftIn .35s ease both; }
+/* 草稿里的话：和正式写上去的一样，只是淡一些、左边的线是虚的 */
+.class-draft .class-say.is-draft { margin: 0; opacity: .72; animation: none; scroll-margin-bottom: calc(var(--class-bar-h, 96px) + 16px); }
+.class-draft .class-say.is-draft::before { background: none; border-left: 2px dashed rgba(242, 220, 133, 0.5); width: 0; filter: none; }
 .class-draft-card {
-  /* 写的过程中会自动滚到最新的草稿：停在对话条上面，不钻到它后面 */
-  scroll-margin-bottom: calc(var(--class-bar-h, 200px) + 16px); scroll-margin-top: 96px;
+  /* 写的过程中会自动滚到最新的草稿：停在输入框上面，不钻到它后面 */
+  scroll-margin-bottom: calc(var(--class-bar-h, 96px) + 16px); scroll-margin-top: 24px;
   position: relative; padding: 14px 20px 16px; border-radius: 16px;
   border: 1.5px dashed rgba(238, 240, 230, 0.36); background: rgba(0, 0, 0, 0.1);
   color: var(--body); opacity: .84;
@@ -77,12 +136,13 @@ body:has(.class-bar[data-state="writing"]) .is-class .class-board:empty::after {
 @keyframes draftIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes chalkWrite { 0%, 100% { transform: translateX(0) rotate(-6deg); } 50% { transform: translateX(-14px) rotate(4deg); } }
 
-/* 绑定了题的图（吸附在旁边的那张）：整张都要露在顶上进度条和底部对话条之间，
-   不然图下面的读数、提示永远藏在对话条后面。宽屏按剩下的高度压低图；
+/* 绑定了题的图（吸附在旁边的那张）：课堂里没有顶栏，吸在离屏幕上沿很近的地方。
+   整张都要露在输入框上面，不然图下面的读数、提示永远藏在输入框后面。宽屏按剩下的高度压低图；
    图框保持正方形（宽度跟着高度缩），拖动换算坐标才和手指对得上 */
+.is-class .steps-pair > .block:not(.block-steps) { top: calc(env(safe-area-inset-top, 0px) + 12px); }
 .is-class .steps-pair > .block:not(.block-steps) .w-plot svg { width: auto; max-width: 100%; margin: 0 auto; }
 @media (min-width: 901px) {
-  .is-class .steps-pair > .block:not(.block-steps) .w-plot svg { max-height: max(240px, calc(100svh - var(--class-bar-h, 200px) - 270px)); }
+  .is-class .steps-pair > .block:not(.block-steps) .w-plot svg { max-height: max(240px, calc(100svh - var(--class-bar-h, 96px) - 150px)); }
 }
 
 /* 重写两次还画不出来的段 */
@@ -95,9 +155,11 @@ body:has(.class-bar[data-state="writing"]) .is-class .class-board:empty::after {
 .dev-check input { width: auto !important; margin-top: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .class-seg, .class-draft { animation: none; }
+  .class-seg, .class-draft, .class-say, .class-said, .class-quick { animation: none; }
   .class-draft:has(.class-draft-card.is-writing)::after { animation: none; }
-  body:has(.class-bar.is-live) .is-class .class-board:empty::before { animation: none; }
+  .ct-ind i { animation: none; opacity: .9; }
+  .ct-scribble path { animation: none; stroke-dashoffset: 0; }
+  .class-pill { transition: none; }
 }
 
 /* 刷新后：组件下面注明刷新前学生已经怎么作答的（组件本身回到初始状态） */

@@ -1,4 +1,4 @@
-// 课堂模式（mode: class）：页面底部是对话框，课堂里的 Claude 一边说话、一边用组件库现场画黑板。
+// 课堂模式（mode: class）：页面底部只有一个输入框，课堂里的 Claude 说的话和画的东西都写在黑板上。
 // 学生在黑板上的作答会自动发给它，它接着往下教。只用 Opus 5.5（effort high）讲课：
 // 返回的不是 Opus 5.5 时，这一轮整段作废（不显示、不执行黑板指令、不进对话历史，工具里记的观察也不留）。
 // 数据都在这个 artifact 的数据库里：黑板段落 steps、作答 answers / events、课堂记录 class_turns、课后小结 class_notes、资料包 pack。
@@ -17,7 +17,7 @@ import {
 } from './prompt.js';
 import { COMPONENT_DOCS } from './docs.js';
 import { createDevTeacher } from './devteacher.js';
-import { createClassBar } from './bar.js';
+import { createClassBar, QUICK, MODEL_TAG } from './bar.js';
 import { initClassDevPanel } from './devpanel.js';
 
 export const MODEL = 'claude-opus-5-5';
@@ -28,6 +28,7 @@ const MAX_REWRITES = 2;
 const MAX_ROUNDS = 6; // 一次学生发言最多连着几轮（重写、看手写原图）；防止意外的死循环
 const TURN_TEXT_MAX = 200 * 1024; // 数据库一个文档最多 256 KiB
 const pad6 = (n) => String(n).padStart(6, '0');
+const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 export async function renderClass(root, meta) {
   session.mode = 'class';
@@ -35,32 +36,26 @@ export async function renderClass(root, meta) {
   session.stages = [];
   const unitName = meta.unit || session.title;
   root.classList.add('is-live', 'is-class');
+  // 没有顶栏：课名是黑板最上面的标题，跟着内容滚走。黑板下面是「尾巴」：生成中的草稿、「Claude 在想」、快捷回答
   root.innerHTML = `
-    <div class="g-bar">
-      <div class="g-name">${mdToHtml(unitName, { inline: true })}</div>
-      <div class="g-dots" role="list"></div>
-      <div class="g-tools">
-        <span class="live-chip" data-state="wait"><i></i><span>连接中</span></span>
-        <button type="button" class="btn btn-sm g-copy">复制学习记录</button>
-      </div>
-    </div>
+    <header class="class-head"><h1 class="class-title">${mdToHtml(unitName, { inline: true })}</h1></header>
     <div class="g-stages class-board"></div>
+    <div class="class-tail">
+      <div class="class-quick" role="group" aria-label="快捷回答" hidden>${QUICK.map((q) => `<button type="button" class="class-pill" data-q="${q}">${q}</button>`).join('')}</div>
+    </div>
     <div class="class-welcome">
       <div class="live-empty-art" aria-hidden="true"><i></i><i></i><i></i></div>
       <p class="class-welcome-text">正在准备课堂…</p>
       <button type="button" class="btn btn-primary btn-lg class-start" hidden>开始上课</button>
     </div>`;
   const board = root.querySelector('.class-board');
-  const dots = root.querySelector('.g-dots');
+  const tail = root.querySelector('.class-tail');
+  const quick = root.querySelector('.class-quick');
   const welcome = root.querySelector('.class-welcome');
   const welcomeText = root.querySelector('.class-welcome-text');
-  const chip = root.querySelector('.live-chip');
-  const setChip = (state, text) => { chip.dataset.state = state; chip.querySelector('span').textContent = text; };
-  root.querySelector('.g-copy').addEventListener('click', () => copyRecord(toast));
 
   const store = await getStore({ title: session.title });
   if (!store) {
-    setChip('off', '没连上');
     welcomeText.innerHTML = '这个页面没有拿到课堂的数据库权限。<br>发布时要声明 <code>capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}</code>；本地试用请在地址后面加 <code>?dev</code>。';
     return;
   }
@@ -95,12 +90,11 @@ export async function renderClass(root, meta) {
   const pack = { main: null, problems: null };
   const localImages = new Map(); // asset id → Blob（这次打开页面时上传的原图，重试和 view_handwriting 用）
   // 等着发给课堂 Claude 的：学生的话、图、黑板动作。triggered：有要马上（或 1.5 秒后）发的；now：要马上发
-  const queue = { texts: [], images: [], actions: [], triggered: false, now: false };
+  const queue = { texts: [], images: [], actions: [], triggered: false, now: false, start: false, scroll: false };
   let lastImages = { seq: 0, blobs: [] }; // 最近一条学生发言带的原图：重试时再发一次
   let busy = false;
   let ctl = null;
   let timer = null;
-  let draftMsg = null;
   let draftBox = null;
   let started = false;
   let compactNext = false;
@@ -110,13 +104,21 @@ export async function renderClass(root, meta) {
 
   const bar = createClassBar({
     images: teacher.images,
-    onSend: ({ text, images }) => enqueueStudent(text, images, true),
-    onQuick: (label) => enqueueStudent(QUICK[label] || label, [], true),
+    tag: mock ? `${MODEL_TAG} · 模拟老师` : MODEL_TAG,
+    onSend: ({ text, images }) => enqueueStudent(text, images, true, { scroll: true }),
     onStop: () => ctl?.abort(),
     onRetry: () => retryRun(),
     onEnd: () => endClass(),
+    onCopy: () => copyRecord(toast),
   });
-  const QUICK = { 没懂: '没懂。', 想不出来: '想不出来。', 换个说法: '换个说法讲讲？', 继续: '继续。' };
+  // 「在想 / 在写」的指示挂在黑板末尾，快捷回答前面
+  tail.insertBefore(bar.indicator, quick);
+  // 快捷回答：跟在黑板内容末尾（不占底部的位置），点了等于说这句话
+  const QUICK_SAY = { 没懂: '没懂。', 想不出来: '想不出来。', 换个说法: '换个说法讲讲？', 继续: '继续。' };
+  quick.addEventListener('click', (e) => {
+    const b = e.target.closest('.class-pill');
+    if (b && !busy) enqueueStudent(QUICK_SAY[b.dataset.q] || b.dataset.q, [], true, { scroll: true });
+  });
   if (!teacher.available) {
     bar.setEnabled(false);
     bar.setStatus('error', legacy ? '这个查看方式不能指定 Opus 5.5，课堂开不了。请在新版 claude.ai 里打开这个页面。'
@@ -143,14 +145,12 @@ export async function renderClass(root, meta) {
     },
   };
 
-  if (teacher.available) setChip('on', mock ? '课堂 · 模拟老师' : '课堂');
-  else setChip('off', '课堂开不了');
   if (dev) initClassDevPanel({ db, root, setFallback: (on) => { if (mock) mock = createDevTeacher({ fallback: on }); }, history: () => history, stats: () => lastPrompt });
 
   // —— 资料包（课前由项目对话写入；课中改了，下一轮自动用新版）——
   const applyMain = (data) => {
     pack.main = data || null;
-    if (pack.main?.unit) root.querySelector('.g-name').innerHTML = mdToHtml(String(pack.main.unit), { inline: true });
+    if (pack.main?.unit) root.querySelector('.class-title').innerHTML = mdToHtml(String(pack.main.unit), { inline: true });
     session.context = pack.main ? [pack.main.goal, pack.main.scope].filter(Boolean).join('\n') : '';
   };
   db.doc('pack/main').onSnapshot((s) => applyMain(s.exists ? s.data() : null), () => {});
@@ -187,7 +187,7 @@ export async function renderClass(root, meta) {
       console.error(e);
       toast('课堂记录没读出来，先从头开始');
     }
-    history.slice(-300).forEach(showTurn);
+    restoreTalk();
     started = history.length > 0;
     refresh();
     if (pendingTurn(history) && teacher.available) bar.setStatus('error', '上一轮 Claude 还没回完，点重试接着上。');
@@ -250,18 +250,70 @@ export async function renderClass(root, meta) {
     }
   }
 
-  function showTurn(t) {
-    if (t.role === 'student') {
-      if (t.actions?.length) bar.addMessage({ role: 'action', html: escapeHtml(t.actions.join('\n')).replace(/\n/g, '<br>') });
-      if (t.say) bar.addMessage({ role: 'student', html: escapeHtml(t.say) + (t.images?.length ? ` <span class="muted">（附图 ${t.images.length} 张）</span>` : '') });
-      else if (!t.actions?.length && t.images?.length) bar.addMessage({ role: 'student', html: `<span class="muted">（附图 ${t.images.length} 张）</span>` });
-    } else if (t.role === 'claude' && !t.discarded) {
-      const speech = parseOutput(t.text, { final: true }).segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n');
-      if (speech.trim()) bar.addMessage({ role: 'claude', html: mdToHtml(speech) });
-    } else if (t.role === 'system' && t.kind === 'closing') {
-      bar.addMessage({ role: 'system', html: '下课了，小结已经存好。' });
+  // —— 黑板上的话：Claude 说的话直接写在黑板上，学生说的话在右边记一小行 ——
+  // 黑板上每样东西的先后用一串数比较（data-key）：段是 [seq, 0]；话是 [说话时黑板上最大的段号, 1, 第几轮, 这一轮里第几句]。
+  // 这样刷新后按记录排回原样；改写失败、后来才画好的段（seq 早就占好了）也会落回它该在的位置，不会跑到后面的话后面去
+  // 都写成函数声明：刷新后恢复（restore）在这些定义之前就会用到
+  function keyOf(el) { return String(el.dataset.key || '').split('.').map(Number); }
+  function cmpKey(a, b) {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const d = (a[i] ?? -1) - (b[i] ?? -1);
+      if (d) return d;
+    }
+    return 0;
+  }
+  function insertByKey(node, key) {
+    node.dataset.key = key.join('.');
+    const next = [...board.children].find((c) => c.dataset.key && cmpKey(keyOf(c), key) > 0);
+    board.insertBefore(node, next || null);
+    return node;
+  }
+
+  function putSay(md, key) {
+    const n = document.createElement('div');
+    n.className = 'class-say';
+    n.innerHTML = mdToHtml(md);
+    return insertByKey(n, key);
+  }
+
+  // 学生说的话（打字、快捷回答）：只在有话的时候记。只有作答动作的轮不记，作答就在组件里
+  function putStudent(t, key) {
+    if (t.start) return null;
+    const n = t.images?.length ? `<span class="class-said-img">附图 ${t.images.length} 张</span>` : '';
+    if (!t.say && !n) return null;
+    const el = document.createElement('div');
+    el.className = 'class-said';
+    el.innerHTML = `<p>${t.say ? escapeHtml(t.say) : ''}${n}</p>`;
+    return insertByKey(el, key);
+  }
+
+  function putClosing(text, key) {
+    const n = document.createElement('div');
+    n.className = 'class-say class-closing';
+    n.innerHTML = `<div class="class-closing-tag">这节课的小结</div>${mdToHtml(text)}`;
+    return insertByKey(n, key);
+  }
+
+  // 刷新后把话排回黑板。新记录里存了每句话的位置（sayAfter / boardAt）；
+  // 旧记录没有，就按「到那时为止画好的最大段号」估一个
+  function restoreTalk() {
+    let at = 0;
+    for (const t of history) {
+      if (t.discarded) continue;
+      if (t.role === 'student') putStudent(t, [t.boardAt ?? at, 1, t.seq, 0]);
+      else if (t.role === 'claude') {
+        let k = 0, idx = 0;
+        for (const s of parseOutput(t.text, { final: true }).segments) {
+          if (s.type === 'speech') { putSay(s.text, [t.sayAfter?.[idx] ?? at, 1, t.seq, idx]); idx++; continue; }
+          if (!isOp(s)) continue;
+          const o = t.boardOps?.[k++];
+          if (o?.ok && (o.op === 'add' || o.op === 'replace')) at = Math.max(at, segs.get(o.id)?.seq || 0);
+        }
+      } else if (t.role === 'system' && t.kind === 'closing') putClosing(t.text, [t.boardAt ?? at, 1, t.seq, 0]);
     }
   }
+  // 和 parseOutput 的 ops 同一个口径：闭合了、看得懂的 board 块
+  function isOp(s) { return s.type === 'board' && s.closed && s.op && !s.op.error; }
 
   // —— 黑板段落 ——
   function segSource(seg) {
@@ -307,11 +359,11 @@ export async function renderClass(root, meta) {
     return { sec, errors, soft: probs.filter((p) => p.soft) };
   }
 
-  // 按 seq 放进黑板（替换时放在原位置）
+  // 按 seq 放进黑板（替换时放在原位置）；和黑板上的话按 data-key 排先后
   function place(seg, sec) {
+    sec.dataset.key = `${seg.seq}.0`;
     if (seg.sec?.isConnected) { seg.sec.after(sec); return; }
-    const after = [...segs.values()].filter((o) => o.id !== seg.id && o.sec?.isConnected && o.seq > seg.seq).sort((a, b) => a.seq - b.seq)[0];
-    if (after) board.insertBefore(sec, after.sec); else board.appendChild(sec);
+    insertByKey(sec, [seg.seq, 0]);
   }
 
   function dropScenesOf(sec) {
@@ -458,8 +510,11 @@ export async function renderClass(root, meta) {
 
   function refresh() {
     const vis = [...board.querySelectorAll('.class-seg')].filter((s) => !s.hidden);
-    welcome.hidden = vis.length > 0 || busy;
-    if (!vis.length && !busy) {
+    const any = [...board.children].some((c) => !c.hidden);
+    welcome.hidden = any || busy;
+    quick.hidden = !(started && any && !busy && teacher.available);
+    syncTail();
+    if (!any && !busy) {
       welcomeText.innerHTML = !teacher.available ? '课堂现在开不了：这个页面用不了 Claude。<br>看看底部的提示。'
         : started ? '黑板现在是空的。在下面说一句话，Claude 会接着讲。' : '准备好了就点「开始上课」。<br>Claude 会一边讲，一边在黑板上出题、画图；你在黑板上作答，它马上接着教。';
       root.querySelector('.class-start').hidden = started || !teacher.available;
@@ -472,13 +527,13 @@ export async function renderClass(root, meta) {
       if (num) num.textContent = String(k + 1);
       else h.innerHTML = `<span class="h-num">${k + 1}</span><span>${h.innerHTML}</span>`;
     });
-    dots.innerHTML = vis.map((sec, k) => `<button type="button" role="listitem" class="g-dot ${k === vis.length - 1 ? 'current' : 'seen'}" data-step="${escapeHtml(sec.dataset.step)}" title="${escapeHtml(segs.get(sec.dataset.step)?.title || '')}"><span>${k + 1}</span></button>`).join('');
   }
-  dots.addEventListener('click', (e) => {
-    const d = e.target.closest('.g-dot');
-    if (d) segs.get(d.dataset.step)?.sec?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-  root.querySelector('.class-start').addEventListener('click', () => enqueueStudent('开始上课。', [], true));
+  // 黑板还是空的时候（第一轮），「Claude 在想」写大一点，放在黑板中间
+  function syncTail() {
+    const empty = ![...board.children].some((c) => !c.hidden);
+    tail.classList.toggle('is-hero', empty && !draftBox);
+  }
+  root.querySelector('.class-start').addEventListener('click', () => enqueueStudent('开始上课。', [], true, { start: true }));
 
   // —— 黑板现状（每轮都告诉课堂 Claude）——
   function figureVars(b) {
@@ -558,9 +613,12 @@ export async function renderClass(root, meta) {
     schedule(trig === 'now');
   }
 
-  function enqueueStudent(text, images = [], urgent = true) {
+  // start：「开始上课」按钮（不在黑板上记成学生说的话）；scroll：发出后把黑板滚到末尾，看得到 Claude 在想
+  function enqueueStudent(text, images = [], urgent = true, { start = false, scroll = false } = {}) {
     if (!teacher.available) return;
     if (text) queue.texts.push(text);
+    if (start) queue.start = true;
+    if (scroll) queue.scroll = true;
     for (const blob of images) {
       const id = store.assets ? store.assets.upload(blob, { type: blob.type || 'image/png' }).then((r) => { localImages.set(r.id, blob); return r.id; }).catch(() => null) : Promise.resolve(null);
       queue.images.push({ blob, id });
@@ -607,16 +665,22 @@ export async function renderClass(root, meta) {
       const actions = queue.actions.splice(0);
       const texts = queue.texts.splice(0);
       const imgs = queue.images.splice(0).slice(-maxImages);
+      const start = queue.start && texts.length === 1 && !actions.length && !imgs.length;
+      const scroll = queue.scroll;
       queue.triggered = false;
       queue.now = false;
+      queue.start = false;
+      queue.scroll = false;
       if (!actions.length && !texts.length && !imgs.length) return true;
       started = true;
       const say = texts.join('\n');
       const ids = (await Promise.all(imgs.map((x) => x.id))).filter(Boolean);
       let text = [actions.length ? actionsMessage(actions) : '', say].filter(Boolean).join('\n\n');
       if (imgs.length) text += teacher.images ? `\n（附了 ${imgs.length} 张图：学生的手写或截图，白底黑字。）` : `\n（学生附了 ${imgs.length} 张图，但这个查看方式发不了图，你看不到；需要的话请学生用文字说。）`;
-      const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), images: ids });
-      showTurn(turn);
+      const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), images: ids, boardAt: segSeq, start: start || undefined });
+      putStudent(turn, [segSeq, 1, turn.seq, 0]);
+      refresh();
+      if (scroll) requestAnimationFrame(() => tail.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'end' }));
       const blobs = imgs.map((x) => x.blob);
       lastImages = { seq: turn.seq, blobs };
       return converse(blobs);
@@ -624,7 +688,8 @@ export async function renderClass(root, meta) {
   }
 
   function addTurn(t) {
-    const turn = { seq: ++turnSeq, at: Date.now(), ...t };
+    const turn = { at: Date.now(), ...t, seq: t.seq ?? turnSeq + 1 };
+    turnSeq = Math.max(turnSeq, turn.seq);
     if (typeof turn.text === 'string' && bytes(turn.text) > TURN_TEXT_MAX) turn.text = turn.text.slice(0, 60000) + '\n（太长，后面省略）';
     history.push(turn);
     sink.put('class_turns', { id: pad6(turn.seq), ...turn });
@@ -753,23 +818,34 @@ export async function renderClass(root, meta) {
 
   // 执行一轮的输出。返回 { retry: [要它重写的说明], asks, notes: [提醒] }
   function finishTurn(res, toolCalls = []) {
-    const { segments, ops, rejected, unclosed } = parseOutput(res.text, { final: true });
-    const speech = segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n');
-    if (speech.trim()) bar.addMessage({ role: 'claude', html: mdToHtml(speech) });
+    const { segments, rejected, unclosed } = parseOutput(res.text, { final: true });
     let failures = [];
     const notes = [];
-    const boardOps = ops.map((op, i) => {
+    // 按输出的顺序：话写上黑板、指令一条条执行。话排在「这时黑板上最大的段号」后面（sayAfter 存进记录，刷新后照样排）
+    const tseq = turnSeq + 1;
+    const boardOps = [];
+    const sayAfter = [];
+    let firstNode = null;
+    for (const s of segments) {
+      if (s.type === 'speech') {
+        const node = putSay(s.text, [segSeq, 1, tseq, sayAfter.length]);
+        sayAfter.push(segSeq);
+        firstNode ||= node;
+        continue;
+      }
+      if (!isOp(s)) continue;
       const n = failures.length;
-      const r = execOp(op, failures, notes);
-      failures.slice(n).forEach((f) => { f.at = i; });
-      return r;
-    });
+      const r = execOp({ ...s.op, body: s.body }, failures, notes);
+      failures.slice(n).forEach((f) => { f.at = boardOps.length; });
+      boardOps.push(r);
+      if (r.ok && (r.op === 'add' || r.op === 'replace')) firstNode ||= segs.get(r.id)?.sec || null;
+    }
     // 同一轮里先写错、后面又写对了同一段（add 错了紧跟一个 replace）：不用再要求重写
     failures = failures.filter((f) => !boardOps.some((o, i) => i > f.at && o.ok && o.id === f.id && (o.op === 'add' || o.op === 'replace')));
     refresh();
-    const firstNew = boardOps.find((o) => o.ok && (o.op === 'add' || o.op === 'replace'));
-    if (firstNew) setTimeout(() => segs.get(firstNew.id)?.sec?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
-    addTurn({ role: 'claude', text: res.text, boardOps, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined });
+    // 滚到这一轮写的第一样东西（话或者新的一段）
+    if (firstNode) setTimeout(() => { if (firstNode.isConnected) firstNode.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' }); }, 80);
+    addTurn({ seq: tseq, role: 'claude', text: res.text, boardOps, sayAfter: sayAfter.length ? sayAfter : undefined, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined });
     bar.setStatus(res.truncated ? 'notice' : 'idle', res.truncated ? '这一轮太长，被截断了。' : '');
 
     const retry = [];
@@ -857,21 +933,18 @@ export async function renderClass(root, meta) {
       raf = 0;
       try {
         const { segments } = parseOutput(pendingText);
-        const speech = segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n');
-        const boards = segments.filter((s) => s.type === 'board');
         bar.setStatus('writing', 'Claude 正在写黑板…');
-        if (speech.trim()) {
-          if (!draftMsg) draftMsg = bar.addMessage({ role: 'claude', html: '', draft: true });
-          draftMsg.setHtml(mdToHtml(speech));
-        }
-        if (boards.length) {
+        const parts = segments.filter((s) => (s.type === 'speech' && s.text.trim()) || s.type === 'board');
+        if (parts.length) {
           if (!draftBox) {
             draftBox = document.createElement('div');
             draftBox.className = 'class-draft';
-            board.appendChild(draftBox);
+            tail.prepend(draftBox);
             welcome.hidden = true;
+            syncTail();
           }
-          draftBox.innerHTML = boards.map(draftCard).join('');
+          // 话和黑板内容按输出的顺序，都先是草稿（确认是 Opus 5.5 之后才正式写上、执行）
+          draftBox.innerHTML = parts.map((s) => (s.type === 'speech' ? `<div class="class-say is-draft">${mdToHtml(previewMd(s.text))}</div>` : draftCard(s))).join('');
           // 黑板上正在写的草稿要看得见：跟着往下滚（学生自己往上翻了就不打扰）
           if (!userScrolled) draftBox.lastElementChild?.scrollIntoView({ block: 'end', behavior: 'smooth' });
         }
@@ -905,10 +978,9 @@ export async function renderClass(root, meta) {
   function clearDraft() {
     userScrolled = false;
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
-    draftMsg?.remove();
-    draftMsg = null;
     draftBox?.remove();
     draftBox = null;
+    syncTail();
   }
 
   // —— 可选工具（这个查看方式支持 tools 时才给）。有副作用的先记在 staged 里，确认是 Opus 5.5 才生效 ——
@@ -988,8 +1060,9 @@ export async function renderClass(root, meta) {
         return false;
       }
       await sink.put('class_notes', { kind: 'summary', text: res.text, at: Date.now(), turn: turnSeq + 1 });
-      addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied });
-      bar.addMessage({ role: 'claude', html: mdToHtml(res.text) });
+      const turn = addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied, boardAt: segSeq });
+      const node = putClosing(res.text, [segSeq, 1, turn.seq, 0]);
+      setTimeout(() => node.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' }), 80);
       bar.setStatus('notice', '下课了。小结已经存好，回对话告诉 Claude「下课了」。');
       session.event('end', null, { turns: history.length });
       return true;

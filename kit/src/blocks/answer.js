@@ -8,6 +8,7 @@ import { widget, mdToHtml, tex2html } from './common.js';
 import { getAI } from '../ai.js';
 import { createPad } from '../ink/pad.js';
 import { photoPicker, readFinal, flatFinal, photoError, transcriptHtml } from '../photo.js';
+import { FEATURES } from '../features.js';
 
 // 通用作答组件：spec = {q, answer, type, before, hint, explain, solution}
 // onDone({ok, attempts, revealed, first})
@@ -123,7 +124,7 @@ const SHAPE_HINT = {
 function addHandwriting(body, shape, input, question, { isFinished, onWork }) {
   if (!SHAPE_HINT[shape.kind]) return;
   getAI().then((ai) => {
-    if (!ai?.images || isFinished()) return;
+    if (!FEATURES.handwriting || !ai?.images || isFinished()) return;
     const actions = body.querySelector('.ans-actions');
     const btn = document.createElement('button');
     btn.type = 'button';

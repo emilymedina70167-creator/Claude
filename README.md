@@ -11,8 +11,9 @@
 ## Apple Pencil
 
 - **板书**：左下角「板书」按钮。打开后用 Pencil 在整页课件上书写，压感控制粗细，笔身倾斜写出粉笔侧锋的宽笔画；手指照常滚动和点按（防误触）；笔尖悬停时显示落笔位置。两指轻点撤销、三指轻点重做，橡皮按整笔擦除。笔迹跟着所在小节走，保存在这台设备上。
-- **手写作答**：作答框旁「✎ 手写作答」，写完由页面里的 Claude 识别并填进格子，确认后再提交。也可以直接在作答框里用 iPadOS 的「随手写」（用笔点输入框时不弹数字键盘）。
-- **手写猜想 / 草稿 / 提问附图**：`conjecture` 可以手写后转文字；`draft` 草稿区可以演算并「拿给 Claude 看」；助教面板可以附手写内容。
+- **作答框里直接写**：用 iPadOS 的「随手写」（用笔点输入框时不弹数字键盘）。
+- **草稿区**：`draft` 可以用 Pencil 演算，内容保存在这台设备上。
+- **暂时关掉的**：「✎ 手写作答」、手写猜想、截图作答 / 粘贴截图、草稿「拿给 Claude 看」、提问附手写。iPad 上试下来不好用（Notability 圈选拷贝的内容粘贴不上来），先从页面上拿掉，修好后在 `kit/src/features.js` 里打开。
 - 网页拿不到 Pencil Pro 的双击、捏压和触感反馈（Apple 只开放给原生 App），所以用两指 / 三指轻点代替最常用的撤销 / 重做。
 
 ## 一个单元是怎么学的
@@ -22,7 +23,6 @@
   课件里：动手算 → 拖动图形 → 说出猜想（Claude 批改、追问）→ 先猜再揭晓
          → 这时才给出定理 → 程序出题练习 → 单元检测
          → 哪里没懂，点「问 Claude」：它看得到当前小节和你的作答，还能直接改图演示
-         → 不想打字：在笔记软件里手写，截图上传，Claude 转写后你核对再提交
   学完：复制「学习记录」粘贴回对话 → Claude 根据错题和猜想追问、补讲
 ```
 
@@ -34,7 +34,7 @@
 
 ### 课堂模式（mode: class）
 
-页面底部是对话框，「课堂里的 Claude」（只用 Opus 5.5、effort high）一边说话，一边用组件库现场画黑板；你在黑板上作答，它马上接着教。项目对话里的 Claude 课前写资料包（`pack/main`、`pack/problems`），课后读课堂记录（`class_turns`、`class_notes`）。说明见 `CLAUDE-PROJECT.md` 第六节，需求原文见 [`docs/classroom-spec.md`](docs/classroom-spec.md)。本地试用：把 `kit/dist/la-kit.js` 放在同一个文件夹，打开 `kit/examples/class-demo.html?dev`（模拟老师按剧本回放，不花额度）。
+页面底部只有一个输入框，用来跟「课堂里的 Claude」（只用 Opus 5.5、effort high）说话；它说的话和它用组件库现场画的东西都直接写在黑板上，你在黑板上作答，它马上接着教。板书、复制学习记录、下课在输入框右边的「⋯」里。项目对话里的 Claude 课前写资料包（`pack/main`、`pack/problems`），课后读课堂记录（`class_turns`、`class_notes`）。说明见 `CLAUDE-PROJECT.md` 第六节，需求原文见 [`docs/classroom-spec.md`](docs/classroom-spec.md)。本地试用：把 `kit/dist/la-kit.js` 放在同一个文件夹，打开 `kit/examples/class-demo.html?dev`（模拟老师按剧本回放，不花额度）。
 
 本地试用实时黑板：打开 `kit/examples/live-demo.html?dev`（`la-kit.js` 放在同一目录），右上角的「开发面板」可以扮演对话里的 Claude 往黑板上写、查看作答。
 
@@ -61,7 +61,7 @@
 
 ## artifact 怎么加载组件库
 
-artifact 不能从 GitHub 加载脚本，也不能加载外部样式和字体。所以组件库打包成一个完全自包含的文件 `kit/dist/la-kit.js`（含 markdown-it、KaTeX 和内嵌字体），作为附带文件发布在上面那个示范 artifact 里。Claude 发布课件时，用 `files` 参数在服务器端把它复制过去，并声明 `capabilities: {"sample": {"images": true}}`，页面里的「问 Claude」、猜想批改、截图作答和 Apple Pencil 手写识别就能用了。实时黑板还要加上 `"db": {}, "assets": {}`。
+artifact 不能从 GitHub 加载脚本，也不能加载外部样式和字体。所以组件库打包成一个完全自包含的文件 `kit/dist/la-kit.js`（含 markdown-it、KaTeX 和内嵌字体），作为附带文件发布在上面那个示范 artifact 里。Claude 发布课件时，用 `files` 参数在服务器端把它复制过去，并声明 `capabilities: {"sample": {"images": true}}`，页面里的「问 Claude」、猜想批改就能用了（截图作答、手写识别暂时关掉，以后打开也靠这个声明）。实时黑板还要加上 `"db": {}, "assets": {}`。
 
 ## 仓库结构
 
@@ -79,7 +79,8 @@ kit/src/
   check.js  mathinput.js 判分（等价答案）、作答输入和数字小键盘
   generators.js          练习题生成器
   ai.js  tutor.js        页面里调用 Claude、助教面板
-  photo.js               截图作答：上传/粘贴手写截图，Claude 转写、读出最终答案
+  photo.js               截图作答：上传/粘贴手写截图，Claude 转写、读出最终答案（暂时关掉）
+  features.js            暂时关掉的功能开关（手写识别、截图粘贴）
   record.js              学习记录
   blocks/                各个组件
   linalg.js              精确分数、行化简

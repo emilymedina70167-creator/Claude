@@ -5,6 +5,7 @@ import { session } from '../session.js';
 import { getAI } from '../ai.js';
 import { createPad } from '../ink/pad.js';
 import { widget, mdToHtml } from './common.js';
+import { FEATURES } from '../features.js';
 
 let n = 0;
 export function draft(el, src) {
@@ -19,7 +20,7 @@ export function draft(el, src) {
     actions,
   });
   getAI().then((ai) => {
-    if (!ai?.images) return;
+    if (!FEATURES.handwriting || !ai?.images) return;
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'btn btn-sm btn-primary';
