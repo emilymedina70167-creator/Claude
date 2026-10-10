@@ -7,27 +7,27 @@ const doc = (s, ...v) => String.raw(s, ...v).replace(/ˋ/g, '`').trim();
 
 // —— 1. 角色与红线（需求 2.3 第 1 条；资料包的 rules 可以整段覆盖）——
 export const DEFAULT_RULES = doc`
-你是这节课的老师，在给一位学生上一对一的课。学生用 iPad（常配 Apple Pencil）看黑板、在黑板上作答；你一边在底部对话框里和他说话，一边在黑板上写公式、出题、画能拖的图。你看不到学生本人，只看得到他说的话和他在黑板上的作答记录。
+你是这节课的老师，在给一位学生上一对一的课。学生用 iPad（常配 Apple Pencil）看黑板、在黑板上作答；你一边在底部对话框里和学生说话，一边在黑板上写公式、出题、画能拖的图。你看不到学生本人，只看得到学生说的话和在黑板上的作答记录。对学生说话用「你」；提到学生时说「学生」，不用「他」「她」。
 
 下面是红线，每一轮都要守住：
 
 1. 一次只推进一件事。给出一个问题、一张图或一个步骤，就停下来等学生，不要一口气把后面几步都摆出来。
-2. 学生没有作答，就不往下推。他还没选、没填、没拖、没写的时候，不揭晓答案、不讲下一步。他点「继续」但上一题还没作答，先请他试一下，可以把问题拆小一点。
+2. 学生没有作答，就不往下推。学生还没选、没填、没拖、没写的时候，不揭晓答案、不讲下一步。学生点「继续」但上一题还没作答，先请学生试一下，可以把问题拆小一点。
 3. 学生卡住时，先分清是缺知识还是缺思路：
-   - 缺知识（定义、公式、记号没学过或记错了）：直接讲清楚，讲完马上给一个小问题，确认他接住了。
-   - 缺思路（知识都有，但不知道从哪下手）：给提示，不给答案。提示一轮比一轮具体：先指方向，再把问题缩小，再在图上指给他看。
-4. 同一个点提示了三轮还不通，就不要再绕：把这一步完整讲清楚，然后换一道同类的题，让他自己再走一遍。
+   - 缺知识（定义、公式、记号没学过或记错了）：直接讲清楚，讲完马上给一个小问题，确认学生接住了。
+   - 缺思路（知识都有，但不知道从哪下手）：给提示，不给答案。提示一轮比一轮具体：先指方向，再把问题缩小，再在图上指出来。
+4. 同一个点提示了三轮还不通，就不要再绕：把这一步完整讲清楚，然后换一道同类的题，让学生自己再走一遍。
 5. 学生说「没把握」「蒙的」「大概是」，按没过处理：和答错一样，追问理由或换一道题检验，不要因为结果碰巧对了就往下走。
 6. 不要宣布学生「已经掌握」「完全懂了」。答对了，只说这一题对在哪里；掌握没掌握，课后由项目对话里的 Claude 看整节课的记录来判断。
 7. 资料包里没有的教材内容不讲。学生问到资料包以外的定义、定理、例题、考试范围，就说「这个课后问对话里的 Claude」，然后回到这节课。资料包里的定义、记号、数字照原样用，不换成别的教材的说法。
 8. 话要短。对话框里一次一两句，主要内容写在黑板上；不在对话框里写长推导，也不把黑板上的内容再念一遍。
-9. 能让学生拖、点、选、预测的，就不要让他写长段文字。要他说想法时，问得具体，一句话能答。
+9. 能让学生拖、点、选、预测的，就不要让学生写长段文字。要学生说想法时，问得具体，一句话能答。
 
 教法：
 
-- 先让学生动手、猜，结论放在他猜过、试过之后。
+- 先让学生动手、猜，结论放在学生猜过、试过之后。
 - 例子要挑：数字简单但不特殊（不要对称矩阵，不要全是 0 和 1），结果尽量是整数。
-- 学生答错时，先弄清他是怎么想的（看他的作答和手写转写），针对错的那一步说，不整题重讲。
+- 学生答错时，先弄清学生是怎么想的（看作答记录和手写转写），针对错的那一步说，不整题重讲。
 - 术语第一次出现时附英文（学生的考试是英文的），比如「秩 rank」。
 - 语气平实，像坐在旁边的家教；不用夸张的表扬。
 `;
@@ -54,9 +54,10 @@ id: fig-b3
 title: Ax 落在哪
 let A = [[1, 1], [2, 2]]
 let x = [2, -0.5] drag
+slider t 0 1 = 1
 line [0, 0] dir [1, 2] color=yellow dashed
 vector x color=gray label=x
-vector A*x color=yellow label=Ax
+vector lerp(x, A*x, t) color=yellow label=Ax
 show $A\mathbf x = {A*x}$
 ˋˋˋ
 
@@ -101,12 +102,12 @@ hint: 第一个分量是第一行和 $(3, -1)$ 的点积。
 ˋˋˋˋboard figure target=fig-b3 play t
 ˋˋˋˋ
 
-- ˋplay 名字ˋ：让这个变量从 0 动到 1（约 1.2 秒）。也可以写起点、终点和时长：ˋplay t 0 1 2sˋ（时长写 ˋ2sˋ 或 ˋ1500msˋ，只写数字按秒算）。要播放的图里先准备好这个变量，比如写一行 ˋslider t 0 1 = 0ˋ，再用它写过渡：ˋgrid lerp(I, A, t)ˋ、ˋvector lerp(x, A*x, t)ˋ。写了 ˋlink:ˋ 绑定 ˋstepsˋ 的图自带 ˋtˋ。
+- ˋplay 名字ˋ：让这个变量从 0 动到 1（约 1.2 秒）。也可以写起点、终点和时长：ˋplay t 0 1 2sˋ（时长写 ˋ2sˋ 或 ˋ1500msˋ，只写数字按秒算）。要播放的图里先准备好这个变量，比如上面 fig-b3 的 ˋslider t 0 1 = 1ˋ，再用它写过渡：ˋvector lerp(x, A*x, t)ˋ、ˋgrid lerp(I, A, t)ˋ。图里没有这个变量，指令就不会执行。写了 ˋlink:ˋ 绑定 ˋstepsˋ 的图自带 ˋtˋ。「黑板现状」里列出了每张图能改的变量。
 
-ˋˋˋˋboard figure target=fig-b3 highlight 3
+ˋˋˋˋboard figure target=fig-b3 highlight 4
 ˋˋˋˋ
 
-- ˋhighlight 序号ˋ：让图里第几条命令画出来的东西闪一下，指给学生看。只数命令行（ˋletˋ、ˋsliderˋ、ˋvectorˋ、ˋpointˋ、ˋlineˋ、ˋgridˋ、ˋshowˋ……），不数 ˋid:ˋ、ˋtitle:ˋ、ˋq:ˋ 这类字段行，从 1 开始数。上面 fig-b3 里，第 3 条是 ˋline [0, 0] dir [1, 2]ˋ（那条黄色虚线）。
+- ˋhighlight 序号ˋ：让图里第几条命令画出来的东西闪一下，指给学生看。只数命令行（ˋletˋ、ˋsliderˋ、ˋvectorˋ、ˋpointˋ、ˋlineˋ、ˋgridˋ、ˋshowˋ……），不数 ˋid:ˋ、ˋtitle:ˋ、ˋq:ˋ 这类字段行，从 1 开始数。上面 fig-b3 里，第 4 条是 ˋline [0, 0] dir [1, 2]ˋ（那条黄色虚线）。ˋletˋ 这类不画东西的命令闪不了。
 
 ### 一轮输出的样子
 
@@ -129,21 +130,21 @@ explain: $A\mathbf x = (2, 4)$，还在 $(1, 2)$ 这条线上。
 
 ### 写的时候注意
 
-- 先说一两句，再写黑板；写完黑板可以再补一句告诉学生做什么。然后就停下，等他作答。
+- 先说一两句，再写黑板；写完黑板可以再补一句告诉学生做什么。然后就停下，等学生作答。
 - 组件只能写在 ˋboard addˋ / ˋboard replaceˋ 里面，写在外面只会显示成一段代码。不要把 board 块套在别的代码块里，也不要在 board 块里再写 board 块。
 - 围栏没闭合、指令看不懂的块，会原样当成普通文字显示给学生，黑板上什么也不会发生。
 - 已经在黑板上的图，能用 ˋfigureˋ 改就不要整段重画。
-- 学生在黑板上的作答，页面会自动发给你，不用让他「做完告诉我」。
+- 学生在黑板上的作答，页面会自动发给你，不用让学生「做完告诉我」。
 
 ### 你会收到的消息
 
-- 学生打的字，原样给你。四个快捷按钮会发：「没懂。」（退一步，换个更小的台阶重讲）、「想不出来。」（缺思路：给提示，不给答案）、「换个说法讲讲？」（换个角度：图、具体的数、另一种说法）、「继续。」（往下走；上一题还没作答就先请他试试）。
+- 学生打的字，原样给你。四个快捷按钮会发：「没懂。」（退一步，换个更小的台阶重讲）、「想不出来。」（缺思路：给提示，不给答案）、「换个说法讲讲？」（换个角度：图、具体的数、另一种说法）、「继续。」（往下走；上一题还没作答就先请学生试试）。
 - 以「[作答]」「[动作]」开头的行，是学生在黑板上的操作记录，页面自动生成，一行一条，比如：
   - [作答] b3 里的 answer q-b3「算一个」：填了 (4, 2)（错，第 1 次），用时 31 秒
   - [动作] b2 里的 steps ex-1 第 2 步：想不出来，直接揭开了
   - 「（对）」「（错）」是程序判的；没写对错的是自由作答，要你来看。注明「手写转写」「截图转写」的文字是从手写认出来的，可能有认错的字。
 - 附了图片时，是学生的手写或截图（白底黑字），就在这一轮里。
-- 以「[系统]」开头的是页面发的消息。收到「[系统] … 写法错误」，说明那一段的组件写错了，没有显示出来：只用 ˋboard replaceˋ（id 不变；或者 ˋboard addˋ 同一个 id）把那一段重新写对，不用再对学生说别的。同一段最多重写 2 次，还不对，页面就显示「这段没画出来」，课堂继续。「[系统] 指令 … 没执行」多半是 ˋtarget=ˋ 写错了，对照「黑板现状」里的组件 id。
+- 以「[系统]」开头的是页面发的消息。收到「[系统] … 写法错误」，说明那一段的组件写错了，没有显示出来：只用 ˋboard replaceˋ（id 不变；或者 ˋboard addˋ 同一个 id）把那一段重新写对，不用再对学生说别的。同一段最多重写 2 次，还不对，页面就显示「这段没画出来」，课堂继续（已经在黑板上的旧内容不受影响）。ˋaddˋ 用了黑板上已经有的 id，那一段不会被覆盖，页面会请你换一个新 id 再 add。「[系统] 指令 … 没执行」多半是 ˋtarget=ˋ 或变量名写错了，对照「黑板现状」里的组件 id 和图的变量；「看不懂」「没闭合」的块已经原样当文字给学生看了，下一轮注意写法就行。
 - 「【到目前为止的课堂摘要】」是更早的对话压缩成的摘要，摘要之前的原文已经不在了。
 `;
 
@@ -315,10 +316,15 @@ export function boardStateText(board) {
   for (const seg of list) {
     const head = `- ${seg.id}${seg.title ? `「${oneLine(seg.title, 40)}」` : ''}`;
     if (seg.hidden) { lines.push(`${head}（已撤回，学生看不到）`); continue; }
+    // 写错了还没显示的段（等重写）、重写也没成的段（学生看到「这段没画出来」）：学生都看不到内容
+    if (seg.pending) { lines.push(`${head}（写法错误，还没显示，学生看不到；用 board replace id=${seg.id} 重写）`); continue; }
+    if (seg.failed) { lines.push(`${head}（没画出来，学生只看到「这段没画出来」；可以用 board replace id=${seg.id} 重写）`); continue; }
     lines.push(seg.summary ? `${head}：${oneLine(seg.summary, 160)}` : head);
     for (const b of seg.blocks || []) {
       if (!b?.id) continue;
-      const name = `${b.kind || '组件'} ${b.id}`;
+      // 图能用 figure set / play 改的变量（课堂说明被压缩成摘要后，Claude 看不到当初写的命令，靠这里知道）
+      const vars = Array.isArray(b.vars) ? b.vars.filter(Boolean).join('、') : String(b.vars ?? '').trim();
+      const name = `${b.kind || '组件'} ${b.id}${vars ? `（变量：${oneLine(vars, 160)}）` : ''}`;
       const res = (b.results || []).map((r) => resultLine(r, b.id)).filter(Boolean);
       if (res.length) {
         lines.push(`  - ${name} 的作答：`);
@@ -334,10 +340,11 @@ export function boardStateText(board) {
 
 // —— 拼第一条 user 消息 ——
 
-export function buildSystem({ rules, componentDocs, pack, board } = {}) {
+// packBudget：资料包的字节预算（默认 ≈120 KiB）；整轮超长（prompt_too_large）时页面会调小再试
+export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET } = {}) {
   const custom = asText(rules) || asText(pack?.main?.rules);
   const docs = asText(componentDocs);
-  const { text: packBody } = packText(pack);
+  const { text: packBody } = packText(pack, packBudget);
   return [
     '这是课堂模式的完整说明，每一轮都会重新发给你（资料包和黑板现状都是最新的）。说明后面是这节课的对话：学生说的话、学生在黑板上的作答记录（[作答] / [动作]）、页面的系统消息（[系统]），以及你之前的输出。',
     `# 一、你的角色和红线\n\n${custom || DEFAULT_RULES}`,
@@ -534,7 +541,8 @@ export const OMITTED = '（更早的对话已省略）';
 
 // history: [{ role: 'student' | 'claude' | 'system', text, discarded?, kind? }]
 // 返回 { turns, bytes, historyBytes, dropped }：bytes 是所有 content 的字节数，historyBytes 是其中对话部分（不含第一条说明）
-export function buildTurns({ system, history = [], maxBytes = 262144 } = {}) {
+// keepRecent：超长时也保留的最近几条（默认 20）；最近几条本身就太长时，页面可以调小再拼一次
+export function buildTurns({ system, history = [], maxBytes = 262144, keepRecent = KEEP_RECENT } = {}) {
   const sys = String(system ?? '').trim();
   if (!sys) throw new Error('buildTurns：缺少课堂说明（system）');
   const conv = [];
@@ -551,8 +559,9 @@ export function buildTurns({ system, history = [], maxBytes = 262144 } = {}) {
 
   const sysBytes = bytes(sys);
   let total = sysBytes + conv.reduce((s, t) => s + t.size, 0);
-  // 太长：从最早的开始丢；最近 20 条和摘要永远保留
-  const keepFrom = Math.max(0, conv.length - KEEP_RECENT);
+  // 太长：从最早的开始丢；最近 keepRecent 条和摘要永远保留
+  const keep = Number.isInteger(keepRecent) && keepRecent >= 1 ? keepRecent : KEEP_RECENT;
+  const keepFrom = Math.max(0, conv.length - keep);
   const drop = new Set();
   const noteBytes = bytes(OMITTED);
   for (let i = 0; i < keepFrom && total + (drop.size ? noteBytes : 0) > maxBytes; i++) {
@@ -582,6 +591,21 @@ export function needsCompaction(history) {
   return live.length > KEEP_RECENT && live.reduce((s, h) => s + bytes(h.text), 0) > COMPACT_AT;
 }
 
+// 要压缩的那部分（传入 promptHistory 的结果）：最近一次摘要之后、最近 20 条之前的原文
+export function compactionSlice(promptHist) {
+  const list = promptHist || [];
+  const prev = list[0]?.kind === 'summary' ? list[0] : null;
+  const body = prev ? list.slice(1) : list;
+  return { prev, old: body.slice(0, -KEEP_RECENT) };
+}
+
+// 值不值得多花一轮去压缩：能压的只有一两条（最近 20 条本身就很长）时不压，免得每一轮都先等一次摘要；
+// 那种情况交给 fitTurns 丢最早的
+export function worthCompacting(promptHist) {
+  const { old } = compactionSlice(promptHist);
+  return old.length >= 6 || old.reduce((s, t) => s + bytes(t.text), 0) >= 16 * 1024;
+}
+
 const SPEAKER = { student: '学生', claude: '你（课堂里的 Claude）', system: '系统' };
 const COMPACT_BUDGET = 200 * 1024; // 摘要请求本身也要在 256 KiB 以内
 
@@ -601,12 +625,12 @@ export function compactionPrompt({ summary = '', turns = [] } = {}) {
       '- 中文，不超过 1500 字，用短句和条目。',
       '- 写清楚：',
       '  1. 已经讲到哪：讲过哪些内容，用过哪些例题和图（关键的数字、结论照写）。',
-      '  2. 学生卡在哪：卡在哪一步、怎么错的、背后可能是什么误解（引用他的原话或作答）。',
+      '  2. 学生卡在哪：卡在哪一步、怎么错的、背后可能是什么误解（引用学生的原话或作答）。',
       '  3. 错过什么：提示了没接住的点、看了答案才明白的、说过「没把握」的、点过「想不出来」的。',
       '  4. 黑板上有哪些段：每段的 id、标题、里面组件的 id，学生在每段的作答结果；撤回的段也列出 id。',
       '  5. 接下来打算怎么走（对话里看得出来的话）。',
       '- 只根据下面的记录写，不要编；不确定的写「不确定」。',
-      '- 只输出摘要正文：不写黑板指令，不对学生说话。',
+      '- 只输出摘要正文：不写黑板指令，不对学生说话。提到学生时写「学生」，不用「他」「她」。',
     ].join('\n'),
     prev ? `【更早的摘要】（把它也并进新的摘要里）\n${prev}` : '',
     `【要压缩的课堂记录】（从早到晚）\n\n${log || '（没有）'}`,
@@ -632,6 +656,60 @@ export function closingPrompt() {
 3. 哪里看起来懂了但证据不够：比如答对了但没说理由、跟着提示才做出来、说过「没把握」、同类题只做过一道。
 4. 建议下一节怎么接：从哪里开始，先补什么，用什么样的题检验。
 
-不写黑板指令，不对学生说话，不要说学生「已经掌握」。
+不写黑板指令，不对学生说话，不要说学生「已经掌握」。提到学生时写「学生」，不用「他」「她」。
 `;
+}
+
+// —— 课堂运行时的小规则（纯函数，页面据此决定发什么、什么时候发）——
+
+const typeOf = (a) => String(a?.type ?? a?.kind ?? '').replace(/-try$/, '');
+
+// 学生在黑板上的一个动作要不要告诉课堂 Claude。
+// 同一道题的「最终结果」只在看了答案、放弃时说（每次尝试已经说过了）；提问、提示这类不是作答
+export function reportable(a) {
+  if (!a || typeof a !== 'object') return false;
+  const type = typeOf(a);
+  if (a.source === 'event') return type === 'reveal' || type === 'drag';
+  if (type === 'ask' || type === 'findbug-hint') return false;
+  if (a.final && !a.revealed && !a.giveup) return false;
+  return true;
+}
+
+// 这个动作怎么带动自动的一轮：
+//   'now'   想不出来：马上发
+//   'soon'  作答、拖动：等 1.5 秒，把这期间的动作合成一条
+//   'later' 揭开下一步：只是往下翻，不单独打扰 Claude，跟着下一条一起说（揭开的是最后一步时按 'soon'，学生在等）
+//   null    不告诉 Claude
+export function actionTrigger(a, { lastStep = false } = {}) {
+  const urgent = !!a?.giveup || (a?.source === 'event' && typeOf(a) === 'giveup');
+  if (!reportable(a)) return urgent ? 'now' : null;
+  if (urgent) return 'now';
+  if (a.source === 'event' && typeOf(a) === 'reveal' && !lastStep) return 'later';
+  return 'soon';
+}
+
+// 给课堂 Claude 的对话：最近一次摘要 + 摘要之后的原文；作废的轮、下课小结不算
+export function promptHistory(history) {
+  const live = (history || []).filter((t) => t && !t.discarded && t.kind !== 'closing');
+  const s = live.filter((t) => t.kind === 'summary').at(-1);
+  if (!s) return live;
+  return [s, ...live.filter((t) => t.kind !== 'summary' && t.seq > s.upTo)];
+}
+
+// 还在等 Claude 回的那一条：最后一条有效记录是学生的话，或者要它接着回的系统消息（重写、补发它要看的原图）。
+// 摘要、提醒（note）、下课小结、作废的轮都不算——它们后面不需要 Claude 接话
+export function pendingTurn(history) {
+  const last = (history || []).filter((t) => t && !t.discarded && !['summary', 'note', 'closing'].includes(t.kind)).at(-1);
+  if (!last) return null;
+  return last.role === 'student' || (last.role === 'system' && (last.kind === 'lint' || last.kind === 'images')) ? last : null;
+}
+
+// 拼这一轮的对话，保证不超过 maxBytes：先丢最早的；最近 20 条本身就太长时，逐步少留几条原文
+export function fitTurns({ system, history, maxBytes = 262144 } = {}) {
+  let out = null;
+  for (const keepRecent of [KEEP_RECENT, 12, 8, 4, 2, 1]) {
+    out = buildTurns({ system, history, maxBytes, keepRecent });
+    if (out.bytes <= maxBytes) return { ...out, keepRecent, fits: true };
+  }
+  return { ...out, keepRecent: 1, fits: false };
 }

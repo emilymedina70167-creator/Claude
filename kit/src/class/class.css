@@ -1,24 +1,32 @@
 /* ===== 课堂模式：底部对话条 =====
-   对话条就是黑板下沿的木制粉笔槽：上沿一条木头（带高光线），槽上躺着几根粉笔和一块板擦。
+   对话条就是黑板下沿的木制粉笔槽：上沿一条木头（带高光线），槽上躺着几根粉笔和一块板擦，
+   木条上挂两个小木把手：左边「板书」，中间「展开」。
    Claude 说的话像老师随口的一两句（正文无衬线，左边一个黄色手写的「Claude」），
-   学生的话靠右放在淡淡的粉笔泡泡里，学生在黑板上的动作缩成一行行小粉笔条。 */
+   学生的话靠右放在淡淡的粉笔泡泡里，学生在黑板上的动作缩成一行行小粉笔条。
+   内容和黑板正文同一列（860px，左右 20px），对话条里的字和黑板上的字左边对齐。 */
 .class-bar {
-  --cb-log-h: 68px;
+  --cb-log-h: 66px;           /* 收起时的消息区：正好两行话，或者一个泡泡 + 一行话 */
+  --cb-col: 860px;            /* 和 .la-lesson 同宽 */
+  --cb-pad: 20px;
+  --cb-edge: max(var(--cb-pad), env(safe-area-inset-left, 0px), calc(50% - var(--cb-col) / 2 + var(--cb-pad)));
   --cb-ease: cubic-bezier(.2, .75, .25, 1);
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 34;
   color: var(--text);
   background:
     radial-gradient(420px 120px at 18% 0%, rgba(255, 255, 255, 0.035), transparent 70%),
-    linear-gradient(180deg, rgba(31, 52, 44, 0.95), rgba(22, 38, 32, 0.97));
+    linear-gradient(180deg, rgba(31, 52, 44, 0.96), rgba(22, 38, 32, 0.98));
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   box-shadow: 0 -14px 34px rgba(0, 0, 0, 0.32);
   /* 键盘弹出时往上抬（--cb-lift 由脚本按 visualViewport 算） */
   transform: translateY(calc(var(--cb-lift, 0px) * -1));
-  transition: transform .24s var(--cb-ease);
+  transition: transform .26s var(--cb-ease), visibility 0s;
   -webkit-tap-highlight-color: transparent;
 }
-/* 黑板上的数字小键盘出来时，对话条滑到屏幕外，键盘收起再回来 */
-body.has-keypad .class-bar { transform: translateY(calc(100% + 30px)); pointer-events: none; }
+/* 让开：黑板上的数字小键盘出来、或者在黑板上的输入框里打字（软键盘只剩小半屏）时，滑到屏幕外，收起再回来 */
+body.has-keypad .class-bar, .class-bar.is-away {
+  transform: translateY(calc(100% + 30px)); pointer-events: none; visibility: hidden;
+  transition: transform .26s var(--cb-ease), visibility 0s linear .26s;
+}
 .class-bar button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .class-bar button:focus-visible, .class-bar textarea:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 
@@ -31,56 +39,75 @@ body.has-keypad .class-bar { transform: translateY(calc(100% + 30px)); pointer-e
     linear-gradient(#8b6845, #6f5035 55%, #563b24);
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.28), 0 4px 10px rgba(0, 0, 0, 0.22);
 }
-/* 槽上的粉笔和板擦（只是装饰） */
+/* 槽上的粉笔和板擦（只是装饰）：都放在右边，左边留给「板书」把手 */
 .cb-stick { position: absolute; top: -4px; height: 7px; border-radius: 4px; box-shadow: 0 2px 2px rgba(0, 0, 0, 0.35), inset 0 -1.5px 0 rgba(0, 0, 0, 0.12); }
-.cb-stick.s1 { left: max(14px, calc(50% - 470px)); width: 42px; background: #f1efe6; transform: rotate(-1.5deg); }
-.cb-stick.s2 { left: max(64px, calc(50% - 420px)); width: 24px; background: var(--yellow); transform: rotate(2deg); }
-.cb-stick.s3 { left: max(94px, calc(50% - 388px)); width: 30px; background: var(--pink); transform: rotate(-.5deg); }
+.cb-stick.s1 { right: calc(var(--cb-edge) + 150px); width: 40px; background: #f1efe6; transform: rotate(-1.5deg); }
+.cb-stick.s2 { right: calc(var(--cb-edge) + 118px); width: 24px; background: var(--yellow); transform: rotate(2deg); }
+.cb-stick.s3 { right: calc(var(--cb-edge) + 80px); width: 30px; background: var(--pink); transform: rotate(-.5deg); }
 .cb-eraser {
-  position: absolute; top: -9px; right: max(16px, calc(50% - 470px)); width: 64px; height: 15px; border-radius: 3px;
+  position: absolute; top: -9px; right: var(--cb-edge); width: 62px; height: 15px; border-radius: 3px;
   background: linear-gradient(#3b3b3b 0 52%, #d7cfbf 52%); box-shadow: 0 3px 3px rgba(0, 0, 0, 0.35);
 }
 
 .cb-inner {
-  position: relative; width: min(900px, 100%); margin: 0 auto;
-  padding: 17px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-  display: flex; flex-direction: column; gap: 6px;
+  position: relative; width: min(var(--cb-col), 100%); margin: 0 auto;
+  padding: 16px max(var(--cb-pad), env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-bottom, 0px)) max(var(--cb-pad), env(safe-area-inset-left, 0px));
+  display: flex; flex-direction: column; gap: 5px;
 }
 .class-bar.is-lifted .cb-inner { padding-bottom: 8px; }
 
-/* —— 消息区：收起时只露最近两句（顶上淡出），展开后可滚动 —— */
-.cb-log { position: relative; height: var(--cb-log-h); transition: height .22s var(--cb-ease); }
-.cb-msgs {
-  position: relative; height: 100%; overflow: hidden; overscroll-behavior: contain;
-  display: flex; flex-direction: column; gap: 7px; padding: 2px 2px 3px;
-}
-/* 内容少时贴底，多了从上面淡出 */
-.cb-msgs > :first-child { margin-top: auto; }
-.cb-log.is-open .cb-msgs { padding-top: 6px; overflow-y: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: rgba(238, 240, 230, 0.2) transparent; }
-.cb-log:not(.is-open) .cb-msg:nth-last-child(n+3) { display: none; }
-.cb-log.is-clipped .cb-msgs {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
-}
-.cb-log.can-open { cursor: pointer; }
-.cb-empty { margin: 0 0 4px; text-align: center; font: 21px/1.3 var(--hand); color: rgba(238, 240, 230, 0.4); }
-
-/* 「展开」是钉在木条上的一个小木把手，像拉开抽屉 */
-.cb-toggle {
-  position: absolute; left: 50%; top: -23px; z-index: 1; translate: -50% 0;
-  height: 25px; padding: 0 16px 0 18px; border: 0; border-radius: 11px 11px 0 0; cursor: pointer;
-  display: inline-flex; align-items: center; gap: 2px;
+/* —— 木条上的小把手：「展开」（中间）和「板书」（左边），像拉开抽屉的木头提手 —— */
+.cb-toggle, .class-bar .ink-fab {
+  height: 26px; padding: 0 16px 0 18px; border: 0; border-radius: 11px 11px 0 0; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
   background: linear-gradient(#93704c, #8b6845);
   box-shadow: inset 0 1.5px 0 rgba(255, 236, 205, 0.34), 0 -3px 8px rgba(0, 0, 0, 0.18);
   color: #f6eedc; font: 19px/1 var(--hand); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
   transition: color .2s, background .2s;
 }
-.cb-toggle::after { content: ""; position: absolute; inset: -9px -6px -12px; } /* 触控面积够 44px */
-.cb-toggle:hover { background: linear-gradient(#9c7852, #8f6b47); color: #fff; }
-.cb-toggle:focus-visible { outline-offset: 3px; }
+.cb-toggle { position: absolute; left: 50%; top: -25px; z-index: 1; translate: -50% 0; }
+/* 触控面积够 44px（看得见的把手只有 26px 高） */
+.cb-toggle::after, .class-bar .ink-fab::after { content: ""; position: absolute; inset: -10px -6px -9px; }
+.cb-toggle:focus-visible, .class-bar .ink-fab:focus-visible { outline: 2px solid var(--yellow); outline-offset: 3px; }
+
+.cb-dock { position: absolute; top: -25px; left: var(--cb-edge); z-index: 1; display: flex; }
+.class-bar .ink-fab {
+  position: relative; left: auto; bottom: auto; z-index: auto; min-height: 0; padding: 0 15px 0 12px; gap: 6px;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.class-bar .ink-fab::before { display: none; }
+.class-bar .ink-fab svg { width: 16px; height: 16px; stroke-width: 2; }
+/* 板书开着：把手变成一截黄粉笔的颜色 */
+.class-bar .ink-fab.on { background: linear-gradient(#f5e39e, #e6cb6c); color: #3b2c14; text-shadow: none; box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.5), 0 -3px 10px rgba(242, 220, 133, 0.25); }
+/* 手写板弹起来时把手收起来，不和石板的边框打架 */
+.class-bar.slate-open .cb-toggle, .class-bar.slate-open .cb-dock { visibility: hidden; }
+
+@media (hover: hover) {
+  .cb-toggle:hover, .class-bar .ink-fab:not(.on):hover { background: linear-gradient(#9c7852, #8f6b47); color: #fff; }
+}
+
+/* —— 消息区：收起时只露最近一两条（整条露，不露半截），展开后可滚动 —— */
+.cb-log { position: relative; height: var(--cb-log-h); transition: height .22s var(--cb-ease); }
+.cb-msgs {
+  position: relative; height: 100%; overflow: hidden; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 3px;
+}
+/* 内容少时贴底 */
+.cb-msgs > :first-child, .cb-msgs > .is-lead { margin-top: auto; }
+.cb-log:not(.is-open):not(.is-measuring) .cb-msg:not(.is-peek) { display: none; }
+.cb-log.is-open .cb-msgs {
+  gap: 13px; padding-top: 8px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; scrollbar-color: rgba(238, 240, 230, 0.2) transparent;
+}
+/* 上面还有：顶上淡出；一条长话只露了开头：底下淡出（展开看全部） */
+.cb-log.is-clip-top .cb-msgs { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 26px); mask-image: linear-gradient(to bottom, transparent 0, #000 26px); }
+.cb-log.is-clip-bottom .cb-msgs { -webkit-mask-image: linear-gradient(to top, transparent 0, #000 22px); mask-image: linear-gradient(to top, transparent 0, #000 22px); }
+.cb-log.can-open { cursor: pointer; }
+.cb-empty { margin: 0 0 6px; text-align: center; font: 21px/1.3 var(--hand); color: rgba(238, 240, 230, 0.42); text-wrap: balance; }
 
 .cb-msg { position: relative; flex: none; font: 16px/1.6 var(--sans); color: var(--body); overflow-wrap: anywhere; animation: cbIn .24s var(--cb-ease) both; }
-.cb-msg p { margin: 0 0 4px; }
+.cb-msg.no-anim { animation: none; }
+.cb-msg p { margin: 0 0 3px; }
 .cb-msg p:last-child, .cb-msg ul:last-child, .cb-msg ol:last-child { margin-bottom: 0; }
 .cb-msg ul, .cb-msg ol { margin: 2px 0 4px; padding-left: 1.3em; }
 .cb-msg strong { color: var(--yellow); font-weight: 600; }
@@ -91,18 +118,18 @@ body.has-keypad .class-bar { transform: translateY(calc(100% + 30px)); pointer-e
 @keyframes cbIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 
 /* Claude：像老师说的一句话 */
-.cb-claude { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 10px; align-items: baseline; padding-right: 2px; }
-.cb-who { font: 21px/1 var(--hand); color: var(--yellow); white-space: nowrap; min-width: 3.1em; }
+.cb-claude { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 12px; align-items: baseline; padding-right: 2px; color: var(--chalk); }
+.cb-who { font: 21px/1 var(--hand); color: var(--yellow); white-space: nowrap; min-width: 2.9em; }
 .cb-body { min-width: 0; }
 /* 展开看全部时，连着的几句只在第一句前写名字 */
 .cb-log.is-open .cb-claude.is-cont .cb-who { visibility: hidden; }
 .cb-draft-tag { display: none; }
 /* 草稿：确认是 Opus 5.5 之前，半透明、虚线左边框、角落一个「草稿」 */
-.cb-claude.is-draft .cb-body { opacity: .62; border-left: 2px dashed rgba(238, 240, 230, 0.42); padding-left: 10px; margin-left: -2px; }
+.cb-claude.is-draft .cb-body { opacity: .66; border-left: 2px dashed rgba(238, 240, 230, 0.42); padding-left: 10px; margin-left: -12px; }
 .cb-claude.is-draft .cb-who { opacity: .75; }
 .cb-claude.is-draft .cb-draft-tag {
-  display: inline-block; align-self: end; margin-bottom: 3px; padding: 1px 7px 2px; border-radius: 7px;
-  font: 15px/1.1 var(--hand); color: var(--muted); border: 1px dashed rgba(238, 240, 230, 0.38);
+  display: inline-block; align-self: start; margin-top: 2px; padding: 1px 8px 2px; border-radius: 7px;
+  font: 15px/1.15 var(--hand); color: var(--muted); border: 1px dashed rgba(238, 240, 230, 0.38);
 }
 /* 正在写的粉笔头 */
 .cb-claude.is-draft .cb-body > :last-child::after {
@@ -112,7 +139,7 @@ body.has-keypad .class-bar { transform: translateY(calc(100% + 30px)); pointer-e
 @keyframes cbCaret { 50% { opacity: .15; } }
 
 /* 学生：靠右，淡淡的粉笔泡泡 */
-.cb-student { align-self: flex-end; max-width: min(78%, 560px); padding: 5px 14px 6px; border-radius: 16px 16px 5px 16px; background: rgba(238, 240, 230, 0.065); color: var(--chalk); white-space: pre-wrap; }
+.cb-student { align-self: flex-end; max-width: min(78%, 560px); padding: 4px 14px 5px; border-radius: 16px 16px 5px 16px; background: rgba(238, 240, 230, 0.065); color: var(--chalk); white-space: pre-wrap; }
 .cb-student::before { content: ""; position: absolute; inset: 0; border: 1.5px solid rgba(238, 240, 230, 0.26); border-radius: inherit; filter: url(#la-chalk); pointer-events: none; }
 
 /* 学生在黑板上的动作：一行一个小粉笔条 */
@@ -120,30 +147,38 @@ body.has-keypad .class-bar { transform: translateY(calc(100% + 30px)); pointer-e
 .cb-action .cb-body { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .cb-chip {
   display: inline-flex; align-items: baseline; gap: 7px; max-width: 100%; min-width: 0;
-  padding: 1px 11px 2px 9px; border-radius: 999px; font-size: 13.5px; line-height: 1.65; color: var(--muted);
+  padding: 1px 12px 2px 10px; border-radius: 999px; font-size: 14px; line-height: 1.6; color: var(--muted);
   background: rgba(0, 0, 0, 0.16); border: 1px dashed rgba(238, 240, 230, 0.24);
 }
-.cb-chip b { flex: none; font: 400 16px/1 var(--hand); color: var(--blue); }
+.cb-chip b { flex: none; font: 400 17px/1 var(--hand); color: var(--blue); }
 .cb-chip > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cb-log.is-open .cb-chip { border-radius: 12px; }
 .cb-log.is-open .cb-chip > span { white-space: normal; }
-.cb-chip[data-tone="bad"] { border-color: rgba(255, 158, 140, 0.4); }
+.cb-chip[data-tone="bad"] { border-color: rgba(255, 158, 140, 0.42); }
 .cb-chip[data-tone="bad"] b { color: var(--coral); }
-.cb-chip[data-tone="ok"] { border-color: rgba(183, 228, 165, 0.4); }
+.cb-chip[data-tone="ok"] { border-color: rgba(183, 228, 165, 0.42); }
 .cb-chip[data-tone="ok"] b { color: var(--green); }
 
 /* 系统：居中一行小字 */
 .cb-system { align-self: center; max-width: 92%; text-align: center; font: 19px/1.35 var(--hand); color: var(--muted); }
 .cb-system .cb-body::before, .cb-system .cb-body::after { content: "—"; margin: 0 8px; opacity: .5; }
 
-/* —— 快捷按钮 · 状态 · 模型标记 · 下课 —— */
+/* —— 快捷按钮（Claude 在想、在写时换成状态）· 模型标记 · 下课 —— */
 .cb-meta {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "quick status side";
-  align-items: center; column-gap: 12px; row-gap: 2px; min-height: 44px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "lead side";
+  align-items: center; column-gap: 12px; row-gap: 4px; min-height: 44px;
 }
-.class-bar[data-state="error"] .cb-meta, .class-bar[data-state="notice"] .cb-meta { grid-template-areas: "status status status" "quick . side"; }
+.class-bar[data-state="error"] .cb-meta, .class-bar[data-state="notice"] .cb-meta { grid-template-areas: "status status" "lead side"; }
 
-.cb-quick { grid-area: quick; display: flex; gap: 4px; min-width: 0; }
+.cb-quick { grid-area: lead; display: flex; gap: 4px; min-width: 0; }
+.cb-status { grid-area: lead; }
+.class-bar[data-state="error"] .cb-status, .class-bar[data-state="notice"] .cb-status { grid-area: status; }
+/* 同一格里两样东西轮流出现：淡入淡出，高度不变 */
+.cb-quick, .cb-status { transition: opacity .2s ease, visibility 0s; }
+.class-bar[data-state="idle"] .cb-status, .class-bar.is-live .cb-quick {
+  opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility 0s linear .2s;
+}
+
 .cb-pill {
   position: relative; flex: none; min-height: 44px; padding: 0 14px 1px; border: 0; background: none; cursor: pointer;
   color: var(--chalk); font: 21px/1 var(--hand); white-space: nowrap;
@@ -154,90 +189,101 @@ body.has-keypad .class-bar { transform: translateY(calc(100% + 30px)); pointer-e
   border: 1.8px solid rgba(238, 240, 230, 0.42); filter: url(#la-chalk); transition: border-color .2s;
 }
 .cb-pill::after { content: ""; position: absolute; inset: 6px 1px; border-radius: 16px; background: rgba(238, 240, 230, 0.035); pointer-events: none; transition: background .2s; }
-.cb-pill:hover::after { background: rgba(238, 240, 230, 0.08); }
-.cb-pill:hover::before { border-color: rgba(238, 240, 230, 0.65); }
+@media (hover: hover) {
+  .cb-pill:hover::after { background: rgba(238, 240, 230, 0.08); }
+  .cb-pill:hover::before { border-color: rgba(238, 240, 230, 0.65); }
+}
 .cb-pill:active { transform: scale(.95); }
+.cb-pill:active::after { background: rgba(238, 240, 230, 0.1); }
 .cb-pill:disabled { opacity: .32; cursor: default; pointer-events: none; }
 
 .cb-status {
-  grid-area: status; display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; min-height: 30px;
-  font-size: 14.5px; line-height: 1.45; color: var(--muted);
+  display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 44px;
+  font-size: 16px; line-height: 1.45; color: var(--body);
 }
 .cb-status-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cb-status[data-state="writing"] .cb-status-text, .cb-status[data-state="thinking"] .cb-status-text { color: var(--body); }
-.cb-status[data-state="error"], .cb-status[data-state="notice"] { justify-content: flex-start; padding: 4px 0 2px; }
-.cb-status[data-state="error"] .cb-status-text, .cb-status[data-state="notice"] .cb-status-text { white-space: normal; overflow: visible; }
-.cb-status[data-state="error"] .cb-status-text { color: var(--chalk); }
-.cb-elapsed { flex: none; font: 17px/1 var(--hand); color: var(--muted); font-variant-numeric: tabular-nums; }
+.cb-elapsed { flex: none; font: 19px/1 var(--hand); color: var(--muted); font-variant-numeric: tabular-nums; }
 .cb-elapsed:empty { display: none; }
+/* 出错 / 提示：单独一行，淡淡的底色，「重试」放在最右边 */
+.class-bar[data-state="error"] .cb-status, .class-bar[data-state="notice"] .cb-status {
+  min-height: 44px; padding: 0 6px 0 14px; border-radius: 14px; font-size: 15.5px;
+  background: rgba(238, 240, 230, 0.05); box-shadow: inset 0 0 0 1px rgba(238, 240, 230, 0.12);
+  animation: cbIn .24s var(--cb-ease) both;
+}
+.class-bar[data-state="error"] .cb-status { background: rgba(255, 158, 140, 0.07); box-shadow: inset 0 0 0 1px rgba(255, 158, 140, 0.3); color: var(--chalk); }
+.class-bar[data-state="error"] .cb-status-text, .class-bar[data-state="notice"] .cb-status-text { white-space: normal; overflow: visible; padding: 6px 0; }
+.class-bar[data-state="notice"] .cb-status { color: var(--muted); }
 
-/* 状态指示：在想 = 呼吸的粉笔点；在写 = 一笔笔画出来的粉笔线；出错 = 珊瑚红点 */
-.cb-ind { flex: none; position: relative; width: 26px; height: 14px; display: none; }
-.cb-status:not([data-state="idle"]) .cb-ind { display: block; }
-.cb-dot { position: absolute; left: 50%; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--yellow); }
+/* 状态指示：在想 = 三个一起呼吸的粉笔点；在写 = 一笔笔画出来的粉笔线；出错 = 珊瑚红点 */
+.cb-ind { flex: none; position: relative; display: none; align-items: center; justify-content: center; gap: 5px; width: 34px; height: 14px; }
+.cb-status:not([data-state="idle"]) .cb-ind { display: inline-flex; }
+.cb-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); }
 .cb-scribble { position: absolute; inset: 0; width: 100%; height: 100%; display: none; overflow: visible; }
 .cb-scribble path { fill: none; stroke: var(--yellow); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 48; stroke-dashoffset: 48; filter: url(#la-chalk-v); }
-.cb-status[data-state="thinking"] .cb-dot { animation: cbBreathe 1.9s ease-in-out infinite; }
+.cb-status[data-state="thinking"] .cb-dot { animation: cbBreathe 1.4s ease-in-out infinite; }
+.cb-status[data-state="thinking"] .cb-dot:nth-child(2) { animation-delay: .18s; }
+.cb-status[data-state="thinking"] .cb-dot:nth-child(3) { animation-delay: .36s; }
 .cb-status[data-state="writing"] .cb-dot { display: none; }
 .cb-status[data-state="writing"] .cb-scribble { display: block; }
 .cb-status[data-state="writing"] .cb-scribble path { animation: cbScribble 1.5s ease-in-out infinite; }
-.cb-status[data-state="error"] .cb-dot { background: var(--coral); box-shadow: 0 0 0 4px rgba(255, 158, 140, 0.16); }
-.cb-status[data-state="notice"] .cb-dot { background: var(--chalk); opacity: .55; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; }
-.cb-status[data-state="error"] .cb-ind, .cb-status[data-state="notice"] .cb-ind { width: 12px; }
-@keyframes cbBreathe {
-  0%, 100% { transform: scale(.68); opacity: .45; box-shadow: 0 0 0 0 rgba(242, 220, 133, 0); }
-  50% { transform: scale(1.08); opacity: 1; box-shadow: 0 0 0 6px rgba(242, 220, 133, 0.13); }
-}
+.cb-status[data-state="error"] .cb-ind, .cb-status[data-state="notice"] .cb-ind { width: 9px; }
+.cb-status[data-state="error"] .cb-dot:not(:first-child), .cb-status[data-state="notice"] .cb-dot:not(:first-child) { display: none; }
+.cb-status[data-state="error"] .cb-dot { width: 9px; height: 9px; background: var(--coral); box-shadow: 0 0 0 4px rgba(255, 158, 140, 0.16); }
+.cb-status[data-state="notice"] .cb-dot { background: var(--chalk); opacity: .55; }
+@keyframes cbBreathe { 0%, 100% { transform: scale(.7); opacity: .35; } 50% { transform: scale(1.1); opacity: 1; } }
 @keyframes cbScribble { 0% { stroke-dashoffset: 48; opacity: 1; } 65% { stroke-dashoffset: 0; opacity: 1; } 90%, 100% { stroke-dashoffset: 0; opacity: 0; } }
 
 .cb-retry {
-  position: relative; flex: none; min-height: 44px; margin: -7px 0; padding: 0 14px 1px; border: 0; background: none; border-radius: 16px;
-  color: var(--yellow); font: 21px/1 var(--hand); cursor: pointer;
+  position: relative; flex: none; min-height: 44px; margin: 0 0 0 auto; padding: 0 18px 1px; border: 0; background: none; border-radius: 16px;
+  color: var(--yellow); font: 22px/1 var(--hand); cursor: pointer;
 }
-.cb-retry::before { content: ""; position: absolute; inset: 5px 0; background: rgba(242, 220, 133, 0.07); border: 1.8px solid rgba(242, 220, 133, 0.75); border-radius: 15px 18px 14px 17px; filter: url(#la-chalk); pointer-events: none; }
+.cb-retry::before { content: ""; position: absolute; inset: 5px 0; background: rgba(242, 220, 133, 0.08); border: 1.8px solid rgba(242, 220, 133, 0.8); border-radius: 15px 18px 14px 17px; filter: url(#la-chalk); pointer-events: none; }
 .cb-retry:active { transform: scale(.95); }
 
-.cb-side { grid-area: side; display: flex; align-items: center; gap: 4px; }
+.cb-side { grid-area: side; display: flex; align-items: center; gap: 2px; }
 .cb-model {
-  position: relative; padding: 4px 9px 5px; border-radius: 999px; white-space: nowrap;
-  font: 12px/1 var(--sans); letter-spacing: .03em; color: rgba(238, 240, 230, 0.58);
+  position: relative; padding: 5px 10px 6px; border-radius: 999px; white-space: nowrap;
+  font: 12.5px/1 var(--sans); letter-spacing: .03em; color: rgba(238, 240, 230, 0.6);
 }
 .cb-model::before { content: ""; position: absolute; inset: 0; border: 1.2px solid rgba(238, 240, 230, 0.28); border-radius: 11px 13px 10px 12px; filter: url(#la-chalk); pointer-events: none; }
 .cb-end {
-  position: relative; min-height: 44px; padding: 0 10px 1px; border: 0; background: none; cursor: pointer; white-space: nowrap;
+  position: relative; min-height: 44px; min-width: 52px; padding: 0 8px 1px 10px; border: 0; background: none; cursor: pointer; white-space: nowrap;
   color: var(--muted); font: 21px/1 var(--hand); transition: color .2s;
 }
-.cb-end:hover { color: var(--chalk); }
+@media (hover: hover) { .cb-end:hover { color: var(--chalk); } }
 .cb-end:disabled { opacity: .35; cursor: default; }
-.cb-end.is-armed { color: var(--coral); }
+.cb-end.is-armed { color: var(--coral); padding: 0 12px 1px; }
 .cb-end.is-armed::before { content: ""; position: absolute; inset: 5px 0; border: 1.8px solid rgba(255, 158, 140, 0.75); border-radius: 15px 18px 14px 17px; filter: url(#la-chalk); pointer-events: none; }
 /* 3 秒的确认窗口：底下一道慢慢缩短的粉笔线 */
 .cb-end.is-armed::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 9px; height: 2px; border-radius: 1px; background: rgba(255, 158, 140, 0.7); transform-origin: left center; animation: cbCountdown 3s linear forwards; }
 @keyframes cbCountdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 
-/* —— 附图 —— */
-.cb-attach { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 16px; padding: 8px 2px 2px; }
-.cb-thumb { position: relative; margin: 0; height: 50px; }
-.cb-thumb img { display: block; height: 50px; max-width: 120px; object-fit: contain; border-radius: 6px; background: #fff; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4); rotate: -1.6deg; animation: cbIn .22s var(--cb-ease) both; }
-.cb-thumb:nth-child(2n) img { rotate: 1.3deg; }
+/* —— 附图：像几张冲印出来的小照片，右上角一个去掉的圆钮 —— */
+.cb-attach { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 20px; padding: 10px 2px 2px; }
+.cb-thumb { position: relative; flex: none; margin: 0; width: 70px; height: 52px; animation: cbIn .22s var(--cb-ease) both; }
+.cb-thumb img {
+  display: block; width: 100%; height: 100%; object-fit: contain; padding: 2px; border-radius: 4px; background: #fbfaf5;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 4px 10px rgba(0, 0, 0, 0.38); rotate: -1.6deg;
+}
+.cb-thumb:nth-child(2n) img { rotate: 1.4deg; }
 .cb-unattach {
-  position: absolute; top: -9px; right: -9px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+  position: absolute; top: -9px; right: -10px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
   display: grid; place-items: center; background: var(--board-3); color: var(--chalk); font: 17px/1 var(--sans);
   box-shadow: 0 0 0 1.5px rgba(238, 240, 230, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 .cb-unattach::after { content: ""; position: absolute; inset: -10px; }
-.cb-attach-note { font: 18px/1.2 var(--hand); color: var(--muted); }
+.cb-attach-note { font: 19px/1.2 var(--hand); color: var(--muted); }
 .cb-attach-note.is-warn { color: var(--coral); }
 
 /* —— 输入行 —— */
 .cb-form { display: flex; align-items: flex-end; gap: 8px; margin: 0; }
 .cb-tool {
   position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  min-width: 46px; height: 46px; padding: 0 12px 0 10px; border: 0; background: none; cursor: pointer;
+  min-width: 46px; height: 46px; padding: 0 13px 0 11px; border: 0; background: none; cursor: pointer;
   color: var(--chalk); font: 20px/1 var(--hand); white-space: nowrap; transition: color .2s, transform .12s ease;
 }
 .cb-tool::before { content: ""; position: absolute; inset: 0; border: 1.8px solid rgba(238, 240, 230, 0.34); border-radius: 13px 16px 12px 15px; filter: url(#la-chalk); pointer-events: none; transition: border-color .2s; }
-.cb-tool:hover::before { border-color: rgba(238, 240, 230, 0.6); }
+@media (hover: hover) { .cb-tool:hover::before { border-color: rgba(238, 240, 230, 0.6); } }
 .cb-tool:active { transform: scale(.95); }
 .cb-tool:disabled { opacity: .32; cursor: default; }
 .cb-tool svg { flex: none; width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -252,7 +298,7 @@ body.has-keypad .class-bar { transform: translateY(calc(100% + 30px)); pointer-e
 }
 /* 占位文字不折行（窄屏时折成几行会把空输入框撑高） */
 .cb-field textarea:placeholder-shown { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cb-field textarea::placeholder { color: rgba(238, 240, 230, 0.38); font: 20px/1.3 var(--hand); }
+.cb-field textarea::placeholder { color: rgba(238, 240, 230, 0.4); font: 20px/1.3 var(--hand); }
 .cb-field textarea:focus { outline: 2px dashed rgba(242, 220, 133, 0.6); outline-offset: -2px; background: rgba(0, 0, 0, 0.3); }
 .cb-field textarea:disabled { opacity: .5; }
 .cb-send { flex: none; min-width: 84px; height: 46px; min-height: 46px; padding: 0 18px; font-size: 23px; transition: opacity .2s, color .2s, background .2s, transform .1s ease; }
@@ -276,41 +322,50 @@ body.has-keypad .class-bar { transform: translateY(calc(100% + 30px)); pointer-e
 .cb-slate-x { position: relative; min-height: 44px; margin: -8px -6px -8px 0; padding: 0 10px; border: 0; background: none; color: var(--blue); font: 20px/1 var(--hand); cursor: pointer; }
 .cb-slate .ink-pad { margin: 8px 0 0; }
 .cb-slate .pad-bar { margin-top: 8px; }
-.cb-slate .pad-bar .btn-primary { min-width: 92px; }
+.cb-slate .pad-bar .btn { min-height: 44px; }
+.cb-slate .pad-bar .btn-primary { min-width: 96px; }
 @keyframes cbSlateIn { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
 
 /* —— 和页面其他部分配合 —— */
 /* 黑板最下面留出对话条的高度，最后一个组件不会被挡住；滚动定位也让开对话条 */
-body.class-on .la-lesson { padding-bottom: calc(var(--class-bar-h, 220px) + 24px); }
-:root:has(body.class-on) { scroll-padding-bottom: calc(var(--class-bar-h, 220px) + 16px); }
+body.class-on .la-lesson { padding-bottom: calc(var(--class-bar-h, 220px) + var(--class-kb, 0px) + 24px); }
+:root:has(body.class-on) { scroll-padding-bottom: calc(var(--class-bar-h, 220px) + var(--class-kb, 0px) + 16px); }
+/* 数字小键盘比对话条高：那时按小键盘的高度让 */
+:root:has(body.class-on.has-keypad) { scroll-padding-bottom: calc(270px + env(safe-area-inset-bottom, 0px)); }
 /* 对话条本身就是粉笔槽，课件末尾那条就不要了 */
 body.class-on .la-tray { display: none; }
-body.class-on .ink-fab { bottom: calc(var(--class-bar-h, 220px) + 14px); transition: bottom .22s var(--cb-ease); }
-body.class-on #la-toast { bottom: calc(var(--class-bar-h, 220px) + 18px); }
+/* 「板书」还没挂到木条上时（对话条先出来、板书按钮后出来的那一瞬间）：先浮在对话条上面 */
+body.class-on > .ink-fab { bottom: calc(var(--class-bar-h, 220px) + 14px); }
+body.class-on #la-toast { bottom: calc(var(--class-bar-h, 220px) + 24px); }
 @media (max-width: 640px), (max-height: 640px) {
-  body.class-on .ink-bar { bottom: calc(var(--class-bar-h, 220px) + 74px); }
+  body.class-on .ink-bar { bottom: calc(var(--class-bar-h, 220px) + 36px); }
 }
+/* 开发面板（?dev）不要伸到对话条后面 */
+body.class-on .dev-body { max-height: calc(100svh - var(--class-bar-h, 220px) - 180px); }
 
-/* —— 窄屏（手机竖屏）：状态和下课一行，快捷按钮单独一行；工具按钮只留图标 —— */
+/* —— 分屏、手机：快捷按钮一行横着滑；工具按钮只留图标 —— */
 @media (max-width: 699px) {
-  .cb-meta { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "status side" "quick quick"; }
-  .class-bar[data-state="error"] .cb-meta, .class-bar[data-state="notice"] .cb-meta { grid-template-areas: "status status" ". side" "quick quick"; }
-  .cb-status { justify-content: flex-start; }
-  .cb-quick { overflow-x: auto; scrollbar-width: none; margin: 0 -4px; padding: 0 4px; }
+  .cb-quick { overflow-x: auto; scrollbar-width: none; margin: 0 -4px; padding: 0 4px; -webkit-mask-image: linear-gradient(to left, transparent 0, #000 18px); mask-image: linear-gradient(to left, transparent 0, #000 18px); }
   .cb-quick::-webkit-scrollbar { display: none; }
+  .cb-pill { padding: 0 11px 1px; font-size: 20px; }
+  .cb-model { font-size: 11.5px; padding: 5px 8px 6px; }
   .cb-tool span { display: none; }
   .cb-tool { padding: 0; }
   .cb-send { min-width: 70px; padding: 0 14px; }
-  .cb-eraser { display: none; }
+  .cb-claude { column-gap: 9px; }
+  .cb-claude.is-draft .cb-body { margin-left: -9px; padding-left: 7px; }
+  .cb-stick, .cb-eraser { display: none; }
 }
-/* 横屏的 iPad：屏幕矮，消息区收起时再矮一点 */
+@media (max-width: 440px) { .class-bar { --cb-pad: 12px; } }
+/* 横屏的 iPad：屏幕矮，消息区收起时正好两行，上下再紧一点 */
 @media (min-width: 1000px) and (max-height: 860px) {
-  .class-bar { --cb-log-h: 60px; }
+  .class-bar { --cb-log-h: 58px; }
+  .cb-inner { padding-top: 15px; gap: 4px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .class-bar, .cb-log, .cb-toggle, .cb-pill, .cb-tool, .cb-send { transition: none; }
-  .cb-msg, .cb-thumb img, .cb-slate { animation: none; }
+  .class-bar, body.has-keypad .class-bar, .class-bar.is-away, .cb-log, .cb-toggle, .class-bar .ink-fab, .cb-pill, .cb-tool, .cb-send, .cb-quick, .cb-status { transition: none; }
+  .cb-msg, .cb-thumb, .cb-slate, .class-bar[data-state="error"] .cb-status, .class-bar[data-state="notice"] .cb-status { animation: none; }
   .cb-status[data-state="thinking"] .cb-dot { animation: none; opacity: .9; }
   .cb-status[data-state="writing"] .cb-scribble path { animation: none; stroke-dashoffset: 0; }
   .cb-claude.is-draft .cb-body > :last-child::after { animation: none; opacity: .6; }

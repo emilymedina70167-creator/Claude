@@ -1,4 +1,6 @@
 // 简易 SVG 坐标平面：数学坐标 ↔ 屏幕坐标，带触控拖动
+import { numText } from './expr.js';
+
 const NS = 'http://www.w3.org/2000/svg';
 const SIZE = 480;
 
@@ -120,11 +122,15 @@ export function createPlane(container, { range = 5 } = {}) {
   return p;
 }
 
+// 手指离按下的地方超过这么多像素才算「拖了」：点一下时手指的轻微抖动不算挪动
+export const DRAG_SLOP = 4;
+
 // 拖把手（带 data-handle 的元素）：scene 的点和 graph 的竖线共用。
 // 只认按下把手的那根手指 / 笔：iPad 上手掌、第二根手指的事件不会把点抢走；
-// pointercancel（系统接管手势）时坐标不可靠，用最后一次移动到的位置收尾
+// pointercancel（系统接管手势）时坐标不可靠，用最后一次移动到的位置收尾。
+// onDrag(id, 点, phase, moved)：moved 表示这次按下以后是否真的拖出了 DRAG_SLOP（点一下是 false）
 export function dragHandles(svg, toPoint, onDrag) {
-  let active = null, pid = null, last = null;
+  let active = null, pid = null, last = null, x0 = 0, y0 = 0, moved = false;
   const finish = (e) => {
     if (active == null || (e && e.pointerId !== pid)) return;
     const id = active;
@@ -132,7 +138,7 @@ export function dragHandles(svg, toPoint, onDrag) {
     active = null;
     pid = null;
     svg.classList.remove('dragging');
-    onDrag(id, pt, 'end');
+    onDrag(id, pt, 'end', moved);
   };
   svg.addEventListener('pointerdown', (e) => {
     const id = e.target.getAttribute?.('data-handle');
@@ -141,17 +147,21 @@ export function dragHandles(svg, toPoint, onDrag) {
     if (active != null) finish();
     active = id;
     pid = e.pointerId;
+    x0 = e.clientX;
+    y0 = e.clientY;
+    moved = false;
     try { svg.setPointerCapture(e.pointerId); } catch { /* 合成事件没有真的指针 */ }
     svg.classList.add('dragging');
     e.preventDefault();
     last = toPoint(e);
-    onDrag(id, last, 'start');
+    onDrag(id, last, 'start', false);
   });
   svg.addEventListener('pointermove', (e) => {
     if (active == null || e.pointerId !== pid) return;
     e.preventDefault();
     last = toPoint(e);
-    onDrag(active, last, 'move');
+    moved ||= Math.hypot(e.clientX - x0, e.clientY - y0) > DRAG_SLOP;
+    onDrag(active, last, 'move', moved);
   });
   svg.addEventListener('pointerup', finish);
   svg.addEventListener('pointercancel', finish);
@@ -206,6 +216,14 @@ export function lerpValue(a, b, k) {
   return k >= 1 ? b : a + (b - a) * k;
 }
 
+// 滑块旁边的读数（两位小数）。停着的时候和读数行一样写成分数（1/2、3/10）；
+// 正在动（播放、学生拖着）时写小数，免得一帧一个分数（3/50、11/50……）闪个不停
+export function sliderText(x, moving = false) {
+  const r = Math.round(x * 100) / 100;
+  if (!moving) return numText(r);
+  return String(r === 0 ? 0 : r);
+}
+
 // 记录 / 发给 Claude 时保留两位小数
 export function round2(x) {
   if (Array.isArray(x)) return x.map(round2);
@@ -217,23 +235,35 @@ export function sameValue(a, b, tol = 1e-9) {
   return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => sameValue(x, b[i], tol));
 }
 
-// 给报错用的中文说法
+// 给报错用的中文说法：「x 是一个 2 维向量」
 export function describeValue(x) {
   const s = shapeOf(x);
   if (s === 'n') return '一个数';
-  if (s && x.every((r) => typeof r === 'number')) return `${x.length} 维向量`;
-  if (s && x.every((r) => Array.isArray(r) && r.length === x[0].length)) return `${x.length}×${x[0].length} 矩阵`;
-  return '这样的值';
+  if (s && x.every((r) => typeof r === 'number')) return `一个 ${x.length} 维向量`;
+  if (s && x.every((r) => Array.isArray(r) && r.length === x[0].length && r.every((y) => typeof y === 'number'))) return `一个 ${x.length}×${x[0].length} 矩阵`;
+  return '一个不是数的值';
 }
 
 // 光晕用的模糊滤镜，第一次闪烁时放进页面（和粉笔滤镜一样放在一个不占地方的 svg 里，各张图都能引用）。
-// 滤镜区域按用户坐标给一大块：水平 / 竖直的线包围盒高度是 0，按包围盒算区域的话光晕会整个消失
+// 滤镜区域按用户坐标给：水平 / 竖直的线包围盒高度是 0，按包围盒算区域的话光晕会整个消失。
+// 区域只盖住画布（scene / space 480×480，graph 640×400）再留一圈：区域越大，每次模糊要处理的像素越多
 const GLOW = '<svg class="la-glow-defs" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>'
-  + '<filter id="la-glow" filterUnits="userSpaceOnUse" x="-400" y="-400" width="1500" height="1300"><feGaussianBlur stdDeviation="4.5"/></filter>'
+  + '<filter id="la-glow" filterUnits="userSpaceOnUse" x="-40" y="-40" width="720" height="560"><feGaussianBlur stdDeviation="4.5"/></filter>'
   + '</defs></svg>';
 function ensureGlow() {
   if (typeof document === 'undefined' || document.getElementById('la-glow') || !document.body) return;
   document.body.insertAdjacentHTML('beforeend', GLOW);
+}
+
+// 只变亮、不垫光晕的细线
+const THIN = ['grid', 'tgrid', 'sp-plane-grid'];
+
+// 「1 let A = …；2 vector x …」：highlight 序号写错时告诉课堂 Claude 每条命令是第几条
+export function commandList(cmds, max = 36) {
+  return cmds.map((c, k) => {
+    const t = String(c.srcLine || c.kind).replace(/\s+/g, ' ').trim();
+    return `${k + 1} ${t.length > max ? t.slice(0, max - 1) + '…' : t}`;
+  }).join('；');
 }
 
 const clone = (x) => (Array.isArray(x) ? x.map(clone) : x);
@@ -249,9 +279,10 @@ const asNum = (x) => (typeof x === 'string' && x.trim() !== '' && Number.isFinit
  *   extra     外部变量（link 来的 step / t，predict 的 t / guess）
  *   env()     求出当前全部变量；draw() 重画
  *   dragValue 可拖的 let 怎么校验新值（scene：二维向量；graph：一个数）；不给就当普通 let（space 没有拖动）
+ *   locked    { 变量名: 原因 }：课堂 Claude 不能 set / play 的变量（predict 里学生自己放的 guess）
  * 图的 draw() 里：画第 i 条命令时给元素加 data-cmd，画完调用 ctl.mark()；检查 goal 前看 ctl.quiet
  */
-export function figureControls({ root, cmds, state, extra, env, draw, dragValue }) {
+export function figureControls({ root, cmds, state, extra, env, draw, dragValue, locked = {} }) {
   const listeners = {};
   const anims = new Map(); // 变量名 → { slot, from, to, ms, t0, quiet, resolve }
   let pending = null; // 下一帧：{ raf, timer }
@@ -259,6 +290,13 @@ export function figureControls({ root, cmds, state, extra, env, draw, dragValue 
   let flash = null; // { i, t0 }
   let flashTimer = 0;
 
+  // 课堂 Claude 要改的变量：找不到、或者是学生自己的（locked）都报错
+  function target(name) {
+    if (has(locked, name)) throw new Error(locked[name]);
+    const slot = locate(name);
+    if (!slot) throw new Error(`图里没有变量 ${name}`);
+    return slot;
+  }
   // 变量放在哪：滑块 / 可拖的点 / 普通 let / 外部变量。create：内部动画（▶、link）允许新建外部变量，和以前一样
   function locate(name, { create = false } = {}) {
     const c = cmds.find((k) => (k.kind === 'slider' || k.kind === 'let') && k.name === name);
@@ -268,9 +306,10 @@ export function figureControls({ root, cmds, state, extra, env, draw, dragValue 
     return null;
   }
   const mapOf = (slot) => (slot.kind === 'slider' ? state.slider : slot.kind === 'drag' ? state.drag : slot.kind === 'let' ? state.override : extra);
-  function write(slot, name, val, silent = false) {
+  // 写进去；是滑块就同步滑块的位置和读数（moving：动画还没走完，读数写小数）
+  function write(slot, name, val, moving = false) {
     mapOf(slot)[name] = val;
-    if (slot.kind === 'slider' && !silent) slot.c.sync?.();
+    if (slot.kind === 'slider') slot.c.sync?.(moving);
   }
   function current(name) {
     try { return env()[name]; } catch { return undefined; }
@@ -285,6 +324,7 @@ export function figureControls({ root, cmds, state, extra, env, draw, dragValue 
     const a = anims.get(name);
     if (!a) return;
     anims.delete(name);
+    if (a.slot.kind === 'slider') a.slot.c.sync?.(false);
     a.resolve();
   }
   function tween(name, slot, from, to, ms, quiet) {
@@ -296,7 +336,7 @@ export function figureControls({ root, cmds, state, extra, env, draw, dragValue 
     }
     return new Promise((resolve) => {
       anims.set(name, { slot, from, to, ms, t0: now(), quiet, resolve });
-      write(slot, name, from);
+      write(slot, name, from, true);
       redraw(quiet);
       schedule();
     });
@@ -320,7 +360,7 @@ export function figureControls({ root, cmds, state, extra, env, draw, dragValue 
     let quiet = false;
     for (const [name, a] of anims) {
       const k = Math.min(1, (t - a.t0) / a.ms);
-      write(a.slot, name, k >= 1 ? a.to : lerpValue(a.from, a.to, ease(k)));
+      write(a.slot, name, k >= 1 ? a.to : lerpValue(a.from, a.to, ease(k)), k < 1);
       quiet ||= a.quiet;
       if (k >= 1) { anims.delete(name); done.push(a); }
     }
@@ -358,23 +398,33 @@ export function figureControls({ root, cmds, state, extra, env, draw, dragValue 
     const els = [...(root.querySelectorAll?.(sel) || [])].filter((e) => !e.parentElement?.closest?.(sel));
     // 重画会新建元素：用负的 animation-delay 接上已经闪到的地方，节奏不会被打断
     const delay = `${-Math.round(elapsed)}ms`;
-    if (els.some((e) => e.namespaceURI === NS)) ensureGlow();
+    // 光晕是克隆出来的轮廓，放进 g.cmd-halo：同一个父元素里的放一组、垫在第一个元素下面，整组只模糊一次。
+    // （逐个元素套滤镜的话，网格上百条线每帧各模糊一遍，动画会卡成幻灯片）
+    // 网格线成片出现（压扁时挤在一起），垫光晕会糊成一整块黄：这类细线不垫光晕，只让线自己变亮（见 styles.css）
+    const groups = new Map();
     for (const e of els) {
       if (e.classList.contains('cmd-flash')) continue;
       e.classList.add('cmd-flash');
       e.style.setProperty('--flash-delay', delay);
-      if (e.namespaceURI === NS) {
-        const h = e.cloneNode(true);
-        for (const x of [h, ...h.querySelectorAll('*')]) {
-          x.removeAttribute('data-cmd');
-          x.removeAttribute('data-handle');
-          x.removeAttribute('id');
-          x.classList.remove('vec-in', 'vec-label-in', 'cmd-flash');
-        }
-        h.classList.add('cmd-halo');
-        h.setAttribute('aria-hidden', 'true');
-        e.before(h);
+      if (e.namespaceURI !== NS || !e.parentNode || THIN.some((k) => e.classList.contains(k))) continue;
+      let g = groups.get(e.parentNode);
+      if (!g) {
+        ensureGlow();
+        g = e.ownerDocument.createElementNS(NS, 'g');
+        g.setAttribute('class', 'cmd-halo');
+        g.setAttribute('aria-hidden', 'true');
+        g.style.setProperty('--flash-delay', delay);
+        e.before(g);
+        groups.set(e.parentNode, g);
       }
+      const h = e.cloneNode(true);
+      for (const x of [h, ...h.querySelectorAll('*')]) {
+        x.removeAttribute('data-cmd');
+        x.removeAttribute('data-handle');
+        x.removeAttribute('id');
+        x.classList.remove('vec-in', 'vec-label-in', 'cmd-flash');
+      }
+      g.appendChild(h);
     }
     return els.length > 0;
   }
@@ -403,8 +453,7 @@ export function figureControls({ root, cmds, state, extra, env, draw, dragValue 
     play(name, from = 0, to = 1, ms = 1200) {
       name = String(name ?? '').trim();
       if (!name) throw new Error('play 要写变量名，比如 play t');
-      const slot = locate(name);
-      if (!slot) throw new Error(`图里没有变量 ${name}`);
+      const slot = target(name);
       from = asNum(from ?? 0);
       to = asNum(to ?? 1);
       const shape = shapeOf(from);
@@ -412,7 +461,10 @@ export function figureControls({ root, cmds, state, extra, env, draw, dragValue 
       const cur = current(name);
       if (shapeOf(cur) && shapeOf(cur) !== shape) {
         const what = describeValue(cur);
-        throw new Error(`${name} 是${what}，play 只能让它在两个${what}之间动；要直接换一个值请用 set`);
+        // 协议里的 play 只带数：向量、矩阵要换值时用 set，它会滑过去
+        throw new Error(shape === 'n'
+          ? `${name} 是${what}，play 只能播放数值变量（比如 slider t 0 1 = 0 的 t）；要让 ${name} 换个值，用 set ${name}=…，它会滑过去`
+          : `${name} 是${what}，play 的起点和终点也要是${what}`);
       }
       if (slot.kind === 'drag') { dragValue(name, from); dragValue(name, to); }
       let d = Number(asNum(ms));
@@ -423,8 +475,8 @@ export function figureControls({ root, cmds, state, extra, env, draw, dragValue 
     // 改一个变量（value 已经求好）。形状没变时用不到半秒滑过去，学生看得出改了什么；opts.ms = 0 直接跳
     set(name, value, { ms = 450 } = {}) {
       name = String(name ?? '').trim();
-      const slot = locate(name);
-      if (!slot) throw new Error(`图里没有变量 ${name}`);
+      if (!name) throw new Error('set 要写变量名，比如 set x=[1, 2]');
+      const slot = target(name);
       let val = asNum(value);
       if (slot.kind === 'slider') {
         if (typeof val !== 'number' || !Number.isFinite(val)) throw new Error(`滑块 ${name} 要设成一个数`);
@@ -463,9 +515,11 @@ export function figureControls({ root, cmds, state, extra, env, draw, dragValue 
     highlight(index) {
       const i = Number(asNum(index));
       if (!Number.isInteger(i) || i < 1) throw new Error('highlight 后面要写命令序号（从 1 数），比如 highlight 3');
-      if (i > cmds.length) throw new Error(cmds.length ? `图里只有 ${cmds.length} 条命令，没有第 ${i} 条（只数命令行，从 1 数）` : '这张图里没有命令');
+      if (i > cmds.length) throw new Error(cmds.length ? `图里只有 ${cmds.length} 条命令，没有第 ${i} 条。只数命令行、从 1 数：${commandList(cmds)}` : '这张图里没有命令');
       clearTimeout(flashTimer);
       unmark();
+      // 滑块行这类不重画的元素：先让浏览器看到 class 被去掉，再加回来时动画才会从头播
+      void root.offsetWidth;
       flash = { i, t0: now() };
       const hit = mark();
       flashTimer = setTimeout(() => { flash = null; unmark(); }, FLASH_MS);

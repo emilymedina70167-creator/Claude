@@ -16,8 +16,11 @@ export function predict(el, src) {
   let target = null;
   const body = widget(el, { title: titleText, cls: 'predict' });
   body.insertAdjacentHTML('beforebegin', fields.q ? `<div class="w-q">${mdToHtml(fields.q)}</div>` : '');
+  // 课堂里 figure target=<predict 的 id> 也能 set / play / highlight（揭晓前后都行）；
+  // 只有 guess 是学生自己放的，课堂 Claude 不能替学生挪
   const api = createScene(body, parsed, {
     extraVars: extra,
+    locked: { guess: 'guess 是学生自己拖的猜测，不能替学生改；要指给学生看，用 highlight' },
     dragTargets: { guess: (p) => { if (!target) extra.guess = p.map((x) => Math.round(x * 10) / 10); } },
     afterDraw(plane) {
       if (target) {

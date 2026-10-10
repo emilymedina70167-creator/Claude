@@ -18,7 +18,7 @@ const SAMPLE_PROBLEMS = {
 };
 const FIELDS = ['unit', 'goal', 'scope', 'textbook', 'plan', 'student', 'rules'];
 
-export function initClassDevPanel({ db, setFallback, history }) {
+export function initClassDevPanel({ db, setFallback, history, stats = () => null }) {
   const el = document.createElement('div');
   el.className = 'dev-panel';
   el.innerHTML = `
@@ -30,7 +30,7 @@ export function initClassDevPanel({ db, setFallback, history }) {
         <label>problems（JSON）<textarea class="dev-problems" rows="4"></textarea></label>
         <div class="dev-row"><button type="button" class="btn btn-sm btn-primary dev-save">保存资料包</button><button type="button" class="btn btn-sm dev-sample">填入示例</button></div>
       </div>
-      <div class="dev-tab" data-tab="turns" hidden><div class="dev-list dev-turns"></div></div>
+      <div class="dev-tab" data-tab="turns" hidden><p class="muted dev-stats"></p><div class="dev-list dev-turns"></div></div>
       <div class="dev-tab" data-tab="teacher" hidden>
         <p class="muted">本地打开时由「模拟老师」按剧本回放，不调用 Claude。地址加 <code>&teacher=real</code> 可以改用真的 Claude（需要在 claude.ai 里打开）。</p>
         <label class="dev-check"><input type="checkbox" class="dev-fallback"> 模拟「Opus 5.5 用不了」（平台换成退路模型，这一轮应当整段作废）</label>
@@ -67,6 +67,9 @@ export function initClassDevPanel({ db, setFallback, history }) {
   });
 
   function showTurns() {
+    // 上一轮发给课堂 Claude 的内容有多大（上限 256 KiB）：看长度控制是不是在起作用
+    const st = stats();
+    $('.dev-stats').textContent = st ? `上一轮发出 ${(st.bytes / 1024).toFixed(1)} KiB（上限 ${(st.maxBytes / 1024).toFixed(0)} KiB），${st.turns} 条消息${st.dropped ? `，省略了最早的 ${st.dropped} 条` : ''}${st.keepRecent < 20 ? `，只留最近 ${st.keepRecent} 条原文` : ''}${st.level ? `，第 ${st.level} 级缩减` : ''}。` : '还没有发过。';
     const rows = history().slice(-60).reverse();
     $('.dev-turns').innerHTML = rows.length ? rows.map((t) => `<div class="dev-item"><div><b>#${t.seq} ${escapeHtml(t.role)}</b>${t.kind ? ` <code>${escapeHtml(t.kind)}</code>` : ''}${t.discarded ? ' <span class="muted">（作废）</span>' : ''} <span class="muted">${new Date(t.at).toLocaleTimeString()}</span></div><div class="muted">${escapeHtml(String(t.text || '').slice(0, 220))}</div>${t.boardOps?.length ? `<div>${t.boardOps.map((o) => `<code>${escapeHtml(`${o.op} ${o.id || ''}${o.ok ? '' : ' ✗'}`)}</code>`).join(' ')}</div>` : ''}</div>`).join('') : '<p class="muted">还没有课堂记录。</p>';
   }

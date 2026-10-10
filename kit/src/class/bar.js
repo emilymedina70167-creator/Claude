@@ -1,5 +1,6 @@
 // 课堂模式的底部对话条：黑板下沿的一条木制粉笔槽。
-// 从上到下：消息区（默认只露最近两句，可展开）→ 快捷按钮 + 状态 + 「Opus 5.5 · high」+「下课」→ 输入行。
+// 从上到下：消息区（默认只露最近一两句，可展开）→ 快捷按钮（Claude 在想 / 在写时换成状态）+「Opus 5.5 · high」+「下课」→ 输入行。
+// 木条上挂两个小木把手：左边「板书」（整页手写，从页面右下角收进来），中间「展开」。
 // 对话条只收集输入、显示消息；学生的话由课堂控制器在真正发出时再 addMessage（排队、合并动作都在控制器里）。
 import { createPad } from '../ink/pad.js';
 
@@ -41,6 +42,18 @@ export function keyboardLift(innerHeight, vv) {
   return n >= 1 ? Math.round(n) : 0;
 }
 
+// 黑板上获得焦点的东西要露在 [minTop, maxBottom] 之间（对话条或键盘上面、顶上进度条下面）：
+// 算出页面要滚多少（正数往下滚）。太高放不下时先保证上沿看得见
+export function clearScroll(r, minTop, maxBottom) {
+  if (!r || !(r.bottom > r.top) || !(maxBottom > minTop)) return 0;
+  let dy = r.bottom > maxBottom ? r.bottom - maxBottom : 0;
+  if (r.top - dy < minTop) dy = r.top - minTop;
+  return Math.abs(dy) < 1 ? 0 : Math.round(dy);
+}
+
+// 会弹出软键盘的输入框（按钮、勾选框不算）
+export const FIELD = 'textarea, select, [contenteditable=""], [contenteditable="true"], input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="hidden"])';
+
 // 预填：输入框里已经有字就不动（不覆盖学生正在写的话）
 export function mergePrefill(current, text) {
   const cur = String(current ?? '');
@@ -74,9 +87,39 @@ export function actionTone(text) {
 export function actionItems(html) {
   return String(html ?? '').split(/<br\s*\/?>|\n/i).map((s) => s.trim()).filter(Boolean).map((line) => {
     const m = line.match(/^\[(作答|动作|系统)\]\s*/);
-    const body = m ? line.slice(m[0].length) : line;
+    const body = plainMath(m ? line.slice(m[0].length) : line);
     return { tag: m ? m[1] : '', html: body, tone: actionTone(body) };
   });
+}
+
+// 动作条只有一行小字，放不下 KaTeX：题目标题里的 TeX（A\mathbf x、\boldsymbol\beta^{\mathrm T}）换成能直接读的字符
+const GREEK = {
+  alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε', zeta: 'ζ', eta: 'η', theta: 'θ', lambda: 'λ',
+  mu: 'μ', nu: 'ν', xi: 'ξ', pi: 'π', rho: 'ρ', sigma: 'σ', tau: 'τ', phi: 'φ', varphi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω',
+  Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Sigma: 'Σ', Phi: 'Φ', Omega: 'Ω',
+};
+const SYMBOL = {
+  cdot: '·', times: '×', le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', to: '→', rightarrow: '→', infty: '∞',
+  pm: '±', approx: '≈', in: '∈', ldots: '…', cdots: '⋯', dots: '…', quad: ' ', qquad: ' ', perp: '⊥', sqrt: '√',
+  tr: 'tr', det: 'det', rank: 'rank', dim: 'dim', sin: 'sin', cos: 'cos', ln: 'ln', log: 'log', left: '', right: '',
+};
+const SUP = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', n: 'ⁿ', k: 'ᵏ', T: 'ᵀ', '-': '⁻', '+': '⁺' };
+const SUB = { 0: '₀', 1: '₁', 2: '₂', 3: '₃', 4: '₄', 5: '₅', 6: '₆', 7: '₇', 8: '₈', 9: '₉', i: 'ᵢ', j: 'ⱼ', n: 'ₙ', k: 'ₖ' };
+const script = (map) => (m, a, b) => {
+  const s = a ?? b;
+  return [...s].every((c) => map[c]) ? [...s].map((c) => map[c]).join('') : m;
+};
+export function plainMath(s) {
+  return String(s ?? '')
+    .replace(/\$+/g, '')
+    .replace(/\\(?:mathrm|text|operatorname)\s*\{\s*T\s*\}/g, 'T')
+    .replace(/\\(?:mathbf|boldsymbol|bm|mathrm|mathit|text|operatorname|vec)\s*\{([^{}]*)\}/g, '$1')
+    .replace(/\\(?:mathbf|boldsymbol|bm|mathrm|mathit|vec)\s*(\\[A-Za-z]+|[A-Za-z0-9])/g, '$1')
+    .replace(/\\([A-Za-z]+)/g, (m, w) => GREEK[w] ?? SYMBOL[w] ?? m)
+    .replace(/\\[,;:! ]/g, ' ')
+    .replace(/\^\{([^{}]{1,4})\}|\^([0-9nkT])/g, script(SUP))
+    .replace(/_\{([^{}]{1,3})\}|_([0-9ijnk])/g, script(SUB))
+    .replace(/[{}]/g, '');
 }
 
 // 附图：最多 max 张，多出来的不要
@@ -130,6 +173,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
       <div class="cb-slate-pad"></div>
     </div>
     <div class="cb-ledge" aria-hidden="true"><i class="cb-stick s1"></i><i class="cb-stick s2"></i><i class="cb-stick s3"></i><i class="cb-eraser"></i></div>
+    <div class="cb-dock"></div>
     <button type="button" class="cb-toggle" hidden aria-expanded="false">展开 ▴</button>
     <div class="cb-inner">
       <div class="cb-log">
@@ -140,7 +184,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
       <div class="cb-meta">
         <div class="cb-quick" role="group" aria-label="快捷回答">${QUICK.map((q) => `<button type="button" class="cb-pill" data-q="${q}">${q}</button>`).join('')}</div>
         <div class="cb-status" data-state="idle">
-          <span class="cb-ind" aria-hidden="true"><i class="cb-dot"></i><svg class="cb-scribble" viewBox="0 0 30 14"><path d="M2 9.5c3-6 5.5 2.5 8.5-2.5s4.5 4 8-1 5 3.5 9.5-.5"/></svg></span>
+          <span class="cb-ind" aria-hidden="true"><i class="cb-dot"></i><i class="cb-dot"></i><i class="cb-dot"></i><svg class="cb-scribble" viewBox="0 0 30 14"><path d="M2 9.5c3-6 5.5 2.5 8.5-2.5s4.5 4 8-1 5 3.5 9.5-.5"/></svg></span>
           <span class="cb-status-text" role="status"></span>
           <span class="cb-elapsed"></span>
           <button type="button" class="cb-retry" hidden>重试</button>
@@ -180,6 +224,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   const fileInput = $('.cb-file');
   const attachBox = $('.cb-attach');
   const slate = $('.cb-slate');
+  const dock = $('.cb-dock');
 
   let open = false;      // 消息区展开
   let pinned = true;     // 展开时学生没往上翻：新内容来了跟到底
@@ -190,10 +235,13 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   let status = statusView('idle');
   let thinkingSince = 0;
   let tick = 0;
+  let swappedAt = -1e9;  // 草稿刚撤下的时刻：紧接着换上的正式消息不再播一遍出场动画
   const confirmEnd = createConfirm(CONFIRM_MS);
   let endTimer = 0;
   const cleanups = [];
   const on = (target, type, fn, opts) => { target.addEventListener(type, fn, opts); cleanups.push(() => target.removeEventListener(type, fn, opts)); };
+  const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const focusVisible = (t) => { try { return t.matches(':focus-visible'); } catch { return true; } }; // 老 Safari 不认这个选择器
 
   msgs.id = `cb-log-${Math.random().toString(36).slice(2, 8)}`;
   toggle.setAttribute('aria-controls', msgs.id);
@@ -202,6 +250,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   shotBtn.hidden = !images;
 
   // —— 消息区 ——
+  const items = () => [...msgs.querySelectorAll('.cb-msg')];
   const count = () => msgs.querySelectorAll('.cb-msg').length;
   const nearBottom = () => msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 28;
 
@@ -214,22 +263,50 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     return last.offsetTop + last.offsetHeight - first.offsetTop + (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
   }
 
+  // 收起时露哪几条：最近两条都整条放得下就露两条，否则只露最后一条。
+  // 不露半截的气泡（看起来像排版坏了），宁可少露一条，展开能看全部
+  function pickPeek(list) {
+    if (list.length < 2) return list;
+    log.classList.add('is-measuring');
+    const cs = getComputedStyle(msgs);
+    const room = msgs.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+    const gap = parseFloat(cs.rowGap) || 0;
+    const tail = list.slice(-2);
+    const [a, b] = tail.map((m) => m.offsetHeight);
+    log.classList.remove('is-measuring');
+    return a + gap + b <= room + 1 ? tail : tail.slice(-1);
+  }
+
   function layoutLog({ follow = false } = {}) {
-    const n = count();
-    log.classList.toggle('is-empty', n === 0);
+    const list = items();
+    log.classList.toggle('is-empty', !list.length);
+    let hidden = 0, clip = '';
     if (open) {
-      // 展开：高度贴合内容，最多约 55vh（键盘弹出时按剩下的可视高度算）
+      // 展开：高度贴合内容，最多半屏，并且留出顶上的进度条（键盘弹出时按剩下的可视高度算）
       const vh = window.visualViewport?.height || window.innerHeight;
       const rest = el.offsetHeight - log.offsetHeight;
-      const max = Math.max(120, Math.min(vh * 0.55, vh - rest - 48));
+      const max = Math.max(120, Math.min(vh * 0.5, vh - rest - 76));
       log.style.height = Math.ceil(Math.min(Math.max(contentHeight(), 40), max)) + 'px';
+      list.forEach((m) => m.classList.remove('is-peek', 'is-lead'));
+      if (follow || pinned) msgs.scrollTop = msgs.scrollHeight;
+      if (msgs.scrollTop > 2) clip = 'top';
     } else {
       log.style.height = '';
+      const peek = pickPeek(list);
+      hidden = list.length - peek.length;
+      list.forEach((m) => { m.classList.toggle('is-peek', peek.includes(m)); m.classList.remove('is-lead'); });
+      peek[0]?.classList.add('is-lead');
+      const last = list[list.length - 1];
+      if (msgs.scrollHeight > msgs.clientHeight + 2) {
+        // 一条就放不下：正在写的草稿跟着最新的字走；写完的长话先露开头，剩下的展开看
+        if (last?.classList.contains('is-draft')) { msgs.scrollTop = msgs.scrollHeight; clip = 'top'; } else { msgs.scrollTop = 0; clip = 'bottom'; }
+      } else {
+        msgs.scrollTop = 0;
+      }
     }
-    if (!open || follow || pinned) msgs.scrollTop = msgs.scrollHeight;
-    const over = msgs.scrollHeight > msgs.clientHeight + 2;
-    toggle.hidden = !open && n <= 2 && !over;
-    log.classList.toggle('is-clipped', msgs.scrollTop > 2);
+    toggle.hidden = !open && !hidden && !clip;
+    log.classList.toggle('is-clip-top', clip === 'top');
+    log.classList.toggle('is-clip-bottom', clip === 'bottom');
     log.classList.toggle('can-open', !open && !toggle.hidden);
   }
 
@@ -237,6 +314,7 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     open = !!v && count() > 0;
     pinned = true;
     log.classList.toggle('is-open', open);
+    el.classList.toggle('log-open', open);
     toggle.textContent = open ? '收起 ▾' : '展开 ▴';
     toggle.setAttribute('aria-expanded', String(open));
     layoutLog({ follow: true });
@@ -246,8 +324,9 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   // 收起时点消息区也能展开（iPad 上比找那个小按钮顺手）
   on(log, 'click', (e) => { if (!open && !toggle.hidden && !e.target.closest('a, button')) setOpen(true); });
   on(msgs, 'scroll', () => {
-    if (open) pinned = nearBottom();
-    log.classList.toggle('is-clipped', msgs.scrollTop > 2);
+    if (!open) return;
+    pinned = nearBottom();
+    log.classList.toggle('is-clip-top', msgs.scrollTop > 2);
   }, { passive: true });
   // Esc 收起（焦点不一定在对话条里，所以挂在 document 上；只在展开时才管）
   on(document, 'keydown', (e) => { if (e.key === 'Escape' && open) setOpen(false); });
@@ -271,6 +350,8 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     const m = { el: node, body: node.querySelector('.cb-body') };
     renderBody(m, r, html);
     if (r === 'claude' && msgs.lastElementChild?.classList.contains('cb-claude')) node.classList.add('is-cont');
+    // 草稿确认后由控制器撤下、换成正式的同一段话：原地换掉，不再淡入一次（否则每轮结尾都闪一下）
+    if (r === 'claude' && !draft && performance.now() - swappedAt < 400) node.classList.add('no-anim');
     msgs.appendChild(node);
     const handle = {
       el: node,
@@ -282,16 +363,25 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
       setDraft(v) {
         node.classList.toggle('is-draft', !!v);
         msgs.setAttribute('aria-busy', String(!!msgs.querySelector('.is-draft')));
+        layoutLog();
       },
       remove() {
         if (!node.isConnected) return;
+        if (node.classList.contains('is-draft')) swappedAt = performance.now();
         node.remove();
         msgs.setAttribute('aria-busy', String(!!msgs.querySelector('.is-draft')));
-        if (!count()) { setOpen(false); msgs.innerHTML = `<p class="cb-empty">${EMPTY}</p>`; }
         layoutLog();
+        // 撤下的是最后一条：等这一轮的正式消息（同一个任务里紧接着加）没来，再显示空白提示
+        queueMicrotask(() => {
+          if (count() || msgs.querySelector('.cb-empty')) return;
+          setOpen(false);
+          msgs.innerHTML = `<p class="cb-empty">${EMPTY}</p>`;
+          layoutLog();
+        });
       },
     };
-    handle.setDraft(draft);
+    node.classList.toggle('is-draft', !!draft);
+    msgs.setAttribute('aria-busy', String(!!msgs.querySelector('.is-draft')));
     pinned = true;
     layoutLog({ follow: true });
     return handle;
@@ -304,6 +394,8 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     status = next;
     statusEl.dataset.state = next.state;
     el.dataset.state = next.state;
+    // 在想 / 在写时快捷按钮反正点不了：那一格换成状态，不多占一行
+    el.classList.toggle('is-live', next.live);
     statusText.textContent = next.text;
     retryBtn.hidden = !next.retry;
     clearInterval(tick);
@@ -507,20 +599,64 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
   }
   publishHeight();
 
-  // —— iPad 软键盘：把对话条抬到键盘上面 ——
+  // —— iPad 软键盘：在对话条里打字时把它抬到键盘上面；在黑板上的输入框里打字时让开 ——
+  // 键盘只留下小半个屏幕：对话条再抬上来，正在填的那一格就被盖住了。所以那时对话条收到键盘后面去，
+  // 键盘收起再回来（和黑板上的数字小键盘一样）
   const vv = window.visualViewport;
-  let lastLift = -1;
+  let lastLift = -1, lastAway = false;
+  const boardField = (t) => t instanceof Element && !el.contains(t) && t.matches(FIELD) && t.getAttribute('inputmode') !== 'none';
   function lift() {
     const n = keyboardLift(window.innerHeight, vv);
-    if (n === lastLift) return; // iPad 上滚动时 scroll 事件很密，没变就不碰样式
+    const away = n > 0 && boardField(document.activeElement);
+    if (n === lastLift && away === lastAway) return; // iPad 上滚动时 scroll 事件很密，没变就不碰样式
     lastLift = n;
-    el.style.setProperty('--cb-lift', n + 'px');
-    el.classList.toggle('is-lifted', n > 0);
+    lastAway = away;
+    el.style.setProperty('--cb-lift', (away ? 0 : n) + 'px');
+    el.classList.toggle('is-lifted', n > 0 && !away);
+    el.classList.toggle('is-away', away);
+    // 键盘盖住的高度也留成页面底部空白：黑板最下面的输入框才滚得到键盘上面
+    if (n > 0) root.style.setProperty('--class-kb', n + 'px'); else root.style.removeProperty('--class-kb');
     if (open) layoutLog();
+    if (away) setTimeout(() => keepClear(document.activeElement), 60);
   }
   if (vv) { on(vv, 'resize', lift); on(vv, 'scroll', lift); }
-  on(window, 'resize', () => { lift(); syncControls(); if (open) layoutLog(); });
+  on(window, 'resize', () => { lift(); syncControls(); layoutLog(); });
   lift();
+
+  // 黑板上获得焦点的输入框、按钮（键盘切换焦点时）不能藏在对话条后面：滚到对话条上面、顶上进度条下面。
+  // 用鼠标或手指点的按钮本来就在眼前，不去动页面
+  function keepClear(t) {
+    if (!(t instanceof Element) || !t.isConnected || document.activeElement !== t || el.contains(t)) return;
+    if (t.closest('.keypad, .dev-panel, .ink-bar, .record-fallback') || t.classList.contains('mi-cell')) return; // 数字小键盘自己会滚
+    if (!boardField(t) && !focusVisible(t)) return;
+    const top0 = vv?.offsetTop || 0;
+    const head = document.querySelector('.g-bar')?.getBoundingClientRect();
+    const minTop = Math.max(top0, head && head.bottom > 0 ? head.bottom : 0) + 10;
+    const covered = !el.classList.contains('is-away') && !document.body.classList.contains('has-keypad');
+    const maxBottom = Math.min(top0 + (vv?.height || window.innerHeight), covered ? el.getBoundingClientRect().top : Infinity) - 14;
+    const dy = clearScroll(t.getBoundingClientRect(), minTop, maxBottom);
+    if (dy) window.scrollBy({ top: dy, behavior: reduceMotion() ? 'auto' : 'smooth' });
+  }
+  on(document, 'focusin', (e) => {
+    lift();
+    // 等浏览器自己的「滚到焦点」和键盘弹出先做完，再补一下
+    const t = e.target;
+    setTimeout(() => keepClear(t), 120);
+  });
+  on(document, 'focusout', () => setTimeout(lift, 0));
+
+  // —— 「板书」：本来是页面左下角的浮动按钮，会压住黑板最下面的题。挂到木条左边当一个小把手 ——
+  function adoptInk() {
+    const fab = document.querySelector('body > .ink-fab');
+    if (!fab) return false;
+    dock.appendChild(fab);
+    return true;
+  }
+  let inkWatch = null;
+  if (!adoptInk() && typeof MutationObserver === 'function') {
+    inkWatch = new MutationObserver(() => { if (adoptInk()) { inkWatch.disconnect(); inkWatch = null; } });
+    inkWatch.observe(document.body, { childList: true });
+  }
 
   setStatus('idle');
   syncControls();
@@ -561,11 +697,15 @@ export function createClassBar({ onSend, onQuick, onStop, onRetry, onEnd, images
     destroy() {
       cleanups.forEach((f) => f());
       ro?.disconnect();
+      inkWatch?.disconnect();
       clearInterval(tick);
       clearTimeout(endTimer);
+      const fab = dock.querySelector('.ink-fab');
+      if (fab) document.body.appendChild(fab); // 板书按钮还给页面
       el.remove();
       document.body.classList.remove('class-on');
       root.style.removeProperty('--class-bar-h');
+      root.style.removeProperty('--class-kb');
     },
   };
 }

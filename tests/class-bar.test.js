@@ -4,6 +4,7 @@ import {
   QUICK, MAX_IMAGES, MODEL_TAG, CONFIRM_MS,
   statusView, isSendKey, keyboardLift, mergePrefill, createConfirm,
   actionTone, actionItems, addImages, clipboardImages, htmlImageSrcs, growHeight, elapsedText,
+  plainMath, clearScroll, FIELD,
 } from '../kit/src/class/bar.js';
 
 // 对话条的 DOM 行为用 Playwright 在浏览器里验证（见模块说明）；这里测不碰 DOM 的部分
@@ -108,6 +109,47 @@ test('actionItems：按 <br> 拆成一行一个，认出 [作答] / [动作]', (
   assert.deepEqual(actionItems(''), []);
   assert.deepEqual(actionItems('<br><br>'), []);
   assert.deepEqual(actionItems(null), []);
+  // 题目标题里的 TeX 在小粉笔条里换成能直接读的字符
+  assert.equal(actionItems('[作答] b1 里的 steps ex-1「A 再作用一次」第 1 步（先看 A\\mathbf x）：选了『一个数』（对）')[0].html,
+    'b1 里的 steps ex-1「A 再作用一次」第 1 步（先看 Ax）：选了『一个数』（对）');
+});
+
+test('plainMath：小粉笔条里的 TeX 换成普通字符', () => {
+  assert.equal(plainMath('A\\mathbf x'), 'Ax');
+  assert.equal(plainMath('\\boldsymbol\\beta^{\\mathrm T}\\mathbf x'), 'βᵀx');
+  assert.equal(plainMath('\\alpha\\beta^\\mathrm{T}'), 'αβᵀ');
+  assert.equal(plainMath('$A^{10} = 3^9 A$'), 'A¹⁰ = 3⁹ A');
+  assert.equal(plainMath('A^{-1}，x_1 + x_{2}'), 'A⁻¹，x₁ + x₂');
+  assert.equal(plainMath('\\operatorname{tr} A \\cdot \\lambda \\ne 0'), 'tr A · λ ≠ 0');
+  assert.equal(plainMath('\\mathbf{x} \\to \\boldsymbol{\\alpha}'), 'x → α');
+  // 认不出来的命令原样留着；上标太长不硬转
+  assert.equal(plainMath('\\int f'), '\\int f');
+  assert.equal(plainMath('e^{abc}'), 'e^abc');
+  // 普通文字和已转义的 HTML 不动
+  assert.equal(plainMath('写了「a &lt; b」（对）'), '写了「a &lt; b」（对）');
+  assert.equal(plainMath(undefined), '');
+});
+
+test('clearScroll：黑板上获得焦点的东西滚到对话条上面、进度条下面', () => {
+  // 藏在对话条后面：往下滚，露出整个，离对话条留空
+  assert.equal(clearScroll({ top: 1000, bottom: 1046 }, 80, 960), 86);
+  // 已经在可见区域里：不动
+  assert.equal(clearScroll({ top: 300, bottom: 400 }, 80, 960), 0);
+  // 藏在顶上进度条后面：往上滚
+  assert.equal(clearScroll({ top: 40, bottom: 90 }, 80, 960), -40);
+  // 比可见区域还高：先保证上沿看得见
+  assert.equal(clearScroll({ top: 500, bottom: 1500 }, 80, 960), 420);
+  // 不合理的输入不滚
+  assert.equal(clearScroll(null, 80, 960), 0);
+  assert.equal(clearScroll({ top: 10, bottom: 10 }, 80, 960), 0);
+  assert.equal(clearScroll({ top: 10, bottom: 50 }, 900, 100), 0);
+  assert.equal(clearScroll({ top: 959.6, bottom: 960.4 }, 80, 960), 0);
+});
+
+test('FIELD：会弹软键盘的才算输入框', () => {
+  assert.match(FIELD, /textarea/);
+  assert.match(FIELD, /contenteditable/);
+  for (const t of ['button', 'submit', 'checkbox', 'radio', 'range', 'file', 'hidden']) assert.ok(FIELD.includes(`:not([type="${t}"])`), t);
 });
 
 test('addImages：最多 4 张，多的丢掉并报数', () => {

@@ -10,7 +10,7 @@
 //   show $A\mathbf x = {A*x}$
 //   goal A*x = [3, 2] msg="命中！"
 import { compile, isNum, isVec, isMat, valueTeX, numText } from './expr.js';
-import { createPlane, snap as snapTo, figureControls } from './plot.js';
+import { createPlane, snap as snapTo, figureControls, sliderText } from './plot.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { session } from './session.js';
 
@@ -66,7 +66,7 @@ export function parseScene(src) {
       continue;
     }
     const c = line.trim().match(/^(let|vector|point|segment|line|span|grid|area|polygon|text|show|goal|slider|curve|eigen)\s+(.*)$/i);
-    if (c) { cmds.push(parseCmd(c[1].toLowerCase(), c[2])); lastField = null; continue; }
+    if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2]), srcLine: line.trim() }); lastField = null; continue; }
     if (lastField) fields[lastField] += '\n' + line;
     else if (/^\s*-\s*\[[ xX]\]/.test(line)) (fields._options ||= []).push(line);
     else throw new Error(`看不懂这一行：${line.trim()}`);
@@ -120,7 +120,8 @@ function parseCmd(kind, rest) {
   return { kind, exprs, mods };
 }
 
-// 创建场景。opts.extraVars：外部提供的变量（如 predict 里的 t、guess）
+// 创建场景。opts.extraVars：外部提供的变量（如 predict 里的 t、guess）；
+// opts.locked：{ 变量名: 原因 }，课堂 Claude 不能用 set / play 改的变量
 export function createScene(container, src, opts = {}) {
   const { fields, cmds } = typeof src === 'string' ? parseScene(src) : src;
   const state = { drag: {}, slider: {}, override: {}, revealed: false, goalsHit: new Set() };
@@ -150,7 +151,7 @@ export function createScene(container, src, opts = {}) {
 
   // 课堂操作（play / set / highlight / vars / dragend）：见 plot.js 的 figureControls
   const ctl = figureControls({
-    root: container, cmds, state, extra, env, draw: () => draw(),
+    root: container, cmds, state, extra, env, draw: () => draw(), locked: opts.locked,
     dragValue: (name, p) => {
       if (!isVec(p) || p.length !== 2) throw new Error(`${name} 是可以拖的点，要设成二维向量，比如 [1, 2]`);
       return p;
@@ -182,9 +183,10 @@ export function createScene(container, src, opts = {}) {
     row.innerHTML = `${c.mods.play ? '<button type="button" class="btn btn-sm btn-play">▶</button>' : ''}<span class="coef-name">${c.mods.label ? escapeHtml(c.mods.label) : tex2html(c.name)}</span><input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.init}" aria-label="${escapeHtml(c.name)}"><output></output>`;
     const input = row.querySelector('input');
     const out = row.querySelector('output');
-    const sync = () => { input.value = state.slider[c.name]; out.textContent = numText(Math.round(state.slider[c.name] * 100) / 100); };
-    // 学生自己拖滑块时，停下正在播放的动画（不然下一帧又被拉回去）
-    input.addEventListener('input', () => { ctl.stop(c.name); state.slider[c.name] = Number(input.value); out.textContent = numText(Math.round(state.slider[c.name] * 100) / 100); draw(); });
+    const sync = (moving = false) => { input.value = state.slider[c.name]; out.textContent = sliderText(state.slider[c.name], moving); };
+    // 学生自己拖滑块时，停下正在播放的动画（不然下一帧又被拉回去）；拖着的时候读数写小数，松手再写成分数
+    input.addEventListener('input', () => { ctl.stop(c.name); state.slider[c.name] = Number(input.value); out.textContent = sliderText(state.slider[c.name], true); draw(); });
+    input.addEventListener('change', () => sync(false));
     row.querySelector('.btn-play')?.addEventListener('click', () => ctl.animate(c.name, c.min, c.max, 1400));
     c.sync = sync;
     sync();
@@ -222,8 +224,7 @@ export function createScene(container, src, opts = {}) {
       plane.cmd = null;
       if (opts.afterDraw) opts.afterDraw(plane, v);
       showReadouts(v, errors);
-      // 课堂 Claude 用 set / play 改的变量不算学生达成目标
-      if (!ctl.quiet) checkGoals(v);
+      checkGoals(v, ctl.quiet);
     }
     plane.cmd = null;
     const errText = errors.join('；');
@@ -270,7 +271,7 @@ export function createScene(container, src, opts = {}) {
         const n = Math.hypot(...d);
         if (n < 1e-9) break;
         const R = plane.range * 3 / n;
-        plane.line([p[0] - d[0] * R, p[1] - d[1] * R], [p[0] + d[0] * R, p[1] + d[1] * R], 'span-line').style.stroke = color(c, 'var(--v4)');
+        plane.line([p[0] - d[0] * R, p[1] - d[1] * R], [p[0] + d[0] * R, p[1] + d[1] * R], c.mods.dashed ? 'span-line dashed' : 'span-line').style.stroke = color(c, 'var(--v4)');
         break;
       }
       case 'span': {
@@ -356,12 +357,20 @@ export function createScene(container, src, opts = {}) {
     side.querySelector('.r-show').innerHTML = cmds.map((c, i) => (c.kind === 'show' && visible(c) ? `<div data-cmd="${i + 1}">${mdToHtml(fillValues(c.text, v, errors), { inline: true })}</div>` : '')).join('');
   }
 
-  function checkGoals(v) {
+  // 课堂 Claude 用 set / play 摆到目标上的（quiet）不算学生做到：记下来，
+  // 之后学生动别的东西时也不算，要学生把它挪开、再自己放回目标上才算
+  const placedByTeacher = new Set();
+  function checkGoals(v, quiet) {
     cmds.forEach((c, i) => {
       if (c.kind !== 'goal' || state.goalsHit.has(i)) return;
       let ok = false;
       try { ok = close(c.lhs(v), c.rhs(v), Number(c.mods.tol) || 0.05); } catch { ok = false; }
-      if (ok) {
+      if (quiet || !ok) {
+        if (quiet && ok) placedByTeacher.add(i);
+        else placedByTeacher.delete(i);
+        return;
+      }
+      if (!placedByTeacher.has(i)) {
         state.goalsHit.add(i);
         const box = side.querySelector('.goal-msg');
         box.hidden = false;
@@ -371,21 +380,33 @@ export function createScene(container, src, opts = {}) {
     });
   }
 
-  // 拖把手。松手时如果点真的挪了位置，发 dragend（课堂 / 实时黑板记成学生的动作）
-  let dragFrom = null;
-  plane.draggable((name, [x, y], phase) => {
+  // 拖把手。按下时记住手指和点的偏移，点跟着手指走、不会一按就跳到指尖；
+  // 只点一下（没拖出几像素）不挪点。松手时点真的挪了位置，才发 dragend（课堂 / 实时黑板记成学生的动作）
+  let dragFrom = null, grab = [0, 0];
+  plane.draggable((name, [x, y], phase, moved) => {
     if (opts.dragTargets && Object.hasOwn(opts.dragTargets, name)) { opts.dragTargets[name]([x, y]); draw(); return; }
     const c = cmds.find((k) => k.kind === 'let' && k.name === name);
-    if (phase === 'start') { ctl.stop(name); dragFrom = state.drag[name]; }
-    const step = Number(c?.mods.snap) || 0.5;
-    state.drag[name] = [snapTo(x, step), snapTo(y, step)];
+    if (!c) return;
+    if (phase === 'start') {
+      ctl.stop(name);
+      dragFrom = valueNow(name);
+      grab = isVec(dragFrom) && dragFrom.length === 2 ? [dragFrom[0] - x, dragFrom[1] - y] : [0, 0];
+      return;
+    }
+    if (!moved) { if (phase === 'end') dragFrom = null; return; }
+    const step = Number(c.mods.snap) || 0.5;
+    state.drag[name] = [snapTo(x + grab[0], step), snapTo(y + grab[1], step)];
     draw();
-    if (phase === 'end' && c) {
+    if (phase === 'end') {
       const to = state.drag[name];
       if (!close(to, dragFrom)) ctl.emit('dragend', name, [...to]);
       dragFrom = null;
     }
   });
+  // 拖动开始时点在哪（动画中途按住也按画面上的位置算）
+  function valueNow(name) {
+    try { return env()[name]; } catch { return state.drag[name]; }
+  }
 
   plane.drawIn = true;
   draw();

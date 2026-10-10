@@ -139,13 +139,17 @@ test('黑板指令说明：例子本身写对了（指令格式、组件 id、�
   assert.deepEqual(comps.map((c) => c.name), ['scene', 'answer', 'predict']);
   for (const c of comps) assert.match(c.src, /^id: [\w-]+$/m, `${c.name} 没写 id:`);
 
-  // 图：解析得了，highlight 3 指的是第 3 条命令 line
+  // 图：解析得了，highlight 4 指的是第 4 条命令 line
   const fig = comps.find((c) => /id: fig-b3/.test(c.src));
   const { cmds, fields } = parseScene(fig.src);
   assert.equal(fields.id, 'fig-b3');
-  assert.equal(cmds[2].kind, 'line');
-  assert.ok(blocks.some((b) => b.header === 'figure target=fig-b3 highlight 3'));
+  assert.equal(cmds[3].kind, 'line');
+  assert.ok(blocks.some((b) => b.header === 'figure target=fig-b3 highlight 4'));
+  assert.ok(PROTOCOL_DOC.includes('第 4 条是 `line [0, 0] dir [1, 2]`'), '文字说明和例子里的序号一致');
   assert.ok(cmds.some((c) => c.kind === 'let' && c.name === 'x' && c.mods.drag), 'set x=… 改的是可拖的 x');
+  // 例子里的 play t 要在这张图上真能放：图里得有变量 t
+  assert.ok(blocks.some((b) => b.header === 'figure target=fig-b3 play t'));
+  assert.ok(cmds.some((c) => c.kind === 'slider' && c.name === 't'), 'fig-b3 有滑块 t，play t 才能执行');
 
   const pred = parseScene(comps.find((c) => c.name === 'predict').src);
   const predA = compile(pred.cmds.find((c) => c.kind === 'let' && c.name === 'A').src)({});
@@ -165,7 +169,7 @@ test('黑板指令说明：protocol.js 能把文档里的例子都解析出来',
   assert.equal(ops[0].title, 'Ax 落在哪');
   assert.ok(ops[0].body.includes('```scene') && ops[0].body.includes('```answer'), '内层组件留在 add 的内容里');
   assert.deepEqual(ops[3].assigns, { x: '[1, 1]' });
-  assert.equal(ops[5].index, 3);
+  assert.equal(ops[5].index, 4);
   assert.deepEqual(protocol.parseCommand('figure target=fig-b3 set x=[1, 1] k=2').assigns, { x: '[1, 1]', k: '2' });
   assert.equal(protocol.parseCommand('figure target=fig-b3 play t 0 1 2s').ms, 2000);
 });

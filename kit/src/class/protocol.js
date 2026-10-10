@@ -10,6 +10,8 @@ const FENCE_RE = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/;
 const PREFIX_RE = /^[ \t]{0,3}(?:`+|~+)[ \t]*(?:b(?:o(?:a(?:r)?)?)?)?$/i;
 
 const ID_RE = /^[A-Za-z0-9_\-.~:@+]{1,64}$/;
+// id 会当成数据库文档名（steps/{id}）：数据库不收只有 . 或 .. 的名字
+const validId = (id) => ID_RE.test(id) && id !== '.' && id !== '..';
 // 变量名和 expr.js 一致：字母、下划线、希腊字母开头
 const NAME_RE = /^[A-Za-z_Ͱ-Ͽ][\wͰ-Ͽ]*$/;
 const ASSIGN_RE = /^([A-Za-z_Ͱ-Ͽ][\wͰ-Ͽ]*)\s*=(?!=)/;
@@ -18,13 +20,14 @@ const ACTIONS = ['set', 'play', 'highlight'];
 const CLOSE = { '"': '"”“', '“': '”“"', '”': '”“"', "'": "'’‘", '‘': '’‘\'', '’': '’‘\'', '「': '」', '『': '』' };
 // 表达式里偶尔混进全角标点，expr.js 不认，先换成半角
 const HALF = { '（': '(', '）': ')', '［': '[', '］': ']', '，': ',', '；': ';', '＝': '=' };
-const ID_RULE = '只能用字母、数字和 _ - . ~ : @ +，1 到 64 个字符';
+const ID_RULE = '只能用字母、数字和 _ - . ~ : @ +，1 到 64 个字符，不能只是 . 或 ..';
 
 /**
  * 解析一轮输出（可以是流式中途的前缀）。
  * final=false：最后一个没闭合的 board 块作为 closed:false 的草稿片段；最后一行没写完时不当闭合围栏。
  * final=true：没闭合的 board 块整块（含开头那行）当普通文字。
- * 返回 { segments, ops, rejected }：rejected 是已闭合但指令看不懂的块（已当普通文字），页面可以据此提醒 Claude。
+ * 返回 { segments, ops, rejected, unclosed }：rejected 是已闭合但指令看不懂的块，unclosed 是 final 时没闭合的块
+ * （两种都已当普通文字），页面可以据此提醒 Claude。
  */
 export function parseOutput(text, { final = false } = {}) {
   const src = String(text ?? '').replace(/\r\n?/g, '\n');
@@ -36,6 +39,7 @@ export function parseOutput(text, { final = false } = {}) {
 
   const segments = [];
   const rejected = [];
+  const unclosed = [];
   let words = []; // 正在积累的普通文字行；看不懂的块、没闭合的块也并进来，保持原文的样子
   const flush = () => {
     const t = tidy(words.join('\n'));
@@ -60,6 +64,7 @@ export function parseOutput(text, { final = false } = {}) {
       words.push(...raw);
     } else if (final || blk.cut) {
       // 围栏没闭合（或者下一块都开始了）：当普通文字，不报错
+      unclosed.push({ header: blk.header, op: blk.op, body: blk.body });
       words.push(...raw);
     } else {
       flush();
@@ -72,7 +77,7 @@ export function parseOutput(text, { final = false } = {}) {
   const ops = segments
     .filter((s) => s.type === 'board' && s.closed && s.op && !s.op.error)
     .map((s) => ({ ...s.op, body: s.body }));
-  return { segments, ops, rejected };
+  return { segments, ops, rejected, unclosed };
 }
 
 // 从开头那行往下找闭合围栏。块里是课件 Markdown，会有组件围栏（```scene … ```），要跳过它们。
@@ -165,7 +170,7 @@ function segmentCommand(op, rest) {
     }
   }
   if (!id) return { error: `${op} 缺少 id，比如 ${op} id=b1` };
-  if (!ID_RE.test(id)) return { error: `id「${id}」不合法：${ID_RULE}` };
+  if (!validId(id)) return { error: `id「${id}」不合法：${ID_RULE}` };
   const out = { op, id };
   if (op !== 'hide' && title !== undefined) out.title = title.trim();
   return out;
@@ -192,7 +197,7 @@ function figureCommand(rest) {
   // target 写在动作后面也认
   if (res.target !== undefined) target = res.target;
   if (!target) return { error: 'figure 缺少 target（图的 id），比如 figure target=fig-1 play t' };
-  if (!ID_RE.test(target)) return { error: `target「${target}」不合法：${ID_RULE}` };
+  if (!validId(target)) return { error: `target「${target}」不合法：${ID_RULE}` };
   if (res.error) return { error: res.error };
   delete res.target;
   return { op: 'figure', target, action, ...res };
@@ -319,7 +324,7 @@ function tokenize(s) {
 function readValue(s, i) {
   const closers = CLOSE[s[i]];
   if (closers) {
-    // 收尾的引号后面应是空白或行尾：标题里夹着的引号（他说"对"了）不算收尾
+    // 收尾的引号后面应是空白或行尾：标题里夹着的引号（比如 说"对"了）不算收尾
     let first = -1;
     for (let j = i + 1; j < s.length; j++) {
       if (!closers.includes(s[j])) continue;

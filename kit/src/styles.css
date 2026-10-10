@@ -907,22 +907,28 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .sp-tools .btn-sm { min-height: 32px; padding: 0 10px; font-size: 17px; --frame: rgba(238, 240, 230, 0.3); background: rgba(21, 38, 32, 0.7); }
 
 /* ===== 课堂：figure highlight 让图里某条命令画出的东西闪一下 =====
-   原图形不动，在它后面垫一层克隆出来、模糊过的粉笔黄光晕（.cmd-halo，滤镜 #la-glow 由 plot.js 放进页面），亮两下再淡掉；
-   面状的东西（张成的平面、面积、阴影、柱子）同时把填色提亮；滑块、读数这类 HTML 行用背景高亮。
+   原图形不动，在它下面垫一组克隆出来的轮廓（g.cmd-halo，由 plot.js 的 figureControls 放进去），
+   整组用 #la-glow 模糊成柔和的粉笔黄光晕，亮两下再淡掉；面状的东西（张成的平面、面积、阴影、柱子）同时把填色提亮；
+   滑块、读数这类 HTML 行用背景高亮。
    重画时元素是新建的：--flash-delay 是负的「已经闪了多久」，节奏接得上，不会每帧从头闪 */
-.plane .cmd-halo, .plane .cmd-halo * {
-  fill: none !important; stroke: #ffe88f !important; stroke-dasharray: none !important;
-  stroke-linecap: round; stroke-linejoin: round; pointer-events: none;
+.plane g.cmd-halo { opacity: 0; filter: url(#la-glow); pointer-events: none; animation: cmdHalo 1.6s ease-in-out var(--flash-delay, 0s) both; }
+/* 克隆来的元素还带着原来的 class（粉笔滤镜、虚线、半透明、自己的动画），这里一律压掉，只留一圈轮廓 */
+.plane .cmd-halo * {
+  fill: none !important; stroke: #ffe88f !important; stroke-width: 12px !important; stroke-opacity: .9 !important;
+  stroke-dasharray: none !important; stroke-linecap: round; stroke-linejoin: round;
+  opacity: 1 !important; filter: none !important; animation: none !important;
 }
-.plane .cmd-halo { stroke-width: 12px !important; stroke-opacity: .9; opacity: 0; filter: url(#la-glow); animation: cmdHalo 1.6s ease-in-out var(--flash-delay, 0s) both; }
-.plane .cmd-halo * { stroke-width: 12px !important; }
-.plane text.cmd-halo { stroke-width: 9px !important; }
-.plane .cmd-halo .vec-head, .plane .cmd-halo.vec-head { fill: #ffe88f !important; }
-/* 网格这类细线成片出现：光晕细一些，免得糊成一片 */
-.plane :is(.grid, .tgrid, .sp-plane-grid, .g-drag-line).cmd-halo { stroke-width: 5px !important; stroke-opacity: .7; }
+.plane .cmd-halo text { stroke-width: 7px !important; stroke-opacity: .75 !important; }
+.plane .cmd-halo .vec-head { fill: #ffe88f !important; fill-opacity: 1 !important; }
+.plane .cmd-halo .g-drag-line { stroke-width: 6px !important; }
+/* 网格线（grid 命令、平面上的格线）不垫光晕，线本身变成粉笔黄、亮两下 */
+.plane .cmd-flash:is(.grid, .tgrid, .sp-plane-grid) { animation: cmdLine 1.6s ease-in-out var(--flash-delay, 0s) both; }
+/* 面状的东西把填色提亮；整片张成的平面盖住整张图，只提一点 */
 .plane .cmd-flash:is(.span-plane, .sp-plane, .sp-face, .area, .g-shade, .g-bar) { animation: cmdFill 1.6s ease-in-out var(--flash-delay, 0s) both; }
+.plane .cmd-flash.span-plane { --flash-fill: .2; }
 @keyframes cmdHalo { 0% { opacity: 0; } 18% { opacity: 1; } 40% { opacity: .3; } 62% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes cmdFill { 18%, 62% { fill-opacity: .42; } }
+@keyframes cmdFill { 18%, 62% { fill-opacity: var(--flash-fill, .42); } }
+@keyframes cmdLine { 18%, 62% { stroke: #ffe88f; stroke-opacity: .85; } 40% { stroke: #ffe88f; stroke-opacity: .4; } }
 .coef.cmd-flash, .r-show > .cmd-flash { border-radius: 10px; animation: cmdRow 1.6s ease-in-out var(--flash-delay, 0s) both; }
 @keyframes cmdRow {
   0%, 100% { background-color: rgba(242, 220, 133, 0); box-shadow: 0 0 0 7px rgba(242, 220, 133, 0); }
@@ -930,7 +936,11 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
   40% { background-color: rgba(242, 220, 133, 0.05); box-shadow: 0 0 0 7px rgba(242, 220, 133, 0.05); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .plane .cmd-halo { animation: none; opacity: .7; }
-  .plane .cmd-flash:is(.span-plane, .sp-plane, .sp-face, .area, .g-shade, .g-bar) { animation: none; fill-opacity: .35; }
+  .plane g.cmd-halo { animation: none; opacity: .7; }
+  .plane .cmd-flash:is(.span-plane, .sp-plane, .sp-face, .area, .g-shade, .g-bar) { animation: none; fill-opacity: var(--flash-fill, .35); }
+  .plane .cmd-flash:is(.grid, .tgrid, .sp-plane-grid) { animation: none; stroke: #ffe88f; stroke-opacity: .7; }
   .coef.cmd-flash, .r-show > .cmd-flash { animation: none; background-color: rgba(242, 220, 133, 0.15); box-shadow: 0 0 0 7px rgba(242, 220, 133, 0.15); }
 }
+
+/* scene / space 的 line … dashed：画成一条细虚线（不写 dashed 时仍是半透明的宽带） */
+.plane .span-line.dashed { stroke-width: 2.6; stroke-opacity: .85; stroke-dasharray: 10 8; stroke-linecap: round; filter: url(#la-chalk); }

@@ -334,9 +334,9 @@ function closingText(conv) {
     String.raw`1. **这节课讲了什么**：从「$A\mathbf x$ 本身也是一个向量」接着讲。用 $A=\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}$（$\boldsymbol\alpha=(1,2)^{\mathrm T}$，$\boldsymbol\beta=(1,1)^{\mathrm T}$）看 $A\mathbf x$、$A^2\mathbf x$ 都落在 $\boldsymbol\alpha$ 那条线上，推出 $A^2=3A$，再到 $A^n=3^{n-1}A$。` + (segs.size ? `黑板上一共写了 ${segs.size} 段。` : ''),
     `2. **学生哪里卡住**：${stuck}`,
     right
-      ? String.raw`3. **哪里看起来懂了但证据不够**：有 ${right} 次作答是对的，但都是选择或填数，没让他用自己的话说为什么 $A\mathbf x$ 在线上；$A^n=3^{n-1}A$ 只做过一道。`
+      ? String.raw`3. **哪里看起来懂了但证据不够**：有 ${right} 次作答是对的，但都是选择或填数，没让学生用自己的话说为什么 $A\mathbf x$ 在线上；$A^n=3^{n-1}A$ 只做过一道。`
       : String.raw`3. **哪里看起来懂了但证据不够**：还没有答对的作答，谈不上「看起来懂了」；跟着提示点头的地方都不能算数。`,
-    String.raw`4. **建议下一节怎么接**：先请他不看黑板说出 $A\mathbf x=\boldsymbol\alpha(\boldsymbol\beta^{\mathrm T}\mathbf x)$ 的意思；再给一个三阶、三行成比例的矩阵求 $A^{10}$，看他能不能自己认出秩一、用 $\operatorname{tr}A$ 写出来。`,
+    String.raw`4. **建议下一节怎么接**：先请学生不看黑板说出 $A\mathbf x=\boldsymbol\alpha(\boldsymbol\beta^{\mathrm T}\mathbf x)$ 的意思；再给一个三阶、三行成比例的矩阵求 $A^{10}$，看学生能不能自己认出秩一、用 $\operatorname{tr}A$ 写出来。`,
     '（这是 ?dev 模拟老师写的小结，只用来测试流程。）',
   ].join('\n\n') + '\n';
 }

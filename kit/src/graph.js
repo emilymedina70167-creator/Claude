@@ -10,10 +10,10 @@
 //   bars binompmf(k, 10, 0.3) for k 0 10 color=pink
 //   vline a color=yellow label=a
 //   show $P(X\le a) = {normcdf(a, mu, 1)}$
-import { compile, isNum, numText } from './expr.js';
+import { compile, isNum } from './expr.js';
 import { splitMods, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
-import { figureControls, dragHandles } from './plot.js';
+import { sliderText, figureControls, dragHandles } from './plot.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const W = 640, H = 400, ML = 52, MR = 18, MT = 18, MB = 40;
@@ -32,7 +32,7 @@ export function parseGraph(src) {
     const line = raw.replace(/\s+#\s.*$/, '').trimEnd();
     if (!line.trim()) continue;
     const c = line.trim().match(re);
-    if (c) { cmds.push(parseCmd(c[1].toLowerCase(), c[2])); last = null; continue; }
+    if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2]), srcLine: line.trim() }); last = null; continue; }
     const f = line.match(/^([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/);
     if (f) { last = f[1].toLowerCase(); fields[last] = f[2]; continue; }
     if (last) fields[last] += '\n' + line;
@@ -282,34 +282,38 @@ export function createGraph(container, src, opts = {}) {
     row.innerHTML = `${c.mods.play ? '<button type="button" class="btn btn-sm btn-play">▶</button>' : ''}<span class="coef-name">${c.mods.label ? escapeHtml(c.mods.label) : tex2html(c.name)}</span><input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.init}" aria-label="${escapeHtml(c.name)}"><output></output>`;
     const input = row.querySelector('input');
     const out = row.querySelector('output');
-    const sync = () => { input.value = state.slider[c.name]; out.textContent = numText(Math.round(state.slider[c.name] * 1000) / 1000); };
-    // 学生自己拖滑块时，停下正在播放的动画
-    input.addEventListener('input', () => { ctl.stop(c.name); state.slider[c.name] = Number(input.value); sync(); draw(); });
+    const sync = (moving = false) => { input.value = state.slider[c.name]; out.textContent = sliderText(state.slider[c.name], moving); };
+    // 学生自己拖滑块时，停下正在播放的动画；拖着的时候读数写小数，松手再写成分数
+    input.addEventListener('input', () => { ctl.stop(c.name); state.slider[c.name] = Number(input.value); sync(true); draw(); });
+    input.addEventListener('change', () => sync(false));
     row.querySelector('.btn-play')?.addEventListener('click', () => ctl.animate(c.name, c.min, c.max, 1600));
     c.sync = sync;
     sync();
     side.querySelector('.sliders').appendChild(row);
   }
 
-  // 拖竖线：按下时停掉这条线上的动画；松手时线真的挪了才发 dragend
+  // 拖竖线：按下时停掉这条线上的动画，记住手指和线的偏移（线不会一按就跳到指尖）；
+  // 只点一下（没拖出几像素）不挪线；松手时线真的挪了才发 dragend
   const toX = (e) => { const r = svg.getBoundingClientRect(); return xr[0] + (((e.clientX - r.left) / r.width) * W - ML) / (W - ML - MR) * (xr[1] - xr[0]); };
-  let dragFrom = null;
-  dragHandles(svg, toX, (name, x, phase) => {
+  let dragFrom = null, grab = 0;
+  dragHandles(svg, toX, (name, x, phase, moved) => {
     const c = cmds.find((k) => k.kind === 'let' && k.name === name);
     if (!c) return;
     if (phase === 'start') {
       ctl.stop(name);
       dragFrom = (() => { try { return env()[name]; } catch { return state.drag[name]; } })();
-      return; // 只是按住，不跳到手指的位置（竖线的把手在底边，按下去不该挪动）
+      grab = typeof dragFrom === 'number' && Number.isFinite(x) ? dragFrom - x : 0;
+      return;
     }
-    if (phase === 'move') {
+    if (moved && Number.isFinite(x)) {
       const step = Number(c.mods.snap) || niceStep(xr[1] - xr[0], 8) / 10;
-      state.drag[name] = Math.max(xr[0], Math.min(xr[1], Math.round(x / step) * step));
+      // 按步长取整后再修掉浮点尾巴（0.7000000000000001 → 0.7）
+      state.drag[name] = Math.max(xr[0], Math.min(xr[1], Number((Math.round((x + grab) / step) * step).toFixed(10))));
       draw();
     }
     if (phase === 'end') {
       const to = Object.hasOwn(state.drag, name) ? state.drag[name] : dragFrom;
-      if (typeof to === 'number' && !(Math.abs(to - dragFrom) < 1e-9)) ctl.emit('dragend', name, to);
+      if (moved && typeof to === 'number' && !(Math.abs(to - dragFrom) < 1e-9)) ctl.emit('dragend', name, to);
       dragFrom = null;
     }
   });

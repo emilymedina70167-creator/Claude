@@ -9,10 +9,10 @@
 //   plane normal [0, 0, 1] at [0, 0, 1]  # 过某点、给定法向量的平面
 //   box u, v, [0, 0, 1]                  # 平行六面体（体积 = |det|）
 //   show $\det = {det(mat(u, v, [0,0,1]))}$
-import { compile, isNum, isVec, numText } from './expr.js';
+import { compile, isNum, isVec } from './expr.js';
 import { splitMods, splitTop, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
-import { figureControls } from './plot.js';
+import { sliderText, figureControls } from './plot.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const SIZE = 480;
@@ -34,7 +34,7 @@ export function parseSpace(src) {
     const line = raw.replace(/\s+#\s.*$/, '').trimEnd();
     if (!line.trim()) continue;
     const c = line.trim().match(re);
-    if (c) { cmds.push(parseCmd(c[1].toLowerCase(), c[2])); last = null; continue; }
+    if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2]), srcLine: line.trim() }); last = null; continue; }
     const f = line.match(/^([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/);
     if (f) { last = f[1].toLowerCase(); fields[last] = f[2]; continue; }
     if (last) fields[last] += '\n' + line;
@@ -272,7 +272,7 @@ export function createSpace(container, src, opts = {}) {
         const p = vec3(c.p(v), 'line '), d = vec3(c.d(v), 'dir ');
         if (len(d) < 1e-9) break;
         const u = mul(R * 1.2, unit(d));
-        seg3(sub(p, u), addv(p, u), 'span-line', color(c, 'var(--v4)'));
+        seg3(sub(p, u), addv(p, u), c.mods.dashed ? 'span-line dashed' : 'span-line', color(c, 'var(--v4)'));
         break;
       }
       case 'span': {
@@ -405,9 +405,10 @@ export function createSpace(container, src, opts = {}) {
     row.innerHTML = `${c.mods.play ? '<button type="button" class="btn btn-sm btn-play">▶</button>' : ''}<span class="coef-name">${c.mods.label ? escapeHtml(c.mods.label) : tex2html(c.name)}</span><input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.init}" aria-label="${escapeHtml(c.name)}"><output></output>`;
     const input = row.querySelector('input');
     const out = row.querySelector('output');
-    const sync = () => { input.value = state.slider[c.name]; out.textContent = numText(Math.round(state.slider[c.name] * 100) / 100); };
-    // 学生自己拖滑块时，停下正在播放的动画
-    input.addEventListener('input', () => { ctl.stop(c.name); state.slider[c.name] = Number(input.value); sync(); draw(); });
+    const sync = (moving = false) => { input.value = state.slider[c.name]; out.textContent = sliderText(state.slider[c.name], moving); };
+    // 学生自己拖滑块时，停下正在播放的动画；拖着的时候读数写小数，松手再写成分数
+    input.addEventListener('input', () => { ctl.stop(c.name); state.slider[c.name] = Number(input.value); sync(true); draw(); });
+    input.addEventListener('change', () => sync(false));
     row.querySelector('.btn-play')?.addEventListener('click', () => ctl.animate(c.name, c.min, c.max, 1600));
     c.sync = sync;
     sync();
