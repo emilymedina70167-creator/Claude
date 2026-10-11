@@ -13,7 +13,8 @@
 - **板书**：左下角「板书」按钮。打开后用 Pencil 在整页课件上书写，压感控制粗细，笔身倾斜写出粉笔侧锋的宽笔画；手指照常滚动和点按（防误触）；笔尖悬停时显示落笔位置。两指轻点撤销、三指轻点重做，橡皮按整笔擦除。笔迹跟着所在小节走，保存在这台设备上。
 - **作答框里直接写**：用 iPadOS 的「随手写」（用笔点输入框时不弹数字键盘）。
 - **草稿区**：`draft` 可以用 Pencil 演算，内容保存在这台设备上。
-- **暂时关掉的**：「✎ 手写作答」、手写猜想、截图作答 / 粘贴截图、草稿「拿给 Claude 看」、提问附手写。iPad 上试下来不好用（Notability 圈选拷贝的内容粘贴不上来），先从页面上拿掉，修好后在 `kit/src/features.js` 里打开。
+- **Notability 手写粘贴**：在 Notability 里圈选「拷贝」（或者系统截图「拷贝并删除」），回到作答框下面的粘贴框长按「粘贴」，Claude 转写后你核对再提交。课堂模式里点输入框左边的图片按钮，在弹出的小框里粘贴。
+- **暂时关掉的**：页面上的手写板（「✎ 手写作答」、手写猜想、草稿「拿给 Claude 看」、提问附手写）。在 `kit/src/features.js` 里打开。
 - 网页拿不到 Pencil Pro 的双击、捏压和触感反馈（Apple 只开放给原生 App），所以用两指 / 三指轻点代替最常用的撤销 / 重做。
 
 ## 一个单元是怎么学的
@@ -61,7 +62,7 @@
 
 ## artifact 怎么加载组件库
 
-artifact 不能从 GitHub 加载脚本，也不能加载外部样式和字体。所以组件库打包成一个完全自包含的文件 `kit/dist/la-kit.js`（含 markdown-it、KaTeX 和内嵌字体），作为附带文件发布在上面那个示范 artifact 里。Claude 发布课件时，用 `files` 参数在服务器端把它复制过去，并声明 `capabilities: {"sample": {"images": true}}`，页面里的「问 Claude」、猜想批改就能用了（截图作答、手写识别暂时关掉，以后打开也靠这个声明）。实时黑板还要加上 `"db": {}, "assets": {}`。
+artifact 不能从 GitHub 加载脚本，也不能加载外部样式和字体。所以组件库打包成一个完全自包含的文件 `kit/dist/la-kit.js`（含 markdown-it、KaTeX 和内嵌字体），作为附带文件发布在上面那个示范 artifact 里。Claude 发布课件时，用 `files` 参数在服务器端把它复制过去，并声明 `capabilities: {"sample": {"images": true}}`，页面里的「问 Claude」、猜想批改和截图作答就能用了。实时黑板还要加上 `"db": {}, "assets": {}`。
 
 ## 仓库结构
 
@@ -79,8 +80,9 @@ kit/src/
   check.js  mathinput.js 判分（等价答案）、作答输入和数字小键盘
   generators.js          练习题生成器
   ai.js  tutor.js        页面里调用 Claude、助教面板
-  photo.js               截图作答：上传/粘贴手写截图，Claude 转写、读出最终答案（暂时关掉）
-  features.js            暂时关掉的功能开关（手写识别、截图粘贴）
+  photo.js               截图作答：上传/粘贴手写截图，Claude 转写、读出最终答案
+  flatten.js             截图转白底 PNG（透明底的浅色笔迹先压暗）
+  features.js            功能开关（页面手写板暂时关着）
   record.js              学习记录
   blocks/                各个组件
   linalg.js              精确分数、行化简

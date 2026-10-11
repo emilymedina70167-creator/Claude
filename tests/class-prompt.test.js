@@ -584,7 +584,7 @@ test('整轮拼起来：真实组件说明 + 300 KiB 教材 + 长对话，不超
   assert.equal(r.turns.at(-1).role, 'user');
 });
 
-// —— 2026-10 布局修订：说的话写在黑板上；手写、截图暂时关掉 ——
+// —— 2026-10 布局修订：说的话写在黑板上；页面手写板暂时关掉 ——
 
 test('课堂说明：说的话写在黑板上，不再提对话框 / 消息区', () => {
   assert.doesNotMatch(DEFAULT_RULES + PROTOCOL_DOC, /对话框|消息区|对话条/);
@@ -593,11 +593,14 @@ test('课堂说明：说的话写在黑板上，不再提对话框 / 消息区',
   assert.match(DEFAULT_RULES, /输入框/);
 });
 
-test('组件手册：手写、截图功能关着的时候，手册里写明暂时关掉、不要让学生用', async () => {
+test('组件手册：页面手写板关着的时候，手册写明暂时关掉、不要让学生用；截图粘贴写清怎么粘', async () => {
   const { FEATURES } = await import('../kit/src/features.js');
-  if (FEATURES.handwriting || FEATURES.photo) return; // 打开以后这条不适用
-  assert.match(DOCS, /暂时关掉了/);
-  assert.match(DOCS, /不要让我用它们/);
-  assert.doesNotMatch(DOCS, /「✎ 手写作答」：我/, '不能再把手写作答写成可用的功能');
-  assert.doesNotMatch(DOCS, /拿给 Claude 看」会把草稿/);
+  if (!FEATURES.handwriting) {
+    assert.match(DOCS, /暂时关掉了/);
+    assert.match(DOCS, /不要让我用它们/);
+    assert.doesNotMatch(DOCS, /「✎ 手写作答」：我/, '不能再把手写作答写成可用的功能');
+    assert.doesNotMatch(DOCS, /拿给 Claude 看」会把草稿/);
+  }
+  if (FEATURES.photo) assert.match(DOCS, /圈选「拷贝」/, '截图作答要写清 Notability 怎么粘');
+  else assert.doesNotMatch(DOCS, /「截图作答」：我/);
 });
