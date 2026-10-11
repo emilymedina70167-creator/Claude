@@ -1,10 +1,11 @@
 // 课堂模式的底部输入框：黑板下面浮着的一条粉笔框，只用来对 Claude 说话。
 // Claude 说的话、画的东西都写在黑板上（课堂控制器负责），这里不显示消息。
 // 一行：手写 · 截图 · 输入框 · 发送（生成中变「停止」）·「⋯」菜单（板书、复制学习记录、下课、模型标记）。
-// 只在需要时多出东西：附上的图（输入框上沿一排小照片）、出错 / 提示（输入框上面一条，带「重试」）、手写板。
+// 只在需要时多出东西：附上的图（输入框上沿一排小照片）、出错 / 提示（输入框上面一条，带「重试」）、手写板、粘贴图片的小框。
 // 「Claude 在想 / 在写」的指示（indicator）由这里更新，但放在黑板末尾（控制器把它挂上去），眼睛不用离开黑板。
 import { createPad } from '../ink/pad.js';
 import { FEATURES } from '../features.js';
+import { imageToPng } from '../flatten.js';
 
 export const QUICK = ['没懂', '想不出来', '换个说法', '继续'];
 export const MAX_IMAGES = 4;
@@ -151,6 +152,13 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images 
       <div class="cb-slate-head"><strong>手写</strong><span>写完点「附上」，和下一句话一起发给 Claude</span><button type="button" class="cb-slate-x" aria-label="收起手写板">收起</button></div>
       <div class="cb-slate-pad"></div>
     </div>
+    <div class="cb-paste" hidden role="dialog" aria-label="附图">
+      <div class="cb-slate-head"><strong>附图</strong><span>长按下面的框选「粘贴」：Notability 圈选拷贝、系统截图都行</span><button type="button" class="cb-paste-x" aria-label="收起">收起</button></div>
+      <div class="cb-paste-row">
+        <div class="cb-paste-zone" contenteditable="true" role="textbox" aria-label="在这里粘贴图片" data-hint="长按这里，选「粘贴」" spellcheck="false" autocorrect="off" autocapitalize="off"></div>
+        <button type="button" class="btn cb-pick">从相册选</button>
+      </div>
+    </div>
     <div class="cb-status" data-state="idle" hidden>
       <i class="cb-dot" aria-hidden="true"></i>
       <span class="cb-status-text" role="status"></span>
@@ -202,6 +210,8 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images 
   const fileInput = $('.cb-file');
   const attachBox = $('.cb-attach');
   const slate = $('.cb-slate');
+  const tray = $('.cb-paste');
+  const zone = $('.cb-paste-zone');
   const dock = $('.cb-dock');
 
   let busy = false;
@@ -272,7 +282,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images 
   on(window, 'pointerdown', (e) => { if (menuOpen && e.target instanceof Element && !menu.contains(e.target) && !moreBtn.contains(e.target)) setMenu(false); }, { capture: true, passive: true });
   on(document, 'keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (menuOpen) { setMenu(false); moreBtn.focus({ preventScroll: true }); } else if (!slate.hidden) openSlate(false);
+    if (menuOpen) { setMenu(false); moreBtn.focus({ preventScroll: true }); } else if (!slate.hidden) openSlate(false); else if (!tray.hidden) openTray(false);
   });
   on(copyBtn, 'click', () => { setMenu(false); onCopy?.(); });
   // 板书按钮（板书层自己管开关）：点了就收起菜单，让开黑板
@@ -404,8 +414,43 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images 
     if (!attachBox.querySelector('.cb-attach-note')) attachBox.insertAdjacentHTML('beforeend', '<span class="cb-attach-note"></span>');
     flashNote(msg);
   }
-  on(shotBtn, 'click', () => fileInput.click());
-  on(fileInput, 'change', async () => { await takeFiles(fileInput.files || []); fileInput.value = ''; });
+  // 「截图」打开粘贴小框。课堂输入框是普通文本框，iPad 的 Safari 不往文本框里插图：
+  // Notability 圈选「拷贝」的内容 paste 事件里是空的，只有可编辑的框才会把图插进来（<img src="blob:…">）
+  function openTray(v, note = '') {
+    const show = !!v && canPhoto() && enabled;
+    if (show) { openSlate(false); setMenu(false); }
+    tray.hidden = !show;
+    el.classList.toggle('tray-open', show);
+    shotBtn.classList.toggle('on', show);
+    shotBtn.setAttribute('aria-expanded', String(show));
+    if (show && note) showNote(note);
+    // 不自动聚焦：iPad 上一聚焦就弹键盘，学生要的是长按出「粘贴」
+  }
+  on(shotBtn, 'click', () => openTray(tray.hidden));
+  on($('.cb-paste-x'), 'click', () => openTray(false));
+  on($('.cb-pick'), 'click', () => fileInput.click());
+  // 粘贴框：剪贴板里有图片文件（系统截图）就直接拿；没有就不拦，等浏览器把图插进框里再从框里取
+  on(zone, 'paste', (e) => {
+    if (!canPhoto()) { e.preventDefault(); return; }
+    const files = clipboardImages(e.clipboardData);
+    if (!files.length) return;
+    e.preventDefault();
+    takeFiles(files).then((n) => { if (n) openTray(false); });
+  });
+  on(zone, 'beforeinput', (e) => { if (!/^insertFrom(Paste|Drop)/.test(e.inputType || '')) e.preventDefault(); }); // 只收图，不让打字
+  on(zone, 'input', async () => {
+    const srcs = [...zone.querySelectorAll('img')].map((n) => n.src).filter(Boolean);
+    const typed = !srcs.length && zone.textContent.trim();
+    if (!srcs.length) { zone.innerHTML = ''; if (typed) showNote('这个框只收图片，文字请打在下面的输入框里'); return; }
+    // 先开始读图再清空框（读图在设 src 时就开始了）
+    const room = Math.max(0, MAX_IMAGES - attached.length);
+    const jobs = srcs.slice(0, room).map((src) => srcToPng(src).catch(() => null));
+    zone.innerHTML = '';
+    const blobs = (await Promise.all(jobs)).filter(Boolean);
+    if (!blobs.length) { showNote(room ? '框里出现了图片，但读不出来。换成系统截图「拷贝并删除」再粘贴试试' : `最多附 ${MAX_IMAGES} 张图`); return; }
+    if (attachBlobs(blobs)) openTray(false);
+  });
+  on(fileInput, 'change', async () => { if (await takeFiles(fileInput.files || [])) openTray(false); fileInput.value = ''; });
   // 剪贴板 / 拖进来的东西里的图：文件优先，没有文件再看 html 里的 <img>
   const dataImages = (dt) => {
     const files = clipboardImages(dt);
@@ -414,6 +459,8 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images 
   on(ta, 'paste', (e) => {
     if (!canPhoto()) return;
     const imgs = dataImages(e.clipboardData);
+    // 剪贴板里什么都没给（Notability 圈选拷贝就是这样）：文本框收不到图，打开粘贴小框，请学生在那里再粘贴一次
+    if (!imgs.length && !(e.clipboardData?.types || []).length) { openTray(true, '文本框收不到这种图：在上面这个框里长按，再粘贴一次'); return; }
     if (!imgs.length) return; // 粘贴文字照常
     e.preventDefault();
     takeFiles(imgs);
@@ -447,7 +494,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images 
         }],
       });
     }
-    if (show) { setMenu(false); ta.blur(); }
+    if (show) { setMenu(false); ta.blur(); openTray(false); }
     slate.hidden = !show;
     el.classList.toggle('slate-open', show);
     penBtn.classList.toggle('on', show);
@@ -464,6 +511,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images 
     el.classList.toggle('no-images', !canPen() && !canPhoto());
     penBtn.hidden = !canPen();
     shotBtn.hidden = !canPhoto();
+    if (!canPhoto()) openTray(false);
     if (!images) {
       openSlate(false);
       if (attached.length) clearAttach();
@@ -590,7 +638,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images 
     },
     setEnabled(v) {
       enabled = !!v;
-      if (!enabled) { openSlate(false); disarmEnd(); }
+      if (!enabled) { openSlate(false); openTray(false); disarmEnd(); }
       retryBtn.hidden = !status.retry || !enabled;
       syncControls();
     },
@@ -614,7 +662,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images 
   };
 }
 
-// 用浏览器解码图片（iPad 的 Safari 能解 PNG、JPEG、HEIC、TIFF），画到白底画布上导出 PNG，太大的按比例缩小
+// 用浏览器解码图片（iPad 的 Safari 能解 PNG、JPEG、HEIC、TIFF），转成白底 PNG（透明底的浅色笔迹先压暗，见 flatten.js），太大的按比例缩小
 async function toPng(file) {
   const url = URL.createObjectURL(file);
   try { return await srcToPng(url); } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
@@ -623,23 +671,10 @@ async function toPng(file) {
 function srcToPng(src) {
   return new Promise((resolve, reject) => {
     const im = new Image();
-    if (/^https?:/i.test(src)) im.crossOrigin = 'anonymous'; // 别的网站的图：没有跨域许可就画不出来，下面会报错
-    im.onload = () => {
-      try {
-        const w = im.naturalWidth || im.width, h = im.naturalHeight || im.height;
-        if (!w || !h) throw new Error('empty image');
-        const k = Math.min(1, MAX_SIDE / Math.max(w, h));
-        const c = document.createElement('canvas');
-        c.width = Math.round(w * k);
-        c.height = Math.round(h * k);
-        const g = c.getContext('2d');
-        g.fillStyle = '#ffffff';
-        g.fillRect(0, 0, c.width, c.height);
-        g.drawImage(im, 0, 0, c.width, c.height);
-        c.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png');
-      } catch (e) { reject(e); }
-    };
-    im.onerror = () => reject(new Error('decode failed'));
+    if (/^https?:/i.test(src)) im.crossOrigin = 'anonymous'; // 别的网站的图：没有跨域许可就读不了像素，imageToPng 退回简单铺白底
+    const timer = setTimeout(() => reject(new Error('decode timeout')), 4000);
+    im.onload = () => { clearTimeout(timer); imageToPng(im, MAX_SIDE).then(resolve, reject); };
+    im.onerror = () => { clearTimeout(timer); reject(new Error('decode failed')); };
     im.src = src;
   });
 }

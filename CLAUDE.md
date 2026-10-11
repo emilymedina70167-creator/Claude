@@ -43,7 +43,9 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - 判分：`check.js`、`mathinput.js`；精确分数和行化简：`linalg.js`。
 - 页面里调用 Claude：`ai.js`（`window.claude.use('sample')`，旧接口 `window.claude.complete`）。
 - 手写：`ink/`（整页板书 overlay、手写板 pad）；截图作答：`photo.js`。
-- `features.js`：暂时关掉的功能开关。手写识别和截图粘贴目前关着（Notability 圈选拷贝粘贴不上来，待修），入口都不出现，代码保留。
+- `features.js`：暂时关掉的功能开关。手写识别和截图粘贴目前关着，入口都不出现，代码保留。
+- `flatten.js`：截图 / 手写图转白底 PNG（透明底的浅色笔迹先压暗）。
+- iPad 粘贴的坑（实测）：Notability 圈选「拷贝」后粘贴，`paste` 事件里什么都没有，Safari 直接把 `<img src="blob:…">` 插进**可编辑框**（文本框不插）。所以粘贴框必须是 contenteditable，空的 paste 绝不能 `preventDefault`，图从插进来的 `<img>` 里取。系统截图则正常带 `image/png` 文件。
 - 样式：`styles.css`（黑板主题，自动适配深色），课堂模式另有 `class/class.css`、`class/board.css`。
 
 ### 课堂模式（`kit/src/class/`）

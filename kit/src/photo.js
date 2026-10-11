@@ -4,6 +4,7 @@
 import { getAI, errorText } from './ai.js';
 import { mdToHtml } from './render.js';
 import { FEATURES } from './features.js';
+import { imageToPng } from './flatten.js';
 
 // 在 anchor 后面插入一行：按钮 + 提示 + 缩略图 + 状态。
 // onPick(files, ui) 在学生选好或粘贴图片后调用；ui.status(html, cls) 用来显示进度和结果。
@@ -40,7 +41,7 @@ export function photoPicker(anchor, { label = '上传手写截图', root, onPick
   };
 
   // 收到的东西统一转成白底 PNG 再发：Notability 等笔记软件「拷贝」出来的常是透明底 PNG、TIFF 或 PDF，
-  // 透明底发给 Claude 可能变成黑底看不清，TIFF / PDF 不在 Claude 接受的格式里。
+  // 透明底发给 Claude 可能变成黑底看不清（浅色笔迹会先压暗，见 flatten.js），TIFF / PDF 不在 Claude 接受的格式里。
   async function take(list) {
     const raw = [...list].filter(Boolean).slice(0, maxCount);
     pasteZone.innerHTML = '';
@@ -81,6 +82,8 @@ export function photoPicker(anchor, { label = '上传手写截图', root, onPick
     return out;
   }
   const typesOf = (dt) => [...new Set([...(dt?.types || []), ...[...(dt?.items || [])].map((it) => it.type)])].filter(Boolean).join('、') || '空';
+  let emptyTimer = 0;
+  let inserted = false;
 
   async function onPaste(e) {
     if (box.hidden || e._phDone) return;
@@ -89,7 +92,16 @@ export function photoPicker(anchor, { label = '上传手写截图', root, onPick
     const hasHtmlImg = /<img/i.test(dt?.getData?.('text/html') || '');
     const inZone = e.currentTarget === pasteZone;
     if (!hasFile && !hasHtmlImg) {
-      if (inZone) { e.preventDefault(); ui.status(`剪贴板里没有图片（里面是：${escapeHtml(typesOf(dt))}）。在 Notability 里圈选后点「拷贝」，再回来长按这个框选「粘贴」。`, 'is-bad'); }
+      // 在 iPad 上实测：Notability 圈选「拷贝」后粘贴，paste 事件里什么都没有（types 是空的），
+      // 但浏览器照常把图插进粘贴框（<img src="blob:…">），由下面的 input 处理。所以这里绝不能拦（以前拦了，图就进不来）；
+      // 过一会儿框里还是什么都没有，才告诉学生剪贴板里没有图
+      if (inZone) {
+        inserted = false;
+        clearTimeout(emptyTimer);
+        emptyTimer = setTimeout(() => {
+          if (!inserted && !busy) ui.status(`没收到图片（剪贴板里是：${escapeHtml(typesOf(dt))}）。在 Notability 里圈选后点「拷贝」，或者用系统截图「拷贝并删除」，再回来长按这个框选「粘贴」。`, 'is-bad');
+        }, 1500);
+      }
       return; // 在文本框里粘贴文字，照常
     }
     e.preventDefault();
@@ -100,17 +112,23 @@ export function photoPicker(anchor, { label = '上传手写截图', root, onPick
   }
   pasteZone.addEventListener('paste', onPaste);
   (root || box.parentElement).addEventListener('paste', onPaste);
-  // 有的浏览器不在 paste 事件里给图片，而是直接把 <img> 插进框里：从插进来的图取出来
+  // iPad 的 Safari 粘贴 Notability 圈选内容时不在 paste 事件里给图，而是直接把 <img src="blob:…"> 插进框里：从插进来的图取出来。
+  // 先开始读图、再清空框（读图在设 src 时就开始了，不依赖框里那个元素还在）
   pasteZone.addEventListener('input', async () => {
-    const img = pasteZone.querySelector('img, object, embed');
-    const src = img?.src || img?.data || '';
+    const srcs = [...pasteZone.querySelectorAll('img, object, embed')].map((n) => n.src || n.data || '').filter(Boolean);
+    const typed = !srcs.length && pasteZone.textContent.trim();
+    if (!srcs.length) {
+      pasteZone.innerHTML = '';
+      if (typed) ui.status('这个框只收图片。文字请打在上面的框里。', 'is-bad');
+      return;
+    }
+    inserted = true;
+    clearTimeout(emptyTimer);
+    const jobs = srcs.slice(0, maxCount).map((src) => imgToBlob(src).catch(() => null));
     pasteZone.innerHTML = '';
-    if (!src) return;
-    try {
-      const blob = await imgToBlob(src);
-      if (blob) take([blob]);
-      else throw new Error('empty');
-    } catch { ui.status(`框里出现了图片，但读不出来（${escapeHtml(src.slice(0, 40))}…）。把这行字发给 Claude，我来适配。`, 'is-bad'); }
+    const blobs = (await Promise.all(jobs)).filter(Boolean);
+    if (blobs.length) take(blobs);
+    else ui.status(`框里出现了图片，但读不出来（${escapeHtml(srcs[0].slice(0, 40))}…）。换成系统截图「拷贝并删除」再粘贴试试。`, 'is-bad');
   });
   // 只接收图片，不让在框里打字
   pasteZone.addEventListener('beforeinput', (e) => { if (!/^insertFromPaste|^insertFromDrop/.test(e.inputType)) e.preventDefault(); });
@@ -137,23 +155,13 @@ const MAX_SIDE = 2400;
 const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // 用浏览器解码（iPad 的 Safari 能直接解码 PNG、JPEG、HEIC、TIFF，以及 PDF 的第一页），
-// 画到白底画布上，导出 PNG；太大的按比例缩小。
+// 转成白底 PNG（透明底的浅色笔迹先压暗）；太大的按比例缩小。4 秒没解码完就算读不出来（有的格式既不成功也不报错）
 function imgToBlob(src) {
   return new Promise((resolve, reject) => {
     const im = new Image();
-    im.onload = () => {
-      const w = im.naturalWidth || im.width, h = im.naturalHeight || im.height;
-      if (!w || !h) { reject(new Error('empty image')); return; }
-      const k = Math.min(1, MAX_SIDE / Math.max(w, h));
-      const c = document.createElement('canvas');
-      c.width = Math.round(w * k); c.height = Math.round(h * k);
-      const g = c.getContext('2d');
-      g.fillStyle = '#ffffff';
-      g.fillRect(0, 0, c.width, c.height);
-      g.drawImage(im, 0, 0, c.width, c.height);
-      c.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png');
-    };
-    im.onerror = () => reject(new Error('decode failed'));
+    const timer = setTimeout(() => reject(new Error('decode timeout')), 4000);
+    im.onload = () => { clearTimeout(timer); imageToPng(im, MAX_SIDE).then(resolve, reject); };
+    im.onerror = () => { clearTimeout(timer); reject(new Error('decode failed')); };
     im.src = src;
   });
 }

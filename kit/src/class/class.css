@@ -181,6 +181,25 @@ body.has-keypad .class-bar, .class-bar.is-away {
 .cb-slate .pad-bar { margin-top: 8px; }
 .cb-slate .pad-bar .btn { min-height: 44px; }
 .cb-slate .pad-bar .btn-primary { min-width: 96px; }
+/* —— 粘贴图片的小框：和手写板一样从输入框上面弹起来。iPad 只往可编辑的框里插 Notability 圈选拷贝的图 —— */
+.cb-paste {
+  position: relative; display: grid; gap: 8px; padding: 10px 14px 14px; border-radius: 16px;
+  background: linear-gradient(170deg, #253d33, #1b2f27);
+  box-shadow: inset 0 0 0 1px rgba(238, 240, 230, 0.16), 0 18px 44px rgba(0, 0, 0, 0.5);
+  animation: cbSlateIn .22s var(--cb-ease) both;
+}
+.cb-paste-x { position: relative; min-height: 44px; margin: -8px -6px -8px 0; padding: 0 10px; border: 0; background: none; color: var(--blue); font: 20px/1 var(--hand); cursor: pointer; }
+.cb-paste-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+.cb-paste-zone {
+  flex: 1 1 240px; min-width: 0; min-height: 76px; padding: 12px 14px; border-radius: 12px; outline: none;
+  background: rgba(0, 0, 0, 0.24); color: var(--chalk); font: 16px/1.5 var(--sans); overflow: hidden;
+  box-shadow: inset 0 0 0 1.5px rgba(238, 240, 230, 0.2); -webkit-user-select: text; user-select: text;
+}
+.cb-paste-zone:focus { box-shadow: inset 0 0 0 2px rgba(242, 220, 133, 0.65); }
+.cb-paste-zone:empty::before { content: attr(data-hint); color: rgba(238, 240, 230, 0.42); font: 22px/1.4 var(--hand); }
+.cb-paste-zone img { max-height: 60px; }
+.cb-pick { flex: none; min-height: 52px; align-self: center; }
+.class-bar.tray-open .cb-pill::before { border-color: rgba(242, 220, 133, 0.5); }
 @keyframes cbSlateIn { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
 @keyframes cbIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 
@@ -210,7 +229,7 @@ body.class-on .dev-body { max-height: calc(100svh - var(--class-bar-h, 96px) - 1
 
 @media (prefers-reduced-motion: reduce) {
   .class-bar, body.has-keypad .class-bar, .class-bar.is-away, .cb-tool, .cb-send { transition: none; }
-  .cb-thumb, .cb-slate, .cb-status, .cb-menu { animation: none; }
+  .cb-thumb, .cb-slate, .cb-paste, .cb-status, .cb-menu { animation: none; }
   .cb-end.is-armed::after { animation: none; }
   /* 框上沿的黄光不走动，常亮一道淡的 */
   .class-bar.is-live .cb-pill::after { animation: none; background-size: 100% 100%; opacity: .5; }
