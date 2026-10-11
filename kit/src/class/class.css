@@ -19,8 +19,12 @@
 }
 .class-bar::before {
   content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background: linear-gradient(to top, rgba(29, 49, 41, 0.96) 0, rgba(29, 49, 41, 0.88) 42%, rgba(29, 49, 41, 0));
+  /* 翻板条和快捷回答底下是实的（板超出一屏时，后面的字不会和按钮叠在一起），只有最上面一小段淡出 */
+  background: linear-gradient(to top, rgba(29, 49, 41, 0.97) 0, rgba(29, 49, 41, 0.94) calc(100% - 22px), rgba(29, 49, 41, 0) 100%);
 }
+/* 横屏有常驻栏时：输入框只在黑板那一栏下面（左右边距由脚本按黑板的位置给），右边那栏是常驻栏 */
+body.class-docked .class-bar { padding-left: var(--cb-l, 20px); padding-right: var(--cb-r, 20px); }
+body.class-docked .class-bar::before { left: var(--cb-l, 0px); right: var(--cb-r, 0px); }
 .class-bar > * { pointer-events: auto; width: min(calc(var(--cb-col) - 2 * var(--cb-pad)), 100%); }
 .class-bar.is-lifted { padding-bottom: 8px; }
 /* 让开：黑板上的数字小键盘出来、或者在黑板上的输入框里打字（软键盘只剩小半屏）时，滑到屏幕外，收起再回来 */
@@ -30,6 +34,60 @@ body.has-keypad .class-bar, .class-bar.is-away {
 }
 .class-bar button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .class-bar button:focus-visible, .class-bar textarea:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+
+/* —— 控制条：左边翻板，右边快捷回答。透明底，只有按钮能点 —— */
+.class-bar > .cb-ctrl { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; min-height: 40px; pointer-events: none; }
+.cb-ctrl > * { pointer-events: auto; }
+.cb-nav { display: inline-flex; align-items: center; gap: 2px; }
+.cb-nav-btn {
+  position: relative; display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%;
+  background: rgba(21, 38, 32, 0.78); color: var(--chalk); cursor: pointer; box-shadow: inset 0 0 0 1.3px rgba(238, 240, 230, 0.22);
+}
+.cb-nav-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.cb-nav-btn:disabled { opacity: .3; cursor: default; }
+.cb-nav-btn::after, .cb-nav-label::after, .cb-now::after { content: ""; position: absolute; inset: -3px; }
+.cb-nav-label {
+  position: relative; display: inline-flex; align-items: baseline; gap: 4px; min-height: 40px; padding: 0 12px; border: 0; border-radius: 12px;
+  background: none; color: var(--muted); font: 19px/1 var(--hand); cursor: pointer;
+}
+.cb-nav-n { font-size: 24px; color: var(--chalk); font-variant-numeric: tabular-nums; }
+.cb-nav-of { font-variant-numeric: tabular-nums; }
+.cb-nav-label[aria-expanded="true"] { color: var(--yellow); }
+.cb-now {
+  position: relative; margin-left: 6px; min-height: 36px; padding: 0 14px 1px; border: 0; border-radius: 999px; cursor: pointer;
+  font: 19px/1 var(--hand); color: var(--yellow); background: rgba(21, 38, 32, 0.9); box-shadow: inset 0 0 0 1.4px rgba(242, 220, 133, 0.6);
+}
+.cb-now.is-live { animation: cbNowPulse 1.6s ease-in-out infinite; }
+@keyframes cbNowPulse { 50% { box-shadow: inset 0 0 0 1.4px rgba(242, 220, 133, 0.95), 0 0 14px rgba(242, 220, 133, 0.35); } }
+.cb-quick { display: flex; gap: 2px 4px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.cb-q {
+  position: relative; flex: none; min-height: 44px; padding: 0 13px 1px; border: 0; background: none; cursor: pointer;
+  color: var(--chalk); font: 20px/1 var(--hand); white-space: nowrap; transition: transform .12s ease, color .2s;
+}
+.cb-q::before {
+  content: ""; position: absolute; inset: 5px 0; border-radius: 16px 18px 15px 17px; pointer-events: none;
+  border: 1.5px dashed rgba(238, 240, 230, 0.42); background: rgba(21, 38, 32, 0.72); transition: border-color .2s;
+}
+@media (hover: hover) { .cb-q:not(:disabled):hover { color: var(--chalk); } .cb-q:not(:disabled):hover::before { border-color: rgba(238, 240, 230, 0.6); } }
+.cb-q:active { transform: scale(.95); }
+.cb-q:disabled { opacity: .35; cursor: default; }
+.cb-q:focus-visible, .cb-nav-btn:focus-visible, .cb-nav-label:focus-visible, .cb-now:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+/* 所有的板：从翻板条上弹出来的一张单子 */
+.cb-pages {
+  position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 2; width: min(380px, 100%); max-height: min(52svh, 420px); overflow-y: auto; padding: 6px;
+  border-radius: 16px; background: rgba(21, 38, 32, 0.97); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  box-shadow: inset 0 0 0 1px rgba(238, 240, 230, 0.16), 0 16px 40px rgba(0, 0, 0, 0.45); animation: cbMenuIn .18s var(--cb-ease) both; transform-origin: left bottom;
+}
+.cb-page-item {
+  display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; align-items: baseline; gap: 10px; width: 100%; min-height: 46px; padding: 6px 12px;
+  border: 0; border-radius: 10px; background: none; color: var(--body); text-align: left; cursor: pointer; font: 16px/1.4 var(--sans);
+}
+.cb-page-item b { font: 400 22px/1 var(--hand); color: var(--muted); text-align: right; }
+.cb-page-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-page-item i { font: normal 15px/1 var(--hand); color: var(--yellow); }
+.cb-page-item.is-view { background: rgba(238, 240, 230, 0.07); }
+.cb-page-item.is-view b { color: var(--chalk); }
+@media (hover: hover) { .cb-page-item:hover { background: rgba(238, 240, 230, 0.07); } }
 
 /* —— 输入框：一条粉笔描边的圆角框 —— */
 .cb-pill {
@@ -221,6 +279,11 @@ body.class-on #la-toast { bottom: calc(var(--class-bar-h, 96px) + 12px); }
 /* 开发面板（?dev）不要伸到输入框后面 */
 body.class-on .dev-body { max-height: calc(100svh - var(--class-bar-h, 96px) - 180px); }
 
+@media (max-width: 560px) {
+  .cb-quick { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  .cb-quick::-webkit-scrollbar { display: none; }
+  .cb-q { padding: 0 9px 1px; font-size: 18px; }
+}
 @media (max-width: 440px) {
   .class-bar { --cb-pad: 12px; }
   .cb-form { padding: 4px; }
@@ -229,7 +292,8 @@ body.class-on .dev-body { max-height: calc(100svh - var(--class-bar-h, 96px) - 1
 
 @media (prefers-reduced-motion: reduce) {
   .class-bar, body.has-keypad .class-bar, .class-bar.is-away, .cb-tool, .cb-send { transition: none; }
-  .cb-thumb, .cb-slate, .cb-paste, .cb-status, .cb-menu { animation: none; }
+  .cb-thumb, .cb-slate, .cb-paste, .cb-status, .cb-menu, .cb-pages, .cb-now.is-live { animation: none; }
+  .cb-pill, .cb-q { transition: none; }
   .cb-end.is-armed::after { animation: none; }
   /* 框上沿的黄光不走动，常亮一道淡的 */
   .class-bar.is-live .cb-pill::after { animation: none; background-size: 100% 100%; opacity: .5; }

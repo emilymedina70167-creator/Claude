@@ -35,7 +35,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 |---|---|---|
 | `guided` | `guided.js` | 一整个单元，按 `##` 分节解锁；学习记录复制回对话 |
 | `live` | `live/` | 对话里的 Claude 一段一段写进 artifact 数据库，页面实时显示；作答写回数据库 |
-| `class` | `class/` | 页面底部只有输入框，课堂里的 Claude 说的话和画的东西都写在黑板上；学生作答自动发给它 |
+| `class` | `class/` | 一屏一块板：课堂里的 Claude 换板、写板、说的话写在板顶；常驻栏；底部只有输入框和翻页条；学生作答自动发给它 |
 
 - `render.js`：Markdown（markdown-it + KaTeX）+ 围栏组件 → DOM。组件在 `blocks/`，注册在 `blocks/index.js`。
 - `session.js`：全局状态（关卡、作答记录、图形注册 `session.scenes`、写法错误 `session.problems`）。
@@ -50,13 +50,13 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ### 课堂模式（`kit/src/class/`）
 
-- `classroom.js`：控制器。黑板段落、学生作答排队（1.5 秒合并）、调用课堂 Claude、执行黑板指令、写法自检和自动重写、刷新后恢复。
-- `protocol.js`：解析课堂 Claude 的输出。普通文字是对学生说的话；```` ```board ```` 围栏块是黑板指令（add / replace / hide / figure）。纯函数，支持流式前缀。
+- `classroom.js`：控制器。一屏一块板（`board new` 换板，旧板翻页看）、板顶那句话、常驻栏、一屏放不放得下的测量（`--board-h`）、学生作答排队（1.5 秒合并，拖动跟着下一条一起发）、调用课堂 Claude、执行黑板指令、写法自检和自动重写、刷新后恢复。学生发的消息不上黑板。
+- `protocol.js`：解析课堂 Claude 的输出。普通文字是对学生说的话（写在板顶）；```` ```board ```` 围栏块是黑板指令（new / add / replace / hide / pin / unpin / figure）。纯函数，支持流式前缀。
 - `prompt.js`：每一轮发给课堂 Claude 的内容（红线 `DEFAULT_RULES`、黑板指令说明 `PROTOCOL_DOC`、组件手册、资料包、黑板现状、对话历史和压缩）。纯函数。
 - `docs.js` + `kit/build-docs.js`：构建时从 `CLAUDE-PROJECT.md` 第三节截出组件手册打包进去。
-- `bar.js`：底部输入框（附图、手写板、「⋯」菜单、iPad 软键盘）。不显示消息：Claude 的话由 `classroom.js` 写在黑板上，按 `data-key` 和段落排先后。
+- `bar.js`：底部输入框（附图、手写板、「⋯」菜单、iPad 软键盘）和它上面的一条：翻页（上一块 / 下一块 / 板列表 / 回到当前板）、快捷回答。不显示消息。
 - `devteacher.js`：`?dev` 的模拟老师；`devpanel.js`：开发面板。
-- 数据（artifact 数据库）：`steps` 黑板段落，`class_turns` 每一轮，`class_notes` 观察和下课小结，`answers` / `events` 作答，`pack/main`、`pack/problems` 资料包。
+- 数据（artifact 数据库）：`steps` 黑板段落（`page` 在第几块板，`place: 'pin'` 是常驻栏），`class_pages` 每块板（标题、板顶的话、下课小结），`class_turns` 每一轮，`class_notes` 观察和下课小结，`answers` / `events` 作答，`pack/main`、`pack/problems` 资料包。
 
 ## 硬性规定（我明确要求过的，不要改）
 

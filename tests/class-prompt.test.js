@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { componentDocs } from '../kit/build-docs.js';
 import {
-  DEFAULT_RULES, PROTOCOL_DOC, bytes, buildSystem, boardStateText, nextSegmentId, packText, PACK_BUDGET, CUT_NOTE,
+  DEFAULT_RULES, PROTOCOL_DOC, bytes, buildSystem, boardStateText, nextSegmentId, nextPinId, packText, PACK_BUDGET, CUT_NOTE,
   actionText, actionsMessage, buildTurns, KEEP_RECENT, OMITTED, COMPACT_AT, needsCompaction, compactionPrompt,
   summaryTurn, SUMMARY_HEAD, closingPrompt,
 } from '../kit/src/class/prompt.js';
@@ -125,12 +125,11 @@ test('黑板指令说明：每条规则都写到了', () => {
 
 test('黑板指令说明：例子本身写对了（指令格式、组件 id、图的命令、highlight 序号）', () => {
   const blocks = boardBlocks(PROTOCOL_DOC);
-  assert.equal(blocks.length, 7);
+  assert.equal(blocks.length, 10);
   const ID = '[A-Za-z0-9_\\-.~:@+]{1,64}';
   const grammar = [
-    new RegExp(`^add id=${ID}( title=("[^"]*"|“[^”]*”))?$`),
-    new RegExp(`^replace id=${ID}( title=("[^"]*"|“[^”]*”))?$`),
-    new RegExp(`^hide id=${ID}$`),
+    new RegExp(`^(new|add|replace|pin) id=${ID}( title=("[^"]*"|“[^”]*”))?$`),
+    new RegExp(`^(hide|unpin) id=${ID}$`),
     new RegExp(`^figure target=${ID} (set( \\w+=\\S.*)+|play \\w+( \\S+ \\S+ \\S+)?|highlight \\d+)$`),
   ];
   for (const b of blocks) assert.ok(grammar.some((g) => g.test(b.header)), `指令写法不对：${b.header}`);
@@ -164,12 +163,14 @@ test('黑板指令说明：例子本身写对了（指令格式、组件 id、�
 
 test('黑板指令说明：protocol.js 能把文档里的例子都解析出来', { skip: !protocol && 'protocol.js 还不存在' }, () => {
   const { ops } = protocol.parseOutput(PROTOCOL_DOC, { final: true });
-  assert.deepEqual(ops.map((o) => o.op + (o.action ? ':' + o.action : '')), ['add', 'replace', 'hide', 'figure:set', 'figure:play', 'figure:highlight', 'add']);
+  assert.deepEqual(ops.map((o) => o.op + (o.action ? ':' + o.action : '')), ['new', 'add', 'replace', 'hide', 'figure:set', 'figure:play', 'figure:highlight', 'pin', 'unpin', 'new']);
   assert.equal(ops[0].id, 'b3');
   assert.equal(ops[0].title, 'Ax 落在哪');
-  assert.ok(ops[0].body.includes('```scene') && ops[0].body.includes('```answer'), '内层组件留在 add 的内容里');
-  assert.deepEqual(ops[3].assigns, { x: '[1, 1]' });
-  assert.equal(ops[5].index, 4);
+  assert.ok(ops[0].body.includes('```scene') && ops[0].body.includes('```answer'), '内层组件留在 new 的内容里');
+  assert.deepEqual(ops[4].assigns, { x: '[1, 1]' });
+  assert.equal(ops[6].index, 4);
+  assert.deepEqual([ops[7].op, ops[7].id, ops[7].title], ['pin', 'k1', '这节课的记号']);
+  assert.deepEqual([ops[8].op, ops[8].id], ['unpin', 'k1']);
   assert.deepEqual(protocol.parseCommand('figure target=fig-b3 set x=[1, 1] k=2').assigns, { x: '[1, 1]', k: '2' });
   assert.equal(protocol.parseCommand('figure target=fig-b3 play t 0 1 2s').ms, 2000);
 });
@@ -586,11 +587,40 @@ test('整轮拼起来：真实组件说明 + 300 KiB 教材 + 长对话，不超
 
 // —— 2026-10 布局修订：说的话写在黑板上；页面手写板暂时关掉 ——
 
-test('课堂说明：说的话写在黑板上，不再提对话框 / 消息区', () => {
+test('课堂说明：一屏一块板，说的话写在板顶，学生的话不上黑板，不再提对话框 / 消息区', () => {
   assert.doesNotMatch(DEFAULT_RULES + PROTOCOL_DOC, /对话框|消息区|对话条/);
   assert.match(PROTOCOL_DOC, /也写在黑板上/);
-  assert.match(PROTOCOL_DOC, /接在黑板最后面/, 'replace 的段留在原位，话接在最后：要写清是哪一段');
+  assert.match(PROTOCOL_DOC, /写在当前这块板的最上面/);
+  assert.match(PROTOCOL_DOC, /学生说的话不显示在黑板上/);
+  assert.match(PROTOCOL_DOC, /一屏放得下/);
+  assert.match(PROTOCOL_DOC, /只有当前板上和常驻栏里的图能动/);
   assert.match(DEFAULT_RULES, /输入框/);
+  assert.match(DEFAULT_RULES, /换一块新板/);
+});
+
+test('黑板现状（分板）：当前板、板顶的话、超出一屏、常驻栏、以前的板、屏幕大小、下一个 id', () => {
+  const t = boardStateText({
+    segs: [
+      { id: 'b1', page: 1, title: '图', summary: '拖', blocks: [{ id: 'fig-1', kind: 'scene', vars: ['x'], results: ['把 x 拖到 [1, 2]', 'a', 'b', 'c'] }] },
+      { id: 'k1', place: 'pin', title: '记号', summary: 'A=αβᵀ', blocks: [] },
+      { id: 'b2', page: 2, title: '题', blocks: [{ id: 'q-2', kind: 'answer', results: [] }] },
+      { id: 'b3', page: 2, title: '提示', hidden: true },
+    ],
+    pages: [{ n: 1, title: 'Ax 落在哪', talk: '先拖' }, { n: 2, title: '推到 n 次', talk: '算一下 $A^3$' }],
+    cur: 2, view: 1,
+    screen: { w: 820, h: 1180, landscape: false, board: { w: 780, h: 860 } },
+    fit: { fits: false, need: 1100, avail: 860 },
+  });
+  assert.match(t, /^黑板现在是第 2 块板（一共 2 块；学生正翻回去看第 1 块）。学生的屏幕：竖屏 820×1180，一块板能用的地方大约 780×860/);
+  assert.ok(t.includes('当前板「推到 n 次」最上面写着你上一句话：「算一下 $A^3$」'));
+  assert.ok(t.includes('当前板上的段（从上到下）：\n- b2「题」\n  - answer q-2：还没有作答\n- b3「提示」（已撤回，学生看不到）'));
+  assert.ok(t.includes('内容高约 1100，一屏只放得下约 860'));
+  assert.ok(t.includes('常驻栏（学生一直看得到）：\n- k1「记号」：A=αβᵀ'));
+  assert.ok(t.includes('以前的板（学生翻回去才看得到；上面的图不能再用 figure 动）：\n- 第 1 块「Ax 落在哪」\n  - b1「图」：拖'));
+  assert.ok(!t.includes('把 x 拖到 [1, 2]'), '以前板上的作答只留最近 3 条');
+  assert.ok(t.endsWith('新的一段用 id b4，常驻栏新的一条用 id k2（用过的 id，包括撤回的，都不要再用）。'));
+  assert.equal(nextPinId([{ id: 'k2' }, { id: 'b7' }, { id: 'K9' }]), 'k10');
+  assert.match(boardStateText({ segs: [], pages: [], cur: 0, screen: { w: 1180, h: 820, landscape: true } }), /^黑板是空的：第一块板用 board new 写。学生的屏幕：横屏 1180×820。\n新的一段用 id b1，常驻栏新的一条用 id k1/);
 });
 
 test('组件手册：页面手写板关着的时候，手册写明暂时关掉、不要让学生用；截图粘贴写清怎么粘', async () => {

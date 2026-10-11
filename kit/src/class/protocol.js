@@ -1,5 +1,6 @@
 // 课堂模式：解析课堂里的 Claude 每一轮的输出。
-// 普通文字是对学生说的话；语言名为 board 的围栏代码块是黑板指令（add / replace / hide / figure）。
+// 普通文字是对学生说的话（写在当前这块板的最上面）；语言名为 board 的围栏代码块是黑板指令：
+// new（擦掉黑板，换一块新板）/ add / replace / hide / figure（改当前这块板）/ pin / unpin（常驻栏）。
 // 页面在流式回调里拿到的是「到目前为止的全文」，每次整段重新解析，所以这里全是纯函数、不留状态、不碰 DOM。
 
 // ```board add id=b7 title="…"：行首最多 3 个空格，` 或 ~ 至少 3 个，可有空格，然后是 board 和指令
@@ -133,20 +134,26 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 
 /* ---------------- 指令 ---------------- */
 
+// 段指令：new / add / replace / pin 带内容（可以有标题）；hide / unpin 只要 id
+export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'pin', 'unpin'];
+const NO_TITLE = new Set(['hide', 'unpin']);
+const OP_LIST = 'new / add / replace / hide / pin / unpin / figure';
+
 /**
  * 解析 board 后面那一行：
- *   add id=b7 title="…"、replace id=b5、hide id=b5、
+ *   new id=b7 title="…"（换一块新板，这一段是新板的第一段）、add id=b8（在当前板上加一段）、
+ *   replace id=b5、hide id=b5、pin id=k1 title="…"（常驻栏）、unpin id=k1、
  *   figure target=fig-b7 set x=[1, 2] k=2 / play t [from to 时长] / highlight 3
  * 看不懂时返回 { error: 原因 }。
  */
 export function parseCommand(header) {
   const h = String(header ?? '').trim();
-  if (!h) return { error: '缺少指令：board 后面要写 add / replace / hide / figure' };
+  if (!h) return { error: `缺少指令：board 后面要写 ${OP_LIST}` };
   const m = h.match(/^(\S+)\s*([\s\S]*)$/);
   const name = m[1].toLowerCase();
-  if (name === 'add' || name === 'replace' || name === 'hide') return segmentCommand(name, m[2]);
+  if (SEGMENT_OPS.includes(name)) return segmentCommand(name, m[2]);
   if (name === 'figure') return figureCommand(m[2]);
-  return { error: `看不懂的指令「${m[1]}」：只认 add / replace / hide / figure` };
+  return { error: `看不懂的指令「${m[1]}」：只认 ${OP_LIST}` };
 }
 
 function segmentCommand(op, rest) {
@@ -169,10 +176,11 @@ function segmentCommand(op, rest) {
       else if (id === undefined) id = t.value;
     }
   }
-  if (!id) return { error: `${op} 缺少 id，比如 ${op} id=b1` };
+  const eg = op === 'pin' || op === 'unpin' ? 'k1' : 'b1';
+  if (!id) return { error: `${op} 缺少 id，比如 ${op} id=${eg}` };
   if (!validId(id)) return { error: `id「${id}」不合法：${ID_RULE}` };
   const out = { op, id };
-  if (op !== 'hide' && title !== undefined) out.title = title.trim();
+  if (!NO_TITLE.has(op) && title !== undefined) out.title = title.trim();
   return out;
 }
 

@@ -2,14 +2,16 @@
 // 用来测流式解析、草稿显示、写法自检和重写、figure 指令、Opus 5.5 退路作废、出错提示。
 // 和 claude.use('sample') 返回的函数同形：teacher(input, opts) / teacher.json / teacher.limits。
 //
-// 剧本按最后一条 user 消息挑（输入里能看出的都从输入推，换一个 teacher 实例也接得上）：
-//   第一轮 → 打招呼 + b1（steps ex-1 + 绑定它的 scene fig-1）
-//   [作答] / [动作] → 回应 + figure set / play（错了再 highlight）+ 一个 answer
-//   继续 / 普通文字（第一次）→ 故意写错的一段（自检应该拦下来）
+// 剧本按最后一条 user 消息挑（输入里能看出的都从输入推，换一个 teacher 实例也接得上）。一屏一块板：
+//   第一轮 → 打招呼 + new b1（steps ex-1 + 绑定它的 scene fig-1）+ pin k1（这节课的记号）
+//   [作答] / [动作] 做对了 → new 一块新板（一个 answer）；第一次做对时 pin k2（刚得出的结论）
+//   [作答] / [动作] 错了、想不出来 → 在当前板上改：当前板有图就 figure set / play / highlight，没图就 add 一段提示
+//   只有 [动作]（拖了拖图、揭开一步）→ 说一句，不动黑板（测只换板顶那句话）
+//   继续 / 普通文字（第一次）→ new 一块故意写错的板（自检应该拦下来）
 //   [系统] … 写法错误 → 「我改一下」+ board replace 写对的版本
-//   没懂 / 想不出来 / 换个说法 → key 提示框
+//   没懂 / 换个说法 → new 一块 key 提示框；想不出来 → 在当前板上 add 一段提示
 //   下课 / 小结 → 四点小结（不写黑板）
-//   其他 → recognize 认方法小练
+//   其他 → new 一块 recognize 认方法小练
 // 开发用的暗号（在对话框里打）：「测试:写错」再来一段写错的；「一直写错」连重写也错（测「这段没画出来」）；
 // 「测试:rate_limited」这类让这一轮按那个错误码失败。
 
@@ -108,27 +110,47 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
       kind: 'first',
       text: join(
         pic + String.raw`我们接着上次停下的地方：$A\mathbf x$ 本身也是一个向量，所以 $A$ 还能再作用一次。`,
-        board(`add id=b${n} title="Ax 落在哪条线上"`, firstBody()),
+        board(`new id=b${n} title="Ax 落在哪条线上"`, firstBody()),
+        board('pin id=k1 title="这节课的记号"', NOTATION),
         String.raw`先拖一拖图里灰色的 $\mathbf x$，看黄色的 $A\mathbf x$ 停在哪，再回答第 1 步。`,
       ),
     };
   }
 
   if (/\[(作答|动作)\]/.test(said)) {
-    const n = nextSeq(turns, memo);
     const giveup = /想不出来|放弃/.test(said);
     const wrong = /（错|没做对|差得比较远|看了答案|没做出来/.test(said);
-    const ops = [board(`figure target=fig-1 set x=${SET_X}`), board('figure target=fig-1 play t')];
-    if (giveup || wrong) ops.push(board('figure target=fig-1 highlight 3'));
-    const open = giveup
-      ? String.raw`没关系，先不写。盯着黄色箭头：我把 $\mathbf x$ 换个位置，它会从 $\mathbf x$ 滑到 $A\mathbf x$。`
-      : wrong
-        ? String.raw`这里容易想岔。看图：我把 $\mathbf x$ 换到左上方，黄色箭头还是落回那条虚线上。`
-        : String.raw`对。再换一个 $\mathbf x$ 看看：`;
-    const then = giveup || wrong
-      ? String.raw`不管 $\mathbf x$ 在哪，$A\mathbf x$ 都是 $\boldsymbol\alpha$ 的倍数。用这一点算下面这题：`
-      : String.raw`换了 $\mathbf x$，$A\mathbf x$ 还是停在黄色虚线上。下面这题不写出 $A$，直接用 $\boldsymbol\alpha$、$\boldsymbol\beta$ 算：`;
-    return { kind: 'actions', text: join(pic + open, ...ops, then, board(`add id=b${n} title="不写出 A 也能算"`, answerBody(n))) };
+    if (giveup || wrong) {
+      // 错了、想不出来：不换板，在当前板上指给学生看。当前板有图就让图动起来，没图就补一段提示
+      const fig = currentFigure(assistant);
+      const open = giveup
+        ? String.raw`没关系，先不写。盯着黄色箭头：我把 $\mathbf x$ 换个位置，它会从 $\mathbf x$ 滑到 $A\mathbf x$。`
+        : String.raw`这里容易想岔。看图：我把 $\mathbf x$ 换到左上方，黄色箭头还是落回那条虚线上。`;
+      if (fig) {
+        return {
+          kind: 'actions',
+          text: join(pic + open, board(`figure target=${fig} set x=${SET_X}`), board(`figure target=${fig} play t`), board(`figure target=${fig} highlight 3`),
+            String.raw`不管 $\mathbf x$ 在哪，$A\mathbf x$ 都是 $\boldsymbol\alpha$ 的倍数。用这一点再试一次。`),
+        };
+      }
+      const n = nextSeq(turns, memo);
+      return { kind: 'actions', text: join(pic + '先别急，看一个提示：', board(`add id=b${n} title="提示"`, keyBody(n, 'hint')), '想通了再回到上面那题。') };
+    }
+    // 只是拖了拖图、揭开一步（平时跟着下一条消息一起到，这里是单独到的）：说一句，不动黑板
+    if (!/\[作答\]/.test(said)) {
+      return { kind: 'actions', text: join(pic + String.raw`嗯，看到了。不管 $\mathbf x$ 拖到哪，黄色的 $A\mathbf x$ 都停在那条虚线上：第 1 步问的就是为什么。`) };
+    }
+    const n = nextSeq(turns, memo);
+    // 第一次做对：把刚得出的结论放进常驻栏
+    const pinned = assistant.some((a) => /board\s+pin\s+id=k2\b/.test(a));
+    return {
+      kind: 'actions',
+      text: join(
+        pic + String.raw`对。换一块板，下面这题不写出 $A$，直接用 $\boldsymbol\alpha$、$\boldsymbol\beta$ 算：`,
+        board(`new id=b${n} title="不写出 A 也能算"`, answerBody(n)),
+        pinned ? '' : board('pin id=k2 title="刚得出的"', LINE_FACT),
+      ),
+    };
   }
 
   if (!isSystem && /没懂|不懂|没听懂|不明白|看不懂|换个说法|想不出来/.test(said)) {
@@ -137,10 +159,10 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
     const open = { plain: '那我退一步，只说一件事：', numbers: '换个说法，用具体的数看：', hint: '给你一个提示，不给答案：' }[mode];
     // 段标题和提示框自己的标题错开，免得黑板上同一句话出现两遍
     const title = { plain: '退一步', numbers: '换个说法', hint: '一个提示' }[mode];
-    return {
-      kind: 'confused',
-      text: join(pic + open, board(`add id=b${n} title="${title}"`, keyBody(n, mode)), '看完再回到上面那题试一次；还卡就点「想不出来」。'),
-    };
+    // 想不出来：提示加在当前板上（题还在眼前）；没懂、换个说法：换一块板重讲
+    const cmd = mode === 'hint' ? `add id=b${n} title="${title}"` : `new id=b${n} title="${title}"`;
+    const close = mode === 'hint' ? '看完再试一次上面那题；还卡就点「想不出来」。' : '看完翻回上一块板再试一次；还卡就点「想不出来」。';
+    return { kind: 'confused', text: join(pic + open, board(cmd, keyBody(n, mode)), close) };
   }
 
   // 「继续」或普通文字：这节课第一次时故意写错一段；以后只有暗号「测试:写错」「一直写错」才再写错
@@ -156,7 +178,7 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
       kind: 'broken',
       text: join(
         pic + String.raw`好，往下走。已经有 $A^2=3A$，再往下乘呢？先看 $A$ 把整个单位圆送到哪。`,
-        board(`add id=b${n} title="${POWER_TITLE}"`, powerBody(String(n), variant)),
+        board(`new id=b${n} title="${POWER_TITLE}"`, powerBody(String(n), variant)),
         '先看图，再填下面的空。',
       ),
     };
@@ -165,7 +187,7 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
   const n = nextSeq(turns, memo);
   return {
     kind: 'fallback',
-    text: join(pic + '好。换个练法：只认方法，不用算。', board(`add id=b${n} title="只认方法"`, recognizeBody(n)), '每题点一个方法，再写一句你凭题目里的什么认出来的。'),
+    text: join(pic + '好。换个练法：只认方法，不用算。', board(`new id=b${n} title="只认方法"`, recognizeBody(n)), '每题点一个方法，再写一句你凭题目里的什么认出来的。'),
   };
 }
 
@@ -180,11 +202,27 @@ const join = (...parts) => `${parts.filter(Boolean).join('\n\n')}\n`;
 
 export const SET_X = '[-1, 1.5]';
 const POWER_TITLE = 'Aⁿ 怎么写';
+// 常驻栏：这节课的记号、刚得出的结论
+const NOTATION = String.raw`$A=\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}$，$\boldsymbol\alpha=(1,2)^{\mathrm T}$，$\boldsymbol\beta=(1,1)^{\mathrm T}$，$A=\begin{bmatrix}1&1\\2&2\end{bmatrix}$`;
+const LINE_FACT = String.raw`$A\mathbf x=\boldsymbol\alpha\,(\boldsymbol\beta^{\mathrm T}\mathbf x)$：不管 $\mathbf x$ 是谁，$A\mathbf x$ 都在 $\boldsymbol\alpha$ 那条线上。`;
+
+// 当前板上的图：最后一块 new 的板里的第一张图（scene / graph / space 的 id:）；之后那块板上 add 的段里的图也算
+export function currentFigure(assistantTexts) {
+  let fig = null;
+  for (const t of assistantTexts || []) {
+    for (const m of String(t).matchAll(/^`{3,}board\s+(new|add)\b[^\n]*\n([\s\S]*?)^`{4}\s*$/gm)) {
+      const id = m[2].match(/^`{3}(?:scene|graph|space)\n(?:[^\n]*\n)*?id:\s*(\S+)/m)?.[1] || null;
+      if (m[1] === 'new') fig = id;
+      else if (id && !fig) fig = id;
+    }
+  }
+  return fig;
+}
 const BROKEN_LINE = 'circle [0, 0] 1'; // scene 没有 circle 命令：parseScene 会报「看不懂这一行」
 
+// 记号在常驻栏（k1）里，这块板上不再写一遍：题和图正好一屏
 function firstBody() {
   return [
-    String.raw`$A=\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}$，其中 $\boldsymbol\alpha=(1,2)^{\mathrm T}$，$\boldsymbol\beta=(1,1)^{\mathrm T}$，写出来是 $A=\begin{bmatrix}1&1\\2&2\end{bmatrix}$。`,
     fence('steps', String.raw`
 id: ex-1
 title: A 再作用一次
@@ -325,13 +363,20 @@ function closingText(conv) {
   const giveup = count(/想不出来/g);
   const confused = count(/没懂/g);
   const segs = new Set();
-  for (const t of conv) if (t.role === 'assistant') for (const m of textOf(t.content).matchAll(/board\s+add\s+id=(\S+)/g)) segs.add(m[1]);
+  const pages = new Set();
+  for (const t of conv) {
+    if (t.role !== 'assistant') continue;
+    for (const m of textOf(t.content).matchAll(/board\s+(new|add)\s+id=(\S+)/g)) {
+      segs.add(m[2]);
+      if (m[1] === 'new') pages.add(m[2]);
+    }
+  }
   const right = count(/（对|做对了|猜得准/g);
   const stuck = wrong + giveup + confused
     ? `作答里答错 ${wrong} 次，点「想不出来」${giveup} 次，说「没懂」${confused} 次。主要卡在「$\\boldsymbol\\beta^{\\mathrm T}\\mathbf x$ 是一个数」这一步：没意识到它只决定倍数。`
     : '这节课的作答里没看到明显卡住的地方，但作答次数不多，不能说明问题。';
   return [
-    String.raw`1. **这节课讲了什么**：从「$A\mathbf x$ 本身也是一个向量」接着讲。用 $A=\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}$（$\boldsymbol\alpha=(1,2)^{\mathrm T}$，$\boldsymbol\beta=(1,1)^{\mathrm T}$）看 $A\mathbf x$、$A^2\mathbf x$ 都落在 $\boldsymbol\alpha$ 那条线上，推出 $A^2=3A$，再到 $A^n=3^{n-1}A$。` + (segs.size ? `黑板上一共写了 ${segs.size} 段。` : ''),
+    String.raw`1. **这节课讲了什么**：从「$A\mathbf x$ 本身也是一个向量」接着讲。用 $A=\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}$（$\boldsymbol\alpha=(1,2)^{\mathrm T}$，$\boldsymbol\beta=(1,1)^{\mathrm T}$）看 $A\mathbf x$、$A^2\mathbf x$ 都落在 $\boldsymbol\alpha$ 那条线上，推出 $A^2=3A$，再到 $A^n=3^{n-1}A$。` + (segs.size ? `黑板上一共用了 ${pages.size} 块板、写了 ${segs.size} 段。` : ''),
     `2. **学生哪里卡住**：${stuck}`,
     right
       ? String.raw`3. **哪里看起来懂了但证据不够**：有 ${right} 次作答是对的，但都是选择或填数，没让学生用自己的话说为什么 $A\mathbf x$ 在线上；$A^n=3^{n-1}A$ 只做过一道。`
@@ -385,7 +430,7 @@ function nextSeq(turns, memo) {
   if (hint) n = Math.max(n, +hint[1]);
   for (const t of turns) {
     if (t.role !== 'assistant') continue;
-    for (const m of textOf(t.content).matchAll(/board\s+(?:add|replace)\s+id=b(\d+)/g)) n = Math.max(n, +m[1] + 1);
+    for (const m of textOf(t.content).matchAll(/board\s+(?:new|add|replace)\s+id=b(\d+)/g)) n = Math.max(n, +m[1] + 1);
   }
   memo.seq = n;
   return n;

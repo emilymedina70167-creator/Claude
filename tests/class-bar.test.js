@@ -4,7 +4,7 @@ import {
   QUICK, MAX_IMAGES, MODEL_TAG, CONFIRM_MS, LONG_WAIT_MS,
   statusView, isSendKey, keyboardLift, mergePrefill, createConfirm,
   addImages, clipboardImages, htmlImageSrcs, growHeight, elapsedText,
-  clearScroll, FIELD, waitText, placeholderFor,
+  clearScroll, FIELD, waitText, placeholderFor, navLabel,
 } from '../kit/src/class/bar.js';
 
 // 输入框的 DOM 行为在浏览器里实际操作验证；这里测不碰 DOM 的部分
@@ -175,4 +175,11 @@ test('placeholderFor：停用、窄屏、能不能粘贴截图', () => {
   assert.match(placeholderFor({ images: true }), /粘贴截图/);
   assert.doesNotMatch(placeholderFor({ images: false }), /截图/);
   assert.equal(placeholderFor(), placeholderFor({ enabled: true, narrow: false, images: false }));
+});
+
+test('navLabel：「第 n / 共几 块」，看的板号越界时夹回来', () => {
+  assert.deepEqual(navLabel(2, 5), { n: '2', of: '/ 5' });
+  assert.deepEqual(navLabel(0, 3), { n: '3', of: '/ 3' }, '还没有在看的板：显示最后一块');
+  assert.deepEqual(navLabel(9, 3), { n: '3', of: '/ 3' });
+  assert.deepEqual(navLabel(1, 0), { n: '', of: '' });
 });

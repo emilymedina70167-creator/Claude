@@ -175,7 +175,7 @@ test('模型：默认 modelApplied 等于传进来的 model；fallback 时为 un
   const r = await fb(input, OPUS);
   assert.equal(r.modelApplied, undefined);
   assert.equal(r.modelTierApplied, 'complex');
-  assert.match(r.text, /board add id=b1/, '退路模型也照常输出，作废由页面判断');
+  assert.match(r.text, /board new id=b1/, '退路模型也照常输出，作废由页面判断');
   // 不讲课的小活（摘要）用 default 档、不传 model
   const s = await createDevTeacher({ pace: 0 })('请写「到目前为止的课堂摘要」。', { modelTier: 'default' });
   assert.equal(s.modelApplied, undefined);
@@ -217,7 +217,7 @@ test('onText 抛错不打断这一轮', async () => {
   const err = mock.method(console, 'error', () => {});
   try {
     const r = await createDevTeacher({ pace: 0 })([{ role: 'user', content: '你好' }], { onText: () => { throw new Error('页面出错'); } });
-    assert.match(r.text, /board add/);
+    assert.match(r.text, /board new/);
     assert.ok(err.mock.callCount() > 0);
   } finally {
     err.mock.restore();
@@ -226,13 +226,13 @@ test('onText 抛错不打断这一轮', async () => {
 
 // —— 剧本 ——
 
-test('剧本 1：第一轮打招呼 + b1（steps ex-1 和绑定它的 scene fig-1）', async () => {
+test('剧本 1：第一轮打招呼 + new b1（steps ex-1 和绑定它的 scene fig-1）+ pin k1（这节课的记号）', async () => {
   const L = lesson();
   const r = await L.say('老师好');
   assert.equal(r.kind, 'first');
   const bs = boards(r.text);
-  assert.equal(bs.length, 1);
-  assert.match(bs[0].header, /^add id=b1 title="[^"]+"$/);
+  assert.deepEqual(bs.map((b) => b.header.split(' ')[0]), ['new', 'pin']);
+  assert.match(bs[0].header, /^new id=b1 title="[^"]+"$/);
   const cs = components(bs[0].body);
   assert.deepEqual(cs.map((c) => c.lang), ['steps', 'scene']);
   const steps = validate(cs[0]);
@@ -248,44 +248,72 @@ test('剧本 1：第一轮打招呼 + b1（steps ex-1 和绑定它的 scene fig-
   assert.match(cs[1].src, /lerp\(x, A\*x, t\)/);
   // 秩一方阵 A = αβᵀ，α=[1,2]，β=[1,1]
   assert.match(cs[1].src, /let A = \[\[1, 1\], \[2, 2\]\]/);
+  // 常驻栏：一小段文字和公式，没有组件
+  assert.equal(bs[1].header, 'pin id=k1 title="这节课的记号"');
+  assert.deepEqual(components(bs[1].body), []);
+  assertTeX(bs[1].body, '常驻栏');
   // 先说话再写黑板，写完补一句
   assert.ok(r.text.indexOf('我们接着') < r.text.indexOf('````board'));
   assert.ok(speechOf(r.text).length > 20);
 });
 
-test('剧本 2：[作答] / [动作] → 回应 + figure set、play + 新的一段 answer', async () => {
+test('剧本 2：错了、想不出来 → 在当前板上 figure set、play、highlight；只拖了图 → 只说一句；做对了 → new 一块新板，第一次再 pin 结论', async () => {
   const L = lesson();
   await L.say('开始吧');
+  const wrong = await L.say('[作答] b1 里的 steps ex-1「A 再作用一次」 第 1 步：选了『一个向量』（错），用时 12 秒');
+  assert.equal(wrong.kind, 'actions');
+  assert.match(wrong.text, /容易想岔/);
+  assert.ok(wrong.text.includes(`\`\`\`\`board figure target=fig-1 set x=${SET_X}\n\`\`\`\``));
+  assert.ok(wrong.text.includes('````board figure target=fig-1 play t\n````'));
+  assert.ok(wrong.text.includes('````board figure target=fig-1 highlight 3\n````'));
+  assert.ok(!/board (new|add)/.test(wrong.text), '错了不换板，就在这块板上指给学生看');
+  // 顺序：说话 → 图动起来 → 再说
+  const order = ['set x=', 'play t', 'highlight 3', '再试一次'].map((s) => wrong.text.indexOf(s));
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
+
+  const giveup = await L.say('[动作] b1 里的 steps ex-1 第 2 步：想不出来，直接揭开了');
+  assert.equal(giveup.kind, 'actions');
+  assert.match(giveup.text, /^没关系/);
+  assert.match(giveup.text, /figure target=fig-1 highlight 3/);
+
+  // 只拖了拖图：说一句，黑板不动
+  const drag = await L.say('[动作] b1 里的图 fig-1：把 x 拖到 [2, 1]');
+  assert.equal(drag.kind, 'actions');
+  assert.equal(boards(drag.text).length, 0);
+  assert.ok(speechOf(drag.text).length > 10);
+
   const right = await L.say('[作答] b1 里的 steps ex-1「A 再作用一次」 第 1 步：选了『一个数』（对），用时 9 秒');
   assert.equal(right.kind, 'actions');
   assert.match(right.text, /^对。/);
-  assert.ok(right.text.includes(`\`\`\`\`board figure target=fig-1 set x=${SET_X}\n\`\`\`\``));
-  assert.ok(right.text.includes('````board figure target=fig-1 play t\n````'));
-  assert.ok(!right.text.includes('highlight'), '答对了不用指给他看');
-  const add = boards(right.text).find((b) => b.header.startsWith('add'));
-  assert.match(add.header, /^add id=b2 /);
-  const [ans] = components(add.body);
+  assert.ok(!right.text.includes('figure'), '答对了不用再指给学生看');
+  const bs = boards(right.text);
+  assert.deepEqual(bs.map((b) => b.header.split(' ')[0]), ['new', 'pin']);
+  assert.match(bs[0].header, /^new id=b2 title="[^"]+"$/);
+  assert.equal(bs[1].header, 'pin id=k2 title="刚得出的"');
+  assertTeX(bs[1].body, '常驻栏');
+  const [ans] = components(bs[0].body);
   assert.equal(ans.lang, 'answer');
   assert.equal(idOf(ans.src), 'q-2');
   const { fields, cmds } = validate(ans);
   const v = {};
   for (const c of cmds) if (c.kind === 'let') v[c.name] = c.expr(v);
   assert.deepEqual(compile(fields.answer)(v), [2, 4], 'x=(3,-1)：βᵀx=2，Ax=2α');
-  // 顺序：说话 → 图动起来 → 再说 → 新的一段
-  const order = ['set x=', 'play t', 'board add'].map((s) => right.text.indexOf(s));
-  assert.deepEqual([...order].sort((a, b) => a - b), order);
 
-  const wrong = await L.say('[作答] b2 里的 answer q-2「先算一个数」：填了 (3, 6)（错，第 1 次），用时 40 秒');
-  assert.match(wrong.text, /容易想岔/);
-  assert.match(wrong.text, /board figure target=fig-1 highlight 3\n/);
-  assert.match(wrong.text, /board add id=b3 /);
+  // 新板上没有图：错了就在这块板上 add 一段提示
+  const wrong2 = await L.say('[作答] b2 里的 answer q-2「先算一个数」：填了 (3, 6)（错，第 1 次），用时 40 秒');
+  assert.ok(!wrong2.text.includes('figure'), '当前板上没有图，不能用 figure');
+  const [hint] = boards(wrong2.text);
+  assert.match(hint.header, /^add id=b3 title="提示"$/);
+  const [key] = components(hint.body);
+  assert.equal(key.lang, 'key');
+  validate(key);
 
-  const giveup = await L.say('[动作] b1 里的 steps ex-1 第 2 步：想不出来，直接揭开了');
-  assert.equal(giveup.kind, 'actions');
-  assert.match(giveup.text, /^没关系/);
-  assert.match(giveup.text, /highlight 3/);
+  // 再做对：又换一块新板；结论已经在常驻栏里了，不再 pin
+  const right2 = await L.say('[作答] b2 里的 answer q-2「先算一个数」：填了 (2, 4)（对，第 2 次），用时 30 秒');
+  assert.deepEqual(boards(right2.text).map((b) => b.header), [`new id=b4 title="${boards(right.text)[0].header.match(/title="([^"]+)"/)[1]}"`]);
   // 换着用不同的 x，答案跟着变
   const answers = L.history.filter((t) => t.role === 'assistant').flatMap((t) => boards(t.content)).flatMap((b) => components(b.body)).filter((c) => c.lang === 'answer').map((c) => parseScene(c.src).fields.answer);
+  assert.equal(answers.length, 2);
   assert.equal(new Set(answers).size, answers.length);
 });
 
@@ -295,7 +323,7 @@ test('剧本 3：「继续」→ 故意写错的一段，组件库的自检会�
   const r = await L.say('继续。');
   assert.equal(r.kind, 'broken');
   const [b] = boards(r.text);
-  assert.match(b.header, /^add id=b2 title="Aⁿ 怎么写"$/);
+  assert.match(b.header, /^new id=b2 title="Aⁿ 怎么写"$/);
   const cs = components(b.body);
   const scene = cs.find((c) => c.lang === 'scene');
   assert.ok(scene.src.includes('circle [0, 0] 1'));
@@ -359,16 +387,16 @@ test('「一直写错」：重写也是错的（两种错法轮换），用来�
   assert.notEqual(broken(r1.text), broken(r2.text), '两次错法不一样');
 });
 
-test('剧本 5：没懂 / 换个说法 / 想不出来 → 一段 key 提示框', async () => {
+test('剧本 5：没懂 / 换个说法 → 换一块板讲（key 提示框）；想不出来 → 在当前板上加一段提示', async () => {
   const L = lesson();
   await L.say('开始');
   const seen = new Set();
-  for (const [msg, open] of [['没懂。', '退一步'], ['换个说法讲讲？', '具体的数'], ['想不出来。', '提示']]) {
+  for (const [msg, open, op] of [['没懂。', '退一步', 'new'], ['换个说法讲讲？', '具体的数', 'new'], ['想不出来。', '提示', 'add']]) {
     const r = await L.say(msg);
     assert.equal(r.kind, 'confused');
     assert.ok(r.text.includes(open), msg);
     const [b] = boards(r.text);
-    assert.match(b.header, /^add id=b\d+ title="[^"]+"$/);
+    assert.match(b.header, new RegExp(`^${op} id=b\\d+ title="[^"]+"$`), msg);
     const [key] = components(b.body);
     assert.equal(key.lang, 'key');
     validate(key);
@@ -390,7 +418,7 @@ test('剧本 6：下课 → 四点小结，不写黑板；数得出卡住的次�
   for (const k of ['1. **这节课讲了什么**', '2. **学生哪里卡住**', '3. **哪里看起来懂了但证据不够**', '4. **建议下一节怎么接**']) assert.ok(r.text.includes(k), k);
   assert.match(r.text, /答错 1 次/);
   assert.match(r.text, /说「没懂」1 次/);
-  assert.match(r.text, /黑板上一共写了 3 段/);
+  assert.match(r.text, /黑板上一共用了 2 块板、写了 2 段/);
   assert.ok(!/已经掌握/.test(r.text), '不宣布学生「已经掌握」');
   assertTeX(r.text, '小结');
   // 学生自己打「下课」也一样
@@ -427,19 +455,19 @@ test('段号：b1、b2…递增；同样的输入再调一次也不重号；跟�
   const input = [{ role: 'user', content: SYSTEM }, { role: 'assistant', content: '````board add id=b1\n…\n````' }, { role: 'user', content: '没懂' }];
   const a = await t(input, OPUS);
   const b = await t(input, OPUS);
-  assert.match(a.text, /board add id=b2 /);
-  assert.match(b.text, /board add id=b3 /);
+  assert.match(a.text, /board new id=b2 /);
+  assert.match(b.text, /board new id=b3 /);
   // 黑板现状说「新的一段用 id b8」（取说明里最后一处）
   const hinted = devReply([{ role: 'user', content: `${SYSTEM.replace('b1。', 'b3。')}\n……\n新的一段用 id b8（用过的 id……）` }, { role: 'assistant', content: '好' }, { role: 'user', content: '没懂' }]);
-  assert.match(hinted.text, /board add id=b8 /);
+  assert.match(hinted.text, /board new id=b8 /);
   assert.match(hinted.text, /id: key-8/);
   // 之前的输出里用到过 b12（比如换了一个模拟老师实例）
   const after = devReply([{ role: 'user', content: SYSTEM }, { role: 'assistant', content: '````board replace id=b12\n…\n````' }, { role: 'user', content: '没懂' }]);
-  assert.match(after.text, /board add id=b13 /);
+  assert.match(after.text, /board new id=b13 /);
   // 同时发出的两轮也不重号
   const t2 = createDevTeacher({ pace: 0 });
   const [x, y] = await Promise.all([t2(input, OPUS), t2(input, OPUS)]);
-  assert.notEqual(x.text.match(/add id=(b\d+)/)[1], y.text.match(/add id=(b\d+)/)[1]);
+  assert.notEqual(x.text.match(/(?:new|add) id=(b\d+)/)[1], y.text.match(/(?:new|add) id=(b\d+)/)[1]);
 });
 
 test('课堂说明里的示例不会带偏剧本（说明里有「写法错误」「（错）」「想不出来」）', () => {
@@ -448,36 +476,56 @@ test('课堂说明里的示例不会带偏剧本（说明里有「写法错误�
   assert.equal(devReply(conv).kind, 'broken', '说明里的「写法错误」不算写错过');
 });
 
-test('一整节课：除了故意写错的那段，黑板内容都能被组件库解析；组件 id 不重复；link 指向存在的 steps', async () => {
+test('一整节课：除了故意写错的那段，黑板内容都能被组件库解析；组件 id 不重复；link 指向存在的 steps；figure 只动当前板上的图', async () => {
   const L = lesson();
   const script = [
     '老师好',
+    '[作答] b1 里的 steps ex-1 第 1 步：选了『一个向量』（错），用时 12 秒',
     '[作答] b1 里的 steps ex-1 第 1 步：选了『一个数』（对），用时 9 秒',
     '[动作] b1 里的图 fig-1：把 x 拖到 [2, 1]',
     '继续。',
-    '[系统] b4「Aⁿ 怎么写」有写法错误，没有显示：\n  1. scene：看不懂这一行：circle [0, 0] 1',
+    '[系统] b3「Aⁿ 怎么写」有写法错误，没有显示：\n  1. scene：看不懂这一行：circle [0, 0] 1',
     '没懂。',
     '换个说法讲讲？',
     '想不出来。',
     '嗯',
-    '[作答] b4 里的 answer q-4「推到 n 次」：填了 9（对，第 1 次），用时 20 秒',
+    '[作答] b3 里的 answer q-3「推到 n 次」：填了 9（对，第 1 次），用时 20 秒',
     '[系统] 下课了。请写这节课的小结',
   ];
   const kinds = [];
   for (const msg of script) kinds.push((await L.say(msg)).kind);
-  assert.deepEqual(kinds, ['first', 'actions', 'actions', 'broken', 'fix', 'confused', 'confused', 'confused', 'fallback', 'actions', 'closing']);
+  assert.deepEqual(kinds, ['first', 'actions', 'actions', 'actions', 'broken', 'fix', 'confused', 'confused', 'confused', 'fallback', 'actions', 'closing']);
 
   const live = new Map(); // 段 id → 组件
   const added = [];
+  const pins = [];
+  const moved = []; // figure 指令动过的图
+  let onBoard = []; // 当前板上的图
+  const figsOf = (cs) => cs.filter((c) => ['scene', 'graph', 'space'].includes(c.lang)).map((c) => idOf(c.src));
   for (const [i, t] of L.history.entries()) {
     if (t.role !== 'assistant') continue;
     assertTeX(speechOf(t.content), `第 ${i} 条的话`);
     for (const b of boards(t.content)) {
-      const m = b.header.match(/^(add|replace) id=(\S+)/);
-      if (!m) { assert.match(b.header, /^figure target=fig-1 (set x=\[|play t$|highlight 3$)/); assert.equal(b.body, ''); continue; }
-      if (m[1] === 'add') added.push(m[2]);
+      const m = b.header.match(/^(new|add|replace|pin) id=(\S+)/);
+      if (!m) {
+        const f = b.header.match(/^figure target=(\S+) (set x=\[|play t$|highlight 3$)/);
+        assert.ok(f, b.header);
+        assert.equal(b.body, '');
+        assert.ok(onBoard.includes(f[1]), `${f[1]} 不在当前板上（当前板上的图：${onBoard.join(' ') || '没有'}）`);
+        moved.push(f[1]);
+        continue;
+      }
+      if (m[1] === 'pin') {
+        assert.deepEqual(components(b.body), [], '常驻栏只放文字和公式');
+        assertTeX(b.body, `${m[2]} 的文字`);
+        pins.push(m[2]);
+        continue;
+      }
+      if (m[1] !== 'replace') added.push(m[2]);
       const cs = components(b.body);
       assert.ok(cs.length > 0);
+      if (m[1] === 'new') onBoard = figsOf(cs);
+      else if (m[1] === 'add') onBoard.push(...figsOf(cs));
       if (kinds[(i - 1) / 2] === 'broken') { assert.throws(() => cs.forEach(validate)); live.set(m[2], []); continue; }
       cs.forEach(validate);
       live.set(m[2], cs);
@@ -486,14 +534,15 @@ test('一整节课：除了故意写错的那段，黑板内容都能被组件�
     }
   }
   assert.equal(new Set(added).size, added.length, '段 id 不重复');
+  assert.deepEqual(pins, ['k1', 'k2']);
   const ids = [...live.values()].flat().map((c) => idOf(c.src));
   assert.equal(new Set(ids).size, ids.length, `组件 id 不重复：${ids.join(' ')}`);
   for (const cs of live.values()) for (const c of cs) {
     const link = c.src.match(/^link:\s*(\S+)/m)?.[1];
     if (link) assert.ok(ids.includes(link), `link: ${link} 指向的组件不在黑板上`);
   }
-  // figure 指令操作的图在黑板上，变量在图里
-  assert.ok(ids.includes('fig-1'));
+  // 答错那一轮在第一块板上动了 fig-1
+  assert.deepEqual([...new Set(moved)], ['fig-1']);
 });
 
 // —— 错误、附图、边界 ——
@@ -527,7 +576,7 @@ test('边界输入：空的、字符串、content 是块数组，都不抛错', 
   const t = createDevTeacher({ pace: 0 });
   for (const input of [undefined, null, '', [], [null, 3], '你好']) {
     const r = await t(input, OPUS);
-    assert.match(r.text, /board add id=b\d+/, String(input));
+    assert.match(r.text, /board (?:new|add) id=b\d+/, String(input));
   }
   assert.equal(lastUserText([{ role: 'user', content: [{ type: 'text', text: '没懂' }, { type: 'image', source: {} }] }]), '没懂');
   assert.equal(devReply([{ role: 'user', content: SYSTEM }, { role: 'assistant', content: [{ type: 'text', text: '好' }] }, { role: 'user', content: [{ type: 'text', text: '没懂。' }] }]).kind, 'confused');
@@ -581,5 +630,5 @@ test('limits、calls、reset', async () => {
   assert.equal(t.calls.length, 0);
   assert.equal(calls, t.calls, 'reset 清空同一个数组，别处拿着的引用还能用');
   const again = await t(input, OPUS);
-  assert.match(again.text, /board add id=b1 /, 'reset 后段号从头编');
+  assert.match(again.text, /board new id=b1 /, 'reset 后段号从头编');
 });

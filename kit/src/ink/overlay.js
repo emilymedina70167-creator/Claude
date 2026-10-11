@@ -38,6 +38,8 @@ export function initBoardInk(article) {
     redraw();
   }
 
+  // 看不见的锚点（自己 hidden，或者在藏起来的地方里：课堂模式翻走的板）：上面的笔迹不画，新笔画也不挂上去
+  const unseen = (a) => a.hidden || !a.getClientRects().length;
   // 锚点：引导模式下每节一个，否则整篇课件一个
   const anchors = () => {
     const ss = [...article.querySelectorAll('.stage')];
@@ -49,10 +51,12 @@ export function initBoardInk(article) {
   function anchorAt(clientY) {
     const as = anchors();
     for (let i = as.length - 1; i >= 0; i--) {
-      if (as[i].hidden) continue;
+      if (unseen(as[i])) continue;
       if (as[i].getBoundingClientRect().top <= clientY) return keyOf(as[i], i);
     }
-    return keyOf(as[0], 0);
+    // 笔落在第一个看得见的锚点上面（比如课堂板头）：挂在第一个看得见的锚点上
+    const first = Math.max(0, as.findIndex((a) => !unseen(a)));
+    return keyOf(as[first], first);
   }
 
   let queued = false;
@@ -66,7 +70,7 @@ export function initBoardInk(article) {
       if (st.hidden) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const as = anchors();
-      const rects = new Map(as.map((a, i) => [keyOf(a, i), a.hidden ? null : a.getBoundingClientRect()]));
+      const rects = new Map(as.map((a, i) => [keyOf(a, i), unseen(a) ? null : a.getBoundingClientRect()]));
       for (const s of strokes) {
         const r = rects.has(s.a) ? rects.get(s.a) : rects.get(keyOf(as[0], 0));
         if (!r) continue;
@@ -305,7 +309,8 @@ export function initBoardInk(article) {
   fit();
   syncBar();
 
-  return { setOn, get strokes() { return strokes; }, undo, redo };
+  // redraw：页面自己把一块内容藏起来、换出来时（课堂模式翻板）尺寸不一定变，要叫一声重画
+  return { setOn, get strokes() { return strokes; }, undo, redo, redraw };
 }
 
 function load(key) {

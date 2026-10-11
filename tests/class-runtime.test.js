@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   reportable, actionTrigger, promptHistory, pendingTurn, fitTurns, buildTurns, buildSystem, boardStateText,
-  DEFAULT_RULES, PROTOCOL_DOC, closingPrompt, compactionPrompt, bytes, KEEP_RECENT, PACK_BUDGET, CUT_NOTE, actionText, usedBoardSeq,
+  DEFAULT_RULES, PROTOCOL_DOC, closingPrompt, compactionPrompt, bytes, KEEP_RECENT, PACK_BUDGET, CUT_NOTE, actionText,
 } from '../kit/src/class/prompt.js';
 import { parseOutput, parseCommand } from '../kit/src/class/protocol.js';
 import { devReply } from '../kit/src/class/devteacher.js';
@@ -34,11 +34,11 @@ test('reportable：每次尝试报，最终结果只在看了答案 / 放弃时�
   assert.equal(reportable(null), false);
 });
 
-test('actionTrigger：想不出来马上发；作答、拖动等 1.5 秒；揭开中间一步跟着下一条；最后一步要发', () => {
+test('actionTrigger：想不出来马上发；作答等 1.5 秒；拖动、揭开中间一步跟着下一条；最后一步要发', () => {
   assert.equal(actionTrigger({ source: 'record', type: 'steps', giveup: true }), 'now');
   assert.equal(actionTrigger({ source: 'event', type: 'giveup' }), 'now', '不报告，但要马上发起');
   assert.equal(actionTrigger({ source: 'record', type: 'steps', value: '甲', ok: true }), 'soon');
-  assert.equal(actionTrigger({ source: 'event', type: 'drag', name: 'x', value: [1, 2] }), 'soon');
+  assert.equal(actionTrigger({ source: 'event', type: 'drag', name: 'x', value: [1, 2] }), 'later', '拖一拖不单独回一轮，跟着下一条作答或说的话一起发');
   assert.equal(actionTrigger({ source: 'event', type: 'reveal', detail: { step: 1 } }), 'later');
   assert.equal(actionTrigger({ source: 'event', type: 'reveal', detail: { step: 3 } }, { lastStep: true }), 'soon');
   assert.equal(actionTrigger({ source: 'record', type: 'answer', final: true, ok: true }), null);
@@ -296,20 +296,4 @@ test('课堂模式里组件自己发起的调用：只有带图的转写能发�
   } finally {
     session.mode = before;
   }
-});
-
-test('usedBoardSeq：刷新后段号要越过记录里话的位置（写错没画出来的段占的号只留在那里）', () => {
-  assert.equal(usedBoardSeq([]), 0);
-  assert.equal(usedBoardSeq(undefined), 0);
-  // b2 写错、重写被停止：steps 里只有 b1，但 Claude 那一轮的话排在 2 后面，学生下一句也记在 2
-  const h = [
-    { seq: 1, role: 'student', say: '开始上课。', start: true, boardAt: 0 },
-    { seq: 2, role: 'claude', text: '…', sayAfter: [0, 1] },
-    { seq: 3, role: 'student', say: '继续。', boardAt: 1 },
-    { seq: 4, role: 'claude', text: '…', sayAfter: [1, 2] },
-    { seq: 5, role: 'system', kind: 'error', discarded: true },
-  ];
-  assert.equal(usedBoardSeq(h), 2);
-  // 旧记录没有这些字段；写坏的值不算
-  assert.equal(usedBoardSeq([{ seq: 1, role: 'claude', text: '' }, { boardAt: 'x', sayAfter: [NaN, null, 3] }]), 3);
 });
