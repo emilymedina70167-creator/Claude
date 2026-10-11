@@ -21,6 +21,7 @@ import {
 import { COMPONENT_DOCS } from './docs.js';
 import { createDevTeacher } from './devteacher.js';
 import { createClassBar, MODEL_TAG } from './bar.js';
+import { createBoardView } from './boardview.js';
 import { initClassDevPanel } from './devpanel.js';
 
 export const MODEL = 'claude-opus-5-5';
@@ -33,10 +34,6 @@ const TURN_TEXT_MAX = 200 * 1024; // 数据库一个文档最多 256 KiB
 const pad6 = (n) => String(n).padStart(6, '0');
 const pad3 = (n) => String(n).padStart(3, '0');
 const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-// 一块板超出一屏多少才算放不下（KaTeX、图的取整会差几个像素）
-const FIT_SLACK = 12;
-// 在这些东西上划动不算翻页：要拖的图、要选的字、要横着滚的公式
-const NO_SWIPE = 'input, textarea, select, button, a, label, [contenteditable=""], [contenteditable="true"], svg, canvas, .keypad, .ink-bar, .class-pins';
 const QUICK_SAY = { 没懂: '没懂。', 想不出来: '想不出来。', 换个说法: '换个说法讲讲？', 继续: '继续。' };
 
 export async function renderClass(root, meta) {
@@ -45,25 +42,22 @@ export async function renderClass(root, meta) {
   session.stages = [];
   const unitName = meta.unit || session.title;
   root.classList.add('is-live', 'is-class');
-  // 常驻栏（横屏在右边一栏，竖屏在顶上一条）+ 黑板。黑板里一块板一个 section，只显示正在看的那块
-  root.innerHTML = `
-    <div class="class-app">
-      <aside class="class-pins" hidden aria-label="常驻栏"><div class="class-pins-head"><span class="class-unit">${mdToHtml(unitName, { inline: true })}</span></div><div class="class-pins-body"></div></aside>
-      <main class="class-stage" aria-label="黑板">
-        <div class="class-pages"></div>
+  // 一屏一块板（boardview.js，实时黑板也用）：常驻栏 + 黑板；黑板区里另有「Claude 在想」和开课前的欢迎牌
+  // segs、busy 在下面才有值：这两个回调要到用户操作或恢复时才会调到
+  const bv = createBoardView({
+    root,
+    unitHtml: mdToHtml(unitName, { inline: true }),
+    stageExtra: `
         <div class="class-hero" hidden></div>
         <div class="class-welcome">
           <div class="live-empty-art" aria-hidden="true"><i></i><i></i><i></i></div>
           <p class="class-welcome-text">正在准备课堂…</p>
           <button type="button" class="btn btn-primary btn-lg class-start" hidden>开始上课</button>
-        </div>
-      </main>
-    </div>`;
-  const board = root.querySelector('.class-app');
-  const stage = root.querySelector('.class-stage');
-  const pagesBox = root.querySelector('.class-pages');
-  const pinsBox = root.querySelector('.class-pins');
-  const pinsBody = root.querySelector('.class-pins-body');
+        </div>`,
+    isBusy: () => busy,
+    seqOf: (id) => segs.get(id)?.seq,
+  });
+  const { board, pages } = bv;
   const hero = root.querySelector('.class-hero');
   const welcome = root.querySelector('.class-welcome');
   const welcomeText = root.querySelector('.class-welcome-text');
@@ -97,11 +91,7 @@ export async function renderClass(root, meta) {
   // —— 状态 ——
   const segs = new Map(); // id → { id, seq, page, place: 'board' | 'pin', title, md, hidden, failed, pending, sec, softNotes }
   let segSeq = 0;
-  const pages = new Map(); // 板号 → { n, title, talk, lead, kind, body, sec, head, talkEl, bodyEl }
-  let pageSeq = 0; // 开过几块板（板号从 1 编）
-  let curPage = 0; // 当前板：最新的那块，Claude 改的、说话写的都是它
-  let viewPage = 0; // 学生正在看的板：翻回去看历史时和 curPage 不同
-  let lastFit = null; // 当前板放不放得下一屏：{ fits, need, avail, w }
+  // 板（pages、当前板 bv.cur、正在看的板 bv.view、放不放得下 bv.fit）在 boardview.js；当前板是最新的那块，Claude 改的、说话写的都是它
   const rewrites = new Map(); // 段 id（或 dup:id）→ 已经要求重写了几次；画好了就清零
   const history = []; // { seq, role, text, kind, discarded, ... } 和数据库 class_turns 一一对应
   let turnSeq = 0;
@@ -120,29 +110,21 @@ export async function renderClass(root, meta) {
   let compactRetryAt = 0; // 摘要失败后，等对话再长几轮才再试（不要每一轮都卡在失败的摘要上）
   let budgetLevel = 0; // prompt_too_large 之后逐级缩小这一轮的内容；成功一轮就复原
   let lastPrompt = null; // 开发面板看：上一轮发了多少字节
-  // 下面这些被函数声明用到、而 restore() 在函数定义之前就会调到那些函数：都要在这里先有值（let / const 有暂时性死区）
-  let fitRaf = 0; // 量一屏放不放得下：一帧最多一次
+  // 被函数声明用到、而 restore() 在函数定义之前就会调到那些函数：要在这里先有值（let / const 有暂时性死区）
   let raf = 0, pendingText = ''; // 草稿：一帧最多画一次
-  // 当前板超出一屏、下面还有内容没露出来时，输入框上方给一个「下面还有」
-  const more = document.createElement('button');
-  more.type = 'button';
-  more.className = 'class-more';
-  more.hidden = true;
-  more.textContent = '下面还有 ↓';
-  more.addEventListener('click', () => window.scrollBy({ top: Math.round(window.innerHeight * 0.6), behavior: reduceMotion() ? 'auto' : 'smooth' }));
-  document.body.appendChild(more);
 
   const bar = createClassBar({
     images: teacher.images,
     tag: mock ? `${MODEL_TAG} · 模拟老师` : MODEL_TAG,
-    onSend: ({ text, images }) => { goPage(curPage); enqueueStudent(text, images, true); },
-    onQuick: (label) => { if (busy) return; goPage(curPage); enqueueStudent(QUICK_SAY[label] || label, [], true); },
-    onNav: (n) => goPage(n),
+    onSend: ({ text, images }) => { bv.go(bv.cur); enqueueStudent(text, images, true); },
+    onQuick: (label) => { if (busy) return; bv.go(bv.cur); enqueueStudent(QUICK_SAY[label] || label, [], true); },
+    onNav: (n) => bv.go(n),
     onStop: () => ctl?.abort(),
     onRetry: () => retryRun(),
     onEnd: () => endClass(),
     onCopy: () => copyRecord(toast),
   });
+  bv.attachBar(bar);
   if (!teacher.available) {
     bar.setEnabled(false);
     bar.setStatus('error', legacy ? '这个查看方式不能指定 Opus 5.5，课堂开不了。请在新版 claude.ai 里打开这个页面。'
@@ -176,21 +158,10 @@ export async function renderClass(root, meta) {
     pack.main = data || null;
     if (pack.main?.unit) root.querySelector('.class-unit').innerHTML = mdToHtml(String(pack.main.unit), { inline: true });
     session.context = pack.main ? [pack.main.goal, pack.main.scope].filter(Boolean).join('\n') : '';
-    syncNav();
+    bv.syncNav();
   };
   db.doc('pack/main').onSnapshot((s) => applyMain(s.exists ? s.data() : null), () => {});
   db.doc('pack/problems').onSnapshot((s) => { pack.problems = s.exists ? s.data() : null; }, () => {});
-
-  initSwipe();
-  initFit();
-  // 竖屏时常驻栏是横着的一条，长的卡片先收着：点一下展开 / 收起
-  pinsBody.addEventListener('click', (e) => {
-    const card = e.target.closest('.class-pin');
-    if (!card || e.target.closest('button, a, input, textarea, svg, .keypad')) return;
-    if (!card.classList.contains('is-clipped') && !card.classList.contains('is-open')) return;
-    card.classList.toggle('is-open');
-    scheduleFit();
-  });
 
   // —— 恢复：资料包、黑板（板和段）、课堂记录、作答 ——
   await restore();
@@ -207,9 +178,9 @@ export async function renderClass(root, meta) {
       if (pm?.exists && !pack.main) applyMain(pm.data());
       if (pp?.exists && !pack.problems) pack.problems = pp.data();
       for (const d of pg.docs.map((x) => x.data()).filter((p) => Number.isFinite(p?.n) && p.n > 0).sort((a, b) => a.n - b.n)) {
-        const p = ensurePage(d.n);
+        const p = bv.ensurePage(d.n);
         Object.assign(p, { title: String(d.title || ''), talk: String(d.talk || ''), lead: d.lead || '', kind: d.kind || '', body: String(d.body || '') });
-        paintPage(p);
+        bv.paint(p);
       }
       const docs = st.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.seq || 0) - (b.seq || 0));
       const legacy = [];
@@ -220,16 +191,16 @@ export async function renderClass(root, meta) {
         let page = place === 'pin' ? 0 : Number(d.page) || 0;
         const old = place === 'board' && !page;
         if (old) {
-          page = pageSeq + 1;
-          Object.assign(ensurePage(page), { lead: d.id, title: d.title || '' });
+          page = bv.seq + 1;
+          Object.assign(bv.ensurePage(page), { lead: d.id, title: d.title || '' });
         }
-        if (page) ensurePage(page);
+        if (page) bv.ensurePage(page);
         const seg = { id: d.id, seq: d.seq || 0, page, place, title: d.title || '', md: String(d.md || ''), hidden: !!d.hidden, failed: !!d.failed, pending: false, sec: null };
         segs.set(seg.id, seg);
         if (old) legacy.push(seg);
         if (!seg.hidden) mountRestored(seg);
       }
-      for (const p of pages.values()) paintPage(p);
+      for (const p of pages.values()) bv.paint(p);
       // 旧版的段分好板就存回去：以后新开的板接在它们后面，下次打开顺序也不变
       for (const seg of legacy) { saveSeg(seg); savePage(pages.get(seg.page)); }
       tu.docs.map((d) => d.data()).filter((t) => Number.isFinite(t?.seq)).sort((a, b) => a.seq - b.seq).forEach((t) => { history.push(t); turnSeq = Math.max(turnSeq, t.seq); });
@@ -244,9 +215,9 @@ export async function renderClass(root, meta) {
       console.error(e);
       toast('课堂记录没读出来，先从头开始');
     }
-    curPage = pageSeq;
+    bv.cur = bv.seq;
     started = history.length > 0;
-    showPage(curPage, { scroll: false });
+    bv.show(bv.cur, { scroll: false });
     refresh();
     if (pendingTurn(history) && teacher.available) bar.setStatus('error', '上一轮 Claude 还没回完，点重试接着上。');
   }
@@ -308,51 +279,13 @@ export async function renderClass(root, meta) {
     }
   }
 
-  // —— 板：一屏一块。都写成函数声明：刷新后恢复（restore）在这些定义之前就会用到 ——
+  // —— 板（摆放、翻板、测量在 boardview.js）。都写成函数声明：刷新后恢复（restore）在这些定义之前就会用到 ——
 
-  function ensurePage(n) {
-    let p = pages.get(n);
-    if (p) return p;
-    const sec = document.createElement('section');
-    sec.className = 'class-page';
-    sec.dataset.page = String(n);
-    sec.hidden = true;
-    sec.setAttribute('aria-label', `第 ${n} 块板`);
-    // 板书：写在板头、板顶那句话上的笔迹挂在这块板上（翻走就藏起来）；「清空」清的是整块板
-    sec.dataset.inkAnchor = `p${n}`;
-    sec.dataset.inkGroup = '';
-    sec.innerHTML = '<header class="class-page-head" hidden><h2 class="class-page-title"></h2></header><div class="class-talk" hidden></div><div class="class-page-body"></div>';
-    p = { n, title: '', talk: '', lead: '', kind: '', body: '', sec, head: sec.querySelector('.class-page-head'), titleEl: sec.querySelector('.class-page-title'), talkEl: sec.querySelector('.class-talk'), bodyEl: sec.querySelector('.class-page-body') };
-    pages.set(n, p);
-    // 按板号插：恢复时板号可能不是按顺序来的
-    const after = [...pagesBox.children].find((c) => Number(c.dataset.page) > n);
-    pagesBox.insertBefore(sec, after || null);
-    pageSeq = Math.max(pageSeq, n);
-    return p;
-  }
-
-  // 擦掉黑板，开一块新板（成为当前板）
+  // 擦掉黑板，开一块新板（成为当前板），存进 class_pages
   function newPage(fields = {}) {
-    const p = ensurePage(pageSeq + 1);
-    Object.assign(p, fields);
-    curPage = p.n;
-    paintPage(p);
+    const p = bv.addPage(fields);
     savePage(p);
     return p;
-  }
-
-  // 板的标题、板顶的话、小结正文画出来
-  function paintPage(p) {
-    p.titleEl.innerHTML = p.title ? mdToHtml(p.title, { inline: true }) : '';
-    p.head.hidden = !p.title;
-    p.talkEl.innerHTML = p.talk ? mdToHtml(p.talk) : '';
-    p.talkEl.hidden = !p.talk;
-    p.sec.classList.toggle('is-closing', p.kind === 'closing');
-    let closing = p.bodyEl.querySelector(':scope > .class-closing');
-    if (p.kind === 'closing') {
-      if (!closing) { closing = document.createElement('div'); closing.className = 'class-closing'; p.bodyEl.prepend(closing); }
-      closing.innerHTML = mdToHtml(p.body || '');
-    } else closing?.remove();
   }
 
   function savePage(p) {
@@ -363,134 +296,9 @@ export async function renderClass(root, meta) {
     const talk = String(md || '').trim();
     if (p.talk === talk) return false;
     p.talk = talk;
-    paintPage(p);
+    bv.paint(p);
     savePage(p);
     return true;
-  }
-
-  // 只显示一块板。scroll：回到页面顶上（换了板，从板的开头看）
-  function showPage(n, { scroll = true, animate = false } = {}) {
-    const target = pages.has(n) ? n : curPage;
-    const changed = target !== viewPage;
-    viewPage = target;
-    for (const p of pages.values()) p.sec.hidden = p.n !== viewPage;
-    const shown = pages.get(viewPage);
-    if (changed && animate && shown && !reduceMotion()) {
-      shown.sec.classList.remove('is-enter');
-      void shown.sec.offsetWidth; // 重新播一次进场
-      shown.sec.classList.add('is-enter');
-    }
-    if (changed && scroll) window.scrollTo({ top: 0, behavior: 'auto' });
-    // 板书挂在段上：翻走的板上的笔迹不画，翻出来的板上的笔迹画回来
-    if (changed) window.LAKit?.ink?.redraw?.();
-    syncNav();
-    scheduleFit();
-  }
-
-  function goPage(n) {
-    if (!pages.size) return;
-    const target = Math.max(1, Math.min(pageSeq, Number(n) || curPage));
-    if (target === viewPage) return;
-    showPage(target, { animate: true });
-  }
-
-  // 往前 / 往后翻一块（划动、方向键）：按实际有的板走，板号中间缺了一块（那块没存上）也不会卡住
-  function stepPage(d) {
-    const ns = [...pages.keys()].sort((a, b) => a - b);
-    const to = ns[ns.indexOf(viewPage) + d];
-    if (to !== undefined) goPage(to);
-  }
-
-  function syncNav() {
-    bar.setNav({
-      view: viewPage, cur: curPage,
-      items: [...pages.values()].sort((a, b) => a.n - b.n).map((p) => ({ n: p.n, title: p.title || (p.kind === 'closing' ? '这节课的小结' : '') })),
-      busy,
-    });
-  }
-
-  // —— 一屏放不放得下：黑板可用的高度给 CSS（--board-h），当前板的内容高度报给课堂 Claude ——
-  function scheduleFit() {
-    if (fitRaf) return;
-    fitRaf = requestAnimationFrame(() => { fitRaf = 0; measureFit(); });
-  }
-  function initFit() {
-    window.addEventListener('resize', scheduleFit, { passive: true });
-    window.addEventListener('orientationchange', scheduleFit, { passive: true });
-    window.addEventListener('scroll', syncMoreHint, { passive: true });
-    if (typeof ResizeObserver === 'function') {
-      const ro = new ResizeObserver(scheduleFit);
-      ro.observe(pagesBox);
-      ro.observe(pinsBox);
-      ro.observe(bar.el);
-    }
-  }
-  function measureFit() {
-    const sr = stage.getBoundingClientRect();
-    // 横屏时常驻栏在右边一栏：输入框只放在黑板那一栏下面（CSS 用 --cb-l / --cb-r 当左右边距）
-    const docked = !pinsBox.hidden && pinsBox.getBoundingClientRect().left >= sr.right - 1;
-    document.body.classList.toggle('class-docked', docked);
-    if (docked) {
-      document.body.style.setProperty('--cb-l', `${Math.round(sr.left)}px`);
-      document.body.style.setProperty('--cb-r', `${Math.max(0, Math.round(document.documentElement.clientWidth - sr.right))}px`);
-    }
-    // 竖屏常驻栏是一条：放不下的卡底下渐隐，点开看全部
-    for (const card of pinsBody.children) card.classList.toggle('is-clipped', !card.classList.contains('is-open') && card.scrollHeight > card.clientHeight + 2);
-    const top = sr.top + window.scrollY;
-    const avail = Math.max(240, Math.round(window.innerHeight - bar.height - top - 10));
-    board.style.setProperty('--board-h', `${avail}px`);
-    const p = pages.get(curPage);
-    if (p && !p.sec.hidden) {
-      const r = p.sec.getBoundingClientRect();
-      const last = [...p.sec.querySelectorAll(':scope > *, :scope > .class-page-body > *')].filter((el) => !el.hidden && el.offsetParent !== null).at(-1);
-      const need = Math.round(last ? last.getBoundingClientRect().bottom - r.top : 0);
-      lastFit = { fits: need <= avail + FIT_SLACK, need, avail, w: Math.round(r.width) };
-      p.sec.classList.toggle('is-overflow', !lastFit.fits);
-    }
-    syncMoreHint();
-  }
-  function syncMoreHint() {
-    const p = pages.get(viewPage);
-    if (!p || p.sec.hidden) { more.hidden = true; return; }
-    const bottom = p.sec.getBoundingClientRect().bottom;
-    more.hidden = !(bottom > window.innerHeight - bar.height + 24);
-  }
-
-  // —— 左右划动翻板（只认手指；在图、输入框、按钮上划不算；屏幕边缘留给系统的返回手势）——
-  function initSwipe() {
-    let s = null;
-    const scrollsSideways = (el) => {
-      for (let n = el; n && n !== stage; n = n.parentElement) if (n.scrollWidth > n.clientWidth + 2 && /(auto|scroll)/.test(getComputedStyle(n).overflowX)) return true;
-      return false;
-    };
-    stage.addEventListener('touchstart', (e) => {
-      s = null;
-      if (e.touches.length !== 1 || pages.size < 2) return;
-      if (document.body.classList.contains('ink-on') || document.body.classList.contains('has-keypad')) return;
-      const t = e.touches[0];
-      const target = e.target instanceof Element ? e.target : null;
-      if (!target || target.closest(NO_SWIPE) || scrollsSideways(target)) return;
-      if (t.clientX < 28 || t.clientX > window.innerWidth - 28) return;
-      s = { x: t.clientX, y: t.clientY, t: performance.now(), sy: window.scrollY };
-    }, { passive: true });
-    stage.addEventListener('touchend', (e) => {
-      if (!s) return;
-      const t = e.changedTouches[0];
-      const dx = t.clientX - s.x, dy = t.clientY - s.y, dt = performance.now() - s.t;
-      const scrolled = Math.abs(window.scrollY - s.sy) > 12;
-      s = null;
-      if (scrolled || dt > 700 || Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.5) return;
-      stepPage(dx < 0 ? 1 : -1);
-    }, { passive: true });
-    stage.addEventListener('touchcancel', () => { s = null; }, { passive: true });
-    // 外接键盘：← → 翻板（在输入框里打字时不算）
-    document.addEventListener('keydown', (e) => {
-      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      const t = e.target;
-      if (t instanceof Element && t.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], .keypad, .cb-menu, .cb-pages')) return;
-      stepPage(e.key === 'ArrowRight' ? 1 : -1);
-    });
   }
 
   // —— 黑板段落 ——
@@ -511,7 +319,7 @@ export async function renderClass(root, meta) {
     sec.innerHTML = '<div class="stage-body"></div>';
     const src = segSource(seg);
     session.stages.push({ id: seg.id, title: seg.title || (seg.md.match(/^##\s+(.+)$/m)?.[1] || '').trim(), src, el: sec });
-    place(seg, sec);
+    bv.place(seg, sec);
     const before = session.problems.length;
     const errors = [];
     try {
@@ -537,34 +345,8 @@ export async function renderClass(root, meta) {
       const why = String(el.getAttribute('title') || '').replace(/^ParseError:\s*/, '').slice(0, 160);
       errors.push({ kind: '公式', msg: `$${el.textContent.trim().slice(0, 80)}$ 写不出来${why ? `（${why}）` : ''}` });
     }
-    if (seg.place !== 'pin') splitFigure(sec.querySelector('.stage-body'));
+    if (seg.place !== 'pin') bv.splitFigure(sec.querySelector('.stage-body'));
     return { sec, errors, soft: probs.filter((p) => p.soft) };
-  }
-
-  // 一段里正好有一张图（scene / graph / space，不是绑定了 steps 的那种）和别的内容：宽屏时排成左图右文。
-  // 只记下图要占几行，排版交给 CSS 的容器查询（窄屏照原来的顺序上下排）
-  // 图占左栏、跨过右栏所有的行，最后一行是 1fr：图比右栏高时多出来的高度都给最后一行，右栏的内容之间不被拉开
-  function splitFigure(body) {
-    const kids = [...body.children];
-    const figs = kids.filter((el) => el.matches('.block-scene, .block-graph, .block-space') && !el.dataset.link);
-    if (figs.length !== 1 || body.querySelector(':scope > .steps-pair')) return;
-    const heads = kids.filter((el) => el.tagName === 'H2');
-    if (heads.length > 1 || (heads.length && kids[0] !== heads[0])) return; // 小标题不在开头：照原样排
-    const text = kids.filter((el) => el !== figs[0] && el.tagName !== 'H2');
-    if (!text.length) return;
-    const head = heads.length ? 1 : 0;
-    body.classList.add('seg-split');
-    figs[0].classList.add('split-fig');
-    body.style.setProperty('--split-rows', `${head ? 'auto ' : ''}repeat(${text.length}, auto) 1fr`);
-    figs[0].style.setProperty('--fig-row', `${1 + head} / span ${text.length + 1}`);
-  }
-
-  // 放进它那块板（按 seq 排）或常驻栏；替换时放在原位置
-  function place(seg, sec) {
-    if (seg.sec?.isConnected) { seg.sec.after(sec); return; }
-    const host = seg.place === 'pin' ? pinsBody : ensurePage(seg.page || curPage || newPage().n).bodyEl;
-    const after = [...host.children].find((c) => (segs.get(c.dataset.step)?.seq ?? Infinity) > seg.seq);
-    host.insertBefore(sec, after || null);
   }
 
   function dropScenesOf(sec) {
@@ -583,7 +365,7 @@ export async function renderClass(root, meta) {
     sec.className = `stage live-step class-seg class-failed${seg.place === 'pin' ? ' class-pin' : ''}`;
     sec.dataset.step = seg.id;
     sec.innerHTML = `<div class="class-failed-box">这段没画出来${seg.title ? `（${escapeHtml(seg.title)}）` : ''}。课堂接着往下。</div>`;
-    place(seg, sec);
+    bv.place(seg, sec);
     return sec;
   }
 
@@ -642,8 +424,8 @@ export async function renderClass(root, meta) {
         if (!toPin) {
           // new：擦掉黑板换一块新板，这一段是新板的第一段（标题就是板的标题）。
           // add / replace 一个没见过的 id：加在当前板上；还没有板、或者当前板是下课小结，就开一块新的
-          const cur = pages.get(curPage);
-          page = op.op === 'new' || !cur || cur.kind === 'closing' ? newPage({ lead: op.id, title: op.title || '' }).n : curPage;
+          const cur = pages.get(bv.cur);
+          page = op.op === 'new' || !cur || cur.kind === 'closing' ? newPage({ lead: op.id, title: op.title || '' }).n : bv.cur;
         }
         seg = { id: op.id, seq: ++segSeq, page, place: toPin ? 'pin' : 'board', title: '', md: '', hidden: false, failed: false, pending: false, sec: null };
       }
@@ -682,7 +464,7 @@ export async function renderClass(root, meta) {
       saveSeg(seg);
       // 板的第一段改了标题：板头跟着改
       const pg = pages.get(seg.page);
-      if (pg && pg.lead === seg.id && op.title !== undefined && pg.title !== seg.title) { pg.title = seg.title; paintPage(pg); savePage(pg); }
+      if (pg && pg.lead === seg.id && op.title !== undefined && pg.title !== seg.title) { pg.title = seg.title; bv.paint(pg); savePage(pg); }
       return { op: op.op, id: op.id, ok: true, title: seg.title, isNew, page: seg.page || undefined };
     }
     if (op.op === 'hide') {
@@ -732,7 +514,7 @@ export async function renderClass(root, meta) {
         if (hit === false) notes.push(`figure ${op.target} highlight ${op.index}：第 ${op.index} 条命令不画东西（比如 let），没有闪`);
       }
       // 板超出一屏、图不在视野里时滚过去（学生正看着当前板时才动页面）
-      if (viewPage === curPage) el.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'nearest' });
+      if (bv.view === bv.cur) el.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'nearest' });
       return { ...base, ok: true };
     } catch (e) {
       return { ...base, ok: false, error: e?.message || String(e) };
@@ -742,7 +524,7 @@ export async function renderClass(root, meta) {
   // 元素在当前板上，或者在常驻栏里（常驻栏一直看得到）
   function onCurrent(el) {
     if (el.closest('.class-pins')) return true;
-    return Number(el.closest('.class-page')?.dataset.page) === curPage;
+    return Number(el.closest('.class-page')?.dataset.page) === bv.cur;
   }
 
   function saveSeg(seg) {
@@ -758,12 +540,10 @@ export async function renderClass(root, meta) {
         : started ? '黑板现在是空的。在下面说一句话，Claude 会接着讲。' : '准备好了就点「开始上课」。<br>Claude 会在黑板上一块一块地讲、出题、画图；你在黑板上作答，它马上接着教。';
       root.querySelector('.class-start').hidden = started || !teacher.available;
     }
-    const pinned = [...pinsBody.children].some((c) => !c.hidden);
-    pinsBox.hidden = !pinned;
-    board.classList.toggle('has-pins', pinned);
+    bv.syncPins();
     bar.setQuick({ show: started && any && teacher.available, enabled: !busy });
-    syncNav();
-    scheduleFit();
+    bv.syncNav();
+    bv.scheduleFit();
   }
   root.querySelector('.class-start').addEventListener('click', () => enqueueStudent('开始上课。', [], true));
 
@@ -812,10 +592,10 @@ export async function renderClass(root, meta) {
     return {
       segs: list,
       pages: [...pages.values()].sort((a, b) => a.n - b.n).map((p) => ({ n: p.n, title: p.title, talk: p.talk, kind: p.kind })),
-      cur: curPage,
-      view: viewPage,
-      screen: { w: vw, h: vh, landscape: vw > vh, board: lastFit ? { w: lastFit.w, h: lastFit.avail } : null },
-      fit: lastFit && pages.has(curPage) ? { fits: lastFit.fits, need: lastFit.need, avail: lastFit.avail } : null,
+      cur: bv.cur,
+      view: bv.view,
+      screen: { w: vw, h: vh, landscape: vw > vh, board: bv.fit ? { w: bv.fit.w, h: bv.fit.avail } : null },
+      fit: bv.fit && pages.has(bv.cur) ? { fits: bv.fit.fits, need: bv.fit.need, avail: bv.fit.avail } : null,
     };
   }
 
@@ -913,7 +693,7 @@ export async function renderClass(root, meta) {
       let text = [actions.length ? actionsMessage(actions) : '', say].filter(Boolean).join('\n\n');
       if (imgs.length) text += teacher.images ? `\n（附了 ${imgs.length} 张图：学生的手写或截图，白底黑字。）` : `\n（学生附了 ${imgs.length} 张图，但这个查看方式发不了图，你看不到；需要的话请学生用文字说。）`;
       // 学生说的话不上黑板，只进课堂记录
-      const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), images: ids, page: curPage || undefined });
+      const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), images: ids, page: bv.cur || undefined });
       const blobs = imgs.map((x) => x.blob);
       lastImages = { seq: turn.seq, blobs };
       return converse(blobs);
@@ -964,7 +744,7 @@ export async function renderClass(root, meta) {
         failTurn(e);
         return false;
       }
-      measureFit();
+      bv.measureFit();
       const level = Math.min(budgetLevel, 3);
       const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), packBudget: PACK_BUDGET >> level });
       const maxBytes = Math.round(promptLimit() * [1, 0.85, 0.7, 0.55][level]);
@@ -1058,7 +838,7 @@ export async function renderClass(root, meta) {
     const { segments, rejected, unclosed } = parseOutput(res.text, { final: true });
     let failures = [];
     const notes = [];
-    const pageBefore = curPage;
+    const pageBefore = bv.cur;
     const boardOps = [];
     for (const s of segments) {
       if (!isOp(s)) continue;
@@ -1073,29 +853,29 @@ export async function renderClass(root, meta) {
     const talk = segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n').trim();
     let talkPage;
     if (talk && !keepTalk) {
-      const cur = pages.get(curPage);
+      const cur = pages.get(bv.cur);
       const p = cur && cur.kind !== 'closing' ? cur : newPage();
       setTalk(p, talk);
       talkPage = p.n;
     }
-    const turnedPage = curPage !== pageBefore;
+    const turnedPage = bv.cur !== pageBefore;
     refresh();
     // 换了新板：翻过去、从头看。只改了当前板：回到当前板（学生翻到以前的板去作答时也拉回来）；
     // 这一轮在当前板上新写、改写的段露不全，就滚到刚好露出来（滚得最少，板顶尽量留着）；没写段时，板顶的话不在视野里就滚上去
     const smooth = reduceMotion() ? 'auto' : 'smooth';
-    if (turnedPage) showPage(curPage, { animate: true });
-    else if (pages.has(curPage)) {
-      if (viewPage !== curPage) showPage(curPage, { animate: true });
-      const fresh = boardOps.filter((o) => o.ok && (o.op === 'add' || o.op === 'replace') && o.page === curPage).map((o) => segs.get(o.id)?.sec).filter((sec) => sec && !sec.hidden).at(-1);
+    if (turnedPage) bv.show(bv.cur, { animate: true });
+    else if (pages.has(bv.cur)) {
+      if (bv.view !== bv.cur) bv.show(bv.cur, { animate: true });
+      const fresh = boardOps.filter((o) => o.ok && (o.op === 'add' || o.op === 'replace') && o.page === bv.cur).map((o) => segs.get(o.id)?.sec).filter((sec) => sec && !sec.hidden).at(-1);
       if (fresh) {
         const r = fresh.getBoundingClientRect();
         if (r.bottom > window.innerHeight - bar.height || r.top < 0) fresh.scrollIntoView({ behavior: smooth, block: 'nearest' });
       } else if (talkPage) {
-        const t = pages.get(curPage).talkEl;
+        const t = pages.get(bv.cur).talkEl;
         if (t.getBoundingClientRect().top < 0) t.scrollIntoView({ behavior: smooth, block: 'start' });
       }
     }
-    addTurn({ role: 'claude', text: res.text, boardOps, page: curPage || undefined, talkPage, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined });
+    addTurn({ role: 'claude', text: res.text, boardOps, page: bv.cur || undefined, talkPage, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined });
     bar.setStatus(res.truncated ? 'notice' : 'idle', res.truncated ? '这一轮太长，被截断了。' : '');
 
     const retry = [];
@@ -1177,7 +957,7 @@ export async function renderClass(root, meta) {
   // 确认是 Opus 5.5 之前都是草稿：话边生成边出现，要写的黑板内容只列出来（写什么、写在哪），不画 ——
   // keepTalk：这一轮只是重写写错的段，说的话不会换到板顶上，原来那句话照常露着、也不预览这一轮的话
   function ensureDraft({ keepTalk = false } = {}) {
-    const host = pages.get(curPage) || null;
+    const host = pages.get(bv.cur) || null;
     if (draft && draft.host === (host?.n || 0)) return draft;
     clearDraft();
     const box = document.createElement('div');
@@ -1206,7 +986,7 @@ export async function renderClass(root, meta) {
         const ops = segments.filter((s) => s.type === 'board');
         d.ops.hidden = !ops.length;
         if (ops.length) d.ops.innerHTML = ops.map(opChip).join('');
-        scheduleFit();
+        bv.scheduleFit();
       } catch (e) {
         // 草稿只是预览：画不出来就先不画，等这一轮结束
         console.warn('草稿没画出来', e);
@@ -1236,7 +1016,7 @@ export async function renderClass(root, meta) {
     bar.indicator.remove();
     draft.box.remove();
     draft = null;
-    scheduleFit();
+    bv.scheduleFit();
   }
 
   // —— 可选工具（这个查看方式支持 tools 时才给）。有副作用的先记在 staged 里，确认是 Opus 5.5 才生效 ——
@@ -1320,7 +1100,7 @@ export async function renderClass(root, meta) {
       await sink.put('class_notes', { kind: 'summary', text: res.text, at: Date.now(), turn: turnSeq + 1 });
       const p = newPage({ title: '这节课的小结', kind: 'closing', body: res.text });
       addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied, page: p.n });
-      showPage(p.n, { animate: true });
+      bv.show(p.n, { animate: true });
       bar.setStatus('notice', '下课了。小结已经存好，回对话告诉 Claude「下课了」。');
       session.event('end', null, { turns: history.length });
       return true;
@@ -1330,11 +1110,11 @@ export async function renderClass(root, meta) {
   window.LAKit = {
     ...(window.LAKit || {}),
     classroom: {
-      history, segs, pages, queue, boardState, flush, retry: retryRun, showPage: (n) => goPage(n), measureFit,
+      history, segs, pages, queue, boardState, flush, retry: retryRun, showPage: (n) => bv.go(n), measureFit: bv.measureFit,
       runClaude: () => exclusive(async () => converse()),
       get busy() { return busy; },
-      get curPage() { return curPage; },
-      get viewPage() { return viewPage; },
+      get curPage() { return bv.cur; },
+      get viewPage() { return bv.view; },
       get pending() { return pendingTurn(history); },
       get lastPrompt() { return lastPrompt; },
       get budgetLevel() { return budgetLevel; },

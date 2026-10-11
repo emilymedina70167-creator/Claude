@@ -5,6 +5,7 @@
 // 只在需要时多出东西：附上的图（输入框上沿一排小照片）、出错 / 提示（输入框上面一条，带「重试」）、手写板、粘贴图片的小框。
 // 「Claude 在想 / 在写」的指示（indicator）由这里更新，但放在黑板末尾（控制器把它挂上去），眼睛不用离开黑板。
 import { createPad } from '../ink/pad.js';
+import { createPageNav } from './pagenav.js';
 import { FEATURES } from '../features.js';
 import { imageToPng } from '../flatten.js';
 
@@ -139,18 +140,12 @@ const ICON = {
   send: '<svg viewBox="0 0 24 24"><path d="M12 19V5.5"/><path d="M6 11l6-6 6 6"/></svg>',
   stop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>',
   more: '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
-  prev: '<svg viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6"/></svg>',
-  next: '<svg viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>',
   copy: '<svg viewBox="0 0 24 24"><rect x="8" y="8" width="11.5" height="12" rx="2"/><path d="M15.5 8V6a2 2 0 0 0-2-2H6.5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2H8"/></svg>',
   bell: '<svg viewBox="0 0 24 24"><path d="M5 19.5h14"/><path d="M7 19.5V11a5 5 0 0 1 10 0v8.5"/><path d="M12 3.5V6"/></svg>',
 };
 
-const escapeText = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-// 翻板条上的字：第几块 / 一共几块
-export function navLabel(view, total) {
-  return total > 0 ? { n: String(Math.max(1, Math.min(view || total, total))), of: `/ ${total}` } : { n: '', of: '' };
-}
+// 翻板条在 pagenav.js（实时黑板也用）；这里接着导出，老的引用不用改
+export { navLabel } from './pagenav.js';
 
 export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick, onNav, images = false, tag = MODEL_TAG } = {}) {
   const el = document.createElement('div');
@@ -170,14 +165,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
       </div>
     </div>
     <div class="cb-ctrl" hidden>
-      <div class="cb-nav" role="group" aria-label="翻板" hidden>
-        <button type="button" class="cb-nav-btn cb-prev" aria-label="上一块板">${ICON.prev}</button>
-        <button type="button" class="cb-nav-label" aria-haspopup="menu" aria-expanded="false" title="所有的板"><span class="cb-nav-word">第</span><span class="cb-nav-n"></span><span class="cb-nav-of"></span><span class="cb-nav-word">块</span></button>
-        <button type="button" class="cb-nav-btn cb-next" aria-label="下一块板">${ICON.next}</button>
-        <button type="button" class="cb-now" hidden>回到当前板</button>
-      </div>
       <div class="cb-quick" role="group" aria-label="快捷回答" hidden>${QUICK.map((q) => `<button type="button" class="cb-q" data-q="${q}">${q}</button>`).join('')}</div>
-      <div class="cb-pages" hidden role="menu" aria-label="所有的板"></div>
     </div>
     <div class="cb-status" data-state="idle" hidden>
       <i class="cb-dot" aria-hidden="true"></i>
@@ -234,13 +222,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
   const zone = $('.cb-paste-zone');
   const dock = $('.cb-dock');
   const ctrl = $('.cb-ctrl');
-  const nav = $('.cb-nav');
-  const prevBtn = $('.cb-prev');
-  const nextBtn = $('.cb-next');
-  const navLabelBtn = $('.cb-nav-label');
-  const nowBtn = $('.cb-now');
   const quick = $('.cb-quick');
-  const pagesMenu = $('.cb-pages');
 
   let busy = false;
   let enabled = true;
@@ -303,7 +285,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
   }
   on(moreBtn, 'click', (e) => {
     e.stopPropagation();
-    if (!menuOpen) { openSlate(false); setPagesOpen(false); }
+    if (!menuOpen) { openSlate(false); pageNav.close(); }
     setMenu(!menuOpen);
   });
   // 挂在 window 的捕获阶段：板书开着时，笔在黑板上的 pointerdown 会被板书层在 document 上拦下（stopPropagation），冒泡阶段收不到
@@ -316,54 +298,10 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
   // 板书按钮（板书层自己管开关）：点了就收起菜单，让开黑板
   on(dock, 'click', (e) => { if (e.target.closest('.ink-fab')) setTimeout(() => setMenu(false), 0); });
 
-  // —— 翻板：‹ › 一块一块翻；点「第 3 / 5 块」列出所有的板；翻回去看时「回到当前板」——
-  let navState = { view: 0, cur: 0, items: [], busy: false };
-  let pagesOpen = false;
-  function setPagesOpen(v) {
-    pagesOpen = !!v && navState.items.length > 0;
-    pagesMenu.hidden = !pagesOpen;
-    navLabelBtn.setAttribute('aria-expanded', String(pagesOpen));
-    if (pagesOpen) {
-      pagesMenu.innerHTML = navState.items.slice().reverse().map((it) => {
-        const tags = [it.n === navState.cur ? '当前' : '', it.n === navState.view && it.n !== navState.cur ? '正在看' : ''].filter(Boolean);
-        return `<button type="button" class="cb-page-item${it.n === navState.view ? ' is-view' : ''}" role="menuitem" data-n="${it.n}"><b>${it.n}</b><span>${escapeText(it.title || '（没有标题）')}</span>${tags.length ? `<i>${tags.join(' · ')}</i>` : ''}</button>`;
-      }).join('');
-      pagesMenu.querySelector('.is-view')?.scrollIntoView({ block: 'nearest' });
-    }
-  }
-  function syncNav() {
-    const { view, cur, items, busy: writing } = navState;
-    const total = items.length;
-    nav.hidden = total < 2; // 只有一块板时没什么可翻
-    const lab = navLabel(view, total);
-    navLabelBtn.querySelector('.cb-nav-n').textContent = lab.n;
-    navLabelBtn.querySelector('.cb-nav-of').textContent = lab.of;
-    const idx = items.findIndex((it) => it.n === view);
-    prevBtn.disabled = idx <= 0;
-    nextBtn.disabled = idx < 0 || idx >= total - 1;
-    nowBtn.hidden = !total || view === cur;
-    // 翻回去看的时候，Claude 在当前板上写东西：「回到当前板」轻轻闪
-    nowBtn.classList.toggle('is-live', !!writing);
-    ctrl.hidden = nav.hidden && quick.hidden;
-    if (pagesOpen) setPagesOpen(true);
-  }
-  const step = (d) => {
-    const idx = navState.items.findIndex((it) => it.n === navState.view);
-    const to = navState.items[idx + d];
-    if (to) onNav?.(to.n);
-  };
-  on(prevBtn, 'click', () => step(-1));
-  on(nextBtn, 'click', () => step(1));
-  on(nowBtn, 'click', () => onNav?.(navState.cur));
-  on(navLabelBtn, 'click', (e) => { e.stopPropagation(); setMenu(false); setPagesOpen(!pagesOpen); });
-  on(pagesMenu, 'click', (e) => {
-    const b = e.target.closest('.cb-page-item');
-    if (!b) return;
-    setPagesOpen(false);
-    onNav?.(Number(b.dataset.n));
-  });
-  on(window, 'pointerdown', (e) => { if (pagesOpen && e.target instanceof Element && !pagesMenu.contains(e.target) && !navLabelBtn.contains(e.target)) setPagesOpen(false); }, { capture: true, passive: true });
-  on(document, 'keydown', (e) => { if (e.key === 'Escape' && pagesOpen) { setPagesOpen(false); navLabelBtn.focus({ preventScroll: true }); } });
+  // —— 翻板条（pagenav.js）：放在控制条左边，板的单子从控制条上沿弹出来 ——
+  const pageNav = createPageNav({ onNav, onOpen: () => setMenu(false) });
+  ctrl.prepend(pageNav.nav);
+  ctrl.append(pageNav.menu);
 
   // —— 快捷回答：点了等于对 Claude 说这句话 ——
   const pills = [...quick.querySelectorAll('.cb-q')];
@@ -371,7 +309,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
   function syncQuick() {
     quick.hidden = !quickState.show;
     pills.forEach((b) => (b.disabled = !quickState.enabled || !enabled));
-    ctrl.hidden = nav.hidden && quick.hidden;
+    ctrl.hidden = !pageNav.shown && quick.hidden;
   }
   on(quick, 'click', (e) => {
     const b = e.target.closest('.cb-q');
@@ -736,8 +674,8 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
     },
     // 翻板条：view 正在看的板号，cur 当前板（最新那块），items [{ n, title }]，busy Claude 正在写
     setNav(state) {
-      navState = { view: Number(state?.view) || 0, cur: Number(state?.cur) || 0, items: Array.isArray(state?.items) ? state.items : [], busy: !!state?.busy };
-      syncNav();
+      pageNav.setNav(state);
+      ctrl.hidden = !pageNav.shown && quick.hidden;
     },
     setQuick(state) {
       quickState = { show: !!state?.show, enabled: state?.enabled !== false };
@@ -747,6 +685,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
     // 测试和热重载用：撤掉输入框和它挂的监听
     destroy() {
       cleanups.forEach((f) => f());
+      pageNav.destroy();
       ro?.disconnect();
       inkWatch?.disconnect();
       inkClass?.disconnect();
