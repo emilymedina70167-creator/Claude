@@ -36,7 +36,7 @@ export const DEFAULT_RULES = doc`
 export const PROTOCOL_DOC = doc`
 你的每一轮输出是一段文本，页面一边收一边处理：
 
-- **黑板指令以外的文字，都是对学生说的话**，也写在黑板上：和这一轮的黑板内容按出现的先后排在一起，左边一道黄线表示是你在说（支持 Markdown 和 $公式$，不要写 ˋ##ˋ 标题）。
+- **黑板指令以外的文字，都是对学生说的话**，也写在黑板上：和这一轮的黑板内容按出现的先后排在一起，左边一道黄线表示是你在说（支持 Markdown 和 $公式$，不要写 ˋ##ˋ 标题）。说的话总是接在黑板最后面；ˋreplaceˋ 改的段留在原来的位置，所以提到改过的段、前面的图时写清是哪一段（比如「b2 改好了」），不要说「下面这题」。
 - **要写上黑板的内容，放在语言名为 ˋboardˋ 的围栏代码块里**。块的第一行是指令。你写的时候学生先看到草稿；整轮写完、确认是你（Opus 5.5）写的之后，页面按出现的顺序执行所有指令。
 - 一轮里可以有好几个指令，按出现的顺序执行。
 
@@ -689,6 +689,16 @@ export function actionTrigger(a, { lastStep = false } = {}) {
 }
 
 // 给课堂 Claude 的对话：最近一次摘要 + 摘要之后的原文；作废的轮、下课小结不算
+// 课堂记录里用过的最大黑板位置（学生的轮 boardAt、Claude 的轮 sayAfter）。刷新后段号要从这之后接着编：
+// 写错没画出来、重写也没成的段占了号却不进 steps，只留在这些位置里；不越过它们，新的话和段会排到旧的话前面
+export function usedBoardSeq(history) {
+  let n = 0;
+  for (const t of history || []) {
+    for (const v of [t?.boardAt, ...(Array.isArray(t?.sayAfter) ? t.sayAfter : [])]) if (Number.isFinite(v)) n = Math.max(n, v);
+  }
+  return n;
+}
+
 export function promptHistory(history) {
   const live = (history || []).filter((t) => t && !t.discarded && t.kind !== 'closing');
   const s = live.filter((t) => t.kind === 'summary').at(-1);

@@ -268,7 +268,8 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images 
     if (!menuOpen) openSlate(false);
     setMenu(!menuOpen);
   });
-  on(document, 'pointerdown', (e) => { if (menuOpen && e.target instanceof Element && !menu.contains(e.target) && !moreBtn.contains(e.target)) setMenu(false); }, { passive: true });
+  // 挂在 window 的捕获阶段：板书开着时，笔在黑板上的 pointerdown 会被板书层在 document 上拦下（stopPropagation），冒泡阶段收不到
+  on(window, 'pointerdown', (e) => { if (menuOpen && e.target instanceof Element && !menu.contains(e.target) && !moreBtn.contains(e.target)) setMenu(false); }, { capture: true, passive: true });
   on(document, 'keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (menuOpen) { setMenu(false); moreBtn.focus({ preventScroll: true }); } else if (!slate.hidden) openSlate(false);
@@ -301,10 +302,15 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images 
     penBtn.disabled = !enabled || full;
     shotBtn.disabled = !enabled || full;
     send.disabled = !enabled && !busy;
-    send.classList.toggle('is-stop', busy);
-    send.innerHTML = busy ? ICON.stop : ICON.send;
-    send.setAttribute('aria-label', busy ? '停止这一轮' : '发送');
-    send.title = busy ? '停止这一轮' : '发送（回车）';
+    // 图标只在「发送 ↔ 停止」切换时换：每打一个字都换一遍的话，正好按在图标上的那一下会被吞掉
+    //（按下时的节点被换掉，松开就不算点击；iPad 上点发送时提交候选词、随手写都会触发 input）
+    if (send.dataset.busy !== String(busy)) {
+      send.dataset.busy = String(busy);
+      send.classList.toggle('is-stop', busy);
+      send.innerHTML = busy ? ICON.stop : ICON.send;
+      send.setAttribute('aria-label', busy ? '停止这一轮' : '发送');
+      send.title = busy ? '停止这一轮' : '发送（回车）';
+    }
     send.classList.toggle('is-empty', !busy && !ta.value.trim() && !attached.length);
     el.classList.toggle('is-busy', busy);
     el.classList.toggle('is-disabled', !enabled);
@@ -471,8 +477,13 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, images 
   function publishHeight() {
     const h = Math.round(el.offsetHeight);
     if (h === lastH) return;
+    // 本来就看着黑板末尾（快捷回答那一行）时，输入框变高（多出出错提示、附图）要跟着往下滚，不然末尾被盖住
+    const se = document.scrollingElement || root;
+    const atEnd = lastH > 0 && h > lastH && se.scrollTop + window.innerHeight >= se.scrollHeight - 48;
+    const grew = h - lastH;
     lastH = h;
     root.style.setProperty('--class-bar-h', h + 'px');
+    if (atEnd) window.scrollBy({ top: grew, behavior: 'auto' });
   }
   let ro = null;
   if (typeof ResizeObserver === 'function') {

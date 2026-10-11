@@ -76,6 +76,8 @@ body.has-keypad .class-bar, .class-bar.is-away {
 }
 .cb-tool svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .cb-more svg { fill: currentColor; stroke: none; }
+/* 点击始终落在按钮本身（图标换掉时不吞掉这一下） */
+.cb-tool svg, .cb-send svg { pointer-events: none; }
 @media (hover: hover) { .cb-tool:not(:disabled):hover { color: var(--chalk); background: rgba(238, 240, 230, 0.07); } }
 .cb-tool:active { transform: scale(.92); }
 .cb-tool:disabled { opacity: .32; cursor: default; }

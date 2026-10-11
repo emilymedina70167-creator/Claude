@@ -5,10 +5,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   reportable, actionTrigger, promptHistory, pendingTurn, fitTurns, buildTurns, buildSystem, boardStateText,
-  DEFAULT_RULES, PROTOCOL_DOC, closingPrompt, compactionPrompt, bytes, KEEP_RECENT, PACK_BUDGET, CUT_NOTE, actionText,
+  DEFAULT_RULES, PROTOCOL_DOC, closingPrompt, compactionPrompt, bytes, KEEP_RECENT, PACK_BUDGET, CUT_NOTE, actionText, usedBoardSeq,
 } from '../kit/src/class/prompt.js';
 import { parseOutput, parseCommand } from '../kit/src/class/protocol.js';
 import { devReply } from '../kit/src/class/devteacher.js';
+import { readFileSync } from 'node:fs';
+import { componentDocs } from '../kit/build-docs.js';
 
 globalThis.localStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
 globalThis.window ??= { addEventListener() {} };
@@ -197,6 +199,8 @@ test('发给课堂 Claude 的说明、小结要求、模拟老师的小结：提
     ['PROTOCOL_DOC', PROTOCOL_DOC],
     ['closingPrompt', closingPrompt()],
     ['compactionPrompt', compactionPrompt({ summary: '', turns: [T(1, 'student', '没懂')] })],
+    // 组件手册也在同一份课堂说明里（构建时从 CLAUDE-PROJECT.md 第三节截出来）
+    ['组件手册', componentDocs(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8'))],
   ]) {
     const bad = s.split('\n').filter((l) => he.test(l.replace(/不用「他」「她」/g, '')));
     assert.deepEqual(bad, [], `${name} 里有性别代词`);
@@ -292,4 +296,20 @@ test('课堂模式里组件自己发起的调用：只有带图的转写能发�
   } finally {
     session.mode = before;
   }
+});
+
+test('usedBoardSeq：刷新后段号要越过记录里话的位置（写错没画出来的段占的号只留在那里）', () => {
+  assert.equal(usedBoardSeq([]), 0);
+  assert.equal(usedBoardSeq(undefined), 0);
+  // b2 写错、重写被停止：steps 里只有 b1，但 Claude 那一轮的话排在 2 后面，学生下一句也记在 2
+  const h = [
+    { seq: 1, role: 'student', say: '开始上课。', start: true, boardAt: 0 },
+    { seq: 2, role: 'claude', text: '…', sayAfter: [0, 1] },
+    { seq: 3, role: 'student', say: '继续。', boardAt: 1 },
+    { seq: 4, role: 'claude', text: '…', sayAfter: [1, 2] },
+    { seq: 5, role: 'system', kind: 'error', discarded: true },
+  ];
+  assert.equal(usedBoardSeq(h), 2);
+  // 旧记录没有这些字段；写坏的值不算
+  assert.equal(usedBoardSeq([{ seq: 1, role: 'claude', text: '' }, { boardAt: 'x', sayAfter: [NaN, null, 3] }]), 3);
 });

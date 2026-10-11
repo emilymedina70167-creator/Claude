@@ -13,7 +13,7 @@ import { copyRecord, toast } from '../record.js';
 import { parseOutput } from './protocol.js';
 import {
   buildSystem, actionText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
-  reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, bytes, PACK_BUDGET, compactionSlice, worthCompacting,
+  reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, bytes, PACK_BUDGET, compactionSlice, worthCompacting, usedBoardSeq,
 } from './prompt.js';
 import { COMPONENT_DOCS } from './docs.js';
 import { createDevTeacher } from './devteacher.js';
@@ -176,6 +176,8 @@ export async function renderClass(root, meta) {
         if (!seg.hidden) mountRestored(seg);
       });
       tu.docs.map((d) => d.data()).filter((t) => Number.isFinite(t?.seq)).sort((a, b) => a.seq - b.seq).forEach((t) => { history.push(t); turnSeq = Math.max(turnSeq, t.seq); });
+      // 段号也要越过记录里用过的位置（写错没画出来、重写也没成的段占了号却不进 steps，见 usedBoardSeq）
+      segSeq = Math.max(segSeq, usedBoardSeq(history));
       // 黑板现状里的作答结果：作答记录 + 揭开 / 拖动（按时间重放，规则和上课时一样）
       const recs = [
         ...an.docs.map((d) => d.data()).map((r) => ({ source: 'record', ...r, type: r.kind, answer: r.kind === 'conjecture' ? r.text : undefined })),
@@ -277,9 +279,10 @@ export async function renderClass(root, meta) {
   }
 
   // 学生说的话（打字、快捷回答）：只在有话的时候记。只有作答动作的轮不记，作答就在组件里
+  // （作答带的手写 / 截图原图也算在作答里，不另记「附图」）
   function putStudent(t, key) {
     if (t.start) return null;
-    const n = t.images?.length ? `<span class="class-said-img">附图 ${t.images.length} 张</span>` : '';
+    const n = t.images?.length && !t.actions?.length ? `<span class="class-said-img">附图 ${t.images.length} 张</span>` : '';
     if (!t.say && !n) return null;
     const el = document.createElement('div');
     el.className = 'class-said';
@@ -298,16 +301,21 @@ export async function renderClass(root, meta) {
   // 旧记录没有，就按「到那时为止画好的最大段号」估一个
   function restoreTalk() {
     let at = 0;
+    let spoke = false; // 学生开过口没有（旧记录里第一句「开始上课。」是按钮，没有 start 标记）
     for (const t of history) {
       if (t.discarded) continue;
-      if (t.role === 'student') putStudent(t, [t.boardAt ?? at, 1, t.seq, 0]);
-      else if (t.role === 'claude') {
+      if (t.role === 'student') {
+        const oldStart = !spoke && t.boardAt === undefined && t.say === '开始上课。' && !t.actions?.length && !t.images?.length;
+        if (!oldStart) putStudent(t, [t.boardAt ?? at, 1, t.seq, 0]);
+        spoke = true;
+      } else if (t.role === 'claude') {
         let k = 0, idx = 0;
         for (const s of parseOutput(t.text, { final: true }).segments) {
           if (s.type === 'speech') { putSay(s.text, [t.sayAfter?.[idx] ?? at, 1, t.seq, idx]); idx++; continue; }
           if (!isOp(s)) continue;
           const o = t.boardOps?.[k++];
-          if (o?.ok && (o.op === 'add' || o.op === 'replace')) at = Math.max(at, segs.get(o.id)?.seq || 0);
+          // 写错的 add 也在这时占了段号（后来重写成功的段就用这个号）：一样算进去
+          if (o && (o.op === 'add' || o.op === 'replace')) at = Math.max(at, segs.get(o.id)?.seq || 0);
         }
       } else if (t.role === 'system' && t.kind === 'closing') putClosing(t.text, [t.boardAt ?? at, 1, t.seq, 0]);
     }
