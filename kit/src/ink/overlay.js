@@ -7,7 +7,7 @@ import { toast } from '../record.js';
 const SIZES = { fine: 1.6, mid: 2.6, bold: 4.2 };
 const ERASER_R = 14;
 // 这些地方的点按始终交给界面本身（工具栏、进度条、助教、键盘……）
-const CHROME = '.ink-bar, .ink-fab, .g-bar, .tutor, .tutor-fab, .keypad, .record-fallback, .ink-pad, .class-bar, .dev-panel';
+const CHROME = '.ink-bar, .ink-fab, .g-bar, .tutor, .tutor-fab, .keypad, .record-fallback, .ink-pad, .class-bar, .class-more, .dev-panel';
 
 const icon = {
   pen: '<svg viewBox="0 0 24 24"><path d="M4 20l1.2-4.4L15.6 5.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.4 18.8z"/><path d="M13.8 7l3.2 3.2"/></svg>',
@@ -40,23 +40,24 @@ export function initBoardInk(article) {
 
   // 看不见的锚点（自己 hidden，或者在藏起来的地方里：课堂模式翻走的板）：上面的笔迹不画，新笔画也不挂上去
   const unseen = (a) => a.hidden || !a.getClientRects().length;
-  // 锚点：引导模式下每节一个，否则整篇课件一个
+  // 锚点：引导模式下每节一个，否则整篇课件一个。课堂模式里每块板本身也是锚点（data-ink-anchor）：
+  // 写在板头、板顶那句话上的笔迹挂在这块板上，翻走就跟着藏起来
   const anchors = () => {
-    const ss = [...article.querySelectorAll('.stage')];
+    const ss = [...article.querySelectorAll('.stage, [data-ink-anchor]')];
     return ss.length ? ss : [article];
   };
-  // 笔画记在哪一节：实时黑板按段的 id（段会陆续加进来），其他按序号
-  const keyOf = (el, i) => el.dataset?.step || i;
+  // 笔画记在哪一节：实时黑板、课堂按段的 id（段会陆续加进来），课堂的板按板号，其他按序号
+  const keyOf = (el, i) => el.dataset?.step || el.dataset?.inkAnchor || i;
   const anchorEl = (k) => { const as = anchors(); return as.find((a, i) => keyOf(a, i) === k) || as[0]; };
-  function anchorAt(clientY) {
-    const as = anchors();
-    for (let i = as.length - 1; i >= 0; i--) {
-      if (unseen(as[i])) continue;
-      if (as[i].getBoundingClientRect().top <= clientY) return keyOf(as[i], i);
-    }
-    // 笔落在第一个看得见的锚点上面（比如课堂板头）：挂在第一个看得见的锚点上
-    const first = Math.max(0, as.findIndex((a) => !unseen(a)));
-    return keyOf(as[first], first);
+  // 笔落点所在的那一节：先挑横向盖住落点的（课堂横屏时黑板和常驻栏是左右两栏），再挑上沿在落点之上、最靠下的
+  function anchorAt(clientX, clientY) {
+    const seen = anchors().map((a, i) => ({ a, i, r: unseen(a) ? null : a.getBoundingClientRect() })).filter((x) => x.r);
+    if (!seen.length) return keyOf(anchors()[0], 0);
+    const col = seen.filter((x) => clientX >= x.r.left && clientX <= x.r.right);
+    const pool = col.length ? col : seen;
+    for (let j = pool.length - 1; j >= 0; j--) if (pool[j].r.top <= clientY) return keyOf(pool[j].a, pool[j].i);
+    // 笔落在第一个看得见的锚点上面：挂在它上面
+    return keyOf(pool[0].a, pool[0].i);
   }
 
   let queued = false;
@@ -154,13 +155,16 @@ export function initBoardInk(article) {
     // 清空当前屏幕所在小节：第一次点只是确认
     if (!btn.classList.contains('armed')) {
       btn.classList.add('armed');
-      toast('再点一次，清空这一节的板书');
+      toast(article.querySelector('[data-ink-group]') ? '再点一次，清空这块板上的板书' : '再点一次，清空这一节的板书');
       setTimeout(() => btn.classList.remove('armed'), 2500);
       return;
     }
     btn.classList.remove('armed');
-    const a = anchorAt(innerHeight / 2);
-    hist.erase(strokes.filter((s) => s.a === a));
+    // 清空屏幕中间那一节；课堂模式里是整块板（板头、板上各段，data-ink-group 圈起来的）
+    const a = anchorAt(innerWidth / 2, innerHeight / 2);
+    const group = anchorEl(a)?.closest?.('[data-ink-group]');
+    const keys = new Set(group ? anchors().map((x, i) => (group.contains(x) ? keyOf(x, i) : null)).filter((k) => k !== null) : [a]);
+    hist.erase(strokes.filter((s) => keys.has(s.a)));
     redraw(); save();
   }
 
@@ -177,7 +181,7 @@ export function initBoardInk(article) {
     e.stopPropagation();
     try { document.documentElement.setPointerCapture(e.pointerId); } catch { /* 部分浏览器不支持 */ }
     cursor.hidden = true;
-    const a = anchorAt(e.clientY);
+    const a = anchorAt(e.clientX, e.clientY);
     const r = anchorEl(a).getBoundingClientRect();
     if (st.tool === 'eraser') {
       st.drawing = null;
@@ -248,7 +252,7 @@ export function initBoardInk(article) {
   }
   function eraseOne(cx, cy) {
     const e = { clientX: cx, clientY: cy };
-    const a = anchorAt(e.clientY);
+    const a = anchorAt(e.clientX, e.clientY);
     const r = anchorEl(a).getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
     const hit = strokes.filter((s) => s.a === a && hitStroke(s, x, y, ERASER_R));

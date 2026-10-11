@@ -318,6 +318,9 @@ export async function renderClass(root, meta) {
     sec.dataset.page = String(n);
     sec.hidden = true;
     sec.setAttribute('aria-label', `第 ${n} 块板`);
+    // 板书：写在板头、板顶那句话上的笔迹挂在这块板上（翻走就藏起来）；「清空」清的是整块板
+    sec.dataset.inkAnchor = `p${n}`;
+    sec.dataset.inkGroup = '';
     sec.innerHTML = '<header class="class-page-head" hidden><h2 class="class-page-title"></h2></header><div class="class-talk" hidden></div><div class="class-page-body"></div>';
     p = { n, title: '', talk: '', lead: '', kind: '', body: '', sec, head: sec.querySelector('.class-page-head'), titleEl: sec.querySelector('.class-page-title'), talkEl: sec.querySelector('.class-talk'), bodyEl: sec.querySelector('.class-page-body') };
     pages.set(n, p);
@@ -389,6 +392,13 @@ export async function renderClass(root, meta) {
     const target = Math.max(1, Math.min(pageSeq, Number(n) || curPage));
     if (target === viewPage) return;
     showPage(target, { animate: true });
+  }
+
+  // 往前 / 往后翻一块（划动、方向键）：按实际有的板走，板号中间缺了一块（那块没存上）也不会卡住
+  function stepPage(d) {
+    const ns = [...pages.keys()].sort((a, b) => a - b);
+    const to = ns[ns.indexOf(viewPage) + d];
+    if (to !== undefined) goPage(to);
   }
 
   function syncNav() {
@@ -470,7 +480,7 @@ export async function renderClass(root, meta) {
       const scrolled = Math.abs(window.scrollY - s.sy) > 12;
       s = null;
       if (scrolled || dt > 700 || Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.5) return;
-      goPage(viewPage + (dx < 0 ? 1 : -1));
+      stepPage(dx < 0 ? 1 : -1);
     }, { passive: true });
     stage.addEventListener('touchcancel', () => { s = null; }, { passive: true });
     // 外接键盘：← → 翻板（在输入框里打字时不算）
@@ -479,7 +489,7 @@ export async function renderClass(root, meta) {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
       const t = e.target;
       if (t instanceof Element && t.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], .keypad, .cb-menu, .cb-pages')) return;
-      goPage(viewPage + (e.key === 'ArrowRight' ? 1 : -1));
+      stepPage(e.key === 'ArrowRight' ? 1 : -1);
     });
   }
 
@@ -943,7 +953,7 @@ export async function renderClass(root, meta) {
     let rewriting = false; // 这一轮是在重写写错的段：它说的话不换掉板顶的话（学生没见过写错的那段）
     for (let round = 0; round < MAX_ROUNDS; round++) {
       bar.setStatus('thinking', round ? 'Claude 在接着写…' : 'Claude 在想…');
-      ensureDraft();
+      ensureDraft({ keepTalk: rewriting });
       ctl = new AbortController();
       const signal = ctl.signal;
       try {
@@ -1165,7 +1175,8 @@ export async function renderClass(root, meta) {
 
   // —— 正在写的这一轮：写在当前板最上面（板顶原来的话先藏起来），还没有板时写在黑板中间。
   // 确认是 Opus 5.5 之前都是草稿：话边生成边出现，要写的黑板内容只列出来（写什么、写在哪），不画 ——
-  function ensureDraft() {
+  // keepTalk：这一轮只是重写写错的段，说的话不会换到板顶上，原来那句话照常露着、也不预览这一轮的话
+  function ensureDraft({ keepTalk = false } = {}) {
     const host = pages.get(curPage) || null;
     if (draft && draft.host === (host?.n || 0)) return draft;
     clearDraft();
@@ -1173,9 +1184,9 @@ export async function renderClass(root, meta) {
     box.className = 'class-draft';
     box.innerHTML = '<div class="class-draft-talk" hidden></div><div class="class-draft-ops" hidden></div>';
     box.prepend(bar.indicator);
-    if (host) { host.talkEl.before(box); host.sec.classList.add('is-drafting'); }
+    if (host) { host.talkEl.before(box); if (!keepTalk) host.sec.classList.add('is-drafting'); }
     else hero.appendChild(box);
-    draft = { box, host: host?.n || 0, talk: box.querySelector('.class-draft-talk'), ops: box.querySelector('.class-draft-ops') };
+    draft = { box, host: host?.n || 0, keepTalk, talk: box.querySelector('.class-draft-talk'), ops: box.querySelector('.class-draft-ops') };
     refresh();
     return draft;
   }
@@ -1189,7 +1200,7 @@ export async function renderClass(root, meta) {
         const { segments } = parseOutput(pendingText);
         bar.setStatus('writing', 'Claude 正在写黑板…');
         const d = ensureDraft();
-        const talk = segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n').trim();
+        const talk = d.keepTalk ? '' : segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n').trim();
         d.talk.hidden = !talk;
         if (talk) d.talk.innerHTML = mdToHtml(previewMd(talk));
         const ops = segments.filter((s) => s.type === 'board');
