@@ -1,22 +1,22 @@
-/* 线代学习台 · 黑板风格
-   整页是一块墨绿黑板：正文用清晰的无衬线字体，标题、标签、按钮、手写数字用粉笔手写体。
-   粉笔颜色有固定含义：蓝 = 第一列/定义，粉 = 第二列/批注，黄 = 结果/重点，绿 = 正确，珊瑚红 = 错误。 */
+/* 线代学习台 · 石墨风格
+   整页是一块中性深灰的「黑板」：正文用清晰的无衬线字体，标题、标签、按钮、手写数字用手写体，线条干净。
+   颜色有固定含义：蓝 = 第一列/定义，粉 = 第二列/批注，黄（琥珀）= 结果/重点，绿 = 正确，珊瑚红 = 错误。
+   别的风格（墨绿黑板、纸本、深蓝、白板）在 themes.css，课件 front matter 写 theme: 选。 */
 :root {
-  /* 主题：颜色都从这几组 RGB 来（rgb(var(--x-rgb) / 透明度)），换主题只要换这些值和下面几个背景（见 themes.css）。
-     默认是墨绿黑板。 */
-  --chalk-rgb: 238 240 230;   /* 粉笔白：正文、线条、描边 */
-  --yellow-rgb: 242 220 133;
-  --blue-rgb: 166 214 239;
-  --pink-rgb: 243 167 182;
-  --green-rgb: 183 228 165;
-  --coral-rgb: 255 158 140;
+  /* 主题：颜色都从这几组 RGB 来（rgb(var(--x-rgb) / 透明度)），换主题只要换这些值和下面几个背景（见 themes.css）。 */
+  --chalk-rgb: 234 232 227;   /* 「粉笔」：正文、线条、描边的颜色 */
+  --yellow-rgb: 240 190 92;
+  --blue-rgb: 128 196 240;
+  --pink-rgb: 240 146 176;
+  --green-rgb: 128 210 160;
+  --coral-rgb: 255 128 112;
   --shade-rgb: 0 0 0;         /* 阴影、压暗一块 */
   --glow-rgb: 255 255 255;    /* 提亮一块 */
-  --board-rgb: 35 58 49;
-  --board-2-rgb: 27 47 39;
-  --board-3-rgb: 21 38 32;
-  --bar-rgb: 29 49 41;        /* 课堂底部输入框后面那一层 */
-  --halo-rgb: 30 50 42;       /* 图里文字的描边：和板子同色，压住后面的线 */
+  --board-rgb: 24 26 30;
+  --board-2-rgb: 30 33 38;
+  --board-3-rgb: 17 19 22;
+  --bar-rgb: 24 26 30;        /* 课堂底部输入框后面那一层 */
+  --halo-rgb: 24 26 30;       /* 图里文字的描边：和板子同色，压住后面的线 */
 
   --board: rgb(var(--board-rgb));
   --board-2: rgb(var(--board-2-rgb));
@@ -24,45 +24,53 @@
   --chalk: rgb(var(--chalk-rgb));
   --text: var(--chalk);
   --body: rgb(var(--chalk-rgb) / 0.9);
-  --muted: #a9b8ab;
+  --muted: #8f949c;
   --faint: rgb(var(--chalk-rgb) / 0.16);
   --line: rgb(var(--chalk-rgb) / 0.5);
   --blue: rgb(var(--blue-rgb));
   --pink: rgb(var(--pink-rgb));
   --yellow: rgb(var(--yellow-rgb));
   --green: rgb(var(--green-rgb));
-  --orange: #f6c08e;
-  --lav: #cdbaf2;
+  --orange: #f2a65e;
+  --lav: #b9a3f3;
   --coral: rgb(var(--coral-rgb));
-  --wood: #6a4a2f;
-  --wood-hi: #8d6a48;
-  --wood-dk: #4a3320;
-  --flash: #ffe88f;           /* 图里「指给你看」那一闪 */
+  --wood: #2e3239;            /* 面板的边（墨绿黑板里是木框） */
+  --wood-hi: #3a3f47;
+  --wood-dk: #24272d;
+  --flash: #ffd36b;           /* 图里「指给你看」那一闪 */
   --sel-ink: #fff;
+  /* 板书（Apple Pencil）的四种笔色 */
+  --ink-white: #eae8e3;
+  --ink-yellow: #f0be5c;
+  --ink-pink: #f092b0;
+  --ink-blue: #80c4f0;
 
   /* 整页背景和几块有自己底色的东西 */
   --page-bg:
-    radial-gradient(600px 220px at 15% 8%, rgb(var(--glow-rgb) / 0.05), transparent 70%),
-    radial-gradient(700px 260px at 85% 35%, rgb(var(--glow-rgb) / 0.04), transparent 70%),
-    radial-gradient(520px 200px at 30% 70%, rgb(var(--glow-rgb) / 0.035), transparent 70%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
-    linear-gradient(170deg, #27403a 0%, #233a31 45%, #1f342b 100%);
-  --keypad-bg: linear-gradient(#7b5a3b, #5c4128);
-  --key-bg: linear-gradient(#2a4338, #22382f);
-  --key-active: #2f4a3e;
-  --card-front: #213730;
-  --card-back: #263d2f;
-  --tray-bg: linear-gradient(#7c5a3b, #5a3f27);
-  --sheet-bg: linear-gradient(170deg, #20362e, #1a2e26);
-  --sheet-bg-2: linear-gradient(170deg, #20362e, #182a23);
-  --slate-bg: linear-gradient(170deg, #253d33, #1b2f27);
-  /* 粉笔毛边：线条、描边套这个滤镜；不要毛边的主题设成 none */
-  --rough: url(#la-chalk);
-  --rough-v: url(#la-chalk-v);
+    radial-gradient(1100px 600px at 18% -10%, rgb(var(--glow-rgb) / 0.05), transparent 70%),
+    radial-gradient(900px 500px at 100% 100%, rgb(var(--glow-rgb) / 0.025), transparent 70%),
+    linear-gradient(180deg, #1b1d21 0%, #18191d 100%);
+  --keypad-bg: linear-gradient(#26292f, #1e2025);
+  --key-bg: linear-gradient(#33373e, #2a2d33);
+  --key-active: #3c4048;
+  --card-front: #202328;
+  --card-back: #24282e;
+  --tray-bg: none;
+  --sheet-bg: linear-gradient(170deg, #202328, #191b1f);
+  --sheet-bg-2: linear-gradient(170deg, #202328, #17191c);
+  --slate-bg: linear-gradient(170deg, #23262b, #1b1d21);
+  /* 毛边滤镜：墨绿黑板给线条、描边加粉笔颗粒；这里线条干净，不加 */
+  --rough: none;
+  --rough-v: none;
+  /* 框线的浓淡（墨绿黑板的粉笔框更浓）*/
+  --card-frame-a: 0.2;
+  --btn-frame-a: 0.4;
+  /* 大标题下面那道手画的线（当遮罩用，颜色是 --yellow） */
+  --h1-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 14' preserveAspectRatio='none'%3E%3Cpath d='M2 9 C 60 3, 110 12, 160 7 S 240 5, 258 8' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
 
   /* 组件里用到的通用名字 */
   --accent: var(--yellow);
-  --accent-ink: #1d2f27;
+  --accent-ink: #18191c;
   --accent-soft: rgb(var(--yellow-rgb) / 0.1);
   --ok: var(--green);
   --ok-soft: rgb(var(--green-rgb) / 0.1);
@@ -84,7 +92,7 @@
   --area-neg: rgb(var(--coral-rgb) / 0.15);
   --hl: rgb(var(--yellow-rgb) / 0.17);
   --hl-col: rgb(var(--blue-rgb) / 0.15);
-  --g1: #a6d6ef; --g2: #f3a7b6; --g3: #b7e4a5; --g4: #cdbaf2; --g5: #f2dc85; --g6: #f6c08e; --grp-ink: #1b2f27;
+  --g1: #80c4f0; --g2: #f092b0; --g3: #80d2a0; --g4: #b9a3f3; --g5: #f0be5c; --g6: #f2a65e; --grp-ink: #18191c;
   --cell: 46px;
   --radius: 16px;
 
@@ -146,9 +154,14 @@ button { font: inherit; color: inherit; }
 /* —— 正文 —— */
 .la-lesson { max-width: 860px; margin: 0 auto; padding: 8px 20px 0; }
 .la-lesson h1 {
-  font-family: var(--hand); font-weight: 400; font-size: clamp(36px, 6vw, 52px); line-height: 1.2;
+  position: relative; font-family: var(--hand); font-weight: 400; font-size: clamp(36px, 6vw, 52px); line-height: 1.2;
   margin: 26px 0 26px; padding-bottom: 14px; text-wrap: balance; color: var(--chalk);
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 14' preserveAspectRatio='none'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 -1.4 1.2'/%3E%3CfeComposite in='SourceGraphic' operator='in'/%3E%3C/filter%3E%3Cpath d='M2 9 C 60 3, 110 12, 160 7 S 240 5, 258 8' fill='none' stroke='%23f2dc85' stroke-width='3' stroke-linecap='round' filter='url(%23c)'/%3E%3C/svg%3E") left bottom / min(300px, 70%) 14px no-repeat;
+}
+/* 标题下面一道手画的线：用遮罩画，颜色才能跟着主题的重点色 */
+.la-lesson h1::after {
+  content: ""; position: absolute; left: 0; bottom: 0; width: min(300px, 70%); height: 14px; pointer-events: none;
+  background: var(--yellow);
+  -webkit-mask: var(--h1-mark) left bottom / 100% 100% no-repeat; mask: var(--h1-mark) left bottom / 100% 100% no-repeat;
 }
 .la-lesson h2 {
   font-family: var(--hand); font-weight: 400; font-size: clamp(30px, 4.6vw, 40px); line-height: 1.25;
@@ -510,7 +523,7 @@ body.has-keypad { padding-bottom: 250px; }
 @keyframes stageIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
 /* 课件底部：粉笔槽 */
-.la-tray { position: relative; height: 30px; margin: 56px -20px 0; background: var(--tray-bg); border-top: 3px solid var(--wood-hi); box-shadow: 0 -4px 12px rgb(var(--shade-rgb) / 0.25); }
+.la-tray { display: none; position: relative; height: 30px; margin: 56px -20px 0; background: var(--tray-bg); border-top: 3px solid var(--wood-hi); box-shadow: 0 -4px 12px rgb(var(--shade-rgb) / 0.25); }
 .la-tray i { position: absolute; top: 7px; height: 10px; border-radius: 5px; box-shadow: 0 2px 2px rgb(var(--shade-rgb) / 0.3); }
 .la-tray .s1 { left: 18%; width: 64px; background: #f1efe6; transform: rotate(-2deg); }
 .la-tray .s2 { left: 28%; width: 38px; background: var(--yellow); transform: rotate(3deg); }

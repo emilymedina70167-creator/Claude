@@ -14,6 +14,7 @@ import { renderClass } from './class/classroom.js';
 import classCss from './class/class.css';
 import classBoardCss from './class/board.css';
 import themesCss from './themes.css';
+import { themeOf } from './theme.js';
 
 // 粉笔手写体：数字和字母用 Caveat（1 和 7 容易分辨），中文用龙藏体。
 // Google Fonts 是 artifact 唯一允许的外部样式来源；加载不到时退回系统楷体
@@ -75,6 +76,12 @@ function renderAll() {
     if (s.closest('head')) document.body.appendChild(article);
     else s.after(article);
     const { meta, body } = frontMatter(dedent(s.textContent));
+    // 风格要在渲染之前定：图、板书的颜色都从 CSS 变量取
+    if (meta.theme !== undefined) {
+      const theme = themeOf(meta.theme);
+      if (theme === null) console.warn(`不认识的 theme「${meta.theme}」，用默认的石墨。可以写 chalk（墨绿黑板）、paper（纸本）、midnight（深蓝）、white（白板）`);
+      else if (theme) document.documentElement.dataset.theme = theme;
+    }
     session.reset(meta.unit || lessonTitle(body));
     session.subject = meta.subject || '线性代数';
     if (/^(class|课堂)$/i.test(meta.mode || '')) renderClass(article, meta);
