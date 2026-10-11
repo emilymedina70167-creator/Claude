@@ -1,0 +1,200 @@
+/* ===== 主题 =====
+   默认是墨绿黑板（styles.css 的 :root）。别的主题只换颜色和背景：<html data-theme="…">。
+   颜色都写成 RGB 三元组，组件里用 rgb(var(--x-rgb) / 透明度) 取，所以换这几组值就整页跟着换。
+   --chalk-rgb 是「写字的颜色」：深色主题是粉笔白，浅色主题是墨色。 */
+
+/* —— 纸本：暖白的笔记纸，点阵底，钢笔蓝、朱红、琥珀 —— */
+:root[data-theme="paper"] {
+  --chalk-rgb: 40 37 33;
+  --yellow-rgb: 176 108 10;
+  --blue-rgb: 38 96 178;
+  --pink-rgb: 190 62 104;
+  --green-rgb: 44 132 76;
+  --coral-rgb: 206 66 44;
+  --shade-rgb: 92 70 40;
+  --glow-rgb: 92 70 40;
+  --board-rgb: 246 242 234;
+  --board-2-rgb: 240 234 222;
+  --board-3-rgb: 250 247 241;
+  --bar-rgb: 246 242 234;
+  --halo-rgb: 246 242 234;
+  --muted: #80786b;
+  --orange: #c4621c;
+  --lav: #7550bd;
+  --body: rgb(var(--chalk-rgb) / 0.88);
+  --wood: #d9cfbd;
+  --wood-hi: #e4dccd;
+  --wood-dk: #c9bda6;
+  --flash: #ffcf3f;
+  --sel-ink: #1d1b18;
+  --accent-ink: #fffaf0;
+  --grp-ink: #2a2723;
+  --g1: #cfe2f6; --g2: #f6d3df; --g3: #d4ecd6; --g4: #e3d9f6; --g5: #f8e7b8; --g6: #f7dcc4;
+  --grid: rgb(var(--chalk-rgb) / 0.08);
+  --axis: rgb(var(--chalk-rgb) / 0.45);
+  --page-bg:
+    radial-gradient(circle at 1px 1px, rgba(110, 90, 60, 0.16) 1.1px, transparent 1.5px) 0 0 / 26px 26px,
+    radial-gradient(900px 500px at 20% 0%, rgba(255, 255, 255, 0.6), transparent 70%),
+    linear-gradient(175deg, #f8f4ec 0%, #f4efe4 60%, #f0eadd 100%);
+  --keypad-bg: linear-gradient(#ece5d7, #e2d9c7);
+  --key-bg: linear-gradient(#fdfbf6, #f3eee3);
+  --key-active: #e6ddcc;
+  --card-front: #f0e9db;
+  --card-back: #f3ead3;
+  --tray-bg: none;
+  --sheet-bg: linear-gradient(170deg, #faf7f0, #f1ebdf);
+  --sheet-bg-2: linear-gradient(170deg, #faf7f0, #efe8da);
+  --slate-bg: linear-gradient(170deg, #fbf8f2, #f2ecdf);
+  --rough: none;
+  --rough-v: none;
+  color-scheme: light;
+}
+
+/* —— 石墨：中性深灰，线条干净，琥珀色当重点 —— */
+:root[data-theme="graphite"] {
+  --chalk-rgb: 234 232 227;
+  --yellow-rgb: 240 190 92;
+  --blue-rgb: 128 196 240;
+  --pink-rgb: 240 146 176;
+  --green-rgb: 128 210 160;
+  --coral-rgb: 255 128 112;
+  --shade-rgb: 0 0 0;
+  --glow-rgb: 255 255 255;
+  --board-rgb: 24 26 30;
+  --board-2-rgb: 30 33 38;
+  --board-3-rgb: 17 19 22;
+  --bar-rgb: 24 26 30;
+  --halo-rgb: 24 26 30;
+  --muted: #8f949c;
+  --orange: #f2a65e;
+  --lav: #b9a3f3;
+  --wood: #2e3239;
+  --wood-hi: #3a3f47;
+  --wood-dk: #24272d;
+  --flash: #ffd36b;
+  --accent-ink: #18191c;
+  --grp-ink: #18191c;
+  --g1: #80c4f0; --g2: #f092b0; --g3: #80d2a0; --g4: #b9a3f3; --g5: #f0be5c; --g6: #f2a65e;
+  --page-bg:
+    radial-gradient(1100px 600px at 18% -10%, rgba(255, 255, 255, 0.05), transparent 70%),
+    radial-gradient(900px 500px at 100% 100%, rgba(255, 255, 255, 0.025), transparent 70%),
+    linear-gradient(180deg, #1b1d21 0%, #18191d 100%);
+  --keypad-bg: linear-gradient(#26292f, #1e2025);
+  --key-bg: linear-gradient(#33373e, #2a2d33);
+  --key-active: #3c4048;
+  --card-front: #202328;
+  --card-back: #24282e;
+  --tray-bg: none;
+  --sheet-bg: linear-gradient(170deg, #202328, #191b1f);
+  --sheet-bg-2: linear-gradient(170deg, #202328, #17191c);
+  --slate-bg: linear-gradient(170deg, #23262b, #1b1d21);
+  --rough: none;
+  --rough-v: none;
+}
+
+/* —— 深蓝：午夜蓝的绘图纸，淡淡的方格，青色和暖黄 —— */
+:root[data-theme="midnight"] {
+  --chalk-rgb: 228 236 248;
+  --yellow-rgb: 255 210 110;
+  --blue-rgb: 116 200 255;
+  --pink-rgb: 255 150 190;
+  --green-rgb: 132 224 172;
+  --coral-rgb: 255 138 118;
+  --shade-rgb: 2 8 20;
+  --glow-rgb: 200 220 255;
+  --board-rgb: 16 28 47;
+  --board-2-rgb: 13 23 40;
+  --board-3-rgb: 9 17 31;
+  --bar-rgb: 15 26 44;
+  --halo-rgb: 15 27 46;
+  --muted: #8ea3c2;
+  --orange: #ffb072;
+  --lav: #b9a8ff;
+  --wood: #22406a;
+  --wood-hi: #2c5285;
+  --wood-dk: #183052;
+  --flash: #ffe07a;
+  --accent-ink: #0d1829;
+  --grp-ink: #0d1829;
+  --g1: #74c8ff; --g2: #ff96be; --g3: #84e0ac; --g4: #b9a8ff; --g5: #ffd26e; --g6: #ffb072;
+  --tgrid: rgb(var(--blue-rgb) / 0.32);
+  --page-bg:
+    linear-gradient(rgba(130, 175, 255, 0.055) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(90deg, rgba(130, 175, 255, 0.055) 1px, transparent 1px) 0 0 / 32px 32px,
+    radial-gradient(1000px 600px at 15% -5%, rgba(90, 140, 230, 0.18), transparent 70%),
+    radial-gradient(800px 500px at 100% 100%, rgba(40, 90, 170, 0.14), transparent 70%),
+    linear-gradient(175deg, #13223a 0%, #0f1c31 55%, #0c1729 100%);
+  --keypad-bg: linear-gradient(#152844, #0f1e35);
+  --key-bg: linear-gradient(#1e3556, #182c48);
+  --key-active: #24426b;
+  --card-front: #13243f;
+  --card-back: #172b4b;
+  --tray-bg: none;
+  --sheet-bg: linear-gradient(170deg, #142641, #0e1a2e);
+  --sheet-bg-2: linear-gradient(170deg, #142641, #0c1729);
+  --slate-bg: linear-gradient(170deg, #162a47, #0f1d33);
+  --rough: none;
+  --rough-v: none;
+}
+
+/* —— 白板：冷白、干净，彩色记号笔 —— */
+:root[data-theme="white"] {
+  --chalk-rgb: 31 36 46;
+  --yellow-rgb: 205 112 0;
+  --blue-rgb: 37 99 220;
+  --pink-rgb: 206 40 116;
+  --green-rgb: 22 150 72;
+  --coral-rgb: 216 44 44;
+  --shade-rgb: 30 42 66;
+  --glow-rgb: 30 42 66;
+  --board-rgb: 248 249 251;
+  --board-2-rgb: 241 243 246;
+  --board-3-rgb: 255 255 255;
+  --bar-rgb: 248 249 251;
+  --halo-rgb: 250 251 253;
+  --muted: #6b7280;
+  --orange: #e2570c;
+  --lav: #7438e0;
+  --body: rgb(var(--chalk-rgb) / 0.88);
+  --wood: #d8dde5;
+  --wood-hi: #e4e8ee;
+  --wood-dk: #c7ced9;
+  --flash: #ffd23f;
+  --sel-ink: #111827;
+  --accent-ink: #ffffff;
+  --grp-ink: #1f242e;
+  --g1: #d3e3fc; --g2: #fbd5e6; --g3: #cdeed9; --g4: #e4d8fb; --g5: #fde9bf; --g6: #fddcc6;
+  --grid: rgb(var(--chalk-rgb) / 0.07);
+  --axis: rgb(var(--chalk-rgb) / 0.42);
+  --page-bg:
+    radial-gradient(1000px 520px at 15% -10%, rgba(255, 255, 255, 1), transparent 70%),
+    linear-gradient(180deg, #f9fafc 0%, #f3f5f8 100%);
+  --keypad-bg: linear-gradient(#eef1f5, #e3e7ed);
+  --key-bg: linear-gradient(#ffffff, #f4f6f9);
+  --key-active: #e3e8ef;
+  --card-front: #ffffff;
+  --card-back: #fbfcfe;
+  --tray-bg: none;
+  --sheet-bg: linear-gradient(170deg, #ffffff, #f4f6f9);
+  --sheet-bg-2: linear-gradient(170deg, #ffffff, #f2f4f8);
+  --slate-bg: linear-gradient(170deg, #ffffff, #f3f5f8);
+  --rough: none;
+  --rough-v: none;
+  color-scheme: light;
+}
+
+/* 没有粉笔毛边的主题：框线细一点、淡一点，不然像一个个硬邦邦的方框 */
+:root:is([data-theme="paper"], [data-theme="graphite"], [data-theme="midnight"], [data-theme="white"]) {
+  --card-frame-a: 0.2;
+  --btn-frame-a: 0.4;
+}
+/* 浅色主题：卡片是浮在纸上的一张白卡（不是压暗的一块），带一点点影子 */
+:root[data-theme="paper"] { --card-bg: rgb(255 253 248 / 0.72); --card-shadow: 0 1px 2px rgb(92 70 40 / 0.06), 0 6px 18px rgb(92 70 40 / 0.06); }
+:root[data-theme="white"] { --card-bg: #fff; --card-shadow: 0 1px 2px rgb(30 42 66 / 0.06), 0 6px 18px rgb(30 42 66 / 0.06); }
+
+/* 粉笔槽只属于黑板 */
+:root:is([data-theme="paper"], [data-theme="graphite"], [data-theme="midnight"], [data-theme="white"]) .la-tray { display: none; }
+/* 浅色主题：浮起来的东西（输入框、菜单）阴影淡一点，纸上不该有浓黑的影子 */
+:root:is([data-theme="paper"], [data-theme="white"]) .cb-pill { box-shadow: 0 6px 22px rgb(var(--shade-rgb) / 0.16), 0 1px 0 rgb(255 255 255 / 0.7) inset; }
+:root:is([data-theme="paper"], [data-theme="white"]) :is(.cb-menu, .cb-pages, .cb-status) { box-shadow: inset 0 0 0 1px rgb(var(--chalk-rgb) / 0.12), 0 12px 32px rgb(var(--shade-rgb) / 0.16); }
+:root:is([data-theme="paper"], [data-theme="white"]) .class-more { box-shadow: inset 0 0 0 1.4px rgb(var(--yellow-rgb) / 0.55), 0 6px 16px rgb(var(--shade-rgb) / 0.14); }
