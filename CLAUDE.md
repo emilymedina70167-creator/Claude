@@ -67,7 +67,8 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - 和课堂模式共用一屏一块板：`class/boardview.js`（板、常驻栏、翻板、一屏放不放得下）、`class/pagenav.js`（翻板条）、`class/selfcheck.js`（额外的写法自检）。改这几个文件，两种模式都要看。
 - `live.js`：订阅 `steps`，按 `layout.js` 的 `planBoards` 分板（`page` 不写就接着前一段那块板，`pin: true` 进常驻栏，板号最大的是当前板）；新板翻过去，翻回去看旧板时当前板来了新内容让「回到当前板」闪。学生作答过的段被改了，先提示不替换。
 - 对话里的 Claude 看不到页面：写法错误写回 `lint/{段 id}`，屏幕和当前板放不放得下写回 `meta/screen`（`layout.js` 的 `lintRecord`、`screenRecord`，有变化才写）。
-- `livebar.js`：底部一条（翻板、连接状态、「⋯」里板书和复制学习记录）。没有输入框、没有「问 Claude」、没有「这段做完了」。
+- 黑板现状 `meta/now`（`layout.js` 的 `statusRecord`）：最近的作答（和课堂模式发给课堂 Claude 的写法一样，`class/prompt.js` 的 `actionText`）、没提交的草稿（`drafts.js`）、写法错误、屏幕、交来的截图。有变化后最多 2 秒写一次。学生说「好了」时对话里的 Claude 只读这一份。
+- `livebar.js`：底部一条（翻板、「交截图」、连接状态、「⋯」里板书、复制学习记录和版本号）。「交截图」复用课堂输入条的图片处理（`class/bar.js` 的 `toPng` 等，Notability 的坑一样要绕），图存 assets，记在 `uploads`。没有输入框、没有「问 Claude」、没有「这段做完了」。
 - `store.js`：claude.ai 里用 artifact 的 db / assets，`?dev` 用 localStorage 替身；`sync.js`：作答、事件、原图写进数据库；`devpanel.js`：`?dev` 开发面板（写段、看作答、看写回）。
 
 ## 硬性规定（我明确要求过的，不要改）

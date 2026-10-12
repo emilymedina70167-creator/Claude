@@ -2,7 +2,9 @@
 // 对话里的 Claude（有记忆的那个）往 steps/{id} 写一段课件 Markdown，带上写在第几块板（page）或放进常驻栏（pin）；
 // 页面按课堂模式同一套「一屏一块板」摆出来（boardview.js），学生在板上作答，作答写回 answers / events。
 // 对话里的 Claude 看不到页面，所以页面把它需要知道的写回数据库：写法错误 lint/{段 id}，
-// 屏幕大小和当前板放不放得下 meta/screen。说话在对话框里，黑板上不放对话，也没有页面里的「问 Claude」。
+// 屏幕大小和当前板放不放得下 meta/screen，以及汇总的「黑板现状」meta/now（最近的作答、没提交的草稿、写法错误、
+// 屏幕、交来的截图）——学生回对话说「好了」时，Claude 读这一份就够了。
+// 说话在对话框里，黑板上不放对话，也没有页面里的「问 Claude」；学生在笔记软件里写的，用底部「交截图」交上来。
 import { renderLesson, mdToHtml, escapeHtml } from '../render.js';
 import { session } from '../session.js';
 import { copyRecord, toast } from '../record.js';
@@ -12,10 +14,13 @@ import { initDevPanel } from './devpanel.js';
 import { createBoardView } from '../class/boardview.js';
 import { extraProblems } from '../class/selfcheck.js';
 import { createLiveBar } from './livebar.js';
-import { planBoards, lintRecord, screenRecord, sameScreen, leadingHeading } from './layout.js';
+import { planBoards, lintRecord, screenRecord, sameScreen, leadingHeading, statusRecord, sameStatus } from './layout.js';
+import { actionText, reportable } from '../class/prompt.js';
+import { draftsIn } from '../drafts.js';
 
 const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const SCREEN_DELAY = 1500; // 屏幕大小、放不放得下：停下来 1.5 秒再写，转屏、滚动时不连着写
+const NOW_DELAY = 2000; // 黑板现状：有变化后 2 秒内写一次（打字、拖图时也是最多每 2 秒一次）
 
 export async function renderLive(root, meta) {
   session.mode = 'live';
@@ -25,6 +30,9 @@ export async function renderLive(root, meta) {
   root.classList.add('is-live', 'is-class');
 
   const steps = new Map(); // id → { id, seq, page, place, lead, title, md, hidden, sec, stage, touched }
+  // 黑板现状的定时器：放在最前面，数据库一订阅就可能马上回调（回调里会排一次写）
+  let nowTimer = 0;
+  let lastNow = null;
   let unseen = false; // 翻回旧板看的时候，当前板上来了新东西：「回到当前板」闪
   const bv = createBoardView({
     root,
@@ -36,12 +44,12 @@ export async function renderLive(root, meta) {
         </div>`,
     isBusy: () => unseen,
     seqOf: (id) => steps.get(id)?.seq,
-    onShow: (n) => { if (n === bv.cur && unseen) { unseen = false; bv.syncNav(); } },
+    onShow: (n) => { if (n === bv.cur && unseen) { unseen = false; bv.syncNav(); } scheduleNow(); },
     onMeasure: () => scheduleScreen(),
   });
   const welcome = root.querySelector('.class-welcome');
   const welcomeText = root.querySelector('.class-welcome-text');
-  const bar = createLiveBar({ onNav: (n) => bv.go(n), onCopy: () => copyRecord(toast) });
+  const bar = createLiveBar({ onNav: (n) => bv.go(n), onCopy: () => copyRecord(toast), onUpload: (blobs, note) => upload(blobs, note) });
   bv.attachBar(bar);
 
   const store = await getStore({ title: session.title });
@@ -51,7 +59,12 @@ export async function renderLive(root, meta) {
     return;
   }
   const sink = createSink(store);
-  session.sink = sink;
+  // 作答、动作照常写进 answers / events，同时记一行进黑板现状（写法和课堂模式发给课堂 Claude 的一样）
+  session.sink = {
+    ...sink,
+    record(e) { const p = sink.record(e); noteAction({ source: 'record', ...e }); return p; },
+    event(e) { const p = sink.event(e); noteAction({ source: 'event', ...(e.detail && typeof e.detail === 'object' ? e.detail : {}), ...e }); return p; },
+  };
   bar.setChip('on', store.dev ? '本地开发' : '实时黑板');
   welcomeText.innerHTML = '黑板还是空的。<br>回对话里让 Claude 开始。';
   if (store.dev) initDevPanel(store, root);
@@ -69,7 +82,19 @@ export async function renderLive(root, meta) {
   store.db.collection('lint').onSnapshot((snap) => {
     lintDb.clear();
     for (const d of snap.docs) lintDb.set(d.id, d.data());
+    scheduleNow();
   }, () => {});
+
+  // 黑板现状里接着上次的「最近作答」和交来的截图（刷新页面不丢）
+  const recent = []; // { line, at, key }
+  const uploads = []; // { id, images, note, page, at }
+  const seeded = store.db.doc('meta/now').get().then((snap) => {
+    const d = snap.exists ? snap.data() : null;
+    if (Array.isArray(d?.recent)) recent.unshift(...d.recent.filter((r) => r && r.line));
+    if (Array.isArray(d?.uploads)) uploads.unshift(...d.uploads.filter((u) => u && u.id));
+  }).catch(() => {});
+  // 学生在黑板上打字、点、拖：草稿可能变了
+  for (const type of ['input', 'click', 'pointerup', 'change']) root.addEventListener(type, () => scheduleNow(), { capture: true, passive: true });
 
   let first = true;
   store.db.collection('steps').onSnapshot((snap) => {
@@ -131,6 +156,7 @@ export async function renderLive(root, meta) {
     first = false;
     bv.syncNav();
     bv.scheduleFit();
+    scheduleNow();
   }
 
   // 换了新板：翻过去从头看。当前板上加了段：正看着就滚到刚好露出来，在看旧板就让「回到当前板」闪
@@ -223,6 +249,7 @@ export async function renderLive(root, meta) {
     if (!rec) return;
     lintDb.set(s.id, rec);
     sink.put('lint', { ...rec, at: Date.now() });
+    scheduleNow();
   }
 
   function markUpdated(s) {
@@ -247,5 +274,61 @@ export async function renderLive(root, meta) {
     if (sameScreen(rec, lastScreen)) return;
     lastScreen = rec;
     sink.put('meta', { ...rec, at: Date.now() });
+    scheduleNow();
+  }
+
+  // —— 黑板现状 meta/now：对话里的 Claude 一次 get 就知道学生那边的全部情况 ——
+  // 有变化后最多 2 秒写一次：已经排着就不往后推（学生一直在打字、拖图时也不会一直不写）；写的时候取最新的状态
+  function scheduleNow() {
+    if (nowTimer) return;
+    nowTimer = setTimeout(() => { nowTimer = 0; writeNow(); }, NOW_DELAY);
+  }
+  function noteAction(a) {
+    if (reportable(a)) {
+      const line = actionText(a);
+      // 连着拖同一个点只留最后一次，免得几次拖动把真正的作答挤出去
+      const key = a.source === 'event' && a.type === 'drag' ? `drag:${a.block ?? ''}:${a.name ?? ''}` : '';
+      if (key && recent.at(-1)?.key === key) recent.pop();
+      if (line) recent.push({ line, at: Date.now(), ...(key ? { key } : {}) });
+      if (recent.length > 60) recent.splice(0, recent.length - 60);
+    }
+    scheduleNow();
+  }
+  function currentDrafts() {
+    const out = [];
+    for (const s of [...steps.values()].sort((a, b) => a.seq - b.seq)) {
+      if (!s.sec?.isConnected || s.hidden) continue;
+      for (const b of s.sec.querySelectorAll('.block[data-bid]')) {
+        for (const d of draftsIn(b)) out.push({ step: s.id, block: b.dataset.bid, label: d.label, text: d.text });
+      }
+    }
+    return out;
+  }
+  async function writeNow() {
+    await seeded;
+    const pages = [...bv.pages.values()].sort((a, b) => a.n - b.n).map((p) => ({ n: p.n, title: p.title }));
+    const lint = [...lintDb.values()].filter((l) => { const s = steps.get(String(l.step ?? l.id)); return s && !s.hidden; });
+    const rec = statusRecord({ cur: bv.cur, view: bv.view, pages, recent, drafts: currentDrafts(), lint, screen: lastScreen, uploads });
+    if (sameStatus(rec, lastNow)) return;
+    lastNow = rec;
+    sink.put('meta', { ...rec, at: Date.now() });
+  }
+
+  // —— 交截图：图存进 assets，记一条 uploads，黑板现状里列出来（对话里的 Claude 用 asset id 看原图）——
+  async function upload(blobs, note) {
+    if (!store.assets) throw new Error('这个页面存不了图：发布时要声明 assets');
+    const ids = [];
+    for (const b of blobs) {
+      try { ids.push((await store.assets.upload(b, { type: b.type || 'image/png' })).id); } catch { /* 这一张没传上 */ }
+    }
+    if (!ids.length) throw new Error('图没传上，检查一下网络再交一次');
+    const rec = { id: `up-${Date.now().toString(36)}`, images: ids, note: note || '', page: bv.view || bv.cur || 0, at: Date.now() };
+    const ok = await sink.put('uploads', rec);
+    if (ok === false) throw new Error('没存上，再交一次');
+    await seeded;
+    uploads.push(rec);
+    if (uploads.length > 20) uploads.splice(0, uploads.length - 20);
+    scheduleNow();
+    toast(ids.length < blobs.length ? `交了 ${ids.length} 张（有 ${blobs.length - ids.length} 张没传上）。回对话说一声` : '已交给 Claude，回对话说一声');
   }
 }

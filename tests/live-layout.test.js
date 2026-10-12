@@ -90,3 +90,28 @@ test('screenRecord / sameScreen：取整到 10 像素，差一两个像素不算
   assert.ok(!sameScreen(a, c));
   assert.ok(!sameScreen(null, a));
 });
+
+test('statusRecord：一份黑板现状，各项有上限；软提醒不算写法错误', async () => {
+  const { statusRecord, sameStatus, NOW_LIMITS } = await import('../kit/src/live/layout.js');
+  const recent = Array.from({ length: 40 }, (_, i) => ({ line: `[作答] 第 ${i} 条`, at: i }));
+  const r = statusRecord({
+    cur: 3, view: 2, pages: [{ n: 1, title: '一' }, { n: 3, title: '三' }], recent,
+    drafts: [{ step: 's4', block: 'q-4', kind: 'answer', label: '', text: '(3, □)' }, { step: 's4', block: 'x', text: '  ' }],
+    lint: [{ step: 's2', ok: false, problems: [{ kind: 'scene', msg: '看不懂这一行' }, { kind: 'steps', msg: '缺 id', soft: true }] }, { step: 's1', ok: true, problems: [] }],
+    screen: { w: 740, h: 730, landscape: true, board: { w: 700, h: 440 }, fits: false, need: 510 },
+    uploads: [{ id: 'u1', images: ['a1'], note: '第二题过程', page: 3, at: 5 }],
+  });
+  assert.equal(r.id, 'now');
+  assert.equal(r.board, 3);
+  assert.equal(r.view, 2);
+  assert.equal(r.recent.length, NOW_LIMITS.recent);
+  assert.equal(r.recent.at(-1).line, '[作答] 第 39 条');
+  assert.deepEqual(r.drafts, [{ step: 's4', block: 'q-4', text: '(3, □)' }]);
+  assert.deepEqual(r.lint, [{ step: 's2', problems: ['scene：看不懂这一行'] }]);
+  assert.deepEqual(r.screen, { w: 740, h: 730, landscape: true, board: { w: 700, h: 440 }, fits: false });
+  assert.deepEqual(r.uploads, [{ id: 'u1', images: ['a1'], note: '第二题过程', page: 3, at: 5 }]);
+  assert.ok(sameStatus({ ...r, at: 1 }, { ...r, at: 2 }));
+  assert.ok(!sameStatus(r, { ...r, view: 3 }));
+  assert.doesNotThrow(() => statusRecord());
+  assert.ok(JSON.stringify(statusRecord({ recent: Array.from({ length: 30 }, () => 'x'.repeat(5000)) })).length < 20000, '再长也不会撑爆一个文档');
+});

@@ -29,7 +29,7 @@ export function initDevPanel(store, root) {
       </div>
       <div class="dev-tab" data-tab="answers" hidden><div class="dev-list dev-answers"></div></div>
       <div class="dev-tab" data-tab="events" hidden><div class="dev-list dev-events"></div></div>
-      <div class="dev-tab" data-tab="lint" hidden><div class="dev-list dev-screen"></div><div class="dev-list dev-lint"></div></div>
+      <div class="dev-tab" data-tab="lint" hidden><div class="dev-list dev-now"></div><div class="dev-list dev-screen"></div><div class="dev-list dev-lint"></div></div>
       <div class="dev-tab" data-tab="board" hidden>
         <label>单元名 <input class="dev-unit"></label>
         <label>给页面里 Claude 的背景资料（context）<textarea class="dev-context" rows="5"></textarea></label>
@@ -102,6 +102,18 @@ export function initDevPanel(store, root) {
   db.doc('meta/screen').onSnapshot((snap) => {
     const d = snap.exists ? snap.data() : null;
     $('.dev-screen').innerHTML = d ? `<div class="dev-item"><b>屏幕</b> ${d.landscape ? '横屏' : '竖屏'} ${d.w}×${d.h}${d.board ? ` · 一块板约 ${d.board.w}×${d.board.h}` : ''} · 当前第 ${d.page} 块${d.fits === false ? `，放不下（要 ${d.need}）` : d.fits ? '，放得下' : ''}</div>` : '<p class="muted">页面还没写回屏幕大小。</p>';
+  });
+
+  // 黑板现状 meta/now：对话里的 Claude 说「好了」时读的那一份
+  db.doc('meta/now').onSnapshot((snap) => {
+    const d = snap.exists ? snap.data() : null;
+    if (!d) { $('.dev-now').innerHTML = '<p class="muted">页面还没写黑板现状。</p>'; return; }
+    const li = (xs) => xs.map((x) => `<div class="muted">${escapeHtml(x)}</div>`).join('');
+    $('.dev-now').innerHTML = `<div class="dev-item"><b>黑板现状</b> <span class="muted">${d.at ? fmtTime(d.at) : ''} · 当前第 ${d.board} 块，在看第 ${d.view} 块</span>
+      ${d.recent?.length ? `<div>最近作答：</div>${li(d.recent.slice(-6).map((r) => r.line))}` : ''}
+      ${d.drafts?.length ? `<div>草稿：</div>${li(d.drafts.map((x) => `${x.step}/${x.block}${x.label ? ' ' + x.label : ''}：${x.text}`))}` : ''}
+      ${d.lint?.length ? `<div>写法错误：</div>${li(d.lint.map((x) => `${x.step}：${x.problems.join('；')}`))}` : ''}
+      ${d.uploads?.length ? `<div>交来的截图：</div>${d.uploads.map((u) => `<div class="muted">${escapeHtml(u.note || '（没写说明）')}</div>${u.images.map((id) => `<img src="${assetUrl(id)}" alt="交来的截图">`).join('')}`).join('')}` : ''}</div>`;
   });
 
   db.doc('meta/board').get().then((s) => { const d = s.data() || {}; $('.dev-unit').value = d.unit || ''; $('.dev-context').value = d.context || ''; });
