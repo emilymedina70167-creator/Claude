@@ -73,3 +73,33 @@ export function screenRecord({ w, h, board, page, fit }) {
 }
 
 export const sameScreen = (a, b) => !!a && !!b && JSON.stringify({ ...a, at: 0 }) === JSON.stringify({ ...b, at: 0 });
+
+/**
+ * 黑板现状（meta/now）：对话里的 Claude 一次 get 就知道学生那边的全部情况，不用分别查作答、事件、写法错误、屏幕。
+ * 页面在有变化后写一次（停下来约 2 秒）；内容和上一次一样就不写（比较时不看 at）。
+ * - recent：最近的作答 / 动作，一行一条（和课堂模式发给课堂 Claude 的写法一样），最新的在最后
+ * - drafts：现在黑板上写了、还没点「检查」「提交」的草稿
+ * - lint：现在还有写法错误的段
+ * - uploads：学生交给 Claude 看的截图（asset id），最新的在最后
+ */
+export const NOW_LIMITS = { recent: 30, line: 300, drafts: 20, uploads: 6, lint: 20 };
+
+export function statusRecord({ cur = 0, view = 0, pages = [], recent = [], drafts = [], lint = [], screen = null, uploads = [] } = {}) {
+  const cut = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+  const L = NOW_LIMITS;
+  return {
+    id: 'now',
+    board: Number(cur) || 0,
+    view: Number(view) || 0,
+    boards: (pages || []).map((p) => ({ n: Number(p.n) || 0, title: cut(p.title, 60) })),
+    recent: (recent || []).filter(Boolean).slice(-L.recent).map((r) => (typeof r === 'string' ? { line: cut(r, L.line) } : { line: cut(r.line, L.line), ...(r.at ? { at: r.at } : {}) })),
+    drafts: (drafts || []).filter((d) => d && String(d.text ?? '').trim()).slice(0, L.drafts).map((d) => ({
+      step: String(d.step ?? ''), block: String(d.block ?? ''), ...(d.label ? { label: String(d.label) } : {}), text: cut(d.text, L.line),
+    })),
+    lint: (lint || []).filter((l) => l && l.ok === false).slice(0, L.lint).map((l) => ({ step: String(l.step ?? l.id ?? ''), problems: (l.problems || []).filter((p) => !p.soft).map((p) => cut(`${p.kind}：${p.msg}`, 200)) })),
+    screen: screen ? { w: screen.w, h: screen.h, landscape: !!screen.landscape, board: screen.board || null, fits: screen.fits ?? null } : null,
+    uploads: (uploads || []).slice(-L.uploads).map((u) => ({ id: String(u.id), images: (u.images || []).map(String), ...(u.note ? { note: cut(u.note, 200) } : {}), page: Number(u.page) || 0, at: u.at || 0 })),
+  };
+}
+
+export const sameStatus = (a, b) => !!a && !!b && JSON.stringify({ ...a, at: 0 }) === JSON.stringify({ ...b, at: 0 });

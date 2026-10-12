@@ -712,12 +712,12 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
 }
 
 // 用浏览器解码图片（iPad 的 Safari 能解 PNG、JPEG、HEIC、TIFF），转成白底 PNG（透明底的浅色笔迹先压暗，见 flatten.js），太大的按比例缩小
-async function toPng(file) {
+export async function toPng(file) {
   const url = URL.createObjectURL(file);
   try { return await srcToPng(url); } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
 }
 
-function srcToPng(src) {
+export function srcToPng(src) {
   return new Promise((resolve, reject) => {
     const im = new Image();
     if (/^https?:/i.test(src)) im.crossOrigin = 'anonymous'; // 别的网站的图：没有跨域许可就读不了像素，imageToPng 退回简单铺白底

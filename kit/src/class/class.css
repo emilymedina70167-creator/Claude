@@ -308,3 +308,19 @@ body.class-on .dev-body { max-height: calc(100svh - var(--class-bar-h, 96px) - 1
 .lb-side { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 .lb-side .live-chip { font-size: 18px; }
 .class-bar.is-board-only .cb-menu { min-width: 220px; }
+/* 「交截图」：图标加字的一颗胶囊（说话在对话框里，交作业在这里） */
+.lb-shot { width: auto; grid-auto-flow: column; gap: 6px; padding: 0 14px 0 11px; border-radius: 999px; font: 500 15px/1 var(--sans); color: var(--chalk); box-shadow: inset 0 0 0 1.4px rgb(var(--chalk-rgb) / 0.28); background: rgb(var(--board-3-rgb) / 0.78); }
+.lb-shot[hidden] { display: none; }
+.lb-shot svg { width: 20px; height: 20px; }
+.class-bar.is-board-only > .lb-up { margin-bottom: 2px; }
+.lb-up .cb-attach { padding: 2px 2px 0; }
+.lb-up-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.lb-note {
+  flex: 1 1 220px; min-width: 0; min-height: 46px; padding: 0 14px; border: 0; border-radius: 12px; outline: none;
+  background: rgb(var(--shade-rgb) / 0.24); color: var(--chalk); font: 16px/1.4 var(--sans); /* 16px：聚焦时不放大页面 */
+  box-shadow: inset 0 0 0 1.5px rgb(var(--chalk-rgb) / 0.2);
+}
+.lb-note::placeholder { color: rgb(var(--chalk-rgb) / 0.42); }
+.lb-note:focus { box-shadow: inset 0 0 0 2px rgb(var(--yellow-rgb) / 0.65); }
+.lb-send { flex: none; min-height: 46px; }
+@media (max-width: 560px) { .lb-shot span { display: none; } .lb-shot { width: 44px; padding: 0; } }
