@@ -24,7 +24,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - 浏览器里看效果：在一个目录里放 `kit/dist/la-kit.js` 和 `kit/examples/*.html`，起一个静态服务器打开。
   - `unit-matrix-vector.html`：引导模式示范单元（也是组件库 artifact 的页面）
   - `live-demo.html?dev`：实时黑板，右上角开发面板扮演对话里的 Claude
-  - `class-demo.html?dev`：课堂模式，模拟老师按剧本回放（不调用 Claude）；剧本里故意有一段写错的组件（`circle` 那行），控制台报「看不懂这一行」是正常的。在输入框里打暗号看教具：「测试:教具」（`let` 块 + `matrix` 的乘积 + 逐行 `mark` + `\calc`）、「测试:幂」（滑块和 `figure play` 让矩阵动起来）、「测试:指图」（图上的 `label=` / `at=` 标注）
+  - `class-demo.html?dev`：课堂模式，模拟老师按剧本回放（不调用 Claude）；剧本里故意有一段写错的组件（`circle` 那行），控制台报「看不懂这一行」是正常的。在输入框里打暗号看教具：「测试:教具」（`let` 块 + `matrix` 的乘积 + 逐行 `mark` + `\calc`）、「测试:幂」（滑块和 `figure play` 让矩阵动起来）、「测试:指图」（图上的 `label=` / `at=` 标注）、「测试:出题」（`practice` 的自定义题型）、「测试:公式」（写含 n 的式子）
   - iPad 尺寸：竖屏 820×1180，横屏 1180×820。云端会话里可以用预装的 Playwright + Chromium 截图检查。
 
 ## 架构
@@ -44,6 +44,8 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - 板书标注：`markspec.js`（写法解析）、`markdraw.js`（手绘的圈 / 框 / 箭头，旁注放哪：躲开正文、离远了连线），都是纯函数；`marks.js`（DOM：一个宿主一层 SVG，按 spec 找到公式里的 `\hl` 项、矩阵的行列、steps 的步、图上的东西，尺寸变了、图 `change` 了跟着重新摆）。`tokens.js` 是指令行分词（协议、标注、matrix 共用）。
 - 会动的矩阵：`matrixspec.js`（写法、精确求值、哪些格子变了 / 哪个数飞到哪，纯函数）+ `blocks/matrix.js`（画面、闪烁和飞行动画、滑块、点乘积里的数；接 `figureControls`，课堂里能 `figure set / play / highlight` 和 `board mark`）。
 - 判分：`check.js`、`mathinput.js`；精确分数和行化简：`linalg.js`。
+- 含 n 的式子作答（`answer` / `steps` 的 `formula: n`）：`formula.js`（读懂学生的写法、写成公式预览、代几组 n 比较、指出哪个 n 对不上、不许直接写 A^n，纯函数）+ `formulainput.js`（输入框和符号小键盘；Apple Pencil 点进去用系统的随手写）。
+- `practice` 的自定义题型（`type: custom`）：`practicespec.js`（模板解析、随机取数 `pick` / `let` / `where`、先取十几组数自检，纯函数），出题和判分照常走 `answerWidget`。
 - 页面里调用 Claude：`ai.js`（`window.claude.use('sample')`，旧接口 `window.claude.complete`）。
 - 手写：`ink/`（整页板书 overlay、手写板 pad）；截图作答：`photo.js`。
 - `drafts.js`：草稿。会让学生作答的组件用 `markDraft` 登记「现在写着什么、还没交」（`answer` 系列、理由框 `thinkbox`、`conjecture`、`quiz`、`findbug`、`predict`），课堂模式发下一轮时一起告诉课堂 Claude，学生不点检查它也看得到。新写会作答的组件也要登记。

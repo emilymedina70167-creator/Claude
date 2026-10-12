@@ -398,7 +398,7 @@ const approxText = (x) => (isNum(x) ? String(Number(x.toPrecision(6))) : Array.i
  * vars：精确的值或 JS 的数 / 数组都行。返回 { value, exact, tex, text, float }；写错了抛出 Error（中文原因）
  */
 export function calcValue(src, vars = {}) {
-  const ast = parse(src);
+  const ast = typeof src === 'string' ? parse(src) : src;
   try {
     const value = run(ast, vars || {});
     return { value, exact: true, tex: exactTeX(value), text: exactText(value), float: toFloat(value) };
@@ -407,7 +407,7 @@ export function calcValue(src, vars = {}) {
   }
   const fv = {};
   for (const [k, v] of Object.entries(vars || {})) fv[k] = toFloat(v);
-  const value = evaluateFloat(src, fv);
+  const value = evaluateFloat(ast, fv);
   return { value, exact: false, tex: approxTeX(value), text: approxText(value), float: value };
 }
 

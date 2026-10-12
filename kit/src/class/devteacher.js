@@ -16,7 +16,8 @@
 // 「测试:rate_limited」这类让这一轮按那个错误码失败；
 // 「测试:教具」秩一方阵：let 块 + matrix 的 product + board mark 逐行标倍数 + \calc 写出 A²；
 // 「测试:幂」B 的幂：matrix 配滑块，figure play 让 1 往右上角退，mark 一个箭头；
-// 「测试:指图」在图上标注：label= 圈住 Ax（拖动 x 时跟着走），at= 用箭头指一个点。
+// 「测试:指图」在图上标注：label= 圈住 Ax（拖动 x 时跟着走），at= 用箭头指一个点；
+// 「测试:出题」自定义练习模板（practice type: custom，页面随机出题）；「测试:公式」写含 n 的式子（answer 的 formula: n）。
 
 export const DEV_LIMITS = Object.freeze({ maxPromptBytes: 262144, images: Object.freeze({ maxCount: 4, maxInputBytes: 20000000, mediaTypes: Object.freeze(['image/png', 'image/jpeg']) }) });
 const THINK_MS = 600; // 第一个字出来前的停顿（模拟思考）
@@ -209,6 +210,15 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
     };
   }
 
+  if (!isSystem && /测试\s*[:：]?\s*出题/.test(said)) {
+    const n = nextSeq(turns, memo);
+    return { kind: 'tools', text: join(pic + '练几道：每道题的数都是页面随机取的，做对 3 道就够。', board(`new id=b${n} title="秩一矩阵的幂：练几道"`, customPracticeBody(n))) };
+  }
+  if (!isSystem && /测试\s*[:：]?\s*公式/.test(said)) {
+    const n = nextSeq(turns, memo);
+    return { kind: 'tools', text: join(pic + String.raw`这次不填数，写式子：用 $n$ 和 $A$ 写出 $A^n$。`, board(`new id=b${n} title="写出 Aⁿ"`, formulaBody(n))) };
+  }
+
   // 「继续」或普通文字：这节课第一次时故意写错一段；以后只有暗号「测试:写错」「一直写错」才再写错
   const again = /测试\s*[:：]?\s*(一直)?写错|一直写错/.test(said);
   const brokeBefore = memo.broken > 0
@@ -379,6 +389,41 @@ let B = [[0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
 slider k 1 4 = 1 step=1 label="k" play
 matrix B^k label="B^{\calc{k}} ="
 `);
+}
+
+function customPracticeBody(n) {
+  return fence('practice', String.raw`
+id: pr-${n}
+title: 秩一矩阵的幂
+type: custom
+count: 3
+pick a = int(-3, 3) nonzero
+pick c = int(1, 3)
+let A = [[c, 1], [a*c, a]]
+where tr(A) != 0
+where abs(tr(A)) <= 4
+q: 设 $A=\calc{A}$，求 $A^{3}$。
+answer: A^3
+before: A^3 =
+hint: 两行成比例，$A$ 的秩是 1：$A^3=(\operatorname{tr}A)^2A$。
+explain: $\operatorname{tr}A=\calc{tr(A)}$，所以 $A^3=\calc{tr(A)^2}\,A=\calc{A^3}$。
+`);
+}
+
+function formulaBody(n) {
+  return [
+    fence('let', 'A = [[1, 1], [2, 2]]'),
+    fence('answer', String.raw`
+id: q-${n}
+title: 用 n 写出 Aⁿ
+q: $A=\calc{A}$，$\operatorname{tr}A=\calc{tr(A)}$。用 $n$ 和 $A$ 写出 $A^n$（$n\ge1$）。
+answer: 3^(n-1)*A
+formula: n
+before: A^n =
+hint: 先算 $A^2$，看它是 $A$ 的几倍。
+explain: $A^2=\calc{A^2}=3A$，所以 $A^n=3^{n-1}A$。
+`),
+  ].join('\n\n');
 }
 
 function pointBody(n) {

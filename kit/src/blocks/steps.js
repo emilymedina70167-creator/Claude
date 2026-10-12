@@ -8,6 +8,7 @@ import { widget, mdToHtml, escapeHtml, tex2html } from './common.js';
 import { answerWidget, plain } from './answer.js';
 import { thinkBox } from './thinkbox.js';
 import { floatVars } from '../exact.js';
+import { formulaSpec, formulaTeX } from '../formula.js';
 
 const KEY = /^([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/;
 
@@ -51,6 +52,13 @@ function numericAnswer(src) {
 
 export function steps(el, src) {
   const { fields, steps: list } = parseSteps(src);
+  // formula: n —— 这一步的答案是含 n 的式子：学生写式子，页面代值比较（只用在 do: true 的步）
+  list.forEach((s, i) => {
+    if (!s.formula) return;
+    if (!s.do || s.choices) throw new Error(`第 ${i + 1} 步的 formula: 只用在 do: true 的步里（学生自己写出式子）`);
+    s.fspec = formulaSpec(s.answer, s.formula, { ...session.vars });
+    s.num = null;
+  });
   const title = fields.title || '一步一步来';
   const body = widget(el, { title, cls: 'steps' });
   const L = fields.id ? link(fields.id) : null;
@@ -111,18 +119,19 @@ export function steps(el, src) {
       return;
     }
 
-    if (s.do && s.num !== null) {
-      // 格子作答：程序判对错，答对或看了答案之后显示完整的这一步
+    if (s.do && (s.num !== null || s.fspec)) {
+      // 格子作答（或写式子）：程序判对错，答对或看了答案之后显示完整的这一步
       const box = document.createElement('div');
       input.appendChild(box);
       s.widget = answerWidget(box, {
         answer: s.num,
+        formula: s.fspec,
         before: s.before,
         hint: s.hint,
-        onTry: (t) => rec({ liveOnly: true, value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined }),
+        onTry: (t) => rec({ liveOnly: true, value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, check: t.note }),
       }, (r) => {
         s.mine = { text: r.last, ok: r.ok, revealed: r.revealed };
-        rec({ value: r.last, ok: r.ok, attempts: r.attempts, first: r.first, revealed: r.revealed, final: true });
+        rec({ value: r.last, ok: r.ok, attempts: r.attempts, first: r.first, revealed: r.revealed, final: true, check: r.note });
         reveal(k);
       });
       return;
@@ -168,7 +177,7 @@ export function steps(el, src) {
       }
       if (st.mine || li.classList.contains('is-revealed')) continue;
       // 填格子的那一步：答对了、看了答案（最后那条记录）才算做完；把填的数放回格子，揭开这一步
-      if (st.do && st.num !== null) {
+      if (st.do && (st.num !== null || st.fspec)) {
         if (r.final || r.ok === true || r.revealed) st.widget?.restore(r);
         continue;
       }
@@ -197,8 +206,8 @@ export function steps(el, src) {
       : m.text !== undefined ? `<div class="st-mine-text">${mdToHtml(m.text)}</div>` : '';
     const real = (s.show ? mdToHtml(s.show) : '') + (s.do && s.answer && s.num === null && !s.show ? mdToHtml(s.answer) : '');
     cmp.hidden = false;
-    cmp.innerHTML = s.num !== null && s.do
-      ? `<div class="st-real st-real-only"><div class="st-lab">完整的这一步</div>${real || tex2html(valueTeX(s.num), true)}</div>`
+    cmp.innerHTML = (s.num !== null || s.fspec) && s.do
+      ? `<div class="st-real st-real-only"><div class="st-lab">完整的这一步</div>${real || tex2html(s.fspec ? formulaTeX(s.fspec.expected) : valueTeX(s.num), true)}</div>`
       : `<div class="st-mine"><div class="st-lab">你的想法</div>${mine || '<div class="muted">（没有写）</div>'}</div><div class="st-real"><div class="st-lab">${s.do ? '参考答案' : '实际这一步'}</div>${real}</div>`;
     revealed = k + 1;
     session.event('reveal', el, { step: k + 1, title: s.title });

@@ -32,6 +32,7 @@ export const DEFAULT_RULES = doc`
 - 指着讲：说「看这一项」时，用 ˋboard markˋ 把它圈出来、框出来，旁边写一句；推导里的关键一步（约掉的项、提出来的公因子、成比例的行）标在板上，学生的眼睛跟得上。
 - 会变的过程让它动起来：幂次、分块、行变换这类「一步步变」的东西，用 ˋmatrixˋ 组件配滑块或 ˋfigure playˋ 演给学生看，不只给结果。
 - 黑板上的数让页面算（ˋ\calc{…}ˋ），改了数出新题时也一样；不要心算后直接写上黑板。
+- 练熟一个方法时，用 ˋpracticeˋ 的自定义题型（ˋtype: customˋ）让页面换着数出题、判分；要学生写出含 $n$ 的一般式时，用 ˋformula: nˋ，页面代值判对错，还会告诉你学生在哪个 $n$ 上对不上。
 - 术语第一次出现时附英文（学生的考试是英文的），比如「秩 rank」。
 - 语气平实，像坐在旁边的家教；不用夸张的表扬。
 `;
@@ -576,7 +577,7 @@ function stepsRecord(a) {
   if (a.giveup) what = `想不出来${txt ? `，写了「${short(txt)}」${viaNote(a.via)}` : ''}`;
   else if (a.revealed) what = `没做出来，看了答案${a.attempts ? `（试了 ${a.attempts} 次）` : ''}${a.value ? `，最后填的是 ${val(a.value)}` : ''}`;
   else if (a.final) what = `${a.ok ? '做对了' : '没做对'}${a.attempts ? `（共 ${a.attempts} 次）` : ''}${a.value ? `，最后填的是 ${val(a.value)}` : ''}`;
-  else if (a.attempts !== undefined && a.attempts !== null) what = `填了 ${val(a.value)}${mark(a.ok, a.attempts)}${a.transcript ? `；手写过程（转写）：「${short(a.transcript)}」` : ''}`;
+  else if (a.attempts !== undefined && a.attempts !== null) what = `填了 ${val(a.value)}${mark(a.ok, a.attempts)}${a.check ? `（${short(a.check, 120)}）` : ''}${a.transcript ? `；手写过程（转写）：「${short(a.transcript)}」` : ''}`;
   else if (a.value !== undefined && a.value !== null && a.value !== '') what = `选了『${val(a.value)}』${mark(a.ok)}`;
   else if (txt) what = `写了「${short(txt)}」${viaNote(a.via)}`;
   else what = '交了，但什么也没写';
@@ -593,7 +594,7 @@ function answerRecord(a, kind) {
     if (a.work || a.transcript) what += `；手写过程（转写）：「${short(a.work || a.transcript)}」`;
   } else {
     const shown = a.value ?? a.text ?? a.last;
-    what = `填了 ${val(shown) || '（空）'}${mark(a.ok, a.attempts)}`;
+    what = `填了 ${val(shown) || '（空）'}${mark(a.ok, a.attempts)}${a.check ? `（${short(a.check, 120)}）` : ''}`;
     if (a.transcript || a.work) what += `；手写过程（转写）：「${short(a.transcript || a.work)}」`;
   }
   return head + q + tail(what, duration(a.ms));

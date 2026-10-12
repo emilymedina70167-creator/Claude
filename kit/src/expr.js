@@ -60,8 +60,9 @@ function erf(x) {
   return x >= 0 ? y : -y;
 }
 
+// src 可以是表达式原文，也可以是 parse 出来的语法树
 export function evaluate(src, vars = {}) {
-  return run(parse(src), vars);
+  return run(typeof src === 'string' ? parse(src) : src, vars);
 }
 
 // 解析成语法树（exact.js 用同一棵树精确求值）

@@ -388,6 +388,20 @@ table.mx.mx-click td { cursor: pointer; }
 .mi-cell.is-wrong { color: var(--coral); border-bottom-color: var(--coral); background: rgb(var(--coral-rgb) / 0.08); }
 .mi-cell.is-right { color: var(--green); border-bottom-color: var(--green); }
 .mi-cell:disabled { opacity: 1; -webkit-text-fill-color: currentColor; }
+/* 写式子的作答框（formulainput.js）：一行字，下面实时写成公式 */
+.fi { display: flex; flex-direction: column; gap: 6px; width: min(360px, 100%); }
+.fi-text {
+  width: 100%; height: 48px; padding: 0 12px;
+  border: 0; border-bottom: 2px dashed rgb(var(--chalk-rgb) / 0.45); border-radius: 10px 10px 2px 2px;
+  background: rgb(var(--shade-rgb) / 0.16); color: var(--yellow); font: 500 20px/1 var(--sans); caret-color: var(--yellow);
+}
+.fi-text:focus { outline: none; border-bottom: 2.5px solid var(--yellow); background: rgb(var(--yellow-rgb) / 0.09); }
+.fi-text.is-wrong { color: var(--coral); border-bottom-color: var(--coral); background: rgb(var(--coral-rgb) / 0.08); }
+.fi-text.is-right { color: var(--green); border-bottom-color: var(--green); }
+.fi-text:disabled { opacity: 1; -webkit-text-fill-color: currentColor; }
+.fi-text::placeholder { color: var(--muted); font-size: 16px; }
+.fi-preview { min-height: 1.7em; padding: 0 4px; font-size: 20px; color: var(--chalk); overflow-x: auto; overflow-y: hidden; }
+.fi-preview.is-bad { font: 14.5px/1.5 var(--sans); color: var(--coral); }
 .mi-single { width: 130px; }
 .mi-vecs { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mi-comma { font: 22px/1 var(--sans); color: var(--muted); }
@@ -415,6 +429,9 @@ table.mx.mx-click td { cursor: pointer; }
 .keypad .kp-next { font-size: 22px; }
 .keypad .kp-ok { font-size: 22px; color: var(--yellow); }
 body.has-keypad { padding-bottom: 250px; }
+.kp-formula .kp-keys { grid-template-columns: repeat(6, minmax(44px, 64px)); }
+.kp-formula .kp-side { grid-template-rows: 1fr; }
+.kp-formula .kp-var { font-style: italic; font-family: KaTeX_Math, "Times New Roman", serif; font-size: 23px; color: var(--yellow); }
 
 /* —— 猜想 —— */
 .cj-text {

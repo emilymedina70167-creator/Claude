@@ -11,14 +11,18 @@ import { createPad } from '../ink/pad.js';
 import { photoPicker, readFinal, flatFinal, photoError, transcriptHtml } from '../photo.js';
 import { FEATURES } from '../features.js';
 import { markDraft } from '../drafts.js';
+import { formulaInput } from '../formulainput.js';
+import { formulaSpec, formulaTeX, compareFormula } from '../formula.js';
 
 // 通用作答组件：spec = {q, answer, type, before, hint, explain, solution}
-// onDone({ok, attempts, revealed, first})
+// spec.formula（formulaSpec 的结果）：答案是含 n 的式子，学生写式子，页面代值比较
+// onDone({ok, attempts, revealed, first, note})
 export function answerWidget(body, spec, onDone) {
   // 题面、提示、解析里的 \calc 用组件自己的变量（spec.scope）：解析答完题才画，那时也要用同一份
   const mdToHtml = (t, o) => withCalcScope(spec.scope, () => mdRaw(t, o));
   const tex2html = (t, d) => withCalcScope(spec.scope, () => texRaw(t, d));
-  const shape = shapeOf(spec.answer, spec.type);
+  const formula = spec.formula || null;
+  const shape = formula ? { kind: 'formula' } : shapeOf(spec.answer, spec.type);
   body._spec = spec; // 方便调试和自动化测试
   body.innerHTML = `
     ${spec.q ? `<div class="w-q">${mdToHtml(spec.q)}</div>` : ''}
@@ -34,7 +38,7 @@ export function answerWidget(body, spec, onDone) {
       <button type="button" class="btn ans-reveal" hidden>看答案</button>
     </div>
     <div class="ans-feedback" hidden></div>`;
-  const input = mathInput(body.querySelector('.ans-input'), shape);
+  const input = formula ? formulaInput(body.querySelector('.ans-input'), { names: formula.names, keys: formula.keys }) : mathInput(body.querySelector('.ans-input'), shape);
   const fb = body.querySelector('.ans-feedback');
   const btnCheck = body.querySelector('.ans-check');
   const btnHint = body.querySelector('.ans-hint');
@@ -46,7 +50,8 @@ export function answerWidget(body, spec, onDone) {
 
   // 截图作答：Claude 读出最终答案填进格子，学生核对后自己点「检查」
   const plainQ = String(spec.q || '').replace(/\s+/g, ' ').slice(0, 600) || body.querySelector('.arr-box, .w-q')?.textContent?.slice(0, 600) || '';
-  const photo = photoPicker(body.querySelector('.ans-actions'), {
+  // 截图作答只认数、向量、矩阵；写式子的题不放
+  const photo = formula ? { disable() {} } : photoPicker(body.querySelector('.ans-actions'), {
     label: '截图作答',
     root: body,
     async onPick(files, ui) {
@@ -78,18 +83,28 @@ export function answerWidget(body, spec, onDone) {
     input.lock();
     btnReveal.hidden = true;
     photo.disable();
-    onDone?.({ ok, attempts, revealed, first, last: input.text(), work });
+    onDone?.({ ok, attempts, revealed, first, last: input.text(), work, note: lastNote || undefined });
   };
+  let lastNote = ''; // 写式子的题：最后一次代值检查的结果（进作答记录，课堂 Claude 看得到错在哪个 n）
 
   function doCheck() {
     if (finished) return;
     let given;
     try { given = input.read(); } catch (e) { show('is-bad', e.message); return; }
+    let r;
+    if (formula) {
+      // 用的是页面读懂以后的式子（补了乘号、换了上标），学生写的原样记进记录
+      try { r = compareFormula(formula.expected, given, { free: formula.free, scope: formula.scope }); } catch (e) { show('is-bad', e.message); return; }
+      // 直接写 A^n 这类「没化简」的：说清楚要怎样写，不算一次
+      if (r.powerBan) { input.markAll('is-wrong'); show('is-bad', mdToHtml(r.msg)); return; }
+      lastNote = r.note;
+      r = { ...r, msg: r.msg ? mdToHtml(r.msg) : '' };
+    }
     attempts++;
     lastTried = input.partial();
     if (first === null) first = input.text();
-    const r = check(given, spec.answer, spec.type);
-    spec.onTry?.({ text: input.text(), ok: r.ok, attempts, work });
+    if (!formula) r = check(given, spec.answer, spec.type);
+    spec.onTry?.({ text: input.text(), ok: r.ok, attempts, work, note: lastNote || undefined });
     if (r.ok) {
       input.markAll('is-right');
       show('is-ok', `<div class="q-verdict">✓ 正确${attempts > 1 ? `（第 ${attempts} 次）` : ''}</div>${r.msg ? `<div>${r.msg}</div>` : ''}${spec.explain ? mdToHtml(spec.explain) : ''}`);
@@ -117,8 +132,8 @@ export function answerWidget(body, spec, onDone) {
     fb.insertAdjacentHTML('afterend', `<div class="w-note ans-hint-box"><strong>提示：</strong>${mdToHtml(spec.hint)}</div>`);
   });
   btnReveal.addEventListener('click', () => {
-    input.fill(display(spec.answer));
-    show('is-reveal', `<div><strong>答案：</strong>${tex2html(valueTeX(spec.answer))}</div>${spec.explain ? mdToHtml(spec.explain) : ''}`);
+    input.fill(formula ? formula.display : display(spec.answer));
+    show('is-reveal', `<div><strong>答案：</strong>${tex2html(formula ? formulaTeX(formula.expected) : valueTeX(spec.answer))}</div>${spec.explain ? mdToHtml(spec.explain) : ''}`);
     finish(false, true);
   });
   // 刷新后照作答记录恢复（课堂 / 实时黑板重放）：答对了的把学生填的数填回去，看了答案的照样摊开答案
@@ -128,7 +143,8 @@ export function answerWidget(body, spec, onDone) {
     if (revealed) { btnReveal.click(); return; }
     if (!ok) return;
     const nums = String(value ?? '').match(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/gi);
-    input.fill(nums ? nums.map((x) => numText(Number(x))) : display(spec.answer));
+    if (formula) input.fill(value && value !== '（没写）' ? value : formula.display);
+    else input.fill(nums ? nums.map((x) => numText(Number(x))) : display(spec.answer));
     input.markAll('is-right');
     show('is-ok', `<div class="q-verdict">✓ 正确${attempts > 1 ? `（第 ${attempts} 次）` : ''}</div>${spec.explain ? mdToHtml(spec.explain) : ''}`);
     finish(true, false);
@@ -209,15 +225,17 @@ export function answer(el, src) {
   // 块里可以先 let 定义变量，再用表达式算答案；整节课的量（let 块）也能直接用
   const vars = floatVars(session.vars);
   for (const c of cmds) if (c.kind === 'let') vars[c.name] = c.expr(vars);
-  const value = compile(fields.answer)(vars);
   const scope = letScope(cmds, session.vars);
+  // formula: n —— 答案是含 n 的式子：学生写式子，页面代几组 n 比较
+  const formula = fields.formula ? formulaSpec(fields.answer, fields.formula, scope) : null;
+  const value = formula ? null : compile(fields.answer)(vars);
   for (const msg of calcProblems([fields.title, fields.q, fields.hint, fields.explain, fields.before, fields.after], scope)) session.problem(el, 'answer', msg);
   const title = fields.title || '动手算 Try it';
   const body = withCalcScope(scope, () => widget(el, { title, cls: 'answer' }));
   const done = session.gate(el, title);
-  const onTry = (t) => session.record({ type: 'answer', liveOnly: true, title, q: plain(fields.q), value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, el });
-  answerWidget(body, { ...fields, answer: value, type: (fields.type || '').toLowerCase(), onTry, scope }, (r) => {
-    session.record({ type: 'answer', final: true, title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, last: r.last, expected: plainValue(value), revealed: r.revealed, work: r.work || undefined, el });
+  const onTry = (t) => session.record({ type: 'answer', liveOnly: true, title, q: plain(fields.q), value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, check: t.note, el });
+  answerWidget(body, { ...fields, answer: value, formula, type: (fields.type || '').toLowerCase(), onTry, scope }, (r) => {
+    session.record({ type: 'answer', final: true, title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, last: r.last, expected: formula ? formula.display : plainValue(value), revealed: r.revealed, work: r.work || undefined, check: r.note, el });
     done();
   });
 }
