@@ -24,7 +24,7 @@ import { createDevTeacher } from './devteacher.js';
 import { createClassBar, MODEL_TAG } from './bar.js';
 import { createBoardView } from './boardview.js';
 import { extraProblems } from './selfcheck.js';
-import { initClassDevPanel } from './devpanel.js';
+import { initClassDevPanel, ensureDemoSlide } from './devpanel.js';
 import { markLayer } from '../marks.js';
 import { markText, markWhere } from '../markspec.js';
 import { calcValue, exactText } from '../exact.js';
@@ -166,8 +166,15 @@ export async function renderClass(root, meta) {
     pack.main = data || null;
     if (pack.main?.unit) root.querySelector('.class-unit').innerHTML = mdToHtml(String(pack.main.unit), { inline: true });
     session.context = pack.main ? [pack.main.goal, pack.main.scope].filter(Boolean).join('\n') : '';
+    syncPackImages();
     bv.syncNav();
   };
+  // 讲义原图（image 组件按 name 找）。本地模拟老师上课时补一张模拟的，「测试:原图」用
+  function syncPackImages() {
+    session.packImages = Array.isArray(pack.main?.images) ? pack.main.images.filter((x) => x && x.name) : [];
+    if (mock && !session.packImages.length) { const demo = ensureDemoSlide(); if (demo) session.packImages = [demo]; }
+  }
+  syncPackImages();
   db.doc('pack/main').onSnapshot((s) => applyMain(s.exists ? s.data() : null), () => {});
   db.doc('pack/problems').onSnapshot((s) => { pack.problems = s.exists ? s.data() : null; }, () => {});
 
@@ -942,7 +949,7 @@ export async function renderClass(root, meta) {
       const lines = [...out.retry, ...out.notes];
       if (wantImages) {
         followed = true;
-        lines.push(`附上你用 view_handwriting 要看的手写原图（${staged.images.length} 张）。看完接着上课，话要短。`);
+        lines.push(`附上你要看的图（view_handwriting 的手写原图、view_image 的讲义原图，共 ${staged.images.length} 张）。看完接着上课，话要短。`);
       }
       rewriting = out.retry.length > 0 && !wantImages;
       const ask = out.retry.length ? `\n请把上面没显示的段重新写对：${out.asks.join('；')}。只写这几段，不用再对学生说别的。` : '';
@@ -1234,6 +1241,28 @@ export async function renderClass(root, meta) {
         },
       },
       {
+        name: 'view_image',
+        description: '把资料包里的一张讲义原图（images 里的 name）附在下一条消息里给你看。每用一次你要多等一整轮；只在要照着原图讲、但资料包的文字说不清的时候用。要贴上黑板给学生看，用 image 组件。',
+        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        async execute(input) {
+          const name = String(input?.name ?? '').trim();
+          staged.calls.push({ name: 'view_image', input: { name } });
+          const list = session.packImages || [];
+          const img = list.find((x) => String(x.name) === name);
+          if (!img) throw new Error(`资料包里没有叫「${name}」的图${list.length ? `（有的是：${list.map((x) => x.name).slice(0, 8).join('、')}）` : ''}`);
+          const url = img.src || img.url || (img.id ? assetUrl(String(img.id)) : '');
+          if (!url) throw new Error('这张图没有地址');
+          if (staged.images.length >= maxImages) throw new Error(`这一轮已经附了 ${maxImages} 张图`);
+          const r = await fetch(url);
+          if (!r.ok) throw new Error('图没取到');
+          const blob = await r.blob();
+          if (!/^image\//.test(blob.type)) throw new Error('这不是一张图');
+          staged.images.push(blob);
+          staged.ids.push(String(img.id || name));
+          return { name, title: img.title || '', attachedNextMessage: 1 };
+        },
+      },
+      {
         name: 'calc',
         description: '精确地算一个表达式（分数不丢精度；det、inv、rank、rref、tr 都是精确的），返回结果的文字和 TeX。可以用这节课 let 块里定义的量；vars 里可以临时给几个量（值写成表达式，比如 {"A": "[[1, 2], [3, 4]]"}）。注意：每调用一次工具，你都要多等一整轮（整份课堂说明重读一遍），很慢。只在改数出新题、得先知道结果才能决定怎么出题时用；要写上黑板的数，直接在公式里写 \\calc{表达式}，页面会算好再写上去，不用先调这个工具。',
         inputSchema: { type: 'object', properties: { expr: { type: 'string' }, vars: { type: 'object', additionalProperties: { type: 'string' } } }, required: ['expr'] },
@@ -1252,7 +1281,8 @@ export async function renderClass(root, meta) {
         },
       },
     ];
-    return view && teacher.images ? tools : tools.filter((t) => t.name !== 'view_handwriting');
+    // 附图的工具（看手写原图、看讲义原图）：这个查看方式发不了图、或者这一轮已经补发过图，就不给
+    return view && teacher.images ? tools : tools.filter((t) => t.name !== 'view_handwriting' && t.name !== 'view_image');
   }
 
   // —— 下课：让课堂 Claude 写一份小结，存进 class_notes（同样只收 Opus 5.5 写的），写在最后一块板上 ——

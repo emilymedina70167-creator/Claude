@@ -121,9 +121,9 @@ export function mdToHtml(src, { inline = false } = {}) {
 // 会产生作答的组件（live 模式下要有稳定的 id）
 const ANSWERING = new Set(['answer', 'conjecture', 'quiz', 'predict', 'practice', 'steps', 'recognize', 'findbug', 'draft', 'sortpass']);
 // 课堂模式里 figure 指令要按 id 找图
-const FIGURES = new Set(['scene', 'graph', 'space', 'matrix']);
+const FIGURES = new Set(['scene', 'graph', 'space', 'matrix', 'sketch', 'derive']);
 // 自己检查文字里 \calc 的组件（它们有自己的 let，变量要连同这些一起算）
-const SELF_CALC = new Set(['answer', 'scene', 'predict', 'matrix', 'let']);
+const SELF_CALC = new Set(['answer', 'scene', 'predict', 'matrix', 'let', 'sketch', 'derive', 'practice']);
 
 // 一段里的 let 块先算一遍：正文的公式在组件挂载之前就渲染了，里面的 \calc 要用到这些量。
 // 写错的不管，let 组件挂载时自己再算一次、报出来

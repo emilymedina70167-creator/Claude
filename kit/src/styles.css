@@ -188,9 +188,9 @@ button { font: inherit; color: inherit; }
 .la-lesson code { font: .88em var(--mono); color: var(--blue); background: rgb(var(--shade-rgb) / 0.2); padding: 2px 6px; border-radius: 6px; }
 .la-lesson pre { background: rgb(var(--shade-rgb) / 0.22); padding: 14px 16px; border-radius: 12px; overflow-x: auto; }
 .la-lesson pre code { background: none; padding: 0; color: var(--chalk); }
-.la-lesson table:not(.mx) { border-collapse: collapse; margin: 18px 0; display: block; overflow-x: auto; }
-.la-lesson table:not(.mx) th, .la-lesson table:not(.mx) td { border: 1px solid var(--border); padding: 8px 14px; }
-.la-lesson table:not(.mx) th { font-family: var(--hand); font-weight: 400; font-size: 22px; color: var(--yellow); }
+.la-lesson table:not(.mx):not(.dv) { border-collapse: collapse; margin: 18px 0; display: block; overflow-x: auto; }
+.la-lesson table:not(.mx):not(.dv) th, .la-lesson table:not(.mx):not(.dv) td { border: 1px solid var(--border); padding: 8px 14px; }
+.la-lesson table:not(.mx):not(.dv) th { font-family: var(--hand); font-weight: 400; font-size: 22px; color: var(--yellow); }
 .la-lesson hr { border: 0; border-top: 2px dashed var(--faint); margin: 36px 0; }
 .katex { font-size: 1.1em; }
 .katex-display { overflow-x: auto; overflow-y: hidden; padding: 6px 0; }
@@ -1069,4 +1069,57 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
   .mk-svg .mk-in .mk-line, .mk-svg .mk-in .mk-lead, .mk-svg .mk-in .mk-fill, .mk-note.mk-in, .mxw-enter { animation: none; stroke-dashoffset: 0; }
   .mxw-mx td.mxw-flash, .mxw-num.mxw-flash { animation: none; }
   .mxw-item.cmd-flash { animation: none; background-color: rgb(var(--yellow-rgb) / 0.15); }
+}
+
+/* —— sketch：当场画的示意图（颜色由 svgsafe.js 换成主题变量，默认粉笔色） —— */
+.sk-wrap { position: relative; width: 100%; margin: 4px auto; container-type: inline-size; }
+.sketch-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.sketch-svg .sk { fill: none; stroke: var(--sk, var(--chalk)); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; filter: var(--rough); }
+.sketch-svg .sk-fill { fill: var(--sk, var(--chalk)); fill-opacity: .18; }
+.sketch-svg .sk-dashed { stroke-dasharray: 9 7; }
+.sketch-svg .sk-dotted { stroke-dasharray: 1.5 6; }
+.sketch-svg .sk-thin { stroke-width: 1.6; }
+.sketch-svg .sk-thick { stroke-width: 4; }
+.sketch-svg .sk-faint { opacity: .5; }
+.sketch-svg :is(.sk-text, .sk-tspan) { fill: var(--sk, var(--chalk)); stroke: none; font-family: var(--hand); filter: none; paint-order: stroke; }
+.sketch-svg .sk-bold { font-weight: 700; }
+.sk-tex { position: absolute; white-space: nowrap; color: var(--chalk); line-height: 1; transform: translate(-50%, -50%); pointer-events: none; }
+.sk-tex.sk-a-start { transform: translate(0, -50%); }
+.sk-tex.sk-a-end { transform: translate(-100%, -50%); }
+/* figure highlight：这一个闪两下 */
+.sketch-svg .sk-flash { animation: skFlash 1.6s ease-in-out both; }
+.sk-tex.sk-flash { animation: skFlashHtml 1.6s ease-in-out both; border-radius: 6px; }
+@keyframes skFlash { 18%, 62% { stroke: var(--flash); stroke-width: 4.5; } 40% { stroke-width: 2.6; } }
+@keyframes skFlashHtml { 18%, 62% { background-color: rgb(var(--yellow-rgb) / 0.2); color: var(--flash); } }
+
+/* —— derive：分拍板书。一行行写出来，等号对齐，旁注在右边 —— */
+.dv-scroll { overflow-x: auto; padding: 4px 2px; }
+.dv { border-collapse: collapse; margin: 0; font-size: 20px; }
+.dv td { padding: 5px 4px; vertical-align: middle; }
+.dv .dv-l { text-align: right; padding-right: 2px; }
+.dv .dv-r { text-align: left; }
+.dv .dv-note { padding-left: 22px; color: var(--yellow); font: 400 20px/1.3 var(--hand); }
+.dv .dv-note .katex { font-size: .92em; }
+/* 新写的一行：从左往右写出来 */
+.dv-line.dv-in > td { animation: dvWrite .7s cubic-bezier(.3,.2,.2,1) both; }
+.dv-line.dv-in > td + td { animation-delay: .25s; }
+.dv-line.dv-in > td + td + td { animation-delay: .7s; }
+@keyframes dvWrite { from { clip-path: inset(0 100% 0 0); opacity: .4; } to { clip-path: inset(0 0 0 0); opacity: 1; } }
+.dv-line.cmd-flash > td { animation: cmdRow 1.6s ease-in-out var(--flash-delay, 0s) both; }
+.dv-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.dv-actions[hidden] { display: none; }
+.dv-count { font: 14px/1 var(--sans); font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .dv { font-size: 18px; } .dv .dv-note { padding-left: 12px; font-size: 18px; } }
+
+/* —— image：讲义原图。白底的幻灯片放在黑板上：圆角、细边，点一下放大 —— */
+.im-fig { margin: 4px 0; }
+.im-open { display: block; width: 100%; padding: 0; border: 1px solid var(--border); border-radius: 10px; background: none; overflow: hidden; cursor: zoom-in; }
+.im-img { display: block; width: 100%; height: auto; max-height: 60svh; object-fit: contain; background: rgb(var(--glow-rgb) / 0.04); }
+.im-cap { margin-top: 6px; font: 14.5px/1.5 var(--sans); color: var(--muted); text-align: center; }
+.im-light { position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); background: rgb(var(--board-rgb) / 0.96); cursor: zoom-out; }
+.im-light img { max-width: 100%; max-height: calc(100% - 60px); object-fit: contain; border-radius: 8px; }
+.im-light-cap { font: 15px/1.5 var(--sans); color: var(--chalk); }
+.im-close { position: absolute; top: max(12px, env(safe-area-inset-top)); right: 12px; width: 48px; height: 48px; border: 0; border-radius: 24px; background: rgb(var(--shade-rgb) / 0.3); color: var(--chalk); font: 28px/1 var(--sans); cursor: pointer; }
+@media (prefers-reduced-motion: reduce) {
+  .dv-line.dv-in > td, .sketch-svg .sk-flash, .sk-tex.sk-flash { animation: none; }
 }

@@ -369,6 +369,58 @@ matrix B^k label="B^{\calc{k}} ="
 - 标签和 `tex` 里可以写 `\calc{…}`，跟着变量变：上例滑到 3 时标签是 $B^{3}=$。
 - 写错（表达式算不出来、尺寸对不上、`mark` 的行号超出矩阵、`split` 的位置不对）：组件下面红字报出来，自检也会报。
 
+### derive：分拍板书（一段推导一行一行写出来）
+
+```derive
+id: d-a2
+title: 推 A²
+A^2 = (\boldsymbol\alpha\boldsymbol\beta^{\mathrm T})(\boldsymbol\alpha\boldsymbol\beta^{\mathrm T})
+    = \boldsymbol\alpha(\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)\boldsymbol\beta^{\mathrm T}   // 结合律：中间先乘
+    = (\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)\,\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}   // $\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是一个数
+    = \calc{tr(A)}\,A
+```
+
+- 每行一段 TeX（**不写 `$`**），`//` 后面是写在右边的旁注（Markdown，可以有 `$公式$`）。第一个 `=`（或 `\le`、`\Rightarrow` 这类关系符）前后分两栏，等号自动对齐；以 `=` 开头的行接着上一行。
+- 一开始只写第一行，我点「下一行」往下写（「全部写出来」一次写完）。`auto: 1.5`：出现在屏幕上以后每 1.5 秒自动写一行；`start: all`：一开始就全写出来。
+- 新的一行从左往右「写」出来。课堂里：`figure target=d-a2 play step 1 4 4s`（4 秒里写完 4 行，跟着你说的话写）、`set step=3`（写到第 3 行）、`highlight 2`（第 2 行闪一下）、`board mark target=d-a2 item=2`（圈第 2 行）。
+- 字段：`id`、`title`、`q`、`note`、`auto`、`start`、`link`（绑定 `steps`：揭开第 k 步时至少写到第 k 行）。
+
+### sketch：当场画的示意图（SVG）
+
+不用互动、偶尔用一次的示意图（分块的样子、维数关系、映射示意……）。直接写 SVG 元素，页面统一配色、过安全检查：
+
+```sketch
+id: sk-block
+title: 分块对角矩阵
+width: 340
+height: 220
+<path d="M 62 20 L 50 20 L 50 200 L 62 200" class="thick"/>
+<path d="M 238 20 L 250 20 L 250 200 L 238 200" class="thick"/>
+<rect x="64" y="28" width="80" height="76" rx="6" class="blue fill"/>
+<rect x="156" y="116" width="80" height="76" rx="6" class="pink fill"/>
+<line x1="150" y1="22" x2="150" y2="198" class="dashed faint"/>
+<tex x="104" y="66">A_1</tex>
+<tex x="196" y="154">A_2</tex>
+<path d="M 262 110 Q 290 80 318 110" class="arrow yellow"/>
+<text x="290" y="140" text-anchor="middle" class="yellow small">n 次方</text>
+```
+
+- `width` / `height` 是坐标范围（左上角是原点，向下是 y），图按屏幕缩放。
+- 只能用 `path` `line` `polyline` `polygon` `rect` `circle` `ellipse` `text`（里面可以有 `tspan`）`g`；不写外面的 `<svg>`，不能有 `style=`、`id=`、链接、图片、脚本。
+- 颜色写名字：`class="blue"`，或 `fill="yellow"` / `stroke="pink"`（`yellow` `pink` `blue` `green` `orange` `purple` `red` `white` `gray`，`none`）。样式 class：`dashed` `dotted` `thin` `thick` `arrow`（线的末端画箭头）`fill`（用这个颜色淡淡地填上）`faint` `bold` `small` `big`。默认是粉笔白的线。
+- 公式写 `<tex x="…" y="…">A_1</tex>`（KaTeX，盖在图上，可以用 `\calc`；`anchor="start|middle|end"`、`color="pink"`、`size="22"`）。
+- 写错（不认的元素、属性、颜色）会报出来要求重写。课堂里：`figure target=sk-block highlight 3`（第 3 个元素闪一下，从 1 数）、`board mark target=sk-block label=A_2`（按 `text` / `tex` 的文字找）、`at=[290, 110]`（图上的坐标）。
+
+### image：讲义原图
+
+```image
+id: img-ex21
+name: 例2.1
+caption: 讲义里例 2.1 那一页
+```
+
+- `name:` 是资料包 `images` 里登记的图（第六节「课前：写资料包」）；也可以写 `src:`（上传到这个 artifact 以后给的地址）。只认这个 artifact 自己的文件。点一下放大看。
+
 ### let：这节课的量（不显示）
 
 ```let
@@ -698,9 +750,10 @@ unit: 第2讲 §2 · 秩一方阵
   - `rules`（可选）：覆盖组件库内置的「角色与红线」。一般不用写。
   - `updatedAt`：时间戳。
 - `collection: "pack"`，`doc_id: "problems"`，`data: { "items": [ { "q": "题面", "answer": "答案", "point": "考点", "source": "来源" }, … ] }`：这节课可用的题。课堂里的 Claude 从里面取题，也可以自己改数。
-- 资料包合起来控制在约 110 KB 以内，超出部分会被截断。课中你也可以改资料包，下一轮自动用新版本：先 `get` 读到 `version`，再带上 `if_version` 用 `update` 或 `set`（已有的文档不带 `if_version` 会被拒绝）。
+- 资料包合起来控制在约 100 KB 以内，超出部分会被截断。课中你也可以改资料包，下一轮自动用新版本：先 `get` 读到 `version`，再带上 `if_version` 用 `update` 或 `set`（已有的文档不带 `if_version` 会被拒绝）。
 - 模型是固定的：课堂里的 Claude 只用 Opus 5.5（effort high）。平台临时换成别的模型时，那一轮整段作废，我会看到「Opus 5.5 暂时用不了，稍后点重试」。资料包里不要写模型相关的字段。我在板顶那句话后面看得到「Opus 5.5 ✓」（平台核验过的模型），「⋯」菜单里有这节课核验过几轮、作废了几轮。
-- 课堂里的 Claude 有这些教具，`plan` 里可以直接点名用：`board mark` 圈、框、划板上已有的东西并写旁注；`matrix` 组件演示会动的矩阵（幂次、分块、乘积）；公式里的 `\calc{…}` 让页面精确地算，`let` 块定义整节课的量。资料包 `textbook` 里的矩阵、向量照原样写清楚（比如 `A = [[1, 1], [2, 2]]`），它好放进 `let` 块。
+- `images`（可选）：讲义里关键的幻灯片、教材页，课堂里的 Claude 能用 `image` 组件贴上黑板，自己也能用工具看。先把图片上传到这个课堂 artifact 的 assets（`Artifact` 工具 publish，`url` 是课堂地址，`asset: true`，`file_path` 是图片），再在 `pack/main` 里写 `images: [{ "name": "例2.1", "src": "上传结果里给的 url，原样照抄", "title": "讲义里例 2.1 那一页" }]`。名字要短，课堂 Claude 按名字找。
+- 课堂里的 Claude 有这些教具，`plan` 里可以直接点名用：`board mark` 圈、框、划板上已有的东西并写旁注；`matrix` 组件演示会动的矩阵（幂次、分块、乘积）；`derive` 一行一行写推导；`sketch` 当场画示意图；`image` 贴讲义原图；`practice` 的 `type: custom` 换着数出题；`formula: n` 判含 n 的式子；公式里的 `\calc{…}` 让页面精确地算，`let` 块定义整节课的量。资料包 `textbook` 里的矩阵、向量照原样写清楚（比如 `A = [[1, 1], [2, 2]]`），它好放进 `let` 块。
 
 ### 课后：读课堂记录
 

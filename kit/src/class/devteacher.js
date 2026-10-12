@@ -17,7 +17,9 @@
 // 「测试:教具」秩一方阵：let 块 + matrix 的 product + board mark 逐行标倍数 + \calc 写出 A²；
 // 「测试:幂」B 的幂：matrix 配滑块，figure play 让 1 往右上角退，mark 一个箭头；
 // 「测试:指图」在图上标注：label= 圈住 Ax（拖动 x 时跟着走），at= 用箭头指一个点；
-// 「测试:出题」自定义练习模板（practice type: custom，页面随机出题）；「测试:公式」写含 n 的式子（answer 的 formula: n）。
+// 「测试:出题」自定义练习模板（practice type: custom，页面随机出题）；「测试:公式」写含 n 的式子（answer 的 formula: n）；
+// 「测试:示意图」sketch 当场画的图 + highlight + label= 标注；「测试:推导」derive 分拍板书 + figure play step；
+// 「测试:原图」image 贴讲义原图（本地用一张模拟的）。
 
 export const DEV_LIMITS = Object.freeze({ maxPromptBytes: 262144, images: Object.freeze({ maxCount: 4, maxInputBytes: 20000000, mediaTypes: Object.freeze(['image/png', 'image/jpeg']) }) });
 const THINK_MS = 600; // 第一个字出来前的停顿（模拟思考）
@@ -217,6 +219,43 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
   if (!isSystem && /测试\s*[:：]?\s*公式/.test(said)) {
     const n = nextSeq(turns, memo);
     return { kind: 'tools', text: join(pic + String.raw`这次不填数，写式子：用 $n$ 和 $A$ 写出 $A^n$。`, board(`new id=b${n} title="写出 Aⁿ"`, formulaBody(n))) };
+  }
+
+  if (!isSystem && /测试\s*[:：]?\s*示意图/.test(said)) {
+    const n = nextSeq(turns, memo);
+    return {
+      kind: 'tools',
+      text: join(
+        pic + String.raw`画个示意图：分块对角的矩阵，两块互不打扰。`,
+        board(`new id=b${n} title="分块对角"`, sketchBody(n)),
+        board(`figure target=sk-${n} highlight 3`),
+        board(`mark target=sk-${n} label=A_2 note="各自乘方" color=pink`),
+        String.raw`所以 $\begin{bmatrix}A_1&O\\O&A_2\end{bmatrix}^n=\begin{bmatrix}A_1^n&O\\O&A_2^n\end{bmatrix}$。`,
+      ),
+    };
+  }
+  if (!isSystem && /测试\s*[:：]?\s*推导/.test(said)) {
+    const n = nextSeq(turns, memo);
+    return {
+      kind: 'tools',
+      text: join(
+        pic + String.raw`我一行一行写，你跟着看每一步为什么成立。`,
+        board(`new id=b${n} title="推 A²"`, deriveBody(n)),
+        board(`figure target=d-${n} play step 1 4 4s`),
+        board(`mark target=d-${n} item=2 style=underline note="关键一步"`),
+      ),
+    };
+  }
+  if (!isSystem && /测试\s*[:：]?\s*原图/.test(said)) {
+    const n = nextSeq(turns, memo);
+    return {
+      kind: 'tools',
+      text: join(
+        pic + '对照讲义原图看一下：书上就是这么写的。',
+        board(`new id=b${n} title="讲义里的例 2.1"`, fence('image', `id: img-${n}\nname: 例2.1\ncaption: 讲义里例 2.1：和我们刚推的一样`)),
+        board(`mark target=img-${n} note="点一下放大看"`),
+      ),
+    };
   }
 
   // 「继续」或普通文字：这节课第一次时故意写错一段；以后只有暗号「测试:写错」「一直写错」才再写错
@@ -422,6 +461,41 @@ formula: n
 before: A^n =
 hint: 先算 $A^2$，看它是 $A$ 的几倍。
 explain: $A^2=\calc{A^2}=3A$，所以 $A^n=3^{n-1}A$。
+`),
+  ].join('\n\n');
+}
+
+function sketchBody(n) {
+  return fence('sketch', String.raw`
+id: sk-${n}
+title: 分块对角矩阵
+width: 340
+height: 220
+<path d="M 62 20 L 50 20 L 50 200 L 62 200" class="thick"/>
+<path d="M 238 20 L 250 20 L 250 200 L 238 200" class="thick"/>
+<rect x="64" y="28" width="80" height="76" rx="6" class="blue fill"/>
+<rect x="156" y="116" width="80" height="76" rx="6" class="pink fill"/>
+<line x1="150" y1="22" x2="150" y2="198" class="dashed faint"/>
+<line x1="54" y1="110" x2="246" y2="110" class="dashed faint"/>
+<tex x="104" y="66">A_1</tex>
+<tex x="196" y="154">A_2</tex>
+<tex x="196" y="66" color="gray">O</tex>
+<tex x="104" y="154" color="gray">O</tex>
+<path d="M 262 110 Q 290 80 318 110" class="arrow yellow"/>
+<text x="290" y="140" text-anchor="middle" class="yellow small">n 次方</text>
+`);
+}
+
+function deriveBody(n) {
+  return [
+    fence('let', 'A = [[1, 1], [2, 2]]'),
+    fence('derive', String.raw`
+id: d-${n}
+title: 推 A²
+A^2 = (\boldsymbol\alpha\boldsymbol\beta^{\mathrm T})(\boldsymbol\alpha\boldsymbol\beta^{\mathrm T})
+    = \boldsymbol\alpha(\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)\boldsymbol\beta^{\mathrm T}   // 结合律：中间先乘
+    = (\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)\,\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}   // $\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是一个数，提到前面
+    = \calc{tr(A)}\,A   // $\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha=\operatorname{tr}A$
 `),
   ].join('\n\n');
 }

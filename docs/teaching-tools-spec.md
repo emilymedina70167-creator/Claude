@@ -122,7 +122,7 @@ mark row 3 note="×1"
 - 红线后面的「教法」加几条：讲的时候指着讲（用 `mark` 圈出关键的项、框出成比例的行），推导里的数让页面算（`\calc`），改数出题先验算。
 - 模拟老师（`?dev`）的剧本加一段：用 `matrix` 画秩一方阵、`mark` 逐行标倍数、`\calc` 写出 $A^2$。
 
-- 说明变长了：每一轮发给课堂 Claude 的整份说明要控制在 160 KiB 以内（给对话留地方），资料包的预算从 120 KiB 调到 112 KiB。
+- 说明变长了：每一轮发给课堂 Claude 的整份说明要控制在 160 KiB 以内（给对话留地方），资料包的预算从 120 KiB 调到 112 KiB（第三批之后再调到 104 KiB）。
 
 ### 1.6 验收
 
@@ -147,8 +147,15 @@ mark row 3 note="×1"
 ## 3. 第三批：表达空间
 
 - **自由画图**：它当场写 SVG 画示意图（只允许图形元素，不允许脚本、外部链接）；页面统一配色，写坏了报错让它重写。
+  - `sketch` 组件：`width` / `height` 是坐标范围；只认 path / line / polyline / polygon / rect / circle / ellipse / text / tspan / g；不能有 style、id、href、事件、图片、foreignObject；颜色只认调色板名字（换成主题变量）；`class` 认 dashed / dotted / thin / thick / arrow / fill / faint / bold / small / big。
+  - 图上的公式写 `<tex x y>…</tex>`（KaTeX 盖在图上，可以 `\calc`）。每个顶层元素从 1 编号：`figure highlight k`、`board mark item=k / label=文字 / at=[x, y]` 都能用。
 - **分拍板书**：一段推导分几拍出现，跟着它说的话一句一句写上去；或者学生点「下一行」。
+  - `derive` 组件：每行一段 TeX，`//` 后面是旁注；第一个关系符前后分两栏，等号对齐；新的一行从左往右写出来。
+  - 学生点「下一行」「全部写出来」；`auto: 1.5` 自动写；课堂里 `figure play step 1 4 4s`、`set step=3`、`highlight 2`、`board mark item=2`。学生翻到第几行记成动作，刷新后恢复。
 - **教材原图上板**：课前把讲义里关键的幻灯片存进课堂的 assets，它能贴上黑板，自己也能看。
+  - 资料包 `pack/main.images: [{ name, src, title }]`（项目对话里的 Claude 用 Artifact 工具 `asset: true` 上传后照抄 url）；黑板现状的资料包里列出名字和说明。
+  - `image` 组件按 `name:` 找（或者直接 `src:`），只认本 artifact 的文件；点一下放大；打不开时显示说明。
+  - 工具 `view_image`：把一张原图附在下一条消息里给课堂 Claude 看（和 view_handwriting 同一套：先记着，确认是 Opus 5.5 才附）。
 
 ## 4. 第四批：看见学生
 

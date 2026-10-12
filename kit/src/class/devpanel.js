@@ -77,3 +77,22 @@ export function initClassDevPanel({ db, setFallback, history, stats = () => null
   $('.dev-fallback').addEventListener('change', (e) => setFallback(e.target.checked));
   $('.dev-clear').addEventListener('click', () => { if (confirm('清空本地这节课的黑板、对话和作答？')) { db._clear?.(); location.reload(); } });
 }
+
+// 本地试用时的一张「讲义原图」（模拟老师的「测试:原图」用）：画一张白底的幻灯片，存成 dev- 图
+export const DEMO_SLIDE = { name: '例2.1', id: 'dev-slide-demo', title: '（模拟）讲义里例 2.1 那一页' };
+export function ensureDemoSlide() {
+  const key = `la-devasset:${DEMO_SLIDE.id}`;
+  try { if (localStorage.getItem(key)) return DEMO_SLIDE; } catch { return null; }
+  const c = document.createElement('canvas');
+  c.width = 960; c.height = 540;
+  const g = c.getContext('2d');
+  if (!g) return null;
+  g.fillStyle = '#fbfaf6'; g.fillRect(0, 0, 960, 540);
+  g.fillStyle = '#1f3b73'; g.fillRect(0, 0, 960, 70);
+  g.fillStyle = '#ffffff'; g.font = 'bold 34px sans-serif'; g.fillText('例 2.1  秩一方阵的幂', 32, 47);
+  g.fillStyle = '#222222'; g.font = '30px serif';
+  ['设 α = (1, 2)ᵀ，β = (1, 1)ᵀ，A = αβᵀ，求 Aⁿ。', '解：A² = α(βᵀα)βᵀ = (βᵀα)A，', '而 βᵀα = 1·1 + 1·2 = 3 = tr A，', '所以 Aⁿ = 3ⁿ⁻¹ A。'].forEach((t, i) => g.fillText(t, 48, 150 + i * 70));
+  g.fillStyle = '#888888'; g.font = '22px sans-serif'; g.fillText('（本地试用的模拟讲义）', 48, 500);
+  try { localStorage.setItem(key, c.toDataURL('image/png')); } catch { return null; }
+  return DEMO_SLIDE;
+}

@@ -18,11 +18,14 @@ import { findbug } from './findbug.js';
 import { graph, space } from './figures.js';
 import { letBlock } from './letblock.js';
 import { matrix } from './matrix.js';
+import { sketch } from './sketch.js';
+import { derive } from './derive.js';
+import { image } from './image.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
   transform2d, vectors, rref, matmul, quiz, card, ...callouts, ...folds,
   scene, predict, answer, conjecture, practice, summary, context, draft,
   array, shellsort, sortpass, steps, recognize, findbug, graph, space,
-  let: letBlock, matrix,
+  let: letBlock, matrix, sketch, derive, image,
 };

@@ -30,7 +30,7 @@ export const DEFAULT_RULES = doc`
 - 例子要挑：数字简单但不特殊（不要对称矩阵，不要全是 0 和 1），结果尽量是整数。
 - 学生答错时，先弄清学生是怎么想的（看作答记录和手写转写），针对错的那一步说，不整题重讲。
 - 指着讲：说「看这一项」时，用 ˋboard markˋ 把它圈出来、框出来，旁边写一句；推导里的关键一步（约掉的项、提出来的公因子、成比例的行）标在板上，学生的眼睛跟得上。
-- 会变的过程让它动起来：幂次、分块、行变换这类「一步步变」的东西，用 ˋmatrixˋ 组件配滑块或 ˋfigure playˋ 演给学生看，不只给结果。
+- 会变的过程让它动起来：幂次、分块、行变换这类「一步步变」的东西，用 ˋmatrixˋ 组件配滑块或 ˋfigure playˋ 演给学生看，不只给结果。推导用 ˋderiveˋ 一行一行写（跟着你说的话 ˋplay stepˋ，或者让学生点「下一行」），示意图用 ˋsketchˋ 当场画，讲义原图用 ˋimageˋ 贴上来对照。
 - 黑板上的数让页面算（ˋ\calc{…}ˋ），改了数出新题时也一样；不要心算后直接写上黑板。
 - 练熟一个方法时，用 ˋpracticeˋ 的自定义题型（ˋtype: customˋ）让页面换着数出题、判分；要学生写出含 $n$ 的一般式时，用 ˋformula: nˋ，页面代值判对错，还会告诉你学生在哪个 $n$ 上对不上。
 - 术语第一次出现时附英文（学生的考试是英文的），比如「秩 rank」。
@@ -113,7 +113,7 @@ hint: 第一个分量是第一行和 $(3, -1)$ 的点积。
 
 ### figure：让当前板上的图动起来
 
-ˋtarget=ˋ 是图的 ˋid:ˋ（ˋsceneˋ、ˋgraphˋ、ˋspaceˋ、ˋpredictˋ 都行）。只有当前板上和常驻栏里的图能动：以前板上的图学生看不到。这一轮先 ˋnewˋ 了的话，当前板已经是新板。块里不写内容，下一行直接闭合。ˋpredictˋ 里学生拖的猜测点（ˋguessˋ）不能改；标了 ˋafterˋ 的东西要等学生点「确定」之后才出现，在那之前 highlight 不到。
+ˋtarget=ˋ 是图的 ˋid:ˋ（ˋsceneˋ、ˋgraphˋ、ˋspaceˋ、ˋpredictˋ、ˋmatrixˋ、ˋderiveˋ、ˋsketchˋ 都行；ˋderiveˋ 的 ˋstepˋ 是写到第几行，ˋsketchˋ 只能 highlight）。只有当前板上和常驻栏里的图能动：以前板上的图学生看不到。这一轮先 ˋnewˋ 了的话，当前板已经是新板。块里不写内容，下一行直接闭合。ˋpredictˋ 里学生拖的猜测点（ˋguessˋ）不能改；标了 ˋafterˋ 的东西要等学生点「确定」之后才出现，在那之前 highlight 不到。
 
 ˋˋˋˋboard figure target=fig-b3 set x=[1, 1]
 ˋˋˋˋ
@@ -274,8 +274,8 @@ const asText = (v) => {
 
 // —— 3. 资料包 ——
 
-// 112 KiB：原来是 120 KiB，教具（mark、matrix、\calc）的说明加进来以后，整份说明要给对话留够地方（≤ 160 KiB）
-export const PACK_BUDGET = 112 * 1024;
+// 104 KiB：原来是 120 KiB，教具（mark、matrix、\calc、derive、sketch……）的说明加进来以后，整份说明要给对话留够地方（≤ 160 KiB）
+export const PACK_BUDGET = 104 * 1024;
 export const CUT_NOTE = '（资料包太长，已截断）';
 const PACK_FIELDS = [
   ['unit', '单元'],
@@ -291,11 +291,14 @@ const PACK_SKIP = /^(rules|updatedAt|createdAt|id|model|modelTier|effort)$/i;
 export function packText(pack, budget = PACK_BUDGET) {
   const main = pack?.main && typeof pack.main === 'object' ? pack.main : {};
   const parts = [];
-  const known = new Set(PACK_FIELDS.map(([k]) => k));
+  const known = new Set([...PACK_FIELDS.map(([k]) => k), 'images']);
   for (const [k, label] of PACK_FIELDS) {
     const t = asText(main[k]);
     if (t) parts.push({ label, body: t });
   }
+  // 讲义原图：只列名字和说明（图本身要看用 view_image，贴上黑板用 image 组件）
+  const imgs = Array.isArray(main.images) ? main.images.filter((x) => x && x.name) : [];
+  if (imgs.length) parts.push({ label: '讲义原图（贴上黑板：image 组件写 name: 名字；自己要看：view_image 工具）', body: imgs.map((x) => `- ${x.name}${x.title ? `：${oneLine(x.title, 120)}` : ''}`).join('\n') });
   for (const k of Object.keys(main)) {
     if (known.has(k) || PACK_SKIP.test(k)) continue;
     const t = asText(main[k]);
@@ -498,7 +501,7 @@ function pagedStateText(board) {
 
 // —— 拼第一条 user 消息 ——
 
-// packBudget：资料包的字节预算（默认 ≈112 KiB）；整轮超长（prompt_too_large）时页面会调小再试
+// packBudget：资料包的字节预算（默认 ≈104 KiB）；整轮超长（prompt_too_large）时页面会调小再试
 export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET } = {}) {
   const custom = asText(rules) || asText(pack?.main?.rules);
   const docs = asText(componentDocs);

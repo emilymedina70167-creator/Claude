@@ -214,13 +214,13 @@ export function markLayer(host) {
     raf = requestAnimationFrame(() => { raf = 0; layout(); });
   }
 
-  // 旁注要躲开的字：宿主所在的整块板（或常驻栏）里的正文、公式、按钮、输入框。图里的线不算（旁注可以写在图上）
+  // 旁注要躲开的字：宿主所在的整块板（或常驻栏）里的正文、公式、图上的文字、按钮、输入框。图里的线不算（旁注可以写在图上）
   function obstacles(hb, k) {
     const scope = host.closest('.class-page, .class-pins, .stage-body') || host;
     const out = [];
     const add = (r) => { if (r.width > 0 && r.height > 0) out.push({ x: (r.left - hb.left) / k, y: (r.top - hb.top) / k, w: r.width / k, h: r.height / k }); };
     const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
-      acceptNode: (t) => (!t.data.trim() || t.parentElement?.closest('.mk-layer, .katex-mathml, svg, [hidden]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+      acceptNode: (t) => (!t.data.trim() || t.parentElement?.closest('.mk-layer, .katex-mathml, [hidden]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
     });
     const range = document.createRange();
     for (let t = walker.nextNode(), n = 0; t && n < 800; t = walker.nextNode(), n++) {
