@@ -1,12 +1,18 @@
 // 手写引擎：把 Apple Pencil 的点变成顺滑的粉笔笔迹。
 // 笔画按「点」存储：[x, y, r]（r = 该点半径，已经算进了压力和倾斜），方便重画、擦除、导出。
 
-export const INK_COLORS = {
-  white: '#eef0e6',
-  yellow: '#f2dc85',
-  pink: '#f3a7b6',
-  blue: '#a6d6ef',
-};
+// 四种笔色跟着页面的风格走（CSS 变量 --ink-white 等）：浅色风格里「白」是墨色，不然写在纸上看不见。
+// 第一次用到时读一次（风格在渲染课件之前就定好了）；读不到（比如 node 里跑测试）就用默认石墨风格的颜色
+const INK_DEFAULT = { white: '#eae8e3', yellow: '#f0be5c', pink: '#f092b0', blue: '#80c4f0' };
+let inkCache = null;
+function inkPalette() {
+  if (inkCache) return inkCache;
+  let cs = null;
+  try { cs = getComputedStyle(document.documentElement); } catch { cs = null; }
+  inkCache = Object.fromEntries(Object.entries(INK_DEFAULT).map(([k, v]) => [k, (cs?.getPropertyValue(`--ink-${k}`) || '').trim() || v]));
+  return inkCache;
+}
+export const INK_COLORS = Object.defineProperties({}, Object.fromEntries(Object.keys(INK_DEFAULT).map((k) => [k, { get: () => inkPalette()[k], enumerable: true }])));
 
 // 是否见过 Pencil：见过之后，手指只用来滚动和点按，不再写字（防误触）
 export const pen = { seen: false };

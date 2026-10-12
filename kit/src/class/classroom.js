@@ -1,7 +1,10 @@
-// 课堂模式（mode: class）：页面底部是对话框，课堂里的 Claude 一边说话、一边用组件库现场画黑板。
+// 课堂模式（mode: class）：一屏就是一块黑板。课堂里的 Claude 每次回应要么擦掉重写一块新板（board new），
+// 要么在当前这块板上改（add / replace / hide / figure）；旧板收进历史，翻页看。它说的话写在当前板的最上面，
+// 学生说的话不上黑板。这节课一直要看的东西（记号、关键结论）放在常驻栏（board pin）。
 // 学生在黑板上的作答会自动发给它，它接着往下教。只用 Opus 5.5（effort high）讲课：
 // 返回的不是 Opus 5.5 时，这一轮整段作废（不显示、不执行黑板指令、不进对话历史，工具里记的观察也不留）。
-// 数据都在这个 artifact 的数据库里：黑板段落 steps、作答 answers / events、课堂记录 class_turns、课后小结 class_notes、资料包 pack。
+// 数据都在这个 artifact 的数据库里：黑板段落 steps（带 page / place）、每块板 class_pages（标题、板顶的话）、
+// 作答 answers / events、课堂记录 class_turns、课后小结 class_notes、资料包 pack。
 import { renderLesson, mdToHtml, escapeHtml } from '../render.js';
 import { session } from '../session.js';
 import { compile } from '../expr.js';
@@ -13,11 +16,14 @@ import { copyRecord, toast } from '../record.js';
 import { parseOutput } from './protocol.js';
 import {
   buildSystem, actionText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
-  reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, bytes, PACK_BUDGET, compactionSlice, worthCompacting,
+  reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, nextPinId, bytes, PACK_BUDGET, compactionSlice, worthCompacting, draftLine,
 } from './prompt.js';
+import { draftsIn } from '../drafts.js';
 import { COMPONENT_DOCS } from './docs.js';
 import { createDevTeacher } from './devteacher.js';
-import { createClassBar } from './bar.js';
+import { createClassBar, MODEL_TAG } from './bar.js';
+import { createBoardView } from './boardview.js';
+import { extraProblems } from './selfcheck.js';
 import { initClassDevPanel } from './devpanel.js';
 
 export const MODEL = 'claude-opus-5-5';
@@ -28,6 +34,9 @@ const MAX_REWRITES = 2;
 const MAX_ROUNDS = 6; // 一次学生发言最多连着几轮（重写、看手写原图）；防止意外的死循环
 const TURN_TEXT_MAX = 200 * 1024; // 数据库一个文档最多 256 KiB
 const pad6 = (n) => String(n).padStart(6, '0');
+const pad3 = (n) => String(n).padStart(3, '0');
+const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+const QUICK_SAY = { 没懂: '没懂。', 想不出来: '想不出来。', 换个说法: '换个说法讲讲？', 继续: '继续。' };
 
 export async function renderClass(root, meta) {
   session.mode = 'class';
@@ -35,32 +44,28 @@ export async function renderClass(root, meta) {
   session.stages = [];
   const unitName = meta.unit || session.title;
   root.classList.add('is-live', 'is-class');
-  root.innerHTML = `
-    <div class="g-bar">
-      <div class="g-name">${mdToHtml(unitName, { inline: true })}</div>
-      <div class="g-dots" role="list"></div>
-      <div class="g-tools">
-        <span class="live-chip" data-state="wait"><i></i><span>连接中</span></span>
-        <button type="button" class="btn btn-sm g-copy">复制学习记录</button>
-      </div>
-    </div>
-    <div class="g-stages class-board"></div>
-    <div class="class-welcome">
-      <div class="live-empty-art" aria-hidden="true"><i></i><i></i><i></i></div>
-      <p class="class-welcome-text">正在准备课堂…</p>
-      <button type="button" class="btn btn-primary btn-lg class-start" hidden>开始上课</button>
-    </div>`;
-  const board = root.querySelector('.class-board');
-  const dots = root.querySelector('.g-dots');
+  // 一屏一块板（boardview.js，实时黑板也用）：常驻栏 + 黑板；黑板区里另有「Claude 在想」和开课前的欢迎牌
+  // segs、busy 在下面才有值：这两个回调要到用户操作或恢复时才会调到
+  const bv = createBoardView({
+    root,
+    unitHtml: mdToHtml(unitName, { inline: true }),
+    stageExtra: `
+        <div class="class-hero" hidden></div>
+        <div class="class-welcome">
+          <div class="live-empty-art" aria-hidden="true"><i></i><i></i><i></i></div>
+          <p class="class-welcome-text">正在准备课堂…</p>
+          <button type="button" class="btn btn-primary btn-lg class-start" hidden>开始上课</button>
+        </div>`,
+    isBusy: () => busy,
+    seqOf: (id) => segs.get(id)?.seq,
+  });
+  const { board, pages } = bv;
+  const hero = root.querySelector('.class-hero');
   const welcome = root.querySelector('.class-welcome');
   const welcomeText = root.querySelector('.class-welcome-text');
-  const chip = root.querySelector('.live-chip');
-  const setChip = (state, text) => { chip.dataset.state = state; chip.querySelector('span').textContent = text; };
-  root.querySelector('.g-copy').addEventListener('click', () => copyRecord(toast));
 
   const store = await getStore({ title: session.title });
   if (!store) {
-    setChip('off', '没连上');
     welcomeText.innerHTML = '这个页面没有拿到课堂的数据库权限。<br>发布时要声明 <code>capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}</code>；本地试用请在地址后面加 <code>?dev</code>。';
     return;
   }
@@ -86,8 +91,9 @@ export async function renderClass(root, meta) {
   const promptLimit = () => Math.max(64 * 1024, (Number(ai?.limits?.maxPromptBytes) || 262144) - 2048);
 
   // —— 状态 ——
-  const segs = new Map(); // id → { id, seq, title, md, hidden, failed, pending, sec, softNotes }
+  const segs = new Map(); // id → { id, seq, page, place: 'board' | 'pin', title, md, hidden, failed, pending, sec, softNotes }
   let segSeq = 0;
+  // 板（pages、当前板 bv.cur、正在看的板 bv.view、放不放得下 bv.fit）在 boardview.js；当前板是最新的那块，Claude 改的、说话写的都是它
   const rewrites = new Map(); // 段 id（或 dup:id）→ 已经要求重写了几次；画好了就清零
   const history = []; // { seq, role, text, kind, discarded, ... } 和数据库 class_turns 一一对应
   let turnSeq = 0;
@@ -100,30 +106,34 @@ export async function renderClass(root, meta) {
   let busy = false;
   let ctl = null;
   let timer = null;
-  let draftMsg = null;
-  let draftBox = null;
+  let draft = null; // 正在写的这一轮：{ box, host, talk, ops }
   let started = false;
   let compactNext = false;
   let compactRetryAt = 0; // 摘要失败后，等对话再长几轮才再试（不要每一轮都卡在失败的摘要上）
   let budgetLevel = 0; // prompt_too_large 之后逐级缩小这一轮的内容；成功一轮就复原
   let lastPrompt = null; // 开发面板看：上一轮发了多少字节
+  // 被函数声明用到、而 restore() 在函数定义之前就会调到那些函数：要在这里先有值（let / const 有暂时性死区）
+  let raf = 0, pendingText = ''; // 草稿：一帧最多画一次
 
   const bar = createClassBar({
     images: teacher.images,
-    onSend: ({ text, images }) => enqueueStudent(text, images, true),
-    onQuick: (label) => enqueueStudent(QUICK[label] || label, [], true),
+    tag: mock ? `${MODEL_TAG} · 模拟老师` : MODEL_TAG,
+    onSend: ({ text, images }) => { bv.go(bv.cur); enqueueStudent(text, images, true); },
+    onQuick: (label) => { if (busy) return; bv.go(bv.cur); enqueueStudent(QUICK_SAY[label] || label, [], true); },
+    onNav: (n) => bv.go(n),
     onStop: () => ctl?.abort(),
     onRetry: () => retryRun(),
     onEnd: () => endClass(),
+    onCopy: () => copyRecord(toast),
   });
-  const QUICK = { 没懂: '没懂。', 想不出来: '想不出来。', 换个说法: '换个说法讲讲？', 继续: '继续。' };
+  bv.attachBar(bar);
   if (!teacher.available) {
     bar.setEnabled(false);
     bar.setStatus('error', legacy ? '这个查看方式不能指定 Opus 5.5，课堂开不了。请在新版 claude.ai 里打开这个页面。'
       : ai === null ? '需要允许这个页面使用 Claude，课堂才能开始。' : '这个页面现在用不了 Claude。');
   }
 
-  // 草稿区「拿给 Claude 看」、手写附件：都进底部对话框
+  // 草稿区「拿给 Claude 看」、手写附件：都进底部输入框
   session.openTutor = (i, prefill, image) => {
     if (image && bar.attach(image) === false) toast(teacher.images ? '图已经附满了，先发出去再附' : '这个查看方式发不了图片，请用文字说');
     if (prefill) bar.prefill(prefill);
@@ -143,38 +153,58 @@ export async function renderClass(root, meta) {
     },
   };
 
-  if (teacher.available) setChip('on', mock ? '课堂 · 模拟老师' : '课堂');
-  else setChip('off', '课堂开不了');
   if (dev) initClassDevPanel({ db, root, setFallback: (on) => { if (mock) mock = createDevTeacher({ fallback: on }); }, history: () => history, stats: () => lastPrompt });
 
   // —— 资料包（课前由项目对话写入；课中改了，下一轮自动用新版）——
   const applyMain = (data) => {
     pack.main = data || null;
-    if (pack.main?.unit) root.querySelector('.g-name').innerHTML = mdToHtml(String(pack.main.unit), { inline: true });
+    if (pack.main?.unit) root.querySelector('.class-unit').innerHTML = mdToHtml(String(pack.main.unit), { inline: true });
     session.context = pack.main ? [pack.main.goal, pack.main.scope].filter(Boolean).join('\n') : '';
+    bv.syncNav();
   };
   db.doc('pack/main').onSnapshot((s) => applyMain(s.exists ? s.data() : null), () => {});
   db.doc('pack/problems').onSnapshot((s) => { pack.problems = s.exists ? s.data() : null; }, () => {});
 
-  // —— 恢复：资料包、黑板段落、课堂记录、作答 ——
+  // —— 恢复：资料包、黑板（板和段）、课堂记录、作答 ——
   await restore();
   session.event('open', null, { title: session.title, unit: unitName, mode: 'class' });
 
   async function restore() {
     try {
       // 资料包也在这里读一次：第一轮不能赶在资料包到之前发出去（那样课堂 Claude 会以为没有资料包）
-      const [st, tu, an, ev, pm, pp] = await Promise.all([
-        db.collection('steps').get(), db.collection('class_turns').get(), db.collection('answers').get(), db.collection('events').get(),
+      const [st, pg, tu, an, ev, pm, pp] = await Promise.all([
+        db.collection('steps').get(), db.collection('class_pages').get().catch(() => ({ docs: [] })),
+        db.collection('class_turns').get(), db.collection('answers').get(), db.collection('events').get(),
         db.doc('pack/main').get().catch(() => null), db.doc('pack/problems').get().catch(() => null),
       ]);
       if (pm?.exists && !pack.main) applyMain(pm.data());
       if (pp?.exists && !pack.problems) pack.problems = pp.data();
-      st.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.seq || 0) - (b.seq || 0)).forEach((d) => {
+      for (const d of pg.docs.map((x) => x.data()).filter((p) => Number.isFinite(p?.n) && p.n > 0).sort((a, b) => a.n - b.n)) {
+        const p = bv.ensurePage(d.n);
+        Object.assign(p, { title: String(d.title || ''), talk: String(d.talk || ''), lead: d.lead || '', kind: d.kind || '', body: String(d.body || '') });
+        bv.paint(p);
+      }
+      const docs = st.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.seq || 0) - (b.seq || 0));
+      const legacy = [];
+      for (const d of docs) {
         segSeq = Math.max(segSeq, d.seq || 0);
-        const seg = { id: d.id, seq: d.seq || 0, title: d.title || '', md: String(d.md || ''), hidden: !!d.hidden, failed: !!d.failed, pending: false, sec: null };
+        const place = d.place === 'pin' ? 'pin' : 'board';
+        // 旧版课堂（还没有分板）的段没有 page：一段算一块板，接在已有的板后面
+        let page = place === 'pin' ? 0 : Number(d.page) || 0;
+        const old = place === 'board' && !page;
+        if (old) {
+          page = bv.seq + 1;
+          Object.assign(bv.ensurePage(page), { lead: d.id, title: d.title || '' });
+        }
+        if (page) bv.ensurePage(page);
+        const seg = { id: d.id, seq: d.seq || 0, page, place, title: d.title || '', md: String(d.md || ''), hidden: !!d.hidden, failed: !!d.failed, pending: false, sec: null };
         segs.set(seg.id, seg);
+        if (old) legacy.push(seg);
         if (!seg.hidden) mountRestored(seg);
-      });
+      }
+      for (const p of pages.values()) bv.paint(p);
+      // 旧版的段分好板就存回去：以后新开的板接在它们后面，下次打开顺序也不变
+      for (const seg of legacy) { saveSeg(seg); savePage(pages.get(seg.page)); }
       tu.docs.map((d) => d.data()).filter((t) => Number.isFinite(t?.seq)).sort((a, b) => a.seq - b.seq).forEach((t) => { history.push(t); turnSeq = Math.max(turnSeq, t.seq); });
       // 黑板现状里的作答结果：作答记录 + 揭开 / 拖动（按时间重放，规则和上课时一样）
       const recs = [
@@ -187,8 +217,9 @@ export async function renderClass(root, meta) {
       console.error(e);
       toast('课堂记录没读出来，先从头开始');
     }
-    history.slice(-300).forEach(showTurn);
+    bv.cur = bv.seq;
     started = history.length > 0;
+    bv.show(bv.cur, { scroll: false });
     refresh();
     if (pendingTurn(history) && teacher.available) bar.setStatus('error', '上一轮 Claude 还没回完，点重试接着上。');
   }
@@ -227,7 +258,7 @@ export async function renderClass(root, meta) {
       t.boardOps.forEach((o, i) => {
         if (!o?.ok) return;
         const at = (t.at || 0) + i / 1000; // 同一轮里的先后
-        if (o.op === 'add' || o.op === 'replace') tl.push({ at, kind: 'render', seg: o.id });
+        if (['add', 'new', 'replace', 'pin'].includes(o.op)) tl.push({ at, kind: 'render', seg: o.id });
         else if (o.op === 'figure' && (o.action === 'set' || o.action === 'play')) tl.push({ at, kind: o.action, target: o.id, args: o.args });
       });
     }
@@ -250,35 +281,47 @@ export async function renderClass(root, meta) {
     }
   }
 
-  function showTurn(t) {
-    if (t.role === 'student') {
-      if (t.actions?.length) bar.addMessage({ role: 'action', html: escapeHtml(t.actions.join('\n')).replace(/\n/g, '<br>') });
-      if (t.say) bar.addMessage({ role: 'student', html: escapeHtml(t.say) + (t.images?.length ? ` <span class="muted">（附图 ${t.images.length} 张）</span>` : '') });
-      else if (!t.actions?.length && t.images?.length) bar.addMessage({ role: 'student', html: `<span class="muted">（附图 ${t.images.length} 张）</span>` });
-    } else if (t.role === 'claude' && !t.discarded) {
-      const speech = parseOutput(t.text, { final: true }).segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n');
-      if (speech.trim()) bar.addMessage({ role: 'claude', html: mdToHtml(speech) });
-    } else if (t.role === 'system' && t.kind === 'closing') {
-      bar.addMessage({ role: 'system', html: '下课了，小结已经存好。' });
-    }
+  // —— 板（摆放、翻板、测量在 boardview.js）。都写成函数声明：刷新后恢复（restore）在这些定义之前就会用到 ——
+
+  // 擦掉黑板，开一块新板（成为当前板），存进 class_pages
+  function newPage(fields = {}) {
+    const p = bv.addPage(fields);
+    savePage(p);
+    return p;
+  }
+
+  function savePage(p) {
+    sink.put('class_pages', { id: pad3(p.n), n: p.n, title: p.title || '', talk: p.talk || '', lead: p.lead || '', kind: p.kind || '', body: p.body || '', at: Date.now() });
+  }
+
+  function setTalk(p, md) {
+    const talk = String(md || '').trim();
+    if (p.talk === talk) return false;
+    p.talk = talk;
+    bv.paint(p);
+    savePage(p);
+    return true;
   }
 
   // —— 黑板段落 ——
+  // 一块板的第一段（board new 写的那段）的标题就是板的标题，写在板头上；同一块板上后加的段照常有自己的小标题
   function segSource(seg) {
-    return !/^##\s+/m.test(seg.md) && seg.title ? `## ${seg.title}\n\n${seg.md}` : seg.md;
+    const lead = seg.place !== 'pin' && pages.get(seg.page)?.lead === seg.id;
+    if (lead || /^##\s+/m.test(seg.md) || !seg.title) return seg.md;
+    return `## ${seg.title}\n\n${seg.md}`;
   }
 
   // 渲染一段：先隐藏着画，自检通过才显示。返回 { sec, errors, soft }
   function renderSeg(seg) {
     const idx = session.stages.length;
     const sec = document.createElement('section');
-    sec.className = 'stage live-step class-seg class-pending';
+    sec.className = `stage live-step class-seg class-pending${seg.place === 'pin' ? ' class-pin' : ''}`;
     sec.dataset.step = seg.id;
     sec.dataset.stage = idx;
     sec.innerHTML = '<div class="stage-body"></div>';
     const src = segSource(seg);
     session.stages.push({ id: seg.id, title: seg.title || (seg.md.match(/^##\s+(.+)$/m)?.[1] || '').trim(), src, el: sec });
-    place(seg, sec);
+    bv.place(seg, sec);
     const before = session.problems.length;
     const errors = [];
     try {
@@ -289,29 +332,10 @@ export async function renderClass(root, meta) {
     }
     const probs = session.problems.slice(before).filter((p) => p.stage === idx);
     errors.push(...probs.filter((p) => !p.soft));
-    // 图的 id: / title: / link: 只有一行。多出来的行是写错的命令被当成了续行（比如 title 下面一行写成 vectr …），
-    // 组件自检不报，但那条命令就这样悄悄没了：当写法错误处理
-    for (const el of sec.querySelectorAll('[data-scene]')) {
-      const fields = session.scenes.get(el.dataset.scene)?.api?.fields || {};
-      for (const k of ['id', 'title', 'link']) {
-        const extra = String(fields[k] ?? '').split('\n').slice(1).map((l) => l.trim()).filter(Boolean);
-        if (extra.length) errors.push({ kind: [...el.classList].find((c) => c.startsWith('block-'))?.slice(6) || '图', msg: `看不懂这一行：${extra[0].slice(0, 80)}（不是认得的命令，被当成了 ${k}: 的续行）` });
-      }
-    }
-    // 公式写错了（KaTeX 画成红字）：组件自检不管这个，但学生会看到一串红色的源码，也要重写
-    const bad = [...sec.querySelectorAll('.katex-error, .tex-error')].slice(0, 3);
-    for (const el of bad) {
-      const why = String(el.getAttribute('title') || '').replace(/^ParseError:\s*/, '').slice(0, 160);
-      errors.push({ kind: '公式', msg: `$${el.textContent.trim().slice(0, 80)}$ 写不出来${why ? `（${why}）` : ''}` });
-    }
+    // 组件自检管不到的：图里写错的命令被当成续行、公式写不出来（selfcheck.js）
+    errors.push(...extraProblems(sec));
+    if (seg.place !== 'pin') bv.splitFigure(sec.querySelector('.stage-body'));
     return { sec, errors, soft: probs.filter((p) => p.soft) };
-  }
-
-  // 按 seq 放进黑板（替换时放在原位置）
-  function place(seg, sec) {
-    if (seg.sec?.isConnected) { seg.sec.after(sec); return; }
-    const after = [...segs.values()].filter((o) => o.id !== seg.id && o.sec?.isConnected && o.seq > seg.seq).sort((a, b) => a.seq - b.seq)[0];
-    if (after) board.insertBefore(sec, after.sec); else board.appendChild(sec);
   }
 
   function dropScenesOf(sec) {
@@ -327,10 +351,10 @@ export async function renderClass(root, meta) {
 
   function failedSec(seg) {
     const sec = document.createElement('section');
-    sec.className = 'stage live-step class-seg class-failed';
+    sec.className = `stage live-step class-seg class-failed${seg.place === 'pin' ? ' class-pin' : ''}`;
     sec.dataset.step = seg.id;
     sec.innerHTML = `<div class="class-failed-box">这段没画出来${seg.title ? `（${escapeHtml(seg.title)}）` : ''}。课堂接着往下。</div>`;
-    place(seg, sec);
+    bv.place(seg, sec);
     return sec;
   }
 
@@ -348,7 +372,7 @@ export async function renderClass(root, meta) {
     return ids;
   }
 
-  // 黑板上（看得到的段里）已经有的组件 id → 所在段
+  // 黑板上（看得到的段里，所有板和常驻栏）已经有的组件 id → 所在段
   function liveBlockIds(exceptSeg) {
     const out = new Map();
     for (const s of segs.values()) {
@@ -358,19 +382,42 @@ export async function renderClass(root, meta) {
     return out;
   }
 
-  // 执行一条黑板指令。返回 { op, id, ok, error?, ... }；画不出来的 add/replace 记进 failures 等着重写
+  // 执行一条黑板指令。返回 { op, id, ok, error?, ... }；画不出来的 new/add/replace/pin 记进 failures 等着重写
   function execOp(op, failures, notes) {
-    if (op.op === 'add' || op.op === 'replace') {
+    if (op.op === 'unpin') {
+      const seg = segs.get(op.id);
+      if (!seg || seg.place !== 'pin') return { op: 'unpin', id: op.id, ok: false, error: seg ? `${op.id} 不在常驻栏里，是黑板上的段：要撤回用 board hide id=${op.id}` : `常驻栏里没有 ${op.id}` };
+      const r = execOp({ op: 'hide', id: op.id }, failures, notes);
+      return { ...r, op: 'unpin' };
+    }
+    if (['add', 'new', 'replace', 'pin'].includes(op.op)) {
       let seg = segs.get(op.id);
-      // add 用了黑板上已经有的 id：多半是忘了用过。不覆盖学生正在做的那段，请它换个新 id
-      if (op.op === 'add' && seg && !seg.pending && !seg.failed) {
-        const where = seg.hidden ? '（已撤回）' : '';
-        const msg = `${op.id} 已经用过了${seg.title ? `（「${seg.title}」${where}）` : where}，这次的 add 没有执行。新的一段换一个没用过的 id（下一个可用的是 ${nextSegmentId([...segs.values()])}）重新 add；要改 ${op.id} 就用 board replace id=${op.id}。`;
+      const toPin = op.op === 'pin';
+      const nextId = toPin ? nextPinId([...segs.values()]) : nextSegmentId([...segs.values()]);
+      // 用了已经有的 id：多半是忘了用过。不覆盖学生正在做的那段，请它换个新 id
+      if ((op.op === 'add' || op.op === 'new') && seg && !seg.pending && !seg.failed) {
+        const where = seg.hidden ? '（已撤回）' : seg.place === 'pin' ? '（在常驻栏）' : '';
+        const msg = `${op.id} 已经用过了${seg.title ? `（「${seg.title}」${where}）` : where}，这次的 ${op.op} 没有执行。新的一段换一个没用过的 id（下一个可用的是 ${nextId}）重新 ${op.op}；要改 ${op.id} 就用 board replace id=${op.id}。`;
         failures.push({ key: `dup:${op.id}`, id: op.id, title: op.title || '', errors: [{ kind: 'id', msg }], dup: true });
         return { op: op.op, id: op.id, ok: false, error: msg };
       }
+      // pin 用了黑板上的段 id、或者 new / add 撞上常驻栏的 id：两边的 id 分开用
+      if (toPin && seg && seg.place !== 'pin') {
+        const msg = `${op.id} 是黑板上的段，不能放进常驻栏。常驻栏用另一个 id（下一个可用的是 ${nextId}）。`;
+        failures.push({ key: `dup:${op.id}`, id: op.id, title: op.title || '', errors: [{ kind: 'id', msg }], dup: true });
+        return { op: 'pin', id: op.id, ok: false, error: msg };
+      }
       const isNew = !seg;
-      if (!seg) seg = { id: op.id, seq: ++segSeq, title: '', md: '', hidden: false, failed: false, pending: false, sec: null };
+      if (!seg) {
+        let page = 0;
+        if (!toPin) {
+          // new：擦掉黑板换一块新板，这一段是新板的第一段（标题就是板的标题）。
+          // add / replace 一个没见过的 id：加在当前板上；还没有板、或者当前板是下课小结，就开一块新的
+          const cur = pages.get(bv.cur);
+          page = op.op === 'new' || !cur || cur.kind === 'closing' ? newPage({ lead: op.id, title: op.title || '' }).n : bv.cur;
+        }
+        seg = { id: op.id, seq: ++segSeq, page, place: toPin ? 'pin' : 'board', title: '', md: '', hidden: false, failed: false, pending: false, sec: null };
+      }
       const next = { ...seg, title: op.title ?? seg.title, md: op.body || '' };
       const errors = [];
       // 组件 id 撞号：同一段里重复，或者和黑板上别的段重复（figure、作答记录、link: 都靠 id 找组件）
@@ -393,9 +440,10 @@ export async function renderClass(root, meta) {
       if (errors.length) {
         if (sec) { dropScenesOf(sec); sec.remove(); }
         for (const [id, step] of links) if (link(id).step !== step) link(id).set(step);
-        if (isNew || seg.pending) { seg.pending = true; segs.set(seg.id, seg); } // 记住 id 和顺序，重写时放回原位
+        // 记住 id、板、顺序和标题，重写时放回原位（重写多半不再写 title=）
+        if (isNew || seg.pending) { seg.pending = true; seg.title = next.title; segs.set(seg.id, seg); }
         failures.push({ key: op.id, id: op.id, title: next.title, errors, isNew: !seg.sec });
-        return { op: op.op, id: op.id, ok: false, error: errors.map((p) => `${p.kind}：${p.msg}`).join('；') };
+        return { op: op.op, id: op.id, ok: false, page: seg.page || undefined, error: errors.map((p) => `${p.kind}：${p.msg}`).join('；') };
       }
       if (seg.sec) { dropScenesOf(seg.sec); seg.sec.remove(); }
       sec.classList.remove('class-pending');
@@ -403,7 +451,10 @@ export async function renderClass(root, meta) {
       segs.set(seg.id, seg);
       rewrites.delete(seg.id);
       saveSeg(seg);
-      return { op: op.op, id: op.id, ok: true, title: seg.title, isNew };
+      // 板的第一段改了标题：板头跟着改
+      const pg = pages.get(seg.page);
+      if (pg && pg.lead === seg.id && op.title !== undefined && pg.title !== seg.title) { pg.title = seg.title; bv.paint(pg); savePage(pg); }
+      return { op: op.op, id: op.id, ok: true, title: seg.title, isNew, page: seg.page || undefined };
     }
     if (op.op === 'hide') {
       const seg = segs.get(op.id);
@@ -422,16 +473,22 @@ export async function renderClass(root, meta) {
     const args = op.action === 'set' ? { assigns: op.assigns } : op.action === 'play' ? { name: op.name, from: op.from, to: op.to, ms: op.ms } : { index: op.index };
     const base = { op: 'figure', id: op.target, action: op.action, args };
     const all = [...board.querySelectorAll(`.class-seg [data-bid="${CSS.escape(op.target)}"]`)];
-    const el = all.find((e) => e.dataset.scene && !e.closest('[hidden]'));
+    // 撤回的段不算；翻板只是藏起来，不算撤回（下面再看在不在当前板上）
+    const el = all.find((e) => e.dataset.scene && !e.closest('.class-seg[hidden]'));
     const sc = el && session.scenes.get(el.dataset.scene);
     if (!sc) {
-      const figs = [...board.querySelectorAll('.class-seg:not([hidden]) [data-scene][data-bid]')].map((e) => e.dataset.bid);
-      const other = all.find((e) => !e.closest('[hidden]'));
+      const figs = [...board.querySelectorAll('.class-seg:not([hidden]) [data-scene][data-bid]')].filter((e) => onCurrent(e)).map((e) => e.dataset.bid);
+      const other = all.find((e) => !e.closest('.class-seg[hidden]'));
       const kind = other && [...other.classList].find((c) => c.startsWith('block-'))?.slice(6);
       const error = other ? `${op.target} 是 ${kind || '组件'}，不是图`
         : all.length ? `${op.target} 所在的段已经撤回了`
-          : `黑板上没有 id 为 ${op.target} 的图${figs.length ? `（现在的图：${figs.join('、')}）` : ''}`;
+          : `黑板上没有 id 为 ${op.target} 的图${figs.length ? `（当前板上的图：${figs.join('、')}）` : ''}`;
       return { ...base, ok: false, error };
+    }
+    // 在以前的板上：学生现在看不到，动了也白动
+    if (!onCurrent(el)) {
+      const n = Number(el.closest('.class-page')?.dataset.page);
+      return { ...base, ok: false, error: `${op.target} 在第 ${n} 块板上，不在当前板上，学生现在看不到它。要用这张图，就在当前板上重新画一张（换个新 id）` };
     }
     const api = sc.api;
     try {
@@ -445,39 +502,38 @@ export async function renderClass(root, meta) {
         const hit = api.highlight?.(op.index);
         if (hit === false) notes.push(`figure ${op.target} highlight ${op.index}：第 ${op.index} 条命令不画东西（比如 let），没有闪`);
       }
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      // 板超出一屏、图不在视野里时滚过去（学生正看着当前板时才动页面）
+      if (bv.view === bv.cur) el.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'nearest' });
       return { ...base, ok: true };
     } catch (e) {
       return { ...base, ok: false, error: e?.message || String(e) };
     }
   }
 
+  // 元素在当前板上，或者在常驻栏里（常驻栏一直看得到）
+  function onCurrent(el) {
+    if (el.closest('.class-pins')) return true;
+    return Number(el.closest('.class-page')?.dataset.page) === bv.cur;
+  }
+
   function saveSeg(seg) {
-    sink.put('steps', { id: seg.id, seq: seg.seq, md: seg.md, title: seg.title || '', hidden: !!seg.hidden, failed: !!seg.failed, by: 'class', at: Date.now() });
+    sink.put('steps', { id: seg.id, seq: seg.seq, page: seg.page || 0, place: seg.place || 'board', md: seg.md, title: seg.title || '', hidden: !!seg.hidden, failed: !!seg.failed, by: 'class', at: Date.now() });
   }
 
   function refresh() {
-    const vis = [...board.querySelectorAll('.class-seg')].filter((s) => !s.hidden);
-    welcome.hidden = vis.length > 0 || busy;
-    if (!vis.length && !busy) {
+    const any = pages.size > 0;
+    welcome.hidden = any || busy;
+    hero.hidden = any || !busy;
+    if (!any && !busy) {
       welcomeText.innerHTML = !teacher.available ? '课堂现在开不了：这个页面用不了 Claude。<br>看看底部的提示。'
-        : started ? '黑板现在是空的。在下面说一句话，Claude 会接着讲。' : '准备好了就点「开始上课」。<br>Claude 会一边讲，一边在黑板上出题、画图；你在黑板上作答，它马上接着教。';
+        : started ? '黑板现在是空的。在下面说一句话，Claude 会接着讲。' : '准备好了就点「开始上课」。<br>Claude 会在黑板上一块一块地讲、出题、画图；你在黑板上作答，它马上接着教。';
       root.querySelector('.class-start').hidden = started || !teacher.available;
     }
-    vis.forEach((sec, k) => {
-      const h = sec.querySelector('.stage-body > h2');
-      if (!h) return;
-      const num = h.querySelector('.h-num');
-      // 撤回了前面的段：编号跟着重排
-      if (num) num.textContent = String(k + 1);
-      else h.innerHTML = `<span class="h-num">${k + 1}</span><span>${h.innerHTML}</span>`;
-    });
-    dots.innerHTML = vis.map((sec, k) => `<button type="button" role="listitem" class="g-dot ${k === vis.length - 1 ? 'current' : 'seen'}" data-step="${escapeHtml(sec.dataset.step)}" title="${escapeHtml(segs.get(sec.dataset.step)?.title || '')}"><span>${k + 1}</span></button>`).join('');
+    bv.syncPins();
+    bar.setQuick({ show: started && any && teacher.available, enabled: !busy });
+    bv.syncNav();
+    bv.scheduleFit();
   }
-  dots.addEventListener('click', (e) => {
-    const d = e.target.closest('.g-dot');
-    if (d) segs.get(d.dataset.step)?.sec?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
   root.querySelector('.class-start').addEventListener('click', () => enqueueStudent('开始上课。', [], true));
 
   // —— 黑板现状（每轮都告诉课堂 Claude）——
@@ -510,17 +566,44 @@ export async function renderClass(root, meta) {
   }
 
   function boardState() {
-    return [...segs.values()].sort((a, b) => a.seq - b.seq).map((seg) => {
+    const list = [...segs.values()].sort((a, b) => a.seq - b.seq).map((seg) => {
       const blocks = seg.sec && !seg.failed ? [...seg.sec.querySelectorAll('.block[data-bid]')].map((b) => ({
         id: b.dataset.bid,
         kind: [...b.classList].find((c) => c.startsWith('block-'))?.slice(6) || '',
         vars: figureVars(b),
         results: (results.get(b.dataset.bid) || []).slice(-6).map((r) => r.line),
+        draft: draftsIn(b).map((d) => (d.label ? `${d.label}：${d.text}` : d.text)).join('；'),
       })) : [];
       const text = texText(seg.sec?.querySelector('.stage-body > p'));
       const summary = [clipTex(text, 140), seg.softNotes?.length ? `（${seg.softNotes.join('；')}）` : ''].filter(Boolean).join(' ');
-      return { id: seg.id, title: seg.title || seg.sec?.querySelector('h2')?.textContent?.replace(/^\d+/, '').trim() || '', summary, hidden: seg.hidden, pending: !!seg.pending, failed: !!seg.failed, blocks };
+      return { id: seg.id, page: seg.page || 0, place: seg.place || 'board', title: seg.title || seg.sec?.querySelector('h2')?.textContent?.trim() || '', summary, hidden: seg.hidden, pending: !!seg.pending, failed: !!seg.failed, blocks };
     });
+    const vw = window.innerWidth, vh = window.innerHeight;
+    return {
+      segs: list,
+      pages: [...pages.values()].sort((a, b) => a.n - b.n).map((p) => ({ n: p.n, title: p.title, talk: p.talk, kind: p.kind })),
+      cur: bv.cur,
+      view: bv.view,
+      screen: { w: vw, h: vh, landscape: vw > vh, board: bv.fit ? { w: bv.fit.w, h: bv.fit.avail } : null },
+      fit: bv.fit && pages.has(bv.cur) ? { fits: bv.fit.fits, need: bv.fit.need, avail: bv.fit.avail } : null,
+    };
+  }
+
+  // —— 草稿：学生写了、还没点「检查」「提交」的东西。不单独发，跟着下一轮一起告诉 Claude（每份只在变了的时候说一次）——
+  const toldDrafts = new WeakMap(); // 放草稿的元素 → 上次告诉 Claude 的文字
+  function freshDrafts() {
+    const out = [];
+    for (const seg of [...segs.values()].sort((a, b) => a.seq - b.seq)) {
+      if (!seg.sec || seg.hidden || seg.failed || seg.pending) continue;
+      for (const b of seg.sec.querySelectorAll('.block[data-bid]')) {
+        for (const d of draftsIn(b)) {
+          if (toldDrafts.get(d.el) === d.text) continue;
+          toldDrafts.set(d.el, d.text);
+          out.push({ step: seg.id, block: b.dataset.bid, kind: [...b.classList].find((c) => c.startsWith('block-'))?.slice(6) || '', title: texText(b.querySelector('.w-title')), label: d.label, text: d.text });
+        }
+      }
+    }
+    return out;
   }
 
   function addResult(a) {
@@ -553,7 +636,7 @@ export async function renderClass(root, meta) {
       }
       queue.actions.push(a);
     }
-    if (trig === 'later') return; // 只是往下翻：跟着下一条一起说
+    if (trig === 'later') return; // 只是往下翻、拖一拖：跟着下一条一起说
     queue.triggered = true;
     schedule(trig === 'now');
   }
@@ -594,9 +677,10 @@ export async function renderClass(root, meta) {
     } finally {
       busy = false;
       ctl = null;
+      clearDraft();
       bar.setBusy(false);
       refresh();
-      if (ok) schedule(false);
+      if (ok) { schedule(false); compactLater(); }
     }
   }
 
@@ -612,11 +696,20 @@ export async function renderClass(root, meta) {
       if (!actions.length && !texts.length && !imgs.length) return true;
       started = true;
       const say = texts.join('\n');
-      const ids = (await Promise.all(imgs.map((x) => x.id))).filter(Boolean);
-      let text = [actions.length ? actionsMessage(actions) : '', say].filter(Boolean).join('\n\n');
+      const drafts = freshDrafts().map(draftLine).filter(Boolean);
+      let text = [actions.length ? actionsMessage(actions) : '', drafts.join('\n'), say].filter(Boolean).join('\n\n');
       if (imgs.length) text += teacher.images ? `\n（附了 ${imgs.length} 张图：学生的手写或截图，白底黑字。）` : `\n（学生附了 ${imgs.length} 张图，但这个查看方式发不了图，你看不到；需要的话请学生用文字说。）`;
-      const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), images: ids });
-      showTurn(turn);
+      // 学生说的话不上黑板，只进课堂记录
+      const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), drafts: drafts.length ? drafts : undefined, images: [], page: bv.cur || undefined });
+      // 图直接交给 Claude，不用等它传进 assets 再开讲（截图传得慢时能省几秒）；传完再把原图的 id 补进这一轮的记录
+      if (imgs.length) {
+        Promise.all(imgs.map((x) => x.id)).then((all) => {
+          const ids = all.filter(Boolean);
+          if (!ids.length) return;
+          turn.images = ids;
+          sink.put('class_turns', { id: pad6(turn.seq), ...turn });
+        });
+      }
       const blobs = imgs.map((x) => x.blob);
       lastImages = { seq: turn.seq, blobs };
       return converse(blobs);
@@ -624,24 +717,36 @@ export async function renderClass(root, meta) {
   }
 
   function addTurn(t) {
-    const turn = { seq: ++turnSeq, at: Date.now(), ...t };
+    const turn = { at: Date.now(), ...t, seq: t.seq ?? turnSeq + 1 };
+    turnSeq = Math.max(turnSeq, turn.seq);
     if (typeof turn.text === 'string' && bytes(turn.text) > TURN_TEXT_MAX) turn.text = turn.text.slice(0, 60000) + '\n（太长，后面省略）';
     history.push(turn);
     sink.put('class_turns', { id: pad6(turn.seq), ...turn });
     return turn;
   }
 
-  async function compact() {
+  // —— 对话太长时的摘要（摘要就是它对前半节课的记忆，所以和讲课一样只用 Opus 5.5 high）——
+  // 平时在一轮讲完、学生在想的时候后台写，不让学生等；只有平台说「太长发不了」时才先写完再讲
+  let compacting = null;
+  function compactLater() {
+    if (compacting || !teacher.available) return;
+    const ph = promptHistory(history);
+    if (!(needsCompaction(ph) && worthCompacting(ph) && history.length >= compactRetryAt)) return;
+    compacting = compact({ background: true }).finally(() => { compacting = null; });
+  }
+
+  async function compact({ background = false } = {}) {
     const { prev, old } = compactionSlice(promptHistory(history));
     if (!old.length) return;
-    bar.setStatus('thinking', '对话有点长了，先整理一下前面的内容…');
+    if (!background) bar.setStatus('thinking', '对话有点长了，先整理一下前面的内容…');
     try {
-      // 摘要不是讲课，按需求用 default 档
-      const r = await teacher.call(compactionPrompt({ summary: prev?.text || '', turns: old }), { modelTier: 'default', cache: false, signal: ctl?.signal });
-      addTurn({ ...summaryTurn(r.text), upTo: old.at(-1).seq, modelTierApplied: r.modelTierApplied || null });
+      const r = await teacher.call(compactionPrompt({ summary: prev?.text || '', turns: old }), { ...TEACH, cache: false, signal: background ? undefined : ctl?.signal });
+      // 平台换了别的模型写的摘要不用：照旧发原文（太长时最早的几轮会被省略），过几轮再试
+      if (r?.modelApplied !== MODEL) throw Object.assign(new Error('摘要不是 Opus 5.5 写的，没用'), { code: 'fallback' });
+      addTurn({ ...summaryTurn(r.text), upTo: old.at(-1).seq, modelApplied: r.modelApplied });
       compactRetryAt = 0;
     } catch (e) {
-      if (e?.code === 'cancelled') throw e;
+      if (e?.code === 'cancelled' && !background) throw e;
       console.warn('摘要失败', e);
       compactRetryAt = history.length + 6;
     }
@@ -652,18 +757,20 @@ export async function renderClass(root, meta) {
     if (!teacher.available) return false;
     let imgs = images;
     let followed = false; // 这次已经补发过 view_handwriting 要的图了
+    let rewriting = false; // 这一轮是在重写写错的段：它说的话不换掉板顶的话（学生没见过写错的那段）
     for (let round = 0; round < MAX_ROUNDS; round++) {
       bar.setStatus('thinking', round ? 'Claude 在接着写…' : 'Claude 在想…');
+      ensureDraft({ keepTalk: rewriting });
       ctl = new AbortController();
       const signal = ctl.signal;
       try {
-        const ph = promptHistory(history);
-        const due = compactNext || (needsCompaction(ph) && worthCompacting(ph) && history.length >= compactRetryAt);
-        if (due) { compactNext = false; await compact(); bar.setStatus('thinking', 'Claude 在想…'); }
+        // 平台说上一轮太长发不了：这次先把摘要写完再讲（后台正在写的话就等它）
+        if (compactNext) { compactNext = false; await (compacting || compact()); bar.setStatus('thinking', 'Claude 在想…'); }
       } catch (e) {
         failTurn(e);
         return false;
       }
+      bv.measureFit();
       const level = Math.min(budgetLevel, 3);
       const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), packBudget: PACK_BUDGET >> level });
       const maxBytes = Math.round(promptLimit() * [1, 0.85, 0.7, 0.55][level]);
@@ -691,7 +798,7 @@ export async function renderClass(root, meta) {
       }
       budgetLevel = 0;
       for (const text of staged.notes) sink.put('class_notes', { kind: 'note', text, at: Date.now(), turn: turnSeq + 1 });
-      const out = finishTurn(res, staged.calls);
+      const out = finishTurn(res, staged.calls, { keepTalk: rewriting });
       // 要它重写的段、它用 view_handwriting 要看的原图：再要一轮
       const wantImages = staged.images.length > 0 && !followed;
       if (round === MAX_ROUNDS - 1 && (out.retry.length || wantImages)) {
@@ -708,6 +815,7 @@ export async function renderClass(root, meta) {
         followed = true;
         lines.push(`附上你用 view_handwriting 要看的手写原图（${staged.images.length} 张）。看完接着上课，话要短。`);
       }
+      rewriting = out.retry.length > 0 && !wantImages;
       const ask = out.retry.length ? `\n请把上面没显示的段重新写对：${out.asks.join('；')}。只写这几段，不用再对学生说别的。` : '';
       const turn = addTurn({ role: 'system', kind: out.retry.length ? 'lint' : 'images', text: `[系统] ${lines.join('\n')}${ask}`, images: wantImages ? staged.ids : undefined });
       imgs = wantImages ? staged.images : [];
@@ -751,25 +859,49 @@ export async function renderClass(root, meta) {
     } catch { return null; }
   }
 
-  // 执行一轮的输出。返回 { retry: [要它重写的说明], asks, notes: [提醒] }
-  function finishTurn(res, toolCalls = []) {
-    const { segments, ops, rejected, unclosed } = parseOutput(res.text, { final: true });
-    const speech = segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n');
-    if (speech.trim()) bar.addMessage({ role: 'claude', html: mdToHtml(speech) });
+  // 执行一轮的输出：指令按顺序执行，说的话写在（执行完之后的）当前板最上面。返回 { retry: [要它重写的说明], asks, notes: [提醒] }
+  function finishTurn(res, toolCalls = [], { keepTalk = false } = {}) {
+    const { segments, rejected, unclosed } = parseOutput(res.text, { final: true });
     let failures = [];
     const notes = [];
-    const boardOps = ops.map((op, i) => {
+    const pageBefore = bv.cur;
+    const boardOps = [];
+    for (const s of segments) {
+      if (!isOp(s)) continue;
       const n = failures.length;
-      const r = execOp(op, failures, notes);
-      failures.slice(n).forEach((f) => { f.at = i; });
-      return r;
-    });
+      const r = execOp({ ...s.op, body: s.body }, failures, notes);
+      failures.slice(n).forEach((f) => { f.at = boardOps.length; });
+      boardOps.push(r);
+    }
     // 同一轮里先写错、后面又写对了同一段（add 错了紧跟一个 replace）：不用再要求重写
-    failures = failures.filter((f) => !boardOps.some((o, i) => i > f.at && o.ok && o.id === f.id && (o.op === 'add' || o.op === 'replace')));
+    failures = failures.filter((f) => !boardOps.some((o, i) => i > f.at && o.ok && o.id === f.id && ['add', 'new', 'replace', 'pin'].includes(o.op)));
+    // 说的话：写在当前板的最上面（换了新板就写在新板上），把上一句换掉。还没有板就开一块只有话的板
+    const talk = segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n').trim();
+    let talkPage;
+    if (talk && !keepTalk) {
+      const cur = pages.get(bv.cur);
+      const p = cur && cur.kind !== 'closing' ? cur : newPage();
+      setTalk(p, talk);
+      talkPage = p.n;
+    }
+    const turnedPage = bv.cur !== pageBefore;
     refresh();
-    const firstNew = boardOps.find((o) => o.ok && (o.op === 'add' || o.op === 'replace'));
-    if (firstNew) setTimeout(() => segs.get(firstNew.id)?.sec?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
-    addTurn({ role: 'claude', text: res.text, boardOps, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined });
+    // 换了新板：翻过去、从头看。只改了当前板：回到当前板（学生翻到以前的板去作答时也拉回来）；
+    // 这一轮在当前板上新写、改写的段露不全，就滚到刚好露出来（滚得最少，板顶尽量留着）；没写段时，板顶的话不在视野里就滚上去
+    const smooth = reduceMotion() ? 'auto' : 'smooth';
+    if (turnedPage) bv.show(bv.cur, { animate: true });
+    else if (pages.has(bv.cur)) {
+      if (bv.view !== bv.cur) bv.show(bv.cur, { animate: true });
+      const fresh = boardOps.filter((o) => o.ok && (o.op === 'add' || o.op === 'replace') && o.page === bv.cur).map((o) => segs.get(o.id)?.sec).filter((sec) => sec && !sec.hidden).at(-1);
+      if (fresh) {
+        const r = fresh.getBoundingClientRect();
+        if (r.bottom > window.innerHeight - bar.height || r.top < 0) fresh.scrollIntoView({ behavior: smooth, block: 'nearest' });
+      } else if (talkPage) {
+        const t = pages.get(bv.cur).talkEl;
+        if (t.getBoundingClientRect().top < 0) t.scrollIntoView({ behavior: smooth, block: 'start' });
+      }
+    }
+    addTurn({ role: 'claude', text: res.text, boardOps, page: bv.cur || undefined, talkPage, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined });
     bar.setStatus(res.truncated ? 'notice' : 'idle', res.truncated ? '这一轮太长，被截断了。' : '');
 
     const retry = [];
@@ -780,7 +912,7 @@ export async function renderClass(root, meta) {
       const head = `${f.id}${f.title ? `「${f.title}」` : ''}`;
       if (n <= MAX_REWRITES) {
         retry.push(f.dup ? `${head}：${f.errors[0].msg}` : `${head}有写法错误，没有显示：\n${f.errors.map((p, i) => `  ${i + 1}. ${p.kind}：${p.msg}`).join('\n')}`);
-        asks.push(f.dup ? `用一个没用过的新 id 重新 add 这一段（黑板上的 ${f.id} 不动）` : `board replace id=${f.id}`);
+        asks.push(f.dup ? `用一个没用过的新 id 重新写这一段（黑板上的 ${f.id} 不动）` : `board replace id=${f.id}`);
         continue;
       }
       rewrites.delete(f.key);
@@ -799,11 +931,13 @@ export async function renderClass(root, meta) {
         notes.push(`${head} 的改写还是有写法错误，黑板上保留原来的内容。`);
       }
     }
-    for (const o of boardOps) if (!o.ok && o.op !== 'add' && o.op !== 'replace') notes.push(`指令 ${o.op}${o.action ? ' ' + o.action : ''} ${o.id || ''} 没执行：${o.error}`);
-    for (const r of rejected) notes.push(`有一个 board 块看不懂（${r.error}），已经当普通文字给学生看了：board ${r.header.slice(0, 60)}`);
-    for (const u of unclosed) notes.push(`有一个 board 块没有闭合，已经当普通文字给学生看了：board ${u.header.slice(0, 60)}${res.truncated ? '（这一轮太长被截断了，下次写短一点）' : ''}`);
+    for (const o of boardOps) if (!o.ok && !['add', 'new', 'replace', 'pin'].includes(o.op)) notes.push(`指令 ${o.op}${o.action ? ' ' + o.action : ''} ${o.id || ''} 没执行：${o.error}`);
+    for (const r of rejected) notes.push(`有一个 board 块看不懂（${r.error}），已经当普通文字写在板顶了：board ${r.header.slice(0, 60)}`);
+    for (const u of unclosed) notes.push(`有一个 board 块没有闭合，已经当普通文字写在板顶了：board ${u.header.slice(0, 60)}${res.truncated ? '（这一轮太长被截断了，下次写短一点）' : ''}`);
     return { retry, asks: [...new Set(asks)], notes };
   }
+  // 和 parseOutput 的 ops 同一个口径：闭合了、看得懂的 board 块
+  function isOp(s) { return s.type === 'board' && s.closed && s.op && !s.op.error; }
 
   // 这一轮没成功（停止、出错）：课后复原时要看得出这里断过，所以也记一条作废的记录；不进对话历史
   function failTurn(e, what = '这一轮') {
@@ -845,11 +979,24 @@ export async function renderClass(root, meta) {
     bar.setStatus('error', errorText(e));
   }
 
-  // —— 流式草稿：话和黑板内容边生成边出现（确认是 Opus 5.5 之前都是草稿，不执行指令）——
-  let raf = 0, pendingText = '';
-  // 生成过程中学生自己滚动了页面（往回看黑板）：草稿就不再自动滚过去
-  let userScrolled = false;
-  for (const ev of ['wheel', 'touchmove']) window.addEventListener(ev, () => { if (busy) userScrolled = true; }, { passive: true });
+  // —— 正在写的这一轮：写在当前板最上面（板顶原来的话先藏起来），还没有板时写在黑板中间。
+  // 确认是 Opus 5.5 之前都是草稿：话边生成边出现，要写的黑板内容只列出来（写什么、写在哪），不画 ——
+  // keepTalk：这一轮只是重写写错的段，说的话不会换到板顶上，原来那句话照常露着、也不预览这一轮的话
+  function ensureDraft({ keepTalk = false } = {}) {
+    const host = pages.get(bv.cur) || null;
+    if (draft && draft.host === (host?.n || 0)) return draft;
+    clearDraft();
+    const box = document.createElement('div');
+    box.className = 'class-draft';
+    box.innerHTML = '<div class="class-draft-talk" hidden></div><div class="class-draft-ops" hidden></div>';
+    box.prepend(bar.indicator);
+    if (host) { host.talkEl.before(box); if (!keepTalk) host.sec.classList.add('is-drafting'); }
+    else hero.appendChild(box);
+    draft = { box, host: host?.n || 0, keepTalk, talk: box.querySelector('.class-draft-talk'), ops: box.querySelector('.class-draft-ops') };
+    refresh();
+    return draft;
+  }
+
   function drawDraft(text) {
     pendingText = text;
     if (raf) return;
@@ -857,24 +1004,15 @@ export async function renderClass(root, meta) {
       raf = 0;
       try {
         const { segments } = parseOutput(pendingText);
-        const speech = segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n');
-        const boards = segments.filter((s) => s.type === 'board');
         bar.setStatus('writing', 'Claude 正在写黑板…');
-        if (speech.trim()) {
-          if (!draftMsg) draftMsg = bar.addMessage({ role: 'claude', html: '', draft: true });
-          draftMsg.setHtml(mdToHtml(speech));
-        }
-        if (boards.length) {
-          if (!draftBox) {
-            draftBox = document.createElement('div');
-            draftBox.className = 'class-draft';
-            board.appendChild(draftBox);
-            welcome.hidden = true;
-          }
-          draftBox.innerHTML = boards.map(draftCard).join('');
-          // 黑板上正在写的草稿要看得见：跟着往下滚（学生自己往上翻了就不打扰）
-          if (!userScrolled) draftBox.lastElementChild?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-        }
+        const d = ensureDraft();
+        const talk = d.keepTalk ? '' : segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n').trim();
+        d.talk.hidden = !talk;
+        if (talk) d.talk.innerHTML = mdToHtml(previewMd(talk));
+        const ops = segments.filter((s) => s.type === 'board');
+        d.ops.hidden = !ops.length;
+        if (ops.length) d.ops.innerHTML = ops.map(opChip).join('');
+        bv.scheduleFit();
       } catch (e) {
         // 草稿只是预览：画不出来就先不画，等这一轮结束
         console.warn('草稿没画出来', e);
@@ -882,33 +1020,29 @@ export async function renderClass(root, meta) {
     });
   }
 
-  function draftCard(b) {
+  function opChip(b) {
     const op = b.op || {};
-    const label = op.op === 'add' ? '新的一段' : op.op === 'replace' ? `改 ${escapeHtml(op.id || '')}` : op.op === 'hide' ? `撤回 ${escapeHtml(op.id || '')}` : op.op === 'figure' ? `动图 ${escapeHtml(op.target || '')}` : '黑板';
-    const body = op.op === 'add' || op.op === 'replace' ? mdToHtml(previewMd(b.body || '')) : '';
-    return `<section class="class-draft-card${b.closed ? '' : ' is-writing'}"><div class="class-draft-tag">草稿 · ${label}${op.title ? `「${escapeHtml(op.title)}」` : ''}</div>${body}</section>`;
+    const t = op.title ? `「${escapeHtml(op.title)}」` : '';
+    const label = op.op === 'new' ? `换一块新板${t}` : op.op === 'add' ? `在这块板上加一段${t}` : op.op === 'replace' ? `改写 ${escapeHtml(op.id || '')}${t}`
+      : op.op === 'hide' ? `擦掉 ${escapeHtml(op.id || '')}` : op.op === 'pin' ? `常驻栏${t || ` ${escapeHtml(op.id || '')}`}` : op.op === 'unpin' ? `从常驻栏撤下 ${escapeHtml(op.id || '')}`
+        : op.op === 'figure' ? `让图 ${escapeHtml(op.target || '')} 动一下` : '写黑板';
+    return `<span class="class-draft-op${b.closed ? '' : ' is-writing'}">${label}</span>`;
   }
 
-  const KIND_NAME = {
-    steps: '分步例题', scene: '图', graph: '函数图', space: '三维图', predict: '先猜一猜', answer: '算一算', practice: '练习',
-    quiz: '选择题', conjecture: '说说你的发现', recognize: '认方法', findbug: '找错', draft: '草稿区', key: '重点',
-    definition: '定义', theorem: '定理', warning: '易错', example: '例题', intuition: '直觉', hint: '提示', card: '记忆卡',
-  };
-  // 草稿里的组件先显示成占位（确认之后才真正画出来）
+  // 末尾还没写完的 $…（公式没闭合）先不显示，免得露出半截 TeX
   function previewMd(md) {
-    // 末尾还没写完的 $…（公式没闭合）先不显示，免得露出半截 TeX
     const dollars = (md.replace(/\\\$/g, '').match(/\$/g) || []).length;
-    if (dollars % 2) md = md.slice(0, md.lastIndexOf('$')) + ' …';
-    return md.replace(/^(\s{0,3})(`{3,}|~{3,})\s*([\w-]+)[^\n]*\n[\s\S]*?(?:^\s{0,3}\2\s*$|$(?![\s\S]))/gm, (m, sp, f, name) => `\n> ${KIND_NAME[name] || name} · 写完就出现\n`);
+    return dollars % 2 ? md.slice(0, md.lastIndexOf('$')) + ' …' : md;
   }
 
   function clearDraft() {
-    userScrolled = false;
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
-    draftMsg?.remove();
-    draftMsg = null;
-    draftBox?.remove();
-    draftBox = null;
+    if (!draft) return;
+    pages.get(draft.host)?.sec.classList.remove('is-drafting');
+    bar.indicator.remove();
+    draft.box.remove();
+    draft = null;
+    bv.scheduleFit();
   }
 
   // —— 可选工具（这个查看方式支持 tools 时才给）。有副作用的先记在 staged 里，确认是 Opus 5.5 才生效 ——
@@ -965,13 +1099,14 @@ export async function renderClass(root, meta) {
     return view && teacher.images ? tools : tools.filter((t) => t.name !== 'view_handwriting');
   }
 
-  // —— 下课：让课堂 Claude 写一份小结，存进 class_notes（同样只收 Opus 5.5 写的）——
+  // —— 下课：让课堂 Claude 写一份小结，存进 class_notes（同样只收 Opus 5.5 写的），写在最后一块板上 ——
   function endClass() {
     if (busy) { toast('等 Claude 说完这一轮再下课'); return; }
     if (!history.length) { toast('还没开始上课'); return; }
     if (!teacher.available) return;
     exclusive(async () => {
       bar.setStatus('thinking', 'Claude 在写这节课的小结…');
+      ensureDraft();
       ctl = new AbortController();
       const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState() });
       const { turns } = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt() }], maxBytes: promptLimit() });
@@ -987,9 +1122,11 @@ export async function renderClass(root, meta) {
         bar.setStatus('error', 'Opus 5.5 暂时用不了，小结没写成，稍后再点「下课」。');
         return false;
       }
+      clearDraft();
       await sink.put('class_notes', { kind: 'summary', text: res.text, at: Date.now(), turn: turnSeq + 1 });
-      addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied });
-      bar.addMessage({ role: 'claude', html: mdToHtml(res.text) });
+      const p = newPage({ title: '这节课的小结', kind: 'closing', body: res.text });
+      addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied, page: p.n });
+      bv.show(p.n, { animate: true });
       bar.setStatus('notice', '下课了。小结已经存好，回对话告诉 Claude「下课了」。');
       session.event('end', null, { turns: history.length });
       return true;
@@ -999,9 +1136,11 @@ export async function renderClass(root, meta) {
   window.LAKit = {
     ...(window.LAKit || {}),
     classroom: {
-      history, segs, queue, boardState, flush, retry: retryRun,
+      history, segs, pages, queue, boardState, flush, retry: retryRun, showPage: (n) => bv.go(n), measureFit: bv.measureFit,
       runClaude: () => exclusive(async () => converse()),
       get busy() { return busy; },
+      get curPage() { return bv.cur; },
+      get viewPage() { return bv.view; },
       get pending() { return pendingTurn(history); },
       get lastPrompt() { return lastPrompt; },
       get budgetLevel() { return budgetLevel; },

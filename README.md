@@ -6,13 +6,15 @@
 
 ## 外观
 
-黑板风格：墨绿黑板带粉笔灰质感，标题、标签、按钮和手写数字用粉笔手写体（数字和字母用 Caveat，中文用龙藏体，都来自 Google Fonts），正文用系统字体。讲解和图形直接写在黑板上，需要动手的地方用粉笔圈出来。图里的向量第一次出现时会一笔一笔画出来。粉笔颜色含义固定：蓝 = 第一列，粉 = 第二列，黄 = 结果和重点。
+风格：默认是「石墨」，中性深灰的底、线条干净，标题、标签、按钮和手写数字用手写体（数字和字母用 Caveat，中文用龙藏体，都来自 Google Fonts），正文用系统字体。讲解和图形直接写在板上，需要动手的地方圈出来。图里的向量第一次出现时会一笔一笔画出来。颜色含义固定：蓝 = 第一列，粉 = 第二列，黄（琥珀）= 结果和重点。还有四种风格可以换：课件开头的 front matter 写 `theme: chalk`（原来的墨绿黑板，带粉笔颗粒）、`paper`（纸本）、`midnight`（深蓝）、`white`（白板）。
 
 ## Apple Pencil
 
 - **板书**：左下角「板书」按钮。打开后用 Pencil 在整页课件上书写，压感控制粗细，笔身倾斜写出粉笔侧锋的宽笔画；手指照常滚动和点按（防误触）；笔尖悬停时显示落笔位置。两指轻点撤销、三指轻点重做，橡皮按整笔擦除。笔迹跟着所在小节走，保存在这台设备上。
-- **手写作答**：作答框旁「✎ 手写作答」，写完由页面里的 Claude 识别并填进格子，确认后再提交。也可以直接在作答框里用 iPadOS 的「随手写」（用笔点输入框时不弹数字键盘）。
-- **手写猜想 / 草稿 / 提问附图**：`conjecture` 可以手写后转文字；`draft` 草稿区可以演算并「拿给 Claude 看」；助教面板可以附手写内容。
+- **作答框里直接写**：用 iPadOS 的「随手写」（用笔点输入框时不弹数字键盘）。
+- **草稿区**：`draft` 可以用 Pencil 演算，内容保存在这台设备上。
+- **Notability 手写粘贴**：在 Notability 里圈选「拷贝」（或者系统截图「拷贝并删除」），回到作答框下面的粘贴框长按「粘贴」，Claude 转写后你核对再提交。课堂模式里点输入框左边的图片按钮，在弹出的小框里粘贴。
+- **暂时关掉的**：页面上的手写板（「✎ 手写作答」、手写猜想、草稿「拿给 Claude 看」、提问附手写）。在 `kit/src/features.js` 里打开。
 - 网页拿不到 Pencil Pro 的双击、捏压和触感反馈（Apple 只开放给原生 App），所以用两指 / 三指轻点代替最常用的撤销 / 重做。
 
 ## 一个单元是怎么学的
@@ -22,7 +24,6 @@
   课件里：动手算 → 拖动图形 → 说出猜想（Claude 批改、追问）→ 先猜再揭晓
          → 这时才给出定理 → 程序出题练习 → 单元检测
          → 哪里没懂，点「问 Claude」：它看得到当前小节和你的作答，还能直接改图演示
-         → 不想打字：在笔记软件里手写，截图上传，Claude 转写后你核对再提交
   学完：复制「学习记录」粘贴回对话 → Claude 根据错题和猜想追问、补讲
 ```
 
@@ -30,19 +31,25 @@
 
 ### 实时黑板（mode: live）
 
-另一种学法：课件页面只是一个壳，对话里的 Claude 一段一段往黑板上写（写进这个 artifact 的数据库）。你在黑板上作答，每次尝试、手写原图、揭开 / 放弃 / 做完都存进数据库；你回对话说「做完了」，Claude 读你的作答，再决定下一段写什么：补讲、换一道、追问，或者往下走。往下走的决定权在对话里。说明见 `CLAUDE-PROJECT.md` 第五节、需求原文见 [`docs/live-board-spec.md`](docs/live-board-spec.md)。
+另一种学法：课件页面只是一块黑板，对话里的 Claude（有你的记忆）一段一段往上写（写进这个 artifact 的数据库）。黑板和课堂模式一样一屏一块板：讲新的一件事就换一块新板，旧板在底部的翻板条上翻回去看；整个单元要用的记号和结论放在常驻栏里。说话都在对话框里，黑板上只有讲课内容。你在黑板上作答，每次尝试、揭开、放弃都存进数据库；你回对话说「好了」，Claude 读你的作答，再决定下一段写什么：补讲、换一道、追问，或者换一块新板往下走。往下走的决定权在对话里。Claude 看不到页面，所以页面把写法错误和「这块板一屏放不放得下」也写回数据库给它读。底部的「⋯」里是板书和复制学习记录。说明见 `CLAUDE-PROJECT.md` 第五节、需求原文见 [`docs/live-board-spec.md`](docs/live-board-spec.md)。
 
 ### 课堂模式（mode: class）
 
-页面底部是对话框，「课堂里的 Claude」（只用 Opus 5.5、effort high）一边说话，一边用组件库现场画黑板；你在黑板上作答，它马上接着教。项目对话里的 Claude 课前写资料包（`pack/main`、`pack/problems`），课后读课堂记录（`class_turns`、`class_notes`）。说明见 `CLAUDE-PROJECT.md` 第六节，需求原文见 [`docs/classroom-spec.md`](docs/classroom-spec.md)。本地试用：把 `kit/dist/la-kit.js` 放在同一个文件夹，打开 `kit/examples/class-demo.html?dev`（模拟老师按剧本回放，不花额度）。
+页面底部只有一个输入框，用来跟「课堂里的 Claude」（只用 Opus 5.5、effort high）说话。黑板一屏一块板：讲新的一件事它就换一块新板，旧板在底部的翻页条上翻回去看，不用上下滑；它说的话写在当前板最上面一行，你发的消息不显示；整节课要用的记号和结论放在常驻栏里（横屏在右边，竖屏在上方）。你在黑板上作答，它马上接着教。板书、复制学习记录、下课在输入框右边的「⋯」里。项目对话里的 Claude 课前写资料包（`pack/main`、`pack/problems`），课后读课堂记录（`class_turns`、`class_notes`）。说明见 `CLAUDE-PROJECT.md` 第六节，需求原文见 [`docs/classroom-spec.md`](docs/classroom-spec.md)。本地试用：把 `kit/dist/la-kit.js` 放在同一个文件夹，打开 `kit/examples/class-demo.html?dev`（模拟老师按剧本回放，不花额度）。
 
-本地试用实时黑板：打开 `kit/examples/live-demo.html?dev`（`la-kit.js` 放在同一目录），右上角的「开发面板」可以扮演对话里的 Claude 往黑板上写、查看作答。
+本地试用实时黑板：打开 `kit/examples/live-demo.html?dev`（`la-kit.js` 放在同一目录），右上角的「开发面板」可以扮演对话里的 Claude 往黑板上写（第几块板、放不放常驻栏）、查看作答和页面写回的信息。
 
 ## 设置
 
-1. 打开 Claude 里的线性代数项目，进入 **Project instructions（项目指令）**。
-2. 把 [`CLAUDE-PROJECT.md`](CLAUDE-PROJECT.md) 的全部内容粘贴进去，放在原有指令后面。
-3. 发资料给 Claude，或者说「按学习台格式做单元 2」。
+1. 打开 Claude 里的项目，进入 **Project instructions（项目指令）**。
+2. 以前贴进去的那一大段学习台说明删掉，换成下面这一段（你自己写的其他指令留着）：
+
+   ```
+   【线代学习台】做和学习台有关的任何事之前（做课件、写实时黑板、备课堂资料包、读课堂记录或学习记录），先用 Artifact 工具读最新说明：action: "read"，url: https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF ，path: "CLAUDE-PROJECT.md"。完全照它做；它和你记忆里的旧做法冲突时，以它为准。读不到就告诉我，不要凭记忆做。同一个对话里读一次就够，我说「说明更新了」再重读。
+   ```
+
+   说明的全文（[`CLAUDE-PROJECT.md`](CLAUDE-PROJECT.md)）跟着组件库一起发布，每次更新组件库它也一起更新，所以项目指令里只放这一段，以后不用再改。
+3. 发资料给 Claude，或者说「按学习台格式做单元 2」。问它「学习台说明是哪个版本」，答的版本号应该和组件库页面「⋯」里写的一样。
 
 ## 组件
 
@@ -61,7 +68,7 @@
 
 ## artifact 怎么加载组件库
 
-artifact 不能从 GitHub 加载脚本，也不能加载外部样式和字体。所以组件库打包成一个完全自包含的文件 `kit/dist/la-kit.js`（含 markdown-it、KaTeX 和内嵌字体），作为附带文件发布在上面那个示范 artifact 里。Claude 发布课件时，用 `files` 参数在服务器端把它复制过去，并声明 `capabilities: {"sample": {"images": true}}`，页面里的「问 Claude」、猜想批改、截图作答和 Apple Pencil 手写识别就能用了。实时黑板还要加上 `"db": {}, "assets": {}`。
+artifact 不能从 GitHub 加载脚本，也不能加载外部样式和字体。所以组件库打包成一个完全自包含的文件 `kit/dist/la-kit.js`（含 markdown-it、KaTeX 和内嵌字体），作为附带文件发布在上面那个示范 artifact 里。Claude 发布课件时，用 `files` 参数在服务器端把它复制过去，并声明 `capabilities: {"sample": {"images": true}}`，页面里的「问 Claude」、猜想批改和截图作答就能用了。实时黑板还要加上 `"db": {}, "assets": {}`。
 
 ## 仓库结构
 
@@ -70,8 +77,8 @@ CLAUDE-PROJECT.md        放进 Claude 项目指令的教学说明
 kit/src/
   main.js                入口：渲染 <script type="text/markdown"> 里的课件
   guided.js              分节解锁、进度条
-  live/                  实时黑板：数据库连接、本地替身（?dev）、开发面板、作答写回
-  class/                 课堂模式：输出解析（protocol）、提示词（prompt）、底部对话条（bar）、控制器（classroom）、模拟老师
+  live/                  实时黑板：分板（layout）、底部翻板条（livebar）、数据库连接、本地替身（?dev）、开发面板、作答和写法错误写回
+  class/                 课堂模式：输出解析（protocol）、提示词（prompt）、底部输入框（bar）、控制器（classroom，Claude 的话也由它写在黑板上）、模拟老师
   graph.js  space.js     函数图、三维图
   link.js                steps 和图的联动
   session.js             关卡、学习记录、图形注册
@@ -80,6 +87,8 @@ kit/src/
   generators.js          练习题生成器
   ai.js  tutor.js        页面里调用 Claude、助教面板
   photo.js               截图作答：上传/粘贴手写截图，Claude 转写、读出最终答案
+  flatten.js             截图转白底 PNG（透明底的浅色笔迹先压暗）
+  features.js            功能开关（页面手写板暂时关着）
   record.js              学习记录
   blocks/                各个组件
   linalg.js              精确分数、行化简

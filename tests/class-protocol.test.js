@@ -296,6 +296,21 @@ test('parseCommand：add / replace / hide', () => {
   assert.match(parseCommand('delete id=b1').error, /看不懂的指令「delete」/);
 });
 
+test('parseCommand：new（换一块新板）/ pin（常驻栏）/ unpin', () => {
+  assert.deepEqual(parseCommand('new id=b3 title="Ax 落在哪"'), { op: 'new', id: 'b3', title: 'Ax 落在哪' });
+  assert.deepEqual(parseCommand('NEW b4'), { op: 'new', id: 'b4' }, '大小写、省掉 id=');
+  assert.deepEqual(parseCommand('pin id=k1 title="这节课的记号"'), { op: 'pin', id: 'k1', title: '这节课的记号' });
+  assert.deepEqual(parseCommand('unpin id=k1'), { op: 'unpin', id: 'k1' });
+  assert.deepEqual(parseCommand('unpin id=k1 title="多余"'), { op: 'unpin', id: 'k1' }, 'unpin 不带标题');
+  assert.match(parseCommand('new').error, /new 缺少 id，比如 new id=b1/);
+  assert.match(parseCommand('pin title="x"').error, /pin 缺少 id，比如 pin id=k1/);
+  assert.match(parseCommand('page id=b1').error, /只认 new \/ add \/ replace \/ hide \/ pin \/ unpin \/ figure/);
+  // 一轮里换新板、改常驻栏、动图可以一起写，按顺序都是 op
+  const { ops } = parseOutput(['好，换一块板。', '````board new id=b2 title="新的一板"', '内容', '````', '````board pin id=k1', '$A=\\alpha\\beta^T$', '````', '````board unpin id=k0', '````', '放好了点确定。'].join('\n'), { final: true });
+  assert.deepEqual(ops.map((o) => [o.op, o.id]), [['new', 'b2'], ['pin', 'k1'], ['unpin', 'k0']]);
+  assert.equal(ops[0].body, '内容');
+});
+
 test('parseCommand：中文引号和各种标题写法', () => {
   assert.equal(parseCommand('add id=b7 title=“Ax 也是一个向量”').title, 'Ax 也是一个向量');
   assert.equal(parseCommand('add id=b7 title=「秩一方阵」').title, '秩一方阵');

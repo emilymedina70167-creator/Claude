@@ -59,6 +59,10 @@ export function mathInput(container, shape) {
         return f(v);
       } catch { return '（未填完）'; }
     },
+    // 填了一部分时的样子（草稿）：空格子写成 □；一个都没填返回 ''
+    partial() {
+      return partialText(shape, [...root.querySelectorAll('.mi-cell')].map((c) => ({ k: Number(c.dataset.k) || 0, v: c.value })));
+    },
     mark(wrong = []) {
       root.querySelectorAll('.mi-cell').forEach((c) => c.classList.remove('is-wrong', 'is-right'));
       for (const w of wrong) root.querySelector(`.mi-cell[data-k="${w.k || 0}"][data-i="${w.i}"][data-j="${w.j || 0}"]`)?.classList.add('is-wrong');
@@ -74,6 +78,25 @@ export function mathInput(container, shape) {
     root,
     onEnter(f) { root.addEventListener('mi-enter', f); },
   };
+}
+
+// 格子里的原样文字 → 草稿的写法（纯函数，有测试）。cells：按页面顺序 [{ k: 第几个向量, v: 格子里的字 }]
+export function partialText(shape, cells) {
+  const vals = (cells || []).map((c) => ({ k: c.k || 0, v: String(c.v ?? '').trim().replace(/−/g, '-') }));
+  if (!vals.some((c) => c.v)) return '';
+  const show = (c) => c.v || '□';
+  if (shape?.kind === 'number') return show(vals[0] || { v: '' });
+  if (shape?.kind === 'matrix') {
+    const rows = [];
+    for (let i = 0; i < shape.r; i++) rows.push(vals.slice(i * shape.c, (i + 1) * shape.c).map(show).join(' '));
+    return `[${rows.join('; ')}]`;
+  }
+  if (shape?.kind === 'vectors') {
+    const groups = new Map();
+    for (const c of vals) { if (!groups.has(c.k)) groups.set(c.k, []); groups.get(c.k).push(show(c)); }
+    return `{${[...groups.values()].map((g) => `(${g.join(', ')})`).join(', ')}}`;
+  }
+  return `(${vals.map(show).join(', ')})`;
 }
 
 // —— 小键盘（全页共用一个）——

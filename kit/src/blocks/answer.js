@@ -8,6 +8,8 @@ import { widget, mdToHtml, tex2html } from './common.js';
 import { getAI } from '../ai.js';
 import { createPad } from '../ink/pad.js';
 import { photoPicker, readFinal, flatFinal, photoError, transcriptHtml } from '../photo.js';
+import { FEATURES } from '../features.js';
+import { markDraft } from '../drafts.js';
 
 // 通用作答组件：spec = {q, answer, type, before, hint, explain, solution}
 // onDone({ok, attempts, revealed, first})
@@ -80,6 +82,7 @@ export function answerWidget(body, spec, onDone) {
     let given;
     try { given = input.read(); } catch (e) { show('is-bad', e.message); return; }
     attempts++;
+    lastTried = input.partial();
     if (first === null) first = input.text();
     const r = check(given, spec.answer, spec.type);
     spec.onTry?.({ text: input.text(), ok: r.ok, attempts, work });
@@ -95,6 +98,13 @@ export function answerWidget(body, spec, onDone) {
     }
   }
 
+  // 草稿：格子填了还没点「检查」（或改了上次检查过的答案）。交过的那次由作答记录说，这里不重复
+  let lastTried = '';
+  markDraft(body, () => {
+    if (finished) return '';
+    const t = input.partial();
+    return t && t !== lastTried ? t : '';
+  });
   btnCheck.addEventListener('click', doCheck);
   input.onEnter(doCheck);
   addHandwriting(body, shape, input, plainQ, { isFinished: () => finished, onWork: (t) => (work = t) });
@@ -123,7 +133,7 @@ const SHAPE_HINT = {
 function addHandwriting(body, shape, input, question, { isFinished, onWork }) {
   if (!SHAPE_HINT[shape.kind]) return;
   getAI().then((ai) => {
-    if (!ai?.images || isFinished()) return;
+    if (!FEATURES.handwriting || !ai?.images || isFinished()) return;
     const actions = body.querySelector('.ans-actions');
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -189,7 +199,7 @@ export function answer(el, src) {
   const done = session.gate(el, title);
   const onTry = (t) => session.record({ type: 'answer', liveOnly: true, title, q: plain(fields.q), value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, el });
   answerWidget(body, { ...fields, answer: value, type: (fields.type || '').toLowerCase(), onTry }, (r) => {
-    session.record({ type: 'answer', final: true, title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, expected: plainValue(value), revealed: r.revealed, work: r.work || undefined, el });
+    session.record({ type: 'answer', final: true, title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, last: r.last, expected: plainValue(value), revealed: r.revealed, work: r.work || undefined, el });
     done();
   });
 }

@@ -13,6 +13,9 @@ import { renderLive } from './live/live.js';
 import { renderClass } from './class/classroom.js';
 import classCss from './class/class.css';
 import classBoardCss from './class/board.css';
+import themesCss from './themes.css';
+import { themeOf } from './theme.js';
+import { VERSION } from './version.js';
 
 // 粉笔手写体：数字和字母用 Caveat（1 和 7 容易分辨），中文用龙藏体。
 // Google Fonts 是 artifact 唯一允许的外部样式来源；加载不到时退回系统楷体
@@ -42,7 +45,7 @@ function injectStyles() {
   document.body.insertAdjacentHTML('afterbegin', CHALK_FILTER);
   const style = document.createElement('style');
   style.id = 'la-kit-style';
-  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss;
+  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + themesCss;
   document.head.appendChild(style);
   if (!document.querySelector('meta[name="viewport"]')) {
     const m = document.createElement('meta');
@@ -74,6 +77,12 @@ function renderAll() {
     if (s.closest('head')) document.body.appendChild(article);
     else s.after(article);
     const { meta, body } = frontMatter(dedent(s.textContent));
+    // 风格要在渲染之前定：图、板书的颜色都从 CSS 变量取
+    if (meta.theme !== undefined) {
+      const theme = themeOf(meta.theme);
+      if (theme === null) console.warn(`不认识的 theme「${meta.theme}」，用默认的石墨。可以写 chalk（墨绿黑板）、paper（纸本）、midnight（深蓝）、white（白板）`);
+      else if (theme) document.documentElement.dataset.theme = theme;
+    }
     session.reset(meta.unit || lessonTitle(body));
     session.subject = meta.subject || '线性代数';
     if (/^(class|课堂)$/i.test(meta.mode || '')) renderClass(article, meta);
@@ -87,8 +96,8 @@ function renderAll() {
     article.insertAdjacentHTML('beforeend', '<div class="la-tray" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i><i class="eraser"></i></div>');
     if (!window.LAKit?.ink) (window.LAKit ||= {}).ink = initBoardInk(article);
   });
-  // 课堂模式里「问 Claude」就是底部对话框，不再单独出现
-  if (session.mode !== 'class') initTutor();
+  // 课堂模式里「问 Claude」就是底部对话框；实时黑板里问问题在对话框里：都不再单独出现
+  if (session.mode !== 'class' && session.mode !== 'live') initTutor();
 }
 
 // 课件本身写错的地方集中列在顶部，方便复制给 Claude 修改
@@ -114,4 +123,4 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 else renderAll();
 
 // 留给高级用法：window.LAKit.render(markdown, element)
-window.LAKit = { ...(window.LAKit || {}), render: (md, el) => { injectStyles(); el.classList.add('la-lesson'); renderLesson(md, el); }, mdToHtml, blocks: Object.keys(blocks), session, recordText };
+window.LAKit = { ...(window.LAKit || {}), version: VERSION, render: (md, el) => { injectStyles(); el.classList.add('la-lesson'); renderLesson(md, el); }, mdToHtml, blocks: Object.keys(blocks), session, recordText };

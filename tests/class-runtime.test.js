@@ -9,6 +9,8 @@ import {
 } from '../kit/src/class/prompt.js';
 import { parseOutput, parseCommand } from '../kit/src/class/protocol.js';
 import { devReply } from '../kit/src/class/devteacher.js';
+import { readFileSync } from 'node:fs';
+import { componentDocs } from '../kit/build-docs.js';
 
 globalThis.localStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
 globalThis.window ??= { addEventListener() {} };
@@ -32,11 +34,11 @@ test('reportable：每次尝试报，最终结果只在看了答案 / 放弃时�
   assert.equal(reportable(null), false);
 });
 
-test('actionTrigger：想不出来马上发；作答、拖动等 1.5 秒；揭开中间一步跟着下一条；最后一步要发', () => {
+test('actionTrigger：想不出来马上发；作答等 1.5 秒；拖动、揭开中间一步跟着下一条；最后一步要发', () => {
   assert.equal(actionTrigger({ source: 'record', type: 'steps', giveup: true }), 'now');
   assert.equal(actionTrigger({ source: 'event', type: 'giveup' }), 'now', '不报告，但要马上发起');
   assert.equal(actionTrigger({ source: 'record', type: 'steps', value: '甲', ok: true }), 'soon');
-  assert.equal(actionTrigger({ source: 'event', type: 'drag', name: 'x', value: [1, 2] }), 'soon');
+  assert.equal(actionTrigger({ source: 'event', type: 'drag', name: 'x', value: [1, 2] }), 'later', '拖一拖不单独回一轮，跟着下一条作答或说的话一起发');
   assert.equal(actionTrigger({ source: 'event', type: 'reveal', detail: { step: 1 } }), 'later');
   assert.equal(actionTrigger({ source: 'event', type: 'reveal', detail: { step: 3 } }, { lastStep: true }), 'soon');
   assert.equal(actionTrigger({ source: 'record', type: 'answer', final: true, ok: true }), null);
@@ -197,6 +199,8 @@ test('发给课堂 Claude 的说明、小结要求、模拟老师的小结：提
     ['PROTOCOL_DOC', PROTOCOL_DOC],
     ['closingPrompt', closingPrompt()],
     ['compactionPrompt', compactionPrompt({ summary: '', turns: [T(1, 'student', '没懂')] })],
+    // 组件手册也在同一份课堂说明里（构建时从 CLAUDE-PROJECT.md 第三节截出来）
+    ['组件手册', componentDocs(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8'))],
   ]) {
     const bad = s.split('\n').filter((l) => he.test(l.replace(/不用「他」「她」/g, '')));
     assert.deepEqual(bad, [], `${name} 里有性别代词`);

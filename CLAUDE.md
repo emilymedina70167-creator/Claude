@@ -4,7 +4,7 @@
 
 - 面向我的说明：`README.md`
 - 放进 claude.ai 项目指令、教 Claude 写课件的说明：`CLAUDE-PROJECT.md`（第三节「组件参考」还会在构建时打包进 `la-kit.js`，给课堂里的 Claude 当组件手册，见下文）
-- 需求原文：`docs/live-board-spec.md`（实时黑板）、`docs/classroom-spec.md`（课堂模式）
+- 需求原文：`docs/live-board-spec.md`（实时黑板）、`docs/classroom-spec.md`（课堂模式）；数据结构组件的方案（待定）：`docs/ds-components-design.md`
 
 ## 分支
 
@@ -34,8 +34,8 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 | mode | 入口 | 说明 |
 |---|---|---|
 | `guided` | `guided.js` | 一整个单元，按 `##` 分节解锁；学习记录复制回对话 |
-| `live` | `live/` | 对话里的 Claude 一段一段写进 artifact 数据库，页面实时显示；作答写回数据库 |
-| `class` | `class/` | 页面底部对话条，课堂里的 Claude 边说边画；学生作答自动发给它 |
+| `live` | `live/` | 一屏一块板：对话里的 Claude 一段一段写进 artifact 数据库（带板号、常驻栏），页面实时显示；作答、写法错误、屏幕大小写回数据库；说话在对话框里 |
+| `class` | `class/` | 一屏一块板：课堂里的 Claude 换板、写板、说的话写在板顶；常驻栏；底部只有输入框和翻页条；学生作答自动发给它 |
 
 - `render.js`：Markdown（markdown-it + KaTeX）+ 围栏组件 → DOM。组件在 `blocks/`，注册在 `blocks/index.js`。
 - `session.js`：全局状态（关卡、作答记录、图形注册 `session.scenes`、写法错误 `session.problems`）。
@@ -43,17 +43,32 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - 判分：`check.js`、`mathinput.js`；精确分数和行化简：`linalg.js`。
 - 页面里调用 Claude：`ai.js`（`window.claude.use('sample')`，旧接口 `window.claude.complete`）。
 - 手写：`ink/`（整页板书 overlay、手写板 pad）；截图作答：`photo.js`。
-- 样式：`styles.css`（黑板主题，自动适配深色），课堂模式另有 `class/class.css`、`class/board.css`。
+- `drafts.js`：草稿。会让学生作答的组件用 `markDraft` 登记「现在写着什么、还没交」（`answer` 系列、理由框 `thinkbox`、`conjecture`、`quiz`、`findbug`、`predict`），课堂模式发下一轮时一起告诉课堂 Claude，学生不点检查它也看得到。新写会作答的组件也要登记。
+- `features.js`：功能开关。截图粘贴开着；页面上的手写板（手写识别）暂时关着，入口都不出现，代码保留。
+- `flatten.js`：截图 / 手写图转白底 PNG（透明底的浅色笔迹先压暗）。
+- iPad 粘贴的坑（实测）：Notability 圈选「拷贝」后粘贴，`paste` 事件里什么都没有，Safari 直接把 `<img src="blob:…">` 插进**可编辑框**（文本框不插）。所以粘贴框必须是 contenteditable，空的 paste 绝不能 `preventDefault`，图从插进来的 `<img>` 里取。系统截图则正常带 `image/png` 文件。
+- 样式：`styles.css`（默认石墨风格），课堂模式另有 `class/class.css`、`class/board.css`。别的风格在 `themes.css`（`chalk` 墨绿黑板、`paper` 纸本、`midnight` 深蓝、`white` 白板），front matter 写 `theme:` 选（`theme.js`）。
+  - 颜色都是变量：组件样式里写 `rgb(var(--chalk-rgb) / 0.4)`、`var(--yellow)` 这样，不要写死 `rgba(238, 240, 230, …)`（`tests/theme.test.js` 守着）。`--chalk-rgb` 是「写字的颜色」，浅色风格里是墨色。
+  - 字体：手写体 `var(--hand)` 只用在标题上（板的标题、组件标题、图上的标注）；按钮、输入框、对错提示、计数、底部那条都用正文字体 `var(--sans)`（小字号的手写体在 iPad 上不好认）。
+  - 加了新的颜色变量，`themes.css` 里每种风格都要写上。板书（Apple Pencil）的笔色也跟风格走（`--ink-white` 等）。
 
 ### 课堂模式（`kit/src/class/`）
 
-- `classroom.js`：控制器。黑板段落、学生作答排队（1.5 秒合并）、调用课堂 Claude、执行黑板指令、写法自检和自动重写、刷新后恢复。
-- `protocol.js`：解析课堂 Claude 的输出。普通文字是对学生说的话；```` ```board ```` 围栏块是黑板指令（add / replace / hide / figure）。纯函数，支持流式前缀。
+- `classroom.js`：控制器。一屏一块板（`board new` 换板，旧板翻页看）、板顶那句话、常驻栏、一屏放不放得下的测量（`--board-h`）、学生作答排队（1.5 秒合并，拖动跟着下一条一起发；没提交的草稿也跟着下一条发，见 `drafts.js`）、调用课堂 Claude、执行黑板指令、写法自检和自动重写、刷新后恢复。对话太长时的摘要也只用 Opus 5.5 high，在一轮讲完后后台写（不让学生等）；学生附的图直接交给 Claude，不等它传进 assets。学生发的消息不上黑板。
+- `protocol.js`：解析课堂 Claude 的输出。普通文字是对学生说的话（写在板顶）；```` ```board ```` 围栏块是黑板指令（new / add / replace / hide / pin / unpin / figure）。纯函数，支持流式前缀。
 - `prompt.js`：每一轮发给课堂 Claude 的内容（红线 `DEFAULT_RULES`、黑板指令说明 `PROTOCOL_DOC`、组件手册、资料包、黑板现状、对话历史和压缩）。纯函数。
 - `docs.js` + `kit/build-docs.js`：构建时从 `CLAUDE-PROJECT.md` 第三节截出组件手册打包进去。
-- `bar.js`：底部对话条（消息区、快捷按钮、附图、手写板、iPad 软键盘）。
+- `bar.js`：底部输入框（附图、手写板、「⋯」菜单、iPad 软键盘）和它上面的一条：翻页（上一块 / 下一块 / 板列表 / 回到当前板）、快捷回答。不显示消息。
 - `devteacher.js`：`?dev` 的模拟老师；`devpanel.js`：开发面板。
-- 数据（artifact 数据库）：`steps` 黑板段落，`class_turns` 每一轮，`class_notes` 观察和下课小结，`answers` / `events` 作答，`pack/main`、`pack/problems` 资料包。
+- 数据（artifact 数据库）：`steps` 黑板段落（`page` 在第几块板，`place: 'pin'` 是常驻栏），`class_pages` 每块板（标题、板顶的话、下课小结），`class_turns` 每一轮，`class_notes` 观察和下课小结，`answers` / `events` 作答，`pack/main`、`pack/problems` 资料包。
+
+### 实时黑板（`kit/src/live/`）
+
+- 和课堂模式共用一屏一块板：`class/boardview.js`（板、常驻栏、翻板、一屏放不放得下）、`class/pagenav.js`（翻板条）、`class/selfcheck.js`（额外的写法自检）。改这几个文件，两种模式都要看。
+- `live.js`：订阅 `steps`，按 `layout.js` 的 `planBoards` 分板（`page` 不写就接着前一段那块板，`pin: true` 进常驻栏，板号最大的是当前板）；新板翻过去，翻回去看旧板时当前板来了新内容让「回到当前板」闪。学生作答过的段被改了，先提示不替换。
+- 对话里的 Claude 看不到页面：写法错误写回 `lint/{段 id}`，屏幕和当前板放不放得下写回 `meta/screen`（`layout.js` 的 `lintRecord`、`screenRecord`，有变化才写）。
+- `livebar.js`：底部一条（翻板、连接状态、「⋯」里板书和复制学习记录）。没有输入框、没有「问 Claude」、没有「这段做完了」。
+- `store.js`：claude.ai 里用 artifact 的 db / assets，`?dev` 用 localStorage 替身；`sync.js`：作答、事件、原图写进数据库；`devpanel.js`：`?dev` 开发面板（写段、看作答、看写回）。
 
 ## 硬性规定（我明确要求过的，不要改）
 
@@ -70,4 +85,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ## 发布组件库
 
-改完并合进 `main` 后，要重新发布组件库 artifact（https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF）：页面是 `kit/examples/unit-matrix-vector.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}`。之后新发布的课件自动用新版，已经发布的保留当时复制的版本。发布前先问我。
+改完并合进 `main` 后，要重新发布组件库 artifact（https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF）：页面是 `kit/examples/unit-matrix-vector.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`、`CLAUDE-PROJECT.md` 来自仓库根目录的同名文件，`capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}`。之后新发布的课件自动用新版，已经发布的保留当时复制的版本。发布前先问我。
+
+- 我的 claude.ai 项目指令里只有一段话：让对话里的 Claude 每个新对话先读组件库里的 `CLAUDE-PROJECT.md`（见 README「设置」）。所以说明的全文要跟着组件库一起发布，不然各个对话里的 Claude 看到的还是旧版。
+- 版本号：`CLAUDE-PROJECT.md` 开头「版本：YYYY-MM-DD」（同一天再发布加 b、c）。每次重新发布组件库前都改成新的版本号；构建时打进 `la-kit.js`（`LAKit.version`，课堂和实时黑板的「⋯」菜单里显示），对得上就说明页面和说明是同一版。
