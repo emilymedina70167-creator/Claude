@@ -184,9 +184,10 @@ export function createBoardView({ root, unitHtml = '', stageExtra = '', isBusy =
   }
   function syncMoreHint() {
     const p = pages.get(viewPage);
-    if (!p || p.sec.hidden) { more.hidden = true; return; }
+    if (!p || p.sec.hidden) { if (!more.hidden) { more.hidden = true; bar?.syncCtrl?.(); } return; }
     const bottom = p.sec.getBoundingClientRect().bottom;
-    more.hidden = !(bottom > window.innerHeight - (bar?.height || 0) + 24);
+    const hide = !(bottom > window.innerHeight - (bar?.height || 0) + 24);
+    if (more.hidden !== hide) { more.hidden = hide; bar?.syncCtrl?.(); }
   }
   window.addEventListener('resize', scheduleFit, { passive: true });
   window.addEventListener('orientationchange', scheduleFit, { passive: true });
@@ -274,7 +275,14 @@ export function createBoardView({ root, unitHtml = '', stageExtra = '', isBusy =
     get view() { return viewPage; },
     get seq() { return pageSeq; },
     get fit() { return lastFit; },
-    attachBar(b) { bar = b; if (bar?.el) ro?.observe(bar.el); syncNav(); scheduleFit(); },
+    attachBar(b) {
+      bar = b;
+      if (bar?.el) ro?.observe(bar.el);
+      // 底部的条给了位置：「下面还有」挂进去，跟翻板条排在一起
+      if (bar?.moreSlot) { bar.moreSlot.appendChild(more); more.classList.add('in-bar'); }
+      syncNav();
+      scheduleFit();
+    },
     ensurePage, addPage, removePage, paint, show, go, step, syncNav, syncPins, scheduleFit, measureFit, splitFigure, place,
   };
 }

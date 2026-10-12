@@ -14,7 +14,7 @@
 
 /* —— 常驻栏 —— */
 .class-pins { min-width: 0; }
-.class-pins-head { margin: 4px 2px 8px; font: 19px/1.3 var(--hand); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.class-pins-head { margin: 4px 2px 8px; font: 13.5px/1.3 var(--sans); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .class-pins-head .katex { font-size: .8em; }
 .class-pins-body { display: flex; flex-direction: column; gap: 10px; }
 .class-pin {
@@ -38,7 +38,7 @@
 
 /* 横屏宽屏：常驻栏在右边一栏，跟着页面吸在上面 */
 @media (min-width: 1000px) and (orientation: landscape) {
-  .class-app.has-pins { grid-template-columns: minmax(0, 1fr) minmax(230px, 280px); column-gap: 26px; }
+  .class-app.has-pins { grid-template-columns: minmax(0, 1fr) minmax(210px, 250px); column-gap: 20px; }
   .class-app.has-pins .class-stage { grid-column: 1; grid-row: 1; }
   .class-app.has-pins .class-pins {
     grid-column: 2; grid-row: 1; align-self: start; position: sticky; top: max(12px, env(safe-area-inset-top, 0px));
@@ -60,7 +60,7 @@
   .class-pin.is-clipped { cursor: pointer; }
   .class-pin.is-clipped::after {
     content: "点开看全部"; position: absolute; left: 0; right: 0; bottom: 0; height: 34px; padding: 10px 14px 0; pointer-events: none; border-radius: 0 0 14px 14px;
-    text-align: right; font: 16px/1 var(--hand); color: var(--yellow);
+    text-align: right; font: 600 13px/1 var(--sans); color: var(--yellow);
     background: linear-gradient(to bottom, rgb(var(--bar-rgb) / 0), rgb(var(--bar-rgb) / 0.96) 55%);
   }
   .class-pin.is-open { max-height: none; cursor: pointer; }
@@ -145,7 +145,7 @@
 /* 重写两次还画不出来的段 */
 .class-failed-box {
   margin: 18px 0; padding: 12px 16px; border-radius: 14px; border: 1.5px dashed rgb(var(--coral-rgb) / 0.55);
-  color: var(--muted); font-family: var(--hand); font-size: 21px; background: rgb(var(--coral-rgb) / 0.05);
+  color: var(--muted); font: 15px/1.5 var(--sans); background: rgb(var(--coral-rgb) / 0.05);
 }
 
 /* —— 正在写这一轮：写在当前板的最上面（还没有板时写在黑板中间）——
@@ -158,7 +158,7 @@
 .class-draft-ops { display: flex; flex-wrap: wrap; gap: 6px 8px; padding-left: 18px; }
 .class-draft-op {
   display: inline-flex; align-items: center; gap: 7px; padding: 3px 12px 4px; border-radius: 999px;
-  font: 18px/1.3 var(--hand); color: var(--muted); border: 1.4px dashed rgb(var(--chalk-rgb) / 0.28);
+  font: 14px/1.3 var(--sans); color: var(--muted); border: 1.4px dashed rgb(var(--chalk-rgb) / 0.28);
 }
 .class-draft-op::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--chalk); opacity: .45; }
 .class-draft-op.is-writing { color: var(--yellow); border-color: rgb(var(--yellow-rgb) / 0.5); }
@@ -167,7 +167,7 @@
 /* 「Claude 在想 / 在写」 */
 .class-thinking {
   display: flex; align-items: center; gap: 12px; padding-left: 18px; min-height: 32px;
-  font: 23px/1.3 var(--hand); color: var(--chalk); opacity: .9;
+  font: 15.5px/1.3 var(--sans); color: var(--chalk); opacity: .85;
 }
 .ct-ind { flex: none; position: relative; display: inline-flex; align-items: center; gap: 5px; width: 34px; height: 14px; }
 .ct-ind i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); animation: ctBreathe 1.4s ease-in-out infinite; }
@@ -177,7 +177,7 @@
 .ct-scribble path { fill: none; stroke: var(--yellow); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 48; stroke-dashoffset: 48; filter: var(--rough-v); animation: ctScribble 1.5s ease-in-out infinite; }
 .class-thinking[data-state="writing"] .ct-ind i { display: none; }
 .class-thinking[data-state="writing"] .ct-scribble { display: block; }
-.ct-elapsed { font-size: 19px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ct-elapsed { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ct-elapsed:empty { display: none; }
 @keyframes ctBreathe { 0%, 100% { transform: scale(.7); opacity: .35; } 50% { transform: scale(1.1); opacity: 1; } }
 @keyframes ctScribble { 0% { stroke-dashoffset: 48; opacity: 1; } 65% { stroke-dashoffset: 0; opacity: 1; } 90%, 100% { stroke-dashoffset: 0; opacity: 0; } }
@@ -202,22 +202,53 @@
 .class-welcome-text code { font-size: 14px; font-family: var(--mono); }
 .class-start { min-width: 210px; }
 
-/* 当前板超出一屏时：输入框上方提示「下面还有」 */
+/* 当前板超出一屏时：提示「下面还有」。平时挂在底部翻板条里（.in-bar），没有底部的条时才浮在右下角 */
 .class-more {
   position: fixed; z-index: 33; right: max(20px, env(safe-area-inset-right, 0px)); bottom: calc(var(--class-bar-h, 120px) + 8px);
   min-height: 40px; padding: 0 16px 1px; border: 0; border-radius: 999px; cursor: pointer;
-  font: 20px/1 var(--hand); color: var(--yellow); background: rgb(var(--board-3-rgb) / 0.92);
+  font: 600 14.5px/1 var(--sans); color: var(--yellow); background: rgb(var(--board-3-rgb) / 0.92);
   box-shadow: inset 0 0 0 1.4px rgb(var(--yellow-rgb) / 0.55), 0 6px 16px rgb(var(--shade-rgb) / 0.3);
   -webkit-tap-highlight-color: transparent; touch-action: manipulation; animation: talkIn .25s ease both;
 }
 body.has-keypad .class-more { display: none; }
-body.class-docked .class-more { right: calc(var(--cb-r, 20px) + 8px); }
+body.class-docked .class-more:not(.in-bar) { right: calc(var(--cb-r, 20px) + 8px); }
+.class-more.in-bar { position: relative; right: auto; bottom: auto; z-index: auto; flex: none; min-height: 36px; padding: 0 13px 1px; margin-left: 6px; box-shadow: inset 0 0 0 1.4px rgb(var(--yellow-rgb) / 0.55); }
+.class-more.in-bar::after { content: ""; position: absolute; inset: -4px 0; }
+.cb-more-slot { display: contents; }
 
 /* 刷新后：组件下面注明刷新前学生已经怎么作答的（组件本身回到初始状态） */
 .class-prev { margin: 10px 0 0; padding: 8px 14px 8px 16px; border-left: 3px solid rgb(var(--blue-rgb) / 0.45); background: rgb(var(--blue-rgb) / 0.04); border-radius: 0 10px 10px 0; font-size: 15px; color: var(--body); }
-.class-prev-tag { font-family: var(--hand); font-size: 19px; color: var(--blue); margin-bottom: 2px; }
+.class-prev-tag { font: 600 13px/1.4 var(--sans); color: var(--blue); margin-bottom: 2px; }
 .class-prev ul { margin: 0; padding-left: 1.2em; }
 .class-prev li + li { margin-top: 2px; }
+
+/* 板上要动手的组件：框画淡一点（板上本来就有选项、按钮各自的框，外框太重就成了框套框） */
+.is-class .widget.act { --frame: rgb(var(--chalk-rgb) / calc(var(--card-frame-a, 0.45) * 0.62)); }
+
+/* 矮的窗口（横屏 iPad、在对话旁边开着）：板上的东西都收紧一点，一屏多放一些 */
+@media (max-height: 860px) {
+  .is-class .widget.act { padding: 14px 16px 16px; }
+  .is-class .w-title { font-size: 24px; margin-bottom: 6px; }
+  .is-class .st-list { margin-top: 8px; }
+  .is-class .st-item { padding: 8px 0 12px 42px; }
+  .is-class .st-n { top: 8px; }
+  .is-class .st-title { font-size: 22px; }
+  .is-class .st-actions { margin-top: 8px; }
+  .is-class .st-choices { gap: 8px; margin-top: 6px; }
+  .class-page-body .block { margin: 12px 0; }
+  .class-page-body .stage-body > p, .class-page-body .stage-body > ul > li, .class-page-body .stage-body > ol > li { margin-bottom: 8px; line-height: 1.75; }
+  .class-talk { margin: 6px 0 2px; }
+  .class-pin { padding: 8px 12px 10px; }
+}
+/* 矮的窗口里常驻栏是黑板上面那一条：卡片收得更矮（露出标题和一两行），点开看全部 */
+@media (max-height: 760px) and (orientation: portrait), (max-height: 760px) and (max-width: 999px) {
+  .class-pin { max-height: 96px; }
+}
+/* 又矮又窄（对话旁边那一栏）：板的标题再小一号 */
+@media (max-height: 760px) and (max-width: 900px) {
+  .la-lesson .class-page-title { font-size: 28px; }
+  .class-pin .stage-body > h2 { font-size: 18px; }
+}
 
 /* 课堂里不画课件末尾的粉笔槽 */
 .is-class .la-tray { display: none; }

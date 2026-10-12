@@ -49,6 +49,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - iPad 粘贴的坑（实测）：Notability 圈选「拷贝」后粘贴，`paste` 事件里什么都没有，Safari 直接把 `<img src="blob:…">` 插进**可编辑框**（文本框不插）。所以粘贴框必须是 contenteditable，空的 paste 绝不能 `preventDefault`，图从插进来的 `<img>` 里取。系统截图则正常带 `image/png` 文件。
 - 样式：`styles.css`（默认石墨风格），课堂模式另有 `class/class.css`、`class/board.css`。别的风格在 `themes.css`（`chalk` 墨绿黑板、`paper` 纸本、`midnight` 深蓝、`white` 白板），front matter 写 `theme:` 选（`theme.js`）。
   - 颜色都是变量：组件样式里写 `rgb(var(--chalk-rgb) / 0.4)`、`var(--yellow)` 这样，不要写死 `rgba(238, 240, 230, …)`（`tests/theme.test.js` 守着）。`--chalk-rgb` 是「写字的颜色」，浅色风格里是墨色。
+  - 字体：手写体 `var(--hand)` 只用在标题上（板的标题、组件标题、图上的标注）；按钮、输入框、对错提示、计数、底部那条都用正文字体 `var(--sans)`（小字号的手写体在 iPad 上不好认）。
   - 加了新的颜色变量，`themes.css` 里每种风格都要写上。板书（Apple Pencil）的笔色也跟风格走（`--ink-white` 等）。
 
 ### 课堂模式（`kit/src/class/`）

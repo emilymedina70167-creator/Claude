@@ -45,6 +45,10 @@ export function createLiveBar({ onNav, onCopy } = {}) {
   const pageNav = createPageNav({ onNav, onOpen: () => setMenu(false) });
   ctrl.prepend(pageNav.nav);
   ctrl.append(pageNav.menu);
+  // 「下面还有 ↓」放在翻板条右边（板 boardview.js 挂进来），不浮在黑板上挡住内容
+  const moreSlot = document.createElement('span');
+  moreSlot.className = 'cb-more-slot';
+  pageNav.nav.after(moreSlot);
   on(moreBtn, 'click', (e) => { e.stopPropagation(); if (!menuOpen) pageNav.close(); setMenu(!menuOpen); });
   // 挂在 window 的捕获阶段：板书开着时，笔的 pointerdown 在 document 上就被板书层拦下了
   on(window, 'pointerdown', (e) => { if (menuOpen && e.target instanceof Element && !menu.contains(e.target) && !moreBtn.contains(e.target)) setMenu(false); }, { capture: true, passive: true });
@@ -82,6 +86,7 @@ export function createLiveBar({ onNav, onCopy } = {}) {
     el,
     get height() { return el.offsetHeight; },
     setNav(state) { pageNav.setNav(state); },
+    moreSlot,
     // state：wait 连接中 / on 连上了 / off 断了
     setChip(state, text) { chip.dataset.state = state; chip.querySelector('span').textContent = text; },
     destroy() {

@@ -302,6 +302,11 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
   const pageNav = createPageNav({ onNav, onOpen: () => setMenu(false) });
   ctrl.prepend(pageNav.nav);
   ctrl.append(pageNav.menu);
+  // 「下面还有 ↓」放在翻板条右边（板 boardview.js 挂进来），不再浮在黑板上挡住内容
+  const moreSlot = document.createElement('span');
+  moreSlot.className = 'cb-more-slot';
+  pageNav.nav.after(moreSlot);
+  const syncCtrl = () => { ctrl.hidden = !pageNav.shown && quick.hidden && !moreSlot.querySelector('.class-more:not([hidden])'); };
 
   // —— 快捷回答：点了等于对 Claude 说这句话 ——
   const pills = [...quick.querySelectorAll('.cb-q')];
@@ -309,7 +314,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
   function syncQuick() {
     quick.hidden = !quickState.show;
     pills.forEach((b) => (b.disabled = !quickState.enabled || !enabled));
-    ctrl.hidden = !pageNav.shown && quick.hidden;
+    syncCtrl();
   }
   on(quick, 'click', (e) => {
     const b = e.target.closest('.cb-q');
@@ -675,8 +680,10 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
     // 翻板条：view 正在看的板号，cur 当前板（最新那块），items [{ n, title }]，busy Claude 正在写
     setNav(state) {
       pageNav.setNav(state);
-      ctrl.hidden = !pageNav.shown && quick.hidden;
+      syncCtrl();
     },
+    moreSlot,
+    syncCtrl,
     setQuick(state) {
       quickState = { show: !!state?.show, enabled: state?.enabled !== false };
       syncQuick();
