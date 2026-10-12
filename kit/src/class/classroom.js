@@ -680,7 +680,7 @@ export async function renderClass(root, meta) {
       clearDraft();
       bar.setBusy(false);
       refresh();
-      if (ok) schedule(false);
+      if (ok) { schedule(false); compactLater(); }
     }
   }
 
@@ -696,12 +696,20 @@ export async function renderClass(root, meta) {
       if (!actions.length && !texts.length && !imgs.length) return true;
       started = true;
       const say = texts.join('\n');
-      const ids = (await Promise.all(imgs.map((x) => x.id))).filter(Boolean);
       const drafts = freshDrafts().map(draftLine).filter(Boolean);
       let text = [actions.length ? actionsMessage(actions) : '', drafts.join('\n'), say].filter(Boolean).join('\n\n');
       if (imgs.length) text += teacher.images ? `\n（附了 ${imgs.length} 张图：学生的手写或截图，白底黑字。）` : `\n（学生附了 ${imgs.length} 张图，但这个查看方式发不了图，你看不到；需要的话请学生用文字说。）`;
       // 学生说的话不上黑板，只进课堂记录
-      const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), drafts: drafts.length ? drafts : undefined, images: ids, page: bv.cur || undefined });
+      const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), drafts: drafts.length ? drafts : undefined, images: [], page: bv.cur || undefined });
+      // 图直接交给 Claude，不用等它传进 assets 再开讲（截图传得慢时能省几秒）；传完再把原图的 id 补进这一轮的记录
+      if (imgs.length) {
+        Promise.all(imgs.map((x) => x.id)).then((all) => {
+          const ids = all.filter(Boolean);
+          if (!ids.length) return;
+          turn.images = ids;
+          sink.put('class_turns', { id: pad6(turn.seq), ...turn });
+        });
+      }
       const blobs = imgs.map((x) => x.blob);
       lastImages = { seq: turn.seq, blobs };
       return converse(blobs);
@@ -717,17 +725,28 @@ export async function renderClass(root, meta) {
     return turn;
   }
 
-  async function compact() {
+  // —— 对话太长时的摘要（摘要就是它对前半节课的记忆，所以和讲课一样只用 Opus 5.5 high）——
+  // 平时在一轮讲完、学生在想的时候后台写，不让学生等；只有平台说「太长发不了」时才先写完再讲
+  let compacting = null;
+  function compactLater() {
+    if (compacting || !teacher.available) return;
+    const ph = promptHistory(history);
+    if (!(needsCompaction(ph) && worthCompacting(ph) && history.length >= compactRetryAt)) return;
+    compacting = compact({ background: true }).finally(() => { compacting = null; });
+  }
+
+  async function compact({ background = false } = {}) {
     const { prev, old } = compactionSlice(promptHistory(history));
     if (!old.length) return;
-    bar.setStatus('thinking', '对话有点长了，先整理一下前面的内容…');
+    if (!background) bar.setStatus('thinking', '对话有点长了，先整理一下前面的内容…');
     try {
-      // 摘要不是讲课，按需求用 default 档
-      const r = await teacher.call(compactionPrompt({ summary: prev?.text || '', turns: old }), { modelTier: 'default', cache: false, signal: ctl?.signal });
-      addTurn({ ...summaryTurn(r.text), upTo: old.at(-1).seq, modelTierApplied: r.modelTierApplied || null });
+      const r = await teacher.call(compactionPrompt({ summary: prev?.text || '', turns: old }), { ...TEACH, cache: false, signal: background ? undefined : ctl?.signal });
+      // 平台换了别的模型写的摘要不用：照旧发原文（太长时最早的几轮会被省略），过几轮再试
+      if (r?.modelApplied !== MODEL) throw Object.assign(new Error('摘要不是 Opus 5.5 写的，没用'), { code: 'fallback' });
+      addTurn({ ...summaryTurn(r.text), upTo: old.at(-1).seq, modelApplied: r.modelApplied });
       compactRetryAt = 0;
     } catch (e) {
-      if (e?.code === 'cancelled') throw e;
+      if (e?.code === 'cancelled' && !background) throw e;
       console.warn('摘要失败', e);
       compactRetryAt = history.length + 6;
     }
@@ -745,9 +764,8 @@ export async function renderClass(root, meta) {
       ctl = new AbortController();
       const signal = ctl.signal;
       try {
-        const ph = promptHistory(history);
-        const due = compactNext || (needsCompaction(ph) && worthCompacting(ph) && history.length >= compactRetryAt);
-        if (due) { compactNext = false; await compact(); bar.setStatus('thinking', 'Claude 在想…'); }
+        // 平台说上一轮太长发不了：这次先把摘要写完再讲（后台正在写的话就等它）
+        if (compactNext) { compactNext = false; await (compacting || compact()); bar.setStatus('thinking', 'Claude 在想…'); }
       } catch (e) {
         failTurn(e);
         return false;
