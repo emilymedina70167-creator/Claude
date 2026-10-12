@@ -31,13 +31,13 @@
 
 ### 实时黑板（mode: live）
 
-另一种学法：课件页面只是一个壳，对话里的 Claude 一段一段往黑板上写（写进这个 artifact 的数据库）。你在黑板上作答，每次尝试、揭开 / 放弃 / 做完都存进数据库；你回对话说「做完了」，Claude 读你的作答，再决定下一段写什么：补讲、换一道、追问，或者往下走。往下走的决定权在对话里。说明见 `CLAUDE-PROJECT.md` 第五节、需求原文见 [`docs/live-board-spec.md`](docs/live-board-spec.md)。
+另一种学法：课件页面只是一块黑板，对话里的 Claude（有你的记忆）一段一段往上写（写进这个 artifact 的数据库）。黑板和课堂模式一样一屏一块板：讲新的一件事就换一块新板，旧板在底部的翻板条上翻回去看；整个单元要用的记号和结论放在常驻栏里。说话都在对话框里，黑板上只有讲课内容。你在黑板上作答，每次尝试、揭开、放弃都存进数据库；你回对话说「好了」，Claude 读你的作答，再决定下一段写什么：补讲、换一道、追问，或者换一块新板往下走。往下走的决定权在对话里。Claude 看不到页面，所以页面把写法错误和「这块板一屏放不放得下」也写回数据库给它读。底部的「⋯」里是板书和复制学习记录。说明见 `CLAUDE-PROJECT.md` 第五节、需求原文见 [`docs/live-board-spec.md`](docs/live-board-spec.md)。
 
 ### 课堂模式（mode: class）
 
 页面底部只有一个输入框，用来跟「课堂里的 Claude」（只用 Opus 5.5、effort high）说话。黑板一屏一块板：讲新的一件事它就换一块新板，旧板在底部的翻页条上翻回去看，不用上下滑；它说的话写在当前板最上面一行，你发的消息不显示；整节课要用的记号和结论放在常驻栏里（横屏在右边，竖屏在上方）。你在黑板上作答，它马上接着教。板书、复制学习记录、下课在输入框右边的「⋯」里。项目对话里的 Claude 课前写资料包（`pack/main`、`pack/problems`），课后读课堂记录（`class_turns`、`class_notes`）。说明见 `CLAUDE-PROJECT.md` 第六节，需求原文见 [`docs/classroom-spec.md`](docs/classroom-spec.md)。本地试用：把 `kit/dist/la-kit.js` 放在同一个文件夹，打开 `kit/examples/class-demo.html?dev`（模拟老师按剧本回放，不花额度）。
 
-本地试用实时黑板：打开 `kit/examples/live-demo.html?dev`（`la-kit.js` 放在同一目录），右上角的「开发面板」可以扮演对话里的 Claude 往黑板上写、查看作答。
+本地试用实时黑板：打开 `kit/examples/live-demo.html?dev`（`la-kit.js` 放在同一目录），右上角的「开发面板」可以扮演对话里的 Claude 往黑板上写（第几块板、放不放常驻栏）、查看作答和页面写回的信息。
 
 ## 设置
 
@@ -71,7 +71,7 @@ CLAUDE-PROJECT.md        放进 Claude 项目指令的教学说明
 kit/src/
   main.js                入口：渲染 <script type="text/markdown"> 里的课件
   guided.js              分节解锁、进度条
-  live/                  实时黑板：数据库连接、本地替身（?dev）、开发面板、作答写回
+  live/                  实时黑板：分板（layout）、底部翻板条（livebar）、数据库连接、本地替身（?dev）、开发面板、作答和写法错误写回
   class/                 课堂模式：输出解析（protocol）、提示词（prompt）、底部输入框（bar）、控制器（classroom，Claude 的话也由它写在黑板上）、模拟老师
   graph.js  space.js     函数图、三维图
   link.js                steps 和图的联动

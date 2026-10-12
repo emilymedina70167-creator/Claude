@@ -299,3 +299,9 @@ body.class-on .dev-body { max-height: calc(100svh - var(--class-bar-h, 96px) - 1
   /* 框上沿的黄光不走动，常亮一道淡的 */
   .class-bar.is-live .cb-pill::after { animation: none; background-size: 100% 100%; opacity: .5; }
 }
+
+/* —— 实时黑板（外部版）底部那条：只有翻板和右边的连接状态、「⋯」，说话在对话框里 —— */
+.class-bar.is-board-only > .cb-ctrl { min-height: 48px; }
+.lb-side { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.lb-side .live-chip { font-size: 18px; }
+.class-bar.is-board-only .cb-menu { min-width: 220px; }

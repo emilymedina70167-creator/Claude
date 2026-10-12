@@ -48,9 +48,10 @@ export function createPageNav({ onNav, onOpen } = {}) {
     menu.hidden = !open;
     labelBtn.setAttribute('aria-expanded', String(open));
     if (!open) return;
-    menu.innerHTML = state.items.slice().reverse().map((it) => {
+    // 显示的是第几块（按顺序数），不是板号：实时黑板里板号中间可以空着
+    menu.innerHTML = state.items.map((it, i) => ({ it, k: i + 1 })).reverse().map(({ it, k }) => {
       const tags = [it.n === state.cur ? '当前' : '', it.n === state.view && it.n !== state.cur ? '正在看' : ''].filter(Boolean);
-      return `<button type="button" class="cb-page-item${it.n === state.view ? ' is-view' : ''}" role="menuitem" data-n="${it.n}"><b>${it.n}</b><span>${escapeText(it.title || '（没有标题）')}</span>${tags.length ? `<i>${tags.join(' · ')}</i>` : ''}</button>`;
+      return `<button type="button" class="cb-page-item${it.n === state.view ? ' is-view' : ''}" role="menuitem" data-n="${it.n}"><b>${k}</b><span>${escapeText(it.title || '（没有标题）')}</span>${tags.length ? `<i>${tags.join(' · ')}</i>` : ''}</button>`;
     }).join('');
     menu.querySelector('.is-view')?.scrollIntoView({ block: 'nearest' });
   }
@@ -58,10 +59,10 @@ export function createPageNav({ onNav, onOpen } = {}) {
     const { view, cur, items, busy } = state;
     const total = items.length;
     nav.hidden = total < 2; // 只有一块板时没什么可翻
-    const lab = navLabel(view, total);
+    const idx = items.findIndex((it) => it.n === view);
+    const lab = navLabel(idx >= 0 ? idx + 1 : view, total);
     labelBtn.querySelector('.cb-nav-n').textContent = lab.n;
     labelBtn.querySelector('.cb-nav-of').textContent = lab.of;
-    const idx = items.findIndex((it) => it.n === view);
     prevBtn.disabled = idx <= 0;
     nextBtn.disabled = idx < 0 || idx >= total - 1;
     nowBtn.hidden = !total || view === cur;

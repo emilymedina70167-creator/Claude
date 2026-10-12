@@ -95,8 +95,8 @@ function renderAll() {
     article.insertAdjacentHTML('beforeend', '<div class="la-tray" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i><i class="eraser"></i></div>');
     if (!window.LAKit?.ink) (window.LAKit ||= {}).ink = initBoardInk(article);
   });
-  // 课堂模式里「问 Claude」就是底部对话框，不再单独出现
-  if (session.mode !== 'class') initTutor();
+  // 课堂模式里「问 Claude」就是底部对话框；实时黑板里问问题在对话框里：都不再单独出现
+  if (session.mode !== 'class' && session.mode !== 'live') initTutor();
 }
 
 // 课件本身写错的地方集中列在顶部，方便复制给 Claude 修改

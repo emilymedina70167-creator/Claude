@@ -990,3 +990,4 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 
 /* scene / space 的 line … dashed：画成一条细虚线（不写 dashed 时仍是半透明的宽带） */
 .plane .span-line.dashed { stroke-width: 2.6; stroke-opacity: .85; stroke-dasharray: 10 8; stroke-linecap: round; filter: var(--rough); }
+.lint-note { margin: 8px 0 0; font-size: 13.5px; color: var(--muted); }

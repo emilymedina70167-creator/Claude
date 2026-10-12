@@ -12,9 +12,9 @@ const NO_SWIPE = 'input, textarea, select, button, a, label, [contenteditable=""
 /**
  * root：课件的 <article>；unitHtml：常驻栏顶上的单元名；stageExtra：黑板区里板以外的东西（欢迎牌之类）。
  * isBusy()：Claude 正在写（翻回去看时「回到当前板」闪）；seqOf(id)：段的先后（同一块板上按它排）；
- * onShow(n)：换了正在看的板。底部的条（bar.setNav、bar.height、bar.el）建好后用 attachBar 接上。
+ * onShow(n)：换了正在看的板；onMeasure(fit)：量过一次一屏放不放得下。底部的条（bar.setNav、bar.height、bar.el）建好后用 attachBar 接上。
  */
-export function createBoardView({ root, unitHtml = '', stageExtra = '', isBusy = () => false, seqOf = () => Infinity, onShow } = {}) {
+export function createBoardView({ root, unitHtml = '', stageExtra = '', isBusy = () => false, seqOf = () => Infinity, onShow, onMeasure } = {}) {
   // 常驻栏（横屏在右边一栏，竖屏在顶上一条）+ 黑板。黑板里一块板一个 section，只显示正在看的那块
   root.innerHTML = `
     <div class="class-app">
@@ -66,6 +66,16 @@ export function createBoardView({ root, unitHtml = '', stageExtra = '', isBusy =
     pagesBox.insertBefore(sec, after || null);
     pageSeq = Math.max(pageSeq, n);
     return p;
+  }
+
+  // 拿掉一块板（实时黑板里一块板上的段都撤回了）。正在看它就回到当前板
+  function removePage(n) {
+    const p = pages.get(n);
+    if (!p) return;
+    p.sec.remove();
+    pages.delete(n);
+    if (viewPage === n) show(curPage, { scroll: false });
+    else syncNav();
   }
 
   // 擦掉黑板，开一块新板（成为当前板）。存不存由调用方管
@@ -169,6 +179,7 @@ export function createBoardView({ root, unitHtml = '', stageExtra = '', isBusy =
       p.sec.classList.toggle('is-overflow', !lastFit.fits);
     }
     syncMoreHint();
+    onMeasure?.(lastFit);
     return lastFit;
   }
   function syncMoreHint() {
@@ -264,6 +275,6 @@ export function createBoardView({ root, unitHtml = '', stageExtra = '', isBusy =
     get seq() { return pageSeq; },
     get fit() { return lastFit; },
     attachBar(b) { bar = b; if (bar?.el) ro?.observe(bar.el); syncNav(); scheduleFit(); },
-    ensurePage, addPage, paint, show, go, step, syncNav, syncPins, scheduleFit, measureFit, splitFigure, place,
+    ensurePage, addPage, removePage, paint, show, go, step, syncNav, syncPins, scheduleFit, measureFit, splitFigure, place,
   };
 }

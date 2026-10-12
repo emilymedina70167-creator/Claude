@@ -34,7 +34,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 | mode | 入口 | 说明 |
 |---|---|---|
 | `guided` | `guided.js` | 一整个单元，按 `##` 分节解锁；学习记录复制回对话 |
-| `live` | `live/` | 对话里的 Claude 一段一段写进 artifact 数据库，页面实时显示；作答写回数据库 |
+| `live` | `live/` | 一屏一块板：对话里的 Claude 一段一段写进 artifact 数据库（带板号、常驻栏），页面实时显示；作答、写法错误、屏幕大小写回数据库；说话在对话框里 |
 | `class` | `class/` | 一屏一块板：课堂里的 Claude 换板、写板、说的话写在板顶；常驻栏；底部只有输入框和翻页条；学生作答自动发给它 |
 
 - `render.js`：Markdown（markdown-it + KaTeX）+ 围栏组件 → DOM。组件在 `blocks/`，注册在 `blocks/index.js`。
@@ -59,6 +59,14 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - `bar.js`：底部输入框（附图、手写板、「⋯」菜单、iPad 软键盘）和它上面的一条：翻页（上一块 / 下一块 / 板列表 / 回到当前板）、快捷回答。不显示消息。
 - `devteacher.js`：`?dev` 的模拟老师；`devpanel.js`：开发面板。
 - 数据（artifact 数据库）：`steps` 黑板段落（`page` 在第几块板，`place: 'pin'` 是常驻栏），`class_pages` 每块板（标题、板顶的话、下课小结），`class_turns` 每一轮，`class_notes` 观察和下课小结，`answers` / `events` 作答，`pack/main`、`pack/problems` 资料包。
+
+### 实时黑板（`kit/src/live/`）
+
+- 和课堂模式共用一屏一块板：`class/boardview.js`（板、常驻栏、翻板、一屏放不放得下）、`class/pagenav.js`（翻板条）、`class/selfcheck.js`（额外的写法自检）。改这几个文件，两种模式都要看。
+- `live.js`：订阅 `steps`，按 `layout.js` 的 `planBoards` 分板（`page` 不写就接着前一段那块板，`pin: true` 进常驻栏，板号最大的是当前板）；新板翻过去，翻回去看旧板时当前板来了新内容让「回到当前板」闪。学生作答过的段被改了，先提示不替换。
+- 对话里的 Claude 看不到页面：写法错误写回 `lint/{段 id}`，屏幕和当前板放不放得下写回 `meta/screen`（`layout.js` 的 `lintRecord`、`screenRecord`，有变化才写）。
+- `livebar.js`：底部一条（翻板、连接状态、「⋯」里板书和复制学习记录）。没有输入框、没有「问 Claude」、没有「这段做完了」。
+- `store.js`：claude.ai 里用 artifact 的 db / assets，`?dev` 用 localStorage 替身；`sync.js`：作答、事件、原图写进数据库；`devpanel.js`：`?dev` 开发面板（写段、看作答、看写回）。
 
 ## 硬性规定（我明确要求过的，不要改）
 
