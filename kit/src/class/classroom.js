@@ -25,6 +25,9 @@ import { createClassBar, MODEL_TAG } from './bar.js';
 import { createBoardView } from './boardview.js';
 import { extraProblems } from './selfcheck.js';
 import { initClassDevPanel } from './devpanel.js';
+import { markLayer } from '../marks.js';
+import { markText, markWhere } from '../markspec.js';
+import { calcValue, exactText } from '../exact.js';
 
 export const MODEL = 'claude-opus-5-5';
 // 学生明确要求：讲课只能是 Opus 5.5、effort high；modelTier 只是平台要求的退路（退路的输出会被丢弃）
@@ -98,6 +101,9 @@ export async function renderClass(root, meta) {
   const history = []; // { seq, role, text, kind, discarded, ... } 和数据库 class_turns 一一对应
   let turnSeq = 0;
   const results = new Map(); // 组件 id → [{ line, key }]（给课堂 Claude 看的黑板现状）
+  // 板书标注（board mark）：id → { id, seg（所在的段）, spec, host（画在哪一段上）}。段被改写、撤回时一起擦掉
+  const marks = new Map();
+  let markSeq = 0;
   const pack = { main: null, problems: null };
   const localImages = new Map(); // asset id → Blob（这次打开页面时上传的原图，重试和 view_handwriting 用）
   // 等着发给课堂 Claude 的：学生的话、图、黑板动作。triggered：有要马上（或 1.5 秒后）发的；now：要马上发
@@ -181,7 +187,7 @@ export async function renderClass(root, meta) {
       if (pp?.exists && !pack.problems) pack.problems = pp.data();
       for (const d of pg.docs.map((x) => x.data()).filter((p) => Number.isFinite(p?.n) && p.n > 0).sort((a, b) => a.n - b.n)) {
         const p = bv.ensurePage(d.n);
-        Object.assign(p, { title: String(d.title || ''), talk: String(d.talk || ''), lead: d.lead || '', kind: d.kind || '', body: String(d.body || '') });
+        Object.assign(p, { title: String(d.title || ''), talk: String(d.talk || ''), talkBy: d.talkBy || '', lead: d.lead || '', kind: d.kind || '', body: String(d.body || ''), foot: String(d.foot || '') });
         bv.paint(p);
       }
       const docs = st.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.seq || 0) - (b.seq || 0));
@@ -256,18 +262,30 @@ export async function renderClass(root, meta) {
     for (const t of history) {
       if (t.role !== 'claude' || t.discarded || !Array.isArray(t.boardOps)) continue;
       t.boardOps.forEach((o, i) => {
+        // 标注的编号接着往下编（撤掉的也算，免得重复）
+        for (const m of o?.marks || []) { const k = /^m(\d+)$/.exec(m.id || ''); if (k) markSeq = Math.max(markSeq, Number(k[1])); }
         if (!o?.ok) return;
         const at = (t.at || 0) + i / 1000; // 同一轮里的先后
         if (['add', 'new', 'replace', 'pin'].includes(o.op)) tl.push({ at, kind: 'render', seg: o.id });
+        else if (o.op === 'hide' || o.op === 'unpin') tl.push({ at, kind: 'drop', seg: o.id });
         else if (o.op === 'figure' && (o.action === 'set' || o.action === 'play')) tl.push({ at, kind: o.action, target: o.id, args: o.args });
+        else if (o.op === 'mark') tl.push({ at, kind: 'mark', marks: o.marks || [] });
+        else if (o.op === 'unmark') tl.push({ at, kind: 'unmark', ids: o.ids || [] });
       });
     }
     for (const r of recs) if (r.source === 'event' && r.type === 'drag' && r.block) tl.push({ at: r.at || 0, kind: 'drag', target: r.block, name: r.name, value: r.value });
     tl.sort((a, b) => a.at - b.at);
     const rendered = new Map();
     for (const e of tl) if (e.kind === 'render') rendered.set(e.seg, e.at);
+    // 标注：按时间走一遍，留下现在还在的（段重画、撤回时，上面的标注跟着擦掉）
+    const kept = new Map();
     for (const e of tl) {
-      if (e.kind === 'render') continue;
+      if (e.kind === 'render' || e.kind === 'drop') { for (const [id, m] of kept) if (m.seg === e.seg) kept.delete(id); }
+      else if (e.kind === 'mark') e.marks.forEach((m) => { if (m?.id && m.spec) kept.set(m.id, m); });
+      else if (e.kind === 'unmark') e.ids.forEach((id) => kept.delete(id));
+    }
+    for (const e of tl) {
+      if (['render', 'drop', 'mark', 'unmark'].includes(e.kind)) continue;
       const el = board.querySelector(`.class-seg:not([hidden]) [data-bid="${CSS.escape(e.target)}"][data-scene]`);
       const api = el && session.scenes.get(el.dataset.scene)?.api;
       if (!api) continue;
@@ -279,6 +297,8 @@ export async function renderClass(root, meta) {
         else for (const [name, src] of Object.entries(e.args?.assigns || {})) api.set(name, compile(src)((api.vars || api.snapshot)?.call(api) || {}));
       } catch { /* 恢复不了就保持初始的样子 */ }
     }
+    // 图都回到原样了，再把标注画回去（标在图上的要按图现在的样子摆）
+    for (const m of kept.values()) placeMark({ ...m.spec, id: m.id }, { animate: false, restore: true });
   }
 
   // —— 板（摆放、翻板、测量在 boardview.js）。都写成函数声明：刷新后恢复（restore）在这些定义之前就会用到 ——
@@ -291,16 +311,32 @@ export async function renderClass(root, meta) {
   }
 
   function savePage(p) {
-    sink.put('class_pages', { id: pad3(p.n), n: p.n, title: p.title || '', talk: p.talk || '', lead: p.lead || '', kind: p.kind || '', body: p.body || '', at: Date.now() });
+    sink.put('class_pages', { id: pad3(p.n), n: p.n, title: p.title || '', talk: p.talk || '', talkBy: p.talkBy || '', lead: p.lead || '', kind: p.kind || '', body: p.body || '', foot: p.foot || '', at: Date.now() });
   }
 
-  function setTalk(p, md) {
+  // by：这句话是谁说的（平台回报的 modelApplied；模拟老师是 'mock'），板顶那句话后面标出来
+  function setTalk(p, md, by = '') {
     const talk = String(md || '').trim();
-    if (p.talk === talk) return false;
+    if (p.talk === talk && p.talkBy === by) return false;
     p.talk = talk;
+    p.talkBy = by;
     bv.paint(p);
     savePage(p);
     return true;
+  }
+
+  // 这节课核验过几轮（平台回报是 Opus 5.5 的讲课和小结）、作废了几轮（平台换了别的模型）
+  function verifyCounts() {
+    let turns = 0, discarded = 0;
+    for (const t of history) {
+      if (t.kind === 'fallback') discarded++;
+      else if ((t.role === 'claude' || t.kind === 'closing') && t.modelApplied === MODEL) turns++;
+    }
+    return { turns, discarded };
+  }
+  function syncVerify() {
+    const { turns, discarded } = verifyCounts();
+    bar.setTag(`${MODEL_TAG}${mock ? ' · 模拟老师' : ''}${turns || discarded ? `，已核验 ${turns} 轮${discarded ? `，作废 ${discarded} 轮` : ''}` : ''}`);
   }
 
   // —— 黑板段落 ——
@@ -446,6 +482,7 @@ export async function renderClass(root, meta) {
         return { op: op.op, id: op.id, ok: false, page: seg.page || undefined, error: errors.map((p) => `${p.kind}：${p.msg}`).join('；') };
       }
       if (seg.sec) { dropScenesOf(seg.sec); seg.sec.remove(); }
+      dropMarks(seg.id);
       sec.classList.remove('class-pending');
       Object.assign(seg, next, { sec, hidden: false, failed: false, pending: false, softNotes: soft.length ? soft.map((p) => p.msg) : undefined });
       segs.set(seg.id, seg);
@@ -462,11 +499,97 @@ export async function renderClass(root, meta) {
       seg.hidden = true;
       seg.pending = false;
       if (seg.sec) seg.sec.hidden = true;
+      dropMarks(seg.id);
       saveSeg(seg);
       return { op: 'hide', id: op.id, ok: true };
     }
     if (op.op === 'figure') return figureOp(op, notes);
+    if (op.op === 'mark') return markOp(op);
+    if (op.op === 'unmark') return unmarkOp(op);
     return { op: op.op, ok: false, error: '看不懂的指令' };
+  }
+
+  // —— 板书标注：board mark / unmark（画法在 marks.js）——
+  // 一个 board mark 块里可以有好几条：画上的记进 marks，画不上的（目标不对、不在当前板上……）一条条说明原因
+  function markOp(op) {
+    const done = [];
+    const errs = [];
+    for (const spec of op.marks || []) {
+      const r = placeMark(spec, { animate: true });
+      if (r.ok) done.push({ id: r.id, seg: r.seg, spec: { ...spec, id: undefined } });
+      else errs.push(`${markWhere(spec)}：${r.error}`);
+    }
+    errs.push(...(op.errors || []));
+    return { op: 'mark', id: op.target || '', ok: done.length > 0, marks: done, error: errs.length ? errs.join('；') : undefined };
+  }
+
+  // 画一条标注。restore：刷新后重放（不管在不在当前板上）。返回 { ok, id, seg } 或 { ok: false, error }
+  function placeMark(spec, { animate = true, restore = false } = {}) {
+    const t = spec.target;
+    let seg = segs.get(t);
+    let host, root, scene = null;
+    if (seg) {
+      if (seg.hidden) return { ok: false, error: `${t} 已经撤回了` };
+      if (seg.pending || seg.failed || !seg.sec?.isConnected) return { ok: false, error: `${t} 没画出来，标不了` };
+      host = seg.sec;
+      root = seg.sec.querySelector('.stage-body') || seg.sec;
+    } else {
+      const el = board.querySelector(`.class-seg:not([hidden]) [data-bid="${CSS.escape(t)}"]`);
+      if (!el) return { ok: false, error: `黑板上没有 ${t}（target= 写段的 id，比如 b5，或者组件的 id:）` };
+      host = el.closest('.class-seg');
+      seg = segs.get(host?.dataset.step);
+      if (!host || !seg) return { ok: false, error: `${t} 不在黑板的段里` };
+      root = el;
+      scene = el.dataset.scene ? session.scenes.get(el.dataset.scene)?.api || null : null;
+    }
+    if (!restore && !onCurrent(host)) {
+      const n = Number(host.closest('.class-page')?.dataset.page);
+      return { ok: false, error: `${t} 在第 ${n} 块板上，不在当前板上，学生现在看不到` };
+    }
+    // 自己起的 id 像 m7 这样时，自动编号跳过它
+    const own = /^m(\d+)$/.exec(spec.id || '');
+    if (own) markSeq = Math.max(markSeq, Number(own[1]));
+    const id = spec.id || `m${markSeq + 1}`;
+    const prev = marks.get(id);
+    const r = markLayer(host).add(id, spec, { root, scene, name: t, animate });
+    if (!r.ok) return { ok: false, error: r.error };
+    if (!spec.id) markSeq++;
+    // 同一个 id 换了地方：原来那条擦掉
+    if (prev && prev.host !== host) prev.host?._marks?.remove(id);
+    marks.set(id, { id, seg: seg.id, spec, host });
+    return { ok: true, id, seg: seg.id };
+  }
+
+  function unmarkOp(op) {
+    const gone = [];
+    const miss = [];
+    const drop = (id) => {
+      const m = marks.get(id);
+      if (!m) return false;
+      m.host?._marks?.remove(id);
+      marks.delete(id);
+      gone.push(id);
+      return true;
+    };
+    if (op.all) for (const id of [...marks.keys()]) drop(id);
+    for (const id of op.ids || []) if (!drop(id) && !op.all) miss.push(id);
+    for (const t of op.targets || []) {
+      if (drop(t)) continue; // 不带 key 的词可能是自己起的标注 id
+      const hit = [...marks.values()].filter((m) => m.spec.target === t || m.seg === t);
+      if (!hit.length && !op.all) miss.push(t);
+      hit.forEach((m) => drop(m.id));
+    }
+    const error = miss.length ? `没有这些标注：${miss.join('、')}（现有的标注列在黑板现状里各段的下面）` : undefined;
+    return { op: 'unmark', id: '', ok: !miss.length || gone.length > 0, ids: gone, error };
+  }
+
+  // 段被改写、撤回：上面的标注一起擦掉（标注指着的东西已经不在了）
+  function dropMarks(segId) {
+    for (const [id, m] of marks) {
+      if (m.seg !== segId) continue;
+      m.host?._marks?.remove(id);
+      marks.delete(id);
+    }
   }
 
   function figureOp(op, notes) {
@@ -521,6 +644,7 @@ export async function renderClass(root, meta) {
   }
 
   function refresh() {
+    syncVerify();
     const any = pages.size > 0;
     welcome.hidden = any || busy;
     hero.hidden = any || !busy;
@@ -576,11 +700,16 @@ export async function renderClass(root, meta) {
       })) : [];
       const text = texText(seg.sec?.querySelector('.stage-body > p'));
       const summary = [clipTex(text, 140), seg.softNotes?.length ? `（${seg.softNotes.join('；')}）` : ''].filter(Boolean).join(' ');
-      return { id: seg.id, page: seg.page || 0, place: seg.place || 'board', title: seg.title || seg.sec?.querySelector('h2')?.textContent?.trim() || '', summary, hidden: seg.hidden, pending: !!seg.pending, failed: !!seg.failed, blocks };
+      const segMarks = seg.hidden ? [] : [...marks.values()].filter((m) => m.seg === seg.id).map((m) => markText(m.id, m.spec));
+      return { id: seg.id, page: seg.page || 0, place: seg.place || 'board', title: seg.title || seg.sec?.querySelector('h2')?.textContent?.trim() || '', summary, hidden: seg.hidden, pending: !!seg.pending, failed: !!seg.failed, blocks, marks: segMarks.length ? segMarks : undefined };
     });
     const vw = window.innerWidth, vh = window.innerHeight;
+    // 这节课的量（let 块）：课堂说明被压缩成摘要以后，Claude 也知道有哪些量、值是多少
+    const lessonVars = Object.entries(session.vars || {}).map(([k, v]) => { try { return `${k} = ${exactText(v)}`; } catch { return k; } });
     return {
       segs: list,
+      vars: lessonVars.length ? lessonVars : undefined,
+      nextMark: `m${markSeq + 1}`,
       pages: [...pages.values()].sort((a, b) => a.n - b.n).map((p) => ({ n: p.n, title: p.title, talk: p.talk, kind: p.kind })),
       cur: bv.cur,
       view: bv.view,
@@ -881,7 +1010,7 @@ export async function renderClass(root, meta) {
     if (talk && !keepTalk) {
       const cur = pages.get(bv.cur);
       const p = cur && cur.kind !== 'closing' ? cur : newPage();
-      setTalk(p, talk);
+      setTalk(p, talk, mock ? 'mock' : res.modelApplied);
       talkPage = p.n;
     }
     const turnedPage = bv.cur !== pageBefore;
@@ -931,7 +1060,16 @@ export async function renderClass(root, meta) {
         notes.push(`${head} 的改写还是有写法错误，黑板上保留原来的内容。`);
       }
     }
-    for (const o of boardOps) if (!o.ok && !['add', 'new', 'replace', 'pin'].includes(o.op)) notes.push(`指令 ${o.op}${o.action ? ' ' + o.action : ''} ${o.id || ''} 没执行：${o.error}`);
+    for (const o of boardOps) {
+      if (o.op === 'mark' || o.op === 'unmark') {
+        if (o.error) notes.push(o.ok ? `指令 ${o.op} 有的没执行：${o.error}` : `指令 ${o.op}${o.id ? ` ${o.id}` : ''} 没执行：${o.error}`);
+        continue;
+      }
+      if (!o.ok && !['add', 'new', 'replace', 'pin'].includes(o.op)) notes.push(`指令 ${o.op}${o.action ? ' ' + o.action : ''} ${o.id || ''} 没执行：${o.error}`);
+    }
+    // 说的话里算不出来的 \calc：学生看到的是一个红框
+    const talkErr = talkPage ? [...(pages.get(talkPage)?.talkEl?.querySelectorAll('.calc-error') || [])].map((x) => x.dataset.calcError) : [];
+    if (talkErr.length) notes.push(`你说的话里有 ${talkErr.join('；')}（学生看到的是红框；下一轮说话时改过来）`);
     for (const r of rejected) notes.push(`有一个 board 块看不懂（${r.error}），已经当普通文字写在板顶了：board ${r.header.slice(0, 60)}`);
     for (const u of unclosed) notes.push(`有一个 board 块没有闭合，已经当普通文字写在板顶了：board ${u.header.slice(0, 60)}${res.truncated ? '（这一轮太长被截断了，下次写短一点）' : ''}`);
     return { retry, asks: [...new Set(asks)], notes };
@@ -1025,7 +1163,7 @@ export async function renderClass(root, meta) {
     const t = op.title ? `「${escapeHtml(op.title)}」` : '';
     const label = op.op === 'new' ? `换一块新板${t}` : op.op === 'add' ? `在这块板上加一段${t}` : op.op === 'replace' ? `改写 ${escapeHtml(op.id || '')}${t}`
       : op.op === 'hide' ? `擦掉 ${escapeHtml(op.id || '')}` : op.op === 'pin' ? `常驻栏${t || ` ${escapeHtml(op.id || '')}`}` : op.op === 'unpin' ? `从常驻栏撤下 ${escapeHtml(op.id || '')}`
-        : op.op === 'figure' ? `让图 ${escapeHtml(op.target || '')} 动一下` : '写黑板';
+        : op.op === 'figure' ? `让图 ${escapeHtml(op.target || '')} 动一下` : op.op === 'mark' ? `在 ${escapeHtml(op.target || '板')} 上圈一下` : op.op === 'unmark' ? '擦掉标注' : '写黑板';
     return `<span class="class-draft-op${b.closed ? '' : ' is-writing'}">${label}</span>`;
   }
 
@@ -1095,6 +1233,24 @@ export async function renderClass(root, meta) {
           return '记下了，下课后给项目对话里的 Claude 看。';
         },
       },
+      {
+        name: 'calc',
+        description: '精确地算一个表达式（分数不丢精度；det、inv、rank、rref、tr 都是精确的），返回结果的文字和 TeX。可以用这节课 let 块里定义的量；vars 里可以临时给几个量（值写成表达式，比如 {"A": "[[1, 2], [3, 4]]"}）。注意：每调用一次工具，你都要多等一整轮（整份课堂说明重读一遍），很慢。只在改数出新题、得先知道结果才能决定怎么出题时用；要写上黑板的数，直接在公式里写 \\calc{表达式}，页面会算好再写上去，不用先调这个工具。',
+        inputSchema: { type: 'object', properties: { expr: { type: 'string' }, vars: { type: 'object', additionalProperties: { type: 'string' } } }, required: ['expr'] },
+        async execute(input) {
+          const expr = String(input?.expr ?? '').trim();
+          const given = input?.vars && typeof input.vars === 'object' ? input.vars : {};
+          staged.calls.push({ name: 'calc', input: { expr: cut(expr, 300), vars: Object.keys(given).length ? given : undefined } });
+          if (!expr) throw new Error('要写 expr（表达式）');
+          const scope = { ...session.vars };
+          for (const [k, src] of Object.entries(given)) {
+            if (!/^[A-Za-z_][\w]*$/.test(k)) throw new Error(`变量名「${k}」只能用字母、数字和下划线`);
+            scope[k] = calcValue(String(src), scope).value;
+          }
+          const r = calcValue(expr, scope);
+          return { text: r.text, tex: r.tex, exact: r.exact };
+        },
+      },
     ];
     return view && teacher.images ? tools : tools.filter((t) => t.name !== 'view_handwriting');
   }
@@ -1123,8 +1279,13 @@ export async function renderClass(root, meta) {
         return false;
       }
       clearDraft();
-      await sink.put('class_notes', { kind: 'summary', text: res.text, at: Date.now(), turn: turnSeq + 1 });
-      const p = newPage({ title: '这节课的小结', kind: 'closing', body: res.text });
+      // 小结那块板的最后一行由页面写：这节课的讲课是不是都由 Opus 5.5 回答（平台核验），作废了几轮
+      const v = verifyCounts();
+      v.turns++; // 这份小结本身也是 Opus 5.5 写的
+      await sink.put('class_notes', { kind: 'summary', text: res.text, at: Date.now(), turn: turnSeq + 1, verify: v });
+      const foot = mock ? `（本地测试：${v.turns} 轮都是模拟老师回放的，没有调用 Claude。）`
+        : `这节课 ${v.turns} 轮讲课和小结全部由 Opus 5.5 回答（平台核验）${v.discarded ? `；另有 ${v.discarded} 轮平台换了别的模型，已作废、没有显示` : ''}。`;
+      const p = newPage({ title: '这节课的小结', kind: 'closing', body: res.text, foot });
       addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied, page: p.n });
       bv.show(p.n, { animate: true });
       bar.setStatus('notice', '下课了。小结已经存好，回对话告诉 Claude「下课了」。');

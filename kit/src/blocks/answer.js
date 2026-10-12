@@ -4,7 +4,8 @@ import { compile, valueTeX, numText } from '../expr.js';
 import { mathInput } from '../mathinput.js';
 import { shapeOf, check } from '../check.js';
 import { session } from '../session.js';
-import { widget, mdToHtml, tex2html } from './common.js';
+import { widget, mdToHtml as mdRaw, tex2html as texRaw, withCalcScope, calcProblems } from './common.js';
+import { letScope, floatVars } from '../exact.js';
 import { getAI } from '../ai.js';
 import { createPad } from '../ink/pad.js';
 import { photoPicker, readFinal, flatFinal, photoError, transcriptHtml } from '../photo.js';
@@ -14,6 +15,9 @@ import { markDraft } from '../drafts.js';
 // 通用作答组件：spec = {q, answer, type, before, hint, explain, solution}
 // onDone({ok, attempts, revealed, first})
 export function answerWidget(body, spec, onDone) {
+  // 题面、提示、解析里的 \calc 用组件自己的变量（spec.scope）：解析答完题才画，那时也要用同一份
+  const mdToHtml = (t, o) => withCalcScope(spec.scope, () => mdRaw(t, o));
+  const tex2html = (t, d) => withCalcScope(spec.scope, () => texRaw(t, d));
   const shape = shapeOf(spec.answer, spec.type);
   body._spec = spec; // 方便调试和自动化测试
   body.innerHTML = `
@@ -117,7 +121,19 @@ export function answerWidget(body, spec, onDone) {
     show('is-reveal', `<div><strong>答案：</strong>${tex2html(valueTeX(spec.answer))}</div>${spec.explain ? mdToHtml(spec.explain) : ''}`);
     finish(false, true);
   });
-  return { input };
+  // 刷新后照作答记录恢复（课堂 / 实时黑板重放）：答对了的把学生填的数填回去，看了答案的照样摊开答案
+  function restore({ ok, revealed, value, attempts: n } = {}) {
+    if (finished) return;
+    attempts = Math.max(1, Number(n) || 1);
+    if (revealed) { btnReveal.click(); return; }
+    if (!ok) return;
+    const nums = String(value ?? '').match(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/gi);
+    input.fill(nums ? nums.map((x) => numText(Number(x))) : display(spec.answer));
+    input.markAll('is-right');
+    show('is-ok', `<div class="q-verdict">✓ 正确${attempts > 1 ? `（第 ${attempts} 次）` : ''}</div>${spec.explain ? mdToHtml(spec.explain) : ''}`);
+    finish(true, false);
+  }
+  return { input, restore };
 }
 
 const display = (v) => (Array.isArray(v) ? v.map(display) : numText(v));
@@ -190,15 +206,17 @@ function addHandwriting(body, shape, input, question, { isFinished, onWork }) {
 export function answer(el, src) {
   const { fields, cmds } = parseScene(src);
   if (!fields.answer) throw new Error('answer 需要 answer:（标准答案或表达式）');
-  // 块里可以先 let 定义变量，再用表达式算答案
-  const vars = {};
+  // 块里可以先 let 定义变量，再用表达式算答案；整节课的量（let 块）也能直接用
+  const vars = floatVars(session.vars);
   for (const c of cmds) if (c.kind === 'let') vars[c.name] = c.expr(vars);
   const value = compile(fields.answer)(vars);
+  const scope = letScope(cmds, session.vars);
+  for (const msg of calcProblems([fields.title, fields.q, fields.hint, fields.explain, fields.before, fields.after], scope)) session.problem(el, 'answer', msg);
   const title = fields.title || '动手算 Try it';
-  const body = widget(el, { title, cls: 'answer' });
+  const body = withCalcScope(scope, () => widget(el, { title, cls: 'answer' }));
   const done = session.gate(el, title);
   const onTry = (t) => session.record({ type: 'answer', liveOnly: true, title, q: plain(fields.q), value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, el });
-  answerWidget(body, { ...fields, answer: value, type: (fields.type || '').toLowerCase(), onTry }, (r) => {
+  answerWidget(body, { ...fields, answer: value, type: (fields.type || '').toLowerCase(), onTry, scope }, (r) => {
     session.record({ type: 'answer', final: true, title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, last: r.last, expected: plainValue(value), revealed: r.revealed, work: r.work || undefined, el });
     done();
   });

@@ -7,6 +7,7 @@ import { link } from '../link.js';
 import { widget, mdToHtml, escapeHtml, tex2html } from './common.js';
 import { answerWidget, plain } from './answer.js';
 import { thinkBox } from './thinkbox.js';
+import { floatVars } from '../exact.js';
 
 const KEY = /^([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/;
 
@@ -39,10 +40,11 @@ export function parseSteps(src) {
   return { fields, steps };
 }
 
-// do 步骤的 answer 能算出数 / 向量 / 矩阵时，用格子作答、程序判对错；否则自由作答、对照答案
+// do 步骤的 answer 能算出数 / 向量 / 矩阵时，用格子作答、程序判对错；否则自由作答、对照答案。
+// 可以用整节课的量（let 块）
 function numericAnswer(src) {
   try {
-    const v = compile(src)({});
+    const v = compile(src)(floatVars(session.vars));
     return isNum(v) || isVec(v) || isMat(v) ? v : null;
   } catch { return null; }
 }
@@ -113,7 +115,7 @@ export function steps(el, src) {
       // 格子作答：程序判对错，答对或看了答案之后显示完整的这一步
       const box = document.createElement('div');
       input.appendChild(box);
-      answerWidget(box, {
+      s.widget = answerWidget(box, {
         answer: s.num,
         before: s.before,
         hint: s.hint,
@@ -165,6 +167,11 @@ export function steps(el, src) {
         continue;
       }
       if (st.mine || li.classList.contains('is-revealed')) continue;
+      // 填格子的那一步：答对了、看了答案（最后那条记录）才算做完；把填的数放回格子，揭开这一步
+      if (st.do && st.num !== null) {
+        if (r.final || r.ok === true || r.revealed) st.widget?.restore(r);
+        continue;
+      }
       if (r.giveup) { li.querySelector('.st-giveup')?.click(); continue; }
       if (st.choices && r.value != null) {
         const i = st.choices.indexOf(String(r.value));

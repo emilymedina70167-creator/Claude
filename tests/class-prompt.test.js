@@ -125,12 +125,13 @@ test('黑板指令说明：每条规则都写到了', () => {
 
 test('黑板指令说明：例子本身写对了（指令格式、组件 id、图的命令、highlight 序号）', () => {
   const blocks = boardBlocks(PROTOCOL_DOC);
-  assert.equal(blocks.length, 10);
+  assert.equal(blocks.length, 12);
   const ID = '[A-Za-z0-9_\\-.~:@+]{1,64}';
   const grammar = [
     new RegExp(`^(new|add|replace|pin) id=${ID}( title=("[^"]*"|“[^”]*”))?$`),
     new RegExp(`^(hide|unpin) id=${ID}$`),
     new RegExp(`^figure target=${ID} (set( \\w+=\\S.*)+|play \\w+( \\S+ \\S+ \\S+)?|highlight \\d+)$`),
+    new RegExp(`^mark target=${ID}( .+)?$`),
   ];
   for (const b of blocks) assert.ok(grammar.some((g) => g.test(b.header)), `指令写法不对：${b.header}`);
 
@@ -163,14 +164,18 @@ test('黑板指令说明：例子本身写对了（指令格式、组件 id、�
 
 test('黑板指令说明：protocol.js 能把文档里的例子都解析出来', { skip: !protocol && 'protocol.js 还不存在' }, () => {
   const { ops } = protocol.parseOutput(PROTOCOL_DOC, { final: true });
-  assert.deepEqual(ops.map((o) => o.op + (o.action ? ':' + o.action : '')), ['new', 'add', 'replace', 'hide', 'figure:set', 'figure:play', 'figure:highlight', 'pin', 'unpin', 'new']);
+  assert.deepEqual(ops.map((o) => o.op + (o.action ? ':' + o.action : '')), ['new', 'add', 'replace', 'hide', 'figure:set', 'figure:play', 'figure:highlight', 'mark', 'mark', 'pin', 'unpin', 'new']);
   assert.equal(ops[0].id, 'b3');
   assert.equal(ops[0].title, 'Ax 落在哪');
   assert.ok(ops[0].body.includes('```scene') && ops[0].body.includes('```answer'), '内层组件留在 new 的内容里');
   assert.deepEqual(ops[4].assigns, { x: '[1, 1]' });
   assert.equal(ops[6].index, 4);
-  assert.deepEqual([ops[7].op, ops[7].id, ops[7].title], ['pin', 'k1', '这节课的记号']);
-  assert.deepEqual([ops[8].op, ops[8].id], ['unpin', 'k1']);
+  // mark：开头那行自己是一条；块里一行一条，沿用开头那行的 target
+  assert.deepEqual(ops[7].marks.map((m) => [m.target, m.sel.kind, m.sel.name, m.note]), [['b5', 'term', 'mid', '1×1：一个数']]);
+  assert.deepEqual(ops[8].marks.map((m) => [m.target, m.sel.i, m.color]), [['m-b6', 1, 'yellow'], ['m-b6', 2, 'pink'], ['m-b6', 3, 'yellow']]);
+  assert.equal(ops[8].errors, undefined);
+  assert.deepEqual([ops[9].op, ops[9].id, ops[9].title], ['pin', 'k1', '这节课的记号']);
+  assert.deepEqual([ops[10].op, ops[10].id], ['unpin', 'k1']);
   assert.deepEqual(protocol.parseCommand('figure target=fig-b3 set x=[1, 1] k=2').assigns, { x: '[1, 1]', k: '2' });
   assert.equal(protocol.parseCommand('figure target=fig-b3 play t 0 1 2s').ms, 2000);
 });

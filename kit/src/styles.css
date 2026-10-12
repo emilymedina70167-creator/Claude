@@ -992,3 +992,64 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 /* scene / space 的 line … dashed：画成一条细虚线（不写 dashed 时仍是半透明的宽带） */
 .plane .span-line.dashed { stroke-width: 2.6; stroke-opacity: .85; stroke-dasharray: 10 8; stroke-linecap: round; filter: var(--rough); }
 .lint-note { margin: 8px 0 0; font-size: 13.5px; color: var(--muted); }
+
+/* —— 板书标注（marks.js）：粉笔圈、框、划，旁边写一句。颜色由 --mk 给（主题变量） —— */
+.mk-host { position: relative; }
+.mk-layer { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.mk-svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+.mk-svg .mk-line { fill: none; stroke: var(--mk); stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; filter: var(--rough); }
+.mk-svg .mk-fill { fill: var(--mk); fill-opacity: .24; stroke: none; }
+.mk-svg .mk-in .mk-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: mkDraw .6s cubic-bezier(.45,.1,.3,1) forwards; }
+.mk-svg .mk-in .mk-fill { animation: mkFade .45s ease both; }
+.mk-svg .mk-lead { fill: none; stroke: var(--mk); stroke-width: 1.6; stroke-linecap: round; stroke-opacity: .8; filter: var(--rough); }
+.mk-svg .mk-in .mk-lead { stroke-dasharray: 1; stroke-dashoffset: 1; animation: mkDraw .4s ease-out .3s forwards; }
+/* 旁注垫一层和黑板同色的底：压在别的内容上也看得清 */
+.mk-note {
+  position: absolute; left: 0; top: 0; max-width: min(250px, 48%); padding: 0 8px 2px; border-radius: 8px;
+  color: var(--mk); background: rgb(var(--board-rgb) / 0.86); font: 400 23px/1.25 var(--hand); white-space: normal; overflow-wrap: anywhere;
+}
+.mk-note .katex { font-size: .86em; color: inherit; }
+.mk-note.mk-in { animation: mkFade .4s ease .3s both; }
+@keyframes mkDraw { to { stroke-dashoffset: 0; } }
+@keyframes mkFade { from { opacity: 0; } to { opacity: 1; } }
+
+/* 公式里的 \chalk{颜色}{…}：这一项用彩色粉笔写 */
+[data-lkc="yellow"] { color: var(--yellow); }
+[data-lkc="pink"] { color: var(--pink); }
+[data-lkc="blue"] { color: var(--blue); }
+[data-lkc="green"] { color: var(--green); }
+[data-lkc="orange"] { color: var(--orange); }
+[data-lkc="purple"] { color: var(--lav); }
+[data-lkc="red"] { color: var(--coral); }
+[data-lkc="white"] { color: var(--chalk); }
+/* 算不出来的 \calc：红框（课堂里会要求重写） */
+.calc-error { display: inline-block; padding: 0 4px; border: 1.5px dashed var(--coral); border-radius: 6px; }
+
+/* —— matrix 组件：会动的矩阵 —— */
+.mxw-body { position: relative; padding: 14px 6px 10px; }
+.mxw-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 14px; }
+.mxw-item { display: inline-flex; align-items: center; gap: 8px; border-radius: 10px; }
+.mxw-label, .mxw-tex, .mxw-op, .mxw-num { font-size: 21px; }
+.mxw-product { flex-wrap: wrap; justify-content: center; gap: 10px; }
+.mxw-mx td { position: relative; min-width: 44px; padding: 6px 12px; font-size: 21px; transition: background-color .25s; }
+.mxw-mx td.mxw-rs { border-bottom: 2px dashed rgb(var(--chalk-rgb) / 0.55); }
+.mxw-mx td.mxw-cs { border-right: 2px dashed rgb(var(--chalk-rgb) / 0.55); }
+/* 值变了：格子亮一下；数挪了位置：飞过去，新格子先空着，落地再出现 */
+.mxw-mx td.mxw-flash, .mxw-num.mxw-flash { animation: mxwFlash 1.1s ease-out; }
+@keyframes mxwFlash { 0% { background-color: rgb(var(--yellow-rgb) / 0.4); color: var(--yellow); } 100% { background-color: rgb(var(--yellow-rgb) / 0); } }
+.mxw-mx td.mxw-await > span { visibility: hidden; }
+.mxw-mx td.mxw-land { animation: mxwLand .55s ease-out; }
+@keyframes mxwLand { 0% { box-shadow: inset 0 0 0 2px rgb(var(--yellow-rgb) / 0.85); color: var(--yellow); } 100% { box-shadow: inset 0 0 0 2px rgb(var(--yellow-rgb) / 0); } }
+.mxw-ghost { position: absolute; z-index: 2; display: flex; align-items: center; justify-content: center; color: var(--yellow); font-size: 21px; pointer-events: none; }
+.mxw-enter { animation: mkFade .4s ease both; }
+.mxw-item.cmd-flash { animation: cmdRow 1.6s ease-in-out var(--flash-delay, 0s) both; }
+.mxw-calc { margin-top: 4px; overflow-x: auto; }
+.matrix-w .sliders { margin-top: 8px; }
+@media (max-width: 600px) {
+  .mxw-mx td { min-width: 34px; padding: 5px 8px; font-size: 19px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk-svg .mk-in .mk-line, .mk-svg .mk-in .mk-lead, .mk-svg .mk-in .mk-fill, .mk-note.mk-in, .mxw-enter { animation: none; stroke-dashoffset: 0; }
+  .mxw-mx td.mxw-flash, .mxw-num.mxw-flash { animation: none; }
+  .mxw-item.cmd-flash { animation: none; background-color: rgb(var(--yellow-rgb) / 0.15); }
+}

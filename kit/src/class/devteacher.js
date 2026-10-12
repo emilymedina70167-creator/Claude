@@ -13,7 +13,10 @@
 //   下课 / 小结 → 四点小结（不写黑板）
 //   其他 → new 一块 recognize 认方法小练
 // 开发用的暗号（在对话框里打）：「测试:写错」再来一段写错的；「一直写错」连重写也错（测「这段没画出来」）；
-// 「测试:rate_limited」这类让这一轮按那个错误码失败。
+// 「测试:rate_limited」这类让这一轮按那个错误码失败；
+// 「测试:教具」秩一方阵：let 块 + matrix 的 product + board mark 逐行标倍数 + \calc 写出 A²；
+// 「测试:幂」B 的幂：matrix 配滑块，figure play 让 1 往右上角退，mark 一个箭头；
+// 「测试:指图」在图上标注：label= 圈住 Ax（拖动 x 时跟着走），at= 用箭头指一个点。
 
 export const DEV_LIMITS = Object.freeze({ maxPromptBytes: 262144, images: Object.freeze({ maxCount: 4, maxInputBytes: 20000000, mediaTypes: Object.freeze(['image/png', 'image/jpeg']) }) });
 const THINK_MS = 600; // 第一个字出来前的停顿（模拟思考）
@@ -165,6 +168,47 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
     return { kind: 'confused', text: join(pic + open, board(cmd, keyBody(n, mode)), close) };
   }
 
+  // 教具演示：板书标注、会动的矩阵、页面验算
+  if (!isSystem && /测试\s*[:：]?\s*教具/.test(said)) {
+    const n = nextSeq(turns, memo);
+    return {
+      kind: 'tools',
+      text: join(
+        pic + String.raw`看这个三阶矩阵：每一行都是同一行的倍数。`,
+        board(`new id=b${n} title="三行成比例"`, rankOneBody(n)),
+        board(`mark target=m-${n} of=A`, 'row 1 note="×(−1)"\nrow 2 note="×2" color=pink\nrow 3 note="×1"'),
+        board(`mark target=b${n} term=mid note="1×1：一个数 $\\calc{b'*a}$"`),
+        String.raw`中间圈出来的 $\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是一个数。点一点 $A$ 里的数，看它是怎么乘出来的。`,
+      ),
+    };
+  }
+  if (!isSystem && /测试\s*[:：]?\s*幂/.test(said)) {
+    const n = nextSeq(turns, memo);
+    return {
+      kind: 'tools',
+      text: join(
+        pic + String.raw`看 $B$ 的幂：那几个 1 会往哪走？`,
+        board(`new id=b${n} title="B 的幂"`, powersBody(n)),
+        board(`figure target=m-${n} play k 1 3 3s`),
+        board(`mark target=m-${n} entry=1,4 style=arrow note="$B^3$ 只剩这一个"`),
+        String.raw`自己拖一拖 $k$，再看一遍。`,
+      ),
+    };
+  }
+
+  if (!isSystem && /测试\s*[:：]?\s*指图/.test(said)) {
+    const n = nextSeq(turns, memo);
+    return {
+      kind: 'tools',
+      text: join(
+        pic + String.raw`拖一拖 $\mathbf x$，看圈住的 $A\mathbf x$ 往哪走。`,
+        board(`new id=b${n} title="指着图讲"`, pointBody(n)),
+        board(`mark target=fig-${n} label=Ax note="$A\\mathbf x$ 总在这条线上"`),
+        board(`mark target=fig-${n} at=[1, 2] style=arrow note="方向 $\\boldsymbol\\alpha=(1,2)$" color=blue`),
+      ),
+    };
+  }
+
   // 「继续」或普通文字：这节课第一次时故意写错一段；以后只有暗号「测试:写错」「一直写错」才再写错
   const again = /测试\s*[:：]?\s*(一直)?写错|一直写错/.test(said);
   const brokeBefore = memo.broken > 0
@@ -308,6 +352,44 @@ hint: $A^3=A^2A=(3A)A=3A^2$。
 explain: $A^3=3A^2=9A$。一般地 $A^n=3^{n-1}A$，这里的 $3=\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha=\operatorname{tr}A$。
 `),
   ].join('\n\n');
+}
+
+// 教具演示：秩一方阵 A = αβᵀ（α = (−1, 2, 1)ᵀ，β = (1, 1, −2)ᵀ）。整节课的量放在 let 块里，
+// matrix 组件画出 α·βᵀ 的乘积，公式里的 A² 用 \calc 让页面算
+function rankOneBody(n) {
+  return [
+    fence('let', String.raw`
+A = [[-1, -1, 2], [2, 2, -4], [1, 1, -2]]
+a = [-1, 2, 1]
+b = [1, 1, -2]
+`),
+    fence('matrix', String.raw`
+id: m-${n}
+product a b' name=A
+`),
+    String.raw`每一行都是 $\boldsymbol\beta^{\mathrm T}=(1,1,-2)$ 的倍数，倍数就是 $\boldsymbol\alpha$ 的分量。所以 $A^2=\boldsymbol\alpha\,\hl{mid}{\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha}\,\boldsymbol\beta^{\mathrm T}=\calc{b'*a}\,A$，$\operatorname{tr}A=\calc{tr(A)}$。`,
+  ].join('\n\n');
+}
+
+// 幂零矩阵 B（4 阶）：k 从 1 拖到 4，那串 1 一格一格往右上角退，B³ 只剩右上角一个，B⁴ 是零矩阵
+function powersBody(n) {
+  return fence('matrix', String.raw`
+id: m-${n}
+let B = [[0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
+slider k 1 4 = 1 step=1 label="k" play
+matrix B^k label="B^{\calc{k}} ="
+`);
+}
+
+function pointBody(n) {
+  return fence('scene', String.raw`
+id: fig-${n}
+let A = [[1, 1], [2, 2]]
+let x = [2, -0.5] drag
+line [0, 0] dir [1, 2] color=yellow dashed
+vector x color=gray label=x
+vector A*x color=yellow label=Ax
+`);
 }
 
 function keyBody(n, mode) {

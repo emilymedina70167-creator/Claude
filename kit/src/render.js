@@ -3,6 +3,8 @@ import MarkdownIt from 'markdown-it';
 import katex from 'katex';
 import { blocks } from './blocks/index.js';
 import { session } from './session.js';
+import { calcValue, expandCalc, parseLets } from './exact.js';
+import { MARK_COLORS } from './markspec.js';
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: false, typographer: false });
 
@@ -51,12 +53,58 @@ function unmask(html, store) {
     });
 }
 
+// 公式里给 Claude 用的几个宏：
+//   \hl{名字}{…}：给一项起名字（板书标注 mark term=名字 靠它找到这一项），本身不画东西
+//   \chalk{颜色}{…}：这一项用彩色粉笔写（颜色跟着风格走，见 styles.css 的 [data-lkc]）
+// 两个都展开成 \htmlData，所以 trust 只放行 \htmlData（\htmlClass、\href 这类照旧不认）
+const MACROS = { '\\hl': '\\htmlData{lkmark=#1}{#2}', '\\chalk': '\\htmlData{lkc=#1}{#2}' };
+const trust = (ctx) => ctx.command === '\\htmlData';
+
+// \calc{表达式}：页面精确地算出来再写进公式。变量：整节课的 let 块（session.vars），
+// 加上组件自己的 let（组件渲染自己的题面、解析时用 withCalcScope 推进来，里面的优先）
+const scopes = [];
+export function withCalcScope(vars, fn) {
+  scopes.push(vars || {});
+  try { return fn(); } finally { scopes.pop(); }
+}
+export function calcScope(extra) {
+  return Object.assign({}, session.vars, ...scopes, extra || {});
+}
+
 export function tex2html(tex, display = false) {
-  try {
-    return katex.renderToString(tex, { displayMode: display, throwOnError: false, strict: false, trust: false });
-  } catch (e) {
-    return `<code class="tex-error">${escapeHtml(tex)}</code>`;
+  let src = String(tex ?? '');
+  let errors = [];
+  if (src.includes('\\calc')) {
+    const scope = calcScope();
+    ({ tex: src, errors } = expandCalc(src, (e) => calcValue(e, scope).tex));
   }
+  let html;
+  try {
+    // macros 每次给一份新的：KaTeX 遇到 \gdef 会往里写
+    html = katex.renderToString(src, { displayMode: display, throwOnError: false, strict: false, trust, macros: { ...MACROS } });
+  } catch (e) {
+    html = `<code class="tex-error">${escapeHtml(src)}</code>`;
+  }
+  // 算不出来的 \calc：画成红框，写法自检（renderLesson 和 class/selfcheck.js）据此报给作者
+  if (errors.length) return `<span class="calc-error" data-calc-error="${escapeHtml(calcErrorText(errors))}">${html}</span>`;
+  return html;
+}
+
+const calcErrorText = (errors) => errors.map((e) => `\\calc{${e.expr.trim().slice(0, 60)}} 算不出来：${e.msg}`).join('；');
+
+/**
+ * 检查一段文字（可以有好几段）里的 \calc{…} 能不能算出来，不渲染。vars：组件自己的变量。
+ * 返回出错的说明（没有就是空数组）。组件可以在创建时检查以后才显示的文字（比如答对后的解析）
+ */
+export function calcProblems(texts, vars) {
+  const scope = calcScope(vars);
+  const out = [];
+  for (const t of [].concat(texts || [])) {
+    if (!t || !String(t).includes('\\calc')) continue;
+    const { errors } = expandCalc(String(t), (e) => calcValue(e, scope).tex);
+    if (errors.length) out.push(calcErrorText(errors));
+  }
+  return out;
 }
 
 export const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -73,11 +121,39 @@ export function mdToHtml(src, { inline = false } = {}) {
 // 会产生作答的组件（live 模式下要有稳定的 id）
 const ANSWERING = new Set(['answer', 'conjecture', 'quiz', 'predict', 'practice', 'steps', 'recognize', 'findbug', 'draft', 'sortpass']);
 // 课堂模式里 figure 指令要按 id 找图
-const FIGURES = new Set(['scene', 'graph', 'space']);
+const FIGURES = new Set(['scene', 'graph', 'space', 'matrix']);
+// 自己检查文字里 \calc 的组件（它们有自己的 let，变量要连同这些一起算）
+const SELF_CALC = new Set(['answer', 'scene', 'predict', 'matrix', 'let']);
+
+// 一段里的 let 块先算一遍：正文的公式在组件挂载之前就渲染了，里面的 \calc 要用到这些量。
+// 写错的不管，let 组件挂载时自己再算一次、报出来
+function prerunLets(src) {
+  let fence = null, body = null;
+  for (const line of String(src).split('\n')) {
+    const m = line.match(/^\s{0,3}(`{3,}|~{3,})\s*([\w-]*)/);
+    if (fence) {
+      if (m && m[1][0] === fence[0] && m[1].length >= fence.length && line.trim() === m[1]) {
+        if (body) {
+          try {
+            for (const d of parseLets(body.join('\n'))) {
+              try { session.vars[d.name] = calcValue(d.src, session.vars).value; } catch { /* 组件会报 */ }
+            }
+          } catch { /* 组件会报 */ }
+        }
+        fence = null;
+        body = null;
+      } else if (body) body.push(line);
+    } else if (m) {
+      fence = m[1];
+      body = m[2].toLowerCase() === 'let' ? [] : null;
+    }
+  }
+}
 
 export function renderLesson(src, root) {
   const pending = [];
   let seq = 0;
+  prerunLets(src);
   const defaultFence = md.renderer.rules.fence;
   md.renderer.rules.fence = (tokens, idx, opts, env, self) => {
     const tok = tokens[idx];
@@ -98,6 +174,11 @@ export function renderLesson(src, root) {
   } finally {
     md.renderer.rules.fence = defaultFence;
   }
+  // 正文里算不出来的 \calc（组件这时还是空壳，它们的文字下面单独查）
+  root.querySelectorAll('.calc-error').forEach((x) => session.problem(x, '公式', x.dataset.calcError));
+  // \chalk{颜色}{…} 的颜色写错了：那一项照常写出来、只是不变色，作者以为强调了、学生看不出来
+  const odd = [...new Set([...root.querySelectorAll('[data-lkc]')].map((e) => e.dataset.lkc).filter((c) => !MARK_COLORS.includes(c)))];
+  if (odd.length) session.problem(root, '公式', `\\chalk 的颜色「${odd.slice(0, 3).join('」「')}」不认识：只认 ${MARK_COLORS.join(' / ')}`);
   root.querySelectorAll('h2').forEach((h) => {
     const m = h.innerHTML.match(/^\s*(\d{1,2})\s*[.、．:：]\s*/);
     if (m) h.innerHTML = `<span class="h-num">${m[1]}</span><span>${h.innerHTML.slice(m[0].length)}</span>`;
@@ -115,6 +196,9 @@ export function renderLesson(src, root) {
     el.dataset.bid = own ? own[1] : `${prefix}-${++seq}`;
     el.dataset.t0 = Date.now();
     if (!own && session.live && (ANSWERING.has(name) || FIGURES.has(name))) session.problem(el, name, `这个组件没写 id:，暂时按 ${el.dataset.bid} 记。请加一行 id:（同一个单元里不重复）`, { soft: true });
+    // 组件文字里的 \calc：有自己 let 的组件（answer、scene、predict、matrix）自己带着变量查；别的按整节课的量查。
+    // 要现在查：解析这类文字往往答完题才显示，那时再报就晚了
+    if (!SELF_CALC.has(name)) for (const msg of calcProblems(body)) session.problem(el, name, msg);
     try {
       blocks[name](el, body);
     } catch (e) {

@@ -1,7 +1,7 @@
 // 一屏一块板（课堂模式和实时黑板共用）：页面结构、板（section.class-page）、常驻栏、翻板、划动、
 // 一屏放不放得下的测量（--board-h、「下面还有」、横屏时输入框靠在黑板那一栏）、宽屏左图右文。
 // 板上写什么、存到哪、什么时候换板由各自的控制器决定；这里只管怎么摆、怎么翻。
-import { mdToHtml } from '../render.js';
+import { mdToHtml, escapeHtml } from '../render.js';
 
 const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 // 一块板超出一屏多少才算放不下（KaTeX、图的取整会差几个像素）
@@ -93,11 +93,18 @@ export function createBoardView({ root, unitHtml = '', stageExtra = '', isBusy =
     p.head.hidden = !p.title;
     p.talkEl.innerHTML = p.talk ? mdToHtml(p.talk) : '';
     p.talkEl.hidden = !p.talk;
+    // 课堂：板顶的话是谁说的（平台核验过的模型）。挂在最后一段的末尾，不单占一行
+    if (p.talk && p.talkBy) {
+      const last = p.talkEl.lastElementChild;
+      const mock = p.talkBy === 'mock';
+      (last?.tagName === 'P' ? last : p.talkEl).insertAdjacentHTML('beforeend', `<span class="class-by${mock ? ' is-mock' : ''}" title="${mock ? '本地测试的模拟老师，没有调用 Claude' : '这句话由 claude-opus-5-5 回答：模型是平台核验的；effort high 是页面要求的档位，平台不回报'}">${mock ? '模拟老师' : 'Opus 5.5 ✓'}</span>`);
+    }
     p.sec.classList.toggle('is-closing', p.kind === 'closing');
     let closing = p.bodyEl.querySelector(':scope > .class-closing');
     if (p.kind === 'closing') {
       if (!closing) { closing = document.createElement('div'); closing.className = 'class-closing'; p.bodyEl.prepend(closing); }
-      closing.innerHTML = mdToHtml(p.body || '');
+      // foot：页面自己写的最后一行（这节课由谁讲的），不是 Claude 写的
+      closing.innerHTML = mdToHtml(p.body || '') + (p.foot ? `<p class="class-foot">${escapeHtml(p.foot)}</p>` : '');
     } else closing?.remove();
   }
 

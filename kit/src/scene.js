@@ -13,6 +13,9 @@ import { compile, isNum, isVec, isMat, valueTeX, numText } from './expr.js';
 import { createPlane, snap as snapTo, figureControls, sliderText } from './plot.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { session } from './session.js';
+import { splitMods, splitTop } from './mods.js';
+
+export { splitMods, splitTop };
 
 const COLOR = {
   blue: 'var(--blue)', pink: 'var(--pink)', yellow: 'var(--yellow)', green: 'var(--green)',
@@ -20,34 +23,7 @@ const COLOR = {
   gray: 'var(--muted)', grey: 'var(--muted)', gold: 'var(--yellow)',
   1: 'var(--v1)', 2: 'var(--v2)', 3: 'var(--v3)', 4: 'var(--v4)', 5: 'var(--v5)',
 };
-const FLAGS = ['drag', 'dashed', 'faint', 'play', 'after', 'before', 'thin', 'drop'];
 const SUB = '₀₁₂₃₄₅₆₇₈₉';
-
-// 把一行末尾的修饰（color=… label="…" drag 等）拆出来
-export function splitMods(line) {
-  const mods = {};
-  let s = line.trim();
-  for (;;) {
-    let m = s.match(/\s+([a-z]+)=("([^"]*)"|“([^”]*)”|[^\s"“]+)$/i);
-    if (m) { mods[m[1].toLowerCase()] = m[3] ?? m[4] ?? m[2]; s = s.slice(0, m.index).trimEnd(); continue; }
-    m = s.match(new RegExp(`\\s+(${FLAGS.join('|')})$`, 'i'));
-    if (m) { mods[m[1].toLowerCase()] = true; s = s.slice(0, m.index).trimEnd(); continue; }
-    return { body: s, mods };
-  }
-}
-
-// 只在最外层按分隔符切（不切括号里的逗号）
-export function splitTop(s, sep = ',') {
-  const out = [];
-  let depth = 0, cur = '';
-  for (const ch of s) {
-    if ('([{'.includes(ch)) depth++;
-    if (')]}'.includes(ch)) depth--;
-    if (ch === sep && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
-  }
-  out.push(cur);
-  return out.map((x) => x.trim()).filter(Boolean);
-}
 
 const prettyLabel = (s) => String(s).replace(/([A-Za-z])(\d+)$/, (_, a, d) => a + [...d].map((c) => SUB[c]).join(''));
 
@@ -124,11 +100,13 @@ function parseCmd(kind, rest) {
 }
 
 // 创建场景。opts.extraVars：外部提供的变量（如 predict 里的 t、guess）；
+// opts.baseVars：整节课的量（let 块，已换成浮点），图里自己的 let 同名时用自己的；
 // opts.locked：{ 变量名: 原因 }，课堂 Claude 不能用 set / play 改的变量
 export function createScene(container, src, opts = {}) {
   const { fields, cmds } = typeof src === 'string' ? parseScene(src) : src;
   const state = { drag: {}, slider: {}, override: {}, revealed: false, goalsHit: new Set() };
   const extra = opts.extraVars || {};
+  const base = opts.baseVars || {};
 
   container.innerHTML = `<div class="w-plot"></div><div class="w-side"><div class="sliders"></div><div class="readout r-show"></div><div class="goal-msg" hidden></div></div>`;
   const side = container.querySelector('.w-side');
@@ -138,7 +116,7 @@ export function createScene(container, src, opts = {}) {
 
   // 依次求出所有 let（拖动的点用当前位置）
   function env() {
-    const v = { ...extra };
+    const v = { ...base, ...extra };
     Object.assign(v, state.slider);
     for (const c of cmds) {
       if (c.kind !== 'let') continue;
@@ -440,6 +418,15 @@ export function createScene(container, src, opts = {}) {
     play: ctl.play,
     highlight: ctl.highlight,
     vars: ctl.vars,
+    // 板书标注：按 label 找命令（返回从 1 数的序号，没有是 0）、图上的点在页面上的位置、坐标范围
+    cmdOfLabel(text) {
+      const t = String(text ?? '').trim();
+      const i = cmds.findIndex((c) => c.mods.label !== undefined && (String(c.mods.label).trim() === t || prettyLabel(c.mods.label) === t));
+      return i + 1;
+    },
+    labels: () => cmds.filter((c) => c.mods.label !== undefined).map((c) => String(c.mods.label)),
+    toClient: (pt) => plane.toClient(pt),
+    range: () => plane.range,
   };
 }
 

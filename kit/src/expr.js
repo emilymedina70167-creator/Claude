@@ -1,12 +1,19 @@
 // 小型表达式语言：数、向量 [1, 2]、矩阵 [[1, 2], [3, 4]]（按行写），
 // 支持 + - * / ^、转置 '、函数 det inv T col row dot norm proj rot lerp 等。
-// 数值用浮点；判分时再转成分数比较。
+// 数值用浮点；判分时再转成分数比较。要精确值（\calc、matrix 组件、课堂的 calc 工具）用 exact.js，写法一样。
+//
+// 向量是列向量：a' 是一行（1×n 矩阵），a'*b 是一个数，a*b' 是外积（n×n 矩阵）。exact.js 用同样的规则。
 
 const FUNCS = {
   det: (M) => det(asMat(M)),
   inv: (M) => inv(asMat(M)),
-  T: (M) => transpose(asMat(M)),
-  transpose: (M) => transpose(asMat(M)),
+  T: (M) => transposeAny(M),
+  transpose: (M) => transposeAny(M),
+  tr: (M) => trace(asMat(M)),
+  rank: (M) => rrefFloat(asMat(M)).rank,
+  rref: (M) => rrefFloat(asMat(M)).R,
+  diag: (...a) => diag(a.length === 1 && isVec(a[0]) ? a[0] : a.map(num)),
+  E: (n = 2) => eye(num(n)), // 教材里单位矩阵写 E：E(3) 和 I(3) 一样
   col: (M, j) => asMat(M).map((r) => r[idx(j, asMat(M)[0].length)]),
   row: (M, i) => asMat(M)[idx(i, asMat(M).length)].slice(),
   dot: (u, v) => dot(asVec(u), asVec(v)),
@@ -54,10 +61,15 @@ function erf(x) {
 }
 
 export function evaluate(src, vars = {}) {
+  return run(parse(src), vars);
+}
+
+// 解析成语法树（exact.js 用同一棵树精确求值）
+export function parse(src) {
   const p = new Parser(String(src));
   const ast = p.parseExpr();
   p.expectEnd();
-  return run(ast, vars);
+  return ast;
 }
 
 export function compile(src) {
@@ -194,7 +206,7 @@ function run(n, vars) {
     case 'var': {
       if (n.name in vars) return vars[n.name];
       if (n.name in CONSTS) return CONSTS[n.name];
-      if (n.name === 'I') return eye(2);
+      if (n.name === 'I' || n.name === 'E') return eye(2);
       throw new Error(`未定义的变量 ${n.name}`);
     }
     case 'neg': return scale(-1, run(n.a, vars));
@@ -246,13 +258,19 @@ export function mul(a, b) {
   if (isNum(a) || isNum(b)) return isNum(a) ? scale(a, b) : scale(b, a);
   if (isMat(a) && isVec(b)) {
     if (a[0].length !== b.length) throw new Error(`矩阵有 ${a[0].length} 列，向量有 ${b.length} 个分量，不能相乘`);
-    return a.map((r) => dot(r, b));
+    // 一行乘一列（a'*b）：1×1，就是一个数
+    return a.length === 1 ? dot(a[0], b) : a.map((r) => dot(r, b));
   }
   if (isMat(a) && isMat(b)) {
     if (a[0].length !== b.length) throw new Error(`尺寸不匹配：${a.length}×${a[0].length} 乘 ${b.length}×${b[0].length}`);
     return a.map((r) => b[0].map((_, j) => r.reduce((s, x, k) => s + x * b[k][j], 0)));
   }
-  if (isVec(a) && isVec(b)) throw new Error('两个向量相乘请用 dot(u, v)');
+  // 列乘一行（a*b'）：外积
+  if (isVec(a) && isMat(b)) {
+    if (b.length !== 1) throw new Error(`向量是 ${a.length}×1，后面要是一行（1×n）才能相乘；外积写成 u*v'`);
+    return a.map((x) => b[0].map((y) => x * y));
+  }
+  if (isVec(a) && isVec(b)) throw new Error("两个向量不能直接相乘：内积写 dot(u, v) 或 u'*v，外积写 u*v'");
   throw new Error('无法相乘');
 }
 function power(a, k) {
@@ -267,7 +285,43 @@ function power(a, k) {
 }
 export const dot = (u, v) => { if (u.length !== v.length) throw new Error('维数不同'); return u.reduce((s, x, i) => s + x * v[i], 0); };
 export const transpose = (M) => M[0].map((_, j) => M.map((r) => r[j]));
+// 转置：矩阵照常；向量（列）转成一行 1×n；数不变
+function transposeAny(x) {
+  if (isNum(x)) return x;
+  if (isVec(x)) return [x.slice()];
+  return transpose(asMat(x));
+}
 export const eye = (n) => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => +(i === j)));
+function trace(M) {
+  if (M.length !== M[0].length) throw new Error('只有方阵才有迹');
+  return M.reduce((s, r, i) => s + r[i], 0);
+}
+function diag(v) {
+  if (!v.length) throw new Error('diag 至少要一个数');
+  return v.map((x, i) => v.map((_, j) => (i === j ? x : 0)));
+}
+// 行最简形（浮点，主元选绝对值最大的；精确版在 exact.js）
+function rrefFloat(M) {
+  const R = M.map((r) => r.slice());
+  const rows = R.length, cols = R[0].length;
+  let r = 0;
+  for (let c = 0; c < cols && r < rows; c++) {
+    let p = r;
+    for (let i = r + 1; i < rows; i++) if (Math.abs(R[i][c]) > Math.abs(R[p][c])) p = i;
+    if (Math.abs(R[p][c]) < 1e-9) continue;
+    [R[r], R[p]] = [R[p], R[r]];
+    const k = R[r][c];
+    R[r] = R[r].map((x) => x / k);
+    for (let i = 0; i < rows; i++) {
+      if (i === r) continue;
+      const f = R[i][c];
+      if (f) R[i] = R[i].map((x, j) => x - f * R[r][j]);
+    }
+    r++;
+  }
+  // 消元留下的 -0 和 1e-16 这类噪声清掉
+  return { R: R.map((row) => row.map((x) => (Math.abs(x) < 1e-12 ? 0 : x))), rank: r };
+}
 export function det(M) {
   const n = M.length;
   if (n !== M[0].length) throw new Error('只有方阵才有行列式');

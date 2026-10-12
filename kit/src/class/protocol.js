@@ -1,7 +1,10 @@
 // 课堂模式：解析课堂里的 Claude 每一轮的输出。
 // 普通文字是对学生说的话（写在当前这块板的最上面）；语言名为 board 的围栏代码块是黑板指令：
-// new（擦掉黑板，换一块新板）/ add / replace / hide / figure（改当前这块板）/ pin / unpin（常驻栏）。
+// new（擦掉黑板，换一块新板）/ add / replace / hide / figure（改当前这块板）/ pin / unpin（常驻栏）/
+// mark / unmark（在板上圈、框、划、写旁注）。
 // 页面在流式回调里拿到的是「到目前为止的全文」，每次整段重新解析，所以这里全是纯函数、不留状态、不碰 DOM。
+import { tokenize, unquote } from '../tokens.js';
+import { parseMarkHead, parseMarkBlock, parseUnmark } from '../markspec.js';
 
 // ```board add id=b7 title="…"：行首最多 3 个空格，` 或 ~ 至少 3 个，可有空格，然后是 board 和指令
 const OPEN_RE = /^([ \t]{0,3})(`{3,}|~{3,})[ \t]*board(?=\s|$)\s*(.*)$/i;
@@ -17,8 +20,6 @@ const validId = (id) => ID_RE.test(id) && id !== '.' && id !== '..';
 const NAME_RE = /^[A-Za-z_Ͱ-Ͽ][\wͰ-Ͽ]*$/;
 const ASSIGN_RE = /^([A-Za-z_Ͱ-Ͽ][\wͰ-Ͽ]*)\s*=(?!=)/;
 const ACTIONS = ['set', 'play', 'highlight'];
-// 引号：英文 "…" '…'、中文 “…” ‘…’、「…」『…』；左右写反了也认
-const CLOSE = { '"': '"”“', '“': '”“"', '”': '”“"', "'": "'’‘", '‘': '’‘\'', '’': '’‘\'', '「': '」', '『': '』' };
 // 表达式里偶尔混进全角标点，expr.js 不认，先换成半角
 const HALF = { '（': '(', '）': ')', '［': '[', '］': ']', '，': ',', '；': ';', '＝': '=' };
 const ID_RULE = '只能用字母、数字和 _ - . ~ : @ +，1 到 64 个字符，不能只是 . 或 ..';
@@ -91,7 +92,13 @@ function scanBlock(lines, start, open, partialAt) {
   const dedent = (s) => (lead ? s.replace(lead, '') : s);
   let header = open[3].trim();
   const body = [];
-  const done = (end, closed, cut = false) => ({ header, op: parseCommand(header), body: body.join('\n'), closed, cut, end });
+  const done = (end, closed, cut = false) => {
+    const text = body.join('\n');
+    let op = parseCommand(header);
+    // mark 块里每行一条标注：块闭合了才拼（流式草稿只看开头那行）
+    if (closed && op.op === 'mark') op = markOp(op, text);
+    return { header, op, body: text, closed, cut, end };
+  };
 
   // 一行写完的短指令：```board hide id=b5```
   const tail = header.match(outer.ch === '`' ? /^(.*?)\s*(`+)$/ : /^(.*?)\s*(~+)$/);
@@ -137,13 +144,14 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // 段指令：new / add / replace / pin 带内容（可以有标题）；hide / unpin 只要 id
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / pin / unpin / figure';
+const OP_LIST = 'new / add / replace / hide / pin / unpin / figure / mark / unmark';
 
 /**
  * 解析 board 后面那一行：
  *   new id=b7 title="…"（换一块新板，这一段是新板的第一段）、add id=b8（在当前板上加一段）、
  *   replace id=b5、hide id=b5、pin id=k1 title="…"（常驻栏）、unpin id=k1、
- *   figure target=fig-b7 set x=[1, 2] k=2 / play t [from to 时长] / highlight 3
+ *   figure target=fig-b7 set x=[1, 2] k=2 / play t [from to 时长] / highlight 3、
+ *   mark target=b5 term=mid note="…"（块里还可以一行一条）、unmark id=m3 / target=b5 / all
  * 看不懂时返回 { error: 原因 }。
  */
 export function parseCommand(header) {
@@ -153,7 +161,26 @@ export function parseCommand(header) {
   const name = m[1].toLowerCase();
   if (SEGMENT_OPS.includes(name)) return segmentCommand(name, m[2]);
   if (name === 'figure') return figureCommand(m[2]);
+  if (name === 'mark') {
+    const r = parseMarkHead(m[2]);
+    return r.error ? { error: r.error } : { op: 'mark', head: m[2].trim(), target: r.head.target };
+  }
+  if (name === 'unmark') {
+    const r = parseUnmark(m[2]);
+    return r.error ? { error: r.error } : { op: 'unmark', ...r };
+  }
   return { error: `看不懂的指令「${m[1]}」：只认 ${OP_LIST}` };
+}
+
+// 闭合的 mark 块：开头那行 + 块里各行拼成 marks。一条也没写对时整块算看不懂；
+// 写对了的照常执行，写错的行放在 errors 里，页面执行完提醒课堂 Claude
+function markOp(op, body) {
+  const r = parseMarkBlock(op.head, body);
+  if (r.error) return { error: r.error };
+  if (!r.marks.length) return { error: r.errors[0] || 'mark 没有写要标的地方' };
+  const out = { op: 'mark', target: op.target, marks: r.marks };
+  if (r.errors.length) out.errors = r.errors;
+  return out;
 }
 
 function segmentCommand(op, rest) {
@@ -300,54 +327,4 @@ function toMs(v, bareIsMs = false) {
   const unit = (m[2] || '').toLowerCase();
   const ms = unit === 'ms' || unit === '毫秒' ? n : unit ? n * 1000 : bareIsMs || n >= 100 ? n : n * 1000;
   return Math.round(Math.min(ms, 60000));
-}
-
-/* ---------------- 分词 ---------------- */
-
-// 指令行切成词：key=value（值可加引号）或单独的词。记下位置，方便取原文
-function tokenize(s) {
-  const out = [];
-  let i = 0;
-  for (;;) {
-    while (i < s.length && /\s/.test(s[i])) i++;
-    if (i >= s.length) return out;
-    const start = i;
-    let key = null;
-    const km = s.slice(i).match(/^([A-Za-z][\w-]*)[ \t]*[=＝][ \t]*/);
-    if (km) {
-      key = km[1].toLowerCase();
-      i += km[0].length;
-      // id= title="…"：等号后面空着，别把下一个 key=… 当成值
-      if (/\s$/.test(km[0]) && /^[A-Za-z][\w-]*[ \t]*[=＝]/.test(s.slice(i))) {
-        out.push({ key, value: '', quoted: false, start, vstart: i, end: i });
-        continue;
-      }
-    }
-    const v = readValue(s, i);
-    out.push({ key, value: v.value, quoted: v.quoted, start, vstart: i, end: v.end });
-    i = v.end;
-  }
-}
-
-function readValue(s, i) {
-  const closers = CLOSE[s[i]];
-  if (closers) {
-    // 收尾的引号后面应是空白或行尾：标题里夹着的引号（比如 说"对"了）不算收尾
-    let first = -1;
-    for (let j = i + 1; j < s.length; j++) {
-      if (!closers.includes(s[j])) continue;
-      if (first < 0) first = j;
-      if (j + 1 === s.length || /\s/.test(s[j + 1])) return { value: s.slice(i + 1, j), quoted: true, end: j + 1 };
-    }
-    if (first >= 0) return { value: s.slice(i + 1, first), quoted: true, end: first + 1 };
-    return { value: s.slice(i + 1), quoted: true, end: s.length }; // 引号还没写完（流式草稿）：取到行尾
-  }
-  let j = i;
-  while (j < s.length && !/\s/.test(s[j])) j++;
-  return { value: s.slice(i, j), quoted: false, end: j };
-}
-
-function unquote(v) {
-  const closers = CLOSE[v[0]];
-  return closers && v.length >= 2 && closers.includes(v[v.length - 1]) ? v.slice(1, -1).trim() : v;
 }

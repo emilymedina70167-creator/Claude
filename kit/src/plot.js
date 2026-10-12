@@ -115,6 +115,13 @@ export function createPlane(container, { range = 5 } = {}) {
       const sy = (evt.clientY - r.top - (r.height - SIZE * k) / 2) / k;
       return [((sx - SIZE / 2) / (SIZE / 2)) * p.range, -((sy - SIZE / 2) / (SIZE / 2)) * p.range];
     },
+    // 数学坐标 → 页面上的位置（client 坐标）：板书标注指图上的点时用。图不在页面上时返回 null
+    toClient([x, y]) {
+      const r = svg.getBoundingClientRect();
+      if (!r.width || !r.height) return null;
+      const k = Math.min(r.width, r.height) / SIZE;
+      return { x: r.left + (r.width - SIZE * k) / 2 + p.X(x) * k, y: r.top + (r.height - SIZE * k) / 2 + p.Y(y) * k };
+    },
     // onDrag(id, [x, y], phase)，phase 是 'start' | 'move' | 'end'
     draggable(onDrag) {
       dragHandles(svg, p.toMath, onDrag);

@@ -1,6 +1,6 @@
 # 线代学习台 · 给 Claude 的教学说明
 
-> **版本：2026-10-12b**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
+> **版本：2026-10-12c**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
 >
 > 这份说明的**最新版**一直放在组件库 artifact 里（文件 `CLAUDE-PROJECT.md`）。每个新对话里，第一次做和学习台有关的事（做课件、写实时黑板、备课堂资料包、读课堂记录或学习记录）之前，先用 `Artifact` 工具读它：`action: "read"`，`url` 是上面的组件库地址，`path: "CLAUDE-PROJECT.md"`。
 > - 读到的版本比你手上这份新：以读到的为准，这份里和它不一样的地方全部作废。回复里顺便告诉我「项目指令里的说明是旧版（版本号），组件库里是新版（版本号）」。
@@ -155,7 +155,9 @@ goal A*x = [3, 5] msg="命中！"
 
 颜色（彩色粉笔）：`blue`、`pink`、`yellow`、`green`、`purple`、`orange`、`red`、`white`、`gray`。**全课程统一含义**：`blue` = 第一列 / $\hat\imath$ 的去向 / 定义，`pink` = 第二列 / $\hat\jmath$ 的去向，`yellow` = 结果和重点（如 $A\mathbf x$、目标点），`gray` = 原始向量或辅助线，`purple` 留给「你的猜测」。文字里提到颜色时要和图一致（比如「拖动 x，让黄色的 Ax……」）。
 
-**表达式**：数、向量 `[1, 2]`、矩阵按行写 `[[1, 2], [3, 4]]`，运算 `+ - * / ^`（`A^-1` 是逆），`A'` 是转置，`2u` 可以省略乘号。函数：`det` `inv` `T` `col(A, j)` `row(A, i)`（从 1 开始数）、`dot` `norm` `|v|` `proj(u, v)` `cross` `rot(角度)` `lerp(a, b, t)` `mat(列1, 列2, …)`（由列组成矩阵）、`I`（单位矩阵）、`sqrt` `abs` `sin` `cos` `tan`（角度制）、`exp` `ln` `log` `floor` `min` `max` `round`，常数 `pi` `e`。比较 `<` `<=` `>` `>=` `==` 成立得 1、不成立得 0（可以写分段函数 `(x>0)*x`）。概率：`choose(n, k)` `fact(n)` `normpdf(x, μ, σ)` `normcdf(x, μ, σ)` `binompmf(k, n, p)` `poissonpmf(k, λ)` `exppdf(x, λ)` `unifpdf(x, a, b)`。
+**表达式**：数、向量 `[1, 2]`、矩阵按行写 `[[1, 2], [3, 4]]`，运算 `+ - * / ^`（`A^-1` 是逆），`A'` 是转置，`2u` 可以省略乘号。函数：`det` `inv` `T` `col(A, j)` `row(A, i)`（从 1 开始数）、`dot` `norm` `|v|` `proj(u, v)` `cross` `rot(角度)` `lerp(a, b, t)` `mat(列1, 列2, …)`（由列组成矩阵）、`I`（单位矩阵）、`sqrt` `abs` `sin` `cos` `tan`（角度制）、`exp` `ln` `log` `floor` `min` `max` `round`，常数 `pi` `e`。比较 `<` `<=` `>` `>=` `==` 成立得 1、不成立得 0（可以写分段函数 `(x>0)*x`）。概率：`choose(n, k)` `fact(n)` `normpdf(x, μ, σ)` `normcdf(x, μ, σ)` `binompmf(k, n, p)` `poissonpmf(k, λ)` `exppdf(x, λ)` `unifpdf(x, a, b)`。矩阵：`tr`（迹）`rank`（秩）`rref`（行最简形）`diag(1, 2, 3)`（对角矩阵）、`I(3)` 也可以写成 `E(3)`（教材的记号；只写 `I`、`E` 是 2 阶）。
+
+**向量都是列向量**，转置的规则处处一样：`a'` 是 1×n 的行，`a'*b` 是一个数（内积，也可以写 `dot(a, b)`），`a*b'` 是 n×n 矩阵（外积），`A*a` 是矩阵乘列向量。两个向量直接写 `a*b` 会报错，免得分不清是内积还是外积。
 
 ### predict：先猜，再揭晓
 
@@ -314,6 +316,51 @@ vector x color=blue label=x
 vector A*x color=pink label=Ax from=1
 vector A*A*x color=yellow label=A²x from=2
 ```
+
+### matrix：会动的矩阵
+
+几个矩阵和公式排成一行。变量变了（拖滑块、绑定的 `steps` 揭开一步、课堂里的 `figure set` / `play`），值变了的格子会闪一下，挪了位置的数会飞过去。适合演示「一步步变」的过程：幂次、分块、乘积是怎么来的。
+
+```matrix
+id: m-pow
+title: B 的幂：1 往右上角退
+let B = [[0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
+slider k 1 4 = 1 step=1 label="k" play
+matrix B^k label="B^{\calc{k}} ="
+```
+
+字段：`id`、`title`、`q`（上方说明）、`note`（下方备注）、`link`（绑定 `steps`，用法同 `scene`）。命令一行一条，按顺序从左到右排：
+
+| 命令 | 作用 |
+|---|---|
+| `let 名字 = 表达式` | 定义变量（同 `scene`） |
+| `slider 名字 最小 最大 = 初值` | 滑块，默认 `step=1`（值取整，`B^k` 可以拖着看）。可选 `label="k"`、`play` |
+| `matrix 表达式` | 画出它的值：矩阵、向量（画成一列）、数（不带括号）。一律精确分数。可选 `label="A ="`（左边的 TeX）、`name=A`（给 `mark`、`split` 认；表达式就是一个变量名时默认用它）、`from=k` / `until=k` |
+| `tex 公式` | 两个矩阵之间的一段公式：`tex =`、`tex \times`、`tex +` |
+| `split rows=2 cols=1` | 分块虚线：第 2 行下面、第 1 列右边各画一条（几条用逗号：`rows=1,3`）。管前面最近的那个矩阵，或者写 `of=名字` |
+| `mark row 2 note="×2"` | 画好就带着的标注：`row` / `col` / `diag` / `entry=2,3` / `block=1,2`，可加 `note=`、`color=`、`style=`、`of=`、`from=k` / `until=k`（写法同课堂的 `board mark`） |
+| `product A B` | 画出 $A\times B=AB$；我点结果里的任意一个数，就亮出 $A$ 的那一行、$B$ 的那一列，下面写出对应相乘再相加。可选 `name=C`（结果的名字） |
+
+- 标签和 `tex` 里可以写 `\calc{…}`，跟着变量变：上例滑到 3 时标签是 $B^{3}=$。
+- 写错（表达式算不出来、尺寸对不上、`mark` 的行号超出矩阵、`split` 的位置不对）：组件下面红字报出来，自检也会报。
+
+### let：这节课的量（不显示）
+
+```let
+A = [[-1, -1, 2], [2, 2, -4], [1, 1, -2]]
+a = [-1, 2, 1]
+b = [1, 1, -2]
+```
+
+一行一个 `名字 = 表达式`，后面的行可以用前面的名字。定义一次，之后所有的段、组件（`answer`、`scene`、`matrix`……）和公式里的 `\calc` 都能直接用这些名字，不用每个组件再写一遍 `let`（组件自己的 `let` 同名时用自己的）。精确值（分数）保存。`I`、`E`、`pi`、`e`、`step`、`t` 是保留的名字。
+
+### 公式里的三个工具：`\calc`、`\hl`、`\chalk`
+
+- **`\calc{表达式}`：让页面算，不要心算。**任何公式里都能写（正文、题面、提示、解析、标签、课堂里说的话），页面用精确分数算好再写进公式：`$A^2=\calc{A^2}$`、`$\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha=\calc{b'*a}$`、`$\operatorname{tr}A=\calc{tr(A)}$`。变量来自 `let` 块（组件里还有组件自己的 `let`）。矩阵写成 `bmatrix`，分数写成 $\tfrac{1}{2}$。开方、三角这类算不准的写成小数。算不出来（变量没定义、尺寸不对）会画成红框并报写法错误。**凡是要写上黑板的数，都用 `\calc` 让页面算**，改数出新题时也一样。
+- **`\hl{名字}{…}`：给一项起名字**，本身不画任何东西。课堂里 `board mark term=名字` 靠它找到这一项去圈、框、划。名字只用字母、数字、`-`、`_`。一个矩阵整个包起来，`board mark of=名字 row=2` 就能标这个矩阵的第 2 行。
+- **`\chalk{颜色}{…}`：这一项用彩色粉笔写**（静态的；颜色跟着黑板风格走，比 `\color` 好）。颜色：`yellow` `pink` `blue` `green` `orange` `purple` `red` `white`，含义同上面的颜色约定。
+
+写的时候就要强调的，直接写进公式：`\boxed{…}`、`\cancel{…}`（约去）、`\underbrace{…}_{\text{…}}`、`\chalk{pink}{…}`。
 
 ### recognize：认方法快练（只认方法，不计算）
 
@@ -626,8 +673,9 @@ unit: 第2讲 §2 · 秩一方阵
   - `rules`（可选）：覆盖组件库内置的「角色与红线」。一般不用写。
   - `updatedAt`：时间戳。
 - `collection: "pack"`，`doc_id: "problems"`，`data: { "items": [ { "q": "题面", "answer": "答案", "point": "考点", "source": "来源" }, … ] }`：这节课可用的题。课堂里的 Claude 从里面取题，也可以自己改数。
-- 资料包合起来控制在约 120 KB 以内，超出部分会被截断。课中你也可以改资料包，下一轮自动用新版本：先 `get` 读到 `version`，再带上 `if_version` 用 `update` 或 `set`（已有的文档不带 `if_version` 会被拒绝）。
-- 模型是固定的：课堂里的 Claude 只用 Opus 5.5（effort high）。平台临时换成别的模型时，那一轮整段作废，我会看到「Opus 5.5 暂时用不了，稍后点重试」。资料包里不要写模型相关的字段。
+- 资料包合起来控制在约 110 KB 以内，超出部分会被截断。课中你也可以改资料包，下一轮自动用新版本：先 `get` 读到 `version`，再带上 `if_version` 用 `update` 或 `set`（已有的文档不带 `if_version` 会被拒绝）。
+- 模型是固定的：课堂里的 Claude 只用 Opus 5.5（effort high）。平台临时换成别的模型时，那一轮整段作废，我会看到「Opus 5.5 暂时用不了，稍后点重试」。资料包里不要写模型相关的字段。我在板顶那句话后面看得到「Opus 5.5 ✓」（平台核验过的模型），「⋯」菜单里有这节课核验过几轮、作废了几轮。
+- 课堂里的 Claude 有这些教具，`plan` 里可以直接点名用：`board mark` 圈、框、划板上已有的东西并写旁注；`matrix` 组件演示会动的矩阵（幂次、分块、乘积）；公式里的 `\calc{…}` 让页面精确地算，`let` 块定义整节课的量。资料包 `textbook` 里的矩阵、向量照原样写清楚（比如 `A = [[1, 1], [2, 2]]`），它好放进 `let` 块。
 
 ### 课后：读课堂记录
 
@@ -635,12 +683,12 @@ unit: 第2讲 §2 · 秩一方阵
 
 - `collection: "class_turns"`（`query`，`order_by: seq`，**`limit: 1000`**——不写 limit 只返回前 100 条，长的课会被截掉；记录多时加 `out_dir` 存成文件再读）：每一轮一条，按 `seq` 排起来就是整节课。字段：`seq`、`role`、`text`、`kind`、`discarded`、`at`，以及下面各自的字段。
   - `role: "student"`：`say` 是我说的话（打字或快捷按钮）；`start: true` 是我点了「开始上课」按钮（`say` 固定是「开始上课。」，不是我打的字）；`actions` 是我在黑板上的动作，每条一行，比如「[作答] b7 里的 steps 第 3 步：选了『跑到线外去』（错），用时 44 秒」；`drafts` 是我在黑板上写了、还没点「检查」「提交」的草稿（填了一半的格子、打了字的理由框），跟着这一条一起发给了课堂里的 Claude，比如「[草稿] b4 里的 answer q-b4：写着 (3, □)，还没提交」；`images` 是我附的手写 / 截图原图的 asset id；`text` 是发给课堂 Claude 的完整内容；`page` 是我发这条时黑板在第几块板。
-  - `role: "claude"`：`text` 是课堂里的 Claude 的完整输出（话 + 黑板指令原文）；`boardOps` 是实际执行了哪些指令（`op`：new / add / replace / hide / pin / unpin / figure，`id`，`page` 是写在第几块板，`ok: false` 的没执行成功，`error` 是原因；figure 还有 `action`：set / play / highlight 和 `args`）；`page` 是这一轮之后黑板停在第几块板，`talkPage` 是它这一轮的话写在第几块板的顶上（只改了写法、没对我说话的轮没有）；`truncated: true` 表示这一轮太长被截断了；`tools` 是它调用过的工具（如果有）；`modelApplied` 一定是 `claude-opus-5-5`。
+  - `role: "claude"`：`text` 是课堂里的 Claude 的完整输出（话 + 黑板指令原文）；`boardOps` 是实际执行了哪些指令（`op`：new / add / replace / hide / pin / unpin / figure / mark / unmark，`id`，`page` 是写在第几块板，`ok: false` 的没执行成功，`error` 是原因；figure 还有 `action`：set / play / highlight 和 `args`；mark 的 `marks` 是画上的标注：`id`、所在的段 `seg`、标的什么 `spec`；unmark 的 `ids` 是擦掉的标注）；`page` 是这一轮之后黑板停在第几块板，`talkPage` 是它这一轮的话写在第几块板的顶上（只改了写法、没对我说话的轮没有）；`truncated: true` 表示这一轮太长被截断了；`tools` 是它调用过的工具（如果有）；`modelApplied` 一定是 `claude-opus-5-5`。
   - `role: "system"`：页面发给它的系统消息。`kind` 有：`lint`（它写的组件有写法错误，没显示，要求重写）、`note`（指令没执行之类的提醒）、`images`（它要看的手写原图，附在这一轮）、`summary`（对话太长时的摘要，`upTo` 是摘要覆盖到第几轮）、`closing`（下课小结）、`fallback`（Opus 5.5 不可用，这一轮作废）、`error`（这一轮出错或我点了停止，`code` 是原因）。
   - 旧版课堂记录里的 `sayAfter`、`boardAt` 只是当时页面排话的位置，读记录时不用管。
   - `discarded: true` 的轮没有进入课堂对话：内容没给我看，黑板也没动。读的时候跳过它们的内容，只当作「这里卡过一下」。
-- `collection: "class_notes"`：课堂里的 Claude 记的观察（`kind: "note"`，`turn` 是在第几轮记的），以及下课时写的小结（`kind: "summary"`：讲了什么、我哪里卡住、哪里看起来懂了但证据不够、建议下一节怎么接）。**小结只有我点了「下课」才有**；直接关掉页面不会写（关页面时来不及等 Claude 写完），这时你就从 `class_turns` 自己读。
-- `collection: "class_pages"`：每一块板一条（`n` 是第几块，`title` 板的标题，`talk` 最后留在板顶的那句话，`lead` 板上第一段的 id）。`kind: "closing"` 的是下课小结那块板，小结在 `body` 里。
+- `collection: "class_notes"`：课堂里的 Claude 记的观察（`kind: "note"`，`turn` 是在第几轮记的），以及下课时写的小结（`kind: "summary"`：讲了什么、我哪里卡住、哪里看起来懂了但证据不够、建议下一节怎么接；`verify: { turns, discarded }` 是页面记的：这节课平台核验是 Opus 5.5 回答的轮数、因为换了别的模型而作废的轮数）。**小结只有我点了「下课」才有**；直接关掉页面不会写（关页面时来不及等 Claude 写完），这时你就从 `class_turns` 自己读。
+- `collection: "class_pages"`：每一块板一条（`n` 是第几块，`title` 板的标题，`talk` 最后留在板顶的那句话，`talkBy` 是平台核验的、说这句话的模型，`lead` 板上第一段的 id）。`kind: "closing"` 的是下课小结那块板，小结在 `body` 里，`foot` 是页面写在最后的核验说明。
 - `collection: "steps"`：黑板上出现过的每一段（`by: "class"`，`page` 是在第几块板上，`place: "pin"` 的是常驻栏里的条目（id 是 `k1`、`k2`…），`md` 是这一段**最后的版本**，改写前的版本在 `class_turns` 的 Claude 输出里；`hidden: true` 是被撤回、从常驻栏撤下的；`failed: true` 是重写两次还画不出来、我看到的是「这段没画出来」）。
 - `collection: "answers"`、`"events"`：和实时黑板一样，每次作答、揭开、放弃、拖图都有记录；课堂里 `events` 还有 `end`（点了「下课」）。手写原图用 `Artifact` 工具 `action: "read"`、`path` 填 asset id 取回。
 

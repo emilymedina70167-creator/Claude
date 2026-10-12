@@ -261,3 +261,9 @@ body.class-docked .class-more:not(.in-bar) { right: calc(var(--cb-r, 20px) + 8px
   .ct-ind i, .class-draft-op.is-writing::before { animation: none; opacity: .9; }
   .ct-scribble path { animation: none; stroke-dashoffset: 0; }
 }
+
+/* 板顶那句话是谁说的：平台核验过的模型（模拟老师时灰色） */
+.class-by { display: inline-block; margin-left: 8px; padding: 0 7px; border: 1px solid rgb(var(--green-rgb) / 0.45); border-radius: 999px; color: var(--green); font: 500 12px/1.6 var(--sans); vertical-align: 2px; white-space: nowrap; animation: none; }
+.class-by.is-mock { border-color: var(--border); color: var(--muted); }
+/* 小结的最后一行：页面写的核验说明 */
+.class-foot { margin: 14px 0 0; padding-top: 10px; border-top: 1px dashed var(--border); color: var(--muted); font: 14px/1.6 var(--sans); }

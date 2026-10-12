@@ -2,8 +2,9 @@
 import { createScene, parseScene } from '../scene.js';
 import { compile, numText } from '../expr.js';
 import { session } from '../session.js';
-import { widget, mdToHtml, tex2html } from './common.js';
+import { widget, mdToHtml, tex2html, withCalcScope, calcProblems } from './common.js';
 import { markDraft } from '../drafts.js';
+import { letScope, floatVars } from '../exact.js';
 
 export function predict(el, src) {
   const parsed = parseScene(src);
@@ -15,12 +16,18 @@ export function predict(el, src) {
 
   const extra = { t: 0, guess: [0.5, 0.5] };
   let target = null;
+  // 文字里的 \calc：图里自己的 let（初始值）+ 整节课的量；解析要到揭晓才显示，现在就查
+  const scope = letScope(parsed.cmds, session.vars);
+  for (const msg of calcProblems([fields.title, fields.q, fields.explain], scope)) session.problem(el, 'predict', msg);
+  const md = (t, o) => withCalcScope(scope, () => mdToHtml(t, o));
+  const base = floatVars(session.vars);
   const body = widget(el, { title: titleText, cls: 'predict' });
-  body.insertAdjacentHTML('beforebegin', fields.q ? `<div class="w-q">${mdToHtml(fields.q)}</div>` : '');
+  body.insertAdjacentHTML('beforebegin', fields.q ? `<div class="w-q">${md(fields.q)}</div>` : '');
   // 课堂里 figure target=<predict 的 id> 也能 set / play / highlight（揭晓前后都行）；
   // 只有 guess 是学生自己放的，课堂 Claude 不能替学生挪
   const api = createScene(body, parsed, {
     extraVars: extra,
+    baseVars: base,
     locked: { guess: 'guess 是学生自己拖的猜测，不能替学生改；要指给学生看，用 highlight' },
     dragTargets: { guess: (p) => { if (!target) extra.guess = p.map((x) => Math.round(x * 10) / 10); } },
     afterDraw(plane) {
@@ -47,14 +54,14 @@ export function predict(el, src) {
   go.addEventListener('click', async () => {
     go.disabled = true;
     let v;
-    try { v = { ...extra, ...api.snapshot() }; target = answer({ ...v, t: 1 }); } catch (e) { status.textContent = '答案表达式有误：' + e.message; return; }
+    try { v = { ...base, ...extra, ...api.snapshot() }; target = answer({ ...v, t: 1 }); } catch (e) { status.textContent = '答案表达式有误：' + e.message; return; }
     const dist = Math.hypot(extra.guess[0] - target[0], extra.guess[1] - target[1]);
     api.reveal();
     await api.animate('t', 0, 1, 1500);
     const close = dist <= tol;
     status.className = `pred-status ${close ? 'ok' : 'warn'}`;
     status.innerHTML = `${close ? '猜得很准！' : '和真实位置差了一些。'}真实位置是 ${tex2html(`(${target.map(numText).join(', ')})`)}，你猜的是 ${tex2html(`(${extra.guess.map((x) => Number(x.toFixed(1))).join(', ')})`)}。`;
-    if (fields.explain) status.insertAdjacentHTML('afterend', `<div class="w-note">${mdToHtml(fields.explain)}</div>`);
+    if (fields.explain) status.insertAdjacentHTML('afterend', `<div class="w-note">${md(fields.explain)}</div>`);
     go.remove();
     session.record({ type: 'predict', title: titleText, q: plain(fields.q), guess: extra.guess, answer: target, ok: close, el });
     done();

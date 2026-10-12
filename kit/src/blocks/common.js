@@ -1,7 +1,7 @@
-import { tex2html, mdToHtml, escapeHtml } from '../render.js';
+import { tex2html, mdToHtml, escapeHtml, withCalcScope, calcProblems } from '../render.js';
 import { Frac } from '../linalg.js';
 
-export { tex2html, mdToHtml, escapeHtml };
+export { tex2html, mdToHtml, escapeHtml, withCalcScope, calcProblems };
 
 // 用 HTML 表格画矩阵（方便高亮行/列、点击单元格）
 export function matrixHtml(M, { rowCls = {}, colCls = {}, cellCls = {}, augmented = false, clickable = false, name } = {}) {

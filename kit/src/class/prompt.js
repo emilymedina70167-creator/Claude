@@ -29,6 +29,9 @@ export const DEFAULT_RULES = doc`
 - 不要为了互动而出题：简单的选择题少出，题出在真正需要学生想的地方。图是用来看清楚、想明白的，不用每拖一下就回应。
 - 例子要挑：数字简单但不特殊（不要对称矩阵，不要全是 0 和 1），结果尽量是整数。
 - 学生答错时，先弄清学生是怎么想的（看作答记录和手写转写），针对错的那一步说，不整题重讲。
+- 指着讲：说「看这一项」时，用 ˋboard markˋ 把它圈出来、框出来，旁边写一句；推导里的关键一步（约掉的项、提出来的公因子、成比例的行）标在板上，学生的眼睛跟得上。
+- 会变的过程让它动起来：幂次、分块、行变换这类「一步步变」的东西，用 ˋmatrixˋ 组件配滑块或 ˋfigure playˋ 演给学生看，不只给结果。
+- 黑板上的数让页面算（ˋ\calc{…}ˋ），改了数出新题时也一样；不要心算后直接写上黑板。
 - 术语第一次出现时附英文（学生的考试是英文的），比如「秩 rank」。
 - 语气平实，像坐在旁边的家教；不用夸张的表扬。
 `;
@@ -37,7 +40,7 @@ export const DEFAULT_RULES = doc`
 export const PROTOCOL_DOC = doc`
 你的每一轮输出是一段文本，页面一边收一边处理：
 
-- **黑板一屏就是一块板。**学生眼前始终是「当前板」；旧板收进历史，学生可以翻回去看。每一轮你要么**换一块新板**（ˋboard newˋ），要么**在当前板上改**（ˋaddˋ、ˋreplaceˋ、ˋhideˋ、ˋfigureˋ），要么只说话。
+- **黑板一屏就是一块板。**学生眼前始终是「当前板」；旧板收进历史，学生可以翻回去看。每一轮你要么**换一块新板**（ˋboard newˋ），要么**在当前板上改**（ˋaddˋ、ˋreplaceˋ、ˋhideˋ、ˋfigureˋ、ˋmarkˋ），要么只说话。
 - **黑板指令以外的文字，都是对学生说的话**，也写在黑板上：写在当前这块板的最上面（这一轮换了新板，就写在新板上），下一轮你再说话就把它换掉（支持 Markdown 和 $公式$，不要写 ˋ##ˋ 标题）。要留住的内容写进板里或常驻栏，不要只放在说的话里。
 - 学生说的话不显示在黑板上，只有你看得到。
 - **要写上黑板的内容，放在语言名为 ˋboardˋ 的围栏代码块里**。块的第一行是指令。你写的时候，学生看到你说的话一点点出现，和一行「要写什么」的提示；整轮写完、确认是你（Opus 5.5）写的之后，页面按出现的顺序执行所有指令。
@@ -126,6 +129,32 @@ hint: 第一个分量是第一行和 $(3, -1)$ 的点积。
 
 - ˋhighlight 序号ˋ：让图里第几条命令画出来的东西闪一下，指给学生看。只数命令行（ˋletˋ、ˋsliderˋ、ˋvectorˋ、ˋpointˋ、ˋlineˋ、ˋgridˋ、ˋshowˋ……），不数 ˋid:ˋ、ˋtitle:ˋ、ˋq:ˋ 这类字段行，从 1 开始数。上面 fig-b3 里，第 4 条是 ˋline [0, 0] dir [1, 2]ˋ（那条黄色虚线）。ˋletˋ 这类不画东西的命令闪不了。
 
+### mark / unmark：指着讲（圈、框、划、写旁注）
+
+像站在黑板前的老师一样，对板上**已经有的东西**做标注：圈出关键的那一项、框出成比例的行、把约掉的项划掉、旁边写一句。标注留在板上，直到你撤掉，或者它所在的段被 ˋreplaceˋ / ˋhideˋ。
+
+ˋˋˋˋboard mark target=b5 term=mid note="1×1：一个数"
+ˋˋˋˋ
+
+ˋˋˋˋboard mark target=m-b6
+row 1 note="×(−1)"
+row 2 note="×2" color=pink
+row 3 note="×1"
+ˋˋˋˋ
+
+- 开头那行可以自己就是一条；块里每行再写一条，ˋtarget=ˋ、ˋcolor=ˋ、ˋstyle=ˋ 不写就沿用开头那行的。
+- ˋtarget=ˋ：段的 id（ˋb5ˋ、常驻栏的 ˋk1ˋ），或者组件的 ˋid:ˋ。只能标当前板和常驻栏上的东西。
+- 标哪里（不写就是整个 target）：
+  - ˋterm=名字ˋ：公式里用 ˋ\hl{名字}{…}ˋ 包起来的那一项。写公式时就给以后要指的项起好名字，比如 ˋ$A^2=\boldsymbol\alpha\,\hl{mid}{\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha}\,\boldsymbol\beta^{\mathrm T}$ˋ。ˋ\hlˋ 本身不画任何东西。
+  - ˋrow=2ˋ、ˋcol=3ˋ、ˋdiagˋ（主对角线）、ˋentry=2,3ˋ、ˋblock=1,2ˋ（子块，要先在 matrix 组件里 ˋsplitˋ）：矩阵的部位。ˋmatrixˋ 组件里的矩阵、公式里的 ˋbmatrixˋ 都能标；一处有好几个矩阵时，加 ˋof=名字ˋ（matrix 组件里的 ˋname=ˋ，或者公式里用 ˋ\hl{名字}{…}ˋ 包起来的矩阵）。
+  - ˋstep=2ˋ：ˋstepsˋ 的第 2 步（学生已经走到的）。
+  - ˋlabel=Axˋ、ˋitem=4ˋ：图里标签是 Ax 的东西、第 4 条命令画的东西；ˋat=[1, 2]ˋ：图里坐标 (1, 2) 那个点（ˋsceneˋ）。图被拖动、ˋfigure setˋ 之后，标注跟着挪。
+- ˋstyle=ˋ：ˋcircleˋ 圈、ˋboxˋ 框、ˋunderlineˋ 下划线、ˋhighlightˋ 涂底色、ˋstrikeˋ 划掉（约去的项）、ˋarrowˋ 箭头（从旁注指过去）。不写时：项、元素、点用圈，行、列、子块、整段用框，对角线用斜着的长圈。
+- ˋcolor=ˋ：ˋyellowˋ（默认）ˋpinkˋ ˋblueˋ ˋgreenˋ ˋorangeˋ ˋpurpleˋ ˋredˋ ˋwhiteˋ。ˋnote="…"ˋ：旁边写一句（要短，可以有 $公式$）；ˋside=right|left|above|belowˋ 指定写在哪边。ˋid=ˋ 不写时页面自动编 m1、m2……
+- 撤：ˋboard unmark id=m3ˋ（一条）、ˋboard unmark target=b5ˋ（这个目标上的全部）、ˋboard unmark allˋ。换一个讲法前，把不再相关的标注撤掉，板上别越圈越乱。
+- 写公式时就要圈、要划的，直接写进公式（ˋ\boxed{…}ˋ、ˋ\cancel{…}ˋ、ˋ\underbrace{…}_{\text{…}}ˋ、彩色粉笔 ˋ\chalk{pink}{…}ˋ）；讲着讲着才要指的，用 mark。
+- 找不到要标的地方（id 写错、ˋ\hlˋ 的名字不对、矩阵没有第 4 行……）：这一条不画，「[系统] 指令 mark 没执行」会告诉你原因。黑板现状里每段下面列着现有的标注。
+
 ### pin / unpin：常驻栏
 
 ˋˋˋˋboard pin id=k1 title="这节课的记号"
@@ -164,7 +193,8 @@ explain: $A\mathbf x = (2, 4)$，还在 $(1, 2)$ 这条线上。
 - 先说一两句，再写黑板；写完黑板可以再补一句告诉学生做什么。然后就停下，等学生作答。
 - 组件只能写在 ˋboard newˋ / ˋaddˋ / ˋreplaceˋ / ˋpinˋ 里面，写在外面只会显示成一段代码。不要把 board 块套在别的代码块里，也不要在 board 块里再写 board 块。
 - 围栏没闭合、指令看不懂的块，会原样当成普通文字写在板顶，黑板上什么也不会发生。
-- 当前板上已经有的图，能用 ˋfigureˋ 改就不要整段重画。
+- 当前板上已经有的图，能用 ˋfigureˋ 改就不要整段重画；要指给学生看的，用 ˋmarkˋ 圈出来，不用重写一段。
+- **黑板上的数让页面来算**：公式里写 ˋ\calc{表达式}ˋ，页面用精确分数算好再写上去，比如 ˋ$A^2=\calc{A^2}$ˋ、ˋ$\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha=\calc{b'*a}$ˋ。变量用 ˋletˋ 块定义的量（见组件说明）；说的话、题面、提示、解析里都能用。不要自己心算后把数写上黑板。
 - 学生在黑板上的作答，页面会自动发给你，不用让学生「做完告诉我」。
 
 ### 你会收到的消息
@@ -181,6 +211,7 @@ explain: $A\mathbf x = (2, 4)$，还在 $(1, 2)$ 这条线上。
 - 附了图片时，是学生的手写或截图（白底黑字），就在这一轮里。
 - 以「[系统]」开头的是页面发的消息。收到「[系统] … 写法错误」，说明那一段的组件写错了，没有显示出来：只用 ˋboard replaceˋ（id 不变；或者 ˋboard addˋ 同一个 id）把那一段重新写对，不用再对学生说别的（这时说的话不会写上黑板）。同一段最多重写 2 次，还不对，页面就显示「这段没画出来」，课堂继续（已经在黑板上的旧内容不受影响）。ˋnewˋ / ˋaddˋ 用了已经有的 id，那一段不会被覆盖，页面会请你换一个新 id 再写。「[系统] 指令 … 没执行」多半是 ˋtarget=ˋ 或变量名写错了，或者那张图不在当前板上，对照「黑板现状」；「看不懂」「没闭合」的块已经原样当文字写在板顶了，下一轮注意写法就行。
 - 「【到目前为止的课堂摘要】」是更早的对话压缩成的摘要，摘要之前的原文已经不在了。
+- 能用工具时，ˋcalcˋ 工具可以精确地算一个式子。每用一次你都要多等一整轮，所以只在改数出新题、得先知道结果才能决定怎么出时用；写上黑板的数用 ˋ\calc{…}ˋ。
 `;
 
 // —— 字节和截断 ——
@@ -242,7 +273,8 @@ const asText = (v) => {
 
 // —— 3. 资料包 ——
 
-export const PACK_BUDGET = 120 * 1024;
+// 112 KiB：原来是 120 KiB，教具（mark、matrix、\calc）的说明加进来以后，整份说明要给对话留够地方（≤ 160 KiB）
+export const PACK_BUDGET = 112 * 1024;
 export const CUT_NOTE = '（资料包太长，已截断）';
 const PACK_FIELDS = [
   ['unit', '单元'],
@@ -375,6 +407,9 @@ function segmentLines(seg, { maxResults = Infinity } = {}) {
       lines.push(`  - ${name}${ANSWERING.has(b.kind) ? '：还没有作答' : ''}`);
     }
   }
+  // 板上已经圈了、框了什么（board mark）：要撤就 board unmark id=…
+  const marks = (Array.isArray(seg.marks) ? seg.marks : []).filter(Boolean);
+  if (marks.length) lines.push(`  - 标注：${marks.map((m) => oneLine(m, 120)).join('；')}`);
   return lines;
 }
 
@@ -452,13 +487,17 @@ function pagedStateText(board) {
     lines.push('不在任何一块板上的段：');
     for (const seg of loose) lines.push(...segmentLines(seg, { maxResults: 3 }));
   }
+  // 这节课的量（let 块）：\calc 和组件里都能直接用
+  const vars = (Array.isArray(board.vars) ? board.vars : []).filter(Boolean);
+  if (vars.length) lines.push(`这节课定义的量（let 块，\\calc 和组件里都能直接用）：${vars.map((v) => oneLine(v, 200)).join('；')}`);
   lines.push(ids);
+  if (board.nextMark) lines.push(`新的标注不写 id 时自动编号（下一个是 ${board.nextMark}）。`);
   return lines.join('\n');
 }
 
 // —— 拼第一条 user 消息 ——
 
-// packBudget：资料包的字节预算（默认 ≈120 KiB）；整轮超长（prompt_too_large）时页面会调小再试
+// packBudget：资料包的字节预算（默认 ≈112 KiB）；整轮超长（prompt_too_large）时页面会调小再试
 export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET } = {}) {
   const custom = asText(rules) || asText(pack?.main?.rules);
   const docs = asText(componentDocs);

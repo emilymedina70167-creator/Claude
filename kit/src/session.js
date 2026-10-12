@@ -11,6 +11,7 @@ export const session = {
   ai: null, // 可用时是 ask 函数
   problems: [], // 课件本身的错误（写法不对），集中显示给作者
   context: '', // context 块：给页面里的 Claude 的背景资料
+  vars: {}, // let 块定义的整节课的量（精确值，exact.js）：后面的组件、\calc 都能直接用
   subject: '线性代数', // 课件开头 subject: 可改（如 数据结构）
   mode: 'plain', // plain | guided | live | class
   replaying: false, // 课堂刷新后把学生的作答重放回组件时为 true：这期间不记录、不发给 Claude
@@ -25,6 +26,7 @@ export const session = {
     this.sceneSeq = 0;
     this.problems = [];
     this.context = '';
+    this.vars = {};
     this.log = load(title)?.log || [];
   },
 
