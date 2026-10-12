@@ -4,6 +4,7 @@ import { parseFields } from '../parse.js';
 import { getAI, errorText, AI_PERMANENT } from '../ai.js';
 import { createPad } from '../ink/pad.js';
 import { session } from '../session.js';
+import { markDraft } from '../drafts.js';
 import { widget, mdToHtml } from './common.js';
 import { plain } from './answer.js';
 import { photoPicker, transcribe, photoError, transcriptHtml } from '../photo.js';
@@ -81,6 +82,9 @@ export function conjecture(el, src) {
   let aiDown = false;
   let via = ''; // 回答来自截图 / 手写板转写（记录里注明）
   const grading = !/^(off|no|false|否|不)$/i.test(fields.grade || (session.live ? 'off' : 'on'));
+  // 草稿：框里写了还没「提交」，或者交了以后又改了
+  let sent = '';
+  markDraft(body, () => { const t = ta.value.trim(); return t && t !== sent ? t : ''; });
 
   // 截图作答：转写到文本框里，学生核对、修改后再提交
   photoPicker(ta, {
@@ -127,6 +131,7 @@ export function conjecture(el, src) {
     const text = ta.value.trim();
     if (text.length < 4) { fb.hidden = false; fb.className = 'cj-feedback is-bad'; fb.textContent = '先写下你的想法，哪怕不确定也没关系。'; return; }
     attempts++;
+    sent = text;
     // grade: off（live 模式默认）：只交给对话里的 Claude 看，页面不批改
     if (!grading) {
       fb.hidden = false;

@@ -175,6 +175,9 @@ explain: $A\mathbf x = (2, 4)$，还在 $(1, 2)$ 这条线上。
   - [动作] b2 里的 steps ex-1 第 2 步：想不出来，直接揭开了
   - 「（对）」「（错）」是程序判的；没写对错的是自由作答，要你来看。注明「手写转写」「截图转写」的文字是从手写认出来的，可能有认错的字。
   - 学生在图里拖动、揭开中间的步骤，不会单独发给你，跟着下一条作答或说的话一起到。
+- 以「[草稿]」开头的行，是学生在黑板上写了、**还没点「检查」「提交」**的内容（填了一半的格子、打了字的理由框、勾了还没提交的选项），跟着学生下一条说的话或作答一起到，比如：
+  - [草稿] b4 里的 answer q-b4「算一个」：写着 (3, □)，还没提交
+  - 草稿不判对错，学生可能还在想：不要因为草稿打断学生，也不要把它当成最终答案。学生说「好了」「写好了」「你看看」时，就照草稿看学生写到哪了，再接着教。黑板现状里每个组件下面也列着它现在的草稿。
 - 附了图片时，是学生的手写或截图（白底黑字），就在这一轮里。
 - 以「[系统]」开头的是页面发的消息。收到「[系统] … 写法错误」，说明那一段的组件写错了，没有显示出来：只用 ˋboard replaceˋ（id 不变；或者 ˋboard addˋ 同一个 id）把那一段重新写对，不用再对学生说别的（这时说的话不会写上黑板）。同一段最多重写 2 次，还不对，页面就显示「这段没画出来」，课堂继续（已经在黑板上的旧内容不受影响）。ˋnewˋ / ˋaddˋ 用了已经有的 id，那一段不会被覆盖，页面会请你换一个新 id 再写。「[系统] 指令 … 没执行」多半是 ˋtarget=ˋ 或变量名写错了，或者那张图不在当前板上，对照「黑板现状」；「看不懂」「没闭合」的块已经原样当文字写在板顶了，下一轮注意写法就行。
 - 「【到目前为止的课堂摘要】」是更早的对话压缩成的摘要，摘要之前的原文已经不在了。
@@ -361,9 +364,13 @@ function segmentLines(seg, { maxResults = Infinity } = {}) {
     const vars = Array.isArray(b.vars) ? b.vars.filter(Boolean).join('、') : String(b.vars ?? '').trim();
     const name = `${b.kind || '组件'} ${b.id}${vars ? `（变量：${oneLine(vars, 160)}）` : ''}`;
     const res = (b.results || []).map((r) => resultLine(r, b.id)).filter(Boolean).slice(-maxResults);
+    const draft = oneLine(String(b.draft ?? '').trim(), 300);
     if (res.length) {
       lines.push(`  - ${name} 的作答：`);
       res.forEach((r) => lines.push(`    - ${r}`));
+      if (draft) lines.push(`    - 现在写着（还没提交）：${draft}`);
+    } else if (draft) {
+      lines.push(`  - ${name}：还没提交，现在写着：${draft}`);
     } else {
       lines.push(`  - ${name}${ANSWERING.has(b.kind) ? '：还没有作答' : ''}`);
     }
@@ -638,6 +645,13 @@ export function actionText(a) {
   const isEvent = a.source === 'event';
   const out = isEvent ? eventText(a, type) : recordText(a, type) ?? eventText(a, type);
   return out ?? unknownText(a, type);
+}
+
+// 一条草稿（学生写了还没提交）→ 一行「[草稿] …」。d：{ step, block, kind, title, label, text }
+export function draftLine(d) {
+  if (!d || !String(d.text ?? '').trim()) return '';
+  const loc = where({ step: d.step, block: d.block, title: d.title }, d.kind || '组件');
+  return `[草稿] ${loc}${d.label ? ` ${d.label}` : ''}：写着 ${short(String(d.text).trim(), 300)}，还没提交`;
 }
 
 // 一批动作合成一条 user 消息：一行一个

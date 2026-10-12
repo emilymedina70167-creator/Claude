@@ -3,6 +3,7 @@ import { parseFields } from '../parse.js';
 import { Frac } from '../linalg.js';
 import { widget, mdToHtml } from './common.js';
 import { session } from '../session.js';
+import { markDraft } from '../drafts.js';
 
 export function quiz(el, src) {
   const { fields, lines } = parseFields(src);
@@ -35,6 +36,17 @@ export function quiz(el, src) {
     gateDone();
     session.record({ type: 'quiz', q: qText, ok, attempts: tries, wrong: wrongPicks, el });
   };
+  // 草稿：多选题勾了还没「提交」；填空题写了还没「检查」（或者改了上次检查过的）
+  let lastChecked = '';
+  markDraft(body, () => {
+    if (closed) return '';
+    if (multi) {
+      const picked = [...body.querySelectorAll('.q-opt.is-picked')].filter((b) => !b.classList.contains('is-right') && !b.classList.contains('is-wrong'));
+      return picked.length ? `勾了 ${picked.map((b) => `${String.fromCharCode(65 + Number(b.dataset.i))}「${options[+b.dataset.i].text.slice(0, 40)}」`).join('、')}` : '';
+    }
+    const v = body.querySelector('.q-input')?.value.trim() || '';
+    return v && v !== lastChecked ? v : '';
+  });
   const explain = fields.explain || fields.explanation || '';
   const feedback = (ok, extra = '', picked = '') => {
     tries++;
@@ -80,6 +92,7 @@ export function quiz(el, src) {
   } else {
     const input = body.querySelector('.q-input');
     const check = () => {
+      lastChecked = input.value.trim();
       const ok = matches(input.value, fields.answer);
       input.classList.toggle('is-wrong', !ok);
       input.classList.toggle('is-right', ok);

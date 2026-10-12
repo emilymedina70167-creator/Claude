@@ -180,6 +180,9 @@ export function sortpass(el, src) {
   const body = widget(el, { title, cls: 'answer sortpass' });
   const done = session.gate(el, title);
   const q = fields.q || defaultQ;
+  const rq = plain(`${q.replace(/\$/g, '')}｜初始：${items.map(fmt).join(' ')}`);
+  // 每一次「检查」都记一条（答错的也记）：老师要看到错在哪，不只是最后对没对
+  const onTry = (t) => session.record({ type: 'answer', liveOnly: true, title, q: rq, value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, el });
   answerWidget(body, {
     q,
     qhtml: `<div class="arr-box">${arrayHtml(items, {})}</div>`,
@@ -188,8 +191,9 @@ export function sortpass(el, src) {
     hint: fields.hint,
     explain,
     before: fields.before,
+    onTry,
   }, (r) => {
-    session.record({ type: 'answer', title, q: plain(`${q.replace(/\$/g, '')}｜初始：${items.map(fmt).join(' ')}`), ok: r.ok, attempts: r.attempts, first: r.first, expected: `(${run.result.map(fmt).join(', ')})`, revealed: r.revealed, el });
+    session.record({ type: 'answer', final: true, title, q: rq, ok: r.ok, attempts: r.attempts, first: r.first, last: r.last, expected: `(${run.result.map(fmt).join(', ')})`, revealed: r.revealed, el });
     done();
   });
 }

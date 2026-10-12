@@ -16,8 +16,9 @@ import { copyRecord, toast } from '../record.js';
 import { parseOutput } from './protocol.js';
 import {
   buildSystem, actionText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
-  reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, nextPinId, bytes, PACK_BUDGET, compactionSlice, worthCompacting,
+  reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, nextPinId, bytes, PACK_BUDGET, compactionSlice, worthCompacting, draftLine,
 } from './prompt.js';
+import { draftsIn } from '../drafts.js';
 import { COMPONENT_DOCS } from './docs.js';
 import { createDevTeacher } from './devteacher.js';
 import { createClassBar, MODEL_TAG } from './bar.js';
@@ -571,6 +572,7 @@ export async function renderClass(root, meta) {
         kind: [...b.classList].find((c) => c.startsWith('block-'))?.slice(6) || '',
         vars: figureVars(b),
         results: (results.get(b.dataset.bid) || []).slice(-6).map((r) => r.line),
+        draft: draftsIn(b).map((d) => (d.label ? `${d.label}：${d.text}` : d.text)).join('；'),
       })) : [];
       const text = texText(seg.sec?.querySelector('.stage-body > p'));
       const summary = [clipTex(text, 140), seg.softNotes?.length ? `（${seg.softNotes.join('；')}）` : ''].filter(Boolean).join(' ');
@@ -585,6 +587,23 @@ export async function renderClass(root, meta) {
       screen: { w: vw, h: vh, landscape: vw > vh, board: bv.fit ? { w: bv.fit.w, h: bv.fit.avail } : null },
       fit: bv.fit && pages.has(bv.cur) ? { fits: bv.fit.fits, need: bv.fit.need, avail: bv.fit.avail } : null,
     };
+  }
+
+  // —— 草稿：学生写了、还没点「检查」「提交」的东西。不单独发，跟着下一轮一起告诉 Claude（每份只在变了的时候说一次）——
+  const toldDrafts = new WeakMap(); // 放草稿的元素 → 上次告诉 Claude 的文字
+  function freshDrafts() {
+    const out = [];
+    for (const seg of [...segs.values()].sort((a, b) => a.seq - b.seq)) {
+      if (!seg.sec || seg.hidden || seg.failed || seg.pending) continue;
+      for (const b of seg.sec.querySelectorAll('.block[data-bid]')) {
+        for (const d of draftsIn(b)) {
+          if (toldDrafts.get(d.el) === d.text) continue;
+          toldDrafts.set(d.el, d.text);
+          out.push({ step: seg.id, block: b.dataset.bid, kind: [...b.classList].find((c) => c.startsWith('block-'))?.slice(6) || '', title: texText(b.querySelector('.w-title')), label: d.label, text: d.text });
+        }
+      }
+    }
+    return out;
   }
 
   function addResult(a) {
@@ -678,10 +697,11 @@ export async function renderClass(root, meta) {
       started = true;
       const say = texts.join('\n');
       const ids = (await Promise.all(imgs.map((x) => x.id))).filter(Boolean);
-      let text = [actions.length ? actionsMessage(actions) : '', say].filter(Boolean).join('\n\n');
+      const drafts = freshDrafts().map(draftLine).filter(Boolean);
+      let text = [actions.length ? actionsMessage(actions) : '', drafts.join('\n'), say].filter(Boolean).join('\n\n');
       if (imgs.length) text += teacher.images ? `\n（附了 ${imgs.length} 张图：学生的手写或截图，白底黑字。）` : `\n（学生附了 ${imgs.length} 张图，但这个查看方式发不了图，你看不到；需要的话请学生用文字说。）`;
       // 学生说的话不上黑板，只进课堂记录
-      const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), images: ids, page: bv.cur || undefined });
+      const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), drafts: drafts.length ? drafts : undefined, images: ids, page: bv.cur || undefined });
       const blobs = imgs.map((x) => x.blob);
       lastImages = { seq: turn.seq, blobs };
       return converse(blobs);

@@ -6,6 +6,7 @@ import { photoPicker, transcribe, photoError } from '../photo.js';
 import { session } from '../session.js';
 import { escapeHtml } from './common.js';
 import { FEATURES } from '../features.js';
+import { markDraft } from '../drafts.js';
 
 export function thinkBox(host, { placeholder = '我觉得……', rows = 2, q = '', owner, padHeight = 200, padHint = '用 Apple Pencil 写，写完点「转成文字」' } = {}) {
   const wrap = document.createElement('div');
@@ -21,6 +22,9 @@ export function thinkBox(host, { placeholder = '我觉得……', rows = 2, q = 
     <div class="tb-status muted" hidden></div>`;
   host.appendChild(wrap);
   const ta = wrap.querySelector('.tb-text');
+  // 草稿：打了字（或手写 / 截图转出来的字）还没交。交了以后框锁上，或者用的一方调 markSent 记下交过的字
+  let sent = '';
+  markDraft(wrap, () => { const t = ta.value.trim(); return ta.readOnly || t === sent ? '' : t; });
   const padBox = wrap.querySelector('.tb-pad');
   const photoBox = wrap.querySelector('.tb-photo');
   const statusEl = wrap.querySelector('.tb-status');
@@ -95,6 +99,7 @@ export function thinkBox(host, { placeholder = '我觉得……', rows = 2, q = 
     get value() { return ta.value.trim(); },
     get via() { return via; },
     clear() { ta.value = ''; via = ''; say(''); },
+    markSent() { sent = ta.value.trim(); },
     lock(on = true) { ta.readOnly = on; wrap.classList.toggle('is-locked', on); padBox.hidden = true; photoBox.hidden = true; },
     focus() { ta.focus({ preventScroll: true }); },
   };

@@ -570,7 +570,7 @@ unit: 第2讲 §2 · 秩一方阵
 我说「下课了」时，用 `ArtifactData` 读：
 
 - `collection: "class_turns"`（`query`，`order_by: seq`，**`limit: 1000`**——不写 limit 只返回前 100 条，长的课会被截掉；记录多时加 `out_dir` 存成文件再读）：每一轮一条，按 `seq` 排起来就是整节课。字段：`seq`、`role`、`text`、`kind`、`discarded`、`at`，以及下面各自的字段。
-  - `role: "student"`：`say` 是我说的话（打字或快捷按钮）；`start: true` 是我点了「开始上课」按钮（`say` 固定是「开始上课。」，不是我打的字）；`actions` 是我在黑板上的动作，每条一行，比如「[作答] b7 里的 steps 第 3 步：选了『跑到线外去』（错），用时 44 秒」；`images` 是我附的手写 / 截图原图的 asset id；`text` 是发给课堂 Claude 的完整内容；`page` 是我发这条时黑板在第几块板。
+  - `role: "student"`：`say` 是我说的话（打字或快捷按钮）；`start: true` 是我点了「开始上课」按钮（`say` 固定是「开始上课。」，不是我打的字）；`actions` 是我在黑板上的动作，每条一行，比如「[作答] b7 里的 steps 第 3 步：选了『跑到线外去』（错），用时 44 秒」；`drafts` 是我在黑板上写了、还没点「检查」「提交」的草稿（填了一半的格子、打了字的理由框），跟着这一条一起发给了课堂里的 Claude，比如「[草稿] b4 里的 answer q-b4：写着 (3, □)，还没提交」；`images` 是我附的手写 / 截图原图的 asset id；`text` 是发给课堂 Claude 的完整内容；`page` 是我发这条时黑板在第几块板。
   - `role: "claude"`：`text` 是课堂里的 Claude 的完整输出（话 + 黑板指令原文）；`boardOps` 是实际执行了哪些指令（`op`：new / add / replace / hide / pin / unpin / figure，`id`，`page` 是写在第几块板，`ok: false` 的没执行成功，`error` 是原因；figure 还有 `action`：set / play / highlight 和 `args`）；`page` 是这一轮之后黑板停在第几块板，`talkPage` 是它这一轮的话写在第几块板的顶上（只改了写法、没对我说话的轮没有）；`truncated: true` 表示这一轮太长被截断了；`tools` 是它调用过的工具（如果有）；`modelApplied` 一定是 `claude-opus-5-5`。
   - `role: "system"`：页面发给它的系统消息。`kind` 有：`lint`（它写的组件有写法错误，没显示，要求重写）、`note`（指令没执行之类的提醒）、`images`（它要看的手写原图，附在这一轮）、`summary`（对话太长时的摘要，`upTo` 是摘要覆盖到第几轮）、`closing`（下课小结）、`fallback`（Opus 5.5 不可用，这一轮作废）、`error`（这一轮出错或我点了停止，`code` 是原因）。
   - 旧版课堂记录里的 `sayAfter`、`boardAt` 只是当时页面排话的位置，读记录时不用管。

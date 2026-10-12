@@ -3,6 +3,7 @@ import { createScene, parseScene } from '../scene.js';
 import { compile, numText } from '../expr.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, tex2html } from './common.js';
+import { markDraft } from '../drafts.js';
 
 export function predict(el, src) {
   const parsed = parseScene(src);
@@ -37,6 +38,9 @@ export function predict(el, src) {
   const status = side.querySelector('.pred-status');
   const go = side.querySelector('.pred-go');
   const done = session.gate(el, titleText);
+  // 草稿：猜测点拖过了、还没点「确定」
+  const start = [...extra.guess];
+  markDraft(body, () => (!target && (extra.guess[0] !== start[0] || extra.guess[1] !== start[1]) ? `把猜测点拖到了 (${extra.guess.map((x) => Number(x.toFixed(1))).join(', ')})，还没点确定` : ''));
   const id = session.registerScene(el, api, titleText);
   el.dataset.scene = id;
 

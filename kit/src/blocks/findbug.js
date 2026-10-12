@@ -2,6 +2,7 @@
 // 点对了显示 why；点错了提示「这一行是对的」，第二次错后可以看答案。
 // 「错在哪」的文字只记录，由对话里的 Claude 看；写了 rubric: 时页面 Claude 可以给一句提示。
 import { session } from '../session.js';
+import { markDraft } from '../drafts.js';
 import { getAI } from '../ai.js';
 import { widget, mdToHtml } from './common.js';
 import { plain } from './answer.js';
@@ -44,6 +45,9 @@ export function findbug(el, src) {
   const fb = body.querySelector('.fb-fb');
   const tb = thinkBox(explain, { placeholder: '比如：这里应该是……，因为……', q: `${fields.q || ''}\n错误的解答：\n${lines.map((l, i) => `${i + 1}. ${l}`).join('\n')}`, owner: el });
   let pick = 0, attempts = 0, finished = false;
+  let tried = 0; // 上次点「提交」时选的是第几行
+  // 草稿：点了某一行还没提交（理由框自己另算一份草稿）
+  markDraft(body, () => (!finished && pick && pick !== tried ? `点了第 ${pick} 行（认为错在这里），还没提交` : ''));
   const firstPicks = [];
 
   body.querySelectorAll('.fb-line').forEach((b) => b.addEventListener('click', () => {
@@ -60,6 +64,8 @@ export function findbug(el, src) {
     const text = tb.value;
     if (!text) { tb.focus(); tb.ta.classList.add('is-need'); return; }
     attempts++;
+    tried = pick;
+    tb.markSent();
     firstPicks.push(pick);
     const ok = pick === bug;
     session.record({ type: 'findbug', title, q: plain((fields.q || title).replace(/\$/g, '')), value: `第 ${pick} 行`, ok, attempts, text, via: tb.via || undefined, expected: `第 ${bug} 行`, liveOnly: !ok && attempts < 2, el });
