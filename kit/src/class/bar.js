@@ -8,6 +8,7 @@ import { createPad } from '../ink/pad.js';
 import { createPageNav } from './pagenav.js';
 import { FEATURES } from '../features.js';
 import { imageToPng } from '../flatten.js';
+import { VERSION } from '../version.js';
 
 export const QUICK = ['没懂', '想不出来', '换个说法', '继续'];
 export const MAX_IMAGES = 4;
@@ -178,6 +179,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
         <button type="button" class="cb-item cb-copy" role="menuitem">${ICON.copy}<span>复制学习记录</span></button>
         <button type="button" class="cb-item cb-end" role="menuitem">${ICON.bell}<span>下课</span></button>
         <div class="cb-tag" title="课堂里的 Claude 固定用 Opus 5.5，effort 为 high">${tag}</div>
+        <div class="cb-ver" title="这个页面用的组件库版本（和项目说明的版本号对得上就是最新的）">组件库 ${VERSION}</div>
       </div>
       <div class="cb-attach" hidden></div>
       <form class="cb-form">

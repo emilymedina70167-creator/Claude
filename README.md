@@ -41,9 +41,15 @@
 
 ## 设置
 
-1. 打开 Claude 里的线性代数项目，进入 **Project instructions（项目指令）**。
-2. 把 [`CLAUDE-PROJECT.md`](CLAUDE-PROJECT.md) 的全部内容粘贴进去，放在原有指令后面。
-3. 发资料给 Claude，或者说「按学习台格式做单元 2」。
+1. 打开 Claude 里的项目，进入 **Project instructions（项目指令）**。
+2. 以前贴进去的那一大段学习台说明删掉，换成下面这一段（你自己写的其他指令留着）：
+
+   ```
+   【线代学习台】做和学习台有关的任何事之前（做课件、写实时黑板、备课堂资料包、读课堂记录或学习记录），先用 Artifact 工具读最新说明：action: "read"，url: https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF ，path: "CLAUDE-PROJECT.md"。完全照它做；它和你记忆里的旧做法冲突时，以它为准。读不到就告诉我，不要凭记忆做。同一个对话里读一次就够，我说「说明更新了」再重读。
+   ```
+
+   说明的全文（[`CLAUDE-PROJECT.md`](CLAUDE-PROJECT.md)）跟着组件库一起发布，每次更新组件库它也一起更新，所以项目指令里只放这一段，以后不用再改。
+3. 发资料给 Claude，或者说「按学习台格式做单元 2」。问它「学习台说明是哪个版本」，答的版本号应该和组件库页面「⋯」里写的一样。
 
 ## 组件
 

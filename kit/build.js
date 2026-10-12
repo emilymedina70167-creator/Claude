@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { componentDocs } from './build-docs.js';
+import { componentDocs, docVersion } from './build-docs.js';
 
 const require = createRequire(import.meta.url);
 const katexDist = path.dirname(require.resolve('katex/dist/katex.min.css'));
@@ -42,7 +42,8 @@ const componentDocsPlugin = {
   },
 };
 
-const banner = `/*! 线代学习台 la-kit | https://github.com/emilymedina70167-creator/Claude
+const version = docVersion(readFileSync(projectDoc, 'utf8'));
+const banner = `/*! 线代学习台 la-kit ${version} | https://github.com/emilymedina70167-creator/Claude
  *  bundles markdown-it (MIT) and KaTeX (MIT, fonts SIL OFL) */`;
 
 await build({
@@ -52,6 +53,7 @@ await build({
   format: 'iife',
   target: ['safari16', 'chrome110', 'firefox110'],
   loader: { '.css': 'text' },
+  define: { __LAKIT_VERSION__: JSON.stringify(version) },
   plugins: [katexCssPlugin, componentDocsPlugin],
   banner: { js: banner },
   outfile: 'kit/dist/la-kit.js',

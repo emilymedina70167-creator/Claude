@@ -1,6 +1,7 @@
 // 实时黑板（外部版）底部的一条：左边翻板（pagenav.js），右边连接状态和「⋯」（板书、复制学习记录）。
 // 说话在对话框里，这里没有输入框。样式和课堂模式底部那条共用（class.css 的 .class-bar / .cb-*）。
 import { createPageNav } from '../class/pagenav.js';
+import { VERSION } from '../version.js';
 
 const ICON = {
   more: '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
@@ -21,6 +22,7 @@ export function createLiveBar({ onNav, onCopy } = {}) {
       <div class="cb-menu" hidden role="menu" aria-label="黑板菜单">
         <div class="cb-dock"></div>
         <button type="button" class="cb-item cb-copy" role="menuitem">${ICON.copy}<span>复制学习记录</span></button>
+        <div class="cb-ver" title="这个页面用的组件库版本（和项目说明的版本号对得上就是最新的）">组件库 ${VERSION}</div>
       </div>
     </div>`;
   document.body.appendChild(el);

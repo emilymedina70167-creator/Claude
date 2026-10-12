@@ -15,6 +15,7 @@ import classCss from './class/class.css';
 import classBoardCss from './class/board.css';
 import themesCss from './themes.css';
 import { themeOf } from './theme.js';
+import { VERSION } from './version.js';
 
 // 粉笔手写体：数字和字母用 Caveat（1 和 7 容易分辨），中文用龙藏体。
 // Google Fonts 是 artifact 唯一允许的外部样式来源；加载不到时退回系统楷体
@@ -122,4 +123,4 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 else renderAll();
 
 // 留给高级用法：window.LAKit.render(markdown, element)
-window.LAKit = { ...(window.LAKit || {}), render: (md, el) => { injectStyles(); el.classList.add('la-lesson'); renderLesson(md, el); }, mdToHtml, blocks: Object.keys(blocks), session, recordText };
+window.LAKit = { ...(window.LAKit || {}), version: VERSION, render: (md, el) => { injectStyles(); el.classList.add('la-lesson'); renderLesson(md, el); }, mdToHtml, blocks: Object.keys(blocks), session, recordText };
