@@ -76,29 +76,39 @@ artifact 不能从 GitHub 加载脚本，也不能加载外部样式和字体。
 ## 仓库结构
 
 ```
-CLAUDE-PROJECT.md        放进 Claude 项目指令的教学说明
+CLAUDE-PROJECT.md        教 Claude 写课件的说明（跟着组件库发布；第三节打包进 la-kit.js 当组件手册）
+CLAUDE.md                给 Claude Code 的开发说明（架构、命令、硬性规定）
+docs/                    需求原文：实时黑板、课堂模式、课堂教具；数据结构组件的方案（待定）
 kit/src/
-  main.js                入口：渲染 <script type="text/markdown"> 里的课件
-  guided.js              分节解锁、进度条
+  main.js                入口：渲染 <script type="text/markdown"> 里的课件，按 mode 分发
+  guided.js              一次写完的课件：分节解锁、进度条
   live/                  实时黑板：分板（layout）、底部翻板条（livebar）、数据库连接、本地替身（?dev）、开发面板、作答和写法错误写回
-  class/                 课堂模式：输出解析（protocol）、提示词（prompt）、底部输入框（bar）、控制器（classroom，Claude 的话也由它写在黑板上）、模拟老师
-  graph.js  space.js     函数图、三维图
-  link.js                steps 和图的联动
-  session.js             关卡、学习记录、图形注册
+  class/                 课堂模式：控制器（classroom）、输出解析（protocol）、提示词（prompt）、底部输入框（bar）、
+                         一屏一块板（boardview、pagenav）、察觉卡住（stuck）、模拟老师和开发面板（?dev）
+  render.js              Markdown + KaTeX + 组件 → 页面
+  blocks/                各个组件（answer、steps、matrix、derive、sketch、image、practice……）
   scene.js  expr.js      图形描述语言、表达式求值
+  graph.js  space.js     函数图、三维图
+  link.js  mods.js       steps 和图的联动、命令行末尾的修饰
+  exact.js  linalg.js    精确分数（\calc、let 块）、行化简
+  markspec.js  markdraw.js  marks.js   板书标注：写法、手绘的圈框箭头和旁注位置、画到页面上
+  matrixspec.js          会动的矩阵：写法、精确求值、哪些格子变了
+  formula.js  formulainput.js  含 n 的式子：读懂写法、代值判分、输入框
+  practicespec.js        自定义练习题型：模板、随机取数、自检
+  derivespec.js  svgsafe.js    分拍板书；示意图的 SVG 清理
   check.js  mathinput.js 判分（等价答案）、作答输入和数字小键盘
   generators.js          练习题生成器
+  drafts.js              还没提交的草稿（课堂 Claude 和实时黑板都看得到）
   ai.js  tutor.js        页面里调用 Claude、助教面板
-  photo.js               截图作答：上传/粘贴手写截图，Claude 转写、读出最终答案
-  flatten.js             截图转白底 PNG（透明底的浅色笔迹先压暗）
+  ink/                   Apple Pencil 板书、手写板
+  photo.js  flatten.js   截图作答；截图转白底 PNG
+  session.js  record.js  关卡、作答、图形注册；学习记录
   features.js            功能开关（页面手写板暂时关着）
-  record.js              学习记录
-  blocks/                各个组件
-  linalg.js              精确分数、行化简
-  styles.css             样式（自动适配深色模式）
-kit/dist/la-kit.js       打包好的单文件
-kit/examples/            示范单元、组件展示页
-tests/                   单元测试
+  styles.css  themes.css 样式（默认石墨）和另外四种风格
+kit/dist/la-kit.js       打包好的单文件（自包含）
+kit/examples/            示范单元、组件展示页、实时黑板和课堂的本地试用页（?dev）
+tests/                   单元测试（node --test）
+.github/workflows/       GitHub 上每次推送自动跑测试、检查打包文件和源码一致
 ```
 
 ## 修改组件库之后

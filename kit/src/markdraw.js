@@ -108,7 +108,10 @@ export function shapeFor(style, geom, seed) {
   const { x, y, w, h } = b;
   switch (style) {
     case 'circle': {
-      const rx = w / 2 * 1.18 + PAD, ry = h / 2 * 1.22 + PAD * 0.8;
+      // 公式里左右挨着别的符号，上下比较空：圈得高一点、窄一点，宽度刚好包住这一项的四个角再多 2px，
+      // 不然会压到旁边的字（A² = αβᵀαβᵀ 圈中间的 βᵀα）。单个字母时别太瘦长
+      const ry = h / 2 * 1.35 + PAD * 0.7;
+      const rx = Math.max(w / 2 / Math.sqrt(1 - (h / 2 / ry) ** 2) + 2, ry * 0.85);
       const cx = x + w / 2, cy = y + h / 2;
       return { strokes: [ellipse(cx, cy, rx, ry, j(0.04), R)], fills: [], bbox: { x: cx - rx * 1.1, y: cy - ry * 1.1, w: rx * 2.2, h: ry * 2.2 } };
     }
@@ -134,14 +137,19 @@ export function shapeFor(style, geom, seed) {
       return { strokes: [], fills: [], bbox: { x: x - 2, y: y - 2, w: w + 4, h: h + 4 } };
     default: { // box
       // 矩阵的一行（一列）：上下（左右）收紧，挨着的几行各框各的，框线不打架
-      const px = geom.tight === 'x' ? geom.inset ?? 1 : PAD - 1, py = geom.tight === 'y' ? geom.inset ?? 1 : PAD - 1;
+      const tx = geom.tight === 'x', ty = geom.tight === 'y';
+      const px = tx ? geom.inset ?? 1 : PAD - 1, py = ty ? geom.inset ?? 1 : PAD - 1;
       const L = x - px, T = y - py, Rr = x + w + px, B = y + h + py;
-      const o = () => (geom.tight ? 1.5 + R() * 2.5 : 3 + R() * 4); // 角上多出去一点
+      // 角上多出去一点。收紧的方向上不出头、抖得也小：不然竖边伸进上下两行的框里，几行的框线叠成一团
+      const o = () => (geom.tight ? 1.5 + R() * 2.5 : 3 + R() * 4);
+      const ox = () => (tx ? 0 : o()), oy = () => (ty ? 0 : o());
+      const jx = () => j(tx ? 0.5 : 1.4), jy = () => j(ty ? 0.5 : 1.4);
+      const bh = ty ? 0.6 : 1.6, bv = tx ? 0.6 : 1.6;
       const d = [
-        stroke([L - o(), T + j()], [Rr + o(), T + j()], R),
-        stroke([Rr + j(), T - o()], [Rr + j(), B + o()], R),
-        stroke([Rr + o(), B + j()], [L - o(), B + j()], R),
-        stroke([L + j(), B + o()], [L + j(), T - o()], R),
+        stroke([L - ox(), T + jy()], [Rr + ox(), T + jy()], R, bh),
+        stroke([Rr + jx(), T - oy()], [Rr + jx(), B + oy()], R, bv),
+        stroke([Rr + ox(), B + jy()], [L - ox(), B + jy()], R, bh),
+        stroke([L + jx(), B + oy()], [L + jx(), T - oy()], R, bv),
       ].join(' ');
       return { strokes: [d], fills: [], bbox: { x: L - 7, y: T - 7, w: Rr - L + 14, h: B - T + 14 } };
     }

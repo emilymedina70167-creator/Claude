@@ -138,6 +138,28 @@ test('snapSlider、flights、changedCells：矩阵怎么动', () => {
   assert.equal(cellTeX(Math.sqrt(2)), '1.41');
 });
 
+test('markdraw：逐行框的时候，相邻两行的框线不打架', () => {
+  // 表格（matrix 组件）里三行挨着的格子，每行 38px 高；marks.js 给表格的行 inset -5
+  const rowBox = (i) => ({ x: 40, y: 100 + i * 38, w: 240, h: 38 });
+  const ys = (d) => [...d.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)].map((m) => +m[2]);
+  const half = 1.4 + 1; // 线宽 2.8 的一半，加上粉笔滤镜的毛边
+  for (let s = 0; s < 40; s++) {
+    for (let i = 0; i < 2; i++) {
+      // 贝塞尔曲线落在控制点围成的范围里，所以比较控制点就够保守了
+      const lo = Math.max(...ys(shapeFor('box', { box: rowBox(i), tight: 'y', inset: -5 }, `r${i}:${s}`).strokes[0]));
+      const hi = Math.min(...ys(shapeFor('box', { box: rowBox(i + 1), tight: 'y', inset: -5 }, `r${i + 1}:${s}`).strokes[0]));
+      assert.ok(lo + half < hi - half, `seed ${s}：第 ${i + 1} 行的框（到 ${lo}）和下一行的框（从 ${hi}）碰到了`);
+    }
+  }
+  // 逐列也一样（左右方向）
+  const xs = (d) => [...d.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)].map((m) => +m[1]);
+  for (let s = 0; s < 40; s++) {
+    const a = Math.max(...xs(shapeFor('box', { box: { x: 0, y: 0, w: 60, h: 120 }, tight: 'x', inset: -5 }, `c1:${s}`).strokes[0]));
+    const b = Math.min(...xs(shapeFor('box', { box: { x: 60, y: 0, w: 60, h: 120 }, tight: 'x', inset: -5 }, `c2:${s}`).strokes[0]));
+    assert.ok(a + half < b - half, `seed ${s}：相邻两列的框碰到了`);
+  }
+});
+
 test('markdraw：形状、箭头、旁注放哪', () => {
   const R1 = rng('m1'), R2 = rng('m1');
   assert.equal(R1(), R2(), '同一个 seed，抖动一样');
