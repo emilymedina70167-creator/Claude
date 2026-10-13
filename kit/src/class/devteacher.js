@@ -20,6 +20,7 @@
 // 「测试:出题」自定义练习模板（practice type: custom，页面随机出题）；「测试:公式」写含 n 的式子（answer 的 formula: n）；
 // 「测试:示意图」sketch 当场画的图 + highlight + label= 标注；「测试:推导」derive 分拍板书 + figure play step；
 // 「测试:原图」image 贴讲义原图（本地用一张模拟的）。
+// 系统发来的「[动作] … 没有动静」（察觉卡住）→ 轻轻问一句；只带「[板书]」的消息 → 说收到了。
 
 export const DEV_LIMITS = Object.freeze({ maxPromptBytes: 262144, images: Object.freeze({ maxCount: 4, maxInputBytes: 20000000, mediaTypes: Object.freeze(['image/png', 'image/jpeg']) }) });
 const THINK_MS = 600; // 第一个字出来前的停顿（模拟思考）
@@ -121,6 +122,15 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
         String.raw`先拖一拖图里灰色的 $\mathbf x$，看黄色的 $A\mathbf x$ 停在哪，再回答第 1 步。`,
       ),
     };
+  }
+
+  // 察觉卡住：只轻轻问一句，不动黑板
+  if (/没有动静/.test(said)) {
+    return { kind: 'nudge', text: join(pic + '不急。卡在哪一步了吗？要提示就点「想不出来」，在纸上算的话算完再交。') };
+  }
+  // 学生在黑板上写了板书（附图）：模拟老师不读图，只回应收到
+  if (/^\[板书\]/m.test(said) && !/\[(作答|动作)\]/.test(said)) {
+    return { kind: 'ink', text: join(pic + '看到你在黑板上写的了（模拟老师不读图）。接着说说你是怎么想的？') };
   }
 
   if (/\[(作答|动作)\]/.test(said)) {

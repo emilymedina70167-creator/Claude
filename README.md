@@ -10,7 +10,7 @@
 
 ## Apple Pencil
 
-- **板书**：左下角「板书」按钮。打开后用 Pencil 在整页课件上书写，压感控制粗细，笔身倾斜写出粉笔侧锋的宽笔画；手指照常滚动和点按（防误触）；笔尖悬停时显示落笔位置。两指轻点撤销、三指轻点重做，橡皮按整笔擦除。笔迹跟着所在小节走，保存在这台设备上。
+- **板书**：左下角「板书」按钮。打开后用 Pencil 在整页课件上书写，压感控制粗细，笔身倾斜写出粉笔侧锋的宽笔画；手指照常滚动和点按（防误触）；笔尖悬停时显示落笔位置。两指轻点撤销、三指轻点重做，橡皮按整笔擦除。笔迹跟着所在小节走，保存在这台设备上。课堂模式里，在当前板上新写的板书会跟着你下一条消息（或下一次作答）变成图片发给课堂里的 Claude，它看得到你在板上算了什么。
 - **作答框里直接写**：用 iPadOS 的「随手写」（用笔点输入框时不弹数字键盘）。
 - **草稿区**：`draft` 可以用 Pencil 演算，内容保存在这台设备上。
 - **Notability 手写粘贴**：在 Notability 里圈选「拷贝」（或者系统截图「拷贝并删除」），回到作答框下面的粘贴框长按「粘贴」，Claude 转写后你核对再提交。课堂模式里点输入框左边的图片按钮，在弹出的小框里粘贴。
@@ -35,7 +35,9 @@
 
 ### 课堂模式（mode: class）
 
-页面底部只有一个输入框，用来跟「课堂里的 Claude」（只用 Opus 5.5、effort high）说话。黑板一屏一块板：讲新的一件事它就换一块新板，旧板在底部的翻页条上翻回去看，不用上下滑；它说的话写在当前板最上面一行，你发的消息不显示；整节课要用的记号和结论放在常驻栏里（横屏在右边，竖屏在上方）。你在黑板上作答，它马上接着教。板书、复制学习记录、下课在输入框右边的「⋯」里。项目对话里的 Claude 课前写资料包（`pack/main`、`pack/problems`），课后读课堂记录（`class_turns`、`class_notes`）。说明见 `CLAUDE-PROJECT.md` 第六节，需求原文见 [`docs/classroom-spec.md`](docs/classroom-spec.md)。本地试用：把 `kit/dist/la-kit.js` 放在同一个文件夹，打开 `kit/examples/class-demo.html?dev`（模拟老师按剧本回放，不花额度）。
+页面底部只有一个输入框，用来跟「课堂里的 Claude」（只用 Opus 5.5、effort high）说话。黑板一屏一块板：讲新的一件事它就换一块新板，旧板在底部的翻页条上翻回去看，不用上下滑；它说的话写在当前板最上面一行，你发的消息不显示；整节课要用的记号和结论放在常驻栏里（横屏在右边，竖屏在上方）。你在黑板上作答，它马上接着教。板书、复制学习记录、「停久了提醒老师」（题还没做、4 分钟没动静时提醒它轻轻问一句，可以关）、下课在输入框右边的「⋯」里。板顶那句话后面的「Opus 5.5 ✓」表示这句话是平台核验过、由 Opus 5.5 回答的，「⋯」里写着这节课核验了几轮、作废了几轮。
+
+它手里的教具：在板上圈、框、划、写旁注（`board mark`），会动的矩阵（`matrix`：幂次、分块、乘积，格子变了会闪、数挪了会飞），一行行写出来的推导（`derive`），当场画的示意图（`sketch`），讲义原图（`image`），黑板上的数让页面精确地算（公式里的 `\calc{…}`），换着数出题判分（`practice` 的自定义题型），判含 $n$ 的式子（`formula: n`，代几组 $n$ 比较，告诉你哪个 $n$ 对不上）。需求和设计见 [`docs/teaching-tools-spec.md`](docs/teaching-tools-spec.md)。项目对话里的 Claude 课前写资料包（`pack/main`、`pack/problems`），课后读课堂记录（`class_turns`、`class_notes`）。说明见 `CLAUDE-PROJECT.md` 第六节，需求原文见 [`docs/classroom-spec.md`](docs/classroom-spec.md)。本地试用：把 `kit/dist/la-kit.js` 放在同一个文件夹，打开 `kit/examples/class-demo.html?dev`（模拟老师按剧本回放，不花额度）。
 
 本地试用实时黑板：打开 `kit/examples/live-demo.html?dev`（`la-kit.js` 放在同一目录），右上角的「开发面板」可以扮演对话里的 Claude 往黑板上写（第几块板、放不放常驻栏）、查看作答和页面写回的信息。
 
@@ -55,13 +57,14 @@
 
 | 类别 | 组件 |
 |---|---|
-| 动手 | `answer` 作答判分（认可等价答案：分数/小数、不同的基、差倍数的特征向量），`practice` 程序出题 |
+| 动手 | `answer` 作答判分（认可等价答案：分数/小数、不同的基、差倍数的特征向量；`formula: n` 写含 n 的式子、代值判分），`practice` 程序出题（`type: custom` 按模板随机取数出题） |
 | 图形 | `scene` 描述式交互图（可拖动的点、滑块、变换网格、张成空间、目标），`predict` 先猜再揭晓 |
 | 思考 | `conjecture` 用自己的话写下发现（页面 Claude 批改，或 `grade: off` 留给对话里的 Claude） |
 | 带着动脑 | `steps` 一步步揭开的例题（先写下一步再看，图跟着步骤动），`recognize` 认方法快练（计时、只重做错的），`findbug` 找错 |
 | 更多图形 | `graph` 函数图（密度、分布律、可拖的竖线、面积），`space` 可旋转的三维图（平面、张成、平行六面体），`scene` 里的 `curve` 参数曲线和 `eigen` 特征方向 |
 | 检测 | `quiz` 选择/填空，`summary` 复制学习记录 |
-| 演示 | `rref` 逐步行化简（精确分数），`matmul` 矩阵乘法，`transform2d`、`vectors` |
+| 演示 | `matrix` 会动的矩阵（滑块、分块、乘积点选、标注），`derive` 分拍板书，`sketch` 示意图，`image` 讲义原图，`rref` 逐步行化简（精确分数），`matmul` 矩阵乘法，`transform2d`、`vectors` |
+| 验算 | `let` 定义整节课的量，公式里 `\calc{…}` 页面精确地算，`\hl{名字}{…}` 给一项起名字（课堂里用来圈它），`\chalk{颜色}{…}` 彩色粉笔 |
 | 内容 | `definition` `theorem` `key` `warning` `example` `intuition`，`hint` `solution` `proof`，`card` |
 
 完整写法见 [`CLAUDE-PROJECT.md`](CLAUDE-PROJECT.md)。

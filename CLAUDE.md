@@ -60,12 +60,12 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ### 课堂模式（`kit/src/class/`）
 
-- `classroom.js`：控制器。一屏一块板（`board new` 换板，旧板翻页看）、板顶那句话、常驻栏、一屏放不放得下的测量（`--board-h`）、学生作答排队（1.5 秒合并，拖动跟着下一条一起发；没提交的草稿也跟着下一条发，见 `drafts.js`）、调用课堂 Claude、执行黑板指令、写法自检和自动重写、刷新后恢复。板书标注记在 `marks`（id → 所在段和 spec），段被改写 / 撤回时一起擦掉，刷新后按 `boardOps` 的时间线重放；工具 `calc`（精确计算，查看方式支持工具时才给）。板顶那句话后面标出平台核验的模型（`class_pages.talkBy`），「⋯」菜单写核验 / 作废了几轮，下课小结的最后一行（`foot`）和 `class_notes` 的 `verify` 由页面写。对话太长时的摘要也只用 Opus 5.5 high，在一轮讲完后后台写（不让学生等）；学生附的图直接交给 Claude，不等它传进 assets。学生发的消息不上黑板。
+- `classroom.js`：控制器。一屏一块板（`board new` 换板，旧板翻页看）、板顶那句话、常驻栏、一屏放不放得下的测量（`--board-h`）、学生作答排队（1.5 秒合并，拖动跟着下一条一起发；没提交的草稿也跟着下一条发，见 `drafts.js`）、调用课堂 Claude、执行黑板指令、写法自检和自动重写、刷新后恢复。板书标注记在 `marks`（id → 所在段和 spec），段被改写 / 撤回时一起擦掉，刷新后按 `boardOps` 的时间线重放；工具 `calc`（精确计算，查看方式支持工具时才给）。板顶那句话后面标出平台核验的模型（`class_pages.talkBy`），「⋯」菜单写核验 / 作废了几轮，下课小结的最后一行（`foot`）和 `class_notes` 的 `verify` 由页面写。对话太长时的摘要也只用 Opus 5.5 high，在一轮讲完后后台写（不让学生等）；学生附的图直接交给 Claude，不等它传进 assets。学生发的消息不上黑板。学生在当前板、常驻栏上新写的板书（`ink/` 的笔画，按段的位置拼成一张图），跟着下一条消息导出成图发给课堂 Claude（`[板书]` 那一行）；当前板上有题没做、学生很久没动静时，提醒课堂 Claude 轻轻问一句（`stuck.js`，「⋯」里可关，`?dev&stuck=8` 把等待改成 8 秒）。
 - `protocol.js`：解析课堂 Claude 的输出。普通文字是对学生说的话（写在板顶）；```` ```board ```` 围栏块是黑板指令（new / add / replace / hide / pin / unpin / figure / mark / unmark）。纯函数，支持流式前缀；`mark` 块闭合以后才把块里的各行拼成 `marks`。
 - `prompt.js`：每一轮发给课堂 Claude 的内容（红线 `DEFAULT_RULES`、黑板指令说明 `PROTOCOL_DOC`、组件手册、资料包、黑板现状、对话历史和压缩）。纯函数。
 - `docs.js` + `kit/build-docs.js`：构建时从 `CLAUDE-PROJECT.md` 第三节截出组件手册打包进去。
 - `bar.js`：底部输入框（附图、手写板、「⋯」菜单、iPad 软键盘）和它上面的一条：翻页（上一块 / 下一块 / 板列表 / 回到当前板）、快捷回答。不显示消息。
-- `devteacher.js`：`?dev` 的模拟老师；`devpanel.js`：开发面板。
+- `devteacher.js`：`?dev` 的模拟老师；`devpanel.js`：开发面板（还有本地试用的模拟讲义图 `ensureDemoSlide`）。
 - 数据（artifact 数据库）：`steps` 黑板段落（`page` 在第几块板，`place: 'pin'` 是常驻栏），`class_pages` 每块板（标题、板顶的话和 `talkBy`、下课小结和 `foot`），`class_turns` 每一轮（`boardOps` 里有 mark / unmark），`class_notes` 观察和下课小结（带 `verify`），`answers` / `events` 作答，`pack/main`、`pack/problems` 资料包。
 - 每一轮的整份说明（`buildSystem`）要在 160 KiB 以内，给对话留地方（`tests/class-prompt.test.js` 守着）。说明再加长时先想办法精简；资料包预算 `PACK_BUDGET` 已经从 120 KiB 调到 104 KiB。
 

@@ -143,12 +143,14 @@ const ICON = {
   more: '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
   copy: '<svg viewBox="0 0 24 24"><rect x="8" y="8" width="11.5" height="12" rx="2"/><path d="M15.5 8V6a2 2 0 0 0-2-2H6.5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2H8"/></svg>',
   bell: '<svg viewBox="0 0 24 24"><path d="M5 19.5h14"/><path d="M7 19.5V11a5 5 0 0 1 10 0v8.5"/><path d="M12 3.5V6"/></svg>',
+  clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></svg>',
 };
 
 // 翻板条在 pagenav.js（实时黑板也用）；这里接着导出，老的引用不用改
 export { navLabel } from './pagenav.js';
 
-export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick, onNav, images = false, tag = MODEL_TAG } = {}) {
+// stuck：「停久了提醒老师」开关 { on, onChange(on) }（不给就不显示这一项）
+export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick, onNav, images = false, tag = MODEL_TAG, stuck = null } = {}) {
   const el = document.createElement('div');
   el.className = 'class-bar';
   el.setAttribute('role', 'region');
@@ -177,6 +179,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
       <div class="cb-menu" hidden role="menu" aria-label="课堂菜单">
         <div class="cb-dock"></div>
         <button type="button" class="cb-item cb-copy" role="menuitem">${ICON.copy}<span>复制学习记录</span></button>
+        ${stuck ? `<button type="button" class="cb-item cb-stuck" role="menuitemcheckbox" aria-checked="${stuck.on ? 'true' : 'false'}" title="我在一块板上很久没动静（题还没做）时，提醒 Claude 问一句">${ICON.clock}<span></span></button>` : ''}
         <button type="button" class="cb-item cb-end" role="menuitem">${ICON.bell}<span>下课</span></button>
         <div class="cb-tag" title="课堂里的 Claude 固定用 Opus 5.5，effort 为 high">${tag}</div>
         <div class="cb-ver" title="这个页面用的组件库版本（和项目说明的版本号对得上就是最新的）">组件库 ${VERSION}</div>
@@ -297,6 +300,17 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
     if (menuOpen) { setMenu(false); moreBtn.focus({ preventScroll: true }); } else if (!slate.hidden) openSlate(false); else if (!tray.hidden) openTray(false);
   });
   on(copyBtn, 'click', () => { setMenu(false); onCopy?.(); });
+  const stuckBtn = $('.cb-stuck');
+  if (stuckBtn) {
+    const syncStuck = () => { stuckBtn.querySelector('span').textContent = `停久了提醒老师：${stuckBtn.getAttribute('aria-checked') === 'true' ? '开' : '关'}`; };
+    syncStuck();
+    on(stuckBtn, 'click', () => {
+      const v = stuckBtn.getAttribute('aria-checked') !== 'true';
+      stuckBtn.setAttribute('aria-checked', String(v));
+      syncStuck();
+      stuck.onChange?.(v);
+    });
+  }
   // 板书按钮（板书层自己管开关）：点了就收起菜单，让开黑板
   on(dock, 'click', (e) => { if (e.target.closest('.ink-fab')) setTimeout(() => setMenu(false), 0); });
 

@@ -28,6 +28,8 @@ import { initClassDevPanel, ensureDemoSlide } from './devpanel.js';
 import { markLayer } from '../marks.js';
 import { markText, markWhere } from '../markspec.js';
 import { calcValue, exactText } from '../exact.js';
+import { strokesToBlob } from '../ink/engine.js';
+import { shouldNudge, stuckText, STUCK_MS } from './stuck.js';
 
 export const MODEL = 'claude-opus-5-5';
 // 学生明确要求：讲课只能是 Opus 5.5、effort high；modelTier 只是平台要求的退路（退路的输出会被丢弃）
@@ -117,13 +119,20 @@ export async function renderClass(root, meta) {
   let compactNext = false;
   let compactRetryAt = 0; // 摘要失败后，等对话再长几轮才再试（不要每一轮都卡在失败的摘要上）
   let budgetLevel = 0; // prompt_too_large 之后逐级缩小这一轮的内容；成功一轮就复原
+  const toldInk = new WeakSet(); // 已经发给课堂 Claude 的板书笔画
+  let lastActive = Date.now(); // 学生最后一次有动静（点、写、打字）
+  let nudged = false; // 这一轮已经提醒过「停了很久」
   let lastPrompt = null; // 开发面板看：上一轮发了多少字节
   // 被函数声明用到、而 restore() 在函数定义之前就会调到那些函数：要在这里先有值（let / const 有暂时性死区）
   let raf = 0, pendingText = ''; // 草稿：一帧最多画一次
 
+  // 察觉卡住的开关（学生在「⋯」里可以关；记在这台设备上）
+  const stuckKey = `la-class-stuck:${session.title}`;
+  let stuckOn = (() => { try { return localStorage.getItem(stuckKey) !== 'off'; } catch { return true; } })();
   const bar = createClassBar({
     images: teacher.images,
     tag: mock ? `${MODEL_TAG} · 模拟老师` : MODEL_TAG,
+    stuck: { on: stuckOn, onChange: (v) => { stuckOn = v; lastActive = Date.now(); try { localStorage.setItem(stuckKey, v ? 'on' : 'off'); } catch { /* 无痕模式 */ } } },
     onSend: ({ text, images }) => { bv.go(bv.cur); enqueueStudent(text, images, true); },
     onQuick: (label) => { if (busy) return; bv.go(bv.cur); enqueueStudent(QUICK_SAY[label] || label, [], true); },
     onNav: (n) => bv.go(n),
@@ -181,6 +190,8 @@ export async function renderClass(root, meta) {
   // —— 恢复：资料包、黑板（板和段）、课堂记录、作答 ——
   await restore();
   session.event('open', null, { title: session.title, unit: unitName, mode: 'class' });
+  // 打开页面之前写的板书（存在这台设备上）不再发：只发这次上课新写的
+  for (const s of window.LAKit?.ink?.strokes || []) toldInk.add(s);
 
   async function restore() {
     try {
@@ -777,13 +788,15 @@ export async function renderClass(root, meta) {
     schedule(trig === 'now');
   }
 
+  // 图存进 assets（课后项目对话里的 Claude 能看）；返回 asset id 的 Promise（失败为 null）
+  function uploadImage(blob) {
+    return store.assets ? store.assets.upload(blob, { type: blob.type || 'image/png' }).then((r) => { localImages.set(r.id, blob); return r.id; }).catch(() => null) : Promise.resolve(null);
+  }
+
   function enqueueStudent(text, images = [], urgent = true) {
     if (!teacher.available) return;
     if (text) queue.texts.push(text);
-    for (const blob of images) {
-      const id = store.assets ? store.assets.upload(blob, { type: blob.type || 'image/png' }).then((r) => { localImages.set(r.id, blob); return r.id; }).catch(() => null) : Promise.resolve(null);
-      queue.images.push({ blob, id });
-    }
+    for (const blob of images) queue.images.push({ blob, id: uploadImage(blob) });
     queue.triggered = true;
     schedule(urgent);
   }
@@ -833,7 +846,10 @@ export async function renderClass(root, meta) {
       started = true;
       const say = texts.join('\n');
       const drafts = freshDrafts().map(draftLine).filter(Boolean);
-      let text = [actions.length ? actionsMessage(actions) : '', drafts.join('\n'), say].filter(Boolean).join('\n\n');
+      // 板上手写：这之后在当前板、常驻栏上新写的板书，导出成图一起发
+      const ink = teacher.images ? await freshInk(Math.min(2, maxImages - imgs.length)) : null;
+      if (ink) imgs.push(...ink.blobs.map((blob) => ({ blob, id: uploadImage(blob) })));
+      let text = [actions.length ? actionsMessage(actions) : '', drafts.join('\n'), ink?.line || '', say].filter(Boolean).join('\n\n');
       if (imgs.length) text += teacher.images ? `\n（附了 ${imgs.length} 张图：学生的手写或截图，白底黑字。）` : `\n（学生附了 ${imgs.length} 张图，但这个查看方式发不了图，你看不到；需要的话请学生用文字说。）`;
       // 学生说的话不上黑板，只进课堂记录
       const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), drafts: drafts.length ? drafts : undefined, images: [], page: bv.cur || undefined });
@@ -1038,6 +1054,9 @@ export async function renderClass(root, meta) {
       }
     }
     addTurn({ role: 'claude', text: res.text, boardOps, page: bv.cur || undefined, talkPage, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined });
+    // Claude 又说了话：重新计「停了多久」
+    nudged = false;
+    lastActive = Date.now();
     bar.setStatus(res.truncated ? 'notice' : 'idle', res.truncated ? '这一轮太长，被截断了。' : '');
 
     const retry = [];
@@ -1323,6 +1342,74 @@ export async function renderClass(root, meta) {
       return true;
     });
   }
+
+  // —— 板上手写：学生用 Pencil 在当前板（和常驻栏）上新写的板书，跟着下一条消息导出成图发给课堂 Claude ——
+  // 笔画的坐标是相对各自那一段的；按段在板上的位置挪到一张图里，排列和黑板上一样。返回 { blobs, line } 或 null
+  async function freshInk(room) {
+    const api = window.LAKit?.ink;
+    if (!api || room <= 0) return null;
+    const fresh = api.strokes.filter((s) => !toldInk.has(s));
+    if (!fresh.length) return null;
+    const groups = [];
+    const pageEl = pages.get(bv.cur)?.sec;
+    const anchorOf = (a) => (a === `p${bv.cur}` ? pageEl : segs.get(a)?.sec);
+    for (const [where, host] of [['board', pageEl], ['pin', root.querySelector('.class-pins')]]) {
+      if (!host || !host.getClientRects().length) continue;
+      const hb = host.getBoundingClientRect();
+      const list = [];
+      const names = new Set();
+      for (const s of fresh) {
+        const el = anchorOf(s.a);
+        if (!el || el.hidden || !host.contains(el)) continue;
+        const seg = segs.get(s.a);
+        if (where === 'board' && seg?.place === 'pin') continue;
+        if (where === 'pin' && seg?.place !== 'pin') continue;
+        const r = el.getBoundingClientRect();
+        const dx = r.left - hb.left, dy = r.top - hb.top;
+        // 笔画的点是一串 x, y, r, x, y, r…
+        list.push({ ...s, pts: s.pts.map((v, i) => (i % 3 === 0 ? v + dx : i % 3 === 1 ? v + dy : v)), bbox: [s.bbox[0] + dx, s.bbox[1] + dy, s.bbox[2] + dx, s.bbox[3] + dy] });
+        toldInk.add(s);
+        if (seg) names.add(`${seg.id}${seg.title ? `「${seg.title}」` : ''}`);
+      }
+      if (list.length) groups.push({ where, list, names: [...names] });
+    }
+    const blobs = [];
+    for (const g of groups.slice(0, room)) {
+      try { const b = await strokesToBlob(g.list); if (b) blobs.push(b); } catch (e) { console.warn('板书没导出来', e); }
+    }
+    if (!blobs.length) return null;
+    const where = groups.flatMap((g) => (g.where === 'pin' ? ['常驻栏'] : g.names.length ? g.names : [`第 ${bv.cur} 块板`]));
+    return { blobs, line: `[板书] 学生用 Pencil 在黑板上写了东西（写在 ${[...new Set(where)].join("、")}上），附在这一轮：${blobs.length} 张图，白底黑字，只有学生的笔迹，排列和黑板上一样。` };
+  }
+
+  // —— 察觉卡住：当前板上有题没做、学生很久没动静，提醒课堂 Claude 轻轻问一句（stuck.js）——
+  for (const ev of ['pointerdown', 'keydown', 'input', 'wheel']) document.addEventListener(ev, () => { lastActive = Date.now(); }, { capture: true, passive: true });
+  document.addEventListener('visibilitychange', () => { lastActive = Date.now(); });
+  // 当前板上等着学生的组件：还没作答的题、走到一半的 steps、还没交的练习
+  const WAITING = new Set(['answer', 'steps', 'predict', 'practice', 'quiz', 'conjecture', 'recognize', 'findbug', 'sortpass']);
+  function waitingBlocks() {
+    const out = [];
+    for (const seg of segs.values()) {
+      if (seg.hidden || seg.failed || seg.pending || !seg.sec || seg.place === 'pin' || seg.page !== bv.cur) continue;
+      for (const b of seg.sec.querySelectorAll('.block[data-bid]')) {
+        const kind = [...b.classList].find((c) => c.startsWith('block-'))?.slice(6) || '';
+        if (!WAITING.has(kind)) continue;
+        const busyHere = b.querySelector('.st-item.is-current, .ans-check:not(:disabled), .pred-go:not(:disabled)');
+        if (busyHere || !(results.get(b.dataset.bid) || []).length) out.push({ id: b.dataset.bid, kind, seg: seg.id });
+      }
+    }
+    return out;
+  }
+  // 本地试用可以把等待时间改短：?dev&stuck=8（秒）
+  const stuckMs = (dev && Number(/[?&]stuck=(\d+)/.exec(location.search)?.[1]) * 1000) || STUCK_MS;
+  setInterval(() => {
+    const waiting = waitingBlocks();
+    if (!shouldNudge({ now: Date.now(), lastActive, waiting, nudged, enabled: stuckOn, busy, hidden: document.hidden, started: started && teacher.available && bv.view === bv.cur, limit: stuckMs })) return;
+    nudged = true;
+    queue.actions.push({ source: 'page', type: 'stuck', text: stuckText({ minutes: Math.max(1, Math.round(stuckMs / 60000)), waiting }) });
+    queue.triggered = true;
+    schedule(true);
+  }, Math.min(15000, Math.max(1000, stuckMs / 4)));
 
   window.LAKit = {
     ...(window.LAKit || {}),
