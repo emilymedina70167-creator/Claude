@@ -169,12 +169,16 @@ test('waitText：等太久时把默认的「在想」换成「想得细」；别
   assert.equal(waitText('对话有点长了，先整理一下前面的内容…', LONG_WAIT_MS * 3), '对话有点长了，先整理一下前面的内容…');
 });
 
-test('placeholderFor：停用、窄屏、能不能粘贴截图', () => {
+test('placeholderFor：停用、窄屏、能不能粘贴截图、板上有没发的手写', () => {
   assert.equal(placeholderFor({ enabled: false, images: true }), '现在没法和 Claude 说话');
   assert.equal(placeholderFor({ narrow: true, images: true }), '和 Claude 说点什么…');
   assert.match(placeholderFor({ images: true }), /粘贴截图/);
   assert.doesNotMatch(placeholderFor({ images: false }), /截图/);
   assert.equal(placeholderFor(), placeholderFor({ enabled: true, narrow: false, images: false }));
+  // 板上有还没发的手写：提示点发送就能给 Claude 看（停用时照样说没法说话）
+  assert.match(placeholderFor({ images: true, ink: true }), /点发送，把板上写的给 Claude 看/);
+  assert.equal(placeholderFor({ narrow: true, ink: true }), '点发送，给 Claude 看板书');
+  assert.equal(placeholderFor({ enabled: false, ink: true }), '现在没法和 Claude 说话');
 });
 
 test('navLabel：「第 n / 共几 块」，看的板号越界时夹回来', () => {

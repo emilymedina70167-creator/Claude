@@ -301,6 +301,8 @@ export function initBoardInk(article) {
   // —— 保存 ——
   let saveTimer = 0;
   function save() {
+    // 板书变了（写完一笔、擦、撤销、清空）：课堂模式的输入条据此决定发送键亮不亮（有没发的板书时，输入框空着也能发）
+    document.dispatchEvent(new CustomEvent('ink-change'));
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try { localStorage.setItem(key, JSON.stringify(strokes.map(({ color, size, pts, bbox, a }) => ({ color, size, pts, bbox, a })))); } catch { /* 存不下就算了 */ }

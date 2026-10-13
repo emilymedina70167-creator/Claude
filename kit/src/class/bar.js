@@ -19,7 +19,10 @@ const STATUS_TEXT = { thinking: 'Claude 在想…', writing: 'Claude 正在写�
 const LONG_WAIT_TEXT = 'Claude 想得细，第一句话要等一会儿…';
 const STATES = new Set(['idle', 'thinking', 'writing', 'error', 'notice']);
 const MAX_SIDE = 2400;
-const PLACEHOLDER = { on: '和 Claude 说点什么，黑板上的作答它也看得到', images: '和 Claude 说点什么，也可以粘贴截图', short: '和 Claude 说点什么…', off: '现在没法和 Claude 说话' };
+const PLACEHOLDER = {
+  on: '和 Claude 说点什么，黑板上的作答它也看得到', images: '和 Claude 说点什么，也可以粘贴截图', short: '和 Claude 说点什么…', off: '现在没法和 Claude 说话',
+  ink: '点发送，把板上写的给 Claude 看；也可以再说一句', inkShort: '点发送，给 Claude 看板书',
+};
 
 // —— 纯函数（不碰 DOM，单元测试直接测）——
 
@@ -126,8 +129,10 @@ export function waitText(text, ms) {
 }
 
 // 占位文字：窄屏放不下长的
-export function placeholderFor({ enabled = true, narrow = false, images = false } = {}) {
+// ink：板上有还没发给 Claude 的手写（这时输入框空着点发送就是发板书）
+export function placeholderFor({ enabled = true, narrow = false, images = false, ink = false } = {}) {
   if (!enabled) return PLACEHOLDER.off;
+  if (ink) return narrow ? PLACEHOLDER.inkShort : PLACEHOLDER.ink;
   if (narrow) return PLACEHOLDER.short;
   return images ? PLACEHOLDER.images : PLACEHOLDER.on;
 }
@@ -150,7 +155,7 @@ const ICON = {
 export { navLabel } from './pagenav.js';
 
 // stuck：「停久了提醒老师」开关 { on, onChange(on) }（不给就不显示这一项）
-export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick, onNav, images = false, tag = MODEL_TAG, stuck = null } = {}) {
+export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick, onNav, images = false, tag = MODEL_TAG, stuck = null, inkPending = null } = {}) {
   const el = document.createElement('div');
   el.className = 'class-bar';
   el.setAttribute('role', 'region');
@@ -355,7 +360,9 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
   // —— 发送 / 停止 ——
   function syncControls() {
     ta.disabled = !enabled;
-    ta.placeholder = placeholderFor({ enabled, narrow: window.innerWidth < 560, images: canPhoto() });
+    // 板上有还没发的手写：发送键不变暗，提示点发送就能给 Claude 看（inkPending 由课堂给，板书一变 ink-change 就重算）
+    const ink = enabled && !busy && !!inkPending?.();
+    ta.placeholder = placeholderFor({ enabled, narrow: window.innerWidth < 560, images: canPhoto(), ink });
     endBtn.disabled = !enabled;
     const full = attached.length >= MAX_IMAGES;
     penBtn.disabled = !enabled || full;
@@ -370,7 +377,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
       send.setAttribute('aria-label', busy ? '停止这一轮' : '发送');
       send.title = busy ? '停止这一轮' : '发送（回车）';
     }
-    send.classList.toggle('is-empty', !busy && !ta.value.trim() && !attached.length);
+    send.classList.toggle('is-empty', !busy && !ta.value.trim() && !attached.length && !ink);
     el.classList.toggle('is-busy', busy);
     el.classList.toggle('is-disabled', !enabled);
   }
@@ -379,7 +386,8 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
     if (busy) { onStop?.(); return; }
     if (!enabled) return;
     const text = ta.value.trim();
-    if (!text && !attached.length) { ta.focus({ preventScroll: true }); return; }
+    // 什么都没写、也没附图：板上有新写的板书就只发板书（课堂把它导出成图），不然只是把光标放进输入框
+    if (!text && !attached.length && !inkPending?.()) { ta.focus({ preventScroll: true }); return; }
     const imgs = attached.map((a) => a.blob);
     ta.value = '';
     clearAttach();
@@ -388,6 +396,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
     onSend?.({ text, images: imgs });
   }
   on(form, 'submit', (e) => { e.preventDefault(); submit(); });
+  on(document, 'ink-change', () => syncControls());
   // 生成中按回车既不发送也不停止（免得误停）：字留在框里，这一轮说完再发
   on(ta, 'keydown', (e) => {
     if (!isSendKey(e)) return;

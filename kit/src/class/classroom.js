@@ -120,6 +120,7 @@ export async function renderClass(root, meta) {
   let compactRetryAt = 0; // 摘要失败后，等对话再长几轮才再试（不要每一轮都卡在失败的摘要上）
   let budgetLevel = 0; // prompt_too_large 之后逐级缩小这一轮的内容；成功一轮就复原
   const toldInk = new WeakSet(); // 已经发给课堂 Claude 的板书笔画
+  let inkSeeded = false; // 打开页面前写的板书已经记成「发过了」（之前不认任何笔画是新写的）
   let lastActive = Date.now(); // 学生最后一次有动静（点、写、打字）
   let nudged = false; // 这一轮已经提醒过「停了很久」
   let lastPrompt = null; // 开发面板看：上一轮发了多少字节
@@ -134,6 +135,7 @@ export async function renderClass(root, meta) {
     tag: mock ? `${MODEL_TAG} · 模拟老师` : MODEL_TAG,
     stuck: { on: stuckOn, onChange: (v) => { stuckOn = v; lastActive = Date.now(); try { localStorage.setItem(stuckKey, v ? 'on' : 'off'); } catch { /* 无痕模式 */ } } },
     onSend: ({ text, images }) => { bv.go(bv.cur); enqueueStudent(text, images, true); },
+    inkPending: () => hasFreshInk(),
     onQuick: (label) => { if (busy) return; bv.go(bv.cur); enqueueStudent(QUICK_SAY[label] || label, [], true); },
     onNav: (n) => bv.go(n),
     onStop: () => ctl?.abort(),
@@ -192,6 +194,7 @@ export async function renderClass(root, meta) {
   session.event('open', null, { title: session.title, unit: unitName, mode: 'class' });
   // 打开页面之前写的板书（存在这台设备上）不再发：只发这次上课新写的
   for (const s of window.LAKit?.ink?.strokes || []) toldInk.add(s);
+  inkSeeded = true;
 
   async function restore() {
     try {
@@ -842,13 +845,16 @@ export async function renderClass(root, meta) {
       const imgs = queue.images.splice(0).slice(-maxImages);
       queue.triggered = false;
       queue.now = false;
+      // 学生只在板上写了、输入框空着点发送：这一轮只发板书（下面导出成图）
+      if (!actions.length && !texts.length && !imgs.length && !hasFreshInk()) return true;
+      // 板上手写：这之后在当前板、常驻栏上新写的板书，导出成图一起发
+      const ink = teacher.images ? await freshInk(Math.min(2, maxImages - imgs.length)) : null;
+      if (ink) imgs.push(...ink.blobs.map((blob) => ({ blob, id: uploadImage(blob) })));
+      // 只有板书、却没导出来：这一轮没东西可发（草稿留着，跟下一条发）
       if (!actions.length && !texts.length && !imgs.length) return true;
       started = true;
       const say = texts.join('\n');
       const drafts = freshDrafts().map(draftLine).filter(Boolean);
-      // 板上手写：这之后在当前板、常驻栏上新写的板书，导出成图一起发
-      const ink = teacher.images ? await freshInk(Math.min(2, maxImages - imgs.length)) : null;
-      if (ink) imgs.push(...ink.blobs.map((blob) => ({ blob, id: uploadImage(blob) })));
       let text = [actions.length ? actionsMessage(actions) : '', drafts.join('\n'), ink?.line || '', say].filter(Boolean).join('\n\n');
       if (imgs.length) text += teacher.images ? `\n（附了 ${imgs.length} 张图：学生的手写或截图，白底黑字。）` : `\n（学生附了 ${imgs.length} 张图，但这个查看方式发不了图，你看不到；需要的话请学生用文字说。）`;
       // 学生说的话不上黑板，只进课堂记录
@@ -1347,8 +1353,8 @@ export async function renderClass(root, meta) {
   // 笔画的坐标是相对各自那一段的；按段在板上的位置挪到一张图里，排列和黑板上一样。返回 { blobs, line } 或 null
   async function freshInk(room) {
     const api = window.LAKit?.ink;
-    if (!api || room <= 0) return null;
-    const fresh = api.strokes.filter((s) => !toldInk.has(s));
+    if (!api || !inkSeeded || room <= 0) return null;
+    const fresh = api.strokes.filter((s) => !toldInk.has(s) && inkPlace(s));
     if (!fresh.length) return null;
     const groups = [];
     const pageEl = pages.get(bv.cur)?.sec;
@@ -1356,30 +1362,47 @@ export async function renderClass(root, meta) {
     for (const [where, host] of [['board', pageEl], ['pin', root.querySelector('.class-pins')]]) {
       if (!host || !host.getClientRects().length) continue;
       const hb = host.getBoundingClientRect();
-      const list = [];
+      const list = [], orig = [];
       const names = new Set();
       for (const s of fresh) {
         const el = anchorOf(s.a);
         if (!el || el.hidden || !host.contains(el)) continue;
+        if (inkPlace(s) !== where) continue;
         const seg = segs.get(s.a);
-        if (where === 'board' && seg?.place === 'pin') continue;
-        if (where === 'pin' && seg?.place !== 'pin') continue;
         const r = el.getBoundingClientRect();
         const dx = r.left - hb.left, dy = r.top - hb.top;
         // 笔画的点是一串 x, y, r, x, y, r…
         list.push({ ...s, pts: s.pts.map((v, i) => (i % 3 === 0 ? v + dx : i % 3 === 1 ? v + dy : v)), bbox: [s.bbox[0] + dx, s.bbox[1] + dy, s.bbox[2] + dx, s.bbox[3] + dy] });
-        toldInk.add(s);
+        orig.push(s);
         if (seg) names.add(`${seg.id}${seg.title ? `「${seg.title}」` : ''}`);
       }
-      if (list.length) groups.push({ where, list, names: [...names] });
+      if (list.length) groups.push({ where, list, orig, names: [...names] });
     }
-    const blobs = [];
+    // 真导出成图的才记成「发过了」：图位不够（room）或导出失败的留着，下一条消息再发
+    const blobs = [], sent = [];
     for (const g of groups.slice(0, room)) {
-      try { const b = await strokesToBlob(g.list); if (b) blobs.push(b); } catch (e) { console.warn('板书没导出来', e); }
+      try {
+        const b = await strokesToBlob(g.list);
+        if (b) { blobs.push(b); sent.push(g); g.orig.forEach((s) => toldInk.add(s)); }
+      } catch (e) { console.warn('板书没导出来', e); }
     }
     if (!blobs.length) return null;
-    const where = groups.flatMap((g) => (g.where === 'pin' ? ['常驻栏'] : g.names.length ? g.names : [`第 ${bv.cur} 块板`]));
+    const where = sent.flatMap((g) => (g.where === 'pin' ? ['常驻栏'] : g.names.length ? g.names : [`第 ${bv.cur} 块板`]));
     return { blobs, line: `[板书] 学生用 Pencil 在黑板上写了东西（写在 ${[...new Set(where)].join("、")}上），附在这一轮：${blobs.length} 张图，白底黑字，只有学生的笔迹，排列和黑板上一样。` };
+  }
+
+  // 一笔板书写在哪：当前板 'board'、常驻栏 'pin'；翻回旧板写的（和撤回了的段上的）不发，返回 null
+  function inkPlace(s) {
+    if (s.a === `p${bv.cur}`) return 'board';
+    const seg = segs.get(s.a);
+    if (!seg?.sec || seg.hidden) return null;
+    if (seg.place === 'pin') return 'pin';
+    return seg.page === bv.cur ? 'board' : null;
+  }
+  // 有没有这次上课新写、还没发给课堂 Claude 的板书（输入条的发送键据此亮起；查看方式发不了图时不算）
+  function hasFreshInk() {
+    const api = window.LAKit?.ink;
+    return !!(teacher.images && inkSeeded && api?.strokes?.some((s) => !toldInk.has(s) && inkPlace(s)));
   }
 
   // —— 察觉卡住：当前板上有题没做、学生很久没动静，提醒课堂 Claude 轻轻问一句（stuck.js）——
