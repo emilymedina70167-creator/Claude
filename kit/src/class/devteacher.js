@@ -27,14 +27,17 @@ const THINK_MS = 600; // 第一个字出来前的停顿（模拟思考）
 const JSON_MS = 300;
 const ERROR_CODES = ['rate_limited', 'refused', 'not_granted', 'sampling_disabled', 'session_expired', 'prompt_too_large', 'image_rejected'];
 
-export function createDevTeacher({ fallback = false, pace = 1 } = {}) {
+export function createDevTeacher({ fallback = false, pace = 1, script = null } = {}) {
   // pace：所有停顿乘这个系数（测试用 0；页面用默认 1）
   const k = Number.isFinite(pace) && pace >= 0 ? pace : 1;
-  const memo = { seq: 0, broken: 0 };
+  const memo = { seq: 0, broken: 0, next: 0 };
+  // script：验收用的剧本（tools/check-lesson.mjs 的 *.class.json）——按顺序原样回放别人写好的课堂输出，
+  // 不按学生的话挑。页面发来的 [系统] 消息（写法错误要求重写、附图）不占剧本，记下来给验收脚本看
+  const scripted = Array.isArray(script) ? script.map((t) => String(t ?? '')) : null;
 
   async function teacher(input, opts = {}) {
     opts = opts || {};
-    const reply = devReply(input, memo, { images: countImages(opts.images) });
+    const reply = scripted ? scriptReply(input, memo, scripted, teacher.log) : devReply(input, memo, { images: countImages(opts.images) });
     teacher.calls.push({ method: 'call', kind: reply.kind, input: copyInput(input), opts: cleanOpts(opts) });
     const signal = opts.signal;
     if (signal?.aborted) throw cancelled('');
@@ -68,6 +71,7 @@ export function createDevTeacher({ fallback = false, pace = 1 } = {}) {
 
   teacher.limits = () => ({ maxPromptBytes: DEV_LIMITS.maxPromptBytes, images: { ...DEV_LIMITS.images, mediaTypes: [...DEV_LIMITS.images.mediaTypes] } });
   teacher.calls = [];
+  teacher.log = []; // 剧本模式：收到的 [系统] 消息
   teacher.reset = () => {
     teacher.calls.length = 0;
     memo.seq = 0;
@@ -84,6 +88,18 @@ export function createDevTeacher({ fallback = false, pace = 1 } = {}) {
  * 按输入挑这一轮的回复。memo 记着已经用到的段号、写错过几次（同一个 teacher 里避免重复）。
  * 返回 { kind, text } 或 { kind: 'error', code }。导出给测试用。
  */
+// 剧本模式的一轮：[系统] 消息不占剧本（只记下来，回一句不动黑板的话）；其余按顺序取下一段
+export function scriptReply(input, memo, script, log = []) {
+  const said = stripImageNote(lastUserText(input));
+  if (said.startsWith('[系统]')) {
+    log.push(said);
+    return { kind: 'script-system', text: '（验收：这一轮不改写。）\n' };
+  }
+  const i = memo.next++;
+  if (i >= script.length) return { kind: 'script-end', text: '（验收：剧本放完了。）\n' };
+  return { kind: 'script', text: script[i] };
+}
+
 export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {}) {
   const turns = toTurns(input);
   // 第一条是课堂说明：里面的示例也有「写法错误」「（错）」「想不出来」，判断剧本时不能算进去

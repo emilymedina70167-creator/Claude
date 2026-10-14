@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "build": "node kit/build.js",
-    "test": "node --test"
+    "test": "node --test",
+    "check": "node tools/check-lesson.mjs",
+    "check:pages": "node tools/check-lesson.mjs --quiet kit/examples/unit-matrix-vector.html kit/examples/408-demo.html kit/examples/demo.html kit/examples/figures.html kit/examples/ds-8.2.3-shell-sort.html"
   },
   "dependencies": {
     "katex": "0.16.9",

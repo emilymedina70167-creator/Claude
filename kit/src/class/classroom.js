@@ -81,7 +81,10 @@ export async function renderClass(root, meta) {
   const ai = await getAI();
   const dev = store.dev || isDev();
   const useMock = dev && !/[?&]teacher=real\b/.test(location.search);
-  let mock = useMock ? createDevTeacher() : null;
+  // 验收脚本（tools/check-lesson.mjs）在打开页面前放好 window.LAKitDevScript：模拟老师按它原样回放
+  const script = useMock && Array.isArray(window.LAKitDevScript) ? window.LAKitDevScript : null;
+  let mock = useMock ? createDevTeacher(script ? { script, pace: 0 } : {}) : null;
+  if (script) window.LAKitEval = { teacher: mock };
   // 旧版接口（window.claude.complete）不能指定模型、也不说是谁答的：每一轮都只能作废，干脆不开课
   const legacy = !mock && !!ai?.legacy;
   const off = { tools: false, images: false }; // 这个查看方式明确说了不支持的（tools_unavailable / images_unavailable）
