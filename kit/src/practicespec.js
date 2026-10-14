@@ -14,7 +14,7 @@ import { calcValue, expandCalc, isQ, Q } from './exact.js';
 
 const CMD = /^(pick|let|where)\s+(.*)$/i;
 const NAME = /^[A-Za-z_][\w]*$/;
-const ONE_LINE = new Set(['id', 'title', 'type', 'types', 'count', 'level', 'answer', 'before', 'after', 'formula', 'check']);
+const ONE_LINE = new Set(['id', 'title', 'type', 'types', 'count', 'level', 'answer', 'before', 'after', 'formula', 'check', 'width']);
 const RESERVED = new Set(['I', 'E', 'pi', 'e', 'n', 'step', 't']);
 const GENS = ['int', 'choice', 'vec', 'mat'];
 
