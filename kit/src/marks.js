@@ -3,7 +3,7 @@
 // 宿主变大小、图重画、矩阵动起来时跟着重新摆；找不到要标的地方时返回中文原因（课堂报给 Claude，组件报成写法错误）。
 import { mdToHtml } from './render.js';
 import { compile, isVec } from './expr.js';
-import { shapeFor, arrowPath, leaderPath, placeNote, union } from './markdraw.js';
+import { shapeFor, arrowPath, leaderPath, placeNote, union, strokeObstacles } from './markdraw.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 // 颜色都从主题变量取（不同风格的黑板颜色不一样）
@@ -215,7 +215,7 @@ export function markLayer(host) {
     raf = requestAnimationFrame(() => { raf = 0; layout(); });
   }
 
-  // 旁注要躲开的字：宿主所在的整块板（或常驻栏）里的正文、公式、图上的文字、按钮、输入框。图里的线不算（旁注可以写在图上）
+  // 旁注要躲开的字：宿主所在的整块板（或常驻栏）里的正文、公式、图上的文字、按钮、输入框。图里的线不算（旁注可以写在图上），示意图除外
   function obstacles(hb, k) {
     const scope = host.closest('.class-page, .class-pins, .stage-body') || host;
     const out = [];
@@ -229,6 +229,14 @@ export function markLayer(host) {
       for (const r of range.getClientRects()) add(r);
     }
     scope.querySelectorAll('button, input, textarea, select, img, canvas').forEach((e) => { if (!e.closest('.mk-layer')) add(e.getBoundingClientRect()); });
+    // 示意图不一样：里面的方块、括号、箭头都是特意画的，旁注压在线上就看不清（scene / graph 的网格线照旧不躲）
+    const sk = [...scope.querySelectorAll('.sketch-svg :is(rect, circle, ellipse, polygon, polyline, path, line)')]
+      .filter((e) => !e.closest('defs'))
+      .map((e) => {
+        const r = e.getBoundingClientRect();
+        return { box: { x: (r.left - hb.left) / k, y: (r.top - hb.top) / k, w: r.width / k, h: r.height / k }, closed: /^(rect|circle|ellipse|polygon)$/i.test(e.tagName) };
+      });
+    out.push(...strokeObstacles(sk));
     return out;
   }
 
