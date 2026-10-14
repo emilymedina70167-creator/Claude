@@ -43,7 +43,7 @@ export function stepperBlock(engine) {
 
     const title = fields.title || engine.title;
     const acts = asks.size > 0 || !!quiz;
-    const body = widget(el, { title, cls: `stepper sv-${engine.name}${acts ? ' stepper-act' : ''}` });
+    const body = widget(el, { title, cls: `sv-widget sv-${engine.name}${acts ? ' stepper-act' : ''}` });
     body.innerHTML = `
       ${fields.q && !quiz ? `<div class="w-q">${mdToHtml(fields.q)}</div>` : ''}
       <div class="sv-quiz" ${quiz ? '' : 'hidden'}></div>
@@ -143,7 +143,7 @@ export function stepperBlock(engine) {
       askBox.hidden = false;
       askBox.innerHTML = `<div class="sv-ask-q"><span class="sv-ask-tag">先猜</span>${mdToHtml(ask.q, { inline: true })}</div>
         ${kind === 'choice' ? `<div class="sv-choices">${ask.choices.map((c) => `<button type="button" class="btn sv-choice" data-v="${escapeHtml(c)}">${mdToHtml(String(c), { inline: true })}</button>`).join('')}</div>` : ''}
-        ${kind === 'text' ? '<div class="sv-ask-row"><input type="text" class="sv-ask-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="写在这里，用空格隔开" aria-label="你的答案"><button type="button" class="btn btn-primary sv-ask-ok">确定</button></div>' : ''}
+        ${kind === 'text' || kind === 'number' ? `<div class="sv-ask-row"><input type="text" class="sv-ask-input" inputmode="${kind === 'number' ? 'decimal' : 'text'}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="${kind === 'number' ? '写一个数（可以写分数）' : '写在这里，用空格隔开'}" aria-label="你的答案"><button type="button" class="btn btn-primary sv-ask-ok">确定</button></div>` : ''}
         ${kind === 'pick' ? `<div class="sv-ask-hint muted">在上面的图里点${(ask.count || 1) > 1 ? `出 ${ask.count} 个` : '一下'}。</div>${(ask.count || 1) > 1 ? '<button type="button" class="btn btn-primary sv-ask-ok">确定</button>' : ''}` : ''}
         <div class="sv-ask-fb" hidden></div>
         <div class="sv-ask-tools"><button type="button" class="link-btn sv-giveup">想不出来，直接看</button><button type="button" class="link-btn sv-reveal" hidden>看答案</button></div>`;
@@ -155,7 +155,7 @@ export function stepperBlock(engine) {
         inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(inp.value); } });
         inp.focus({ preventScroll: true });
       }
-      askBox.querySelector('.sv-ask-ok')?.addEventListener('click', () => submit(kind === 'text' ? inp.value : pending.picked.slice()));
+      askBox.querySelector('.sv-ask-ok')?.addEventListener('click', () => submit(inp ? inp.value : pending.picked.slice()));
       askBox.querySelectorAll('.sv-choice').forEach((b) => b.addEventListener('click', () => submit(b.dataset.v)));
       askBox.querySelector('.sv-giveup').addEventListener('click', () => finishAsk({ giveup: true }));
       askBox.querySelector('.sv-reveal').addEventListener('click', () => finishAsk({ revealed: true }));

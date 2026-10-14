@@ -24,6 +24,7 @@ import { image } from './image.js';
 import { stepperBlock } from '../stepper.js';
 import { sortEngine } from '../engines/sort.js';
 import { treeEngine } from '../engines/tree.js';
+import { kmpEngine, hashEngine, bsearchEngine } from '../engines/search.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -34,4 +35,7 @@ export const blocks = {
   // 一步步走的演示（stepper.js 外壳 + engines/ 里的纯函数引擎）
   sort: stepperBlock(sortEngine),
   tree: stepperBlock(treeEngine),
+  kmp: stepperBlock(kmpEngine),
+  hash: stepperBlock(hashEngine),
+  bsearch: stepperBlock(bsearchEngine),
 };

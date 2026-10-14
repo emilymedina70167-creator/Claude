@@ -71,6 +71,16 @@ const norm = (x) => String(x ?? '').trim().toUpperCase();
  * 返回 { ok, msg, wrong? }
  */
 export function checkAsk(ask, given) {
+  if (ask.kind === 'number') {
+    const g = readNumber(given);
+    if (g === null) return { ok: false, msg: '写一个数（整数、小数或分数，如 2.5、5/2）。' };
+    // 小数写到两位（四舍五入）也算对：ASL 这类常常除不尽
+    const a = Number(ask.answer);
+    const decimals = (String(given).trim().split('.')[1] || '').length;
+    const tol = decimals && decimals <= 2 && !String(given).includes('/') ? 0.5 * 10 ** -decimals + 1e-9 : 1e-9;
+    const ok = Math.abs(g - a) <= tol;
+    return { ok, msg: ok ? '' : '不对，再算算。' };
+  }
   if (ask.kind === 'text') {
     const r = checkSeq(given, parseSeqAnswer(ask.answer));
     return { ok: r.ok, msg: r.msg, wrong: r.wrong };
@@ -88,6 +98,7 @@ export function checkAsk(ask, given) {
 
 /** 答案写成一句话（看答案、记录用） */
 export function askAnswerText(ask) {
+  if (ask.display !== undefined) return String(ask.display);
   if (ask.kind === 'text') return String(ask.answer).split('|')[0].trim();
   const a = Array.isArray(ask.alts) ? ask.alts[0] : ask.answer;
   return Array.isArray(a) ? a.join('、') : String(a);
@@ -95,3 +106,13 @@ export function askAnswerText(ask) {
 
 /** 第几步的计数文字：0 是「开始」 */
 export const stepLabel = (k, n) => (k <= 0 ? '开始' : `第 ${k} / ${n} 步`);
+
+// 学生写的数：整数、小数、分数（全角也认）
+export function readNumber(text) {
+  const s = String(text ?? '').trim().replace(/[\uFF10-\uFF19]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/／/g, '/').replace(/．/g, '.').replace(/−/g, '-');
+  let m = /^(-?\d+(?:\.\d+)?)$/.exec(s);
+  if (m) return Number(m[1]);
+  m = /^(-?\d+)\s*\/\s*(\d+)$/.exec(s);
+  if (m && Number(m[2]) !== 0) return Number(m[1]) / Number(m[2]);
+  return null;
+}

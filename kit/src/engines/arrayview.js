@@ -14,9 +14,11 @@ const itemHtml = (x) => (x === null || x === undefined ? '' : typeof x === 'obje
  *   zero：额外画在最左边的一格（插入排序的 A[0]、快排的枢轴）：{ label, item }
  *   lo / hi：当前处理的区间（区间外的淡一点）；fresh：这一步刚变的位置（闪一下）
  *   pick：可以点的格子写 data-pick；label：左边的名字（如 A）
+ *   extra：下面再加几行，和格子对齐：[{ label: '比较次数', cells: [...] }]（有 extra 时左边多一栏写每一行是什么）
  */
 export function arrayView(items, opts = {}) {
-  const { base = 1, idx = true, cls = {}, ptr = {}, zero = null, lo = null, hi = null, fresh = [], pick = true, label = '' } = opts;
+  const { base = 1, idx = true, cls = {}, ptr = {}, zero = null, lo = null, hi = null, fresh = [], pick = true, label = '', extra = [] } = opts;
+  const side = extra.length ? (t = '') => `<div class="sv-row-h">${esc(t)}</div>` : () => '';
   const n = items.length;
   const cols = n + (zero ? 1 : 0);
   const freshSet = new Set(fresh);
@@ -25,22 +27,29 @@ export function arrayView(items, opts = {}) {
     const c = ['sv-cell', x === null || x === undefined ? 'sv-empty' : '', out ? 'sv-out' : '', cls[p] || '', freshSet.has(p) ? 'sv-new' : ''].filter(Boolean).join(' ');
     return `<div class="${c}" data-cmd="${p - base + 1}"${pick ? ` data-pick="${p}"` : ''}>${itemHtml(x)}</div>`;
   };
-  let h = `<div class="sv-arr" style="--cols:${cols}">`;
+  // 格子多（散列表、长主串）时格子窄一点，iPad 竖屏一行放得下
+  let h = `<div class="sv-arr${extra.length ? ' sv-has-label' : ''}${cols > 12 ? ' sv-dense' : ''}" style="--cols:${cols}">`;
   if (label) h += `<div class="sv-arr-label">${esc(label)}</div>`;
-  h += '<div class="sv-row">';
+  h += `<div class="sv-row">${side()}`;
   if (zero) h += `<div class="sv-cell sv-zero${zero.cls ? ` ${zero.cls}` : ''}${zero.fresh ? ' sv-new' : ''}">${itemHtml(zero.item)}</div>`;
   for (let i = 0; i < n; i++) h += cell(base + i, items[i]);
   h += '</div>';
   if (idx) {
-    h += '<div class="sv-row sv-idx">';
+    h += `<div class="sv-row sv-idx">${side(extra.length ? (base === 0 ? '地址' : '位置') : '')}`;
     if (zero) h += `<div>${esc(zero.label ?? '')}</div>`;
     for (let i = 0; i < n; i++) h += `<div>${base + i}</div>`;
     h += '</div>';
   }
   if (Object.keys(ptr).length) {
-    h += '<div class="sv-row sv-ptr">';
+    h += `<div class="sv-row sv-ptr">${side()}`;
     if (zero) h += '<div></div>';
     for (let i = 0; i < n; i++) { const t = ptr[base + i]; h += `<div>${t ? `<span>▲</span>${esc(t)}` : ''}</div>`; }
+    h += '</div>';
+  }
+  for (const r of extra) {
+    h += `<div class="sv-row sv-extra">${side(r.label)}`;
+    if (zero) h += '<div></div>';
+    for (let i = 0; i < n; i++) h += `<div>${esc(r.cells[i] ?? '')}</div>`;
     h += '</div>';
   }
   return h + '</div>';
