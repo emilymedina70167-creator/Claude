@@ -589,6 +589,25 @@ ask: pivot
 - `mode: quiz` 配 `pass: 2`：只给初始序列，我写出第 2 趟（快排是第 2 次划分）之后的序列。
 - 希尔排序用下面的 `shellsort` / `sortpass`。
 
+### tree：二叉树的遍历、二叉排序树、堆
+
+<!-- 科目：数据结构 -->
+
+三种用法，看写哪个字段：
+
+```tree
+id: t-in
+title: 中序遍历
+nodes: A(B(D, E(G)), C(, F))
+walk: inorder
+ask: visit
+```
+
+- **遍历**：`nodes:` 括号写法（逗号前是左子树，空着表示没有：`C(, F)` 是 C 只有右孩子 F；只写一个 `A(B)` 是左孩子），或 `level:` 层序写法（`A B C # D`，`#` 是空位置，按完全二叉树编号）。`walk:` 选 `preorder`（先序）、`inorder`（中序）、`postorder`（后序）、`levelorder`（层序）。画面下面写着已经访问的序列、递归栈（层序是队列）。`ask: visit`：每访问一个结点前，我先在图上点出下一个访问谁。`mode: quiz`：我写出整个遍历序列。
+- **二叉排序树**：`bst: 53 17 78 09 45 65 87 32` 依次插入建树（不写 `ops:` 时，演示的就是建树过程）。`ops: delete 17, insert 50, search 32` 在建好的树上依次操作。删除按王道：叶结点直接删；只有一棵子树就让子树顶上来；两棵子树都有用直接后继（右子树里最小的）替代，写 `replace: pred` 改用直接前驱。`ask:` 能问 `insert`（新结点是谁的孩子，点出来）、`compare`（往左还是往右）、`case`（删除属于哪种情况）、`replace`（用哪个结点替代，点出来）。`mode: quiz` 配 `quiz: level`（或 `pre` / `in` / `post`）：我写出最后这棵树的那种序列。
+- **堆**：`heap: 53 17 78 09 45 65 87 32`，`type: max`（大根堆，默认）或 `min`。`ops: build, insert 63, delete, sort`：建堆（从 ⌊n/2⌋ 往前逐个往下调整）、插入（放最后、往上浮）、删除堆顶（最后一个放上来、往下坠）、堆排序；不写 `ops` 就是建堆。树和数组一起画，下标对得上（`figure … highlight 3`、`board mark … item=3` 树上和数组里的 A[3] 一起标）。`ask:` 能问 `build`（建好的堆写出来）、`swap`（这次和谁交换，点出来）、`pass`（堆排序每一趟之后的序列）。`mode: quiz`：写出最后的序列；有 `sort` 时配 `pass: 2` 写第 2 趟之后的。
+- 结点最多 31 个。遍历的树每个结点名字不同；点结点、`label=` 都按名字找（堆按下标）。
+
 ### 排序（数据结构）：array / shellsort / sortpass
 
 <!-- 科目：数据结构 -->

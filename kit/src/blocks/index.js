@@ -23,6 +23,7 @@ import { derive } from './derive.js';
 import { image } from './image.js';
 import { stepperBlock } from '../stepper.js';
 import { sortEngine } from '../engines/sort.js';
+import { treeEngine } from '../engines/tree.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -32,4 +33,5 @@ export const blocks = {
   let: letBlock, matrix, sketch, derive, image,
   // 一步步走的演示（stepper.js 外壳 + engines/ 里的纯函数引擎）
   sort: stepperBlock(sortEngine),
+  tree: stepperBlock(treeEngine),
 };

@@ -1218,3 +1218,27 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .sv-bucket.sv-empty { opacity: .45; }
 .sv-bucket-n { font: 13px var(--sans); color: var(--muted); margin-right: 2px; }
 .sv-bucket-x { padding: 1px 6px; border-radius: 6px; background: rgb(var(--yellow-rgb) / 0.15); color: var(--chalk); font: 15px var(--sans); }
+/* 二叉树（engines/treeview.js）：结点是圆圈，横着按中序排、竖着按层 */
+.sv-tree { display: block; height: auto; overflow: visible; margin: 0 auto; }
+.sv-tree .sv-edge { stroke: rgb(var(--chalk-rgb) / 0.45); stroke-width: 2; }
+.sv-tree .sv-edge.sv-edge-path { stroke: var(--yellow); stroke-width: 3; }
+.sv-tree .sv-edge.sv-edge-ghost { stroke-dasharray: 5 5; }
+.sv-tree .sv-node circle { fill: rgb(var(--board-2-rgb)); stroke: rgb(var(--chalk-rgb) / 0.6); stroke-width: 2; transition: fill .25s, stroke .25s; }
+.sv-tree .sv-node text { fill: var(--chalk); font: 500 17px var(--sans); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.sv-tree .sv-node text.sv-small { font-size: 13px; }
+.sv-tree .sv-node .sv-node-note { fill: var(--yellow); font-size: 13px; text-anchor: start; }
+.sv-tree .sv-node.sv-cur circle { stroke: var(--blue); stroke-width: 3; fill: rgb(var(--blue-rgb) / 0.25); }
+.sv-tree .sv-node.sv-path circle { stroke: var(--yellow); }
+.sv-tree .sv-node.sv-done circle { fill: rgb(var(--green-rgb) / 0.25); stroke: rgb(var(--green-rgb) / 0.8); }
+.sv-tree .sv-node.sv-found circle { fill: rgb(var(--green-rgb) / 0.4); stroke: var(--green); stroke-width: 3; }
+.sv-tree .sv-node.sv-cmp circle { stroke: var(--yellow); stroke-width: 3; }
+.sv-tree .sv-node.sv-swap circle { stroke: var(--pink); stroke-width: 3; fill: rgb(var(--pink-rgb) / 0.2); }
+.sv-tree .sv-node.sv-ghost circle { fill: none; stroke-dasharray: 4 4; }
+.sv-tree .sv-node.sv-new.sv-flash circle { animation: sv-node-flash 0.9s ease-out; }
+@keyframes sv-node-flash { 0% { stroke: var(--yellow); stroke-width: 7; } 100% { stroke-width: 2; } }
+.sv-picking .sv-tree [data-pick] { outline: none; }
+.sv-picking .sv-tree [data-pick] circle { stroke-dasharray: 5 3; stroke: var(--lav); }
+.sv-picking .sv-tree [data-pick].sv-picked circle { stroke-dasharray: none; stroke: var(--lav); stroke-width: 4; }
+.sv-picking .sv-tree [data-pick] { cursor: pointer; }
+.sv-tree-empty { padding: 20px 0; }
+.sv-heap { display: flex; flex-direction: column; gap: 10px; }
