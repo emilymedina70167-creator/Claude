@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { componentDocs } from '../kit/build-docs.js';
+import { docsForSubject, SUBJECTS } from '../kit/src/subject.js';
 import {
   DEFAULT_RULES, PROTOCOL_DOC, bytes, buildSystem, boardStateText, nextSegmentId, nextPinId, packText, PACK_BUDGET, CUT_NOTE,
   actionText, actionsMessage, buildTurns, KEEP_RECENT, OMITTED, COMPACT_AT, needsCompaction, compactionPrompt,
@@ -40,7 +41,9 @@ test('组件说明：从 CLAUDE-PROJECT.md 截出第三节，示例和表格都�
   assert.ok(!DOCS.includes('### summary'), 'summary 在课堂里用不上');
   assert.ok(!DOCS.includes('\n\n\n'), '连续空行要去掉');
   assert.ok(!/^-{3,}$/m.test(DOCS), '分隔线要去掉');
-  assert.ok(bytes(DOCS) < 40 * KiB, `组件说明太长：${bytes(DOCS)} 字节`);
+  // 课堂每一轮只带「通用 + 这门课」的那几节（subject.js），每门课的说明要短；整节打包进 la-kit.js，宽一点
+  for (const subject of SUBJECTS) assert.ok(bytes(docsForSubject(DOCS, subject)) < 40 * KiB, `${subject}的组件说明太长：${bytes(docsForSubject(DOCS, subject))} 字节`);
+  assert.ok(bytes(DOCS) < 160 * KiB, `组件说明整节太长：${bytes(DOCS)} 字节`);
 });
 
 test('组件说明：围栏里的「## 」不算节标题，代码块里的空行原样保留', () => {
