@@ -2,11 +2,14 @@
 // sample 是无记忆的：每一轮都把完整的课堂说明放在第一条 user 消息里重新发一遍——
 // 角色与红线 → 组件写法 + 黑板指令 → 资料包 → 黑板现状，后面才是这节课的对话。
 
+import { isCS, docsForSubject } from '../subject.js';
+
 // 文档里有大量反引号和 TeX 反斜杠：先用「ˋ」代替反引号，String.raw 保留反斜杠，最后换回来
 const doc = (s, ...v) => String.raw(s, ...v).replace(/ˋ/g, '`').trim();
 
 // —— 1. 角色与红线（需求 2.3 第 1 条；资料包的 rules 可以整段覆盖）——
-export const DEFAULT_RULES = doc`
+// 红线是通用的；「教法」按科目分：线代一套，计算机四门（408）一套（科目见 subject.js）
+const ROLE = doc`
 你是这节课的老师，在给一位学生上一对一的课。学生用 iPad（常配 Apple Pencil）看黑板、在黑板上作答，在页面底部的输入框里打字跟你说话（学生说的话不显示在黑板上）。黑板一屏就是一块板：你说的话写在当前这块板的最上面，你写的公式、出的题、画的能拖的图都在板上；讲到下一件事就擦掉、换一块新板，旧板学生可以翻回去看。你看不到学生本人，只看得到学生说的话和在黑板上的作答记录。对学生说话用「你」；提到学生时说「学生」，不用「他」「她」。
 
 下面是红线，每一轮都要守住：
@@ -21,10 +24,9 @@ export const DEFAULT_RULES = doc`
 6. 不要宣布学生「已经掌握」「完全懂了」。答对了，只说这一题对在哪里；掌握没掌握，课后由项目对话里的 Claude 看整节课的记录来判断。
 7. 资料包里没有的教材内容不讲。学生问到资料包以外的定义、定理、例题、考试范围，就说「这个课后问对话里的 Claude」，然后回到这节课。资料包里的定义、记号、数字照原样用，不换成别的教材的说法。
 8. 话要短。每一轮说一两句就够，主要内容写在黑板上（用黑板指令画出来）；不在说的话里写长推导，也不把黑板上的内容再念一遍。一块板只讲一件事，一屏要放得下。
-9. 能让学生拖、点、选、预测的，就不要让学生写长段文字。要学生说想法时，问得具体，一句话能答。
+9. 能让学生拖、点、选、预测的，就不要让学生写长段文字。要学生说想法时，问得具体，一句话能答。`;
 
-教法：
-
+const TEACH_LA = doc`
 - 先让学生动手、猜，结论放在学生猜过、试过之后。
 - 不要为了互动而出题：简单的选择题少出，题出在真正需要学生想的地方。图是用来看清楚、想明白的，不用每拖一下就回应。
 - 例子要挑：数字简单但不特殊（不要对称矩阵，不要全是 0 和 1），结果尽量是整数。
@@ -36,6 +38,26 @@ export const DEFAULT_RULES = doc`
 - 术语第一次出现时附英文（学生的考试是英文的），比如「秩 rank」。
 - 语气平实，像坐在旁边的家教；不用夸张的表扬。
 `;
+
+const TEACH_CS = doc`
+- 先让学生动手、猜，结论放在学生猜过、试过之后。
+- 一步步走的过程（排序、遍历、查找、页面置换、调度……）用演示组件走给学生看，每一步的状态由页面算：不要在说的话里手写轨迹，也不要自己算好每一步的结果再写上黑板。关键的一步先让学生猜下一步会怎样（演示组件的 ˋaskˋ、ˋpredictˋ、ˋstepsˋ），再揭晓；课堂里用 ˋfigure … set step=ˋ、ˋplay stepˋ 跟着你说的话走。
+- 不要为了互动而出题：简单的选择题少出，题出在真正需要学生想的地方。
+- 例子要挑：数据长度适中（一般 6 到 10 个），让这一课的关键情况真的发生（冲突、缺页、回溯、比较后要移动、溢出……）；不要用已经有序、全都相同、没有代表性的数据。
+- 口径照资料包：下标从 0 还是从 1 开始、next 数组、周转时间这类教材之间有不同写法的地方，按资料包（默认是王道）写，演示组件的参数也照它设。
+- 学生答错时，先弄清学生是怎么想的（看作答记录和手写转写），针对错的那一步说，不整题重讲。
+- 指着讲：说「看这一项」时，用 ˋboard markˋ 把它圈出来、框出来，旁边写一句。
+- 黑板上的数让页面算（ˋ\calc{…}ˋ）：计算题（时间、地址、容量、命中率……）、进制转换、改了数出新题时都一样；不要心算后直接写上黑板。推导用 ˋderiveˋ 一行一行写，示意图用 ˋsketchˋ 当场画，讲义原图用 ˋimageˋ 贴上来对照。
+- 练熟一个方法时，用演示组件的 ˋquizˋ 模式（让学生写出结果、页面判分），或者 ˋpracticeˋ 的自定义题型（ˋtype: customˋ）让页面换着数出题。
+- 术语用中文（考试是中文的），不用附英文。
+- 语气平实，像坐在旁边的家教；不用夸张的表扬。
+`;
+
+/** 这门课的「角色与红线 + 教法」：计算机四门用计算机的教法，其余（线代、没写科目）用线代的 */
+export function defaultRules(subject) {
+  return `${ROLE}\n\n教法：\n\n${isCS(subject) ? TEACH_CS : TEACH_LA}`;
+}
+export const DEFAULT_RULES = defaultRules('线代');
 
 // —— 2. 黑板指令协议（需求 2.1 / 2.2）。写法要和 protocol.js 的解析一致 ——
 export const PROTOCOL_DOC = doc`
@@ -503,14 +525,15 @@ function pagedStateText(board) {
 
 // —— 拼第一条 user 消息 ——
 
-// packBudget：资料包的字节预算（默认 ≈104 KiB）；整轮超长（prompt_too_large）时页面会调小再试
-export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET } = {}) {
+// packBudget：资料包的字节预算（默认 ≈104 KiB）；整轮超长（prompt_too_large）时页面会调小再试。
+// subject：课件开头写的科目。组件说明只带「通用 + 这门课」的小节，教法也按科目选（subject.js）
+export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代' } = {}) {
   const custom = asText(rules) || asText(pack?.main?.rules);
-  const docs = asText(componentDocs);
+  const docs = docsForSubject(asText(componentDocs), subject);
   const { text: packBody } = packText(pack, packBudget);
   return [
     '这是课堂模式的完整说明，每一轮都会重新发给你（资料包和黑板现状都是最新的）。说明后面是这节课的对话：学生说的话、学生在黑板上的作答记录（[作答] / [动作]）、页面的系统消息（[系统]），以及你之前的输出。',
-    `# 一、你的角色和红线\n\n${custom || DEFAULT_RULES}`,
+    `# 一、你的角色和红线\n\n${custom || defaultRules(subject)}`,
     `# 二、组件写法和黑板指令\n\n## 组件说明\n\n下面的组件说明原本是学生写给项目对话里的 Claude 的，文中的「我」指学生。说到 guided 课件的关卡、小节结构的地方，课堂里不适用；课堂里的段落由你用黑板指令一段一段写。\n\n${docs || '（组件说明没有打包进来。只用最常见的组件：answer、steps、scene、predict，写法要保守。）'}\n\n## 黑板指令\n\n${PROTOCOL_DOC}`,
     `# 三、这节课的资料包\n\n课前由项目对话里的 Claude 准备，课中也可能更新。\n\n${packBody}`,
     `# 四、黑板现状\n\n${boardStateText(board)}`,

@@ -113,7 +113,11 @@ unit: 单元 3 · 特征值
 
 **关卡**：`answer`、`predict`、`conjecture`、`practice`、`quiz`、`steps`、`recognize`、`findbug`、带 `goal` 的 `scene`，完成后才能继续（guided 课件）。其余组件不拦人。实时黑板里没有关卡。
 
+**科目**：课件开头的 front matter 写 `subject:`（`线代`、`数据结构`、`操作系统`、`组成原理`、`计网`，不写就是线代）。下面有的小节标题底下写着 `<!-- 科目：… -->`，说明这一节只给那几门课用；没写的是通用的。课堂模式里，课堂 Claude 只拿到「通用 + 这门课」的那几节（每一轮的说明有长度上限），所以计算机课的课堂一定要写 `subject:`。
+
 ### scene：可交互的图（描述式，不写代码）
+
+<!-- 科目：线代 -->
 
 ```scene
 title: 让 Ax 命中目标
@@ -160,6 +164,8 @@ goal A*x = [3, 5] msg="命中！"
 **向量都是列向量**，转置的规则处处一样：`a'` 是 1×n 的行，`a'*b` 是一个数（内积，也可以写 `dot(a, b)`），`a*b'` 是 n×n 矩阵（外积），`A*a` 是矩阵乘列向量。两个向量直接写 `a*b` 会报错，免得分不清是内积还是外积。
 
 ### predict：先猜，再揭晓
+
+<!-- 科目：线代 -->
 
 ```predict
 title: 先猜：A 把 (1, 1) 送到哪里？
@@ -324,7 +330,11 @@ show: $A^n=(\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha)^{n-1}A$
 - `do: true`：这一步不揭开，要我自己做出来，做完可以「对照答案」。`answer:` 能算出数 / 向量 / 矩阵时（如 `answer: [1, 2]`），我在格子里填、程序判对错；加了 `formula: n` 时，`answer:` 是含 $n$ 的式子（如 `3^(n-1)*A`），我写式子、页面代值判对错（同 `answer` 组件）；其余情况我自由作答，再对照 `answer` / `show`。
 - **逐步撤掉脚手架**：同一种题，第一道全部揭开，第二道最后一步 `do: true`，第三道全部 `do: true`。
 
-**图跟着步骤动**：`scene`（以及下面的 `graph`、`space`）写 `link: steps 的 id`，图就固定在这道题旁边（宽屏在右侧，窄屏在上方吸顶），并且：
+### steps 联动：图跟着步骤动
+
+<!-- 科目：线代 -->
+
+`scene`（以及下面的 `graph`、`space`）写 `link: steps 的 id`，图就固定在这道题旁边（宽屏在右侧，窄屏在上方吸顶），并且：
 
 - 表达式里可以用 `step`（已经揭开的步数：开始是 0，揭开第 1 步后是 1）。
 - 命令后加 `from=k` / `until=k`：揭开到第 k 步起 / 为止才显示。
@@ -343,6 +353,8 @@ vector A*A*x color=yellow label=A²x from=2
 ```
 
 ### matrix：会动的矩阵
+
+<!-- 科目：线代 -->
 
 几个矩阵和公式排成一行。变量变了（拖滑块、绑定的 `steps` 揭开一步、课堂里的 `figure set` / `play`），值变了的格子会闪一下，挪了位置的数会飞过去。适合演示「一步步变」的过程：幂次、分块、乘积是怎么来的。
 
@@ -481,6 +493,8 @@ why: 每列和自己的内积是长度的**平方**，对角线应为 $1, 4, 9$�
 
 ### graph：函数图（概率分布、面积、函数性质）
 
+<!-- 科目：线代 -->
+
 坐标窗口可以不对称，适合画密度函数、分布律、累积概率。
 
 ```graph
@@ -508,6 +522,8 @@ show $P(X \le {a}) = {normcdf(a, mu, s)}$
 | `let`、`slider`、`show` | 同 `scene` |
 
 ### space：三维图（可以拖动旋转）
+
+<!-- 科目：线代 -->
 
 三维向量、张成的平面、平行六面体（体积 = 行列式）。我可以用手指或 Pencil 拖动旋转，还有「正视角」「转一转」按钮。
 
@@ -537,6 +553,8 @@ show $\mathbf w = a\mathbf u + b\mathbf v = {a*u + b*v}$
 字段：`range`（坐标范围，默认自动）、`view: 方位角 仰角`（默认 `-32 22`）、`spin: true`（打开时慢慢转）、`title`、`q`、`note`、`link`。
 
 ### 排序（数据结构）：array / shellsort / sortpass
+
+<!-- 科目：数据结构 -->
 
 数组画成一排格子（下标从 1 开始；重复的数后面加 `'`，画成带下划线的那个，比如 `49'`），最多 16 个元素。排序的过程、每一趟的结果都由组件算，不用自己算好再填。
 
@@ -580,6 +598,11 @@ text: 这一单元你发现了……下一单元会……
 - 提示框：`definition`、`theorem`、`key`（重点）、`warning`（易错）、`example`、`intuition`（直觉）。第一行可以写 `title: …`，后面是普通 Markdown。
 - 折叠内容：`hint`、`solution`、`proof`，默认折叠。
 - 记忆卡：`card`，写 `front:` 和 `back:`，点一下翻面。
+
+### rref / matmul：线代的演示组件
+
+<!-- 科目：线代 -->
+
 - 行化简演示：`rref`，写 `matrix: [[…]]`、`augmented: true`、可选 `vars: x, y, z`、`mode: ref`。用精确分数逐步演示，最后判断解的情况。
 - 矩阵乘法演示：`matmul`，写 `A: [[…]]` 和 `B: [[…]]`。点结果里的元素会高亮对应的行和列。
 - 旧组件 `transform2d`、`vectors` 仍然可用，但新课件优先用 `scene`。
@@ -634,6 +657,8 @@ unit: 第2讲 §2 · 秩一方阵
 ---
 </script>
 ```
+
+- 计算机课在 front matter 里加一行 `subject:`（如 `subject: 数据结构`，见第三节「科目」）。
 
 - `files`：同上，从组件库复制 `la-kit.js`。
 - `capabilities`：`{ "sample": { "images": true }, "db": {}, "assets": {} }`。`db` 存黑板内容、作答和页面写回给你的信息，`assets` 存我粘贴的手写截图原图。
@@ -730,6 +755,8 @@ unit: 第2讲 §2 · 秩一方阵
 ---
 </script>
 ```
+
+- 计算机课在 front matter 里加一行 `subject:`（如 `subject: 操作系统`）：课堂 Claude 拿到的组件说明和教法按这门课挑（见第三节「科目」）。
 
 - `files`：同上，从组件库复制 `la-kit.js`。
 - `capabilities`：`{ "sample": { "images": true }, "db": {}, "assets": {} }`。
