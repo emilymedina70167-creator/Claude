@@ -28,6 +28,7 @@ import { kmpEngine, hashEngine, bsearchEngine } from '../engines/search.js';
 import { netEngine } from '../engines/graph.js';
 import { traceEngine } from '../engines/trace.js';
 import { schedEngine, pagingEngine, bankerEngine, diskEngine } from '../engines/os.js';
+import { addrEngine } from '../engines/addr.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -47,4 +48,5 @@ export const blocks = {
   paging: stepperBlock(pagingEngine),
   banker: stepperBlock(bankerEngine),
   disk: stepperBlock(diskEngine),
+  addr: stepperBlock(addrEngine),
 };

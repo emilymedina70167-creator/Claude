@@ -2,7 +2,7 @@
 // 每个算法是一个引擎（engines/*.js）：parse(fields) → 输入，run(输入) → 每一步的状态和一句说明，view(状态) → 画面。
 // 外壳（stepper.js）统一管上一步 / 下一步 / 播放、ask、quiz、课堂的 figure、记录。
 // 这里是不碰 DOM 的部分，有测试（tests/stepper.test.js）。
-import { parseSeqAnswer, checkSeq } from './textcheck.js';
+import { parseSeqAnswer, checkSeq, radixAnswer, checkRadix } from './textcheck.js';
 
 /**
  * 每个引擎的步：{ view, msg, ask? }
@@ -80,6 +80,11 @@ export function checkAsk(ask, given) {
     const tol = decimals && decimals <= 2 && !String(given).includes('/') ? 0.5 * 10 ** -decimals + 1e-9 : 1e-9;
     const ok = Math.abs(g - a) <= tol;
     return { ok, msg: ok ? '' : '不对，再算算。' };
+  }
+  if (ask.kind === 'bin' || ask.kind === 'hex') {
+    // 位串：answer 是数（BigInt 也行）；width 要求写满几位
+    const r = checkRadix(given, radixAnswer(typeof ask.answer === 'bigint' ? ask.answer : Number(ask.answer), ask.kind === 'bin' ? 2 : 16, ask.width || 0));
+    return { ok: r.ok, msg: r.msg, wrong: r.wrong };
   }
   if (ask.kind === 'text') {
     const r = checkSeq(given, parseSeqAnswer(ask.answer));

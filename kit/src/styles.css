@@ -1351,3 +1351,23 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .os-disk .os-path { fill: none; stroke: var(--blue); stroke-width: 2.5; stroke-linejoin: round; }
 .os-disk .os-dot { fill: var(--blue); }
 .os-disk .os-dot.os-now { fill: var(--yellow); }
+/* 一串二进制位按字段画（engines/bitview.js）：字段名在上、位在中间、值在下 */
+.bv { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
+.bv-f { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 6px; border-radius: 10px; border: 2px solid rgb(var(--chalk-rgb) / 0.25); }
+.bv-f.bv-hi { border-color: var(--yellow); background: rgb(var(--yellow-rgb) / 0.1); }
+.bv-f.bv-a { border-color: rgb(var(--blue-rgb) / 0.7); } .bv-f.bv-b { border-color: rgb(var(--pink-rgb) / 0.7); } .bv-f.bv-c { border-color: rgb(var(--green-rgb) / 0.7); }
+.bv-name { font: 13px var(--sans); color: var(--chalk); white-space: nowrap; }
+.bv-name small { margin-left: 4px; color: var(--muted); font-size: 11.5px; }
+.bv-bits { display: flex; gap: 1px; font: 600 16px/1 var(--mono); color: var(--yellow); }
+.bv-bits span { min-width: 12px; text-align: center; }
+.bv-bits span.bv-gap { margin-left: 5px; }
+.bv-val { font: 13.5px var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; }
+.bv-val small { margin-left: 4px; }
+.sv-picking .bv-f[data-pick] { cursor: pointer; }
+/* 地址变换（engines/addr.js） */
+.ad-row { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.ad-h { font: 600 14px var(--sans); color: var(--chalk); }
+.ad-tables { display: flex; flex-wrap: wrap; gap: 18px; margin: 8px 0; }
+.ad-tbl .sv-gtbl { margin-top: 4px; }
+.ad-tbl tr.ad-hit td { background: rgb(var(--green-rgb) / 0.16); color: var(--green); font-weight: 700; }
+.ad-tbl tr.ad-miss td { background: rgb(var(--coral-rgb) / 0.14); color: var(--coral); font-weight: 700; }
