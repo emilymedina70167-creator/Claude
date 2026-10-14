@@ -1371,3 +1371,34 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .ad-tbl .sv-gtbl { margin-top: 4px; }
 .ad-tbl tr.ad-hit td { background: rgb(var(--green-rgb) / 0.16); color: var(--green); font-weight: 700; }
 .ad-tbl tr.ad-miss td { background: rgb(var(--coral-rgb) / 0.14); color: var(--coral); font-weight: 700; }
+/* 组成原理（engines/co.js）：几种编码、竖式加法、Cache 表、流水线时空图 */
+.co-num { font: 600 28px var(--mono); color: var(--yellow); }
+.co-num small { margin-left: 10px; font: 14px var(--sans); color: var(--muted); }
+.co-codes { display: flex; flex-direction: column; gap: 8px; }
+.co-code { display: flex; align-items: center; gap: 12px; padding: 4px 10px; border-radius: 10px; }
+.co-code.co-cur { background: rgb(var(--yellow-rgb) / 0.12); }
+.co-k { min-width: 3.5em; font: 14px var(--sans); color: var(--muted); }
+.co-bits { font: 600 19px var(--mono); color: var(--chalk); letter-spacing: 0.06em; }
+.co-bits b { color: var(--pink); margin-right: 6px; }
+.co-add { display: inline-flex; flex-direction: column; gap: 2px; font: 600 19px var(--mono); }
+.co-row { display: flex; align-items: center; }
+.co-row span:not(.co-k) { width: 22px; text-align: center; color: var(--chalk); }
+.co-row.co-carry span:not(.co-k) { color: var(--muted); font-size: 13px; }
+.co-row.co-plus { border-bottom: 2px solid rgb(var(--chalk-rgb) / 0.6); padding-bottom: 2px; }
+.co-row.co-sum span:not(.co-k) { color: var(--yellow); }
+.co-row.co-carry span.co-cout { color: var(--pink); }
+.co-cache td.co-set { background: rgb(var(--blue-rgb) / 0.1); }
+.co-cache td.co-hit { background: rgb(var(--green-rgb) / 0.2); color: var(--green); font-weight: 700; }
+.co-cache td.co-miss { background: rgb(var(--coral-rgb) / 0.16); color: var(--coral); font-weight: 700; }
+.co-hist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.co-hist span { display: inline-flex; flex-direction: column; align-items: center; min-width: 40px; padding: 2px 6px; border-radius: 8px; border: 1.5px solid rgb(var(--chalk-rgb) / 0.25); font: 600 14px var(--mono); color: var(--chalk); }
+.co-hist span small { font: 11.5px var(--sans); }
+.co-hist span.co-h small { color: var(--green); } .co-hist span.co-m small { color: var(--coral); }
+.co-hist span.co-now { border-color: var(--yellow); }
+.co-pipe td { padding: 4px 6px; min-width: 34px; font-size: 13.5px; }
+.co-pipe td:first-child { text-align: left; white-space: nowrap; }
+.co-pipe td.co-st { font: 600 13px var(--mono); }
+.co-pipe td.co-if { background: rgb(var(--blue-rgb) / 0.2); } .co-pipe td.co-id { background: color-mix(in srgb, var(--lav) 20%, transparent); }
+.co-pipe td.co-ex { background: rgb(var(--yellow-rgb) / 0.2); } .co-pipe td.co-mem { background: rgb(var(--pink-rgb) / 0.2); } .co-pipe td.co-wb { background: rgb(var(--green-rgb) / 0.2); }
+.co-pipe td.co-stall { background: repeating-linear-gradient(45deg, rgb(var(--coral-rgb) / 0.25) 0 5px, transparent 5px 10px); color: var(--coral); }
+.co-pipe td.co-wait { color: var(--muted); }

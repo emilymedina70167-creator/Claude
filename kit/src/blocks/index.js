@@ -29,6 +29,7 @@ import { netEngine } from '../engines/graph.js';
 import { traceEngine } from '../engines/trace.js';
 import { schedEngine, pagingEngine, bankerEngine, diskEngine } from '../engines/os.js';
 import { addrEngine } from '../engines/addr.js';
+import { bitsEngine, cacheEngine, pipeEngine } from '../engines/co.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -49,4 +50,7 @@ export const blocks = {
   banker: stepperBlock(bankerEngine),
   disk: stepperBlock(diskEngine),
   addr: stepperBlock(addrEngine),
+  bits: stepperBlock(bitsEngine),
+  cache: stepperBlock(cacheEngine),
+  pipe: stepperBlock(pipeEngine),
 };
