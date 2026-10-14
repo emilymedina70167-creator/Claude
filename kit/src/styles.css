@@ -1148,3 +1148,73 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .dv-line.dv-in > td, .sketch-svg .sk-flash, .sk-tex.sk-flash { animation: none; }
 }
+
+/* —— 步进器（stepper.js）：一步步走的演示。上面是画面，下面一句说明、先猜的问题、控制条 —— */
+.stepper .sv-stage { overflow-x: auto; padding: 6px 0 8px; -webkit-overflow-scrolling: touch; }
+.sv-msg { min-height: 3.2em; margin-top: 6px; font-size: 16px; padding: 4px 0 4px 14px; border-left: 3px solid rgb(var(--blue-rgb) / 0.6); color: var(--body); }
+.sv-verdict { display: inline-block; margin-right: 8px; padding: 0 10px; border-radius: 999px; background: rgb(var(--green-rgb) / 0.14); color: var(--green); font-size: 14.5px; }
+.sv-ctrl { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
+.sv-ctrl .btn { min-height: 44px; }
+.sv-count { font: 14px/1 var(--sans); font-variant-numeric: tabular-nums; }
+.sv-scrub { width: 100%; height: 44px; margin: 4px 0 0; accent-color: var(--yellow); }
+.sv-ask { margin-top: 10px; padding: 12px 14px; border-radius: 12px; border: 2px dashed color-mix(in srgb, var(--lav) 60%, transparent); background: color-mix(in srgb, var(--lav) 7%, transparent); display: flex; flex-direction: column; gap: 10px; }
+.sv-ask-q { font-size: 16px; color: var(--chalk); }
+.sv-ask-tag { display: inline-block; margin-right: 8px; padding: 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--lav) 20%, transparent); color: var(--lav); font-size: 14px; }
+.sv-choices { display: flex; flex-wrap: wrap; gap: 10px; }
+.sv-choice { min-height: 44px; }
+.sv-ask-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.sv-ask-input {
+  flex: 1 1 220px; height: 46px; padding: 0 12px; border: 0; border-bottom: 2px dashed rgb(var(--chalk-rgb) / 0.45); border-radius: 10px 10px 2px 2px;
+  background: rgb(var(--shade-rgb) / 0.16); color: var(--yellow); font: 500 18px/1 var(--mono); caret-color: var(--yellow);
+}
+.sv-ask-input:focus { outline: none; border-bottom: 2.5px solid var(--yellow); }
+.sv-ask-input::placeholder { color: var(--muted); font: 16px var(--sans); }
+.sv-ask-hint { font-size: 14.5px; }
+.sv-ask-fb { font-size: 15px; }
+.sv-ask-fb.is-bad { color: var(--coral); }
+.sv-ask-tools { display: flex; gap: 18px; flex-wrap: wrap; }
+.sv-picking [data-pick] { cursor: pointer; outline: 2px dashed color-mix(in srgb, var(--lav) 55%, transparent); outline-offset: 2px; }
+.sv-picking [data-pick].sv-picked { outline: 3px solid var(--lav); background: color-mix(in srgb, var(--lav) 20%, transparent); }
+.sv-show-demo { margin-top: 12px; }
+.sv-stage-q { margin: 6px 0; }
+
+/* 一排格子（engines/arrayview.js） */
+.sv-arr { display: grid; gap: 4px; width: max-content; }
+.sv-arr + .sv-arr { margin-top: 12px; }
+.sv-arr-label { font-family: var(--hand); font-size: 20px; color: var(--muted); }
+.sv-row { display: grid; grid-template-columns: repeat(var(--cols), var(--cell)); gap: 5px; align-items: center; }
+.sv-cell {
+  height: var(--cell); display: flex; align-items: center; justify-content: center; position: relative;
+  border-radius: 9px; font: 500 19px/1 var(--sans); font-variant-numeric: tabular-nums;
+  background: rgb(var(--shade-rgb) / 0.16); color: var(--chalk); border: 2px solid rgb(var(--chalk-rgb) / 0.35);
+  transition: background .25s, color .25s, opacity .25s, transform .25s, border-color .25s;
+}
+.sv-cell u { text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.sv-cell.sv-empty { background: transparent; border: 2px dashed rgb(var(--chalk-rgb) / 0.3); }
+.sv-cell.sv-zero { border-style: solid; border-color: rgb(var(--chalk-rgb) / 0.2); background: rgb(var(--shade-rgb) / 0.25); color: var(--muted); margin-right: 10px; }
+.sv-cell.sv-out { opacity: .3; }
+.sv-cell.sv-done { background: rgb(var(--green-rgb) / 0.22); border-color: rgb(var(--green-rgb) / 0.55); }
+.sv-cell.sv-cur { border-color: var(--blue); background: rgb(var(--blue-rgb) / 0.18); }
+.sv-cell.sv-cmp { border-color: var(--yellow); box-shadow: 0 0 0 3px rgb(var(--yellow-rgb) / 0.35); }
+.sv-cell.sv-swap { border-color: var(--pink); box-shadow: 0 0 0 3px rgb(var(--pink-rgb) / 0.45); }
+.sv-cell.sv-hole { border-style: dashed; color: rgb(var(--chalk-rgb) / 0.35); background: transparent; }
+.sv-cell.sv-placed { transform: translateY(-5px); box-shadow: 0 0 0 3px rgb(var(--green-rgb) / 0.7); }
+.sv-cell.sv-pivot { color: var(--pink); border-color: var(--pink); }
+.sv-cell.sv-g1 { background: rgb(var(--blue-rgb) / 0.2); }
+.sv-cell.sv-g2 { background: rgb(var(--pink-rgb) / 0.2); }
+.sv-new.sv-flash { animation: sv-flash 0.9s ease-out; }
+@keyframes sv-flash { 0% { box-shadow: 0 0 0 6px rgb(var(--yellow-rgb) / 0.75); } 100% { box-shadow: 0 0 0 0 rgb(var(--yellow-rgb) / 0); } }
+.sv-idx > div, .sv-ptr > div { text-align: center; font-size: 13px; color: var(--muted); line-height: 1.2; }
+.sv-ptr > div { font: 600 15px/1.2 var(--sans); color: var(--yellow); }
+.sv-ptr span { display: block; font-size: 14px; color: var(--blue); }
+.sv-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.sv-chip { font: 500 14.5px/1.5 var(--sans); font-variant-numeric: tabular-nums; padding: 2px 12px; border-radius: 999px; background: rgb(var(--shade-rgb) / 0.2); color: var(--yellow); border: 1.5px dashed rgb(var(--yellow-rgb) / 0.45); }
+.sv-chip b { color: var(--muted); font-weight: 400; margin-right: 4px; }
+/* 基数排序：这一趟看的那一位；0～9 号队列 */
+.sv-digits { display: grid; grid-template-columns: repeat(var(--cols), var(--cell)); gap: 5px; margin-top: 2px; text-align: center; font: 14px/1.2 var(--mono); color: var(--muted); }
+.sv-digits b { color: var(--yellow); font-weight: 700; }
+.sv-buckets { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 12px; max-width: 560px; }
+.sv-bucket { min-height: 40px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px 6px; border-radius: 8px; border: 1.5px solid rgb(var(--chalk-rgb) / 0.25); }
+.sv-bucket.sv-empty { opacity: .45; }
+.sv-bucket-n { font: 13px var(--sans); color: var(--muted); margin-right: 2px; }
+.sv-bucket-x { padding: 1px 6px; border-radius: 6px; background: rgb(var(--yellow-rgb) / 0.15); color: var(--chalk); font: 15px var(--sans); }

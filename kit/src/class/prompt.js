@@ -671,6 +671,17 @@ function recordText(a, type) {
     }
     case 'scene':
       return `[作答] ${where(a, '图')}：达成了图里的目标`;
+    case 'stepper': {
+      // 演示组件（排序、遍历、置换……）：走到某一步之前先猜（ask），或者 quiz 模式写出结果
+      const at = a.detail ? `${short(a.detail, 30)}，` : '';
+      const q = a.q ? `「${short(a.q, 120)}」` : '';
+      let what;
+      if (a.giveup) what = `想不出来，直接看了${a.expected ? `（答案是 ${val(a.expected)}）` : ''}`;
+      else if (a.revealed) what = `${a.attempts ? `试了 ${a.attempts} 次没猜对，` : ''}看了答案${a.expected ? `（${val(a.expected)}）` : ''}`;
+      else if (a.final) what = `${a.ok ? '做对了' : '没做对'}${a.attempts ? `（共 ${a.attempts} 次）` : ''}`;
+      else what = `${val(a.value) ? `${a.pick ? '在图上点了' : '写了'} ${val(a.value)}` : '（空）'}${mark(a.ok, a.attempts)}`;
+      return `[作答] ${where(a, a.engine || '演示')}：${at}${q}${tail(what, duration(a.ms))}`;
+    }
     case 'ask':
       return `[动作] 问了：「${short(a.question ?? a.text ?? a.q, 200)}」`;
     default:
@@ -688,7 +699,10 @@ function eventText(a, type) {
   switch (type) {
     case 'giveup': return `[动作] ${where(a, 'steps', { title: false })}${subText}：想不出来，直接揭开了`;
     case 'reveal': return `[动作] ${where(a, 'steps', { title: false })}：揭开第 ${sub ?? '?'} 步${stepTitle ? `（${short(stepTitle, 24)}）` : ''}`;
-    case 'drag': return `[动作] ${where(a, '图', { title: false })}：把 ${get('name') ?? '点'} 拖到 ${val(get('value'))}`;
+    case 'drag':
+      // 演示、分拍板书的 step：走到第几步
+      if (get('name') === 'step' && get('beat') !== undefined) return `[动作] ${where(a, '演示', { title: false })}：走到第 ${val(get('value'))} 步（共 ${val(get('beat'))} 步）`;
+      return `[动作] ${where(a, '图', { title: false })}：把 ${get('name') ?? '点'} 拖到 ${val(get('value'))}`;
     case 'done': return `[动作] 点了 ${typeof a.step === 'string' ? a.step : '这一段'}${stepTitle ? `「${short(stepTitle, 30)}」` : ''}的「这段做完了」`;
     case 'ask': return `[动作] 问了：「${short(get('question'), 200)}」`;
     case 'open': return '[动作] 打开了课堂页面';

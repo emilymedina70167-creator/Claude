@@ -4,7 +4,8 @@
 
 - 面向我的说明：`README.md`
 - 放进 claude.ai 项目指令、教 Claude 写课件的说明：`CLAUDE-PROJECT.md`（第三节「组件参考」还会在构建时打包进 `la-kit.js`，给课堂里的 Claude 当组件手册，见下文）
-- 需求原文：`docs/live-board-spec.md`（实时黑板）、`docs/classroom-spec.md`（课堂模式）、`docs/teaching-tools-spec.md`（课堂教具：板书标注、会动的矩阵、页面验算）；数据结构组件的方案（待定）：`docs/ds-components-design.md`
+- 需求原文：`docs/live-board-spec.md`（实时黑板）、`docs/classroom-spec.md`（课堂模式）、`docs/teaching-tools-spec.md`（课堂教具：板书标注、会动的矩阵、页面验算）
+- 计算机四门课（数据结构、操作系统、组成原理、计网）的总计划和进度：`docs/408-plan.md`；数据结构 `trace` / `tree` / `net` 的细节方案：`docs/ds-components-design.md`
 
 ## 分支
 
@@ -49,6 +50,9 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - 含 n 的式子作答（`answer` / `steps` 的 `formula: n`）：`formula.js`（读懂学生的写法、写成公式预览、代几组 n 比较、指出哪个 n 对不上、不许直接写 A^n，纯函数）+ `formulainput.js`（输入框和符号小键盘；Apple Pencil 点进去用系统的随手写）。
 - `practice` 的自定义题型（`type: custom`）：`practicespec.js`（模板解析、随机取数 `pick` / `let` / `where`、先取十几组数自检，纯函数），出题和判分照常走 `answerWidget`。
 - 表达空间：`sketch`（当场写的 SVG 示意图；`svgsafe.js` 白名单清理、调色板配色，纯函数）、`derive`（分拍板书：一行行写、等号对齐；`derivespec.js` 纯函数；写到第几行是变量 `step`，接 `figureControls`）、`image`（讲义原图：资料包 `images` 按名字找，课堂工具 `view_image` 让课堂 Claude 自己看）。
+- 科目：`subject.js`（front matter 的 `subject:`；`CLAUDE-PROJECT.md` 第三节小节下的 `<!-- 科目：… -->` 标记，课堂只带「通用 + 这门课」的组件说明，`prompt.js` 的 `defaultRules` 按科目换教法）。计算机课要的表达式（`0x1F`、`mod`、位运算、`bin` / `hex`）在 `expr.js` 和 `exact.js` 两边都有。
+- 文字型答案：`textcheck.js`（序列 `type: seq`、二进制 / 十六进制 `type: bin / hex` 的读法和判分，纯函数）+ `textinput.js`（输入框和回显）。
+- 演示组件（一步步走的过程）：`stepper.js` 是外壳（上一步 / 下一步 / 播放、`ask` 先猜再揭晓、`mode: quiz`、课堂的 `figure step` 和 `highlight`、记录），`stepperspec.js` 是它不碰 DOM 的部分；每个算法是 `engines/` 里的一个纯函数引擎（`parse` → `run` 出每一步 → `view` 画成 HTML，`data-pick` 给在图上点、`data-cmd` 给 highlight / `board mark item=`），在 `blocks/index.js` 用 `stepperBlock(引擎)` 注册。现有：`engines/sort.js`（`sort`）。新算法照这个做，引擎配 `node --test`。
 - 页面里调用 Claude：`ai.js`（`window.claude.use('sample')`，旧接口 `window.claude.complete`）。
 - 手写：`ink/`（整页板书 overlay、手写板 pad）；截图作答：`photo.js`。
 - `drafts.js`：草稿。会让学生作答的组件用 `markDraft` 登记「现在写着什么、还没交」（`answer` 系列、理由框 `thinkbox`、`conjecture`、`quiz`、`findbug`、`predict`），课堂模式发下一轮时一起告诉课堂 Claude，学生不点检查它也看得到。新写会作答的组件也要登记。

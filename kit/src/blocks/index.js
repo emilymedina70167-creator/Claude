@@ -21,6 +21,8 @@ import { matrix } from './matrix.js';
 import { sketch } from './sketch.js';
 import { derive } from './derive.js';
 import { image } from './image.js';
+import { stepperBlock } from '../stepper.js';
+import { sortEngine } from '../engines/sort.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -28,4 +30,6 @@ export const blocks = {
   scene, predict, answer, conjecture, practice, summary, context, draft,
   array, shellsort, sortpass, steps, recognize, findbug, graph, space,
   let: letBlock, matrix, sketch, derive, image,
+  // 一步步走的演示（stepper.js 外壳 + engines/ 里的纯函数引擎）
+  sort: stepperBlock(sortEngine),
 };
