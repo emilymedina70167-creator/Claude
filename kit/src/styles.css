@@ -1274,3 +1274,24 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .sv-chain-node sub { font-size: 11px; color: var(--yellow); margin-left: 2px; }
 .sv-chain-arrow, .sv-chain-null { color: var(--muted); font-size: 15px; }
 .sv-chain-fail { margin-left: 12px; font: 13px var(--sans); color: var(--yellow); }
+/* 图（engines/graph.js）：边可以点（粗的透明线好点中），权写在边旁边；表格（Dijkstra 每一轮、Floyd 的矩阵、关键路径） */
+.sv-net .sv-gedge path { stroke: rgb(var(--chalk-rgb) / 0.45); stroke-width: 2; fill: none; }
+.sv-net .sv-gedge path.sv-ghit { stroke: transparent; stroke-width: 18; }
+.sv-net .sv-gedge.sv-edge-tree path:not(.sv-ghit) { stroke: var(--green); stroke-width: 4; }
+.sv-net .sv-gedge.sv-edge-cand path:not(.sv-ghit) { stroke: rgb(var(--yellow-rgb) / 0.55); stroke-dasharray: 6 4; }
+.sv-net .sv-gedge.sv-edge-cur path:not(.sv-ghit) { stroke: var(--yellow); stroke-width: 4.5; }
+.sv-net .sv-gedge.sv-edge-rej path:not(.sv-ghit) { stroke: var(--coral); stroke-dasharray: 3 5; }
+.sv-net .sv-arrowhead { fill: rgb(var(--chalk-rgb) / 0.7); }
+.sv-net .sv-gw { fill: var(--yellow); font: 600 14px var(--sans); text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: rgb(var(--halo-rgb) / 0.9); stroke-width: 4px; }
+.sv-picking .sv-net .sv-gedge { cursor: pointer; }
+.sv-picking .sv-net .sv-gedge path:not(.sv-ghit) { stroke-dasharray: 4 3; }
+.sv-gtbl-wrap { overflow-x: auto; margin-top: 10px; }
+.sv-gtbl { border-collapse: collapse; font: 15px var(--sans); font-variant-numeric: tabular-nums; }
+.sv-gtbl th, .sv-gtbl td { border: 1px solid rgb(var(--chalk-rgb) / 0.22); padding: 5px 10px; text-align: center; min-width: 38px; }
+.sv-gtbl th { color: var(--muted); font-weight: 500; }
+.sv-gtbl td b { color: var(--chalk); font-weight: 600; }
+.sv-gtbl td.sv-pickcell { color: var(--green); font-weight: 700; background: rgb(var(--green-rgb) / 0.12); }
+.sv-gtbl td.sv-chg { color: var(--yellow); font-weight: 700; background: rgb(var(--yellow-rgb) / 0.14); }
+.sv-gtbl td.sv-kline { background: rgb(var(--blue-rgb) / 0.08); }
+.sv-adjlist { margin-top: 8px; font: 14.5px/1.6 var(--mono); color: var(--body); }
+.sv-adjlist b { color: var(--chalk); }

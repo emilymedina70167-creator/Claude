@@ -25,6 +25,7 @@ import { stepperBlock } from '../stepper.js';
 import { sortEngine } from '../engines/sort.js';
 import { treeEngine } from '../engines/tree.js';
 import { kmpEngine, hashEngine, bsearchEngine } from '../engines/search.js';
+import { netEngine } from '../engines/graph.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -38,4 +39,5 @@ export const blocks = {
   kmp: stepperBlock(kmpEngine),
   hash: stepperBlock(hashEngine),
   bsearch: stepperBlock(bsearchEngine),
+  net: stepperBlock(netEngine),
 };
