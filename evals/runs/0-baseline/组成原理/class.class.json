@@ -1,0 +1,50 @@
+{
+  "unit": "Cache · 组相联映射和 LRU",
+  "subject": "组成原理",
+  "pack": {
+    "main": {
+      "unit": "Cache · 组相联映射和 LRU",
+      "goal": "给出主存地址位数、cache 行数、块大小和路数，能算出标记 / 组号 / 块内地址各几位，把一个地址拆成三段；依次访问时能写出每次的组号、标记、是否命中；组满时说清 LRU 换出谁，以及为什么只在本组里换。",
+      "scope": "只讲组相联映射的地址划分和 LRU / FIFO 替换（直接映射、全相联作为特例对比）。不讲写策略、多级 cache、命中率和平均访问时间的计算。口径按王道。",
+      "textbook": "【王道 · Cache 和主存的映射】按字节编址时，主存地址分成「主存块号 | 块内地址」，块内地址位数 = log2(块大小)。\n组相联映射：把 Cache 分成 Q 个大小相等的组，每组 r 行（称为 r 路组相联）。主存块号 j 映射到 Cache 的第 i 组，i = j mod Q，可以放在该组的任意一行。主存地址结构为「标记 | 组号 | 块内地址」，组号位数 = log2 Q，标记位数 = 主存地址位数 − 组号位数 − 块内地址位数。访问时先用组号选出一组，再把这一组各行的标记同时和地址里的标记比较，相等且有效位为 1 即命中。直接映射相当于 1 路组相联（组数 = 行数），全相联相当于只有 1 组。\n替换算法：组相联映射中，替换只在主存块所映射的那一组里进行。LRU（近期最少使用）：换出最长时间没有被访问过的块。为每行设一个计数器（LRU 位）：命中时该行计数清 0，比它小的计数加 1，其余不变；未命中且组内还有空行时，新装入的行计数置 0，其余全加 1；未命中且组满时，换出计数最大的行。FIFO（先进先出）：换出最早调入的块，不管它最近有没有被访问。\n例题：主存地址 16 位，按字节编址；cache 共 8 行，块大小 16 B，2 路组相联，LRU 替换，开始为空。依次访问（十六进制地址）0x0010、0x0050、0x0010、0x0090、0x0050、0x0010。写出每次访问的组号、标记，是否命中。答案：块内地址 4 位；8 行每组 2 行，共 4 组，组号 2 位；标记 16 − 2 − 4 = 10 位。组号都是 1；标记依次 0、1、0、2、1、0；只有第 3 次命中。",
+      "plan": "1. 先算三段各几位（answer，答案写成向量）。重点：组号位数看组数，不看行数。\n2. 拆一个地址（如 0x0090）：块号、组号、标记。\n3. 用 cache 组件把 6 次访问走一遍：lines: 8、ways: 2、replace: lru、block: 16B、addr: 16、refs 写字节地址，ask: set, hit, victim。\n4. 停在第 4 次访问问两件事：别的组都空着，为什么还要换出一块；LRU 为什么换 0x0050 那块、不换先进来的 0x0010 那块（和 FIFO 对比：同一串访问 FIFO 命中 2 次）。\n5. practice 自定义题型换参数练拆地址（行数、块大小、路数都随机）。",
+      "student": "考研生，用 iPad + Apple Pencil，过程写在 Notability 里截图交。习惯了直接映射，容易把「行数」当成「组数」去算组号位数；十六进制转二进制偶尔数错位。",
+      "updatedAt": 1760425200000
+    },
+    "problems": {
+      "items": [
+        {
+          "q": "主存地址 16 位，按字节编址；cache 共 8 行，块大小 16 B，2 路组相联，LRU 替换，开始为空。依次访问 0x0010、0x0050、0x0010、0x0090、0x0050、0x0010。写出每次访问的组号、标记，是否命中。",
+          "answer": "标记 10 位 | 组号 2 位 | 块内地址 4 位；组号都是 1；标记依次 0、1、0、2、1、0；只有第 3 次命中。",
+          "point": "组相联的地址划分；替换只在本组内；LRU 换出谁",
+          "source": "题库 co-cache（王道口径）"
+        },
+        {
+          "q": "同上，替换算法改成 FIFO，一共命中几次？",
+          "answer": "2 次（第 3、5 次）。第 4 次访问 FIFO 换出最早进来的 0x0010 那块，LRU 换出的是 0x0050 那块。",
+          "point": "LRU 和 FIFO 的区别",
+          "source": "由 co-cache 改编"
+        },
+        {
+          "q": "同样的 cache 改成直接映射（8 行，块 16 B），同一串访问的行号和命中情况？",
+          "answer": "行号 3 位、标记 9 位；行号依次 1、5、1、1、5、1；第 3、5 次命中，共 2 次。",
+          "point": "直接映射是 1 路组相联；组号（行号）位数随组数变",
+          "source": "由 co-cache 改编"
+        }
+      ]
+    }
+  },
+  "turns": [
+    {
+      "teacher": "这节课做一道 2 路组相联 + LRU 的题，题目放在常驻栏里。先不走访问序列，把地址拆成三段：每段几位？\n\n````board new id=b1 title=\"地址拆成三段\"\n```let\nA = 16\nL = 8\nW = 2\nB = 16\n```\n\n访问一个地址时，cache 要从地址里读出三样：去哪一组找、和组里的标记比什么、要块里的第几个字节。\n\n```answer\nid: q-b1\ntitle: 每段几位\nq: 主存地址 16 位，按字节编址；cache 共 8 行，块大小 16 B，$\\hl{ways}{\\text{2 路组相联}}$。把地址拆成「标记 | 组号 | 块内地址」，每段各几位？\nanswer: [A - log2(B) - log2(L / W), log2(L / W), log2(B)]\nbefore: \\begin{bmatrix}\\text{标记}\\\\\\text{组号}\\\\\\text{块内地址}\\end{bmatrix}=\nhint: 块内地址看一块有多少字节；组号看一共有多少组。\nexplain: 块内地址 $\\log_2\\calc{B}=\\calc{log2(B)}$ 位；$\\calc{L}$ 行每组 $\\calc{W}$ 行，共 $\\calc{L/W}$ 组，组号 $\\calc{log2(L/W)}$ 位；标记 $\\calc{A}-\\calc{log2(B)}-\\calc{log2(L/W)}=\\calc{A-log2(B)-log2(L/W)}$ 位。\n```\n````\n\n````board pin id=k1 title=\"这节课的 cache\"\n主存地址 16 位，按字节编址；cache 8 行，块 16 B，2 路组相联，LRU，开始为空\n\n依次访问：0x0010、0x0050、0x0010、0x0090、0x0050、0x0010\n````"
+    },
+    {
+      "student": "[作答] b1 里的 answer q-b1「每段几位」：填了 (9, 3, 4)（错，第 1 次），用时 48 秒",
+      "teacher": "块内地址 4 位是对的。组号你写了 3 位，3 位正好能编出 8 个号，是按 8 行算的吧？看圈出来的这几个字，先数一数一共几组。\n\n````board mark target=b1 term=ways note=\"每组 2 行\"\n````\n\n````board add id=b2 title=\"先数组数\"\n```answer\nid: q-b2\ntitle: 一共几组\nq: cache 共 8 行，2 路组相联（每组 2 行）。一共分成几组？组号要几位，才能给每一组编上号？\nanswer: [L / W, log2(L / W)]\nbefore: \\begin{bmatrix}\\text{组数}\\\\\\text{组号位数}\\end{bmatrix}=\nhint: 8 行两行两行地分。$k$ 位二进制能编出 $2^k$ 个号。\nexplain: $\\calc{L}\\div\\calc{W}=\\calc{L/W}$ 组；$2^{\\calc{log2(L/W)}}=\\calc{L/W}$，所以组号 $\\calc{log2(L/W)}$ 位。\n```\n````\n\n数出来以后，回到上面那题改一改。"
+    },
+    {
+      "student": "没懂，为什么？",
+      "teacher": "这是组相联的规矩，直接讲：地址里的组号只负责挑出一组，组里那 2 行不靠地址来选，是一起拿标记去比的。看图，再答下面的小题。\n\n````board new id=b3 title=\"组号只管选组\"\n```sketch\nid: sk-sets\ntitle: 8 行分成 4 组\nwidth: 360\nheight: 240\n<rect x=\"20\" y=\"10\" width=\"60\" height=\"18\" rx=\"3\"/>\n<rect x=\"20\" y=\"30\" width=\"60\" height=\"18\" rx=\"3\" class=\"yellow fill\"/>\n<rect x=\"20\" y=\"50\" width=\"60\" height=\"18\" rx=\"3\"/>\n<rect x=\"20\" y=\"70\" width=\"60\" height=\"18\" rx=\"3\"/>\n<rect x=\"20\" y=\"90\" width=\"60\" height=\"18\" rx=\"3\"/>\n<rect x=\"20\" y=\"110\" width=\"60\" height=\"18\" rx=\"3\" class=\"yellow fill\"/>\n<rect x=\"20\" y=\"130\" width=\"60\" height=\"18\" rx=\"3\"/>\n<rect x=\"20\" y=\"150\" width=\"60\" height=\"18\" rx=\"3\"/>\n<rect x=\"20\" y=\"170\" width=\"60\" height=\"18\" rx=\"3\"/>\n<rect x=\"20\" y=\"190\" width=\"60\" height=\"18\" rx=\"3\" class=\"yellow fill\"/>\n<text x=\"50\" y=\"23\" text-anchor=\"middle\" class=\"small\">块0</text>\n<text x=\"50\" y=\"43\" text-anchor=\"middle\" class=\"small\">块1</text>\n<text x=\"50\" y=\"63\" text-anchor=\"middle\" class=\"small\">块2</text>\n<text x=\"50\" y=\"83\" text-anchor=\"middle\" class=\"small\">块3</text>\n<text x=\"50\" y=\"103\" text-anchor=\"middle\" class=\"small\">块4</text>\n<text x=\"50\" y=\"123\" text-anchor=\"middle\" class=\"small\">块5</text>\n<text x=\"50\" y=\"143\" text-anchor=\"middle\" class=\"small\">块6</text>\n<text x=\"50\" y=\"163\" text-anchor=\"middle\" class=\"small\">块7</text>\n<text x=\"50\" y=\"183\" text-anchor=\"middle\" class=\"small\">块8</text>\n<text x=\"50\" y=\"203\" text-anchor=\"middle\" class=\"small\">块9</text>\n<rect x=\"220\" y=\"20\" width=\"120\" height=\"40\" rx=\"4\"/>\n<rect x=\"220\" y=\"70\" width=\"120\" height=\"40\" rx=\"4\" class=\"yellow fill\"/>\n<rect x=\"220\" y=\"120\" width=\"120\" height=\"40\" rx=\"4\"/>\n<rect x=\"220\" y=\"170\" width=\"120\" height=\"40\" rx=\"4\"/>\n<line x1=\"220\" y1=\"40\" x2=\"340\" y2=\"40\" class=\"thin faint\"/>\n<line x1=\"220\" y1=\"90\" x2=\"340\" y2=\"90\" class=\"thin faint\"/>\n<line x1=\"220\" y1=\"140\" x2=\"340\" y2=\"140\" class=\"thin faint\"/>\n<line x1=\"220\" y1=\"190\" x2=\"340\" y2=\"190\" class=\"thin faint\"/>\n<text x=\"212\" y=\"45\" text-anchor=\"end\" class=\"small\">组0</text>\n<text x=\"212\" y=\"95\" text-anchor=\"end\" class=\"small yellow\">组1</text>\n<text x=\"212\" y=\"145\" text-anchor=\"end\" class=\"small\">组2</text>\n<text x=\"212\" y=\"195\" text-anchor=\"end\" class=\"small\">组3</text>\n<line x1=\"80\" y1=\"39\" x2=\"218\" y2=\"80\" class=\"arrow yellow\"/>\n<line x1=\"80\" y1=\"119\" x2=\"218\" y2=\"90\" class=\"arrow yellow\"/>\n<line x1=\"80\" y1=\"199\" x2=\"218\" y2=\"100\" class=\"arrow yellow\"/>\n<text x=\"180\" y=\"232\" text-anchor=\"middle\" class=\"small\">块 1、5、9 都进组 1，组里 2 行哪行空放哪行</text>\n```\n\n主存第 $j$ 块进第 $j \\bmod \\calc{L/W}$ 组，放在这一组的**哪一行都行**；查的时候，组里 $\\calc{W}$ 行**同时**拿标记比。所以地址里只要写清是哪一组：$\\calc{L/W}$ 组要 $\\calc{log2(L/W)}$ 位，不是给 8 行编号的 3 位。\n\n```answer\nid: q-b3\ntitle: 进哪一组\nq: cache 共 8 行，2 路组相联（共 4 组）。主存第 6 块映射到第几组？\nanswer: mod(6, L / W)\nhint: 块号除以组数，看余数。\nexplain: $6\\bmod\\calc{L/W}=\\calc{mod(6, L/W)}$，进第 $\\calc{mod(6, L/W)}$ 组，组里 2 行哪一行空就放哪一行。\n```\n````\n\n答完这题，翻回上一块板把三段的位数改过来。"
+    }
+  ]
+}

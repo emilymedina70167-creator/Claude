@@ -1,0 +1,62 @@
+{
+  "unit": "含参数的线性方程组",
+  "subject": "线代",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "先看 |A|",
+      "md": "```let\nlam1 = 1\nA1 = [[lam1, 1, 1], [1, lam1, 1], [1, 1, lam1]]\nlam2 = -2\nA2 = [[lam2, 1, 1], [1, lam2, 1], [1, 1, lam2]]\nb2 = [1, lam2, lam2^2]\nAb2 = mat(col(A2, 1), col(A2, 2), col(A2, 3), b2)\neta = [1, 0, 0]\nxi1 = [-1, 1, 0]\nxi2 = [-1, 0, 1]\n```\n\n系数矩阵 $A$ 是方阵：$|A|\\ne0$ 时有唯一解（克拉默法则 Cramer's rule）。所以先问：$\\lambda$ 取什么值时 $|A|=0$？拖动竖线 $a$，看 $|A|$ 怎么随 $\\lambda$ 变。\n\n```graph\nid: g-det\ntitle: |A| 随 λ 变化\nx: -3.5 2.5\ny: -6 6\nxlabel: λ\nplot det([[x, 1, 1], [1, x, 1], [1, 1, x]]) color=yellow label=|A|\nlet a = 0 drag snap=0.5\nshow $\\lambda={a}$ 时 $|A|={det([[a, 1, 1], [1, a, 1], [1, 1, a]])}$\n```\n\n```answer\nid: q-zero\ntitle: 哪些 λ\nq: $A=\\begin{bmatrix}\\lambda&1&1\\\\1&\\lambda&1\\\\1&1&\\lambda\\end{bmatrix}$，$\\lambda$ 取哪些值时 $|A|=0$？从小到大写，用空格隔开。\ntype: seq\nanswer: -2 1\nhint: 看黄色曲线在哪里碰到横轴。$\\lambda=1$ 那里曲线只碰一下就回去了，这说明什么？\nexplain: $\\lambda=-2$ 和 $\\lambda=1$。图只能看个大概，下一块板用代数把 $|A|$ 分解出来。\n```"
+    },
+    {
+      "id": "k1",
+      "seq": 2,
+      "pin": true,
+      "title": "题目",
+      "md": "$\\begin{cases}\\lambda x_1+x_2+x_3=1\\\\x_1+\\lambda x_2+x_3=\\lambda\\\\x_1+x_2+\\lambda x_3=\\lambda^2\\end{cases}$\n\n$\\lambda$ 取何值时唯一解、无解、无穷多解？无穷多解时求通解。"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "把 |A| 分解",
+      "md": "图上看到的，用代数确认。这个矩阵你见过：每一行加起来都一样。\n\n```steps\nid: ex-fac\ntitle: 分解 |A|\nq: $|A|=\\begin{vmatrix}\\lambda&1&1\\\\1&\\lambda&1\\\\1&1&\\lambda\\end{vmatrix}$\nstep: 各列加到第 1 列\nask: 每一行加起来是多少？做完 $c_1+c_2+c_3$ 能提出什么？\nchoices: $\\lambda+2$ | $\\lambda+1$ | $3\\lambda$\nanswer: $\\lambda+2$\nshow: 提出 $\\lambda+2$：$|A|=(\\lambda+2)\\begin{vmatrix}1&1&1\\\\1&\\lambda&1\\\\1&1&\\lambda\\end{vmatrix}$\nstep: 化上三角\nask: 第 1 列全是 $1$ 了，下一步做什么？\nshow: $r_2-r_1,\\ r_3-r_1$：$|A|=(\\lambda+2)\\begin{vmatrix}1&1&1\\\\0&\\lambda-1&0\\\\0&0&\\lambda-1\\end{vmatrix}=(\\lambda+2)(\\lambda-1)^2$\nstep: 分情况\nask: 什么时候有唯一解？剩下哪几种情况要单独算？\nshow: $\\lambda\\ne1$ 且 $\\lambda\\ne-2$ 时 $|A|\\ne0$，唯一解。$\\lambda=1$、$\\lambda=-2$ 要**代进去**单独化简。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 4,
+      "pin": true,
+      "title": "判别",
+      "md": "$|A|=(\\lambda+2)(\\lambda-1)^2$\n\n$r(A)=r(A\\mid\\mathbf b)=3$ 唯一解；$r(A)<r(A\\mid\\mathbf b)$ 无解；$r(A)=r(A\\mid\\mathbf b)<3$ 无穷多解。"
+    },
+    {
+      "id": "s3",
+      "seq": 5,
+      "page": 3,
+      "title": "这样化简对吗",
+      "md": "有人不先算 $|A|$，直接化简增广矩阵。点出第一处出问题的那一行，再写问题在哪。\n\n```findbug\nid: bug-param\ntitle: 这份草稿错在哪？\nq: 讨论 $\\lambda$，化简常驻栏里方程组的增广矩阵。\nline: $(A\\mid\\mathbf b)=\\begin{bmatrix}\\lambda&1&1&1\\\\1&\\lambda&1&\\lambda\\\\1&1&\\lambda&\\lambda^2\\end{bmatrix}\\xrightarrow{r_1\\leftrightarrow r_3}\\begin{bmatrix}1&1&\\lambda&\\lambda^2\\\\1&\\lambda&1&\\lambda\\\\\\lambda&1&1&1\\end{bmatrix}$\nline: $\\xrightarrow[r_3-\\lambda r_1]{r_2-r_1}\\begin{bmatrix}1&1&\\lambda&\\lambda^2\\\\0&\\lambda-1&1-\\lambda&\\lambda-\\lambda^2\\\\0&1-\\lambda&1-\\lambda^2&1-\\lambda^3\\end{bmatrix}$\nline: 第 2、3 行同除以 $\\lambda-1$：$\\begin{bmatrix}1&1&\\lambda&\\lambda^2\\\\0&1&-1&-\\lambda\\\\0&-1&-(1+\\lambda)&-(1+\\lambda+\\lambda^2)\\end{bmatrix}$\nline: $\\xrightarrow{r_3+r_2}\\begin{bmatrix}1&1&\\lambda&\\lambda^2\\\\0&1&-1&-\\lambda\\\\0&0&-(\\lambda+2)&-(\\lambda+1)^2\\end{bmatrix}$，所以 $\\lambda\\ne-2$ 时唯一解，$\\lambda=-2$ 时无解\nbug: 3\nwhy: 除以 $\\lambda-1$ 就默认了 $\\lambda\\ne1$：$\\lambda=1$ 这种情况被悄悄丢掉了，而它恰恰是无穷多解的情形。要除以含参数的式子，先把它等于 $0$ 的情况单独拿出来。\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 4,
+      "title": "λ = −2",
+      "md": "把 $\\lambda=-2$ 代进去，增广矩阵就是具体的数了。\n\n```answer\nid: q-r2\ntitle: 两个秩\nq: $\\lambda=-2$ 时，方程组 $\\begin{cases}-2x_1+x_2+x_3=1\\\\x_1-2x_2+x_3=-2\\\\x_1+x_2-2x_3=4\\end{cases}$ 的系数矩阵和增广矩阵的秩各是多少？\nanswer: [rank(A2), rank(Ab2)]\nbefore: \\bigl(r(A),\\ r(A\\mid\\mathbf b)\\bigr)=\nhint: 把三个方程加起来看看。\nexplain: 三个方程相加：左边是 $0$，右边是 $\\calc{b2'*[1, 1, 1]}$，矛盾。$r(A)=\\calc{rank(A2)}<r(A\\mid\\mathbf b)=\\calc{rank(Ab2)}$，**无解**。行最简形 $\\calc{rref(Ab2)}$ 的最后一行就是 $0=1$。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 5,
+      "title": "λ = 1：基础解系",
+      "md": "$\\lambda=1$ 时三个方程都变成 $x_1+x_2+x_3=1$：$r(A)=r(A\\mid\\mathbf b)=\\calc{rank(A1)}<3$，无穷多解。先看对应的齐次方程。\n\n```answer\nid: q-basis\ntitle: 基础解系\nq: 写出齐次方程 $x_1+x_2+x_3=0$ 的一个基础解系（fundamental system of solutions）。\ntype: basis\nanswer: [[-1, 1, 0], [-1, 0, 1]]\nhint: 一个方程、三个未知数，自由变量有 $3-1=2$ 个。取 $x_2,x_3$ 自由，分别令 $(x_2,x_3)=(1,0)$ 和 $(0,1)$。\nexplain: 比如 $\\boldsymbol\\xi_1=\\calc{xi1}$，$\\boldsymbol\\xi_2=\\calc{xi2}$。别的取法只要是两个线性无关的解，也对。\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 6,
+      "title": "通解长什么样",
+      "md": "$\\lambda=1$ 时的通解 = 一个特解 + 基础解系的任意组合。拖滑块 $k_1,k_2$：黄点一直在黄色平面上。\n\n```space\nid: sp-sol\ntitle: 解集是一张平面\nslider k1 -2 2 = 0 step=0.5\nslider k2 -2 2 = 0 step=0.5\nplane normal [1, 1, 1] color=gray\nplane normal [1, 1, 1] at eta color=yellow\nvector eta color=gray label=η\nvector xi1 color=blue label=ξ1\nvector xi2 color=pink label=ξ2\nvector k1*xi1 + k2*xi2 from eta color=yellow\npoint eta + k1*xi1 + k2*xi2 color=yellow label=x\nshow $\\mathbf x=\\boldsymbol\\eta+k_1\\boldsymbol\\xi_1+k_2\\boldsymbol\\xi_2={eta+k1*xi1+k2*xi2}$，$x_1+x_2+x_3={dot(eta+k1*xi1+k2*xi2, [1, 1, 1])}$\n```\n\n```quiz\nid: qz-eta\ntitle: 换一个特解\nq: 通解 $\\boldsymbol\\eta+k_1\\boldsymbol\\xi_1+k_2\\boldsymbol\\xi_2$ 里，把特解 $\\boldsymbol\\eta=(1,0,0)^{\\mathrm T}$ 换成另一个特解 $(0,1,0)^{\\mathrm T}$，解集会变吗？\n- [x] 不变：还是同一张黄色平面\n- [ ] 变成一张平行的新平面\n- [ ] 变成灰色那张过原点的平面\nexplain: $(0,1,0)^{\\mathrm T}$ 也满足 $x_1+x_2+x_3=1$，本来就在黄色平面上。特解只负责把平面搬离原点，从平面上哪一点出发都行。通解：$\\mathbf x=\\calc{eta}+k_1\\calc{xi1}+k_2\\calc{xi2}$（$k_1,k_2$ 任意）。\n```"
+    }
+  ]
+}

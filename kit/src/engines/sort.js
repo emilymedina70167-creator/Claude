@@ -36,8 +36,48 @@ export function parse(fields) {
 
 /** 跑一遍：{ steps: [{ view, msg, ask? }], passes: [每一趟结束后的序列（数组）] } */
 export function run(input) {
+  if (input.mistake) return { steps: [{ view: { A: input.items.slice() }, msg: '' }], passes: mistakePasses(input.items.map(vOf), input.mistake) };
   const f = { insert: insertion, bubble, select: selection, quick, merge, radix }[input.algo];
   return f(input.items.map((x) => ({ ...x })));
+}
+
+// 常见错法下每一趟之后的序列（只拿来和学生写的比，不用一步步的演示）：
+//   bubbleFront 冒泡从前往后（大的往后沉）；selectMax 选择排序每趟选最大的放到最后；quickLast 快排取最后一个作枢轴
+function mistakePasses(a, mistake) {
+  const A = a.slice(), n = A.length, passes = [];
+  if (mistake === 'bubbleFront') {
+    for (let i = 0; i < n - 1; i++) {
+      let flag = false;
+      for (let j = 0; j < n - 1 - i; j++) if (A[j] > A[j + 1]) { [A[j], A[j + 1]] = [A[j + 1], A[j]]; flag = true; }
+      passes.push(A.slice());
+      if (!flag) break;
+    }
+  } else if (mistake === 'selectMax') {
+    for (let i = n - 1; i > 0; i--) {
+      let m = 0;
+      for (let j = 1; j <= i; j++) if (A[j] > A[m]) m = j;
+      [A[i], A[m]] = [A[m], A[i]];
+      passes.push(A.slice());
+    }
+  } else if (mistake === 'quickLast') {
+    const sort = (lo, hi) => {
+      if (lo >= hi) return;
+      const pivot = A[hi];
+      let l = lo, h = hi;
+      while (l < h) {
+        while (l < h && A[l] <= pivot) l++;
+        A[h] = A[l];
+        while (l < h && A[h] >= pivot) h--;
+        A[l] = A[h];
+      }
+      A[l] = pivot;
+      passes.push(A.slice());
+      sort(lo, l - 1);
+      sort(l + 1, hi);
+    };
+    sort(0, n - 1);
+  }
+  return passes;
 }
 
 // —— 直接插入排序（带哨兵 A[0]）——
@@ -302,4 +342,24 @@ export function problems(input, r) {
   return out;
 }
 
-export const sortEngine = { name: 'sort', title: '排序演示', parse, run, view, quiz, problems };
+// 考卷上那张表：每一趟（快排是每一次划分）结束后的整个序列
+export function table(input, r) {
+  const unit = input.algo === 'quick' ? '次划分' : '趟';
+  return {
+    q: `对上面的序列做${ALGOS[input.algo]}（升序${input.algo === 'quick' ? '，王道的划分方法：枢轴取区间第一个' : input.algo === 'bubble' ? '，王道的冒泡：每趟从后往前，小的往前冒' : ''}），写出每一${unit}结束后的序列。`,
+    qhtml: arrayView(input.items, { pick: false }),
+    dir: 'row',
+    head: input.items.map((_, i) => `${i + 1}`),
+    rows: r.passes.map((p, k) => ({ label: `第 ${k + 1} ${unit}`, cells: p.map((v) => ({ v: [String(v), `${v}′`, `${v}'`] })) })),
+  };
+}
+
+// 常见错法：冒泡方向弄反、选择排序选成最大的、快排取错枢轴
+export function variants(input) {
+  if (input.algo === 'bubble') return [{ label: '像是从前往后冒泡（大的往后沉）了；王道的冒泡是从后往前、小的往前冒', input: { ...input, mistake: 'bubbleFront' } }];
+  if (input.algo === 'select') return [{ label: '像是每趟选最大的放到最后了；简单选择排序是每趟选最小的放到最前', input: { ...input, mistake: 'selectMax' } }];
+  if (input.algo === 'quick') return [{ label: '像是取了区间最后一个当枢轴；王道取的是第一个', input: { ...input, mistake: 'quickLast' } }];
+  return [];
+}
+
+export const sortEngine = { name: 'sort', title: '排序演示', parse, run, view, quiz, problems, table, variants };

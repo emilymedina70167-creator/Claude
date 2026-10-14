@@ -1,0 +1,38 @@
+{
+  "unit": "组相联映射和 LRU",
+  "subject": "组成原理",
+  "steps": [
+    {
+      "id": "s1", "seq": 1, "page": 1, "title": "地址拆成三段",
+      "md": "```let\nA = 16\nL = 8\nW = 2\nB = 16\nS = L / W\nob = log2(B)\nsb = log2(S)\ntb = A - ob - sb\n```\n\n访问一个地址时，cache 要从地址里读出三样东西：去哪一组找、和组里的标记比什么、要块里的第几个字节。先算每一段几位，每一步自己填。\n\n```steps\nid: ex-bits\ntitle: 每段几位\nq: 主存地址 $\\calc{A}$ 位，按字节编址；cache 共 $\\calc{L}$ 行，块大小 $\\calc{B}$ B，$\\calc{W}$ 路组相联。地址拆成「标记 | 组号 | 块内地址」，每段几位？\n\nstep: 块内地址\ndo: true\nask: 一块 $\\calc{B}$ 个字节，块内地址要几位？\nanswer: log2(B)\nshow: $\\log_2\\calc{B}=\\calc{log2(B)}$ 位。\n\nstep: 一共几组\ndo: true\nask: $\\calc{L}$ 行，每组 $\\calc{W}$ 行，一共几组？\nanswer: L / W\nshow: $\\calc{L}\\div\\calc{W}=\\calc{L/W}$ 组。\n\nstep: 组号\ndo: true\nask: 组号要几位？\nanswer: log2(L / W)\nshow: $\\log_2\\calc{L/W}=\\calc{log2(L/W)}$ 位。看的是组数，不是行数。\n\nstep: 标记\ndo: true\nask: 剩下的高位都是标记，几位？\nanswer: A - log2(B) - log2(L / W)\nshow: $\\calc{A}-\\calc{log2(B)}-\\calc{log2(L/W)}=\\calc{A-log2(B)-log2(L/W)}$ 位。\n```"
+    },
+    {
+      "id": "k1", "seq": 2, "pin": true, "title": "这节课的 cache",
+      "md": "主存地址 $\\calc{A}$ 位，按字节编址；cache $\\calc{L}$ 行，块 $\\calc{B}$ B，$\\calc{W}$ 路组相联，LRU，开始为空\n\n访问：0x0010、0x0050、0x0010、0x0090、0x0050、0x0010"
+    },
+    {
+      "id": "s2", "seq": 3, "page": 2, "title": "拆一个地址",
+      "md": "先拆一个地址。0x0090 不是第一个访问的，但拆法都一样。\n\n```answer\nid: a-split\ntitle: 0x0090 拆开\nq: 地址 0x0090（16 位，按字节编址）写成二进制是 $\\calc{bin(0x0090, 16)}$。按「标记 $\\calc{tb}$ 位 | 组号 $\\calc{sb}$ 位 | 块内地址 $\\calc{ob}$ 位」切开，组号和标记各是多少？写十进制。\nanswer: [mod(div(0x0090, B), S), div(0x0090, B*S)]\nbefore: \\begin{bmatrix}\\text{组号}\\\\\\text{标记}\\end{bmatrix}=\nhint: 从右边切掉块内地址的 $\\calc{ob}$ 位，剩下的是主存块号；块号最低的 $\\calc{sb}$ 位是组号，再往上全是标记。\nexplain: 块号 $=\\calc{div(0x0090, B)}$，组号 $=\\calc{div(0x0090, B)}\\bmod\\calc{S}=\\calc{mod(div(0x0090, B), S)}$，标记 $=\\calc{div(0x0090, B*S)}$。\n```"
+    },
+    {
+      "id": "k2", "seq": 4, "pin": true, "title": "地址三段",
+      "md": "标记 $\\calc{tb}$ 位 | 组号 $\\calc{sb}$ 位 | 块内地址 $\\calc{ob}$ 位\n\n组号 = 主存块号 mod 组数（$\\calc{S}$ 组）"
+    },
+    {
+      "id": "s3", "seq": 5, "page": 3, "title": "依次访问",
+      "md": "六次访问按顺序走一遍。每次先猜它进哪一组、命中没有；缺失而且这一组满了时，点出 LRU 要换出的那一块。\n\n```cache\nid: c-lru\ntitle: 2 路组相联 + LRU\nlines: 8\nways: 2\nreplace: lru\nblock: 16B\naddr: 16\nrefs: 0x0010, 0x0050, 0x0010, 0x0090, 0x0050, 0x0010\nask: set, hit, victim, hits\n```"
+    },
+    {
+      "id": "s4", "seq": 6, "page": 4, "title": "为什么换它",
+      "md": "第 4 次访问 0x0090 缺失时，cache 的 $\\calc{L}$ 行里只用了 2 行。\n\n```quiz\nid: q-why\nq: 别的组都空着，为什么还要换出一块？\n- [ ] LRU 规定：只要缺失，就换出最久没用的一块\n- [x] 0x0090 只能放进第 $\\calc{mod(div(0x0090, B), S)}$ 组，这一组的 $\\calc{W}$ 行已经满了；别的组空着也用不上\n- [ ] cache 已经满了\nexplain: 组相联里，一个主存块只能放进它那一组（组号 = 块号 mod 组数）。空行在别的组，用不上；换谁也只在这一组的 $\\calc{W}$ 行里挑。\n```\n\n```conjecture\nid: cj-lru\ntitle: LRU 换谁\nq: 第 4 次访问时，组里是 0x0010 那块（第 1 次进来）和 0x0050 那块（第 2 次进来）。LRU 换出的是 0x0050 那块，不是先进来的 0x0010 那块。为什么？一句话。\nrubric: 要点：0x0010 那块在第 3 次访问时刚被用过，0x0050 那块上一次被用是第 2 次，最久没被访问的是 0x0050 那块；LRU 看「最近一次被访问」，不看「谁先进来」（那是 FIFO）。说成「因为 0x0050 后进来」或者只说「LRU 规定」算不正确。\nanswer: LRU 换出最久没被访问的一块。0x0010 那块第 3 次刚命中过，0x0050 那块从第 2 次以后就没用过，所以换 0x0050 那块。按进来的先后换是 FIFO。\nplaceholder: 因为……\n```"
+    },
+    {
+      "id": "s5", "seq": 7, "page": 5, "title": "换成 FIFO",
+      "md": "同一串访问，只把替换算法换成 FIFO（先进先出）。在 Notability 里自己走一遍，再写命中次数；做完可以看一步步的过程，和 LRU 那张表比一比，从第几次访问开始不一样。\n\n```cache\nid: c-fifo\ntitle: 换成 FIFO\nq: 同样 6 次访问，2 路组相联，替换算法改成 FIFO，一共命中几次？\nlines: 8\nways: 2\nreplace: fifo\nblock: 16B\naddr: 16\nrefs: 0x0010, 0x0050, 0x0010, 0x0090, 0x0050, 0x0010\nmode: quiz\n```"
+    },
+    {
+      "id": "s6", "seq": 8, "page": 6, "title": "换着数拆地址",
+      "md": "换着参数练拆地址：每题的行数、块大小、路数都可能不一样。\n\n```practice\nid: pr-split\ntitle: 拆地址\ntype: custom\ncount: 4\npick b = choice(8, 16, 32, 64)\npick n = choice(8, 16, 32, 64)\npick w = choice(1, 2, 4)\npick x = int(0, 65535)\nlet s = n / w\nq: 主存地址 16 位，按字节编址；cache 共 $\\calc{n}$ 行，块大小 $\\calc{b}$ B，$\\calc{w}$ 路组相联（1 路就是直接映射）。地址 $\\calc{hex(x, 4)}$（十六进制）映射到第几组？标记是多少？都写十进制。\nanswer: [mod(div(x, b), s), div(x, b*s)]\nbefore: \\begin{bmatrix}\\text{组号}\\\\\\text{标记}\\end{bmatrix}=\nhint: 块内地址 $\\log_2\\calc{b}$ 位；组数 $=\\calc{n}\\div\\calc{w}$，组号是 $\\log_2(\\text{组数})$ 位；剩下的高位是标记。\nexplain: 块内地址 $\\calc{log2(b)}$ 位，共 $\\calc{s}$ 组，组号 $\\calc{log2(s)}$ 位，标记 $\\calc{16-log2(b)-log2(s)}$ 位。块号 $=\\calc{div(x, b)}$，组号 $=\\calc{div(x, b)}\\bmod\\calc{s}=\\calc{mod(div(x, b), s)}$，标记 $=\\calc{div(x, b*s)}$。\n```"
+    }
+  ]
+}

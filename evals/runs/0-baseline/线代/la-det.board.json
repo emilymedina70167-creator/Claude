@@ -1,0 +1,62 @@
+{
+  "unit": "行列式 · 行和相等",
+  "subject": "线代",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "每一行加起来",
+      "md": "```let\nA = [[1, 2, 3, 4], [2, 3, 4, 1], [3, 4, 1, 2], [4, 1, 2, 3]]\nJ = [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]]\nC = [[1, 0, 0, 0], [1, 1, 0, 0], [1, 0, 1, 0], [1, 0, 0, 1]]\nM1 = A*C\nM2 = M1*diag(1/10, 1, 1, 1)\nL1 = [[1, 0, 0, 0], [-1, 1, 0, 0], [-1, 0, 1, 0], [-1, 0, 0, 1]]\nM3 = L1*M2\nL2 = [[1, 0, 0, 0], [0, 1, 0, 0], [0, -2, 1, 0], [0, 1, 0, 1]]\nM4 = L2*M3\n```\n\n这节课算常驻栏里的四阶行列式（determinant）$D$。按一行展开要算 4 个三阶行列式，太慢。先别算，看看这 16 个数有什么特点。\n\n```answer\nid: q-c1\ntitle: 新的第 1 列\nq: 把 $D=\\begin{vmatrix}1&2&3&4\\\\2&3&4&1\\\\3&4&1&2\\\\4&1&2&3\\end{vmatrix}$ 的第 2、3、4 列都加到第 1 列上（记作 $c_1+c_2+c_3+c_4$，其余三列不动），新的第 1 列是什么？\nanswer: col(M1, 1)\nbefore: \\text{新的第 1 列}=\nhint: 新第 1 列的第 $i$ 个数，就是原来第 $i$ 行四个数的和。\nexplain: 四行各自的和是 $\\calc{A*[1, 1, 1, 1]}$，全都一样。所以新的第 1 列四个数相同，能提出公因子——这就是「每行之和相等」的用处。\n```"
+    },
+    {
+      "id": "k1",
+      "seq": 2,
+      "pin": true,
+      "title": "题目",
+      "md": "$D=\\begin{vmatrix}1&2&3&4\\\\2&3&4&1\\\\3&4&1&2\\\\4&1&2&3\\end{vmatrix}$，求 $D$。"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "提出公因子",
+      "md": "每一步先判断 $D$ 的值变不变，再揭开。旁边的矩阵跟着你揭开的步骤变。\n\n```steps\nid: ex-det1\ntitle: 凑出公因子\nq: 计算常驻栏里的 $D$。\nstep: 各列加到第 1 列\nask: 做 $c_1+c_2+c_3+c_4$ 之后，$D$ 的值变不变？\nchoices: 不变 | 变成原来的 4 倍 | 变号\nanswer: 不变\nshow: 把别的列（的倍数）加到某一列上，行列式不变（倍加）。现在第 1 列四个数一样了。\nstep: 提出公因子\nask: 第 1 列四个数都是 $10$。把 $10$ 提到外面，$D$ 等于新行列式的几倍？\nchoices: $10$ 倍 | $10^4$ 倍 | $\\tfrac{1}{10}$ 倍\nanswer: $10$ 倍\nshow: 某一列有公因子 $k$，只提出一个 $k$：$D=10\\det\\calc{M2}$。$10^4$ 是整个矩阵乘 $10$ 时才有（$|10A|=10^4|A|$）。\n```\n\n```matrix\nid: m-det1\ntitle: 第 1 列的变化\nlink: ex-det1\nmatrix (step<1)*A + (step>=1)*M1 label=\"D=\\det\"\nmark col 1 note=\"全一样\" from=1\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "化成上三角",
+      "md": "第 1 列现在全是 $1$。接着只用倍加，把它化成上三角（upper triangular），对角线一乘就是答案。\n\n```steps\nid: ex-det2\ntitle: 化成上三角\nq: 从 $D=10\\det\\calc{M2}$ 往下算。\nstep: 消第 1 列\nask: 第 1 列全是 $1$，怎样一次把下面三个 $1$ 都变成 $0$？这一步 $D$ 变不变？\nshow: $r_2-r_1,\\ r_3-r_1,\\ r_4-r_1$，都是倍加，$D$ 不变：$D=10\\det\\calc{M3}$。\nstep: 消第 2 列\nask: 还差哪几次倍加，就成上三角了？\nshow: $r_3-2r_2,\\ r_4+r_2$：$D=10\\det\\calc{M4}$。\nstep: 对角线相乘\ndo: true\nanswer: det(A)\nshow: 上三角行列式等于对角线相乘：$D=10\\times\\calc{det(M4)}=\\calc{det(A)}$。\n```\n\n```matrix\nid: m-det2\ntitle: 一步步化成上三角\nlink: ex-det2\nmatrix (step<1)*M2 + (step==1)*M3 + (step>=2)*M4 label=\"D=10\\det\"\nmark diag note=\"对角线相乘\" from=2\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 5,
+      "pin": true,
+      "title": "三条规则",
+      "md": "- 两行（列）互换：变号\n- 一行（列）的 $k$ 倍加到另一行（列）：不变\n- 一行（列）有公因子 $k$：提出一个 $k$\n- 上三角：对角线相乘"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 4,
+      "title": "错在哪一步",
+      "md": "同样的招，换一个三阶的。下面这份解答有一处错：点出第一处错的那一行，再写错在哪。\n\n```findbug\nid: bug-det\ntitle: 这份解答错在哪？\nq: 计算 $\\begin{vmatrix}3&1&2\\\\2&3&1\\\\1&2&3\\end{vmatrix}$。\nline: 每行之和都是 $6$，把第 2、3 列加到第 1 列：$=\\begin{vmatrix}6&1&2\\\\6&3&1\\\\6&2&3\\end{vmatrix}$\nline: 第 1 列提出公因子 $6$：$=6^3\\begin{vmatrix}1&1&2\\\\1&3&1\\\\1&2&3\\end{vmatrix}$\nline: $r_2-r_1,\\ r_3-r_1$：$=216\\begin{vmatrix}1&1&2\\\\0&2&-1\\\\0&1&1\\end{vmatrix}$\nline: 按第 1 列展开：$=216\\times(2\\times1-(-1)\\times1)=648$\nbug: 2\nwhy: 只有第 1 列有公因子 $6$，只能提出一个 $6$；$6^3$ 是三列（整个矩阵）都提出 $6$ 时才有，比如 $|6B|=6^3|B|$。正确结果是 $\\calc{det([[3, 1, 2], [2, 3, 1], [1, 2, 3]])}$。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 5,
+      "title": "换几道练",
+      "md": "自己来：先看每行之和，再化上三角。过程写在 Notability 里，最后填数。\n\n```practice\nid: pr-det\ntitle: 行和相等，再来\ntype: custom\ncount: 2\npick a = int(-3, 5)\npick b = int(-3, 3) nonzero\nlet J = [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]]\nlet M = (a-b)*E(4) + b*J\nwhere a != b\nwhere det(M) != 0\nwhere abs(det(M)) <= 300\nq: 计算四阶行列式 $D=\\det\\calc{M}$。\nanswer: det(M)\nbefore: D=\nhint: 每一行的和都是 $\\calc{a+3*b}$：先把各列加到第 1 列。\nexplain: 各列加到第 1 列、提出 $\\calc{a+3*b}$；再各行减第 1 行，得到对角线为 $1,\\ \\calc{a-b},\\ \\calc{a-b},\\ \\calc{a-b}$ 的上三角。$D=\\calc{a+3*b}\\times(\\calc{a-b})^3=\\calc{det(M)}$。\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 6,
+      "title": "推广到 n 阶",
+      "md": "考研常考的是 $n$ 阶的版本，三步一样：各列加到第 1 列、提公因子、各行减第 1 行。\n\n```answer\nid: q-dn\ntitle: n 阶的公式\nq: $n$ 阶行列式 $D_n$ 的主对角线上都是 $3$，其余位置都是 $1$。求 $D_n$，写成含 $n$ 的式子。\nanswer: (n+2)*2^(n-1)\nformula: n\nbefore: D_n=\nhint: 每一行的和是 $3+(n-1)$。提出它以后各行减第 1 行，对角线上剩下几个 $2$？\nexplain: 各列加到第 1 列，提出 $n+2$；各行减第 1 行得上三角，对角线是一个 $1$ 和 $n-1$ 个 $2$，所以 $D_n=(n+2)\\cdot2^{n-1}$。页面验算：$D_3=\\calc{det(2*E(3)+[[1, 1, 1], [1, 1, 1], [1, 1, 1]])}$，$D_4=\\calc{det(2*E(4)+J)}$。\n```"
+    }
+  ]
+}

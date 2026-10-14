@@ -47,10 +47,17 @@ function kmpParse(fields) {
   return { T: [undefined, ...pat], S: [undefined, ...text], show, use };
 }
 
-function kmpRun({ T, S, show, use }) {
+function kmpRun({ T, S, show, use, mistake }) {
   const n = T.length - 1;
-  const next = nextArray(T);
-  const nv = nextvalArray(T, next);
+  let next = nextArray(T);
+  let nv = nextvalArray(T, next);
+  // 常见错法（只拿来和学生写的比）：zero 每个值减 1；pm 部分匹配值；nvAsNext nextval 照抄 next
+  if (mistake) {
+    if (mistake === 'zero') { next = next.map((x) => (x === undefined ? x : x - 1)); nv = nv.map((x) => (x === undefined ? x : x - 1)); }
+    if (mistake === 'pm') { const pm = [undefined]; for (let j = 1; j <= n; j++) pm[j] = border(T, j); next = pm; nv = pm.slice(); }
+    if (mistake === 'nvAsNext') nv = next.slice();
+    return { steps: [{ view: { table: true, next: [], nextval: null }, msg: '' }], passes: [show === 'nextval' ? nv.slice(1) : next.slice(1)], next, nv };
+  }
   const steps = [];
   const pat = T.slice(1).join('');
   if (show !== 'match') {
@@ -155,6 +162,26 @@ export const kmpEngine = {
     const pat = input.T.slice(1).join('');
     if (input.show === 'match') return { q: `用 ${input.use} 数组在主串 ${input.S.slice(1).join('')} 里找模式串 ${pat}，写出匹配成功的位置（从 1 数，找不到写 0）。`, type: 'seq', answer: String(r.passes[0][0]) };
     return { q: `写出模式串 ${pat} 的 ${input.show} 数组（从 j = 1 开始）。`, type: 'seq', answer: r.passes[0].join(' ') };
+  },
+  // 考卷上那张表：j、模式串、next（、nextval），一个 j 一列
+  table(input, r) {
+    if (input.show === 'match') return null;
+    const n = input.T.length - 1;
+    const wantNv = input.show === 'nextval';
+    return {
+      q: `模式串 ${input.T.slice(1).join('')}：按王道的写法（从 1 数，next[1] = 0）写出 next${wantNv ? ' 和 nextval' : ''} 数组。`,
+      qhtml: '', dir: 'col', head: ['T[j]', 'next[j]', ...(wantNv ? ['nextval[j]'] : [])],
+      rows: Array.from({ length: n }, (_, k) => ({ label: `j = ${k + 1}`, cells: [{ v: input.T[k + 1], given: true }, { v: String(r.next[k + 1]), num: true }, ...(wantNv ? [{ v: String(r.nv[k + 1]), num: true }] : [])] })),
+    };
+  },
+  // 常见错法：从 0 数的 next（next[0] = −1，也就是王道的值都减 1）；把部分匹配值（PM）当成 next；nextval 写成了 next
+  variants(input) {
+    if (input.show === 'match') return [];
+    return [
+      { label: '像是按「从 0 数、next[0] = −1」的写法算的（王道从 1 数，值都要加 1）', input: { ...input, mistake: 'zero' } },
+      { label: '像是写成了部分匹配值 PM（最长相等前后缀的长度），还没右移、加 1', input: { ...input, mistake: 'pm' } },
+      ...(input.show === 'nextval' ? [{ label: '像是 nextval 没有改，照抄了 next', input: { ...input, mistake: 'nvAsNext' } }] : []),
+    ];
   },
 };
 
@@ -265,6 +292,26 @@ export const hashEngine = {
     if (input.probe === 'chain') throw new Error('拉链法的 quiz 只能是 quiz: asl');
     return { q: `${head}写出散列表从地址 0 到 ${input.size - 1} 的内容（空的写 #）。`, type: 'seq', answer: r.passes[0].join(' ') };
   },
+  // 考卷上那张表：每个地址放了哪个关键字、查到它比较几次；再写两个 ASL
+  table(input, r) {
+    if (input.probe === 'chain') return null;
+    const last = r.steps.at(-1).view.table;
+    const rows = Array.from({ length: input.size }, (_, a) => ({ label: String(a), cells: [{ v: last[a] ? last[a].key : '' }, { v: last[a] ? String(last[a].cnt) : '', num: true }] }));
+    return {
+      q: `H(key) = key % ${input.p}，${PROBES[input.probe]}，表长 ${input.size}（地址 0～${input.size - 1}），依次插入 ${input.keys.map((k) => k.text).join('、')}。填出每个地址放的关键字（空着的不填）和查找成功时找到它要比较几次；表下面写两个 ASL（分数或小数）。`,
+      qhtml: '', dir: 'col', head: ['关键字', '比较次数'],
+      rows,
+      extra: [{ label: 'ASL成功', v: r.asl.succ, num: true }, { label: 'ASL失败', v: r.asl.fail, num: true }],
+    };
+  },
+  // 常见错法：表长当成了除数；线性探测和平方探测弄混
+  variants(input) {
+    const out = [];
+    if (input.size !== input.p && input.probe !== 'chain') out.push({ label: `像是用表长 ${input.size} 当成了除数（H(key) = key % ${input.p}，不是 % ${input.size}）`, input: { ...input, p: input.size } });
+    if (input.probe === 'linear') out.push({ label: '像是按平方探测探的', input: { ...input, probe: 'quadratic' } });
+    if (input.probe === 'quadratic') out.push({ label: '像是按线性探测探的', input: { ...input, probe: 'linear' } });
+    return out;
+  },
 };
 
 // ================= 折半查找 =================
@@ -296,7 +343,7 @@ function decisionTree(n) {
   return { root, nodes };
 }
 
-function bsRun({ items, keys, keyText, tree }) {
+function bsRun({ items, keys, keyText, tree, ceil = false }) {
   const n = items.length;
   const steps = [];
   const T = decisionTree(n);
@@ -313,7 +360,7 @@ function bsRun({ items, keys, keyText, tree }) {
         steps.push({ view: v({ low, high, key: keyText[ki], path: path.slice(), fail: true }), msg: `low = ${low} > high = ${high}：查找失败，一共比较了 ${path.length} 次（${path.map((p) => items[p - 1].text).join('、')}）。` });
         break;
       }
-      const mid = Math.floor((low + high) / 2);
+      const mid = ceil ? Math.ceil((low + high) / 2) : Math.floor((low + high) / 2);
       path.push(mid);
       const x = items[mid - 1];
       const c = key === x.v ? 0 : key < x.v ? -1 : 1;
@@ -376,5 +423,25 @@ export const bsearchEngine = {
   quiz(input, r) {
     if (!input.keys.length) throw new Error('bsearch 的 quiz 要写 key:（问查找它时依次和哪些元素比较）');
     return { q: `在有序表 ${input.items.map((x) => x.text).join(' ')} 里折半查找 ${input.keyText[0]}，依次和哪些元素比较？按顺序写出来。`, type: 'seq', answer: r.passes[0].join(' ') };
+  },
+  // 考卷上那张表：查找每个 key 时，每一次比较的 low、high、mid 和比的元素
+  table(input, r) {
+    if (!input.keys.length) return null;
+    const rows = [];
+    let ki = -1;
+    for (const x of r.steps) {
+      if (x.view.key !== undefined && !x.view.path?.length && x.view.mid === undefined) { ki++; continue; }
+      if (x.view.mid === undefined) continue;
+      rows.push({ label: `查 ${input.keyText[ki]}：第 ${x.view.path.length} 次`, cells: [{ v: String(x.view.low), num: true }, { v: String(x.view.high), num: true }, { v: String(x.view.mid), num: true }, { v: input.items[x.view.mid - 1].text }] });
+    }
+    return {
+      q: `在有序表 ${input.items.map((x) => x.text).join(' ')}（位置从 1 数）里折半查找 ${input.keyText.join('、')}。每一次比较写出 low、high、mid（mid = ⌊(low + high)/2⌋）和比的那个元素。`,
+      qhtml: '', dir: 'row', head: ['low', 'high', 'mid', '比的元素'],
+      rows,
+    };
+  },
+  // 常见错法：mid 向上取整
+  variants(input) {
+    return [{ label: '像是 mid 向上取整了（王道：mid = ⌊(low + high)/2⌋，向下取整）', input: { ...input, ceil: true } }];
   },
 };

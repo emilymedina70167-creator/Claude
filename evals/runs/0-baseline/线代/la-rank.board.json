@@ -1,0 +1,62 @@
+{
+  "unit": "向量组的秩和极大无关组",
+  "subject": "线代",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "按列排，只做行变换",
+      "md": "```let\na1 = [1, -1, 2, 4]\na2 = [0, 3, 1, 2]\na3 = [3, 0, 7, 14]\na4 = [1, -1, 2, 0]\na5 = [2, 1, 5, 6]\nA = mat(a1, a2, a3, a4, a5)\nR = rref(A)\n```\n\n题目在常驻栏。要找的是「谁能被谁表示」——这是**列之间**的关系。所以把 5 个向量按列排成 $A=(\\boldsymbol\\alpha_1,\\dots,\\boldsymbol\\alpha_5)$，只做行变换，化成行最简形（reduced row echelon form）。每点下一步之前，先想好这一步做什么。\n\n```rref\nid: rr-a\ntitle: 化成行最简形\nmatrix: [[1, 0, 3, 1, 2], [-1, 3, 0, -1, 1], [2, 1, 7, 2, 5], [4, 2, 14, 0, 6]]\n```\n\n```answer\nid: q-rk\ntitle: 秩是多少\nq: 向量组 $\\boldsymbol\\alpha_1,\\dots,\\boldsymbol\\alpha_5$（见常驻栏）的秩（rank）是多少？\nanswer: rank(A)\nhint: 数一数行最简形里非零行（主元）的个数。\nexplain: 非零行有 $\\calc{rank(A)}$ 行，所以秩是 $\\calc{rank(A)}$。\n```"
+    },
+    {
+      "id": "k1",
+      "seq": 2,
+      "pin": true,
+      "title": "题目",
+      "md": "$\\boldsymbol\\alpha_1=(1,-1,2,4)^{\\mathrm T}$，$\\boldsymbol\\alpha_2=(0,3,1,2)^{\\mathrm T}$，$\\boldsymbol\\alpha_3=(3,0,7,14)^{\\mathrm T}$，$\\boldsymbol\\alpha_4=(1,-1,2,0)^{\\mathrm T}$，$\\boldsymbol\\alpha_5=(2,1,5,6)^{\\mathrm T}$。求秩、一个极大无关组，并把其余向量用它表示。"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "在 R 里读关系",
+      "md": "$R$ 的列之间的关系一眼就能看出来：主元列（pivot columns）都是单位向量。\n\n```steps\nid: ex-read\ntitle: 读出 R 的列关系\nq: $R=\\calc{R}$，第 $j$ 列记作 $\\mathbf r_j$。\nstep: 找主元列\nask: 哪几列有主元？\nchoices: 第 1、2、3 列 | 第 1、2、4 列 | 第 1、2、5 列\nanswer: 第 1、2、4 列\nshow: $\\mathbf r_1,\\mathbf r_2,\\mathbf r_4$ 是三个不同的单位向量，线性无关。\nstep: 读 r3\nask: 写出 $\\mathbf r_3=x_1\\mathbf r_1+x_2\\mathbf r_2$ 里的 $(x_1,x_2)$。\ndo: true\nanswer: [[1, 0, 0, 0], [0, 1, 0, 0]]*col(R, 3)\nshow: $\\mathbf r_3=\\calc{col(R, 3)}$，前两个数就是系数：$\\mathbf r_3=\\calc{[1, 0, 0, 0]'*col(R, 3)}\\,\\mathbf r_1+\\calc{[0, 1, 0, 0]'*col(R, 3)}\\,\\mathbf r_2$。\nstep: 读 r5\nask: 写出 $\\mathbf r_5=x_1\\mathbf r_1+x_2\\mathbf r_2+x_4\\mathbf r_4$ 里的 $(x_1,x_2,x_4)$。\ndo: true\nanswer: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]]*col(R, 5)\nshow: $\\mathbf r_5=\\calc{col(R, 5)}$，前三个数就是系数。\n```\n\n```matrix\nid: m-R\ntitle: 行最简形 R\nlink: ex-read\nmatrix R label=\"R=\"\nmark col 1 from=1\nmark col 2 from=1\nmark col 4 from=1\nmark col 3 color=pink from=2\nmark col 5 color=pink from=3\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "回到原来的向量",
+      "md": "$R$ 是 $A$ 做行变换得到的，列向量全变了样。$R$ 里的关系，原来的 $\\boldsymbol\\alpha$ 还满足吗？算一下。\n\n```answer\nid: q-back\ntitle: 验证一下\nq: 已知 $\\boldsymbol\\alpha_1=\\calc{a1}$，$\\boldsymbol\\alpha_2=\\calc{a2}$，$\\boldsymbol\\alpha_4=\\calc{a4}$，计算 $\\boldsymbol\\alpha_1+\\boldsymbol\\alpha_2+\\boldsymbol\\alpha_4$。\nanswer: a1 + a2 + a4\nbefore: \\boldsymbol\\alpha_1+\\boldsymbol\\alpha_2+\\boldsymbol\\alpha_4=\nexplain: 结果是 $\\calc{a1+a2+a4}$，正好是 $\\boldsymbol\\alpha_5$：系数和你在 $R$ 里读到的一样。\n```\n\n```conjecture\nid: cj-why\ntitle: 为什么还成立？\nq: 行变换把每个 $\\boldsymbol\\alpha_j$ 都变了样，为什么 $R$ 的列之间的关系，在原来的 $\\boldsymbol\\alpha$ 之间也成立？一两句话。提示：一串行变换相当于左乘什么？\nrubric: 要点 (1) 一串行变换 = 左乘一个可逆矩阵 $P$，$\\mathbf r_j=P\\boldsymbol\\alpha_j$；(2) $\\sum x_j\\boldsymbol\\alpha_j=\\mathbf 0\\iff\\sum x_j\\mathbf r_j=\\mathbf 0$（左乘 $P$，反过来左乘 $P^{-1}$）。只说出 (1) 算部分正确。\nanswer: 行变换就是左乘可逆矩阵 $P$：$R=PA$，$\\mathbf r_j=P\\boldsymbol\\alpha_j$。$\\sum x_j\\boldsymbol\\alpha_j=\\mathbf 0$ 两边左乘 $P$ 得 $\\sum x_j\\mathbf r_j=\\mathbf 0$，反过来左乘 $P^{-1}$。所以两组列的线性关系完全一样。\nplaceholder: 因为……\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "为什么关系不变",
+      "md": "把你刚才的想法一步步对一遍。\n\n```steps\nid: ex-why\ntitle: 行变换保住列的关系\nq: $A=(\\boldsymbol\\alpha_1,\\dots,\\boldsymbol\\alpha_5)$ 经过一串行变换变成 $R=(\\mathbf r_1,\\dots,\\mathbf r_5)$。\nstep: 行变换是左乘\nask: 一串初等行变换相当于 $A$ 左乘了什么？$\\mathbf r_j$ 和 $\\boldsymbol\\alpha_j$ 是什么关系？\nshow: 左乘一个可逆矩阵 $P$：$R=PA$，按列看就是 $\\mathbf r_j=P\\boldsymbol\\alpha_j$。\nstep: 关系搬过去\nask: 若 $x_1\\boldsymbol\\alpha_1+\\dots+x_5\\boldsymbol\\alpha_5=\\mathbf 0$，那么 $x_1\\mathbf r_1+\\dots+x_5\\mathbf r_5$ 等于什么？\nchoices: 也等于零向量 | 不一定\nanswer: 也等于零向量\nshow: 两边左乘 $P$：$\\sum x_jP\\boldsymbol\\alpha_j=\\sum x_j\\mathbf r_j=\\mathbf 0$；反过来左乘 $P^{-1}$ 就搬回来。两组列的线性关系一模一样。\nstep: 列变换呢\nask: 如果先做列变换 $c_3-3c_1$ 再读关系，读出来的还是原来那些 $\\boldsymbol\\alpha$ 之间的关系吗？\nchoices: 是 | 不是\nanswer: 不是\nshow: 列变换把第 3 列换成了 $\\boldsymbol\\alpha_3-3\\boldsymbol\\alpha_1$，之后读出的是新向量之间的关系。只求秩可以用列变换；要表示式，只能做行变换。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 6,
+      "pin": true,
+      "title": "结论",
+      "md": "行变换不改变**列之间的线性关系**。按列排、只做行变换：主元列 ↔ 极大无关组；其余各列在 $R$ 里的数，就是表示系数。"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 5,
+      "title": "这份解答错在哪",
+      "md": "一份很常见的写法，前两行没问题。点出第一处错的那一行，再写错在哪。\n\n```findbug\nid: bug-rank\ntitle: 这份解答错在哪？\nq: 求 $\\boldsymbol\\alpha_1,\\dots,\\boldsymbol\\alpha_5$（见常驻栏）的一个极大无关组（maximal linearly independent subset），并把其余向量用它表示。\nline: 按列排成 $A$，只做初等行变换，化成行最简形 $R=\\calc{R}$\nline: $R$ 有 $\\calc{rank(A)}$ 个主元，所以秩是 $\\calc{rank(A)}$\nline: 主元在第 1、2、4 列，所以极大无关组是 $(1,0,0,0)^{\\mathrm T},(0,1,0,0)^{\\mathrm T},(0,0,1,0)^{\\mathrm T}$\nline: $\\boldsymbol\\alpha_3=3\\boldsymbol\\alpha_1+\\boldsymbol\\alpha_2$，$\\boldsymbol\\alpha_5=\\boldsymbol\\alpha_1+\\boldsymbol\\alpha_2+\\boldsymbol\\alpha_4$\nbug: 3\nwhy: 主元列只告诉你「第几列」。极大无关组要从原来的向量里取：$\\boldsymbol\\alpha_1,\\boldsymbol\\alpha_2,\\boldsymbol\\alpha_4$。$R$ 的列已经不是原来的向量了——行变换只保住了列之间的关系，没保住列向量本身。\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 6,
+      "title": "换一组练",
+      "md": "自己来一遍：按列排、行变换、读主元列和系数。过程写在 Notability 里。\n\n```practice\nid: pr-rank\ntitle: 换一组向量\ntype: custom\ncount: 2\npick u1 = vec(4, -2, 2)\npick u2 = vec(4, -2, 2)\npick u4 = vec(4, -2, 2)\npick c1 = int(-2, 2) nonzero\npick c2 = int(-2, 2) nonzero\npick d1 = int(-2, 2)\npick d2 = int(-2, 2)\npick d4 = int(-2, 2) nonzero\nlet M = mat(u1, u2, c1*u1 + c2*u2, u4, d1*u1 + d2*u2 + d4*u4)\nwhere rank(mat(u1, u2, u4)) == 3\nq: 5 个向量按列排好是 $A=(\\boldsymbol\\alpha_1,\\dots,\\boldsymbol\\alpha_5)=\\calc{M}$。找出主元列对应的极大无关组，把 $\\boldsymbol\\alpha_5$ 用它表示，按下标从小到大填系数。\nanswer: [d1, d2, d4]\nbefore: \\boldsymbol\\alpha_5\\ \\text{的系数}=\nhint: 只做行变换化成行最简形：主元列就是极大无关组，$\\boldsymbol\\alpha_5$ 那一列的前几个数就是系数。\nexplain: 行最简形是 $\\calc{rref(M)}$，主元在第 1、2、4 列，$\\boldsymbol\\alpha_5$ 对 $\\boldsymbol\\alpha_1,\\boldsymbol\\alpha_2,\\boldsymbol\\alpha_4$ 的系数依次是 $\\calc{[d1, d2, d4]}$。\n```"
+    }
+  ]
+}

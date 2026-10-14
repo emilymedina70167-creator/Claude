@@ -514,4 +514,48 @@ export function problems(input) {
   return out;
 }
 
-export const treeEngine = { name: 'tree', title: '树', parse, run, view, quiz, problems };
+// 考卷上那张表
+export function table(input, r) {
+  if (input.kind === 'walk') {
+    const seq = r.passes[0];
+    return { q: `写出这棵树的${WALKS[input.walk]}序列（一格一个结点）。`, qhtml: treeSvg(input.tree, { pick: () => '' }), dir: 'row', head: seq.map((_, i) => `${i + 1}`), rows: [{ label: `${WALKS[input.walk]}`, cells: seq.map((k) => ({ v: k })) }] };
+  }
+  if (input.kind === 'bst') {
+    // 依次插入：每个关键字插进来以后，双亲是谁、是左孩子还是右孩子（错法 mirror：大的往左了）
+    const sign = input.mistake === 'mirror' ? -1 : 1;
+    const nodes = [];
+    const rows = input.items.map((x) => {
+      if (!nodes.length) { nodes.push({ x, l: null, r: null }); return { label: x.text, cells: [{ v: ['', '无'] }, { v: ['', '无', '根'] }] }; }
+      let cur = nodes[0], parent = null, side = '';
+      while (cur) { parent = cur; const c = sign * cmp(x, cur.x); if (c === 0) break; side = c < 0 ? 'l' : 'r'; cur = c < 0 ? cur.l : cur.r; }
+      if (!cur) { const nd = { x, l: null, r: null }; parent[side] = nd; nodes.push(nd); }
+      return { label: x.text, cells: [{ v: cur ? '' : parent.x.text }, { v: cur ? '' : side === 'l' ? ['左', '左孩子', 'L'] : ['右', '右孩子', 'R'] }] };
+    });
+    return { q: `依次插入 ${input.items.map((x) => x.text).join('、')} 建一棵二叉排序树。每个关键字插进来以后，写出它的双亲（根就空着）、是左孩子还是右孩子。`, qhtml: '', dir: 'row', head: ['双亲', '左 / 右'], rows };
+  }
+  // 堆：建堆时每调整完一棵子树的数组；堆排序每一趟之后的数组
+  const A = [null, ...input.items.map((x) => x.text)];
+  const V = [null, ...input.items.map((x) => x.v)];
+  const n = input.items.length;
+  const better = (i, j) => (input.max ? V[i] > V[j] : V[i] < V[j]);
+  const rows = [];
+  if (input.ops.some((o) => o.op === 'build') && !input.ops.some((o) => o.op === 'insert' || o.op === 'delete')) {
+    for (let i = n >> 1; i >= 1; i--) {
+      let k = i;
+      for (;;) { let c = 2 * k; if (c > n) break; if (c + 1 <= n && better(c + 1, c)) c++; if (!better(c, k)) break; [A[k], A[c]] = [A[c], A[k]]; [V[k], V[c]] = [V[c], V[k]]; k = c; }
+      rows.push({ label: `调整 A[${i}] 后`, cells: A.slice(1).map((x) => ({ v: x })) });
+    }
+  }
+  r.passes.forEach((p, k) => rows.push({ label: `第 ${k + 1} 趟`, cells: p.map((x) => ({ v: x })) }));
+  if (!rows.length) return null;
+  return { q: `对 ${input.items.map((x) => x.text).join(' ')} 建${input.max ? '大' : '小'}根堆${r.passes.length ? '、堆排序' : ''}：写出每调整完一棵子树（从 A[⌊n/2⌋] 往前）${r.passes.length ? '、每一趟排序' : ''}之后的数组 A[1]～A[${n}]。`, qhtml: arrayView(input.items.map((x) => x.text), { pick: false }), dir: 'row', head: Array.from({ length: n }, (_, i) => `${i + 1}`), rows };
+}
+
+// 常见错法
+export function variants(input) {
+  if (input.kind === 'walk') return Object.keys(WALKS).filter((w) => w !== input.walk).map((w) => ({ label: `像是按${WALKS[w]}走的`, input: { ...input, walk: w } }));
+  if (input.kind === 'bst') return [{ label: '像是大的往左、小的往右了（二叉排序树：比根小的在左子树）', input: { ...input, mistake: 'mirror' } }];
+  return [{ label: `像是建成了${input.max ? '小' : '大'}根堆`, input: { ...input, max: !input.max } }];
+}
+
+export const treeEngine = { name: 'tree', title: '树', parse, run, view, quiz, problems, table, variants };

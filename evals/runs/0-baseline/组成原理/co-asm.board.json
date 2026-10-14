@@ -1,0 +1,38 @@
+{
+  "unit": "机器级代码：sum 函数",
+  "subject": "组成原理",
+  "steps": [
+    {
+      "id": "s1", "seq": 1, "page": 1, "title": "栈里放了什么",
+      "md": "调用 `sum(a, n)` 时，调用者先把参数压栈，再 `call`；进了 `sum` 先执行开头这几行：\n\n```\n1   push ebp\n2   mov  ebp, esp\n3   mov  ecx, dword ptr [ebp+8]\n4   mov  edx, dword ptr [ebp+12]\n```\n\n参数为什么在 [ebp+8]、[ebp+12]？一步步想栈里依次放了什么。\n\n```steps\nid: ex-push\ntitle: 栈里依次放了什么\nq: 调用者执行 `sum(a, n)`：先压参数，再 `call sum`；进入 `sum` 后执行第 1、2 行。x86 的栈往低地址长，每项 4 字节。\n\nstep: 参数的顺序\nask: 两个参数谁先压栈？\nchoices: 先压 a，再压 n | 先压 n，再压 a\nanswer: 先压 n，再压 a\nshow: C 的调用约定从右往左压参数：先压 n，再压 a。所以 a 离栈顶更近，地址更低。\n\nstep: call 做了什么\nask: `call sum` 除了跳转，还往栈里压了什么？\nchoices: 返回地址 | 旧的 ebp | eax 的值\nanswer: 返回地址\nshow: `call` 把下一条指令的地址（返回地址）压栈，`ret` 时再弹出来跳回去。\n\nstep: 第 1、2 行\nask: 执行完 `push ebp`、`mov ebp, esp`，ebp 指向哪里？\nchoices: 指向刚压进去的旧 ebp | 指向返回地址 | 指向参数 a\nanswer: 指向刚压进去的旧 ebp\nshow: 第 1 行把调用者的 ebp 存进栈，第 2 行让 ebp 指向这里。从 ebp 往高地址数：$[\\text{ebp}]$ 是旧 ebp，$[\\text{ebp}+4]$ 是返回地址，$[\\text{ebp}+8]$ 是 a，$[\\text{ebp}+12]$ 是 n。\n```"
+    },
+    {
+      "id": "s2", "seq": 2, "page": 2, "title": "画出栈帧",
+      "md": "```sketch\nid: sk-frame\ntitle: 执行完第 2 行的栈\nwidth: 340\nheight: 206\n<text x=\"180\" y=\"20\" text-anchor=\"middle\" class=\"small faint\">高地址</text>\n<rect x=\"110\" y=\"30\" width=\"140\" height=\"36\" class=\"blue fill\"/>\n<rect x=\"110\" y=\"66\" width=\"140\" height=\"36\" class=\"blue fill\"/>\n<rect x=\"110\" y=\"102\" width=\"140\" height=\"36\" class=\"gray fill\"/>\n<rect x=\"110\" y=\"138\" width=\"140\" height=\"36\" class=\"yellow fill\"/>\n<text x=\"180\" y=\"53\" text-anchor=\"middle\" class=\"small\">n</text>\n<text x=\"180\" y=\"89\" text-anchor=\"middle\" class=\"small\">a（首地址）</text>\n<text x=\"180\" y=\"125\" text-anchor=\"middle\" class=\"small\">返回地址</text>\n<text x=\"180\" y=\"161\" text-anchor=\"middle\" class=\"small\">旧 ebp</text>\n<text x=\"100\" y=\"53\" text-anchor=\"end\" class=\"small\">ebp+12</text>\n<text x=\"100\" y=\"89\" text-anchor=\"end\" class=\"small\">ebp+8</text>\n<text x=\"100\" y=\"125\" text-anchor=\"end\" class=\"small\">ebp+4</text>\n<text x=\"100\" y=\"161\" text-anchor=\"end\" class=\"small yellow\">ebp = esp</text>\n<text x=\"180\" y=\"196\" text-anchor=\"middle\" class=\"small faint\">低地址</text>\n<line x1=\"268\" y1=\"40\" x2=\"268\" y2=\"172\" class=\"arrow faint\"/>\n<text x=\"276\" y=\"110\" class=\"small faint\">往这边长</text>\n```\n\n```answer\nid: a-ebp\ntitle: ebp 是多少\nq: 调用者压参数之前 esp = 0x0012FF40。进入 sum、执行完第 2 行后，ebp 是多少？写 8 位十六进制。\ntype: hex\nwidth: 8\nanswer: 0x0012FF40 - 4*4\nhint: 从压参数开始，一共压了几项？每项 4 字节，栈往低地址长。\nexplain: 压了 n、a、返回地址、旧 ebp 共 4 项：$\\calc{hex(0x0012FF40, 8)}-16=\\calc{hex(0x0012FF40 - 16, 8)}$。a 在 $\\calc{hex(0x0012FF40 - 8, 8)}$，正好是 ebp+8。\n```"
+    },
+    {
+      "id": "k1", "seq": 3, "pin": true, "title": "栈帧",
+      "md": "$[\\text{ebp}]$ 旧 ebp，$[\\text{ebp}+4]$ 返回地址\n\n$[\\text{ebp}+8]$ 参数 a，$[\\text{ebp}+12]$ 参数 n"
+    },
+    {
+      "id": "s3", "seq": 4, "page": 3, "title": "寄存器对上变量",
+      "md": "```\nint s = 0;\nfor (int i = 0; i < n; i++) s += a[i];\nreturn s;\n```\n\n```\n3   mov  ecx, dword ptr [ebp+8]\n4   mov  edx, dword ptr [ebp+12]\n5   mov  eax, 0\n6   mov  ebx, 0\n7 L1: cmp ebx, edx\n8   jge  L2\n9   add  eax, dword ptr [ecx+ebx*4]\n10  inc  ebx\n11  jmp  L1\n```\n\n```steps\nid: ex-reg\ntitle: 谁是谁\nq: 对照上面的 C 和汇编，四个寄存器各对应 C 里的哪个量？\n\nstep: ecx\nask: 第 3 行把 [ebp+8] 放进 ecx。ecx 是谁？\nchoices: a（数组首地址） | n | s | i\nanswer: a（数组首地址）\nshow: [ebp+8] 是参数 a。数组名作参数，传的是首地址，所以 ecx 里是 a 的首地址。\n\nstep: edx\nask: 第 4 行之后，edx 是谁？\nchoices: a（数组首地址） | n | s | i\nanswer: n\nshow: [ebp+12] 是参数 n，第 7 行拿它和 ebx 比。\n\nstep: eax 和 ebx\nask: 第 5、6 行把 eax、ebx 都清 0。哪个是 s、哪个是 i？凭哪一行看出来？\nshow: 第 9 行 eax 一直往上加 a 的元素，eax 是 s（函数的返回值也放在 eax）；第 10 行 ebx 每轮加 1、第 7 行拿它和 n 比，ebx 是 i。\n\nstep: 循环的几部分\nask: 第 7、8 行对应 C 里 for 的哪一部分？第 10、11 行呢？\nshow: 第 7、8 行是判断 `i < n`，不成立就跳到 L2 出循环；第 10 行是 `i++`，第 11 行跳回 L1 再判断。\n```"
+    },
+    {
+      "id": "k2", "seq": 5, "pin": true, "title": "寄存器",
+      "md": "ecx = a（首地址），edx = n\n\neax = s（也是返回值），ebx = i"
+    },
+    {
+      "id": "s4", "seq": 6, "page": 4, "title": "第 9 行访问哪里",
+      "md": "第 9 行 `add eax, dword ptr [ecx+ebx*4]` 从内存取一个数加进 eax。取的是哪里？\n\n```answer\nid: a-addr\ntitle: 取哪个地址\nq: 数组 a 的首地址是 0x00401000。i = 2 时，第 9 行访问的内存地址是多少？写 8 位十六进制。\ntype: hex\nwidth: 8\nanswer: 0x00401000 + 2*4\nhint: ecx 是首地址，ebx 是 i。一个 int 占几个字节？\nexplain: $\\text{ecx}+\\text{ebx}\\times4=\\calc{hex(0x00401000, 8)}+2\\times4=\\calc{hex(0x00401000 + 2*4, 8)}$，就是 a[2] 的地址。\n```\n\n```quiz\nid: q-scale\nq: 地址里为什么是 ebx*4？\n- [ ] 因为循环一共走 4 次\n- [x] 因为一个 int 占 4 个字节，a[i] 在首地址后面 4i 个字节\n- [ ] 因为 ebx 是第 4 个通用寄存器\nexplain: 按字节编址，a[i] 的地址 = a + i × sizeof(int) = a + 4i。比例因子 4 就是元素的大小；换成 char 数组就是 ×1。\n```"
+    },
+    {
+      "id": "s5", "seq": 7, "page": 5, "title": "数执行次数",
+      "md": "用 C 代码把 n = 3 的循环走一遍：每次到 for 那一行，先猜条件成不成立。数一数条件一共判断几次、循环体执行几次，再对回汇编（判断 i < n 就是第 7、8 行）。\n\n```trace\nid: tr-sum\ntitle: n = 3 走一遍\ncall: sum(a, 3)\nlet a = [5, 7, 9]\nask: cond\ncode:\nint sum(int a[], int n){\n    int s = 0;\n    int i;\n    for(i=0;i<n;i++)\n        s+=a[i];\n    return s;\n}\n```\n\n```answer\nid: a-count\ntitle: 第 7、9 行各几次\nq: n = 3 时，汇编第 7 行（cmp）执行几次？第 9 行（add）执行几次？\nanswer: [3 + 1, 3]\nbefore: \\begin{bmatrix}\\text{第 7 行}\\\\\\text{第 9 行}\\end{bmatrix}=\nhint: 第 7 行就是每次判断 $i<n$。i = 0、1、2 时成立；i 等于几时不成立、跳出去？\nexplain: 第 7 行在 i = 0、1、2、3 时各执行一次，共 $\\calc{3+1}$ 次（最后一次不成立，第 8 行跳到 L2）；第 9 行只在成立时执行，共 3 次。\n```"
+    },
+    {
+      "id": "s6", "seq": 8, "page": 6, "title": "换个 n 再数",
+      "md": "同一段汇编，换个 n。注意 n = 0 的情况。\n\n```practice\nid: pr-count\ntitle: 数执行次数\ntype: custom\ncount: 3\npick n = int(0, 12)\nq: 同一段汇编（第 7 行 cmp、第 9 行 add、第 11 行 jmp），$n=\\calc{n}$ 时，这三行各执行几次？\nanswer: [n + 1, n, n]\nbefore: \\begin{bmatrix}\\text{第 7 行}\\\\\\text{第 9 行}\\\\\\text{第 11 行}\\end{bmatrix}=\nhint: 每一轮：第 7、8 行判断，成立就执行第 9～11 行；最后一次判断不成立，跳出去。\nexplain: 第 7 行判断 $\\calc{n}+1=\\calc{n+1}$ 次；第 9、10、11 行每轮各一次，共 $\\calc{n}$ 次。\n```"
+    }
+  ]
+}

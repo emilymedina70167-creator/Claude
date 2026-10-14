@@ -34,11 +34,12 @@ export function stepperBlock(engine) {
   block.stepper = true; // render.js：演示组件都是「图」（课堂 figure 能动），也可能有作答，要写 id
   return block;
   function block(el, src) {
-    const { fields } = parseFields(src);
+    // frames 这种正文里自己有「key: 值」的行的：字段只从开头那一段读（engine.head）
+    const { fields } = parseFields(engine.head ? engine.head(src) : src);
     const common = commonSpec(fields);
     const input = engine.parse(fields, src);
     // 有的引擎自带要问的（trace 的 predict:）：没写 ask: 时照它问
-    if (!common.ask && engine.defaultAsk) { const d = engine.defaultAsk(input); if (d) common.ask = parseAskField(d); }
+    if ((fields.ask === undefined || fields.ask === '') && engine.defaultAsk) { const d = engine.defaultAsk(input); if (d) common.ask = parseAskField(d); }
     const run = engine.run(input);
     const steps = run.steps;
     const last = steps.length - 1;
@@ -101,6 +102,8 @@ export function stepperBlock(engine) {
     // 关卡（guided 课件）：有 ask 的，问的都答过（或放弃）才算；quiz 做完算；纯演示不拦人
     const gate = acts ? session.gate(el, title) : null;
     const answered = new Set(); // 已经答过（或放弃）的步
+    const blankDone = new Set(); // 挖了空的步：已经填对（或看了答案）的
+    let blanking = -1; // 正在填空的那一步（-1：没有）
     let k = 0; // 现在停在第几步
     let pending = null; // 正在问的：{ at（问的是第几步）, ask, attempts, picked: [] }
     let timer = 0;
@@ -124,19 +127,27 @@ export function stepperBlock(engine) {
       k = to;
       if (pending && pending.at !== k + 1) closeAsk();
       const s = steps[k];
-      stage.innerHTML = engine.view(s.view, input, { k, picking: pending && ['pick', 'order'].includes(pending.ask.kind) });
+      if (blanking >= 0 && blanking !== k) blanking = -1;
+      const filling = blanking === k;
+      stage.innerHTML = engine.view(s.view, input, {
+        k, md: mdToHtml, picking: pending && ['pick', 'order'].includes(pending.ask.kind),
+        // 挖空：正在填的这一步画成输入框；填过的、往回翻的画成答案
+        blank: (i) => (filling ? `<input type="text" class="sv-blank" data-b="${i}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="第 ${i + 1} 个空">` : `<span class="sv-blank-a">${escapeHtml(String([].concat(s.blanks?.[i]?.v ?? '')[0]))}</span>`),
+      });
+      if (filling) openBlanks(k);
       if (snap) animateFrom(stage, snap, { ms: Math.min(360, common.speed * 600) });
       if (moved && !reduceMotion()) stage.querySelectorAll('.sv-new').forEach((x) => { x.classList.remove('sv-flash'); void x.offsetWidth; x.classList.add('sv-flash'); });
       // highlight 用的「命令」：画面里有几个 data-cmd 就有几条（从 1 数）
       const n = Math.max(0, ...[...stage.querySelectorAll('[data-cmd]')].map((x) => Number(x.dataset.cmd) || 0));
       cmds.length = 1;
       for (let i = 1; i <= n; i++) cmds.unshift({ kind: 'item', srcLine: `第 ${i} 个`, mods: {} });
-      msg.innerHTML = `${verdict ? `<span class="sv-verdict">${verdict}</span>` : ''}${mdToHtml(s.msg || '', { inline: true })}`;
-      verdict = '';
+      // 正在填空时先不给说明（说明里常常就有答案）
+      msg.innerHTML = filling ? '<span class="muted">把上面的空填好，点「检查」。</span>' : `${verdict ? `<span class="sv-verdict">${verdict}</span>` : ''}${mdToHtml(s.msg || '', { inline: true })}`;
+      if (!filling) verdict = '';
       count.textContent = stepLabel(k, last);
       scrub.value = String(k);
       btnPrev.disabled = k === 0;
-      btnNext.disabled = k === last;
+      btnNext.disabled = k === last || filling;
       if (pending && ['pick', 'order'].includes(pending.ask.kind)) markPicked();
       ctl.mark();
       ctl.emit('change', { step: k });
@@ -146,7 +157,49 @@ export function stepperBlock(engine) {
 
     function checkGate() {
       if (!gate || quiz || fill) return;
-      if ([...asks].every((a) => answered.has(a)) && k === last) gate();
+      const blanksOk = steps.every((x, i) => !x.blanks || blankDone.has(i));
+      if ([...asks].every((a) => answered.has(a)) && blanksOk && k === last) gate();
+    }
+
+    // —— 挖空（frames 的 {{答案}}）：走到这一步先把空填上，检查对了才往下 ——
+    let blankTries = 0, blankT0 = 0;
+    function openBlanks(at) {
+      const bl = steps[at].blanks || [];
+      askBox.hidden = false;
+      askBox.innerHTML = `<div class="sv-ask-q"><span class="sv-ask-tag">填空</span>这一步有 ${bl.length} 个空，填好再往下。</div>
+        <div class="sv-ask-row"><button type="button" class="btn btn-primary sv-blank-ok">检查</button></div>
+        <div class="sv-ask-fb" hidden></div>
+        <div class="sv-ask-tools"><button type="button" class="link-btn sv-blank-show" ${blankTries >= 2 ? '' : 'hidden'}>看答案</button><button type="button" class="link-btn sv-blank-give">想不出来，直接看</button></div>`;
+      const inputs = [...stage.querySelectorAll('.sv-blank')];
+      markDraft(askBox, () => (blanking === at ? inputs.map((x, i) => (x.value.trim() ? `第 ${i + 1} 个空：${x.value.trim()}` : '')).filter(Boolean).join('，') : ''));
+      inputs.forEach((x, i) => x.addEventListener('keydown', (e) => { if (e.key !== 'Enter') return; e.preventDefault(); (inputs[i + 1] || askBox.querySelector('.sv-blank-ok')).focus(); }));
+      inputs.forEach((x) => x.addEventListener('input', () => x.classList.remove('is-bad')));
+      askBox.querySelector('.sv-blank-ok').addEventListener('click', () => {
+        const vals = inputs.map((x) => x.value);
+        if (vals.every((v) => !v.trim())) return;
+        blankTries++;
+        const bad = bl.map((b, i) => (cellOkFor(b, vals[i] ?? '') ? -1 : i)).filter((i) => i >= 0);
+        inputs.forEach((x, i) => { x.classList.toggle('is-bad', bad.includes(i)); x.classList.toggle('is-ok', !bad.includes(i) && !!vals[i]?.trim()); });
+        session.record({ type: 'stepper', engine: engine.name, liveOnly: true, title, q: plainText(steps[at].msg ? `第 ${at} 步的空` : ''), value: vals.map((v, i) => `${i + 1}:${v.trim() || '（空）'}`).join(' '), ok: !bad.length, attempts: blankTries, detail: `第 ${at} 步的空`, ms: Date.now() - blankT0, el });
+        if (!bad.length) { finishBlanks(at, { ok: true }); return; }
+        const fb = askBox.querySelector('.sv-ask-fb');
+        fb.hidden = false;
+        fb.className = 'sv-ask-fb is-bad';
+        fb.textContent = bad.length === 1 ? `第 ${bad[0] + 1} 个空不对，再想想。` : `有 ${bad.length} 个空不对（第 ${bad.map((i) => i + 1).join('、')} 个），再想想。`;
+        if (blankTries >= 2) askBox.querySelector('.sv-blank-show').hidden = false;
+        inputs[bad[0]]?.focus({ preventScroll: true });
+      });
+      askBox.querySelector('.sv-blank-show').addEventListener('click', () => finishBlanks(at, { revealed: true }));
+      askBox.querySelector('.sv-blank-give').addEventListener('click', () => finishBlanks(at, { giveup: true }));
+    }
+    function finishBlanks(at, { ok = false, revealed = false, giveup = false }) {
+      blankDone.add(at);
+      session.record({ type: 'stepper', engine: engine.name, final: true, title, q: `第 ${at} 步的空`, ok, attempts: blankTries, revealed: revealed || undefined, giveup: giveup || undefined, expected: (steps[at].blanks || []).map((b) => [].concat(b.v)[0]).join('、'), detail: `第 ${at} 步的空`, ms: Date.now() - blankT0, el });
+      if (giveup) session.event('giveup', el, { step: at, title: '填空' });
+      verdict = ok ? `✓ 填对了${blankTries > 1 ? `（第 ${blankTries} 次）` : ''}` : '答案已经写上了。';
+      blanking = -1;
+      closeAsk();
+      draw();
     }
 
     // 学生自己走：记成动作（课堂刷新后照它恢复，也跟着下一条消息告诉课堂 Claude）
@@ -159,11 +212,16 @@ export function stepperBlock(engine) {
     }
     // 往前走一步：下一步要问而还没问过，先问
     function forward() {
-      if (k >= last) return false;
+      if (k >= last || blanking === k) return false;
       const nx = k + 1;
       if (asks.has(nx) && !answered.has(nx)) { openAsk(nx); return false; }
-      go(nx);
-      return true;
+      enter(nx);
+      return blanking !== nx;
+    }
+    // 走到一步：这一步有没填的空，就进入填空
+    function enter(to, opts) {
+      if (steps[to]?.blanks && !blankDone.has(to)) { blanking = to; blankTries = 0; blankT0 = Date.now(); }
+      go(to, opts);
     }
 
     // —— 先猜再揭晓 ——
@@ -284,7 +342,7 @@ export function stepperBlock(engine) {
       verdict = ok ? `✓ 猜对了${attempts > 1 ? `（第 ${attempts} 次）` : ''}` : `答案：${escapeHtml(askAnswerText(ask))}`;
       if (ask.explain) verdict += `　${mdToHtml(ask.explain, { inline: true })}`;
       closeAsk();
-      go(at);
+      enter(at);
     }
 
     // —— 播放：到要问的步停下来问 ——
@@ -296,15 +354,18 @@ export function stepperBlock(engine) {
       timer = setInterval(() => { if (!el.isConnected || !forward()) stopPlay(); }, common.speed * 1000);
     });
     btnNext.addEventListener('click', () => { stopPlay(); forward(); });
-    btnPrev.addEventListener('click', () => { stopPlay(); closeAsk(); go(k - 1); });
-    body.querySelector('.sv-reset').addEventListener('click', () => { stopPlay(); closeAsk(); go(0); });
-    // 拖进度条：不能越过还没答的问题
+    btnPrev.addEventListener('click', () => { stopPlay(); closeAsk(); blanking = -1; go(k - 1); });
+    body.querySelector('.sv-reset').addEventListener('click', () => { stopPlay(); closeAsk(); blanking = -1; go(0); });
+    // 拖进度条：不能越过还没答的问题、还没填的空
     scrub.addEventListener('input', () => {
       stopPlay();
       let to = Number(scrub.value);
       const blocker = [...asks].filter((a) => !answered.has(a) && a > k && a <= to).sort((a, b) => a - b)[0];
-      if (blocker) { to = blocker - 1; go(to); openAsk(blocker); return; }
+      const hole = steps.findIndex((x, i) => i > k && i <= to && x.blanks && !blankDone.has(i));
+      if (blocker && (hole < 0 || blocker <= hole)) { to = blocker - 1; blanking = -1; go(to); openAsk(blocker); return; }
       closeAsk();
+      if (hole >= 0) { enter(hole); return; }
+      blanking = -1;
       go(to);
     });
 
@@ -334,6 +395,7 @@ export function stepperBlock(engine) {
       const t = fill;
       const order = fillOrder(t);
       const values = t.rows.map((row) => row.cells.map(() => ''));
+      values.extra = (t.extra || []).map(() => '');
       const q = [fields.q, t.q || '把下面这张表填完整，点「检查」。'].filter(Boolean).join('\n\n');
       const pic = t.qhtml ?? engine.view(steps[0].view, input, { k: 0 });
       const width = (cell) => Math.max(2, Math.min(9, Math.max(...[].concat(cell.v).map((x) => String(x ?? '').length)) + 1));
@@ -355,13 +417,17 @@ export function stepperBlock(engine) {
       box.innerHTML = `<div class="w-q">${mdToHtml(q)}</div>
         ${pic ? `<div class="sv-stage sv-stage-q">${pic}</div>` : ''}
         <div class="sv-fill-wrap"><table class="sv-fill-t${t.dir === 'col' ? ' sv-fill-cols' : ''}">${grid}</table></div>
+        ${(t.extra || []).length ? `<div class="sv-fill-extra">${t.extra.map((x, i) => `<label class="sv-fill-x"><span>${escapeHtml(x.label)}</span><input type="text" class="sv-fill-in sv-fill-xin" data-x="${i}" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="${escapeHtml(x.label)}"></label>`).join('')}</div>` : ''}
         ${t.note ? `<div class="w-note">${mdToHtml(t.note)}</div>` : ''}
         <div class="sv-fill-fb" aria-live="polite" hidden></div>
         <div class="sv-fill-ctrl"><button type="button" class="btn btn-primary sv-fill-check">检查</button><button type="button" class="btn sv-fill-reveal" hidden>看这一格的答案</button><button type="button" class="link-btn sv-fill-giveup">想不出来，看过程</button></div>`;
       const fb = box.querySelector('.sv-fill-fb');
-      const elOf = (r, c) => box.querySelector(`[data-r="${r}"][data-c="${c}"]`);
+      // first 可能是表下面的一格（{ extra: i }）
+      const elOf = (r, c) => (r && typeof r === 'object' ? box.querySelector(`[data-x="${r.extra}"]`) : box.querySelector(`[data-r="${r}"][data-c="${c}"]`));
+      const at = (f) => (f.extra !== undefined ? f : f.r);
       const read = () => {
-        box.querySelectorAll('.sv-fill-in').forEach((x) => { values[x.dataset.r][x.dataset.c] = x.value; });
+        box.querySelectorAll('.sv-fill-in:not(.sv-fill-xin)').forEach((x) => { values[x.dataset.r][x.dataset.c] = x.value; });
+        box.querySelectorAll('.sv-fill-xin').forEach((x) => { values.extra[x.dataset.x] = x.value; });
         box.querySelectorAll('.sv-fill-mark').forEach((x) => { values[x.dataset.r][x.dataset.c] = x.getAttribute('aria-pressed') === 'true' ? '√' : ''; });
         return values;
       };
@@ -372,8 +438,9 @@ export function stepperBlock(engine) {
         if (done) return '';
         read();
         const filled = order.filter(({ r, c }) => String(values[r][c]).trim());
-        if (!filled.length) return '';
-        return `填了 ${filled.length}/${order.length} 格：` + filled.slice(0, 24).map(({ r, c }) => `${t.rows[r].label ?? r + 1}·${t.head[c]}=${values[r][c]}`).join('，');
+        const xs = (t.extra || []).map((x, i) => [x.label, String(values.extra[i]).trim()]).filter(([, v]) => v);
+        if (!filled.length && !xs.length) return '';
+        return `填了 ${filled.length}/${order.length} 格：` + filled.slice(0, 24).map(({ r, c }) => `${t.rows[r].label ?? r + 1}·${t.head[c]}=${values[r][c]}`).join('，') + xs.map(([k, v]) => `；${k}=${v}`).join('');
       });
       box.addEventListener('click', (e) => {
         const m = e.target.closest('.sv-fill-mark');
@@ -389,19 +456,21 @@ export function stepperBlock(engine) {
           });
         }
       });
-      box.addEventListener('input', (e) => { e.target.closest('td')?.classList.remove('is-bad', 'is-ok'); });
+      box.addEventListener('input', (e) => { e.target.closest('td, .sv-fill-x')?.classList.remove('is-bad', 'is-ok'); });
       // 回车跳到下一格
       box.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter' || !e.target.matches('.sv-fill-in')) return;
         e.preventDefault();
-        const i = order.findIndex(({ r, c }) => r === Number(e.target.dataset.r) && c === Number(e.target.dataset.c));
-        const nx = order.slice(i + 1).map(({ r, c }) => elOf(r, c)).find((x) => x?.matches('input'));
+        const all = [...order.map(({ r, c }) => elOf(r, c)), ...(t.extra || []).map((_, i) => elOf({ extra: i }))].filter((x) => x?.matches('input'));
+        const nx = all[all.indexOf(e.target) + 1];
         if (nx) nx.focus(); else box.querySelector('.sv-fill-check').focus();
       });
+      const cellBox = (x) => x?.closest('td, .sv-fill-x');
       const show = (res) => {
-        box.querySelectorAll('td.is-ok, td.is-bad').forEach((x) => x.classList.remove('is-ok', 'is-bad'));
-        order.slice(0, res.okCount).forEach(({ r, c }) => elOf(r, c)?.closest('td')?.classList.add('is-ok'));
-        if (res.first) elOf(res.first.r, res.first.c)?.closest('td')?.classList.add('is-bad');
+        box.querySelectorAll('.is-ok, .is-bad').forEach((x) => x.classList.remove('is-ok', 'is-bad'));
+        order.slice(0, res.okCount).forEach(({ r, c }) => cellBox(elOf(r, c))?.classList.add('is-ok'));
+        (t.extra || []).forEach((_, i) => { if (order.length + i < res.okCount) cellBox(elOf({ extra: i }))?.classList.add('is-ok'); });
+        if (res.first) cellBox(elOf(at(res.first), res.first.c))?.classList.add('is-bad');
       };
       const finish = (how) => {
         done = true;
@@ -429,26 +498,26 @@ export function stepperBlock(engine) {
           return;
         }
         last = res.first;
-        const name = cellName(t, res.first.r, res.first.c);
-        const said = values[res.first.r][res.first.c];
+        const name = cellName(t, at(res.first), res.first.c);
+        const said = res.first.extra !== undefined ? values.extra[res.first.extra] : values[res.first.r][res.first.c];
         fb.className = 'sv-fill-fb is-bad';
         fb.textContent = res.first.empty ? `${name}还空着（前面 ${res.okCount} 格都对）。` : `${name}不对（前面 ${res.okCount} 格都对）。改好再检查。`;
         if (attempts >= 2) box.querySelector('.sv-fill-reveal').hidden = false;
-        elOf(res.first.r, res.first.c)?.focus?.({ preventScroll: true });
+        elOf(at(res.first), res.first.c)?.focus?.({ preventScroll: true });
         const misread = misreadFill(t, values, variants().map((v) => { try { const vt = engine.table(v.input, v.run, fields); return vt ? { label: v.label, table: fillSpec(vt, fields).table } : null; } catch { return null; } }).filter(Boolean));
         session.record({ type: 'stepper', engine: engine.name, liveOnly: true, title, q: plainText(q), value: res.first.empty ? `填到${name}还空着` : `${name}写的「${said}」`, ok: false, attempts, detail: `填表：前 ${res.okCount}/${res.total} 格对`, misread: misread || undefined, el });
       });
       box.querySelector('.sv-fill-reveal').addEventListener('click', () => {
         if (!last || done) return;
-        const cell = t.rows[last.r].cells[last.c];
-        const x = elOf(last.r, last.c);
+        const cell = last.extra !== undefined ? t.extra[last.extra] : t.rows[last.r].cells[last.c];
+        const x = elOf(at(last), last.c);
         if (x?.matches('input')) x.value = cellAnswer(cell) === '（空）' ? '' : cellAnswer(cell);
         else if (x) { const on = cellAnswer(cell) === '√'; x.setAttribute('aria-pressed', on ? 'true' : 'false'); x.textContent = on ? '√' : ''; }
-        x?.closest('td')?.classList.remove('is-bad');
-        x?.closest('td')?.classList.add('is-revealed');
+        cellBox(x)?.classList.remove('is-bad');
+        cellBox(x)?.classList.add('is-revealed');
         revealed++;
         box.querySelector('.sv-fill-reveal').hidden = true;
-        fb.textContent = `${cellName(t, last.r, last.c)}是「${cellAnswer(cell)}」。接着填，再检查。`;
+        fb.textContent = `${cellName(t, at(last), last.c)}是「${cellAnswer(cell)}」。接着填，再检查。`;
       });
       box.querySelector('.sv-fill-giveup').addEventListener('click', () => {
         if (done) return;
@@ -458,6 +527,7 @@ export function stepperBlock(engine) {
           if (x?.matches('input')) { if (!cellOkFor(cell, x.value)) { x.value = cellAnswer(cell) === '（空）' ? '' : cellAnswer(cell); x.closest('td').classList.add('is-revealed'); } }
           else if (x) { const on = cellAnswer(cell) === '√'; x.setAttribute('aria-pressed', on ? 'true' : 'false'); x.textContent = on ? '√' : ''; }
         });
+        (t.extra || []).forEach((cell, i) => { const x = elOf({ extra: i }); if (x && !cellOkFor(cell, x.value)) { x.value = cellAnswer(cell); cellBox(x).classList.add('is-revealed'); } });
         session.event('giveup', el, { step: 0, title: '填表' });
         fb.hidden = false;
         fb.className = 'sv-fill-fb';
@@ -504,6 +574,7 @@ export function stepperBlock(engine) {
         if (!(v >= 0 && v <= last)) throw new Error(`step 写 0 到 ${last} 之间的数`);
         stopPlay();
         closeAsk();
+        blanking = -1;
         if (quiz || fill) demo.hidden = false;
         return ctl.set('step', v, { ms: 0 });
       },

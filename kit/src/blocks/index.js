@@ -31,6 +31,7 @@ import { schedEngine, pagingEngine, bankerEngine, diskEngine } from '../engines/
 import { addrEngine } from '../engines/addr.js';
 import { bitsEngine, cacheEngine, pipeEngine } from '../engines/co.js';
 import { subnetEngine, tcpEngine, windowEngine } from '../engines/net4.js';
+import { framesEngine } from '../engines/frames.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -57,4 +58,5 @@ export const blocks = {
   subnet: stepperBlock(subnetEngine),
   tcp: stepperBlock(tcpEngine),
   window: stepperBlock(windowEngine),
+  frames: stepperBlock(framesEngine),
 };

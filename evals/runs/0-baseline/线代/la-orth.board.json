@@ -1,0 +1,62 @@
+{
+  "unit": "实对称矩阵的正交对角化",
+  "subject": "线代",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "先找特征值",
+      "md": "```let\nA = [[0, 1, 1], [1, 0, 1], [1, 1, 0]]\nx1 = [1, 1, 1]\nx2 = [-1, 1, 0]\nx3 = [-1, 0, 1]\nb3 = x3 - dot(x3, x2)/dot(x2, x2)*x2\nb3s = 2*b3\nBm = mat(x1, x2, b3s)\nBt = Bm'\n```\n\n$A$ 是实对称矩阵（real symmetric matrix），要找正交矩阵（orthogonal matrix）$Q$ 使 $Q^{\\mathrm T}AQ$ 为对角阵。先找特征值——这个 $A$ 不用硬展开特征多项式。\n\n```steps\nid: ex-eig\ntitle: 三个特征值\nq: $A=\\begin{bmatrix}0&1&1\\\\1&0&1\\\\1&1&0\\end{bmatrix}$，求特征值。\nstep: 每行之和\nask: $A$ 每一行加起来都是 $2$。这说明什么？\nchoices: $(1,1,1)^{\\mathrm T}$ 是特征向量，特征值 2 | $|A|=2$ | $\\operatorname{tr}A=2$\nanswer: $(1,1,1)^{\\mathrm T}$ 是特征向量，特征值 2\nshow: $A\\begin{bmatrix}1\\\\1\\\\1\\end{bmatrix}=\\calc{A*x1}=2\\begin{bmatrix}1\\\\1\\\\1\\end{bmatrix}$：行和就是 $A$ 乘全 1 向量。\nstep: 看 A + E\nask: $A+E=\\calc{A+E(3)}$ 的秩是多少？这对特征值 $-1$ 说明什么？\nchoices: 秩 1，λ = −1 有 2 个线性无关的特征向量 | 秩 2，λ = −1 只有 1 个 | 秩 3，−1 不是特征值\nanswer: 秩 1，λ = −1 有 2 个线性无关的特征向量\nshow: $r(A+E)=\\calc{rank(A+E(3))}$，三行都是 $x_1+x_2+x_3=0$，基础解系 $\\boldsymbol\\xi_2=\\calc{x2}$，$\\boldsymbol\\xi_3=\\calc{x3}$。所以 $-1$ 至少是二重特征值。\nstep: 二重还是三重\nask: 用迹判断：$-1$ 是二重还是三重？\nchoices: 二重 | 三重\nanswer: 二重\nshow: 三个特征值之和是 $\\operatorname{tr}A=\\calc{tr(A)}$：$2+(-1)+(-1)=\\calc{2-1-1}$ 对得上。特征值是 $2,-1,-1$。\n```"
+    },
+    {
+      "id": "k1",
+      "seq": 2,
+      "pin": true,
+      "title": "题目",
+      "md": "$A=\\begin{bmatrix}0&1&1\\\\1&0&1\\\\1&1&0\\end{bmatrix}$，求正交矩阵 $Q$ 使 $Q^{\\mathrm T}AQ$ 为对角阵。\n\n$\\lambda=2$：$\\boldsymbol\\xi_1=(1,1,1)^{\\mathrm T}$；$\\lambda=-1$：$\\boldsymbol\\xi_2=(-1,1,0)^{\\mathrm T}$，$\\boldsymbol\\xi_3=(-1,0,1)^{\\mathrm T}$"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "谁和谁正交",
+      "md": "三个特征向量画在一起：灰色平面是 $\\lambda=-1$ 的特征空间 $x_1+x_2+x_3=0$。转一转，看谁和谁垂直。\n\n```space\nid: sp-eig\ntitle: 特征向量的位置\nnote: ξ1 属于 λ = 2；ξ2、ξ3 属于 λ = −1\nplane normal [1, 1, 1] color=gray\nvector x1 color=yellow label=ξ1\nvector x2 color=blue label=ξ2\nvector x3 color=pink label=ξ3\n```\n\n```answer\nid: q-dot\ntitle: 三个内积\nq: $\\boldsymbol\\xi_1=(1,1,1)^{\\mathrm T}$，$\\boldsymbol\\xi_2=(-1,1,0)^{\\mathrm T}$，$\\boldsymbol\\xi_3=(-1,0,1)^{\\mathrm T}$。依次算 $\\boldsymbol\\xi_1^{\\mathrm T}\\boldsymbol\\xi_2,\\ \\boldsymbol\\xi_1^{\\mathrm T}\\boldsymbol\\xi_3,\\ \\boldsymbol\\xi_2^{\\mathrm T}\\boldsymbol\\xi_3$。\nanswer: [dot(x1, x2), dot(x1, x3), dot(x2, x3)]\nhint: 对应分量相乘再相加。\nexplain: $\\calc{[dot(x1, x2), dot(x1, x3), dot(x2, x3)]}$：不同特征值的 $\\boldsymbol\\xi_1$ 和另外两个**已经正交**；同一个特征值的 $\\boldsymbol\\xi_2,\\boldsymbol\\xi_3$ 不正交，要自己正交化。\n```\n\n```proof\n为什么不同特征值的一定正交：设 $A\\boldsymbol\\xi=\\lambda\\boldsymbol\\xi$，$A\\boldsymbol\\eta=\\mu\\boldsymbol\\eta$，$\\lambda\\ne\\mu$，$A^{\\mathrm T}=A$。则 $\\lambda\\,\\boldsymbol\\xi^{\\mathrm T}\\boldsymbol\\eta=(A\\boldsymbol\\xi)^{\\mathrm T}\\boldsymbol\\eta=\\boldsymbol\\xi^{\\mathrm T}A\\boldsymbol\\eta=\\mu\\,\\boldsymbol\\xi^{\\mathrm T}\\boldsymbol\\eta$，所以 $(\\lambda-\\mu)\\boldsymbol\\xi^{\\mathrm T}\\boldsymbol\\eta=0$，$\\boldsymbol\\xi^{\\mathrm T}\\boldsymbol\\eta=0$。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 4,
+      "pin": true,
+      "title": "实对称矩阵",
+      "md": "不同特征值的特征向量自动正交；同一个特征值的要施密特正交化；最后全部单位化。"
+    },
+    {
+      "id": "s3",
+      "seq": 5,
+      "page": 3,
+      "title": "施密特正交化",
+      "md": "把 $\\boldsymbol\\xi_2,\\boldsymbol\\xi_3$ 正交化（施密特 Gram–Schmidt）：保留 $\\boldsymbol\\xi_2$，从 $\\boldsymbol\\xi_3$ 里减掉它在 $\\boldsymbol\\xi_2$ 方向上的那一截。\n\n```steps\nid: ex-gs\ntitle: 施密特正交化\nq: $\\boldsymbol\\xi_2=(-1,1,0)^{\\mathrm T}$，$\\boldsymbol\\xi_3=(-1,0,1)^{\\mathrm T}$，求两两正交的 $\\boldsymbol\\beta_2,\\boldsymbol\\beta_3$。\nstep: 第一个不动\nask: $\\boldsymbol\\beta_2$ 取什么？\nshow: $\\boldsymbol\\beta_2=\\boldsymbol\\xi_2=\\calc{x2}$\nstep: 减掉投影\nask: 设 $\\boldsymbol\\beta_3=\\boldsymbol\\xi_3-k\\boldsymbol\\beta_2$，要 $\\boldsymbol\\beta_2^{\\mathrm T}\\boldsymbol\\beta_3=0$，$k$ 是多少？可以填分数。\ndo: true\nanswer: dot(x3, x2)/dot(x2, x2)\nshow: $k=\\dfrac{\\boldsymbol\\xi_3^{\\mathrm T}\\boldsymbol\\beta_2}{\\boldsymbol\\beta_2^{\\mathrm T}\\boldsymbol\\beta_2}=\\dfrac{\\calc{dot(x3, x2)}}{\\calc{dot(x2, x2)}}$\nstep: 得到 β3\nask: 算出 $\\boldsymbol\\beta_3$。它还是 $\\lambda=-1$ 的特征向量吗？\nshow: $\\boldsymbol\\beta_3=\\calc{b3}$，乘 2 去分母：$\\calc{b3s}$。它是 $\\boldsymbol\\xi_2,\\boldsymbol\\xi_3$ 的组合，还在 $\\lambda=-1$ 的特征空间里，所以还是特征向量。\n```\n\n```space\nid: sp-gs\ntitle: 从 ξ3 里减掉一截\nlink: ex-gs\nplane normal [1, 1, 1] color=gray\nvector x2 color=blue label=β2\nvector x3 color=pink label=ξ3 thin\nvector x3 - t*dot(x3, x2)/dot(x2, x2)*x2 color=yellow label=β3 from=3\nsegment x3, b3 dashed from=3\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 4,
+      "title": "单位化",
+      "md": "三个两两正交的特征向量 $\\boldsymbol\\xi_1,\\boldsymbol\\beta_2,\\boldsymbol\\beta_3$（$\\boldsymbol\\beta_3$ 用去了分母的那个）排成 $B$。点 $B^{\\mathrm T}B$ 里的数，看它是哪两列的内积。\n\n```matrix\nid: m-btb\ntitle: BᵀB：列和列的内积\nproduct Bt Bm name=G\n```\n\n```answer\nid: q-len\ntitle: 长度的平方\nq: $B=(\\boldsymbol\\xi_1,\\boldsymbol\\beta_2,\\boldsymbol\\beta_3)=\\calc{Bm}$。要把三列都化成单位向量，三列长度的平方依次是多少？\nanswer: [dot(x1, x1), dot(x2, x2), dot(b3s, b3s)]\nhint: $B^{\\mathrm T}B$ 的对角线就是每一列和自己的内积。\nexplain: 长度的平方是 $\\calc{[dot(x1, x1), dot(x2, x2), dot(b3s, b3s)]}$，所以 $Q=\\Bigl(\\dfrac{\\boldsymbol\\xi_1}{\\sqrt{\\calc{dot(x1, x1)}}},\\ \\dfrac{\\boldsymbol\\beta_2}{\\sqrt{\\calc{dot(x2, x2)}}},\\ \\dfrac{\\boldsymbol\\beta_3}{\\sqrt{\\calc{dot(b3s, b3s)}}}\\Bigr)$，$Q^{\\mathrm T}AQ=\\calc{inv(Bm)*A*Bm}$。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 5,
+      "title": "Qᵀ 就是 Q⁻¹",
+      "md": "$Q$ 的列两两正交、长度都是 $1$。\n\n```conjecture\nid: cj-qt\ntitle: 好处在哪？\nq: 为什么 $Q^{\\mathrm T}Q=E$？这让「求 $Q^{-1}$」和「写出 $Q^{-1}AQ$」省掉了什么？一两句话。\nrubric: 要点 (1) $Q^{\\mathrm T}Q$ 的 $(i,j)$ 元是第 $i$、$j$ 列的内积：两两正交给 0，单位长度给 1；(2) 所以 $Q^{-1}=Q^{\\mathrm T}$，不用做行变换求逆，转置一下就行。只说出 (2) 不说原因算部分正确。\nanswer: $Q^{\\mathrm T}Q$ 的每个元素是两列的内积：不同列正交得 0，同一列单位长度得 1，所以 $Q^{\\mathrm T}Q=E$，$Q^{-1}=Q^{\\mathrm T}$。求逆只要转置，不用做行变换；$A=Q\\Lambda Q^{\\mathrm T}$，算 $A^n=Q\\Lambda^nQ^{\\mathrm T}$ 也省事。\nplaceholder: 因为……\n```\n\n```key\ntitle: 结果\n$Q=\\begin{bmatrix}\\frac{1}{\\sqrt3}&-\\frac{1}{\\sqrt2}&-\\frac{1}{\\sqrt6}\\\\\\frac{1}{\\sqrt3}&\\frac{1}{\\sqrt2}&-\\frac{1}{\\sqrt6}\\\\\\frac{1}{\\sqrt3}&0&\\frac{2}{\\sqrt6}\\end{bmatrix}$，$Q^{\\mathrm T}AQ=\\calc{inv(Bm)*A*Bm}$\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 6,
+      "title": "施密特练一练",
+      "md": "换几组向量练施密特。过程写在 Notability 里，填 $\\boldsymbol\\beta_2$。\n\n```practice\nid: pr-gs\ntitle: 施密特练一练\ntype: custom\ncount: 2\npick u = vec(3, -2, 2)\npick w = vec(3, -2, 2)\nwhere rank(mat(u, w)) == 2\nwhere dot(u, w) != 0\nq: 把 $\\boldsymbol\\alpha_1=\\calc{u}$，$\\boldsymbol\\alpha_2=\\calc{w}$ 施密特正交化，求 $\\boldsymbol\\beta_2$（方向对就行，可以乘一个数去分母）。\nanswer: w - dot(w, u)/dot(u, u)*u\ncheck: eigvec\nhint: $\\boldsymbol\\beta_1=\\boldsymbol\\alpha_1$，$\\boldsymbol\\beta_2=\\boldsymbol\\alpha_2-\\dfrac{\\boldsymbol\\alpha_2^{\\mathrm T}\\boldsymbol\\beta_1}{\\boldsymbol\\beta_1^{\\mathrm T}\\boldsymbol\\beta_1}\\boldsymbol\\beta_1$。\nexplain: 系数是 $\\dfrac{\\calc{dot(w, u)}}{\\calc{dot(u, u)}}$，$\\boldsymbol\\beta_2=\\calc{w - dot(w, u)/dot(u, u)*u}$。验算：$\\boldsymbol\\beta_1^{\\mathrm T}\\boldsymbol\\beta_2=\\calc{dot(u, w - dot(w, u)/dot(u, u)*u)}$。\n```"
+    }
+  ]
+}

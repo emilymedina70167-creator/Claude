@@ -1,0 +1,67 @@
+{
+  "unit": "数据链路层 · CRC 校验",
+  "subject": "计网",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "多项式和模 2",
+      "md": "```let\nM = 0b11_0101_1011\nG = 0b1_0011\nr = floor(log2(G))\nV0 = shl(M, r)\nD1 = shl(G, floor(log2(V0)) - r)\nV1 = xor(V0, D1)\nD2 = shl(G, floor(log2(V1)) - r)\nV2 = xor(V1, D2)\nD3 = shl(G, floor(log2(V2)) - r)\nV3 = xor(V2, D3)\nD4 = shl(G, floor(log2(V3)) - r)\nV4 = xor(V3, D4)\nR = V4\nTx = V0 + R\nY0 = Tx\nY1 = xor(Y0, (Y0 >= shl(1, r))*shl(G, max(floor(log2(max(Y0, 1))) - r, 0)))\nY2 = xor(Y1, (Y1 >= shl(1, r))*shl(G, max(floor(log2(max(Y1, 1))) - r, 0)))\nY3 = xor(Y2, (Y2 >= shl(1, r))*shl(G, max(floor(log2(max(Y2, 1))) - r, 0)))\nY4 = xor(Y3, (Y3 >= shl(1, r))*shl(G, max(floor(log2(max(Y3, 1))) - r, 0)))\nY5 = xor(Y4, (Y4 >= shl(1, r))*shl(G, max(floor(log2(max(Y4, 1))) - r, 0)))\nY6 = xor(Y5, (Y5 >= shl(1, r))*shl(G, max(floor(log2(max(Y5, 1))) - r, 0)))\nY7 = xor(Y6, (Y6 >= shl(1, r))*shl(G, max(floor(log2(max(Y6, 1))) - r, 0)))\nY8 = xor(Y7, (Y7 >= shl(1, r))*shl(G, max(floor(log2(max(Y7, 1))) - r, 0)))\nY9 = xor(Y8, (Y8 >= shl(1, r))*shl(G, max(floor(log2(max(Y8, 1))) - r, 0)))\nY10 = xor(Y9, (Y9 >= shl(1, r))*shl(G, max(floor(log2(max(Y9, 1))) - r, 0)))\nZ0 = xor(Tx, shl(1, 10))\nZ1 = xor(Z0, (Z0 >= shl(1, r))*shl(G, max(floor(log2(max(Z0, 1))) - r, 0)))\nZ2 = xor(Z1, (Z1 >= shl(1, r))*shl(G, max(floor(log2(max(Z1, 1))) - r, 0)))\nZ3 = xor(Z2, (Z2 >= shl(1, r))*shl(G, max(floor(log2(max(Z2, 1))) - r, 0)))\nZ4 = xor(Z3, (Z3 >= shl(1, r))*shl(G, max(floor(log2(max(Z3, 1))) - r, 0)))\nZ5 = xor(Z4, (Z4 >= shl(1, r))*shl(G, max(floor(log2(max(Z4, 1))) - r, 0)))\nZ6 = xor(Z5, (Z5 >= shl(1, r))*shl(G, max(floor(log2(max(Z5, 1))) - r, 0)))\nZ7 = xor(Z6, (Z6 >= shl(1, r))*shl(G, max(floor(log2(max(Z6, 1))) - r, 0)))\nZ8 = xor(Z7, (Z7 >= shl(1, r))*shl(G, max(floor(log2(max(Z7, 1))) - r, 0)))\nZ9 = xor(Z8, (Z8 >= shl(1, r))*shl(G, max(floor(log2(max(Z8, 1))) - r, 0)))\nZ10 = xor(Z9, (Z9 >= shl(1, r))*shl(G, max(floor(log2(max(Z9, 1))) - r, 0)))\n```\n\nCRC 的除法是**模 2** 的：每一位单独算，不进位、不借位，加和减都是异或（相同得 0，不同得 1）。先把生成多项式写成比特串。\n\n```answer\nid: q-gbits\ntitle: G(x) 的比特串\nq: 生成多项式 $G(x)=x^4+x+1$。按 $x^4,x^3,x^2,x^1,x^0$ 的系数依次写出比特串。\ntype: bin\nanswer: G\nwidth: 5\nhint: 有这一项，系数就是 1；没有就是 0。$x^3$、$x^2$ 有没有？\nexplain: 系数依次是 1、0、0、1、1：$\\calc{bin(G, 5)}$。最高次是 $\\calc{r}$，所以校验码是 $\\calc{r}$ 位。\n```"
+    },
+    {
+      "id": "k1",
+      "seq": 2,
+      "pin": true,
+      "title": "题目",
+      "md": "数据 1101011011，生成多项式 $G(x)=x^4+x+1$。求 CRC 校验码和实际发送的比特串；接收方收到后怎么判断有没有错？"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 1,
+      "md": "```answer\nid: q-xor\ntitle: 模 2 减一次\nq: 模 2 减法就是按位异或。计算 $11010-10011$（模 2），写满 5 位。\ntype: bin\nanswer: xor(0b11010, G)\nwidth: 5\nhint: 一位一位比：相同得 0，不同得 1，不借位。\nexplain: $11010\\oplus10011=\\calc{bin(xor(0b11010, G), 5)}$。这正是等一下竖式的第一步：数据开头的 5 位 11010 减去除数。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 2,
+      "title": "补 0 再除",
+      "md": "发送方：先在数据后面补 $r$ 个 0（$r$ 是 $G(x)$ 的最高次），再模 2 除以 $G$ 的比特串，**余数**就是 CRC 校验码。先自己除一遍。\n\n```draft\nid: dr-crc\ntitle: 草稿区\nnote: 每次只看最高位的 1：把 10011 对齐到它下面，异或；剩下的不到 5 位就停。\nheight: 240\n```\n\n```answer\nid: q-crc\ntitle: 余数是多少\nq: 生成多项式 $G(x)=x^4+x+1$，要发送的数据是 1101011011。在数据后面补 4 个 0，模 2 除以 10011，余数（CRC 校验码）是多少？写满 4 位。\ntype: bin\nanswer: R\nwidth: 4\nhint: 补 0 以后是 $\\calc{bin(V0, 14)}$（14 位）。第一步用开头的 11010 异或 10011，得到的结果接着往下除。\nexplain: 余数是 $\\calc{bin(R, 4)}$。竖式在下一块板上一行一行对照。\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 3,
+      "title": "对照竖式",
+      "md": "点「下一行」一行一行写出来，和你草稿上的竖式对照。每一步都把除数对齐到当前最高位的 1。\n\n```derive\nid: d-crc\ntitle: 模 2 除法\n\\text{补 0 后} = \\calc{bin(V0, 14)}   // 数据后面补 $\\calc{r}$ 个 0\n\\oplus\\ \\text{除数} = \\calc{bin(D1, 14)}   // 10011 对齐最高位的 1\n\\text{得} = \\calc{bin(V1, 14)}\n\\oplus\\ \\text{除数} = \\calc{bin(D2, 14)}   // 再对齐新的最高位\n\\text{得} = \\calc{bin(V2, 14)}\n\\oplus\\ \\text{除数} = \\calc{bin(D3, 14)}\n\\text{得} = \\calc{bin(V3, 14)}\n\\oplus\\ \\text{除数} = \\calc{bin(D4, 14)}\n\\text{余数} = \\calc{bin(R, 14)}   // 不到 5 位了，停：最后 4 位就是校验码\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 3,
+      "md": "```answer\nid: q-send\ntitle: 实际发送的串\nq: 数据 1101011011，生成多项式 $G(x)=x^4+x+1$，CRC 校验码是算出的 4 位余数。实际发送的比特串是什么？写满 14 位。\ntype: bin\nanswer: Tx\nwidth: 14\nhint: 校验码接在数据后面，正好填进补的那 4 个 0 的位置。\nexplain: $\\calc{bin(Tx, 14)}$：前 10 位是数据，后 4 位是校验码 $\\calc{bin(R, 4)}$。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 7,
+      "pin": true,
+      "title": "发送方三步",
+      "md": "1. 数据后面补 $r$ 个 0（$r$ 是 $G(x)$ 的最高次）\n2. 模 2 除以 $G$ 的比特串（每步异或）\n3. $r$ 位余数接在数据后面发出去"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 4,
+      "title": "接收方怎么查",
+      "md": "接收方拿同一个除数去除**收到的整串**（不再补 0）。\n\n```answer\nid: q-recv\ntitle: 收到后再除\nq: 接收方收到 $\\calc{bin(Tx, 14)}$，用 $G(x)=x^4+x+1$ 对应的 10011 做模 2 除法，余数是多少？写满 4 位。\ntype: bin\nanswer: Y10\nwidth: 4\nhint: 发出去的串 = 补 0 的数据 + 余数。补 0 的数据除以 $G$ 余 $R$，再「加」上一个 $R$ 呢？\nexplain: 余数是 $\\calc{bin(Y10, 4)}$。模 2 里加就是减：补 0 的数据除以 $G$ 余 $R$，再加上 $R$，正好整除。\n```\n\n```quiz\nid: qz-zero\ntitle: 余数为 0 说明什么\nq: 接收方算出余数为 0，可以得出什么结论？\n- [ ] 传输一定没有出错\n- [x] 没有检测到错误，接受这一帧\n- [ ] 一定出错了，丢弃这一帧\nexplain: 余数为 0 只说明**没检测到**错误：错误模式恰好是 $G$ 的倍数时，CRC 发现不了。余数不为 0 就一定出错了，丢弃。比如从左数第 4 位翻转，收到 $\\calc{bin(Z0, 14)}$，余数是 $\\calc{bin(Z10, 4)}$，不为 0。\n```"
+    },
+    {
+      "id": "s7",
+      "seq": 9,
+      "page": 5,
+      "title": "换一组数据",
+      "md": "换一组数据和生成多项式，自己从补 0 做到余数。先在 Notability 上列竖式。\n\n```practice\nid: pr-crc\ntitle: 自己算校验码\ntype: custom\ncount: 3\npick dat = int(512, 1023)\npick gen = choice(0b10011, 0b11001, 0b10111, 0b11101)\nlet w0 = shl(dat, 4)\nlet w1 = xor(w0, (w0 >= 16)*shl(gen, max(floor(log2(max(w0, 1))) - 4, 0)))\nlet w2 = xor(w1, (w1 >= 16)*shl(gen, max(floor(log2(max(w1, 1))) - 4, 0)))\nlet w3 = xor(w2, (w2 >= 16)*shl(gen, max(floor(log2(max(w2, 1))) - 4, 0)))\nlet w4 = xor(w3, (w3 >= 16)*shl(gen, max(floor(log2(max(w3, 1))) - 4, 0)))\nlet w5 = xor(w4, (w4 >= 16)*shl(gen, max(floor(log2(max(w4, 1))) - 4, 0)))\nlet w6 = xor(w5, (w5 >= 16)*shl(gen, max(floor(log2(max(w5, 1))) - 4, 0)))\nlet w7 = xor(w6, (w6 >= 16)*shl(gen, max(floor(log2(max(w6, 1))) - 4, 0)))\nlet w8 = xor(w7, (w7 >= 16)*shl(gen, max(floor(log2(max(w7, 1))) - 4, 0)))\nlet w9 = xor(w8, (w8 >= 16)*shl(gen, max(floor(log2(max(w8, 1))) - 4, 0)))\nlet w10 = xor(w9, (w9 >= 16)*shl(gen, max(floor(log2(max(w9, 1))) - 4, 0)))\nq: 生成多项式的比特串是 $\\calc{bin(gen, 5)}$（最高次 4），要发送的数据是 $\\calc{bin(dat, 10)}$。求 CRC 校验码，写满 4 位。\nanswer: w10\ncheck: bin\nwidth: 4\nhint: 先补 4 个 0：$\\calc{bin(w0, 14)}$。每次把除数对齐到最高位的 1，异或，直到剩下不到 5 位。\nexplain: 补 0 后 $\\calc{bin(w0, 14)}$，模 2 除以 $\\calc{bin(gen, 5)}$，余数 $\\calc{bin(w10, 4)}$；实际发送 $\\calc{bin(w0 + w10, 14)}$。\n```"
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "unit": "数据链路层 · 后退 N 帧与选择重传",
+  "subject": "计网",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "GBN：2 号帧丢了",
+      "md": "甲用后退 N 帧（GBN）给乙发 0～6 号帧，发送窗口 4。2 号帧第一次发送时丢了，其余都正常。点「下一步」往下走，看乙每收到一帧做了什么；到问号处先写答案。\n\n```window\nid: w-gbn\ntitle: GBN：2 号帧丢了\nproto: gbn\nframes: 7\nwindow: 4\nlost: 2\nask: resend, total\n```"
+    },
+    {
+      "id": "k1",
+      "seq": 2,
+      "pin": true,
+      "title": "题目",
+      "md": "甲→乙发 0～6 号帧，发送窗口 4，2 号帧丢失，其余正常。GBN 要重传哪些帧？换成 SR（窗口也是 4）呢？"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 1,
+      "md": "```quiz\nid: qz-gbn\ntitle: 3 号帧哪去了\nq: 3、4、5 号帧第一次发送时明明送到了乙，为什么甲还要重传它们？\n- [ ] 3、4、5 号帧也丢了\n- [x] 乙只收按序到达的帧：2 号没到，后面来的 3、4、5 都被丢弃了\n- [ ] 乙收下了，只是甲不知道，保险起见再发一遍\nexplain: GBN 的接收窗口只有 1：乙只收正在等的那一号（2 号），别的号一律丢弃，再确认一次最后按序收到的 1 号。所以甲超时后要从 2 号起「后退」，把发过的全部重发。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 2,
+      "title": "换成选择重传",
+      "md": "同样的数据换成选择重传（SR），发送窗口、接收窗口都是 4。这回乙怎么处理 3、4、5？到问号处先写。\n\n```window\nid: w-sr\ntitle: SR：2 号帧丢了\nproto: sr\nframes: 7\nwindow: 4\nlost: 2\nask: resend, total\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 3,
+      "title": "确认丢了一个",
+      "md": "再换一种出错：帧都没丢，丢的是 **1 号帧的确认**。GBN 里甲要不要重传 1 号？到问号处先写一共发了几帧。\n\n```window\nid: w-ack\ntitle: GBN：确认丢了\nproto: gbn\nframes: 6\nwindow: 4\nacklost: 1\nask: total\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 3,
+      "md": "```quiz\nid: qz-ack\ntitle: 换成 SR 呢\nq: 同样是 1 号帧的确认丢了，换成选择重传（SR），会怎样？\n- [ ] 不用重传：后面 2 号帧的确认把 1 号也一起确认了\n- [x] 1 号帧超时后重传：SR 的确认只管它自己那一帧\n- [ ] 从 1 号起全部重传\nexplain: GBN 是**累积确认**：ACK2 表示 2 号及以前的帧都收到了，丢一个确认不要紧。SR 是**逐帧确认**：ACK2 只说明 2 号到了，1 号的计时器照样超时，1 号要重传（乙收到重复的 1 号，丢掉，再确认一次）。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 7,
+      "pin": true,
+      "title": "GBN 和 SR",
+      "md": "- GBN：接收窗口 1，只收按序的；累积确认（ACKn：n 号及以前都收到了）；超时从出错的帧起全部重传。\n- SR：接收窗口 = 发送窗口，失序的先缓存；逐帧确认；只重传超时的那一帧。"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 4,
+      "title": "GBN 的窗口上限",
+      "md": "帧序号只有 $n$ 位，号用完了就从 0 重新来。窗口太大会出什么事？用 $n=2$（序号 0～3）试一下。\n\n```steps\nid: ex-gbnw\ntitle: GBN：窗口取 4\nq: 帧序号 2 位（0、1、2、3 循环使用），GBN 的发送窗口取 4。甲连发 0、1、2、3 号帧。\n\nstep: 情况一：确认全丢了\nask: 乙把 4 帧都收下了，可 4 个确认全在路上丢了。乙现在等的下一个序号是几？甲超时后重发旧的 0 号帧，乙会怎么处理？\nshow: 乙收完 0～3，等的下一个序号又是 0。旧的 0 号帧正好对上，被当成**新的一帧**收下——数据重复了，乙却察觉不到。\n\nstep: 情况二：4 帧全丢了\nask: 如果是 4 个数据帧全丢了，甲超时重发 0 号帧。乙能不能分清现在是情况一还是情况二？\nchoices: 能分清 | 分不清\nanswer: 分不清\nshow: 两种情况下乙都在等 0 号、收到的都是 0 号，看到的一模一样，可一个该丢、一个该收。所以窗口不能把 $2^n$ 个号用满。\n\nstep: 窗口取 3 呢\nask: 窗口改成 3：甲发 0、1、2，乙全收下、确认全丢。甲重发 0 号帧时，乙等的是几？会不会收错？\nshow: 乙等的是 3 号，重发的 0 号对不上，丢弃，不会出错。留一个号不用，新旧两轮就不会撞号：$W_{\\text{发}}\\le 2^n-1$。\n```"
+    },
+    {
+      "id": "s7",
+      "seq": 9,
+      "page": 5,
+      "title": "SR 的窗口上限",
+      "md": "SR 的乙也开着窗口，失序的帧能先收下。序号还是 2 位，发送窗口、接收窗口都取 3：甲发 0、1、2，乙全收下，3 个确认全丢了。\n\n```sketch\nid: sk-ring\ntitle: 两个窗口\nwidth: 340\nheight: 180\n<circle cx=\"110\" cy=\"90\" r=\"55\" class=\"faint\"/>\n<path d=\"M 95.5 21.5 A 70 70 0 1 1 95.5 158.5\" fill=\"none\" class=\"blue thick\"/>\n<path d=\"M 29.8 107 A 82 82 0 1 1 190.2 107\" fill=\"none\" class=\"pink thick\"/>\n<circle cx=\"110\" cy=\"35\" r=\"13\" class=\"yellow\"/>\n<circle cx=\"165\" cy=\"90\" r=\"13\" class=\"yellow\"/>\n<tex x=\"110\" y=\"35\">0</tex>\n<tex x=\"165\" y=\"90\">1</tex>\n<tex x=\"110\" y=\"145\">2</tex>\n<tex x=\"55\" y=\"90\">3</tex>\n<line x1=\"215\" y1=\"38\" x2=\"245\" y2=\"38\" class=\"blue thick\"/>\n<text x=\"252\" y=\"34\" class=\"small\">甲的窗口</text>\n<text x=\"252\" y=\"50\" class=\"small\">还停在 0、1、2</text>\n<line x1=\"215\" y1=\"86\" x2=\"245\" y2=\"86\" class=\"pink thick\"/>\n<text x=\"252\" y=\"82\" class=\"small\">乙的窗口</text>\n<text x=\"252\" y=\"98\" class=\"small\">滑到 3、0、1</text>\n<circle cx=\"230\" cy=\"136\" r=\"9\" class=\"yellow\"/>\n<text x=\"252\" y=\"141\" class=\"small\">两边都有的号</text>\n```"
+    },
+    {
+      "id": "s8",
+      "seq": 10,
+      "page": 5,
+      "md": "```steps\nid: ex-srw\ntitle: SR：窗口取 3\nq: 帧序号 2 位（0～3 循环），SR 的发送窗口、接收窗口都取 3。甲发 0、1、2，乙全收下，3 个确认全丢了（见上图）。\n\nstep: 重发的 0 号\nask: 甲超时重发旧的 0 号帧。看图：乙会怎么处理？\nchoices: 当成新帧收下 | 认出是重复帧，丢弃\nanswer: 当成新帧收下\nshow: 0 落在乙的新窗口（粉色）里，乙把它当成新一轮的 0 号帧缓存起来：出错了。\n\nstep: 窗口最大多少\nask: 要让甲的旧窗口和乙的新窗口不重叠，发送窗口 + 接收窗口最多是多少？两个一样大时各是多少？\nshow: $W_{\\text{发}}+W_{\\text{收}}\\le 2^n$；两个一样大时 $W\\le 2^{n-1}$。序号 2 位时 SR 的窗口最多是 $\\calc{2^(2-1)}$。\n\nstep: 序号 3 位时，GBN 和 SR 的发送窗口最大各是多少？\ndo: true\nanswer: [2^3 - 1, 2^(3 - 1)]\nshow: GBN：$2^3-1=\\calc{2^3-1}$；SR：$2^{3-1}=\\calc{2^(3-1)}$。\n```"
+    },
+    {
+      "id": "k3",
+      "seq": 11,
+      "pin": true,
+      "title": "窗口上限",
+      "md": "序号 $n$ 位：GBN $W_{\\text{发}}\\le 2^n-1$；SR $W_{\\text{发}}=W_{\\text{收}}\\le 2^{n-1}$。"
+    },
+    {
+      "id": "s9",
+      "seq": 12,
+      "page": 6,
+      "title": "自己来",
+      "md": "最后自己来。先在 Notability 里画出时序图（可以用底部「交截图」交上来），再填。\n\n```window\nid: w-quiz\ntitle: 自己数\nq: 甲用后退 N 帧（GBN）发 0～7 号帧，发送窗口 3，4 号帧第一次发送时丢失，其余正常。一共发送了几个数据帧（含重传）？\nproto: gbn\nframes: 8\nwindow: 3\nlost: 4\nmode: quiz\n```\n\n```practice\nid: pr-win\ntitle: 序号位数和窗口\ntype: custom\ncount: 3\npick n = int(2, 7)\nq: 帧序号用 $\\calc{n}$ 位二进制编号。后退 N 帧（GBN）的发送窗口最大是多少？选择重传（SR，接收窗口和发送窗口一样大）的发送窗口最大是多少？\nanswer: [2^n - 1, 2^(n - 1)]\nbefore: \\begin{bmatrix}W_{\\text{GBN}}\\\\W_{\\text{SR}}\\end{bmatrix} =\nhint: 序号一共 $2^{\\calc{n}}$ 个。GBN 的接收窗口是 1；SR 的旧发送窗口和新接收窗口不能重叠。\nexplain: 序号共 $\\calc{2^n}$ 个。GBN：$W\\le 2^{\\calc{n}}-1=\\calc{2^n-1}$。SR：$W_{\\text{发}}+W_{\\text{收}}\\le\\calc{2^n}$，所以 $W\\le\\calc{2^(n-1)}$。\n```"
+    }
+  ]
+}

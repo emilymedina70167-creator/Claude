@@ -1,0 +1,68 @@
+{
+  "unit": "网络层 · 距离向量路由",
+  "subject": "计网",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "一开始谁知道什么",
+      "md": "```let\ncAB = 1\ncBC = 2\ncAC = 5\ncCD = 1\n```\n\n四个路由器，链路上的数是代价。开始时每个路由器只知道和自己**直接相连**的邻居。\n\n```sketch\nid: sk-topo\ntitle: 网络拓扑\nwidth: 340\nheight: 190\n<line x1=\"66\" y1=\"91\" x2=\"154\" y2=\"44\"/>\n<line x1=\"170\" y1=\"53\" x2=\"170\" y2=\"147\"/>\n<line x1=\"66\" y1=\"109\" x2=\"154\" y2=\"156\"/>\n<line x1=\"188\" y1=\"165\" x2=\"277\" y2=\"165\"/>\n<circle cx=\"50\" cy=\"100\" r=\"18\" class=\"yellow\"/>\n<circle cx=\"170\" cy=\"35\" r=\"18\"/>\n<circle cx=\"170\" cy=\"165\" r=\"18\"/>\n<circle cx=\"295\" cy=\"165\" r=\"18\"/>\n<tex x=\"50\" y=\"100\">A</tex>\n<tex x=\"170\" y=\"35\">B</tex>\n<tex x=\"170\" y=\"165\">C</tex>\n<tex x=\"295\" y=\"165\">D</tex>\n<tex x=\"100\" y=\"56\" color=\"blue\">\\calc{cAB}</tex>\n<tex x=\"184\" y=\"100\" color=\"blue\">\\calc{cBC}</tex>\n<tex x=\"100\" y=\"146\" color=\"blue\">\\calc{cAC}</tex>\n<tex x=\"232\" y=\"151\" color=\"blue\">\\calc{cCD}</tex>\n```\n\n| 开始时 | 到 A | 到 B | 到 C | 到 D |\n|---|---|---|---|---|\n| A | 0 | $\\calc{cAB}$ | $\\calc{cAC}$ | $\\infty$ |\n| B | $\\calc{cAB}$ | 0 | $\\calc{cBC}$ | $\\infty$ |\n| C | $\\calc{cAC}$ | $\\calc{cBC}$ | 0 | $\\calc{cCD}$ |\n| D | $\\infty$ | $\\infty$ | $\\calc{cCD}$ | 0 |"
+    },
+    {
+      "id": "k1",
+      "seq": 2,
+      "pin": true,
+      "title": "拓扑",
+      "md": "A–B $\\calc{cAB}$，B–C $\\calc{cBC}$，A–C $\\calc{cAC}$，C–D $\\calc{cCD}$。所有路由器同时交换距离向量。"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 1,
+      "md": "```conjecture\nid: cj-bf\ntitle: 你会怎么算\nq: 第一次交换时，A 收到 B、C 发来的表（上表里 B、C 那两行）。A 到 C 的最短距离，怎么用这两行算出来？一句话说出你的算法。\ngrade: off\nanswer: 对每个邻居 N，算「A 到 N 的代价 + N 的表里到 C 的距离」，取最小的那个，下一跳就是那个 N。\nplaceholder: 对每个邻居……\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 2,
+      "title": "第一次交换",
+      "md": "```steps\nid: ex-dv1\ntitle: 第一次交换后的 A\nq: 拓扑见常驻栏。第一次交换时，A 收到 B 的表 $(A\\ \\calc{cAB},\\ B\\ 0,\\ C\\ \\calc{cBC},\\ D\\ \\infty)$ 和 C 的表 $(A\\ \\calc{cAC},\\ B\\ \\calc{cBC},\\ C\\ 0,\\ D\\ \\calc{cCD})$。\n\nstep: 到 C：经谁？\nask: A 到 C 有两种走法：先到 B、再用 B 的表；或者走 A–C、再用 C 的表。各是多少？取哪个？\nshow: $d(A,C)=\\min\\{\\,c(A,B)+d_B(C),\\ c(A,C)+d_C(C)\\,\\}=\\min\\{\\calc{cAB}+\\calc{cBC},\\ \\calc{cAC}+0\\}=\\calc{min(cAB + cBC, cAC)}$，下一跳 B。\n\nstep: A 到 D 现在是多少？\ndo: true\nanswer: cAC + cCD\nshow: B 的表里到 D 是 $\\infty$，经 B 走不通；经 C：$\\calc{cAC}+\\calc{cCD}=\\calc{cAC+cCD}$，下一跳 C。\n\nstep: 下一跳\nask: A 到 B、C、D 的下一跳依次是？\nchoices: B、B、C | B、C、C | B、B、B\nanswer: B、B、C\nshow: 到 B 直达，到 C 经 B，到 D 经 C。这就是 Bellman-Ford：$d(A,X)=\\min_N\\{c(A,N)+d_N(X)\\}$，$N$ 取遍 A 的邻居，$d_N$ 用邻居**上一次**发来的表。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 5,
+      "pin": true,
+      "title": "Bellman-Ford",
+      "md": "$d(A,X)=\\min_N\\{c(A,N)+d_N(X)\\}$，$N$ 取遍邻居；$d_N$ 用邻居**上一次**发来的表。"
+    },
+    {
+      "id": "k3",
+      "seq": 6,
+      "pin": true,
+      "title": "A 的表（第一次后）",
+      "md": "到 B：$\\calc{cAB}$（直达）；到 C：$\\calc{min(cAB+cBC, cAC)}$（经 B）；到 D：$\\calc{cAC+cCD}$（经 C）"
+    },
+    {
+      "id": "s4",
+      "seq": 7,
+      "page": 3,
+      "title": "第二次交换",
+      "md": "所有路由器第一次交换后都更新了表。第二次交换，A 收到的是 B、C 的**新表**。\n\n```steps\nid: ex-dv2\ntitle: 第二次交换后的 A\nq: 拓扑见常驻栏，A 第一次交换后的表也在常驻栏。现在所有路由器第二次同时交换距离向量。\n\nstep: B 的新表\nask: 第一次交换时，B 从 C 那里知道了 D。B 第一次交换后到 D 是多少、下一跳是谁？\nshow: B 收到的是 C 的初始表（C 到 D 是 $\\calc{cCD}$），而 A 那时还不知道 D：$d_B(D)=\\calc{cBC}+\\calc{cCD}=\\calc{cBC+cCD}$，下一跳 C。\n\nstep: A 到 D 现在是多少？\ndo: true\nanswer: min(cAB + cBC + cCD, cAC + cCD)\nshow: $d(A,D)=\\min\\{\\calc{cAB}+\\calc{cBC+cCD},\\ \\calc{cAC}+\\calc{cCD}\\}=\\calc{min(cAB+cBC+cCD, cAC+cCD)}$，下一跳从 C 换成了 B。\n\nstep: 还会变吗\nask: 再交换第三次，A 的表还会变吗？\nchoices: 不会变了 | 还会变小\nanswer: 不会变了\nshow: 最长的最短路 A–B–C–D 只有 3 跳：开始时知道 1 跳的，每交换一次多知道 1 跳，两次后谁的表都不再变——收敛了。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 8,
+      "page": 4,
+      "title": "坏消息传得慢",
+      "md": "收敛以后，C–D 这条链路断了。为了看清楚，假设 A 关机了，只看 B、C、D。\n\n```steps\nid: ex-bad\ntitle: C–D 断了\nq: 断之前：C 到 D 是 $\\calc{cCD}$（直达），B 到 D 是 $\\calc{cBC+cCD}$（经 C）。C–D 断了以后，C 先收到了 B 发来的旧表。\n\nstep: C 到 D 变成多少？\ndo: true\nanswer: cBC + cBC + cCD\nshow: C 的直达路没了，B 的表还写着到 D 是 $\\calc{cBC+cCD}$，C 以为经 B 能到：$\\calc{cBC}+\\calc{cBC+cCD}=\\calc{2*cBC+cCD}$。可 B 的这条路恰恰经过 C。\n\nstep: B 收到 C 的新表，到 D 变成多少？\ndo: true\nanswer: 3*cBC + cCD\nshow: $\\calc{cBC}+\\calc{2*cBC+cCD}=\\calc{3*cBC+cCD}$。两个路由器互相指着对方，每交换一次加一点。\n\nstep: 会停吗\nask: 照这样交换下去，会怎样？\nchoices: 很快发现 D 不可达 | 一直加下去，直到「无穷大」 | 交换两次就稳定\nanswer: 一直加下去，直到「无穷大」\nshow: 一直数到「无穷大」才停（RIP 里距离 16 就算不可达）：**坏消息传得慢**。反过来，新出现一条更短的路，每交换一次就往外传一跳，几次就传遍：**好消息传得快**。\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 9,
+      "page": 5,
+      "title": "换一组代价",
+      "md": "同样的拓扑，换一组代价，自己算两次交换。先在 Notability 上把四个路由器的表列出来。\n\n```practice\nid: pr-dv\ntitle: 换一组代价\ntype: custom\ncount: 3\npick a = int(1, 6)\npick b = int(1, 6)\npick c = int(1, 9)\npick d = int(1, 6)\nwhere a + b != c\nq: 四个路由器：A–B 代价 $\\calc{a}$，B–C 代价 $\\calc{b}$，A–C 代价 $\\calc{c}$，C–D 代价 $\\calc{d}$，没有别的链路。开始时每个路由器只知道直接相连的邻居，所有路由器同时交换距离向量。依次写出：第一次交换后 A 到 C、A 到 D 的距离，第二次交换后 A 到 D 的距离。\nanswer: [min(a + b, c), c + d, min(a + b + d, c + d)]\nbefore: \\begin{bmatrix}d_1(A,C)\\\\d_1(A,D)\\\\d_2(A,D)\\end{bmatrix} =\nhint: 每次只用邻居上一次的表。第一次交换时 B 还不知道 D。\nexplain: $d_1(A,C)=\\min\\{\\calc{a}+\\calc{b},\\ \\calc{c}\\}=\\calc{min(a+b, c)}$。B 一开始不知道 D，所以 $d_1(A,D)=\\calc{c}+\\calc{d}=\\calc{c+d}$。第一次交换后 $d_B(D)=\\calc{b}+\\calc{d}=\\calc{b+d}$，所以 $d_2(A,D)=\\min\\{\\calc{a}+\\calc{b+d},\\ \\calc{c}+\\calc{d}\\}=\\calc{min(a+b+d, c+d)}$。\n```"
+    }
+  ]
+}

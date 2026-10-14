@@ -1,0 +1,50 @@
+{
+  "unit": "数据链路层 · 后退 N 帧与选择重传",
+  "subject": "计网",
+  "pack": {
+    "main": {
+      "unit": "数据链路层 · 后退 N 帧（GBN）与选择重传（SR）",
+      "goal": "中间丢了一帧时，能说出 GBN 和 SR 各要重传哪些帧、为什么；能说清 GBN 的累积确认和 SR 的逐帧确认差在哪；知道窗口上限 GBN ≤ 2ⁿ − 1、SR ≤ 2ⁿ⁻¹ 是怎么来的。",
+      "scope": "王道《计算机网络》第 3 章「流量控制与可靠传输机制」：停止-等待、后退 N 帧、选择重传。信道利用率的计算、TCP 的滑动窗口不在这节课讲。",
+      "textbook": "后退 N 帧协议（GBN）：发送方不必等确认，可以连续发送多个帧；发送窗口 1 < W_T ≤ 2^n − 1（n 是帧序号的比特数），接收窗口 W_R = 1。接收方只按序接收数据帧，收到失序的帧一律丢弃，并对最后一个按序到达的帧再发一次确认。采用累积确认：ACKn 表示第 n 号帧及以前的帧都已正确收到。某个帧超时后，发送方重传这个帧以及它后面已经发送过的所有帧（「后退 N 帧」）。\n选择重传协议（SR）：只重传出错或超时的帧。接收窗口 W_R > 1，接收方把落在窗口内的失序帧先缓存起来，缺的帧到齐后一起交付上层；对每个正确收到的帧单独确认（逐帧确认）。窗口大小满足 W_T + W_R ≤ 2^n，一般取 W_T = W_R ≤ 2^(n−1)。\n例题：甲向乙用 GBN 发送 0～6 号帧，发送窗口 4，2 号帧丢失，其余正常。甲要重传哪些帧？换成 SR（窗口也是 4）呢？答：GBN 重传 2、3、4、5 号帧（6 号在超时前还没发出，之后正常发送）；SR 只重传 2 号帧。",
+      "plan": "1. 先用 window 演示组件（proto: gbn，frames: 7，window: 4，lost: 2，ask: resend）走一遍，超时那一步让学生先写重传哪几帧。答错时先弄清学生把乙的做法想成了什么。\n2. 换成 SR 再走一遍（proto: sr），对比两种接收方。\n3. 用 acklost: 1 对比累积确认和逐帧确认：GBN 丢一个确认不用重传，SR 要重传。\n4. 用序号 2 位的例子讲窗口上限：steps 让学生判断重发的旧帧会不会被当成新帧；可以用 sketch 画序号环上的新旧两个窗口。\n5. window 的 mode: quiz（数一共发了几帧）和 practice 的 type: custom（序号位数 → 两种窗口上限）练熟。",
+      "student": "考研生，iPad + Apple Pencil 上课。刚学数据链路层，容易把 GBN 和 SR 的重传范围弄混；以前遇到确认号时分不清 ACKn 是「n 号及以前都收到了」还是「下一个要 n 号」。",
+      "updatedAt": 1792022400000
+    },
+    "problems": {
+      "items": [
+        {
+          "q": "甲向乙用后退 N 帧协议（GBN）发送 0～6 号帧，发送窗口 4，2 号帧丢失，其余正常。甲要重传哪些帧？换成选择重传（SR，窗口也是 4）呢？",
+          "answer": "GBN 重传 2、3、4、5 号帧；SR 只重传 2 号帧。",
+          "point": "GBN 接收窗口为 1、失序帧丢弃、超时后退重传；SR 缓存失序帧、只重传超时的帧",
+          "source": "验收题库 cn-gbn"
+        },
+        {
+          "q": "帧序号用 3 位二进制编号。GBN 的发送窗口最大是多少？SR（发送窗口 = 接收窗口）呢？",
+          "answer": "GBN 最大 7；SR 最大 4。",
+          "point": "W_T ≤ 2^n − 1；W_T + W_R ≤ 2^n",
+          "source": "王道 3.4"
+        },
+        {
+          "q": "甲用 GBN 发送 0～5 号帧，发送窗口 4，帧都没有丢，只有 1 号帧的确认丢了。甲要不要重传 1 号帧？换成 SR 呢？",
+          "answer": "GBN 不用重传：后面 2 号帧的确认是累积确认，把 1 号也确认了。SR 要重传 1 号帧：确认只管自己那一帧，1 号会超时。",
+          "point": "累积确认和逐帧确认",
+          "source": "自编"
+        }
+      ]
+    }
+  },
+  "turns": [
+    {
+      "teacher": "这节课只看一件事：中间丢了一帧，后退 N 帧要重传哪些。点「下一步」把过程走一遍，到超时那一步先写出你的答案。\n\n````board new id=b1 title=\"丢了 2 号帧\"\n甲用后退 N 帧（GBN）给乙发 0～6 号帧，发送窗口 4，2 号帧第一次发送时丢了，其余都正常。看清楚乙每收到一帧做了什么。\n\n```window\nid: w-gbn\ntitle: GBN：2 号帧丢了\nproto: gbn\nframes: 7\nwindow: 4\nlost: 2\nask: resend\n```\n````\n\n````board pin id=k1 title=\"这道题\"\n甲→乙发 0～6 号帧，GBN，发送窗口 4；**2 号帧第一次发送时丢失**，其余正常。\n````"
+    },
+    {
+      "student": "[作答] b1 里的 window w-gbn「GBN：2 号帧丢了」第 9 步（超时后重传哪几帧）：填了 2（错，第 1 次），用时 41 秒",
+      "teacher": "你只写了 2。3、4、5 号帧第一次其实都送到了乙那里——先看乙收到 3 号帧时是怎么处理的。\n\n````board mark target=w-gbn label=3 note=\"2 号还没到，3 号先到了\"\n````\n\n````board add id=b2 title=\"乙怎么处理 3 号\"\n```quiz\nid: qz-b2\nq: 2 号帧还没到，乙先收到了 3 号帧。按后退 N 帧，乙会怎么处理这个 3 号帧？\n- [ ] 先存起来，等 2 号到了一起交给上层\n- [x] 丢掉，再发一次对 1 号帧的确认\n- [ ] 收下，并单独确认 3 号\nexplain: 后退 N 帧的接收窗口只有 1：乙只收它正在等的那一号（2 号），别的一律丢弃，并重发对最后按序收到的 1 号帧的确认。\n```\n````"
+    },
+    {
+      "student": "没懂，为什么？",
+      "teacher": "这是后退 N 帧的规定，不是推出来的：乙只收按序到达的帧。看新板上的图。\n\n````board new id=b3 title=\"乙只等一个号\"\n乙已经按序收下 0、1，接收窗口只有 **1 格**，停在 2 号上。2 号没到之前，后面来的帧号对不上，到了也直接丢掉，再发一次 ACK1（「1 号及以前都收到了」）。\n\n```sketch\nid: sk-b3\ntitle: 乙的接收窗口\nwidth: 340\nheight: 140\n<rect x=\"18\" y=\"30\" width=\"40\" height=\"36\" rx=\"4\" class=\"green fill\"/>\n<rect x=\"64\" y=\"30\" width=\"40\" height=\"36\" rx=\"4\" class=\"green fill\"/>\n<rect x=\"110\" y=\"30\" width=\"40\" height=\"36\" rx=\"4\" class=\"yellow thick\"/>\n<rect x=\"156\" y=\"30\" width=\"40\" height=\"36\" rx=\"4\" class=\"red dashed\"/>\n<rect x=\"202\" y=\"30\" width=\"40\" height=\"36\" rx=\"4\" class=\"red dashed\"/>\n<rect x=\"248\" y=\"30\" width=\"40\" height=\"36\" rx=\"4\" class=\"red dashed\"/>\n<rect x=\"294\" y=\"30\" width=\"40\" height=\"36\" rx=\"4\" class=\"faint\"/>\n<tex x=\"38\" y=\"48\">0</tex>\n<tex x=\"84\" y=\"48\">1</tex>\n<tex x=\"130\" y=\"48\">2</tex>\n<tex x=\"176\" y=\"48\">3</tex>\n<tex x=\"222\" y=\"48\">4</tex>\n<tex x=\"268\" y=\"48\">5</tex>\n<tex x=\"314\" y=\"48\">6</tex>\n<text x=\"61\" y=\"88\" text-anchor=\"middle\" class=\"small green\">已交付</text>\n<text x=\"130\" y=\"88\" text-anchor=\"middle\" class=\"small yellow\">只等 2 号</text>\n<text x=\"222\" y=\"88\" text-anchor=\"middle\" class=\"small red\">到了也丢</text>\n<text x=\"314\" y=\"88\" text-anchor=\"middle\" class=\"small gray\">还没发</text>\n<text x=\"170\" y=\"122\" text-anchor=\"middle\" class=\"small\">每丢掉一帧，乙就再发一次 ACK1</text>\n```\n\n```quiz\nid: qz-b3\nq: 甲的 2 号帧超时的那一刻，乙那里存着 3、4、5 号帧吗？\n- [ ] 存着，乙只是在等 2 号\n- [x] 没有，它们一到就被丢掉了\nexplain: 乙的接收窗口只有 1 格，3、4、5 一到就丢弃，乙手里只有已经按序交付的 0、1。\n```\n````\n\n先答下面这一问，再回去想重传哪几帧。"
+    }
+  ]
+}

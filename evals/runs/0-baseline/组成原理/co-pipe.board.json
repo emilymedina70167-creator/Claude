@@ -1,0 +1,38 @@
+{
+  "unit": "流水线的数据冒险",
+  "subject": "组成原理",
+  "steps": [
+    {
+      "id": "s1", "seq": 1, "page": 1, "title": "谁和谁相关",
+      "md": "常驻栏里的四条指令依次进五段流水线（IF 取指、ID 译码并读寄存器、EX 执行、MEM 访存、WB 写回寄存器）。每条指令的第一个寄存器是目的寄存器。先找出哪里会出问题。\n\n```quiz\nid: q-raw\nq: 哪几对是「写后读」相关（后一条要读前一条写的寄存器）？可以多选。\n- [x] I1 → I2：r1\n- [x] I1 → I3：r1\n- [ ] I1 → I4：r2\n- [ ] I2 → I3：r4\nexplain: 写后读只看「前面写、后面读」同一个寄存器：I1 写 r1，I2、I3 都读 r1。I1 和 I4 都只是读 r2，读后读不会出错；I3 不读 r4。\n```"
+    },
+    {
+      "id": "k1", "seq": 2, "pin": true, "title": "指令和约定",
+      "md": "- I1 `add r1, r2, r3`\n- I2 `sub r4, r1, r5`\n- I3 `and r6, r1, r7`\n- I4 `or r8, r2, r9`\n\n五段各 1 个周期；寄存器前半周期写、后半周期读；不转发"
+    },
+    {
+      "id": "s2", "seq": 3, "page": 2, "title": "sub 要等多久",
+      "md": "先不管冲突，按每个周期进一条画出 add 和 sub：\n\n```sketch\nid: sk-ideal\ntitle: 不停顿的话\nwidth: 360\nheight: 128\n<text x=\"4\" y=\"16\" class=\"small faint\">周期</text>\n<text x=\"82\" y=\"16\" text-anchor=\"middle\" class=\"small faint\">1</text>\n<text x=\"130\" y=\"16\" text-anchor=\"middle\" class=\"small faint\">2</text>\n<text x=\"178\" y=\"16\" text-anchor=\"middle\" class=\"small faint\">3</text>\n<text x=\"226\" y=\"16\" text-anchor=\"middle\" class=\"small faint\">4</text>\n<text x=\"274\" y=\"16\" text-anchor=\"middle\" class=\"small faint\">5</text>\n<text x=\"322\" y=\"16\" text-anchor=\"middle\" class=\"small faint\">6</text>\n<text x=\"4\" y=\"46\" class=\"small\">add</text>\n<text x=\"4\" y=\"86\" class=\"small\">sub</text>\n<rect x=\"60\" y=\"26\" width=\"44\" height=\"30\" rx=\"4\"/>\n<rect x=\"108\" y=\"26\" width=\"44\" height=\"30\" rx=\"4\"/>\n<rect x=\"156\" y=\"26\" width=\"44\" height=\"30\" rx=\"4\"/>\n<rect x=\"204\" y=\"26\" width=\"44\" height=\"30\" rx=\"4\"/>\n<rect x=\"252\" y=\"26\" width=\"44\" height=\"30\" rx=\"4\" class=\"yellow fill\"/>\n<rect x=\"108\" y=\"66\" width=\"44\" height=\"30\" rx=\"4\"/>\n<rect x=\"156\" y=\"66\" width=\"44\" height=\"30\" rx=\"4\" class=\"pink fill\"/>\n<rect x=\"204\" y=\"66\" width=\"44\" height=\"30\" rx=\"4\"/>\n<rect x=\"252\" y=\"66\" width=\"44\" height=\"30\" rx=\"4\"/>\n<rect x=\"300\" y=\"66\" width=\"44\" height=\"30\" rx=\"4\"/>\n<text x=\"82\" y=\"46\" text-anchor=\"middle\" class=\"small\">IF</text>\n<text x=\"130\" y=\"46\" text-anchor=\"middle\" class=\"small\">ID</text>\n<text x=\"178\" y=\"46\" text-anchor=\"middle\" class=\"small\">EX</text>\n<text x=\"226\" y=\"46\" text-anchor=\"middle\" class=\"small\">MEM</text>\n<text x=\"274\" y=\"46\" text-anchor=\"middle\" class=\"small yellow\">WB</text>\n<text x=\"130\" y=\"86\" text-anchor=\"middle\" class=\"small\">IF</text>\n<text x=\"178\" y=\"86\" text-anchor=\"middle\" class=\"small pink\">ID</text>\n<text x=\"226\" y=\"86\" text-anchor=\"middle\" class=\"small\">EX</text>\n<text x=\"274\" y=\"86\" text-anchor=\"middle\" class=\"small\">MEM</text>\n<text x=\"322\" y=\"86\" text-anchor=\"middle\" class=\"small\">WB</text>\n<line x1=\"258\" y1=\"58\" x2=\"196\" y2=\"66\" class=\"arrow red\"/>\n<text x=\"180\" y=\"120\" text-anchor=\"middle\" class=\"small red\">sub 读 r1 的时候，add 还没写回</text>\n```\n\n```steps\nid: ex-wait\ntitle: sub 等到什么时候\nq: 寄存器前半周期写、后半周期读，不用转发。sub 在 ID 段读 r1，r1 由 add 在 WB 段写回。\n\nstep: sub 最早什么时候读\nask: sub 的 ID 最早能放在第几个周期？为什么？\nchoices: 第 4 周期 | 第 5 周期 | 第 6 周期\nanswer: 第 5 周期\nshow: add 的 WB 在第 5 周期，前半周期写进 r1；sub 的 ID 放在同一个周期，后半周期读到的已经是新的 r1。\n\nstep: 停几个周期\ndo: true\nask: sub 的 ID 本来在第 3 周期，现在推到第 5 周期，sub 要停几个周期？\nanswer: 5 - 3\nshow: 停 2 个周期：第 3、4 周期 sub 原地不动，后面的指令也跟着推后。\n\nstep: 如果写完才能读\nask: 假如寄存器堆不分前后半周期，WB 写完的下一个周期才能读，sub 要停几个周期？\nchoices: 2 | 3 | 4\nanswer: 3\nshow: sub 的 ID 只能放在第 6 周期，比本来的第 3 周期晚 3 个周期。前半写、后半读正好省掉 1 个。\n```"
+    },
+    {
+      "id": "k2", "seq": 4, "pin": true, "title": "什么时候能读",
+      "md": "不转发：读结果的指令，ID 最早和写结果的指令的 WB 在同一个周期。"
+    },
+    {
+      "id": "s3", "seq": 5, "page": 3, "title": "画时空图",
+      "md": "四条都放进去。每加一条，先猜它要停几个周期；最后猜一共要多少个周期。I3 也读 r1，看清楚它要不要停。\n\n```pipe\nid: p-stall\ntitle: 不转发的时空图\ninstrs: add r1, r2, r3; sub r4, r1, r5; and r6, r1, r7; or r8, r2, r9\nask: stall, cycles\n```"
+    },
+    {
+      "id": "s4", "seq": 6, "page": 3,
+      "md": "```quiz\nid: q-and\nq: I3（and）也读 add 写的 r1，为什么它不用再停？\n- [ ] 因为 and 是逻辑运算，不用等\n- [x] I2 停下来时，I3 也跟着往后推了；轮到 I3 读 r1 时，I1 已经写回\n- [ ] 因为 I3 读的是 r7\nexplain: 流水线里前一条停，后面的都跟着停。I3 的 ID 被推到 I1 的 WB 之后，r1 早就写好了。\n```"
+    },
+    {
+      "id": "s5", "seq": 7, "page": 4, "title": "有转发呢",
+      "md": "如果 add 在 EX 段算出的结果，下一个周期就能直接送进 sub 的 EX 段（转发），还要停吗？先猜，再看。\n\n```pipe\nid: p-fwd\ntitle: 有转发的时空图\ninstrs: add r1, r2, r3; sub r4, r1, r5; and r6, r1, r7; or r8, r2, r9\nforward: yes\nask: stall, cycles\n```\n\n```answer\nid: a-save\ntitle: 省了几个周期\nq: 这四条指令，有转发比不转发一共少用几个周期？\nanswer: 2\nhint: 两张时空图的总周期数相减。\nexplain: 不转发时 sub 停 2 个周期，后面跟着推后；有转发不用停，所以正好省下这 2 个周期。\n```"
+    },
+    {
+      "id": "s6", "seq": 8, "page": 5, "title": "换一段代码",
+      "md": "换一段代码，在 Notability 里自己画时空图，写出一共多少个周期。约定和前面一样：不转发，前半周期写、后半周期读。注意 I3 同时读两个刚算出来的寄存器。\n\n```pipe\nid: p-quiz\ntitle: 自己画一遍\ninstrs: add r1, r2, r3; sub r4, r5, r6; and r7, r1, r4; or r8, r7, r1\nmode: quiz\n```"
+    }
+  ]
+}

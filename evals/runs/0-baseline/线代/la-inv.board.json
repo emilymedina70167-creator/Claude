@@ -1,0 +1,55 @@
+{
+  "unit": "矩阵方程 AX = A + 2X",
+  "subject": "线代",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "先整理方程",
+      "md": "```let\nA = [[4, 2, 3], [1, 1, 0], [-1, 2, 3]]\nB = A - 2*E(3)\nX = inv(B)*A\nG0 = mat(col(B, 1), col(B, 2), col(B, 3), col(A, 1), col(A, 2), col(A, 3))\nP1 = [[0, 1, 0], [1, 0, 0], [0, 0, 1]]\nP2 = [[1, 0, 0], [-2, 1, 0], [1, 0, 1]]\nP3 = [[1, 0, 0], [0, 0, 1], [0, 1, 0]]\nP4 = [[1, 0, 0], [0, 1, 0], [0, -4, 1]]\nP5 = diag(1, 1, -1)\nP6 = [[1, 0, 0], [0, 1, -1], [0, 0, 1]]\nP7 = [[1, 1, 0], [0, 1, 0], [0, 0, 1]]\nS1 = P2*P1*G0\nS2 = P4*P3*S1\nS3 = P5*S2\nS4 = P7*P6*S3\n```\n\n这节课解矩阵方程（matrix equation），题目在常驻栏。第一件事：整理成「某个矩阵 × $X$ = 已知矩阵」。每一步先选、先写，再揭开。\n\n```steps\nid: ex-inv1\ntitle: 整理方程\nq: $A=\\begin{bmatrix}4&2&3\\\\1&1&0\\\\-1&2&3\\end{bmatrix}$，$AX=A+2X$，求 $X$。\nstep: 移项\nask: 把含 $X$ 的项放到一边，写出来。\nshow: $AX-2X=A$\nstep: 提出 X\nask: 把 $X$ 提出来，哪一个对？\nchoices: $(A-2)X=A$ | $(A-2E)X=A$ | $X(A-2E)=A$\nanswer: $(A-2E)X=A$\nshow: $2X=2EX$，两项里的 $X$ 都在右边，只能提到右边：$(A-2E)X=A$。$A-2$ 没有意义：矩阵不能减一个数。\nstep: 解出 X\nask: $A-2E$ 可逆（$|A-2E|=\\calc{det(B)}$）。$X$ 等于哪一个？\nchoices: $X=(A-2E)^{-1}A$ | $X=A(A-2E)^{-1}$\nanswer: $X=(A-2E)^{-1}A$\nshow: 两边**左乘** $(A-2E)^{-1}$，左边才能变成 $(A-2E)^{-1}(A-2E)X=X$。矩阵乘法不能交换，逆只能乘在系数矩阵所在的那一边。\n```"
+    },
+    {
+      "id": "k1",
+      "seq": 2,
+      "pin": true,
+      "title": "题目",
+      "md": "$A=\\begin{bmatrix}4&2&3\\\\1&1&0\\\\-1&2&3\\end{bmatrix}$，$AX=A+2X$，求 $X$。"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "X 在左边呢",
+      "md": "换一个方程检验一下：$X$ 写在 $A$ 的左边时，答案跟着变。\n\n```quiz\nid: qz-side\ntitle: X 在左边\nq: 若 $XA=A+2X$（且 $A-2E$ 可逆），则 $X=$？\n- [ ] $(A-2E)^{-1}A$\n- [x] $A(A-2E)^{-1}$\n- [ ] $(A-2E)A^{-1}$\nexplain: $XA-2X=X(A-2E)=A$，系数矩阵在 $X$ 的右边，所以两边**右乘** $(A-2E)^{-1}$：$X=A(A-2E)^{-1}$。系数矩阵在 $X$ 的哪一边，逆就乘在哪一边。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "不用先求逆",
+      "md": "先求 $(A-2E)^{-1}$ 再乘 $A$，要算两遍。有一次就够的办法——先想清楚为什么。记 $B=A-2E$。\n\n```steps\nid: ex-inv2\ntitle: 为什么一次就够\nq: 对分块矩阵 $(B\\mid A)$ 做一串初等行变换（elementary row operations）。\nstep: 行变换就是左乘\nask: 一串行变换相当于左乘一个可逆矩阵 $P$：$(B\\mid A)\\to(PB\\mid PA)$。左边变成 $E$ 时，$P$ 是什么？\nchoices: $B^{-1}$ | $B$ | $A^{-1}$\nanswer: $B^{-1}$\nshow: $PB=E$，所以 $P=B^{-1}$。\nstep: 右边是什么\nask: 这时右边的 $PA$ 是什么？\nchoices: $X$ | $A^{-1}$ | $E$\nanswer: $X$\nshow: $PA=B^{-1}A=X$。所以 $(B\\mid A)\\xrightarrow{\\text{行变换}}(E\\mid X)$，一次得到 $X$，不用单独求 $B^{-1}$。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 5,
+      "pin": true,
+      "title": "方法",
+      "md": "$(A-2E)X=A$：$(A-2E\\mid A)\\xrightarrow{\\text{行变换}}(E\\mid X)$。\n\n$X$ 在左边（$XB=A$）时，先转置成 $B^{\\mathrm T}X^{\\mathrm T}=A^{\\mathrm T}$ 再这样做。"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 4,
+      "title": "化简 (A−2E | A)",
+      "md": "现在动手。每一步先写下你打算做的行变换，再揭开对照。旁边的矩阵跟着变：虚线左边是 $A-2E$，右边是 $A$。\n\n```steps\nid: ex-inv3\ntitle: 化成 (E | X)\nq: 把 $(A-2E\\mid A)$ 化成 $(E\\mid X)$（矩阵在旁边）。\nstep: 消第 1 列\nask: 第 1 列怎么消最省事？哪一行的首元是 $1$？\nshow: $r_1\\leftrightarrow r_2$，再 $r_2-2r_1$、$r_3+r_1$。\nstep: 消第 2 列\nask: 第 2 列下一步做什么？\nshow: $r_2\\leftrightarrow r_3$（让 $1$ 当主元），再 $r_3-4r_2$。\nstep: 主元化成 1\nask: 第 3 行的主元是 $-1$，怎么办？\nshow: $r_3\\times(-1)$。左边成了上三角，主元都是 $1$。\nstep: 往回消，读出 X\ndo: true\nanswer: X\nshow: $r_2-r_3$，再 $r_1+r_2$：左边成了 $E$，右边就是 $X=\\calc{X}$。\n```\n\n```matrix\nid: m-inv\ntitle: (A−2E | A) 一步步变\nlink: ex-inv3\nmatrix (step<1)*G0 + (step==1)*S1 + (step==2)*S2 + (step==3)*S3 + (step>=4)*S4 name=G\nsplit cols=3\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 5,
+      "title": "换个矩阵",
+      "md": "不看提示自己做一遍：先整理方程，再对 $(A-kE\\mid A)$ 做行变换。过程写在 Notability 里，最后填 $X$。\n\n```practice\nid: pr-inv\ntitle: 换个矩阵\ntype: custom\ncount: 2\npick p = int(-1, 1) nonzero\npick w = int(-1, 1) nonzero\npick r = int(-1, 1) nonzero\npick s = int(-1, 1) nonzero\npick u = int(-1, 1) nonzero\npick v = int(-1, 1) nonzero\npick k = int(2, 4)\nlet L = [[1, 0, 0], [p, 1, 0], [w, r, 1]]\nlet U = [[1, s, u], [0, 1, v], [0, 0, 1]]\nlet M = L*U + k*E(3)\nq: 设 $A=\\calc{M}$，矩阵 $X$ 满足 $AX=A+\\calc{k}X$，求 $X$。\nanswer: inv(M - k*E(3))*M\nbefore: X=\nhint: 先整理成 $(A-\\calc{k}E)X=A$，再对 $(A-\\calc{k}E\\mid A)$ 做初等行变换。\nexplain: $A-\\calc{k}E=\\calc{M-k*E(3)}$，$(A-\\calc{k}E\\mid A)\\to(E\\mid X)$，$X=\\calc{inv(M-k*E(3))*M}$。\n```"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "unit": "补码加减和标志位",
+  "subject": "组成原理",
+  "steps": [
+    {
+      "id": "s1", "seq": 1, "page": 1, "title": "先写成补码",
+      "md": "```let\nx = 100\ny = 50\n```\n\n8 位补码，$x=\\calc{x}$，$y=\\calc{y}$。算 $x+y$、$x-y$ 之前，先把要用到的两个补码写出来。\n\n```answer\nid: a-x\ntitle: x 的补码\nq: 写出 $[x]_{\\text{补}}$（8 位补码，$x=\\calc{x}$），写满 8 位。\ntype: bin\nwidth: 8\nanswer: unsigned(x, 8)\nhint: 正数的补码就是它的二进制，前面补 0 凑满 8 位。从 64、32、16……里挑出加起来等于 $\\calc{x}$ 的几个。\nexplain: $[x]_{\\text{补}}=\\calc{bin(x, 8)}$。\n```"
+    },
+    {
+      "id": "s2", "seq": 2, "page": 1,
+      "md": "减法要用到 $[-y]_{\\text{补}}$。下面从原码一步步走到补码，补码那一步先自己写。\n\n```bits\nid: b-negy\ntitle: −y 的补码\nnum: -50\nwidth: 8\nshow: 原码 反码 补码\nask: twos\n```"
+    },
+    {
+      "id": "k1", "seq": 3, "pin": true, "title": "这节课的数",
+      "md": "$x=\\calc{x}$，$y=\\calc{y}$，8 位补码\n\n标志位（王道）：$\\mathrm{OF}=C_n\\oplus C_{n-1}$；SF = 结果最高位；ZF = 结果全 0 时为 1；$\\mathrm{CF}=C_{\\text{out}}\\oplus C_{\\text{in}}$（减法 $C_{\\text{in}}=1$）"
+    },
+    {
+      "id": "s3", "seq": 4, "page": 2, "title": "x + y",
+      "md": "$x+y=\\calc{x+y}$。先想一想：8 位补码放得下这个数吗？然后在竖式里一步步算，结果和每个标志位都先自己写，再揭晓。\n\n```bits\nid: b-add\ntitle: x + y 的竖式\nadd: 100 + 50\nwidth: 8\nask: result, of, sf, zf, cf\n```"
+    },
+    {
+      "id": "s4", "seq": 5, "page": 2,
+      "md": "```answer\nid: a-sum-signed\ntitle: 当有符号数读\nq: 把上面 $x+y$ 竖式得到的 8 位结果当成补码（有符号数）读，它是多少？\nanswer: signed(x + y, 8)\nhint: 最高位是符号位。最高位为 1 时，补码的值 $=-128+$ 后 7 位的值。\nexplain: 结果 $\\calc{bin(x+y, 8)}$ 读成补码是 $\\calc{signed(x+y, 8)}$，不是 $\\calc{x+y}$：两个正数加出了负数。\n```"
+    },
+    {
+      "id": "s5", "seq": 6, "page": 3, "title": "x − y",
+      "md": "减法交给加法器做：$[x-y]_{\\text{补}}=[x]_{\\text{补}}+[-y]_{\\text{补}}$，电路里就是「$x$ 加上 $y$ 按位取反，最低位再进一个 $C_{\\text{in}}=1$」。照样每一步先写再看。\n\n```bits\nid: b-sub\ntitle: x − y 的竖式\nsub: 100 - 50\nwidth: 8\nask: neg, result, of, cf\n```"
+    },
+    {
+      "id": "s6", "seq": 7, "page": 3,
+      "md": "```quiz\nid: q-cout\nq: $x-y$ 的竖式里，最高位往外有进位（$C_{\\text{out}}=1$）。把 $x$、$y$ 当成无符号数，这个进位说明什么？\n- [ ] $\\calc{x}-\\calc{y}$ 要借位\n- [x] $\\calc{x}-\\calc{y}$ 够减，不用借位\n- [ ] 有符号运算溢出了\nexplain: 加 $y$ 的反码再加 1，相当于加上 $2^8-y$。够减时和一定 $\\ge 2^8$，所以减法里 $C_{\\text{out}}=1$ 表示「没借位」。王道的 $\\mathrm{CF}=C_{\\text{out}}\\oplus C_{\\text{in}}=1\\oplus1=0$：CF 记的是借位。\n```"
+    },
+    {
+      "id": "s7", "seq": 8, "page": 4, "title": "OF 和 CF 各管什么",
+      "md": "同一个 8 位结果，当无符号数读、当有符号数读，对不对是两回事：\n\n| 运算 | 8 位结果 | 无符号读 | 应该是 | 有符号读 | 应该是 |\n|---|---|---|---|---|---|\n| $x+y$ | $\\calc{bin(x+y, 8)}$ | $\\calc{mod(x+y, 256)}$ | $\\calc{x+y}$ | $\\calc{signed(x+y, 8)}$ | $\\calc{x+y}$ |\n| $x-y$ | $\\calc{bin(x-y, 8)}$ | $\\calc{mod(x-y, 256)}$ | $\\calc{x-y}$ | $\\calc{signed(x-y, 8)}$ | $\\calc{x-y}$ |\n\n```conjecture\nid: cj-ofcf\ntitle: 一句话说清\nq: 对照这张表和你写的标志位：OF = 1 在告诉你什么？CF = 1 又在告诉你什么？各一句话。\nrubric: 要点 (1) OF = 1：把操作数和结果都当有符号数（补码）看，结果超出了 8 位补码的范围，读出来的值是错的；(2) CF = 1：当无符号数看，加法最高位有进位（超过 255）、减法不够减要借位，结果是错的。两条都对算正确；只对一条算部分正确；把 OF 说成「最高位有进位」或者把两者说反算不正确。\nanswer: OF 是有符号数的溢出标志：x + y 当有符号数读成 −106，错了，所以 OF = 1。CF 是无符号数的进位 / 借位标志：两次运算当无符号数读都对（150、50），所以 CF 都是 0。\nplaceholder: OF = 1 说明……；CF = 1 说明……\n```"
+    },
+    {
+      "id": "k2", "seq": 9, "pin": true, "title": "OF 和 CF",
+      "md": "OF：当**有符号数**看，结果溢出没有。\n\nCF：当**无符号数**看，加法有没有进位、减法有没有借位。\n\n两个标志每次都算；用哪个，看你把数当成什么。"
+    },
+    {
+      "id": "s8", "seq": 10, "page": 5, "title": "同一串位，CF 不同",
+      "md": "换个做法：不做减法，直接把 $[-y]_{\\text{补}}$ 加上去，算 $x+(-y)$。这是一次**加法**，$C_{\\text{in}}=0$。8 位结果和上一块板的 $x-y$ 一样，CF 呢？\n\n```bits\nid: b-add2\ntitle: x + (−y)\nadd: 0x64 + 0xCE\nwidth: 8\nask: cf\n```"
+    },
+    {
+      "id": "s9", "seq": 11, "page": 5,
+      "md": "```quiz\nid: q-cf2\nq: 上面的加法和上一块板的减法得到同样的 8 位结果，CF 却不一样。为什么？\n- [x] CF 看的是这次运算当无符号数算对没有：$\\calc{x}+\\calc{mod(-y, 256)}$ 超过了 255，要进位；$\\calc{x}-\\calc{y}$ 够减，不借位\n- [ ] CF 只看最高位往外有没有进位，两次应该一样，有一次算错了\n- [ ] CF 和 OF 一样，看的是有符号数溢出没有\nexplain: 加法时 $\\mathrm{CF}=C_{\\text{out}}$（进位），减法时 $\\mathrm{CF}=\\overline{C_{\\text{out}}}$（借位）；$\\mathrm{CF}=C_{\\text{out}}\\oplus C_{\\text{in}}$ 把两种情况写成了一个式子。\n```"
+    },
+    {
+      "id": "s10", "seq": 12, "page": 6, "title": "换一组数",
+      "md": "换一组数，从头算到尾：先写两个补码、相加，再定四个标志。可以先在 Notability 里写出竖式。\n\n```practice\nid: pr-sub\ntitle: 减法的标志位\ntype: custom\ncount: 3\npick a = int(-128, 127)\npick b = int(-127, 127)\nlet r = mod(a - b, 256)\nq: 8 位补码，$x=\\calc{a}$，$y=\\calc{b}$。计算 $x-y$，写出运算后的 OF、SF、ZF、CF（每个填 0 或 1）。\nanswer: [(a - b > 127) + (a - b < -128), bit(r, 7), r == 0, mod(a, 256) < mod(b, 256)]\nbefore: \\begin{bmatrix}\\mathrm{OF}\\\\\\mathrm{SF}\\\\\\mathrm{ZF}\\\\\\mathrm{CF}\\end{bmatrix}=\nhint: 先写 $[x]_{\\text{补}}$ 和 $[-y]_{\\text{补}}$，相加得到结果。OF：两个加数符号相同、结果的符号却变了。CF：当无符号数看，够不够减。\nexplain: $[x]_{\\text{补}}=\\calc{bin(a, 8)}$，$[-y]_{\\text{补}}=\\calc{bin(-b, 8)}$，结果 $\\calc{bin(r, 8)}$。有符号：真值 $\\calc{a}-(\\calc{b})=\\calc{a-b}$，结果读成 $\\calc{signed(r, 8)}$。无符号：$\\calc{mod(a, 256)}-\\calc{mod(b, 256)}$，被减数小于减数就要借位。\n```"
+    }
+  ]
+}

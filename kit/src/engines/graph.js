@@ -268,7 +268,8 @@ function dijkstra(g) {
     const changed = [];
     for (const a of adj[u]) {
       if (fin.has(a.to)) continue;
-      if (dist[u] + a.w < dist[a.to]) { dist[a.to] = dist[u] + a.w; path[a.to] = u; changed.push(a.to); }
+      const nd = g.primLike ? a.w : dist[u] + a.w; // primLike：常见错法，只看边权
+      if (nd < dist[a.to]) { dist[a.to] = nd; path[a.to] = u; changed.push(a.to); }
     }
     hist.push({ pick: u, dist: { ...dist }, final: [...fin] });
     steps.push({
@@ -382,7 +383,7 @@ function critical(g) {
   const acts = g.edges.map((e) => ({ e, key: ekey(e, true), early: ve[e.u], late: vl[e.v] - e.w }));
   const crit = acts.filter((a) => a.late === a.early);
   steps.push({ view: v({ acts, crit: crit.map((a) => a.key) }), msg: `每个活动：e = ve(起点)，l = vl(终点) − 权，l − e 是时间余量。余量为 0 的是关键活动：${crit.map((a) => `<${a.e.u},${a.e.v}>`).join('、')}。关键路径长度 ${ve[sink]}。` , ask: { tag: 'length', kind: 'number', q: '关键路径的长度（整个工程最短要多久）是多少？', answer: ve[sink] } });
-  return { steps, passes: [[ve[sink]]], length: ve[sink], crit: crit.map((a) => a.key) };
+  return { steps, passes: [[ve[sink]]], length: ve[sink], crit: crit.map((a) => a.key), ve, vl, acts };
 }
 
 // —— 画 ——
@@ -528,4 +529,59 @@ export function problems(input) {
   return out;
 }
 
-export const netEngine = { name: 'net', title: '图', parse, run, view, quiz, problems };
+// 考卷上那张表（mode: fill）
+export function fillTable(input, r) {
+  const a = input.algo;
+  if (a === 'bfs' || a === 'dfs') {
+    const seq = r.passes[0];
+    return { q: `从 ${input.start} 出发${a === 'bfs' ? '广度' : '深度'}优先遍历（邻接点${input.order === 'list' ? '按 edges 写的顺序' : '按顶点编号从小到大'}），写出遍历序列（一格一个顶点）。`, dir: 'row', head: seq.map((_, i) => `${i + 1}`), rows: [{ label: '序列', cells: seq.map((x) => ({ v: x })) }] };
+  }
+  if (a === 'topo') {
+    if (!r.ok) return null;
+    const all = input.use === 'stack' ? [r.passes[0]] : allTopo(input, 31);
+    if (all.length > 30) return null;
+    return { q: `写出一个拓扑序列${input.use === 'stack' ? '（按王道的代码：入度为 0 的入栈）' : ''}（顶点用空格隔开）。`, dir: 'row', head: ['拓扑序列'], rows: [{ label: '', cells: [{ v: all.map((x) => x.join(' ')) }] }] };
+  }
+  if (a === 'dijkstra') {
+    // 教材那张表：第 i 轮开始时各顶点的 dist（已经确定的空着），和这一轮确定的顶点
+    const others = input.names.filter((x) => x !== input.start);
+    const hist = r.steps.filter((x) => x.view.hist && x.view.cur !== undefined).map((x) => x.view);
+    const rows = [];
+    for (let i = 1; i < hist.length; i++) {
+      const before = hist[i - 1];
+      const fin = new Set(before.done);
+      const pick = hist[i].cur;
+      const ties = others.filter((x) => !fin.has(x) && before.table.dist[x] === before.table.dist[pick]);
+      rows.push({ label: `第 ${i} 轮`, cells: [...others.map((x) => (fin.has(x) ? { v: '', given: true } : { v: inf(before.table.dist[x]), num: true })), { v: ties }] });
+    }
+    return { q: `从 ${input.start} 出发用 Dijkstra 求最短路径。每一轮写出还没确定的各顶点的 dist（到不了写 ∞），和这一轮确定的顶点。`, dir: 'col', head: [...others.map((x) => `dist[${x}]`), '确定'], rows };
+  }
+  if (a === 'kruskal') {
+    const rows = r.steps.filter((x) => x.ask?.tag === 'take').map((x) => ({ label: x.ask.q.split('：')[0], cells: [{ v: x.ask.answer === '选' ? '√' : '', mark: true }] }));
+    return { q: 'Kruskal：边按权从小到大排好了，逐条看选不选（会成环的不选），选的打 √。', dir: 'row', head: ['选'], rows };
+  }
+  if (a === 'prim') {
+    if (r.tie) return null;
+    const rows = r.steps.filter((x) => x.ask?.tag === 'next').map((x, k) => { const m = /\((\S+), (\S+)\)，权 (\S+)/.exec(x.msg) || []; return { label: `第 ${k + 1} 次`, cells: [{ v: x.ask.answer }, { v: m[3] || '', num: true }] }; });
+    return { q: `从 ${input.start} 开始用 Prim 求最小生成树：每次写出加进来的顶点和那条边的权。`, dir: 'row', head: ['加进来的顶点', '边的权'], rows, extra: [{ label: '权值之和', v: String(r.total), num: true }] };
+  }
+  if (a === 'critical') {
+    const rows = [];
+    const ve = r.ve || {}, vl = r.vl || {};
+    for (const x of input.names) rows.push({ label: x, cells: [{ v: String(ve[x]), num: true }, { v: String(vl[x]), num: true }, { v: '', given: true }] });
+    for (const act of r.acts || []) rows.push({ label: `<${act.e.u},${act.e.v}>`, cells: [{ v: String(act.early), num: true }, { v: String(act.late), num: true }, { v: String(act.late - act.early), num: true }] });
+    return { q: '求关键路径：先写每个事件（顶点）的 ve、vl，再写每个活动（边）的 e、l 和时间余量 l − e。', dir: 'row', head: ['ve / e', 'vl / l', 'l − e'], rows, extra: [{ label: '关键路径长度', v: String(r.length ?? ''), num: true }] };
+  }
+  return null;
+}
+
+// 常见错法
+export function variants(input) {
+  const a = input.algo;
+  if (a === 'bfs') return [{ label: '像是按深度优先走的', input: { ...input, algo: 'dfs' } }];
+  if (a === 'dfs') return [{ label: '像是按广度优先走的', input: { ...input, algo: 'bfs' } }];
+  if (a === 'dijkstra') return [{ label: '像是把 Prim 的更新方式用在了 Dijkstra 上（dist 只比了边权，没加上到前一个顶点的距离）', input: { ...input, primLike: true } }];
+  return [];
+}
+
+export const netEngine = { name: 'net', title: '图', parse, run, view, quiz, problems, table: fillTable, variants };

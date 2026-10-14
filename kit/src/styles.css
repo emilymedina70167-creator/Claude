@@ -1193,11 +1193,28 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .sv-fill-t td.is-revealed .sv-fill-in, .sv-fill-t td.is-revealed { color: var(--lav); }
 .sv-fill-copyrow td, .sv-fill-copyrow th { border: 0; height: auto; padding-top: 4px; }
 .sv-fill-copy { min-height: 36px; font: 13px var(--sans); padding: 0 8px; white-space: nowrap; }
+.sv-fill-extra { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 4px 0 6px; }
+.sv-fill-x { display: inline-flex; align-items: center; gap: 8px; font: 15px var(--sans); color: var(--muted); border-radius: 8px; padding: 2px; }
+.sv-fill-x .sv-fill-in { width: 7em; }
+.sv-fill-x.is-ok { background: rgb(var(--green-rgb) / 0.13); }
+.sv-fill-x.is-bad { box-shadow: inset 0 0 0 2.5px var(--coral); }
+.sv-fill-x.is-revealed .sv-fill-in { color: var(--lav); }
 .sv-fill-fb { font: 15.5px var(--sans); margin: 6px 0; }
 .sv-fill-fb.is-bad { color: var(--coral); }
 .sv-fill-fb.is-ok { color: var(--green); }
 .sv-fill-ctrl { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
 .sv-fill-ctrl .btn { min-height: 44px; }
+
+/* 通用演示 frames：每一帧老师自己写；{{答案}} 是要学生填的空 */
+.sv-frames .fr-md table { margin: 8px 0; }
+.sv-frames .fr-md p { margin: 6px 0; }
+.sv-frames .fr-arr + .fr-arr, .sv-frames .fr-md + .fr-arr, .sv-frames .fr-arr + .fr-md { margin-top: 10px; }
+.sv-blank { width: 4.2em; height: 36px; box-sizing: border-box; border: 0; border-bottom: 2px solid var(--yellow); border-radius: 6px 6px 0 0; background: rgb(var(--yellow-rgb) / 0.1); color: var(--text); font: 600 16px var(--sans); text-align: center; padding: 0 4px; vertical-align: middle; }
+.sv-cell .sv-blank { width: 100%; height: 100%; border-radius: 6px; }
+.sv-blank:focus { outline: 2px solid var(--yellow); outline-offset: 1px; }
+.sv-blank.is-bad { border-bottom-color: var(--coral); background: rgb(var(--coral-rgb) / 0.12); }
+.sv-blank.is-ok { border-bottom-color: var(--green); background: rgb(var(--green-rgb) / 0.12); }
+.sv-blank-a { color: var(--yellow); font-weight: 600; border-bottom: 1.5px dashed rgb(var(--yellow-rgb) / 0.6); padding: 0 2px; }
 
 /* 按顺序点（ask: order）：点过的标上第几个 */
 .sv-order-seq { font: 600 16px var(--sans); color: var(--lav); min-width: 4em; flex: 1 1 auto; }

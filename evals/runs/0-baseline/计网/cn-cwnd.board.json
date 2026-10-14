@@ -1,0 +1,67 @@
+{
+  "unit": "TCP · 拥塞控制",
+  "subject": "计网",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "一路顺利",
+      "md": "先看没有丢包的情况：cwnd 从 1 开始，ssthresh = 8（单位：报文段）。每一轮，这一窗的报文段全部确认回来，cwnd 就长一次。到问号处先填这一轮的 cwnd，再看图。\n\n```tcp\nid: tc-ss\ntitle: 一路顺利\nssthresh: 8\nrounds: 8\nask: 3, 4, 5\n```"
+    },
+    {
+      "id": "k1",
+      "seq": 2,
+      "pin": true,
+      "title": "记号",
+      "md": "cwnd：拥塞窗口；ssthresh：慢开始门限；单位：报文段。一个传输轮次 ≈ 一个 RTT：这一轮 cwnd 个报文段发出去、确认全部回来。"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "3 个重复确认",
+      "md": "第 8 轮发出的报文段里丢了一个，后面几个照常到达，发送方连着收到 3 个重复确认。先选，再往下走。\n\n```quiz\nid: qz-3dup\ntitle: 收到 3 个重复确认\nq: 按 Reno（快重传 + 快恢复），收到 3 个重复确认后，ssthresh 和 cwnd 怎么变？\n- [ ] ssthresh 减半，cwnd 回到 1\n- [x] ssthresh 变成当时 cwnd 的一半，cwnd 等于新的 ssthresh\n- [ ] ssthresh 不变，cwnd 减半\n- [ ] 都不变，只把丢的那个重传\nexplain: 快重传：不等超时，马上重传丢的那个报文段。快恢复：ssthresh 取当时 cwnd 的一半，cwnd 直接从新的 ssthresh 开始拥塞避免（每轮 +1），不回到 1。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 2,
+      "md": "```tcp\nid: tc-3dup\ntitle: 第 8 轮出事\nssthresh: 8\nrounds: 11\nevents: 3dup@8\nstart: 7\nask: 9, 10\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 3,
+      "title": "超时",
+      "md": "这次第 11 轮**超时**：连重复确认都没等到。往下走，问号处先填。\n\n```tcp\nid: tc-to\ntitle: 第 11 轮超时\nssthresh: 8\nrounds: 16\nevents: 3dup@8, timeout@11\nstart: 10\nask: 12, 14, 15\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 3,
+      "md": "```conjecture\nid: cj-why\ntitle: 为什么不一样\nq: 同样是丢了报文段：收到 3 个重复确认，cwnd 只减到一半；超时，cwnd 却回到 1。为什么这样区别对待？一句话。\ngrade: off\nanswer: 能收到 3 个重复确认，说明后面的报文段还能到达接收方，网络只是轻度拥塞；超时说明连确认都回不来，可能拥塞严重，所以从 1 重新慢开始。\nplaceholder: 因为……\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 7,
+      "pin": true,
+      "title": "Reno 的四条",
+      "md": "- 慢开始：每轮 ×2，但不超过 ssthresh\n- 拥塞避免（cwnd ≥ ssthresh）：每轮 +1\n- 3 个重复确认：ssthresh = cwnd / 2，cwnd = ssthresh\n- 超时：ssthresh = cwnd / 2，cwnd = 1"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 4,
+      "title": "原题：1～22 轮",
+      "md": "原题。每到问号先填这一轮的 cwnd（可以先在 Notability 上把 22 轮列成一张表）。\n\n```tcp\nid: tc-main\ntitle: 原题\nq: cwnd 从 1 开始，ssthresh 初值 16（单位：报文段）。第 12 轮收到 3 个重复确认（快重传、快恢复），第 16 轮超时。画出第 1～22 轮的 cwnd。\nssthresh: 16\nrounds: 22\nevents: 3dup@12, timeout@16\nask: 5, 6, 12, 13, 16, 17, 20, 21, 22\n```"
+    },
+    {
+      "id": "s7",
+      "seq": 9,
+      "page": 5,
+      "title": "换一组数",
+      "md": "换一组数，自己从第 1 轮推过去。每题只问一轮，先在草稿上把前面的轮次列出来。\n\n```tcp\nid: tc-q1\ntitle: 第 9 轮\nq: cwnd 从 1 开始，ssthresh 初值 12（单位：报文段）。第 5 轮超时，第 13 轮收到 3 个重复确认（Reno）。第 9 轮的 cwnd 是多少？\nmode: quiz\nssthresh: 12\nrounds: 16\nevents: timeout@5, 3dup@13\nat: 9\n```\n\n```tcp\nid: tc-q2\ntitle: 第 14 轮\nq: 同上一题：cwnd 从 1 开始，ssthresh 初值 12，第 5 轮超时，第 13 轮收到 3 个重复确认（Reno）。第 14 轮的 cwnd 是多少？\nmode: quiz\nssthresh: 12\nrounds: 16\nevents: timeout@5, 3dup@13\nat: 14\n```"
+    }
+  ]
+}

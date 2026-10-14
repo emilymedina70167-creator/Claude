@@ -1,0 +1,62 @@
+{
+  "unit": "二次型：配方法、正定、正交变换",
+  "subject": "线代",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "写出矩阵",
+      "md": "```let\nA = [[1, 1, 1], [1, 2, 3], [1, 3, 5]]\nT = [[1, 1, 1], [0, 1, 2], [0, 0, 1]]\nC = inv(T)\nA2 = [[2, 0, 0], [0, 3, 2], [0, 2, 3]]\n```\n\n二次型（quadratic form）写成 $f=\\mathbf x^{\\mathrm T}A\\mathbf x$，$A$ 是对称矩阵。第一步永远是把 $A$ 写对。\n\n```answer\nid: q-A\ntitle: f 的矩阵\nq: 写出二次型 $f=x_1^2+2x_2^2+5x_3^2+2x_1x_2+2x_1x_3+6x_2x_3$ 的矩阵 $A$（对称矩阵）。\nanswer: A\nbefore: A=\nhint: 平方项的系数放对角线；交叉项 $2x_1x_2$ 的系数**平分**给 $a_{12}$ 和 $a_{21}$。\nexplain: $A=\\calc{A}$。比如 $6x_2x_3$ 拆成 $3x_2x_3+3x_3x_2$，所以 $a_{23}=a_{32}=3$。验算：$\\mathbf x=(1,2,-1)^{\\mathrm T}$ 时 $\\mathbf x^{\\mathrm T}A\\mathbf x=\\calc{dot([1, 2, -1], A*[1, 2, -1])}$，代进原式也是这个数。\n```"
+    },
+    {
+      "id": "k1",
+      "seq": 2,
+      "pin": true,
+      "title": "题目",
+      "md": "(1) $f=x_1^2+2x_2^2+5x_3^2+2x_1x_2+2x_1x_3+6x_2x_3$：配方化标准形，写出可逆线性变换，判断是否正定。\n\n(2) $f=2x_1^2+3x_2^2+3x_3^2+4x_2x_3$：正交变换化标准形，$f=1$ 是什么曲面？"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "配方",
+      "md": "配方法：先把含 $x_1$ 的项全收进一个平方，再处理剩下的。每一步先写你打算怎么凑，再揭开。\n\n```steps\nid: ex-sq\ntitle: 配方\nq: $f=x_1^2+2x_2^2+5x_3^2+2x_1x_2+2x_1x_3+6x_2x_3$\nstep: 收 x1\nask: 含 $x_1$ 的项是 $x_1^2+2x_1x_2+2x_1x_3$。凑成哪个完全平方？剩下什么？\nshow: $f=(x_1+x_2+x_3)^2+x_2^2+4x_3^2+4x_2x_3$（平方展开多出的 $x_2^2+x_3^2+2x_2x_3$ 要减回去）\nstep: 收 x2\nask: 剩下的 $x_2^2+4x_2x_3+4x_3^2$ 呢？\nshow: $=(x_2+2x_3)^2$，所以 $f=(x_1+x_2+x_3)^2+(x_2+2x_3)^2$\nstep: 换元\nask: 令 $y_1=x_1+x_2+x_3$，$y_2=x_2+2x_3$，$y_3$ 取什么？为什么一定要写 $y_3$？\nshow: $y_3=x_3$。变换必须**可逆**：三个新变量换三个旧变量，只写两个式子不是可逆线性变换。标准形 $f=y_1^2+y_2^2$。\nstep: 写出 x = Cy\nask: 由 $\\mathbf y=T\\mathbf x$ 反解，写出 $\\mathbf x=C\\mathbf y$ 的矩阵 $C$。\ndo: true\nanswer: C\nshow: $\\mathbf y=T\\mathbf x$，$T=\\calc{T}$，所以 $C=T^{-1}=\\calc{C}$。验算：$C^{\\mathrm T}AC=\\calc{C'*A*C}$。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "正定吗",
+      "md": "标准形 $y_1^2+y_2^2$ 里没有 $y_3^2$。这说明什么？\n\n```steps\nid: ex-pd\ntitle: 判断正定\nq: $f=y_1^2+y_2^2$，$\\mathbf x=C\\mathbf y$ 可逆。$f$ 正定（positive definite）吗？\nstep: 能取到 0 吗\nask: 有没有 $\\mathbf x\\ne\\mathbf 0$ 使 $f=0$？\nchoices: 有 | 没有\nanswer: 有\nshow: 取 $\\mathbf y=(0,0,1)^{\\mathrm T}$，$\\mathbf x=C\\mathbf y=\\calc{C*[0, 0, 1]}\\ne\\mathbf 0$，$f=\\mathbf x^{\\mathrm T}A\\mathbf x=\\calc{dot(C*[0, 0, 1], A*C*[0, 0, 1])}$。正定要求 $\\mathbf x\\ne\\mathbf 0$ 时 $f>0$，不满足。\nstep: 顺序主子式\nask: 算 $A$ 的三个顺序主子式（leading principal minors）$D_1,D_2,D_3$。\ndo: true\nanswer: [dot([1, 0, 0], A*[1, 0, 0]), det([[1, 0, 0], [0, 1, 0]]*A*[[1, 0], [0, 1], [0, 0]]), det(A)]\nshow: $D_1=\\calc{dot([1, 0, 0], A*[1, 0, 0])}$，$D_2=\\calc{det([[1, 0, 0], [0, 1, 0]]*A*[[1, 0], [0, 1], [0, 0]])}$，$D_3=|A|=\\calc{det(A)}$。正定要三个都大于 0，$D_3$ 不满足。\nstep: 结论\nask: $f$ 是哪一种？\nchoices: 正定 | 半正定，不是正定 | 不定\nanswer: 半正定，不是正定\nshow: 秩 $\\calc{rank(A)}$，标准形没有负项、少一个平方项：半正定（positive semidefinite），不是正定。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 5,
+      "pin": true,
+      "title": "正定的判定",
+      "md": "$f$ 正定 ⇔ 标准形系数（特征值）全 $>0$ ⇔ 顺序主子式全 $>0$。有一个是 $0$：最多半正定。"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 4,
+      "title": "第 (2) 题：特征值",
+      "md": "第 (2) 题用正交变换（orthogonal transformation）$\\mathbf x=Q\\mathbf y$：标准形的系数就是 $A$ 的特征值。\n\n```steps\nid: ex-eig2\ntitle: 正交变换的标准形\nq: $f=2x_1^2+3x_2^2+3x_3^2+4x_2x_3$\nstep: 写矩阵\nask: 写出 $f$ 的矩阵 $A$。\ndo: true\nanswer: A2\nshow: $A=\\calc{A2}$（$4x_2x_3$ 平分成 $a_{23}=a_{32}=2$）\nstep: 特征值怎么最快\nask: 这个 $A$ 有什么结构？特征值怎么求最快？\nshow: 分块对角：左上角的 $2$ 单独一块，右下角 $\\begin{bmatrix}3&2\\\\2&3\\end{bmatrix}$ 的特征值是 $3\\pm2$。\nstep: 标准形\nask: 三个特征值从小到大填，它们就是标准形的系数。\ndo: true\nanswer: [1, 2, 5]\nshow: 特征值 $1,2,5$（核对：和 $=\\operatorname{tr}A=\\calc{tr(A2)}$，积 $=|A|=\\calc{det(A2)}$），标准形 $f=y_1^2+2y_2^2+5y_3^2$。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 5,
+      "title": "形状没变",
+      "md": "$\\mathbf x=Q\\mathbf y$ 只是把坐标轴转到特征向量的方向上，曲面的形状、大小都不变。先看 $x_1=0$ 这个截面：$3x_2^2+4x_2x_3+3x_3^2=1$。\n\n```scene\nid: sc-sec\ntitle: 截面 x₁ = 0\nq: 拖滑块（或点播放）：蓝、粉两根坐标轴转到特征向量的方向（虚线），黄色椭圆一动不动，只是在新坐标下摆正了。\nlet M = [[3, 2], [2, 3]]\nslider t 0 1 = 0 play label=\"转轴\"\neigen M\ncurve rot(-45)*[cos(s), sin(s)/sqrt(5)] color=yellow\nvector rot(-45*t)*[1.2, 0] color=blue label=y1\nvector rot(-45*t)*[0, 1.2] color=pink label=y3\n```\n\n```quiz\nid: qz-surf\ntitle: f = 1 是什么\nq: 第 (2) 题的标准形是 $y_1^2+2y_2^2+5y_3^2$。$f=1$ 是什么曲面？\n- [x] 椭球面\n- [ ] 单叶双曲面\n- [ ] 椭圆柱面\n- [ ] 双叶双曲面\nexplain: 三个系数都是正的：$y_1^2+\\dfrac{y_2^2}{1/2}+\\dfrac{y_3^2}{1/5}=1$，半轴 $1,\\tfrac{1}{\\sqrt2},\\tfrac{1}{\\sqrt5}$ 的椭球面。正交变换只转坐标轴，所以原来的 $f=1$ 也是这个椭球面。有一个系数是 0 是柱面，有负的是双曲面。\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 6,
+      "title": "顺序主子式练一练",
+      "md": "换几个矩阵，练顺序主子式和正定的判断。\n\n```practice\nid: pr-pd\ntitle: 顺序主子式\ntype: custom\ncount: 3\npick M = mat(3, 3, -2, 2)\npick c = int(-2, 1)\nlet S = M'*M + c*E(3)\nwhere det(S) != 0\nq: 二次型的矩阵是 $A=\\calc{S}$。依次写出三个顺序主子式 $D_1,D_2,D_3$；第 4 格：正定填 $1$，不正定填 $0$。\nanswer: [dot([1, 0, 0], S*[1, 0, 0]), det([[1, 0, 0], [0, 1, 0]]*S*[[1, 0], [0, 1], [0, 0]]), det(S), (dot([1, 0, 0], S*[1, 0, 0]) > 0)*(det([[1, 0, 0], [0, 1, 0]]*S*[[1, 0], [0, 1], [0, 0]]) > 0)*(det(S) > 0)]\nbefore: (D_1,\\ D_2,\\ D_3,\\ \\text{正定?})=\nhint: $D_1=a_{11}$，$D_2$ 是左上角 $2\\times2$ 的行列式，$D_3=|A|$。三个都大于 0 才正定。\nexplain: 答案是 $\\calc{[dot([1, 0, 0], S*[1, 0, 0]), det([[1, 0, 0], [0, 1, 0]]*S*[[1, 0], [0, 1], [0, 0]]), det(S)]}$。三个都大于 0 才正定，有一个不是就不正定。\n```"
+    }
+  ]
+}

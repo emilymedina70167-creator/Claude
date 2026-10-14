@@ -147,6 +147,7 @@ export function readNumber(text) {
 //         group?: 'f'（同一行里 group 一样的几格不管先后，比的是写了哪些：物理块里放了哪几页），
 //         vec?: true（一个向量：几个数用空格或逗号隔开，括号可有可无） }
 //   copy: true 每一行后面有「照上一行抄」（页面置换这种大部分照抄、只改一格的表）
+//   extra: [{ label, v, num? }] 表下面再写几个数（散列表填完再写两个 ASL），表都对了才判它们
 
 const FILL_BLANK = /^(|-|—|–|－|无|空)$/;
 const INF_RE = /^(∞|inf|infinity|oo|无穷|无穷大)$/i;
@@ -234,11 +235,20 @@ export function checkFill(table, values) {
     if (!cellOk(cell, text)) return { ok: false, first: { r, c, empty: false }, okCount, total: order.length };
     okCount++;
   }
-  return { ok: true, first: null, okCount, total: order.length };
+  const extras = table.extra || [];
+  const total = order.length + extras.length;
+  for (let i = 0; i < extras.length; i++) {
+    const text = values?.extra?.[i] ?? '';
+    if (normCell(text) === '') return { ok: false, first: { extra: i, empty: true }, okCount, total };
+    if (!cellOk(extras[i], text)) return { ok: false, first: { extra: i, empty: false }, okCount, total };
+    okCount++;
+  }
+  return { ok: true, first: null, okCount, total };
 }
 
 /** 这一格叫什么（「第 3 行『块 2』」「访问 1 那一列的『块 2』」） */
 export function cellName(table, r, c) {
+  if (r && typeof r === 'object') return `「${table.extra?.[r.extra]?.label ?? '下面那一格'}」`;
   const row = table.rows[r], col = table.head[c] ?? `第 ${c + 1} 格`;
   const rl = row.label !== undefined && row.label !== '' ? String(row.label) : `第 ${r + 1} ${table.dir === 'col' ? '列' : '行'}`;
   return table.dir === 'col' ? `「${rl}」那一列的「${col}」` : `「${rl}」那一行的「${col}」`;
@@ -296,7 +306,7 @@ export function misreadAnswer(given, variants = [], same = (a, b) => normCell(a)
 }
 
 /**
- * 作者对填表的要求：given: 2（前 2 行 / 列直接给出）、cols: 块 1, 缺页（只填这几列，别的直接给出）。
+ * 作者对填表的要求：given: 2（前 2 行 / 列直接给出）、rows: 3（只要前 3 行 / 列）、cols: 块 1, 缺页（只填这几列，别的直接给出）。
  * 返回 { table（改好 given 的新表）, errors }
  */
 export function fillSpec(table, fields = {}) {
@@ -309,6 +319,12 @@ export function fillSpec(table, fields = {}) {
     else if (n >= t.rows.length) errors.push(`given: ${n} 太多了：这张表一共 ${t.rows.length} ${unit}，全给出就没得填了`);
     else for (let r = 0; r < n; r++) t.rows[r].cells.forEach((c) => { c.given = true; });
   }
+  if (fields.rows !== undefined && String(fields.rows).trim() !== '') {
+    // 只填前几行 / 前几列（比如排序只写前 3 趟）
+    const n = Number(fields.rows);
+    if (!Number.isInteger(n) || n < 1) errors.push(`rows: 写只填前几${unit}（正整数），现在是「${fields.rows}」`);
+    else t.rows = t.rows.slice(0, n);
+  }
   if (fields.cols !== undefined && String(fields.cols).trim() !== '') {
     const want = String(fields.cols).split(/[,，、]/).map((x) => x.trim()).filter(Boolean);
     const norm = (x) => String(x).replace(/\s+/g, '').toLowerCase();
@@ -317,6 +333,6 @@ export function fillSpec(table, fields = {}) {
     if (bad.length) errors.push(`cols: 没有「${bad.join('、')}」（这张表的${t.dir === 'col' ? '行' : '列'}：${t.head.join('、')}）`);
     else t.rows.forEach((row) => row.cells.forEach((c, i) => { if (!idx.includes(i)) c.given = true; }));
   }
-  if (!fillOrder(t).length) errors.push('这张表没有要填的格子了');
+  if (!fillOrder(t).length && !(t.extra || []).length) errors.push('这张表没有要填的格子了');
   return { table: t, errors };
 }
