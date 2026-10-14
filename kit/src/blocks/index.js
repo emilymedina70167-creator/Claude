@@ -27,6 +27,7 @@ import { treeEngine } from '../engines/tree.js';
 import { kmpEngine, hashEngine, bsearchEngine } from '../engines/search.js';
 import { netEngine } from '../engines/graph.js';
 import { traceEngine } from '../engines/trace.js';
+import { schedEngine, pagingEngine, bankerEngine, diskEngine } from '../engines/os.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -42,4 +43,8 @@ export const blocks = {
   bsearch: stepperBlock(bsearchEngine),
   net: stepperBlock(netEngine),
   trace: stepperBlock(traceEngine),
+  sched: stepperBlock(schedEngine),
+  paging: stepperBlock(pagingEngine),
+  banker: stepperBlock(bankerEngine),
+  disk: stepperBlock(diskEngine),
 };

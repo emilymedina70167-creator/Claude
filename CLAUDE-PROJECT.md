@@ -684,6 +684,23 @@ void InsertSort(ElemType A[], int n){
 - `mode: quiz`：只给代码，我写出结果：`quiz: output` 写输出（有 printf 时默认就是它），`quiz: A` 写运行完数组 A 的内容。
 - 课堂里：`figure target=tr-ins set step=20`、`play step 0 40 20s`；`highlight 7` / `board mark target=tr-ins item=7` 指第 7 行代码。
 
+### sched / paging / banker / disk：操作系统的过程
+
+<!-- 科目：操作系统 -->
+
+```sched
+id: os-rr
+title: 时间片轮转
+algo: rr q=2
+procs: P1 0 5, P2 2 4, P3 4 1, P4 5 6
+ask: next
+```
+
+- **`sched` 进程调度**：`procs:` 一个进程一组「名字 到达时间 运行时间 [优先级]」，逗号隔开（`P1 0 3, P2 2 6`）。`algo:` 选 `fcfs`、`sjf`（非抢占）、`srtf`（抢占式短作业优先 / 最短剩余时间）、`hrrn`（高响应比，每次调度时算出各进程的响应比写在说明里）、`prio`（优先级，非抢占）、`pprio`（优先级，抢占）、`rr q=2`（时间片轮转）。优先级默认数越小越高，写 `prio: large` 改成数越大越高。RR 的约定（王道）：同一时刻有新进程到达、又有进程用完时间片，新进程先入队。画面：甘特图（同一个进程同一种颜色）、就绪队列、进程表；最后一步算周转、带权周转、等待时间和平均值。`ask:` 能问 `next`（接下来运行谁，在就绪队列里点）、`avg`（平均周转时间，可以写分数）。`mode: quiz`：默认写 CPU 上依次运行的进程，`quiz: avg` / `quiz: wait` 写平均周转 / 平均等待时间。
+- **`paging` 页面置换**：`refs: 7 0 1 2 0 3 0 4`（页面引用串），`frames: 3`（物理块数），`algo:` 选 `fifo`、`lru`、`opt`、`clock`（简单 CLOCK：访问位、指针）。画成王道那张表：一列一次访问，每个物理块一行，缺页打 ✓，FIFO 下面写进入的先后、LRU 写最近使用的先后，CLOCK 标访问位和指针。一开始调入也算缺页。OPT 里以后都不用的页有几个时，换先调入的那个。`ask:` 能问 `hit`（命中还是缺页）、`victim`（换出哪一页，在表的最后一列点）、`faults`（一共缺页几次）。`mode: quiz`：缺页次数，`quiz: victims` 写依次换出的页。想看 Belady 现象，就放两个 FIFO，物理块 3 和 4。
+- **`banker` 银行家算法**：`avail: 3 3 2`，`max:` 和 `alloc:` 一行一个进程（`P0 7 5 3; P1 3 2 2; …`），可选 `request: P1 1 0 2`（某个进程提出的请求：先查是否超过 Need、是否超过 Available，再试着分配看安不安全）。表里有 Max、Allocation、Need、每个进程是第几个运行完的；安全性算法每次从编号小的开始找 Need ≤ Work 的进程（能满足的有好几个时，选哪个都对）。`ask:` 能问 `next`（下一个能运行完的进程，点进程名）、`request`（这个请求能不能分配）。`mode: quiz`：写一个安全序列（任何一个对的都算），有 `request` 时写「能」或「不能」。
+- **`disk` 磁盘调度**：`requests: 98 183 37 122 14 124 65 67`，`head: 53`，`algo:` 选 `fcfs`、`sstf`、`scan`、`cscan`、`look`、`clook`；`dir: up`（往磁道号大的方向，默认）或 `down`；`tracks: 0-199`（磁道范围，默认 0-199）。SCAN、C-SCAN 走到磁盘尽头才掉头 / 跳回，LOOK、C-LOOK 到最远的请求就掉头 / 跳回；C-SCAN、C-LOOK 跳回去的距离默认不算，`jump: count` 算上。**有的教材题目里的「SCAN」走到最远的请求就掉头，那其实是 LOOK：按题目说的选。**画面是磁头移动的折线图（纵向是时间）。`ask:` 能问 `next`（下一个去哪个磁道）、`total`（一共移动多少）。`mode: quiz`：移动的磁道总数，`quiz: order` 写服务顺序。
+
 ### 排序（数据结构）：array / shellsort / sortpass
 
 <!-- 科目：数据结构 -->
