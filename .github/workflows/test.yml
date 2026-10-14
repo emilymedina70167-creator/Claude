@@ -1,0 +1,23 @@
+# 每次推送、每个合并请求：跑单元测试，再确认提交的 kit/dist/la-kit.js 和源码一致
+#（改了 kit/src/ 或 CLAUDE-PROJECT.md 第三节却忘了重新 build，这里会红）
+name: 测试
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: 打包产物和源码一致
+        run: |
+          npm run build
+          git diff --exit-code --stat kit/dist/la-kit.js || { echo "::error::kit/dist/la-kit.js 和源码对不上：本地 npm run build 之后把它一起提交"; exit 1; }

@@ -112,8 +112,9 @@ function matrixGeom(root, spec) {
   const rows = cellRects(f.m);
   const cells = (pick) => rows.flatMap((r, i) => r.filter((c, j) => c && pick(i, j)));
   if (s.kind === 'all') return { geoms: [{ box: union(cells(() => true)) }] };
-  // 一行（一列）的框收紧，挨着的几行各框各的：表格的格子有内边距，往里收一点；公式里的格子贴着字，往外留一点
-  const inset = table ? -4 : 2;
+  // 一行（一列）的框收紧，挨着的几行各框各的：表格的格子有内边距（7px），往里收一点，两行的框之间留出 10px；
+  // 公式里的格子贴着字，往外留一点
+  const inset = table ? -5 : 2;
   if (s.kind === 'row') return { geoms: [{ box: union(cells((i) => i === s.i - 1)), tight: 'y', inset }] };
   if (s.kind === 'col') return { geoms: [{ box: union(cells((i, j) => j === s.j - 1)), tight: 'x', inset }] };
   if (s.kind === 'entry') {

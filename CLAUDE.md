@@ -21,7 +21,9 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 ```
 
 - 改了 `kit/src/` 或 `CLAUDE-PROJECT.md` 第三节，都要重新 build 并提交 `kit/dist/la-kit.js`。产物要和源码一致（`npm run build` 之后 `git status` 应该是干净的）。
+- GitHub 上每次推送都会跑 `.github/workflows/test.yml`：`npm test`，再 build 一遍看 `kit/dist/la-kit.js` 和提交的是否一样（忘了重新 build 会红）。
 - 浏览器里看效果：在一个目录里放 `kit/dist/la-kit.js` 和 `kit/examples/*.html`，起一个静态服务器打开。
+  - 示例页开头的 `<!doctype html>`、`<meta charset="utf-8">` 不能删：`la-kit.js` 的正则和 `String.raw` 里有中文（不能转义，转了课堂说明会变成 `\uXXXX`），浏览器不按 UTF-8 读就整页报错；没有 doctype 时 KaTeX 在怪异模式下排版不对。claude.ai 发布时会自己补上，所以课件模板里不用写。
   - `unit-matrix-vector.html`：引导模式示范单元（也是组件库 artifact 的页面）
   - `live-demo.html?dev`：实时黑板，右上角开发面板扮演对话里的 Claude
   - `class-demo.html?dev`：课堂模式，模拟老师按剧本回放（不调用 Claude）；剧本里故意有一段写错的组件（`circle` 那行），控制台报「看不懂这一行」是正常的。在输入框里打暗号看教具：「测试:教具」（`let` 块 + `matrix` 的乘积 + 逐行 `mark` + `\calc`）、「测试:幂」（滑块和 `figure play` 让矩阵动起来）、「测试:指图」（图上的 `label=` / `at=` 标注）、「测试:出题」（`practice` 的自定义题型）、「测试:公式」（写含 n 的式子）、「测试:示意图」（`sketch`）、「测试:推导」（`derive` + `figure play step`）、「测试:原图」（`image`，本地用一张模拟的讲义图）
