@@ -27,9 +27,9 @@ export const bin = (v, bits) => v.toString(2).padStart(bits, '0');
 
 /**
  * fields：[{ name, bits, cls?, value? }]，从高位到低位，位数加起来是总宽度。
- * opts：hi（要强调的字段名）、note（字段下面除了十进制再写点什么：{ 名字: 文字 }）
+ * opts：hi（要强调的字段名）、note（字段下面除了十进制再写点什么：{ 名字: 文字 }）、values: false 不写值（IP 地址这类十进制值没意义的）
  */
-export function bitFields(v, fields, { hi = [], note = {}, pick = false } = {}) {
+export function bitFields(v, fields, { hi = [], note = {}, pick = false, values = true } = {}) {
   const width = fields.reduce((a, f) => a + f.bits, 0);
   const b = bin(BigInt(v), width);
   let pos = 0, cell = 0;
@@ -42,7 +42,7 @@ export function bitFields(v, fields, { hi = [], note = {}, pick = false } = {}) 
     // 四位一组按整个位串从低位往高位分（每组正好是一位十六进制），不按字段分
     const startBit = pos - f.bits;
     const bitsHtml = [...part].map((c, i) => { const fromRight = width - 1 - (startBit + i); return `<span data-cmd="${++cell}"${i > 0 && fromRight % 4 === 3 ? ' class="bv-gap"' : ''}>${c}</span>`; }).join('');
-    h += `<div class="${cls}"${pick ? ` data-pick="${esc(f.name)}"` : ''} data-label="${esc(f.name)}"><div class="bv-name">${esc(f.name)}<small>${f.bits} 位</small></div><div class="bv-bits">${bitsHtml}</div><div class="bv-val">${f.bits ? `${val}${note[f.name] ? `<small>${esc(note[f.name])}</small>` : ''}` : ''}</div></div>`;
+    h += `<div class="${cls}"${pick ? ` data-pick="${esc(f.name)}"` : ''} data-label="${esc(f.name)}"><div class="bv-name">${esc(f.name)}<small>${f.bits} 位</small></div><div class="bv-bits">${bitsHtml}</div>${values ? `<div class="bv-val">${f.bits ? `${val}${note[f.name] ? `<small>${esc(note[f.name])}</small>` : ''}` : ''}</div>` : ''}</div>`;
   }
   return h + '</div>';
 }

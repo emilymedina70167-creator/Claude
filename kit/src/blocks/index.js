@@ -30,6 +30,7 @@ import { traceEngine } from '../engines/trace.js';
 import { schedEngine, pagingEngine, bankerEngine, diskEngine } from '../engines/os.js';
 import { addrEngine } from '../engines/addr.js';
 import { bitsEngine, cacheEngine, pipeEngine } from '../engines/co.js';
+import { subnetEngine, tcpEngine, windowEngine } from '../engines/net4.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -53,4 +54,7 @@ export const blocks = {
   bits: stepperBlock(bitsEngine),
   cache: stepperBlock(cacheEngine),
   pipe: stepperBlock(pipeEngine),
+  subnet: stepperBlock(subnetEngine),
+  tcp: stepperBlock(tcpEngine),
+  window: stepperBlock(windowEngine),
 };

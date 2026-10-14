@@ -1402,3 +1402,45 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .co-pipe td.co-ex { background: rgb(var(--yellow-rgb) / 0.2); } .co-pipe td.co-mem { background: rgb(var(--pink-rgb) / 0.2); } .co-pipe td.co-wb { background: rgb(var(--green-rgb) / 0.2); }
 .co-pipe td.co-stall { background: repeating-linear-gradient(45deg, rgb(var(--coral-rgb) / 0.25) 0 5px, transparent 5px 10px); color: var(--coral); }
 .co-pipe td.co-wait { color: var(--muted); }
+/* 计算机网络（engines/net4.js）：IP 地址的位、子网条、路由表、cwnd 折线图、时序图 */
+.cn-ip { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
+.cn-h { font: 600 14px var(--sans); color: var(--chalk); }
+.cn-dst { font: 600 15px var(--mono); color: var(--yellow); letter-spacing: 0.03em; overflow-x: auto; }
+.cn-kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin-top: 6px; font: 15px var(--sans); }
+.cn-kv div { display: contents; }
+.cn-kv span { color: var(--muted); }
+.cn-kv b { font: 600 16px var(--mono); color: var(--yellow); }
+.cn-bar { position: relative; height: 34px; margin: 8px 0; border-radius: 8px; background: rgb(var(--shade-rgb) / 0.2); overflow: hidden; }
+.cn-seg { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; border-right: 2px solid rgb(var(--board-rgb)); background: rgb(var(--blue-rgb) / 0.35); font: 600 12.5px var(--sans); color: var(--chalk); overflow: hidden; }
+.cn-seg.cn-cur { background: rgb(var(--yellow-rgb) / 0.55); color: var(--grp-ink); }
+tr.cn-row-cur td { background: rgb(var(--yellow-rgb) / 0.1); }
+tr.cn-best td { background: rgb(var(--green-rgb) / 0.18); color: var(--green); font-weight: 700; }
+.sv-picking .cn-rt td[data-pick] { cursor: pointer; outline: 2px dashed color-mix(in srgb, var(--lav) 55%, transparent); }
+.cn-aggs { display: flex; flex-direction: column; gap: 4px; }
+.cn-agg { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.cn-agg span { min-width: 9em; font: 14px var(--mono); color: var(--muted); }
+.cn-agg code { font: 15px var(--mono); color: var(--body); }
+.cn-agg code b { color: var(--yellow); }
+.cn-cwnd .cn-axis, .cn-seq .cn-life { stroke: rgb(var(--chalk-rgb) / 0.4); stroke-width: 1.5; }
+.cn-cwnd .cn-tk { fill: var(--muted); font: 11px var(--sans); text-anchor: middle; }
+.cn-cwnd .cn-tky { text-anchor: end; }
+.cn-cwnd .cn-ss { stroke: var(--pink); stroke-dasharray: 5 4; stroke-width: 1.5; }
+.cn-cwnd .cn-line { fill: none; stroke: var(--blue); stroke-width: 2.5; }
+.cn-cwnd .cn-pt.cn-ss1 { fill: var(--blue); } .cn-cwnd .cn-pt.cn-ca { fill: var(--green); } .cn-cwnd .cn-pt.cn-ev { fill: var(--coral); }
+.cn-cwnd .cn-evt { fill: var(--coral); font: 11.5px var(--sans); text-anchor: middle; }
+.cn-seq .cn-who { fill: var(--chalk); font: 600 14px var(--sans); text-anchor: middle; }
+.cn-seq .cn-msg { stroke: var(--blue); stroke-width: 2; }
+.cn-seq .cn-msg.cn-new { stroke: var(--yellow); }
+.cn-seq .cn-msg.cn-ackl { stroke: var(--green); }
+.cn-seq .cn-msg.cn-re { stroke: var(--pink); }
+.cn-seq .cn-msg.cn-lost { stroke-dasharray: 5 4; }
+.cn-seq .cn-msgt { fill: var(--yellow); font: 13px var(--mono); text-anchor: middle; paint-order: stroke; stroke: rgb(var(--halo-rgb) / 0.92); stroke-width: 5px; stroke-linejoin: round; }
+.cn-seq .cn-st { fill: var(--muted); font: 12px var(--mono); }
+.cn-seq .cn-arrowhead { fill: rgb(var(--chalk-rgb) / 0.75); }
+.cn-seq .cn-x { fill: var(--coral); font: 700 16px var(--sans); text-anchor: middle; }
+.cn-seq .cn-lbl { fill: var(--chalk); font: 12px var(--mono); text-anchor: end; paint-order: stroke; stroke: rgb(var(--halo-rgb) / 0.92); stroke-width: 4px; }
+.cn-seq .cn-lbl.cn-lbl-r { text-anchor: start; fill: var(--green); }
+.cn-seq .cn-tk { fill: var(--muted); font: 11px var(--sans); text-anchor: end; }
+.cn-seq .cn-now { stroke: var(--yellow); stroke-dasharray: 2 4; }
+.cn-wnd { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.cn-legend { font-size: 12.5px; }
