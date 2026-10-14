@@ -7,7 +7,7 @@ import { parseFields } from './parse.js';
 import { session } from './session.js';
 import { widget, mdToHtml, escapeHtml, calcProblems } from './blocks/common.js';
 import { figureControls } from './plot.js';
-import { commonSpec, resolveAsks, checkAsk, askAnswerText, stepLabel } from './stepperspec.js';
+import { commonSpec, resolveAsks, checkAsk, askAnswerText, stepLabel, parseAskField } from './stepperspec.js';
 import { markDraft } from './drafts.js';
 import { answerWidget, textAnswerSpec } from './blocks/answer.js';
 
@@ -23,6 +23,7 @@ const plainText = (s) => String(s || '').replace(/\$/g, '').replace(/\s+/g, ' ')
  *     第 i 个格子 / 结点写 data-cmd="i"（课堂的 highlight i 靠它，从 1 数）
  *   quiz?(输入, run, fields) → { q, type: 'seq' | 'bin' | 'hex', answer, explain? }（mode: quiz 用）
  *   problems?(输入, run) → [中文提醒]（参数能用但不理想时，比如数据已经有序）
+ *   defaultAsk?(输入) → 没写 ask: 时默认问哪些（trace 写了 predict: 就问 predict）
  */
 export function stepperBlock(engine) {
   block.stepper = true; // render.js：演示组件都是「图」（课堂 figure 能动），也可能有作答，要写 id
@@ -31,6 +32,8 @@ export function stepperBlock(engine) {
     const { fields } = parseFields(src);
     const common = commonSpec(fields);
     const input = engine.parse(fields, src);
+    // 有的引擎自带要问的（trace 的 predict:）：没写 ask: 时照它问
+    if (!common.ask && engine.defaultAsk) { const d = engine.defaultAsk(input); if (d) common.ask = parseAskField(d); }
     const run = engine.run(input);
     const steps = run.steps;
     const last = steps.length - 1;

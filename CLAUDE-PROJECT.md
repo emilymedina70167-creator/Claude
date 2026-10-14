@@ -647,6 +647,37 @@ ask: next
   - `critical`：关键路径（有向带权图，边是活动）。一步一个事件算 ve（拓扑序）、vl（逆拓扑序），最后列出每个活动的 e、l、l − e，关键活动标绿。`ask:` 能问 `ve`、`vl`（这个事件的值）、`length`（关键路径长度）。
 - `mode: quiz`：bfs / dfs 写遍历序列；prim / kruskal 写权值之和；dijkstra 写各顶点被确定的顺序；topo 写一个拓扑序列（任何一个对的都算）；critical 写关键路径长度。floyd 没有 quiz。
 
+### trace：代码逐行跟踪（真的把 C 代码跑一遍）
+
+<!-- 科目：数据结构 操作系统 组成原理 -->
+
+```trace
+id: tr-ins
+title: 直接插入排序（带哨兵）
+call: InsertSort(A, 5)
+let A = [0, 38, 49, 65, 13, 27]
+predict: 7 if i == 4 -> j
+code:
+void InsertSort(ElemType A[], int n){
+    int i, j;
+    for(i=2;i<=n;i++)
+        if(A[i]<A[i-1]){
+            A[0]=A[i];
+            for(j=i-1;A[0]<A[j];--j)
+                A[j+1]=A[j];
+            A[j+1]=A[0];
+        }
+}
+```
+
+- 页面里有一个 C 的解释器，**每执行一行记一步**：左边代码高亮这一行，右边是调用栈、这一层的变量（这一步变了的亮一下）、数组（`i`、`j`、`low`、`high`、`mid` 这类下标变量画在格子下面；`pointers: i, j` 自己指定）、二维数组的表、输出。说明里写着这一行做了什么（哪个变量从几变成几、条件成立没有、调用、返回）。
+- `code:` **单独一行、放在最后**，下面全是代码（王道的写法照抄）。代码里有 `main` 就从 `main` 跑；没有就写 `call: 函数(参数)`，用 `let A = [0, 38, 49]`、`let n = 5` 给输入（一行一个，数组的下标从 0 数）。
+- 支持：`int` `long` `char` `double` `float` `bool`（`ElemType` 默认是 int，也可以 `typedef`），`#define` 常量，一维、二维数组和 `{…}` 初始化，函数、递归、引用参数 `int &a`，`if` / `for` / `while` / `do-while` / `break` / `continue` / `return`，各种运算符，`printf`、`putchar`、`puts`，没写的 `swap(a, b)` 当成交换两个变量。第一期**不支持指针、结构体、`malloc`、`switch`**：写了会报出来。
+- 下标越界、变量没赋值就用、死循环（超过 1 万步）、递归没出口，都会停在那一行说清楚（如果是有意的，正好给我看错在哪）。
+- `predict: 7 if i == 4 -> j`：先猜。走到第 7 行（`i == 4` 的那一次）先停下，问我「执行完这一行，j 是多少」，答了才往下走。几个用 `;` 隔开；`if` 可以不写（第一次走到就问）。写了 `predict` 就自动问；没走到的 predict 自检会提醒。另外 `ask: cond`（这次条件成立吗）、`ask: line`（接下来执行第几行）可以练控制流。
+- `mode: quiz`：只给代码，我写出结果：`quiz: output` 写输出（有 printf 时默认就是它），`quiz: A` 写运行完数组 A 的内容。
+- 课堂里：`figure target=tr-ins set step=20`、`play step 0 40 20s`；`highlight 7` / `board mark target=tr-ins item=7` 指第 7 行代码。
+
 ### 排序（数据结构）：array / shellsort / sortpass
 
 <!-- 科目：数据结构 -->

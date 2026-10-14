@@ -1295,3 +1295,28 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .sv-gtbl td.sv-kline { background: rgb(var(--blue-rgb) / 0.08); }
 .sv-adjlist { margin-top: 8px; font: 14.5px/1.6 var(--mono); color: var(--body); }
 .sv-adjlist b { color: var(--chalk); }
+/* 代码逐行跟踪（engines/trace.js）：宽屏左边代码、右边变量；窄屏上下排 */
+.tr-wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 760px) { .tr-wrap { grid-template-columns: 1fr; } .sv-trace .tr-code { max-height: 300px; } }
+.tr-code { margin: 0; padding: 8px 0; font: 13.5px/1.65 var(--mono); background: rgb(var(--shade-rgb) / 0.24); color: var(--body); border-radius: 12px; overflow: auto; max-height: 460px; }
+.tr-line { display: block; padding: 0 12px 0 0; white-space: pre; border-left: 3px solid transparent; }
+.tr-line i { display: inline-block; width: 2.6em; padding-right: .8em; text-align: right; color: var(--muted); font-style: normal; user-select: none; }
+.tr-line.tr-cur { background: var(--hl); border-left-color: var(--yellow); color: var(--chalk); }
+.tr-line.tr-err { background: rgb(var(--coral-rgb) / 0.16); border-left-color: var(--coral); }
+.sv-picking .tr-line[data-pick] { outline: none; cursor: pointer; }
+.tr-code-q { max-height: 360px; margin: 8px 0; }
+.tr-state { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tr-stack { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font: 13.5px var(--mono); color: var(--muted); }
+.tr-stack span.tr-top { color: var(--blue); font-weight: 600; }
+.tr-stack i { font-style: normal; color: var(--muted); }
+.tr-vars { display: flex; flex-wrap: wrap; gap: 6px; }
+.tr-vars-h { font: 13px var(--sans); color: var(--muted); align-self: center; }
+.tr-var { font: 500 15px/1.5 var(--mono); padding: 2px 10px; border-radius: 999px; background: rgb(var(--shade-rgb) / 0.2); color: var(--yellow); border: 1.5px dashed rgb(var(--yellow-rgb) / 0.4); }
+.tr-var b { color: var(--muted); font-weight: 400; margin-right: 2px; }
+.tr-var small { color: var(--pink); margin-right: 2px; }
+.tr-var.tr-chg { border-style: solid; border-color: var(--yellow); background: rgb(var(--yellow-rgb) / 0.14); }
+.tr-arr { overflow-x: auto; }
+.tr-arr-name { font: 600 14px var(--mono); color: var(--chalk); margin-bottom: 2px; }
+.tr-out { border-radius: 10px; background: rgb(var(--shade-rgb) / 0.3); padding: 6px 10px; }
+.tr-out-h { font: 12.5px var(--sans); color: var(--muted); }
+.tr-out pre { margin: 2px 0 0; font: 14px/1.5 var(--mono); color: var(--green); white-space: pre-wrap; }
