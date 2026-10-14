@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseMatrix, matrixEnv, matrixItems, floatEnv, snapSlider, flights, changedCells, checkMark, cellTeX } from '../kit/src/matrixspec.js';
-import { shapeFor, placeNote, gapBetween, union, rng, arrowPath, leaderPath } from '../kit/src/markdraw.js';
+import { shapeFor, placeNote, gapBetween, union, rng, arrowPath, leaderPath, strokeObstacles } from '../kit/src/markdraw.js';
 import { Q } from '../kit/src/exact.js';
 
 const items = (src, state = {}) => {
@@ -158,6 +158,26 @@ test('markdraw：逐行框的时候，相邻两行的框线不打架', () => {
     const b = Math.min(...xs(shapeFor('box', { box: { x: 60, y: 0, w: 60, h: 120 }, tight: 'x', inset: -5 }, `c2:${s}`).strokes[0]));
     assert.ok(a + half < b - half, `seed ${s}：相邻两列的框碰到了`);
   }
+});
+
+test('markdraw：示意图里的线，旁注躲开（方块只躲边，里面能写）', () => {
+  const block = { x: 100, y: 100, w: 120, h: 120 };
+  const obs = strokeObstacles([{ box: block, closed: true }, { box: { x: 260, y: 40, w: 12, h: 200 }, closed: false }]);
+  assert.equal(obs.length, 5, '方块四条边 + 括号一块');
+  const inside = { x: 130, y: 140, w: 60, h: 24 };
+  const onEdge = { x: 190, y: 140, w: 60, h: 24 };
+  const hit = (r) => obs.some((o) => r.x < o.x + o.w && o.x < r.x + r.w && r.y < o.y + o.h && o.y < r.y + r.h);
+  assert.ok(!hit(inside), '方块里面空着的地方不算');
+  assert.ok(hit(onEdge), '压在方块的右边上要躲');
+  assert.ok(hit({ x: 250, y: 100, w: 40, h: 20 }), '压在括号上要躲');
+  assert.deepEqual(strokeObstacles([{ box: { x: 0, y: 0, w: 4, h: 4 }, closed: true }]), [{ x: -4, y: -4, w: 12, h: 12 }], '小得没有里面的形状整个躲');
+  assert.deepEqual(strokeObstacles([{ box: null }, { box: { x: NaN, y: 0, w: 1, h: 1 } }]), []);
+
+  // 放旁注：目标在方块里靠右，右边紧挨着就是方块的边。把边当障碍时，旁注不再压在边上
+  const target = { x: 160, y: 140, w: 40, h: 40 };
+  const area = { x0: 0, y0: 0, x1: 400, y1: 300 };
+  const at = placeNote(target, { w: 90, h: 24 }, area, { obstacles: obs });
+  assert.ok(!hit({ x: at.x, y: at.y, w: 90, h: 24 }), `旁注 (${at.x}, ${at.y}) 压到了线`);
 });
 
 test('markdraw：形状、箭头、旁注放哪', () => {

@@ -188,6 +188,25 @@ export function arrowPath(from, to, seed) {
   return `M${P(a)} Q${P(c)} ${P(b)} M${P(h1)} L${P(b)} L${P(h2)}`;
 }
 
+/**
+ * 示意图（sketch）里画出来的线，当作旁注要躲开的地方。shapes：[{ box, closed }]。
+ * 封闭的形状（方块、圆）只躲四条边：框里空着的地方旁注照样能写；线、折线、路径躲它占的范围。t：线的粗细加余量
+ */
+export function strokeObstacles(shapes, t = 8) {
+  const h = t / 2;
+  const out = [];
+  for (const { box: b, closed } of shapes || []) {
+    if (!b || !Number.isFinite(b.x) || !Number.isFinite(b.y) || !(b.w >= 0) || !(b.h >= 0)) continue;
+    if (closed && b.w > t && b.h > t) {
+      out.push(
+        { x: b.x - h, y: b.y - h, w: b.w + t, h: t }, { x: b.x - h, y: b.y + b.h - h, w: b.w + t, h: t },
+        { x: b.x - h, y: b.y - h, w: t, h: b.h + t }, { x: b.x + b.w - h, y: b.y - h, w: t, h: b.h + t },
+      );
+    } else out.push({ x: b.x - h, y: b.y - h, w: b.w + t, h: b.h + t });
+  }
+  return out;
+}
+
 const SIDE_ORDER = ['right', 'above', 'below', 'left'];
 const GAPS = [8, 30, 60, 100, 150];
 const ALIGNS = ['center', 'start', 'end'];
