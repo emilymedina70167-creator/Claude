@@ -48,7 +48,74 @@ const FUNCS = {
   poissonpmf: (k, l) => (Number.isInteger(num(k)) && num(k) >= 0 ? Math.exp(-num(l)) * num(l) ** num(k) / fact(num(k)) : 0),
   exppdf: (x, l = 1) => (num(x) < 0 ? 0 : num(l) * Math.exp(-num(l) * num(x))),
   unifpdf: (x, a = 0, b = 1) => (num(x) >= num(a) && num(x) <= num(b) ? 1 / (num(b) - num(a)) : 0),
+  // 计算机课：整数、进制、位运算（位运算只对非负整数；负数先用 unsigned(x, n) 换成 n 位的无符号数）
+  log2: (x) => Math.log2(num(x)),
+  mod: (a, b) => { const m = intOf(b, '模'); if (m === 0) throw new Error('mod 的模不能是 0'); return ((intOf(a, 'mod') % m) + m) % m; },
+  div: (a, b) => { const d = intOf(b, '除数'); if (d === 0) throw new Error('除以 0 了'); return Math.floor(intOf(a, 'div') / d); },
+  gcd: (a, b) => gcd(intOf(a, 'gcd'), intOf(b, 'gcd')),
+  lcm: (a, b) => { const x = intOf(a, 'lcm'), y = intOf(b, 'lcm'); return x && y ? Math.abs(x * y) / gcd(x, y) : 0; },
+  and: (a, b) => Number(BigInt(uintOf(a)) & BigInt(uintOf(b))),
+  or: (a, b) => Number(BigInt(uintOf(a)) | BigInt(uintOf(b))),
+  xor: (a, b) => Number(BigInt(uintOf(a)) ^ BigInt(uintOf(b))),
+  not: (a, n) => Number(BigInt(uintOf(a, bitsOf(n))) ^ ((1n << BigInt(bitsOf(n))) - 1n)),
+  shl: (a, k) => uintOf(a) * 2 ** uintOf(k, 64),
+  shr: (a, k) => Math.floor(uintOf(a) / 2 ** uintOf(k, 64)),
+  bit: (a, i) => Math.floor(uintOf(a) / 2 ** uintOf(i, 64)) % 2,
+  signed: (x, n) => { const b = bitsOf(n), v = uintOf(x, b); return v >= 2 ** (b - 1) ? v - 2 ** b : v; },
+  unsigned: (x, n) => { const b = bitsOf(n), v = intOf(x, 'unsigned'); if (v < -(2 ** (b - 1)) || v >= 2 ** b) throw new Error(`${v} 用 ${b} 位放不下`); return ((v % 2 ** b) + 2 ** b) % 2 ** b; },
+  // 写成二进制 / 十六进制的文字（只能直接写出来，不能再拿去算）：负数写成 n 位补码
+  bin: (x, n) => radixText(x, n, 2),
+  hex: (x, n) => radixText(x, n, 16),
 };
+
+function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) [a, b] = [b, a % b]; return a; }
+function intOf(x, what) {
+  const v = num(x);
+  if (!Number.isInteger(v)) throw new Error(`${what} 要整数（现在是 ${v}）`);
+  return v;
+}
+function bitsOf(n) {
+  if (n === undefined) throw new Error('要写位数，比如 not(x, 8)、signed(x, 8)');
+  const b = intOf(n, '位数');
+  if (b < 1 || b > 64) throw new Error('位数写 1 到 64');
+  return b;
+}
+// 非负整数；给了位数 b 时还要放得进 b 位
+function uintOf(x, b) {
+  const v = intOf(x, '位运算');
+  if (v < 0) throw new Error(`位运算只对非负整数（${v} 是负数：先用 unsigned(${v}, 位数) 换成无符号数）`);
+  if (b !== undefined && v >= 2 ** b) throw new Error(`${v} 用 ${b} 位放不下`);
+  return v;
+}
+// 进制文字：n 是位数（二进制）或位数（十六进制的几位）。负数要给位数，写成补码
+export function radixText(x, n, base) {
+  const v = intOf(x, base === 2 ? 'bin' : 'hex');
+  const width = n === undefined ? 0 : intOf(n, '位数');
+  if (width < 0 || width > 64) throw new Error('位数写 1 到 64');
+  let big = BigInt(v);
+  if (big < 0n) {
+    if (!width) throw new Error(`负数要写位数才能写成补码，比如 ${base === 2 ? 'bin' : 'hex'}(${v}, 8)`);
+    const bits = BigInt(base === 2 ? width : width * 4);
+    if (big < -(1n << (bits - 1n))) throw new Error(`${v} 用 ${bits} 位补码放不下`);
+    big += 1n << bits;
+  }
+  const s = big.toString(base).toUpperCase();
+  if (width && s.length > width) throw new Error(`${v} 写成${base === 2 ? '二' : '十六'}进制有 ${s.length} 位，比 ${width} 位长`);
+  return new Radix(s.padStart(width, '0'), base);
+}
+
+// bin / hex 的结果：一串数字，记着是几进制（写出来时四位一组）。不能再参与运算
+export class Radix {
+  constructor(digits, base) { this.digits = digits; this.base = base; }
+  toString() { return this.digits; }
+  // 公式里：等宽字体，从右往左四位一组
+  toTeX() {
+    const groups = [];
+    for (let i = this.digits.length; i > 0; i -= 4) groups.unshift(this.digits.slice(Math.max(0, i - 4), i));
+    return `\\texttt{${groups.join('\\,')}}`;
+  }
+}
+export const isRadix = (x) => x instanceof Radix;
 const CONSTS = { pi: Math.PI, e: Math.E };
 
 function fact(n) { let r = 1; for (let i = 2; i <= n; i++) r *= i; return r; }
@@ -155,7 +222,7 @@ class Parser {
   parsePrimary() {
     const tok = this.next();
     if (!tok) throw new Error('表达式不完整');
-    if (tok.k === 'num') return { t: 'num', v: tok.n };
+    if (tok.k === 'num') return tok.big !== undefined ? { t: 'num', v: tok.n, big: tok.big } : { t: 'num', v: tok.n };
     if (tok.v === '(') { const e = this.parseExpr(); this.expect(')'); return e; }
     if (tok.v === '[') {
       const items = [];
@@ -183,7 +250,7 @@ class Parser {
 
 function tokenize(s) {
   const out = [];
-  const re = /\s*(?:(\d+\.?\d*|\.\d+)|([A-Za-z_Ͱ-Ͽ][\wͰ-Ͽ]*)|(\*\*|<=|>=|==|!=|[-+*/^()[\],'|·<>]))/y;
+  const re = /\s*(?:(0[xX][0-9A-Fa-f][0-9A-Fa-f_]*|0[bB][01][01_]*)|(\d+\.?\d*|\.\d+)|([A-Za-z_Ͱ-Ͽ][\wͰ-Ͽ]*)|(\*\*|<=|>=|==|!=|[-+*/^()[\],'|·<>]))/y;
   let m;
   let pos = 0;
   s = s.replace(/−/g, '-').replace(/×/g, '*').replace(/≤/g, '<=').replace(/≥/g, '>=').replace(/≠/g, '!=');
@@ -193,9 +260,13 @@ function tokenize(s) {
     m = re.exec(s);
     if (!m) throw new Error(`无法识别：${s.slice(pos).trim().slice(0, 12)}`);
     pos = re.lastIndex;
-    if (m[1] !== undefined) out.push({ k: 'num', v: m[1], n: Number(m[1]) });
-    else if (m[2] !== undefined) out.push({ k: 'id', v: m[2] });
-    else out.push({ k: 'op', v: m[3] === '**' ? '^' : m[3] });
+    if (m[1] !== undefined) {
+      // 0x1F、0b1010_0011：整数，按 BigInt 读（exact.js 精确地用；浮点超过 2^53 会不准）
+      const big = BigInt(m[1].replace(/_/g, ''));
+      out.push({ k: 'num', v: m[1], n: Number(big), big });
+    } else if (m[2] !== undefined) out.push({ k: 'num', v: m[2], n: Number(m[2]) });
+    else if (m[3] !== undefined) out.push({ k: 'id', v: m[3] });
+    else out.push({ k: 'op', v: m[4] === '**' ? '^' : m[4] });
   }
   return out;
 }
@@ -219,6 +290,7 @@ function run(n, vars) {
     }
     case 'bin': {
       const a = run(n.a, vars), b = run(n.b, vars);
+      if (isRadix(a) || isRadix(b)) throw new Error('bin()、hex() 的结果只能直接写出来，不能再算（要算就对原来的数算）');
       if (n.op === '+') return add(a, b);
       if (n.op === '-') return add(a, scale(-1, b));
       if (n.op === '*') return mul(a, b);
@@ -376,6 +448,7 @@ export function toFraction(x, maxDen = 60) {
 }
 
 export function valueTeX(v) {
+  if (isRadix(v)) return v.toTeX();
   if (isNum(v)) return numTeX(v);
   if (isMat(v)) return `\\begin{bmatrix}${v.map((r) => r.map(numTeX).join(' & ')).join(' \\\\ ')}\\end{bmatrix}`;
   if (isVec(v)) return `\\begin{bmatrix}${v.map(numTeX).join(' \\\\ ')}\\end{bmatrix}`;
