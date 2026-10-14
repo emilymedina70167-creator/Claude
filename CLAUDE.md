@@ -4,7 +4,9 @@
 
 - 面向我的说明：`README.md`
 - 放进 claude.ai 项目指令、教 Claude 写课件的说明：`CLAUDE-PROJECT.md`（第三节「组件参考」还会在构建时打包进 `la-kit.js`，给课堂里的 Claude 当组件手册，见下文）
-- 需求原文：`docs/live-board-spec.md`（实时黑板）、`docs/classroom-spec.md`（课堂模式）、`docs/teaching-tools-spec.md`（课堂教具：板书标注、会动的矩阵、页面验算）；数据结构组件的方案（待定）：`docs/ds-components-design.md`
+- 需求原文：`docs/live-board-spec.md`（实时黑板）、`docs/classroom-spec.md`（课堂模式）、`docs/teaching-tools-spec.md`（课堂教具：板书标注、会动的矩阵、页面验算）
+- 下一步的总计划（线代和 408 一起做到优秀：验收尺子、外壳升级、线代六章、408 加深）和进度：`docs/quality-plan.md`
+- 计算机四门课第一轮（第 0～5 批）的计划：`docs/408-plan.md`；数据结构 `trace` / `tree` / `net` 的细节方案：`docs/ds-components-design.md`
 
 ## 分支
 
@@ -26,7 +28,8 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
   - 示例页开头的 `<!doctype html>`、`<meta charset="utf-8">` 不能删：`la-kit.js` 的正则和 `String.raw` 里有中文（不能转义，转了课堂说明会变成 `\uXXXX`），浏览器不按 UTF-8 读就整页报错；没有 doctype 时 KaTeX 在怪异模式下排版不对。claude.ai 发布时会自己补上，所以课件模板里不用写。
   - `unit-matrix-vector.html`：引导模式示范单元（也是组件库 artifact 的页面）
   - `live-demo.html?dev`：实时黑板，右上角开发面板扮演对话里的 Claude
-  - `class-demo.html?dev`：课堂模式，模拟老师按剧本回放（不调用 Claude）；剧本里故意有一段写错的组件（`circle` 那行），控制台报「看不懂这一行」是正常的。在输入框里打暗号看教具：「测试:教具」（`let` 块 + `matrix` 的乘积 + 逐行 `mark` + `\calc`）、「测试:幂」（滑块和 `figure play` 让矩阵动起来）、「测试:指图」（图上的 `label=` / `at=` 标注）、「测试:出题」（`practice` 的自定义题型）、「测试:公式」（写含 n 的式子）、「测试:示意图」（`sketch`）、「测试:推导」（`derive` + `figure play step`）、「测试:原图」（`image`，本地用一张模拟的讲义图）
+  - `408-demo.html`：计算机四门课的全部演示组件
+  - `class-demo.html?dev`：课堂模式，模拟老师按剧本回放（不调用 Claude）；剧本里故意有一段写错的组件（`circle` 那行），控制台报「看不懂这一行」是正常的。在输入框里打暗号看教具：「测试:教具」（`let` 块 + `matrix` 的乘积 + 逐行 `mark` + `\calc`）、「测试:幂」（滑块和 `figure play` 让矩阵动起来）、「测试:指图」（图上的 `label=` / `at=` 标注）、「测试:出题」（`practice` 的自定义题型）、「测试:公式」（写含 n 的式子）、「测试:示意图」（`sketch`）、「测试:推导」（`derive` + `figure play step`）、「测试:原图」（`image`，本地用一张模拟的讲义图）、「测试:排序」（演示组件 `sort` + `figure play step` + `mark`）
   - iPad 尺寸：竖屏 820×1180，横屏 1180×820。云端会话里可以用预装的 Playwright + Chromium 截图检查。
 
 ## 架构
@@ -49,6 +52,13 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - 含 n 的式子作答（`answer` / `steps` 的 `formula: n`）：`formula.js`（读懂学生的写法、写成公式预览、代几组 n 比较、指出哪个 n 对不上、不许直接写 A^n，纯函数）+ `formulainput.js`（输入框和符号小键盘；Apple Pencil 点进去用系统的随手写）。
 - `practice` 的自定义题型（`type: custom`）：`practicespec.js`（模板解析、随机取数 `pick` / `let` / `where`、先取十几组数自检，纯函数），出题和判分照常走 `answerWidget`。
 - 表达空间：`sketch`（当场写的 SVG 示意图；`svgsafe.js` 白名单清理、调色板配色，纯函数）、`derive`（分拍板书：一行行写、等号对齐；`derivespec.js` 纯函数；写到第几行是变量 `step`，接 `figureControls`）、`image`（讲义原图：资料包 `images` 按名字找，课堂工具 `view_image` 让课堂 Claude 自己看）。
+- 科目：`subject.js`（front matter 的 `subject:`；`CLAUDE-PROJECT.md` 第三节小节下的 `<!-- 科目：… -->` 标记，课堂只带「通用 + 这门课」的组件说明，`prompt.js` 的 `defaultRules` 按科目换教法）。计算机课要的表达式（`0x1F`、`mod`、位运算、`bin` / `hex`）在 `expr.js` 和 `exact.js` 两边都有。
+- 文字型答案：`textcheck.js`（序列 `type: seq`、二进制 / 十六进制 `type: bin / hex` 的读法和判分，纯函数）+ `textinput.js`（输入框和回显）。
+- 演示组件（一步步走的过程）：`stepper.js` 是外壳（上一步 / 下一步 / 播放、`ask` 先猜再揭晓、`mode: quiz`、课堂的 `figure step` 和 `highlight`、记录），`stepperspec.js` 是它不碰 DOM 的部分；每个算法是 `engines/` 里的一个纯函数引擎（`parse` → `run` 出每一步 → `view` 画成 HTML，`data-pick` 给在图上点、`data-cmd` 给 highlight / `board mark item=`），在 `blocks/index.js` 用 `stepperBlock(引擎)` 注册。新算法照这个做，引擎配 `node --test`，答案和王道的例子对一遍。
+  - 数据结构：`engines/sort.js`（`sort`）、`tree.js` + `treeview.js`（`tree`）、`search.js`（`kmp` `hash` `bsearch`）、`graph.js`（`net`）、`trace.js`（`trace`，解释器在 `kit/src/cinterp.js`：C 子集，一步一行，生成器实现，越界 / 没赋值 / 死循环都报行号）。
+  - 操作系统：`os.js`（`sched` `paging` `banker` `disk`）、`addr.js`（`addr`）。组成原理：`co.js`（`bits` `cache` `pipe`）。计网：`net4.js`（`subnet` `tcp` `window`）。
+  - 共用的画法：`arrayview.js`（一排格子）、`treeview.js`（二叉树）、`bitview.js`（按字段画二进制位、`1KB` / `0A5CH` 这类写法）。
+  - 浏览器里看全部演示：`kit/examples/408-demo.html`。
 - 页面里调用 Claude：`ai.js`（`window.claude.use('sample')`，旧接口 `window.claude.complete`）。
 - 手写：`ink/`（整页板书 overlay、手写板 pad）；截图作答：`photo.js`。
 - `drafts.js`：草稿。会让学生作答的组件用 `markDraft` 登记「现在写着什么、还没交」（`answer` 系列、理由框 `thinkbox`、`conjecture`、`quiz`、`findbug`、`predict`），课堂模式发下一轮时一起告诉课堂 Claude，学生不点检查它也看得到。新写会作答的组件也要登记。
@@ -69,7 +79,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - `bar.js`：底部输入框（附图、手写板、「⋯」菜单、iPad 软键盘）和它上面的一条：翻页（上一块 / 下一块 / 板列表 / 回到当前板）、快捷回答。不显示消息。
 - `devteacher.js`：`?dev` 的模拟老师；`devpanel.js`：开发面板（还有本地试用的模拟讲义图 `ensureDemoSlide`）。
 - 数据（artifact 数据库）：`steps` 黑板段落（`page` 在第几块板，`place: 'pin'` 是常驻栏），`class_pages` 每块板（标题、板顶的话和 `talkBy`、下课小结和 `foot`），`class_turns` 每一轮（`boardOps` 里有 mark / unmark），`class_notes` 观察和下课小结（带 `verify`），`answers` / `events` 作答，`pack/main`、`pack/problems` 资料包。
-- 每一轮的整份说明（`buildSystem`）要在 160 KiB 以内，给对话留地方（`tests/class-prompt.test.js` 守着）。说明再加长时先想办法精简；资料包预算 `PACK_BUDGET` 已经从 120 KiB 调到 104 KiB。
+- 每一轮的整份说明（`buildSystem`）要在 160 KiB 以内（`SYSTEM_MAX`），给对话留地方。资料包预算 `PACK_BUDGET` 是 104 KiB，某门课的组件说明长了，`buildSystem` 自动让资料包少占一点，保证整份不超；但每门课至少要给资料包留 96 KiB（`tests/subject.test.js` 守着）。组件说明再加长时先想办法精简，线代、计算机专用的小节打上科目标记。
 
 ### 实时黑板（`kit/src/live/`）
 

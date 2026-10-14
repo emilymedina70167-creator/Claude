@@ -930,7 +930,7 @@ export async function renderClass(root, meta) {
       }
       bv.measureFit();
       const level = Math.min(budgetLevel, 3);
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), packBudget: PACK_BUDGET >> level });
+      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject });
       const maxBytes = Math.round(promptLimit() * [1, 0.85, 0.7, 0.55][level]);
       const fit = fitTurns({ system, history: promptHistory(history), maxBytes });
       lastPrompt = { bytes: fit.bytes, maxBytes, keepRecent: fit.keepRecent, dropped: fit.dropped, turns: fit.turns.length, level };
@@ -1319,7 +1319,7 @@ export async function renderClass(root, meta) {
       bar.setStatus('thinking', 'Claude 在写这节课的小结…');
       ensureDraft();
       ctl = new AbortController();
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState() });
+      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), subject: session.subject });
       const { turns } = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt() }], maxBytes: promptLimit() });
       let res;
       try {

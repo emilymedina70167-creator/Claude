@@ -3,7 +3,7 @@ import { parseFields, list } from '../parse.js';
 import { generate } from '../generators.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml, withCalcScope } from './common.js';
-import { answerWidget, plain, plainValue } from './answer.js';
+import { answerWidget, plain, plainValue, textAnswerSpec } from './answer.js';
 import { parseTemplate, instantiate, checkTemplate, fillText } from '../practicespec.js';
 import { formulaSpec } from '../formula.js';
 import { toFloat, calcValue } from '../exact.js';
@@ -79,8 +79,12 @@ function customPractice(el, src) {
   const need = Math.max(1, Number(fields.count) || 3);
   const base = { ...session.vars };
   const formulaOf = (vars) => (fields.formula ? formulaSpec(fields.answer, fields.formula, vars) : null);
+  // check: bin / hex：答案写成二进制 / 十六进制（width: 要求几位）。序列答案要逐题算，自定义题型里先不支持
+  const check = (fields.check || '').toLowerCase().trim();
+  if (/^(seq|sequence|order)$/.test(check)) throw new Error('practice 的自定义题型还不支持 check: seq（序列答案请用 answer 组件的 type: seq）');
+  const textOf = (vars) => textAnswerSpec(check, fields.answer, { scope: vars, width: fields.width });
   // 先取几组数试一遍：模板写错（算不出来、条件取不到）现在就报，别等学生做到那一题
-  const errors = checkTemplate(tpl, { base, formulaCheck: fields.formula ? (vars) => formulaOf(vars) : null });
+  const errors = checkTemplate(tpl, { base, formulaCheck: fields.formula ? (vars) => formulaOf(vars) : /^(bin|hex)$/.test(check) ? textOf : null });
   if (errors.length) throw new Error(errors.slice(0, 2).join('；'));
   const title = fields.title || '练习 Practice';
   const body = widget(el, { title: escapeHtml(title), cls: 'practice' });
@@ -108,18 +112,19 @@ function customPractice(el, src) {
     const { vars, picked } = instantiate(tpl, { base, avoid: prev });
     prev = picked;
     const formula = formulaOf(vars);
-    const value = formula ? null : toFloat(calcValue(fields.answer, vars).value);
+    const text = formula ? null : textOf(vars);
+    const value = formula || text ? null : toFloat(calcValue(fields.answer, vars).value);
     const box = body.querySelector('.pr-problem');
     next.hidden = true;
     skip.hidden = false;
     const t0 = Date.now();
     // 记录里的题目：\calc 换成算好的数，课堂 Claude 看得到这一题取的是什么数
     const rq = plain(fillText(fields.q, vars).tex.replace(/\$/g, ''));
-    const expected = formula ? formula.display : plainValue(value);
+    const expected = formula ? formula.display : text ? text.display : plainValue(value);
     const onTry = (t) => session.record({ type: 'practice', liveOnly: true, title, q: rq, value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, check: t.note, ms: Date.now() - t0, el });
     withCalcScope(vars, () => answerWidget(box, {
       q: fields.q, before: fields.before, after: fields.after, hint: fields.hint, explain: fields.explain,
-      answer: value, formula, type: (fields.check || '').toLowerCase(), scope: vars, onTry,
+      answer: value, formula, text, type: check, scope: vars, onTry,
     }, (r) => {
       total++;
       results.push(r.ok);
@@ -130,7 +135,7 @@ function customPractice(el, src) {
       next.hidden = false;
       skip.hidden = true;
     }));
-    if (focus) box.querySelector('.mi-cell, .fi-text')?.focus({ preventScroll: true });
+    if (focus) box.querySelector('.mi-cell, .fi-text, .ti-input')?.focus({ preventScroll: true });
   }
 
   next.addEventListener('click', () => newProblem());

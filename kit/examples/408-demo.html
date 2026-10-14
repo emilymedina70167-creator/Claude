@@ -1,0 +1,209 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>408 教具一览</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+subject: 数据结构
+unit: 408 教具一览
+---
+
+# 408 教具一览
+
+每一个都是「一步步走」的演示：你只写输入，每一步由页面算。点「下一步」往下走；写了 `ask:` 的，走到那一步之前先让你猜。
+
+## 1. 数据结构
+
+```sort
+id: s-quick
+title: 快排的第一次划分
+algo: quick
+array: 49 38 65 97 76 13 27 49'
+ask: pivot
+```
+
+```tree
+id: t-in
+title: 中序遍历
+nodes: A(B(D, E(G)), C(, F))
+walk: inorder
+ask: visit
+```
+
+```tree
+id: t-heap
+title: 堆排序
+heap: 53 17 78 09 45 65 87 32
+ops: build, sort
+```
+
+```kmp
+id: k-nv
+title: 求 nextval
+pattern: abaabc
+show: nextval
+ask: next
+```
+
+```hash
+id: h-lin
+title: 线性探测
+hash: 19 14 23 01 68 20 84 27 55 11 10 79
+p: 13
+size: 16
+```
+
+```net
+id: g-dij
+title: Dijkstra
+edges: V1->V2 10, V1->V5 5, V2->V3 1, V2->V5 2, V3->V4 4, V4->V1 7, V4->V3 6, V5->V2 3, V5->V3 9, V5->V4 2
+run: dijkstra from V1
+ask: next
+```
+
+```trace
+id: tr-ins
+title: 直接插入排序（带哨兵）
+call: InsertSort(A, 5)
+let A = [0, 38, 49, 65, 13, 27]
+predict: 7 if i == 4 -> j
+code:
+void InsertSort(ElemType A[], int n){
+    int i, j;
+    for(i=2;i<=n;i++)
+        if(A[i]<A[i-1]){
+            A[0]=A[i];
+            for(j=i-1;A[0]<A[j];--j)
+                A[j+1]=A[j];
+            A[j+1]=A[0];
+        }
+}
+```
+
+## 2. 操作系统
+
+```sched
+id: os-rr
+title: 时间片轮转
+algo: rr q=2
+procs: P1 0 5, P2 2 4, P3 4 1, P4 5 6
+ask: next
+```
+
+```paging
+id: os-lru
+title: LRU 页面置换
+refs: 7 0 1 2 0 3 0 4 2 3 0 3 2
+frames: 3
+algo: lru
+ask: victim
+```
+
+```banker
+id: os-bank
+title: 银行家算法
+avail: 3 3 2
+max: P0 7 5 3; P1 3 2 2; P2 9 0 2; P3 2 2 2; P4 4 3 3
+alloc: P0 0 1 0; P1 2 0 0; P2 3 0 2; P3 2 1 1; P4 0 0 2
+request: P1 1 0 2
+```
+
+```disk
+id: os-scan
+title: SCAN
+requests: 98 183 37 122 14 124 65 67
+head: 53
+algo: scan
+```
+
+```addr
+id: os-addr
+title: 地址变换
+vaddr: 0x0A5C
+bits: 16
+page: 1KB
+table: 0->5, 1->10, 2->4, 3->7
+tlb: 1->10
+cost: tlb=20 mem=100
+```
+
+## 3. 组成原理
+
+```bits
+id: co-code
+title: −5 的几种编码
+num: -5
+ask: twos
+```
+
+```bits
+id: co-float
+title: 单精度 −0.75
+float: -0.75
+```
+
+```bits
+id: co-flags
+title: 补码减法和标志位
+sub: 5 - 7
+```
+
+```cache
+id: co-cache
+title: 2 路组相联
+lines: 8
+ways: 2
+block: 16B
+addr: 16
+refs: 0x0010, 0x0124, 0x0010, 0x0230, 0x0344
+ask: set, hit
+```
+
+```pipe
+id: co-pipe
+title: 数据相关
+instrs: add r1, r2, r3; sub r4, r1, r5; and r6, r1, r7; or r8, r2, r9
+ask: stall
+```
+
+## 4. 计算机网络
+
+```subnet
+id: cn-vlsm
+title: 按主机数划分子网
+split: 192.168.1.0/24
+hosts: 60, 30, 10
+```
+
+```subnet
+id: cn-lpm
+title: 最长前缀匹配
+table: 192.168.1.0/24 -> R1, 192.168.1.128/25 -> R2, 0.0.0.0/0 -> R3
+dst: 192.168.1.200
+```
+
+```tcp
+id: cn-cwnd
+title: 拥塞窗口
+ssthresh: 16
+rounds: 22
+events: 3dup@12, timeout@16
+ask: cwnd
+```
+
+```tcp
+id: cn-hand
+title: 三次握手
+handshake: x=100, y=300
+```
+
+```window
+id: cn-gbn
+title: 后退 N 帧
+proto: gbn
+frames: 6
+window: 4
+lost: 2
+ask: resend
+```
+</script>

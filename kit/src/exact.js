@@ -2,7 +2,7 @@
 //   \calc{表达式}（页面把公式里的数算出来，Claude 不手算）、matrix 组件、课堂里的 calc 工具、整节课的 let 块。
 // 开方、三角、e、π 这类算不出精确值的，抛出 Inexact，调用方（calcValue）退回 expr.js 的小数。
 // 纯函数，不碰 DOM，有测试（tests/exact.test.js）。
-import { parse, evaluate as evaluateFloat, isNum, isVec, isMat } from './expr.js';
+import { parse, evaluate as evaluateFloat, isNum, isVec, isMat, Radix, isRadix } from './expr.js';
 
 export class Inexact extends Error {
   constructor(what) {
@@ -94,7 +94,7 @@ export const isQMat = (x) => Array.isArray(x) && x.length > 0 && x.every((r) => 
 
 /** JS 的数 / 数组（浮点）或已经是精确的值 → 精确的值 */
 export function toExact(v) {
-  if (v instanceof Q) return v;
+  if (v instanceof Q || isRadix(v)) return v;
   if (typeof v === 'number' || typeof v === 'bigint') return Q.from(v);
   if (Array.isArray(v)) return v.map(toExact);
   throw new Error('这里需要数、向量或矩阵');
@@ -308,14 +308,73 @@ const FUNCS = {
   },
   sqrt: (x) => { const r = sqrtQ(q(x)); if (!r) throw new Inexact('开方'); return r; },
   norm: (v) => { const r = sqrtQ(dot(vec(v), v)); if (!r) throw new Inexact('长度'); return r; },
+  // —— 计算机课：整数、进制、位运算（写法和 expr.js 一样；这里用 BigInt，64 位的地址也不丢精度）——
+  // log2：2 的整数次幂（含 1/2、1/4 这种）精确，其余退回小数
+  log2: (x) => {
+    const v = q(x);
+    if (v.n <= 0n) throw new Error('log2 只对正数');
+    const p2 = (b) => (b > 0n && (b & (b - 1n)) === 0n ? BigInt(b.toString(2).length - 1) : null);
+    if (v.d === 1n && p2(v.n) !== null) return new Q(p2(v.n));
+    if (v.n === 1n && p2(v.d) !== null) return new Q(-p2(v.d));
+    throw new Inexact('log2 ');
+  },
+  mod: (a, b) => { const m = bigInt(b, '模'); if (m === 0n) throw new Error('mod 的模不能是 0'); const r = bigInt(a, 'mod') % m; return new Q(r < 0n === m < 0n || r === 0n ? r : r + m); },
+  div: (a, b) => { const d = bigInt(b, '除数'); if (d === 0n) throw new Error('除以 0 了'); return floorQ(new Q(bigInt(a, 'div'), d)); },
+  gcd: (a, b) => new Q(gcd(bigInt(a, 'gcd'), bigInt(b, 'gcd'))),
+  lcm: (a, b) => { const x = bigInt(a, 'lcm'), y = bigInt(b, 'lcm'); if (!x || !y) return ZERO; const l = (x * y) / gcd(x, y); return new Q(l < 0n ? -l : l); },
+  and: (a, b) => new Q(uint(a) & uint(b)),
+  or: (a, b) => new Q(uint(a) | uint(b)),
+  xor: (a, b) => new Q(uint(a) ^ uint(b)),
+  not: (a, n) => { const w = width(n); return new Q(uint(a, w) ^ ((1n << w) - 1n)); },
+  shl: (a, k) => new Q(uint(a) << uint(k, 7n)),
+  shr: (a, k) => new Q(uint(a) >> uint(k, 7n)),
+  bit: (a, i) => new Q((uint(a) >> uint(i, 7n)) & 1n),
+  signed: (x, n) => { const w = width(n), v = uint(x, w); return new Q(v >= 1n << (w - 1n) ? v - (1n << w) : v); },
+  unsigned: (x, n) => {
+    const w = width(n), v = bigInt(x, 'unsigned');
+    if (v < -(1n << (w - 1n)) || v >= 1n << w) throw new Error(`${v} 用 ${w} 位放不下`);
+    return new Q(v < 0n ? v + (1n << w) : v);
+  },
+  bin: (x, n) => radix(x, n, 2),
+  hex: (x, n) => radix(x, n, 16),
 };
+
+const bigInt = (x, what) => { q(x, what); if (!x.integer) throw new Error(`${what} 要整数（现在是 ${x}）`); return x.n; };
+function width(n) {
+  if (n === undefined) throw new Error('要写位数，比如 not(x, 8)、signed(x, 8)');
+  const w = bigInt(n, '位数');
+  if (w < 1n || w > 64n) throw new Error('位数写 1 到 64');
+  return w;
+}
+// 非负整数；给了位数 w 时还要放得进 w 位（移位的次数用 w = 7：最多移 127 位）
+function uint(x, w) {
+  const v = bigInt(x, '位运算');
+  if (v < 0n) throw new Error(`位运算只对非负整数（${v} 是负数：先用 unsigned(${v}, 位数) 换成无符号数）`);
+  if (w !== undefined && v >= 1n << w) throw new Error(`${v} 用 ${w} 位放不下`);
+  return v;
+}
+function radix(x, n, base) {
+  const v = bigInt(x, base === 2 ? 'bin' : 'hex');
+  const digits = n === undefined ? 0 : Number(bigInt(n, '位数'));
+  if (digits < 0 || digits > 64) throw new Error('位数写 1 到 64');
+  let big = v;
+  if (big < 0n) {
+    if (!digits) throw new Error(`负数要写位数才能写成补码，比如 ${base === 2 ? 'bin' : 'hex'}(${v}, 8)`);
+    const bits = BigInt(base === 2 ? digits : digits * 4);
+    if (big < -(1n << (bits - 1n))) throw new Error(`${v} 用 ${bits} 位补码放不下`);
+    big += 1n << bits;
+  }
+  const s = big.toString(base).toUpperCase();
+  if (digits && s.length > digits) throw new Error(`${v} 写成${base === 2 ? '二' : '十六'}进制有 ${s.length} 位，比 ${digits} 位长`);
+  return new Radix(s.padStart(digits, '0'), base);
+}
 
 // 这些函数 expr.js 有、但结果一般不是有理数：交给小数去算
 const FLOAT_ONLY = new Set(['rot', 'sin', 'cos', 'tan', 'atan2', 'exp', 'ln', 'log', 'normpdf', 'normcdf', 'binompmf', 'poissonpmf', 'exppdf', 'unifpdf']);
 
 function run(n, vars) {
   switch (n.t) {
-    case 'num': return Q.from(n.v);
+    case 'num': return n.big !== undefined ? new Q(n.big) : Q.from(n.v);
     case 'var': {
       if (n.name in vars) return toExact(vars[n.name]);
       if (n.name === 'pi' || n.name === 'e') throw new Inexact(n.name === 'pi' ? 'π ' : 'e ');
@@ -338,6 +397,7 @@ function run(n, vars) {
     }
     case 'bin': {
       const a = run(n.a, vars), b = run(n.b, vars);
+      if (isRadix(a) || isRadix(b)) throw new Error('bin()、hex() 的结果只能直接写出来，不能再算（要算就对原来的数算）');
       if (n.op === '+') return add(a, b);
       if (n.op === '-') return add(a, scale(new Q(-1n), b));
       if (n.op === '*') return mul(a, b);
@@ -367,6 +427,7 @@ const bigText = (x) => {
 
 /** 精确的值 → TeX：分数用 \tfrac，向量写成列，矩阵用 bmatrix（和 expr.js 的 valueTeX 一致） */
 export function exactTeX(v) {
+  if (isRadix(v)) return v.toTeX();
   if (isQ(v)) { bigText(v); return v.toTeX(); }
   if (isQMat(v)) return `\\begin{bmatrix}${v.map((r) => r.map(exactTeX).join(' & ')).join(' \\\\ ')}\\end{bmatrix}`;
   if (isQVec(v)) return `\\begin{bmatrix}${v.map(exactTeX).join(' \\\\ ')}\\end{bmatrix}`;
@@ -375,6 +436,7 @@ export function exactTeX(v) {
 
 /** 精确的值 → 文字：3/4、[1, 2]、[[1, 2], [3, 4]] */
 export function exactText(v) {
+  if (isRadix(v)) return v.digits;
   if (isQ(v)) return bigText(v);
   if (Array.isArray(v)) return `[${v.map(exactText).join(', ')}]`;
   throw new Error('写不出这个值');

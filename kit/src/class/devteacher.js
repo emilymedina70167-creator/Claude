@@ -19,7 +19,7 @@
 // 「测试:指图」在图上标注：label= 圈住 Ax（拖动 x 时跟着走），at= 用箭头指一个点；
 // 「测试:出题」自定义练习模板（practice type: custom，页面随机出题）；「测试:公式」写含 n 的式子（answer 的 formula: n）；
 // 「测试:示意图」sketch 当场画的图 + highlight + label= 标注；「测试:推导」derive 分拍板书 + figure play step；
-// 「测试:原图」image 贴讲义原图（本地用一张模拟的）。
+// 「测试:原图」image 贴讲义原图（本地用一张模拟的）；「测试:排序」演示组件 sort（快排一次划分，先猜枢轴落在哪）+ figure play step + mark。
 // 系统发来的「[动作] … 没有动静」（察觉卡住）→ 轻轻问一句；只带「[板书]」的消息 → 说收到了。
 
 export const DEV_LIMITS = Object.freeze({ maxPromptBytes: 262144, images: Object.freeze({ maxCount: 4, maxInputBytes: 20000000, mediaTypes: Object.freeze(['image/png', 'image/jpeg']) }) });
@@ -264,6 +264,20 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
         pic + '对照讲义原图看一下：书上就是这么写的。',
         board(`new id=b${n} title="讲义里的例 2.1"`, fence('image', `id: img-${n}\nname: 例2.1\ncaption: 讲义里例 2.1：和我们刚推的一样`)),
         board(`mark target=img-${n} note="点一下放大看"`),
+      ),
+    };
+  }
+
+  if (!isSystem && /测试\s*[:：]?\s*排序/.test(said)) {
+    const n = nextSeq(turns, memo);
+    return {
+      kind: 'tools',
+      text: join(
+        pic + '看快排的一次划分：枢轴先拿出来，high 和 low 轮流往中间走、填坑。',
+        board(`new id=b${n} title="快排：一次划分"`, fence('sort', `id: s-${n}\nalgo: quick\narray: 49 38 65 97 76 13 27 49'\nask: pivot`)),
+        board(`figure target=s-${n} play step 0 1 1s`),
+        board(`mark target=s-${n} item=1 note="空出来的坑" color=pink`),
+        '接着点「下一步」往下走；走到最后会先问你枢轴 49 落在第几个。',
       ),
     };
   }

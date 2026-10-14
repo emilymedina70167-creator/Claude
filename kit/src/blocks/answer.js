@@ -13,6 +13,9 @@ import { FEATURES } from '../features.js';
 import { markDraft } from '../drafts.js';
 import { formulaInput } from '../formulainput.js';
 import { formulaSpec, formulaTeX, compareFormula } from '../formula.js';
+import { textAnswerInput } from '../textinput.js';
+import { parseSeqAnswer, checkSeq, radixAnswer, checkRadix, groupDigits } from '../textcheck.js';
+import { calcValue, isQ } from '../exact.js';
 
 // 通用作答组件：spec = {q, answer, type, before, hint, explain, solution}
 // spec.formula（formulaSpec 的结果）：答案是含 n 的式子，学生写式子，页面代值比较
@@ -22,7 +25,9 @@ export function answerWidget(body, spec, onDone) {
   const mdToHtml = (t, o) => withCalcScope(spec.scope, () => mdRaw(t, o));
   const tex2html = (t, d) => withCalcScope(spec.scope, () => texRaw(t, d));
   const formula = spec.formula || null;
-  const shape = formula ? { kind: 'formula' } : shapeOf(spec.answer, spec.type);
+  // 文字型答案（序列、二进制 / 十六进制）：textAnswerSpec 的结果
+  const text = spec.text || null;
+  const shape = formula ? { kind: 'formula' } : text ? text.shape : shapeOf(spec.answer, spec.type);
   body._spec = spec; // 方便调试和自动化测试
   body.innerHTML = `
     ${spec.q ? `<div class="w-q">${mdToHtml(spec.q)}</div>` : ''}
@@ -38,7 +43,8 @@ export function answerWidget(body, spec, onDone) {
       <button type="button" class="btn ans-reveal" hidden>看答案</button>
     </div>
     <div class="ans-feedback" hidden></div>`;
-  const input = formula ? formulaInput(body.querySelector('.ans-input'), { names: formula.names, keys: formula.keys }) : mathInput(body.querySelector('.ans-input'), shape);
+  const box = body.querySelector('.ans-input');
+  const input = formula ? formulaInput(box, { names: formula.names, keys: formula.keys }) : text ? textAnswerInput(box, shape) : mathInput(box, shape);
   const fb = body.querySelector('.ans-feedback');
   const btnCheck = body.querySelector('.ans-check');
   const btnHint = body.querySelector('.ans-hint');
@@ -50,8 +56,8 @@ export function answerWidget(body, spec, onDone) {
 
   // 截图作答：Claude 读出最终答案填进格子，学生核对后自己点「检查」
   const plainQ = String(spec.q || '').replace(/\s+/g, ' ').slice(0, 600) || body.querySelector('.arr-box, .w-q')?.textContent?.slice(0, 600) || '';
-  // 截图作答只认数、向量、矩阵；写式子的题不放
-  const photo = formula ? { disable() {} } : photoPicker(body.querySelector('.ans-actions'), {
+  // 截图作答只认数、向量、矩阵；写式子、写序列和位串的题不放
+  const photo = formula || text ? { disable() {} } : photoPicker(body.querySelector('.ans-actions'), {
     label: '截图作答',
     root: body,
     async onPick(files, ui) {
@@ -103,7 +109,8 @@ export function answerWidget(body, spec, onDone) {
     attempts++;
     lastTried = input.partial();
     if (first === null) first = input.text();
-    if (!formula) r = check(given, spec.answer, spec.type);
+    if (text) r = text.check(given);
+    else if (!formula) r = check(given, spec.answer, spec.type);
     spec.onTry?.({ text: input.text(), ok: r.ok, attempts, work, note: lastNote || undefined });
     if (r.ok) {
       input.markAll('is-right');
@@ -132,8 +139,8 @@ export function answerWidget(body, spec, onDone) {
     fb.insertAdjacentHTML('afterend', `<div class="w-note ans-hint-box"><strong>提示：</strong>${mdToHtml(spec.hint)}</div>`);
   });
   btnReveal.addEventListener('click', () => {
-    input.fill(formula ? formula.display : display(spec.answer));
-    show('is-reveal', `<div><strong>答案：</strong>${tex2html(formula ? formulaTeX(formula.expected) : valueTeX(spec.answer))}</div>${spec.explain ? mdToHtml(spec.explain) : ''}`);
+    input.fill(formula ? formula.display : text ? text.display : display(spec.answer));
+    show('is-reveal', `<div><strong>答案：</strong>${tex2html(formula ? formulaTeX(formula.expected) : text ? text.tex : valueTeX(spec.answer))}</div>${spec.explain ? mdToHtml(spec.explain) : ''}`);
     finish(false, true);
   });
   // 刷新后照作答记录恢复（课堂 / 实时黑板重放）：答对了的把学生填的数填回去，看了答案的照样摊开答案
@@ -144,6 +151,7 @@ export function answerWidget(body, spec, onDone) {
     if (!ok) return;
     const nums = String(value ?? '').match(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/gi);
     if (formula) input.fill(value && value !== '（没写）' ? value : formula.display);
+    else if (text) input.fill(value && value !== '（未填完）' ? value : text.display);
     else input.fill(nums ? nums.map((x) => numText(Number(x))) : display(spec.answer));
     input.markAll('is-right');
     show('is-ok', `<div class="q-verdict">✓ 正确${attempts > 1 ? `（第 ${attempts} 次）` : ''}</div>${spec.explain ? mdToHtml(spec.explain) : ''}`);
@@ -228,17 +236,45 @@ export function answer(el, src) {
   const scope = letScope(cmds, session.vars);
   // formula: n —— 答案是含 n 的式子：学生写式子，页面代几组 n 比较
   const formula = fields.formula ? formulaSpec(fields.answer, fields.formula, scope) : null;
-  const value = formula ? null : compile(fields.answer)(vars);
+  const text = textAnswerSpec(fields.type, fields.answer, { scope, width: fields.width });
+  const value = formula || text ? null : compile(fields.answer)(vars);
   for (const msg of calcProblems([fields.title, fields.q, fields.hint, fields.explain, fields.before, fields.after], scope)) session.problem(el, 'answer', msg);
   const title = fields.title || '动手算 Try it';
   const body = withCalcScope(scope, () => widget(el, { title, cls: 'answer' }));
   const done = session.gate(el, title);
   const onTry = (t) => session.record({ type: 'answer', liveOnly: true, title, q: plain(fields.q), value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, check: t.note, el });
-  answerWidget(body, { ...fields, answer: value, formula, type: (fields.type || '').toLowerCase(), onTry, scope }, (r) => {
-    session.record({ type: 'answer', final: true, title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, last: r.last, expected: formula ? formula.display : plainValue(value), revealed: r.revealed, work: r.work || undefined, check: r.note, el });
+  answerWidget(body, { ...fields, answer: value, formula, text, type: (fields.type || '').toLowerCase(), onTry, scope }, (r) => {
+    session.record({ type: 'answer', final: true, title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, last: r.last, expected: formula ? formula.display : text ? text.display : plainValue(value), revealed: r.revealed, work: r.work || undefined, check: r.note, el });
     done();
   });
 }
 
 export const plain = (s) => String(s || '').replace(/\s+/g, ' ').slice(0, 200);
 export const plainValue = (v) => (Array.isArray(v) ? (Array.isArray(v[0]) ? `[${v.map((r) => r.map(numText).join(' ')).join('; ')}]` : `(${v.map(numText).join(', ')})`) : numText(v));
+
+/**
+ * 文字型答案（type: seq / bin / hex）→ answerWidget 的 spec.text：{ shape, check(写的) → {ok, wrong, msg}, display, tex }。
+ * 别的 type 返回 null。seq 的 answer 是序列原文（几种都对用 | 隔开）；bin / hex 的 answer 是表达式（精确地算），
+ * width 是要求写几位（不写就只比数值，前导 0 不管）
+ */
+export function textAnswerSpec(type, answer, { scope = {}, width } = {}) {
+  const t = String(type || '').toLowerCase().trim();
+  if (t === 'seq' || t === 'sequence' || t === 'order') {
+    const alts = parseSeqAnswer(answer);
+    const single = alts.every((a) => a.every((x) => [...x].length === 1));
+    const display = alts[0].join(' ');
+    return { shape: { kind: 'seq', single }, check: (g) => checkSeq(g, alts), display, tex: `\\text{${alts[0].map(texSafe).join(' → ')}}` };
+  }
+  if (t === 'bin' || t === 'hex') {
+    const base = t === 'bin' ? 2 : 16;
+    const w = width === undefined || width === '' ? 0 : Number(width);
+    if (!Number.isInteger(w) || w < 0 || w > 64) throw new Error(`width: 写 1 到 64 的整数（现在是「${width}」）`);
+    let v = calcValue(answer, scope).value;
+    if (isQ(v)) { if (!v.integer) throw new Error(`type: ${t} 的答案要是整数（现在是 ${v}）`); v = v.n; }
+    const ans = radixAnswer(v, base, w);
+    const shown = groupDigits(ans.digits);
+    return { shape: { kind: 'radix', base, width: ans.width }, check: (g) => checkRadix(g, ans), display: shown, tex: `\\texttt{${shown.replace(/ /g, '\\,')}}${base === 16 ? '\\,\\text{H}' : ''}` };
+  }
+  return null;
+}
+const texSafe = (s) => String(s).replace(/[\\{}$&#^_%~]/g, (c) => `\\${c}`);
