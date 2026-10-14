@@ -51,7 +51,8 @@ function bitsParse(fields) {
   return { mode: 'code', x, width, show };
 }
 
-function codeRun({ x, width: n, show }) {
+// mistake（只在算常见错法时用）：'noPlusOne' 负数补码忘了 +1；'noFlip' 移码忘了把符号位取反；'flipSign' 反码连符号位也取反了
+function codeRun({ x, width: n, show, mistake }) {
   const steps = [];
   const neg = x < 0n;
   const mag = neg ? -x : x;
@@ -61,9 +62,12 @@ function codeRun({ x, width: n, show }) {
   steps.push({ view: { rows: { ...rows } }, msg: `${x} 用 ${n} 位表示（最高位是符号位，0 正 1 负）。|${x}| = ${mag} = ${mag.toString(2)}B。` });
   const can = mag < lim; // 原码、反码表示不了 −2^(n−1)
   const orig = can ? (neg ? '1' : '0') + bin(mag, n - 1) : null;
-  const ones = can ? (neg ? '1' + [...bin(mag, n - 1)].map((c) => (c === '1' ? '0' : '1')).join('') : orig) : null;
-  const twos = bin(x, n);
-  const bias = bin(x + lim, n);
+  let ones = can ? (neg ? '1' + [...bin(mag, n - 1)].map((c) => (c === '1' ? '0' : '1')).join('') : orig) : null;
+  let twos = bin(x, n);
+  let bias = bin(x + lim, n);
+  if (mistake === 'noPlusOne' && neg && ones) twos = ones;
+  if (mistake === 'noFlip') bias = twos;
+  if (mistake === 'flipSign' && neg && ones) ones = '0' + ones.slice(1);
   const add = (k, val, msg) => {
     if (!show.includes(k)) return;
     rows[k] = val;
@@ -79,6 +83,7 @@ function codeRun({ x, width: n, show }) {
 // —— IEEE 754 单精度 ——
 function floatRun(input) {
   const steps = [];
+  const BIAS = input.bias ?? 127; // 常见错法「偏置用 128」只在算错法时改
   const F = (v) => [{ name: '符号 S', bits: 1, cls: 'bv-b' }, { name: '阶码 E', bits: 8, cls: 'bv-a' }, { name: '尾数 M', bits: 23, cls: 'bv-c' }];
   if (input.decode) {
     const v = input.bitsVal;
@@ -120,7 +125,7 @@ function floatRun(input) {
   const exact = rem === 0n;
   if (rem * 2n > scaleDen || (rem * 2n === scaleDen && sig % 2n === 1n)) sig += 1n;
   if (sig >= 1n << 24n) { sig >>= 1n; e += 1; }
-  const E = e + 127;
+  const E = e + BIAS;
   if (E >= 255) throw new Error(`${input.src} 太大了，单精度放不下`);
   if (E <= 0) throw new Error(`${input.src} 太小了（要用非规格化数），这里只演示规格化数`);
   const M = sig & 0x7fffffn;
@@ -133,7 +138,7 @@ function floatRun(input) {
   steps.push({ view: { v, fields: F(), hi: ['阶码 E'] }, msg: `阶码 E = 指数 + 127 = ${e} + 127 = ${E} = ${bin(E, 8)}B（移码，偏置 127）。`, ask: { tag: 'exp', kind: 'bin', width: 8, q: '阶码 E（8 位二进制）是什么？', answer: BigInt(E), display: bin(E, 8) } });
   steps.push({ view: { v, fields: F(), hi: ['尾数 M'] }, msg: `尾数 M：1.后面的 23 位（隐藏最前面的 1）：${group4(mStr)}。` });
   steps.push({ view: { v, fields: F() }, msg: `合起来：${S} ${bin(E, 8)} ${mStr} = ${hexOf(v, 32)}。`, ask: { tag: 'hex', kind: 'hex', width: 8, q: `${input.src} 的单精度表示（十六进制）是什么？`, answer: v, display: hexOf(v, 32) } });
-  return { steps, bits: v };
+  return { steps, bits: v, S, E, M: mStr };
 }
 // a/d 的二进制写法（整数部分 + 小数部分，小数最多 24 位）
 function binaryText(a, d) {
@@ -145,7 +150,8 @@ function binaryText(a, d) {
 }
 
 // —— 补码加减和标志位 ——
-function arithRun({ a, b, sub, width: n }) {
+// mistake（只在算常见错法时用）：'cfRaw' 减法的 CF 直接取最高位进位（没和 Cin 异或）；'ofCarry' 把 OF 当成最高位进位
+function arithRun({ a, b, sub, width: n, mistake }) {
   const steps = [];
   const mask = (1n << BigInt(n)) - 1n;
   const A = BigInt.asUintN(n, a), B = BigInt.asUintN(n, b);
@@ -163,7 +169,7 @@ function arithRun({ a, b, sub, width: n }) {
     carries.push(c);
   }
   const Cn = carries[n - 1], Cn1 = carries[n - 2];
-  const OF = Number(Cn ^ Cn1), SF = Number((R >> BigInt(n - 1)) & 1n), ZF = R === 0n ? 1 : 0, CF = Number(Cn ^ cin);
+  const OF = mistake === 'ofCarry' ? Number(Cn) : Number(Cn ^ Cn1), SF = Number((R >> BigInt(n - 1)) & 1n), ZF = R === 0n ? 1 : 0, CF = mistake === 'cfRaw' ? Number(Cn) : Number(Cn ^ cin);
   const signed = (v) => BigInt.asIntN(n, v);
   const view = (extra = {}) => ({ A, B, Bin, R, carries, cin, ...extra });
   steps.push({ view: view({ stage: 0 }), msg: `${n} 位：X = ${a}（${group4(bin(A, n))}），Y = ${b}（${group4(bin(B, n))}）。${sub ? '减法在加法器里做：X − Y = X + (Y 按位取反) + 1（加法器的进位输入 Cin = 1）。' : '加法：X + Y，进位输入 Cin = 0。'}` });
@@ -228,6 +234,56 @@ export const bitsEngine = {
       return { q: `写出 ${input.src} 的 IEEE 754 单精度表示（十六进制）。`, type: 'hex', width: 8, answer: `0x${r.bits.toString(16)}` };
     }
     return { q: `${input.width} 位补码运算 ${input.src}：写出结果（二进制）。`, type: 'bin', width: input.width, answer: `0b${r.R.toString(2)}` };
+  },
+  // 考卷上那张表：各种码 / 浮点的三个字段 / 运算结果和四个标志位
+  table(input, r) {
+    if (input.mode === 'code') {
+      return {
+        q: `写出 ${input.x} 的 ${input.width} 位${input.show.join('、')}（表示不了的写「无」）。`,
+        qhtml: '',
+        dir: 'row',
+        head: [`${input.width} 位二进制`],
+        rows: input.show.map((k) => ({ label: k, cells: [{ v: r.rows[k] ?? '' }] })),
+      };
+    }
+    if (input.mode === 'float') {
+      if (input.decode) return null;
+      return {
+        q: `把 ${input.src} 写成 IEEE 754 单精度：符号位、阶码（8 位二进制，偏置 127）、尾数（23 位，隐藏最前面的 1）、整个数的十六进制。`,
+        qhtml: '',
+        dir: 'row',
+        head: ['写出来'],
+        rows: [
+          { label: '符号 S', cells: [{ v: String(r.S) }] },
+          { label: '阶码 E', cells: [{ v: bin(r.E, 8) }] },
+          { label: '尾数 M', cells: [{ v: r.M }] },
+          { label: '十六进制', cells: [{ v: [hexOf(r.bits, 32).replace(/H$/, ''), `0x${r.bits.toString(16).toUpperCase().padStart(8, '0')}`, hexOf(r.bits, 32)] }] },
+        ],
+      };
+    }
+    return {
+      q: `${input.width} 位补码运算 ${input.src}：写出结果的二进制和四个标志位。`,
+      qhtml: '',
+      dir: 'row',
+      head: ['写出来'],
+      rows: [
+        { label: '结果', cells: [{ v: bin(r.R, input.width) }] },
+        ...['OF', 'SF', 'ZF', 'CF'].map((k) => ({ label: k, cells: [{ v: String(r.flags[k]) }] })),
+      ],
+    };
+  },
+  // 常见错法
+  variants(input) {
+    if (input.mode === 'code') return [
+      { label: '像是负数的补码忘了 +1（写成了反码）', input: { ...input, mistake: 'noPlusOne' } },
+      { label: '像是移码没有把符号位取反（写成了补码）', input: { ...input, mistake: 'noFlip' } },
+      { label: '像是反码连符号位也取反了', input: { ...input, mistake: 'flipSign' } },
+    ];
+    if (input.mode === 'float') return input.decode ? [] : [{ label: '像是阶码的偏置用了 128（应该是 127）', input: { ...input, bias: 128 } }, { label: '像是阶码的偏置用了 126', input: { ...input, bias: 126 } }];
+    return [
+      ...(input.sub ? [{ label: '像是减法的 CF 直接取了最高位的进位（王道：CF = 进位 ⊕ Cin）', input: { ...input, mistake: 'cfRaw' } }] : []),
+      { label: '像是把最高位的进位当成了溢出 OF（OF = 最高位进位 ⊕ 次高位进位）', input: { ...input, mistake: 'ofCarry' } },
+    ];
   },
 };
 
@@ -333,7 +389,36 @@ export const cacheEngine = {
   run: cacheRun,
   view: cacheView,
   quiz(input, r) {
-    return { q: `Cache 共 ${input.lines} 行，${MAPNAME(input.ways, input.lines)}${input.ways > 1 ? `，${input.replace.toUpperCase()} 替换` : ''}，一开始是空的。依次访问${input.mode === 'block' ? '主存块' : '地址'} ${input.refs.map((x) => x.text).join(' ')}${input.mode === 'addr' ? `（块大小 ${input.block} B）` : ''}，一共命中几次？`, type: 'seq', answer: String(r.hits) };
+    return { q: `Cache 共 ${input.lines} 行，${MAPNAME(input.ways, input.lines)}${input.ways > 1 ? `，${input.replace.toUpperCase()} 替换` : ''}，一开始是空的。依次访问${input.mode === 'block' ? '主存块' : '地址'} ${input.refs.map((x) => x.text).join(' ')}${input.mode === 'addr' ? `（块大小 ${input.block} B）` : ''}，一共命中几次？`, type: 'num', answer: String(r.hits) };
+  },
+  // 考卷上那张表：每次访问的${'组号'}、标记、命中没有、换出的块
+  table(input, r) {
+    const where = input.ways === 1 ? '行号' : '组号';
+    const showSet = input.sets > 1;
+    const head = [...(showSet ? [where] : []), '标记', '命中', '换出的块'];
+    const rows = [];
+    for (const x of r.steps) {
+      if (x.view.hit === undefined) continue;
+      const ref = x.view.r;
+      const set = ref.block % input.sets, tag = Math.floor(ref.block / input.sets);
+      const victim = x.ask?.tag === 'victim' ? x.ask.answer : (() => { const before = r.steps[r.steps.indexOf(x) - 1]?.view.cache?.[set] || []; const after = x.view.cache[set]; const gone = before.filter((b) => b && !after.some((a) => a && a.block === b.block)); return gone.length ? String(gone[0].block) : ''; })();
+      rows.push({ label: ref.text, cells: [...(showSet ? [{ v: String(set), num: true }] : []), { v: String(tag), num: true }, { v: x.view.hit ? '√' : '', mark: true }, { v: victim }] });
+    }
+    return {
+      q: `Cache 共 ${input.lines} 行，${MAPNAME(input.ways, input.lines)}${input.ways > 1 ? `，${input.replace.toUpperCase()} 替换` : ''}，一开始是空的。${input.mode === 'addr' ? `主存地址 ${input.bits} 位，按字节编址，块大小 ${input.block} B。` : ''}依次访问${input.mode === 'block' ? '主存块' : '地址'} ${input.refs.map((x) => x.text).join(' ')}：写出每次访问的${showSet ? `${where}、` : ''}标记（十进制），命中打 √，被换出的主存块号。`,
+      qhtml: '',
+      dir: 'row',
+      head,
+      rows,
+    };
+  },
+  // 常见错法：映射方式弄错（直接映射 / 全相联）、替换算法弄反
+  variants(input) {
+    const out = [];
+    if (input.ways !== 1) out.push({ label: '像是按直接映射算的（组号用了 块号 mod 行数）', input: { ...input, ways: 1, sets: input.lines } });
+    if (input.ways !== input.lines) out.push({ label: '像是按全相联算的', input: { ...input, ways: input.lines, sets: 1 } });
+    if (input.ways > 1) out.push({ label: `像是按 ${input.replace === 'lru' ? 'FIFO' : 'LRU'} 替换的`, input: { ...input, replace: input.replace === 'lru' ? 'fifo' : 'lru' } });
+    return out;
   },
 };
 
@@ -420,6 +505,22 @@ export const pipeEngine = {
   run: pipeRun,
   view: pipeView,
   quiz(input, r) {
-    return { q: `五段流水线（${input.forward ? '有转发' : '没有转发，只能阻塞'}${input.forward ? '' : input.split ? '，寄存器前半周期写、后半周期读' : ''}）执行下面的指令，一共要多少个周期？\n\n${input.instrs.map((x) => `- ${x.name}：\`${x.text}\``).join('\n')}`, type: 'seq', answer: String(r.total) };
+    return { q: `五段流水线（${input.forward ? '有转发' : '没有转发，只能阻塞'}${input.forward ? '' : input.split ? '，寄存器前半周期写、后半周期读' : ''}）执行下面的指令，一共要多少个周期？\n\n${input.instrs.map((x) => `- ${x.name}：\`${x.text}\``).join('\n')}`, type: 'num', answer: String(r.total) };
+  },
+  // 考卷上那张表：每条指令停几个周期、EX 和 WB 在第几个周期
+  table(input, r) {
+    return {
+      q: `五段流水线（${input.forward ? '有转发' : '没有转发，只能阻塞'}${input.forward ? '' : input.split ? '，寄存器前半周期写、后半周期读' : '，寄存器写完才能读'}），第 1 条指令第 1 个周期取指。先在纸上画时空图，再填每条指令要停几个周期、EX 段和 WB 段在第几个周期。`,
+      qhtml: `<ol class="co-instrs">${input.instrs.map((x) => `<li><b>${esc(x.name)}</b>　<code>${esc(x.text)}</code></li>`).join('')}</ol>`,
+      dir: 'row',
+      head: ['停几个周期', 'EX 在第几周期', 'WB 在第几周期'],
+      rows: r.sched.map((x, i) => ({ label: input.instrs[i].name, cells: [{ v: String(x.stall), num: true }, { v: String(x.EX), num: true }, { v: String(x.WB), num: true }] })),
+    };
+  },
+  // 常见错法：有没有转发弄反；寄存器「前半周期写、后半周期读」用没用上
+  variants(input) {
+    const out = [{ label: input.forward ? '像是按没有转发算的' : '像是按有转发算的', input: { ...input, forward: !input.forward } }];
+    if (!input.forward) out.push({ label: input.split ? '像是没用上「前半周期写、后半周期读」（多停了一个周期）' : '像是按「前半周期写、后半周期读」算的', input: { ...input, split: !input.split } });
+    return out;
   },
 };

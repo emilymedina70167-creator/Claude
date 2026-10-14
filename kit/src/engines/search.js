@@ -138,8 +138,9 @@ function kmpView(s, input) {
   let h = `<div class="sv-tbl sv-kmp" style="--cols:${cols}">`;
   h += `<div class="sv-tbl-row"><div class="sv-tbl-h">i</div>${range(1, cols).map((p) => `<div class="sv-tbl-c sv-tbl-idx${p === s.i ? ' sv-cur' : ''}">${p <= m ? p : ''}</div>`).join('')}</div>`;
   h += `<div class="sv-tbl-row"><div class="sv-tbl-h">S</div>${range(1, cols).map((p) => { const j = p - off; const c = p > m ? 'sv-empty' : s.done && j >= 1 && j <= n ? 'sv-done' : eq.has(j) ? 'sv-done' : p === s.i && s.bad ? 'sv-swap' : p === s.i ? 'sv-cmp' : ''; return `<div class="sv-tbl-c ${c}" data-cmd="${p}" data-label="${esc(S[p] ?? '')}">${esc(S[p] ?? '')}</div>`; }).join('')}</div>`;
-  h += `<div class="sv-tbl-row"><div class="sv-tbl-h">T</div>${range(1, cols).map((p) => { const j = p - off; if (j < 1 || j > n) return '<div class="sv-tbl-c sv-tbl-gap"></div>'; const c = s.done || eq.has(j) ? 'sv-done' : j === s.j && s.bad ? 'sv-swap' : j === s.j ? 'sv-cmp' : ''; return `<div class="sv-tbl-c ${c}">${esc(T[j])}</div>`; }).join('')}</div>`;
-  h += `<div class="sv-tbl-row"><div class="sv-tbl-h">j</div>${range(1, cols).map((p) => { const j = p - off; return `<div class="sv-tbl-c sv-tbl-idx${j === s.j ? ' sv-cur' : ''}">${j >= 1 && j <= n ? j : ''}</div>`; }).join('')}</div>`;
+  // 模式串的字符和下标带 data-key：j 回退时整行往右滑（morph.js）
+  h += `<div class="sv-tbl-row"><div class="sv-tbl-h">T</div>${range(1, cols).map((p) => { const j = p - off; if (j < 1 || j > n) return '<div class="sv-tbl-c sv-tbl-gap"></div>'; const c = s.done || eq.has(j) ? 'sv-done' : j === s.j && s.bad ? 'sv-swap' : j === s.j ? 'sv-cmp' : ''; return `<div class="sv-tbl-c ${c}" data-key="t${j}">${esc(T[j])}</div>`; }).join('')}</div>`;
+  h += `<div class="sv-tbl-row"><div class="sv-tbl-h">j</div>${range(1, cols).map((p) => { const j = p - off; return j >= 1 && j <= n ? `<div class="sv-tbl-c sv-tbl-idx${j === s.j ? ' sv-cur' : ''}" data-key="tj${j}">${j}</div>` : '<div class="sv-tbl-c sv-tbl-idx"></div>'; }).join('')}</div>`;
   h += '</div>';
   return h + chips([['i', s.i], ['j', s.j], [input.use, s.arr.slice(1).join(' ')], ['比较次数', s.cmps]]);
 }

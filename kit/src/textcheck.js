@@ -56,7 +56,7 @@ export function checkSeq(text, alts) {
   let msg;
   if (g.length !== a.length) msg = `元素个数不对：你写了 ${g.length} 个，应该是 ${a.length} 个。${prefix ? `前 ${prefix} 个是对的。` : ''}`;
   else msg = prefix ? `前 ${prefix} 个是对的，从第 ${prefix + 1} 个开始不对（有 ${wrong.length} 个位置不对，已标红）。` : `第 1 个就不对（有 ${wrong.length} 个位置不对，已标红）。`;
-  return { ok: false, tokens, wrong, msg };
+  return { ok: false, tokens, wrong, prefix, msg };
 }
 
 // —— 二进制 / 十六进制 ——

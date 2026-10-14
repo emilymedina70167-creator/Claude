@@ -188,9 +188,9 @@ button { font: inherit; color: inherit; }
 .la-lesson code { font: .88em var(--mono); color: var(--blue); background: rgb(var(--shade-rgb) / 0.2); padding: 2px 6px; border-radius: 6px; }
 .la-lesson pre { background: rgb(var(--shade-rgb) / 0.22); padding: 14px 16px; border-radius: 12px; overflow-x: auto; }
 .la-lesson pre code { background: none; padding: 0; color: var(--chalk); }
-.la-lesson table:not(.mx):not(.dv) { border-collapse: collapse; margin: 18px 0; display: block; overflow-x: auto; }
-.la-lesson table:not(.mx):not(.dv) th, .la-lesson table:not(.mx):not(.dv) td { border: 1px solid var(--border); padding: 8px 14px; }
-.la-lesson table:not(.mx):not(.dv) th { font-family: var(--hand); font-weight: 400; font-size: 22px; color: var(--yellow); }
+.la-lesson table:not(.mx):not(.dv):not(.sv-fill-t) { border-collapse: collapse; margin: 18px 0; display: block; overflow-x: auto; }
+.la-lesson table:not(.mx):not(.dv):not(.sv-fill-t) th, .la-lesson table:not(.mx):not(.dv):not(.sv-fill-t) td { border: 1px solid var(--border); padding: 8px 14px; }
+.la-lesson table:not(.mx):not(.dv):not(.sv-fill-t) th { font-family: var(--hand); font-weight: 400; font-size: 22px; color: var(--yellow); }
 .la-lesson hr { border: 0; border-top: 2px dashed var(--faint); margin: 36px 0; }
 .katex { font-size: 1.1em; }
 .katex-display { overflow-x: auto; overflow-y: hidden; padding: 6px 0; }
@@ -1176,6 +1176,37 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .sv-ask-tools { display: flex; gap: 18px; flex-wrap: wrap; }
 .sv-picking [data-pick] { cursor: pointer; outline: 2px dashed color-mix(in srgb, var(--lav) 55%, transparent); outline-offset: 2px; }
 .sv-picking [data-pick].sv-picked { outline: 3px solid var(--lav); background: color-mix(in srgb, var(--lav) 20%, transparent); }
+/* 自己填表（mode: fill）：考卷上那张表，逐格判 */
+.sv-fill .w-q { margin-bottom: 8px; }
+.sv-fill-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 10px 0 6px; max-width: 100%; }
+.sv-fill-t { border-collapse: collapse; font: 16px var(--sans); color: var(--body); }
+.sv-fill-t th, .sv-fill-t td { border: 1px solid rgb(var(--chalk-rgb) / 0.22); padding: 2px; text-align: center; vertical-align: middle; min-width: 40px; height: 44px; }
+.sv-fill-t th { font: 500 14.5px var(--sans); color: var(--muted); padding: 2px 8px; white-space: nowrap; background: rgb(var(--chalk-rgb) / 0.04); }
+.sv-fill-t th[scope="row"] { text-align: right; }
+.sv-fill-given { color: var(--muted); }
+.sv-fill-in { width: 100%; min-width: 2.2em; height: 40px; box-sizing: border-box; border: 0; border-radius: 6px; background: rgb(var(--chalk-rgb) / 0.06); color: var(--text); font: 600 16px var(--sans); text-align: center; padding: 0 4px; }
+.sv-fill-in:focus { outline: 2px solid var(--yellow); outline-offset: -2px; background: rgb(var(--yellow-rgb) / 0.1); }
+.sv-fill-mark { width: 100%; min-width: 40px; height: 40px; border: 1px dashed rgb(var(--chalk-rgb) / 0.3); border-radius: 6px; background: transparent; color: var(--yellow); font: 700 20px var(--sans); cursor: pointer; }
+.sv-fill-mark[aria-pressed="true"] { border-style: solid; border-color: rgb(var(--yellow-rgb) / 0.6); background: rgb(var(--yellow-rgb) / 0.12); }
+.sv-fill-t td.is-ok { background: rgb(var(--green-rgb) / 0.13); }
+.sv-fill-t td.is-bad { box-shadow: inset 0 0 0 2.5px var(--coral); background: rgb(var(--coral-rgb) / 0.1); }
+.sv-fill-t td.is-revealed .sv-fill-in, .sv-fill-t td.is-revealed { color: var(--lav); }
+.sv-fill-copyrow td, .sv-fill-copyrow th { border: 0; height: auto; padding-top: 4px; }
+.sv-fill-copy { min-height: 36px; font: 13px var(--sans); padding: 0 8px; white-space: nowrap; }
+.sv-fill-fb { font: 15.5px var(--sans); margin: 6px 0; }
+.sv-fill-fb.is-bad { color: var(--coral); }
+.sv-fill-fb.is-ok { color: var(--green); }
+.sv-fill-ctrl { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.sv-fill-ctrl .btn { min-height: 44px; }
+
+/* 按顺序点（ask: order）：点过的标上第几个 */
+.sv-order-seq { font: 600 16px var(--sans); color: var(--lav); min-width: 4em; flex: 1 1 auto; }
+.sv-order-undo { min-height: 44px; }
+span.sv-order-badge { position: absolute; top: -9px; right: -9px; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 10px; background: var(--lav); color: var(--board); font: 700 12.5px/20px var(--sans); text-align: center; pointer-events: none; }
+.sv-picking [data-pick] { position: relative; }
+g.sv-order-badge { pointer-events: none; }
+g.sv-order-badge circle { fill: var(--lav); stroke: none; }
+g.sv-order-badge text { fill: var(--board); font: 700 12px var(--sans); text-anchor: middle; dominant-baseline: central; }
 .sv-show-demo { margin-top: 12px; }
 .sv-stage-q { margin: 6px 0; }
 

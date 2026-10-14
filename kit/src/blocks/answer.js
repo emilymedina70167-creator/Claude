@@ -16,6 +16,7 @@ import { formulaSpec, formulaTeX, compareFormula } from '../formula.js';
 import { textAnswerInput } from '../textinput.js';
 import { parseSeqAnswer, checkSeq, radixAnswer, checkRadix, groupDigits } from '../textcheck.js';
 import { calcValue, isQ } from '../exact.js';
+import { cellOk, normCell, readNumber } from '../stepperspec.js';
 
 // 通用作答组件：spec = {q, answer, type, before, hint, explain, solution}
 // spec.formula（formulaSpec 的结果）：答案是含 n 的式子，学生写式子，页面代值比较
@@ -264,6 +265,12 @@ export function textAnswerSpec(type, answer, { scope = {}, width } = {}) {
     const single = alts.every((a) => a.every((x) => [...x].length === 1));
     const display = alts[0].join(' ');
     return { shape: { kind: 'seq', single }, check: (g) => checkSeq(g, alts), display, tex: `\\text{${alts[0].map(texSafe).join(' → ')}}` };
+  }
+  if (t === 'num' || t === 'number') {
+    // 一个数（平均周转时间、ASL、命中率……）：分数、小数都认，除不尽的写到两位小数以上四舍五入对得上就算对
+    const want = String(answer ?? '').trim();
+    const cell = { v: want, num: true };
+    return { shape: { kind: 'seq', single: false }, check: (g) => { const ok = cellOk(cell, g); return { ok, tokens: [], wrong: [], msg: ok ? '' : readNumber(normCell(g)) === null ? '写一个数（整数、小数或分数，如 2.5、61/4）。' : '不对，再算算（除不尽的写分数，或者写到两位小数）。' }; }, display: want, tex: `${texSafe(want)}` };
   }
   if (t === 'bin' || t === 'hex') {
     const base = t === 'bin' ? 2 : 16;

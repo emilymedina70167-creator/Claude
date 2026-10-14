@@ -101,7 +101,38 @@ function adjacency({ names, edges, directed, order }) {
 const ekey = (e, directed) => (directed ? `${e.u}->${e.v}` : [e.u, e.v].join('-'));
 
 export function run(input) {
-  return { bfs: bfs, dfs: dfs, prim, kruskal, dijkstra, floyd, topo, critical }[input.algo](input);
+  const r = { bfs: bfs, dfs: dfs, prim, kruskal, dijkstra, floyd, topo, critical }[input.algo](input);
+  addOrderAsk(input, r);
+  return r;
+}
+
+// 整个序列「先别往下看，按顺序在图上点出来」：挂在第 1 步上（ask: order）。
+// 答案不唯一的（拓扑排序有好几种、Dijkstra / Prim 有一样近的）把每一种都算对；太多了就不问
+const ORDER_Q = {
+  bfs: '先别往下看：按广度优先的顺序，在图上依次点出所有顶点。',
+  dfs: '先别往下看：按深度优先的顺序，在图上依次点出所有顶点。',
+  topo: '先别往下看：在图上依次点出一个拓扑序列。',
+  dijkstra: '先别往下看：在图上依次点出顶点加入集合 S 的顺序（从起点开始）。',
+  prim: '先别往下看：在图上依次点出顶点加进树里的顺序（从起点开始）。',
+};
+function addOrderAsk(input, r) {
+  const q = ORDER_Q[input.algo];
+  if (!q || r.steps.length < 2) return;
+  let answer = '';
+  if (input.algo === 'bfs' || input.algo === 'dfs') answer = r.passes[0].join(' ');
+  else if (input.algo === 'topo') {
+    if (!r.ok) return;
+    if (input.use === 'stack') answer = r.passes[0].join(' ');
+    else { const all = allTopo(input, 31); if (all.length > 30) return; answer = all.map((x) => x.join(' ')).join(' | '); }
+  } else if (input.algo === 'dijkstra') {
+    if (r.tie || !r.order?.length) return;
+    answer = [input.start, ...r.order.filter((x) => x !== input.start)].join(' ');
+  } else if (input.algo === 'prim') {
+    if (r.tie || !r.order?.length) return;
+    answer = r.order.join(' ');
+  }
+  if (!answer) return;
+  r.steps[1].asks = [...(r.steps[1].asks || []), { tag: 'order', kind: 'order', q, answer }];
 }
 
 // —— 遍历 ——
@@ -167,12 +198,17 @@ function prim(g) {
   let total = 0;
   const v = (extra = {}) => ({ done: [...inT], tree: [...tree], total, ...extra });
   steps.push({ view: v({ cur: g.start }), msg: `Prim：从 ${g.start} 开始，每次在「一头在树里、一头在树外」的边里挑权最小的，把树外那头加进来，直到 ${n} 个顶点都进来。` });
+  const order = [g.start];
+  let tie = false;
   while (inT.size < n) {
     let best = null;
     for (const x of g.names) {
       if (!inT.has(x)) continue;
       for (const a of adj[x]) if (!inT.has(a.to) && (!best || a.w < best.w || (a.w === best.w && g.names.indexOf(a.to) < g.names.indexOf(best.to)))) best = { from: x, to: a.to, w: a.w, e: a.e };
     }
+    // 一样小的边通向别的顶点：加进来的顺序就不唯一
+    if (best) for (const x of inT) for (const a of adj[x]) if (!inT.has(a.to) && a.w === best.w && a.to !== best.to) tie = true;
+    if (best) order.push(best.to);
     if (!best) { steps.push({ view: v(), msg: '图不连通：剩下的顶点连不进来，没有生成树。' }); break; }
     const cands = [];
     for (const x of inT) for (const a of adj[x]) if (!inT.has(a.to)) cands.push(ekey(a.e, false));
@@ -182,7 +218,7 @@ function prim(g) {
     steps.push({ view: v({ cur: best.to, cand: cands, edge: ekey(best.e, false), fresh: [best.to] }), msg: `横跨树内外的边里最小的是 (${best.from}, ${best.to})，权 ${best.w}：把 ${best.to} 加进来。`, ask: { tag: 'next', kind: 'pick', q: '下一个加进树里的顶点是？点出来。', answer: best.to } });
   }
   steps.push({ view: v(), msg: `最小生成树的权值之和是 ${total}。` });
-  return { steps, passes: [[total]], total };
+  return { steps, passes: [[total]], total, order, tie };
 }
 
 function kruskal(g) {
@@ -217,6 +253,7 @@ function dijkstra(g) {
   const fin = new Set();
   dist[g.start] = 0;
   const hist = []; // 每一轮：{ pick, dist: {...} }
+  let tie = false; // 有一轮出现一样近的：加入 S 的顺序不唯一
   const steps = [];
   const snapT = () => ({ dist: { ...dist }, path: { ...path }, final: [...fin] });
   const treeEdges = () => N.filter((x) => path[x] !== null && fin.has(x)).map((x) => findKey(g, path[x], x));
@@ -226,6 +263,7 @@ function dijkstra(g) {
     for (const x of N) if (!fin.has(x) && dist[x] !== INF && (u === null || dist[x] < dist[u])) u = x;
     if (u === null) { steps.push({ view: { table: snapT(), hist: hist.slice(), done: [...fin], tree: treeEdges() }, msg: '剩下的顶点都到不了（dist 是 ∞），结束。' }); break; }
     const ties = N.filter((x) => !fin.has(x) && dist[x] === dist[u]);
+    if (ties.length > 1) tie = true;
     fin.add(u);
     const changed = [];
     for (const a of adj[u]) {
@@ -241,7 +279,7 @@ function dijkstra(g) {
   }
   const routes = N.filter((x) => x !== g.start).map((x) => `${x}：${dist[x] === INF ? '到不了' : `${dist[x]}（${routeOf(path, g.start, x).join('→')}）`}`);
   steps.push({ view: { table: snapT(), hist: hist.slice(), done: [...fin], tree: treeEdges() }, msg: `从 ${g.start} 到各顶点的最短路径：${routes.join('；')}。` });
-  return { steps, passes: [N.map((x) => inf(dist[x]))], dist, path, order: hist.map((h) => h.pick) };
+  return { steps, passes: [N.map((x) => inf(dist[x]))], dist, path, order: hist.map((h) => h.pick), tie };
 }
 function findKey(g, a, b) {
   const e = g.edges.find((x) => (x.u === a && x.v === b) || (!g.directed && x.u === b && x.v === a));

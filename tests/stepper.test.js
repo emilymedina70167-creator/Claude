@@ -115,3 +115,68 @@ test('课堂 Claude 看到的：演示里先猜的作答、走到第几步', asy
   assert.match(actionText({ source: 'record', type: 'stepper', engine: 'sort', block: 's-2', value: '1 2 3', ok: true, attempts: 2, detail: '写出结果' }), /写出结果，写了 1 2 3（对，第 2 次）/);
   assert.equal(actionText({ source: 'event', type: 'drag', step: 'b2', block: 's-2', name: 'step', value: 6, beat: 22 }), '[动作] b2 里的演示 s-2：走到第 6 步（共 22 步）');
 });
+
+test('自己填表：逐格判、只指出第一处、mark 格、数、几种都对；错法诊断', async () => {
+  const { checkFill, cellOk, normCell, cellName, misreadFill, misreadAnswer, fillOrder } = await import('../kit/src/stepperspec.js');
+  const table = {
+    dir: 'col', head: ['块 1', '块 2', '缺页'],
+    rows: [
+      { label: '7', cells: [{ v: '7' }, { v: '' }, { v: '√', mark: true }] },
+      { label: '0', cells: [{ v: '7', given: true }, { v: '0' }, { v: '√', mark: true }] },
+      { label: '7', cells: [{ v: '7' }, { v: '0' }, { v: '', mark: true }] },
+    ],
+  };
+  assert.equal(fillOrder(table).length, 8);
+  assert.equal(normCell(' ∞ '), '∞');
+  assert.equal(normCell('inf'), '∞');
+  assert.equal(normCell('—'), '');
+  assert.ok(cellOk({ v: '2.5', num: true }, '5/2'));
+  assert.ok(cellOk({ v: '7/3', num: true }, '2.33'));
+  assert.ok(!cellOk({ v: '7/3', num: true }, '2.3'));
+  assert.ok(cellOk({ v: ['A', 'B'] }, 'b'));
+  let r = checkFill(table, [['7', '', '√'], ['', '0', '√'], ['7', '0', '']]);
+  assert.ok(r.ok);
+  r = checkFill(table, [['7', '', '√'], ['', '1', '√'], ['7', '0', '']]);
+  assert.deepEqual(r.first, { r: 1, c: 1, empty: false });
+  assert.equal(r.okCount, 3);
+  r = checkFill(table, [['7', '', ''], ['', '0', '√']]);
+  assert.equal(r.first.r, 0);
+  assert.equal(r.first.c, 2);
+  r = checkFill(table, [['7', '', '√'], ['', '', '']]);
+  assert.ok(r.first.empty);
+  assert.equal(cellName(table, 1, 1), '「0」那一列的「块 2」');
+  // 错法诊断：错的格子和 FIFO 的表对得上
+  const fifo = { rows: [{ cells: [{ v: '7' }, { v: '' }, { v: '√', mark: true }] }, { cells: [{ v: '7' }, { v: '1' }, { v: '√', mark: true }] }, { cells: [{ v: '7' }, { v: '0' }, { v: '', mark: true }] }] };
+  assert.equal(misreadFill(table, [['7', '', '√'], ['', '1', '√'], ['7', '0', '']], [{ label: '像是按 FIFO 换的', table: fifo }]), '像是按 FIFO 换的');
+  assert.equal(misreadFill(table, [['7', '', '√'], ['', '9', '√'], ['7', '0', '']], [{ label: 'x', table: fifo }]), '');
+  assert.equal(misreadAnswer('A C B', [{ label: '像是先序', answer: 'A B C' }, { label: '像是后序', answer: 'A C B' }]), '像是后序');
+  assert.equal(misreadAnswer('A,C,B', [{ label: '像是后序', answer: 'A C B | C A B' }]), '像是后序');
+});
+
+test('填表：一组格子不管先后（物理块）；页面置换的表和错法', async () => {
+  const { checkFill, misreadFill, fillSpec } = await import('../kit/src/stepperspec.js');
+  const { pagingEngine } = await import('../kit/src/engines/os.js');
+  const input = pagingEngine.parse({ refs: '1 2 3 4 1 2 5 1 2 3 4 5', frames: '3', algo: 'fifo' });
+  const r = pagingEngine.run(input);
+  const t = pagingEngine.table(input, r);
+  assert.equal(t.rows.length, 12);
+  assert.equal(t.rows.filter((x) => x.cells[3].v === '√').length, 9);
+  // 学生按「进入的先后」写（顺序和物理块不一样）也算对
+  const vals = t.rows.map((row) => row.cells.map((c) => [].concat(c.v)[0]));
+  vals[5] = [vals[5][2], vals[5][0], vals[5][1], vals[5][3], vals[5][4]];
+  assert.ok(checkFill(t, vals).ok);
+  // 第 4 列写成 LRU 的结果：报第 4 列的组；错法对得上 LRU
+  const lru = pagingEngine.table({ ...input, algo: 'lru' }, pagingEngine.run({ ...input, algo: 'lru' }));
+  const bad = lru.rows.map((row) => row.cells.map((c) => [].concat(c.v)[0]));
+  const res = checkFill(t, bad);
+  assert.ok(!res.ok);
+  assert.equal(misreadFill(t, bad, [{ label: 'LRU', table: lru }]), 'LRU');
+  // given: 3 前 3 列直接给出；cols 只填缺页
+  const g = fillSpec(t, { given: '3', cols: '缺页' });
+  assert.deepEqual(g.errors, []);
+  assert.equal(g.table.rows[5].cells.filter((c) => !c.given).length, 1);
+  assert.match(fillSpec(t, { cols: '块 9' }).errors[0], /没有「块 9」/);
+  // 错法：没把一开始调入算成缺页
+  const v = pagingEngine.variants(input).find((x) => /调入/.test(x.label));
+  assert.equal(pagingEngine.quiz(v.input, pagingEngine.run(v.input), {}).answer, '6');
+});

@@ -15,9 +15,16 @@ const itemHtml = (x) => (x === null || x === undefined ? '' : typeof x === 'obje
  *   lo / hi：当前处理的区间（区间外的淡一点）；fresh：这一步刚变的位置（闪一下）
  *   pick：可以点的格子写 data-pick；label：左边的名字（如 A）
  *   extra：下面再加几行，和格子对齐：[{ label: '比较次数', cells: [...] }]（有 extra 时左边多一栏写每一行是什么）
+ *   keys：格子里的数是「同一个东西在挪位置」（排序、堆）时写 true：每个格子带 data-key（数 + 第几次出现），
+ *     换步时从旧位置滑到新位置（morph.js）。值会原地变的（dist、Work、计数）不要写，不然一个数会「飞」到别的格子
  */
 export function arrayView(items, opts = {}) {
-  const { base = 1, idx = true, cls = {}, ptr = {}, zero = null, lo = null, hi = null, fresh = [], pick = true, label = '', extra = [] } = opts;
+  const { base = 1, idx = true, cls = {}, ptr = {}, zero = null, lo = null, hi = null, fresh = [], pick = true, label = '', extra = [], keys = false } = opts;
+  // 先给数组里的编、最后才轮到左边那一格（枢轴、哨兵）：枢轴拿出来时从原位飞过去，放回去时从枢轴格飞回来
+  const keyOf = keys ? keyMaker() : null;
+  // 「坑」（快排里值还留着、但已经被拿走的格子）不算这个值的身份
+  const itemKeys = keyOf ? items.map((x, i) => (x === null || x === undefined || /\bsv-hole\b/.test(cls[base + i] || '') ? null : keyOf(itemText(x)))) : [];
+  const zeroKey = keyOf && zero && zero.item !== null && zero.item !== undefined ? keyOf(itemText(zero.item)) : null;
   const side = extra.length ? (t = '') => `<div class="sv-row-h">${esc(t)}</div>` : () => '';
   const n = items.length;
   const cols = n + (zero ? 1 : 0);
@@ -25,13 +32,14 @@ export function arrayView(items, opts = {}) {
   const cell = (p, x) => {
     const out = (lo !== null && p < lo) || (hi !== null && p > hi);
     const c = ['sv-cell', x === null || x === undefined ? 'sv-empty' : '', out ? 'sv-out' : '', cls[p] || '', freshSet.has(p) ? 'sv-new' : ''].filter(Boolean).join(' ');
-    return `<div class="${c}" data-cmd="${p - base + 1}"${pick ? ` data-pick="${p}"` : ''}>${itemHtml(x)}</div>`;
+    const key = itemKeys[p - base] ? ` data-key="${esc(itemKeys[p - base])}"` : '';
+    return `<div class="${c}" data-cmd="${p - base + 1}"${pick ? ` data-pick="${p}"` : ''}${key}>${itemHtml(x)}</div>`;
   };
   // 格子多（散列表、长主串）时格子窄一点，iPad 竖屏一行放得下
   let h = `<div class="sv-arr${extra.length ? ' sv-has-label' : ''}${cols > 12 ? ' sv-dense' : ''}" style="--cols:${cols}">`;
   if (label) h += `<div class="sv-arr-label">${esc(label)}</div>`;
   h += `<div class="sv-row">${side()}`;
-  if (zero) h += `<div class="sv-cell sv-zero${zero.cls ? ` ${zero.cls}` : ''}${zero.fresh ? ' sv-new' : ''}">${itemHtml(zero.item)}</div>`;
+  if (zero) h += `<div class="sv-cell sv-zero${zero.cls ? ` ${zero.cls}` : ''}${zero.fresh ? ' sv-new' : ''}"${zeroKey ? ` data-key="${esc(zeroKey)}"` : ''}>${itemHtml(zero.item)}</div>`;
   for (let i = 0; i < n; i++) h += cell(base + i, items[i]);
   h += '</div>';
   if (idx) {
@@ -53,6 +61,12 @@ export function arrayView(items, opts = {}) {
     h += '</div>';
   }
   return h + '</div>';
+}
+
+/** 同一个画面里给值编 data-key：同一个值第二次出现记成「值#1」，这样重复的数也各有各的身份 */
+export function keyMaker(prefix = 'v') {
+  const seen = new Map();
+  return (text) => { const n = seen.get(text) || 0; seen.set(text, n + 1); return `${prefix}:${text}#${n}`; };
 }
 
 /** 几个变量写成一排小牌子：[['i', 3], ['j', 2]]，值是 undefined / null 的不写 */

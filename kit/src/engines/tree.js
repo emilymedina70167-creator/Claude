@@ -4,7 +4,7 @@
 //   heap: + ops:              堆：建堆、插入（上浮）、删除堆顶（下坠）、堆排序；树和数组两种样子一起看
 // 纯函数，不碰 DOM（tests/tree-engine.test.js）。画法在 treeview.js。
 import { treeSvg, levelOrder } from './treeview.js';
-import { arrayView, chips } from './arrayview.js';
+import { arrayView, chips, keyMaker } from './arrayview.js';
 
 const WALKS = { preorder: '先序', inorder: '中序', postorder: '后序', levelorder: '层序' };
 const WALK_ALIAS = { pre: 'preorder', preorder: 'preorder', 先序: 'preorder', 前序: 'preorder', in: 'inorder', inorder: 'inorder', 中序: 'inorder', post: 'postorder', postorder: 'postorder', 后序: 'postorder', level: 'levelorder', levelorder: 'levelorder', 层序: 'levelorder', 层次: 'levelorder' };
@@ -189,6 +189,8 @@ function walkRun({ tree, walk }) {
     rec(tree.root, [], null);
   }
   steps.push({ view: view(null, walk === 'levelorder' ? null : []), msg: `${name}序列：${seq.join(' ')}。` });
+  // ask: order：先别往下看，在图上按顺序点出整个遍历序列（挂在第 1 步上）
+  if (steps.length > 1) steps[1].asks = [{ tag: 'order', kind: 'order', q: `先别往下看：按${name}的顺序，在图上依次点出所有结点。`, answer: seq.join(' ') }];
   return { steps, passes: [seq] };
 }
 
@@ -461,8 +463,12 @@ function heapView(s) {
   const arrCls = { ...(s.cls || {}) };
   for (let i = len + 1; i <= s.A.length; i++) arrCls[i] = `${arrCls[i] || ''} sv-done`.trim();
   if (s.sorted === 1) for (let i = 1; i <= s.A.length; i++) arrCls[i] = 'sv-done';
-  const tsvg = treeSvg(tree, { cls, fresh: (s.fresh || []).filter((i) => i <= len), pick: (id) => id, cmd: (id) => Number(id) });
-  const arr = arrayView(s.A.map((x) => x && x.text), { cls: arrCls, fresh: s.fresh, label: '' });
+  // 堆的结点是位置、值在换：按值编身份，交换时树上和数组里的值都飞过去
+  const km = keyMaker('h');
+  const hk = {};
+  for (let i = 1; i <= len; i++) hk[i] = km(s.A[i - 1].text);
+  const tsvg = treeSvg(tree, { cls, fresh: (s.fresh || []).filter((i) => i <= len), pick: (id) => id, cmd: (id) => Number(id), key: (id) => hk[id] });
+  const arr = arrayView(s.A.map((x) => x && x.text), { cls: arrCls, fresh: s.fresh, label: '', keys: true });
   return `<div class="sv-heap">${tsvg}${arr}</div>`;
 }
 

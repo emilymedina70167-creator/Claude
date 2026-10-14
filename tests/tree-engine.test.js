@@ -72,8 +72,8 @@ test('堆：建大根堆、插入、删除堆顶、堆排序（王道例子）�
   assert.throws(() => parse({ heap: 'A B' }), /要写数/);
   // 树和数组里同一个元素的 highlight 编号一样（都是下标）
   const html = view(b.r.steps.at(-1).view, b.input);
-  assert.match(html, /<g class="sv-node[^"]*" data-pick="1" data-cmd="1" data-label="87">/);
-  assert.match(html, /<div class="sv-cell[^"]*" data-cmd="1" data-pick="1">87<\/div>/);
+  assert.match(html, /<g class="sv-node[^"]*" data-pick="1" data-cmd="1" data-label="87"[^>]*>/);
+  assert.match(html, /<div class="sv-cell[^"]*" data-cmd="1" data-pick="1"[^>]*>87<\/div>/);
 });
 
 test('画法：按中序排开不重叠；ghost 和标注', () => {

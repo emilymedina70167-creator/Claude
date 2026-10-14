@@ -42,6 +42,8 @@ export function levelOrder(tree) {
  *   pick(id) → data-pick 的值；cmd(id) → data-cmd 的值（默认层序第几个）；note：{ id: 结点旁边的小字 }
  *   ghost：{ parent, side: 'left' | 'right', key }：画一个虚线的「将要插进来」的结点
  *   fresh：这一步刚变的结点（闪一下）
+ *   key(id) → 结点的身份（data-key，换步时同一个结点从旧位置滑到新位置）；默认就是 id。
+ *     堆这种「结点是位置、值在换」的树，传按值编的身份，交换时值会飞过去
  */
 export function treeSvg(tree, opts = {}) {
   const { cls = {}, edge = {}, note = {}, fresh = [], ghost = null } = opts;
@@ -50,6 +52,7 @@ export function treeSvg(tree, opts = {}) {
   const order = levelOrder(tree);
   const cmdOf = opts.cmd || ((id) => order.indexOf(id) + 1);
   const pickOf = opts.pick || ((id) => tree.nodes[id].key);
+  const keyOf = opts.key || ((id) => `n:${id}`);
   const ids = Object.keys(pos);
   const maxX = Math.max(...ids.map((id) => pos[id].x));
   const maxD = Math.max(...ids.map((id) => pos[id].d)) + (ghost ? 1 : 0);
@@ -63,7 +66,7 @@ export function treeSvg(tree, opts = {}) {
     const n = tree.nodes[id];
     for (const c of [n.left, n.right]) {
       if (c === null || c === undefined) continue;
-      lines += `<line class="sv-edge ${edge[c] || ''}" x1="${cx(id)}" y1="${cy(id)}" x2="${cx(c)}" y2="${cy(c)}"/>`;
+      lines += `<line class="sv-edge ${edge[c] || ''}" data-key="e:${esc(c)}" x1="${cx(id)}" y1="${cy(id)}" x2="${cx(c)}" y2="${cy(c)}"/>`;
     }
   }
   if (ghost) {
@@ -78,7 +81,7 @@ export function treeSvg(tree, opts = {}) {
     const c = ['sv-node', cls[id] || '', freshSet.has(String(id)) ? 'sv-new' : ''].filter(Boolean).join(' ');
     const key = String(n.key);
     const small = key.length > 2 ? ' sv-small' : '';
-    circles += `<g class="${c}" data-pick="${esc(pickOf(id))}" data-cmd="${cmdOf(id)}" data-label="${esc(key)}"><circle cx="${cx(id)}" cy="${cy(id)}" r="${R}"/><text class="${small}" x="${cx(id)}" y="${cy(id)}">${esc(key)}</text>${note[id] ? `<text class="sv-node-note" x="${cx(id) + R + 4}" y="${cy(id) - R + 2}">${esc(note[id])}</text>` : ''}</g>`;
+    circles += `<g class="${c}" data-pick="${esc(pickOf(id))}" data-cmd="${cmdOf(id)}" data-label="${esc(key)}" data-key="${esc(keyOf(id))}"><circle cx="${cx(id)}" cy="${cy(id)}" r="${R}"/><text class="${small}" x="${cx(id)}" y="${cy(id)}">${esc(key)}</text>${note[id] ? `<text class="sv-node-note" x="${cx(id) + R + 4}" y="${cy(id) - R + 2}">${esc(note[id])}</text>` : ''}</g>`;
   }
   return `<svg class="sv-tree" viewBox="0 0 ${W} ${H}" width="${W}" style="max-width:100%" role="img" aria-label="二叉树">${lines}${circles}</svg>`;
 }

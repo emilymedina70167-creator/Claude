@@ -39,7 +39,7 @@ function schedParse(fields) {
   return { procs, algo, q, prioSmall };
 }
 
-function schedRun({ procs, algo, q, prioSmall }) {
+function schedRun({ procs, algo, q, prioSmall, rrOld = false }) {
   const P = procs.map((p) => ({ ...p, rem: p.burst, done: null, first: null }));
   const segs = []; // { name, s, e }（name 为 null 是空闲）
   const steps = [];
@@ -106,10 +106,12 @@ function schedRun({ procs, algo, q, prioSmall }) {
     t += run;
     p.rem -= run;
     segs.push({ name, s: start, e: t });
+    // 错法「用完时间片的先排、新到的后排」（rrOld）只在算常见错法时用
+    if (algo === 'rr' && rrOld && p.rem > 0) ready.push(name);
     const fresh = admit(t);
     let tail = '';
     if (p.rem === 0) { p.done = t; finished++; tail = `${name} 运行完（完成时间 ${t}）。`; }
-    else if (algo === 'rr') { ready.push(name); tail = `时间片用完，${name} 还剩 ${p.rem}，${fresh.length ? `先让新到的 ${fresh.join('、')} 入队，再` : ''}排到队尾。`; }
+    else if (algo === 'rr') { if (!rrOld) ready.push(name); tail = `时间片用完，${name} 还剩 ${p.rem}，${fresh.length ? `先让新到的 ${fresh.join('、')} 入队，再` : ''}排到队尾。`; }
     else { tail = `${fresh.join('、')} 到达，${name} 还剩 ${p.rem}，被抢占，回到就绪队列。`; ready.push(name); }
     steps.push({ view: v({ run: name }), msg: `t = ${start}：就绪队列 ${queueText}。${algo === 'rr' ? `队头是 ${name}` : why(name)}，运行 ${name}（${start}～${t}）。${tail}${fresh.length && (p.rem === 0 || algo !== 'rr') && !tail.includes('到达') ? `${fresh.join('、')} 在这期间到达。` : ''}`, ask });
   }
@@ -153,9 +155,27 @@ export const schedEngine = {
   quiz(input, r, fields) {
     const what = String(fields.quiz || 'order').toLowerCase();
     const head = `用${SCHED[input.algo]}${input.q ? `（时间片 ${input.q}）` : ''}调度这几个进程。`;
-    if (what === 'avg' || what === 'turn') return { q: `${head}平均周转时间是多少？（写分数或小数）`, qhtml: schedProcTable(input), type: 'seq', answer: frac(r.rows.reduce((a, x) => a + x.turn, 0), r.rows.length) };
-    if (what === 'wait') return { q: `${head}平均等待时间是多少？（写分数或小数）`, qhtml: schedProcTable(input), type: 'seq', answer: frac(r.rows.reduce((a, x) => a + x.wait, 0), r.rows.length) };
+    if (what === 'avg' || what === 'turn') return { q: `${head}平均周转时间是多少？（写分数或小数）`, qhtml: schedProcTable(input), type: 'num', answer: frac(r.rows.reduce((a, x) => a + x.turn, 0), r.rows.length) };
+    if (what === 'wait') return { q: `${head}平均等待时间是多少？（写分数或小数）`, qhtml: schedProcTable(input), type: 'num', answer: frac(r.rows.reduce((a, x) => a + x.wait, 0), r.rows.length) };
     return { q: `${head}按时间顺序写出 CPU 上依次运行的进程（同一个进程被打断后再运行要再写一次，空闲不写）。`, qhtml: schedProcTable(input), type: 'seq', answer: r.order.join(' ') };
+  },
+  // 考卷上那张表：每个进程的完成时间、周转时间、带权周转时间、等待时间
+  table(input, r) {
+    return {
+      q: `用${SCHED[input.algo]}${input.q ? `（时间片 ${input.q}）` : ''}调度这几个进程。先在纸上画甘特图，再填每个进程的完成时间、周转时间、带权周转时间（除不尽写分数）、等待时间。`,
+      qhtml: schedProcTable(input),
+      dir: 'row',
+      head: ['完成时间', '周转时间', '带权周转', '等待时间'],
+      rows: r.rows.map((x) => ({ label: x.name, cells: [{ v: String(x.done), num: true }, { v: String(x.turn), num: true }, { v: frac(x.turn, x.burst), num: true }, { v: String(x.wait), num: true }] })),
+    };
+  },
+  // 常见错法：换成别的调度算法；抢占 / 非抢占弄反；RR 里新到的和用完时间片的谁先入队弄反
+  variants(input) {
+    const hasPrio = input.procs.some((p) => p.prio !== null);
+    const algos = ['fcfs', 'sjf', 'srtf', 'hrrn', ...(hasPrio ? ['prio', 'pprio'] : []), ...(input.q ? ['rr'] : [])].filter((a) => a !== input.algo);
+    const out = algos.map((a) => ({ label: `像是按${SCHED[a]}排的`, input: { ...input, algo: a, q: a === 'rr' ? input.q : null } }));
+    if (input.algo === 'rr') out.unshift({ label: '像是把用完时间片的进程排在了新到达的进程前面（王道：同一时刻新到的先入队）', input: { ...input, rrOld: true } });
+    return out;
   },
 };
 const schedProcTable = (input) => table(['进程', '到达时间', '运行时间', ...(input.procs.some((p) => p.prio !== null) ? ['优先级'] : [])], input.procs.map((p) => [p.name, p.arrive, p.burst, ...(p.prio !== null ? [p.prio] : [])]));
@@ -279,7 +299,28 @@ export const pagingEngine = {
     const what = String(fields.quiz || 'faults').toLowerCase();
     const head = `页面引用串 ${input.refs.join(' ')}，分 ${input.frames} 个物理块，用${PAGING[input.algo]}。`;
     if (what === 'victims') return { q: `${head}依次写出被换出的页。`, type: 'seq', answer: r.victims.join(' ') || '无' };
-    return { q: `${head}一共缺页多少次（一开始调入也算）？`, type: 'seq', answer: String(r.faults) };
+    // 错法「一开始调入不算缺页」：缺页次数少算了开头那几次
+    const faults = input.noInitial ? r.faults - Math.min(input.frames, new Set(input.refs).size) : r.faults;
+    return { q: `${head}一共缺页多少次（一开始调入也算）？`, type: 'seq', answer: String(faults) };
+  },
+  // 考卷上那张表：每次访问一列，各物理块里是哪页（同一列里的物理块不管顺序）、缺没缺页、换出谁
+  table(input, r) {
+    const cols = r.steps.filter((x) => x.view.k >= 0 && !x.view.end).map((x) => x.view.cols.at(-1));
+    const head = [...Array.from({ length: input.frames }, (_, f) => `块 ${f + 1}`), '缺页', '换出'];
+    return {
+      q: `页面引用串 ${input.refs.join(' ')}，分 ${input.frames} 个物理块，用${PAGING[input.algo]}。每访问一页，写出各物理块里的页（同一列里先后不论）、缺页打 √、被换出的页。`,
+      dir: 'col',
+      copy: true,
+      head,
+      rows: cols.map((c) => ({ label: c.ref, cells: [...c.slots.map((x) => ({ v: x ?? '', group: 'f' })), { v: c.fault ? '√' : '', mark: true }, { v: c.victim ?? '' }] })),
+      qhtml: '',
+    };
+  },
+  // 常见错法：换成别的置换算法；「一开始调入不算缺页」
+  variants(input) {
+    const out = Object.keys(PAGING).filter((a) => a !== input.algo).map((a) => ({ label: `像是按 ${PAGING[a]} 换的`, input: { ...input, algo: a } }));
+    out.push({ label: '像是没把一开始调入算成缺页', input: { ...input, noInitial: true } });
+    return out;
   },
   problems(input) {
     const out = [];
@@ -403,6 +444,25 @@ export const bankerEngine = {
     if (input.request) return { q: `${input.names[input.request.i]} 请求 ${vec(input.request.v)}，能不能分配？写「能」或「不能」。`, qhtml: bankerView({ avail: input.avail, alloc: input.alloc, need: input.max.map((x, i) => x.map((y, j) => y - input.alloc[i][j])) }, input), type: 'seq', answer: r.safe === true ? '能' : '不能' };
     return { q: '这个状态安全吗？安全就写出一个安全序列（如 P1 P3 P4 P2 P0），不安全写「不安全」。', qhtml: bankerView({ avail: input.avail, alloc: input.alloc, need: input.max.map((x, i) => x.map((y, j) => y - input.alloc[i][j])) }, input), type: 'seq', answer: r.safe ? r.seqs.map((x) => x.join(' ')).join(' | ') : '不安全' };
   },
+  // 考卷上那张表：每个进程的 Need；再按「每次选编号最小的能运行完的进程」写安全性检查每一步之后的 Work
+  table(input, r) {
+    const N = input.max.map((x, i) => x.map((y, j) => y - input.alloc[i][j]));
+    const rows = input.names.map((n, i) => ({ label: n, cells: [{ v: N[i].join(' '), vec: true }, { v: '', given: true }] }));
+    // 安全性检查（没有请求、或请求已经试分配之后）：第几个运行完的是谁、之后的 Work
+    const runs = r.steps.filter((x) => x.view.w0 && x.view.hl !== undefined);
+    runs.forEach((x, k) => rows.push({ label: `第 ${k + 1} 个`, cells: [{ v: input.names[x.view.hl] }, { v: x.view.work.join(' '), vec: true }] }));
+    return {
+      q: `先算每个进程的 Need = Max − Allocation；再做安全性检查（Work 从 Available${input.request ? '（试分配之后的）' : ''}开始，每次选编号最小的、Need ≤ Work 的进程），写出每次运行完的进程和之后的 Work。向量写成「3 3 2」。`,
+      qhtml: bankerView({ avail: input.avail, alloc: input.alloc, need: input.max.map(() => input.avail.map(() => '?')) }, input),
+      dir: 'row',
+      head: ['Need / 进程', 'Work'],
+      rows,
+    };
+  },
+  // 常见错法：Need 直接用了 Max（忘了减 Allocation）
+  variants(input) {
+    return [{ label: '像是把 Max 当成了 Need（忘了减 Allocation）', input: { ...input, alloc: input.alloc.map((row) => row.map(() => 0)), max: input.max } }];
+  },
 };
 
 // ================= 磁盘调度 =================
@@ -509,6 +569,30 @@ export const diskEngine = {
   quiz(input, r, fields) {
     const head = `磁头在 ${input.head}${['scan', 'cscan', 'look', 'clook'].includes(input.algo) ? `，正往${input.dir > 0 ? '大' : '小'}的方向移动` : ''}，请求队列 ${input.reqs.join(' ')}，用${DISK[input.algo]}${['cscan', 'clook'].includes(input.algo) ? `（跳回的距离${input.jump ? '算' : '不算'}）` : ''}。`;
     if (String(fields.quiz || 'total').toLowerCase() === 'order') return { q: `${head}写出服务的顺序。`, type: 'seq', answer: r.order.join(' ') };
-    return { q: `${head}磁头一共移动多少个磁道？`, type: 'seq', answer: String(r.dist) };
+    return { q: `${head}磁头一共移动多少个磁道？`, type: 'num', answer: String(r.dist) };
+  },
+  // 考卷上那张表：依次访问的磁道、每次移动的距离（走到尽头、跳回算进紧接着的那一次）
+  table(input, r) {
+    const rows = [];
+    let prev = 0;
+    for (const x of r.steps) {
+      if (x.view.last === undefined) continue;
+      rows.push({ label: `第 ${rows.length + 1} 个`, cells: [{ v: String(x.view.last), num: true }, { v: String(x.view.dist - prev), num: true }] });
+      prev = x.view.dist;
+    }
+    return {
+      q: `磁头在 ${input.head}${['scan', 'cscan', 'look', 'clook'].includes(input.algo) ? `，正往${input.dir > 0 ? '大' : '小'}的方向移动` : ''}，请求队列 ${input.reqs.join(' ')}（磁道 ${input.lo}～${input.hi}），用${DISK[input.algo]}${['cscan', 'clook'].includes(input.algo) ? `（跳回的距离${input.jump ? '算' : '不算'}）` : ''}。依次写出被访问的磁道和移动距离（走到尽头、跳回的那一段算进紧接着的那一次）。`,
+      qhtml: '',
+      dir: 'row',
+      head: ['被访问的磁道', '移动距离'],
+      rows,
+    };
+  },
+  // 常见错法：换成别的算法；方向弄反；SCAN 走不走到尽头（LOOK）、C-SCAN 跳回算不算
+  variants(input) {
+    const out = Object.keys(DISK).filter((a) => a !== input.algo).map((a) => ({ label: `像是按${DISK[a]}做的`, input: { ...input, algo: a } }));
+    if (['scan', 'cscan', 'look', 'clook'].includes(input.algo)) out.unshift({ label: '像是方向弄反了', input: { ...input, dir: -input.dir } });
+    if (['cscan', 'clook'].includes(input.algo)) out.unshift({ label: input.jump ? '像是没把跳回的距离算进去' : '像是把跳回的距离也算进去了', input: { ...input, jump: !input.jump } });
+    return out;
   },
 };

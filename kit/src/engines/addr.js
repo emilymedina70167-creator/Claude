@@ -114,4 +114,30 @@ export const addrEngine = {
     if (a.pa === undefined) return { q, type: 'seq', answer: a.fault ? '缺页' : '越界' };
     return { q, type: 'hex', answer: `0x${a.pa.toString(16)}` };
   },
+  // 考卷上那张表：每个逻辑地址的页号、页内偏移、物理块号、物理地址（十六进制；缺页、越界照写）
+  table(input, r) {
+    const hx = (v, w) => { const t = v.toString(16).toUpperCase(); return [t, `0x${t}`, `${t}H`, `0x${t.padStart(Math.ceil(w / 4), '0')}`, `${t.padStart(Math.ceil(w / 4), '0')}H`, t.padStart(Math.ceil(w / 4), '0')]; };
+    return {
+      q: `逻辑地址 ${input.bits} 位，页面大小 ${input.page} B。${input.tlb ? '快表、' : ''}页表见上面。写出每个逻辑地址的页号、页内偏移（十进制或十六进制都行）、物理块号和物理地址（十六进制；缺页写「缺页」，越界写「越界」）。`,
+      qhtml: view({ stage: 'start' }, input),
+      dir: 'row',
+      head: ['页号', '页内偏移', '物理块号', '物理地址'],
+      rows: input.addrs.map((a, i) => {
+        const p = Number(a.v >> BigInt(input.k)), d = a.v & ((1n << BigInt(input.k)) - 1n);
+        const res = r.results[i] || {};
+        const f = res.pa !== undefined ? Number(res.pa >> BigInt(input.k)) : null;
+        return { label: a.text, cells: [{ v: String(p), num: true }, { v: [String(d), ...hx(d, input.k)] }, { v: f === null ? (res.fault ? ['缺页', '-'] : ['越界', '-']) : String(f) }, { v: res.pa !== undefined ? hx(res.pa, input.pbits) : res.fault ? '缺页' : '越界' }] };
+      }),
+    };
+  },
+  // 常见错法：页面大小看错一档（页内偏移多拆 / 少拆了一位）
+  variants(input) {
+    const out = [];
+    for (const dk of [1, -1]) {
+      const k = input.k + dk;
+      if (k < 1 || k >= input.bits) continue;
+      out.push({ label: dk > 0 ? '像是页内偏移多拆了一位（页面大小看大了一倍）' : '像是页内偏移少拆了一位（页面大小看小了一半）', input: { ...input, k, page: 2 ** k } });
+    }
+    return out;
+  },
 };

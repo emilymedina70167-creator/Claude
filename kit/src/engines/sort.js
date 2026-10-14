@@ -272,7 +272,7 @@ function radix(A) {
 }
 
 export function view(s, input) {
-  let h = arrayView(s.A, { cls: s.cls, ptr: s.ptr, zero: s.zero, lo: s.lo ?? null, hi: s.hi ?? null, fresh: s.fresh });
+  let h = arrayView(s.A, { cls: s.cls, ptr: s.ptr, zero: s.zero, lo: s.lo ?? null, hi: s.hi ?? null, fresh: s.fresh, keys: true });
   if (s.digit !== undefined && !s.buckets) {
     // 基数排序：数下面标出这一趟看的那一位
     h += `<div class="sv-digits" style="--cols:${s.A.length}">${s.A.map((x) => { const str = String(x.v); const k = str.length - 1 - s.digit; return `<div>${k >= 0 ? `${esc(str.slice(0, k))}<b>${esc(str[k])}</b>${esc(str.slice(k + 1))}` : `<b>0</b>${esc(str)}`}</div>`; }).join('')}</div>`;

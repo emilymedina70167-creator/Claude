@@ -685,7 +685,9 @@ function recordText(a, type) {
       else if (a.revealed) what = `${a.attempts ? `试了 ${a.attempts} 次没猜对，` : ''}看了答案${a.expected ? `（${val(a.expected)}）` : ''}`;
       else if (a.final) what = `${a.ok ? '做对了' : '没做对'}${a.attempts ? `（共 ${a.attempts} 次）` : ''}`;
       else what = `${val(a.value) ? `${a.pick ? '在图上点了' : '写了'} ${val(a.value)}` : '（空）'}${mark(a.ok, a.attempts)}`;
-      return `[作答] ${where(a, a.engine || '演示')}：${at}${q}${tail(what, duration(a.ms))}`;
+      // 页面看出来的错法（只给老师看：用它来追问，别直接告诉学生）
+      const why = a.misread ? `；页面看出来：${short(a.misread, 60)}` : '';
+      return `[作答] ${where(a, a.engine || '演示')}：${at}${q}${tail(what + why, duration(a.ms))}`;
     }
     case 'ask':
       return `[动作] 问了：「${short(a.question ?? a.text ?? a.q, 200)}」`;
