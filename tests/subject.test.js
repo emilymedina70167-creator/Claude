@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { subjectKey, isCS, docsForSubject, parseTag, SUBJECTS } from '../kit/src/subject.js';
 import { componentDocs } from '../kit/build-docs.js';
-import { buildSystem, defaultRules, DEFAULT_RULES, bytes, PACK_BUDGET } from '../kit/src/class/prompt.js';
+import { buildSystem, defaultRules, DEFAULT_RULES, bytes } from '../kit/src/class/prompt.js';
 
 const PROJECT = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
 const DOCS = componentDocs(PROJECT);
@@ -86,8 +86,9 @@ test('课堂说明按科目拼：每门课加上最大的资料包都不超过 1
   for (const subject of SUBJECTS) {
     const sys = buildSystem({ componentDocs: DOCS, pack, board: [], subject });
     assert.ok(bytes(sys) < 160 * KiB, `${subject}：说明 ${bytes(sys)} 字节`);
-    // 资料包以外的部分（红线、组件说明、指令）要给资料包留出预算
-    assert.ok(bytes(sys) - PACK_BUDGET < 56 * KiB, `${subject}：资料包以外 ${bytes(sys) - PACK_BUDGET} 字节`);
+    // 资料包以外的部分（红线、组件说明、指令）长了，资料包让一点；但至少给资料包留 96 KiB
+    const rest = bytes(buildSystem({ componentDocs: DOCS, pack: {}, board: [], subject }));
+    assert.ok(rest < 160 * KiB - 96 * KiB, `${subject}：资料包以外 ${rest} 字节，留给资料包的不到 96 KiB`);
   }
   const ds = buildSystem({ componentDocs: DOCS, pack: {}, board: [], subject: '数据结构' });
   assert.match(ds, /### 排序/);

@@ -530,8 +530,7 @@ function pagedStateText(board) {
 export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代' } = {}) {
   const custom = asText(rules) || asText(pack?.main?.rules);
   const docs = docsForSubject(asText(componentDocs), subject);
-  const { text: packBody } = packText(pack, packBudget);
-  return [
+  const parts = (packBody) => [
     '这是课堂模式的完整说明，每一轮都会重新发给你（资料包和黑板现状都是最新的）。说明后面是这节课的对话：学生说的话、学生在黑板上的作答记录（[作答] / [动作]）、页面的系统消息（[系统]），以及你之前的输出。',
     `# 一、你的角色和红线\n\n${custom || defaultRules(subject)}`,
     `# 二、组件写法和黑板指令\n\n## 组件说明\n\n下面的组件说明原本是学生写给项目对话里的 Claude 的，文中的「我」指学生。说到 guided 课件的关卡、小节结构的地方，课堂里不适用；课堂里的段落由你用黑板指令一段一段写。\n\n${docs || '（组件说明没有打包进来。只用最常见的组件：answer、steps、scene、predict，写法要保守。）'}\n\n## 黑板指令\n\n${PROTOCOL_DOC}`,
@@ -539,7 +538,13 @@ export function buildSystem({ rules, componentDocs, pack, board, packBudget = PA
     `# 四、黑板现状\n\n${boardStateText(board)}`,
     '（课堂说明到这里结束。下面是这节课的对话，回应最后一条消息。）',
   ].join('\n\n');
+  // 整份说明不超过 SYSTEM_MAX：组件说明（按科目）长一点的课，资料包的预算跟着让一点
+  const rest = bytes(parts(''));
+  const { text: packBody } = packText(pack, Math.max(16 * 1024, Math.min(packBudget, SYSTEM_MAX - rest - 3 * 1024)));
+  return parts(packBody);
 }
+// 每一轮的整份说明的上限（给对话留地方；CLAUDE.md 里写的 160 KiB）
+export const SYSTEM_MAX = 160 * 1024;
 
 // —— 学生在黑板上的动作 → 一行中文 ——
 
