@@ -1,0 +1,35 @@
+{
+  "unit": "矩阵方程 AX = A + 2X",
+  "subject": "线代",
+  "pack": {
+    "main": {
+      "unit": "矩阵方程 AX = A + 2X",
+      "goal": "能把 AX=A+2X 整理成 (A−2E)X=A（X 从哪边提、逆从哪边乘不出错，2 要写成 2E），能用初等行变换 (A−2E | A) → (E | X) 一次求出 X，并说清为什么不用先求逆。",
+      "scope": "只讲这一类「AX = 含 X 的式子」的矩阵方程：整理、可逆性判断、分块行变换求 X。XA 型只做左右对照，不展开列变换的做法。不讲伴随矩阵求逆。",
+      "textbook": "题目：设 A = [[4, 2, 3], [1, 1, 0], [-1, 2, 3]]，矩阵 X 满足 AX = A + 2X，求 X。\n解：AX − 2X = A，即 (A − 2E)X = A。A − 2E = [[2, 2, 3], [1, -1, 0], [-1, 2, 1]]，|A − 2E| = −1 ≠ 0，可逆，所以 X = (A − 2E)^{-1}A。对 (A − 2E | A) 作初等行变换，左边化成 E 时右边即 X = [[3, -8, -6], [2, -9, -6], [-2, 12, 9]]。\n依据：对矩阵作一次初等行变换，相当于左乘一个初等矩阵；一串初等行变换相当于左乘一个可逆矩阵 P。若 P(B | C) = (PB | PC) 且 PB = E，则 P = B^{-1}，右边 PC = B^{-1}C。\n矩阵乘法不满足交换律：一般 AX ≠ XA；分配律分左右：AX − 2EX = (A − 2E)X，XA − 2XE = X(A − 2E)。",
+      "plan": "1. 整理方程（一块板一件事）：移项后让学生选「提出 X」的写法，错误选项有 (A−2)X 和 X(A−2E)。答错先用 board mark 圈出 X 在每一项里的位置，让学生把错的写法乘开对照；还不懂就直接讲左右之分（derive 一行行写 + matrix 组件拿具体 X₀ 算 AX₀ ≠ X₀A），再给一个 XA+X 型的小题确认。\n2. 变式 XA = A + 2X：只问 X 等于什么（右乘逆），检验左右。\n3. 为什么 (B | A) → (E | X)：先问「一串行变换相当于左乘什么」「左边成 E 时 P 是什么」，让学生自己推出右边是 X。\n4. 学生在 Notability 里自己化简 (A−2E | A)，填 X。错了再用 matrix 组件（split cols=3 画出分块竖线，figure set 一步步换成下一步的矩阵）对照，找错在哪一步。\n5. practice 的 type: custom 换数练：A = L·U + kE（L、U 是对角线为 1 的三角矩阵，保证 A − kE 可逆、X 是整数）。",
+      "student": "考研生，用 iPad + Apple Pencil，过程写在 Notability 里截图交。会算矩阵乘法和行变换，但容易把数的习惯（随手交换、提公因子不看左右）带进矩阵；行变换里符号偶尔出错。",
+      "updatedAt": 1797235200000
+    },
+    "problems": {
+      "items": [
+        { "q": "设 A = [[4, 2, 3], [1, 1, 0], [-1, 2, 3]]，矩阵 X 满足 AX = A + 2X，求 X。", "answer": "(A − 2E)X = A，X = (A − 2E)^{-1}A = [[3, -8, -6], [2, -9, -6], [-2, 12, 9]]", "point": "整理成 (A−2E)X = A；(A−2E | A) 行变换成 (E | X)", "source": "验收题库 la-inv" },
+        { "q": "同一个 A，矩阵 X 满足 XA = A + 2X，求 X 的表达式。", "answer": "X(A − 2E) = A，X = A(A − 2E)^{-1}（右乘逆）", "point": "系数矩阵在 X 的哪一边，逆就乘在哪一边", "source": "变式" },
+        { "q": "A 是 3 阶矩阵，A − kE 可逆，AX = A + kX，用初等行变换求 X（课堂里换数出题）。", "answer": "X = (A − kE)^{-1}A，对 (A − kE | A) 作行变换", "point": "一次行变换求 X，不单独求逆", "source": "换数练习" }
+      ]
+    }
+  },
+  "turns": [
+    {
+      "teacher": "这节课解一个矩阵方程。先不急着求逆，第一步只做一件事：把它整理成「某个矩阵乘 $X$ = 已知矩阵」。\n\n````board new id=b1 title=\"先整理方程\"\n```let\nA = [[4, 2, 3], [1, 1, 0], [-1, 2, 3]]\nB = A - 2*E(3)\nX = inv(B)*A\n```\n\n移项，含 $X$ 的放到左边：\n\n$$\\hl{ax}{AX}-\\hl{tx}{2X}=A$$\n\n```quiz\nid: q-b1\ntitle: 提出 X\nq: 把左边的 $X$ 提出来，哪一个对？\n- [ ] $(A-2)X=A$\n- [x] $(A-2E)X=A$\n- [ ] $X(A-2E)=A$\n```\n````\n\n````board pin id=k1 title=\"题目\"\n$A=\\begin{bmatrix}4&2&3\\\\1&1&0\\\\-1&2&3\\end{bmatrix}$，$AX=A+2X$，求 $X$。\n````\n\n移项我先写好了，你来提 $X$。"
+    },
+    {
+      "student": "[作答] b1 里的 quiz q-b1「提出 X」：选了『$X(A-2E)=A$』（错），用时 21 秒",
+      "teacher": "把 $2$ 写成 $2E$ 是对的。再看 $X$ 站在每一项的哪一边——我圈出来了。\n\n````board mark target=b1 term=ax note=\"X 在 A 的右边\"\nterm=tx note=\"2X = 2EX：X 也在右边\"\n````\n\n````board add id=b2 title=\"乘开看看\"\n```quiz\nid: q-b2\ntitle: 乘开看看\nq: 把你选的 $X(A-2E)$ 乘开，得到的是哪一个？\n- [x] $XA-2X$\n- [ ] $AX-2X$\n- [ ] 两个都对\n```\n````\n\n乘开以后，和板上那一行对得上吗？"
+    },
+    {
+      "student": "没懂，为什么？",
+      "teacher": "关键是矩阵乘法分左右：$AX$ 和 $XA$ 一般不相等。所以提公因子时，$X$ 在哪一边，就只能从哪一边提。\n\n````board new id=b3 title=\"X 只能从右边提\"\n```derive\nid: d-b3\ntitle: 从右边提出 X\nAX-2X = AX-2EX   // $2X$ 写成 $2EX$，$X$ 还在右边\n      = (A-2E)X   // 两项都是「某个矩阵乘 $X$」，从右边提出 $X$\nX(A-2E) = XA-2X   // 你选的那个乘开是 $XA$，不是 $AX$\n```\n\n```matrix\nid: m-b3\ntitle: 随便取一个 X₀ 试试\nlet X0 = [[1, 1, 0], [0, 1, 0], [0, 0, 1]]\nmatrix A*X0 label=\"AX_0=\"\ntex \\ne\nmatrix X0*A label=\"X_0A=\"\n```\n\n```quiz\nid: q-b3\ntitle: 换一个试试\nq: $XA+X=C$，把 $X$ 提出来是哪一个？\n- [x] $X(A+E)=C$\n- [ ] $(A+E)X=C$\n```\n````\n\n````board figure target=d-b3 play step 1 3 3s\n````\n\n下面两个矩阵是页面算的：同一个 $X_0$，左乘、右乘结果不一样。最后那道小题选一下。"
+    }
+  ]
+}

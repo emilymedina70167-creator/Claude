@@ -1205,6 +1205,16 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .sv-fill-ctrl { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
 .sv-fill-ctrl .btn { min-height: 44px; }
 
+/* 初等行变换 elim：一步一个行变换，主元圈出来，结论在下面一条条攒起来 */
+.sv-elim .el-op { text-align: center; min-height: 1.8em; font-size: 19px; margin-bottom: 6px; }
+.sv-elim .el-sub { font: 600 16px var(--sans); color: var(--yellow); }
+.sv-elim .el-mx { display: flex; justify-content: center; overflow-x: auto; padding: 4px 0 10px; }
+.sv-elim table.mx th.el-name { font: 500 15px var(--sans); color: var(--muted); padding: 2px 15px 6px; border-radius: 8px; }
+.sv-elim table.mx th.el-name.hl-col { color: var(--yellow); }
+.sv-elim table.mx td.sv-new { animation: none; }
+.sv-elim .el-notes { margin: 6px 0 0; padding-left: 1.2em; font: 15px/1.6 var(--sans); color: var(--body); }
+.sv-picking .sv-elim th[data-pick], .sv-elim.sv-picking th[data-pick] { cursor: pointer; }
+
 /* 通用演示 frames：每一帧老师自己写；{{答案}} 是要学生填的空 */
 .sv-frames .fr-md table { margin: 8px 0; }
 .sv-frames .fr-md p { margin: 6px 0; }

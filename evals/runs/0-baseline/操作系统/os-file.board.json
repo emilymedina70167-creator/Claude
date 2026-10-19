@@ -1,0 +1,41 @@
+{
+  "unit": "混合索引：最大文件、读一块要几次磁盘",
+  "subject": "操作系统",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "索引结点长什么样",
+      "md": "```let\nbs = 1024\nad = 4\nper = bs/ad\n```\n\n索引结点里有 13 个地址项：10 个直接、一级 / 二级 / 三级间接各 1 个。间接地址项指向的是**索引块**：一整块磁盘里装的全是地址。\n\n```sketch\nid: sk-inode\ntitle: 混合索引\nwidth: 380\nheight: 220\n<rect x=\"10\" y=\"10\" width=\"80\" height=\"204\" rx=\"6\" class=\"thick\"/>\n<text x=\"50\" y=\"30\" text-anchor=\"middle\" class=\"small\">索引结点</text>\n<rect x=\"18\" y=\"40\" width=\"64\" height=\"76\" rx=\"3\" class=\"blue fill\"/>\n<text x=\"50\" y=\"82\" text-anchor=\"middle\" class=\"small\">直接 ×10</text>\n<rect x=\"18\" y=\"124\" width=\"64\" height=\"24\" rx=\"3\" class=\"pink fill\"/>\n<text x=\"50\" y=\"141\" text-anchor=\"middle\" class=\"small\">一级</text>\n<rect x=\"18\" y=\"154\" width=\"64\" height=\"24\" rx=\"3\" class=\"orange fill\"/>\n<text x=\"50\" y=\"171\" text-anchor=\"middle\" class=\"small\">二级</text>\n<rect x=\"18\" y=\"184\" width=\"64\" height=\"24\" rx=\"3\" class=\"purple fill\"/>\n<text x=\"50\" y=\"201\" text-anchor=\"middle\" class=\"small\">三级</text>\n<line x1=\"82\" y1=\"78\" x2=\"306\" y2=\"78\" class=\"arrow blue\"/>\n<rect x=\"310\" y=\"66\" width=\"60\" height=\"24\" rx=\"3\" class=\"gray fill\"/>\n<text x=\"340\" y=\"83\" text-anchor=\"middle\" class=\"small\">数据块</text>\n<line x1=\"82\" y1=\"136\" x2=\"106\" y2=\"136\" class=\"arrow pink\"/>\n<rect x=\"110\" y=\"124\" width=\"44\" height=\"24\" rx=\"3\" class=\"pink\"/>\n<text x=\"132\" y=\"141\" text-anchor=\"middle\" class=\"small\">索引</text>\n<line x1=\"154\" y1=\"136\" x2=\"306\" y2=\"136\" class=\"arrow pink\"/>\n<rect x=\"310\" y=\"124\" width=\"60\" height=\"24\" rx=\"3\" class=\"gray fill\"/>\n<text x=\"340\" y=\"141\" text-anchor=\"middle\" class=\"small\">数据块</text>\n<line x1=\"82\" y1=\"166\" x2=\"106\" y2=\"166\" class=\"arrow orange\"/>\n<rect x=\"110\" y=\"154\" width=\"44\" height=\"24\" rx=\"3\" class=\"orange\"/>\n<text x=\"132\" y=\"171\" text-anchor=\"middle\" class=\"small\">索引</text>\n<line x1=\"154\" y1=\"166\" x2=\"176\" y2=\"166\" class=\"arrow orange\"/>\n<rect x=\"180\" y=\"154\" width=\"44\" height=\"24\" rx=\"3\" class=\"orange\"/>\n<text x=\"202\" y=\"171\" text-anchor=\"middle\" class=\"small\">索引</text>\n<line x1=\"224\" y1=\"166\" x2=\"306\" y2=\"166\" class=\"arrow orange\"/>\n<rect x=\"310\" y=\"154\" width=\"60\" height=\"24\" rx=\"3\" class=\"gray fill\"/>\n<text x=\"340\" y=\"171\" text-anchor=\"middle\" class=\"small\">数据块</text>\n<line x1=\"82\" y1=\"196\" x2=\"106\" y2=\"196\" class=\"arrow purple\"/>\n<rect x=\"110\" y=\"184\" width=\"44\" height=\"24\" rx=\"3\" class=\"purple\"/>\n<text x=\"132\" y=\"201\" text-anchor=\"middle\" class=\"small\">索引</text>\n<line x1=\"154\" y1=\"196\" x2=\"176\" y2=\"196\" class=\"arrow purple\"/>\n<rect x=\"180\" y=\"184\" width=\"44\" height=\"24\" rx=\"3\" class=\"purple\"/>\n<text x=\"202\" y=\"201\" text-anchor=\"middle\" class=\"small\">索引</text>\n<line x1=\"224\" y1=\"196\" x2=\"246\" y2=\"196\" class=\"arrow purple\"/>\n<rect x=\"250\" y=\"184\" width=\"44\" height=\"24\" rx=\"3\" class=\"purple\"/>\n<text x=\"272\" y=\"201\" text-anchor=\"middle\" class=\"small\">索引</text>\n<line x1=\"294\" y1=\"196\" x2=\"306\" y2=\"196\" class=\"arrow purple\"/>\n<rect x=\"310\" y=\"184\" width=\"60\" height=\"24\" rx=\"3\" class=\"gray fill\"/>\n<text x=\"340\" y=\"201\" text-anchor=\"middle\" class=\"small\">数据块</text>\n```\n\n```answer\nid: q-per-block\ntitle: 一块装几个地址\nq: 磁盘块 1 KB，每个地址项 4 B。一个索引块里能放多少个地址项？\nanswer: per\nhint: 一块多少字节，除以一项多少字节。\nexplain: $\\calc{bs}\\div\\calc{ad}=\\calc{per}$\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 2,
+      "page": 2,
+      "title": "每一级管多少块",
+      "md": "一个索引块放 $\\calc{per}$ 个地址。顺着上一块板的图往下数：每多一级间接，就多乘一次。\n\n```answer\nid: q-levels\ntitle: 每一级管几块\nq: 索引结点有 10 个直接地址项，一级、二级、三级间接各 1 个；一个索引块放 $\\calc{per}$ 个地址。直接、一级、二级、三级各最多能管多少个数据块？（从上到下填）\nanswer: [10, per, per^2, per^3]\nbefore: \\begin{bmatrix}\\text{直接}\\\\ \\text{一级}\\\\ \\text{二级}\\\\ \\text{三级}\\end{bmatrix}=\nhint: 二级间接：第一个索引块里的每一项，又指向一个装满地址的索引块。\nexplain: 直接 10 块；一级 $\\calc{per}$ 块；二级 $\\calc{per}^2=\\calc{per^2}$ 块；三级 $\\calc{per}^3=\\calc{per^3}$ 块。\n```\n\n```answer\nid: q-max\ntitle: 单个文件最大\nq: 同上，磁盘块 1 KB。单个文件最大是多少 KB？\nanswer: (10 + per + per^2 + per^3)*bs/1024\nafter: \\text{ KB}\nhint: 四部分能管的块数加起来，每块 1 KB。\nexplain: $(10+\\calc{per}+\\calc{per}^2+\\calc{per}^3)\\times 1\\text{ KB}=\\calc{10+per+per^2+per^3}$ KB\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 3,
+      "page": 3,
+      "title": "第 300 KB 在哪",
+      "md": "```steps\nid: st-300\ntitle: 读第 300 KB\nq: 索引结点有 10 个直接地址项，一级、二级、三级间接各 1 个；磁盘块 1 KB，地址项 4 B。索引结点已在内存，读文件第 300 KB 处的数据，要访问几次磁盘？\n\nstep: 在第几块\nask: 第 300 KB 处在文件的第几块（从 0 数）？\ndo: true\nanswer: 300*1024/bs\nshow: 每块 1 KB，第 300 KB 处在第 $\\calc{300*1024/bs}$ 块（第 0 块是 0～1 KB）。\n\nstep: 一级间接管到哪\nask: 直接地址管第 0～9 块。一级间接管的是第几块到第几块？（填起止两个块号）\ndo: true\nanswer: [10, 9 + per]\nshow: 一级间接接着往后管 $\\calc{per}$ 块：第 10～$\\calc{9+per}$ 块。二级间接从第 $\\calc{10+per}$ 块开始。\n\nstep: 落在哪一级\nask: 所以第 300 块落在哪一级？\nchoices: 直接 | 一级间接 | 二级间接 | 三级间接\nanswer: 二级间接\nshow: $\\calc{10+per}\\le 300\\le\\calc{9+per+per^2}$，落在二级间接。\n\nstep: 读几次磁盘\nask: 读这块数据，一共要访问几次磁盘？\ndo: true\nanswer: 3\nshow: 二级间接地址项在内存里的索引结点里：先读二级索引块，再读它指向的一级索引块，最后读数据块，共 3 次。\n```"
+    },
+    {
+      "id": "k1",
+      "seq": 4,
+      "pin": true,
+      "title": "每一级管的块号",
+      "md": "（块号从 0 数，块 1 KB、地址项 4 B）\n\n直接 0～9　一级 10～$\\calc{9+per}$\n\n二级 $\\calc{10+per}$～$\\calc{9+per+per^2}$　三级 $\\calc{10+per+per^2}$ 起"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "换参数练",
+      "md": "直接地址项的个数、块的大小都会变，每次先算一个索引块放几个地址。\n\n```practice\nid: pr-idx\ntitle: 读第几 KB 要几次\ntype: custom\ncount: 4\npick d = choice(8, 10, 12)\npick b = choice(1, 2, 4)\npick L = int(0, 2)\npick u = int(0, 99)\nlet p = b*1024/4\nlet lo = (L >= 1)*d + (L >= 2)*p\nlet cnt = (L == 0)*d + (L == 1)*p + (L == 2)*p^2\nlet blk = lo + floor(u*cnt/100)\nq: 索引结点有 $\\calc{d}$ 个直接地址项，一级、二级、三级间接地址项各 1 个；磁盘块 $\\calc{b}$ KB，地址项 4 B。索引结点已在内存，读文件第 $\\calc{blk*b}$ KB 处的数据，要访问几次磁盘？\nanswer: L + 1\nhint: 先算在第几块（从 0 数）、一个索引块放几个地址，再看直接、一级间接各管到第几块。\nexplain: 第 $\\calc{blk*b}$ KB 在第 $\\calc{blk}$ 块；一块放 $\\calc{p}$ 个地址：直接管 0～$\\calc{d-1}$，一级 $\\calc{d}$～$\\calc{d+p-1}$，二级 $\\calc{d+p}$～$\\calc{d+p+p^2-1}$。要先读 $\\calc{L}$ 个索引块（0 表示直接），再读数据块，共 $\\calc{L+1}$ 次。\n```"
+    }
+  ]
+}

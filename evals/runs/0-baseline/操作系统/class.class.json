@@ -1,0 +1,44 @@
+{
+  "unit": "进程调度：FCFS / SJF / SRTF / RR",
+  "subject": "操作系统",
+  "pack": {
+    "main": {
+      "unit": "进程调度：FCFS / SJF / SRTF / RR",
+      "goal": "用同一组四个进程，自己画出 FCFS、SJF（非抢占）、SRTF、RR（q = 2）的甘特图，填出每个进程的完成时间和周转时间，算平均周转时间；说清 SRTF 和 SJF 从哪个时刻开始不一样、为什么（新进程到达时比的是正在运行的进程的剩余时间）；知道 RR 里同一时刻新到达的进程和刚用完时间片的进程谁先入队（王道：新到达的先入队）。",
+      "scope": "王道 408 处理机调度一节：FCFS、SJF（非抢占）、SRTF（抢占式短作业优先）、RR。周转时间、平均周转时间按王道的定义；带权周转时间、等待时间在页面算出来时顺带提一句，不展开。高响应比、优先级、多级反馈队列是下一节，这节不讲。",
+      "textbook": "周转时间 = 作业完成时间 − 作业提交（到达）时间。平均周转时间 = 各作业周转时间之和 ÷ 作业数。带权周转时间 = 周转时间 ÷ 实际运行时间。等待时间 = 周转时间 − 运行时间（本题没有 I/O）。\nFCFS（先来先服务）：按到达的先后选，非抢占。\nSJF（短作业优先）：从就绪队列里选估计运行时间最短的，非抢占，一旦上处理机就一直运行到结束。\nSRTF（最短剩余时间优先）：SJF 的抢占式版本。有新进程到达时，比较新进程的运行时间和当前进程的剩余时间，更短的那个运行。\nRR（时间片轮转）：就绪进程按到达先后排成队列，每次让队首进程运行一个时间片 q；时间片用完还没结束，就排到就绪队列的队尾。王道的约定：同一时刻既有新进程到达、又有进程用完时间片，新到达的进程先入队。\n本节的题：P1 到达 0、运行 8；P2 到达 1、运行 4；P3 到达 2、运行 9；P4 到达 3、运行 5。分别用 FCFS、SJF（非抢占）、SRTF、RR（q = 2）调度，画出甘特图，求平均周转时间。",
+      "plan": "1. FCFS：sched 组件（algo: fcfs，ask: avg），学生点着走完甘特图，最后自己写平均周转时间。常驻栏放四个进程的数据和「周转时间 = 完成时间 − 到达时间」，到达时间用 \\hl{arr}{…} 包起来，学生忘减时用 board mark 圈它。\n2. SJF：sched（algo: sjf，ask: next, avg），关键是 t = 8 时在 P2、P3、P4 里挑最短的。\n3. SRTF：先让学生猜「P1 在 t = ? 第一次被抢」（answer: 1），再用 sched（algo: srtf，ask: next, avg）走一遍；把「新进程到达时也比一次，比的是剩余时间」pin 进常驻栏。\n4. RR：先问 t = 2 时 P3（新到）和 P1（时间片用完）谁先入队，再用 sched（algo: rr q=2，ask: next）走一遍。\n5. 换一组数自己做：P1 0 7, P2 2 4, P3 4 1, P4 5 4。sched 的 mode: quiz（quiz: avg）做 SRTF，mode: quiz 写 RR 的运行序列。\n所有时间、平均值都让 sched 组件或 \\calc 算，不要心算后写上黑板。",
+      "student": "考研生，用 iPad 和 Apple Pencil 上课。第一次系统地学调度算法。套公式时容易漏项（比如周转时间忘了减到达时间）。",
+      "updatedAt": 1791964800000
+    },
+    "problems": {
+      "items": [
+        {
+          "q": "P1 到达 0、运行 8；P2 到达 1、运行 4；P3 到达 2、运行 9；P4 到达 3、运行 5。分别用 FCFS、SJF（非抢占）、SRTF、RR（q = 2）调度，画甘特图，求平均周转时间。",
+          "answer": "FCFS 15.25；SRTF 13。SJF、RR 以 sched 组件算出的为准。",
+          "point": "四种调度的甘特图；周转时间的定义；抢占发生在 t = 1；RR 同时入队的约定",
+          "source": "王道 408 典型题"
+        },
+        {
+          "q": "P1 到达 0、运行 7；P2 到达 2、运行 4；P3 到达 4、运行 1；P4 到达 5、运行 4。用 SRTF 求平均周转时间；用 RR（q = 2）写出 CPU 上依次运行的进程。",
+          "answer": "用 sched 组件的 mode: quiz 判（quiz: avg / 默认的运行序列）。",
+          "point": "换数据自己做：SRTF 有两次抢占；RR 在 t = 2、t = 4 都有「新到达」和「时间片用完」撞在同一时刻",
+          "source": "改数"
+        }
+      ]
+    }
+  },
+  "turns": [
+    {
+      "teacher": "这节课用同一组四个进程，把四种调度各走一遍。先从先来先服务开始：点「下一步」看甘特图一段段长出来，走到最后会请你写平均周转时间。\n\n````board new id=b1 title=\"先来先服务\"\nFCFS：谁先到谁先用 CPU，用上了就一直跑完，才轮到下一个。\n\n```sched\nid: sc-fcfs\ntitle: FCFS\nalgo: fcfs\nprocs: P1 0 8, P2 1 4, P3 2 9, P4 3 5\nask: avg\n```\n````\n\n````board pin id=k1 title=\"四个进程\"\nP1（0 到，跑 8）　P2（1 到，跑 4）\n\nP3（2 到，跑 9）　P4（3 到，跑 5）\n\n$\\text{周转时间}=\\text{完成时间}-\\hl{arr}{\\text{到达时间}}$\n````"
+    },
+    {
+      "student": "[作答] b1 里的 sched sc-fcfs「FCFS」平均周转时间：填了 16.75（错，第 1 次），用时 1 分 42 秒",
+      "teacher": "16.75 正好是四个**完成时间**的平均。周转时间要从进程**到达**的那一刻算起，常驻栏里圈出来的就是漏掉的那一项。先只算一个进程试试。\n\n````board mark target=k1 term=arr color=pink note=\"别漏了这一项\"\n````\n\n````board add id=b2 title=\"只看 P2\"\n```answer\nid: q-b2\ntitle: P2 的周转时间\nq: 按 FCFS，P2 在 t = 1 到达，要等 P1 跑完（t = 8）才开始，跑 4 个时间单位。P2 的周转时间是多少？\nanswer: (8 + 4) - 1\nhint: 先看 P2 在哪个时刻跑完，再减去它到达的时刻。\nexplain: P2 在 $\\calc{8+4}$ 时完成，周转时间 $=\\calc{8+4}-1=\\calc{8+4-1}$。\n```\n````"
+    },
+    {
+      "student": "没懂，为什么？",
+      "teacher": "周转时间量的是进程**在系统里待了多久**：从它到达那一刻开始掐表，到它跑完为止。到达之前它还不在系统里，那一段不算。看 P2 这条时间线。\n\n````board new id=b3 title=\"从到达开始掐表\"\n```sketch\nid: sk-b3\ntitle: P2 在系统里的时间\nwidth: 360\nheight: 150\n<line x1=\"20\" y1=\"100\" x2=\"345\" y2=\"100\" class=\"faint\"/>\n<line x1=\"30\" y1=\"94\" x2=\"30\" y2=\"106\"/>\n<line x1=\"55\" y1=\"94\" x2=\"55\" y2=\"106\"/>\n<line x1=\"230\" y1=\"94\" x2=\"230\" y2=\"106\"/>\n<line x1=\"330\" y1=\"94\" x2=\"330\" y2=\"106\"/>\n<text x=\"30\" y=\"124\" text-anchor=\"middle\" class=\"small\">0</text>\n<text x=\"55\" y=\"124\" text-anchor=\"middle\" class=\"small\">1</text>\n<text x=\"230\" y=\"124\" text-anchor=\"middle\" class=\"small\">8</text>\n<tex x=\"330\" y=\"120\" anchor=\"middle\" size=\"14\">\\calc{8+4}</tex>\n<rect x=\"30\" y=\"74\" width=\"25\" height=\"20\" class=\"gray faint dashed\"/>\n<rect x=\"55\" y=\"74\" width=\"175\" height=\"20\" rx=\"3\" class=\"gray fill\"/>\n<rect x=\"230\" y=\"74\" width=\"100\" height=\"20\" rx=\"3\" class=\"yellow fill\"/>\n<text x=\"142\" y=\"89\" text-anchor=\"middle\" class=\"small\">在就绪队列里等</text>\n<text x=\"280\" y=\"89\" text-anchor=\"middle\" class=\"small\">在 CPU 上跑</text>\n<text x=\"42\" y=\"144\" text-anchor=\"middle\" class=\"small faint\">还没到</text>\n<line x1=\"55\" y1=\"52\" x2=\"330\" y2=\"52\" class=\"arrow pink\"/>\n<line x1=\"55\" y1=\"46\" x2=\"55\" y2=\"58\" class=\"pink\"/>\n<tex x=\"192\" y=\"34\" anchor=\"middle\" color=\"pink\">\\text{周转时间}=\\calc{8+4}-1=\\calc{8+4-1}</tex>\n```\n\n```answer\nid: q-b3\ntitle: 换 P4 算\nq: 按 FCFS，P4 在 t = 3 到达，要等前面三个都跑完，t = $\\calc{8+4+9}$ 才开始，跑 5。照 P2 的时间线：P4 在就绪队列里等了多久？周转时间是多少？（上面填等待，下面填周转）\nanswer: [(8 + 4 + 9) - 3, (8 + 4 + 9 + 5) - 3]\nbefore: \\begin{bmatrix}\\text{等待}\\\\ \\text{周转}\\end{bmatrix}=\nhint: 从 t = 3 开始掐表：等到 t = $\\calc{8+4+9}$，再跑 5。\nexplain: 等待 $\\calc{8+4+9}-3=\\calc{8+4+9-3}$，周转 $\\calc{8+4+9+5}-3=\\calc{8+4+9+5-3}$，正好是等待 + 运行。\n```\n````"
+    }
+  ]
+}

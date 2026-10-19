@@ -32,6 +32,7 @@ import { addrEngine } from '../engines/addr.js';
 import { bitsEngine, cacheEngine, pipeEngine } from '../engines/co.js';
 import { subnetEngine, tcpEngine, windowEngine } from '../engines/net4.js';
 import { framesEngine } from '../engines/frames.js';
+import { elimEngine } from '../engines/elim.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -59,4 +60,5 @@ export const blocks = {
   tcp: stepperBlock(tcpEngine),
   window: stepperBlock(windowEngine),
   frames: stepperBlock(framesEngine),
+  elim: stepperBlock(elimEngine),
 };

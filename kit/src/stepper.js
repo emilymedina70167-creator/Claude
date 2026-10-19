@@ -5,7 +5,7 @@
 //   课堂里的 figure set step= / play step / highlight（第几个格子、第几个结点闪一下）；学生走到第几步记成动作（刷新后恢复）。
 import { parseFields } from './parse.js';
 import { session } from './session.js';
-import { widget, mdToHtml, escapeHtml, calcProblems } from './blocks/common.js';
+import { widget, mdToHtml, tex2html, escapeHtml, calcProblems } from './blocks/common.js';
 import { figureControls } from './plot.js';
 import { commonSpec, resolveAsks, checkAsk, askAnswerText, stepLabel, parseAskField, fillSpec, checkFill, cellName, cellAnswer, fillOrder, misreadFill, misreadAnswer } from './stepperspec.js';
 import { markDraft } from './drafts.js';
@@ -130,7 +130,7 @@ export function stepperBlock(engine) {
       if (blanking >= 0 && blanking !== k) blanking = -1;
       const filling = blanking === k;
       stage.innerHTML = engine.view(s.view, input, {
-        k, md: mdToHtml, picking: pending && ['pick', 'order'].includes(pending.ask.kind),
+        k, md: mdToHtml, tex: (t) => tex2html(t), picking: pending && ['pick', 'order'].includes(pending.ask.kind),
         // 挖空：正在填的这一步画成输入框；填过的、往回翻的画成答案
         blank: (i) => (filling ? `<input type="text" class="sv-blank" data-b="${i}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="第 ${i + 1} 个空">` : `<span class="sv-blank-a">${escapeHtml(String([].concat(s.blanks?.[i]?.v ?? '')[0]))}</span>`),
       });

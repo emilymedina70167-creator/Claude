@@ -42,7 +42,7 @@
       "seq": 6,
       "page": 4,
       "title": "λ = −2",
-      "md": "把 $\\lambda=-2$ 代进去，增广矩阵就是具体的数了。\n\n```answer\nid: q-r2\ntitle: 两个秩\nq: $\\lambda=-2$ 时，方程组 $\\begin{cases}-2x_1+x_2+x_3=1\\\\x_1-2x_2+x_3=-2\\\\x_1+x_2-2x_3=4\\end{cases}$ 的系数矩阵和增广矩阵的秩各是多少？\nanswer: [rank(A2), rank(Ab2)]\nbefore: \\bigl(r(A),\\ r(A\\mid\\mathbf b)\\bigr)=\nhint: 把三个方程加起来看看。\nexplain: 三个方程相加：左边是 $0$，右边是 $\\calc{b2'*[1, 1, 1]}$，矛盾。$r(A)=\\calc{rank(A2)}<r(A\\mid\\mathbf b)=\\calc{rank(Ab2)}$，**无解**。行最简形 $\\calc{rref(Ab2)}$ 的最后一行就是 $0=1$。\n```"
+      "md": "把 $\\lambda=-2$ 代进去，增广矩阵就是具体的数了。旁边是三个方程各自代表的平面：拖 $\\lambda$，看它们什么时候有公共点。\n\n```space\nid: sp-planes\ntitle: 三个方程，三个平面\nslider lam -3 2 = -2 step=0.5 label=\"λ\"\nplane normal [lam, 1, 1] at [0, 0, 1] color=blue\nplane normal [1, lam, 1] at [0, 1, 0] color=pink\nplane normal [1, 1, lam] at [0, 0, lam] color=yellow\n```\n\n```answer\nid: q-r2\ntitle: 两个秩\nq: $\\lambda=-2$ 时，方程组 $\\begin{cases}-2x_1+x_2+x_3=1\\\\x_1-2x_2+x_3=-2\\\\x_1+x_2-2x_3=4\\end{cases}$ 的系数矩阵和增广矩阵的秩各是多少？\nanswer: [rank(A2), rank(Ab2)]\nbefore: \\bigl(r(A),\\ r(A\\mid\\mathbf b)\\bigr)=\nhint: 把三个方程加起来看看。\nexplain: 三个方程相加：左边是 $0$，右边是 $\\calc{b2'*[1, 1, 1]}$，矛盾。$r(A)=\\calc{rank(A2)}<r(A\\mid\\mathbf b)=\\calc{rank(Ab2)}$，**无解**。行最简形 $\\calc{rref(Ab2)}$ 的最后一行就是 $0=1$。图上：三个平面两两相交成三条平行的直线，围成一个三棱柱，没有公共点。\n```"
     },
     {
       "id": "s5",

@@ -1,0 +1,67 @@
+{
+  "unit": "银行家算法：Need、安全性检查、处理请求",
+  "subject": "操作系统",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "先算 Need",
+      "md": "5 个进程、3 类资源。银行家算法每一步都要用「每个进程**还要**多少」，先把它算出来。\n\n```let\nM = [[7, 5, 3], [3, 2, 2], [9, 0, 2], [2, 2, 2], [4, 3, 3]]\nA = [[0, 1, 0], [2, 0, 0], [3, 0, 2], [2, 1, 1], [0, 0, 2]]\nav = [3, 3, 2]\nN = M - A\n```\n\n```answer\nid: q-need\ntitle: 算 Need\nq: 5 个进程 P0～P4、3 类资源，一行一个进程、一列一类资源。$\\text{Max}=\\calc{M}$，$\\text{Allocation}=\\calc{A}$，Available = (3, 3, 2)。求 Need。\nanswer: N\nbefore: \\text{Need}=\nhint: Need 是「最多要的」减去「已经拿到的」，一格一格减。\nexplain: $\\text{Need}=\\text{Max}-\\text{Allocation}=\\calc{N}$\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 2,
+      "page": 2,
+      "title": "安全性检查",
+      "md": "安全性检查：Work 从 Available 开始；找一个 Need ≤ Work 的进程，假设它拿到资源、运行完、把资源全还回来；重复，直到所有进程都运行完（安全），或者谁都满足不了（不安全）。\n\n```quiz\nid: qz-work\nq: Work = (3, 3, 2) 时 P1 的 Need ≤ Work，让 P1 运行完。Work 要加上 P1 的哪一行？\n- [x] Allocation：P1 运行完，把手里的全部还回来\n- [ ] Need：P1 刚刚拿走的那些\n- [ ] Max：P1 最多要的\nexplain: P1 先从 Work 拿走 Need，运行完还回 Max（= Allocation + Need）。一来一回，Work 净增加的是 Allocation：$\\calc{av'}+\\calc{row(A, 2)}=\\calc{av'+row(A, 2)}$。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 3,
+      "page": 2,
+      "md": "每一轮先在表里点出下一个能运行完的进程（能满足的有好几个时，点哪个都对），看 Work 怎么变。\n\n```banker\nid: bk-safe\ntitle: 当前状态安全吗\navail: 3 3 2\nmax: P0 7 5 3; P1 3 2 2; P2 9 0 2; P3 2 2 2; P4 4 3 3\nalloc: P0 0 1 0; P1 2 0 0; P2 3 0 2; P3 2 1 1; P4 0 0 2\nask: next\n```"
+    },
+    {
+      "id": "k1",
+      "seq": 4,
+      "pin": true,
+      "title": "安全性检查",
+      "md": "Need = Max − Allocation\n\n找 Need ≤ Work 的进程 → 运行完 → Work += 它的 Allocation"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 3,
+      "title": "P1 请求 (1, 0, 2)",
+      "md": "现在 P1 提出请求 (1, 0, 2)。系统按固定的顺序做三步检查。\n\n```steps\nid: st-req\ntitle: 三步检查\nq: P1 请求 Request = (1, 0, 2)。P1 的 Need = $\\calc{row(N, 2)}$，Available = $\\calc{av'}$。\n\nstep: 第一步\nask: 先查什么？\nchoices: Request ≤ Need | Request ≤ Available | 试分配后是否安全\nanswer: Request ≤ Need\nshow: 请求超过它自己声明还要的量，说明出错，直接拒绝。(1, 0, 2) ≤ $\\calc{row(N, 2)}$，通过。\n\nstep: 第二步\nask: 再查什么？\nchoices: Request ≤ Available | 试分配后是否安全\nanswer: Request ≤ Available\nshow: 系统手里不够，P1 只能等。(1, 0, 2) ≤ $\\calc{av'}$，通过。\n\nstep: 第三步\nask: 前两步都过了，接下来？\nchoices: 直接分配 | 先试着分配，再做安全性检查 | 看 P1 能不能马上运行完\nanswer: 先试着分配，再做安全性检查\nshow: 试分配：Available − Request、Allocation + Request、Need − Request，再对新状态做安全性检查；安全才真分配，不安全就恢复原状、让 P1 等。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 4,
+      "title": "试分配以后还安全吗",
+      "md": "跟着走一遍：页面先查前两步、试分配，再对新状态做安全性检查。问到时先答再看。\n\n```banker\nid: bk-req\ntitle: P1 请求 (1, 0, 2)\navail: 3 3 2\nmax: P0 7 5 3; P1 3 2 2; P2 9 0 2; P3 2 2 2; P4 4 3 3\nalloc: P0 0 1 0; P1 2 0 0; P2 3 0 2; P3 2 1 1; P4 0 0 2\nrequest: P1 1 0 2\nask: request, next\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 7,
+      "pin": true,
+      "title": "处理请求",
+      "md": "① Request ≤ Need　② Request ≤ Available　③ 试分配后安全才分配"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 5,
+      "title": "自己判：P4 请求",
+      "md": "换一个请求，从**最初的状态**算（P1 的请求没有发生）：P4 请求 (3, 3, 0)。在草稿纸上按三步做完，再写结论：能还是不能。\n\n```banker\nid: bk-quiz\ntitle: P4 请求 (3, 3, 0)\navail: 3 3 2\nmax: P0 7 5 3; P1 3 2 2; P2 9 0 2; P3 2 2 2; P4 4 3 3\nalloc: P0 0 1 0; P1 2 0 0; P2 3 0 2; P3 2 1 1; P4 0 0 2\nrequest: P4 3 3 0\nmode: quiz\n```"
+    },
+    {
+      "id": "s7",
+      "seq": 9,
+      "page": 5,
+      "md": "```quiz\nid: qz-stuck\nq: P4 的请求 (3, 3, 0) 卡在了哪一步（或者都通过了）？\n- [ ] 第一步：超过 Need\n- [ ] 第二步：超过 Available\n- [x] 前两步都过了，试分配后不安全\n- [ ] 三步都过了，可以分配\nexplain: (3, 3, 0) ≤ P4 的 Need $\\calc{row(N, 5)}$，也 ≤ Available $\\calc{av'}$；试分配后 Available 只剩 $\\calc{av' - [3, 3, 0]'}$，没有一个进程的 Need ≤ 它，不安全，P4 要等。\n```"
+    }
+  ]
+}

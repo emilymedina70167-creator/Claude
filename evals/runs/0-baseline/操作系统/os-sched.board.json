@@ -1,0 +1,87 @@
+{
+  "unit": "进程调度：FCFS / SJF / SRTF / RR",
+  "subject": "操作系统",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "四个进程",
+      "md": "P1：0 到，跑 8　　P2：1 到，跑 4\n\nP3：2 到，跑 9　　P4：3 到，跑 5\n\n周转时间 = 完成时间 − 到达时间"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "FCFS：自己先算",
+      "md": "先来先服务（FCFS）：谁先到谁先用 CPU，用上了就一直跑完，才轮到下一个。先在草稿纸上画出甘特图（时间轴上每一段标出是谁在跑），再填表。\n\n```let\narr = [0, 1, 2, 3]\nrun = [8, 4, 9, 5]\nL = [[1, 0, 0, 0], [1, 1, 0, 0], [1, 1, 1, 0], [1, 1, 1, 1]]\nfin = L*run\ntat = fin - arr\n```\n\n```answer\nid: q-fcfs-table\ntitle: FCFS 的表\nq: P1（0 到，跑 8）、P2（1 到，跑 4）、P3（2 到，跑 9）、P4（3 到，跑 5）按 FCFS 调度。一行一个进程，从上到下是 P1～P4；左列填完成时间，右列填周转时间。\nanswer: mat(fin, tat)\nbefore: \\begin{matrix}P_1\\\\ P_2\\\\ P_3\\\\ P_4\\end{matrix}\nhint: P2、P3、P4 到达时 CPU 都还在忙，所以一个接一个、中间不空闲：完成时间 = 上一个的完成时间 + 自己的运行时间。周转时间 = 完成 − 到达。\nexplain: 完成时间依次是 $\\calc{fin'}$，减去到达时间 $\\calc{arr'}$，周转时间依次是 $\\calc{tat'}$。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 1,
+      "md": "```answer\nid: q-fcfs-avg\ntitle: 平均周转时间\nq: 按 FCFS，P1～P4 四个进程的平均周转时间是多少？（可以写分数或小数）\nanswer: tat'*[1, 1, 1, 1]/4\nhint: 四个周转时间加起来再除以 4。用的是周转时间，不是完成时间。\nexplain: $\\calc{tat'*[1, 1, 1, 1]}\\div 4=\\calc{tat'*[1, 1, 1, 1]/4}$\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 2,
+      "title": "SJF：挑最短的",
+      "md": "短作业优先（SJF，非抢占）：CPU 空出来时，在**已经到达**的进程里挑运行时间最短的；挑中了就一直跑完。\n\n每到要挑进程的时候，先在就绪队列里点出你选谁；最后写平均周转时间。\n\n```sched\nid: sc-sjf\ntitle: SJF（非抢占）\nalgo: sjf\nprocs: P1 0 8, P2 1 4, P3 2 9, P4 3 5\nask: next, avg\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 3,
+      "title": "SRTF：先猜抢占时刻",
+      "md": "最短剩余时间优先（SRTF）是 SJF 的抢占版：**新进程一到**就比一次，它的运行时间比正在跑的进程**还剩的**时间短，就把 CPU 抢过来。\n\n```quiz\nid: qz-preempt\nq: SJF 里 P1 从 0 一直跑到 8。换成 SRTF，P1 在 t = ? 时第一次被抢走？\nanswer: 1\nexplain: t = 1 时 P2 到达：P2 要跑 4，P1 还剩 $8-1=\\calc{8-1}$，P2 更短，抢走 CPU。SJF 不抢占，所以两张甘特图从 t = 1 起就不一样了。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 3,
+      "md": "猜完走一遍：每次调度先点出你选谁，最后写平均周转时间。\n\n```sched\nid: sc-srtf\ntitle: SRTF（抢占）\nalgo: srtf\nprocs: P1 0 8, P2 1 4, P3 2 9, P4 3 5\nask: next, avg\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 7,
+      "pin": true,
+      "title": "抢占和非抢占",
+      "md": "- SJF：只在 CPU 空出来时挑进程\n- SRTF：新进程到达时也比一次，比的是**剩余**时间"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 4,
+      "title": "RR：谁先进队",
+      "md": "时间片轮转（RR，q = 2）：每次最多连续跑 2，没跑完就回到就绪队列**队尾**。\n\n```quiz\nid: qz-rr-order\nq: t = 2 时，P3 刚好到达，P1 的时间片也刚好用完，两个都要进就绪队列。按王道的约定，谁排在前面？\n- [x] P3：新到达的先入队\n- [ ] P1：用完时间片的先入队\nexplain: 王道的约定：同一时刻既有新进程到达、又有进程用完时间片，**新到达的先入队**。所以 t = 2 时就绪队列是 P2、P3、P1（P2 在 t = 1 就到了）。\n```"
+    },
+    {
+      "id": "s7",
+      "seq": 9,
+      "page": 4,
+      "md": "照这个约定走一遍：每次轮到下一个时，先在就绪队列里点出是谁。\n\n```sched\nid: sc-rr\ntitle: RR（q = 2）\nalgo: rr q=2\nprocs: P1 0 8, P2 1 4, P3 2 9, P4 3 5\nask: next, avg\n```"
+    },
+    {
+      "id": "k3",
+      "seq": 10,
+      "pin": true,
+      "title": "RR 的约定",
+      "md": "同一时刻：新到达的先入队，刚用完时间片的排在它后面（王道）。"
+    },
+    {
+      "id": "s8",
+      "seq": 11,
+      "page": 5,
+      "title": "换一组数：SRTF",
+      "md": "新的一组：P1（0 到，跑 7）、P2（2，4）、P3（4，1）、P4（5，4）。先在草稿纸上画 SRTF 的甘特图，列出每个进程的完成时间和周转时间，再填平均周转时间。做完可以看一步步的过程对照。\n\n```sched\nid: sc-quiz-srtf\ntitle: 自己做：SRTF\nalgo: srtf\nprocs: P1 0 7, P2 2 4, P3 4 1, P4 5 4\nmode: quiz\nquiz: avg\n```"
+    },
+    {
+      "id": "s9",
+      "seq": 12,
+      "page": 6,
+      "title": "换一组数：RR",
+      "md": "同一组数，用 RR（q = 2）。这组数里有两次「新到达」和「时间片用完」撞在同一时刻。写出 CPU 上依次运行的进程（比如 P1 P2 …）。\n\n```sched\nid: sc-quiz-rr\ntitle: 自己做：RR\nalgo: rr q=2\nprocs: P1 0 7, P2 2 4, P3 4 1, P4 5 4\nmode: quiz\n```"
+    }
+  ]
+}

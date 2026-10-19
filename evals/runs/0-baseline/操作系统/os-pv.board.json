@@ -1,0 +1,68 @@
+{
+  "unit": "PV 操作：水果盘",
+  "subject": "操作系统",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "记录型信号量",
+      "md": "P(S)：S − 1；S < 0 就阻塞，排进 S 的等待队列\n\nV(S)：S + 1；S ≤ 0 就从 S 的等待队列里唤醒一个\n\nS < 0 时，|S| 是正在等的进程个数"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "先找关系",
+      "md": "盘子一次只能放一个水果：爸爸专放苹果、妈妈专放橘子，儿子专吃橘子、女儿专吃苹果。先别写代码，把谁等谁理清。\n\n```steps\nid: st-rel\ntitle: 谁等谁\nq: 爸爸、妈妈、儿子、女儿四个进程共用一个盘子，盘子里最多一个水果。\n\nstep: 爸爸和妈妈\nask: 爸爸和妈妈之间是什么关系？\nchoices: 互斥 | 同步 | 没有关系\nanswer: 互斥\nshow: 盘子空着时，两人只能有一个放进去：**互斥**（抢同一个空盘子）。\n\nstep: 爸爸和女儿\nask: 爸爸和女儿之间呢？\nchoices: 互斥 | 同步 | 没有关系\nanswer: 同步\nshow: 女儿要等盘里有苹果（爸爸放了）才能拿；爸爸要等盘子空了才能放：**同步**。妈妈和儿子也一样。\n\nstep: 儿子和女儿\nask: 儿子和女儿之间要不要单独设信号量？\nchoices: 要 | 不要\nanswer: 不要\nshow: 两人吃的水果不同，从来不会直接等对方；他们只是都会把盘子腾空。\n\nstep: 设信号量\ndo: true\nask: 要几个信号量？各叫什么、表示什么、初值多少？\nanswer: plate = 1（盘子里还能放几个水果）、apple = 0（盘里的苹果数）、orange = 0（盘里的橘子数）\nshow: 三个：plate = 1，apple = 0，orange = 0。plate 管「盘子空不空」，apple、orange 管「有没有我要的那种水果」。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 3,
+      "pin": true,
+      "title": "水果盘的信号量",
+      "md": "plate = 1（盘子空位）　apple = 0　orange = 0"
+    },
+    {
+      "id": "s2",
+      "seq": 4,
+      "page": 2,
+      "title": "写出四个进程",
+      "md": "用常驻栏里的三个信号量写出四个进程，一步写一个，写完再对照。可以打字，也可以在 Notability 里写好粘贴进来。\n\n```steps\nid: st-code\ntitle: 四个进程\nq: 信号量 plate = 1，apple = 0，orange = 0。每个进程都是 while(1) 循环，只写循环体，写成「P(…); 动作; V(…);」的样子。\n\nstep: 爸爸\ndo: true\nask: 写出爸爸进程（放苹果）。\nanswer: `P(plate); 放苹果; V(apple);`\nshow: 先要一个空盘子，放好以后告诉女儿「有苹果了」。\n\nstep: 妈妈\ndo: true\nask: 写出妈妈进程（放橘子）。\nanswer: `P(plate); 放橘子; V(orange);`\nshow: 和爸爸对称。\n\nstep: 女儿\ndo: true\nask: 写出女儿进程（吃苹果）。\nanswer: `P(apple); 取苹果; V(plate); 吃苹果;`\nshow: 先等有苹果；拿走以后盘子空了，V(plate) 让爸爸妈妈可以再放。吃苹果放在 V(plate) 之后，不占着盘子。\n\nstep: 儿子\ndo: true\nask: 写出儿子进程（吃橘子）。\nanswer: `P(orange); 取橘子; V(plate); 吃橘子;`\nshow: 和女儿对称。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 5,
+      "page": 3,
+      "title": "跟踪一种顺序",
+      "md": "按下面这个交替顺序跑一遍：main 里每一行是某个进程做的一次 P 或 V（注释写着是谁），放水果、取水果的动作没写成代码。走到问号处先猜信号量的值。\n\n```trace\nid: tr-pv\ntitle: 一种交替顺序\npredict: 6 -> plate; 8 -> orange; 10 -> plate\ncode:\nvoid P(int &s){ s = s - 1; }\nvoid V(int &s){ s = s + 1; }\nint main(){\n    int plate = 1, apple = 0, orange = 0;\n    P(plate);    // 爸爸：要空盘子\n    P(plate);    // 妈妈：也要空盘子\n    V(apple);    // 爸爸：苹果放好了\n    P(orange);   // 儿子：要橘子\n    P(apple);    // 女儿：要苹果\n    V(plate);    // 女儿：苹果拿走了\n    V(orange);   // 妈妈：橘子放好了\n    V(plate);    // 儿子：橘子拿走了\n    return 0;\n}\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 3,
+      "md": "```quiz\nid: qz-wake\nq: 妈妈在第 6 行的 P(plate) 阻塞了。要等第几行执行完，妈妈才被唤醒、能去放橘子？\nanswer: 10\nexplain: 第 10 行女儿 V(plate)：plate 加 1 以后仍 ≤ 0，说明有人在等，唤醒妈妈。妈妈接着放橘子，第 11 行 V(orange) 又唤醒在第 8 行阻塞的儿子。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 4,
+      "title": "为什么不用 mutex",
+      "md": "```steps\nid: st-mutex\ntitle: 要不要再加 mutex\nq: 生产者-消费者问题里，缓冲区要用 mutex = 1 保护。这道题只有 plate、apple、orange 三个信号量，没有 mutex，为什么也不会有两个进程同时动盘子？\n\nstep: 三个数加起来\nask: 没有进程阻塞时，plate + apple + orange 最大是几？\ndo: true\nanswer: 1\nshow: 初值的和是 1。每个进程都是先 P 一个、再 V 一个：P 走的那个 1 在这个进程手里，V 的时候才还回来，所以和不会超过 1。\n\nstep: 最多几个进程在动盘子\nask: 那么同时在「放」或「取」的进程最多几个？\nchoices: 1 个 | 2 个 | 4 个\nanswer: 1 个\nshow: 要放或取，必须先 P 成功一个值为 1 的信号量；三个加起来最多是 1，所以任何时刻最多一个进程在动盘子，互斥自然成立。\n\nstep: 盘子能放两个呢\nask: 如果盘子能放 2 个水果（plate 初值 2），还能不要 mutex 吗？\nchoices: 能 | 不能\nanswer: 不能\nshow: 爸爸和妈妈可能同时 P(plate) 成功、同时往盘里放，盘子这块缓冲区就要再用 mutex 保护。\n```"
+    },
+    {
+      "id": "k3",
+      "seq": 8,
+      "pin": true,
+      "title": "为什么不用 mutex",
+      "md": "盘子只能放 1 个：plate + apple + orange ≤ 1，同一时刻最多一个进程在放或取。"
+    },
+    {
+      "id": "s6",
+      "seq": 9,
+      "page": 5,
+      "title": "找错",
+      "md": "最后检查一份别人的解答。\n\n```findbug\nid: bug-pv\ntitle: 这份解答错在哪\nq: 盘子一次只能放一个水果，爸爸放苹果、妈妈放橘子、儿子吃橘子、女儿吃苹果。下面是一份 PV 解答（每个进程是 while(1) 循环的循环体）。先点出第一处错的那一行，再写错在哪。\nline: 信号量：plate = 1，apple = 0，orange = 0\nline: 爸爸：P(plate); 放苹果; V(apple);\nline: 妈妈：P(plate); 放橘子; V(orange);\nline: 儿子：P(orange); 取橘子; V(plate); 吃橘子;\nline: 女儿：P(apple); V(plate); 取苹果; 吃苹果;\nbug: 5\nwhy: 女儿先 V(plate) 再取苹果：苹果还在盘里，盘子就被宣布「空了」，爸爸或妈妈可能马上再放一个进去，盘里同时有两个水果。V(plate) 要放在「取苹果」之后。\n```"
+    }
+  ]
+}

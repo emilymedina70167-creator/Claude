@@ -1,0 +1,62 @@
+{
+  "unit": "Ax = b 什么时候有解（几何）",
+  "subject": "线代",
+  "steps": [
+    {
+      "id": "s1",
+      "seq": 1,
+      "page": 1,
+      "title": "Ax 能走到哪",
+      "md": "```let\nA = [[1, 2], [2, 4]]\na1 = col(A, 1)\na2 = col(A, 2)\nb1 = [3, 6]\nb2 = [1, 0]\n```\n\n$A\\mathbf x$ 是 $A$ 的列的线性组合（linear combination）：$A\\mathbf x=x_1\\mathbf a_1+x_2\\mathbf a_2$。拖动灰色的 $\\mathbf x$，看黄色的 $A\\mathbf x$ 能跑到哪些地方。\n\n```scene\nid: sc-ax\ntitle: Ax 能走到哪\nlet x = [1, 1] drag snap=0.5\nvector a1 color=blue label=a1\nvector a2 color=pink label=a2\nvector dot(x, [1, 0])*a1 color=blue thin\nvector dot(x, [0, 1])*a2 from dot(x, [1, 0])*a1 color=pink thin\nvector x color=gray label=x\nvector A*x color=yellow label=Ax\nshow $\\mathbf x={x}$，$A\\mathbf x=x_1\\mathbf a_1+x_2\\mathbf a_2={A*x}$\n```\n\n```quiz\nid: qz-reach\ntitle: 能到的地方\nq: 不管 $\\mathbf x$ 怎么拖，$A\\mathbf x$ 能到达的点组成什么？\n- [ ] 整个平面\n- [x] 一条过原点的直线\n- [ ] 一条不过原点的直线\n- [ ] 只有原点\nexplain: $\\mathbf a_2=\\calc{a2}$ 正好是 $\\mathbf a_1=\\calc{a1}$ 的 2 倍，所以 $x_1\\mathbf a_1+x_2\\mathbf a_2=(x_1+2x_2)\\mathbf a_1$，永远在 $\\mathbf a_1$ 这条线上。这条线就是 $A$ 的列空间（column space）。\n```"
+    },
+    {
+      "id": "k1",
+      "seq": 2,
+      "pin": true,
+      "title": "题目",
+      "md": "$A=\\begin{bmatrix}1&2\\\\2&4\\end{bmatrix}$，$\\mathbf b_1=(3,6)^{\\mathrm T}$，$\\mathbf b_2=(1,0)^{\\mathrm T}$。$A\\mathbf x=\\mathbf b_1$、$A\\mathbf x=\\mathbf b_2$ 各有没有解？有解时解集是什么样子？"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "命中 b₁，b₂ 呢",
+      "md": "黄色的线是列空间。两个目标：绿点 $\\mathbf b_1$、红点 $\\mathbf b_2$。先拖 $\\mathbf x$，让 $A\\mathbf x$ 命中 $\\mathbf b_1$。\n\n```scene\nid: sc-hit\ntitle: 命中 b1\nlet x = [0, 0] drag snap=0.5\nspan a1, a2 color=yellow\npoint b1 color=green label=b1\npoint b2 color=red label=b2\nvector x color=gray label=x\nvector A*x color=yellow label=Ax\nshow $A\\mathbf x={A*x}$\ngoal A*x = b1 msg=\"命中 b₁！\"\n```\n\n```quiz\nid: qz-b2\ntitle: b2 呢\nq: 能让 $A\\mathbf x=\\mathbf b_2=(1,0)^{\\mathrm T}$ 吗？\n- [ ] 能，再拖一拖就行\n- [x] 不能：$\\mathbf b_2$ 不在列空间那条直线上\n- [ ] 不能：$|A|=0$ 的方程组一定无解\nexplain: $A\\mathbf x$ 只能落在列空间那条线上，$\\mathbf b_2$ 不在线上，所以无解。第三项不对：$|A|=\\calc{det(A)}$，可 $A\\mathbf x=\\mathbf b_1$ 照样有解——$|A|=0$ 只说明不是唯一解。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "用秩说同一件事",
+      "md": "考试里没有图，用秩判断：把 $\\mathbf b$ 拼到 $A$ 后面，$\\mathbf b$ 在列空间里的话，加进去秩不变。\n\n```answer\nid: q-rk\ntitle: 三个秩\nq: $A=\\begin{bmatrix}1&2\\\\2&4\\end{bmatrix}$，$\\mathbf b_1=(3,6)^{\\mathrm T}$，$\\mathbf b_2=(1,0)^{\\mathrm T}$。依次写出 $r(A)$、$r(A\\mid\\mathbf b_1)$、$r(A\\mid\\mathbf b_2)$。\nanswer: [rank(A), rank(mat(a1, a2, b1)), rank(mat(a1, a2, b2))]\nhint: 看拼上 $\\mathbf b$ 以后，两行还成不成比例。\nexplain: $\\calc{[rank(A), rank(mat(a1, a2, b1)), rank(mat(a1, a2, b2))]}$：$\\mathbf b_1$ 加进去秩不变，$\\mathbf b_2$ 加进去秩变大。\n```\n\n```conjecture\nid: cj-solv\ntitle: 一句话\nq: 用一句话说：$A\\mathbf x=\\mathbf b$ 什么时候有解？用「列空间」说一遍，再用「秩」说一遍。\nrubric: 要点 (1) 有解 ⇔ $\\mathbf b$ 是 $A$ 的列的线性组合（在列空间里）；(2) ⇔ $r(A)=r(A\\mid\\mathbf b)$。只说出一种算部分正确。\nanswer: 有解 ⇔ $\\mathbf b$ 在 $A$ 的列空间里（是列的线性组合）⇔ $r(A)=r(A\\mid\\mathbf b)$。\nplaceholder: 有解当且仅当……\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 5,
+      "pin": true,
+      "title": "有解的条件",
+      "md": "有解 ⇔ $\\mathbf b$ 在列空间里 ⇔ $r(A)=r(A\\mid\\mathbf b)$。"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 4,
+      "title": "Ax = 0 的解",
+      "md": "有解时，解有多少个？先看齐次的 $A\\mathbf x=\\mathbf 0$：拖 $\\mathbf x$（别拖回原点），让黄色的 $A\\mathbf x$ 缩成 $\\mathbf 0$。\n\n```scene\nid: sc-null\ntitle: 让 Ax = 0\nlet x = [1, 1] drag snap=0.5\nvector a1 color=blue label=a1 thin\nvector a2 color=pink label=a2 thin\nvector x color=gray label=x\nvector A*x color=yellow label=Ax\nshow $\\mathbf x={x}$，$A\\mathbf x={A*x}$\n```\n\n```answer\nid: q-null\ntitle: 零空间的方向\nq: $A=\\begin{bmatrix}1&2\\\\2&4\\end{bmatrix}$。$A\\mathbf x=\\mathbf 0$ 的非零解都在一条直线上，写出这条直线的一个方向向量。\ntype: eigvec\nanswer: [-2, 1]\nhint: 要 $x_1\\mathbf a_1+x_2\\mathbf a_2=\\mathbf 0$，而 $\\mathbf a_2=2\\mathbf a_1$，所以 $x_1+2x_2=0$。\nexplain: 方向 $\\calc{[-2, 1]}$（乘任何非零数都行）。这条线叫零空间（null space）。验算：$A\\calc{[-2, 1]}=\\calc{A*[-2, 1]}$。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 5,
+      "title": "Ax = b₁ 的全部解",
+      "md": "$A\\mathbf x=\\mathbf b_1$ 的解不止一个，它们排成什么样？每步先想，再揭开；图跟着变。\n\n```steps\nid: ex-sol\ntitle: Ax = b1 的解集\nq: $A=\\begin{bmatrix}1&2\\\\2&4\\end{bmatrix}$，$\\mathbf b_1=(3,6)^{\\mathrm T}$，求 $A\\mathbf x=\\mathbf b_1$ 的全部解。\nstep: 找一个解\nask: 令 $x_2=0$，$x_1$ 是多少？\ndo: true\nanswer: 3\nshow: 特解（particular solution）$\\boldsymbol\\eta=(3,0)^{\\mathrm T}$：$A\\boldsymbol\\eta=\\calc{A*[3, 0]}=\\mathbf b_1$。\nstep: 再加上零空间\nask: 给 $\\boldsymbol\\eta$ 加上零空间里的任意一个向量 $k\\boldsymbol\\xi$，$\\boldsymbol\\xi=(-2,1)^{\\mathrm T}$。$A(\\boldsymbol\\eta+k\\boldsymbol\\xi)$ 是多少？\nchoices: 还是 $\\mathbf b_1$ | 变成 $\\mathbf 0$ | 变成 $k\\mathbf b_1$\nanswer: 还是 $\\mathbf b_1$\nshow: $A(\\boldsymbol\\eta+k\\boldsymbol\\xi)=A\\boldsymbol\\eta+kA\\boldsymbol\\xi=\\mathbf b_1+\\mathbf 0$。\nstep: 解集的样子\nask: 所以全部解在图上是什么？\nchoices: 过 $(3,0)$、方向 $(-2,1)$ 的直线 | 过原点、方向 $(-2,1)$ 的直线 | 只有 $(3,0)$ 一个点\nanswer: 过 $(3,0)$、方向 $(-2,1)$ 的直线\nshow: $\\mathbf x=\\boldsymbol\\eta+k\\boldsymbol\\xi=(3,0)^{\\mathrm T}+k(-2,1)^{\\mathrm T}$：把零空间那条线平移到 $\\boldsymbol\\eta$。拖图里的 $\\mathbf x$ 沿黄线走，$A\\mathbf x$ 一直等于 $\\mathbf b_1$。\n```\n\n```scene\nid: sc-sol\ntitle: 解集是一条直线\nlink: ex-sol\nlet x = [3, 0] drag snap=0.5\npoint [3, 0] color=green label=η from=1\nline [0, 0] dir [-2, 1] color=gray dashed from=2\nline [3, 0] dir [-2, 1] color=yellow from=3\nvector x color=gray label=x\nshow $\\mathbf x={x}$，$A\\mathbf x={A*x}$\n```"
+    },
+    {
+      "id": "k3",
+      "seq": 8,
+      "pin": true,
+      "title": "解集",
+      "md": "全部解 = 特解 + 零空间：$\\mathbf x=\\boldsymbol\\eta+k\\boldsymbol\\xi$。"
+    }
+  ]
+}

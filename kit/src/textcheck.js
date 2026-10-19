@@ -30,8 +30,9 @@ export function splitSeq(text, { single = false } = {}) {
 
 const norm = (t) => halfWidth(t).trim().toUpperCase();
 
+// 全角换成半角；减号（−、–、－）一律当成 -，学生在 iPad 上打出来的和页面写的不一样也认
 function halfWidth(s) {
-  return String(s ?? '').replace(/[！-～]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/　/g, ' ');
+  return String(s ?? '').replace(/[！-～]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/　/g, ' ').replace(/[−–—]/g, '-');
 }
 
 /**

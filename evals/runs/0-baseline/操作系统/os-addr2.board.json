@@ -1,0 +1,62 @@
+{
+  "unit": "二级页表和快表：拆地址、有效访问时间",
+  "subject": "操作系统",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "题目条件",
+      "md": "32 位虚拟地址，页 4 KB，页表项 4 B\n\n页目录号 10 位 + 页表索引 10 位 + 页内偏移 12 位\n\n快表 10 ns，访存 100 ns，快表命中率 90%"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "为什么是 10、10、12",
+      "md": "```let\nva = 0x00403A10\npg = 4096\npte = 4\ntlb = 10\nmem = 100\nh = 0.9\n```\n\n32 位虚拟地址切成三段：\n\n```sketch\nid: sk-fields\ntitle: 32 位虚拟地址\nwidth: 360\nheight: 110\n<rect x=\"10\" y=\"36\" width=\"106\" height=\"40\" rx=\"4\" class=\"blue fill\"/>\n<rect x=\"116\" y=\"36\" width=\"106\" height=\"40\" rx=\"4\" class=\"pink fill\"/>\n<rect x=\"222\" y=\"36\" width=\"128\" height=\"40\" rx=\"4\" class=\"yellow fill\"/>\n<text x=\"63\" y=\"61\" text-anchor=\"middle\">页目录号</text>\n<text x=\"169\" y=\"61\" text-anchor=\"middle\">页表索引</text>\n<text x=\"286\" y=\"61\" text-anchor=\"middle\">页内偏移</text>\n<text x=\"63\" y=\"98\" text-anchor=\"middle\" class=\"small blue\">10 位</text>\n<text x=\"169\" y=\"98\" text-anchor=\"middle\" class=\"small pink\">10 位</text>\n<text x=\"286\" y=\"98\" text-anchor=\"middle\" class=\"small yellow\">12 位</text>\n<text x=\"12\" y=\"26\" class=\"small faint\">第 31 位</text>\n<text x=\"348\" y=\"26\" text-anchor=\"end\" class=\"small faint\">第 0 位</text>\n```\n\n页内偏移 12 位，是因为一页 $\\calc{pg}$ B $=2^{\\calc{log2(pg)}}$ B。那页表索引为什么是 10 位？\n\n```answer\nid: q-ptes\ntitle: 一页放几项\nq: 页大小 4 KB，页表项 4 B。一个页面里能放多少个页表项？\nanswer: pg/pte\nhint: 一页多少字节，除以每项多少字节。\nexplain: $\\calc{pg}\\div\\calc{pte}=\\calc{pg/pte}=2^{\\calc{log2(pg/pte)}}$：一张页表正好占一页，用 $\\calc{log2(pg/pte)}$ 位就能选中其中一项，所以页表索引是 $\\calc{log2(pg/pte)}$ 位；剩下 $32-\\calc{log2(pg)}-\\calc{log2(pg/pte)}=\\calc{32-log2(pg)-log2(pg/pte)}$ 位给页目录号。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "拆 0x00403A10",
+      "md": "先把 0x00403A10 写成二进制（一位十六进制 = 4 位二进制），再从左往右切：前 10 位、接着 10 位、最后 12 位。\n\n```answer\nid: q-split\ntitle: 页目录号和页表索引\nq: 32 位虚拟地址 0x00403A10，页目录号 10 位、页表索引 10 位、页内偏移 12 位。页目录号和页表索引各是多少（写十进制）？\nanswer: [shr(va, 22), and(shr(va, 12), 0x3FF)]\nbefore: \\begin{bmatrix}\\text{页目录号}\\\\ \\text{页表索引}\\end{bmatrix}=\nhint: 高 20 位是 $\\calc{bin(shr(va, 12), 20)}$：前 10 位、后 10 位各是多少？\nexplain: 页目录号 = 高 10 位 = $\\calc{shr(va, 22)}$；页表索引 = 中间 10 位 = $\\calc{and(shr(va, 12), 0x3FF)}$。\n```\n\n```answer\nid: q-offset\ntitle: 页内偏移\nq: 同一个地址 0x00403A10，页内偏移（低 12 位）是多少？写十六进制。\ntype: hex\nanswer: and(va, 0xFFF)\nhint: 低 12 位正好是最后 3 位十六进制数。\nexplain: 页内偏移 = $\\calc{hex(and(va, 0xFFF), 3)}$\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "多拆几个地址",
+      "md": "换几个地址练熟。先在草稿纸上把十六进制写成二进制，再切。\n\n```practice\nid: pr-split\ntitle: 拆地址\ntype: custom\ncount: 3\npick pd = int(0, 1023)\npick px = int(0, 1023)\npick po = int(0, 4095)\nlet v = pd*2^22 + px*2^12 + po\nq: 32 位虚拟地址（十六进制）$\\calc{hex(v, 8)}$，页目录号 10 位、页表索引 10 位、页内偏移 12 位。页目录号和页表索引各是多少（写十进制）？\nanswer: [pd, px]\nbefore: \\begin{bmatrix}\\text{页目录号}\\\\ \\text{页表索引}\\end{bmatrix}=\nhint: 高 20 位是 $\\calc{bin(shr(v, 12), 20)}$，切成 10 位 + 10 位。\nexplain: 页目录号 $=\\calc{pd}$，页表索引 $=\\calc{px}$，页内偏移是 $\\calc{hex(po, 3)}$。\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "取一个数访存几次",
+      "md": "看图数一数：二级页表下，取一个数要碰几次内存。\n\n```sketch\nid: sk-walk\ntitle: 二级页表：取一个数\nwidth: 380\nheight: 200\n<rect x=\"10\" y=\"20\" width=\"90\" height=\"36\" rx=\"6\" class=\"green fill\"/>\n<text x=\"55\" y=\"43\" text-anchor=\"middle\">快表</text>\n<rect x=\"120\" y=\"120\" width=\"250\" height=\"70\" rx=\"8\" class=\"dashed faint\"/>\n<text x=\"245\" y=\"112\" text-anchor=\"middle\" class=\"small faint\">内存</text>\n<rect x=\"132\" y=\"136\" width=\"66\" height=\"36\" rx=\"4\" class=\"blue fill\"/>\n<text x=\"165\" y=\"159\" text-anchor=\"middle\" class=\"small\">页目录</text>\n<rect x=\"212\" y=\"136\" width=\"66\" height=\"36\" rx=\"4\" class=\"pink fill\"/>\n<text x=\"245\" y=\"159\" text-anchor=\"middle\" class=\"small\">页表</text>\n<rect x=\"292\" y=\"136\" width=\"66\" height=\"36\" rx=\"4\" class=\"yellow fill\"/>\n<text x=\"325\" y=\"159\" text-anchor=\"middle\" class=\"small\">数据</text>\n<path d=\"M 55 56 L 55 154 L 130 154\" class=\"arrow gray\"/>\n<text x=\"62\" y=\"104\" class=\"small gray\">没命中</text>\n<line x1=\"198\" y1=\"154\" x2=\"210\" y2=\"154\" class=\"arrow\"/>\n<line x1=\"278\" y1=\"154\" x2=\"290\" y2=\"154\" class=\"arrow\"/>\n<path d=\"M 100 38 Q 325 38 325 134\" class=\"arrow green\"/>\n<text x=\"215\" y=\"30\" text-anchor=\"middle\" class=\"small green\">命中：直接给出块号</text>\n```\n\n```quiz\nid: qz-miss\nq: 二级页表，快表没命中。取到这个数，一共要访问内存几次？\nanswer: 3\nexplain: 查页目录 1 次、查页表 1 次、取数 1 次，共 3 次。\n```\n\n```quiz\nid: qz-hit\nq: 快表命中时，要访问内存几次？\nanswer: 1\nexplain: 快表直接给出块号，只剩取数 1 次（快表不在内存里）。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 5,
+      "title": "有效访问时间",
+      "md": "```steps\nid: st-eat\ntitle: 列出有效访问时间\nq: 快表 10 ns，访存 100 ns，快表命中率 90%，二级页表，不考虑 cache，不发生缺页。求有效访问时间。\n\nstep: 命中时花多久\nask: 快表命中时，一次取数花多少 ns？\ndo: true\nanswer: tlb + mem\nshow: 查快表 + 取数 $=\\calc{tlb}+\\calc{mem}=\\calc{tlb+mem}$ ns\n\nstep: 没命中时花多久\nask: 快表没命中时呢？（上一块板数过访存几次）\ndo: true\nanswer: tlb + 3*mem\nshow: 查快表 + 页目录 + 页表 + 取数 $=\\calc{tlb}+3\\times\\calc{mem}=\\calc{tlb+3*mem}$ ns\n\nstep: 合起来\nask: 按命中率加权，有效访问时间是多少 ns？\ndo: true\nanswer: h*(tlb + mem) + (1 - h)*(tlb + 3*mem)\nshow: $0.9\\times\\calc{tlb+mem}+(1-0.9)\\times\\calc{tlb+3*mem}=\\calc{h*(tlb+mem)+(1-h)*(tlb+3*mem)}$ ns\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 7,
+      "pin": true,
+      "title": "有效访问时间",
+      "md": "命中率 ×（快表 + 访存）+（1 − 命中率）×（快表 + (页表级数 + 1) × 访存）"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 6,
+      "title": "换数再算",
+      "md": "页表级数、时间、命中率都换着来。\n\n```practice\nid: pr-eat\ntitle: 有效访问时间\ntype: custom\ncount: 3\npick k = int(1, 3)\npick tb = choice(5, 10, 20)\npick m = choice(50, 100, 200)\npick hp = choice(80, 90, 95, 98)\nlet hr = hp/100\nlet ans = hr*(tb + m) + (1 - hr)*(tb + (k + 1)*m)\nwhere ans == floor(ans)\nq: 采用 $\\calc{k}$ 级页表，快表访问 $\\calc{tb}$ ns，访存 $\\calc{m}$ ns，快表命中率 $\\calc{hp}\\%$。不考虑 cache、不发生缺页，求有效访问时间（ns）。\nanswer: ans\nhint: 没命中时，要把 $\\calc{k}$ 级页表都查一遍再取数：一共访存几次？\nexplain: 命中：$\\calc{tb}+\\calc{m}=\\calc{tb+m}$；没命中：$\\calc{tb}+\\calc{k+1}\\times\\calc{m}=\\calc{tb+(k+1)*m}$。有效访问时间 $=\\calc{hp}\\%\\times\\calc{tb+m}+\\calc{100-hp}\\%\\times\\calc{tb+(k+1)*m}=\\calc{ans}$ ns。\n```"
+    }
+  ]
+}
