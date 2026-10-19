@@ -347,6 +347,9 @@ const FUNCS = {
   },
   bin: (x, n) => radix(x, n, 2),
   hex: (x, n) => radix(x, n, 16),
+  // 只为写出来的：vmat(A) 写成行列式的竖线 |…|；qf(A) 把对称矩阵写成二次型 x₁² + 2x₁x₂ + …（练习题的题面用）
+  vmat: (M) => { square(M, '行列式'); return new Shown(`\\begin{vmatrix}${M.map((r) => r.map((x) => x.toTeX()).join(' & ')).join(' \\\\ ')}\\end{vmatrix}`, exactText(M)); },
+  qf: (M) => quadFormShown(M),
   // 精确地四舍五入（分数不经过浮点）：dec(61/4) = 15.25，dec(8/3) = 2.67，dec(x, 3)
   dec: (x, k) => decExact(q(x, 'dec() 里'), k === undefined ? 2 : int(k, '位数')),
 };
@@ -364,6 +367,27 @@ function uint(x, w) {
   if (v < 0n) throw new Error(`位运算只对非负整数（${v} 是负数：先用 unsigned(${v}, 位数) 换成无符号数）`);
   if (w !== undefined && v >= 1n << w) throw new Error(`${v} 用 ${w} 位放不下`);
   return v;
+}
+// 只能写出来、不能再算的值（和 bin / hex / dec 一样当 Radix 看）：带着自己的 TeX
+class Shown extends Radix {
+  constructor(tex, text) { super(text, 0); this.tex = tex; }
+  toTeX() { return this.tex; }
+}
+function quadFormShown(M) {
+  square(M, '二次型');
+  if (!M.every((r, i) => r.every((x, j) => x.cmp(M[j][i]) === 0))) throw new Error('qf(A)：二次型的矩阵要对称');
+  const terms = [];
+  const n = M.length;
+  for (let i = 0; i < n; i++) for (let j = i; j < n; j++) {
+    const c = i === j ? M[i][i] : M[i][j].mul(new Q(2n));
+    if (c.zero) continue;
+    const neg = c.n < 0n, a = neg ? c.neg() : c;
+    const k = a.n === 1n && a.d === 1n ? '' : a.toTeX();
+    terms.push({ neg, tex: `${k}${i === j ? `x_{${i + 1}}^{2}` : `x_{${i + 1}}x_{${j + 1}}`}` });
+  }
+  if (!terms.length) return new Shown('0', '0');
+  const tex = terms.map((t, k) => (k === 0 ? (t.neg ? '-' : '') : t.neg ? ' - ' : ' + ') + t.tex).join('');
+  return new Shown(tex, tex);
 }
 function decExact(x, k) {
   if (k < 0 || k > 10) throw new Error('dec(x, 位数)：位数写 0 到 10');

@@ -200,3 +200,27 @@ test('formula: λ（特征多项式）：作者写希腊字母、省略乘号都
   assert.equal(compareFormula(s.expected, read('(λ-1)^2(λ-2)'), { free: s.free, scope: s.scope }).ok, false);
   assert.match(formulaTeX(s.expected), /lambda/);
 });
+
+test('practice 的内置线代题型：每种、每个难度取 20 组数都算得出、条件取得到；数是「好算」的', async () => {
+  const { BUILTIN_TEMPLATES, builtinTemplate, instantiate } = await import('../kit/src/practicespec.js');
+  const { calcValue } = await import('../kit/src/exact.js');
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (const name of Object.keys(BUILTIN_TEMPLATES)) {
+    for (const level of [1, 2]) {
+      const t = builtinTemplate(name, level);
+      assert.deepEqual(checkTemplate(t, { rand, rounds: 20 }), [], `${name} level ${level}`);
+    }
+  }
+  // 逆矩阵（level 2）是整数；特征值是从小到大的整数；二次型的矩阵对称、交叉项是一半
+  for (let k = 0; k < 10; k++) {
+    const inv = instantiate(builtinTemplate('inverse', 2), { rand }).vars;
+    assert.ok(calcValue('inv(A)', inv).value.flat().every((x) => x.integer));
+    const eg = instantiate(builtinTemplate('eigen', 1), { rand }).vars;
+    assert.ok(eg.a.cmp(eg.b) < 0);
+    const qf = instantiate(builtinTemplate('quadform', 1), { rand }).vars;
+    assert.ok(qf.A.every((r, i) => r.every((x, j) => x.cmp(qf.A[j][i]) === 0)));
+  }
+  assert.equal(builtinTemplate('nope'), null);
+  assert.equal(builtinTemplate('det3', 5).fields.q.includes('四阶'), true, '难度超过了就用最难的');
+});

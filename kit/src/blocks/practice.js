@@ -4,7 +4,7 @@ import { generate } from '../generators.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml, withCalcScope } from './common.js';
 import { answerWidget, plain, plainValue, textAnswerSpec } from './answer.js';
-import { parseTemplate, instantiate, checkTemplate, fillText } from '../practicespec.js';
+import { parseTemplate, instantiate, checkTemplate, fillText, builtinTemplate, BUILTIN_TEMPLATES } from '../practicespec.js';
 import { formulaSpec } from '../formula.js';
 import { toFloat, calcValue } from '../exact.js';
 
@@ -15,10 +15,17 @@ export function practice(el, src) {
   const custom = String(src).match(/^\s*types?\s*[:：]\s*(.*)$/mi)?.[1];
   if (custom && /\bcustom\b/i.test(custom)) {
     if (list(custom).length > 1) throw new Error('type: custom（自定义题型）不能和别的题型混在一起');
-    return customPractice(el, src);
+    const tpl = parseTemplate(src);
+    return templatePractice(el, tpl.fields, [{ tpl, name: '' }]);
   }
   const { fields } = parseFields(src);
   const types = list(fields.type || fields.types || 'matvec');
+  // 线代的内置题型（det3、inverse、rank、eigen、eigvec、quadform）是写好的模板，走自定义题型那条路
+  const builtin = types.filter((t) => BUILTIN_TEMPLATES[t.toLowerCase()]);
+  if (builtin.length) {
+    if (builtin.length < types.length) throw new Error(`内置题型 ${builtin.join('、')} 不能和 ${types.filter((t) => !builtin.includes(t)).join('、')} 写在同一个 practice 里：分成两个 practice`);
+    return templatePractice(el, fields, builtin.map((t) => ({ tpl: builtinTemplate(t, fields.level), name: BUILTIN_TEMPLATES[t.toLowerCase()].name })));
+  }
   const need = Math.max(1, Number(fields.count) || 3);
   const level = Number(fields.level) || 1;
   types.forEach((t) => generate(t, level)); // 先检查题型名
@@ -73,29 +80,33 @@ export function practice(el, src) {
 }
 
 // —— 自定义题型：照模板随机取数出题（写法见 practicespec.js），答案精确算出来判分 ——
-function customPractice(el, src) {
-  const tpl = parseTemplate(src);
-  const { fields } = tpl;
+// 内置的线代题型也是模板（BUILTIN_TEMPLATES），几种题型轮着出。fields：组件自己的字段（count、title、note）
+function templatePractice(el, fields, tpls) {
   const need = Math.max(1, Number(fields.count) || 3);
   const base = { ...session.vars };
-  const formulaOf = (vars) => (fields.formula ? formulaSpec(fields.answer, fields.formula, vars) : null);
-  // check: bin / hex：答案写成二进制 / 十六进制（width: 要求几位）。序列答案要逐题算，自定义题型里先不支持
-  const check = (fields.check || '').toLowerCase().trim();
-  if (/^(seq|sequence|order)$/.test(check)) throw new Error('practice 的自定义题型还不支持 check: seq（序列答案请用 answer 组件的 type: seq）');
-  const textOf = (vars) => textAnswerSpec(check, fields.answer, { scope: vars, width: fields.width });
-  // 先取几组数试一遍：模板写错（算不出来、条件取不到）现在就报，别等学生做到那一题
-  const errors = checkTemplate(tpl, { base, formulaCheck: fields.formula ? (vars) => formulaOf(vars) : /^(bin|hex)$/.test(check) ? textOf : null });
-  if (errors.length) throw new Error(errors.slice(0, 2).join('；'));
+  const kits = tpls.map(({ tpl, name }) => {
+    const f = tpl.fields;
+    const formulaOf = (vars) => (f.formula ? formulaSpec(f.answer, f.formula, vars) : null);
+    // check: bin / hex：答案写成二进制 / 十六进制（width: 要求几位）。序列答案要逐题算，自定义题型里先不支持
+    const check = (f.check || '').toLowerCase().trim();
+    if (/^(seq|sequence|order)$/.test(check)) throw new Error('practice 的自定义题型还不支持 check: seq（序列答案请用 answer 组件的 type: seq）');
+    const textOf = (vars) => textAnswerSpec(check, f.answer, { scope: vars, width: f.width });
+    // 先取几组数试一遍：模板写错（算不出来、条件取不到）现在就报，别等学生做到那一题
+    const errors = checkTemplate(tpl, { base, formulaCheck: f.formula ? (vars) => formulaOf(vars) : /^(bin|hex)$/.test(check) ? textOf : null });
+    if (errors.length) throw new Error(errors.slice(0, 2).join('；'));
+    return { tpl, f, name, check, formulaOf, textOf, prev: null };
+  });
+  let turn = 0;
   const title = fields.title || '练习 Practice';
   const body = widget(el, { title: escapeHtml(title), cls: 'practice' });
   body.innerHTML = `
-    <div class="pr-types muted">程序随机出题，可以一直练</div>
+    <div class="pr-types muted">${kits.some((x) => x.name) ? `${kits.map((x) => escapeHtml(x.name)).join(' · ')}　·　` : ''}程序随机出题，可以一直练</div>
     ${fields.note ? `<div class="w-note">${mdToHtml(fields.note)}</div>` : ''}
     <div class="pr-head"><div class="pr-dots"></div><span class="pr-count muted"></span></div>
     <div class="pr-problem"></div>
     <div class="pr-nav"><button type="button" class="btn pr-skip">换一题</button><button type="button" class="btn btn-primary pr-next" hidden>下一题 →</button></div>`;
   const done = session.gate(el, title);
-  let right = 0, total = 0, prev = null;
+  let right = 0, total = 0;
   const results = [];
   const dots = body.querySelector('.pr-dots');
   const count = body.querySelector('.pr-count');
@@ -109,27 +120,31 @@ function customPractice(el, src) {
   }
 
   function newProblem(focus = true) {
-    const { vars, picked } = instantiate(tpl, { base, avoid: prev });
-    prev = picked;
-    const formula = formulaOf(vars);
-    const text = formula ? null : textOf(vars);
-    const value = formula || text ? null : toFloat(calcValue(fields.answer, vars).value);
+    const kit = kits[turn++ % kits.length];
+    const f = kit.f;
+    const { vars, picked } = instantiate(kit.tpl, { base, avoid: kit.prev });
+    kit.prev = picked;
+    const formula = kit.formulaOf(vars);
+    const text = formula ? null : kit.textOf(vars);
+    const value = formula || text ? null : toFloat(calcValue(f.answer, vars).value);
+    const check = kit.check;
+    const ptitle = kit.name || title;
     const box = body.querySelector('.pr-problem');
     next.hidden = true;
     skip.hidden = false;
     const t0 = Date.now();
     // 记录里的题目：\calc 换成算好的数，课堂 Claude 看得到这一题取的是什么数
-    const rq = plain(fillText(fields.q, vars).tex.replace(/\$/g, ''));
+    const rq = plain(fillText(f.q, vars).tex.replace(/\$/g, ''));
     const expected = formula ? formula.display : text ? text.display : plainValue(value);
-    const onTry = (t) => session.record({ type: 'practice', liveOnly: true, title, q: rq, value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, check: t.note, ms: Date.now() - t0, el });
+    const onTry = (t) => session.record({ type: 'practice', liveOnly: true, title: ptitle, q: rq, value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, check: t.note, ms: Date.now() - t0, el });
     withCalcScope(vars, () => answerWidget(box, {
-      q: fields.q, before: fields.before, after: fields.after, hint: fields.hint, explain: fields.explain,
+      q: f.q, before: f.before, after: f.after, hint: f.hint, explain: f.explain,
       answer: value, formula, text, type: check, scope: vars, onTry,
     }, (r) => {
       total++;
       results.push(r.ok);
       if (r.ok) right++;
-      session.record({ type: 'practice', final: true, ms: Date.now() - t0, title, q: rq, ok: r.ok, attempts: r.attempts, first: r.first, expected, firstTry: r.ok && r.attempts === 1, work: r.work || undefined, check: r.note, el });
+      session.record({ type: 'practice', final: true, ms: Date.now() - t0, title: ptitle, q: rq, ok: r.ok, attempts: r.attempts, first: r.first, expected, firstTry: r.ok && r.attempts === 1, work: r.work || undefined, check: r.note, el });
       if (right >= need) done();
       status();
       next.hidden = false;

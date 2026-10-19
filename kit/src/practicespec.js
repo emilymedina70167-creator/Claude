@@ -199,3 +199,151 @@ export function checkTemplate(tpl, { base = {}, rand = Math.random, rounds = 12,
   }
   return errors;
 }
+
+// —— 内置的线代题型：就是写好的自定义模板（和 type: custom 同一套取数、自检、判分），按 level 选难度 ——
+// 每个题型 [level 1, level 2]；数都取得「好算」：行列式不大、逆矩阵分母小、特征值是整数
+const T = String.raw;
+export const BUILTIN_TEMPLATES = {
+  det3: {
+    name: '三阶 / 四阶行列式',
+    levels: [T`pick A = mat(3, 3, -3, 3)
+where det(A) != 0
+where abs(det(A)) <= 40
+q: 计算行列式 $D=\calc{vmat(A)}$。
+answer: det(A)
+before: D =
+hint: 先用倍加把一列（一行）化出两个 0（倍加不改变行列式），再按它展开。
+explain: $D=\calc{det(A)}$。`, T`pick A = mat(4, 4, -2, 2)
+where det(A) != 0
+where abs(det(A)) <= 60
+q: 计算四阶行列式 $D=\calc{vmat(A)}$。
+answer: det(A)
+before: D =
+hint: 先化出一列只剩一个非零元，按这一列展开降成三阶；换行要变号。
+explain: $D=\calc{det(A)}$。`],
+  },
+  inverse: {
+    name: '求逆矩阵',
+    levels: [T`pick A = mat(2, 2, -4, 4)
+where det(A) != 0
+where abs(det(A)) <= 6
+q: 求 $A=\calc{A}$ 的逆矩阵。
+answer: inv(A)
+before: A^{-1} =
+hint: 二阶矩阵：主对角线两个数换位置，副对角线两个数变号，再除以 $|A|$。
+explain: $|A|=\calc{det(A)}$，$A^{-1}=\calc{inv(A)}$。`, T`pick A = mat(3, 3, -2, 2)
+where abs(det(A)) == 1
+q: 求 $A=\calc{A}$ 的逆矩阵。
+answer: inv(A)
+before: A^{-1} =
+hint: 对 $(A\mid E)$ 做初等行变换，左边化成 $E$ 时右边就是 $A^{-1}$。
+explain: $A^{-1}=\calc{inv(A)}$（乘回去验算 $AA^{-1}=E$）。`],
+  },
+  rank: {
+    name: '矩阵的秩',
+    levels: [T`pick u = vec(3, -2, 2)
+pick v = vec(4, -2, 2)
+pick w = vec(3, -2, 2)
+pick z = vec(4, -2, 2)
+pick s = choice(0, 1, 1)
+let A = u*v' + s*w*z'
+where rank(A) >= 1
+q: 求矩阵 $A=\calc{A}$ 的秩。
+answer: rank(A)
+before: r(A) =
+hint: 用初等行变换化成行阶梯形，数非零行。
+explain: 化成阶梯形后有 $\calc{rank(A)}$ 个非零行，$r(A)=\calc{rank(A)}$。`, T`pick B = mat(4, 2, -2, 2)
+pick C = mat(2, 5, -2, 2)
+pick D = mat(4, 1, -1, 1)
+pick F = mat(1, 5, -1, 1)
+let A = B*C + D*F
+where rank(A) >= 2
+q: 求矩阵 $A=\calc{A}$ 的秩。
+answer: rank(A)
+before: r(A) =
+hint: 用初等行变换化成行阶梯形，数非零行。
+explain: $r(A)=\calc{rank(A)}$。`],
+  },
+  eigen: {
+    name: '特征值',
+    levels: [T`pick P = mat(2, 2, -2, 2)
+pick a = int(-3, 4)
+pick b = int(-3, 4)
+where abs(det(P)) == 1
+where a < b
+let A = P*diag(a, b)*inv(P)
+where tr(A'*A) <= 120
+q: 求 $A=\calc{A}$ 的特征值（从小到大写）。
+answer: [a, b]
+hint: $|\lambda E-A|=\lambda^2-\operatorname{tr}(A)\,\lambda+|A|$，令它等于 0。
+explain: 特征值是 $\calc{a}$ 和 $\calc{b}$。验算：两者之和是 $\operatorname{tr}A=\calc{tr(A)}$，乘积是 $|A|=\calc{det(A)}$。`, T`pick P = mat(3, 3, -1, 1)
+pick a = int(-2, 3)
+pick b = int(-2, 3)
+pick c = int(-2, 3)
+where abs(det(P)) == 1
+where a < b
+where b < c
+let A = P*diag(a, b, c)*inv(P)
+where tr(A'*A) <= 150
+q: 求 $A=\calc{A}$ 的特征值（从小到大写）。
+answer: [a, b, c]
+hint: 解 $|\lambda E-A|=0$；可以先试试 $\operatorname{tr}A$ 的因数，再用「特征值之和 = 迹、之积 = 行列式」验算。
+explain: 特征值是 $\calc{a}$、$\calc{b}$、$\calc{c}$（和 $=\operatorname{tr}A=\calc{tr(A)}$，积 $=|A|=\calc{det(A)}$）。`],
+  },
+  eigvec: {
+    name: '特征向量',
+    check: 'eigvec',
+    levels: [T`pick P = mat(2, 2, -2, 2)
+pick a = int(-3, 4)
+pick b = int(-3, 4)
+where abs(det(P)) == 1
+where a != b
+let A = P*diag(a, b)*inv(P)
+where tr(A'*A) <= 120
+q: $A=\calc{A}$ 的特征值是 $\calc{a}$ 和 $\calc{b}$。求属于 $\lambda=\calc{a}$ 的一个特征向量。
+answer: col(P, 1)
+check: eigvec
+hint: 解 $(\lambda E-A)\mathbf x=\mathbf 0$，$\lambda=\calc{a}$。
+explain: 比如 $\calc{col(P, 1)}$，它的任何非零倍数都对。`, T`pick P = mat(3, 3, -1, 1)
+pick a = int(-2, 3)
+pick b = int(-2, 3)
+pick c = int(-2, 3)
+where abs(det(P)) == 1
+where a != b
+where a != c
+where b != c
+let A = P*diag(a, b, c)*inv(P)
+where tr(A'*A) <= 150
+q: $A=\calc{A}$ 的特征值是 $\calc{a}$、$\calc{b}$、$\calc{c}$。求属于 $\lambda=\calc{a}$ 的一个特征向量。
+answer: col(P, 1)
+check: eigvec
+hint: 解 $(\lambda E-A)\mathbf x=\mathbf 0$，$\lambda=\calc{a}$：化成行最简形，自由未知数取 1。
+explain: 比如 $\calc{col(P, 1)}$，它的任何非零倍数都对。`],
+  },
+  quadform: {
+    name: '二次型的矩阵',
+    levels: [T`pick S = mat(3, 3, -3, 3)
+let A = (S + S')/2
+where rank(A) >= 2
+q: 写出二次型 $f=\calc{qf(A)}$ 的矩阵 $A$。
+answer: A
+before: A =
+hint: 平方项 $x_i^2$ 的系数放在对角线上；交叉项 $x_ix_j$ 的系数除以 2，放在 $a_{ij}$ 和 $a_{ji}$ 两个位置。
+explain: $A=\calc{A}$。`, T`pick S = mat(4, 4, -3, 3)
+let A = (S + S')/2
+where rank(A) >= 3
+q: 写出二次型 $f=\calc{qf(A)}$ 的矩阵 $A$。
+answer: A
+before: A =
+hint: 交叉项 $x_ix_j$ 的系数除以 2，放在 $a_{ij}$ 和 $a_{ji}$ 两个位置。
+explain: $A=\calc{A}$。`],
+  },
+};
+
+/** 内置模板题型：名字 + level → 解析好的模板（不是内置模板的返回 null） */
+export function builtinTemplate(name, level = 1) {
+  const b = BUILTIN_TEMPLATES[String(name).trim().toLowerCase()];
+  if (!b) return null;
+  const src = b.levels[Math.min(b.levels.length, Math.max(1, Number(level) || 1)) - 1];
+  return { ...parseTemplate(src), name: b.name };
+}
