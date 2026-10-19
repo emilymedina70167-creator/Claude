@@ -1215,6 +1215,17 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .sv-elim .el-notes { margin: 6px 0 0; padding-left: 1.2em; font: 15px/1.6 var(--sans); color: var(--body); }
 .sv-picking .sv-elim th[data-pick], .sv-elim.sv-picking th[data-pick] { cursor: pointer; }
 
+/* 行列式 det：两边是竖线（不是括号），左边是一路记下来的系数 */
+.dt-row { display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 4px 0 10px; font-size: 19px; }
+table.mx.mx-det::before, table.mx.mx-det::after { width: 0; border-radius: 0; }
+table.mx.mx-det::before { border-right: 0; border-top: 0; border-bottom: 0; }
+table.mx.mx-det::after { border-left: 0; border-top: 0; border-bottom: 0; }
+/* 特征值 eig、施密特 schmidt、二次型 quad：一行行的式子 + 矩阵 */
+.eg-row { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; overflow-x: auto; padding: 4px 0 8px; font-size: 18px; }
+.eg-lbl { white-space: nowrap; }
+.dt-row table.mx, .eg-row table.mx { margin: 0; }
+.eg-line { overflow-x: auto; padding: 4px 0; font-size: 18px; }
+
 /* 通用演示 frames：每一帧老师自己写；{{答案}} 是要学生填的空 */
 .sv-frames .fr-md table { margin: 8px 0; }
 .sv-frames .fr-md p { margin: 6px 0; }

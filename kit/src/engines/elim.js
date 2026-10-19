@@ -343,7 +343,7 @@ function gcdQ(a, b) {
 }
 
 /** 不含参数的矩阵：行最简形、秩、主元列 */
-function rrefQ(M0, n) {
+export function rrefQ(M0, n) {
   const { M } = autoOps(M0, n, 'rref', '');
   const pivots = [];
   M.forEach((row, i) => { const l = lead(row, n); if (l >= 0) pivots.push([i, l]); });
@@ -351,7 +351,7 @@ function rrefQ(M0, n) {
 }
 
 // 方程组的解（不含参数，M 是 [A | b] 的行最简形）
-function solution(M, n, pivots) {
+export function solution(M, n, pivots) {
   const inconsistent = M.some((row) => isZeroRow(row, n) && !row[n].zero);
   if (inconsistent) return { kind: 'none' };
   const pc = pivots.map(([, c]) => c);
@@ -576,7 +576,7 @@ export function view(s, input, opts = {}) {
     h += '</tr>';
   });
   h += '</tbody></table></div>';
-  if (s.notes?.length) h += `<ul class="el-notes">${s.notes.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`;
+  if (s.notes?.length) h += `<ul class="el-notes">${s.notes.map((t) => `<li>${opts.md ? opts.md(t, { inline: true }) : esc(t)}</li>`).join('')}</ul>`;
   return h;
 }
 

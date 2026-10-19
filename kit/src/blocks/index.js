@@ -33,6 +33,9 @@ import { bitsEngine, cacheEngine, pipeEngine } from '../engines/co.js';
 import { subnetEngine, tcpEngine, windowEngine } from '../engines/net4.js';
 import { framesEngine } from '../engines/frames.js';
 import { elimEngine } from '../engines/elim.js';
+import { detEngine } from '../engines/det.js';
+import { eigEngine, schmidtEngine } from '../engines/eig.js';
+import { quadEngine } from '../engines/quad.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -61,4 +64,8 @@ export const blocks = {
   window: stepperBlock(windowEngine),
   frames: stepperBlock(framesEngine),
   elim: stepperBlock(elimEngine),
+  det: stepperBlock(detEngine),
+  eig: stepperBlock(eigEngine),
+  schmidt: stepperBlock(schmidtEngine),
+  quad: stepperBlock(quadEngine),
 };
