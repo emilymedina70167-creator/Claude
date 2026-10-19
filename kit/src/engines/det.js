@@ -159,8 +159,9 @@ export function run(input) {
     const before = coef;
     M = apply(M, op);
     let eff;
-    if (op.kind === 'swap') { coef = coef.neg(); swaps++; eff = '变号'; }
-    else if (op.kind === 'scale') { coef = coef.div(op.k); eff = op.pull ? `提出公因数 ${op.pull.toString()}，系数乘 ${op.pull.toString()}` : `这一${WHAT[op.dim]}乘了 ${op.k.toString()}，系数要除以 ${op.k.toString()}`; }
+    // 错法（variants）：noSign 换行不变号；noScale 某行乘 k / 提出 k 后系数没跟着变
+    if (op.kind === 'swap') { if (!input.noSign) coef = coef.neg(); swaps++; eff = '变号'; }
+    else if (op.kind === 'scale') { if (!input.noScale) coef = coef.div(op.k); eff = op.pull ? `提出公因数 ${op.pull.toString()}，系数乘 ${op.pull.toString()}` : `这一${WHAT[op.dim]}乘了 ${op.k.toString()}，系数要除以 ${op.k.toString()}`; }
     else eff = '不变';
     const ask = { tag: 'effect', kind: 'choice', q: `做 ${opText(op)}，行列式的值怎么变？`, choices: effectChoices, answer: op.kind === 'swap' ? '变号' : op.kind === 'scale' ? effectChoices[2] : '不变' };
     steps.push({ view: view({ op: opTeX(op), changed: op.dim === 'r' ? (op.kind === 'swap' ? [op.i, op.j] : [op.i]) : [], changedCols: op.dim === 'c' ? (op.kind === 'swap' ? [op.i, op.j] : [op.i]) : [], before }), msg: `${why}${eff === '不变' ? '某行（列）加上另一行（列）的倍数：行列式不变' : eff === '变号' ? `交换两${WHAT[op.dim]}：行列式变号` : eff}。`, ask });
@@ -172,7 +173,7 @@ export function run(input) {
     if (nz.length === 1 && n > 1) {
       const { x, k } = nz[0];
       const [i, j] = op.dim === 'r' ? [op.i, k] : [k, op.i];
-      const sign = (i + j) % 2 ? -1 : 1;
+      const sign = input.noCofSign ? 1 : (i + j) % 2 ? -1 : 1; // noCofSign：展开时忘了 (−1)^{i+j}
       const before = coef;
       coef = coef.mul(x).mul(new Q(BigInt(sign)));
       M = minor(M, i, j);
@@ -180,13 +181,14 @@ export function run(input) {
       return;
     }
     // 几个不是 0：写成几个余子式之和，每个直接算出来
-    const parts = nz.map(({ x, k }) => { const [i, j] = op.dim === 'r' ? [op.i, k] : [k, op.i]; const s = (i + j) % 2 ? -1 : 1; return { x, i, j, s, m: detQ(minor(M, i, j)) }; });
+    const parts = nz.map(({ x, k }) => { const [i, j] = op.dim === 'r' ? [op.i, k] : [k, op.i]; const s = !input.noCofSign && (i + j) % 2 ? -1 : 1; return { x, i, j, s, m: detQ(minor(M, i, j)) }; });
     const total = parts.reduce((a, p) => a.add(p.x.mul(p.m).mul(new Q(BigInt(p.s)))), ZERO);
     const before = coef;
     coef = coef.mul(total);
     const terms = parts.map((p) => `${p.s < 0 ? '−' : '+'}${p.x.toString()}×${p.m.toString()}`).join(' ').replace(/^\+/, '');
     // 先问符号：挑一个带负号的元素问（(−1)^{i+j} 最容易忘），没有就问第一个
-    const asked = parts.find((p) => p.s < 0) || parts[0];
+    // （错法 run 里都是正号，挑的元素要和正确 run 一样，题面才对得上）
+    const asked = parts.find((p) => (p.i + p.j) % 2) || parts[0];
     M = [[ONE]];
     steps.push({ view: view({ op: opTeX(op), before, done: true }), msg: `按第 ${op.i + 1} ${WHAT[op.dim]}展开：每个元素乘它的代数余子式（余子式直接算出来）：${terms} = ${total.toString()}。`, ask: { tag: 'sign', kind: 'choice', q: `按第 ${op.i + 1} ${WHAT[op.dim]}展开时，第 ${asked.i + 1} 行第 ${asked.j + 1} 列的 ${asked.x.toString()} 乘它的余子式，前面的符号是？`, choices: ['+', '−'], answer: asked.s > 0 ? '+' : '−' } });
   };
@@ -198,18 +200,19 @@ export function run(input) {
     for (const op of auto.ops) doOp(op, op.kind === 'swap' ? '换一行当主元（±1 最好算）：' : op.kind === 'scale' ? '先乘一下，免得出分数：' : '');
     if (auto.zeroCol !== undefined) {
       steps.push({ view: view({ zero: true }), msg: `第 ${auto.zeroCol + 1} 列从对角线往下全是 0：上三角的这个对角元是 0，D = 0。`, ask: { tag: 'value', kind: 'number', q: 'D 等于多少？', answer: 0 } });
-      return { steps, value, swaps };
+      return { steps, value: mistaken(input) ? ZERO : value, swaps };
     }
   }
   if (M.length > 1) {
     const diag = M.map((r, i) => r[i]);
     const prod = diag.reduce((a, x) => a.mul(x), ONE);
-    steps.push({ view: view({ diag: true }), msg: `上三角了：行列式 = 主对角线相乘 = ${diag.map((x) => x.toString()).join(' × ')} = ${prod.toString()}。所以 D = ${coef.toString()} × ${prod.toString()} = ${coef.mul(prod).toString()}。`, ask: { tag: 'value', kind: 'number', q: 'D 等于多少？', answer: Number(coef.mul(prod).toNumber()), display: coef.mul(prod).toString() } });
-  } else {
-    const v = coef.mul(M[0][0]);
-    steps.push({ view: view({ diag: true }), msg: `D = ${v.toString()}。`, ask: { tag: 'value', kind: 'number', q: 'D 等于多少？', answer: v.toNumber(), display: v.toString() } });
+    const v = coef.mul(prod);
+    steps.push({ view: view({ diag: true }), msg: `上三角了：行列式 = 主对角线相乘 = ${diag.map((x) => x.toString()).join(' × ')} = ${prod.toString()}。所以 D = ${coef.toString()} × ${prod.toString()} = ${v.toString()}。`, ask: { tag: 'value', kind: 'number', q: 'D 等于多少？', answer: v.toNumber(), display: v.toString() } });
+    return { steps, value: mistaken(input) ? v : value, swaps };
   }
-  return { steps, value, swaps };
+  const v = coef.mul(M[0][0]);
+  steps.push({ view: view({ diag: true }), msg: `D = ${v.toString()}。`, ask: { tag: 'value', kind: 'number', q: 'D 等于多少？', answer: v.toNumber(), display: v.toString() } });
+  return { steps, value: mistaken(input) ? v : value, swaps };
 }
 function opText(op) {
   if (op.kind === 'swap') return `交换第 ${op.i + 1}、${op.j + 1} ${WHAT[op.dim]}`;
@@ -247,17 +250,18 @@ export function table(input, r) {
   return { q: '每做一步，写出 D = 系数 × |新的行列式| 里的系数；最后写出 D。', qhtml: '', dir: 'col', head: ['系数'], rows, extra: [{ label: 'D', v: r.value.toString(), num: true }] };
 }
 
-// 常见错法：换行（列）忘了变号
+const mistaken = (input) => !!(input.noSign || input.noScale || input.noCofSign);
+
+// 常见错法：换行（列）忘了变号、某行乘 k（提出 k）后系数没跟着变、按行展开忘了 (−1)^{i+j}。
+// 只列出会算出不一样结果的（比如没有换行就不提「忘了变号」）
 export function variants(input) {
-  return [{ label: '像是交换两行（列）时忘了变号', input: { ...input, noSign: true } }];
+  const all = [
+    { label: '像是交换两行（列）时忘了变号', input: { ...input, noSign: true } },
+    { label: '像是某行乘了 k（或提出公因数 k）以后，行列式前面的系数没跟着变（乘 k 要除以 k，提出 k 要乘 k）', input: { ...input, noScale: true } },
+    { label: '像是按行（列）展开时忘了代数余子式的符号 (−1)^{i+j}', input: { ...input, noCofSign: true } },
+  ];
+  const right = run(input).value;
+  return all.filter((v) => run(v.input).value.cmp(right) !== 0);
 }
 
-// 错法的输入：值按「换行不变号」算
-const baseRun = run;
-function runWithMistakes(input) {
-  const r = baseRun(input);
-  if (input.noSign && r.swaps % 2) r.value = r.value.neg();
-  return r;
-}
-
-export const detEngine = { name: 'det', title: '行列式', parse, run: runWithMistakes, view, quiz, table, variants };
+export const detEngine = { name: 'det', title: '行列式', parse, run, view, quiz, table, variants };

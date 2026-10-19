@@ -33,6 +33,8 @@ import { bitsEngine, cacheEngine, pipeEngine } from '../engines/co.js';
 import { subnetEngine, tcpEngine, windowEngine } from '../engines/net4.js';
 import { framesEngine } from '../engines/frames.js';
 import { elimEngine } from '../engines/elim.js';
+import { elimDo } from './elimdo.js';
+import { parseFields } from '../parse.js';
 import { detEngine } from '../engines/det.js';
 import { eigEngine, schmidtEngine } from '../engines/eig.js';
 import { quadEngine } from '../engines/quad.js';
@@ -63,9 +65,17 @@ export const blocks = {
   tcp: stepperBlock(tcpEngine),
   window: stepperBlock(windowEngine),
   frames: stepperBlock(framesEngine),
-  elim: stepperBlock(elimEngine),
+  elim: elimBlock(),
   det: stepperBlock(detEngine),
   eig: stepperBlock(eigEngine),
   schmidt: stepperBlock(schmidtEngine),
   quad: stepperBlock(quadEngine),
 };
+
+// elim：mode: do 是学生自己做行变换（blocks/elimdo.js），其余照演示组件（演示 / quiz / fill）
+function elimBlock() {
+  const demo = stepperBlock(elimEngine);
+  const f = (el, src) => (/^do$/i.test(String(parseFields(src).fields.mode ?? '').trim()) ? elimDo(el, src) : demo(el, src));
+  f.stepper = true;
+  return f;
+}

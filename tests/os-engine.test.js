@@ -2,8 +2,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { schedEngine, pagingEngine, bankerEngine, diskEngine, safeSequences } from '../kit/src/engines/os.js';
+import { checkAsk, misreadAnswer, misreadFill } from '../kit/src/stepperspec.js';
 
 const go = (eng, f) => { const input = eng.parse(f); return { input, r: eng.run(input) }; };
+
+// 和 stepper.js 一样拿常见错法比（答错了才比）：先猜比题面一样的那一问，quiz 比答案，填表逐格比
+const vruns = (eng, input, fields) => eng.variants(input, fields).map((v) => ({ label: v.label, input: v.input, run: eng.run(v.input) }));
+const askAns = (a) => (Array.isArray(a.alts) ? a.alts.map((z) => [].concat(z).join(' ')).join(' | ') : [].concat(a.answer).join(' '));
+function askDiag(eng, input, ask, given, fields = {}) {
+  if (checkAsk(ask, given).ok) return '';
+  return misreadAnswer(given, vruns(eng, input, fields).map((v) => { const a = v.run.steps.flatMap((x) => [x.ask, ...(x.asks || [])]).find((y) => y && y.q === ask.q && y.kind === ask.kind); return a ? { label: v.label, answer: askAns(a) } : null; }).filter(Boolean));
+}
+function quizDiag(eng, input, given, fields = {}) {
+  if (misreadAnswer(given, [{ label: 'ok', answer: String(eng.quiz(input, eng.run(input), fields).answer) }])) return '';
+  return misreadAnswer(given, vruns(eng, input, fields).map((v) => ({ label: v.label, answer: String(eng.quiz(v.input, v.run, fields).answer) })));
+}
+const fillAs = (eng, inp, fields = {}) => eng.table(inp, eng.run(inp), fields).rows.map((row) => row.cells.map((c) => [].concat(c.v)[0]));
+const fillDiag = (eng, input, values, fields = {}) => misreadFill(eng.table(input, eng.run(input), fields), values, vruns(eng, input, fields).map((v) => ({ label: v.label, table: eng.table(v.input, v.run, fields) })));
+const pick = (eng, input, re, fields = {}) => { const v = eng.variants(input, fields).find((x) => re.test(x.label)); assert.ok(v, `没有「${re}」这种错法`); return v; };
 const segs = (r) => r.segs.map((x) => `${x.name || '-'}:${x.s}-${x.e}`).join(' ');
 const W = 'P1 0 7, P2 2 4, P3 4 1, P4 5 4';
 
@@ -80,4 +96,36 @@ test('磁盘调度：经典的 FCFS 640、SSTF 236、SCAN 331、C-SCAN 183；王
   assert.equal(diskEngine.quiz(w.input, w.r, { quiz: 'order' }).answer, '90 58 55 39 38 18 150 160 184');
   for (const s of w.r.steps) assert.match(diskEngine.view(s.view, w.input), /os-disk/);
   assert.throws(() => diskEngine.parse({ ...D, algo: 'scan', tracks: '0-50' }), /tracks/);
+});
+
+test('银行家算法的常见错法：Max 当 Need、Work 加的不是 Allocation、请求没先和 Need 比、试分配没改状态', () => {
+  const B = { avail: '3 3 2', max: 'P0 7 5 3; P1 3 2 2; P2 9 0 2; P3 2 2 2; P4 4 3 3', alloc: 'P0 0 1 0; P1 2 0 0; P2 3 0 2; P3 2 1 1; P4 0 0 2' };
+  const { input, r } = go(bankerEngine, B);
+  const needMax = pick(bankerEngine, input, /Max 当成了 Need/), workNeed = pick(bankerEngine, input, /Work 加的是 Need/), workMax = pick(bankerEngine, input, /Work 加的是 Max/);
+  // Need 用 Max：走到 P3 以后谁也运行不了，学生写「不安全」
+  assert.equal(quizDiag(bankerEngine, input, '不安全'), needMax.label);
+  assert.equal(quizDiag(bankerEngine, input, 'P1 P3 P4 P2 P0'), '', '对的安全序列不比');
+  // Work += Need：有的序列只有这么算才「安全」
+  const wn = bankerEngine.run(workNeed.input).seqs.map((x) => x.join(' ')).find((s) => !r.seqs.some((y) => y.join(' ') === s));
+  assert.ok(wn);
+  assert.equal(quizDiag(bankerEngine, input, wn), workNeed.label);
+  // 填表：按错法填的整张表认得出来；对的表不报
+  assert.equal(fillDiag(bankerEngine, input, fillAs(bankerEngine, workMax.input)), workMax.label);
+  assert.equal(fillDiag(bankerEngine, input, fillAs(bankerEngine, needMax.input)), needMax.label, '不安全的表后面几行空着，行数和对的表一样，比得上');
+  assert.equal(fillDiag(bankerEngine, input, fillAs(bankerEngine, input)), '');
+  assert.equal(bankerEngine.table(needMax.input, bankerEngine.run(needMax.input)).rows.length, bankerEngine.table(input, r).rows.length);
+
+  // 请求超过 Need：只和 Available 比就会「能分配」
+  const q1 = go(bankerEngine, { ...B, request: 'P1 2 0 0' });
+  const ask1 = q1.r.steps.find((s) => s.ask?.tag === 'request').ask;
+  const noNeed = pick(bankerEngine, q1.input, /没先和 Need 比/);
+  assert.equal(askDiag(bankerEngine, q1.input, ask1, '能分配'), noNeed.label);
+  assert.equal(askDiag(bankerEngine, q1.input, ask1, '不能：超过它声明的需求'), '');
+  assert.equal(quizDiag(bankerEngine, q1.input, '能'), noNeed.label);
+  assert.ok(!bankerEngine.variants(go(bankerEngine, { ...B, request: 'P1 1 0 2' }).input, {}).some((v) => /没先和 Need 比/.test(v.label)), '请求没超过 Need 时这种错法和对的一样，不列');
+  // 分了就不安全：拿原来的状态检查会以为能分
+  const q2 = go(bankerEngine, { ...B, request: 'P4 3 3 0' });
+  const ask2 = q2.r.steps.find((s) => s.ask?.tag === 'request').ask;
+  assert.equal(askDiag(bankerEngine, q2.input, ask2, '能分配'), pick(bankerEngine, q2.input, /试分配以后没改/).label);
+  assert.equal(askDiag(bankerEngine, q2.input, ask2, '不能：分配了就不安全'), '');
 });

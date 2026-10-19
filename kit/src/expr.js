@@ -66,6 +66,7 @@ const FUNCS = {
   // 写成二进制 / 十六进制的文字（只能直接写出来，不能再拿去算）：负数写成 n 位补码
   bin: (x, n) => radixText(x, n, 2),
   hex: (x, n) => radixText(x, n, 16),
+  dec: (x, k = 2) => decText(x, k),
 };
 
 function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) [a, b] = [b, a % b]; return a; }
@@ -116,6 +117,19 @@ export class Radix {
   }
 }
 export const isRadix = (x) => x instanceof Radix;
+
+// dec(x, 2) 的结果：四舍五入成小数写出来（平均周转时间、ASL、有效访问时间这种要写小数的）。和 bin / hex 一样只能直接写出来
+export class Dec extends Radix {
+  constructor(text) { super(text, 10); }
+  toTeX() { return this.digits.replace(/^-/, '-'); }
+}
+/** 一个数四舍五入到 k 位小数，去掉末尾的 0（15.25、2.67、3） */
+export function decText(x, k = 2) {
+  if (typeof x !== 'number' || !Number.isFinite(x)) throw new Error('dec() 里要一个数');
+  if (!(Number.isInteger(k) && k >= 0 && k <= 10)) throw new Error('dec(x, 位数)：位数写 0 到 10');
+  const t = (Math.round((Math.abs(x) + Number.EPSILON) * 10 ** k) / 10 ** k).toFixed(k).replace(/\.?0+$/, '');
+  return new Dec(x < 0 && Number(t) !== 0 ? `-${t}` : t);
+}
 const CONSTS = { pi: Math.PI, e: Math.E };
 
 function fact(n) { let r = 1; for (let i = 2; i <= n; i++) r *= i; return r; }
@@ -290,7 +304,7 @@ function run(n, vars) {
     }
     case 'bin': {
       const a = run(n.a, vars), b = run(n.b, vars);
-      if (isRadix(a) || isRadix(b)) throw new Error('bin()、hex() 的结果只能直接写出来，不能再算（要算就对原来的数算）');
+      if (isRadix(a) || isRadix(b)) throw new Error('bin()、hex()、dec() 的结果只能直接写出来，不能再算（要算就对原来的数算）');
       if (n.op === '+') return add(a, b);
       if (n.op === '-') return add(a, scale(-1, b));
       if (n.op === '*') return mul(a, b);

@@ -274,19 +274,22 @@ export function misreadFill(table, values, variants = []) {
       units.push({ r, cs: row.cells.map((x, i) => (x.group === cell.group && !x.given ? i : -1)).filter((i) => i >= 0), group: cell.group });
     });
   });
+  // 表下面单独的几格（ASL、D、总移动距离……）也算：很多错法只错在这里
+  (table.extra || []).forEach((_, x) => units.push({ x }));
   const bag = (xs) => xs.map(normCell).filter(Boolean).sort().join('|');
   const unitOk = (t, u) => {
+    if (u.x !== undefined) { const cell = t.extra?.[u.x]; return !!cell && cellOk(cell, values?.extra?.[u.x] ?? ''); }
     const row = t.rows[u.r];
     if (!row) return false;
     if (u.group === undefined) { const cell = row.cells[u.cs[0]]; return !!cell && cellOk(cell, values?.[u.r]?.[u.cs[0]] ?? ''); }
     return bag(u.cs.map((c) => [].concat(row.cells[c]?.v ?? '')[0])) === bag(u.cs.map((c) => values?.[u.r]?.[c] ?? ''));
   };
-  const filled = (u) => u.cs.some((c) => normCell(values?.[u.r]?.[c] ?? '') !== '' || table.rows[u.r].cells[c].mark);
+  const filled = (u) => (u.x !== undefined ? normCell(values?.extra?.[u.x] ?? '') !== '' : u.cs.some((c) => normCell(values?.[u.r]?.[c] ?? '') !== '' || table.rows[u.r].cells[c].mark));
   const wrong = units.filter((u) => filled(u) && !unitOk(table, u));
   if (!wrong.length) return '';
   let best = { label: '', hit: 0 };
   for (const v of variants) {
-    if (!v?.table?.rows || v.table.rows.length !== table.rows.length) continue;
+    if (!v?.table?.rows || v.table.rows.length !== table.rows.length || (v.table.extra || []).length !== (table.extra || []).length) continue;
     const hit = wrong.filter((u) => unitOk(v.table, u)).length;
     if (hit > best.hit) best = { label: v.label, hit };
   }
@@ -335,4 +338,38 @@ export function fillSpec(table, fields = {}) {
   }
   if (!fillOrder(t).length && !(t.extra || []).length) errors.push('这张表没有要填的格子了');
   return { table: t, errors };
+}
+
+// —— 字段名的拼写检查 ——
+// 组件读过的字段都记下来（读的时候没写也算：引擎会先看「有没有 b:」），源码里写了却从来没被读过的，
+// 就是写错了名字、或者这个组件 / 这种用法用不上它（比如没写 mode: fill 却写了 given:）。不报的话作者以为生效了。
+const SHELL_FIELDS = ['id', 'title', 'q', 'note', 'link'];
+export function trackFields(raw) {
+  const seen = new Set(SHELL_FIELDS);
+  const fields = new Proxy(raw, {
+    get(t, k) { if (typeof k === 'string') seen.add(k); return t[k]; },
+    has(t, k) { if (typeof k === 'string') seen.add(k); return k in t; },
+  });
+  const unknown = () => Object.keys(raw).filter((k) => !seen.has(k)).map((k) => {
+    const near = closest(k, [...seen]);
+    return `字段「${k}:」页面没有用上：${near ? `是不是 ${near}:？` : '这个组件没有这个字段'}（${k === 'given' || k === 'rows' || k === 'cols' ? '这几个字段只在 mode: fill 时有用；' : ''}写错的字段会被忽略）`;
+  });
+  return { fields, unknown };
+}
+
+// 编辑距离最近的（差一两个字母、大小写不同）
+function closest(k, names) {
+  const a = k.toLowerCase();
+  let best = '', bd = Infinity;
+  for (const n of names) {
+    const d = editDistance(a, n.toLowerCase());
+    if (d < bd) { bd = d; best = n; }
+  }
+  return bd <= Math.max(1, Math.min(2, Math.floor(a.length / 3))) ? best : '';
+}
+function editDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
 }

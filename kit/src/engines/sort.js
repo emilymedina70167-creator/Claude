@@ -1,5 +1,5 @@
 // 排序演示引擎（组件 sort）：直接插入、冒泡、简单选择、快速排序、二路归并、基数排序，一律按王道的代码走。
-// 位置从 1 数（考题里的「第几个」）；重复的数在后面加 '（49'），看稳定性。纯函数，不碰 DOM（tests/sort-engine.test.js）。
+// 位置从 1 数（考题里的「第几个」）；重复的数在后面加 '（49'），看稳定性。纯函数，不碰 DOM（tests/stepper.test.js；常见错法在 tests/sorting.test.js）。
 import { parseArray } from '../sorting.js';
 import { arrayView, esc, itemText } from './arrayview.js';
 
@@ -36,48 +36,155 @@ export function parse(fields) {
 
 /** 跑一遍：{ steps: [{ view, msg, ask? }], passes: [每一趟结束后的序列（数组）] } */
 export function run(input) {
-  if (input.mistake) return { steps: [{ view: { A: input.items.slice() }, msg: '' }], passes: mistakePasses(input.items.map(vOf), input.mistake) };
   const f = { insert: insertion, bubble, select: selection, quick, merge, radix }[input.algo];
-  return f(input.items.map((x) => ({ ...x })));
+  const ok = f(input.items.map((x) => ({ ...x })));
+  return input.mistake ? mistakeRun(input, ok) : ok;
 }
 
-// 常见错法下每一趟之后的序列（只拿来和学生写的比，不用一步步的演示）：
-//   bubbleFront 冒泡从前往后（大的往后沉）；selectMax 选择排序每趟选最大的放到最后；quickLast 快排取最后一个作枢轴
-function mistakePasses(a, mistake) {
-  const A = a.slice(), n = A.length, passes = [];
-  if (mistake === 'bubbleFront') {
-    for (let i = 0; i < n - 1; i++) {
-      let flag = false;
-      for (let j = 0; j < n - 1 - i; j++) if (A[j] > A[j + 1]) { [A[j], A[j + 1]] = [A[j + 1], A[j]]; flag = true; }
-      passes.push(A.slice());
-      if (!flag) break;
-    }
-  } else if (mistake === 'selectMax') {
-    for (let i = n - 1; i > 0; i--) {
-      let m = 0;
-      for (let j = 1; j <= i; j++) if (A[j] > A[m]) m = j;
-      [A[i], A[m]] = [A[m], A[i]];
-      passes.push(A.slice());
-    }
-  } else if (mistake === 'quickLast') {
-    const sort = (lo, hi) => {
-      if (lo >= hi) return;
-      const pivot = A[hi];
-      let l = lo, h = hi;
-      while (l < h) {
-        while (l < h && A[l] <= pivot) l++;
-        A[h] = A[l];
-        while (l < h && A[h] >= pivot) h--;
-        A[l] = A[h];
+// —— 常见错法 ——
+// 只拿来和学生写的比（外壳拿它说「像是……」），不用一步步的演示。每种错法：
+//   passes(a, ok)：从头到尾都按错法做，每一趟（快排是每一次划分）之后的序列（只有值）；ok 是正确的那一遍。mode: quiz / fill 比这个
+//   one(a, view, k)：先猜时学生看着的是正确的状态（view.A），在它上面按错法走第 k 趟（从 0 数）会写出什么
+//   first: true：只有第 1 趟说得清（之后「按错法再走一趟」没有唯一的写法），只给第 1 趟的先猜
+//   都没有的（趟数数错、枢轴取错、先按高位分配）：先猜的题面已经写明了插第几个、哪个枢轴、按哪一位，不会这样错
+const MISTAKES = {
+  // 冒泡从前往后（大的往后沉）
+  bubbleFront: {
+    first: true,
+    passes: (a) => {
+      const A = a.slice(), n = A.length, ps = [];
+      for (let i = 0; i < n - 1; i++) {
+        let flag = false;
+        for (let j = 0; j < n - 1 - i; j++) if (A[j] > A[j + 1]) { [A[j], A[j + 1]] = [A[j + 1], A[j]]; flag = true; }
+        ps.push(A.slice());
+        if (!flag) break;
       }
-      A[l] = pivot;
-      passes.push(A.slice());
-      sort(lo, l - 1);
-      sort(l + 1, hi);
-    };
-    sort(0, n - 1);
+      return ps;
+    },
+  },
+  // 冒泡只把最小的挪到最前、别的不动：「每趟冒一个最小的上来」记住了，忘了沿途的逆序对也在两两交换
+  bubbleMin: { passes: (a) => shiftPasses(a), one: (a, v, k) => shiftMin(a, k) },
+  // 选择排序每趟选最大的放到最后
+  selectMax: {
+    first: true,
+    passes: (a) => {
+      const A = a.slice(), ps = [];
+      for (let i = A.length - 1; i > 0; i--) {
+        let m = 0;
+        for (let j = 1; j <= i; j++) if (A[j] > A[m]) m = j;
+        [A[i], A[m]] = [A[m], A[i]];
+        ps.push(A.slice());
+      }
+      return ps;
+    },
+  },
+  // 选择排序选出最小的以后像插入那样把中间的往后挪（和 bubbleMin 做出来一样，只是错在不同的算法上）
+  selectShift: { passes: (a) => shiftPasses(a), one: (a, v, k) => shiftMin(a, k) },
+  // 插入排序把第 1 个元素自己也算一趟：学生的第 k 趟是正确的第 k−1 趟（第 1 趟是原样）
+  insertCount: { passes: (a, ok) => [a.slice(), ...ok.passes.slice(0, -1)] },
+  // 快排取最后一个作枢轴（填坑法）
+  quickLast: { passes: (a) => quickPasses(a, lastPartition) },
+  // 快排用交换法划分（枢轴还是第一个）
+  quickSwap: { passes: (a) => quickPasses(a, swapPartition), one: (a, v) => { swapPartition(a, v.lo - 1, v.hi - 1); return a; } },
+  // 归并时最后落单的一段并进前面那一组
+  mergeOdd: {
+    passes: (a) => {
+      const A = a.slice(), ps = [];
+      let segs = segsOf(A.length, 1);
+      while (segs.length > 1) { segs = mergeOddPass(A, segs); ps.push(A.slice()); }
+      return ps;
+    },
+    one: (a, v, k) => { mergeOddPass(a, segsOf(a.length, 2 ** k)); return a; },
+  },
+  // 基数排序从最高位开始分配（每趟照样是整个序列分配、收集）
+  radixMSD: { passes: (a) => { let A = a; const ps = []; for (let k = digitsOf(a) - 1; k >= 0; k--) ps.push(A = radixPass(A, k)); return ps; } },
+  // 基数排序收集时同一个队列后进先出（队列画成竖着一摞，从上往下收）
+  radixLIFO: { passes: (a) => { let A = a; const ps = []; for (let k = 0; k < digitsOf(a); k++) ps.push(A = radixPass(A, k, true)); return ps; }, one: (a, v, k) => radixPass(a, k, true) },
+};
+
+function mistakeRun(input, ok) {
+  const M = MISTAKES[input.mistake];
+  const a = input.items.map(vOf);
+  // 趟数和正确的一样多：填表的行数对不上，外壳就不拿它比了。错法提前排完的照最后的样子补上，多走的不要
+  const n = ok.passes.length;
+  const passes = M.passes(a, ok).slice(0, n);
+  while (passes.length < n) passes.push((passes.at(-1) || a).slice());
+  // 先猜：题面照抄正确的那一遍（外壳按题面找同一个问题），答案换成错法
+  const steps = [{ view: { A: input.items.slice() }, msg: '' }];
+  let k = 0;
+  for (const s of ok.steps) {
+    if (!s.ask || !PASS_ASKS.includes(s.ask.tag)) continue;
+    const got = M.one ? M.one(s.view.A.map(vOf), s.view, k) : M.first && k === 0 ? passes[0] : null;
+    k++;
+    if (got) steps.push({ view: s.view, msg: '', ask: { ...s.ask, answer: got.join(' ') } });
   }
-  return passes;
+  return { steps, passes };
+}
+const PASS_ASKS = ['pass', 'partition'];
+
+// 第 i 个到最后里最小的拿出来放到第 i 个，中间的依次往后挪一格
+function shiftMin(A, i) {
+  let m = i;
+  for (let j = i + 1; j < A.length; j++) if (A[j] < A[m]) m = j;
+  A.splice(i, 0, ...A.splice(m, 1));
+  return A;
+}
+const shiftPasses = (a) => { const A = a.slice(), ps = []; for (let i = 0; i < A.length - 1; i++) ps.push(shiftMin(A, i).slice()); return ps; };
+
+// 快排的划分（下标从 0 数，返回枢轴落在哪）；quickPasses 和正确的一样：先左后右递归，只剩一个的区间不划分
+const quickPasses = (a, part) => {
+  const A = a.slice(), ps = [];
+  const sort = (lo, hi) => { if (lo >= hi) return; const p = part(A, lo, hi); ps.push(A.slice()); sort(lo, p - 1); sort(p + 1, hi); };
+  sort(0, A.length - 1);
+  return ps;
+};
+function lastPartition(A, lo, hi) {
+  const pivot = A[hi];
+  let l = lo, h = hi;
+  while (l < h) {
+    while (l < h && A[l] <= pivot) l++;
+    A[h] = A[l];
+    while (l < h && A[h] >= pivot) h--;
+    A[l] = A[h];
+  }
+  A[l] = pivot;
+  return l;
+}
+// 交换法（Hoare 式，很多教材和网上的代码这样写）：枢轴取 A[lo]，i 从 lo+1 往右找比枢轴大的、j 从 hi 往左找比枢轴小的
+// （和枢轴相等的两边都跳过），找到就对换；i、j 交错后把枢轴和 A[j] 交换。
+// 49 38 65 97 76 13 27 49′ 一次划分得 13 38 27 49 76 97 65 49′（王道的填坑法是 27 38 13 49 76 97 65 49′）
+function swapPartition(A, lo, hi) {
+  const p = A[lo];
+  let i = lo + 1, j = hi;
+  for (;;) {
+    while (i <= j && A[i] <= p) i++;
+    while (i <= j && A[j] >= p) j--;
+    if (i >= j) break;
+    [A[i], A[j]] = [A[j], A[i]];
+  }
+  [A[lo], A[j]] = [A[j], A[lo]];
+  return j;
+}
+
+// 二路归并：每段长 len 切开（[起, 止)）；一趟把相邻两段归并，最后配不上对的一段并进前面那一组（错法；正确的是原样留着）
+const segsOf = (n, len) => { const o = []; for (let s = 0; s < n; s += len) o.push([s, Math.min(n, s + len)]); return o; };
+function mergeOddPass(A, segs) {
+  const out = [];
+  for (let i = 0; i < segs.length; i += 2) {
+    if (i + 1 < segs.length) out.push([segs[i][0], segs[i + 1][1]]);
+    else if (out.length) out[out.length - 1][1] = segs[i][1];
+    else out.push(segs[i]);
+  }
+  for (const [s, e] of out) A.splice(s, e - s, ...A.slice(s, e).sort((x, y) => x - y));
+  return out;
+}
+
+// 基数排序的一趟：按第 k 位（0 是个位）分配到 0～9 号队列再收集；lifo：同一个队列里后放进去的先收（错法）
+const digitsOf = (a) => Math.max(1, ...a.map((x) => String(x).length));
+function radixPass(A, k, lifo = false) {
+  const B = Array.from({ length: 10 }, () => []);
+  for (const x of A) B[Math.floor(x / 10 ** k) % 10].push(x);
+  return B.flatMap((b) => (lifo ? b.slice().reverse() : b));
 }
 
 // —— 直接插入排序（带哨兵 A[0]）——
@@ -354,12 +461,45 @@ export function table(input, r) {
   };
 }
 
-// 常见错法：冒泡方向弄反、选择排序选成最大的、快排取错枢轴
+// 常见错法（只给老师看）。先后有用：同一个答案两种错法都对得上时，说前面那种
+const VARIANTS = {
+  insert: [
+    ['insertCount', '像是把第 1 个元素自己也算成了一趟，写的第 k 趟其实是第 k−1 趟（王道：第 1 个元素自己就是有序表，第 1 趟是插入第 2 个，一共 n−1 趟）'],
+  ],
+  bubble: [
+    ['bubbleFront', '像是从前往后冒泡、大的往后沉了（王道的冒泡：每趟从后往前两两比较，小的往前冒）'],
+    ['bubbleMin', '像是每趟只把最小的那个挪到了最前面，别的照原样往后排（王道的冒泡：从后往前两两比较、逆序就交换，路上别的逆序对也会被换掉）'],
+  ],
+  select: [
+    ['selectMax', '像是每趟选最大的放到最后了（王道的简单选择排序：每趟选最小的，和第 i 个交换）'],
+    ['selectShift', '像是选出最小的以后把前面的元素依次往后挪了一格（王道的简单选择排序：最小的直接和第 i 个交换，被换走的那个跳到最小的原来的位置）'],
+  ],
+  quick: [
+    ['quickSwap', '像是用交换法划分的：左边找到比枢轴大的、右边找到比枢轴小的就对换，最后枢轴和相遇处交换（王道的划分是填坑：枢轴先拿出来，high、low 轮流把数填进对面的坑）'],
+    ['quickLast', '像是取了区间最后一个当枢轴（王道：枢轴取区间第一个 A[low]）'],
+  ],
+  merge: [
+    ['mergeOdd', '像是把最后落单的那一段并进了前面一组一起归并（王道：配不上对的最后一段原样留到下一趟）'],
+  ],
+  radix: [
+    ['radixMSD', '像是从最高位开始分配了（王道的基数排序是最低位优先：第 1 趟按个位，再按十位、百位……）'],
+    ['radixLIFO', '像是同一个队列里后放进去的先收集了（王道：每个队列先进先出，按放进去的先后收集，基数排序才稳定）'],
+  ],
+};
+
+// 这组数上做出来和正确的（或者前面一种错法）每一趟都一样的错法不列：认不出来，列了只会说错
 export function variants(input) {
-  if (input.algo === 'bubble') return [{ label: '像是从前往后冒泡（大的往后沉）了；王道的冒泡是从后往前、小的往前冒', input: { ...input, mistake: 'bubbleFront' } }];
-  if (input.algo === 'select') return [{ label: '像是每趟选最大的放到最后了；简单选择排序是每趟选最小的放到最前', input: { ...input, mistake: 'selectMax' } }];
-  if (input.algo === 'quick') return [{ label: '像是取了区间最后一个当枢轴；王道取的是第一个', input: { ...input, mistake: 'quickLast' } }];
-  return [];
+  const sig = (r) => r.passes.map((p) => p.join(' ')).join(' / ');
+  const seen = new Set([sig(run(input))]);
+  const out = [];
+  for (const [mistake, label] of VARIANTS[input.algo] || []) {
+    const v = { ...input, mistake };
+    const s = sig(run(v));
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push({ label, input: v });
+  }
+  return out;
 }
 
 export const sortEngine = { name: 'sort', title: '排序演示', parse, run, view, quiz, problems, table, variants };

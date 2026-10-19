@@ -65,17 +65,20 @@ const colTeX = (v) => `\\begin{pmatrix}${v.map((x) => x.toTeX()).join('\\\\')}\\
 const matTeX = (rows) => `\\begin{pmatrix}${rows.map((r) => r.join('&')).join('\\\\')}\\end{pmatrix}`;
 
 /** 施密特正交化：β1 = α1，βk = αk − Σ (αk, βi)/(βi, βi) βi（每一步记下内积），返回每一步 */
-export function schmidt(vs) {
+// mistake（错法，给 variants 用）：useAlpha 往前面的 α 上投影（应该是 β）；noDenom 投影系数忘了除以 (β, β)
+export function schmidt(vs, { mistake = '' } = {}) {
   const betas = [];
   const log = [];
-  for (const a of vs) {
+  for (const [k, a] of vs.entries()) {
     let b = a.slice();
     const terms = [];
-    for (const p of betas) {
-      const num = dot(a, p), den = dot(p, p);
+    for (const [i, p0] of betas.entries()) {
+      const p = mistake === 'useAlpha' ? vs[i] : p0;
+      const num = dot(a, p), den = mistake === 'noDenom' ? ONE : dot(p, p);
       terms.push({ num, den, p });
       if (!num.zero) b = sub(b, scale(num.div(den), p));
     }
+    if (mistake && k > 0 && b.every((x) => x.zero)) { betas.push(b); log.push({ a, b, terms }); continue; }
     if (b.every((x) => x.zero)) throw new Error('这几个向量线性相关，施密特正交化做不下去（有一个减完是零向量）');
     betas.push(b);
     log.push({ a, b, terms });
@@ -116,7 +119,8 @@ export function run(input) {
   steps.push({ view: view({ mx: A.map((r) => r.map((x) => x.toTeX())), label: 'A' }), msg: '求特征值：解特征方程 |λE − A| = 0。' });
   const ftex = f.toFactorTeX();
   notes.push(`$|\\lambda E - A| = ${ftex}$`);
-  const values = roots.flatMap(({ root, mult }) => Array(mult).fill(root.toString()));
+  // 错法 diagValues：把主对角线上的数当成特征值（三角矩阵才对）——只影响「特征值是哪几个」的答案
+  const values = input.mistake === 'diagValues' ? A.map((r, i) => r[i].toString()) : roots.flatMap(({ root, mult }) => Array(mult).fill(root.toString()));
   steps.push({
     view: view({ mx: lamE, label: '\\lambda E - A', poly: `|\\lambda E - A| = ${f.toTeX()} = ${ftex}` }),
     msg: rest.deg >= 1 ? `|λE − A| = $${ftex}$：还有 $${rest.toTeX()} = 0$ 的根不是有理数，这里只往下讲有理的特征值。` : `|λE − A| = $${ftex}$，特征值是 ${roots.map(({ root, mult }) => `λ = ${root.toString()}${mult > 1 ? `（${mult} 重）` : ''}`).join('，')}。`,
@@ -130,7 +134,8 @@ export function run(input) {
     const { M: R, pivots } = rrefQ(M.map((r) => [...r, P(0)]), n);
     const sol = solution(R, n, pivots);
     const basis = sol.kind === 'infinite' ? sol.basis.map(primitive) : [];
-    const geo = basis.length;
+    // 错法 geoRank：把 λE − A 的秩当成了线性无关的特征向量的个数（应该是 n − 秩）
+    const geo = input.mistake === 'geoRank' ? n - basis.length : basis.length;
     spaces.push({ root, mult, basis, geo });
     notes.push(`λ = ${root.toString()}：${geo} 个线性无关的特征向量${geo < mult ? `（比重数 ${mult} 少）` : ''}`);
     steps.push({
@@ -139,7 +144,8 @@ export function run(input) {
       ask: { tag: 'geo', kind: 'number', q: `λ = ${root.toString()} 对应的线性无关的特征向量有几个？`, answer: geo },
     });
   }
-  const diagonalizable = spaces.every((s) => s.geo === s.mult);
+  // 错法 repeatNo：以为有重根就不能对角化（要看几何重数是不是等于代数重数）
+  const diagonalizable = input.mistake === 'repeatNo' ? roots.every((x) => x.mult === 1) : spaces.every((s) => s.geo === s.mult);
   if (goal === 'eig') return { steps, f, roots, values, spaces, diagonalizable };
   steps.push({
     view: view(),
@@ -194,7 +200,20 @@ export function table(input, r) {
   };
 }
 
-export const eigEngine = { name: 'eig', title: '特征值与对角化', parse, run, view, quiz, table };
+// 常见错法：只列会答得不一样的（三角矩阵的对角元就是特征值，就不提 diagValues）。
+// 先后有讲究：「能对角化吗」答「不能」时两种都说得通，有重根就不能这种更常见，排在前面
+export function variants(input) {
+  const right = run(input);
+  const out = [];
+  const bag = (xs) => xs.slice().sort().join(' ');
+  const diag = input.A.map((r, i) => r[i].toString());
+  if (right.values && bag(diag) !== bag(right.values)) out.push({ label: '像是把主对角线上的数当成了特征值（只有三角矩阵才是；要解 |λE − A| = 0）', input: { ...input, mistake: 'diagValues' } });
+  if (right.diagonalizable && right.roots?.some((x) => x.mult > 1)) out.push({ label: '像是以为有重根就不能对角化（要看每个特征值的几何重数是否等于代数重数）', input: { ...input, mistake: 'repeatNo' } });
+  if (right.spaces?.some((x) => x.geo !== input.n - x.geo)) out.push({ label: '像是把 λE − A 的秩当成了线性无关的特征向量个数（应该是 n − r(λE − A)）', input: { ...input, mistake: 'geoRank' } });
+  return out;
+}
+
+export const eigEngine = { name: 'eig', title: '特征值与对角化', parse, run, view, quiz, table, variants };
 
 // ================= schmidt =================
 
@@ -209,7 +228,7 @@ function sParse(fields) {
   return { vs, normalize };
 }
 function sRun(input) {
-  const { betas, log } = schmidt(input.vs);
+  const { betas, log } = schmidt(input.vs, { mistake: input.mistake });
   const steps = [{ view: { lines: input.vs.map((v, i) => `\\alpha_{${i + 1}} = ${colTeX(v)}`) }, msg: '施密特正交化：β₁ = α₁；后面每个 α 减去它在前面每个 β 上的投影 (α, β)/(β, β)·β。' }];
   const lines = [];
   log.forEach((x, t) => {
@@ -221,7 +240,7 @@ function sRun(input) {
       ask: t === 0 ? undefined : { tag: 'dot', kind: 'number', q: `(α${t + 1}, β1) 是多少？`, answer: x.terms[0].num.toNumber(), display: x.terms[0].num.toString() },
     });
   });
-  if (input.normalize) {
+  if (input.normalize && !input.mistake) {
     const us = betas.map(unit);
     lines.push(us.map((u, i) => `e_{${i + 1}} = ${unitTeX(u)}`).join(',\\ '));
     steps.push({ view: { lines: lines.slice() }, msg: '再单位化：每个 β 除以它的长度（长度 = √(β, β)）。' });
@@ -234,6 +253,16 @@ function sView(s, input, opts = {}) {
 }
 export const schmidtEngine = {
   name: 'schmidt', title: '施密特正交化', parse: sParse, run: sRun, view: sView,
+  // 常见错法：往 α 上投影、忘了除以 (β, β)；只列会算出不一样的 β 的
+  variants(input) {
+    const right = schmidt(input.vs).betas.map((b) => b.join(','));
+    const out = [];
+    for (const [mistake, label] of [['useAlpha', '像是往前面的 α 上投影了（应该减去在已经求出的 β 上的投影）'], ['noDenom', '像是投影的系数忘了除以 (β, β)（系数是 (α, β)/(β, β)）']]) {
+      const w = schmidt(input.vs, { mistake }).betas.map((b) => b.join(','));
+      if (w.some((x, i) => x !== right[i])) out.push({ label, input: { ...input, mistake } });
+    }
+    return out;
+  },
   table(input, r) {
     return { q: '写出正交化以后的每个 β（还没单位化，按公式算出来的，不要约分乘整）。', qhtml: '', dir: 'row', head: input.vs[0].map((_, i) => `第 ${i + 1} 个分量`), rows: r.betas.map((b, t) => ({ label: `β${t + 1}`, cells: b.map((x) => ({ v: x.toString(), num: true })) })) };
   },

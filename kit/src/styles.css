@@ -1215,6 +1215,31 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .sv-elim .el-notes { margin: 6px 0 0; padding-left: 1.2em; font: 15px/1.6 var(--sans); color: var(--body); }
 .sv-picking .sv-elim th[data-pick], .sv-elim.sv-picking th[data-pick] { cursor: pointer; }
 
+/* elim 的 mode: do：学生自己写行变换。输入框 16px（iPad 聚焦不放大），按钮至少 44px */
+.ed-goal { font: 15px/1.5 var(--sans); margin-bottom: 6px; }
+.ed-status { text-align: center; font: 15px/1.5 var(--sans); color: var(--muted); margin: 2px 0 6px; }
+.ed-status.is-done { color: var(--green); font-weight: 600; }
+.ed-hist { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0; margin: 4px 0 10px; font-size: 16px; }
+.ed-hist li { display: flex; align-items: center; gap: 6px; }
+.ed-n { font: 600 13px var(--sans); color: var(--muted); }
+.ed-line { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ed-in { flex: 1 1 220px; min-width: 0; min-height: 44px; font: 16px var(--mono, var(--sans)); padding: 6px 10px; border-radius: 10px; border: 1px solid rgb(var(--chalk-rgb) / 0.3); background: rgb(var(--chalk-rgb) / 0.05); color: var(--body); }
+.ed-line .btn, .ed-ctrl .btn, .ed-wctrl .btn { min-height: 44px; }
+.ed-keys { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.ed-key { min-width: 44px; min-height: 44px; font: 16px var(--sans); }
+.ed-ctrl, .ed-wctrl { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.ed-write { margin: 8px 0; padding: 8px 10px; border-radius: 10px; border: 1px dashed rgb(var(--chalk-rgb) / 0.3); }
+.ed-wq { font: 15px/1.6 var(--sans); margin-bottom: 6px; }
+.ed-wrow { display: flex; flex-wrap: wrap; gap: 6px; }
+.ed-w { width: 72px; min-height: 44px; font: 16px var(--sans); text-align: center; border-radius: 8px; border: 1px solid rgb(var(--chalk-rgb) / 0.3); background: rgb(var(--chalk-rgb) / 0.05); color: var(--body); }
+.ed-w.is-bad { border-color: var(--coral); }
+.ed-fb { font: 15px/1.5 var(--sans); margin: 6px 0; }
+.ed-fb.is-bad { color: var(--coral); }
+.ed-fb.is-note { color: var(--yellow); }
+.ed-after { margin-top: 8px; }
+.ed-after .btn { min-height: 44px; }
+.ed-demo:not(:empty) { margin-top: 10px; }
+
 /* 行列式 det：两边是竖线（不是括号），左边是一路记下来的系数 */
 .dt-row { display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 4px 0 10px; font-size: 19px; }
 table.mx.mx-det::before, table.mx.mx-det::after { width: 0; border-radius: 0; }
@@ -1253,6 +1278,8 @@ g.sv-order-badge text { fill: var(--board); font: 700 12px var(--sans); text-anc
 .sv-arr + .sv-arr { margin-top: 12px; }
 .sv-arr.sv-dense { --cell: 40px; }
 .sv-arr.sv-dense .sv-cell { font-size: 17px; }
+/* iPad 竖屏：16 格的散列表加上左边的标签，40px 一格正好多出几个像素 */
+@media (max-width: 860px) { .sv-arr.sv-dense { --cell: 37px; } }
 @media (max-width: 560px) { .sv-arr.sv-dense { --cell: 30px; } .sv-arr.sv-dense .sv-cell { font-size: 14px; } }
 .sv-arr-label { font-family: var(--hand); font-size: 20px; color: var(--muted); }
 .sv-row { display: grid; grid-template-columns: repeat(var(--cols), var(--cell)); gap: 5px; align-items: center; }

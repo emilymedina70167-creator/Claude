@@ -50,3 +50,21 @@ test('正交变换法：特征值 1, 2, 5，f = 1 是椭球面，正定', () => 
   assert.equal(r.steps.find((s) => s.ask?.tag === 'surface').ask.answer, '椭球面');
   assert.deepEqual(r.minors.map(String), ['2', '6', '10']);
 });
+
+test('quad 的错法诊断：看主对角元判正定、把主对角元当成正交变换的系数', async () => {
+  const { misreadAnswer } = await import('../kit/src/stepperspec.js');
+  // 主对角元都正，但不定：x1² + x2² + 4x1x2（特征值 3、−1）
+  const input = G.parse({ f: 'x1^2 + x2^2 + 4x1x2', method: 'orth' });
+  const r = G.run(input);
+  assert.equal(r.kind, '不定');
+  const vs = G.variants(input);
+  assert.deepEqual(vs.map((v) => v.input.mistake || 'half'), ['half', 'diagDefinite', 'diagValues']);
+  const askOf = (run, tag) => run.steps.map((s) => s.ask).find((a) => a?.tag === tag);
+  const ref = askOf(r, 'definite');
+  const asks = (tag) => vs.map((v) => { try { const a = askOf(G.run(v.input), tag); return a && a.q === askOf(r, tag).q ? { label: v.label, answer: a.answer } : null; } catch { return null; } }).filter(Boolean);
+  assert.match(misreadAnswer('正定', asks('definite')), /主对角元的正负/);
+  assert.equal(ref.answer, '不定');
+  assert.match(misreadAnswer('1 1', asks('values')), /主对角元当成了标准形的系数/);
+  // 本来就正定：看主对角元也对，不提这个错法
+  assert.ok(!G.variants(G.parse({ f: '2x1^2 + 3x2^2 + 2x1x2' })).some((v) => v.input.mistake === 'diagDefinite'));
+});

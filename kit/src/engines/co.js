@@ -8,6 +8,39 @@ import { chips, esc } from './arrayview.js';
 const bin = (v, n) => (BigInt.asUintN(n, BigInt(v))).toString(2).padStart(n, '0');
 const group4 = (s) => s.replace(/\B(?=(\d{4})+$)/g, ' ');
 
+// bin / hex 的 ask 判分只看 answer（按位串比）；错法诊断（stepper.js）却是拿学生写的文字和错法的答案逐字比，
+// answer 是 BigInt，转成文字是十进制，永远对不上。所以把常见的几种写法放进 alts（bin / hex 的判分不看 alts）
+const radixForms = (v, kind, width) => {
+  if (kind === 'bin') return [bin(v, width)];
+  const h = BigInt(v).toString(16).toUpperCase().padStart(Math.ceil(width / 4), '0');
+  return [h, `0x${h}`, `${h}H`];
+};
+// 小数答案（解码出来的值）：常见的写法也放进 alts（number 的判分不看 alts）：小数、分数
+const numForms = (x) => {
+  const out = [String(x)];
+  for (let k = 0; k <= 40; k++) {
+    const n = x * 2 ** k;
+    if (Number.isInteger(n)) { if (k) out.push(`${n}/${2 ** k}`); break; }
+  }
+  return out;
+};
+
+// 一个 run 里学生能答的：每个 ask（题面 → 答案）、quiz 和填表的答案。
+// 错法算出来和对的完全一样就不列（differing）：列着也认不出什么，还让人以为这组数能诊断出它
+const big = (k, v) => (typeof v === 'bigint' ? `${v}n` : v);
+function answersOf(engine, input, r, fields) {
+  const asks = r.steps.flatMap((s) => [s.ask, ...(s.asks || [])]).filter(Boolean).map((a) => [a.q, a.alts ?? a.answer]);
+  const get = (f) => { try { return f() ?? null; } catch { return null; } };
+  const quiz = get(() => engine.quiz(input, r, fields).answer);
+  const t = get(() => engine.table(input, r, fields));
+  return JSON.stringify([asks, quiz, t && t.rows.map((row) => row.cells.map((c) => c.v))], big);
+}
+function differing(engine, input, list, fields = {}) {
+  let base;
+  try { base = answersOf(engine, input, engine.run(input), fields); } catch { return list; }
+  return list.filter((v) => { try { return answersOf(engine, v.input, engine.run(v.input), fields) !== base; } catch { return false; } });
+}
+
 // ================= bits：数的表示 =================
 
 // 十进制小数 → 精确的分数 n/d（BigInt）
@@ -51,7 +84,8 @@ function bitsParse(fields) {
   return { mode: 'code', x, width, show };
 }
 
-// mistake（只在算常见错法时用）：'noPlusOne' 负数补码忘了 +1；'noFlip' 移码忘了把符号位取反；'flipSign' 反码连符号位也取反了
+// mistake（只在算常见错法时用）：'noPlusOne' 负数补码忘了 +1；'noFlip' 移码忘了把符号位取反；'flipSign' 反码连符号位也取反了；
+// 'posFlip' 正数也按负数的规则取反（反码数值位取反、补码再 +1，移码跟着这个补码改符号位）
 function codeRun({ x, width: n, show, mistake }) {
   const steps = [];
   const neg = x < 0n;
@@ -68,10 +102,15 @@ function codeRun({ x, width: n, show, mistake }) {
   if (mistake === 'noPlusOne' && neg && ones) twos = ones;
   if (mistake === 'noFlip') bias = twos;
   if (mistake === 'flipSign' && neg && ones) ones = '0' + ones.slice(1);
+  if (mistake === 'posFlip' && x > 0n) {
+    ones = '0' + [...bin(mag, n - 1)].map((c) => (c === '1' ? '0' : '1')).join('');
+    twos = '0' + bin(lim - mag, n - 1);
+    bias = '1' + twos.slice(1);
+  }
   const add = (k, val, msg) => {
     if (!show.includes(k)) return;
     rows[k] = val;
-    steps.push({ view: { rows: { ...rows }, cur: k }, msg, ask: val === null ? undefined : { tag: tag[k], kind: 'bin', width: n, q: `${x} 的 ${n} 位${k}是什么？`, answer: BigInt(`0b${val}`), display: group4(val) } });
+    steps.push({ view: { rows: { ...rows }, cur: k }, msg, ask: val === null ? undefined : { tag: tag[k], kind: 'bin', width: n, q: `${x} 的 ${n} 位${k}是什么？`, answer: BigInt(`0b${val}`), alts: [val], display: group4(val) } });
   };
   add('原码', orig, can ? `原码：符号位 ${neg ? 1 : 0}，后面 ${n - 1} 位是绝对值 ${mag} 的二进制：${group4(orig)}。` : `${x} 的绝对值 ${mag} 用 ${n - 1} 位放不下：原码表示不了（${n} 位原码的范围是 ±${lim - 1n}）。`);
   add('反码', ones, !can ? `反码也表示不了 ${x}。` : neg ? `反码：负数的符号位不变、数值位按位取反：${group4(ones)}。` : `反码：正数的反码和原码一样：${group4(ones)}。`);
@@ -81,9 +120,11 @@ function codeRun({ x, width: n, show, mistake }) {
 }
 
 // —— IEEE 754 单精度 ——
+// 常见错法（只在算错法时用）：bias 偏置不是 127（编码、解码都用）；
+// noHidden 解码时尾数前面没补隐藏的 1；withHidden 编码时把隐藏的 1 也写进了 23 位尾数（后面挤掉一位）
 function floatRun(input) {
   const steps = [];
-  const BIAS = input.bias ?? 127; // 常见错法「偏置用 128」只在算错法时改
+  const BIAS = input.bias ?? 127;
   const F = (v) => [{ name: '符号 S', bits: 1, cls: 'bv-b' }, { name: '阶码 E', bits: 8, cls: 'bv-a' }, { name: '尾数 M', bits: 23, cls: 'bv-c' }];
   if (input.decode) {
     const v = input.bitsVal;
@@ -98,11 +139,12 @@ function floatRun(input) {
       value = (S ? -1 : 1) * Number(M) * 2 ** -149;
       text = M ? `非规格化数：(−1)^${S} × 0.M × 2^−126 = ${value}` : `${S ? '−' : '+'}0`;
     } else {
-      const frac = 1 + Number(M) / 2 ** 23;
-      value = (S ? -1 : 1) * frac * 2 ** (E - 127);
-      text = `(−1)^${S} × 1.${bin(M, 23).replace(/0+$/, '') || '0'}B × 2^(${E} − 127) = ${S ? '−' : ''}${frac} × 2^${E - 127} = ${value}`;
+      const lead = input.noHidden ? 0 : 1;
+      const frac = lead + Number(M) / 2 ** 23;
+      value = (S ? -1 : 1) * frac * 2 ** (E - BIAS);
+      text = `(−1)^${S} × ${lead}.${bin(M, 23).replace(/0+$/, '') || '0'}B × 2^(${E} − ${BIAS}) = ${S ? '−' : ''}${frac} × 2^${E - BIAS} = ${value}`;
     }
-    steps.push({ view: { v, fields: F(), hi: ['阶码 E'] }, msg: E === 255 || E === 0 ? `阶码全 ${E ? 1 : 0}：特殊值。${text}。` : `规格化数：真正的指数 = E − 127 = ${E - 127}；尾数前面补上隐藏的 1：1.M。`, ask: value === null ? undefined : { tag: 'value', kind: 'number', q: `${input.src} 表示的数是多少？`, answer: value } });
+    steps.push({ view: { v, fields: F(), hi: ['阶码 E'] }, msg: E === 255 || E === 0 ? `阶码全 ${E ? 1 : 0}：特殊值。${text}。` : `规格化数：真正的指数 = E − ${BIAS} = ${E - BIAS}；尾数前面补上隐藏的 1：1.M。`, ask: value === null ? undefined : { tag: 'value', kind: 'number', q: `${input.src} 表示的数是多少？`, answer: value, alts: numForms(value) } });
     steps.push({ view: { v, fields: F() }, msg: `值 = ${text}。` });
     return { steps, value, bits: v };
   }
@@ -130,7 +172,7 @@ function floatRun(input) {
   const E = e + BIAS;
   if (E >= 255) throw new Error(`${input.src} 太大了，单精度放不下`);
   if (E <= 0) throw new Error(`${input.src} 太小了（要用非规格化数），这里只演示规格化数`);
-  const M = sig & 0x7fffffn;
+  const M = input.withHidden ? sig >> 1n : sig & 0x7fffffn;
   const S = neg ? 1 : 0;
   const v = (BigInt(S) << 31n) | (BigInt(E) << 23n) | M;
   const mStr = bin(M, 23);
@@ -138,9 +180,9 @@ function floatRun(input) {
   steps.push({ view: { fields: null }, msg: `把 ${input.src} 写成 IEEE 754 单精度：1 位符号 S、8 位阶码 E（移码，偏置 127）、23 位尾数 M（规格化以后隐藏最前面的 1）。` });
   steps.push({ view: { fields: null }, msg: `${input.src}：符号位 S = ${S}（${neg ? '负' : '正'}数）。绝对值写成二进制：${binText}${exact ? '' : '（除不尽，后面取到 24 位有效数字，就近舍入）'}。`, ask: { tag: 'sign', kind: 'number', q: '符号位 S 是多少？', answer: S } });
   steps.push({ view: { fields: null }, msg: `规格化：写成 1.${mStr.replace(/0+$/, '') || '0'}B × 2^${e}（小数点移到第一个 1 后面，移了 ${Math.abs(e)} 位，指数是 ${e}）。` });
-  steps.push({ view: { v, fields: F(), hi: ['阶码 E'] }, msg: `阶码 E = 指数 + 127 = ${e} + 127 = ${E} = ${bin(E, 8)}B（移码，偏置 127）。`, ask: { tag: 'exp', kind: 'bin', width: 8, q: '阶码 E（8 位二进制）是什么？', answer: BigInt(E), display: bin(E, 8) } });
+  steps.push({ view: { v, fields: F(), hi: ['阶码 E'] }, msg: `阶码 E = 指数 + 127 = ${e} + 127 = ${E} = ${bin(E, 8)}B（移码，偏置 127）。`, ask: { tag: 'exp', kind: 'bin', width: 8, q: '阶码 E（8 位二进制）是什么？', answer: BigInt(E), alts: radixForms(E, 'bin', 8), display: bin(E, 8) } });
   steps.push({ view: { v, fields: F(), hi: ['尾数 M'] }, msg: `尾数 M：1.后面的 23 位（隐藏最前面的 1）：${group4(mStr)}。` });
-  steps.push({ view: { v, fields: F() }, msg: `合起来：${S} ${bin(E, 8)} ${mStr} = ${hexOf(v, 32)}。`, ask: { tag: 'hex', kind: 'hex', width: 8, q: `${input.src} 的单精度表示（十六进制）是什么？`, answer: v, display: hexOf(v, 32) } });
+  steps.push({ view: { v, fields: F() }, msg: `合起来：${S} ${bin(E, 8)} ${mStr} = ${hexOf(v, 32)}。`, ask: { tag: 'hex', kind: 'hex', width: 8, q: `${input.src} 的单精度表示（十六进制）是什么？`, answer: v, alts: radixForms(v, 'hex', 32), display: hexOf(v, 32) } });
   return { steps, bits: v, S, E, M: mStr };
 }
 // a/d 的二进制写法（整数部分 + 小数部分，小数最多 24 位）
@@ -153,7 +195,8 @@ function binaryText(a, d) {
 }
 
 // —— 补码加减和标志位 ——
-// mistake（只在算常见错法时用）：'cfRaw' 减法的 CF 直接取最高位进位（没和 Cin 异或）；'ofCarry' 把 OF 当成最高位进位
+// mistake（只在算常见错法时用）：'cfRaw' 减法的 CF 直接取最高位进位（没和 Cin 异或）；'ofCarry' 把 OF 当成最高位进位；
+// 'sfTrue' SF 按真实结果（不限位数）的正负写（溢出时和结果的最高位相反）
 function arithRun({ a, b, sub, width: n, mistake }) {
   const steps = [];
   const mask = (1n << BigInt(n)) - 1n;
@@ -172,12 +215,13 @@ function arithRun({ a, b, sub, width: n, mistake }) {
     carries.push(c);
   }
   const Cn = carries[n - 1], Cn1 = carries[n - 2];
-  const OF = mistake === 'ofCarry' ? Number(Cn) : Number(Cn ^ Cn1), SF = Number((R >> BigInt(n - 1)) & 1n), ZF = R === 0n ? 1 : 0, CF = mistake === 'cfRaw' ? Number(Cn) : Number(Cn ^ cin);
   const signed = (v) => BigInt.asIntN(n, v);
+  const exact = sub ? signed(A) - signed(B) : signed(A) + signed(B);
+  const OF = mistake === 'ofCarry' ? Number(Cn) : Number(Cn ^ Cn1), SF = mistake === 'sfTrue' ? Number(exact < 0n) : Number((R >> BigInt(n - 1)) & 1n), ZF = R === 0n ? 1 : 0, CF = mistake === 'cfRaw' ? Number(Cn) : Number(Cn ^ cin);
   const view = (extra = {}) => ({ A, B, Bin, R, carries, cin, ...extra });
   steps.push({ view: view({ stage: 0 }), msg: `${n} 位：X = ${a}（${group4(bin(A, n))}），Y = ${b}（${group4(bin(B, n))}）。${sub ? '减法在加法器里做：X − Y = X + (Y 按位取反) + 1（加法器的进位输入 Cin = 1）。' : '加法：X + Y，进位输入 Cin = 0。'}` });
-  if (sub) steps.push({ view: view({ stage: 1 }), msg: `Y 按位取反：${group4(bin(Bin, n))}，再加上 Cin = 1。`, ask: { tag: 'neg', kind: 'bin', width: n, q: `Y 按位取反是什么？`, answer: Bin, display: group4(bin(Bin, n)) } });
-  steps.push({ view: view({ stage: 2 }), msg: `从最低位往上逐位相加（上面一行是每一位向高位的进位）：结果 ${group4(bin(R, n))}；最高位的进位 C${n} = ${Cn}，次高位的进位 C${n - 1} = ${Cn1}。`, ask: { tag: 'result', kind: 'bin', width: n, q: '结果的二进制是什么？', answer: R, display: group4(bin(R, n)) } });
+  if (sub) steps.push({ view: view({ stage: 1 }), msg: `Y 按位取反：${group4(bin(Bin, n))}，再加上 Cin = 1。`, ask: { tag: 'neg', kind: 'bin', width: n, q: `Y 按位取反是什么？`, answer: Bin, alts: radixForms(Bin, 'bin', n), display: group4(bin(Bin, n)) } });
+  steps.push({ view: view({ stage: 2 }), msg: `从最低位往上逐位相加（上面一行是每一位向高位的进位）：结果 ${group4(bin(R, n))}；最高位的进位 C${n} = ${Cn}，次高位的进位 C${n - 1} = ${Cn1}。`, ask: { tag: 'result', kind: 'bin', width: n, q: '结果的二进制是什么？', answer: R, alts: radixForms(R, 'bin', n), display: group4(bin(R, n)) } });
   const flags = [
     ['OF', OF, `OF（溢出）= C${n} ⊕ C${n - 1} = ${Cn} ⊕ ${Cn1} = ${OF}：${OF ? `当成有符号数，结果溢出了（真实结果 ${sub ? signed(A) - signed(B) : signed(A) + signed(B)} 超出 ${n} 位补码的范围）` : '当成有符号数没有溢出'}`],
     ['SF', SF, `SF（符号）= 结果的最高位 = ${SF}`],
@@ -275,18 +319,29 @@ export const bitsEngine = {
       ],
     };
   },
-  // 常见错法
-  variants(input) {
-    if (input.mode === 'code') return [
+  // 常见错法（和对的答案一样的不列）
+  variants(input, fields) {
+    let out;
+    if (input.mode === 'code') out = [
       { label: '像是负数的补码忘了 +1（写成了反码）', input: { ...input, mistake: 'noPlusOne' } },
       { label: '像是移码没有把符号位取反（写成了补码）', input: { ...input, mistake: 'noFlip' } },
       { label: '像是反码连符号位也取反了', input: { ...input, mistake: 'flipSign' } },
+      { label: '像是正数也按位取反了（王道：正数的原码、反码、补码都一样）', input: { ...input, mistake: 'posFlip' } },
     ];
-    if (input.mode === 'float') return input.decode ? [] : [{ label: '像是阶码的偏置用了 128（应该是 127）', input: { ...input, bias: 128 } }, { label: '像是阶码的偏置用了 126', input: { ...input, bias: 126 } }];
-    return [
+    else if (input.mode === 'float') out = input.decode ? [
+      { label: '像是阶码减了 128（王道：单精度的偏置是 127，指数 = E − 127）', input: { ...input, bias: 128 } },
+      { label: '像是尾数前面没补隐藏的 1（王道：规格化数的值是 1.M × 2^(E − 127)）', input: { ...input, noHidden: true } },
+    ] : [
+      { label: '像是阶码的偏置用了 128（应该是 127）', input: { ...input, bias: 128 } },
+      { label: '像是阶码的偏置用了 126', input: { ...input, bias: 126 } },
+      { label: '像是尾数把隐藏的 1 也写进去了（王道：规格化成 1.xxx 以后，23 位尾数只写小数点后面的）', input: { ...input, withHidden: true } },
+    ];
+    else out = [
       ...(input.sub ? [{ label: '像是减法的 CF 直接取了最高位的进位（王道：CF = 进位 ⊕ Cin）', input: { ...input, mistake: 'cfRaw' } }] : []),
       { label: '像是把最高位的进位当成了溢出 OF（OF = 最高位进位 ⊕ 次高位进位）', input: { ...input, mistake: 'ofCarry' } },
+      { label: '像是 SF 按真实结果的正负写的（王道：SF 就是结果的最高位，溢出时和真实结果的正负相反）', input: { ...input, mistake: 'sfTrue' } },
     ];
+    return differing(bitsEngine, input, out, fields);
   },
 };
 
@@ -449,7 +504,8 @@ function pipeParse(fields) {
   return { instrs, forward, split };
 }
 
-function pipeRun({ instrs, forward, split }) {
+// loadFree（只在算常见错法时用）：以为有转发时 load 的结果也能在 EX 段结束就送出去（load-use 不用停）
+function pipeRun({ instrs, forward, split, loadFree }) {
   const steps = [];
   const sched = []; // { IF, IDin, ID（离开 ID 的那个周期）, EX, MEM, WB, stall, why }
   const rule = forward ? '有转发（旁路）：运算结果在 EX 段结束就能送给下一条的 EX；取数（load）的结果要到 MEM 段结束，紧跟着用它的指令要停 1 个周期'
@@ -466,7 +522,7 @@ function pipeRun({ instrs, forward, split }) {
       for (let j = i - 1; j >= 0; j--) if (instrs[j].dest === r) { p = j; break; }
       if (p < 0) continue;
       const P = sched[p];
-      const req = forward ? (instrs[p].load ? P.MEM : P.EX) : split ? P.WB : P.WB + 1;
+      const req = forward ? (instrs[p].load && !loadFree ? P.MEM : P.EX) : split ? P.WB : P.WB + 1;
       // 有转发时要求的是 EX ≥ req + 1，也就是 ID 结束 ≥ req
       if (req > need) need = req;
       why.push(`用到 ${instrs[p].name} 写的 ${r}（${instrs[p].name} 的 ${forward ? (instrs[p].load ? 'MEM' : 'EX') : 'WB'} 在第 ${req - (!forward && !split ? 1 : 0)} 周期）`);
@@ -520,10 +576,11 @@ export const pipeEngine = {
       rows: r.sched.map((x, i) => ({ label: input.instrs[i].name, cells: [{ v: String(x.stall), num: true }, { v: String(x.EX), num: true }, { v: String(x.WB), num: true }] })),
     };
   },
-  // 常见错法：有没有转发弄反；寄存器「前半周期写、后半周期读」用没用上
-  variants(input) {
+  // 常见错法：有没有转发弄反；寄存器「前半周期写、后半周期读」用没用上；有转发时以为 load-use 也不用停
+  variants(input, fields) {
     const out = [{ label: input.forward ? '像是按没有转发算的' : '像是按有转发算的', input: { ...input, forward: !input.forward } }];
     if (!input.forward) out.push({ label: input.split ? '像是没用上「前半周期写、后半周期读」（多停了一个周期）' : '像是按「前半周期写、后半周期读」算的', input: { ...input, split: !input.split } });
-    return out;
+    else out.push({ label: '像是以为有转发时，取数指令后面紧跟着用它的结果也不用停（王道：load-use 有转发也要停 1 个周期，数要到 MEM 段结束才有）', input: { ...input, loadFree: true } });
+    return differing(pipeEngine, input, out, fields);
   },
 };

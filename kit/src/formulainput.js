@@ -10,7 +10,8 @@ const SHOW = { alpha: 'α', beta: 'β', gamma: 'γ', lambda: 'λ', mu: 'μ', the
 export function formulaInput(container, { names = [], keys = names, placeholder = '' } = {}) {
   const root = document.createElement('div');
   root.className = 'fi';
-  const eg = placeholder || `比如 3^(${keys[0] || 'n'}-1)${keys.find((x) => /^[A-Z]$/.test(x)) || ''}`;
+  const v = keys[0] ? SHOW[keys[0]] || keys[0] : 'n';
+  const eg = placeholder || `比如 3^(${v}-1)${keys.find((x) => /^[A-Z]$/.test(x)) || ''}`;
   root.innerHTML = `<input class="fi-text" type="text" inputmode="none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="${eg}" aria-label="写式子">
     <div class="fi-preview" aria-live="polite"></div>`;
   container.appendChild(root);

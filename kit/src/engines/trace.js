@@ -11,9 +11,17 @@ import { arrayView, esc } from './arrayview.js';
 
 const AUTO_PTR = ['i', 'j', 'k', 'low', 'high', 'mid', 'left', 'right', 'l', 'r', 'p', 'q', 'front', 'rear', 'top', 'min', 'max', 'pos'];
 
+// 字段只在 code: 前面（代码里的 default:、标号 L1: 不能当成字段）
+export function head(src) {
+  const lines = String(src ?? '').split('\n');
+  const at = lines.findIndex((l) => /^\s*code\s*[:：]\s*$/i.test(l));
+  return (at < 0 ? lines : lines.slice(0, at)).join('\n');
+}
+
 export function parse(_fields, src) {
   const lines = String(src ?? '').split('\n');
   const at = lines.findIndex((l) => /^\s*code\s*[:：]\s*$/i.test(l));
+  void _fields?.code;
   if (at < 0) throw new Error('trace 要写 code:（单独一行），下面是代码；code: 放在最后');
   const head = lines.slice(0, at);
   const code = lines.slice(at + 1).join('\n').replace(/^\n+|\s+$/g, '');
@@ -25,7 +33,9 @@ export function parse(_fields, src) {
     if (m) { vars[m[1]] = parseValue(m[2], m[1]); continue; }
     rest.push(l);
   }
-  const { fields } = parseFields(rest.join('\n'));
+  // 自己再读一遍 let 以外的字段；读的时候也经过外壳传进来的 _fields，外壳才知道哪些字段用上了（拼写检查）
+  const own = parseFields(rest.join('\n')).fields;
+  const fields = new Proxy(own, { get: (t, k) => { if (_fields && typeof k === 'string') void _fields[k]; return t[k]; } });
   let program;
   try { program = parseProgram(code); } catch (e) { throw new Error(e instanceof CError ? `代码${e.message}` : e.message); }
   let entry = null;
@@ -181,4 +191,4 @@ export function problems(input, r) {
   return out;
 }
 
-export const traceEngine = { name: 'trace', title: '代码跟踪', parse, run, view, quiz, problems, defaultAsk: (input) => (input.predicts.length ? 'predict' : '') };
+export const traceEngine = { name: 'trace', title: '代码跟踪', head, parse, run, view, quiz, problems, defaultAsk: (input) => (input.predicts.length ? 'predict' : '') };

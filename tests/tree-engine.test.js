@@ -84,3 +84,99 @@ test('画法：按中序排开不重叠；ghost 和标注', () => {
   assert.match(treeSvg(t, { note: { [t.root]: 'bf=0' } }), /sv-node-note/);
   assert.match(treeSvg({ root: null, nodes: {} }), /空树/);
 });
+
+// —— 常见错法 ——
+// 外壳（stepper.js）认错法的路：先猜按题面找错法那一遍里的同一个问题、mode: quiz 比答案、mode: fill 逐格比表；都只在答错时才诊断
+import { treeEngine } from '../kit/src/engines/tree.js';
+import { misreadAnswer, misreadFill } from '../kit/src/stepperspec.js';
+
+function diagnose(fields) {
+  const E = treeEngine;
+  const input = E.parse(fields);
+  const r = E.run(input);
+  // 外壳也是这样：这组数上算不了的错法（比如不是小根堆却要插入）跳过
+  const vs = E.variants(input).flatMap((v) => { try { return [{ ...v, run: E.run(v.input) }]; } catch { return []; } });
+  return {
+    input, r, vs,
+    variant: (re) => { const v = vs.find((x) => re.test(x.label)); assert.ok(v, `没有「${re.source}」这种错法：${vs.map((x) => x.label).join('；')}`); return v; },
+    answerOf: (v) => E.quiz(v.input, v.run).answer,
+    quiz: (given) => (given === E.quiz(input, r).answer ? '' : misreadAnswer(given, vs.map((v) => ({ label: v.label, answer: E.quiz(v.input, v.run).answer })))),
+    fill: (values) => misreadFill(E.table(input, r), values, vs.map((v) => ({ label: v.label, table: E.table(v.input, v.run) })).filter((v) => v.table)),
+    ask: (tag, given, k = 0) => {
+      const ask = r.steps.filter((s) => s.ask?.tag === tag)[k].ask;
+      if (given === ask.answer) return '';
+      return misreadAnswer(given, vs.map((v) => {
+        const a = v.run.steps.flatMap((x) => [x.ask, ...(x.asks || [])]).find((y) => y && y.q === ask.q && y.kind === ask.kind);
+        return a ? { label: v.label, answer: [].concat(a.answer).join(' ') } : null;
+      }).filter(Boolean));
+    },
+  };
+}
+const cellsOf = (t) => t.rows.map((row) => row.cells.map((c) => [].concat(c.v)[0]));
+
+test('错法：二叉排序树删除时前驱、后继用反（只在真有两棵子树的删除时列）', () => {
+  let d = diagnose({ bst: HEAP, ops: 'delete 53', quiz: 'level' });
+  const pred = d.variant(/用了直接前驱/);
+  assert.equal(d.answerOf(pred), '45 17 78 09 32 65 87');
+  assert.equal(d.quiz('45 17 78 09 32 65 87'), pred.label);
+  assert.equal(d.quiz('65 17 78 09 45 87 32'), '', '正确答案（直接后继 65 顶上）');
+  assert.equal(d.quiz('65 17 78 09 32 87 45'), '', '随手写错的不乱说');
+  // 先猜「用来替代 53 的是哪个结点」：点了 45
+  assert.equal(d.ask('replace', '45'), pred.label);
+  assert.equal(d.ask('replace', '87'), '', '点了别的不乱说');
+  assert.equal(d.ask('case', CASE_ONE), '', '错法那一遍只留替代结点这一问');
+  // 作者写了 replace: pred：反过来是「用了后继」
+  d = diagnose({ bst: HEAP, ops: 'delete 53', replace: 'pred', quiz: 'level' });
+  const succ = d.variant(/用了直接后继/);
+  assert.equal(d.quiz('65 17 78 09 45 87 32'), succ.label);
+  assert.equal(d.ask('replace', '65'), succ.label);
+  // 只删叶结点、只有一棵子树的：两种做法一样，不列
+  for (const ops of ['delete 09, delete 87', 'delete 09, delete 17', 'insert 40, search 32']) {
+    assert.ok(!diagnose({ bst: HEAP, ops }).vs.some((v) => /前驱|后继/.test(v.label)), ops);
+  }
+  assert.ok(!diagnose({ bst: HEAP }).vs.some((v) => /前驱|后继/.test(v.label)));
+});
+const CASE_ONE = '只有一棵子树：子树顶上来';
+
+test('错法：二叉排序树大的往左（写结果、先猜往哪走、填表都认得出）', () => {
+  const d = diagnose({ bst: HEAP, quiz: 'pre' });
+  const v = d.variant(/大的往左/);
+  // 整棵树左右翻过来：53(78(87, 65), 17(45(, 32), 09))
+  assert.equal(d.answerOf(v), '53 78 87 65 17 45 32 09');
+  assert.equal(d.quiz('53 78 87 65 17 45 32 09'), v.label);
+  assert.equal(d.quiz('53 17 09 45 32 78 65 87'), '', '正确的先序');
+  // 先猜：78 和 53 比往哪走，选了左子树
+  const k = d.r.steps.filter((s) => s.ask?.tag === 'compare').findIndex((s) => /^78 和 53/.test(s.ask.q));
+  assert.equal(d.ask('compare', '左子树', k), v.label);
+  // 填表：每个关键字的双亲和左右
+  assert.equal(d.fill(cellsOf(treeEngine.table(v.input, v.run))), v.label);
+  assert.equal(d.fill(cellsOf(treeEngine.table(d.input, d.r))), '');
+});
+
+test('错法：堆逐个插入建堆、大小根堆弄反（两种建法一样时不列）', () => {
+  let d = diagnose({ heap: HEAP });
+  const ins = d.variant(/一个个插入/);
+  // 53 → 17 → 78 上浮 → 09 → 45 上浮 → 65 上浮 → 87 浮到堆顶 → 32 上浮
+  assert.equal(d.answerOf(ins), '87 45 78 32 17 53 65 09');
+  assert.equal(d.quiz('87 45 78 32 17 53 65 09'), ins.label);
+  assert.equal(d.quiz('87 45 78 32 17 65 53 09'), '', '正确答案（从 A[4] 往前逐个往下调整）');
+  assert.equal(d.quiz('87 78 45 32 17 65 53 09'), '', '随手写错的不乱说');
+  assert.equal(d.ask('build', '87 45 78 32 17 53 65 09'), ins.label, '先猜「建好的大根堆是什么」');
+  const flip = d.variant(/建成了小根堆/);
+  assert.equal(d.quiz('09 17 65 32 45 78 87 53'), flip.label);
+  assert.equal(d.fill(cellsOf(treeEngine.table(flip.input, flip.run))), flip.label);
+  // 堆排序第 1 趟：从逐个插入建成的堆接着排
+  d = diagnose({ heap: HEAP, ops: 'build, sort', pass: '1' });
+  assert.equal(d.quiz('78 45 65 32 17 53 09 87'), d.variant(/一个个插入/).label);
+  assert.equal(d.quiz('78 45 65 32 17 09 53 87'), '', '正确的第 1 趟');
+  // 本来就是堆、这组数建小根堆：两种建法结果一样，不列
+  assert.ok(!diagnose({ heap: '9 5 8 1 2' }).vs.some((v) => /一个个插入/.test(v.label)));
+  assert.ok(!diagnose({ heap: HEAP, type: 'min' }).vs.some((v) => /一个个插入/.test(v.label)));
+  assert.ok(!diagnose({ heap: '9 5 8 1 2', ops: 'insert 7' }).vs.some((v) => /一个个插入/.test(v.label)), '没有建堆');
+});
+
+test('错法：遍历次序弄混，说明里写出这里要的次序', () => {
+  const d = diagnose({ nodes: 'A(B(D, E), C(, F))', walk: 'pre' });
+  assert.equal(d.quiz('D B E A C F'), '像是按中序走的（先序：根 → 左子树 → 右子树）');
+  assert.equal(d.quiz('A B D E C F'), '');
+});

@@ -180,3 +180,23 @@ test('checkTemplate：先取几组数试一遍，题面、解析、答案都要�
   assert.deepEqual(checkTemplate(f, { rand: seeded(3), formulaCheck: (vars) => formulaSpec(f.fields.answer, f.fields.formula, vars) }), []);
   assert.equal(toFloat(instantiate(f, { rand: seeded(5) }).vars.A[1][1]), 0);
 });
+
+test('practice 里可以用 E、I 当名字（阶码 E）；E(3) 仍是单位矩阵', async () => {
+  const t = parseTemplate('type: custom\npick n = int(1, 20)\nlet E = (n >= 2) + (n >= 4) + (n >= 8) + (n >= 16)\nlet M = E(2) * E\nq: x\nanswer: E');
+  assert.deepEqual(checkTemplate(t), []);
+  const { vars } = instantiate(t, { rand: () => 0.5 });
+  assert.equal(vars.E.toString(), '3'); // n = 11
+  assert.deepEqual(vars.M.map((r) => r.map(String)), [['3', '0'], ['0', '3']]);
+});
+
+test('formula: λ（特征多项式）：作者写希腊字母、省略乘号都行；学生写 λ 判分', async () => {
+  const { formulaSpec, compareFormula, normalizeFormula, formulaTeX } = await import('../kit/src/formula.js');
+  const s = formulaSpec('(λ-1)(λ-2)^2', 'λ', {});
+  assert.equal(s.free[0].name, 'lambda');
+  assert.equal(s.display, '(λ-1)(λ-2)^2');
+  const read = (t) => normalizeFormula(t, { names: s.names });
+  assert.ok(compareFormula(s.expected, read('λ^3 - 5λ^2 + 8λ - 4'), { free: s.free, scope: s.scope }).ok);
+  assert.ok(compareFormula(s.expected, read('(λ-2)²(λ-1)'), { free: s.free, scope: s.scope }).ok);
+  assert.equal(compareFormula(s.expected, read('(λ-1)^2(λ-2)'), { free: s.free, scope: s.scope }).ok, false);
+  assert.match(formulaTeX(s.expected), /lambda/);
+});

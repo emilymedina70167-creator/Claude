@@ -6,6 +6,7 @@
 import { Q } from '../exact.js';
 import { Poly, P } from '../poly.js';
 import { esc } from './arrayview.js';
+import { detQ } from './det.js';
 
 const ZERO = new Q(0n), ONE = new Q(1n);
 
@@ -368,6 +369,48 @@ export function solution(M, n, pivots) {
   return { kind: 'infinite', x0, basis, free };
 }
 
+// 错法（variants）：sign 读基础解系时主元未知数没变号（移项忘了变号）；order 特解按顺序写、没放回主元所在的位置
+function slip(sol, mistake, pivots, n) {
+  if (mistake === 'sign') sol.basis = sol.basis.map((b) => b.map((x, j) => (pivots.some(([, c]) => c === j) ? x.neg() : x)));
+  if (mistake === 'order') {
+    const vals = pivots.map(([, c]) => sol.x0[c]);
+    sol.x0 = Array.from({ length: n }, (_, j) => vals[j] ?? ZERO);
+  }
+}
+
+// Q 的方阵求逆（错法里要用 A⁻¹，不走一步步的消元）
+function invQ(A) {
+  const n = A.length;
+  const M = A.map((r, i) => [...r, ...A.map((_, j) => (i === j ? ONE : ZERO))]);
+  for (let c = 0; c < n; c++) {
+    const p = M.findIndex((r, i) => i >= c && !r[c].zero);
+    if (p < 0) return null;
+    [M[c], M[p]] = [M[p], M[c]];
+    const k = M[c][c];
+    M[c] = M[c].map((x) => x.div(k));
+    for (let i = 0; i < n; i++) if (i !== c && !M[i][c].zero) { const f = M[i][c]; M[i] = M[i].map((x, j) => x.sub(f.mul(M[c][j]))); }
+  }
+  return M.map((r) => r.slice(n));
+}
+const mulQ = (X, Y) => X.map((r) => Y[0].map((_, j) => r.reduce((s, x, k) => s.add(x.mul(Y[k][j])), ZERO)));
+const tQ = (X) => X[0].map((_, j) => X.map((r) => r[j]));
+
+// 求逆、矩阵方程的错法：transpose 写成了 A⁻¹ 的转置；adjugate 伴随矩阵没除以 |A|；side AX = B 算成了 BA⁻¹（XA = B 算成了 A⁻¹B）
+function wrongX(input, X) {
+  const Aq = input.A.map((r) => r.map((p) => p.constValue()));
+  if (input.mistake === 'transpose') return tQ(X);
+  if (input.mistake === 'adjugate') { const d = detQ(Aq); return X.map((r) => r.map((x) => x.mul(d))); }
+  if (input.mistake === 'side') {
+    const Bq = input.B.map((r) => r.map((p) => p.constValue()));
+    // side right 时 input 里存的是转置（Aᵀ Xᵀ = Bᵀ），先转回来
+    const [A0, B0] = input.side === 'right' ? [tQ(Aq), tQ(Bq)] : [Aq, Bq];
+    const Ai = invQ(A0);
+    if (!Ai || B0.length !== B0[0].length || B0.length !== A0.length) return X;
+    return input.side === 'right' ? mulQ(Ai, B0) : mulQ(B0, Ai);
+  }
+  return X;
+}
+
 const colTeX = (v) => `\\begin{pmatrix}${v.map((x) => x.toTeX()).join('\\\\')}\\end{pmatrix}`;
 const KIND_TEXT = { none: '无解', unique: '唯一解', infinite: '无穷多解' };
 
@@ -445,6 +488,7 @@ export function run(input) {
     const augRank = M.filter((row) => !isZeroRow(row, n + 1)).length;
     const sol = solution(M, n, pivots);
     const kind = sol.kind;
+    if (kind === 'infinite' && input.mistake) slip(sol, input.mistake, pivots, n);
     notes.push(`r(A) = ${rankA}，r(A | b) = ${augRank}`);
     steps.push({ view: view(M, { pivots }), msg: `r(A) = ${rankA}，r(A | b) = ${augRank}，未知数 ${n} 个：${kind === 'none' ? 'r(A) < r(A | b)，最后一列冒出一个主元（0 = 非零），无解' : kind === 'unique' ? `r(A) = r(A | b) = n = ${n}，唯一解` : `r(A) = r(A | b) = ${rankA} < ${n}，无穷多解，有 ${n - rankA} 个自由未知数`}。`, ask: { tag: 'kind', kind: 'choice', q: '这个方程组的解是哪种情况？', choices: ['无解', '唯一解', '无穷多解'], answer: KIND_TEXT[kind] } });
     if (kind === 'unique') {
@@ -471,11 +515,15 @@ export function run(input) {
   }
   let X = M.map((r) => r.slice(n).map((x) => x.constValue()));
   if (goal === 'matrixeq' && input.side === 'right') X = X[0].map((_, j) => X.map((r) => r[j]));
+  const Xtrue = X;
+  if (input.mistake) X = wrongX(input, X);
   const XT = `\\begin{pmatrix}${X.map((r) => r.map((x) => x.toTeX()).join('&')).join('\\\\')}\\end{pmatrix}`;
   notes.push(`${goal === 'inverse' ? 'A⁻¹' : 'X'} 求出来了`);
   // 先问一个元素：挑第一个不是整数的（最容易算错），都是整数就挑第一个不是 0 的
-  const flat = X.flatMap((r, i) => r.map((x, j) => ({ x, i, j })));
-  const pick = flat.find((t) => !t.x.integer) || flat.find((t) => !t.x.zero) || flat[0];
+  // （按对的 X 挑位置，错法 run 里题面才一样）
+  const flat = Xtrue.flatMap((r, i) => r.map((x, j) => ({ x, i, j })));
+  const at = flat.find((t) => !t.x.integer) || flat.find((t) => !t.x.zero) || flat[0];
+  const pick = { ...at, x: X[at.i][at.j] };
   const what = goal === 'inverse' ? 'A⁻¹' : 'X';
   steps.push({
     view: view(M, { pivots, right: true }),
@@ -639,4 +687,139 @@ export function problems(input) {
   return out;
 }
 
-export const elimEngine = { name: 'elim', title: '初等行变换', parse, run, view, quiz, table, problems };
+// ================= 自己做：mode: do =================
+// 学生自己写一步步的行变换，页面精确地做；write: rows 时变了的那一行要学生自己算出来，页面逐个数核对。
+// 这里只有不碰 DOM 的部分（blocks/elimdo.js 是画面）：开始、读一步、做一步、到了没有、提示下一步
+
+const TARGET_TEXT = { ref: '行阶梯形', rref: '行最简形', E: '左边是单位矩阵 E' };
+
+/** 开始的状态：M 是 (A | B)；target 是要化成的样子（求秩默认阶梯形，解方程组、极大无关组要最简形，求逆、矩阵方程要左边是 E） */
+export function doStart(input, fields = {}) {
+  if (input.param) throw new Error('mode: do 不能含参数（先把参数取定；含参讨论用 ask: 让页面一步步讨论）');
+  const want = String(fields.target ?? '').trim().toLowerCase();
+  let target = input.goal === 'rank' ? 'ref' : ['inverse', 'matrixeq'].includes(input.goal) ? 'E' : 'rref';
+  if (want) {
+    if (!['ref', 'rref'].includes(want)) throw new Error('target: 写 ref（行阶梯形）或 rref（行最简形）');
+    if (target === 'E') throw new Error('求逆、矩阵方程要化到左边是 E，不用写 target:');
+    target = want;
+  }
+  const M0 = input.A.map((r, i) => [...r, ...(input.B ? input.B[i] : [])]);
+  return { M: M0, history: [], target, n: input.n, m: input.m };
+}
+
+/** 学生写的一步（可以用 ; 隔开写几步）：返回 [op]；写错了抛出中文说明（不带 ops: 前缀） */
+export function doParse(state, text) {
+  const t = String(text ?? '').trim();
+  if (!t) throw new Error('写一步行变换，比如 r2 - 2r1、r1 <-> r3、r2 / 3');
+  try {
+    return parseOps(t, state.m);
+  } catch (e) {
+    throw new Error(String(e.message).replace(/^ops: /, ''));
+  }
+}
+
+/** 这一步改了哪几行（write: rows 时要学生写的就是这几行；交换只是挪位置，不用写） */
+export const doChanged = (op) => (op.kind === 'swap' ? [] : [op.i]);
+
+/** 做一步：返回新的状态和一句提醒（没有改变矩阵、出了分数……） */
+export function doApply(state, op) {
+  const M = applyOp(state.M, op);
+  const same = M.every((r, i) => r.every((x, j) => x.sub(state.M[i][j]).zero));
+  // 倍加让系数部分出了分数才提醒（为了把主元化成 1 而除，出分数是正常的；求逆时右边的分数也正常）
+  const fr = (row) => row.slice(0, state.n).some((x) => x.isConst && !x.constValue().integer);
+  const frac = op.kind === 'add' && fr(M[op.i]) && !fr(state.M[op.i]);
+  const note = same ? '这一步没有改变矩阵' : frac ? '这一行出了分数：可以先把别的行乘一下，或者换一行当主元，后面好算一些' : '';
+  return { state: { ...state, M, history: [...state.history, { op, M: state.M }] }, note };
+}
+
+/** 撤回最后一步 */
+export function doUndo(state) {
+  if (!state.history.length) return state;
+  const last = state.history.at(-1);
+  return { ...state, M: last.M, history: state.history.slice(0, -1) };
+}
+
+/** 到了没有：{ done, text（已经是什么样子 / 还差什么） } */
+export function doStatus(state) {
+  const { M, n, target } = state;
+  if (target === 'E') {
+    const left = M.every((r, i) => r.slice(0, n).every((x, j) => (i === j ? x.isConst && x.constValue().n === 1n && x.constValue().d === 1n : x.zero)));
+    if (left) return { done: true, text: '左边化成 E 了：右边就是要求的矩阵。' };
+    if (isRef(M, n) && M.some((r) => isZeroRow(r, n))) return { done: true, stuck: true, text: '左边出现了全是 0 的一行：化不成 E，A 不可逆。' };
+    return { done: false, text: '还要把左边化成单位矩阵 E。' };
+  }
+  const ok = target === 'ref' ? isRef(M, n) : isRref(M, n);
+  if (ok) {
+    const r = M.filter((row) => !isZeroRow(row, n)).length;
+    return { done: true, text: `已经是${TARGET_TEXT[target]}了：非零行 ${r} 行。` };
+  }
+  if (target === 'rref' && isRef(M, n)) return { done: false, text: '已经是行阶梯形了；行最简形还要：主元化成 1，主元所在的列其余都是 0。' };
+  return { done: false, text: `还不是${TARGET_TEXT[target]}。` };
+}
+
+/** 提示：页面自己做的话下一步是什么（没有就是 null） */
+export function doHint(state) {
+  const auto = autoOps(state.M, state.n, state.target === 'ref' ? 'ref' : 'rref', '');
+  const s = auto.ops.find((x) => !x.tidy) || auto.ops[0];
+  return s ? s.op : null;
+}
+
+/** 页面自己做要几步（记录里比一比：学生绕了多少路） */
+export function doAutoCount(input) {
+  const st = doStart(input);
+  return autoOps(st.M, st.n, st.target === 'ref' ? 'ref' : 'rref', '').ops.filter((x) => !x.tidy).length;
+}
+
+/** 一步写成文字（记录、历史）和 TeX（画面） */
+export const doOpText = (op) => {
+  const k = (p) => (p.isConst ? p.constValue().toString() : '…');
+  if (op.kind === 'swap') return `r${op.i + 1} ↔ r${op.j + 1}`;
+  if (op.kind === 'scale') {
+    const q = op.k.isConst ? op.k.constValue() : null;
+    if (q && (q.n === 1n || q.n === -1n) && q.d !== 1n) return `r${op.i + 1} / ${q.n < 0n ? '−' : ''}${q.d}`;
+    const c = k(op.k);
+    return `${c === '-1' ? '−' : c.replace(/^-/, '−')}r${op.i + 1}`;
+  }
+  if (op.kind === 'add') { const c = op.k.isConst ? op.k.constValue() : null; const neg = c && c.n < 0n; const a = c ? (neg ? c.neg() : c).toString() : '…'; return `r${op.i + 1} ${neg ? '−' : '+'} ${a === '1' ? '' : a}r${op.j + 1}`; }
+  return opText(op);
+};
+export const doOpTeX = (op) => opTeX(op, '');
+
+/** 学生写的一行（write: rows）和页面算的比：返回不对的那几格的下标（列，从 0 数）；看不懂的格子也算不对 */
+export function doCheckRow(state, op, texts) {
+  const M = applyOp(state.M, op);
+  const want = M[op.i];
+  const bad = [];
+  want.forEach((p, j) => {
+    let q = null;
+    try { q = parsePolyExpr(String(texts[j] ?? '').trim()); } catch { q = null; }
+    if (!q || !q.sub(p).zero) bad.push(j);
+  });
+  return bad;
+}
+
+// 常见错法：只列在这组数上会得出不一样答案的
+export function variants(input) {
+  if (input.param) return [];
+  let right;
+  try { right = run(input); } catch { return []; }
+  const same = (r) => JSON.stringify(table(input, r)?.rows.map((x) => x.cells.map((c) => String(c.v)))) === JSON.stringify(table(input, right)?.rows.map((x) => x.cells.map((c) => String(c.v))));
+  const cands = [];
+  if (input.goal === 'solve' && right.sol?.kind === 'infinite') {
+    cands.push(['sign', '像是读基础解系时主元未知数没变号（xᵢ = −(自由未知数的系数)，移到等号右边要变号）']);
+    cands.push(['order', '像是特解按顺序写了，没把值放回主元所在的那几个未知数（不是主元的自由未知数取 0）']);
+  }
+  if (input.goal === 'inverse' && right.X) {
+    cands.push(['transpose', '像是写成了 A⁻¹ 的转置（行、列弄反了）']);
+    cands.push(['adjugate', '像是写成了伴随矩阵 A*（A⁻¹ = A*/|A|，忘了除以 |A|）']);
+  }
+  if (input.goal === 'matrixeq' && right.X) cands.push(['side', input.side === 'right' ? '像是 XA = B 算成了 A⁻¹B（应该是 X = BA⁻¹）' : '像是 AX = B 算成了 BA⁻¹（应该是 X = A⁻¹B）']);
+  const out = [];
+  for (const [mistake, label] of cands) {
+    const v = { ...input, mistake };
+    try { if (!same(run(v))) out.push({ label, input: v }); } catch { /* 这组数上算不了就不列 */ }
+  }
+  return out;
+}
+
+export const elimEngine = { name: 'elim', title: '初等行变换', parse, run, view, quiz, table, problems, variants };

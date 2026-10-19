@@ -136,6 +136,8 @@ function addOrderAsk(input, r) {
 }
 
 // —— 遍历 ——
+// 题面带上第几个：错法诊断（stepper.js）按题面找错法里的同一个问题，每一问的题面要不一样
+const visitQ = (k) => (k === 1 ? '第一个访问的顶点是？点出来。' : `下一个（第 ${k} 个）访问的顶点是？点出来。`);
 function bfs(g) {
   const adj = adjacency(g);
   const steps = [];
@@ -149,7 +151,7 @@ function bfs(g) {
     if (r !== g.start) steps.push({ view: v({ queue: [] }), msg: `还有没访问到的顶点（图不连通）：从 ${r} 再开始一次。` });
     seen.add(r); order.push(r);
     const q = [r];
-    steps.push({ view: v({ cur: r, queue: q.slice(), fresh: [r] }), msg: `访问 ${r}，入队。`, ask: { tag: 'visit', kind: 'pick', q: `${order.length === 1 ? '第一个' : '下一个'}访问的顶点是？点出来。`, answer: r } });
+    steps.push({ view: v({ cur: r, queue: q.slice(), fresh: [r] }), msg: `访问 ${r}，入队。`, ask: { tag: 'visit', kind: 'pick', q: visitQ(order.length), answer: r } });
     while (q.length) {
       const x = q.shift();
       steps.push({ view: v({ cur: x, queue: q.slice() }), msg: `队头 ${x} 出队，看它的邻接点：${adj[x].map((a) => `${a.to}${seen.has(a.to) ? '（已访问）' : ''}`).join('、') || '没有'}。` });
@@ -157,7 +159,7 @@ function bfs(g) {
         if (seen.has(a.to)) continue;
         seen.add(a.to); order.push(a.to); q.push(a.to);
         tree.add(ekey(a.e, g.directed));
-        steps.push({ view: v({ cur: a.to, from: x, queue: q.slice(), fresh: [a.to], edge: ekey(a.e, g.directed) }), msg: `访问 ${x} 的邻接点 ${a.to}，入队。`, ask: { tag: 'visit', kind: 'pick', q: '下一个访问的顶点是？点出来。', answer: a.to } });
+        steps.push({ view: v({ cur: a.to, from: x, queue: q.slice(), fresh: [a.to], edge: ekey(a.e, g.directed) }), msg: `访问 ${x} 的邻接点 ${a.to}，入队。`, ask: { tag: 'visit', kind: 'pick', q: visitQ(order.length), answer: a.to } });
       }
     }
   }
@@ -175,7 +177,7 @@ function dfs(g) {
     seen.add(x); order.push(x);
     if (e) tree.add(ekey(e, g.directed));
     const st = [...stack, x];
-    steps.push({ view: v({ cur: x, stack: st, fresh: [x], edge: e ? ekey(e, g.directed) : null }), msg: from ? `${from} 的下一个没访问过的邻接点是 ${x}：访问它，往深处走。` : `访问 ${x}。`, ask: { tag: 'visit', kind: 'pick', q: `${order.length === 1 ? '第一个' : '下一个'}访问的顶点是？点出来。`, answer: x } });
+    steps.push({ view: v({ cur: x, stack: st, fresh: [x], edge: e ? ekey(e, g.directed) : null }), msg: from ? `${from} 的下一个没访问过的邻接点是 ${x}：访问它，往深处走。` : `访问 ${x}。`, ask: { tag: 'visit', kind: 'pick', q: visitQ(order.length), answer: x } });
     for (const a of adj[x]) if (!seen.has(a.to)) rec(a.to, st, x, a.e);
     steps.push({ view: v({ cur: x, stack: st }), msg: `${x} 的邻接点都访问过了，${stack.length ? `退回 ${stack.at(-1)}` : '这一次的遍历结束'}。` });
   };
@@ -200,22 +202,35 @@ function prim(g) {
   steps.push({ view: v({ cur: g.start }), msg: `Prim：从 ${g.start} 开始，每次在「一头在树里、一头在树外」的边里挑权最小的，把树外那头加进来，直到 ${n} 个顶点都进来。` });
   const order = [g.start];
   let tie = false;
+  // 常见错法（mistake，只拿来和学生写的比）：dijLike 用了 Dijkstra 的更新（边权加上树里那头到起点的距离）；
+  // lastOnly 只看刚加进来的那个顶点连出去的边（它连不出去了才看整棵树）
+  const far = { [g.start]: 0 };
+  let last = g.start;
+  const cost = (x, a) => (g.mistake === 'dijLike' ? far[x] + a.w : a.w);
+  const idx = (x) => g.names.indexOf(x);
   while (inT.size < n) {
+    const from = g.mistake === 'lastOnly' && adj[last].some((a) => !inT.has(a.to)) ? new Set([last]) : inT;
     let best = null;
     for (const x of g.names) {
-      if (!inT.has(x)) continue;
-      for (const a of adj[x]) if (!inT.has(a.to) && (!best || a.w < best.w || (a.w === best.w && g.names.indexOf(a.to) < g.names.indexOf(best.to)))) best = { from: x, to: a.to, w: a.w, e: a.e };
+      if (!from.has(x)) continue;
+      for (const a of adj[x]) {
+        if (inT.has(a.to)) continue;
+        const c = cost(x, a);
+        if (!best || c < best.c || (c === best.c && idx(a.to) < idx(best.to))) best = { from: x, to: a.to, w: a.w, e: a.e, c };
+      }
     }
     // 一样小的边通向别的顶点：加进来的顺序就不唯一
-    if (best) for (const x of inT) for (const a of adj[x]) if (!inT.has(a.to) && a.w === best.w && a.to !== best.to) tie = true;
+    if (best) for (const x of from) for (const a of adj[x]) if (!inT.has(a.to) && cost(x, a) === best.c && a.to !== best.to) tie = true;
     if (best) order.push(best.to);
     if (!best) { steps.push({ view: v(), msg: '图不连通：剩下的顶点连不进来，没有生成树。' }); break; }
     const cands = [];
     for (const x of inT) for (const a of adj[x]) if (!inT.has(a.to)) cands.push(ekey(a.e, false));
     inT.add(best.to);
+    far[best.to] = best.c;
+    last = best.to;
     tree.add(ekey(best.e, false));
     total += best.w;
-    steps.push({ view: v({ cur: best.to, cand: cands, edge: ekey(best.e, false), fresh: [best.to] }), msg: `横跨树内外的边里最小的是 (${best.from}, ${best.to})，权 ${best.w}：把 ${best.to} 加进来。`, ask: { tag: 'next', kind: 'pick', q: '下一个加进树里的顶点是？点出来。', answer: best.to } });
+    steps.push({ view: v({ cur: best.to, cand: cands, edge: ekey(best.e, false), fresh: [best.to], w: best.w }), msg: `横跨树内外的边里最小的是 (${best.from}, ${best.to})，权 ${best.w}：把 ${best.to} 加进来。`, ask: { tag: 'next', kind: 'pick', q: `下一个（第 ${order.length} 个）加进树里的顶点是？点出来。`, answer: best.to } });
   }
   steps.push({ view: v(), msg: `最小生成树的权值之和是 ${total}。` });
   return { steps, passes: [[total]], total, order, tie };
@@ -232,14 +247,22 @@ function kruskal(g) {
   const comps = () => { const m = {}; for (const x of g.names) (m[find(x)] ||= []).push(x); return Object.values(m).map((c) => c.join('')).join(' | '); };
   const v = (extra = {}) => ({ tree: [...tree], rej: [...rej], total, comps: comps(), ...extra });
   steps.push({ view: v(), msg: `Kruskal：把边按权从小到大排（${sorted.map((e) => `(${e.u},${e.v})${e.w}`).join(' ')}），依次看：两头不在同一个连通分量里就选，在同一个分量里（会成环）就不要。` });
+  // 常见错法（mistake，只拿来和学生写的比）：nocycle 不判环、看到的边都选；touched 两头都已经连着选中的边就当成会成环。
+  // 错法看的边和对的做法一样多：填表的行一样，才好逐格比
+  const rows = g.mistake ? kruskal({ ...g, mistake: null }).steps.filter((s) => s.ask?.tag === 'take').length : Infinity;
+  const touched = new Set();
+  let looked = 0;
   for (const e of sorted) {
-    if (count === n - 1) break;
+    if (g.mistake ? looked === rows : count === n - 1) break;
+    looked++;
     const a = find(e.u), b = find(e.v);
-    const take = a !== b;
+    const take = g.mistake === 'nocycle' ? true : g.mistake === 'touched' ? !(touched.has(e.u) && touched.has(e.v)) : a !== b;
     const k = ekey(e, false);
-    if (take) { parent[a] = b; tree.add(k); total += e.w; count++; } else rej.add(k);
+    if (take) { if (a !== b) parent[a] = b; tree.add(k); total += e.w; count++; touched.add(e.u); touched.add(e.v); } else rej.add(k);
     steps.push({ view: v({ edge: k, cur2: [e.u, e.v] }), msg: take ? `(${e.u}, ${e.v}) 权 ${e.w}：两头在不同的连通分量里，选它。` : `(${e.u}, ${e.v}) 权 ${e.w}：${e.u} 和 ${e.v} 已经连通了，选它会成环，不要。`, ask: { tag: 'take', kind: 'choice', q: `(${e.u}, ${e.v}) 权 ${e.w}：选不选？`, choices: ['选', '不选（会成环）'], answer: take ? '选' : '不选（会成环）' } });
   }
+  // 不判环的人选够 n − 1 条就停：写出来的权值之和是最小的 n − 1 条边加起来
+  if (g.mistake === 'nocycle') total = sorted.slice(0, n - 1).reduce((s, e) => s + e.w, 0);
   steps.push({ view: v(), msg: count === n - 1 ? `选够了 ${n - 1} 条边，最小生成树的权值之和是 ${total}。` : '边看完了还没连通所有顶点：图不连通。' });
   return { steps, passes: [[total]], total };
 }
@@ -341,17 +364,22 @@ function topo(g) {
   const done = [];
   const steps = [];
   const stackMode = g.use === 'stack';
+  // 常见错法（只拿来和学生写的比，都在 use: stack 下）：mistake: queue 用了队列（先入先出）；min 不看栈，挑入度为 0 里编号最小的
   const st = stackMode ? g.names.filter((x) => deg[x] === 0) : null;
   const v = (extra = {}) => ({ deg: { ...deg }, done: done.slice(), seq: done.slice(), stack: st ? st.slice() : null, ...extra });
   steps.push({ view: v(), msg: stackMode ? '拓扑排序（王道的代码，用栈）：入度为 0 的顶点先都入栈；每次出栈一个、输出，把它的出边删掉，入度变成 0 的顶点入栈。' : '拓扑排序：每次选一个入度为 0 的顶点输出（有好几个时这里按顶点编号选最小的；选别的也对），删掉它和它的出边，再找下一个。' });
   while (done.length < g.names.length) {
     const zero = g.names.filter((x) => !done.includes(x) && deg[x] === 0);
     let x;
-    if (stackMode) { if (!st.length) break; x = st.pop(); } else { if (!zero.length) break; x = zero[0]; }
+    if (stackMode) {
+      if (!st.length) break;
+      // 栈里放的正好是入度为 0、还没输出的顶点：min 就是取其中编号最小的
+      x = g.mistake === 'queue' ? st.shift() : g.mistake === 'min' ? st.splice(st.indexOf(zero[0]), 1)[0] : st.pop();
+    } else { if (!zero.length) break; x = zero[0]; }
     done.push(x);
     const freed = [];
     for (const a of adj[x]) { deg[a.to]--; if (deg[a.to] === 0) { freed.push(a.to); if (stackMode) st.push(a.to); } }
-    steps.push({ view: v({ cur: x, fresh: [x], cut: x }), msg: `${stackMode ? '出栈' : '入度为 0 的有'}${stackMode ? ` ${x}` : `：${zero.join('、')}，选 ${x}`}，输出。删掉它的出边${adj[x].length ? `（${adj[x].map((a) => a.to).join('、')} 的入度各减 1）` : ''}${freed.length ? `，${freed.join('、')} 的入度变成 0${stackMode ? '，入栈' : ''}` : ''}。`, ask: { tag: 'next', kind: 'pick', q: '下一个输出的顶点是？点出来。', alts: stackMode ? [x] : zero } });
+    steps.push({ view: v({ cur: x, fresh: [x], cut: x }), msg: `${stackMode ? '出栈' : '入度为 0 的有'}${stackMode ? ` ${x}` : `：${zero.join('、')}，选 ${x}`}，输出。删掉它的出边${adj[x].length ? `（${adj[x].map((a) => a.to).join('、')} 的入度各减 1）` : ''}${freed.length ? `，${freed.join('、')} 的入度变成 0${stackMode ? '，入栈' : ''}` : ''}。`, ask: { tag: 'next', kind: 'pick', q: done.length === 1 ? '第一个输出的顶点是？点出来。' : `下一个（第 ${done.length} 个）输出的顶点是？点出来。`, alts: stackMode ? [x] : zero } });
   }
   const ok = done.length === g.names.length;
   steps.push({ view: v(), msg: ok ? `拓扑序列：${done.join(' ')}。` : `还剩 ${g.names.length - done.length} 个顶点，入度都不是 0：图里有回路，没有拓扑序列。` });
@@ -367,20 +395,23 @@ function critical(g) {
   if (!t) throw new Error('图里有回路，没有关键路径');
   const steps = [];
   const ve = {}, vl = {};
+  // 常见错法（mistake，只拿来和学生写的比）：veMin ve 取了最小；vlMax vl 取了最大；eByEnd 活动的 e 用了终点事件的 ve
+  const pickVe = g.mistake === 'veMin' ? Math.min : Math.max;
+  const pickVl = g.mistake === 'vlMax' ? Math.max : Math.min;
   const v = (extra = {}) => ({ ve: { ...ve }, vl: { ...vl }, ...extra });
   steps.push({ view: v(), msg: `关键路径：先按拓扑序（${t.join(' ')}）从前往后求每个事件的最早发生时间 ve，再从后往前求最迟发生时间 vl；活动的最早开始 e = ve(起点)，最迟开始 l = vl(终点) − 权，l − e = 0 的是关键活动。` });
   for (const x of t) {
     const ins = radj[x];
-    ve[x] = ins.length ? Math.max(...ins.map((a) => ve[a.from] + a.w)) : 0;
+    ve[x] = ins.length ? pickVe(...ins.map((a) => ve[a.from] + a.w)) : 0;
     steps.push({ view: v({ cur: x }), msg: ins.length ? `ve(${x}) = max{ ${ins.map((a) => `ve(${a.from}) + ${a.w} = ${ve[a.from] + a.w}`).join('，')} } = ${ve[x]}。` : `${x} 是源点：ve(${x}) = 0。`, ask: { tag: 've', kind: 'number', q: `ve(${x}) 是多少？`, answer: ve[x] } });
   }
   const sink = t[t.length - 1];
   for (const x of t.slice().reverse()) {
     const outs = adj[x];
-    vl[x] = outs.length ? Math.min(...outs.map((a) => vl[a.to] - a.w)) : ve[sink];
+    vl[x] = outs.length ? pickVl(...outs.map((a) => vl[a.to] - a.w)) : ve[sink];
     steps.push({ view: v({ cur: x }), msg: outs.length ? `vl(${x}) = min{ ${outs.map((a) => `vl(${a.to}) − ${a.w} = ${vl[a.to] - a.w}`).join('，')} } = ${vl[x]}。` : `${x} 是汇点：vl(${x}) = ve(${x}) = ${vl[x]}。`, ask: { tag: 'vl', kind: 'number', q: `vl(${x}) 是多少？`, answer: vl[x] } });
   }
-  const acts = g.edges.map((e) => ({ e, key: ekey(e, true), early: ve[e.u], late: vl[e.v] - e.w }));
+  const acts = g.edges.map((e) => ({ e, key: ekey(e, true), early: g.mistake === 'eByEnd' ? ve[e.v] : ve[e.u], late: vl[e.v] - e.w }));
   const crit = acts.filter((a) => a.late === a.early);
   steps.push({ view: v({ acts, crit: crit.map((a) => a.key) }), msg: `每个活动：e = ve(起点)，l = vl(终点) − 权，l − e 是时间余量。余量为 0 的是关键活动：${crit.map((a) => `<${a.e.u},${a.e.v}>`).join('、')}。关键路径长度 ${ve[sink]}。` , ask: { tag: 'length', kind: 'number', q: '关键路径的长度（整个工程最短要多久）是多少？', answer: ve[sink] } });
   return { steps, passes: [[ve[sink]]], length: ve[sink], crit: crit.map((a) => a.key), ve, vl, acts };
@@ -562,7 +593,8 @@ export function fillTable(input, r) {
   }
   if (a === 'prim') {
     if (r.tie) return null;
-    const rows = r.steps.filter((x) => x.ask?.tag === 'next').map((x, k) => { const m = /\((\S+), (\S+)\)，权 (\S+)/.exec(x.msg) || []; return { label: `第 ${k + 1} 次`, cells: [{ v: x.ask.answer }, { v: m[3] || '', num: true }] }; });
+    // 边的权从这一步的状态里拿（以前从说明里用正则截，截成了「1：把」，学生怎么填都不对）
+    const rows = r.steps.filter((x) => x.ask?.tag === 'next').map((x, k) => ({ label: `第 ${k + 1} 次`, cells: [{ v: x.ask.answer }, { v: String(x.view.w ?? ''), num: true }] }));
     return { q: `从 ${input.start} 开始用 Prim 求最小生成树：每次写出加进来的顶点和那条边的权。`, dir: 'row', head: ['加进来的顶点', '边的权'], rows, extra: [{ label: '权值之和', v: String(r.total), num: true }] };
   }
   if (a === 'critical') {
@@ -575,13 +607,64 @@ export function fillTable(input, r) {
   return null;
 }
 
-// 常见错法
+// 常见错法：学生答错时拿来比（stepper.js）。floyd 没有 ask、quiz、填表，不列
 export function variants(input) {
   const a = input.algo;
-  if (a === 'bfs') return [{ label: '像是按深度优先走的', input: { ...input, algo: 'dfs' } }];
-  if (a === 'dfs') return [{ label: '像是按广度优先走的', input: { ...input, algo: 'bfs' } }];
-  if (a === 'dijkstra') return [{ label: '像是把 Prim 的更新方式用在了 Dijkstra 上（dist 只比了边权，没加上到前一个顶点的距离）', input: { ...input, primLike: true } }];
-  return [];
+  const out = [];
+  if (a === 'bfs' || a === 'dfs') {
+    out.push(a === 'bfs' ? { label: '像是按深度优先走的', input: { ...input, algo: 'dfs' } } : { label: '像是按广度优先走的', input: { ...input, algo: 'bfs' } });
+    out.push(input.order === 'list'
+      ? { label: '像是邻接点按顶点编号的顺序走了（这题按邻接表，也就是 edges 写的顺序）', input: { ...input, order: 'vertex' } }
+      : { label: '像是邻接点按 edges 写的顺序走了（这题按顶点编号从小到大）', input: { ...input, order: 'list' } });
+  }
+  if (a === 'dijkstra') {
+    out.push({ label: '像是把 Prim 的更新方式用在了 Dijkstra 上（dist 只比了边权，没加上到前一个顶点的距离）', input: { ...input, primLike: true } });
+    if (input.directed) out.push({ label: '像是把有向图当成了无向图（王道：有向边只能顺着箭头走）', input: { ...input, directed: false } });
+  }
+  if (a === 'prim') {
+    out.push({ label: '像是把 Dijkstra 的更新方式用在了 Prim 上（王道：Prim 只比边权，不加上到起点的距离）', input: { ...input, mistake: 'dijLike' } });
+    out.push({ label: '像是只看了刚加进来的那个顶点连出去的边（王道：Prim 要看所有一头在树里、一头在树外的边）', input: { ...input, mistake: 'lastOnly' } });
+  }
+  if (a === 'kruskal') {
+    out.push({ label: '像是没判断会不会成环，看到的边都选了（王道：两头已经在同一个连通分量里的边不选）', input: { ...input, mistake: 'nocycle' } });
+    out.push({ label: '像是两个顶点都已经连着选中的边就当成会成环、不选了（王道：看两头在不在同一个连通分量里，不在就该选）', input: { ...input, mistake: 'touched' } });
+  }
+  if (a === 'topo') {
+    // 用栈 / 编号最小 / 队列弄混只在 use: stack 时算错：默认任何拓扑序列都对，按栈走出来的也对
+    if (input.use === 'stack') {
+      out.push({ label: '像是没按栈走，每次挑了入度为 0 里编号最小的（王道的代码：入度为 0 的入栈，每次取栈顶）', input: { ...input, mistake: 'min' } });
+      out.push({ label: '像是用了队列，入度为 0 的先进先出（王道的代码用栈：后进的先出）', input: { ...input, mistake: 'queue' } });
+    }
+    // 每次选出度为 0 的 = 把边都反过来再做拓扑排序
+    out.push({ label: '像是每次选了出度为 0 的顶点，求成了逆拓扑序列（王道：拓扑排序每次选入度为 0 的）', input: { ...input, edges: input.edges.map((e) => ({ ...e, u: e.v, v: e.u })) } });
+  }
+  if (a === 'critical') {
+    out.push({ label: '像是 ve 取了最小值（王道：事件要等所有前驱活动都完成，ve 取最大）', input: { ...input, mistake: 'veMin' } });
+    out.push({ label: '像是 vl 取了最大值（王道：vl 按逆拓扑序从后往前推，取最小）', input: { ...input, mistake: 'vlMax' } });
+    out.push({ label: '像是活动的 e 用了终点事件的 ve（王道：活动 <i,j> 的最早开始 e = ve(i)，起点事件的）', input: { ...input, mistake: 'eByEnd' } });
+  }
+  return differing(input, out);
+}
+
+// 学生能答的：每个 ask（题面 → 答案）、quiz 的答案、填表的格子
+function answersOf(input, r) {
+  const asks = new Map();
+  for (const s of r.steps) for (const x of [s.ask, ...(s.asks || [])]) { const k = x && `${x.kind}|${x.q}`; if (x && !asks.has(k)) asks.set(k, JSON.stringify(x.alts ?? x.answer)); }
+  let q = null;
+  try { q = quiz(input, r).answer; } catch { /* floyd 没有 quiz */ }
+  const t = fillTable(input, r);
+  return { asks, quiz: q, rows: t ? t.rows.length : -1, cells: t ? JSON.stringify(t.rows.map((row) => row.cells.map((c) => c.v))) : null };
+}
+// 只留认得出来的错法（和 stepper.js 的诊断一样比）：同一个问题答案不同、quiz 答案不同、或者填表行数一样而格子不同。
+// 和对的一模一样的不列，免得误报
+function differing(input, list) {
+  if (!list.length) return list;
+  let base;
+  try { base = answersOf(input, run(input)); } catch { return list; }
+  const tell = (w) => [...base.asks].some(([k, a]) => w.asks.has(k) && w.asks.get(k) !== a)
+    || (base.quiz !== null && w.quiz !== null && base.quiz !== w.quiz)
+    || (base.cells !== null && w.cells !== null && base.rows === w.rows && base.cells !== w.cells);
+  return list.filter((x) => { try { return tell(answersOf(x.input, run(x.input))); } catch { return false; } });
 }
 
 export const netEngine = { name: 'net', title: '图', parse, run, view, quiz, problems, table: fillTable, variants };

@@ -12,6 +12,21 @@ const round2 = (x) => Math.round(x * 100) / 100;
 const avgText = (sum, n) => { const v = sum / n; return Number.isInteger(v) ? String(v) : `${frac(sum, n)} ≈ ${round2(v)}`; };
 const table = (head, rows, cls = '') => `<div class="sv-gtbl-wrap"><table class="sv-gtbl ${cls}"><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => (c && typeof c === 'object' ? `<td class="${c.cls || ''}"${c.attrs || ''}>${c.html}</td>` : `<td>${c ?? ''}</td>`)).join('')}</tr>`).join('')}</tbody></table></div>`;
 
+// 一个 run 里学生能答的：每个 ask（题面 → 答案）、quiz 和填表的答案。
+// 错法算出来和对的完全一样就不列（differing）：列着也认不出什么，还让人以为这组数能诊断出它
+function answersOf(engine, input, r, fields) {
+  const asks = r.steps.flatMap((s) => [s.ask, ...(s.asks || [])]).filter(Boolean).map((a) => [a.q, a.alts ?? a.answer]);
+  const get = (f) => { try { return f() ?? null; } catch { return null; } };
+  const quiz = get(() => engine.quiz(input, r, fields).answer);
+  const t = get(() => engine.table(input, r, fields));
+  return JSON.stringify([asks, quiz, t && t.rows.map((row) => row.cells.map((c) => c.v))]);
+}
+function differing(engine, input, list, fields = {}) {
+  let base;
+  try { base = answersOf(engine, input, engine.run(input), fields); } catch { return list; }
+  return list.filter((v) => { try { return answersOf(engine, v.input, engine.run(v.input), fields) !== base; } catch { return false; } });
+}
+
 // ================= 进程调度 =================
 
 const SCHED = { fcfs: '先来先服务 FCFS', sjf: '短作业优先 SJF（非抢占）', srtf: '最短剩余时间优先 SRTF（抢占式短作业优先）', hrrn: '高响应比优先 HRRN', prio: '优先级调度（非抢占）', pprio: '优先级调度（抢占）', rr: '时间片轮转 RR' };
@@ -366,7 +381,7 @@ function bankerParse(fields) {
   return { names, avail: avail.map(Number), max: max.map((r) => r.v), alloc: alloc.map((r) => r.v), request };
 }
 
-// 所有安全序列（quiz 里写哪一个都算对）
+// 所有安全序列（quiz 里写哪一个都算对）。alloc 是进程运行完还回来的（正常就是 Allocation；算错法时换成 Need / Max）
 export function safeSequences(avail, need, alloc, limit = 200) {
   const n = need.length, out = [];
   const rec = (work, done, seq) => {
@@ -378,18 +393,26 @@ export function safeSequences(avail, need, alloc, limit = 200) {
   return out;
 }
 
+// mistake（只在算常见错法时用）：
+//   needMax   Need 直接用了 Max（忘了减 Allocation）
+//   workNeed / workMax   安全性算法里 Work 加的是 Need / Max（应该加 Allocation：进程运行完还回来的是它占着的资源）
+//   reqNoNeed   请求只和 Available 比，没先和 Need 比
+//   reqNoTry    试分配以后没改 Available、Allocation、Need，拿原来的状态做安全性检查
+const needOf = (input, alloc = input.alloc) => input.max.map((r, i) => (input.mistake === 'needMax' ? r.slice() : r.map((x, j) => x - alloc[i][j])));
+
 function bankerRun(input) {
-  const { names } = input;
+  const { names, mistake } = input;
   let avail = input.avail.slice();
   let alloc = input.alloc.map((r) => r.slice());
-  const need = () => input.max.map((r, i) => r.map((x, j) => x - alloc[i][j]));
+  const need = () => needOf(input, alloc);
+  const gains = () => { const N = need(); return names.map((_, i) => (mistake === 'workNeed' ? N[i] : mistake === 'workMax' ? input.max[i] : alloc[i])); };
   const steps = [];
   const v = (extra = {}) => ({ avail: avail.slice(), alloc: alloc.map((r) => r.slice()), need: need(), ...extra });
   steps.push({ view: v(), msg: `银行家算法：Need = Max − Allocation。${input.request ? `先检查 ${names[input.request.i]} 的请求，再` : ''}用安全性算法找安全序列：Work = Available，每次找一个 Need ≤ Work 的进程，假设它运行完、把资源还回来（Work += Allocation）。这里每次从编号小的开始找（能满足的有好几个时，选别的也对）。` });
   if (input.request) {
     const { i, v: r } = input.request;
     const N = need();
-    if (!le(r, N[i])) {
+    if (!le(r, N[i]) && mistake !== 'reqNoNeed') {
       steps.push({ view: v({ hl: i }), msg: `${names[i]} 请求 ${vec(r)}，超过了它还需要的 Need = ${vec(N[i])}：出错，不能分配。`, ask: { tag: 'request', kind: 'choice', q: `${names[i]} 请求 ${vec(r)}，能不能分配？`, choices: ['能分配', '不能：超过它声明的需求', '不能：现在资源不够，等待', '不能：分配了就不安全'], answer: '不能：超过它声明的需求' } });
       return { steps, safe: null, seqs: [] };
     }
@@ -397,12 +420,15 @@ function bankerRun(input) {
       steps.push({ view: v({ hl: i }), msg: `${names[i]} 请求 ${vec(r)}，比现在可用的 ${vec(avail)} 多：资源不够，${names[i]} 等待。`, ask: { tag: 'request', kind: 'choice', q: `${names[i]} 请求 ${vec(r)}，能不能分配？`, choices: ['能分配', '不能：超过它声明的需求', '不能：现在资源不够，等待', '不能：分配了就不安全'], answer: '不能：现在资源不够，等待' } });
       return { steps, safe: null, seqs: [] };
     }
-    avail = avail.map((x, j) => x - r[j]);
-    alloc[i] = alloc[i].map((x, j) => x + r[j]);
-    const ok = safeSequences(avail, need(), alloc).length > 0;
+    if (mistake !== 'reqNoTry') {
+      avail = avail.map((x, j) => x - r[j]);
+      alloc[i] = alloc[i].map((x, j) => x + r[j]);
+    }
+    const ok = safeSequences(avail, need(), gains()).length > 0;
     steps.push({ view: v({ hl: i }), msg: `${names[i]} 请求 ${vec(r)} ≤ Need ${vec(input.max[i].map((x, j) => x - input.alloc[i][j]))}，也 ≤ Available：先试着分给它，Available 变成 ${vec(avail)}，再看这样安不安全。`, ask: { tag: 'request', kind: 'choice', q: `${names[i]} 请求 ${vec(r)}，能不能分配？`, choices: ['能分配', '不能：超过它声明的需求', '不能：现在资源不够，等待', '不能：分配了就不安全'], answer: ok ? '能分配' : '不能：分配了就不安全' } });
   }
   const N = need();
+  const G = gains();
   let work = avail.slice();
   const done = Array(names.length).fill(false);
   const seq = [];
@@ -414,12 +440,12 @@ function bankerRun(input) {
     }
     const i = can[0];
     const w0 = work.slice();
-    work = work.map((x, j) => x + alloc[i][j]);
+    work = work.map((x, j) => x + G[i][j]);
     done[i] = true;
     seq.push(i);
-    steps.push({ view: v({ work: work.slice(), w0, done: done.slice(), seq: seq.slice(), hl: i }), msg: `Work = ${vec(w0)}，${names[i]} 的 Need ${vec(N[i])} ≤ Work：让它运行完，还回 Allocation ${vec(alloc[i])}，Work 变成 ${vec(work)}。`, ask: { tag: 'next', kind: 'pick', q: `Work = ${vec(w0)}：下一个能运行完的进程是？在表里点出来。`, alts: can.map((x) => names[x]) } });
+    steps.push({ view: v({ work: work.slice(), w0, done: done.slice(), seq: seq.slice(), hl: i }), msg: `Work = ${vec(w0)}，${names[i]} 的 Need ${vec(N[i])} ≤ Work：让它运行完，还回 Allocation ${vec(G[i])}，Work 变成 ${vec(work)}。`, ask: { tag: 'next', kind: 'pick', q: `Work = ${vec(w0)}：下一个能运行完的进程是？在表里点出来。`, alts: can.map((x) => names[x]) } });
   }
-  const seqs = safeSequences(avail, N, alloc);
+  const seqs = safeSequences(avail, N, G);
   steps.push({ view: v({ work: work.slice(), done: done.slice(), seq: seq.slice() }), msg: `所有进程都能运行完：安全。一个安全序列是 ${seq.map((i) => names[i]).join(' → ')}${seqs.length > 1 ? `（一共有 ${seqs.length >= 200 ? '很多' : seqs.length} 种安全序列）` : ''}。${input.request ? `所以可以分给 ${names[input.request.i]}。` : ''}` });
   return { steps, safe: true, seqs: seqs.map((x) => x.map((i) => names[i])) };
 }
@@ -446,22 +472,32 @@ export const bankerEngine = {
   },
   // 考卷上那张表：每个进程的 Need；再按「每次选编号最小的能运行完的进程」写安全性检查每一步之后的 Work
   table(input, r) {
-    const N = input.max.map((x, i) => x.map((y, j) => y - input.alloc[i][j]));
+    const N = needOf(input);
     const rows = input.names.map((n, i) => ({ label: n, cells: [{ v: N[i].join(' '), vec: true }, { v: '', given: true }] }));
     // 安全性检查（没有请求、或请求已经试分配之后）：第几个运行完的是谁、之后的 Work
     const runs = r.steps.filter((x) => x.view.w0 && x.view.hl !== undefined);
     runs.forEach((x, k) => rows.push({ label: `第 ${k + 1} 个`, cells: [{ v: input.names[x.view.hl] }, { v: x.view.work.join(' '), vec: true }] }));
+    // 走不下去（不安全）时后面几行空着：行数不泄露「能运行完几个」，按错法算出来能多走几步的表也还对得上行
+    if (r.safe === false) for (let k = runs.length; k < input.names.length; k++) rows.push({ label: `第 ${k + 1} 个`, cells: [{ v: '' }, { v: '', vec: true }] });
     return {
-      q: `先算每个进程的 Need = Max − Allocation；再做安全性检查（Work 从 Available${input.request ? '（试分配之后的）' : ''}开始，每次选编号最小的、Need ≤ Work 的进程），写出每次运行完的进程和之后的 Work。向量写成「3 3 2」。`,
+      q: `先算每个进程的 Need = Max − Allocation；再做安全性检查（Work 从 Available${input.request ? '（试分配之后的）' : ''}开始，每次选编号最小的、Need ≤ Work 的进程），写出每次运行完的进程和之后的 Work（找不到能运行完的进程了，后面就空着）。向量写成「3 3 2」。`,
       qhtml: bankerView({ avail: input.avail, alloc: input.alloc, need: input.max.map(() => input.avail.map(() => '?')) }, input),
       dir: 'row',
       head: ['Need / 进程', 'Work'],
       rows,
     };
   },
-  // 常见错法：Need 直接用了 Max（忘了减 Allocation）
-  variants(input) {
-    return [{ label: '像是把 Max 当成了 Need（忘了减 Allocation）', input: { ...input, alloc: input.alloc.map((row) => row.map(() => 0)), max: input.max } }];
+  // 常见错法：Need 直接用了 Max；Work 加的不是 Allocation；请求没先和 Need 比；试分配以后没改状态就检查
+  variants(input, fields) {
+    return differing(bankerEngine, input, [
+      { label: '像是把 Max 当成了 Need（王道：Need = Max − Allocation）', input: { ...input, mistake: 'needMax' } },
+      { label: '像是安全性算法里 Work 加的是 Need（王道：进程运行完还回它占着的资源，Work = Work + Allocation）', input: { ...input, mistake: 'workNeed' } },
+      { label: '像是安全性算法里 Work 加的是 Max（王道：进程运行完还回它占着的资源，Work = Work + Allocation）', input: { ...input, mistake: 'workMax' } },
+      ...(input.request ? [
+        { label: '像是请求只和 Available 比了，没先和 Need 比（王道：先看 Request ≤ Need，超过它声明的最大需求就出错）', input: { ...input, mistake: 'reqNoNeed' } },
+        { label: '像是试分配以后没改 Available、Allocation、Need，拿原来的状态做了安全性检查', input: { ...input, mistake: 'reqNoTry' } },
+      ] : []),
+    ], fields);
   },
 };
 

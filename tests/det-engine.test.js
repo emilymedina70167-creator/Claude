@@ -37,3 +37,34 @@ test('写错了报出来；错法：换行忘了变号', () => {
   assert.equal(D.run(input).value.toString(), '-2');
   assert.equal(D.run(v.input).value.toString(), '2');
 });
+
+test('错法诊断：乘 k 后系数没跟着变、展开忘了符号；填表和 quiz 都认得出，对的不会被认成错法', async () => {
+  const { misreadAnswer, misreadFill, fillSpec } = await import('../kit/src/stepperspec.js');
+  const input = D.parse({ matrix: '[[3,1,1,1],[1,3,1,1],[1,1,3,1],[1,1,1,3]]', ops: 'c1 + c2 + c3 + c4; c1 / 6; r2 - r1; r3 - r1; r4 - r1' });
+  const right = D.run(input);
+  assert.equal(right.value.toString(), '48');
+  const vs = D.variants(input);
+  // 没有换行、没有展开：只剩「系数没跟着变」
+  assert.deepEqual(vs.map((v) => v.input.noScale ? 'scale' : v.input.noSign ? 'sign' : 'cof'), ['scale']);
+  const wrongValue = D.run(vs[0].input).value.toString();
+  assert.equal(wrongValue, '8'); // 忘了乘提出的 6
+  const variants = vs.map((v) => ({ label: v.label, answer: D.quiz(v.input, D.run(v.input)).answer }));
+  assert.match(misreadAnswer(wrongValue, variants), /系数没跟着变/);
+  assert.equal(misreadAnswer('48', variants), '');
+  // 填表：按错法填的系数
+  const t = fillSpec(D.table(input, right), {}).table;
+  const vt = D.table(vs[0].input, D.run(vs[0].input));
+  const values = vt.rows.map((r) => r.cells.map((c) => String(c.v)));
+  assert.match(misreadFill(t, values, [{ label: vs[0].label, table: fillSpec(vt, {}).table }]), /系数没跟着变/);
+  // 展开忘了符号：按第 1 行展开，(1,2) 位的 −号丢了
+  const ex = D.parse({ matrix: '[[1,2,0],[3,4,5],[0,1,6]]', ops: 'expand r1' });
+  const ev = D.variants(ex).find((v) => v.input.noCofSign);
+  assert.ok(ev);
+  assert.equal(D.run(ex).value.toString(), String(1 * (24 - 5) - 2 * 18));
+  assert.equal(D.run(ev.input).value.toString(), String(1 * (24 - 5) + 2 * 18));
+  // 符号的问题在错法 run 里题面一样、答案是 +
+  const ask = (r) => r.steps.map((s) => s.ask).find((a) => a?.tag === 'sign');
+  assert.equal(ask(D.run(ex)).q, ask(D.run(ev.input)).q);
+  assert.equal(ask(D.run(ex)).answer, '−');
+  assert.equal(ask(D.run(ev.input)).answer, '+');
+});

@@ -2,7 +2,7 @@
 //   \calc{表达式}（页面把公式里的数算出来，Claude 不手算）、matrix 组件、课堂里的 calc 工具、整节课的 let 块。
 // 开方、三角、e、π 这类算不出精确值的，抛出 Inexact，调用方（calcValue）退回 expr.js 的小数。
 // 纯函数，不碰 DOM，有测试（tests/exact.test.js）。
-import { parse, evaluate as evaluateFloat, isNum, isVec, isMat, Radix, isRadix } from './expr.js';
+import { parse, evaluate as evaluateFloat, isNum, isVec, isMat, Radix, isRadix, Dec } from './expr.js';
 
 export class Inexact extends Error {
   constructor(what) {
@@ -347,6 +347,8 @@ const FUNCS = {
   },
   bin: (x, n) => radix(x, n, 2),
   hex: (x, n) => radix(x, n, 16),
+  // 精确地四舍五入（分数不经过浮点）：dec(61/4) = 15.25，dec(8/3) = 2.67，dec(x, 3)
+  dec: (x, k) => decExact(q(x, 'dec() 里'), k === undefined ? 2 : int(k, '位数')),
 };
 
 const bigInt = (x, what) => { q(x, what); if (!x.integer) throw new Error(`${what} 要整数（现在是 ${x}）`); return x.n; };
@@ -362,6 +364,16 @@ function uint(x, w) {
   if (v < 0n) throw new Error(`位运算只对非负整数（${v} 是负数：先用 unsigned(${v}, 位数) 换成无符号数）`);
   if (w !== undefined && v >= 1n << w) throw new Error(`${v} 用 ${w} 位放不下`);
   return v;
+}
+function decExact(x, k) {
+  if (k < 0 || k > 10) throw new Error('dec(x, 位数)：位数写 0 到 10');
+  const p = 10n ** BigInt(k);
+  const neg = x.n < 0n;
+  const a = neg ? -x.n : x.n;
+  const r = (a * p * 2n + x.d) / (2n * x.d); // 四舍五入
+  let t = (r / p).toString();
+  if (k) { const f = (r % p).toString().padStart(k, '0').replace(/0+$/, ''); if (f) t += `.${f}`; }
+  return new Dec(neg && r !== 0n ? `-${t}` : t);
 }
 function radix(x, n, base) {
   const v = bigInt(x, base === 2 ? 'bin' : 'hex');
@@ -407,7 +419,7 @@ function run(n, vars) {
     }
     case 'bin': {
       const a = run(n.a, vars), b = run(n.b, vars);
-      if (isRadix(a) || isRadix(b)) throw new Error('bin()、hex() 的结果只能直接写出来，不能再算（要算就对原来的数算）');
+      if (isRadix(a) || isRadix(b)) throw new Error('bin()、hex()、dec() 的结果只能直接写出来，不能再算（要算就对原来的数算）');
       if (n.op === '+') return add(a, b);
       if (n.op === '-') return add(a, scale(new Q(-1n), b));
       if (n.op === '*') return mul(a, b);

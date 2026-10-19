@@ -5,6 +5,21 @@
 import { chips, esc } from './arrayview.js';
 import { bitFields } from './bitview.js';
 
+// 一个 run 里学生能答的：每个 ask（题面 → 答案）、quiz 和填表的答案。
+// 错法算出来和对的完全一样就不列（differing）：列着也认不出什么，还让人以为这组数能诊断出它
+function answersOf(engine, input, r, fields) {
+  const asks = r.steps.flatMap((s) => [s.ask, ...(s.asks || [])]).filter(Boolean).map((a) => [a.q, a.alts ?? a.answer]);
+  const get = (f) => { try { return f() ?? null; } catch { return null; } };
+  const quiz = get(() => engine.quiz(input, r, fields).answer);
+  const t = get(() => engine.table(input, r, fields));
+  return JSON.stringify([asks, quiz, t && t.rows.map((row) => row.cells.map((c) => c.v))]);
+}
+function differing(engine, input, list, fields = {}) {
+  let base;
+  try { base = answersOf(engine, input, engine.run(input), fields); } catch { return list; }
+  return list.filter((v) => { try { return answersOf(engine, v.input, engine.run(v.input), fields) !== base; } catch { return false; } });
+}
+
 // ================= subnet =================
 
 export function parseIp(s) {
@@ -54,17 +69,26 @@ function subnetParse(fields) {
   throw new Error('subnet 要写 ip:（看一个地址）、split:（划分子网）、table: + dst:（最长前缀匹配）或 aggregate:（路由聚合）');
 }
 
+// 常见错法的标记（只在算错法时用）：
+//   noMinus2   主机数没减 2（ip：2^h；vlsm：子网大小只要能放下主机数）
+//   lastOctet  ip：广播地址只把最后一段写成 255
+//   oldRule    equal：按旧规定不用全 0、全 1 的子网号（借 k 位要 2^k − 2 ≥ 子网数，子网号从 1 起）
+//   asGiven    vlsm：没有从大到小，按题目给的顺序分
+//   bcPlus1    equal / vlsm 的填表：广播地址 = 网络地址 + 地址数（多了 1），最后一个可用跟着多 1
+//   firstMatch route：匹配到第一项就用；octet：'up' 按点分十进制整段比，'down' 只比前面的整段
+//   aggOff     agg：共同前缀多数（+1）/ 少数（−1）一位；noClear：网络地址没把后面的位清 0
 function subnetRun(input) {
   const steps = [];
   if (input.mode === 'ip') {
     const { ip, len } = input;
-    const net = netOf(ip, len), bc = bcastOf(ip, len), h = 32 - len;
+    const net = netOf(ip, len), h = 32 - len;
+    const bc = input.lastOctet ? Math.floor(net / 256) * 256 + 255 : bcastOf(ip, len);
     const v = (extra) => ({ ip, len, ...extra });
     steps.push({ view: v({}), msg: `${ipText(ip)}/${len}：/${len} 是网络前缀的长度。写成二进制看。` });
     steps.push({ view: v({}), msg: `${ipText(ip)}/${len}：前 ${len} 位是网络号，后 ${h} 位是主机号。子网掩码 = ${len} 个 1 后面跟 ${h} 个 0 = ${ipText(maskOf(len))}。`, ask: { tag: 'mask', kind: 'text', q: '子网掩码（点分十进制）是什么？', answer: ipText(maskOf(len)) } });
     steps.push({ view: v({ show: 'net' }), msg: `网络地址：主机号全写 0（也就是地址和掩码按位与）= ${ipText(net)}。`, ask: { tag: 'net', kind: 'text', q: '网络地址是什么？', answer: ipText(net) } });
     steps.push({ view: v({ show: 'bcast' }), msg: `广播地址：主机号全写 1 = ${ipText(bc)}。`, ask: { tag: 'bcast', kind: 'text', q: '广播地址是什么？', answer: ipText(bc) } });
-    const n = h >= 2 ? 2 ** h - 2 : 0;
+    const n = h >= 2 ? 2 ** h - (input.noMinus2 ? 0 : 2) : 0;
     steps.push({ view: v({ show: 'range' }), msg: h >= 2 ? `可分配的主机地址：${ipText(net + 1)} ～ ${ipText(bc - 1)}，一共 2^${h} − 2 = ${n} 个（去掉网络地址和广播地址）。` : `主机号只有 ${h} 位，没有可分配的主机地址（/31、/32 是特殊用法）。`, ask: { tag: 'hosts', kind: 'number', q: '最多能分配给多少台主机？', answer: n } });
     return { steps, net, bc, n };
   }
@@ -73,13 +97,15 @@ function subnetRun(input) {
     const base = netOf(ip, len);
     const subs = [];
     if (input.mode === 'equal') {
-      const k = Math.log2(input.n);
+      let k = Math.log2(input.n);
+      if (input.oldRule) { k = 2; while (2 ** k - 2 < input.n) k++; }
+      const first = input.oldRule ? 1 : 0;
       if (len + k > 30) throw new Error(`/${len} 分成 ${input.n} 个子网，主机号不够了`);
       steps.push({ view: { base, len, subs: [] }, msg: `${ipText(base)}/${len} 等分成 ${input.n} 个子网：从主机号里借 ${k} 位当子网号，每个子网的前缀是 /${len + k}，各有 2^${32 - len - k} 个地址。` });
       for (let i = 0; i < input.n; i++) {
-        const s = { ip: base + i * 2 ** (32 - len - k), len: len + k };
+        const s = { ip: base + (i + first) * 2 ** (32 - len - k), len: len + k };
         subs.push(s);
-        steps.push({ view: { base, len, subs: subs.slice(), cur: i }, msg: `子网 ${i + 1}（子网号 ${i.toString(2).padStart(k, '0')}）：${ipText(s.ip)}/${s.len}，可用 ${ipText(s.ip + 1)} ～ ${ipText(bcastOf(s.ip, s.len) - 1)}，广播 ${ipText(bcastOf(s.ip, s.len))}。`, ask: { tag: 'subnet', kind: 'text', q: `第 ${i + 1} 个子网的网络地址是什么？`, answer: ipText(s.ip) } });
+        steps.push({ view: { base, len, subs: subs.slice(), cur: i }, msg: `子网 ${i + 1}（子网号 ${(i + first).toString(2).padStart(k, '0')}）：${ipText(s.ip)}/${s.len}，可用 ${ipText(s.ip + 1)} ～ ${ipText(bcastOf(s.ip, s.len) - 1)}，广播 ${ipText(bcastOf(s.ip, s.len))}。`, ask: { tag: 'subnet', kind: 'text', q: `第 ${i + 1} 个子网的网络地址是什么？`, answer: ipText(s.ip) } });
       }
     } else {
       // asGiven（只在算常见错法时用）：没有从大到小，按题目给的顺序分
@@ -104,23 +130,28 @@ function subnetRun(input) {
   if (input.mode === 'route') {
     const { rows, dst } = input;
     const hits = [];
+    // 比前几位：正确是前缀长度；错法 octet 按 8 位一段取整（'up' 不满的那段整段比，'down' 不满的那段不比）
+    const cmp = (len) => (input.octet === 'up' ? Math.ceil(len / 8) * 8 : input.octet === 'down' ? Math.floor(len / 8) * 8 : len);
     steps.push({ view: { rows, dst, checked: [] }, msg: `目的地址 ${input.dstText}：拿它和路由表的每一项比，看前缀（前「长度」位）一不一样；能匹配的有好几项时，选前缀最长的（最长前缀匹配）。` });
     rows.forEach((r, i) => {
-      const ok = netOf(dst, r.len) === netOf(r.ip, r.len);
+      const ok = netOf(dst, cmp(r.len)) === netOf(r.ip, cmp(r.len));
       if (ok) hits.push(i);
       steps.push({ view: { rows, dst, checked: rows.slice(0, i + 1).map((_, j) => j), hits: hits.slice(), cur: i }, msg: `${r.text}：目的地址的前 ${r.len} 位是 ${ipText(netOf(dst, r.len))}，${ok ? '和它一样，匹配' : `不等于 ${ipText(netOf(r.ip, r.len))}，不匹配`}。`, ask: { tag: 'match', kind: 'choice', q: `${input.dstText} 和 ${r.text} 匹配吗？`, choices: ['匹配', '不匹配'], answer: ok ? '匹配' : '不匹配' } });
     });
     // firstMatch（只在算常见错法时用）：匹配到第一项就用，没比前缀长短
     const best = hits.length ? (input.firstMatch ? hits[0] : hits.reduce((a, b) => (rows[b].len > rows[a].len ? b : a))) : -1;
     steps.push({ view: { rows, dst, checked: rows.map((_, j) => j), hits, best }, msg: best >= 0 ? `匹配的有 ${hits.map((j) => rows[j].text).join('、')}，前缀最长的是 ${rows[best].text}：从 ${rows[best].hop} 转发。` : '一项都不匹配，又没有默认路由（0.0.0.0/0）：丢弃，发 ICMP 终点不可达。', ask: best >= 0 ? { tag: 'hop', kind: 'pick', q: '最后从哪一项转发？在路由表里点出来。', answer: String(best + 1) } : undefined });
-    return { steps, hop: best >= 0 ? rows[best].hop : null };
+    return { steps, hop: best >= 0 ? rows[best].hop : null, matches: rows.map((_, i) => hits.includes(i)) };
   }
   // 路由聚合：最长的共同前缀
   const { nets } = input;
-  let k = 0;
+  let k0 = 0;
   const bins = nets.map((x) => bin32(x.ip));
-  while (k < Math.min(...nets.map((x) => x.len)) && bins.every((b) => b[k] === bins[0][k])) k++;
-  const agg = { ip: netOf(nets[0].ip, k), len: k };
+  while (k0 < Math.min(...nets.map((x) => x.len)) && bins.every((b) => b[k0] === bins[0][k0])) k0++;
+  const k = Math.max(0, Math.min(32, k0 + (input.aggOff || 0)));
+  // 错法（多数、少数一位）的地址从最小的那个网络截：学生一般拿第一个（最小的）网络来写
+  const low = Math.min(...nets.map((x) => x.ip));
+  const agg = { ip: input.noClear ? low : netOf(low, k), len: k };
   steps.push({ view: { nets, k: 0 }, msg: `把 ${nets.length} 个网络写成二进制，从左往右找它们共同的前缀。` });
   steps.push({ view: { nets, k }, msg: `前 ${k} 位都一样（第 ${k + 1} 位开始不同${k === Math.min(...nets.map((x) => x.len)) ? '，或者到了最短的那个前缀' : ''}），聚合成 ${ipText(agg.ip)}/${k}。`, ask: { tag: 'agg', kind: 'text', q: '聚合以后的网络是什么？（写 a.b.c.d/前缀）', answer: `${ipText(agg.ip)}/${k}` } });
   return { steps, agg };
@@ -191,17 +222,42 @@ export const subnetEngine = {
         q: input.mode === 'vlsm' ? `把 ${ipText(input.base.ip)}/${input.base.len} 按主机数 ${input.hosts.join('、')} 划分（主机数多的先分，地址从小往大）。每个子网写网络地址（a.b.c.d/前缀）、子网掩码、第一个和最后一个可分配地址、广播地址。` : `把 ${ipText(input.base.ip)}/${input.base.len} 等分成 ${input.n} 个子网，每个子网写网络地址（a.b.c.d/前缀）、子网掩码、第一个和最后一个可分配地址、广播地址。`,
         qhtml: '', dir: 'row',
         head: ['网络地址', '子网掩码', '第一个可用', '最后一个可用', '广播地址'],
-        rows: r.subs.map((s, i) => { const bc = bcastOf(s.ip, s.len); return { label: label(s, i), cells: [{ v: `${ipText(s.ip)}/${s.len}` }, { v: ipText(maskOf(s.len)) }, { v: ipText(s.ip + 1) }, { v: ipText(bc - 1) }, { v: ipText(bc) }] }; }),
+        rows: r.subs.map((s, i) => { const bc = bcastOf(s.ip, s.len) + (input.bcPlus1 ? 1 : 0); return { label: label(s, i), cells: [{ v: `${ipText(s.ip)}/${s.len}` }, { v: ipText(maskOf(s.len)) }, { v: ipText(s.ip + 1) }, { v: ipText(bc - 1) }, { v: ipText(bc) }] }; }),
       };
     }
-    if (input.mode === 'route') return { q: `目的地址 ${input.dstText}：哪几项匹配？最后从哪个下一跳转发？`, qhtml: '', dir: 'row', head: ['匹配吗', '前缀长度'], rows: input.rows.map((x, i) => ({ label: x.text, cells: [{ v: netOf(input.dst, x.len) === netOf(x.ip, x.len) ? '√' : '', mark: true }, { v: String(x.len), given: true }] })).concat([{ label: '下一跳', cells: [{ v: r.hop ?? '丢弃' }, { v: '', given: true }] }]) };
+    if (input.mode === 'route') return { q: `目的地址 ${input.dstText}：哪几项匹配？最后从哪个下一跳转发？`, qhtml: '', dir: 'row', head: ['匹配吗', '前缀长度'], rows: input.rows.map((x, i) => ({ label: x.text, cells: [{ v: r.matches[i] ? '√' : '', mark: true }, { v: String(x.len), given: true }] })).concat([{ label: '下一跳', cells: [{ v: r.hop ?? '丢弃' }, { v: '', given: true }] }]) };
     return { q: `把 ${input.nets.map((x) => `${ipText(x.ip)}/${x.len}`).join('、')} 聚合成一个网络。`, qhtml: '', dir: 'row', head: ['写出来'], rows: [{ label: '共同前缀有几位', cells: [{ v: String(r.agg.len), num: true }] }, { label: '聚合后', cells: [{ v: `${ipText(r.agg.ip)}/${r.agg.len}` }] }] };
   },
-  // 常见错法：主机数忘了减 2；没有从大到小分；最长前缀匹配用成了「第一个匹配的」
-  variants(input) {
-    if (input.mode === 'vlsm') return [{ label: '像是算主机位时忘了减 2（网络地址和广播地址不能分给主机）', input: { ...input, noMinus2: true } }, { label: '像是没有先给主机多的子网分（按题目给的顺序分了）', input: { ...input, asGiven: true } }];
-    if (input.mode === 'route') return [{ label: '像是用了第一个匹配的表项，没比前缀长短', input: { ...input, firstMatch: true } }];
-    return [];
+  // 常见错法：主机数忘了减 2；广播地址只改了最后一段；旧规定的全 0 全 1 子网号；广播地址多 1；没有从大到小分；
+  // 最长前缀匹配用成了「第一个匹配的」、按点分十进制整段比；聚合时前缀多数 / 少数一位、网络地址没清 0
+  variants(input, fields) {
+    const bcPlus1 = { label: '像是广播地址多算了 1，写成了下一个子网的网络地址（王道：广播地址 = 网络地址 + 地址数 − 1，最后一个可用地址再减 1）', input: { ...input, bcPlus1: true } };
+    const out = {
+      ip: [
+        { label: '像是主机数忘了减 2（王道：主机号全 0 是网络地址、全 1 是广播地址，都不能分给主机，2^主机位数 − 2）', input: { ...input, noMinus2: true } },
+        { label: '像是广播地址只把最后一段写成了 255（王道：主机号的每一位都写 1，前缀不是 24 时要写成二进制看）', input: { ...input, lastOctet: true } },
+      ],
+      equal: [
+        { label: '像是按旧规定去掉了全 0、全 1 的子网号（现在 CIDR 允许用：分成 2^k 个子网借 k 位就够，子网号从 0 起）', input: { ...input, oldRule: true } },
+        bcPlus1,
+      ],
+      vlsm: [
+        { label: '像是算主机位时忘了减 2（网络地址和广播地址不能分给主机）', input: { ...input, noMinus2: true } },
+        { label: '像是没有先给主机多的子网分（按题目给的顺序分了）', input: { ...input, asGiven: true } },
+        bcPlus1,
+      ],
+      route: [
+        { label: '像是用了第一个匹配的表项，没比前缀长短', input: { ...input, firstMatch: true } },
+        { label: '像是按点分十进制整段比的（王道：前缀不是 8 的倍数时，那一段要写成二进制，只比前面几位）', input: { ...input, octet: 'up' } },
+        { label: '像是只比了前面完整的几段，不满 8 位的那一段没比（王道：要写成二进制，比满前缀长度那么多位）', input: { ...input, octet: 'down' } },
+      ],
+      agg: [
+        { label: '像是共同前缀多数了一位（王道：写成二进制，从左往右数到第一个不一样的位为止）', input: { ...input, aggOff: 1 } },
+        { label: '像是共同前缀少数了一位（王道：写成二进制，从左往右数到第一个不一样的位为止）', input: { ...input, aggOff: -1 } },
+        { label: '像是网络地址没把共同前缀后面的位清 0（直接写了第一个网络的地址）', input: { ...input, noClear: true } },
+      ],
+    }[input.mode] || [];
+    return differing(subnetEngine, input, out, fields);
   },
 };
 
@@ -231,7 +287,9 @@ function tcpParse(fields) {
   return { mode: 'cwnd', ssthresh, rounds, events, variant, init: Number(fields.init || 1) };
 }
 
-function cwndRun({ ssthresh: s0, rounds, events, variant, init }) {
+// mistake（只在算常见错法时用）：'noCap' 慢开始翻倍不封顶（越过 ssthresh）；'halfSs' 拥塞时把原来的 ssthresh 减半（应该是 cwnd 的一半）；
+// 'timeoutFast' 超时也按快恢复处理（cwnd = 新的 ssthresh，不回到 1）
+function cwndRun({ ssthresh: s0, rounds, events, variant, init, mistake }) {
   const steps = [];
   const series = [];
   let cwnd = init, ss = s0;
@@ -244,10 +302,10 @@ function cwndRun({ ssthresh: s0, rounds, events, variant, init }) {
     let msg = `第 ${k} 轮：cwnd = ${cwnd}（${phase}${phase === '慢开始' ? '' : `，cwnd ≥ ssthresh = ${ss}`}）。`;
     let next;
     if (ev) {
-      const half = Math.max(Math.floor(cwnd / 2), 2);
-      if (ev === 'timeout' || variant === 'tahoe') { msg += `这一轮${ev === 'timeout' ? '超时' : '收到 3 个重复确认（Tahoe 当成超时）'}：ssthresh = cwnd / 2 = ${half}，cwnd 回到 1，重新慢开始。`; ss = half; next = 1; }
+      const half = Math.max(Math.floor((mistake === 'halfSs' ? ss : cwnd) / 2), 2);
+      if ((ev === 'timeout' && mistake !== 'timeoutFast') || (ev !== 'timeout' && variant === 'tahoe')) { msg += `这一轮${ev === 'timeout' ? '超时' : '收到 3 个重复确认（Tahoe 当成超时）'}：ssthresh = cwnd / 2 = ${half}，cwnd 回到 1，重新慢开始。`; ss = half; next = 1; }
       else { msg += `这一轮收到 3 个重复确认：快重传；快恢复：ssthresh = cwnd / 2 = ${half}，cwnd = ssthresh = ${half}，接着拥塞避免。`; ss = half; next = half; }
-    } else next = cwnd < ss ? Math.min(cwnd * 2, ss) : cwnd + 1;
+    } else next = cwnd < ss ? (mistake === 'noCap' ? cwnd * 2 : Math.min(cwnd * 2, ss)) : cwnd + 1;
     steps.push({ view: { series: series.slice(), ss }, msg, ask });
     cwnd = next;
   }
@@ -332,10 +390,15 @@ export const tcpEngine = {
       rows: r.series.map((x) => ({ label: x.k, cells: [{ v: String(x.cwnd), num: true }, { v: String(x.ss), num: true }] })),
     };
   },
-  // 常见错法：Reno / Tahoe 弄混；慢开始不封顶（越过 ssthresh 还翻倍）
-  variants(input) {
+  // 常见错法：Reno / Tahoe 弄混；慢开始不封顶（越过 ssthresh 还翻倍）；ssthresh 自己减半；超时也快恢复
+  variants(input, fields) {
     if (input.mode !== 'cwnd') return [];
-    return [{ label: input.variant === 'reno' ? '像是按 Tahoe 算的（3 个重复确认也让 cwnd 回到 1）' : '像是按 Reno 算的（3 个重复确认时快恢复）', input: { ...input, variant: input.variant === 'reno' ? 'tahoe' : 'reno' } }];
+    return differing(tcpEngine, input, [
+      { label: input.variant === 'reno' ? '像是按 Tahoe 算的（3 个重复确认也让 cwnd 回到 1）' : '像是按 Reno 算的（3 个重复确认时快恢复）', input: { ...input, variant: input.variant === 'reno' ? 'tahoe' : 'reno' } },
+      { label: '像是慢开始翻倍越过了 ssthresh（王道：翻倍不超过 ssthresh，到了 ssthresh 就改成每轮加 1）', input: { ...input, mistake: 'noCap' } },
+      { label: '像是把原来的 ssthresh 减半了（王道：新的 ssthresh = 出现拥塞时 cwnd 的一半）', input: { ...input, mistake: 'halfSs' } },
+      ...(input.variant === 'reno' ? [{ label: '像是超时也做了快恢复（王道：超时 cwnd 一律回到 1、重新慢开始；只有 3 个重复确认才快恢复）', input: { ...input, mistake: 'timeoutFast' } }] : []),
+    ], fields);
   },
 };
 
@@ -358,7 +421,9 @@ function winParse(fields) {
   return { proto, frames, window, lost: new Set(list(fields.lost, 'lost')), acklost: new Set(list(fields.acklost, 'acklost')), delay, timeout };
 }
 
-function winRun({ proto, frames: N, window: W, lost, acklost, delay: D, timeout: TO }) {
+// 常见错法（只在算错法时用）：resendOne GBN 超时只重传超时的那一帧（像 SR）；resendAll SR 超时把这一帧起已经发出的都重传（像 GBN）；
+// cumAck SR 的发送方把确认当成累积确认（前面丢了的确认算被后面的 ACK 带上了）
+function winRun({ proto, frames: N, window: W, lost, acklost, delay: D, timeout: TO, resendOne, resendAll, cumAck }) {
   const steps = [];
   const sent = []; // 发过的数据帧：{ f, t, lost }
   const acks = []; // 发过的确认：{ n, t, lost }
@@ -403,7 +468,8 @@ function winRun({ proto, frames: N, window: W, lost, acklost, delay: D, timeout:
     for (const x of inflight.filter((y) => y.kind === 'ack' && y.arrive === t)) {
       if (x.lost) { ev.push(`ACK${x.n} 在路上丢了`); continue; }
       if (proto === 'sr') {
-        acked.add(x.n); timer.delete(x.n);
+        const cover = cumAck ? acks.filter((a) => a.lost && a.n < x.n).map((a) => a.n) : [];
+        for (const k of [x.n, ...cover]) { acked.add(k); timer.delete(k); }
         const old = base;
         while (acked.has(base)) base++;
         ev.push(`发送方收到 ACK${x.n}${base !== old ? `，窗口滑到 ${base}` : ''}`);
@@ -422,10 +488,20 @@ function winRun({ proto, frames: N, window: W, lost, acklost, delay: D, timeout:
     // 3. 超时
     const expired = [...timer.entries()].filter(([, at]) => at === t).map(([f]) => f).sort((a, b) => a - b);
     if (expired.length) {
-      if (proto === 'sr') {
+      if (proto === 'sr' && resendAll) {
+        const again = [];
+        for (let k = expired[0]; k < next; k++) { again.push(k); timer.delete(k); if (!resend.includes(k)) resend.push(k); }
+        resend.sort((a, b) => a - b);
+        ev.push(`${expired[0]} 号帧超时：从它起已经发出的都重传（${again.join('、')}）`);
+        ask = { tag: 'resend', kind: 'text', q: `t = ${t}：超时了，要重传哪几个帧？`, answer: again.join(' ') };
+      } else if (proto === 'sr') {
         for (const f of expired) { timer.delete(f); resend.push(f); }
         ev.push(`${expired.join('、')} 号帧超时：只重传${expired.length > 1 ? '这几个' : '它'}`);
         ask = { tag: 'resend', kind: 'text', q: `t = ${t}：超时了，要重传哪几个帧？`, answer: expired.join(' ') };
+      } else if (resendOne) {
+        for (const f of expired) { timer.delete(f); resend.push(f); }
+        ev.push(`${expired.join('、')} 号帧超时：只重传${expired.length > 1 ? '这几个' : '它'}`);
+        ask = { tag: 'resend', kind: 'text', q: `t = ${t}：${expired[0]} 号帧超时了，接下来要重传哪几个帧？`, answer: expired.join(' ') };
       } else {
         const first = expired[0];
         if (first === base || proto === 'sw') {
@@ -504,10 +580,25 @@ export const windowEngine = {
       rows: Array.from({ length: input.frames }, (_, f) => ({ label: `${f} 号`, cells: [{ v: String(last.filter((x) => x.f === f).length), num: true }] })),
     };
   },
-  // 常见错法：GBN 和 SR 弄混
-  variants(input) {
-    if (input.proto === 'sw') return [];
-    const other = input.proto === 'gbn' ? 'sr' : 'gbn';
-    return [{ label: `像是按${PROTO[other]}算的`, input: { ...input, proto: other } }];
+  // 常见错法：GBN 和 SR 弄混（换协议算一遍；GBN、SR 问「重传哪几个」的题面不一样，换协议对不上这一问，
+  // 所以在本协议里再按另一种重传法算一遍）；累积确认和单独确认弄混（确认帧丢了要不要重传）
+  variants(input, fields) {
+    const ackLost = input.acklost.size > 0;
+    const out = [];
+    if (input.proto === 'sw') {
+      if (ackLost) out.push({ label: '像是以为确认帧丢了就不用重传（王道：发送方收不到确认就超时重传，接收方丢掉重复的帧、再确认一次）', input: { ...input, acklost: new Set() } });
+    } else {
+      const other = input.proto === 'gbn' ? 'sr' : 'gbn';
+      // 答案一样时先列的说了算：只丢了确认的 SR，「当成累积确认」和「按 GBN 算」答案相同，前者说得更准，排前面
+      if (input.proto === 'sr' && ackLost) out.push({ label: '像是把选择重传的确认当成了累积确认（王道：SR 每一帧单独确认，哪一帧的确认丢了，那一帧就要超时重传）', input: { ...input, cumAck: true } });
+      out.push({ label: `像是按${PROTO[other]}算的`, input: { ...input, proto: other } });
+      if (input.proto === 'gbn') {
+        out.push({ label: '像是只重传了超时的那一帧（王道：GBN 要从这一帧起，把已经发出、还没确认的都重传）', input: { ...input, resendOne: true } });
+        if (ackLost) out.push({ label: '像是没用上累积确认，以为确认帧丢了就要超时重传（王道：GBN 是累积确认，后面的 ACK 及时到了，前面丢的确认就不碍事）', input: { ...input, lost: new Set([...input.lost, ...input.acklost]), acklost: new Set() } });
+      } else {
+        out.push({ label: '像是把超时那一帧后面已经发出的也重传了（王道：SR 只重传超时的那一帧）', input: { ...input, resendAll: true } });
+      }
+    }
+    return differing(windowEngine, input, out, fields);
   },
 };

@@ -7,7 +7,7 @@ import { parseFields } from './parse.js';
 import { session } from './session.js';
 import { widget, mdToHtml, tex2html, escapeHtml, calcProblems } from './blocks/common.js';
 import { figureControls } from './plot.js';
-import { commonSpec, resolveAsks, checkAsk, askAnswerText, stepLabel, parseAskField, fillSpec, checkFill, cellName, cellAnswer, fillOrder, misreadFill, misreadAnswer } from './stepperspec.js';
+import { commonSpec, resolveAsks, checkAsk, askAnswerText, stepLabel, parseAskField, fillSpec, checkFill, cellName, cellAnswer, fillOrder, misreadFill, trackFields } from './stepperspec.js';
 import { markDraft } from './drafts.js';
 import { answerWidget, textAnswerSpec } from './blocks/answer.js';
 import { snapshot, animateFrom, settle } from './morph.js';
@@ -35,7 +35,8 @@ export function stepperBlock(engine) {
   return block;
   function block(el, src) {
     // frames 这种正文里自己有「key: 值」的行的：字段只从开头那一段读（engine.head）
-    const { fields } = parseFields(engine.head ? engine.head(src) : src);
+    const tracked = trackFields(parseFields(engine.head ? engine.head(src) : src).fields);
+    const { fields } = tracked;
     const common = commonSpec(fields);
     const input = engine.parse(fields, src);
     // 有的引擎自带要问的（trace 的 predict:）：没写 ask: 时照它问
@@ -317,10 +318,11 @@ export function stepperBlock(engine) {
       pending.attempts++;
       const shown = Array.isArray(given) ? given.join('、') : String(given).trim();
       // 错了：同一个问题（题面一样）在常见错法下的答案和学生的一样，就是那种错法
-      const misread = r.ok ? '' : misreadAnswer(given, variants().map((v) => {
+      // 判的办法和判学生一样（checkAsk）：数按数值、二进制按位、序列按序列，25/13 和 1.92 也对得上
+      const misread = r.ok ? '' : (variants().find((v) => {
         const a = v.run.steps.flatMap((x) => [x.ask, ...(x.asks || [])]).find((y) => y && y.q === ask.q && y.kind === ask.kind);
-        return a ? { label: v.label, answer: Array.isArray(a.alts) ? a.alts.map((z) => [].concat(z).join(' ')).join(' | ') : [].concat(a.answer).join(' ') } : null;
-      }).filter(Boolean));
+        try { return !!a && checkAsk(a, given).ok; } catch { return false; }
+      })?.label || '');
       session.record({ type: 'stepper', engine: engine.name, liveOnly: true, title, q: plainText(ask.q), value: shown, pick: ask.kind === 'pick' || undefined, ok: r.ok, attempts: pending.attempts, detail: `第 ${at} 步`, misread: misread || undefined, ms: Date.now() - pending.t0, el });
       if (r.ok) { finishAsk({ ok: true }); return; }
       const fb = askBox.querySelector('.sv-ask-fb');
@@ -375,8 +377,13 @@ export function stepperBlock(engine) {
       const spec = textAnswerSpec(quiz.type || 'seq', quiz.answer, { width: quiz.width });
       const q = fields.q ? `${fields.q}\n\n${quiz.q}` : quiz.q;
       const onTry = (t) => {
-        const same = quiz.type === 'num' ? (a, b) => cellOkFor({ v: a, num: true }, b) : undefined;
-        const misread = t.ok ? '' : misreadAnswer(t.text, variants().map((v) => { try { const a = engine.quiz(v.input, v.run, fields); return a ? { label: v.label, answer: String(a.answer) } : null; } catch { return null; } }).filter(Boolean), same);
+        // 错法的结果也照这道题的题型判（二进制、十六进制、数、序列的各种写法都认）
+        const misread = t.ok ? '' : (variants().find((v) => {
+          try {
+            const a = engine.quiz(v.input, v.run, fields);
+            return !!a && textAnswerSpec(quiz.type || 'seq', a.answer, { width: quiz.width }).check(t.text).ok;
+          } catch { return false; }
+        })?.label || '');
         session.record({ type: 'stepper', engine: engine.name, liveOnly: true, title, q: plainText(q), value: t.text, ok: t.ok, attempts: t.attempts, detail: '写出结果', misread: misread || undefined, el });
       };
       answerWidget(qbox, { q, qhtml: quiz.qhtml ? `<div class="sv-stage sv-stage-q">${quiz.qhtml}</div>` : '', text: spec, explain: quiz.explain, hint: fields.hint, onTry }, (r) => {
@@ -581,5 +588,7 @@ export function stepperBlock(engine) {
     };
     const id = session.registerScene(el, api, title);
     el.dataset.scene = id;
+    // 画好以后：写了却没用上的字段（拼错了，或者这种用法用不上）
+    for (const msg of tracked.unknown()) session.problem(el, engine.name, msg, { soft: true });
   }
 }

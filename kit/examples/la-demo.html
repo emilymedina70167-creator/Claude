@@ -1,0 +1,123 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>线代过程组件一览</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+subject: 线代
+unit: 线代过程组件一览
+---
+
+# 线代过程组件一览
+
+考研线代里「一步步算」的过程：你只写矩阵和要求什么，每一步由页面精确地算（分数、含参数的式子、根号都精确）。写了 `ask:` 的，走到那一步之前先让你猜；`mode: fill` 的要自己填表。
+
+## 1. 初等行变换
+
+```elim
+id: el-a
+title: a 取何值时无解、唯一解、无穷多解
+matrix: [[1, 1, a], [1, a, 1], [a, 1, 1]]
+b: [1, 1, -2]
+param: a
+ask: special, case
+```
+
+```elim
+id: el-x
+title: 齐次方程组的通解
+matrix: [[1, 1, -1, -1], [2, -5, 3, 2], [7, -7, 3, 1]]
+b: [0, 0, 0]
+ask: free
+```
+
+```elim
+id: el-v
+title: 极大无关组，其余的怎么表示
+vectors: a1 = (1, 2, 3), a2 = (2, 4, 6), a3 = (1, 0, 1), a4 = (3, 4, 7)
+ask: basis, combo
+```
+
+```elim
+id: el-inv
+title: 求逆矩阵：自己填
+matrix: [[1, 2, 3], [2, 2, 1], [3, 4, 3]]
+inverse: true
+mode: fill
+```
+
+## 2. 行列式
+
+```det
+id: dt-1
+title: 每列加到第一列，提公因子
+matrix: [[3, 1, 1, 1], [1, 3, 1, 1], [1, 1, 3, 1], [1, 1, 1, 3]]
+ops: c1 + c2 + c3 + c4; c1 / 6; r2 - r1; r3 - r1; r4 - r1
+ask: effect, value
+```
+
+```det
+id: dt-2
+title: 按第一行展开
+matrix: [[1, 2, 0], [3, 4, 5], [0, 1, 6]]
+ops: expand r1
+ask: sign
+```
+
+## 3. 特征值、对角化、施密特
+
+```eig
+id: eg-1
+title: 实对称矩阵正交相似对角化
+matrix: [[1, -2, 2], [-2, -2, 4], [2, 4, -2]]
+ask: values, geo, schmidt
+```
+
+```eig
+id: eg-2
+title: 能对角化吗
+matrix: [[2, 1], [0, 2]]
+mode: fill
+```
+
+```schmidt
+id: sc-1
+title: 施密特正交化
+vectors: (1, 1, 0), (1, 0, 1), (0, 1, 1)
+ask: dot
+```
+
+## 4. 二次型
+
+```quad
+id: qd-1
+title: 配方法化标准形
+f: x1^2 + 2x2^2 + 5x3^2 + 2x1x2 + 2x1x3 + 6x2x3
+ask: matrix, square, definite
+```
+
+```quad
+id: qd-2
+title: 正交变换法：是什么曲面
+f: 2x^2 + 3y^2 + 3z^2 + 4yz
+method: orth
+ask: values, surface
+```
+
+## 5. 自己写每一步：frames
+
+````frames
+id: fr-1
+title: 分块矩阵的逆（自己写的过程）
+---
+$\begin{pmatrix} A & O \\ O & B \end{pmatrix}^{-1}$ 是什么？
+> 分块对角矩阵：每一块分别求逆。
+---
+?? $\begin{pmatrix} A & O \\ O & B \end{pmatrix}^{-1}$ = $\begin{pmatrix} A^{-1} & O \\ O & B^{-1} \end{pmatrix}$ | $\begin{pmatrix} B^{-1} & O \\ O & A^{-1} \end{pmatrix}$ | $\begin{pmatrix} O & A^{-1} \\ B^{-1} & O \end{pmatrix}$
+$\begin{pmatrix} A^{-1} & O \\ O & B^{-1} \end{pmatrix}$
+> 乘回去验算：$\begin{pmatrix} A & O \\ O & B \end{pmatrix}\begin{pmatrix} A^{-1} & O \\ O & B^{-1} \end{pmatrix} = E$。
+---
+副对角的呢：$\begin{pmatrix} O & A \\ B & O \end{pmatrix}^{-1}$ 右上角那块是 $B^{-1}$，左下角那块是 {{A^-1|A⁻¹|A^(-1)}}（写 A^-1 或 B^-1）。
+> 注意位置换了：$\begin{pmatrix} O & A \\ B & O \end{pmatrix}^{-1} = \begin{pmatrix} O & B^{-1} \\ A^{-1} & O \end{pmatrix}$。
+````
+</script>

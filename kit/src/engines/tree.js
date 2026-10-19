@@ -7,6 +7,7 @@ import { treeSvg, levelOrder } from './treeview.js';
 import { arrayView, chips, keyMaker } from './arrayview.js';
 
 const WALKS = { preorder: '先序', inorder: '中序', postorder: '后序', levelorder: '层序' };
+const RULES = { preorder: '根 → 左子树 → 右子树', inorder: '左子树 → 根 → 右子树', postorder: '左子树 → 右子树 → 根', levelorder: '一层一层，每层从左往右（用一个队列）' };
 const WALK_ALIAS = { pre: 'preorder', preorder: 'preorder', 先序: 'preorder', 前序: 'preorder', in: 'inorder', inorder: 'inorder', 中序: 'inorder', post: 'postorder', postorder: 'postorder', 后序: 'postorder', level: 'levelorder', levelorder: 'levelorder', 层序: 'levelorder', 层次: 'levelorder' };
 const NULLS = new Set(['#', '^', 'null', 'nil', '∅', '空', '-']);
 const MAX_NODES = 31;
@@ -135,10 +136,13 @@ function passOf(fields) {
 }
 
 export function run(input) {
-  if (input.kind === 'walk') return walkRun(input);
-  if (input.kind === 'bst') return bstRun(input);
-  return heapRun(input);
+  const r = input.kind === 'walk' ? walkRun(input) : input.kind === 'bst' ? bstRun(input) : heapRun(input);
+  // 错法那一遍只留和这种错法有关的先猜：错法走岔以后树就不一样了，别的问题题面碰巧一样、答案碰巧对上，会说错
+  const keep = KEEP_ASKS[input.mistake];
+  if (keep) for (const s of r.steps) { if (s.ask && !keep.includes(s.ask.tag)) delete s.ask; delete s.asks; }
+  return r;
 }
+const KEEP_ASKS = { mirror: ['compare'], replace: ['replace'], insertBuild: ['build'] };
 
 // —— 遍历 ——
 
@@ -157,7 +161,7 @@ function walkRun({ tree, walk }) {
     if (cur) cls[cur] = 'sv-cur';
     return { tree, cls, seq: seq.slice(), stack: stack ? stack.map(K) : null, queue: queue ? queue.map(K) : null, fresh: cur ? [cur] : [] };
   };
-  const rule = { preorder: '根 → 左子树 → 右子树', inorder: '左子树 → 根 → 右子树', postorder: '左子树 → 右子树 → 根', levelorder: '一层一层，每层从左往右（用一个队列）' }[walk];
+  const rule = RULES[walk];
   steps.push({ view: view(null, walk === 'levelorder' ? null : []), msg: `${name}遍历：${rule}。` });
   const visit = (id, stack, msg, queue) => {
     done.add(id);
@@ -196,10 +200,13 @@ function walkRun({ tree, walk }) {
 
 // —— 二叉排序树 ——
 
-function bstRun({ items, ops, replace }) {
+function bstRun({ items, ops, replace, mistake }) {
   const tree = { root: null, nodes: {} };
   let seq = 0;
   const steps = [];
+  // 错法 mirror（大的往左）：往哪边走反过来；说明里的 < / > 还按真的大小写（只拿来比答案，不演示）
+  const sign = mistake === 'mirror' ? -1 : 1;
+  const go = (a, b) => sign * cmp(a, b);
   const K = (id) => tree.nodes[id].key;
   const snap = (extra = {}) => ({ tree: clone(tree), ...extra });
   const text = (it) => it.text;
@@ -211,7 +218,8 @@ function bstRun({ items, ops, replace }) {
     const path = [];
     let id = tree.root, parent = null, side = null;
     while (id !== null) {
-      const c = cmp(x, keyItem(id));
+      const real = cmp(x, keyItem(id));
+      const c = go(x, keyItem(id));
       path.push(id);
       const edge = Object.fromEntries(path.slice(1).map((p) => [p, 'sv-edge-path']));
       const cls = Object.fromEntries(path.map((p) => [p, 'sv-path']));
@@ -219,7 +227,7 @@ function bstRun({ items, ops, replace }) {
       const dir = c < 0 ? '左' : '右';
       const step = {
         view: snap({ cls, edge, chips: [[opName, text(x)]] }),
-        msg: c === 0 ? `${text(x)} = ${K(id)}：找到了。` : `${text(x)} ${c < 0 ? '<' : '>'} ${K(id)}：往${dir}子树走${(c < 0 ? tree.nodes[id].left : tree.nodes[id].right) === null ? `，${dir}子树是空的` : ''}。`,
+        msg: c === 0 ? `${text(x)} = ${K(id)}：找到了。` : `${text(x)} ${real < 0 ? '<' : '>'} ${K(id)}：往${dir}子树走${(c < 0 ? tree.nodes[id].left : tree.nodes[id].right) === null ? `，${dir}子树是空的` : ''}。`,
       };
       if (ask && c !== 0) step.ask = { tag: 'compare', kind: 'choice', q: `${text(x)} 和 ${K(id)} 比，接下来往哪边走？`, choices: ['左子树', '右子树'], answer: c < 0 ? '左子树' : '右子树' };
       steps.push(step);
@@ -242,7 +250,7 @@ function bstRun({ items, ops, replace }) {
     if (quiet) {
       let id = tree.root;
       for (;;) {
-        const c = cmp(x, keyItem(id));
+        const c = go(x, keyItem(id));
         if (c === 0) return;
         const s = c < 0 ? 'left' : 'right';
         if (tree.nodes[id][s] === null) { const nid = `n${++seq}`; tree.nodes[nid] = { key: text(x), item: x, left: null, right: null }; tree.nodes[id][s] = nid; return; }
@@ -251,7 +259,7 @@ function bstRun({ items, ops, replace }) {
     }
     // 先算出会插在哪（给 ask 用）
     let p = tree.root;
-    for (;;) { const c = cmp(x, keyItem(p)); if (c === 0) break; const nx = tree.nodes[p][c < 0 ? 'left' : 'right']; if (nx === null) break; p = nx; }
+    for (;;) { const c = go(x, keyItem(p)); if (c === 0) break; const nx = tree.nodes[p][c < 0 ? 'left' : 'right']; if (nx === null) break; p = nx; }
     steps.push({ view: snap({ chips: [['插入', text(x)]] }), msg: `插入 ${text(x)}：从根开始比，小往左、大往右，走到空的位置就放下。`, ask: cmp(x, keyItem(p)) === 0 ? undefined : { tag: 'insert', kind: 'pick', q: `${text(x)} 插进来以后，是谁的孩子？在图里点出它的双亲。`, answer: K(p) } });
     const r = descend(x, '插入', true);
     if (r.found !== null) {
@@ -342,7 +350,7 @@ function inorderKeys(tree) {
 
 // —— 堆（数组从 1 存：A[i] 的孩子是 A[2i]、A[2i+1]）——
 
-function heapRun({ items, max, ops }) {
+function heapRun({ items, max, ops, mistake }) {
   const A = [null, ...items.map((x) => ({ ...x }))];
   let len = items.length;
   const steps = [], passes = [];
@@ -385,10 +393,17 @@ function heapRun({ items, max, ops }) {
     steps.push({ view: snap({ cls: { 1: 'sv-cur' } }), msg: `${T(A[1])} 浮到了堆顶，停下。` });
   };
 
+  const buildQ = () => `建好的${word}，按 A[1]～A[${len}] 写出来是什么？`;
   const build = () => {
+    if (mistake === 'insertBuild') {
+      // 错法：从空堆开始一个个插入、上浮（只拿来和学生写的比，不演示）。题面和正确的一样，外壳才找得到同一个问题
+      for (let k = 2; k <= len; k++) for (let c = k; c > 1 && better(A[c], A[c >> 1]); c >>= 1) [A[c], A[c >> 1]] = [A[c >> 1], A[c]];
+      steps.push({ view: snap(), msg: '', ask: { tag: 'build', kind: 'text', q: buildQ(), answer: A.slice(1, len + 1).map(T).join(' ') } });
+      return;
+    }
     const after = A.slice(); // 先算一遍建好的样子给 ask 用
     { const B = after; const sd = (k) => { for (;;) { let c = 2 * k; if (c > len) return; if (c + 1 <= len && better(B[c + 1], B[c])) c++; if (!better(B[c], B[k])) return; [B[k], B[c]] = [B[c], B[k]]; k = c; } }; for (let i = len >> 1; i >= 1; i--) sd(i); }
-    steps.push({ view: snap(), msg: `建${word}：序列按层序放成一棵完全二叉树（A[i] 的孩子是 A[2i]、A[2i+1]）。从最后一个非叶结点 A[⌊${len}/2⌋] = A[${len >> 1}] 开始，往前逐个往下调整。`, ask: { tag: 'build', kind: 'text', q: `建好的${word}，按 A[1]～A[${len}] 写出来是什么？`, answer: after.slice(1, len + 1).map(T).join(' ') } });
+    steps.push({ view: snap(), msg: `建${word}：序列按层序放成一棵完全二叉树（A[i] 的孩子是 A[2i]、A[2i+1]）。从最后一个非叶结点 A[⌊${len}/2⌋] = A[${len >> 1}] 开始，往前逐个往下调整。`, ask: { tag: 'build', kind: 'text', q: buildQ(), answer: after.slice(1, len + 1).map(T).join(' ') } });
     for (let i = len >> 1; i >= 1; i--) {
       steps.push({ view: snap({ cls: { [i]: 'sv-cur' }, sub: i }), msg: `调整以 A[${i}] = ${T(A[i])} 为根的子树。` });
       siftDown(i, '这棵子树的调整');
@@ -551,11 +566,26 @@ export function table(input, r) {
   return { q: `对 ${input.items.map((x) => x.text).join(' ')} 建${input.max ? '大' : '小'}根堆${r.passes.length ? '、堆排序' : ''}：写出每调整完一棵子树（从 A[⌊n/2⌋] 往前）${r.passes.length ? '、每一趟排序' : ''}之后的数组 A[1]～A[${n}]。`, qhtml: arrayView(input.items.map((x) => x.text), { pick: false }), dir: 'row', head: Array.from({ length: n }, (_, i) => `${i + 1}`), rows };
 }
 
-// 常见错法
+// 常见错法（只给老师看）
 export function variants(input) {
-  if (input.kind === 'walk') return Object.keys(WALKS).filter((w) => w !== input.walk).map((w) => ({ label: `像是按${WALKS[w]}走的`, input: { ...input, walk: w } }));
-  if (input.kind === 'bst') return [{ label: '像是大的往左、小的往右了（二叉排序树：比根小的在左子树）', input: { ...input, mistake: 'mirror' } }];
-  return [{ label: `像是建成了${input.max ? '小' : '大'}根堆`, input: { ...input, max: !input.max } }];
+  if (input.kind === 'walk') return Object.keys(WALKS).filter((w) => w !== input.walk).map((w) => ({ label: `像是按${WALKS[w]}走的（${WALKS[input.walk]}：${RULES[input.walk]}）`, input: { ...input, walk: w } }));
+  const asksOf = (inp, tag) => { try { return run(inp).steps.filter((s) => s.ask?.tag === tag).map((s) => s.ask.answer).join(' / '); } catch { return ''; } };
+  if (input.kind === 'bst') {
+    const out = [{ label: '像是大的往左、小的往右了（二叉排序树：比根小的进左子树，比根大的进右子树）', input: { ...input, mistake: 'mirror' } }];
+    // 删除两棵子树都有的结点时前驱、后继用反了：ops 里真有这种删除才列（没有的话两种做法答案一样）
+    if (asksOf(input, 'replace')) {
+      out.push(input.replace === 'pred'
+        ? { label: '像是删左右子树都有的结点时用了直接后继（这道题要用直接前驱：进左子树，一路往右走到头，也就是左子树里最大的）', input: { ...input, replace: 'succ', mistake: 'replace' } }
+        : { label: '像是删左右子树都有的结点时用了直接前驱（王道默认用直接后继：进右子树，一路往左走到头，也就是右子树里最小的）', input: { ...input, replace: 'pred', mistake: 'replace' } });
+    }
+    return out;
+  }
+  const out = [{ label: `像是建成了${input.max ? '小' : '大'}根堆（这里要的是${input.max ? '大根堆：双亲不小于孩子，堆顶最大' : '小根堆：双亲不大于孩子，堆顶最小'}）`, input: { ...input, max: !input.max } }];
+  // 逐个插入建堆：这组数上两种建法结果一样（比如本来就是堆）就不列
+  const ins = { ...input, mistake: 'insertBuild' };
+  const want = asksOf(input, 'build');
+  if (want && asksOf(ins, 'build') !== want) out.push({ label: '像是从空堆开始一个个插入、上浮建的堆（王道：整个序列先放成完全二叉树，从 A[⌊n/2⌋] 往前逐个往下调整）', input: ins });
+  return out;
 }
 
 export const treeEngine = { name: 'tree', title: '树', parse, run, view, quiz, problems, table, variants };

@@ -180,3 +180,33 @@ test('填表：一组格子不管先后（物理块）；页面置换的表和�
   const v = pagingEngine.variants(input).find((x) => /调入/.test(x.label));
   assert.equal(pagingEngine.quiz(v.input, pagingEngine.run(v.input), {}).answer, '6');
 });
+
+test('字段名的拼写检查：写了却没用上的字段报出来，像的给个建议', async () => {
+  const { trackFields } = await import('../kit/src/stepperspec.js');
+  const { sortEngine } = await import('../kit/src/engines/sort.js');
+  const { parseFields } = await import('../kit/src/parse.js');
+  const src = 'id: s1\ntitle: 快排\nalgo: quick\narray: 3 1 2\nspeeed: 2\ngiven: 1\nfoo: 1';
+  const t = trackFields(parseFields(src).fields);
+  const input = sortEngine.parse(t.fields, src);
+  sortEngine.run(input);
+  void t.fields.speed; void t.fields.mode; // 外壳读的
+  const msgs = t.unknown();
+  assert.equal(msgs.length, 3);
+  assert.match(msgs[0], /「speeed:」.*是不是 speed:/);
+  assert.match(msgs[1], /「given:」.*只在 mode: fill 时有用/);
+  assert.match(msgs[2], /「foo:」.*这个组件没有这个字段/);
+});
+
+test('错法诊断按题型判：先猜里分数对小数、quiz 里十六进制的各种写法、填表下面单独的格子', async () => {
+  const { checkAsk, misreadFill, fillSpec } = await import('../kit/src/stepperspec.js');
+  // 外壳先猜时：用错法那一问自己的判法（checkAsk）判学生写的
+  const a = { tag: 'aslfail', kind: 'number', q: 'ASL失败是多少？', answer: 25 / 13, display: '25/13' };
+  assert.ok(checkAsk(a, '25/13').ok);
+  assert.ok(checkAsk(a, '1.92').ok);
+  // 填表：只错在表下面 extra 的那一格，也认得出
+  const table = { dir: 'row', head: ['x'], rows: [{ label: 'a', cells: [{ v: '1', num: true }] }], extra: [{ label: 'D', v: '48', num: true }] };
+  const wrongT = { ...table, extra: [{ label: 'D', v: '8', num: true }] };
+  const t = fillSpec(table, {}).table;
+  assert.equal(misreadFill(t, Object.assign([['1']], { extra: ['8'] }), [{ label: '系数没跟着变', table: fillSpec(wrongT, {}).table }]), '系数没跟着变');
+  assert.equal(misreadFill(t, Object.assign([['1']], { extra: ['7'] }), [{ label: '系数没跟着变', table: fillSpec(wrongT, {}).table }]), '');
+});

@@ -95,9 +95,8 @@ const forSubject = (sec, key) => !sec.tags || !key || sec.tags.includes(key);
 const tidy = (lines) => lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 // 精简版的末尾指一下完整写法在哪
 // （lookup：课堂 Claude 有没有 component_doc 工具；没有时只能等写错了页面附上）
-const pointer = (sec, lookup) => (lookup
-  ? `（更多字段和例子：component_doc 取 ${sec.names[0]}；写错了页面会把完整写法附给你）`
-  : `（${sec.names[0]} 还有更多字段和例子；写错了页面会把完整写法附给你）`);
+// 说明开头讲过怎么取、写错了会附上，这里只留一句（每节都有，越短越好）
+const pointer = (sec, lookup) => (lookup ? `（更多写法：component_doc 取 ${sec.names[0]}）` : '（还有更多写法）');
 
 /**
  * 组件说明（componentDocs 截出来的第三节）按科目挑：没有标记的小节是通用的，一直留着；

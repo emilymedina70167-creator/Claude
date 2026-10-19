@@ -264,10 +264,12 @@ export async function renderClass(root, meta) {
     const on = (bid, sel = '') => board.querySelector(`.class-seg:not([hidden]) .block${sel}[data-bid="${CSS.escape(bid)}"]`);
     session.replaying = true;
     try {
+      // 会自己重放的组件（steps、elim 的 mode: do）：照记录放回去
       for (const [bid, list] of byBlock) {
-        const el = on(bid, '.block-steps');
+        const el = on(bid);
         if (!el?._replay) continue;
-        try { el._replay(list.filter((r) => r.type === 'steps' || (r.source === 'event' && r.type === 'reveal'))); } catch (e) { console.warn('steps 没能重放', e); }
+        const mine = el.classList.contains('block-steps') ? list.filter((r) => r.type === 'steps' || (r.source === 'event' && r.type === 'reveal')) : list;
+        try { el._replay(mine); } catch (e) { console.warn('作答没能重放', e); }
       }
       restoreFigures(recs);
     } finally {
@@ -275,7 +277,7 @@ export async function renderClass(root, meta) {
     }
     for (const [bid] of byBlock) {
       const el = on(bid);
-      if (!el || ['block-steps', 'block-scene', 'block-graph', 'block-space'].some((c) => el.classList.contains(c))) continue;
+      if (!el || el._replay || ['block-steps', 'block-scene', 'block-graph', 'block-space'].some((c) => el.classList.contains(c))) continue;
       const lines = (results.get(bid) || []).map((r) => r.line.replace(/^[^：]*：/, '')).filter(Boolean);
       if (!lines.length) continue;
       el.insertAdjacentHTML('beforeend', `<div class="class-prev"><div class="class-prev-tag">刷新前的作答</div><ul>${lines.slice(-4).map((l) => `<li>${mdToHtml(l, { inline: true })}</li>`).join('')}</ul></div>`);
@@ -1298,7 +1300,7 @@ export async function renderClass(root, meta) {
       },
       {
         name: 'component_doc',
-        description: '取一个组件的完整写法（课堂说明里有的组件只写了最常用的写法，末尾写着「更多字段和例子」）。name 写组件名，比如 elim、sched、answer。每调用一次你要多等一整轮，只在要用说明里没写到的字段时用；照精简版写错了，页面会自动把完整写法附在提醒里，不用先查。',
+        description: '取一个组件的完整写法（课堂说明里有的组件只写了最常用的写法，末尾写着「更多写法」）。name 写组件名，比如 elim、sched、answer。每调用一次你要多等一整轮，只在要用说明里没写到的字段时用；照精简版写错了，页面会自动把完整写法附在提醒里，不用先查。',
         inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
         async execute(input) {
           const name = String(input?.name ?? '').trim();

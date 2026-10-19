@@ -80,3 +80,84 @@ test('老师自己写 ops：照做；做完不是最简形就自动接着做', (
   assert.throws(() => E.parse({ matrix: '[[1,a],[a,1]]' }), /param/);
   assert.throws(() => E.parse({ matrix: '[[1,2],[3,4]]', param: 'a' }), /矩阵里却没有 a/);
 });
+
+test('elim 的错法诊断：基础解系没变号、特解没放回主元的位置、逆矩阵转置 / 伴随没除、矩阵方程乘反了', async () => {
+  const { misreadFill, fillSpec } = await import('../kit/src/stepperspec.js');
+  const diagnose = (fields) => {
+    const input = E.parse(fields);
+    const right = E.run(input);
+    const t = fillSpec(E.table(input, right), {}).table;
+    const vs = E.variants(input).map((v) => ({ ...v, table: fillSpec(E.table(v.input, E.run(v.input)), {}).table }));
+    return { input, vs, t, guess: (v) => misreadFill(t, v.table.rows.map((r) => r.cells.map((c) => String(c.v))), vs) };
+  };
+  // 主元在第 1、3 列：x2、x4 自由
+  const a = diagnose({ matrix: '[[1, 2, 0, 1], [0, 0, 1, 3]]', b: '[4, 5]' });
+  assert.deepEqual(a.vs.map((v) => v.input.mistake), ['sign', 'order']);
+  for (const v of a.vs) assert.equal(a.guess(v), v.label);
+  // 对的不会被认成错法；对不上任何错法也不乱认
+  const ok = a.t.rows.map((r) => r.cells.map((c) => String(c.v)));
+  assert.equal(misreadFill(a.t, ok, a.vs), '');
+  // 求逆：|A| = −2，A⁻¹ 不对称
+  const b = diagnose({ matrix: '[[1, 2], [3, 4]]', inverse: 'true' });
+  assert.deepEqual(b.vs.map((v) => v.input.mistake), ['transpose', 'adjugate']);
+  for (const v of b.vs) assert.equal(b.guess(v), v.label);
+  assert.deepEqual(E.run(b.vs[1].input).X.map((r) => r.map(String)), [['4', '-2'], ['-3', '1']]);
+  // 对称、|A| = 1 的：两种错法都和对的一样，不列
+  assert.deepEqual(E.variants(E.parse({ matrix: '[[2, 1], [1, 1]]', inverse: 'true' })), []);
+  // AX = B 与 XA = B
+  for (const side of ['left', 'right']) {
+    const c = diagnose({ matrix: '[[1, 1], [0, 1]]', rhs: '[[1, 2], [3, 4]]', side });
+    assert.deepEqual(c.vs.map((v) => v.input.mistake), ['side']);
+    assert.equal(c.guess(c.vs[0]), c.vs[0].label);
+  }
+});
+
+test('mode: do：学生自己写行变换，页面做；到了目标就算完；能撤回、能要提示；自己算的那一行逐个核对', async () => {
+  const { doStart, doParse, doApply, doUndo, doStatus, doHint, doAutoCount, doOpText, doChanged, doCheckRow } = await import('../kit/src/engines/elim.js');
+  // 求逆：目标是左边化成 E
+  const inv = E.parse({ matrix: '[[1, 2], [3, 4]]', inverse: 'true' });
+  let st = doStart(inv);
+  assert.equal(st.target, 'E');
+  assert.equal(doStatus(st).done, false);
+  for (const t of ['r2 - 3r1', 'r2 / -2', 'r1 - 2r2']) st = doApply(st, doParse(st, t)[0]).state;
+  assert.equal(doStatus(st).done, true);
+  assert.deepEqual(st.M.map((r) => r.slice(2).map((x) => x.constValue().toString())), [['-2', '1'], ['3/2', '-1/2']]);
+  // 写成文字再读回来是同一步（刷新后照记录重放用的就是这几个字）
+  for (const h of st.history) assert.equal(doOpText(doParse(st, doOpText(h.op))[0]), doOpText(h.op));
+  assert.deepEqual(st.history.map((h) => doOpText(h.op)), ['r2 − 3r1', 'r2 / −2', 'r1 − 2r2']);
+  // 撤回
+  const back = doUndo(st);
+  assert.equal(back.history.length, 2);
+  assert.equal(doStatus(back).done, false);
+  // 求秩：目标是阶梯形；默认的提示是页面自己会做的下一步
+  const rk = E.parse({ matrix: '[[2, 4, 6], [1, 1, 1]]' });
+  const s0 = doStart(rk);
+  assert.equal(s0.target, 'ref');
+  assert.equal(doOpText(doHint(s0)), 'r1 ↔ r2');
+  assert.equal(doAutoCount(rk), 2);
+  // 解方程组要最简形；target: ref 只要阶梯形
+  assert.equal(doStart(E.parse({ matrix: '[[1, 2], [3, 4]]', b: '[1, 1]' })).target, 'rref');
+  assert.equal(doStart(E.parse({ matrix: '[[1, 2], [3, 4]]', b: '[1, 1]' }), { target: 'ref' }).target, 'ref');
+  // 已经是阶梯形、还不是最简形：说清楚还差什么
+  const half = doStart(E.parse({ matrix: '[[1, 2], [0, 3]]', b: '[1, 1]' }));
+  assert.match(doStatus(half).text, /已经是行阶梯形了；行最简形还要/);
+  // 没改变矩阵、倍加出了分数：提醒一句
+  assert.match(doApply(s0, doParse(s0, '1r1')[0]).note, /没有改变矩阵/);
+  assert.match(doApply(s0, doParse(s0, 'r2 - (1/3)r1')[0]).note, /出了分数/);
+  // 写错了报出来（不带 ops: 前缀）
+  assert.throws(() => doParse(s0, 'r5 - r1'), /^Error: 「r5 - r1」里的第 5 行不存在（一共 2 行）$/);
+  assert.throws(() => doParse(s0, ''), /写一步行变换/);
+  assert.throws(() => doStart(E.parse({ matrix: '[[1, a], [1, 1]]', param: 'a' })), /不能含参数/);
+  // write: rows：交换不用写；倍加要写出新的那一行，逐个数核对（分数、整数写法都认）
+  const [op] = doParse(s0, 'r2 - (1/2)r1');
+  assert.deepEqual(doChanged(op), [1]);
+  assert.deepEqual(doChanged(doParse(s0, 'r1 <-> r2')[0]), []);
+  assert.deepEqual(doCheckRow(s0, op, ['0', '-1', '-2']), []);
+  assert.deepEqual(doCheckRow(s0, op, ['0', '1', '-4/2']), [1]);
+  assert.deepEqual(doCheckRow(s0, op, ['0', 'x', '']), [1, 2]);
+  // 化不成 E：左边出现零行，说 A 不可逆
+  let sg = doStart(E.parse({ matrix: '[[1, 2], [2, 4]]', inverse: 'true' }));
+  sg = doApply(sg, doParse(sg, 'r2 - 2r1')[0]).state;
+  assert.equal(doStatus(sg).done, true);
+  assert.match(doStatus(sg).text, /不可逆/);
+});

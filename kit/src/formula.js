@@ -150,8 +150,11 @@ function startsWithDigit(n) {
  * formula: 字段 → 要代的值。"n" → n = 1…6；"n=0..5" → n = 0…5；"n, k" → 两个都代（各取几组）。
  * 返回 [{ name, values }]；写错抛出中文原因
  */
+// 作者写的希腊字母（formula: λ、answer: (λ-1)^2）换成名字，和学生输入的读法一致（λ 读成 lambda）
+const greekNames = (t) => String(t ?? '').replace(/[αβγδλμθξη]/g, (c) => ` ${GREEK[c]} `);
+
 export function parseFree(spec) {
-  const parts = String(spec ?? '').split(/[,，;；]/).map((x) => x.trim()).filter(Boolean);
+  const parts = greekNames(spec).split(/[,，;；]/).map((x) => x.trim()).filter(Boolean);
   if (!parts.length) throw new Error('formula: 后面写式子里的变量，比如 formula: n');
   return parts.map((p) => {
     const m = p.match(/^([A-Za-z_]\w*)\s*(?:[=＝]\s*(-?\d+)\s*(?:\.\.|…|~|到)\s*(-?\d+))?$/);
@@ -275,11 +278,15 @@ function varsIn(n, out = new Set()) {
  */
 export function formulaSpec(answer, freeSpec, scope = {}) {
   const free = parseFree(freeSpec);
-  const src = String(answer ?? '').trim();
+  const shown = String(answer ?? '').trim();
+  const src = greekNames(shown).replace(/\s+/g, ' ').trim();
   if (!src) throw new Error('formula: 的题要写 answer:（标准答案的式子，比如 3^(n-1)*A）');
-  let ast;
-  try { ast = parse(src); } catch (e) { throw new Error(`answer: ${src} 写错了：${e.message}`); }
   const freeNames = free.map((f) => f.name);
+  // 按表达式读；读不了（省略了乘号：(λ-1)(λ-2)、2n）就照学生输入的读法再读一次
+  let ast, expected = src;
+  try { ast = parse(src); } catch (e) {
+    try { expected = normalizeFormula(shown, { names: [...freeNames, ...Object.keys(scope)] }); ast = parse(expected); } catch { throw new Error(`answer: ${shown} 写错了：${e.message}`); }
+  }
   const used = [...varsIn(ast)].filter((v) => !freeNames.includes(v));
   const missing = used.filter((v) => !(v in scope) && !['I', 'E', 'pi', 'e'].includes(v));
   if (missing.length) throw new Error(`answer: 里的 ${missing.join('、')} 没有定义：在 let 里给出它的值`);
@@ -288,5 +295,5 @@ export function formulaSpec(answer, freeSpec, scope = {}) {
   // 只在一两个值上算得出来，比不出对错（比如 A^(1/n)）
   if (self.checked < 2) throw new Error(`answer: ${src} 代不进去：只有 ${self.checked} 组值算得出来，检查式子或 formula: 的范围`);
   const names = [...new Set([...freeNames, ...Object.keys(scope).filter((k) => /^[A-Za-z_]\w*$/.test(k))])];
-  return { expected: src, free, scope, names, keys: [...freeNames, ...used], display: src };
+  return { expected, free, scope, names, keys: [...freeNames, ...used], display: shown };
 }

@@ -109,10 +109,10 @@ test('完整写法：精简版一直带着，后半段按名字取；写错了�
   assert.deepEqual(sectionNames('### trace：代码逐行跟踪（真的把 C 代码跑一遍）'), ['trace']);
   assert.deepEqual(sectionNames('### 公式里的三个工具：`\\calc`、`\\hl`'), ['calc', 'hl']);
   const la = docsForSubject(md, '线代');
-  assert.match(la, /elim 的精简\n\n（更多字段和例子：component_doc 取 elim；/);
+  assert.match(la, /elim 的精简\n\n（更多写法：component_doc 取 elim）/);
   assert.doesNotMatch(la, /elim 的完整|线代 answer 的完整|sched/);
   assert.doesNotMatch(la, /完整写法 -->/);
-  assert.match(docsForSubject(md, '线代', { lookup: false }), /（elim 还有更多字段和例子；写错了页面会把完整写法附给你）/);
+  assert.match(docsForSubject(md, '线代', { lookup: false }), /elim 的精简\n\n（还有更多写法）/);
   // 点名的带完整写法；代码块里的标记不算
   const named = docsForSubject(md, '线代', { full: ['elim'] });
   assert.match(named, /elim 的完整\n```elim\n<!-- 完整写法 -->\n```/);

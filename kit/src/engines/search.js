@@ -8,6 +8,30 @@ import { treeSvg } from './treeview.js';
 const frac = (a, b) => { const g = gcd(a, b); const p = a / g, q = b / g; return q === 1 ? `${p}` : `${p}/${q}`; };
 function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) [a, b] = [b, a % b]; return a || 1; }
 const dec = (a, b) => (Number.isInteger(a / b) ? String(a / b) : (a / b).toFixed(2).replace(/0$/, ''));
+// number 的 ask 判分只看 answer（按数比）；错法诊断（stepper.js）却是拿学生写的文字和错法的答案逐字比，
+// 所以把同一个数常见的几种写法放进 alts：约分的、没约分的、两位小数（number 的判分不看 alts）
+const numForms = (a, b) => [...new Set([frac(a, b), `${a}/${b}`, dec(a, b), String(a / b)])];
+
+// 一个 run 里学生能答的：每个 ask（题面 → 答案）、quiz 的答案、填表的格子
+function answersOf(engine, input, r, fields) {
+  const asks = new Map();
+  for (const s of r.steps) for (const a of [s.ask, ...(s.asks || [])]) { const k = a && `${a.kind}|${a.q}`; if (a && !asks.has(k)) asks.set(k, JSON.stringify(a.alts ?? a.answer)); }
+  const get = (f) => { try { return f() ?? null; } catch { return null; } };
+  const quiz = get(() => engine.quiz(input, r, fields).answer);
+  const t = get(() => engine.table(input, r, fields));
+  return { asks, quiz, rows: t ? t.rows.length : -1, cells: t ? JSON.stringify(t.rows.map((row) => row.cells.map((c) => c.v))) : null };
+}
+// 只留认得出来的错法（和 stepper.js 的诊断一样比）：同一个问题答案不同、quiz 答案不同、或者填表行数一样而格子不同。
+// 和对的一模一样的不列，免得误报
+function differing(engine, input, list, fields = {}) {
+  if (!list.length) return list;
+  let base;
+  try { base = answersOf(engine, input, engine.run(input), fields); } catch { return list; }
+  const tell = (w) => [...base.asks].some(([k, a]) => w.asks.has(k) && w.asks.get(k) !== a)
+    || (base.quiz !== null && w.quiz !== null && base.quiz !== w.quiz)
+    || (base.cells !== null && w.cells !== null && base.rows === w.rows && base.cells !== w.cells);
+  return list.filter((v) => { try { return tell(answersOf(engine, v.input, engine.run(v.input), fields)); } catch { return false; } });
+}
 
 // ================= KMP =================
 
@@ -206,7 +230,7 @@ function hashParse(fields) {
   return { keys: keys.map((t) => ({ text: t, v: Number(t) })), p, size: probe === 'chain' ? p : size, probe };
 }
 
-function hashRun({ keys, p, size, probe }) {
+function hashRun({ keys, p, size, probe, mistake }) {
   const steps = [];
   const table = Array(size).fill(null); // 开放定址：{ key, cnt }
   const chains = Array.from({ length: size }, () => []); // 拉链：[{ key, cnt }]
@@ -242,19 +266,23 @@ function hashRun({ keys, p, size, probe }) {
   const n = keys.length;
   const succ = probe === 'chain' ? chains.flat().map((x) => x.cnt) : table.filter(Boolean).map((x) => x.cnt);
   const sSum = succ.reduce((a, b) => a + b, 0);
-  steps.push({ view: v({ showCnt: true }), msg: `ASL成功 = 每个关键字的比较次数加起来 ÷ ${n} = (${succ.join(' + ')}) / ${n} = ${frac(sSum, n)}${Number.isInteger(sSum / n) ? '' : ` ≈ ${dec(sSum, n)}`}。`, ask: { tag: 'asl', kind: 'number', q: 'ASL成功（查找成功的平均查找长度）是多少？', answer: sSum / n, display: frac(sSum, n) } });
-  // 查找失败：按散列函数可能算出的 p 个地址，各自要比较几次才能确定没有
+  steps.push({ view: v({ showCnt: true }), msg: `ASL成功 = 每个关键字的比较次数加起来 ÷ ${n} = (${succ.join(' + ')}) / ${n} = ${frac(sSum, n)}${Number.isInteger(sSum / n) ? '' : ` ≈ ${dec(sSum, n)}`}。`, ask: { tag: 'asl', kind: 'number', q: 'ASL成功（查找成功的平均查找长度）是多少？', answer: sSum / n, display: frac(sSum, n), alts: numForms(sSum, n) } });
+  // 查找失败：按散列函数可能算出的 p 个地址，各自要比较几次才能确定没有。
+  // 常见错法（mistake，只拿来和学生写的比）：failBySize 表长 size 个地址都算、按 size 平均；failNoEmpty 和空位置的那次比较没算；
+  // nullCounted 拉链法和空指针的比较也算了一次；failByN 除以了关键字个数 n
+  const starts = mistake === 'failBySize' ? size : p;
   const fail = [];
-  for (let r = 0; r < p; r++) {
-    if (probe === 'chain') { fail.push(chains[r].length); continue; }
+  for (let r = 0; r < starts; r++) {
+    if (probe === 'chain') { fail.push(chains[r].length + (mistake === 'nullCounted' ? 1 : 0)); continue; }
     let c = 0;
-    for (const { a } of probeSeq(r)) { c++; if (table[a] === null) break; }
+    for (const { a } of probeSeq(r)) { c++; if (table[a] === null) { if (mistake === 'failNoEmpty') c--; break; } }
     fail.push(c);
   }
   const fSum = fail.reduce((a, b) => a + b, 0);
+  const den = mistake === 'failByN' ? n : starts;
   const rule = probe === 'chain' ? '链表有几个结点就比较几次（王道：和空指针的比较不算）' : '一直探测到空位置为止（王道：和空位置的那次比较也算）';
-  steps.push({ view: v({ showCnt: true, fail }), msg: `ASL失败：H(key) 只能算出 0～${p - 1} 这 ${p} 个地址，从每个地址开始查失败要比较几次：${rule}。(${fail.join(' + ')}) / ${p} = ${frac(fSum, p)}${Number.isInteger(fSum / p) ? '' : ` ≈ ${dec(fSum, p)}`}。`, ask: { tag: 'aslfail', kind: 'number', q: 'ASL失败（查找失败的平均查找长度）是多少？', answer: fSum / p, display: frac(fSum, p) } });
-  return { steps, passes: [table.map((x) => (x ? x.key : '#'))], asl: { succ: frac(sSum, n), fail: frac(fSum, p) } };
+  steps.push({ view: v({ showCnt: true, fail }), msg: `ASL失败：H(key) 只能算出 0～${p - 1} 这 ${p} 个地址，从每个地址开始查失败要比较几次：${rule}。(${fail.join(' + ')}) / ${den} = ${frac(fSum, den)}${Number.isInteger(fSum / den) ? '' : ` ≈ ${dec(fSum, den)}`}。`, ask: { tag: 'aslfail', kind: 'number', q: 'ASL失败（查找失败的平均查找长度）是多少？', answer: fSum / den, display: frac(fSum, den), alts: numForms(fSum, den) } });
+  return { steps, passes: [table.map((x) => (x ? x.key : '#'))], asl: { succ: frac(sSum, n), fail: frac(fSum, den) } };
 }
 
 function hashView(s, input) {
@@ -304,13 +332,23 @@ export const hashEngine = {
       extra: [{ label: 'ASL成功', v: r.asl.succ, num: true }, { label: 'ASL失败', v: r.asl.fail, num: true }],
     };
   },
-  // 常见错法：表长当成了除数；线性探测和平方探测弄混
-  variants(input) {
+  // 常见错法：表长当成了除数；线性探测和平方探测弄混；ASL失败算错（开放定址：空位置那次没算、按表长平均；
+  // 拉链法：和空指针的比较也算了；都可能：除以了关键字个数）
+  variants(input, fields) {
+    const { p, size } = input;
+    const n = input.keys.length;
     const out = [];
-    if (input.size !== input.p && input.probe !== 'chain') out.push({ label: `像是用表长 ${input.size} 当成了除数（H(key) = key % ${input.p}，不是 % ${input.size}）`, input: { ...input, p: input.size } });
-    if (input.probe === 'linear') out.push({ label: '像是按平方探测探的', input: { ...input, probe: 'quadratic' } });
-    if (input.probe === 'quadratic') out.push({ label: '像是按线性探测探的', input: { ...input, probe: 'linear' } });
-    return out;
+    if (input.probe !== 'chain') {
+      if (size !== p) out.push({ label: `像是用表长 ${size} 当成了除数（H(key) = key % ${p}，不是 % ${size}）`, input: { ...input, p: size } });
+      if (input.probe === 'linear') out.push({ label: '像是按平方探测探的', input: { ...input, probe: 'quadratic' } });
+      if (input.probe === 'quadratic') out.push({ label: '像是按线性探测探的', input: { ...input, probe: 'linear' } });
+      out.push({ label: '像是查找失败时和空位置的那次比较没算（王道：探测到空位置才能确定查不到，这一次也算）', input: { ...input, mistake: 'failNoEmpty' } });
+      if (size !== p) out.push({ label: `像是 ASL失败按表长 ${size} 个地址平均了（王道：H(key) 只能算出 0～${p - 1}，按这 ${p} 个地址平均）`, input: { ...input, mistake: 'failBySize' } });
+    } else {
+      out.push({ label: '像是拉链法查找失败时和空指针的比较也算了一次（王道：链表有几个结点就比较几次，空指针不算）', input: { ...input, mistake: 'nullCounted' } });
+    }
+    if (n !== p) out.push({ label: `像是 ASL失败除以了关键字个数 ${n}（王道：ASL成功才除以关键字个数，ASL失败除以 H(key) 能算出的地址个数 ${p}）`, input: { ...input, mistake: 'failByN' } });
+    return differing(hashEngine, input, out, fields);
   },
 };
 
@@ -343,7 +381,9 @@ function decisionTree(n) {
   return { root, nodes };
 }
 
-function bsRun({ items, keys, keyText, tree, ceil = false }) {
+// 常见错法（只拿来和学生写的比）：ceil mid 向上取整；mistake: failLevel 判定树查找失败把失败结点那层也算了，
+// failByN ASL失败除以 n；mistake: zero 位置从 0 数（比的元素一样，只是填表时 low、high、mid 都小 1，见 table）
+function bsRun({ items, keys, keyText, tree, ceil = false, mistake }) {
   const n = items.length;
   const steps = [];
   const T = decisionTree(n);
@@ -364,7 +404,8 @@ function bsRun({ items, keys, keyText, tree, ceil = false }) {
       path.push(mid);
       const x = items[mid - 1];
       const c = key === x.v ? 0 : key < x.v ? -1 : 1;
-      const ask = { tag: 'mid', kind: 'pick', q: `下一次和哪个元素比？在图里点出来。`, answer: String(mid) };
+      // 题面带上查谁、第几次：错法诊断按题面找错法里的同一个问题，每一问的题面要不一样
+      const ask = { tag: 'mid', kind: 'pick', q: `查找 ${keyText[ki]}：第 ${path.length} 次和哪个元素比？在图里点出来。`, answer: String(mid) };
       if (c === 0) {
         steps.push({ view: v({ low, high, mid, key: keyText[ki], path: path.slice(), found: mid }), msg: `mid = ⌊(${low} + ${high})/2⌋ = ${mid}，第 ${mid} 个是 ${x.text} = ${keyText[ki]}：找到了，一共比较了 ${path.length} 次。`, ask });
         break;
@@ -380,12 +421,13 @@ function bsRun({ items, keys, keyText, tree, ceil = false }) {
     const sSum = depths.reduce((a, b) => a + b, 0);
     // 失败结点（判定树里空的位置）：比较的次数 = 它双亲所在的层数
     const fails = [];
-    for (const nd of Object.values(T.nodes)) for (const c of [nd.left, nd.right]) if (c === null) fails.push(nd.d);
+    for (const nd of Object.values(T.nodes)) for (const c of [nd.left, nd.right]) if (c === null) fails.push(nd.d + (mistake === 'failLevel' ? 1 : 0));
     const fSum = fails.reduce((a, b) => a + b, 0);
-    asl = { succ: frac(sSum, n), fail: frac(fSum, n + 1) };
+    const fDen = mistake === 'failByN' ? n : n + 1;
+    asl = { succ: frac(sSum, n), fail: frac(fSum, fDen) };
     const byLevel = (arr) => { const m = {}; for (const d of arr) m[d] = (m[d] || 0) + 1; return Object.entries(m).map(([d, c]) => `${d}×${c}`).join(' + '); };
-    steps.push({ view: v({ all: true }), msg: `判定树：每个结点就是一次比较，查到第 d 层的结点要比较 d 次。ASL成功 = (${byLevel(depths)}) / ${n} = ${frac(sSum, n)}。`, ask: { tag: 'asl', kind: 'number', q: 'ASL成功是多少？', answer: sSum / n, display: frac(sSum, n) } });
-    steps.push({ view: v({ all: true }), msg: `查找失败落在判定树的 ${n + 1} 个空位置上，比较次数是空位置双亲的层数。ASL失败 = (${byLevel(fails)}) / ${n + 1} = ${frac(fSum, n + 1)}。`, ask: { tag: 'aslfail', kind: 'number', q: 'ASL失败是多少？', answer: fSum / (n + 1), display: frac(fSum, n + 1) } });
+    steps.push({ view: v({ all: true }), msg: `判定树：每个结点就是一次比较，查到第 d 层的结点要比较 d 次。ASL成功 = (${byLevel(depths)}) / ${n} = ${frac(sSum, n)}。`, ask: { tag: 'asl', kind: 'number', q: 'ASL成功是多少？', answer: sSum / n, display: frac(sSum, n), alts: numForms(sSum, n) } });
+    steps.push({ view: v({ all: true }), msg: `查找失败落在判定树的 ${n + 1} 个空位置上，比较次数是空位置双亲的层数。ASL失败 = (${byLevel(fails)}) / ${fDen} = ${frac(fSum, fDen)}。`, ask: { tag: 'aslfail', kind: 'number', q: 'ASL失败是多少？', answer: fSum / fDen, display: frac(fSum, fDen), alts: numForms(fSum, fDen) } });
   }
   return { steps, passes: seqs, T, asl };
 }
@@ -429,10 +471,11 @@ export const bsearchEngine = {
     if (!input.keys.length) return null;
     const rows = [];
     let ki = -1;
+    const off = input.mistake === 'zero' ? 1 : 0; // 错法：位置从 0 数，写出来的 low、high、mid 都小 1
     for (const x of r.steps) {
       if (x.view.key !== undefined && !x.view.path?.length && x.view.mid === undefined) { ki++; continue; }
       if (x.view.mid === undefined) continue;
-      rows.push({ label: `查 ${input.keyText[ki]}：第 ${x.view.path.length} 次`, cells: [{ v: String(x.view.low), num: true }, { v: String(x.view.high), num: true }, { v: String(x.view.mid), num: true }, { v: input.items[x.view.mid - 1].text }] });
+      rows.push({ label: `查 ${input.keyText[ki]}：第 ${x.view.path.length} 次`, cells: [{ v: String(x.view.low - off), num: true }, { v: String(x.view.high - off), num: true }, { v: String(x.view.mid - off), num: true }, { v: input.items[x.view.mid - 1].text }] });
     }
     return {
       q: `在有序表 ${input.items.map((x) => x.text).join(' ')}（位置从 1 数）里折半查找 ${input.keyText.join('、')}。每一次比较写出 low、high、mid（mid = ⌊(low + high)/2⌋）和比的那个元素。`,
@@ -440,8 +483,17 @@ export const bsearchEngine = {
       rows,
     };
   },
-  // 常见错法：mid 向上取整
-  variants(input) {
-    return [{ label: '像是 mid 向上取整了（王道：mid = ⌊(low + high)/2⌋，向下取整）', input: { ...input, ceil: true } }];
+  // 常见错法：mid 向上取整；位置从 0 数（王道的代码里数组下标从 0 开始，这张表从 1 数）；
+  // 判定树的 ASL失败：把失败结点那层也算了一次比较、除以了 n
+  variants(input, fields) {
+    const n = input.items.length;
+    return differing(bsearchEngine, input, [
+      { label: '像是 mid 向上取整了（王道：mid = ⌊(low + high)/2⌋，向下取整）', input: { ...input, ceil: true } },
+      ...(input.keys.length ? [{ label: `像是位置从 0 数了，low = 0、high = ${n - 1}（王道这张表位置从 1 数：low = 1、high = ${n}，mid 也跟着大 1）`, input: { ...input, mistake: 'zero' } }] : []),
+      ...(input.tree ? [
+        { label: '像是查找失败时把失败结点那一层也算了一次比较（王道：失败结点不是比较，次数是它双亲所在的层数）', input: { ...input, mistake: 'failLevel' } },
+        { label: `像是 ASL失败除以了 ${n}（王道：判定树有 n + 1 = ${n + 1} 个失败结点，除以 ${n + 1}）`, input: { ...input, mistake: 'failByN' } },
+      ] : []),
+    ], fields);
   },
 };

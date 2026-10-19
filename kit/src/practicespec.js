@@ -16,7 +16,8 @@ const CMD = /^(pick|let|where)\s+(.*)$/i;
 const NAME = /^[A-Za-z_][\w]*$/;
 const ONE_LINE = new Set(['id', 'title', 'type', 'types', 'count', 'level', 'answer', 'before', 'after', 'formula', 'check', 'width']);
 // 常数和图里的变量名不能拿来 pick；n 只有在 formula: n（答案是含 n 的式子）时才不能用
-const RESERVED = new Set(['I', 'E', 'pi', 'e', 'step', 't']);
+// I、E 可以用（组成原理里 E 是阶码）：题目里的量只在这个题型里有效，单独写 E 就是它，E(3) 照样是单位矩阵
+const RESERVED = new Set(['pi', 'e', 'step', 't']);
 const GENS = ['int', 'choice', 'vec', 'mat'];
 
 /** 解析模板。返回 { fields, picks, lets, wheres }；写错了抛出中文原因 */

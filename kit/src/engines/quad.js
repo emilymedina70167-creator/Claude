@@ -267,7 +267,8 @@ export function run(input) {
     const f = charPoly(A);
     const { roots, rest } = f.roots();
     if (rest.deg >= 1) throw new Error('特征值不全是有理数，正交变换法这里演示不了（用配方法：method: complete）');
-    const vals = roots.flatMap(({ root, mult }) => Array(mult).fill(root));
+    // 错法 diagValues：把 A 的主对角元当成了标准形的系数（应该是特征值）
+    const vals = input.mistake === 'diagValues' ? A.map((r, i) => r[i]).sort((x, y) => x.cmp(y)) : roots.flatMap(({ root, mult }) => Array(mult).fill(root));
     d = vals;
     const std = vals.map((x, k) => `${x.n < 0n ? '-' : k ? '+' : ''}${x.n === 1n && x.d === 1n || x.n === -1n && x.d === 1n ? '' : (x.n < 0n ? x.neg() : x).toTeX()}y_{${k + 1}}^{2}`).join(' ');
     notes.push(`特征值 ${vals.map(String).join(', ')}`);
@@ -282,7 +283,9 @@ export function run(input) {
     }
   }
   const p = signs.filter((x) => x > 0).length, q = signs.filter((x) => x < 0).length;
-  const kind = definiteness(p, q, n);
+  // 错法 diagDefinite：看主对角元的正负判断正定性（主对角元都正只是正定的必要条件）
+  const dg = A.map((r, i) => (r[i].zero ? 0 : r[i].n > 0n ? 1 : -1));
+  const kind = input.mistake === 'diagDefinite' ? definiteness(dg.filter((x) => x > 0).length, dg.filter((x) => x < 0).length, n) : definiteness(p, q, n);
   // 顺序主子式（对照正定的判定）
   const minors = Array.from({ length: n }, (_, k) => det(A.slice(0, k + 1).map((r) => r.slice(0, k + 1))));
   notes.push(`正惯性指数 ${p}，负惯性指数 ${q}，${kind}`);
@@ -316,8 +319,14 @@ export function table(input, r) {
 }
 
 // 常见错法：交叉项的系数没除以 2
+// 只列会得出不一样答案的（判断用的是正定性和标准形的系数）
 export function variants(input) {
-  return [{ label: '像是交叉项的系数没有除以 2（aᵢⱼ 应该是 xᵢxⱼ 系数的一半）', input: { ...input, halfMistake: true } }];
+  const out = [{ label: '像是交叉项的系数没有除以 2（aᵢⱼ 应该是 xᵢxⱼ 系数的一半）', input: { ...input, halfMistake: true } }];
+  const right = run(input);
+  const differs = (mistake, key) => { try { const w = run({ ...input, mistake }); return String(w[key]) !== String(right[key]); } catch { return false; } };
+  if (differs('diagDefinite', 'kind')) out.push({ label: '像是看主对角元的正负判断正定性（主对角元都大于 0 只是必要条件；要看标准形的系数，或顺序主子式、特征值）', input: { ...input, mistake: 'diagDefinite' } });
+  if (input.method === 'orth' && differs('diagValues', 'd')) out.push({ label: '像是把 A 的主对角元当成了标准形的系数（正交变换法的系数是 A 的特征值）', input: { ...input, mistake: 'diagValues' } });
+  return out;
 }
 
 export const quadEngine = { name: 'quad', title: '二次型', parse, run, view, quiz, table, variants };
