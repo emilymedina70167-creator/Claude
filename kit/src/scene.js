@@ -14,6 +14,7 @@ import { createPlane, snap as snapTo, figureControls, sliderText } from './plot.
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { session } from './session.js';
 import { splitMods, splitTop } from './mods.js';
+import { conicLines } from './quadric.js';
 
 export { splitMods, splitTop };
 
@@ -38,12 +39,12 @@ export function parseScene(src) {
     const line = raw.replace(/\s+#\s.*$/, '').trimEnd();
     if (!line.trim()) { if (lastField) fields[lastField] += '\n'; continue; }
     const f = line.match(/^([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/);
-    if (f && !/^(let|vector|point|segment|line|span|grid|area|polygon|text|show|goal|slider|curve|eigen)\b/.test(line)) {
+    if (f && !/^(let|vector|point|segment|line|span|grid|area|polygon|text|show|goal|slider|curve|eigen|conic)\b/.test(line)) {
       lastField = f[1].toLowerCase();
       fields[lastField] = f[2];
       continue;
     }
-    const c = line.trim().match(/^(let|vector|point|segment|line|span|grid|area|polygon|text|show|goal|slider|curve|eigen)\s+(.*)$/i);
+    const c = line.trim().match(/^(let|vector|point|segment|line|span|grid|area|polygon|text|show|goal|slider|curve|eigen|conic)\s+(.*)$/i);
     if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2]), srcLine: line.trim() }); lastField = null; continue; }
     // 只有说明类字段（q、note、explain……）可以续行；id、title 这类一行字段后面跟着看不懂的行，多半是命令写错了
     if (lastField && !ONE_LINE.has(lastField)) fields[lastField] += '\n' + line;
@@ -94,6 +95,11 @@ function parseCmd(kind, rest) {
     const [p, d] = body.split(/\s+dir\s+/);
     if (!d) throw new Error('line 的写法：line 点 dir 方向');
     return { kind, p: compile(p), d: compile(d), mods };
+  }
+  if (kind === 'conic') {
+    // conic A = c：二次曲线 xᵀAx = c（不写 = c 就是 = 1）
+    const m = body.match(/^(.+?)(?:\s*=\s*([^=\]]+))?$/);
+    return { kind, A: compile(m[1]), c: m[2] !== undefined ? compile(m[2]) : () => 1, mods };
   }
   const exprs = splitTop(body).map(compile);
   return { kind, exprs, mods };
@@ -149,6 +155,8 @@ export function createScene(container, src, opts = {}) {
         if (c.kind === 'point') c.exprs.forEach((e) => take(e(v)));
         if (c.kind === 'let' && c.mods.drag) take(v[c.name]);
         if (c.kind === 'goal') take(c.rhs(v));
+        // 椭圆整个装得下；双曲线这种伸到远处的，按顶点取
+        if (c.kind === 'conic') { const q = conicLines(c.A(v), c.c(v), 6); for (const l of q.lines) for (const p of l) take(p.map((x) => Math.max(-4, Math.min(4, x)))); }
       } catch { /* 画的时候再报错 */ }
     }
     plane.range = Math.min(10, Math.max(3, Math.ceil(m + 1)));
@@ -304,6 +312,22 @@ export function createScene(container, src, opts = {}) {
         el.style.stroke = color(c, 'var(--v3)');
         if (c.mods.fill) el.style.fill = color(c, 'var(--v3)');
         if (lab) plane.text(pts[Math.floor(N * 0.12)], lab, 'plot-text curve-label').style.fill = color(c, 'var(--v3)');
+        break;
+      }
+      case 'conic': {
+        const A = c.A(v), cc = c.c(v);
+        if (!isMat(A) || A.length !== 2 || A[0].length !== 2) throw new Error('conic 需要 2×2 的对称矩阵');
+        if (!isNum(cc)) throw new Error('conic 的右边（= 后面）要是一个数');
+        const q = conicLines(A, cc, plane.range * 1.5);
+        const col = color(c, 'var(--v2)');
+        for (const l of q.lines) { const el = plane.path(l, `curve${c.mods.dashed ? ' dashed' : ''}`); el.style.stroke = col; }
+        // 主轴（特征向量方向）：axes 写了就画成虚线，看出曲线是转过去的
+        if (c.mods.axes) for (const d of q.axes) { const L = plane.range * 1.5; plane.path([[-L * d[0], -L * d[1]], [L * d[0], L * d[1]]], 'curve dashed').style.stroke = 'var(--muted)'; }
+        const name = lab || q.kind;
+        // 名字标在看得见的一段上（双曲线伸出画面的部分会被裁掉）
+        const seen = q.lines[0]?.filter((p) => Math.max(Math.abs(p[0]), Math.abs(p[1])) <= plane.range * 0.8) || [];
+        if (seen.length) plane.text(seen[Math.floor(seen.length * 0.3)], name, 'plot-text curve-label').style.fill = col;
+        else plane.text([-plane.range * 0.9, plane.range * 0.85], name, 'plot-text curve-label').style.fill = col;
         break;
       }
       case 'eigen': {

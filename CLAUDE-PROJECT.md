@@ -181,7 +181,7 @@ goal A*x = [3, 5] msg="命中！"
 
 颜色（彩色粉笔）：`blue`、`pink`、`yellow`、`green`、`purple`、`orange`、`red`、`white`、`gray`。**全课程统一含义**：`blue` = 第一列 / $\hat\imath$ 的去向 / 定义，`pink` = 第二列 / $\hat\jmath$ 的去向，`yellow` = 结果和重点（如 $A\mathbf x$、目标点），`gray` = 原始向量或辅助线，`purple` 留给「你的猜测」。文字里提到颜色时要和图一致（比如「拖动 x，让黄色的 Ax……」）。
 
-还有 `polygon`、`text`、`curve`（参数曲线、单位圆的像）、`eigen`（特征方向）。
+还有 `polygon`、`text`、`curve`（参数曲线、单位圆的像）、`eigen`（特征方向）、`conic A = 3`（二次曲线 $\mathbf x^{\mathsf T}A\mathbf x=3$）。
 
 <!-- 完整写法 -->
 
@@ -191,6 +191,7 @@ goal A*x = [3, 5] msg="命中！"
 | `text "文字" at 点` | 文字 |
 | `curve 表达式 for s 0 360` | 参数曲线：s 从 0 走到 360，画出点的轨迹。单位圆的像：`curve A*[cos(s), sin(s)]`（省略 `for` 时默认 `s 0 360`） |
 | `eigen A` | 画出 2×2 矩阵 A 的特征向量方向（虚线）并标上 λ；没有实特征值时注明「会转」 |
+| `conic A = c` | 二次曲线 $\mathbf x^{\mathsf T}A\mathbf x=c$（A 对称；不写 `= c` 是 1）：页面按特征值认出是椭圆、双曲线、平行 / 相交直线，标上名字；`axes` 把主轴（特征向量方向）画成虚线 |
 
 ### predict：先猜，再揭晓
 
@@ -634,6 +635,7 @@ show $\mathbf w = a\mathbf u + b\mathbf v = {a*u + b*v}$
 | `plane normal n at P` | 过 P、法向量为 n 的平面（省略 `at` 则过原点） |
 | `box u, v, w` | u、v、w 张成的平行六面体 |
 | `grid M` | 地面网格（z = 0）在 3×3 矩阵 M 下的像 |
+| `quadric A = c` | 二次曲面 $\mathbf x^{\mathsf T}A\mathbf x=c$ 的线框（A 是 3×3 对称矩阵，不写 `= c` 是 1）：椭球面、单叶 / 双叶双曲面、柱面、锥面，左上角写着是什么曲面 |
 | `text "文字" at P`、`let`、`slider`、`show` | 同上 |
 
 字段：`range`（坐标范围，默认自动）、`view: 方位角 仰角`（默认 `-32 22`）、`spin: true`（打开时慢慢转）、`title`、`q`、`note`、`link`。

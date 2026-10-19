@@ -992,6 +992,8 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .plane.space .sp-plane { fill-opacity: .1; stroke-opacity: .5; stroke-width: 1.5; }
 .plane.space .sp-plane-grid { stroke-opacity: .22; stroke-width: 1; }
 .plane.space .sp-face { fill-opacity: .13; stroke-opacity: .75; stroke-width: 1.6; stroke-linejoin: round; }
+/* 二次曲面的线框：细一点、淡一点，前后的线都看得见 */
+.plane.space .sp-quad { stroke-width: 1.4; stroke-opacity: .72; stroke-linecap: round; }
 .sp-tools { position: absolute; right: 4px; top: 4px; display: flex; gap: 6px; }
 .sp-tools .btn-sm { min-height: 32px; padding: 0 10px; font-size: 17px; --frame: rgb(var(--chalk-rgb) / 0.3); background: rgb(var(--board-3-rgb) / 0.7); }
 

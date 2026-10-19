@@ -9,14 +9,16 @@
 //   plane normal [0, 0, 1] at [0, 0, 1]  # 过某点、给定法向量的平面
 //   box u, v, [0, 0, 1]                  # 平行六面体（体积 = |det|）
 //   show $\det = {det(mat(u, v, [0,0,1]))}$
+//   quadric [[2,0,0],[0,3,2],[0,2,3]] = 6     # 二次曲面 xᵀAx = 6 的线框（在主轴上参数化，quadric.js）
 import { compile, isNum, isVec } from './expr.js';
 import { splitMods, splitTop, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { sliderText, figureControls } from './plot.js';
+import { quadricLines } from './quadric.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const SIZE = 480;
-const CMDS = ['let', 'slider', 'vector', 'point', 'segment', 'line', 'span', 'plane', 'box', 'grid', 'text', 'show'];
+const CMDS = ['let', 'slider', 'vector', 'point', 'segment', 'line', 'span', 'plane', 'box', 'grid', 'quadric', 'text', 'show'];
 const COLOR = {
   blue: 'var(--blue)', pink: 'var(--pink)', yellow: 'var(--yellow)', green: 'var(--green)', purple: 'var(--lav)',
   orange: 'var(--orange)', red: 'var(--coral)', white: 'var(--chalk)', gray: 'var(--muted)', grey: 'var(--muted)',
@@ -78,6 +80,11 @@ function parseCmd(kind, rest) {
     if (!m) throw new Error('plane 的写法：plane normal [a, b, c] at [x, y, z]（at 可省略，默认过原点）');
     return { kind, n: compile(m[1]), at: m[2] ? compile(m[2]) : null, mods };
   }
+  if (kind === 'quadric') {
+    // quadric A = c（不写 = c 就是 = 1）
+    const m = body.match(/^(.+?)(?:\s*=\s*([^=\]]+))?$/);
+    return { kind, A: compile(m[1]), c: m[2] !== undefined ? compile(m[2]) : () => 1, mods };
+  }
   return { kind, exprs: splitTop(body).map(compile), mods };
 }
 
@@ -125,6 +132,8 @@ export function createSpace(container, src, opts = {}) {
         if (c.kind === 'vector') { const a = c.expr(v); take(a); if (c.from) take(addv(c.from(v), a)); }
         if (c.kind === 'point') c.exprs.forEach((e) => take(e(v)));
         if (c.kind === 'box') take(c.exprs.map((e) => e(v)).reduce(addv));
+        // 椭球面这种有界的：整个装得下；伸到无穷远的按半轴长取一点余量
+        if (c.kind === 'quadric') { const q = quadricLines(c.A(v), c.c(v), 4); for (const l of q.lines) for (const p of l) take(p.map((x) => Math.max(-4, Math.min(4, x)))); }
       }
     } catch { /* 画的时候再报错 */ }
     R = Math.min(10, Math.max(1.5, Math.ceil(m * 2) / 2));
@@ -311,6 +320,17 @@ export function createSpace(container, src, opts = {}) {
             pg.style.stroke = fill;
           });
         }
+        break;
+      }
+      case 'quadric': {
+        const A = c.A(v), cc = c.c(v);
+        if (!Array.isArray(A) || A.length !== 3 || A.some((r) => !Array.isArray(r) || r.length !== 3)) throw new Error('quadric 需要 3×3 的对称矩阵');
+        if (!isNum(cc)) throw new Error('quadric 的右边（= 后面）要是一个数');
+        const q = quadricLines(A, cc, R);
+        const col = color(c, 'var(--v2)');
+        for (const l of q.lines) for (let t = 1; t < l.length; t++) seg3(l[t - 1], l[t], 'sp-quad', col);
+        // 是什么曲面写在左上角（和「张成整个空间」一样）；c.mods.label 可以自己写
+        labels.push({ x: 14, y: 24, ux: 0, uy: 0, text: lab || q.kind, col, fixed: true, cmd: cur });
         break;
       }
       case 'grid': {

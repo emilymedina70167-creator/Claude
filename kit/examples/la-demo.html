@@ -104,6 +104,22 @@ method: orth
 ask: values, surface
 ```
 
+```space
+id: sp-q
+title: 2x² + 3y² + 3z² + 4yz = 6 是什么曲面
+let A = [[2, 0, 0], [0, 3, 2], [0, 2, 3]]
+quadric A = 6 color=blue
+show 特征值 2、1、5 都是正的：椭球面
+```
+
+```scene
+id: sc-c
+title: x² + 4xy + y² = 3：主轴转了 45°
+let A = [[1, 2], [2, 1]]
+conic A = 3 color=pink axes
+show 特征值 3、−1：一正一负，双曲线
+```
+
 ## 5. 练习：程序出题
 
 ```elim

@@ -1,6 +1,6 @@
 // 命令行末尾的修饰（color=… label="…" drag 等）和按最外层逗号切分：scene、graph、space、matrix 共用。纯函数
 
-const FLAGS = ['drag', 'dashed', 'faint', 'play', 'after', 'before', 'thin', 'drop'];
+const FLAGS = ['drag', 'dashed', 'faint', 'play', 'after', 'before', 'thin', 'drop', 'axes']; // axes：conic 画出主轴
 
 // 把一行末尾的修饰（color=… label="…" drag 等）拆出来
 export function splitMods(line) {
