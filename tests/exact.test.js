@@ -99,3 +99,16 @@ test('一行加 row(A, i)：按一行算（课件里常写 u\' + row(A, 2)）', 
   assert.throws(() => evaluateExact('a + [1, 2, 3]', vars), /2 维向量 和 3 维向量/);
   assert.throws(() => evaluateExact('A + [1, 2]', vars), /2×2 和 2 维向量/);
 });
+
+test('dec(x, k)：四舍五入写成小数，精确（分数不经过浮点）；不能再拿去算', () => {
+  assert.equal(calcValue('dec(61/4)').text, '15.25');
+  assert.equal(calcValue('dec(8/3)').text, '2.67');
+  assert.equal(calcValue('dec(8/3, 3)').text, '2.667');
+  assert.equal(calcValue('dec(3)').text, '3');
+  assert.equal(calcValue('dec(-1/8)').text, '-0.13');
+  assert.equal(calcValue('dec(1/1000)').text, '0');
+  assert.equal(calcValue('dec(2.675, 2)').text, '2.68'); // 小数先按精确的分数，舍入不受浮点影响
+  assert.equal(calcValue('dec(sqrt(2), 3)').text, '1.414');
+  assert.throws(() => calcValue('dec(1/3) + 1'), /dec\(\) 的结果只能直接写出来/);
+  assert.equal(expandCalc('\\calc{dec(61/4)}', (e) => calcValue(e).tex).tex, '{15.25}');
+});

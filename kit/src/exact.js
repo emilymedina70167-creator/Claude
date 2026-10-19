@@ -492,6 +492,8 @@ export function calcValue(src, vars = {}) {
   const fv = {};
   for (const [k, v] of Object.entries(vars || {})) fv[k] = toFloat(v);
   const value = evaluateFloat(ast, fv);
+  // dec(sqrt(2), 3) 这种：小数算出来以后照 dec 写好了，按它写的位数（不再截成 4 位有效数字）
+  if (isRadix(value)) return { value, exact: false, tex: value.toTeX(), text: value.digits, float: value.base === 10 ? Number(value.digits) : NaN };
   return { value, exact: false, tex: approxTeX(value), text: approxText(value), float: value };
 }
 

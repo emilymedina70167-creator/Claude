@@ -30,7 +30,10 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
   - `live-demo.html?dev`：实时黑板，右上角开发面板扮演对话里的 Claude
   - `408-demo.html`：计算机四门课的全部演示组件
   - `class-demo.html?dev`：课堂模式，模拟老师按剧本回放（不调用 Claude）；剧本里故意有一段写错的组件（`circle` 那行），控制台报「看不懂这一行」是正常的。在输入框里打暗号看教具：「测试:教具」（`let` 块 + `matrix` 的乘积 + 逐行 `mark` + `\calc`）、「测试:幂」（滑块和 `figure play` 让矩阵动起来）、「测试:指图」（图上的 `label=` / `at=` 标注）、「测试:出题」（`practice` 的自定义题型）、「测试:公式」（写含 n 的式子）、「测试:示意图」（`sketch`）、「测试:推导」（`derive` + `figure play step`）、「测试:原图」（`image`，本地用一张模拟的讲义图）、「测试:排序」（演示组件 `sort` + `figure play step` + `mark`）
-  - iPad 尺寸：竖屏 820×1180，横屏 1180×820。云端会话里可以用预装的 Playwright + Chromium 截图检查。
+    - `la-demo.html`：线代的过程组件（elim、det、eig、schmidt、quad、frames）
+- iPad 尺寸：竖屏 820×1180，横屏 1180×820。云端会话里可以用预装的 Playwright + Chromium 截图检查。
+- 页面检查脚本：`node tools/check-lesson.mjs 文件…`（课件 `.md`、示例页 `.html`、实时黑板 `.board.json`、课堂输出 `.class.json`）在两种 iPad 尺寸下渲染、把演示走一遍，报写法错误、控制台报错、冲出版面、一屏放不下；`--shots 目录` 存截图。`npm run check:pages` 查全部示例页（改了组件要跑）。
+- 验收（扮演老师写真题课，量一次写对率）：`evals/`（说明在 `evals/README.md`，结果在 `evals/results.md`）。
 
 ## 架构
 
@@ -48,13 +51,15 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - 精确计算：`exact.js`（BigInt 分数；`\calc{…}` 的展开、`let` 块的解析、`calcValue`）。`render.js` 的 `tex2html` 展开 `\calc`，并带两个 KaTeX 宏 `\hl{名字}{…}`、`\chalk{颜色}{…}`（都展开成 `\htmlData`，`trust` 只放行它）。`let` 块（`blocks/letblock.js`）定义整节课的量（`session.vars`）；`renderLesson` 先把一段里的 `let` 块算一遍，正文的 `\calc` 才用得到。
 - 板书标注：`markspec.js`（写法解析）、`markdraw.js`（手绘的圈 / 框 / 箭头，旁注放哪：躲开正文、离远了连线），都是纯函数；`marks.js`（DOM：一个宿主一层 SVG，按 spec 找到公式里的 `\hl` 项、矩阵的行列、steps 的步、图上的东西，尺寸变了、图 `change` 了跟着重新摆）。`tokens.js` 是指令行分词（协议、标注、matrix 共用）。
 - 会动的矩阵：`matrixspec.js`（写法、精确求值、哪些格子变了 / 哪个数飞到哪，纯函数）+ `blocks/matrix.js`（画面、闪烁和飞行动画、滑块、点乘积里的数；接 `figureControls`，课堂里能 `figure set / play / highlight` 和 `board mark`）。
-- 判分：`check.js`、`mathinput.js`；精确分数和行化简：`linalg.js`。
+- 判分：`check.js`、`mathinput.js`；`anscheck.js`（`answer` 的 `check:` 按条件判、格子里的根号 `1/√2`，纯函数）；精确分数和行化简：`linalg.js`。
 - 含 n 的式子作答（`answer` / `steps` 的 `formula: n`）：`formula.js`（读懂学生的写法、写成公式预览、代几组 n 比较、指出哪个 n 对不上、不许直接写 A^n，纯函数）+ `formulainput.js`（输入框和符号小键盘；Apple Pencil 点进去用系统的随手写）。
 - `practice` 的自定义题型（`type: custom`）：`practicespec.js`（模板解析、随机取数 `pick` / `let` / `where`、先取十几组数自检，纯函数），出题和判分照常走 `answerWidget`。
 - 表达空间：`sketch`（当场写的 SVG 示意图；`svgsafe.js` 白名单清理、调色板配色，纯函数）、`derive`（分拍板书：一行行写、等号对齐；`derivespec.js` 纯函数；写到第几行是变量 `step`，接 `figureControls`）、`image`（讲义原图：资料包 `images` 按名字找，课堂工具 `view_image` 让课堂 Claude 自己看）。
 - 科目：`subject.js`（front matter 的 `subject:`；`CLAUDE-PROJECT.md` 第三节小节下的 `<!-- 科目：… -->` 标记，课堂只带「通用 + 这门课」的组件说明，`prompt.js` 的 `defaultRules` 按科目换教法）。计算机课要的表达式（`0x1F`、`mod`、位运算、`bin` / `hex`）在 `expr.js` 和 `exact.js` 两边都有。
 - 文字型答案：`textcheck.js`（序列 `type: seq`、二进制 / 十六进制 `type: bin / hex` 的读法和判分，纯函数）+ `textinput.js`（输入框和回显）。
-- 演示组件（一步步走的过程）：`stepper.js` 是外壳（上一步 / 下一步 / 播放、`ask` 先猜再揭晓、`mode: quiz`、课堂的 `figure step` 和 `highlight`、记录），`stepperspec.js` 是它不碰 DOM 的部分；每个算法是 `engines/` 里的一个纯函数引擎（`parse` → `run` 出每一步 → `view` 画成 HTML，`data-pick` 给在图上点、`data-cmd` 给 highlight / `board mark item=`），在 `blocks/index.js` 用 `stepperBlock(引擎)` 注册。新算法照这个做，引擎配 `node --test`，答案和王道的例子对一遍。
+- 演示组件（一步步走的过程）：`stepper.js` 是外壳（上一步 / 下一步 / 播放、`ask` 先猜再揭晓（含 `order` 按顺序点）、`mode: quiz`、`mode: fill` 自己填表、课堂的 `figure step` 和 `highlight`、记录），`stepperspec.js` 是它不碰 DOM 的部分（问哪几步、判分、填表、错法比对、字段拼写检查 `trackFields`）；`morph.js` 是步与步之间的过渡（`data-key` 一样的滑过去）。每个算法是 `engines/` 里的一个纯函数引擎（`parse` → `run` 出每一步 → `view` 画成 HTML，`data-pick` 给在图上点、`data-cmd` 给 highlight / `board mark item=`），在 `blocks/index.js` 用 `stepperBlock(引擎)` 注册。可选：`table`（fill 的表）、`variants`（常见错法：换成错法的输入，外壳跑一遍拿来和学生的答案比，记录里写「页面看出来：像是……」，只给老师）、`quiz`、`problems`、`head`（字段只在开头一段）。新算法照这个做，引擎配 `node --test`，答案和王道的例子对一遍；错法至少 2 种，答案和对的一样的不列。
+  - 通用演示：`engines/frames.js`（`frames`：老师自己写每一帧，能问、能挖空）。
+  - 线代：`engines/elim.js`（`elim`：秩、极大无关组、方程组、含参讨论、求逆、矩阵方程；`mode: do` 学生自己做行变换的纯函数也在这里，画面是 `blocks/elimdo.js`）、`det.js`、`eig.js`（`eig`、`schmidt`，根号精确）、`quad.js`；含参数的精确多项式在 `poly.js`。浏览器里看：`kit/examples/la-demo.html`。
   - 数据结构：`engines/sort.js`（`sort`）、`tree.js` + `treeview.js`（`tree`）、`search.js`（`kmp` `hash` `bsearch`）、`graph.js`（`net`）、`trace.js`（`trace`，解释器在 `kit/src/cinterp.js`：C 子集，一步一行，生成器实现，越界 / 没赋值 / 死循环都报行号）。
   - 操作系统：`os.js`（`sched` `paging` `banker` `disk`）、`addr.js`（`addr`）。组成原理：`co.js`（`bits` `cache` `pipe`）。计网：`net4.js`（`subnet` `tcp` `window`）。
   - 共用的画法：`arrayview.js`（一排格子）、`treeview.js`（二叉树）、`bitview.js`（按字段画二进制位、`1KB` / `0A5CH` 这类写法）。
@@ -72,14 +77,14 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ### 课堂模式（`kit/src/class/`）
 
-- `classroom.js`：控制器。一屏一块板（`board new` 换板，旧板翻页看）、板顶那句话、常驻栏、一屏放不放得下的测量（`--board-h`）、学生作答排队（1.5 秒合并，拖动跟着下一条一起发；没提交的草稿也跟着下一条发，见 `drafts.js`）、调用课堂 Claude、执行黑板指令、写法自检和自动重写、刷新后恢复。板书标注记在 `marks`（id → 所在段和 spec），段被改写 / 撤回时一起擦掉，刷新后按 `boardOps` 的时间线重放；工具 `calc`（精确计算，查看方式支持工具时才给）。板顶那句话后面标出平台核验的模型（`class_pages.talkBy`），「⋯」菜单写核验 / 作废了几轮，下课小结的最后一行（`foot`）和 `class_notes` 的 `verify` 由页面写。对话太长时的摘要也只用 Opus 5.5 high，在一轮讲完后后台写（不让学生等）；学生附的图直接交给 Claude，不等它传进 assets。学生发的消息不上黑板。学生在当前板、常驻栏上新写的板书（`ink/` 的笔画，按段的位置拼成一张图），跟着下一条消息导出成图发给课堂 Claude（`[板书]` 那一行；有没发的板书时输入框空着也能发，`bar.js` 的 `inkPending`，板书一变 `ink/overlay.js` 发 `ink-change`）；当前板上有题没做、学生很久没动静时，提醒课堂 Claude 轻轻问一句（`stuck.js`，「⋯」里可关，`?dev&stuck=8` 把等待改成 8 秒）。
+- `classroom.js`：控制器。一屏一块板（`board new` 换板，旧板翻页看）、板顶那句话、常驻栏、一屏放不放得下的测量（`--board-h`）、学生作答排队（1.5 秒合并，拖动跟着下一条一起发；没提交的草稿也跟着下一条发，见 `drafts.js`）、调用课堂 Claude、执行黑板指令、写法自检和自动重写、刷新后恢复。板书标注记在 `marks`（id → 所在段和 spec），段被改写 / 撤回时一起擦掉，刷新后按 `boardOps` 的时间线重放；工具 `calc`（精确计算）、`component_doc`（组件的完整写法），查看方式支持工具时才给。板顶那句话后面标出平台核验的模型（`class_pages.talkBy`），「⋯」菜单写核验 / 作废了几轮，下课小结的最后一行（`foot`）和 `class_notes` 的 `verify` 由页面写。对话太长时的摘要也只用 Opus 5.5 high，在一轮讲完后后台写（不让学生等）；学生附的图直接交给 Claude，不等它传进 assets。学生发的消息不上黑板。学生在当前板、常驻栏上新写的板书（`ink/` 的笔画，按段的位置拼成一张图），跟着下一条消息导出成图发给课堂 Claude（`[板书]` 那一行；有没发的板书时输入框空着也能发，`bar.js` 的 `inkPending`，板书一变 `ink/overlay.js` 发 `ink-change`）；当前板上有题没做、学生很久没动静时，提醒课堂 Claude 轻轻问一句（`stuck.js`，「⋯」里可关，`?dev&stuck=8` 把等待改成 8 秒）。
 - `protocol.js`：解析课堂 Claude 的输出。普通文字是对学生说的话（写在板顶）；```` ```board ```` 围栏块是黑板指令（new / add / replace / hide / pin / unpin / figure / mark / unmark）。纯函数，支持流式前缀；`mark` 块闭合以后才把块里的各行拼成 `marks`。
 - `prompt.js`：每一轮发给课堂 Claude 的内容（红线 `DEFAULT_RULES`、黑板指令说明 `PROTOCOL_DOC`、组件手册、资料包、黑板现状、对话历史和压缩）。纯函数。
-- `docs.js` + `kit/build-docs.js`：构建时从 `CLAUDE-PROJECT.md` 第三节截出组件手册打包进去。
+- `docs.js` + `kit/build-docs.js`：构建时从 `CLAUDE-PROJECT.md` 第三节截出组件手册打包进去。小节里 `<!-- 完整写法 -->` 以前是精简版（每一轮都带），以后是不常用的写法：课堂 Claude 用工具 `component_doc` 按名字取；某个组件写错要重写时，页面把它的完整写法附在提醒里；资料包 `main.components` 点了名的组件直接带完整写法（`subject.js` 的 `docsForSubject` / `componentDoc`，`prompt.js` 的 `systemDocs` / `lintDocs`）。对话里写课件的 Claude 读整份 `CLAUDE-PROJECT.md`，两部分都看得到。
 - `bar.js`：底部输入框（附图、手写板、「⋯」菜单、iPad 软键盘）和它上面的一条：翻页（上一块 / 下一块 / 板列表 / 回到当前板）、快捷回答。不显示消息。
 - `devteacher.js`：`?dev` 的模拟老师；`devpanel.js`：开发面板（还有本地试用的模拟讲义图 `ensureDemoSlide`）。
 - 数据（artifact 数据库）：`steps` 黑板段落（`page` 在第几块板，`place: 'pin'` 是常驻栏），`class_pages` 每块板（标题、板顶的话和 `talkBy`、下课小结和 `foot`），`class_turns` 每一轮（`boardOps` 里有 mark / unmark），`class_notes` 观察和下课小结（带 `verify`），`answers` / `events` 作答，`pack/main`、`pack/problems` 资料包。
-- 每一轮的整份说明（`buildSystem`）要在 160 KiB 以内（`SYSTEM_MAX`），给对话留地方。资料包预算 `PACK_BUDGET` 是 104 KiB，某门课的组件说明长了，`buildSystem` 自动让资料包少占一点，保证整份不超；但每门课至少要给资料包留 96 KiB（`tests/subject.test.js` 守着）。组件说明再加长时先想办法精简，线代、计算机专用的小节打上科目标记。
+- 每一轮的整份说明（`buildSystem`）要在 160 KiB 以内（`SYSTEM_MAX`），给对话留地方。资料包预算 `PACK_BUDGET` 是 104 KiB，某门课的组件说明长了，`buildSystem` 自动让资料包少占一点，保证整份不超；但每门课至少要给资料包留 96 KiB，每门课系统里的组件说明（精简版）≤ 40 KiB（`tests/subject.test.js` 守着；线代现在约 39 KiB，最紧）。组件说明再加长时先想办法精简：不常用的写法放到 `<!-- 完整写法 -->` 后面，线代、计算机专用的小节打上科目标记。说明里每个演示组件的例子都要照抄就能用（`tests/engines-common.test.js` 守着）。
 
 ### 实时黑板（`kit/src/live/`）
 

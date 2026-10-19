@@ -1,6 +1,6 @@
 # 线代学习台 · 给 Claude 的教学说明
 
-> **版本：2026-10-14c**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
+> **版本：2026-10-19**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
 >
 > 这份说明的**最新版**一直放在组件库 artifact 里（文件 `CLAUDE-PROJECT.md`）。每个新对话里，第一次做和学习台有关的事（做课件、写实时黑板、备课堂资料包、读课堂记录或学习记录）之前，先用 `Artifact` 工具读它：`action: "read"`，`url` 是上面的组件库地址，`path: "CLAUDE-PROJECT.md"`。
 > - 读到的版本比你手上这份新：以读到的为准，这份里和它不一样的地方全部作废。回复里顺便告诉我「项目指令里的说明是旧版（版本号），组件库里是新版（版本号）」。
@@ -129,7 +129,7 @@ unit: 单元 3 · 特征值
 
 ### 表达式（所有组件通用）
 
-**表达式**：数、向量 `[1, 2]`、矩阵按行写 `[[1, 2], [3, 4]]`，运算 `+ - * / ^`（`A^-1` 是逆），`A'` 是转置，`2u` 可以省略乘号。函数：`det` `inv` `T` `col(A, j)` `row(A, i)`（从 1 开始数）、`dot` `norm` `|v|` `proj(u, v)` `cross` `rot(角度)` `lerp(a, b, t)` `mat(列1, 列2, …)`（由列组成矩阵）、`I`（单位矩阵）、`sqrt` `abs` `sin` `cos` `tan`（角度制）、`exp` `ln` `log` `floor` `min` `max` `round`，常数 `pi` `e`。比较 `<` `<=` `>` `>=` `==` 成立得 1、不成立得 0（可以写分段函数 `(x>0)*x`）。概率：`choose(n, k)` `fact(n)` `normpdf(x, μ, σ)` `normcdf(x, μ, σ)` `binompmf(k, n, p)` `poissonpmf(k, λ)` `exppdf(x, λ)` `unifpdf(x, a, b)`。矩阵：`tr`（迹）`rank`（秩）`rref`（行最简形）`diag(1, 2, 3)`（对角矩阵）、`I(3)` 也可以写成 `E(3)`（教材的记号；只写 `I`、`E` 是 2 阶）。
+**表达式**：数、向量 `[1, 2]`、矩阵按行写 `[[1, 2], [3, 4]]`，运算 `+ - * / ^`（`A^-1` 是逆），`A'` 是转置，`2u` 可以省略乘号。函数：`det` `inv` `T` `col(A, j)` `row(A, i)`（从 1 开始数）、`dot` `norm` `|v|` `proj(u, v)` `cross` `rot(角度)` `lerp(a, b, t)` `mat(列1, 列2, …)`（由列组成矩阵）、`I`（单位矩阵）、`sqrt` `abs` `sin` `cos` `tan`（角度制）、`exp` `ln` `log` `floor` `min` `max` `round`，常数 `pi` `e`。比较 `<` `<=` `>` `>=` `==` 成立得 1、不成立得 0（可以写分段函数 `(x>0)*x`）。概率：`choose(n, k)` `fact(n)` `normpdf(x, μ, σ)` `normcdf(x, μ, σ)` `binompmf(k, n, p)` `poissonpmf(k, λ)` `exppdf(x, λ)` `unifpdf(x, a, b)`。矩阵：`tr`（迹）`rank`（秩）`rref`（行最简形）`diag(1, 2, 3)`（对角矩阵）、`I(3)` 也可以写成 `E(3)`（教材的记号；只写 `I`、`E` 是 2 阶）。`dec(x, 2)` 把数四舍五入写成小数（`\calc{dec(61/4)}` 写出 15.25，默认 2 位，末尾的 0 不写），只能直接写出来、不能再算。
 
 **向量都是列向量**，转置的规则处处一样：`a'` 是 1×n 的行，`a'*b` 是一个数（内积，也可以写 `dot(a, b)`），`a*b'` 是 n×n 矩阵（外积），`A*a` 是矩阵乘列向量。两个向量直接写 `a*b` 会报错，免得分不清是内积还是外积。
 
