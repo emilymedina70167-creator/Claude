@@ -6,11 +6,14 @@ import { widget, mdToHtml, tex2html, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
 import { elimEngine, doStart, doParse, doApply, doUndo, doStatus, doHint, doAutoCount, doOpText, doOpTeX, doChanged, doCheckRow } from '../engines/elim.js';
 import { stepperBlock } from '../stepper.js';
+import { calcFields } from '../stepperspec.js';
 
 const TARGET_GOAL = { ref: '化成行阶梯形', rref: '化成行最简形', E: '把左边化成单位矩阵 E' };
 
 export function elimDo(el, src) {
-  const { fields } = parseFields(src);
+  const calced = calcFields(parseFields(src).fields, session.vars);
+  const { fields } = calced;
+  for (const e of calced.errors) session.problem(el, 'elim', e);
   const input = elimEngine.parse(fields, src);
   let state = doStart(input, fields);
   const write = /^(rows?|行|me|yes|true)$/i.test(String(fields.write ?? '').trim());

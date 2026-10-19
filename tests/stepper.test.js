@@ -210,3 +210,21 @@ test('错法诊断按题型判：先猜里分数对小数、quiz 里十六进制
   assert.equal(misreadFill(t, Object.assign([['1']], { extra: ['8'] }), [{ label: '系数没跟着变', table: fillSpec(wrongT, {}).table }]), '系数没跟着变');
   assert.equal(misreadFill(t, Object.assign([['1']], { extra: ['7'] }), [{ label: '系数没跟着变', table: fillSpec(wrongT, {}).table }]), '');
 });
+
+test('组件字段里的 \\calc{…}：换成 let 量的精确值（矩阵、分数）；题面不换；算不出来报出来', async () => {
+  const { calcFields } = await import('../kit/src/stepperspec.js');
+  const { toExact } = await import('../kit/src/exact.js');
+  const scope = { A: toExact([[1, 2], [3, 4]]), b: toExact([1, 0.5]), k: toExact(3) };
+  const r = calcFields({ matrix: '\\calc{A}', b: '\\calc{b}', key: '\\calc{k + 1}', q: '求 $\\calc{A}$ 的逆', title: '\\calc{k}' }, scope);
+  assert.equal(r.fields.matrix, '[[1, 2], [3, 4]]');
+  assert.equal(r.fields.b, '[1, 1/2]');
+  assert.equal(r.fields.key, '4');
+  assert.equal(r.fields.q, '求 $\\calc{A}$ 的逆');
+  assert.equal(r.fields.title, '\\calc{k}');
+  assert.deepEqual(r.errors, []);
+  assert.match(calcFields({ matrix: '\\calc{Z}' }, scope).errors[0], /matrix: 里的 \\calc\{Z\} 算不出来：未定义的变量 Z/);
+  // 换出来的矩阵 elim 直接能用
+  const { elimEngine } = await import('../kit/src/engines/elim.js');
+  const run = elimEngine.run(elimEngine.parse({ matrix: r.fields.matrix, inverse: 'true' }));
+  assert.ok(run.X);
+});

@@ -3,6 +3,7 @@
 // 外壳（stepper.js）统一管上一步 / 下一步 / 播放、ask、quiz、课堂的 figure、记录。
 // 这里是不碰 DOM 的部分，有测试（tests/stepper.test.js）。
 import { parseSeqAnswer, checkSeq, radixAnswer, checkRadix } from './textcheck.js';
+import { expandCalc, calcValue, exactText } from './exact.js';
 
 /**
  * 每个引擎的步：{ view, msg, ask? }
@@ -372,4 +373,20 @@ function editDistance(a, b) {
   for (let j = 1; j <= b.length; j++) d[0][j] = j;
   for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
   return d[a.length][b.length];
+}
+
+// —— 组件字段里的 \calc{…} ——
+// 整节课 let 块里定义的矩阵、数，直接拿来当演示的输入：matrix: \calc{A}、b: \calc{b}、key: \calc{k + 1}。
+// 换成精确的文字（[[1, 2], [3, 4]]、1/2）；题面这类会排成公式的字段不换（那里的 \calc 由公式来算）
+const TEXT_FIELDS = new Set(['id', 'title', 'q', 'note', 'hint', 'explain']);
+export function calcFields(fields, scope = {}) {
+  const errors = [];
+  const out = { ...fields };
+  for (const [k, v] of Object.entries(fields)) {
+    if (TEXT_FIELDS.has(k) || typeof v !== 'string' || !v.includes('\\calc')) continue;
+    const r = expandCalc(v, (e) => exactText(calcValue(e, scope).value), { wrap: false });
+    out[k] = r.tex;
+    for (const e of r.errors) errors.push(`${k}: 里的 \\calc{${e.expr.trim().slice(0, 40)}} 算不出来：${e.msg}`);
+  }
+  return { fields: out, errors };
 }

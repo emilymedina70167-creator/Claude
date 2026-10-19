@@ -7,7 +7,7 @@ import { parseFields } from './parse.js';
 import { session } from './session.js';
 import { widget, mdToHtml, tex2html, escapeHtml, calcProblems } from './blocks/common.js';
 import { figureControls } from './plot.js';
-import { commonSpec, resolveAsks, checkAsk, askAnswerText, stepLabel, parseAskField, fillSpec, checkFill, cellName, cellAnswer, fillOrder, misreadFill, trackFields } from './stepperspec.js';
+import { commonSpec, resolveAsks, checkAsk, askAnswerText, stepLabel, parseAskField, fillSpec, checkFill, cellName, cellAnswer, fillOrder, misreadFill, trackFields, calcFields } from './stepperspec.js';
 import { markDraft } from './drafts.js';
 import { answerWidget, textAnswerSpec } from './blocks/answer.js';
 import { snapshot, animateFrom, settle } from './morph.js';
@@ -35,7 +35,10 @@ export function stepperBlock(engine) {
   return block;
   function block(el, src) {
     // frames 这种正文里自己有「key: 值」的行的：字段只从开头那一段读（engine.head）
-    const tracked = trackFields(parseFields(engine.head ? engine.head(src) : src).fields);
+    // 字段里的 \calc{…}（matrix: \calc{A}）先换成这节课 let 量的精确值
+    const calced = calcFields(parseFields(engine.head ? engine.head(src) : src).fields, session.vars);
+    const tracked = trackFields(calced.fields);
+    for (const e of calced.errors) session.problem(el, engine.name, e);
     const { fields } = tracked;
     const common = commonSpec(fields);
     const input = engine.parse(fields, src);

@@ -567,7 +567,8 @@ export function parseLets(src) {
  * 公式里的 \calc{表达式} 换成算出来的 TeX（括号可以嵌套）。evaluate(src) → TeX，写错时抛出 Error。
  * 返回 { tex, errors: [{ expr, msg }] }；算不出来的那一处换成 \text{?}
  */
-export function expandCalc(tex, evaluate) {
+// wrap：结果外面加不加 {}（公式里要加，免得和前后粘在一起；组件字段里的不加）
+export function expandCalc(tex, evaluate, { wrap = true } = {}) {
   const s = String(tex ?? '');
   if (!s.includes('\\calc')) return { tex: s, errors: [] };
   const errors = [];
@@ -585,7 +586,7 @@ export function expandCalc(tex, evaluate) {
     const expr = s.slice(re.lastIndex, j - 1);
     out += s.slice(i, m.index);
     try {
-      out += `{${evaluate(expr)}}`;
+      out += wrap ? `{${evaluate(expr)}}` : evaluate(expr);
     } catch (e) {
       errors.push({ expr, msg: e?.message || String(e) });
       out += '{\\text{?}}';
