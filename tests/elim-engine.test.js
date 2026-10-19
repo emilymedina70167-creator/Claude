@@ -161,3 +161,24 @@ test('mode: do：学生自己写行变换，页面做；到了目标就算完；
   assert.equal(doStatus(sg).done, true);
   assert.match(doStatus(sg).text, /不可逆/);
 });
+
+test('elim 的错法诊断（秩、向量组）：没化简就数非零行、表示系数取反、以为线性无关', async () => {
+  const { misreadFill, fillSpec } = await import('../kit/src/stepperspec.js');
+  const rk = E.parse({ matrix: '[[1, 2, 3], [2, 4, 6], [1, 0, 1]]' });
+  const rv = E.variants(rk);
+  assert.deepEqual(rv.map((v) => v.input.mistake), ['rows']);
+  assert.equal(E.quiz(rv[0].input, E.run(rv[0].input)).answer, '3');
+  assert.equal(E.quiz(rk, E.run(rk)).answer, '2');
+  // 满秩：数原矩阵的非零行也对，不列
+  assert.deepEqual(E.variants(E.parse({ matrix: '[[1, 2], [3, 4]]' })), []);
+  const vg = E.parse({ vectors: 'a1 = (1, 2, 3), a2 = (2, 4, 6), a3 = (1, 0, 1), a4 = (3, 4, 7)' });
+  const vv = E.variants(vg);
+  assert.deepEqual(vv.map((v) => v.input.mistake), ['comboNeg', 'allIndep']);
+  const t = fillSpec(E.table(vg, E.run(vg)), {}).table;
+  const tables = vv.map((v) => ({ label: v.label, table: fillSpec(E.table(v.input, E.run(v.input)), {}).table }));
+  const neg = tables[0].table.rows.map((r) => r.cells.map((c) => String(c.v)));
+  assert.equal(misreadFill(t, neg, tables), vv[0].label);
+  // 只把下面的「秩」写成了向量个数：也认得出
+  const ok = t.rows.map((r) => r.cells.map((c) => String(c.v)));
+  assert.equal(misreadFill(t, Object.assign(ok, { extra: ['4'] }), tables), vv[1].label);
+});

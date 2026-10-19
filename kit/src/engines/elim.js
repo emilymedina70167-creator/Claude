@@ -459,15 +459,19 @@ export function run(input) {
   if (param) return paramCases(input, M, M0, steps, notes, view, v, conds);
 
   if (goal === 'rank') {
+    // 错法 rows：没化简就数了原矩阵的非零行
+    const r = input.mistake === 'rows' ? M0.filter((row) => !isZeroRow(row, n)).length : rankA;
     notes.push(`r(A) = ${rankA}`);
-    steps.push({ view: view(M, { pivots }), msg: `化成行阶梯形了：非零行有 ${rankA} 行，所以 r(A) = ${rankA}。`, ask: { tag: 'rank', kind: 'number', q: '这个矩阵的秩是多少？', answer: rankA } });
-    return { steps, rank: rankA, M };
+    steps.push({ view: view(M, { pivots }), msg: `化成行阶梯形了：非零行有 ${rankA} 行，所以 r(A) = ${rankA}。`, ask: { tag: 'rank', kind: 'number', q: '这个矩阵的秩是多少？', answer: r } });
+    return { steps, rank: r, M };
   }
   if (goal === 'basis') {
     const names = input.names;
     const pc = pivots.map(([, c]) => c);
+    // 错法 allIndep：以为向量组线性无关，秩就是向量的个数
+    const rShown = input.mistake === 'allIndep' ? n : rankA;
     notes.push(`r = ${rankA}`);
-    steps.push({ view: view(M, { pivots }), msg: `行最简形有 ${rankA} 个非零行：向量组的秩是 ${rankA}。`, ask: { tag: 'rank', kind: 'number', q: '向量组的秩是多少？', answer: rankA } });
+    steps.push({ view: view(M, { pivots }), msg: `行最简形有 ${rankA} 个非零行：向量组的秩是 ${rankA}。`, ask: { tag: 'rank', kind: 'number', q: '向量组的秩是多少？', answer: rShown } });
     // 所有的极大无关组：任取秩那么多列，线性无关就是
     const alts = combos(n, rankA).filter((cs) => rrefQ(M0.map((r) => cs.map((c) => r[c])), cs.length).pivots.length === rankA).map((cs) => cs.map((c) => names[c]));
     notes.push(`极大无关组：${pc.map((c) => names[c]).join(', ')}`);
@@ -475,14 +479,15 @@ export function run(input) {
     const reps = [];
     for (let j = 0; j < n; j++) {
       if (pc.includes(j)) continue;
-      const coef = pivots.map(([i]) => M[i][j].constValue());
+      // 错法 comboNeg：系数取了相反数（当成了 Ax = 0 的基础解系那样移项）
+      const coef = pivots.map(([i]) => (input.mistake === 'comboNeg' ? M[i][j].constValue().neg() : M[i][j].constValue()));
       const terms = coef.map((k, t) => ({ k, name: names[pc[t]] })).filter((x) => !x.k.zero);
       const tex = terms.length ? terms.map((x, t) => `${t && x.k.n > 0n ? '+' : ''}${x.k.n === 1n && x.k.d === 1n ? '' : x.k.n === -1n && x.k.d === 1n ? '-' : x.k.toTeX()}${texName(x.name)}`).join('') : '0';
       reps.push({ j, coef, tex });
       notes.push(`${names[j]} = ${tex}`);
       steps.push({ view: view(M, { pivots, hlCols: [j] }), msg: `看最简形的第 ${j + 1} 列 (${coef.map((k) => k.toString()).join(', ')})ᵀ：$${texName(names[j])} = ${tex}$。`, ask: { tag: 'combo', kind: 'text', q: `${names[j]} 用 ${pc.map((c) => names[c]).join('、')} 表示时，系数依次是多少？（空格隔开）`, answer: coef.map((k) => k.toString()).join(' ') } });
     }
-    return { steps, rank: rankA, pivots: pc, reps, M };
+    return { steps, rank: rShown, pivots: pc, reps, M };
   }
   if (goal === 'solve') {
     const augRank = M.filter((row) => !isZeroRow(row, n + 1)).length;
@@ -803,7 +808,12 @@ export function variants(input) {
   if (input.param) return [];
   let right;
   try { right = run(input); } catch { return []; }
-  const same = (r) => JSON.stringify(table(input, r)?.rows.map((x) => x.cells.map((c) => String(c.v)))) === JSON.stringify(table(input, right)?.rows.map((x) => x.cells.map((c) => String(c.v))));
+  // 填表（每一格和下面单独的格子）、quiz、先猜的答案都一样，就不算一种错法
+  const sig = (inp, r) => JSON.stringify([
+    table(inp, r)?.rows.map((x) => x.cells.map((c) => String(c.v))), table(inp, r)?.extra?.map((x) => String(x.v)),
+    quiz(inp, r)?.answer, r.steps.flatMap((x) => [x.ask, ...(x.asks || [])]).filter(Boolean).map((a) => `${a.q}=${[].concat(a.answer).join(' ')}`),
+  ]);
+  const same = (r, inp) => sig(inp, r) === sig(input, right);
   const cands = [];
   if (input.goal === 'solve' && right.sol?.kind === 'infinite') {
     cands.push(['sign', '像是读基础解系时主元未知数没变号（xᵢ = −(自由未知数的系数)，移到等号右边要变号）']);
@@ -813,11 +823,16 @@ export function variants(input) {
     cands.push(['transpose', '像是写成了 A⁻¹ 的转置（行、列弄反了）']);
     cands.push(['adjugate', '像是写成了伴随矩阵 A*（A⁻¹ = A*/|A|，忘了除以 |A|）']);
   }
+  if (input.goal === 'rank') cands.push(['rows', '像是没化成阶梯形就数了原矩阵的非零行（秩是化成阶梯形以后非零行的个数）']);
+  if (input.goal === 'basis') {
+    cands.push(['comboNeg', '像是表示系数取了相反数（行最简形里这一列的数就是系数，不用移项变号；变号的是 Ax = 0 的基础解系）']);
+    cands.push(['allIndep', '像是以为这组向量线性无关，秩写成了向量的个数']);
+  }
   if (input.goal === 'matrixeq' && right.X) cands.push(['side', input.side === 'right' ? '像是 XA = B 算成了 A⁻¹B（应该是 X = BA⁻¹）' : '像是 AX = B 算成了 BA⁻¹（应该是 X = A⁻¹B）']);
   const out = [];
   for (const [mistake, label] of cands) {
     const v = { ...input, mistake };
-    try { if (!same(run(v))) out.push({ label, input: v }); } catch { /* 这组数上算不了就不列 */ }
+    try { if (!same(run(v), v)) out.push({ label, input: v }); } catch { /* 这组数上算不了就不列 */ }
   }
   return out;
 }
