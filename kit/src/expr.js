@@ -319,7 +319,10 @@ const idx = (k, n) => { const i = num(k) - 1; if (i < 0 || i >= n || !Number.isI
 
 export function add(a, b) {
   if (isNum(a) && isNum(b)) return a + b;
-  if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) return a.map((x, i) => add(x, b[i]));
+  if (Array.isArray(a) && Array.isArray(b) && a.length === b.length && isNum(a[0]) === isNum(b[0])) return a.map((x, i) => add(x, b[i]));
+  // 和 exact.js 一样：1×n 加一列 n 个数按一行算
+  if (isMat(a) && a.length === 1 && isVec(b) && a[0].length === b.length) return add(a, [b]);
+  if (isMat(b) && b.length === 1 && isVec(a) && b[0].length === a.length) return add([a], b);
   throw new Error('尺寸不同，不能相加');
 }
 export function scale(k, a) {

@@ -131,7 +131,13 @@ test('parseTemplate：写错了说清楚', () => {
   assert.throws(() => parseTemplate('pick a = rand(1, 3)\nq: x\nanswer: a'), /pick 的右边写 int/);
   assert.throws(() => parseTemplate('pick a = int(3, 1)\nq: x\nanswer: a'), /最大值要不小于最小值/);
   assert.throws(() => parseTemplate('pick a = int(0, 0) nonzero\nq: x\nanswer: a'), /只有 0/);
-  assert.throws(() => parseTemplate('pick n = int(1, 3)\nq: x\nanswer: n'), /保留的名字/);
+  assert.throws(() => parseTemplate('pick t = int(1, 3)\nq: x\nanswer: t'), /保留的名字/);
+  // n 只在 formula: n 时不能用
+  assert.throws(() => parseTemplate('pick n = int(1, 3)\nq: x\nanswer: n^2\nformula: n'), /formula: n/);
+  assert.equal(parseTemplate('pick n = int(1, 3)\nq: x\nanswer: n').picks[0].name, 'n');
+  // int 的范围可以用前面取的量
+  const t2 = parseTemplate('pick k = int(2, 4)\npick x = int(0, 2^k - 1)\nq: x\nanswer: x');
+  for (let i = 0; i < 20; i++) { const { vars } = instantiate(t2, {}); assert.ok(vars.x.toNumber() <= 2 ** vars.k.toNumber() - 1); }
   assert.throws(() => parseTemplate('pick a = int(1, 3)\nwhere a >\nq: x\nanswer: a'), /「where a >」/);
   assert.throws(() => parseTemplate('pick a = int(1, 3)\nid: x\nfoo bar\nq: x\nanswer: a'), /看不懂这一行：foo bar/);
 });

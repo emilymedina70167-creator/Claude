@@ -15,7 +15,8 @@ import { calcValue, expandCalc, isQ, Q } from './exact.js';
 const CMD = /^(pick|let|where)\s+(.*)$/i;
 const NAME = /^[A-Za-z_][\w]*$/;
 const ONE_LINE = new Set(['id', 'title', 'type', 'types', 'count', 'level', 'answer', 'before', 'after', 'formula', 'check', 'width']);
-const RESERVED = new Set(['I', 'E', 'pi', 'e', 'n', 'step', 't']);
+// 常数和图里的变量名不能拿来 pick；n 只有在 formula: n（答案是含 n 的式子）时才不能用
+const RESERVED = new Set(['I', 'E', 'pi', 'e', 'step', 't']);
 const GENS = ['int', 'choice', 'vec', 'mat'];
 
 /** 解析模板。返回 { fields, picks, lets, wheres }；写错了抛出中文原因 */
@@ -51,6 +52,10 @@ export function parseTemplate(src) {
     else throw new Error(`看不懂这一行：${t}（自定义题型的命令：pick / let / where，题面写 q:，答案写 answer:）`);
   }
   for (const k in fields) fields[k] = fields[k].trim();
+  if (fields.formula && /\bn\b/.test(fields.formula)) {
+    const clash = [...picks, ...lets].find((x) => x.name === 'n');
+    if (clash) throw new Error(`「${clash.line.slice(0, 60)}」：formula: n 的答案里 n 是变量，pick / let 不能再叫 n，换一个名字`);
+  }
   if (!picks.length) throw new Error('自定义题型至少要一条 pick（随机取的数），比如 pick a = int(-3, 3) nonzero');
   if (!fields.q) throw new Error('自定义题型要写 q:（题面，里面用 \\calc{…} 写出取到的数）');
   if (!fields.answer) throw new Error('自定义题型要写 answer:（答案的表达式，用 pick / let 的名字）');
@@ -71,14 +76,17 @@ function parsePick(rhs) {
     args.forEach((a) => parse(a));
     return { gen, items: args, nonzero };
   }
+  // 范围可以是前面 pick 过的量的式子（int(0, g*2^k - 1)），取的时候再算；写死的整数现在就检查
   const nums = args.map((a) => {
-    if (!/^-?\d+$/.test(a)) throw new Error(`${gen}(…) 里写整数（看不懂「${a}」）`);
-    return Number(a);
+    if (/^-?\d+$/.test(a)) return Number(a);
+    if (gen !== 'int') throw new Error(`${gen}(…) 里写整数（看不懂「${a}」）`);
+    try { parse(a); } catch { throw new Error(`int(…) 里写整数，或者用前面 pick 的量写的式子（看不懂「${a}」）`); }
+    return a;
   });
   const need = { int: 2, vec: 3, mat: 4 }[gen];
   if (nums.length !== need) throw new Error({ int: 'int(最小, 最大)', vec: 'vec(维数, 最小, 最大)', mat: 'mat(行, 列, 最小, 最大)' }[gen]);
   const [lo, hi] = nums.slice(-2);
-  if (!(hi >= lo)) throw new Error(`${gen} 的最大值要不小于最小值`);
+  if (typeof lo === 'number' && typeof hi === 'number' && !(hi >= lo)) throw new Error(`${gen} 的最大值要不小于最小值`);
   if (nonzero && lo === 0 && hi === 0) throw new Error('范围里只有 0，nonzero 取不到数');
   if (gen !== 'int' && nums.slice(0, need - 2).some((d) => d < 1 || d > 6)) throw new Error(`${gen} 的大小写 1 到 6`);
   return { gen, nums, nonzero };
@@ -105,7 +113,17 @@ function draw(p, vars, rand) {
     do x = randInt(lo, hi, rand); while (p.nonzero && x === 0);
     return Q.int(x);
   };
-  if (p.gen === 'int') return int(p.nums[0], p.nums[1]);
+  if (p.gen === 'int') {
+    const bound = (x) => {
+      if (typeof x === 'number') return x;
+      const v = calcValue(x, vars).value;
+      if (!isQ(v) || !v.integer) throw new Error(`int(…) 的范围「${x}」算出来不是整数`);
+      return Number(v.n);
+    };
+    const lo = bound(p.nums[0]), hi = bound(p.nums[1]);
+    if (hi < lo) throw new Error(`int(${p.nums[0]}, ${p.nums[1]}) 的最大值比最小值小`);
+    return int(lo, hi);
+  }
   if (p.gen === 'choice') return calcValue(p.items[randInt(0, p.items.length - 1, rand)], vars).value;
   if (p.gen === 'vec') {
     // nonzero：向量不能全是 0（每个分量可以是 0）

@@ -113,10 +113,20 @@ const mat = (x) => { if (!isQMat(x)) throw new Error('这里需要一个矩阵')
 const int = (x, what) => { q(x, what); if (!x.integer) throw new Error(`${what}要是整数`); return Number(x.n); };
 const square = (M, what) => { mat(M); if (M.length !== M[0].length) throw new Error(`只有方阵才有${what}`); return M; };
 
+// row(A, i) 取出来是一列数，和 v'（1×n）相加时按一行算：课件里常写 u' + row(A, 2)
+const asRowOf = (M, v, isV) => (M.length === 1 && isV(v) && M[0].length === v.length ? [v] : null);
 export function add(a, b) {
   if (isQ(a) && isQ(b)) return a.add(b);
   if (Array.isArray(a) && Array.isArray(b) && a.length === b.length && isQ(a[0]) === isQ(b[0])) return a.map((x, i) => add(x, b[i]));
-  throw new Error('尺寸不同，不能相加（单位矩阵按需要写 E(3)、E(4)）');
+  if (isQMat(a) && asRowOf(a, b, isQVec)) return add(a, [b]);
+  if (isQMat(b) && asRowOf(b, a, isQVec)) return add([a], b);
+  throw new Error(`尺寸不同（${sizeText(a)} 和 ${sizeText(b)}），不能相加（单位矩阵按需要写 E(3)、E(4)）`);
+}
+function sizeText(x) {
+  if (isQ(x)) return '数';
+  if (isQMat(x)) return `${x.length}×${x[0].length}`;
+  if (isQVec(x)) return `${x.length} 维向量`;
+  return '？';
 }
 export function scale(k, a) {
   if (isQ(a)) return k.mul(a);

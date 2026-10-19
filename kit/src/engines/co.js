@@ -89,6 +89,8 @@ function floatRun(input) {
     const v = input.bitsVal;
     if (v >= 1n << 32n) throw new Error('float: 单精度是 32 位，十六进制最多 8 位');
     const S = Number(v >> 31n), E = Number((v >> 23n) & 0xffn), M = v & 0x7fffffn;
+    // 第 0 步是开始的样子（问题挂在第 1 步起才问得到）
+    steps.push({ view: { fields: null }, msg: `${input.src} 是一个 IEEE 754 单精度数：32 位，按 1 位符号 | 8 位阶码 | 23 位尾数拆开。` });
     steps.push({ view: { v, fields: F() }, msg: `${input.src} 写成 32 位二进制，按 1 | 8 | 23 拆开：符号 S = ${S}，阶码 E = ${E}（${bin(E, 8)}），尾数 M = ${bin(M, 23)}。`, ask: { tag: 'exp', kind: 'number', q: '阶码 E（十进制）是多少？', answer: E } });
     let value, text;
     if (E === 255) { text = M ? 'NaN（不是数）' : `${S ? '−' : '+'}∞`; value = null; }
@@ -133,6 +135,7 @@ function floatRun(input) {
   const v = (BigInt(S) << 31n) | (BigInt(E) << 23n) | M;
   const mStr = bin(M, 23);
   const binText = binaryText(a, d);
+  steps.push({ view: { fields: null }, msg: `把 ${input.src} 写成 IEEE 754 单精度：1 位符号 S、8 位阶码 E（移码，偏置 127）、23 位尾数 M（规格化以后隐藏最前面的 1）。` });
   steps.push({ view: { fields: null }, msg: `${input.src}：符号位 S = ${S}（${neg ? '负' : '正'}数）。绝对值写成二进制：${binText}${exact ? '' : '（除不尽，后面取到 24 位有效数字，就近舍入）'}。`, ask: { tag: 'sign', kind: 'number', q: '符号位 S 是多少？', answer: S } });
   steps.push({ view: { fields: null }, msg: `规格化：写成 1.${mStr.replace(/0+$/, '') || '0'}B × 2^${e}（小数点移到第一个 1 后面，移了 ${Math.abs(e)} 位，指数是 ${e}）。` });
   steps.push({ view: { v, fields: F(), hi: ['阶码 E'] }, msg: `阶码 E = 指数 + 127 = ${e} + 127 = ${E} = ${bin(E, 8)}B（移码，偏置 127）。`, ask: { tag: 'exp', kind: 'bin', width: 8, q: '阶码 E（8 位二进制）是什么？', answer: BigInt(E), display: bin(E, 8) } });

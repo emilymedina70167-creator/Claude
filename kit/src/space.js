@@ -94,6 +94,7 @@ const vec3 = (p, what) => { if (!isVec(p) || p.length !== 3) throw new Error(`${
 export function createSpace(container, src, opts = {}) {
   const { fields, cmds } = typeof src === 'string' ? parseSpace(src) : src;
   const extra = opts.extraVars || {};
+  const base = opts.baseVars || {};
   const state = { slider: {}, drag: {}, override: {}, yaw: -32, pitch: 22, spinning: /^(true|yes|1|是)$/i.test(fields.spin || '') };
   const view = String(fields.view || '').split(/[\s,，]+/).map(Number);
   if (view.length === 2 && view.every(Number.isFinite)) [state.yaw, state.pitch] = view;
@@ -108,7 +109,7 @@ export function createSpace(container, src, opts = {}) {
   container.querySelector('.sp-plot').prepend(svg);
 
   const env = () => {
-    const v = { ...extra, ...state.slider };
+    const v = { ...base, ...extra, ...state.slider };
     for (const c of cmds) if (c.kind === 'let') v[c.name] = Object.hasOwn(state.override, c.name) ? state.override[c.name] : c.expr(v);
     return v;
   };

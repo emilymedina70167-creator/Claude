@@ -1,0 +1,1022 @@
+[
+  {
+    "file": "evals/runs/0-baseline/操作系统/class.class.json",
+    "kind": "class",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 2 轮：板「先来先服务」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/class.class.json",
+    "kind": "class",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 1 轮：板「先来先服务」一屏放不下",
+      "第 2 轮：板「先来先服务」一屏放不下",
+      "第 3 轮：板「从到达开始掐表」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/os-addr2.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/os-addr2.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/os-banker.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "quiz",
+        "msg": "\\calc{av'+row(A, 2)} 算不出来：尺寸不同，不能相加（单位矩阵按需要写 E(3)、E(4)）",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 5 块板：板「自己判：P4 请求」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/os-banker.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "quiz",
+        "msg": "\\calc{av'+row(A, 2)} 算不出来：尺寸不同，不能相加（单位矩阵按需要写 E(3)、E(4)）",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 5 块板：板「自己判：P4 请求」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/os-file.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/os-file.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/os-page.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/os-page.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/os-pv.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [
+      "第 3 块板：trace 「一种交替顺序」 里有一块要横着滑（387/372px）"
+    ],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/os-pv.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/os-sched.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/操作系统/os-sched.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/class.class.json",
+    "kind": "class",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 2 轮：板「先整理方程」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/class.class.json",
+    "kind": "class",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 2 轮：板「先整理方程」一屏放不下",
+      "第 3 轮：板「X 只能从右边提」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-det.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-det.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-diag.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "graph",
+        "msg": "图形描述有误：未定义的变量 A；未定义的变量 A",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-diag.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "graph",
+        "msg": "图形描述有误：未定义的变量 A；未定义的变量 A",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-geo.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-geo.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-inv.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-inv.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-orth.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "space",
+        "msg": "图形描述有误：未定义的变量 x1；未定义的变量 x2；未定义的变量 x3",
+        "soft": false
+      },
+      {
+        "kind": "space",
+        "msg": "图形描述有误：未定义的变量 x2；未定义的变量 x3",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-orth.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "space",
+        "msg": "图形描述有误：未定义的变量 x1；未定义的变量 x2；未定义的变量 x3",
+        "soft": false
+      },
+      {
+        "kind": "space",
+        "msg": "图形描述有误：未定义的变量 x2；未定义的变量 x3",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-param.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "space",
+        "msg": "图形描述有误：未定义的变量 eta；未定义的变量 eta；未定义的变量 xi1；未定义的变量 xi2；未定义的变量 xi1；未定义的变量 eta；未定义的变量 eta；未定义的变量 eta",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 6 块板：板「通解长什么样」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-param.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "space",
+        "msg": "图形描述有误：未定义的变量 eta；未定义的变量 eta；未定义的变量 xi1；未定义的变量 xi2；未定义的变量 xi1；未定义的变量 eta；未定义的变量 eta；未定义的变量 eta",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 6 块板：板「通解长什么样」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-quad.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-quad.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-rank.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/线代/la-rank.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/class.class.json",
+    "kind": "class",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 2 轮：板「地址拆成三段」一屏放不下",
+      "第 3 轮：板「组号只管选组」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/class.class.json",
+    "kind": "class",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 2 轮：板「地址拆成三段」一屏放不下",
+      "第 3 轮：板「组号只管选组」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/co-arith.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/co-arith.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/co-asm.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "practice",
+        "msg": "「pick n = int(0, 12)」：n 是保留的名字，换一个",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/co-asm.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "practice",
+        "msg": "「pick n = int(0, 12)」：n 是保留的名字，换一个",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/co-cache.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "practice",
+        "msg": "「pick n = choice(8, 16, 32, 64)」：n 是保留的名字，换一个",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/co-cache.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "practice",
+        "msg": "「pick n = choice(8, 16, 32, 64)」：n 是保留的名字，换一个",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 6 块板：板「换着数拆地址」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/co-float.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "bits",
+        "msg": "ask: 没有「sign」这种问题（这个演示能问的：exp、hex）",
+        "soft": false
+      },
+      {
+        "kind": "bits",
+        "msg": "ask: 没有「exp」这种问题（这个演示能问的：value）",
+        "soft": false
+      },
+      {
+        "kind": "practice",
+        "msg": "「pick n = int(1, 20)」：n 是保留的名字，换一个",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/co-float.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "bits",
+        "msg": "ask: 没有「sign」这种问题（这个演示能问的：exp、hex）",
+        "soft": false
+      },
+      {
+        "kind": "bits",
+        "msg": "ask: 没有「exp」这种问题（这个演示能问的：value）",
+        "soft": false
+      },
+      {
+        "kind": "practice",
+        "msg": "「pick n = int(1, 20)」：n 是保留的名字，换一个",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 6 块板：板「换个数自己写」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/co-mem.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "practice",
+        "msg": "「pick x = int(0, g*2^k - 1)」：int(…) 里写整数（看不懂「g*2^k - 1」）",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/co-mem.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "practice",
+        "msg": "「pick x = int(0, g*2^k - 1)」：int(…) 里写整数（看不懂「g*2^k - 1」）",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/co-pipe.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/组成原理/co-pipe.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/class.class.json",
+    "kind": "class",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 1 轮：板「丢了 2 号帧」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/class.class.json",
+    "kind": "class",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 1 轮：板「丢了 2 号帧」一屏放不下",
+      "第 2 轮：板「乙只等一个号」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/cn-crc.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/cn-crc.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/cn-cwnd.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/cn-cwnd.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 5 块板：板「换一组数」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/cn-dv.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/cn-dv.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/cn-gbn.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "practice",
+        "msg": "「pick n = int(2, 7)」：n 是保留的名字，换一个",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 6 块板：板「自己来」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/cn-gbn.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [
+      {
+        "kind": "practice",
+        "msg": "「pick n = int(2, 7)」：n 是保留的名字，换一个",
+        "soft": false
+      }
+    ],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [
+      "第 6 块板：板「自己来」一屏放不下"
+    ],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/cn-subnet.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/cn-subnet.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/cn-web.board.json",
+    "kind": "live",
+    "size": "820×1180",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  },
+  {
+    "file": "evals/runs/0-baseline/计网/cn-web.board.json",
+    "kind": "live",
+    "size": "1180×820",
+    "theme": "默认",
+    "problems": [],
+    "errors": [],
+    "overflow": 0,
+    "spills": [],
+    "scrolls": [],
+    "overlaps": [],
+    "unfit": [],
+    "notes": []
+  }
+]

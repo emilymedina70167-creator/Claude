@@ -17,6 +17,7 @@ import { textAnswerInput } from '../textinput.js';
 import { parseSeqAnswer, checkSeq, radixAnswer, checkRadix, groupDigits } from '../textcheck.js';
 import { calcValue, isQ } from '../exact.js';
 import { cellOk, normCell, readNumber } from '../stepperspec.js';
+import { parseConditions, checkConditions } from '../anscheck.js';
 
 // 通用作答组件：spec = {q, answer, type, before, hint, explain, solution}
 // spec.formula（formulaSpec 的结果）：答案是含 n 的式子，学生写式子，页面代值比较
@@ -111,6 +112,7 @@ export function answerWidget(body, spec, onDone) {
     lastTried = input.partial();
     if (first === null) first = input.text();
     if (text) r = text.check(given);
+    else if (spec.cond) r = checkConditions(spec.cond, given, spec.vars || {});
     else if (!formula) r = check(given, spec.answer, spec.type);
     spec.onTry?.({ text: input.text(), ok: r.ok, attempts, work, note: lastNote || undefined });
     if (r.ok) {
@@ -239,12 +241,22 @@ export function answer(el, src) {
   const formula = fields.formula ? formulaSpec(fields.answer, fields.formula, scope) : null;
   const text = textAnswerSpec(fields.type, fields.answer, { scope, width: fields.width });
   const value = formula || text ? null : compile(fields.answer)(vars);
+  // check: 按条件判（答案不唯一的：特解、P、Q、可逆变换……）。answer: 是一个对的答案（形状、看答案用），先拿它验一遍条件
+  let cond = null;
+  if (fields.check) {
+    if (formula || text) session.problem(el, 'answer', 'check: 只能用在数、向量、矩阵的答案上');
+    else {
+      cond = parseConditions(fields.check);
+      const r = checkConditions(cond, value, vars);
+      if (!r.ok) session.problem(el, 'answer', `answer: 写的答案不满足 check 里的条件（${r.which}）：先把 answer 改成一个对的答案，页面才知道要填几格`);
+    }
+  }
   for (const msg of calcProblems([fields.title, fields.q, fields.hint, fields.explain, fields.before, fields.after], scope)) session.problem(el, 'answer', msg);
   const title = fields.title || '动手算 Try it';
   const body = withCalcScope(scope, () => widget(el, { title, cls: 'answer' }));
   const done = session.gate(el, title);
   const onTry = (t) => session.record({ type: 'answer', liveOnly: true, title, q: plain(fields.q), value: t.text, ok: t.ok, attempts: t.attempts, transcript: t.work || undefined, check: t.note, el });
-  answerWidget(body, { ...fields, answer: value, formula, text, type: (fields.type || '').toLowerCase(), onTry, scope }, (r) => {
+  answerWidget(body, { ...fields, answer: value, formula, text, cond, vars, type: (fields.type || '').toLowerCase(), onTry, scope }, (r) => {
     session.record({ type: 'answer', final: true, title, q: plain(fields.q), ok: r.ok, attempts: r.attempts, first: r.first, last: r.last, expected: formula ? formula.display : text ? text.display : plainValue(value), revealed: r.revealed, work: r.work || undefined, check: r.note, el });
     done();
   });
@@ -285,3 +297,4 @@ export function textAnswerSpec(type, answer, { scope = {}, width } = {}) {
   return null;
 }
 const texSafe = (s) => String(s).replace(/[\\{}$&#^_%~]/g, (c) => `\\${c}`);
+

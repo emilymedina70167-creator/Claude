@@ -60,6 +60,7 @@ function subnetRun(input) {
     const { ip, len } = input;
     const net = netOf(ip, len), bc = bcastOf(ip, len), h = 32 - len;
     const v = (extra) => ({ ip, len, ...extra });
+    steps.push({ view: v({}), msg: `${ipText(ip)}/${len}：/${len} 是网络前缀的长度。写成二进制看。` });
     steps.push({ view: v({}), msg: `${ipText(ip)}/${len}：前 ${len} 位是网络号，后 ${h} 位是主机号。子网掩码 = ${len} 个 1 后面跟 ${h} 个 0 = ${ipText(maskOf(len))}。`, ask: { tag: 'mask', kind: 'text', q: '子网掩码（点分十进制）是什么？', answer: ipText(maskOf(len)) } });
     steps.push({ view: v({ show: 'net' }), msg: `网络地址：主机号全写 0（也就是地址和掩码按位与）= ${ipText(net)}。`, ask: { tag: 'net', kind: 'text', q: '网络地址是什么？', answer: ipText(net) } });
     steps.push({ view: v({ show: 'bcast' }), msg: `广播地址：主机号全写 1 = ${ipText(bc)}。`, ask: { tag: 'bcast', kind: 'text', q: '广播地址是什么？', answer: ipText(bc) } });

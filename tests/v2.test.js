@@ -70,3 +70,21 @@ test('出题器：答案和题目一致', () => {
     }
   }
 });
+
+test('answer 的 check:：按条件判（特解、正交矩阵），根号的数也能写', async () => {
+  const { parseConditions, checkConditions, readCell } = await import('../kit/src/anscheck.js');
+  const A = [[1, 1, 1], [2, 2, 2]], b = [1, 2];
+  const cond = parseConditions('A*ans == b => 代进去 Ax 不等于 b');
+  assert.ok(checkConditions(cond, [1, 0, 0], { A, b }).ok);
+  assert.ok(checkConditions(cond, [0, 0, 1], { A, b }).ok);
+  const bad = checkConditions(cond, [1, 1, 0], { A, b });
+  assert.equal(bad.ok, false);
+  assert.equal(bad.msg, '代进去 Ax 不等于 b');
+  const r = readCell('1/√2');
+  assert.ok(Math.abs(Number(r) - Math.SQRT1_2) < 1e-12);
+  assert.equal(String(r), '1/√2');
+  assert.equal(String(readCell('-3/4')), '-3/4');
+  assert.throws(() => readCell('abc'));
+  const Q = [[readCell('1/√2'), readCell('1/√2')], [readCell('1/√2'), readCell('-1/√2')]];
+  assert.ok(checkConditions(parseConditions("ans'*ans == E(2); det(ans) != 0"), Q, {}).ok);
+});

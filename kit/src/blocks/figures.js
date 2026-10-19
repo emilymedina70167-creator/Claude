@@ -5,12 +5,14 @@ import { session } from '../session.js';
 import { link } from '../link.js';
 import { widget, mdToHtml } from './common.js';
 import { round2 } from '../plot.js';
+import { floatVars } from '../exact.js';
 
 function figure(el, src, create, { cls, title }) {
   const body = widget(el, { title: null, cls });
   const linkId = (src.match(/^\s*link\s*[:：]\s*(\S+)\s*$/m) || [])[1];
   const extra = linkId ? { step: link(linkId).step, t: 1 } : {};
-  const api = create(body, src, { extraVars: extra });
+  // 整节课的量（let 块）在图里也能直接用，和 scene 一样
+  const api = create(body, src, { extraVars: extra, baseVars: floatVars(session.vars) });
   const { fields } = api;
   const titleText = fields.title || title;
   el.querySelector('.widget').insertAdjacentHTML('afterbegin', `<div class="w-title">${mdToHtml(titleText, { inline: true })}</div>`);

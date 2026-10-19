@@ -1,5 +1,7 @@
 // 数学作答输入：一个数 / 向量 / 矩阵 / 一组向量（基），配 iPad 友好的数字小键盘
 import { Frac } from './linalg.js';
+import { readCell } from './anscheck.js';
+
 
 // shape: {kind:'number'} | {kind:'vector', n} | {kind:'matrix', r, c} | {kind:'vectors', n, count}
 export function mathInput(container, shape) {
@@ -39,7 +41,7 @@ export function mathInput(container, shape) {
       const val = (inp) => {
         const s = inp.value.trim().replace(/−/g, '-');
         if (!s) { inp.focus(); throw new Error('还有空格没填'); }
-        try { return Frac.from(s); } catch { inp.classList.add('is-wrong'); throw new Error(`看不懂「${s}」，请写整数、小数或分数（如 -3/4）`); }
+        try { return readCell(s); } catch { inp.classList.add('is-wrong'); throw new Error(`看不懂「${s}」，请写整数、小数、分数（如 -3/4）或带根号的数（如 1/√2）`); }
       };
       const at = (k) => [...root.querySelectorAll(`.mi-cell[data-k="${k}"]`)];
       if (shape.kind === 'number') return val(at(0)[0]);
@@ -125,7 +127,7 @@ function showPad() {
     pad = document.createElement('div');
     pad.className = 'keypad';
     pad.innerHTML = `<div class="kp-keys">${['7', '8', '9', '⌫', '4', '5', '6', '−', '1', '2', '3', '/', '0', '.', '←', '→'].map((k) => `<button type="button" data-k="${k}">${k}</button>`).join('')}</div>
-      <div class="kp-side"><button type="button" data-k="next" class="kp-next">下一格</button><button type="button" data-k="ok" class="kp-ok">完成</button></div>`;
+      <div class="kp-side"><button type="button" data-k="√" class="kp-root" aria-label="根号">√</button><button type="button" data-k="next" class="kp-next">下一格</button><button type="button" data-k="ok" class="kp-ok">完成</button></div>`;
     // 用 pointerdown + preventDefault，避免输入框失去焦点
     pad.addEventListener('pointerdown', (e) => {
       const b = e.target.closest('button');

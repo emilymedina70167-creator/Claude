@@ -100,6 +100,7 @@ const fmtTick = (v, step) => { const d = Math.max(0, -Math.floor(Math.log10(step
 export function createGraph(container, src, opts = {}) {
   const { fields, cmds, xr, yr: yrGiven } = typeof src === 'string' ? parseGraph(src) : src;
   const extra = opts.extraVars || {};
+  const base = opts.baseVars || {};
   const state = { slider: {}, drag: {}, override: {} };
   cmds.filter((c) => c.kind === 'slider').forEach((c) => (state.slider[c.name] = c.init));
   container.innerHTML = '<div class="w-plot g-plot"></div><div class="w-side"><div class="sliders"></div><div class="readout r-show"></div></div>';
@@ -110,7 +111,7 @@ export function createGraph(container, src, opts = {}) {
   container.querySelector('.g-plot').appendChild(svg);
 
   const env = () => {
-    const v = { ...extra, ...state.slider };
+    const v = { ...base, ...extra, ...state.slider };
     for (const c of cmds) {
       if (c.kind !== 'let') continue;
       v[c.name] = Object.hasOwn(state.override, c.name) ? state.override[c.name]

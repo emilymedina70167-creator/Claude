@@ -442,7 +442,7 @@ table.mx.mx-click td { cursor: pointer; }
 }
 .keypad.show { display: flex; }
 .kp-keys { display: grid; grid-template-columns: repeat(4, minmax(56px, 78px)); gap: 7px; }
-.kp-side { display: grid; grid-template-rows: 1fr 1fr; gap: 7px; width: min(116px, 24vw); }
+.kp-side { display: grid; grid-template-rows: auto 1fr 1fr; gap: 7px; width: min(116px, 24vw); }
 .keypad button {
   min-height: 48px; border: 1px solid rgb(var(--shade-rgb) / 0.35); border-radius: 10px;
   background: var(--key-bg); color: var(--chalk);

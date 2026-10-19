@@ -89,3 +89,13 @@ test('\\calc{…}：公式里的数由页面算', () => {
   assert.equal(expandCalc('没有 calc', ev).tex, '没有 calc');
   assert.match(expandCalc('\\calc{1+', ev).errors[0].msg, /右括号/);
 });
+
+test('一行加 row(A, i)：按一行算（课件里常写 u\' + row(A, 2)）', () => {
+  const vars = { A: [[1, 2], [3, 4]], a: [1, 1] };
+  assert.equal(text("a' + row(A, 2)", vars), '[[4, 5]]');
+  assert.equal(text("row(A, 2) - a'", vars), '[[2, 3]]');
+  assert.deepEqual(evaluate("a' + row(A, 2)", vars), [[4, 5]]);
+  // 尺寸真对不上时说清楚是哪两个
+  assert.throws(() => evaluateExact('a + [1, 2, 3]', vars), /2 维向量 和 3 维向量/);
+  assert.throws(() => evaluateExact('A + [1, 2]', vars), /2×2 和 2 维向量/);
+});
