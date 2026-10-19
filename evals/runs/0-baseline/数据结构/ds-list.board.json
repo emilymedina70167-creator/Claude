@@ -1,0 +1,60 @@
+{
+  "unit": "算法设计：链表重排",
+  "subject": "数据结构",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "这道题",
+      "md": "- 带头结点的单链表 L = (a1, a2, …, an) → L′ = (a1, an, a2, an−1, …)\n- 要求：空间 O(1)，时间尽可能快\n- 答卷三问：设计思想、C 代码、时间复杂度"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "要排成什么样",
+      "md": "L′ 是「前面取一个、后面取一个」交替着来。先用编号试一个：\n\n```answer\nid: q-n7\ntitle: n = 7 时\nq: 带头结点的单链表 L = (1, 2, 3, 4, 5, 6, 7)，按 L′ = (a1, an, a2, an−1, a3, an−2, …) 重排，写出 L′。\ntype: seq\nanswer: 1 7 2 6 3 5 4\nhint: 第 1 个、倒数第 1 个、第 2 个、倒数第 2 个……\nexplain: 前半段 1 2 3 4 顺着取，后半段倒着取 7 6 5，交替排：1 7 2 6 3 5 4。\n```\n\n```quiz\nid: qz-o1\nq: 「后面取一个」要倒着取后半段，可单链表只能往后走。空间 O(1)、时间又要快，哪种办法行？\n- [ ] 把结点指针存进数组，从数组两头取\n- [ ] 每次从头走到当前的倒数第 k 个\n- [x] 先把后半段原地逆置，再从两段的开头轮流取\nexplain: 存数组要 O(n) 的空间；每次从头找倒数第 k 个，总共 O(n²)；原地逆置后半段只用几个指针，整个算法 O(n)。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "三步怎么做",
+      "md": "思路分三步：① 找中间结点 ② 后半段原地逆置 ③ 两段交替合并。每一步先写你打算怎么做，再揭开。\n\n```steps\nid: ex-plan\ntitle: 三步走\nq: 带头结点的单链表 L，空间 O(1)，把 (a1, a2, …, an) 重排成 (a1, an, a2, an−1, …)。\n\nstep: 找中间\nask: 不先数长度，走一趟就找到中间结点，用什么办法？\nshow: 快慢指针：p 每次走一步、q 每次走两步，q 走到表尾时，p 正好在前半段的最后一个结点。\n\nstep: 逆置后半段\nask: 后半段从 p->next 开始。怎么原地逆置？开始逆置之前，p->next 要先怎么处理？\nshow: 先 q = p->next、p->next = NULL，把后半段摘下来；再把 q 起的结点一个个头插到 p 后面，后半段就倒过来了。\n\nstep: 交替合并\nask: 现在 L 是前半段，后面接着倒过来的后半段。怎么把后半段的结点一个个插进前半段？\nshow: s 指前半段的插入点（从 a1 开始），q 指后半段的第一个结点：把 q 插在 s 后面，s 跳到前半段的下一个结点，q 换成后半段的下一个，直到后半段取完。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "跟着指针走",
+      "md": "页面的代码跟踪还不支持指针，这里用数组模拟链表：结点 i 存的就是 ai，`nxt[i]` 是它的 next，0 号是头结点，`nxt[i] == 0` 表示 NULL。代码和指针版一行对一行。n = 6，走到两处会停下来问你。\n\n```trace\nid: tr-list\ntitle: n = 6 跟一遍\npointers: p, q, r, s\npredict: 9 -> q; 18 -> q\ncode:\nvoid change_list(int nxt[], int h){\n    int p, q, r, s;\n    p = h; q = h;\n    while(nxt[q] != 0){\n        p = nxt[p];\n        q = nxt[q];\n        if(nxt[q] != 0) q = nxt[q];\n    }\n    q = nxt[p];\n    nxt[p] = 0;\n    while(q != 0){\n        r = nxt[q];\n        nxt[q] = nxt[p];\n        nxt[p] = q;\n        q = r;\n    }\n    s = nxt[h];\n    q = nxt[p];\n    nxt[p] = 0;\n    while(q != 0){\n        r = nxt[q];\n        nxt[q] = nxt[s];\n        nxt[s] = q;\n        s = nxt[q];\n        q = r;\n    }\n}\nint main(){\n    int nxt[7] = {1, 2, 3, 4, 5, 6, 0};\n    int i;\n    change_list(nxt, 0);\n    for(i = nxt[0]; i != 0; i = nxt[i])\n        printf(\"%d \", i);\n    return 0;\n}\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "这份代码错在哪",
+      "md": "```findbug\nid: bug-list\ntitle: 错在哪一行\nq: 下面是一份指针版的 change_list（带头结点 h），跑 n = 6 时出了错。点出第一处错的那一行，再写错在哪。\nline: `p = q = h; while(q->next != NULL){ p = p->next; q = q->next; if(q->next != NULL) q = q->next; }`\nline: `q = p->next;`　取出后半段，接着直接开始逆置\nline: `while(q != NULL){ r = q->next; q->next = p->next; p->next = q; q = r; }`　头插到 p 后面\nline: `s = h->next; q = p->next; p->next = NULL;`\nline: `while(q != NULL){ r = q->next; q->next = s->next; s->next = q; s = q->next; q = r; }`\nbug: 2\nwhy: 取出后半段以后没写 `p->next = NULL;`：第一次头插时 `q->next = p->next` 让 a4 的 next 指向它自己，后半段的尾巴成了环，合并时就会走到空指针上。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 5,
+      "title": "n = 7 跑一遍",
+      "md": "换成 n = 7（奇数，中间结点归前半段）。先不看过程，在纸上推一遍，写出程序打印的序列。\n\n```trace\nid: tr-n7\ntitle: n = 7 打印什么\nmode: quiz\nquiz: output\ncode:\nvoid change_list(int nxt[], int h){\n    int p, q, r, s;\n    p = h; q = h;\n    while(nxt[q] != 0){\n        p = nxt[p];\n        q = nxt[q];\n        if(nxt[q] != 0) q = nxt[q];\n    }\n    q = nxt[p];\n    nxt[p] = 0;\n    while(q != 0){\n        r = nxt[q];\n        nxt[q] = nxt[p];\n        nxt[p] = q;\n        q = r;\n    }\n    s = nxt[h];\n    q = nxt[p];\n    nxt[p] = 0;\n    while(q != 0){\n        r = nxt[q];\n        nxt[q] = nxt[s];\n        nxt[s] = q;\n        s = nxt[q];\n        q = r;\n    }\n}\nint main(){\n    int nxt[8] = {1, 2, 3, 4, 5, 6, 7, 0};\n    int i;\n    change_list(nxt, 0);\n    for(i = nxt[0]; i != 0; i = nxt[i])\n        printf(\"%d \", i);\n    return 0;\n}\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 7,
+      "page": 6,
+      "title": "写答卷",
+      "md": "照考试的样子答三问。代码用指针写（`typedef struct node{ int data; struct node *next; } NODE;`），在 Notability 里写好，用底部「交截图」交上来，我逐行看。\n\n```conjecture\nid: cj-idea\ntitle: (1) 设计思想\nq: 用三四句话写出算法的设计思想（答卷上的写法）。\nplaceholder: 先……再……最后……\nanswer: 先用快慢指针找到中间结点（p 走一步、q 走两步，q 到表尾时 p 在中间）；把 p 之后的后半段摘下来原地逆置（头插到 p 后面）；再从前半段的第一个结点开始，把后半段的结点依次插到前半段每个结点后面。\n```"
+    },
+    {
+      "id": "s7",
+      "seq": 8,
+      "md": "```quiz\nid: qz-time\nq: (3) 这个算法的时间复杂度是多少？\n- [ ] $O(n^2)$\n- [ ] $O(n\\log n)$\n- [x] $O(n)$\n- [ ] $O(1)$\nexplain: 找中点约走 $n/2$ 步，逆置后半段 $n/2$ 步，合并 $n/2$ 步，合起来 $O(n)$；只用了 p、q、r、s 几个指针，空间 $O(1)$。\n```"
+    }
+  ]
+}

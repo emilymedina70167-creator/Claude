@@ -40,7 +40,9 @@ test('组件说明：从 CLAUDE-PROJECT.md 截出第三节，示例和表格都�
   assert.ok(!DOCS.includes('### context'), 'context 在课堂里用不上');
   assert.ok(!DOCS.includes('### summary'), 'summary 在课堂里用不上');
   assert.ok(!DOCS.includes('\n\n\n'), '连续空行要去掉');
-  assert.ok(!/^-{3,}$/m.test(DOCS), '分隔线要去掉');
+  // 代码块外的分隔线（frames 的例子里每一帧之间的 --- 在代码块里，要留着）
+  assert.ok(!/^-{3,}$/m.test(DOCS.replace(/^(`{3,})[^\n]*\n[\s\S]*?^\1\s*$/gm, '')), '分隔线要去掉');
+  assert.ok(DOCS.includes('````frames\nid: fr-post\ntitle: 中缀转后缀：a + b * c\n---\n'), 'frames 例子里的 --- 不能去掉');
   // 课堂每一轮只带「通用 + 这门课」的那几节（subject.js），每门课的说明要短；整节打包进 la-kit.js，宽一点
   for (const subject of SUBJECTS) assert.ok(bytes(docsForSubject(DOCS, subject)) < 40 * KiB, `${subject}的组件说明太长：${bytes(docsForSubject(DOCS, subject))} 字节`);
   assert.ok(bytes(DOCS) < 160 * KiB, `组件说明整节太长：${bytes(DOCS)} 字节`);

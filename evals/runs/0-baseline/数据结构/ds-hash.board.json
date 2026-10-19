@@ -1,0 +1,48 @@
+{
+  "unit": "散列表：线性探测与 ASL",
+  "subject": "数据结构",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "这道题的约定",
+      "md": "- H(key) = key % 13，表长 16（地址 0～15）\n- 线性探测：冲突就看下一个地址 H+1、H+2……\n- 比较一次 = 和一个地址里的内容比一次"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "小表先走一遍",
+      "md": "先拿一组小的数走一遍：H(key) = key % 7，表长 10。每插一个关键字，先点出它最后放在哪个地址；最后两步页面会算 ASL，看它是怎么数的。\n\n```hash\nid: h-demo\ntitle: 小表走一遍\nhash: 7 8 30 11 18 9 14\np: 7\nsize: 10\nprobe: linear\nask: place\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "填题目的表",
+      "md": "题目的数据。先在草稿区算出每个 H(key)，冲突就往后找，再把整张表写进来。\n\n```hash\nid: h-quiz\ntitle: 写出整张表\nhash: 19 14 23 01 68 20 84 27 55 11 10 79\np: 13\nsize: 16\nprobe: linear\nmode: quiz\nq: 关键字 {19, 14, 23, 01, 68, 20, 84, 27, 55, 11, 10, 79}，H(key) = key % 13，表长 16，线性探测。从地址 0 写到 15，空的写 #。\n```\n\n```draft\ntitle: 草稿区\nnote: 一行一个关键字：H(key)，再写探测到的地址。\nheight: 220\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "查找成功的 ASL",
+      "md": "查找表里的一个关键字要比较几次？和插入它时探测了几个地址一样多。数出每个关键字的次数，再求平均（翻回上一块板看你的表）。\n\n```hash\nid: h-asl\ntitle: 查找成功的 ASL\nhash: 19 14 23 01 68 20 84 27 55 11 10 79\np: 13\nsize: 16\nprobe: linear\nmode: quiz\nquiz: asl\nq: 上一块板的散列表，等概率下查找成功的平均查找长度是多少？可以写分数。\n```\n\n```draft\ntitle: 草稿区\nnote: 12 个关键字各比几次，写成一行再加起来。\nheight: 160\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "查找失败比到哪",
+      "md": "```steps\nid: ex-fail\ntitle: 查找失败\nq: 表已经填好（翻回去看）。查找一个不在表里的关键字，怎样才能断定「查找失败」？\n\nstep: 从哪开始\nask: 查找失败时，第一次比较的地址 H(key) 可能是哪些？一共几种？\nchoices: 0～12，13 种 | 0～15，16 种 | 只有空着的那些地址\nanswer: 0～12，13 种\nshow: H(key) = key % 13 只能算出 0～12，所以按这 13 个起点平均；地址 13～15 只会被探测到，不会当起点。\n\nstep: 比到哪停\nask: 从 H(key) 往后一个个比，比到哪里才能断定失败？\nchoices: 比到表尾 | 比到第一个空位置，这次也算一次比较 | 比到第一个空位置，这次不算\nanswer: 比到第一个空位置，这次也算一次比较\nshow: 关键字要是在表里，一定在从 H(key) 起、第一个空位置之前；碰到空位置就能断定失败。按王道的算法，和空位置的这次比较也算。\n\nstep: 数一个\ndo: true\nask: H(key) = 1 时，查找失败一共要比较几次？\nanswer: 13\nshow: 地址 1～12 都有关键字，13 是空的：比较地址 1, 2, …, 13，一共 13 次。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 5,
+      "title": "查找失败的 ASL",
+      "md": "现在把 13 个起点都数一遍。点「播放」，表会自己填好，最后停下来问你 ASL失败（可以写分数）。\n\n```hash\nid: h-fail\ntitle: 查找失败的 ASL\nhash: 19 14 23 01 68 20 84 27 55 11 10 79\np: 13\nsize: 16\nprobe: linear\nask: aslfail\nspeed: 0.4\n```\n\n```draft\ntitle: 草稿区\nnote: 地址 0～12 各要比几次，列成一行再加起来。\nheight: 160\n```"
+    }
+  ]
+}

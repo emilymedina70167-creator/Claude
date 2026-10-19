@@ -149,7 +149,7 @@ export function readNumber(text) {
 //   copy: true 每一行后面有「照上一行抄」（页面置换这种大部分照抄、只改一格的表）
 //   extra: [{ label, v, num? }] 表下面再写几个数（散列表填完再写两个 ASL），表都对了才判它们
 
-const FILL_BLANK = /^(|-|—|–|－|无|空)$/;
+const FILL_BLANK = /^(|-|—|–|－|#|＃|无|空)$/; // # 和 hash 的 quiz 一样表示空位置
 const INF_RE = /^(∞|inf|infinity|oo|无穷|无穷大)$/i;
 const MARK_RE = /^(√|✓|✔|v|y|yes|是|1|t|true)$/i;
 

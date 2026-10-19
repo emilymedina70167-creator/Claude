@@ -159,7 +159,7 @@ export function run(input) {
     if (s.basis.length > 1) {
       const { betas, log } = schmidt(s.basis);
       const lines = log.map((x, t) => (t === 0 ? `\\beta_1 = \\xi_1 = ${colTeX(x.b)}` : `\\beta_{${t + 1}} = \\xi_{${t + 1}} ${x.terms.map((u) => `- \\frac{${u.num.toTeX()}}{${u.den.toTeX()}}\\beta_{${x.terms.indexOf(u) + 1}}`).join(' ')} = ${colTeX(x.b)}`));
-      steps.push({ view: view({ lines }), msg: `λ = ${s.root.toString()} 有 ${s.basis.length} 个特征向量，它们不一定正交：施密特正交化。`, ask: { tag: 'needSchmidt', kind: 'choice', q: '不同特征值的特征向量要不要再正交化？', choices: ['不用：实对称矩阵不同特征值的特征向量已经正交', '要，全部一起正交化'], answer: '不用：实对称矩阵不同特征值的特征向量已经正交' } });
+      steps.push({ view: view({ lines }), msg: `λ = ${s.root.toString()} 有 ${s.basis.length} 个特征向量，它们不一定正交：施密特正交化。`, ask: { tag: 'schmidt', kind: 'choice', q: '不同特征值的特征向量要不要再正交化？', choices: ['不用：实对称矩阵不同特征值的特征向量已经正交', '要，全部一起正交化'], answer: '不用：实对称矩阵不同特征值的特征向量已经正交' } });
       betas.forEach((b) => qcols.push({ u: unit(b), root: s.root }));
     } else s.basis.forEach((b) => qcols.push({ u: unit(b), root: s.root }));
   }

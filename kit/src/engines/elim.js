@@ -473,7 +473,16 @@ export function run(input) {
   if (goal === 'matrixeq' && input.side === 'right') X = X[0].map((_, j) => X.map((r) => r[j]));
   const XT = `\\begin{pmatrix}${X.map((r) => r.map((x) => x.toTeX()).join('&')).join('\\\\')}\\end{pmatrix}`;
   notes.push(`${goal === 'inverse' ? 'A⁻¹' : 'X'} 求出来了`);
-  steps.push({ view: view(M, { pivots, right: true }), msg: goal === 'inverse' ? `左边是 E 了，右边就是 $A^{-1} = ${XT}$。可以乘回去验算 $AA^{-1} = E$。` : input.side === 'right' ? `左边是 E 了，右边是 $X^{T}$，转置回来：$X = ${XT}$。` : `左边是 E 了，右边就是 $X = ${XT}$。` });
+  // 先问一个元素：挑第一个不是整数的（最容易算错），都是整数就挑第一个不是 0 的
+  const flat = X.flatMap((r, i) => r.map((x, j) => ({ x, i, j })));
+  const pick = flat.find((t) => !t.x.integer) || flat.find((t) => !t.x.zero) || flat[0];
+  const what = goal === 'inverse' ? 'A⁻¹' : 'X';
+  steps.push({
+    view: view(M, { pivots, right: true }),
+    msg: goal === 'inverse' ? `左边是 E 了，右边就是 $A^{-1} = ${XT}$。可以乘回去验算 $AA^{-1} = E$。` : input.side === 'right' ? `左边是 E 了，右边是 $X^{T}$，转置回来：$X = ${XT}$。` : `左边是 E 了，右边就是 $X = ${XT}$。`,
+    ask: { tag: 'entry', kind: 'number', q: `${what} 第 ${pick.i + 1} 行第 ${pick.j + 1} 列是多少？（可以写分数）`, answer: pick.x.toNumber(), display: pick.x.toString() },
+    asks: square ? [{ tag: 'invertible', kind: 'choice', q: 'A 可逆吗？', choices: ['可逆', '不可逆'], answer: '可逆' }] : undefined,
+  });
   return { steps, rank: rankA, M, X, m };
 }
 

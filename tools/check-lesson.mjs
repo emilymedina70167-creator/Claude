@@ -147,11 +147,12 @@ async function walkSteppers(page) {
       const ask = w.locator('.sv-ask');
       if (await ask.isVisible()) {
         const g = ask.locator('.sv-giveup');
-        if (await g.isVisible()) { await g.click(); continue; }
+        if (await g.isVisible()) { try { await g.click({ timeout: 3000 }); } catch { break; } continue; }
       }
       const next = w.locator('.sv-next');
       if (!(await next.isVisible()) || !(await next.isEnabled())) break;
-      await next.click();
+      // 课堂里翻板、quiz 收起过程时按钮会在点之前藏起来：点不到就不走了（不算页面的错）
+      try { await next.click({ timeout: 3000 }); } catch { break; }
       const o = await w.evaluate((el) => {
         const res = [];
         for (const svg of el.querySelectorAll('svg')) {

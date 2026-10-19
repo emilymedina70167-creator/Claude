@@ -1,0 +1,53 @@
+{
+  "unit": "Dijkstra 最短路径",
+  "subject": "数据结构",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "Dijkstra",
+      "md": "- dist[v]：目前已知的、源点到 v 的最短长度；path[v]：这条路上 v 的前一个顶点\n- 每一轮：不在 S 里、dist 最小的顶点 u 加入 S\n- 再用 u 更新不在 S 里的 w：`dist[w] = min(dist[w], dist[u] + 边权)`"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "先走一遍",
+      "md": "题目的图，从 V1 出发。点「下一步」走一遍：每一轮先点出这一轮加入 S 的顶点，再看表里这一列的 dist 怎么变。\n\n```net\nid: g-dij\ntitle: 从 V1 出发\nedges: V1->V2 10, V1->V5 5, V2->V3 1, V2->V5 2, V3->V4 4, V4->V1 7, V4->V3 6, V5->V2 3, V5->V3 9, V5->V4 2\nrun: dijkstra from V1\nask: next\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "每轮自己更新",
+      "md": "换一个图，表你自己填。每一轮：先选谁加入 S，再用它更新别的顶点。\n\n```steps\nid: ex-d2\ntitle: 从 A 出发\nq: 有向图 A→B 5，A→C 1，C→B 2，C→D 6，B→D 1，B→E 6，D→E 2，C→E 9，从 A 出发做 Dijkstra。一开始 S = {A}，dist：B 5，C 1，D ∞，E ∞。\n\nstep: 第 1 轮选谁\nask: 这一轮哪个顶点加入 S？\nchoices: B | C | D | E\nanswer: C\nshow: 不在 S 里、dist 最小的是 C（1），C 加入 S。\n\nstep: 用 C 更新\ndo: true\nask: C 加入后，B、D、E 的 dist 各是多少？按 B、D、E 的顺序填。\nanswer: [min(5, 1+2), 1+6, 1+9]\nshow: B：$\\min(5,\\ 1+2)=\\calc{min(5, 1+2)}$，经过 C 更短，path[B] 改成 C；D：$1+6=\\calc{1+6}$；E：$1+9=\\calc{1+9}$。\n\nstep: 第 2 轮选谁\nask: 下一个加入 S 的是谁？\nchoices: B | D | E\nanswer: B\nshow: 不在 S 里的 B、D、E 中，B 的 dist 最小，B 加入 S。\n\nstep: 用 B 更新\ndo: true\nask: B 加入后，D、E 的 dist 各是多少？按 D、E 的顺序填。\nanswer: [min(7, 3+1), min(10, 3+6)]\nshow: D：$\\min(7,\\ 3+1)=\\calc{min(7, 3+1)}$；E：$\\min(10,\\ 3+6)=\\calc{min(10, 3+6)}$。path[D]、path[E] 都改成 B。\n\nstep: 最后两轮\ndo: true\nask: 接下来 D 加入 S。用 D 更新后，E 的 dist 是多少？\nanswer: min(9, 4+2)\nshow: E：$\\min(9,\\ 4+2)=\\calc{min(9, 4+2)}$，最后 E 加入。加入 S 的顺序是 A C B D E。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "让页面对一遍",
+      "md": "把刚才的图交给页面：先写出顶点加入 S 的顺序，做完点开「看一步步的过程」，和你每一轮填的 dist 对一对。\n\n```net\nid: g-d2\ntitle: 从 A 出发\nedges: A->B 5, A->C 1, C->B 2, C->D 6, B->D 1, B->E 6, D->E 2, C->E 9\nrun: dijkstra from A\nmode: quiz\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "沿 path 倒推",
+      "md": "回到题目的图，直接看最后的表。最短距离在 dist 里；最短路径要沿着 path 往回找：path[v] 是 v 的前一个顶点。\n\n```net\nid: g-dij-end\ntitle: 题目的最终结果\nedges: V1->V2 10, V1->V5 5, V2->V3 1, V2->V5 2, V3->V4 4, V4->V1 7, V4->V3 6, V5->V2 3, V5->V3 9, V5->V4 2\nrun: dijkstra from V1\nstart: end\n```\n\n```answer\nid: q-path3\ntitle: V1 到 V3 的路\nq: 有向图 V1→V2 10，V1→V5 5，V2→V3 1，V2→V5 2，V3→V4 4，V4→V1 7，V4→V3 6，V5→V2 3，V5→V3 9，V5→V4 2。从 Dijkstra 求出的 path 数组读出 V1 到 V3 的最短路径，写成顶点序列。\ntype: seq\nanswer: V1 V5 V2 V3\nhint: 从 V3 开始：path[V3] 是谁？再看那个顶点的 path……一直找回 V1，再倒过来写。\nexplain: path[V3] = V2，path[V2] = V5，path[V5] = V1，倒过来是 V1 → V5 → V2 → V3，长度 $5+3+1=\\calc{5+3+1}$。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 5,
+      "title": "负权边为什么不行",
+      "md": "Dijkstra 要求边权不能是负的。为什么？看一个三个顶点的图（演示组件不接受负权，这张图是手画的）。\n\n```sketch\nid: sk-neg\ntitle: 有一条负权边\nwidth: 260\nheight: 150\n<line x1=\"55.5\" y1=\"66.1\" x2=\"184.5\" y2=\"33.9\" class=\"arrow\"/>\n<line x1=\"55.3\" y1=\"74.8\" x2=\"184.7\" y2=\"115.2\" class=\"arrow\"/>\n<line x1=\"200\" y1=\"104\" x2=\"200\" y2=\"46\" class=\"arrow pink\"/>\n<circle cx=\"40\" cy=\"70\" r=\"16\"/>\n<circle cx=\"200\" cy=\"30\" r=\"16\"/>\n<circle cx=\"200\" cy=\"120\" r=\"16\"/>\n<text x=\"40\" y=\"75\" text-anchor=\"middle\">A</text>\n<text x=\"200\" y=\"35\" text-anchor=\"middle\">B</text>\n<text x=\"200\" y=\"125\" text-anchor=\"middle\">C</text>\n<text x=\"116\" y=\"40\" text-anchor=\"middle\" class=\"small\">2</text>\n<text x=\"116\" y=\"112\" text-anchor=\"middle\" class=\"small\">3</text>\n<text x=\"214\" y=\"80\" class=\"pink small\">−2</text>\n```\n\n```steps\nid: ex-neg\ntitle: 从 A 出发\nq: 上图：A→B 2，A→C 3，C→B −2，从 A 出发求最短路径。\n\nstep: 第 1 轮\nask: 按 Dijkstra，第一轮把谁加入 S？它的 dist 定成多少？\nchoices: B，定成 2 | C，定成 3\nanswer: B，定成 2\nshow: B 的 dist 2 最小，B 加入 S，2 就定下来了，以后不再改。\n\nstep: 真正的最短\nask: A 到 B 真正最短的路是哪条？多长？\nshow: A → C → B：$3+(-2)=\\calc{3+(-2)}$，比 2 还短。可 B 已经在 S 里，Dijkstra 不会再改它，结果错了。\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 7,
+      "md": "```conjecture\nid: cj-neg\ntitle: 前提是什么\nq: 一句话：Dijkstra 凭什么认为刚加入 S 的那个 dist 不会再变短？负权边破坏了哪一点？\nplaceholder: 因为……\nanswer: 刚加入 S 的顶点 dist 最小，别的路都要先到一个 dist 不比它小的顶点、再加上非负的边，只会更长，所以它不会再变短；有负权边时，绕到 dist 更大的顶点再走一条负边反而可能更短，这个前提就不成立了。\n```"
+    }
+  ]
+}

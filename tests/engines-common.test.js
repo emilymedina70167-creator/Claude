@@ -50,3 +50,30 @@ test('每个演示：第 0 步没有问题；填表的表每一行格子数和�
     }
   }
 });
+
+// 说明（CLAUDE-PROJECT.md）里的每个演示组件例子：课件作者照抄的就是它们，必须一字不改就能用——
+// 解析得了、走得完、ask: 写的种类都问得到、mode / given / rows / cols 都对
+test('说明里的演示组件例子：照抄就能用（ask 的种类都有、填表的字段都对）', async () => {
+  const { resolveAsks, commonSpec } = await import('../kit/src/stepperspec.js');
+  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const found = [];
+  for (const m of md.matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)) if (ENGINES[m[2]]) found.push([m[2], m[3]]);
+  assert.ok(found.length >= 12, `说明里只找到 ${found.length} 个演示组件的例子`);
+  for (const [name, src] of found) {
+    const e = ENGINES[name];
+    const where = `${name}（${src.split('\n').find((l) => /^id:/.test(l)) || src.split('\n')[0]}）`;
+    const { fields } = parseFields(e.head ? e.head(src) : src);
+    const input = e.parse(fields, src);
+    const r = e.run(input);
+    const spec = commonSpec(fields);
+    const { errors } = resolveAsks(spec.ask, r.steps);
+    assert.deepEqual(errors, [], `${where}：ask 写的问不到`);
+    assert.deepEqual(e.problems?.(input, r) || [], [], `${where}：自检有提醒`);
+    if (spec.mode === 'quiz') assert.ok(e.quiz?.(input, r, fields), `${where}：mode: quiz 却没有 quiz`);
+    if (spec.mode === 'fill') {
+      const t = e.table?.(input, r, fields);
+      assert.ok(t, `${where}：mode: fill 却没有表`);
+      assert.deepEqual(fillSpec(t, fields).errors, [], `${where}：given / rows / cols 写错了`);
+    }
+  }
+});

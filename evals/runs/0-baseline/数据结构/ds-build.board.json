@@ -1,0 +1,53 @@
+{
+  "unit": "由遍历序列构造二叉树",
+  "subject": "数据结构",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "这道题的序列",
+      "md": "- 先序：A B C D E F G H I\n- 中序：B C A E D G H F I"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "根在哪、怎么切",
+      "md": "先序是「根 左 右」，中序是「左 根 右」。每一步先写下你的想法，再揭开。\n\n```steps\nid: ex-root\ntitle: 拆出第一层\nq: 已知先序 A B C D E F G H I、中序 B C A E D G H F I，画出这棵二叉树。\n\nstep: 找根\nask: 整棵树的根是谁？凭的是哪个序列？\nchoices: 先序第一个 A | 先序最后一个 I | 中序第一个 B\nanswer: 先序第一个 A\nshow: 先序「根 左 右」：最先访问的就是根，根是 A。\n\nstep: 分左右\nask: 在中序里找到 A。哪些结点在 A 的左子树，哪些在右子树？\nshow: 中序「左 根 右」：A 左边的 B C 是左子树，右边的 E D G H F I 是右子树。\n\nstep: 先序也切开\nask: 左子树有 2 个结点。先序去掉 A 以后，哪一段是左子树的先序、哪一段是右子树的先序？\nshow: 根后面紧跟着整棵左子树，个数和中序里一样多：B C 是左子树的先序，D E F G H I 是右子树的先序。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "递归往下拆",
+      "md": "左、右子树各自又是「一个先序 + 一个中序」，用同样的办法拆。左子树带着你走，右子树你自己来。\n\n```steps\nid: ex-sub\ntitle: 拆左右子树\nq: 左子树：先序 B C，中序 B C。右子树：先序 D E F G H I，中序 E D G H F I。\n\nstep: 左子树\nask: 左子树的根是谁？C 是它的左孩子还是右孩子？\nchoices: 根 B，C 是左孩子 | 根 B，C 是右孩子 | 根 C，B 是左孩子\nanswer: 根 B，C 是右孩子\nshow: 先序第一个 B 是根；中序 B C 里 C 在 B 的右边，所以 C 是 B 的右孩子。\n\nstep: 右子树的根\ndo: true\nask: 右子树的根是谁？它的左子树、右子树各有哪些结点？\nanswer: 根 D；左子树只有 E，右子树是 F G H I\nshow: 先序 D E F G H I 的第一个 D 是根；中序 E ｜ D ｜ G H F I：左子树只有 E，右子树的中序是 G H F I、先序是 F G H I。\n\nstep: 再往下一层\ndo: true\nask: 先序 F G H I、中序 G H F I：根是谁？G、H、I 各挂在哪？\nanswer: 根 F；G 是 F 的左孩子，H 是 G 的右孩子；I 是 F 的右孩子\nshow: F 是根；中序 G H ｜ F ｜ I：左子树 G H（先序 G H：G 是根，中序里 H 在 G 右边，是 G 的右孩子），右子树只有 I。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "自己画完",
+      "md": "把整棵树画出来：画在下面的草稿区，或者在 Notability 里画好，用底部的「交截图」交上来。画完写出后序序列。\n\n```draft\ntitle: 画树\nnote: 从根 A 开始，一层一层往下画。\nheight: 260\n```\n\n```answer\nid: q-post\ntitle: 后序序列\nq: 已知二叉树的先序 A B C D E F G H I、中序 B C A E D G H F I，写出它的后序序列。\ntype: seq\nanswer: C B E H G I F D A\nhint: 后序是「左 右 根」：根 A 一定在最后；先写完整棵左子树，再写右子树。\nexplain: 左子树 B（右孩子 C）的后序是 C B；右子树 D（左孩子 E，右孩子 F；F 的左孩子 G、G 的右孩子 H，F 的右孩子 I）的后序是 E H G I F D；最后是根 A。\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "对一对",
+      "md": "这就是两个序列唯一确定的那棵树，和你画的比一比。再在树上把后序走一遍：每一步先点出下一个访问谁。\n\n```tree\nid: t-post\ntitle: 后序走一遍\nnodes: A(B(, C), D(E, F(G(, H), I)))\nwalk: postorder\nask: visit\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 5,
+      "title": "先序加后序行吗",
+      "md": "先序 + 中序能唯一确定一棵二叉树。换成**先序 + 后序**呢？试最小的例子。\n\n```quiz\nid: qz-pp\nq: 先序是 A B、后序是 B A 的二叉树，一共有几棵？\nanswer: 2\nexplain: B 可以是 A 的左孩子，也可以是右孩子：两棵树的先序都是 A B、后序都是 B A，只有中序不同（B A 和 A B）。\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 7,
+      "md": "```sketch\nid: sk-pp\ntitle: 两棵都对\nwidth: 300\nheight: 150\n<text x=\"150\" y=\"18\" text-anchor=\"middle\" class=\"small\">先序 A B，后序 B A</text>\n<line x1=\"63.3\" y1=\"59.5\" x2=\"46.7\" y2=\"95.5\"/>\n<circle cx=\"70\" cy=\"45\" r=\"16\"/>\n<circle cx=\"40\" cy=\"110\" r=\"16\" class=\"yellow\"/>\n<text x=\"70\" y=\"50\" text-anchor=\"middle\">A</text>\n<text x=\"40\" y=\"115\" text-anchor=\"middle\">B</text>\n<text x=\"70\" y=\"144\" text-anchor=\"middle\" class=\"small\">B 是左孩子</text>\n<line x1=\"236.7\" y1=\"59.5\" x2=\"253.3\" y2=\"95.5\"/>\n<circle cx=\"230\" cy=\"45\" r=\"16\"/>\n<circle cx=\"260\" cy=\"110\" r=\"16\" class=\"yellow\"/>\n<text x=\"230\" y=\"50\" text-anchor=\"middle\">A</text>\n<text x=\"260\" y=\"115\" text-anchor=\"middle\">B</text>\n<text x=\"230\" y=\"144\" text-anchor=\"middle\" class=\"small\">B 是右孩子</text>\n```\n\n```conjecture\nid: cj-pp\ntitle: 差在哪\nq: 一句话：为什么先序 + 后序分不出左右，中序却可以？\nplaceholder: 因为……\nanswer: 先序、后序里根只出现在最前或最后，它们只告诉你谁是根，不告诉你哪些结点在根的左边、哪些在右边；中序把根夹在左右子树中间，找到根就能把两边切开。所以某个结点只有一个孩子时，先序 + 后序分不出它是左孩子还是右孩子。\n```"
+    }
+  ]
+}

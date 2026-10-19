@@ -2,9 +2,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { subjectKey, isCS, docsForSubject, parseTag, SUBJECTS } from '../kit/src/subject.js';
+import { subjectKey, isCS, docsForSubject, parseTag, SUBJECTS, sectionNames, componentDoc, detailNames, allNames } from '../kit/src/subject.js';
 import { componentDocs } from '../kit/build-docs.js';
-import { buildSystem, defaultRules, DEFAULT_RULES, bytes } from '../kit/src/class/prompt.js';
+import { buildSystem, defaultRules, DEFAULT_RULES, bytes, lintDocs, docLookup, packComponents, DETAIL_BUDGET } from '../kit/src/class/prompt.js';
 
 const PROJECT = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
 const DOCS = componentDocs(PROJECT);
@@ -95,4 +95,58 @@ test('课堂说明按科目拼：每门课加上最大的资料包都不超过 1
   assert.match(ds, /不用附英文/);
   const la = buildSystem({ componentDocs: DOCS, pack: {}, board: [] });
   assert.doesNotMatch(la, /### 排序/, '不写科目就是线代');
+});
+
+test('完整写法：精简版一直带着，后半段按名字取；写错了附上', () => {
+  const md = [
+    '### elim：消元', '<!-- 科目：线代 -->', '', 'elim 的精简', '', '<!-- 完整写法 -->', '', 'elim 的完整', '```elim', '<!-- 完整写法 -->', '```', '',
+    '### sched / paging：操作系统', '<!-- 科目：操作系统 -->', 'sched 的精简', '<!-- 完整写法 -->', 'sched 的完整', '',
+    '### answer：作答', 'answer 的内容', '',
+    '### answer 的线代写法：基', '<!-- 科目：线代 -->', '线代的 answer', '<!-- 完整写法 -->', '线代 answer 的完整', '',
+    '### 公式里的三个工具：`\\calc`、`\\hl`', '工具',
+  ].join('\n');
+  assert.deepEqual(sectionNames('### sched / paging / banker：操作系统的过程'), ['sched', 'paging', 'banker']);
+  assert.deepEqual(sectionNames('### trace：代码逐行跟踪（真的把 C 代码跑一遍）'), ['trace']);
+  assert.deepEqual(sectionNames('### 公式里的三个工具：`\\calc`、`\\hl`'), ['calc', 'hl']);
+  const la = docsForSubject(md, '线代');
+  assert.match(la, /elim 的精简\n\n（更多字段和例子：component_doc 取 elim；/);
+  assert.doesNotMatch(la, /elim 的完整|线代 answer 的完整|sched/);
+  assert.doesNotMatch(la, /完整写法 -->/);
+  assert.match(docsForSubject(md, '线代', { lookup: false }), /（elim 还有更多字段和例子；写错了页面会把完整写法附给你）/);
+  // 点名的带完整写法；代码块里的标记不算
+  const named = docsForSubject(md, '线代', { full: ['elim'] });
+  assert.match(named, /elim 的完整\n```elim\n<!-- 完整写法 -->\n```/);
+  assert.doesNotMatch(named, /线代 answer 的完整/);
+  assert.match(docsForSubject(md, '线代', { full: true }), /线代 answer 的完整/);
+  // 按名字取：同名的小节拼起来，只要这门课的
+  assert.match(componentDoc(md, 'answer', '线代'), /answer 的内容[\s\S]*线代的 answer\n\n?线代 answer 的完整/);
+  assert.equal(componentDoc(md, 'answer', '操作系统'), '### answer：作答\nanswer 的内容');
+  assert.match(componentDoc(md, 'paging', '操作系统'), /sched 的精简\nsched 的完整/);
+  assert.equal(componentDoc(md, 'paging', '线代'), null);
+  assert.match(componentDoc(md, '公式里', '线代'), /工具/, '中文名按标题找');
+  assert.deepEqual(detailNames(md, '线代'), ['elim', 'answer']);
+  assert.deepEqual(allNames(md, '操作系统'), ['sched', 'paging', 'answer', 'calc', 'hl']);
+  // 页面：写错的组件附完整写法（没有完整写法的不附）；工具找不到时列出有哪些
+  const lint = lintDocs(md, '线代', ['elim', 'ELIM', 'scene']);
+  assert.match(lint, /^【elim 的完整写法】\n### elim：消元[\s\S]*elim 的完整/);
+  assert.equal(lint.match(/【/g).length, 1);
+  assert.match(docLookup(md, '线代', 'elim'), /elim 的完整/);
+  assert.throws(() => docLookup(md, '线代', 'foo'), /没有叫「foo」的组件（这门课有：elim、answer、calc、hl）/);
+  assert.deepEqual(packComponents({ main: { components: 'elim, det、`eig` elim' } }), ['elim', 'det', 'eig']);
+  assert.deepEqual(packComponents({ main: { components: ['Quad'] } }), ['quad']);
+  assert.deepEqual(packComponents({}), []);
+});
+
+test('真的组件说明：每门课系统里的组件说明 ≤ 40 KiB；资料包点名全部组件也不超', () => {
+  for (const subject of SUBJECTS) {
+    const d = docsForSubject(DOCS, subject);
+    assert.ok(bytes(d) <= 40 * KiB, `${subject}：组件说明 ${bytes(d)} 字节，超过 40 KiB`);
+    const names = detailNames(DOCS, subject);
+    for (const n of names) assert.ok(componentDoc(DOCS, n, subject), `${subject} 的 ${n} 取不到`);
+    const pack = { main: { components: names, textbook: '教材原文。'.repeat(300 * KiB / 15) } };
+    const sys = buildSystem({ componentDocs: DOCS, pack, board: [], subject });
+    assert.ok(bytes(sys) < 160 * KiB, `${subject}：说明 ${bytes(sys)} 字节`);
+    const rest = bytes(buildSystem({ componentDocs: DOCS, pack: { main: { components: names } }, board: [], subject }));
+    assert.ok(rest < 160 * KiB - 96 * KiB + DETAIL_BUDGET, `${subject}：点名组件以后资料包以外 ${rest} 字节`);
+  }
 });

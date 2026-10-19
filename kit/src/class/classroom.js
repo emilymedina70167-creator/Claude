@@ -17,6 +17,7 @@ import { parseOutput } from './protocol.js';
 import {
   buildSystem, actionText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
   reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, nextPinId, bytes, PACK_BUDGET, compactionSlice, worthCompacting, draftLine,
+  lintDocs, docLookup,
 } from './prompt.js';
 import { draftsIn } from '../drafts.js';
 import { COMPONENT_DOCS } from './docs.js';
@@ -933,7 +934,7 @@ export async function renderClass(root, meta) {
       }
       bv.measureFit();
       const level = Math.min(budgetLevel, 3);
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject });
+      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools });
       const maxBytes = Math.round(promptLimit() * [1, 0.85, 0.7, 0.55][level]);
       const fit = fitTurns({ system, history: promptHistory(history), maxBytes });
       lastPrompt = { bytes: fit.bytes, maxBytes, keepRecent: fit.keepRecent, dropped: fit.dropped, turns: fit.turns.length, level };
@@ -978,6 +979,9 @@ export async function renderClass(root, meta) {
       }
       rewriting = out.retry.length > 0 && !wantImages;
       const ask = out.retry.length ? `\n请把上面没显示的段重新写对：${out.asks.join('；')}。只写这几段，不用再对学生说别的。` : '';
+      // 写错的组件有完整写法的，附在后面（课堂说明里只有精简版）
+      const docs = out.retry.length ? lintDocs(COMPONENT_DOCS, session.subject, out.kinds) : '';
+      if (docs) lines.push(`\n${docs}`);
       const turn = addTurn({ role: 'system', kind: out.retry.length ? 'lint' : 'images', text: `[系统] ${lines.join('\n')}${ask}`, images: wantImages ? staged.ids : undefined });
       imgs = wantImages ? staged.images : [];
       lastImages = { seq: turn.seq, blobs: imgs };
@@ -1070,6 +1074,7 @@ export async function renderClass(root, meta) {
 
     const retry = [];
     const asks = [];
+    const kinds = [];
     for (const f of failures) {
       const n = (rewrites.get(f.key) || 0) + 1;
       rewrites.set(f.key, n);
@@ -1077,6 +1082,7 @@ export async function renderClass(root, meta) {
       if (n <= MAX_REWRITES) {
         retry.push(f.dup ? `${head}：${f.errors[0].msg}` : `${head}有写法错误，没有显示：\n${f.errors.map((p, i) => `  ${i + 1}. ${p.kind}：${p.msg}`).join('\n')}`);
         asks.push(f.dup ? `用一个没用过的新 id 重新写这一段（黑板上的 ${f.id} 不动）` : `board replace id=${f.id}`);
+        if (!f.dup) kinds.push(...f.errors.map((p) => p.kind).filter(Boolean));
         continue;
       }
       rewrites.delete(f.key);
@@ -1107,7 +1113,7 @@ export async function renderClass(root, meta) {
     if (talkErr.length) notes.push(`你说的话里有 ${talkErr.join('；')}（学生看到的是红框；下一轮说话时改过来）`);
     for (const r of rejected) notes.push(`有一个 board 块看不懂（${r.error}），已经当普通文字写在板顶了：board ${r.header.slice(0, 60)}`);
     for (const u of unclosed) notes.push(`有一个 board 块没有闭合，已经当普通文字写在板顶了：board ${u.header.slice(0, 60)}${res.truncated ? '（这一轮太长被截断了，下次写短一点）' : ''}`);
-    return { retry, asks: [...new Set(asks)], notes };
+    return { retry, asks: [...new Set(asks)], notes, kinds };
   }
   // 和 parseOutput 的 ops 同一个口径：闭合了、看得懂的 board 块
   function isOp(s) { return s.type === 'board' && s.closed && s.op && !s.op.error; }
@@ -1288,6 +1294,17 @@ export async function renderClass(root, meta) {
           staged.images.push(blob);
           staged.ids.push(String(img.id || name));
           return { name, title: img.title || '', attachedNextMessage: 1 };
+        },
+      },
+      {
+        name: 'component_doc',
+        description: '取一个组件的完整写法（课堂说明里有的组件只写了最常用的写法，末尾写着「更多字段和例子」）。name 写组件名，比如 elim、sched、answer。每调用一次你要多等一整轮，只在要用说明里没写到的字段时用；照精简版写错了，页面会自动把完整写法附在提醒里，不用先查。',
+        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        async execute(input) {
+          const name = String(input?.name ?? '').trim();
+          staged.calls.push({ name: 'component_doc', input: { name } });
+          if (!name) throw new Error('要写 name（组件名）');
+          return docLookup(COMPONENT_DOCS, session.subject, name);
         },
       },
       {

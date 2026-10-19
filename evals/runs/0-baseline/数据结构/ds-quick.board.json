@@ -1,0 +1,60 @@
+{
+  "unit": "快速排序的一趟划分",
+  "subject": "数据结构",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "Partition 填坑",
+      "md": "- `pivot = A[low]`：枢轴拿出来，low 处成了坑\n- high 往左找 **< pivot** 的，填进 A[low]\n- low 往右找 **> pivot** 的，填进 A[high]\n- low == high 时 `A[low] = pivot`"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "填坑：先走一遍",
+      "md": "王道的 Partition：枢轴取区间第一个元素，先拿出来，它的位置就成了一个「坑」。high 从右往左找比枢轴小的填进坑，坑就挪到了右边；low 再从左往右找比枢轴大的去填……low、high 相遇时把枢轴放回去。\n\n换一组数先走一遍：一步步点「下一步」，看 high、low 轮流停在哪。每次划分快结束时，会请你点出枢轴落在第几格。\n\n```sort\nid: s-demo\ntitle: 换组数走一遍\nalgo: quick\narray: 46 79 56 38 40 84 50 42\nask: pivot\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "自己划一趟",
+      "md": "回到题目的序列。先在草稿区（或 Notability）按「high 先走、轮流填坑」划一遍，再写结果。\n\n```sort\nid: s-q1\ntitle: 第一次划分\nalgo: quick\narray: 49 38 65 97 76 13 27 49'\nmode: quiz\npass: 1\nq: 按王道的 Partition（枢轴取第一个 49），写出第一次划分之后的序列，49′ 写成 49'。枢轴最后落在第几个位置，从你写的序列里就看得出来。\n```\n\n```draft\ntitle: 草稿区\nnote: 用 Apple Pencil 划一遍：每填一次坑写一行。\nheight: 220\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "一共划分几次",
+      "md": "第一次划分后，49 左右各成一段，两段**各自再划分**；一段只剩 0 或 1 个元素就不用再分。下面是王道的 QuickSort，加了一个计数 cnt：每做一次 Partition 加 1。先在纸上画出每次划分的是哪一段，再写出程序打印几。\n\n```trace\nid: tr-cnt\ntitle: 划分了几次\nmode: quiz\nquiz: output\nq: 对 (49, 38, 65, 97, 76, 13, 27, 49′) 快排（代码里 49′ 也写成 49），程序最后打印的 cnt 是几？\ncode:\nint Partition(int A[], int low, int high){\n    int pivot=A[low];\n    while(low<high){\n        while(low<high&&A[high]>=pivot) --high;\n        A[low]=A[high];\n        while(low<high&&A[low]<=pivot) ++low;\n        A[high]=A[low];\n    }\n    A[low]=pivot;\n    return low;\n}\nvoid QuickSort(int A[], int low, int high, int &cnt){\n    if(low<high){\n        int pivotpos=Partition(A,low,high);\n        cnt++;\n        QuickSort(A,low,pivotpos-1,cnt);\n        QuickSort(A,pivotpos+1,high,cnt);\n    }\n}\nint main(){\n    int A[9]={0,49,38,65,97,76,13,27,49};\n    int cnt=0;\n    QuickSort(A,1,8,cnt);\n    printf(\"%d\",cnt);\n    return 0;\n}\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "快排稳定吗",
+      "md": "**稳定**：关键字相同的两个元素，排完以后先后次序不变。49 和 49′ 先放一放，看一个最小的例子 (3, 2, 2′)：先写出第一次划分之后的序列，再看 2 和 2′。\n\n```sort\nid: s-st\ntitle: 3 2 2′ 的划分\nalgo: quick\narray: 3 2 2'\nask: partition\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "md": "```conjecture\nid: cj-st\ntitle: 2′ 怎么跑到前面\nq: 用一句话说：2′ 为什么跑到了 2 前面？是哪一次填坑把它带过去的？\nplaceholder: 因为……\nanswer: high 从右往左找比枢轴 3 小的，先碰到的是最右边的 2′，它被直接填进最左边的坑，一下子跨过了 2。相同的关键字被远距离挪动，先后次序就可能颠倒，所以快排不稳定。\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 7,
+      "page": 5,
+      "title": "回到 49 和 49′",
+      "md": "不稳定的意思是「**存在**一组数据会让次序颠倒」，不是每组都会。回到题目的序列，直接看排完的样子：\n\n```sort\nid: s-full\ntitle: 排完的样子\nalgo: quick\narray: 49 38 65 97 76 13 27 49'\nstart: end\n```\n\n```quiz\nid: qz-st\nq: 这一组排完，49 和 49′ 的先后变了吗？由此能说明什么？\n- [ ] 变了，所以快排不稳定\n- [x] 这一组没变；但 (3, 2, 2′) 变了，所以快排不稳定\n- [ ] 这一组没变，所以快排稳定\nexplain: 稳定要对所有输入都成立，一个反例就够说明不稳定。答「为什么不稳定」时，举 (3, 2, 2′) 这种真的颠倒了的例子；这一组按王道的代码排，49 一直在 49′ 前面。\n```"
+    },
+    {
+      "id": "s7",
+      "seq": 8,
+      "page": 6,
+      "title": "再练一组",
+      "md": "换一组数，不看过程直接写。注意第 2 次划分是对哪一段做的（王道的代码先递归左边那段）。\n\n```sort\nid: s-q2\ntitle: 第 2 次划分后\nalgo: quick\narray: 38 65 12 97 50 26 73 19\nmode: quiz\npass: 2\n```\n\n```draft\ntitle: 草稿区\nheight: 200\n```"
+    }
+  ]
+}

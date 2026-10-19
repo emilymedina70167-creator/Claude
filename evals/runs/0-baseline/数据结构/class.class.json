@@ -1,0 +1,44 @@
+{
+  "unit": "快速排序的一趟划分",
+  "subject": "数据结构",
+  "pack": {
+    "main": {
+      "unit": "数据结构 · 快速排序的一趟划分",
+      "goal": "能按王道的 Partition（枢轴取区间第一个元素，high、low 轮流填坑）手写出一趟划分的结果、说出枢轴的最终位置；能数出整个快排一共做几次划分；能举反例说明快排不稳定。",
+      "scope": "王道《数据结构考研复习指导》8.3.2 快速排序：Partition 和 QuickSort 的代码、一趟划分的过程、递归、稳定性、时间空间复杂度的结论。不讲枢轴的其他选法、非递归写法、三路划分。",
+      "textbook": "王道的代码（数组下标从 1 用起）：\nint Partition(ElemType A[], int low, int high){\n    ElemType pivot=A[low];      // 第一个元素作枢轴\n    while(low<high){\n        while(low<high&&A[high]>=pivot) --high;\n        A[low]=A[high];         // 比枢轴小的移到左端\n        while(low<high&&A[low]<=pivot) ++low;\n        A[high]=A[low];         // 比枢轴大的移到右端\n    }\n    A[low]=pivot;               // 枢轴放到最终位置\n    return low;\n}\nvoid QuickSort(ElemType A[], int low, int high){\n    if(low<high){\n        int pivotpos=Partition(A,low,high);\n        QuickSort(A,low,pivotpos-1);\n        QuickSort(A,pivotpos+1,high);\n    }\n}\n稳定性：在划分算法中，若右端区间有两个关键字相同且均小于基准值的记录，则交换到左端区间后，它们的相对位置会发生变化，快速排序是不稳定的。例：L = (3, 2, 2′)，第一次划分后为 (2′, 2, 3)，最终也是 (2′, 2, 3)。\n注意：题目这组 (49, 38, 65, 97, 76, 13, 27, 49′) 按这份代码排，49 始终在 49′ 前面（第一次划分后 49 在第 4 个、49′ 在第 8 个；排完 49 在第 4、49′ 在第 5），说明不稳定要用 (3, 2, 2′) 这样真的颠倒了的例子。",
+      "plan": "1. 开场就让学生直接试一趟（sort 的 mode: quiz、pass: 1），从结果看学生用的是「填坑」还是别的教材、视频里的「交换法」（交换法的结果是 13 38 27 49 76 97 65 49′）。2. 错在哪一步就讲哪一步：坑在左边，high 往左找比枢轴小的来填；坑跑到右边，low 往右找比枢轴大的来填。用 sort 演示（ask: pivot）对照，board mark 指着坑。3. 换一组数再写一趟：38 65 12 97 50 26 73 19，用 pass: 2 还能练「第 2 次划分对哪一段」。4. 一共几次划分：只有长度 ≥ 2 的段才划分，可以让学生画出每次划分的区间。5. 稳定性：sort 演示 3 2 2′（ask: partition），让学生一句话说出原因；再看题目这组排完 49、49′ 的次序其实没变——不稳定指「存在反例」。",
+      "student": "考研生，在 iPad 上用 Apple Pencil。学过快排的思想，可能看过「交换法」的划分；对王道 Partition 的「填坑」细节（谁先走、等于枢轴的停不停）不熟。术语用中文。",
+      "updatedAt": 1760860800000
+    },
+    "problems": {
+      "items": [
+        {
+          "q": "对关键字序列 (49, 38, 65, 97, 76, 13, 27, 49′) 按王道的快速排序代码（取第一个元素作枢轴）进行一趟划分，写出划分后的序列和枢轴的最终位置；整个快排一共做几次划分；快排为什么不稳定。",
+          "answer": "一趟划分后 (27, 38, 13, 49, 76, 97, 65, 49′)，枢轴 49 在第 4 个位置；一共 4 次划分（区间 [1, 8]、[1, 3]、[5, 8]、[5, 6]）；不稳定：(3, 2, 2′) 划分后成 (2′, 2, 3)。这一组排完 49 仍在 49′ 前面。",
+          "point": "Partition 填坑、递归、稳定性",
+          "source": "验收题库 ds-quick（王道口径）"
+        },
+        {
+          "q": "对 (38, 65, 12, 97, 50, 26, 73, 19) 按王道的代码快排，写出第 2 次划分之后的序列。",
+          "answer": "(12, 19, 26, 38, 50, 97, 73, 65)；黑板上用 sort 的 mode: quiz、pass: 2 让页面判。",
+          "point": "第 2 次划分是对左边那段做的",
+          "source": "自编"
+        }
+      ]
+    }
+  },
+  "turns": [
+    {
+      "teacher": "这节课练快排的一趟划分。先不看过程，按你现在的理解直接试一趟，我看看你是怎么划的。\n\n````board new id=b1 title=\"先试一趟\"\n先在纸上划一遍，再把第一次划分之后的序列写进来（49′ 写成 49'）。\n\n```sort\nid: s-pre\ntitle: 第一次划分\nalgo: quick\narray: 49 38 65 97 76 13 27 49'\nmode: quiz\npass: 1\nq: 对 (49, 38, 65, 97, 76, 13, 27, 49′) 按王道的快排代码做一次划分（枢轴取第一个 49），写出划分后的序列。\n```\n````\n\n写好点「检查」。"
+    },
+    {
+      "student": "[作答] b1 里的 sort s-pre「第一次划分」：填了 13 38 27 49 76 97 65 49'（错，第 1 次），用时 95 秒",
+      "teacher": "你写的像是「交换」的划法：两头各找一个数对调，最后把 49 换到中间。王道的 Partition 不对调，是**填坑**——先只看第一步。\n\n````board new id=b2 title=\"填坑：第一步\"\n49 先拿出来放在一边，第 1 格就空成了一个坑。\n\n```sort\nid: s-fill\ntitle: 填坑划分\nalgo: quick\narray: 49 38 65 97 76 13 27 49'\nask: pivot\n```\n\n```quiz\nid: q-first\nq: 坑在第 1 格。high 从第 8 格往左走，第一个停下来的是谁？它去了哪？\n- [ ] 49′，填进第 1 格\n- [x] 27，填进第 1 格\n- [ ] 27，和 65 对调\n- [ ] 13，和 49 对调\nexplain: 代码里 `A[high] >= pivot` 就继续往左，所以 49′ 跳过；27 是第一个比 49 小的，直接填进第 1 格的坑，它原来的第 7 格成了新的坑。\n```\n````\n\n````board mark target=s-fill item=1 note=\"49 拿走后，这里是坑\"\n````\n\n先选；选完可以在上面的演示里点「下一步」对一对。"
+    },
+    {
+      "student": "没懂，为什么？",
+      "teacher": "先不管代码，只想「坑」：最后 49 左边要全是比它小的数，所以第 1 格这个坑得填一个**比 49 小**的；这样的数要是还站在右边，就是站错了地方，所以让 high 从右边去找。\n\n````board new id=b3 title=\"坑该填谁\"\n```sketch\nid: sk-hole\ntitle: 49 拿走以后\nwidth: 360\nheight: 180\n<rect x=\"20\" y=\"8\" width=\"56\" height=\"30\" rx=\"6\" class=\"pink fill\"/>\n<text x=\"48\" y=\"29\" text-anchor=\"middle\" class=\"pink\">49</text>\n<text x=\"86\" y=\"28\" class=\"small\">枢轴先拿出来</text>\n<path d=\"M 37 58 L 37 42\" class=\"arrow pink\"/>\n<rect x=\"20\" y=\"60\" width=\"34\" height=\"34\" rx=\"4\" class=\"yellow dashed\"/>\n<rect x=\"60\" y=\"60\" width=\"34\" height=\"34\" rx=\"4\"/>\n<rect x=\"100\" y=\"60\" width=\"34\" height=\"34\" rx=\"4\"/>\n<rect x=\"140\" y=\"60\" width=\"34\" height=\"34\" rx=\"4\"/>\n<rect x=\"180\" y=\"60\" width=\"34\" height=\"34\" rx=\"4\"/>\n<rect x=\"220\" y=\"60\" width=\"34\" height=\"34\" rx=\"4\"/>\n<rect x=\"260\" y=\"60\" width=\"34\" height=\"34\" rx=\"4\"/>\n<rect x=\"300\" y=\"60\" width=\"34\" height=\"34\" rx=\"4\"/>\n<text x=\"37\" y=\"82\" text-anchor=\"middle\" class=\"yellow small\">坑</text>\n<text x=\"77\" y=\"83\" text-anchor=\"middle\">38</text>\n<text x=\"117\" y=\"83\" text-anchor=\"middle\">65</text>\n<text x=\"157\" y=\"83\" text-anchor=\"middle\">97</text>\n<text x=\"197\" y=\"83\" text-anchor=\"middle\">76</text>\n<text x=\"237\" y=\"83\" text-anchor=\"middle\">13</text>\n<text x=\"277\" y=\"83\" text-anchor=\"middle\">27</text>\n<text x=\"317\" y=\"83\" text-anchor=\"middle\">49′</text>\n<text x=\"37\" y=\"112\" text-anchor=\"middle\" class=\"small\">low</text>\n<text x=\"317\" y=\"112\" text-anchor=\"middle\" class=\"small\">high</text>\n<path d=\"M 317 122 Q 177 162 37 122\" class=\"arrow yellow\"/>\n<text x=\"177\" y=\"172\" text-anchor=\"middle\" class=\"yellow small\">high 往左找比 49 小的，填进坑</text>\n```\n\n```quiz\nid: q-hole\nq: high 找到一个比 49 小的数、填进第 1 格以后，它原来的位置空成了新坑。这个新坑该填什么样的数？谁去找？\n- [x] 比 49 大的数，low 从左往右找\n- [ ] 比 49 小的数，high 接着往左找\n- [ ] 直接把 49 放进去\nexplain: 新坑在右边，49 右边最后要全是比它大的数，所以让 low 从左边找一个比 49 大的（站错了地方的）来填；填完坑又回到左边，再轮到 high。两人轮流，直到相遇。\n```\n````\n\n选完翻回上一块板，再做「第一个停下来的是谁」那道。"
+    }
+  ]
+}

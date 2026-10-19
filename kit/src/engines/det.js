@@ -185,8 +185,10 @@ export function run(input) {
     const before = coef;
     coef = coef.mul(total);
     const terms = parts.map((p) => `${p.s < 0 ? '−' : '+'}${p.x.toString()}×${p.m.toString()}`).join(' ').replace(/^\+/, '');
+    // 先问符号：挑一个带负号的元素问（(−1)^{i+j} 最容易忘），没有就问第一个
+    const asked = parts.find((p) => p.s < 0) || parts[0];
     M = [[ONE]];
-    steps.push({ view: view({ op: opTeX(op), before, done: true }), msg: `按第 ${op.i + 1} ${WHAT[op.dim]}展开：每个元素乘它的代数余子式（余子式直接算出来）：${terms} = ${total.toString()}。` });
+    steps.push({ view: view({ op: opTeX(op), before, done: true }), msg: `按第 ${op.i + 1} ${WHAT[op.dim]}展开：每个元素乘它的代数余子式（余子式直接算出来）：${terms} = ${total.toString()}。`, ask: { tag: 'sign', kind: 'choice', q: `按第 ${op.i + 1} ${WHAT[op.dim]}展开时，第 ${asked.i + 1} 行第 ${asked.j + 1} 列的 ${asked.x.toString()} 乘它的余子式，前面的符号是？`, choices: ['+', '−'], answer: asked.s > 0 ? '+' : '−' } });
   };
   if (input.ops) for (const op of input.ops) { if (M.length === 1) break; doOp(op); }
   // 还没化成上三角：自动接着化

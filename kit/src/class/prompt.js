@@ -2,7 +2,7 @@
 // sample 是无记忆的：每一轮都把完整的课堂说明放在第一条 user 消息里重新发一遍——
 // 角色与红线 → 组件写法 + 黑板指令 → 资料包 → 黑板现状，后面才是这节课的对话。
 
-import { isCS, docsForSubject } from '../subject.js';
+import { isCS, docsForSubject, detailNames, componentDoc, allNames } from '../subject.js';
 
 // 文档里有大量反引号和 TeX 反斜杠：先用「ˋ」代替反引号，String.raw 保留反斜杠，最后换回来
 const doc = (s, ...v) => String.raw(s, ...v).replace(/ˋ/g, '`').trim();
@@ -310,7 +310,8 @@ const PACK_FIELDS = [
   ['student', '学生的情况'],
 ];
 // 不放进资料包正文的字段：rules 放在第 1 部分；模型由页面固定（需求 2.3），资料包里写了也不理
-const PACK_SKIP = /^(rules|updatedAt|createdAt|id|model|modelTier|effort)$/i;
+// components 是这节课要用的组件：它们的完整写法放进第 2 部分（packComponents），不写进资料包正文
+const PACK_SKIP = /^(rules|updatedAt|createdAt|id|model|modelTier|effort|components)$/i;
 
 export function packText(pack, budget = PACK_BUDGET) {
   const main = pack?.main && typeof pack.main === 'object' ? pack.main : {};
@@ -527,13 +528,62 @@ function pagedStateText(board) {
 
 // packBudget：资料包的字节预算（默认 ≈104 KiB）；整轮超长（prompt_too_large）时页面会调小再试。
 // subject：课件开头写的科目。组件说明只带「通用 + 这门课」的小节，教法也按科目选（subject.js）
-export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代' } = {}) {
+// 资料包 main.components：这节课要用哪些组件（数组，或用逗号、空格隔开的一串）
+export function packComponents(pack) {
+  const c = pack?.main?.components;
+  const list = Array.isArray(c) ? c : typeof c === 'string' ? c.split(/[\s,，、]+/) : [];
+  return [...new Set(list.map((x) => String(x ?? '').trim().replace(/^`|`$/g, '').toLowerCase()).filter(Boolean))];
+}
+// 资料包点名的组件，完整写法最多放这么多（多了从后面的开始不放，课堂 Claude 照样能用 component_doc 取）
+export const DETAIL_BUDGET = 16 * 1024;
+
+// 组件说明：精简版，资料包点名的组件带完整写法
+export function systemDocs(componentDocs, subject, names = [], { lookup = true } = {}) {
+  const src = asText(componentDocs);
+  const base = docsForSubject(src, subject, { lookup });
+  let keep = names.slice();
+  let docs = keep.length ? docsForSubject(src, subject, { full: keep, lookup }) : base;
+  while (keep.length && bytes(docs) - bytes(base) > DETAIL_BUDGET) {
+    keep = keep.slice(0, -1);
+    docs = keep.length ? docsForSubject(src, subject, { full: keep, lookup }) : base;
+  }
+  return { docs, names: keep };
+}
+
+// 写错了的组件：完整写法附在要求重写的那条提醒后面（只附有完整写法的；精简版本来就在说明里）
+export function lintDocs(componentDocs, subject, kinds = []) {
+  const src = asText(componentDocs);
+  const has = new Set(detailNames(src, subject));
+  const out = [];
+  for (const k of new Set(kinds.map((x) => String(x ?? '').toLowerCase()))) {
+    if (!has.has(k)) continue;
+    const d = componentDoc(src, k, subject);
+    if (d) out.push(`【${k} 的完整写法】\n${cutBytes(d, DOC_MAX)}`);
+  }
+  return out.join('\n\n');
+}
+const DOC_MAX = 12 * 1024;
+
+// component_doc 工具：按名字取一个组件的完整说明；找不到时列出有哪些
+export function docLookup(componentDocs, subject, name) {
+  const src = asText(componentDocs);
+  const d = componentDoc(src, name, subject);
+  if (d) return cutBytes(d, DOC_MAX);
+  const names = allNames(src, subject);
+  throw new Error(`没有叫「${String(name ?? '').trim()}」的组件${names.length ? `（这门课有：${names.join('、')}）` : ''}`);
+}
+
+// tools：这个查看方式给不给课堂 Claude 工具（不给就没有 component_doc，说明里不提它）
+export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true } = {}) {
   const custom = asText(rules) || asText(pack?.main?.rules);
-  const docs = docsForSubject(asText(componentDocs), subject);
+  const { docs } = systemDocs(componentDocs, subject, packComponents(pack), { lookup: tools });
+  const lookupNote = tools
+    ? '要用没写到的字段时用 component_doc 工具按名字取完整写法（要多等一轮）；'
+    : '';
   const parts = (packBody) => [
     '这是课堂模式的完整说明，每一轮都会重新发给你（资料包和黑板现状都是最新的）。说明后面是这节课的对话：学生说的话、学生在黑板上的作答记录（[作答] / [动作]）、页面的系统消息（[系统]），以及你之前的输出。',
     `# 一、你的角色和红线\n\n${custom || defaultRules(subject)}`,
-    `# 二、组件写法和黑板指令\n\n## 组件说明\n\n下面的组件说明原本是学生写给项目对话里的 Claude 的，文中的「我」指学生。说到 guided 课件的关卡、小节结构的地方，课堂里不适用；课堂里的段落由你用黑板指令一段一段写。\n\n${docs || '（组件说明没有打包进来。只用最常见的组件：answer、steps、scene、predict，写法要保守。）'}\n\n## 黑板指令\n\n${PROTOCOL_DOC}`,
+    `# 二、组件写法和黑板指令\n\n## 组件说明\n\n下面的组件说明原本是学生写给项目对话里的 Claude 的，文中的「我」指学生。说到 guided 课件的关卡、小节结构的地方，课堂里不适用；课堂里的段落由你用黑板指令一段一段写。有的组件这里只写了最常用的写法（末尾写着「更多字段和例子」）：照着写就行；${lookupNote}写错了页面会把那个组件的完整写法附在提醒里。资料包里点了名的组件，完整写法已经放在下面。\n\n${docs || '（组件说明没有打包进来。只用最常见的组件：answer、steps、scene、predict，写法要保守。）'}\n\n## 黑板指令\n\n${PROTOCOL_DOC}`,
     `# 三、这节课的资料包\n\n课前由项目对话里的 Claude 准备，课中也可能更新。\n\n${packBody}`,
     `# 四、黑板现状\n\n${boardStateText(board)}`,
     '（课堂说明到这里结束。下面是这节课的对话，回应最后一条消息。）',

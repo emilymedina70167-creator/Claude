@@ -43,7 +43,7 @@ test('实对称矩阵正交相似对角化：λ = −1 的两个特征向量施�
     const d = a.w.reduce((s, x, t) => s.add(x.mul(b.w[t])), q(0));
     if (i === j) assert.equal(d.toString(), String(a.k)); else assert.equal(d.toString(), '0');
   }
-  assert.ok(r.steps.some((s) => s.ask?.tag === 'needSchmidt'));
+  assert.ok(r.steps.some((s) => s.ask?.tag === 'schmidt'));
 });
 
 test('施密特正交化、单位化的写法', () => {

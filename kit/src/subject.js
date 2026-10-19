@@ -41,37 +41,113 @@ function fenceOf(line) {
   return { ch: m[1][0], len: m[1].length, info };
 }
 
+// 小节里的「<!-- 完整写法 -->」：这一行以前是精简版（课堂说明里一直带着），以后是不常用的字段和更多例子。
+// 课堂说明有长度上限，完整写法让课堂 Claude 按名字取（component_doc 工具），写错了页面也会附上；
+// 对话里写课件的 Claude 读的是整份 CLAUDE-PROJECT.md，两部分都看得到。
+const DETAIL_RE = /^\s*<!--\s*完整写法\s*-->\s*$/;
+
+// 小节标题里的组件名：「### sched / paging / banker / disk：操作系统的过程」→ sched paging banker disk。
+// 只认两个字母以上的英文词（「C 代码」「含 n 的式子」里的单个字母不算）
+export function sectionNames(heading) {
+  const t = String(heading ?? '').replace(/^#+\s*/, '');
+  const out = [];
+  for (const m of t.matchAll(/(?<![\w-])([A-Za-z][\w-]+)/g)) {
+    const n = m[1].toLowerCase();
+    if (!out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
 /**
- * 组件说明（componentDocs 截出来的第三节）按科目挑：没有标记的小节是通用的，一直留着；
- * 标了科目的小节只留给那几门课。subject 不认识（或没写）时全部留着。标记行本身去掉。
- * 小节以 ### 为界；代码块里的 ### 和标记不算。
+ * 第三节按 ### 切成小节：{ head（标题行）, names, tags（null = 通用）, body（精简版的行）, detail（完整写法的行，没有就是 null）}。
+ * 第一个 ### 之前的话是 head 为空的一节。代码块里的 ###、标记都不算。
  */
-export function docsForSubject(docs, subject) {
-  const key = subjectKey(subject);
+export function docSections(docs) {
   const lines = String(docs ?? '').split('\n');
   const out = [];
   let open = null;
-  let section = []; // 当前小节的行
-  let tags = null; // 当前小节的科目；null = 通用
-  const flush = () => {
-    if (!tags || !key || tags.includes(key)) out.push(...section);
-    section = [];
-    tags = null;
-  };
+  let cur = { head: '', names: [], tags: null, body: [], detail: null };
+  const push = () => { out.push(cur); };
   for (const line of lines) {
     const f = fenceOf(line);
+    const into = (l) => (cur.detail ? cur.detail : cur.body).push(l);
     if (open) {
       if (f && !f.info && f.ch === open.ch && f.len >= open.len) open = null;
-      section.push(line);
+      into(line);
       continue;
     }
-    if (f) { open = f; section.push(line); continue; }
-    if (/^#{1,3}\s/.test(line)) flush();
+    if (f) { open = f; into(line); continue; }
+    if (/^#{1,3}\s/.test(line)) {
+      push();
+      cur = { head: line, names: /^###\s/.test(line) ? sectionNames(line) : [], tags: null, body: [line], detail: null };
+      continue;
+    }
     const tag = parseTag(line);
-    if (tag) { tags = tag; continue; }
-    section.push(line);
+    if (tag) { cur.tags = tag; continue; }
+    if (DETAIL_RE.test(line) && !cur.detail) { cur.detail = []; continue; }
+    into(line);
   }
-  flush();
+  push();
+  return out;
+}
+
+const forSubject = (sec, key) => !sec.tags || !key || sec.tags.includes(key);
+const tidy = (lines) => lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+// 精简版的末尾指一下完整写法在哪
+// （lookup：课堂 Claude 有没有 component_doc 工具；没有时只能等写错了页面附上）
+const pointer = (sec, lookup) => (lookup
+  ? `（更多字段和例子：component_doc 取 ${sec.names[0]}；写错了页面会把完整写法附给你）`
+  : `（${sec.names[0]} 还有更多字段和例子；写错了页面会把完整写法附给你）`);
+
+/**
+ * 组件说明（componentDocs 截出来的第三节）按科目挑：没有标记的小节是通用的，一直留着；
+ * 标了科目的小节只留给那几门课。subject 不认识（或没写）时全部留着。标记行本身去掉。
+ * full：有「完整写法」的小节带不带后半段——true 全带，false（默认）都不带，也可以是组件名的数组（只带这几个的）。
+ * 不带的在精简版末尾写一句完整写法怎么取（lookup：有没有 component_doc 工具）。
+ */
+export function docsForSubject(docs, subject, { full = false, lookup = true } = {}) {
+  const key = subjectKey(subject);
+  const want = Array.isArray(full) ? new Set(full.map((x) => String(x).toLowerCase())) : null;
+  const out = [];
+  for (const sec of docSections(docs)) {
+    if (!forSubject(sec, key)) continue;
+    out.push(...sec.body);
+    if (!sec.detail) continue;
+    const take = full === true || (want && sec.names.some((n) => want.has(n)));
+    if (take) out.push(...sec.detail);
+    else {
+      while (out.length && out[out.length - 1] === '') out.pop();
+      out.push('', pointer(sec, lookup), '');
+    }
+  }
   // 去掉小节后留下的连续空行
-  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return tidy(out);
+}
+
+/** 有完整写法的组件名（这门课的） */
+export function detailNames(docs, subject) {
+  const key = subjectKey(subject);
+  return docSections(docs).filter((s) => s.detail && forSubject(s, key)).flatMap((s) => s.names);
+}
+
+/**
+ * 一个组件的完整说明（精简版 + 完整写法）：标题里有这个名字的小节都算（answer 和「answer 的线代写法」），
+ * 只要这门课的。找不到返回 null。
+ */
+export function componentDoc(docs, name, subject) {
+  const key = subjectKey(subject);
+  const n = String(name ?? '').trim().replace(/^`|`$/g, '').toLowerCase();
+  if (!n) return null;
+  const all = docSections(docs).filter((s) => forSubject(s, key));
+  let secs = all.filter((s) => s.names.includes(n));
+  // 中文的名字（「演示组件」「表达式」）：标题里有就算
+  if (!secs.length) secs = all.filter((s) => /^###\s/.test(s.head) && s.head.toLowerCase().includes(n));
+  if (!secs.length) return null;
+  return secs.map((s) => tidy([...s.body, ...(s.detail || [])])).join('\n\n');
+}
+
+/** 这门课的说明里有小节的全部组件名（component_doc 找不到时列给它看） */
+export function allNames(docs, subject) {
+  const key = subjectKey(subject);
+  return [...new Set(docSections(docs).filter((s) => forSubject(s, key)).flatMap((s) => s.names))];
 }
