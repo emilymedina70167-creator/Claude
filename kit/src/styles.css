@@ -1333,6 +1333,25 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .me-av { font: 13px var(--sans); color: var(--body); }
 @media (max-width: 600px) { .me-chip { min-width: 52px; } .me-range { min-width: 0; font-size: 13px; } }
 
+/* 浮点加减 fadd：一行行写下来（名字 | 阶码 ；尾数），尾数相加是竖式；移出去的位在括号里、颜色淡一点 */
+.fa-q { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 4px 0 10px; font: 600 16px var(--mono); color: var(--chalk); }
+.fa-q .fa-op { font: 15px var(--sans); color: var(--muted); align-self: center; }
+.fa-lines { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow-x: auto; padding-bottom: 4px; }
+.fa-line { display: grid; grid-template-columns: 7.5em auto auto auto; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 9px; font: 600 17px var(--mono); color: var(--chalk); white-space: nowrap; }
+.fa-line.fa-addl { grid-template-columns: 7.5em auto; }
+.fa-line.fa-cur { background: rgb(var(--yellow-rgb) / 0.13); }
+.fa-k { font: 14px var(--sans); color: var(--muted); text-align: right; }
+.fa-e { color: var(--blue); }
+.fa-semi { color: var(--muted); }
+.fa-sign { color: var(--pink); }
+.fa-g { color: var(--muted); }
+.fa-add { display: inline-flex; flex-direction: column; align-items: flex-end; }
+.fa-arow { display: flex; gap: 6px; }
+.fa-pm { width: 1em; text-align: center; color: var(--muted); }
+.fa-arow.fa-plus { border-bottom: 2px solid rgb(var(--chalk-rgb) / 0.6); padding-bottom: 2px; }
+.fa-arow.fa-sum .fa-m { color: var(--yellow); }
+@media (max-width: 600px) { .fa-line { grid-template-columns: 5.5em auto auto auto; font-size: 15px; } .fa-line.fa-addl { grid-template-columns: 5.5em auto; } }
+
 /* 行列式 det：两边是竖线（不是括号），左边是一路记下来的系数 */
 .dt-row { display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 4px 0 10px; font-size: 19px; }
 table.mx.mx-det::before, table.mx.mx-det::after { width: 0; border-radius: 0; }

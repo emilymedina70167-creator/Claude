@@ -42,6 +42,7 @@ import { quadEngine } from '../engines/quad.js';
 import { crcEngine, hammingEngine } from '../engines/codes.js';
 import { allocEngine } from '../engines/osmem.js';
 import { memexpEngine } from '../engines/comem.js';
+import { faddEngine } from '../engines/cofloat.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -78,6 +79,7 @@ export const blocks = {
   hamming: stepperBlock(hammingEngine),
   alloc: stepperBlock(allocEngine),
   memexp: stepperBlock(memexpEngine),
+  fadd: stepperBlock(faddEngine),
 };
 
 // elim：mode: do 是学生自己做行变换（blocks/elimdo.js），其余照演示组件（演示 / quiz / fill）

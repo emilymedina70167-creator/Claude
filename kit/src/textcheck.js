@@ -109,6 +109,8 @@ export function readRadix(text, base) {
  */
 export function checkRadix(text, ans) {
   let digits;
+  // 定长的二进制位串（补码、尾数）：小数点、括号（移出去的位）只是写法，去掉再比；不定长的按数值比，小数点有意义，不去
+  if (ans.width && ans.base === 2) text = String(text ?? '').replace(/[.。()（）]/g, '');
   try { digits = readRadix(text, ans.base); } catch (e) { return { ok: false, digits: '', wrong: [], msg: e.message, bad: true }; }
   const unit = ans.base === 2 ? '位' : '位（十六进制）';
   if (ans.width) {
