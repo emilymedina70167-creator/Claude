@@ -1310,6 +1310,29 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .om-tab th, .om-tab td { border: 1px solid rgb(var(--chalk-rgb) / 0.2); padding: 4px 12px; text-align: center; font-variant-numeric: tabular-nums; }
 .om-tab th { color: var(--muted); font-weight: 500; }
 
+/* 存储器扩展 memexp：一行一组（字扩展），一组里几片并排（位扩展）；下面是地址线怎么分（固定 / 片选 / 片内） */
+.me-head { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 10px; font: 15px var(--sans); color: var(--body); }
+.me-cap { padding: 4px 12px; border-radius: 9px; border: 2px solid rgb(var(--chalk-rgb) / 0.3); color: var(--chalk); font-weight: 600; }
+.me-cap.me-t { border-color: rgb(var(--blue-rgb) / 0.7); }
+.me-arrow { color: var(--muted); }
+.me-grid { display: flex; flex-direction: column; gap: 6px; align-items: center; margin: 4px 0 10px; }
+.me-grp { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 10px; border: 1.5px dashed transparent; }
+.me-cs { min-width: 30px; text-align: center; font: 600 14px var(--mono); color: var(--pink); }
+.me-chips { flex: none; display: flex; gap: 4px; }
+.me-chip { flex: none; white-space: nowrap; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 64px; min-height: 44px; padding: 3px 6px; border-radius: 6px; border: 2px solid rgb(var(--chalk-rgb) / 0.35); background: rgb(var(--chalk-rgb) / 0.05); }
+.me-chip b { font: 600 14px var(--sans); color: var(--chalk); }
+.me-chip small { font: 12px var(--sans); color: var(--muted); }
+.me-range { flex: none; white-space: nowrap; min-width: 8.5em; font: 600 14.5px var(--mono); color: var(--yellow); }
+.me-addr { display: flex; justify-content: center; gap: 3px; flex-wrap: wrap; margin: 4px 0 6px; }
+.me-a { display: flex; flex-direction: column; align-items: center; min-width: 88px; padding: 4px 10px; border-radius: 8px; border: 2px solid rgb(var(--chalk-rgb) / 0.3); }
+.me-a.me-fix { border-color: rgb(var(--chalk-rgb) / 0.3); background: rgb(var(--chalk-rgb) / 0.07); }
+.me-a.me-sel { border-color: rgb(var(--pink-rgb) / 0.7); background: rgb(var(--pink-rgb) / 0.1); }
+.me-a.me-in { border-color: rgb(var(--blue-rgb) / 0.7); background: rgb(var(--blue-rgb) / 0.1); }
+.me-an { font: 12.5px var(--sans); color: var(--muted); }
+.me-ab { font: 600 15px var(--mono); color: var(--chalk); }
+.me-av { font: 13px var(--sans); color: var(--body); }
+@media (max-width: 600px) { .me-chip { min-width: 52px; } .me-range { min-width: 0; font-size: 13px; } }
+
 /* 行列式 det：两边是竖线（不是括号），左边是一路记下来的系数 */
 .dt-row { display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 4px 0 10px; font-size: 19px; }
 table.mx.mx-det::before, table.mx.mx-det::after { width: 0; border-radius: 0; }
@@ -1610,3 +1633,47 @@ tr.cn-best td { background: rgb(var(--green-rgb) / 0.18); color: var(--green); f
 .cn-seq .cn-now { stroke: var(--yellow); stroke-dasharray: 2 4; }
 .cn-wnd { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .cn-legend { font-size: 12.5px; }
+
+/* 树（二）：huffman、uf、buildtree、thread、forest（engines/forestview.js 画；结点、边沿用上面 .sv-tree 的样式） */
+.sv-tree .sv-node .sv-node-sub { fill: var(--yellow); font: 600 14px var(--sans); text-anchor: middle; dominant-baseline: central; }
+.sv-tree .sv-edge-lbl { fill: var(--yellow); font: 700 14px var(--mono); text-anchor: middle; dominant-baseline: central; paint-order: stroke; stroke: rgb(var(--halo-rgb) / 0.92); stroke-width: 4px; }
+.sv-tree .sv-node.sv-dummy circle { fill: none; stroke-dasharray: 4 3; }
+.sv-tree .sv-node.sv-dummy text { fill: var(--muted); }
+.sv-tree .sv-node.sv-dummy .sv-node-sub { fill: var(--muted); font-weight: 400; }
+/* 森林 ↔ 二叉树：兄弟之间加的线、抹掉的线；二叉树里右孩子那条边原来是「兄弟」 */
+.sv-tree .sv-sib { stroke: var(--pink); stroke-width: 2.5; stroke-dasharray: 6 4; }
+.sv-tree .sv-edge.sv-edge-cut { stroke: rgb(var(--coral-rgb) / 0.55); stroke-dasharray: 3 5; }
+.sv-tree .sv-edge.sv-edge-sib { stroke: rgb(var(--pink-rgb) / 0.75); stroke-width: 2.5; }
+/* 线索：前驱蓝、后继粉，虚线箭头；还空着的指针画一小截加 ∧ */
+.sv-tree .sv-stub line { stroke: rgb(var(--chalk-rgb) / 0.45); stroke-width: 2; }
+.sv-tree .sv-stub text { fill: var(--muted); font: 13px var(--sans); text-anchor: middle; dominant-baseline: central; }
+.sv-tree .sv-thread path { fill: none; stroke-width: 2; stroke-dasharray: 6 4; }
+.sv-tree .sv-thread.sv-th-pred path { stroke: var(--blue); }
+.sv-tree .sv-thread.sv-th-succ path { stroke: var(--pink); }
+.sv-tree .sv-thread.sv-th-pred .sv-th-head, .sv-tree .sv-thread.sv-th-pred .sv-th-null { fill: var(--blue); }
+.sv-tree .sv-thread.sv-th-succ .sv-th-head, .sv-tree .sv-thread.sv-th-succ .sv-th-null { fill: var(--pink); }
+.sv-tree .sv-th-null { font: 600 12px var(--sans); dominant-baseline: central; }
+.sv-tree .sv-thread.sv-th-fresh path { stroke-width: 3; }
+.sv-tree .sv-thread.sv-new.sv-flash path { animation: sv-th-flash 0.9s ease-out; }
+@keyframes sv-th-flash { 0% { stroke-width: 6; } 100% { stroke-width: 3; } }
+.sv-th-nullrow { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 4px 0; font: 14px var(--sans); }
+.sv-th-nullpick { min-width: 64px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 2px solid rgb(var(--chalk-rgb) / 0.4); font: 600 15px var(--mono); color: var(--chalk); }
+.sv-th-legend, .sv-fo-legend, .sv-bt-legend { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 8px; font: 13.5px var(--sans); margin-top: 4px; }
+.sv-th-key, .sv-fo-key { display: inline-block; width: 26px; height: 0; border-top: 2.5px dashed; margin-left: 8px; }
+.sv-th-key.sv-th-pred { border-color: var(--blue); }
+.sv-th-key.sv-th-succ { border-color: var(--pink); }
+.sv-fo-key.sv-fo-child { border-top-style: solid; border-color: rgb(var(--chalk-rgb) / 0.6); }
+.sv-fo-key.sv-fo-sib { border-color: var(--pink); }
+.sv-key { display: inline-block; width: 16px; height: 16px; border-radius: 4px; margin-left: 8px; border: 1.5px solid rgb(var(--chalk-rgb) / 0.35); }
+.sv-key.sv-g1 { background: rgb(var(--blue-rgb) / 0.3); }
+.sv-key.sv-g2 { background: rgb(var(--pink-rgb) / 0.3); }
+.sv-th-tbl td, .sv-th-tbl th { min-width: 34px; padding: 4px 8px; }
+.sv-th-tbl th { font: 500 13px var(--mono); }
+.sv-gtbl td.sv-code b { font-family: var(--mono); color: var(--yellow); letter-spacing: 0.06em; }
+/* 两张图并排（森林 / 二叉树、二叉树 / 结点表），放不下就上下排 */
+.sv-panels { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: flex-start; justify-content: center; }
+.sv-panel { min-width: 0; max-width: 100%; display: flex; flex-direction: column; align-items: center; }
+.sv-panel-h { font-family: var(--hand); font-size: 19px; color: var(--muted); margin-bottom: 2px; }
+.sv-uf, .sv-bt { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.sv-bt-seqs { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 100%; overflow-x: auto; }
+.sv-seqrow .sv-cell.sv-done.sv-out { opacity: .45; }
