@@ -9,6 +9,8 @@
 //     A = [3, 1, 2], n = 3 -> return = 2
 //   ref: | 参考解法（多行，学生看不到）：没写期望的测试用它算；也拿它的复杂度和学生的比
 //   scale: n = 4 8 16 32; A = rand(n)     估复杂度：n 取这几个值，其余的输入由 n 生成
+//   check: | 答案不唯一时（「相对次序不限」）：老师写一个 C 函数 int check(int A[], int A0[], int n)，
+//            A 是学生跑完的、A0 是原来的（每个数组参数后面跟一个 …0），返回 1 算对；printf 的话就是没过的原因
 import { parseProgram, runProgram, parseExpression, CError } from './cinterp.js';
 import { evaluate } from './expr.js';
 
@@ -77,10 +79,18 @@ export function parseCodeSpec(fields) {
   if (!tests.length) throw new Error('code 要写 tests:（一行一个测试：A = [1, 2, 3], n = 3 -> A = [3, 2, 1]）');
   let ref = null;
   if (fields.ref) { try { ref = parseProgram(fields.ref); } catch (e) { throw new Error(`ref:（参考解法）${e instanceof CError ? e.message : e.message}`); } }
-  if (!ref && tests.some((t) => !t.expect)) throw new Error('有的测试没写 -> 期望：要么写上，要么给 ref:（参考解法），页面拿它算');
+  let check = null;
+  if (fields.check) {
+    try { check = parseProgram(fields.check); } catch (e) { throw new Error(`check:（检查函数）${e.message}`); }
+    if (!check.funcs.check) throw new Error('check: 里要有一个叫 check 的函数，比如 int check(int A[], int A0[], int n)');
+  }
+  if (!ref && !check && tests.some((t) => !t.expect)) throw new Error('有的测试没写 -> 期望：要么写上，要么给 ref:（参考解法）或 check:（检查函数），页面拿它判');
   const scale = fields.scale ? parseScale(fields.scale) : null;
   const starter = String(fields.starter ?? '').trim() ? String(fields.starter).replace(/^\n+|\s+$/g, '') : sig ? `${sig.text} {\n    \n}` : '';
-  return { sig, call, callExpr, tests, ref, scale, starter };
+  // check 怎么调：学生函数的参数，每个数组参数后面加一个原来的（A → A, A0）；有返回值的再加 ret
+  const params = sig ? sig.params : [];
+  const checkCall = check ? String(fields.check_call ?? '').trim() || `check(${[...params.flatMap((p) => (tests.some((t) => Array.isArray(t.input[p])) ? [p, `${p}0`] : [p])), ...(sig && sig.ret !== 'void' ? ['ret'] : [])].join(', ')})` : '';
+  return { sig, call, callExpr, tests, ref, check, checkCall, scale, starter };
 }
 
 // scale: n = 4 8 16 32; A = rand(n), k = n / 2
@@ -166,6 +176,22 @@ export function runTests(code, spec) {
   try { program = compile(code, '代码'); } catch (e) { return spec.tests.map((t) => ({ ok: false, line: t.line, error: e.message, errLine: e.line, compile: true })); }
   return spec.tests.map((t) => {
     let expect = t.expect;
+    if (!expect && spec.check) {
+      // 老师的 check 函数判：学生跑完的数组 + 原来的数组（…0）+ 返回值
+      const r = runOnce(program, spec, t.input);
+      if (r.error) return { ok: false, line: t.line, error: r.error, errLine: r.line };
+      const vars = {};
+      for (const [k, v] of Object.entries(t.input)) {
+        if (Array.isArray(v)) { vars[k] = (r.arrays[k] || v).map((x) => norm(x)); vars[`${k}0`] = v; } else vars[k] = v;
+      }
+      if (r.ret !== undefined) vars.ret = norm(r.ret);
+      const cspec = { call: spec.checkCall, callExpr: parseExpression(spec.checkCall) };
+      const c = runOnce(spec.check, cspec, vars);
+      if (c.error) return { ok: false, line: t.line, error: `检查函数出错了：${c.error}`, teacher: true };
+      const ok = Number(norm(c.ret)) !== 0;
+      const got = Object.keys(t.input).filter((k) => Array.isArray(t.input[k])).map((k) => `${k} = ${valText(r.arrays[k])}`).join('，');
+      return { ok, line: t.line, diff: ok ? [] : [{ what: '检查', want: c.out ? c.out.trim() : '满足题目的要求', got: got || valText(r.ret) }], steps: r.steps };
+    }
     if (!expect) {
       const rr = runOnce(spec.ref, spec, t.input);
       if (rr.error) return { ok: false, line: t.line, error: `参考解法在这个测试上出错了：${rr.error}`, teacher: true };

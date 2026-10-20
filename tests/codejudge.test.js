@@ -90,3 +90,36 @@ test('估复杂度：逆置 O(n)、冒泡 O(n²)、折半 O(log n)；递归的�
   assert.equal(re.space, 'O(n)');
   assert.equal(fitGrowth([4, 8, 16, 32], [10, 10, 10, 10]), 'O(1)');
 });
+
+test('check:：答案不唯一时用老师写的 C 函数判（A 是跑完的，A0 是原来的）；printf 的就是没过的原因', () => {
+  const spec = parseCodeSpec({
+    fn: 'void Move(int A[], int n)',
+    tests: 'A = [3, -1, 2, -5, 4], n = 5\nA = [1, 2], n = 2',
+    check: `int check(int A[], int A0[], int n) {
+    int i, neg = 0, sum = 0;
+    for (i = 0; i < n; i++) { sum += A[i] - A0[i]; if (A0[i] < 0) neg++; }
+    if (sum != 0) { printf("元素变了"); return 0; }
+    for (i = 0; i < neg; i++) if (A[i] >= 0) { printf("前 %d 个应该都是负数", neg); return 0; }
+    return 1;
+}`,
+  });
+  assert.equal(spec.checkCall, 'check(A, A0, n)');
+  // 一种做法：前后两个指针交换（次序和参考解法不一样也对）
+  const two = 'void Move(int A[], int n) {\n  int i = 0, j = n - 1;\n  while (i < j) {\n    if (A[i] < 0) i++;\n    else { int t = A[i]; A[i] = A[j]; A[j] = t; j--; }\n  }\n}';
+  assert.ok(runTests(two, spec).every((r) => r.ok));
+  const none = runTests('void Move(int A[], int n) { }', spec);
+  assert.equal(none[0].ok, false);
+  assert.match(none[0].diff[0].want, /前 2 个应该都是负数/);
+  assert.equal(none[1].ok, true, '没有负数的，不动也对');
+});
+
+test('说明里的 code 例子照抄能用', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { parseFields } = await import('../kit/src/parse.js');
+  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const src = /^````code\n([\s\S]*?)^````$/m.exec(md)[1];
+  const spec = parseCodeSpec(parseFields(src).fields);
+  const ok = 'void Reverse(int A[], int n) {\n    for (int i = 0; i < n / 2; i++) { int t = A[i]; A[i] = A[n - 1 - i]; A[n - 1 - i] = t; }\n}';
+  assert.ok(runTests(ok, spec).every((r) => r.ok));
+  assert.equal(estimate(ok, spec).time, 'O(n)');
+});

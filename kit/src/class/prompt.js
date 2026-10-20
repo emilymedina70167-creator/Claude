@@ -374,7 +374,7 @@ export function packText(pack, budget = PACK_BUDGET) {
 // —— 4. 黑板现状 ——
 
 // 会产生作答的组件：还没作答时要写出来（图之类的不用）
-const ANSWERING = new Set(['answer', 'conjecture', 'quiz', 'predict', 'practice', 'steps', 'recognize', 'findbug', 'sortpass']);
+const ANSWERING = new Set(['answer', 'conjecture', 'quiz', 'predict', 'practice', 'steps', 'recognize', 'findbug', 'sortpass', 'code']);
 const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const oneLine = (s, n = 200) => clip(String(s ?? '').replace(/\s*\n\s*/g, ' / ').replace(/\s+/g, ' ').trim(), n);
 const clip = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
@@ -726,6 +726,14 @@ function recordText(a, type) {
     }
     case 'scene':
       return `[作答] ${where(a, '图')}：达成了图里的目标`;
+    case 'code': {
+      // 写代码题：每次运行都记一条（过了几个测试、第一个没过的、复杂度），带上代码，老师看得到写成了什么样
+      const head = `[作答] ${where(a, '代码题')}：第 ${Number(a.attempts) || 1} 次运行，过了 ${Number(a.passed) || 0} / ${Number(a.total) || 0} 个测试`;
+      const fail = a.fail ? `；第一个没过的：${short(a.fail, 240)}` : '';
+      const cx = a.cx ? `；${short(a.cx, 200)}` : '';
+      const src = typeof a.value === 'string' && a.value.trim() ? `\n学生的代码：\n\`\`\`c\n${String(a.value).slice(0, 1600)}\n\`\`\`` : '';
+      return `${head}${fail}${cx}${src}`;
+    }
     case 'stepper': {
       // 演示组件（排序、遍历、置换……）：走到某一步之前先猜（ask），或者 quiz 模式写出结果
       const at = a.detail ? `${short(a.detail, 30)}，` : '';

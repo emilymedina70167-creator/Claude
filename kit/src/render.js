@@ -119,7 +119,7 @@ export function mdToHtml(src, { inline = false } = {}) {
 
 // 渲染一段课件并挂载互动组件
 // 会产生作答的组件（live 模式下要有稳定的 id）
-const ANSWERING = new Set(['answer', 'conjecture', 'quiz', 'predict', 'practice', 'steps', 'recognize', 'findbug', 'draft', 'sortpass']);
+const ANSWERING = new Set(['answer', 'conjecture', 'quiz', 'predict', 'practice', 'steps', 'recognize', 'findbug', 'draft', 'sortpass', 'code']);
 // 课堂模式里 figure 指令要按 id 找图
 const FIGURES = new Set(['scene', 'graph', 'space', 'matrix', 'sketch', 'derive']);
 // 自己检查文字里 \calc 的组件（它们有自己的 let，变量要连同这些一起算）

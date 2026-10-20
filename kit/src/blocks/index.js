@@ -21,6 +21,7 @@ import { matrix } from './matrix.js';
 import { sketch } from './sketch.js';
 import { derive } from './derive.js';
 import { image } from './image.js';
+import { code } from './code.js';
 import { stepperBlock } from '../stepper.js';
 import { sortEngine } from '../engines/sort.js';
 import { treeEngine } from '../engines/tree.js';
@@ -44,7 +45,7 @@ export const blocks = {
   transform2d, vectors, rref, matmul, quiz, card, ...callouts, ...folds,
   scene, predict, answer, conjecture, practice, summary, context, draft,
   array, shellsort, sortpass, steps, recognize, findbug, graph, space,
-  let: letBlock, matrix, sketch, derive, image,
+  let: letBlock, matrix, sketch, derive, image, code,
   // 一步步走的演示（stepper.js 外壳 + engines/ 里的纯函数引擎）
   sort: stepperBlock(sortEngine),
   tree: stepperBlock(treeEngine),

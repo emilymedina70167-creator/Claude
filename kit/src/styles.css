@@ -1242,6 +1242,28 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .ed-after .btn { min-height: 44px; }
 .ed-demo:not(:empty) { margin-top: 10px; }
 
+/* code：写代码题。等宽 16px（iPad 聚焦不放大），左边行号，出错的那一行标红 */
+.cj-meta { font: 15px/1.5 var(--sans); margin-bottom: 8px; }
+.cj-meta code, .cj-why code { font: .92em var(--mono); color: var(--blue); }
+.cj-editor { display: flex; border: 1px solid rgb(var(--chalk-rgb) / 0.3); border-radius: 10px; background: rgb(var(--shade-rgb) / 0.18); overflow: hidden; }
+.cj-gutter { flex: none; padding: 10px 6px 10px 10px; font: 16px/1.5 var(--mono); color: var(--muted); text-align: right; user-select: none; overflow: hidden; min-width: 2.2em; }
+.cj-gutter .is-err { color: var(--coral); font-weight: 700; }
+.cj-code { flex: 1; min-width: 0; border: 0; outline: none; resize: vertical; padding: 10px 10px 10px 4px; font: 16px/1.5 var(--mono); color: var(--body); background: transparent; tab-size: 4; white-space: pre; overflow-x: auto; }
+.cj-keys { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.cj-key { min-width: 44px; min-height: 44px; font: 16px var(--mono); }
+.cj-ctrl { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.cj-ctrl .btn { min-height: 44px; }
+.cj-count { font: 15px var(--sans); }
+.cj-tests { list-style: none; padding: 0; margin: 10px 0 4px; font: 15px/1.5 var(--sans); }
+.cj-t { display: grid; grid-template-columns: 1.6em 1fr; gap: 2px 6px; padding: 4px 0; border-top: 1px dashed rgb(var(--chalk-rgb) / 0.15); }
+.cj-mark { font-weight: 700; color: var(--muted); }
+.cj-t.is-ok .cj-mark { color: var(--green); }
+.cj-t.is-bad .cj-mark { color: var(--coral); }
+.cj-case { font: 14.5px/1.5 var(--mono); color: var(--body); overflow-wrap: anywhere; }
+.cj-why { grid-column: 2; color: var(--coral); }
+.cj-why:empty { display: none; }
+.cj-cx { font: 15px/1.5 var(--sans); margin-top: 6px; }
+
 /* 行列式 det：两边是竖线（不是括号），左边是一路记下来的系数 */
 .dt-row { display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 4px 0 10px; font-size: 19px; }
 table.mx.mx-det::before, table.mx.mx-det::after { width: 0; border-radius: 0; }
