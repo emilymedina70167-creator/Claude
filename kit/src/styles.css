@@ -1366,6 +1366,19 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .fi-box.fi-data { border-color: rgb(var(--green-rgb) / 0.7); }
 .fi-arr { color: var(--muted); }
 
+/* IP 分片 frag：原数据报的数据部分画成一条，按分片切开；下面是每片的表 */
+.nf-bar { display: flex; gap: 3px; margin: 6px 0 10px; min-height: 54px; }
+.nf-seg { min-width: 44px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 4px 2px; border-radius: 8px; border: 2px solid rgb(var(--blue-rgb) / 0.6); background: rgb(var(--blue-rgb) / 0.14); overflow: hidden; }
+.nf-seg b { font: 600 14px var(--sans); color: var(--chalk); white-space: nowrap; }
+.nf-seg small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font: 12px var(--sans); color: var(--muted); white-space: nowrap; }
+.nf-seg.nf-cur { border-color: var(--yellow); background: rgb(var(--yellow-rgb) / 0.16); }
+.nf-tab { border-collapse: collapse; margin: 0 auto; font: 14.5px var(--sans); color: var(--body); }
+.nf-tab th, .nf-tab td { border: 1px solid rgb(var(--chalk-rgb) / 0.2); padding: 4px 12px; text-align: center; font-variant-numeric: tabular-nums; min-width: 3em; }
+.nf-tab th { color: var(--muted); font-weight: 500; }
+.nf-tab tr.nf-on td { background: var(--hl); color: var(--chalk); }
+.nf-note { margin-top: 8px; text-align: center; font: 14px var(--sans); color: var(--muted); }
+.nf-drop { padding: 14px; text-align: center; border-radius: 10px; border: 2px dashed var(--coral); color: var(--coral); font: 600 16px var(--sans); }
+
 /* 行列式 det：两边是竖线（不是括号），左边是一路记下来的系数 */
 .dt-row { display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 4px 0 10px; font-size: 19px; }
 table.mx.mx-det::before, table.mx.mx-det::after { width: 0; border-radius: 0; }

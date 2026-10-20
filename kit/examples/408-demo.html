@@ -266,6 +266,14 @@ table: 192.168.1.0/24 -> R1, 192.168.1.128/25 -> R2, 0.0.0.0/0 -> R3
 dst: 192.168.1.200
 ```
 
+```frag
+id: nf-1
+title: IP 分片：4000 字节的数据报经过 MTU 1500、576
+total: 4000
+mtu: 1500, 576
+ask: max, count, offset
+```
+
 ```tcp
 id: cn-cwnd
 title: 拥塞窗口
