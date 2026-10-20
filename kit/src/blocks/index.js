@@ -39,6 +39,7 @@ import { parseFields } from '../parse.js';
 import { detEngine } from '../engines/det.js';
 import { eigEngine, schmidtEngine } from '../engines/eig.js';
 import { quadEngine } from '../engines/quad.js';
+import { crcEngine, hammingEngine } from '../engines/codes.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -71,6 +72,8 @@ export const blocks = {
   eig: stepperBlock(eigEngine),
   schmidt: stepperBlock(schmidtEngine),
   quad: stepperBlock(quadEngine),
+  crc: stepperBlock(crcEngine),
+  hamming: stepperBlock(hammingEngine),
 };
 
 // elim：mode: do 是学生自己做行变换（blocks/elimdo.js），其余照演示组件（演示 / quiz / fill）

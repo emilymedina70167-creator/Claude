@@ -195,6 +195,21 @@ instrs: add r1, r2, r3; sub r4, r1, r5; and r6, r1, r7; or r8, r2, r9
 ask: stall
 ```
 
+```hamming
+id: hm-1
+title: 海明码：信息位 1010
+data: 1010
+ask: k, p
+```
+
+```crc
+id: crc-1
+title: CRC：M = 101001，G(x) = x³ + x² + 1
+data: 101001
+gen: x^3 + x^2 + 1
+ask: zeros, rem
+```
+
 ## 4. 计算机网络
 
 ```subnet

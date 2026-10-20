@@ -1264,6 +1264,34 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .cj-why:empty { display: none; }
 .cj-cx { font: 15px/1.5 var(--sans); margin-top: 6px; }
 
+/* 校验码 crc（模 2 除法的竖式）、hamming（H_n … H_1 一排，校验位和信息位分颜色） */
+.cc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; justify-content: center; margin: 4px 0 8px; }
+.cc-k { font: 14px var(--sans); color: var(--muted); }
+.cc-bits { display: inline-flex; gap: 1px; font: 600 18px/1 var(--mono); color: var(--chalk); }
+.cc-div { display: flex; flex-direction: column; align-items: center; gap: 1px; overflow-x: auto; padding: 4px 0; }
+.cc-row { display: flex; align-items: center; font: 600 17px/1.25 var(--mono); }
+.cc-lbl { width: 4.2em; flex: none; font: 13px var(--sans); color: var(--muted); text-align: right; padding-right: 8px; }
+.cc-b { display: inline-block; width: 1.05em; text-align: center; color: var(--chalk); }
+.cc-b.cc-e { color: transparent; }
+.cc-b.cc-pad { color: var(--muted); }
+.cc-b.cc-split { margin-left: .5em; color: var(--yellow); }
+.cc-split ~ .cc-b { color: var(--yellow); }
+.cc-g { color: var(--blue); }
+.cc-g .cc-b:not(.cc-e) { color: var(--blue); border-bottom: 2px solid rgb(var(--blue-rgb) / 0.6); }
+.cc-cur .cc-b:not(.cc-e) { background: rgb(var(--yellow-rgb) / 0.16); }
+.cc-rem .cc-b { color: var(--yellow); }
+.hm-row { display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; margin: 6px 0; }
+.hm-c { display: flex; flex-direction: column; align-items: center; min-width: 40px; padding: 4px 2px; border-radius: 9px; border: 2px solid rgb(var(--chalk-rgb) / 0.25); }
+.hm-c.hm-p { border-color: rgb(var(--pink-rgb) / 0.6); }
+.hm-c.hm-cover { background: rgb(var(--blue-rgb) / 0.14); border-color: rgb(var(--blue-rgb) / 0.7); }
+.hm-c.hm-self { background: rgb(var(--yellow-rgb) / 0.16); border-color: var(--yellow); }
+.hm-c.hm-err { background: rgb(var(--coral-rgb) / 0.18); border-color: var(--coral); }
+.hm-h { font: 12.5px var(--sans); color: var(--muted); }
+.hm-v { font: 600 19px/1.2 var(--mono); color: var(--chalk); min-height: 1.2em; }
+.hm-n { font: 12.5px var(--sans); color: var(--muted); }
+.hm-c.hm-p .hm-n { color: var(--pink); }
+.hm-s { text-align: center; font: 15px var(--sans); color: var(--body); }
+
 /* 行列式 det：两边是竖线（不是括号），左边是一路记下来的系数 */
 .dt-row { display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 4px 0 10px; font-size: 19px; }
 table.mx.mx-det::before, table.mx.mx-det::after { width: 0; border-radius: 0; }
