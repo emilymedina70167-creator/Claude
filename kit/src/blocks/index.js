@@ -40,6 +40,7 @@ import { detEngine } from '../engines/det.js';
 import { eigEngine, schmidtEngine } from '../engines/eig.js';
 import { quadEngine } from '../engines/quad.js';
 import { crcEngine, hammingEngine } from '../engines/codes.js';
+import { allocEngine } from '../engines/osmem.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -74,6 +75,7 @@ export const blocks = {
   quad: stepperBlock(quadEngine),
   crc: stepperBlock(crcEngine),
   hamming: stepperBlock(hammingEngine),
+  alloc: stepperBlock(allocEngine),
 };
 
 // elim：mode: do 是学生自己做行变换（blocks/elimdo.js），其余照演示组件（演示 / quiz / fill）

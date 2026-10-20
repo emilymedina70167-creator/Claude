@@ -188,9 +188,9 @@ button { font: inherit; color: inherit; }
 .la-lesson code { font: .88em var(--mono); color: var(--blue); background: rgb(var(--shade-rgb) / 0.2); padding: 2px 6px; border-radius: 6px; }
 .la-lesson pre { background: rgb(var(--shade-rgb) / 0.22); padding: 14px 16px; border-radius: 12px; overflow-x: auto; }
 .la-lesson pre code { background: none; padding: 0; color: var(--chalk); }
-.la-lesson table:not(.mx):not(.dv):not(.sv-fill-t) { border-collapse: collapse; margin: 18px 0; display: block; overflow-x: auto; }
-.la-lesson table:not(.mx):not(.dv):not(.sv-fill-t) th, .la-lesson table:not(.mx):not(.dv):not(.sv-fill-t) td { border: 1px solid var(--border); padding: 8px 14px; }
-.la-lesson table:not(.mx):not(.dv):not(.sv-fill-t) th { font-family: var(--hand); font-weight: 400; font-size: 22px; color: var(--yellow); }
+.la-lesson table:not(.mx):not(.dv):not(.sv-fill-t):not(.sv-tab) { border-collapse: collapse; margin: 18px 0; display: block; overflow-x: auto; }
+.la-lesson table:not(.mx):not(.dv):not(.sv-fill-t):not(.sv-tab) th, .la-lesson table:not(.mx):not(.dv):not(.sv-fill-t):not(.sv-tab) td { border: 1px solid var(--border); padding: 8px 14px; }
+.la-lesson table:not(.mx):not(.dv):not(.sv-fill-t):not(.sv-tab) th { font-family: var(--hand); font-weight: 400; font-size: 22px; color: var(--yellow); }
 .la-lesson hr { border: 0; border-top: 2px dashed var(--faint); margin: 36px 0; }
 .katex { font-size: 1.1em; }
 .katex-display { overflow-x: auto; overflow-y: hidden; padding: 6px 0; }
@@ -1291,6 +1291,24 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .hm-n { font: 12.5px var(--sans); color: var(--muted); }
 .hm-c.hm-p .hm-n { color: var(--pink); }
 .hm-s { text-align: center; font: 15px var(--sans); color: var(--body); }
+
+/* 引擎自己画的表格加 sv-tab，不吃课件里 Markdown 表格的样式（手写体的表头是给讲义用的） */
+/* 动态分区分配 alloc：一条按容量占宽度的内存条（占用的、空闲的、OS 分颜色），下面是空闲分区表 */
+.om-bar { display: flex; gap: 2px; margin: 6px 0 10px; min-height: 64px; }
+.om-seg { min-width: 38px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 1px; padding: 4px 2px; border-radius: 8px; border: 2px solid rgb(var(--chalk-rgb) / 0.25); overflow: hidden; position: relative; }
+.om-seg span { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.om-used { background: rgb(var(--blue-rgb) / 0.18); border-color: rgb(var(--blue-rgb) / 0.6); }
+.om-os { background: rgb(var(--chalk-rgb) / 0.08); }
+.om-free { border-style: dashed; }
+.om-cur { border-color: var(--yellow); background: rgb(var(--yellow-rgb) / 0.16); }
+.om-freed { border-color: var(--green); background: rgb(var(--green-rgb) / 0.12); }
+.om-name { font: 600 14px var(--sans); color: var(--chalk); }
+.om-size { font: 13px var(--sans); color: var(--body); }
+.om-at { font: 11.5px var(--sans); color: var(--muted); }
+.sv-picking .om-free[data-pick] { cursor: pointer; }
+.om-tab { border-collapse: collapse; margin: 0 auto; font: 14.5px var(--sans); color: var(--body); }
+.om-tab th, .om-tab td { border: 1px solid rgb(var(--chalk-rgb) / 0.2); padding: 4px 12px; text-align: center; font-variant-numeric: tabular-nums; }
+.om-tab th { color: var(--muted); font-weight: 500; }
 
 /* 行列式 det：两边是竖线（不是括号），左边是一路记下来的系数 */
 .dt-row { display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 4px 0 10px; font-size: 19px; }

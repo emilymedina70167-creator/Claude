@@ -156,6 +156,15 @@ tlb: 1->10
 cost: tlb=20 mem=100
 ```
 
+```alloc
+id: om-1
+title: 动态分区分配：首次适应
+memory: 640K
+algo: first
+ops: alloc 1 130K, alloc 2 60K, alloc 3 100K, free 2, alloc 4 200K, free 3, free 1, alloc 5 140K
+ask: where, merge
+```
+
 ## 3. 组成原理
 
 ```bits
