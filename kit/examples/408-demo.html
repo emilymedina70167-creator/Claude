@@ -165,6 +165,19 @@ ops: alloc 1 130K, alloc 2 60K, alloc 3 100K, free 2, alloc 4 200K, free 3, free
 ask: where, merge
 ```
 
+```fileidx
+id: fi-1
+title: 混合索引：10 个直接地址、一级 / 二级 / 三级间接各 1 个
+block: 1KB
+entry: 4B
+direct: 10
+single: 1
+double: 1
+triple: 1
+offset: 10240, 300000
+ask: n, max, level, reads
+```
+
 ## 3. 组成原理
 
 ```bits

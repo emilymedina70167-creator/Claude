@@ -1352,6 +1352,20 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .fa-arow.fa-sum .fa-m { color: var(--yellow); }
 @media (max-width: 600px) { .fa-line { grid-template-columns: 5.5em auto auto auto; font-size: 15px; } .fa-line.fa-addl { grid-template-columns: 5.5em auto; } }
 
+/* 混合索引 fileidx：每一级地址项的表（读的那一级标出来），下面是从索引结点一路指到数据块 */
+.fi-tab { border-collapse: collapse; margin: 0 auto; font: 14.5px var(--sans); color: var(--body); }
+.fi-tab th, .fi-tab td { border: 1px solid rgb(var(--chalk-rgb) / 0.2); padding: 5px 12px; text-align: center; font-variant-numeric: tabular-nums; }
+.fi-tab th { color: var(--muted); font-weight: 500; }
+.fi-tab sup { line-height: 0; }
+.fi-tab tr.fi-on td { background: var(--hl); color: var(--chalk); }
+.fi-n { margin: 8px 0 2px; text-align: center; font: 14px var(--sans); color: var(--muted); }
+.fi-chain { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; margin: 10px 0 4px; }
+.fi-box { display: flex; flex-direction: column; align-items: center; min-width: 76px; padding: 5px 10px; border-radius: 9px; border: 2px solid rgb(var(--chalk-rgb) / 0.35); font: 600 14px var(--sans); color: var(--chalk); }
+.fi-box small { font: 12.5px var(--sans); color: var(--muted); }
+.fi-box.fi-idx { border-color: rgb(var(--blue-rgb) / 0.7); }
+.fi-box.fi-data { border-color: rgb(var(--green-rgb) / 0.7); }
+.fi-arr { color: var(--muted); }
+
 /* 行列式 det：两边是竖线（不是括号），左边是一路记下来的系数 */
 .dt-row { display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 4px 0 10px; font-size: 19px; }
 table.mx.mx-det::before, table.mx.mx-det::after { width: 0; border-radius: 0; }
