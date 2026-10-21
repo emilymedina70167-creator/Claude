@@ -1597,6 +1597,10 @@ g.sv-order-badge text { fill: var(--board); font: 700 12px var(--sans); text-anc
 .os-disk .os-path { fill: none; stroke: var(--blue); stroke-width: 2.5; stroke-linejoin: round; }
 .os-disk .os-dot { fill: var(--blue); }
 .os-disk .os-dot.os-now { fill: var(--yellow); }
+/* 页面置换给了 init: 时的「开始」那一列：颜色淡一点，和访问的列分开 */
+.os-pt td.os-startcol { color: var(--muted); border-right: 2px solid rgb(var(--chalk-rgb) / 0.35); }
+.os-pt .os-start { font: 13px var(--sans); color: var(--muted); }
+
 /* 一串二进制位按字段画（engines/bitview.js）：字段名在上、位在中间、值在下 */
 .bv { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
 .bv-f { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 6px; border-radius: 10px; border: 2px solid rgb(var(--chalk-rgb) / 0.25); }

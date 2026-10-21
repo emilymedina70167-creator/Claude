@@ -128,6 +128,16 @@ algo: lru
 ask: victim
 ```
 
+```paging
+id: os-eclock
+title: 改进型 CLOCK：缺页时换出哪一页
+algo: eclock
+init: 1 1 0, 2 1 1, 3 0 1, 4 1 0
+ptr: 1
+refs: 5 2w 6
+ask: victim
+```
+
 ```banker
 id: os-bank
 title: 银行家算法
