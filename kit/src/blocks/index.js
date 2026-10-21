@@ -43,6 +43,7 @@ import { crcEngine, hammingEngine } from '../engines/codes.js';
 import { allocEngine } from '../engines/osmem.js';
 import { memexpEngine } from '../engines/comem.js';
 import { faddEngine } from '../engines/cofloat.js';
+import { mulEngine } from '../engines/comul.js';
 import { fileidxEngine } from '../engines/osfile.js';
 import { pagetableEngine } from '../engines/ospt.js';
 import { fragEngine } from '../engines/netfrag.js';
@@ -95,6 +96,7 @@ export const blocks = {
   alloc: stepperBlock(allocEngine),
   memexp: stepperBlock(memexpEngine),
   fadd: stepperBlock(faddEngine),
+  mul: stepperBlock(mulEngine),
   fileidx: stepperBlock(fileidxEngine),
   pagetable: stepperBlock(pagetableEngine),
   frag: stepperBlock(fragEngine),

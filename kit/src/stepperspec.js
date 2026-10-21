@@ -122,6 +122,10 @@ export function checkAsk(ask, given) {
 export function askAnswerText(ask) {
   if (ask.display !== undefined) return String(ask.display);
   if (ask.kind === 'text' || ask.kind === 'order') return String(ask.answer).split('|')[0].trim();
+  // 位串的答案存的是数：写成二进制 / 十六进制（补足 width 位），不然会显示成十进制
+  if (ask.kind === 'bin' || ask.kind === 'hex') {
+    try { return radixAnswer(typeof ask.answer === 'bigint' ? ask.answer : Number(ask.answer), ask.kind === 'bin' ? 2 : 16, ask.width || 0).digits; } catch { /* 写不成位串的，照原样 */ }
+  }
   const a = Array.isArray(ask.alts) ? ask.alts[0] : ask.answer;
   return Array.isArray(a) ? a.join('、') : String(a);
 }

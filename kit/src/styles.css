@@ -1405,6 +1405,17 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .pt-seg.pt-hi { box-shadow: 0 0 0 2px var(--yellow); }
 .pt-note { margin-top: 6px; text-align: center; font: 14px var(--sans); color: var(--muted); }
 
+/* 定点乘法 mul：王道那张「部分积 | 乘数 | 说明」的表；加的那一行下面画横线，右移的那一行带箭头，这一步新写的几行是黄的 */
+.ml-wrap { overflow-x: auto; }
+.ml-tab { border-collapse: collapse; margin: 0 auto; font: 16px var(--mono); color: var(--chalk); }
+.ml-tab th { padding: 4px 14px; font: 500 14px var(--sans); color: var(--muted); border-bottom: 1px solid rgb(var(--chalk-rgb) / 0.3); }
+.ml-tab th small { font-size: 12px; }
+.ml-tab td { padding: 3px 14px; white-space: nowrap; }
+.ml-tab td.ml-n { font: 14px var(--sans); color: var(--muted); white-space: normal; min-width: 9em; }
+.ml-tab tr.ml-add td.ml-a { border-bottom: 2px solid rgb(var(--chalk-rgb) / 0.6); }
+.ml-tab tr.ml-new td.ml-a, .ml-tab tr.ml-new td.ml-q { color: var(--yellow); }
+.ml-tab .ml-q1 { margin-left: 6px; padding: 0 4px; border-left: 1.5px dashed rgb(var(--chalk-rgb) / 0.5); color: var(--pink); }
+
 /* 行列式 det：两边是竖线（不是括号），左边是一路记下来的系数 */
 .dt-row { display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 4px 0 10px; font-size: 19px; }
 table.mx.mx-det::before, table.mx.mx-det::after { width: 0; border-radius: 0; }

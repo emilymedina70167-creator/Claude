@@ -103,7 +103,7 @@ function run(input) {
   // 1. 写成补码
   lines.push({ k: '[x]浮', e: x.e, m: x.m }, { k: '[y]浮', e: y.e, m: y.m });
   const neg = y.m < 0n ? ['y', y] : x.m < 0n ? ['x', x] : ['y', y];
-  steps.push({ view: snap({ cur: [0, 1] }), msg: `写成补码（阶码在前，尾数在后，都是两个符号位）：[x]浮 = ${eCode(x.e, eb)}；${mText(x.m, mb)}，[y]浮 = ${eCode(y.e, eb)}；${mText(y.m, mb)}。负数的补码：符号位 11，数值位取反、末位加 1。`, ask: { tag: 'code', kind: 'bin', width: mb + 2, q: `${neg[0]} 的尾数写成双符号位补码是？（写成 11.0101…，小数点可写可不写）`, answer: mInt(neg[1].m, mb) } });
+  steps.push({ view: snap({ cur: [0, 1] }), msg: `写成补码（阶码在前，尾数在后，都是两个符号位）：[x]浮 = ${eCode(x.e, eb)}；${mText(x.m, mb)}，[y]浮 = ${eCode(y.e, eb)}；${mText(y.m, mb)}。负数的补码：符号位 11，数值位取反、末位加 1。`, ask: { tag: 'code', kind: 'bin', width: mb + 2, q: `${neg[0]} 的尾数写成双符号位补码是？（写成 11.0101…，小数点可写可不写）`, answer: mInt(neg[1].m, mb), display: mText(neg[1].m, mb) } });
 
   // 2. 对阶：小阶向大阶看齐，小阶的尾数右移；移出去的位写在括号里（gCur 位），后面一直跟着这几位算
   const dE = x.e - y.e;
@@ -131,7 +131,7 @@ function run(input) {
   const bits = (v, g) => { const p = mParts(v, mb, g); return BigInt(`0b${p.s}${p.v}${p.g}`); };
   const subNote = sub ? (mistake === 'subNoNeg' ? '减法：' : `减法：加上 [−My]补 = ${mText(yUse, mb)}（[My]补 连同符号位取反、末位加 1）。`) : '';
   lines.push({ k: sub ? '尾数相减' : '尾数相加', add: { a: mA, b: mB, sum: m }, g: gCur });
-  steps.push({ view: snap({ cur: [lines.length - 1] }), msg: `${subNote}尾数相加：${mText(mA, mb, gCur)} + ${mText(mB, mb, gCur)} = ${mText(m, mb, gCur)}${overflowed(m) ? '：两个符号位不一样，尾数溢出了（要右规）' : ''}。`, ask: { tag: 'sum', kind: 'bin', width: mb + 2 + gCur, q: `尾数相加得多少？（双符号位补码${gCur ? `，括号里移出去的 ${gCur} 位也写上` : ''}）`, answer: bits(m, gCur) } });
+  steps.push({ view: snap({ cur: [lines.length - 1] }), msg: `${subNote}尾数相加：${mText(mA, mb, gCur)} + ${mText(mB, mb, gCur)} = ${mText(m, mb, gCur)}${overflowed(m) ? '：两个符号位不一样，尾数溢出了（要右规）' : ''}。`, ask: { tag: 'sum', kind: 'bin', width: mb + 2 + gCur, q: `尾数相加得多少？（双符号位补码${gCur ? `，括号里移出去的 ${gCur} 位也写上` : ''}）`, answer: bits(m, gCur), display: mText(m, mb, gCur) } });
 
   if (m === 0n) {
     steps.push({ view: snap(), msg: `尾数是 0：结果是 0（机器零），不用再规格化。` });
@@ -169,7 +169,7 @@ function run(input) {
     if (overflowed(m)) { m = floorDiv(m, 2n); e += 1; note += `；加 1 以后尾数溢出（${mParts(m * 2n, mb).s}），再右规一位，阶码加 1`; }
     else if (!isNorm(m, mb, mistake)) { m *= 2n; e -= 1; note += '；舍入以后不是规格化数了，再左规一位，阶码减 1'; }
     lines.push({ k: '舍入后', e, m });
-    steps.push({ view: snap({ cur: [lines.length - 1] }), msg: `舍入（${round === 'half' ? '0 舍 1 入' : '截断'}）：${mText(before, mb, gb)}，${note}，得 ${mText(m, mb)}。`, ask: { tag: 'round', kind: 'bin', width: mb + 2, q: '舍入以后的尾数是？（双符号位补码）', answer: mInt(m, mb) } });
+    steps.push({ view: snap({ cur: [lines.length - 1] }), msg: `舍入（${round === 'half' ? '0 舍 1 入' : '截断'}）：${mText(before, mb, gb)}，${note}，得 ${mText(m, mb)}。`, ask: { tag: 'round', kind: 'bin', width: mb + 2, q: '舍入以后的尾数是？（双符号位补码）', answer: mInt(m, mb), display: mText(m, mb) } });
   } else {
     steps.push({ view: snap(), msg: `没有移出去的位（或者都是 0），不用舍入：尾数 ${mText(m, mb)}。` });
   }
