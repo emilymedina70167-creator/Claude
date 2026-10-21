@@ -2,7 +2,7 @@
 // 每个组件对几道王道 / 408 的题（答案写在注释里），常见错法各查一个：错法那一遍的答案和对的不一样、学生照错法答能认出来
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { avlEngine, rbtEngine } from '../kit/src/engines/balanced.js';
 import { btreeEngine } from '../kit/src/engines/btree.js';
 import { checkAsk, fillSpec, checkFill, resolveAsks, commonSpec, trackFields } from '../kit/src/stepperspec.js';
@@ -194,8 +194,8 @@ test('B 树的错法：上限算成 m、分裂时上移错了', () => {
 });
 
 // 说明草稿里的例子：照抄就能用（解析得了、ask 的种类都问得到、没有用不上的字段）
-test('说明草稿（docs/drafts/trees.md）里的例子照抄就能用', { skip: !existsSync(new URL('../docs/drafts/trees.md', import.meta.url)) }, () => {
-  const md = readFileSync(new URL('../docs/drafts/trees.md', import.meta.url), 'utf8');
+test('手册（CLAUDE-PROJECT.md）里平衡树的例子照抄就能用', () => {
+  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
   const found = [...md.matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)].filter((m) => ENGINES[m[2]]);
   assert.ok(found.length >= 3);
   for (const [, , name, src] of found) {

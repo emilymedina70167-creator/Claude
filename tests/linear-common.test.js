@@ -40,18 +40,21 @@ function checkBlock(name, src, { strict }) {
   assert.deepEqual(tracked.unknown(), [], `${where}：有用不上的字段`);
 }
 
-test('说明草稿（docs/drafts/linear.md）和示例页里的例子：照抄就能用', () => {
-  const doc = blocksOf('docs/drafts/linear.md');
-  assert.ok(doc.length >= 5, `草稿里只找到 ${doc.length} 个例子`);
+test('手册（CLAUDE-PROJECT.md）和示例页里的例子：照抄就能用', () => {
+  // 手册里别的 sort 例子归 engines-common 管，这里只严查这四个组件
+  const doc = blocksOf('CLAUDE-PROJECT.md').filter(([name]) => name !== 'sort');
+  assert.ok(doc.length >= 4, `手册里只找到 ${doc.length} 个例子`);
   for (const [name, src] of doc) checkBlock(name, src, { strict: true });
   const page = blocksOf('kit/examples/ds-linear-demo.html');
   assert.ok(page.length >= 12);
   for (const [name, src] of page) checkBlock(name, src, { strict: false });
 });
 
-test('说明草稿的精简版每节不超过 500 字节', () => {
-  const md = readFileSync(new URL('../docs/drafts/linear.md', import.meta.url), 'utf8');
-  for (const part of md.split(/^### /m).slice(1, 5)) {
+test('手册里这几节的精简版每节不超过 500 字节', () => {
+  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const parts = md.split(/^### /m).filter((x) => /^(stack|cqueue|compress|extsort)：/.test(x));
+  assert.equal(parts.length, 4);
+  for (const part of parts) {
     const head = part.slice(0, part.indexOf('<!-- 完整写法 -->'));
     assert.ok(Buffer.byteLength(`### ${head}`.trim()) <= 500, `${part.split('\n')[0]}：精简版 ${Buffer.byteLength(head)} 字节`);
   }
