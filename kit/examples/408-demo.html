@@ -80,6 +80,35 @@ void InsertSort(ElemType A[], int n){
 }
 ```
 
+```code
+id: cj-move
+title: 算法设计题：把所有负数移到正数前面
+q: 设计一个算法，把数组 A 的 n 个整数里所有的负数移到正数前面（相对次序不限），要求时间 O(n)、空间 O(1)。
+fn: void Move(int A[], int n)
+tests:
+A = [3, -1, 2, -5, 4], n = 5
+A = [-2, -3], n = 2
+A = [1, 2, 3], n = 3
+ref:
+void Move(int A[], int n) {
+    int i = 0, j = n - 1;
+    while (i < j) {
+        while (i < j && A[i] < 0) i++;
+        while (i < j && A[j] >= 0) j--;
+        if (i < j) { int t = A[i]; A[i] = A[j]; A[j] = t; }
+    }
+}
+check:
+int check(int A[], int A0[], int n) {
+    int i, k = 0, neg = 0, sum = 0;
+    for (i = 0; i < n; i++) { sum += A[i] - A0[i]; if (A0[i] < 0) neg++; }
+    if (sum != 0) { printf("元素变了（不是原来那些数）"); return 0; }
+    for (i = 0; i < neg; i++) if (A[i] >= 0) { printf("前 %d 个应该都是负数", neg); return 0; }
+    return 1;
+}
+scale: n = 8 16 32 64; A = rand(n)
+```
+
 ## 2. 操作系统
 
 ```sched
@@ -96,6 +125,16 @@ title: LRU 页面置换
 refs: 7 0 1 2 0 3 0 4 2 3 0 3 2
 frames: 3
 algo: lru
+ask: victim
+```
+
+```paging
+id: os-eclock
+title: 改进型 CLOCK：缺页时换出哪一页
+algo: eclock
+init: 1 1 0, 2 1 1, 3 0 1, 4 1 0
+ptr: 1
+refs: 5 2w 6
 ask: victim
 ```
 
@@ -125,6 +164,38 @@ page: 1KB
 table: 0->5, 1->10, 2->4, 3->7
 tlb: 1->10
 cost: tlb=20 mem=100
+```
+
+```pagetable
+id: pt-1
+title: 多级页表：32 位逻辑地址、4KB 页、4B 页表项
+vbits: 32
+page: 4KB
+pte: 4B
+vaddr: 0x12345678
+ask: offset, per, levels, idx
+```
+
+```alloc
+id: om-1
+title: 动态分区分配：首次适应
+memory: 640K
+algo: first
+ops: alloc 1 130K, alloc 2 60K, alloc 3 100K, free 2, alloc 4 200K, free 3, free 1, alloc 5 140K
+ask: where, merge
+```
+
+```fileidx
+id: fi-1
+title: 混合索引：10 个直接地址、一级 / 二级 / 三级间接各 1 个
+block: 1KB
+entry: 4B
+direct: 10
+single: 1
+double: 1
+triple: 1
+offset: 10240, 300000
+ask: n, max, level, reads
 ```
 
 ## 3. 组成原理
@@ -166,6 +237,48 @@ instrs: add r1, r2, r3; sub r4, r1, r5; and r6, r1, r7; or r8, r2, r9
 ask: stall
 ```
 
+```hamming
+id: hm-1
+title: 海明码：信息位 1010
+data: 1010
+ask: k, p
+```
+
+```memexp
+id: me-1
+title: 存储器扩展：2K×4 位的芯片组成 8K×8 位
+chip: 2K×4
+target: 8K×8
+addr: 16
+base: 6000H
+ask: count, cs, range
+```
+
+```fadd
+id: fa-1
+title: 浮点加法：x = 2^010 × 0.11011011，y = 2^100 × (−0.10101100)
+x: 2^010 × 0.11011011
+y: 2^100 × (-0.10101100)
+ask: shift, sum, norm, round
+```
+
+```mul
+id: ml-1
+title: Booth 补码一位乘：x = −0.1101，y = 0.1011
+x: -0.1101
+y: 0.1011
+algo: booth
+ask: op, result
+```
+
+```crc
+id: crc-1
+title: CRC：M = 101001，G(x) = x³ + x² + 1
+data: 101001
+gen: x^3 + x^2 + 1
+ask: zeros, rem
+```
+
 ## 4. 计算机网络
 
 ```subnet
@@ -180,6 +293,30 @@ id: cn-lpm
 title: 最长前缀匹配
 table: 192.168.1.0/24 -> R1, 192.168.1.128/25 -> R2, 0.0.0.0/0 -> R3
 dst: 192.168.1.200
+```
+
+```encode
+id: ec-1
+title: 编码波形：10110010
+bits: 10110010
+code: manchester, diffman, nrzi
+ask: level
+```
+
+```encode
+id: ec-2
+title: 读波形：差分曼彻斯特
+levels: 01 01 10 01 01 01 10 10
+code: diffman
+ask: bit
+```
+
+```frag
+id: nf-1
+title: IP 分片：4000 字节的数据报经过 MTU 1500、576
+total: 4000
+mtu: 1500, 576
+ask: max, count, offset
 ```
 
 ```tcp

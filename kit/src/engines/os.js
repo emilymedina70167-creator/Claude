@@ -197,25 +197,45 @@ const schedProcTable = (input) => table(['进程', '到达时间', '运行时间
 
 // ================= 页面置换 =================
 
-const PAGING = { fifo: '先进先出 FIFO', lru: '最近最久未使用 LRU', opt: '最佳置换 OPT', clock: '简单 CLOCK（NRU）' };
+const PAGING = { fifo: '先进先出 FIFO', lru: '最近最久未使用 LRU', opt: '最佳置换 OPT', clock: '简单 CLOCK（NRU）', eclock: '改进型 CLOCK' };
 
 function pagingParse(fields) {
-  const refs = String(fields.refs ?? '').trim().split(/[\s,，、]+/).filter(Boolean);
-  if (!refs.length) throw new Error('paging 要写 refs:（页面引用串，如 7 0 1 2 0 3 0 4）');
-  if (refs.length > 24) throw new Error('refs: 最多 24 个');
-  const frames = Number(fields.frames);
-  if (!Number.isInteger(frames) || frames < 1 || frames > 6) throw new Error('paging 要写 frames:（分给进程的物理块数，1 到 6）');
+  // 引用串里写 2w 是写这一页（改进型 CLOCK 要看修改位；别的算法只当成访问）
+  const raw = String(fields.refs ?? '').trim().split(/[\s,，、]+/).filter(Boolean);
+  if (!raw.length) throw new Error('paging 要写 refs:（页面引用串，如 7 0 1 2 0 3 0 4；写访问写成 2w）');
+  if (raw.length > 24) throw new Error('refs: 最多 24 个');
+  const refs = raw.map((x) => x.replace(/[wW写]$/, ''));
+  const writes = raw.map((x) => /[wW写]$/.test(x) && x.length > 1);
   const algo = String(fields.algo || '').trim().toLowerCase();
   if (!PAGING[algo]) throw new Error(`paging 要写 algo:（${Object.entries(PAGING).map(([k, v]) => `${k} ${v}`).join('、')}）`);
-  return { refs, frames, algo };
+  // 开始时已经在内存里的页：init: 2 1 0, 5 1 1（页、访问位、修改位；简单 CLOCK 只写页和访问位，别的算法只写页）
+  let init = null;
+  if (fields.init !== undefined) {
+    const want = algo === 'eclock' ? 3 : algo === 'clock' ? 2 : 1;
+    init = String(fields.init).split(/[,，;；]/).map((x) => x.trim()).filter(Boolean).map((x) => {
+      const t = x.replace(/[()（）]/g, ' ').split(/\s+/).filter(Boolean);
+      if (t.length !== want || t.slice(1).some((b) => !/^[01]$/.test(b))) throw new Error(`init: 每个物理块写「${['页', '页 访问位', '页 访问位 修改位'][want - 1]}」，用逗号隔开（现在有一项是「${x}」）`);
+      return { page: t[0], use: Number(t[1] ?? 1), mod: Number(t[2] ?? 0) };
+    });
+    if (new Set(init.map((x) => x.page)).size !== init.length) throw new Error('init: 里有重复的页');
+  }
+  const frames = fields.frames !== undefined ? Number(fields.frames) : init ? init.length : NaN;
+  if (!Number.isInteger(frames) || frames < 1 || frames > 6) throw new Error('paging 要写 frames:（分给进程的物理块数，1 到 6）');
+  if (init && init.length > frames) throw new Error(`init: 写了 ${init.length} 个物理块，比 frames: ${frames} 多`);
+  const ptr = fields.ptr !== undefined ? Number(fields.ptr) - 1 : 0;
+  if (!Number.isInteger(ptr) || ptr < 0 || ptr >= frames) throw new Error(`ptr: 指针一开始指着第几个物理块（1 到 ${frames}）`);
+  return { refs, writes, frames, algo, init, ptr };
 }
 
-function pagingRun({ refs, frames, algo }) {
+function pagingRun({ refs, writes = [], frames, algo, init = null, ptr: ptr0 = 0, mistake = '' }) {
   const slots = Array(frames).fill(null);
   const use = Array(frames).fill(0);
-  let ptr = 0;
+  const mod = Array(frames).fill(0);
+  let ptr = ptr0;
   const loadedAt = Array(frames).fill(-1), usedAt = Array(frames).fill(-1);
-  const cols = []; // 每次访问之后：{ slots, fault, victim, use, ptr, order }
+  // 开始时已经在内存里的：按写的先后算进入 / 使用的先后（越前越早）
+  if (init) init.forEach((x, i) => { slots[i] = x.page; use[i] = x.use; mod[i] = x.mod; loadedAt[i] = usedAt[i] = i - init.length - 1; });
+  const cols = []; // 每次访问之后：{ slots, fault, victim, use, mod, ptr, order }
   const steps = [];
   let faults = 0;
   const victims = [];
@@ -227,22 +247,27 @@ function pagingRun({ refs, frames, algo }) {
     return null;
   };
   const snap = (k, extra = {}) => ({ k, cols: cols.slice(), ...extra });
-  steps.push({ view: snap(-1), msg: `${PAGING[algo]}，分 ${frames} 个物理块，一开始都空着。依次访问 ${refs.join(' ')}（一开始调入也算缺页）。` });
+  const bits = (f) => (algo === 'eclock' ? `(${use[f]},${mod[f]})` : `访问位 ${use[f]}`);
+  const startText = init ? `一开始物理块里是 ${init.map((x, i) => `${x.page}${algo === 'clock' || algo === 'eclock' ? bits(i) : ''}`).join('、')}${algo === 'clock' || algo === 'eclock' ? `，指针指着块 ${ptr0 + 1}` : ''}` : '一开始都空着';
+  const rule = algo === 'eclock' ? '括号里是（访问位, 修改位）。缺页时从指针处找：第 1 轮找 (0,0)，不改任何位；找不到第 2 轮找 (0,1)，扫过的访问位清 0；还找不到就回到第 1 轮再来。' : '';
+  steps.push({ view: snap(-1), msg: `${PAGING[algo]}，分 ${frames} 个物理块，${startText}。依次访问 ${refs.map((r, k) => `${r}${writes[k] ? '（写）' : ''}`).join(' ')}${init ? '' : '（一开始调入也算缺页）'}。${rule}` });
   refs.forEach((pg, k) => {
     const at = slots.indexOf(pg);
     let msg, victim = null, slot = at;
     if (at >= 0) {
       usedAt[at] = k;
-      if (algo === 'clock') use[at] = 1;
-      msg = `访问 ${pg}：已经在内存里，命中。${algo === 'lru' ? `${pg} 变成最近用过的。` : algo === 'clock' ? `访问位置 1（指针不动）。` : ''}`;
+      if (algo === 'clock' || algo === 'eclock') use[at] = 1;
+      if (algo === 'eclock' && writes[k]) mod[at] = 1;
+      msg = `访问 ${pg}：已经在内存里，命中。${algo === 'lru' ? `${pg} 变成最近用过的。` : algo === 'clock' ? `访问位置 1（指针不动）。` : algo === 'eclock' ? `访问位置 1${writes[k] ? '，写了，修改位置 1' : ''}（指针不动）。` : ''}`;
     } else {
       faults++;
       const empty = slots.indexOf(null);
       if (empty >= 0) {
         slot = empty;
         msg = `访问 ${pg}：不在内存里，缺页。还有空的物理块，直接调入。`;
-        if (algo === 'clock') ptr = (empty + 1) % frames;
+        if (algo === 'clock' || algo === 'eclock') ptr = (empty + 1) % frames;
       } else {
+        const ptr0Now = ptr;
         if (algo === 'fifo') slot = loadedAt.indexOf(Math.min(...loadedAt));
         else if (algo === 'lru') slot = usedAt.indexOf(Math.min(...usedAt));
         else if (algo === 'opt') {
@@ -251,6 +276,23 @@ function pagingRun({ refs, frames, algo }) {
           const far = Math.max(...next);
           const cand = slots.map((_, i) => i).filter((i) => next[i] === far);
           slot = cand.sort((a, b) => loadedAt[a] - loadedAt[b])[0];
+        } else if (algo === 'eclock') {
+          // 第 1、3 轮找 (0,0) 不改位；第 2、4 轮找 (0,1)，扫过的访问位清 0（错法 clearFirst：第 1 轮也清）
+          const rounds = [];
+          for (let round = 0, found = false; round < 4 && !found; round++) {
+            const wantM = round % 2;
+            const seen = [];
+            for (let i = 0; i < frames; i++) {
+              const f = (ptr + i) % frames;
+              if (use[f] === 0 && mod[f] === wantM) { slot = f; found = true; seen.push(`块 ${f + 1} 是 (0,${wantM})`); break; }
+              const before = `(${use[f]},${mod[f]})`;
+              if (wantM === 1 || mistake === 'clearFirst') use[f] = 0;
+              seen.push(`块 ${f + 1} ${before}${wantM === 1 || mistake === 'clearFirst' ? `→(${use[f]},${mod[f]})` : ''}`);
+            }
+            rounds.push(`第 ${round + 1} 轮找 (0,${wantM})${wantM ? '，扫过的访问位清 0' : ''}：${seen.join('、')}`);
+          }
+          ptr = (slot + 1) % frames;
+          msg = `（指针从块 ${ptr0Now + 1} 开始。${rounds.join('；')}）`;
         } else {
           const scanned = [];
           for (;;) {
@@ -261,43 +303,50 @@ function pagingRun({ refs, frames, algo }) {
         }
         victim = slots[slot];
         victims.push(victim);
-        const reason = algo === 'fifo' ? `${victim} 最先进入内存` : algo === 'lru' ? `${victim} 最久没被访问` : algo === 'opt' ? (() => { const j = refs.indexOf(victim, k + 1); return j < 0 ? `${victim} 以后再也不用` : `${victim} 要到第 ${j + 1} 个访问才再用，最远`; })() : `${victim} 的访问位是 0`;
+        const reason = algo === 'fifo' ? `${victim} 最先进入内存` : algo === 'lru' ? `${victim} 最久没被访问` : algo === 'opt' ? (() => { const j = refs.indexOf(victim, k + 1); return j < 0 ? `${victim} 以后再也不用` : `${victim} 要到第 ${j + 1} 个访问才再用，最远`; })() : algo === 'eclock' ? `${victim} 是先找到的 (0,${mod[slot]})` : `${victim} 的访问位是 0`;
         msg = `访问 ${pg}：不在内存里，缺页。物理块满了，${reason}，换出 ${victim}。${msg || ''}`;
       }
       slots[slot] = pg;
       loadedAt[slot] = k;
       usedAt[slot] = k;
-      if (algo === 'clock') use[slot] = 1;
+      if (algo === 'clock' || algo === 'eclock') use[slot] = 1;
+      mod[slot] = writes[k] ? 1 : 0;
     }
-    cols.push({ ref: pg, slots: slots.slice(), fault: at < 0, victim, use: use.slice(), ptr, order: order() });
+    cols.push({ ref: pg, slots: slots.slice(), fault: at < 0, victim, use: use.slice(), mod: mod.slice(), ptr, order: order() });
     const ask = at >= 0 ? { tag: 'hit', kind: 'choice', q: `访问 ${pg}：命中还是缺页？`, choices: ['命中', '缺页'], answer: '命中' }
       : victim !== null ? { tag: 'victim', kind: 'pick', q: `访问 ${pg} 缺页了，物理块已满：换出哪一页？在表里最右边那一列点出来。`, answer: victim }
         : { tag: 'hit', kind: 'choice', q: `访问 ${pg}：命中还是缺页？`, choices: ['命中', '缺页'], answer: '缺页' };
     steps.push({ view: snap(k, { slot }), msg, ask });
   });
   const n = refs.length;
-  steps.push({ view: snap(n - 1, { end: true }), msg: `一共缺页 ${faults} 次（包括一开始调入的 ${Math.min(frames, new Set(refs).size)} 次），缺页率 ${faults}/${n}${Number.isInteger((faults / n) * 100) ? ` = ${(faults / n) * 100}%` : ` ≈ ${round2((faults / n) * 100)}%`}。被换出的页依次是 ${victims.join(' ') || '（没有）'}。`, ask: { tag: 'faults', kind: 'number', q: '一共缺页多少次？', answer: faults } });
+  steps.push({ view: snap(n - 1, { end: true }), msg: `一共缺页 ${faults} 次${init ? '' : `（包括一开始调入的 ${Math.min(frames, new Set(refs).size)} 次）`}，缺页率 ${faults}/${n}${Number.isInteger((faults / n) * 100) ? ` = ${(faults / n) * 100}%` : ` ≈ ${round2((faults / n) * 100)}%`}。被换出的页依次是 ${victims.join(' ') || '（没有）'}。`, ask: { tag: 'faults', kind: 'number', q: '一共缺页多少次？', answer: faults } });
   return { steps, faults, victims };
 }
 
 function pagingView(s, input) {
-  const { refs, frames, algo } = input;
+  const { refs, frames, algo, init } = input;
   const cur = s.k;
-  const head = ['', ...refs.map((r, k) => `<span class="${k === cur ? 'os-cur' : ''}">${esc(r)}</span>`)];
+  const clk = algo === 'clock' || algo === 'eclock';
+  const bitsHtml = (u, m) => (clk ? `<sup>${u}${algo === 'eclock' ? `,${m}` : ''}</sup>` : '');
+  // 给了 init: 时最前面加一列「开始」：开始时的页、位和指针
+  const initSlots = Array.from({ length: frames }, (_, f) => init?.[f]?.page ?? null);
+  const head = ['', ...(init ? ['<span class="os-start">开始</span>'] : []), ...refs.map((r, k) => `<span class="${k === cur ? 'os-cur' : ''}">${esc(r)}${input.writes?.[k] ? '<sub>写</sub>' : ''}</span>`)];
   const rows = [];
   for (let f = 0; f < frames; f++) {
-    rows.push([`块 ${f + 1}`, ...refs.map((_, k) => {
+    const first = init ? [{ html: init[f] ? `${esc(init[f].page)}${bitsHtml(init[f].use, init[f].mod)}${clk && input.ptr === f ? '<i class="os-ptr">◀</i>' : ''}` : '', cls: 'os-startcol' }] : [];
+    rows.push([`块 ${f + 1}`, ...first, ...refs.map((_, k) => {
       const c = s.cols[k];
       if (!c) return '';
       const x = c.slots[f];
-      const isNew = c.fault && s.cols[k].slots[f] !== (k ? s.cols[k - 1].slots[f] : null);
+      const isNew = c.fault && x !== (k ? s.cols[k - 1].slots[f] : initSlots[f]);
       // 最新的那一列可以点（先猜「换出哪一页」时，学生看的是换页之前的这一列）
       const pickable = k === cur && x !== null ? ` data-pick="${esc(x)}" data-label="${esc(x)}"` : '';
-      return { html: `${esc(x ?? '')}${algo === 'clock' && x !== null ? `<sup>${c.use[f]}</sup>` : ''}${algo === 'clock' && c.ptr === f && x !== null ? '<i class="os-ptr">◀</i>' : ''}`, cls: [isNew ? 'os-in' : '', k === cur ? 'os-curcol' : ''].join(' '), attrs: pickable };
+      return { html: `${esc(x ?? '')}${x !== null ? bitsHtml(c.use[f], c.mod[f]) : ''}${clk && c.ptr === f && x !== null ? '<i class="os-ptr">◀</i>' : ''}`, cls: [isNew ? 'os-in' : '', k === cur ? 'os-curcol' : ''].join(' '), attrs: pickable };
     })]);
   }
-  rows.push(['缺页', ...refs.map((_, k) => (s.cols[k] ? { html: s.cols[k].fault ? '✓' : '', cls: s.cols[k].fault ? 'os-fault' : '' } : ''))]);
-  if (algo === 'fifo' || algo === 'lru') rows.push([algo === 'fifo' ? '进入的先后' : '最近使用', ...refs.map((_, k) => (s.cols[k]?.order ? { html: s.cols[k].order.join('<br>'), cls: 'os-order' } : ''))]);
+  const pad = init ? [''] : [];
+  rows.push(['缺页', ...pad, ...refs.map((_, k) => (s.cols[k] ? { html: s.cols[k].fault ? '✓' : '', cls: s.cols[k].fault ? 'os-fault' : '' } : ''))]);
+  if (algo === 'fifo' || algo === 'lru') rows.push([algo === 'fifo' ? '进入的先后' : '最近使用', ...pad, ...refs.map((_, k) => (s.cols[k]?.order ? { html: s.cols[k].order.join('<br>'), cls: 'os-order' } : ''))]);
   let h = table(head, rows, 'os-pt');
   const faults = s.cols.filter((c) => c.fault).length;
   h += chips([['已访问', `${s.cols.length} / ${refs.length}`], ['缺页', faults]]);
@@ -331,15 +380,18 @@ export const pagingEngine = {
       qhtml: '',
     };
   },
-  // 常见错法：换成别的置换算法；「一开始调入不算缺页」
+  // 常见错法：换成别的置换算法（改进型 CLOCK 只和简单 CLOCK 比：init 里的位别的算法用不上）；「一开始调入不算缺页」；改进型 CLOCK 第 1 轮也清了访问位
   variants(input) {
-    const out = Object.keys(PAGING).filter((a) => a !== input.algo).map((a) => ({ label: `像是按 ${PAGING[a]} 换的`, input: { ...input, algo: a } }));
-    out.push({ label: '像是没把一开始调入算成缺页', input: { ...input, noInitial: true } });
+    const others = input.algo === 'eclock' ? ['clock'] : Object.keys(PAGING).filter((a) => a !== input.algo && a !== 'eclock' && !(input.init && a === 'clock' && input.algo !== 'clock'));
+    const out = others.map((a) => ({ label: `像是按 ${PAGING[a]} 换的`, input: { ...input, algo: a } }));
+    if (input.algo === 'eclock') out.push({ label: '像是第 1 轮找 (0,0) 时就把访问位清 0 了（第 1 轮不改任何位，第 2 轮才清）', input: { ...input, mistake: 'clearFirst' } });
+    if (!input.init) out.push({ label: '像是没把一开始调入算成缺页', input: { ...input, noInitial: true } });
     return out;
   },
   problems(input) {
     const out = [];
-    if (new Set(input.refs).size <= input.frames) out.push('refs 里不同的页不多于 frames，根本不会发生置换');
+    if (new Set([...input.refs, ...(input.init || []).map((x) => x.page)]).size <= input.frames) out.push('refs 里不同的页不多于 frames，根本不会发生置换');
+    if (input.writes.some(Boolean) && input.algo !== 'eclock') out.push('refs 里写了「w」（写访问），只有 algo: eclock（改进型 CLOCK）用得上修改位');
     return out;
   },
 };

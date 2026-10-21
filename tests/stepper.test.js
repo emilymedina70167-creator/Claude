@@ -81,7 +81,7 @@ test('排序引擎：先猜的问题和真实结果一致；每一步都画得�
     const passAsks = r.steps.filter((s) => s.ask && ['pass', 'partition'].includes(s.ask.tag)).map((s) => s.ask.answer);
     assert.deepEqual(passAsks, r.passes.map((p) => p.join(' ')), a);
     const input = parse({ algo: a, array: ARR });
-    for (const s of r.steps) assert.match(view(s.view, input), /class="sv-arr"/);
+    for (const s of r.steps) assert.match(view(s.view, input), /class="sv-arr[ "]/);
   }
   // 快排「枢轴落在第几个」和那一步画出来的位置一致
   const q = go('quick');

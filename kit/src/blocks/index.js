@@ -21,6 +21,7 @@ import { matrix } from './matrix.js';
 import { sketch } from './sketch.js';
 import { derive } from './derive.js';
 import { image } from './image.js';
+import { code } from './code.js';
 import { stepperBlock } from '../stepper.js';
 import { sortEngine } from '../engines/sort.js';
 import { treeEngine } from '../engines/tree.js';
@@ -38,13 +39,33 @@ import { parseFields } from '../parse.js';
 import { detEngine } from '../engines/det.js';
 import { eigEngine, schmidtEngine } from '../engines/eig.js';
 import { quadEngine } from '../engines/quad.js';
+import { crcEngine, hammingEngine } from '../engines/codes.js';
+import { allocEngine } from '../engines/osmem.js';
+import { memexpEngine } from '../engines/comem.js';
+import { faddEngine } from '../engines/cofloat.js';
+import { mulEngine } from '../engines/comul.js';
+import { fileidxEngine } from '../engines/osfile.js';
+import { pagetableEngine } from '../engines/ospt.js';
+import { fragEngine } from '../engines/netfrag.js';
+import { encodeEngine } from '../engines/netcode.js';
+import { huffmanEngine } from '../engines/huffman.js';
+import { ufEngine } from '../engines/uf.js';
+import { buildtreeEngine } from '../engines/buildtree.js';
+import { threadEngine } from '../engines/thread.js';
+import { forestEngine } from '../engines/forest.js';
+import { avlEngine, rbtEngine } from '../engines/balanced.js';
+import { btreeEngine } from '../engines/btree.js';
+import { stackEngine } from '../engines/stack.js';
+import { cqueueEngine } from '../engines/cqueue.js';
+import { compressEngine } from '../engines/compress.js';
+import { extsortEngine } from '../engines/extsort.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
   transform2d, vectors, rref, matmul, quiz, card, ...callouts, ...folds,
   scene, predict, answer, conjecture, practice, summary, context, draft,
   array, shellsort, sortpass, steps, recognize, findbug, graph, space,
-  let: letBlock, matrix, sketch, derive, image,
+  let: letBlock, matrix, sketch, derive, image, code,
   // 一步步走的演示（stepper.js 外壳 + engines/ 里的纯函数引擎）
   sort: stepperBlock(sortEngine),
   tree: stepperBlock(treeEngine),
@@ -70,6 +91,26 @@ export const blocks = {
   eig: stepperBlock(eigEngine),
   schmidt: stepperBlock(schmidtEngine),
   quad: stepperBlock(quadEngine),
+  crc: stepperBlock(crcEngine),
+  hamming: stepperBlock(hammingEngine),
+  alloc: stepperBlock(allocEngine),
+  memexp: stepperBlock(memexpEngine),
+  fadd: stepperBlock(faddEngine),
+  mul: stepperBlock(mulEngine),
+  fileidx: stepperBlock(fileidxEngine),
+  pagetable: stepperBlock(pagetableEngine),
+  frag: stepperBlock(fragEngine),
+  encode: stepperBlock(encodeEngine),
+  // 树（二）：哈夫曼、并查集、由遍历序列建树、线索二叉树、树和森林 ↔ 二叉树
+  huffman: stepperBlock(huffmanEngine),
+  uf: stepperBlock(ufEngine),
+  buildtree: stepperBlock(buildtreeEngine),
+  thread: stepperBlock(threadEngine),
+  forest: stepperBlock(forestEngine),
+  // 平衡树：平衡二叉树、红黑树、B 树 / B+ 树
+  avl: stepperBlock(avlEngine), rbt: stepperBlock(rbtEngine), btree: stepperBlock(btreeEngine),
+  // 线性结构：栈的应用、循环队列、特殊矩阵的压缩存储；外部排序
+  stack: stepperBlock(stackEngine), cqueue: stepperBlock(cqueueEngine), compress: stepperBlock(compressEngine), extsort: stepperBlock(extsortEngine),
 };
 
 // elim：mode: do 是学生自己做行变换（blocks/elimdo.js），其余照演示组件（演示 / quiz / fill）

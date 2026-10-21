@@ -1,0 +1,188 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>trace 二期：链表、二叉链表</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+subject: 数据结构
+unit: trace 二期：指针、结构体、链表
+---
+
+# trace 二期：指针、结构体、链表
+
+代码真的跑一遍：堆上的结点画成框，指针画成箭头，`NULL` 是 ∧。每一步新建、改了的亮一下。
+
+## 1. 单链表
+
+```trace
+id: tr-rev
+title: 带头结点的单链表就地逆置（头插法）
+call: Reverse(L)
+let L = list [头, 1, 2, 3, 4]
+predict: 11 if p->data == 3 -> p->next; 13 if r == NULL -> p
+code:
+typedef struct LNode {
+    ElemType data;
+    struct LNode *next;
+} LNode, *LinkList;
+void Reverse(LinkList L){
+    LNode *p, *r;
+    p = L->next;
+    L->next = NULL;
+    while (p != NULL) {
+        r = p->next;
+        p->next = L->next;
+        L->next = p;
+        p = r;
+    }
+}
+```
+
+```trace
+id: tr-head
+title: 头插法建立单链表
+code:
+typedef struct LNode {
+    ElemType data;
+    struct LNode *next;
+} LNode, *LinkList;
+LinkList List_HeadInsert(LinkList &L, int a[], int n){
+    LNode *s;
+    L = (LinkList)malloc(sizeof(LNode));
+    L->next = NULL;
+    for (int i = 0; i < n; i++) {
+        s = (LNode *)malloc(sizeof(LNode));
+        s->data = a[i];
+        s->next = L->next;
+        L->next = s;
+    }
+    return L;
+}
+int main(){
+    LinkList L;
+    int a[3] = {1, 2, 3};
+    List_HeadInsert(L, a, 3);
+    return 0;
+}
+```
+
+```trace
+id: tr-del
+title: 删除所有值为 x 的结点
+call: Del_X(L, 3)
+let L = list [头, 1, 3, 2, 3]
+code:
+typedef struct LNode {
+    ElemType data;
+    struct LNode *next;
+} LNode, *LinkList;
+void Del_X(LinkList &L, ElemType x){
+    LNode *p = L->next, *pre = L, *q;
+    while (p != NULL) {
+        if (p->data == x) {
+            q = p;
+            p = p->next;
+            pre->next = p;
+            free(q);
+        } else {
+            pre = p;
+            p = p->next;
+        }
+    }
+}
+```
+
+```trace
+id: tr-merge
+title: 两个递增的有序表合并成一个递增的表
+call: Merge(La, Lb)
+let La = list [头, 1, 4, 7]
+let Lb = list [头, 2, 3, 8]
+code:
+typedef struct LNode {
+    ElemType data;
+    struct LNode *next;
+} LNode, *LinkList;
+void Merge(LinkList &La, LinkList &Lb){
+    LNode *pa = La->next, *pb = Lb->next;
+    LNode *r = La;
+    while (pa && pb) {
+        if (pa->data <= pb->data) {
+            r->next = pa; r = pa; pa = pa->next;
+        } else {
+            r->next = pb; r = pb; pb = pb->next;
+        }
+    }
+    r->next = pa ? pa : pb;
+    free(Lb);
+    Lb = NULL;
+}
+```
+
+## 2. 二叉链表
+
+```trace
+id: tr-pre
+title: 先序遍历（递归）
+call: PreOrder(T)
+let T = tree A(B(D, E), C(, F))
+code:
+typedef struct BiTNode {
+    char data;
+    struct BiTNode *lchild, *rchild;
+} BiTNode, *BiTree;
+void PreOrder(BiTree T){
+    if (T != NULL) {
+        visit(T);
+        PreOrder(T->lchild);
+        PreOrder(T->rchild);
+    }
+}
+```
+
+## 3. 顺序表和写错的代码
+
+```trace
+id: tr-sq
+title: 顺序表的插入
+code:
+#define MaxSize 6
+typedef struct {
+    ElemType data[MaxSize];
+    int length;
+} SqList;
+bool ListInsert(SqList &L, int i, ElemType e){
+    if (i < 1 || i > L.length + 1) return false;
+    for (int j = L.length; j >= i; j--)
+        L.data[j] = L.data[j - 1];
+    L.data[i - 1] = e;
+    L.length++;
+    return true;
+}
+int main(){
+    SqList L = {{3, 5, 8}, 3};
+    ListInsert(L, 2, 4);
+    return 0;
+}
+```
+
+```trace
+id: tr-bug
+title: 找错：删除第 i 个结点
+call: Delete(L, 4)
+let L = list [头, 1, 2, 3]
+code:
+typedef struct LNode {
+    ElemType data;
+    struct LNode *next;
+} LNode, *LinkList;
+void Delete(LinkList L, int i){
+    LNode *p = L;
+    for (int j = 1; j < i; j++)
+        p = p->next;
+    LNode *q = p->next;
+    p->next = q->next;
+    free(q);
+}
+```
+</script>
