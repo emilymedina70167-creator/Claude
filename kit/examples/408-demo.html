@@ -266,6 +266,22 @@ table: 192.168.1.0/24 -> R1, 192.168.1.128/25 -> R2, 0.0.0.0/0 -> R3
 dst: 192.168.1.200
 ```
 
+```encode
+id: ec-1
+title: 编码波形：10110010
+bits: 10110010
+code: manchester, diffman, nrzi
+ask: level
+```
+
+```encode
+id: ec-2
+title: 读波形：差分曼彻斯特
+levels: 01 01 10 01 01 01 10 10
+code: diffman
+ask: bit
+```
+
 ```frag
 id: nf-1
 title: IP 分片：4000 字节的数据报经过 MTU 1500、576
