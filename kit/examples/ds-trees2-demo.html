@@ -1,0 +1,110 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>树（二）教具一览</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+subject: 数据结构
+unit: 树（二）教具一览
+---
+
+# 树（二）：哈夫曼、并查集、建树、线索、森林
+
+每一个都是「一步步走」的演示：只写输入，每一步由页面算。写了 `ask:` 的，走到那一步之前先让你猜。
+
+## 1. 哈夫曼树
+
+```huffman
+id: hf-1
+title: 哈夫曼树和哈夫曼编码
+weights: a:7 b:5 c:2 d:4
+ask: pick, wpl, code
+```
+
+```huffman
+id: hf-3
+title: 三叉哈夫曼树：先补虚结点
+weights: 1 2 3 4 5 6 7 8
+k: 3
+ask: dummy, wpl
+```
+
+## 2. 并查集
+
+```uf
+id: uf-1
+title: Union 和 Find
+n: 8
+ops: union 1 2, union 3 4, union 2 4, find 4
+ask: parent, root
+```
+
+```uf
+id: uf-2
+title: 路径压缩
+n: 6
+ops: union 3 4, union 2 3, union 1 2, union 0 1, find 4
+compress: true
+ask: root, parent
+```
+
+```uf
+id: uf-3
+title: 小树并到大树：填 S 数组
+n: 8
+ops: union 1 2, union 3 4, union 2 4, union 5 1, find 2
+rank: true
+mode: fill
+```
+
+## 3. 由遍历序列建二叉树
+
+```buildtree
+id: bt-1
+title: 先序 + 中序
+pre: A B C D E F G H I
+in: B C A E D G H F I
+ask: root, split
+```
+
+```buildtree
+id: bt-2
+title: 后序 + 中序：写出先序
+post: C B E H G I F D A
+in: B C A E D G H F I
+mode: quiz
+```
+
+## 4. 线索二叉树
+
+```thread
+id: th-1
+title: 中序线索化
+nodes: A(B(D, E), C)
+ask: pred, succ
+```
+
+```thread
+id: th-2
+title: 先序线索化：填结点表
+nodes: A(B(D, E), C(, F))
+order: pre
+mode: fill
+```
+
+## 5. 树、森林与二叉树
+
+```forest
+id: fo-1
+title: 森林转成二叉树
+forest: A(B, C, D) E(F, G)
+ask: parent
+```
+
+```forest
+id: fo-2
+title: 二叉树还原成森林
+binary: A(B(E, C(, D)), F(G, H))
+ask: parent
+```
+</script>

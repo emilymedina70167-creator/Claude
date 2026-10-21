@@ -45,6 +45,17 @@ import { memexpEngine } from '../engines/comem.js';
 import { faddEngine } from '../engines/cofloat.js';
 import { fileidxEngine } from '../engines/osfile.js';
 import { fragEngine } from '../engines/netfrag.js';
+import { huffmanEngine } from '../engines/huffman.js';
+import { ufEngine } from '../engines/uf.js';
+import { buildtreeEngine } from '../engines/buildtree.js';
+import { threadEngine } from '../engines/thread.js';
+import { forestEngine } from '../engines/forest.js';
+import { avlEngine, rbtEngine } from '../engines/balanced.js';
+import { btreeEngine } from '../engines/btree.js';
+import { stackEngine } from '../engines/stack.js';
+import { cqueueEngine } from '../engines/cqueue.js';
+import { compressEngine } from '../engines/compress.js';
+import { extsortEngine } from '../engines/extsort.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -84,6 +95,16 @@ export const blocks = {
   fadd: stepperBlock(faddEngine),
   fileidx: stepperBlock(fileidxEngine),
   frag: stepperBlock(fragEngine),
+  // 树（二）：哈夫曼、并查集、由遍历序列建树、线索二叉树、树和森林 ↔ 二叉树
+  huffman: stepperBlock(huffmanEngine),
+  uf: stepperBlock(ufEngine),
+  buildtree: stepperBlock(buildtreeEngine),
+  thread: stepperBlock(threadEngine),
+  forest: stepperBlock(forestEngine),
+  // 平衡树：平衡二叉树、红黑树、B 树 / B+ 树
+  avl: stepperBlock(avlEngine), rbt: stepperBlock(rbtEngine), btree: stepperBlock(btreeEngine),
+  // 线性结构：栈的应用、循环队列、特殊矩阵的压缩存储；外部排序
+  stack: stepperBlock(stackEngine), cqueue: stepperBlock(cqueueEngine), compress: stepperBlock(compressEngine), extsort: stepperBlock(extsortEngine),
 };
 
 // elim：mode: do 是学生自己做行变换（blocks/elimdo.js），其余照演示组件（演示 / quiz / fill）

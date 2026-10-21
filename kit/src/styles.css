@@ -1687,7 +1687,7 @@ tr.cn-best td { background: rgb(var(--green-rgb) / 0.18); color: var(--green); f
 .sv-tree .sv-node.sv-dummy text { fill: var(--muted); }
 .sv-tree .sv-node.sv-dummy .sv-node-sub { fill: var(--muted); font-weight: 400; }
 /* 森林 ↔ 二叉树：兄弟之间加的线、抹掉的线；二叉树里右孩子那条边原来是「兄弟」 */
-.sv-tree .sv-sib { stroke: var(--pink); stroke-width: 2.5; stroke-dasharray: 6 4; }
+.sv-tree .sv-sibline { stroke: var(--pink); stroke-width: 2.5; stroke-dasharray: 6 4; }
 .sv-tree .sv-edge.sv-edge-cut { stroke: rgb(var(--coral-rgb) / 0.55); stroke-dasharray: 3 5; }
 .sv-tree .sv-edge.sv-edge-sib { stroke: rgb(var(--pink-rgb) / 0.75); stroke-width: 2.5; }
 /* 线索：前驱蓝、后继粉，虚线箭头；还空着的指针画一小截加 ∧ */
@@ -1702,7 +1702,7 @@ tr.cn-best td { background: rgb(var(--green-rgb) / 0.18); color: var(--green); f
 .sv-tree .sv-thread.sv-th-fresh path { stroke-width: 3; }
 .sv-tree .sv-thread.sv-new.sv-flash path { animation: sv-th-flash 0.9s ease-out; }
 @keyframes sv-th-flash { 0% { stroke-width: 6; } 100% { stroke-width: 3; } }
-.sv-th-nullrow { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 4px 0; font: 14px var(--sans); }
+.sv-th-nullrow { display: none; align-items: center; justify-content: center; gap: 10px; margin: 4px 0; font: 14px var(--sans); }
 .sv-th-nullpick { min-width: 64px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 2px solid rgb(var(--chalk-rgb) / 0.4); font: 600 15px var(--mono); color: var(--chalk); }
 .sv-th-legend, .sv-fo-legend, .sv-bt-legend { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 8px; font: 13.5px var(--sans); margin-top: 4px; }
 .sv-th-key, .sv-fo-key { display: inline-block; width: 26px; height: 0; border-top: 2.5px dashed; margin-left: 8px; }
@@ -1723,3 +1723,217 @@ tr.cn-best td { background: rgb(var(--green-rgb) / 0.18); color: var(--green); f
 .sv-uf, .sv-bt { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .sv-bt-seqs { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 100%; overflow-x: auto; }
 .sv-seqrow .sv-cell.sv-done.sv-out { opacity: .45; }
+.sv-tree .sv-node .sv-node-sub2 { fill: var(--muted); font: 500 12.5px var(--sans); text-anchor: middle; dominant-baseline: central; }
+.sv-panels .sv-gtbl-wrap { margin-top: 4px; }
+.sv-tree.sv-trees .sv-node circle.sv-node-bg { fill: rgb(var(--board-2-rgb)); stroke: none; }
+.sv-seqrow .sv-cell.sv-g1, .sv-key.sv-g1 { background: rgb(var(--blue-rgb) / 0.3); border-color: rgb(var(--blue-rgb) / 0.75); }
+.sv-seqrow .sv-cell.sv-g2, .sv-key.sv-g2 { background: rgb(var(--pink-rgb) / 0.28); border-color: rgb(var(--pink-rgb) / 0.75); }
+.sv-picking .sv-th-nullrow { display: flex; }
+/* —— 平衡树（engines/balanced.js 的 avl / rbt，engines/btree.js 的 btree）—— */
+/* 红黑树：结点涂成红 / 黑（暗色风格里黑结点是压暗的实心圆加亮边）；高亮只换描边，不盖住颜色。
+   填色和板子的颜色先调好再填（不用半透明），连线才不会从结点里透出来 */
+.sv-rbt .sv-tree .sv-node.sv-rb-red circle { fill: color-mix(in srgb, var(--coral) 34%, rgb(var(--board-2-rgb))); stroke: var(--coral); stroke-width: 3; }
+.sv-rbt .sv-tree .sv-node.sv-rb-black circle { fill: color-mix(in srgb, rgb(var(--shade-rgb)) 78%, rgb(var(--board-2-rgb))); stroke: rgb(var(--chalk-rgb) / 0.85); stroke-width: 2.5; }
+.sv-rbt .sv-tree .sv-node.sv-rb-red.sv-path circle, .sv-rbt .sv-tree .sv-node.sv-rb-black.sv-path circle { stroke: var(--yellow); }
+.sv-rbt .sv-tree .sv-node.sv-rb-red.sv-cur circle, .sv-rbt .sv-tree .sv-node.sv-rb-black.sv-cur circle { stroke: var(--blue); stroke-width: 4.5; }
+.sv-rbt .sv-tree .sv-node.sv-rb-red.sv-cmp circle, .sv-rbt .sv-tree .sv-node.sv-rb-black.sv-cmp circle { stroke: var(--yellow); stroke-width: 4.5; }
+.sv-rbt .sv-tree .sv-node.sv-rb-red.sv-done circle, .sv-rbt .sv-tree .sv-node.sv-rb-black.sv-done circle { stroke: var(--green); stroke-width: 4.5; }
+/* 浅色风格（纸本、白板）：黑结点就是实心的墨色，字反白 */
+:root:is([data-theme="paper"], [data-theme="white"]) .sv-rbt .sv-tree .sv-node.sv-rb-black circle { fill: color-mix(in srgb, var(--chalk) 88%, rgb(var(--board-2-rgb))); }
+:root:is([data-theme="paper"], [data-theme="white"]) .sv-rbt .sv-tree .sv-node.sv-rb-black text:not(.sv-node-note) { fill: rgb(var(--board-rgb)); }
+/* 结点旁边的小字（平衡因子、父 / 叔 / 爷）：左孩子的写在左上角，不压着连向双亲的边 */
+.sv-tree .sv-node .sv-node-note.sv-note-l { text-anchor: end; }
+/* B 树、B+ 树：一个结点是一排格子的框，孩子连在格子的缝上（B+ 树连在格子下面）；叶结点之间的绿箭头是 B+ 树的叶链 */
+.sv-mway { display: block; height: auto; overflow: visible; margin: 0 auto; }
+.sv-mway .sv-bedge { stroke: rgb(var(--chalk-rgb) / 0.45); stroke-width: 2; }
+.sv-mway .sv-bedge.sv-edge-path { stroke: var(--yellow); stroke-width: 3; }
+.sv-mway .sv-blink line, .sv-mway .sv-blink path { stroke: rgb(var(--green-rgb) / 0.8); stroke-width: 2; fill: none; }
+.sv-mway .sv-bframe { fill: rgb(var(--board-2-rgb)); stroke: rgb(var(--chalk-rgb) / 0.6); stroke-width: 2; transition: stroke .25s, fill .25s; }
+.sv-mway .sv-bkey rect { fill: transparent; stroke: rgb(var(--chalk-rgb) / 0.28); stroke-width: 1; transition: fill .25s; }
+.sv-mway .sv-bkey text { fill: var(--chalk); font: 500 18px var(--sans); font-variant-numeric: tabular-nums; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.sv-mway .sv-bnode.sv-path .sv-bframe { stroke: var(--yellow); stroke-width: 2.5; }
+.sv-mway .sv-bnode.sv-sib .sv-bframe { stroke: var(--blue); stroke-width: 2.5; }
+.sv-mway .sv-bnode.sv-done .sv-bframe { fill: rgb(var(--green-rgb) / 0.16); stroke: rgb(var(--green-rgb) / 0.85); }
+.sv-mway .sv-bnode.sv-over .sv-bframe { fill: rgb(var(--coral-rgb) / 0.12); stroke: var(--coral); stroke-width: 3; stroke-dasharray: 7 4; }
+.sv-mway .sv-bnode.sv-under .sv-bframe { stroke: var(--coral); stroke-width: 2.5; stroke-dasharray: 4 4; }
+.sv-mway .sv-bnode.sv-bempty .sv-bframe { fill: none; stroke-dasharray: 4 4; }
+.sv-mway .sv-bkey.sv-cur rect { fill: rgb(var(--blue-rgb) / 0.28); }
+.sv-mway .sv-bkey.sv-up rect { fill: rgb(var(--yellow-rgb) / 0.34); }
+.sv-mway .sv-bkey.sv-swap rect { fill: rgb(var(--pink-rgb) / 0.3); }
+.sv-mway .sv-bkey.sv-new.sv-flash rect { animation: sv-bkey-flash 0.9s ease-out; }
+@keyframes sv-bkey-flash { from { fill: rgb(var(--yellow-rgb) / 0.65); } }
+.sv-picking .sv-mway [data-pick] { cursor: pointer; }
+.sv-picking .sv-mway [data-pick] rect { stroke: var(--lav); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.sv-picking .sv-mway [data-pick].sv-picked rect { stroke-dasharray: none; stroke-width: 3.5; }
+/* —— trace 的堆（第二期：结构体、指针、malloc / free、链表、二叉链表）——
+   结点是一排格子的框（一个成员一格），指针是从格子中心出发的箭头，NULL 写 ∧，没赋值的写 ?；
+   指针变量的名字写在结点上面（树写在左边），名字和箭头是蓝的，这一步变了的是黄的，指向已释放结点的是珊瑚色。
+   有堆的图时（.tr-heapy）：宽的地方代码在左、变量和堆在右；iPad 竖屏代码和变量并排，堆的图占满下面一整行。
+   按组件本身的宽度换（容器查询），课堂的板、课件里一样 */
+.tr-cq { container: trheap / inline-size; }
+.tr-wrap.tr-heapy { grid-template-columns: fit-content(46%) minmax(0, 1fr); grid-template-areas: "code state" "code heap"; grid-template-rows: auto 1fr; }
+.tr-wrap.tr-heapy > .tr-code { grid-area: code; }
+.tr-wrap.tr-heapy > .tr-state { grid-area: state; }
+.tr-wrap.tr-heapy > .tr-heap { grid-area: heap; }
+@container trheap (max-width: 980px) { .tr-wrap.tr-heapy { grid-template-columns: fit-content(64%) minmax(0, 1fr); grid-template-areas: "code state" "heap heap"; grid-template-rows: auto auto; } }
+@container trheap (max-width: 600px) { .tr-wrap.tr-heapy { grid-template-columns: minmax(0, 1fr); grid-template-areas: "code" "state" "heap"; } }
+.tr-heap { min-width: 0; }
+.tr-heap-svg { display: block; height: auto; overflow: visible; }
+.tr-heap-svg .tr-box { fill: rgb(var(--board-2-rgb)); stroke: rgb(var(--chalk-rgb) / 0.7); stroke-width: 1.8; transition: stroke .25s, fill .25s; }
+.tr-heap-svg .tr-div { stroke: rgb(var(--chalk-rgb) / 0.42); stroke-width: 1.2; }
+.tr-heap-svg .tr-hchg { fill: rgb(var(--yellow-rgb) / 0.24); }
+.tr-heap-svg .tr-cv { fill: var(--chalk); font: 500 15px var(--mono); text-anchor: middle; dominant-baseline: central; }
+.tr-heap-svg .tr-cv.tr-small { font-size: 11.5px; }
+.tr-heap-svg .tr-cv.tr-unset { fill: var(--muted); font-weight: 400; }
+.tr-heap-svg .tr-cv.tr-null { fill: rgb(var(--chalk-rgb) / 0.8); font: 600 16px var(--sans); }
+.tr-heap-svg .tr-dot { fill: rgb(var(--chalk-rgb) / 0.85); }
+.tr-heap-svg .tr-nid { fill: var(--muted); font: 11px var(--sans); }
+.tr-heap-svg .tr-arrow { stroke: rgb(var(--chalk-rgb) / 0.72); stroke-width: 1.8; fill: none; }
+.tr-heap-svg .tr-arrow.tr-arrow-new { stroke: var(--yellow); stroke-width: 2.4; }
+.tr-heap-svg .tr-arrow.tr-arrow-bad { stroke: var(--coral); stroke-dasharray: 5 4; }
+.tr-heap-svg .tr-arrow.tr-arrow-dead { stroke-dasharray: 3 4; opacity: .45; }
+.tr-heap-svg .tr-ah { fill: rgb(var(--chalk-rgb) / 0.72); }
+.tr-heap-svg .tr-ah-new { fill: var(--yellow); }
+.tr-heap-svg .tr-ah-bad { fill: var(--coral); }
+.tr-heap-svg .tr-ah-ptr { fill: var(--blue); }
+.tr-heap-svg .tr-plabel text { fill: var(--blue); font: 600 14px var(--mono); paint-order: stroke; stroke: rgb(var(--halo-rgb)); stroke-width: 4px; stroke-linejoin: round; }
+.tr-heap-svg .tr-plabel line { stroke: var(--blue); stroke-width: 1.6; }
+.tr-heap-svg .tr-plabel.tr-plabel-new text { fill: var(--yellow); }
+.tr-heap-svg .tr-plabel.tr-plabel-new line { stroke: var(--yellow); }
+.tr-heap-svg .tr-plabel.tr-plabel-bad text { fill: var(--coral); }
+.tr-heap-svg .tr-plabel.tr-plabel-bad line { stroke: var(--coral); }
+.tr-heap-svg .tr-node.tr-freed { opacity: .7; }
+.tr-heap-svg .tr-node.tr-freed .tr-box { stroke: var(--coral); stroke-dasharray: 5 4; fill: rgb(var(--coral-rgb) / 0.08); }
+.tr-heap-svg .tr-node.tr-leak .tr-box { stroke: var(--coral); stroke-width: 2.4; }
+.tr-heap-svg .tr-node:is(.tr-freed, .tr-leak) .tr-nid { fill: var(--coral); }
+.tr-heap-svg .tr-node.sv-new.sv-flash .tr-box { animation: tr-node-flash 0.9s ease-out; }
+@keyframes tr-node-flash { 0% { stroke: var(--yellow); stroke-width: 6; } 100% { stroke-width: 1.8; } }
+.tr-heap-svg .cmd-flash .tr-box { stroke: var(--flash); stroke-width: 3.5; }
+.tr-heap-cap { font: 12.5px var(--sans); color: var(--muted); margin-top: 2px; }
+.tr-heap-svg .tr-tname { fill: var(--chalk); font: 600 13px var(--mono); }
+.tr-heap-svg .tr-tidx { fill: var(--muted); font: 12px var(--mono); text-anchor: end; dominant-baseline: central; }
+/* 变量的小牌子里的指针、结构体变量（SqList L）的卡片 */
+.tr-var .tr-nullv { color: rgb(var(--chalk-rgb) / 0.8); }
+.tr-var .tr-wild { color: var(--muted); }
+.tr-var .tr-bad { color: var(--coral); margin-left: 2px; }
+.tr-var.tr-ptrv { color: var(--blue); border-color: rgb(var(--blue-rgb) / 0.4); }
+.tr-var.tr-ptrv.tr-chg { color: var(--yellow); border-color: var(--yellow); }
+.tr-st { border: 1.5px solid rgb(var(--chalk-rgb) / 0.22); border-radius: 12px; padding: 6px 10px 8px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tr-st-h { font: 600 14px var(--mono); color: var(--chalk); }
+.tr-st-h span { font: 12.5px var(--sans); color: var(--muted); margin-left: 4px; }
+.tr-st-h small { color: var(--pink); margin-left: 2px; }
+/* —— 线性结构与外部排序（engines/stack.js、cqueue.js、compress.js、extsort.js，画法在 linearview.js）—— */
+/* 希尔排序（sort 的 algo: shell）：同一组同一个颜色，和 array 组件的分组配色一样 */
+.sv-cell.sv-sg1 { background: var(--g1); } .sv-cell.sv-sg2 { background: var(--g2); } .sv-cell.sv-sg3 { background: var(--g3); }
+.sv-cell.sv-sg4 { background: var(--g4); } .sv-cell.sv-sg5 { background: var(--g5); } .sv-cell.sv-sg6 { background: var(--g6); }
+.sv-cell.sv-sg1, .sv-cell.sv-sg2, .sv-cell.sv-sg3, .sv-cell.sv-sg4, .sv-cell.sv-sg5, .sv-cell.sv-sg6 { color: var(--grp-ink); border-color: transparent; }
+.sv-cell.sv-cmp[class*="sv-sg"] { border-color: var(--yellow); }
+/* 格子、名字 */
+.ln-h { font: 13.5px/1.3 var(--sans); color: var(--muted); }
+.ln-cell {
+  min-width: 40px; height: 40px; padding: 0 8px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; position: relative;
+  border-radius: 8px; font: 500 18px/1 var(--sans); font-variant-numeric: tabular-nums; color: var(--chalk);
+  background: rgb(var(--shade-rgb) / 0.16); border: 2px solid rgb(var(--chalk-rgb) / 0.35); transition: background .25s, border-color .25s, opacity .25s;
+}
+.ln-cell.ln-op { color: var(--yellow); }
+.ln-cell.ln-ok { border-color: rgb(var(--green-rgb) / 0.7); background: rgb(var(--green-rgb) / 0.16); }
+.ln-cell.ln-bad { border-color: var(--coral); background: rgb(var(--coral-rgb) / 0.18); }
+.ln-cell.ln-in { opacity: .7; }
+.ln-cell.ln-hole { border-style: dashed; background: transparent; }
+.ln-cell.ln-frozen { border-style: dashed; color: var(--muted); }
+.ln-cell.ln-frozen::after { content: "下一段"; position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); font: 11px/1.2 var(--sans); color: var(--muted); white-space: nowrap; }
+/* 栈：竖着一摞，栈底在下，开口朝上 */
+.ln-main { display: flex; gap: 18px 22px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px; }
+.ln-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-right: 58px; }
+.ln-stack-box { display: flex; flex-direction: column-reverse; gap: 4px; padding: 4px 4px 5px; min-width: 56px; min-height: calc(var(--depth) * 44px); border: 2.5px solid rgb(var(--chalk-rgb) / 0.55); border-top: 0; border-radius: 0 0 10px 10px; }
+.ln-stack-box .ln-cell { width: 56px; }
+.ln-top { position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); font: 13px var(--sans); color: var(--blue); white-space: nowrap; pointer-events: none; }
+.ln-stack-empty { font-size: 13px; text-align: center; padding: 10px 0; }
+.ln-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; flex: 1 1 240px; }
+.ln-seq { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ln-seq + .ln-seq { margin-top: 6px; }
+.ln-seq-row { display: flex; flex-wrap: wrap; gap: 5px; min-height: 40px; align-items: center; }
+.ln-seq-empty { font-size: 14px; }
+/* 读到哪儿的输入带 */
+.ln-tape { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; font: 500 18px/1 var(--mono); }
+.ln-tape + .ln-tape { margin-top: 6px; }
+.ln-tape-h { font: 13.5px var(--sans); color: var(--muted); margin-right: 8px; }
+.ln-tok { min-width: 28px; height: 34px; padding: 0 5px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--chalk); border: 2px solid transparent; transition: color .25s, border-color .25s; }
+.ln-tok.ln-read { color: rgb(var(--chalk-rgb) / 0.38); }
+.ln-tok.ln-now { border-color: var(--yellow); background: rgb(var(--yellow-rgb) / 0.16); color: var(--chalk); }
+.ln-tok.ln-ok { color: var(--green); }
+.ln-tok.ln-bad { color: var(--coral); border-color: var(--coral); }
+.ln-verdict { font: 600 18px var(--sans); padding: 6px 16px; border-radius: 10px; width: max-content; }
+.ln-verdict.ln-ok { color: var(--green); background: rgb(var(--green-rgb) / 0.14); }
+.ln-verdict.ln-bad { color: var(--coral); background: rgb(var(--coral-rgb) / 0.14); }
+.ln-seqs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ln-chip { font: 14.5px var(--mono); padding: 3px 10px; border-radius: 8px; background: rgb(var(--shade-rgb) / 0.2); color: var(--body); border: 1px solid rgb(var(--chalk-rgb) / 0.2); }
+/* 置换-选择：工作区、输出的各段 */
+.ln-wa { margin-bottom: 14px; }
+.ln-fo { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.ln-fo .ln-seq { flex-direction: row; align-items: center; gap: 10px; }
+.ln-fo .ln-seq .ln-h { min-width: 3.8em; }
+.ln-fo .ln-seq + .ln-seq { margin-top: 0; }
+.ln-seq.ln-cur > .ln-h { color: var(--yellow); font-weight: 600; }
+/* 循环队列：一圈扇形格子，下标在里圈，front / rear 的箭头在外圈 */
+.ln-cq { display: flex; flex-direction: column; gap: 6px; }
+.ln-op-line { font: 600 15px var(--sans); color: var(--yellow); }
+.ln-op-line.ln-bad { color: var(--coral); }
+.ln-ring { display: block; height: auto; margin: 0 auto; overflow: visible; }
+.ln-ring .ln-slot path { fill: rgb(var(--shade-rgb) / 0.16); stroke: rgb(var(--chalk-rgb) / 0.4); stroke-width: 1.5; transition: fill .25s, stroke .25s; }
+.ln-ring .ln-slot.ln-full path { fill: rgb(var(--blue-rgb) / 0.22); }
+.ln-ring .ln-slot.ln-front path { stroke: var(--blue); stroke-width: 3; }
+.ln-ring .ln-slot.ln-rear path { stroke: var(--yellow); stroke-width: 3; stroke-dasharray: 6 4; }
+.ln-ring .ln-slot.ln-front.ln-rear path { stroke: var(--pink); stroke-dasharray: none; }
+.ln-ring .ln-slot.ln-bad path { fill: rgb(var(--coral-rgb) / 0.22); }
+.ln-ring .ln-slot-v { fill: var(--chalk); font: 600 17px var(--sans); text-anchor: middle; dominant-baseline: central; }
+.ln-ring .ln-slot-v.ln-old { fill: var(--muted); }
+.ln-ring .ln-slot-i { fill: var(--muted); font: 12px var(--sans); text-anchor: middle; dominant-baseline: central; }
+.ln-ring .ln-ptr line { stroke: rgb(var(--chalk-rgb) / 0.8); stroke-width: 2; }
+.ln-ring marker path { fill: rgb(var(--chalk-rgb) / 0.8); }
+.ln-ring .ln-ptr text { font: 600 15px var(--sans); dominant-baseline: central; }
+.ln-ring .ln-ptr-front { fill: var(--blue); }
+.ln-ring .ln-ptr-rear { fill: var(--yellow); }
+/* 特殊矩阵：A 的每个元素一格（要存的涂色），下面是一维数组 B（可以折行） */
+.ln-cp { display: flex; flex-direction: column; gap: 6px; }
+.ln-cp > .ln-h { margin-top: 4px; }
+.ln-mx { display: grid; grid-template-columns: 26px repeat(var(--n), 44px); gap: 3px; width: max-content; }
+.ln-mx-c { height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font: 14px var(--sans); color: var(--muted); border: 1.5px solid rgb(var(--chalk-rgb) / 0.14); transition: background .25s, border-color .25s, box-shadow .25s; }
+.ln-mx-c sub, .ln-b-c sub { font-size: 10px; }
+.ln-mx-h { border: 0; font-size: 12px; }
+.ln-mx-c.ln-st { color: var(--chalk); background: rgb(var(--blue-rgb) / 0.1); border-color: rgb(var(--blue-rgb) / 0.45); }
+.ln-mx-c.ln-filled { background: rgb(var(--blue-rgb) / 0.28); }
+.ln-mx-c.ln-mirror, .ln-mx-c.ln-const, .ln-mx-c.ln-zero { opacity: .6; border-style: dashed; }
+.ln-mx-c.ln-line, .ln-b-c.ln-line { border-color: var(--yellow); box-shadow: 0 0 0 2px rgb(var(--yellow-rgb) / 0.35); }
+.ln-mx-c.ln-before, .ln-b-c.ln-before { background: rgb(var(--yellow-rgb) / 0.24); }
+.ln-mx-c.ln-target, .ln-b-c.ln-target { border-color: var(--pink); box-shadow: 0 0 0 3px rgb(var(--pink-rgb) / 0.5); color: var(--chalk); opacity: 1; }
+.ln-mx-c.ln-use { border-color: var(--pink); border-style: solid; opacity: 1; }
+.ln-b { display: flex; flex-wrap: wrap; gap: 4px 3px; }
+.ln-b-w { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.ln-b-c { width: 46px; height: 34px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1.5px solid rgb(var(--chalk-rgb) / 0.3); font: 14px var(--sans); color: var(--chalk); transition: background .25s, border-color .25s; }
+.ln-b-c.ln-filled { background: rgb(var(--blue-rgb) / 0.2); }
+.ln-b-i { font: 11.5px var(--sans); color: var(--muted); }
+.ln-sketch { display: block; height: auto; overflow: visible; }
+.ln-sk-box { fill: none; stroke: rgb(var(--chalk-rgb) / 0.5); stroke-width: 1.5; }
+.ln-sk-st { fill: rgb(var(--blue-rgb) / 0.22); stroke: var(--blue); stroke-width: 1.5; }
+.ln-sk-before { fill: rgb(var(--yellow-rgb) / 0.35); }
+.ln-sk-dot { fill: var(--pink); }
+.ln-sk-t { fill: var(--pink); font: 600 14px var(--sans); }
+.ln-sk-ax { fill: var(--muted); font: 12px var(--sans); }
+.ln-sp { flex-direction: row; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+.ln-tt td.ln-tt-k { color: var(--muted); }
+.ln-tt-empty { padding: 8px 0; font-size: 14px; }
+/* 败者树、归并树：内部结点是方块（上面小字 ls[t]）或圆，叶子是方块（下面写 b0） */
+.ln-tn rect, .ln-forest .ln-tn circle { fill: rgb(var(--board-2-rgb)); stroke: rgb(var(--chalk-rgb) / 0.6); stroke-width: 2; transition: fill .25s, stroke .25s; }
+.ln-tn-h { fill: var(--muted); font: 11px var(--sans); text-anchor: middle; dominant-baseline: central; }
+.ln-tn-v { fill: var(--chalk); font: 600 14px var(--sans); text-anchor: middle; dominant-baseline: central; }
+.ln-champ rect { stroke: var(--green); }
+.ln-leaf rect { fill: rgb(var(--blue-rgb) / 0.16); stroke: rgb(var(--blue-rgb) / 0.7); stroke-width: 2; transition: fill .25s, stroke .25s; }
+.ln-leaf-v { fill: var(--chalk); font: 600 15px var(--sans); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.ln-leaf-n { fill: var(--muted); font: 12px var(--sans); text-anchor: middle; dominant-baseline: central; }
+.ln-tn.sv-cmp rect, .ln-leaf.sv-cmp rect, .ln-fnode.sv-cmp circle, .ln-fnode.sv-cmp rect { stroke: var(--yellow); stroke-width: 3; }
+.ln-win rect, .ln-win circle { fill: rgb(var(--green-rgb) / 0.3); stroke: var(--green); }
+.ln-virtual rect { stroke-dasharray: 5 4; fill: none; }
+g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path { animation: sv-node-flash 0.9s ease-out; }
+.sv-picking .sv-tree [data-pick] rect { stroke-dasharray: 5 3; stroke: var(--lav); }
+.sv-picking .sv-tree [data-pick].sv-picked rect { stroke-dasharray: none; stroke: var(--lav); stroke-width: 4; }

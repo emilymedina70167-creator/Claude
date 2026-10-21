@@ -1,13 +1,14 @@
-// 排序演示引擎（组件 sort）：直接插入、冒泡、简单选择、快速排序、二路归并、基数排序，一律按王道的代码走。
+// 排序演示引擎（组件 sort）：直接插入、希尔、冒泡、简单选择、快速排序、二路归并、基数排序，一律按王道的代码走。
 // 位置从 1 数（考题里的「第几个」）；重复的数在后面加 '（49'），看稳定性。纯函数，不碰 DOM（tests/stepper.test.js；常见错法在 tests/sorting.test.js）。
-import { parseArray } from '../sorting.js';
-import { arrayView, esc, itemText } from './arrayview.js';
+import { parseArray, parseGaps } from '../sorting.js';
+import { arrayView, esc, itemText, chips } from './arrayview.js';
 
 export const ALGOS = {
-  insert: '直接插入排序', bubble: '冒泡排序', select: '简单选择排序', quick: '快速排序', merge: '二路归并排序', radix: '基数排序',
+  insert: '直接插入排序', shell: '希尔排序', bubble: '冒泡排序', select: '简单选择排序', quick: '快速排序', merge: '二路归并排序', radix: '基数排序',
 };
 const ALIAS = {
   insert: 'insert', insertion: 'insert', 插入: 'insert', 直接插入: 'insert',
+  shell: 'shell', shellsort: 'shell', 希尔: 'shell',
   bubble: 'bubble', 冒泡: 'bubble',
   select: 'select', selection: 'select', 选择: 'select', 简单选择: 'select',
   quick: 'quick', quicksort: 'quick', 快排: 'quick', 快速: 'quick',
@@ -31,20 +32,22 @@ export function parse(fields) {
   if (algo === 'radix' && items.some((x) => !Number.isInteger(x.v) || x.v < 0)) throw new Error('基数排序只排非负整数');
   const pass = fields.pass === undefined || fields.pass === '' ? 1 : Number(fields.pass);
   if (!Number.isInteger(pass) || pass < 1) throw new Error(`pass: 写第几趟（从 1 数）（现在是「${fields.pass}」）`);
+  // 希尔排序才读 gaps:（别的算法写了 gaps:，字段检查会报「没有用上」）
+  if (algo === 'shell') return { algo, items, pass, gaps: parseGaps(fields.gaps, items.length) };
   return { algo, items, pass };
 }
 
 /** 跑一遍：{ steps: [{ view, msg, ask? }], passes: [每一趟结束后的序列（数组）] } */
 export function run(input) {
-  const f = { insert: insertion, bubble, select: selection, quick, merge, radix }[input.algo];
+  const f = { insert: insertion, shell: (A) => shell(A, input.gaps), bubble, select: selection, quick, merge, radix }[input.algo];
   const ok = f(input.items.map((x) => ({ ...x })));
   return input.mistake ? mistakeRun(input, ok) : ok;
 }
 
 // —— 常见错法 ——
 // 只拿来和学生写的比（外壳拿它说「像是……」），不用一步步的演示。每种错法：
-//   passes(a, ok)：从头到尾都按错法做，每一趟（快排是每一次划分）之后的序列（只有值）；ok 是正确的那一遍。mode: quiz / fill 比这个
-//   one(a, view, k)：先猜时学生看着的是正确的状态（view.A），在它上面按错法走第 k 趟（从 0 数）会写出什么
+//   passes(a, ok, input)：从头到尾都按错法做，每一趟（快排是每一次划分）之后的序列（只有值）；ok 是正确的那一遍。mode: quiz / fill 比这个
+//   one(a, view, k, input)：先猜时学生看着的是正确的状态（view.A），在它上面按错法走第 k 趟（从 0 数）会写出什么
 //   first: true：只有第 1 趟说得清（之后「按错法再走一趟」没有唯一的写法），只给第 1 趟的先猜
 //   都没有的（趟数数错、枢轴取错、先按高位分配）：先猜的题面已经写明了插第几个、哪个枢轴、按哪一位，不会这样错
 const MISTAKES = {
@@ -100,6 +103,8 @@ const MISTAKES = {
   radixMSD: { passes: (a) => { let A = a; const ps = []; for (let k = digitsOf(a) - 1; k >= 0; k--) ps.push(A = radixPass(A, k)); return ps; } },
   // 基数排序收集时同一个队列后进先出（队列画成竖着一摞，从上往下收）
   radixLIFO: { passes: (a) => { let A = a; const ps = []; for (let k = 0; k < digitsOf(a); k++) ps.push(A = radixPass(A, k, true)); return ps; }, one: (a, v, k) => radixPass(a, k, true) },
+  // 希尔排序按连续的段分组：d = 5 时把序列切成 5 段相邻的（每段各自排好），而不是相隔 5 的元素一组
+  shellBlock: { passes: (a, ok, input) => { const A = a.slice(); return input.gaps.map((d) => blockPass(A, d).slice()); }, one: (a, v, k, input) => blockPass(a, input.gaps[k]) },
 };
 
 function mistakeRun(input, ok) {
@@ -107,14 +112,14 @@ function mistakeRun(input, ok) {
   const a = input.items.map(vOf);
   // 趟数和正确的一样多：填表的行数对不上，外壳就不拿它比了。错法提前排完的照最后的样子补上，多走的不要
   const n = ok.passes.length;
-  const passes = M.passes(a, ok).slice(0, n);
+  const passes = M.passes(a, ok, input).slice(0, n);
   while (passes.length < n) passes.push((passes.at(-1) || a).slice());
   // 先猜：题面照抄正确的那一遍（外壳按题面找同一个问题），答案换成错法
   const steps = [{ view: { A: input.items.slice() }, msg: '' }];
   let k = 0;
   for (const s of ok.steps) {
     if (!s.ask || !PASS_ASKS.includes(s.ask.tag)) continue;
-    const got = M.one ? M.one(s.view.A.map(vOf), s.view, k) : M.first && k === 0 ? passes[0] : null;
+    const got = M.one ? M.one(s.view.A.map(vOf), s.view, k, input) : M.first && k === 0 ? passes[0] : null;
     k++;
     if (got) steps.push({ view: s.view, msg: '', ask: { ...s.ask, answer: got.join(' ') } });
   }
@@ -179,6 +184,18 @@ function mergeOddPass(A, segs) {
   return out;
 }
 
+// 希尔排序的错法：按连续的段分组。n 个元素尽量平均切成 d 段（前面的段多一个），每段各自排好；d = 1 就是整个排一遍
+function blockPass(A, d) {
+  const n = A.length, q = Math.floor(n / d), r = n % d;
+  let s = 0;
+  for (let g = 0; g < d; g++) {
+    const len = q + (g < r ? 1 : 0);
+    A.splice(s, len, ...A.slice(s, s + len).sort((x, y) => x - y));
+    s += len;
+  }
+  return A;
+}
+
 // 基数排序的一趟：按第 k 位（0 是个位）分配到 0～9 号队列再收集；lifo：同一个队列里后放进去的先收（错法）
 const digitsOf = (a) => Math.max(1, ...a.map((x) => String(x).length));
 function radixPass(A, k, lifo = false) {
@@ -230,6 +247,61 @@ function insertion(A) {
   }
   steps.push({ view: { A: A.slice(), cls: clsFor(range(1, n), 'sv-done'), zero: { label: '哨兵', item: null } }, msg: `排序完成，一共 ${n - 1} 趟。` });
   return { steps, passes };
+}
+
+// —— 希尔排序（王道的 ShellSort：增量 d 从 n/2 开始每次减半，也可以自己给；相隔 d 的元素是一组，组内直接插入）——
+//   for(d=n/2;d>=1;d=d/2) for(i=d+1;i<=n;++i) if(A[i]<A[i-d]){ A[0]=A[i]; for(j=i-d;j>0&&A[0]<A[j];j-=d) A[j+d]=A[j]; A[j+d]=A[0]; }
+// 代码里 i 是轮流处理各组的（i = d+1 是第 1 组，i = d+2 是第 2 组……），各组互不相干，所以一组一组排完的结果和代码一样；
+// 演示一组一步，看得清哪几个是一组
+const shellGroups = (n, d) => Array.from({ length: Math.min(d, n) }, (_, g) => range(0, Math.floor((n - 1 - g) / d)).map((k) => g + 1 + k * d));
+const groupCls = (n, d) => { const o = {}; shellGroups(n, d).forEach((ps, g) => ps.forEach((p) => { o[p] = `sv-sg${(g % 6) + 1}`; })); return o; };
+const groupRow = (n, d) => range(1, n).map((p) => String(((p - 1) % d) + 1));
+function shell(A, gaps) {
+  const n = A.length;
+  const steps = [], passes = [];
+  const gs = (ps) => ps.map((p) => `${p}`).join('、');
+  steps.push({ view: { A: A.slice() }, msg: `初始序列。希尔排序：先取一个增量 d，把相隔 d 的元素分成一组（第 1、1+d、1+2d……个是一组），每组内部做直接插入排序；然后缩小 d 再来一趟，最后一趟 d = 1。这里的增量依次是 ${gaps.join('、')}。` });
+  gaps.forEach((d, k) => {
+    const pass = k + 1;
+    const groups = shellGroups(n, d);
+    const base = { gap: d, groups: groupRow(n, d) };
+    const after = A.slice();
+    for (const ps of groups) { const vals = ps.map((p) => after[p - 1]); insertSorted(vals); ps.forEach((p, i) => { after[p - 1] = vals[i]; }); }
+    steps.push({
+      view: { A: A.slice(), cls: groupCls(n, d), ...base },
+      msg: d === 1 ? `第 ${pass} 趟：d = 1，整个序列是一组，做一次直接插入排序（前面几趟已经让它基本有序，这一趟挪得很少）。` : `第 ${pass} 趟：d = ${d}，分成 ${groups.length} 组（同色是一组）：${groups.map((ps) => `{${gs(ps)}}`).join('、')}。每组内部做直接插入排序。`,
+      ask: { tag: 'pass', kind: 'text', q: `第 ${pass} 趟（d = ${d}）结束后，序列是什么？`, answer: seqOf(after) },
+    });
+    groups.forEach((ps, g) => {
+      if (ps.length < 2) return;
+      const before = ps.map((p) => A[p - 1]);
+      const vals = before.slice();
+      insertSorted(vals);
+      const moved = ps.filter((p, i) => vals[i] !== before[i]);
+      ps.forEach((p, i) => { A[p - 1] = vals[i]; });
+      // 正在排的这一组框出来，别的组照样上色、淡下去
+      const cls = groupCls(n, d);
+      for (let p = 1; p <= n; p++) cls[p] += ps.includes(p) ? ' sv-cmp' : ' sv-out';
+      steps.push({
+        view: { A: A.slice(), cls, fresh: moved, ...base },
+        msg: d === 1 ? `整个序列做直接插入排序：${before.map(t).join(', ')} → ${vals.map(t).join(', ')}。` : `第 ${g + 1} 组（第 ${gs(ps)} 个）：${before.map(t).join(', ')}${moved.length ? ` → ${vals.map(t).join(', ')}` : '，已经有序，不用动'}。`,
+      });
+    });
+    passes.push(A.map(vOf));
+    steps.push({ view: { A: A.slice(), cls: groupCls(n, d), ...base }, msg: `第 ${pass} 趟（d = ${d}）结束：${A.map(t).join(' ')}。${d === 1 ? '' : `每一组（同色）内部都有序了，整个序列还没有。`}` });
+  });
+  steps.push({ view: { A: A.slice(), cls: clsFor(range(1, n), 'sv-done') }, msg: `排序完成，一共 ${gaps.length} 趟。希尔排序不稳定：相同的数分在不同的组里，可能换了先后。` });
+  return { steps, passes };
+}
+// 一组里做直接插入（稳定：相等的不往前挪）
+function insertSorted(a) {
+  for (let i = 1; i < a.length; i++) {
+    const x = a[i];
+    let j = i - 1;
+    while (j >= 0 && vOf(a[j]) > vOf(x)) { a[j + 1] = a[j]; j--; }
+    a[j + 1] = x;
+  }
+  return a;
 }
 
 // —— 冒泡排序（王道：每趟从后往前，小的往前冒；一趟没交换就提前结束）——
@@ -419,7 +491,10 @@ function radix(A) {
 }
 
 export function view(s, input) {
-  let h = arrayView(s.A, { cls: s.cls, ptr: s.ptr, zero: s.zero, lo: s.lo ?? null, hi: s.hi ?? null, fresh: s.fresh, keys: true });
+  // 希尔排序：下面一行写每个位置是第几组，旁边写这一趟的增量
+  const extra = s.groups ? [{ label: '组', cells: s.groups }] : [];
+  let h = arrayView(s.A, { cls: s.cls, ptr: s.ptr, zero: s.zero, lo: s.lo ?? null, hi: s.hi ?? null, fresh: s.fresh, keys: true, extra });
+  if (s.gap) h += chips([['增量 d', s.gap]]);
   if (s.digit !== undefined && !s.buckets) {
     // 基数排序：数下面标出这一趟看的那一位
     h += `<div class="sv-digits" style="--cols:${s.A.length}">${s.A.map((x) => { const str = String(x.v); const k = str.length - 1 - s.digit; return `<div>${k >= 0 ? `${esc(str.slice(0, k))}<b>${esc(str[k])}</b>${esc(str.slice(k + 1))}` : `<b>0</b>${esc(str)}`}</div>`; }).join('')}</div>`;
@@ -434,7 +509,7 @@ export function quiz(input, r) {
   const k = Math.min(input.pass, r.passes.length);
   const unit = input.algo === 'quick' ? `第 ${k} 次划分` : `第 ${k} 趟`;
   return {
-    q: `对上面的序列做${ALGOS[input.algo]}（升序${input.algo === 'quick' ? '，王道的划分方法：枢轴取区间第一个' : ''}），写出${unit}结束后的序列。`,
+    q: `对上面的序列做${ALGOS[input.algo]}（升序${input.algo === 'quick' ? '，王道的划分方法：枢轴取区间第一个' : input.algo === 'shell' ? `，增量依次是 ${input.gaps.join('、')}` : ''}），写出${unit}结束后的序列。`,
     qhtml: arrayView(input.items, { pick: false }),
     type: 'seq',
     answer: r.passes[k - 1].join(' '),
@@ -446,6 +521,7 @@ export function problems(input, r) {
   const out = [];
   if (v.every((x, i) => i === 0 || v[i - 1] <= x)) out.push('array: 已经是升序的，演示里几乎看不到元素怎么动，换一组乱一点的数');
   if (input.pass > r.passes.length) out.push(`pass: ${input.pass} 超过了实际的趟数（${r.passes.length} 趟），按最后一趟出题`);
+  if (input.algo === 'shell' && input.gaps.at(-1) !== 1) out.push(`gaps: 最后一个增量要是 1（现在是 ${input.gaps.join('、')}），不然最后不一定有序`);
   return out;
 }
 
@@ -453,16 +529,19 @@ export function problems(input, r) {
 export function table(input, r) {
   const unit = input.algo === 'quick' ? '次划分' : '趟';
   return {
-    q: `对上面的序列做${ALGOS[input.algo]}（升序${input.algo === 'quick' ? '，王道的划分方法：枢轴取区间第一个' : input.algo === 'bubble' ? '，王道的冒泡：每趟从后往前，小的往前冒' : ''}），写出每一${unit}结束后的序列。`,
+    q: `对上面的序列做${ALGOS[input.algo]}（升序${input.algo === 'quick' ? '，王道的划分方法：枢轴取区间第一个' : input.algo === 'bubble' ? '，王道的冒泡：每趟从后往前，小的往前冒' : input.algo === 'shell' ? `，增量依次是 ${input.gaps.join('、')}` : ''}），写出每一${unit}结束后的序列。`,
     qhtml: arrayView(input.items, { pick: false }),
     dir: 'row',
     head: input.items.map((_, i) => `${i + 1}`),
-    rows: r.passes.map((p, k) => ({ label: `第 ${k + 1} ${unit}`, cells: p.map((v) => ({ v: [String(v), `${v}′`, `${v}'`] })) })),
+    rows: r.passes.map((p, k) => ({ label: `第 ${k + 1} ${unit}${input.algo === 'shell' ? `（d = ${input.gaps[k]}）` : ''}`, cells: p.map((v) => ({ v: [String(v), `${v}′`, `${v}'`] })) })),
   };
 }
 
 // 常见错法（只给老师看）。先后有用：同一个答案两种错法都对得上时，说前面那种
 const VARIANTS = {
+  shell: [
+    ['shellBlock', '像是把相邻的元素分成了一组，每组是连续的一段（王道：相隔增量 d 的元素才是一组，第 1、1+d、1+2d……个）'],
+  ],
   insert: [
     ['insertCount', '像是把第 1 个元素自己也算成了一趟，写的第 k 趟其实是第 k−1 趟（王道：第 1 个元素自己就是有序表，第 1 趟是插入第 2 个，一共 n−1 趟）'],
   ],

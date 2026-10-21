@@ -195,3 +195,31 @@ test('排序错法：基数排序先按最高位分配、同一个队列后进�
   // 一位数：哪种错法都和正确的一样，不列
   assert.deepEqual(sortEngine.variants(sortEngine.parse({ algo: 'radix', array: '3 1 2 1' })), []);
 });
+
+// —— 希尔排序并进 sort（algo: shell）——
+test('sort 的希尔排序：王道的 49 38 65 97 76 13 27 49′ 55 04，d = 5、3、1', () => {
+  const E = sortEngine;
+  const input = E.parse({ algo: 'shell', array: "49 38 65 97 76 13 27 49' 55 04", gaps: '5 3 1' });
+  const r = E.run(input);
+  // d = 5：13 27 49′ 55 04 49 38 65 97 76；d = 3：13 04 49′ 38 27 49 55 65 97 76；d = 1：排好
+  assert.deepEqual(r.passes.map((p) => p.join(' ')), ['13 27 49 55 4 49 38 65 97 76', '13 4 49 38 27 49 55 65 97 76', '4 13 27 38 49 49 55 65 76 97']);
+  // 不稳定：49′ 跑到了 49 前面
+  const last = r.steps.at(-1).view.A;
+  assert.ok(last.findIndex((x) => x.mark) < last.findIndex((x) => x.v === 49 && !x.mark));
+  // 不写 gaps：n/2 每次减半，和 shellsort 组件一样
+  const d = E.parse({ algo: 'shell', array: WD });
+  assert.deepEqual(d.gaps, [4, 2, 1]);
+  assert.deepEqual(E.run(d).passes.map((p) => p.join(' ')), shellRun(parseArray(WD), [4, 2, 1]).states.map((s) => s.A.map((x) => x.v).join(' ')));
+  assert.throws(() => E.parse({ algo: 'shell', array: '3 1 2', gaps: '5 1' }), /小于/);
+});
+
+test('希尔排序的错法：按连续的段分组', () => {
+  const d = diagnose({ algo: 'shell', array: "49 38 65 97 76 13 27 49' 55 04", gaps: '5 3 1', pass: '1' });
+  const v = d.variant(/连续的一段/);
+  // d = 5 时切成 5 段相邻的两个：(49 38)(65 97)(76 13)(27 49′)(55 04) 各自排好
+  assert.equal(d.answerOf(v), '38 49 65 97 13 76 27 49 4 55');
+  assert.equal(d.quiz('38 49 65 97 13 76 27 49 4 55'), v.label);
+  assert.equal(d.quiz('13 27 49 55 4 49 38 65 97 76'), '', '正确答案');
+  assert.equal(d.ask(d.passAsk(1), '38 49 65 97 13 76 27 49 4 55'), v.label);
+  assert.equal(d.fill(cellsOf(tableOf(v))), v.label);
+});

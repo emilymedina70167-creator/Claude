@@ -1,0 +1,137 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>线性结构与外部排序</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+subject: 数据结构
+unit: 线性结构与外部排序
+---
+
+# 线性结构与外部排序
+
+栈的应用、循环队列、特殊矩阵的压缩存储、希尔排序、外部排序。每一个都是「一步步走」的演示：你只写输入，每一步由页面算；写了 `ask:` 的，走到那一步之前先让你猜。
+
+## 1. 栈的应用
+
+```stack
+id: st-infix
+title: 中缀转后缀
+infix: a + b * (c - d) / e
+ask: pop, out
+```
+
+```stack
+id: st-post
+title: 后缀表达式求值
+postfix: 1 2 3 * + 4 -
+ask: top
+```
+
+```stack
+id: st-br
+title: 括号匹配
+brackets: {[()()]}
+ask: match
+```
+
+```stack
+id: st-legal
+title: 出栈序列合法吗
+push: 1 2 3 4
+pop: 3 2 4 1
+ask: legal
+```
+
+```stack
+id: st-cat
+title: 4 个元素有几种出栈序列
+count: 4
+ask: count
+```
+
+## 2. 循环队列
+
+```cqueue
+id: cq-spare
+title: 牺牲一个单元
+size: 6
+ops: enqueue a b c d e, dequeue 2, enqueue f g h
+ask: rear, full
+```
+
+```cqueue
+id: cq-tag
+title: 增设 tag（画成一排）
+size: 5
+full: tag
+front: 3
+rear: 1
+ops: dequeue, enqueue x y z
+draw: row
+mode: fill
+```
+
+## 3. 特殊矩阵的压缩存储
+
+```compress
+id: cp-sym
+title: 对称矩阵：a[3][4] 在哪
+matrix: symmetric 5
+at: 3 4
+ask: index, line
+```
+
+```compress
+id: cp-tri
+title: 三对角矩阵（100 阶）
+matrix: tridiagonal 100
+at: 30 30
+ask: index
+```
+
+```compress
+id: cp-sp
+title: 稀疏矩阵的三元组表
+matrix: sparse
+data: 0 0 3 0; 0 5 0 0; 7 0 0 2
+ask: triple
+```
+
+## 4. 希尔排序
+
+```sort
+id: s-shell
+title: 希尔排序：d = 5, 3, 1
+algo: shell
+array: 49 38 65 97 76 13 27 49' 55 04
+gaps: 5 3 1
+ask: pass
+```
+
+## 5. 外部排序
+
+```extsort
+id: ex-loser
+title: 败者树
+loser: 17 5 10 29 15
+next: 44 12
+ask: loser
+```
+
+```extsort
+id: ex-rep
+title: 置换-选择排序
+replace: 51 94 37 92 14 63 15 99 48 56 23 60 31 17 43 8 90 166 100
+work: 3
+ask: out
+```
+
+```extsort
+id: ex-tree
+title: 最佳归并树（3 路）
+merge: 9 30 12 18 3 17 2 6 24
+k: 3
+ask: virtual, merge, io
+```
+</script>
