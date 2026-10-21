@@ -231,9 +231,10 @@ export function table(input) {
   return { q: `依次执行下面的操作${rule ? `（${rule}）` : ''}，写出每做完一个以后的 S 数组${hasFind ? '，Find 再写出结果' : ''}。根写负数。`, qhtml: view(run({ ...input, ops: [] }).steps[0].view, input), dir: 'row', head, rows, copy: true };
 }
 
-export function problems(input) {
+export function problems(input, r) {
   const out = [];
-  if (input.compress && !input.ops.some((o) => o.op === 'find') && !input.ops.some((o) => o.op === 'union')) out.push('compress: true 只在 Find 时起作用');
+  // 写了路径压缩，却没有一次 Find 的路径超过一条边：演示里看不到压缩
+  if (input.compress && !r.steps.some((st) => /^(路径压缩|两次 Find 顺带)/.test(st.msg))) out.push('compress: true 在这组操作里没起作用：每次 Find 的路径都不超过一条边，没有能压缩的。要演示路径压缩，先用 union 3 4, union 2 3, union 1 2 这样连成一条链，再 find 4');
   return out;
 }
 

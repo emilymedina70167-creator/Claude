@@ -146,7 +146,7 @@ export function run(input) {
     if (kind === 'lower' || kind === 'upper') steps.push({ view: { filled: cnt, constant: true, target: at ? locate(input, at[0], at[1], null) : null }, msg: `${kind === 'lower' ? '上' : '下'}三角区的常数 c 只存一次，放在最后：B[${from + cnt - 1}]。` });
     if (at) {
       const right = locate(input, at[0], at[1], null);
-      steps.push({ view: { filled: cnt, target: right, show: 'check' }, msg: right.k === null ? `对照：a[${at[0]}][${at[1]}] 在三条对角线外面，是 0，B 里没有它。` : `对照：a[${at[0]}][${at[1]}]${right.swapped ? `（就是 ${aName(input, ...right.use)}）` : right.constant ? '（常数 c）' : ''} 确实在 B[${right.k}]。` });
+      steps.push({ view: { filled: cnt, target: right, show: 'check' }, msg: right.k === null ? `对照：a[${at[0]}][${at[1]}] 在三条对角线外面，是 0，B 里没有它。` : `对照：a[${at[0]}][${at[1]}]${right.swapped ? `（就是 ${aName(input, ...right.use)}）` : right.constant ? '（常数 c）' : ' '}确实在 B[${right.k}]。` });
     }
   }
   return { steps, cnt, L, region };
@@ -206,7 +206,7 @@ function runSparse(input) {
 }
 
 // —— 画面 ——
-const sub = (input, I, J) => { const [i, j] = ij(input, I, J); const big = i >= 10 || j >= 10; return `a<sub>${i}${big ? ',' : ''}${j}</sub>`; };
+const sub = (input, I, J) => { const [i, j] = ij(input, I, J); const big = i >= 10 || j >= 10; return `<span>a<sub>${i}${big ? ',' : ''}${j}</sub></span>`; };
 
 export function view(s, input) {
   if (input.kind === 'sparse') return sparseView(s, input);
@@ -215,6 +215,7 @@ export function view(s, input) {
   const cnt = total(region, n) + (kind === 'lower' || kind === 'upper' ? 1 : 0);
   const T = s.target;
   if (n > SMALL) return bigView(s, input, T, cnt);
+  // 只给题（quiz / fill）：只画 A，不画 B（B 有几格就是答案之一）
   // 每个元素在 B 里的位置（正确的那一种存法）
   const pos = {};
   let k = 0;
@@ -240,7 +241,7 @@ export function view(s, input) {
       if (beforeSet.has(key)) cls.push('ln-before');
       if (T && T.I === I && T.J === J) cls.push('ln-target');
       if (T && useKey === key && T.swapped) cls.push('ln-use');
-      mx += `<div class="${cls.join(' ')}" data-label="${esc(label.replace(/<\/?sub>/g, ''))}">${label}</div>`;
+      mx += `<div class="${cls.join(' ')}" data-label="${esc(label.replace(/<[^>]+>/g, ''))}">${label}</div>`;
     }
   }
   mx += '</div>';
@@ -256,6 +257,7 @@ export function view(s, input) {
   }
   b += '</div>';
   const ch = chips([['B 的长度', cnt], ...(T && !T.zero && s.show ? [['k', `${from} + ${T.m} = ${T.k}`]] : [])]);
+  if (s.noB) return `<div class="ln-cp"><div class="ln-h">A（${KIND[kind]}，${n} 阶）</div>${mx}</div>`;
   return `<div class="ln-cp"><div class="ln-h">A（${KIND[kind]}，${n} 阶）</div>${mx}<div class="ln-h">B（${order === 'row' ? '行' : '列'}优先）</div>${b}${ch}</div>`;
 }
 
@@ -282,7 +284,7 @@ function bigView(s, input, T, cnt) {
   h += `<text class="ln-sk-ax" x="${o}" y="${o - 10}">1</text><text class="ln-sk-ax" x="${o + S}" y="${o - 10}" text-anchor="end">${n}</text><text class="ln-sk-ax" x="${o - 8}" y="${o + S}" text-anchor="end">${n}</text>`;
   const svg = `<svg class="ln-sketch" viewBox="0 0 ${S + 2 * o + 70} ${S + 2 * o}" width="${S + 2 * o + 70}" style="max-width:100%" role="img" aria-label="${KIND[kind]}示意"><defs><clipPath id="ln-clip"><path d="${shape}"/></clipPath></defs>${h}</svg>`;
   const kText = T && !T.zero && s.show ? [['k', `${from} + ${T.m} = ${T.k}`]] : [];
-  return `<div class="ln-cp"><div class="ln-h">A（${KIND[kind]}，${n} 阶，涂色的是要存的）</div>${svg}${chips([['B', `B[${from}]～B[${from + cnt - 1}]，一共 ${cnt} 个`], ...kText])}</div>`;
+  return `<div class="ln-cp"><div class="ln-h">A（${KIND[kind]}，${n} 阶，涂色的是要存的）</div>${svg}${s.noB ? '' : chips([['B', `B[${from}]～B[${from + cnt - 1}]，一共 ${cnt} 个`], ...kText])}</div>`;
 }
 
 function sparseView(s, input) {
@@ -310,8 +312,9 @@ function sparseView(s, input) {
 export function quiz(input, r) {
   if (input.kind === 'sparse') return { q: `把上面的稀疏矩阵按${input.order === 'row' ? '行' : '列'}优先写成三元组表（行列号从 ${input.base} 数）：每个三元组写「行 列 值」，依次连起来写成一串。`, qhtml: sparseView({ got: 0 }, input), type: 'seq', answer: r.list.map((t) => `${t.i} ${t.j} ${t.v}`).join(' ') };
   const head = `${input.n} 阶${KIND[input.kind]}${input.kind === 'symmetric' ? `（存${input.store === 'lower' ? '下' : '上'}三角）` : ''}按${input.order === 'row' ? '行' : '列'}优先压缩存进一维数组 B[${input.from}…]，A 的行列号从 ${input.base} 数。`;
-  if (!input.at || r.L.k === null) return { q: `${head}B 一共要存多少个元素？`, type: 'seq', answer: String(r.cnt) };
-  return { q: `${head}a[${input.at[0]}][${input.at[1]}] 存在 B 的哪个位置？写下标 k。`, type: 'seq', answer: String(r.L.k) };
+  const qhtml = view({ filled: 0, noB: true }, input);
+  if (!input.at || r.L.k === null) return { q: `${head}B 一共要存多少个元素？`, qhtml, type: 'seq', answer: String(r.cnt) };
+  return { q: `${head}a[${input.at[0]}][${input.at[1]}] 存在 B 的哪个位置？写下标 k。`, qhtml, type: 'seq', answer: String(r.L.k) };
 }
 
 // —— mode: fill：每一行（列）存在 B 的哪一段；最后写 B 的长度、a[i][j] 的下标 ——
@@ -337,6 +340,7 @@ export function table(input, r) {
   if (input.at && r.L.k !== null) extra.push({ label: `a[${input.at[0]}][${input.at[1]}] 的下标`, v: String(r.L.k), num: true });
   return {
     q: `${n} 阶${KIND[input.kind]}${input.kind === 'symmetric' ? `（存${input.store === 'lower' ? '下' : '上'}三角）` : ''}按${order === 'row' ? '行' : '列'}优先存进 B（从 B[${input.from}] 开始），A 的行列号从 ${input.base} 数。写出每${order === 'row' ? '一行' : '一列'}存的元素在 B 里从哪个下标到哪个下标。`,
+    qhtml: view({ filled: 0, noB: true }, input),
     dir: 'row', head: ['从 B[ ]', '到 B[ ]'],
     rows, extra,
   };

@@ -136,6 +136,24 @@ function inspectInPage(scopeSel) {
   return out;
 }
 
+// 一个演示组件里 SVG 的字有没有叠（在页面里跑）：叠了的写成「甲」和「乙」
+function measureOverlaps(el) {
+  const res = [];
+  for (const svg of el.querySelectorAll('svg')) {
+    const texts = [...svg.querySelectorAll('text')].filter((t) => t.textContent.trim() && t.getBoundingClientRect().width > 0);
+    const rects = texts.map((t) => t.getBoundingClientRect());
+    for (let a = 0; a < texts.length; a++) for (let b = a + 1; b < texts.length; b++) {
+      const p = rects[a], q = rects[b];
+      const ww = Math.min(p.right, q.right) - Math.max(p.left, q.left), hh = Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top);
+      if (ww <= 0 || hh <= 0) continue;
+      if (texts[a].textContent === texts[b].textContent && Math.abs(p.left - q.left) < 1.5 && Math.abs(p.top - q.top) < 1.5) continue;
+      if (ww * hh < 0.25 * Math.min(p.width * p.height, q.width * q.height)) continue;
+      res.push(`「${texts[a].textContent.trim().slice(0, 12)}」和「${texts[b].textContent.trim().slice(0, 12)}」`);
+    }
+  }
+  return res;
+}
+
 // 演示组件一步步走到底：碰到「先猜」就点「想不出来」，每走一步看一次图里的字有没有叠
 async function walkSteppers(page) {
   const n = await page.locator('.sv-widget').count();
@@ -153,22 +171,16 @@ async function walkSteppers(page) {
       if (!(await next.isVisible()) || !(await next.isEnabled())) break;
       // 课堂里翻板、quiz 收起过程时按钮会在点之前藏起来：点不到就不走了（不算页面的错）
       try { await next.click({ timeout: 3000 }); } catch { break; }
-      const o = await w.evaluate((el) => {
-        const res = [];
-        for (const svg of el.querySelectorAll('svg')) {
-          const texts = [...svg.querySelectorAll('text')].filter((t) => t.textContent.trim() && t.getBoundingClientRect().width > 0);
-          const rects = texts.map((t) => t.getBoundingClientRect());
-          for (let a = 0; a < texts.length; a++) for (let b = a + 1; b < texts.length; b++) {
-            const p = rects[a], q = rects[b];
-            const ww = Math.min(p.right, q.right) - Math.max(p.left, q.left), hh = Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top);
-            if (ww <= 0 || hh <= 0) continue;
-            if (texts[a].textContent === texts[b].textContent && Math.abs(p.left - q.left) < 1.5 && Math.abs(p.top - q.top) < 1.5) continue;
-            if (ww * hh < 0.25 * Math.min(p.width * p.height, q.width * q.height)) continue;
-            res.push(`「${texts[a].textContent.trim().slice(0, 12)}」和「${texts[b].textContent.trim().slice(0, 12)}」`);
-          }
-        }
-        return res;
-      });
+      // 先量一次；量到叠着的，等这一步的滑动（morph 的 Web Animations，几百毫秒）走完再量：滑到一半时字会暂时叠着，不是真问题。
+      // 颜色闪烁（CSS 动画、过渡）不挪位置，不等
+      let o = await w.evaluate(measureOverlaps);
+      if (o.length) {
+        await w.evaluate((el) => {
+          const moving = el.getAnimations({ subtree: true }).filter((a) => !(a instanceof CSSAnimation) && !(a instanceof CSSTransition) && a.effect?.getComputedTiming?.().iterations !== Infinity);
+          return Promise.race([Promise.all(moving.map((a) => a.finished.catch(() => {}))), new Promise((r) => setTimeout(r, 1000))]);
+        });
+        o = await w.evaluate(measureOverlaps);
+      }
       const name = await w.evaluate((el) => [...(el.closest('.block')?.classList || [])].find((c) => c.startsWith('block-'))?.slice(6) || 'stepper');
       for (const x of o) overlaps.push(`${name} 第 ${k + 1} 步：${x} 叠在一起`);
     }

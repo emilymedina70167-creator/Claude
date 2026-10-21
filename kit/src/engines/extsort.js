@@ -280,7 +280,8 @@ export function huffman(lens, k, virt) {
     merges.push({ take: kids, id, before, after: order.slice() });
   }
   const wpl = nodes.filter((x) => !x.leaf).reduce((s, x) => s + x.v, 0);
-  return { nodes, merges, wpl, root: order[0], start };
+  const height = (id) => (nodes[id].kids.length ? 1 + Math.max(...nodes[id].kids.map(height)) : 0);
+  return { nodes, merges, wpl, root: order[0], start, R: height(order[0]) };
 }
 
 function runMerge(input) {
@@ -294,9 +295,9 @@ function runMerge(input) {
   const steps = [];
   const leafIds = T.start.filter((x) => !T.nodes[x].virtual);
   const u = (n - 1) % (k - 1);
-  steps.push({ view: { roots: leafIds, nodes: T.nodes }, msg: `${n} 个初始归并段，长度（记录数）是 ${lens.join('、')}，做 ${k} 路归并。最佳归并树就是 ${k} 叉哈夫曼树：每次把最短的 ${k} 段归并成一段，让长的段少参加几趟归并。` });
+  steps.push({ view: { roots: leafIds, nodes: T.nodes, R: T.R }, msg: `${n} 个初始归并段，长度（记录数）是 ${lens.join('、')}，做 ${k} 路归并。最佳归并树就是 ${k} 叉哈夫曼树：每次把最短的 ${k} 段归并成一段，让长的段少参加几趟归并。` });
   steps.push({
-    view: { roots: T.start, nodes: T.nodes, fresh: Array.from({ length: virt }, (_, i) => n + i) },
+    view: { roots: T.start, nodes: T.nodes, R: T.R, fresh: Array.from({ length: virt }, (_, i) => n + i) },
     msg: `先看要不要补虚段：严格 ${k} 叉树要求 (n − 1) % (k − 1) = 0。这里 (${n} − 1) % (${k} − 1) = ${u}，${u === 0 ? '正好为 0，不用补。' : `不为 0，要补 ${k} − 1 − ${u} = **${virt}** 个长度为 0 的虚段（虚线框），它们最先被合并。`}`,
     ask: { tag: 'virtual', kind: 'number', q: `${n} 个初始归并段做 ${k} 路归并，要补几个虚段？`, answer: mv },
   });
@@ -304,15 +305,15 @@ function runMerge(input) {
     const after = m.after;
     const combos = pickAlts(m.before, m.take, T.nodes);
     steps.push({
-      view: { roots: after, nodes: T.nodes, took: m.take, fresh: [m.id] },
+      view: { roots: after, nodes: T.nodes, R: T.R, took: m.take, fresh: [m.id] },
       msg: `第 ${j + 1} 次：最短的 ${m.take.length} 段是 ${m.take.map((x) => T.nodes[x].v).sort((a, b) => a - b).join('、')}，归并成长 ${T.nodes[m.id].v} 的一段。`,
-      // 选哪几段：错法也照正确的画面问（答案一样，认不出错法，只是让「答案和对的完全一样」的错法照样被筛掉）
-      ...({ ask: { tag: 'merge', kind: 'pick', count: m.take.length, q: `第 ${j + 1} 次归并：选哪 ${m.take.length} 段？在图上点出来（点最上面的那一层）。`, answer: m.take.map((x) => `n${x}`), alts: combos, display: m.take.map((x) => T.nodes[x].v).sort((a, b) => a - b).join('、') } }),
+      // 选哪几段：错法的那一遍也照正确的画面问（答案一样，认不出错法；少了这一问，「答案和对的完全一样」的错法就筛不掉）
+      ask: { tag: 'merge', kind: 'pick', count: m.take.length, q: `第 ${j + 1} 次归并：选哪 ${m.take.length} 段？在图上点出来（点每棵树的根）。`, answer: m.take.map((x) => `n${x}`), alts: combos, display: m.take.map((x) => T.nodes[x].v).sort((a, b) => a - b).join('、') },
     });
   });
   const inner = T.nodes.filter((x) => !x.leaf).map((x) => x.v);
   steps.push({
-    view: { roots: [T.root], nodes: T.nodes, done: true },
+    view: { roots: [T.root], nodes: T.nodes, R: T.R, done: true },
     msg: `最佳归并树建好了。WPL = 所有非叶结点的值加起来 = ${inner.join(' + ')} = **${T.wpl}**（也就是每段的长度 × 它参加归并的趟数）。每个记录每参加一趟归并要读一次、写一次，所以 I/O 次数 = 2 × WPL = **${2 * T.wpl}**。`,
     ask: { tag: 'io', kind: 'number', q: '归并过程中的读写（I/O）次数是多少？（每个记录占一个物理块）', answer: io },
     asks: [{ tag: 'wpl', kind: 'number', q: '这棵最佳归并树的 WPL 是多少？', answer: M.wpl }],
@@ -336,22 +337,26 @@ function pickAlts(before, take, nodes) {
   return out;
 }
 
-// 画法：每棵树的叶子占一格，内部结点在孩子的正中间；树根都在最上面一层
+// 画法：每棵树的叶子占一格，内部结点在孩子的正中间。纵向按「离最终那棵树的底有多高」排：
+// 一棵高 h 的树，根画在第 R − h 层（R 是最终归并树的高度），各结点在根下面按深度排。这样合并时
+// 最高的那棵子树不用动、新结点出现在它们上面，矮的子树往上靠；最后一步正好是平常的画法（根在最上面）
 function forestSvg(s) {
   const { nodes } = s;
   const roots = s.roots;
   const GAP = 46, LEVEL = 60, TOP = 26;
+  const height = (id) => (nodes[id].kids.length ? 1 + Math.max(...nodes[id].kids.map(height)) : 0);
+  const R = s.R ?? Math.max(...roots.map(height));
   const X = {}, D = {};
-  let slot = 0, maxD = 0;
+  let slot = 0;
   const lay = (id, d) => {
-    D[id] = d; maxD = Math.max(maxD, d);
+    D[id] = d;
     const x = nodes[id];
     if (!x.kids.length) { X[id] = (++slot) * GAP; return; }
     x.kids.forEach((c) => lay(c, d + 1));
     X[id] = (X[x.kids[0]] + X[x.kids.at(-1)]) / 2;
   };
-  roots.forEach((r) => lay(r, 0));
-  const W = (slot + 1) * GAP, H = TOP + maxD * LEVEL + 40;
+  roots.forEach((r) => lay(r, R - height(r)));
+  const W = (slot + 1) * GAP, H = TOP + R * LEVEL + 40;
   const took = new Set(s.took || []), fresh = new Set(s.fresh || []);
   const rootSet = new Set(roots);
   let edges = '', ns = '';
@@ -396,7 +401,7 @@ export function table(input, r) {
   if (input.mode === 'loser') {
     const k = input.keys.length;
     return {
-      q: `写出建好败者树以后、每次调整以后 ls[0]～ls[${k - 1}] 里记的段号（写 3 或 b3 都行）。`,
+      q: `${k} 路归并，各段当前的关键字是 ${input.keys.join('、')}（b0～b${k - 1}）。${input.next.length ? `建好败者树以后，依次输出冠军、把那一段的下一个关键字补进来：${input.next.map((x) => (x === Infinity ? '∞' : x)).join('、')}。` : ''}写出建好${input.next.length ? '、每次调整' : ''}以后 ls[0]～ls[${k - 1}] 里记的段号（写 3 或 b3 都行）。`,
       dir: 'col', head: Array.from({ length: k }, (_, t) => `ls[${t}]`),
       rows: r.phases.map((ls, m) => ({ label: m === 0 ? '建好' : `调整 ${m}`, cells: ls.map((x) => ({ v: [`b${x}`, String(x)] })) })),
     };
@@ -428,7 +433,7 @@ export function problems(input, r) {
 
 const VARIANTS = {
   loser: [
-    ['storeWinner', '像是内部结点记了胜者，做成了胜者树（王道：败者树的内部结点记**败者**，胜者往上接着比）'],
+    ['storeWinner', '像是内部结点记了胜者，做成了胜者树（王道：败者树的内部结点记败者，胜者往上接着比）'],
     ['maxWins', '像是把关键字大的当成了胜者（王道：归并要升序输出，关键字小的胜，ls[0] 是最小的那段）'],
   ],
   replace: [

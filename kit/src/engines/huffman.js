@@ -206,13 +206,12 @@ export function view(s, input) {
   let h = svg;
   const S = (w) => showW(input, w);
   if (s.wpl) {
-    // 表放在树旁边（放不下就到下面）：算 WPL 那一步是「权值 × 路径长度」，编码那一步是编码和码长。
-    // 两张表一样多行，换步时树不挪（挪了的话新出现的 0 / 1 会和还在滑的字叠在一起）。没写字符名的不要「字符」那一列
+    // 表放在树旁边（放不下就到下面）：算 WPL 那一步填到「权 × 长」，编码那一步再填上编码（码长就是路径长度）。
+    // 两步用同一张表、编码那一列先留着宽度：表一样宽，换步时树不挪（挪了的话新出现的 0 / 1 会和还在滑的字叠在一起）。
+    // 没写字符名的不要「字符」那一列
     const leaves = Object.keys(all).filter((id) => !all[id].kids.length && !all[id].dummy).sort((a, b) => all[a].cmd - all[b].cmd);
     const named = input.leaves.some((x) => x.name);
-    const tbl = s.codes
-      ? miniTable([...(named ? ['字符'] : []), '权值', '编码', '码长'], leaves.map((id) => [...(named ? [all[id].name] : []), S(all[id].w), { html: `<b>${s.codes[id]}</b>`, cls: 'sv-code' }, s.codes[id].length]))
-      : miniTable([...(named ? ['字符'] : []), '权值', '路径长度', '权 × 长'], leaves.map((id) => [...(named ? [all[id].name] : []), S(all[id].w), s.depth[id], S(all[id].w * s.depth[id])]));
+    const tbl = miniTable([...(named ? ['字符'] : []), '权值', '路径长度', '权 × 长', { html: '编码', cls: 'sv-code' }], leaves.map((id) => [...(named ? [all[id].name] : []), S(all[id].w), s.depth[id], S(all[id].w * s.depth[id]), { html: s.codes ? `<b>${s.codes[id]}</b>` : '', cls: 'sv-code' }]));
     h = panels([['', svg], ['', tbl]]);
   }
   const pairs = [];

@@ -1757,6 +1757,7 @@ tr.cn-best td { background: rgb(var(--green-rgb) / 0.18); color: var(--green); f
 .sv-th-tbl td, .sv-th-tbl th { min-width: 34px; padding: 4px 8px; }
 .sv-th-tbl th { font: 500 13px var(--mono); }
 .sv-gtbl td.sv-code b { font-family: var(--mono); color: var(--yellow); letter-spacing: 0.06em; }
+.sv-gtbl .sv-code { min-width: 5.5em; }
 /* 两张图并排（森林 / 二叉树、二叉树 / 结点表），放不下就上下排 */
 .sv-panels { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: flex-start; justify-content: center; }
 .sv-panel { min-width: 0; max-width: 100%; display: flex; flex-direction: column; align-items: center; }
@@ -1953,6 +1954,7 @@ tr.cn-best td { background: rgb(var(--green-rgb) / 0.18); color: var(--green); f
 .ln-b-w { display: flex; flex-direction: column; align-items: center; gap: 1px; }
 .ln-b-c { width: 46px; height: 34px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1.5px solid rgb(var(--chalk-rgb) / 0.3); font: 14px var(--sans); color: var(--chalk); transition: background .25s, border-color .25s; }
 .ln-b-c.ln-filled { background: rgb(var(--blue-rgb) / 0.2); }
+.ln-b-c.ln-filled.ln-before { background: rgb(var(--yellow-rgb) / 0.24); }
 .ln-b-i { font: 11.5px var(--sans); color: var(--muted); }
 .ln-sketch { display: block; height: auto; overflow: visible; }
 .ln-sk-box { fill: none; stroke: rgb(var(--chalk-rgb) / 0.5); stroke-width: 1.5; }

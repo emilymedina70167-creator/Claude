@@ -1,7 +1,7 @@
 // 树（二）的演示引擎：huffman、uf、buildtree、thread、forest。和王道的例子对答案，每种错法查一个
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { parseFields } from '../kit/src/parse.js';
 import { trackFields, commonSpec, resolveAsks, checkAsk, fillSpec, fillOrder, checkFill } from '../kit/src/stepperspec.js';
 import { huffmanEngine } from '../kit/src/engines/huffman.js';
@@ -164,10 +164,13 @@ test('forest：A(B, C, D) E(F, G) ↔ 二叉树；王道 树 A(B(E, F), C, D(G))
   assert.throws(() => parseForest('A(B) B'), /写了两次/);
 });
 
-// 示例页里的每个例子：照抄就能用（解析、走完、ask 都问得到、字段都用上、每一步都画得出来、填表的表对得上）
-test('示例页 ds-trees2-demo.html：第 0 步不问；ask 都问得到；字段都用上；每一步画得出来', () => {
+// 示例页和说明草稿里的每个例子：照抄就能用（解析、走完、ask 都问得到、字段都用上、每一步都画得出来、填表的表对得上）。
+// 草稿并进 CLAUDE-PROJECT.md 以后会删掉，那时只查示例页
+test('示例页 ds-trees2-demo.html、说明草稿的例子：第 0 步不问；ask 都问得到；字段都用上；每一步画得出来', () => {
   const src = readFileSync(new URL('../kit/examples/ds-trees2-demo.html', import.meta.url), 'utf8');
-  const blocks = [...src.matchAll(/```(\w+)\n([\s\S]*?)```/g)].filter((m) => ENGINES[m[1]]);
+  const draft = new URL('../docs/drafts/trees2.md', import.meta.url);
+  const all = src + (existsSync(draft) ? readFileSync(draft, 'utf8') : '');
+  const blocks = [...all.matchAll(/```(\w+)\n([\s\S]*?)```/g)].filter((m) => ENGINES[m[1]]);
   assert.equal(new Set(blocks.map((m) => m[1])).size, 5, '五个组件都有例子');
   for (const [, name, body] of blocks) {
     const e = ENGINES[name];

@@ -35,7 +35,7 @@ ops: union 1 2, union 3 4, find 4
 ask: root, parent
 ```
 
-- 元素 0～n−1（`from: 1` 改成 1～n），S 是双亲数组，根存 −1。`union a b`：先找两个根，S[Root2] = Root1。`rank: true` 小树并到大树（根存 −结点数），`compress: true` 路径压缩。`ask:` 问 `root`（Find 的结果，我点）、`parent`（某个 S[i]）、`array`（整个 S）。`mode: quiz` 写最后的 S。
+- 元素 0～n−1（`from: 1` 从 1 起），S 是双亲数组，根存 −1。`union a b`：先找两个根，S[Root2] = Root1。`rank: true` 小树并大树（根存 −结点数），`compress: true` 路径压缩。`ask:` 问 `root`（Find 的结果，我点）、`parent`（某个 S[i]）、`array`（整个 S）。`mode: quiz` 写最后的 S。
 
 <!-- 完整写法 -->
 
