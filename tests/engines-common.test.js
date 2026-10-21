@@ -17,9 +17,31 @@ import { detEngine } from '../kit/src/engines/det.js';
 import { eigEngine, schmidtEngine } from '../kit/src/engines/eig.js';
 import { quadEngine } from '../kit/src/engines/quad.js';
 import { framesEngine } from '../kit/src/engines/frames.js';
+import { crcEngine, hammingEngine } from '../kit/src/engines/codes.js';
+import { allocEngine } from '../kit/src/engines/osmem.js';
+import { memexpEngine } from '../kit/src/engines/comem.js';
+import { faddEngine } from '../kit/src/engines/cofloat.js';
+import { mulEngine } from '../kit/src/engines/comul.js';
+import { fileidxEngine } from '../kit/src/engines/osfile.js';
+import { pagetableEngine } from '../kit/src/engines/ospt.js';
+import { fragEngine } from '../kit/src/engines/netfrag.js';
+import { encodeEngine } from '../kit/src/engines/netcode.js';
+import { huffmanEngine } from '../kit/src/engines/huffman.js';
+import { ufEngine } from '../kit/src/engines/uf.js';
+import { buildtreeEngine } from '../kit/src/engines/buildtree.js';
+import { threadEngine } from '../kit/src/engines/thread.js';
+import { forestEngine } from '../kit/src/engines/forest.js';
+import { avlEngine, rbtEngine } from '../kit/src/engines/balanced.js';
+import { btreeEngine } from '../kit/src/engines/btree.js';
+import { stackEngine } from '../kit/src/engines/stack.js';
+import { cqueueEngine } from '../kit/src/engines/cqueue.js';
+import { compressEngine } from '../kit/src/engines/compress.js';
+import { extsortEngine } from '../kit/src/engines/extsort.js';
 import { fillSpec, fillOrder } from '../kit/src/stepperspec.js';
 
-const ENGINES = Object.fromEntries([sortEngine, treeEngine, kmpEngine, hashEngine, bsearchEngine, netEngine, traceEngine, schedEngine, pagingEngine, bankerEngine, diskEngine, addrEngine, bitsEngine, cacheEngine, pipeEngine, subnetEngine, tcpEngine, windowEngine, elimEngine, detEngine, eigEngine, schmidtEngine, quadEngine, framesEngine].map((e) => [e.name, e]));
+const ENGINES = Object.fromEntries([sortEngine, treeEngine, kmpEngine, hashEngine, bsearchEngine, netEngine, traceEngine, schedEngine, pagingEngine, bankerEngine, diskEngine, addrEngine, bitsEngine, cacheEngine, pipeEngine, subnetEngine, tcpEngine, windowEngine, elimEngine, detEngine, eigEngine, schmidtEngine, quadEngine, framesEngine,
+  crcEngine, hammingEngine, allocEngine, memexpEngine, faddEngine, mulEngine, fileidxEngine, pagetableEngine, fragEngine, encodeEngine,
+  huffmanEngine, ufEngine, buildtreeEngine, threadEngine, forestEngine, avlEngine, rbtEngine, btreeEngine, stackEngine, cqueueEngine, compressEngine, extsortEngine].map((e) => [e.name, e]));
 
 // 示例页里的每个演示组件，再加几个 408-demo 没有的写法
 const blocks = [];

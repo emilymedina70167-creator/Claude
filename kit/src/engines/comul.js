@@ -42,6 +42,7 @@ function runBooth(input) {
   let A = 0n, Q = Y < 0n ? Y + pw(n + 1) : Y, q1 = 0;
   const A2 = (v) => fixText(v, 2, n);
   const Qt = () => `${bits(Q, n + 1)}`;
+  steps.push({ view: { rows: [] }, msg: `用补码一位乘（Booth）算 x·y：x = ${input.xs}，y = ${input.ys}，数值位 ${n} 位。` });
   rows.push({ a: A2(A), q: Qt(), q1, note: `开始：部分积 0，乘数 [y]补 = ${fixText(Y, 1, n)}，末尾补 y${n + 1} = 0`, kind: 'start' });
   steps.push({ view: { rows: rows.slice() }, msg: `[x]补 = ${A2(X)}，[−x]补 = ${A2(-X)}（双符号位），[y]补 = ${fixText(Y, 1, n)}。看乘数最低两位 y${n}y${n + 1}：00 / 11 加 0，01 加 [x]补，10 加 [−x]补，再一起算术右移；一共加 ${n + 1} 次、移 ${n} 次。`, ask: { tag: 'code', kind: 'bin', width: n + 2, q: '[−x]补（双符号位）是？', answer: (-X < 0n ? -X + pw(n + 2) : -X), display: A2(-X) } });
   const adds = mistake === 'noLastAdd' ? n : n + 1;
@@ -85,6 +86,7 @@ function runOrig(input) {
   let A = 0n, Q = ay;
   const At = (v) => fixText(v, 1, n); // 部分积前面那一位是进位
   const Qt = () => bits(Q, n);
+  steps.push({ view: { rows: [] }, msg: `用原码一位乘算 x·y：x = ${input.xs}，y = ${input.ys}，数值位 ${n} 位。` });
   rows.push({ a: At(A), q: Qt(), note: `开始：部分积 0，乘数 |y| = ${fixText(ay, 1, n).slice(2)}`, kind: 'start' });
   steps.push({ view: { rows: rows.slice() }, msg: `符号位单独算：${X < 0n ? 1 : 0} ⊕ ${Y < 0n ? 1 : 0} = ${neg ? 1 : 0}。|x| = ${fixText(ax, 1, n)}，|y| = ${fixText(ay, 1, n)}：乘数最低位是 1 就加 |x|，是 0 加 0，然后部分积和乘数一起逻辑右移一位（部分积前面那一位是进位，移进来），做 ${n} 次。`, ask: { tag: 'sign', kind: 'choice', q: '乘积的符号位是？', choices: ['0', '1'], answer: neg ? '1' : '0' } });
   for (let i = 0; i < n; i++) {
@@ -108,6 +110,7 @@ function runOrig(input) {
 const run = (input) => (input.algo === 'booth' ? runBooth(input) : runOrig(input));
 
 function view(s, input) {
+  if (!s.rows.length) return `<div class="ml-q0">x = ${input.xs}，y = ${input.ys}</div>`;
   const head = `<tr><th>部分积</th><th>乘数${input.algo === 'booth' ? `<small>（y${input.n + 1}）</small>` : ''}</th><th>说明</th></tr>`;
   const body = s.rows.map((r, i) => {
     const fresh = s.from !== undefined && i >= s.from;

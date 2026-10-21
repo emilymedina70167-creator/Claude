@@ -12,7 +12,7 @@ test('Booth：[x·y]补 = 1.01110001；每次看 y_n y_{n+1}', () => {
   assert.deepEqual(r.steps.filter((s) => s.ask?.tag === 'op').map((s) => s.ask.answer), ['+[−x]补', '+0', '+[x]补', '+[−x]补', '+[x]补']);
   assert.equal(r.rows.filter((x) => x.kind === 'shift').length, 4);
   assert.ok(checkAsk(r.steps.at(-1).ask, '1.01110001').ok);
-  assert.ok(checkAsk(r.steps[0].ask, '00.1101').ok);
+  assert.ok(checkAsk(r.steps[1].ask, '00.1101').ok);
   assert.equal(A.variants(input).length, 3);
   // 两个负数、和真值对一下
   for (const [x, y] of [['-0.1101', '-0.1011'], ['0.111', '-0.101'], ['-0.11', '0.01']]) {

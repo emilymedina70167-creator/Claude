@@ -1407,6 +1407,7 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 
 /* 定点乘法 mul：王道那张「部分积 | 乘数 | 说明」的表；加的那一行下面画横线，右移的那一行带箭头，这一步新写的几行是黄的 */
 .ml-wrap { overflow-x: auto; }
+.ml-q0 { padding: 10px 0; text-align: center; font: 600 18px var(--mono); color: var(--chalk); }
 .ml-tab { border-collapse: collapse; margin: 0 auto; font: 16px var(--mono); color: var(--chalk); }
 .ml-tab th { padding: 4px 14px; font: 500 14px var(--sans); color: var(--muted); border-bottom: 1px solid rgb(var(--chalk-rgb) / 0.3); }
 .ml-tab th small { font-size: 12px; }
