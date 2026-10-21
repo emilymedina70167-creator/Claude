@@ -166,6 +166,16 @@ tlb: 1->10
 cost: tlb=20 mem=100
 ```
 
+```pagetable
+id: pt-1
+title: 多级页表：32 位逻辑地址、4KB 页、4B 页表项
+vbits: 32
+page: 4KB
+pte: 4B
+vaddr: 0x12345678
+ask: offset, per, levels, idx
+```
+
 ```alloc
 id: om-1
 title: 动态分区分配：首次适应

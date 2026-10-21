@@ -44,6 +44,7 @@ import { allocEngine } from '../engines/osmem.js';
 import { memexpEngine } from '../engines/comem.js';
 import { faddEngine } from '../engines/cofloat.js';
 import { fileidxEngine } from '../engines/osfile.js';
+import { pagetableEngine } from '../engines/ospt.js';
 import { fragEngine } from '../engines/netfrag.js';
 import { encodeEngine } from '../engines/netcode.js';
 import { huffmanEngine } from '../engines/huffman.js';
@@ -95,6 +96,7 @@ export const blocks = {
   memexp: stepperBlock(memexpEngine),
   fadd: stepperBlock(faddEngine),
   fileidx: stepperBlock(fileidxEngine),
+  pagetable: stepperBlock(pagetableEngine),
   frag: stepperBlock(fragEngine),
   encode: stepperBlock(encodeEngine),
   // 树（二）：哈夫曼、并查集、由遍历序列建树、线索二叉树、树和森林 ↔ 二叉树

@@ -1390,6 +1390,21 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .ec-svg .ec-bit.ec-curbit { fill: var(--yellow); }
 .ec-svg .ec-name { fill: var(--muted); font: 12.5px var(--sans); text-anchor: end; }
 
+/* 多级页表 pagetable：逻辑地址按字段画一条（宽度按位数）；每一级一种颜色（bitview 的 bv-a～bv-e） */
+.bv-f.bv-d { border-color: color-mix(in srgb, var(--lav) 70%, transparent); } .bv-f.bv-e { border-color: rgb(var(--yellow-rgb) / 0.7); }
+.pt-head { margin: 4px 0 8px; text-align: center; font: 600 16px var(--mono); color: var(--chalk); }
+.pt-split { display: flex; gap: 3px; margin: 6px 0; min-height: 56px; }
+.pt-seg { min-width: 56px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 4px 2px; border-radius: 8px; border: 2px solid rgb(var(--chalk-rgb) / 0.35); overflow: hidden; }
+.pt-seg b { font: 600 14px var(--sans); color: var(--chalk); white-space: nowrap; }
+.pt-seg small { font: 12.5px var(--sans); color: var(--muted); }
+.pt-seg.bv-a { border-color: rgb(var(--blue-rgb) / 0.7); background: rgb(var(--blue-rgb) / 0.1); }
+.pt-seg.bv-b { border-color: rgb(var(--pink-rgb) / 0.7); background: rgb(var(--pink-rgb) / 0.1); }
+.pt-seg.bv-c { border-color: rgb(var(--green-rgb) / 0.7); background: rgb(var(--green-rgb) / 0.1); }
+.pt-seg.bv-d { border-color: color-mix(in srgb, var(--lav) 70%, transparent); background: color-mix(in srgb, var(--lav) 10%, transparent); }
+.pt-seg.bv-e { border-color: rgb(var(--yellow-rgb) / 0.7); background: rgb(var(--yellow-rgb) / 0.1); }
+.pt-seg.pt-hi { box-shadow: 0 0 0 2px var(--yellow); }
+.pt-note { margin-top: 6px; text-align: center; font: 14px var(--sans); color: var(--muted); }
+
 /* 行列式 det：两边是竖线（不是括号），左边是一路记下来的系数 */
 .dt-row { display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 4px 0 10px; font-size: 19px; }
 table.mx.mx-det::before, table.mx.mx-det::after { width: 0; border-radius: 0; }
