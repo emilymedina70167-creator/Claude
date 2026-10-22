@@ -33,6 +33,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
     - `la-demo.html`：线代的过程组件（elim、det、eig、schmidt、quad、frames）
 - iPad 尺寸：竖屏 820×1180，横屏 1180×820。云端会话里可以用预装的 Playwright + Chromium 截图检查。
 - 页面检查脚本：`node tools/check-lesson.mjs 文件…`（课件 `.md`、示例页 `.html`、实时黑板 `.board.json`、课堂输出 `.class.json`）在两种 iPad 尺寸下渲染、把演示走一遍，报写法错误、控制台报错、冲出版面、一屏放不下；`--shots 目录` 存截图。`npm run check:pages` 查全部示例页（改了组件要跑）。
+- 组件画廊：`npm run gallery -- --out 目录 kit/examples/408-demo.html`：每个组件单独截一张（演示组件停在最后一步），五种风格各一张，拼成联系表 `sheet-*.png`（一行一个组件），视觉统一一眼看完；`--themes paper,white`、`--only id1,id2`、`--width 1180`。
 - 验收（扮演老师写真题课，量一次写对率）：`evals/`（说明在 `evals/README.md`，结果在 `evals/results.md`）。
 
 ## 架构
