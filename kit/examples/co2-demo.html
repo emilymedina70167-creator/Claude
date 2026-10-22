@@ -1,0 +1,180 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>组成原理（二）教具</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+subject: 组成原理
+unit: 组成原理（二）：寻址方式、指令格式、数据的存放、多重中断
+---
+
+# 组成原理（二）
+
+每一个都是「一步步走」的演示：只写题目里给的数，每一步由页面算。写了 `ask:` 的，走到那一步之前先让你猜。
+
+## 1. 寻址方式 ea
+
+```ea
+id: ea-table
+title: 同一块内存，几种寻址方式
+ins: 立即 20, 直接 20, 间接 20, 立即 30, 直接 30, 间接 30
+mem: 20=40, 30=50, 40=60, 50=70
+ask: operand
+```
+
+```ea
+id: ea-2013
+title: 变址寻址（2013 统考）
+ins: 变址 R 2000H
+reg: R=1000H
+mem: 1000H=2000H, 2000H=3000H, 3000H=4000H
+ask: ea, operand
+```
+
+```ea
+id: ea-2009
+title: 相对寻址的转移（2009 统考）
+ins: 相对 06H 转移
+at: 2000H
+len: 2
+ask: ea
+```
+
+```ea
+id: ea-mix
+title: 寄存器、寄存器间接、基址、先变址后间址、出栈
+ins: 寄存器 R1, 寄存器间接 R1, 基址 0010H, 先变址后间址 0004H, 出栈
+reg: R1=0300H, BR=0200H, IX=0100H, SP=0400H
+mem: 0104H=0210H, 0210H=1234H, 0300H=00FFH, 0400H=5A5AH
+ask: ea, access
+```
+
+```ea
+id: ea-fill
+title: 自己填表
+mode: fill
+ins: 直接 2000H, 间接 1000H, 变址 2000H, 相对 FFFEH
+reg: IX=1000H
+at: 3000H
+len: 2
+mem: 1000H=2000H, 2000H=3000H, 3000H=4000H
+```
+
+## 2. 扩展操作码 opcode
+
+```opcode
+id: oc-wd
+title: 16 位指令、4 位地址码（王道的例子）
+len: 16
+addr: 4
+need: 三地址 15, 二地址 15, 一地址 15, 零地址 16
+ask: avail, range
+```
+
+```opcode
+id: oc-max
+title: 零地址指令最多几条
+len: 16
+addr: 6
+need: 二地址 15, 一地址 34, 零地址 ?
+ask: avail, max
+```
+
+```opcode
+id: oc-len
+title: 指令字长至少几位（2017 统考）
+len: ?
+addr: 6
+need: 三地址 29, 二地址 107
+unit: 8
+ask: len
+```
+
+```opcode
+id: oc-fill
+title: 一地址最多几条（自己填表）
+mode: fill
+len: 16
+addr: 4
+need: 三地址 15, 二地址 15, 一地址 ?, 零地址 16
+```
+
+## 3. 大小端与对齐 layout
+
+```layout
+id: ly-2012
+title: 结构体按边界对齐、小端（2012 统考）
+struct: int a; char b; short c
+at: 0xC008
+set: a = 273
+look: 0xC008
+ask: offset, size, byte
+```
+
+```layout
+id: ly-double
+title: 有 double 的结构体
+struct: char a; double b; int c
+at: 0x1000
+ask: offset, size
+```
+
+```layout
+id: ly-2018
+title: int i = −64 的机器代码（2018 统考）
+value: -64
+type: int
+name: i
+at: 8000H
+ask: code, bytes
+```
+
+```layout
+id: ly-2016
+title: 大端方式的最低有效字节（2016 统考）
+value: 0x1234FF00
+at: EFFFFF12H
+endian: big
+ask: lsb
+```
+
+## 4. 多重中断 irq
+
+```irq
+id: iq-dacb
+title: 处理次序改成 D > A > C > B
+prio: A > B > C > D
+order: D > A > C > B
+req: B@10, A@20, C@30, D@40
+time: 20μs
+ask: mask, next
+```
+
+```irq
+id: iq-wd
+title: 5 级中断同时请求（王道的例子）
+prio: L0 > L1 > L2 > L3 > L4
+order: L1 > L3 > L0 > L4 > L2
+req: all@0
+time: 10
+ask: next, finish
+```
+
+```irq
+id: iq-mask
+title: 从屏蔽字看处理次序
+prio: A B C D
+mask: A=1110, B=0100, C=0110, D=1111
+ask: rank
+```
+
+```irq
+id: iq-fill
+title: 自己填表
+mode: fill
+prio: A > B > C > D
+order: D > A > C > B
+req: B@10, A@20, C@30, D@40
+time: 20
+```
+</script>
