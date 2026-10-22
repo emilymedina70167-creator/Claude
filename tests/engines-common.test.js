@@ -148,3 +148,22 @@ test('quiz 的答案、填表的标准答案：照着填都判对（示例页 + 
   if (process.env.SHOW_COUNTS) console.log(`quiz ${quizzes}、表 ${tables}`);
   assert.ok(quizzes > 30 && tables > 30, `quiz ${quizzes} 个、表 ${tables} 张，太少了`);
 });
+
+// 手册的格式：每个演示组件都要有一节（课堂 Claude 只知道手册里写了的），能 quiz / fill / 认错法的，说明里要提到
+test('每个演示组件在手册里都有说明，quiz、fill、错法诊断都写到了', async () => {
+  const { componentDocs } = await import('../kit/build-docs.js');
+  const { docSections } = await import('../kit/src/subject.js');
+  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const secs = docSections(componentDocs(md));
+  const textOf = (name) => { const s = secs.find((x) => x.names.includes(name)); return s ? [...s.body, ...(s.detail || [])].join('\n') : null; };
+  const missing = [], gaps = [];
+  for (const [name, e] of Object.entries(ENGINES)) {
+    const t = textOf(name);
+    if (t === null) { missing.push(name); continue; }
+    if (e.quiz && !/mode: quiz|`quiz`/.test(t)) gaps.push(`${name} 有 quiz，说明里没写 mode: quiz`);
+    if (e.table && !/mode: fill|`fill`/.test(t)) gaps.push(`${name} 有填表，说明里没写 mode: fill`);
+    if (e.variants && !/错法/.test(t)) gaps.push(`${name} 认得出错法，说明里没写「错法诊断认得出……」`);
+  }
+  assert.deepEqual(missing, [], `这些组件在 CLAUDE-PROJECT.md 第三节没有说明（小节标题里要有组件名）：${missing.join('、')}`);
+  assert.deepEqual(gaps, []);
+});
