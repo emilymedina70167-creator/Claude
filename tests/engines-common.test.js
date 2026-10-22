@@ -37,11 +37,12 @@ import { stackEngine } from '../kit/src/engines/stack.js';
 import { cqueueEngine } from '../kit/src/engines/cqueue.js';
 import { compressEngine } from '../kit/src/engines/compress.js';
 import { extsortEngine } from '../kit/src/engines/extsort.js';
+import { asmEngine } from '../kit/src/engines/coasm.js';
 import { fillSpec, fillOrder } from '../kit/src/stepperspec.js';
 
 const ENGINES = Object.fromEntries([sortEngine, treeEngine, kmpEngine, hashEngine, bsearchEngine, netEngine, traceEngine, schedEngine, pagingEngine, bankerEngine, diskEngine, addrEngine, bitsEngine, cacheEngine, pipeEngine, subnetEngine, tcpEngine, windowEngine, elimEngine, detEngine, eigEngine, schmidtEngine, quadEngine, framesEngine,
   crcEngine, hammingEngine, allocEngine, memexpEngine, faddEngine, mulEngine, fileidxEngine, pagetableEngine, fragEngine, encodeEngine,
-  huffmanEngine, ufEngine, buildtreeEngine, threadEngine, forestEngine, avlEngine, rbtEngine, btreeEngine, stackEngine, cqueueEngine, compressEngine, extsortEngine].map((e) => [e.name, e]));
+  huffmanEngine, ufEngine, buildtreeEngine, threadEngine, forestEngine, avlEngine, rbtEngine, btreeEngine, stackEngine, cqueueEngine, compressEngine, extsortEngine, asmEngine].map((e) => [e.name, e]));
 
 // 示例页里的每个演示组件，再加几个 408-demo 没有的写法
 const blocks = [];

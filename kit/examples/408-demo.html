@@ -237,6 +237,26 @@ instrs: add r1, r2, r3; sub r4, r1, r5; and r6, r1, r7; or r8, r2, r9
 ask: stall
 ```
 
+```asm
+id: as-1
+title: 机器级代码：函数调用和循环
+call: sum(4)
+predict: 8 -> eax
+code:
+sum:
+push ebp
+mov ebp, esp
+mov ecx, [ebp+8]
+mov eax, 0
+L1: cmp ecx, 0
+jle L2
+add eax, ecx
+dec ecx
+jmp L1
+L2: pop ebp
+ret
+```
+
 ```hamming
 id: hm-1
 title: 海明码：信息位 1010

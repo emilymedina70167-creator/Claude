@@ -1417,6 +1417,21 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .ml-tab tr.ml-new td.ml-a, .ml-tab tr.ml-new td.ml-q { color: var(--yellow); }
 .ml-tab .ml-q1 { margin-left: 6px; padding: 0 4px; border-left: 1.5px dashed rgb(var(--chalk-rgb) / 0.5); color: var(--pink); }
 
+/* 机器级代码 asm：代码和寄存器沿用 trace 的样子；标志位一排，栈一格一个双字（高地址在上），esp / ebp 标出来 */
+.as-flags { display: flex; flex-wrap: wrap; gap: 6px; }
+.as-flag { padding: 2px 10px; border-radius: 999px; font: 600 14px var(--mono); color: var(--muted); border: 1.5px solid rgb(var(--chalk-rgb) / 0.25); }
+.as-flag.as-on { color: var(--chalk); border-color: rgb(var(--blue-rgb) / 0.7); background: rgb(var(--blue-rgb) / 0.12); }
+.as-flag.as-chg { border-color: var(--yellow); }
+.as-stack { display: flex; flex-direction: column; gap: 2px; }
+.as-cell { display: grid; grid-template-columns: 7.5em minmax(5em, auto) 1fr; align-items: center; gap: 8px; padding: 2px 8px; border-radius: 6px; border: 1.5px solid rgb(var(--chalk-rgb) / 0.18); font: 14px var(--mono); }
+.as-cell.as-esp { border-color: rgb(var(--yellow-rgb) / 0.7); background: rgb(var(--yellow-rgb) / 0.1); }
+.as-cell.as-ebp { border-color: rgb(var(--pink-rgb) / 0.7); }
+.as-addr { color: var(--muted); font-size: 12.5px; }
+.as-val { color: var(--chalk); font-weight: 600; }
+.as-ptr { color: var(--yellow); font: 13px var(--sans); }
+.as-data { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.as-m { font: 13.5px var(--mono); color: var(--green); }
+
 /* 行列式 det：两边是竖线（不是括号），左边是一路记下来的系数 */
 .dt-row { display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 4px 0 10px; font-size: 19px; }
 table.mx.mx-det::before, table.mx.mx-det::after { width: 0; border-radius: 0; }
