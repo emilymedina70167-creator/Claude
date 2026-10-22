@@ -293,7 +293,7 @@ export const csmaEngine = {
     if (input.dist !== null) ctx.push(`两站相距 ${distText(input.dist)}，信号传播速率 ${speedText(input.v)}`);
     else if (input.minframe !== null) ctx.push(`最短帧长 ${bitsText(input.minframe)}${input.v !== null ? `，信号传播速率 ${speedText(input.v)}` : ''}`);
     else if (input.tau !== null) ctx.push(`单程传播时延 ${timeText(input.tau)}`);
-    if (a.tag === 'detect') ctx.push(`A 在 0 时刻开始发送，B 在 ${input.last ? 'A 的信号快到时' : `${timeText(input.tb)} 时`}开始发送`);
+    if (a.tag === 'detect') ctx.push(`A 在 0 时刻开始发送，B ${input.last ? '在 A 的信号快到时' : input.tb === 0 ? '和 A 同时' : `在 ${timeText(input.tb)} 时`}开始发送`);
     if (input.slot !== null) ctx.push(`基本退避时间 ${timeText(input.slot)}`);
     return { q: `CSMA/CD，${ctx.join('，')}。${a.q}`, type: 'num', answer: ansText(a.answer) };
   },

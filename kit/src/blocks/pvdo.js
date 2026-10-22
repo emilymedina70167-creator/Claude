@@ -7,6 +7,7 @@ import { parseFields } from '../parse.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import { markDraft } from '../drafts.js';
+import { snapshot, animateFrom, settle } from '../morph.js';
 import { stepperBlock } from '../stepper.js';
 import { calcFields, trackFields, parseAskField, checkAsk, askAnswerText } from '../stepperspec.js';
 import { pvEngine, pvStart, pvMove, procInfo, pvSearch, pvIntro, scheduleText, isBad, MISTAKES } from '../engines/pv.js';
@@ -15,6 +16,7 @@ const MAX_MOVES = 200;
 const ASK_TAGS = ['block', 'value', 'wake', 'deadlock', 'buffer'];
 const plain = (s) => String(s ?? '').replace(/\*\*/g, '').replace(/\$[^$]*\$/g, (m) => m.slice(1, -1)).replace(/\s+/g, ' ').slice(0, 200);
 const WHAT = { deadlock: '死锁', bad: '出错' };
+const reduceMotion = () => { try { return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 
 // pv：写了 run:（或 mode: demo / quiz / fill）是一步步的演示（stepper.js 外壳）；没写 run: 是学生自己点
 export function pvBlock() {
@@ -79,9 +81,12 @@ export function pvDo(el, src) {
   const moves = () => hist.map((h) => sys.procs[h.p].name);
   const say = (text, kind = '') => { fb.hidden = !text; fb.className = `pvd-fb${kind ? ` is-${kind}` : ''}`; fb.innerHTML = text ? mdToHtml(text, { inline: true }) : ''; };
 
-  function draw() {
+  // glide：走一步、撤回一步时，进程的 ◀ 和排队的名字滑过去（和演示一样）
+  function draw({ glide = false } = {}) {
     const last = hist.at(-1);
+    const snap = glide && !reduceMotion() && stage.animate ? (settle(stage), snapshot(stage)) : null;
     stage.innerHTML = pvEngine.view(last ? last.step.view : { st: s0, ev: null, bad: [] }, input);
+    if (snap) animateFrom(stage, snap, { ms: 300 });
     msg.innerHTML = `${verdict ? `<span class="sv-verdict">${verdict}</span>` : ''}${mdToHtml(last ? last.step.msg : pvIntro(input), { inline: true })}`;
     verdict = '';
     const s = cur();
@@ -123,7 +128,7 @@ export function pvDo(el, src) {
       gate?.();
       verdict = `${verdict ? `${verdict}　` : ''}✓ 找到了，${hist.length} 步。`;
     }
-    draw();
+    draw({ glide: true });
   }
 
   // —— 先猜 ——
@@ -233,7 +238,7 @@ export function pvDo(el, src) {
       const last = hist.pop();
       say(`撤回了 ${sys.procs[last.p].name} 的「${last.step.view.ev.text}」`);
       record({ value: '撤回一步', detail: `自己走，撤回到第 ${hist.length} 步` });
-      draw();
+      draw({ glide: true });
       return;
     }
     if (e.target.closest('.pvd-reset')) {

@@ -2310,7 +2310,7 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .pv { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }
 @media (max-width: 760px) { .pv { grid-template-columns: minmax(0, 1fr); } }
 .pv-procs { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; min-width: 0; }
-.pv-card { min-width: 0; border-radius: 12px; border: 1.5px solid rgb(var(--chalk-rgb) / 0.16); background: rgb(var(--shade-rgb) / 0.18); overflow: hidden; transition: border-color .25s; }
+.pv-card { min-width: 0; border-radius: 12px; border: 1.5px solid rgb(var(--chalk-rgb) / 0.16); background: rgb(var(--shade-rgb) / 0.12); overflow: hidden; transition: border-color .25s; }
 .pv-card-on { border-color: rgb(var(--yellow-rgb) / 0.55); }
 .pv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px 6px; border-bottom: 1px solid rgb(var(--chalk-rgb) / 0.12); }
 .pv-tname { font: 18px/1.2 var(--hand); color: var(--chalk); margin-right: 4px; }
@@ -2324,7 +2324,8 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .pv-proc.pv-done { opacity: .6; border-style: dashed; }
 .pvd-stage .pv-proc.pv-ready, .pvd-stage .pv-proc.pv-run { cursor: pointer; }
 .sv-picking .pv-proc { min-height: 44px; cursor: pointer; }
-.pv-code { margin: 0; padding: 6px 0; font: 14px/1.65 var(--mono); color: var(--body); overflow-x: auto; }
+/* .la-lesson pre 自带底色和内边距：卡片已经有底色了，这里不要再叠一层 */
+.pv .pv-code { margin: 0; padding: 6px 0; border-radius: 0; background: none; font: 14px/1.65 var(--mono); color: var(--body); overflow-x: auto; }
 .pv-line { display: flex; align-items: center; gap: 10px; min-height: 1.65em; padding: 0 8px 0 10px; border-left: 3px solid transparent; white-space: pre; }
 .pv-line.pv-brace { color: var(--muted); }
 .pv-line.pv-ran { background: var(--hl); border-left-color: var(--yellow); color: var(--chalk); }

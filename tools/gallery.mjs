@@ -19,7 +19,7 @@ import { withTheme } from './check-lesson.mjs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const THEMES = ['default', 'chalk', 'paper', 'midnight', 'white'];
 // 演示组件的名字（blocks/index.js 里用 stepperBlock 注册的，加上 elim）：给它们加 start: end，截最后一步
-const STEPPERS = new Set([...readFileSync(join(ROOT, 'kit/src/blocks/index.js'), 'utf8').matchAll(/^\s*(\w+):\s*stepperBlock\(/gm)].map((m) => m[1]).concat('elim'));
+const STEPPERS = new Set([...readFileSync(join(ROOT, 'kit/src/blocks/index.js'), 'utf8').matchAll(/(\w+):\s*stepperBlock\(/g)].map((m) => m[1]).concat('elim'));
 
 function parseArgs(argv) {
   const opt = { out: '', themes: THEMES, width: 820, only: null, per: 12, files: [] };
@@ -37,9 +37,10 @@ function parseArgs(argv) {
   return opt;
 }
 
-// 课件里每个演示组件的围栏块，开头加一行 start: end（已经写了 start: 的不动）
+// 课件里每个演示组件的围栏块，开头加一行 start: end（已经写了 start: 的不动），停在最后一步
 export function toEnd(md) {
-  return md.replace(/^(`{3,})(\w+)\n([\s\S]*?)^\1[ \t]*$/gm, (all, fence, name, body) => (STEPPERS.has(name) && !/^start\s*:/m.test(body) ? `${fence}${name}\nstart: end\n${body}${fence}` : all));
+  // 先猜的问题去掉（有的放在第 1 步之前问，不去掉就停在第 0 步）
+  return md.replace(/^(`{3,})(\w+)\n([\s\S]*?)^\1[ \t]*$/gm, (all, fence, name, body) => (STEPPERS.has(name) && !/^start\s*:/m.test(body) ? `${fence}${name}\nstart: end\n${body.replace(/^(ask|predict)\s*:.*\n/gm, '')}${fence}` : all));
 }
 
 async function main() {
@@ -67,7 +68,7 @@ async function main() {
         const el = page.locator(`.block[data-bid="${id}"]`).first();
         if (!(await el.isVisible().catch(() => false))) continue;
         const out = join(opt.out, '组件', `${basename(file, '.html')}-${id}-${theme}.png`.replace(/[^\w.\-一-鿿]/g, '_'));
-        try { await el.scrollIntoViewIfNeeded(); await el.screenshot({ path: out }); shots.push({ page: basename(file), id, theme, file: out }); } catch { /* 太大或看不见的跳过 */ }
+        try { await el.scrollIntoViewIfNeeded(); await page.waitForTimeout(250); await el.screenshot({ path: out }); shots.push({ page: basename(file), id, theme, file: out }); } catch { /* 太大或看不见的跳过 */ }
       }
       await ctx.close();
     }

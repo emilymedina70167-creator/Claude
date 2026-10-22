@@ -143,7 +143,8 @@ export function stepperBlock(engine) {
       if (moved && !reduceMotion()) stage.querySelectorAll('.sv-new').forEach((x) => { x.classList.remove('sv-flash'); void x.offsetWidth; x.classList.add('sv-flash'); });
       // highlight 用的「命令」：画面里有几个 data-cmd 就有几条（从 1 数）
       const n = Math.max(0, ...[...stage.querySelectorAll('[data-cmd]')].map((x) => Number(x.dataset.cmd) || 0));
-      cmds.length = 1;
+      // 只留 step 这个滑块再重排：滑块在数组最后，cmds.length = 1 会留下第一个格子、把滑块丢了（第二次 figure set step 就报没有 step）
+      cmds.splice(0, cmds.length, slider);
       for (let i = 1; i <= n; i++) cmds.unshift({ kind: 'item', srcLine: `第 ${i} 个`, mods: {} });
       // 正在填空时先不给说明（说明里常常就有答案）
       msg.innerHTML = filling ? '<span class="muted">把上面的空填好，点「检查」。</span>' : `${verdict ? `<span class="sv-verdict">${verdict}</span>` : ''}${mdToHtml(s.msg || '', { inline: true })}`;
