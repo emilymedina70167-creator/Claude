@@ -102,3 +102,14 @@ test('说明里的演示组件例子：照抄就能用（ask 的种类都有、�
     assert.deepEqual(tracked.unknown(), [], `${where}：例子里有用不上的字段`);
   }
 });
+
+// 新加的演示组件忘了放进上面的 ENGINES，就不会被「例子照抄就能用」查到：按 blocks/index.js 里注册的对一遍
+test('blocks/index.js 里注册的演示组件都在这份测试的 ENGINES 里', () => {
+  const src = readFileSync(new URL('../kit/src/blocks/index.js', import.meta.url), 'utf8');
+  const registered = [...src.matchAll(/^\s*(\w+):\s*stepperBlock\(/gm)].map((m) => m[1]);
+  assert.ok(registered.length > 30);
+  const missing = registered.filter((n) => !ENGINES[n]);
+  assert.deepEqual(missing, [], `这些组件没放进 tests/engines-common.test.js 的 ENGINES：${missing.join('、')}`);
+  // elim 走 elimBlock()（mode: do 另有画面），也要在
+  assert.ok(ENGINES.elim);
+});
