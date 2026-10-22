@@ -113,3 +113,37 @@ test('blocks/index.js 里注册的演示组件都在这份测试的 ENGINES 里'
   // elim 走 elimBlock()（mode: do 另有画面），也要在
   assert.ok(ENGINES.elim);
 });
+
+// 每个 quiz 的标准答案自己判自己要是对的；填表的表照着标准答案填要全对——判法和出题对不上时（宽度、写法、分组），学生写对了也会被判错
+test('quiz 的答案、填表的标准答案：照着填都判对（示例页 + 手册里的每个例子）', async () => {
+  const { textAnswerSpec } = await import('../kit/src/textspec.js');
+  const { checkFill, normCell } = await import('../kit/src/stepperspec.js');
+  const { readdirSync } = await import('node:fs');
+  const all = [...blocks];
+  const pages = ['CLAUDE-PROJECT.md', ...readdirSync('kit/examples').filter((f) => f.endsWith('.html')).map((f) => `kit/examples/${f}`)];
+  for (const f of pages) for (const m of readFileSync(f, 'utf8').matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)) if (ENGINES[m[2]]) all.push([m[2], m[3]]);
+  let quizzes = 0, tables = 0;
+  for (const [name, src] of all) {
+    const e = ENGINES[name];
+    const where = `${name}（${src.split('\n').find((l) => /^id:/.test(l)) || src.split('\n')[0]}）`;
+    const { fields } = parseFields(e.head ? e.head(src) : src);
+    let input, r;
+    try { input = e.parse(fields, src); r = e.run(input); } catch { continue; } // 示例页里故意写错的、只演示出错的
+    let q = null;
+    try { q = e.quiz?.(input, r, fields) ?? null; } catch { /* 这种用法没有 quiz */ }
+    const spec = q && textAnswerSpec(q.type || 'seq', q.answer, { width: q.width });
+    if (spec) { quizzes++; assert.ok(spec.check(spec.display).ok, `${where}：quiz 的答案「${spec.display}」自己判成了错`); }
+    let t = null;
+    try { t = e.table?.(input, r, fields) ?? null; } catch { /* 这种用法没有表 */ }
+    if (!t) continue;
+    tables++;
+    const { table } = fillSpec(t, {});
+    const first = (c) => String([].concat(c.v ?? '')[0] ?? '');
+    const values = table.rows.map((row) => row.cells.map((c) => (c.given ? '' : c.mark ? (normCell(first(c)) !== '' ? '√' : '') : first(c))));
+    values.extra = (table.extra || []).map(first);
+    const res = checkFill(table, values);
+    assert.ok(res.ok, `${where}：照着标准答案填，${res.first ? (res.first.extra !== undefined ? `附加的第 ${res.first.extra + 1} 格` : `第 ${res.first.r + 1} 行第 ${res.first.c + 1} 格`) : ''}判成了错`);
+  }
+  if (process.env.SHOW_COUNTS) console.log(`quiz ${quizzes}、表 ${tables}`);
+  assert.ok(quizzes > 30 && tables > 30, `quiz ${quizzes} 个、表 ${tables} 张，太少了`);
+});
