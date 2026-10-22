@@ -334,6 +334,15 @@ title: 三次握手
 handshake: x=100, y=300
 ```
 
+```tcp
+id: cn-data
+title: TCP 传数据：序号 70、100，第一个丢了
+send: 70 100
+last: 180
+lost: 1
+ask: len, ack
+```
+
 ```window
 id: cn-gbn
 title: 后退 N 帧
