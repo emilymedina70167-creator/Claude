@@ -208,7 +208,7 @@ function endStmt(s, pos, st, ctx) {
   }
 }
 function mark(st, m, ctx) {
-  if (!st || st.t !== 'work') throw new Error(`${ctx.where}「临界区」要标在临界区里的那句操作后面（比如 写文件; // 临界区），${st ? `不能标在 ${st.text} 上` : '前面没有句子'}`);
+  if (!st || (st.t !== 'work' && st.t !== 'set')) throw new Error(`${ctx.where}「临界区」要标在临界区里的那句操作后面（比如 写文件; // 临界区），${st ? `不能标在 ${st.text} 上` : '前面没有句子'}`);
   st.cs = m;
 }
 
@@ -225,7 +225,8 @@ function parseSemRef(text, ctx) {
 
 function parseBody(s, pos, ctx) {
   skipWs(s, pos, false);
-  if (s[pos.i] === '{') { pos.i++; return parseStmts(s, pos, ctx, '}'); }
+  // 写了大括号的照样显示成一块（if (…) { count--; } 不缩成一行）
+  if (s[pos.i] === '{') { pos.i++; const b = parseStmts(s, pos, ctx, '}'); b.braced = true; return b; }
   return [parseStmt(s, pos, ctx)];
 }
 
@@ -363,7 +364,7 @@ function compile(t, where) {
   const lines = [], code = [];
   const L = (text, depth, extra = {}) => { lines.push({ text, depth, ...extra }); return lines.length - 1; };
   const ins = (st, line) => ({ op: st.t, sem: st.sem, var: st.var, aop: st.op, expr: st.expr, text: st.text, cs: st.cs || null, buf: st.buf || null, line });
-  const inlineIf = (st) => st.t === 'if' && st.then.length === 1 && SIMPLE.has(st.then[0].t) && (!st.else || (st.else.length === 1 && (SIMPLE.has(st.else[0].t) || inlineIf(st.else[0]))));
+  const inlineIf = (st) => st.t === 'if' && !st.then.braced && st.then.length === 1 && SIMPLE.has(st.then[0].t) && (!st.else || (!st.else.braced && st.else.length === 1 && (SIMPLE.has(st.else[0].t) || inlineIf(st.else[0]))));
   const loopCheck = (from) => { if (!code.slice(from).some((x) => x.op !== 'jmp')) throw new Error(`${where}循环里没有句子`); };
   function chain(st, depth, prefix) {
     const line = L(`${prefix}if (${st.condText}) ${st.then[0].text};`, depth, { step: true, cs: st.then[0].cs || null });
@@ -442,6 +443,8 @@ const PROBLEMS = [
   ['smoker', /^(吸烟者|抽烟者|smoker|smokers)$/i],
   ['fruit', /^(苹果橘子|水果|多生产者多消费者|多生产者-多消费者|fruit|apple)$/i],
 ];
+const ROOM = /^(?:(?:限|最多|至多)(\d+|[一二两三四五六七八九])个?人|room|limit)$/i;
+const CN_NUM = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
 const PROBLEM_LIST = '生产者消费者、读者写者（可加「写者优先」）、哲学家（可加「互斥」「限四人」「奇偶」）、吸烟者、苹果橘子';
 
 function preset(src, bufferField) {
@@ -494,7 +497,15 @@ function preset(src, bufferField) {
       const L = 'P(chopstick[i])', R = `P(chopstick[(i+1)%${n}])`, VL = 'V(chopstick[i])', VR = `V(chopstick[(i+1)%${n}])`;
       let body, sems = `chopstick[${n}] = 1`, about = `哲学家进餐：${n} 个哲学家围着桌子，第 i 个左边是 chopstick[i]，右边是 chopstick[(i+1)%${n}]，两根都拿到才能吃饭。`;
       if (modIs(/^(互斥|mutex)$/i)) { sems += ', mutex = 1'; body = `P(mutex); ${L}; ${R}; V(mutex); 吃饭; ${VL}; ${VR}; 思考;`; about += '拿两根筷子的动作用 mutex 互斥。'; }
-      else if (modIs(/^(限\S*人|最多\S*人|至多\S*人|room|limit)$/i)) { sems += `, room = ${n - 1}`; body = `P(room); ${L}; ${R}; 吃饭; ${VL}; ${VR}; V(room); 思考;`; about += `room = ${n - 1}：最多 ${n - 1} 个人同时拿筷子。`; }
+      else if (mods.some((x) => ROOM.test(x))) {
+        // 限四人 / 最多 4 人 / room（默认 n − 1）；限 n 人等于没限，也让写（演示「这样还是会死锁」）
+        const m = ROOM.exec(mods.splice(mods.findIndex((x) => ROOM.test(x)), 1)[0]);
+        const k = m[1] ? (m[1] === '两' ? 2 : CN_NUM.indexOf(m[1]) >= 0 ? CN_NUM.indexOf(m[1]) : Number(m[1])) : n - 1;
+        if (!(k >= 1 && k <= n)) throw new Error(`problem: 限几人写 1～${n}（现在是「${m[0]}」）`);
+        sems += `, room = ${k}`;
+        body = `P(room); ${L}; ${R}; 吃饭; ${VL}; ${VR}; V(room); 思考;`;
+        about += `room = ${k}：最多 ${k} 个人同时去拿筷子。`;
+      }
       else if (modIs(/^(奇偶|odd)$/i)) { body = `if (i % 2 == 1) { ${L}; ${R}; } else { ${R}; ${L}; } 吃饭; ${VL}; ${VR}; 思考;`; about += '奇数号先拿左边，偶数号先拿右边。'; }
       else body = `${L}; ${R}; 吃饭; ${VL}; ${VR}; 思考;`;
       out = { sems, code: `P(i)×${n}（哲学家）: while(1) { ${body} }`, about };
@@ -766,6 +777,7 @@ export function exec(sys, s0, p, mistake = '', lite = false) {
       ev.cond = !!evalExpr(x.cond, env());
       if (!lite) ev.vals = [...idsOf(x.cond)].map((id) => `${id} = ${env()[id]}`);
       ev.innerOp = x.inner.op;
+      if (!lite) ev.itext = insText(sys, p, x.inner, E);
       if (ev.cond) next = run1(x.inner) ? null : x.next;
       else { next = x.jf; if (x.inner.sem) ev.key = semKey(sys, x.inner.sem, env()); }
     } else if (run1(x)) next = null;
@@ -777,7 +789,7 @@ export function exec(sys, s0, p, mistake = '', lite = false) {
 
 // 进程正在做的这一句算不算临界区：标了 /* 临界区 */ 的、缓冲区的放入 / 取出
 function csOf(sys, x) {
-  if (!x || x.op !== 'work') return null;
+  if (!x || (x.op !== 'work' && x.op !== 'set')) return null;
   if (x.cs) return { group: '临界区', shared: x.cs === 's' };
   if (x.buf && sys.buffer) return { group: sys.buffer.name, shared: false };
   return null;
@@ -836,23 +848,26 @@ export function pvSearch(sys, want = 'deadlock', { limit = MAX_STATES } = {}) {
   res ||= { found: false, path: null, states: parent.size, complete: true };
   // 最短的走法常常有好几种，宽度优先找到的那种不一定好懂：轮流一句一句走、一个进程一直走到阻塞再换下一个，
   // 这两种「自然」的走法要是一样短，就用它（哲学家：五个人先都拿起左边的筷子，再都去拿右边的）
-  if (res.found) for (const policy of ['rr', 'block']) {
-    const nat = natural(sys, policy, res.path.length);
-    const bad = nat && badOf(sys, nat.s, nat.ev).filter(isBad(want));
-    if (bad?.length) { res.path = nat.order; res.bad = bad; break; }
+  if (res.found) {
+    const tries = [...sys.procs.map((_, p) => ['block', p]), ['rr', 0]];
+    for (const [policy, from] of tries) {
+      const nat = natural(sys, policy, res.path.length, from);
+      const bad = nat && badOf(sys, nat.s, nat.ev).filter(isBad(want));
+      if (bad?.length) { res.path = nat.order; res.bad = bad; break; }
+    }
   }
   sys._search[want] = res;
   return res;
 }
 
-// 按一种规则走 len 步：rr 轮流一句一句走；block 一个进程一直走到阻塞（或做完），再换下一个
-function natural(sys, policy, len) {
-  let s = initState(sys), ev = null, p = 0;
+// 按一种规则走 len 步：rr 轮流一句一句走；block 从进程 from 开始，一个进程一直走到阻塞（或做完）再换下一个
+function natural(sys, policy, len, from = 0) {
+  let s = initState(sys), ev = null, p = from;
   const order = [];
   while (order.length < len) {
     const rs = readyList(sys, s);
     if (!rs.length) return null;
-    const q = policy === 'block' && isReady(sys, s, p) ? p : rs.find((x) => x >= (policy === 'block' ? p : p)) ?? rs[0];
+    const q = policy === 'block' && isReady(sys, s, p) ? p : rs.find((x) => x >= p) ?? rs[0];
     const r = exec(sys, s, q);
     s = r.s; ev = r.ev;
     order.push(q);
@@ -904,25 +919,27 @@ function badText(sys, b, s) {
 function msgOf(sys, s0, s, ev, bad, before) {
   const pr = sys.procs[ev.p];
   const who = pr.name;
+  const text = ev.op === 'guard' ? ev.itext : ev.text;
   const pv = () => {
-    if (ev.kind === 'P') return `${ev.text}：${ev.key} 从 ${fmt(ev.before)} 减到 ${fmt(ev.after)}，${ev.blocked ? `${ev.after < 0 ? '小于 0' : '不能往下走'}：${who} **阻塞**，排进 ${ev.key} 的等待队列（${names(sys, s.q[ev.key])}）` : '不小于 0，接着往下走'}`;
-    if (ev.kind === 'V') return `${ev.text}：${ev.key} 从 ${fmt(ev.before)} 加到 ${fmt(ev.after)}，${ev.woken !== null && ev.woken !== undefined ? `≤ 0，说明有进程在等：唤醒队头的 ${sys.procs[ev.woken].name}（从阻塞变成就绪，下次轮到它时从 P 后面接着走）` : ev.after > 0 ? '大于 0，没有进程在等' : '没有唤醒谁'}`;
-    if (ev.kind === 'set') return `${ev.text}：${ev.var} 从 ${ev.before} 变成 ${ev.after}`;
-    let m = ev.text;
+    if (ev.kind === 'P') return `${text}：${ev.key} 从 ${fmt(ev.before)} 减到 ${fmt(ev.after)}，${ev.blocked ? `${ev.after < 0 ? '小于 0' : '不能往下走'}：${who} **阻塞**，排进 ${ev.key} 的等待队列（${names(sys, s.q[ev.key])}）` : '不小于 0，接着往下走'}`;
+    if (ev.kind === 'V') return `${text}：${ev.key} 从 ${fmt(ev.before)} 加到 ${fmt(ev.after)}，${ev.woken !== null && ev.woken !== undefined ? `≤ 0，说明有进程在等：唤醒队头的 ${sys.procs[ev.woken].name}（从阻塞变成就绪，下次轮到它时从 P 后面接着走）` : ev.after > 0 ? '大于 0，没有进程在等' : '没有唤醒谁'}`;
+    if (ev.kind === 'set') return `${text}：${ev.var} 从 ${ev.before} 变成 ${ev.after}`;
+    let m = text;
     if (ev.buf) {
       const B = sys.buffer;
-      if (!ev.buf.err) m += `：${B.name}里现在有 ${ev.buf.n} 个（一共 ${B.cap} 个位置）`;
+      if (!ev.buf.err) m += `，${B.name}里现在有 ${ev.buf.n} 个（一共 ${B.cap} 个位置）`;
     }
     return m;
   };
   let m;
   if (ev.op === 'test') m = `${who} 判断 ${ev.text.replace(/^\} /, '')}：${ev.vals.join('，')}，${ev.cond ? '成立' : '不成立'}。`;
-  else if (ev.op === 'guard') m = `${who} 执行 if (${codeOf(sys, ev.p)[ev.pc].condText})：${ev.vals.join('，')}，${ev.cond ? `成立，执行 ${pv()}` : `不成立，不执行 ${ev.text.replace(/^if \(.*?\) /, '')}`}。`;
+  else if (ev.op === 'guard') m = `${who} 执行 if (${codeOf(sys, ev.p)[ev.pc].condText})：${ev.vals.join('，')}，${ev.cond ? `成立，执行 ${pv()}` : `不成立，不执行 ${text}`}。`;
   else m = ev.kind === 'work' ? `${who}：${pv()}。` : `${who} 执行 ${pv()}。`;
   if (ev.done) m += ` ${who} 做完了。`;
   // 新出现的毛病（同时在临界区会一直持续，只在刚出现时说）
   const had = new Set(before.map((b) => `${b.kind}:${b.group || ''}:${(b.procs || []).join(',')}`));
-  for (const b of bad) if (!had.has(`${b.kind}:${b.group || ''}:${(b.procs || []).join(',')}`)) m += ` ${badText(sys, b, s)}`;
+  // 死锁的细节（谁在等谁）在画面下面的提示框里，这里只说一句
+  for (const b of bad) if (!had.has(`${b.kind}:${b.group || ''}:${(b.procs || []).join(',')}`)) m += ` ${b.kind === 'deadlock' ? '**死锁了**：所有进程都阻塞着，谁都走不下去。' : badText(sys, b, s)}`;
   return m;
 }
 
@@ -1058,7 +1075,7 @@ function view(v, input) {
     const q = s.q[key].length ? s.q[key].map((p) => `<span class="pv-qp" data-key="pv-q${p}">${esc(sys.procs[p].name)}</span>`).join('<i>←</i>') : '<span class="muted">—</span>';
     return `<tr data-cmd="${n + j + 1}" data-label="${esc(key)}"${chg ? ' class="pv-chg sv-new"' : ''}><td><b>${esc(key)}</b></td><td class="pv-val${s.sem[key] < 0 ? ' pv-neg' : ''}">${fmt(s.sem[key])}</td><td class="pv-q">${q}</td></tr>`;
   }).join('');
-  let side = `<div class="sv-gtbl-wrap"><table class="sv-gtbl sv-tab pv-sems"><thead><tr><th>信号量</th><th>值</th><th>等待队列（队头在左）</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  let side = `<div class="sv-gtbl-wrap"><table class="sv-gtbl sv-tab pv-sems"><thead><tr><th>信号量</th><th>值</th><th>等待队列<small>队头在左</small></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   if (sys.buffer) {
     const B = sys.buffer;
     const cells = [];
@@ -1109,6 +1126,9 @@ function table(input, r) {
     if (op === 'set' && !sys.varNames.length) return;
     rows.push({ label: `${k}. ${sys.procs[ev.p].name}：${ev.text}`, cells: head.map((h) => ({ v: String(sys.keys.includes(h) ? st.view.st.sem[h] : st.view.st.vars[h]), num: true })) });
   });
+  // 第一行是开始时的值（直接给出），第 1 步也能「照抄」
+  const s0 = initState(sys);
+  if (rows.length) rows.unshift({ label: '开始', cells: head.map((h) => ({ v: String(sys.keys.includes(h) ? s0.sem[h] : s0.vars[h]), given: true })) });
   const text = input.run && !input.run.search ? input.runText : scheduleText(sys, r.order);
   return { q: `按 ${text} 的顺序执行，填出每一步之后各信号量${sys.varNames.length ? '和变量' : ''}的值（没变的点「照抄」；负数写成 -1）。`, qhtml: view({ st: initState(sys), ev: null, bad: [] }, input), dir: 'row', head, rows, copy: true };
 }

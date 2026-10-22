@@ -177,7 +177,7 @@ function csmaRun(input) {
     vals.push({ label: `A 检测到冲突（${U}）`, v: inUnit(tA, U) });
     put('line', { now: ta }, `t = t_B + τ = ${input.last ? `(τ − δ) + τ ≈ 2τ = ${T(2 * tau)}` : `${T(tb)} + ${T(tau)} = ${T(ta)}`}：B 的信号传回 A，A 检测到冲突，停止发送${input.jam !== null ? `，发 jam 到 ${T(ta + input.jam / rate)}` : '、发 jam'}，然后退避。`,
       numAsk('detect', `A 在什么时刻检测到冲突？（从 A 开始发送算，${U}）`, inUnit(tA, U), input.last ? `${T(2 * tau)}（2τ，差一点点）` : T(ta)));
-    put('line', { now: ta, done: true }, `从 A 开始发送到两边都检测到冲突用了 ${input.last ? `约 2τ = ${T(2 * tau)}` : T(ta)}。B 和 A 同时发时最短（τ = ${T(tau)}），B 在 A 的信号快到时才发最长（2τ = ${T(2 * tau)}，就是争用期）：A 发出 2τ 还没检测到冲突，这一帧就不会再冲突了。`);
+    put('line', { now: ta, done: true }, `从 A 开始发送到两边都检测到冲突用了${input.last ? `约 2τ = ${T(2 * tau)}` : ` ${T(ta)}`}。B 和 A 同时发时最短（τ = ${T(tau)}），B 在 A 的信号快到时才发最长（2τ = ${T(2 * tau)}，就是争用期）：A 发出 2τ 还没检测到冲突，这一帧就不会再冲突了。`);
   }
 
   // —— 二进制指数退避 ——

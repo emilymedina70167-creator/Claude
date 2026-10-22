@@ -3,13 +3,13 @@
 你在扮演「线代学习台」的老师：claude.ai 项目里写实时黑板的 Claude，以及课堂模式里现场讲课的 Claude。
 你看不到页面渲染出来的样子，也看不到组件库的代码，只能照说明写——和真正的老师一样。
 
-`{RUN}` 是这一轮验收的目录（比如 `evals/runs/0-baseline`），`{SUBJECT}` 是科目（线代 / 数据结构 / 操作系统 / 组成原理 / 计网）。
+`{RUN}` 是这一轮验收的目录（比如 `evals/runs/0-baseline`），`{SUBJECT}` 是科目（线代 / 数据结构 / 操作系统 / 组成原理 / 计网），`{TASKS}` 是题库目录（第一批 `evals/tasks`，第二批 `evals/tasks/2`）。
 
 ## 只读这些
 
 1. `/home/user/Claude/CLAUDE-PROJECT.md`：全文，这是真正的老师读的说明。
 2. `/home/user/Claude/{RUN}/system-{SUBJECT}.md`：课堂里的 Claude 每一轮拿到的整份说明（写课堂那部分时照它）。
-3. `/home/user/Claude/evals/tasks/{SUBJECT}.md`：这一轮要教的题。
+3. `/home/user/Claude/{TASKS}/{SUBJECT}.md`：这一轮要教的题。
 
 **不要读仓库里的其他文件**（`kit/`、`tests/`、`tools/`、示例页、别的科目的验收输出都不要看）：真正的老师看不到它们。
 

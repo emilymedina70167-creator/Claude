@@ -161,11 +161,12 @@ export function solve(ins, input) {
     return mem.get(x);
   };
   const R = (name) => input.regs.get(name).v;
-  const out = { ea: null, eaReg: null, op: null, acc: 0, reads, eaReads: 0, lines: [], regs: [], jump: ins.jump, pc: null, sp: null };
+  const out = { ea: null, eaReg: null, op: null, acc: 0, reads, eaReads: 0, lines: [], regs: [], jump: ins.jump, pc: null, sp: null, kind: ins.k };
   const A = ins.a ? dispOf(ins, input) : null;
   let k = ins.k;
   if (mistake === 'immDirect' && k === 'imm') k = 'dir';
   if (mistake === 'regAsReg' && k === 'regind') k = 'reg';
+  out.kind = k; // 按错法算时走的是另一种方式（run 照它出步骤）
   switch (k) {
     case 'imm':
       out.op = A.v;
@@ -277,10 +278,11 @@ function run(input) {
     const pre = many ? `第 ${i + 1} 条「${x.text}」：` : '';
     const v = (stage) => ({ i, stage, upto: i });
     const kind = askKind(input);
+    const kk = s.kind;
     // 第一拍：EA（立即、寄存器寻址没有主存地址，这一拍直接给操作数）
-    if (x.k === 'imm') {
+    if (kk === 'imm') {
       steps.push({ view: v('op'), msg: `${pre}立即寻址：操作数就在指令里，A 就是操作数 ${fmtD(s.op, input, Math.max(2, digitsOf(x.a)))}，没有 EA，也不用访存。`, ask: { tag: 'operand', kind, q: `${pre}操作数是多少？`, answer: ansOf(s.op, input), display: fmtD(s.op, input, Math.max(2, digitsOf(x.a))) } });
-    } else if (x.k === 'reg') {
+    } else if (kk === 'reg') {
       steps.push({ view: v('op'), msg: `${pre}寄存器寻址：操作数在寄存器 ${x.reg} 里，EA = ${x.reg}（寄存器编号，不是主存地址）。操作数 = (${x.reg}) = ${fmtD(s.op, input)}，不用访存。`, ask: { tag: 'operand', kind, q: `${pre}操作数是多少？`, answer: ansOf(s.op, input), display: fmtD(s.op, input) } });
     } else {
       const why = {
@@ -294,7 +296,7 @@ function run(input) {
         indidx: () => '先间址后变址：先到 A 单元里取一个地址，再加上变址寄存器的内容。',
         pop: () => '出栈（堆栈寻址）：操作数在栈顶，SP 指向栈顶元素（王道的约定：栈往低地址长）。',
         push: () => '进栈（堆栈寻址）：SP 指向栈顶元素，先 SP − 1 再写进去。',
-      }[x.k]();
+      }[kk]();
       steps.push({ view: v('ea'), msg: `${pre}${why}${s.lines.join('；')}。${x.jump ? `这是转移指令：EA 就是转移的目标地址，执行完 PC = ${fmtA(s.ea, input)}。` : ''}`, ask: { tag: 'ea', kind, q: `${pre}${x.jump ? '转移的目标地址（EA）' : '有效地址 EA'}是多少？`, answer: ansOf(s.ea, input), display: fmtA(s.ea, input) } });
       if (!x.jump && x.k !== 'push') {
         steps.push({ view: v('op'), msg: s.op === null ? `${pre}操作数在主存 ${fmtA(s.ea, input)} 里（题目没给它的内容）。` : `${pre}操作数 = (EA) = (${fmtA(s.ea, input)}) = ${fmtD(s.op, input)}。${x.k === 'pop' ? `读完以后 (SP) + 1 → SP = ${fmtA(s.sp, input)}。` : ''}`, ask: s.op === null ? undefined : { tag: 'operand', kind, q: `${pre}操作数是多少？`, answer: ansOf(s.op, input), display: fmtD(s.op, input) } });
@@ -306,7 +308,7 @@ function run(input) {
     const parts = [];
     if (s.eaReads) parts.push(`取 EA 访存 ${s.eaReads} 次`);
     if (s.ea !== null && !x.jump) parts.push(x.k === 'push' ? '写操作数 1 次' : '取操作数 1 次');
-    const accText = s.acc === 0 ? (x.jump ? '转移指令只是把 EA 送进 PC，不访存' : `${x.k === 'imm' ? '操作数在指令里' : '操作数在寄存器里'}，不访存`) : parts.join('，');
+    const accText = s.acc === 0 ? (x.jump ? '转移指令只是把 EA 送进 PC，不访存' : `${kk === 'imm' ? '操作数在指令里' : '操作数在寄存器里'}，不访存`) : parts.join('，');
     steps.push({ view: v('acc'), msg: `${pre}访存 ${s.acc} 次（不算取指令）：${accText}。`, ask: { tag: 'access', kind: 'number', q: `${pre}取操作数一共要访存几次（不算取指令）？`, answer: s.acc } });
   });
   if (many) steps.push({ view: { i: -1, stage: '', upto: ins.length }, msg: `${ins.length} 条指令都做完了：${ins.map((x, i) => `「${x.text}」取到 ${opText(sol[i], input)}`).join('，')}。` });

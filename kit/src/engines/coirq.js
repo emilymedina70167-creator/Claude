@@ -156,7 +156,7 @@ function run(input) {
   const info = maskInfo(input);
   const steps = [];
   const colText = `（按 ${prio.join(' ')} 的顺序，1 屏蔽、0 开放）`;
-  steps.push({ view: { phase: 'mask', k: input.given ? n : 0 }, msg: `${n} 个中断源，硬件响应优先级 ${prio.join(' > ')}。${input.order ? `要把处理次序改成 ${input.order.join(' > ')}：用屏蔽字。` : input.given ? `屏蔽字已经给了${colText}。` : '屏蔽字按响应优先级设：每个中断源屏蔽自己和比自己低的。'}${input.reqs.length ? `每个服务程序要 ${[...new Set(prio.filter((x) => input.time.has(x)).map((x) => tt(input.time.get(x), input)))].join(' / ')}。` : ''}` });
+  steps.push({ view: { phase: 'mask', k: input.given ? n : 0, intro: true }, msg: `${n} 个中断源，硬件响应优先级 ${prio.join(' > ')}。${input.order ? `要把处理次序改成 ${input.order.join(' > ')}：用屏蔽字。` : input.given ? `屏蔽字已经给了${colText}。` : '屏蔽字按响应优先级设：每个中断源屏蔽自己和比自己低的。'}${input.reqs.length ? `每个服务程序要 ${[...new Set(prio.filter((x) => input.time.has(x)).map((x) => tt(input.time.get(x), input)))].join(' / ')}。` : ''}` });
   if (!input.given) {
     // 一个个写屏蔽字：处理次序不比它高的写 1
     const rank = info.rank;
@@ -217,6 +217,21 @@ function run(input) {
   return { steps, info, sim };
 }
 
+// 题目给的几样（第 0 步、quiz 和填表的题面）
+function givenHtml(input) {
+  const { prio } = input;
+  const items = [`硬件响应优先级 <b>${esc(prio.join(' > '))}</b>`];
+  if (input.order) items.push(`要的处理次序 <b>${esc(input.order.join(' > '))}</b>`);
+  if (input.reqs.length) {
+    const at = new Map();
+    for (const r of input.reqs) at.set(r.t, [...(at.get(r.t) || []), r.name]);
+    items.push(`请求 <b>${[...at].map(([t, xs]) => `${esc(xs.join('、'))} 在 ${esc(tt(t, input))}`).join('，')}</b>`);
+    const ts = [...new Set(prio.filter((x) => input.time.has(x)).map((x) => input.time.get(x)))];
+    items.push(`${ts.length === 1 ? '每个' : ''}服务程序 <b>${ts.length === 1 ? esc(tt(ts[0], input)) : esc(prio.filter((x) => input.time.has(x)).map((x) => `${x} ${tt(input.time.get(x), input)}`).join('，'))}</b>`);
+  }
+  return `<div class="iq-given">${items.map((x) => `<span>${x}</span>`).join('')}</div>`;
+}
+
 function view(st, input) {
   const { prio, n } = input;
   const info = maskInfo(input);
@@ -241,7 +256,7 @@ function view(st, input) {
     const state = st.phase !== 'run' ? '' : x === running ? '执行中' : stack.includes(x) ? '被打断' : pending.includes(x) ? '挂着' : doneSet.has(x) ? `做完 ${tt(sim.done[x], input)}` : '';
     return `<tr class="${cls}" data-cmd="${i + 1}" data-label="${esc(x)}"><th scope="row">${esc(x)}</th><td class="iq-r">${i + 1}</td>${prio.map((y, j) => `<td class="iq-b${bits && bits[j] === '1' ? ' iq-1' : ''}">${bits ? bits[j] : ''}</td>`).join('')}${sim ? `<td class="iq-s">${esc(state)}</td>` : ''}</tr>`;
   }).join('');
-  let h = `<div class="iq-wrap"><table class="sv-tab iq-tab"><thead><tr><th>中断源</th><th>响应</th>${prio.map((y) => `<th class="iq-bh">${esc(y)}</th>`).join('')}${sim ? '<th>状态</th>' : ''}</tr></thead><tbody>${rows}</tbody></table>`;
+  let h = `${st.intro ? givenHtml(input) : ''}<div class="iq-wrap"><table class="sv-tab iq-tab"><thead><tr><th>中断源</th><th>响应</th>${prio.map((y) => `<th class="iq-bh">${esc(y)}</th>`).join('')}${sim ? '<th>状态</th>' : ''}</tr></thead><tbody>${rows}</tbody></table>`;
   if (st.rank || (st.phase === 'run' && (input.order || input.given))) h += `<div class="iq-rank">处理次序：${esc(info.rank.join(' > '))}</div>`;
   h += '</div>';
   if (!sim) return h;
@@ -285,13 +300,14 @@ function view(st, input) {
 export const irqEngine = {
   name: 'irq', title: '中断屏蔽与处理次序', parse, run, view,
   quiz(input, r) {
-    if (r.sim) return { q: '按时间先后，写出各中断服务程序处理完的次序（空格隔开）。', type: 'seq', answer: r.sim.finish.join(' ') };
-    return { q: `按 ${input.prio.join('、')} 的顺序写出各中断源的屏蔽字（每个 ${input.n} 位，空格隔开）。`, type: 'seq', answer: input.prio.map((x) => r.info.masks.get(x)).join(' ') };
+    const qhtml = input.given ? view({ phase: 'mask', k: input.n, intro: true }, input) : givenHtml(input);
+    if (r.sim) return { qhtml, q: '按时间先后，写出各中断服务程序处理完的次序（空格隔开）。', type: 'seq', answer: r.sim.finish.join(' ') };
+    return { qhtml, q: `按 ${input.prio.join('、')} 的顺序写出各中断源的屏蔽字（每个 ${input.n} 位，空格隔开）。`, type: 'seq', answer: input.prio.map((x) => r.info.masks.get(x)).join(' ') };
   },
   table(input, r) {
     const head = ['屏蔽字', ...(r.sim ? ['开始处理', '处理完'] : [])];
     return {
-      q: r.sim ? '填每个中断源的屏蔽字、开始处理和处理完的时刻，再写处理完的先后次序。' : '填每个中断源的屏蔽字（按响应优先级的顺序写各位，1 屏蔽）。', qhtml: '', dir: 'row', head,
+      q: r.sim ? '填每个中断源的屏蔽字、开始处理和处理完的时刻，再写处理完的先后次序。' : '填每个中断源的屏蔽字（按响应优先级的顺序写各位，1 屏蔽）。', qhtml: input.given ? view({ phase: 'mask', k: input.n, intro: true }, input) : givenHtml(input), dir: 'row', head,
       rows: input.prio.map((x) => ({ label: x, cells: [{ v: r.info.masks.get(x), given: !!input.given }, ...(r.sim ? [r.sim.start[x] === undefined ? { v: '', given: true } : { v: String(r.sim.start[x]), num: true }, r.sim.done[x] === undefined ? { v: '', given: true } : { v: String(r.sim.done[x]), num: true }] : [])] })),
       extra: r.sim ? [{ label: '处理完的次序', v: ['', ',', '→', '>', '、'].map((sep) => r.sim.finish.join(sep)) }] : input.given && !input.loose ? [{ label: '处理次序（从高到低）', v: ['', ',', '→', '>', '、'].map((sep) => r.info.rank.join(sep)) }] : undefined,
     };

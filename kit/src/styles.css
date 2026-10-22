@@ -2184,6 +2184,9 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .iq-tab tr.iq-run td.iq-s { color: var(--green); font-weight: 700; }
 .iq-tab tr.iq-wait td.iq-s { color: var(--coral); }
 .iq-rank { font: 15px var(--sans); color: var(--body); }
+.iq-given { display: flex; flex-wrap: wrap; gap: 6px 10px; justify-content: center; margin: 2px 0 10px; }
+.iq-given span { padding: 3px 10px; border-radius: 8px; border: 1.5px solid rgb(var(--chalk-rgb) / 0.25); font: 14px var(--sans); color: var(--muted); }
+.iq-given b { color: var(--chalk); font-weight: 600; }
 .iq-info { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: center; margin: 10px 0 4px; font: 14px var(--sans); color: var(--muted); }
 .iq-info b { color: var(--chalk); }
 .iq-tl { overflow-x: auto; }
@@ -2322,7 +2325,7 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .pvd-stage .pv-proc.pv-ready, .pvd-stage .pv-proc.pv-run { cursor: pointer; }
 .sv-picking .pv-proc { min-height: 44px; cursor: pointer; }
 .pv-code { margin: 0; padding: 6px 0; font: 14px/1.65 var(--mono); color: var(--body); overflow-x: auto; }
-.pv-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 1.65em; padding: 0 8px 0 10px; border-left: 3px solid transparent; white-space: pre; }
+.pv-line { display: flex; align-items: center; gap: 10px; min-height: 1.65em; padding: 0 8px 0 10px; border-left: 3px solid transparent; white-space: pre; }
 .pv-line.pv-brace { color: var(--muted); }
 .pv-line.pv-ran { background: var(--hl); border-left-color: var(--yellow); color: var(--chalk); }
 .pv-line.pv-blkline { background: rgb(var(--coral-rgb) / 0.12); border-left-color: var(--coral); }
@@ -2333,6 +2336,7 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .pv-mk.pv-mk-blk { background: rgb(var(--coral-rgb) / 0.2); color: var(--coral); }
 .pv-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .pv-sems td { white-space: nowrap; transition: background .25s; }
+.pv-sems th small { display: block; font-size: 12px; font-weight: 400; }
 .pv-sems tr.pv-chg td { background: rgb(var(--yellow-rgb) / 0.12); }
 .pv-val { font: 600 16px var(--sans); color: var(--yellow); }
 .pv-val.pv-neg { color: var(--coral); }
