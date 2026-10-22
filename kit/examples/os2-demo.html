@@ -1,0 +1,112 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>操作系统教具（二）</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+subject: 操作系统
+unit: 操作系统教具（二）
+---
+
+# 操作系统教具（二）
+
+访存的整条链和有效访问时间、位示图、死锁检测。点「下一步」往下走；写了 `ask:` 的，走到那一步之前先让你猜。
+
+## 1. 访存的整条链 mem
+
+2009 年统考第 46 题：页面 4KB，快表 10 ns、内存 100 ns，缺页处理 10⁸ ns（含更新快表和页表），驻留集 2 块、LRU，快表一开始是空的。
+
+```mem
+id: vm-2009
+title: 2009 年第 46 题：三个地址各要多久
+page: 4KB
+table: 0->101H, 1->-, 2->254H
+vaddr: 2362H, 1565H, 25A5H
+cost: tlb=10 mem=100 fault=10^8
+resident: 2
+ask: page, tlb, victim, paddr, time
+```
+
+```mem
+id: vm-eat
+title: 有效访问时间
+rate: tlb=0.9 fault=0.0001
+cost: tlb=10 mem=100 fault=10^8
+ask: hit, miss, fault, eat
+```
+
+```mem
+id: vm-eat2
+title: 两级页表、带 Cache
+rate: tlb=0.95 cache=0.9
+cost: tlb=5 cache=10 mem=100
+levels: 2
+ask: data, miss, eat
+```
+
+```mem
+id: vm-fill
+title: 自己填表
+mode: fill
+page: 4KB
+table: 0->101H, 1->-, 2->254H
+vaddr: 2362H, 1565H, 25A5H
+cost: tlb=10 mem=100 fault=10^8
+resident: 2
+```
+
+## 2. 位示图 bitmap
+
+```bitmap
+id: bm-1
+title: 分配、回收、互相换算
+map: 1111 0011 1010 0000; 0000 1111 1111 1110; 1111 1111 0000 0000
+ops: alloc 3, free 5, where 20, block 2 3
+ask: alloc, blocks, word, bit, block
+```
+
+```bitmap
+id: bm-1based
+title: 从 1 编号（b = n(i − 1) + j）
+word: 16
+base: 1
+ops: where 37, block 3 5
+ask: word, bit, block
+```
+
+```bitmap
+id: bm-2015
+title: 2015 年统考：位示图存在磁盘上
+at: 32
+block: 1KB
+ops: free 409612
+ask: disk, word
+```
+
+## 3. 死锁检测 deadlock
+
+```deadlock
+id: dl-cycle
+title: 有环，但能完全化简
+res: R1 3, R2 2
+edges: R1->P1 2, P1->R2, R1->P2, R2->P2, P2->R1
+ask: avail, next, dead
+```
+
+```deadlock
+id: dl-dead
+title: 化简不下去：死锁
+res: R1 1, R2 2, R3 1, R4 3
+edges: R1->P2, R2->P1, R2->P2, R3->P3, P1->R1, P2->R3, P3->R2
+ask: avail, dead, who
+```
+
+```deadlock
+id: dl-quiz
+title: 有没有死锁
+mode: quiz
+res: R1 2, R2 1
+alloc: P1 1 0; P2 1 0; P3 0 1
+request: P1 0 1; P2 0 0; P3 1 0
+```
+</script>

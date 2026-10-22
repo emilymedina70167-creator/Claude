@@ -44,6 +44,8 @@ import { allocEngine } from '../engines/osmem.js';
 import { memexpEngine } from '../engines/comem.js';
 import { faddEngine } from '../engines/cofloat.js';
 import { mulEngine } from '../engines/comul.js';
+import { asmEngine } from '../engines/coasm.js';
+import { divEngine } from '../engines/codiv.js';
 import { fileidxEngine } from '../engines/osfile.js';
 import { pagetableEngine } from '../engines/ospt.js';
 import { fragEngine } from '../engines/netfrag.js';
@@ -59,6 +61,17 @@ import { stackEngine } from '../engines/stack.js';
 import { cqueueEngine } from '../engines/cqueue.js';
 import { compressEngine } from '../engines/compress.js';
 import { extsortEngine } from '../engines/extsort.js';
+import { memEngine } from '../engines/osvm.js';
+import { bitmapEngine } from '../engines/osbitmap.js';
+import { deadlockEngine } from '../engines/osdeadlock.js';
+import { eaEngine } from '../engines/coea.js';
+import { opcodeEngine } from '../engines/coopcode.js';
+import { layoutEngine } from '../engines/colayout.js';
+import { irqEngine } from '../engines/coirq.js';
+import { csmaEngine, switchEngine } from '../engines/netmac.js';
+import { dvEngine } from '../engines/netdv.js';
+import { utilEngine, rttEngine } from '../engines/netperf.js';
+import { pvBlock } from './pvdo.js';
 
 // 代码块语言名 → 组件
 export const blocks = {
@@ -97,6 +110,8 @@ export const blocks = {
   memexp: stepperBlock(memexpEngine),
   fadd: stepperBlock(faddEngine),
   mul: stepperBlock(mulEngine),
+  asm: stepperBlock(asmEngine),
+  div: stepperBlock(divEngine),
   fileidx: stepperBlock(fileidxEngine),
   pagetable: stepperBlock(pagetableEngine),
   frag: stepperBlock(fragEngine),
@@ -111,6 +126,14 @@ export const blocks = {
   avl: stepperBlock(avlEngine), rbt: stepperBlock(rbtEngine), btree: stepperBlock(btreeEngine),
   // 线性结构：栈的应用、循环队列、特殊矩阵的压缩存储；外部排序
   stack: stepperBlock(stackEngine), cqueue: stepperBlock(cqueueEngine), compress: stepperBlock(compressEngine), extsort: stepperBlock(extsortEngine),
+  // 操作系统（二）：访存的整条链和有效访问时间、位示图、死锁检测（资源分配图化简）
+  mem: stepperBlock(memEngine), bitmap: stepperBlock(bitmapEngine), deadlock: stepperBlock(deadlockEngine),
+  // 组成原理（二）：寻址方式、扩展操作码、大小端与对齐、中断屏蔽
+  ea: stepperBlock(eaEngine), opcode: stepperBlock(opcodeEngine), layout: stepperBlock(layoutEngine), irq: stepperBlock(irqEngine),
+  // 计网（二）：CSMA/CD、距离向量（RIP）、交换机自学习、信道利用率、HTTP 要几个 RTT
+  csma: stepperBlock(csmaEngine), dv: stepperBlock(dvEngine), switch: stepperBlock(switchEngine), util: stepperBlock(utilEngine), rtt: stepperBlock(rttEngine),
+  // 进程同步：信号量 P/V（写了 run: 是演示；没写是学生自己点进程，blocks/pvdo.js）
+  pv: pvBlock(),
 };
 
 // elim：mode: do 是学生自己做行变换（blocks/elimdo.js），其余照演示组件（演示 / quiz / fill）

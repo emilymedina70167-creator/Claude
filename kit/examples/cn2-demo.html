@@ -1,0 +1,221 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>计网（二）教具一览</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+subject: 计网
+unit: 计网（二）教具一览
+---
+
+# 计网（二）教具一览
+
+CSMA/CD、距离向量路由（RIP）、交换机自学习、信道利用率、HTTP 要几个 RTT。都是「一步步走」的演示：只写题目给的量，每一步由页面算。写了 `ask:` 的，走到那一步之前先让你猜。
+
+## 1. CSMA/CD
+
+```csma
+id: cd-2010
+title: 2010 年 47 题：两台主机最晚什么时候都检测到冲突
+rate: 10Mb/s
+dist: 2km
+v: 200000km/s
+bsend: last
+ask: tau, minframe, detect
+```
+
+```csma
+id: cd-2019
+title: 2019 年：最短帧长 128B，单程传播时延最多多少
+rate: 100Mb/s
+minframe: 128B
+ask: tau
+```
+
+```csma
+id: cd-2009
+title: 2009 年：最短帧长少 800 比特，距离怎么变
+rate: 1Gb/s
+v: 200000km/s
+dframe: -800bit
+ask: dchange
+```
+
+```csma
+id: cd-back
+title: 冲突时间线和二进制指数退避
+rate: 10Mb/s
+delay: 25.6μs
+bsend: 8μs
+jam: 48
+r: 1, 3, 0, 9
+ask: detect, wait
+```
+
+```csma
+id: cd-11
+title: 第 11 次重传，r 在哪个范围里选
+rate: 10Mb/s
+slot: 51.2μs
+retry: 11
+ask: range
+```
+
+## 2. 交换机自学习
+
+```switch
+id: sw-2014
+title: 2014 年：两个帧分别从哪些端口转发
+hosts: a1 1, b1 2, c1 3
+init: b1 2
+frames: a1→c1, c1→a1
+ask: out
+```
+
+```switch
+id: sw-hub
+title: 端口 1 接了集线器
+hosts: A 1, B 1, C 2, D 3
+frames: A→B, B→A, C→*, D→C, A→D
+ask: out, learn
+```
+
+```switch
+id: sw-fill
+title: 自己填：每一帧从哪些端口出去
+mode: fill
+hosts: A 1, B 2, C 3, D 4
+frames: A→D, D→A, B→A, C→B, A→C
+```
+
+## 3. 距离向量路由（RIP）
+
+```dv
+id: dv-rip
+title: 谢希仁 4-38：B 收到 C 的 RIP 报文
+router: B
+table: N1 7 A, N2 2 C, N6 8 F, N8 4 E, N9 4 F
+from: C
+recv: N2 4, N3 8, N6 4, N8 3, N9 5
+ask: dist
+```
+
+```dv
+id: dv-fill
+title: 自己填：R6 更新后的路由表
+mode: fill
+router: R6
+table: Net2 3 R4, Net3 4 R5
+from: R4
+recv: Net1 3, Net2 4, Net3 1
+```
+
+```dv
+id: dv-vec
+title: C 收到 B、D、E 的距离向量
+router: C
+vectors: B (5,0,8,12,6,2), D (16,12,6,0,9,10), E (7,6,3,9,0,4)
+cost: B 6, D 3, E 5
+ask: dist, hop
+```
+
+```dv
+id: dv-cti
+title: 坏消息传得慢：B–C 断了
+links: A-B, B-C
+cut: B-C
+watch: A
+ask: dist
+```
+
+```dv
+id: dv-net
+title: 四台路由器一轮轮交换
+links: A-B 1, B-C 2, C-D 1, A-D 7
+ask: dist
+```
+
+## 4. 信道利用率
+
+```util
+id: ut-2014
+title: 2014 年：GBN 窗口 1000，最大平均数据传输速率
+proto: gbn
+window: 1000
+frame: 1000B
+rate: 100Mb/s
+delay: 50ms
+ask: tframe, u, thru
+```
+
+```util
+id: ut-2015
+title: 2015 年：利用率不小于 80%，帧序号至少几位
+proto: gbn
+frame: 1000B
+rate: 128kb/s
+delay: 250ms
+target: 80%
+ask: cycle, wmin, seqbits
+```
+
+```util
+id: ut-2018
+title: 2018 年：停止-等待，利用率 40% 时帧长多少
+rate: 3kb/s
+delay: 200ms
+target: 40%
+ask: lmin
+```
+
+```util
+id: ut-2020
+title: 2020 年：确认帧也要发 0.8 秒
+frame: 1000B
+ack: 1000B
+rate: 10kb/s
+delay: 200ms
+ask: u
+```
+
+```util
+id: ut-quiz
+title: 只写结果：有效数据传输速率
+mode: quiz
+frame: 1518B
+data: 1500B
+ack: 64B
+rate: 10Mb/s
+delay: 10μs
+```
+
+## 5. HTTP 要几个 RTT
+
+```rtt
+id: rt-non
+title: 非持久连接，8 个对象
+objects: 8
+http: non
+ask: base, obj, total
+```
+
+```rtt
+id: rt-par
+title: 非持久，最多 5 个并行连接
+objects: 8
+http: non
+parallel: 5
+ask: total
+```
+
+```rtt
+id: rt-pipe
+title: 持久 + 流水线，先查 2 次 DNS
+objects: 8
+http: pipeline
+dns: 2
+rtt: 20ms
+dnsrtt: 10ms
+ask: obj, total, time
+```
+</script>

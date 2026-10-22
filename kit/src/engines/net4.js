@@ -264,6 +264,7 @@ export const subnetEngine = {
 // ================= tcp =================
 
 function tcpParse(fields) {
+  if (fields.send !== undefined || fields.lens !== undefined) return dataParse(fields);
   if (fields.handshake !== undefined || fields.close !== undefined) {
     const nums = {};
     for (const m of String(fields.handshake ?? fields.close ?? '').matchAll(/([xyuvw])\s*=\s*(\d+)/gi)) nums[m[1].toLowerCase()] = Number(m[2]);
@@ -273,7 +274,7 @@ function tcpParse(fields) {
     return { mode: close ? 'close' : 'hand', ...nums };
   }
   const ssthresh = Number(fields.ssthresh);
-  if (!(ssthresh >= 2)) throw new Error('tcp 要写 ssthresh:（慢开始门限，如 16），或者 handshake: x=100, y=300（三次握手）、close: u=…, v=…, w=…（四次挥手）');
+  if (!(ssthresh >= 2)) throw new Error('tcp 要写 ssthresh:（慢开始门限，如 16），或者 handshake: x=100, y=300（三次握手）、close: u=…, v=…, w=…（四次挥手）、send: 70 100 配 last: 180（传数据）');
   const rounds = fields.rounds === undefined ? 20 : Number(fields.rounds);
   if (!Number.isInteger(rounds) || rounds < 2 || rounds > 40) throw new Error('rounds: 看几个传输轮次（2 到 40，默认 20）');
   const events = {};
@@ -341,6 +342,93 @@ function handRun(input) {
   return { steps };
 }
 
+// —— 传数据：序号、确认号（累积确认），中间丢了一个时接收方先暂存失序的报文段 ——
+// 两种写法：send: 70 100 配 last: 180（各报文段的序号 + 最后的确认号，要算每段多长），或 seq: 70 配 lens: 30 80（第一个序号 + 每段的长度）
+function dataParse(fields) {
+  const nums = (src, what) => String(src ?? '').split(/[\s,，、]+/).filter(Boolean).map((x) => { const n = Number(x); if (!Number.isInteger(n) || n < 0) throw new Error(`${what}写非负整数，「${x}」不对`); return n; });
+  let segs, given;
+  if (fields.send !== undefined) {
+    const seqs = nums(fields.send, 'send: 各报文段的序号');
+    const last = Number(fields.last);
+    if (seqs.length < 1 || seqs.length > 8) throw new Error('send: 写 1～8 个报文段的序号（依次发送，连续的）');
+    if (!Number.isInteger(last)) throw new Error('send: 要配 last:（最后一个报文段到达后的确认号），才算得出最后一段多长');
+    const all = [...seqs, last];
+    for (let i = 1; i < all.length; i++) if (all[i] <= all[i - 1]) throw new Error(`序号要一个比一个大：${all[i - 1]} 后面是 ${all[i]}`);
+    segs = seqs.map((q, i) => ({ i: i + 1, seq: q, len: all[i + 1] - q }));
+    given = 'seq';
+  } else {
+    const lens = nums(fields.lens, 'lens: 每个报文段的数据长度');
+    const seq0 = Number(fields.seq);
+    if (!Number.isInteger(seq0) || seq0 < 0) throw new Error('lens: 要配 seq:（第一个报文段的序号）');
+    if (lens.length < 1 || lens.length > 8 || lens.some((x) => x < 1)) throw new Error('lens: 写 1～8 个报文段的长度（字节，至少 1）');
+    let q = seq0;
+    segs = lens.map((len, i) => { const x = { i: i + 1, seq: q, len }; q += len; return x; });
+    given = 'len';
+  }
+  const lost = new Set(nums(fields.lost, 'lost: 第一次发送时丢了的报文段（第几个）'));
+  for (const k of lost) if (k < 1 || k > segs.length) throw new Error(`lost: 写第几个报文段（1～${segs.length}）`);
+  return { mode: 'data', segs, given, lost };
+}
+
+// mistake：'ackLast' 确认号写成收到的最后一个字节的序号（少 1）；'noBuffer' 接收方丢掉失序的报文段（重传后只确认到重传的那一段）；
+// 'lossAck' 失序的报文段到了也确认到它的末尾（当成了选择确认）
+function dataRun({ segs, given, lost, mistake }) {
+  const steps = [];
+  const msgs = [];
+  const v = (extra = {}) => ({ msgs: msgs.slice(), ...extra });
+  let exp = segs[0].seq;
+  const buf = [];
+  const acks = [];
+  const ackOut = (n) => (mistake === 'ackLast' ? n - 1 : n);
+  // 收到一段：按序的往前推，失序的暂存；返回发回的确认号
+  const receive = (g) => {
+    if (g.seq === exp) {
+      exp = g.seq + g.len;
+      for (let moved = true; moved;) { moved = false; const k = buf.findIndex((b) => b.seq === exp); if (k >= 0 && mistake !== 'noBuffer') { exp += buf[k].len; buf.splice(k, 1); moved = true; } }
+      return ackOut(exp);
+    }
+    if (g.seq > exp && mistake !== 'noBuffer') buf.push(g);
+    return mistake === 'lossAck' ? ackOut(g.seq + g.len) : ackOut(exp);
+  };
+  steps.push({ view: v(), msg: `主机 A 向 B 连续发送 ${segs.length} 个报文段${given === 'seq' ? `，序号依次是 ${segs.map((g) => g.seq).join('、')}；最后一个到达后 B 的确认号是 ${segs.at(-1).seq + segs.at(-1).len}` : `，第一个的序号是 ${segs[0].seq}，数据依次是 ${segs.map((g) => g.len).join('、')} 字节`}。TCP 的序号按字节编，确认号是「期望收到的下一个字节的序号」（累积确认）。${lost.size ? `第 ${[...lost].join('、')} 个第一次发送时丢了。` : ''}` });
+  for (const g of segs) {
+    const isLost = lost.has(g.i);
+    msgs.push({ dir: 1, text: `seq=${g.seq}，${g.len} 字节`, lost: isLost });
+    const sendAsk = given === 'seq' ? { tag: 'len', kind: 'number', q: `第 ${g.i} 个报文段带多少字节数据？`, answer: g.len } : g.i > 1 ? { tag: 'seq', kind: 'number', q: `第 ${g.i} 个报文段的序号是多少？`, answer: g.seq } : undefined;
+    steps.push({ view: v({ cur: msgs.length - 1 }), msg: `A 发第 ${g.i} 个：seq = ${g.seq}，带 ${g.len} 字节（第 ${g.seq}～${g.seq + g.len - 1} 号字节）${given === 'seq' ? `：长度 = 下一个序号 − 这个序号 = ${g.seq + g.len} − ${g.seq}` : ''}。${isLost ? '这个报文段在路上丢了。' : ''}`, ask: sendAsk });
+    if (isLost) continue;
+    const inOrder = g.seq === exp;
+    const a = receive(g);
+    acks.push(a);
+    msgs.push({ dir: -1, text: `ACK，ack=${a}` });
+    steps.push({ view: v({ cur: msgs.length - 1 }), msg: inOrder ? `B 收到第 ${g.i} 个（正是期望的 ${g.seq}）：期望的下一个字节是 ${g.seq} + ${g.len} = ${g.seq + g.len}${a !== g.seq + g.len && mistake !== 'ackLast' ? `，再接上暂存的，确认到 ${a}` : ''}，发回 ack = ${a}。` : `B 收到第 ${g.i} 个，可它期望的是 ${exp}（前面的还没到）：失序，先暂存；确认号还是 ${exp}（重复确认）。`, ask: { tag: 'ack', kind: 'number', q: `B 收到第 ${g.i} 个报文段以后，发回的确认号是多少？`, answer: a } });
+  }
+  // 丢了的，超时以后重传；B 收到后连同暂存的一起确认
+  for (const g of segs.filter((x) => lost.has(x.i))) {
+    msgs.push({ dir: 1, text: `重传 seq=${g.seq}，${g.len} 字节`, re: true });
+    const before = exp;
+    const a = receive(g);
+    acks.push(a);
+    msgs.push({ dir: -1, text: `ACK，ack=${a}` });
+    steps.push({ view: v({ cur: msgs.length - 1 }), msg: `A 等不到第 ${g.i} 个的确认（超时，或收到 3 个重复确认），重传 seq = ${g.seq}。B 收到后从 ${before} 接上${a > g.seq + g.len ? `暂存的报文段，一直确认到 ${a}` : ''}：发回 ack = ${a}。`, ask: { tag: 'ack', kind: 'number', q: `B 收到重传的第 ${g.i} 个报文段以后，发回的确认号是多少？`, answer: a } });
+  }
+  steps.push({ view: v({ done: true }), msg: `B 发回的确认号依次是 ${acks.join('、')}。` });
+  return { steps, acks, exp };
+}
+
+function dataSvg(s) {
+  const W = 520, top = 40, gap = 48;
+  const H = top + gap * Math.max(s.msgs.length, 3) + 24;
+  let g = `<text class="cn-who" x="90" y="20">主机 A</text><text class="cn-who" x="${W - 90}" y="20">主机 B</text><line class="cn-life" x1="90" y1="28" x2="90" y2="${H - 10}"/><line class="cn-life" x1="${W - 90}" y1="28" x2="${W - 90}" y2="${H - 10}"/>`;
+  s.msgs.forEach((m, i) => {
+    const y1 = top + i * gap, y2 = y1 + gap - 14;
+    const [x1, x2] = m.dir > 0 ? [90, W - 90] : [W - 90, 90];
+    const end = m.lost ? [x1 + (x2 - x1) * 0.6, y1 + (y2 - y1) * 0.6] : [x2, y2];
+    g += `<line class="cn-msg${m.lost ? ' cn-lost' : ''}${m.re ? ' cn-re' : ''}${i === s.cur ? ' cn-new' : ''}" x1="${x1}" y1="${y1}" x2="${end[0]}" y2="${end[1]}"${m.lost ? '' : ' marker-end="url(#cn-arrow2)"'} data-cmd="${i + 1}"/>${m.lost ? `<text class="cn-x" x="${end[0]}" y="${end[1] + 5}">✗</text>` : ''}<text class="cn-msgt" x="${W / 2}" y="${(y1 + y2) / 2 - 6}">${esc(m.text)}</text>`;
+  });
+  return `<svg class="cn-seq" viewBox="0 0 ${W} ${H}" width="${W}" style="max-width:100%" role="img" aria-label="时序图"><defs><marker id="cn-arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="cn-arrowhead"/></marker></defs>${g}</svg>`;
+}
+
 function cwndSvg(series, ss, rounds) {
   const W = 600, H = 260, pad = 32;
   const maxY = Math.max(ss, ...series.map((x) => Math.max(x.cwnd, x.ss)), 4) + 2;
@@ -373,9 +461,10 @@ export const tcpEngine = {
   name: 'tcp',
   title: 'TCP',
   parse: tcpParse,
-  run: (input) => (input.mode === 'cwnd' ? cwndRun(input) : handRun(input)),
-  view: (s, input) => (input.mode === 'cwnd' ? cwndSvg(s.series, s.ss, input.rounds) + chips(s.series.length ? [['cwnd', s.series.at(-1).cwnd], ['ssthresh', s.series.at(-1).ss], ['阶段', s.series.at(-1).phase]] : [['ssthresh', s.ss]]) : handSvg(s)),
+  run: (input) => (input.mode === 'cwnd' ? cwndRun(input) : input.mode === 'data' ? dataRun(input) : handRun(input)),
+  view: (s, input) => (input.mode === 'cwnd' ? cwndSvg(s.series, s.ss, input.rounds) + chips(s.series.length ? [['cwnd', s.series.at(-1).cwnd], ['ssthresh', s.series.at(-1).ss], ['阶段', s.series.at(-1).phase]] : [['ssthresh', s.ss]]) : input.mode === 'data' ? dataSvg(s) : handSvg(s)),
   quiz(input, r, fields) {
+    if (input.mode === 'data') return { q: `主机 A 向 B 连续发送 ${input.segs.length} 个报文段，${input.given === 'seq' ? `序号依次是 ${input.segs.map((g) => g.seq).join('、')}` : `第一个序号 ${input.segs[0].seq}，数据依次 ${input.segs.map((g) => g.len).join('、')} 字节`}${input.lost.size ? `，第 ${[...input.lost].join('、')} 个第一次发送时丢了（之后重传）` : ''}。按顺序写出 B 发回的确认号（用空格隔开）。`, type: 'seq', answer: r.acks.join(' ') };
     if (input.mode !== 'cwnd') throw new Error('三次握手、四次挥手没有 quiz 模式，用 ask 问序号和确认号');
     const k = Number(fields.at || input.rounds);
     if (!(k >= 1 && k <= input.rounds)) throw new Error(`at: 写第几轮（1 到 ${input.rounds}）`);
@@ -383,6 +472,13 @@ export const tcpEngine = {
   },
   // 考卷上那张表：每一轮的 cwnd 和 ssthresh（一轮一列）
   table(input, r) {
+    if (input.mode === 'data') {
+      // 每个报文段：序号、长度、B 收到后发回的确认号（丢了的那次不填）；重传的另起一行
+      let k = 0;
+      const rows = input.segs.map((g) => ({ label: `第 ${g.i} 个`, cells: [{ v: String(g.seq), num: true, given: input.given === 'seq' && true }, { v: String(g.len), num: true, given: input.given === 'len' }, input.lost.has(g.i) ? { v: '丢失', given: true } : { v: String(r.acks[k++]), num: true }] }));
+      for (const g of input.segs.filter((x) => input.lost.has(x.i))) rows.push({ label: `重传第 ${g.i} 个`, cells: [{ v: String(g.seq), given: true }, { v: String(g.len), given: true }, { v: String(r.acks[k++]), num: true }] });
+      return { q: '填出每个报文段的序号、数据长度，和 B 收到它以后发回的确认号。', qhtml: '', dir: 'row', head: ['序号', '数据长度', 'B 的确认号'], rows };
+    }
     if (input.mode !== 'cwnd') return null;
     return {
       q: `TCP（${input.variant === 'reno' ? 'Reno：3 个重复确认时快重传、快恢复' : 'Tahoe：3 个重复确认和超时一样'}），一开始 cwnd = ${input.init}，ssthresh = ${input.ssthresh}${Object.keys(input.events).length ? `，${Object.entries(input.events).map(([kk, e]) => `第 ${kk} 轮${e === 'timeout' ? '超时' : '收到 3 个重复确认'}`).join('，')}` : ''}。填出每一轮的 cwnd 和这一轮的 ssthresh。`,
@@ -392,6 +488,11 @@ export const tcpEngine = {
   },
   // 常见错法：Reno / Tahoe 弄混；慢开始不封顶（越过 ssthresh 还翻倍）；ssthresh 自己减半；超时也快恢复
   variants(input, fields) {
+    if (input.mode === 'data') return differing(tcpEngine, input, [
+      { label: '像是确认号写成了收到的最后一个字节的序号（确认号是期望收到的下一个字节：序号 + 长度）', input: { ...input, mistake: 'ackLast' } },
+      { label: '像是接收方把失序到达的报文段丢掉了（TCP 通常先暂存，重传的那段到了以后一起确认）', input: { ...input, mistake: 'noBuffer' } },
+      { label: '像是失序的报文段到了也确认到它的末尾（TCP 是累积确认：前面缺着，确认号就停在缺的那个字节）', input: { ...input, mistake: 'lossAck' } },
+    ], fields);
     if (input.mode !== 'cwnd') return [];
     return differing(tcpEngine, input, [
       { label: input.variant === 'reno' ? '像是按 Tahoe 算的（3 个重复确认也让 cwnd 回到 1）' : '像是按 Reno 算的（3 个重复确认时快恢复）', input: { ...input, variant: input.variant === 'reno' ? 'tahoe' : 'reno' } },

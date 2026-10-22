@@ -1,0 +1,111 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>信号量 P/V 演示</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+subject: 操作系统
+unit: 信号量 P/V
+---
+
+# 信号量 P/V
+
+几个进程并发执行，每一步是某一个进程执行它的下一句。写了 `run:` 的是一步步的演示；没写 `run:` 的是你自己点进程，看它会怎样。
+
+## 1. 照顺序走一遍
+
+```pv
+id: pv-pc
+title: 生产者消费者：消费者先来
+problem: 生产者消费者
+buffer: 2
+run: C P×6 C+
+ask: block, wake
+```
+
+## 2. 交换两个 P 会怎样
+
+```pv
+id: pv-swap
+title: 生产者先 P(mutex) 再 P(empty)
+problem: 生产者消费者
+buffer: 2
+swap: P
+run: deadlock
+ask: deadlock
+```
+
+## 3. 自己排顺序
+
+```pv
+id: pv-dp
+title: 哲学家进餐：能不能让它死锁？
+problem: 哲学家
+find: deadlock
+```
+
+```pv
+id: pv-guess
+title: 点进程之前先猜
+problem: 生产者消费者 C×2
+buffer: 1
+ask: block, wake
+```
+
+```pv
+id: pv-race
+title: 两个生产者、没有 mutex
+semaphore: empty = 2, full = 0
+buffer: 2
+find: bad
+code:
+P×2（生产者）: while(1) { P(empty); 把产品放入缓冲区; V(full); }
+C（消费者）: while(1) { P(full); 从缓冲区取出一个产品; V(empty); }
+```
+
+## 4. 读者写者
+
+```pv
+id: pv-rw
+title: 读者优先：R1 在读，写者等，R2 照样进来
+problem: 读者写者
+run: R1×4 W R2×4
+ask: block
+```
+
+## 5. 写出结果、填表
+
+```pv
+id: pv-quiz
+title: 互斥地拿筷子还会死锁吗
+problem: 哲学家 互斥
+mode: quiz
+```
+
+```pv
+id: pv-fill
+title: 两个消费者先来
+problem: 生产者消费者 C×2
+buffer: 1
+run: C1 C2 P×6
+mode: fill
+```
+
+## 6. 王道的代码直接贴
+
+```pv
+id: pv-paste
+title: 前驱关系：S1 做完才能做 S2
+run: P2 P1×2 P2+
+code:
+semaphore a = 0;
+P1() {
+  S1;
+  V(a);
+}
+P2() {
+  P(a);
+  S2;
+}
+```
+</script>

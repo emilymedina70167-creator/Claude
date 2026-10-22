@@ -154,6 +154,23 @@ function measureOverlaps(el) {
   return res;
 }
 
+// 在页面里跑：每个有 step 这个变量的图（演示组件），figure set step 连着跳两次；返回出错的说法
+function checkFigureSteps() {
+  const out = [];
+  for (const [id, sc] of window.LAKit?.session?.scenes || []) {
+    const api = sc.api;
+    if (!api?.set || !api.vars || !('step' in (api.vars() || {}))) continue;
+    const name = sc.el?.closest?.('[data-bid]')?.dataset.bid || id;
+    const last = Number(sc.el?.querySelector?.('.sv-scrub')?.max ?? 0);
+    try {
+      api.set('step', last);
+      api.set('step', 0);
+      if (api.vars().step !== 0) out.push(`课堂的 figure set step（${name}）：跳回 0 以后 step 是 ${api.vars().step}`);
+    } catch (e) { out.push(`课堂的 figure set step（${name}）出错：${e.message}`); }
+  }
+  return out;
+}
+
 // 演示组件一步步走到底：碰到「先猜」就点「想不出来」，每走一步看一次图里的字有没有叠
 async function walkSteppers(page) {
   const n = await page.locator('.sv-widget').count();
@@ -235,6 +252,8 @@ async function checkStatic(browser, file, opt, dir) {
         for (const x of await walkSteppers(page)) if (!res.overlaps.includes(x)) res.overlaps.push(x);
         merge(res, await page.evaluate(inspectInPage), '走完以后');
       }
+      // 课堂里老师用的 figure set step：每个演示组件连着跳两次（跳到最后、再跳回开头），出错就是「错」（以前第二次会丢了 step）
+      for (const x of await page.evaluate(checkFigureSteps)) res.errors.push(x);
       results.push(res);
       await ctx.close();
     }

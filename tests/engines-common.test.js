@@ -37,11 +37,24 @@ import { stackEngine } from '../kit/src/engines/stack.js';
 import { cqueueEngine } from '../kit/src/engines/cqueue.js';
 import { compressEngine } from '../kit/src/engines/compress.js';
 import { extsortEngine } from '../kit/src/engines/extsort.js';
+import { asmEngine } from '../kit/src/engines/coasm.js';
+import { divEngine } from '../kit/src/engines/codiv.js';
+import { memEngine } from '../kit/src/engines/osvm.js';
+import { bitmapEngine } from '../kit/src/engines/osbitmap.js';
+import { deadlockEngine } from '../kit/src/engines/osdeadlock.js';
+import { eaEngine } from '../kit/src/engines/coea.js';
+import { opcodeEngine } from '../kit/src/engines/coopcode.js';
+import { layoutEngine } from '../kit/src/engines/colayout.js';
+import { irqEngine } from '../kit/src/engines/coirq.js';
+import { csmaEngine, switchEngine } from '../kit/src/engines/netmac.js';
+import { dvEngine } from '../kit/src/engines/netdv.js';
+import { utilEngine, rttEngine } from '../kit/src/engines/netperf.js';
+import { pvEngine } from '../kit/src/engines/pv.js';
 import { fillSpec, fillOrder } from '../kit/src/stepperspec.js';
 
 const ENGINES = Object.fromEntries([sortEngine, treeEngine, kmpEngine, hashEngine, bsearchEngine, netEngine, traceEngine, schedEngine, pagingEngine, bankerEngine, diskEngine, addrEngine, bitsEngine, cacheEngine, pipeEngine, subnetEngine, tcpEngine, windowEngine, elimEngine, detEngine, eigEngine, schmidtEngine, quadEngine, framesEngine,
   crcEngine, hammingEngine, allocEngine, memexpEngine, faddEngine, mulEngine, fileidxEngine, pagetableEngine, fragEngine, encodeEngine,
-  huffmanEngine, ufEngine, buildtreeEngine, threadEngine, forestEngine, avlEngine, rbtEngine, btreeEngine, stackEngine, cqueueEngine, compressEngine, extsortEngine].map((e) => [e.name, e]));
+  huffmanEngine, ufEngine, buildtreeEngine, threadEngine, forestEngine, avlEngine, rbtEngine, btreeEngine, stackEngine, cqueueEngine, compressEngine, extsortEngine, asmEngine, divEngine, memEngine, bitmapEngine, deadlockEngine, eaEngine, opcodeEngine, layoutEngine, irqEngine, csmaEngine, dvEngine, switchEngine, utilEngine, rttEngine, pvEngine].map((e) => [e.name, e]));
 
 // 示例页里的每个演示组件，再加几个 408-demo 没有的写法
 const blocks = [];
@@ -101,4 +114,73 @@ test('说明里的演示组件例子：照抄就能用（ask 的种类都有、�
     if (e.defaultAsk) e.defaultAsk(input);
     assert.deepEqual(tracked.unknown(), [], `${where}：例子里有用不上的字段`);
   }
+});
+
+// 新加的演示组件忘了放进上面的 ENGINES，就不会被「例子照抄就能用」查到：按 blocks/index.js 里注册的对一遍
+test('blocks/index.js 里注册的演示组件都在这份测试的 ENGINES 里', () => {
+  const src = readFileSync(new URL('../kit/src/blocks/index.js', import.meta.url), 'utf8');
+  // 一行里可能注册好几个（avl: …, rbt: …）：每个「名字: stepperBlock(」都算
+  // 也认自己包一层的（elim: elimBlock()、pv: pvBlock()：有演示也有学生自己做的画面）
+  const registered = [...src.matchAll(/(\w+):\s*(?:stepperBlock\(|\w+Block\(\))/g)].map((m) => m[1]);
+  assert.ok(registered.length > 30);
+  const missing = registered.filter((n) => !ENGINES[n]);
+  assert.deepEqual(missing, [], `这些组件没放进 tests/engines-common.test.js 的 ENGINES：${missing.join('、')}`);
+  // elim 走 elimBlock()（mode: do 另有画面），也要在
+  assert.ok(ENGINES.elim);
+});
+
+// 每个 quiz 的标准答案自己判自己要是对的；填表的表照着标准答案填要全对——判法和出题对不上时（宽度、写法、分组），学生写对了也会被判错
+test('quiz 的答案、填表的标准答案：照着填都判对（示例页 + 手册里的每个例子）', async () => {
+  const { textAnswerSpec } = await import('../kit/src/textspec.js');
+  const { checkFill, normCell } = await import('../kit/src/stepperspec.js');
+  const { readdirSync } = await import('node:fs');
+  const all = [...blocks];
+  const pages = ['CLAUDE-PROJECT.md', ...readdirSync('kit/examples').filter((f) => f.endsWith('.html')).map((f) => `kit/examples/${f}`)];
+  for (const f of pages) for (const m of readFileSync(f, 'utf8').matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)) if (ENGINES[m[2]]) all.push([m[2], m[3]]);
+  let quizzes = 0, tables = 0;
+  for (const [name, src] of all) {
+    const e = ENGINES[name];
+    const where = `${name}（${src.split('\n').find((l) => /^id:/.test(l)) || src.split('\n')[0]}）`;
+    const { fields } = parseFields(e.head ? e.head(src) : src);
+    let input, r;
+    try { input = e.parse(fields, src); r = e.run(input); } catch { continue; } // 示例页里故意写错的、只演示出错的
+    let q = null;
+    try { q = e.quiz?.(input, r, fields) ?? null; } catch { /* 这种用法没有 quiz */ }
+    const spec = q && textAnswerSpec(q.type || 'seq', q.answer, { width: q.width });
+    if (spec) { quizzes++; assert.ok(spec.check(spec.display).ok, `${where}：quiz 的答案「${spec.display}」自己判成了错`); }
+    let t = null;
+    try { t = e.table?.(input, r, fields) ?? null; } catch { /* 这种用法没有表 */ }
+    if (!t) continue;
+    tables++;
+    const { table } = fillSpec(t, {});
+    const first = (c) => String([].concat(c.v ?? '')[0] ?? '');
+    const values = table.rows.map((row) => row.cells.map((c) => (c.given ? '' : c.mark ? (normCell(first(c)) !== '' ? '√' : '') : first(c))));
+    values.extra = (table.extra || []).map(first);
+    const res = checkFill(table, values);
+    assert.ok(res.ok, `${where}：照着标准答案填，${res.first ? (res.first.extra !== undefined ? `附加的第 ${res.first.extra + 1} 格` : `第 ${res.first.r + 1} 行第 ${res.first.c + 1} 格`) : ''}判成了错`);
+  }
+  if (process.env.SHOW_COUNTS) console.log(`quiz ${quizzes}、表 ${tables}`);
+  assert.ok(quizzes > 30 && tables > 30, `quiz ${quizzes} 个、表 ${tables} 张，太少了`);
+});
+
+// 手册的格式：每个演示组件都要有一节（课堂 Claude 只知道手册里写了的），能 quiz / fill / 认错法的，说明里要提到
+test('每个演示组件在手册里都有说明，quiz、fill、错法诊断都写到了', async () => {
+  const { componentDocs } = await import('../kit/build-docs.js');
+  const { docSections } = await import('../kit/src/subject.js');
+  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const secs = docSections(componentDocs(md));
+  const textOf = (name) => { const s = secs.find((x) => x.names.includes(name)); return s ? [...s.body, ...(s.detail || [])].join('\n') : null; };
+  const missing = [], gaps = [];
+  // 说明还在 docs/drafts/ 里、没并进手册的组件（子任务正在做）：并说明的时候把这里清空，之后不许再有
+  const PENDING_DOCS = new Set([]);
+  for (const [name, e] of Object.entries(ENGINES)) {
+    if (PENDING_DOCS.has(name)) continue;
+    const t = textOf(name);
+    if (t === null) { missing.push(name); continue; }
+    if (e.quiz && !/mode: quiz|`quiz`/.test(t)) gaps.push(`${name} 有 quiz，说明里没写 mode: quiz`);
+    if (e.table && !/mode: fill|`fill`/.test(t)) gaps.push(`${name} 有填表，说明里没写 mode: fill`);
+    if (e.variants && !/错法/.test(t)) gaps.push(`${name} 认得出错法，说明里没写「错法诊断认得出……」`);
+  }
+  assert.deepEqual(missing, [], `这些组件在 CLAUDE-PROJECT.md 第三节没有说明（小节标题里要有组件名）：${missing.join('、')}`);
+  assert.deepEqual(gaps, []);
 });
