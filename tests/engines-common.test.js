@@ -170,7 +170,7 @@ test('每个演示组件在手册里都有说明，quiz、fill、错法诊断都
   const textOf = (name) => { const s = secs.find((x) => x.names.includes(name)); return s ? [...s.body, ...(s.detail || [])].join('\n') : null; };
   const missing = [], gaps = [];
   // 说明还在 docs/drafts/ 里、没并进手册的组件（子任务正在做）：并说明的时候把这里清空，之后不许再有
-  const PENDING_DOCS = new Set(['mem', 'bitmap', 'deadlock', 'ea', 'opcode', 'layout', 'irq', 'csma', 'dv', 'switch', 'util', 'rtt', 'pv']);
+  const PENDING_DOCS = new Set(['ea', 'opcode', 'layout', 'irq', 'csma', 'dv', 'switch', 'util', 'rtt', 'pv']);
   for (const [name, e] of Object.entries(ENGINES)) {
     if (PENDING_DOCS.has(name)) continue;
     const t = textOf(name);
