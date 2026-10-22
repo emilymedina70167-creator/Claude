@@ -73,9 +73,9 @@
 | 验算 | `let` 定义整节课的量，公式里 `\calc{…}` 页面精确地算，`\hl{名字}{…}` 给一项起名字（课堂里用来圈它），`\chalk{颜色}{…}` 彩色粉笔 |
 | 内容 | `definition` `theorem` `key` `warning` `example` `intuition`，`hint` `solution` `proof`，`card` |
 | 数据结构（演示） | `sort`（插入、冒泡、选择、快排、归并、基数、希尔），`stack`（中缀转后缀、后缀求值、括号匹配、出栈序列），`cqueue`（循环队列），`compress`（特殊矩阵压缩存储），`tree`（遍历、二叉排序树、堆和堆排序），`avl` `rbt` `btree`（平衡树、红黑树、B / B+ 树），`huffman` `uf` `buildtree` `thread` `forest`（哈夫曼、并查集、由序列建树、线索化、森林转换），`kmp` `hash` `bsearch`（查找），`net`（遍历、最小生成树、最短路径、拓扑、关键路径），`extsort`（败者树、置换选择、最佳归并树），`trace`（C 代码逐行跟踪，页面里有解释器，指针、结构体、链表都能跑），`code`（写代码题，页面跑测试、估复杂度） |
-| 操作系统（演示） | `sched`（进程调度、甘特图），`paging`（页面置换，含改进型 CLOCK），`banker`（银行家算法），`disk`（磁盘调度），`addr`（分页地址变换、快表），`pagetable`（多级页表），`alloc`（动态分区分配），`fileidx`（混合索引） |
-| 组成原理（演示） | `bits`（原码 / 反码 / 补码 / 移码、IEEE 754、补码加减和标志位），`fadd`（浮点加减），`mul`（原码一位乘、Booth），`memexp`（存储器扩展），`cache`（映射和替换），`pipe`（五段流水线和阻塞），`crc` `hamming`（校验码） |
-| 计算机网络（演示） | `encode`（编码波形），`subnet`（子网划分、最长前缀匹配、聚合），`frag`（IP 分片），`tcp`（拥塞窗口、握手挥手），`window`（停等 / GBN / SR 时序图） |
+| 操作系统（演示） | `sched`（进程调度、甘特图），`paging`（页面置换，含改进型 CLOCK），`banker`（银行家算法），`disk`（磁盘调度），`addr`（分页地址变换、快表），`pagetable`（多级页表），`alloc`（动态分区分配），`fileidx`（混合索引），`mem`（快表、页表、缺页的整条链和有效访问时间），`bitmap`（位示图），`deadlock`（死锁检测），`pv`（信号量：跟着顺序走，或者自己点进程找死锁） |
+| 组成原理（演示） | `bits`（原码 / 反码 / 补码 / 移码、IEEE 754、补码加减和标志位），`fadd`（浮点加减），`mul`（原码一位乘、Booth），`memexp`（存储器扩展），`cache`（映射和替换），`pipe`（五段流水线和阻塞），`div`（加减交替除法），`asm`（x86 机器级代码：寄存器、标志位、栈帧），`ea`（寻址方式），`opcode`（扩展操作码），`layout`（大小端和对齐），`irq`（中断屏蔽和处理次序），`crc` `hamming`（校验码） |
+| 计算机网络（演示） | `encode`（编码波形），`subnet`（子网划分、最长前缀匹配、聚合），`frag`（IP 分片），`tcp`（拥塞窗口、握手挥手、传数据的序号和确认号），`window`（停等 / GBN / SR 时序图），`csma`（CSMA/CD），`switch`（交换机自学习），`dv`（距离向量），`util`（信道利用率），`rtt`（HTTP 要几个 RTT） |
 
 完整写法见 [`CLAUDE-PROJECT.md`](CLAUDE-PROJECT.md)。
 

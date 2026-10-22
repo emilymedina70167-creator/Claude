@@ -120,7 +120,8 @@ test('说明里的演示组件例子：照抄就能用（ask 的种类都有、�
 test('blocks/index.js 里注册的演示组件都在这份测试的 ENGINES 里', () => {
   const src = readFileSync(new URL('../kit/src/blocks/index.js', import.meta.url), 'utf8');
   // 一行里可能注册好几个（avl: …, rbt: …）：每个「名字: stepperBlock(」都算
-  const registered = [...src.matchAll(/(\w+):\s*stepperBlock\(/g)].map((m) => m[1]);
+  // 也认自己包一层的（elim: elimBlock()、pv: pvBlock()：有演示也有学生自己做的画面）
+  const registered = [...src.matchAll(/(\w+):\s*(?:stepperBlock\(|\w+Block\(\))/g)].map((m) => m[1]);
   assert.ok(registered.length > 30);
   const missing = registered.filter((n) => !ENGINES[n]);
   assert.deepEqual(missing, [], `这些组件没放进 tests/engines-common.test.js 的 ENGINES：${missing.join('、')}`);
@@ -171,7 +172,7 @@ test('每个演示组件在手册里都有说明，quiz、fill、错法诊断都
   const textOf = (name) => { const s = secs.find((x) => x.names.includes(name)); return s ? [...s.body, ...(s.detail || [])].join('\n') : null; };
   const missing = [], gaps = [];
   // 说明还在 docs/drafts/ 里、没并进手册的组件（子任务正在做）：并说明的时候把这里清空，之后不许再有
-  const PENDING_DOCS = new Set(['pv']);
+  const PENDING_DOCS = new Set([]);
   for (const [name, e] of Object.entries(ENGINES)) {
     if (PENDING_DOCS.has(name)) continue;
     const t = textOf(name);

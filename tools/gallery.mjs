@@ -18,8 +18,8 @@ import { withTheme } from './check-lesson.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const THEMES = ['default', 'chalk', 'paper', 'midnight', 'white'];
-// 演示组件的名字（blocks/index.js 里用 stepperBlock 注册的，加上 elim）：给它们加 start: end，截最后一步
-const STEPPERS = new Set([...readFileSync(join(ROOT, 'kit/src/blocks/index.js'), 'utf8').matchAll(/(\w+):\s*stepperBlock\(/g)].map((m) => m[1]).concat('elim'));
+// 演示组件的名字（blocks/index.js 里用 stepperBlock 注册的，和 elimBlock() / pvBlock() 这种包了一层的）：给它们加 start: end，截最后一步
+const STEPPERS = new Set([...readFileSync(join(ROOT, 'kit/src/blocks/index.js'), 'utf8').matchAll(/(\w+):\s*(?:stepperBlock\(|\w+Block\(\))/g)].map((m) => m[1]));
 
 function parseArgs(argv) {
   const opt = { out: '', themes: THEMES, width: 820, only: null, per: 12, files: [] };
