@@ -84,7 +84,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - `bar.js`：底部输入框（附图、手写板、「⋯」菜单、iPad 软键盘）和它上面的一条：翻页（上一块 / 下一块 / 板列表 / 回到当前板）、快捷回答。不显示消息。
 - `devteacher.js`：`?dev` 的模拟老师；`devpanel.js`：开发面板（还有本地试用的模拟讲义图 `ensureDemoSlide`）。
 - 数据（artifact 数据库）：`steps` 黑板段落（`page` 在第几块板，`place: 'pin'` 是常驻栏），`class_pages` 每块板（标题、板顶的话和 `talkBy`、下课小结和 `foot`），`class_turns` 每一轮（`boardOps` 里有 mark / unmark），`class_notes` 观察和下课小结（带 `verify`），`answers` / `events` 作答，`pack/main`、`pack/problems` 资料包。
-- 每一轮的整份说明（`buildSystem`）要在 160 KiB 以内（`SYSTEM_MAX`），给对话留地方。资料包预算 `PACK_BUDGET` 是 104 KiB，某门课的组件说明长了，`buildSystem` 自动让资料包少占一点，保证整份不超；但每门课至少要给资料包留 96 KiB，每门课系统里的组件说明（精简版）≤ 40 KiB（`tests/subject.test.js` 守着；线代现在约 39 KiB，最紧）。组件说明再加长时先想办法精简：不常用的写法放到 `<!-- 完整写法 -->` 后面，线代、计算机专用的小节打上科目标记。说明里每个演示组件的例子都要照抄就能用（`tests/engines-common.test.js` 守着）。
+- 每一轮的整份说明（`buildSystem`）要在 160 KiB 以内（`SYSTEM_MAX`），给对话留地方。资料包预算 `PACK_BUDGET` 是 104 KiB，某门课的组件说明长了，`buildSystem` 自动让资料包少占一点，保证整份不超；但每门课至少要给资料包留 96 KiB，每门课系统里的组件说明（精简版）≤ 40 KiB（`tests/subject.test.js` 守着；线代现在约 39 KiB，最紧）。组件说明再加长时先想办法精简：不常用的写法放到 `<!-- 完整写法 -->` 后面，线代、计算机专用的小节打上科目标记。`npm run docs:size` 看每门课离上限还剩多少、哪几节最大（`-- 操作系统 20` 只看一门课）。说明里每个演示组件的例子都要照抄就能用（`tests/engines-common.test.js` 守着）。
 
 ### 实时黑板（`kit/src/live/`）
 
