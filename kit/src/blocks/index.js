@@ -45,6 +45,7 @@ import { memexpEngine } from '../engines/comem.js';
 import { faddEngine } from '../engines/cofloat.js';
 import { mulEngine } from '../engines/comul.js';
 import { asmEngine } from '../engines/coasm.js';
+import { divEngine } from '../engines/codiv.js';
 import { fileidxEngine } from '../engines/osfile.js';
 import { pagetableEngine } from '../engines/ospt.js';
 import { fragEngine } from '../engines/netfrag.js';
@@ -110,6 +111,7 @@ export const blocks = {
   fadd: stepperBlock(faddEngine),
   mul: stepperBlock(mulEngine),
   asm: stepperBlock(asmEngine),
+  div: stepperBlock(divEngine),
   fileidx: stepperBlock(fileidxEngine),
   pagetable: stepperBlock(pagetableEngine),
   frag: stepperBlock(fragEngine),

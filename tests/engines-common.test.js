@@ -38,6 +38,7 @@ import { cqueueEngine } from '../kit/src/engines/cqueue.js';
 import { compressEngine } from '../kit/src/engines/compress.js';
 import { extsortEngine } from '../kit/src/engines/extsort.js';
 import { asmEngine } from '../kit/src/engines/coasm.js';
+import { divEngine } from '../kit/src/engines/codiv.js';
 import { memEngine } from '../kit/src/engines/osvm.js';
 import { bitmapEngine } from '../kit/src/engines/osbitmap.js';
 import { deadlockEngine } from '../kit/src/engines/osdeadlock.js';
@@ -53,7 +54,7 @@ import { fillSpec, fillOrder } from '../kit/src/stepperspec.js';
 
 const ENGINES = Object.fromEntries([sortEngine, treeEngine, kmpEngine, hashEngine, bsearchEngine, netEngine, traceEngine, schedEngine, pagingEngine, bankerEngine, diskEngine, addrEngine, bitsEngine, cacheEngine, pipeEngine, subnetEngine, tcpEngine, windowEngine, elimEngine, detEngine, eigEngine, schmidtEngine, quadEngine, framesEngine,
   crcEngine, hammingEngine, allocEngine, memexpEngine, faddEngine, mulEngine, fileidxEngine, pagetableEngine, fragEngine, encodeEngine,
-  huffmanEngine, ufEngine, buildtreeEngine, threadEngine, forestEngine, avlEngine, rbtEngine, btreeEngine, stackEngine, cqueueEngine, compressEngine, extsortEngine, asmEngine, memEngine, bitmapEngine, deadlockEngine, eaEngine, opcodeEngine, layoutEngine, irqEngine, csmaEngine, dvEngine, switchEngine, utilEngine, rttEngine, pvEngine].map((e) => [e.name, e]));
+  huffmanEngine, ufEngine, buildtreeEngine, threadEngine, forestEngine, avlEngine, rbtEngine, btreeEngine, stackEngine, cqueueEngine, compressEngine, extsortEngine, asmEngine, divEngine, memEngine, bitmapEngine, deadlockEngine, eaEngine, opcodeEngine, layoutEngine, irqEngine, csmaEngine, dvEngine, switchEngine, utilEngine, rttEngine, pvEngine].map((e) => [e.name, e]));
 
 // 示例页里的每个演示组件，再加几个 408-demo 没有的写法
 const blocks = [];
