@@ -1,0 +1,68 @@
+{
+  "unit": "相似矩阵求参数",
+  "subject": "线代",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "题目",
+      "md": "$A=\\begin{bmatrix}2&0&0\\\\0&0&1\\\\0&1&x\\end{bmatrix}\\sim B=\\begin{bmatrix}2&0&0\\\\0&y&0\\\\0&0&-1\\end{bmatrix}$，求 $x$、$y$。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "相似能告诉你什么",
+      "md": "相似 similar：存在可逆的 $P$，使 $P^{-1}AP=B$。先别急着列方程，想想相似的两个矩阵有哪些东西是一样的。\n\n```quiz\nid: q-inv\nq: 若 $A\\sim B$，下面哪些**一定**相等？（多选）\n- [x] 特征值 eigenvalue\n- [x] 迹 $\\operatorname{tr}$（trace）\n- [x] 行列式\n- [x] 秩\n- [ ] 特征向量\n- [ ] 对应位置的元素\nexplain: $|\\lambda E-B|=|P^{-1}(\\lambda E-A)P|=|\\lambda E-A|$：特征多项式相同，所以特征值相同；迹是特征值之和、行列式是特征值之积，也相同；乘可逆矩阵不改变秩。特征向量一般不同：$A$ 的特征向量是 $P$ 乘 $B$ 的特征向量。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 1,
+      "md": "```quiz\nid: q-two\nq: 不用算行列式：$A$ 有一个特征值一眼就看得出来，是几？\nanswer: 2\nexplain: $A$ 的第 1 行、第 1 列除了 $a_{11}=2$ 全是 0，$A$ 是分块对角的：左上角 $2$，右下角 $\\begin{bmatrix}0&1\\\\1&x\\end{bmatrix}$。所以 2 一定是特征值，$B$ 里也有 2；剩下的 $y$、$-1$ 要和右下角那一块对上。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 2,
+      "title": "列出两个方程",
+      "md": "迹相等、行列式相等，各给一个方程。先在草稿上写，再一步步做。\n\n```steps\nid: ex-sim\ntitle: 两个方程\nq: $A=\\begin{bmatrix}2&0&0\\\\0&0&1\\\\0&1&x\\end{bmatrix}$ 与 $B=\\begin{bmatrix}2&0&0\\\\0&y&0\\\\0&0&-1\\end{bmatrix}$ 相似，求 $x$、$y$。\n\nstep: 迹相等\ndo: true\nask: 由 $\\operatorname{tr}A=\\operatorname{tr}B$，算出 $y-x$ 等于几？\nanswer: 1\nshow: $\\operatorname{tr}A=2+0+x$，$\\operatorname{tr}B=2+y+(-1)$，所以 $y-x=1$。\n\nstep: 行列式和 x 有关吗\nask: 先猜：$|A|$ 和 $x$ 有关吗？\nchoices: 无关 | 有关，是 x 的一次式 | 有关，是 x 的二次式\nanswer: 无关\nshow: 按第 1 行展开：$|A|=2\\begin{vmatrix}0&1\\\\1&x\\end{vmatrix}=2(0\\cdot x-1)=-2$，$x$ 被 0 乘掉了。$|B|=2\\cdot y\\cdot(-1)=-2y$。\n\nstep: 解出 y\ndo: true\nask: 由 $|A|=|B|$，$y$ 等于几？\nanswer: 1\nshow: $-2=-2y$，$y=1$。\n\nstep: 解出 x\ndo: true\nask: 代回第一个方程，$x$ 等于几？\nanswer: 0\nshow: $y-x=1$，$x=0$。\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 3,
+      "title": "代回去检验",
+      "md": "解出来的 $x$、$y$ 只保证「迹、行列式相等」。代回去看：$x=0$ 时 $A$ 的特征值真的是 $2,1,-1$ 吗？\n\n```answer\nid: q-charA\ntitle: 特征多项式\nq: 取 $x=0$，$A=\\begin{bmatrix}2&0&0\\\\0&0&1\\\\0&1&0\\end{bmatrix}$，写出 $|\\lambda E-A|$（因式分解或展开都行）。\nformula: λ\nanswer: (λ-2)(λ^2-1)\nbefore: |\\lambda E-A|=\nhint: 按第 1 行展开：$(\\lambda-2)\\begin{vmatrix}\\lambda&-1\\\\-1&\\lambda\\end{vmatrix}$。\nexplain: $(\\lambda-2)(\\lambda^2-1)=(\\lambda-2)(\\lambda-1)(\\lambda+1)$，特征值 $2,1,-1$，和 $B$ 的对角元一样。\n```\n\n```eig\nid: eg-chk\ntitle: 页面再算一遍\nmatrix: [[2, 0, 0], [0, 0, 1], [0, 1, 0]]\ngoal: eig\nask: values\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 6,
+      "pin": true,
+      "title": "相似 ⇒",
+      "md": "$A\\sim B\\Rightarrow$ 特征值相同 $\\Rightarrow\\operatorname{tr}A=\\operatorname{tr}B$，$|A|=|B|$。只是必要条件：求出参数要代回去检验。"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 4,
+      "title": "检验够不够",
+      "md": "```quiz\nid: q-need\nq: 只凭 $\\operatorname{tr}A=\\operatorname{tr}B$、$|A|=|B|$ 解出参数，为什么还要代回去检验？\n- [x] 迹、行列式相等只是必要条件，不保证三个特征值都对上\n- [ ] 只是怕算错，逻辑上不需要\n- [ ] 迹和行列式相等就一定相似，检验是多余的\nexplain: 3 阶矩阵有 3 个特征值，迹、行列式只管它们的和与积。这题碰巧够了：2 是白给的，剩下两个由和、积唯一确定。就算特征值全对上，还要两个矩阵都能对角化才相似：这里 $A$ 是实对称矩阵、$B$ 是对角矩阵，所以 $A\\sim B$。\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 4,
+      "title": "另一种列法",
+      "md": "$-1$ 是 $B$ 的特征值，所以也必须是 $A$ 的：$|-E-A|=0$。这样一个方程就能解出 $x$。\n\n```answer\nid: q-alt\ntitle: 用 −1 列方程\nq: $A=\\begin{bmatrix}2&0&0\\\\0&0&1\\\\0&1&x\\end{bmatrix}$，写出 $|-E-A|$（含 $x$ 的式子）。\nformula: x\nanswer: -3x\nbefore: |-E-A|=\nhint: $-E-A=\\begin{bmatrix}-3&0&0\\\\0&-1&-1\\\\0&-1&-1-x\\end{bmatrix}$，按第 1 行展开。\nexplain: $-3\\big[(-1)(-1-x)-1\\big]=-3x$，令它为 0 得 $x=0$，和前面一致。\n```"
+    },
+    {
+      "id": "s7",
+      "seq": 9,
+      "page": 5,
+      "title": "换个数再练",
+      "md": "同样的题型，页面换着数出。先找白给的特征值，再列迹、行列式两个方程。\n\n```practice\nid: pr-sim\ntitle: 相似求参数\ntype: custom\ncount: 2\npick p = int(1, 3)\npick m = int(-2, 2)\npick d = choice(1, 2)\npick u = choice(1, -1, 2, -2, 4, -4)\nlet v = d^2/u\nwhere floor(v) == v\nlet c = m - u\nlet xs = m - v\nlet ys = c + xs - m\nwhere ys != m\nwhere m != p\nq: 设 $A=\\begin{bmatrix}\\calc{p}&0&0\\\\0&\\calc{c}&\\calc{d}\\\\0&\\calc{d}&x\\end{bmatrix}$ 与 $B=\\begin{bmatrix}\\calc{p}&0&0\\\\0&y&0\\\\0&0&\\calc{m}\\end{bmatrix}$ 相似，求 $(x, y)$。\nanswer: [xs, ys]\nbefore: (x,\\ y)=\nhint: 迹：$\\calc{p}+\\calc{c}+x=\\calc{p}+y+(\\calc{m})$；行列式：$\\calc{p}\\,(\\calc{c}\\,x-\\calc{d^2})=\\calc{p}\\cdot y\\cdot(\\calc{m})$。\nexplain: $x=\\calc{xs}$，$y=\\calc{ys}$。检验：右下角 $\\begin{bmatrix}\\calc{c}&\\calc{d}\\\\\\calc{d}&\\calc{xs}\\end{bmatrix}$ 的迹 $\\calc{c+xs}$、行列式 $\\calc{c*xs-d^2}$，正好是 $\\calc{ys}+(\\calc{m})$ 和 $\\calc{ys}\\cdot(\\calc{m})$。\n```"
+    }
+  ]
+}

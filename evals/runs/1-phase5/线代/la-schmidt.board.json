@@ -1,0 +1,62 @@
+{
+  "unit": "施密特正交化",
+  "subject": "线代",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "题目",
+      "md": "$\\boldsymbol\\alpha_1=(1,1,0)^{\\mathrm T}$，$\\boldsymbol\\alpha_2=(1,0,1)^{\\mathrm T}$，$\\boldsymbol\\alpha_3=(0,1,1)^{\\mathrm T}$：正交化、单位化。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "减掉投影",
+      "md": "```let\na1 = [1, 1, 0]\na2 = [1, 0, 1]\na3 = [0, 1, 1]\nb1 = a1\nb2 = a2 - dot(a2, b1)/dot(b1, b1)*b1\nb3 = a3 - dot(a3, b1)/dot(b1, b1)*b1 - dot(a3, b2)/dot(b2, b2)*b2\n```\n\n施密特正交化 Gram–Schmidt 每一步只做一件事：从 $\\boldsymbol\\alpha$ 里减掉它在已有方向上的那一截。先在平面上看：拖动灰色的 $\\boldsymbol\\alpha$，粉色剩下的那段是不是一直和蓝色的 $\\boldsymbol\\beta_1$ 垂直？\n\n```scene\nid: fig-proj\ntitle: 减掉投影\nlet b = [2, 1]\nlet a = [1.5, -0.5] drag snap=0.5\nline [0, 0] dir b color=blue dashed thin\nvector b color=blue label=β1\nvector a color=gray label=α\nvector dot(a, b)/dot(b, b)*b color=yellow label=kβ1\nvector a - dot(a, b)/dot(b, b)*b from dot(a, b)/dot(b, b)*b color=pink label=β2\nshow $(\\boldsymbol\\beta_2,\\boldsymbol\\beta_1)={dot(a - dot(a, b)/dot(b, b)*b, b)}$\n```\n\n```answer\nid: q-k\ntitle: 减几倍\nq: $\\boldsymbol\\beta_1=(2,1)$，$\\boldsymbol\\alpha=(1,2)$。要让 $\\boldsymbol\\alpha-k\\boldsymbol\\beta_1$ 和 $\\boldsymbol\\beta_1$ 垂直，$k$ 是多少？\nanswer: dot([1, 2], [2, 1])/dot([2, 1], [2, 1])\nbefore: k=\nhint: 让内积为 0：$(\\boldsymbol\\alpha-k\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)=(\\boldsymbol\\alpha,\\boldsymbol\\beta_1)-k(\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)=0$。\nexplain: $k=\\dfrac{(\\boldsymbol\\alpha,\\boldsymbol\\beta_1)}{(\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)}=\\calc{dot([1, 2], [2, 1])/dot([2, 1], [2, 1])}$。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 3,
+      "pin": true,
+      "title": "每一步",
+      "md": "$\\boldsymbol\\beta_k=\\boldsymbol\\alpha_k-\\sum_{j<k}\\dfrac{(\\boldsymbol\\alpha_k,\\boldsymbol\\beta_j)}{(\\boldsymbol\\beta_j,\\boldsymbol\\beta_j)}\\boldsymbol\\beta_j$（往已经正交好的 $\\boldsymbol\\beta$ 上投影）"
+    },
+    {
+      "id": "s2",
+      "seq": 4,
+      "page": 2,
+      "title": "求 β₂",
+      "md": "回到题目。第一步不用动：$\\boldsymbol\\beta_1=\\boldsymbol\\alpha_1$。\n\n```answer\nid: q-b2\ntitle: 写出 β₂\nq: $\\boldsymbol\\beta_1=\\boldsymbol\\alpha_1=(1,1,0)^{\\mathrm T}$，$\\boldsymbol\\alpha_2=(1,0,1)^{\\mathrm T}$。写出 $\\boldsymbol\\beta_2=\\boldsymbol\\alpha_2-k\\boldsymbol\\beta_1$。\nanswer: b2\ncheck: dot(ans, b1) == 0 => 和 $\\boldsymbol\\beta_1$ 的内积不是 0，再算算 $k$\n  det(mat(a1, a2, ans)) == 0 => 不在 $\\boldsymbol\\alpha_1$、$\\boldsymbol\\alpha_2$ 张成的平面里：$\\boldsymbol\\beta_2$ 应该是 $\\boldsymbol\\alpha_2$ 减掉 $\\boldsymbol\\beta_1$ 的倍数\n  dot(ans, ans) != 0 => 不能是零向量\nbefore: \\boldsymbol\\beta_2=\nhint: $k=\\dfrac{(\\boldsymbol\\alpha_2,\\boldsymbol\\beta_1)}{(\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)}$：分子、分母各是几？\nexplain: $(\\boldsymbol\\alpha_2,\\boldsymbol\\beta_1)=\\calc{dot(a2, b1)}$，$(\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)=\\calc{dot(b1, b1)}$，$\\boldsymbol\\beta_2=\\calc{b2'}^{\\mathrm T}$。乘 2 写成 $(1,-1,2)^{\\mathrm T}$ 也对：方向一样，还是正交的。\n```\n\n```space\nid: fig-b2\ntitle: 在 α₁、α₂ 的平面里\nspan a1, a2 color=gray\nvector b1 color=blue label=β1\nvector a2 color=gray label=α2\nvector dot(a2, b1)/dot(b1, b1)*b1 color=yellow label=kβ1\nvector b2 from dot(a2, b1)/dot(b1, b1)*b1 color=pink label=β2\nshow $(\\boldsymbol\\beta_2,\\boldsymbol\\beta_1)={dot(b2, b1)}$\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 5,
+      "page": 3,
+      "title": "求 β₃",
+      "md": "```steps\nid: ex-b3\ntitle: 求 β₃\nq: 已有 $\\boldsymbol\\beta_1=\\calc{b1'}^{\\mathrm T}$，$\\boldsymbol\\beta_2=\\calc{b2'}^{\\mathrm T}$（用这个没乘倍数的），$\\boldsymbol\\alpha_3=\\calc{a3'}^{\\mathrm T}$，求 $\\boldsymbol\\beta_3$。\n\nstep: 要减哪几截\nask: $\\boldsymbol\\beta_3$ 要和 $\\boldsymbol\\beta_1$、$\\boldsymbol\\beta_2$ 都垂直。从 $\\boldsymbol\\alpha_3$ 里要减掉哪些？\nchoices: 在 β₁、β₂ 上的投影各一截 | 只减在 β₂ 上的投影 | 在 α₁、α₂ 上的投影各一截\nanswer: 在 β₁、β₂ 上的投影各一截\nshow: $\\boldsymbol\\beta_3=\\boldsymbol\\alpha_3-\\dfrac{(\\boldsymbol\\alpha_3,\\boldsymbol\\beta_1)}{(\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)}\\boldsymbol\\beta_1-\\dfrac{(\\boldsymbol\\alpha_3,\\boldsymbol\\beta_2)}{(\\boldsymbol\\beta_2,\\boldsymbol\\beta_2)}\\boldsymbol\\beta_2$。往已经正交好的 $\\boldsymbol\\beta$ 上投，不往 $\\boldsymbol\\alpha$ 上投。\n\nstep: 第一个系数\ndo: true\nask: $\\dfrac{(\\boldsymbol\\alpha_3,\\boldsymbol\\beta_1)}{(\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)}=$？\nanswer: dot(a3, b1)/dot(b1, b1)\nshow: $(\\boldsymbol\\alpha_3,\\boldsymbol\\beta_1)=\\calc{dot(a3, b1)}$，$(\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)=\\calc{dot(b1, b1)}$，系数 $\\calc{dot(a3, b1)/dot(b1, b1)}$。\n\nstep: 第二个系数\ndo: true\nask: $\\dfrac{(\\boldsymbol\\alpha_3,\\boldsymbol\\beta_2)}{(\\boldsymbol\\beta_2,\\boldsymbol\\beta_2)}=$？\nanswer: dot(a3, b2)/dot(b2, b2)\nshow: $(\\boldsymbol\\alpha_3,\\boldsymbol\\beta_2)=\\calc{dot(a3, b2)}$，$(\\boldsymbol\\beta_2,\\boldsymbol\\beta_2)=\\calc{dot(b2, b2)}$，系数 $\\calc{dot(a3, b2)/dot(b2, b2)}$。\n\nstep: 写出 β₃\ndo: true\nask: 按公式算出 $\\boldsymbol\\beta_3$（不乘倍数）。\nanswer: b3\nshow: $\\boldsymbol\\beta_3=\\calc{b3'}^{\\mathrm T}$；乘 3 写成 $(-2,2,2)^{\\mathrm T}$，或者 $(-1,1,1)^{\\mathrm T}$ 也行。\n```\n\n```answer\nid: q-ver\ntitle: 验算\nq: 用你求出的 $\\boldsymbol\\beta_3$ 验算两个内积：$\\big((\\boldsymbol\\beta_3,\\boldsymbol\\beta_1),\\ (\\boldsymbol\\beta_3,\\boldsymbol\\beta_2)\\big)=$？\nanswer: [dot(b3, b1), dot(b3, b2)]\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 4,
+      "title": "为什么一定垂直",
+      "md": "```conjecture\nid: cj-why\ntitle: 为什么一定垂直\nq: 不代数：为什么按这个公式减完，$\\boldsymbol\\beta_3$ 一定和 $\\boldsymbol\\beta_1$ 垂直？把 $(\\boldsymbol\\beta_3,\\boldsymbol\\beta_1)$ 按内积的线性展开试试，一两句话。\nrubric: 要点 (1) 展开后含 $(\\boldsymbol\\beta_2,\\boldsymbol\\beta_1)$ 的那一项是 0；(2) 剩下 $(\\boldsymbol\\alpha_3,\\boldsymbol\\beta_1)-k_1(\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)$，$k_1$ 正是让它为 0 的那个数。只说「因为减掉了投影」算部分正确。\nanswer: $(\\boldsymbol\\beta_3,\\boldsymbol\\beta_1)=(\\boldsymbol\\alpha_3,\\boldsymbol\\beta_1)-k_1(\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)-k_2(\\boldsymbol\\beta_2,\\boldsymbol\\beta_1)$：第三项因为 $\\boldsymbol\\beta_2\\perp\\boldsymbol\\beta_1$ 是 0，前两项因为 $k_1$ 的取法正好抵消。\nplaceholder: 展开以后……\n```\n\n写完你的想法，再点「下一行」对照：\n\n```derive\nid: d-why\ntitle: 展开看\n(\\boldsymbol\\beta_3,\\boldsymbol\\beta_1) = (\\boldsymbol\\alpha_3,\\boldsymbol\\beta_1)-k_1(\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)-k_2(\\boldsymbol\\beta_2,\\boldsymbol\\beta_1)   // 内积对每一项展开\n    = (\\boldsymbol\\alpha_3,\\boldsymbol\\beta_1)-k_1(\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)   // $\\boldsymbol\\beta_2\\perp\\boldsymbol\\beta_1$，最后一项是 0\n    = 0   // $k_1=\\dfrac{(\\boldsymbol\\alpha_3,\\boldsymbol\\beta_1)}{(\\boldsymbol\\beta_1,\\boldsymbol\\beta_1)}$，正好抵消\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 5,
+      "title": "单位化",
+      "md": "最后每个 $\\boldsymbol\\beta$ 除以自己的长度。格子里可以写根号：`1/√2`、`-2/√6`。\n\n```answer\nid: q-e1\ntitle: η₁\nq: $\\boldsymbol\\beta_1=(1,1,0)^{\\mathrm T}$，写出 $\\boldsymbol\\eta_1=\\dfrac{\\boldsymbol\\beta_1}{\\|\\boldsymbol\\beta_1\\|}$。\nanswer: b1/norm(b1)\nbefore: \\boldsymbol\\eta_1=\n```\n\n```answer\nid: q-e2\ntitle: η₂\nq: $\\boldsymbol\\beta_2=(\\tfrac12,-\\tfrac12,1)^{\\mathrm T}$，写出 $\\boldsymbol\\eta_2$。\nanswer: b2/norm(b2)\nbefore: \\boldsymbol\\eta_2=\nhint: 先乘 2 变成 $(1,-1,2)^{\\mathrm T}$ 再单位化，结果一样，根号好算：长度是 $\\sqrt{1+1+4}$。\n```\n\n```answer\nid: q-e3\ntitle: η₃\nq: $\\boldsymbol\\beta_3=(-\\tfrac23,\\tfrac23,\\tfrac23)^{\\mathrm T}$，写出 $\\boldsymbol\\eta_3$。\nanswer: b3/norm(b3)\nbefore: \\boldsymbol\\eta_3=\nhint: 方向和 $(-1,1,1)^{\\mathrm T}$ 一样。\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 6,
+      "title": "换一组自己填",
+      "md": "换一组向量，整张表你自己填（按公式算，不乘倍数）。这一组有个系数和刚才不一样，留意一下。\n\n```schmidt\nid: sc-fill\ntitle: 自己填一遍\nvectors: (1, 0, -1), (1, -1, 0), (1, 1, 1)\nnormalize: no\nmode: fill\n```"
+    }
+  ]
+}

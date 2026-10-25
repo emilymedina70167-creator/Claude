@@ -1,0 +1,62 @@
+{
+  "unit": "含参数的正定二次型",
+  "subject": "线代",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "题目",
+      "md": "$f=x_1^2+x_2^2+5x_3^2+2t\\,x_1x_2-2x_1x_3+4x_2x_3$，$t$ 取何值时 $f$ 正定？"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "写出矩阵",
+      "md": "二次型 quadratic form 写成 $f=\\mathbf x^{\\mathrm T}A\\mathbf x$，$A$ 是对称矩阵。先看 $2t\\,x_1x_2$ 这一项在 $A$ 里怎么分。\n\n```quiz\nid: q-a12\nq: $A$ 的 $(1,2)$ 元 $a_{12}$ 是？\n- [ ] $2t$\n- [x] $t$\n- [ ] $\\tfrac t2$\nexplain: $\\mathbf x^{\\mathrm T}A\\mathbf x$ 里 $x_1x_2$ 出现两次：$a_{12}x_1x_2+a_{21}x_2x_1=2a_{12}x_1x_2$。所以 $a_{12}=a_{21}$ 是系数的一半，$=t$。\n```\n\n```answer\nid: q-rest\ntitle: 其余三个\nq: 同样的道理，写出 $(a_{13},\\ a_{23},\\ a_{33})$。\nanswer: [-1, 2, 5]\nhint: $-2x_1x_3$、$4x_2x_3$ 的系数各除以 2；$a_{33}$ 是 $x_3^2$ 的系数，不除。\nexplain: $A=\\begin{bmatrix}1&t&-1\\\\t&1&2\\\\-1&2&5\\end{bmatrix}$。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 3,
+      "pin": true,
+      "title": "矩阵",
+      "md": "$A=\\begin{bmatrix}1&t&-1\\\\t&1&2\\\\-1&2&5\\end{bmatrix}$"
+    },
+    {
+      "id": "s2",
+      "seq": 4,
+      "page": 2,
+      "title": "顺序主子式",
+      "md": "正定 positive definite $\\Leftrightarrow$ 顺序主子式 leading principal minors 全大于 0。$D_1=1>0$ 已经满足，算另外两个。\n\n```answer\nid: q-D2\ntitle: D₂\nq: $D_2=\\begin{vmatrix}1&t\\\\t&1\\end{vmatrix}=$？（含 $t$ 的式子）\nformula: t\nanswer: det([[1, t], [t, 1]])\nbefore: D_2=\n```\n\n```answer\nid: q-D3\ntitle: D₃\nq: $D_3=|A|=\\begin{vmatrix}1&t&-1\\\\t&1&2\\\\-1&2&5\\end{vmatrix}=$？（含 $t$ 的式子）\nformula: t\nanswer: det([[1, t, -1], [t, 1, 2], [-1, 2, 5]])\nbefore: D_3=\nhint: 可以先 $r_3+r_1$ 把第 3 行变成 $(0,\\ 2+t,\\ 4)$，再按第 1 列展开；或者直接按第 1 行展开。\nexplain: 按第 1 行展开：$D_3=1\\cdot(5-4)-t(5t+2)+(-1)(2t+1)=-5t^2-4t=-t(5t+4)$。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 5,
+      "page": 3,
+      "title": "解不等式",
+      "md": "拖动竖线（它的位置就是 $t$），看哪一段 $D_2$、$D_3$ 同时在横轴上方。\n\n```graph\nid: fig-D\ntitle: D₂、D₃ 随 t 变\nx: -1.5 1\ny: -2.5 1.5\nxlabel: t\nplot 1 - x^2 color=blue label=D2\nplot -5*x^2 - 4*x color=pink label=D3\nhline 0 color=gray\nlet a = 0.5 drag snap=0.05\nshow $t={a}$：$D_2={1-a^2}$，$D_3={-5*a^2-4*a}$\n```\n\n```answer\nid: q-int\ntitle: t 的范围\nq: $f$ 正定 $\\Leftrightarrow D_2>0$ 且 $D_3>0$。解出来是 $a<t<b$，填 $(a,\\ b)$。\nanswer: [-4/5, 0]\nbefore: (a,\\ b)=\nhint: $D_3=-t(5t+4)>0\\Leftrightarrow t(5t+4)<0$；再和 $D_2>0$ 的范围取交集。\nexplain: $D_3>0\\Leftrightarrow-\\tfrac45<t<0$；$D_2>0\\Leftrightarrow-1<t<1$；交集是 $-\\tfrac45<t<0$（$D_2$ 的条件被包含了）。\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 4,
+      "title": "代一个 t 检验",
+      "md": "取区间里的 $t=-\\tfrac12$：页面一步步配方，你先猜它正定不正定。\n\n```quad\nid: qd-in\ntitle: t = −1/2 时\nf: x1^2 + x2^2 + 5x3^2 - x1x2 - 2x1x3 + 4x2x3\nask: definite\n```\n\n```answer\nid: q-out\ntitle: 区间外呢\nq: 取区间外的 $t=-1$，$D_3=\\begin{vmatrix}1&-1&-1\\\\-1&1&2\\\\-1&2&5\\end{vmatrix}$ 是多少？\nanswer: det([[1, -1, -1], [-1, 1, 2], [-1, 2, 5]])\nbefore: D_3=\nexplain: $D_3=\\calc{det([[1, -1, -1], [-1, 1, 2], [-1, 2, 5]])}<0$，所以 $t=-1$ 时不正定。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 5,
+      "title": "为什么不求特征值",
+      "md": "```quiz\nid: q-method\nq: 这题为什么用顺序主子式，不用「特征值全大于 0」？\n- [x] $|\\lambda E-A|$ 是系数含 $t$ 的三次式，特征值求不出来\n- [ ] 特征值法判断不了正定\n- [ ] 两种方法结论可能不一样\nexplain: 两种判法等价。可这里特征多项式的系数含 $t$，三个根写不出来；顺序主子式只要算几个行列式，直接得到关于 $t$ 的不等式。已知特征值（或者 $A$ 由别的矩阵构造出来，如 $A^2+kE$）时，特征值法才方便。\n```\n\n```recognize\nid: rec-pd\ntitle: 认方法：判正定\nmethods: 顺序主子式 | 特征值 | 定义 xᵀAx>0 | 配方\nreason: true\nshuffle: true\n\nitem: $f=2x_1^2+x_2^2+ax_3^2+2x_1x_2+2x_2x_3$，$a$ 取何值时正定？\nanswer: 顺序主子式\nwhy: 矩阵含参数，特征值求不出来；顺序主子式直接给出关于 $a$ 的不等式。\n\nitem: 3 阶实对称矩阵 $A$ 的特征值是 $1,-1,2$，$k$ 取何值时 $A^2+kE$ 正定？\nanswer: 特征值\nwhy: $A^2+kE$ 的特征值是 $\\lambda^2+k$，看它们全大于 0。\n\nitem: $A$ 是 $m\\times n$ 实矩阵、$r(A)=n$，证明 $A^{\\mathrm T}A$ 正定。\nanswer: 定义 xᵀAx>0\nwhy: $\\mathbf x^{\\mathrm T}A^{\\mathrm T}A\\mathbf x=\\|A\\mathbf x\\|^2$，$\\mathbf x\\ne\\mathbf 0$ 时 $A\\mathbf x\\ne\\mathbf 0$。\n\nitem: $f=(x_1+x_2)^2+(x_2-x_3)^2+(x_1+ax_3)^2$，$a$ 取何值时正定？\nanswer: 定义 xᵀAx>0 | 配方\nwhy: 已经是平方和，$f\\ge0$；$f=0$ 当且仅当三个括号都为 0，看这个齐次方程组什么时候只有零解。\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 6,
+      "title": "换个数练",
+      "md": "页面换着数出题：参数在右下角，$D_3$ 是 $t$ 的一次式。\n\n```practice\nid: pr-pd\ntitle: 含参正定\ntype: custom\ncount: 2\npick a = int(-1, 1)\npick d = int(-2, 2)\npick b = int(-3, 3) nonzero\npick c = int(2, 4)\nlet D2 = c - a^2\nlet K = b^2 - 2*a*b*d + c*d^2\nwhere K != 0\nq: 二次型 $f=\\mathbf x^{\\mathrm T}A\\mathbf x$，$A=\\begin{bmatrix}1&\\calc{a}&\\calc{d}\\\\\\calc{a}&\\calc{c}&\\calc{b}\\\\\\calc{d}&\\calc{b}&t\\end{bmatrix}$。$f$ 正定 $\\Leftrightarrow t>$ ？\nanswer: K/D2\nbefore: t>\nhint: $D_1=1$，$D_2=\\calc{D2}>0$ 已经满足；$D_3$ 是 $t$ 的一次式，令它大于 0。\nexplain: $D_3=\\calc{D2}\\,t-\\calc{K}$，所以 $t>\\calc{K/D2}$。\n```"
+    }
+  ]
+}
