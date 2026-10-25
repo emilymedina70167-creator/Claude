@@ -1,0 +1,41 @@
+{
+  "unit": "CSMA/CD 的最短帧长",
+  "subject": "计网",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "这道题的量",
+      "md": "- 总线 1 km，数据率 10 Mb/s，传播速率 $2\\times10^8$ m/s\n- $\\tau$：端到端单程传播时延 = 距离 ÷ 传播速率"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "最坏要多久才知道",
+      "md": "A 在 0 时刻开始发。最坏的情况：A 的信号快到 B 的时候，B 侦听到信道还空着，也开始发。下图横着是位置、往下是时间，走到关键一步会先问你。\n\n```csma\nid: cd-why\ntitle: 最坏的情况\nrate: 10Mb/s\ndist: 1km\nbsend: last\nask: tau, detect\n```\n\n```quiz\nid: q-why\nq: A 发完一帧就不再检测冲突了。要保证一旦撞了 A 一定知道，A 发这一帧至少要发多久？\n- [ ] $\\tau$\n- [x] $2\\tau$\n- [ ] 和帧长没关系\nexplain: 最坏时 B 的信号要到将近 $2\\tau$ 才回到 A。A 要是在那之前就发完了，会以为发成功了。所以争用期是 $2\\tau$（来回）。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "算最短帧长",
+      "md": "原题：1 km、10 Mb/s、$2\\times10^8$ m/s。在草稿上算，再把每一行填出来（单位写在行名里）。\n\n```csma\nid: cd-fill\ntitle: 自己算\nrate: 10Mb/s\ndist: 1km\nmode: fill\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "数据率、距离变了",
+      "md": "```quiz\nid: q-rate\nq: 距离不变，数据率从 10 Mb/s 提到 100 Mb/s。最短帧长怎么变？\n- [x] 变成 10 倍\n- [ ] 变成 $\\tfrac{1}{10}$\n- [ ] 不变\nexplain: 争用期 $2\\tau$ 只和距离有关，没变；同样的时间里发得更快，要发的比特更多：$\\calc{2*1000/(2*10^8)*100*10^6}$ bit。\n```\n\n```quiz\nid: q-dist\nq: 数据率不变（10 Mb/s），总线从 1 km 变成 2 km。最短帧长怎么变？\n- [x] 变成 2 倍\n- [ ] 变成一半\n- [ ] 不变\nexplain: $\\tau$ 翻倍，争用期 $2\\tau$ 也翻倍，最短帧长 $\\calc{2*2000/(2*10^8)*10*10^6}$ bit。\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "练熟",
+      "md": "```practice\nid: pr-minf\ntitle: 最短帧长\ntype: custom\ncount: 3\npick d = int(1, 5)\npick r = choice(10, 100, 1000)\nq: 总线长 $\\calc{d}$ km，数据率 $\\calc{r}$ Mb/s，信号传播速率 $2\\times10^8$ m/s，用 CSMA/CD。最短帧长是多少 bit？\nanswer: 2*d*1000/(2*10^8)*r*10^6\nafter: \\text{bit}\nhint: 先算 $\\tau$，再想争用期是几个 $\\tau$。\nexplain: $\\tau=\\calc{d*1000/(2*10^8)*10^6}\\ \\mu s$，争用期 $2\\tau=\\calc{2*d*1000/(2*10^8)*10^6}\\ \\mu s$，最短帧长 $=2\\tau\\times\\calc{r}\\ \\text{Mb/s}=\\calc{2*d*1000/(2*10^8)*r*10^6}$ bit。\n```"
+    }
+  ]
+}

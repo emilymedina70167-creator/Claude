@@ -1,0 +1,48 @@
+{
+  "unit": "差分曼彻斯特编码",
+  "subject": "计网",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "两种编码看哪里",
+      "md": "- 曼彻斯特：看**中间**往哪跳（1：高→低，0：低→高）\n- 差分曼彻斯特：中间总要跳；看**开头**有没有跳（有跳 = 0，没跳 = 1）\n- 开始之前是低电平"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "先走四位",
+      "md": "用一串短的先试：差分曼彻斯特和曼彻斯特画在一起对比。每一位先猜差分曼彻斯特的**前半个码元**是高还是低。\n\n```encode\nid: ec-try\ntitle: 0110 两种画法\nbits: 0110\ncode: diffman, manchester\nask: level\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "自己画 10110010",
+      "md": "原题：比特串 10110010，开始之前是低电平。先在 Notability 里画出差分曼彻斯特的波形，再一位一位填「高低」，页面逐格批。\n\n```encode\nid: ec-fill\ntitle: 10110010\nbits: 10110010\ncode: diffman\nmode: fill\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "同一条波形两种读法",
+      "md": "下面这条波形（每位两个半码元：01 10 10 01 10 01，1 是高、0 是低），开始之前是低电平。\n\n```answer\nid: a-man\ntitle: 当曼彻斯特读\nq: 半码元电平依次是 01 10 10 01 10 01（1 高 0 低）。如果它是**曼彻斯特**编码（1：高→低），表示的比特串是什么？\ntype: seq\nanswer: 0 1 1 0 1 0\nhint: 每一位只看中间往哪跳。\n```\n\n```encode\nid: ec-read\ntitle: 当差分曼彻斯特读\nlevels: 01 10 10 01 10 01\ncode: diffman\nask: bit\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "码元速率",
+      "md": "数据率 10 Mb/s 时，差分曼彻斯特每秒要变多少个码元？页面走到最后会先问你。\n\n```encode\nid: ec-baud\ntitle: 码元速率\nbits: 10110010\ncode: diffman\nrate: 10Mb/s\nask: baud\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 5,
+      "title": "练熟",
+      "md": "按半码元写出 16 位：高写 1，低写 0，可以两位一组用空格隔开。\n\n```practice\nid: pr-dm\ntitle: 差分曼彻斯特\ntype: custom\ncount: 3\npick x = int(0, 255)\nlet f1 = xor(0, 1 - bit(x, 7))\nlet f2 = xor(1 - f1, 1 - bit(x, 6))\nlet f3 = xor(1 - f2, 1 - bit(x, 5))\nlet f4 = xor(1 - f3, 1 - bit(x, 4))\nlet f5 = xor(1 - f4, 1 - bit(x, 3))\nlet f6 = xor(1 - f5, 1 - bit(x, 2))\nlet f7 = xor(1 - f6, 1 - bit(x, 1))\nlet f8 = xor(1 - f7, 1 - bit(x, 0))\nlet w = f1*2^15 + (1 - f1)*2^14 + f2*2^13 + (1 - f2)*2^12 + f3*2^11 + (1 - f3)*2^10 + f4*2^9 + (1 - f4)*2^8 + f5*2^7 + (1 - f5)*2^6 + f6*2^5 + (1 - f6)*2^4 + f7*2^3 + (1 - f7)*2^2 + f8*2^1 + (1 - f8)*2^0\nq: 开始之前是低电平。比特串 $\\calc{bin(x, 8)}$ 的差分曼彻斯特编码，按半码元依次写出电平（高 1 低 0，共 16 位）。\nanswer: w\ncheck: bin\nwidth: 16\nhint: 每一位先看开头：是 0 就要跳（和上一位的后半个码元相反），是 1 就不跳；中间再跳一次。\nexplain: 半码元电平是 $\\calc{bin(w, 16)}$（两位一位）。\n```"
+    }
+  ]
+}
