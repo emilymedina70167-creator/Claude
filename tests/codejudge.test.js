@@ -123,3 +123,17 @@ test('说明里的 code 例子照抄能用', async () => {
   assert.ok(runTests(ok, spec).every((r) => r.ok));
   assert.equal(estimate(ok, spec).time, 'O(n)');
 });
+
+test('链表题：list [...] 建好带头结点的单链表，跑完读回来比', () => {
+  const spec = parseCodeSpec({ fn: 'void Reverse(LinkList &L)', tests: 'L = list [1, 2, 3, 4] -> L = list [4, 3, 2, 1]\nL = list [] -> L = list []', scale: 'n = 8 16 32 64; L = rand(n)' });
+  assert.match(spec.starter, /typedef struct LNode/);
+  const good = 'void Reverse(LinkList &L) {\n    LNode *p = L->next, *r;\n    L->next = NULL;\n    while (p != NULL) { r = p->next; p->next = L->next; L->next = p; p = r; }\n}';
+  assert.deepEqual(runTests(good, spec).map((t) => t.ok), [true, true]);
+  assert.equal(estimate(good, spec).time, 'O(n)');
+  const loop = runTests('void Reverse(LinkList &L) {\n    L->next->next = L->next;\n}', spec)[0];
+  assert.match(loop.diff[0].got, /成环/);
+  const crash = runTests('void Reverse(LinkList &L) {\n    LNode *p = NULL;\n    p->next = L;\n}', spec)[0];
+  assert.equal(crash.errLine, 3); // 前面补的 typedef 那一行不算
+  const nohead = parseCodeSpec({ fn: 'int Len(LinkList L)', head: 'no', tests: 'L = list [1, 2, 3] -> return = 3' });
+  assert.ok(runTests('int Len(LinkList L) {\n    int k = 0;\n    while (L != NULL) { k++; L = L->next; }\n    return k;\n}', nohead)[0].ok);
+});

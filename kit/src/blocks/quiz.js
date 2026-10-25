@@ -1,4 +1,5 @@
 // 练习题：选择题（单选/多选）或填空（数字、分数、文字）
+import { splitAlts } from '../tokens.js';
 import { parseFields } from '../parse.js';
 import { Frac } from '../linalg.js';
 import { widget, mdToHtml } from './common.js';
@@ -106,7 +107,7 @@ export function quiz(el, src) {
 // 数字按数值比较（1/2 = 0.5），否则忽略大小写和空格比较；答案可用 | 分隔多个可接受写法
 function matches(given, answer) {
   const norm = (s) => String(s).replace(/\$/g, '').replace(/\s+/g, '').toLowerCase();
-  return String(answer).split('|').some((ans) => {
+  return splitAlts(answer).some((ans) => {
     try {
       return Math.abs(Number(Frac.from(norm(given))) - Number(Frac.from(norm(ans)))) < 1e-9;
     } catch {

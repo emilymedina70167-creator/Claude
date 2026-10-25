@@ -17,9 +17,15 @@ import { evaluate } from './expr.js';
 const SIZES = [4, 8, 16, 32];
 const MAX_STEPS_SCALE = 60000;
 
-// 一个值：数、字符 'a'、数组 [1, 2]、二维 [[1, 2], [3, 4]]、字符串 "abc"
+// 一个值：数、字符 'a'、数组 [1, 2]、二维 [[1, 2], [3, 4]]、字符串 "abc"、单链表 list [1, 2, 3]
 export function parseValue(src, what = '') {
   const s = String(src ?? '').trim();
+  const lm = /^list\s*(\[[\s\S]*\])$/i.exec(s);
+  if (lm) {
+    const v = parseValue(lm[1], what);
+    if (!Array.isArray(v) || v.some((x) => typeof x !== 'number')) throw new Error(`${what}「${s}」：list 后面写结点里的数，比如 list [1, 2, 3]（不用写头结点）`);
+    return { list: v };
+  }
   if (/^"(.*)"$/s.test(s)) return { str: s.slice(1, -1) };
   if (/^'.'$/.test(s)) return s[1];
   try {
@@ -27,7 +33,7 @@ export function parseValue(src, what = '') {
     const ok = (x) => typeof x === 'number' || (typeof x === 'string' && x.length === 1);
     if (ok(v) || (Array.isArray(v) && (v.every(ok) || v.every((r) => Array.isArray(r) && r.every(ok))))) return v;
   } catch { /* 下面报错 */ }
-  throw new Error(`${what}「${s}」看不懂：写数（3）、数组（[1, 2, 3]）、字符（'a'）或字符串（"abc"）`);
+  throw new Error(`${what}「${s}」看不懂：写数（3）、数组（[1, 2, 3]）、字符（'a'）、字符串（"abc"）或单链表（list [1, 2, 3]）`);
 }
 
 // 「A = [1, 2], n = 2」：按最外层逗号切（数组里的逗号不切）
@@ -77,8 +83,12 @@ export function parseCodeSpec(fields) {
     return { line, input, expect };
   });
   if (!tests.length) throw new Error('code 要写 tests:（一行一个测试：A = [1, 2, 3], n = 3 -> A = [3, 2, 1]）');
+  const lists = [...new Set(tests.flatMap((t) => [...Object.entries(t.input), ...Object.entries(t.expect || {})].filter(([, v]) => v && typeof v === 'object' && 'list' in v).map(([k]) => k)))];
+  const head = !/^(no|false|0|否|不带|没有)/i.test(String(fields.head ?? '').trim());
+  if (lists.length && fields.check) throw new Error('链表题（list [...]）暂时不能配 check:：把期望的链表写在 -> 后面');
+  const lspec = { lists, head, sig, call };
   let ref = null;
-  if (fields.ref) { try { ref = parseProgram(fields.ref); } catch (e) { throw new Error(`ref:（参考解法）${e instanceof CError ? e.message : e.message}`); } }
+  if (fields.ref) { try { ref = compile(fields.ref, '', lspec); } catch (e) { throw new Error(`ref:（参考解法）${e.message}`); } }
   let check = null;
   if (fields.check) {
     try { check = parseProgram(fields.check); } catch (e) { throw new Error(`check:（检查函数）${e.message}`); }
@@ -86,11 +96,12 @@ export function parseCodeSpec(fields) {
   }
   if (!ref && !check && tests.some((t) => !t.expect)) throw new Error('有的测试没写 -> 期望：要么写上，要么给 ref:（参考解法）或 check:（检查函数），页面拿它判');
   const scale = fields.scale ? parseScale(fields.scale) : null;
-  const starter = String(fields.starter ?? '').trim() ? String(fields.starter).replace(/^\n+|\s+$/g, '') : sig ? `${sig.text} {\n    \n}` : '';
+  // 链表题：起始代码带上王道的结点定义，学生知道成员叫 data、next
+  const starter = String(fields.starter ?? '').trim() ? String(fields.starter).replace(/^\n+|\s+$/g, '') : sig ? `${lists.length ? `${LNODE}\n\n` : ''}${sig.text} {\n    \n}` : '';
   // check 怎么调：学生函数的参数，每个数组参数后面加一个原来的（A → A, A0）；有返回值的再加 ret
   const params = sig ? sig.params : [];
   const checkCall = check ? String(fields.check_call ?? '').trim() || `check(${[...params.flatMap((p) => (tests.some((t) => Array.isArray(t.input[p])) ? [p, `${p}0`] : [p])), ...(sig && sig.ret !== 'void' ? ['ret'] : [])].join(', ')})` : '';
-  return { sig, call, callExpr, tests, ref, check, checkCall, scale, starter };
+  return { sig, call, callExpr, tests, ref, check, checkCall, scale, starter, lists, head };
 }
 
 // scale: n = 4 8 16 32; A = rand(n), k = n / 2
@@ -117,13 +128,58 @@ function genValue(src, env, rnd) {
   return evaluate(src, env);
 }
 
+// 链表题（王道的单链表）：测试里写 L = list [1, 2, 3]。解释器只认 C，所以在代码后面接一段 C 的架子：
+// 先 malloc 出链表（默认带头结点，head: no 不带）、调学生的函数、再把链表抄进一个数组读出来。
+// 学生代码里没有 LNode 的 typedef 就在最前面补一行（报错的行号减回去）。
+export const LNODE = 'typedef struct LNode { int data; struct LNode *next; } LNode, *LinkList;';
+const LIST_MAX = 200; // 读回来最多这么多个结点：再多就是成环了
+const hasLNode = (code) => /\bLNode\b[^;{]*\{|\}\s*LNode\b/.test(code);
+function listHarness(spec) {
+  const { lists, head } = spec;
+  const ret = spec.sig && spec.sig.ret !== 'void' && !/\*|LinkList/.test(spec.sig.ret) ? spec.sig.ret : '';
+  const build = (k) => `    ${k} = __mk(__a_${k}, __n_${k});`;
+  return `
+LinkList ${lists.join(', ')};
+${lists.map((k) => `int __o_${k}[${LIST_MAX}];\nint __on_${k};`).join('\n')}
+${ret ? `${ret} __ret;` : ''}
+LinkList __mk(int a[], int n) {
+    LNode *h = (LNode *)malloc(sizeof(LNode));
+    h->next = NULL;
+    LNode *t = h;
+    for (int i = 0; i < n; i++) { LNode *s = (LNode *)malloc(sizeof(LNode)); s->data = a[i]; s->next = NULL; t->next = s; t = s; }
+    ${head ? 'return h;' : 'LNode *f = h->next; free(h); return f;'}
+}
+int __dump(LinkList h, int o[]) {
+    LNode *p = ${head ? 'h->next' : 'h'};
+    int k = 0;
+    while (p != NULL && k < ${LIST_MAX}) { o[k] = p->data; k++; p = p->next; }
+    return k;
+}
+void __base() {
+${lists.map(build).join('\n')}
+${lists.map((k) => `    __on_${k} = __dump(${k}, __o_${k});`).join('\n')}
+}
+void __test() {
+${lists.map(build).join('\n')}
+    ${ret ? `__ret = ${spec.call};` : `${spec.call};`}
+${lists.map((k) => `    __on_${k} = __dump(${k}, __o_${k});`).join('\n')}
+}
+`;
+}
+
 // 程序 + 学生代码：要学生写的函数在学生的代码里；老师 ref 里的辅助函数不混进来
-function compile(code, what) {
-  try { return parseProgram(code); } catch (e) { throw Object.assign(new Error(`${what}${e instanceof CError ? e.message : e.message}`), { line: e.line }); }
+function compile(code, what, spec = null) {
+  let src = code, off = 0;
+  if (spec?.lists?.length) {
+    if (!hasLNode(code)) { src = `${LNODE}\n${code}`; off = 1; }
+    src += `\n${listHarness(spec)}`;
+  }
+  try { return Object.assign(parseProgram(src), { off }); } catch (e) { throw Object.assign(new Error(`${what}${(e.message || '').replace(/第 (\d+) 行/, (_, n) => `第 ${n - off} 行`)}`), { line: e.line ? e.line - off : e.line }); }
 }
 
 // 跑一次：返回 { arrays: {名字: 值}, ret, out, error, steps, depth, extra（额外数组的元素个数） }
-function runOnce(program, spec, input, { maxSteps } = {}) {
+function runOnce(program, spec, input, { maxSteps, base = false } = {}) {
+  if (spec.lists?.length) return runList(program, spec, input, { maxSteps, base });
   const vars = {};
   for (const [k, v] of Object.entries(input)) vars[k] = v && typeof v === 'object' && 'str' in v ? [...v.str, '\0'] : v;
   const fn = spec.callExpr?.t === 'call' ? program.funcs[spec.callExpr.name] : null;
@@ -147,6 +203,35 @@ function runOnce(program, spec, input, { maxSteps } = {}) {
   return { arrays, ret, out: r.out, error: r.error ? r.error.message : null, line: r.error?.line, steps: r.steps.length, depth, extra };
 }
 
+// 链表题跑一次：架子里的 __test() 建链表、调用、读回来；base 不调用（估复杂度时减掉建链表、读回来的步数）
+function runList(program, spec, input, { maxSteps, base }) {
+  const vars = {};
+  const off = program.off || 0;
+  for (const [k, v] of Object.entries(input)) {
+    if (spec.lists.includes(k)) {
+      const a = Array.isArray(v) ? v : v?.list || [];
+      vars[`__a_${k}`] = a.length ? a : [0];
+      vars[`__n_${k}`] = a.length;
+    } else vars[k] = v && typeof v === 'object' && 'str' in v ? [...v.str, '\0'] : v;
+  }
+  for (const k of spec.lists) if (!(`__n_${k}` in vars)) { vars[`__a_${k}`] = [0]; vars[`__n_${k}`] = 0; }
+  const name = base ? '__base' : '__test';
+  let r;
+  try { r = runProgram(program, { entry: { src: `${name}()`, e: parseExpression(`${name}()`) }, vars, maxSteps }); } catch (e) { return { error: e.message, line: e.line && e.line - off }; }
+  const last = r.steps.at(-1) || { globals: [] };
+  const g = Object.fromEntries((last.globals || []).map((x) => [x.name, x]));
+  const arrays = {};
+  for (const [k, v] of Object.entries(input)) if (!spec.lists.includes(k) && g[k]?.arr) arrays[k] = g[k].data;
+  for (const k of spec.lists) {
+    const n = Number(g[`__on_${k}`]?.value);
+    if (Number.isFinite(n)) arrays[k] = { list: g[`__o_${k}`].data.slice(0, n).map(Number), loop: n >= LIST_MAX };
+  }
+  const ret = g.__ret?.value;
+  const depth = Math.max(0, ...r.steps.map((s) => (s.frames || []).length)) - 1; // __test 自己那一层不算
+  const err = r.error ? r.error.message.replace(/第 (\d+) 行/, (_, n) => `第 ${n - off} 行`) : null;
+  return { arrays, ret, out: r.out, error: err, line: r.error?.line && r.error.line - off, steps: r.steps.length, depth, extra: 0 };
+}
+
 const norm = (v) => {
   if (v && typeof v === 'object' && 'str' in v) return v.str;
   if (Array.isArray(v)) return v.map(norm);
@@ -162,6 +247,7 @@ const sameVal = (a, b) => {
   return String(x) === String(y);
 };
 const valText = (v) => {
+  if (v && typeof v === 'object' && 'list' in v) return v.loop ? '（链表成环了：顺着 next 走不到 NULL）' : v.list.length ? `${v.list.join(' → ')} → NULL` : '空链表';
   const x = norm(v);
   if (Array.isArray(x)) return `[${x.map(valText).join(', ')}]`;
   return typeof x === 'string' && x.length === 1 ? `'${x}'` : String(x);
@@ -173,7 +259,7 @@ const valText = (v) => {
  */
 export function runTests(code, spec) {
   let program;
-  try { program = compile(code, '代码'); } catch (e) { return spec.tests.map((t) => ({ ok: false, line: t.line, error: e.message, errLine: e.line, compile: true })); }
+  try { program = compile(code, '代码', spec); } catch (e) { return spec.tests.map((t) => ({ ok: false, line: t.line, error: e.message, errLine: e.line, compile: true })); }
   return spec.tests.map((t) => {
     let expect = t.expect;
     if (!expect && spec.check) {
@@ -202,6 +288,11 @@ export function runTests(code, spec) {
     const diff = [];
     for (const [k, want] of Object.entries(expect)) {
       const got = k === 'return' ? r.ret : k === 'out' ? { str: r.out } : r.arrays[k];
+      if (want && typeof want === 'object' && 'list' in want) {
+        const ok = got && 'list' in got && !got.loop && got.list.length === want.list.length && got.list.every((x, i) => x === want.list[i]);
+        if (!ok) diff.push({ what: k, want: valText(want), got: got ? valText(got) : '（没有这个变量）' });
+        continue;
+      }
       if (got === undefined) { diff.push({ what: k, want: valText(want), got: k === 'return' ? '（函数没有返回值）' : '（没有这个变量）' }); continue; }
       if (k === 'out' ? norm(got) !== norm(want) : !sameVal(got, want)) diff.push({ what: k === 'return' ? '返回值' : k === 'out' ? '输出' : k, want: valText(want), got: valText(k === 'out' ? got : Array.isArray(norm(want)) ? norm(got).slice(0, norm(want).length) : got) });
     }
@@ -230,7 +321,7 @@ export function fitGrowth(ns, ys) {
 export function estimate(code, spec, { seed = 1 } = {}) {
   if (!spec.scale) return null;
   let program;
-  try { program = typeof code === 'string' ? compile(code, '代码') : code; } catch (e) { return { error: e.message }; }
+  try { program = typeof code === 'string' ? compile(code, '代码', spec) : code; } catch (e) { return { error: e.message }; }
   let s = seed;
   const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
   const ns = [], steps = [], spaces = [];
@@ -240,7 +331,9 @@ export function estimate(code, spec, { seed = 1 } = {}) {
     try { for (const [k, src] of Object.entries(spec.scale.gens)) input[k] = genValue(src, env, rnd); } catch (e) { return { error: `scale: ${e.message}` }; }
     const r = runOnce(program, spec, input, { maxSteps: MAX_STEPS_SCALE });
     if (r.error) return { ns, steps, error: /已经走了/.test(r.error) ? `n = ${n} 时超过 ${MAX_STEPS_SCALE} 步了（太慢，或者死循环）` : `n = ${n} 时出错：${r.error}` };
-    ns.push(n); steps.push(r.steps); spaces.push(r.extra + r.depth);
+    // 链表题：建链表、读回来的步数不算学生的
+    const b = spec.lists?.length ? runOnce(program, spec, input, { maxSteps: MAX_STEPS_SCALE, base: true }) : null;
+    ns.push(n); steps.push(Math.max(1, r.steps - (b && !b.error ? b.steps : 0))); spaces.push(r.extra + r.depth);
   }
   const flat = spaces.every((x) => x === spaces[0]);
   return { ns, steps, time: fitGrowth(ns, steps), space: flat ? 'O(1)' : fitGrowth(ns, spaces.map((x) => Math.max(1, x))) };

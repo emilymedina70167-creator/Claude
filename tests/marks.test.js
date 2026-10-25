@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tokenize } from '../kit/src/tokens.js';
+import { tokenize, splitAlts } from '../kit/src/tokens.js';
 import { parseMarkSpec, parseMarkBlock, parseUnmark, markText, defaultStyle } from '../kit/src/markspec.js';
 import { parseOutput, parseCommand } from '../kit/src/class/protocol.js';
 
@@ -160,4 +160,9 @@ test('协议：mark 块流式时先只看开头那行，闭合后才拼出 marks
   assert.equal(b.op.marks, undefined);
   const done = parseOutput(text, { final: true });
   assert.deepEqual(done.ops[0].marks.map((m) => m.sel.name), ['a', 'b']);
+});
+
+test('splitAlts：公式里的 | 不算选项分隔', () => {
+  assert.deepEqual(splitAlts('$2(r_i+|y|)-|y|$ | $2r_i-|y|$ | 不用管'), ['$2(r_i+|y|)-|y|$', '$2r_i-|y|$', '不用管']);
+  assert.deepEqual(splitAlts('a|b| c '), ['a', 'b', 'c']);
 });
