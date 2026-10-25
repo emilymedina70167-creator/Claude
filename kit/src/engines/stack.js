@@ -493,7 +493,7 @@ export function table(input, r) {
 
 export function problems(input) {
   const out = [];
-  if (input.mode === 'infix' && !input.toks.some((x) => x.type === 'op' && PREC[x.t] === 2) && !input.toks.some((x) => x.type === '(')) out.push('infix: 只有 + − 、没有括号，看不出优先级和括号怎么处理，换一个带 * / 或括号的');
+  if (input.mode === 'infix' && !input.toks.some((x) => x.type === 'op' && PREC[x.t] === 2) && !input.toks.some((x) => x.type === '(')) out.push('infix: 只有 + − 、没有括号：专门讲同级的从左往右出栈可以不管；要讲优先级和括号就换一个带 * / 或括号的');
   return out;
 }
 

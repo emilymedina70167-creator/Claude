@@ -1,0 +1,48 @@
+{
+  "unit": "海明码",
+  "subject": "组成原理",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "位置怎么编",
+      "md": "海明码从右往左编号 $H_7H_6\\cdots H_1$；校验位 $P_i$ 放在 $H_{2^{i-1}}$（$H_1$、$H_2$、$H_4$），信息位 $D_1D_2\\ldots$ 依次填剩下的位置。偶校验。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "要几个校验位",
+      "md": "```quiz\nid: q-states\ntitle: 要分几种情况\nq: 信息位 $n$ 位、校验位 $k$ 位。纠错时，$k$ 位的检验结果要分出几种情况？\n- [x] $n+k+1$ 种：没错，或者 $n+k$ 位里某一位错了\n- [ ] $n$ 种：信息位里某一位错了\n- [ ] $n+k$ 种：某一位错了\nexplain: 校验位自己也可能错，还要留一种「没错」：$k$ 位能写出 $2^k$ 种，所以要 $2^k\\ge n+k+1$。\n```\n\n```answer\nid: q-k\ntitle: 信息位 1010\nq: 信息位是 $1010$（$n=4$），至少要几个校验位？\nlet n = 4\nanswer: (2 < n + 2) + (4 < n + 3) + (8 < n + 4) + (16 < n + 5) + 1\nhint: 从 $k=1$ 往上试，看 $2^k\\ge n+k+1$ 第一次成立在哪。\nexplain: $2^2=4<4+2+1$，$2^3=8\\ge 4+3+1$，所以 $k=3$，海明码一共 $\\calc{4+3}$ 位。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "谁管哪几位",
+      "md": "把位置编号写成二进制：比如 $H_6$ 是 $\\calc{bin(6, 3)}$。$P_i$ 管的是编号的第 $i$ 位（从右数）为 1 的那些位置。\n\n```quiz\nid: q-p2\ntitle: P2 管哪几位\nq: 7 位海明码里，$P_2$（在 $H_2$）负责校验哪些位置？（多选）\n- [ ] $H_1$\n- [x] $H_2$\n- [x] $H_3$\n- [ ] $H_4$\n- [ ] $H_5$\n- [x] $H_6$\n- [x] $H_7$\nexplain: 编号第 2 位是 1 的：$H_2(010)$、$H_3(011)$、$H_6(110)$、$H_7(111)$。同理 $P_1$ 管 $H_1H_3H_5H_7$，$P_3$ 管 $H_4H_5H_6H_7$。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "求海明码",
+      "md": "信息位 $1010$：页面一个个求 $P_i$，求之前先问你。\n\n```hamming\nid: hm-code\ntitle: 1010 的海明码\ndata: 1010\nask: p, code\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "哪一位错了",
+      "md": "收到 $1000010$。每个 $S_i$ 是 $P_i$ 管的那几位异或起来，$S_3S_2S_1$ 读成二进制就是出错的位置。先在纸上算，再填。\n\n```hamming\nid: hm-fix\ntitle: 收到 1000010\nrecv: 1000010\nask: s, pos\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 5,
+      "title": "换着数练",
+      "md": "```practice\nid: pr-code\ntitle: 求海明码\ntype: custom\ncount: 3\npick d = int(1, 15)\nlet P1 = xor(xor(bit(d, 0), bit(d, 1)), bit(d, 3))\nlet P2 = xor(xor(bit(d, 0), bit(d, 2)), bit(d, 3))\nlet P3 = xor(xor(bit(d, 1), bit(d, 2)), bit(d, 3))\nlet h = 64*bit(d, 3) + 32*bit(d, 2) + 16*bit(d, 1) + 8*P3 + 4*bit(d, 0) + 2*P2 + P1\nwhere d != 10\nq: 信息位 $D_4D_3D_2D_1 = \\calc{bin(d, 4)}$，偶校验，写出 7 位海明码 $H_7\\cdots H_1$。\nanswer: h\ncheck: bin\nwidth: 7\nhint: $P_1$ 管 $H_3H_5H_7$（即 $D_1D_2D_4$），$P_2$ 管 $H_3H_6H_7$（$D_1D_3D_4$），$P_3$ 管 $H_5H_6H_7$（$D_2D_3D_4$）。\nexplain: $P_3=\\calc{P3}$，$P_2=\\calc{P2}$，$P_1=\\calc{P1}$，海明码 $\\calc{bin(h, 7)}$。\n```\n\n```practice\nid: pr-fix\ntitle: 哪一位错了\ntype: custom\ncount: 3\npick d = int(0, 15)\npick w = int(0, 7)\nlet P1 = xor(xor(bit(d, 0), bit(d, 1)), bit(d, 3))\nlet P2 = xor(xor(bit(d, 0), bit(d, 2)), bit(d, 3))\nlet P3 = xor(xor(bit(d, 1), bit(d, 2)), bit(d, 3))\nlet h = 64*bit(d, 3) + 32*bit(d, 2) + 16*bit(d, 1) + 8*P3 + 4*bit(d, 0) + 2*P2 + P1\nlet r = xor(h, (w > 0)*shl(1, max(w - 1, 0)))\nq: 偶校验的 7 位海明码，收到 $H_7\\cdots H_1 = \\calc{bin(r, 7)}$（最多错 1 位）。哪一位错了？写位置编号，没错写 0。\nanswer: w\nhint: $S_1 = H_1\\oplus H_3\\oplus H_5\\oplus H_7$，$S_2$、$S_3$ 同理；$S_3S_2S_1$ 读成二进制。\nexplain: $S_3S_2S_1 = \\calc{bin(w, 3)}$，第 $\\calc{w}$ 位错（0 是没错）。\n```"
+    }
+  ]
+}

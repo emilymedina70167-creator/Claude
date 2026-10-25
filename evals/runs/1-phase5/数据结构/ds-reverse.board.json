@@ -1,0 +1,41 @@
+{
+  "unit": "算法设计 · 单链表就地逆置",
+  "subject": "数据结构",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "结点类型",
+      "md": "`typedef struct LNode { int data; struct LNode *next; } LNode, *LinkList;`\n带头结点：`L->next` 是第一个数据结点。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "头插法会倒过来",
+      "md": "头插法：每个新结点都插在头结点后面、原来第一个结点的前面。\n\n```answer\nid: q-headins\ntitle: 插完是什么样\nq: 带头结点的空链表 L，依次用头插法插入 1, 2, 3, 4。从头结点后面开始读，链表是？\ntype: seq\nanswer: 4 3 2 1\nhint: 每个新来的都排到最前面。\n```\n\n所以：把原链表的结点**从前往后一个个摘下来，再头插回 L**，就逆置了；不新开结点，空间 $O(1)$。"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "跟踪每一步指针",
+      "md": "L = 头 → 1 → 2 → 3 → 4。左边代码一行行高亮，右边的结点和箭头跟着变；走到三处会先停下让你猜。\n\n```trace\nid: tr-rev\ntitle: 头插法逆置\ncall: Reverse(L)\nlet L = list [头, 1, 2, 3, 4]\npredict: 8 -> L->next; 11 if p->data == 2 -> p->next; 13 if p->data == 3 -> p\ncode:\ntypedef struct LNode{\n    int data;\n    struct LNode *next;\n}LNode, *LinkList;\nvoid Reverse(LinkList L){\n    LNode *p, *r;\n    p = L->next;\n    L->next = NULL;\n    while(p != NULL){\n        r = p->next;\n        p->next = L->next;\n        L->next = p;\n        p = r;\n    }\n}\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "不先记下 p->next",
+      "md": "把 `r` 去掉，最后一句改成 `p = p->next;`。先猜第 11 行执行完 p 指向谁，再看页面报了什么。\n\n```trace\nid: tr-bug\ntitle: 少了 r 会怎样\ncall: Reverse(L)\nlet L = list [头, 1, 2, 3, 4]\npredict: 11 -> p\ncode:\ntypedef struct LNode{\n    int data;\n    struct LNode *next;\n}LNode, *LinkList;\nvoid Reverse(LinkList L){\n    LNode *p = L->next;\n    L->next = NULL;\n    while(p != NULL){\n        p->next = L->next;\n        L->next = p;\n        p = p->next;\n    }\n}\n```\n\n```conjecture\nid: cj-why-r\ntitle: 为什么要先记下\nq: 一句话：为什么要在改 `p->next` 之前，先用 `r` 记下它？\ngrade: off\nanswer: `p->next = L->next` 会把 p 和后面的链断开，不先记下，后面的结点就再也找不到了（丢链、内存泄漏）。\nplaceholder: 因为改了 p->next 以后……\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "自己写",
+      "md": "````code\nid: cd-rev\ntitle: 就地逆置单链表\nq: 带头结点的单链表 L，写 Reverse(L) 把它就地逆置，空间 O(1)。\nfn: void Reverse(LinkList L)\nstarter:\ntypedef struct LNode{\n    int data;\n    struct LNode *next;\n}LNode, *LinkList;\nvoid Reverse(LinkList L){\n}\ntests:\nL = list [头, 1, 2, 3, 4] -> L = list [头, 4, 3, 2, 1]\nL = list [头, 7] -> L = list [头, 7]\nL = list [头] -> L = list [头]\nL = list [头, 5, 5, 2] -> L = list [头, 2, 5, 5]\n````"
+    }
+  ]
+}

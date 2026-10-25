@@ -1,0 +1,75 @@
+{
+  "unit": "用对角化求 Aⁿ",
+  "subject": "线代",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "题目",
+      "md": "$A=\\begin{bmatrix}1&-1\\\\2&4\\end{bmatrix}$，求 $A^n$。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "对角化帮什么忙",
+      "md": "```let\nA = [[1, -1], [2, 4]]\nP = [[1, 1], [-1, -2]]\nL = diag(2, 3)\nD = diag(-1, 2)\n```\n\n拖滑块比一比：左边是 $A$ 的幂，右边是一个对角矩阵 $D$ 的幂。哪边能一眼写出 $k$ 次方？\n\n```matrix\nid: m-pow\ntitle: A 的幂和对角矩阵的幂\nslider k 1 6 = 1 label=\"k\" play\nmatrix A^k label=\"A^{\\calc{k}}=\"\ntex \\qquad\nmatrix D^k label=\"D^{\\calc{k}}=\"\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 1,
+      "md": "```steps\nid: ex-why\ntitle: 把 Aⁿ 拆成对角的\nq: 假设已经找到可逆的 $P$、对角的 $\\Lambda$，使 $P^{-1}AP=\\Lambda$。$A^n$ 怎么用它们写？\n\nstep: 先把 A 解出来\nask: 由 $P^{-1}AP=\\Lambda$，$A$ 等于什么？\nchoices: $P\\Lambda P^{-1}$ | $P^{-1}\\Lambda P$ | $\\Lambda$\nanswer: $P\\Lambda P^{-1}$\nshow: 两边左乘 $P$、右乘 $P^{-1}$：$A=P\\Lambda P^{-1}$。\n\nstep: 乘三次\nask: $A^3=(P\\Lambda P^{-1})(P\\Lambda P^{-1})(P\\Lambda P^{-1})$ 化简成什么？\nchoices: $P\\Lambda^3P^{-1}$ | $P^3\\Lambda^3P^{-3}$ | $\\Lambda^3$\nanswer: $P\\Lambda^3P^{-1}$\nshow: 只去括号、不挪位置：$P\\Lambda\\underbrace{P^{-1}P}_{E}\\Lambda\\underbrace{P^{-1}P}_{E}\\Lambda P^{-1}=P\\Lambda^3P^{-1}$。同理 $A^n=P\\Lambda^nP^{-1}$。\n\nstep: 省在哪里\nask: 为什么 $P\\Lambda^nP^{-1}$ 比直接算 $A^n$ 省事？一句话。\nshow: 对角矩阵的幂就是对角元各自乘方：$\\Lambda^n=\\operatorname{diag}(\\lambda_1^n,\\lambda_2^n)$。所以只要求出 $P$ 和 $\\Lambda$，再乘两次。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 4,
+      "pin": true,
+      "title": "思路",
+      "md": "$P^{-1}AP=\\Lambda\\Rightarrow A^n=P\\Lambda^nP^{-1}$；$\\Lambda^n$ 是对角元各自乘方。"
+    },
+    {
+      "id": "s3",
+      "seq": 5,
+      "page": 2,
+      "title": "特征值",
+      "md": "$\\Lambda$ 的对角元就是 $A$ 的特征值。先写特征多项式 characteristic polynomial。\n\n```answer\nid: q-char\ntitle: 特征多项式\nq: $A=\\begin{bmatrix}1&-1\\\\2&4\\end{bmatrix}$，写出 $|\\lambda E-A|$（展开或因式分解都行）。\nformula: λ\nanswer: (λ-1)(λ-4)+2\nbefore: |\\lambda E-A|=\nhint: $\\lambda E-A=\\begin{bmatrix}\\lambda-1&1\\\\-2&\\lambda-4\\end{bmatrix}$：主对角线之积减副对角线之积。\nexplain: $(\\lambda-1)(\\lambda-4)-1\\cdot(-2)=\\lambda^2-5\\lambda+6=(\\lambda-2)(\\lambda-3)$。\n```\n\n```answer\nid: q-vals\ntitle: 特征值\nq: $A$ 的两个特征值，从小到大写。\nanswer: [2, 3]\nhint: 把特征多项式分解成两个一次因式。可以对一下：两个特征值之和是 $\\operatorname{tr}A=\\calc{tr(A)}$，之积是 $|A|=\\calc{det(A)}$。\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 3,
+      "title": "特征向量",
+      "md": "对每个特征值解 $(\\lambda E-A)\\mathbf x=\\mathbf 0$，写一个非零解就行，差一个倍数都算对。\n\n```answer\nid: q-v2\ntitle: λ = 2\nq: 解 $(2E-A)\\mathbf x=\\mathbf 0$，写出 $A=\\begin{bmatrix}1&-1\\\\2&4\\end{bmatrix}$ 属于 $\\lambda=2$ 的一个特征向量。\ntype: eigvec\nanswer: [1, -1]\nhint: $2E-A=\\calc{2*E-A}$，两行成比例，只剩一个方程。\n```\n\n```answer\nid: q-v3\ntitle: λ = 3\nq: 解 $(3E-A)\\mathbf x=\\mathbf 0$，写出属于 $\\lambda=3$ 的一个特征向量。\ntype: eigvec\nanswer: [1, -2]\nhint: $3E-A=\\calc{3*E-A}$。\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 4,
+      "title": "写出 P 和 P⁻¹",
+      "md": "```answer\nid: q-P\ntitle: 拼出 P\nq: 用你求的特征向量拼成 $P$，使 $P^{-1}AP=\\Lambda=\\begin{bmatrix}2&0\\\\0&3\\end{bmatrix}$（注意列的顺序要和 $\\Lambda$ 对上）。\nanswer: P\ncheck: det(ans) != 0 => $P$ 要可逆：两列不能成比例\n  inv(ans)*A*ans == L => 第 1 列要是 $\\lambda=2$ 的特征向量，第 2 列是 $\\lambda=3$ 的\nbefore: P=\n```\n\n```answer\nid: q-Pinv\ntitle: P 的逆\nq: 下面统一用 $P=\\calc{P}$，求 $P^{-1}$。\nanswer: inv(P)\nbefore: P^{-1}=\nhint: $\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}^{-1}=\\dfrac{1}{ad-bc}\\begin{bmatrix}d&-b\\\\-c&a\\end{bmatrix}$，这里 $|P|=\\calc{det(P)}$。\n```"
+    },
+    {
+      "id": "k3",
+      "seq": 8,
+      "pin": true,
+      "title": "P 和 Λ",
+      "md": "$P=\\calc{P}$，$\\Lambda=\\calc{L}$，$P^{-1}=\\calc{inv(P)}$"
+    },
+    {
+      "id": "s6",
+      "seq": 9,
+      "page": 5,
+      "title": "乘出 Aⁿ",
+      "md": "$\\Lambda^n=\\begin{bmatrix}2^n&0\\\\0&3^n\\end{bmatrix}$。在草稿上把 $P\\Lambda^nP^{-1}$ 乘出来，四个元素都写成含 $n$ 的式子。\n\n```answer\nid: q-An\ntitle: 写出 Aⁿ\nq: $A=\\begin{bmatrix}1&-1\\\\2&4\\end{bmatrix}$，$P=\\calc{P}$，$P^{-1}=\\calc{inv(P)}$，求 $A^n=P\\Lambda^nP^{-1}$。\nformula: n\nanswer: P*L^n*inv(P)\nbefore: A^n=\nhint: 先算 $P\\Lambda^n=\\begin{bmatrix}2^n&3^n\\\\-2^n&-2\\cdot3^n\\end{bmatrix}$，再右乘 $P^{-1}$。\nexplain: $A^n=\\begin{bmatrix}2^{n+1}-3^n&2^n-3^n\\\\-2^{n+1}+2\\cdot3^n&-2^n+2\\cdot3^n\\end{bmatrix}$。\n```\n\n```answer\nid: q-n0\ntitle: 代 n = 0 检验\nq: 把 $n=0$ 代进你写的 $A^n$，得到的矩阵是什么？它应该是什么？\nanswer: E\nbefore: A^0=\nexplain: $A^0=E$。式子在 $n=0$ 时：$2-1=1$，$1-1=0$，$-2+2=0$，$-1+2=1$，正好是 $E$；$n=1$ 时应该回到 $A$。两个都对上，式子基本可信。\n```"
+    },
+    {
+      "id": "s7",
+      "seq": 10,
+      "page": 6,
+      "title": "换个矩阵练",
+      "md": "页面换着数出题。步骤一样：特征值 → 特征向量拼 $P$ → $P^{-1}$ → $P\\Lambda^nP^{-1}$。写完先代 $n=1$ 看看是不是 $A$。\n\n```practice\nid: pr-pow\ntitle: 对角化求幂\ntype: custom\ncount: 2\npick a = int(-2, 2)\npick b = int(-2, 2) nonzero\npick l1 = int(-2, 3) nonzero\npick l2 = int(-2, 3) nonzero\nwhere l1 != l2\nlet Q = [[1, a], [b, a*b + 1]]\nlet M = Q*diag(l1, l2)*inv(Q)\nwhere tr(M'*M) <= 100\nq: 设 $A=\\calc{M}$，求 $A^n$。\nformula: n\nanswer: Q*diag(l1, l2)^n*inv(Q)\nbefore: A^n=\nhint: 特征值之和 $\\operatorname{tr}A=\\calc{tr(M)}$，之积 $|A|=\\calc{det(M)}$。\nexplain: 特征值 $\\calc{l1}$、$\\calc{l2}$；取 $P=\\calc{Q}$，$\\Lambda=\\operatorname{diag}(\\calc{l1},\\calc{l2})$，$P^{-1}=\\calc{inv(Q)}$，$A^n=P\\Lambda^nP^{-1}$。\n```"
+    }
+  ]
+}

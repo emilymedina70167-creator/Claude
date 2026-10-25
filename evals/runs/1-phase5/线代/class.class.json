@@ -1,0 +1,44 @@
+{
+  "unit": "用对角化求 Aⁿ",
+  "subject": "线代",
+  "pack": {
+    "main": {
+      "unit": "用对角化求 Aⁿ",
+      "goal": "对 A = [[1, -1], [2, 4]]：自己求出特征值、特征向量，写出 P 和 Λ（列的顺序对上），说清为什么 Aⁿ = PΛⁿP⁻¹（只能加括号、相邻的 P⁻¹P = E，不能交换顺序），乘出 Aⁿ，并代 n = 0、1 检验。",
+      "scope": "考研数学一、二、三：二阶矩阵相似对角化求幂。不讲若尔当标准形、凯莱-哈密顿定理、谱分解。",
+      "textbook": "定义（相似）：若存在可逆矩阵 P 使 P⁻¹AP = B，称 A 与 B 相似，记 A ~ B。\n定理：n 阶矩阵 A 可相似对角化 ⇔ A 有 n 个线性无关的特征向量。此时以这些特征向量为列组成 P，P⁻¹AP = Λ = diag(λ1, …, λn)，Λ 的对角元依次是 P 各列对应的特征值。\n推论：A 有 n 个互不相同的特征值时一定可以对角化。\n特征多项式：|λE − A|；特征值是它的根；属于 λ 的特征向量是 (λE − A)x = 0 的非零解。\n求幂：由 P⁻¹AP = Λ 得 A = PΛP⁻¹，Aⁿ = (PΛP⁻¹)(PΛP⁻¹)…(PΛP⁻¹) = PΛⁿP⁻¹，Λⁿ = diag(λ1ⁿ, …, λnⁿ)。\n二阶逆矩阵：[[a, b], [c, d]]⁻¹ = 1/(ad − bc) · [[d, −b], [−c, a]]。\n例题：A = [[1, -1], [2, 4]]，求 Aⁿ。\n解：|λE − A| = (λ − 1)(λ − 4) + 2 = (λ − 2)(λ − 3)，λ1 = 2，λ2 = 3。λ = 2：特征向量 (1, −1)ᵀ；λ = 3：特征向量 (1, −2)ᵀ。P = [[1, 1], [-1, -2]]，Λ = diag(2, 3)，P⁻¹ = [[2, 1], [-1, -1]]。\nAⁿ = PΛⁿP⁻¹ = [[2^(n+1) − 3^n, 2^n − 3^n], [−2^(n+1) + 2·3^n, −2^n + 2·3^n]]。",
+      "plan": "1. 动机：用 matrix 组件配滑块，比较 Aᵏ 和一个对角矩阵的幂；用 steps 让学生自己从 P⁻¹AP = Λ 推出 A = PΛP⁻¹、A³ = PΛ³P⁻¹（选择题），关键是「只加括号、不换顺序」，相邻的 P⁻¹P = E（可以用 derive + board mark 指出来）。\n2. 特征多项式：answer 配 formula: λ，学生写 |λE − A|；容易错在副对角线的符号。\n3. 特征向量：answer 的 type: eigvec，两个特征值各一个。\n4. 拼 P：answer 配 check（det ≠ 0，P⁻¹AP = diag(2, 3)），提醒列的顺序和 Λ 对上；再求 P⁻¹。\n5. 乘出 Aⁿ：answer 配 formula: n；然后代 n = 0（应得 E）、n = 1（应得 A）检验。\n6. 时间够就用 practice 的 type: custom 换矩阵再练一题。",
+      "student": "矩阵乘法有时会下意识当成能交换顺序（把同类的矩阵归到一起）；二阶行列式副对角线那一项的符号容易错；求出特征向量后不检查 P 的列顺序和 Λ 是否对应。在 iPad 上用 Apple Pencil，计算习惯在 Notability 里写。",
+      "updatedAt": 1793000000000
+    },
+    "problems": {
+      "items": [
+        {
+          "q": "A = [[1, -1], [2, 4]]，求 Aⁿ。",
+          "answer": "特征值 2、3；P = [[1, 1], [-1, -2]]，Λ = diag(2, 3)；Aⁿ = [[2^(n+1) − 3^n, 2^n − 3^n], [−2^(n+1) + 2·3^n, −2^n + 2·3^n]]",
+          "point": "相似对角化求幂；Aⁿ = PΛⁿP⁻¹",
+          "source": "考研常见题"
+        },
+        {
+          "q": "A = [[3, 1], [-2, 0]]，求 Aⁿ。",
+          "answer": "特征值 1、2；P = [[1, 1], [-2, -1]]，P⁻¹ = [[-1, -1], [2, 1]]；Aⁿ = [[2^(n+1) − 1, 2^n − 1], [2 − 2^(n+1), 2 − 2^n]]",
+          "point": "同类题，换数再走一遍",
+          "source": "改数"
+        }
+      ]
+    }
+  },
+  "turns": [
+    {
+      "teacher": "这节课求 $A^n$。先别动笔硬算，想想：如果 $A$ 能对角化，$A^n$ 能不能换个算法？\n\n````board pin id=k1 title=\"这节课的题\"\n$A=\\begin{bmatrix}1&-1\\\\2&4\\end{bmatrix}$，求 $A^n$。\n````\n\n````board new id=b1 title=\"Aⁿ 怎么拆\"\n```let\nA = [[1, -1], [2, 4]]\nD = diag(-1, 2)\n```\n\n```matrix\nid: m-b1\ntitle: 比一比两边的幂\nslider k 1 6 = 1 label=\"k\" play\nmatrix A^k label=\"A^{\\calc{k}}=\"\ntex \\qquad\nmatrix D^k label=\"D^{\\calc{k}}=\"\n```\n\n```steps\nid: ex-b1\ntitle: 拆成对角矩阵的幂\nq: 假设已经找到可逆的 $P$、对角的 $\\Lambda$，使 $P^{-1}AP=\\Lambda$。$A^n$ 怎么用它们写？\n\nstep: 先把 A 解出来\nask: 由 $P^{-1}AP=\\Lambda$，$A$ 等于什么？\nchoices: $P\\Lambda P^{-1}$ | $P^{-1}\\Lambda P$ | $\\Lambda$\nanswer: $P\\Lambda P^{-1}$\nshow: 两边左乘 $P$、右乘 $P^{-1}$：$A=P\\Lambda P^{-1}$。\n\nstep: 乘三次\nask: $A^3=(P\\Lambda P^{-1})(P\\Lambda P^{-1})(P\\Lambda P^{-1})$ 化简成什么？\nchoices: $P\\Lambda^3P^{-1}$ | $P^3\\Lambda^3P^{-3}$ | $\\Lambda^3$\nanswer: $P\\Lambda^3P^{-1}$\nshow: $P\\Lambda\\underbrace{P^{-1}P}_{E}\\Lambda\\underbrace{P^{-1}P}_{E}\\Lambda P^{-1}=P\\Lambda^3P^{-1}$，同理 $A^n=P\\Lambda^nP^{-1}$。\n```\n````\n\n拖滑块比一比左右两边哪个好写，然后做下面两步。"
+    },
+    {
+      "student": "[作答] b1 里的 steps ex-b1「拆成对角矩阵的幂」第 1 步：选了『$P\\Lambda P^{-1}$』（对），用时 25 秒\n[作答] b1 里的 steps ex-b1「拆成对角矩阵的幂」第 2 步：选了『$P^3\\Lambda^3P^{-3}$』（错），用时 41 秒",
+      "teacher": "第 2 步你把三个 $P$、三个 $\\Lambda$ 各自归到了一起。先不挪位置，把三个 $A$ 原样排开，看中间挨着的是什么。\n\n````board new id=b2 title=\"中间挨着什么\"\n```derive\nid: d-b2\ntitle: 三个 A 原样排开\nA^3 = P\\Lambda\\,\\hl{c1}{P^{-1}P}\\,\\Lambda\\,\\hl{c2}{P^{-1}P}\\,\\Lambda P^{-1}   // 只去掉括号，顺序一点没动\n    = P\\Lambda E\\Lambda E\\Lambda P^{-1}   // 挨着的 $P^{-1}P=E$\n    = P\\Lambda^3P^{-1}\n```\n\n```quiz\nid: q-b2\nq: 照这个办法，$A^5$ 等于？\n- [x] $P\\Lambda^5P^{-1}$\n- [ ] $P^5\\Lambda^5P^{-5}$\n- [ ] $\\Lambda^5$\nexplain: 五个 $P\\Lambda P^{-1}$ 排开，挨着的 $P^{-1}P$ 有四处，每处都是 $E$；剩下两头的 $P$、$P^{-1}$ 和中间五个 $\\Lambda$。\n```\n````\n\n````board mark target=d-b2 term=c1 note=\"挨着的两个\"\nterm=c2\n````\n\n点「下一行」往下看，再做下面这题。"
+    },
+    {
+      "student": "没懂，为什么？",
+      "teacher": "要点只有一个：矩阵相乘可以加括号（结合律），但**不能交换顺序**。随便取一对矩阵看看，$P\\Lambda$ 和 $\\Lambda P$ 是不是同一个。\n\n````board new id=b3 title=\"能不能换顺序\"\n```let\nPe = [[1, 1], [0, 1]]\nLe = diag(2, 3)\n```\n\n随便取一个可逆的 $P=\\calc{Pe}$ 和对角的 $\\Lambda=\\calc{Le}$：\n\n```matrix\nid: m-b3\ntitle: 换了顺序还相等吗\nmatrix Pe*Le label=\"P\\Lambda=\" name=X\ntex \\ne\nmatrix Le*Pe label=\"\\Lambda P=\" name=Y\n```\n\n```quiz\nid: q-b3\nq: 所以在 $(P\\Lambda P^{-1})(P\\Lambda P^{-1})$ 里，能乘成 $E$ 的是哪两个？\n- [x] 中间挨着的 $P^{-1}$ 和 $P$\n- [ ] 两头的 $P$ 和 $P^{-1}$\n- [ ] 把两个 $\\Lambda$ 换到一起\nexplain: 只有挨着的才能先乘：$P\\Lambda(P^{-1}P)\\Lambda P^{-1}=P\\Lambda^2P^{-1}$。两头的 $P$、$P^{-1}$ 中间隔着别的矩阵，挪到一起就是在交换顺序。\n```\n````\n\n````board mark target=m-b3 of=X entry=1,2 note=\"不一样\"\nof=Y entry=1,2 color=pink\n````\n\n写成 $P^3\\Lambda^3P^{-3}$ 就得把 $\\Lambda$ 和 $P$ 换位置，而它们换了顺序结果就变了。做下面这题。"
+    }
+  ]
+}

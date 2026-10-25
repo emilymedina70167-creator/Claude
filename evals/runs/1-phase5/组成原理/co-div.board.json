@@ -1,0 +1,41 @@
+{
+  "unit": "原码加减交替除法",
+  "subject": "组成原理",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "这道题",
+      "md": "$x=-0.1011$，$y=-0.1101$，原码加减交替法求商和余数。\n\n符号位单独算：$q_s = x_s\\oplus y_s$；数值部分用 $|x|$、$|y|$ 做。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "为什么不先恢复",
+      "md": "恢复余数法：余数 $r_i<0$ 时上商 0，先加 $|y|$ 恢复，再左移一位、减 $|y|$。看看这两步能不能并成一步。\n\n```steps\nid: ex-why\ntitle: 余数为负时\nq: 设第 $i$ 步的余数 $r_i<0$（上商 0）。恢复余数法：先恢复成 $r_i+|y|$，再左移一位、减 $|y|$ 得 $r_{i+1}$。\n\nstep: 写出下一个余数\nask: 按恢复余数法，$r_{i+1}$ 用 $r_i$ 和 $|y|$ 怎么写？\nchoices: $2(r_i+|y|)-|y|$ | $2r_i-|y|$ | $(r_i+|y|)-|y|$\nanswer: $2(r_i+|y|)-|y|$\nshow: $r_{i+1}=2(r_i+|y|)-|y|$\n\nstep: 化简\nask: 把括号展开，$r_{i+1}$ 等于什么？\nchoices: $2r_i+|y|$ | $2r_i-|y|$ | $2r_i$\nanswer: $2r_i+|y|$\nshow: $r_{i+1}=2r_i+|y|$：不用先恢复，**左移以后直接加** $|y|$，结果一样，还省了一次加法。余数 $\\ge 0$ 时照旧：上商 1，左移减 $|y|$。\n\nstep: 最后一步\nask: 上完最后一位商，余数还是负的，要怎么办？\nchoices: 再加一次 $|y|$ 恢复 | 不用管 | 把商的末位改成 1\nanswer: 再加一次 $|y|$ 恢复\nshow: 数值部分的余数要 $\\ge 0$：最后为负就加 $|y|$ 恢复（这一步不左移）。真正的余数 = 它 $\\times 2^{-n}$，符号和被除数相同。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "先看一遍",
+      "md": "换一组数，看页面怎么走「余数 | 商 | 说明」的表。每上一位商之前，先说这一位上几。\n\n```div\nid: dv-demo\ntitle: 先看一遍\nx: 0.1001\ny: -0.1011\nalgo: orig\nask: q\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "自己写每一步",
+      "md": "回到这道题：每一步的余数和上商自己填。\n\n```div\nid: dv-fill\ntitle: x = −0.1011，y = −0.1101\nx: -0.1011\ny: -0.1101\nalgo: orig\nmode: fill\n```\n\n```quiz\nid: q-rem\ntitle: 余数写成什么\nq: 设表里最后得到的余数（数值部分）是 $r$，这道题真正的余数是？\n- [x] $-r\\times 2^{-4}$\n- [ ] $r\\times 2^{-4}$\n- [ ] $-r$\n- [ ] $r$\nexplain: 余数的符号和被除数相同（$x$ 是负的）；做了 4 次左移，余数被放大了 $2^4$ 倍，要乘 $2^{-4}$。商的符号是 $x_s\\oplus y_s$，跟余数的符号不是一回事。\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "换着数练",
+      "md": "```practice\nid: pr-div\ntitle: 原码加减交替\ntype: custom\ncount: 3\npick b = int(9, 15)\npick a = int(1, b - 1)\nq: $x = 0.\\calc{bin(a, 4)}$，$y = 0.\\calc{bin(b, 4)}$，用原码加减交替法求商，写小数点后面的 4 位。\nanswer: div(16*a, b)\ncheck: bin\nwidth: 4\nhint: 第一步 $|x|-|y|$ 是负的（$|x|<|y|$），上商 0；之后余数为正左移减 $|y|$，为负左移加 $|y|$。\nexplain: 商 $=0.\\calc{bin(div(16*a, b), 4)}$，余数 $=0.\\calc{bin(16*a - b*div(16*a, b), 4)}\\times 2^{-4}$。\n```"
+    }
+  ]
+}

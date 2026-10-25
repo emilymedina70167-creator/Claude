@@ -1,0 +1,62 @@
+{
+  "unit": "KMP 的 next 和 nextval",
+  "subject": "数据结构",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "约定（王道）",
+      "md": "串从 1 数。主串第 $i$ 个和模式串 $T[j]$ 失配：$i$ 不动，$j$ 退到 $\\text{next}[j]$；$\\text{next}[1]=0$ 表示 $i$、$j$ 都往后挪一位。模式串 $T=$ abaabc。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "j 退到哪",
+      "md": "在 $T[j]$ 才失配，说明 $T[1..j-1]$ 已经和主串对上了。主串不回退，模式串能保留多少已经对上的？\n\n```quiz\nid: q-meaning\ntitle: 在 j = 5 失配\nq: 在 $j=5$ 失配：$T[1..4]=$ abaa 已经和主串对上。模式串开头最多能有几个字符不用重比？\n- [x] 1 个：abaa 最长的相等前后缀是 a\n- [ ] 2 个：ab\n- [ ] 0 个：只能从头比\nexplain: 能保留的就是 $T[1..j-1]$ 最长的相等前后缀（不算整个串自己）：abaa 的前缀 a、ab、aba，后缀 a、aa、baa，相等的最长是 a，长 1。下一次拿 $T[2]$ 去比，所以 $\\text{next}[5]=1+1=2$。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 3,
+      "pin": true,
+      "title": "next[j]",
+      "md": "$\\text{next}[j]=T[1..j-1]$ 最长相等前后缀的长度 $+1$（$j=1$ 时为 0）。"
+    },
+    {
+      "id": "s2",
+      "seq": 4,
+      "page": 2,
+      "title": "一位一位算 next",
+      "md": "每一格先自己算（画面会把前后缀标出来），再揭晓。\n\n```kmp\nid: k-next\ntitle: 求 next\npattern: abaabc\nshow: next\nask: next\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 5,
+      "page": 3,
+      "title": "next 哪里白比",
+      "md": "拿主串 abaacabaabc 去匹配，看第一次失配以后 $j$ 怎么退。\n\n```kmp\nid: k-match\ntitle: 用 next 匹配\npattern: abaabc\ntext: abaacabaabc\nask: slide\n```\n\n```quiz\nid: q-waste\ntitle: 白比了一次\nq: $T[5]$（b）和主串的 c 失配，$j$ 退到 2，拿 $T[2]$ 再和 c 比。这次比较？\n- [x] 一定失配：$T[2]$ 也是 b，和刚失配的 $T[5]$ 是同一个字符\n- [ ] 不一定，要看主串后面\n- [ ] 一定成功\nexplain: $T[\\text{next}[j]]=T[j]$ 时，退过去比的还是同一个字符，必然再失配。nextval 就把这种情况提前跳过：接着往前退。\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 4,
+      "title": "求 nextval",
+      "md": "规则：$T[\\text{next}[j]]=T[j]$ 时 $\\text{nextval}[j]=\\text{nextval}[\\text{next}[j]]$，否则 $\\text{nextval}[j]=\\text{next}[j]$。每一格先算再揭晓。\n\n```kmp\nid: k-nv\ntitle: 求 nextval\npattern: abaabc\nshow: nextval\nask: nextval\n```"
+    },
+    {
+      "id": "k3",
+      "seq": 7,
+      "pin": true,
+      "title": "nextval",
+      "md": "$T[\\text{next}[j]]=T[j]$ → 接着退：$\\text{nextval}[j]=\\text{nextval}[\\text{next}[j]]$；不等 → 照抄 $\\text{next}[j]$。"
+    },
+    {
+      "id": "s5",
+      "seq": 8,
+      "page": 5,
+      "title": "换一个串",
+      "md": "模式串 ababaaab：自己把每个 $j$ 的 next 和 nextval 填出来。\n\n```kmp\nid: k-fill\ntitle: ababaaab\npattern: ababaaab\nshow: nextval\nmode: fill\n```"
+    }
+  ]
+}

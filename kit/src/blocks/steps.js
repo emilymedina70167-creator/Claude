@@ -1,6 +1,7 @@
 // steps：一步步揭开的例题。每一步揭开前，学生先写下（或选出）下一步要做什么、为什么，
 // 然后才看到真实的一步；学生的想法留在原处，和真实步骤并排对照。
 // do: true 的步骤不揭开，要学生自己做出来（逐步撤掉脚手架）。
+import { splitAlts } from '../tokens.js';
 import { compile, isNum, isVec, isMat, valueTeX } from '../expr.js';
 import { session } from '../session.js';
 import { link } from '../link.js';
@@ -32,7 +33,7 @@ export function parseSteps(src) {
   if (!steps.length) throw new Error('steps 至少要有一个 step:');
   steps.forEach((s, i) => {
     s.do = /^(true|yes|1|是)$/i.test(s.do || '');
-    s.choices = s.choices ? s.choices.split('|').map((x) => x.trim()).filter(Boolean) : null;
+    s.choices = s.choices ? splitAlts(s.choices) : null;
     if (s.choices && s.answer && !s.choices.includes(s.answer)) throw new Error(`第 ${i + 1} 步的 answer:「${s.answer}」不在 choices 里`);
     if (!s.show && !s.answer) throw new Error(`第 ${i + 1} 步需要 show:（揭开后显示的真实步骤）`);
     if (!s.do && !s.ask && !s.choices) throw new Error(`第 ${i + 1} 步需要 ask:（揭开前问学生的问题）`);

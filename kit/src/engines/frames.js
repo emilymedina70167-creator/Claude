@@ -16,6 +16,7 @@
 //   ?? 问题 = 对的 | 错的 | 错的   选择题：第一个是对的，显示时打乱
 //   其余的行是 Markdown（表格、文字、公式），{{答案}} 是要学生填的空（几种都对写 {{3|三}}；不能写在公式里）
 //   前缀：* 正在看（黄）、! 冲突 / 交换（红）、~ 已完成（绿）；_ 是空格子；@名字 是格子下面的指针
+import { splitAlts } from '../tokens.js';
 import { arrayView, keyMaker, esc, chips } from './arrayview.js';
 import { treeSvg } from './treeview.js';
 import { parseTree } from './tree.js';
@@ -58,7 +59,7 @@ function cellOf(tok, where) {
   if (at && at[1] !== '') { t = at[1]; out.ptr = at[2]; }
   if (/^[*!~]/.test(t) && t.length > 1) { out.mark = t[0]; t = t.slice(1); }
   const b = /^\{\{(.+)\}\}$/.exec(t);
-  if (b) { out.blank = b[1].split('|').map((x) => x.trim()).filter(Boolean); if (!out.blank.length) throw new Error(`${where}：{{}} 里要写答案`); out.text = out.blank[0]; }
+  if (b) { out.blank = splitAlts(b[1]); if (!out.blank.length) throw new Error(`${where}：{{}} 里要写答案`); out.text = out.blank[0]; }
   else if (t === '_') out.text = null;
   else out.text = t;
   return out;
@@ -71,7 +72,7 @@ function parseAsk(line, where, choice) {
   const q = body.slice(0, i).trim(), a = body.slice(i + 1).trim();
   if (!q || !a) throw new Error(`${where}：问题和答案都不能空`);
   if (choice) {
-    const opts = a.split('|').map((x) => x.trim()).filter(Boolean);
+    const opts = splitAlts(a);
     if (opts.length < 2) throw new Error(`${where}：选择题至少写两个选项：?? 问题 = 对的 | 错的`);
     // 打乱选项（按题面定下来，每次打开都一样）
     let h = 0;
@@ -132,7 +133,7 @@ export function parse(fields, src) {
     for (const it of items) {
       if (it.type === 'md') {
         it.text = it.text.replace(/\{\{([^{}]+)\}\}/g, (_, a) => {
-          const alts = a.split('|').map((x) => x.trim()).filter(Boolean);
+          const alts = splitAlts(a);
           if (!alts.length) throw new Error(`${where}：{{}} 里要写答案`);
           blanks.push({ v: alts, num: alts.every((x) => /^-?\d+(\.\d+)?$|^-?\d+\/\d+$/.test(x)) });
           return `\u0001B${blanks.length - 1}\u0001`;

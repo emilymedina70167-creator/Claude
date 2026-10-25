@@ -1,0 +1,48 @@
+{
+  "unit": "停止-等待协议的信道利用率",
+  "subject": "计网",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "记号",
+      "md": "- $T$：发一帧的时间 = 帧长 ÷ 数据率\n- $d$：单程传播时延，RTT $=2d$\n- 原题：4 kb/s，$d=20$ ms，确认帧不计"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "一个周期在忙什么",
+      "md": "先拿一个短帧看：40 bit 的帧，4 kb/s，单程 20 ms。时间线上实线是在发、虚线是空等。走到每个量之前会先问你。\n\n```util\nid: ut-look\ntitle: 40 bit 的帧\nproto: sw\nframe: 40bit\nrate: 4kb/s\ndelay: 20ms\nask: tframe, cycle, u\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "写出利用率的式子",
+      "md": "```answer\nid: a-formula\ntitle: 利用率的式子\nq: 停止-等待协议，发一帧用时 $T$，单程传播时延 $d$，确认帧的发送时间忽略。写出信道利用率 $U$。\nanswer: T/(T+2*d)\nformula: T, d\nbefore: U =\nhint: 一个周期从开始发这一帧，到收到它的确认为止。这段时间多长？其中信道真正在发数据的有多久？\nexplain: 一个周期 $=T+2d$（发完还要等最后一位到对面、确认再回来），其中只有 $T$ 在发：$U=\\dfrac{T}{T+2d}$。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "帧长至少多长",
+      "md": "原题：要让利用率达到 50%。先用上一块板的式子在草稿上解出 $T$，再换成帧长；页面会先问你帧长至少多少。\n\n```util\nid: ut-main\ntitle: 达到 50%\nproto: sw\nrate: 4kb/s\ndelay: 20ms\ntarget: 50%\nask: lmin\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "为什么低，怎么改",
+      "md": "```quiz\nid: q-low\nq: 停止-等待协议利用率低，根本原因是什么？\n- [x] 发完一帧要空等确认，RTT 这段时间信道闲着\n- [ ] 确认帧占了信道\n- [ ] 数据率太低\nexplain: 一个周期里有 $2d$ 在空等。帧越短、传播时延越长，空等占得越多。\n```\n\n换成滑动窗口：不等确认，连续发好几帧。还是 40 bit 的帧，窗口至少多大，信道才不空等？\n\n```util\nid: ut-win\ntitle: 窗口要多大\nproto: gbn\nframe: 40bit\nrate: 4kb/s\ndelay: 20ms\ntarget: 100%\nask: wmin\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 5,
+      "title": "练熟",
+      "md": "```practice\nid: pr-sw\ntitle: 停等的最短帧长\ntype: custom\ncount: 3\npick r = choice(4, 8, 16, 64)\npick d = int(5, 50)\npick u = choice(1/2, 3/4, 4/5)\nlet T = u/(1 - u)*2*d\nq: 信道数据率 $\\calc{r}$ kb/s，单程传播时延 $\\calc{d}$ ms，用停止-等待协议（确认帧的发送时间忽略）。要让信道利用率达到 $\\calc{u*100}\\%$，帧长至少多少 bit？\nanswer: T*r\nafter: \\text{bit}\nhint: 由 $U=\\dfrac{T}{T+2d}\\ge\\calc{u}$ 先解出 $T$（ms），1 kb/s 就是每 ms 1 bit。\nexplain: $T\\ge\\calc{u/(1-u)}\\times2\\times\\calc{d}=\\calc{T}$ ms，帧长 $\\ge\\calc{T}\\ \\text{ms}\\times\\calc{r}\\ \\text{kb/s}=\\calc{T*r}$ bit。\n```"
+    }
+  ]
+}

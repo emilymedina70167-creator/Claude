@@ -2,6 +2,7 @@
 // 每个算法是一个引擎（engines/*.js）：parse(fields) → 输入，run(输入) → 每一步的状态和一句说明，view(状态) → 画面。
 // 外壳（stepper.js）统一管上一步 / 下一步 / 播放、ask、quiz、课堂的 figure、记录。
 // 这里是不碰 DOM 的部分，有测试（tests/stepper.test.js）。
+import { splitAlts } from './tokens.js';
 import { parseSeqAnswer, checkSeq, radixAnswer, checkRadix } from './textcheck.js';
 import { expandCalc, calcValue, exactText } from './exact.js';
 
@@ -121,7 +122,7 @@ export function checkAsk(ask, given) {
 /** 答案写成一句话（看答案、记录用） */
 export function askAnswerText(ask) {
   if (ask.display !== undefined) return String(ask.display);
-  if (ask.kind === 'text' || ask.kind === 'order') return String(ask.answer).split('|')[0].trim();
+  if (ask.kind === 'text' || ask.kind === 'order') return (splitAlts(ask.answer)[0] || '');
   // 位串的答案存的是数：写成二进制 / 十六进制（补足 width 位），不然会显示成十进制
   if (ask.kind === 'bin' || ask.kind === 'hex') {
     try { return radixAnswer(typeof ask.answer === 'bigint' ? ask.answer : Number(ask.answer), ask.kind === 'bin' ? 2 : 16, ask.width || 0).digits; } catch { /* 写不成位串的，照原样 */ }
@@ -307,7 +308,7 @@ export function misreadAnswer(given, variants = [], same = (a, b) => normCell(a)
   const g = Array.isArray(given) ? given.join(' ') : String(given ?? '');
   if (!g.trim()) return '';
   for (const v of variants) {
-    const alts = String(v.answer ?? '').split('|').map((x) => x.trim()).filter(Boolean);
+    const alts = splitAlts(v.answer);
     if (alts.some((a) => same(a.replace(/[\s,，、→]+/g, ' '), g.replace(/[\s,，、→]+/g, ' ')))) return v.label;
   }
   return '';

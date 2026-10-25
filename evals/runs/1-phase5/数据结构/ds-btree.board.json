@@ -1,0 +1,61 @@
+{
+  "unit": "B 树的插入",
+  "subject": "数据结构",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "这道题",
+      "md": "4 阶 B 树（$m=4$），初始为空，依次插入 5, 6, 9, 13, 8, 2, 12, 15。新关键字总是插进**最下面一层**的结点。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "4 阶是什么意思",
+      "md": "$m$ 阶 B 树：每个结点最多 $m$ 棵子树；除根以外，每个结点至少 $\\lceil m/2\\rceil$ 棵子树。一个结点里的关键字比子树少一个。\n\n```let\nm = 4\n```\n\n```answer\nid: q-max\ntitle: 最多几个关键字\nq: 4 阶 B 树里，一个结点最多放几个关键字？\nanswer: m - 1\nhint: 关键字个数 = 子树个数 − 1。\nexplain: 最多 $\\calc{m}$ 棵子树，所以最多 $\\calc{m-1}$ 个关键字；插进第 $\\calc{m}$ 个就放不下了。\n```\n\n```answer\nid: q-min\ntitle: 最少几个关键字\nq: 4 阶 B 树里，除根以外的结点最少放几个关键字？\nanswer: floor((m+1)/2) - 1\nhint: 先算 $\\lceil 4/2\\rceil$ 是几棵子树。\nexplain: 至少 $\\lceil m/2\\rceil=\\calc{floor((m+1)/2)}$ 棵子树，所以至少 $\\calc{floor((m+1)/2)-1}$ 个关键字。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "第一次分裂",
+      "md": "先只插前四个：5, 6, 9, 13。走到第 4 个时先停下：要不要分裂？分裂的话，哪个关键字上移？\n\n```btree\nid: bt-first\ntitle: 插入 5 6 9 13\nbtree: 5 6 9 13\norder: 4\nask: split, up\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 2,
+      "md": "```quiz\nid: q-five\ntitle: 换成 5 阶\nq: 5 阶 B 树里一个结点插满了 5 个关键字 $k_1<k_2<k_3<k_4<k_5$，分裂时哪个上移？\n- [ ] $k_2$\n- [x] $k_3$\n- [ ] $k_4$\nexplain: 从第 $\\lceil m/2\\rceil$ 个分开：$\\lceil 5/2\\rceil=3$，$k_3$ 上移，左右各剩 2 个，都不少于 $\\lceil 5/2\\rceil-1=2$。\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 5,
+      "pin": true,
+      "title": "分裂",
+      "md": "插进去后有 $m$ 个关键字就分裂：第 $\\lceil m/2\\rceil$ 个**上移**到双亲，左边、右边各成一个结点；双亲也满了就接着往上分。"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 3,
+      "title": "自己做这道真题",
+      "md": "依次插入 5, 6, 9, 13, 8, 2, 12, 15。**先在草稿区画出每次分裂后的树**，再写出最后的树：按层写，一个结点一对方括号，如 `[30] [10 20] [40 50]`。\n\n```draft\ntitle: 草稿区\nnote: 每分裂一次，画一次整棵树。\nheight: 240\n```\n\n```btree\nid: bt-quiz\ntitle: 最后的树\nbtree: 5 6 9 13 8 2 12 15\norder: 4\nmode: quiz\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 4,
+      "title": "一次次对照",
+      "md": "拿你草稿上的每一棵树来对。每次分裂前先停下：要不要分？哪个上移？\n\n```btree\nid: bt-all\ntitle: 2020 年统考\nbtree: 5 6 9 13 8 2 12 15\norder: 4\nask: split, up\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 8,
+      "page": 5,
+      "title": "换成 5 阶",
+      "md": "换一题：依次插入 20, 30, 10, 40, 50, 15, 25, 35, 45, 60, 5，建一棵 5 阶 B 树。每插一个，填上移的关键字（没有分裂写 `-`）和这时的根结点。\n\n```btree\nid: bt-five\ntitle: 5 阶 B 树\nbtree: 20 30 10 40 50 15 25 35 45 60 5\norder: 5\nmode: fill\n```"
+    }
+  ]
+}

@@ -61,3 +61,21 @@ export function unquote(v) {
   const closers = CLOSE[v[0]];
   return closers && v.length >= 2 && closers.includes(v[v.length - 1]) ? v.slice(1, -1).trim() : v;
 }
+
+// 「a | b | c」这种用 | 分开的选项、可接受的几种写法。公式里的 | 不算分隔（$|y|$、$\|x\|$ 是绝对值、范数）：
+// 只在 $…$ 外面的 | 处切开。纯函数。
+export function splitAlts(s) {
+  const out = [];
+  let cur = '';
+  let math = false;
+  const str = String(s ?? '');
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (c === '\\' && i + 1 < str.length) { cur += c + str[++i]; continue; }
+    if (c === '$') math = !math;
+    if (c === '|' && !math) { out.push(cur); cur = ''; continue; }
+    cur += c;
+  }
+  out.push(cur);
+  return out.map((x) => x.trim()).filter(Boolean);
+}
