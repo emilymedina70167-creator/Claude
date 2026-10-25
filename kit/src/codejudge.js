@@ -20,11 +20,14 @@ const MAX_STEPS_SCALE = 60000;
 // 一个值：数、字符 'a'、数组 [1, 2]、二维 [[1, 2], [3, 4]]、字符串 "abc"、单链表 list [1, 2, 3]
 export function parseValue(src, what = '') {
   const s = String(src ?? '').trim();
-  const lm = /^list\s*(\[[\s\S]*\])$/i.exec(s);
+  // 链表的写法同 trace：第一个写「头」是带头结点，不写就是不带
+  const lm = /^list\s*\[([\s\S]*)\]$/i.exec(s);
   if (lm) {
-    const v = parseValue(lm[1], what);
-    if (!Array.isArray(v) || v.some((x) => typeof x !== 'number')) throw new Error(`${what}「${s}」：list 后面写结点里的数，比如 list [1, 2, 3]（不用写头结点）`);
-    return { list: v };
+    const items = lm[1].split(/[,，]/).map((x) => x.trim()).filter(Boolean);
+    const head = items.length > 0 && /^(头|头结点|head|h)$/i.test(items[0]);
+    const nums = (head ? items.slice(1) : items).map(Number);
+    if (nums.some((x) => !Number.isFinite(x))) throw new Error(`${what}「${s}」：list 后面写结点里的数，带头结点的第一个写「头」，比如 list [头, 1, 2, 3]`);
+    return { list: nums, head };
   }
   if (/^"(.*)"$/s.test(s)) return { str: s.slice(1, -1) };
   if (/^'.'$/.test(s)) return s[1];
@@ -33,7 +36,7 @@ export function parseValue(src, what = '') {
     const ok = (x) => typeof x === 'number' || (typeof x === 'string' && x.length === 1);
     if (ok(v) || (Array.isArray(v) && (v.every(ok) || v.every((r) => Array.isArray(r) && r.every(ok))))) return v;
   } catch { /* 下面报错 */ }
-  throw new Error(`${what}「${s}」看不懂：写数（3）、数组（[1, 2, 3]）、字符（'a'）、字符串（"abc"）或单链表（list [1, 2, 3]）`);
+  throw new Error(`${what}「${s}」看不懂：写数（3）、数组（[1, 2, 3]）、字符（'a'）、字符串（"abc"）或单链表（list [头, 1, 2, 3]）`);
 }
 
 // 「A = [1, 2], n = 2」：按最外层逗号切（数组里的逗号不切）
@@ -84,7 +87,10 @@ export function parseCodeSpec(fields) {
   });
   if (!tests.length) throw new Error('code 要写 tests:（一行一个测试：A = [1, 2, 3], n = 3 -> A = [3, 2, 1]）');
   const lists = [...new Set(tests.flatMap((t) => [...Object.entries(t.input), ...Object.entries(t.expect || {})].filter(([, v]) => v && typeof v === 'object' && 'list' in v).map(([k]) => k)))];
-  const head = !/^(no|false|0|否|不带|没有)/i.test(String(fields.head ?? '').trim());
+  // 带不带头结点看输入里的链表（同 trace：list [头, 1, 2] 带，list [1, 2] 不带）
+  const heads = new Set(tests.flatMap((t) => Object.values(t.input).filter((v) => v && typeof v === 'object' && 'list' in v).map((v) => v.head)));
+  if (heads.size > 1) throw new Error('tests 里的链表有的带头结点（list [头, …]）有的不带：一道题统一一种');
+  const head = heads.has(true);
   if (lists.length && fields.check) throw new Error('链表题（list [...]）暂时不能配 check:：把期望的链表写在 -> 后面');
   const lspec = { lists, head, sig, call };
   let ref = null;
@@ -129,7 +135,7 @@ function genValue(src, env, rnd) {
 }
 
 // 链表题（王道的单链表）：测试里写 L = list [1, 2, 3]。解释器只认 C，所以在代码后面接一段 C 的架子：
-// 先 malloc 出链表（默认带头结点，head: no 不带）、调学生的函数、再把链表抄进一个数组读出来。
+// 先 malloc 出链表（list [头, 1, 2] 带头结点，list [1, 2] 不带）、调学生的函数、再把链表抄进一个数组读出来。
 // 学生代码里没有 LNode 的 typedef 就在最前面补一行（报错的行号减回去）。
 export const LNODE = 'typedef struct LNode { int data; struct LNode *next; } LNode, *LinkList;';
 const LIST_MAX = 200; // 读回来最多这么多个结点：再多就是成环了
