@@ -60,7 +60,12 @@ async function main() {
       const page = await ctx.newPage();
       await page.goto(pathToFileURL(join(dir, name)).href);
       await page.waitForTimeout(900);
-      await page.evaluate(() => { document.querySelectorAll('.stage[hidden]').forEach((s) => { s.hidden = false; }); window.dispatchEvent(new Event('resize')); });
+      // 浮在页面上的按钮（左下角的「板书」等）会盖在正好滚到屏幕底的组件上，截图前藏起来
+      await page.evaluate(() => {
+        document.querySelectorAll('.stage[hidden]').forEach((s) => { s.hidden = false; });
+        for (const e of document.body.querySelectorAll('*')) if (getComputedStyle(e).position === 'fixed' && !e.closest('.block')) e.style.visibility = 'hidden';
+        window.dispatchEvent(new Event('resize'));
+      });
       await page.waitForTimeout(400);
       const ids = await page.evaluate(() => [...document.querySelectorAll('.block[data-bid]')].map((b) => b.dataset.bid).filter(Boolean));
       for (const id of ids) {

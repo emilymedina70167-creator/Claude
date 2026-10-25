@@ -65,6 +65,7 @@
   --green-rgb: 44 132 76;
   --coral-rgb: 206 66 44;
   --shade-rgb: 92 70 40;
+  --well-k: 0.6;
   --glow-rgb: 92 70 40;
   --board-rgb: 246 242 234;
   --board-2-rgb: 240 234 222;
@@ -162,6 +163,7 @@
   --green-rgb: 22 150 72;
   --coral-rgb: 216 44 44;
   --shade-rgb: 30 42 66;
+  --well-k: 0.5;
   --glow-rgb: 30 42 66;
   --board-rgb: 248 249 251;
   --board-2-rgb: 241 243 246;
