@@ -1,0 +1,41 @@
+{
+  "unit": "位示图：回收一个盘块改哪里（2015）",
+  "subject": "操作系统",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "题目",
+      "md": "位示图存在从 **32 号**开始的盘块里，盘块 1 KB，盘块号从 0 开始，块内按字节编号（从 0）。回收盘块 409612：改哪个盘块、块内哪个字节？"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "一块能管多少盘块",
+      "md": "```let\nb = 409612\nn = 1024 * 8\n```\n\n位示图里**一个二进制位管一个盘块**（0 空闲、1 已分配）。\n\n```answer\nid: q-per\ntitle: 一块管多少\nq: 盘块大小 1 KB。用来存位示图的一个盘块，能记多少个盘块的状态？\nanswer: n\nafter: \\text{ 个}\nhint: 1 KB 是多少字节？一个字节有几位？\nexplain: $1024 \\times 8 = \\calc{n}$ 位，一位管一个盘块，所以一块管 $\\calc{n}$ 个盘块。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "除法和取余定位",
+      "md": "```let\nb = 409612\nn = 1024 * 8\n```\n\n一步一步定位，每一步自己算出来再对照。\n\n```steps\nid: st-loc\ntitle: 回收 409612\nq: 位示图从 32 号盘块开始存，一块管 $\\calc{n}$ 个盘块，盘块号、块内字节都从 0 编号。回收盘块 409612，要改哪个盘块、哪个字节、哪一位？\n\nstep: 落在位示图的第几块（从 0 数）\ndo: true\nanswer: div(b, n)\nshow: $\\lfloor 409612 \\div \\calc{n} \\rfloor = \\calc{div(b, n)}$，余 $\\calc{mod(b, n)}$\n\nstep: 换成实际的盘块号\ndo: true\nanswer: 32 + div(b, n)\nshow: 位示图从 32 号开始存，第 $\\calc{div(b, n)}$ 块就是 $32 + \\calc{div(b, n)} = \\calc{32 + div(b, n)}$ 号盘块\n\nstep: 块内第几个字节\ndo: true\nanswer: div(mod(b, n), 8)\nshow: 余数 $\\calc{mod(b, n)}$ 是块内的第几位（从 0 数）；一个字节 8 位：$\\lfloor \\calc{mod(b, n)} \\div 8 \\rfloor = \\calc{div(mod(b, n), 8)}$\n\nstep: 字节里第几位\ndo: true\nanswer: mod(mod(b, n), 8)\nshow: $\\calc{mod(b, n)} \\bmod 8 = \\calc{mod(mod(b, n), 8)}$：回收就把这一位置 0\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "从 1 编号差在哪",
+      "md": "换个口径：**盘块号、块内字节号都从 1 开始**（存位示图的起始块还是 32 号）。先自己算，再看下面的一般式。\n\n```bitmap\nid: bm-base1\ntitle: 从 1 编号\nat: 32\nblock: 1KB\nbase: 1\nops: free 409612\nmode: quiz\n```\n\n```derive\nid: d-base\ntitle: 一般式\ni = \\left\\lfloor (b - b_0) \\div n \\right\\rfloor + i_0   // $b_0$：盘块号从几数；$i_0$：块（字）从几数\nj = (b - b_0) \\bmod n + j_0   // 先减 $b_0$ 再除、再取余，最后加 $j_0$\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "换数再练",
+      "md": "```practice\nid: pr-bm\ntitle: 定位练熟\ntype: custom\ncount: 3\npick k = choice(1, 2, 4)\npick s = int(10, 60)\npick b = int(100000, 999999)\nlet n = 1024 * 8 * k\nq: 位示图从 $\\calc{s}$ 号盘块开始存，盘块大小 $\\calc{k}$ KB，盘块号、块内字节都从 0 编号。回收盘块 $\\calc{b}$，要改哪个盘块、块内第几个字节？\nanswer: [s + div(b, n), div(mod(b, n), 8)]\nbefore: (\\text{盘块号}, \\text{字节号}) =\nhint: 一块管 $\\calc{n}$ 个盘块：先除以它定位到块，余数再除以 8 定位到字节。别忘了加起始块号。\nexplain: $\\lfloor \\calc{b} \\div \\calc{n} \\rfloor = \\calc{div(b, n)}$，盘块 $\\calc{s} + \\calc{div(b, n)} = \\calc{s + div(b, n)}$；余 $\\calc{mod(b, n)}$，字节 $\\lfloor \\calc{mod(b, n)} \\div 8 \\rfloor = \\calc{div(mod(b, n), 8)}$。\n```"
+    }
+  ]
+}

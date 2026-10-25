@@ -1,0 +1,55 @@
+{
+  "unit": "快表、页表、缺页的整条链（2009-46）",
+  "subject": "操作系统",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "题目数据",
+      "md": "页面 4 KB；快表 10 ns，内存 100 ns，缺页处理 $10^8$ ns（含更新快表和页表）。驻留集 2 块，LRU；快表初始为空。\n\n页表：页 0 → 101H，页 1 不在内存，页 2 → 254H。依次访问 2362H、1565H、25A5H。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "拆页号和偏移",
+      "md": "地址要先拆开：低几位是页内偏移，剩下的高位是页号。页面 4 KB，偏移占几位？\n\n```answer\nid: q-split\ntitle: 三个页号\nq: 页面大小 4 KB，逻辑地址依次是 2362H、1565H、25A5H。按顺序写出这三个地址的页号（十进制）。\nanswer: [div(0x2362, 4096), div(0x1565, 4096), div(0x25A5, 4096)]\nbefore: (p_1, p_2, p_3) =\nhint: $4\\,\\text{KB}=2^{12}$ B，偏移占低 12 位，也就是十六进制的低 3 位。\nexplain: 偏移 12 位 = 低 3 个十六进制位。2362H：页号 $\\calc{div(0x2362, 4096)}$，偏移 $\\calc{hex(mod(0x2362, 4096), 3)}$H；1565H：页号 $\\calc{div(0x1565, 4096)}$，偏移 $\\calc{hex(mod(0x1565, 4096), 3)}$H；25A5H：页号 $\\calc{div(0x25A5, 4096)}$，偏移 $\\calc{hex(mod(0x25A5, 4096), 3)}$H。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "第一次：2362H",
+      "md": "快表是空的。这次访问依次要经过下面几段，每段多久？\n\n```sketch\nid: sk-path\ntitle: 一次访存的路\nwidth: 360\nheight: 120\n<rect x=\"10\" y=\"30\" width=\"90\" height=\"50\" rx=\"8\" class=\"blue fill\"/>\n<text x=\"55\" y=\"60\" text-anchor=\"middle\">查快表</text>\n<path d=\"M 102 55 L 132 55\" class=\"arrow\"/>\n<rect x=\"135\" y=\"30\" width=\"90\" height=\"50\" rx=\"8\" class=\"pink fill\"/>\n<text x=\"180\" y=\"60\" text-anchor=\"middle\">查页表</text>\n<text x=\"180\" y=\"98\" text-anchor=\"middle\" class=\"small faint\">页表在内存里</text>\n<path d=\"M 227 55 L 257 55\" class=\"arrow\"/>\n<rect x=\"260\" y=\"30\" width=\"90\" height=\"50\" rx=\"8\" class=\"yellow fill\"/>\n<text x=\"305\" y=\"60\" text-anchor=\"middle\">访存取数</text>\n<text x=\"55\" y=\"20\" text-anchor=\"middle\" class=\"small\">? ns</text>\n<text x=\"180\" y=\"20\" text-anchor=\"middle\" class=\"small\">? ns</text>\n<text x=\"305\" y=\"20\" text-anchor=\"middle\" class=\"small\">? ns</text>\n```\n\n```answer\nid: q-t1\ntitle: 2362H 要多久\nq: 快表初始为空，页 2 在内存（块号 254H）。快表 10 ns、内存 100 ns。访问 2362H 一共要多少 ns？\nanswer: 10 + 100 + 100\nafter: \\text{ ns}\nhint: 快表没命中，还要到内存里查页表；查到块号以后，再访存一次才取到数据。\nexplain: 查快表 10 + 查页表 100 + 取数 100 = $\\calc{10 + 100 + 100}$ ns。查完页表顺手把「页 2 → 254H」放进快表（不计时），下一次访问页 2 就能命中。\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "1565H 落在哪个块",
+      "md": "页 1 不在内存，要缺页、调页。驻留集只有 2 块，已经被页 0、页 2 占着，得先换出一页。\n\n```answer\nid: q-pa\ntitle: 1565H 的物理地址\nq: 页面 4 KB；驻留集 2 块，被页 0（块 101H）、页 2（块 254H）占着，按 LRU 换出一页，页 1 调进腾出的那一块。上一次访问的是 2362H。写出 1565H 的物理地址（十六进制）。\ntype: hex\nanswer: 0x101 * 0x1000 + 0x565\nhint: 先想 LRU 换谁：刚刚访问过的是哪一页？换出的那页腾出的块号，拼上偏移 565H。\nexplain: 刚访问过页 2，页 0 最久没用，换出页 0，页 1 装进块 101H。物理地址 = 块号 | 偏移 = $\\calc{hex(0x101 * 0x1000 + 0x565)}$H。\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "整条链：三次各多久",
+      "md": "页面把三次访问一段段走出来，关键处先猜。重点看第二次：缺页处理完、**重新执行**这条指令时，快表命中没有。\n\n```mem\nid: vm-chain\ntitle: 三次访问各要多久\npage: 4KB\ntable: 0->101H, 1->-, 2->254H\nvaddr: 2362H, 1565H, 25A5H\ncost: tlb=10 mem=100 fault=10^8\nresident: 2\nask: tlb, inmem, victim, time\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 5,
+      "title": "重新执行为什么命中",
+      "md": "```quiz\nid: qz-retry\ntitle: 缺页之后\nq: 1565H 缺页处理完，CPU 重新执行这条指令。这时查快表，结果是？\n- [x] 命中：缺页处理时已经把页 1 的表项写进了快表\n- [ ] 没命中：要再查一次页表\n- [ ] 不用查快表，直接访存\nexplain: 题目说缺页处理「含更新快表和页表」，所以重新执行时快表命中，只要 10 + 100。整次：$10 + 100 + 10^8 + 10 + 100 = \\calc{10 + 100 + 10^8 + 10 + 100}$ ns。第三次 25A5H 是页 2，第一次访问后就进了快表：$\\calc{10 + 100}$ ns。\n```"
+    },
+    {
+      "id": "s6",
+      "seq": 7,
+      "page": 6,
+      "title": "换一组：自己填",
+      "md": "口径一样（快表初始为空、驻留集 2、LRU、缺页处理含更新快表）。每个地址填页号、快表命中没有、缺页没有、物理地址和用时。先在草稿上记好驻留集里两页的新旧顺序。\n\n```mem\nid: vm-fill\ntitle: 四次访问\npage: 4KB\ntable: 0->2A0H, 1->-, 2->1B3H, 3->-\nvaddr: 0A2CH, 3B10H, 0C4EH, 2F00H\ncost: tlb=10 mem=100 fault=10^8\nresident: 2\nmode: fill\n```"
+    }
+  ]
+}

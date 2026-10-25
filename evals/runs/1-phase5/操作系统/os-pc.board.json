@@ -1,0 +1,48 @@
+{
+  "unit": "生产者-消费者：P 操作的顺序",
+  "subject": "操作系统",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "设定",
+      "md": "缓冲池 n 个缓冲区（这里取 **n = 2**），一个生产者 P、一个消费者 C。信号量：mutex（互斥）、empty（空位数）、full（产品数）。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "三个信号量的初值",
+      "md": "```answer\nid: q-init\ntitle: 初值\nq: 缓冲池有 2 个缓冲区，开始时全空。写出 mutex、empty、full 的初值。\nanswer: [1, 2, 0]\nbefore: (\\text{mutex}, \\text{empty}, \\text{full}) =\nhint: empty 数的是空着的缓冲区，full 数的是已经放了产品的缓冲区；mutex 保证同一时刻只有一个进程动缓冲池。\nexplain: mutex = 1；empty = n = 2；full = 0。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "写出两个进程",
+      "md": "先在 Notability 里写，写好粘贴截图（或直接打字）。\n\n```conjecture\nid: cj-code\ntitle: 写出 P、V\nq: 用 P、V 操作写出生产者和消费者（各是一个 while(1) 循环），要用到 mutex、empty、full。\ngrade: off\nanswer: 生产者：while(1){ 生产一个产品; P(empty); P(mutex); 把产品放入缓冲区; V(mutex); V(full); }　消费者：while(1){ P(full); P(mutex); 从缓冲区取出一个产品; V(mutex); V(empty); 消费这个产品; }\nplaceholder: 生产者：while(1) { … }\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "跟着一个顺序走",
+      "md": "消费者先来（缓冲区是空的），然后生产者一直走到阻塞为止。每个 P、V 之后写出三个信号量的值（负数写 -1）。\n\n```pv\nid: pv-trace\ntitle: 先 C，再一直走 P\nproblem: 生产者消费者\nbuffer: 2\nrun: C P+\nmode: fill\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "把 P 反过来",
+      "md": "生产者改成**先 P(mutex)、再 P(empty)**，其余不变。你来点「下一步让谁走」，找一种让两个进程都卡死的走法；觉得怎么走都不会死锁，就点「我觉得不会死锁」。\n\n```pv\nid: pv-swap\ntitle: 找出死锁的走法\nproblem: 生产者消费者\nbuffer: 2\nswap: P\nfind: deadlock\nask: block\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 6,
+      "page": 5,
+      "title": "为什么死锁",
+      "md": "```conjecture\nid: cj-why\ntitle: 卡在哪\nq: 用一两句话说：死锁那一刻，生产者手里拿着什么、在等什么？消费者呢？为什么谁也等不到？\ngrade: off\nanswer: 缓冲区满（empty = 0）时，生产者先 P(mutex) 拿到了 mutex，再 P(empty) 阻塞在 empty 上；消费者要取产品得先 P(mutex)，拿不到，阻塞在 mutex 上。能让 empty 加 1 的只有消费者的 V(empty)，能放开 mutex 的只有阻塞着的生产者，互相等，死锁。\nplaceholder: 生产者拿着……在等……\n```\n\n```solution\ntitle: 结论（写完再看）\n同步的 P（empty、full）在前，互斥的 P（mutex）在后；两个 V 的顺序可以换，V 不会阻塞。\n```"
+    }
+  ]
+}

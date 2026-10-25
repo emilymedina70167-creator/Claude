@@ -1,0 +1,41 @@
+{
+  "unit": "结构体的对齐（32 位）",
+  "subject": "组成原理",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "对齐规则（32 位）",
+      "md": "char 1、short 2、int 4 字节。每个成员从**自己大小的整数倍**开始；sizeof 凑成最大成员大小的整数倍。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "为什么要对齐",
+      "md": "32 位机器的存储器一次读出一个对齐的 4 字节字（地址 0～3、4～7……）。假如 `char a` 后面紧接着放 `int b`：\n\n```sketch\nid: sk-mis\ntitle: b 紧挨着 a 放\nwidth: 360\nheight: 170\n<text x=\"30\" y=\"55\" text-anchor=\"middle\" class=\"small\">0～3</text>\n<text x=\"30\" y=\"115\" text-anchor=\"middle\" class=\"small\">4～7</text>\n<rect x=\"60\" y=\"30\" width=\"60\" height=\"40\" class=\"gray\"/>\n<rect x=\"120\" y=\"30\" width=\"60\" height=\"40\" class=\"yellow fill\"/>\n<rect x=\"180\" y=\"30\" width=\"60\" height=\"40\" class=\"yellow fill\"/>\n<rect x=\"240\" y=\"30\" width=\"60\" height=\"40\" class=\"yellow fill\"/>\n<rect x=\"60\" y=\"90\" width=\"60\" height=\"40\" class=\"yellow fill\"/>\n<rect x=\"120\" y=\"90\" width=\"60\" height=\"40\" class=\"gray faint\"/>\n<rect x=\"180\" y=\"90\" width=\"60\" height=\"40\" class=\"gray faint\"/>\n<rect x=\"240\" y=\"90\" width=\"60\" height=\"40\" class=\"gray faint\"/>\n<text x=\"90\" y=\"56\" text-anchor=\"middle\">a</text>\n<text x=\"150\" y=\"56\" text-anchor=\"middle\" class=\"yellow\">b</text>\n<text x=\"210\" y=\"56\" text-anchor=\"middle\" class=\"yellow\">b</text>\n<text x=\"270\" y=\"56\" text-anchor=\"middle\" class=\"yellow\">b</text>\n<text x=\"90\" y=\"116\" text-anchor=\"middle\" class=\"yellow\">b</text>\n<text x=\"180\" y=\"160\" text-anchor=\"middle\" class=\"yellow small\">b 横跨了两个字</text>\n```\n\n```quiz\nid: q-access\ntitle: 读 b 要几次\nq: 按上图，int 型的 b 放在地址 1～4，存储器一次只能读出一个对齐的 4 字节字。读出 b 至少要访存几次？\nanswer: 2\nexplain: b 的 4 个字节分在 0～3 和 4～7 两个字里，要读两次再拼起来。b 从 4 的倍数开始放，一次就够：对齐是用一点空间换访存次数。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "偏移和 sizeof",
+      "md": "`struct { char a; int b; short c; }`：先猜每个成员的偏移和 sizeof，页面画出内存，空出来的字节画斜线。\n\n```layout\nid: ly-main\ntitle: char a; int b; short c\nstruct: char a; int b; short c\nask: offset, size\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "按大小重排",
+      "md": "把成员按大小从大到小排：`int b; short c; char a;`。自己把每个字节填出来。\n\n````frames\nid: fr-re\ntitle: int b; short c; char a\n---\narray 偏移: 0 1 2 3 4 5 6 7\narray 字节: _ _ _ _ _ _ _ _\n> 一格一个字节。下一步把每个字节属于谁填上，空出来的写「空」。\n---\narray 偏移: 0 1 2 3 4 5 6 7\narray 字节: {{b}} {{b}} {{b}} {{b}} {{c}} {{c}} {{a}} {{空|-|无}}\n> 每个成员从自己大小的整数倍开始。\n---\narray 偏移: 0 1 2 3 4 5 6 7\narray 字节: ~b ~b ~b ~b ~c ~c ~a !空\n> b 占 0～3，c 从 4（2 的倍数）开始，a 在 6；成员只用到 7 个字节，sizeof 凑成 4 的倍数是 {{8}}，比原来省了 {{4}} 个字节。\n````"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "换一个结构体",
+      "md": "```layout\nid: ly-q1\ntitle: 原来的顺序\nstruct: short a; char b; int c; char d\nmode: quiz\n```\n\n```layout\nid: ly-q2\ntitle: 按大小重排\nstruct: int c; short a; char b; char d\nmode: quiz\n```"
+    }
+  ]
+}

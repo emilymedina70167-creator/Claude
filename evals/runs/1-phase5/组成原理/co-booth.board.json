@@ -1,0 +1,41 @@
+{
+  "unit": "Booth 补码一位乘",
+  "subject": "组成原理",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "这道题",
+      "md": "$x=-0.1101$，$y=0.1011$，$n=4$，求 $[x\\cdot y]_补$。\n\n部分积、被乘数用双符号位；乘数末尾补附加位 $y_{n+1}=0$。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "看哪两位",
+      "md": "Booth 法不管 $y$ 的正负，直接拿 $[y]_补$ 去乘。先弄清：$[y]_补$ 的每一位在乘法里起什么作用。\n\n```steps\nid: ex-rule\ntitle: Booth 看哪两位\nq: $[y]_补 = y_0.y_1y_2\\cdots y_n$（$y_0$ 是符号位）。想把 $[x]_补\\cdot y$ 拆成一步步的「加、右移」。\n\nstep: 补码的真值\nask: 由 $[y]_补 = y_0.y_1\\cdots y_n$，$y$ 的真值是什么？\nchoices: $-y_0 + 0.y_1y_2\\cdots y_n$ | $y_0 + 0.y_1y_2\\cdots y_n$ | $-0.y_1y_2\\cdots y_n$\nanswer: $-y_0 + 0.y_1y_2\\cdots y_n$\nshow: $y = -y_0 + \\sum_{i=1}^{n} y_i 2^{-i}$：符号位的权是 $-1$。\n\nstep: 拆成相邻两位的差\nask: 把每一项拆开：$y_i2^{-i} = y_i2^{-(i-1)} - y_i2^{-i}$，再把同一个 2 的幂合起来。$2^{-i}$ 前面的系数是什么？\nchoices: $y_{i+1} - y_i$ | $y_i - y_{i+1}$ | $y_i + y_{i+1}$\nanswer: $y_{i+1} - y_i$\nshow: $y = \\sum_{i=0}^{n}(y_{i+1}-y_i)\\,2^{-i}$，补一位 $y_{n+1}=0$（附加位）。\n\nstep: 每一步加什么\nask: 每一步看相邻两位 $y_iy_{i+1}$。$y_iy_{i+1}=10$ 时，这一步加什么？\nchoices: $[-x]_补$ | $[x]_补$ | $0$\nanswer: $[-x]_补$\nshow: $y_{i+1}-y_i$：$00$、$11$ 得 $0$，加 $0$；$01$ 得 $+1$，加 $[x]_补$；$10$ 得 $-1$，加 $[-x]_补$。加完算术右移一位。\n\nstep: 加几次、移几次\nask: $n=4$ 时，$i$ 从 $0$ 到 $n$，一共要加几次？\ndo: true\nanswer: 4 + 1\nshow: 加 $n+1=5$ 次；最后一次（$i=0$，权是 $2^0$）加完不再移位，所以右移 $n=4$ 次。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "先看一遍",
+      "md": "换一组数，看页面怎么走那张「部分积 | 乘数 | 说明」的表。每一步先说这一次加什么。\n\n```mul\nid: ml-demo\ntitle: Booth：先看一遍\nx: 0.1011\ny: -0.1101\nalgo: booth\nask: code, op\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "自己填表",
+      "md": "回到这道题：自己把每次右移后的部分积和乘数填出来，再写结果。\n\n```mul\nid: ml-fill\ntitle: x = −0.1101，y = 0.1011\nx: -0.1101\ny: 0.1011\nalgo: booth\nmode: fill\n```\n\n```answer\nid: q-prod\ntitle: 写出结果\nq: $x=-0.1101$，$y=0.1011$，用 Booth 法求 $[x\\cdot y]_补$。写 9 位（符号位 + 8 位数值），不写小数点。\ntype: bin\nanswer: unsigned(-0b1101 * 0b1011, 9)\nwidth: 9\nhint: 积的高位在最后的部分积里，低位是一位位移进乘数那一栏的。\nexplain: $[x\\cdot y]_补 = \\calc{bin(unsigned(-0b1101 * 0b1011, 9), 9)}$，即 $x\\cdot y = -0.\\calc{bin(0b1101 * 0b1011, 8)}$。\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "换着数练",
+      "md": "```practice\nid: pr-booth\ntitle: Booth 换着数练\ntype: custom\ncount: 3\npick a = int(-15, 15) nonzero\npick b = int(-15, 15) nonzero\nq: $[x]_补 = \\calc{bin(a, 5)}$，$[y]_补 = \\calc{bin(b, 5)}$（最高位是符号位，小数点在它后面）。用 Booth 法求 $[x\\cdot y]_补$，写 9 位，不写小数点。\nanswer: unsigned(a*b, 9)\ncheck: bin\nwidth: 9\nhint: 先写出 $[-x]_补 = \\calc{bin(-a, 5)}$，再从 $y_4y_5$ 开始看相邻两位：加 5 次、右移 4 次。\nexplain: $[x\\cdot y]_补 = \\calc{bin(unsigned(a*b, 9), 9)}$。\n```"
+    }
+  ]
+}

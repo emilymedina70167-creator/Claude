@@ -1,0 +1,41 @@
+{
+  "unit": "动态分区分配：最佳适应",
+  "subject": "操作系统",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "题目",
+      "md": "内存 640K，从低地址开始用，**最佳适应**。依次：J1 申请 130K、J2 60K、J3 100K、J2 释放、J4 200K、J3 释放、J1 释放、J5 140K、J6 60K、J7 50K。写出每次分配的起始地址。"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "最佳适应怎么挑",
+      "md": "```quiz\nid: qz-best\ntitle: 分在哪\nq: 空闲分区有 3 块：起始 100K 长 140K、起始 300K 长 30K、起始 500K 长 80K。来了一个 60K 的作业，最佳适应分在哪块？\n- [ ] 起始 100K（140K）\n- [ ] 起始 300K（30K）\n- [x] 起始 500K（80K）\nexplain: 最佳适应把空闲区**按容量从小到大**排，挑第一个放得下的：30K 放不下，80K 放得下。分完剩下 20K：最佳适应总是留下这种很小的碎片。首次适应会分在 100K。\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "回收：和谁合并",
+      "md": "换一个小例子把分配和回收都走一遍。分配时先在内存条上点你觉得会分到的空闲区；回收时先判断它和上邻、下邻哪块空闲区合并。\n\n```alloc\nid: om-demo\ntitle: 分配和回收\nmemory: 640K\nalgo: best\nused: OS 0 40K\nops: alloc A 100K, alloc B 50K, alloc C 120K, alloc D 80K, free B, free D, alloc E 40K, free C\nask: where, merge\n```"
+    },
+    {
+      "id": "s3",
+      "seq": 4,
+      "page": 3,
+      "title": "自己做这道题",
+      "md": "在草稿区维护空闲分区表：每次分配、回收之后，按**容量从小到大**重写一遍（起址、大小）。再把每个作业的起始地址填进表里。\n\n```draft\nid: dr-alloc\ntitle: 空闲分区表\nheight: 200\n```\n\n```alloc\nid: om-fill\ntitle: 每次分配的起始地址\nmemory: 640K\nalgo: best\nops: alloc 1 130K, alloc 2 60K, alloc 3 100K, free 2, alloc 4 200K, free 3, free 1, alloc 5 140K, alloc 6 60K, alloc 7 50K\nmode: fill\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 5,
+      "page": 4,
+      "title": "碎片从哪来",
+      "md": "下面是同一串请求换成**首次适应**的结果（已经走到最后），和你刚做的最佳适应对照着看最后剩下的空闲区。\n\n```alloc\nid: om-first\ntitle: 对照：首次适应\nmemory: 640K\nalgo: first\nops: alloc 1 130K, alloc 2 60K, alloc 3 100K, free 2, alloc 4 200K, free 3, free 1, alloc 5 140K, alloc 6 60K, alloc 7 50K\nstart: end\n```\n\n```conjecture\nid: cj-frag\ntitle: 为什么留碎片\nq: 最佳适应做完以后，高地址那边剩下一块很小的空闲区。用一句话说：为什么「挑最小的放得下的」反而容易留下用不上的小碎片？\ngrade: off\nanswer: 每次都挑和作业大小最接近的空闲区，分完剩下的部分就最小（这题 J5 140K 分进 150K，只剩 10K），这种小块以后几乎什么作业都放不下，就成了外部碎片。\nplaceholder: 因为……\n```"
+    }
+  ]
+}

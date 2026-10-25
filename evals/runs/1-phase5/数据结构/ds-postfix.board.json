@@ -1,0 +1,55 @@
+{
+  "unit": "栈的应用 · 中缀转后缀",
+  "subject": "数据结构",
+  "steps": [
+    {
+      "id": "k1",
+      "seq": 1,
+      "pin": true,
+      "title": "转换规则（王道）",
+      "md": "- 操作数：直接写进后缀\n- `(` 入栈；`)` 弹到 `(` 为止，括号不写进后缀\n- 运算符：栈顶比它优先级**高**的先弹出，再入栈（一样高的呢？第 1 块板）\n- 读完：栈里的依次弹出"
+    },
+    {
+      "id": "s1",
+      "seq": 2,
+      "page": 1,
+      "title": "一样高的弹不弹",
+      "md": "$a-b+c$ 要按 $(a-b)+c$ 算。读到 $+$ 时栈顶是 $-$，两个一样高。走到那一步会先停下：这次弹出哪些？\n\n```stack\nid: st-assoc\ntitle: a − b + c\ninfix: a - b + c\nask: pop\n```"
+    },
+    {
+      "id": "s2",
+      "seq": 3,
+      "page": 2,
+      "title": "不弹会怎样",
+      "md": "```let\na = 5\nb = 3\nc = 1\n```\n\n```quiz\nid: q-nopop\ntitle: 不弹会怎样\nq: 假如读到 $+$ 时不弹 $-$，直接把 $+$ 压上去，最后得到 a b c + −。这个后缀式算的是什么？\n- [x] $a-(b+c)$\n- [ ] $(a-b)+c$\n- [ ] 两个一样\nexplain: 后缀式里运算符出现的先后就是计算的先后：a b c + − 先算 $b+c$，再用 $a$ 去减。代数看：$a=5,b=3,c=1$ 时 $(a-b)+c=\\calc{(a-b)+c}$，而 $a-(b+c)=\\calc{a-(b+c)}$。\n```\n\n```conjecture\nid: cj-assoc\ntitle: 一句话说清\nq: 为什么栈里和它一样高的运算符要先弹出？用一句话说。\ngrade: off\nanswer: 同级运算从左往右算（左结合），栈里那个先出现，应该先算，所以先弹出写进后缀。\nplaceholder: 因为……\n```"
+    },
+    {
+      "id": "k2",
+      "seq": 4,
+      "pin": true,
+      "title": "一样高也弹",
+      "md": "运算符先弹出栈里优先级**高于或等于**它的（碰到 `(` 或栈空停），再入栈：左结合，先来的先算。"
+    },
+    {
+      "id": "s3",
+      "seq": 5,
+      "page": 3,
+      "title": "自己填表",
+      "md": "把 $A+B*(C-D)-E/F$ 转成后缀式。每读一个符号，写出栈里有什么（栈底 → 栈顶）和后缀写到哪。\n\n```stack\nid: st-fill\ntitle: 王道那张表\ninfix: A + B * (C - D) - E / F\nmode: fill\n```"
+    },
+    {
+      "id": "s4",
+      "seq": 6,
+      "page": 4,
+      "title": "对照关键的几步",
+      "md": "再走一遍，每读到一个运算符先停下说这次弹出哪些。重点看读到 `)` 之后那个 $-$：栈里有 $+$ 和 $*$，哪些要弹？\n\n```stack\nid: st-check\ntitle: 对照过程\ninfix: A + B * (C - D) - E / F\nask: pop\n```"
+    },
+    {
+      "id": "s5",
+      "seq": 7,
+      "page": 5,
+      "title": "换一个式子",
+      "md": "```stack\nid: st-quiz\ntitle: 自己转\nq: 写出 $a*b/c-(d-e)*f+g$ 的后缀式（可以先在草稿上画栈）。\ninfix: a * b / c - (d - e) * f + g\nmode: quiz\n```"
+    }
+  ]
+}
