@@ -1,9 +1,11 @@
 // 学习记录：整理成一段文字，复制给对话里的 Claude
 import { session } from './session.js';
+import { VERSION } from './version.js';
 
 export function recordText() {
   const L = session.log;
-  const lines = [`【学习记录】${session.title}`];
+  // 带上组件库版本：对话里的 Claude 对一下说明的版本，看得出这节课是不是旧版组件库发布的
+  const lines = [`【学习记录】${session.title}（组件库 ${VERSION}）`];
   const st = session.stages.length;
   if (st > 1 && !session.live) lines.push(`进度：已解锁 ${Math.min(st, session.progress + 1)} / ${st} 节`);
   const prac = L.filter((e) => e.type === 'practice');

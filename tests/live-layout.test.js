@@ -113,5 +113,6 @@ test('statusRecord：一份黑板现状，各项有上限；软提醒不算写�
   assert.ok(sameStatus({ ...r, at: 1 }, { ...r, at: 2 }));
   assert.ok(!sameStatus(r, { ...r, view: 3 }));
   assert.doesNotThrow(() => statusRecord());
+  assert.equal(statusRecord({ kit: '2026-10-26' }).kit, '2026-10-26', '黑板现状带上组件库版本');
   assert.ok(JSON.stringify(statusRecord({ recent: Array.from({ length: 30 }, () => 'x'.repeat(5000)) })).length < 20000, '再长也不会撑爆一个文档');
 });

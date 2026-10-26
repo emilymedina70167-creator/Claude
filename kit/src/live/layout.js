@@ -81,14 +81,16 @@ export const sameScreen = (a, b) => !!a && !!b && JSON.stringify({ ...a, at: 0 }
  * - drafts：现在黑板上写了、还没点「检查」「提交」的草稿
  * - lint：现在还有写法错误的段
  * - uploads：学生交给 Claude 看的截图（asset id），最新的在最后
+ * - kit：这块黑板用的组件库版本。对话里的 Claude 拿它和说明的版本比，对不上就是黑板用的旧版组件库（旧版写不出新写法）
  */
 export const NOW_LIMITS = { recent: 30, line: 300, drafts: 20, uploads: 6, lint: 20 };
 
-export function statusRecord({ cur = 0, view = 0, pages = [], recent = [], drafts = [], lint = [], screen = null, uploads = [] } = {}) {
+export function statusRecord({ cur = 0, view = 0, pages = [], recent = [], drafts = [], lint = [], screen = null, uploads = [], kit = '' } = {}) {
   const cut = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
   const L = NOW_LIMITS;
   return {
     id: 'now',
+    kit: String(kit || ''),
     board: Number(cur) || 0,
     view: Number(view) || 0,
     boards: (pages || []).map((p) => ({ n: Number(p.n) || 0, title: cut(p.title, 60) })),

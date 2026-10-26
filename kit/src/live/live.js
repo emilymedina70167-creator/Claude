@@ -17,6 +17,7 @@ import { createLiveBar } from './livebar.js';
 import { planBoards, lintRecord, screenRecord, sameScreen, leadingHeading, statusRecord, sameStatus } from './layout.js';
 import { actionText, reportable } from '../class/prompt.js';
 import { draftsIn } from '../drafts.js';
+import { VERSION } from '../version.js';
 
 const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const SCREEN_DELAY = 1500; // 屏幕大小、放不放得下：停下来 1.5 秒再写，转屏、滚动时不连着写
@@ -308,7 +309,7 @@ export async function renderLive(root, meta) {
     await seeded;
     const pages = [...bv.pages.values()].sort((a, b) => a.n - b.n).map((p) => ({ n: p.n, title: p.title }));
     const lint = [...lintDb.values()].filter((l) => { const s = steps.get(String(l.step ?? l.id)); return s && !s.hidden; });
-    const rec = statusRecord({ cur: bv.cur, view: bv.view, pages, recent, drafts: currentDrafts(), lint, screen: lastScreen, uploads });
+    const rec = statusRecord({ cur: bv.cur, view: bv.view, pages, recent, drafts: currentDrafts(), lint, screen: lastScreen, uploads, kit: VERSION });
     if (sameStatus(rec, lastNow)) return;
     lastNow = rec;
     sink.put('meta', { ...rec, at: Date.now() });
