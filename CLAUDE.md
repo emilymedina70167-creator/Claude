@@ -29,6 +29,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
   - `unit-matrix-vector.html`：引导模式示范单元（也是组件库 artifact 的页面）
   - `live-demo.html?dev`：实时黑板，右上角开发面板扮演对话里的 Claude
   - `408-demo.html`：计算机四门课的全部演示组件
+  - `desk-demo.html?dev`：学习台（记忆库、在学习台里上课；「测试:记忆」见下文「学习台和记忆库」）
   - `class-demo.html?dev`：课堂模式，模拟老师按剧本回放（不调用 Claude）；剧本里故意有一段写错的组件（`circle` 那行），控制台报「看不懂这一行」是正常的。在输入框里打暗号看教具：「测试:教具」（`let` 块 + `matrix` 的乘积 + 逐行 `mark` + `\calc`）、「测试:幂」（滑块和 `figure play` 让矩阵动起来）、「测试:指图」（图上的 `label=` / `at=` 标注）、「测试:出题」（`practice` 的自定义题型）、「测试:公式」（写含 n 的式子）、「测试:示意图」（`sketch`）、「测试:推导」（`derive` + `figure play step`）、「测试:原图」（`image`，本地用一张模拟的讲义图）、「测试:排序」（演示组件 `sort` + `figure play step` + `mark`）
     - `la-demo.html`：线代的过程组件（elim、det、eig、schmidt、quad、frames）
 - iPad 尺寸：竖屏 820×1180，横屏 1180×820。云端会话里可以用预装的 Playwright + Chromium 截图检查。
@@ -100,11 +101,16 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ### 学习台和记忆库（`kit/src/memory/`，`docs/learner-memory-spec.md`）
 
-- 分三批做，每一批做完对话里的 Claude 用一节真课验过再做下一批。**现在做完的是第 1 批**（记忆库本身）；第 2 批是在学习台里上课（多 `session`、证据自动写进 `evidence`、课堂每一轮带记忆摘要、`memory_read` 工具、观察写进 `observations`），第 3 批是首页的课程地图、弱点表、课程列表。
+- 分三批做，每一批做完对话里的 Claude 用一节真课验过再做下一批。**现在做完的是第 1、2 批**（记忆库本身；在学习台里上课），第 3 批是首页的课程地图、弱点表、课程列表。
 - `schema.js`（纯函数）：十二类集合（`COLLECTIONS`：中文名、`history` / `state`、谁能写、编号的正则、必填、只能取的值、日期字段、指向别的类的字段、改了要记 log 的字段）；三种角色 `chat` / `class` / `page`，`assertWrite` 在代码层面拦住不该写的（课堂里的 Claude 只能写 `observations`、`slips`）；复现档位 1 → 3 → 7 → 14 → 30（`nextTier`、`reviewDue`：到期 = last + tier，页面算）；`applyChange` 改状态类时按字段记 log。
 - `check.js`（纯函数）：自检对话里的 Claude 写的记忆（编号、字段、日期、指向的 id、结论挂证据），外加指纹 `meta/ledger`：历史类（错题、观察、失误）改了、删了记一条提醒留 7 天；状态类改了 `tracked` 字段却没在 log 里记到新值就一直报（指纹停在旧值，补上 log 才前进）。结果写回 `meta/memcheck` 给对话里的 Claude 读。
 - `desk.js`：学习台首页（今天、自检、记忆库每类几条）；页面只写 `meta`。`sample.js` 是一份守规矩的示例记忆（`?dev` 的「填入示例记忆」、测试都用它）。说明书 `CLAUDE-PROJECT.md` 第七节的 JSON 例子拼起来要能过自检（`tests/memory.test.js` 守着）。
-- 浏览器里看：`kit/examples/desk-demo.html?dev`。
+- 在学习台里上课（第 2 批）：首页「开新课」→ `sessions/{编号}`（`c-20261027-1`，页面写），`pack/main`、`pack/problems` 抄进 `sessions/{编号}/pack/`；地址带 `#编号` 就进这节课（`desk.js` 的 `classHash` / `enterClass`，进出都整页刷新，课堂挂的全局监听不留）。课堂照旧是 `classroom.js`，多一个 `desk` 参数：
+  - 数据：`memory/session.js` 的 `scopeDb` 把 `steps`、`class_pages`、`class_turns`、`pack`、`uploads` 换到 `sessions/{编号}/` 下面（Proxy 转发，方法绑在原对象上；写进去带 `session`），课堂的代码不用改路径。
+  - 证据：`sync.js` 的 `createSink(store, { evidence })`：作答、动作只写一份进 `evidence`（`toEvidence`：组件 id 叫 `comp`，`block` 是课程地图的块，`tags` 带段的 `point=`），不再写 `answers` / `events`；刷新后 `fromEvidence` 读回来重放。学生说的话、附的图也是证据（`sayEvidence`）。
+  - 课堂 Claude：`prompt.js` 的 `buildSystem({ memory })` 多一节「你对学生的了解」（`memory/digest.js` 的 `memoryDigest`：rules → profile → 当前块 → 相关弱点、错题原文、掌握 → 失误 → position，预算 `MEMORY_BUDGET` 32 KiB、从后往前截，资料包用剩下的）；记忆库有 rules 时替换内置红线（`memoryRules`：角色那一段和教法照旧）。工具：`lesson_note`（kind note / proposal，写 `observations`）、`slip_note`（写 `slips`）、`memory_read`（只读）；写之前 `assertWrite('class', …)`。下课小结写 `observations`（kind summary），`sessions/{编号}` 记 `verify`、`status`、`summary`。
+  - `protocol.js` 的段指令认 `point=`（这一段练的知识点），存在段上。
+- 浏览器里看：`kit/examples/desk-demo.html?dev`（「填入示例记忆」→「开新课」，输入框打「测试:记忆」：模拟老师真的调用 `memory_read`、`lesson_note`、`slip_note`，写一段标了 `point=tr` 的题）。
 
 ## 硬性规定（我明确要求过的，不要改）
 

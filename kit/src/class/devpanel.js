@@ -16,7 +16,7 @@ const SAMPLE_PROBLEMS = {
     { q: 'A = [[2,-2],[1,-1]]，求 A¹⁰⁰', answer: 'A（tr A = 1）', point: 'tr A = 1 时幂不变', source: '文稿04 练习3' },
   ],
 };
-const FIELDS = ['unit', 'goal', 'scope', 'textbook', 'plan', 'student', 'rules'];
+const FIELDS = ['unit', 'block', 'goal', 'scope', 'textbook', 'plan', 'student', 'rules'];
 
 export function initClassDevPanel({ db, setFallback, history, stats = () => null }) {
   const el = document.createElement('div');

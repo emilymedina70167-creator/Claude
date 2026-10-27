@@ -17,6 +17,7 @@
 // 「测试:教具」秩一方阵：let 块 + matrix 的 product + board mark 逐行标倍数 + \calc 写出 A²；
 // 「测试:幂」B 的幂：matrix 配滑块，figure play 让 1 往右上角退，mark 一个箭头；
 // 「测试:指图」在图上标注：label= 圈住 Ax（拖动 x 时跟着走），at= 用箭头指一个点；
+// 「测试:记忆」学习台里上课：真的调用 memory_read、lesson_note（提议）、slip_note 三个工具，写一段标了 point= 的题；
 // 「测试:出题」自定义练习模板（practice type: custom，页面随机出题）；「测试:公式」写含 n 的式子（answer 的 formula: n）；
 // 「测试:示意图」sketch 当场画的图 + highlight + label= 标注；「测试:推导」derive 分拍板书 + figure play step；
 // 「测试:原图」image 贴讲义原图（本地用一张模拟的）；「测试:排序」演示组件 sort（快排一次划分，先猜枢轴落在哪）+ figure play step + mark。
@@ -49,6 +50,15 @@ export function createDevTeacher({ fallback = false, pace = 1, script = null } =
       await wait(THINK_MS * k / 2, signal);
       throw fail(reply.code, `模拟错误：${reply.code}`);
     }
+    // 剧本里要调用的工具（「测试:记忆」）：照真的 Claude 那样调页面给的工具，结果记下来给开发面板、测试看
+    if (reply.calls && Array.isArray(opts.tools)) {
+      for (const c of reply.calls) {
+        const tool = opts.tools.find((t) => t.name === c.name);
+        let out;
+        try { out = tool ? await tool.execute(c.input) : { error: `没给 ${c.name} 这个工具` }; } catch (e) { out = { error: e?.message || String(e) }; }
+        teacher.toolResults.push({ name: c.name, input: c.input, out });
+      }
+    }
     const text = await stream(reply.text, { onText: opts.onText, signal, pace: k });
     return {
       text,
@@ -71,6 +81,7 @@ export function createDevTeacher({ fallback = false, pace = 1, script = null } =
 
   teacher.limits = () => ({ maxPromptBytes: DEV_LIMITS.maxPromptBytes, images: { ...DEV_LIMITS.images, mediaTypes: [...DEV_LIMITS.images.mediaTypes] } });
   teacher.calls = [];
+  teacher.toolResults = []; // 剧本里调用过的工具和结果
   teacher.log = []; // 剧本模式：收到的 [系统] 消息
   teacher.reset = () => {
     teacher.calls.length = 0;
@@ -195,6 +206,32 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
     const cmd = mode === 'hint' ? `add id=b${n} title="${title}"` : `new id=b${n} title="${title}"`;
     const close = mode === 'hint' ? '看完再试一次上面那题；还卡就点「想不出来」。' : '看完翻回上一块板再试一次；还卡就点「想不出来」。';
     return { kind: 'confused', text: join(pic + open, board(cmd, keyBody(n, mode)), close) };
+  }
+
+  // 学习台里上课：读记忆、记提议和自己的失误、写一段标了知识点的题
+  if (!isSystem && /测试\s*[:：]?\s*记忆/.test(said)) {
+    const n = nextSeq(turns, memo);
+    return {
+      kind: 'tools',
+      calls: [
+        { name: 'memory_read', input: { collection: 'weaknesses' } },
+        { name: 'lesson_note', input: { kind: 'proposal', text: '（模拟老师）这节课内积外积分得清了，W19 可以考虑降一级。', about: ['W19'] } },
+        { name: 'slip_note', input: { text: '（模拟老师）一次出了两道题，没等学生答第一道。', lesson: '一块板一件事。' } },
+      ],
+      text: join(
+        pic + '先看一道和上次错题同类的：',
+        board(`new id=b${n} title="内积还是外积" point=tr`, [
+          String.raw`$\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是几行几列？`,
+          '',
+          '```quiz',
+          `id: q-mem-${n}`,
+          String.raw`q: $\boldsymbol\alpha,\boldsymbol\beta$ 都是 3 维列向量，$\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是`,
+          '- [x] 一个数（1×1）',
+          '- [ ] 3×3 矩阵',
+          '```',
+        ].join('\n')),
+      ),
+    };
   }
 
   // 教具演示：板书标注、会动的矩阵、页面验算

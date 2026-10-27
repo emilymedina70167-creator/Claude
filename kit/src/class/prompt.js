@@ -3,6 +3,7 @@
 // 角色与红线 → 组件写法 + 黑板指令 → 资料包 → 黑板现状，后面才是这节课的对话。
 
 import { isCS, docsForSubject, detailNames, componentDoc, allNames } from '../subject.js';
+import { memoryDigest } from '../memory/digest.js';
 
 // 文档里有大量反引号和 TeX 反斜杠：先用「ˋ」代替反引号，String.raw 保留反斜杠，最后换回来
 const doc = (s, ...v) => String.raw(s, ...v).replace(/ˋ/g, '`').trim();
@@ -58,6 +59,34 @@ export function defaultRules(subject) {
   return `${ROLE}\n\n教法：\n\n${isCS(subject) ? TEACH_CS : TEACH_LA}`;
 }
 export const DEFAULT_RULES = defaultRules('线代');
+
+// 学习台里上课：学生在记忆库 rules 里定下的规则替换内置的红线（需求 learner-memory 第 3 节）。
+// 角色那一段（怎么看黑板、怎么称呼学生）和按科目的教法照旧，教法和规则冲突时以规则为准
+const ROLE_INTRO = ROLE.split('\n\n下面是红线')[0];
+export function memoryRules(subject, rulesText) {
+  return `${ROLE_INTRO}\n\n下面是学生定下的规则（学习台记忆库的 rules，替换组件库内置的红线），每一轮都要守住：\n\n${rulesText}\n\n教法（组件库内置，按科目；和上面的规则冲突时以规则为准）：\n\n${isCS(subject) ? TEACH_CS : TEACH_LA}`;
+}
+
+// 学习台里上课时，记忆摘要后面附的说明：能写什么、不能写什么、怎么查
+export const DESK_DOC = doc`
+### 在学习台里上课
+
+- 学生在黑板上的每个动作（作答、预测、拖动、揭开、放弃）、在输入框里说的话、附的图，页面都自动记成证据（evidence），课后对话里的 Claude 看证据判断。证据你不用写，也写不了。
+- 你能写的只有两样：观察（ˋlesson_noteˋ 工具：ˋkindˋ 写 ˋnoteˋ 是观察、ˋproposalˋ 是提议，比如「W19 这节课两次都做对了，可以考虑降一级」，ˋaboutˋ 写相关的编号）和你自己的教学失误（ˋslip_noteˋ 工具：这节课你哪里教得不好、下次怎么做）。弱点、掌握、错题、复现、规则都不能改：看到了就用 proposal 提，由对话里的 Claude 采纳。
+- 不要宣布学生掌握了：掌握只由对话里的 Claude 看证据判断。
+- 新写的一段可以标上练的是哪个知识点：ˋboard new id=b3 title="…" point=trˋ（ˋpoint=ˋ 写上面掌握状态里 ˋ#ˋ 后面那段名字），学生在这一段的作答就记成这个知识点的证据。没有合适的就不写。
+- 记忆摘要没放下的、要看某道错题的原文、某一块的完整范围，用 ˋmemory_readˋ 工具查（ˋcollectionˋ 写集合名，ˋidˋ 写编号；不写 ˋidˋ 时可以写 ˋblockˋ 只看挨着这一块的）。每用一次要多等一轮，只在真的需要时用。
+`;
+const DESK_DOC_NO_TOOLS = doc`
+### 在学习台里上课
+
+- 学生在黑板上的每个动作、说的话、附的图，页面都自动记成证据（evidence），课后对话里的 Claude 看证据判断。
+- 这个查看方式不支持工具：你记不了观察，也查不了记忆库里没放进摘要的部分。要课后注意的事，在下课小结里写清楚。
+- 不要宣布学生掌握了：掌握只由对话里的 Claude 看证据判断。
+- 新写的一段可以标上练的是哪个知识点：ˋboard new id=b3 title="…" point=trˋ（ˋpoint=ˋ 写上面掌握状态里 ˋ#ˋ 后面那段名字）。
+`;
+// 记忆摘要最多占多少（规则 + 摘要合起来）；剩下的给资料包
+export const MEMORY_BUDGET = 32 * 1024;
 
 // —— 2. 黑板指令协议（需求 2.1 / 2.2）。写法要和 protocol.js 的解析一致 ——
 export const PROTOCOL_DOC = doc`
@@ -574,24 +603,42 @@ export function docLookup(componentDocs, subject, name) {
 }
 
 // tools：这个查看方式给不给课堂 Claude 工具（不给就没有 component_doc，说明里不提它）
-export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true } = {}) {
+/**
+ * memory（学习台里上课时才有）：{ mem: 记忆库各类的数组, block: 这节课的块, session: 这节课的编号 }。
+ * 有记忆时多一节「你对学生的了解」，记忆库 rules 替换内置的红线；记忆先占（最多 MEMORY_BUDGET），资料包用剩下的
+ */
+export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true, memory = null } = {}) {
   const custom = asText(rules) || asText(pack?.main?.rules);
   const { docs } = systemDocs(componentDocs, subject, packComponents(pack), { lookup: tools });
   const lookupNote = tools
     ? '要用没写到的字段时用 component_doc 工具按名字取完整写法（要多等一轮）；'
     : '';
-  const parts = (packBody) => [
-    '这是课堂模式的完整说明，每一轮都会重新发给你（资料包和黑板现状都是最新的）。说明后面是这节课的对话：学生说的话、学生在黑板上的作答记录（[作答] / [动作]）、页面的系统消息（[系统]），以及你之前的输出。',
-    `# 一、你的角色和红线\n\n${custom || defaultRules(subject)}`,
-    `# 二、组件写法和黑板指令\n\n## 组件说明\n\n下面的组件说明原本是学生写给项目对话里的 Claude 的，文中的「我」指学生。说到 guided 课件的关卡、小节结构的地方，课堂里不适用；课堂里的段落由你用黑板指令一段一段写。有的组件这里只写了最常用的写法（末尾写着「更多写法」）：照着写就行；${lookupNote}写错了页面会把那个组件的完整写法附在提醒里。资料包里点了名的组件，完整写法已经放在下面。\n\n${docs || '（组件说明没有打包进来。只用最常见的组件：answer、steps、scene、predict，写法要保守。）'}\n\n## 黑板指令\n\n${PROTOCOL_DOC}`,
-    `# 三、这节课的资料包\n\n课前由项目对话里的 Claude 准备，课中也可能更新。\n\n${packBody}`,
-    `# 四、黑板现状\n\n${boardStateText(board)}`,
-    '（课堂说明到这里结束。下面是这节课的对话，回应最后一条消息。）',
-  ].join('\n\n');
-  // 整份说明不超过 SYSTEM_MAX：组件说明（按科目）长一点的课，资料包的预算跟着让一点
-  const rest = bytes(parts(''));
+  const desk = memory ? (tools ? DESK_DOC : DESK_DOC_NO_TOOLS) : '';
+  const parts = (packBody, mem = null) => {
+    const role = custom || (mem?.rules ? memoryRules(subject, mem.rules) : defaultRules(subject));
+    const sections = [
+      `你的角色和红线\n\n${role}`,
+      `组件写法和黑板指令\n\n## 组件说明\n\n下面的组件说明原本是学生写给项目对话里的 Claude 的，文中的「我」指学生。说到 guided 课件的关卡、小节结构的地方，课堂里不适用；课堂里的段落由你用黑板指令一段一段写。有的组件这里只写了最常用的写法（末尾写着「更多写法」）：照着写就行；${lookupNote}写错了页面会把那个组件的完整写法附在提醒里。资料包里点了名的组件，完整写法已经放在下面。\n\n${docs || '（组件说明没有打包进来。只用最常见的组件：answer、steps、scene、predict，写法要保守。）'}\n\n## 黑板指令\n\n${PROTOCOL_DOC}`,
+      ...(memory ? [`你对学生的了解（学习台的记忆库）\n\n${mem?.text || ''}\n\n${desk}`] : []),
+      `这节课的资料包\n\n课前由项目对话里的 Claude 准备，课中也可能更新。${memory ? '在学习台里，资料包是这节课的额外安排（推进建议、备好的题），学生的情况看上面的记忆。' : ''}\n\n${packBody}`,
+      `黑板现状\n\n${boardStateText(board)}`,
+    ];
+    const NUM = ['一', '二', '三', '四', '五', '六'];
+    return [
+      '这是课堂模式的完整说明，每一轮都会重新发给你（资料包和黑板现状都是最新的）。说明后面是这节课的对话：学生说的话、学生在黑板上的作答记录（[作答] / [动作]）、页面的系统消息（[系统]），以及你之前的输出。',
+      ...sections.map((x, i) => `# ${NUM[i]}、${x}`),
+      '（课堂说明到这里结束。下面是这节课的对话，回应最后一条消息。）',
+    ].join('\n\n');
+  };
+  // 整份说明不超过 SYSTEM_MAX：记忆先占（最多 MEMORY_BUDGET），组件说明（按科目）长一点的课，资料包的预算跟着让一点；资料包至少留 16 KiB
+  let mem = null;
+  if (memory) {
+    const room = SYSTEM_MAX - bytes(parts('', { rules: '', text: '' })) - 16 * 1024 - 3 * 1024;
+    mem = memoryDigest(memory.mem || {}, { block: memory.block, session: memory.session, tools, budget: Math.max(4 * 1024, Math.min(MEMORY_BUDGET, room)) });
+  }
+  const rest = bytes(parts('', mem));
   const { text: packBody } = packText(pack, Math.max(16 * 1024, Math.min(packBudget, SYSTEM_MAX - rest - 3 * 1024)));
-  return parts(packBody);
+  return parts(packBody, mem);
 }
 // 每一轮的整份说明的上限（给对话留地方；CLAUDE.md 里写的 160 KiB）
 export const SYSTEM_MAX = 160 * 1024;
