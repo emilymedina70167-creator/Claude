@@ -2,10 +2,16 @@
 // 纯函数，不碰 DOM，有测试（tests/memory.test.js）。页面写数据库前用 canWrite 拦一道（课堂里的 Claude 只能写观察和自己的失误），
 // 自检（check.js）照这里的字段和规则查对话里的 Claude 写进来的东西。
 //
-// 三种角色：chat（对话里的 Claude，用 ArtifactData 写）、class（课堂里的 Claude）、page（页面自己的代码）。
+// 四种角色：chat（对话里的 Claude，用 ArtifactData 写）、class（课堂里的 Claude）、page（页面自己的代码）、
+// me（我自己：在页面上点了「确认」、自己改、撤销。docs/desk-plan.md 第 4 节）。
+// 课堂里的 Claude 改记忆分三档（memo.js）：直接写（偏好、它的失误、观察）用 class；我确认才写（错题、弱点、复现组、位置）
+// 由我点「确认」时以 me 的身份写进去（log 里 by 还是 class，note 写我哪天确认的）；掌握、规则只能提议。
 // 两种性质：history（只增不改：写错了追加一条更正）、state（可以改，每次改都在 log 里记一条）；meta 是页面自己的。
 
-export const ROLES = ['chat', 'class', 'page'];
+export const ROLES = ['chat', 'class', 'page', 'me'];
+export const ROLE_TEXT = { chat: '对话里的 Claude', class: '课堂里的 Claude', page: '页面', me: '我（在页面上点的）' };
+// 写进去以后多久之内还能撤销（docs/desk-plan.md 4.3；我还没定，先和自检提醒保留的天数一样）
+export const UNDO_DAYS = 7;
 
 // 日期一律写成 YYYY-MM-DD（按我这边的本地日期）
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -26,9 +32,11 @@ export const COLLECTIONS = {
     tracked: ['text', 'status'],
   },
   profile: {
-    label: '我（和教学有关的）', kind: 'state', writers: ['chat'],
+    // 课堂里的 Claude 只能直接写 topic 是「讲法」「习惯」的（memo.js 拦着）；撤销时 status 改成 void
+    label: '我（和教学有关的）', kind: 'state', writers: ['chat', 'class', 'me'],
     id: { re: /^p-[A-Za-z0-9_-]+$/, eg: 'p-goal、p-device' },
     required: ['topic', 'text'],
+    enums: { status: ['active', 'void'] },
     dates: ['since'],
     tracked: [],
   },
@@ -48,15 +56,15 @@ export const COLLECTIONS = {
     tracked: [],
   },
   observations: {
-    label: '课堂观察', kind: 'history', writers: ['class', 'page'],
+    label: '课堂观察', kind: 'history', writers: ['class', 'page', 'me'],
     id: { re: /^ob-[A-Za-z0-9_-]+$/, eg: '页面自动编号' },
     required: ['kind', 'text', 'at'],
     enums: { kind: ['note', 'summary', 'proposal'] },
-    refs: { block: 'curriculum', session: 'sessions' },
+    refs: { block: 'curriculum', session: 'sessions', corrects: 'observations' },
     tracked: [],
   },
   errors: {
-    label: '错题档案', kind: 'history', writers: ['chat'],
+    label: '错题档案', kind: 'history', writers: ['chat', 'me'],
     id: { re: /^L\d+-T?\d+$/, eg: 'L2-07、L2-T03' },
     required: ['source', 'q', 'mine', 'step', 'cause', 'date'],
     dates: ['date'],
@@ -64,10 +72,10 @@ export const COLLECTIONS = {
     tracked: [],
   },
   weaknesses: {
-    label: '弱点表', kind: 'state', writers: ['chat'],
+    label: '弱点表', kind: 'state', writers: ['chat', 'me'],
     id: { re: /^W\d+$/, eg: 'W19' },
     required: ['title', 'scope', 'level'],
-    enums: { scope: ['通用', '链条', '局部'], level: ['L0', 'L1', 'L2', 'L3'], status: ['active', 'closed'] },
+    enums: { scope: ['通用', '链条', '局部'], level: ['L0', 'L1', 'L2', 'L3'], status: ['active', 'closed', 'void'] },
     dates: ['last'],
     refs: { errors: 'errors', blocks: 'curriculum' },
     tracked: ['level', 'scope', 'status'],
@@ -81,27 +89,29 @@ export const COLLECTIONS = {
     tracked: ['state', 'tier'],
   },
   reviews: {
-    label: '复现组', kind: 'state', writers: ['chat'],
+    label: '复现组', kind: 'state', writers: ['chat', 'me'],
     id: { re: /^R\d+$/, eg: 'R3' },
     required: ['title', 'tier'],
+    // paused：我暂停了（不算到期）；done：停掉了；void：撤销了的新组
+    enums: { status: ['active', 'paused', 'done', 'void'] },
     dates: ['last'],
     refs: { weaknesses: 'weaknesses', blocks: 'curriculum' },
     tracked: ['tier', 'last', 'result'],
   },
   position: {
-    label: '当前位置', kind: 'state', writers: ['chat'],
+    label: '当前位置', kind: 'state', writers: ['chat', 'me'],
     id: { re: /^now$/, eg: '只有一条：now' },
     required: ['block', 'next'],
     refs: { block: 'curriculum' },
     tracked: ['block'],
   },
   slips: {
-    label: '教学失误', kind: 'history', writers: ['chat', 'class'],
+    label: '教学失误', kind: 'history', writers: ['chat', 'class', 'me'],
     id: { re: /^S-[A-Za-z0-9_-]+$/, eg: 'S-1027-1' },
     required: ['by', 'date', 'text'],
     enums: { by: ['chat', 'class'] },
     dates: ['date'],
-    refs: { session: 'sessions' },
+    refs: { session: 'sessions', corrects: 'slips' },
     tracked: [],
   },
   sessions: {
@@ -111,6 +121,17 @@ export const COLLECTIONS = {
     dates: ['date'],
     refs: { block: 'curriculum' },
     tracked: [],
+  },
+  // 改动单（docs/desk-plan.md 4.1）：课堂里的 Claude 每一条要改记忆的（memo 块），和我在页面上自己改的，都先记一条。
+  // 直接写的那档马上执行（status: done）；我确认才写的那档等我点（open → done / rejected）；撤销了是 undone。
+  // 记着改了哪一类哪一条（coll、target）、改成什么（data / patch）、为什么（reason、basis），撤销按它回退
+  pending: {
+    label: '改动单', kind: 'state', writers: ['class', 'page', 'me'],
+    id: { re: /^pd-[A-Za-z0-9_-]+$/, eg: '页面自动编号' },
+    required: ['kind', 'coll', 'op', 'status', 'at'],
+    enums: { op: ['add', 'update'], status: ['open', 'done', 'rejected', 'undone'], tier: ['direct', 'confirm', 'me'], by: ['class', 'me'] },
+    refs: { session: 'sessions' },
+    tracked: ['status'],
   },
 };
 
@@ -128,8 +149,8 @@ export function canWrite(role, coll) {
 export function assertWrite(role, coll) {
   if (canWrite(role, coll)) return;
   const c = COLLECTIONS[coll];
-  const who = { chat: '对话里的 Claude', class: '课堂里的 Claude', page: '页面' }[role] || role;
-  const owners = (c?.writers || []).map((r) => ({ chat: '对话里的 Claude', class: '课堂里的 Claude', page: '页面' }[r])).join('、');
+  const who = ROLE_TEXT[role] || role;
+  const owners = (c?.writers || []).map((r) => ROLE_TEXT[r]).join('、');
   throw new Error(`${who}不能写 ${coll}（${c?.label || coll}）：这一类只有${owners}能写${role === 'class' ? '。看到的情况写进 observations（kind: proposal），由对话里的 Claude 采纳' : ''}`);
 }
 
@@ -183,9 +204,9 @@ export function reviewDue(r, today) {
   return { due, days, state: days < 0 ? 'overdue' : days === 0 ? 'today' : 'later' };
 }
 
-/** 全部复现组按到期先后排（过期的在最前）；停掉的（status: done）不算 */
+/** 全部复现组按到期先后排（过期的在最前）；停掉的、暂停的、撤销了的不算 */
 export function dueList(reviews, today) {
-  return (reviews || []).filter((r) => r && r.status !== 'done').map((r) => ({ id: String(r.id), title: String(r.title || ''), ...reviewDue(r, today) }))
+  return (reviews || []).filter((r) => r && !['done', 'paused', 'void'].includes(r.status)).map((r) => ({ id: String(r.id), title: String(r.title || ''), ...reviewDue(r, today) }))
     .filter((x) => !x.error).sort((a, b) => a.days - b.days || (a.id > b.id ? 1 : -1));
 }
 

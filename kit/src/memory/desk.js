@@ -12,18 +12,20 @@ import { session } from '../session.js';
 import { toast } from '../record.js';
 import { getStore, getDownloads } from '../live/store.js';
 import { VERSION } from '../version.js';
-import { COLLECTIONS, MEMORY_COLLECTIONS, assertWrite, toDate } from './schema.js';
+import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toDate } from './schema.js';
 import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED } from './session.js';
 import { buildReport, reportLine } from './report.js';
 import { backupFile, backupName, BOARD_COLLECTIONS, SESSION_EXTRA } from './backup.js';
 import { createManualForm } from './manual.js';
 import { usageText } from '../class/usage.js';
+import { createMemOps } from './memops.js';
+import { createMemoView } from './memoview.js';
+import { resolvedErrors, voidedIds } from './memo.js';
 import { renderClass } from '../class/classroom.js';
 import { checkMemory, memcheckRecord } from './check.js';
 import { sampleMemory } from './sample.js';
 
 const CHECK_DELAY = 800; // 一次 batch 写进来好几类：停一下再查，不要每到一类查一遍
-const ROLE_TEXT = { chat: '对话里的 Claude', class: '课堂里的 Claude', page: '页面' };
 // 课堂每一轮要带的记忆（证据条数多、按需查，不订阅）
 const MEMORY_FOR_CLASS = MEMORY_COLLECTIONS.filter((c) => c !== 'evidence' && c !== 'sessions');
 
@@ -47,6 +49,8 @@ export async function renderDesk(root, meta) {
     <p class="dk-status muted">正在连接记忆库…</p>
     <section class="dk-card dk-class" hidden><h2 class="dk-h">上课</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-today" hidden><h2 class="dk-h">今天</h2><div class="dk-body"></div></section>
+    <section class="dk-card dk-pending" hidden><h2 class="dk-h">待确认</h2><p class="dk-sub muted">课堂里的 Claude 提的错题、弱点、复现组、下一节：点「确认」才写进记忆库。写进去的 7 天内能撤销。</p><div class="dk-popen"></div><div class="dk-memo-sub" role="heading" aria-level="3">最近写进去的</div><div class="dk-pdone"></div></section>
+    <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-manual" hidden><h2 class="dk-h">补记</h2><p class="dk-sub muted">在学习台外面做的（纸上、Notability、对话里）：写一句、贴张截图，下一节课的课后报告会列出来。</p><div class="dk-body"></div><div class="dk-mlist"></div></section>
     <section class="dk-card dk-check" hidden><h2 class="dk-h">自检</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-colls" hidden><h2 class="dk-h">记忆库</h2><div class="dk-body"></div></section>
@@ -122,10 +126,12 @@ export async function renderDesk(root, meta) {
 
   function paint(res, today) {
     status.hidden = true;
-    for (const s of ['.dk-today', '.dk-check', '.dk-colls', '.dk-later', '.dk-manual', '.dk-backup']) $(s).hidden = false;
+    for (const s of ['.dk-today', '.dk-check', '.dk-colls', '.dk-later', '.dk-manual', '.dk-backup', '.dk-pending', '.dk-mine']) $(s).hidden = false;
     paintClass();
     paintManual();
     paintBackup();
+    paintPending();
+    paintMine();
     const total = Object.values(res.counts).reduce((a, b) => a + b, 0);
     // 今天：过期、今天到期的复现组，下一节从哪接、欠账
     const pos = data.position.find((d) => d.id === 'now');
@@ -184,6 +190,51 @@ export async function renderDesk(root, meta) {
       writeReport(db, id, { doc, update: (patch) => db.doc(`sessions/${id}`).set({ ...doc, ...patch }) }).catch((e) => console.warn('课后报告没补写成', id, e));
     }
   }
+
+  // —— 待确认：所有课的改动单（memoview.js）；我点了才写 ——
+  const ops = createMemOps({ db, mem: () => data });
+  const memoView = createMemoView({ db, ops });
+  let pendingWired = false;
+  function paintPending() {
+    if (pendingWired) return;
+    pendingWired = true;
+    const byAt = (a, b) => (b.at || 0) - (a.at || 0);
+    memoView.attach($('.dk-popen'), () => memoView.all().filter((p) => p.status === 'open').sort(byAt), { mode: 'list', empty: '没有等你确认的。' });
+    memoView.attach($('.dk-pdone'), () => memoView.all().filter((p) => p.status === 'done' && p.doneAt > Date.now() - UNDO_DAYS * 86400000).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)).slice(0, 12), { mode: 'list', empty: '这几天没有写进去的。' });
+  }
+
+  // —— 我改记忆：偏好的文字、错题标已解决、复现组暂停（memo.js 的 meChange，一样记改动单、能撤销）——
+  function paintMine() {
+    const box = $('.dk-mine .dk-body');
+    if (box.querySelector('.mm-f')) return; // 正在改的时候不重画
+    const gone = voidedIds(data);
+    const solved = resolvedErrors(data);
+    const prefs = data.profile.filter((p) => !gone.has(`profile/${p.id}`)).sort((a, b) => cmpId(a.id, b.id));
+    const errs = data.errors.filter((e) => !e.corrects && !gone.has(`errors/${e.id}`) && !solved.has(String(e.id))).sort((a, b) => cmpId(a.id, b.id));
+    const revs = data.reviews.filter((r) => !gone.has(`reviews/${r.id}`) && r.status !== 'done').sort((a, b) => cmpId(a.id, b.id));
+    box.innerHTML = `
+      <div class="dk-memo-sub" role="heading" aria-level="3">关于我（讲法、习惯……）</div>${prefs.map((p) => `<div class="dk-edit-row" data-id="${escapeHtml(p.id)}"><span><span class="dk-k">${escapeHtml(p.topic || '')}</span>${inline(p.text)}</span><button type="button" class="btn btn-sm dk-pref">改</button></div>`).join('') || '<p class="muted">还没有。</p>'}
+      <div class="dk-memo-sub" role="heading" aria-level="3">没解决的错题</div>${errs.map((e) => `<div class="dk-edit-row" data-id="${escapeHtml(e.id)}"><span><b>${escapeHtml(e.id)}</b> ${inline(String(e.cause || e.q || '').slice(0, 80))}</span><button type="button" class="btn btn-sm dk-solve">已解决</button></div>`).join('') || '<p class="muted">没有。</p>'}
+      <div class="dk-memo-sub" role="heading" aria-level="3">复现组</div>${revs.map((r) => `<div class="dk-edit-row" data-id="${escapeHtml(r.id)}"><span><b>${escapeHtml(r.id)}</b> ${inline(r.title)}${r.status === 'paused' ? '<span class="muted">（暂停了）</span>' : ''}</span><button type="button" class="btn btn-sm dk-pause">${r.status === 'paused' ? '恢复' : '暂停'}</button></div>`).join('') || '<p class="muted">没有。</p>'}`;
+  }
+  $('.dk-mine .dk-body').addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    const row = b?.closest('.dk-edit-row');
+    if (!row) return;
+    const id = row.dataset.id;
+    const run = async (what, args, msg) => {
+      b.disabled = true;
+      try { await ops.me(what, { id, ...args }); toast(msg); } catch (err) { toast(`没成：${err?.message || err}`); b.disabled = false; }
+    };
+    if (b.classList.contains('dk-pref')) {
+      const p = data.profile.find((x) => x.id === id);
+      row.innerHTML = `<label class="mm-f" style="flex:1"><span>${escapeHtml(p?.topic || '')}</span><textarea rows="2">${escapeHtml(p?.text || '')}</textarea></label><button type="button" class="btn btn-sm btn-primary dk-pref-save">保存</button><button type="button" class="btn btn-sm dk-pref-x">算了</button>`;
+      row.querySelector('textarea').focus();
+    } else if (b.classList.contains('dk-pref-save')) await run('pref', { text: row.querySelector('textarea').value }, '改好了（7 天内能撤）').then(() => paintMine());
+    else if (b.classList.contains('dk-pref-x')) { row.innerHTML = ''; paintMine(); }
+    else if (b.classList.contains('dk-solve')) { if (confirm(`把 ${id} 标成已解决？（原条不动，加一条更正）`)) await run('resolve', {}, `${id} 标了已解决`); }
+    else if (b.classList.contains('dk-pause')) await run(b.textContent === '暂停' ? 'pause' : 'resume', {}, b.textContent === '暂停' ? `${id} 暂停了，不算到期` : `${id} 恢复了`);
+  });
 
   // —— 补记：学习台外面做的，记成证据（src: manual）——
   let manualForm = null;
@@ -333,10 +384,15 @@ async function enterClass(root, meta, sid) {
   };
   // 资料包写了块就用它的；没写就用开课时记下的
   const main = await scopeDb(db, sid).doc('pack/main').get().then((s) => (s.exists ? s.data() : null)).catch(() => null);
+  // 改记忆（memo 块、整理单、确认 / 撤销）：用没 scopeDb 过的数据库，记忆库在根上
+  const ops = createMemOps({ db, mem: () => mem });
   const block = String(main?.block || doc.block || '');
   return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
     store: { ...store, db: scopeDb(db, sid) }, sid, block, mem, updateSession, onHome: () => goto(''),
     writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),
+    // 下课时先算一份（还没下课：结束时间按现在算）放进给课堂 Claude 的输入
+    makeReport: ({ turns, steps } = {}) => makeReport(db, sid, { doc: { ...doc, endedAt: doc.endedAt || Date.now() }, turns, steps }),
+    memo: { ops, view: createMemoView({ db, ops }) },
   });
 }
 
@@ -347,6 +403,14 @@ async function enterClass(root, meta, sid) {
  */
 export async function writeReport(db, sid, { doc, turns = null, steps = null, update }) {
   assertWrite('page', 'sessions');
+  const report = await makeReport(db, sid, { doc, turns, steps });
+  await scopeDb(db, sid).doc('report/main').set(report);
+  await update({ report: { at: report.at, line: reportLine(report), items: report.totals.items, first: report.totals.first } });
+  return report;
+}
+
+/** 只算不写（下课时放进给课堂 Claude 的输入；writeReport 也用它） */
+export async function makeReport(db, sid, { doc, turns = null, steps = null }) {
   const rows = (snap) => (snap ? snap.docs.map((d) => ({ id: d.id, ...d.data() })) : []);
   const mine = (coll) => db.collection(coll).where('session', '==', sid).get().then(rows, () => []);
   const scoped = scopeDb(db, sid);
@@ -361,11 +425,8 @@ export async function writeReport(db, sid, { doc, turns = null, steps = null, up
   const start = Number(doc.startedAt) || 0;
   const end = Number(doc.endedAt) || Date.now();
   const prevEnd = Math.max(0, ...sessions.filter((x) => x.id !== sid && Number(x.endedAt) && Number(x.endedAt) <= start).map((x) => Number(x.endedAt)));
-  const report = buildReport({
+  return buildReport({
     session: { ...doc, id: sid }, evidence, observations, slips, turns: t, steps: st,
     manual: manual.filter((e) => Number(e.at) > prevEnd && Number(e.at) <= end),
   });
-  await scoped.doc('report/main').set(report);
-  await update({ report: { at: report.at, line: reportLine(report), items: report.totals.items, first: report.totals.first } });
-  return report;
 }

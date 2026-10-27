@@ -220,3 +220,27 @@ export function reportLine(r) {
   return [min ? `${min} 分钟` : '', t.items ? `${t.items} 题，一次对 ${t.first}${t.wrong ? `，错 ${t.wrong}` : ''}${t.giveup + t.revealed ? `，没做出 ${t.giveup + t.revealed}` : ''}` : '没做题',
     t.drafts ? `${t.drafts} 处草稿没交` : ''].filter(Boolean).join(' · ');
 }
+
+/**
+ * 下课时给课堂 Claude 看的报告（closingPrompt 里的那段）：一道题一行，带组件 id 和证据 id，整理单的 basis 照着写。
+ * 最多 max 字节左右（题多的课只留最近的）。
+ */
+export function reportText(r, { max = 8 * 1024 } = {}) {
+  if (!r) return '';
+  const t = r.totals || {};
+  const min = Math.round((r.time?.activeMs || 0) / 60000);
+  const head = [`## 课后报告（${r.session || ''}${r.block ? `，块 ${r.block}` : ''}）`,
+    `- 时长约 ${min} 分钟；做了 ${t.items || 0} 题：一次对 ${t.first || 0}、改对 ${t.ok || 0}、错 ${t.wrong || 0}、想不出来 ${t.giveup || 0}、看了答案 ${t.revealed || 0}、程序判不了 ${t.open || 0}。`];
+  const tags = (r.byTag || []).filter((x) => x.tag).map((x) => `${x.tag} ${x.items} 题一次对 ${x.first}`);
+  if (tags.length) head.push(`- 按块 / 知识点：${tags.join('；')}`);
+  const items = (r.items || []).map((it) => `- ${it.comp}${it.seg ? `（${it.seg}）` : ''}「${cut(it.q, 60)}」：${it.seq || '·'} ${OUTCOME_TEXT[it.outcome] || it.outcome}${it.last ? `，最后写的 ${cut(it.last, 40)}` : ''}${it.ms ? `，${Math.round(it.ms / 1000)} 秒` : ''}；证据 ${it.evidence.slice(-3).join(',')}`);
+  const tail = [];
+  if (r.drafts?.length) tail.push(`- 没交的草稿：${r.drafts.map((d) => `${d.comp || ''}「${cut(d.text, 40)}」（${d.id}）`).join('；')}`);
+  if (r.says?.length) tail.push(`- 学生说的话：${r.says.filter((s) => s.text).slice(-12).map((s) => `「${cut(s.text, 60)}」（${s.id}）`).join('；')}`);
+  if (r.manual?.length) tail.push(`- 学习台外面补记的：${r.manual.map((m) => `「${cut(m.text, 60)}」${m.verdict ? ` ${m.verdict}` : ''}（${m.id}）`).join('；')}`);
+  const size = (xs) => new TextEncoder().encode(xs.join('\n')).length;
+  let kept = items;
+  while (kept.length > 1 && size([...head, ...kept, ...tail]) > max) kept = kept.slice(1);
+  if (kept.length < items.length) head.push(`- （题太多，只列了最近的 ${kept.length} 道）`);
+  return [...head, ...(kept.length ? ['', '每道题：', ...kept] : []), ...(tail.length ? ['', ...tail] : [])].join('\n');
+}

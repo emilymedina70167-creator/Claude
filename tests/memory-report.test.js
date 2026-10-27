@@ -225,3 +225,18 @@ test('选择题只记最后一次：前面点错的几次补成错；时长不�
   assert.equal(r.time.activeMs, r.time.wallMs);
   assert.equal(r.time.wallMs, 2 * 60000);
 });
+
+test('reportText：下课时给课堂 Claude 的报告，一道题一行带组件 id 和证据 id；太长截掉最早的题', async () => {
+  const { reportText } = await import('../kit/src/memory/report.js');
+  const r = buildReport({ session: sessionDoc, evidence: lesson(), turns, steps });
+  const t = reportText(r);
+  assert.match(t, /^## 课后报告（c-20261027-1，块 L2\.2\.1）/);
+  assert.match(t, /- q-b2（b2）「求 tr\(A\)」：✗✓ 改对了，最后写的 5；证据 ev-r1,ev-r2,ev-r3/);
+  assert.match(t, /没交的草稿：q-b6「\(3, □\)」/);
+  assert.match(t, /学生说的话：「没懂为什么 βᵀα 是数」（ev-s1）/);
+  const big = { ...r, items: Array.from({ length: 400 }, (_, i) => ({ ...r.items[0], comp: `q-${i}` })) };
+  const tb = reportText(big, { max: 4096 });
+  assert.ok(new TextEncoder().encode(tb).length <= 4096 + 200);
+  assert.match(tb, /只列了最近的/);
+  assert.match(tb, /q-399/);
+});

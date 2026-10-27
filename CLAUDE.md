@@ -102,8 +102,8 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ### 学习台和记忆库（`kit/src/memory/`，`docs/learner-memory-spec.md`）
 
-- 分三批做，每一批做完对话里的 Claude 用一节真课验过再做下一批。**现在做完的是第 1、2 批**（记忆库本身；在学习台里上课）。原来的第 3 批并进了 `docs/desk-plan.md`（学习台做强：记录、交互、内部 Claude 改记忆），以它为准；**desk-plan 做完了第 1 批（记录能力）**。
-- `schema.js`（纯函数）：十二类集合（`COLLECTIONS`：中文名、`history` / `state`、谁能写、编号的正则、必填、只能取的值、日期字段、指向别的类的字段、改了要记 log 的字段）；三种角色 `chat` / `class` / `page`，`assertWrite` 在代码层面拦住不该写的（课堂里的 Claude 只能写 `observations`、`slips`）；复现档位 1 → 3 → 7 → 14 → 30（`nextTier`、`reviewDue`：到期 = last + tier，页面算）；`applyChange` 改状态类时按字段记 log。
+- 分三批做，每一批做完对话里的 Claude 用一节真课验过再做下一批。**现在做完的是第 1、2 批**（记忆库本身；在学习台里上课）。原来的第 3 批并进了 `docs/desk-plan.md`（学习台做强：记录、交互、内部 Claude 改记忆），以它为准；**desk-plan 做完了第 1 批（记录能力）、第 2 批（课堂里的 Claude 改记忆）**。
+- `schema.js`（纯函数）：十三类集合（`COLLECTIONS`：中文名、`history` / `state`、谁能写、编号的正则、必填、只能取的值、日期字段、指向别的类的字段、改了要记 log 的字段；第十三类是改动单 `pending`）；四种角色 `chat` / `class` / `page` / `me`（我在页面上点的），`assertWrite` 在代码层面拦住不该写的（课堂里的 Claude 只能写 `observations`、`slips`、`profile`；错题、弱点、复现组、位置只有 `chat` 和 `me`）；撤销时限 `UNDO_DAYS`；复现档位 1 → 3 → 7 → 14 → 30（`nextTier`、`reviewDue`：到期 = last + tier，页面算）；`applyChange` 改状态类时按字段记 log。
 - `check.js`（纯函数）：自检对话里的 Claude 写的记忆（编号、字段、日期、指向的 id、结论挂证据），外加指纹 `meta/ledger`：历史类（错题、观察、失误）改了、删了记一条提醒留 7 天；状态类改了 `tracked` 字段却没在 log 里记到新值就一直报（指纹停在旧值，补上 log 才前进）。结果写回 `meta/memcheck` 给对话里的 Claude 读。
 - `desk.js`：学习台首页（今天、自检、记忆库每类几条）；页面只写 `meta`。`sample.js` 是一份守规矩的示例记忆（`?dev` 的「填入示例记忆」、测试都用它）。说明书 `CLAUDE-PROJECT.md` 第七节的 JSON 例子拼起来要能过自检（`tests/memory.test.js` 守着）。
 - 在学习台里上课（第 2 批）：首页「开新课」→ `sessions/{编号}`（`c-20261027-1`，页面写），`pack/main`、`pack/problems` 抄进 `sessions/{编号}/pack/`；地址带 `#编号` 就进这节课（`desk.js` 的 `classHash` / `enterClass`，进出都整页刷新，课堂挂的全局监听不留）。课堂照旧是 `classroom.js`，多一个 `desk` 参数：
@@ -116,7 +116,14 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
   - 证据补全：作答 / 动作带 `turn`（发生时最新一轮的 seq，`evCtx`）；下课那一刻没交的草稿记成 `src: draft`（`draftEvidence`，`classroom.js` 的 `allDrafts`）；板书导出的图在 say 证据里记 `ink`。
   - 补记：首页「补记」（`manual.js` 的表单，贴图照课堂输入条的写法绕 Notability 的坑），记成 `src: manual`（`manualEvidence`，没有 session）。
   - 备份：`backup.js`（纯函数）把记忆库、资料包、每节课的报告（可选证据、黑板）拼成一个 JSON，`docs` 每条就是 ArtifactData batch 的样子；首页「导出备份」用 `downloads` 能力存（`store.js` 的 `getDownloads`，`?dev` 用下载链接）。恢复由外部 Claude 照说明书第七节「备份和恢复」写回（`restoreBatches` 是同样的切法，测试用）。首页还显示 assets 用了多少（`assets.list()` 的 `usage`）。
-- 浏览器里看：`kit/examples/desk-demo.html?dev`（「填入示例记忆」→「开新课」，输入框打「测试:记忆」：模拟老师真的调用 `memory_read`、`lesson_note`、`slip_note`，写一段标了 `point=tr` 的题；点「下课」后回首页看「上一节」、补记、导出备份）。
+- 课堂里的 Claude 改记忆（desk-plan 第 2 批）：
+  - 写法：输出里的 ```` ```board memo ```` 块，一行一条（`protocol.js` 的 `memoOp` → `memo.js` 的 `parseMemoLines`），不用工具（工具 `lesson_note`、`slip_note` 留着兼容，说明里不再推荐）。说明在 `prompt.js` 的 `MEMO_DOC`（`DESK_DOC` 里）。
+  - `memo.js`（纯函数）：三档 `MEMO_KINDS`（direct：pref / slip / note / propose；confirm：error / weakness / review / position；mastery、rule 拒绝）、依据 `resolveBasis`（组件 id / 段 id 换成这节课的证据，`say` 是最近一句话）、`planEntry` 查编号字段取值、改动单 `pendingRecord`、执行 `applyPending`（直接写的用 class 的身份，确认的用 me；状态类记 log，`ref` 是改动单编号）、`rejectPending`、`undoPending`（状态类按 `applied` 退回，新加的改 `void`；历史类追加 `void` 的更正）、我自己改 `meChange`、作废的 `voidedIds`（`digest.js` 跳过它们，并列出还在等确认的）。
+  - `memops.js`：数据库这一层（课堂和首页共用）：`applyMemo`、`confirm`（自动编号被占了就换下一个）、`reject`、`undo`、`me`。确认只由 `memoview.js` 里我点的按钮调用。
+  - `memoview.js`：改动单的画面（板顶那句话下面的一行小字、小结板上的整理单、首页的「待确认」）：确认 / 改 / 不要 / 撤销，点依据看那次作答原文。`classroom.js` 的 `decoratePage`（`boardview.js` 的 `decorate` 钩子）挂上去，板记着 `memo`（改动单 id，存进 `class_pages`）。
+  - 下课：`desk.makeReport` 先算一份报告，`report.js` 的 `reportText` 放进 `closingPrompt({ report })`，小结和整理单同一次写；小结正文是 memo 块以外的文字。
+  - 首页：「待确认」「我改记忆」两张卡。
+- 浏览器里看：`kit/examples/desk-demo.html?dev`（「填入示例记忆」→「开新课」，输入框打「测试:整理」：模拟老师写一个 memo 块，三档各几条、再故意写两条不对的；下课时模拟小结后面带整理单。打「测试:记忆」：模拟老师真的调用 `memory_read`、`lesson_note`、`slip_note`，写一段标了 `point=tr` 的题；点「下课」后回首页看「上一节」、补记、导出备份）。
 
 ## 硬性规定（我明确要求过的，不要改）
 

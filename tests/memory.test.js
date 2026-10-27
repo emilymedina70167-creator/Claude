@@ -14,9 +14,12 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 
 // —— 分类和谁能写 ——
 
-test('需求第 2 节的十二类都在，每类一个写入方的规矩照表', () => {
-  assert.deepEqual(MEMORY_COLLECTIONS.sort(), ['curriculum', 'errors', 'evidence', 'mastery', 'observations', 'position', 'profile', 'reviews', 'rules', 'sessions', 'slips', 'weaknesses'].sort());
-  for (const c of ['rules', 'profile', 'curriculum', 'errors', 'weaknesses', 'mastery', 'reviews', 'position']) assert.deepEqual(COLLECTIONS[c].writers, ['chat'], c);
+test('需求第 2 节的十二类都在（加上 desk-plan 4.1 的改动单），每类的写入方照表', () => {
+  assert.deepEqual(MEMORY_COLLECTIONS.sort(), ['curriculum', 'errors', 'evidence', 'mastery', 'observations', 'pending', 'position', 'profile', 'reviews', 'rules', 'sessions', 'slips', 'weaknesses'].sort());
+  // 掌握、规则、课程地图只有对话里的 Claude 写；错题、弱点、复现组、位置多了「我确认」这条路（me）；偏好课堂里的 Claude 能直接写
+  for (const c of ['rules', 'curriculum', 'mastery']) assert.deepEqual(COLLECTIONS[c].writers, ['chat'], c);
+  for (const c of ['errors', 'weaknesses', 'reviews', 'position']) assert.deepEqual(COLLECTIONS[c].writers, ['chat', 'me'], c);
+  assert.deepEqual(COLLECTIONS.profile.writers, ['chat', 'class', 'me']);
   assert.deepEqual(COLLECTIONS.evidence.writers, ['page']);
   assert.ok(COLLECTIONS.observations.writers.includes('class'));
   assert.ok(COLLECTIONS.slips.writers.includes('class') && COLLECTIONS.slips.writers.includes('chat'));
@@ -28,7 +31,10 @@ test('需求第 2 节的十二类都在，每类一个写入方的规矩照表',
 test('canWrite / assertWrite：课堂里的 Claude 只能写观察和自己的失误；改弱点、宣布掌握在代码层面拦住', () => {
   assert.ok(canWrite('class', 'observations'));
   assert.ok(canWrite('class', 'slips'));
-  for (const c of ['weaknesses', 'mastery', 'reviews', 'errors', 'rules', 'position', 'evidence', 'profile', 'curriculum']) assert.ok(!canWrite('class', c), c);
+  for (const c of ['weaknesses', 'mastery', 'reviews', 'errors', 'rules', 'position', 'evidence', 'curriculum']) assert.ok(!canWrite('class', c), c);
+  // 我点了确认才写的几类：me 能写；掌握、规则我在页面上也改不了（只能提议，由对话里的 Claude 判断）
+  for (const c of ['errors', 'weaknesses', 'reviews', 'position', 'profile']) assert.ok(canWrite('me', c), c);
+  for (const c of ['mastery', 'rules', 'curriculum', 'evidence']) assert.ok(!canWrite('me', c), c);
   assert.throws(() => assertWrite('class', 'mastery'), /课堂里的 Claude不能写 mastery（掌握状态）.*observations/);
   assert.doesNotThrow(() => assertWrite('chat', 'weaknesses'));
   assert.ok(canWrite('page', 'evidence') && !canWrite('chat', 'evidence'));
@@ -200,11 +206,11 @@ test('状态类改了要记 log：没记就一直报，补上 to 是新值的 lo
 test('log 的写法：数组、日期、谁改的、改的哪个字段', () => {
   const m = sampleMemory(TODAY);
   m.reviews[1].log = 'tier 1→3';
-  m.reviews[2].log = [{ date: '10-27', by: 'me', basis: 'ev-1' }];
+  m.reviews[2].log = [{ date: '10-27', by: 'you', basis: 'ev-1' }];
   const msgs = checkMemory(m, { today: TODAY }).problems.map((p) => `${p.id}：${p.msg}`);
   assert.ok(msgs.includes('R4：log 要是数组：[{ date, by, field, from, to, basis }]'));
   assert.ok(msgs.includes('R5：log 第 1 条的 date 要写成 YYYY-MM-DD'));
-  assert.ok(msgs.includes('R5：log 第 1 条的 by 只能是 chat / class / page'));
+  assert.ok(msgs.includes('R5：log 第 1 条的 by 只能是 chat / class / page / me'));
   assert.ok(msgs.includes('R5：log 第 1 条缺少 field（改的是哪个字段）'));
   assert.ok(msgs.includes('R5：log 第 1 条的 basis 要是数组（证据、错题的 id）'));
 });

@@ -5,6 +5,7 @@
 // 页面在流式回调里拿到的是「到目前为止的全文」，每次整段重新解析，所以这里全是纯函数、不留状态、不碰 DOM。
 import { tokenize, unquote } from '../tokens.js';
 import { parseMarkHead, parseMarkBlock, parseUnmark } from '../markspec.js';
+import { parseMemoLines } from '../memory/memo.js';
 
 // ```board add id=b7 title="…"：行首最多 3 个空格，` 或 ~ 至少 3 个，可有空格，然后是 board 和指令
 const OPEN_RE = /^([ \t]{0,3})(`{3,}|~{3,})[ \t]*board(?=\s|$)\s*(.*)$/i;
@@ -143,7 +144,7 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // 段指令：new / add / replace / pin 带内容（可以有标题）；hide / unpin 只要 id
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / pin / unpin / figure / mark / unmark';
+const OP_LIST = 'new / add / replace / hide / pin / unpin / figure / mark / unmark / memo';
 
 /**
  * 解析 board 后面那一行：
@@ -168,6 +169,8 @@ export function parseCommand(header) {
     const r = parseUnmark(m[2]);
     return r.error ? { error: r.error } : { op: 'unmark', ...r };
   }
+  // 学习台里改记忆（memory/memo.js）：一行一条，写在块里
+  if (name === 'memo') return { op: 'memo' };
   return { error: `看不懂的指令「${m[1]}」：只认 ${OP_LIST}` };
 }
 
@@ -177,7 +180,15 @@ export function parseCommand(header) {
  */
 export function blockCommand(header, body = '') {
   const op = parseCommand(header);
+  if (op.op === 'memo') return memoOp(body);
   return op.op === 'mark' ? markOp(op, body) : op;
+}
+
+// 闭合的 memo 块：一行一条（写法见 memory/memo.js）。一条也没读懂时整块算看不懂；读懂的照常记，读不懂的行放在 errors 里
+function memoOp(body) {
+  const r = parseMemoLines(body);
+  if (!r.entries.length) return { error: r.errors[0] || 'memo 里一条也没写' };
+  return { op: 'memo', entries: r.entries, ...(r.errors.length ? { errors: r.errors } : {}) };
 }
 
 // 闭合的 mark 块：开头那行 + 块里各行拼成 marks。一条也没写对时整块算看不懂；

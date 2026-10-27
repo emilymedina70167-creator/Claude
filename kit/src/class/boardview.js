@@ -14,7 +14,8 @@ const NO_SWIPE = 'input, textarea, select, button, a, label, [contenteditable=""
  * isBusy()：Claude 正在写（翻回去看时「回到当前板」闪）；seqOf(id)：段的先后（同一块板上按它排）；
  * onShow(n)：换了正在看的板；onMeasure(fit)：量过一次一屏放不放得下。底部的条（bar.setNav、bar.height、bar.el）建好后用 attachBar 接上。
  */
-export function createBoardView({ root, unitHtml = '', stageExtra = '', isBusy = () => false, seqOf = () => Infinity, onShow, onMeasure } = {}) {
+// decorate(p)：每次画完一块板以后调（学习台里课堂在板顶的话下面挂改动单；实时黑板不给）
+export function createBoardView({ root, unitHtml = '', stageExtra = '', isBusy = () => false, seqOf = () => Infinity, onShow, onMeasure, decorate = null } = {}) {
   // 常驻栏（横屏在右边一栏，竖屏在顶上一条）+ 黑板。黑板里一块板一个 section，只显示正在看的那块
   root.innerHTML = `
     <div class="class-app">
@@ -106,6 +107,7 @@ export function createBoardView({ root, unitHtml = '', stageExtra = '', isBusy =
       // foot：页面自己写的最后一行（这节课由谁讲的），不是 Claude 写的
       closing.innerHTML = mdToHtml(p.body || '') + (p.foot ? `<p class="class-foot">${escapeHtml(p.foot)}</p>` : '');
     } else closing?.remove();
+    decorate?.(p);
   }
 
   // 只显示一块板。scroll：回到页面顶上（换了板，从板的开头看）

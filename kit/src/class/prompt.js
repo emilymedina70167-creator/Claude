@@ -67,26 +67,45 @@ export function memoryRules(subject, rulesText) {
   return `${ROLE_INTRO}\n\n下面是学生定下的规则（学习台记忆库的 rules，替换组件库内置的红线），每一轮都要守住：\n\n${rulesText}\n\n教法（组件库内置，按科目；和上面的规则冲突时以规则为准）：\n\n${isCS(subject) ? TEACH_CS : TEACH_LA}`;
 }
 
-// 学习台里上课时，记忆摘要后面附的说明：能写什么、不能写什么、怎么查
+// 学习台里上课时，记忆摘要后面附的说明：能写什么、不能写什么、怎么写（docs/desk-plan.md 4.1：写记忆用输出里的 memo 块，不用工具）
+const MEMO_DOC = doc`
+- **改记忆写在这一轮的输出里**，和黑板指令一样用一个 ˋmemoˋ 块（不用工具：每调一次工具要多跑一整轮，很贵），一行一条，可以和别的 board 块写在同一轮：
+
+  ˋˋˋˋboard memo
+  pref topic=讲法 text="先看图再推公式" basis=say
+  slip text="一次出了两道题，没等学生答第一道" lesson="一块板一件事"
+  note text="换括号那一步还是要停很久" about=W19
+  error step="第 1 步换括号" cause="把 βᵀα 当成矩阵" weakness=W19 basis=q-b5
+  weakness id=W19 level=L0 basis=q-b5,q-b7
+  review id=R3 result=过 basis=q-b9
+  position next="先收 L2-08 的同类题，再推 Aⁿ" debts="例 2.3；例 2.4"
+  ˋˋˋˋ
+
+  - 三档，页面在代码里管着：**直接写**——ˋprefˋ 讲法偏好、学习习惯（ˋtopicˋ 只能是「讲法」「习惯」，写进 profile）、ˋslipˋ 你自己这节课的教学失误（ˋlessonˋ 写下次怎么做）、ˋnoteˋ 观察、ˋproposeˋ 提议；**学生点了确认才写**——ˋerrorˋ 新错题（ˋq mine step causeˋ，ˋweakness=ˋ 挂哪个弱点，不写 ˋidˋ 页面自动编号；题面、学生的答案不写时页面从依据里那次作答补）、ˋweaknessˋ 改已有弱点的 ˋlevel scope status errors blocksˋ（写 ˋid=ˋ），或者新弱点（ˋtitle scope levelˋ，不写 ˋidˋ）、ˋreviewˋ 复现组判结果 ˋresult=过 / 没过ˋ、加题 ˋadd="…"ˋ，或者新的一组（ˋtitle family content weaknessesˋ）、ˋpositionˋ 下一节从哪接（ˋnext block debts firstˋ）；**只能提议**——掌握状态、规则：写成 ˋpropose text="…" about=… basis=…ˋ，由对话里的 Claude 或学生决定。
+  - ˋbasis=ˋ 写依据，逗号隔开：黑板上的组件 id（ˋq-b5ˋ，页面换成学生在那道题上的全部作答）、段 id（ˋb5ˋ）、ˋsayˋ（学生刚说的那句话）、记忆里的编号（ˋL2-07ˋ ˋW19ˋ）、证据 id（ˋev-…ˋ）。ˋpref propose error weakness reviewˋ 一定要有依据，找不到依据的不记。
+  - 有空格的值加引号。写错的、找不到依据的，页面不记，下一轮在 [系统] 提醒里告诉你原因。学生在板顶那句话下面看得到这一轮记了什么，能撤销；等确认的由学生决定，不用催。
+  - 不是每一轮都要写：确实看到了再记。一轮最多几条。
+`;
 export const DESK_DOC = doc`
 ### 在学习台里上课
 
-- 学生在黑板上的每个动作（作答、预测、拖动、揭开、放弃）、在输入框里说的话、附的图，页面都自动记成证据（evidence），课后对话里的 Claude 看证据判断。证据你不用写，也写不了。
-- 你能写的只有两样：观察（ˋlesson_noteˋ 工具：ˋkindˋ 写 ˋnoteˋ 是观察、ˋproposalˋ 是提议，比如「W19 这节课两次都做对了，可以考虑降一级」，ˋaboutˋ 写相关的编号）和你自己的教学失误（ˋslip_noteˋ 工具：这节课你哪里教得不好、下次怎么做）。弱点、掌握、错题、复现、规则都不能改：看到了就用 proposal 提，由对话里的 Claude 采纳。
+- 学生在黑板上的每个动作（作答、预测、拖动、揭开、放弃）、在输入框里说的话、附的图，页面都自动记成证据（evidence），课后看证据判断。证据你不用写，也写不了。
+${MEMO_DOC}
 - 不要宣布学生掌握了：掌握只由对话里的 Claude 看证据判断。
 - 新写的一段可以标上练的是哪个知识点：ˋboard new id=b3 title="…" point=trˋ（ˋpoint=ˋ 写上面掌握状态里 ˋ#ˋ 后面那段名字），学生在这一段的作答就记成这个知识点的证据。没有合适的就不写。
-- 记忆摘要没放下的、要看某道错题的原文、某一块的完整范围，用 ˋmemory_readˋ 工具查（ˋcollectionˋ 写集合名，ˋidˋ 写编号；不写 ˋidˋ 时可以写 ˋblockˋ 只看挨着这一块的）。每用一次要多等一轮，只在真的需要时用。
+- 记忆摘要没放下的、要看某道错题的原文、某一块的完整范围，用 ˋmemory_readˋ 工具查（ˋcollectionˋ 写集合名，ˋidˋ 写编号；不写 ˋidˋ 时可以写 ˋblockˋ 只看挨着这一块的）。**很贵**：每用一次要多跑一整轮、整份说明再读一遍，只在摘要里确实没有、又非看不可时用。
 `;
 const DESK_DOC_NO_TOOLS = doc`
 ### 在学习台里上课
 
-- 学生在黑板上的每个动作、说的话、附的图，页面都自动记成证据（evidence），课后对话里的 Claude 看证据判断。
-- 这个查看方式不支持工具：你记不了观察，也查不了记忆库里没放进摘要的部分。要课后注意的事，在下课小结里写清楚。
+- 学生在黑板上的每个动作、说的话、附的图，页面都自动记成证据（evidence），课后看证据判断。
+${MEMO_DOC}
+- 这个查看方式不支持工具：查不了记忆库里没放进摘要的部分。
 - 不要宣布学生掌握了：掌握只由对话里的 Claude 看证据判断。
 - 新写的一段可以标上练的是哪个知识点：ˋboard new id=b3 title="…" point=trˋ（ˋpoint=ˋ 写上面掌握状态里 ˋ#ˋ 后面那段名字）。
 `;
 // 记忆摘要最多占多少（规则 + 摘要合起来）；剩下的给资料包
-export const MEMORY_BUDGET = 32 * 1024;
+export const MEMORY_BUDGET = 16 * 1024; // docs/desk-plan.md 第 7 节：从 32 KiB 降下来省额度，先放和这一块直接有关的
 
 // —— 2. 黑板指令协议（需求 2.1 / 2.2）。写法要和 protocol.js 的解析一致 ——
 export const PROTOCOL_DOC = doc`
@@ -966,8 +985,9 @@ export function summaryTurn(text) {
 }
 
 // —— 下课小结（存进 class_notes，给项目对话里的 Claude 课后看）——
-export function closingPrompt() {
-  return doc`
+// 学习台里（report：页面算好的课后报告，memory/report.js 的 reportText）：同一次调用里接着写整理单（memo 块），不多调用一次（docs/desk-plan.md 4.2）
+export function closingPrompt({ report = '' } = {}) {
+  const base = doc`
 下课了。请写这节课的小结，给项目对话里的 Claude 课后看：它会据此判断学生掌握得怎么样、下一节从哪里接。
 
 中文，分下面四点，每点几条短句，具体到题目、步骤和学生的原话：
@@ -979,6 +999,14 @@ export function closingPrompt() {
 
 不写黑板指令，不对学生说话，不要说学生「已经掌握」。提到学生时写「学生」，不用「他」「她」。
 `;
+  if (!report) return base;
+  return `${base}\n\n${doc`
+这节课在学习台里上。下面是页面按证据算好的课后报告（每道题的对错、没做完的、没交的草稿、学生说的话）。
+
+小结写完以后，接着写一个 ˋmemoˋ 块当**整理单**（写法和上课时一样，见「在学习台里上课」）：这节课新出现的错题（ˋerrorˋ）、弱点该怎么变（ˋweaknessˋ）、复现组怎么调（ˋreviewˋ）、下一节从哪接（ˋpositionˋ，一定写）、你这节课的教学失误（ˋslipˋ）。每条都写 ˋbasis=ˋ（下面报告里的组件 id 或证据 id）。等确认的那几类学生会在小结那块板上逐条点「确认 / 改 / 不要」；上课时已经记过的不用再写。整理单只写在 memo 块里，小结正文里不用重复。
+
+${report}
+`}`;
 }
 
 // —— 课堂运行时的小规则（纯函数，页面据此决定发什么、什么时候发）——

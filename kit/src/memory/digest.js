@@ -2,6 +2,8 @@
 // 从学习台的记忆库里挑和这节课的块有关的部分，按优先级排：
 //   rules 全文 → profile → 当前块的 curriculum（相邻块只给范围）→ 相关的 weaknesses、errors 原文、mastery → 最近的 slips → position
 // 有字节预算（和资料包一起受 SYSTEM_MAX 限制）：放不下时从后往前截，截掉的写明「还有几条，用 memory_read 查」。
+// 撤销了的（status: void、有一条作废的更正指向它）不带；学生标了已解决的错题注明；还在等学生确认的改动单列出来，免得它再提一遍。
+import { voidedIds, resolvedErrors, pendingTitle } from './memo.js';
 
 const enc = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
 export const utf8 = (s) => (enc ? enc.encode(String(s)).length : Buffer.byteLength(String(s)));
@@ -34,7 +36,10 @@ export function nearBlocks(curriculum, block) {
  * 返回 { rules（给「角色和红线」那一节的规则全文，没有就是空字符串）, text（正文）, cut: [{ coll, more }], bytes }
  */
 export function memoryDigest(mem = {}, { block = '', budget = 32 * 1024, session = '', tools = true } = {}) {
-  const get = (c) => (Array.isArray(mem[c]) ? mem[c].filter((d) => d && d.id !== undefined) : []);
+  const gone = voidedIds(mem);
+  const solved = resolvedErrors(mem);
+  // 作废的、更正别的条目的（作废更正、「已解决」那条）都不单独带：原条上注明
+  const get = (c) => (Array.isArray(mem[c]) ? mem[c].filter((d) => d && d.id !== undefined && !gone.has(`${c}/${d.id}`) && !(c === 'errors' && d.corrects && (d.void || d.resolved))) : []);
   const position = get('position').find((d) => d.id === 'now') || null;
   const here = String(block || position?.block || '');
   const { cur, near } = nearBlocks(get('curriculum'), here);
@@ -68,7 +73,7 @@ export function memoryDigest(mem = {}, { block = '', budget = 32 * 1024, session
 
   // 相关的错题：块挨着这节课的，或者挂在相关弱点上的。相关的弱点：管着这几块的、挂着这些错题的、影响面是「通用」的
   const errors = get('errors');
-  const weak = get('weaknesses').filter((w) => w.status !== 'closed');
+  const weak = get('weaknesses').filter((w) => w.status !== 'closed' && w.status !== 'void');
   const nearErr = new Set(errors.filter((e) => nearIds.has(blockOf(e.block))).map((e) => String(e.id)));
   const relW = weak.filter((w) => list(w.blocks).some((b) => nearIds.has(blockOf(b))) || list(w.errors).some((e) => nearErr.has(e)) || w.scope === '通用');
   const touch = (w) => (list(w.blocks).includes(here) || list(w.errors).some((e) => errors.find((x) => x.id === e)?.block === here) ? 0 : 1);
@@ -82,7 +87,7 @@ export function memoryDigest(mem = {}, { block = '', budget = 32 * 1024, session
   sections.push({
     coll: 'errors', head: '## 相关的错题（errors，原文）',
     items: relE.map((e) => [
-      `- ${e.id}${e.source ? `（${one(e.source, 60)}）` : ''}${e.date ? ` ${e.date}` : ''}${e.weakness ? `，挂 ${e.weakness}` : ''}${e.corrects ? `，更正 ${e.corrects}` : ''}`,
+      `- ${e.id}${e.source ? `（${one(e.source, 60)}）` : ''}${e.date ? ` ${e.date}` : ''}${e.weakness ? `，挂 ${e.weakness}` : ''}${e.corrects ? `，更正 ${e.corrects}` : ''}${solved.has(String(e.id)) ? '，学生标了已解决' : ''}`,
       e.q ? `  - 题面：${one(e.q, 600)}` : '', e.mine ? `  - 学生的答案：${one(e.mine, 400)}` : '', e.step ? `  - 错在：${one(e.step, 200)}` : '', e.cause ? `  - 根因：${one(e.cause, 300)}` : '',
     ].filter(Boolean).join('\n')),
   });
@@ -91,6 +96,9 @@ export function memoryDigest(mem = {}, { block = '', budget = 32 * 1024, session
   sections.push({ coll: 'mastery', head: '## 掌握状态（mastery，只读：你不能宣布掌握）', items: relM.map((m) => `- ${m.id}：${m.state}${m.state === '复现通过' && m.tier ? `（第 ${m.tier} 天那档）` : ''}`) });
   const slips = get('slips').sort(byDate('date')).slice(0, 12);
   sections.push({ coll: 'slips', head: '## 别再犯（两个 Claude 以前的教学失误，最近的在前）', items: slips.map((s) => `- ${s.date || ''}（${s.by === 'class' ? '课堂里的 Claude' : '对话里的 Claude'}）${one(s.text, 300)}${s.lesson ? ` → ${one(s.lesson, 200)}` : ''}`) });
+  // 还在等学生确认的改动（memo 写的错题、弱点、复现组、位置）：已经提过了，别再提
+  const open = (Array.isArray(mem.pending) ? mem.pending : []).filter((p) => p && p.status === 'open').sort((a, b) => (a.at || 0) - (b.at || 0));
+  sections.push({ coll: 'pending', head: '## 已经提了、等学生确认的改动（不用再提）', items: open.map((p) => `- ${one(pendingTitle(p), 160)}`) });
   if (position) {
     sections.push({
       coll: 'position', head: '## 上一节停在哪（position）',

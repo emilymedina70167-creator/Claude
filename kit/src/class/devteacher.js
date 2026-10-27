@@ -136,7 +136,36 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
     return { kind: stubborn ? 'fix-broken' : 'fix', text: join(stubborn ? '我再改一下。' : '我改一下。', ...blocks) };
   }
 
-  if (/下课|小结/.test(said)) return { kind: 'closing', text: closingText(conv) };
+  // 学习台里下课：小结后面接着写整理单（memo 块），依据用课后报告里的第一道题
+  if (/下课|小结/.test(said)) return { kind: 'closing', text: closingText(conv) + (/整理单/.test(said) ? `\n${closingMemo(said)}` : '') };
+
+  // 学习台里改记忆：memo 块的三档都写一条，再故意写两条不对的（掌握只能提议、偏好没写依据）
+  if (!isSystem && /测试\s*[:：]?\s*整理/.test(said)) {
+    const n = nextSeq(turns, memo);
+    return {
+      kind: 'memo',
+      text: join(
+        pic + '先记一下刚才看到的，然后做一道：',
+        board(`new id=b${n} title="几行几列" point=tr`, [
+          '```quiz',
+          `id: q-org-${n}`,
+          String.raw`q: $\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}$（$\boldsymbol\alpha,\boldsymbol\beta$ 都是 3 维列向量）是`,
+          '- [ ] 一个数',
+          '- [x] 3×3 矩阵',
+          '```',
+        ].join('\n')),
+        board('memo', [
+          'pref topic=讲法 text="（模拟老师）先看图再推公式" basis=say',
+          'slip text="（模拟老师）刚才一口气讲了三步才停" lesson="一步一停"',
+          'note text="（模拟老师）问到形状时犹豫了很久" about=W19',
+          'error q="（模拟）βᵀα 是几行几列" mine="3×3" step="判断形状" cause="（模拟老师）把内积当外积" weakness=W19 basis=say',
+          'weakness id=W19 level=L0 basis=say',
+          'mastery id=L2.2.2 state=基础题过',
+          'pref topic=习惯 text="（模拟老师）没写依据的偏好"',
+        ].join('\n')),
+      ),
+    };
+  }
 
   if (!assistant.length) {
     const n = nextSeq(turns, memo);
@@ -662,6 +691,18 @@ function closingText(conv) {
     String.raw`4. **建议下一节怎么接**：先请学生不看黑板说出 $A\mathbf x=\boldsymbol\alpha(\boldsymbol\beta^{\mathrm T}\mathbf x)$ 的意思；再给一个三阶、三行成比例的矩阵求 $A^{10}$，看学生能不能自己认出秩一、用 $\operatorname{tr}A$ 写出来。`,
     '（这是 ?dev 模拟老师写的小结，只用来测试流程。）',
   ].join('\n\n') + '\n';
+}
+
+// 下课整理单（模拟）：依据用课后报告里列的第一道题，报告里没有题就用学生说的话
+function closingMemo(said) {
+  const comp = said.match(/^- ([A-Za-z][\w-]*)（/m)?.[1] || 'say';
+  return board('memo', [
+    `error q="（模拟）βᵀα 是几行几列" mine="3×3" step="判断 βᵀα 的形状" cause="（模拟老师）把 βᵀα 当成 3×3 矩阵" weakness=W19 basis=${comp}`,
+    `weakness id=W19 level=L2 basis=${comp}`,
+    `review id=R5 add="（模拟）βᵀα 是几行几列" basis=${comp}`,
+    'position next="（模拟老师）先收形状判断的同类题，再推 Aⁿ" debts="形状判断的同类题"',
+    'slip text="（模拟老师）下课前没让学生用自己的话再说一遍" lesson="下课前留一题让学生口述"',
+  ].join('\n')) + '\n';
 }
 
 function compactText() {

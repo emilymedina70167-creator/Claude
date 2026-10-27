@@ -35,6 +35,7 @@ import { strokesToBlob } from '../ink/engine.js';
 import { shouldNudge, stuckText, STUCK_MS } from './stuck.js';
 import { fromEvidence, sayEvidence, draftEvidence, observationRecord, slipRecord, memoryRead } from '../memory/session.js';
 import { callCost, usageOf, usageText } from './usage.js';
+import { reportText } from '../memory/report.js';
 
 export const MODEL = 'claude-opus-5-5';
 // 学生明确要求：讲课只能是 Opus 5.5、effort high；modelTier 只是平台要求的退路（退路的输出会被丢弃）
@@ -72,6 +73,7 @@ export async function renderClass(root, meta, desk = null) {
         </div>`,
     isBusy: () => busy,
     seqOf: (id) => segs.get(id)?.seq,
+    decorate: (p) => decoratePage(p),
   });
   const { board, pages } = bv;
   const hero = root.querySelector('.class-hero');
@@ -146,6 +148,7 @@ export async function renderClass(root, meta, desk = null) {
   let raf = 0, pendingText = ''; // 草稿：一帧最多画一次
   let lastVerify = { turns: 0, discarded: 0 }; // 学习台里：上次写进 sessions/{编号} 的核验轮数
   let lastUsage = ''; // 学习台里：上次写进 sessions/{编号} 的花费
+  let turnMemos = []; // 这一轮 memo 块里读懂的条目（执行完黑板指令、记下这一轮以后再写进记忆库）
 
   // 察觉卡住的开关（学生在「⋯」里可以开；记在这台设备上）。每提醒一次就是一整轮调用，默认关（docs/desk-plan.md 第 7 节）。
   // 本地试用带 ?stuck=秒数 时自动开
@@ -232,7 +235,7 @@ export async function renderClass(root, meta, desk = null) {
       if (pp?.exists && !pack.problems) pack.problems = pp.data();
       for (const d of pg.docs.map((x) => x.data()).filter((p) => Number.isFinite(p?.n) && p.n > 0).sort((a, b) => a.n - b.n)) {
         const p = bv.ensurePage(d.n);
-        Object.assign(p, { title: String(d.title || ''), talk: String(d.talk || ''), talkBy: d.talkBy || '', lead: d.lead || '', kind: d.kind || '', body: String(d.body || ''), foot: String(d.foot || '') });
+        Object.assign(p, { title: String(d.title || ''), talk: String(d.talk || ''), talkBy: d.talkBy || '', lead: d.lead || '', kind: d.kind || '', body: String(d.body || ''), foot: String(d.foot || ''), memo: Array.isArray(d.memo) ? d.memo.map(String) : [] });
         bv.paint(p);
       }
       const docs = st.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.seq || 0) - (b.seq || 0));
@@ -374,7 +377,40 @@ export async function renderClass(root, meta, desk = null) {
   }
 
   function savePage(p) {
-    sink.put('class_pages', { id: pad3(p.n), n: p.n, title: p.title || '', talk: p.talk || '', talkBy: p.talkBy || '', lead: p.lead || '', kind: p.kind || '', body: p.body || '', foot: p.foot || '', at: Date.now() });
+    sink.put('class_pages', { id: pad3(p.n), n: p.n, title: p.title || '', talk: p.talk || '', talkBy: p.talkBy || '', lead: p.lead || '', kind: p.kind || '', body: p.body || '', foot: p.foot || '', ...(p.memo?.length ? { memo: p.memo } : {}), at: Date.now() });
+  }
+
+  // —— 学习台里改记忆（memory/memo.js）：这一轮 memo 块记的改动单挂在板顶那句话下面（小结板上整张列出来，逐条确认）——
+  function decoratePage(p) {
+    if (!desk?.memo) return;
+    const ids = p.memo || [];
+    let el = p.sec.querySelector(':scope > .class-memo, :scope > .class-page-body > .class-memo');
+    if (!ids.length) { el?.remove(); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'class-memo';
+      const closing = p.kind === 'closing' && p.bodyEl.querySelector(':scope > .class-closing');
+      if (closing) closing.after(el);
+      else p.talkEl.after(el);
+    }
+    desk.memo.view.attach(el, () => p.memo || [], p.kind === 'closing'
+      ? { mode: 'list', title: '整理单：等你确认的，点「确认」才写进学习台' }
+      : { mode: 'line' });
+  }
+
+  // 执行一轮里的 memo 块：直接写的马上写，等确认的记成改动单；没记成的告诉课堂 Claude（不多跑一轮：跟着下一轮的提醒）
+  async function runMemo(entries, seq, pageN) {
+    try {
+      const r = await desk.memo.ops.applyMemo(entries, { session: desk.sid, block: desk.block, turn: seq });
+      const p = pages.get(pageN);
+      if (p && r.pds.length) { p.memo = [...(p.memo || []), ...r.pds.map((x) => x.id)]; savePage(p); bv.paint(p); }
+      if (r.rejected.length) addTurn({ role: 'system', kind: 'note', text: `[系统] memo 里有 ${r.rejected.length} 条没记：\n${r.rejected.map((x) => `- ${x.line}\n  原因：${x.error}`).join('\n')}` });
+      return r;
+    } catch (e) {
+      console.warn('memo 没记成', e);
+      addTurn({ role: 'system', kind: 'note', text: `[系统] memo 没记成（${e?.message || e}），这一轮的改动都没写。` });
+      return null;
+    }
   }
 
   // by：这句话是谁说的（平台回报的 modelApplied；模拟老师是 'mock'），板顶那句话后面标出来
@@ -488,6 +524,12 @@ export async function renderClass(root, meta, desk = null) {
 
   // 执行一条黑板指令。返回 { op, id, ok, error?, ... }；画不出来的 new/add/replace/pin 记进 failures 等着重写
   function execOp(op, failures, notes) {
+    if (op.op === 'memo') {
+      if (!desk?.memo) return { op: 'memo', ok: false, error: 'memo 只在学习台里上课时能用（单独的课堂没有记忆库）' };
+      turnMemos.push(...op.entries);
+      if (op.errors?.length) notes.push(`memo 里有 ${op.errors.length} 行没读懂，没记：\n${op.errors.map((e) => `  - ${e}`).join('\n')}`);
+      return { op: 'memo', ok: true, n: op.entries.length };
+    }
     if (op.op === 'unpin') {
       const seg = segs.get(op.id);
       if (!seg || seg.place !== 'pin') return { op: 'unpin', id: op.id, ok: false, error: seg ? `${op.id} 不在常驻栏里，是黑板上的段：要撤回用 board hide id=${op.id}` : `常驻栏里没有 ${op.id}` };
@@ -974,6 +1016,7 @@ export async function renderClass(root, meta, desk = null) {
     const notes = [];
     const pageBefore = bv.cur;
     const boardOps = [];
+    turnMemos = [];
     for (const s of segments) {
       if (!isOp(s)) continue;
       const n = failures.length;
@@ -1009,7 +1052,8 @@ export async function renderClass(root, meta, desk = null) {
         if (t.getBoundingClientRect().top < 0) t.scrollIntoView({ behavior: smooth, block: 'start' });
       }
     }
-    addTurn({ role: 'claude', text: res.text, boardOps, page: bv.cur || undefined, talkPage, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined, cost });
+    const told = addTurn({ role: 'claude', text: res.text, boardOps, page: bv.cur || undefined, talkPage, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined, cost });
+    if (turnMemos.length) runMemo(turnMemos.splice(0), told.seq, talkPage || bv.cur);
     // Claude 又说了话：重新计「停了多久」
     nudged = false;
     lastActive = Date.now();
@@ -1364,8 +1408,11 @@ export async function renderClass(root, meta, desk = null) {
       bar.setStatus('thinking', 'Claude 在写这节课的小结…');
       ensureDraft();
       ctl = new AbortController();
+      const steps = () => [...segs.values()].map((x) => ({ id: x.id, page: x.page, title: x.title || x.sec?.querySelector('h2')?.textContent?.trim() || '', place: x.place }));
+      // 学习台里：先用代码算一份课后报告放进这次的输入，小结和整理单同一次写（docs/desk-plan.md 4.2，不多调用一次）
+      const report = desk?.makeReport ? await desk.makeReport({ turns: history, steps: steps() }).then(reportText, () => '') : '';
       const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), subject: session.subject, memory: memoryArg() });
-      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt() }], maxBytes: promptLimit() });
+      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ report }) }], maxBytes: promptLimit() });
       const cost = (why) => callCost({ bytes: fit.bytes, why });
       let res;
       try {
@@ -1383,8 +1430,19 @@ export async function renderClass(root, meta, desk = null) {
       // 小结那块板的最后一行由页面写：这节课的讲课是不是都由 Opus 5.5 回答（平台核验），作废了几轮
       const v = verifyCounts();
       v.turns++; // 这份小结本身也是 Opus 5.5 写的
+      // 学习台里：整理单写在 memo 块里，小结正文是 memo 块以外的文字
+      let summary = res.text;
+      let memoEntries = [];
+      if (desk?.memo) {
+        const out = parseOutput(res.text, { final: true });
+        const memos = out.ops.filter((o) => o.op === 'memo');
+        if (memos.length) {
+          memoEntries = memos.flatMap((o) => o.entries);
+          summary = out.segments.filter((x) => x.type === 'speech').map((x) => x.text).join('\n\n').trim() || res.text;
+        }
+      }
       if (desk) {
-        const ob = observationRecord({ kind: 'summary', text: res.text, session: desk.sid, block: desk.block, turn: turnSeq + 1, verify: v });
+        const ob = observationRecord({ kind: 'summary', text: summary, session: desk.sid, block: desk.block, turn: turnSeq + 1, verify: v });
         await sink.put('observations', ob);
         desk.updateSession({ status: 'closed', endedAt: Date.now(), summary: ob.id, verify: v });
       } else {
@@ -1392,15 +1450,16 @@ export async function renderClass(root, meta, desk = null) {
       }
       const foot = mock ? `（本地测试：${v.turns} 轮都是模拟老师回放的，没有调用 Claude。）`
         : `这节课 ${v.turns} 轮讲课和小结全部由 Opus 5.5 回答（平台核验）${v.discarded ? `；另有 ${v.discarded} 轮平台换了别的模型，已作废、没有显示` : ''}。`;
-      const p = newPage({ title: '这节课的小结', kind: 'closing', body: res.text, foot });
-      addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied, page: p.n, cost: cost('closing') });
+      const p = newPage({ title: '这节课的小结', kind: 'closing', body: summary, foot });
+      const closed = addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied, page: p.n, cost: cost('closing') });
       bv.show(p.n, { animate: true });
+      // 整理单：直接写的马上写，等确认的挂在小结下面让我逐条点
+      const memo = memoEntries.length ? await runMemo(memoEntries, closed.seq, p.n) : null;
       // 课后报告（memory/report.js，页面代码算，不调用 Claude）：sessions/{编号}/report/main
-      if (desk?.writeReport) {
-        const steps = [...segs.values()].map((x) => ({ id: x.id, page: x.page, title: x.title || x.sec?.querySelector('h2')?.textContent?.trim() || '', place: x.place }));
-        desk.writeReport({ turns: history, steps }).catch((e) => { console.warn('课后报告没写成', e); toast('课后报告没写成，回学习台首页会再试'); });
-      }
-      bar.setStatus('notice', desk ? '下课了。小结和课后报告已经存进学习台，回对话告诉 Claude「下课了」。' : '下课了。小结已经存好，回对话告诉 Claude「下课了」。');
+      if (desk?.writeReport) desk.writeReport({ turns: history, steps: steps() }).catch((e) => { console.warn('课后报告没写成', e); toast('课后报告没写成，回学习台首页会再试'); });
+      const open = memo?.pds.filter((x) => x.status === 'open').length || 0;
+      bar.setStatus('notice', !desk ? '下课了。小结已经存好，回对话告诉 Claude「下课了」。'
+        : open ? `下课了。小结和课后报告存进学习台了；小结下面的整理单有 ${open} 条等你确认。` : '下课了。小结和课后报告已经存进学习台。');
       session.event('end', null, { turns: history.length });
       return true;
     });

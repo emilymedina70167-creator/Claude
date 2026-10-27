@@ -102,7 +102,7 @@ test('buildSystem：学习台里多一节「你对学生的了解」，记忆库
     assert.match(s, /学生定下的规则（学习台记忆库的 rules，替换组件库内置的红线）/);
     assert.ok(!s.includes('1. 一次只推进一件事'), '内置红线被替换了');
     assert.match(s, /不用「他」「她」/, '角色那一段照旧');
-    assert.match(s, /slip_note/);
+    assert.match(s, /board memo/);
     assert.match(s, /W19/);
   }
   // 不在学习台里：和以前一样
