@@ -32,7 +32,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
   - `class-demo.html?dev`：课堂模式，模拟老师按剧本回放（不调用 Claude）；剧本里故意有一段写错的组件（`circle` 那行），控制台报「看不懂这一行」是正常的。在输入框里打暗号看教具：「测试:教具」（`let` 块 + `matrix` 的乘积 + 逐行 `mark` + `\calc`）、「测试:幂」（滑块和 `figure play` 让矩阵动起来）、「测试:指图」（图上的 `label=` / `at=` 标注）、「测试:出题」（`practice` 的自定义题型）、「测试:公式」（写含 n 的式子）、「测试:示意图」（`sketch`）、「测试:推导」（`derive` + `figure play step`）、「测试:原图」（`image`，本地用一张模拟的讲义图）、「测试:排序」（演示组件 `sort` + `figure play step` + `mark`）
     - `la-demo.html`：线代的过程组件（elim、det、eig、schmidt、quad、frames）
 - iPad 尺寸：竖屏 820×1180，横屏 1180×820。云端会话里可以用预装的 Playwright + Chromium 截图检查。
-- 页面检查脚本：`node tools/check-lesson.mjs 文件…`（课件 `.md`、示例页 `.html`、实时黑板 `.board.json`、课堂输出 `.class.json`）在两种 iPad 尺寸下渲染、把演示走一遍，报写法错误、控制台报错、冲出版面、一屏放不下，课堂用的 `figure set step` 每个演示组件连着跳两次；`--shots 目录` 存截图。`npm run check:pages` 查全部示例页（改了组件要跑）。
+- 页面检查脚本：`node tools/check-lesson.mjs 文件…`（课件 `.md`、示例页 `.html`、实时黑板 `.board.json`（可带 `ops` 教具指令、`talk` 板顶的话，有指令时按 seq 和段一条条写进去，没执行的指令报成错；例子 `kit/examples/live-tools.board.json`）、课堂输出 `.class.json`）在两种 iPad 尺寸下渲染、把演示走一遍，报写法错误、控制台报错、冲出版面、一屏放不下，课堂用的 `figure set step` 每个演示组件连着跳两次；`--shots 目录` 存截图。`npm run check:pages` 查全部示例页（改了组件要跑）。
 - 组件画廊：`npm run gallery -- --out 目录 kit/examples/408-demo.html`：每个组件单独截一张（演示组件停在最后一步），五种风格各一张，拼成联系表 `sheet-*.png`（一行一个组件），视觉统一一眼看完；`--themes paper,white`、`--only id1,id2`、`--width 1180`。
 - 验收（扮演老师写真题课，量一次写对率）：`evals/`（说明在 `evals/README.md`，结果在 `evals/results.md`）。
 
@@ -50,7 +50,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - `session.js`：全局状态（关卡、作答记录、图形注册 `session.scenes`、写法错误 `session.problems`）。
 - 图形：`scene.js`（描述式交互图）、`graph.js`（函数图）、`space.js`（三维）、`expr.js`（表达式求值；向量是列向量，`a'` 是行）、`link.js`（steps 和图的联动）、`mods.js`（命令行末尾的修饰）。
 - 精确计算：`exact.js`（BigInt 分数；`\calc{…}` 的展开、`let` 块的解析、`calcValue`）。`render.js` 的 `tex2html` 展开 `\calc`，并带两个 KaTeX 宏 `\hl{名字}{…}`、`\chalk{颜色}{…}`（都展开成 `\htmlData`，`trust` 只放行它）。`let` 块（`blocks/letblock.js`）定义整节课的量（`session.vars`）；`renderLesson` 先把一段里的 `let` 块算一遍，正文的 `\calc` 才用得到。
-- 板书标注：`markspec.js`（写法解析）、`markdraw.js`（手绘的圈 / 框 / 箭头，旁注放哪：躲开正文、离远了连线），都是纯函数；`marks.js`（DOM：一个宿主一层 SVG，按 spec 找到公式里的 `\hl` 项、矩阵的行列、steps 的步、图上的东西，尺寸变了、图 `change` 了跟着重新摆）。`tokens.js` 是指令行分词（协议、标注、matrix 共用）。
+- 板书标注：`markspec.js`（写法解析）、`markdraw.js`（手绘的圈 / 框 / 箭头，旁注放哪：躲开正文、离远了连线），都是纯函数；`marks.js`（DOM：一个宿主一层 SVG，按 spec 找到公式里的 `\hl` 项、矩阵的行列、steps 的步、图上的东西，尺寸变了、图 `change` 了跟着重新摆）。在板上执行 mark / unmark / figure（找目标、只动当前板和常驻栏、板上现有的标注）是 `class/boardtools.js`，课堂和实时黑板共用。`tokens.js` 是指令行分词（协议、标注、matrix 共用）。
 - 会动的矩阵：`matrixspec.js`（写法、精确求值、哪些格子变了 / 哪个数飞到哪，纯函数）+ `blocks/matrix.js`（画面、闪烁和飞行动画、滑块、点乘积里的数；接 `figureControls`，课堂里能 `figure set / play / highlight` 和 `board mark`）。
 - 判分：`check.js`、`mathinput.js`；`anscheck.js`（`answer` 的 `check:` 按条件判、格子里的根号 `1/√2`，纯函数）；精确分数和行化简：`linalg.js`。
 - 含 n 的式子作答（`answer` / `steps` 的 `formula: n`）：`formula.js`（读懂学生的写法、写成公式预览、代几组 n 比较、指出哪个 n 对不上、不许直接写 A^n，纯函数）+ `formulainput.js`（输入框和符号小键盘；Apple Pencil 点进去用系统的随手写）。
@@ -89,10 +89,11 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ### 实时黑板（`kit/src/live/`）
 
-- 和课堂模式共用一屏一块板：`class/boardview.js`（板、常驻栏、翻板、一屏放不放得下）、`class/pagenav.js`（翻板条）、`class/selfcheck.js`（额外的写法自检）。改这几个文件，两种模式都要看。
+- 和课堂模式共用一屏一块板：`class/boardview.js`（板、常驻栏、翻板、一屏放不放得下）、`class/pagenav.js`（翻板条）、`class/selfcheck.js`（额外的写法自检）、`class/boardtools.js`（教具：标注、让图动）。改这几个文件，两种模式都要看。
 - `live.js`：订阅 `steps`，按 `layout.js` 的 `planBoards` 分板（`page` 不写就接着前一段那块板，`pin: true` 进常驻栏，板号最大的是当前板）；新板翻过去，翻回去看旧板时当前板来了新内容让「回到当前板」闪。学生作答过的段被改了，先提示不替换。
 - 对话里的 Claude 看不到页面：写法错误写回 `lint/{段 id}`，屏幕和当前板放不放得下写回 `meta/screen`（`layout.js` 的 `lintRecord`、`screenRecord`，有变化才写）。
-- 黑板现状 `meta/now`（`layout.js` 的 `statusRecord`）：最近的作答（和课堂模式发给课堂 Claude 的写法一样，`class/prompt.js` 的 `actionText`）、没提交的草稿（`drafts.js`）、写法错误、屏幕、交来的截图、这块黑板用的组件库版本（`kit`，对话里的 Claude 拿它和说明的版本比，旧了先换新版）。有变化后最多 2 秒写一次。学生说「好了」时对话里的 Claude 只读这一份。
+- 黑板现状 `meta/now`（`layout.js` 的 `statusRecord`）：最近的作答（和课堂模式发给课堂 Claude 的写法一样，`class/prompt.js` 的 `actionText`）、没提交的草稿（`drafts.js`）、写法错误、屏幕、交来的截图、这块黑板用的组件库版本（`kit`，对话里的 Claude 拿它和说明的版本比，旧了先换新版）、教具指令的结果 `ops`、板上的标注 `marks`、能动的图 `figures`。有变化后最多 2 秒写一次。学生说「好了」时对话里的 Claude 只读这一份。
+- 教具指令（`docs/live-tools-spec.md`）：对话里的 Claude 往 `ops/{id}` 写 `{ seq, cmd, body }`，`cmd` 和课堂 board 块的第一行一样（`class/protocol.js` 的 `blockCommand`），只收 mark / unmark / figure。`ops.js` 是纯函数（读懂指令、要等哪些目标、结果行、刷新后的时间线 `restorePlan`）；`live.js` 按 seq 依次执行，目标还没画出来先等（最多 5 秒，前一条在等后面的也等），新指令先等 0.4 秒（同一次 batch 里改写的段可能晚到）；学生在看旧板时不播动画。执行过的记在 `ops_done/{id}`（带段的指纹 `segSig`：刷新后段变了的标注、图的状态不放回去；同一个 id 改写成新指令算新的一版，先擦掉旧版画的标注）。板顶的话 `talk/{板号}` = `{ page, md }`，写在 `boardview.js` 的 `talkEl`，不标模型。`?dev` 时 `window.LAKitLive` 给检查脚本看还有几条没执行、结果。
 - `livebar.js`：底部一条（翻板、「交截图」、连接状态、「⋯」里板书、复制学习记录和版本号）。「交截图」复用课堂输入条的图片处理（`class/bar.js` 的 `toPng` 等，Notability 的坑一样要绕），图存 assets，记在 `uploads`。没有输入框、没有「问 Claude」、没有「这段做完了」。
 - `store.js`：claude.ai 里用 artifact 的 db / assets，`?dev` 用 localStorage 替身；`sync.js`：作答、事件、原图写进数据库；`devpanel.js`：`?dev` 开发面板（写段、看作答、看写回）。
 

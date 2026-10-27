@@ -94,9 +94,8 @@ function scanBlock(lines, start, open, partialAt) {
   const body = [];
   const done = (end, closed, cut = false) => {
     const text = body.join('\n');
-    let op = parseCommand(header);
     // mark 块里每行一条标注：块闭合了才拼（流式草稿只看开头那行）
-    if (closed && op.op === 'mark') op = markOp(op, text);
+    const op = closed ? blockCommand(header, text) : parseCommand(header);
     return { header, op, body: text, closed, cut, end };
   };
 
@@ -170,6 +169,15 @@ export function parseCommand(header) {
     return r.error ? { error: r.error } : { op: 'unmark', ...r };
   }
   return { error: `看不懂的指令「${m[1]}」：只认 ${OP_LIST}` };
+}
+
+/**
+ * 一整块指令：开头那行 + 块里的内容（课堂里闭合了的 board 块；实时黑板 ops 集合里的一条 { cmd, body }）。
+ * mark 的块里一行一条标注，在这里拼成 marks；别的指令和 parseCommand 一样（内容由调用方当段的 Markdown 用）。
+ */
+export function blockCommand(header, body = '') {
+  const op = parseCommand(header);
+  return op.op === 'mark' ? markOp(op, body) : op;
 }
 
 // 闭合的 mark 块：开头那行 + 块里各行拼成 marks。一条也没写对时整块算看不懂；
