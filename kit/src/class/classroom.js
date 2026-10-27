@@ -33,7 +33,8 @@ import { markText } from '../markspec.js';
 import { calcValue, exactText } from '../exact.js';
 import { strokesToBlob } from '../ink/engine.js';
 import { shouldNudge, stuckText, STUCK_MS } from './stuck.js';
-import { fromEvidence, sayEvidence, observationRecord, slipRecord, memoryRead } from '../memory/session.js';
+import { fromEvidence, sayEvidence, draftEvidence, observationRecord, slipRecord, memoryRead } from '../memory/session.js';
+import { callCost, usageOf, usageText } from './usage.js';
 
 export const MODEL = 'claude-opus-5-5';
 // 学生明确要求：讲课只能是 Opus 5.5、effort high；modelTier 只是平台要求的退路（退路的输出会被丢弃）
@@ -49,7 +50,7 @@ const QUICK_SAY = { 没懂: '没懂。', 想不出来: '想不出来。', 换个
 
 /**
  * desk（在学习台里上课时才有）：{ store（已经 scopeDb 过的）, sid, block, mem（记忆库各类的数组，页面一直在更新）,
- * updateSession(patch)（改 sessions/{sid}）, onHome（回学习台首页）}
+ * updateSession(patch)（改 sessions/{sid}）, writeReport({ turns, steps })（下课后写课后报告）, onHome（回学习台首页）}
  */
 export async function renderClass(root, meta, desk = null) {
   session.mode = 'class';
@@ -85,7 +86,8 @@ export async function renderClass(root, meta, desk = null) {
   const { db } = store;
   // 学习台里：作答、动作写成证据，带上这节课、这一块、这一段标的知识点（point=）
   const sink = createSink(store, desk ? { evidence: (rec) => evCtx(rec.step) } : {});
-  const evCtx = (step) => ({ session: desk?.sid, block: desk?.block, point: segs.get(step)?.point });
+  // turn：这时课堂进行到第几轮（最近一轮的 seq），课后报告按它和课堂记录对齐
+  const evCtx = (step) => ({ session: desk?.sid, block: desk?.block, point: segs.get(step)?.point, turn: turnSeq });
 
   // —— 谁来讲课：claude.ai 里是真的 Claude；本地 ?dev 用模拟老师（剧本回放，不花额度）——
   const ai = await getAI();
@@ -143,10 +145,12 @@ export async function renderClass(root, meta, desk = null) {
   // 被函数声明用到、而 restore() 在函数定义之前就会调到那些函数：要在这里先有值（let / const 有暂时性死区）
   let raf = 0, pendingText = ''; // 草稿：一帧最多画一次
   let lastVerify = { turns: 0, discarded: 0 }; // 学习台里：上次写进 sessions/{编号} 的核验轮数
+  let lastUsage = ''; // 学习台里：上次写进 sessions/{编号} 的花费
 
-  // 察觉卡住的开关（学生在「⋯」里可以关；记在这台设备上）
+  // 察觉卡住的开关（学生在「⋯」里可以开；记在这台设备上）。每提醒一次就是一整轮调用，默认关（docs/desk-plan.md 第 7 节）。
+  // 本地试用带 ?stuck=秒数 时自动开
   const stuckKey = `la-class-stuck:${session.title}`;
-  let stuckOn = (() => { try { return localStorage.getItem(stuckKey) !== 'off'; } catch { return true; } })();
+  let stuckOn = (() => { if (isDev() && /[?&]stuck=\d+/.test(location.search)) return true; try { return localStorage.getItem(stuckKey) === 'on'; } catch { return false; } })();
   const bar = createClassBar({
     images: teacher.images,
     tag: mock ? `${MODEL_TAG} · 模拟老师` : MODEL_TAG,
@@ -209,6 +213,7 @@ export async function renderClass(root, meta, desk = null) {
 
   // —— 恢复：资料包、黑板（板和段）、课堂记录、作答 ——
   await restore();
+  syncUsage();
   session.event('open', null, { title: session.title, unit: unitName, mode: 'class' });
   // 打开页面之前写的板书（存在这台设备上）不再发：只发这次上课新写的
   for (const s of window.LAKit?.ink?.strokes || []) toldInk.add(s);
@@ -644,6 +649,23 @@ export async function renderClass(root, meta, desk = null) {
 
   // —— 草稿：学生写了、还没点「检查」「提交」的东西。不单独发，跟着下一轮一起告诉 Claude（每份只在变了的时候说一次）——
   const toldDrafts = new WeakMap(); // 放草稿的元素 → 上次告诉 Claude 的文字
+  // 下课时：板上（没撤回的段里）所有还没提交的草稿；已经记成证据、内容没变的跳过
+  const loggedDrafts = new WeakMap();
+  function allDrafts() {
+    const out = [];
+    for (const seg of [...segs.values()].sort((a, b) => a.seq - b.seq)) {
+      if (!seg.sec || seg.hidden || seg.failed || seg.pending) continue;
+      for (const b of seg.sec.querySelectorAll('.block[data-bid]')) {
+        for (const d of draftsIn(b)) {
+          if (loggedDrafts.get(d.el) === d.text) continue;
+          loggedDrafts.set(d.el, d.text);
+          out.push({ step: seg.id, block: b.dataset.bid, kind: [...b.classList].find((c) => c.startsWith('block-'))?.slice(6) || '', title: texText(b.querySelector('.w-title')), label: d.label, text: d.text });
+        }
+      }
+    }
+    return out;
+  }
+
   function freshDrafts() {
     const out = [];
     for (const seg of [...segs.values()].sort((a, b) => a.seq - b.seq)) {
@@ -769,7 +791,8 @@ export async function renderClass(root, meta, desk = null) {
       if (imgs.length) {
         Promise.all(imgs.map((x) => x.id)).then((all) => {
           const ids = all.filter(Boolean);
-          if (desk && (ids.length || say.trim())) sink.put('evidence', { ...evOf(ids), turn: turn.seq });
+          // ink：其中几张是学生在板上用 Pencil 写的板书（导出成图），排在附图后面
+          if (desk && (ids.length || say.trim())) sink.put('evidence', { ...evOf(ids), turn: turn.seq, ...(ink?.blobs.length ? { ink: ink.blobs.length } : {}) });
           if (!ids.length) return;
           turn.images = ids;
           sink.put('class_turns', { id: pad6(turn.seq), ...turn });
@@ -777,7 +800,9 @@ export async function renderClass(root, meta, desk = null) {
       }
       const blobs = imgs.map((x) => x.blob);
       lastImages = { seq: turn.seq, blobs };
-      return converse(blobs);
+      // 只有「停久了」的提醒、学生什么都没说没做：这一轮是页面要的，记成 stuck（省额度的统计里单列）
+      const why = !texts.length && !imgs.length && actions.length && actions.every((a) => a.source === 'page' && a.type === 'stuck') ? 'stuck' : 'turn';
+      return converse(blobs, { why });
     });
   }
 
@@ -787,7 +812,16 @@ export async function renderClass(root, meta, desk = null) {
     if (typeof turn.text === 'string' && bytes(turn.text) > TURN_TEXT_MAX) turn.text = turn.text.slice(0, 60000) + '\n（太长，后面省略）';
     history.push(turn);
     sink.put('class_turns', { id: pad6(turn.seq), ...turn });
+    if (turn.cost) syncUsage();
     return turn;
+  }
+
+  // 这节课调用 Claude 花了多少（usage.js）：「⋯」菜单里显示；学习台里记进 sessions/{编号}（有变化才写）
+  function syncUsage() {
+    const u = usageOf(history);
+    bar.setUsage?.(usageText(u));
+    const json = JSON.stringify(u);
+    if (desk && u.calls && json !== lastUsage) { lastUsage = json; desk.updateSession({ usage: u }); }
   }
 
   // —— 对话太长时的摘要（摘要就是它对前半节课的记忆，所以和讲课一样只用 Opus 5.5 high）——
@@ -805,10 +839,11 @@ export async function renderClass(root, meta, desk = null) {
     if (!old.length) return;
     if (!background) bar.setStatus('thinking', '对话有点长了，先整理一下前面的内容…');
     try {
-      const r = await teacher.call(compactionPrompt({ summary: prev?.text || '', turns: old }), { ...TEACH, cache: false, signal: background ? undefined : ctl?.signal });
+      const input = compactionPrompt({ summary: prev?.text || '', turns: old });
+      const r = await teacher.call(input, { ...TEACH, cache: false, signal: background ? undefined : ctl?.signal });
       // 平台换了别的模型写的摘要不用：照旧发原文（太长时最早的几轮会被省略），过几轮再试
       if (r?.modelApplied !== MODEL) throw Object.assign(new Error('摘要不是 Opus 5.5 写的，没用'), { code: 'fallback' });
-      addTurn({ ...summaryTurn(r.text), upTo: old.at(-1).seq, modelApplied: r.modelApplied });
+      addTurn({ ...summaryTurn(r.text), upTo: old.at(-1).seq, modelApplied: r.modelApplied, cost: callCost({ bytes: bytes(input), why: 'compact' }) });
       compactRetryAt = 0;
     } catch (e) {
       if (e?.code === 'cancelled' && !background) throw e;
@@ -818,9 +853,11 @@ export async function renderClass(root, meta, desk = null) {
   }
 
   // —— 讲课：一次调用（画不出来的段会自动再要一轮重写，同一段最多 2 次）。返回 true 表示 Opus 5.5 讲完了这一轮 ——
-  async function converse(images = []) {
+  // why：这一轮为什么调用（usage.js：turn 学生引起的、stuck 停久了的提醒）；同一轮里再要的几次记成 lint（重写）/ images（看原图）
+  async function converse(images = [], { why: firstWhy = 'turn' } = {}) {
     if (!teacher.available) return false;
     let imgs = images;
+    let why = firstWhy;
     let followed = false; // 这次已经补发过 view_handwriting 要的图了
     let rewriting = false; // 这一轮是在重写写错的段：它说的话不换掉板顶的话（学生没见过写错的那段）
     for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -847,23 +884,25 @@ export async function renderClass(root, meta, desk = null) {
       if (imgs.length && teacher.images) opts.images = imgs.slice(0, maxImages);
       if (teacher.tools) opts.tools = classTools(staged, { view: !followed });
       let res;
+      // 这一次调用花了多少：发出去的字节；它调了几次工具（每次平台多跑一整轮）
+      const cost = (w) => callCost({ bytes: fit.bytes, why: w, tools: staged.calls.length });
       try {
         res = await teacher.call(fit.turns, opts);
       } catch (e) {
         clearDraft();
-        failTurn(e);
+        failTurn(e, '这一轮', cost('failed'));
         return false;
       }
       clearDraft();
       if (res?.modelApplied !== MODEL) {
         // 平台换了退路模型：整段作废（不显示、不执行、不进对话历史），只留一条记录
-        addTurn({ role: 'system', kind: 'fallback', discarded: true, text: 'Opus 5.5 不可用，这一轮作废', modelApplied: res?.modelApplied || null, modelTierApplied: res?.modelTierApplied || null });
+        addTurn({ role: 'system', kind: 'fallback', discarded: true, text: 'Opus 5.5 不可用，这一轮作废', modelApplied: res?.modelApplied || null, modelTierApplied: res?.modelTierApplied || null, cost: cost('failed') });
         bar.setStatus('error', 'Opus 5.5 暂时用不了，稍后点重试。');
         return false;
       }
       budgetLevel = 0;
       saveNotes(staged);
-      const out = finishTurn(res, staged.calls, { keepTalk: rewriting });
+      const out = finishTurn(res, staged.calls, { keepTalk: rewriting, cost: cost(why) });
       // 要它重写的段、它用 view_handwriting 要看的原图：再要一轮
       const wantImages = staged.images.length > 0 && !followed;
       if (round === MAX_ROUNDS - 1 && (out.retry.length || wantImages)) {
@@ -881,6 +920,7 @@ export async function renderClass(root, meta, desk = null) {
         lines.push(`附上你要看的图（view_handwriting 的手写原图、view_image 的讲义原图，共 ${staged.images.length} 张）。看完接着上课，话要短。`);
       }
       rewriting = out.retry.length > 0 && !wantImages;
+      why = out.retry.length ? 'lint' : 'images';
       const ask = out.retry.length ? `\n请把上面没显示的段重新写对：${out.asks.join('；')}。只写这几段，不用再对学生说别的。` : '';
       // 写错的组件有完整写法的，附在后面（课堂说明里只有精简版）
       const docs = out.retry.length ? lintDocs(COMPONENT_DOCS, session.subject, out.kinds) : '';
@@ -928,7 +968,7 @@ export async function renderClass(root, meta, desk = null) {
   }
 
   // 执行一轮的输出：指令按顺序执行，说的话写在（执行完之后的）当前板最上面。返回 { retry: [要它重写的说明], asks, notes: [提醒] }
-  function finishTurn(res, toolCalls = [], { keepTalk = false } = {}) {
+  function finishTurn(res, toolCalls = [], { keepTalk = false, cost = undefined } = {}) {
     const { segments, rejected, unclosed } = parseOutput(res.text, { final: true });
     let failures = [];
     const notes = [];
@@ -969,7 +1009,7 @@ export async function renderClass(root, meta, desk = null) {
         if (t.getBoundingClientRect().top < 0) t.scrollIntoView({ behavior: smooth, block: 'start' });
       }
     }
-    addTurn({ role: 'claude', text: res.text, boardOps, page: bv.cur || undefined, talkPage, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined });
+    addTurn({ role: 'claude', text: res.text, boardOps, page: bv.cur || undefined, talkPage, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined, cost });
     // Claude 又说了话：重新计「停了多久」
     nudged = false;
     lastActive = Date.now();
@@ -1022,9 +1062,11 @@ export async function renderClass(root, meta, desk = null) {
   function isOp(s) { return s.type === 'board' && s.closed && s.op && !s.op.error; }
 
   // 这一轮没成功（停止、出错）：课后复原时要看得出这里断过，所以也记一条作废的记录；不进对话历史
-  function failTurn(e, what = '这一轮') {
+  // cost：这次调用花了多少。没发出去的（没权限、太频繁、太长、图被拒……）不算
+  const NOT_SENT = new Set(['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed', 'rate_limited', 'session_expired', 'prompt_too_large', 'image_rejected', 'images_unavailable', 'tools_unavailable']);
+  function failTurn(e, what = '这一轮', cost = undefined) {
     const code = String(e?.code || 'unknown');
-    addTurn({ role: 'system', kind: 'error', discarded: true, code, text: `${what}没成功（${code === 'cancelled' ? '学生点了停止' : code}），Claude 的输出没有用` });
+    addTurn({ role: 'system', kind: 'error', discarded: true, code, text: `${what}没成功（${code === 'cancelled' ? '学生点了停止' : code}），Claude 的输出没有用`, cost: cost && !NOT_SENT.has(code) ? cost : undefined });
     handleError(e);
   }
 
@@ -1317,20 +1359,23 @@ export async function renderClass(root, meta, desk = null) {
     if (!history.length) { toast('还没开始上课'); return; }
     if (!teacher.available) return;
     exclusive(async () => {
+      // 学习台里：下课那一刻还没提交的草稿记成证据（写了一半的不丢）。小结没写成、再点下课时，没变的草稿不重复记
+      if (desk) for (const d of allDrafts()) sink.put('evidence', draftEvidence(d, evCtx(d.step)));
       bar.setStatus('thinking', 'Claude 在写这节课的小结…');
       ensureDraft();
       ctl = new AbortController();
       const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), subject: session.subject, memory: memoryArg() });
-      const { turns } = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt() }], maxBytes: promptLimit() });
+      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt() }], maxBytes: promptLimit() });
+      const cost = (why) => callCost({ bytes: fit.bytes, why });
       let res;
       try {
-        res = await teacher.call(turns, { ...TEACH, cache: false, signal: ctl.signal });
+        res = await teacher.call(fit.turns, { ...TEACH, cache: false, signal: ctl.signal });
       } catch (e) {
-        failTurn(e, '下课小结');
+        failTurn(e, '下课小结', cost('failed'));
         return false;
       }
       if (res?.modelApplied !== MODEL) {
-        addTurn({ role: 'system', kind: 'fallback', discarded: true, text: 'Opus 5.5 不可用，下课小结作废', modelApplied: res?.modelApplied || null, modelTierApplied: res?.modelTierApplied || null });
+        addTurn({ role: 'system', kind: 'fallback', discarded: true, text: 'Opus 5.5 不可用，下课小结作废', modelApplied: res?.modelApplied || null, modelTierApplied: res?.modelTierApplied || null, cost: cost('failed') });
         bar.setStatus('error', 'Opus 5.5 暂时用不了，小结没写成，稍后再点「下课」。');
         return false;
       }
@@ -1348,9 +1393,14 @@ export async function renderClass(root, meta, desk = null) {
       const foot = mock ? `（本地测试：${v.turns} 轮都是模拟老师回放的，没有调用 Claude。）`
         : `这节课 ${v.turns} 轮讲课和小结全部由 Opus 5.5 回答（平台核验）${v.discarded ? `；另有 ${v.discarded} 轮平台换了别的模型，已作废、没有显示` : ''}。`;
       const p = newPage({ title: '这节课的小结', kind: 'closing', body: res.text, foot });
-      addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied, page: p.n });
+      addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied, page: p.n, cost: cost('closing') });
       bv.show(p.n, { animate: true });
-      bar.setStatus('notice', desk ? '下课了。小结已经存进学习台，回对话告诉 Claude「下课了」。' : '下课了。小结已经存好，回对话告诉 Claude「下课了」。');
+      // 课后报告（memory/report.js，页面代码算，不调用 Claude）：sessions/{编号}/report/main
+      if (desk?.writeReport) {
+        const steps = [...segs.values()].map((x) => ({ id: x.id, page: x.page, title: x.title || x.sec?.querySelector('h2')?.textContent?.trim() || '', place: x.place }));
+        desk.writeReport({ turns: history, steps }).catch((e) => { console.warn('课后报告没写成', e); toast('课后报告没写成，回学习台首页会再试'); });
+      }
+      bar.setStatus('notice', desk ? '下课了。小结和课后报告已经存进学习台，回对话告诉 Claude「下课了」。' : '下课了。小结已经存好，回对话告诉 Claude「下课了」。');
       session.event('end', null, { turns: history.length });
       return true;
     });

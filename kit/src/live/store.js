@@ -20,6 +20,27 @@ export async function getStore({ title = 'dev' } = {}) {
 
 export const isDev = () => /[?&#]dev\b/.test(location.search + location.hash);
 
+// 给我存一个文件（学习台的导出备份）：claude.ai 里用 downloads 能力（我确认后才存）；本地 ?dev 用一个下载链接代替。
+// 都没有返回 null（发布时没声明 downloads）
+export async function getDownloads() {
+  const c = window.claude;
+  if (c && typeof c.use === 'function') {
+    try { const d = await c.use('downloads'); if (d) return d; } catch { /* 没声明 */ }
+  }
+  if (!isDev()) return null;
+  return {
+    async save({ filename, data }) {
+      const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
+      const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      return { status: 'saved' };
+    },
+  };
+}
+
 // 资源地址：真 assets 用 /_blob/<id>；替身存的是 data URL
 export function assetUrl(id) {
   if (id.startsWith('dev-')) { try { return localStorage.getItem(`la-devasset:${id}`) || ''; } catch { return ''; } }
@@ -164,7 +185,12 @@ function fakeAssets() {
       try { localStorage.setItem(`la-devasset:${id}`, url); } catch { /* 太大就只留在内存 */ }
       return { id, url, sizeBytes: blob.size, contentType: blob.type || 'image/png' };
     },
-    async list() { return { assets: [], usage: {} }; },
+    // 本地替身：只数这次存进 localStorage 的原图（学习台首页的「用量」看）
+    async list() {
+      let files = 0, bytes = 0;
+      try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k?.startsWith('la-devasset:dev-')) { files++; bytes += Math.round((localStorage.getItem(k) || '').length * 0.75); } } } catch { /* 无痕模式 */ }
+      return { assets: [], usage: { files, bytes, maxFiles: 1000, maxBytes: 100 * 1024 * 1024 } };
+    },
     async delete() {},
   };
 }

@@ -1,6 +1,6 @@
 # 线代学习台 · 给 Claude 的教学说明
 
-> **版本：2026-10-27c**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
+> **版本：2026-10-27d**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
 >
 > 这份说明的**最新版**一直放在组件库 artifact 里（文件 `CLAUDE-PROJECT.md`）。每个新对话里，第一次做和学习台有关的事（做课件、写实时黑板、备课堂资料包、读课堂记录或学习记录）之前，先用 `Artifact` 工具读它：`action: "read"`，`url` 是上面的组件库地址，`path: "CLAUDE-PROJECT.md"`。
 > - 读到的版本比你手上这份新：以读到的为准，这份里和它不一样的地方全部作废。回复里顺便告诉我「项目指令里的说明是旧版（版本号），组件库里是新版（版本号）」。
@@ -2123,7 +2123,7 @@ unit: 第2讲 §2 · 秩一方阵
 1. **备课**：往学习台（第七节）的数据库写这节课的资料包：`collection: "pack"`，`doc_id: "main"` 和 `"problems"`，字段见下文「课前：写资料包」，另外写 `block`：这节课讲课程地图里的哪一块（比如 `"L2.2.1"`）。在学习台里资料包是「这节课的额外安排」：`goal`、`scope`、`plan`、备好的题、`textbook` 里这节课要照着讲的原文；我的情况（`student`）不用再抄，课堂里的 Claude 从记忆里看。
 2. 告诉我「备好了」。我在学习台首页点「开新课」：页面开一节新课（编号像 `c-20261027-1`），把 `pack/main`、`pack/problems` 抄一份进这节课（以后你改 `pack/main` 备下一节，不影响这一节）。没下课的那节课，首页上有「接着上课」。
 3. 上课中要改这一节的资料包：写 `sessions/c-20261027-1/pack/main`（`collection` 写 `"sessions/c-20261027-1/pack"`）。
-4. 课后读这节课的记录：见下文「课后：读课堂记录」开头的「在学习台里上的课」。
+4. 课后读这节课的记录：**先读课后报告** `sessions/c-20261027-1/report/main`（第七节「课后报告」，页面下课时算好的，一份就够），要细查再按下文「课后：读课堂记录」开头的「在学习台里上的课」读原始记录。
 
 课堂里的 Claude 在学习台里：能读整个记忆库（带不下的用工具 `memory_read` 查），能写的只有观察（`observations`，含「提议」：比如提议某个弱点降一级，由你决定采不采纳）和它自己的教学失误（`slips`）；弱点、掌握、错题、复现、规则都改不了（页面在代码里拦着）。它写的每一段可以标 `point=知识点`（掌握状态编号 `#` 后面那段），我在那一段的作答就记成这个知识点的证据。
 
@@ -2195,8 +2195,9 @@ unit: 第2讲 §2 · 秩一方阵
 
 ### 课后：读课堂记录
 
-**在学习台里上的课**（编号在 `sessions` 里，最新的那节就是；`sessions/{编号}` 里有 `date`、`block`、`title`、`status`：`open` / `closed`、`verify`、下课小结的 id `summary`）：
+**在学习台里上的课**（编号在 `sessions` 里，最新的那节就是；`sessions/{编号}` 里有 `date`、`block`、`title`、`status`：`open` / `closed`、`verify`、下课小结的 id `summary`、花了多少 `usage`、课后报告的要点 `report`）：
 
+- **先读课后报告**：`collection: "sessions/c-20261027-1/report"`，`doc_id: "main"`（字段见第七节「课后报告」）。每道题的尝试序列和结果、按块和知识点的汇总、没做完的题、没交的草稿、我说的话、补记、课堂 Claude 的观察和失误的 id 都在里面，一般读这一份就够判断；要看某道题的原文，按它的 `evidence` 里的 id 去 `evidence` 里 `get`。
 - 下面的 `class_turns`、`class_pages`、`steps` 在这节课下面：`collection` 写 `"sessions/c-20261027-1/class_turns"` 这样。
 - 没有 `answers`、`events`、`class_notes`：我的作答、动作、说的话、附的图都在 `evidence` 里（`query`，`where: [["session", "==", "c-20261027-1"]]`，`limit: 1000`；字段见第七节「每节课和证据」），课堂里的 Claude 的观察、提议、下课小结在 `observations` 里（同样按 `session` 查），它记的失误在 `slips` 里（`by: "class"`）。
 - 读完照第七节「平时怎么用」写回记忆库。
@@ -2204,9 +2205,10 @@ unit: 第2讲 §2 · 秩一方阵
 **单独的课堂 artifact**，我说「下课了」时，用 `ArtifactData` 读：
 
 - `collection: "class_turns"`（`query`，`order_by: seq`，**`limit: 1000`**——不写 limit 只返回前 100 条，长的课会被截掉；记录多时加 `out_dir` 存成文件再读）：每一轮一条，按 `seq` 排起来就是整节课。字段：`seq`、`role`、`text`、`kind`、`discarded`、`at`，以及下面各自的字段。
-  - `role: "student"`：`say` 是我说的话（打字或快捷按钮）；`start: true` 是我点了「开始上课」按钮（`say` 固定是「开始上课。」，不是我打的字）；`actions` 是我在黑板上的动作，每条一行，比如「[作答] b7 里的 steps 第 3 步：选了『跑到线外去』（错），用时 44 秒」；`drafts` 是我在黑板上写了、还没点「检查」「提交」的草稿（填了一半的格子、打了字的理由框），跟着这一条一起发给了课堂里的 Claude，比如「[草稿] b4 里的 answer q-b4：写着 (3, □)，还没提交」；`images` 是我附的手写 / 截图原图的 asset id（我在黑板上用 Pencil 新写的板书也会导出成图附进来，`text` 里有一行「[板书] …」说写在哪一段上）；`text` 是发给课堂 Claude 的完整内容（我在一块板上很久没动静时，页面会发一行「[动作] 学生在当前板上 … 分钟没有动静」，课堂 Claude 只轻轻问一句）；`page` 是我发这条时黑板在第几块板。
-  - `role: "claude"`：`text` 是课堂里的 Claude 的完整输出（话 + 黑板指令原文）；`boardOps` 是实际执行了哪些指令（`op`：new / add / replace / hide / pin / unpin / figure / mark / unmark，`id`，`page` 是写在第几块板，`ok: false` 的没执行成功，`error` 是原因；figure 还有 `action`：set / play / highlight 和 `args`；mark 的 `marks` 是画上的标注：`id`、所在的段 `seg`、标的什么 `spec`；unmark 的 `ids` 是擦掉的标注）；`page` 是这一轮之后黑板停在第几块板，`talkPage` 是它这一轮的话写在第几块板的顶上（只改了写法、没对我说话的轮没有）；`truncated: true` 表示这一轮太长被截断了；`tools` 是它调用过的工具（如果有）；`modelApplied` 一定是 `claude-opus-5-5`。
+  - `role: "student"`：`say` 是我说的话（打字或快捷按钮）；`start: true` 是我点了「开始上课」按钮（`say` 固定是「开始上课。」，不是我打的字）；`actions` 是我在黑板上的动作，每条一行，比如「[作答] b7 里的 steps 第 3 步：选了『跑到线外去』（错），用时 44 秒」；`drafts` 是我在黑板上写了、还没点「检查」「提交」的草稿（填了一半的格子、打了字的理由框），跟着这一条一起发给了课堂里的 Claude，比如「[草稿] b4 里的 answer q-b4：写着 (3, □)，还没提交」；`images` 是我附的手写 / 截图原图的 asset id（我在黑板上用 Pencil 新写的板书也会导出成图附进来，`text` 里有一行「[板书] …」说写在哪一段上）；`text` 是发给课堂 Claude 的完整内容（我在「⋯」里打开了「停久了提醒老师」（默认关：每提醒一次就多调用一轮）、又在一块板上很久没动静时，页面会发一行「[动作] 学生在当前板上 … 分钟没有动静」，课堂 Claude 只轻轻问一句）；`page` 是我发这条时黑板在第几块板。
+  - `role: "claude"`：`text` 是课堂里的 Claude 的完整输出（话 + 黑板指令原文）；`boardOps` 是实际执行了哪些指令（`op`：new / add / replace / hide / pin / unpin / figure / mark / unmark，`id`，`page` 是写在第几块板，`ok: false` 的没执行成功，`error` 是原因；figure 还有 `action`：set / play / highlight 和 `args`；mark 的 `marks` 是画上的标注：`id`、所在的段 `seg`、标的什么 `spec`；unmark 的 `ids` 是擦掉的标注）；`page` 是这一轮之后黑板停在第几块板，`talkPage` 是它这一轮的话写在第几块板的顶上（只改了写法、没对我说话的轮没有）；`truncated: true` 表示这一轮太长被截断了；`tools` 是它调用过的工具（如果有）；`modelApplied` 一定是 `claude-opus-5-5`；`cost` 是这一次调用花了多少（见下面 `role: "system"` 后面的说明）。
   - `role: "system"`：页面发给它的系统消息。`kind` 有：`lint`（它写的组件有写法错误，没显示，要求重写）、`note`（指令没执行之类的提醒）、`images`（它要看的手写原图，附在这一轮）、`summary`（对话太长时的摘要，`upTo` 是摘要覆盖到第几轮）、`closing`（下课小结）、`fallback`（Opus 5.5 不可用，这一轮作废）、`error`（这一轮出错或我点了停止，`code` 是原因）。
+  - `cost`（2026-10-27d 起）：调用了 Claude 的那一轮（讲课、重写、摘要、小结、作废的轮）记着这一次花了多少：`bytes` 发出去的字节数（整份说明 + 对话，约 2.8 字节一个 token），`why` 为什么调用（`turn` 我说话 / 作答引起的、`closing` 下课小结、`lint` 写错了要重写、`images` 要看原图补发一轮、`stuck` 停久了的提醒、`compact` 对话太长写摘要、`failed` 出错或换了模型白花的），`tools` 这一次里调了几次工具（每次平台多跑一整轮）。整节课的合计在 `sessions/{编号}` 的 `usage`（`calls` 估计跑了几轮、`bytes`、`tokens`、`avgBytes`、`extra` 多跑的轮按原因）。
   - 旧版课堂记录里的 `sayAfter`、`boardAt` 只是当时页面排话的位置，读记录时不用管。
   - `discarded: true` 的轮没有进入课堂对话：内容没给我看，黑板也没动。读的时候跳过它们的内容，只当作「这里卡过一下」。
 - `collection: "class_notes"`：课堂里的 Claude 记的观察（`kind: "note"`，`turn` 是在第几轮记的），以及下课时写的小结（`kind: "summary"`：讲了什么、我哪里卡住、哪里看起来懂了但证据不够、建议下一节怎么接；`verify: { turns, discarded }` 是页面记的：这节课平台核验是 Opus 5.5 回答的轮数、因为换了别的模型而作废的轮数）。**小结只有我点了「下课」才有**；直接关掉页面不会写（关页面时来不及等 Claude 写完），这时你就从 `class_turns` 自己读。
@@ -2226,7 +2228,7 @@ unit: 第2讲 §2 · 秩一方阵
 
 我的学习记忆（规则、弱点、错题、掌握、复现、当前位置……）不再只放在 claude.ai 的项目记忆里，而是放在一个**长期存在的「学习台」artifact 的数据库**里：分好类，每一类有明确的负责人，结论都挂证据。你用 `ArtifactData` 读写它；页面打开时自己算复现到期、自检你写的东西守不守规矩，结果写回给你。
 
-现在做好了两批：**记忆库本身**，和**在学习台里上课**（第六节「在学习台里开一节课」：课堂里的 Claude 每一轮带着记忆，我在板上的动作自动记成证据，它的观察、提议、教学失误写进记忆库）。课程地图、弱点表、以前的课的列表这些给我看的页面是下一批。
+现在做好了：**记忆库本身**；**在学习台里上课**（第六节「在学习台里开一节课」：课堂里的 Claude 每一轮带着记忆，我在板上的动作自动记成证据，它的观察、提议、教学失误写进记忆库）；**记录**（下课时页面算好课后报告；首页补记学习台外面做的；导出备份；每节课花了多少）。课程地图、弱点表、以前的课的列表这些给我看的页面在后面。
 
 ### 发布学习台（只发布一次）
 
@@ -2241,9 +2243,9 @@ unit: 线代 + 408
 </script>
 ```
 
-- `files`：同第一节，从组件库复制 `la-kit.js`。`capabilities`：`{ "sample": { "images": true }, "db": {}, "assets": {} }`（`sample` 给在学习台里上课的课堂 Claude 用，`assets` 放教材页、板书截图、我附的图的原图）。2026-10-27c 以前发布的学习台只声明了 `db`、`assets`：用同一个 `url` 重新发布一次，换上新的 `la-kit.js`、补上 `sample`（数据库都还在）。
+- `files`：同第一节，从组件库复制 `la-kit.js`。`capabilities`：`{ "sample": { "images": true }, "db": {}, "assets": {}, "downloads": true }`（`sample` 给在学习台里上课的课堂 Claude 用，`assets` 放教材页、板书截图、我附的图的原图，`downloads` 给首页「导出备份」存文件）。以前发布的学习台少声明了几样（2026-10-27c 以前没有 `sample`，2026-10-27d 以前没有 `downloads`）：用同一个 `url` 重新发布一次，换上新的 `la-kit.js`、`capabilities` 写全（数据库都还在）。
 - **整个学习过程只有这一个学习台。**发布后把它的地址记进项目记忆（「学习台：https://claude.ai/artifact/…」），以后都往这个地址读写，不要再发布新的。组件库更新后换新版：同一个 `url` 重新发布（第一节「组件库版本要对得上」），数据库都还在。
-- 页面上我看得到：**今天**（过期、今天到期的复现组，下一节从哪接、欠账）、**自检**（你写的有没有不守规矩的地方）、**记忆库**（每一类有几条、谁写）。
+- 页面上我看得到：**上课**（开新课 / 接着上课，上一节的要点和花了多少）、**今天**（过期、今天到期的复现组，下一节从哪接、欠账）、**补记**、**自检**（你写的有没有不守规矩的地方）、**记忆库**（每一类有几条、谁写）、**备份和用量**。
 
 ### 规矩（照这个写，页面会查）
 
@@ -2255,7 +2257,7 @@ unit: 线代 + 408
 | `rules` | 规则：项目指令全文（红线、掌握的定义、检验题三条、来源分工、讲解交付）、执行细则、教法偏好、黑板写法 | 你，**只在我定下或改了规则时**，写之前和我确认 |
 | `profile` | 和教学有关的我（目标、术语附英文、用 iPad 和 Notability……），不放生活信息 | 你 |
 | `curriculum` | 课程地图：讲 → 节 → 块，每一块的范围、详略、考试口径、文稿要点、原文段落、教材页、依赖 | 你，备课时 |
-| `evidence` | 证据：我在板上的每一个动作（作答、预测、拖动、揭开、放弃），在课堂输入框里说的话、附的图 | 页面自动写，只增不改 |
+| `evidence` | 证据：我在板上的每一个动作（作答、预测、拖动、揭开、放弃），在课堂输入框里说的话、附的图，下课时没交的草稿，首页补记的 | 页面自动写，只增不改 |
 | `observations` | 课堂里的 Claude 当堂的观察、提议、下课小结 | 课堂里的 Claude（页面替它写进来） |
 | `errors` | 错题档案 | 你，只增不改 |
 | `weaknesses` | 弱点表 | 你（课堂只能在 `observations` 里提议） |
@@ -2342,12 +2344,38 @@ unit: 线代 + 408
 
 ### 每节课和证据（页面写，你读）
 
-- **`sessions`**：编号 `c-20261027-1`（日期 - 当天第几节）。`date`、`block`（这节课的块）、`title`、`status`（`open` 还在上 / `closed` 点了下课）、`startedAt`、`endedAt`、`pack`（开课时资料包的 `unit`、`goal`）、`verify`（核验了几轮、作废了几轮）、`summary`（下课小结那条观察的 id）。这节课的黑板、课堂轮次、资料包在 `sessions/{编号}/` 下面（`steps`、`class_turns`、`class_pages`、`pack`），文档里都带 `session` 字段。
+- **`sessions`**：编号 `c-20261027-1`（日期 - 当天第几节）。`date`、`block`（这节课的块）、`title`、`status`（`open` 还在上 / `closed` 点了下课）、`startedAt`、`endedAt`、`pack`（开课时资料包的 `unit`、`goal`）、`verify`（核验了几轮、作废了几轮）、`summary`（下课小结那条观察的 id）、`usage`（这节课调用 Claude 花了多少，见第六节「课后：读课堂记录」的 `cost`）、`report`（课后报告的要点：`line` 一行字、`items` 做了几题、`first` 一次对几题、`at`）。这节课的黑板、课堂轮次、资料包、课后报告在 `sessions/{编号}/` 下面（`steps`、`class_turns`、`class_pages`、`pack`、`report`），文档里都带 `session` 字段。
 - **`evidence`**：编号 `ev-…`，页面自动编。每条都有 `session`、`block`（这节课的块）、`tags`（知识点标签：`["L2.2.1", "L2.2.1#tr"]`，后一个来自课堂里的 Claude 给那一段标的 `point=`）、`kind`、`src`、`at`：
   - `src: "record"`：一次作答。`kind` 是组件（`answer`、`practice`、`quiz`、`predict`、`steps`、`conjecture`……），`comp` 是组件的 id，`step` 是黑板上的段，`q` 题面，`text` / `value` 我写的、选的，`ok` 程序判的对错（判不了是 null），`attempts` 第几次，`ms` 用时，`giveup` 想不出来，`final` 这道题的最终结果，`images` 手写原图，`transcript` 转写。
   - `src: "event"`：一个动作。`kind` 是 `reveal`（揭开一步）、`giveup`、`drag`（拖动，`detail` 里是变量和松手时的值）、`open`（打开）、`end`（下课）等。
-  - `src: "say"`：我在课堂输入框里说的话（`kind: "say"`，`text`），附的图（`kind: "photo"`，`images` 是 asset id，用 `Artifact` 工具 `action: "read"`、`path` 填 id 看原图）。`turn` 是课堂第几轮。
+  - `src: "say"`：我在课堂输入框里说的话（`kind: "say"`，`text`），附的图（`kind: "photo"`，`images` 是 asset id，用 `Artifact` 工具 `action: "read"`、`path` 填 id 看原图；`ink: 2` 表示最后 2 张是我在黑板上用 Pencil 写的板书导出的图）。`turn` 是课堂第几轮。
+  - `src: "draft"`（`kind: "draft"`）：点「下课」那一刻我在黑板上写了、还没交的草稿：`comp` 组件 id、`compKind` 组件、`step` 段、`label` 第几步、`text` 写着什么。
+  - `src: "manual"`（`kind: "manual"`）：我在学习台首页「补记」的，学习台外面做的（纸上、Notability、和你的对话里）：`text`、`images`（截图）、`block`（挂到哪一块，可能没有）、`verdict`：`对` / `错` / `不会`（没标就没有；`ok` 跟着是 true / false / null，`不会` 还有 `giveup: true`）。没有 `session`；下一节课的课后报告的 `manual` 里会列出来。
+  - 作答、动作、草稿的 `turn` 是它发生时课堂进行到第几轮（那时最新一轮的 `seq`），对照 `class_turns` 就知道它跟着哪一条发给了课堂里的 Claude。
   - 判断过没过、记错题时，`basis` 里写这些证据的 id。
+
+### 课后报告：`sessions/{编号}/report/main`（页面写，你读）
+
+我点「下课」、小结写好以后，页面用代码把这节课整理成一份（不调用 Claude，同样的证据算出同样的报告）。下课时没写成的（或者旧版下的课），我下次打开学习台首页时补写。读 `collection: "sessions/c-20261027-1/report"`，`doc_id: "main"`：
+
+- `time`：`wallMs` 开课到下课、`activeMs` 去掉超过 10 分钟没动静的空档后的时长、`gaps` 几段空档。
+- `totals`：`items` 做了几题，`first` 一次对、`ok` 改了几次后对、`wrong` 最后还错、`giveup` 想不出来、`revealed` 看了答案、`open` 程序判不了对错（猜想、自由写的）；`says` 说了几句、`photos` 附图几次、`drafts` 没交的草稿、`turns` 几轮。
+- `items`：每道题一条（一个组件里分步的按步分开）：`comp`、`kind`、`q` 题面（截短）、`seg` 段、`page` 第几块板、`segTitle`、`tags`、`seq` 每次的对错（`✗✗✓`）、`attempts`、`outcome`（上面那几种）、`ms` 用时、`last` 最后写的、`expected`、`images` 手写原图、`turn`、`evidence`（这道题的证据 id，看原文用）。
+- `byTag`：按块、按知识点（`L2.2.1#tr`）汇总，字段同 `totals`，`ms` 是总用时。
+- `unfinished`：错了还没改对、也没看答案的题（`items` 的 `key`）；`drafts`：没交的草稿；`says`：我说的话（原文）和附的图；`manual`：上一节下课以后我补记的。
+- `notes`：课堂里的 Claude 这节课的观察、提议、小结（id、`kind`、开头一段）；`summary` 小结的 id；`slips` 它记的失误。
+- `usage`：这节课花了多少（同 `sessions/{编号}.usage`）；`verify`：核验了几轮、作废了几轮。
+- 太长时（几百道题）文字会缩短、最早的条目截掉，`more` 里写着各截掉了几条。
+
+### 备份和恢复
+
+- **导出**：我在学习台首页「备份和用量」点「导出备份」，存成一个 JSON 文件（`学习台备份-20261027.json`）。可选带不带证据、带不带各节课的黑板和课堂记录；每节课的资料包、课后报告总是带上。
+- 文件的样子：`{ "format": "la-desk-backup", "v": 1, "kit", "at", "today", "include": { "evidence", "boards" }, "counts", "docs": [{ "collection", "doc_id", "data" }] }`。`docs` 里每一条就是 `ArtifactData` batch 要的样子（`collection` 可能是 `"sessions/c-20261027-1/report"` 这样的子集合）。
+- **恢复**（我把文件交给你、说「从备份恢复」时）：
+  1. 先确认往哪个学习台写（一般是重新发布的、空的学习台，或者原来那个），把文件存到本地读出来，`format` 不是 `la-desk-backup` 的不要写。
+  2. 学习台不是空的：先按集合 `list`（`limit: 1000`）看哪些文档已经有了。已经有的默认**跳过**（备份比现在旧）；我明确说「用备份覆盖」时，写那一条要带上读到的 `version` 作 `if_version`。
+  3. 按 `docs` 的顺序，每 50 条（整批不过 1 MiB）一次 `batch`，每条 `{ "op": "set", "collection", "doc_id", "data" }`。条目大的可以先存成本地 JSON 文件，用 `file_path` 代替 `data`。
+  4. 写完让我打开学习台，读 `meta/memcheck`：自检的指纹会重新记一遍，第一次可能有「被改了」的提醒，看一眼没问题就行。告诉我写了几条、跳过几条。
 
 ### 复现组什么时候到期
 
@@ -2376,5 +2404,5 @@ unit: 线代 + 408
 ### 平时怎么用
 
 - **开课前**：读 `position`、当前块的 `curriculum`、相关的 `weaknesses`、`errors`、`mastery`，还有今天到期的复现组。缺的补上（比如这一块的 `curriculum` 还没写文稿要点、原文），再往学习台写这节课的资料包（第六节「在学习台里开一节课」，写上 `block`），告诉我去学习台点「开新课」。
-- **课后**：读这节课的记录（第六节「课后：读课堂记录」：`sessions/{编号}/class_turns`、这节课的 `evidence`、`observations`），判断过没过、记错题、改弱点证据级、更新复现结果、写 `position`，看课堂里的 Claude 的提议（`observations` 里 `kind: "proposal"`）决定采不采纳，把两个 Claude 的教学失误写进 `slips`，**全部用一次 `batch`**。结论的 `basis` 写证据的 id。然后让我打开学习台看一眼，你读 `meta/memcheck`。
+- **课后**：先读这节课的课后报告（`sessions/{编号}/report/main`，上文），要细查再读原始记录（第六节「课后：读课堂记录」：`sessions/{编号}/class_turns`、这节课的 `evidence`、`observations`），判断过没过、记错题、改弱点证据级、更新复现结果、写 `position`，看课堂里的 Claude 的提议（`observations` 里 `kind: "proposal"`）决定采不采纳，把两个 Claude 的教学失误写进 `slips`，**全部用一次 `batch`**。结论的 `basis` 写证据的 id。然后让我打开学习台看一眼，你读 `meta/memcheck`。
 - **规则变了**：我在对话里定了新规则或改了旧的，和我确认后写进 `rules`（带日期和来源），旧的改成 `status: "void"`，不删。

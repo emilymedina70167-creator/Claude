@@ -6,7 +6,8 @@
 import { COLLECTIONS, MEMORY_COLLECTIONS, assertWrite, toDate } from './schema.js';
 
 // 课堂自己的数据：放进 sessions/{编号}/ 下面，每节课分开（编号一样的段 b1、轮次 000001 不会撞）
-export const SESSION_SCOPED = ['steps', 'class_pages', 'class_turns', 'pack', 'uploads'];
+// report：下课时页面算的课后报告（report.js），sessions/{编号}/report/main
+export const SESSION_SCOPED = ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report'];
 const SID_RE = /^c-\d{8}-\d+$/;
 export const isSessionId = (s) => SID_RE.test(String(s || ''));
 
@@ -52,7 +53,7 @@ const newId = () => Date.now().toString(36) + '-' + Math.random().toString(36).s
 /**
  * 一条作答（sync.js 的 toAnswer 出来的）或一个动作（events 那样的）→ evidence 里的一条。
  * 组件的 id 原来叫 block（作答记录里），在证据里改叫 comp：evidence 的 block 是课程地图的块。
- * ctx：{ session, block（这节课的块）, point（这一段练的知识点，可选）}
+ * ctx：{ session, block（这节课的块）, point（这一段练的知识点，可选）, turn（这时课堂进行到第几轮：最近一轮的 seq，报告和时间线按它对齐课堂记录）}
  */
 export function toEvidence(src, rec, ctx = {}) {
   const { id: _, block: comp, ...rest } = rec || {};
@@ -66,9 +67,12 @@ export function toEvidence(src, rec, ctx = {}) {
     session: ctx.session || null,
     block: ctx.block || null,
     tags: evidenceTags(ctx),
+    ...turnOf(ctx),
     at: rec?.at || Date.now(),
   };
 }
+
+const turnOf = (ctx) => (Number.isFinite(ctx?.turn) && ctx.turn > 0 ? { turn: ctx.turn } : {});
 
 /** 知识点标签：这节课的块，加上这一段的知识点（和 mastery 的编号一样写成 块#名字） */
 export function evidenceTags({ block, point } = {}) {
@@ -91,6 +95,34 @@ export function sayEvidence(text, ctx = {}, images = []) {
     id: `ev-${newId()}`, src: 'say', kind: images.length && !t ? 'photo' : 'say',
     text: t.length > 2000 ? t.slice(0, 1999) + '…' : t, images: images.map(String),
     comp: null, session: ctx.session || null, block: ctx.block || null, tags: evidenceTags(ctx), at: Date.now(),
+  };
+}
+
+/**
+ * 下课那一刻还没提交的草稿（drafts.js 的 draftsIn）：记一条证据（kind: draft），免得「写了一半」丢掉。
+ * d：{ step（段）, block（组件 id）, kind（组件）, title, label（第几步）, text }
+ */
+export function draftEvidence(d, ctx = {}) {
+  const t = String(d?.text || '').trim();
+  return {
+    id: `ev-${newId()}`, src: 'draft', kind: 'draft', comp: d?.block ?? null, step: d?.step ?? null, compKind: String(d?.kind || ''),
+    title: String(d?.title || '').slice(0, 200), label: String(d?.label || ''), text: t.length > 2000 ? t.slice(0, 1999) + '…' : t,
+    session: ctx.session || null, block: ctx.block || null, tags: evidenceTags(ctx), ...turnOf(ctx), at: Date.now(),
+  };
+}
+
+// 补记（学习台首页）：在学习台外面做的（纸上、Notability、外部对话里）。verdict：对 / 错 / 不会，不标就是空
+export const MANUAL_VERDICTS = ['对', '错', '不会'];
+
+/** 补记的一条证据（src: manual）：不属于哪节课，跟着下一节课的课后报告一起看 */
+export function manualEvidence({ text = '', images = [], block = null, verdict = '' } = {}) {
+  const t = String(text || '').trim();
+  const v = MANUAL_VERDICTS.includes(verdict) ? verdict : '';
+  if (!t && !images.length) throw new Error('写一句话或者贴一张图');
+  return {
+    id: `ev-${newId()}`, src: 'manual', kind: 'manual', text: t.length > 4000 ? t.slice(0, 3999) + '…' : t, images: images.map(String),
+    ...(v ? { verdict: v, ok: v === '对' ? true : v === '错' ? false : null, ...(v === '不会' ? { giveup: true } : {}) } : {}),
+    comp: null, session: null, block: block || null, tags: evidenceTags({ block }), at: Date.now(),
   };
 }
 

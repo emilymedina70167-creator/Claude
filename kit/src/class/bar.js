@@ -185,10 +185,11 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
       <div class="cb-menu" hidden role="menu" aria-label="课堂菜单">
         <div class="cb-dock"></div>
         <button type="button" class="cb-item cb-copy" role="menuitem">${ICON.copy}<span>复制学习记录</span></button>
-        ${stuck ? `<button type="button" class="cb-item cb-stuck" role="menuitemcheckbox" aria-checked="${stuck.on ? 'true' : 'false'}" title="我在一块板上很久没动静（题还没做）时，提醒 Claude 问一句">${ICON.clock}<span></span></button>` : ''}
+        ${stuck ? `<button type="button" class="cb-item cb-stuck" role="menuitemcheckbox" aria-checked="${stuck.on ? 'true' : 'false'}" title="我在一块板上很久没动静（题还没做）时，提醒 Claude 问一句（每提醒一次多调用一轮 Claude，默认关）">${ICON.clock}<span></span></button>` : ''}
         <button type="button" class="cb-item cb-end" role="menuitem">${ICON.bell}<span>下课</span></button>
         ${onHome ? `<button type="button" class="cb-item cb-home" role="menuitem">${ICON.home}<span>回学习台</span></button>` : ''}
         <div class="cb-tag" title="课堂里的 Claude 固定用 Opus 5.5，effort 为 high">${tag}</div>
+        <div class="cb-usage" hidden title="每调用一次 Claude，整份课堂说明都要重发一遍；这是按发出去的字节估的"></div>
         <div class="cb-ver" title="这个页面用的组件库版本（和项目说明的版本号对得上就是最新的）">组件库 ${VERSION}</div>
       </div>
       <div class="cb-attach" hidden></div>
@@ -678,6 +679,8 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
     setBusy(v) { busy = !!v; syncControls(); },
     setImages,
     setTag(text) { $('.cb-tag').textContent = text || MODEL_TAG; },
+    // 这节课调用 Claude 花了多少（usage.js 的 usageText），空的不显示
+    setUsage(text) { const u = $('.cb-usage'); u.textContent = text || ''; u.hidden = !text; },
     // 外部附上的图（草稿区「拿给 Claude 看」等）：PNG 直接用，其他格式先转成白底 PNG
     async attach(blob) {
       if (!blob || !images) return false;

@@ -81,7 +81,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ### 课堂模式（`kit/src/class/`）
 
-- `classroom.js`：控制器。一屏一块板（`board new` 换板，旧板翻页看）、板顶那句话、常驻栏、一屏放不放得下的测量（`--board-h`）、学生作答排队（1.5 秒合并，拖动跟着下一条一起发；没提交的草稿也跟着下一条发，见 `drafts.js`）、调用课堂 Claude、执行黑板指令、写法自检和自动重写、刷新后恢复。板书标注记在 `marks`（id → 所在段和 spec），段被改写 / 撤回时一起擦掉，刷新后按 `boardOps` 的时间线重放；工具 `calc`（精确计算）、`component_doc`（组件的完整写法），查看方式支持工具时才给。板顶那句话后面标出平台核验的模型（`class_pages.talkBy`），「⋯」菜单写核验 / 作废了几轮，下课小结的最后一行（`foot`）和 `class_notes` 的 `verify` 由页面写。对话太长时的摘要也只用 Opus 5.5 high，在一轮讲完后后台写（不让学生等）；学生附的图直接交给 Claude，不等它传进 assets。学生发的消息不上黑板。学生在当前板、常驻栏上新写的板书（`ink/` 的笔画，按段的位置拼成一张图），跟着下一条消息导出成图发给课堂 Claude（`[板书]` 那一行；有没发的板书时输入框空着也能发，`bar.js` 的 `inkPending`，板书一变 `ink/overlay.js` 发 `ink-change`）；当前板上有题没做、学生很久没动静时，提醒课堂 Claude 轻轻问一句（`stuck.js`，「⋯」里可关，`?dev&stuck=8` 把等待改成 8 秒）。
+- `classroom.js`：控制器。一屏一块板（`board new` 换板，旧板翻页看）、板顶那句话、常驻栏、一屏放不放得下的测量（`--board-h`）、学生作答排队（1.5 秒合并，拖动跟着下一条一起发；没提交的草稿也跟着下一条发，见 `drafts.js`）、调用课堂 Claude、执行黑板指令、写法自检和自动重写、刷新后恢复。板书标注记在 `marks`（id → 所在段和 spec），段被改写 / 撤回时一起擦掉，刷新后按 `boardOps` 的时间线重放；工具 `calc`（精确计算）、`component_doc`（组件的完整写法），查看方式支持工具时才给。板顶那句话后面标出平台核验的模型（`class_pages.talkBy`），「⋯」菜单写核验 / 作废了几轮，下课小结的最后一行（`foot`）和 `class_notes` 的 `verify` 由页面写。对话太长时的摘要也只用 Opus 5.5 high，在一轮讲完后后台写（不让学生等）；学生附的图直接交给 Claude，不等它传进 assets。学生发的消息不上黑板。学生在当前板、常驻栏上新写的板书（`ink/` 的笔画，按段的位置拼成一张图），跟着下一条消息导出成图发给课堂 Claude（`[板书]` 那一行；有没发的板书时输入框空着也能发，`bar.js` 的 `inkPending`，板书一变 `ink/overlay.js` 发 `ink-change`）；当前板上有题没做、学生很久没动静时，提醒课堂 Claude 轻轻问一句（`stuck.js`；每提醒一次就是一整轮调用，默认关、「⋯」里能开，`?dev&stuck=8` 自动打开并把等待改成 8 秒）。每次调用 Claude 记一条花费 `cost`（`usage.js`：发出去的字节、为什么调用、调了几次工具）在那一轮的 `class_turns` 上，「⋯」里显示这节课一共约多少 token、多跑了几轮为什么，学习台里合计写进 `sessions/{编号}.usage`。
 - `protocol.js`：解析课堂 Claude 的输出。普通文字是对学生说的话（写在板顶）；```` ```board ```` 围栏块是黑板指令（new / add / replace / hide / pin / unpin / figure / mark / unmark）。纯函数，支持流式前缀；`mark` 块闭合以后才把块里的各行拼成 `marks`。
 - `prompt.js`：每一轮发给课堂 Claude 的内容（红线 `DEFAULT_RULES`、黑板指令说明 `PROTOCOL_DOC`、组件手册、资料包、黑板现状、对话历史和压缩）。纯函数。
 - `docs.js` + `kit/build-docs.js`：构建时从 `CLAUDE-PROJECT.md` 第三节截出组件手册打包进去。小节里 `<!-- 完整写法 -->` 以前是精简版（每一轮都带），以后是不常用的写法：课堂 Claude 用工具 `component_doc` 按名字取；某个组件写错要重写时，页面把它的完整写法附在提醒里；资料包 `main.components` 点了名的组件直接带完整写法（`subject.js` 的 `docsForSubject` / `componentDoc`，`prompt.js` 的 `systemDocs` / `lintDocs`）。对话里写课件的 Claude 读整份 `CLAUDE-PROJECT.md`，两部分都看得到。
@@ -102,7 +102,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ### 学习台和记忆库（`kit/src/memory/`，`docs/learner-memory-spec.md`）
 
-- 分三批做，每一批做完对话里的 Claude 用一节真课验过再做下一批。**现在做完的是第 1、2 批**（记忆库本身；在学习台里上课）。原来的第 3 批并进了 `docs/desk-plan.md`（学习台做强：记录、交互、内部 Claude 改记忆），以它为准。
+- 分三批做，每一批做完对话里的 Claude 用一节真课验过再做下一批。**现在做完的是第 1、2 批**（记忆库本身；在学习台里上课）。原来的第 3 批并进了 `docs/desk-plan.md`（学习台做强：记录、交互、内部 Claude 改记忆），以它为准；**desk-plan 做完了第 1 批（记录能力）**。
 - `schema.js`（纯函数）：十二类集合（`COLLECTIONS`：中文名、`history` / `state`、谁能写、编号的正则、必填、只能取的值、日期字段、指向别的类的字段、改了要记 log 的字段）；三种角色 `chat` / `class` / `page`，`assertWrite` 在代码层面拦住不该写的（课堂里的 Claude 只能写 `observations`、`slips`）；复现档位 1 → 3 → 7 → 14 → 30（`nextTier`、`reviewDue`：到期 = last + tier，页面算）；`applyChange` 改状态类时按字段记 log。
 - `check.js`（纯函数）：自检对话里的 Claude 写的记忆（编号、字段、日期、指向的 id、结论挂证据），外加指纹 `meta/ledger`：历史类（错题、观察、失误）改了、删了记一条提醒留 7 天；状态类改了 `tracked` 字段却没在 log 里记到新值就一直报（指纹停在旧值，补上 log 才前进）。结果写回 `meta/memcheck` 给对话里的 Claude 读。
 - `desk.js`：学习台首页（今天、自检、记忆库每类几条）；页面只写 `meta`。`sample.js` 是一份守规矩的示例记忆（`?dev` 的「填入示例记忆」、测试都用它）。说明书 `CLAUDE-PROJECT.md` 第七节的 JSON 例子拼起来要能过自检（`tests/memory.test.js` 守着）。
@@ -111,7 +111,12 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
   - 证据：`sync.js` 的 `createSink(store, { evidence })`：作答、动作只写一份进 `evidence`（`toEvidence`：组件 id 叫 `comp`，`block` 是课程地图的块，`tags` 带段的 `point=`），不再写 `answers` / `events`；刷新后 `fromEvidence` 读回来重放。学生说的话、附的图也是证据（`sayEvidence`）。
   - 课堂 Claude：`prompt.js` 的 `buildSystem({ memory })` 多一节「你对学生的了解」（`memory/digest.js` 的 `memoryDigest`：rules → profile → 当前块 → 相关弱点、错题原文、掌握 → 失误 → position，预算 `MEMORY_BUDGET` 32 KiB、从后往前截，资料包用剩下的）；记忆库有 rules 时替换内置红线（`memoryRules`：角色那一段和教法照旧）。工具：`lesson_note`（kind note / proposal，写 `observations`）、`slip_note`（写 `slips`）、`memory_read`（只读）；写之前 `assertWrite('class', …)`。下课小结写 `observations`（kind summary），`sessions/{编号}` 记 `verify`、`status`、`summary`。
   - `protocol.js` 的段指令认 `point=`（这一段练的知识点），存在段上。
-- 浏览器里看：`kit/examples/desk-demo.html?dev`（「填入示例记忆」→「开新课」，输入框打「测试:记忆」：模拟老师真的调用 `memory_read`、`lesson_note`、`slip_note`，写一段标了 `point=tr` 的题）。
+- 记录能力（desk-plan 第 1 批）：
+  - 课后报告 `report.js`（纯函数）：下课后 `desk.js` 的 `writeReport` 读这节课的证据、观察、失误、上一节下课以后的补记，算好写进 `sessions/{编号}/report/main`（`SESSION_SCOPED` 里有 `report`），要点记在 `sessions/{编号}.report`；下课时没写成的，首页打开时补写（`fixReports`）。一道题 = 组件 + 第几步（`itemKey`），尝试序列、结果（`OUTCOMES`）、按 `tags` 汇总、时长去掉 10 分钟以上的空档。
+  - 证据补全：作答 / 动作带 `turn`（发生时最新一轮的 seq，`evCtx`）；下课那一刻没交的草稿记成 `src: draft`（`draftEvidence`，`classroom.js` 的 `allDrafts`）；板书导出的图在 say 证据里记 `ink`。
+  - 补记：首页「补记」（`manual.js` 的表单，贴图照课堂输入条的写法绕 Notability 的坑），记成 `src: manual`（`manualEvidence`，没有 session）。
+  - 备份：`backup.js`（纯函数）把记忆库、资料包、每节课的报告（可选证据、黑板）拼成一个 JSON，`docs` 每条就是 ArtifactData batch 的样子；首页「导出备份」用 `downloads` 能力存（`store.js` 的 `getDownloads`，`?dev` 用下载链接）。恢复由外部 Claude 照说明书第七节「备份和恢复」写回（`restoreBatches` 是同样的切法，测试用）。首页还显示 assets 用了多少（`assets.list()` 的 `usage`）。
+- 浏览器里看：`kit/examples/desk-demo.html?dev`（「填入示例记忆」→「开新课」，输入框打「测试:记忆」：模拟老师真的调用 `memory_read`、`lesson_note`、`slip_note`，写一段标了 `point=tr` 的题；点「下课」后回首页看「上一节」、补记、导出备份）。
 
 ## 硬性规定（我明确要求过的，不要改）
 
@@ -128,7 +133,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ## 发布组件库
 
-改完并合进 `main` 后，要重新发布组件库 artifact（https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF）：页面是 `kit/examples/unit-matrix-vector.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`、`CLAUDE-PROJECT.md` 来自仓库根目录的同名文件，`capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}`。之后新发布的课件自动用新版，已经发布的保留当时复制的版本。发布前先问我。
+改完并合进 `main` 后，要重新发布组件库 artifact（https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF）：页面是 `kit/examples/unit-matrix-vector.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`、`CLAUDE-PROJECT.md` 来自仓库根目录的同名文件，`capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}`。（学习台另外还要 `"downloads": true`，那是外部 Claude 照说明书第七节发布的，不在这里。）之后新发布的课件自动用新版，已经发布的保留当时复制的版本。发布前先问我。
 
 - 我的 claude.ai 项目指令里只有一段话：让对话里的 Claude 每个新对话先读组件库里的 `CLAUDE-PROJECT.md`（见 README「设置」）。所以说明的全文要跟着组件库一起发布，不然各个对话里的 Claude 看到的还是旧版。
 - 版本号：`CLAUDE-PROJECT.md` 开头「版本：YYYY-MM-DD」（同一天再发布加 b、c）。每次重新发布组件库前都改成新的版本号；构建时打进 `la-kit.js`（`LAKit.version`，课堂和实时黑板的「⋯」菜单里显示），对得上就说明页面和说明是同一版。
