@@ -13,6 +13,8 @@ import { renderLive } from './live/live.js';
 import { renderClass } from './class/classroom.js';
 import classCss from './class/class.css';
 import classBoardCss from './class/board.css';
+import { renderDesk } from './memory/desk.js';
+import deskCss from './memory/desk.css';
 import themesCss from './themes.css';
 import { themeOf } from './theme.js';
 import { VERSION } from './version.js';
@@ -45,7 +47,7 @@ function injectStyles() {
   document.body.insertAdjacentHTML('afterbegin', CHALK_FILTER);
   const style = document.createElement('style');
   style.id = 'la-kit-style';
-  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + themesCss;
+  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + deskCss + '\n' + themesCss;
   document.head.appendChild(style);
   if (!document.querySelector('meta[name="viewport"]')) {
     const m = document.createElement('meta');
@@ -86,6 +88,7 @@ function renderAll() {
     session.reset(meta.unit || lessonTitle(body));
     session.subject = meta.subject || '线性代数';
     if (/^(class|课堂)$/i.test(meta.mode || '')) renderClass(article, meta);
+    else if (/^(desk|学习台)$/i.test(meta.mode || '')) renderDesk(article, meta);
     else if (/^(live|实时)$/i.test(meta.mode || '')) renderLive(article, meta);
     else if (/^(guided|引导)$/i.test(meta.mode || '')) renderGuided(body, article, meta);
     else {
@@ -93,11 +96,13 @@ function renderAll() {
       renderLesson(body, article);
     }
     if (!session.live) showProblems(article);
+    // 学习台是看记忆的地方，不在上面写板书
+    if (session.mode === 'desk') return;
     article.insertAdjacentHTML('beforeend', '<div class="la-tray" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i><i class="eraser"></i></div>');
     if (!window.LAKit?.ink) (window.LAKit ||= {}).ink = initBoardInk(article);
   });
   // 课堂模式里「问 Claude」就是底部对话框；实时黑板里问问题在对话框里：都不再单独出现
-  if (session.mode !== 'class' && session.mode !== 'live') initTutor();
+  if (session.mode !== 'class' && session.mode !== 'live' && session.mode !== 'desk') initTutor();
 }
 
 // 课件本身写错的地方集中列在顶部，方便复制给 Claude 修改

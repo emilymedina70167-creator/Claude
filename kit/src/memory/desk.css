@@ -1,0 +1,40 @@
+/* 学习台（mode: desk）：首页的几张卡。颜色都用主题变量（themes.css 换风格时跟着换） */
+.la-lesson.is-desk { max-width: 860px; margin: 0 auto; padding: 24px 16px 80px; }
+.dk-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 18px; }
+.la-lesson .dk-title { margin: 8px 0 0; }
+.dk-unit { font: 16px/1.4 var(--sans); color: var(--body); }
+.dk-ver { margin-left: auto; font: 13px/1.4 var(--sans); color: var(--muted); }
+.dk-status { font: 16px/1.6 var(--sans); }
+.dk-card { margin: 0 0 16px; padding: 16px 18px; border-radius: 14px; background: rgb(var(--glow-rgb) / 0.03); border: 1px solid var(--faint); }
+/* 卡片的小标题：不要课件里那种上面一道虚线、空一大段的 h2 */
+.la-lesson .dk-h { display: block; margin: 0 0 8px; padding: 0; font-size: 26px; color: var(--yellow); }
+.la-lesson .dk-h::before { content: none; }
+.dk-body { font: 15.5px/1.55 var(--sans); color: var(--body); }
+.dk-body p { margin: 4px 0; }
+.dk-row { display: flex; align-items: baseline; gap: 12px; min-height: 44px; padding: 10px 0; border-bottom: 1px solid var(--faint); }
+.dk-row:last-child { border-bottom: 0; }
+.dk-row b { min-width: 3em; font: 600 16px/1.3 var(--sans); color: var(--chalk); }
+.dk-row span { flex: 1; min-width: 0; }
+.dk-row em { font-style: normal; font: 600 14px/1.3 var(--sans); white-space: nowrap; }
+.dk-row.is-over em { color: var(--coral); }
+.dk-row.is-today em { color: var(--yellow); }
+.dk-soon { margin-top: 8px; font-size: 14px; }
+.dk-pos { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--faint); display: grid; gap: 6px; }
+.dk-k { display: inline-block; min-width: 3.5em; margin-right: 8px; font-size: 13.5px; color: var(--muted); }
+.dk-ok { color: var(--green); }
+.dk-check .lint { margin: 4px 0 8px; }
+.dk-soft summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--muted); }
+.dk-soft ul { margin: 4px 0; padding-left: 1.3em; font-size: 14px; color: var(--muted); }
+.dk-table { display: grid; }
+.dk-crow { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 9px 0; border-bottom: 1px solid var(--faint); }
+.dk-crow:last-child { border-bottom: 0; }
+.dk-cname code { margin-left: 8px; font-size: 13px; color: var(--muted); }
+.dk-n { grid-row: span 2; align-self: center; font: 600 18px/1 var(--sans); color: var(--chalk); }
+.dk-who { font-size: 13px; color: var(--muted); }
+.dk-later { margin-top: 18px; font-size: 14px; }
+.dk-dev { display: flex; gap: 10px; margin-top: 18px; }
+@media (min-width: 700px) {
+  .dk-crow { grid-template-columns: 1fr 14em 3em; }
+  .dk-n { grid-row: auto; grid-column: 3; text-align: right; }
+  .dk-who { grid-column: 2; grid-row: 1; align-self: center; }
+}

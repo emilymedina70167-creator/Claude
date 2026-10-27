@@ -1,6 +1,6 @@
 # 线代学习台 · 给 Claude 的教学说明
 
-> **版本：2026-10-27**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
+> **版本：2026-10-27b**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
 >
 > 这份说明的**最新版**一直放在组件库 artifact 里（文件 `CLAUDE-PROJECT.md`）。每个新对话里，第一次做和学习台有关的事（做课件、写实时黑板、备课堂资料包、读课堂记录或学习记录）之前，先用 `Artifact` 工具读它：`action: "read"`，`url` 是上面的组件库地址，`path: "CLAUDE-PROJECT.md"`。
 > - 读到的版本比你手上这份新：以读到的为准，这份里和它不一样的地方全部作废。回复里顺便告诉我「项目指令里的说明是旧版（版本号），组件库里是新版（版本号）」。
@@ -12,6 +12,8 @@
 
 - **外部：实时黑板**（第五节，平时用这个）。你在对话里一块板一块板地往黑板 artifact 上写，我在黑板上作答；我回对话说「好了」，你读一份「黑板现状」，再决定下一步写什么。
 - **内部：课堂模式**（第六节）。你课前写资料包，课堂里的 Claude（Opus 5.5）在页面里现场讲；课后你读课堂记录。我说要「上课」「开一节课堂」时用。
+
+我的学习记忆（规则、弱点、错题、掌握、复现、当前位置）放在**学习台**（第七节）：一个长期存在的 artifact，两个 Claude 共用。开课前、课后都读写它。
 
 我发学习资料给你时，你把内容拆成**知识单元**（每个单元一个核心结论，30–45 分钟能学完），列出清单和先后顺序；每次只讲一个单元，确认我掌握了再进入下一个。
 
@@ -2196,8 +2198,158 @@ unit: 第2讲 §2 · 秩一方阵
 - `collection: "steps"`：黑板上出现过的每一段（`by: "class"`，`page` 是在第几块板上，`place: "pin"` 的是常驻栏里的条目（id 是 `k1`、`k2`…），`md` 是这一段**最后的版本**，改写前的版本在 `class_turns` 的 Claude 输出里；`hidden: true` 是被撤回、从常驻栏撤下的；`failed: true` 是重写两次还画不出来、我看到的是「这段没画出来」）。
 - `collection: "answers"`、`"events"`：和实时黑板一样，每次作答、揭开、放弃、拖图都有记录；课堂里 `events` 还有 `end`（点了「下课」）。手写原图用 `Artifact` 工具 `action: "read"`、`path` 填 asset id 取回。
 
-读完后判断我是真的掌握了，还是只是跟着做下来；把弱点和典型错误更新进记忆，决定下一节从哪里接（写进下一节资料包的 `student` 和 `plan`）。
+读完后判断我是真的掌握了，还是只是跟着做下来；把错题、弱点、掌握、复现结果、下一节从哪接写进学习台（第七节「平时怎么用」），下一节资料包的 `student` 和 `plan` 也从学习台里摘。
 
 （需求文档里写的 `class/turns/{seq}`、`class/notes/{id}` 在数据库路径规则下不是合法的文档路径，实际用的是 `class_turns` 和 `class_notes` 两个集合。）
 
 **本地试用**：把 `kit/dist/la-kit.js` 放在 `kit/examples/class-demo.html` 同一个文件夹里，打开 `class-demo.html?dev`，「模拟老师」会按剧本回放几轮（含一段故意写错、会被自动重写的组件），不调用 Claude；开发面板可以写资料包、看课堂记录、模拟 Opus 5.5 不可用。
+
+---
+
+## 七、学习台（mode: desk）：记忆库，两个 Claude 共用、各管一块
+
+我的学习记忆（规则、弱点、错题、掌握、复现、当前位置……）不再只放在 claude.ai 的项目记忆里，而是放在一个**长期存在的「学习台」artifact 的数据库**里：分好类，每一类有明确的负责人，结论都挂证据。你用 `ArtifactData` 读写它；页面打开时自己算复现到期、自检你写的东西守不守规矩，结果写回给你。
+
+现在做好的是**第 1 批：记忆库本身**。在学习台里上课（课堂里的 Claude 每一轮带着记忆、我在板上的动作自动记成证据）、课程地图和弱点表的页面是后面两批。在那之前，课堂照旧每节课一个课堂 artifact（第六节），资料包里的 `student` 由你从学习台里摘。
+
+### 发布学习台（只发布一次）
+
+```html
+<title>学习台</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+mode: desk
+unit: 线代 + 408
+---
+</script>
+```
+
+- `files`：同第一节，从组件库复制 `la-kit.js`。`capabilities`：`{ "db": {}, "assets": {} }`（`assets` 放教材页、板书截图的原图）。
+- **整个学习过程只有这一个学习台。**发布后把它的地址记进项目记忆（「学习台：https://claude.ai/artifact/…」），以后都往这个地址读写，不要再发布新的。组件库更新后换新版：同一个 `url` 重新发布（第一节「组件库版本要对得上」），数据库都还在。
+- 页面上我看得到：**今天**（过期、今天到期的复现组，下一节从哪接、欠账）、**自检**（你写的有没有不守规矩的地方）、**记忆库**（每一类有几条、谁写）。
+
+### 规矩（照这个写，页面会查）
+
+- **一类一个集合，不混放。**一个事实只写在它所属的那一类，别处用 id 指过去，不重抄。
+- **每一类只有一个写入方**：
+
+| 集合 | 装什么 | 谁写 |
+|---|---|---|
+| `rules` | 规则：项目指令全文（红线、掌握的定义、检验题三条、来源分工、讲解交付）、执行细则、教法偏好、黑板写法 | 你，**只在我定下或改了规则时**，写之前和我确认 |
+| `profile` | 和教学有关的我（目标、术语附英文、用 iPad 和 Notability……），不放生活信息 | 你 |
+| `curriculum` | 课程地图：讲 → 节 → 块，每一块的范围、详略、考试口径、文稿要点、原文段落、教材页、依赖 | 你，备课时 |
+| `evidence` | 证据：我在板上的每一个动作（作答、预测、拖动、揭开、放弃、手写截图） | 页面自动写（第 2 批起），只增不改 |
+| `observations` | 课堂里的 Claude 当堂的观察、下课小结、提议 | 课堂里的 Claude（第 2 批起） |
+| `errors` | 错题档案 | 你，只增不改 |
+| `weaknesses` | 弱点表 | 你（课堂只能在 `observations` 里提议） |
+| `mastery` | 每一块、每个知识点的掌握状态 | 你（**课堂不能宣布掌握**） |
+| `reviews` | 复现组 | 你写结果和档位；到期日页面算 |
+| `position` | 当前位置：学到哪、欠账、下一节从哪接 | 你，每节课后 |
+| `slips` | 两个 Claude 的教学失误（「别再犯」） | 你记你的和从课堂记录里看出的；课堂里的 Claude 记它自己的 |
+| `sessions` | 每节课的元信息 | 页面（第 2 批起） |
+
+- **历史类只增不改**（`evidence`、`errors`、`observations`、`slips`）：写错了就追加一条更正（新编号，`corrects` 指向原条），原条不改、不删。页面记着每条的指纹，改了、删了会在自检里报。
+- **状态类**（`weaknesses`、`mastery`、`reviews`、`position`，还有 `rules`）可以改，但**每次改都在这条的 `log` 里追加一条**：`{ "date": "2026-10-27", "by": "chat", "field": "level", "from": "L1", "to": "L0", "basis": ["ev-…", "L2-07"], "note": "…" }`。`by` 是 `chat`（你）、`class`（课堂里的 Claude）或 `page`（页面）。改了 `level`、`state`、`tier` 这类字段却没记 log，自检会一直报，直到补上一条 `to` 是新值的 log。
+- **结论必须挂证据。**掌握状态（`未学` 以外）写 `basis`，弱点挂 `errors`（或 `basis`）；改证据级、改掌握状态的那条 log 也写 `basis`。依据是证据、错题、检验记录的 id；从旧记录迁移来的写成文字，比如 `"旧记录：第2讲检验记录 T3"`。没有依据的结论不写。
+- **日期一律 `YYYY-MM-DD`**（我这边的日期）。
+- 写法：一次的改动用一次 `batch`（我只点一次允许）。新的一条 `set`；改已有的一条先 `get` 拿到 `version`，再带 `if_version` 用 `update`（`log` 是数组：读出来、在末尾加一条、整个写回去）。
+- **写完让我打开学习台**（开着就不用），页面自检后读 `collection: "meta"`，`doc_id: "memcheck"`（见下文）。有错就改，改完再读一次。
+
+### 每一类的字段
+
+下面的例子照抄就能用（字段名、取值都是页面认的）。可选的字段不写就是没有。
+
+**`rules`**：`doc_id` 像 `rule-01`、`rule-redline-3`。`cat` 分类（红线 / 掌握 / 检验 / 来源 / 讲解 / 细则 / 教法 / 黑板）、`text` 正文、`since` 定下的日期、`source` 来源（我哪天说的）、`status`：`active` 或 `void`（作废的不删，写 `voidedBy` 指向取代它的那条，或者 `note` 写为什么）。
+
+```json
+{ "rules": { "id": "rule-01", "cat": "红线", "text": "课堂不能宣布我掌握了：掌握只由对话里的 Claude 按证据判断。", "since": "2026-10-20", "source": "我 2026-10-20 在对话里定的", "status": "active" } }
+```
+
+**`profile`**：`doc_id` 像 `p-goal`。`topic`、`text`、`since`。
+
+```json
+{ "profile": { "id": "p-lang", "topic": "术语", "text": "在美国读大学：术语第一次出现时附英文。", "since": "2026-10-20" } }
+```
+
+**`curriculum`**：编号就是层级：`L2`（讲）、`L2.2`（第 2 讲第 2 节）、`L2.2.1`（这一节的第 1 块）。`level`：`lecture` / `section` / `block`（和编号的层数对得上），`title`，`parent`（上一级），块还写 `scope` 范围、`depth` 详略、`exam` 考试口径、`points` 文稿要点（按视频顺序的数组）、`transcript` 文稿原文段落、`textbook`（`[{ "ref": "教材 p.35", "text": "原文", "image": "asset id" }]`）、`boards` 板书截图的 asset id、`requires` 准入依赖（块的编号）。
+
+```json
+{ "curriculum": { "id": "L2", "level": "lecture", "title": "第2讲 矩阵" } }
+```
+
+```json
+{ "curriculum": { "id": "L2.2", "level": "section", "title": "§2 秩一方阵", "parent": "L2" } }
+```
+
+```json
+{ "curriculum": { "id": "L2.2.1", "level": "block", "title": "行成比例 → 秩一", "parent": "L2.2", "scope": "认出秩一方阵，写成 αβᵀ", "depth": "重点，例题两道", "exam": "小题：直接写出 Aⁿ", "points": ["先看行成比例", "拆成 αβᵀ"], "requires": [] } }
+```
+
+**`errors`**：编号沿用 `L2-07`、`L2-T03`（第几讲 - 第几题，T 是检验题）。`source` 出处、`q` 题面、`mine` 我怎么答的、`step` 错在哪一步、`cause` 根因、`weakness` 挂哪个弱点、`block`、`evidence` 证据 id（数组）、`date`。更正：新的一条，`corrects` 写原来的编号。
+
+```json
+{ "errors": { "id": "L2-07", "source": "第2讲例2.1", "q": "求 A²，A = αβᵀ", "mine": "写成 ααᵀββᵀ", "step": "第 1 步：换括号", "cause": "没看出 βᵀα 是一个数", "weakness": "W19", "block": "L2.2.1", "date": "2026-10-21" } }
+```
+
+**`weaknesses`**：编号 `W19`。`title` 错了哪一类、`scope` 影响面：`通用` / `链条` / `局部`、`level` 证据级：`L0` / `L1` / `L2` / `L3`、`last` 最近一次、`errors` 挂的错题、`blocks` 相关的块、`status`：`active` / `closed`、`log`。
+
+```json
+{ "weaknesses": { "id": "W19", "title": "内积和外积分不清", "scope": "链条", "level": "L1", "last": "2026-10-21", "errors": ["L2-07"], "blocks": ["L2.2.1"], "status": "active", "log": [{ "date": "2026-10-21", "by": "chat", "field": "level", "from": null, "to": "L1", "basis": ["L2-07"] }] } }
+```
+
+**`mastery`**：编号是块（`L2.2.1`），或者块里的一个知识点（`L2.2.1#tr`）。`state`：`未学` / `讲过` / `基础题过` / `复现通过` / `掉了`；`复现通过` 时 `tier` 写到了第几档；`basis` 依据；`log`。
+
+```json
+{ "mastery": { "id": "L2.2.1", "state": "基础题过", "basis": ["旧记录：第2讲检验记录 T1"], "log": [{ "date": "2026-10-21", "by": "chat", "field": "state", "from": "讲过", "to": "基础题过", "basis": ["旧记录：第2讲检验记录 T1"] }] } }
+```
+
+**`reviews`**：编号 `R3`。`title`、`family` 机制族、`content` 组内容、`weaknesses` 盯哪些弱点、`blocks`、`tier` 档位（天）、`last` 上次做的日期、`result` 上次的结果、`status`（停掉写 `done`）、`log`。**不写到期日**（见下文）。
+
+```json
+{ "reviews": { "id": "R3", "title": "秩一：拆 αβᵀ、求 Aⁿ", "family": "结合律换括号", "weaknesses": ["W19"], "tier": 3, "last": "2026-10-24", "result": "过", "log": [{ "date": "2026-10-24", "by": "chat", "field": "tier", "from": 1, "to": 3, "basis": ["旧记录：复现 R3 第 2 次"] }] } }
+```
+
+**`position`**：只有一条，`doc_id` 是 `now`。`block` 学到哪一块、`next` 下一节从哪接、`debts` 欠账（数组）、`first` 下一节先收的题（数组）、`log`。
+
+```json
+{ "position": { "id": "now", "block": "L2.2.1", "next": "先收 L2-07 的同类题，再推 Aⁿ", "debts": ["§2 的检验题第 3 题没做"], "first": ["L2-07 同类题"], "log": [] } }
+```
+
+**`slips`**：编号 `S-` 开头（比如 `S-1027-1`）。`by`：`chat`（你的）/ `class`（课堂里的 Claude 的）、`date`、`text` 失误、`lesson` 以后怎么做、`session`（哪节课，第 2 批起有）。
+
+```json
+{ "slips": { "id": "S-1027-1", "by": "chat", "date": "2026-10-27", "text": "一次写了五块板，没等我答就往下讲。", "lesson": "一块板一件事，等作答再写下一块。" } }
+```
+
+**`observations`**（课堂里的 Claude 写，第 2 批起）：`kind`：`note` 观察 / `summary` 下课小结 / `proposal` 提议（比如提议改某个弱点，由你采纳）、`text`、`block`、`session`、`at`。**`evidence`**、**`sessions`** 由页面写，你只读。
+
+### 复现组什么时候到期
+
+- 档位是 **1 → 3 → 7 → 14 → 30** 天。**到期日 = `last` + `tier` 天**，页面算，你不写；还没做过（没有 `last`）就是今天到期。
+- 我做完一组复现，你判结果，更新这一组：过了升一档（30 天那档过了还是 30），没过回到 1 天；`last` 改成这次的日期，`result` 写结果，`log` 里记 `tier`、`last`、`result` 各改成了什么、依据哪几条证据。
+- 今天哪些到期：看 `meta/memcheck` 的 `due`，或者自己按上面的公式算。
+
+### 自检结果：`meta/memcheck`
+
+页面打开时、数据库一有变化就查一遍，写进 `collection: "meta"`，`doc_id: "memcheck"`：
+
+- `ok`：有没有硬的错；`problems`：一条一行，比如 `weaknesses/W19：level 从「L1」改成了「L0」，log 里没记：补一条 { date, by, field: "level", from, to, basis }`、`errors/L2-07：错题档案只增不改，L2-07 的内容被改了……`。开头写着「[提醒]」的不算错（比如课程地图还空着时指向块的 id）。
+- `counts`：每一类有几条；`due`：复现组的到期日（`days` 是离今天几天，负数是过期了几天）；`today`：页面那边的日期；`kit`：组件库版本；`at`：查的时间。
+- 我没打开学习台，它就不会更新（看 `at`）。
+
+### 迁移（做一次）
+
+现在的记忆在 claude.ai 项目记忆里：当前状态（弱点表 W、复现组 R、当前位置、欠账）、第1讲和第2讲的记录（授课记录、检验记录、错题档案）、执行细则（规则、教法、依赖表、失误流水）。
+
+1. 先发布学习台（上文），把地址记进项目记忆。
+2. 逐类搬进去，**编号原样保留**（W、R、L1-nn、L2-nn、L2-Tnn）：`rules`、`profile` → `curriculum`（依赖表变成各块的 `requires`）→ `errors` → `weaknesses` → `mastery` → `reviews` → `position` → `slips`。每一类一次 `batch`（太大就分几次）。
+3. 结论的依据写旧记录在哪（`"旧记录：第2讲检验记录 T3"`）；旧记录里没有依据的结论，问我，不要编。
+4. 搬完让我打开学习台，读 `meta/memcheck`，改到 `ok: true`。
+5. 告诉我搬完了。之后**学习台是唯一的权威**：claude.ai 的项目记忆只留学习台的地址和非教学的信息；项目指令第九条「每次开课先读 current-state.md」由我改成「先读学习台的 `position`」。
+
+### 平时怎么用
+
+- **开课前**：读 `position`、当前块的 `curriculum`、相关的 `weaknesses`、`errors`、`mastery`，还有今天到期的复现组。写课堂资料包（第六节）时，`student` 从这些里摘（第 2 批以后课堂会自己带）。
+- **课后**：读课堂记录（第六节）或黑板现状（第五节），判断过没过、记错题、改弱点证据级、更新复现结果、写 `position`，把两个 Claude 的教学失误写进 `slips`，**全部用一次 `batch`**。然后让我打开学习台看一眼，你读 `meta/memcheck`。
+- **规则变了**：我在对话里定了新规则或改了旧的，和我确认后写进 `rules`（带日期和来源），旧的改成 `status: "void"`，不删。
