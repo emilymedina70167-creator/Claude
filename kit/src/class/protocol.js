@@ -193,10 +193,12 @@ function markOp(op, body) {
 
 function segmentCommand(op, rest) {
   const toks = tokenize(rest);
-  let id, title;
+  let id, title, point;
   for (let k = 0; k < toks.length; k++) {
     const t = toks[k];
     if (t.key === 'id') id = t.value;
+    // 学习台里：这一段练的是哪个知识点（mastery 编号 # 后面那段），学生在这段的作答记成它的证据
+    else if (t.key === 'point') point = t.value;
     else if (t.key === 'title') {
       title = t.value;
       if (!t.quoted) {
@@ -216,6 +218,10 @@ function segmentCommand(op, rest) {
   if (!validId(id)) return { error: `id「${id}」不合法：${ID_RULE}` };
   const out = { op, id };
   if (!NO_TITLE.has(op) && title !== undefined) out.title = title.trim();
+  if (point !== undefined && !NO_TITLE.has(op)) {
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(point)) return { error: `point「${point}」只能用字母、数字、- 和 _（写掌握状态编号 # 后面那段，比如 point=tr）` };
+    out.point = point;
+  }
   return out;
 }
 

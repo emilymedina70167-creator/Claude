@@ -149,13 +149,14 @@ const ICON = {
   copy: '<svg viewBox="0 0 24 24"><rect x="8" y="8" width="11.5" height="12" rx="2"/><path d="M15.5 8V6a2 2 0 0 0-2-2H6.5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2H8"/></svg>',
   bell: '<svg viewBox="0 0 24 24"><path d="M5 19.5h14"/><path d="M7 19.5V11a5 5 0 0 1 10 0v8.5"/><path d="M12 3.5V6"/></svg>',
   clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></svg>',
+  home: '<svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/></svg>',
 };
 
 // 翻板条在 pagenav.js（实时黑板也用）；这里接着导出，老的引用不用改
 export { navLabel } from './pagenav.js';
 
-// stuck：「停久了提醒老师」开关 { on, onChange(on) }（不给就不显示这一项）
-export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick, onNav, images = false, tag = MODEL_TAG, stuck = null, inkPending = null } = {}) {
+// stuck：「停久了提醒老师」开关 { on, onChange(on) }（不给就不显示这一项）；onHome：在学习台里上课时「回学习台」
+export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick, onNav, onHome = null, images = false, tag = MODEL_TAG, stuck = null, inkPending = null } = {}) {
   const el = document.createElement('div');
   el.className = 'class-bar';
   el.setAttribute('role', 'region');
@@ -186,6 +187,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
         <button type="button" class="cb-item cb-copy" role="menuitem">${ICON.copy}<span>复制学习记录</span></button>
         ${stuck ? `<button type="button" class="cb-item cb-stuck" role="menuitemcheckbox" aria-checked="${stuck.on ? 'true' : 'false'}" title="我在一块板上很久没动静（题还没做）时，提醒 Claude 问一句">${ICON.clock}<span></span></button>` : ''}
         <button type="button" class="cb-item cb-end" role="menuitem">${ICON.bell}<span>下课</span></button>
+        ${onHome ? `<button type="button" class="cb-item cb-home" role="menuitem">${ICON.home}<span>回学习台</span></button>` : ''}
         <div class="cb-tag" title="课堂里的 Claude 固定用 Opus 5.5，effort 为 high">${tag}</div>
         <div class="cb-ver" title="这个页面用的组件库版本（和项目说明的版本号对得上就是最新的）">组件库 ${VERSION}</div>
       </div>
@@ -305,6 +307,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
     if (menuOpen) { setMenu(false); moreBtn.focus({ preventScroll: true }); } else if (!slate.hidden) openSlate(false); else if (!tray.hidden) openTray(false);
   });
   on(copyBtn, 'click', () => { setMenu(false); onCopy?.(); });
+  if (onHome) on($('.cb-home'), 'click', () => { setMenu(false); onHome(); });
   const stuckBtn = $('.cb-stuck');
   if (stuckBtn) {
     const syncStuck = () => { stuckBtn.querySelector('span').textContent = `停久了提醒老师：${stuckBtn.getAttribute('aria-checked') === 'true' ? '开' : '关'}`; };

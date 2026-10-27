@@ -13,7 +13,7 @@ import { renderLive } from './live/live.js';
 import { renderClass } from './class/classroom.js';
 import classCss from './class/class.css';
 import classBoardCss from './class/board.css';
-import { renderDesk } from './memory/desk.js';
+import { renderDesk, classHash } from './memory/desk.js';
 import deskCss from './memory/desk.css';
 import themesCss from './themes.css';
 import { themeOf } from './theme.js';
@@ -96,8 +96,8 @@ function renderAll() {
       renderLesson(body, article);
     }
     if (!session.live) showProblems(article);
-    // 学习台是看记忆的地方，不在上面写板书
-    if (session.mode === 'desk') return;
+    // 学习台的首页是看记忆的地方，不在上面写板书（在学习台里上课时照常有板书）
+    if (session.mode === 'desk' && !classHash()) return;
     article.insertAdjacentHTML('beforeend', '<div class="la-tray" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i><i class="eraser"></i></div>');
     if (!window.LAKit?.ink) (window.LAKit ||= {}).ink = initBoardInk(article);
   });

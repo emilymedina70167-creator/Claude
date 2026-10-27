@@ -1,11 +1,14 @@
 // 把作答、事件、手写原图写进数据库（live 模式）。
 // 写失败不打断学生：角落里标一个「这条没存上」，自动重试一次，还可以手动再试。
 import { session } from '../session.js';
+import { toEvidence } from '../memory/session.js';
 
 const cut = (s, n) => (typeof s === 'string' && s.length > n ? s.slice(0, n) + '…' : s);
 const newId = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
 
-export function createSink(store) {
+// evidence：在学习台里上课时给一个函数，返回这一条证据的 { session, block, point }。
+// 这时作答和动作只写一份进 evidence（和 answers / events 同一条写入路径，不写两遍）
+export function createSink(store, { evidence = null } = {}) {
   const pending = new Map(); // 组件 id → 正在上传的原图（Promise<id|null>）
   const failed = [];
   let badge = null;
@@ -89,11 +92,13 @@ export function createSink(store) {
       const ups = pending.get(key) || [];
       pending.delete(key);
       const images = (await Promise.all(ups)).filter(Boolean);
-      return put('answers', toAnswer(e, images));
+      const rec = toAnswer(e, images);
+      return evidence ? put('evidence', toEvidence('record', rec, evidence(rec))) : put('answers', rec);
     },
 
     event(e) {
-      return put('events', { ...e, detail: e.detail ?? null, at: Date.now() });
+      const rec = { ...e, detail: e.detail ?? null, at: Date.now() };
+      return evidence ? put('evidence', toEvidence('event', rec, evidence(rec))) : put('events', rec);
     },
 
     // 课堂模式：黑板段落、课堂记录、课后小结（失败同样标「没存上」）

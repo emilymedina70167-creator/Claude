@@ -5,6 +5,8 @@
 // 返回的不是 Opus 5.5 时，这一轮整段作废（不显示、不执行黑板指令、不进对话历史，工具里记的观察也不留）。
 // 数据都在这个 artifact 的数据库里：黑板段落 steps（带 page / place）、每块板 class_pages（标题、板顶的话）、
 // 作答 answers / events、课堂记录 class_turns、课后小结 class_notes、资料包 pack。
+// 在学习台里上课（desk，docs/learner-memory-spec.md 第 2 批）：这节课的数据放在 sessions/{编号}/ 下面（memory/session.js 的 scopeDb），
+// 作答和动作只写进 evidence（证据），观察、下课小结写进 observations，课堂 Claude 每一轮带着记忆摘要，多两个工具 slip_note、memory_read。
 import { renderLesson, mdToHtml, escapeHtml } from '../render.js';
 import { session } from '../session.js';
 import { compile } from '../expr.js';
@@ -31,6 +33,7 @@ import { markText } from '../markspec.js';
 import { calcValue, exactText } from '../exact.js';
 import { strokesToBlob } from '../ink/engine.js';
 import { shouldNudge, stuckText, STUCK_MS } from './stuck.js';
+import { fromEvidence, sayEvidence, observationRecord, slipRecord, memoryRead } from '../memory/session.js';
 
 export const MODEL = 'claude-opus-5-5';
 // 学生明确要求：讲课只能是 Opus 5.5、effort high；modelTier 只是平台要求的退路（退路的输出会被丢弃）
@@ -44,7 +47,11 @@ const pad3 = (n) => String(n).padStart(3, '0');
 const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const QUICK_SAY = { 没懂: '没懂。', 想不出来: '想不出来。', 换个说法: '换个说法讲讲？', 继续: '继续。' };
 
-export async function renderClass(root, meta) {
+/**
+ * desk（在学习台里上课时才有）：{ store（已经 scopeDb 过的）, sid, block, mem（记忆库各类的数组，页面一直在更新）,
+ * updateSession(patch)（改 sessions/{sid}）, onHome（回学习台首页）}
+ */
+export async function renderClass(root, meta, desk = null) {
   session.mode = 'class';
   session.live = true; // 共用 live 的行为：猜想默认不批改、作答逐次记录、组件要有 id
   session.stages = [];
@@ -70,13 +77,15 @@ export async function renderClass(root, meta) {
   const welcome = root.querySelector('.class-welcome');
   const welcomeText = root.querySelector('.class-welcome-text');
 
-  const store = await getStore({ title: session.title });
+  const store = desk?.store || await getStore({ title: session.title });
   if (!store) {
     welcomeText.innerHTML = '这个页面没有拿到课堂的数据库权限。<br>发布时要声明 <code>capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}</code>；本地试用请在地址后面加 <code>?dev</code>。';
     return;
   }
   const { db } = store;
-  const sink = createSink(store);
+  // 学习台里：作答、动作写成证据，带上这节课、这一块、这一段标的知识点（point=）
+  const sink = createSink(store, desk ? { evidence: (rec) => evCtx(rec.step) } : {});
+  const evCtx = (step) => ({ session: desk?.sid, block: desk?.block, point: segs.get(step)?.point });
 
   // —— 谁来讲课：claude.ai 里是真的 Claude；本地 ?dev 用模拟老师（剧本回放，不花额度）——
   const ai = await getAI();
@@ -85,14 +94,16 @@ export async function renderClass(root, meta) {
   // 验收脚本（tools/check-lesson.mjs）在打开页面前放好 window.LAKitDevScript：模拟老师按它原样回放
   const script = useMock && Array.isArray(window.LAKitDevScript) ? window.LAKitDevScript : null;
   let mock = useMock ? createDevTeacher(script ? { script, pace: 0 } : {}) : null;
-  if (script) window.LAKitEval = { teacher: mock };
+  // 验收脚本、浏览器里的测试读模拟老师的记录（调用过什么、工具的结果）
+  if (mock) window.LAKitEval = { teacher: mock };
   // 旧版接口（window.claude.complete）不能指定模型、也不说是谁答的：每一轮都只能作废，干脆不开课
   const legacy = !mock && !!ai?.legacy;
   const off = { tools: false, images: false }; // 这个查看方式明确说了不支持的（tools_unavailable / images_unavailable）
   const teacher = {
     get available() { return !!(mock || (ai?.call && !legacy)); },
     call: (input, opts) => (mock ? mock(input, opts) : ai.call(input, opts)),
-    get tools() { return !mock && !!ai?.tools && !off.tools; },
+    // 模拟老师在学习台里也给工具：「测试:记忆」会真的调用 memory_read、lesson_note、slip_note（单独的课堂照旧不给）
+    get tools() { return mock ? !!desk : !!ai?.tools && !off.tools; },
     get images() { return !!(ai?.images || mock) && !off.images; },
   };
   const maxImages = ai?.images?.maxCount || 4;
@@ -131,6 +142,7 @@ export async function renderClass(root, meta) {
   let lastPrompt = null; // 开发面板看：上一轮发了多少字节
   // 被函数声明用到、而 restore() 在函数定义之前就会调到那些函数：要在这里先有值（let / const 有暂时性死区）
   let raf = 0, pendingText = ''; // 草稿：一帧最多画一次
+  let lastVerify = { turns: 0, discarded: 0 }; // 学习台里：上次写进 sessions/{编号} 的核验轮数
 
   // 察觉卡住的开关（学生在「⋯」里可以关；记在这台设备上）
   const stuckKey = `la-class-stuck:${session.title}`;
@@ -147,6 +159,7 @@ export async function renderClass(root, meta) {
     onRetry: () => retryRun(),
     onEnd: () => endClass(),
     onCopy: () => copyRecord(toast),
+    onHome: desk?.onHome || null,
   });
   bv.attachBar(bar);
   if (!teacher.available) {
@@ -204,11 +217,12 @@ export async function renderClass(root, meta) {
   async function restore() {
     try {
       // 资料包也在这里读一次：第一轮不能赶在资料包到之前发出去（那样课堂 Claude 会以为没有资料包）
-      const [st, pg, tu, an, ev, pm, pp] = await Promise.all([
+      const [st, pg, tu, work, pm, pp] = await Promise.all([
         db.collection('steps').get(), db.collection('class_pages').get().catch(() => ({ docs: [] })),
-        db.collection('class_turns').get(), db.collection('answers').get(), db.collection('events').get(),
+        db.collection('class_turns').get(), studentWork(),
         db.doc('pack/main').get().catch(() => null), db.doc('pack/problems').get().catch(() => null),
       ]);
+      const { an, ev } = work;
       if (pm?.exists && !pack.main) applyMain(pm.data());
       if (pp?.exists && !pack.problems) pack.problems = pp.data();
       for (const d of pg.docs.map((x) => x.data()).filter((p) => Number.isFinite(p?.n) && p.n > 0).sort((a, b) => a.n - b.n)) {
@@ -229,7 +243,7 @@ export async function renderClass(root, meta) {
           Object.assign(bv.ensurePage(page), { lead: d.id, title: d.title || '' });
         }
         if (page) bv.ensurePage(page);
-        const seg = { id: d.id, seq: d.seq || 0, page, place, title: d.title || '', md: String(d.md || ''), hidden: !!d.hidden, failed: !!d.failed, pending: false, sec: null };
+        const seg = { id: d.id, seq: d.seq || 0, page, place, title: d.title || '', md: String(d.md || ''), hidden: !!d.hidden, failed: !!d.failed, pending: false, sec: null, ...(d.point ? { point: d.point } : {}) };
         segs.set(seg.id, seg);
         if (old) legacy.push(seg);
         if (!seg.hidden) mountRestored(seg);
@@ -240,8 +254,8 @@ export async function renderClass(root, meta) {
       tu.docs.map((d) => d.data()).filter((t) => Number.isFinite(t?.seq)).sort((a, b) => a.seq - b.seq).forEach((t) => { history.push(t); turnSeq = Math.max(turnSeq, t.seq); });
       // 黑板现状里的作答结果：作答记录 + 揭开 / 拖动（按时间重放，规则和上课时一样）
       const recs = [
-        ...an.docs.map((d) => d.data()).map((r) => ({ source: 'record', ...r, type: r.kind, answer: r.kind === 'conjecture' ? r.text : undefined })),
-        ...ev.docs.map((d) => d.data()).map((e) => ({ source: 'event', ...(e.detail && typeof e.detail === 'object' ? e.detail : {}), ...e })),
+        ...an.map((r) => ({ source: 'record', ...r, type: r.kind, answer: r.kind === 'conjecture' ? r.text : undefined })),
+        ...ev.map((e) => ({ source: 'event', ...(e.detail && typeof e.detail === 'object' ? e.detail : {}), ...e })),
       ].sort((a, b) => (a.at || 0) - (b.at || 0));
       recs.forEach((a) => { if (reportable(a)) addResult(a); });
       replayStudentWork(recs);
@@ -254,6 +268,22 @@ export async function renderClass(root, meta) {
     bv.show(bv.cur, { scroll: false });
     refresh();
     if (pendingTurn(history) && teacher.available) bar.setStatus('error', '上一轮 Claude 还没回完，点重试接着上。');
+  }
+
+  // 学生在黑板上的作答和动作：单独的课堂在 answers / events 里；学习台里在 evidence 里（按这节课的编号找，组件 id 放回 block）
+  async function studentWork() {
+    if (!desk) {
+      const [a, e] = await Promise.all([db.collection('answers').get(), db.collection('events').get()]);
+      return { an: a.docs.map((d) => d.data()), ev: e.docs.map((d) => d.data()) };
+    }
+    const s = await db.collection('evidence').where('session', '==', desk.sid).get();
+    const an = [], ev = [];
+    for (const d of s.docs) {
+      const x = fromEvidence({ id: d.id, ...d.data() });
+      if (x.kind === 'record') an.push(x.rec);
+      else if (x.kind === 'event') ev.push(x.rec);
+    }
+    return { an, ev };
   }
 
   // —— 刷新后把学生的作答放回黑板 ——
@@ -364,6 +394,11 @@ export async function renderClass(root, meta) {
   }
   function syncVerify() {
     const { turns, discarded } = verifyCounts();
+    // 学习台里：这节课核验了几轮、作废了几轮记在 sessions/{编号}（有变化才写）
+    if (desk && (turns !== lastVerify.turns || discarded !== lastVerify.discarded)) {
+      lastVerify = { turns, discarded };
+      if (turns || discarded) desk.updateSession({ verify: { turns, discarded } });
+    }
     bar.setTag(`${MODEL_TAG}${mock ? ' · 模拟老师' : ''}${turns || discarded ? `，已核验 ${turns} 轮${discarded ? `，作废 ${discarded} 轮` : ''}` : ''}`);
   }
 
@@ -482,7 +517,7 @@ export async function renderClass(root, meta) {
         }
         seg = { id: op.id, seq: ++segSeq, page, place: toPin ? 'pin' : 'board', title: '', md: '', hidden: false, failed: false, pending: false, sec: null };
       }
-      const next = { ...seg, title: op.title ?? seg.title, md: op.body || '' };
+      const next = { ...seg, title: op.title ?? seg.title, md: op.body || '', ...(op.point ? { point: op.point } : {}) };
       const errors = [];
       // 组件 id 撞号：同一段里重复，或者和黑板上别的段重复（figure、作答记录、link: 都靠 id 找组件）
       const taken = liveBlockIds(seg);
@@ -538,7 +573,7 @@ export async function renderClass(root, meta) {
   }
 
   function saveSeg(seg) {
-    sink.put('steps', { id: seg.id, seq: seg.seq, page: seg.page || 0, place: seg.place || 'board', md: seg.md, title: seg.title || '', hidden: !!seg.hidden, failed: !!seg.failed, by: 'class', at: Date.now() });
+    sink.put('steps', { id: seg.id, seq: seg.seq, page: seg.page || 0, place: seg.place || 'board', md: seg.md, title: seg.title || '', hidden: !!seg.hidden, failed: !!seg.failed, ...(seg.point ? { point: seg.point } : {}), by: 'class', at: Date.now() });
   }
 
   function refresh() {
@@ -727,10 +762,14 @@ export async function renderClass(root, meta) {
       if (imgs.length) text += teacher.images ? `\n（附了 ${imgs.length} 张图：学生的手写或截图，白底黑字。）` : `\n（学生附了 ${imgs.length} 张图，但这个查看方式发不了图，你看不到；需要的话请学生用文字说。）`;
       // 学生说的话不上黑板，只进课堂记录
       const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), drafts: drafts.length ? drafts : undefined, images: [], page: bv.cur || undefined });
+      // 学习台里：学生说的话也是证据（附的图等传完再记，带上原图的 id）
+      const evOf = (images = []) => sayEvidence(say, evCtx(null), images);
+      if (desk && say.trim() && !imgs.length) sink.put('evidence', { ...evOf(), turn: turn.seq });
       // 图直接交给 Claude，不用等它传进 assets 再开讲（截图传得慢时能省几秒）；传完再把原图的 id 补进这一轮的记录
       if (imgs.length) {
         Promise.all(imgs.map((x) => x.id)).then((all) => {
           const ids = all.filter(Boolean);
+          if (desk && (ids.length || say.trim())) sink.put('evidence', { ...evOf(ids), turn: turn.seq });
           if (!ids.length) return;
           turn.images = ids;
           sink.put('class_turns', { id: pad6(turn.seq), ...turn });
@@ -798,12 +837,12 @@ export async function renderClass(root, meta) {
       }
       bv.measureFit();
       const level = Math.min(budgetLevel, 3);
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools });
+      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg() });
       const maxBytes = Math.round(promptLimit() * [1, 0.85, 0.7, 0.55][level]);
       const fit = fitTurns({ system, history: promptHistory(history), maxBytes });
       lastPrompt = { bytes: fit.bytes, maxBytes, keepRecent: fit.keepRecent, dropped: fit.dropped, turns: fit.turns.length, level };
       // 工具做的事先记着，确认是 Opus 5.5 讲的才算数（退路模型记的观察、要看的图都不留）
-      const staged = { notes: [], images: [], ids: [], calls: [] };
+      const staged = { notes: [], slips: [], images: [], ids: [], calls: [] };
       const opts = { ...TEACH, cache: false, signal, onText: ({ text }) => drawDraft(text) };
       if (imgs.length && teacher.images) opts.images = imgs.slice(0, maxImages);
       if (teacher.tools) opts.tools = classTools(staged, { view: !followed });
@@ -823,7 +862,7 @@ export async function renderClass(root, meta) {
         return false;
       }
       budgetLevel = 0;
-      for (const text of staged.notes) sink.put('class_notes', { kind: 'note', text, at: Date.now(), turn: turnSeq + 1 });
+      saveNotes(staged);
       const out = finishTurn(res, staged.calls, { keepTalk: rewriting });
       // 要它重写的段、它用 view_handwriting 要看的原图：再要一轮
       const wantImages = staged.images.length > 0 && !followed;
@@ -1088,6 +1127,47 @@ export async function renderClass(root, meta) {
     bv.scheduleFit();
   }
 
+  // 学习台里：每一轮带着的记忆（页面一直订阅着记忆库，拼摘要在 prompt.js）
+  function memoryArg() {
+    return desk ? { mem: desk.mem, block: desk.block, session: desk.sid } : null;
+  }
+
+  // 工具记下的观察、失误：确认是 Opus 5.5 讲的这一轮才写。学习台里写进记忆库（observations、slips），单独的课堂写进 class_notes
+  let slipSeq = 0;
+  function saveNotes(staged) {
+    for (const n of staged.notes) {
+      if (desk) sink.put('observations', observationRecord({ kind: n.kind, text: n.text, about: n.about, session: desk.sid, block: desk.block, turn: turnSeq + 1 }));
+      else sink.put('class_notes', { kind: 'note', text: n.text, at: Date.now(), turn: turnSeq + 1 });
+    }
+    if (desk) {
+      for (const sl of staged.slips) {
+        slipSeq = Math.max(slipSeq, ...(desk.mem.slips || []).map((x) => Number(String(x.id).match(new RegExp(`^S-${desk.sid.slice(2)}-(\\d+)$`))?.[1]) || 0));
+        sink.put('slips', slipRecord({ ...sl, session: desk.sid }, ++slipSeq));
+      }
+    }
+  }
+
+  // 一个组件的全部作答：单独的课堂在 answers 里；学习台里在这节课的 evidence 里（组件 id 是 comp）
+  async function answersOf(blockId) {
+    if (!desk) return (await db.collection('answers').where('block', '==', blockId).get()).docs.map((d) => d.data());
+    const s = await db.collection('evidence').where('session', '==', desk.sid).get();
+    return s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.src === 'record' && d.comp === blockId).map((d) => ({ ...fromEvidence(d).rec, id: d.id }));
+  }
+
+  // memory_read 查证据：按块或者按节课，最近的 30 条，一条一行要点
+  async function evidenceRows({ block, session: sid, id }) {
+    if (id) {
+      const s = await db.collection('evidence').doc(String(id)).get();
+      if (!s.exists) throw new Error(`evidence 里没有 ${id}`);
+      return { collection: 'evidence', doc: s.data() };
+    }
+    const [k, v] = block ? ['block', String(block)] : ['session', String(sid || desk.sid)];
+    const s = await db.collection('evidence').where(k, '==', v).get();
+    const rows = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.at || 0) - (b.at || 0)).slice(-30)
+      .map((d) => ({ id: d.id, at: d.at, session: d.session, kind: d.kind, comp: d.comp || undefined, ok: d.ok ?? undefined, q: typeof d.q === 'string' ? d.q.slice(0, 120) : undefined, text: typeof d.text === 'string' ? d.text.slice(0, 200) : undefined, value: d.value ?? undefined, tags: d.tags }));
+    return { collection: 'evidence', [k]: v, count: rows.length, items: rows };
+  }
+
   // —— 可选工具（这个查看方式支持 tools 时才给）。有副作用的先记在 staged 里，确认是 Opus 5.5 才生效 ——
   function classTools(staged, { view = true } = {}) {
     const cut = (v, n) => (typeof v === 'string' && v.length > n ? v.slice(0, n) + '…' : v);
@@ -1100,8 +1180,8 @@ export async function renderClass(root, meta) {
           const blockId = String(input?.blockId ?? '').trim();
           staged.calls.push({ name: 'get_answers', input: { blockId } });
           if (!blockId) throw new Error('要写 blockId（组件的 id）');
-          const s = await db.collection('answers').where('block', '==', blockId).get();
-          return s.docs.map((d) => d.data()).sort((a, b) => a.at - b.at).slice(-30).map((a) => ({
+          const list = await answersOf(blockId);
+          return list.sort((a, b) => a.at - b.at).slice(-30).map((a) => ({
             id: a.id, kind: a.kind, q: cut(a.q, 200), text: cut(a.text, 500), value: cut(a.value, 200), ok: a.ok, attempts: a.attempts,
             transcript: cut(a.transcript, 500), detail: a.detail, giveup: a.giveup, revealed: a.revealed, ms: a.ms, images: (a.images || []).length,
           }));
@@ -1115,7 +1195,7 @@ export async function renderClass(root, meta) {
           const answerId = String(input?.answerId ?? '').trim();
           staged.calls.push({ name: 'view_handwriting', input: { answerId } });
           if (!answerId) throw new Error('要写 answerId（get_answers 返回的 id）');
-          const s = await db.collection('answers').doc(answerId).get();
+          const s = await db.collection(desk ? 'evidence' : 'answers').doc(answerId).get();
           if (!s.exists) throw new Error('没有这条作答');
           const a = s.data();
           const ids = (a.images || []).slice(0, maxImages);
@@ -1126,7 +1206,20 @@ export async function renderClass(root, meta) {
           return { transcript: cut(a.transcript || a.text || '', 1000), images: (a.images || []).length, attachedNextMessage: Math.min(blobs.length, room) };
         },
       },
-      {
+      desk ? {
+        name: 'lesson_note',
+        description: '记一条给课后看的观察，存进学习台的 observations，项目对话里的 Claude 课后会读。kind：note 是观察（比如学生反复出现的错误），proposal 是提议（弱点、掌握、复现这些你不能改，看到该改的就提议，比如「W19 这节课两次都对了，可以考虑降一级」）。about 写相关的编号（W19、L2-07、L2.2.1#tr……）。',
+        inputSchema: { type: 'object', properties: { text: { type: 'string' }, kind: { type: 'string', enum: ['note', 'proposal'] }, about: { type: 'array', items: { type: 'string' } } }, required: ['text'] },
+        async execute(input) {
+          const text = String(input?.text ?? '').trim().slice(0, 2000);
+          const kind = input?.kind === 'proposal' ? 'proposal' : 'note';
+          const about = Array.isArray(input?.about) ? input.about.map((x) => String(x).trim()).filter(Boolean).slice(0, 20) : [];
+          staged.calls.push({ name: 'lesson_note', input: { text, kind, about: about.length ? about : undefined } });
+          if (!text) throw new Error('要写 text');
+          staged.notes.push({ text, kind, about });
+          return kind === 'proposal' ? '记下了这条提议，课后由项目对话里的 Claude 决定采不采纳。' : '记下了，下课后给项目对话里的 Claude 看。';
+        },
+      } : {
         name: 'lesson_note',
         description: '记一条给课后看的观察（比如学生反复出现的错误），项目对话里的 Claude 课后会读。',
         inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
@@ -1134,10 +1227,34 @@ export async function renderClass(root, meta) {
           const text = String(input?.text ?? '').trim().slice(0, 2000);
           staged.calls.push({ name: 'lesson_note', input: { text } });
           if (!text) throw new Error('要写 text');
-          staged.notes.push(text);
+          staged.notes.push({ text, kind: 'note' });
           return '记下了，下课后给项目对话里的 Claude 看。';
         },
       },
+      ...(desk ? [{
+        name: 'slip_note',
+        description: '记一条你自己这节课的教学失误（比如「一次写了三块板没等学生答」「小问的答案就印在板上」），存进学习台的 slips，以后上课会提醒你别再犯。text 写失误，lesson 写下次怎么做。',
+        inputSchema: { type: 'object', properties: { text: { type: 'string' }, lesson: { type: 'string' } }, required: ['text'] },
+        async execute(input) {
+          const text = String(input?.text ?? '').trim().slice(0, 1000);
+          const lesson = String(input?.lesson ?? '').trim().slice(0, 500);
+          staged.calls.push({ name: 'slip_note', input: { text, lesson: lesson || undefined } });
+          if (!text) throw new Error('要写 text');
+          staged.slips.push({ text, lesson });
+          return '记下了。';
+        },
+      }, {
+        name: 'memory_read',
+        description: '查学习台的记忆库（只读）。collection 写集合名：rules、profile、curriculum、errors、weaknesses、mastery、reviews、position、slips、observations、evidence。写 id 查一条的全文（比如 errors 的 L2-07、curriculum 的 L2.2.1）；不写 id 时列出这一类（可以写 block 只要挨着这一块的）。evidence 按 block 或 session（这节课是 ' + desk.sid + '）查最近的 30 条。每调用一次你要多等一整轮，只在记忆摘要里没有、又确实需要时用。',
+        inputSchema: { type: 'object', properties: { collection: { type: 'string' }, id: { type: 'string' }, block: { type: 'string' }, session: { type: 'string' } }, required: ['collection'] },
+        async execute(input) {
+          const q = { collection: String(input?.collection ?? '').trim(), id: input?.id, block: input?.block, session: input?.session };
+          staged.calls.push({ name: 'memory_read', input: Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined && v !== '')) });
+          const r = memoryRead(desk.mem, q);
+          if (!r.needDb) return r;
+          return evidenceRows(q);
+        },
+      }] : []),
       {
         name: 'view_image',
         description: '把资料包里的一张讲义原图（images 里的 name）附在下一条消息里给你看。每用一次你要多等一整轮；只在要照着原图讲、但资料包的文字说不清的时候用。要贴上黑板给学生看，用 image 组件。',
@@ -1203,7 +1320,7 @@ export async function renderClass(root, meta) {
       bar.setStatus('thinking', 'Claude 在写这节课的小结…');
       ensureDraft();
       ctl = new AbortController();
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), subject: session.subject });
+      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), subject: session.subject, memory: memoryArg() });
       const { turns } = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt() }], maxBytes: promptLimit() });
       let res;
       try {
@@ -1221,13 +1338,19 @@ export async function renderClass(root, meta) {
       // 小结那块板的最后一行由页面写：这节课的讲课是不是都由 Opus 5.5 回答（平台核验），作废了几轮
       const v = verifyCounts();
       v.turns++; // 这份小结本身也是 Opus 5.5 写的
-      await sink.put('class_notes', { kind: 'summary', text: res.text, at: Date.now(), turn: turnSeq + 1, verify: v });
+      if (desk) {
+        const ob = observationRecord({ kind: 'summary', text: res.text, session: desk.sid, block: desk.block, turn: turnSeq + 1, verify: v });
+        await sink.put('observations', ob);
+        desk.updateSession({ status: 'closed', endedAt: Date.now(), summary: ob.id, verify: v });
+      } else {
+        await sink.put('class_notes', { kind: 'summary', text: res.text, at: Date.now(), turn: turnSeq + 1, verify: v });
+      }
       const foot = mock ? `（本地测试：${v.turns} 轮都是模拟老师回放的，没有调用 Claude。）`
         : `这节课 ${v.turns} 轮讲课和小结全部由 Opus 5.5 回答（平台核验）${v.discarded ? `；另有 ${v.discarded} 轮平台换了别的模型，已作废、没有显示` : ''}。`;
       const p = newPage({ title: '这节课的小结', kind: 'closing', body: res.text, foot });
       addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied, page: p.n });
       bv.show(p.n, { animate: true });
-      bar.setStatus('notice', '下课了。小结已经存好，回对话告诉 Claude「下课了」。');
+      bar.setStatus('notice', desk ? '下课了。小结已经存进学习台，回对话告诉 Claude「下课了」。' : '下课了。小结已经存好，回对话告诉 Claude「下课了」。');
       session.event('end', null, { turns: history.length });
       return true;
     });
