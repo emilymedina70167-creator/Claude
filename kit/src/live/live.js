@@ -3,8 +3,10 @@
 // 页面按课堂模式同一套「一屏一块板」摆出来（boardview.js），学生在板上作答，作答写回 answers / events。
 // 对话里的 Claude 看不到页面，所以页面把它需要知道的写回数据库：写法错误 lint/{段 id}，
 // 屏幕大小和当前板放不放得下 meta/screen，以及汇总的「黑板现状」meta/now（最近的作答、没提交的草稿、写法错误、
-// 屏幕、交来的截图）——学生回对话说「好了」时，Claude 读这一份就够了。
-// 说话在对话框里，黑板上不放对话，也没有页面里的「问 Claude」；学生在笔记软件里写的，用底部「交截图」交上来。
+// 屏幕、交来的截图、教具指令的结果和板上的标注）——学生回对话说「好了」时，Claude 读这一份就够了。
+// 老师的教具和课堂模式共用（class/boardtools.js）：对话里的 Claude 往 ops 集合写 mark / unmark / figure 指令
+// （写法同课堂的 board 块），页面按 seq 执行；往 talk 集合写一句话，页面写在那块板的最上面。
+// 说话主要在对话框里，黑板上不放对话，也没有页面里的「问 Claude」；学生在笔记软件里写的，用底部「交截图」交上来。
 import { renderLesson, mdToHtml, escapeHtml } from '../render.js';
 import { session } from '../session.js';
 import { copyRecord, toast } from '../record.js';
@@ -18,6 +20,10 @@ import { planBoards, lintRecord, screenRecord, sameScreen, leadingHeading, statu
 import { actionText, reportable } from '../class/prompt.js';
 import { draftsIn } from '../drafts.js';
 import { VERSION } from '../version.js';
+import { createBoardTools } from '../class/boardtools.js';
+import { markText } from '../markspec.js';
+import { compile } from '../expr.js';
+import { parseLiveOp, opTargets, nextOps, resultLine, segSig, opKey, restorePlan, OP_WAIT, OP_SETTLE, OPS_KEEP } from './ops.js';
 
 const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const SCREEN_DELAY = 1500; // 屏幕大小、放不放得下：停下来 1.5 秒再写，转屏、滚动时不连着写
@@ -30,9 +36,20 @@ export async function renderLive(root, meta) {
   const unitName = meta.unit || session.title;
   root.classList.add('is-live', 'is-class');
 
-  const steps = new Map(); // id → { id, seq, page, place, lead, title, md, hidden, sec, stage, touched }
+  const steps = new Map(); // id → { id, seq, page, place, lead, title, md, hidden, sec, stage, touched, drawn（画在板上的那一版 { md, title }）}
   // 黑板现状的定时器：放在最前面，数据库一订阅就可能马上回调（回调里会排一次写）
   let nowTimer = 0;
+  // 板顶的话、教具指令的状态也一样（订阅的回调里就会用到）
+  const talks = new Map(); // 板号 → 板顶的话（md）
+  const opDocs = new Map(); // id → ops 里的那条
+  const opSeen = new Map(); // id → { key, at }：这次打开页面后第一次看到这一版的时间
+  const opDone = new Map(); // id → 执行过的那一版的指纹（opKey）
+  const opPlaced = new Map(); // id → 这条指令画上的标注 id（同一个 doc_id 改写成新指令时，先擦掉旧版画的）
+  let opTimer = 0;
+  let opsBusy = false;
+  let opsLoaded = false; // 上次执行过的记录读回来、标注和图的状态放回去了
+  let stepsLoaded;
+  const stepsReady = new Promise((r) => { stepsLoaded = r; });
   let lastNow = null;
   let unseen = false; // 翻回旧板看的时候，当前板上来了新东西：「回到当前板」闪
   const bv = createBoardView({
@@ -48,6 +65,8 @@ export async function renderLive(root, meta) {
     onShow: (n) => { if (n === bv.cur && unseen) { unseen = false; bv.syncNav(); } scheduleNow(); },
     onMeasure: () => scheduleScreen(),
   });
+  // 教具（和课堂模式共用）：板上的标注、让图动。只动当前板和常驻栏上的东西
+  const tools = createBoardTools({ bv, segs: steps });
   const welcome = root.querySelector('.class-welcome');
   const welcomeText = root.querySelector('.class-welcome-text');
   const bar = createLiveBar({ onNav: (n) => bv.go(n), onCopy: () => copyRecord(toast), onUpload: (blobs, note) => upload(blobs, note) });
@@ -89,10 +108,13 @@ export async function renderLive(root, meta) {
   // 黑板现状里接着上次的「最近作答」和交来的截图（刷新页面不丢）
   const recent = []; // { line, at, key }
   const uploads = []; // { id, images, note, page, at }
+  const opLines = []; // 教具指令的结果，一条一行（刷新前的也接着，执行过的不再报一遍）
+  const opResults = []; // 这次打开页面后的结果 { id, ok, partial, line }（本地检查脚本读）
   const seeded = store.db.doc('meta/now').get().then((snap) => {
     const d = snap.exists ? snap.data() : null;
     if (Array.isArray(d?.recent)) recent.unshift(...d.recent.filter((r) => r && r.line));
     if (Array.isArray(d?.uploads)) uploads.unshift(...d.uploads.filter((u) => u && u.id));
+    if (Array.isArray(d?.ops)) opLines.unshift(...d.ops.filter((l) => typeof l === 'string' && l));
   }).catch(() => {});
   // 学生在黑板上打字、点、拖：草稿可能变了
   for (const type of ['input', 'click', 'pointerup', 'change']) root.addEventListener(type, () => scheduleNow(), { capture: true, passive: true });
@@ -100,7 +122,22 @@ export async function renderLive(root, meta) {
   let first = true;
   store.db.collection('steps').onSnapshot((snap) => {
     apply(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    stepsLoaded();
+    pumpOps();
   }, () => bar.setChip('off', '连接断了，刷新试试'));
+
+  // —— 板顶的话：talk/{板号} = { page, md }。写在那块板的最上面；md 写空就去掉 ——
+  store.db.collection('talk').onSnapshot((snap) => {
+    talks.clear();
+    for (const d of snap.docs) {
+      const x = d.data() || {};
+      const n = Number(x.page ?? d.id);
+      if (Number.isInteger(n) && n >= 1) talks.set(n, String(x.md ?? ''));
+    }
+    syncTalks();
+    bv.scheduleFit();
+    scheduleNow();
+  }, () => {});
 
   // 数据库里的段 → 板上。新出现、改了的段画出来；撤回的藏起来；换了板的挪过去
   function apply(docs) {
@@ -112,6 +149,7 @@ export async function renderLive(root, meta) {
       const p = bv.ensurePage(pg.n);
       if (p.title !== pg.title || p.lead !== pg.lead) { p.title = pg.title; p.lead = pg.lead; bv.paint(p); }
     }
+    syncTalks();
     const ordered = docs.filter((d) => plan.steps.has(String(d.id))).sort((a, b) => (Number(a.seq) || 0) - (Number(b.seq) || 0));
     for (const d of ordered) {
       const id = String(d.id);
@@ -128,6 +166,8 @@ export async function renderLive(root, meta) {
         continue;
       }
       const moved = s.page !== pos.page || s.place !== pos.place || s.seq !== seq;
+      // 挪到别的板、进出常驻栏：段上的标注擦掉（同一块板上换个先后不算）
+      if (s.page !== pos.page || s.place !== pos.place) tools.dropMarks(id);
       const leadChanged = s.lead !== pos.lead;
       Object.assign(s, { seq, page: pos.page, place: pos.place, lead: pos.lead });
       if (d.hidden) { hide(s); continue; }
@@ -180,6 +220,7 @@ export async function renderLive(root, meta) {
   }
 
   function hide(s) {
+    tools.dropMarks(s.id);
     if (s.hidden && !s.sec?.isConnected) return;
     s.hidden = true;
     if (s.sec) s.sec.hidden = true;
@@ -196,8 +237,18 @@ export async function renderLive(root, meta) {
     return `## ${s.title}\n\n${s.md}`;
   }
 
+  // 画在板上的这一段现在是什么样：指令执行时记下来，刷新后段变了（改了内容、挪了板、撤回了）就不再放回标注和图的状态
+  function sigOf(id) {
+    const s = steps.get(String(id));
+    return s && !s.hidden && s.sec?.isConnected && s.drawn ? segSig({ page: s.page, place: s.place, title: s.drawn.title, md: s.drawn.md }) : undefined;
+  }
+
   function draw(s) {
     const old = s.sec;
+    // 内容没变、只是重画（板的第一段换了、段从页面上掉了）：标注照原样放回去；内容变了就擦掉
+    const same = s.drawn && s.drawn.md === s.md && s.drawn.title === s.title;
+    const keep = same ? [...tools.marks.values()].filter((m) => m.seg === s.id) : [];
+    tools.dropMarks(s.id);
     if (s.stage < 0) { s.stage = session.stages.length; session.stages.push({ id: s.id, title: '', src: '', el: null }); }
     const i = s.stage;
     const sec = document.createElement('section');
@@ -220,6 +271,8 @@ export async function renderLive(root, meta) {
       session.problems.push({ stage: i, title: s.title, kind: '渲染', msg: `这段画不出来：${e?.message || e}` });
     }
     if (s.place !== 'pin') bv.splitFigure(sec.querySelector('.stage-body'));
+    s.drawn = { md: s.md, title: s.title };
+    for (const m of keep) tools.placeMark({ ...m.spec, id: m.id }, { animate: false, restore: true });
     const problems = [...session.problems.filter((p) => p.stage === i), ...extraProblems(sec)];
     showLint(s, problems);
     reportLint(s, problems);
@@ -260,6 +313,181 @@ export async function renderLive(root, meta) {
     b.innerHTML = '<span>Claude 改了这一段。你已经在这里作答，所以先没替换。</span><button type="button" class="btn btn-sm btn-primary">看新版本</button>';
     b.querySelector('button').addEventListener('click', () => { draw(s); bv.scheduleFit(); });
     s.sec.append(b);
+  }
+
+  // —— 板顶的话：写在那块板的最上面（课堂模式那一行），不标模型（说话的是对话里的 Claude）——
+  function syncTalks() {
+    for (const p of bv.pages.values()) {
+      const md = (talks.get(p.n) || '').trim();
+      if (p.talk === md && !p.talkBy) continue;
+      p.talk = md;
+      p.talkBy = '';
+      bv.paint(p);
+      // 公式写错、\calc 算不出来：学生看到红字，结果里告诉对话里的 Claude
+      const bad = [...p.talkEl.querySelectorAll('.calc-error, .katex-error, .tex-error')].slice(0, 3)
+        .map((e) => e.dataset.calcError || `$${e.textContent.trim().slice(0, 60)}$ 写不出来（${String(e.getAttribute('title') || '').replace(/^ParseError:\s*/, '').slice(0, 120)}）`);
+      // 刷新后重画同一句不再报一遍（报过的在接着的结果里）
+      const line = `talk ${p.n}：板顶的话里有写法错误（学生看到的是红字）：${bad.join('；')}`;
+      if (bad.length) seeded.then(() => { if (!opLines.includes(line)) { noteOp(line); opResults.push({ id: `talk ${p.n}`, ok: false, line }); } });
+    }
+  }
+
+  // —— 教具指令：ops/{id} = { seq, cmd, body }，写法同课堂模式的 board 块（只收 mark / unmark / figure）——
+  // 按 seq 依次执行；指向的段、组件还没画出来就先等（最多 OP_WAIT），前一条在等，后面的也等。
+  // 执行过的记在 ops_done/{id}（刷新后只把标注、图的状态放回去，不再报一遍结果）
+  // 打开页面时：等第一批段画好、上次执行过的记录读回来，先把标注和图的状态放回去，再执行新的指令
+  (async () => {
+    let recs = [];
+    try { recs = (await store.db.collection('ops_done').get()).docs.map((d) => ({ id: d.id, ...d.data() })); } catch { recs = []; }
+    await Promise.all([stepsReady, seeded]);
+    for (const r of recs) {
+      if (r.key) opDone.set(String(r.id), r.key);
+      if (r.kind === 'mark') opPlaced.set(String(r.id), (r.marks || []).map((m) => m.id));
+    }
+    try { restoreOps(recs); } catch (e) { console.error(e); }
+    opsLoaded = true;
+    pumpOps();
+  })();
+  store.db.collection('ops').onSnapshot((snap) => {
+    opDocs.clear();
+    const now = Date.now();
+    for (const d of snap.docs) {
+      const doc = { id: d.id, ...d.data() };
+      opDocs.set(d.id, doc);
+      const key = opKey(doc);
+      if (opSeen.get(d.id)?.key !== key) opSeen.set(d.id, { key, at: now });
+    }
+    pumpOps();
+  }, () => {});
+
+  function restoreOps(recs) {
+    const plan = restorePlan(recs, sigOf);
+    plan.ids.forEach((id) => tools.bumpSeq(id));
+    session.replaying = true;
+    try {
+      for (const f of plan.figures) {
+        const el = bv.board.querySelector(`.class-seg:not([hidden]) [data-bid="${CSS.escape(f.target)}"][data-scene]`);
+        const api = el && session.scenes.get(el.dataset.scene)?.api;
+        if (!api) continue;
+        try {
+          if (f.action === 'play') api.set(f.args.name, f.args.to ?? 1);
+          else for (const [name, src] of Object.entries(f.args.assigns || {})) api.set(name, compile(src)((api.vars || api.snapshot)?.call(api) || {}));
+        } catch { /* 放不回去就保持初始的样子 */ }
+      }
+    } finally {
+      session.replaying = false;
+    }
+    // 图回到刷新前的样子了，再把标注画回去（标在图上的要按图现在的样子摆）
+    for (const m of plan.marks) tools.placeMark({ ...m.spec, id: m.id }, { animate: false, restore: true });
+    scheduleNow();
+  }
+
+  const isDone = (d) => opDone.get(String(d.id)) === opKey(d);
+  // 目标在不在黑板上：段（撤回的也算，执行时说「已经撤回」）、组件；组件写在已经画了的段里却没画出来（写法错误）也算到了
+  function targetState(t) {
+    if (steps.has(t)) return { ok: true };
+    if (bv.board.querySelector(`.class-seg [data-bid="${CSS.escape(t)}"]`)) return { ok: true };
+    const re = new RegExp(`^[ \\t]*id[ \\t]*[:：][ \\t]*${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[ \\t]*$`, 'm');
+    const home = [...steps.values()].find((s) => s.sec?.isConnected && re.test(s.drawn?.md || ''));
+    if (home) return { ok: false, broken: `${t} 没画出来：它所在的 ${home.id} 有写法错误，见 lint，先改好 ${home.id}` };
+    return { ok: false };
+  }
+
+  function pumpOps() {
+    if (opsBusy || !opsLoaded) return;
+    opsBusy = true;
+    try {
+      clearTimeout(opTimer);
+      opTimer = 0;
+      for (const d of nextOps([...opDocs.values()], isDone)) {
+        const p = parseLiveOp(d);
+        if (p.error) { finishOp(d, { ok: false, error: p.error }); continue; }
+        const age = Date.now() - (opSeen.get(d.id)?.at ?? 0);
+        if (age < OP_SETTLE) { opTimer = setTimeout(pumpOps, OP_SETTLE - age + 20); break; }
+        const states = opTargets(p.op).map((t) => [t, targetState(t)]);
+        const broken = states.find(([, st]) => st.broken);
+        if (broken) { finishOp(d, { ok: false, error: broken[1].broken }); continue; }
+        const missing = states.filter(([, st]) => !st.ok).map(([t]) => t);
+        if (missing.length && age < OP_WAIT) { opTimer = setTimeout(pumpOps, 250); break; }
+        if (missing.length) { finishOp(d, { ok: false, error: `${missing.join('、')} 还没画出来：等了 ${OP_WAIT / 1000} 秒，黑板上还没有它；段要先写进 steps，组件要写 id:` }); continue; }
+        runOp(d, p.op);
+      }
+    } finally {
+      opsBusy = false;
+    }
+  }
+
+  function runOp(d, op) {
+    // 学生正看着当前板才播动画；在看旧板时直接画成最后的样子（翻回来看到结果就行）
+    const animate = bv.view === bv.cur && !document.hidden;
+    const notes = [];
+    // 改写了一条执行过的指令（多半是改错）：旧版画的标注先擦掉，免得新旧两份都在板上
+    const old = opPlaced.get(String(d.id)) || [];
+    if (old.length) tools.unmarkOp({ ids: old.filter((id) => tools.marks.has(id)) });
+    let res;
+    try {
+      res = op.op === 'mark' ? tools.markOp(op, { animate })
+        : op.op === 'unmark' ? tools.unmarkOp(op)
+          : tools.figureOp(op, notes, { animate });
+    } catch (e) {
+      console.error(e);
+      res = { ok: false, error: `执行出错：${e?.message || e}` };
+    }
+    finishOp(d, res, notes, op);
+  }
+
+  // 记下执行过了：结果写进黑板现状，标注和图的改动写进 ops_done（刷新后放回去用）
+  function finishOp(d, res, notes = [], op = null) {
+    const id = String(d.id);
+    const key = opKey(d);
+    opDone.set(id, key);
+    const line = resultLine(id, d.cmd, res, notes);
+    noteOp(line);
+    opResults.push({ id, ok: !!res?.ok, partial: !!(res?.ok && res.error), line });
+    const rec = { id, seq: Number(d.seq) || 0, key, ok: !!res?.ok, at: Date.now() };
+    opPlaced.set(id, res?.op === 'mark' ? (res.marks || []).map((m) => m.id) : []);
+    if (res?.op === 'mark') {
+      rec.kind = 'mark';
+      rec.marks = (res.marks || []).map((m) => ({ id: m.id, seg: m.seg, spec: m.spec, sig: sigOf(m.seg) ?? null }));
+    } else if (res?.op === 'unmark') {
+      rec.kind = 'unmark';
+      rec.ids = res.ids || [];
+    } else if (res?.op === 'figure' && res.ok && op && (op.action === 'set' || op.action === 'play')) {
+      const seg = bv.board.querySelector(`.class-seg:not([hidden]) [data-bid="${CSS.escape(op.target)}"][data-scene]`)?.closest('[data-step]')?.dataset.step || '';
+      Object.assign(rec, { kind: 'figure', action: op.action, target: op.target, args: res.args, seg, sig: sigOf(seg) ?? null });
+    }
+    sink.put('ops_done', rec);
+  }
+
+  function noteOp(line) {
+    opLines.push(line);
+    if (opLines.length > OPS_KEEP * 3) opLines.splice(0, opLines.length - OPS_KEEP * 3);
+    scheduleNow();
+  }
+
+  // 本地检查（tools/check-lesson.mjs）：等页面把写进来的指令都处理完再看
+  if (store.dev) window.LAKitLive = { pendingOps: () => (opsLoaded ? nextOps([...opDocs.values()], isDone).length : -1), results: () => opResults.slice() };
+
+  // 黑板现状里的标注：一段一行，按段的先后
+  function currentMarks() {
+    const by = new Map();
+    for (const m of tools.marks.values()) {
+      if (!by.has(m.seg)) by.set(m.seg, []);
+      by.get(m.seg).push(markText(m.id, m.spec));
+    }
+    return [...by.entries()].sort((a, b) => (steps.get(a[0])?.seq ?? 0) - (steps.get(b[0])?.seq ?? 0)).map(([step, list]) => ({ step, list }));
+  }
+  // 当前板和常驻栏上的图，能用 figure set / play 改的变量
+  function currentFigures() {
+    const out = [];
+    for (const s of [...steps.values()].sort((a, b) => a.seq - b.seq)) {
+      if (s.hidden || !s.sec?.isConnected || !(s.place === 'pin' || s.page === bv.cur)) continue;
+      for (const b of s.sec.querySelectorAll('.block[data-bid][data-scene]')) {
+        const vars = tools.figureVars(b);
+        if (vars) out.push({ id: b.dataset.bid, kind: [...b.classList].find((c) => c.startsWith('block-'))?.slice(6) || '', step: s.id, vars });
+      }
+    }
+    return out;
   }
 
   // —— 屏幕大小和当前板放不放得下：写回 meta/screen，对话里的 Claude 照着控制一块板写多少 ——
@@ -309,7 +537,7 @@ export async function renderLive(root, meta) {
     await seeded;
     const pages = [...bv.pages.values()].sort((a, b) => a.n - b.n).map((p) => ({ n: p.n, title: p.title }));
     const lint = [...lintDb.values()].filter((l) => { const s = steps.get(String(l.step ?? l.id)); return s && !s.hidden; });
-    const rec = statusRecord({ cur: bv.cur, view: bv.view, pages, recent, drafts: currentDrafts(), lint, screen: lastScreen, uploads, kit: VERSION });
+    const rec = statusRecord({ cur: bv.cur, view: bv.view, pages, recent, drafts: currentDrafts(), lint, screen: lastScreen, uploads, kit: VERSION, ops: opLines, marks: currentMarks(), figures: currentFigures() });
     if (sameStatus(rec, lastNow)) return;
     lastNow = rec;
     sink.put('meta', { ...rec, at: Date.now() });

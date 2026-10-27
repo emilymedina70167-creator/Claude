@@ -82,10 +82,13 @@ export const sameScreen = (a, b) => !!a && !!b && JSON.stringify({ ...a, at: 0 }
  * - lint：现在还有写法错误的段
  * - uploads：学生交给 Claude 看的截图（asset id），最新的在最后
  * - kit：这块黑板用的组件库版本。对话里的 Claude 拿它和说明的版本比，对不上就是黑板用的旧版组件库（旧版写不出新写法）
+ * - ops：最近的教具指令（ops 集合里的 mark / unmark / figure）的结果，一条一行，最新的在最后
+ * - marks：现在板上的标注，一段一行：「s3：m1：s3 里\hl{key}（圈）「…」；m2：…」（markspec.js 的 markText），撤标注、换讲法时靠它找 id
+ * - figures：当前板和常驻栏上的图能用 figure set / play 改的变量
  */
-export const NOW_LIMITS = { recent: 30, line: 300, drafts: 20, uploads: 6, lint: 20 };
+export const NOW_LIMITS = { recent: 30, line: 300, drafts: 20, uploads: 6, lint: 20, ops: 10, marks: 20, figures: 20 };
 
-export function statusRecord({ cur = 0, view = 0, pages = [], recent = [], drafts = [], lint = [], screen = null, uploads = [], kit = '' } = {}) {
+export function statusRecord({ cur = 0, view = 0, pages = [], recent = [], drafts = [], lint = [], screen = null, uploads = [], kit = '', ops = [], marks = [], figures = [] } = {}) {
   const cut = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
   const L = NOW_LIMITS;
   return {
@@ -101,6 +104,11 @@ export function statusRecord({ cur = 0, view = 0, pages = [], recent = [], draft
     lint: (lint || []).filter((l) => l && l.ok === false).slice(0, L.lint).map((l) => ({ step: String(l.step ?? l.id ?? ''), problems: (l.problems || []).filter((p) => !p.soft).map((p) => cut(`${p.kind}：${p.msg}`, 200)) })),
     screen: screen ? { w: screen.w, h: screen.h, landscape: !!screen.landscape, board: screen.board || null, fits: screen.fits ?? null } : null,
     uploads: (uploads || []).slice(-L.uploads).map((u) => ({ id: String(u.id), images: (u.images || []).map(String), ...(u.note ? { note: cut(u.note, 200) } : {}), page: Number(u.page) || 0, at: u.at || 0 })),
+    ops: (ops || []).map((o) => (typeof o === 'string' ? o : o?.line)).filter(Boolean).slice(-L.ops).map((l) => cut(l, L.line)),
+    marks: (marks || []).filter((m) => m && m.step && (m.list || []).length).slice(0, L.marks).map((m) => cut(`${m.step}：${m.list.join('；')}`, 600)),
+    figures: (figures || []).filter((f) => f && f.id).slice(0, L.figures).map((f) => ({
+      id: String(f.id), ...(f.kind ? { kind: String(f.kind) } : {}), step: String(f.step ?? ''), vars: (f.vars || []).map(String).slice(0, 30),
+    })),
   };
 }
 

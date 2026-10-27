@@ -35,7 +35,7 @@
 
 ### 实时黑板（mode: live）
 
-另一种学法：课件页面只是一块黑板，对话里的 Claude（有你的记忆）一段一段往上写（写进这个 artifact 的数据库）。黑板和课堂模式一样一屏一块板：讲新的一件事就换一块新板，旧板在底部的翻板条上翻回去看；整个单元要用的记号和结论放在常驻栏里。说话都在对话框里，黑板上只有讲课内容。你在黑板上作答，每次尝试、揭开、放弃都存进数据库；在笔记软件里写的过程，用底部的「交截图」交上来。你回对话说「好了」，Claude 读一份「黑板现状」（最近的作答、还没点检查的草稿、写法错误、屏幕放不放得下、交来的截图），再决定下一段写什么：补讲、换一道、追问，或者换一块新板往下走。往下走的决定权在对话里。底部的「⋯」里是板书、复制学习记录和组件库版本号。说明见 `CLAUDE-PROJECT.md` 第五节、需求原文见 [`docs/live-board-spec.md`](docs/live-board-spec.md)。
+另一种学法：课件页面只是一块黑板，对话里的 Claude（有你的记忆）一段一段往上写（写进这个 artifact 的数据库）。黑板和课堂模式一样一屏一块板：讲新的一件事就换一块新板，旧板在底部的翻板条上翻回去看；整个单元要用的记号和结论放在常驻栏里。说话都在对话框里，黑板上只有讲课内容（要你盯着黑板看的一句话，Claude 会写在当前板的最上面）。Claude 还能像课堂模式里的老师一样，回头在板上圈、框、划、写旁注，让图和矩阵动起来（教具指令写进数据库，页面执行）。你在黑板上作答（也可以黑板上只放讲解和题面，你在对话里打字、贴截图作答），每次尝试、揭开、放弃都存进数据库；在笔记软件里写的过程，用底部的「交截图」交上来。你回对话说「好了」，Claude 读一份「黑板现状」（最近的作答、还没点检查的草稿、写法错误、屏幕放不放得下、交来的截图），再决定下一段写什么：补讲、换一道、追问，或者换一块新板往下走。往下走的决定权在对话里。底部的「⋯」里是板书、复制学习记录和组件库版本号。说明见 `CLAUDE-PROJECT.md` 第五节、需求原文见 [`docs/live-board-spec.md`](docs/live-board-spec.md)、[`docs/live-tools-spec.md`](docs/live-tools-spec.md)（标注、让图动、板顶的话）。
 
 ### 课堂模式（mode: class）
 
@@ -43,7 +43,7 @@
 
 它手里的教具：在板上圈、框、划、写旁注（`board mark`），会动的矩阵（`matrix`：幂次、分块、乘积，格子变了会闪、数挪了会飞），一行行写出来的推导（`derive`），当场画的示意图（`sketch`），讲义原图（`image`），黑板上的数让页面精确地算（公式里的 `\calc{…}`），换着数出题判分（`practice` 的自定义题型），判含 $n$ 的式子（`formula: n`，代几组 $n$ 比较，告诉你哪个 $n$ 对不上）。需求和设计见 [`docs/teaching-tools-spec.md`](docs/teaching-tools-spec.md)。项目对话里的 Claude 课前写资料包（`pack/main`、`pack/problems`），课后读课堂记录（`class_turns`、`class_notes`）。说明见 `CLAUDE-PROJECT.md` 第六节，需求原文见 [`docs/classroom-spec.md`](docs/classroom-spec.md)。本地试用：把 `kit/dist/la-kit.js` 放在同一个文件夹，打开 `kit/examples/class-demo.html?dev`（模拟老师按剧本回放，不花额度）。
 
-本地试用实时黑板：打开 `kit/examples/live-demo.html?dev`（`la-kit.js` 放在同一目录），右上角的「开发面板」可以扮演对话里的 Claude 往黑板上写（第几块板、放不放常驻栏）、查看作答和页面写回的信息。
+本地试用实时黑板：打开 `kit/examples/live-demo.html?dev`（`la-kit.js` 放在同一目录），右上角的「开发面板」可以扮演对话里的 Claude 往黑板上写（第几块板、放不放常驻栏）、写指令和板顶的话、查看作答和页面写回的信息。
 
 ## 设置
 
@@ -92,7 +92,7 @@ docs/                    需求原文：实时黑板、课堂模式、课堂教�
 kit/src/
   main.js                入口：渲染 <script type="text/markdown"> 里的课件，按 mode 分发
   guided.js              一次写完的课件：分节解锁、进度条
-  live/                  实时黑板：分板（layout）、底部翻板条（livebar）、数据库连接、本地替身（?dev）、开发面板、作答和写法错误写回
+  live/                  实时黑板：分板（layout）、教具指令（ops）、底部翻板条（livebar）、数据库连接、本地替身（?dev）、开发面板、作答和写法错误写回
   class/                 课堂模式：控制器（classroom）、输出解析（protocol）、提示词（prompt）、底部输入框（bar）、
                          一屏一块板（boardview、pagenav）、察觉卡住（stuck）、模拟老师和开发面板（?dev）
   render.js              Markdown + KaTeX + 组件 → 页面

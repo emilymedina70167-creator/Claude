@@ -6,7 +6,8 @@
 // 用法：node tools/check-lesson.mjs [选项] 文件…
 //   *.md          课件 Markdown（front matter + 正文）
 //   *.html        示例页（kit/examples/ 那种：一段 <script type="text/markdown">）
-//   *.board.json  实时黑板的段：{ "unit", "subject", "steps": [{ "id", "seq", "page", "title", "md", "pin" }] }
+//   *.board.json  实时黑板：{ "unit", "subject", "steps": [{ "id", "seq", "page", "title", "md", "pin" }],
+//                 "ops": [{ "id", "seq", "cmd", "body" }]（教具指令，和段按 seq 一起一条条写进去）, "talk": [{ "page", "md" }]（板顶的话）}
 //   *.class.json  课堂输出：{ "unit", "subject", "pack": { "main", "problems" }, "turns": [{ "student", "teacher" }] }
 //                 （teacher 是课堂里的 Claude 一轮的完整输出：说的话 + board 围栏块；student 是这一轮之前学生发的话，
 //                  第一轮是点「开始上课」，不用写）
@@ -261,17 +262,37 @@ async function checkStatic(browser, file, opt, dir) {
   return results;
 }
 
+// 实时黑板里的教具指令要一条条写：对话里的 Claude 写指令时只有那时的当前板能标、能动。
+// 把段和指令按 seq 排好，页面开着时一条条写进替身数据库（localStorage + storage 事件，和别的标签页改数据一样），
+// 每条指令等页面处理完再写下一条
+export function boardTimeline(spec) {
+  const items = [];
+  (Array.isArray(spec.steps) ? spec.steps : []).forEach((s, i) => {
+    const { id, ...rest } = s;
+    items.push({ path: `steps/${String(id || `s${i + 1}`)}`, data: { seq: i + 1, ...rest }, kind: 'step', order: i });
+  });
+  (Array.isArray(spec.ops) ? spec.ops : []).forEach((o, i) => {
+    const { id, ...rest } = o;
+    items.push({ path: `ops/${String(id || `o${i + 1}`)}`, data: { body: '', ...rest }, kind: 'op', order: 1000 + i });
+  });
+  // 没写 seq 的指令放最后（页面会报「缺少 seq」）
+  const seqOf = (x) => (Number.isFinite(Number(x.data.seq)) ? Number(x.data.seq) : Infinity);
+  return items.sort((a, b) => seqOf(a) - seqOf(b) || a.order - b.order);
+}
+
 // 实时黑板：段先写进开发用的替身数据库（localStorage），页面按板号分板；每块板翻过去看一遍
 async function checkBoard(browser, file, opt, dir) {
   const spec = JSON.parse(readFileSync(file, 'utf8'));
   const unit = spec.unit || basename(file);
-  const steps = Array.isArray(spec.steps) ? spec.steps : [];
+  const timeline = boardTimeline(spec);
+  const stepwise = timeline.some((x) => x.kind === 'op');
   const db = {};
-  steps.forEach((s, i) => {
-    const id = String(s.id || `s${i + 1}`);
-    const { id: _, ...rest } = s;
-    db[`steps/${id}`] = { seq: i + 1, ...rest };
-  });
+  for (const t of Array.isArray(spec.talk) ? spec.talk : []) {
+    const n = Number(t?.page);
+    if (Number.isInteger(n) && n >= 1) db[`talk/${n}`] = { page: n, md: String(t.md ?? '') };
+  }
+  // 没有指令：段一次全放好（和以前一样）；有指令：开着页面一条条写
+  if (!stepwise) for (const x of timeline) db[x.path] = x.data;
   const results = [];
   const themes = opt.themes === 'all' ? THEMES : [spec.theme || ''];
   for (const theme of themes) {
@@ -284,7 +305,29 @@ async function checkBoard(browser, file, opt, dir) {
       const page = await ctx.newPage();
       hook(page, res);
       await page.goto(pathToFileURL(join(dir, name)).href + '?dev');
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(stepwise ? 600 : 1500);
+      if (stepwise) {
+        const key = `la-devdb:${unit}`;
+        for (const x of timeline) {
+          await page.evaluate(([k, path, data]) => {
+            const all = JSON.parse(localStorage.getItem(k) || '{}');
+            all[path] = data;
+            localStorage.setItem(k, JSON.stringify(all));
+            window.dispatchEvent(new StorageEvent('storage', { key: k }));
+          }, [key, x.path, x.data]);
+          await page.waitForTimeout(x.kind === 'op' ? 150 : 250);
+          // 指令：等页面执行完（要等的段没到时页面最多等 5 秒）
+          for (let t = 0; x.kind === 'op' && t < 80; t++) {
+            if (await page.evaluate(() => window.LAKitLive?.pendingOps?.() === 0)) break;
+            await page.waitForTimeout(100);
+          }
+        }
+        await page.waitForTimeout(600);
+      }
+      // 教具指令没执行的、板顶的话写错的（页面的结果）
+      for (const r of await page.evaluate(() => window.LAKitLive?.results?.() || [])) {
+        if (!r.ok || r.partial) res.problems.push({ kind: r.id.startsWith('talk') ? '板顶的话' : '指令', msg: r.line, soft: false });
+      }
       // 翻到第一块板，再一块块往后
       for (let k = 0; k < 60; k++) {
         const prev = page.locator('.cb-prev');
@@ -295,6 +338,11 @@ async function checkBoard(browser, file, opt, dir) {
       for (let k = 0; k < 60; k++) {
         const n = (await page.locator('.cb-nav-n').first().textContent().catch(() => '')) || String(k + 1);
         await page.waitForTimeout(250);
+        // 板书标注翻回来会重新「画」一遍：等画完再看、再截图
+        await page.evaluate(() => Promise.race([
+          Promise.all([...document.querySelectorAll('.class-page:not([hidden]) .mk-layer')].flatMap((l) => l.getAnimations({ subtree: true })).map((a) => a.finished.catch(() => {}))),
+          new Promise((r) => setTimeout(r, 1500)),
+        ]));
         merge(res, await page.evaluate(inspectInPage), `第 ${n.trim()} 块板`);
         if (opt.shots) await page.screenshot({ path: join(opt.shots, `${basename(file)}-${theme || 'default'}-${size[0]}-b${n.trim()}.png`) });
         if (opt.walk) for (const x of await walkSteppers(page)) { const v = `第 ${n.trim()} 块板：${x}`; if (!res.overlaps.includes(v)) res.overlaps.push(v); }
@@ -442,7 +490,9 @@ export async function checkFiles(files, opt = {}) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const opt = parseArgs(process.argv.slice(2));
   if (!opt.files.length) {
-    console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').filter((l) => l.startsWith('//')).slice(0, 23).map((l) => l.slice(3)).join('\n'));
+    // 用法：文件开头那一整段注释
+    const lines = readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1);
+    console.log(lines.slice(0, lines.findIndex((l) => !l.startsWith('//'))).map((l) => l.slice(3)).join('\n'));
     process.exit(2);
   }
   const results = await checkFiles(opt.files, opt);

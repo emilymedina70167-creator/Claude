@@ -26,8 +26,8 @@ import { createClassBar, MODEL_TAG } from './bar.js';
 import { createBoardView } from './boardview.js';
 import { extraProblems } from './selfcheck.js';
 import { initClassDevPanel, ensureDemoSlide } from './devpanel.js';
-import { markLayer } from '../marks.js';
-import { markText, markWhere } from '../markspec.js';
+import { createBoardTools } from './boardtools.js';
+import { markText } from '../markspec.js';
 import { calcValue, exactText } from '../exact.js';
 import { strokesToBlob } from '../ink/engine.js';
 import { shouldNudge, stuckText, STUCK_MS } from './stuck.js';
@@ -107,9 +107,10 @@ export async function renderClass(root, meta) {
   const history = []; // { seq, role, text, kind, discarded, ... } 和数据库 class_turns 一一对应
   let turnSeq = 0;
   const results = new Map(); // 组件 id → [{ line, key }]（给课堂 Claude 看的黑板现状）
-  // 板书标注（board mark）：id → { id, seg（所在的段）, spec, host（画在哪一段上）}。段被改写、撤回时一起擦掉
-  const marks = new Map();
-  let markSeq = 0;
+  // 教具（board mark / unmark / figure，课堂和实时黑板共用 boardtools.js）。
+  // 板上现有的标注 marks：id → { id, seg（所在的段）, spec, host（画在哪一段上）}。段被改写、撤回时一起擦掉
+  const tools = createBoardTools({ bv, segs });
+  const { marks } = tools;
   const pack = { main: null, problems: null };
   const localImages = new Map(); // asset id → Blob（这次打开页面时上传的原图，重试和 view_handwriting 用）
   // 等着发给课堂 Claude 的：学生的话、图、黑板动作。triggered：有要马上（或 1.5 秒后）发的；now：要马上发
@@ -290,7 +291,7 @@ export async function renderClass(root, meta) {
       if (t.role !== 'claude' || t.discarded || !Array.isArray(t.boardOps)) continue;
       t.boardOps.forEach((o, i) => {
         // 标注的编号接着往下编（撤掉的也算，免得重复）
-        for (const m of o?.marks || []) { const k = /^m(\d+)$/.exec(m.id || ''); if (k) markSeq = Math.max(markSeq, Number(k[1])); }
+        for (const m of o?.marks || []) tools.bumpSeq(m.id);
         if (!o?.ok) return;
         const at = (t.at || 0) + i / 1000; // 同一轮里的先后
         if (['add', 'new', 'replace', 'pin'].includes(o.op)) tl.push({ at, kind: 'render', seg: o.id });
@@ -325,7 +326,7 @@ export async function renderClass(root, meta) {
       } catch { /* 恢复不了就保持初始的样子 */ }
     }
     // 图都回到原样了，再把标注画回去（标在图上的要按图现在的样子摆）
-    for (const m of kept.values()) placeMark({ ...m.spec, id: m.id }, { animate: false, restore: true });
+    for (const m of kept.values()) tools.placeMark({ ...m.spec, id: m.id }, { animate: false, restore: true });
   }
 
   // —— 板（摆放、翻板、测量在 boardview.js）。都写成函数声明：刷新后恢复（restore）在这些定义之前就会用到 ——
@@ -509,7 +510,7 @@ export async function renderClass(root, meta) {
         return { op: op.op, id: op.id, ok: false, page: seg.page || undefined, error: errors.map((p) => `${p.kind}：${p.msg}`).join('；') };
       }
       if (seg.sec) { dropScenesOf(seg.sec); seg.sec.remove(); }
-      dropMarks(seg.id);
+      tools.dropMarks(seg.id);
       sec.classList.remove('class-pending');
       Object.assign(seg, next, { sec, hidden: false, failed: false, pending: false, softNotes: soft.length ? soft.map((p) => p.msg) : undefined });
       segs.set(seg.id, seg);
@@ -526,144 +527,14 @@ export async function renderClass(root, meta) {
       seg.hidden = true;
       seg.pending = false;
       if (seg.sec) seg.sec.hidden = true;
-      dropMarks(seg.id);
+      tools.dropMarks(seg.id);
       saveSeg(seg);
       return { op: 'hide', id: op.id, ok: true };
     }
-    if (op.op === 'figure') return figureOp(op, notes);
-    if (op.op === 'mark') return markOp(op);
-    if (op.op === 'unmark') return unmarkOp(op);
+    if (op.op === 'figure') return tools.figureOp(op, notes);
+    if (op.op === 'mark') return tools.markOp(op);
+    if (op.op === 'unmark') return tools.unmarkOp(op);
     return { op: op.op, ok: false, error: '看不懂的指令' };
-  }
-
-  // —— 板书标注：board mark / unmark（画法在 marks.js）——
-  // 一个 board mark 块里可以有好几条：画上的记进 marks，画不上的（目标不对、不在当前板上……）一条条说明原因
-  function markOp(op) {
-    const done = [];
-    const errs = [];
-    for (const spec of op.marks || []) {
-      const r = placeMark(spec, { animate: true });
-      if (r.ok) done.push({ id: r.id, seg: r.seg, spec: { ...spec, id: undefined } });
-      else errs.push(`${markWhere(spec)}：${r.error}`);
-    }
-    errs.push(...(op.errors || []));
-    return { op: 'mark', id: op.target || '', ok: done.length > 0, marks: done, error: errs.length ? errs.join('；') : undefined };
-  }
-
-  // 画一条标注。restore：刷新后重放（不管在不在当前板上）。返回 { ok, id, seg } 或 { ok: false, error }
-  function placeMark(spec, { animate = true, restore = false } = {}) {
-    const t = spec.target;
-    let seg = segs.get(t);
-    let host, root, scene = null;
-    if (seg) {
-      if (seg.hidden) return { ok: false, error: `${t} 已经撤回了` };
-      if (seg.pending || seg.failed || !seg.sec?.isConnected) return { ok: false, error: `${t} 没画出来，标不了` };
-      host = seg.sec;
-      root = seg.sec.querySelector('.stage-body') || seg.sec;
-    } else {
-      const el = board.querySelector(`.class-seg:not([hidden]) [data-bid="${CSS.escape(t)}"]`);
-      if (!el) return { ok: false, error: `黑板上没有 ${t}（target= 写段的 id，比如 b5，或者组件的 id:）` };
-      host = el.closest('.class-seg');
-      seg = segs.get(host?.dataset.step);
-      if (!host || !seg) return { ok: false, error: `${t} 不在黑板的段里` };
-      root = el;
-      scene = el.dataset.scene ? session.scenes.get(el.dataset.scene)?.api || null : null;
-    }
-    if (!restore && !onCurrent(host)) {
-      const n = Number(host.closest('.class-page')?.dataset.page);
-      return { ok: false, error: `${t} 在第 ${n} 块板上，不在当前板上，学生现在看不到` };
-    }
-    // 自己起的 id 像 m7 这样时，自动编号跳过它
-    const own = /^m(\d+)$/.exec(spec.id || '');
-    if (own) markSeq = Math.max(markSeq, Number(own[1]));
-    const id = spec.id || `m${markSeq + 1}`;
-    const prev = marks.get(id);
-    const r = markLayer(host).add(id, spec, { root, scene, name: t, animate });
-    if (!r.ok) return { ok: false, error: r.error };
-    if (!spec.id) markSeq++;
-    // 同一个 id 换了地方：原来那条擦掉
-    if (prev && prev.host !== host) prev.host?._marks?.remove(id);
-    marks.set(id, { id, seg: seg.id, spec, host });
-    return { ok: true, id, seg: seg.id };
-  }
-
-  function unmarkOp(op) {
-    const gone = [];
-    const miss = [];
-    const drop = (id) => {
-      const m = marks.get(id);
-      if (!m) return false;
-      m.host?._marks?.remove(id);
-      marks.delete(id);
-      gone.push(id);
-      return true;
-    };
-    if (op.all) for (const id of [...marks.keys()]) drop(id);
-    for (const id of op.ids || []) if (!drop(id) && !op.all) miss.push(id);
-    for (const t of op.targets || []) {
-      if (drop(t)) continue; // 不带 key 的词可能是自己起的标注 id
-      const hit = [...marks.values()].filter((m) => m.spec.target === t || m.seg === t);
-      if (!hit.length && !op.all) miss.push(t);
-      hit.forEach((m) => drop(m.id));
-    }
-    const error = miss.length ? `没有这些标注：${miss.join('、')}（现有的标注列在黑板现状里各段的下面）` : undefined;
-    return { op: 'unmark', id: '', ok: !miss.length || gone.length > 0, ids: gone, error };
-  }
-
-  // 段被改写、撤回：上面的标注一起擦掉（标注指着的东西已经不在了）
-  function dropMarks(segId) {
-    for (const [id, m] of marks) {
-      if (m.seg !== segId) continue;
-      m.host?._marks?.remove(id);
-      marks.delete(id);
-    }
-  }
-
-  function figureOp(op, notes) {
-    const args = op.action === 'set' ? { assigns: op.assigns } : op.action === 'play' ? { name: op.name, from: op.from, to: op.to, ms: op.ms } : { index: op.index };
-    const base = { op: 'figure', id: op.target, action: op.action, args };
-    const all = [...board.querySelectorAll(`.class-seg [data-bid="${CSS.escape(op.target)}"]`)];
-    // 撤回的段不算；翻板只是藏起来，不算撤回（下面再看在不在当前板上）
-    const el = all.find((e) => e.dataset.scene && !e.closest('.class-seg[hidden]'));
-    const sc = el && session.scenes.get(el.dataset.scene);
-    if (!sc) {
-      const figs = [...board.querySelectorAll('.class-seg:not([hidden]) [data-scene][data-bid]')].filter((e) => onCurrent(e)).map((e) => e.dataset.bid);
-      const other = all.find((e) => !e.closest('.class-seg[hidden]'));
-      const kind = other && [...other.classList].find((c) => c.startsWith('block-'))?.slice(6);
-      const error = other ? `${op.target} 是 ${kind || '组件'}，不是图`
-        : all.length ? `${op.target} 所在的段已经撤回了`
-          : `黑板上没有 id 为 ${op.target} 的图${figs.length ? `（当前板上的图：${figs.join('、')}）` : ''}`;
-      return { ...base, ok: false, error };
-    }
-    // 在以前的板上：学生现在看不到，动了也白动
-    if (!onCurrent(el)) {
-      const n = Number(el.closest('.class-page')?.dataset.page);
-      return { ...base, ok: false, error: `${op.target} 在第 ${n} 块板上，不在当前板上，学生现在看不到它。要用这张图，就在当前板上重新画一张（换个新 id）` };
-    }
-    const api = sc.api;
-    try {
-      if (op.action === 'set') {
-        const vars = (api.vars || api.snapshot)?.call(api) || {};
-        for (const [name, src] of Object.entries(op.assigns || {})) api.set(name, compile(src)(vars));
-      } else if (op.action === 'play') {
-        if (api.play) api.play(op.name, op.from ?? 0, op.to ?? 1, op.ms ?? 1200);
-        else api.animate?.(op.name, op.from ?? 0, op.to ?? 1, op.ms ?? 1200);
-      } else if (op.action === 'highlight') {
-        const hit = api.highlight?.(op.index);
-        if (hit === false) notes.push(`figure ${op.target} highlight ${op.index}：第 ${op.index} 条命令不画东西（比如 let），没有闪`);
-      }
-      // 板超出一屏、图不在视野里时滚过去（学生正看着当前板时才动页面）
-      if (bv.view === bv.cur) el.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'nearest' });
-      return { ...base, ok: true };
-    } catch (e) {
-      return { ...base, ok: false, error: e?.message || String(e) };
-    }
-  }
-
-  // 元素在当前板上，或者在常驻栏里（常驻栏一直看得到）
-  function onCurrent(el) {
-    if (el.closest('.class-pins')) return true;
-    return Number(el.closest('.class-page')?.dataset.page) === bv.cur;
   }
 
   function saveSeg(seg) {
@@ -688,15 +559,6 @@ export async function renderClass(root, meta) {
   root.querySelector('.class-start').addEventListener('click', () => enqueueStudent('开始上课。', [], true));
 
   // —— 黑板现状（每轮都告诉课堂 Claude）——
-  function figureVars(b) {
-    const sc = b.dataset.scene && session.scenes.get(b.dataset.scene);
-    if (!sc) return undefined;
-    let v = {};
-    try { v = (sc.api.vars || sc.api.snapshot)?.call(sc.api) || {}; } catch { v = {}; }
-    // predict 的 guess 是学生的猜测，不让课堂 Claude 改
-    return Object.keys(v).filter((k) => !(b.classList.contains('block-predict') && k === 'guess'));
-  }
-
   // 一段文字给课堂 Claude 看：公式换回 $TeX$（KaTeX 渲染后的文字是乱的，比如「x\mathbf xx」）
   function texText(p) {
     if (!p) return '';
@@ -721,7 +583,7 @@ export async function renderClass(root, meta) {
       const blocks = seg.sec && !seg.failed ? [...seg.sec.querySelectorAll('.block[data-bid]')].map((b) => ({
         id: b.dataset.bid,
         kind: [...b.classList].find((c) => c.startsWith('block-'))?.slice(6) || '',
-        vars: figureVars(b),
+        vars: tools.figureVars(b),
         results: (results.get(b.dataset.bid) || []).slice(-6).map((r) => r.line),
         draft: draftsIn(b).map((d) => (d.label ? `${d.label}：${d.text}` : d.text)).join('；'),
       })) : [];
@@ -736,7 +598,7 @@ export async function renderClass(root, meta) {
     return {
       segs: list,
       vars: lessonVars.length ? lessonVars : undefined,
-      nextMark: `m${markSeq + 1}`,
+      nextMark: tools.nextMark,
       pages: [...pages.values()].sort((a, b) => a.n - b.n).map((p) => ({ n: p.n, title: p.title, talk: p.talk, kind: p.kind })),
       cur: bv.cur,
       view: bv.view,

@@ -1,0 +1,21 @@
+{
+  "unit": "实时黑板的教具：标注、让图动、板顶的话",
+  "steps": [
+    { "id": "k1", "seq": 1, "pin": true, "title": "记号", "md": "$A=\\begin{bmatrix}A_{11}&\\hl{a12}{A_{12}}\\\\A_{21}&A_{22}\\end{bmatrix}$" },
+    { "id": "s1", "seq": 2, "page": 1, "title": "B 的幂", "md": "拖滑块，看 1 怎么往右上角退。\n\n```matrix\nid: m-pow\ntitle: B 的幂\nlet B = [[0, 1, 0], [0, 0, 1], [0, 0, 0]]\nslider k 1 3 = 1 step=1 label=\"k\"\nmatrix B^k name=P label=\"B^{\\calc{k}} =\"\n```" },
+    { "id": "s5", "seq": 6, "page": 2, "title": "分块", "md": "把 $A$ 切成四块：\n\n```matrix\nid: m-cut\ntitle: 切成四块\nmatrix [[1, 2, 3], [4, 5, 6], [7, 8, 9]] name=A label=\"A =\"\nsplit rows=1 cols=1\n```\n\n$$\\hl{key}{A_{12}} = \\begin{bmatrix}2 & 3\\end{bmatrix}$$" }
+  ],
+  "ops": [
+    { "id": "o1", "seq": 3, "cmd": "figure target=m-pow play k 1 3 2s" },
+    { "id": "o2", "seq": 4, "cmd": "mark target=m-pow", "body": "entry=1,3 of=P note=\"只剩这一个 1\"" },
+    { "id": "o3", "seq": 5, "cmd": "mark target=k1 term=a12 color=blue", "body": "" },
+    { "id": "o4", "seq": 7, "cmd": "mark target=m-cut block=1,2 note=\"右上块\"" },
+    { "id": "o5", "seq": 8, "cmd": "mark target=s5 term=key" },
+    { "id": "o6", "seq": 9, "cmd": "figure target=m-cut highlight 1" },
+    { "id": "o7", "seq": 10, "cmd": "unmark target=k1" }
+  ],
+  "talk": [
+    { "page": 1, "md": "滑到 $k=3$：$B^3$ 是什么？" },
+    { "page": 2, "md": "看右上块：它是 $A$ 的哪几行、哪几列？" }
+  ]
+}
