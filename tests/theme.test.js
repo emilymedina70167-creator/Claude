@@ -38,7 +38,7 @@ test('每种风格都把颜色的 RGB 变量写全（不然会混进默认石墨
 });
 
 test('组件样式里不再写死颜色：都从主题变量取', () => {
-  for (const f of ['styles.css', 'class/class.css', 'class/board.css']) {
+  for (const f of ['styles.css', 'class/class.css', 'class/board.css', 'memory/desk.css']) {
     let css = read(f);
     if (f === 'styles.css') css = css.slice(css.indexOf('}', css.indexOf(':root {')) + 1);
     const lit = [...css.matchAll(/rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+/g)].map((m) => m[0]);
