@@ -151,7 +151,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ## 发布：学习台是唯一的 artifact（`docs/hub-plan.md`）
 
-说明书、组件写法、`la-kit.js`、记忆、每一节课（课堂、实时黑板、自学单元）都在**学习台**里（https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo）。改完并合进 `main` 后，重新发布学习台：页面是 `kit/desk.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`pdf/*` 来自 `kit/dist/pdf/`（读 PDF 用的 pdf.js 和解码器，导入 PDF 时才取；`.mjs` 写 `text/javascript`，`.wasm` 写 `application/wasm`；只在 pdf.js 升级时要重新传），`CLAUDE-PROJECT.md` 来自 `kit/dist/docs/CLAUDE-PROJECT.md`（**瘦身版**：构建时 `kit/build-split.js` 从仓库根目录的整份说明拆出来，第三节只剩组件一览），`components/*.md` 来自 `kit/dist/docs/components/`（每个组件一份写法，外部要用哪个读哪个），`capabilities` 不传（沿用已有的 `sample`（带图）、`db`、`assets`、`downloads`）。数据库、assets 不受发布影响。**合进 `main`、重新发布学习台都不用问我**（我说过：肯定发），做完一批就合、就发。
+说明书、组件写法、`la-kit.js`、记忆、每一节课（课堂、实时黑板、自学单元）都在**学习台**里（https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo）。改完并合进 `main` 后，重新发布学习台：页面是 `kit/desk.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`pdf/*` 来自 `kit/dist/pdf/`（读 PDF 用的 pdf.js 和解码器，导入 PDF 时才取；`.mjs` 写 `text/javascript`，`.wasm` 写 `application/wasm`；学习台不收二进制的 `.bcmap` 和带原样控制字符的文本，所以构建时 cmap 拼成 `cmaps.json`、worker 里的控制字符换成 `\xNN`；只在 pdf.js 升级时要重新传），`CLAUDE-PROJECT.md` 来自 `kit/dist/docs/CLAUDE-PROJECT.md`（**瘦身版**：构建时 `kit/build-split.js` 从仓库根目录的整份说明拆出来，第三节只剩组件一览），`components/*.md` 来自 `kit/dist/docs/components/`（每个组件一份写法，外部要用哪个读哪个），`capabilities` 不传（沿用已有的 `sample`（带图）、`db`、`assets`、`downloads`）。数据库、assets 不受发布影响。**合进 `main`、重新发布学习台都不用问我**（我说过：肯定发），做完一批就合、就发。
 
 - 外部 Claude 不发布任何 artifact：实时黑板、自学单元开在学习台里（`sessions` 的 `kind: live / unit`），课堂由页面开。说明书第一节、第五节、第七节写着。
 - 我的 claude.ai 项目指令里只有一段话：让对话里的 Claude 每个新对话先读学习台里的 `CLAUDE-PROJECT.md`（见 README「设置」）。所以说明的全文要跟着学习台一起发布。

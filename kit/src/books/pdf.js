@@ -16,11 +16,33 @@ export async function loadPdfLib() {
   return lib;
 }
 
+// pdf.js 要的 cmap（没嵌字体的中文 PDF 才用到）和解码器 wasm 由它来取：cmap 发布成一个 pdf/cmaps.json（学习台不收二进制的
+// .bcmap），第一次要用时才下载
+let cmapPack = null;
+class DeskData {
+  constructor({ cMapUrl, wasmUrl }) {
+    this.cMapUrl = cMapUrl;
+    this.wasmUrl = wasmUrl;
+  }
+  async fetch({ kind, filename }) {
+    if (kind === 'cMapUrl') {
+      cmapPack ||= fetch(`${base()}cmaps.json`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`cmaps.json ${r.status}`))));
+      const b64 = (await cmapPack.catch((e) => { cmapPack = null; throw e; }))[filename];
+      if (!b64) throw new Error(`没有 cmap ${filename}`);
+      return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    }
+    if (kind !== 'wasmUrl') throw new Error(`pdf.js 要的 ${kind} 没带`);
+    const r = await fetch(`${this.wasmUrl}${filename}`);
+    if (!r.ok) throw new Error(`${filename} ${r.status}`);
+    return new Uint8Array(await r.arrayBuffer());
+  }
+}
+
 /** 打开一个 PDF（bytes：ArrayBuffer / Uint8Array）。返回 pdf.js 的文档对象（numPages、getPage） */
 export async function openPdf(bytes) {
   const L = await loadPdfLib();
   const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  return L.getDocument({ data, wasmUrl: base(), cMapUrl: `${base()}cmaps/`, cMapPacked: true, isEvalSupported: false, useSystemFonts: true }).promise;
+  return L.getDocument({ data, wasmUrl: base(), cMapUrl: base(), cMapPacked: true, BinaryDataFactory: DeskData, isEvalSupported: false, useSystemFonts: true }).promise;
 }
 
 /**

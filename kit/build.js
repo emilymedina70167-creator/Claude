@@ -83,14 +83,16 @@ await build({
   const pdfDir = path.dirname(require.resolve('pdfjs-dist/package.json'));
   const out = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'dist', 'pdf');
   rmSync(out, { recursive: true, force: true });
-  mkdirSync(path.join(out, 'cmaps'), { recursive: true });
+  mkdirSync(out, { recursive: true });
   // worker 的内嵌数据（模板字符串里）有原样的控制字符，学习台发布时不收：换成等价的 \xNN 写法。
   // 这些字符前面都没有反斜杠、也没有 String.raw，换了值不变（tests/books.test.js 守着）
   for (const f of ['build/pdf.min.mjs', 'build/pdf.worker.min.mjs']) {
     writeFileSync(path.join(out, path.basename(f)), escapeControls(readFileSync(path.join(pdfDir, f), 'utf8')));
   }
   for (const f of ['jbig2.wasm', 'openjpeg.wasm', 'qcms_bg.wasm', 'jbig2_nowasm_fallback.js', 'openjpeg_nowasm_fallback.js']) copyFileSync(path.join(pdfDir, 'wasm', f), path.join(out, f));
+  // cmap 是二进制的 .bcmap，学习台发布不收这种文件：拼成一个 JSON（名字 → base64），books/pdf.js 的 DeskData 从里面取
   const cmaps = readdirSync(path.join(pdfDir, 'cmaps')).filter((f) => /GB|UCS2|UTF16|Identity/.test(f));
-  for (const f of cmaps) copyFileSync(path.join(pdfDir, 'cmaps', f), path.join(out, 'cmaps', f));
+  const packed = Object.fromEntries(cmaps.map((f) => [f, readFileSync(path.join(pdfDir, 'cmaps', f)).toString('base64')]));
+  writeFileSync(path.join(out, 'cmaps.json'), JSON.stringify(packed));
   console.log(`  kit/dist/pdf/  pdf.js ${JSON.parse(readFileSync(path.join(pdfDir, 'package.json'), 'utf8')).version}，cmap ${cmaps.length} 个`);
 }

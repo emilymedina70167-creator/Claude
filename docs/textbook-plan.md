@@ -41,7 +41,7 @@
 
 **备份**：导出备份带上 `books` 和每本的 `chunks`（转写花了额度，丢了不划算）；原页图在 assets 里不进备份。
 
-**pdf.js 不进 la-kit.js**：一百多万字节，平时上课用不着。构建时拷到 `kit/dist/pdf/`（pdf.js、worker、扫描版要的 JBIG2 / JPEG2000 解码器和不支持 wasm 时的 js 版、GB 的 cmap），作为学习台的附带文件 `pdf/…` 发布，导入 PDF 时才取。
+**pdf.js 不进 la-kit.js**：一百多万字节，平时上课用不着。构建时拷到 `kit/dist/pdf/`（pdf.js、worker、扫描版要的 JBIG2 / JPEG2000 解码器和不支持 wasm 时的 js 版、GB 的 cmap），作为学习台的附带文件 `pdf/…` 发布，导入 PDF 时才取。学习台的附带文件不收二进制的 `.bcmap`，也不收带原样控制字符的文本：构建时 cmap 拼成一个 `cmaps.json`（`books/pdf.js` 的 `DeskData` 交给 pdf.js，没嵌字体的中文 PDF 才下载），worker 里的控制字符换成等价的 `\xNN`（`books/jsescape.js`；换前换后同一份 PDF 渲染、文字层一样）。
 
 ## 本地试用
 
