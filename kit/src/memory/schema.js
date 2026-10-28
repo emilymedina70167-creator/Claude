@@ -42,7 +42,8 @@ export const COLLECTIONS = {
     tracked: [],
   },
   curriculum: {
-    label: '课程地图', kind: 'state', writers: ['chat'],
+    // me：学习台上「挂课程地图」我确认了的（plan.js），页面替我写
+    label: '课程地图', kind: 'state', writers: ['chat', 'me'],
     // 线代不带前缀；别的门课带前缀（space.js 的 COURSES）：DS-L2.1、EN-L3.2.1
     id: { re: /^(?:[A-Z]{2}-)?L\d+(?:\.\d+){0,2}$/, eg: 'L2（讲）、L2.2（节）、L2.2.1（块）；别的门课带前缀：DS-L2.1、EN-L1.1.1' },
     required: ['title'],

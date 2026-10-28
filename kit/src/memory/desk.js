@@ -30,7 +30,12 @@ import { dueList } from './schema.js';
 // 正在看哪一科（这台设备记着；分科见 space.js）
 const SPACE_KEY = 'la-desk-space';
 const loadSpace = () => { try { const v = localStorage.getItem(SPACE_KEY); return SPACES[v] ? v : DEFAULT_SPACE; } catch { return DEFAULT_SPACE; } };
-import { renderClass } from '../class/classroom.js';
+import { renderClass, MODEL } from '../class/classroom.js';
+import { getAI } from '../ai.js';
+import { createBooksView } from '../books/bookview.js';
+import { createPlanner } from '../books/planview.js';
+import { loadBooks } from '../books/importer.js';
+import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
 import { renderGuided } from '../guided.js';
 import { createSink } from '../live/sync.js';
@@ -48,7 +53,7 @@ const deskUrl = () => { const r = String(document.referrer || ''); return /^http
 /** #view/c-20261027-1：只读翻看以前那节课的黑板 */
 export const viewHash = () => { const h = decodeURIComponent(String(location.hash || '').slice(1)); return h.startsWith('view/') && isSessionId(h.slice(5)) ? h.slice(5) : ''; };
 // 首页以外的页面（pages.js），换页不刷新
-const PAGES = { map: '课程地图', weak: '弱点表', errors: '错题本', classes: '以前的课', stats: '统计' };
+const PAGES = { map: '课程地图', books: '教材', weak: '弱点表', errors: '错题本', classes: '以前的课', stats: '统计' };
 const goto = (hash) => { location.hash = hash; location.reload(); };
 
 export async function renderDesk(root, meta) {
@@ -68,6 +73,7 @@ export async function renderDesk(root, meta) {
     <nav class="dk-nav" aria-label="学习台的页面"><a href="#">首页</a>${Object.entries(PAGES).map(([k, v]) => `<a href="#${k}">${v}</a>`).join('')}</nav>
     <p class="dk-status muted">正在连接记忆库…</p>
     <div class="dk-pages" hidden></div>
+    <div class="dk-bookpage" hidden></div>
     <div class="dk-home">
     <div class="dk-col">
     <section class="dk-card dk-class" hidden><h2 class="dk-h">上课</h2><div class="dk-body"></div></section>
@@ -104,6 +110,10 @@ export async function renderDesk(root, meta) {
   let timer = 0;
   // 对话里的 Claude 备好的下一节课（资料包，每科一份：pack/main、pack/main-cs、pack/main-en）：开新课时抄一份进那节课
   let space = loadSpace();
+  // 教材页（data 在下面订阅着；planner 用的时候才取）和自己备课（books/）：转写、挂课程地图、备课都用 Opus 5.5
+  const planner = createPlanner({ db, getAI, model: MODEL, getData: () => data, space: () => space });
+  const booksView = createBooksView($('.dk-bookpage'), { db, assets: store.assets, getAI, space: () => space, model: MODEL, plan: { open: (host, id) => planner.openMap(host, id) } });
+
   const packs = Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: null, problems: null }]));
   for (const k of SPACE_KEYS) {
     const ids = packIds(k);
@@ -224,7 +234,9 @@ export async function renderDesk(root, meta) {
     }).join('')}</div>`;
   }
 
-  // —— 上课：接着上没下课的那节，或者开一节新的 ——
+  // —— 上课：接着上没下课的那节，或者开一节新的；没备课就在这里让 Claude 备（books/planview.js）——
+  let prepBusy = false;
+  let prepMsg = '';
   function paintClass() {
     if (!loaded.has('sessions')) return;
     const box = $('.dk-class');
@@ -241,13 +253,15 @@ export async function renderDesk(root, meta) {
     // 等我确认的改动单；上一节还没整理完（它的整理单里还有没点的）
     const openPd = (mine.pending || []).filter((p) => p.status === 'open');
     const lastOpen = last ? openPd.filter((p) => p.session === last.id).length : 0;
+    const blocksHere = mine.curriculum.filter((b) => (b.level || (String(b.id).replace(/^[A-Z]{2}-/, '').split('.').length === 3 ? 'block' : '')) === 'block').sort((a, b) => cmpId(a.id, b.id));
     box.querySelector('.dk-body').innerHTML = `
       ${lastOpen ? `<p class="dk-warn">上一节的整理单还有 ${lastOpen} 条没确认：<a class="dk-link" href="#classes/${escapeHtml(last.id)}">去看那节课</a> 或者在下面「待确认」里点。</p>` : openPd.length ? `<p><a class="dk-link dk-to-pending" href="#">待确认 ${openPd.length} 条 ↓</a></p>` : ''}
       ${last ? `<p class="dk-last"><span class="dk-k">上一节</span>${escapeHtml(last.id)}${last.block ? `（${escapeHtml(last.block)}）` : ''}${lastLine ? `<span class="muted">：${escapeHtml(lastLine)}</span>` : ''}</p>` : ''}
       ${opens.map((x) => { const k = kindOf(x); return `<div class="dk-row dk-open is-${k}"><span class="dk-kind">${SESSION_KINDS[k]}</span><span>${inline(x.title || x.id)}${x.block ? `<span class="muted">（${escapeHtml(x.block)}）</span>` : ''}</span><button type="button" class="btn btn-primary dk-go" data-sid="${escapeHtml(x.id)}">${k === 'class' ? '接着上课' : '进去'}</button></div>`; }).join('')}
-      <div class="dk-next">${main ? `<p><span class="dk-k">备好的课</span>${inline(main.unit || '（资料包没写 unit）')}${block ? `<span class="muted">（${escapeHtml(block)}）</span>` : ''}</p>${main.goal ? `<p class="dk-goal muted" title="点一下看全文">${inline(main.goal)}</p>` : ''}`
-        : `<p class="muted">对话里的 Claude 还没备${SPACES[space].label}的课（pack/${packIds(space).main} 是空的）。也可以直接开课：课堂里的 Claude 带着记忆，但没有这节课的安排。</p>`}
-        <button type="button" class="btn ${open ? '' : 'btn-primary'} dk-new">开新课</button></div>
+      <div class="dk-next">${main ? `<p><span class="dk-k">备好的课</span>${inline(main.unit || '（资料包没写 unit）')}${block ? `<span class="muted">（${escapeHtml(block)}）</span>` : ''}${main.by === 'desk' ? '<span class="muted"> · 学习台备的</span>' : ''}</p>${main.goal ? `<p class="dk-goal muted" title="点一下看全文">${inline(main.goal)}</p>` : ''}`
+        : `<p class="muted">${SPACES[space].label}还没有备好的课：在下面选一块，让 Claude 备课（也可以直接开课：课堂里的 Claude 带着记忆，但没有这节课的安排）。</p>`}
+        ${blocksHere.length ? planner.prepHtml({ suggested: main?.block || suggestBlock(blocksHere, mine.position.find((d) => d.id === positionId(space))), blocks: blocksHere, main, busy: prepBusy, msg: prepMsg }) : ''}
+        <button type="button" class="btn ${open || !main ? '' : 'btn-primary'} dk-new"${prepBusy ? ' disabled' : ''}>开新课</button></div>
       <div class="dk-mrow dk-handoff"><button type="button" class="btn btn-sm dk-copy-handoff">复制给外部 Claude 的启动语</button><span class="muted">贴进任何一个对话，它就知道去哪读说明、学到哪了、要做什么。</span></div>`;
     // 资料包的目标常常很长：先收成三行，点一下展开
     box.querySelector('.dk-goal')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('is-open'));
@@ -257,6 +271,17 @@ export async function renderDesk(root, meta) {
       try { await navigator.clipboard.writeText(text); toast('复制好了，去对话里粘贴'); } catch { prompt('没能自动复制，长按全选后复制：', text); }
     });
     box.querySelectorAll('.dk-go').forEach((b) => b.addEventListener('click', (e) => goto(e.currentTarget.dataset.sid)));
+    box.querySelector('.dk-prep-go')?.addEventListener('click', async () => {
+      const id = box.querySelector('.dk-prep-block').value;
+      if (pack.main && !confirm(`重新备课会换掉现在备好的「${pack.main.unit || ''}」，接着？`)) return;
+      prepBusy = true;
+      prepMsg = '开始备课…';
+      paintClass();
+      try { await planner.prep(id, { onStep: (m) => { prepMsg = m; paintClass(); } }); prepMsg = '备好了：看一眼推进计划，没问题就开新课'; }
+      catch (err) { prepMsg = `没备成：${err?.message || err?.code || err}`; }
+      prepBusy = false;
+      paintClass();
+    });
     box.querySelector('.dk-new').addEventListener('click', (e) => { e.currentTarget.disabled = true; newClass(block).catch((err) => { toast(`没开成：${err?.message || err}`); e.currentTarget.disabled = false; }); });
   }
 
@@ -455,10 +480,13 @@ export async function renderDesk(root, meta) {
     if (isSessionId(h) || viewHash()) { location.reload(); return; }
     const page = h.split('/')[0];
     const home = !PAGES[page];
+    const books = page === 'books';
     $('.dk-home').hidden = !home;
-    $('.dk-pages').hidden = home;
+    $('.dk-pages').hidden = home || books;
+    $('.dk-bookpage').hidden = !books;
     root.querySelectorAll('.dk-nav a').forEach((a) => a.setAttribute('aria-current', String(a.getAttribute('href') === `#${home ? '' : page}`)));
-    if (!home) pagesView.show(h);
+    if (books) booksView.show(h);
+    else if (!home) pagesView.show(h);
   }
   window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });
   route();
@@ -536,15 +564,17 @@ async function enterClass(root, meta, sid, { readOnly = false } = {}) {
     });
   }
   if (kind === 'unit') return enterUnit(root, meta, { db, store, sid, doc, block, title, readOnly, finish });
+  // 教材（books/）：这一科的书和条目，开课时读一次。资料包点名的条目全文放进资料包，别的课堂里按需取
+  const books = await loadBooks(db, doc.space || spaceOfId(block)).catch(() => ({ books: [], chunks: [] }));
   if (readOnly) {
     return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
-      store: { ...store, db: readOnlyDb(scopeDb(db, sid)), assets: null }, sid, block, mem, readOnly: true,
+      store: { ...store, db: readOnlyDb(scopeDb(db, sid)), assets: null }, sid, block, mem, readOnly: true, books,
       updateSession: () => Promise.resolve(), onHome: () => goto(`classes/${sid}`),
       memo: { ops, view: createMemoView({ db, ops }) },
     });
   }
   return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
-    store: { ...store, db: scopeDb(db, sid) }, sid, block, mem, updateSession, onHome: () => goto(''),
+    store: { ...store, db: scopeDb(db, sid) }, sid, block, mem, updateSession, onHome: () => goto(''), books,
     writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),
     // 下课时先算一份（还没下课：结束时间按现在算）放进给课堂 Claude 的输入
     makeReport: ({ turns, steps } = {}) => makeReport(db, sid, { doc: { ...doc, endedAt: doc.endedAt || Date.now() }, turns, steps }),

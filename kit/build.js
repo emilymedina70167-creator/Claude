@@ -73,3 +73,19 @@ await build({
   for (const [f, text] of Object.entries(files)) writeFileSync(path.join(out, f), text);
   console.log(`  kit/dist/docs/CLAUDE-PROJECT.md  ${(Buffer.byteLength(main) / 1024).toFixed(0)}kb，组件写法 ${Object.keys(files).length} 份`);
 }
+
+// 读 PDF 用的 pdf.js（教材入库，docs/textbook-plan.md）：不打进 la-kit.js（一百多万字节，平时上课用不着），
+// 作为学习台的附带文件发布在 pdf/ 下，导入 PDF 时页面才去取（同一个 artifact 里的文件，不是外部脚本）。
+// 扫描版的书常用 JBIG2 / CCITT / JPEG2000 压图，解码器（wasm，和不支持 wasm 时的 js 版）也要带上；中文字体的 cmap 只带 GB 的
+{
+  const { mkdirSync, copyFileSync, rmSync, readdirSync } = await import('node:fs');
+  const pdfDir = path.dirname(require.resolve('pdfjs-dist/package.json'));
+  const out = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'dist', 'pdf');
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(path.join(out, 'cmaps'), { recursive: true });
+  for (const f of ['build/pdf.min.mjs', 'build/pdf.worker.min.mjs']) copyFileSync(path.join(pdfDir, f), path.join(out, path.basename(f)));
+  for (const f of ['jbig2.wasm', 'openjpeg.wasm', 'qcms_bg.wasm', 'jbig2_nowasm_fallback.js', 'openjpeg_nowasm_fallback.js']) copyFileSync(path.join(pdfDir, 'wasm', f), path.join(out, f));
+  const cmaps = readdirSync(path.join(pdfDir, 'cmaps')).filter((f) => /GB|UCS2|UTF16|Identity/.test(f));
+  for (const f of cmaps) copyFileSync(path.join(pdfDir, 'cmaps', f), path.join(out, 'cmaps', f));
+  console.log(`  kit/dist/pdf/  pdf.js ${JSON.parse(readFileSync(path.join(pdfDir, 'package.json'), 'utf8')).version}，cmap ${cmaps.length} 个`);
+}
