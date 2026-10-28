@@ -9,7 +9,7 @@ globalThis.localStorage ??= { getItem: (k) => (mem0.has(k) ? mem0.get(k) : null)
 globalThis.window ??= { addEventListener() {} };
 globalThis.document ??= { addEventListener() {} };
 
-const { memoryDigest, nearBlocks, utf8 } = await import('../kit/src/memory/digest.js');
+const { memoryDigest, nearBlocks, utf8, RULES_SHARE } = await import('../kit/src/memory/digest.js');
 const {
   sessionId, isSessionId, scopeDb, toEvidence, fromEvidence, evidenceTags, sayEvidence, observationRecord, slipRecord, memoryRead, SESSION_SCOPED, MEMORY_READ_MAX,
 } = await import('../kit/src/memory/session.js');
@@ -39,10 +39,10 @@ test('记忆摘要：按优先级带规则、学生、这一块、相关的弱�
     'L2.2.2：讲过', 'L2.2.1：基础题过', '## 别再犯', '一次写了五块板', '## 上一节停在哪', '这一节从哪接：先收 L2-07 的同类题']) {
     assert.ok(t.includes(s), `摘要里有「${s}」`);
   }
-  // 顺序：学生 → 课程地图 → 弱点 → 错题 → 掌握 → 失误 → 位置
+  // 顺序：学生 → 上一节停在哪（短、开课就要用）→ 课程地图 → 弱点 → 错题 → 掌握 → 失误；这一块的长原文最后
   const at = (s) => t.indexOf(s);
-  assert.ok(at('## 学生') < at('## 课程地图') && at('## 课程地图') < at('## 相关的弱点') && at('## 相关的弱点') < at('## 相关的错题')
-    && at('## 相关的错题') < at('## 掌握状态') && at('## 掌握状态') < at('## 别再犯') && at('## 别再犯') < at('## 上一节停在哪'));
+  assert.ok(at('## 学生') < at('## 上一节停在哪') && at('## 上一节停在哪') < at('## 课程地图') && at('## 课程地图') < at('## 相关的弱点') && at('## 相关的弱点') < at('## 相关的错题')
+    && at('## 相关的错题') < at('## 掌握状态') && at('## 掌握状态') < at('## 别再犯'));
   assert.deepEqual(d.cut, []);
   // 作废的规则不带
   const m = M();
@@ -86,6 +86,14 @@ test('记忆摘要的预算：放不下从后往前截，写明还有几条、�
   assert.match(d.text, /（放不下，没带：errors \d+ 条.*要用就用 memory_read 查。）/);
   // 默认预算下全部放得下的就不截
   assert.deepEqual(memoryDigest(M(), { block: 'L2.2.2' }).cut, []);
+  // 规则很多时最多占预算的 RULES_SHARE（红线先放），这一块、上一节停在哪、错题照样带得上；截掉的规则写出编号
+  const big = M();
+  for (let i = 0; i < 60; i++) big.rules.push({ id: `rule-x-${i}`, cat: '细则', text: '很长的细则'.repeat(40), status: 'active' });
+  const g = memoryDigest(big, { block: 'L2.2.2', budget: 16 * 1024 });
+  assert.ok(utf8(g.rules) <= 16 * 1024 * RULES_SHARE, `${utf8(g.rules)}`);
+  assert.match(g.rules, /［红线］课堂不能宣布我「掌握了」/);
+  for (const s of ['### 这节课的块：L2.2.2', '这一节从哪接：先收 L2-07 的同类题', 'L2-07（第2讲例2.1）']) assert.ok(g.text.includes(s), s);
+  assert.match(g.text, /rules \d+ 条（rule-x-/);
   assert.ok(utf8('中') === 3);
 });
 

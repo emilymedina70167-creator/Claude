@@ -2,6 +2,9 @@
 // 从学习台的记忆库里挑和这节课的块有关的部分，按优先级排：
 //   rules 全文 → profile → 当前块的 curriculum（相邻块只给范围）→ 相关的 weaknesses、errors 原文、mastery → 最近的 slips → position
 // 有字节预算（和资料包一起受 SYSTEM_MAX 限制）：放不下时从后往前截，截掉的写明「还有几条，用 memory_read 查」。
+// 规则最多占预算的 RULES_SHARE（按类别：红线、掌握、检验、讲解在前）：真实的记忆库里规则有十几 KB，不限的话
+// 16 KB 全被规则占满，这一块的范围、上一节停在哪、相关的错题全被截掉（2026-10-29 用真数据量出来的）。
+// 上一节停在哪、这一块的要点比长的原文先放；文稿原文、教材原文放在最后（资料包里一般也有这节课要照着讲的原文）。
 // 撤销了的（status: void、有一条作废的更正指向它）不带；学生标了已解决的错题注明；还在等学生确认的改动单列出来，免得它再提一遍。
 import { voidedIds, resolvedErrors, pendingTitle } from './memo.js';
 import { filterSpace, spaceOfId, positionId } from './space.js';
@@ -13,6 +16,10 @@ const list = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v =
 const byDate = (k) => (a, b) => String(b?.[k] || '').localeCompare(String(a?.[k] || ''));
 // 块的编号：L2.2.1；知识点：L2.2.1#tr → 所在的块 L2.2.1
 const blockOf = (id) => String(id || '').split('#')[0];
+export const RULES_SHARE = 0.45;
+// 规则的类别：课堂里最要紧的在前（放不下时后面的先截）
+const RULE_ORDER = ['红线', '掌握', '检验', '讲解', '教法', '黑板', '细则', '来源'];
+const ruleRank = (r) => { const i = RULE_ORDER.indexOf(String(r.cat || '')); return i < 0 ? RULE_ORDER.length : i; };
 
 /** 这节课有关的块：当前块、它依赖的块、依赖它的块、同一节里紧挨着的前后两块 */
 export function nearBlocks(curriculum, block) {
@@ -51,9 +58,19 @@ export function memoryDigest(mem0 = {}, { block = '', budget = 32 * 1024, sessio
 
   // —— 每一节：标题 + 一条条（按优先级排好）。一条放不下就停，后面的记成「还有几条」——
   const sections = [];
-  const rules = get('rules').filter((r) => r.status !== 'void').sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
-  sections.push({ coll: 'rules', items: rules.map((r) => `- ${r.cat ? `［${one(r.cat, 20)}］` : ''}${String(r.text ?? '').trim()}`) });
+  const rules = get('rules').filter((r) => r.status !== 'void').sort((a, b) => ruleRank(a) - ruleRank(b) || String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
+  sections.push({ coll: 'rules', cap: Math.floor(budget * RULES_SHARE), ids: rules.map((r) => r.id), items: rules.map((r) => `- ${r.cat ? `［${one(r.cat, 20)}］` : ''}${String(r.text ?? '').trim()}`) });
   sections.push({ coll: 'profile', head: '## 学生（profile）', items: get('profile').map((p) => `- ${p.topic ? `${one(p.topic, 30)}：` : ''}${one(p.text, 600)}`) });
+  // 上一节停在哪：很短、每节课开头都要用，放在前面
+  if (position) {
+    sections.push({
+      coll: 'position', head: '## 上一节停在哪（position）',
+      items: [[
+        position.block ? `- 学到：${position.block}` : '', position.next ? `- 这一节从哪接：${one(position.next, 400)}` : '',
+        list(position.first).length ? `- 先收的题：${list(position.first).map((x) => one(x, 200)).join('；')}` : '', list(position.debts).length ? `- 欠账：${list(position.debts).map((x) => one(x, 200)).join('；')}` : '',
+      ].filter(Boolean).join('\n')].filter(Boolean),
+    });
+  }
 
   const cItems = [];
   if (cur) {
@@ -65,10 +82,6 @@ export function memoryDigest(mem0 = {}, { block = '', budget = 32 * 1024, sessio
     if (pts.length) lines.push(`- 文稿要点（按视频顺序）：\n${pts.map((p, i) => `  ${i + 1}. ${one(p, 300)}`).join('\n')}`);
     if (list(cur.requires).length) lines.push(`- 准入依赖：${list(cur.requires).join('、')}`);
     cItems.push(lines.join('\n'));
-    if (cur.transcript) cItems.push(`### ${cur.id} 的文稿原文\n${String(cur.transcript).trim()}`);
-    for (const t of Array.isArray(cur.textbook) ? cur.textbook : list(cur.textbook).map((text) => ({ text }))) {
-      if (t && (t.text || t.ref)) cItems.push(`### 教材原文${t.ref ? `（${one(t.ref, 80)}）` : ''}\n${String(t.text || '（只有原图）').trim()}`);
-    }
   } else {
     cItems.push(here ? `（课程地图里还没有块 ${here}。）` : '（这节课没有指定块。）');
   }
@@ -103,15 +116,14 @@ export function memoryDigest(mem0 = {}, { block = '', budget = 32 * 1024, sessio
   // 还在等学生确认的改动（memo 写的错题、弱点、复现组、位置）：已经提过了，别再提
   const open = (Array.isArray(mem.pending) ? mem.pending : []).filter((p) => p && p.status === 'open').sort((a, b) => (a.at || 0) - (b.at || 0));
   sections.push({ coll: 'pending', head: '## 已经提了、等学生确认的改动（不用再提）', items: open.map((p) => `- ${one(pendingTitle(p), 160)}`) });
-  if (position) {
-    sections.push({
-      coll: 'position', head: '## 上一节停在哪（position）',
-      items: [[
-        position.block ? `- 学到：${position.block}` : '', position.next ? `- 这一节从哪接：${one(position.next, 400)}` : '',
-        list(position.first).length ? `- 先收的题：${list(position.first).map((x) => one(x, 200)).join('；')}` : '', list(position.debts).length ? `- 欠账：${list(position.debts).map((x) => one(x, 200)).join('；')}` : '',
-      ].filter(Boolean).join('\n')].filter(Boolean),
-    });
+
+  // 这一块的文稿原文、教材原文：长，放最后（放不下就用 memory_read 查 curriculum 的这一块）
+  const src = [];
+  if (cur?.transcript) src.push(`### ${cur.id} 的文稿原文\n${String(cur.transcript).trim()}`);
+  for (const t of cur ? (Array.isArray(cur.textbook) ? cur.textbook : list(cur.textbook).map((text) => ({ text }))) : []) {
+    if (t && (t.text || t.ref)) src.push(`### 教材原文${t.ref ? `（${one(t.ref, 80)}）` : ''}\n${String(t.text || '（只有原图）').trim()}`);
   }
+  sections.push({ coll: 'curriculum', label: `${cur?.id || ''} 的原文`, head: '## 这一块的原文（curriculum）', items: src });
 
   // —— 按优先级往预算里装：一条放不下，它和后面的全都不放（从后往前截），最后一行写明还有哪些、怎么查 ——
   const intro = `这节课在学习台里上${session ? `（${session}）` : ''}。下面是学习台记忆库里和这节课有关的部分，由项目对话里的 Claude 维护；你只能读，不能改（掌握、弱点、错题、复现都由它课后看证据判断）。${tools ? '没放下的、要看原文的，用 memory_read 工具查（collection 写集合名，id 写编号）。' : ''}`;
@@ -125,18 +137,22 @@ export function memoryDigest(mem0 = {}, { block = '', budget = 32 * 1024, sessio
     if (!s.items.length) continue;
     const kept = [];
     let i = 0;
+    let own = 0;
     for (; !full && i < s.items.length; i++) {
       // 规则单独放；别的节：第一条带上小标题，节和节之间空一行
       const add = utf8(s.items[i]) + 1 + (kept.length || !s.head ? 0 : utf8(s.head) + 4);
+      // 规则到了自己的上限就停，后面的节照常放
+      if (s.cap && own + add > s.cap) break;
       if (used + add > budget) { full = true; break; }
       used += add;
+      own += add;
       kept.push(s.items[i]);
     }
-    if (s.items.length - i) cut.push({ coll: s.coll, more: s.items.length - i });
+    if (s.items.length - i) cut.push({ coll: s.coll, more: s.items.length - i, ...(s.ids ? { ids: s.ids.slice(i) } : {}), ...(s.label ? { label: s.label } : {}) });
     if (s.coll === 'rules') { rulesText = kept.join('\n'); continue; }
     if (kept.length) body.push(`${s.head}\n\n${kept.join('\n')}`);
   }
-  if (cut.length) body.push(`（放不下，没带：${cut.map((c) => `${c.coll} ${c.more} 条`).join('、')}。${tools ? '要用就用 memory_read 查。' : ''}）`);
+  if (cut.length) body.push(`（放不下，没带：${cut.map((c) => `${c.label || c.coll} ${c.more} 条${c.ids ? `（${c.ids.slice(0, 20).join('、')}${c.ids.length > 20 ? '……' : ''}）` : ''}`).join('、')}。${tools ? '要用就用 memory_read 查。' : ''}）`);
   const text = body.join('\n\n');
   return { rules: rulesText, text, cut, bytes: utf8(text) + utf8(rulesText) };
 }
