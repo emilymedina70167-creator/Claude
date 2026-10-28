@@ -2,7 +2,7 @@
   "name": "la-kit",
   "version": "1.0.0",
   "private": true,
-  "description": "线代学习台组件库：在 Claude artifact 里渲染互动线性代数课件",
+  "description": "学习台组件库：在 Claude artifact 里上数学、408、英语的互动课",
   "type": "module",
   "scripts": {
     "build": "node kit/build.js",

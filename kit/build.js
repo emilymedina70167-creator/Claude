@@ -43,7 +43,7 @@ const componentDocsPlugin = {
 };
 
 const version = docVersion(readFileSync(projectDoc, 'utf8'));
-const banner = `/*! 线代学习台 la-kit ${version} | https://github.com/emilymedina70167-creator/Claude
+const banner = `/*! 学习台 la-kit ${version} | https://github.com/emilymedina70167-creator/Claude
  *  bundles markdown-it (MIT) and KaTeX (MIT, fonts SIL OFL) */`;
 
 await build({
