@@ -21,11 +21,12 @@ const evRow = (e) => ({ id: e.id, at: e.at, date: toDate(e.at), session: e.sessi
 const fmt = (v) => (v === null || v === undefined ? '无' : Array.isArray(v) ? v.join('、') : String(v));
 
 /**
- * host：放页面的元素；data：记忆库各类的数组（一直在更新）；db：学习台的数据库；ops：memops.js；
+ * host：放页面的元素；getData()：这一科的记忆库各类的数组（一直在更新）；db：学习台的数据库；ops：memops.js；
  * goto(hash)：整页刷新跳到地址（进课堂、翻看黑板）。返回 { show(route), refresh() }
  */
-export function createPages(host, { data, db, ops, goto }) {
+export function createPages(host, { getData, db, ops, goto }) {
   let route = '';
+  let data = getData(); // 当前这一科的记忆（desk.js 的 filterSpace），每次重画时重新取
   const open = new Set(); // 展开着的详情（页面重画时保持）
   let errFilter = { block: '', weakness: '', state: 'open' };
   const reports = new Map(); // 课号 → 课后报告（读过的缓存）
@@ -43,6 +44,7 @@ export function createPages(host, { data, db, ops, goto }) {
 
   function paint() {
     const [page, arg] = route.split('/');
+    data = getData();
     // 正在打字（错题本的筛选不算）时不重画
     if (host.contains(document.activeElement) && document.activeElement.matches('textarea, input:not([type])')) return;
     const y = window.scrollY;

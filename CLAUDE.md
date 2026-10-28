@@ -60,6 +60,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - `practice` 的自定义题型（`type: custom`）：`practicespec.js`（模板解析、随机取数 `pick` / `let` / `where`、先取十几组数自检，纯函数），出题和判分照常走 `answerWidget`。
 - 表达空间：`sketch`（当场写的 SVG 示意图；`svgsafe.js` 白名单清理、调色板配色，纯函数）、`derive`（分拍板书：一行行写、等号对齐；`derivespec.js` 纯函数；写到第几行是变量 `step`，接 `figureControls`）、`image`（讲义原图：资料包 `images` 按名字找，课堂工具 `view_image` 让课堂 Claude 自己看）。
 - 科目：`subject.js`（front matter 的 `subject:`；`CLAUDE-PROJECT.md` 第三节小节下的 `<!-- 科目：… -->` 标记，课堂只带「通用 + 这门课」的组件说明，`prompt.js` 的 `defaultRules` 按科目换教法）。计算机课要的表达式（`0x1F`、`mod`、位运算、`bin` / `hex`）在 `expr.js` 和 `exact.js` 两边都有。
+- 英语（考研英语一的语法）：`entext.js`（纯函数：英文答案的规范化和比对（大小写、弯引号、缩写、句末标点）、填空模板 `{{a|b}}`、切词、改错定位、成分标注的括号写法 `[S … [RC …]]` 和判分、操练题）+ `blocks/english.js`（`cloze` 填空、`errfind` 点词改错、`parse` 句子成分（能套从句，`mode: show` 只展示）、`drill` 句型操练）。说明书第三节里标「科目：英语」；英语的教法 `prompt.js` 的 `TEACH_EN`；示例页 `kit/examples/en-demo.html`。
 - 文字型答案：`textcheck.js`（序列 `type: seq`、二进制 / 十六进制 `type: bin / hex` 的读法和判分，纯函数）+ `textinput.js`（输入框和回显）。
 - 演示组件（一步步走的过程）：`stepper.js` 是外壳（上一步 / 下一步 / 播放、`ask` 先猜再揭晓（含 `order` 按顺序点）、`mode: quiz`、`mode: fill` 自己填表、课堂的 `figure step` 和 `highlight`、记录），`stepperspec.js` 是它不碰 DOM 的部分（问哪几步、判分、填表、错法比对、字段拼写检查 `trackFields`）；`morph.js` 是步与步之间的过渡（`data-key` 一样的滑过去）。每个算法是 `engines/` 里的一个纯函数引擎（`parse` → `run` 出每一步 → `view` 画成 HTML，`data-pick` 给在图上点、`data-cmd` 给 highlight / `board mark item=`），在 `blocks/index.js` 用 `stepperBlock(引擎)` 注册。可选：`table`（fill 的表）、`variants`（常见错法：换成错法的输入，外壳跑一遍拿来和学生的答案比，记录里写「页面看出来：像是……」，只给老师）、`quiz`、`problems`、`head`（字段只在开头一段）。新算法照这个做，引擎配 `node --test`，答案和王道的例子对一遍；错法至少 2 种，答案和对的一样的不列。
   - 通用演示：`engines/frames.js`（`frames`：老师自己写每一帧，能问、能挖空）。
@@ -129,6 +130,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
   - 复现课：首页到期的复现组「开复现课」→ `newClass(block, reviewPack(…))`，`sessions` 和资料包记 `review`，下课的 `closingPrompt({ review })` 要它写 `review id=… result=…`。
   - 组件手册按需带：资料包写了 `components` 时，`prompt.js` 的 `systemDocs` 只带 `CORE_COMPONENTS` 和点名的（`subject.js` 的 `docsForSubject({ only })`），别的只留标题（没有工具时照旧全带）。
   - 说明书瘦身：`kit/build-split.js`，构建时写 `kit/dist/docs/`（要提交）。
+- 分科（数学 / 408 / 英语，`space.js`，纯函数）：一个学习台三个空间。课程编号带门课前缀（线代不带；`DS-` `OS-` `CO-` `CN-` `EN-`，`courseOf` / `spaceOfId` / `subjectOf`），错题跟着前缀编号；弱点、复现组按挂的块 / 错题认（或写 `space`）；`position` 每科一条（`now`、`now-cs`、`now-en`，`positionId`），资料包每科一份（`pack/main`、`main-cs`、`main-en`，`packIds`）。首页顶上切换（`desk.js` 的 `setSpace`，这台设备记着），首页各卡、页面、待确认都只看这一科（`filterSpace`）；「关于我」、规则、失误、自检、备份全科共用。开课时 `sessions` 记 `space`、`subject`，`enterClass` 把 `session.subject` 设成这一块的门课，课堂按它带组件说明和教法；记忆摘要也只带这一科。
 - 浏览器里看：`kit/examples/desk-demo.html?dev`（「填入示例记忆」→「开新课」，输入框打「测试:整理」：模拟老师写一个 memo 块，三档各几条、再故意写两条不对的；下课时模拟小结后面带整理单。打「测试:记忆」：模拟老师真的调用 `memory_read`、`lesson_note`、`slip_note`，写一段标了 `point=tr` 的题；点「下课」后回首页看「上一节」、补记、导出备份）。
 
 ## 硬性规定（我明确要求过的，不要改）

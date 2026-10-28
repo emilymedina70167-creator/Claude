@@ -42,7 +42,8 @@ export const COLLECTIONS = {
   },
   curriculum: {
     label: '课程地图', kind: 'state', writers: ['chat'],
-    id: { re: /^L\d+(?:\.\d+){0,2}$/, eg: 'L2（讲）、L2.2（节）、L2.2.1（块）' },
+    // 线代不带前缀；别的门课带前缀（space.js 的 COURSES）：DS-L2.1、EN-L3.2.1
+    id: { re: /^(?:[A-Z]{2}-)?L\d+(?:\.\d+){0,2}$/, eg: 'L2（讲）、L2.2（节）、L2.2.1（块）；别的门课带前缀：DS-L2.1、EN-L1.1.1' },
     required: ['title'],
     enums: { level: ['lecture', 'section', 'block'] },
     refs: { parent: 'curriculum', requires: 'curriculum' },
@@ -65,7 +66,7 @@ export const COLLECTIONS = {
   },
   errors: {
     label: '错题档案', kind: 'history', writers: ['chat', 'me'],
-    id: { re: /^L\d+-T?\d+$/, eg: 'L2-07、L2-T03' },
+    id: { re: /^(?:[A-Z]{2}-)?L\d+-T?\d+$/, eg: 'L2-07、L2-T03；别的门课带前缀：DS-L2-03、EN-L1-02' },
     required: ['source', 'q', 'mine', 'step', 'cause', 'date'],
     dates: ['date'],
     refs: { weakness: 'weaknesses', block: 'curriculum', corrects: 'errors' },
@@ -75,14 +76,14 @@ export const COLLECTIONS = {
     label: '弱点表', kind: 'state', writers: ['chat', 'me'],
     id: { re: /^W\d+$/, eg: 'W19' },
     required: ['title', 'scope', 'level'],
-    enums: { scope: ['通用', '链条', '局部'], level: ['L0', 'L1', 'L2', 'L3'], status: ['active', 'closed', 'void'] },
+    enums: { scope: ['通用', '链条', '局部'], level: ['L0', 'L1', 'L2', 'L3'], status: ['active', 'closed', 'void'], space: ['math', 'cs', 'en'] },
     dates: ['last'],
     refs: { errors: 'errors', blocks: 'curriculum' },
     tracked: ['level', 'scope', 'status'],
   },
   mastery: {
     label: '掌握状态', kind: 'state', writers: ['chat'],
-    id: { re: /^L\d+(?:\.\d+){0,2}(?:#[A-Za-z0-9_-]+)?$/, eg: 'L2.2.1（一块）、L2.2.1#tr（块里的一个知识点）' },
+    id: { re: /^(?:[A-Z]{2}-)?L\d+(?:\.\d+){0,2}(?:#[A-Za-z0-9_-]+)?$/, eg: 'L2.2.1（一块）、L2.2.1#tr（块里的一个知识点）、EN-L1.1.1#past' },
     required: ['state'],
     enums: { state: ['未学', '讲过', '基础题过', '复现通过', '掉了'] },
     // 所在的块（block，不写就是编号 # 前面那段）在 check.js 里单独查
@@ -93,14 +94,15 @@ export const COLLECTIONS = {
     id: { re: /^R\d+$/, eg: 'R3' },
     required: ['title', 'tier'],
     // paused：我暂停了（不算到期）；done：停掉了；void：撤销了的新组
-    enums: { status: ['active', 'paused', 'done', 'void'] },
+    enums: { status: ['active', 'paused', 'done', 'void'], space: ['math', 'cs', 'en'] },
     dates: ['last'],
     refs: { weaknesses: 'weaknesses', blocks: 'curriculum' },
     tracked: ['tier', 'last', 'result'],
   },
   position: {
     label: '当前位置', kind: 'state', writers: ['chat', 'me'],
-    id: { re: /^now$/, eg: '只有一条：now' },
+    // 每科一条：now（数学）、now-cs（408）、now-en（英语）
+    id: { re: /^now(?:-(?:cs|en))?$/, eg: 'now（数学）、now-cs（408）、now-en（英语）' },
     required: ['block', 'next'],
     refs: { block: 'curriculum' },
     tracked: ['block'],
@@ -118,6 +120,7 @@ export const COLLECTIONS = {
     label: '每节课', kind: 'state', writers: ['page'],
     id: { re: /^c-[A-Za-z0-9_-]+$/, eg: '页面自动编号' },
     required: ['date'],
+    enums: { space: ['math', 'cs', 'en'] },
     dates: ['date'],
     refs: { block: 'curriculum' },
     tracked: [],

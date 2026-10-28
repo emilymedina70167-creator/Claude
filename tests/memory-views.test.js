@@ -106,7 +106,9 @@ test('启动语：说明书地址、学到哪、上一节、到期的复现组�
   assert.match(t, /学到 L2\.2\.2；下一节：先收 L2-07/);
   assert.match(t, /上一节：c-20261027-1/);
   assert.match(t, /有一节还没下课：c-20261028-1/);
-  assert.match(t, /备下一节课/);
+  assert.match(t, /备下一节数学课：往学习台写资料包 pack\/main/);
+  assert.match(t, /这一科：数学/);
+  assert.match(handoffText(m, { today: TODAY, space: "en" }), /pack\/main-en/);
   assert.match(t, /1 张改动单等我确认/);
   assert.match(t, /到期的复现组：R3/);
   assert.match(t, /地址问我要/);

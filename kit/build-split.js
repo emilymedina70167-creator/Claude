@@ -12,7 +12,8 @@ const NEXT = /^##\s*四\s*[、.．]/;
 
 /** 一个组件小节的文件名：标题里第一个组件名（「kmp / hash / bsearch」→ kmp） */
 const fileOf = (sec) => `components/${sec.names[0]}.md`;
-const strip = (lines) => lines.filter((l) => !/^\s*<!--\s*(科目|完整写法)\s*[:：-]?.*-->\s*$/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+// 去掉科目标记、「完整写法」分隔行，和第三节末尾那条分隔线（---）
+const strip = (lines) => lines.filter((l) => !/^\s*<!--\s*(科目|完整写法)\s*[:：-]?.*-->\s*$/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim().replace(/\n+-{3,}$/, '').trim();
 
 /**
  * markdown：整份 CLAUDE-PROJECT.md；kitUrl：组件库地址（告诉外部去哪读组件文件）。

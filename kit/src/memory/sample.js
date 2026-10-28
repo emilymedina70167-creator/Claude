@@ -48,3 +48,25 @@ export function sampleMemory(today) {
     ],
   };
 }
+
+/** 分科的示例（?dev 的「填入示例记忆」一起填）：408 和英语各一点课程地图、位置、错题，看切换科目 */
+export function sampleSpaces(today) {
+  const d = (n) => addDays(today, n);
+  return {
+    curriculum: [
+      { id: 'DS-L2', level: 'lecture', title: '第2章 线性表' },
+      { id: 'DS-L2.1', level: 'section', title: '§1 顺序表', parent: 'DS-L2' },
+      { id: 'DS-L2.1.1', level: 'block', title: '顺序表的插入删除', parent: 'DS-L2.1', scope: '插入、删除时元素移动的次数' },
+      { id: 'EN-L1', level: 'lecture', title: '第1章 句子成分' },
+      { id: 'EN-L1.1', level: 'section', title: '§1 简单句的主干', parent: 'EN-L1' },
+      { id: 'EN-L1.1.1', level: 'block', title: '找主谓宾', parent: 'EN-L1.1', scope: '五种基本句型，先找谓语动词' },
+    ],
+    errors: [
+      { id: 'EN-L1-01', source: '语法书 1.1 练习', q: 'Neither of the answers ___ correct.', mine: 'are', step: '主谓一致', cause: '把 answers 当主语', block: 'EN-L1.1.1', date: d(-2) },
+    ],
+    position: [
+      { id: 'now-cs', block: 'DS-L2.1.1', next: '顺序表插入删除的平均移动次数' },
+      { id: 'now-en', block: 'EN-L1.1.1', next: '五种基本句型，从找谓语开始' },
+    ],
+  };
+}

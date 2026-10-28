@@ -1,6 +1,6 @@
 # 线代学习台 · 给 Claude 的教学说明
 
-> **版本：2026-10-28b**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
+> **版本：2026-10-28c**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
 >
 > 这份说明的**最新版**一直放在组件库 artifact 里（文件 `CLAUDE-PROJECT.md`）。每个新对话里，第一次做和学习台有关的事（做课件、写实时黑板、备课堂资料包、读课堂记录或学习记录）之前，先用 `Artifact` 工具读它：`action: "read"`，`url` 是上面的组件库地址，`path: "CLAUDE-PROJECT.md"`。
 > - 读到的版本比你手上这份新：以读到的为准，这份里和它不一样的地方全部作废。回复里顺便告诉我「项目指令里的说明是旧版（版本号），组件库里是新版（版本号）」。
@@ -257,6 +257,10 @@ b = [1, 1, -2]
 - `array` / `shellsort` / `sortpass`（数据结构）：array / shellsort / sortpass → `components/array.md`
 - `summary`：单元结尾（必放） → `components/summary.md`
 - `rref` / `matmul`（线代）：线代的演示组件 → `components/rref.md`
+- `cloze`（英语）：英语填空（一句或一段里几个空） → `components/cloze.md`
+- `errfind`（英语）：英语改错（点出用错的词，再写改成什么） → `components/errfind.md`
+- `parse`（英语）：句子成分标注（长难句，能套从句） → `components/parse.md`
+- `drill`（英语）：句型操练（一题一题做，页面判分） → `components/drill.md`
 
 ## 四、读学习记录
 
@@ -652,6 +656,17 @@ unit: 线代 + 408
 ```
 
 **`observations`**（课堂里的 Claude 写，页面替它存）：`kind`：`note` 观察 / `summary` 下课小结 / `proposal` 提议（比如提议改某个弱点，由你决定采不采纳，采纳了就照规矩改那一类、log 的 `basis` 写这条观察的 id）、`text`、`about`（相关的编号）、`block`、`session`、`turn`（第几轮记的）、`at`。下课小结还有 `verify`（这节课平台核验是 Opus 5.5 的轮数、作废的轮数）。**`evidence`**、**`sessions`** 由页面写，你只读（见下文）。
+
+### 分科：数学 / 408 / 英语
+
+学习台里分三个空间：**数学**（`math`，现在是线代）、**408**（`cs`：数据结构、操作系统、组成原理、计网）、**英语**（`en`，考研英语一的语法）。我在学习台顶上切换，每科有自己的课程地图、下一节从哪接、资料包、待确认、错题本这些页面；「关于我」（`profile`）、规则（`rules`）、两个 Claude 的教学失误（`slips`）、统计、备份全科共用。
+
+- **课程编号带门课的前缀**：线代不带（`L2.2.1`，以前写的都是线代，不用改）；数据结构 `DS-`、操作系统 `OS-`、组成原理 `CO-`、计网 `CN-`、英语 `EN-`，比如 `DS-L2.1.1`、`EN-L1.1.1`、掌握状态 `EN-L1.1.1#past`。错题跟着前缀：`DS-L2-03`、`EN-L1-02`（编号照旧是「第几讲 - 第几题」，各门课各编各的）。页面按前缀认是哪一科、哪门课。
+- **弱点、复现组**的编号全科共用一套（`W19`、`R3`）；页面按它挂的块、错题看是哪一科。分不清时写上 `space`：`math` / `cs` / `en`。
+- **下一节从哪接**每科一条：`position` 的 `now`（数学）、`now-cs`（408）、`now-en`（英语）。
+- **资料包**每科一份：数学是 `pack/main`、`pack/problems`，408 是 `pack/main-cs`、`pack/problems-cs`，英语是 `pack/main-en`、`pack/problems-en`。备哪一科的课就写哪一份，`block` 写这节课的块（带前缀），我在那一科的首页点「开新课」。
+- **课堂按块的门课上**：`block` 是 `DS-…` 的课，课堂里的 Claude 带数据结构的组件说明和计算机的教法；`EN-…` 的带英语组件（`cloze`、`errfind`、`parse`、`drill`）和英语的教法。`sessions/{编号}` 记着 `space` 和 `subject`。
+- **英语的课程地图**照我给你的语法书和视频课的章节建（`EN-L1` 第 1 章，`EN-L1.1` 第 1 节，`EN-L1.1.1` 一块），块的 `scope` 写这块的语法点和考研英语一的考法，`points` 写要点，`textbook` 放书里的规则原文和例句。
 
 ### 每节课和证据（页面写，你读）
 

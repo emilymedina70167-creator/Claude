@@ -4,6 +4,7 @@
 import { REVIEW_TIERS, toDate, addDays, daysBetween, reviewDue, dueList } from './schema.js';
 import { voidedIds, resolvedErrors, pendingTitle } from './memo.js';
 import { OUTCOME_TEXT } from './report.js';
+import { SPACES, positionId, packIds } from './space.js';
 
 const cut = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 // 截短带公式的文字：截断处落在 $…$ 里面时，退到那个公式前面（不然页面上露出半截 TeX）
@@ -234,8 +235,8 @@ export function reviewPack(mem = {}, rid, { packs = [], today = toDate(Date.now(
  * 贴进任何一个对话就能接手：说明书在哪、学习台在哪、现在学到哪、上节课怎么样、有什么等着外部做。
  * kitUrl：组件库地址；deskUrl：学习台地址（页面不一定知道，没有就让外部问我）
  */
-export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDate(Date.now()), pack = null } = {}) {
-  const pos = (mem.position || []).find((p) => p.id === 'now');
+export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDate(Date.now()), pack = null, space = 'math' } = {}) {
+  const pos = (mem.position || []).find((p) => p.id === positionId(space));
   const rows = classRows(mem);
   const last = rows.find((r) => r.status === 'closed');
   const openClass = rows.find((r) => r.status === 'open');
@@ -244,13 +245,15 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
   const proposals = (mem.observations || []).filter((o) => o.kind === 'proposal' && !gone.has(`observations/${o.id}`) && (!last || o.session === last.id));
   const due = dueList(live(mem, 'reviews'), today).filter((d) => d.days <= 0);
   const todo = [];
-  if (!pack) todo.push('备下一节课：往学习台写资料包 pack/main、pack/problems（说明书第六节「在学习台里开一节课」）。');
+  const ids = packIds(space);
+  if (!pack) todo.push(`备下一节${SPACES[space]?.label || ''}课：往学习台写资料包 pack/${ids.main}、pack/${ids.problems}（说明书第六节「在学习台里开一节课」、第七节「分科」）。`);
   if (proposals.length) todo.push(`看上一节课堂里的 Claude 的提议（observations 里 kind: proposal，${proposals.length} 条），掌握状态、规则只能由你决定。`);
   if (open.length) todo.push(`还有 ${open.length} 张改动单等我确认（pending，status: open）：我在学习台上点，你不用代写。`);
   return [
-    '【线代学习台 · 接手】',
+    `【线代学习台 · 接手 · ${SPACES[space]?.label || ''}】`,
     kitUrl ? `- 先读说明书：Artifact 工具 action: "read"，url: ${kitUrl}，path: "CLAUDE-PROJECT.md"。` : '',
     `- 学习台：${deskUrl || '（地址问我要：在 claude.ai 打开学习台时地址栏里的那个）'}。记忆都在它的数据库里，用 ArtifactData 读。`,
+    `- 这一科：${SPACES[space]?.label || space}（只列这一科的；学习台还有${Object.keys(SPACES).filter((k) => k !== space).map((k) => SPACES[k].label).join('、')}）。`,
     `- 今天 ${today}。${pos ? `学到 ${pos.block || '？'}；下一节：${cut(pos.next, 120)}${list(pos.debts).length ? `；欠账：${list(pos.debts).map((x) => cut(x, 60)).join('；')}` : ''}。` : '还没有 position。'}`,
     last ? `- 上一节：${last.id}（${last.block || '没写块'}）${last.line ? `，${last.line}` : ''}${last.summary ? `；小结开头：${last.summary}` : ''}。课后报告在 sessions/${last.id}/report/main。` : '- 还没有下过课。',
     openClass ? `- 有一节还没下课：${openClass.id}。` : '',

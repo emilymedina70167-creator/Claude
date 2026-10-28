@@ -24,9 +24,15 @@ import { resolvedErrors, voidedIds } from './memo.js';
 import { createPages } from './pages.js';
 import { reviewPack, handoffText } from './views.js';
 import { readOnlyDb } from './session.js';
+import { SPACES, SPACE_KEYS, DEFAULT_SPACE, filterSpace, spaceOfDoc, spaceOfId, subjectOf, positionId, packIds } from './space.js';
+import { dueList } from './schema.js';
+
+// 正在看哪一科（这台设备记着；分科见 space.js）
+const SPACE_KEY = 'la-desk-space';
+const loadSpace = () => { try { const v = localStorage.getItem(SPACE_KEY); return SPACES[v] ? v : DEFAULT_SPACE; } catch { return DEFAULT_SPACE; } };
 import { renderClass } from '../class/classroom.js';
 import { checkMemory, memcheckRecord } from './check.js';
-import { sampleMemory } from './sample.js';
+import { sampleMemory, sampleSpaces } from './sample.js';
 
 const CHECK_DELAY = 800; // 一次 batch 写进来好几类：停一下再查，不要每到一类查一遍
 // 课堂每一轮要带的记忆（证据条数多、按需查，不订阅）
@@ -57,6 +63,7 @@ export async function renderDesk(root, meta) {
       <span class="dk-unit">${mdToHtml(String(unit), { inline: true })}</span>
       <span class="dk-ver" title="组件库版本">组件库 ${escapeHtml(VERSION)}</span>
     </header>
+    <div class="dk-spaces" role="tablist" aria-label="科目">${SPACE_KEYS.map((k) => `<button type="button" role="tab" class="dk-space" data-space="${k}">${SPACES[k].label}</button>`).join('')}</div>
     <nav class="dk-nav" aria-label="学习台的页面"><a href="#">首页</a>${Object.entries(PAGES).map(([k, v]) => `<a href="#${k}">${v}</a>`).join('')}</nav>
     <p class="dk-status muted">正在连接记忆库…</p>
     <div class="dk-pages" hidden></div>
@@ -89,10 +96,29 @@ export async function renderDesk(root, meta) {
   let lastCheck = '';
   let lastLedger = '';
   let timer = 0;
-  // 对话里的 Claude 备好的下一节课（资料包）：开新课时抄一份进那节课
-  let pack = { main: null, problems: null };
-  db.doc('pack/main').onSnapshot((s) => { pack.main = s.exists ? s.data() : null; paintClass(); }, () => {});
-  db.doc('pack/problems').onSnapshot((s) => { pack.problems = s.exists ? s.data() : null; }, () => {});
+  // 对话里的 Claude 备好的下一节课（资料包，每科一份：pack/main、pack/main-cs、pack/main-en）：开新课时抄一份进那节课
+  let space = loadSpace();
+  const packs = Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: null, problems: null }]));
+  for (const k of SPACE_KEYS) {
+    const ids = packIds(k);
+    db.doc(`pack/${ids.main}`).onSnapshot((s) => { packs[k].main = s.exists ? s.data() : null; if (k === space) paintClass(); }, () => {});
+    db.doc(`pack/${ids.problems}`).onSnapshot((s) => { packs[k].problems = s.exists ? s.data() : null; }, () => {});
+  }
+  // 这一科的记忆（共用的几类全给）；pack 是这一科的资料包
+  const sv = () => filterSpace(data, space);
+  let pack = packs[space];
+  let lastRes = null;
+  function setSpace(k) {
+    if (!SPACES[k]) return;
+    space = k;
+    pack = packs[k];
+    try { localStorage.setItem(SPACE_KEY, k); } catch { /* 无痕模式 */ }
+    root.querySelectorAll('.dk-space').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.space === k)));
+    manualForm?.refreshBlocks();
+    if (lastRes) paint(lastRes, toDate(Date.now()));
+  }
+  root.querySelector('.dk-spaces').addEventListener('click', (e) => { const b = e.target.closest('.dk-space'); if (b) setSpace(b.dataset.space); });
+  root.querySelectorAll('.dk-space').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.space === space)));
   const ledgerReady = db.doc('meta/ledger').get().then((s) => { ledger = s.exists ? s.data() : null; lastLedger = JSON.stringify(ledger); }).catch(() => {});
   for (const c of MEMORY_COLLECTIONS) {
     db.collection(c).onSnapshot((snap) => {
@@ -139,6 +165,7 @@ export async function renderDesk(root, meta) {
   }
 
   function paint(res, today) {
+    lastRes = res;
     status.hidden = true;
     for (const s of ['.dk-today', '.dk-check', '.dk-colls', '.dk-manual', '.dk-backup', '.dk-pending', '.dk-mine']) $(s).hidden = false;
     pagesView.refresh();
@@ -148,13 +175,17 @@ export async function renderDesk(root, meta) {
     paintPending();
     paintMine();
     const total = Object.values(res.counts).reduce((a, b) => a + b, 0);
-    // 今天：过期、今天到期的复现组，下一节从哪接、欠账
-    const pos = data.position.find((d) => d.id === 'now');
-    const due = res.due.filter((d) => d.days <= 0);
-    const soon = res.due.filter((d) => d.days > 0).slice(0, 3);
+    // 今天（这一科）：过期、今天到期的复现组，下一节从哪接、欠账；别的科有到期的提一句
+    const mine = sv();
+    const pos = mine.position.find((d) => d.id === positionId(space));
+    const dues = dueList(mine.reviews, today);
+    const due = dues.filter((d) => d.days <= 0);
+    const soon = dues.filter((d) => d.days > 0).slice(0, 3);
+    const elsewhere = SPACE_KEYS.filter((k) => k !== space).map((k) => [k, dueList(filterSpace(data, k).reviews, today).filter((d) => d.days <= 0).length]).filter(([, n]) => n);
     $('.dk-today .dk-body').innerHTML = !total ? '<p class="muted">记忆库还是空的。回对话里让 Claude 把记忆搬进来（说明书第七节「迁移」）。</p>' : `
       <div class="dk-due">${due.length ? due.map((d) => `<div class="dk-row ${d.days < 0 ? 'is-over' : 'is-today'}"><b>${escapeHtml(d.id)}</b><span>${inline(d.title)}</span><em>${d.days < 0 ? `过期 ${-d.days} 天` : '今天'}</em><button type="button" class="btn btn-sm dk-review" data-rid="${escapeHtml(d.id)}">开复现课</button></div>`).join('') : '<p class="muted">今天没有到期的复现组。</p>'}
-        ${soon.length ? `<p class="dk-soon muted">接下来：${soon.map((d) => `${escapeHtml(d.id)}（${escapeHtml(d.due.slice(5))}）`).join('、')}</p>` : ''}</div>
+        ${soon.length ? `<p class="dk-soon muted">接下来：${soon.map((d) => `${escapeHtml(d.id)}（${escapeHtml(d.due.slice(5))}）`).join('、')}</p>` : ''}
+        ${elsewhere.length ? `<p class="dk-soon">别的科也有到期的：${elsewhere.map(([k, n]) => `<button type="button" class="btn btn-sm dk-space-go" data-space="${k}">${SPACES[k].label} ${n} 组</button>`).join(' ')}</p>` : ''}</div>
       ${pos ? `<div class="dk-pos"><div><span class="dk-k">下一节</span>${inline(pos.next)}</div>${pos.block ? `<div><span class="dk-k">学到</span>${escapeHtml(pos.block)}${blockTitle(pos.block)}</div>` : ''}${listOf(pos.debts).length ? `<div><span class="dk-k">欠账</span>${listOf(pos.debts).map((x) => inline(x)).join('；')}</div>` : ''}</div>` : ''}`;
     // 自检
     const hard = res.problems.filter((p) => !p.soft);
@@ -179,26 +210,27 @@ export async function renderDesk(root, meta) {
     if (!loaded.has('sessions')) return;
     const box = $('.dk-class');
     box.hidden = false;
-    const open = data.sessions.filter((x) => x.status === 'open').sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
-    // 上一节（下了课的最近一节）：课后报告的要点、花了多少
-    const last = data.sessions.filter((x) => x.status === 'closed').sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0))[0];
+    const mine = sv();
+    const open = mine.sessions.filter((x) => x.status === 'open').sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+    // 上一节（这一科下了课的最近一节）：课后报告的要点、花了多少
+    const last = mine.sessions.filter((x) => x.status === 'closed').sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0))[0];
     const lastLine = last ? [last.report?.line || '', usageText(last.usage)].filter(Boolean).join('；') : '';
     const main = pack.main;
-    const block = main?.block || data.position.find((d) => d.id === 'now')?.block || '';
+    const block = main?.block || mine.position.find((d) => d.id === positionId(space))?.block || '';
     // 等我确认的改动单；上一节还没整理完（它的整理单里还有没点的）
-    const openPd = (data.pending || []).filter((p) => p.status === 'open');
+    const openPd = (mine.pending || []).filter((p) => p.status === 'open');
     const lastOpen = last ? openPd.filter((p) => p.session === last.id).length : 0;
     box.querySelector('.dk-body').innerHTML = `
       ${lastOpen ? `<p class="dk-warn">上一节的整理单还有 ${lastOpen} 条没确认：<a class="dk-link" href="#classes/${escapeHtml(last.id)}">去看那节课</a> 或者在下面「待确认」里点。</p>` : openPd.length ? `<p><a class="dk-link dk-to-pending" href="#">待确认 ${openPd.length} 条 ↓</a></p>` : ''}
       ${last ? `<p class="dk-last"><span class="dk-k">上一节</span>${escapeHtml(last.id)}${last.block ? `（${escapeHtml(last.block)}）` : ''}${lastLine ? `<span class="muted">：${escapeHtml(lastLine)}</span>` : ''}</p>` : ''}
       ${open ? `<div class="dk-row"><b>${escapeHtml(open.id)}</b><span>${inline(open.title || '')}${open.block ? `<span class="muted">（${escapeHtml(open.block)}）</span>` : ''}</span><button type="button" class="btn btn-primary dk-go" data-sid="${escapeHtml(open.id)}">接着上课</button></div>` : ''}
       <div class="dk-next">${main ? `<p><span class="dk-k">备好的课</span>${inline(main.unit || '（资料包没写 unit）')}${block ? `<span class="muted">（${escapeHtml(block)}）</span>` : ''}</p>${main.goal ? `<p class="muted">${inline(main.goal)}</p>` : ''}`
-        : '<p class="muted">对话里的 Claude 还没备课（pack/main 是空的）。也可以直接开课：课堂里的 Claude 带着记忆，但没有这节课的安排。</p>'}
+        : `<p class="muted">对话里的 Claude 还没备${SPACES[space].label}的课（pack/${packIds(space).main} 是空的）。也可以直接开课：课堂里的 Claude 带着记忆，但没有这节课的安排。</p>`}
         <button type="button" class="btn ${open ? '' : 'btn-primary'} dk-new">开新课</button></div>
       <div class="dk-mrow dk-handoff"><button type="button" class="btn btn-sm dk-copy-handoff">复制给外部 Claude 的启动语</button><span class="muted">贴进任何一个对话，它就知道去哪读说明、学到哪了、要做什么。</span></div>`;
     box.querySelector('.dk-to-pending')?.addEventListener('click', (e) => { e.preventDefault(); $('.dk-pending').scrollIntoView({ behavior: 'smooth' }); });
     box.querySelector('.dk-copy-handoff').addEventListener('click', async () => {
-      const text = handoffText(data, { kitUrl: KIT_URL, deskUrl: deskUrl(), pack: pack.main });
+      const text = handoffText(sv(), { kitUrl: KIT_URL, deskUrl: deskUrl(), pack: pack.main, space });
       try { await navigator.clipboard.writeText(text); toast('复制好了，去对话里粘贴'); } catch { prompt('没能自动复制，长按全选后复制：', text); }
     });
     box.querySelector('.dk-go')?.addEventListener('click', (e) => goto(e.currentTarget.dataset.sid));
@@ -221,11 +253,13 @@ export async function renderDesk(root, meta) {
   const memoView = createMemoView({ db, ops });
   let pendingWired = false;
   function paintPending() {
-    if (pendingWired) return;
+    if (pendingWired) { memoView.refresh(); return; }
     pendingWired = true;
     const byAt = (a, b) => (b.at || 0) - (a.at || 0);
-    memoView.attach($('.dk-popen'), () => memoView.all().filter((p) => p.status === 'open').sort(byAt), { mode: 'list', empty: '没有等你确认的。' });
-    memoView.attach($('.dk-pdone'), () => memoView.all().filter((p) => p.status === 'done' && p.doneAt > Date.now() - UNDO_DAYS * 86400000).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)).slice(0, 12), { mode: 'list', empty: '这几天没有写进去的。' });
+    // 只列这一科的（分不出科的，比如偏好，各科都列）
+    const here = (p) => { const k = spaceOfDoc('pending', p, data); return !k || k === space; };
+    memoView.attach($('.dk-popen'), () => memoView.all().filter((p) => p.status === 'open' && here(p)).sort(byAt), { mode: 'list', empty: '没有等你确认的。' });
+    memoView.attach($('.dk-pdone'), () => memoView.all().filter((p) => p.status === 'done' && here(p) && p.doneAt > Date.now() - UNDO_DAYS * 86400000).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)).slice(0, 12), { mode: 'list', empty: '这几天没有写进去的。' });
   }
 
   // —— 我改记忆：偏好的文字、错题标已解决、复现组暂停（memo.js 的 meChange，一样记改动单、能撤销）——
@@ -235,8 +269,9 @@ export async function renderDesk(root, meta) {
     const gone = voidedIds(data);
     const solved = resolvedErrors(data);
     const prefs = data.profile.filter((p) => !gone.has(`profile/${p.id}`)).sort((a, b) => cmpId(a.id, b.id));
-    const errs = data.errors.filter((e) => !e.corrects && !gone.has(`errors/${e.id}`) && !solved.has(String(e.id))).sort((a, b) => cmpId(a.id, b.id));
-    const revs = data.reviews.filter((r) => !gone.has(`reviews/${r.id}`) && r.status !== 'done').sort((a, b) => cmpId(a.id, b.id));
+    const mine = sv();
+    const errs = mine.errors.filter((e) => !e.corrects && !gone.has(`errors/${e.id}`) && !solved.has(String(e.id))).sort((a, b) => cmpId(a.id, b.id));
+    const revs = mine.reviews.filter((r) => !gone.has(`reviews/${r.id}`) && r.status !== 'done').sort((a, b) => cmpId(a.id, b.id));
     box.innerHTML = `
       <div class="dk-memo-sub" role="heading" aria-level="3">关于我（讲法、习惯……）</div>${prefs.map((p) => `<div class="dk-edit-row" data-id="${escapeHtml(p.id)}"><span><span class="dk-k">${escapeHtml(p.topic || '')}</span>${inline(p.text)}</span><button type="button" class="btn btn-sm dk-pref">改</button></div>`).join('') || '<p class="muted">还没有。</p>'}
       <div class="dk-memo-sub" role="heading" aria-level="3">没解决的错题</div>${errs.map((e) => `<div class="dk-edit-row" data-id="${escapeHtml(e.id)}"><span><b>${escapeHtml(e.id)}</b> ${inline(String(e.cause || e.q || '').slice(0, 80))}</span><button type="button" class="btn btn-sm dk-solve">已解决</button></div>`).join('') || '<p class="muted">没有。</p>'}
@@ -269,7 +304,7 @@ export async function renderDesk(root, meta) {
     if (!manualForm) {
       manualForm = createManualForm(box.querySelector('.dk-body'), {
         images: !!store.assets,
-        blocks: () => data.curriculum.filter((b) => b.level === 'block' || String(b.id).split('.').length === 3).sort((a, b) => cmpId(a.id, b.id)).map((b) => ({ id: String(b.id), title: b.title })),
+        blocks: () => sv().curriculum.filter((b) => b.level === 'block' || String(b.id).split('.').length === 3).sort((a, b) => cmpId(a.id, b.id)).map((b) => ({ id: String(b.id), title: b.title })),
         onSave: async ({ text, blobs, block, verdict }) => {
           const images = [];
           for (const b of blobs) {
@@ -353,8 +388,10 @@ export async function renderDesk(root, meta) {
     assertWrite('page', 'sessions');
     const main = use ? use.main : pack.main || null;
     const problems = use ? use.problems : pack.problems;
+    // 这节课是哪一科、哪门课：按块看（没有块就是现在看着的这一科），课堂按它带组件说明和教法
+    const sp = block ? spaceOfId(block) : space;
     await db.doc(`sessions/${sid}`).set({
-      date: today, block: block || null, title: String(main?.unit || unit), status: 'open', startedAt: Date.now(),
+      date: today, block: block || null, title: String(main?.unit || unit), status: 'open', startedAt: Date.now(), space: sp, ...(block ? { subject: subjectOf(block) } : {}),
       pack: main ? { unit: main.unit || '', goal: main.goal || '', updatedAt: main.updatedAt || null } : null,
       ...(main?.review ? { review: main.review } : {}),
     });
@@ -387,7 +424,9 @@ export async function renderDesk(root, meta) {
   });
 
   // —— 首页以外的页面：课程地图、弱点表、错题本、以前的课、统计（pages.js，换页不刷新）——
-  const pagesView = createPages($('.dk-pages'), { data, db, ops, goto });
+  const pagesView = createPages($('.dk-pages'), { getData: sv, db, ops, goto });
+  // 首页「别的科也有到期的」：点了切过去
+  $('.dk-today').addEventListener('click', (e) => { const b = e.target.closest('.dk-space-go'); if (b) setSpace(b.dataset.space); });
   function route() {
     const h = decodeURIComponent(String(location.hash || '').slice(1));
     if (isSessionId(h) || viewHash()) { location.reload(); return; }
@@ -418,7 +457,7 @@ export async function renderDesk(root, meta) {
     root.append(bar);
     bar.querySelector('.dk-seed').addEventListener('click', async () => {
       const today = toDate(Date.now());
-      for (const [c, docs] of Object.entries(sampleMemory(today))) for (const d of docs) { const { id, ...rest } = d; await db.doc(`${c}/${id}`).set(rest); }
+      for (const src of [sampleMemory(today), sampleSpaces(today)]) for (const [c, docs] of Object.entries(src)) for (const d of docs) { const { id, ...rest } = d; await db.doc(`${c}/${id}`).set(rest); }
     });
     bar.querySelector('.dk-clear').addEventListener('click', () => { if (confirm('清空本地的示例记忆？')) { db._clear?.(); location.reload(); } });
   }
@@ -453,6 +492,8 @@ async function enterClass(root, meta, sid, { readOnly = false } = {}) {
   // 改记忆（memo 块、整理单、确认 / 撤销）：用没 scopeDb 过的数据库，记忆库在根上
   const ops = createMemOps({ db, mem: () => mem });
   const block = String(main?.block || doc.block || '');
+  // 分科：课堂按这一块的门课带组件说明和教法（学习台页面开头的 subject: 管不了每节课）
+  session.subject = doc.subject || subjectOf(block);
   if (readOnly) {
     return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
       store: { ...store, db: readOnlyDb(scopeDb(db, sid)), assets: null }, sid, block, mem, readOnly: true,

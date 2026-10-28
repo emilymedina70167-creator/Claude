@@ -2,7 +2,7 @@
 // sample 是无记忆的：每一轮都把完整的课堂说明放在第一条 user 消息里重新发一遍——
 // 角色与红线 → 组件写法 + 黑板指令 → 资料包 → 黑板现状，后面才是这节课的对话。
 
-import { isCS, docsForSubject, detailNames, componentDoc, allNames } from '../subject.js';
+import { isCS, isEN, docsForSubject, detailNames, componentDoc, allNames } from '../subject.js';
 import { memoryDigest } from '../memory/digest.js';
 
 // 文档里有大量反引号和 TeX 反斜杠：先用「ˋ」代替反引号，String.raw 保留反斜杠，最后换回来
@@ -54,9 +54,22 @@ const TEACH_CS = doc`
 - 语气平实，像坐在旁边的家教；不用夸张的表扬。
 `;
 
-/** 这门课的「角色与红线 + 教法」：计算机四门用计算机的教法，其余（线代、没写科目）用线代的 */
+// 英语（考研英语一的语法）：先看例句、自己归纳，再用组件练；长难句靠拆成分
+const TEACH_EN = doc`
+- 先给例句、后给规则：挑两三个对比鲜明的例句，让学生自己说出规律（ˋquizˋ 选、ˋclozeˋ 填、一句话说），再把规则写上黑板。
+- 长难句：先让学生自己用 ˋparseˋ 拆主干（主谓宾），再一层层拆从句、非谓语；拆对了再讲意思，不先翻译。一个句子拆不动时，先问谓语动词是哪个。
+- 一个语法点的练习按「填空 ˋclozeˋ → 改错 ˋerrfindˋ → 句型操练 ˋdrillˋ」由浅到深，题量少而准；每题都是真句子（优先用资料包里的例句和真题句子）。
+- 学生答错时，先弄清是哪条规则没想到（看作答记录：页面写着第几个词开始不对、哪一处成分标错了），针对那一条说，不整句重讲。
+- 指着讲：说「看这个词」时，用 ˋboard markˋ 把它圈出来；句子结构可以用 ˋparseˋ 的答案形式直接写在板上（学生看括号就懂层次）。
+- 语法术语用中文（主语、谓语、宾语、定语从句、非谓语……），第一次出现时附英文；例句、答案用英文，讲解用中文。
+- 不要求背诵规则原文：能在句子里认出来、能用对就行。
+- 语气平实，像坐在旁边的家教；不用夸张的表扬。
+`;
+
+/** 这门课的「角色与红线 + 教法」：计算机四门用计算机的教法，英语用英语的，其余（线代、没写科目）用线代的 */
+const teachFor = (subject) => (isCS(subject) ? TEACH_CS : isEN(subject) ? TEACH_EN : TEACH_LA);
 export function defaultRules(subject) {
-  return `${ROLE}\n\n教法：\n\n${isCS(subject) ? TEACH_CS : TEACH_LA}`;
+  return `${ROLE}\n\n教法：\n\n${teachFor(subject)}`;
 }
 export const DEFAULT_RULES = defaultRules('线代');
 
@@ -64,7 +77,7 @@ export const DEFAULT_RULES = defaultRules('线代');
 // 角色那一段（怎么看黑板、怎么称呼学生）和按科目的教法照旧，教法和规则冲突时以规则为准
 const ROLE_INTRO = ROLE.split('\n\n下面是红线')[0];
 export function memoryRules(subject, rulesText) {
-  return `${ROLE_INTRO}\n\n下面是学生定下的规则（学习台记忆库的 rules，替换组件库内置的红线），每一轮都要守住：\n\n${rulesText}\n\n教法（组件库内置，按科目；和上面的规则冲突时以规则为准）：\n\n${isCS(subject) ? TEACH_CS : TEACH_LA}`;
+  return `${ROLE_INTRO}\n\n下面是学生定下的规则（学习台记忆库的 rules，替换组件库内置的红线），每一轮都要守住：\n\n${rulesText}\n\n教法（组件库内置，按科目；和上面的规则冲突时以规则为准）：\n\n${teachFor(subject)}`;
 }
 
 // 学习台里上课时，记忆摘要后面附的说明：能写什么、不能写什么、怎么写（docs/desk-plan.md 4.1：写记忆用输出里的 memo 块，不用工具）
@@ -787,6 +800,16 @@ function recordText(a, type) {
     case 'quiz': {
       const wrong = Array.isArray(a.wrong) && a.wrong.length ? `，选错过：${a.wrong.map((w) => `「${short(w, 40)}」`).join('、')}` : '';
       return `[作答] ${where(a, 'quiz')}：${a.q ? `「${short(a.q, 120)}」` : ''}${a.ok ? '做对了' : '没做对，看了解析'}${a.attempts ? `（共 ${a.attempts} 次）` : ''}${wrong}`;
+    }
+    // 英语组件：一次尝试一条（detail 是页面说的哪里不对），最后一条是结果
+    case 'cloze':
+    case 'errfind':
+    case 'parse':
+    case 'drill': {
+      const kind = { cloze: '填空', errfind: '改错', parse: '句子成分', drill: '操练' }[type];
+      const q = a.q ? `「${short(a.q, 120)}」` : '';
+      if (a.final) return `[作答] ${where(a, kind)}：${q}${a.revealed ? `试了 ${a.attempts || 0} 次没做对，看了答案${a.expected ? `（${short(a.expected, 160)}）` : ''}` : a.ok ? `做对了（共 ${a.attempts} 次）` : '没做对'}`;
+      return `[作答] ${where(a, kind)}：${q}写了 ${short(a.value, 300) || '（空）'}${mark(a.ok, a.attempts)}${a.detail ? `（${short(a.detail, 160)}）` : ''}`;
     }
     case 'predict': {
       const guess = a.guess ?? a.value;

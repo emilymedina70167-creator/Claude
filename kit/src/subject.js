@@ -9,6 +9,7 @@ const NAMES = {
   操作系统: ['操作系统', 'os', 'operating system', 'operating systems'],
   组成原理: ['组成原理', '计算机组成原理', '计组', '计算机组成', 'co', 'computer organization'],
   计网: ['计网', '计算机网络', '网络', 'cn', 'computer network', 'computer networks'],
+  英语: ['英语', 'english', 'en', '英语一', '考研英语', '语法', 'grammar'],
 };
 export const SUBJECTS = Object.keys(NAMES);
 // 计算机四门（408）：教法、术语附不附英文和线代不一样
@@ -23,6 +24,7 @@ export function subjectKey(s) {
 }
 
 export const isCS = (s) => CS.includes(subjectKey(s));
+export const isEN = (s) => subjectKey(s) === '英语';
 
 // 小节的科目标记：<!-- 科目：数据结构 操作系统 -->（冒号全角半角都行，几门课用空格、逗号、顿号隔开）
 const TAG_RE = /^\s*<!--\s*科目\s*[:：]\s*(.*?)\s*-->\s*$/;

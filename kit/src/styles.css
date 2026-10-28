@@ -2376,3 +2376,35 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .pvd-fb.is-bad { color: var(--coral); }
 .pvd-hist { margin-top: 6px; font: 14px var(--sans); }
 .pvd-after { margin-top: 10px; }
+
+/* —— 英语（语法）组件：cloze、errfind、parse、drill（blocks/english.js）—— */
+.en-text { font: 18px/2.1 var(--sans); color: var(--chalk); margin: 4px 0 14px; overflow-wrap: anywhere; }
+.en-blank { min-height: 40px; margin: 0 4px; padding: 2px 8px; border: 0; border-bottom: 2px solid rgb(var(--chalk-rgb) / 0.45); background: rgb(var(--glow-rgb) / 0.05); color: var(--yellow); font: 16px/1.4 var(--sans); max-width: 100%; box-sizing: border-box; }
+.en-blank:focus { outline: none; border-bottom-color: var(--yellow); }
+.en-blank.is-right, .dr-in.is-right, .en-fix-in.is-right { border-color: var(--green); color: var(--green); }
+.en-blank.is-wrong, .dr-in.is-wrong, .en-fix-in.is-wrong { border-color: var(--coral); color: var(--coral); }
+.en-blank.is-answer { color: rgb(var(--blue-rgb)); border-bottom-color: rgb(var(--blue-rgb) / 0.6); }
+.en-words { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 4px; margin: 6px 0 12px; font: 18px/1.6 var(--sans); }
+.en-word, .pz-w { min-height: 44px; min-width: 36px; padding: 4px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--chalk); font: inherit; cursor: pointer; }
+.en-word:hover, .pz-w:hover { border-color: rgb(var(--chalk-rgb) / 0.25); }
+.en-word.is-picked { border-color: var(--yellow); background: rgb(var(--yellow-rgb) / 0.14); }
+.en-word.is-wrong { border-color: var(--coral); color: var(--coral); }
+.en-word.is-right, .en-word.is-answer { border-color: var(--green); color: var(--green); }
+.en-punct { color: rgb(var(--chalk-rgb) / 0.7); }
+.en-fix { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; font: 15px/1.4 var(--sans); color: var(--muted); }
+.en-fix-in, .dr-in { min-height: 44px; padding: 8px 10px; border: 1px solid var(--faint); border-radius: 10px; background: rgb(var(--glow-rgb) / 0.04); color: var(--chalk); font: 16px/1.4 var(--sans); box-sizing: border-box; }
+.en-fix-in { flex: 1; max-width: 18em; }
+.dr-in { width: 100%; margin: 6px 0 12px; resize: vertical; }
+.dr-q { font: 18px/1.6 var(--sans); color: var(--chalk); }
+.dr-n { font: 13.5px/1.4 var(--sans); }
+.dr-sum { margin-top: 8px; font: 600 15px/1.4 var(--sans); color: var(--chalk); }
+.pz-help { font: 13.5px/1.5 var(--sans); margin-bottom: 4px; }
+.pz-w.is-sel { background: rgb(var(--yellow-rgb) / 0.18); border-color: rgb(var(--yellow-rgb) / 0.6); }
+.pz-open, .pz-close { font: 600 20px/1 var(--sans); cursor: pointer; }
+.pz-open small { font: 600 11.5px/1 var(--sans); margin-left: 1px; vertical-align: super; }
+.pz-open.is-wrong, .pz-close.is-wrong { text-decoration: line-through; opacity: 0.75; }
+.pz-roles { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.pz-role { min-height: 44px; }
+.pz-c0 { color: var(--yellow); } .pz-c1 { color: rgb(var(--blue-rgb)); } .pz-c2 { color: var(--pink); }
+.pz-c3 { color: var(--green); } .pz-c4 { color: var(--coral); } .pz-c5 { color: rgb(var(--chalk-rgb) / 0.85); }
+.pz-ans .pz-w { cursor: default; }

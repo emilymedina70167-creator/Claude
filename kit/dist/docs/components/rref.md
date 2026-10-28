@@ -5,5 +5,3 @@
 - `rref`：写 `matrix: [[…]]`、`augmented: true`、可选 `vars: x, y, z`、`mode: ref`。用精确分数逐步演示，最后判断解的情况。
 - `matmul`：写 `A: [[…]]` 和 `B: [[…]]`。点结果里的元素会高亮对应的行和列。
 - 旧组件 `transform2d`、`vectors` 仍然可用，但新课件优先用 `scene`。
-
----

@@ -1,6 +1,6 @@
 # 线代学习台 · 给 Claude 的教学说明
 
-> **版本：2026-10-28b**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
+> **版本：2026-10-28c**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
 >
 > 这份说明的**最新版**一直放在组件库 artifact 里（文件 `CLAUDE-PROJECT.md`）。每个新对话里，第一次做和学习台有关的事（做课件、写实时黑板、备课堂资料包、读课堂记录或学习记录）之前，先用 `Artifact` 工具读它：`action: "read"`，`url` 是上面的组件库地址，`path: "CLAUDE-PROJECT.md"`。
 > - 读到的版本比你手上这份新：以读到的为准，这份里和它不一样的地方全部作废。回复里顺便告诉我「项目指令里的说明是旧版（版本号），组件库里是新版（版本号）」。
@@ -1950,6 +1950,70 @@ text: 这一单元你发现了……下一单元会……
 - `matmul`：写 `A: [[…]]` 和 `B: [[…]]`。点结果里的元素会高亮对应的行和列。
 - 旧组件 `transform2d`、`vectors` 仍然可用，但新课件优先用 `scene`。
 
+### cloze：英语填空（一句或一段里几个空）
+
+<!-- 科目：英语 -->
+
+```cloze
+title: 过去完成时
+q: 用括号里动词的正确形式填空。
+text: By the time we arrived, the film {{had started}} (start).
+  She {{has lived|has been living}} here since 2010.
+explain: 「到达」之前已经开始：过去的过去用过去完成时。
+```
+
+- 空写成 `{{答案}}`，几种写法都对时 `{{a|b}}`。大小写、弯引号、多余空格、缩写（`don't` = `do not`）都不算错；`case: on` 时要求大小写也对。
+- 判错时只告诉我第几个空、从第几个词开始不对，不说答案；错两次以后才有「看答案」。`text:` 可以换行写成一段（续行前面空两格）。
+
+### errfind：英语改错（点出用错的词，再写改成什么）
+
+<!-- 科目：英语 -->
+
+```errfind
+q: 找出句中的错误并改正。
+text: Neither of the answers are correct.
+wrong: are
+fix: is
+explain: neither of 做主语，谓语用单数。
+```
+
+- `wrong:` 写 `text` 里用错的那个词（同一个词出现几次时写 `are#2`）；`fix:` 写改成什么（几种都对时 `a | b`），不写 `fix:` 就只要求点出来。
+- 我点错了词，页面只说「这个词用得没错」；点对了、改错了说「找对了，改得不对」。
+
+### parse：句子成分标注（长难句，能套从句）
+
+<!-- 科目：英语 -->
+
+```parse
+title: 拆主干
+q: 标出主语、谓语、间接宾语、直接宾语，再标出主语里的定语从句。
+answer: [S The man [RC who lives next door]] [V gave] [IO me] [DO a book].
+roles: S V IO DO RC
+explain: 先找谓语 gave，往前是主语，who 引导的定语从句修饰 the man。
+```
+
+- `answer:` 用括号写标准答案：`[成分 词…]`，可以套（从句里的成分再套一层）；句子原文就是去掉括号的部分，标点照写。我点词定起点、终点，再点成分；判分时范围和成分都要对。
+- 成分的写法：`S` 主语、`V` 谓语、`O` 宾语、`IO` 间接宾语、`DO` 直接宾语、`P` 表语、`C` 补语、`OC` 宾补、`A` 状语、`Attr` 定语、`App` 同位语、`RC` 定语从句、`SC` 主语从句、`ObC` 宾语从句、`PC` 表语从句、`AppC` 同位语从句、`AdvC` 状语从句、`NF` 非谓语、`Conj` 连接词；`roles:` 写这道题用到的（按钮就是这几个），也可以自己起名：`roles: S V O T=时间状语`。
+- `mode: show`：不作答，直接把句子结构画在板上（讲解时用）。
+- 一道题只拆一层最清楚：先拆主干，下一道再拆从句里面。
+
+### drill：句型操练（一题一题做，页面判分）
+
+<!-- 科目：英语 -->
+
+```drill
+title: 主动变被动
+q: 把句子改成被动语态。
+count: 3
+- They built this bridge in 1990. => This bridge was built in 1990.
+- People say that he is rich. => He is said to be rich. | It is said that he is rich.
+- Someone has stolen my bike. => My bike has been stolen.
+- They will hold the meeting tomorrow. => The meeting will be held tomorrow.
+```
+
+- 一行一题：`- 原句 => 答案`，几种都对时 `a | b`。`count:` 这次做几题（默认全做），题目默认打乱（`shuffle: off` 照原样）。
+- 整句作答：句末标点可写可不写，大小写、缩写同上。错两次可以看答案，做完一题点「下一题」，最后告诉我一次就对了几题。
+
 ---
 
 ## 四、读学习记录
@@ -2346,6 +2410,17 @@ unit: 线代 + 408
 ```
 
 **`observations`**（课堂里的 Claude 写，页面替它存）：`kind`：`note` 观察 / `summary` 下课小结 / `proposal` 提议（比如提议改某个弱点，由你决定采不采纳，采纳了就照规矩改那一类、log 的 `basis` 写这条观察的 id）、`text`、`about`（相关的编号）、`block`、`session`、`turn`（第几轮记的）、`at`。下课小结还有 `verify`（这节课平台核验是 Opus 5.5 的轮数、作废的轮数）。**`evidence`**、**`sessions`** 由页面写，你只读（见下文）。
+
+### 分科：数学 / 408 / 英语
+
+学习台里分三个空间：**数学**（`math`，现在是线代）、**408**（`cs`：数据结构、操作系统、组成原理、计网）、**英语**（`en`，考研英语一的语法）。我在学习台顶上切换，每科有自己的课程地图、下一节从哪接、资料包、待确认、错题本这些页面；「关于我」（`profile`）、规则（`rules`）、两个 Claude 的教学失误（`slips`）、统计、备份全科共用。
+
+- **课程编号带门课的前缀**：线代不带（`L2.2.1`，以前写的都是线代，不用改）；数据结构 `DS-`、操作系统 `OS-`、组成原理 `CO-`、计网 `CN-`、英语 `EN-`，比如 `DS-L2.1.1`、`EN-L1.1.1`、掌握状态 `EN-L1.1.1#past`。错题跟着前缀：`DS-L2-03`、`EN-L1-02`（编号照旧是「第几讲 - 第几题」，各门课各编各的）。页面按前缀认是哪一科、哪门课。
+- **弱点、复现组**的编号全科共用一套（`W19`、`R3`）；页面按它挂的块、错题看是哪一科。分不清时写上 `space`：`math` / `cs` / `en`。
+- **下一节从哪接**每科一条：`position` 的 `now`（数学）、`now-cs`（408）、`now-en`（英语）。
+- **资料包**每科一份：数学是 `pack/main`、`pack/problems`，408 是 `pack/main-cs`、`pack/problems-cs`，英语是 `pack/main-en`、`pack/problems-en`。备哪一科的课就写哪一份，`block` 写这节课的块（带前缀），我在那一科的首页点「开新课」。
+- **课堂按块的门课上**：`block` 是 `DS-…` 的课，课堂里的 Claude 带数据结构的组件说明和计算机的教法；`EN-…` 的带英语组件（`cloze`、`errfind`、`parse`、`drill`）和英语的教法。`sessions/{编号}` 记着 `space` 和 `subject`。
+- **英语的课程地图**照我给你的语法书和视频课的章节建（`EN-L1` 第 1 章，`EN-L1.1` 第 1 节，`EN-L1.1.1` 一块），块的 `scope` 写这块的语法点和考研英语一的考法，`points` 写要点，`textbook` 放书里的规则原文和例句。
 
 ### 每节课和证据（页面写，你读）
 

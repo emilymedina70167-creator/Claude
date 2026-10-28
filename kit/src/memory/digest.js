@@ -4,6 +4,7 @@
 // 有字节预算（和资料包一起受 SYSTEM_MAX 限制）：放不下时从后往前截，截掉的写明「还有几条，用 memory_read 查」。
 // 撤销了的（status: void、有一条作废的更正指向它）不带；学生标了已解决的错题注明；还在等学生确认的改动单列出来，免得它再提一遍。
 import { voidedIds, resolvedErrors, pendingTitle } from './memo.js';
+import { filterSpace, spaceOfId, positionId } from './space.js';
 
 const enc = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
 export const utf8 = (s) => (enc ? enc.encode(String(s)).length : Buffer.byteLength(String(s)));
@@ -35,12 +36,15 @@ export function nearBlocks(curriculum, block) {
  * block：这节课的块（没有就用 position 里的）；budget：字节上限（rules 和正文合起来）；tools：这个查看方式能不能用 memory_read。
  * 返回 { rules（给「角色和红线」那一节的规则全文，没有就是空字符串）, text（正文）, cut: [{ coll, more }], bytes }
  */
-export function memoryDigest(mem = {}, { block = '', budget = 32 * 1024, session = '', tools = true } = {}) {
+export function memoryDigest(mem0 = {}, { block = '', budget = 32 * 1024, session = '', tools = true } = {}) {
+  // 分科：只带这一科的（数学课不带英语的弱点），「关于我」、规则、失误全科共用
+  const space = spaceOfId(block || (mem0.position || []).find((d) => d?.id === 'now')?.block);
+  const mem = filterSpace(mem0, space);
   const gone = voidedIds(mem);
   const solved = resolvedErrors(mem);
   // 作废的、更正别的条目的（作废更正、「已解决」那条）都不单独带：原条上注明
   const get = (c) => (Array.isArray(mem[c]) ? mem[c].filter((d) => d && d.id !== undefined && !gone.has(`${c}/${d.id}`) && !(c === 'errors' && d.corrects && (d.void || d.resolved))) : []);
-  const position = get('position').find((d) => d.id === 'now') || null;
+  const position = get('position').find((d) => d.id === positionId(space)) || null;
   const here = String(block || position?.block || '');
   const { cur, near } = nearBlocks(get('curriculum'), here);
   const nearIds = new Set([here, ...near.map((d) => d.id)].filter(Boolean));

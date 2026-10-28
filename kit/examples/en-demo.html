@@ -1,0 +1,65 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>英语组件</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+mode: guided
+subject: 英语
+unit: 英语组件：填空、改错、句子成分、句型操练
+---
+
+# 英语（语法）组件
+
+说明书第三节里四个英语组件的例子，原样照抄。
+
+### 填空
+
+```cloze
+title: 过去完成时
+q: 用括号里动词的正确形式填空。
+text: By the time we arrived, the film {{had started}} (start).
+  She {{has lived|has been living}} here since 2010.
+explain: 「到达」之前已经开始：过去的过去用过去完成时。
+```
+
+### 改错
+
+```errfind
+q: 找出句中的错误并改正。
+text: Neither of the answers are correct.
+wrong: are
+fix: is
+explain: neither of 做主语，谓语用单数。
+```
+
+### 句子成分
+
+```parse
+title: 拆主干
+q: 标出主语、谓语、间接宾语、直接宾语，再标出主语里的定语从句。
+answer: [S The man [RC who lives next door]] [V gave] [IO me] [DO a book].
+roles: S V IO DO RC
+explain: 先找谓语 gave，往前是主语，who 引导的定语从句修饰 the man。
+```
+
+讲解时把结构直接画在板上（`mode: show`）：
+
+```parse
+mode: show
+answer: [SC What he said] [V surprised] [O everyone] [A at the meeting].
+roles: SC=主语从句 V O A
+```
+
+### 句型操练
+
+```drill
+title: 主动变被动
+q: 把句子改成被动语态。
+count: 3
+- They built this bridge in 1990. => This bridge was built in 1990.
+- People say that he is rich. => He is said to be rich. | It is said that he is rich.
+- Someone has stolen my bike. => My bike has been stolen.
+- They will hold the meeting tomorrow. => The meeting will be held tomorrow.
+```
+</script>

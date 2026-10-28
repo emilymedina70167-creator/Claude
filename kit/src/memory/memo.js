@@ -15,6 +15,7 @@
 // 我在页面上自己改（偏好、错题标已解决、复现组暂停）也走同一条路（tier: me），一样能撤销。
 import { COLLECTIONS, UNDO_DAYS, assertWrite, applyChange, nextTier, toDate, daysBetween, same } from './schema.js';
 import { tokenize } from '../tokens.js';
+import { courseOf, prefixOf, positionId, spaceOfId } from './space.js';
 
 export const MEMO_KINDS = {
   pref: { tier: 'direct', coll: 'profile', label: '偏好' },
@@ -99,14 +100,15 @@ export function resolveBasis(tokens, { evidence = [], mem = {} } = {}) {
 
 /* ---------------- 编号 ---------------- */
 
-const lectureOf = (block) => /^L(\d+)/.exec(String(block || ''))?.[1] || '';
+const lectureOf = (block) => /^(?:[A-Z]{2}-)?L(\d+)/.exec(String(block || ''))?.[1] || '';
 const maxNum = (ids, re) => Math.max(0, ...ids.map((id) => Number(re.exec(String(id))?.[1]) || 0));
 
 /** 下一个错题编号：同一讲里最大的号 + 1（L2-07 → L2-08；检验题 L2-T03 另算） */
 export function nextErrorId(errors, block) {
   const l = lectureOf(block) || '0';
-  const n = maxNum((errors || []).map((e) => e.id), new RegExp(`^L${l}-(\\d+)$`)) + 1;
-  return `L${l}-${String(n).padStart(2, '0')}`;
+  const pre = `${prefixOf(courseOf(block))}L${l}-`; // 分科：DS-L2-03 和线代的 L2-03 各编各的
+  const n = maxNum((errors || []).map((e) => e.id), new RegExp(`^${pre}(\\d+)$`)) + 1;
+  return `${pre}${String(n).padStart(2, '0')}`;
 }
 export const nextWeaknessId = (ws) => `W${maxNum((ws || []).map((w) => w.id), /^W(\d+)$/) + 1}`;
 export const nextReviewId = (rs) => `R${maxNum((rs || []).map((r) => r.id), /^R(\d+)$/) + 1}`;
@@ -192,7 +194,7 @@ export function planEntry(entry, ctx = {}) {
       if (a.id && !COLLECTIONS.weaknesses.id.re.test(a.id)) return { error: `弱点编号「${a.id}」不对，像 W19；新弱点不写 id 页面自动编` };
       if (a.id) return { error: `弱点表里没有 ${a.id}：新弱点不写 id（页面自动编），要改的写已有的编号` };
       if (!a.title || !a.scope || !a.level) return { error: '新弱点要写 title、scope（通用 / 链条 / 局部）、level（L0～L3）' };
-      return { ...base, op: 'add', target: nextWeaknessId(get('weaknesses')), data: { title: cut(a.title, 120), scope: a.scope, level: a.level, last: date, errors: errs, blocks: a.blocks?.length ? a.blocks : ctx.block ? [ctx.block] : [], status: 'active', basis } };
+      return { ...base, op: 'add', target: nextWeaknessId(get('weaknesses')), data: { title: cut(a.title, 120), scope: a.scope, level: a.level, last: date, errors: errs, blocks: a.blocks?.length ? a.blocks : ctx.block ? [ctx.block] : [], status: 'active', basis, ...(ctx.block ? { space: spaceOfId(ctx.block) } : {}) } };
     }
     case 'review': {
       const old = a.id ? find('reviews', a.id) : null;
@@ -217,10 +219,12 @@ export function planEntry(entry, ctx = {}) {
       if (!a.title) return { error: '新复现组要写 title（还有 family、content、weaknesses、blocks）' };
       for (const w of a.weaknesses || []) if (!find('weaknesses', w)) return { error: `weaknesses 里的 ${w} 在弱点表里没有` };
       // 新的一组：从明天开始（档位 1 天，last 是今天）
-      return { ...base, op: 'add', target: nextReviewId(get('reviews')), data: { title: cut(a.title, 120), ...(a.family ? { family: cut(a.family, 120) } : {}), content: a.content ? [cut(a.content, 300)] : [], weaknesses: a.weaknesses || [], blocks: a.blocks?.length ? a.blocks : ctx.block ? [ctx.block] : [], tier: 1, last: date, status: 'active' } };
+      return { ...base, op: 'add', target: nextReviewId(get('reviews')), data: { title: cut(a.title, 120), ...(a.family ? { family: cut(a.family, 120) } : {}), content: a.content ? [cut(a.content, 300)] : [], weaknesses: a.weaknesses || [], blocks: a.blocks?.length ? a.blocks : ctx.block ? [ctx.block] : [], tier: 1, last: date, status: 'active', ...(ctx.block ? { space: spaceOfId(ctx.block) } : {}) } };
     }
     case 'position': {
-      const old = find('position', 'now');
+      // 每科一条「下一节从哪接」：按这节课的块是哪一科
+      const pid = positionId(spaceOfId(a.block || ctx.block));
+      const old = find('position', pid);
       const patch = {};
       if (a.next) patch.next = cut(a.next, 400);
       if (a.block) {
@@ -233,10 +237,10 @@ export function planEntry(entry, ctx = {}) {
       if (old) {
         for (const k of Object.keys(patch)) if (same(old[k], patch[k])) delete patch[k];
         if (!Object.keys(patch).length) return { error: 'position 和现在的一样，不用改' };
-        return { ...base, op: 'update', target: 'now', patch };
+        return { ...base, op: 'update', target: pid, patch };
       }
       if (!patch.block && !ctx.block) return { error: '还没有 position：第一次要写 block' };
-      return { ...base, op: 'add', target: 'now', data: { block: patch.block || ctx.block, next: patch.next || '', ...(patch.debts ? { debts: patch.debts } : {}), ...(patch.first ? { first: patch.first } : {}), log: [] } };
+      return { ...base, op: 'add', target: pid, data: { block: patch.block || ctx.block, next: patch.next || '', ...(patch.debts ? { debts: patch.debts } : {}), ...(patch.first ? { first: patch.first } : {}), log: [] } };
     }
     default:
       return { error: `不认识「${kind}」` };
