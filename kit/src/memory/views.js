@@ -142,6 +142,7 @@ export function classRows(mem = {}) {
       id: s.id, date: s.date || '', block: s.block || '', title: s.title || '', status: s.status || '',
       minutes: s.report?.activeMs ? Math.round(s.report.activeMs / 60000) : null, line: s.report?.line || '',
       verify: s.verify || null, summary: cut(first, 80), usage: s.usage || null, review: s.review || null, startedAt: s.startedAt || 0,
+      kind: ['live', 'unit'].includes(s.kind) ? s.kind : 'class',
     };
   }).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0) || cmpId(b.id, a.id));
 }
@@ -239,7 +240,7 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
   const pos = (mem.position || []).find((p) => p.id === positionId(space));
   const rows = classRows(mem);
   const last = rows.find((r) => r.status === 'closed');
-  const openClass = rows.find((r) => r.status === 'open');
+  const opens = rows.filter((r) => r.status === 'open');
   const open = (mem.pending || []).filter((p) => p.status === 'open');
   const gone = voidedIds(mem);
   const proposals = (mem.observations || []).filter((o) => o.kind === 'proposal' && !gone.has(`observations/${o.id}`) && (!last || o.session === last.id));
@@ -251,12 +252,13 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
   if (open.length) todo.push(`还有 ${open.length} 张改动单等我确认（pending，status: open）：我在学习台上点，你不用代写。`);
   return [
     `【学习台 · 接手 · ${SPACES[space]?.label || ''}】`,
-    kitUrl ? `- 先读说明书：Artifact 工具 action: "read"，url: ${kitUrl}，path: "CLAUDE-PROJECT.md"。` : '',
-    `- 学习台：${deskUrl || '（地址问我要：在 claude.ai 打开学习台时地址栏里的那个）'}。记忆都在它的数据库里，用 ArtifactData 读。`,
+    `- 学习台：${deskUrl || kitUrl || '（地址问我要：在 claude.ai 打开学习台时地址栏里的那个）'}。说明书、组件写法、记忆、每节课都在它里面：先用 Artifact 工具 action: "read"、path: "CLAUDE-PROJECT.md" 读说明书，记忆用 ArtifactData 读。`,
     `- 这一科：${SPACES[space]?.label || space}（只列这一科的；学习台还有${Object.keys(SPACES).filter((k) => k !== space).map((k) => SPACES[k].label).join('、')}）。`,
     `- 今天 ${today}。${pos ? `学到 ${pos.block || '？'}；下一节：${cut(pos.next, 120)}${list(pos.debts).length ? `；欠账：${list(pos.debts).map((x) => cut(x, 60)).join('；')}` : ''}。` : '还没有 position。'}`,
-    last ? `- 上一节：${last.id}（${last.block || '没写块'}）${last.line ? `，${last.line}` : ''}${last.summary ? `；小结开头：${last.summary}` : ''}。课后报告在 sessions/${last.id}/report/main。` : '- 还没有下过课。',
-    openClass ? `- 有一节还没下课：${openClass.id}。` : '',
+    last ? `- 上一节：${last.kind === 'class' ? '' : `${last.kind === 'live' ? '实时黑板' : '自学单元'} `}${last.id}（${last.block || '没写块'}）${last.line ? `，${last.line}` : ''}${last.summary ? `；小结开头：${last.summary}` : ''}。课后报告在 sessions/${last.id}/report/main。` : '- 还没有下过课。',
+    ...opens.map((r) => (r.kind === 'live'
+      ? `- 实时黑板 ${r.id}「${cut(r.title, 40)}」还开着：接着写就往 sessions/${r.id}/steps 写，黑板现状在 sessions/${r.id}/meta/now（说明书第五节）。`
+      : r.kind === 'unit' ? `- 自学单元 ${r.id}「${cut(r.title, 40)}」我还没学完。` : `- 有一节课堂还没下课：${r.id}。`)),
     due.length ? `- 到期的复现组：${due.map((d) => `${d.id}${d.days < 0 ? `（过期 ${-d.days} 天）` : ''}`).join('、')}（学习台首页能直接开复现课）。` : '',
     pack ? `- 已经备好的下一节：${cut(pack.unit || '', 60)}${pack.block ? `（${pack.block}）` : ''}。` : '',
     todo.length ? `- 等你做的：\n${todo.map((t) => `  - ${t}`).join('\n')}` : '- 现在没有等你做的。',

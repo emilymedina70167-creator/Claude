@@ -9,12 +9,17 @@ const ICON = {
   more: '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
   copy: '<svg viewBox="0 0 24 24"><rect x="8" y="8" width="11.5" height="12" rx="2"/><path d="M15.5 8V6a2 2 0 0 0-2-2H6.5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2H8"/></svg>',
   shot: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 15.5l-4.5-4.5-7.5 8"/></svg>',
+  home: '<svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/></svg>',
+  end: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
 };
 const MAX_UP = 4; // 一次最多交几张
 
 
-/** onUpload(blobs, note)：交截图，返回 Promise（失败时抛出带说明的错误）；不传就没有「交截图」 */
-export function createLiveBar({ onNav, onCopy, onUpload } = {}) {
+/**
+ * onUpload(blobs, note)：交截图，返回 Promise（失败时抛出带说明的错误）；不传就没有「交截图」
+ * onHome、onEnd：在学习台里开的黑板才有（「回学习台」「这块黑板用完了」）
+ */
+export function createLiveBar({ onNav, onCopy, onUpload, onHome = null, onEnd = null } = {}) {
   const el = document.createElement('div');
   el.className = 'class-bar is-board-only';
   el.setAttribute('role', 'region');
@@ -42,6 +47,8 @@ export function createLiveBar({ onNav, onCopy, onUpload } = {}) {
       <div class="cb-menu" hidden role="menu" aria-label="黑板菜单">
         <div class="cb-dock"></div>
         <button type="button" class="cb-item cb-copy" role="menuitem">${ICON.copy}<span>复制学习记录</span></button>
+        ${onHome ? `<button type="button" class="cb-item cb-home" role="menuitem">${ICON.home}<span>回学习台</span></button>` : ''}
+        ${onEnd ? `<button type="button" class="cb-item cb-end" role="menuitem">${ICON.end}<span>这块黑板用完了</span></button>` : ''}
         <div class="cb-ver" title="这个页面用的组件库版本（和项目说明的版本号对得上就是最新的）">组件库 ${VERSION}</div>
       </div>
     </div>`;
@@ -76,6 +83,8 @@ export function createLiveBar({ onNav, onCopy, onUpload } = {}) {
   on(window, 'pointerdown', (e) => { if (menuOpen && e.target instanceof Element && !menu.contains(e.target) && !moreBtn.contains(e.target)) setMenu(false); }, { capture: true, passive: true });
   on(document, 'keydown', (e) => { if (e.key === 'Escape' && menuOpen) { setMenu(false); moreBtn.focus({ preventScroll: true }); } });
   on($('.cb-copy'), 'click', () => { setMenu(false); onCopy?.(); });
+  if (onHome) on($('.cb-home'), 'click', () => { setMenu(false); onHome(); });
+  if (onEnd) on($('.cb-end'), 'click', () => { setMenu(false); onEnd(); });
   on(dock, 'click', (e) => { if (e.target.closest('.ink-fab')) setTimeout(() => setMenu(false), 0); });
 
   // —— 交截图：和课堂模式的「附图」一样，iPad 的 Safari 只往可编辑的框里插 Notability 圈选拷贝的图 ——

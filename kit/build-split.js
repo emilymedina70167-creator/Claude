@@ -43,7 +43,7 @@ export function splitProject(markdown, { kitUrl = '' } = {}) {
     const desc = sec.head.replace(/^#+\s*/, '').replace(/^[^：:]*[：:]\s*/, '').trim();
     index.push({ names: sec.names, file, desc, tags: sec.tags });
   }
-  const how = `每个组件的写法（字段、例子、常见错法）单独放在组件库里，**要用哪个先读哪个**：\`Artifact\` 工具 \`action: "read"\`，\`url\`${kitUrl ? ` 是 ${kitUrl}` : ' 是组件库的地址'}，\`path\` 写下表里的文件（比如 \`"components/answer.md"\`）；一次可以用 \`paths\` 读好几个。没读写法就写组件，页面会报写法错误。`;
+  const how = `每个组件的写法（字段、例子、常见错法）单独放在学习台里，**要用哪个先读哪个**：\`Artifact\` 工具 \`action: "read"\`，\`url\`${kitUrl ? ` 是 ${kitUrl}` : ' 是学习台的地址'}，\`path\` 写下表里的文件（比如 \`"components/answer.md"\`）；一次可以用 \`paths\` 读好几个。没读写法就写组件，页面会报写法错误。`;
   const table = index.map((x) => `- \`${x.names.join('` / `')}\`${x.tags ? `（${x.tags.join('、')}）` : ''}：${x.desc} → \`${x.file}\``).join('\n');
   const sec3new = [lines[s], '', keep.filter(Boolean).join('\n\n'), '', '### 组件一览（写法要单独读）', '', how, '', table, ''].join('\n');
   const main = [...lines.slice(0, s), sec3new, ...lines.slice(e)].join('\n');

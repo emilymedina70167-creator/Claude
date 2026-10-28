@@ -2,7 +2,7 @@
 
 让 Claude 在对话里用 **artifact** 给我上线性代数课，以及 408 的数据结构、操作系统、组成原理、计算机网络。重点不是「看 Claude 讲」，而是**自己动手、自己得出结论**：Claude 负责设计推进的路径，组件库负责图形、计算和判分。
 
-示范单元（也是组件库本身）：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
+学习台（唯一的入口：说明书、组件库、记忆、每一节课都在里面）：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 
 ## 外观
 
@@ -55,11 +55,11 @@
 2. 以前贴进去的那一大段学习台说明删掉，换成下面这一段（你自己写的其他指令留着）：
 
    ```
-   【学习台】做和学习台有关的任何事之前（做课件、写实时黑板、备课堂资料包、读课堂记录或学习记录），先用 Artifact 工具读最新说明：action: "read"，url: https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF ，path: "CLAUDE-PROJECT.md"。完全照它做；它和你记忆里的旧做法冲突时，以它为准。读不到就告诉我，不要凭记忆做。同一个对话里读一次就够；我说「说明更新了」，或者黑板现状、学习记录里写的组件库版本比你读到的说明版本新，就重读。页面的组件库版本比说明旧时，照说明里「组件库版本要对得上」先换新版再写。
+   【学习台】做和学习有关的任何事之前（写实时黑板、备课、读课堂记录、改记忆），先用 Artifact 工具读学习台里的最新说明：action: "read"，url: https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo ，path: "CLAUDE-PROJECT.md"。完全照它做；它和你记忆里的旧做法冲突时，以它为准。读不到就告诉我，不要凭记忆做。同一个对话里读一次就够；我说「说明更新了」，或者黑板现状、自检结果里写的版本比你读到的说明版本新，就重读。一切都在学习台这一个 artifact 里，不要发布新的 artifact。
    ```
 
-   说明的全文（[`CLAUDE-PROJECT.md`](CLAUDE-PROJECT.md)）跟着组件库一起发布，每次更新组件库它也一起更新，所以项目指令里只放这一段，以后不用再改。
-3. 发资料给 Claude，或者说「按学习台格式做单元 2」。问它「学习台说明是哪个版本」，答的版本号应该和组件库页面「⋯」里写的一样。
+   说明的全文（[`CLAUDE-PROJECT.md`](CLAUDE-PROJECT.md)）跟着学习台一起发布，每次更新它也一起更新，所以项目指令里只放这一段，以后不用再改。
+3. 发资料给 Claude，或者说「备下一节」「开一块黑板讲单元 2」。问它「学习台说明是哪个版本」，答的版本号应该和学习台底部写的一样。
 
 ## 组件
 
@@ -134,4 +134,4 @@ npm test          # 单元测试
 npm run build     # 重新生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 ```
 
-然后重新发布组件库 artifact（同一个地址，页面是 `kit/examples/unit-matrix-vector.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}`）。之后新发布的课件会自动用上新版；已经发布的课件保留当时复制的版本。
+然后重新发布学习台（同一个地址，页面是 `kit/desk.html`，附带文件 `la-kit.js`、瘦身说明书 `CLAUDE-PROJECT.md` 和 `components/*.md` 来自 `kit/dist/`，见 CLAUDE.md「发布」）。数据库不受影响，刷新学习台就是新版。

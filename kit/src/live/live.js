@@ -13,6 +13,7 @@ import { copyRecord, toast } from '../record.js';
 import { getStore } from './store.js';
 import { createSink } from './sync.js';
 import { initDevPanel } from './devpanel.js';
+import { sayEvidence } from '../memory/session.js';
 import { createBoardView } from '../class/boardview.js';
 import { extraProblems } from '../class/selfcheck.js';
 import { createLiveBar } from './livebar.js';
@@ -29,7 +30,11 @@ const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduc
 const SCREEN_DELAY = 1500; // 屏幕大小、放不放得下：停下来 1.5 秒再写，转屏、滚动时不连着写
 const NOW_DELAY = 2000; // 黑板现状：有变化后 2 秒内写一次（打字、拖图时也是最多每 2 秒一次）
 
-export async function renderLive(root, meta) {
+/**
+ * desk（在学习台里开的黑板才有，docs/hub-plan.md）：{ store（scopeDb 过的，数据都在 sessions/{编号}/ 下面）, sid, block, onHome, onEnd }
+ * 这时作答、动作、交的截图只写一份进记忆库的 evidence（带 session、block、段的 point），学习台、课堂里的 Claude 都看得到
+ */
+export async function renderLive(root, meta, desk = null) {
   session.mode = 'live';
   session.live = true;
   session.stages = [];
@@ -69,16 +74,16 @@ export async function renderLive(root, meta) {
   const tools = createBoardTools({ bv, segs: steps });
   const welcome = root.querySelector('.class-welcome');
   const welcomeText = root.querySelector('.class-welcome-text');
-  const bar = createLiveBar({ onNav: (n) => bv.go(n), onCopy: () => copyRecord(toast), onUpload: (blobs, note) => upload(blobs, note) });
+  const bar = createLiveBar({ onNav: (n) => bv.go(n), onCopy: () => copyRecord(toast), onUpload: (blobs, note) => upload(blobs, note), onHome: desk?.onHome || null, onEnd: desk?.onEnd || null });
   bv.attachBar(bar);
 
-  const store = await getStore({ title: session.title });
+  const store = desk?.store || await getStore({ title: session.title });
   if (!store) {
     bar.setChip('off', '没连上');
     welcomeText.innerHTML = '这个页面没有拿到黑板的数据库权限。<br>发布时要声明 <code>capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}</code>；本地试用请在地址后面加 <code>?dev</code>。';
     return;
   }
-  const sink = createSink(store);
+  const sink = createSink(store, desk ? { evidence: (rec) => ({ session: desk.sid, block: desk.block, point: steps.get(String(rec.step))?.point }) } : {});
   // 作答、动作照常写进 answers / events，同时记一行进黑板现状（写法和课堂模式发给课堂 Claude 的一样）
   session.sink = {
     ...sink,
@@ -160,7 +165,7 @@ export async function renderLive(root, meta) {
       const seq = Number(d.seq) || 0;
       let s = steps.get(id);
       if (!s) {
-        s = { id, seq, page: pos.page, place: pos.place, lead: pos.lead, title, md, hidden: !!d.hidden, sec: null, stage: -1, touched: false };
+        s = { id, seq, page: pos.page, place: pos.place, lead: pos.lead, title, md, hidden: !!d.hidden, sec: null, stage: -1, touched: false, point: d.point || null };
         steps.set(id, s);
         if (!s.hidden) { draw(s); fresh.push(s); }
         continue;
@@ -169,7 +174,7 @@ export async function renderLive(root, meta) {
       // 挪到别的板、进出常驻栏：段上的标注擦掉（同一块板上换个先后不算）
       if (s.page !== pos.page || s.place !== pos.place) tools.dropMarks(id);
       const leadChanged = s.lead !== pos.lead;
-      Object.assign(s, { seq, page: pos.page, place: pos.place, lead: pos.lead });
+      Object.assign(s, { seq, page: pos.page, place: pos.place, lead: pos.lead, point: d.point || null });
       if (d.hidden) { hide(s); continue; }
       const wasHidden = s.hidden;
       s.hidden = false;
@@ -554,6 +559,8 @@ export async function renderLive(root, meta) {
     const rec = { id: `up-${Date.now().toString(36)}`, images: ids, note: note || '', page: bv.view || bv.cur || 0, at: Date.now() };
     const ok = await sink.put('uploads', rec);
     if (ok === false) throw new Error('没存上，再交一次');
+    // 学习台里：交的截图也是证据（和课堂里附的图一样），以后两个 Claude 翻记录都找得到
+    if (desk) sink.put('evidence', sayEvidence(note || '', { session: desk.sid, block: desk.block }, ids));
     await seeded;
     uploads.push(rec);
     if (uploads.length > 20) uploads.splice(0, uploads.length - 20);

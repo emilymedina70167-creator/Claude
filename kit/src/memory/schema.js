@@ -117,10 +117,11 @@ export const COLLECTIONS = {
     tracked: [],
   },
   sessions: {
-    label: '每节课', kind: 'state', writers: ['page'],
-    id: { re: /^c-[A-Za-z0-9_-]+$/, eg: '页面自动编号' },
+    // 课堂由页面开；实时黑板、自学单元由对话里的 Claude 开（kind: live / unit），所以 chat 也能写
+    label: '每节课', kind: 'state', writers: ['page', 'chat'],
+    id: { re: /^c-[A-Za-z0-9_-]+$/, eg: 'c-20261028-2（当天第几节）' },
     required: ['date'],
-    enums: { space: ['math', 'cs', 'en'] },
+    enums: { space: ['math', 'cs', 'en'], kind: ['class', 'live', 'unit'], status: ['open', 'closed'] },
     dates: ['date'],
     refs: { block: 'curriculum' },
     tracked: [],
