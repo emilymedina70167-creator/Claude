@@ -78,12 +78,17 @@ await build({
 // 作为学习台的附带文件发布在 pdf/ 下，导入 PDF 时页面才去取（同一个 artifact 里的文件，不是外部脚本）。
 // 扫描版的书常用 JBIG2 / CCITT / JPEG2000 压图，解码器（wasm，和不支持 wasm 时的 js 版）也要带上；中文字体的 cmap 只带 GB 的
 {
-  const { mkdirSync, copyFileSync, rmSync, readdirSync } = await import('node:fs');
+  const { mkdirSync, copyFileSync, rmSync, readdirSync, writeFileSync } = await import('node:fs');
+  const { escapeControls } = await import('./src/books/jsescape.js');
   const pdfDir = path.dirname(require.resolve('pdfjs-dist/package.json'));
   const out = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'dist', 'pdf');
   rmSync(out, { recursive: true, force: true });
   mkdirSync(path.join(out, 'cmaps'), { recursive: true });
-  for (const f of ['build/pdf.min.mjs', 'build/pdf.worker.min.mjs']) copyFileSync(path.join(pdfDir, f), path.join(out, path.basename(f)));
+  // worker 的内嵌数据（模板字符串里）有原样的控制字符，学习台发布时不收：换成等价的 \xNN 写法。
+  // 这些字符前面都没有反斜杠、也没有 String.raw，换了值不变（tests/books.test.js 守着）
+  for (const f of ['build/pdf.min.mjs', 'build/pdf.worker.min.mjs']) {
+    writeFileSync(path.join(out, path.basename(f)), escapeControls(readFileSync(path.join(pdfDir, f), 'utf8')));
+  }
   for (const f of ['jbig2.wasm', 'openjpeg.wasm', 'qcms_bg.wasm', 'jbig2_nowasm_fallback.js', 'openjpeg_nowasm_fallback.js']) copyFileSync(path.join(pdfDir, 'wasm', f), path.join(out, f));
   const cmaps = readdirSync(path.join(pdfDir, 'cmaps')).filter((f) => /GB|UCS2|UTF16|Identity/.test(f));
   for (const f of cmaps) copyFileSync(path.join(pdfDir, 'cmaps', f), path.join(out, 'cmaps', f));

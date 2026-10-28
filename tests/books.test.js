@@ -216,3 +216,15 @@ test('课堂里的教材：资料包点名的条目全文进「教材原文」�
   assert.ok(f.docs.some((d) => d.collection === 'books/B1/chunks' && d.doc_id === 'B1-11.1'));
   assert.equal(f.counts['books/*/chunks'], 3);
 });
+
+test('构建时给 pdf.js 换掉原样的控制字符：值不变', async () => {
+  const { escapeControls } = await import('../kit/src/books/jsescape.js');
+  const src = 'const a = `x\x0ey${1}\x7f`, b = "\x1b\\\\", c = /[\x01-\x1f]/;';
+  const out = escapeControls(src);
+  assert.doesNotMatch(out, /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/);
+  const run = (s) => new Function(`${s}; return [a, b, c.source.length, c.test('\\x05')];`)();
+  assert.deepEqual(run(out).slice(0, 2), run(src).slice(0, 2));
+  assert.equal(run(out)[3], true);
+  assert.throws(() => escapeControls('"\\\x0e"'));
+  assert.throws(() => escapeControls('String.raw`\x0e`'));
+});
