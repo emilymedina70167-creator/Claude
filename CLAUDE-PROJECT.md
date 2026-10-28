@@ -1,6 +1,6 @@
 # 线代学习台 · 给 Claude 的教学说明
 
-> **版本：2026-10-27e**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
+> **版本：2026-10-28**　组件库：https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF
 >
 > 这份说明的**最新版**一直放在组件库 artifact 里（文件 `CLAUDE-PROJECT.md`）。每个新对话里，第一次做和学习台有关的事（做课件、写实时黑板、备课堂资料包、读课堂记录或学习记录）之前，先用 `Artifact` 工具读它：`action: "read"`，`url` 是上面的组件库地址，`path: "CLAUDE-PROJECT.md"`。
 > - 读到的版本比你手上这份新：以读到的为准，这份里和它不一样的地方全部作废。回复里顺便告诉我「项目指令里的说明是旧版（版本号），组件库里是新版（版本号）」。
@@ -2208,7 +2208,7 @@ unit: 第2讲 §2 · 秩一方阵
   - `role: "student"`：`say` 是我说的话（打字或快捷按钮）；`start: true` 是我点了「开始上课」按钮（`say` 固定是「开始上课。」，不是我打的字）；`actions` 是我在黑板上的动作，每条一行，比如「[作答] b7 里的 steps 第 3 步：选了『跑到线外去』（错），用时 44 秒」；`drafts` 是我在黑板上写了、还没点「检查」「提交」的草稿（填了一半的格子、打了字的理由框），跟着这一条一起发给了课堂里的 Claude，比如「[草稿] b4 里的 answer q-b4：写着 (3, □)，还没提交」；`images` 是我附的手写 / 截图原图的 asset id（我在黑板上用 Pencil 新写的板书也会导出成图附进来，`text` 里有一行「[板书] …」说写在哪一段上）；`text` 是发给课堂 Claude 的完整内容（我在「⋯」里打开了「停久了提醒老师」（默认关：每提醒一次就多调用一轮）、又在一块板上很久没动静时，页面会发一行「[动作] 学生在当前板上 … 分钟没有动静」，课堂 Claude 只轻轻问一句）；`page` 是我发这条时黑板在第几块板。
   - `role: "claude"`：`text` 是课堂里的 Claude 的完整输出（话 + 黑板指令原文）；`boardOps` 是实际执行了哪些指令（`op`：new / add / replace / hide / pin / unpin / figure / mark / unmark / memo（学习台里改记忆，`n` 是读懂了几条，每条记成什么见 `pending`），`id`，`page` 是写在第几块板，`ok: false` 的没执行成功，`error` 是原因；figure 还有 `action`：set / play / highlight 和 `args`；mark 的 `marks` 是画上的标注：`id`、所在的段 `seg`、标的什么 `spec`；unmark 的 `ids` 是擦掉的标注）；`page` 是这一轮之后黑板停在第几块板，`talkPage` 是它这一轮的话写在第几块板的顶上（只改了写法、没对我说话的轮没有）；`truncated: true` 表示这一轮太长被截断了；`tools` 是它调用过的工具（如果有）；`modelApplied` 一定是 `claude-opus-5-5`；`cost` 是这一次调用花了多少（见下面 `role: "system"` 后面的说明）。
   - `role: "system"`：页面发给它的系统消息。`kind` 有：`lint`（它写的组件有写法错误，没显示，要求重写）、`note`（指令没执行之类的提醒）、`images`（它要看的手写原图，附在这一轮）、`summary`（对话太长时的摘要，`upTo` 是摘要覆盖到第几轮）、`closing`（下课小结）、`fallback`（Opus 5.5 不可用，这一轮作废）、`error`（这一轮出错或我点了停止，`code` 是原因）。
-  - `cost`（2026-10-27d 起）：调用了 Claude 的那一轮（讲课、重写、摘要、小结、作废的轮）记着这一次花了多少：`bytes` 发出去的字节数（整份说明 + 对话，约 2.8 字节一个 token），`why` 为什么调用（`turn` 我说话 / 作答引起的、`closing` 下课小结、`lint` 写错了要重写、`images` 要看原图补发一轮、`stuck` 停久了的提醒、`compact` 对话太长写摘要、`failed` 出错或换了模型白花的），`tools` 这一次里调了几次工具（每次平台多跑一整轮）。整节课的合计在 `sessions/{编号}` 的 `usage`（`calls` 估计跑了几轮、`bytes`、`tokens`、`avgBytes`、`extra` 多跑的轮按原因）。
+  - `cost`（2026-10-28 起）：调用了 Claude 的那一轮（讲课、重写、摘要、小结、作废的轮）记着这一次花了多少：`bytes` 发出去的字节数（整份说明 + 对话，约 2.8 字节一个 token），`why` 为什么调用（`turn` 我说话 / 作答引起的、`closing` 下课小结、`lint` 写错了要重写、`images` 要看原图补发一轮、`stuck` 停久了的提醒、`compact` 对话太长写摘要、`failed` 出错或换了模型白花的），`tools` 这一次里调了几次工具（每次平台多跑一整轮）。整节课的合计在 `sessions/{编号}` 的 `usage`（`calls` 估计跑了几轮、`bytes`、`tokens`、`avgBytes`、`extra` 多跑的轮按原因）。
   - 旧版课堂记录里的 `sayAfter`、`boardAt` 只是当时页面排话的位置，读记录时不用管。
   - `discarded: true` 的轮没有进入课堂对话：内容没给我看，黑板也没动。读的时候跳过它们的内容，只当作「这里卡过一下」。
 - `collection: "class_notes"`：课堂里的 Claude 记的观察（`kind: "note"`，`turn` 是在第几轮记的），以及下课时写的小结（`kind: "summary"`：讲了什么、我哪里卡住、哪里看起来懂了但证据不够、建议下一节怎么接；`verify: { turns, discarded }` 是页面记的：这节课平台核验是 Opus 5.5 回答的轮数、因为换了别的模型而作废的轮数）。**小结只有我点了「下课」才有**；直接关掉页面不会写（关页面时来不及等 Claude 写完），这时你就从 `class_turns` 自己读。
@@ -2243,7 +2243,7 @@ unit: 线代 + 408
 </script>
 ```
 
-- `files`：同第一节，从组件库复制 `la-kit.js`。`capabilities`：`{ "sample": { "images": true }, "db": {}, "assets": {}, "downloads": true }`（`sample` 给在学习台里上课的课堂 Claude 用，`assets` 放教材页、板书截图、我附的图的原图，`downloads` 给首页「导出备份」存文件）。以前发布的学习台少声明了几样（2026-10-27c 以前没有 `sample`，2026-10-27d 以前没有 `downloads`）：用同一个 `url` 重新发布一次，换上新的 `la-kit.js`、`capabilities` 写全（数据库都还在）。
+- `files`：同第一节，从组件库复制 `la-kit.js`。`capabilities`：`{ "sample": { "images": true }, "db": {}, "assets": {}, "downloads": true }`（`sample` 给在学习台里上课的课堂 Claude 用，`assets` 放教材页、板书截图、我附的图的原图，`downloads` 给首页「导出备份」存文件）。以前发布的学习台少声明了几样（2026-10-27c 以前没有 `sample`，2026-10-28 以前没有 `downloads`）：用同一个 `url` 重新发布一次，换上新的 `la-kit.js`、`capabilities` 写全（数据库都还在）。
 - **整个学习过程只有这一个学习台。**发布后把它的地址记进项目记忆（「学习台：https://claude.ai/artifact/…」），以后都往这个地址读写，不要再发布新的。组件库更新后换新版：同一个 `url` 重新发布（第一节「组件库版本要对得上」），数据库都还在。
 - 页面上我看得到：**上课**（开新课 / 接着上课，上一节的要点和花了多少）、**今天**（过期、今天到期的复现组，下一节从哪接、欠账）、**待确认**（改动单：确认 / 改 / 不要，最近写进去的能撤销）、**我改记忆**（偏好的文字、错题标已解决、复现组暂停）、**补记**、**自检**（你写的有没有不守规矩的地方）、**记忆库**（每一类有几条、谁写）、**备份和用量**。
 

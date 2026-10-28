@@ -16,7 +16,7 @@ const { createMemOps } = await import('../kit/src/memory/memops.js');
 const { parseOutput } = await import('../kit/src/class/protocol.js');
 const { sampleMemory } = await import('../kit/src/memory/sample.js');
 const { checkMemory } = await import('../kit/src/memory/check.js');
-const { assertWrite, addDays, UNDO_DAYS, dueList } = await import('../kit/src/memory/schema.js');
+const { assertWrite, addDays, toDate, UNDO_DAYS, dueList } = await import('../kit/src/memory/schema.js');
 const { fakeDb } = await import('../kit/src/live/store.js');
 const { memoryDigest } = await import('../kit/src/memory/digest.js');
 
@@ -182,9 +182,12 @@ test('撤销：状态类退回旧值（也记 log）；历史类追加作废的�
   assert.equal(m.profile.find((x) => x.id === p.pd.target).status, 'void');
   assert.ok(!memoryDigest(m, { block: 'L2.2.2' }).text.includes('先看图'));
   // 超时
-  assert.ok(canUndo(p.pd, TODAY));
-  assert.ok(!canUndo(p.pd, addDays(TODAY, UNDO_DAYS)));
-  assert.throws(() => undoPending({ ...p.pd, status: 'done' }, m, { date: addDays(TODAY, UNDO_DAYS + 1) }), /超过 7 天/);
+  // 按写进去那天算（doneAt 是真实的时间戳）
+  const day = toDate(p.pd.doneAt);
+  assert.ok(canUndo(p.pd, day));
+  assert.ok(canUndo(p.pd, addDays(day, UNDO_DAYS - 1)));
+  assert.ok(!canUndo(p.pd, addDays(day, UNDO_DAYS)));
+  assert.throws(() => undoPending({ ...p.pd, status: 'done' }, m, { date: addDays(day, UNDO_DAYS + 1) }), /超过 7 天/);
   // 后来又改过
   const w2 = applyPending(pendingRecord(run('weakness id=W19 level=L2 basis=q-b5')), m, { date: TODAY });
   let m3 = apply(m, w2.writes);
