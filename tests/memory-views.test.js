@@ -155,3 +155,21 @@ test('说明书瘦身：主说明不到一半大小，别的几节原样，第�
   assert.ok(!/<!-- 科目/.test(files['components/sched.md']));
   assert.match(files['components/elim.md'], /```elim/);
 });
+
+test('开场简报：每科一份，接手要知道的 + 这一科记忆库里每样东西的目录（编号 + 一句话），规则全列（含只给对话的）', async () => {
+  const { deskBrief, briefId, BRIEF_MAX } = await import('../kit/src/memory/views.js');
+  const m = M();
+  m.rules.push({ id: 'rule-pk-1', cat: '细则', text: '资料包要放文稿原文', for: 'chat', since: 'x', source: 'y', status: 'active' });
+  m.profile.push({ id: 'p-en-goal', topic: '目标', text: '英语一' });
+  const b = deskBrief(m, { space: 'math', today: TODAY, kitUrl: 'https://claude.ai/artifact/KIT' });
+  assert.match(b.text, /^【学习台 · 接手 · 数学】/);
+  assert.match(b.text, /## 这一科记忆库里有什么（一条一行）/);
+  assert.match(b.text, /rule-pk-1［细则］资料包要放文稿原文/);
+  assert.match(b.text, /W19 内积和外积分不清/);
+  assert.match(b.text, /L2-07（L2\.2\.2）没看出 βᵀα 是一个数/);
+  assert.ok(!b.text.includes('p-en-goal'), '英语的「关于我」不进数学的简报');
+  assert.ok(!b.text.includes('没放全文'));
+  assert.ok(Buffer.byteLength(b.text) <= BRIEF_MAX);
+  assert.equal(briefId('math'), 'brief');
+  assert.equal(briefId('en'), 'brief-en');
+});

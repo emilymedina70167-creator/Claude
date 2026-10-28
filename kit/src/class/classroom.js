@@ -923,7 +923,7 @@ export async function renderClass(root, meta, desk = null) {
       const level = Math.min(budgetLevel, 3);
       const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg() });
       const maxBytes = Math.round(promptLimit() * [1, 0.85, 0.7, 0.55][level]);
-      const fit = fitTurns({ system, history: promptHistory(history), maxBytes });
+      const fit = fitTurns({ system, history: promptHistory(history), maxBytes, stub: teacher.tools });
       lastPrompt = { bytes: fit.bytes, maxBytes, keepRecent: fit.keepRecent, dropped: fit.dropped, turns: fit.turns.length, level };
       // 工具做的事先记着，确认是 Opus 5.5 讲的才算数（退路模型记的观察、要看的图都不留）
       const staged = { notes: [], slips: [], images: [], ids: [], calls: [] };
@@ -1245,6 +1245,23 @@ export async function renderClass(root, meta, desk = null) {
     return s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.src === 'record' && d.comp === blockId).map((d) => ({ ...fromEvidence(d).rec, id: d.id }));
   }
 
+  // memory_read 查以前的课：sessions 那一条的要点、课后报告（大的只给要点）、下课小结和观察
+  async function sessionRows(ids) {
+    const out = [];
+    for (const sid of ids.slice(0, 4)) {
+      const doc = (desk.mem.sessions || []).find((x) => x.id === sid);
+      if (!doc) { out.push({ id: sid, error: '没有这节课' }); continue; }
+      const rep = await db.doc(`sessions/${sid}/report/main`).get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
+      const obs = (desk.mem.observations || []).filter((o) => o.session === sid);
+      out.push({
+        id: sid, kind: doc.kind || 'class', date: doc.date, block: doc.block, title: doc.title, status: doc.status,
+        summary: obs.find((o) => o.kind === 'summary')?.text, notes: obs.filter((o) => o.kind !== 'summary').map((o) => `${o.kind}：${o.text}`).slice(0, 12),
+        report: rep ? reportText(rep).slice(0, 6000) : doc.report?.line || '（这节课还没有课后报告）',
+      });
+    }
+    return { collection: 'sessions', items: out };
+  }
+
   // memory_read 查证据：按块或者按节课，最近的 30 条，一条一行要点
   async function evidenceRows({ block, session: sid, id }) {
     if (id) {
@@ -1263,6 +1280,26 @@ export async function renderClass(root, meta, desk = null) {
   function classTools(staged, { view = true } = {}) {
     const cut = (v, n) => (typeof v === 'string' && v.length > n ? v.slice(0, n) + '…' : v);
     const tools = [
+      {
+        // 较早几轮的段原文在对话里被省略了（prompt.js 的 stubBoardText）：要照着原文改、要对上记号时取回来
+        name: 'board_read',
+        description: '取黑板上几段的原文（你以前写的 Markdown，最后的版本）。ids 写段的 id 数组，比如 ["b3","b5"]，一次可以取好几段。对话里较早的段原文被页面省略了，要照着原文改写、要和以前写的记号对上时用。每调用一次你要多等一整轮。',
+        inputSchema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' } } }, required: ['ids'] },
+        async execute(input) {
+          const ids = (Array.isArray(input?.ids) ? input.ids : String(input?.ids ?? '').split(/[,，\s]+/)).map((x) => String(x).trim()).filter(Boolean).slice(0, 12);
+          staged.calls.push({ name: 'board_read', input: { ids } });
+          if (!ids.length) throw new Error('要写 ids（段的 id 数组）');
+          let room = 24 * 1024;
+          return ids.map((id) => {
+            const g = segs.get(id);
+            if (!g) return { id, error: '黑板上没有这一段' };
+            const md = String(g.md ?? '');
+            const text = md.length > room ? md.slice(0, Math.max(0, room)) + '…（太长，截掉了）' : md;
+            room -= text.length;
+            return { id, page: g.place === 'pin' ? '常驻栏' : g.page, title: g.title || '', hidden: !!g.hidden || undefined, md: text };
+          });
+        },
+      },
       {
         name: 'get_answers',
         description: '读黑板上某个组件（按组件 id）的全部作答记录，包括每次尝试、手写转写和用时。返回最近 30 条。',
@@ -1336,13 +1373,14 @@ export async function renderClass(root, meta, desk = null) {
         },
       }, {
         name: 'memory_read',
-        description: '查学习台的记忆库（只读）。collection 写集合名：rules、profile、curriculum、errors、weaknesses、mastery、reviews、position、slips、observations、evidence。写 id 查一条的全文（比如 errors 的 L2-07、curriculum 的 L2.2.1）；不写 id 时列出这一类（可以写 block 只要挨着这一块的）。evidence 按 block 或 session（这节课是 ' + desk.sid + '）查最近的 30 条。每调用一次你要多等一整轮，只在记忆摘要里没有、又确实需要时用。',
-        inputSchema: { type: 'object', properties: { collection: { type: 'string' }, id: { type: 'string' }, block: { type: 'string' }, session: { type: 'string' } }, required: ['collection'] },
+        description: '查学习台的记忆库（只读）。collection 写集合名：rules、profile、curriculum、errors、weaknesses、mastery、reviews、position、slips、observations、sessions、evidence。ids 写编号数组，一次取好几条的全文（比如 collection errors、ids ["L2-07","L2-31"]；同一类的放一起取）；id 取一条。sessions 写课的编号，给那节课的要点、课后报告和小结。不写 id / ids 时列出这一类（可以写 block 只要挨着这一块的）。evidence 按 block 或 session（这节课是 ' + desk.sid + '）查最近的 30 条。每调用一次你要多等一整轮：照记忆里的目录挑准了编号，一次取够。',
+        inputSchema: { type: 'object', properties: { collection: { type: 'string' }, ids: { type: 'array', items: { type: 'string' } }, id: { type: 'string' }, block: { type: 'string' }, session: { type: 'string' } }, required: ['collection'] },
         async execute(input) {
-          const q = { collection: String(input?.collection ?? '').trim(), id: input?.id, block: input?.block, session: input?.session };
+          const q = { collection: String(input?.collection ?? '').trim(), ids: Array.isArray(input?.ids) ? input.ids.map(String) : undefined, id: input?.id, block: input?.block, session: input?.session };
           staged.calls.push({ name: 'memory_read', input: Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined && v !== '')) });
           const r = memoryRead(desk.mem, q);
           if (!r.needDb) return r;
+          if (q.collection === 'sessions') return sessionRows(r.ids);
           return evidenceRows(q);
         },
       }] : []),
@@ -1417,7 +1455,7 @@ export async function renderClass(root, meta, desk = null) {
       // 学习台里：先用代码算一份课后报告放进这次的输入，小结和整理单同一次写（docs/desk-plan.md 4.2，不多调用一次）
       const report = desk?.makeReport ? await desk.makeReport({ turns: history, steps: steps() }).then(reportText, () => '') : '';
       const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), subject: session.subject, memory: memoryArg() });
-      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ report, review: desk?.review }) }], maxBytes: promptLimit() });
+      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ report, review: desk?.review }) }], maxBytes: promptLimit(), stub: teacher.tools });
       const cost = (why) => callCost({ bytes: fit.bytes, why });
       let res;
       try {

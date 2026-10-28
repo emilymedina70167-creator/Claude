@@ -74,3 +74,22 @@ test('课堂里的 memo：错题按门课编号，下一节写进这一科的 po
   const w = planEntry(parseMemoLines('weakness title="主谓一致" scope=局部 level=L1 basis=say').entries[0], ctx);
   assert.equal(w.data.space, 'en');
 });
+
+test('共用的几类也分科：写了 space，或者编号里带科目（p-cs-、p-en-、S-…-ds1）；课堂只带这一科和不分科的', async () => {
+  const { spaceOfShared, sharedFor } = await import('../kit/src/memory/space.js');
+  assert.equal(spaceOfShared({ id: 'p-cs-m-log' }), 'cs');
+  assert.equal(spaceOfShared({ id: 'p-en-goal' }), 'en');
+  assert.equal(spaceOfShared({ id: 'S-0922-ds1' }), 'cs');
+  assert.equal(spaceOfShared({ id: 'S-0828-en2' }), 'en');
+  assert.equal(spaceOfShared({ id: 'p-concrete' }), null);
+  assert.equal(spaceOfShared({ id: 'rule-chk-1' }), null);
+  assert.equal(spaceOfShared({ id: 'p-x', space: 'math' }), 'math');
+  assert.deepEqual(sharedFor([{ id: 'p-cs-a' }, { id: 'p-en-b' }, { id: 'p-goal' }], 'en').map((d) => d.id), ['p-en-b', 'p-goal']);
+  // 规则 for: chat 的（只给对话里的 Claude）不进课堂
+  const { memoryDigest } = await import('../kit/src/memory/digest.js');
+  const d = memoryDigest({ rules: [{ id: 'rule-a', cat: '红线', text: '课堂要的', since: 'x', source: 'y' }, { id: 'rule-b', cat: '细则', text: '备课才要的', for: 'chat', since: 'x', source: 'y' }], profile: [{ id: 'p-cs-x', topic: '讲法', text: '408 的讲法' }, { id: 'p-goal', topic: '目标', text: '考研' }] }, { block: 'L2.1.1' });
+  assert.match(d.rules, /课堂要的/);
+  assert.ok(!d.rules.includes('备课才要的') && !d.text.includes('备课才要的'));
+  assert.ok(!d.text.includes('408 的讲法'));
+  assert.match(d.text, /考研/);
+});

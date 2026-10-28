@@ -58,7 +58,12 @@ test('记忆摘要：没写块就用 position 的；只挑挨着这一块的错�
   m.weaknesses.push({ id: 'W31', title: '审题不全', scope: '通用', level: 'L2', basis: ['x'] });
   const t = memoryDigest(m, {}).text; // position.block 是 L2.2.2
   assert.match(t, /这节课的块：L2.2.2/);
-  assert.ok(!t.includes('远处的错题') && !t.includes('远处的弱点'));
+  // 远处的只在目录里（编号、一句话），全文不带
+  const [fullPart, catalog] = t.split('## 目录');
+  assert.ok(!fullPart.includes('远处的错题') && !fullPart.includes('远处的弱点'));
+  assert.ok(!catalog.includes('远处的错题'), '远处的错题题面不进目录');
+  assert.match(catalog, /W30 远处的弱点/);
+  assert.match(catalog, /L5\.1\.1：L5-01/);
   assert.match(t, /W31 审题不全（通用/);
   assert.match(memoryDigest(m, { block: 'L5.1.1' }).text, /远处的错题/);
   assert.match(memoryDigest(m, { block: 'L9.9.9' }).text, /课程地图里还没有块 L9.9.9/);
@@ -83,7 +88,10 @@ test('记忆摘要的预算：放不下从后往前截，写明还有几条、�
   assert.ok(d.bytes <= 8 * 1024 + 200, `${d.bytes}`);
   assert.match(d.rules, /红线/);
   assert.ok(d.cut.some((c) => c.coll === 'errors'));
-  assert.match(d.text, /（放不下，没带：errors \d+ 条.*要用就用 memory_read 查。）/);
+  // 放不下的进目录（编号 + 一句话），告诉它用 memory_read 一次取好几条
+  assert.match(d.text, /## 目录（记忆库里没放全文的，一条一行）/);
+  assert.match(d.text, /memory_read 按编号取，\*\*一次可以取好几条\*\*/);
+  assert.ok(utf8(d.text.split('## 目录')[0]) < 8 * 1024);
   // 默认预算下全部放得下的就不截
   assert.deepEqual(memoryDigest(M(), { block: 'L2.2.2' }).cut, []);
   // 规则很多时最多占预算的 RULES_SHARE（红线先放），这一块、上一节停在哪、错题照样带得上；截掉的规则写出编号
@@ -93,7 +101,8 @@ test('记忆摘要的预算：放不下从后往前截，写明还有几条、�
   assert.ok(utf8(g.rules) <= 16 * 1024 * RULES_SHARE, `${utf8(g.rules)}`);
   assert.match(g.rules, /［红线］课堂不能宣布我「掌握了」/);
   for (const s of ['### 这节课的块：L2.2.2', '这一节从哪接：先收 L2-07 的同类题', 'L2-07（第2讲例2.1）']) assert.ok(g.text.includes(s), s);
-  assert.match(g.text, /rules \d+ 条（rule-x-/);
+  // 放不下的规则进目录：编号、类别、开头一句
+  assert.match(g.text, /\*\*规则（没放全文的）\*\*：\n- rule-x-\d+［细则］很长的细则/);
   assert.ok(utf8('中') === 3);
 });
 
@@ -104,8 +113,9 @@ test('buildSystem：学习台里多一节「你对学生的了解」，记忆库
   for (const subject of ['线代', '数据结构', '操作系统', '组成原理', '计算机网络']) {
     const s = buildSystem({ componentDocs: COMPONENT_DOCS, pack, board: [], subject, memory: { mem: M(), block: 'L2.2.2', session: 'c-20261027-1' } });
     assert.ok(utf8(s) <= SYSTEM_MAX, `${subject}：${utf8(s)}`);
-    assert.match(s, /# 三、你对学生的了解（学习台的记忆库）/);
-    assert.match(s, /# 四、这节课的资料包/);
+    // 顺序按多久变一次排：资料包在记忆前面
+    assert.match(s, /# 三、这节课的资料包[\s\S]*# 四、你对学生的了解（学习台的记忆库）/);
+    assert.match(s, /# 三、这节课的资料包/);
     assert.match(s, /# 五、黑板现状/);
     assert.match(s, /学生定下的规则（学习台记忆库的 rules，替换组件库内置的红线）/);
     assert.ok(!s.includes('1. 一次只推进一件事'), '内置红线被替换了');
@@ -245,7 +255,14 @@ test('memory_read：按集合、编号查（只读）；不写编号列这一类
   assert.equal(memoryRead(m, { collection: 'errors', id: 'L2-07' }).doc.cause, '没看出 βᵀα 是一个数');
   assert.throws(() => memoryRead(m, { collection: 'errors', id: 'L9-99' }), /errors 里没有 L9-99（有：L2-07）/);
   assert.throws(() => memoryRead(m, { collection: 'meta' }), /collection 只能是/);
-  assert.throws(() => memoryRead(m, { collection: 'sessions' }), /collection 只能是/);
+  assert.throws(() => memoryRead(m, { collection: 'sessions' }), /sessions 要写课的编号/);
+  assert.deepEqual(memoryRead(m, { collection: 'sessions', ids: ['c-1', 'c-2'] }), { needDb: true, ids: ['c-1', 'c-2'] });
+  // 一次取好几条：找到的给全文，没有的写在 missing
+  const two = memoryRead(m, { collection: 'weaknesses', ids: ['W19', 'W99'] });
+  assert.deepEqual(two.docs.map((d) => d.id), ['W19']);
+  assert.deepEqual(two.missing, ['W99']);
+  assert.equal(memoryRead(m, { collection: 'errors', ids: 'L2-07' }).doc.id, 'L2-07');
+  assert.throws(() => memoryRead(m, { collection: 'pending' }), /collection 只能是/);
   assert.deepEqual(memoryRead(m, { collection: 'evidence' }), { needDb: true });
   assert.deepEqual(memoryRead(m, { collection: 'mastery', block: 'L2.2.1' }).items.map((x) => x.id), ['L2.2.1']);
   assert.deepEqual(memoryRead(m, { collection: 'curriculum', block: 'L2.2' }).items.map((x) => x.id).sort(), ['L2.2', 'L2.2.1', 'L2.2.2']);

@@ -73,6 +73,17 @@ export function spaceOfDoc(coll, d, mem = {}) {
 // 全科共用、不按空间过滤的
 const SHARED = new Set(['rules', 'profile', 'slips']);
 
+// 共用的几类（规则、关于我、失误）里也有只管一科的：写了 space，或者编号里带着科目
+// （p-cs-…、p-en-…、rule-cs-…、S-0922-ds1、S-0828-en1）。课堂里的 Claude 只带这一科和不分科的，首页照旧全列
+const SHARED_TAG = [['cs', /(^|-)(cs|ds|os|co|cn)(-|\d|$)/i], ['en', /(^|-)en(-|\d|$)/i], ['math', /(^|-)(math|la)(-|\d|$)/i]];
+export function spaceOfShared(d) {
+  if (SPACES[d?.space]) return d.space;
+  const rest = String(d?.id ?? '').replace(/^(p|rule|S)-/, '');
+  return SHARED_TAG.find(([, re]) => re.test(rest))?.[0] || null;
+}
+/** 规则、关于我、失误里属于这一科或不分科的 */
+export const sharedFor = (docs, space) => (Array.isArray(docs) ? docs : []).filter((d) => { const k = spaceOfShared(d); return !k || k === space; });
+
 /** 只要这个空间的记忆（共用的几类照旧全给；分不出科的历史条目也留着） */
 export function filterSpace(mem = {}, space = DEFAULT_SPACE) {
   const out = {};

@@ -653,3 +653,30 @@ test('说明的版本号：开头写着，构建时打进 la-kit.js', async () =
   // 同一天第二次发布加字母，按字符串比较也是更新的
   assert.ok('2026-10-12b' > '2026-10-12' && '2026-10-13' > '2026-10-12b');
 });
+
+test('省额度不丢信息：较早几轮 Claude 写的长段原文换成一行（段还在黑板上，board_read 取），说的话、标注照旧；最近几轮原样', async () => {
+  const { stubBoardText, buildTurns, STUB_AFTER } = await import('../kit/src/class/prompt.js');
+  const long = '$A=\\begin{pmatrix}1&2\\\\2&4\\end{pmatrix}$ '.repeat(30);
+  const out = `看这个。\n\n\`\`\`\`board new id=b3 title="Ax"\n${long}\n\`\`\`\`\n\n\`\`\`\`board add id=b4\n短的一段\n\`\`\`\`\n\n\`\`\`\`board mark target=b3 term=k\n\`\`\`\``;
+  const s = stubBoardText(out);
+  assert.match(s, /^看这个。/);
+  assert.match(s, /\[页面省略了这一段的原文：这一轮写了 board new id=b3 title="Ax"（\d\.\d KB）。段还在黑板上，要看原文用 board_read 取 b3\]/);
+  assert.ok(!s.includes('pmatrix'));
+  assert.match(s, /````board add id=b4\n短的一段\n````/); // 短的不省
+  assert.match(s, /````board mark target=b3 term=k/);
+  // 省略行不是 board 块的样子：解析出来不会当成指令
+  const { parseOutput } = await import('../kit/src/class/protocol.js');
+  assert.ok(!parseOutput(s, { final: true }).ops.some((o) => o.op === 'new'));
+  assert.equal(stubBoardText('只说话'), '只说话');
+  // buildTurns：只省 STUB_AFTER 轮以前的，而且要能取回来（stub: true）才省
+  const history = [];
+  for (let i = 0; i < STUB_AFTER + 3; i++) history.push({ role: 'student', text: `第 ${i} 句` }, { role: 'claude', text: out });
+  history.push({ role: 'student', text: '好了' });
+  const on = buildTurns({ system: '说明', history, stub: true });
+  const off = buildTurns({ system: '说明', history });
+  const said = on.turns.filter((t) => t.role === 'assistant');
+  assert.equal(said.filter((t) => t.content.includes('页面省略了')).length, 3);
+  assert.ok(said.slice(-STUB_AFTER).every((t) => t.content.includes('pmatrix')));
+  assert.ok(on.bytes < off.bytes - 3 * 1000);
+  assert.ok(!off.turns.some((t) => t.content.includes('页面省略了')));
+});

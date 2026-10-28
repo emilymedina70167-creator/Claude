@@ -4,7 +4,8 @@
 import { REVIEW_TIERS, toDate, addDays, daysBetween, reviewDue, dueList } from './schema.js';
 import { voidedIds, resolvedErrors, pendingTitle } from './memo.js';
 import { OUTCOME_TEXT } from './report.js';
-import { SPACES, positionId, packIds } from './space.js';
+import { SPACES, positionId, packIds, filterSpace } from './space.js';
+import { classView, memoryCatalog, utf8 } from './digest.js';
 
 const cut = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 // 截短带公式的文字：截断处落在 $…$ 里面时，退到那个公式前面（不然页面上露出半截 TeX）
@@ -268,3 +269,18 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
 
 export const TIER_LABEL = (tier) => (REVIEW_TIERS.includes(Number(tier)) ? `${tier} 天档` : '');
 export { OUTCOME_TEXT, daysBetween };
+
+/* ---------------- 给对话里的 Claude 的开场简报（docs/memory-plan.md）---------------- */
+
+// 页面写进 meta/brief（数学）、meta/brief-cs、meta/brief-en：对话里的 Claude 开场 get 一份，就知道现在学到哪、
+// 有什么等它做，和这一科记忆库里每一样东西的编号（一条一行，要全文再按编号读），不用一类一类 list 十几次
+export const BRIEF_MAX = 24 * 1024;
+export const briefId = (space) => (space === 'math' ? 'brief' : `brief-${space}`);
+export function deskBrief(mem = {}, { space = 'math', today = toDate(Date.now()), kitUrl = '', deskUrl = '', pack = null } = {}) {
+  const head = handoffText(filterSpace(mem, space), { kitUrl, deskUrl, today, pack, space });
+  const view = classView(mem, { space, forClass: false });
+  const cat = memoryCatalog(view, { tools: false, today, max: BRIEF_MAX - utf8(head) - 600 });
+  const how = '要哪一条的全文，用 ArtifactData 按编号读（get；同一类几条用 query 的 where id in […]）。这份是页面在学习台打开时写的（看 at）；隔了很久没打开，或者你刚写过记忆，以数据库为准。';
+  const body = cat.text.replace(/（没放全文的）/g, '').replace(/（没放全文的，/g, '（');
+  return { space, text: `${head}\n\n${how}\n\n${body.replace(/^## 目录（记忆库里没放全文的，一条一行）\n\n这个查看方式不支持工具，目录里的东西取不了全文。\n\n/, '## 这一科记忆库里有什么（一条一行）\n\n')}`, today };
+}

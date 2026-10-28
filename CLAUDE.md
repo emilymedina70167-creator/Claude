@@ -5,7 +5,7 @@
 - 面向我的说明：`README.md`
 - 放进 claude.ai 项目指令、教 Claude 写课件的说明：`CLAUDE-PROJECT.md`（第三节「组件参考」还会在构建时打包进 `la-kit.js`，给课堂里的 Claude 当组件手册，见下文）
 - 需求原文：`docs/live-board-spec.md`（实时黑板）、`docs/classroom-spec.md`（课堂模式）、`docs/teaching-tools-spec.md`（课堂教具：板书标注、会动的矩阵、页面验算）、`docs/live-tools-spec.md`（实时黑板追上课堂：标注、让图动、板顶的话）、`docs/learner-memory-spec.md`（学习台的系统记忆：分类存储、各管一块，两个 Claude 共用）
-- **一个学习台（所有东西在一处）：`docs/hub-plan.md`**；学习台的记录、交互、内部 Claude 改记忆：`docs/desk-plan.md`（记录能力、交互、内部 Claude 改记忆；外内协作的分工；分批和验收）。新对话做学习台先读它。
+- **一个学习台（所有东西在一处）：`docs/hub-plan.md`**；记忆分两层（全文 + 目录）、省额度不丢信息：`docs/memory-plan.md`；学习台的记录、交互、内部 Claude 改记忆：`docs/desk-plan.md`（记录能力、交互、内部 Claude 改记忆；外内协作的分工；分批和验收）。新对话做学习台先读它。
 - 下一步的总计划（线代和 408 一起做到优秀：验收尺子、外壳升级、线代六章、408 加深）和进度：`docs/quality-plan.md`
 - 计算机四门课第一轮（第 0～5 批）的计划：`docs/408-plan.md`；数据结构 `trace` / `tree` / `net` 的细节方案：`docs/ds-components-design.md`
 
@@ -85,7 +85,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 - `classroom.js`：控制器。一屏一块板（`board new` 换板，旧板翻页看）、板顶那句话、常驻栏、一屏放不放得下的测量（`--board-h`）、学生作答排队（1.5 秒合并，拖动跟着下一条一起发；没提交的草稿也跟着下一条发，见 `drafts.js`）、调用课堂 Claude、执行黑板指令、写法自检和自动重写、刷新后恢复。板书标注记在 `marks`（id → 所在段和 spec），段被改写 / 撤回时一起擦掉，刷新后按 `boardOps` 的时间线重放；工具 `calc`（精确计算）、`component_doc`（组件的完整写法），查看方式支持工具时才给。板顶那句话后面标出平台核验的模型（`class_pages.talkBy`），「⋯」菜单写核验 / 作废了几轮，下课小结的最后一行（`foot`）和 `class_notes` 的 `verify` 由页面写。对话太长时的摘要也只用 Opus 5.5 high，在一轮讲完后后台写（不让学生等）；学生附的图直接交给 Claude，不等它传进 assets。学生发的消息不上黑板。学生在当前板、常驻栏上新写的板书（`ink/` 的笔画，按段的位置拼成一张图），跟着下一条消息导出成图发给课堂 Claude（`[板书]` 那一行；有没发的板书时输入框空着也能发，`bar.js` 的 `inkPending`，板书一变 `ink/overlay.js` 发 `ink-change`）；当前板上有题没做、学生很久没动静时，提醒课堂 Claude 轻轻问一句（`stuck.js`；每提醒一次就是一整轮调用，默认关、「⋯」里能开，`?dev&stuck=8` 自动打开并把等待改成 8 秒）。每次调用 Claude 记一条花费 `cost`（`usage.js`：发出去的字节、为什么调用、调了几次工具）在那一轮的 `class_turns` 上，「⋯」里显示这节课一共约多少 token、多跑了几轮为什么，学习台里合计写进 `sessions/{编号}.usage`。
 - `protocol.js`：解析课堂 Claude 的输出。普通文字是对学生说的话（写在板顶）；```` ```board ```` 围栏块是黑板指令（new / add / replace / hide / pin / unpin / figure / mark / unmark）。纯函数，支持流式前缀；`mark` 块闭合以后才把块里的各行拼成 `marks`。
-- `prompt.js`：每一轮发给课堂 Claude 的内容（红线 `DEFAULT_RULES`、黑板指令说明 `PROTOCOL_DOC`、组件手册、资料包、黑板现状、对话历史和压缩）。纯函数。
+- `prompt.js`：每一轮发给课堂 Claude 的内容（红线 `DEFAULT_RULES`、黑板指令说明 `PROTOCOL_DOC`、组件手册、资料包、黑板现状、对话历史和压缩）。纯函数。最近 `STUB_AFTER`（6）轮以前 Claude 写的长段原文换成一行「页面省略了……」（`stubBoardText`，有工具时才省），工具 `board_read` 按段 id 取回。
 - `docs.js` + `kit/build-docs.js`：构建时从 `CLAUDE-PROJECT.md` 第三节截出组件手册打包进去。小节里 `<!-- 完整写法 -->` 以前是精简版（每一轮都带），以后是不常用的写法：课堂 Claude 用工具 `component_doc` 按名字取；某个组件写错要重写时，页面把它的完整写法附在提醒里；资料包 `main.components` 点了名的组件直接带完整写法（`subject.js` 的 `docsForSubject` / `componentDoc`，`prompt.js` 的 `systemDocs` / `lintDocs`）。对话里写课件的 Claude 读整份 `CLAUDE-PROJECT.md`，两部分都看得到。
 - `bar.js`：底部输入框（附图、手写板、「⋯」菜单、iPad 软键盘）和它上面的一条：翻页（上一块 / 下一块 / 板列表 / 回到当前板）、快捷回答。不显示消息。
 - `devteacher.js`：`?dev` 的模拟老师；`devpanel.js`：开发面板（还有本地试用的模拟讲义图 `ensureDemoSlide`）。
@@ -111,7 +111,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - 在学习台里上课（第 2 批）：首页「开新课」→ `sessions/{编号}`（`c-20261027-1`，页面写），`pack/main`、`pack/problems` 抄进 `sessions/{编号}/pack/`；地址带 `#编号` 就进这节课（`desk.js` 的 `classHash` / `enterClass`，进出都整页刷新，课堂挂的全局监听不留）。课堂照旧是 `classroom.js`，多一个 `desk` 参数：
   - 数据：`memory/session.js` 的 `scopeDb` 把 `steps`、`class_pages`、`class_turns`、`pack`、`uploads` 换到 `sessions/{编号}/` 下面（Proxy 转发，方法绑在原对象上；写进去带 `session`），课堂的代码不用改路径。
   - 证据：`sync.js` 的 `createSink(store, { evidence })`：作答、动作只写一份进 `evidence`（`toEvidence`：组件 id 叫 `comp`，`block` 是课程地图的块，`tags` 带段的 `point=`），不再写 `answers` / `events`；刷新后 `fromEvidence` 读回来重放。学生说的话、附的图也是证据（`sayEvidence`）。
-  - 课堂 Claude：`prompt.js` 的 `buildSystem({ memory })` 多一节「你对学生的了解」（`memory/digest.js` 的 `memoryDigest`：rules → profile → 当前块 → 相关弱点、错题原文、掌握 → 失误 → position，预算 `MEMORY_BUDGET` 32 KiB、从后往前截，资料包用剩下的）；记忆库有 rules 时替换内置红线（`memoryRules`：角色那一段和教法照旧）。工具：`lesson_note`（kind note / proposal，写 `observations`）、`slip_note`（写 `slips`）、`memory_read`（只读）；写之前 `assertWrite('class', …)`。下课小结写 `observations`（kind summary），`sessions/{编号}` 记 `verify`、`status`、`summary`。
+  - 课堂 Claude：`prompt.js` 的 `buildSystem({ memory })` 多一节「你对学生的了解」（`memory/digest.js`，`docs/memory-plan.md`）：**全文**（`memoryDigest`：给课堂的规则 → 这一科的关于我 → position → 当前块 → 以前学这一块的课 → 相关弱点、错题原文（最多 8 条）→ 掌握 → 最近失误 → 等确认的 → 长原文）+ **目录**（`memoryCatalog`：其余的一条一行，编号 + 一句话，≤ 7 KiB），预算 `MEMORY_BUDGET` 32 KiB。`rules.for: chat` 的不带，`rules`/`profile`/`slips` 按 `space.js` 的 `sharedFor` 只带这一科的。说明的顺序按多久变一次：组件说明 → 资料包 → 记忆 → 黑板现状。记忆库有 rules 时替换内置红线（`memoryRules`：角色那一段和教法照旧）。工具：`lesson_note`（kind note / proposal，写 `observations`）、`slip_note`（写 `slips`）、`memory_read`（只读；`ids` 一次取好几条；`sessions` 取以前的课的报告和小结）；写之前 `assertWrite('class', …)`。下课小结写 `observations`（kind summary），`sessions/{编号}` 记 `verify`、`status`、`summary`。
   - `protocol.js` 的段指令认 `point=`（这一段练的知识点），存在段上。
 - 记录能力（desk-plan 第 1 批）：
   - 课后报告 `report.js`（纯函数）：下课后 `desk.js` 的 `writeReport` 读这节课的证据、观察、失误、上一节下课以后的补记，算好写进 `sessions/{编号}/report/main`（`SESSION_SCOPED` 里有 `report`），要点记在 `sessions/{编号}.report`；下课时没写成的，首页打开时补写（`fixReports`）。一道题 = 组件 + 第几步（`itemKey`），尝试序列、结果（`OUTCOMES`）、按 `tags` 汇总、时长去掉 10 分钟以上的空档。
@@ -126,6 +126,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
   - 下课：`desk.makeReport` 先算一份报告，`report.js` 的 `reportText` 放进 `closingPrompt({ report })`，小结和整理单同一次写；小结正文是 memo 块以外的文字。
   - 首页：「待确认」「我改记忆」两张卡。
 - 给我看的页面和第 4 批（desk-plan 第 3、4 批）：
+  - 开场简报：首页打开时写 `meta/brief`、`brief-cs`、`brief-en`（`views.js` 的 `deskBrief`：接手要知道的 + 这一科记忆库的目录），对话里的 Claude 开场 get 一份。
   - `views.js`（纯函数）：课程地图 `curriculumTree` / `blockDetail`、时间线 `blockTimeline`、弱点表 `weaknessRows`、错题本 `errorRows`、以前的课 `classRows`、统计 `learningStats`（按每节课报告的要点 `sessions.report.activeMs/items/first`）、复现课的资料包 `reviewPack`、启动语 `handoffText`。
   - `pages.js`：这些页面的 DOM。地址 `#map`、`#weak`、`#errors`、`#classes`、`#classes/c-…`、`#stats` 换页不刷新（`desk.js` 的 `route`）；`#view/c-…` 整页刷新进只读的课堂（`enterClass(…, { readOnly })`：`session.js` 的 `readOnlyDb` 让写入什么都不做，课堂不调用 Claude、不能发言）。
   - 复现课：首页到期的复现组「开复现课」→ `newClass(block, reviewPack(…))`，`sessions` 和资料包记 `review`，下课的 `closingPrompt({ review })` 要它写 `review id=… result=…`。

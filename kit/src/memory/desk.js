@@ -22,7 +22,7 @@ import { createMemOps } from './memops.js';
 import { createMemoView } from './memoview.js';
 import { resolvedErrors, voidedIds } from './memo.js';
 import { createPages } from './pages.js';
-import { reviewPack, handoffText } from './views.js';
+import { reviewPack, handoffText, deskBrief, briefId } from './views.js';
 import { readOnlyDb } from './session.js';
 import { SPACES, SPACE_KEYS, DEFAULT_SPACE, filterSpace, spaceOfDoc, spaceOfId, subjectOf, positionId, packIds } from './space.js';
 import { dueList } from './schema.js';
@@ -38,8 +38,8 @@ import { checkMemory, memcheckRecord } from './check.js';
 import { sampleMemory, sampleSpaces } from './sample.js';
 
 const CHECK_DELAY = 800; // 一次 batch 写进来好几类：停一下再查，不要每到一类查一遍
-// 课堂每一轮要带的记忆（证据条数多、按需查，不订阅）
-const MEMORY_FOR_CLASS = MEMORY_COLLECTIONS.filter((c) => c !== 'evidence' && c !== 'sessions');
+// 课堂每一轮要带的记忆（证据条数多、按需查，不订阅）。sessions 要带：记忆摘要里有「以前学这一块的课」、目录里有以前的课
+const MEMORY_FOR_CLASS = MEMORY_COLLECTIONS.filter((c) => c !== 'evidence');
 
 /** 地址后面的 #c-20261027-1：进这节课（刷新也还在这节课里） */
 export const classHash = () => { const h = decodeURIComponent(String(location.hash || '').slice(1)); return isSessionId(h) ? h : ''; };
@@ -154,6 +154,7 @@ export async function renderDesk(root, meta) {
     // 有哪一类没读到：这一次不更新指纹（不然没读到的条目会被当成删掉了）
     for (const c of failed) res.problems.unshift({ coll: c, id: '', msg: `读不到 ${c}（${COLLECTIONS[c].label}），这一次的自检不全` });
     paint(res, today);
+    writeBriefs(today);
     const rec = memcheckRecord(res, { kit: VERSION, today });
     const json = JSON.stringify(rec);
     if (json !== lastCheck) {
@@ -167,6 +168,18 @@ export async function renderDesk(root, meta) {
         ledger = res.ledger;
         put('meta', 'ledger', { ...res.ledger, at: Date.now() }).catch(() => {});
       }
+    }
+  }
+
+  // 给对话里的 Claude 的开场简报（views.js 的 deskBrief）：每科一份，内容变了才写
+  const lastBrief = {};
+  function writeBriefs(today) {
+    if (failed.size) return;
+    for (const k of SPACE_KEYS) {
+      const b = deskBrief(data, { space: k, today, kitUrl: KIT_URL, deskUrl: deskUrl(), pack: packs[k].main });
+      if (lastBrief[k] === b.text) continue;
+      lastBrief[k] = b.text;
+      put('meta', briefId(k), { space: k, text: b.text, kit: VERSION, today, at: Date.now() }).catch(() => {});
     }
   }
 

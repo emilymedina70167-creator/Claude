@@ -173,7 +173,7 @@ export function slipRecord({ text, lesson = '', session }, n = 1) {
 
 // —— memory_read：课堂里的 Claude 查记忆库（只读）——
 
-const READABLE = MEMORY_COLLECTIONS.filter((c) => c !== 'sessions');
+const READABLE = MEMORY_COLLECTIONS.filter((c) => c !== 'pending');
 export const MEMORY_READ_MAX = 12 * 1024; // 一次最多返回多少（太多的截掉，告诉它再缩小）
 
 /**
@@ -185,8 +185,20 @@ export function memoryRead(mem, input = {}) {
   const coll = String(input.collection || '').trim();
   if (!READABLE.includes(coll)) throw new Error(`collection 只能是 ${READABLE.join(' / ')}`);
   if (coll === 'evidence') return { needDb: true };
+  // 一次取好几条（目录里挑好的编号）：每调用一次课堂 Claude 要多跑一整轮，所以鼓励一次取够
+  const many = [...new Set([...(Array.isArray(input.ids) ? input.ids : String(input.ids ?? '').split(/[,，\s]+/)), input.id].map((x) => String(x ?? '').trim()).filter(Boolean))].slice(0, 20);
+  // 以前的课：报告在 sessions/{编号}/report 下面，页面去数据库里取
+  if (coll === 'sessions') {
+    if (!many.length) throw new Error('sessions 要写课的编号（id 或 ids），比如 c-20261027-1');
+    return { needDb: true, ids: many };
+  }
   const docs = (Array.isArray(mem?.[coll]) ? mem[coll] : []).filter((d) => d && d.id !== undefined);
-  const id = String(input.id ?? '').trim();
+  if (many.length > 1) {
+    const found = many.map((x) => docs.find((d) => String(d.id) === x)).filter(Boolean);
+    const missing = many.filter((x) => !docs.some((d) => String(d.id) === x));
+    return clip({ collection: coll, docs: found, ...(missing.length ? { missing } : {}) });
+  }
+  const id = many[0] || '';
   if (id) {
     const d = docs.find((x) => String(x.id) === id);
     if (!d) throw new Error(`${coll} 里没有 ${id}${docs.length ? `（有：${docs.slice(0, 12).map((x) => x.id).join('、')}${docs.length > 12 ? '……' : ''}）` : '（这一类还是空的）'}`);
@@ -206,6 +218,12 @@ function summaryOf(coll, d) {
 function clip(out) {
   const s = JSON.stringify(out);
   if (s.length <= MEMORY_READ_MAX) return out;
+  if (out.docs) {
+    const docs = [...out.docs];
+    while (docs.length > 1 && JSON.stringify({ ...out, docs }).length > MEMORY_READ_MAX - 200) docs.pop();
+    const rest = out.docs.slice(docs.length).map((d) => d.id);
+    return { ...out, docs, ...(rest.length ? { more: rest, note: `一次放不下，还有 ${rest.join('、')}：要的话再取一次` } : {}) };
+  }
   if (out.items) {
     const items = [...out.items];
     while (items.length > 1 && JSON.stringify({ ...out, items }).length > MEMORY_READ_MAX - 200) items.pop();

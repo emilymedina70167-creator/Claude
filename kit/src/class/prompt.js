@@ -4,6 +4,7 @@
 
 import { isCS, isEN, docsForSubject, detailNames, componentDoc, allNames } from '../subject.js';
 import { memoryDigest } from '../memory/digest.js';
+import { parseOutput } from './protocol.js';
 
 // 文档里有大量反引号和 TeX 反斜杠：先用「ˋ」代替反引号，String.raw 保留反斜杠，最后换回来
 const doc = (s, ...v) => String.raw(s, ...v).replace(/ˋ/g, '`').trim();
@@ -106,7 +107,7 @@ export const DESK_DOC = doc`
 ${MEMO_DOC}
 - 不要宣布学生掌握了：掌握只由对话里的 Claude 看证据判断。
 - 新写的一段可以标上练的是哪个知识点：ˋboard new id=b3 title="…" point=trˋ（ˋpoint=ˋ 写上面掌握状态里 ˋ#ˋ 后面那段名字），学生在这一段的作答就记成这个知识点的证据。没有合适的就不写。
-- 记忆摘要没放下的、要看某道错题的原文、某一块的完整范围，用 ˋmemory_readˋ 工具查（ˋcollectionˋ 写集合名，ˋidˋ 写编号；不写 ˋidˋ 时可以写 ˋblockˋ 只看挨着这一块的）。**很贵**：每用一次要多跑一整轮、整份说明再读一遍，只在摘要里确实没有、又非看不可时用。
+- 记忆分两层：前面是和这节课直接有关的全文，最后是其余东西的目录（一条一行：编号 + 一句话）。目录里的要看全文，用 ˋmemory_readˋ 按编号取：ˋcollectionˋ 写集合名，ˋidsˋ 写编号数组，**一次取好几条**（同一类的放一起）；以前的课写 ˋcollection: "sessions"ˋ，给你那节课的报告和小结。**很贵**：每用一次要多跑一整轮、整份说明再读一遍。该取的时候：学生的错像目录里某道旧错题（取来对照根因）、要提起或接着以前某节课、要按某条规则做又拿不准原文。别的时候用全文里的就够了。
 `;
 const DESK_DOC_NO_TOOLS = doc`
 ### 在学习台里上课
@@ -118,7 +119,7 @@ ${MEMO_DOC}
 - 新写的一段可以标上练的是哪个知识点：ˋboard new id=b3 title="…" point=trˋ（ˋpoint=ˋ 写上面掌握状态里 ˋ#ˋ 后面那段名字）。
 `;
 // 记忆摘要最多占多少（规则 + 摘要合起来）；剩下的给资料包
-export const MEMORY_BUDGET = 16 * 1024; // docs/desk-plan.md 第 7 节：从 32 KiB 降下来省额度，先放和这一块直接有关的
+export const MEMORY_BUDGET = 32 * 1024; // docs/memory-plan.md：规则（给课堂的）全文 + 和这节课直接有关的全文 + 其余的目录；省额度靠只带这一科、给课堂的，和对话里省略旧段原文
 
 // —— 2. 黑板指令协议（需求 2.1 / 2.2）。写法要和 protocol.js 的解析一致 ——
 export const PROTOCOL_DOC = doc`
@@ -655,13 +656,15 @@ export function buildSystem({ rules, componentDocs, pack, board, packBudget = PA
     const sections = [
       `你的角色和红线\n\n${role}`,
       `组件写法和黑板指令\n\n## 组件说明\n\n下面的组件说明原本是学生写给项目对话里的 Claude 的，文中的「我」指学生。说到 guided 课件的关卡、小节结构的地方，课堂里不适用；课堂里的段落由你用黑板指令一段一段写。有的组件这里只写了最常用的写法（末尾写着「更多写法」）：照着写就行；${lookupNote}写错了页面会把那个组件的完整写法附在提醒里。资料包里点了名的组件，完整写法已经放在下面；点了名时，没点名的不常用组件只留了标题（要用就按名字取）。\n\n${docs || '（组件说明没有打包进来。只用最常见的组件：answer、steps、scene、predict，写法要保守。）'}\n\n## 黑板指令\n\n${PROTOCOL_DOC}`,
+      // 顺序按「一节课里多久变一次」排：组件说明、资料包几乎不变，记忆（等确认的改动）偶尔变，黑板现状每轮都变。
+      // 每一轮整份重发；平台要是对重复的开头打折，不变的放前面最省
+      `这节课的资料包\n\n课前由项目对话里的 Claude 准备，课中也可能更新。${memory ? '在学习台里，资料包是这节课的额外安排（推进建议、备好的题），学生的情况看后面的记忆。' : ''}\n\n${packBody}`,
       ...(memory ? [`你对学生的了解（学习台的记忆库）\n\n${mem?.text || ''}\n\n${desk}`] : []),
-      `这节课的资料包\n\n课前由项目对话里的 Claude 准备，课中也可能更新。${memory ? '在学习台里，资料包是这节课的额外安排（推进建议、备好的题），学生的情况看上面的记忆。' : ''}\n\n${packBody}`,
       `黑板现状\n\n${boardStateText(board)}`,
     ];
     const NUM = ['一', '二', '三', '四', '五', '六'];
     return [
-      '这是课堂模式的完整说明，每一轮都会重新发给你（资料包和黑板现状都是最新的）。说明后面是这节课的对话：学生说的话、学生在黑板上的作答记录（[作答] / [动作]）、页面的系统消息（[系统]），以及你之前的输出。',
+      `这是课堂模式的完整说明，每一轮都会重新发给你（资料包和黑板现状都是最新的）。说明后面是这节课的对话：学生说的话、学生在黑板上的作答记录（[作答] / [动作]）、页面的系统消息（[系统]），以及你之前的输出。${tools ? '较早几轮你写的长段原文被页面省略成了一行「[页面省略了这一段的原文……]」（段还在黑板上，要照着原文改写或对记号时用 board_read 按段 id 取回）；那是页面做的，你新写的段照常写完整。' : ''}`,
       ...sections.map((x, i) => `# ${NUM[i]}、${x}`),
       '（课堂说明到这里结束。下面是这节课的对话，回应最后一条消息。）',
     ].join('\n\n');
@@ -906,18 +909,41 @@ export function actionsMessage(actions) {
 export const KEEP_RECENT = 20;
 export const OMITTED = '（更早的对话已省略）';
 
+// 省额度、不丢信息（docs/memory-plan.md）：每一轮整段对话都要重发一遍，而 Claude 早先写的段原文（几 KB 一段）还在黑板上。
+// 所以最近 STUB_AFTER 轮以前的 Claude 输出里，new / add / replace 的长段换成一行「页面省略了原文」，说的话、指令行、
+// 标注、memo 照旧原样；要看原文用工具 board_read 按段 id 取（一次几段）。不支持工具的查看方式不省（取不回来）。
+// 省略行故意不写成 board 块的样子，免得 Claude 照着学、新写的段也只写一行。
+export const STUB_AFTER = 6;
+const STUB_MIN = 400; // 原文比这短的不省
+const STUB_OPS = new Set(['new', 'add', 'replace']);
+export function stubBoardText(text) {
+  const src = String(text ?? '');
+  const { segments } = parseOutput(src, { final: true });
+  const long = (sg) => sg.type === 'board' && STUB_OPS.has(sg.op?.op) && bytes(sg.body) > STUB_MIN;
+  if (!segments.some(long)) return src;
+  return segments.map((sg) => {
+    if (sg.type !== 'board') return sg.text;
+    if (!long(sg)) return `\`\`\`\`board ${sg.header}\n${sg.body}\n\`\`\`\``;
+    return `[页面省略了这一段的原文：这一轮写了 board ${oneLine(sg.header, 120)}（${(bytes(sg.body) / 1024).toFixed(1)} KB）。段还在黑板上，要看原文用 board_read 取 ${sg.op.id || '这一段'}]`;
+  }).join('\n\n');
+}
+
 // history: [{ role: 'student' | 'claude' | 'system', text, discarded?, kind? }]
 // 返回 { turns, bytes, historyBytes, dropped }：bytes 是所有 content 的字节数，historyBytes 是其中对话部分（不含第一条说明）
 // keepRecent：超长时也保留的最近几条（默认 20）；最近几条本身就太长时，页面可以调小再拼一次
-export function buildTurns({ system, history = [], maxBytes = 262144, keepRecent = KEEP_RECENT } = {}) {
+export function buildTurns({ system, history = [], maxBytes = 262144, keepRecent = KEEP_RECENT, stub = false } = {}) {
   const sys = String(system ?? '').trim();
   if (!sys) throw new Error('buildTurns：缺少课堂说明（system）');
   const conv = [];
+  // 最近 STUB_AFTER 轮 Claude 的输出原样，更早的长段省略（stub：能用 board_read 取回时才省）
+  const said = (history || []).filter((h) => h && !h.discarded && h.role === 'claude');
+  const old = new Set(stub ? said.slice(0, Math.max(0, said.length - STUB_AFTER)) : []);
   for (const h of history || []) {
     if (!h || h.discarded) continue;
     const role = h.role === 'claude' ? 'assistant' : h.role === 'student' || h.role === 'system' ? 'user' : null;
     if (!role) continue;
     let content = String(h.text ?? '').trim();
+    if (old.has(h)) content = stubBoardText(content).trim();
     if (!content) continue; // sample 不收空的 content
     if (h.role === 'system' && !content.startsWith('[系统]')) content = `[系统] ${content}`;
     conv.push({ role, content, size: bytes(content), pinned: h.kind === 'summary' });
@@ -1083,10 +1109,10 @@ export function pendingTurn(history) {
 }
 
 // 拼这一轮的对话，保证不超过 maxBytes：先丢最早的；最近 20 条本身就太长时，逐步少留几条原文
-export function fitTurns({ system, history, maxBytes = 262144 } = {}) {
+export function fitTurns({ system, history, maxBytes = 262144, stub = false } = {}) {
   let out = null;
   for (const keepRecent of [KEEP_RECENT, 12, 8, 4, 2, 1]) {
-    out = buildTurns({ system, history, maxBytes, keepRecent });
+    out = buildTurns({ system, history, maxBytes, keepRecent, stub });
     if (out.bytes <= maxBytes) return { ...out, keepRecent, fits: true };
   }
   return { ...out, keepRecent: 1, fits: false };
