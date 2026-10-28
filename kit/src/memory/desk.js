@@ -59,24 +59,27 @@ export async function renderDesk(root, meta) {
   const unit = meta.unit || session.title || '学习台';
   root.innerHTML = `
     <header class="dk-head">
-      <h1 class="dk-title">学习台</h1>
-      <span class="dk-unit">${mdToHtml(String(unit), { inline: true })}</span>
-      <span class="dk-ver" title="组件库版本">组件库 ${escapeHtml(VERSION)}</span>
+      <div class="dk-brand"><h1 class="dk-title">学习台</h1><span class="dk-unit">${mdToHtml(String(unit), { inline: true })}</span></div>
+      <div class="dk-spaces" role="tablist" aria-label="科目">${SPACE_KEYS.map((k) => `<button type="button" role="tab" class="dk-space" data-space="${k}">${SPACES[k].label}</button>`).join('')}</div>
     </header>
-    <div class="dk-spaces" role="tablist" aria-label="科目">${SPACE_KEYS.map((k) => `<button type="button" role="tab" class="dk-space" data-space="${k}">${SPACES[k].label}</button>`).join('')}</div>
     <nav class="dk-nav" aria-label="学习台的页面"><a href="#">首页</a>${Object.entries(PAGES).map(([k, v]) => `<a href="#${k}">${v}</a>`).join('')}</nav>
     <p class="dk-status muted">正在连接记忆库…</p>
     <div class="dk-pages" hidden></div>
     <div class="dk-home">
+    <div class="dk-col">
     <section class="dk-card dk-class" hidden><h2 class="dk-h">上课</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-today" hidden><h2 class="dk-h">今天</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-pending" hidden><h2 class="dk-h">待确认</h2><p class="dk-sub muted">课堂里的 Claude 提的错题、弱点、复现组、下一节：点「确认」才写进记忆库。写进去的 7 天内能撤销。</p><div class="dk-popen"></div><div class="dk-memo-sub" role="heading" aria-level="3">最近写进去的</div><div class="dk-pdone"></div></section>
-    <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-manual" hidden><h2 class="dk-h">补记</h2><p class="dk-sub muted">在学习台外面做的（纸上、Notability、对话里）：写一句、贴张截图，下一节课的课后报告会列出来。</p><div class="dk-body"></div><div class="dk-mlist"></div></section>
+    </div>
+    <div class="dk-col dk-col-side">
+    <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-check" hidden><h2 class="dk-h">自检</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-colls" hidden><h2 class="dk-h">记忆库</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-backup" hidden><h2 class="dk-h">备份和用量</h2><div class="dk-body"></div></section>
-    </div>`;
+    </div>
+    </div>
+    <footer class="dk-foot">组件库 ${escapeHtml(VERSION)}</footer>`;
   const $ = (s) => root.querySelector(s);
   const status = $('.dk-status');
 
@@ -201,7 +204,7 @@ export async function renderDesk(root, meta) {
     // 记忆库：每一类有几条、谁写
     $('.dk-colls .dk-body').innerHTML = `<div class="dk-table">${MEMORY_COLLECTIONS.map((c) => {
       const s = COLLECTIONS[c];
-      return `<div class="dk-crow"><span class="dk-cname">${escapeHtml(s.label)}<code>${c}</code></span><span class="dk-n">${res.counts[c]}</span><span class="dk-who">${s.writers.map((r) => ROLE_TEXT[r]).join('、')}写</span></div>`;
+      return `<div class="dk-crow" title="${escapeHtml(s.writers.map((r) => ROLE_TEXT[r]).join('、'))}写"><span class="dk-cname">${escapeHtml(s.label)}<code>${c}</code></span><span class="dk-n">${res.counts[c]}</span><span class="dk-who">${s.writers.map((r) => ROLE_TEXT[r]).join('、')}写</span></div>`;
     }).join('')}</div>`;
   }
 
@@ -224,10 +227,12 @@ export async function renderDesk(root, meta) {
       ${lastOpen ? `<p class="dk-warn">上一节的整理单还有 ${lastOpen} 条没确认：<a class="dk-link" href="#classes/${escapeHtml(last.id)}">去看那节课</a> 或者在下面「待确认」里点。</p>` : openPd.length ? `<p><a class="dk-link dk-to-pending" href="#">待确认 ${openPd.length} 条 ↓</a></p>` : ''}
       ${last ? `<p class="dk-last"><span class="dk-k">上一节</span>${escapeHtml(last.id)}${last.block ? `（${escapeHtml(last.block)}）` : ''}${lastLine ? `<span class="muted">：${escapeHtml(lastLine)}</span>` : ''}</p>` : ''}
       ${open ? `<div class="dk-row"><b>${escapeHtml(open.id)}</b><span>${inline(open.title || '')}${open.block ? `<span class="muted">（${escapeHtml(open.block)}）</span>` : ''}</span><button type="button" class="btn btn-primary dk-go" data-sid="${escapeHtml(open.id)}">接着上课</button></div>` : ''}
-      <div class="dk-next">${main ? `<p><span class="dk-k">备好的课</span>${inline(main.unit || '（资料包没写 unit）')}${block ? `<span class="muted">（${escapeHtml(block)}）</span>` : ''}</p>${main.goal ? `<p class="muted">${inline(main.goal)}</p>` : ''}`
+      <div class="dk-next">${main ? `<p><span class="dk-k">备好的课</span>${inline(main.unit || '（资料包没写 unit）')}${block ? `<span class="muted">（${escapeHtml(block)}）</span>` : ''}</p>${main.goal ? `<p class="dk-goal muted" title="点一下看全文">${inline(main.goal)}</p>` : ''}`
         : `<p class="muted">对话里的 Claude 还没备${SPACES[space].label}的课（pack/${packIds(space).main} 是空的）。也可以直接开课：课堂里的 Claude 带着记忆，但没有这节课的安排。</p>`}
         <button type="button" class="btn ${open ? '' : 'btn-primary'} dk-new">开新课</button></div>
       <div class="dk-mrow dk-handoff"><button type="button" class="btn btn-sm dk-copy-handoff">复制给外部 Claude 的启动语</button><span class="muted">贴进任何一个对话，它就知道去哪读说明、学到哪了、要做什么。</span></div>`;
+    // 资料包的目标常常很长：先收成三行，点一下展开
+    box.querySelector('.dk-goal')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('is-open'));
     box.querySelector('.dk-to-pending')?.addEventListener('click', (e) => { e.preventDefault(); $('.dk-pending').scrollIntoView({ behavior: 'smooth' }); });
     box.querySelector('.dk-copy-handoff').addEventListener('click', async () => {
       const text = handoffText(sv(), { kitUrl: KIT_URL, deskUrl: deskUrl(), pack: pack.main, space });
@@ -454,7 +459,7 @@ export async function renderDesk(root, meta) {
     const bar = document.createElement('div');
     bar.className = 'dk-dev';
     bar.innerHTML = '<button type="button" class="btn btn-sm dk-seed">填入示例记忆</button><button type="button" class="btn btn-sm dk-clear">清空</button>';
-    root.append(bar);
+    root.querySelector('.dk-foot').before(bar);
     bar.querySelector('.dk-seed').addEventListener('click', async () => {
       const today = toDate(Date.now());
       for (const src of [sampleMemory(today), sampleSpaces(today)]) for (const [c, docs] of Object.entries(src)) for (const d of docs) { const { id, ...rest } = d; await db.doc(`${c}/${id}`).set(rest); }
