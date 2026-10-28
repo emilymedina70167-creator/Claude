@@ -51,7 +51,8 @@ const QUICK_SAY = { 没懂: '没懂。', 想不出来: '想不出来。', 换个
 
 /**
  * desk（在学习台里上课时才有）：{ store（已经 scopeDb 过的）, sid, block, mem（记忆库各类的数组，页面一直在更新）,
- * updateSession(patch)（改 sessions/{sid}）, writeReport({ turns, steps })（下课后写课后报告）, onHome（回学习台首页）}
+ * updateSession(patch)（改 sessions/{sid}）, writeReport({ turns, steps })（下课后写课后报告）, onHome（回学习台首页）,
+ * readOnly（「以前的课」翻看黑板：store 是只读的，不调用 Claude，不能发言）}
  */
 export async function renderClass(root, meta, desk = null) {
   session.mode = 'class';
@@ -103,8 +104,9 @@ export async function renderClass(root, meta, desk = null) {
   // 旧版接口（window.claude.complete）不能指定模型、也不说是谁答的：每一轮都只能作废，干脆不开课
   const legacy = !mock && !!ai?.legacy;
   const off = { tools: false, images: false }; // 这个查看方式明确说了不支持的（tools_unavailable / images_unavailable）
+  const readOnly = !!desk?.readOnly;
   const teacher = {
-    get available() { return !!(mock || (ai?.call && !legacy)); },
+    get available() { return !readOnly && !!(mock || (ai?.call && !legacy)); },
     call: (input, opts) => (mock ? mock(input, opts) : ai.call(input, opts)),
     // 模拟老师在学习台里也给工具：「测试:记忆」会真的调用 memory_read、lesson_note、slip_note（单独的课堂照旧不给）
     get tools() { return mock ? !!desk : !!ai?.tools && !off.tools; },
@@ -169,7 +171,10 @@ export async function renderClass(root, meta, desk = null) {
     onHome: desk?.onHome || null,
   });
   bv.attachBar(bar);
-  if (!teacher.available) {
+  if (readOnly) {
+    bar.setEnabled(false);
+    bar.setStatus('notice', '这是以前的课：只能翻看。作答不会记下来，也不调用 Claude。');
+  } else if (!teacher.available) {
     bar.setEnabled(false);
     bar.setStatus('error', legacy ? '这个查看方式不能指定 Opus 5.5，课堂开不了。请在新版 claude.ai 里打开这个页面。'
       : ai === null ? '需要允许这个页面使用 Claude，课堂才能开始。' : '这个页面现在用不了 Claude。');
@@ -629,7 +634,7 @@ export async function renderClass(root, meta, desk = null) {
     welcome.hidden = any || busy;
     hero.hidden = any || !busy;
     if (!any && !busy) {
-      welcomeText.innerHTML = !teacher.available ? '课堂现在开不了：这个页面用不了 Claude。<br>看看底部的提示。'
+      welcomeText.innerHTML = readOnly ? '这节课的黑板上什么也没有。' : !teacher.available ? '课堂现在开不了：这个页面用不了 Claude。<br>看看底部的提示。'
         : started ? '黑板现在是空的。在下面说一句话，Claude 会接着讲。' : '准备好了就点「开始上课」。<br>Claude 会在黑板上一块一块地讲、出题、画图；你在黑板上作答，它马上接着教。';
       root.querySelector('.class-start').hidden = started || !teacher.available;
     }
@@ -1412,7 +1417,7 @@ export async function renderClass(root, meta, desk = null) {
       // 学习台里：先用代码算一份课后报告放进这次的输入，小结和整理单同一次写（docs/desk-plan.md 4.2，不多调用一次）
       const report = desk?.makeReport ? await desk.makeReport({ turns: history, steps: steps() }).then(reportText, () => '') : '';
       const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), subject: session.subject, memory: memoryArg() });
-      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ report }) }], maxBytes: promptLimit() });
+      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ report, review: desk?.review }) }], maxBytes: promptLimit() });
       const cost = (why) => callCost({ bytes: fit.bytes, why });
       let res;
       try {

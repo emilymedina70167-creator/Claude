@@ -48,6 +48,26 @@ export function scopeDb(db, sid) {
   };
 }
 
+/**
+ * 只读的数据库（「以前的课」翻看黑板时用）：读照旧，写（set / update / delete / add）什么都不做。
+ * 翻看时作答、刷新恢复都不会改到那节课的记录。
+ */
+export function readOnlyDb(db) {
+  const nop = () => Promise.resolve();
+  const wrap = (target, over) => new Proxy(target, {
+    get(t, k) {
+      if (k in over) return over[k];
+      const v = t[k];
+      return typeof v === 'function' ? v.bind(t) : v;
+    },
+  });
+  const docRef = (ref) => wrap(ref, { set: nop, update: nop, delete: nop });
+  return {
+    doc: (path) => docRef(db.doc(path)),
+    collection: (path) => { const c = db.collection(path); return wrap(c, { doc: (id) => docRef(c.doc(id)), add: nop }); },
+  };
+}
+
 const newId = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
 
 /**

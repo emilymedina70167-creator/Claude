@@ -59,3 +59,17 @@ await build({
   outfile: 'kit/dist/la-kit.js',
   logLevel: 'info',
 });
+
+// 发布组件库用的瘦身说明（build-split.js）：主说明 + 每个组件一份写法，放在 kit/dist/docs/
+{
+  const { splitProject } = await import('./build-split.js');
+  const { mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+  const { KIT_URL } = await import('./src/version.js');
+  const out = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'dist', 'docs');
+  const { main, files } = splitProject(readFileSync(projectDoc, 'utf8'), { kitUrl: KIT_URL });
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(path.join(out, 'components'), { recursive: true });
+  writeFileSync(path.join(out, 'CLAUDE-PROJECT.md'), main);
+  for (const [f, text] of Object.entries(files)) writeFileSync(path.join(out, f), text);
+  console.log(`  kit/dist/docs/CLAUDE-PROJECT.md  ${(Buffer.byteLength(main) / 1024).toFixed(0)}kb，组件写法 ${Object.keys(files).length} 份`);
+}

@@ -104,12 +104,18 @@ const pointer = (sec, lookup) => (lookup ? `（更多写法：component_doc 取 
  * full：有「完整写法」的小节带不带后半段——true 全带，false（默认）都不带，也可以是组件名的数组（只带这几个的）。
  * 不带的在精简版末尾写一句完整写法怎么取（lookup：有没有 component_doc 工具）。
  */
-export function docsForSubject(docs, subject, { full = false, lookup = true } = {}) {
+export function docsForSubject(docs, subject, { full = false, lookup = true, only = null } = {}) {
   const key = subjectKey(subject);
   const want = Array.isArray(full) ? new Set(full.map((x) => String(x).toLowerCase())) : null;
+  // only：只带这些组件的写法（常用的 + 资料包点名的），别的组件只留标题一行，要用时按名字取（没有工具取不了，就不省）
+  const keepOnly = only && lookup ? new Set([...only].map((x) => String(x).toLowerCase())) : null;
   const out = [];
   for (const sec of docSections(docs)) {
     if (!forSubject(sec, key)) continue;
+    if (keepOnly && sec.names.length && !sec.names.some((n) => keepOnly.has(n))) {
+      out.push(sec.head, '', `（这节课没点名，只留了标题。要用时 component_doc 取 ${sec.names[0]}；写错了页面也会附上写法）`, '');
+      continue;
+    }
     out.push(...sec.body);
     if (!sec.detail) continue;
     const take = full === true || (want && sec.names.some((n) => want.has(n)));

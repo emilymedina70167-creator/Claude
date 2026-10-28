@@ -585,15 +585,19 @@ export function packComponents(pack) {
 // 资料包点名的组件，完整写法最多放这么多（多了从后面的开始不放，课堂 Claude 照样能用 component_doc 取）
 export const DETAIL_BUDGET = 16 * 1024;
 
-// 组件说明：精简版，资料包点名的组件带完整写法
+// 最常用的组件：资料包点了名时，课堂说明里只带这些 + 点名的（docs/desk-plan.md 第 7 节：组件手册是每轮最大的一块）
+export const CORE_COMPONENTS = ['answer', 'quiz', 'steps', 'scene', 'conjecture', 'predict', 'let', 'calc', 'hl', 'chalk', 'draft', 'stepper', 'summary'];
+
+// 组件说明：精简版，资料包点名的组件带完整写法；点了名时别的（不常用的）组件只留标题
 export function systemDocs(componentDocs, subject, names = [], { lookup = true } = {}) {
   const src = asText(componentDocs);
-  const base = docsForSubject(src, subject, { lookup });
+  const only = names.length ? [...CORE_COMPONENTS, ...names] : null;
+  const base = docsForSubject(src, subject, { lookup, only });
   let keep = names.slice();
-  let docs = keep.length ? docsForSubject(src, subject, { full: keep, lookup }) : base;
+  let docs = keep.length ? docsForSubject(src, subject, { full: keep, lookup, only }) : base;
   while (keep.length && bytes(docs) - bytes(base) > DETAIL_BUDGET) {
     keep = keep.slice(0, -1);
-    docs = keep.length ? docsForSubject(src, subject, { full: keep, lookup }) : base;
+    docs = keep.length ? docsForSubject(src, subject, { full: keep, lookup, only }) : base;
   }
   return { docs, names: keep };
 }
@@ -637,7 +641,7 @@ export function buildSystem({ rules, componentDocs, pack, board, packBudget = PA
     const role = custom || (mem?.rules ? memoryRules(subject, mem.rules) : defaultRules(subject));
     const sections = [
       `你的角色和红线\n\n${role}`,
-      `组件写法和黑板指令\n\n## 组件说明\n\n下面的组件说明原本是学生写给项目对话里的 Claude 的，文中的「我」指学生。说到 guided 课件的关卡、小节结构的地方，课堂里不适用；课堂里的段落由你用黑板指令一段一段写。有的组件这里只写了最常用的写法（末尾写着「更多写法」）：照着写就行；${lookupNote}写错了页面会把那个组件的完整写法附在提醒里。资料包里点了名的组件，完整写法已经放在下面。\n\n${docs || '（组件说明没有打包进来。只用最常见的组件：answer、steps、scene、predict，写法要保守。）'}\n\n## 黑板指令\n\n${PROTOCOL_DOC}`,
+      `组件写法和黑板指令\n\n## 组件说明\n\n下面的组件说明原本是学生写给项目对话里的 Claude 的，文中的「我」指学生。说到 guided 课件的关卡、小节结构的地方，课堂里不适用；课堂里的段落由你用黑板指令一段一段写。有的组件这里只写了最常用的写法（末尾写着「更多写法」）：照着写就行；${lookupNote}写错了页面会把那个组件的完整写法附在提醒里。资料包里点了名的组件，完整写法已经放在下面；点了名时，没点名的不常用组件只留了标题（要用就按名字取）。\n\n${docs || '（组件说明没有打包进来。只用最常见的组件：answer、steps、scene、predict，写法要保守。）'}\n\n## 黑板指令\n\n${PROTOCOL_DOC}`,
       ...(memory ? [`你对学生的了解（学习台的记忆库）\n\n${mem?.text || ''}\n\n${desk}`] : []),
       `这节课的资料包\n\n课前由项目对话里的 Claude 准备，课中也可能更新。${memory ? '在学习台里，资料包是这节课的额外安排（推进建议、备好的题），学生的情况看上面的记忆。' : ''}\n\n${packBody}`,
       `黑板现状\n\n${boardStateText(board)}`,
@@ -986,7 +990,7 @@ export function summaryTurn(text) {
 
 // —— 下课小结（存进 class_notes，给项目对话里的 Claude 课后看）——
 // 学习台里（report：页面算好的课后报告，memory/report.js 的 reportText）：同一次调用里接着写整理单（memo 块），不多调用一次（docs/desk-plan.md 4.2）
-export function closingPrompt({ report = '' } = {}) {
+export function closingPrompt({ report = '', review = '' } = {}) {
   const base = doc`
 下课了。请写这节课的小结，给项目对话里的 Claude 课后看：它会据此判断学生掌握得怎么样、下一节从哪里接。
 
@@ -1004,7 +1008,7 @@ export function closingPrompt({ report = '' } = {}) {
 这节课在学习台里上。下面是页面按证据算好的课后报告（每道题的对错、没做完的、没交的草稿、学生说的话）。
 
 小结写完以后，接着写一个 ˋmemoˋ 块当**整理单**（写法和上课时一样，见「在学习台里上课」）：这节课新出现的错题（ˋerrorˋ）、弱点该怎么变（ˋweaknessˋ）、复现组怎么调（ˋreviewˋ）、下一节从哪接（ˋpositionˋ，一定写）、你这节课的教学失误（ˋslipˋ）。每条都写 ˋbasis=ˋ（下面报告里的组件 id 或证据 id）。等确认的那几类学生会在小结那块板上逐条点「确认 / 改 / 不要」；上课时已经记过的不用再写。整理单只写在 memo 块里，小结正文里不用重复。
-
+${review ? `\n这是复现课（复现组 ${review}）：整理单里一定写一行 ˋreview id=${review} result=过ˋ 或 ˋresult=没过ˋ（依据写这节课做的那几道题），学生确认了，档位才按结果变。\n` : ''}
 ${report}
 `}`;
 }

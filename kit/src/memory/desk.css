@@ -91,3 +91,75 @@
 .dk-edit-row:last-child { border-bottom: 0; }
 .dk-edit-row > span { flex: 1; min-width: 12em; }
 .dk-edit-row .btn { min-height: 44px; }
+/* 第 3、4 批：导航、课程地图、弱点表、错题本、以前的课、统计（pages.js） */
+.dk-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: -6px 0 16px; }
+.dk-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--faint); color: var(--body); font: 15px/1 var(--sans); text-decoration: none; }
+.dk-nav a[aria-current="true"] { border-color: var(--yellow); color: var(--yellow); background: rgb(var(--yellow-rgb) / 0.1); }
+.dk-warn { padding: 8px 10px; border-radius: 10px; background: rgb(var(--yellow-rgb) / 0.12); color: var(--chalk); }
+.dk-link { color: var(--yellow); }
+.dk-handoff { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--faint); }
+.dk-handoff .muted { flex: 1; min-width: 12em; font-size: 13.5px; }
+.dk-due .dk-row .btn { min-height: 44px; }
+.dk-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.dk-st { display: inline-block; padding: 2px 8px; border-radius: 999px; font: 12.5px/1.4 var(--sans); white-space: nowrap; border: 1px solid transparent; }
+.dk-st.st-none { color: var(--muted); border-color: var(--faint); }
+.dk-st.st-taught { color: var(--chalk); background: rgb(var(--chalk-rgb) / 0.1); }
+.dk-st.st-basic { color: var(--chalk); background: rgb(var(--yellow-rgb) / 0.2); }
+.dk-st.st-review { color: var(--chalk); background: rgb(var(--green-rgb) / 0.25); }
+.dk-st.st-lost { color: var(--chalk); background: rgb(var(--coral-rgb) / 0.25); }
+.dk-counts { display: block; margin: -4px 0 6px; font: 13px/1.4 var(--sans); color: var(--muted); }
+.dk-sec { margin: 8px 0 4px; }
+.dk-sec-h { margin: 10px 0 4px; font: 600 15.5px/1.4 var(--sans); color: var(--chalk); }
+.dk-sec-h .dk-counts { display: inline; margin-left: 8px; }
+.dk-blk { border-bottom: 1px solid var(--faint); }
+.dk-blk:last-child { border-bottom: 0; }
+.dk-blk.is-closed { opacity: 0.6; }
+.dk-blk-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 6px 0; border: 0; background: transparent; color: var(--body); font: 15.5px/1.4 var(--sans); text-align: left; cursor: pointer; }
+.dk-blk-row > span:first-of-type { flex: 1; min-width: 0; }
+.dk-blk-row code, .dk-sec-h code { font-size: 13px; color: var(--muted); }
+.dk-pts { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 8px; font-size: 13px; color: var(--muted); }
+.dk-panel { margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; background: rgb(var(--glow-rgb) / 0.04); border: 1px solid var(--faint); font: 14.5px/1.55 var(--sans); }
+.dk-panel p { margin: 4px 0; }
+.dk-sub-card { margin: 6px 0; }
+.dk-log { margin: 4px 0; padding-left: 1.2em; font-size: 13.5px; color: var(--body); }
+.dk-tl { list-style: none; margin: 4px 0; padding: 0; }
+.dk-tl li { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--faint); font-size: 14px; }
+.dk-tl li:last-child { border-bottom: 0; }
+.dk-tl li.is-ok .dk-tl-d { color: var(--green); }
+.dk-tl li.is-bad .dk-tl-d { color: var(--coral); }
+.dk-tl-d { flex: none; width: 3.2em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dk-thumb { max-height: 56px; max-width: 120px; vertical-align: middle; border-radius: 6px; }
+.dk-tag { flex: none; padding: 1px 8px; border-radius: 999px; font: 12.5px/1.5 var(--sans); background: rgb(var(--chalk-rgb) / 0.08); color: rgb(var(--chalk-rgb) / 0.8); white-space: nowrap; }
+.dk-tag.is-ok { background: rgb(var(--green-rgb) / 0.2); }
+.dk-tag.is-warn { background: rgb(var(--yellow-rgb) / 0.2); }
+.dk-tag.lv-L3, .dk-tag.lv-L2 { background: rgb(var(--coral-rgb) / 0.2); }
+.dk-filters { margin-bottom: 8px; }
+.dk-err { padding: 10px 0; border-bottom: 1px solid var(--faint); font: 14.5px/1.55 var(--sans); }
+.dk-err:last-child { border-bottom: 0; }
+.dk-err.is-resolved { opacity: 0.7; }
+.dk-err-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.dk-err p { margin: 3px 0; overflow-wrap: anywhere; }
+.dk-class-row { display: grid; grid-template-columns: 5.5em 1fr auto; gap: 10px; align-items: center; min-height: 56px; padding: 10px 0; border-bottom: 1px solid var(--faint); color: var(--body); text-decoration: none; font: 14.5px/1.45 var(--sans); }
+.dk-class-row:last-child { border-bottom: 0; }
+.dk-cr-d { display: grid; }
+.dk-cr-d .muted { font-size: 11.5px; }
+.dk-cr-m { min-width: 0; overflow-wrap: anywhere; }
+.dk-cr-n { text-align: right; font-size: 13.5px; white-space: nowrap; }
+.dk-summary { font: 14.5px/1.6 var(--sans); }
+.dk-tablewrap { overflow-x: auto; max-width: 100%; }
+.dk-table2 { width: 100%; border-collapse: collapse; font: 14px/1.45 var(--sans); }
+.dk-table2 th, .dk-table2 td { padding: 6px 8px; border-bottom: 1px solid var(--faint); text-align: left; vertical-align: top; }
+.dk-table2 th { color: var(--muted); font-weight: 500; }
+.dk-seq { font-variant-numeric: tabular-nums; letter-spacing: 0.1em; white-space: nowrap; }
+.dk-bars { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; align-items: end; height: 140px; margin: 10px 0 6px; }
+.dk-bar { display: grid; grid-template-rows: 1fr auto; height: 100%; align-items: end; text-align: center; }
+.dk-bar i { display: block; width: 100%; max-width: 18px; margin: 0 auto; min-height: 2px; border-radius: 4px 4px 0 0; background: var(--yellow); }
+.dk-bar span { font: 11px/1.6 var(--sans); color: var(--muted); }
+.dk-rate { position: relative; min-width: 8em; }
+.dk-rate i { display: block; height: 8px; border-radius: 4px; background: var(--yellow); margin-top: 6px; }
+.dk-rate span { font-size: 12.5px; color: var(--muted); }
+.dk-tl-d { width: 3.6em; white-space: nowrap; }
+.la-lesson .dk-table2 th { font: 500 13.5px/1.4 var(--sans); color: var(--muted); }
+.la-lesson .dk-pages .dk-card p, .la-lesson .dk-pages .dk-card li { font-size: 15px; line-height: 1.55; }
+.la-lesson .dk-table2 th, .la-lesson .dk-table2 td { border: 0; border-bottom: 1px solid var(--faint); background: transparent; }
+.dk-err .dk-k { min-width: 4.6em; }

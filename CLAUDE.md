@@ -23,7 +23,7 @@ npm test          # node --test，tests/ 下全部单元测试（纯函数为主
 npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 ```
 
-- 改了 `kit/src/` 或 `CLAUDE-PROJECT.md` 第三节，都要重新 build 并提交 `kit/dist/la-kit.js`。产物要和源码一致（`npm run build` 之后 `git status` 应该是干净的）。
+- 改了 `kit/src/` 或 `CLAUDE-PROJECT.md`，都要重新 build 并提交 `kit/dist/la-kit.js` 和 `kit/dist/docs/`（发布用的瘦身说明书）。产物要和源码一致（`npm run build` 之后 `git status` 应该是干净的）。
 - GitHub 上每次推送都会跑 `.github/workflows/test.yml`：`npm test`，再 build 一遍看 `kit/dist/la-kit.js` 和提交的是否一样（忘了重新 build 会红）。
 - 浏览器里看效果：在一个目录里放 `kit/dist/la-kit.js` 和 `kit/examples/*.html`，起一个静态服务器打开。
   - 示例页开头的 `<!doctype html>`、`<meta charset="utf-8">` 不能删：`la-kit.js` 的正则和 `String.raw` 里有中文（不能转义，转了课堂说明会变成 `\uXXXX`），浏览器不按 UTF-8 读就整页报错；没有 doctype 时 KaTeX 在怪异模式下排版不对。claude.ai 发布时会自己补上，所以课件模板里不用写。
@@ -102,7 +102,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ### 学习台和记忆库（`kit/src/memory/`，`docs/learner-memory-spec.md`）
 
-- 分三批做，每一批做完对话里的 Claude 用一节真课验过再做下一批。**现在做完的是第 1、2 批**（记忆库本身；在学习台里上课）。原来的第 3 批并进了 `docs/desk-plan.md`（学习台做强：记录、交互、内部 Claude 改记忆），以它为准；**desk-plan 做完了第 1 批（记录能力）、第 2 批（课堂里的 Claude 改记忆）**。
+- 分三批做，每一批做完对话里的 Claude 用一节真课验过再做下一批。**现在做完的是第 1、2 批**（记忆库本身；在学习台里上课）。原来的第 3 批并进了 `docs/desk-plan.md`（学习台做强：记录、交互、内部 Claude 改记忆），以它为准；**desk-plan 四批都做完了**（记录能力、课堂里的 Claude 改记忆、给我看的页面、复现课 / 启动语 / 说明书瘦身 / 组件手册按需带 / 统计）。
 - `schema.js`（纯函数）：十三类集合（`COLLECTIONS`：中文名、`history` / `state`、谁能写、编号的正则、必填、只能取的值、日期字段、指向别的类的字段、改了要记 log 的字段；第十三类是改动单 `pending`）；四种角色 `chat` / `class` / `page` / `me`（我在页面上点的），`assertWrite` 在代码层面拦住不该写的（课堂里的 Claude 只能写 `observations`、`slips`、`profile`；错题、弱点、复现组、位置只有 `chat` 和 `me`）；撤销时限 `UNDO_DAYS`；复现档位 1 → 3 → 7 → 14 → 30（`nextTier`、`reviewDue`：到期 = last + tier，页面算）；`applyChange` 改状态类时按字段记 log。
 - `check.js`（纯函数）：自检对话里的 Claude 写的记忆（编号、字段、日期、指向的 id、结论挂证据），外加指纹 `meta/ledger`：历史类（错题、观察、失误）改了、删了记一条提醒留 7 天；状态类改了 `tracked` 字段却没在 log 里记到新值就一直报（指纹停在旧值，补上 log 才前进）。结果写回 `meta/memcheck` 给对话里的 Claude 读。
 - `desk.js`：学习台首页（今天、自检、记忆库每类几条）；页面只写 `meta`。`sample.js` 是一份守规矩的示例记忆（`?dev` 的「填入示例记忆」、测试都用它）。说明书 `CLAUDE-PROJECT.md` 第七节的 JSON 例子拼起来要能过自检（`tests/memory.test.js` 守着）。
@@ -123,6 +123,12 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
   - `memoview.js`：改动单的画面（板顶那句话下面的一行小字、小结板上的整理单、首页的「待确认」）：确认 / 改 / 不要 / 撤销，点依据看那次作答原文。`classroom.js` 的 `decoratePage`（`boardview.js` 的 `decorate` 钩子）挂上去，板记着 `memo`（改动单 id，存进 `class_pages`）。
   - 下课：`desk.makeReport` 先算一份报告，`report.js` 的 `reportText` 放进 `closingPrompt({ report })`，小结和整理单同一次写；小结正文是 memo 块以外的文字。
   - 首页：「待确认」「我改记忆」两张卡。
+- 给我看的页面和第 4 批（desk-plan 第 3、4 批）：
+  - `views.js`（纯函数）：课程地图 `curriculumTree` / `blockDetail`、时间线 `blockTimeline`、弱点表 `weaknessRows`、错题本 `errorRows`、以前的课 `classRows`、统计 `learningStats`（按每节课报告的要点 `sessions.report.activeMs/items/first`）、复现课的资料包 `reviewPack`、启动语 `handoffText`。
+  - `pages.js`：这些页面的 DOM。地址 `#map`、`#weak`、`#errors`、`#classes`、`#classes/c-…`、`#stats` 换页不刷新（`desk.js` 的 `route`）；`#view/c-…` 整页刷新进只读的课堂（`enterClass(…, { readOnly })`：`session.js` 的 `readOnlyDb` 让写入什么都不做，课堂不调用 Claude、不能发言）。
+  - 复现课：首页到期的复现组「开复现课」→ `newClass(block, reviewPack(…))`，`sessions` 和资料包记 `review`，下课的 `closingPrompt({ review })` 要它写 `review id=… result=…`。
+  - 组件手册按需带：资料包写了 `components` 时，`prompt.js` 的 `systemDocs` 只带 `CORE_COMPONENTS` 和点名的（`subject.js` 的 `docsForSubject({ only })`），别的只留标题（没有工具时照旧全带）。
+  - 说明书瘦身：`kit/build-split.js`，构建时写 `kit/dist/docs/`（要提交）。
 - 浏览器里看：`kit/examples/desk-demo.html?dev`（「填入示例记忆」→「开新课」，输入框打「测试:整理」：模拟老师写一个 memo 块，三档各几条、再故意写两条不对的；下课时模拟小结后面带整理单。打「测试:记忆」：模拟老师真的调用 `memory_read`、`lesson_note`、`slip_note`，写一段标了 `point=tr` 的题；点「下课」后回首页看「上一节」、补记、导出备份）。
 
 ## 硬性规定（我明确要求过的，不要改）
@@ -140,7 +146,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ## 发布组件库
 
-改完并合进 `main` 后，要重新发布组件库 artifact（https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF）：页面是 `kit/examples/unit-matrix-vector.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`、`CLAUDE-PROJECT.md` 来自仓库根目录的同名文件，`capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}`。（学习台另外还要 `"downloads": true`，那是外部 Claude 照说明书第七节发布的，不在这里。）之后新发布的课件自动用新版，已经发布的保留当时复制的版本。**合进 `main`、重新发布组件库都不用问我**（我说过：肯定发），做完一批就合、就发。
+改完并合进 `main` 后，要重新发布组件库 artifact（https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF）：页面是 `kit/examples/unit-matrix-vector.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`CLAUDE-PROJECT.md` 来自 `kit/dist/docs/CLAUDE-PROJECT.md`（**瘦身版**：构建时 `kit/build-split.js` 从仓库根目录的整份说明拆出来，第三节只剩组件一览），`components/*.md` 来自 `kit/dist/docs/components/`（每个组件一份写法，外部要用哪个读哪个），`capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}`。（学习台另外还要 `"downloads": true`，那是外部 Claude 照说明书第七节发布的，不在这里。）之后新发布的课件自动用新版，已经发布的保留当时复制的版本。**合进 `main`、重新发布组件库都不用问我**（我说过：肯定发），做完一批就合、就发。
 
 - 我的 claude.ai 项目指令里只有一段话：让对话里的 Claude 每个新对话先读组件库里的 `CLAUDE-PROJECT.md`（见 README「设置」）。所以说明的全文要跟着组件库一起发布，不然各个对话里的 Claude 看到的还是旧版。
 - 版本号：`CLAUDE-PROJECT.md` 开头「版本：YYYY-MM-DD」（同一天再发布加 b、c）。每次重新发布组件库前都改成新的版本号；构建时打进 `la-kit.js`（`LAKit.version`，课堂和实时黑板的「⋯」菜单里显示），对得上就说明页面和说明是同一版。
