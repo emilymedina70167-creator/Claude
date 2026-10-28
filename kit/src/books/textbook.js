@@ -100,3 +100,30 @@ export function blockChunks(block, chunks = []) {
   const ids = Array.isArray(block?.chunks) ? block.chunks.map(String) : [];
   return ids.map((id) => chunks.find((c) => c.id === id)).filter(Boolean);
 }
+
+/**
+ * 课堂里的教材（docs/textbook-plan.md）：资料包点名的条目（main.chunks，备课时挑的）全文放进资料包的「教材原文」，
+ * 这一块挂着的、同一讲的条目列目录（按需取），点名条目的原页图给 image 组件按编号贴、view_image 自己看。
+ * main：资料包；block：课程地图的这一块（chunks 字段）；tools：能不能用 textbook_read 这些工具。
+ * 返回 { textbook（全文，没有就是空串）, catalog（目录 + 怎么取，没有书就是空串）, images: [{ name, id, title }] }
+ */
+export function textbookForClass({ main = null, block = null, books = [], chunks = [], tools = true, max = 40 * 1024 } = {}) {
+  if (!chunks.length) return { textbook: '', catalog: '', images: [] };
+  const named = (Array.isArray(main?.chunks) ? main.chunks : []).map((id) => chunks.find((c) => c.id === id)).filter(Boolean);
+  const mine = named.length ? named : blockChunks(block, chunks);
+  let used = 0;
+  const full = [];
+  for (const c of mine) {
+    const t = chunkText(c, books.find((b) => b.id === c.book));
+    if (full.length && used + bytes(t) > max) break;
+    used += bytes(t);
+    full.push(t);
+  }
+  const around = mine.map((c) => c.id);
+  const cat = bookCatalog(books, chunks, { around: around.length ? around : null, max: 6 * 1024 });
+  const how = tools
+    ? '上面没放全文的条目，用 textbook_read 按编号取（ids 一次写几条）；不知道在哪就用 textbook_search 按词找（比如「伴随矩阵」「克拉默」）；要核对转写、照原页讲，用 textbook_page 看那条的原页图，或者用 image 组件把原页贴上黑板（name 写条目编号）。每用一次工具要多等一整轮，挑准了再取。'
+    : '这个查看方式不能用工具：目录里的条目取不了全文。';
+  const images = mine.flatMap((c) => (Array.isArray(c.img) ? c.img.slice(0, 2) : []).map((id, i) => ({ name: i ? `${c.id}-${i + 1}` : c.id, id, title: `${c.title}（原页${c.page ? ` p.${c.page}` : ''}）` }))).slice(0, 16);
+  return { textbook: full.join('\n\n'), catalog: cat ? `${cat}\n\n${how}` : '', images };
+}

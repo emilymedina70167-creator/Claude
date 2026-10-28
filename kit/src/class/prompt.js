@@ -373,7 +373,8 @@ const PACK_FIELDS = [
 ];
 // 不放进资料包正文的字段：rules 放在第 1 部分；模型由页面固定（需求 2.3），资料包里写了也不理
 // components 是这节课要用的组件：它们的完整写法放进第 2 部分（packComponents），不写进资料包正文
-const PACK_SKIP = /^(rules|updatedAt|createdAt|id|model|modelTier|effort|components)$/i;
+// chunks（备课挑的教材条目，全文已经并进「教材原文」）、by / at / cost / date（学习台备课时记的）也不放
+const PACK_SKIP = /^(rules|updatedAt|createdAt|id|model|modelTier|effort|components|chunks|by|at|cost|date)$/i;
 
 export function packText(pack, budget = PACK_BUDGET) {
   const main = pack?.main && typeof pack.main === 'object' ? pack.main : {};

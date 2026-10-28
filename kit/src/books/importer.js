@@ -29,6 +29,8 @@ export function createImporter({ db, assets, ai, model, onProgress = () => {} })
   let busy = null; // 正在转的书的编号
   const report = (p) => { try { onProgress(p); } catch { /* 画面的错不影响入库 */ } };
   const blobs = new Map(); // 这次刚画好的页图（不用再从 assets 下载）：'B1/23' → Blob
+  let calls = 0; // 这次调用了 Claude 几次（拼条目时记进书的 cost）
+  let noEffort = false;
 
   async function upload(blob) {
     if (!assets) throw new Error('学习台没有 assets 权限，存不了原页图');
@@ -50,9 +52,11 @@ export function createImporter({ db, assets, ai, model, onProgress = () => {} })
       await db.doc(`books/${opts.book}`).set({ ...(old || {}), ...meta, createdAt: old?.createdAt || Date.now() });
       if (/\.docx$/i.test(file?.name || '')) return await addDocx(file, opts, meta);
       if (/\.pptx$/i.test(file?.name || '')) await addPptx(file, opts);
-      else if (/\.pdf$/i.test(file?.name || '')) await addPdf(file, opts);
+      else if (/\.pdf$/i.test(file?.name || '')) await addPdf(file, opts, meta);
       else await addImages(opts.files || [file], opts);
-      return await transcribe(opts.book, { meta });
+      // 停下了就只拼已经转好的；没停：剩下没转的、转坏的再转一遍（PDF 是第二次机会）
+      if (stopFlag) return await rebuild(opts.book);
+      return await transcribe(opts.book, { meta, fresh: false });
     } finally {
       busy = null;
     }
@@ -89,24 +93,34 @@ export function createImporter({ db, assets, ai, model, onProgress = () => {} })
     }
   }
 
-  async function addPdf(file, opts) {
+  // PDF：每 WINDOW 页「存原页图 → 转写」一轮，边存边转（几百页的书不用等全部画完才开始转；中途停下，前面的都转好了）
+  const WINDOW = 12;
+  async function addPdf(file, opts, meta) {
     report({ book: opts.book, stage: 'read', msg: '打开 PDF…' });
     const doc = await openPdf(await file.arrayBuffer());
     const from = Math.max(1, Number(opts.from) || 1);
     const to = Math.min(doc.numPages, Number(opts.to) || doc.numPages);
     await db.doc(`books/${opts.book}`).set({ ...(await db.doc(`books/${opts.book}`).get()).data(), pages: doc.numPages });
     const have = new Map((await pagesOf(opts.book)).map((p) => [p.n, p]));
-    for (let n = from; n <= to; n++) {
-      if (stopFlag) break;
-      if (have.get(n)?.status === 'done' && !opts.force) continue;
-      report({ book: opts.book, stage: 'render', done: n - from + 1, total: to - from + 1, msg: `存第 ${n} 页的原页图…` });
-      const blob = await renderPage(doc, n, { width: PAGE_WIDTH, quality: 0.8 });
-      const layer = await pageText(doc, n).catch(() => '');
-      const id = await upload(blob);
-      blobs.set(`${opts.book}/${n}/${id}`, blob);
-      await savePage(opts.book, n, { img: id, imgs: [id], layer: layer.slice(0, 6000), status: 'todo' });
+    try {
+      for (let a = from; a <= to && !stopFlag; a += WINDOW) {
+        const b = Math.min(to, a + WINDOW - 1);
+        const nums = [];
+        for (let n = a; n <= b && !stopFlag; n++) {
+          if (have.get(n)?.status === 'done' && !opts.force) continue;
+          report({ book: opts.book, stage: 'render', done: n - from + 1, total: to - from + 1, msg: `存第 ${n} 页的原页图（第 ${from}–${to} 页）…` });
+          const blob = await renderPage(doc, n, { width: PAGE_WIDTH, quality: 0.8 });
+          const layer = await pageText(doc, n).catch(() => '');
+          const id = await upload(blob);
+          blobs.set(`${opts.book}/${n}/${id}`, blob);
+          await savePage(opts.book, n, { img: id, imgs: [id], layer: layer.slice(0, 6000), status: 'todo' });
+          nums.push(n);
+        }
+        if (nums.length) await transcribe(opts.book, { pages: nums, meta, rebuild: false, fresh: false, of: { from, to } });
+      }
+    } finally {
+      doc.destroy?.();
     }
-    doc.destroy?.();
   }
 
   async function addImages(list, opts) {
@@ -141,9 +155,9 @@ export function createImporter({ db, assets, ai, model, onProgress = () => {} })
   /**
    * 把还没转（todo）和转坏了（error）的页交给 Claude 看图转写，再拼成条目。pages：只转这几页（重转用，force 也转已经好的）
    */
-  async function transcribe(book, { pages = null, force = false, meta = null } = {}) {
+  async function transcribe(book, { pages = null, force = false, meta = null, rebuild: again = true, fresh = true, of = null } = {}) {
     busy = busy || book;
-    stopFlag = false;
+    if (fresh) stopFlag = false;
     const info = meta || (await db.doc(`books/${book}`).get()).data() || {};
     const all = await pagesOf(book);
     const todo = all.filter((p) => (pages ? pages.includes(p.n) && (force || p.status !== 'done') : p.status === 'todo' || p.status === 'error'));
@@ -151,8 +165,8 @@ export function createImporter({ db, assets, ai, model, onProgress = () => {} })
     const batches = [];
     for (let i = 0; i < todo.length; i += per) batches.push(todo.slice(i, i + per));
     let done = 0;
-    let calls = 0;
     let fatal = null;
+    const range = of ? `（第 ${of.from}–${of.to} 页）` : '';
     // 上一页停在哪（最后一条、所在的讲和节）：给 Claude 判断这几页开头是不是接着上一页
     const ctxBefore = (n) => {
       let chapter = '', section = '';
@@ -173,8 +187,10 @@ export function createImporter({ db, assets, ai, model, onProgress = () => {} })
       for (let attempt = 0; attempt < 2 && !res; attempt++) {
         try {
           calls++;
-          res = await ai.call(prompt, { model, effort: 'medium', modelTier: 'complex', images, cache: false });
+          // 看图转写是认字、不是推理：effort 用 medium 省思考的 token；这个查看方式不认 effort 时去掉它再试
+          res = await ai.call(prompt, { model, ...(noEffort ? {} : { effort: 'medium' }), modelTier: 'complex', images, cache: false });
         } catch (e) {
+          if (!noEffort && ['invalid_argument', 'invalid_request', 'bad_request', 'unsupported_option'].includes(e?.code)) { noEffort = true; attempt--; continue; }
           if (e?.code === 'rate_limited' && attempt === 0) { report({ book, stage: 'transcribe', done, total: todo.length, msg: '请求太快，歇 20 秒…' }); await sleep(20000); continue; }
           if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'images_unavailable'].includes(e?.code)) fatal = e;
           throw e;
@@ -190,7 +206,7 @@ export function createImporter({ db, assets, ai, model, onProgress = () => {} })
         if (k >= 0) all[k] = { ...rec, n: p.n };
       }
       done += batch.length;
-      report({ book, stage: 'transcribe', done, total: todo.length, msg: `转好了 ${done} / ${todo.length} 页` });
+      report({ book, stage: 'transcribe', done, total: todo.length, msg: `转好了第 ${nums.join('、')} 页${range}` });
     }
     let next = 0;
     const worker = async () => {
@@ -205,14 +221,15 @@ export function createImporter({ db, assets, ai, model, onProgress = () => {} })
     };
     report({ book, stage: 'transcribe', done: 0, total: todo.length, msg: todo.length ? `开始转写 ${todo.length} 页（${batches.length} 次调用）…` : '没有要转的页' });
     await Promise.all(Array.from({ length: Math.min(WORKERS, batches.length) }, worker));
-    const r = await rebuild(book, { calls });
-    busy = null;
-    if (fatal) throw fatal;
+    if (fatal) { await rebuild(book); throw fatal; }
+    if (!again) return null;
+    const r = await rebuild(book);
+    if (fresh) busy = null;
     return r;
   }
 
   /** 把转好的页拼成条目写进去；改过、核对过的条目保留 */
-  async function rebuild(book, { calls = 0 } = {}) {
+  async function rebuild(book) {
     report({ book, stage: 'save', msg: '拼成条目…' });
     const info = (await db.doc(`books/${book}`).get()).data() || {};
     const pages = await pagesOf(book);
@@ -224,6 +241,7 @@ export function createImporter({ db, assets, ai, model, onProgress = () => {} })
     await writeChunks(book, chunks, { replace: true });
     const left = pages.filter((p) => p.status !== 'done').length;
     const cost = { calls: (info.cost?.calls || 0) + calls, pages: pages.filter((p) => p.status === 'done').length };
+    calls = 0;
     await db.doc(`books/${book}`).set({ ...info, status: left ? 'partial' : 'ready', chunks: chunks.length, toc, pagesDone: cost.pages, pagesLeft: left, cost, at: Date.now() });
     report({ book, stage: 'done', done: chunks.length, total: chunks.length, msg: `${chunks.length} 条${left ? `，还有 ${left} 页没转好` : ''}` });
     return { chunks: chunks.length, left };

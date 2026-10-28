@@ -17,7 +17,9 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 test('需求第 2 节的十二类都在（加上 desk-plan 4.1 的改动单），每类的写入方照表', () => {
   assert.deepEqual(MEMORY_COLLECTIONS.sort(), ['curriculum', 'errors', 'evidence', 'mastery', 'observations', 'pending', 'position', 'profile', 'reviews', 'rules', 'sessions', 'slips', 'weaknesses'].sort());
   // 掌握、规则、课程地图只有对话里的 Claude 写；错题、弱点、复现组、位置多了「我确认」这条路（me）；偏好课堂里的 Claude 能直接写
-  for (const c of ['rules', 'curriculum', 'mastery']) assert.deepEqual(COLLECTIONS[c].writers, ['chat'], c);
+  for (const c of ['rules', 'mastery']) assert.deepEqual(COLLECTIONS[c].writers, ['chat'], c);
+  // 课程地图：学习台上「挂课程地图」我确认了的，页面替我写（docs/textbook-plan.md）
+  assert.deepEqual(COLLECTIONS.curriculum.writers, ['chat', 'me']);
   for (const c of ['errors', 'weaknesses', 'reviews', 'position']) assert.deepEqual(COLLECTIONS[c].writers, ['chat', 'me'], c);
   assert.deepEqual(COLLECTIONS.profile.writers, ['chat', 'class', 'me']);
   assert.deepEqual(COLLECTIONS.evidence.writers, ['page']);
@@ -34,7 +36,7 @@ test('canWrite / assertWrite：课堂里的 Claude 只能写观察和自己的�
   for (const c of ['weaknesses', 'mastery', 'reviews', 'errors', 'rules', 'position', 'evidence', 'curriculum']) assert.ok(!canWrite('class', c), c);
   // 我点了确认才写的几类：me 能写；掌握、规则我在页面上也改不了（只能提议，由对话里的 Claude 判断）
   for (const c of ['errors', 'weaknesses', 'reviews', 'position', 'profile']) assert.ok(canWrite('me', c), c);
-  for (const c of ['mastery', 'rules', 'curriculum', 'evidence']) assert.ok(!canWrite('me', c), c);
+  for (const c of ['mastery', 'rules', 'evidence']) assert.ok(!canWrite('me', c), c);
   assert.throws(() => assertWrite('class', 'mastery'), /课堂里的 Claude不能写 mastery（掌握状态）.*observations/);
   assert.doesNotThrow(() => assertWrite('chat', 'weaknesses'));
   assert.ok(canWrite('page', 'evidence') && !canWrite('chat', 'evidence'));

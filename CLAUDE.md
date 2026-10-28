@@ -5,7 +5,7 @@
 - 面向我的说明：`README.md`
 - 放进 claude.ai 项目指令、教 Claude 写课件的说明：`CLAUDE-PROJECT.md`（第三节「组件参考」还会在构建时打包进 `la-kit.js`，给课堂里的 Claude 当组件手册，见下文）
 - 需求原文：`docs/live-board-spec.md`（实时黑板）、`docs/classroom-spec.md`（课堂模式）、`docs/teaching-tools-spec.md`（课堂教具：板书标注、会动的矩阵、页面验算）、`docs/live-tools-spec.md`（实时黑板追上课堂：标注、让图动、板顶的话）、`docs/learner-memory-spec.md`（学习台的系统记忆：分类存储、各管一块，两个 Claude 共用）
-- **一个学习台（所有东西在一处）：`docs/hub-plan.md`**；记忆分两层（全文 + 目录）、省额度不丢信息：`docs/memory-plan.md`；学习台的记录、交互、内部 Claude 改记忆：`docs/desk-plan.md`（记录能力、交互、内部 Claude 改记忆；外内协作的分工；分批和验收）。新对话做学习台先读它。
+- **一个学习台（所有东西在一处）：`docs/hub-plan.md`**；记忆分两层（全文 + 目录）、省额度不丢信息：`docs/memory-plan.md`；教材板块（入库、按需读）和学习台自己备课：`docs/textbook-plan.md`；学习台的记录、交互、内部 Claude 改记忆：`docs/desk-plan.md`（记录能力、交互、内部 Claude 改记忆；外内协作的分工；分批和验收）。新对话做学习台先读它。
 - 下一步的总计划（线代和 408 一起做到优秀：验收尺子、外壳升级、线代六章、408 加深）和进度：`docs/quality-plan.md`
 - 计算机四门课第一轮（第 0～5 批）的计划：`docs/408-plan.md`；数据结构 `trace` / `tree` / `net` 的细节方案：`docs/ds-components-design.md`
 
@@ -132,6 +132,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
   - 复现课：首页到期的复现组「开复现课」→ `newClass(block, reviewPack(…))`，`sessions` 和资料包记 `review`，下课的 `closingPrompt({ review })` 要它写 `review id=… result=…`。
   - 组件手册按需带：资料包写了 `components` 时，`prompt.js` 的 `systemDocs` 只带 `CORE_COMPONENTS` 和点名的（`subject.js` 的 `docsForSubject({ only })`），别的只留标题（没有工具时照旧全带）。
   - 说明书瘦身：`kit/build-split.js`，构建时写 `kit/dist/docs/`（要提交）。
+- 教材板块和自己备课（`kit/src/books/`，`docs/textbook-plan.md`）：`zip.js`（解 zip，用浏览器的 DecompressionStream）、`office.js`（docx 段落、pptx 每页的字和图）、`ingest.js`（看图转写的提示词和读回、拼条目 `assembleChunks`、文稿切条，纯函数）、`textbook.js`（目录、搜索、按编号取、课堂里的教材 `textbookForClass`，纯函数）、`plan.js`（挂课程地图、备课的提示词和读回，纯函数）、`pdf.js`（取 `pdf/` 下的 pdf.js、画页、文字层）、`importer.js`（入库流程：存原页图 → 几页一次看图转写 → 拼条目，停了能接着转）、`bookview.js`（学习台「教材」页 `#books`）、`planview.js`（挂课程地图、首页的备课）、`devmock.js`（`?dev` 的模拟 Claude）。数据在 `books/{B1}`、`books/{B1}/pages/{页}`、`books/{B1}/chunks/{B1-23.1}`。课堂（`classroom.js`）：资料包点名的条目全文并进「教材原文」、目录一节，工具 `textbook_read` / `textbook_search` / `textbook_page`，`image` 组件写条目编号贴原页（`session.chunkImage`）。
 - 分科（数学 / 408 / 英语，`space.js`，纯函数）：一个学习台三个空间。课程编号带门课前缀（线代不带；`DS-` `OS-` `CO-` `CN-` `EN-`，`courseOf` / `spaceOfId` / `subjectOf`），错题跟着前缀编号；弱点、复现组按挂的块 / 错题认（或写 `space`）；`position` 每科一条（`now`、`now-cs`、`now-en`，`positionId`），资料包每科一份（`pack/main`、`main-cs`、`main-en`，`packIds`）。首页顶上切换（`desk.js` 的 `setSpace`，这台设备记着），首页各卡、页面、待确认都只看这一科（`filterSpace`）；「关于我」、规则、失误、自检、备份全科共用。开课时 `sessions` 记 `space`、`subject`，`enterClass` 把 `session.subject` 设成这一块的门课，课堂按它带组件说明和教法；记忆摘要也只带这一科。
 - 浏览器里看：`kit/examples/desk-demo.html?dev`（「填入示例记忆」→「开新课」，输入框打「测试:整理」：模拟老师写一个 memo 块，三档各几条、再故意写两条不对的；下课时模拟小结后面带整理单。打「测试:记忆」：模拟老师真的调用 `memory_read`、`lesson_note`、`slip_note`，写一段标了 `point=tr` 的题；点「下课」后回首页看「上一节」、补记、导出备份）。
 
@@ -150,7 +151,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 
 ## 发布：学习台是唯一的 artifact（`docs/hub-plan.md`）
 
-说明书、组件写法、`la-kit.js`、记忆、每一节课（课堂、实时黑板、自学单元）都在**学习台**里（https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo）。改完并合进 `main` 后，重新发布学习台：页面是 `kit/desk.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`CLAUDE-PROJECT.md` 来自 `kit/dist/docs/CLAUDE-PROJECT.md`（**瘦身版**：构建时 `kit/build-split.js` 从仓库根目录的整份说明拆出来，第三节只剩组件一览），`components/*.md` 来自 `kit/dist/docs/components/`（每个组件一份写法，外部要用哪个读哪个），`capabilities` 不传（沿用已有的 `sample`（带图）、`db`、`assets`、`downloads`）。数据库、assets 不受发布影响。**合进 `main`、重新发布学习台都不用问我**（我说过：肯定发），做完一批就合、就发。
+说明书、组件写法、`la-kit.js`、记忆、每一节课（课堂、实时黑板、自学单元）都在**学习台**里（https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo）。改完并合进 `main` 后，重新发布学习台：页面是 `kit/desk.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`pdf/*` 来自 `kit/dist/pdf/`（读 PDF 用的 pdf.js 和解码器，导入 PDF 时才取；`.mjs` 写 `text/javascript`，`.wasm` 写 `application/wasm`；只在 pdf.js 升级时要重新传），`CLAUDE-PROJECT.md` 来自 `kit/dist/docs/CLAUDE-PROJECT.md`（**瘦身版**：构建时 `kit/build-split.js` 从仓库根目录的整份说明拆出来，第三节只剩组件一览），`components/*.md` 来自 `kit/dist/docs/components/`（每个组件一份写法，外部要用哪个读哪个），`capabilities` 不传（沿用已有的 `sample`（带图）、`db`、`assets`、`downloads`）。数据库、assets 不受发布影响。**合进 `main`、重新发布学习台都不用问我**（我说过：肯定发），做完一批就合、就发。
 
 - 外部 Claude 不发布任何 artifact：实时黑板、自学单元开在学习台里（`sessions` 的 `kind: live / unit`），课堂由页面开。说明书第一节、第五节、第七节写着。
 - 我的 claude.ai 项目指令里只有一段话：让对话里的 Claude 每个新对话先读学习台里的 `CLAUDE-PROJECT.md`（见 README「设置」）。所以说明的全文要跟着学习台一起发布。

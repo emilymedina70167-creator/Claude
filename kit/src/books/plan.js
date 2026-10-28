@@ -4,6 +4,7 @@
 //   prepPrompt / parsePrep。资料包的样子和对话里的 Claude 写的一样（pack/main、pack/problems），课堂照常读。
 // 纯函数，有测试；画面和调用在 planview.js。
 import { chunkLine, chunkText } from './textbook.js';
+import { fixLatexEscapes } from './ingest.js';
 
 const one = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const list = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v === '' ? [] : [v]).map(String);
@@ -12,7 +13,8 @@ const jsonOf = (raw) => {
   if (raw && typeof raw === 'object') return raw;
   const m = String(raw ?? '').match(/\{[\s\S]*\}/);
   if (!m) throw new Error('回的不是 JSON');
-  return JSON.parse(m[0]);
+  // 公式里单个反斜杠被 JSON 吃掉的（\frac 成了换页符）补回来
+  return fixLatexEscapes(JSON.parse(m[0]));
 };
 
 /** 课程地图里一块的一行（给 Claude 看已有的块）：编号 标题：范围（挂了几条资料） */
@@ -132,7 +134,7 @@ export function prepPrompt({ block, material = [], books = [], memoryText = '', 
     '',
     `## 能用的组件\n${components.join('、')}`,
     '',
-    '## 要你写的资料包（只输出 JSON，不要别的文字）',
+    '## 要你写的资料包（只输出 JSON，不要别的文字；字符串里公式的反斜杠写两个，比如 "$\\\\frac{1}{2}$"）',
     '{',
     '  "unit": "这节课的名字（短）",',
     '  "goal": "这节课要学生最后能做到什么（具体到能检验，比如「看到行成比例的方阵能认出秩一，并用 tr 写出 Aⁿ」）",',

@@ -34,6 +34,7 @@ import { renderClass, MODEL } from '../class/classroom.js';
 import { getAI } from '../ai.js';
 import { createBooksView } from '../books/bookview.js';
 import { createPlanner } from '../books/planview.js';
+import { createDevAI } from '../books/devmock.js';
 import { loadBooks } from '../books/importer.js';
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
@@ -111,8 +112,10 @@ export async function renderDesk(root, meta) {
   // 对话里的 Claude 备好的下一节课（资料包，每科一份：pack/main、pack/main-cs、pack/main-en）：开新课时抄一份进那节课
   let space = loadSpace();
   // 教材页（data 在下面订阅着；planner 用的时候才取）和自己备课（books/）：转写、挂课程地图、备课都用 Opus 5.5
-  const planner = createPlanner({ db, getAI, model: MODEL, getData: () => data, space: () => space });
-  const booksView = createBooksView($('.dk-bookpage'), { db, assets: store.assets, getAI, space: () => space, model: MODEL, plan: { open: (host, id) => planner.openMap(host, id) } });
+  // 本地试用（?dev）没有页面里的 Claude：用模拟的把入库、挂地图、备课走通
+  const deskAI = store.dev ? async () => (await getAI()) || createDevAI() : getAI;
+  const planner = createPlanner({ db, getAI: deskAI, model: MODEL, getData: () => data, space: () => space });
+  const booksView = createBooksView($('.dk-bookpage'), { db, assets: store.assets, getAI: deskAI, space: () => space, model: MODEL, plan: { open: (host, id) => planner.openMap(host, id) } });
 
   const packs = Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: null, problems: null }]));
   for (const k of SPACE_KEYS) {
@@ -186,7 +189,7 @@ export async function renderDesk(root, meta) {
   function writeBriefs(today) {
     if (failed.size) return;
     for (const k of SPACE_KEYS) {
-      const b = deskBrief(data, { space: k, today, kitUrl: KIT_URL, deskUrl: deskUrl(), pack: packs[k].main });
+      const b = deskBrief(data, { space: k, today, kitUrl: KIT_URL, deskUrl: deskUrl(), pack: packs[k].main, books: booksView.books() });
       if (lastBrief[k] === b.text) continue;
       lastBrief[k] = b.text;
       put('meta', briefId(k), { space: k, text: b.text, kit: VERSION, today, at: Date.now() }).catch(() => {});
@@ -415,7 +418,8 @@ export async function renderDesk(root, meta) {
         }
       }
       const today = toDate(Date.now());
-      const file = backupFile({ memory: data, pack, sessions, evidence, boards, kit: VERSION, today });
+      const books = await loadBooks(db).catch(() => null);
+      const file = backupFile({ memory: data, pack, sessions, books, evidence, boards, kit: VERSION, today });
       const blob = new Blob([JSON.stringify(file, null, 1)], { type: 'application/json' });
       await dl.save({ filename: backupName(today), data: blob });
       note.textContent = `导出了 ${file.docs.length} 条（${mb(blob.size)}）。`;

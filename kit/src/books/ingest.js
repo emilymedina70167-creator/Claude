@@ -25,50 +25,96 @@ export function transcribePrompt(book = {}, pages = [], ctx = {}) {
   const where = [ctx.chapter ? `现在在「${ctx.chapter}」` : '', ctx.section ? `「${ctx.section}」` : ''].filter(Boolean).join('');
   return [
     `你在把一本教材的扫描页逐页转写成文字，存进学生的学习台；以后课堂里的老师（也是 Claude）讲课时按需取用这些文字，学生手边没有书，所以一个字、一个数都不能错。`,
-    `教材：${book.title || '（没写书名）'}${book.subject ? `（${book.subject}）` : ''}。这次附了 ${pages.length} 张图，依次是 PDF 的第 ${pages.join('、')} 页。${where ? `${where}。` : ''}${ctx.last ? `上一页最后一条是 ${ctx.last.kind}「${ctx.last.title}」，这次第一页开头如果接着它写，那一条标 "cont": true。` : ''}`,
+    `教材：${book.title || '（没写书名）'}${book.subject ? `（${book.subject}）` : ''}。这次附了 ${pages.length} 张图，依次是 PDF 的第 ${pages.join('、')} 页。${where ? `${where}。` : ''}${ctx.last ? `上一页最后一条是 ${ctx.last.kind}「${ctx.last.title}」，这次第一页开头如果接着它写，那一条的开头那行末尾写「| 接上页」。` : ''}`,
     '',
     '要求：',
     '1. 忠实转写：不总结、不改写、不补充、不纠正原书。每个数字、符号、上下标、矩阵元素都照原页。看不清的地方写【看不清】，不要猜。',
     '2. 公式用 LaTeX：行内 $…$，单独成行的 $$…$$；矩阵 \\begin{pmatrix}…\\end{pmatrix}，行列式 \\begin{vmatrix}…\\end{vmatrix}，方程组 \\begin{cases}…\\end{cases}。正文里的普通文字不要放进 $ 里。',
-    `3. 按内容切成「条」，kind 只能是：标题、${KINDS.filter((k) => k !== '文稿' && k !== '讲义').join('、')}。例题连同它的解答放在同一条，定理连同证明放在同一条；一段讲解是一条「说明」。`,
-    '4. 标题条写 level：1 是章（讲）、2 是节、3 是小节；title 写标题原文，text 留空字符串。',
-    '5. 每条的 title：例题、定义、定理照书上的编号和名字写（如「例2.1」「定理3（克拉默法则）」）；说明写这段讲什么（十个字以内）。',
-    '6. 一条跨页：下一页开头接着写的那一条标 "cont": true，text 只写这一页上的部分，title 照抄上一页那条的。',
-    '7. 图：kind 写「图表」，text 用一两句话说图里画了什么（坐标、箭头、标的字）。表格用 Markdown 表格转写。',
-    '8. 页眉、页脚、页码、书名水印、广告不要。整页是空白或只有图片装饰，items 写空数组。',
-    ...(ctx.kind === 'slides' ? ['', '这些图是讲义（幻灯片、板书截图）里的图：同样照上面的规矩转写图里的字和公式；图里没有字的（照片、装饰）items 写空数组。'] : []),
+    `3. 按内容切成「条」，类型只能是：${KINDS.filter((k) => k !== '文稿' && k !== '讲义').join('、')}。例题连同它的解答放在同一条，定理连同证明放在同一条；一段讲解是一条「说明」。`,
+    '4. 章节标题单独一行，类型写「标题1」（章、讲）、「标题2」（节）、「标题3」（小节），后面是标题原文，下面不写正文。',
+    '5. 每条的名字：例题、定义、定理照书上的编号和名字写（如「例2.1」「定理3（克拉默法则）」）；说明写这段讲什么（十个字以内）。',
+    '6. 一条跨页：下一页开头接着写的那一条，名字照抄上一页那条的，开头那行末尾写「| 接上页」，正文只写这一页上的部分。',
+    '7. 图：类型写「图表」，正文用一两句话说图里画了什么（坐标、箭头、标的字）。表格用 Markdown 表格转写。',
+    '8. 页眉、页脚、页码、书名水印、广告不要。整页是空白或只有装饰，那一页只写「=== 第 N 页」就行。',
+    ...(ctx.kind === 'slides' ? ['', '这些图是讲义（幻灯片、板书截图）里的图：同样照上面的规矩转写图里的字和公式；图里没有字的（照片、装饰）那一页只写「=== 第 N 页」。'] : []),
     ...(ctx.layer && Object.values(ctx.layer).some(Boolean) ? ['', '下面是这几页 PDF 自带的文字层（可能错行、断字，公式是乱的）：汉字、数字可以对照它，公式、矩阵一律以图为准。', ...Object.entries(ctx.layer).filter(([, t]) => t).map(([n, t]) => `【第 ${n} 页的文字层】\n${String(t).slice(0, 4000)}`)] : []),
     '',
-    '只输出 JSON，不要别的文字：',
-    '{"pages":[{"page":页码,"items":[{"kind":"例题","title":"例2.1","text":"…","cont":false}]}]}',
+    '只输出下面这种格式，不要别的话（不用 JSON：公式里的反斜杠照常写一个）：',
+    '=== 第 23 页',
+    '--- 标题2 | §2 矩阵的运算',
+    '--- 例题 | 例2.1 | 接上页',
+    '解：……$A^n = 3^{n-1}A$……',
+    '--- 定义 | 定义2.3',
+    '……',
+    '=== 第 24 页',
+    '……',
   ].join('\n');
 }
 
-/** 读 Claude 回的 JSON（可能包在 ```json 里）；检查每一页都在、每条的 kind 认得 */
+const HEAD_RE = /^---\s*([^|]+?)\s*(?:\|\s*(.*?))?\s*(?:\|\s*(接上页)\s*)?$/;
+/**
+ * 读 Claude 回的转写：「=== 第 N 页」分页，「--- 类型 | 名字 | 接上页」开一条，下面到下一个标记前是正文（原样，公式不转义）。
+ * 也认旧的 JSON 写法 {"pages":[…]}。返回 { pages: Map(页码 → items), missing: 没转出来的页 }
+ */
 export function parseTranscription(raw, pages = []) {
-  let obj = raw;
-  if (typeof raw === 'string') {
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error('回的不是 JSON');
-    obj = JSON.parse(m[0]);
-  }
-  const list = Array.isArray(obj?.pages) ? obj.pages : null;
-  if (!list) throw new Error('JSON 里没有 pages');
+  const src = String(raw ?? '');
+  if (/^\s*(```json)?\s*\{/.test(src) && /"pages"/.test(src)) return parseJsonTranscription(src, pages);
   const out = new Map();
-  list.forEach((p, i) => {
+  let page = null;
+  let item = null;
+  const flush = () => { if (item && page !== null) { item.text = clean(item.lines.join('\n')); delete item.lines; if (item.kind === '标题' ? item.title : item.text || item.title) out.get(page).push(item); } item = null; };
+  for (const line of src.replace(/\r\n?/g, '\n').split('\n')) {
+    const pm = line.match(/^===\s*第\s*(\d+)\s*页/);
+    if (pm) { flush(); page = Number(pm[1]); if (!out.has(page)) out.set(page, []); continue; }
+    const hm = page !== null && line.match(HEAD_RE);
+    if (hm) {
+      flush();
+      const k = hm[1].trim();
+      const lv = k.match(/^标题\s*([123])?$/);
+      const rest = String(hm[2] || '');
+      const cont = !!hm[3] || /\|\s*接上页\s*$/.test(rest);
+      const title = clean(rest.replace(/\|\s*接上页\s*$/, '')).slice(0, 80);
+      item = lv ? { kind: '标题', level: Number(lv[1] || 2), title, cont: false, lines: [] } : { kind: ITEM_KINDS.has(k) ? k : '说明', title, cont, lines: [] };
+      continue;
+    }
+    if (item) item.lines.push(line);
+    else if (page !== null && line.trim() && !/^```/.test(line)) item = { kind: '说明', title: '', cont: false, lines: [line] };
+  }
+  flush();
+  if (!out.size) throw new Error('回的不是转写（没有「=== 第 N 页」）');
+  return { pages: out, missing: pages.filter((n) => !out.has(n)) };
+}
+
+function parseJsonTranscription(raw, pages) {
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('回的不是 JSON');
+  const obj = fixLatexEscapes(JSON.parse(m[0]));
+  const out = new Map();
+  (Array.isArray(obj?.pages) ? obj.pages : []).forEach((p, i) => {
     const n = Number(p?.page ?? pages[i]);
     if (!Number.isInteger(n)) return;
-    const items = (Array.isArray(p.items) ? p.items : []).map((it) => ({
-      kind: ITEM_KINDS.has(String(it?.kind)) ? String(it.kind) : '说明',
-      title: clean(it?.title).slice(0, 80),
-      text: clean(it?.text),
-      cont: !!it?.cont,
+    out.set(n, (Array.isArray(p.items) ? p.items : []).map((it) => ({
+      kind: ITEM_KINDS.has(String(it?.kind)) ? String(it.kind) : '说明', title: clean(it?.title).slice(0, 80), text: clean(it?.text), cont: !!it?.cont,
       ...(it?.kind === '标题' ? { level: [1, 2, 3].includes(Number(it.level)) ? Number(it.level) : 2 } : {}),
-    })).filter((it) => it.kind === '标题' ? it.title : it.text || it.title);
-    out.set(n, items);
+    })).filter((it) => (it.kind === '标题' ? it.title : it.text || it.title)));
   });
-  const missing = pages.filter((n) => !out.has(n));
-  return { pages: out, missing };
+  return { pages: out, missing: pages.filter((n) => !out.has(n)) };
+}
+
+/**
+ * JSON 里的 LaTeX 常被写成单个反斜杠：「\frac」读出来成了换页符 + rac、「\begin」成了退格 + egin。
+ * 这些控制字符正文里不会出现，换回反斜杠；换行、制表后面紧跟 LaTeX 命令名的（\neq、\times）也换回来
+ */
+export function fixLatexEscapes(v) {
+  if (typeof v === 'string') {
+    return v.replace(/\f/g, '\\f').replace(/\x08/g, '\\b')
+      .replace(/\t(?=(?:imes|heta|au|ext|frac|ilde|op|riangle|o\b))/g, '\\t')
+      .replace(/\r(?=(?:ho|ight|angle|m\b|ceil|floor))/g, '\\r')
+      .replace(/\n(?=(?:eq|e\b|abla|u\b|ot|leq|geq|mid|exists|subseteq|i\b|ewline))/g, '\\n');
+  }
+  if (Array.isArray(v)) return v.map(fixLatexEscapes);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fixLatexEscapes(x)]));
+  return v;
 }
 
 /**

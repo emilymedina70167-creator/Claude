@@ -276,8 +276,10 @@ export { OUTCOME_TEXT, daysBetween };
 // 有什么等它做，和这一科记忆库里每一样东西的编号（一条一行，要全文再按编号读），不用一类一类 list 十几次
 export const BRIEF_MAX = 24 * 1024;
 export const briefId = (space) => (space === 'math' ? 'brief' : `brief-${space}`);
-export function deskBrief(mem = {}, { space = 'math', today = toDate(Date.now()), kitUrl = '', deskUrl = '', pack = null } = {}) {
-  const head = handoffText(filterSpace(mem, space), { kitUrl, deskUrl, today, pack, space });
+export function deskBrief(mem = {}, { space = 'math', today = toDate(Date.now()), kitUrl = '', deskUrl = '', pack = null, books = [] } = {}) {
+  const mine = books.filter((b) => !b.space || b.space === space);
+  const head = handoffText(filterSpace(mem, space), { kitUrl, deskUrl, today, pack, space })
+    + (mine.length ? `\n- 学习台里的资料（books，条目在 books/{编号}/chunks）：${mine.map((b) => `${b.id}《${cut(b.title, 30)}》${b.chunks ? ` ${b.chunks} 条` : ''}${b.status === 'partial' ? '（没转完）' : ''}`).join('；')}。` : '');
   const view = classView(mem, { space, forClass: false });
   const cat = memoryCatalog(view, { tools: false, today, max: BRIEF_MAX - utf8(head) - 600 });
   const how = '要哪一条的全文，用 ArtifactData 按编号读（get；同一类几条用 query 的 where id in […]）。这份是页面在学习台打开时写的（看 at）；隔了很久没打开，或者你刚写过记忆，以数据库为准。';

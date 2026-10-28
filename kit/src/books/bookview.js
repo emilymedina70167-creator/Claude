@@ -5,6 +5,7 @@ import { toast } from '../record.js';
 import { assetUrl } from '../live/store.js';
 import { createImporter, kindOfFile, FILE_KINDS } from './importer.js';
 import { nextBookCode, PAGES_PER_CALL } from './ingest.js';
+import { openPdf } from './pdf.js';
 import { BOOK_KINDS, chunkLine } from './textbook.js';
 import { SPACES } from '../memory/space.js';
 
@@ -27,10 +28,12 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
   const pagesCache = new Map();
   const open = new Set();
   let editing = null;
+  let pdfPages = null; // 选好的 PDF 有几页（估算调用次数）
 
   db.collection('books').onSnapshot((s) => { books = docsOf(s); if (route) paint(); }, () => {});
   host.addEventListener('click', onClick);
   host.addEventListener('change', onChange);
+  host.addEventListener('input', (e) => { if (e.target.matches('.bk-form input[name=from], .bk-form input[name=to]')) paintCost(); });
 
   async function getImporter() {
     if (importer) return importer;
@@ -58,6 +61,8 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
     if (!progress) return '<div class="bk-progress" hidden></div>';
     const pct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
     const running = !!importer?.busy;
+    // 转完了：只留一行结果，不留进度条
+    if (!running && progress.stage === 'done') return `<div class="bk-progress" role="status"><p class="dk-ok">${esc(progress.book || '')} ${esc(progress.msg || '')}</p></div>`;
     return `<div class="bk-progress" role="status"><div class="bk-bar"><i style="width:${pct}%"></i></div><p><b>${esc(progress.book || '')}</b> ${esc(progress.msg || '')}</p>${running ? '<button type="button" class="btn btn-sm bk-stop">停下（转好的会留着）</button>' : ''}</div>`;
   };
 
@@ -95,10 +100,22 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
         ${sp === 'cs' ? `<label class="mm-f"><span>哪门课</span><select name="subject">${['数据结构', '操作系统', '组成原理', '计网'].map((x) => `<option>${x}</option>`).join('')}</select></label>` : ''}
         <label class="mm-f"><span>是什么</span><select name="kind">${Object.entries(BOOK_KINDS).map(([k, v]) => `<option value="${k}"${k === (images ? 'textbook' : kind) ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
         ${/\.pdf$/i.test(first.name) && picked.length === 1 ? `<div class="dk-mrow"><label class="mm-f"><span>从第几页</span><input type="number" name="from" min="1" placeholder="1" inputmode="numeric"></label><label class="mm-f"><span>到第几页（空着就是到最后）</span><input type="number" name="to" min="1" placeholder="最后" inputmode="numeric"></label></div>
-          <p class="muted bk-cost">扫描页每 ${PAGES_PER_CALL} 页一次调用。整本几百页要几十次，花的额度不少：可以先转这一讲要用的几十页，以后再接着转别的页。</p>` : ''}
+          <p class="muted bk-cost">${costText()}</p>` : ''}
         <p class="muted">放在「${esc(SPACES[sp]?.label || sp)}」。</p>
         <div class="dk-mrow dk-mfoot"><button type="button" class="btn bk-cancel">算了</button><button type="submit" class="btn btn-primary bk-go">开始导入</button></div>
       </form>`;
+  }
+
+  // 估算：扫描页每 PAGES_PER_CALL 页一次调用（每页一张图，约一两千 token，加上转出来的字）
+  function costText(from = null, to = null) {
+    const n = pdfPages ? Math.max(0, Math.min(pdfPages, to || pdfPages) - Math.max(1, from || 1) + 1) : null;
+    return n === null ? `扫描页每 ${PAGES_PER_CALL} 页一次调用。整本几百页要几十次，花的额度不少：可以先转这一讲要用的几十页，以后再接着转别的页。`
+      : `这个 PDF 一共 ${pdfPages} 页。转 ${n} 页约 ${Math.ceil(n / PAGES_PER_CALL)} 次调用（每次 ${PAGES_PER_CALL} 页），每页约两三千 token（图 + 转出来的字）。可以先转这一讲要用的几十页，以后再接着转。`;
+  }
+  function paintCost() {
+    const f = host.querySelector('.bk-form');
+    const el = f?.querySelector('.bk-cost');
+    if (el) el.textContent = costText(Number(f.querySelector('[name=from]')?.value) || null, Number(f.querySelector('[name=to]')?.value) || null);
   }
 
   /* —— 一本书：目录、条目对着原页核对、页的状态 —— */
@@ -163,8 +180,14 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
   function onChange(e) {
     if (e.target.matches('.bk-file')) {
       picked = [...(e.target.files || [])].filter((f) => kindOfFile(f));
+      pdfPages = null;
       if (!picked.length) toast(`认得的有：${FILE_KINDS.map((k) => k.label).join('、')}`);
       paint();
+      // PDF：先数一数有几页，算出要调用几次（花多少额度心里有数再开始）
+      if (picked.length === 1 && /\.pdf$/i.test(picked[0].name)) {
+        const f = picked[0];
+        f.arrayBuffer().then(openPdf).then((doc) => { if (picked[0] === f) { pdfPages = doc.numPages; doc.destroy?.(); paintCost(); } }).catch(() => {});
+      }
     }
   }
 

@@ -24,7 +24,8 @@ export function image(el, src) {
   let caption = fields.caption || fields.title || '';
   if (fields.name) {
     const list = Array.isArray(session.packImages) ? session.packImages : [];
-    const img = list.find((x) => x && String(x.name) === fields.name);
+    // 学习台里还能写教材条目的编号（B1-23.1）：贴那一条的原页图（classroom.js 的 chunkImage）
+    const img = list.find((x) => x && String(x.name) === fields.name) || session.chunkImage?.(fields.name);
     if (!img) throw new Error(`资料包里没有叫「${fields.name}」的图${list.length ? `（有的是：${list.map((x) => x.name).filter(Boolean).slice(0, 8).join('、')}）` : '（资料包的 images 是空的）'}`);
     url = img.src || img.url || (img.id ? assetUrl(String(img.id)) : '');
     caption ||= img.title || '';

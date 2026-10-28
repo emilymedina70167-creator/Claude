@@ -57,17 +57,28 @@ test('pptx：一页一条，标题占位符、正文、这页引用的图', asyn
   assert.deepEqual(s[1].media, []);
 });
 
-test('看图转写：提示词写清楚页码、上一页停在哪、只出 JSON；读回结果，缺页报出来，kind 不认得的当说明', () => {
+test('看图转写：提示词写清楚页码、上一页停在哪；读回结果（标记行的写法，也认 JSON），缺页报出来，类型不认得的当说明', async () => {
   const p = transcribePrompt({ title: '线代基础30讲', subject: '线代' }, [23, 24], { chapter: '第2讲 矩阵', last: { kind: '例题', title: '例2.1' } });
   assert.match(p, /依次是 PDF 的第 23、24 页/);
   assert.match(p, /上一页最后一条是 例题「例2\.1」/);
-  assert.match(p, /只输出 JSON/);
+  assert.match(p, /只输出下面这种格式/);
   assert.ok(!/[他她]/.test(p));
   const r = parseTranscription('```json\n{"pages":[{"page":23,"items":[{"kind":"例题","title":"例2.2","text":"设 $A=\\\\begin{pmatrix}1&2\\\\end{pmatrix}$","cont":false},{"kind":"奇怪","text":"一段"}]}]}\n```', [23, 24]);
   assert.deepEqual(r.missing, [24]);
   assert.equal(r.pages.get(23)[1].kind, '说明');
   assert.match(r.pages.get(23)[0].text, /pmatrix/);
-  assert.throws(() => parseTranscription('没有 JSON'), /不是 JSON/);
+  assert.throws(() => parseTranscription('什么都没有'), /没有「=== 第 N 页」/);
+  // 现在的写法：标记行分页、分条，正文原样（公式的反斜杠不用转义）；接上页、标题层级
+  const t = parseTranscription('=== 第 23 页\n--- 标题2 | §2 矩阵的运算\n--- 例题 | 例2.1 | 接上页\n解：$\\frac{1}{2}$，$\\begin{pmatrix}1&2\\end{pmatrix}$\n--- 定义 | 定义2.3\n把行换成列\n=== 第 24 页\n', [23, 24, 25]);
+  assert.deepEqual(t.missing, [25]);
+  const p23 = t.pages.get(23);
+  assert.deepEqual(p23.map((x) => [x.kind, x.title, x.cont, x.level]), [['标题', '§2 矩阵的运算', false, 2], ['例题', '例2.1', true, undefined], ['定义', '定义2.3', false, undefined]]);
+  assert.equal(p23[1].text, '解：$\\frac{1}{2}$，$\\begin{pmatrix}1&2\\end{pmatrix}$');
+  assert.deepEqual(t.pages.get(24), []);
+  assert.match(p, /=== 第 23 页\n--- 标题2 \| §2 矩阵的运算/);
+  // JSON 里被吃掉的反斜杠补回来
+  const { fixLatexEscapes } = await import('../kit/src/books/ingest.js');
+  assert.equal(fixLatexEscapes(JSON.parse('"\\frac{1}{2} \\times \\neq a\\nb"')), '\\frac{1}{2} \\times \\neq a\nb');
 });
 
 test('拼成条目：标题更新第几讲、第几节，跨页接上，碎的说明并起来，太长的切开，目录指向标题后面第一条', () => {
@@ -179,4 +190,29 @@ test('备课：提示词带范围、挂着的原文、全部规则、记忆、�
   assert.equal(suggestBlock(cur, { block: 'L2.1.3', next: '重讲块4' }), 'L2.1.4');
   assert.equal(suggestBlock(cur, { block: 'L2.1.3', next: '接着讲 L2.1.5' }), 'L2.1.5');
   assert.equal(suggestBlock(cur, null), 'L2.1.3');
+});
+
+test('课堂里的教材：资料包点名的条目全文进「教材原文」，这一讲的列目录，原页图按条目编号；备份带上书和条目', async () => {
+  const { textbookForClass } = await import('../kit/src/books/textbook.js');
+  const books = [{ id: 'B1', title: '线代30讲', kind: 'textbook' }];
+  const chunks = [
+    { id: 'B1-10.1', book: 'B1', seq: 1, kind: '定义', title: '数量矩阵', chapter: '第2讲', page: 10, text: '$kE$', img: ['a1'] },
+    { id: 'B1-11.1', book: 'B1', seq: 2, kind: '例题', title: '例2.3', chapter: '第2讲', page: 11, text: '算 $(A+B)^2$', img: ['a2'] },
+    { id: 'B1-40.1', book: 'B1', seq: 3, kind: '定义', title: '秩', chapter: '第3讲', page: 40, text: '…' },
+  ];
+  const t = textbookForClass({ main: { chunks: ['B1-11.1'] }, books, chunks });
+  assert.match(t.textbook, /^### B1-11\.1［例题］例2\.3/);
+  assert.ok(!t.textbook.includes('B1-10.1'));
+  assert.match(t.catalog, /B1-10\.1［定义］数量矩阵/);
+  assert.ok(!t.catalog.includes('B1-40.1'), '只列这一讲');
+  assert.match(t.catalog, /textbook_read/);
+  assert.deepEqual(t.images.map((x) => [x.name, x.id]), [['B1-11.1', 'a2']]);
+  // 没点名：用这一块挂着的
+  assert.match(textbookForClass({ block: { chunks: ['B1-10.1'] }, books, chunks }).textbook, /数量矩阵/);
+  assert.equal(textbookForClass({ books, chunks: [] }).catalog, '');
+  const { backupFile } = await import('../kit/src/memory/backup.js');
+  const f = backupFile({ books: { books, chunks }, evidence: false });
+  assert.ok(f.docs.some((d) => d.collection === 'books' && d.doc_id === 'B1'));
+  assert.ok(f.docs.some((d) => d.collection === 'books/B1/chunks' && d.doc_id === 'B1-11.1'));
+  assert.equal(f.counts['books/*/chunks'], 3);
 });

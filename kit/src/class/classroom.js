@@ -36,6 +36,7 @@ import { shouldNudge, stuckText, STUCK_MS } from './stuck.js';
 import { fromEvidence, sayEvidence, draftEvidence, observationRecord, slipRecord, memoryRead } from '../memory/session.js';
 import { callCost, usageOf, usageText } from './usage.js';
 import { reportText } from '../memory/report.js';
+import { textbookForClass, readChunks, searchChunks } from '../books/textbook.js';
 
 export const MODEL = 'claude-opus-5-5';
 // 学生明确要求：讲课只能是 Opus 5.5、effort high；modelTier 只是平台要求的退路（退路的输出会被丢弃）
@@ -213,7 +214,26 @@ export async function renderClass(root, meta, desk = null) {
   // 讲义原图（image 组件按 name 找）。本地模拟老师上课时补一张模拟的，「测试:原图」用
   function syncPackImages() {
     session.packImages = Array.isArray(pack.main?.images) ? pack.main.images.filter((x) => x && x.name) : [];
+    // 资料包点名的教材条目的原页图：image 组件写条目编号就能贴（books/textbook.js 的 textbookForClass）
+    if (desk?.books) session.packImages.push(...textbookNow().images.map((x) => ({ name: x.name, id: x.id, title: x.title })));
+    // 没点名的条目也能贴：image 组件写任何条目编号，取它的第一张原页图
+    session.chunkImage = desk?.books ? (name) => { const c = desk.books.chunks.find((x) => x.id === name); return c?.img?.[0] ? { name, id: c.img[0], title: `${c.title}（原页${c.page ? ` p.${c.page}` : ''}）` } : null; } : null;
     if (mock && !session.packImages.length) { const demo = ensureDemoSlide(); if (demo) session.packImages = [demo]; }
+  }
+  // 学习台里的教材（desk.books）：点名条目的全文并进资料包的「教材原文」，目录作为资料包的一节；没有书就是原来的资料包
+  function textbookNow(tools = true) {
+    const b = desk?.books;
+    if (!b?.chunks?.length) return { textbook: '', catalog: '', images: [] };
+    const block = (desk.mem?.curriculum || []).find((x) => x.id === (pack.main?.block || desk.block));
+    return textbookForClass({ main: pack.main, block, books: b.books, chunks: b.chunks, tools });
+  }
+  function packForPrompt(tools) {
+    const tb = textbookNow(tools);
+    if (!tb.textbook && !tb.catalog) return pack;
+    const main = { ...(pack.main || {}) };
+    if (tb.textbook) main.textbook = [main.textbook, tb.textbook].filter((x) => x && (typeof x !== 'string' || x.trim())).map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join('\n\n');
+    if (tb.catalog) main['教材目录（按需取）'] = tb.catalog;
+    return { ...pack, main };
   }
   syncPackImages();
   db.doc('pack/main').onSnapshot((s) => applyMain(s.exists ? s.data() : null), () => {});
@@ -921,7 +941,7 @@ export async function renderClass(root, meta, desk = null) {
       }
       bv.measureFit();
       const level = Math.min(budgetLevel, 3);
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg() });
+      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(teacher.tools), board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg() });
       const maxBytes = Math.round(promptLimit() * [1, 0.85, 0.7, 0.55][level]);
       const fit = fitTurns({ system, history: promptHistory(history), maxBytes, stub: teacher.tools });
       lastPrompt = { bytes: fit.bytes, maxBytes, keepRecent: fit.keepRecent, dropped: fit.dropped, turns: fit.turns.length, level };
@@ -1406,6 +1426,47 @@ export async function renderClass(root, meta, desk = null) {
           return { name, title: img.title || '', attachedNextMessage: 1 };
         },
       },
+      ...(desk?.books?.chunks?.length ? [{
+        name: 'textbook_read',
+        description: '取教材、文稿、讲义里几条的全文（学习台的资料，按条目编号，比如 B1-23.1；资料包里的「教材目录」有编号）。ids 写编号数组，一次取好几条。每调用一次你要多等一整轮。',
+        inputSchema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' } } }, required: ['ids'] },
+        async execute(input) {
+          const ids = Array.isArray(input?.ids) ? input.ids.map(String) : String(input?.ids ?? '').split(/[,，\s]+/).filter(Boolean);
+          staged.calls.push({ name: 'textbook_read', input: { ids } });
+          if (!ids.length) throw new Error('要写 ids（条目编号）');
+          const r = readChunks(desk.books.chunks, desk.books.books, ids);
+          return { text: r.text || '（一条都没找到）', ...(r.missing.length ? { missing: r.missing } : {}), ...(r.more.length ? { more: r.more, note: '一次放不下，剩下的再取一次' } : {}) };
+        },
+      }, {
+        name: 'textbook_search',
+        description: '在学习台的教材、文稿、讲义里按词找条目（比如「伴随矩阵」「克拉默法则」「例2.5」），返回最像的几条的编号、标题和一小段原文；要全文再用 textbook_read。每调用一次你要多等一整轮。',
+        inputSchema: { type: 'object', properties: { q: { type: 'string' }, book: { type: 'string' } }, required: ['q'] },
+        async execute(input) {
+          const q = String(input?.q ?? '').trim();
+          staged.calls.push({ name: 'textbook_search', input: { q, book: input?.book } });
+          if (!q) throw new Error('要写 q（找什么）');
+          const hits = searchChunks(desk.books.chunks, q, { book: String(input?.book || '') });
+          return hits.length ? { hits } : { hits: [], note: '没找到：换个说法，或者看资料包里的教材目录' };
+        },
+      }, {
+        name: 'textbook_page',
+        description: '把一条教材条目的原页图（扫描页）附在下一条消息里给你看：核对转写的数、照原页讲时用。id 写条目编号。每调用一次你要多等一整轮。要贴上黑板给学生看，用 image 组件（name 写条目编号）。',
+        inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        async execute(input) {
+          const id = String(input?.id ?? '').trim();
+          staged.calls.push({ name: 'textbook_page', input: { id } });
+          const c = desk.books.chunks.find((x) => x.id === id);
+          if (!c) throw new Error(`没有 ${id} 这一条`);
+          const img = (c.img || [])[0];
+          if (!img) throw new Error(`${id} 没有原页图（文稿、只有字的讲义没有）`);
+          if (staged.images.length >= maxImages) throw new Error(`这一轮已经附了 ${maxImages} 张图`);
+          const r = await fetch(assetUrl(String(img)));
+          if (!r.ok) throw new Error('原页图没取到');
+          staged.images.push(await r.blob());
+          staged.ids.push(String(img));
+          return { id, title: c.title, page: c.page, attachedNextMessage: 1 };
+        },
+      }] : []),
       {
         name: 'component_doc',
         description: '取一个组件的完整写法（课堂说明里有的组件只写了最常用的写法，末尾写着「更多写法」）。name 写组件名，比如 elim、sched、answer。每调用一次你要多等一整轮，只在要用说明里没写到的字段时用；照精简版写错了，页面会自动把完整写法附在提醒里，不用先查。',
@@ -1454,7 +1515,7 @@ export async function renderClass(root, meta, desk = null) {
       const steps = () => [...segs.values()].map((x) => ({ id: x.id, page: x.page, title: x.title || x.sec?.querySelector('h2')?.textContent?.trim() || '', place: x.place }));
       // 学习台里：先用代码算一份课后报告放进这次的输入，小结和整理单同一次写（docs/desk-plan.md 4.2，不多调用一次）
       const report = desk?.makeReport ? await desk.makeReport({ turns: history, steps: steps() }).then(reportText, () => '') : '';
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack, board: boardState(), subject: session.subject, memory: memoryArg() });
+      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: boardState(), subject: session.subject, memory: memoryArg() });
       const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ report, review: desk?.review }) }], maxBytes: promptLimit(), stub: teacher.tools });
       const cost = (why) => callCost({ bytes: fit.bytes, why });
       let res;

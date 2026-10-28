@@ -206,3 +206,41 @@
 .dk-unit-bar { display: flex; align-items: center; gap: 12px; max-width: 860px; margin: 12px auto 0; padding: 0 20px; font: 14px/1.4 var(--sans); }
 .dk-unit-bar .muted { flex: 1; }
 .dk-unit-bar .btn { min-height: 44px; }
+/* 教材页（books/bookview.js）：导入、进度、条目对着原页核对 */
+.bk-pick { position: relative; min-height: 44px; display: inline-flex; align-items: center; cursor: pointer; }
+.bk-form { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--faint); }
+.bk-form .mm-f input, .bk-form .mm-f select, .dk-prep select { min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--faint); background: rgb(var(--glow-rgb) / 0.04); color: var(--chalk); font: 16px/1.3 var(--sans); box-sizing: border-box; width: 100%; }
+.bk-form .dk-mrow .mm-f { flex: 1; min-width: 9em; }
+.bk-cost { font-size: 13.5px; }
+.bk-progress { margin-top: 12px; }
+.bk-bar { height: 8px; border-radius: 4px; background: rgb(var(--chalk-rgb) / 0.08); overflow: hidden; }
+.bk-bar i { display: block; height: 100%; background: var(--yellow); transition: width 0.3s; }
+.bk-progress p { margin: 6px 0; font-size: 14px; }
+.bk-progress .btn { min-height: 44px; }
+.bk-sec { margin: 6px 0 2px; font-size: 13.5px; }
+.bk-chunk { border-bottom: 1px solid var(--faint); }
+.bk-chunk:last-child { border-bottom: 0; }
+.bk-chunk.is-checked .bk-toggle > span:first-child { color: rgb(var(--chalk-rgb) / 0.75); }
+.bk-chunk .bk-toggle { gap: 8px; }
+.bk-chunk .bk-toggle > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.bk-body { display: grid; gap: 10px; padding: 4px 0 12px; }
+.bk-text { font: 15.5px/1.65 var(--sans); overflow-x: auto; }
+.bk-text p { margin: 6px 0; }
+.bk-imgs { display: flex; flex-wrap: wrap; gap: 8px; }
+.bk-img { max-width: 100%; max-height: 420px; border-radius: 8px; border: 1px solid var(--faint); background: #fff; }
+.bk-edit { min-height: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; }
+@media (min-width: 1040px) {
+  .bk-body { grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); align-items: start; }
+  .bk-body .mm-acts { grid-column: 1 / -1; }
+}
+.bk-pages { display: flex; flex-wrap: wrap; gap: 6px; }
+.bk-maprow { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--faint); font: 14.5px/1.5 var(--sans); }
+.bk-maprow input { width: 22px; height: 22px; margin-top: 2px; accent-color: var(--yellow); flex: none; }
+.bk-maprow.is-bad { opacity: 0.75; }
+.bk-maprow > span { min-width: 0; overflow-wrap: anywhere; }
+/* 首页「上课」卡里的备课 */
+.dk-prep { width: 100%; margin: 6px 0; padding: 10px 0; border-top: 1px dashed var(--faint); display: grid; gap: 6px; }
+.dk-prep .dk-mrow { align-items: flex-end; }
+.dk-prep .btn { min-height: 44px; }
+.dk-prep-msg { font-size: 14px; }
+.dk-next { width: 100%; }

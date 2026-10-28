@@ -1,6 +1,6 @@
 # 学习台 · 给 Claude 的教学说明
 
-> **版本：2026-10-29c**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-10-30**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份说明的**最新版**一直放在**学习台** artifact 里（文件 `CLAUDE-PROJECT.md`）。每个新对话里，第一次做和学习有关的事（写黑板、备课、读课堂记录、改记忆）之前，先用 `Artifact` 工具读它：`action: "read"`，`url` 是上面的学习台地址，`path: "CLAUDE-PROJECT.md"`。
 > - 读到的版本比你手上这份新：以读到的为准，这份里和它不一样的地方全部作废。回复里顺便告诉我「项目指令里的说明是旧版（版本号），学习台里是新版（版本号）」。
@@ -2367,6 +2367,15 @@ count: 3
 ```
 
 **`observations`**（课堂里的 Claude 写，页面替它存）：`kind`：`note` 观察 / `summary` 下课小结 / `proposal` 提议（比如提议改某个弱点，由你决定采不采纳，采纳了就照规矩改那一类、log 的 `basis` 写这条观察的 id）、`text`、`about`（相关的编号）、`block`、`session`、`turn`（第几轮记的）、`at`。下课小结还有 `verify`（这节课平台核验是 Opus 5.5 的轮数、作废的轮数）。**`evidence`**、**`sessions`** 由页面写，你只读（见下文）。
+
+### 教材和资料：`books`（页面写，你读）
+
+我的教材 PDF（扫描版也行）、截图、视频课文稿（Word）、讲义（PowerPoint）在学习台「教材」页导入，页面让 Claude 看图转写成文字、切成一条一条存着（docs/textbook-plan.md）。**以后要教材原文先来这里找**，不用再读项目知识库里的 PDF。
+
+- `books/{B1}`：一本资料（`title`、`kind`：`textbook` / `transcript` / `slides` / `notes`、`space`、`status`、`toc` 章节目录、`chunks` 条数）。
+- `books/{B1}/chunks/{B1-23.1}`（`collection: "books/B1/chunks"`）：一条（`kind` 定义 / 定理 / 例题 / 说明……、`title`、`chapter`、`section`、`page`、`text` 原文（Markdown + LaTeX）、`img` 原页图的 asset id、`checked` 我核对过）。编号是「从第几页开始的第几条」。
+- 课程地图的块用 `chunks` 字段挂条目编号（`["B1-23.1", "B1-24.1"]`）：我在学习台上「挂到课程地图」（页面让 Claude 提、我确认）；你备课时也可以写。
+- **学习台现在能自己备课**：首页「上课」卡选一块、点「让 Claude 备课」，页面写这一科的 `pack/main`（`by: "desk"`、`chunks` 是要照着讲的条目）。我让你备课时照旧写资料包，`chunks` 写条目编号就行（页面把全文放进去），不用再抄原文。
 
 ### 分科：数学 / 408 / 英语
 

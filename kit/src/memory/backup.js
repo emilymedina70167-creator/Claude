@@ -19,13 +19,14 @@ const strip = (d) => { const { id: _, ...rest } = d || {}; return rest; };
  * sessions：{ 编号: { 集合名: [{ id, ... }] } }（每节课下面的）。evidence：带不带证据。
  * 返回要存成文件的对象：{ format, v, kit, at, today, include, counts, docs: [{ collection, doc_id, data }] }
  */
-export function backupFile({ memory = {}, pack = {}, sessions = {}, evidence = true, boards = false, kit = '', today = '', at = Date.now() } = {}) {
+// books：{ books, chunks }，教材板块（转写要花额度，丢了重转不划算，所以备份带上文字；原页图在 assets 里，不进备份）
+export function backupFile({ memory = {}, pack = {}, sessions = {}, books = null, evidence = true, boards = false, kit = '', today = '', at = Date.now() } = {}) {
   const docs = [];
   const counts = {};
   const add = (collection, d) => {
     if (!d || d.id === undefined || d.id === null) return;
     docs.push({ collection, doc_id: String(d.id), data: strip(d) });
-    const top = collection.startsWith('sessions/') ? `sessions/*/${collection.split('/')[2]}` : collection;
+    const top = /^(sessions|books)\//.test(collection) ? `${collection.split('/')[0]}/*/${collection.split('/')[2]}` : collection;
     counts[top] = (counts[top] || 0) + 1;
   };
   for (const c of MEMORY_COLLECTIONS) {
@@ -33,6 +34,8 @@ export function backupFile({ memory = {}, pack = {}, sessions = {}, evidence = t
     for (const d of [...(memory[c] || [])].sort((a, b) => String(a.id).localeCompare(String(b.id)))) add(c, d);
   }
   for (const k of ['main', 'problems']) if (pack?.[k]) add('pack', { ...pack[k], id: k });
+  for (const b of books?.books || []) add('books', b);
+  for (const c of books?.chunks || []) add(`books/${c.book}/chunks`, c);
   for (const sid of Object.keys(sessions || {}).sort()) {
     for (const c of [...SESSION_EXTRA, ...(boards ? BOARD_COLLECTIONS : [])]) {
       for (const d of sessions[sid]?.[c] || []) add(`sessions/${sid}/${c}`, d);
