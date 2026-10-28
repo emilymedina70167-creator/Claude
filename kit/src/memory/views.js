@@ -250,7 +250,7 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
   if (proposals.length) todo.push(`看上一节课堂里的 Claude 的提议（observations 里 kind: proposal，${proposals.length} 条），掌握状态、规则只能由你决定。`);
   if (open.length) todo.push(`还有 ${open.length} 张改动单等我确认（pending，status: open）：我在学习台上点，你不用代写。`);
   return [
-    `【线代学习台 · 接手 · ${SPACES[space]?.label || ''}】`,
+    `【学习台 · 接手 · ${SPACES[space]?.label || ''}】`,
     kitUrl ? `- 先读说明书：Artifact 工具 action: "read"，url: ${kitUrl}，path: "CLAUDE-PROJECT.md"。` : '',
     `- 学习台：${deskUrl || '（地址问我要：在 claude.ai 打开学习台时地址栏里的那个）'}。记忆都在它的数据库里，用 ArtifactData 读。`,
     `- 这一科：${SPACES[space]?.label || space}（只列这一科的；学习台还有${Object.keys(SPACES).filter((k) => k !== space).map((k) => SPACES[k].label).join('、')}）。`,

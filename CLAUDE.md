@@ -1,6 +1,6 @@
 # 给 Claude Code 的开发说明
 
-这个仓库是「线代学习台」：让 Claude 在 claude.ai 的 artifact 里给我上课。对话框只能出文字和简陋的图，所以 Claude 不在对话里讲，而是把课堂搬到一块黑板上：能拖的图、一步步揭开的例题、先猜再揭晓、自动判分、Apple Pencil 手写。Claude 设计「推着我自己得出结论」的路径，组件库 `la-kit` 负责图形、计算和判分。我在 iPad 上用。
+这个仓库是「学习台」（最早只有线代，现在分数学、408、英语三科）：让 Claude 在 claude.ai 的 artifact 里给我上课。对话框只能出文字和简陋的图，所以 Claude 不在对话里讲，而是把课堂搬到一块黑板上：能拖的图、一步步揭开的例题、先猜再揭晓、自动判分、Apple Pencil 手写。Claude 设计「推着我自己得出结论」的路径，组件库 `la-kit` 负责图形、计算和判分。我在 iPad 上用。
 
 - 面向我的说明：`README.md`
 - 放进 claude.ai 项目指令、教 Claude 写课件的说明：`CLAUDE-PROJECT.md`（第三节「组件参考」还会在构建时打包进 `la-kit.js`，给课堂里的 Claude 当组件手册，见下文）
