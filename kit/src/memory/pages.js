@@ -185,7 +185,7 @@ export function createPages(host, { getData, db, ops, goto }) {
     // 一个系列（每天学了几分钟）：细柱，主题色，悬停看数；下面另有表
     return `<section class="dk-card"><h2 class="dk-h">最近两周</h2>
       <p>一共 ${st.total} 分钟，学了 ${st.studyDays} 天。</p>
-      <div class="dk-bars" role="img" aria-label="最近 14 天每天学习的分钟数">${st.daily.map((d) => `<div class="dk-bar" title="${esc(d.date)}：${d.minutes} 分钟，${d.items} 题一次对 ${d.first}"><i style="height:${Math.round((d.minutes / max) * 100)}%"></i><span>${esc(d.date.slice(8))}</span></div>`).join('')}</div>
+      <div class="dk-bars" role="img" aria-label="最近 14 天每天学习的分钟数">${st.daily.map((d) => `<div class="dk-bar" title="${esc(d.date)}：${d.minutes} 分钟，${d.items} 题一次对 ${d.first}"><i${d.minutes ? '' : ' class="is-zero"'} style="height:${Math.round((d.minutes / max) * 100)}%"></i><span>${esc(d.date.slice(8))}</span></div>`).join('')}</div>
       <details class="dk-soft"><summary>看表</summary><div class="dk-tablewrap"><table class="dk-table2"><thead><tr><th>日期</th><th>分钟</th><th>题</th><th>一次对</th></tr></thead><tbody>${st.daily.filter((d) => d.minutes || d.items).map((d) => `<tr><td>${esc(d.date)}</td><td>${d.minutes}</td><td>${d.items}</td><td>${d.first}</td></tr>`).join('') || '<tr><td colspan="4">这两周还没有课后报告。</td></tr>'}</tbody></table></div></details>
     </section>
     <section class="dk-card"><h2 class="dk-h">每一块</h2>${st.blocks.length ? `<div class="dk-tablewrap"><table class="dk-table2"><thead><tr><th>块</th><th>分钟</th><th>节数</th><th>一次做对</th></tr></thead><tbody>${st.blocks.map((b) => `<tr><td>${esc(b.block)}</td><td>${b.minutes}</td><td>${b.sessions}</td><td>${b.items ? `${b.first} / ${b.items}` : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">还没有。</p>'}</section>

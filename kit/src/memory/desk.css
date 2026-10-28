@@ -1,13 +1,42 @@
 /* 学习台（mode: desk）：首页的几张卡。颜色都用主题变量（themes.css 换风格时跟着换） */
-.la-lesson.is-desk { max-width: 860px; margin: 0 auto; padding: 24px 16px 80px; }
-.dk-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 18px; }
-.la-lesson .dk-title { margin: 8px 0 0; }
-.dk-unit { font: 16px/1.4 var(--sans); color: var(--body); }
-.dk-ver { margin-left: auto; font: 13px/1.4 var(--sans); color: var(--muted); }
+.la-lesson.is-desk { max-width: 860px; margin: 0 auto; padding: 20px 16px 64px; font: 15.5px/1.6 var(--sans); }
+/* 顶上：标题和这门课的说明在左，科目切换在右（窄了换到下一行） */
+.dk-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 20px; margin: 4px 0 18px; }
+.dk-brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; min-width: 0; }
+.la-lesson .dk-title { margin: 0; padding-bottom: 10px; font-size: 46px; line-height: 1.1; }
+.dk-unit { font: 15px/1.4 var(--sans); color: var(--muted); letter-spacing: 0.02em; }
+/* 科目：一组分段按钮，选中的那一科亮起来 */
+.dk-spaces { display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: rgb(var(--chalk-rgb) / 0.06); border: 1px solid var(--faint); }
+.dk-space { min-height: 44px; min-width: 76px; padding: 0 18px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font: 600 16px/1 var(--sans); letter-spacing: 0.04em; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.dk-space:hover { color: var(--chalk); }
+.dk-space[aria-selected="true"] { background: rgb(var(--yellow-rgb) / 0.16); color: var(--yellow); box-shadow: inset 0 0 0 1px rgb(var(--yellow-rgb) / 0.45); }
+.dk-space:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+/* 页面：一排标签，当前页下面一道重点色 */
+.dk-nav { display: flex; gap: 2px; margin: 0 0 20px; border-bottom: 1px solid var(--faint); overflow-x: auto; scrollbar-width: none; }
+.dk-nav::-webkit-scrollbar { display: none; }
+.dk-nav a { flex: none; display: inline-flex; align-items: center; min-height: 46px; padding: 0 14px; color: var(--muted); font: 500 15.5px/1 var(--sans); text-decoration: none; white-space: nowrap; }
+.dk-nav a:hover { color: var(--chalk); }
+.dk-nav a[aria-current="true"] { color: var(--chalk); font-weight: 600; box-shadow: inset 0 -2px 0 var(--yellow); }
 .dk-status { font: 16px/1.6 var(--sans); }
-.dk-card { margin: 0 0 16px; padding: 16px 18px; border-radius: 14px; background: rgb(var(--glow-rgb) / 0.03); border: 1px solid var(--faint); }
+.dk-home { display: grid; gap: 16px; }
+.dk-col { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.dk-card { min-width: 0; margin: 0; padding: 18px 20px; border-radius: 16px; background: rgb(var(--glow-rgb) / 0.035); border: 1px solid var(--faint); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+.dk-pages .dk-card { margin: 0 0 16px; }
+.dk-card p { margin: 6px 0; font-size: 15.5px; line-height: 1.6; }
+/* 上课是首页最要紧的一张：边框带一点重点色 */
+.dk-class { border-color: rgb(var(--yellow-rgb) / 0.35); background: linear-gradient(180deg, rgb(var(--yellow-rgb) / 0.06), rgb(var(--glow-rgb) / 0.02) 70%); }
+.dk-next { display: grid; justify-items: start; gap: 4px; margin-top: 4px; }
+.dk-next .dk-new { margin-top: 8px; min-width: 132px; }
+.dk-goal { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+.dk-goal.is-open { display: block; }
+.dk-foot { margin-top: 28px; text-align: center; font: 12.5px/1.4 var(--sans); color: var(--muted); letter-spacing: 0.04em; }
+/* 横屏（iPad 1180）：两栏。左边上课、今天、待确认、补记；右边改记忆、自检、记忆库、备份 */
+@media (min-width: 1040px) {
+  .la-lesson.is-desk { max-width: 1120px; padding-left: 28px; padding-right: 28px; }
+  .dk-home { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: start; gap: 18px; }
+}
 /* 卡片的小标题：不要课件里那种上面一道虚线、空一大段的 h2 */
-.la-lesson .dk-h { display: block; margin: 0 0 8px; padding: 0; font-size: 26px; color: var(--yellow); }
+.la-lesson .dk-h { display: block; margin: 0 0 10px; padding: 0; font-size: 25px; line-height: 1.2; color: var(--yellow); }
 .la-lesson .dk-h::before { content: none; }
 .dk-body { font: 15.5px/1.55 var(--sans); color: var(--body); }
 .dk-body p { margin: 4px 0; }
@@ -33,7 +62,15 @@
 .dk-who { font-size: 13px; color: var(--muted); }
 .dk-later { margin-top: 18px; font-size: 14px; }
 .dk-dev { display: flex; gap: 10px; margin-top: 18px; }
-@media (min-width: 700px) {
+/* 记忆库这张卡在横屏的右栏里很窄：按卡的宽度排，不按屏幕 */
+.dk-colls { container-type: inline-size; }
+/* 窄的时候只列名字和条数（谁能写的放在悬停提示里），十几行不至于拉得很长 */
+@container (max-width: 599px) {
+  .dk-crow { padding: 7px 0; }
+  .dk-who { display: none; }
+  .dk-n { grid-row: auto; }
+}
+@container (min-width: 600px) {
   .dk-crow { grid-template-columns: 1fr 14em 3em; }
   .dk-n { grid-row: auto; grid-column: 3; text-align: right; }
   .dk-who { grid-column: 2; grid-row: 1; align-self: center; }
@@ -92,9 +129,6 @@
 .dk-edit-row > span { flex: 1; min-width: 12em; }
 .dk-edit-row .btn { min-height: 44px; }
 /* 第 3、4 批：导航、课程地图、弱点表、错题本、以前的课、统计（pages.js） */
-.dk-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: -6px 0 16px; }
-.dk-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--faint); color: var(--body); font: 15px/1 var(--sans); text-decoration: none; }
-.dk-nav a[aria-current="true"] { border-color: var(--yellow); color: var(--yellow); background: rgb(var(--yellow-rgb) / 0.1); }
 .dk-warn { padding: 8px 10px; border-radius: 10px; background: rgb(var(--yellow-rgb) / 0.12); color: var(--chalk); }
 .dk-link { color: var(--yellow); }
 .dk-handoff { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--faint); }
@@ -163,3 +197,4 @@
 .la-lesson .dk-pages .dk-card p, .la-lesson .dk-pages .dk-card li { font-size: 15px; line-height: 1.55; }
 .la-lesson .dk-table2 th, .la-lesson .dk-table2 td { border: 0; border-bottom: 1px solid var(--faint); background: transparent; }
 .dk-err .dk-k { min-width: 4.6em; }
+.dk-bar i.is-zero { background: var(--faint); }
