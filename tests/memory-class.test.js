@@ -158,7 +158,7 @@ test('scopeDb：课堂自己的集合放进 sessions/{编号}/ 下面并带上 s
   assert.equal((await s1.collection('steps').get()).docs[0].data().md, '第一节');
   assert.equal((await s2.doc('steps/b1').get()).data().md, '第二节');
   assert.equal((await s1.collection('steps').where('md', '==', '第一节').get()).size, 1);
-  assert.deepEqual(SESSION_SCOPED, ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report']);
+  assert.deepEqual(SESSION_SCOPED, ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report', 'talk', 'ops', 'ops_done', 'lint', 'meta', 'unit']);
 });
 
 // —— 证据 ——
@@ -259,4 +259,21 @@ test('board new / add / replace / pin 可以写 point=（这一段练的知识�
   assert.equal(parseCommand('hide id=b4 point=x').point, undefined);
   const out = parseOutput('````board new id=b5 point=tr\n内容\n````', { final: true });
   assert.equal(out.ops[0].point, 'tr');
+});
+
+test('一个学习台：实时黑板、自学单元也是 sessions 里的一节，黑板的集合换到这节课下面，学习台自己的 meta 不动', async () => {
+  const { kindOf, SESSION_KINDS } = await import('../kit/src/memory/session.js');
+  assert.equal(kindOf({}), 'class');
+  assert.equal(kindOf({ kind: 'live' }), 'live');
+  assert.equal(kindOf({ kind: 'nope' }), 'class');
+  assert.deepEqual(Object.keys(SESSION_KINDS), ['class', 'live', 'unit']);
+  const seen = [];
+  const fake = { doc: (p) => { seen.push(p); return { set: async () => {} }; }, collection: (p) => { seen.push(p); return { doc: () => ({ set: async () => {} }) }; } };
+  const sc = scopeDb(fake, 'c-20261029-1');
+  sc.doc('meta/now'); sc.collection('talk'); sc.collection('ops'); sc.doc('unit/main'); sc.collection('evidence');
+  assert.deepEqual(seen, ['sessions/c-20261029-1/meta/now', 'sessions/c-20261029-1/talk', 'sessions/c-20261029-1/ops', 'sessions/c-20261029-1/unit/main', 'evidence']);
+  // 对话里的 Claude 能开实时黑板、自学单元（写 sessions），课堂里的 Claude 不能
+  const { canWrite } = await import('../kit/src/memory/schema.js');
+  assert.equal(canWrite('chat', 'sessions'), true);
+  assert.equal(canWrite('class', 'sessions'), false);
 });

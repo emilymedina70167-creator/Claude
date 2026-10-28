@@ -13,7 +13,7 @@ import { toast } from '../record.js';
 import { getStore, getDownloads } from '../live/store.js';
 import { VERSION, KIT_URL } from '../version.js';
 import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toDate } from './schema.js';
-import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED } from './session.js';
+import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf } from './session.js';
 import { buildReport, reportLine } from './report.js';
 import { backupFile, backupName, BOARD_COLLECTIONS, SESSION_EXTRA } from './backup.js';
 import { createManualForm } from './manual.js';
@@ -31,6 +31,9 @@ import { dueList } from './schema.js';
 const SPACE_KEY = 'la-desk-space';
 const loadSpace = () => { try { const v = localStorage.getItem(SPACE_KEY); return SPACES[v] ? v : DEFAULT_SPACE; } catch { return DEFAULT_SPACE; } };
 import { renderClass } from '../class/classroom.js';
+import { renderLive } from '../live/live.js';
+import { renderGuided } from '../guided.js';
+import { createSink } from '../live/sync.js';
 import { checkMemory, memcheckRecord } from './check.js';
 import { sampleMemory, sampleSpaces } from './sample.js';
 
@@ -214,7 +217,9 @@ export async function renderDesk(root, meta) {
     const box = $('.dk-class');
     box.hidden = false;
     const mine = sv();
-    const open = mine.sessions.filter((x) => x.status === 'open').sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+    // 没下课的：课堂、对话里的 Claude 开的实时黑板、自学单元，都列出来（最新的在前）
+    const opens = mine.sessions.filter((x) => x.status === 'open').sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+    const open = opens.find((x) => kindOf(x) === 'class');
     // 上一节（这一科下了课的最近一节）：课后报告的要点、花了多少
     const last = mine.sessions.filter((x) => x.status === 'closed').sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0))[0];
     const lastLine = last ? [last.report?.line || '', usageText(last.usage)].filter(Boolean).join('；') : '';
@@ -226,7 +231,7 @@ export async function renderDesk(root, meta) {
     box.querySelector('.dk-body').innerHTML = `
       ${lastOpen ? `<p class="dk-warn">上一节的整理单还有 ${lastOpen} 条没确认：<a class="dk-link" href="#classes/${escapeHtml(last.id)}">去看那节课</a> 或者在下面「待确认」里点。</p>` : openPd.length ? `<p><a class="dk-link dk-to-pending" href="#">待确认 ${openPd.length} 条 ↓</a></p>` : ''}
       ${last ? `<p class="dk-last"><span class="dk-k">上一节</span>${escapeHtml(last.id)}${last.block ? `（${escapeHtml(last.block)}）` : ''}${lastLine ? `<span class="muted">：${escapeHtml(lastLine)}</span>` : ''}</p>` : ''}
-      ${open ? `<div class="dk-row"><b>${escapeHtml(open.id)}</b><span>${inline(open.title || '')}${open.block ? `<span class="muted">（${escapeHtml(open.block)}）</span>` : ''}</span><button type="button" class="btn btn-primary dk-go" data-sid="${escapeHtml(open.id)}">接着上课</button></div>` : ''}
+      ${opens.map((x) => { const k = kindOf(x); return `<div class="dk-row dk-open is-${k}"><span class="dk-kind">${SESSION_KINDS[k]}</span><span>${inline(x.title || x.id)}${x.block ? `<span class="muted">（${escapeHtml(x.block)}）</span>` : ''}</span><button type="button" class="btn btn-primary dk-go" data-sid="${escapeHtml(x.id)}">${k === 'class' ? '接着上课' : '进去'}</button></div>`; }).join('')}
       <div class="dk-next">${main ? `<p><span class="dk-k">备好的课</span>${inline(main.unit || '（资料包没写 unit）')}${block ? `<span class="muted">（${escapeHtml(block)}）</span>` : ''}</p>${main.goal ? `<p class="dk-goal muted" title="点一下看全文">${inline(main.goal)}</p>` : ''}`
         : `<p class="muted">对话里的 Claude 还没备${SPACES[space].label}的课（pack/${packIds(space).main} 是空的）。也可以直接开课：课堂里的 Claude 带着记忆，但没有这节课的安排。</p>`}
         <button type="button" class="btn ${open ? '' : 'btn-primary'} dk-new">开新课</button></div>
@@ -238,7 +243,7 @@ export async function renderDesk(root, meta) {
       const text = handoffText(sv(), { kitUrl: KIT_URL, deskUrl: deskUrl(), pack: pack.main, space });
       try { await navigator.clipboard.writeText(text); toast('复制好了，去对话里粘贴'); } catch { prompt('没能自动复制，长按全选后复制：', text); }
     });
-    box.querySelector('.dk-go')?.addEventListener('click', (e) => goto(e.currentTarget.dataset.sid));
+    box.querySelectorAll('.dk-go').forEach((b) => b.addEventListener('click', (e) => goto(e.currentTarget.dataset.sid)));
     box.querySelector('.dk-new').addEventListener('click', (e) => { e.currentTarget.disabled = true; newClass(block).catch((err) => { toast(`没开成：${err?.message || err}`); e.currentTarget.disabled = false; }); });
   }
 
@@ -499,6 +504,25 @@ async function enterClass(root, meta, sid, { readOnly = false } = {}) {
   const block = String(main?.block || doc.block || '');
   // 分科：课堂按这一块的门课带组件说明和教法（学习台页面开头的 subject: 管不了每节课）
   session.subject = doc.subject || subjectOf(block);
+  const kind = kindOf(doc);
+  const title = doc.title || meta.unit;
+  // 实时黑板、自学单元是对话里的 Claude 开的：页面不写报告给课堂 Claude，用完了由谁点「用完了」都行，报告由首页补写（fixReports）
+  const finish = async () => {
+    if (!confirm(`${SESSION_KINDS[kind]}「${title}」用完了？以后在「以前的课」里还能翻看。`)) return;
+    // 对话里的 Claude 也可能改着这条（改标题、块）：读最新的再改，不拿开页面时那份去盖
+    const cur = await db.doc(`sessions/${sid}`).get().then((x) => (x.exists ? x.data() : doc)).catch(() => doc);
+    assertWrite('page', 'sessions');
+    await db.doc(`sessions/${sid}`).set({ ...cur, status: 'closed', endedAt: Date.now() });
+    goto('');
+  };
+  if (kind === 'live') {
+    const sc = scopeDb(db, sid);
+    return renderLive(root, { ...meta, unit: title }, {
+      store: { ...store, db: readOnly ? readOnlyDb(sc) : sc, assets: readOnly ? null : store.assets }, sid, block,
+      onHome: () => goto(readOnly ? `classes/${sid}` : ''), onEnd: readOnly || doc.status === 'closed' ? null : finish,
+    });
+  }
+  if (kind === 'unit') return enterUnit(root, meta, { db, store, sid, doc, block, title, readOnly, finish });
   if (readOnly) {
     return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
       store: { ...store, db: readOnlyDb(scopeDb(db, sid)), assets: null }, sid, block, mem, readOnly: true,
@@ -514,6 +538,33 @@ async function enterClass(root, meta, sid, { readOnly = false } = {}) {
     memo: { ops, view: createMemoView({ db, ops }) },
     review: doc.review || null,
   });
+}
+
+/**
+ * 自学单元（kind: unit）：对话里的 Claude 把一次写完的课件（guided）写进 sessions/{编号}/unit/main 的 md，在学习台里打开。
+ * 作答进 evidence（和课堂、黑板一样），进度记在这台设备上（guided 照旧）。
+ */
+async function enterUnit(root, meta, { db, store, sid, doc, block, title, readOnly, finish }) {
+  const sc = scopeDb(db, sid);
+  const u = await sc.doc('unit/main').get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
+  root.classList.add('is-desk-unit');
+  const top = document.createElement('div');
+  top.className = 'dk-unit-bar';
+  top.innerHTML = `<button type="button" class="btn btn-sm dk-u-home">← 学习台</button><span class="muted">${SESSION_KINDS.unit} · ${escapeHtml(sid)}</span>${readOnly || doc.status === 'closed' ? '' : '<button type="button" class="btn btn-sm dk-u-end">学完了</button>'}`;
+  root.before(top);
+  top.querySelector('.dk-u-home').addEventListener('click', () => goto(readOnly ? `classes/${sid}` : ''));
+  top.querySelector('.dk-u-end')?.addEventListener('click', finish);
+  if (!u?.md) {
+    root.innerHTML = `<p class="dk-status">这个自学单元还没有内容（sessions/${escapeHtml(sid)}/unit/main 是空的）。回对话里让 Claude 写进来。</p>`;
+    return;
+  }
+  session.reset(title);
+  session.subject = doc.subject || subjectOf(block);
+  if (!readOnly) {
+    const sink = createSink({ ...store, db: sc }, { evidence: () => ({ session: sid, block }) });
+    session.sink = sink;
+  }
+  renderGuided(String(u.md), root, { ...meta, unit: u.unit || title });
 }
 
 /**

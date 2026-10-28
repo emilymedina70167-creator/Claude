@@ -5,7 +5,7 @@
 - 面向我的说明：`README.md`
 - 放进 claude.ai 项目指令、教 Claude 写课件的说明：`CLAUDE-PROJECT.md`（第三节「组件参考」还会在构建时打包进 `la-kit.js`，给课堂里的 Claude 当组件手册，见下文）
 - 需求原文：`docs/live-board-spec.md`（实时黑板）、`docs/classroom-spec.md`（课堂模式）、`docs/teaching-tools-spec.md`（课堂教具：板书标注、会动的矩阵、页面验算）、`docs/live-tools-spec.md`（实时黑板追上课堂：标注、让图动、板顶的话）、`docs/learner-memory-spec.md`（学习台的系统记忆：分类存储、各管一块，两个 Claude 共用）
-- **学习台的下一步（当前重点）：`docs/desk-plan.md`**（记录能力、交互、内部 Claude 改记忆；外内协作的分工；分批和验收）。新对话做学习台先读它。
+- **一个学习台（所有东西在一处）：`docs/hub-plan.md`**；学习台的记录、交互、内部 Claude 改记忆：`docs/desk-plan.md`（记录能力、交互、内部 Claude 改记忆；外内协作的分工；分批和验收）。新对话做学习台先读它。
 - 下一步的总计划（线代和 408 一起做到优秀：验收尺子、外壳升级、线代六章、408 加深）和进度：`docs/quality-plan.md`
 - 计算机四门课第一轮（第 0～5 批）的计划：`docs/408-plan.md`；数据结构 `trace` / `tree` / `net` 的细节方案：`docs/ds-components-design.md`
 
@@ -27,7 +27,8 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - GitHub 上每次推送都会跑 `.github/workflows/test.yml`：`npm test`，再 build 一遍看 `kit/dist/la-kit.js` 和提交的是否一样（忘了重新 build 会红）。
 - 浏览器里看效果：在一个目录里放 `kit/dist/la-kit.js` 和 `kit/examples/*.html`，起一个静态服务器打开。
   - 示例页开头的 `<!doctype html>`、`<meta charset="utf-8">` 不能删：`la-kit.js` 的正则和 `String.raw` 里有中文（不能转义，转了课堂说明会变成 `\uXXXX`），浏览器不按 UTF-8 读就整页报错；没有 doctype 时 KaTeX 在怪异模式下排版不对。claude.ai 发布时会自己补上，所以课件模板里不用写。
-  - `unit-matrix-vector.html`：引导模式示范单元（也是组件库 artifact 的页面）
+  - `unit-matrix-vector.html`：引导模式示范单元
+  - `kit/desk.html`：发布到学习台的页面（就是 `mode: desk` 那几行）
   - `live-demo.html?dev`：实时黑板，右上角开发面板扮演对话里的 Claude
   - `408-demo.html`：计算机四门课的全部演示组件
   - `desk-demo.html?dev`：学习台（记忆库、在学习台里上课；「测试:记忆」见下文「学习台和记忆库」）
@@ -47,7 +48,7 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 | `guided` | `guided.js` | 一整个单元，按 `##` 分节解锁；学习记录复制回对话 |
 | `live` | `live/` | 一屏一块板：对话里的 Claude 一段一段写进 artifact 数据库（带板号、常驻栏），页面实时显示；作答、写法错误、屏幕大小写回数据库；说话在对话框里 |
 | `class` | `class/` | 一屏一块板：课堂里的 Claude 换板、写板、说的话写在板顶；常驻栏；底部只有输入框和翻页条；学生作答自动发给它 |
-| `desk` | `memory/` | 学习台：长期存在的 artifact，数据库就是记忆库；首页列今天到期的复现、自检对话里的 Claude 写的记忆 |
+| `desk` | `memory/` | 学习台：唯一的 artifact，数据库就是记忆库；课堂、实时黑板（`live/` 的 `renderLive(…, desk)`）、自学单元（`guided.js`）都开在它里面（`sessions/{编号}`，`kind`） |
 
 - `render.js`：Markdown（markdown-it + KaTeX）+ 围栏组件 → DOM。组件在 `blocks/`，注册在 `blocks/index.js`。
 - `session.js`：全局状态（关卡、作答记录、图形注册 `session.scenes`、写法错误 `session.problems`）。
@@ -146,9 +147,11 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
 - 能写成纯函数的逻辑放在不碰 DOM 的模块里，用 `node --test` 测；DOM 行为靠浏览器里实际操作验证。
 - 界面以 iPad 为准：触控目标至少 44px，输入框字号 16px（防止聚焦放大），注意软键盘、横竖屏、Apple Pencil。
 
-## 发布组件库
+## 发布：学习台是唯一的 artifact（`docs/hub-plan.md`）
 
-改完并合进 `main` 后，要重新发布组件库 artifact（https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF）：页面是 `kit/examples/unit-matrix-vector.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`CLAUDE-PROJECT.md` 来自 `kit/dist/docs/CLAUDE-PROJECT.md`（**瘦身版**：构建时 `kit/build-split.js` 从仓库根目录的整份说明拆出来，第三节只剩组件一览），`components/*.md` 来自 `kit/dist/docs/components/`（每个组件一份写法，外部要用哪个读哪个），`capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}`。（学习台另外还要 `"downloads": true`，那是外部 Claude 照说明书第七节发布的，不在这里。）之后新发布的课件自动用新版，已经发布的保留当时复制的版本。**合进 `main`、重新发布组件库都不用问我**（我说过：肯定发），做完一批就合、就发。
+说明书、组件写法、`la-kit.js`、记忆、每一节课（课堂、实时黑板、自学单元）都在**学习台**里（https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo）。改完并合进 `main` 后，重新发布学习台：页面是 `kit/desk.html`，附带文件 `la-kit.js` 来自 `kit/dist/la-kit.js`，`CLAUDE-PROJECT.md` 来自 `kit/dist/docs/CLAUDE-PROJECT.md`（**瘦身版**：构建时 `kit/build-split.js` 从仓库根目录的整份说明拆出来，第三节只剩组件一览），`components/*.md` 来自 `kit/dist/docs/components/`（每个组件一份写法，外部要用哪个读哪个），`capabilities` 不传（沿用已有的 `sample`（带图）、`db`、`assets`、`downloads`）。数据库、assets 不受发布影响。**合进 `main`、重新发布学习台都不用问我**（我说过：肯定发），做完一批就合、就发。
 
-- 我的 claude.ai 项目指令里只有一段话：让对话里的 Claude 每个新对话先读组件库里的 `CLAUDE-PROJECT.md`（见 README「设置」）。所以说明的全文要跟着组件库一起发布，不然各个对话里的 Claude 看到的还是旧版。
-- 版本号：`CLAUDE-PROJECT.md` 开头「版本：YYYY-MM-DD」（同一天再发布加 b、c）。每次重新发布组件库前都改成新的版本号；构建时打进 `la-kit.js`（`LAKit.version`，课堂和实时黑板的「⋯」菜单里显示），对得上就说明页面和说明是同一版。
+- 外部 Claude 不发布任何 artifact：实时黑板、自学单元开在学习台里（`sessions` 的 `kind: live / unit`），课堂由页面开。说明书第一节、第五节、第七节写着。
+- 我的 claude.ai 项目指令里只有一段话：让对话里的 Claude 每个新对话先读学习台里的 `CLAUDE-PROJECT.md`（见 README「设置」）。所以说明的全文要跟着学习台一起发布。
+- 以前的组件库 artifact（https://claude.ai/artifact/5ZUhFR5T5i1wMysQmthoAF）不再更新：页面换成了 `kit/moved/index.html`，`CLAUDE-PROJECT.md` 换成 `kit/moved/CLAUDE-PROJECT.md`（一句话：去学习台读）。我改好项目指令后可以删掉它。
+- 版本号：`CLAUDE-PROJECT.md` 开头「版本：YYYY-MM-DD」（同一天再发布加 b、c）。每次重新发布前都改成新的版本号；构建时打进 `la-kit.js`（`LAKit.version`，课堂和实时黑板的「⋯」菜单、学习台底部显示），对得上就说明页面和说明是同一版。

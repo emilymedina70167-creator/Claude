@@ -7,7 +7,12 @@ import { COLLECTIONS, MEMORY_COLLECTIONS, assertWrite, toDate } from './schema.j
 
 // 课堂自己的数据：放进 sessions/{编号}/ 下面，每节课分开（编号一样的段 b1、轮次 000001 不会撞）
 // report：下课时页面算的课后报告（report.js），sessions/{编号}/report/main
-export const SESSION_SCOPED = ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report'];
+// 学习台里的实时黑板（kind: live）还有 talk、ops、ops_done、lint、meta（黑板现状 meta/now 等）；自学单元（kind: unit）的课件在 unit/main。
+// 学习台自己的 meta（memcheck、ledger）不经过 scopeDb，不会被换走
+export const SESSION_SCOPED = ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report', 'talk', 'ops', 'ops_done', 'lint', 'meta', 'unit'];
+// 一节课是哪一种：课堂（课堂里的 Claude 讲，页面开）、实时黑板（对话里的 Claude 一块板一块板写，它开）、自学单元（一次写完的课件）
+export const SESSION_KINDS = { class: '课堂', live: '实时黑板', unit: '自学单元' };
+export const kindOf = (doc) => (SESSION_KINDS[doc?.kind] ? doc.kind : 'class');
 const SID_RE = /^c-\d{8}-\d+$/;
 export const isSessionId = (s) => SID_RE.test(String(s || ''));
 

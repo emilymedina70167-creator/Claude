@@ -102,16 +102,21 @@ test('启动语：说明书地址、学到哪、上一节、到期的复现组�
   const m = M();
   m.pending = [{ id: 'pd-1', kind: 'error', label: '错题', target: 'L2-08', status: 'open', data: { cause: '换括号' } }];
   const t = handoffText(m, { kitUrl: 'https://claude.ai/artifact/KIT', today: TODAY });
+  assert.match(t, /学习台：https:\/\/claude\.ai\/artifact\/KIT。说明书、组件写法、记忆、每节课都在它里面/);
   assert.match(t, /path: "CLAUDE-PROJECT.md"/);
   assert.match(t, /学到 L2\.2\.2；下一节：先收 L2-07/);
   assert.match(t, /上一节：c-20261027-1/);
-  assert.match(t, /有一节还没下课：c-20261028-1/);
+  assert.match(t, /有一节课堂还没下课：c-20261028-1/);
+  // 对话里的 Claude 开的实时黑板还开着：告诉它往哪接着写
+  m.sessions.push({ id: 'c-20261028-2', date: TODAY, kind: 'live', title: '分块', status: 'open', startedAt: 9 });
+  assert.match(handoffText(m, { today: TODAY }), /实时黑板 c-20261028-2「分块」还开着：接着写就往 sessions\/c-20261028-2\/steps 写/);
+  assert.equal(classRows(m)[0].kind, 'live');
   assert.match(t, /备下一节数学课：往学习台写资料包 pack\/main/);
   assert.match(t, /这一科：数学/);
   assert.match(handoffText(m, { today: TODAY, space: "en" }), /pack\/main-en/);
   assert.match(t, /1 张改动单等我确认/);
   assert.match(t, /到期的复现组：R3/);
-  assert.match(t, /地址问我要/);
+  assert.match(handoffText(m, { today: TODAY }), /地址问我要/);
 });
 
 const DOCS = componentDocs(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8'));
@@ -135,7 +140,7 @@ test('说明书瘦身：主说明不到一半大小，别的几节原样，第�
   const { main, files, index } = splitProject(src, { kitUrl: 'https://claude.ai/artifact/KIT' });
   assert.ok(Buffer.byteLength(main) < Buffer.byteLength(src) * 0.5);
   assert.match(main, /版本：\d{4}-\d{2}-\d{2}/);
-  for (const h of ['## 一、发布课件', '## 二、怎么设计一个单元', '## 六、课堂模式', '## 七、学习台']) assert.ok(main.includes(h), h);
+  for (const h of ['## 一、自学单元的写法', '## 二、怎么设计一个单元', '## 六、课堂模式', '## 七、学习台']) assert.ok(main.includes(h), h);
   assert.equal(main.slice(main.indexOf('## 七、学习台')), src.slice(src.indexOf('## 七、学习台')));
   assert.match(main, /### 组件一览/);
   assert.match(main, /### let：/); // 每节课都用的留在主说明里

@@ -198,3 +198,11 @@
 .la-lesson .dk-table2 th, .la-lesson .dk-table2 td { border: 0; border-bottom: 1px solid var(--faint); background: transparent; }
 .dk-err .dk-k { min-width: 4.6em; }
 .dk-bar i.is-zero { background: var(--faint); }
+/* 一个学习台：没下课的课堂、实时黑板、自学单元都列在「上课」卡里（docs/hub-plan.md） */
+.dk-open { align-items: center; }
+.dk-row .dk-kind { flex: none; min-width: 0; padding: 2px 10px; border-radius: 999px; font: 600 12.5px/1.5 var(--sans); background: rgb(var(--chalk-rgb) / 0.08); color: rgb(var(--chalk-rgb) / 0.85); }
+.dk-row.is-live .dk-kind { background: rgb(var(--yellow-rgb) / 0.18); color: var(--yellow); }
+.dk-row.is-unit .dk-kind { background: rgb(var(--green-rgb) / 0.18); color: var(--green); }
+.dk-unit-bar { display: flex; align-items: center; gap: 12px; max-width: 860px; margin: 12px auto 0; padding: 0 20px; font: 14px/1.4 var(--sans); }
+.dk-unit-bar .muted { flex: 1; }
+.dk-unit-bar .btn { min-height: 44px; }
