@@ -129,6 +129,8 @@ function loadDump(dir, book) {
 
 // 告诉转写的模型这是什么：学生自己的书，转了只存进学生私人的学习台自己复习（页面里的 Haiku 以为是要外传，不肯转）
 const CONTEXT = '（这些是学生自己手里这本教材的扫描页。转写的文字只存进学生私人的学习台，上课时给讲课的老师按条取用，不对外发布。）';
+// 小模型常把「第 N 页」写成页眉上印的页码：写明用我给的编号（apply 读回时万一没照做，也按顺序对回去）
+const pageRule = (nums) => `\n【页码】分页行「=== 第 N 页」里的 N 一律用我给的编号 ${nums.join('、')}（按图的先后顺序），不要用页面上印的页码。\n`;
 
 function plan() {
   const dir = opt('dump'), book = opt('book'), work = opt('work');
@@ -150,7 +152,7 @@ function plan() {
   for (const nums of batchesOf(todo, per)) {
     const id = `b${pad(nums[0])}`;
     const layer = Object.fromEntries(nums.map((n) => [n, byN.get(n).layer || '']));
-    const prompt = `${CONTEXT}\n\n${transcribePrompt({ title: info.title, subject: info.subject }, nums, { ...ctxBefore(pages, nums[0]), kind: info.kind, layer })}`;
+    const prompt = `${CONTEXT}\n${pageRule(nums)}\n${transcribePrompt({ title: info.title, subject: info.subject }, nums, { ...ctxBefore(pages, nums[0]), kind: info.kind, layer })}`;
     fs.writeFileSync(path.join(out, `${id}.prompt.txt`), prompt);
     const imgs = Object.fromEntries(nums.map((n) => [n, byN.get(n).img]));
     fs.writeFileSync(path.join(out, `${id}.json`), JSON.stringify({ book, pages: nums, imgs }, null, 1));
@@ -193,6 +195,12 @@ function apply() {
     const raw = fs.readFileSync(outFile, 'utf8');
     let parsed;
     try { parsed = parseTranscription(raw, nums); } catch (e) { report.push(`${id}：${e.message}：${raw.replace(/\s+/g, ' ').slice(0, 100)}`); continue; }
+    // 一页都对不上、但页数一样：它写的是书上印的页码，按顺序对回我给的编号
+    if (parsed.missing.length === nums.length && parsed.pages.size === nums.length) {
+      const got = [...parsed.pages.keys()].sort((a, b) => a - b);
+      parsed = { pages: new Map(got.map((k, i) => [nums[i], parsed.pages.get(k)])), missing: [] };
+      report.push(`${id}：页码写成了 ${got[0]}–${got[got.length - 1]}，已按顺序对回 ${nums[0]}–${nums[nums.length - 1]}`);
+    }
     const got = Object.fromEntries(nums.filter((n) => parsed.pages.has(n)).map((n) => [n, parsed.pages.get(n)]));
     if (parsed.missing.length) report.push(`${id}：第 ${parsed.missing.join('、')} 页没转出来`);
     if (!Object.keys(got).length) continue;
