@@ -8,6 +8,7 @@
 // 不限的话全被规则占满（2026-10-29 用真数据量出来的）。目录有自己的上限 CATALOG_MAX，太长时远处的错题、掌握收成按块的编号。
 // 撤销了的（status: void、有一条作废的更正指向它）不带；学生标了已解决的错题注明；还在等学生确认的改动单列出来，免得它再提一遍。
 import { weaknessHits, hitText, lessonLines, lessonLinesText, pointCatalog } from './skills.js';
+import { debriefText } from './debrief.js';
 import { voidedIds, resolvedErrors, pendingTitle, absorbedSlips } from './memo.js';
 import { filterSpace, spaceOfId, positionId, sharedFor } from './space.js';
 import { dueList, toDate } from './schema.js';
@@ -152,7 +153,9 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
       const x = sessionLine(s, obs, 160);
       // 最近那节归过类的：会了 / 还不稳 / 下次先测（页面按知识点算的），这节课开头先测没稳的
       const ll = i === 0 && s.skills ? lessonLinesText(lessonLines(s.skills, catalog)) : [];
-      return { key: `sessions/${s.id}`, text: `- ${x.head}${s.date ? ` ${s.date}` : ''}${x.line ? `：${x.line}` : ''}${x.sum.length ? `\n  - 小结：${x.sum.join(' / ')}` : ''}${ll.length ? `\n  - 页面按知识点算的：${ll.join('。')}` : ''}` };
+      // 最近那节下课后的复盘（debrief.js）：误解消了没有、开头先测什么
+      const db = i === 0 && s.debrief ? debriefText(s.debrief).split('\n').map((l) => `    ${l}`).join('\n') : '';
+      return { key: `sessions/${s.id}`, text: `- ${x.head}${s.date ? ` ${s.date}` : ''}${x.line ? `：${x.line}` : ''}${x.sum.length ? `\n  - 小结：${x.sum.join(' / ')}` : ''}${ll.length ? `\n  - 页面按知识点算的：${ll.join('。')}` : ''}${db ? `\n  - 下课后的复盘：\n${db}` : ''}` };
     }),
   });
 

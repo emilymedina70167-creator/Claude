@@ -16,7 +16,8 @@ import { getStore, getDownloads } from '../live/store.js';
 import { VERSION, KIT_URL } from '../version.js';
 import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toDate } from './schema.js';
 import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf } from './session.js';
-import { buildReport, reportLine, REPORT_VERSION, lastActivity } from './report.js';
+import { buildReport, reportLine, REPORT_VERSION, lastActivity, reportText } from './report.js';
+import { needsDebrief, transcriptText, debriefPrompt, parseDebrief, debriefText, debriefView, DEBRIEF_VERSION } from './debrief.js';
 import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA } from './backup.js';
 import { createManualForm } from './manual.js';
 import { createMemOps } from './memops.js';
@@ -184,11 +185,11 @@ export async function renderDesk(root, meta) {
       loaded.add(c);
       failed.delete(c);
       if (c === 'sessions' || c === 'position') paintClass();
-      if (c === 'sessions') { fixReports(); fixSkills(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
+      if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
       if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) fixReports(); if (lastRes) paintWeek(toDate(Date.now())); }
       if (c === 'curriculum') manualForm?.refreshBlocks();
-      if (['curriculum', 'weaknesses', 'observations', 'mastery'].includes(c)) fixSkills();
+      if (['curriculum', 'weaknesses', 'observations', 'mastery'].includes(c)) { fixSkills(); fixDebriefs(); }
       schedule();
     }, () => { failed.add(c); loaded.add(c); schedule(); });
   }
@@ -339,6 +340,8 @@ export async function renderDesk(root, meta) {
     const lastLine = last ? String(last.report?.line || '') : '';
     // 上一节没稳的知识点（归过类才有）：这节开头先测
     const lastNext = last?.skills ? lessonLines(last.skills, pointCatalog(data.sessions, data.mastery)).next : [];
+    // 上一节下课后的复盘（debrief.js）：只列还没解决的（还在、没真正测过、新冒出的），解决了的在「以前的课」里看
+    const lastDebrief = debriefView(last?.debrief).filter((x) => x.kind === 'bad' || x.kind === 'warn');
     // 课前热身（journey.js）：上一节没稳的点在题库里有原题，开一节练习先做几道
     // 上一节以后已经开过热身（做完或还开着）就不再出按钮：还开着的在下面「没下课的」那一行接着做
     const warmed = last && mine.sessions.some((x) => x.warmup && (x.startedAt || 0) > (last.endedAt || 0));
@@ -379,6 +382,7 @@ export async function renderDesk(root, meta) {
           ${stat('is-recall', '.dk-recall', rc.total, '条', '今天要记')}
           ${last ? `<a class="dk-stat is-last" href="#classes/${escapeHtml(last.id)}"><span class="dk-stat-n">${escapeHtml(String(last.date || '').slice(5).replace('-', '/'))}</span><span class="dk-stat-u"></span><span class="dk-stat-k">上一节${lastLine ? ` · ${escapeHtml(lastLine)}` : ''}</span></a>` : stat('is-last', '.dk-class', '—', '', '还没上过课')}
         </div>
+        ${lastDebrief.length ? `<p class="dk-last muted"><span class="dk-k">复盘</span>${lastDebrief.map((x) => inline(x.text)).join('；')}</p>` : ''}
         ${lastNext.length ? `<p class="dk-last muted"><span class="dk-k">下次先测</span>${lastNext.map((x) => inline(x.name)).join('；')}${warm.length && !open ? ` <button type="button" class="btn btn-sm dk-warm" title="上一节没稳的那几个点，题库里的原题；页面判分，不调用 Claude">课前热身 ${warm.length} 题</button>` : ''}</p>` : ''}
       </div>
       ${others.map((x) => { const k = kindOf(x); return `<div class="dk-row dk-open is-${k}"><span class="dk-kind">${SESSION_KINDS[k]}</span><span>${inline(x.title || blockTitle(x.block) || x.id)}</span><button type="button" class="btn btn-primary dk-go" data-sid="${escapeHtml(x.id)}">${k === 'class' ? '接着上课' : '进去'}</button><button type="button" class="btn btn-sm dk-close" data-sid="${escapeHtml(x.id)}" title="不调用 Claude：只结束这节、页面算课后报告">直接下课</button><button type="button" class="btn btn-sm btn-danger dk-purge" data-sid="${escapeHtml(x.id)}" title="测试开的、不要的课：连黑板和记录一起删掉">删掉</button></div>`; }).join('')}
@@ -637,6 +641,52 @@ export async function renderDesk(root, meta) {
     } finally {
       skillBusy = false;
       setTimeout(fixSkills, 500);
+    }
+  }
+
+  // —— 下课后的复盘（debrief.js，docs/smart-plan.md 第 2 批）：下了课、报告写好的课，后台调用一次 Opus 通读整节课，
+  // 判断误解消了没有、写好下一节开头先测什么，存在 sessions/{编号}.debrief，下一节的课堂和备课带着。
+  // 新的课先复盘（下一节最要用的就是上一节的）；一次打开学习台最多 3 节；走后台（lane: 'bg'），不和别的调用抢。
+  // 讲课只用 Opus 5.5 high，复盘决定下一节怎么开场，也用它；回的不是 Opus 5.5 就不存，下次再试
+  const debriefed = new Set();
+  let debriefBusy = false;
+  async function fixDebriefs() {
+    if (debriefBusy || debriefed.size >= 3 || !['sessions', 'weaknesses', 'observations'].every((c) => loaded.has(c))) return;
+    const x = data.sessions.filter((d) => !debriefed.has(d.id) && needsDebrief(d)).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+    if (!x) return;
+    debriefBusy = true;
+    debriefed.add(x.id);
+    try {
+      const ai = await deskAI();
+      if (!ai) return;
+      const scoped = scopeDb(db, x.id);
+      const [turns, rep] = await Promise.all([
+        scoped.collection('class_turns').get().then((s) => s.docs.map((d) => d.data()), () => []),
+        scoped.doc('report/main').get().then((r) => (r.exists ? r.data() : null), () => null),
+      ]);
+      if (!turns.length) return;
+      const sp = spaceOfDoc('sessions', x, data) || space;
+      const gone = voidedIds(data);
+      const weak = filterSpace(data, sp).weaknesses.filter((w) => !['closed', 'merged', 'void'].includes(w.status) && !gone.has(`weaknesses/${w.id}`));
+      // 上一节（同一科、比这节早）的复盘：对照误解有没有又出现
+      const prevS = data.sessions.filter((d) => d.id !== x.id && d.debrief && (spaceOfDoc('sessions', d, data) || space) === sp && (d.startedAt || 0) < (x.startedAt || 0))
+        .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+      const prompt = debriefPrompt({ session: x, transcript: transcriptText(turns), report: rep ? reportText(rep) : '', weaknesses: weak, prev: prevS ? debriefText(prevS.debrief) : '', subject: subjectOf(x.block || '') });
+      const res = await ai.call(prompt, { model: MODEL, effort: 'high', modelTier: 'complex', cache: false, lane: 'bg' });
+      if (res?.modelApplied && res.modelApplied !== MODEL) return;
+      const got = parseDebrief(res.text);
+      if (got.problems.includes('回的不是复盘')) { console.warn('复盘回的不是复盘', x.id, String(res.text).slice(0, 200)); return; }
+      const debrief = { v: DEBRIEF_VERSION, at: Date.now(), model: res.modelApplied || '', bytes: new TextEncoder().encode(prompt).length, mis: got.mis, pace: got.pace, habit: got.habit, opening: got.opening, advice: got.advice };
+      // 读最新的再写（报告、归类可能刚写过这一条）
+      const cur = await db.doc(`sessions/${x.id}`).get().then((r) => (r.exists ? r.data() : null));
+      if (!cur) return;
+      assertWrite('page', 'sessions');
+      await db.doc(`sessions/${x.id}`).set({ ...cur, debrief });
+    } catch (err) {
+      console.warn('复盘没做成', x.id, err?.message || err?.code || err);
+    } finally {
+      debriefBusy = false;
+      setTimeout(fixDebriefs, 500);
     }
   }
 

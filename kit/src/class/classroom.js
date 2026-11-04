@@ -37,6 +37,7 @@ import { shouldNudge, stuckText, STUCK_MS } from './stuck.js';
 import { fromEvidence, sayEvidence, draftEvidence, observationRecord, slipRecord, memoryRead } from '../memory/session.js';
 import { callCost, usageOf, usageText } from './usage.js';
 import { reportText } from '../memory/report.js';
+import { debriefText } from '../memory/debrief.js';
 import { earlierClasses } from '../memory/digest.js';
 import { choose } from '../dialog.js';
 import { lessonSheet, sheetMd } from '../memory/sheet.js';
@@ -312,6 +313,8 @@ export async function renderClass(root, meta, desk = null) {
       x.summary ? `- 小结：${String(x.summary).slice(0, 1500)}` : '',
       ...(x.notes || []).slice(0, 8).map((n) => `- ${String(n).slice(0, 300)}`),
       x.report ? `- 课后报告：\n${String(x.report).slice(0, 3000)}` : '',
+      // 下课后的复盘（debrief.js）：误解消了没有、这节开头先测什么
+      x.debrief ? `- 下课后的复盘（教研员通读整节课写的）：\n${x.debrief}` : '',
     ].filter(Boolean).join('\n')).join('\n\n');
   })().catch((e) => console.warn('以前的课没取到', e)) : Promise.resolve());
   if (desk && !readOnly) setTimeout(fetchEarlier, 2000);
@@ -1905,6 +1908,7 @@ export async function renderClass(root, meta, desk = null) {
         id: sid, kind: doc.kind || 'class', date: doc.date, block: doc.block, title: doc.title, status: doc.status,
         summary: obs.find((o) => o.kind === 'summary')?.text, notes: obs.filter((o) => o.kind !== 'summary').map((o) => `${o.kind}：${o.text}`).slice(0, 12),
         report: rep ? reportText(rep).slice(0, 6000) : doc.report?.line || '（这节课还没有课后报告）',
+        ...(doc.debrief ? { debrief: debriefText(doc.debrief) } : {}),
       });
     }
     return { collection: 'sessions', items: out };

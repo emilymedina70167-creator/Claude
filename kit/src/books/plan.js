@@ -3,6 +3,7 @@
 // - 备课：开课前按这一块的范围、要点、挂着的教材和文稿原文、学生的记忆，写这节课的资料包（目标、推进、要用的组件、题、要照着讲的条目）。
 //   prepPrompt / parsePrep。资料包的样子和对话里的 Claude 写的一样（pack/main、pack/problems），课堂照常读。
 // 纯函数，有测试；画面和调用在 planview.js。
+import { rehearsalText } from './rehearse.js';
 import { chunkLine, chunkText } from './textbook.js';
 import { fixLatexEscapes } from './ingest.js';
 import { spaceOfDoc, spaceOfId } from '../memory/space.js';
@@ -246,6 +247,8 @@ export function lessonPlanText(main = {}) {
     : main.review.map((r) => (r && typeof r === 'object' ? `- ${r.id}：${r.how}` : `- ${r}`)).join('\n');
   if (Array.isArray(main.prepCheck) && main.prepCheck.length) out.prepCheck = main.prepCheck.map((w) => `- ${w}`).join('\n');
   if (Array.isArray(main.todos) && main.todos.length) out.todos = main.todos.map((t) => `- ${t.text}`).join('\n');
+  // 课前预演（rehearse.js）：按这个学生的记录把教案走了一遍，哪一步会卡、拿什么题探
+  if (main.rehearsal && typeof main.rehearsal === 'object') { const t = rehearsalText(main.rehearsal); if (t) out.rehearsal = t; }
   return out;
 }
 

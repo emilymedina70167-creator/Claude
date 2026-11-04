@@ -189,6 +189,9 @@ npm run build     # 生成 kit/dist/la-kit.js（DEBUG=1 时不压缩）
   - 记忆点 `recall`（`K12`，状态类）：`recall.js`（纯函数：到期、今天想哪几条 `recallToday`、自评 `rateRecall`（got 升一档、30 天那档再想起来 `done`；vague 不动；miss 回 1 天 `lapses + 1`）、证据 `recallEvidence`（`src: recall`，不进掌握））+ `recallrun.js`（首页「要记的」：先写再看答案、三个按钮）。课堂 memo 的 `recall q= a=`（`memo.js`，一节最多 8 条、几乎一样的不收、一科最多 `RECALL_CAP`），我自己加 / 停掉是 `meChange('recall-add' / 'recall-void')`；`digest.js` 的记忆摘要带「要记的」（这几块的、老想不起的，最多 12 条）。
   - 课堂计划块：`protocol.js` 认 `board plan`（学生看不到，≤ 200 字）；`prompt.js` 的 `latestPlan` 从整段历史里取最新一份放进「黑板现状」前面，`stripPlan` 把历史里的 plan 块去掉；`features.js` 的 `plan` 开关**现在关着**（教学尺子量下来没看出好处，`evals/teaching/results.md`）。
   - 教法里三门课共用的几条（误解要早探、确认题要换数……）在 `prompt.js` 的 `TEACH_PROBE`，来自教学尺子的评卷。
+- 课外的教研组（`docs/smart-plan.md` 第 2 批，都走 `lane: 'bg'`、Opus 5.5 high，不碰上课的速度）：
+  - 下课后的复盘 `debrief.js`（纯函数：`needsDebrief`、`transcriptText`、`debriefPrompt`、`parseDebrief`（`误解｜消了/还在/绕开了/新冒出｜…｜依据`、`节奏`、`习惯`、`开场`、`建议` 几种行）、`debriefText` 给老师、`debriefView` 给我看）；`desk.js` 的 `fixDebriefs` 首页打开时一节一节做（新的先，一次最多 3 节），存 `sessions/{编号}.debrief`。下一节的记忆摘要（`digest.js` 以前学这一块的课的第一节）、课堂开课取的以前的课（`classroom.js` 的 `sessionRows` / `fetchEarlier`）、首页「上一节」下面的「复盘」一行、「以前的课」那一页（`pages.js` 的 `debriefHtml`；`views.js` 的 `classRows` 带 `debrief`）都用它。`?dev` 的模拟 Claude（`books/devmock.js`）也会回复盘。
+  - 课前预演 `books/rehearse.js`（纯函数：`rehearsePrompt`、`parseRehearsal`（`步｜第几步｜…｜问题｜探题`、`改｜…`）、`rehearsalText`）；`planview.js` 备好教案后 `rehearse` 后台跑，写进 `pack/main` 的 `rehearsal`（`at` 对不上、重新备过课就不写）；`plan.js` 的 `lessonPlanText` 写成文字，`prompt.js` 的 `PACK_FIELDS` 里「课前预演」一节。
 - 浏览器里看：`kit/examples/desk-demo.html?dev`（「填入示例记忆」→「开新课」，输入框打「测试:整理」：模拟老师写一个 memo 块，三档各几条、再故意写两条不对的；下课时模拟小结后面带整理单。打「测试:记忆」：模拟老师真的调用 `memory_read`、`lesson_note`、`slip_note`，写一段标了 `point=tr` 的题；点「下课」后回首页看「上一节」、补记、导出备份）。
 
 ## 硬性规定（我明确要求过的，不要改）
