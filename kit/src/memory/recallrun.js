@@ -5,6 +5,12 @@ import { mdToHtml, escapeHtml } from '../render.js';
 import { toast } from '../record.js';
 import { assertWrite, applyChange, toDate } from './schema.js';
 import { RATINGS, rateRecall, recallEvidence, sameText } from './recall.js';
+import { SPRING, SHEET } from './feel.js';
+
+// 一叠卡（2026-11-04，照「学习台手感」原型）：正面是问题和写的框，点「看答案」翻过来，背面是答案和三个按钮；
+// 评完那张飞走（想起来了往右、没想起往左、模糊往上），后面那张跟上来。只是画面，排期和记录照旧
+const still = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const anim = (el, frames, opts) => (el?.animate && !still() ? el.animate(frames, opts) : { finished: Promise.resolve() });
 
 const inline = (s) => { try { return mdToHtml(String(s ?? ''), { inline: true }); } catch { return escapeHtml(String(s ?? '')); } };
 
@@ -21,29 +27,43 @@ export function runRecall(host, { items = [], db, titleOf = () => '', onDone = (
   function show() {
     if (at >= list.length) return done();
     const k = list[at];
+    const left = list.length - at;
     host.innerHTML = `
       <div class="rc-run">
         <div class="rc-top"><span class="muted">第 ${at + 1} / ${list.length} 条</span><button type="button" class="btn btn-sm rc-stop">先到这</button></div>
-        <div class="rc-q">${inline(k.q)}</div>
-        <textarea class="rc-typed" rows="3" placeholder="先自己写出来（Apple Pencil 可以直接在框里写）"></textarea>
-        <div class="rc-acts"><button type="button" class="btn btn-primary rc-show">看答案</button></div>
-        <div class="rc-back" hidden></div>
+        <div class="rc-deck${left > 1 ? ' has-2' : ''}${left > 2 ? ' has-3' : ''}">
+          <div class="rc-card">
+            <div class="rc-front">
+              <div class="rc-q">${inline(k.q)}</div>
+              <textarea class="rc-typed" rows="3" placeholder="先自己写出来（Apple Pencil 可以直接在框里写）"></textarea>
+              <div class="rc-acts"><button type="button" class="btn btn-primary rc-show">翻过来看答案</button></div>
+            </div>
+            <div class="rc-back" hidden></div>
+          </div>
+        </div>
       </div>`;
     host.querySelector('.rc-stop').addEventListener('click', done);
     host.querySelector('.rc-show').addEventListener('click', reveal);
+    // 不是第一张：从后面那一叠里跟上来
+    if (at > 0) anim(host.querySelector('.rc-card'), [{ transform: 'translateY(14px) scale(.95)', opacity: 0.6 }, { transform: 'none', opacity: 1 }], { duration: 460, easing: SPRING });
     window.scrollTo({ top: Math.max(0, host.getBoundingClientRect().top + window.scrollY - 80), behavior: 'smooth' });
   }
 
   function reveal() {
     const k = list[at];
     const typed = host.querySelector('.rc-typed').value;
-    host.querySelector('.rc-acts').hidden = true;
     host.querySelector('.rc-typed').readOnly = true;
+    const card = host.querySelector('.rc-card');
     const back = host.querySelector('.rc-back');
-    back.hidden = false;
     const t = k.block ? titleOf(k.block) : '';
+    // 翻面：转到侧面那一刻把正面换成背面，再转回来（不靠 backface-visibility，几张叠着的卡也不会透）
+    const flip = () => { host.querySelector('.rc-front').hidden = true; back.hidden = false; };
+    if (still()) flip();
+    else anim(card, [{ transform: 'perspective(1200px) rotateY(0)' }, { transform: 'perspective(1200px) rotateY(90deg)' }], { duration: 200, easing: 'ease-in' }).finished.then(() => { flip(); anim(card, [{ transform: 'perspective(1200px) rotateY(-90deg)' }, { transform: 'perspective(1200px) rotateY(0)' }], { duration: 520, easing: SPRING }); });
     back.innerHTML = `
+      <p class="rc-q-small">${inline(k.q)}</p>
       <div class="rc-a"><span class="dk-k">答案</span>${inline(k.a)}</div>
+      ${typed.trim() ? `<p class="rc-mine"><span class="dk-k">我写的</span>${escapeHtml(typed)}</p>` : ''}
       <p class="rc-where muted">${t ? `${inline(t)} · ` : ''}${k.last ? `上次${{ got: '想起来了', vague: '模糊', miss: '没想起' }[k.result] || '想过'}` : '第一次想'}${Number(k.lapses) ? `，没想起过 ${Number(k.lapses)} 次` : ''}${sameText(typed, k.a) ? '　<b class="rc-same">写得和答案一样</b>' : ''}</p>
       <div class="rc-rate">${Object.entries(RATINGS).map(([v, r]) => `<button type="button" class="btn rc-r is-${v}" data-r="${v}"><b>${r.label}</b><span class="muted">${r.hint}</span></button>`).join('')}</div>`;
     back.querySelectorAll('.rc-r').forEach((b) => b.addEventListener('click', () => rate(b.dataset.r, typed)));
@@ -67,6 +87,9 @@ export function runRecall(host, { items = [], db, titleOf = () => '', onDone = (
       const { id: _, ...base } = cur ? { id: k.id, ...cur } : k;
       await db.doc(`recall/${k.id}`).set(applyChange(base, patch, { date: today, by: 'page', basis: [evId], note: `我自己想了一遍：${note}` }));
       tally[rating]++;
+      // 评完那张飞走：想起来了往右、没想起往左、模糊往上
+      const dir = rating === 'got' ? 1 : rating === 'miss' ? -1 : 0;
+      await anim(host.querySelector('.rc-card'), [{ transform: 'none', opacity: 1 }, { transform: dir ? `translateX(${dir * 120}%) rotate(${dir * 10}deg)` : 'translateY(-40px) scale(.92)', opacity: 0 }], { duration: 380, easing: SHEET, fill: 'forwards' }).finished.catch(() => {});
       at++;
       show();
     } catch (err) {
@@ -80,6 +103,7 @@ export function runRecall(host, { items = [], db, titleOf = () => '', onDone = (
     if (!n) { onDone(); return; }
     host.innerHTML = `
       <div class="rc-run">
+        <svg class="rc-tick" viewBox="0 0 84 84" aria-hidden="true"><circle cx="42" cy="42" r="38"/><path d="M26 43 37 54 59 31"/></svg>
         <p class="rc-sum">想了 ${n} 条：想起来了 ${tally.got}、模糊 ${tally.vague}、没想起 ${tally.miss}。</p>
         <p class="muted">${tally.miss ? '没想起的明天再来；' : ''}想起来的隔得更久再问，隔 30 天还想得起来就算记牢了。</p>
         <div class="rc-acts"><button type="button" class="btn btn-primary rc-ok">好</button></div>

@@ -42,6 +42,9 @@ import { weekLines, progress, warmupDrills, backlogDays, daysLeft, EXAM_DATE } f
 import { needsSkills, skillsPrompt, parseSkills, skillSummary, pointCatalog, lessonLines, SKILLS_VERSION } from './skills.js';
 
 // 正在看哪一科（这台设备记着；分科见 space.js）
+// 首页的版式：书页（一张张分组卡，默认）或者小组件（像 iPad 主屏，一格一格），这台设备记着
+const LAYOUT_KEY = 'la-desk-layout';
+const loadLayout = () => { try { return localStorage.getItem(LAYOUT_KEY) === 'grid' ? 'grid' : 'list'; } catch { return 'list'; } };
 const SPACE_KEY = 'la-desk-space';
 const loadSpace = () => { try { const v = localStorage.getItem(SPACE_KEY); return SPACES[v] ? v : DEFAULT_SPACE; } catch { return DEFAULT_SPACE; } };
 import { renderClass, MODEL } from '../class/classroom.js';
@@ -94,6 +97,7 @@ export async function renderDesk(root, meta) {
   const viewing = viewHash();
   if (viewing) return enterClass(root, meta, viewing, { readOnly: true });
   root.classList.add('is-desk');
+  root.dataset.layout = loadLayout();
   const unit = meta.unit || session.title || '学习台';
   root.innerHTML = `
     <div class="dk-shell">
@@ -108,6 +112,7 @@ export async function renderDesk(root, meta) {
     <div class="dk-home">
     <div class="dk-col">
     <section class="dk-card dk-class" hidden aria-label="上课" data-menu="hero"><div class="dk-body"></div></section>
+    <div class="dk-days-slot"></div>
     <section class="dk-group" aria-label="今天"><h2 class="dk-grp-h">今天</h2><div class="dk-card dk-rows"></div></section>
     <div class="dk-drawer" hidden>
     <div class="dk-part dk-today" hidden><h2 class="dk-h">复现</h2><div class="dk-body"></div></div>
@@ -346,7 +351,7 @@ export async function renderDesk(root, meta) {
   let prepBusy = false;
   let prepMsg = '';
   // 主角卡右边的签条：距考研几天，下面一枚南大的校徽；点它看还剩几周（openDays）
-  const spineHtml = () => { const n = daysLeft(); return n < 0 ? '' : `<button type="button" class="dk-spine" data-open="days" data-menu="days" aria-label="距考研还有 ${n} 天，目标南京大学"><span class="dk-tag"><span class="dk-tag-k">${n ? '距考研' : '今天'}</span><span class="dk-tag-n">${n || '考研'}</span><span class="dk-tag-u">${n ? '天' : ''}</span></span><span class="dk-nju is-shield" aria-hidden="true"></span></button>`; };
+  const spineHtml = (widget = false) => { const n = daysLeft(); const [y, mo, d] = EXAM_DATE.split('-').map(Number); return n < 0 ? '' : `<button type="button" class="dk-spine${widget ? ' dk-card is-widget' : ''}" data-open="days" data-menu="days" aria-label="距考研还有 ${n} 天，目标南京大学"><span class="dk-tag"><span class="dk-tag-k">${n ? '距考研' : '今天'}</span><span class="dk-tag-n">${n || '考研'}</span><span class="dk-tag-u">${n ? '天' : ''}</span></span>${widget ? `<small class="dk-days-date">${y} 年<br>${mo} 月 ${d} 日</small>` : ''}<span class="dk-nju is-shield" aria-hidden="true"></span></button>`; };
   function paintClass() {
     if (!loaded.has('sessions')) return;
     const box = $('.dk-class');
@@ -387,6 +392,7 @@ export async function renderDesk(root, meta) {
     const others = opens.filter((x) => x !== open);
     // 后台一写数据（补报告、归类、写掌握）就会重画这一块：正在填的备课表单（选的块、教材页、展开着）留住
     const keep = { open: box.querySelector('.dk-prepfold')?.open, block: box.querySelector('.dk-prep-block')?.value, pages: box.querySelector('.dk-prep-pages')?.value };
+    $('.dk-days-slot').innerHTML = root.dataset.layout === 'grid' ? spineHtml(true) : '';
     box.querySelector('.dk-body').innerHTML = `
       ${openPd.length ? `<p><a class="dk-link dk-to-pending" href="#">还有 ${openPd.length} 条以前留下的没写进去 ↓</a></p>` : ''}
       <div class="dk-hero-wrap"><div class="dk-hero">
@@ -402,7 +408,7 @@ export async function renderDesk(root, meta) {
         ${last ? `<a class="dk-lastline" href="#classes/${escapeHtml(last.id)}">上一节 ${escapeHtml(String(last.date || '').slice(5).replace('-', '/'))}${lastLine ? `：${escapeHtml(lastLine)}` : ''}</a>` : ''}
         ${lastDebrief.length ? `<p class="dk-last muted"><span class="dk-k">复盘</span>${lastDebrief.map((x) => inline(x.text)).join('；')}</p>` : ''}
         ${lastNext.length ? `<p class="dk-last muted"><span class="dk-k">下次先测</span>${lastNext.map((x) => inline(x.name)).join('；')}${warm.length && !open ? ` <button type="button" class="btn btn-sm dk-warm" title="上一节没稳的那几个点，题库里的原题；页面判分，不调用 Claude">课前热身 ${warm.length} 题</button>` : ''}</p>` : ''}
-      </div>${spineHtml()}</div>
+      </div>${root.dataset.layout === 'grid' ? '' : spineHtml()}</div>
       ${others.map((x) => { const k = kindOf(x); return `<div class="dk-row dk-open is-${k}"><span class="dk-kind">${SESSION_KINDS[k]}</span><span>${inline(x.title || blockTitle(x.block) || x.id)}</span><button type="button" class="btn btn-primary dk-go" data-sid="${escapeHtml(x.id)}">${k === 'class' ? '接着上课' : '进去'}</button><button type="button" class="btn btn-sm dk-close" data-sid="${escapeHtml(x.id)}" title="不调用 Claude：只结束这节、页面算课后报告">直接下课</button><button type="button" class="btn btn-sm btn-danger dk-purge" data-sid="${escapeHtml(x.id)}" title="测试开的、不要的课：连黑板和记录一起删掉">删掉</button></div>`; }).join('')}
       ${blocksHere.length ? `<details class="dk-fold dk-prepfold"${prepBusy || prepMsg ? ' open' : ''}><summary><span class="dk-fold-t">${main ? '换一块 / 重新备课' : '让 Claude 备课'}</span><span class="muted">${main ? '' : '选一块，Claude 先备好教案（也可以直接开课）'}</span></summary>${planner.prepHtml({ suggested: main?.block || suggestBlock(blocksHere, pos), blocks: blocksHere, main, busy: prepBusy, msg: prepMsg })}</details>` : ''}`;
     {
@@ -1026,16 +1032,40 @@ export async function renderDesk(root, meta) {
   }, { layer: $('.dk-layer') });
 
   // —— 样子（theme.js）：只有紫藤；跟着 iPad 的白天晚上换，或者固定白天、固定晚上。换的时候从手指那一点圆形铺开 ——
+  // 想要的版式（管理页里点了就是它）；首页上显示的（root.dataset.layout）回到首页时才变形过去
+  let wantLayout = root.dataset.layout;
+  // 换版式：同一块东西（主角卡、距考研、今天的每一行、这一周）用 View Transitions 从书页的位置直接变形到小组件的位置
+  function morphLayout() {
+    if (root.dataset.layout === wantLayout) return;
+    const swap = () => { root.dataset.layout = wantLayout; paintClass(); };
+    if (!document.startViewTransition || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)) { swap(); return; }
+    root.classList.add('vt-morph');
+    document.startViewTransition(swap).finished.finally(() => root.classList.remove('vt-morph'));
+  }
   function paintLook() {
     const cur = isAuto() ? 'auto' : document.documentElement.dataset.theme === 'inknight' ? 'night' : 'day';
     const dark = typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
     $('.dk-look .dk-body').innerHTML = `<div class="dk-spaces dk-look-mode" role="tablist" aria-label="白天晚上">${[['auto', '跟着 iPad'], ['day', '白天'], ['night', '晚上']].map(([v, t]) => `<button type="button" class="dk-space dk-look-m" data-mode="${v}" aria-selected="${v === cur}">${t}</button>`).join('')}</div>
-      <p class="dk-sub muted">${cur === 'auto' ? `iPad 是浅色时用白天，切到深色（设置 → 显示与亮度，可以设成日落后自动）就换成晚上。现在 iPad 是${dark ? '深色' : '浅色'}。` : cur === 'day' ? '一直用白天的。' : '一直用晚上的。'}</p>`;
+      <p class="dk-sub muted">${cur === 'auto' ? `iPad 是浅色时用白天，切到深色（设置 → 显示与亮度，可以设成日落后自动）就换成晚上。现在 iPad 是${dark ? '深色' : '浅色'}。` : cur === 'day' ? '一直用白天的。' : '一直用晚上的。'}</p>
+      <p class="dk-look-k">首页的版式</p>
+      <div class="dk-spaces dk-look-layout" role="tablist" aria-label="首页的版式">${[['list', '书页'], ['grid', '小组件']].map(([v, t]) => `<button type="button" class="dk-space dk-look-l" data-layout="${v}" aria-selected="${v === wantLayout}">${t}</button>`).join('')}</div>
+      <p class="dk-sub muted">${wantLayout === 'grid' ? '像 iPad 主屏的小组件：一格一格、字很大，点哪格开哪格。' : '一张张分组的卡，一行一件事。'}</p>`;
     wireThumb($('.dk-look-mode'), () => $('.dk-look-m[aria-selected="true"]'));
+    wireThumb($('.dk-look-layout'), () => $('.dk-look-l[aria-selected="true"]'));
   }
   paintLook();
   if (typeof matchMedia === 'function') matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => paintLook());
   $('.dk-look').addEventListener('click', (e) => {
+    const l = e.target.closest('.dk-look-l');
+    if (l) {
+      if (l.dataset.layout === wantLayout) return;
+      wantLayout = l.dataset.layout;
+      try { localStorage.setItem(LAYOUT_KEY, wantLayout); } catch { /* 无痕模式 */ }
+      paintLook();
+      // 回首页，翻过去以后再变形，看得见同一块东西挪到哪
+      setTimeout(() => { if (location.hash.slice(1)) location.hash = ''; setTimeout(morphLayout, 520); }, 320);
+      return;
+    }
     const m = e.target.closest('.dk-look-m');
     if (!m || m.getAttribute('aria-selected') === 'true') return;
     const v = m.dataset.mode;
