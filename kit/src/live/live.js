@@ -76,12 +76,18 @@ export async function renderLive(root, meta, desk = null) {
   const bar = createLiveBar({ onNav: (n) => bv.go(n), onCopy: () => copyRecord(toast), onUpload: (blobs, note) => upload(blobs, note), onHome: desk?.onHome || null, onEnd: desk?.onEnd || null });
   bv.attachBar(bar);
 
+  // 量屏幕的定时器：放在「没连上数据库就 return」前面——板子的尺寸监听在那之前就挂上了，没连上时它一触发就报
+  // 「Cannot access before initialization」（live-demo.html 不带 ?dev 打开就是这样）
+  let screenTimer = 0;
+  let lastScreen = null;
+  let connected = false; // 不能直接看 store：等 getStore 的那一会儿它还在 TDZ 里
   const store = desk?.store || await getStore({ title: session.title });
   if (!store) {
     bar.setChip('off', '没连上');
     welcomeText.innerHTML = '这个页面没有拿到黑板的数据库权限。<br>发布时要声明 <code>capabilities: {"sample": {"images": true}, "db": {}, "assets": {}}</code>；本地试用请在地址后面加 <code>?dev</code>。';
     return;
   }
+  connected = true;
   const sink = createSink(store, desk ? { evidence: (rec) => ({ session: desk.sid, block: desk.block, point: steps.get(String(rec.step))?.point }) } : {});
   // 作答、动作照常写进 answers / events，同时记一行进黑板现状（写法和课堂模式发给课堂 Claude 的一样）
   session.sink = {
@@ -495,9 +501,8 @@ export async function renderLive(root, meta, desk = null) {
   }
 
   // —— 屏幕大小和当前板放不放得下：写回 meta/screen，对话里的 Claude 照着控制一块板写多少 ——
-  let screenTimer = 0;
-  let lastScreen = null;
   function scheduleScreen() {
+    if (!connected) return; // 还没连上（或者连不上）数据库：没地方写
     clearTimeout(screenTimer);
     screenTimer = setTimeout(reportScreen, SCREEN_DELAY);
   }

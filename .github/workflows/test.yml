@@ -21,3 +21,32 @@ jobs:
         run: |
           npm run build
           git diff --exit-code --stat kit/dist/la-kit.js || { echo "::error::kit/dist/la-kit.js 和源码对不上：本地 npm run build 之后把它一起提交"; exit 1; }
+
+  # 学习台整条流程（tools/desk-e2e.mjs）：真的浏览器里填示例记忆、每一页、上课下课、报告、练一练、要想起来的、
+  # 我改记忆、补记、备份恢复、删课、过午夜、写失败一次、连点两下、体检、出错记录。不调用 Claude，用 ?dev 的替身数据库
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 装 Playwright 和 Chromium
+        run: |
+          npm i -g playwright@1.63.0
+          playwright install --with-deps chromium
+      - run: npm run build
+      - name: 学习台整条流程
+        run: node tools/desk-e2e.mjs --shots e2e-shots
+      - name: 学习台、课堂、实时黑板三个页面（两种 iPad 尺寸，不报错、不冲出版面）
+        run: node tools/check-lesson.mjs kit/examples/desk-demo.html kit/examples/class-demo.html kit/examples/live-demo.html
+      - name: 没过的截图
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-shots
+          path: |
+            e2e-shots
+            .e2e-fail

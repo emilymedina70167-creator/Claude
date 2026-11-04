@@ -53,6 +53,26 @@ const snapDoc = (id, data) => ({ id, exists: data !== undefined, data: () => (da
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
+// 本地替身的「故障」：整条流程的自动测试（tools/desk-e2e.mjs）用它模拟网络不好——接下来几次写失败、每次写慢一点。
+// 只在 ?dev 的替身里有，真的数据库不受影响。window.LAKitDev.failWrites(1, 'evidence/') 让下一次写 evidence 失败
+const faults = { left: 0, match: '', code: 'unavailable', lag: 0, writes: 0, failed: 0 };
+if (typeof window !== 'undefined') {
+  window.LAKitDev = Object.assign(window.LAKitDev || {}, {
+    faults,
+    failWrites(n = 1, match = '', code = 'unavailable') { Object.assign(faults, { left: n, match, code }); },
+    slowWrites(ms = 0) { faults.lag = ms; },
+  });
+}
+async function faultGate(path) {
+  faults.writes++;
+  if (faults.lag) await new Promise((r) => setTimeout(r, faults.lag));
+  if (faults.left > 0 && (!faults.match || path.includes(faults.match))) {
+    faults.left--;
+    faults.failed++;
+    throw { code: faults.code, message: `模拟的写入失败（${path}）` };
+  }
+}
+
 export function fakeDb(key) {
   let all = load();
   const subs = new Set();
@@ -75,12 +95,13 @@ export function fakeDb(key) {
     return {
       id, path,
       async get() { return snapDoc(id, all[path]); },
-      async set(data) { all[path] = clone(data); changed(); },
+      async set(data) { await faultGate(path); all[path] = clone(data); changed(); },
       async update(data) {
+        await faultGate(path);
         if (!all[path]) throw { code: 'invalid_argument', message: 'document does not exist' };
         all[path] = merge(all[path], clone(data)); changed();
       },
-      async delete() { delete all[path]; changed(); },
+      async delete() { await faultGate(path); delete all[path]; changed(); },
       onSnapshot(next) {
         let last;
         const f = () => { const s = JSON.stringify(all[path]); if (s !== last) { last = s; next(snapDoc(id, all[path])); } };

@@ -1,0 +1,545 @@
+// 学习台整条流程的自动测试：在真的浏览器里把学习台从头用一遍，哪一步不对就报出来（退出码 1）。
+// 单元测试只管纯函数；这里管跨好几步的流程——点了保存以后、网络写失败一次、连点两下、过了午夜、下课以后报告写没写。
+// 2026-11-04 全面排查时查出来的二十来处问题，大半是这类流程上的，这个脚本守着它们不再回来。
+//
+// 用法：
+//   npm run build && node tools/desk-e2e.mjs            # 全部跑一遍
+//   node tools/desk-e2e.mjs --only recall,class        # 只跑几段（段名见下面 SUITES）
+//   node tools/desk-e2e.mjs --shots 目录                # 每一段结束存一张截图（失败的那一步一定存）
+//   node tools/desk-e2e.mjs --headed                    # 开着窗口看（本地）
+//
+// 用的是 ?dev 的本地替身数据库（localStorage），不碰真的学习台；替身能注入故障（kit/src/live/store.js 的 window.LAKitDev）。
+// 不调用 Claude：课堂里是模拟老师（devteacher.js），归类、复盘是 books/devmock.js。
+import { chromium } from './playwright.mjs';
+import { createServer } from 'node:http';
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join, resolve, dirname, extname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const KIT = join(ROOT, 'kit/dist/la-kit.js');
+const PAGE = join(ROOT, 'kit/examples/desk-demo.html');
+
+const args = process.argv.slice(2);
+const opt = { only: null, shots: '', headed: false };
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--only') opt.only = new Set(args[++i].split(','));
+  else if (args[i] === '--shots') opt.shots = resolve(args[++i]);
+  else if (args[i] === '--headed') opt.headed = true;
+}
+if (!existsSync(KIT)) { console.error(`没有 ${KIT}：先 npm run build`); process.exit(2); }
+if (opt.shots) mkdirSync(opt.shots, { recursive: true });
+
+// —— 静态服务器：学习台和 la-kit.js、pdf/ 放在一个目录下（和发布的样子一样）——
+const files = { '/desk.html': PAGE, '/la-kit.js': KIT };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.wasm': 'application/wasm' };
+const server = createServer((q, r) => {
+  const path = decodeURIComponent(q.url.split('?')[0]);
+  const f = files[path] || (path.startsWith('/pdf/') ? join(ROOT, 'kit/dist', path) : null);
+  if (!f || !existsSync(f)) { r.writeHead(404); r.end(); return; }
+  r.writeHead(200, { 'content-type': TYPES[extname(f)] || 'application/octet-stream' });
+  r.end(readFileSync(f));
+});
+await new Promise((ok) => server.listen(0, ok));
+const BASE = `http://127.0.0.1:${server.address().port}/desk.html?dev`;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const results = [];
+let failures = 0;
+
+/** 一个浏览器页面加上收集页面报错、读替身数据库的小工具 */
+async function openPage(browser, { clock = null } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 820, height: 1180 }, timezoneId: 'Asia/Shanghai', locale: 'zh-CN', acceptDownloads: true });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(`页面报错：${e.message}`));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(`控制台：${m.text().slice(0, 300)}`); });
+  // 和 claude.ai 的沙箱一样：系统弹框直接当「取消」
+  await page.addInitScript(() => { window.confirm = () => false; window.alert = () => {}; window.prompt = () => null; });
+  if (clock) await page.clock.install({ time: clock });
+  const t = {
+    page, ctx, errors,
+    /** 替身数据库的全部内容：{ 'sessions/c-…': {...}, … } */
+    async db() {
+      return page.evaluate(() => {
+        let best = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k.startsWith('la-devdb:')) continue;
+          try { const v = JSON.parse(localStorage.getItem(k) || '{}'); if (Object.keys(v).length > Object.keys(best).length) best = v; } catch { /* */ }
+        }
+        return best;
+      });
+    },
+    async docs(coll) { const all = await t.db(); return Object.entries(all).filter(([k]) => k.startsWith(`${coll}/`) && k.split('/').length === 2).map(([k, v]) => ({ id: k.split('/')[1], ...v })); },
+    async text(sel) { return page.evaluate((s) => document.querySelector(s)?.innerText ?? null, sel); },
+    async waitFor(fn, { timeout = 15000, every = 200, what = '条件' } = {}) {
+      const t0 = Date.now();
+      for (;;) {
+        // 页面正在整页刷新（进课堂、换地址）：这一次读不到，等一下再读
+        let v = null;
+        try { v = await fn(); } catch (e) { if (!/context was destroyed|navigat|Target closed|detached/i.test(e.message)) throw e; }
+        if (v) return v;
+        if (Date.now() - t0 > timeout) throw new Error(`等了 ${timeout / 1000} 秒还没等到：${what}`);
+        await sleep(every);
+      }
+    },
+    /** 页面自己画的问一句（dialog.js）：点文字对得上的那个按钮 */
+    async answer(label) {
+      await page.waitForSelector('.la-dialog', { timeout: 5000 });
+      await page.evaluate((l) => { const b = [...document.querySelectorAll('.la-dialog .btn')].find((x) => x.textContent.trim() === l || x.textContent.includes(l)); if (!b) throw new Error(`对话框里没有「${l}」`); b.click(); }, label);
+      await sleep(300);
+    },
+    async home() { await page.evaluate(() => { location.hash = ''; }); await sleep(600); },
+    /** 整页打开到某个地址（先离开，免得和页面自己的 location.reload 撞在一起） */
+    async open(hash = '') { await page.goto('about:blank'); await page.goto(`${BASE}${hash ? `#${hash}` : ''}`); await page.waitForLoadState('load'); await sleep(800); },
+    /** 点了开课的按钮以后：等进到课堂（页面自己改地址、整页刷新）、开课页画好 */
+    async inClass(match = () => true) {
+      await page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash) && match(decodeURIComponent(u.hash.slice(1))), { timeout: 20000 });
+      await page.waitForLoadState('load');
+      await t.waitFor(() => page.evaluate(() => /开始上课|下一题|这次练习/.test(document.body.innerText)), { timeout: 20000, what: '课堂（或练习）画出来' });
+      return decodeURIComponent(new URL(page.url()).hash.slice(1));
+    },
+    async route(h) { await page.evaluate((x) => { location.hash = x; }, h); await sleep(700); },
+  };
+  return t;
+}
+
+async function seeded(browser) {
+  const t = await openPage(browser);
+  await t.page.goto(BASE);
+  await t.page.waitForSelector('.dk-seed', { timeout: 15000 });
+  await t.page.click('.dk-seed');
+  await t.waitFor(async () => (await t.page.$('.dk-trow')) && (await t.text('.dk-class'))?.includes('开新课'), { what: '填入示例记忆后首页画好' });
+  await sleep(800);
+  return t;
+}
+
+/** 往替身数据库里直接放几条（模拟对话里的 Claude、别的设备写的） */
+async function plant(t, docs) {
+  await t.page.evaluate((docs) => {
+    const k = [...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).find((x) => x.startsWith('la-devdb:'));
+    const all = JSON.parse(localStorage.getItem(k));
+    Object.assign(all, docs);
+    localStorage.setItem(k, JSON.stringify(all));
+  }, docs);
+}
+const todayIn = (t) => t.page.evaluate(() => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; });
+
+function check(cond, msg) { if (!cond) throw new Error(msg); }
+
+// —— 每一段：一个独立的浏览器上下文（数据库从空开始），按顺序做几件事、核对结果 ——
+const SUITES = {
+  // 首页每一块都画出来、每一页都打得开、换科目不清掉「样子」的选中
+  async pages(browser) {
+    const t = await seeded(browser);
+    const days = await t.text('.dk-tag-n');
+    const want = await t.page.evaluate(() => { const d = new Date(); const a = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); return String(Math.round((Date.UTC(2027, 11, 21) - a) / 86400000)); });
+    check(days === want, `距考研写的是 ${days}，按今天算应该是 ${want}`);
+    for (const pg of ['map', 'books', 'weak', 'errors', 'classes', 'stats', 'manage']) {
+      await t.route(pg);
+      const txt = await t.page.evaluate(() => [...document.querySelectorAll('.dk-pages, .dk-bookpage, .dk-manage')].find((e) => !e.hidden)?.innerText || '');
+      check(txt.trim().length >= 4, `「${pg}」那一页是空的`);
+    }
+    await t.route('manage');
+    const before = await t.page.$$eval('.dk-look [aria-selected="true"]', (x) => x.map((e) => e.textContent));
+    await t.page.click('.dk-space[data-space="cs"]'); await sleep(400);
+    await t.page.click('.dk-space[data-space="en"]'); await sleep(400);
+    const after = await t.page.$$eval('.dk-look [aria-selected="true"]', (x) => x.map((e) => e.textContent));
+    check(JSON.stringify(before) === JSON.stringify(after) && after.length === 2, `换科目以后「样子」的选中变了：${before} → ${after}`);
+    await t.page.click('.dk-space[data-space="math"]'); await sleep(300);
+    // 小组件版式：切过去首页照样画
+    await t.page.click('.dk-look-l[data-layout="grid"]'); await sleep(1500);
+    check((await t.page.evaluate(() => document.querySelector('.is-desk')?.dataset.layout)) === 'grid', '切到小组件版式没切过去');
+    check(await t.page.$('.dk-days-slot .dk-spine'), '小组件版式里没有距考研那一格');
+    // 面板：每一行点开、关上，不留下遮罩
+    await t.route('manage'); await t.page.click('.dk-look-l[data-layout="list"]'); await sleep(1500);
+    for (const r of await t.page.$$eval('.dk-trow', (x) => x.map((e) => e.dataset.row))) {
+      await t.page.click(`.dk-trow[data-row="${r}"]`); await sleep(800);
+      check(await t.page.$('.fl-panel'), `点「${r}」那一行没出面板`);
+      await t.page.click('.fl-close'); await sleep(800);
+      check(!(await t.page.$('.fl-panel')), `「${r}」的面板关不上`);
+      check((await t.page.evaluate((k) => getComputedStyle(document.querySelector(`.dk-trow[data-row="${k}"]`)).visibility, r)) === 'visible', `关了「${r}」的面板，那一行还藏着`);
+    }
+    return t;
+  },
+
+  // 「我改记忆」：第一次保存写失败（网络抖），编辑框留着、按钮能再点；第二次成功，编辑框收起、新的话画出来
+  async mine(browser) {
+    const t = await seeded(browser);
+    await t.route('manage');
+    await t.page.evaluate(() => { document.querySelector('.dk-mine-sec[data-sec="prefs"]').open = true; });
+    // 一次写失败（网络抖）：写的出口自己重试，像没发生过
+    await t.page.click('.dk-mine .dk-pref'); await sleep(200);
+    await t.page.fill('.dk-mine textarea', '自动测试改的第一句');
+    await t.page.evaluate(() => window.LAKitDev.failWrites(1));
+    await t.page.click('.dk-mine .dk-pref-save');
+    await t.waitFor(async () => !(await t.page.$('.dk-mine .mm-f')), { timeout: 8000, what: '失败一次（自己重试成了）以后编辑框收起' });
+    check((await t.text('.dk-mine')).includes('自动测试改的第一句'), '失败一次自己重试以后列表里还是旧的话');
+    // 一直写不进去（断网）：编辑框留着、按钮能再点；网好了再点就成
+    t.expected = ['模拟的写入失败'];
+    await t.page.evaluate(() => { document.querySelector('.dk-mine-sec[data-sec="prefs"]').open = true; });
+    await t.page.click('.dk-mine .dk-pref'); await sleep(200);
+    await t.page.fill('.dk-mine textarea', '自动测试改的一句：先让我自己试');
+    await t.page.evaluate(() => window.LAKitDev.failWrites(20));
+    await t.page.click('.dk-mine .dk-pref-save');
+    await t.waitFor(() => t.page.$('.dk-mine .dk-pref-save:not([disabled])'), { timeout: 10000, what: '写不进去以后「保存」放开' });
+    check(await t.page.$('.dk-mine .mm-f'), '写不进去以后编辑框没了（改的话丢了）');
+    await t.page.evaluate(() => window.LAKitDev.failWrites(0));
+    await t.page.click('.dk-mine .dk-pref-save');
+    await t.waitFor(async () => !(await t.page.$('.dk-mine .mm-f')), { timeout: 8000, what: '保存成功以后编辑框收起' });
+    check((await t.text('.dk-mine')).includes('自动测试改的一句'), '保存成功以后列表里还是旧的话');
+    await t.waitFor(async () => ((await t.db())['meta/errors']?.list || []).some((e) => String(e.msg).includes('模拟的写入失败')), { timeout: 12000, what: '写不进去的那次记进 meta/errors（攒几秒才写）' });
+    const prof = await t.docs('profile');
+    check(prof.some((p) => String(p.text).includes('自动测试改的一句')), '数据库里的「关于我」没改');
+    return t;
+  },
+
+  // 要想起来的：评分写失败一次再点，只记一条证据；第一张写「第一次想」；评完数量归零；评分途中点「先到这」不再翻出下一张
+  async recall(browser) {
+    const t = await seeded(browser);
+    const due = Number((await t.text('.dk-trow[data-row="recall"] .dk-ic')) || 0);
+    const stamp = (k) => JSON.stringify([k.tier, k.last, k.result, k.lapses]);
+    const before = new Map((await t.docs('recall')).map((k) => [k.id, stamp(k)]));
+    check(due >= 2, `示例记忆里今天要想的只有 ${due} 条，测不了`);
+    await t.page.click('.dk-trow[data-row="recall"]'); await sleep(800);
+    await t.page.click('.fl-panel .dk-recall-go'); await sleep(600);
+    // 第一张：故意让写记忆点失败一次
+    await t.page.fill('.rc-typed', '随便写一句');
+    await t.page.click('.rc-show'); await sleep(900);
+    const where = await t.text('.rc-where');
+    check(/第一次想|上次/.test(where || ''), '翻过来以后没有「第一次想 / 上次…」那一行');
+    t.expected = ['模拟的写入失败'];
+    await t.page.evaluate(() => window.LAKitDev.failWrites(20, 'recall/'));
+    await t.page.click('.rc-r[data-r="got"]');
+    await t.waitFor(() => t.page.$('.rc-r[data-r="got"]:not([disabled])'), { timeout: 10000, what: '写不进去以后评分按钮放开' });
+    await t.page.evaluate(() => window.LAKitDev.failWrites(0));
+    await t.page.click('.rc-r[data-r="got"]');
+    await t.waitFor(() => t.page.$('.rc-show'), { timeout: 8000, what: '评完第一张翻出第二张' });
+    // 第二张：评分的同时点「先到这」
+    await t.page.click('.rc-show'); await sleep(900);
+    await t.page.evaluate(() => window.LAKitDev.slowWrites(600));
+    await t.page.click('.rc-r[data-r="vague"]');
+    await sleep(100);
+    await t.page.evaluate(() => document.querySelector('.rc-stop')?.click());
+    await t.page.evaluate(() => window.LAKitDev.slowWrites(0));
+    await sleep(2500);
+    check(!(await t.page.$('.rc-show')), '评分途中点了「先到这」，还是翻出了下一张');
+    check((await t.text('.fl-panel'))?.includes('想了'), '点「先到这」以后没出小结');
+    const ev = (await t.docs('evidence')).filter((e) => e.src === 'recall');
+    check(ev.length === 2, `想了 2 条，证据里记了 ${ev.length} 条（写失败重试不该多记）`);
+    const rated = (await t.docs('recall')).filter((k) => before.get(k.id) !== stamp(k));
+    check(rated.length === 2, `想了 2 条，记忆点里变了的有 ${rated.length} 条`);
+    await t.page.click('.fl-close'); await sleep(800);
+    const left = Number((await t.text('.dk-trow[data-row="recall"] .dk-ic')) || 0);
+    check(left === due - 2, `想完 2 条，首页还写今天要想 ${left} 条（原来 ${due}）`);
+    return t;
+  },
+
+  // 补记：写一句、记下来，证据里多一条 src: manual
+  async manual(browser) {
+    const t = await seeded(browser);
+    await t.page.click('.dk-trow[data-row="manual"]'); await sleep(800);
+    await t.page.fill('.fl-panel .dk-mtext', '自动测试：书上 2.3 节第 5 题做错了，符号弄反');
+    await t.page.evaluate(() => [...document.querySelectorAll('.fl-panel .dk-mv')].find((b) => b.textContent.includes('错'))?.click());
+    await t.page.click('.fl-panel .dk-msave'); await sleep(1500);
+    const ev = (await t.docs('evidence')).filter((e) => e.src === 'manual');
+    check(ev.length === 1, `补记以后证据里 src: manual 有 ${ev.length} 条`);
+    return t;
+  },
+
+  // 一整节课：连点两下「开新课」只开一节；上课、作答；回首页直接下课；报告是正式的；以前的课、翻看黑板都打得开
+  async class(browser) {
+    const t = await seeded(browser);
+    const before = (await t.docs('sessions')).length;
+    await t.page.dblclick('.dk-class .dk-new');
+    const sid = await t.inClass();
+    check((await t.docs('sessions')).length === before + 1, '连点两下「开新课」开出了不止一节');
+    await t.page.click('button:has-text("开始上课")');
+    await t.waitFor(() => t.page.$('.st-choice, .quiz-opt, button:has-text("一个数（1×1）")'), { timeout: 30000, what: '模拟老师写出第一道题' });
+    await sleep(1500);
+    await t.page.evaluate(() => [...document.querySelectorAll('button')].find((b) => b.textContent.includes('一个数（1×1）'))?.click());
+    await sleep(2500);
+    const input = t.page.locator('textarea:visible, [contenteditable="true"]:visible').first();
+    await input.click(); await t.page.keyboard.type('测试:记忆'); await t.page.keyboard.press('Enter');
+    await sleep(8000);
+    // 回首页：这节课挂着，主角卡写「接着上课」
+    await t.open(); await t.page.waitForSelector('.dk-class .dk-go', { state: 'attached', timeout: 15000 });
+    await t.page.evaluate(() => document.querySelector('.dk-class .dk-close').click());
+    await t.answer('直接下课');
+    const s = await t.waitFor(async () => { const x = (await t.docs('sessions')).find((d) => d.id === sid); return x?.status === 'closed' && x.report?.at ? x : null; }, { timeout: 20000, what: '直接下课以后报告写好' });
+    check(!s.report.provisional, '下了课的报告还是「暂时的」');
+    await t.route('classes');
+    check((await t.text('.dk-pages'))?.includes('分钟'), '以前的课里没有这节课');
+    await t.route(`classes/${sid}`);
+    await t.waitFor(async () => !(await t.text('.dk-pages'))?.includes('还没有课后报告') && (await t.text('.dk-pages'))?.length > 40, { what: '这节课那一页读到报告' });
+    // 翻看黑板（只读的课堂）
+    await t.open(`view/${sid}`);
+    await t.waitFor(() => t.page.evaluate(() => document.body.innerText.includes('这节课的记号') || document.querySelectorAll('.bd-seg, .seg, section').length > 2), { timeout: 20000, what: '只读的黑板画出来' });
+    return t;
+  },
+
+  // 练一练：题库里放两道挂着到期复现组的题。做完（中间写证据失败一次）结果照样算进去；
+  // 另开一节做一道错的就回首页「直接下课」，复现组照样记「没过」（以前直接下课会把复现结果丢掉）
+  async drill(browser) {
+    const t = await seeded(browser);
+    const plant = async () => t.page.evaluate(() => {
+      const k = [...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).find((x) => x.startsWith('la-devdb:'));
+      const all = JSON.parse(localStorage.getItem(k));
+      const q = (id, text) => ({ block: 'L2.2.2', kind: 'quiz', md: '```quiz\nid: ' + id + '\nq: ' + text + '\n- [x] 一个数\n- [ ] 一个矩阵\n```', q: text, title: text, src: 'board', from: { session: 'c-20261020-1', comp: id }, fromSession: 'c-20261020-1', orig: 'wrong', errors: ['L2-07'], space: 'math', status: 'active', at: Date.parse('2026-10-20T10:00:00+08:00') });
+      all['drills/d-e2e-1'] = q('d-e2e-1', 'βᵀα 是什么');
+      all['drills/d-e2e-2'] = q('d-e2e-2', 'αᵀβ 是什么');
+      localStorage.setItem(k, JSON.stringify(all));
+    });
+    await plant(); await t.open(); await sleep(1500);
+    await t.waitFor(() => t.page.$('.dk-trow[data-row="drill"]'), { what: '首页出现「练一练」' });
+    const run = async () => {
+      const n0 = (await t.docs('sessions')).length;
+      await t.page.click('.dk-trow[data-row="drill"]'); await sleep(800);
+      await t.page.dblclick('.fl-panel .dk-drill-go'); // 手指一抖点了两下：只开一节
+      const id = await t.inClass();
+      await sleep(800);
+      check((await t.docs('sessions')).length === n0 + 1, '连点两下「开始」开出了不止一节练习');
+      return id;
+    };
+    // 点一个选项；答对的等页面判完（「这题是……的」那一行出来），答错的等「再想想」
+    const pick = async (label) => {
+      await t.waitFor(() => t.page.$('.dr-stage .q-opt'), { timeout: 10000, what: '题目画出来' });
+      await t.page.evaluate((l) => { const b = [...document.querySelectorAll('.dr-stage .q-opt')].find((x) => x.textContent.trim().endsWith(l)); b?.click(); }, label);
+      await t.waitFor(() => t.page.$('.dr-where:not([hidden]), .dr-stage .q-opt.is-wrong'), { timeout: 8000, what: `点了「${label}」以后页面判出来` });
+      await sleep(400);
+    };
+    // 第一节：做完，第一题作答时写证据失败一次（sink 自己重试）
+    const did = await run();
+    await t.page.evaluate(() => window.LAKitDev.failWrites(1, 'evidence/'));
+    for (let i = 0; i < 4 && !(await t.page.$('.dr-done:not([hidden])')); i++) { await pick('一个数'); await t.page.click('.dr-next').catch(() => {}); await sleep(900); }
+    const d = await t.waitFor(async () => (await t.docs('sessions')).find((x) => x.id === did && x.status === 'closed' && x.drill), { timeout: 25000, what: '练一练做完写进 sessions' });
+    check(d.drill.n === 2 && d.drill.clean === 2, `两道都一次做对，结果记成 ${JSON.stringify(d.drill)}（写失败的那题算成没做了？）`);
+    // 第二节：故意做错一道就走，在首页直接下课
+    const r0 = (await t.docs('reviews')).find((r) => r.id === 'R3');
+    await plant(); await t.open(); await sleep(1500);
+    await t.page.evaluate(() => { const k = [...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).find((x) => x.startsWith('la-devdb:')); const all = JSON.parse(localStorage.getItem(k)); for (const p of Object.keys(all)) if (p.startsWith('evidence/') && String(all[p].comp || '').startsWith('d-e2e')) all[p].at = Date.parse('2026-10-01T10:00:00+08:00'); localStorage.setItem(k, JSON.stringify(all)); });
+    await t.open(); await sleep(1500);
+    if (!(await t.page.$('.dk-trow[data-row="drill"]'))) { results.push({ note: '刚做对的题今天不再挑，第二节练一练没开成，直接下课那一半没测' }); return t; }
+    const did2 = await run();
+    await pick('一个矩阵');
+    await t.page.click('.dr-home');
+    await t.waitFor(() => t.page.evaluate(() => !location.hash && !!document.querySelector('.dk-class')), { timeout: 15000, what: '从练习回到学习台' });
+    await t.page.waitForSelector('.dk-open .dk-close', { state: 'attached', timeout: 15000 });
+    await t.page.evaluate((x) => document.querySelector(`.dk-open .dk-close[data-sid="${x}"]`)?.click(), did2);
+    await t.answer('直接下课');
+    const d2 = await t.waitFor(async () => (await t.docs('sessions')).find((x) => x.id === did2 && x.status === 'closed'), { timeout: 20000, what: '练一练直接下课' });
+    check(d2.drill, '练一练直接下课以后没有算结果');
+    const r1 = (await t.docs('reviews')).find((r) => r.id === 'R3');
+    check(r1 && (r1.result !== r0?.result || r1.last !== r0?.last), `做错了一道就直接下课，复现组 R3 没变（${JSON.stringify({ before: r0?.result, after: r1?.result })}）`);
+    return t;
+  },
+
+  // 复现课：「复现」那一行点开，「复现这 N 组」开一节复现课，这节课记着复现哪几组；连点两下只开一节
+  async review(browser) {
+    const t = await seeded(browser);
+    const n0 = (await t.docs('sessions')).length;
+    await t.page.click('.dk-trow[data-row="today"]'); await sleep(800);
+    const want = await t.page.$eval('.fl-panel .dk-rv .dk-review', (b) => b.dataset.rids.split(','));
+    await t.page.dblclick('.fl-panel .dk-rv .dk-review');
+    const sid = await t.inClass();
+    await sleep(1000);
+    const all = await t.docs('sessions');
+    check(all.length === n0 + 1, '连点两下「复现这几组」开出了不止一节');
+    const s = all.find((x) => x.id === sid);
+    check(Array.isArray(s.review) && want.every((r) => s.review.includes(r)), `复现课没记着要复现的组（要 ${want}，记的 ${JSON.stringify(s.review)}）`);
+    const pk = (await t.db())[`sessions/${sid}/pack/main`];
+    check(pk && (pk.reviewClass || pk.review), '复现课的资料包里没有复现组');
+    return t;
+  },
+
+  // 备课：首页「让 Claude 备课」（本地用模拟的 Claude），教案写进资料包；马上开课，课前预演最后也要到这节课自己的那份资料包里
+  async prep(browser) {
+    const t = await seeded(browser);
+    await t.page.evaluate(() => { const f = document.querySelector('.dk-prepfold'); if (f) f.open = true; });
+    await t.page.click('.dk-prep-go');
+    if (await t.page.$('.la-dialog')) await t.answer('重新备课');
+    const main = await t.waitFor(async () => { const m = (await t.db())['pack/main']; return m?.by === 'desk' && !m.usedBy ? m : null; }, { timeout: 30000, what: '备好的教案写进 pack/main' });
+    check(main.unit || main.goal, '备好的教案没有标题和目标');
+    await t.waitFor(() => t.page.evaluate(() => /备好的下一节/.test(document.querySelector('.dk-class')?.innerText || '')), { what: '主角卡换成「备好的下一节」' });
+    await t.page.click('.dk-class .dk-new');
+    const sid = await t.inClass();
+    const sp = await t.waitFor(async () => (await t.db())[`sessions/${sid}/pack/main`]?.rehearsal, { timeout: 30000, what: '课前预演到这节课的资料包里（开课以后才写好的也要补进去）' });
+    check(Array.isArray(sp.steps) || sp.fixes || sp.at, '课前预演是空的');
+    const root = (await t.db())['pack/main'];
+    check(root.usedBy === sid, '开了课，备好的教案没记成用掉了');
+    return t;
+  },
+
+  // 对话里的 Claude 开的实时黑板、自学单元：打得开，「用完了 / 学完了」以后下课、首页补上报告
+  async outside(browser) {
+    const t = await seeded(browser);
+    const today = await todayIn(t);
+    const day = today.replace(/-/g, '');
+    await plant(t, {
+      [`sessions/c-${day}-7`]: { kind: 'live', status: 'open', date: today, block: 'L2.2.2', space: 'math', title: '实时黑板（自动测试）', startedAt: Date.now() - 60000 },
+      [`sessions/c-${day}-8`]: { kind: 'unit', status: 'open', date: today, block: 'L2.2.2', space: 'math', title: '自学单元（自动测试）', startedAt: Date.now() - 60000 },
+      [`sessions/c-${day}-8/unit/main`]: { md: '---\nmode: guided\n---\n\n# 自学单元\n\n## 第一节\n\n内积 $\\alpha^T\\beta$ 是一个数。\n\n```quiz\nid: u1\nq: $\\alpha^T\\beta$ 是\n- [x] 一个数\n- [ ] 一个矩阵\n```\n', session: `c-${day}-8` },
+    });
+    await t.open(`c-${day}-7`);
+    await t.waitFor(() => t.page.evaluate(() => !!document.querySelector('.cb-end')), { timeout: 20000, what: '实时黑板画出来（有「这块黑板用完了」）' });
+    await t.page.evaluate(() => document.querySelector('.cb-end').click());
+    await t.answer('用完了');
+    await t.waitFor(async () => (await t.docs('sessions')).find((x) => x.id === `c-${day}-7`)?.status === 'closed', { what: '实时黑板用完了记成下课' });
+    await t.open(`c-${day}-8`);
+    await t.waitFor(() => t.page.$('button:has-text("继续")'), { timeout: 20000, what: '自学单元画出来' });
+    check(!(await t.page.evaluate(() => document.body.innerText.includes('mode: guided'))), '自学单元开头的 front matter 原样印在页面上');
+    await t.page.click('button:has-text("继续")');
+    await t.waitFor(() => t.page.evaluate(() => document.body.innerText.includes('内积')), { timeout: 10000, what: '自学单元第一节解锁' });
+    await t.page.click('.dk-u-end');
+    await t.answer('用完了');
+    await t.waitFor(async () => (await t.docs('sessions')).find((x) => x.id === `c-${day}-8`)?.status === 'closed', { what: '自学单元学完了记成下课' });
+    await t.open();
+    await t.waitFor(async () => { const all = await t.docs('sessions'); return [7, 8].every((n) => all.find((x) => x.id === `c-${day}-${n}`)?.report?.at); }, { timeout: 25000, what: '首页给实时黑板、自学单元补上课后报告' });
+    return t;
+  },
+
+  // 主角卡的「⋯」小菜单：点开有「直接下课」「删掉这节课」，点「直接下课」走的是同一个流程
+  async menu(browser) {
+    const t = await seeded(browser);
+    await t.page.click('.dk-class .dk-new');
+    const sid = await t.inClass();
+    await t.open(); await t.page.waitForSelector('.dk-class .dk-more', { timeout: 15000 });
+    await t.page.click('.dk-class .dk-more'); await sleep(500);
+    const items = await t.page.$$eval('.fl-menu button', (x) => x.map((b) => b.textContent.trim()));
+    check(items.some((x) => x.includes('直接下课')) && items.some((x) => x.includes('删掉')), `「⋯」菜单里是 ${items.join(' / ')}`);
+    await t.page.evaluate(() => [...document.querySelectorAll('.fl-menu button')].find((b) => b.textContent.includes('直接下课')).click());
+    await t.answer('直接下课');
+    await t.waitFor(async () => (await t.docs('sessions')).find((x) => x.id === sid)?.status === 'closed', { what: '从「⋯」菜单直接下课' });
+    check(!(await t.page.$('.fl-menu')), '菜单点完没收起');
+    return t;
+  },
+
+  // 删掉一节课以后同一天再开课：不拿到同一个课号
+  async purge(browser) {
+    const t = await seeded(browser);
+    await t.page.click('.dk-class .dk-new');
+    const sid = await t.inClass();
+    await t.open(); await t.page.waitForSelector('.dk-class .dk-purge', { state: 'attached', timeout: 15000 });
+    // 删课留下来的东西还记着这个课号：挂在弱点上的错题删课时留着（purge.js），模拟一条
+    await t.page.evaluate((s) => { const k = [...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).find((x) => x.startsWith('la-devdb:')); const all = JSON.parse(localStorage.getItem(k)); all['errors/L2-99'] = { source: '课上', q: '删课以后留下的错题', mine: '错的', step: '第 1 步', cause: '自动测试', date: '2026-11-04', session: s, block: 'L2.1.1' }; const w = Object.keys(all).find((x) => x.startsWith('weaknesses/')); all[w] = { ...all[w], errors: [...(all[w].errors || []), 'L2-99'] }; localStorage.setItem(k, JSON.stringify(all)); }, sid);
+    await t.page.reload(); await t.page.waitForSelector('.dk-class .dk-purge', { state: 'attached', timeout: 15000 });
+    await t.page.evaluate(() => document.querySelector('.dk-class .dk-purge').click());
+    await t.answer('删掉');
+    await t.waitFor(async () => !(await t.docs('sessions')).some((x) => x.id === sid), { what: '这节课删掉' });
+    await sleep(800);
+    await t.page.click('.dk-class .dk-new');
+    const again = await t.inClass();
+    check(again !== sid, `删课以后再开课又拿到了 ${sid}`);
+    return t;
+  },
+
+  // 备份：导出一份，原样「只补缺的」恢复回去，条数不变、页面不报错
+  async backup(browser) {
+    const t = await seeded(browser);
+    await t.route('manage');
+    const [dl] = await Promise.all([t.page.waitForEvent('download', { timeout: 15000 }), t.page.click('.dk-backup .dk-bgo')]);
+    const path = await dl.path();
+    const body = JSON.parse(readFileSync(path, 'utf8'));
+    check(Array.isArray(body.docs) && body.docs.length > 10, '导出的备份里几乎没有东西');
+    const n0 = Object.keys(await t.db()).length;
+    await t.page.setInputFiles('.dk-brestore input', path); await sleep(1500);
+    if (await t.page.$('.la-dialog')) await t.answer('只补缺的').catch(() => t.answer('补'));
+    await sleep(2000);
+    const n1 = Object.keys(await t.db()).length;
+    check(n1 >= n0, `恢复以后数据库少了东西：${n0} → ${n1}`);
+    return t;
+  },
+
+  // 过了午夜：页面一直开着，日期、距考研自己换；iPad 熄屏一夜（定时器停了）再点亮也换
+  async midnight(browser) {
+    const t = await openPage(browser, { clock: new Date('2026-11-04T23:58:00+08:00') });
+    await t.page.goto(BASE);
+    await t.page.clock.runFor(3000);
+    await t.page.click('.dk-seed');
+    await t.page.clock.runFor(4000);
+    const d0 = await t.text('.dk-date'), n0 = Number(await t.text('.dk-tag-n'));
+    check(d0?.includes('11月4日'), `开始时日期写的是 ${d0}`);
+    await t.page.clock.runFor(3 * 60 * 1000);
+    const d1 = await t.text('.dk-date'), n1 = Number(await t.text('.dk-tag-n'));
+    check(d1?.includes('11月5日') && n1 === n0 - 1, `过了午夜：日期 ${d0} → ${d1}，距考研 ${n0} → ${n1}`);
+    await t.page.clock.pauseAt(new Date('2026-11-05T00:30:00+08:00'));
+    await t.page.clock.setSystemTime(new Date('2026-11-07T08:00:00+08:00'));
+    await t.page.clock.resume();
+    await t.page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await t.page.clock.runFor(3000);
+    const d2 = await t.text('.dk-date'), n2 = Number(await t.text('.dk-tag-n'));
+    check(d2?.includes('11月7日') && n2 === n0 - 3, `熄屏两天再点亮：日期 ${d2}，距考研 ${n2}（应该是 ${n0 - 3}）`);
+    return t;
+  },
+
+  // 体检和出错记录：打开学习台以后写了 meta/health；整个流程里没有页面报错被记进 meta/errors
+  async health(browser) {
+    const t = await seeded(browser);
+    await t.waitFor(async () => (await t.db())['meta/health'], { timeout: 20000, what: '体检写进 meta/health' });
+    // 故意留一个机械的毛病：下了课却没有结束时间、没有科目；体检应该自己补上
+    await t.page.evaluate(() => { const k = [...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).find((x) => x.startsWith('la-devdb:')); const all = JSON.parse(localStorage.getItem(k)); all['sessions/c-20261101-1'] = { date: '2026-11-01', status: 'closed', block: 'L2.1.1', title: '体检用的旧课', startedAt: Date.parse('2026-11-01T10:00:00+08:00') }; localStorage.setItem(k, JSON.stringify(all)); });
+    await t.page.reload();
+    const s = await t.waitFor(async () => { const x = (await t.db())['sessions/c-20261101-1']; return x?.endedAt && x.space ? x : null; }, { timeout: 20000, what: '体检补上旧课的结束时间和科目' });
+    check(s.title === '体检用的旧课', '体检改了课的标题（不该碰写的内容）');
+    const h = (await t.db())['meta/health'];
+    check(Array.isArray(h.fixed) && h.fixed.some((f) => String(f.id).includes('c-20261101-1')), 'meta/health 里没记这次修了什么');
+    await t.route('manage');
+    check((await t.text('.dk-check'))?.includes('体检'), '管理页的自检里看不到体检的结果');
+    return t;
+  },
+
+  async errors(browser) {
+    const t = await seeded(browser);
+    // 故意制造一个没接住的错误：应该被记进 meta/errors，管理页能看到
+    await t.page.evaluate(() => { setTimeout(() => { throw new Error('自动测试故意抛的错'); }, 0); });
+    await t.waitFor(async () => { const e = (await t.db())['meta/errors']; return e?.list?.some((x) => String(x.msg).includes('自动测试故意抛的错')); }, { timeout: 15000, what: '没接住的错误写进 meta/errors' });
+    // 这个是故意的：从收集的页面报错里拿掉
+    t.errors.splice(0, t.errors.length, ...t.errors.filter((e) => !e.includes('自动测试故意抛的错')));
+    await t.route('manage');
+    check((await t.text('.dk-check'))?.includes('自动测试故意抛的错'), '管理页看不到页面出过的错');
+    return t;
+  },
+};
+
+const browser = await chromium.launch({ headless: !opt.headed });
+const t0 = Date.now();
+for (const [name, fn] of Object.entries(SUITES)) {
+  if (opt.only && !opt.only.has(name)) continue;
+  const s0 = Date.now();
+  let t = null;
+  try {
+    t = await fn(browser);
+    if (t?.errors.length) throw new Error(`流程走完了，但页面报了错：\n      ${t.errors.slice(0, 8).join('\n      ')}`);
+    // 代码里接住了、但报给 errlog 的（写数据库失败没重试成、体检拿不准……）也算：等它攒完写进去再看
+    if (t && name !== 'errors' && name !== 'midnight') {
+      await sleep(4500);
+      const logged = ((await t.db().catch(() => ({})))['meta/errors']?.list || []).filter((e) => !e.soft && !t.expected?.some((x) => String(e.msg).includes(x)));
+      if (logged.length) throw new Error(`流程走完了，但页面记下了错误（meta/errors）：\n      ${logged.slice(0, 6).map((e) => `${e.where}：${e.msg}${e.what ? `（${e.what}）` : ''}`).join('\n      ')}`);
+    }
+    results.push({ name, ok: true, ms: Date.now() - s0 });
+    if (opt.shots && t) await t.page.screenshot({ path: join(opt.shots, `${name}.png`), fullPage: true }).catch(() => {});
+  } catch (e) {
+    failures++;
+    results.push({ name, ok: false, ms: Date.now() - s0, msg: e.message });
+    const pages = browser.contexts().flatMap((c) => c.pages());
+    const p = t?.page || pages[pages.length - 1];
+    if (p && opt.shots !== null) {
+      const dir = opt.shots || join(ROOT, '.e2e-fail');
+      mkdirSync(dir, { recursive: true });
+      await p.screenshot({ path: join(dir, `${name}-失败.png`), fullPage: true }).catch(() => {});
+    }
+  } finally {
+    for (const c of browser.contexts()) await c.close().catch(() => {});
+  }
+}
+await browser.close();
+server.close();
+
+for (const r of results) {
+  if (r.note) { console.log(`  （${r.note}）`); continue; }
+  console.log(`${r.ok ? '✓' : '✗'} ${r.name}  ${(r.ms / 1000).toFixed(1)} 秒${r.ok ? '' : `\n    ${r.msg}`}`);
+}
+console.log(`\n${results.filter((r) => !r.note).length} 段，${failures} 段没过，共 ${((Date.now() - t0) / 1000).toFixed(0)} 秒。`);
+if (process.env.GITHUB_STEP_SUMMARY) writeFileSync(process.env.GITHUB_STEP_SUMMARY, results.map((r) => (r.note ? `- （${r.note}）` : `- ${r.ok ? '✓' : '✗'} ${r.name}${r.ok ? '' : `：${r.msg}`}`)).join('\n') + '\n', { flag: 'a' });
+process.exit(failures ? 1 : 0);

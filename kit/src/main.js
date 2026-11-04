@@ -18,6 +18,10 @@ import deskCss from './memory/desk.css';
 import themesCss from './themes.css';
 import { themeOf, storedTheme, applyTheme, DESK_DEFAULT } from './theme.js';
 import { VERSION } from './version.js';
+import { installErrlog, reportError } from './errlog.js';
+
+// 页面出错自己记下来（errlog.js）：越早挂上越好，学习台连上数据库以后写进 meta/errors
+installErrlog();
 import './confidence.js';
 
 // 粉笔手写体：数字和字母用 Caveat（1 和 7 容易分辨），中文用龙藏体。
@@ -94,7 +98,7 @@ function renderAll() {
     session.subject = meta.subject || '线性代数';
     if (/^(class|课堂)$/i.test(meta.mode || '')) renderClass(article, meta);
     // 学习台是异步的：出错了写在页面上（以前没人接，整页空白）
-    else if (/^(desk|学习台)$/i.test(meta.mode || '')) Promise.resolve(renderDesk(article, meta)).catch((err) => { console.error(err); article.insertAdjacentHTML('beforeend', `<div class="block-error">学习台出错了：${escapeHtml(String(err?.message || err))}<br>刷新一下；还不行就截图发给开发那边。</div>`); });
+    else if (/^(desk|学习台)$/i.test(meta.mode || '')) Promise.resolve(renderDesk(article, meta)).catch((err) => { console.error(err); reportError(err, { what: '学习台没打开' }); article.insertAdjacentHTML('beforeend', `<div class="block-error">学习台出错了：${escapeHtml(String(err?.message || err))}<br>刷新一下；还不行就截图发给开发那边。</div>`); });
     else if (/^(live|实时)$/i.test(meta.mode || '')) renderLive(article, meta);
     else if (/^(guided|引导)$/i.test(meta.mode || '')) renderGuided(body, article, meta);
     else {

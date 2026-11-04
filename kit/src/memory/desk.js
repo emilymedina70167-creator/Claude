@@ -9,9 +9,12 @@
 // 课程地图、弱点表、以前的课的页面（desk-plan 第 3 批）后面做。
 import { sheetMd } from './sheet.js';
 import { ask, choose } from '../dialog.js';
-import { mdToHtml, escapeHtml } from '../render.js';
+import { mdToHtml, escapeHtml, frontMatter } from '../render.js';
 import { session } from '../session.js';
 import { toast } from '../record.js';
+import { attachErrlog, onError, markSeen, reportError } from '../errlog.js';
+import { healthCheck, healthRecord, sameDoc } from './health.js';
+import { guardDb } from './writer.js';
 import { getStore, getDownloads } from '../live/store.js';
 import { VERSION, KIT_URL } from '../version.js';
 import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toDate } from './schema.js';
@@ -131,7 +134,7 @@ export async function renderDesk(root, meta) {
     <section class="dk-card dk-recent"><h2 class="dk-h">最近记下的</h2><p class="dk-sub muted">课堂里的 Claude 和页面直接写进记忆的，不对就撤销（7 天内）。</p><div class="dk-pdone"></div></section>
     <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-backup" hidden><h2 class="dk-h">备份</h2><div class="dk-body"></div></section>
-    <section class="dk-card dk-check" hidden><h2 class="dk-h">自检</h2><div class="dk-body"></div></section>
+    <section class="dk-card dk-check" hidden><h2 class="dk-h">自检</h2><div class="dk-body"></div><div class="dk-health"></div><div class="dk-errs"></div></section>
     <section class="dk-card dk-colls" hidden><details class="dk-fold"><summary><h2 class="dk-h">记忆库</h2><span class="muted">每一类有几条、谁写</span></summary><div class="dk-body"></div></details></section>
     </div>
     <footer class="dk-foot">组件库 ${escapeHtml(VERSION)}</footer>
@@ -150,7 +153,9 @@ export async function renderDesk(root, meta) {
     status.innerHTML = '这个页面没有拿到记忆库的数据库权限。<br>发布时要声明 <code>capabilities: {"sample": {"images": true}, "db": {}, "assets": {}, "downloads": true}</code>；本地试用请在地址后面加 <code>?dev</code>。';
     return;
   }
-  const { db } = store;
+  // 首页写数据库都走同一个出口（writer.js）：写前看守不守规矩、同一个文档排队、一会儿就好的失败自己重试、写不进去记进 errlog
+  const db = guardDb(store.db);
+  attachErrlog(db);
   // 页面只写自己的 meta（自检结果、指纹）：写之前按记忆库的规矩拦一道
   const put = (coll, id, data) => { assertWrite('page', coll); return db.doc(`${coll}/${id}`).set(data); };
 
@@ -196,7 +201,19 @@ export async function renderDesk(root, meta) {
   const cmpId = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true });
   const inline = (s) => { try { return mdToHtml(String(s ?? ''), { inline: true }); } catch { return escapeHtml(String(s ?? '')); } };
   const fixing = new Set(); // 正在写报告的课
-  let opening = false; // 正在开新课（newClass）：写资料包那几秒里首页重画，「开新课」也别再能点
+  let opening = false; // 正在开一节（开新课、复现课、练一练、课前热身）：写进去那几秒首页会重画，按钮别再能点出第二节
+  const OPENERS = '.dk-new, .dk-review, .dk-drill-go, .dk-warm';
+  /** 开一节（写 sessions、整页跳过去）：同一时间只开一节，失败了放开按钮 */
+  async function openOne(make) {
+    if (opening) return;
+    opening = true;
+    root.querySelectorAll(OPENERS).forEach((b) => { b.disabled = true; });
+    try { goto(await make()); } catch (err) {
+      opening = false;
+      root.querySelectorAll(OPENERS).forEach((b) => { b.disabled = false; });
+      toast(`没开成：${err?.message || err}`);
+    }
+  }
   function setSpace(k) {
     if (!SPACES[k]) return;
     space = k;
@@ -269,7 +286,7 @@ export async function renderDesk(root, meta) {
     for (const c of failed) res.problems.unshift({ coll: c, id: '', msg: `读不到 ${c}（${COLLECTIONS[c].label}），这一次的自检不全` });
     paint(res, today);
     writeBriefs(today);
-    if (!failed.size) { flushOpen(); proposeMastery(); }
+    if (!failed.size) { flushOpen(); proposeMastery(); runHealth(today); }
     const rec = memcheckRecord(res, { kit: VERSION, today });
     const json = JSON.stringify(rec);
     if (json !== lastCheck) {
@@ -285,6 +302,74 @@ export async function renderDesk(root, meta) {
       }
     }
   }
+
+  // —— 体检（health.js）：页面自己的机械数据按规则修好，拿不准的、Claude 写的内容只记下来。结果在 meta/health，管理页「自检」里看 ——
+  let healthDoc = null;
+  let healthBusy = false;
+  let lastHealth = '';
+  db.doc('meta/health').onSnapshot((s) => { healthDoc = s.exists ? s.data() : null; paintHealth(); }, () => {});
+  async function runHealth(today) {
+    if (healthBusy) return;
+    healthBusy = true;
+    try {
+      const res = healthCheck(data, { today });
+      const done = [];
+      for (const f of res.fixes) {
+        try {
+          assertWrite('page', f.coll);
+          // 改之前再读一遍：订阅回来的那份可能已经旧了（课堂在别的标签页里刚写过这节课）。和算的时候不一样就这一次不改
+          const ref = db.doc(`${f.coll}/${f.id}`);
+          const cur = await ref.get().then((x) => (x.exists ? x.data() : null));
+          const was = data[f.coll].find((d) => String(d.id) === f.id);
+          if (!cur || !was || !sameDoc(cur, was)) continue;
+          await ref.set(f.doc);
+          done.push(f);
+        } catch (err) { reportError(err, { what: `体检没修成：${f.what}`, path: `${f.coll}/${f.id}` }); }
+      }
+      const key = JSON.stringify([res.notes, done.map((f) => [f.coll, f.id, f.what])]);
+      if (key === lastHealth && healthDoc) return;
+      lastHealth = key;
+      await put('meta', 'health', healthRecord(healthDoc, { ...res, fixes: done }, { kit: VERSION })).catch((err) => reportError(err, { what: '体检结果没写进去' }));
+    } finally { healthBusy = false; }
+  }
+  function paintHealth() {
+    const box = $('.dk-health');
+    if (!box) return;
+    if (!healthDoc) { box.innerHTML = '<h3 class="dk-h3">体检</h3><p class="muted">还没跑过。</p>'; return; }
+    const fixed = healthDoc.fixed || [], notes = healthDoc.notes || [];
+    const when = (t) => { const d = new Date(Number(t) || 0); return `${d.getMonth() + 1}/${d.getDate()}`; };
+    box.innerHTML = `<h3 class="dk-h3">体检</h3>
+      <p class="dk-sub muted">页面自己的数据（课的时间、科目、档位）按规则自己修；课堂里写的内容只看不改。</p>
+      ${notes.length ? `<p><b>${notes.length} 处要看</b></p><ul class="dk-errlist">${notes.slice(0, 8).map((n) => `<li>${escapeHtml(n.msg)}${n.id ? `<span class="muted">　${escapeHtml(n.coll)}</span>` : ''}</li>`).join('')}</ul>` : '<p class="dk-ok">没有要看的。</p>'}
+      ${fixed.length ? `<details class="dk-soft"><summary>最近自己修了 ${fixed.length} 处</summary><ul class="dk-errlist">${fixed.map((f) => `<li>${escapeHtml(f.what)}<span class="muted">　${escapeHtml(f.coll)}/${escapeHtml(f.id)} · ${escapeHtml(when(f.at))}</span></li>`).join('')}</ul></details>` : ''}`;
+  }
+
+  // —— 页面出过的错（errlog.js 写的 meta/errors）：管理页「自检」里列出来，点「看过了」变灰 ——
+  let errDoc = null;
+  db.doc('meta/errors').onSnapshot((s) => { errDoc = s.exists ? s.data() : null; paintErrs(); }, () => {});
+  onError(() => setTimeout(paintErrs, 3500)); // 刚出的一条攒几秒才写进去：写完订阅会回来，这里只是保险
+  function paintErrs() {
+    const box = $('.dk-errs');
+    if (!box) return;
+    const all = Array.isArray(errDoc?.list) ? errDoc.list : [];
+    const hard = all.filter((e) => !e.soft), soft = all.filter((e) => e.soft);
+    const fresh = hard.filter((e) => !e.seen);
+    const when = (t) => { const d = new Date(Number(t) || 0); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+    const row = (e) => `<li class="${e.seen ? 'is-seen' : ''}"><b>${escapeHtml(e.msg || '')}</b><span class="muted">　${escapeHtml(e.where || '')} · ${escapeHtml(when(e.at))}${Number(e.count) > 1 ? ` · ${Number(e.count)} 次` : ''}${e.what ? ` · ${escapeHtml(e.what)}` : ''}</span>${e.trail?.length ? `<br><span class="muted dk-err-trail">之前：${escapeHtml(e.trail.slice(-3).join(' → '))}</span>` : ''}</li>`;
+    box.innerHTML = `<h3 class="dk-h3">页面出过的错</h3>${!hard.length ? '<p class="dk-ok">页面没出过错。</p>' : `
+      <p class="dk-sub muted">${fresh.length ? `有 ${fresh.length} 种还没看过。` : '都看过了。'}开发那边每次开工先读这一份（版本 ${escapeHtml(errDoc?.kit || '')}）。</p>
+      <ul class="dk-errlist">${hard.slice(0, 5).map(row).join('')}</ul>
+      ${hard.length > 5 ? `<details class="dk-soft"><summary>还有 ${hard.length - 5} 种</summary><ul class="dk-errlist">${hard.slice(5).map(row).join('')}</ul></details>` : ''}
+      <div class="dk-mrow">${fresh.length ? '<button type="button" class="btn btn-sm dk-err-seen">看过了</button>' : ''}<button type="button" class="btn btn-sm dk-err-clear">清掉</button></div>`}
+      ${soft.length ? `<details class="dk-soft"><summary>${soft.length} 条小提醒（加载失败之类，不影响用）</summary><ul class="dk-errlist">${soft.slice(0, 20).map(row).join('')}</ul></details>` : ''}`;
+  }
+  $('.dk-errs').addEventListener('click', async (e) => {
+    const b = e.target.closest('.dk-err-seen, .dk-err-clear');
+    if (!b) return;
+    if (b.classList.contains('dk-err-clear') && !await ask('清掉页面出过的错的记录？（开发那边就看不到了）', { ok: '清掉', danger: true })) return;
+    b.disabled = true;
+    await markSeen(db, { clear: b.classList.contains('dk-err-clear') }).catch((err) => toast(`没成：${err?.message || err}`));
+  });
 
   // 以前留下、还开着的改动单（以前要我一条条确认的）：打开学习台时直接写进去（2026-11-03：不要我确认，直接改），
   // 和点「确认」走同一条路（自动编号被占了换下一个）；写不进去的留着，在首页「还没写进去的」里能点「不要」
@@ -457,16 +542,13 @@ export async function renderDesk(root, meta) {
       const pg = box.querySelector('.dk-prep-pages');
       if (pg && keep.pages !== undefined && keep.pages !== '') pg.value = keep.pages;
     }
-    box.querySelector('.dk-warm')?.addEventListener('click', async (e) => {
-      e.currentTarget.disabled = true;
-      try {
-        const sid = sessionId(today, takenIds());
-        assertWrite('page', 'sessions');
-        const why = `上一节没稳的：${lastNext.map((x) => x.name).join('、')}`;
-        await db.doc(`sessions/${sid}`).set({ kind: 'drill', date: today, block: null, space, title: '课前热身', warmup: true, status: 'open', startedAt: Date.now(), items: warm, reviews: [], why: Object.fromEntries(warm.map((id) => [id, why])) });
-        goto(sid);
-      } catch (err) { toast(`没开成：${err?.message || err}`); e.currentTarget.disabled = false; }
-    });
+    box.querySelector('.dk-warm')?.addEventListener('click', () => openOne(async () => {
+      const sid = sessionId(today, takenIds());
+      assertWrite('page', 'sessions');
+      const why = `上一节没稳的：${lastNext.map((x) => x.name).join('、')}`;
+      await db.doc(`sessions/${sid}`).set({ kind: 'drill', date: today, block: null, space, title: '课前热身', warmup: true, status: 'open', startedAt: Date.now(), items: warm, reviews: [], why: Object.fromEntries(warm.map((id) => [id, why])) });
+      return sid;
+    }));
     // 资料包的目标常常很长：先收成三行，点一下展开
     box.querySelector('.dk-goal')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('is-open'));
     box.querySelector('.dk-owe')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('is-open'));
@@ -507,7 +589,7 @@ export async function renderDesk(root, meta) {
       prepBusy = false;
       paintClass();
     });
-    box.querySelector('.dk-new').addEventListener('click', (e) => { e.currentTarget.disabled = true; newClass(block).catch((err) => { toast(`没开成：${err?.message || err}`); e.currentTarget.disabled = false; }); });
+    box.querySelector('.dk-new').addEventListener('click', () => newClass(block)); // openOne 管防连点和失败
   }
 
   // —— 删掉一节课（purge.js）：测试开的、不要的课，连黑板、对话、证据、这节课记下的笔记一起删 ——
@@ -582,15 +664,12 @@ export async function renderDesk(root, meta) {
       : `<p>挑好了 ${pick.items.length} 道（题库里一共 ${n} 道）${pick.reviews.length ? `，顺便复习 ${pick.reviews.length} 组到期的` : ''}：</p>
         <ul class="dk-drill-why">${pick.items.slice(0, 4).map((x) => `<li>${blockTitle(x.block) || escapeHtml(x.block)}<span class="muted">　${escapeHtml(x.why)}</span></li>`).join('')}${pick.items.length > 4 ? '<li class="muted">……</li>' : ''}</ul>
         <button type="button" class="btn btn-primary dk-drill-go">开始（${pick.items.length} 道）</button>`;
-    box.querySelector('.dk-drill-go')?.addEventListener('click', async (e) => {
-      e.currentTarget.disabled = true;
-      try {
-        const sid = sessionId(today, takenIds());
-        assertWrite('page', 'sessions');
-        await db.doc(`sessions/${sid}`).set({ kind: 'drill', date: today, block: null, space, title: '练习', status: 'open', startedAt: Date.now(), items: pick.items.map((x) => x.id), reviews: pick.reviews, why: Object.fromEntries(pick.items.map((x) => [x.id, x.why])) });
-        goto(sid);
-      } catch (err) { toast(`没开成：${err?.message || err}`); e.currentTarget.disabled = false; }
-    });
+    box.querySelector('.dk-drill-go')?.addEventListener('click', () => openOne(async () => {
+      const sid = sessionId(today, takenIds());
+      assertWrite('page', 'sessions');
+      await db.doc(`sessions/${sid}`).set({ kind: 'drill', date: today, block: null, space, title: '练习', status: 'open', startedAt: Date.now(), items: pick.items.map((x) => x.id), reviews: pick.reviews, why: Object.fromEntries(pick.items.map((x) => [x.id, x.why])) });
+      return sid;
+    }));
   }
 
   // —— 要记的（recall.js / recallrun.js）：各科到期的记忆点混在一起想一遍，页面不调用 Claude ——
@@ -807,19 +886,26 @@ export async function renderDesk(root, meta) {
       b.disabled = true;
       try { await ops.me(what, { id, ...args }); toast(msg); return true; } catch (err) { toast(`没成：${err?.message || err}`); b.disabled = false; return false; }
     };
-    // 改好了：收起编辑框再重画（编辑框还在时 paintMine 不重画）
-    const saved = (ok) => { if (ok) { row.innerHTML = ''; paintMine(); } };
+    // 改好了：收起编辑框再重画（编辑框还在时 paintMine 不重画）。订阅要过一会儿才回来，先把手上这份改成新的，
+    // 不然收起来那一下列表里还是旧的说法
+    const saved = (ok, coll, text) => {
+      if (!ok) return;
+      const d = data[coll]?.find((x) => x.id === id);
+      if (d) d.text = text;
+      row.innerHTML = '';
+      paintMine();
+    };
     if (b.classList.contains('dk-pref')) {
       const p = data.profile.find((x) => x.id === id);
       row.innerHTML = `<label class="mm-f" style="flex:1"><span>${escapeHtml(p?.topic || '')}</span><textarea rows="2">${escapeHtml(p?.text || '')}</textarea></label><button type="button" class="btn btn-sm btn-primary dk-pref-save">保存</button><button type="button" class="btn btn-sm dk-pref-x">算了</button>`;
       row.querySelector('textarea').focus();
-    } else if (b.classList.contains('dk-pref-save')) saved(await run('pref', { text: row.querySelector('textarea').value }, '改好了（7 天内能撤）'));
+    } else if (b.classList.contains('dk-pref-save')) { const text = row.querySelector('textarea').value; saved(await run('pref', { text }, '改好了（7 天内能撤）'), 'profile', text); }
     else if (b.classList.contains('dk-pref-x') || b.classList.contains('dk-lesson-cancel')) { row.innerHTML = ''; paintMine(); }
     else if (b.classList.contains('dk-lesson')) {
       const l = (data.lessons || []).find((x) => x.id === id);
       row.innerHTML = `<label class="mm-f" style="flex:1"><span>改说法</span><textarea rows="3">${escapeHtml(l?.text || '')}</textarea></label><button type="button" class="btn btn-sm btn-primary dk-lesson-save">保存</button><button type="button" class="btn btn-sm dk-lesson-cancel">算了</button>`;
       row.querySelector('textarea').focus();
-    } else if (b.classList.contains('dk-lesson-save')) saved(await run('lesson', { text: row.querySelector('textarea').value }, '改好了（7 天内能撤）'));
+    } else if (b.classList.contains('dk-lesson-save')) { const text = row.querySelector('textarea').value; saved(await run('lesson', { text }, '改好了（7 天内能撤）'), 'lessons', text); }
     else if (b.classList.contains('dk-lesson-x')) { if (await ask('这条守则不用了？（7 天内能撤）', { ok: '不用了' })) await run('lesson-retire', {}, `${id} 不用了`); }
     else if (b.classList.contains('dk-rvoid')) { if (await ask('这条不用再记了？（7 天内能撤）', { ok: '不用记了' })) await run('recall-void', {}, '这条不再排了'); }
     else if (b.classList.contains('dk-pause')) await run(b.textContent === '暂停' ? 'pause' : 'resume', {}, b.textContent === '暂停' ? `${id} 暂停了，不算到期` : `${id} 恢复了`);
@@ -947,22 +1033,14 @@ export async function renderDesk(root, meta) {
 
   // 开一节新课：sessions/{编号}，资料包抄一份进 sessions/{编号}/pack（以后对话里的 Claude 备下一节、改 pack/main，不影响这一节）
   // use：复现课用页面自己拼的资料包（views.js 的 reviewPack），不用 pack/main
-  async function newClass(block, use = null) {
-    if (opening) return;
-    opening = true;
-    root.querySelectorAll('.dk-new, .dk-review, .dk-drill-go, .dk-warm').forEach((b) => { b.disabled = true; });
+  function newClass(block, use = null) { return openOne(() => makeClass(block, use)); }
+  async function makeClass(block, use = null) {
     const fresh = livePack();
     const main = use ? use.main : fresh.main;
     const problems = use ? use.problems : fresh.problems;
     // 没备课时这节课的标题用块的标题（以前是学习台的名字「数学 · 408 · 英语」，以前的课列表里看不出是哪节）
     const blkTitle = block ? data.curriculum.find((d) => d.id === block)?.title || '' : '';
-    let sid;
-    try { sid = await createClass(db, { block, main, problems, space, unit: blkTitle || unit, taken: takenIds() }); } catch (err) {
-      opening = false;
-      root.querySelectorAll('.dk-new, .dk-review, .dk-drill-go, .dk-warm').forEach((b) => { b.disabled = false; });
-      toast(`没开成：${err?.message || err}`);
-      return;
-    }
+    const sid = await createClass(db, { block, main, problems, space, unit: blkTitle || unit, taken: takenIds() });
     if (!use && fresh.main) {
       // 记下这份教案用掉了；教案里补上的待办这时才算补了（备了没上、重新备别的块，待办还在）
       await db.doc(`pack/${packIds(space).main}`).set({ ...fresh.main, usedBy: sid, usedAt: Date.now() }).catch(() => {});
@@ -973,13 +1051,13 @@ export async function renderDesk(root, meta) {
         await db.doc('meta/todos').set({ done: [...new Set([...done, ...ids])].slice(-500), at: Date.now() }).catch(() => {});
       }
     }
-    goto(sid);
+    return sid;
   }
 
   // —— 复现课：到期的复现组（一组或同一门课的几组）一键开课，资料包页面自己拼（每组的内容、盯的弱点、错题原文、以前同一块的题）——
   $('.dk-today').addEventListener('click', async (e) => {
     const b = e.target.closest('.dk-review');
-    if (!b) return;
+    if (!b || opening) return;
     root.querySelectorAll('.dk-review').forEach((x) => { x.disabled = true; });
     try {
       const rids = String(b.dataset.rids || '').split(',').filter(Boolean);
@@ -1235,6 +1313,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     return;
   }
   const { db } = store;
+  attachErrlog(db); // 课堂、练习、只读的黑板里出的错也写进 meta/errors
   step('读这节课');
   const snap = await within(db.doc(`sessions/${sid}`).get(), 15000, null);
   if (!snap?.exists) {
@@ -1280,7 +1359,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   }
   if (kind === 'drill') {
     return enterDrill(root, meta, {
-      db, store, sid, doc, readOnly, goto,
+      db: guardDb(db), store, sid, doc, readOnly, goto, // 练一练是页面自己的：写也走同一个出口（课堂那边不包，不碰回话的速度）
       openClass: async (blk, use) => {
         const taken = (await db.collection('sessions').get().catch(() => null))?.docs.map((d) => d.id) || [];
         goto(await createClass(db, { block: blk, main: use.main, problems: use.problems, space: doc.space || 'math', unit: use.main.unit, taken }));
@@ -1340,7 +1419,11 @@ async function enterUnit(root, meta, { db, store, sid, doc, block, title, readOn
     const sink = createSink({ ...store, db: sc }, { evidence: () => ({ session: sid, block }) });
     session.sink = sink;
   }
-  renderGuided(String(u.md), root, { ...meta, unit: u.unit || title });
+  // 对话里的 Claude 照着写课件的习惯，md 开头可能带一段 front matter（--- … ---）：拿掉再画，不然整段原样印在单元顶上。
+  // 里面的设置照用，theme 除外（学习台只有紫藤，写了会把它盖掉）
+  const fm = frontMatter(String(u.md));
+  const { theme: _t, mode: _m, ...extra } = fm.meta;
+  renderGuided(fm.body, root, { ...meta, ...extra, unit: u.unit || extra.unit || title });
 }
 
 /**

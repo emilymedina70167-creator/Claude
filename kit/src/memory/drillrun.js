@@ -59,7 +59,7 @@ export async function enterDrill(root, meta, { db, store, sid, doc, readOnly = f
   top.className = 'dk-unit-bar dr-bar';
   top.innerHTML = `<button type="button" class="btn btn-sm dr-home">← 学习台</button><span class="muted dr-count"></span>`;
   root.before(top);
-  top.querySelector('.dr-home').addEventListener('click', () => goto(''));
+  top.querySelector('.dr-home').addEventListener('click', () => leave());
   if (!drills.length) {
     root.innerHTML = '<p class="dk-status">这次练习没有题（题库里的题被删了？）。回学习台再点一次「练一练」。</p>';
     return;
@@ -131,7 +131,26 @@ export async function enterDrill(root, meta, { db, store, sid, doc, readOnly = f
     if (done) w.innerHTML = titleOf(d.block) ? `这题是「${mdToHtml(titleOf(d.block), { inline: true })}」的` : `这题是 ${escapeHtml(d.block || '')} 的`;
   }
 
+  // 做错了还没做完就走（下一题、跳过、回学习台、关页面）：选择题只在答对 / 揭开时才记一条，错的那几下没进证据，
+  // 这道题会被算成「没做」，复现组的结果也跟着丢。走的时候补一条「没做出来」（giveup），和课上点「想不出来」一样算
+  function leaveItem() {
+    const d = drills[at];
+    if (!d || readOnly || judged.has(d.id)) return;
+    const host = box.querySelector('.dr-host');
+    if (!host?.querySelector('.is-wrong, .is-bad')) return;
+    judged.add(d.id);
+    session.event('giveup', host.querySelector('[data-bid]') || host, { why: '做错了没做完就走了' });
+  }
+  async function leave() {
+    leaveItem();
+    // 等这一条写进去再离开（整页刷新会把还在写的截断），最多 3 秒
+    await Promise.race([session.sink?.settled?.(), new Promise((r) => setTimeout(r, 3000))]);
+    goto('');
+  }
+  addEventListener('pagehide', () => leaveItem());
+
   $('.dr-next').addEventListener('click', () => {
+    leaveItem();
     if (at < drills.length - 1) show(at + 1);
     else finish();
   });

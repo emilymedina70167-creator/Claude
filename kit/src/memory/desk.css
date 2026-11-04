@@ -852,3 +852,10 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 
 /* 首页没下课那几行的「直接下课 / 删掉」、要想起来的「先到这」：手指点的，至少 44px（.btn-sm 是 38px） */
 .is-desk .dk-open .btn-sm, .is-desk .rc-stop { min-height: 44px; }
+
+/* 自检里的体检结果、页面出过的错（errlog.js / health.js） */
+.dk-check .dk-h3 { margin: 18px 0 6px; font: 600 15px/1.4 var(--sans); }
+.dk-errlist { margin: 6px 0; padding-left: 18px; }
+.dk-errlist li { margin: 6px 0; line-height: 1.5; word-break: break-word; }
+.dk-errlist li.is-seen b { font-weight: 400; color: var(--muted); }
+.dk-err-trail { font-size: 12px; }
