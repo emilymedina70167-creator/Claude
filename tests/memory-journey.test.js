@@ -90,3 +90,13 @@ test('「这一周」那几句：只说真发生了的事，没有可说的就�
   assert.doesNotMatch(lines.map((l) => l.text).join(''), /太棒|厉害|加油|真棒/, '不夸');
   assert.ok(!weekLines(mem, { today: '2026-11-04', space: 'en', dueToday: 2 }).some((l) => l.k === 'done'), '还有到期的就不说「都做完了」');
 });
+
+test('msToNextDay：到下一个本地午夜（过 1 秒），至少 1 秒', async () => {
+  const { msToNextDay } = await import('../kit/src/memory/journey.js');
+  const t = new Date(2026, 10, 4, 23, 59, 0).getTime();
+  assert.equal(msToNextDay(t), 61 * 1000);
+  const noon = new Date(2026, 10, 4, 12, 0, 0).getTime();
+  assert.equal(msToNextDay(noon), 12 * 3600 * 1000 + 1000);
+  assert.equal(msToNextDay(new Date(2026, 10, 5, 0, 0, 0, 500).getTime()) > 23 * 3600 * 1000, true);
+  assert.equal(msToNextDay(new Date(2026, 10, 5, 0, 0, 0, 999).getTime()) >= 1000, true);
+});

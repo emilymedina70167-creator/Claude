@@ -16,6 +16,13 @@ const list = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v =
 /** 离考试还有几天（考试那天是 0，过了是负数） */
 export const daysLeft = (today = toDate(Date.now()), exam = EXAM_DATE) => daysBetween(today, exam);
 
+/** 离下一个本地午夜还有多少毫秒（页面一直开着时，到点把「今天」换成新的一天）；至少 1 秒，免得在午夜那一刻连着触发 */
+export function msToNextDay(now = Date.now()) {
+  const d = new Date(now);
+  const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 1);
+  return Math.max(1000, next.getTime() - d.getTime());
+}
+
 /** 顶上那一行：离考研 413 天 */
 export function countdownText(today = toDate(Date.now()), exam = EXAM_DATE) {
   const n = daysLeft(today, exam);

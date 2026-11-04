@@ -38,7 +38,7 @@ import { installNju } from './nju.js';
 import { runRecall } from './recallrun.js';
 import { purgePlan, purgeText } from './purge.js';
 import { vocabRecalls } from './vocab.js';
-import { weekLines, progress, warmupDrills, backlogDays, daysLeft, EXAM_DATE } from './journey.js';
+import { weekLines, progress, warmupDrills, backlogDays, daysLeft, msToNextDay, EXAM_DATE } from './journey.js';
 import { needsSkills, skillsPrompt, parseSkills, skillSummary, pointCatalog, lessonLines, SKILLS_VERSION } from './skills.js';
 
 // 正在看哪一科（这台设备记着；分科见 space.js）
@@ -186,6 +186,7 @@ export async function renderDesk(root, meta) {
   const usedBefore = (m) => data.sessions.some((x) => x.pack && x.pack.unit === (m.unit || '') && x.pack.goal === (m.goal || '') && (x.pack.updatedAt ?? null) === (m.updatedAt ?? null));
   const livePack = () => (pack.main && !pack.main.usedBy && !usedBefore(pack.main) ? pack : { main: null, problems: null });
   let lastRes = null;
+  let daysBody = null; // 开着的「距考研」面板（openDays）
   function setSpace(k) {
     if (!SPACES[k]) return;
     space = k;
@@ -218,7 +219,29 @@ export async function renderDesk(root, meta) {
     }, () => { failed.add(c); loaded.add(c); schedule(); });
   }
   // 隔夜再打开（iPad 上页面一直开着）：日期变了，到期要重算
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) schedule(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { schedule(); tick(); } });
+
+  // —— 日子换了，首页自己跟着换（不用我刷新）——
+  // 顶上的日期、距考研几天、今天到期的复现和要想的、练一练挑的题、这一周、给对话里 Claude 的简报，都按「今天」算；
+  // 页面一直亮着跨过午夜、iPad 熄屏一夜再点亮，都要换成新的一天。到午夜定一个点；iPad 熄屏时定时器会停，
+  // 所以另外每分钟看一眼日期，点亮、回到前台、得到焦点时也看一眼。
+  // 每分钟顺带查一下挂着没下课、已经三个小时没动静的课（fixReports 的 stale）：不然要等下一次数据变了才算暂时的报告
+  let day = toDate(Date.now());
+  let midnight = 0;
+  function tick() {
+    const d = toDate(Date.now());
+    if (d !== day) {
+      day = d;
+      $('.dk-date').textContent = todayLabel();
+      schedule();
+    }
+    clearTimeout(midnight);
+    midnight = setTimeout(tick, msToNextDay());
+  }
+  tick();
+  setInterval(() => { tick(); if (loaded.has('sessions') && loaded.has('evidence')) fixReports(); }, 60 * 1000);
+  window.addEventListener('pageshow', tick);
+  window.addEventListener('focus', tick);
 
   function schedule() {
     clearTimeout(timer);
@@ -307,6 +330,7 @@ export async function renderDesk(root, meta) {
     paintWeek(today);
     paintRecall(today);
     paintRows(today);
+    if (daysBody?.isConnected) fillDays(daysBody); // 开着的「距考研」面板：天数、这一周跟着换
     const total = Object.values(res.counts).reduce((a, b) => a + b, 0);
     // 今天（这一科）：过期、今天到期的复现组，下一节从哪接、欠账；别的科有到期的提一句
     const mine = sv();
@@ -994,21 +1018,24 @@ export async function renderDesk(root, meta) {
   $('.dk-rows').addEventListener('click', (e) => { const r = e.target.closest('.dk-trow'); if (r) openRow(r); });
 
   // —— 距考研：目标南京大学（校徽、毛笔校名），还剩多少天；一格一周，紫的是这一周，最后一格是考试 ——
-  function openDays(src) {
+  // 面板开着的时候日子换了、这一周有了新记录：paint 里用 fillDays 重画（不再放格子的动画）
+  function fillDays(body, animate = false) {
     const n = daysLeft();
     const weeks = Math.max(1, Math.ceil(n / 7));
     const [y, mo, d] = EXAM_DATE.split('-').map(Number);
     const wd = '日一二三四五六'[new Date(y, mo - 1, d).getDay()];
+    body.innerHTML = `<div class="dk-goal-card"><span class="dk-nju is-shield" aria-hidden="true"></span><div class="dk-goal-t"><small>目标</small><span class="dk-nju is-word" role="img" aria-label="南京大学"></span><span class="dk-nju is-en" aria-hidden="true"></span></div></div>
+      <h2 class="dk-days-h">距考研</h2><p class="dk-days-n">${n}<small>天</small></p>
+      <p class="dk-sub muted">${y} 年 ${mo} 月 ${d} 日，星期${wd}。一格是一周，还剩 ${weeks} 周；紫的是这一周，最后一格是考试。</p>
+      <div class="dk-weeks">${Array.from({ length: weeks }, (_, i) => `<i class="${i === 0 ? 'is-now' : i === weeks - 1 ? 'is-exam' : ''}"></i>`).join('')}</div>
+      ${weekLines(data, { today: toDate(Date.now()), space }).slice(0, 3).map((l) => `<p class="dk-days-l">${inline(l.text)}</p>`).join('')}`;
+    if (animate) body.querySelectorAll('.dk-weeks i').forEach((i, k) => i.animate?.([{ transform: 'scale(0)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 420, delay: 260 + k * 9, easing: 'cubic-bezier(.34, 1.4, .64, 1)', fill: 'backwards' }));
+  }
+  function openDays(src) {
     panels.open(src, {
       title: '距考研',
-      mount: (body) => {
-        body.innerHTML = `<div class="dk-goal-card"><span class="dk-nju is-shield" aria-hidden="true"></span><div class="dk-goal-t"><small>目标</small><span class="dk-nju is-word" role="img" aria-label="南京大学"></span><span class="dk-nju is-en" aria-hidden="true"></span></div></div>
-          <h2 class="dk-days-h">距考研</h2><p class="dk-days-n">${n}<small>天</small></p>
-          <p class="dk-sub muted">${y} 年 ${mo} 月 ${d} 日，星期${wd}。一格是一周，还剩 ${weeks} 周；紫的是这一周，最后一格是考试。</p>
-          <div class="dk-weeks">${Array.from({ length: weeks }, (_, i) => `<i class="${i === 0 ? 'is-now' : i === weeks - 1 ? 'is-exam' : ''}"></i>`).join('')}</div>
-          ${weekLines(data, { today: toDate(Date.now()), space }).slice(0, 3).map((l) => `<p class="dk-days-l">${inline(l.text)}</p>`).join('')}`;
-        body.querySelectorAll('.dk-weeks i').forEach((i, k) => i.animate?.([{ transform: 'scale(0)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 420, delay: 260 + k * 9, easing: 'cubic-bezier(.34, 1.4, .64, 1)', fill: 'backwards' }));
-      },
+      mount: (body) => { daysBody = body; fillDays(body, true); },
+      onClose: () => { daysBody = null; },
     });
   }
   root.addEventListener('click', (e) => { const b = e.target.closest('.dk-spine'); if (b) openDays(b); });
