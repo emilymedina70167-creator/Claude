@@ -93,7 +93,8 @@ function renderAll() {
     session.reset(meta.unit || lessonTitle(body));
     session.subject = meta.subject || '线性代数';
     if (/^(class|课堂)$/i.test(meta.mode || '')) renderClass(article, meta);
-    else if (/^(desk|学习台)$/i.test(meta.mode || '')) renderDesk(article, meta);
+    // 学习台是异步的：出错了写在页面上（以前没人接，整页空白）
+    else if (/^(desk|学习台)$/i.test(meta.mode || '')) Promise.resolve(renderDesk(article, meta)).catch((err) => { console.error(err); article.insertAdjacentHTML('beforeend', `<div class="block-error">学习台出错了：${escapeHtml(String(err?.message || err))}<br>刷新一下；还不行就截图发给开发那边。</div>`); });
     else if (/^(live|实时)$/i.test(meta.mode || '')) renderLive(article, meta);
     else if (/^(guided|引导)$/i.test(meta.mode || '')) renderGuided(body, article, meta);
     else {

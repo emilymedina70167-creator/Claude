@@ -93,9 +93,9 @@ export async function renderDesk(root, meta) {
   session.mode = 'desk';
   session.live = true;
   const inClass = classHash();
-  if (inClass) return enterClass(root, meta, inClass);
+  if (inClass) return openClassSafely(root, meta, inClass);
   const viewing = viewHash();
-  if (viewing) return enterClass(root, meta, viewing, { readOnly: true });
+  if (viewing) return openClassSafely(root, meta, viewing, { readOnly: true });
   root.classList.add('is-desk');
   root.dataset.layout = loadLayout();
   const unit = meta.unit || session.title || '学习台';
@@ -1168,14 +1168,46 @@ export const supRuns = (html) => String(html).replace(/[⁰¹²³⁴⁵⁶⁷⁸
 // —— 在学习台里上一节课 ——
 // 课堂的数据放在 sessions/{编号}/ 下面；记忆库一直订阅着（每一轮的记忆摘要用最新的）；sessions/{编号} 由页面改（核验、下课）
 // readOnly：「以前的课」翻看黑板（#view/编号）：数据库只读，不调用 Claude，回去是那节课的报告
-async function enterClass(root, meta, sid, { readOnly = false } = {}) {
+// 进一节课（整页刷新以后）：先出一行「正在打开」，读到哪一步写哪一步；出错、卡住都写在屏幕上，带「再试一次」「回学习台」。
+// 2026-11-04 iPad 上点「接着上课」整页只剩一块空板：开课前要等好几步数据库读取，哪一步出错或者一直不返回，
+// 以前什么都不显示（renderDesk 的错也没人接）
+async function openClassSafely(root, meta, sid, opts = {}) {
+  const box = document.createElement('div');
+  box.className = 'dk-opening';
+  box.innerHTML = `<p class="dk-status">正在打开这节课…</p><p class="dk-open-step muted"></p><p class="dk-open-ver muted">组件库 ${escapeHtml(VERSION)}</p>`;
+  root.append(box);
+  const step = (t) => { const el = box.querySelector('.dk-open-step'); if (el) el.textContent = t; };
+  const slow = setTimeout(() => box.isConnected && showStuck(box, sid, '等了 20 秒还没打开，像是数据库那边没回话。'), 20000);
+  try {
+    await enterClass(root, meta, sid, { ...opts, step });
+  } catch (err) {
+    console.error('打开这节课出错', err);
+    showStuck(box, sid, `打开这节课出错了：${err?.message || err}`, err?.stack);
+    clearTimeout(slow);
+    return;
+  }
+  clearTimeout(slow);
+  box.remove();
+}
+function showStuck(box, sid, msg, stack = '') {
+  if (!box.isConnected) document.querySelector('.la-lesson')?.append(box);
+  box.innerHTML = `<p class="dk-status">${escapeHtml(msg)}</p>${stack ? `<pre class="dk-open-err">${escapeHtml(String(stack).split('\n').slice(0, 4).join('\n'))}</pre>` : ''}<p class="muted">截一张图发给开发那边就能查。课的内容都还在。</p><p class="dk-open-ver muted">组件库 ${escapeHtml(VERSION)}</p><div class="dk-open-acts"><button type="button" class="btn btn-primary dk-open-retry">再试一次</button><button type="button" class="btn dk-open-home">回学习台</button></div>`;
+  box.querySelector('.dk-open-retry').addEventListener('click', () => location.reload());
+  box.querySelector('.dk-open-home').addEventListener('click', () => { location.hash = ''; location.reload(); });
+}
+// 慢的读取给个时限：到点了就用 fallback 先开课（教材条目、上一节读过的教材，课堂里需要时还能自己取）
+const within = (p, ms, fallback) => Promise.race([Promise.resolve(p).catch(() => fallback), new Promise((res) => setTimeout(() => res(fallback), ms))]);
+
+async function enterClass(root, meta, sid, { readOnly = false, step = () => {} } = {}) {
+  step('连接记忆库');
   const store = await getStore({ title: session.title });
   if (!store) {
     root.innerHTML = '<p class="dk-status muted">这个页面没有拿到记忆库的数据库权限。发布时要声明 <code>capabilities: {"sample": {"images": true}, "db": {}, "assets": {}, "downloads": true}</code>。</p>';
     return;
   }
   const { db } = store;
-  const snap = await db.doc(`sessions/${sid}`).get().catch(() => null);
+  step('读这节课');
+  const snap = await within(db.doc(`sessions/${sid}`).get(), 15000, null);
   if (!snap?.exists) {
     root.innerHTML = `<p class="dk-status">学习台里没有 ${escapeHtml(sid)} 这节课。</p><button type="button" class="btn">回学习台</button>`;
     root.querySelector('button').addEventListener('click', () => goto(''));
@@ -1190,7 +1222,8 @@ async function enterClass(root, meta, sid, { readOnly = false } = {}) {
     return db.doc(`sessions/${sid}`).set(doc).catch(() => {});
   };
   // 这节课记着的块（课上 memo 换过块也记在这里）优先；没记就用资料包写的
-  const main = await scopeDb(db, sid).doc('pack/main').get().then((s) => (s.exists ? s.data() : null)).catch(() => null);
+  step('读这节课的资料包');
+  const main = await within(scopeDb(db, sid).doc('pack/main').get().then((s) => (s.exists ? s.data() : null)), 10000, null);
   // 改记忆（memo 块、整理单、确认 / 撤销）：用没 scopeDb 过的数据库，记忆库在根上
   const ops = createMemOps({ db, mem: () => mem });
   const block = String(doc.block || main?.block || '');
@@ -1228,10 +1261,12 @@ async function enterClass(root, meta, sid, { readOnly = false } = {}) {
   }
   if (kind === 'unit') return enterUnit(root, meta, { db, store, sid, doc, block, title, readOnly, finish });
   // 教材（books/）：这一科的书和条目，开课时读一次。资料包点名的条目全文放进资料包，别的课堂里按需取
-  const books = await loadBooks(db, space).catch(() => ({ books: [], chunks: [] }));
+  step('读教材');
+  const books = await within(loadBooks(db, space), 8000, { books: [], chunks: [] });
   // 上一节同一块的课用 textbook_read 取过的教材：这节课一开始就放进「教材原文」（接着往下的几条页面也顺带放），
   // 不用开讲先取一轮——课程地图还没挂教材条目时，英语课每节都要先取（2026-11-02 三节课取了 30 次，每次多等一整轮）
-  const prevRead = !readOnly && !doc.review && books.chunks.length && !(Array.isArray(main?.chunks) && main.chunks.length) ? await priorReads(db, mem.sessions || [], { sid, block, books }).catch(() => []) : [];
+  const prevRead = !readOnly && !doc.review && books.chunks.length && !(Array.isArray(main?.chunks) && main.chunks.length) ? await within(priorReads(db, mem.sessions || [], { sid, block, books }), 5000, []) : [];
+  step('画黑板');
   if (readOnly) {
     return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
       store: { ...store, db: readOnlyDb(scopeDb(db, sid)), assets: null }, sid, block, space, mem, readOnly: true, books,
