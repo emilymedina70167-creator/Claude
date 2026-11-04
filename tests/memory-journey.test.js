@@ -100,3 +100,17 @@ test('msToNextDay：到下一个本地午夜（过 1 秒），至少 1 秒', asy
   assert.equal(msToNextDay(new Date(2026, 10, 5, 0, 0, 0, 500).getTime()) > 23 * 3600 * 1000, true);
   assert.equal(msToNextDay(new Date(2026, 10, 5, 0, 0, 0, 999).getTime()) >= 1000, true);
 });
+
+test('sink.settled：等手上的证据写完（第一次失败、重试成功）再返回，没存上的条数是 0', async () => {
+  globalThis.window ||= globalThis;
+  globalThis.document ||= { querySelector: () => null, createElement: () => ({ style: {}, addEventListener() {}, append() {}, remove() {} }), body: { append() {} } };
+  const { createSink } = await import('../kit/src/live/sync.js');
+  const saved = [];
+  let fails = 1;
+  const db = { collection: () => ({ doc: (id) => ({ set: async (b) => { await new Promise((r) => setTimeout(r, 20)); if (fails-- > 0) throw new Error('网络抖了'); saved.push(id); } }) }) };
+  const sink = createSink({ db }, { evidence: () => ({ session: 's1' }) });
+  sink.event({ type: 'x', block: 'b1' });
+  const left = await sink.settled();
+  assert.equal(left, 0);
+  assert.equal(saved.length, 1);
+});

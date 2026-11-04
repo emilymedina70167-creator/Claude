@@ -150,7 +150,8 @@ export function createPanels({ shell, layer }) {
   };
   const rectOf = (el) => (el?.isConnected && el.offsetParent ? el.getBoundingClientRect() : null);
 
-  /** opts：kind、title、mount(body)（往面板里放东西）、unmount()（关上之后把东西放回去）、onClose */
+  /** opts：kind、title、mount(body)（往面板里放东西）、unmount()（关上之后把东西放回去）、onClose、
+   *  find()（面板开着时原来那张卡被重画了：找到新画的那张，关的时候缩回它） */
   function openPanel(src, opts = {}) {
     if (open) return null;
     const kind = opts.kind || 'zoom';
@@ -186,7 +187,9 @@ export function createPanels({ shell, layer }) {
   function closePanel() {
     if (!open || open.closing) return Promise.resolve();
     open.closing = true;
-    const { z, src, opts } = open;
+    const { z, opts } = open;
+    resync();
+    const src = open.src;
     const cur = z.getBoundingClientRect();
     z.style.transform = '';
     const s = rectOf(src);
@@ -233,7 +236,15 @@ export function createPanels({ shell, layer }) {
   }
   scrim.addEventListener('click', () => closePanel());
   addEventListener('keydown', (e) => { if (e.key === 'Escape') closePanel(); });
-  return { open: openPanel, close: closePanel, get isOpen() { return !!open; } };
+  // 首页的数据一变就重画那几行、主角卡：面板开着时原来那张卡换成了新画的一张（看得见、关的时候找不到）。
+  // 重画以后调一下：新的那张也藏起来，关的时候缩回它
+  function resync() {
+    if (!open || open.kind !== 'zoom' || !open.opts.find || open.src?.isConnected) return;
+    const el = open.opts.find();
+    open.src = el || null;
+    if (el) el.style.visibility = 'hidden';
+  }
+  return { open: openPanel, close: closePanel, resync, get isOpen() { return !!open; } };
 }
 
 // —— 长按：那张卡被托起来、背景虚化，旁边弹出一个小菜单；点外面放回去 ——

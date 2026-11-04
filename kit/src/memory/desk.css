@@ -849,3 +849,6 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 .dk-open-err { margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: var(--field); font: 12px/1.5 var(--mono); text-align: left; white-space: pre-wrap; overflow-x: auto; }
 .dk-open-acts { display: flex; justify-content: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 .dk-open-ver { margin: 10px 0 0; font-size: 12px; }
+
+/* 首页没下课那几行的「直接下课 / 删掉」、要想起来的「先到这」：手指点的，至少 44px（.btn-sm 是 38px） */
+.is-desk .dk-open .btn-sm, .is-desk .rc-stop { min-height: 44px; }

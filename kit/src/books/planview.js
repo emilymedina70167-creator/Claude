@@ -147,7 +147,15 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     const ref = db.doc(`pack/${packId}`);
     const cur = await ref.get().then((r) => (r.exists ? r.data() : null));
     if (!cur || cur.at !== main.at) return;
-    await ref.set({ ...cur, rehearsal: { steps: got.steps, fixes: got.fixes, at: Date.now(), model: res.modelApplied || '', bytes: enc.encode(prompt).length } });
+    const rehearsal = { steps: got.steps, fixes: got.fixes, at: Date.now(), model: res.modelApplied || '', bytes: enc.encode(prompt).length };
+    await ref.set({ ...cur, rehearsal });
+    // 预演写好以前已经开了课（备好时就说了「不用等，可以直接开课」）：开课时抄走的是那节课自己的一份资料包，
+    // 写进那一份，课堂订阅着 pack/main，下一轮就看得到；不然这一次调用白花了
+    if (cur.usedBy) {
+      const sref = db.doc(`sessions/${cur.usedBy}/pack/main`);
+      const sp = await sref.get().then((r) => (r.exists ? r.data() : null)).catch(() => null);
+      if (sp && sp.at === main.at && !sp.rehearsal) await sref.set({ ...sp, rehearsal }).catch(() => {});
+    }
   }
 
   /** 首页「上课」卡里的备课区：选块、备课、看备好的 */

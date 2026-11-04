@@ -117,6 +117,8 @@ export function createMemoView({ db, ops, nameOf = null }) {
       let ok = 0;
       for (const pd of g.items) { try { await (yes ? ops.confirm(pd) : ops.reject(pd)); ok++; } catch (err) { toast(`有一条没成：${err?.message || err}`); } }
       toast(yes ? `写进去了 ${ok} 条` : `不要了 ${ok} 条`);
+      // 有没成的：那一组还在，按钮放开能再点（全成了的那组订阅回来就重画掉了）
+      if (ok < n) gEl.querySelectorAll('button').forEach((b) => { b.disabled = false; });
       return;
     }
     const box = t.closest('.mm-item');

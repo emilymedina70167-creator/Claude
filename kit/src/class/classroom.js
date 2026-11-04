@@ -2168,7 +2168,8 @@ export async function renderClass(root, meta, desk = null) {
       const steps = () => [...segs.values()].filter((x) => !String(x.id).startsWith('~')).map((x) => ({ id: x.id, page: x.page, title: x.title || x.sec?.querySelector('h2')?.textContent?.trim() || '', place: x.place, md: x.md, seq: x.seq, ...(x.point ? { point: x.point } : {}), ...(x.failed ? { failed: true } : {}), ...(x.hidden ? { hidden: true } : {}) }));
       // 学习台里：先用代码算一份课后报告放进这次的输入，小结和整理单同一次写（docs/desk-plan.md 4.2，不多调用一次）
       const repObj = desk?.makeReport ? await desk.makeReport({ turns: history, steps: steps() }).catch(() => null) : null;
-      const report = repObj ? reportText(repObj) : '';
+      // 在学习台里却没算出报告（读证据出错）：整理单照样要写（复现组的结果、归纳失误、下一节从哪接），只是没有报告可对照
+      const report = repObj ? reportText(repObj) : desk ? '（这一次页面没算出课后报告：整理单按这节课的对话写，basis 写组件 id 或段 id。）' : '';
       // 这节课的一页（memory/sheet.js）：页面自己拼，写在小结那块板的下面
       const sheet = sheetMd(repObj?.sheet || lessonSheet({ steps: steps() }));
       const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: boardState(), subject: session.subject, memory: memoryArg(), canvas: CANVAS, ...planArg() });

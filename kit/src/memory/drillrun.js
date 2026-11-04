@@ -14,6 +14,35 @@ import { createMemOps } from './memops.js';
 const TEXT = { ...OUTCOME_TEXT, skip: '没做', giveup: '没做出来', wrong: '错', ok: '改对了', first: '一次对' };
 
 /**
+ * 一节练习做完（或者在首页点了「直接下课」）：按证据算结果，复现组的结果直接写进去（档位跟着变，不等我确认，
+ * 不对能在「管理」里撤销），这节记成下课、写课后报告。已经下了课的只算不写。
+ * drills / curriculum 不给就自己读。返回 { res, mem, doc }
+ */
+export async function closeDrill(db, sid, { doc, drills = null, curriculum = null, readOnly = false, writeReport = null }) {
+  const rows = (snap) => (snap ? snap.docs.map((d) => ({ id: d.id, ...d.data() })) : []);
+  if (!drills) {
+    const ids = Array.isArray(doc.items) ? doc.items.map(String) : [];
+    const all = rows(await db.collection('drills').get().catch(() => null));
+    drills = ids.map((id) => all.find((d) => d.id === id)).filter(Boolean);
+  }
+  if (!curriculum) curriculum = rows(await db.collection('curriculum').get().catch(() => null));
+  const evidence = rows(await db.collection('evidence').where('session', '==', sid).get().catch(() => null));
+  const mem = { reviews: rows(await db.collection('reviews').get().catch(() => null)), errors: rows(await db.collection('errors').get().catch(() => null)), curriculum };
+  const res = drillOutcome({ drills, evidence, mem, reviews: Array.isArray(doc.reviews) ? doc.reviews : [] });
+  const today = toDate(Date.now());
+  if (!readOnly && doc.status !== 'closed') {
+    const ops = createMemOps({ db, mem: () => mem });
+    for (const p of reviewPendings(res.reviewResults, { session: sid, date: today, mem })) await ops.applyNow({ id: p.id, ...p.doc }).catch(() => {});
+    assertWrite('page', 'sessions');
+    const summary = { n: res.rows.length, clean: res.rows.filter((x) => x.clean).length, wrong: res.wrong.length };
+    doc = { ...doc, status: 'closed', endedAt: Date.now(), drill: summary };
+    await db.doc(`sessions/${sid}`).set(doc).catch(() => {});
+    await writeReport?.(doc).catch(() => {});
+  }
+  return { res, mem, doc };
+}
+
+/**
  * root：页面；ctx：{ db（学习台的数据库，没 scopeDb 过）, store, sid, doc（sessions 文档）, readOnly, goto, openClass(block, pack), writeReport() }
  */
 export async function enterDrill(root, meta, { db, store, sid, doc, readOnly = false, goto, openClass, writeReport }) {
@@ -112,22 +141,13 @@ export async function enterDrill(root, meta, { db, store, sid, doc, readOnly = f
     const out = $('.dr-done');
     out.hidden = false;
     out.innerHTML = '<p class="muted">正在算结果…</p>';
-    // 证据可能还在排队写：等一会儿再读
-    await new Promise((r) => setTimeout(r, 900));
-    const evidence = rows(await db.collection('evidence').where('session', '==', sid).get().catch(() => null));
-    const mem = { reviews: rows(await db.collection('reviews').get().catch(() => null)), errors: rows(await db.collection('errors').get().catch(() => null)), curriculum };
-    const res = drillOutcome({ drills, evidence, mem, reviews: Array.isArray(doc.reviews) ? doc.reviews : [] });
-    const today = toDate(Date.now());
-    if (!readOnly && doc.status !== 'closed') {
-      // 复现组的结果直接写进去（档位跟着变），不等我确认；不对能在「管理」里撤销
-      const ops = createMemOps({ db, mem: () => mem });
-      for (const p of reviewPendings(res.reviewResults, { session: sid, date: today, mem })) await ops.applyNow({ id: p.id, ...p.doc }).catch(() => {});
-      assertWrite('page', 'sessions');
-      const summary = { n: res.rows.length, clean: res.rows.filter((x) => x.clean).length, wrong: res.wrong.length };
-      doc = { ...doc, status: 'closed', endedAt: Date.now(), drill: summary };
-      await db.doc(`sessions/${sid}`).set(doc).catch(() => {});
-      await writeReport?.(doc).catch(() => {});
-    }
+    // 证据可能还在排队写（网络不好时第一次失败要 1～2 秒后重试）：等它们都落地再读，不然最后几题算成没做。
+    // 最多等 10 秒；先让组件把最后一次作答交给 sink
+    await new Promise((r) => setTimeout(r, 300));
+    const lost = await Promise.race([session.sink?.settled?.() ?? 0, new Promise((r) => setTimeout(() => r(-1), 10000))]);
+    if (lost) console.warn('练一练：还有作答没存上', lost);
+    const { res, mem, doc: after } = await closeDrill(db, sid, { doc, drills, curriculum, readOnly, writeReport });
+    doc = after;
     const clean = res.rows.filter((x) => x.clean).length;
     const groupName = (id) => String(mem.reviews.find((r) => String(r.id) === id)?.title || id);
     out.innerHTML = `
