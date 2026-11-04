@@ -8,7 +8,14 @@ const reduce = () => typeof matchMedia === 'function' && matchMedia('(prefers-re
 const SPRING_LINEAR = 'linear(0, 0.0419, 0.1416, 0.2692, 0.4039, 0.5325, 0.6475, 0.7452, 0.8248, 0.8871, 0.934, 0.9678, 0.991, 1.006, 1.0146, 1.0188, 1.0199, 1.0191, 1.0171, 1.0145, 1.0118, 1.0093, 1.007, 1.005, 1.0035, 1.0022, 1.0013, 1.0006, 1.0002, 0.9999, 0.9997, 0.9996, 0.9996, 0.9996, 0.9997, 0.9997, 0.9998, 1)';
 export const SPRING = typeof CSS !== 'undefined' && CSS.supports?.('transition-timing-function', SPRING_LINEAR) ? SPRING_LINEAR : 'cubic-bezier(.34, 1.4, .64, 1)';
 export const SHEET = 'cubic-bezier(.32, .72, 0, 1)';
-const anim = (el, frames, opts) => (el.animate && !reduce() ? el.animate(frames, opts) : { finished: Promise.resolve(), cancel() {} });
+const DONE = { finished: Promise.resolve(), cancel() {} };
+// 动画出错（老一点的 Safari 不认 linear() 之类）就换成普通的曲线再试，再不行就不动：动画只是锦上添花，不能挡住要做的事
+const anim = (el, frames, opts) => {
+  if (!el?.animate || reduce()) return DONE;
+  try { return el.animate(frames, opts); } catch {
+    try { return el.animate(frames, { ...opts, easing: 'ease-out' }); } catch { return DONE; }
+  }
+};
 
 // iOS Safari 只有挂了 touchstart 才会给按钮 :active（按下去一沉靠它）
 let touchWired = false;
@@ -106,7 +113,11 @@ export function circleSwap(apply, at) {
 
 // —— 开课：主角卡放大铺满，再进课堂（进课堂是整页刷新，放大这一下让它不像突然换了一页）——
 export function zoomInto(from, then) {
-  if (!from || reduce()) { then(); return; }
+  let went = false;
+  const go = () => { if (!went) { went = true; then(); } };
+  if (!from || reduce()) { go(); return; }
+  setTimeout(go, 900);
+  try {
   const r = from.getBoundingClientRect();
   const z = document.createElement('div');
   z.className = 'fl-zoomout';
@@ -114,7 +125,8 @@ export function zoomInto(from, then) {
   document.body.append(z);
   anim(z, [{ top: `${r.top}px`, left: `${r.left}px`, width: `${r.width}px`, height: `${r.height}px`, borderRadius: getComputedStyle(from).borderRadius },
     { top: '0px', left: '0px', width: `${innerWidth}px`, height: `${innerHeight}px`, borderRadius: '0px' }], { duration: 520, easing: SPRING, fill: 'forwards' })
-    .finished.then(then, then);
+    .finished.then(go, go);
+  } catch { go(); }
 }
 
 // —— 面板：从原来那张卡长出来（kind: 'zoom'），或者从底下推上来（'sheet'）——
@@ -165,7 +177,7 @@ export function createPanels({ shell, layer }) {
     const dur = kind === 'sheet' ? 520 : 560;
     fadeScrim(1, dur);
     anim(z, [from, to], { duration: dur, easing: zoom ? SPRING : SHEET });
-    if (zoom) anim(z.querySelector('.fl-panel-in'), [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], { duration: 380, delay: dur * 0.3, easing: 'ease-out', fill: 'backwards' });
+    if (zoom) anim(z.querySelector('.fl-panel-in'), [{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: dur * 0.35, easing: 'ease-out', fill: 'backwards' });
     open = { z, src: zoom ? src : null, kind, opts };
     wireDrag(z);
     z.querySelector('.fl-close').addEventListener('click', () => closePanel());
@@ -235,51 +247,60 @@ const ICON = {
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
 };
 export function wireLongPress(root, items, { layer = document.body } = {}) {
-  let swallow = false;
-  let menu = null;
+  let swallowUntil = 0;
   root.addEventListener('pointerdown', (e) => {
     const el = e.target.closest('[data-menu]');
-    if (!el || menu || document.documentElement.classList.contains('fl-locked') || e.button > 0) return;
+    if (!el || menuOpen || document.documentElement.classList.contains('fl-locked') || e.button > 0) return;
     const x0 = e.clientX, y0 = e.clientY;
-    const t = setTimeout(() => { off(); const list = items(el); if (list.length) { swallow = true; openMenu(el, list); } }, 450);
-    const mv = (m) => { if (Math.hypot(m.clientX - x0, m.clientY - y0) > 10) off(); };
-    const off = () => { clearTimeout(t); removeEventListener('pointerup', off); removeEventListener('pointercancel', off); removeEventListener('pointermove', mv); };
-    addEventListener('pointerup', off); addEventListener('pointercancel', off); addEventListener('pointermove', mv, { passive: true });
+    let fired = false;
+    const t = setTimeout(() => { const list = items(el); if (list.length) { fired = true; showMenu(el, list, { layer, lift: true }); } }, 450);
+    const mv = (m) => { if (!fired && Math.hypot(m.clientX - x0, m.clientY - y0) > 10) off(); };
+    const up = () => { if (fired) swallowUntil = Date.now() + 400; off(); };
+    const off = () => { clearTimeout(t); removeEventListener('pointerup', up); removeEventListener('pointercancel', off); removeEventListener('pointermove', mv); };
+    addEventListener('pointerup', up); addEventListener('pointercancel', off); addEventListener('pointermove', mv, { passive: true });
   });
-  // 长按以后松手那一下 click 不算（不然又点开了）；也不要系统的放大镜、拷贝菜单
-  root.addEventListener('click', (e) => { if (swallow) { swallow = false; e.stopPropagation(); e.preventDefault(); } }, true);
+  // 长按松手那一下的 click 不算（电脑上会补发一次，不吞就又点开了）；只吞 0.4 秒以内的，过了就不管
+  root.addEventListener('click', (e) => { if (Date.now() < swallowUntil && !e.target.closest('.fl-menu, .fl-ctx')) { swallowUntil = 0; e.stopPropagation(); e.preventDefault(); } }, true);
   root.addEventListener('contextmenu', (e) => { if (e.target.closest('[data-menu]')) e.preventDefault(); });
-  function openMenu(el, list) {
-    const r = el.getBoundingClientRect();
-    const veil = document.createElement('div'); veil.className = 'fl-ctx';
-    const lift = el.cloneNode(true);
+}
+
+// —— 弹一个小菜单：el 是从哪弹的（lift 时把它托起来）；list 是 [{ text, icon, warn, run }] ——
+let menuOpen = false;
+export function showMenu(el, list, { layer = document.body, lift: liftIt = false } = {}) {
+  if (menuOpen || !list.length) return;
+  menuOpen = true;
+  const r = el.getBoundingClientRect();
+  const veil = document.createElement('div'); veil.className = 'fl-ctx';
+  let lift = null;
+  if (liftIt) {
+    lift = el.cloneNode(true);
     lift.classList.add('fl-lift'); lift.removeAttribute('data-menu'); lift.setAttribute('aria-hidden', 'true');
     lift.querySelectorAll('[id]').forEach((x) => x.removeAttribute('id'));
     const rad = getComputedStyle(el).borderRadius;
     Object.assign(lift.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, borderRadius: rad === '0px' ? '16px' : rad });
-    const m = document.createElement('div'); m.className = 'fl-menu'; m.setAttribute('role', 'menu');
-    m.innerHTML = list.map((x, i) => `<button type="button" role="menuitem" data-i="${i}"${x.warn ? ' class="is-warn"' : ''}>${x.text}${ICON[x.icon] ? `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[x.icon]}</svg>` : ''}</button>`).join('');
-    layer.append(veil, lift, m);
-    const mh = m.offsetHeight, mw = m.offsetWidth, gap = 12;
-    const below = r.bottom + gap + mh < innerHeight - 12;
-    const top = below ? r.bottom + gap : Math.max(12, r.top - gap - mh);
-    const left = Math.min(Math.max(12, r.left), innerWidth - mw - 12);
-    Object.assign(m.style, { top: `${top}px`, left: `${left}px`, transformOrigin: `${below ? 'top' : 'bottom'} ${r.left - left < mw / 2 ? 'left' : 'right'}` });
-    el.style.visibility = 'hidden';
-    const big = r.width > 500 ? 1.015 : 1.04;
-    anim(veil, [{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: 'ease-out' });
-    anim(lift, [{ transform: 'scale(1)' }, { transform: `scale(${big})` }], { duration: 480, easing: SPRING, fill: 'forwards' });
-    anim(m, [{ transform: 'scale(.4)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 460, easing: SPRING });
-    menu = { el };
-    const close = (then) => {
-      if (!menu) return;
-      menu = null;
-      anim(m, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.6)' }], { duration: 180, easing: 'ease-in', fill: 'forwards' });
-      anim(veil, [{ opacity: 1 }, { opacity: 0 }], { duration: 260, fill: 'forwards' });
-      anim(lift, [{ transform: `scale(${big})` }, { transform: 'scale(1)' }], { duration: 300, easing: SHEET, fill: 'forwards' }).finished.then(() => { el.style.visibility = ''; veil.remove(); lift.remove(); m.remove(); then?.(); });
-    };
-    veil.addEventListener('click', () => close());
-    m.addEventListener('click', (e) => { const b = e.target.closest('[data-i]'); if (b) close(() => list[Number(b.dataset.i)].run()); });
-    m.querySelector('button')?.focus({ preventScroll: true });
-  }
+  } else veil.classList.add('is-light');
+  const m = document.createElement('div'); m.className = 'fl-menu'; m.setAttribute('role', 'menu');
+  m.innerHTML = list.map((x, i) => `<button type="button" role="menuitem" data-i="${i}"${x.warn ? ' class="is-warn"' : ''}>${x.text}${ICON[x.icon] ? `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[x.icon]}</svg>` : ''}</button>`).join('');
+  layer.append(...[veil, lift, m].filter(Boolean));
+  const mh = m.offsetHeight, mw = m.offsetWidth, gap = liftIt ? 12 : 8;
+  const below = r.bottom + gap + mh < innerHeight - 12;
+  const top = below ? r.bottom + gap : Math.max(12, r.top - gap - mh);
+  const left = Math.min(Math.max(12, liftIt ? r.left : r.right - mw), innerWidth - mw - 12);
+  Object.assign(m.style, { top: `${top}px`, left: `${left}px`, transformOrigin: `${below ? 'top' : 'bottom'} ${r.left + r.width / 2 - left < mw / 2 ? 'left' : 'right'}` });
+  if (lift) el.style.visibility = 'hidden';
+  const big = r.width > 500 ? 1.015 : 1.04;
+  anim(veil, [{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: 'ease-out' });
+  if (lift) anim(lift, [{ transform: 'scale(1)' }, { transform: `scale(${big})` }], { duration: 480, easing: SPRING, fill: 'forwards' });
+  anim(m, [{ transform: 'scale(.4)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 460, easing: SPRING });
+  let closing = false;
+  const close = (then) => {
+    if (closing) return;
+    closing = true;
+    anim(m, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.6)' }], { duration: 180, easing: 'ease-in', fill: 'forwards' });
+    anim(veil, [{ opacity: 1 }, { opacity: 0 }], { duration: 260, fill: 'forwards' });
+    const end = () => { el.style.visibility = ''; veil.remove(); lift?.remove(); m.remove(); menuOpen = false; then?.(); };
+    (lift ? anim(lift, [{ transform: `scale(${big})` }, { transform: 'scale(1)' }], { duration: 300, easing: SHEET, fill: 'forwards' }) : anim(m, [{ opacity: 0 }, { opacity: 0 }], { duration: 200 })).finished.then(end, end);
+  };
+  veil.addEventListener('click', () => close());
+  m.addEventListener('click', (e) => { const b = e.target.closest('[data-i]'); if (b) close(() => list[Number(b.dataset.i)].run()); });
 }

@@ -33,7 +33,7 @@ import { pickDrills, harvestDrills, drillLine, DRILL_N } from './drills.js';
 import { enterDrill } from './drillrun.js';
 import { recallToday, spaceCounts } from './recall.js';
 import { applyTheme, isAuto } from '../theme.js';
-import { wireTouchActive, wireThumb, pageIn, rollNumber, wireNavMini, circleSwap, zoomInto, createPanels, wireLongPress } from './feel.js';
+import { wireTouchActive, wireThumb, pageIn, rollNumber, wireNavMini, circleSwap, zoomInto, createPanels, wireLongPress, showMenu } from './feel.js';
 import { installNju } from './nju.js';
 import { runRecall } from './recallrun.js';
 import { purgePlan, purgeText } from './purge.js';
@@ -414,6 +414,9 @@ export async function renderDesk(root, meta) {
     const rc = recallToday(data.recall, { today });
     const stat = (cls, go, n, unit, k) => `<button type="button" class="dk-stat ${cls}" data-go="${go}"><span class="dk-stat-n">${n}</span><span class="dk-stat-u">${unit}</span><span class="dk-stat-k">${k}</span></button>`;
     const others = opens.filter((x) => x !== open);
+    // 标题有多长（去掉公式、标记）：长的标题小一号，不然一个大标题挤成三四行
+    const heroText = String(open ? (open.title && open.title !== unit ? open.title : (open.block && data.curriculum.find((c) => String(c.id) === String(open.block))?.title) || heroT) : heroT);
+    const heroLen = [...heroText.replace(/\$[^$]*\$/g, 'xxxx').replace(/[*_`]/g, '')].length;
     // 后台一写数据（补报告、归类、写掌握）就会重画这一块：正在填的备课表单（选的块、教材页、展开着）留住
     const keep = { open: box.querySelector('.dk-prepfold')?.open, block: box.querySelector('.dk-prep-block')?.value, pages: box.querySelector('.dk-prep-pages')?.value };
     $('.dk-days-slot').innerHTML = root.dataset.layout === 'grid' ? spineHtml(true) : '';
@@ -421,13 +424,13 @@ export async function renderDesk(root, meta) {
       ${openPd.length ? `<p><a class="dk-link dk-to-pending" href="#">还有 ${openPd.length} 条以前留下的没写进去 ↓</a></p>` : ''}
       <div class="dk-hero-wrap"><div class="dk-hero">
         <p class="dk-eyebrow">${escapeHtml(SPACES[space].label)}${open ? '这节课还没下课' : main ? '备好的下一节' : '的下一节'}${main?.by === 'desk' ? '<span class="muted">（学习台备的）</span>' : ''}</p>
-        <h2 class="dk-hero-t">${supRuns(inline(open ? (open.title && open.title !== unit ? open.title : (open.block && data.curriculum.find((c) => String(c.id) === String(open.block))?.title) || heroT) : heroT))}</h2>
+        <h2 class="dk-hero-t${heroLen > 26 ? ' is-xlong' : heroLen > 13 ? ' is-long' : ''}">${supRuns(inline(open ? (open.title && open.title !== unit ? open.title : (open.block && data.curriculum.find((c) => String(c.id) === String(open.block))?.title) || heroT) : heroT))}</h2>
         ${heroS ? `<p class="dk-hero-s dk-goal" title="点一下看全文">${inline(heroS)}</p>` : ''}
-        ${debts.length ? `<p class="dk-owe">还欠着：${debts.map((x) => inline(x)).join('；')}</p>` : ''}
+        ${debts.length ? `<p class="dk-owe" title="点一下看全文">还欠着：${debts.map((x) => inline(x)).join('；')}</p>` : ''}
         <div class="dk-hero-acts">
           ${open ? `<button type="button" class="btn btn-primary btn-lg dk-go" data-sid="${escapeHtml(open.id)}">接着上课</button>` : ''}
           <button type="button" class="btn ${open ? '' : 'btn-primary btn-lg'} dk-new"${prepBusy ? ' disabled' : ''}>开新课</button>
-          ${open ? `<span class="dk-hero-more"><button type="button" class="link-btn dk-close" data-sid="${escapeHtml(open.id)}" title="不调用 Claude：只结束这节、页面算课后报告">直接下课</button><button type="button" class="link-btn dk-purge" data-sid="${escapeHtml(open.id)}" title="测试开的、不要的课：连黑板和记录一起删掉">删掉</button></span>` : ''}
+          ${open ? `<button type="button" class="btn dk-more" data-sid="${escapeHtml(open.id)}" aria-label="这节课的更多操作" title="直接下课、删掉这节课"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/></svg></button><span hidden><button type="button" class="dk-close" data-sid="${escapeHtml(open.id)}"></button><button type="button" class="dk-purge" data-sid="${escapeHtml(open.id)}"></button></span>` : ''}
         </div>
         ${last ? `<a class="dk-lastline" href="#classes/${escapeHtml(last.id)}">上一节 ${escapeHtml(String(last.date || '').slice(5).replace('-', '/'))}${lastLine ? `：${escapeHtml(lastLine)}` : ''}</a>` : ''}
         ${lastDebrief.length ? `<p class="dk-last muted"><span class="dk-k">复盘</span>${lastDebrief.map((x) => inline(x.text)).join('；')}</p>` : ''}
@@ -456,6 +459,12 @@ export async function renderDesk(root, meta) {
     });
     // 资料包的目标常常很长：先收成三行，点一下展开
     box.querySelector('.dk-goal')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('is-open'));
+    box.querySelector('.dk-owe')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('is-open'));
+    // 「⋯」：直接下课、删掉这节课（iOS 那种小菜单；真正做事的还是原来那两个按钮）
+    box.querySelector('.dk-more')?.addEventListener('click', (e) => showMenu(e.currentTarget, [
+      { text: '直接下课', icon: 'close', run: () => box.querySelector('.dk-close')?.click() },
+      { text: '删掉这节课', icon: 'close', warn: true, run: () => box.querySelector('.dk-purge')?.click() },
+    ], { layer: $('.dk-layer') }));
     box.querySelector('.dk-to-pending')?.addEventListener('click', (e) => { e.preventDefault(); $('.dk-pending').scrollIntoView({ behavior: 'smooth' }); });
     box.querySelectorAll('.dk-go').forEach((b) => b.addEventListener('click', (e) => goto(e.currentTarget.dataset.sid)));
     // 挂着没下课的旧课：直接结束（不写小结、不调用 Claude），课后报告由 fixReports 用代码补上，证据就有了归处
