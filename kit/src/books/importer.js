@@ -390,6 +390,8 @@ export function createImporter({ db, assets, ai, onProgress = () => {} }) {
   /** 写条目：replace 时删掉已经没有的；改过文字（fixed）、核对过（checked）的保留 */
   async function writeChunks(book, chunks, { replace = false } = {}) {
     const old = new Map(docsOf(await db.collection(`books/${book}/chunks`).get()).map((c) => [c.id, c]));
+    // 一本书几百条，一条一条等太慢：十条一组同时写
+    const jobs = [];
     for (const c of chunks) {
       const o = old.get(c.id);
       const keep = o?.fixed ? { text: o.text, title: o.title, kind: o.kind, fixed: true } : {};
@@ -397,10 +399,11 @@ export function createImporter({ db, assets, ai, onProgress = () => {} }) {
       delete rec.id;
       delete rec.media;
       const same = o && JSON.stringify({ ...o, id: undefined }) === JSON.stringify({ ...rec, id: undefined });
-      if (!same) await db.doc(`books/${book}/chunks/${c.id}`).set(rec);
+      if (!same) jobs.push(() => db.doc(`books/${book}/chunks/${c.id}`).set(rec));
       old.delete(c.id);
     }
-    if (replace) for (const id of old.keys()) await db.doc(`books/${book}/chunks/${id}`).delete().catch(() => {});
+    if (replace) for (const id of old.keys()) jobs.push(() => db.doc(`books/${book}/chunks/${id}`).delete().catch(() => {}));
+    for (let i = 0; i < jobs.length; i += 10) await Promise.all(jobs.slice(i, i + 10).map((f) => f()));
   }
 
   return { add, transcribe, rebuild, writeChunks, stop: () => { stopFlag = true; }, get busy() { return busy; } };

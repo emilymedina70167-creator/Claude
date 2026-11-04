@@ -46,60 +46,92 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
 
   // Claude Code 转好的结果放在收件箱 book_inbox/{书-批}：{ book, pages: { 页码: items }, by, at }（每批一条新记录，它那边不用改已有的页、
   // 不用管版本号）。页面看到了就并进各页（status done），删掉这条，再把这本书拼一遍条目（rebuild 是纯代码，不调用 Claude）
+  // 以前是一条一条串着做、一本书做完再做下一本，整个收件箱要把页面开着等几十分钟，中途关了页面就停在半路（书目还显示「等转写」）。
+  // 现在：几本书同时做（同一本书里按记录编号的顺序，同一页有新旧两版时后写的盖在后面），一条记录里的各页同时写，
+  // 一本书的记录做完马上拼条目（书目跟着变）；做的时候又来了新的快照不丢，做完再跑一遍；某一条出错不挡着后面的
   let inboxBusy = false;
+  let inboxLatest = null;
+  const inboxDone = new Set(); // 这次已经并进去、删掉的记录，旧快照里还有它也不重复做
+  const INBOX_BOOKS = 4; // 同时做几本书
+  async function takeOne(d) {
+    const book = String(d.book || '');
+    // 项目对话里的 Claude（或别处）直接写转写原文：{ book, text: '=== 第 82 页\n--- 定义 | …', by }，这里读懂（和页面里转写同一个 parseTranscription），
+    // 学习台里还没有的页照样建（原页图以后「存进学习台」时补）；读的结果写一条回执 book_inbox_log/{同一个 id}，它下次能查
+    if (typeof d.text === 'string') {
+      let log = { book, at: Date.now() };
+      try {
+        const { pages } = parseTranscription(d.text, []);
+        d.pages = Object.fromEntries([...pages].map(([n, items]) => [n, items]));
+        d.meta = { ...Object.fromEntries([...pages.keys()].map((n) => [n, {}])), ...(d.meta || {}) };
+        const ns = [...pages.keys()].sort((a, b) => a - b);
+        const gaps = [];
+        for (let i = 1; i < ns.length; i++) for (let n = ns[i - 1] + 1; n < ns[i]; n++) gaps.push(n);
+        log = { ...log, pages: ns, items: ns.reduce((s, n) => s + pages.get(n).length, 0), gaps, unclear: ns.filter((n) => pages.get(n).some((it) => /【看不清】/.test(it.text || ''))) };
+      } catch (e) {
+        d.pages = {};
+        log = { ...log, error: String(e?.message || e) };
+      }
+      await db.doc(`book_inbox_log/${d.id}`).set(log).catch(() => {});
+    }
+    // 从仓库里的 PDF 转的：书、页在学习台里可能还没有，收件箱带着书的信息（info）和每页的原页图（meta）一起建
+    if (d.info) {
+      const bref = db.doc(`books/${book}`);
+      const bs = await bref.get();
+      if (!bs.exists) await bref.set({ ...d.info, status: 'importing', createdAt: Date.now(), at: Date.now() });
+      else if (d.info.pages && !bs.data().pages) await bref.set({ ...bs.data(), pages: d.info.pages });
+    }
+    let skipped = 0;
+    await Promise.all(Object.entries(d.pages || {}).map(async ([n, items]) => {
+      if (!Array.isArray(items)) return;
+      const ref = db.doc(`books/${book}/pages/${n}`);
+      const snap = await ref.get();
+      const m = d.meta?.[n];
+      if (!snap.exists && !m) { skipped++; return; } // 这页还没存进学习台：这条记录留着，页存好以后再并（以前是直接删掉，转好的字就丢了）
+      const base = snap.exists ? snap.data() : { n: Number(n), img: m.img || '', imgs: m.img ? [m.img] : [], layer: '', ...(m.size ? { size: m.size } : {}), ...(m.blank ? { blank: true } : {}) };
+      if (m?.img && !base.img) Object.assign(base, { img: m.img, imgs: [m.img] });
+      const rec = { ...base, items, status: 'done', err: '', by: m?.blank ? 'page' : d.by || '', via: 'claude-code', at: Date.now() };
+      delete rec.redo;
+      await ref.set(rec);
+    }));
+    if (skipped) return false;
+    await db.doc(`book_inbox/${d.id}`).delete().catch(() => {});
+    return true;
+  }
   async function takeInbox(docs) {
-    if (inboxBusy || !docs.length) return;
+    if (inboxBusy) { inboxLatest = docs; return; }
+    if (!docs.length) return;
     inboxBusy = true;
     const touched = new Set();
     try {
-      for (const d of docs) {
-        const book = String(d.book || '');
-        if (!/^B\d+$/.test(book)) continue;
-        // 项目对话里的 Claude（或别处）直接写转写原文：{ book, text: '=== 第 82 页\n--- 定义 | …', by }，这里读懂（和页面里转写同一个 parseTranscription），
-        // 学习台里还没有的页照样建（原页图以后「存进学习台」时补）；读的结果写一条回执 book_inbox_log/{同一个 id}，它下次能查
-        if (typeof d.text === 'string') {
-          let log = { book, at: Date.now() };
-          try {
-            const { pages } = parseTranscription(d.text, []);
-            d.pages = Object.fromEntries([...pages].map(([n, items]) => [n, items]));
-            d.meta = { ...Object.fromEntries([...pages.keys()].map((n) => [n, {}])), ...(d.meta || {}) };
-            const ns = [...pages.keys()].sort((a, b) => a - b);
-            const gaps = [];
-            for (let i = 1; i < ns.length; i++) for (let n = ns[i - 1] + 1; n < ns[i]; n++) gaps.push(n);
-            log = { ...log, pages: ns, items: ns.reduce((s, n) => s + pages.get(n).length, 0), gaps, unclear: ns.filter((n) => pages.get(n).some((it) => /【看不清】/.test(it.text || ''))) };
-          } catch (e) {
-            d.pages = {};
-            log = { ...log, error: String(e?.message || e) };
+      let todo = docs;
+      while (todo?.length) {
+        const byBook = new Map();
+        for (const d of todo) {
+          const book = String(d.book || '');
+          if (!/^B\d+$/.test(book) || inboxDone.has(d.id)) continue;
+          if (!byBook.has(book)) byBook.set(book, []);
+          byBook.get(book).push(d);
+        }
+        const names = [...byBook.keys()];
+        let next = 0;
+        const worker = async () => {
+          while (next < names.length) {
+            const book = names[next++];
+            let did = false;
+            for (const d of byBook.get(book).sort((x, y) => (x.id < y.id ? -1 : 1))) {
+              try { if (await takeOne(d)) { inboxDone.add(d.id); did = true; } } catch { /* 这一条下次再来 */ }
+            }
+            if (!did) continue;
+            touched.add(book);
+            try { const im = await getImporter(); await im.rebuild(book); } catch { /* 条目下次再拼 */ }
+            chunksCache.delete(book);
+            pagesCache.delete(book);
+            if (route) paint();
           }
-          await db.doc(`book_inbox_log/${d.id}`).set(log).catch(() => {});
-        }
-        // 从仓库里的 PDF 转的：书、页在学习台里可能还没有，收件箱带着书的信息（info）和每页的原页图（meta）一起建
-        if (d.info) {
-          const bref = db.doc(`books/${book}`);
-          const bs = await bref.get();
-          if (!bs.exists) await bref.set({ ...d.info, status: 'importing', createdAt: Date.now(), at: Date.now() });
-          else if (d.info.pages && !bs.data().pages) await bref.set({ ...bs.data(), pages: d.info.pages });
-        }
-        for (const [n, items] of Object.entries(d.pages || {})) {
-          if (!Array.isArray(items)) continue;
-          const ref = db.doc(`books/${book}/pages/${n}`);
-          const snap = await ref.get();
-          const m = d.meta?.[n];
-          if (!snap.exists && !m) continue;
-          const base = snap.exists ? snap.data() : { n: Number(n), img: m.img || '', imgs: m.img ? [m.img] : [], layer: '', ...(m.size ? { size: m.size } : {}), ...(m.blank ? { blank: true } : {}) };
-          if (m?.img && !base.img) Object.assign(base, { img: m.img, imgs: [m.img] });
-          const rec = { ...base, items, status: 'done', err: '', by: m?.blank ? 'page' : d.by || '', via: 'claude-code', at: Date.now() };
-          delete rec.redo;
-          await ref.set(rec);
-        }
-        await db.doc(`book_inbox/${d.id}`).delete().catch(() => {});
-        touched.add(book);
-      }
-      const im = await getImporter();
-      for (const book of touched) {
-        await im.rebuild(book).catch(() => {});
-        chunksCache.delete(book);
-        pagesCache.delete(book);
+        };
+        await Promise.all(Array.from({ length: Math.min(INBOX_BOOKS, names.length) }, worker));
+        todo = inboxLatest;
+        inboxLatest = null;
       }
     } finally {
       inboxBusy = false;
