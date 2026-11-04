@@ -14,6 +14,7 @@ import {
 } from './views.js';
 import { toDate } from './schema.js';
 import { hitText, lessonLines, pointCatalog } from './skills.js';
+import { debriefView } from './debrief.js';
 
 const inline = (s) => { try { return mdToHtml(String(s ?? ''), { inline: true }); } catch { return escapeHtml(String(s ?? '')); } };
 const esc = escapeHtml;
@@ -187,12 +188,23 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
       <section class="dk-card"><h2 class="dk-h">${esc(r.date)} ${inline(r.title)}</h2>
         <p class="muted">${KIND_TEXT[r.kind]}${r.block ? ` · ${inline(blockName(r.block))}` : ''}${r.minutes !== null ? ` · ${r.minutes} 分钟` : ''}${r.usage?.calls ? ` · 调用 ${r.usage.calls} 轮，${esc(tokenText(r.usage.bytes))}` : ''}</p>
         <div class="mm-acts"><button type="button" class="btn btn-primary" data-goto="${r.status === 'open' ? esc(sid) : `view/${esc(sid)}`}">${r.status === 'open' ? (r.kind === 'class' ? '接着上课' : '进去') : r.kind === 'unit' ? '翻看这个单元' : '翻看这节课的黑板'}</button>${purge ? `<button type="button" class="btn btn-danger" data-purge="${esc(sid)}">删掉这节课</button>` : ''}</div>
+        ${debriefHtml(r.debrief)}
         ${skillsHtml(r.skills)}
         ${sum ? `<div class="dk-memo-sub" role="heading" aria-level="3">下课小结</div><div class="dk-summary">${mdToHtml(sum.text || '')}</div>` : ''}
         ${rep && sheetMd(rep.sheet) ? `<div class="dk-memo-sub" role="heading" aria-level="3">这节课的一页</div><div class="dk-summary dk-sheet">${mdToHtml(sheetMd(rep.sheet))}</div>` : ''}
         ${rep ? reportHtml(rep) : rep === false ? '<p class="muted">这节课还没有课后报告（下课以后才有；回首页会补写）。</p>' : '<p class="muted">正在读课后报告…</p>'}
         ${obs.filter((o) => o.kind !== 'summary').length ? `<details class="dk-soft"><summary>老师当堂的笔记（${obs.filter((o) => o.kind !== 'summary').length} 条）</summary><ul class="dk-log">${obs.filter((o) => o.kind !== 'summary').map((o) => `<li>${o.kind === 'proposal' ? '<b>提议</b> ' : ''}${inline(o.text)}</li>`).join('')}</ul></details>` : ''}
       </section>`;
+  }
+
+  // 下课后的复盘（debrief.js）：误解消了没有、思维习惯、下节先测；给老师的依据和建议收起来
+  function debriefHtml(d) {
+    const rows = debriefView(d);
+    if (!rows.length) return '';
+    const more = [...(d.pace || []).map((p) => `节奏：${p.where}${p.how ? `——${p.how}` : ''}`), ...(d.opening?.q ? [`开场的题：${d.opening.q}`] : []), ...(d.advice || []).map((a) => `给下一节老师：${a}`)];
+    return `<div class="dk-memo-sub" role="heading" aria-level="3">下课后的复盘</div>
+      ${rows.map((x) => `<p>${inline(x.text)}</p>`).join('')}
+      ${more.length ? `<details class="dk-soft"><summary>节奏和给老师的建议</summary><ul class="dk-log">${more.map((t) => `<li>${inline(t)}</li>`).join('')}</ul></details>` : ''}`;
   }
 
   // 这节课的三行和按知识点的表（skills.js：下课后页面让 Claude 把每道题归到知识点）
@@ -228,9 +240,9 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
     const max = Math.max(30, ...st.daily.map((d) => d.minutes));
     // 一个系列（每天学了几分钟）：细柱，主题色，悬停看数；下面另有表
     return `<section class="dk-card"><h2 class="dk-h">最近两周</h2>
-      <p>一共 ${st.total} 分钟，学了 ${st.studyDays} 天。</p>
+      ${!st.total && !st.daily.some((d) => d.items) ? '<p class="dk-empty">最近两周还没上过课。上完一节，这里每天一根柱子。</p>' : `<p>一共 ${st.total} 分钟，学了 ${st.studyDays} 天。</p>
       <div class="dk-bars" role="img" aria-label="最近 14 天每天学习的分钟数">${st.daily.map((d) => `<div class="dk-bar" title="${esc(d.date)}：${d.minutes} 分钟，${d.items} 题一次对 ${d.first}"><i${d.minutes ? '' : ' class="is-zero"'} style="height:${Math.round((d.minutes / max) * 100)}%"></i><span>${esc(d.date.slice(8))}</span></div>`).join('')}</div>
-      <details class="dk-soft"><summary>看表</summary><div class="dk-tablewrap"><table class="dk-table2"><thead><tr><th>日期</th><th>分钟</th><th>题</th><th>一次对</th></tr></thead><tbody>${st.daily.filter((d) => d.minutes || d.items).map((d) => `<tr><td>${esc(d.date)}</td><td>${d.minutes}</td><td>${d.items}</td><td>${d.first}</td></tr>`).join('') || '<tr><td colspan="4">这两周还没有课后报告。</td></tr>'}</tbody></table></div></details>
+      <details class="dk-soft"><summary>看表</summary><div class="dk-tablewrap"><table class="dk-table2"><thead><tr><th>日期</th><th>分钟</th><th>题</th><th>一次对</th></tr></thead><tbody>${st.daily.filter((d) => d.minutes || d.items).map((d) => `<tr><td>${esc(d.date)}</td><td>${d.minutes}</td><td>${d.items}</td><td>${d.first}</td></tr>`).join('') || '<tr><td colspan="4">这两周还没有课后报告。</td></tr>'}</tbody></table></div></details>`}
     </section>
     <section class="dk-card"><h2 class="dk-h">每一块</h2>${st.blocks.length ? `<div class="dk-tablewrap"><table class="dk-table2"><thead><tr><th>块</th><th>分钟</th><th>节数</th><th>一次做对</th></tr></thead><tbody>${st.blocks.map((b) => `<tr><td>${inline(blockName(b.block))}</td><td>${b.minutes}</td><td>${b.sessions}</td><td>${b.items ? `${b.first} / ${b.items}` : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">还没有。</p>'}</section>
     <section class="dk-card"><h2 class="dk-h">一次做对率（每节课）</h2>${st.trend.length ? `<div class="dk-tablewrap"><table class="dk-table2"><tbody>${st.trend.map((x) => `<tr><td>${esc(x.date)}</td><td class="dk-rate"><i style="width:${x.rate}%"></i><span>${x.rate}%</span></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">还没有做过题的课。</p>'}</section>`;

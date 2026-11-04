@@ -23,4 +23,7 @@ export const FEATURES = {
   stream: true,
   // 版面（class/canvas.js，docs/board-plan.md 第 4 节）：课堂 Claude 自己排板——这块板分几栏、每段放哪一栏，页面按真实内容排、栏间一道竖线
   canvas: true,
+  // 抢跑（class/spec.js，docs/smart-plan.md 第 1 批）：一轮讲完、板上没事可做时先按「继续」调用，开课页先按「开始上课」调用；
+  // 学生真点了、整份内容一字不差就直接用，不然丢掉（多花一次调用，不多等）
+  spec: true,
 };

@@ -1,6 +1,7 @@
 // 页面里调用 Claude：新版 artifact 用 claude.use("sample")，
 // 旧版对话 artifact 用 window.claude.complete。都没有就返回 null（相关功能隐藏）。
 import { session } from './session.js';
+import { lane } from './lane.js';
 
 let pending = null;
 
@@ -9,6 +10,16 @@ let pending = null;
 // 拒绝码用 capability_disabled：组件把它当「这个页面没有 Claude」，安静地收起相关按钮
 const classBlocked = (opts) => session.mode === 'class' && !(opts && opts.images);
 const blocked = () => Promise.reject({ code: 'capability_disabled', message: '课堂模式里只有课堂 Claude（Opus 5.5）讲课' });
+
+// 调用让路（lane.js）：opts.lane === 'bg' 的是后台的活，等讲课的调用跑完再发、一次一个，也不要平台加速；
+// 别的（讲课、抢跑、学生点了按钮的）马上发。lane 不传给平台
+export function laned(fn) {
+  return (input, opts = {}) => {
+    const { lane: kind, ...rest } = opts || {};
+    const bg = kind === 'bg';
+    return lane.run(bg ? 'bg' : 'fg', () => fn(input, bg && rest.fast === undefined ? { ...rest, fast: false } : rest), { signal: rest.signal });
+  };
+}
 
 export function getAI() {
   if (pending) return pending;
@@ -25,11 +36,11 @@ export function getAI() {
         tools: !!limits?.tools,
         // 能发图片时是 {maxCount, mediaTypes, ...}；课件要声明 capabilities: {"sample": {"images": true}}
         images: limits?.images || null,
-        ask: (input, opts = {}) => (classBlocked(opts) ? blocked() : sample(input, opts).then((r) => r.text)),
+        ask: laned((input, opts) => (classBlocked(opts) ? blocked() : sample(input, opts).then((r) => r.text))),
         // 完整结果（含 modelApplied / modelTierApplied），课堂模式要据此判断是不是指定的模型在讲课
-        call: (input, opts = {}) => sample(input, opts),
+        call: laned((input, opts) => sample(input, opts)),
         limits,
-        json: (input, opts = {}) => (classBlocked(opts) ? blocked() : sample.json(input, opts)),
+        json: laned((input, opts) => (classBlocked(opts) ? blocked() : sample.json(input, opts))),
       };
     }
     if (typeof c.complete === 'function') {

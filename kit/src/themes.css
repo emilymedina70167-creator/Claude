@@ -683,3 +683,64 @@
 /* 黑板：印是一方黄粉笔描的框，里面一个粉笔字 */
 :root[data-theme="chalk"] .la-lesson .dk-title::before { background: rgb(var(--yellow-rgb) / 0.08); color: var(--yellow); font: 400 26px/1 var(--hand); box-shadow: inset 0 0 0 2px rgb(var(--yellow-rgb) / 0.8); filter: var(--rough); }
 :root[data-theme="chalk"] .dk-date { color: rgb(var(--yellow-rgb) / 0.9); }
+
+/* —— 组件的质感（2026-11-04）：iOS 那一族（水墨、墨夜、纸本、青瓷、玄）的组件也是一套 ——
+   黑板上一块板原来有四五种标题色（组件标题花青、例题赭黄、常驻栏赭黄……），颜色留给重点，标题都是墨色；
+   输入框不要粉笔那道虚线底，是 iOS 的圆角框；表格是细线、圆角、表头淡底；一排格子、树的结点是一张张小白卡；
+   演示的说明不要左边那道竖线，是淡淡的一块。:where 压低权重：组件自己的状态（对、错、分组颜色）照样盖得住 */
+:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"]) :is(.w-title, .la-lesson h3) { color: var(--chalk); }
+:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"]) .class-pin .stage-body > h2 { color: var(--muted); font: 600 13px/1.4 var(--sans); letter-spacing: 0.1em; margin: 0 0 6px; padding: 0; }
+:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"]) .class-pin .stage-body > h2::before { content: none; }
+
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) :is(.q-input, .mi-cell, .ti-input, .fi-text, .sv-ask-input, .mx-inputs input, .sv-blank) {
+  border: 0; border-radius: 12px; background: var(--field); box-shadow: var(--field-edge); color: var(--chalk);
+}
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) :is(.q-input, .mi-cell, .ti-input, .fi-text, .sv-ask-input, .mx-inputs input, .sv-blank, .sv-fill-in):focus {
+  outline: none; border: 0; background: var(--card-solid); box-shadow: 0 0 0 2px rgb(var(--yellow-rgb) / 0.65), 0 2px 10px -4px rgb(var(--shade-rgb) / 0.2);
+}
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) :is(.q-input, .mi-cell, .ti-input, .fi-text, .sv-ask-input, .sv-blank):is(.is-right, .is-ok) { color: var(--green); background: rgb(var(--green-rgb) / 0.07); box-shadow: inset 0 0 0 1px rgb(var(--green-rgb) / 0.5); }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) :is(.q-input, .mi-cell, .ti-input, .fi-text, .sv-ask-input, .sv-blank):is(.is-wrong, .is-bad) { color: var(--coral); background: rgb(var(--coral-rgb) / 0.06); box-shadow: inset 0 0 0 1px rgb(var(--coral-rgb) / 0.5); }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .sv-fill-in { border-radius: 8px; background: var(--field); box-shadow: var(--field-edge); color: var(--chalk); }
+
+/* 表格：外面一道细线、圆角，里面只留很淡的格线，表头一层淡底 */
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) :is(.sv-gtbl, .sv-fill-t, .la-lesson table:not(.mx):not(.dv):not(.sv-fill-t):not(.sv-tab)) {
+  border-collapse: separate; border-spacing: 0; border: 0.5px solid rgb(var(--chalk-rgb) / 0.18); border-radius: 12px; background: rgb(var(--card-solid-rgb) / 0.7); overflow: hidden;
+}
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) :is(.sv-gtbl, .sv-fill-t, .la-lesson table:not(.mx):not(.dv):not(.sv-fill-t):not(.sv-tab)) :is(th, td) {
+  border: 0; border-right: 0.5px solid rgb(var(--chalk-rgb) / 0.08); border-bottom: 0.5px solid rgb(var(--chalk-rgb) / 0.1);
+}
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) :is(.sv-gtbl, .sv-fill-t, .la-lesson table:not(.mx):not(.dv):not(.sv-fill-t):not(.sv-tab)) :is(th, td):last-child { border-right: 0; }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) :is(.sv-gtbl, .sv-fill-t, .la-lesson table:not(.mx):not(.dv):not(.sv-fill-t):not(.sv-tab)) tr:last-child > :is(th, td) { border-bottom: 0; }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) :is(.sv-gtbl, .sv-fill-t, .la-lesson table:not(.mx):not(.dv):not(.sv-fill-t):not(.sv-tab)) thead th { background: rgb(var(--chalk-rgb) / 0.04); }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .la-lesson table:not(.mx):not(.dv):not(.sv-fill-t):not(.sv-tab) th { font: 600 14.5px/1.4 var(--sans); color: var(--muted); }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .la-lesson table:not(.mx):not(.dv):not(.sv-fill-t):not(.sv-tab) { display: table; max-width: 100%; }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .sv-fill-t .sv-fill-copyrow > * { border: 0; background: transparent; }
+
+/* 一排格子、树的结点：一张张小白卡，细边，一点点影子 */
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) :is(.arr-cell, .sv-cell) { background: var(--card-solid); border: 1.5px solid rgb(var(--chalk-rgb) / 0.13); box-shadow: 0 1px 2px rgb(var(--shade-rgb) / 0.07); border-radius: 10px; }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .sv-cell:is(.sv-empty, .sv-hole) { background: transparent; border: 1.5px dashed rgb(var(--chalk-rgb) / 0.22); box-shadow: none; }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .sv-cell.sv-zero { background: rgb(var(--chalk-rgb) / 0.04); box-shadow: none; }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .sv-chip { border: 0; background: rgb(var(--chalk-rgb) / 0.05); color: var(--chalk); font-weight: 600; }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .sv-gtbl thead th { color: var(--body); }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .sv-fill-t td .sv-fill-in:not(:focus) { background: transparent; box-shadow: none; }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .arr-cell.arr-empty { background: transparent; border: 1px dashed rgb(var(--chalk-rgb) / 0.22); box-shadow: none; }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .arr-cell.arr-zero { background: rgb(var(--chalk-rgb) / 0.04); box-shadow: none; }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .arr-cell:is(.arr-cmp) { border-color: rgb(var(--yellow-rgb) / 0.8); box-shadow: 0 0 0 3px rgb(var(--yellow-rgb) / 0.22); }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .sv-tree .sv-node circle { fill: var(--card-solid); stroke: rgb(var(--chalk-rgb) / 0.4); stroke-width: 1.3; }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) .sv-tree .sv-edge { stroke-width: 1.3; }
+
+/* 演示的说明、组件的注：淡淡的一块，不要左边那道竖线 */
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) :is(.sv-msg, .w-note, .ss-msg) { border-left: 0; padding: 10px 14px; border-radius: 12px; background: rgb(var(--chalk-rgb) / 0.035); }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) :is(.sv-msg, .ss-msg):empty { background: transparent; }
+
+/* 滑块：iOS 的样子——细轨道、走过的一段上色、白色圆钮带影子 */
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, rgb(var(--yellow-rgb) / 0.85) 0 var(--pct, 0%), rgb(var(--chalk-rgb) / 0.14) var(--pct, 0%) 100%); }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) input[type="range"]::-webkit-slider-thumb { width: 28px; height: 28px; margin-top: -12px; border: 0; background: #fff; box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 2px 6px rgb(0 0 0 / 0.2), 0 1px 1px rgb(0 0 0 / 0.08); }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, rgb(var(--yellow-rgb) / 0.85) 0 var(--pct, 0%), rgb(var(--chalk-rgb) / 0.14) var(--pct, 0%) 100%); }
+:where(:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"])) input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; background: #fff; box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 2px 6px rgb(0 0 0 / 0.2); }
+/* 分步题、演示里先猜的选项：和单选题一样是一张张白卡，不是灰按钮（灰按钮看着像「点了就走」，不像「选一个」） */
+:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"]) .btn:is(.st-choice, .sv-choice):not(.btn-primary):not(.btn-danger) { background: var(--card-solid); box-shadow: 0 1px 2px rgb(var(--shade-rgb) / 0.06); --frame: rgb(var(--chalk-rgb) / 0.16); font-weight: 500; color: var(--chalk); }
+:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"]) .btn:is(.st-choice, .sv-choice):not(.btn-primary):not(.btn-danger):hover { background: var(--card-hover); }
+:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"]) .btn:is(.st-choice, .sv-choice).is-picked:not(.btn-primary) { background: rgb(var(--chalk-rgb) / 0.06); --frame: rgb(var(--chalk-rgb) / 0.5); color: var(--chalk); }
+:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"]) .btn:is(.st-choice, .sv-choice).is-right:not(.btn-primary) { background: rgb(var(--green-rgb) / 0.08); --frame: rgb(var(--green-rgb) / 0.6); color: var(--green); }
+:root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"]) .btn:is(.st-choice, .sv-choice).is-wrong:not(.btn-primary) { background: rgb(var(--coral-rgb) / 0.07); --frame: rgb(var(--coral-rgb) / 0.55); color: var(--coral); }

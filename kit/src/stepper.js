@@ -12,6 +12,7 @@ import { markDraft } from './drafts.js';
 import { answerWidget, textAnswerSpec } from './blocks/answer.js';
 import { snapshot, animateFrom, settle } from './morph.js';
 import { cellOk as cellOkFor } from './stepperspec.js';
+import { ICONS, playLabel, trackFill } from './icons.js';
 
 const reduceMotion = () => { try { return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 const plainText = (s) => String(s || '').replace(/\$/g, '').replace(/\s+/g, ' ').slice(0, 200);
@@ -99,10 +100,10 @@ export function stepperBlock(engine) {
         <div class="sv-msg" aria-live="polite"></div>
         <div class="sv-ask" hidden></div>
         <div class="sv-ctrl">
-          <button type="button" class="btn btn-sm sv-reset" title="回到开头" aria-label="回到开头">⏮</button>
-          <button type="button" class="btn btn-sm sv-prev">◀ 上一步</button>
-          <button type="button" class="btn btn-sm btn-primary sv-next">下一步 ▶</button>
-          <button type="button" class="btn btn-sm sv-play">播放</button>
+          <button type="button" class="btn btn-sm btn-ic sv-reset" title="回到开头" aria-label="回到开头">${ICONS.first}</button>
+          <button type="button" class="btn btn-sm sv-prev">${ICONS.prev}<span>上一步</span></button>
+          <button type="button" class="btn btn-sm btn-primary sv-next"><span>下一步</span>${ICONS.next}</button>
+          <button type="button" class="btn btn-sm sv-play">${playLabel(false)}</button>
           <span class="sv-count muted"></span>
         </div>
         <input type="range" class="sv-scrub" min="0" max="${last}" step="1" value="0" aria-label="走到第几步">
@@ -208,6 +209,7 @@ export function stepperBlock(engine) {
       if (!filling) verdict = '';
       count.textContent = stepLabel(k, last);
       scrub.value = String(k);
+      trackFill(scrub);
       btnPrev.disabled = k === 0;
       btnNext.disabled = k === last || filling;
       if (pending && ['pick', 'order'].includes(pending.ask.kind)) markPicked();
@@ -409,11 +411,11 @@ export function stepperBlock(engine) {
     }
 
     // —— 播放：到要问的步停下来问 ——
-    function stopPlay() { clearInterval(timer); timer = 0; btnPlay.textContent = '播放'; }
+    function stopPlay() { clearInterval(timer); timer = 0; btnPlay.innerHTML = playLabel(false); }
     btnPlay.addEventListener('click', () => {
       if (timer) { stopPlay(); return; }
       if (k >= last) go(0);
-      btnPlay.textContent = '暂停';
+      btnPlay.innerHTML = playLabel(true);
       timer = setInterval(() => { if (!el.isConnected || !forward()) stopPlay(); }, common.speed * 1000);
     });
     btnNext.addEventListener('click', () => { stopPlay(); forward(); });

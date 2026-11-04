@@ -167,6 +167,7 @@ export function classRows(mem = {}) {
       // 练一练、课前热身（kind: drill）：列表里照旧算一行，「上一节」不算它
       drill: s.kind === 'drill',
       skills: s.skills || null,
+      debrief: s.debrief || null,
     };
   }).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0) || cmpId(b.id, a.id));
 }

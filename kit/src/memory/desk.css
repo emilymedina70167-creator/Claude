@@ -555,3 +555,71 @@
 .dk-prog[data-space="math"] { --sp-rgb: var(--blue-rgb); }
 .dk-prog[data-space="cs"] { --sp-rgb: var(--green-rgb); }
 .dk-prog[data-space="en"] { --sp-rgb: var(--pink-rgb); }
+
+/* —— 首页「今天」（2026-11-04）：复现、要记的、练一练、补记并成一张分组卡，一段一段用细线隔开 ——
+   原来是四张卡、卡里又套灰卡，和主角卡的三个数说的是同一件事，看着重复、零碎 */
+.dk-group { padding: 2px 20px; }
+.dk-group:not(:has(> .dk-part:not([hidden]))) { display: none; }
+.dk-part { padding: 16px 0; }
+.dk-part:not([hidden]) ~ .dk-part:not([hidden]) { box-shadow: inset 0 0.5px 0 rgb(var(--chalk-rgb) / 0.12); }
+.la-lesson.is-desk .dk-part .dk-h { font-size: 17px; letter-spacing: 0.06em; margin-bottom: 8px; }
+.dk-part > .dk-sub { margin: -2px 0 10px; font-size: 13.5px; }
+.dk-part.dk-manual { padding: 8px 0; }
+.dk-part.dk-manual .dk-fold > summary { align-items: center; }
+/* 复现：每门课一行（科目、几组到期、按钮），挑出来的几组在下面一行行列着；不再套一张灰卡 */
+:root .is-desk .dk-group .dk-rv { padding: 0; border-radius: 0; background: none; box-shadow: none; }
+.dk-group .dk-rv + .dk-rv { margin-top: 12px; padding-top: 12px; box-shadow: inset 0 0.5px 0 rgb(var(--chalk-rgb) / 0.08); }
+.dk-group .dk-rv-pick { margin-top: 6px; padding-left: 17px; }
+.dk-group .dk-soon { margin: 10px 0 0; }
+/* 要记的：一行——左边数字和说明，右边「开始」 */
+.dk-deckrow { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+:root .is-desk .dk-deckrow .dk-deck { flex: 1; min-width: 0; margin: 0; padding: 0; background: none; box-shadow: none; }
+.dk-deckrow .dk-deck-n { font-size: 34px; }
+.dk-recall .dk-radd { margin-top: 6px; }
+.dk-recall .dk-radd > summary { min-height: 40px; }
+/* 主角卡和别的卡一样，不要那一圈细框 */
+:root:is([data-theme^="ink"], [data-theme="paper"], [data-theme="celadon"]) .is-desk .dk-class { box-shadow: var(--panel-edge), var(--lift); }
+/* 标题里的上标（desk.js 的 supRuns） */
+.dk-sup { font-size: 0.58em; vertical-align: 0.85em; line-height: 0; margin-left: 0.04em; font-weight: 600; }
+
+/* 这一周：几科的名字一样宽（共用一列），「数据结构」不折行；说明和进度条之间留口气 */
+.dk-progs { grid-template-columns: max-content minmax(0, 1fr) auto; column-gap: 12px; row-gap: 10px; align-items: center; }
+.dk-prog { display: contents; }
+.dk-prog-k { white-space: nowrap; font: 14px/1.4 var(--sans); }
+.dk-prog-n { font: 13px/1.4 var(--sans); color: var(--muted); }
+.dk-progs + .dk-sub { margin-top: 12px; font-size: 13px; }
+
+/* 下拉框：不要浏览器自己的箭头和灰底，iOS 的样子——圆角、淡底、右边一个小 ⌄；标签和框之间不要空一大段 */
+:root body .la-lesson.is-desk select:not([multiple]):not([size]) {
+  -webkit-appearance: none; appearance: none; padding: 0 34px 0 12px !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1.5 1.5 6 6l4.5-4.5' fill='none' stroke='%238e8e93' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important; background-position: right 12px center !important; background-size: 12px 8px !important;
+}
+.dk-filters .dk-mblock { gap: 8px; }
+.dk-filters .dk-k { min-width: 0; margin-right: 0; }
+
+/* 「样子」的缩略图：一张迷你的学习台 */
+.dk-sw { position: relative; display: grid; grid-template-rows: auto 1fr; gap: 8%; padding: 9% 10%; overflow: hidden; background: var(--sw-bg); }
+.dk-sw-top { display: flex; align-items: center; gap: 6%; height: 14%; min-height: 9px; }
+.dk-sw-seal { aspect-ratio: 1; height: 100%; border-radius: 2px; background: var(--sw-acc); }
+.dk-sw-name { height: 70%; width: 34%; border-radius: 999px; background: var(--sw-ink); opacity: .85; }
+.dk-sw i.dk-sw-card { position: relative; display: flex; flex-direction: column; justify-content: flex-end; gap: 9%; height: auto; padding: 9% 10%; border-radius: 6px; background: var(--sw-card); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), inset 0 0 0 0.5px rgb(0 0 0 / 0.06); overflow: hidden; }
+.dk-sw .dk-sw-card b { display: block; height: 9%; min-height: 3px; border-radius: 999px; background: var(--sw-ink); }
+.dk-sw .dk-sw-card b.dk-sw-l1 { width: 58%; height: 13%; min-height: 4px; opacity: .9; }
+.dk-sw .dk-sw-card b.dk-sw-l2 { width: 78%; opacity: .3; }
+.dk-sw .dk-sw-card b.dk-sw-btn { width: 30%; height: 20%; min-height: 7px; margin-top: 3%; border-radius: 4px; background: var(--sw-acc); }
+/* 各自的小细节 */
+.dk-sw[data-sw="ink"] .dk-sw-seal { background: #b63a28; }
+.dk-sw[data-sw="ink"] .dk-sw-card b.dk-sw-btn { background: var(--sw-ink); }
+.dk-sw[data-sw^="ink"] .dk-sw-card::after { content: ""; position: absolute; right: -6%; top: 6%; width: 64%; height: 46%; opacity: .16;
+  background: var(--sw-ink); clip-path: polygon(0 100%, 18% 55%, 30% 70%, 52% 22%, 66% 48%, 80% 30%, 100% 62%, 100% 100%); }
+.dk-sw[data-sw="inknight"] .dk-sw-card::before { content: ""; position: absolute; right: 16%; top: 12%; width: 11%; aspect-ratio: 1; border-radius: 50%; background: #efe6cf; box-shadow: 0 0 8px 2px rgb(239 230 207 / 0.35); }
+.dk-sw[data-sw="inknight"] .dk-sw-seal { background: #b8503a; }
+.dk-sw[data-sw="paper"] .dk-sw-card { background: repeating-linear-gradient(to bottom, transparent 0 7px, rgb(80 110 160 / 0.16) 7px 8px), var(--sw-card); }
+.dk-sw[data-sw="paper"] .dk-sw-card::before { content: ""; position: absolute; left: 8%; top: 0; bottom: 0; width: 1px; background: rgb(200 70 60 / 0.4); }
+.dk-sw[data-sw="celadon"] .dk-sw-card::after { content: ""; position: absolute; right: 0; top: 0; width: 45%; height: 60%; opacity: .35;
+  background: linear-gradient(118deg, transparent 47%, rgb(60 100 90 / 0.5) 48%, transparent 50%), linear-gradient(32deg, transparent 58%, rgb(60 100 90 / 0.4) 59%, transparent 61%), linear-gradient(160deg, transparent 70%, rgb(60 100 90 / 0.4) 71%, transparent 73%); }
+.dk-sw[data-sw="chalk"] .dk-sw-card { background: radial-gradient(60% 40% at 30% 30%, rgb(255 255 255 / 0.06), transparent), var(--sw-card); box-shadow: inset 0 0 0 1px rgb(238 240 230 / 0.25); }
+.dk-sw[data-sw="chalk"] .dk-sw-seal { background: transparent; box-shadow: inset 0 0 0 1.5px var(--sw-acc); }
+.dk-sw[data-sw="chalk"] .dk-sw-card b.dk-sw-btn { background: transparent; box-shadow: inset 0 0 0 1.5px var(--sw-acc); }
+.dk-group .btn-primary { box-shadow: none; }

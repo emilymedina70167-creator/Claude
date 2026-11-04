@@ -42,13 +42,32 @@ export function createDevAI() {
     for (const [, n, seq] of rows) out.push(`item ${n} ${block}#dev-${Number(n) % 2 ? 'a' : 'b'}${weak && seq.includes('✗') ? ` ${weak}` : ''}`);
     return out.join('\n');
   }
+  // 下课后的复盘（memory/debrief.js）：按记录里学生的第一次作答写一条「还在」的误解、一条开场
+  function debrief(prompt) {
+    const act = prompt.match(/#(\d+) 【学生】(\[作答\][^\n]*)/);
+    const what = act ? act[2].replace(/^\[作答\]\s*/, '').slice(0, 40) : '这节课的第一道题';
+    return [
+      `误解｜还在｜模拟的误解：${what}｜#${act?.[1] || 1} 学生这样作答`,
+      '习惯｜模拟的习惯：先套规则再看题｜#2、#4',
+      `开场｜${what.slice(0, 20)}｜模拟的一道题：再做一遍同类题，换一组数`,
+      '建议｜先让学生凭自己的理解做一次，再讲规则',
+    ].join('\n');
+  }
+  // 课前预演（rehearse.js）：讲解顺序的第一步写一条会卡、一道探题
+  function rehearse(prompt) {
+    const step = prompt.match(/### 讲解顺序\n(\d+)\. ([^\n]*)/);
+    return [
+      `步｜${step?.[1] || 1}｜模拟：学生按旧的想法理解「${(step?.[2] || '第一步').slice(0, 20)}」｜确认题按错的想法也能做对｜模拟的探题：换一组能分开两种想法的数`,
+      '改｜模拟：第 1 步先让学生凭自己的理解做一次，再讲',
+    ].join('\n');
+  }
   return {
     tools: true,
     images: { maxCount: 4, maxInputBytes: 20000000, mediaTypes: ['image/png', 'image/jpeg'] },
     async call(prompt, opts = {}) {
       await new Promise((r) => setTimeout(r, 300));
       const p = String(prompt);
-      const text = p.startsWith('你在把一本教材的扫描页') ? transcribe(p) : p.startsWith('你在帮学生整理学习台的课程地图') ? map(p) : p.startsWith('你是这个学生的老师，现在给下一节课备课') ? prep(p) : p.startsWith('你在给学生的一节课的题归类') ? skills(p) : '{}';
+      const text = p.startsWith('你在把一本教材的扫描页') ? transcribe(p) : p.startsWith('你在帮学生整理学习台的课程地图') ? map(p) : p.startsWith('你是这个学生的老师，现在给下一节课备课') ? prep(p) : p.startsWith('你在给学生的一节课的题归类') ? skills(p) : p.startsWith('你在给一节刚上完的课做复盘') ? debrief(p) : p.startsWith('你在课前预演一份教案') ? rehearse(p) : '{}';
       opts.onText?.({ text, delta: text });
       return { text, truncated: false, modelApplied: opts.model || 'claude-opus-5-5', modelTierApplied: opts.modelTier || 'complex' };
     },

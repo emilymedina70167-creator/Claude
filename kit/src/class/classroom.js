@@ -10,7 +10,7 @@
 import { renderLesson, mdToHtml, escapeHtml } from '../render.js';
 import { session } from '../session.js';
 import { link } from '../link.js';
-import { getAI, errorText } from '../ai.js';
+import { getAI, errorText, laned } from '../ai.js';
 import { getStore, isDev, assetUrl } from '../live/store.js';
 import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
@@ -21,6 +21,7 @@ import {
   lintDocs, docLookup, latestPlan,
 } from './prompt.js';
 import { FEATURES } from '../features.js';
+import { specFor, specKey, specDiff, SPEC_DELAY } from './spec.js';
 import { draftsIn } from '../drafts.js';
 import { COMPONENT_DOCS } from './docs.js';
 import { createDevTeacher } from './devteacher.js';
@@ -36,6 +37,7 @@ import { shouldNudge, stuckText, STUCK_MS } from './stuck.js';
 import { fromEvidence, sayEvidence, draftEvidence, observationRecord, slipRecord, memoryRead } from '../memory/session.js';
 import { callCost, usageOf, usageText } from './usage.js';
 import { reportText } from '../memory/report.js';
+import { debriefText } from '../memory/debrief.js';
 import { earlierClasses } from '../memory/digest.js';
 import { choose } from '../dialog.js';
 import { lessonSheet, sheetMd } from '../memory/sheet.js';
@@ -120,6 +122,7 @@ export async function renderClass(root, meta, desk = null) {
   // 验收脚本（tools/check-lesson.mjs）在打开页面前放好 window.LAKitDevScript：模拟老师按它原样回放
   const script = useMock && Array.isArray(window.LAKitDevScript) ? window.LAKitDevScript : null;
   let mock = useMock ? createDevTeacher(script ? { script, pace: 0 } : {}) : null;
+  const mockLaned = laned((input, opts) => mock(input, opts));
   // 验收脚本、浏览器里的测试读模拟老师的记录（调用过什么、工具的结果）
   if (mock) window.LAKitEval = { teacher: mock };
   // 旧版接口（window.claude.complete）不能指定模型、也不说是谁答的：每一轮都只能作废，干脆不开课
@@ -128,7 +131,8 @@ export async function renderClass(root, meta, desk = null) {
   const readOnly = !!desk?.readOnly;
   const teacher = {
     get available() { return !readOnly && !!(mock || (ai?.call && !legacy)); },
-    call: (input, opts) => (mock ? mock(input, opts) : ai.call(input, opts)),
+    // 模拟老师也走调用让路（lane.js；ai.call 自己已经走了）
+    call: (input, opts) => (mock ? mockLaned(input, opts) : ai.call(input, opts)),
     // 模拟老师在学习台里也给工具：「测试:记忆」会真的调用 memory_read、lesson_note、slip_note（单独的课堂照旧不给）
     get tools() { return mock ? !!desk : !!ai?.tools && !off.tools; },
     get images() { return !!(ai?.images || mock) && !off.images; },
@@ -170,6 +174,10 @@ export async function renderClass(root, meta, desk = null) {
   // 被函数声明用到、而 restore() 在函数定义之前就会调到那些函数：要在这里先有值（let / const 有暂时性死区）
   let raf = 0, pendingText = '', pendingStatus = ''; // 草稿：一帧最多画一次
   let firstAt = 0; // 这一次调用黑板上出现第一个字的时候（performance.now）
+  // 抢跑（spec.js）：{ say, key, ctl, promise, text（已经写出来的）, onText（接上以后画黑板的）, staged, bytes }
+  let spec = null;
+  let specTimer = null;
+  let ended = false; // 下课小结写过了：之后不再抢跑
   let stream = null; // 边写边显示：这一轮先画出来的段（streamOps）
   let streamPage = null; // 核验过了：先开的那块新板留着，finishTurn 的 board new 直接用它
   let committing = false; // finishTurn 正在把先画出来的段换成正式的：正式的不再播淡入（不闪一下）
@@ -305,6 +313,8 @@ export async function renderClass(root, meta, desk = null) {
       x.summary ? `- 小结：${String(x.summary).slice(0, 1500)}` : '',
       ...(x.notes || []).slice(0, 8).map((n) => `- ${String(n).slice(0, 300)}`),
       x.report ? `- 课后报告：\n${String(x.report).slice(0, 3000)}` : '',
+      // 下课后的复盘（debrief.js）：误解消了没有、这节开头先测什么
+      x.debrief ? `- 下课后的复盘（教研员通读整节课写的）：\n${x.debrief}` : '',
     ].filter(Boolean).join('\n')).join('\n\n');
   })().catch((e) => console.warn('以前的课没取到', e)) : Promise.resolve());
   if (desk && !readOnly) setTimeout(fetchEarlier, 2000);
@@ -318,6 +328,8 @@ export async function renderClass(root, meta, desk = null) {
   // 打开页面之前写的板书（存在这台设备上）不再发：只发这次上课新写的
   for (const s of window.LAKit?.ink?.strokes || []) toldInk.add(s);
   inkSeeded = true;
+  // 开课页：先按「开始上课」抢跑（以前的课取好、资料包读进来以后）
+  if (!started && !readOnly) fetchEarlier().then(() => specSoon(1500));
 
   async function restore() {
     try {
@@ -1238,12 +1250,13 @@ export async function renderClass(root, meta, desk = null) {
       clearDraft();
       bar.setBusy(false);
       refresh();
-      if (ok && after) { schedule(false); compactLater(); }
+      if (ok && after) { schedule(false); compactLater(); specSoon(); }
     }
   }
 
   function flush() {
     if (busy || !queue.triggered) return Promise.resolve();
+    ended = false;
     // 学生有动作了：这一轮剩下的拍子一下子播完；预案接得住就不调用 Claude
     finishBeats();
     if (tryLocal()) return Promise.resolve();
@@ -1315,7 +1328,7 @@ export async function renderClass(root, meta, desk = null) {
     if (compacting || !teacher.available) return;
     const ph = promptHistory(history);
     if (!(needsCompaction(ph) && worthCompacting(ph) && history.length >= compactRetryAt)) return;
-    compacting = compact({ background: true }).finally(() => { compacting = null; });
+    compacting = compact({ background: true }).finally(() => { compacting = null; specSoon(); });
   }
 
   async function compact({ background = false } = {}) {
@@ -1324,7 +1337,7 @@ export async function renderClass(root, meta, desk = null) {
     if (!background) bar.setStatus('thinking', '对话有点长了，先整理一下前面的内容…');
     try {
       const input = compactionPrompt({ summary: prev?.text || '', turns: old });
-      const r = await teacher.call(input, { ...TEACH, cache: false, signal: background ? undefined : ctl?.signal });
+      const r = await teacher.call(input, { ...TEACH, cache: false, signal: background ? undefined : ctl?.signal, ...(background ? { lane: 'bg' } : {}) });
       // 平台换了别的模型写的摘要不用：照旧发原文（太长时最早的几轮会被省略），过几轮再试
       if (r?.modelApplied !== MODEL) throw Object.assign(new Error('摘要不是 Opus 5.5 写的，没用'), { code: 'fallback' });
       addTurn({ ...summaryTurn(r.text), upTo: old.at(-1).seq, modelApplied: r.modelApplied, cost: callCost({ bytes: bytes(input), why: 'compact' }) });
@@ -1334,6 +1347,67 @@ export async function renderClass(root, meta, desk = null) {
       console.warn('摘要失败', e);
       compactRetryAt = history.length + 6;
     }
+  }
+
+  // 这一轮要发给课堂 Claude 的整份内容（说明 + 对话）。hist：对话记录（抢跑时多一条假定的学生的话）
+  function buildInput(hist) {
+    bv.measureFit();
+    const level = Math.min(budgetLevel, 3);
+    const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(teacher.tools), board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg(), canvas: CANVAS, ...planArg() });
+    const maxBytes = Math.round(promptLimit() * [1, 0.85, 0.7, 0.55][level]);
+    const fit = fitTurns({ system, history: promptHistory(hist), maxBytes, stub: teacher.tools });
+    return { fit, system, maxBytes, level };
+  }
+
+  // —— 抢跑（spec.js，docs/smart-plan.md 第 1 批）——
+  // 一轮讲完、板上没事可做时，先按「学生点了继续」调用；开课页先按「开始上课」调用。学生真点了、整份内容一字不差才用。
+  function specState() {
+    const anyDraft = [...segs.values()].some((seg) => seg.sec && !seg.hidden && !seg.failed && !seg.pending && [...seg.sec.querySelectorAll('.block[data-bid]')].some((b) => draftsIn(b).length));
+    return {
+      on: FEATURES.spec !== false, available: teacher.available, busy, ended, started, compacting: !!compacting,
+      liveTurns: history.filter((t) => t && !t.discarded).length,
+      pending: !!pendingTurn(history),
+      queued: queue.triggered || queue.texts.length + queue.actions.length + queue.images.length > 0,
+      drafts: anyDraft, ink: hasFreshInk(), waiting: started ? waitingBlocks().length : 0,
+      beatsLeft: !!(beat && !beat.done), away: started && bv.view !== bv.cur,
+    };
+  }
+  function specSoon(delay = SPEC_DELAY) {
+    clearTimeout(specTimer);
+    specTimer = setTimeout(startSpec, delay);
+  }
+  function startSpec() {
+    if (spec) return;
+    const say = specFor(specState());
+    if (!say) return;
+    let input;
+    try { input = buildInput([...history, { role: 'student', text: say, say, seq: turnSeq + 1 }]); } catch (e) { console.warn('抢跑没拼出来', e); return; }
+    const key = specKey(input.fit.turns);
+    if (!key) return;
+    const s = { say, key, ctl: new AbortController(), text: '', onText: null, staged: { notes: [], slips: [], images: [], ids: [], calls: [] }, bytes: input.fit.bytes };
+    const opts = { ...TEACH, cache: false, signal: s.ctl.signal, onText: (u) => { s.text = u.text; s.onText?.(u); } };
+    if (teacher.tools) opts.tools = classTools(s.staged, { view: true });
+    s.promise = teacher.call(input.fit.turns, opts);
+    s.promise.catch(() => {}); // 没接上的抢跑出错不报
+    spec = s;
+  }
+  // key 一样就交出去（之后归这一轮管）；不一样就停掉、记一笔白花的
+  function takeSpec(key) {
+    const s = spec;
+    if (!s) return null;
+    if (key && s.key === key) { spec = null; return s; }
+    dropSpec(key);
+    return null;
+  }
+  // key：这一刻要发的内容（有的话，把和抢跑那份第一处不同的地方记下来：以后看真课的记录，知道为什么没接上）
+  function dropSpec(key = null) {
+    clearTimeout(specTimer);
+    const s = spec;
+    if (!s) return;
+    spec = null;
+    s.ctl.abort();
+    const diff = key ? specDiff(s.key, key) : '';
+    addTurn({ role: 'system', kind: 'spec', discarded: true, text: `抢跑「${s.say}」没用上（学生做了别的，或者黑板、记忆变了）`, ...(diff ? { diff } : {}), cost: callCost({ bytes: s.bytes, why: 'spec' }) });
   }
 
   // —— 讲课：一次调用（画不出来的段会自动再要一轮重写，同一段最多 2 次）。返回 true 表示 Opus 5.5 讲完了这一轮 ——
@@ -1359,14 +1433,12 @@ export async function renderClass(root, meta, desk = null) {
       }
       // 开课时取的以前的课：最多等 3 秒（一般早就取好了）
       await Promise.race([fetchEarlier(), new Promise((r) => setTimeout(r, 3000))]);
-      bv.measureFit();
-      const level = Math.min(budgetLevel, 3);
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(teacher.tools), board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg(), canvas: CANVAS, ...planArg() });
-      const maxBytes = Math.round(promptLimit() * [1, 0.85, 0.7, 0.55][level]);
-      const fit = fitTurns({ system, history: promptHistory(history), maxBytes, stub: teacher.tools });
+      const { fit, system, maxBytes, level } = buildInput(history);
       lastPrompt = { bytes: fit.bytes, maxBytes, keepRecent: fit.keepRecent, dropped: fit.dropped, turns: fit.turns.length, level, ...(dev ? { system } : {}) };
+      // 抢跑（spec.js）：这一刻要发的和抢跑发的一字不差就接着用；不一样就先停掉它（让出平台的位子），照常调用
+      const pre = round === 0 && !(imgs.length && teacher.images) ? takeSpec(specKey(fit.turns)) : (dropSpec(), null);
       // 工具做的事先记着，确认是 Opus 5.5 讲的才算数（退路模型记的观察、要看的图都不留）
-      const staged = { notes: [], slips: [], images: [], ids: [], calls: [] };
+      let staged = { notes: [], slips: [], images: [], ids: [], calls: [] };
       const opts = { ...TEACH, cache: false, signal, onText: ({ text }) => drawDraft(text) };
       if (imgs.length && teacher.images) opts.images = imgs.slice(0, maxImages);
       if (teacher.tools) opts.tools = classTools(staged, { view: !followed });
@@ -1374,8 +1446,30 @@ export async function renderClass(root, meta, desk = null) {
       // 这一次调用花了多少：发出去的字节；它调了几次工具（每次平台多跑一整轮）
       const t0 = performance.now();
       firstAt = 0;
-      const cost = (w) => callCost({ bytes: fit.bytes, why: w, tools: staged.calls.length, ms: performance.now() - t0, first: firstAt ? firstAt - t0 : undefined });
-      try {
+      const cost = (w) => callCost({ bytes: fit.bytes, why: w, tools: staged.calls.length, ms: performance.now() - t0, first: firstAt ? firstAt - t0 : undefined, spec: adopted ? 'hit' : undefined });
+      let adopted = false;
+      if (pre) {
+        // 接上抢跑：已经写出来的先画上，后面的接着画；停止按钮停它
+        ctl = pre.ctl;
+        pre.onText = opts.onText;
+        if (pre.text) { drawDraft(pre.text); firstAt = performance.now(); }
+        try {
+          res = await pre.promise;
+          staged = pre.staged;
+          adopted = true;
+        } catch (e) {
+          // 接上以后被取消的只能是学生点了停止：和平常一样停下。别的错（抢跑那次出了错）学生不知道有过抢跑，照常再调用一次
+          if (e?.code === 'cancelled') { clearDraft(); dropPreviews({ rollback: true }); failTurn(e, '这一轮', cost('failed')); return false; }
+          res = null;
+          dropPreviews({ rollback: true });
+          clearDraft();
+          ensureDraft({ keepTalk: rewriting });
+          ctl = new AbortController();
+          opts.signal = ctl.signal;
+          firstAt = 0;
+        }
+      }
+      if (!res) try {
         res = await teacher.call(fit.turns, opts);
       } catch (e) {
         clearDraft();
@@ -1814,6 +1908,7 @@ export async function renderClass(root, meta, desk = null) {
         id: sid, kind: doc.kind || 'class', date: doc.date, block: doc.block, title: doc.title, status: doc.status,
         summary: obs.find((o) => o.kind === 'summary')?.text, notes: obs.filter((o) => o.kind !== 'summary').map((o) => `${o.kind}：${o.text}`).slice(0, 12),
         report: rep ? reportText(rep).slice(0, 6000) : doc.report?.line || '（这节课还没有课后报告）',
+        ...(doc.debrief ? { debrief: debriefText(doc.debrief) } : {}),
       });
     }
     return { collection: 'sessions', items: out };
@@ -2045,6 +2140,8 @@ export async function renderClass(root, meta, desk = null) {
     if (busy) { toast('等 Claude 说完这一轮再下课'); return; }
     if (!history.length) { toast('还没开始上课'); return; }
     if (!teacher.available) return;
+    // 下课：抢跑的「继续」用不上了，先停掉（让出平台的位子给小结）
+    dropSpec();
     // 已经写过小结、之后没再上课：再点「下课」先问一句（11-02 那节课小结写了两遍，第二遍又等了一分半）
     const last = [...history].reverse().find((t) => t && !t.discarded && (t.role === 'student' || t.kind === 'closing'));
     if (last?.kind === 'closing') {
@@ -2124,6 +2221,7 @@ export async function renderClass(root, meta, desk = null) {
       const foot = mock ? `（本地测试：${v.turns} 轮都是模拟老师回放的，没有调用 Claude。）`
         : `这节课 ${v.turns} 轮讲课和小结全部由 Opus 5.5 回答（平台核验）${v.discarded ? `；另有 ${v.discarded} 轮平台换了别的模型，已作废、没有显示` : ''}。`;
       const p = newPage({ title: '这节课的小结', kind: 'closing', body: summary, foot, ...(sheet ? { sheet } : {}) });
+      ended = true;
       const closed = addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied, page: p.n, cost: cost('closing') });
       bv.show(p.n, { animate: true });
       // 整理单：都直接写进去，小结下面只有一行小字（点开能撤销）
@@ -2224,7 +2322,7 @@ export async function renderClass(root, meta, desk = null) {
   window.LAKit = {
     ...(window.LAKit || {}),
     classroom: {
-      history, segs, pages, queue, boardState, flush, retry: retryRun, showPage: (n) => bv.go(n), measureFit: bv.measureFit,
+      history, segs, pages, queue, boardState, flush, specState, get spec() { return spec ? { say: spec.say, text: spec.text.length } : null; }, retry: retryRun, showPage: (n) => bv.go(n), measureFit: bv.measureFit,
       runClaude: () => exclusive(async () => converse()),
       get busy() { return busy; },
       get curPage() { return bv.cur; },

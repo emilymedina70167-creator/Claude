@@ -179,6 +179,11 @@ button { font: inherit; color: inherit; }
 .btn-primary:disabled { opacity: .5; color: var(--yellow); background: rgb(var(--yellow-rgb) / 0.06); box-shadow: none; --frame: rgb(var(--yellow-rgb) / 0.45); }
 .btn-danger { color: var(--coral); --frame: rgb(var(--coral-rgb) / 0.7); }
 .btn-sm { min-height: 38px; padding: 0 14px; font-size: 15px; }
+/* 按钮里的小图标（icons.js）：和字一样高，跟着字的颜色；只有图标的按钮是方的 */
+.btn .ic { width: 1.1em; height: 1.1em; flex: none; }
+.btn .ic + span, .btn span + .ic { margin: 0; }
+.btn-ic { padding: 0; min-width: 44px; }
+.btn-sm.btn-ic { min-width: 44px; }
 .btn-lg { min-height: 54px; padding: 0 26px; font-size: 18px; }
 .link-btn { background: none; border: 0; color: var(--blue); padding: 4px 0; cursor: pointer; font: 500 15.5px/1.4 var(--sans); }
 
@@ -1224,8 +1229,14 @@ mark.hl-pink { --hl: var(--pink-rgb); } mark.hl-blue { --hl: var(--blue-rgb); } 
 .sv-verdict { display: inline-block; margin-right: 8px; padding: 0 10px; border-radius: 999px; background: rgb(var(--green-rgb) / 0.14); color: var(--green); font-size: 14.5px; }
 .sv-ctrl { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
 .sv-ctrl .btn { min-height: 44px; }
+.sv-ctrl .sv-prev { padding-left: 10px; }
+.sv-ctrl .sv-next { padding-right: 12px; }
+.sv-ctrl .sv-count { margin-left: auto; }
 .sv-count { font: 14px/1 var(--sans); font-variant-numeric: tabular-nums; }
 .sv-scrub { width: 100%; height: 44px; margin: 4px 0 0; accent-color: var(--yellow); }
+/* 进度条走过的一段上色（--pct 由 icons.js 的 trackFill 写）：一眼看出走到哪 */
+.sv-scrub::-webkit-slider-runnable-track { background: linear-gradient(90deg, rgb(var(--yellow-rgb) / 0.85) 0 var(--pct, 0%), rgb(var(--chalk-rgb) / 0.16) var(--pct, 0%) 100%); }
+.sv-scrub::-moz-range-track { background: linear-gradient(90deg, rgb(var(--yellow-rgb) / 0.85) 0 var(--pct, 0%), rgb(var(--chalk-rgb) / 0.16) var(--pct, 0%) 100%); }
 .sv-ask { margin-top: 10px; padding: 12px 14px; border-radius: 12px; border: 2px dashed color-mix(in srgb, var(--lav) 60%, transparent); background: color-mix(in srgb, var(--lav) 7%, transparent); display: flex; flex-direction: column; gap: 10px; }
 .sv-ask-q { font-size: 16px; color: var(--chalk); }
 .sv-ask-tag { display: inline-block; margin-right: 8px; padding: 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--lav) 20%, transparent); color: var(--lav); font-size: 14px; }
@@ -2463,6 +2474,10 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .en-words { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 4px; margin: 6px 0 12px; font: 18px/1.6 var(--sans); }
 .en-word, .pz-w { min-height: 44px; min-width: 36px; padding: 4px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--chalk); font: inherit; cursor: pointer; }
 .en-word:hover, .pz-w:hover { border-color: rgb(var(--chalk-rgb) / 0.25); }
+/* 点词的句子：词和词之间不要撑得太开（读着像一个个按钮），标点贴着前一个词；每个词下面一道很淡的点线，看得出能点 */
+.en-words .en-word { padding: 4px 5px; text-decoration: underline dotted rgb(var(--chalk-rgb) / 0.28); text-decoration-thickness: 1.5px; text-underline-offset: 7px; }
+.en-words .en-word:is(.is-picked, .is-wrong, .is-right, .is-answer) { text-decoration: none; }
+.en-words .en-punct { margin-left: -6px; }
 .en-word.is-picked { border-color: var(--yellow); background: rgb(var(--yellow-rgb) / 0.14); }
 .en-word.is-wrong { border-color: var(--coral); color: var(--coral); }
 .en-word.is-right, .en-word.is-answer { border-color: var(--green); color: var(--green); }

@@ -453,6 +453,7 @@ const PACK_FIELDS = [
   ['methods', '这节课要用的可执行规则（课前定好、写完整了的：讲到时照这里写上黑板，常驻栏里放一份；做题只用这里讲过的）'],
   ['sequence', '讲解顺序（一步一块板：一个点，或者大的点的一部分；大的点分几步讲，不压缩；讲完一个点再出考它的题）'],
   ['prepCheck', '备课检查（页面核出来的问题：上课时绕开，比如先补讲、或者那道题不出）'],
+  ['rehearsal', '课前预演（备课以后按学生的记录把教案走了一遍：哪一步多半会卡、确认题暴露不出误解的地方、能分开对错想法的探题。是参考，学生实际怎么答照旧当场看着接）'],
   ['todos', '学生以前上课时问过、这节课要补上的'],
   ['textbook', '教材原文（教材内容只能用这里的）'],
   ['plan', '建议的推进顺序（是建议，按学生的实际情况调整）'],
@@ -1348,7 +1349,17 @@ export function pendingTurn(history) {
 }
 
 // 拼这一轮的对话，保证不超过 maxBytes：先丢最早的；最近 20 条本身就太长时，逐步少留几条原文
+// stub（能用 board_read 取回）时：整段对话不省略也放得下、一轮不丢、只比省略的多 NOSTUB_EXTRA 以内，就发原文。
+// 省略是为了省额度，可它一取原文就多跑一整轮（真课一轮多等 20～60 秒）；额度够了以后速度优先（docs/smart-plan.md）
+export const NOSTUB_EXTRA = 40 * 1024;
 export function fitTurns({ system, history, maxBytes = 262144, stub = false } = {}) {
+  if (stub) {
+    const full = buildTurns({ system, history, maxBytes, keepRecent: KEEP_RECENT, stub: false });
+    if (full.bytes <= maxBytes && !full.dropped) {
+      const short = buildTurns({ system, history, maxBytes, keepRecent: KEEP_RECENT, stub: true });
+      if (full.bytes - short.bytes <= NOSTUB_EXTRA) return { ...full, keepRecent: KEEP_RECENT, fits: true, stubbed: false };
+    }
+  }
   let out = null;
   for (const keepRecent of [KEEP_RECENT, 12, 8, 4, 2, 1]) {
     out = buildTurns({ system, history, maxBytes, keepRecent, stub });

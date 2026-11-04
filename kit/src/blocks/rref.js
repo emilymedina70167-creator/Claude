@@ -2,6 +2,7 @@
 import { parseFields } from '../parse.js';
 import { parseArray, asMatrix, rrefSteps, classify } from '../linalg.js';
 import { widget, tex2html, matrixHtml, mdToHtml } from './common.js';
+import { ICONS } from '../icons.js';
 
 export function rref(el, src) {
   const { fields } = parseFields(src);
@@ -22,9 +23,9 @@ export function rref(el, src) {
       <div class="rref-mx"></div>
     </div>
     <div class="stepper">
-      <button class="btn btn-prev" type="button">◀ 上一步</button>
+      <button class="btn btn-prev" type="button">${ICONS.prev}<span>上一步</span></button>
       <span class="step-count"></span>
-      <button class="btn btn-next btn-primary" type="button">下一步 ▶</button>
+      <button class="btn btn-next btn-primary" type="button"><span>下一步</span>${ICONS.next}</button>
     </div>
     <div class="readout r-summary"></div>
     ${fields.note ? `<div class="w-note">${mdToHtml(fields.note)}</div>` : ''}`;

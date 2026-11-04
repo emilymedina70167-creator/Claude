@@ -11,6 +11,8 @@ import { blockChunks, chunkLine } from './textbook.js';
 import { memoryDigest } from '../memory/digest.js';
 import { prefixOf, packIds, subjectOf, sharedFor, spaceOfId, filterSpace, COURSES } from '../memory/space.js';
 import { activeLessons } from '../memory/memo.js';
+import { rehearsePrompt, parseRehearsal } from './rehearse.js';
+import { debriefText } from '../memory/debrief.js';
 import { reviewRank, plainTitle } from '../memory/views.js';
 import { COMPONENT_DOCS } from '../class/docs.js';
 import { allNames } from '../subject.js';
@@ -124,8 +126,28 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     await db.doc(`pack/${ids.main}`).set(main);
     await db.doc(`pack/${ids.problems}`).set(problems);
     // 补上的待办等开课时才记成补了（desk.js 的 newClass）：备了没上、又重新备别的块，待办不丢
-    onStep('备好了');
+    onStep('备好了；后台在按你的记录把教案预演一遍（不用等，可以直接开课）');
+    // 上一节（这一科）下课后的复盘：预演时对照还没消的误解
+    const lastDebrief = mine.sessions.filter((x) => x.debrief).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0]?.debrief;
+    rehearse({ main, problems, memoryText: mem.text, debrief: lastDebrief ? debriefText(lastDebrief) : '', subject, packId: ids.main })
+      .catch((e) => console.warn('课前预演没做成', e?.message || e?.code || e));
     return main;
+  }
+
+  // —— 课前预演（rehearse.js，docs/smart-plan.md 第 2 批）：备好教案以后，后台（lane: 'bg'）再调用一次 Opus 5.5 high，
+  // 按学生的记录把教案走一遍，哪一步会卡、拿什么题探，写回教案的 rehearsal。这期间又重新备了课（教案换了）就不写
+  async function rehearse({ main, problems, memoryText, debrief, subject, packId }) {
+    const ai = await getAI();
+    if (!ai) return;
+    const prompt = rehearsePrompt({ main, problems, memoryText, debrief, subject });
+    const res = await ai.call(prompt, { model, effort: 'high', modelTier: 'complex', cache: false, lane: 'bg' });
+    if (res?.modelApplied && res.modelApplied !== model) return;
+    const got = parseRehearsal(res.text);
+    if (got.problems.includes('回的不是预演')) { console.warn('预演回的不是预演', String(res.text).slice(0, 200)); return; }
+    const ref = db.doc(`pack/${packId}`);
+    const cur = await ref.get().then((r) => (r.exists ? r.data() : null));
+    if (!cur || cur.at !== main.at) return;
+    await ref.set({ ...cur, rehearsal: { steps: got.steps, fixes: got.fixes, at: Date.now(), model: res.modelApplied || '', bytes: enc.encode(prompt).length } });
   }
 
   /** 首页「上课」卡里的备课区：选块、备课、看备好的 */
@@ -148,6 +170,9 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     if (main.methods?.length) parts.push(`<p><b>这节课的规则</b></p><ul>${main.methods.map((m) => `<li><b>${esc(m.title || m.id)}</b>：${mdToHtml(String(m.steps || ''), { inline: true })}</li>`).join('')}</ul>`);
     if (main.sequence?.length) parts.push(`<p><b>讲解顺序</b></p><ol>${main.sequence.map((x) => `<li>${mdToHtml(String(x.point || ''), { inline: true })}</li>`).join('')}</ol>`);
     if (main.plan) parts.push(`<p><b>补充</b></p>${mdToHtml(String(main.plan))}`);
+    // 课前预演：哪一步多半会卡（老师上课时也带着）
+    const rh = main.rehearsal;
+    if (rh?.steps?.length || rh?.fixes?.length) parts.push(`<p><b>课前预演</b></p><ul>${(rh.steps || []).map((x) => `<li>第 ${x.step} 步：${mdToHtml(String(x.issue || ''), { inline: true })}${x.probe ? `<br><span class="muted">探题：${mdToHtml(String(x.probe), { inline: true })}</span>` : ''}</li>`).join('')}${(rh.fixes || []).map((f) => `<li>${mdToHtml(String(f), { inline: true })}</li>`).join('')}</ul>`);
     return parts.join('');
   }
 

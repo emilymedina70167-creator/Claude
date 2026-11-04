@@ -710,3 +710,23 @@ test('board_read 取回过的段：之后几轮对话里不再省略（只留最
   const said2 = buildTurns({ system: '说明', history: later, stub: true }).turns.filter((t) => t.role === 'assistant').map((t) => t.content);
   assert.doesNotMatch(said2[1], /新版 x/);
 });
+
+test('fitTurns：放得下、不丢轮、只多一点时发原文（省掉 board_read 那一整轮）；太长才省略', async () => {
+  const { fitTurns, STUB_AFTER, NOSTUB_EXTRA } = await import('../kit/src/class/prompt.js');
+  const seg = (n) => `\`\`\`\`board add id=b${n}\n${'x'.repeat(2000)}\n\`\`\`\``;
+  const make = (rounds) => {
+    const h = [];
+    for (let i = 0; i < rounds; i++) h.push({ role: 'student', text: `第 ${i} 句` }, { role: 'claude', text: seg(i) });
+    h.push({ role: 'student', text: '好了' });
+    return h;
+  };
+  const few = fitTurns({ system: '说明', history: make(STUB_AFTER + 3), stub: true });
+  assert.equal(few.stubbed, false);
+  assert.ok(!few.turns.some((t) => t.content.includes('页面省略了')));
+  // 省略能省下的超过 NOSTUB_EXTRA：照旧省略
+  const many = fitTurns({ system: '说明', history: make(STUB_AFTER + Math.ceil(NOSTUB_EXTRA / 2000) + 4), stub: true });
+  assert.ok(many.turns.some((t) => t.content.includes('页面省略了')));
+  // 原文放不下（要丢轮）：照旧省略
+  const tight = fitTurns({ system: '说明', history: make(STUB_AFTER + 3), stub: true, maxBytes: 16 * 1024 });
+  assert.ok(tight.turns.some((t) => t.content.includes('页面省略了')));
+});

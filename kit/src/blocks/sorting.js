@@ -6,6 +6,7 @@ import { parseFields } from '../parse.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, escapeHtml } from './common.js';
 import { answerWidget, plain } from './answer.js';
+import { ICONS, playLabel } from '../icons.js';
 import {
   parseArray, parseGaps, shellTrace, shellRun, arrayHtml, explainPass, explainUpto,
   SHELL_CODE, groupOf, values, fmt,
@@ -57,10 +58,10 @@ export function shellsort(el, src) {
         <div class="ss-vars"></div>
         <div class="ss-msg" aria-live="polite"></div>
         <div class="ss-ctrl">
-          <button type="button" class="btn btn-sm ss-reset" title="回到开头">⏮</button>
-          <button type="button" class="btn btn-sm ss-prev">◀ 上一步</button>
-          <button type="button" class="btn btn-sm btn-primary ss-next">下一步 ▶</button>
-          <button type="button" class="btn btn-sm ss-play">自动播放</button>
+          <button type="button" class="btn btn-sm btn-ic ss-reset" title="回到开头" aria-label="回到开头">${ICONS.first}</button>
+          <button type="button" class="btn btn-sm ss-prev">${ICONS.prev}<span>上一步</span></button>
+          <button type="button" class="btn btn-sm btn-primary ss-next"><span>下一步</span>${ICONS.next}</button>
+          <button type="button" class="btn btn-sm ss-play">${playLabel(false, '自动播放')}</button>
           <span class="ss-count muted"></span>
         </div>
         ${mode === 'code' ? '<div class="ss-jump"><span class="muted">跳到：</span>' + gaps.map((d, k) => `<button type="button" class="link-btn" data-pass="${k + 1}">第 ${k + 1} 趟开头</button>`).join('') + '<button type="button" class="link-btn" data-pass="end">最后</button></div>' : ''}
@@ -113,14 +114,14 @@ export function shellsort(el, src) {
     }
   }
   const go = (to) => { k = Math.max(0, Math.min(steps.length - 1, to)); draw(); };
-  function stop() { clearInterval(timer); timer = null; btnPlay.textContent = '自动播放'; }
+  function stop() { clearInterval(timer); timer = null; btnPlay.innerHTML = playLabel(false, '自动播放'); }
   btnPrev.addEventListener('click', () => { stop(); go(k - 1); });
   btnNext.addEventListener('click', () => { stop(); go(k + 1); });
   body.querySelector('.ss-reset').addEventListener('click', () => { stop(); go(0); });
   btnPlay.addEventListener('click', () => {
     if (timer) { stop(); return; }
     if (k === steps.length - 1) go(0);
-    btnPlay.textContent = '暂停';
+    btnPlay.innerHTML = playLabel(true);
     timer = setInterval(() => (k >= steps.length - 1 ? stop() : go(k + 1)), mode === 'code' ? 900 : 1600);
   });
   body.querySelector('.ss-jump')?.addEventListener('click', (e) => {

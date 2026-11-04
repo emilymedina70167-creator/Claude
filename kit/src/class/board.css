@@ -56,6 +56,8 @@
   }
   .class-pins-body::-webkit-scrollbar { display: none; }
   .class-pin { flex: 0 0 auto; min-width: 190px; max-width: min(380px, 80vw); max-height: min(176px, 20svh); overflow: hidden; scroll-snap-align: start; }
+  /* 只有一张卡时没有别的卡要并排：放宽，矩阵、一行式子不用折到下一行 */
+  .class-pin:only-child { max-width: min(680px, 100%); }
   /* 放不下的卡：底下渐隐，点一下展开 */
   .class-pin.is-clipped { cursor: pointer; }
   .class-pin.is-clipped::after {
