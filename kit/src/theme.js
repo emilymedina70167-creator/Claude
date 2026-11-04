@@ -10,40 +10,27 @@ export function themeOf(value) {
 
 // 这台设备上选的风格（学习台「管理」里选；课件自己写了 theme: 的照课件）。存 localStorage，无痕模式读不到就是默认石墨
 const KEY = 'la-theme';
-// 学习台里推荐的三种（2026-11-03 我要三种最舒服、最适合学习的）：夜读（石墨）、纸本、青瓷；别的照旧能用
-// sw：选的时候那块小样的颜色（页面底、卡片、字、重点色）
-// dark：深色的一种（「跟着 iPad 白天晚上」时，白天从浅色里挑、晚上从深色里挑）
+// 学习台只有一种样子：紫藤（2026-11-04 我定的：iOS 的版式，青绿山水的底加南大紫）。白天是 ink、晚上是 inknight
+// （沿用原来水墨那一对的名字：板上、书桌上 [data-theme^="ink"] 的那一套 iOS 组件都是它们的，换颜色不用改选择器）。
+// 别的风格（纸本、青瓷、黑板、玄、夜读……）不再给我选；themes.css 里的样式留着，以前写了 theme: 的课件照旧打得开
 export const PICKS = [
-  { id: 'ink', name: '水墨', note: '宣纸和墨，最安静', sw: ['#f1ede5', '#faf8f3', '#1e1e1e', '#a67422'] },
-  { id: 'paper', name: '纸本', note: '暖白笔记纸，像在本子上写', sw: ['#f4efe4', '#fffdf8', '#28251f', '#b06c0a'] },
-  { id: 'celadon', name: '青瓷', note: '浅青灰，白天看久了不刺眼', sw: ['#e5ece7', '#f8fbf9', '#1a2a28', '#b26812'] },
-  { id: 'chalk', name: '黑板', note: '墨绿黑板，粉笔字，擦过的痕迹', sw: ['#233a31', '#2b463b', '#eef0e6', '#f2dc85'], dark: true },
-  { id: 'inknight', name: '墨夜', note: '水墨的夜里：黑漆描金，远山和月亮', sw: ['#131210', '#1f1e1b', '#eee8dc', '#d2ac6c'], dark: true },
-  { id: 'xuan', name: '玄', note: 'iOS 的深色模式，纯黑、干净', sw: ['#000000', '#1c1c1e', '#ffffff', '#0a84ff'], dark: true },
+  { id: 'ink', name: '紫藤 · 白天' },
+  { id: 'inknight', name: '紫藤 · 晚上', dark: true },
 ];
-// 以前的几种，收在「更多」里
-export const MORE = [
-  { id: 'graphite', name: '夜读', sw: ['#171c22', '#232a32', '#eeebe2', '#f0be5c'], dark: true },
-  { id: 'candle', name: '烛光', sw: ['#1c1612', '#2a211b', '#f2e6d4', '#eeb25a'], dark: true },
-  { id: 'dusk', name: '暮色', sw: ['#221e3a', '#2f2a50', '#eeeaf8', '#ffbe8c'], dark: true },
-  { id: 'midnight', name: '深蓝', sw: ['#101c2f', '#18283f', '#e4ecf8', '#ffd26e'], dark: true },
-  { id: 'white', name: '白板', sw: ['#f3f5f8', '#ffffff', '#1f242e', '#cd7000'] },
-];
+export const MORE = [];
 export const DAY_DEFAULT = 'ink';
 export const NIGHT_DEFAULT = 'inknight';
 
-// 2026-11-03 我定下白天水墨、晚上墨夜：以前试样子时留下的那几种（没选过、水墨、黑板、墨夜、玄）换成「跟着 iPad」这一对，只换一次
-const PAIR_FLAG = `${KEY}-pair-1103`;
+// 2026-11-04 只留紫藤：这台设备以前选过什么都换成「跟着 iPad」的紫藤这一对（白天 ink、晚上 inknight），只换一次
+const PAIR_FLAG = `${KEY}-wist-1104`;
 function migratePair() {
   try {
     if (localStorage.getItem(PAIR_FLAG)) return;
     localStorage.setItem(PAIR_FLAG, '1');
-    const raw = localStorage.getItem(KEY);
-    if (raw === null || ['ink', 'chalk', 'inknight', 'xuan', 'auto'].includes(raw)) {
-      localStorage.setItem(KEY, 'auto'); localStorage.setItem(`${KEY}-day`, 'ink'); localStorage.setItem(`${KEY}-night`, 'inknight');
-    }
+    localStorage.setItem(KEY, 'auto'); localStorage.setItem(`${KEY}-day`, 'ink'); localStorage.setItem(`${KEY}-night`, 'inknight');
   } catch { /* 无痕模式 */ }
 }
+const DESK_IDS = ['ink', 'inknight'];
 export function storedTheme(fallback = '') {
   if (fallback === DESK_DEFAULT) migratePair();
   try {
@@ -51,14 +38,17 @@ export function storedTheme(fallback = '') {
     if (raw === null) return fallback;
     if (raw === 'auto') return 'auto';
     const t = themeOf(raw);
+    // 学习台只认紫藤那两种：别的（以前选过的、坏掉的值）都退回跟着 iPad
+    if (fallback === DESK_DEFAULT && !DESK_IDS.includes(t)) return 'auto';
     return t === null ? fallback : t;
   } catch { return fallback; }
 }
 
-// 「跟着 iPad 白天晚上」：系统是浅色用白天那种，深色用晚上那种（la-theme-day / la-theme-night，没选过就是水墨 / 黑板）
+// 「跟着 iPad 白天晚上」：系统是浅色用白天那种，深色用晚上那种
 const get = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
 const set = (k, v) => { try { localStorage.setItem(k, v); } catch { /* 无痕模式 */ } };
-export const dayNight = () => ({ day: get(`${KEY}-day`, DAY_DEFAULT), night: get(`${KEY}-night`, NIGHT_DEFAULT) });
+// 白天、晚上就是紫藤那一对（以前存过别的也不认）
+export const dayNight = () => ({ day: DAY_DEFAULT, night: NIGHT_DEFAULT });
 export function setDayNight(which, id) { set(`${KEY}-${which}`, id); }
 const darkMq = () => (typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null);
 let autoWired = false;
@@ -69,7 +59,7 @@ export function resolveTheme(t) {
   return darkMq()?.matches ? night : day;
 }
 export const isAuto = () => get(KEY, '') === 'auto';
-// 学习台没选过样子：跟着 iPad，白天水墨、晚上墨夜（2026-11-03 我定的一对）
+// 学习台没选过样子：跟着 iPad，白天紫藤、晚上紫藤的夜色
 export const DESK_DEFAULT = 'auto';
 /** 换风格：写在 <html data-theme>（'' 是默认石墨），save 时记在这台设备上 */
 export function applyTheme(t, { save = false } = {}) {

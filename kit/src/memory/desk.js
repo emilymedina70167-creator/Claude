@@ -32,11 +32,13 @@ import { masteryProposals, masteryPendingWrites } from './mastery.js';
 import { pickDrills, harvestDrills, drillLine, DRILL_N } from './drills.js';
 import { enterDrill } from './drillrun.js';
 import { recallToday, spaceCounts } from './recall.js';
-import { PICKS, MORE, applyTheme, isAuto, dayNight, setDayNight } from '../theme.js';
+import { applyTheme, isAuto } from '../theme.js';
+import { wireTouchActive, wireThumb, pageIn, rollNumber, wireNavMini, circleSwap, zoomInto, createPanels, wireLongPress } from './feel.js';
+import { installNju } from './nju.js';
 import { runRecall } from './recallrun.js';
 import { purgePlan, purgeText } from './purge.js';
 import { vocabRecalls } from './vocab.js';
-import { countdownText, weekLines, progress, warmupDrills, backlogDays } from './journey.js';
+import { weekLines, progress, warmupDrills, backlogDays, daysLeft, EXAM_DATE } from './journey.js';
 import { needsSkills, skillsPrompt, parseSkills, skillSummary, pointCatalog, lessonLines, SKILLS_VERSION } from './skills.js';
 
 // 正在看哪一科（这台设备记着；分科见 space.js）
@@ -77,7 +79,12 @@ const todayLabel = (d = new Date()) => `${d.getMonth() + 1}月${d.getDate()}日 
 
 // 首页以外的页面（pages.js），换页不刷新
 const PAGES = { map: '课程地图', books: '教材', weak: '弱点表', errors: '错题本', classes: '以前的课', stats: '统计' };
-const goto = (hash) => { location.hash = hash; location.reload(); };
+// 进一节课（整页刷新）之前：开着的面板或者主角卡放大铺满，不像突然换了一页（feel.js 的 zoomInto）
+const goto = (hash) => {
+  const go = () => { location.hash = hash; location.reload(); };
+  const from = isSessionId(hash) ? (document.querySelector('.fl-panel') || document.querySelector('.dk-class:not([hidden])')) : null;
+  if (from) zoomInto(from, go); else go();
+};
 
 export async function renderDesk(root, meta) {
   session.mode = 'desk';
@@ -89,8 +96,9 @@ export async function renderDesk(root, meta) {
   root.classList.add('is-desk');
   const unit = meta.unit || session.title || '学习台';
   root.innerHTML = `
+    <div class="dk-shell">
     <header class="dk-head">
-      <div class="dk-brand" title="${escapeHtml(String(unit))}"><span class="dk-date">${escapeHtml(todayLabel())}${countdownText(toDate(Date.now())) ? `<span class="dk-countdown"> · ${escapeHtml(countdownText(toDate(Date.now())))}</span>` : ''}</span><h1 class="dk-title">学习台</h1></div>
+      <div class="dk-brand" title="${escapeHtml(String(unit))}"><span class="dk-date">${escapeHtml(todayLabel())}</span><h1 class="dk-title">学习台</h1></div>
       <div class="dk-spaces" role="tablist" aria-label="科目">${SPACE_KEYS.map((k) => `<button type="button" role="tab" class="dk-space" data-space="${k}">${SPACES[k].label}</button>`).join('')}</div>
     </header>
     <nav class="dk-nav" aria-label="学习台的页面"><a href="#">首页</a>${Object.entries(PAGES).map(([k, v]) => `<a href="#${k}">${v}</a>`).join('')}<a href="#manage">管理</a></nav>
@@ -99,13 +107,14 @@ export async function renderDesk(root, meta) {
     <div class="dk-bookpage" hidden></div>
     <div class="dk-home">
     <div class="dk-col">
-    <section class="dk-card dk-class" hidden aria-label="上课"><div class="dk-body"></div></section>
-    <section class="dk-card dk-group" aria-label="今天">
+    <section class="dk-card dk-class" hidden aria-label="上课" data-menu="hero"><div class="dk-body"></div></section>
+    <section class="dk-group" aria-label="今天"><h2 class="dk-grp-h">今天</h2><div class="dk-card dk-rows"></div></section>
+    <div class="dk-drawer" hidden>
     <div class="dk-part dk-today" hidden><h2 class="dk-h">复现</h2><div class="dk-body"></div></div>
     <div class="dk-part dk-recall" hidden><h2 class="dk-h">要记的</h2><p class="dk-sub muted">先写出来，再看答案。隔 1、3、7、14、30 天各想一遍。</p><div class="dk-body"></div><details class="dk-fold dk-radd"><summary><span class="muted">自己加一条</span></summary><div class="dk-radd-f"></div></details></div>
     <div class="dk-part dk-drill" hidden><h2 class="dk-h">练一练</h2><p class="dk-sub muted">页面从以前课上的题里挑几道，不同块混着做，页面判分，不调用 Claude。</p><div class="dk-body"></div></div>
     <div class="dk-part dk-manual" hidden><details class="dk-fold"><summary><h2 class="dk-h">补记</h2><span class="muted">在学习台外面做的题，写一句或贴张图</span></summary><div class="dk-body"></div><div class="dk-mlist"></div></details></div>
-    </section>
+    </div>
     </div>
     <div class="dk-col dk-col-side">
     <section class="dk-card dk-week" hidden><h2 class="dk-h">这一周</h2><div class="dk-body"></div></section>
@@ -113,16 +122,23 @@ export async function renderDesk(root, meta) {
     </div>
     </div>
     <div class="dk-manage" hidden>
-    <section class="dk-card dk-look"><h2 class="dk-h">样子</h2><p class="dk-sub muted">学习台和课堂一起换，这台设备记着。</p><div class="dk-body"></div></section>
+    <section class="dk-card dk-look"><h2 class="dk-h">样子</h2><p class="dk-sub muted">紫藤：学习台和课堂一起，跟着 iPad 的白天晚上换，也可以固定一种。这台设备记着。</p><div class="dk-body"></div></section>
     <section class="dk-card dk-recent"><h2 class="dk-h">最近记下的</h2><p class="dk-sub muted">课堂里的 Claude 和页面直接写进记忆的，不对就撤销（7 天内）。</p><div class="dk-pdone"></div></section>
     <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-backup" hidden><h2 class="dk-h">备份</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-check" hidden><h2 class="dk-h">自检</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-colls" hidden><details class="dk-fold"><summary><h2 class="dk-h">记忆库</h2><span class="muted">每一类有几条、谁写</span></summary><div class="dk-body"></div></details></section>
     </div>
-    <footer class="dk-foot">组件库 ${escapeHtml(VERSION)}</footer>`;
+    <footer class="dk-foot">组件库 ${escapeHtml(VERSION)}</footer>
+    </div>
+    <div class="dk-layer"></div>`;
   const $ = (s) => root.querySelector(s);
   const status = $('.dk-status');
+  // 手感（feel.js）：按下回弹、滑块、面板、长按、毛玻璃的小标题栏；校徽（nju.js）写成 CSS 变量
+  installNju(root);
+  wireTouchActive();
+  const panels = createPanels({ shell: $('.dk-shell'), layer: $('.dk-layer') });
+  wireNavMini($('.dk-title'), '学习台');
 
   const store = await getStore({ title: session.title });
   if (!store) {
@@ -172,11 +188,14 @@ export async function renderDesk(root, meta) {
     try { localStorage.setItem(SPACE_KEY, k); } catch { /* 无痕模式 */ }
     root.querySelectorAll('.dk-space').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.space === k)));
     root.dataset.space = k;
+    syncSpaces();
     manualForm?.refreshBlocks();
     if (lastRes) paint(lastRes, toDate(Date.now()));
   }
   root.querySelector('.dk-spaces').addEventListener('click', (e) => { const b = e.target.closest('.dk-space'); if (b) setSpace(b.dataset.space); });
   root.querySelectorAll('.dk-space').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.space === space)));
+  const syncSpaces = wireThumb($('.dk-spaces'), () => $('.dk-space[aria-selected="true"]'));
+  const syncNav = wireThumb($('.dk-nav'), () => $('.dk-nav a[aria-current="true"]'), 'fl-pill');
   root.dataset.space = space; // 这一科的颜色（desk.css 的 --sp-rgb）
   const ledgerReady = db.doc('meta/ledger').get().then((s) => { ledger = s.exists ? s.data() : null; lastLedger = JSON.stringify(ledger); }).catch(() => {});
   for (const c of MEMORY_COLLECTIONS) {
@@ -282,6 +301,7 @@ export async function renderDesk(root, meta) {
     paintDrill(today);
     paintWeek(today);
     paintRecall(today);
+    paintRows(today);
     const total = Object.values(res.counts).reduce((a, b) => a + b, 0);
     // 今天（这一科）：过期、今天到期的复现组，下一节从哪接、欠账；别的科有到期的提一句
     const mine = sv();
@@ -325,6 +345,8 @@ export async function renderDesk(root, meta) {
   // —— 上课：接着上没下课的那节，或者开一节新的；没备课就在这里让 Claude 备（books/planview.js）——
   let prepBusy = false;
   let prepMsg = '';
+  // 主角卡右边的签条：距考研几天，下面一枚南大的校徽；点它看还剩几周（openDays）
+  const spineHtml = () => { const n = daysLeft(); return n < 0 ? '' : `<button type="button" class="dk-spine" data-open="days" data-menu="days" aria-label="距考研还有 ${n} 天，目标南京大学"><span class="dk-tag"><span class="dk-tag-k">${n ? '距考研' : '今天'}</span><span class="dk-tag-n">${n || '考研'}</span><span class="dk-tag-u">${n ? '天' : ''}</span></span><span class="dk-nju is-shield" aria-hidden="true"></span></button>`; };
   function paintClass() {
     if (!loaded.has('sessions')) return;
     const box = $('.dk-class');
@@ -367,24 +389,20 @@ export async function renderDesk(root, meta) {
     const keep = { open: box.querySelector('.dk-prepfold')?.open, block: box.querySelector('.dk-prep-block')?.value, pages: box.querySelector('.dk-prep-pages')?.value };
     box.querySelector('.dk-body').innerHTML = `
       ${openPd.length ? `<p><a class="dk-link dk-to-pending" href="#">还有 ${openPd.length} 条以前留下的没写进去 ↓</a></p>` : ''}
-      <div class="dk-hero">
-        <p class="dk-eyebrow">${escapeHtml(SPACES[space].label)} · ${open ? '这节课还没下课' : main ? '备好的下一节' : '下一节'}${main?.by === 'desk' ? '<span class="muted"> · 学习台备的</span>' : ''}</p>
+      <div class="dk-hero-wrap"><div class="dk-hero">
+        <p class="dk-eyebrow">${escapeHtml(SPACES[space].label)}${open ? '这节课还没下课' : main ? '备好的下一节' : '的下一节'}${main?.by === 'desk' ? '<span class="muted">（学习台备的）</span>' : ''}</p>
         <h2 class="dk-hero-t">${supRuns(inline(open ? (open.title && open.title !== unit ? open.title : (open.block && data.curriculum.find((c) => String(c.id) === String(open.block))?.title) || heroT) : heroT))}</h2>
         ${heroS ? `<p class="dk-hero-s dk-goal" title="点一下看全文">${inline(heroS)}</p>` : ''}
-        ${debts.length ? `<p class="dk-debts"><span class="dk-k">欠账</span>${debts.map((x) => `<span class="dk-chip">${inline(x)}</span>`).join('')}</p>` : ''}
+        ${debts.length ? `<p class="dk-owe">还欠着：${debts.map((x) => inline(x)).join('；')}</p>` : ''}
         <div class="dk-hero-acts">
           ${open ? `<button type="button" class="btn btn-primary btn-lg dk-go" data-sid="${escapeHtml(open.id)}">接着上课</button>` : ''}
           <button type="button" class="btn ${open ? '' : 'btn-primary btn-lg'} dk-new"${prepBusy ? ' disabled' : ''}>开新课</button>
           ${open ? `<span class="dk-hero-more"><button type="button" class="link-btn dk-close" data-sid="${escapeHtml(open.id)}" title="不调用 Claude：只结束这节、页面算课后报告">直接下课</button><button type="button" class="link-btn dk-purge" data-sid="${escapeHtml(open.id)}" title="测试开的、不要的课：连黑板和记录一起删掉">删掉</button></span>` : ''}
         </div>
-        <div class="dk-stats">
-          ${stat('is-review', '.dk-today', dueN, '组', '复现到期')}
-          ${stat('is-recall', '.dk-recall', rc.total, '条', '今天要记')}
-          ${last ? `<a class="dk-stat is-last" href="#classes/${escapeHtml(last.id)}"><span class="dk-stat-n">${escapeHtml(String(last.date || '').slice(5).replace('-', '/'))}</span><span class="dk-stat-u"></span><span class="dk-stat-k">上一节${lastLine ? ` · ${escapeHtml(lastLine)}` : ''}</span></a>` : stat('is-last', '.dk-class', '—', '', '还没上过课')}
-        </div>
+        ${last ? `<a class="dk-lastline" href="#classes/${escapeHtml(last.id)}">上一节 ${escapeHtml(String(last.date || '').slice(5).replace('-', '/'))}${lastLine ? `：${escapeHtml(lastLine)}` : ''}</a>` : ''}
         ${lastDebrief.length ? `<p class="dk-last muted"><span class="dk-k">复盘</span>${lastDebrief.map((x) => inline(x.text)).join('；')}</p>` : ''}
         ${lastNext.length ? `<p class="dk-last muted"><span class="dk-k">下次先测</span>${lastNext.map((x) => inline(x.name)).join('；')}${warm.length && !open ? ` <button type="button" class="btn btn-sm dk-warm" title="上一节没稳的那几个点，题库里的原题；页面判分，不调用 Claude">课前热身 ${warm.length} 题</button>` : ''}</p>` : ''}
-      </div>
+      </div>${spineHtml()}</div>
       ${others.map((x) => { const k = kindOf(x); return `<div class="dk-row dk-open is-${k}"><span class="dk-kind">${SESSION_KINDS[k]}</span><span>${inline(x.title || blockTitle(x.block) || x.id)}</span><button type="button" class="btn btn-primary dk-go" data-sid="${escapeHtml(x.id)}">${k === 'class' ? '接着上课' : '进去'}</button><button type="button" class="btn btn-sm dk-close" data-sid="${escapeHtml(x.id)}" title="不调用 Claude：只结束这节、页面算课后报告">直接下课</button><button type="button" class="btn btn-sm btn-danger dk-purge" data-sid="${escapeHtml(x.id)}" title="测试开的、不要的课：连黑板和记录一起删掉">删掉</button></div>`; }).join('')}
       ${blocksHere.length ? `<details class="dk-fold dk-prepfold"${prepBusy || prepMsg ? ' open' : ''}><summary><span class="dk-fold-t">${main ? '换一块 / 重新备课' : '让 Claude 备课'}</span><span class="muted">${main ? '' : '选一块，Claude 先备好教案（也可以直接开课）'}</span></summary>${planner.prepHtml({ suggested: main?.block || suggestBlock(blocksHere, pos), blocks: blocksHere, main, busy: prepBusy, msg: prepMsg })}</details>` : ''}`;
     {
@@ -541,7 +559,7 @@ export async function renderDesk(root, meta) {
     body.querySelector('.dk-recall-go')?.addEventListener('click', () => {
       recalling = true;
       box.querySelector('.dk-radd').hidden = true;
-      runRecall(body, { items: t.items, db, titleOf: (b) => data.curriculum.find((c) => String(c.id) === String(b))?.title || '', onDone: () => { recalling = false; paintRecall(toDate(Date.now())); } });
+      runRecall(body, { items: t.items, db, titleOf: (b) => data.curriculum.find((c) => String(c.id) === String(b))?.title || '', onDone: () => { recalling = false; paintRecall(toDate(Date.now())); paintRows(); } });
     });
   }
   // 自己加一条：挂这一科的哪一块（可以不挂）
@@ -921,43 +939,116 @@ export async function renderDesk(root, meta) {
     }
   });
 
-  // —— 样子（theme.js）：固定一种，或者跟着 iPad 白天晚上（白天一种浅色、晚上一种深色）；点了马上换，这台设备记着 ——
+  // —— 首页「今天」：一行一件事（复现、要记的、练一练、补记），点一行，那一段从这一行长出来（feel.js 的面板）——
+  // 那几段的内容还是原来那几个函数画的（paint、paintRecall、paintDrill、paintManual），平时收在藏着的抽屉（.dk-drawer）里，
+  // 打开时整段搬进面板、关上搬回去：做的事、数据一点没变
+  const ROWS = {
+    today: { title: '复现', ic: 'is-review' },
+    recall: { title: '要想起来的', ic: 'is-recall' },
+    drill: { title: '练一练', ic: 'is-drill' },
+    manual: { title: '补记', ic: 'is-plus' },
+  };
+  const rowCounts = {};
+  function paintRows(today = toDate(Date.now())) {
+    const box = $('.dk-rows');
+    if (!box) return;
+    const groups = todayReviews(data, { today });
+    const nrev = groups.reduce((n, g) => n + g.total, 0);
+    const rc = recallToday(data.recall, { today });
+    const dpick = $('.dk-drill').hidden ? null : pickDrills(data, { space, today });
+    const sub = {
+      today: nrev ? groups.map((g) => `${g.subject} ${g.total} 组`).join('，') : '今天没有要复现的',
+      recall: rc.total ? `${spaceCounts(rc.bySpace)}。先写出来，再看答案` : '今天没有要想的',
+      drill: dpick ? (dpick.items.length ? `挑好了 ${dpick.items.length} 道，不同块混着做` : '题库里的题最近都做对过') : '',
+      manual: '在学习台外面做的题，写一句或贴张图',
+    };
+    const n = { today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null };
+    const keys = Object.keys(ROWS).filter((k) => k !== 'drill' || dpick);
+    box.innerHTML = keys.map((k) => `<button type="button" class="dk-trow" data-row="${k}" data-menu="${k}"><span class="dk-ic ${ROWS[k].ic}${n[k] === 0 ? ' is-zero' : ''}"${n[k] === null ? '' : ' data-count'}>${n[k] === null ? '+' : rowCounts[k] ?? n[k]}</span><b>${ROWS[k].title}</b><small>${escapeHtml(sub[k])}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('');
+    // 数字变了：往上滚过去（第一次画不滚）
+    for (const k of keys) {
+      if (n[k] === null) continue;
+      const el = box.querySelector(`[data-row="${k}"] [data-count]`);
+      if (rowCounts[k] !== undefined && rowCounts[k] !== n[k]) { el.dataset.n = String(rowCounts[k]); rollNumber(el, n[k]); }
+      rowCounts[k] = n[k];
+    }
+  }
+  function openRow(row, then) {
+    const k = row.dataset.row;
+    const sec = $(`.dk-${k}`);
+    if (!sec) return;
+    const drawer = $('.dk-drawer');
+    panels.open(row, {
+      title: ROWS[k].title,
+      mount: (body) => { sec.hidden = false; sec.querySelector('details.dk-fold:not(.dk-radd)')?.setAttribute('open', ''); body.append(sec); then?.(sec); },
+      unmount: () => { drawer.append(sec); },
+      onClose: () => paintRows(),
+    });
+  }
+  $('.dk-rows').addEventListener('click', (e) => { const r = e.target.closest('.dk-trow'); if (r) openRow(r); });
+
+  // —— 距考研：目标南京大学（校徽、毛笔校名），还剩多少天；一格一周，紫的是这一周，最后一格是考试 ——
+  function openDays(src) {
+    const n = daysLeft();
+    const weeks = Math.max(1, Math.ceil(n / 7));
+    const [y, mo, d] = EXAM_DATE.split('-').map(Number);
+    const wd = '日一二三四五六'[new Date(y, mo - 1, d).getDay()];
+    panels.open(src, {
+      title: '距考研',
+      mount: (body) => {
+        body.innerHTML = `<div class="dk-goal-card"><span class="dk-nju is-shield" aria-hidden="true"></span><div class="dk-goal-t"><small>目标</small><span class="dk-nju is-word" role="img" aria-label="南京大学"></span><span class="dk-nju is-en" aria-hidden="true"></span></div></div>
+          <h2 class="dk-days-h">距考研</h2><p class="dk-days-n">${n}<small>天</small></p>
+          <p class="dk-sub muted">${y} 年 ${mo} 月 ${d} 日，星期${wd}。一格是一周，还剩 ${weeks} 周；紫的是这一周，最后一格是考试。</p>
+          <div class="dk-weeks">${Array.from({ length: weeks }, (_, i) => `<i class="${i === 0 ? 'is-now' : i === weeks - 1 ? 'is-exam' : ''}"></i>`).join('')}</div>
+          ${weekLines(data, { today: toDate(Date.now()), space }).slice(0, 3).map((l) => `<p class="dk-days-l">${inline(l.text)}</p>`).join('')}`;
+        body.querySelectorAll('.dk-weeks i').forEach((i, k) => i.animate?.([{ transform: 'scale(0)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 420, delay: 260 + k * 9, easing: 'cubic-bezier(.34, 1.4, .64, 1)', fill: 'backwards' }));
+      },
+    });
+  }
+  root.addEventListener('click', (e) => { const b = e.target.closest('.dk-spine'); if (b) openDays(b); });
+
+  // —— 长按：卡托起来，弹一个小菜单（都是首页上本来就有的按钮，菜单只是近路）——
+  const clickIn = (sel) => () => $(sel)?.click();
+  wireLongPress(root, (el) => {
+    const k = el.dataset.menu;
+    const row = (r) => $(`.dk-trow[data-row="${r}"]`);
+    if (k === 'hero') {
+      const go = $('.dk-class .dk-go');
+      return [go ? { text: '接着上课', icon: 'play', run: () => go.click() } : { text: '开新课', icon: 'play', run: clickIn('.dk-class .dk-new') },
+        $('.dk-prepfold') && { text: '让 Claude 备课', icon: 'spark', run: () => { const f = $('.dk-prepfold'); f.open = true; f.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }].filter(Boolean);
+    }
+    if (k === 'today') return [$('.dk-today .dk-review') && { text: '开复现课', icon: 'play', run: clickIn('.dk-today .dk-review') }, { text: '看到期的', icon: 'list', run: () => openRow(row('today')) }].filter(Boolean);
+    if (k === 'recall') return [$('.dk-recall .dk-recall-go') && { text: '开始想', icon: 'play', run: () => openRow(row('recall'), (sec) => sec.querySelector('.dk-recall-go')?.click()) }, { text: '自己加一条', icon: 'plus', run: () => openRow(row('recall'), (sec) => { const f = sec.querySelector('.dk-radd'); if (f) f.open = true; }) }].filter(Boolean);
+    if (k === 'drill') return [$('.dk-drill .dk-drill-go') && { text: '开始练', icon: 'play', run: clickIn('.dk-drill .dk-drill-go') }, { text: '看挑了哪几道', icon: 'list', run: () => openRow(row('drill')) }].filter(Boolean);
+    if (k === 'manual') return [{ text: '写一条', icon: 'plus', run: () => openRow(row('manual')) }];
+    if (k === 'days') return [{ text: '看还剩几周', icon: 'grid', run: () => openDays(el) }];
+    return [];
+  }, { layer: $('.dk-layer') });
+
+  // —— 样子（theme.js）：只有紫藤；跟着 iPad 的白天晚上换，或者固定白天、固定晚上。换的时候从手指那一点圆形铺开 ——
   function paintLook() {
-    const auto = isAuto();
-    const cur = document.documentElement.dataset.theme || 'graphite'; // 没有 data-theme 就是石墨（夜读）
-    const { day, night } = dayNight();
-    // 缩略图是一张迷你的学习台：印、标题、主角卡（两行字、一个主按钮），各种样子自己的小细节（远山、月亮、横线……）在 desk.css 按 data-sw 画
-    const sw = (x) => `<span class="dk-sw" data-sw="${escapeHtml(x.id)}" aria-hidden="true" style="--sw-bg:${x.sw[0]};--sw-card:${x.sw[1]};--sw-ink:${x.sw[2]};--sw-acc:${x.sw[3]}"><span class="dk-sw-top"><span class="dk-sw-seal"></span><span class="dk-sw-name"></span></span><i class="dk-sw-card"><b class="dk-sw-l1"></b><b class="dk-sw-l2"></b><b class="dk-sw-btn"></b></i></span>`;
-    const card = (x, slot, on) => `<button type="button" class="dk-look-btn" data-slot="${slot}" data-theme-id="${escapeHtml(x.id)}" aria-pressed="${on}">${sw(x)}<span class="dk-look-t"><b>${escapeHtml(x.name)}</b>${x.note ? `<span class="muted">${escapeHtml(x.note)}</span>` : ''}</span></button>`;
-    const lights = PICKS.filter((x) => !x.dark), darks = PICKS.filter((x) => x.dark);
-    const row = (title, list, slot, pick) => `<p class="dk-look-k">${title}</p><div class="dk-looks">${list.map((x) => card(x, slot, x.id === pick)).join('')}</div>`;
+    const cur = isAuto() ? 'auto' : document.documentElement.dataset.theme === 'inknight' ? 'night' : 'day';
     const dark = typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
-    $('.dk-look .dk-body').innerHTML = `
-      <div class="dk-spaces dk-look-mode" role="tablist" aria-label="怎么换"><button type="button" class="dk-space dk-look-m" data-mode="fixed" aria-selected="${!auto}">固定一种</button><button type="button" class="dk-space dk-look-m" data-mode="auto" aria-selected="${auto}">跟着 iPad 白天晚上</button></div>
-      ${auto
-        ? `<p class="dk-sub">iPad 是浅色时用「白天」那种，切到深色（设置 → 显示与亮度，可以设成日落后自动）就换成「晚上」那种。现在 iPad 是${dark ? '深色' : '浅色'}。</p>
-          ${row('白天', lights, 'day', day)}${row('晚上', darks, 'night', night)}
-          <details class="dk-soft"${MORE.some((x) => x.id === (x.dark ? night : day)) ? ' open' : ''}><summary>更多</summary><div class="dk-looks is-more">${MORE.map((x) => card(x, x.dark ? 'night' : 'day', x.id === (x.dark ? night : day))).join('')}</div></details>`
-        : `${row('浅色', lights, 'fixed', cur)}${row('深色', darks, 'fixed', cur)}
-          <details class="dk-soft"${MORE.some((x) => x.id === cur) ? ' open' : ''}><summary>更多</summary><div class="dk-looks is-more">${MORE.map((x) => card(x, 'fixed', x.id === cur)).join('')}</div></details>`}`;
+    $('.dk-look .dk-body').innerHTML = `<div class="dk-spaces dk-look-mode" role="tablist" aria-label="白天晚上">${[['auto', '跟着 iPad'], ['day', '白天'], ['night', '晚上']].map(([v, t]) => `<button type="button" class="dk-space dk-look-m" data-mode="${v}" aria-selected="${v === cur}">${t}</button>`).join('')}</div>
+      <p class="dk-sub muted">${cur === 'auto' ? `iPad 是浅色时用白天，切到深色（设置 → 显示与亮度，可以设成日落后自动）就换成晚上。现在 iPad 是${dark ? '深色' : '浅色'}。` : cur === 'day' ? '一直用白天的。' : '一直用晚上的。'}</p>`;
+    wireThumb($('.dk-look-mode'), () => $('.dk-look-m[aria-selected="true"]'));
   }
   paintLook();
-  // iPad 自己切了深浅色：那一句「现在 iPad 是……」和选中的样子跟着重画（换风格本身 theme.js 管）
   if (typeof matchMedia === 'function') matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => paintLook());
   $('.dk-look').addEventListener('click', (e) => {
     const m = e.target.closest('.dk-look-m');
-    if (m) { applyTheme(m.dataset.mode === 'auto' ? 'auto' : (document.documentElement.dataset.theme || 'graphite'), { save: true }); paintLook(); return; }
-    const b = e.target.closest('.dk-look-btn');
-    if (!b) return;
-    if (b.dataset.slot === 'fixed') applyTheme(b.dataset.themeId, { save: true });
-    else { setDayNight(b.dataset.slot, b.dataset.themeId); applyTheme('auto', { save: true }); }
-    paintLook();
+    if (!m || m.getAttribute('aria-selected') === 'true') return;
+    const v = m.dataset.mode;
+    circleSwap(() => { applyTheme(v === 'auto' ? 'auto' : v === 'night' ? 'inknight' : 'ink', { save: true }); paintLook(); }, m);
   });
 
   // —— 首页以外的页面：课程地图、弱点表、错题本、以前的课、统计（pages.js，换页不刷新）——
   const pagesView = createPages($('.dk-pages'), { getData: sv, db, ops, goto, purge: (sid, btn) => purgeClass(sid, btn) });
   // 首页「别的科也有到期的」：点了切过去
   $('.dk-today').addEventListener('click', (e) => { const b = e.target.closest('.dk-space-go'); if (b) setSpace(b.dataset.space); });
+  // 页面的先后（首页、课程地图……管理）：往后的从右边进来，往前的从左边
+  const ORDER = ['', ...Object.keys(PAGES), 'manage'];
+  let lastAt = -1;
   function route() {
     const h = decodeURIComponent(String(location.hash || '').slice(1));
     if (isSessionId(h) || viewHash()) { location.reload(); return; }
@@ -972,6 +1063,10 @@ export async function renderDesk(root, meta) {
     root.querySelectorAll('.dk-nav a').forEach((a) => a.setAttribute('aria-current', String(a.getAttribute('href') === `#${home ? '' : page}`)));
     if (books) booksView.show(h);
     else if (!home) pagesView.show(h);
+    syncNav();
+    const at = Math.max(0, ORDER.indexOf(home ? '' : page));
+    if (lastAt >= 0 && at !== lastAt) pageIn(home ? $('.dk-home') : manage ? $('.dk-manage') : books ? $('.dk-bookpage') : $('.dk-pages'), Math.sign(at - lastAt));
+    lastAt = at;
   }
   window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });
   route();

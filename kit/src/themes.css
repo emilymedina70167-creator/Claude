@@ -744,3 +744,108 @@
 :root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"]) .btn:is(.st-choice, .sv-choice).is-picked:not(.btn-primary) { background: rgb(var(--chalk-rgb) / 0.06); --frame: rgb(var(--chalk-rgb) / 0.5); color: var(--chalk); }
 :root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"]) .btn:is(.st-choice, .sv-choice).is-right:not(.btn-primary) { background: rgb(var(--green-rgb) / 0.08); --frame: rgb(var(--green-rgb) / 0.6); color: var(--green); }
 :root:is([data-theme^="ink"], [data-theme="xuan"], [data-theme="paper"], [data-theme="celadon"]) .btn:is(.st-choice, .sv-choice).is-wrong:not(.btn-primary) { background: rgb(var(--coral-rgb) / 0.07); --frame: rgb(var(--coral-rgb) / 0.55); color: var(--coral); }
+
+/* ======== 紫藤（2026-11-04 我定的学习台唯一的样子）========
+   iOS 的版式；青绿山水的底（宣纸般的浅豆绿，左上一团玉色、右上一团紫藤色、下面一点泥金的晕光），卡片是半透明的毛玻璃；
+   主按钮、选中的页面是深的南大紫（茄紫）——目标是南京大学，校徽也是这个紫；紫花配绿叶，颜色都压得很低，不俗气。
+   沿用水墨（白天）、墨夜（晚上）的名字，[data-theme^="ink"] 那一套 iOS 组件照旧。颜色的含义不变：
+   黄 = 泥金（重点、结果）、红 = 朱砂（错、例外）、粉 = 胭脂（要背）、蓝 = 靛蓝（说明）、绿 = 石绿（对、例题）；
+   学习台里每科的颜色也是它们：数学靛蓝、408 石绿、英语胭脂。晚上是深灰绿的夜，不做近黑 */
+:root[data-theme="ink"] {
+  --chalk-rgb: 27 34 32;
+  --yellow-rgb: 150 112 42;
+  --blue-rgb: 61 90 153;
+  --pink-rgb: 161 76 106;
+  --green-rgb: 47 122 97;
+  --coral-rgb: 178 58 43;
+  --shade-rgb: 25 45 40;
+  --glow-rgb: 25 45 40;
+  --board-rgb: 240 242 236;
+  --board-2-rgb: 233 236 229;
+  --board-3-rgb: 248 249 245;
+  --bar-rgb: 240 242 236;
+  --halo-rgb: 244 246 241;
+  --muted: #5e6b66;
+  --lav: #6b3a78;
+  --orange: #9a6a3c;
+  --ink-white: #1b2220;
+  --ink-yellow: #96702a;
+  --ink-pink: #a14c6a;
+  --ink-blue: #3d5a99;
+  --accent-ink: #ffffff;
+  --grp-ink: #1b2220;
+  --g1: #d6deec; --g2: #ecd6df; --g3: #d3e6dd; --g4: #e2d8ea; --g5: #efe3c8; --g6: #e6dccd;
+  --page-bg:
+    radial-gradient(900px 640px at -8% -12%, rgb(150 205 182 / 0.5), transparent 62%),
+    radial-gradient(820px 620px at 108% -4%, rgb(206 172 224 / 0.52), transparent 60%),
+    radial-gradient(1100px 720px at 50% 115%, rgb(232 210 158 / 0.4), transparent 62%),
+    #f0f2ec;
+  --card-bg: rgb(255 255 250 / 0.72);
+  --card-shadow: 0 1px 2px rgb(25 45 40 / 0.05), 0 10px 26px -18px rgb(25 45 40 / 0.25);
+  --card-solid: #fffffc; --card-solid-rgb: 255 255 252; --card-hover: #ffffff;
+  --panel: rgb(255 255 250 / 0.62);
+  --panel-edge: inset 0 0 0 0.5px rgb(255 255 255 / 0.75), 0 0 0 0.5px rgb(30 55 45 / 0.05);
+  --lift: 0 1px 2px rgb(25 45 40 / 0.05), 0 14px 34px -20px rgb(25 45 40 / 0.28);
+  --field: rgb(40 70 60 / 0.07);
+  --field-edge: inset 0 0 0 0.5px rgb(40 70 60 / 0.06);
+  --btn-bg: rgb(40 70 60 / 0.07);
+  --btn-bg-hi: rgb(40 70 60 / 0.11);
+  --seg-on: #fffffc;
+  --glass: saturate(1.7) blur(26px);
+  --brand: #4a1b52; --brand-ink: #ffffff;
+  --goal: #6b0f6e;
+}
+:root[data-theme="inknight"] {
+  --chalk-rgb: 238 242 238;
+  --yellow-rgb: 214 178 110;
+  --blue-rgb: 147 169 224;
+  --pink-rgb: 227 154 181;
+  --green-rgb: 124 194 164;
+  --coral-rgb: 226 100 78;
+  --shade-rgb: 0 0 0;
+  --glow-rgb: 230 245 238;
+  --board-rgb: 21 26 24;
+  --board-2-rgb: 30 37 34;
+  --board-3-rgb: 17 21 20;
+  --bar-rgb: 21 26 24;
+  --halo-rgb: 21 26 24;
+  --muted: #9daaa3;
+  --lav: #d3b0da;
+  --ink-white: #eef2ee;
+  --ink-yellow: #d6b26e;
+  --ink-pink: #e39ab5;
+  --ink-blue: #93a9e0;
+  --accent-ink: #2a1530;
+  --grp-ink: #151a18;
+  --g1: #93a9e0; --g2: #e39ab5; --g3: #7cc2a4; --g4: #d3b0da; --g5: #d6b26e; --g6: #c9a07c;
+  --page-bg:
+    radial-gradient(900px 640px at -8% -12%, rgb(70 140 118 / 0.34), transparent 62%),
+    radial-gradient(820px 620px at 108% -4%, rgb(150 100 172 / 0.34), transparent 60%),
+    radial-gradient(1100px 720px at 50% 115%, rgb(160 130 70 / 0.2), transparent 62%),
+    #151a18;
+  --card-bg: rgb(44 54 50 / 0.7);
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 16px 36px -22px rgb(0 0 0 / 0.6);
+  --card-solid: #222927; --card-solid-rgb: 34 41 39; --card-hover: #283130;
+  --panel: rgb(44 54 50 / 0.6);
+  --panel-edge: inset 0 0 0 0.5px rgb(255 255 255 / 0.08);
+  --lift: 0 1px 2px rgb(0 0 0 / 0.3), 0 18px 40px -22px rgb(0 0 0 / 0.6);
+  --field: rgb(190 225 210 / 0.08);
+  --field-edge: inset 0 0 0 0.5px rgb(190 225 210 / 0.07);
+  --btn-bg: rgb(190 225 210 / 0.09);
+  --btn-bg-hi: rgb(190 225 210 / 0.14);
+  --seg-on: #46514c;
+  --glass: saturate(1.6) blur(26px);
+  --brand: #e6d2ea; --brand-ink: #2a1530;
+  --goal: #d29ad4;
+}
+/* 主按钮、黑板的步骤序号、发送按钮：南大紫（白天深茄紫白字，晚上浅藤紫深字） */
+:root[data-theme^="ink"] .btn-primary { color: var(--brand-ink); background: var(--brand); box-shadow: 0 6px 14px -9px color-mix(in srgb, var(--brand) 55%, transparent); }
+:root[data-theme^="ink"] .btn-primary:hover { background: color-mix(in srgb, var(--brand) 90%, var(--brand-ink)); }
+:root[data-theme^="ink"] .btn-primary:disabled { color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, transparent); box-shadow: none; --frame: transparent; }
+:root[data-theme^="ink"] .st-n { color: var(--brand-ink); }
+:root[data-theme^="ink"] .st-n::before { background: var(--brand); }
+:root[data-theme^="ink"] .cb-send { background: var(--brand); color: var(--brand-ink); }
+:root[data-theme^="ink"] .class-more { box-shadow: inset 0 0 0 1.4px color-mix(in srgb, var(--brand) 55%, transparent), 0 6px 16px rgb(var(--shade-rgb) / 0.14); }
+/* 紫藤：提示是从顶上落下来的一条白胶囊（iOS 的横幅），不是底下一条描黄边的 */
+:root[data-theme^="ink"] #la-toast { top: calc(env(safe-area-inset-top, 0px) + 12px); bottom: auto; transform: translate(-50%, -140%); border: 0; color: var(--chalk); background: var(--card-solid); font-weight: 600; box-shadow: 0 12px 30px -10px rgb(var(--shade-rgb) / 0.35), 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.1); transition: transform .6s cubic-bezier(.34, 1.4, .64, 1), opacity .3s; }
+:root[data-theme^="ink"] #la-toast.show { transform: translate(-50%, 0); }
