@@ -101,3 +101,9 @@ test('我自己加一条、停掉一条；分科；课堂的记忆摘要带这�
   assert.match(d.text, /## 要记的/);
   assert.match(d.text, /K1 外积的秩是多少 → 1/);
 });
+
+test('recallLine：刚记下的（建的时候就写了 last）是「还没想过」，评过一次才写档位', () => {
+  const fresh = { id: 'K9', q: '问', a: '答', tier: 1, last: '2026-11-04' };
+  assert.match(recallLine(fresh, '2026-11-05'), /还没想过/);
+  assert.match(recallLine({ ...fresh, result: 'got', tier: 3 }, '2026-11-05'), /第 3 天那档/);
+});

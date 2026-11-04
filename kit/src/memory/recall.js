@@ -89,7 +89,7 @@ export const spaceCounts = (bySpace = {}) => Object.keys(SPACES).filter((k) => b
 /** 给课堂 Claude 的一行（记忆摘要「要记的」那一节）：编号、问法 → 答案、没想起几次 */
 export const recallLine = (d, today = toDate(Date.now())) => {
   const due = recallDue(d, today);
-  return `- ${d.id} ${cut(d.q, 80)} → ${cut(d.a, 80)}（${d.last ? `第 ${d.tier || 1} 天那档${due.days <= 0 ? '，到期了' : ''}` : '还没想过'}${Number(d.lapses) ? `，没想起过 ${d.lapses} 次` : ''}）`;
+  return `- ${d.id} ${cut(d.q, 80)} → ${cut(d.a, 80)}（${d.result ? `第 ${d.tier || 1} 天那档${due.days <= 0 ? '，到期了' : ''}` : '还没想过'}${Number(d.lapses) ? `，没想起过 ${d.lapses} 次` : ''}）`;
 };
 
 export const nextRecallId = (list) => `K${Math.max(0, ...(list || []).map((d) => Number(/^K(\d+)$/.exec(String(d.id))?.[1]) || 0)) + 1}`;

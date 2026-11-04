@@ -819,3 +819,6 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 .vt-morph .dk-week { view-transition-name: dk-week; }
 .vt-morph .dk-pending { view-transition-name: dk-pending; }
 ::view-transition-group(*) { animation-duration: .55s; animation-timing-function: cubic-bezier(.32, .72, 0, 1); }
+
+/* 首页没下课那几行的「直接下课 / 删掉」、要想起来的「先到这」：手指点的，至少 44px（.btn-sm 是 38px） */
+.is-desk .dk-open .btn-sm, .is-desk .rc-stop { min-height: 44px; }

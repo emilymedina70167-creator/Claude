@@ -143,9 +143,10 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
   sections.push({ coll: 'curriculum', head: '## 课程地图（curriculum）', items: cItems });
 
   // 以前学这一块（和挨着的块）的课：最近两节，报告的一行 + 小结开头。上一节怎么样，开课就要知道
+  // 课上换过块的（blocks）也算：讲到一半转去别的块，这一块的那一段还是学过
   const obs = get('observations');
   const catalog = pointCatalog(get('sessions'), get('mastery'));
-  const before = get('sessions').filter((s) => s.id !== session && nearIds.has(String(s.block || '')) && (s.report || s.summary || s.status === 'closed'))
+  const before = get('sessions').filter((s) => s.id !== session && (nearIds.has(String(s.block || '')) || (Array.isArray(s.blocks) && s.blocks.some((b) => nearIds.has(String(b))))) && (s.report || s.summary || s.status === 'closed'))
     .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0)).slice(0, 2);
   sections.push({
     coll: 'sessions', head: '## 以前学这一块的课（sessions，最近的在前）',

@@ -55,7 +55,8 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
   });
 
   function show(r) { route = r; paint(); }
-  function refresh() { if (route) paint(); }
+  // 不在这几页上（回了首页、去了教材）时不重画：不然每次数据一变都在背后画一遍上次看的页面，还会去读报告
+  function refresh() { if (route && !host.hidden) paint(); }
 
   function paint() {
     const [page, arg] = route.split('/');
@@ -177,11 +178,13 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
   function classPage(sid) {
     const r = classRows(data).find((x) => x.id === sid);
     if (!r) return `<p class="muted">没有 ${esc(sid)} 这节课。</p><p><a class="dk-link" href="#classes">回到以前的课</a></p>`;
-    const rep = reports.get(sid);
-    if (rep === undefined) {
-      reports.set(sid, null);
-      scopeDb(db, sid).doc('report/main').get().then((s) => { reports.set(sid, s.exists ? s.data() : false); refresh(); }, () => { reports.set(sid, false); refresh(); });
+    // 按报告的版本缓存（sessions 上的 report.at）：下课后几秒报告才写好、暂时的报告重算成正式的，都要重新读
+    const ver = `${sid}@${data.sessions?.find((x) => x.id === sid)?.report?.at || ''}`;
+    if (!reports.has(ver)) {
+      reports.set(ver, null);
+      scopeDb(db, sid).doc('report/main').get().then((s) => { reports.set(ver, s.exists ? s.data() : false); refresh(); }, () => { reports.set(ver, false); refresh(); });
     }
+    const rep = reports.get(ver);
     const obs = (data.observations || []).filter((o) => o.session === sid);
     const sum = obs.find((o) => o.kind === 'summary');
     return `<p><a class="dk-link" href="#classes">← 以前的课</a></p>

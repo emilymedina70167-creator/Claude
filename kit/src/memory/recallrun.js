@@ -23,6 +23,8 @@ export function runRecall(host, { items = [], db, titleOf = () => '', onDone = (
   const tally = { got: 0, vague: 0, miss: 0 };
   let at = 0;
   let busy = false;
+  let stopped = false; // 评分还在写、卡还在飞时点了「先到这」：写完这张就停，不再翻出下一张
+  const evIds = new Map(); // 一条记忆点这一叠里只记一条证据：写记忆点失败重试时不再多出一条
 
   function show() {
     if (at >= list.length) return done();
@@ -42,7 +44,7 @@ export function runRecall(host, { items = [], db, titleOf = () => '', onDone = (
           </div>
         </div>
       </div>`;
-    host.querySelector('.rc-stop').addEventListener('click', done);
+    host.querySelector('.rc-stop').addEventListener('click', () => { if (busy) stopped = true; else done(); });
     host.querySelector('.rc-show').addEventListener('click', reveal);
     // 不是第一张：从后面那一叠里跟上来
     if (at > 0) anim(host.querySelector('.rc-card'), [{ transform: 'translateY(14px) scale(.95)', opacity: 0.6 }, { transform: 'none', opacity: 1 }], { duration: 460, easing: SPRING });
@@ -64,7 +66,7 @@ export function runRecall(host, { items = [], db, titleOf = () => '', onDone = (
       <p class="rc-q-small">${inline(k.q)}</p>
       <div class="rc-a"><span class="dk-k">答案</span>${inline(k.a)}</div>
       ${typed.trim() ? `<p class="rc-mine"><span class="dk-k">我写的</span>${escapeHtml(typed)}</p>` : ''}
-      <p class="rc-where muted">${t ? `${inline(t)} · ` : ''}${k.last ? `上次${{ got: '想起来了', vague: '模糊', miss: '没想起' }[k.result] || '想过'}` : '第一次想'}${Number(k.lapses) ? `，没想起过 ${Number(k.lapses)} 次` : ''}${sameText(typed, k.a) ? '　<b class="rc-same">写得和答案一样</b>' : ''}</p>
+      <p class="rc-where muted">${t ? `${inline(t)} · ` : ''}${k.result ? `上次${{ got: '想起来了', vague: '模糊', miss: '没想起' }[k.result] || '想过'}` : '第一次想'}${Number(k.lapses) ? `，没想起过 ${Number(k.lapses)} 次` : ''}${sameText(typed, k.a) ? '　<b class="rc-same">写得和答案一样</b>' : ''}</p>
       <div class="rc-rate">${Object.entries(RATINGS).map(([v, r]) => `<button type="button" class="btn rc-r is-${v}" data-r="${v}"><b>${r.label}</b><span class="muted">${r.hint}</span></button>`).join('')}</div>`;
     back.querySelectorAll('.rc-r').forEach((b) => b.addEventListener('click', () => rate(b.dataset.r, typed)));
   }
@@ -76,22 +78,23 @@ export function runRecall(host, { items = [], db, titleOf = () => '', onDone = (
     const k = list[at];
     const today = toDate(Date.now());
     try {
-      const { patch, note } = rateRecall(k, rating, { today });
-      const ev = recallEvidence(k, { typed, rating });
-      const { id: evId, ...evDoc } = ev;
+      // 读最新的再改（课堂里可能刚改过问法，别的设备今天可能已经想过这条）：档位按最新的那份算
+      const cur = await db.doc(`recall/${k.id}`).get().then((s) => (s.exists ? s.data() : null)).catch(() => null);
+      const { id: _, ...base } = cur ? { id: k.id, ...cur } : k;
+      const { patch, note } = rateRecall({ id: k.id, ...base }, rating, { today });
+      const { id: evNew, ...evDoc } = recallEvidence(k, { typed, rating });
+      const evId = evIds.get(k.id) || evNew;
+      evIds.set(k.id, evId);
       assertWrite('page', 'evidence');
       assertWrite('page', 'recall');
       await db.doc(`evidence/${evId}`).set(evDoc);
-      // 读最新的再改（课堂里可能刚改过问法）
-      const cur = await db.doc(`recall/${k.id}`).get().then((s) => (s.exists ? s.data() : null)).catch(() => null);
-      const { id: _, ...base } = cur ? { id: k.id, ...cur } : k;
       await db.doc(`recall/${k.id}`).set(applyChange(base, patch, { date: today, by: 'page', basis: [evId], note: `我自己想了一遍：${note}` }));
       tally[rating]++;
       // 评完那张飞走：想起来了往右、没想起往左、模糊往上
       const dir = rating === 'got' ? 1 : rating === 'miss' ? -1 : 0;
       await anim(host.querySelector('.rc-card'), [{ transform: 'none', opacity: 1 }, { transform: dir ? `translateX(${dir * 120}%) rotate(${dir * 10}deg)` : 'translateY(-40px) scale(.92)', opacity: 0 }], { duration: 380, easing: SHEET, fill: 'forwards' }).finished.catch(() => {});
       at++;
-      show();
+      if (stopped) done(); else show();
     } catch (err) {
       toast(`没记上：${err?.message || err}`);
       host.querySelectorAll('.rc-r').forEach((b) => { b.disabled = false; });

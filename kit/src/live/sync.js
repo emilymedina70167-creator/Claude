@@ -30,6 +30,10 @@ export function createSink(store, { evidence = null } = {}) {
   const chains = new Map(); // 'coll/id' → 最后一次写入的 Promise
   const versions = new Map(); // 'coll/id' → 最新一次写入的编号（旧的写失败了不再进「没存上」）
 
+  // 还在写的（record 先等图传完才 put）：settled() 等它们都落地，练一练做完算结果前用
+  const inflight = new Set();
+  const track = (p) => { inflight.add(p); p.finally(() => inflight.delete(p)).catch(() => {}); return p; };
+
   function put(coll, data, retry = true) {
     const body = JSON.parse(JSON.stringify(data)); // 去掉 undefined
     const id = body.id || newId();
@@ -76,6 +80,15 @@ export function createSink(store, { evidence = null } = {}) {
     for (const f of list) await put(f.coll, f.body, false);
   }
 
+  async function recordNow(e) {
+    const key = e.block || 'page';
+    const ups = pending.get(key) || [];
+    pending.delete(key);
+    const images = (await Promise.all(ups)).filter(Boolean);
+    const rec = toAnswer(e, images);
+    return evidence ? put('evidence', toEvidence('record', rec, evidence(rec))) : put('answers', rec);
+  }
+
   return {
     // 返回每张图上传后的 asset id（Promise，失败为 null），课堂模式记进 class_turns
     images(key, blobs) {
@@ -87,18 +100,18 @@ export function createSink(store, { evidence = null } = {}) {
       return ups;
     },
 
-    async record(e) {
-      const key = e.block || 'page';
-      const ups = pending.get(key) || [];
-      pending.delete(key);
-      const images = (await Promise.all(ups)).filter(Boolean);
-      const rec = toAnswer(e, images);
-      return evidence ? put('evidence', toEvidence('record', rec, evidence(rec))) : put('answers', rec);
-    },
+    record(e) { return track(recordNow(e)); },
 
     event(e) {
       const rec = { ...e, detail: e.detail ?? null, at: Date.now() };
-      return evidence ? put('evidence', toEvidence('event', rec, evidence(rec))) : put('events', rec);
+      return track(evidence ? put('evidence', toEvidence('event', rec, evidence(rec))) : put('events', rec));
+    },
+
+    /** 等手上的写入（含失败后的那一次重试）都落地；没存上的再试一遍。返回还有几条没存上 */
+    async settled() {
+      for (let i = 0; i < 5 && (inflight.size || chains.size); i++) await Promise.allSettled([...inflight, ...chains.values()]);
+      if (failed.length) { await retryAll(); await Promise.allSettled([...chains.values()]); }
+      return failed.length;
     },
 
     // 课堂模式：黑板段落、课堂记录、课后小结（失败同样标「没存上」）
