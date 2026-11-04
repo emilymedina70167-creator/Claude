@@ -52,7 +52,15 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
   let inboxBusy = false;
   let inboxLatest = null;
   const inboxDone = new Set(); // 这次已经并进去、删掉的记录，旧快照里还有它也不重复做
-  const INBOX_BOOKS = 4; // 同时做几本书
+  const needRebuild = new Set(); // 记录已经并进页、但条目还没拼成（拼的时候出错）的书，下一轮接着拼
+  const INBOX_BOOKS = 2; // 同时做几本书（一下子写得太多，数据库会限流，出错就停在半路，所以宁可慢一点）
+  // 写数据库偶尔被限流或网络抖一下：歇一会儿再试（以前一出错整轮就停了，剩下的记录也没有人再去碰）
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function retry(fn, tries = 5) {
+    for (let i = 0; ; i++) {
+      try { return await fn(); } catch (e) { if (i >= tries - 1) throw e; await sleep(1200 * (i + 1)); }
+    }
+  }
   async function takeOne(d) {
     const book = String(d.book || '');
     // 项目对话里的 Claude（或别处）直接写转写原文：{ book, text: '=== 第 82 页\n--- 定义 | …', by }，这里读懂（和页面里转写同一个 parseTranscription），
@@ -71,59 +79,65 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
         d.pages = {};
         log = { ...log, error: String(e?.message || e) };
       }
-      await db.doc(`book_inbox_log/${d.id}`).set(log).catch(() => {});
+      await retry(() => db.doc(`book_inbox_log/${d.id}`).set(log)).catch(() => {});
     }
     // 从仓库里的 PDF 转的：书、页在学习台里可能还没有，收件箱带着书的信息（info）和每页的原页图（meta）一起建
     if (d.info) {
       const bref = db.doc(`books/${book}`);
-      const bs = await bref.get();
-      if (!bs.exists) await bref.set({ ...d.info, status: 'importing', createdAt: Date.now(), at: Date.now() });
-      else if (d.info.pages && !bs.data().pages) await bref.set({ ...bs.data(), pages: d.info.pages });
+      const bs = await retry(() => bref.get());
+      if (!bs.exists) await retry(() => bref.set({ ...d.info, status: 'importing', createdAt: Date.now(), at: Date.now() }));
+      else if (d.info.pages && !bs.data().pages) await retry(() => bref.set({ ...bs.data(), pages: d.info.pages }));
     }
     let skipped = 0;
     await Promise.all(Object.entries(d.pages || {}).map(async ([n, items]) => {
       if (!Array.isArray(items)) return;
       const ref = db.doc(`books/${book}/pages/${n}`);
-      const snap = await ref.get();
+      const snap = await retry(() => ref.get());
       const m = d.meta?.[n];
       if (!snap.exists && !m) { skipped++; return; } // 这页还没存进学习台：这条记录留着，页存好以后再并（以前是直接删掉，转好的字就丢了）
       const base = snap.exists ? snap.data() : { n: Number(n), img: m.img || '', imgs: m.img ? [m.img] : [], layer: '', ...(m.size ? { size: m.size } : {}), ...(m.blank ? { blank: true } : {}) };
       if (m?.img && !base.img) Object.assign(base, { img: m.img, imgs: [m.img] });
       const rec = { ...base, items, status: 'done', err: '', by: m?.blank ? 'page' : d.by || '', via: 'claude-code', at: Date.now() };
       delete rec.redo;
-      await ref.set(rec);
+      await retry(() => ref.set(rec));
     }));
-    if (skipped) return false;
-    await db.doc(`book_inbox/${d.id}`).delete().catch(() => {});
-    return true;
+    if (skipped) return 'skip';
+    await retry(() => db.doc(`book_inbox/${d.id}`).delete());
+    return 'ok';
   }
   async function takeInbox(docs) {
     if (inboxBusy) { inboxLatest = docs; return; }
-    if (!docs.length) return;
+    if (!docs.length && !needRebuild.size) return;
     inboxBusy = true;
-    const touched = new Set();
+    let failed = false;
     try {
       let todo = docs;
-      while (todo?.length) {
+      while (todo?.length || needRebuild.size) {
         const byBook = new Map();
-        for (const d of todo) {
+        for (const d of todo || []) {
           const book = String(d.book || '');
           if (!/^B\d+$/.test(book) || inboxDone.has(d.id)) continue;
           if (!byBook.has(book)) byBook.set(book, []);
           byBook.get(book).push(d);
         }
+        for (const b of needRebuild) if (!byBook.has(b)) byBook.set(b, []);
         const names = [...byBook.keys()];
         let next = 0;
         const worker = async () => {
           while (next < names.length) {
             const book = names[next++];
-            let did = false;
             for (const d of byBook.get(book).sort((x, y) => (x.id < y.id ? -1 : 1))) {
-              try { if (await takeOne(d)) { inboxDone.add(d.id); did = true; } } catch { /* 这一条下次再来 */ }
+              try {
+                const r = await takeOne(d);
+                if (r === 'ok') { inboxDone.add(d.id); needRebuild.add(book); }
+              } catch { failed = true; }
             }
-            if (!did) continue;
-            touched.add(book);
-            try { const im = await getImporter(); await im.rebuild(book); } catch { /* 条目下次再拼 */ }
+            if (!needRebuild.has(book)) continue;
+            try {
+              const im = await getImporter();
+              await retry(() => im.rebuild(book), 3);
+              needRebuild.delete(book);
+            } catch { failed = true; }
             chunksCache.delete(book);
             pagesCache.delete(book);
             if (route) paint();
@@ -132,10 +146,13 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
         await Promise.all(Array.from({ length: Math.min(INBOX_BOOKS, names.length) }, worker));
         todo = inboxLatest;
         inboxLatest = null;
+        if (!todo) break;
       }
     } finally {
       inboxBusy = false;
-      if (touched.size && route) paint();
+      if (route) paint();
+      // 有出错的（被限流、网络抖）：过一会儿重新读一遍收件箱接着做，不用等谁来碰一下
+      if (failed) setTimeout(() => { db.collection('book_inbox').get().then((snap) => takeInbox(docsOf(snap)), () => {}); }, 10000);
     }
   }
   db.collection('book_inbox').onSnapshot((s) => takeInbox(docsOf(s)), () => {});
