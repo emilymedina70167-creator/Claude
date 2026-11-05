@@ -872,3 +872,65 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 .dk-form { flex: 0 0 auto; }
 .dk-form .dk-space { min-width: 0; min-height: 44px; padding: 0 14px; font-size: 14px; }
 .dk-form .dk-space::before { content: none; }
+
+/* —— 410 分的进度（score.js，docs/score-plan.md）：主角卡下面一张卡，点开是面板 ——
+   四科一条分段的条：每段的长短是这一科的目标分，里面实的一截是攒下的；颜色和每一科的颜色一样，政治是墨色 */
+.sc-blue { --c: var(--blue-rgb); }
+.sc-green { --c: var(--green-rgb); }
+.sc-pink { --c: var(--pink-rgb); }
+.sc-chalk { --c: var(--chalk-rgb); }
+.dk-score { padding: 0; }
+.dk-score-btn { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; width: 100%; padding: 18px 20px 16px; border: 0; border-radius: inherit; background: none; color: inherit; text-align: left; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.dk-score-btn > * { grid-column: 1; }
+.dk-score-btn .dk-chev { grid-column: 2; grid-row: 1 / span 5; align-self: center; }
+.dk-score-k { font: 600 13px/1.3 var(--sans); color: var(--muted); letter-spacing: .02em; }
+.dk-score-n { display: flex; align-items: baseline; gap: 6px; }
+.dk-score-n b { font: 900 40px/1 var(--display); color: var(--goal, var(--chalk)); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.dk-score-n small { font: 600 16px/1 var(--display); color: var(--muted); }
+.dk-score-n em { margin-left: 6px; padding: 2px 9px; border-radius: 999px; font: 600 14px/1.5 var(--sans); font-style: normal; font-variant-numeric: tabular-nums; }
+:is(.dk-score-n em, .dk-sc-h span).is-up { background: rgb(var(--green-rgb) / 0.14); color: rgb(var(--green-rgb)); }
+:is(.dk-score-n em, .dk-sc-h span).is-down { background: rgb(var(--coral-rgb) / 0.14); color: rgb(var(--coral-rgb)); }
+.dk-score-bar { display: flex; gap: 3px; height: 10px; }
+.dk-score-bar.is-big { height: 14px; margin: 16px 0 8px; }
+.dk-score-seg { position: relative; overflow: hidden; border-radius: 5px; background: rgb(var(--c) / 0.14); }
+.dk-score-seg i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: rgb(var(--c) / 0.9); }
+.dk-score-seg i.is-some { min-width: 3px; }
+.dk-score-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 13px/1.4 var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; }
+.dk-score-legend i, .dk-sc-h i { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 50%; background: rgb(var(--c) / 0.9); vertical-align: 1px; }
+.dk-score-l { font: 13.5px/1.4 var(--sans); }
+/* 面板 */
+.dk-sc-head { display: flex; align-items: center; gap: 16px; }
+.dk-sc-head .dk-nju.is-shield { flex: none; width: 46px; }
+.dk-sc-n { margin: 2px 0 0; display: flex; align-items: baseline; gap: 8px; }
+.dk-sc-n b { font: 900 52px/1 var(--display); color: var(--goal, var(--chalk)); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.dk-sc-n small { font: 600 18px/1 var(--display); color: var(--muted); }
+.la-lesson .dk-sc-h { display: flex; align-items: center; gap: 8px; margin: 26px 0 6px; font: 700 19px/1.3 var(--display); color: var(--chalk); }
+.dk-sc-h b { margin-left: auto; font: 700 17px/1 var(--display); font-variant-numeric: tabular-nums; }
+.dk-sc-h b small { font-size: 14px; color: var(--muted); }
+.dk-sc-h span { padding: 1px 9px; border-radius: 999px; font: 600 14px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
+.la-lesson :is(.dk-sc-moves, .dk-sc-ch ul, .dk-sc-ladder, .dk-sc-basis) { list-style: none; margin: 0; padding: 0; }
+:is(.dk-sc-moves, .dk-sc-ch ul, .dk-sc-ladder) li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; align-items: center; padding: 9px 0; border-top: 0.5px solid rgb(var(--chalk-rgb) / 0.12); font: 14.5px/1.45 var(--sans); color: var(--body); }
+:is(.dk-sc-moves, .dk-sc-ch ul) li small { grid-column: 1; grid-row: 2; font-size: 13px; }
+:is(.dk-sc-moves, .dk-sc-ch ul, .dk-sc-ladder) li b { grid-column: 2; grid-row: 1 / span 2; font-variant-numeric: tabular-nums; }
+.dk-sc-ch ul li b small { color: var(--muted); font-weight: 400; }
+.dk-sc-moves b.is-up { color: rgb(var(--green-rgb)); }
+.dk-sc-moves b.is-down { color: rgb(var(--coral-rgb)); }
+.dk-sc-row { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 40px; font: 14.5px/1.4 var(--sans); color: var(--body); }
+.dk-sc-row b { font-variant-numeric: tabular-nums; }
+.dk-sc-row b small { color: var(--muted); font-weight: 400; }
+.dk-sc-pbar { position: relative; height: 8px; overflow: hidden; border-radius: 4px; background: rgb(var(--c) / 0.14); }
+.dk-sc-pbar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: rgb(var(--c) / 0.9); }
+.dk-sc-part.is-out .dk-sc-row { color: var(--muted); }
+.dk-sc-out { margin: -4px 0 6px; font: 13px/1.45 var(--sans); }
+.dk-sc-ch { margin: -4px 0 6px; }
+.dk-sc-ch summary { display: flex; align-items: center; min-height: 36px; font: 13px/1.4 var(--sans); cursor: pointer; }
+.dk-sc-how summary { min-height: 44px; }
+.la-lesson .dk-sc-how summary .dk-sc-h { margin: 0; }
+.dk-sc-how p { font: 14.5px/1.65 var(--sans); color: var(--body); }
+.dk-sc-basis li { display: grid; gap: 2px; padding: 7px 0; border-top: 0.5px solid rgb(var(--chalk-rgb) / 0.12); font: 14px/1.45 var(--sans); }
+.dk-sc-basis li small { font-size: 13px; }
+/* 小组件版式：两格宽；窄屏一整排 */
+.is-desk[data-layout="grid"] .dk-score { grid-column: span 2; border-radius: 24px; }
+.is-desk[data-layout="grid"] .dk-score-n b { font-size: 48px; }
+@media (max-width: 760px) { .is-desk[data-layout="grid"] .dk-score { grid-column: 1 / -1; } }
+.vt-morph .dk-score { view-transition-name: dk-score; }

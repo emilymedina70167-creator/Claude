@@ -53,6 +53,16 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
   let inboxLatest = null;
   const inboxDone = new Set(); // 这次已经并进去、删掉的记录，旧快照里还有它也不重复做
   const needRebuild = new Set(); // 记录已经并进页、但条目还没拼成（拼的时候出错）的书，下一轮接着拼
+  // 收件箱里每本书还有几批没并（书目、书页上写「正在并入转写，还剩 N 批」：以前并的时候什么都不显示，
+  // 书一直写「等转写」，看着像没转；并完一整本才拼条目、书目才变）
+  let inboxDocs = [];
+  const rebuilding = new Set(); // 正在拼条目的书（几百页的书要拼一两分钟）
+  const inboxLeft = (book) => inboxDocs.filter((d) => String(d.book || '') === book && !inboxDone.has(d.id)).length;
+  // 并的时候屏幕别熄：iPad 熄屏页面就停，几百页的书要并几分钟（和存 PDF 时一样请求常亮）
+  let inboxLock = null;
+  const holdAwake = async () => { try { if (!inboxLock && document.visibilityState === 'visible') { inboxLock = await navigator.wakeLock?.request?.('screen'); inboxLock?.addEventListener?.('release', () => { inboxLock = null; }); } } catch { inboxLock = null; } };
+  document.addEventListener('visibilitychange', () => { if (inboxBusy && document.visibilityState === 'visible') holdAwake(); });
+  const letSleep = () => { try { inboxLock?.release?.(); } catch { /* */ } inboxLock = null; };
   const INBOX_BOOKS = 2; // 同时做几本书（一下子写得太多，数据库会限流，出错就停在半路，所以宁可慢一点）
   // 写数据库偶尔被限流或网络抖一下：歇一会儿再试（以前一出错整轮就停了，剩下的记录也没有人再去碰）
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -106,9 +116,12 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
     return 'ok';
   }
   async function takeInbox(docs) {
+    inboxDocs = docs || [];
+    if (route && !inboxBusy) paint();
     if (inboxBusy) { inboxLatest = docs; return; }
     if (!docs.length && !needRebuild.size) return;
     inboxBusy = true;
+    holdAwake();
     let failed = false;
     try {
       let todo = docs;
@@ -126,13 +139,16 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
         const worker = async () => {
           while (next < names.length) {
             const book = names[next++];
+            if (byBook.get(book).length) await retry(() => db.doc(`books/${book}`).update({ needsRebuild: true }), 3).catch(() => {});
             for (const d of byBook.get(book).sort((x, y) => (x.id < y.id ? -1 : 1))) {
               try {
                 const r = await takeOne(d);
-                if (r === 'ok') { inboxDone.add(d.id); needRebuild.add(book); }
+                if (r === 'ok') { inboxDone.add(d.id); needRebuild.add(book); if (route) paint(); }
               } catch { failed = true; }
             }
             if (!needRebuild.has(book)) continue;
+            rebuilding.add(book);
+            if (route) paint();
             try {
               const im = await getImporter();
               await retry(() => im.rebuild(book), 3);
@@ -140,6 +156,7 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
             } catch { failed = true; }
             chunksCache.delete(book);
             pagesCache.delete(book);
+            rebuilding.delete(book);
             if (route) paint();
           }
         };
@@ -150,13 +167,21 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
       }
     } finally {
       inboxBusy = false;
+      letSleep();
       if (route) paint();
       // 有出错的（被限流、网络抖）：过一会儿重新读一遍收件箱接着做，不用等谁来碰一下
       if (failed) setTimeout(() => { db.collection('book_inbox').get().then((snap) => takeInbox(docsOf(snap)), () => {}); }, 10000);
     }
   }
   db.collection('book_inbox').onSnapshot((s) => takeInbox(docsOf(s)), () => {});
-  db.collection('books').onSnapshot((s) => { books = docsOf(s); if (route) paint(); }, () => {});
+  // 上次并完了页、条目没拼完就关了页面（书上还记着 needsRebuild，收件箱已经空了）：打开时接着拼。
+  // 已经写好的条目 writeChunks 会跳过，只补没写的
+  db.collection('books').onSnapshot((s) => {
+    books = docsOf(s);
+    const left = books.filter((b) => b.needsRebuild && !inboxLeft(b.id) && !needRebuild.has(b.id) && !rebuilding.has(b.id));
+    if (left.length) { for (const b of left) needRebuild.add(b.id); takeInbox(inboxDocs); }
+    if (route) paint();
+  }, () => {});
   host.addEventListener('click', onClick);
   host.addEventListener('change', onChange);
   host.addEventListener('input', (e) => { if (e.target.matches('.bk-form input[name=from], .bk-form input[name=to]')) paintCost(); });
@@ -253,7 +278,7 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
     if (el) el.textContent = costText(Number(f.querySelector('[name=from]')?.value) || null, Number(f.querySelector('[name=to]')?.value) || null);
   }
 
-  const statusOf = (b) => (b.storing && importer?.busy !== b.id ? '没存完' : b.status === 'importing' && importer?.busy !== b.id ? '没存完' : STATUS[b.status] || b.status || '');
+  const statusOf = (b) => (inboxLeft(b.id) ? `正在并入转写（还剩 ${inboxLeft(b.id)} 批）` : rebuilding.has(b.id) || b.needsRebuild ? '正在拼条目' : b.storing && importer?.busy !== b.id ? '没存完' : b.status === 'importing' && importer?.busy !== b.id ? '没存完' : STATUS[b.status] || b.status || '');
   // 上次没存完（中途退出、刷新、屏幕熄了）：书上记着 storing（哪个文件、哪几页），给一个「接着存」
   function resumeCard(b) {
     const s = b.storing;
@@ -296,7 +321,9 @@ export function createBooksView(host, { db, assets, getAI, space, model, plan = 
       </section>
       ${resumeCard(b)}
       ${b.storeFailed?.length ? `<section class="dk-card"><h2 class="dk-h">没存上的页</h2><p>${esc(pageRanges(b.storeFailed))}没传上去（网络断了一下之类）。再选一次这本 PDF、存进这本书，只会补这些页，已经存好的不重复存。</p></section>` : ''}
-      ${bad.length && !TRANSCRIBE_HERE ? `<section class="dk-card"><h2 class="dk-h">等转写的页</h2><p>${esc(pageRanges(bad.map((p) => p.n)))}，一共 ${bad.length} 页。回到 Claude Code 说「转 ${esc(id)}」，转好写回来以后这里自己拼成条目。${b.pages && b.pagesStored && b.pagesStored < b.pages ? `PDF 一共 ${b.pages} 页，存进来了 ${b.pagesStored} 页；没存的页重新选这个 PDF、写好页码范围再存。` : ''}</p></section>` : ''}
+      ${!inboxLeft(id) && (rebuilding.has(id) || b.needsRebuild) ? `<section class="dk-card"><h2 class="dk-h">正在拼条目</h2><p>转写都并进来了，正在把这本书拼成一条一条的（几百页要一两分钟）。学习台开着才会拼，屏幕别熄；中途关了，下次打开接着拼。</p></section>` : ''}
+      ${inboxLeft(id) ? `<section class="dk-card"><h2 class="dk-h">正在并入转写</h2><p>已经转好了，还剩 ${inboxLeft(id)} 批（一批 4 页）在往书里并。学习台开着才会并，屏幕别熄；并完这一本自己拼成条目，这里就变成「转好了」。</p></section>` : ''}
+      ${bad.length && !TRANSCRIBE_HERE && !inboxLeft(id) && !b.needsRebuild ? `<section class="dk-card"><h2 class="dk-h">等转写的页</h2><p>${esc(pageRanges(bad.map((p) => p.n)))}，一共 ${bad.length} 页。回到 Claude Code 说「转 ${esc(id)}」，转好写回来以后这里自己拼成条目。${b.pages && b.pagesStored && b.pagesStored < b.pages ? `PDF 一共 ${b.pages} 页，存进来了 ${b.pagesStored} 页；没存的页重新选这个 PDF、写好页码范围再存。` : ''}</p></section>` : ''}
       ${bad.length && TRANSCRIBE_HERE ? `<section class="dk-card"><h2 class="dk-h">没转好的页</h2><div class="bk-pages">${bad.map((p) => `<span class="dk-tag is-warn" title="${esc(p.err || '')}">第 ${p.n} 页${p.status === 'error' ? '（出错）' : ''}</span>`).join(' ')}</div></section>` : ''}
       <section class="dk-card"><h2 class="dk-h">条目</h2>
         ${!chunks ? '<p class="muted">正在读…</p>' : !chunks.length ? '<p class="muted">还没有条目。</p>' : chunkList(b, chunks)}

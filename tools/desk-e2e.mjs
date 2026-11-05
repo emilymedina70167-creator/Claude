@@ -208,6 +208,26 @@ const SUITES = {
   },
 
   // 要想起来的：评分写失败一次再点，只记一条证据；第一张写「第一次想」；评完数量归零；评分途中点「先到这」不再翻出下一张
+  // 410 分的进度（score.js）：首页那张卡、掌握一变数字跟着变、点开面板、关上
+  async score(browser) {
+    const t = await seeded(browser);
+    const num = async () => Number((await t.text('.dk-score-n b')) || NaN);
+    const n0 = await t.waitFor(async () => { const n = await num(); return Number.isFinite(n) ? n : null; }, { what: '首页的 410 卡画出来' });
+    check((await t.text('.dk-score'))?.includes('410'), '410 卡上没写目标');
+    // 一块写成复现通过 30 天那档（替身数据库直接放进去，刷新一下读到）：分跟着涨
+    const db = await t.db();
+    await plant(t, { 'mastery/L2.2.2': { ...(db['mastery/L2.2.2'] || {}), state: '复现通过', tier: 30 } });
+    await t.page.reload(); await sleep(1500);
+    const n1 = await t.waitFor(async () => { const n = await num(); return n > n0 ? n : null; }, { what: '掌握升档以后 410 卡上的分涨了' });
+    check(n1 > n0, `分没涨：${n0} → ${n1}`);
+    await t.page.click('.dk-score-btn'); await sleep(900);
+    check(await t.page.$('.fl-panel .dk-sc-how'), '点 410 卡没出面板（或面板里没有「怎么算的」）');
+    check((await t.text('.fl-panel'))?.includes('学习台里还没有这一部分'), '面板里没标出学习台里还没有的部分');
+    await t.page.click('.fl-close'); await sleep(800);
+    check(!(await t.page.$('.fl-panel')), '410 的面板关不上');
+    return t;
+  },
+
   async recall(browser) {
     const t = await seeded(browser);
     // 首页的数字会往上滚（feel.js 的 rollNumber），滚的那一下字里有新旧两个数：等它停下来再读
@@ -768,6 +788,37 @@ const SUITES = {
     const wo = await t.waitFor(async () => (await t.db())['meta/workorder'], { timeout: 15000, what: '工作单写进 meta/workorder' });
     check(Array.isArray(wo.items) && wo.recheck && typeof wo.recheck.math === 'string', 'meta/workorder 的样子不对');
     check((await t.text('.dk-work'))?.includes('后方的工作单'), '管理页看不到后方的工作单');
+    return t;
+  },
+
+  // 教材的收件箱（Claude Code 转好写进 book_inbox）：并进各页、删掉记录、拼成条目，书目从「等转写」变成「转好了」
+  async inbox(browser) {
+    const t = await seeded(browser);
+    const page = (n) => ({ n, img: '', imgs: [], layer: '', size: [1200, 1600], status: 'todo', at: 1 });
+    await plant(t, {
+      'books/B90': { title: '测试用的习题册', kind: 'textbook', space: 'math', subject: '线代', status: 'partial', pages: 2, pagesDone: 0, pagesLeft: 2, pagesStored: 2, chunks: 0, toc: [], createdAt: 1, at: 1 },
+      'books/B90/pages/1': page(1),
+      'books/B90/pages/2': page(2),
+      'book_inbox/B90-001-a': { book: 'B90', batch: 'b001', by: 'test', at: 1, pages: { 1: [{ kind: '标题', level: 1, title: '第1章 行列式', text: '', cont: false }, { kind: '习题', title: '1', text: '计算 $\\det A$.', cont: false }], 2: [{ kind: '习题', title: '2', text: '求 $A^{-1}$.', cont: false }] } },
+    });
+    await t.page.reload(); await sleep(1500);
+    await t.route('books');
+    const b = await t.waitFor(async () => { const x = (await t.db())['books/B90']; return x?.status === 'ready' && x.chunks > 0 ? x : null; }, { timeout: 20000, what: '收件箱并进书里、拼成条目' });
+    check(b.pagesDone === 2, `转好的页数不对：${b.pagesDone}`);
+    check(!(await t.db())['book_inbox/B90-001-a'], '并完了收件箱的记录没删');
+    await sleep(600);
+    check((await t.text('.dk-bookpage'))?.includes('转好了'), '教材页没写「转好了」');
+    check(!b.needsRebuild, '拼完了书上还记着「还要拼条目」');
+    // 上次并完了页、条目没拼完就关了页面（书上记着 needsRebuild，收件箱已经空了）：再打开接着拼
+    const done = (n, title) => ({ ...page(n), status: 'done', items: [{ kind: '习题', title, text: `第 ${title} 题.`, cont: false }] });
+    await plant(t, {
+      'books/B91': { title: '拼到一半的书', kind: 'textbook', space: 'math', subject: '线代', status: 'partial', pages: 2, pagesDone: 0, pagesLeft: 2, pagesStored: 2, chunks: 0, toc: [], needsRebuild: true, createdAt: 1, at: 1 },
+      'books/B91/pages/1': done(1, '1'),
+      'books/B91/pages/2': done(2, '2'),
+    });
+    await t.page.reload(); await sleep(1500);
+    const b2 = await t.waitFor(async () => { const x = (await t.db())['books/B91']; return x?.status === 'ready' && x.chunks === 2 && !x.needsRebuild ? x : null; }, { timeout: 20000, what: '打开学习台后接着把没拼完的书拼成条目' });
+    check(b2.pagesDone === 2, `接着拼以后转好的页数不对：${b2.pagesDone}`);
     return t;
   },
 

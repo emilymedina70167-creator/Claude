@@ -46,6 +46,7 @@ import { runRecall } from './recallrun.js';
 import { purgePlan, purgeText } from './purge.js';
 import { vocabRecalls } from './vocab.js';
 import { weekLines, progress, warmupDrills, backlogDays, daysLeft, msToNextDay, EXAM_DATE } from './journey.js';
+import { scoreBoard, scoreLine, fmt as fmtScore, signed, LADDER, GOAL } from './score.js';
 import { needsSkills, skillsPrompt, parseSkills, skillSummary, pointCatalog, lessonLines, SKILLS_VERSION } from './skills.js';
 
 // 正在看哪一科（这台设备记着；分科见 space.js）
@@ -122,6 +123,7 @@ export async function renderDesk(root, meta) {
     <div class="dk-col">
     <section class="dk-card dk-class" hidden aria-label="上课" data-menu="hero"><div class="dk-body"></div></section>
     <div class="dk-days-slot"></div>
+    <section class="dk-card dk-score" hidden aria-label="${GOAL} 分的进度"></section>
     <section class="dk-group" aria-label="今天"><h2 class="dk-grp-h">今天</h2><div class="dk-card dk-rows"></div></section>
     <div class="dk-drawer" hidden>
     <div class="dk-part dk-today" hidden><h2 class="dk-h">复现</h2><div class="dk-body"></div></div>
@@ -199,6 +201,7 @@ export async function renderDesk(root, meta) {
   const livePack = () => (pack.main && !pack.main.usedBy && !usedBefore(pack.main) ? pack : { main: null, problems: null });
   let lastRes = null;
   let daysBody = null; // 开着的「距考研」面板（openDays）
+  let scoreBody = null; // 开着的「410 分」面板（openScore）
   // 已经用过的课号：还在的课，加上删掉的课留下来的错题、观察、失误、证据上记着的课号（删课时挂着弱点的错题会留下）。
   // 不然同一天再开的课拿到同一个号，那几条就算到新课头上
   const takenIds = () => [...new Set([...data.sessions.map((x) => x.id), ...['errors', 'observations', 'slips', 'evidence'].flatMap((c) => (data[c] || []).map((d) => d.session).filter(Boolean))])];
@@ -513,6 +516,7 @@ export async function renderDesk(root, meta) {
     paintRecall(today);
     paintRows(today);
     if (daysBody?.isConnected) fillDays(daysBody); // 开着的「距考研」面板：天数、这一周跟着换
+    paintScore(today);
     const total = Object.values(res.counts).reduce((a, b) => a + b, 0);
     // 今天（这一科）：过期、今天到期的复现组，下一节从哪接、欠账；别的科有到期的提一句
     const mine = sv();
@@ -1250,6 +1254,52 @@ export async function renderDesk(root, meta) {
     });
   }
   root.addEventListener('click', (e) => { const b = e.target.closest('.dk-spine'); if (b) openDays(b); });
+
+  // —— 410 分的进度（score.js）：每一块按掌握攒几成、按大纲的分值加权，加起来是攒下的分；不调用 Claude ——
+  // 首页一张卡（攒了几分、四科一条分段的条、这 7 天攒了几分），点开是面板：这 7 天加分减分的块、每一科每一部分、怎么算的
+  function scoreBar(b, big = false) { return  `<span class="dk-score-bar${big ? ' is-big' : ''}" role="img" aria-label="${b.subjects.map((s) => `${s.label} ${fmtScore(s.got)} / ${s.target}`).join('，')}">${b.subjects.map((s) => `<span class="dk-score-seg sc-${s.rgb}" style="flex:${s.target}"><i${s.got > 0 ? ' class="is-some"' : ''} style="width:${Math.min(100, (s.got / s.target) * 100).toFixed(2)}%"></i></span>`).join('')}</span>`; }
+  function paintScore(today = toDate(Date.now())) {
+    const box = $('.dk-score');
+    if (!box || !loaded.has('mastery') || !loaded.has('curriculum')) return;
+    const b = scoreBoard(data, { today });
+    box.hidden = false;
+    box.innerHTML = `<button type="button" class="dk-score-btn" data-open="score">
+      <span class="dk-score-k">目标 ${GOAL} 分 · 已经攒下</span>
+      <span class="dk-score-n"><b>${fmtScore(b.total)}</b><small>/ ${GOAL}</small>${Math.round(b.week.delta * 10) ? `<em class="${b.week.delta > 0 ? 'is-up' : 'is-down'}">${signed(b.week.delta)}</em>` : ''}</span>
+      ${scoreBar(b)}
+      <span class="dk-score-legend">${b.subjects.map((s) => `<span class="sc-${s.rgb}"><i></i>${escapeHtml(s.label)} ${fmtScore(s.got)}</span>`).join('')}</span>
+      <span class="dk-score-l muted">${escapeHtml(scoreLine(b))}</span><span class="dk-chev" aria-hidden="true"></span></button>`;
+    if (scoreBody?.isConnected) fillScore(scoreBody, b);
+  }
+  function fillScore(body, b = scoreBoard(data, { today: toDate(Date.now()) })) {
+    const move = (x) => `<li><span>${escapeHtml(plainTitle(x.title) || x.id)}</span><small class="muted">${escapeHtml(x.from)} → ${escapeHtml(x.to)}</small><b class="${x.delta > 0 ? 'is-up' : 'is-down'}">${signed(x.delta)}</b></li>`;
+    const moves = [...b.week.ups, ...b.week.downs];
+    const part = (p) => `<div class="dk-sc-part${p.inDesk ? '' : ' is-out'}"><div class="dk-sc-row"><span>${escapeHtml(p.label)}</span><span class="dk-sc-pbar"><i style="width:${Math.min(100, (p.got / p.points) * 100).toFixed(2)}%"></i></span><b>${fmtScore(p.got)}<small> / ${fmtScore(p.points)}</small></b></div>
+      ${p.inDesk ? `<details class="dk-sc-ch"><summary class="muted">${p.chapters.length} 章${p.chapters.some((c) => !c.blocks.length) ? `，${p.chapters.filter((c) => !c.blocks.length).length} 章还没排课` : ''}</summary><ul>${p.chapters.map((c) => `<li><span>${escapeHtml(plainTitle(c.title) || c.id)}</span><small class="muted">${c.blocks.length ? `上过 ${c.done} / ${c.blocks.length} 块` : '还没排课'}</small><b>${fmtScore(c.got)}<small> / ${fmtScore(c.points)}</small></b></li>`).join('')}</ul></details>` : `<p class="dk-sc-out muted">学习台里还没有这一部分（${escapeHtml(p.basis)}）</p>`}</div>`;
+    body.innerHTML = `
+      <div class="dk-sc-head"><span class="dk-nju is-shield" aria-hidden="true"></span><div><small class="muted">目标 ${GOAL} 分 · 已经攒下</small><p class="dk-sc-n"><b>${fmtScore(b.total)}</b><small>/ ${GOAL}</small></p></div></div>
+      ${scoreBar(b, true)}
+      <p class="dk-sub muted">${b.pace.left > 0 ? `还差 ${Math.ceil(b.pace.left)} 分，离考研还有 ${b.pace.weeks} 周，平均每周要攒 ${fmtScore(b.pace.perWeek)} 分。` : `攒够 ${GOAL} 了。`}</p>
+      <h3 class="dk-sc-h">这 7 天 <span class="${b.week.delta >= 0 ? 'is-up' : 'is-down'}">${signed(b.week.delta)}</span></h3>
+      ${moves.length ? `<ul class="dk-sc-moves">${moves.slice(0, 8).map(move).join('')}</ul>${moves.length > 8 ? `<p class="muted">还有 ${moves.length - 8} 块</p>` : ''}` : '<p class="muted">这 7 天没有一块升档或掉档。</p>'}
+      ${b.subjects.map((s) => `<section class="dk-sc-sub sc-${s.rgb}"><h3 class="dk-sc-h"><i></i>${escapeHtml(s.label)}<b>${fmtScore(s.got)}<small> / ${s.target}</small></b></h3>${s.parts.map(part).join('')}</section>`).join('')}
+      <details class="dk-fold dk-sc-how"><summary><h3 class="dk-sc-h">怎么算的</h3></summary>
+        <p>不猜考多少分，只数已经攒下的分。${GOAL} 分给四科：${b.subjects.map((s) => `${escapeHtml(s.label)} ${s.target}`).join('、')}。每一科按考试大纲的分值分到各部分，一部分的分平分到课程地图里的各章，一章再平分到这一章的块。</p>
+        <p>一块攒到几成，看这一块的掌握（页面按你的作答算的，不是 Claude 说的）：</p>
+        <ul class="dk-sc-ladder">${LADDER.map((x) => `<li><span>${escapeHtml(x.text)}</span><b>${Math.round(x.credit * 100)}%</b></li>`).join('')}<li><span>以前过了、后来又错了（掉了）</span><b>10%</b></li></ul>
+        <p class="muted">考场在几个月以后：只会当场做的题，考场上常常丢；隔了 30 天还能一次做对，才算稳拿。学习台里还没有的部分（高数、概率、组成原理、操作系统、计网、阅读、写作、政治）分照样占着、攒到的是 0，缺口在哪一眼看得到。</p>
+        <ul class="dk-sc-basis">${b.subjects.flatMap((s) => s.parts.map((p) => `<li><span>${escapeHtml(s.label)} · ${escapeHtml(p.label)}</span><small class="muted">${escapeHtml(p.basis)}</small></li>`)).join('')}</ul>
+      </details>`;
+  }
+  function openScore(src) {
+    panels.open(src, {
+      title: `${GOAL} 分`,
+      find: () => $('.dk-score-btn'),
+      mount: (body) => { scoreBody = body; fillScore(body); },
+      onClose: () => { scoreBody = null; },
+    });
+  }
+  root.addEventListener('click', (e) => { const b = e.target.closest('.dk-score-btn'); if (b) openScore(b); });
 
   // —— 长按：卡托起来，弹一个小菜单（都是首页上本来就有的按钮，菜单只是近路）——
   const clickIn = (sel) => () => $(sel)?.click();

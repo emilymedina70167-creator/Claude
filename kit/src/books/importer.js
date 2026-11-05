@@ -366,7 +366,8 @@ export function createImporter({ db, assets, ai, onProgress = () => {} }) {
   /** 把转好的页拼成条目写进去；改过、核对过的条目保留 */
   async function rebuild(book) {
     report({ book, stage: 'save', msg: '拼成条目…' });
-    const info = (await db.doc(`books/${book}`).get()).data() || {};
+    // needsRebuild 是 bookview 记的「还要拼条目」：拼完这一下就去掉
+    const { needsRebuild: _rb, ...info } = (await db.doc(`books/${book}`).get()).data() || {};
     const pages = await pagesOf(book);
     const ready = pages.filter((p) => p.status === 'done').map((p) => ({ page: p.n, items: p.items || [] }));
     const { chunks, toc } = assembleChunks(ready, book);
