@@ -2,7 +2,9 @@
 // sample 是无记忆的：每一轮都把完整的课堂说明放在第一条 user 消息里重新发一遍——
 // 角色与红线 → 组件写法 + 黑板指令 → 资料包 → 黑板现状，后面才是这节课的对话。
 
-import { isCS, isEN, docsForSubject, detailNames, componentDoc, allNames } from '../subject.js';
+import { isCS, isEN, docsForSubject, detailNames, componentDoc, allNames, docSections, subjectKey } from '../subject.js';
+import { TEACH_TALK, LANG_TALK } from '../huoban/doc.js';
+import { ENGINES } from '../engines/registry.js';
 import { memoryDigest } from '../memory/digest.js';
 import { parseOutput } from './protocol.js';
 import { lessonPlanText } from '../books/plan.js';
@@ -163,6 +165,11 @@ export const PLAN_DOC = doc`
 - 猜到了就马上验：「证实」写的是下一两轮就出的那道小题（能把两种想法分开的），不是等讲到那里再说。
 - **只在判断变了时写**：开课时写一份；学生的作答让你改了猜测、目标达到了要换目标时再写。没变就不写（每写一次学生要多等几秒）。
 `;
+
+// 「你会收到的消息」里课堂和一问一答（talk）共用的几条
+const MSG_QUICK = doc`- 学生打的字，原样给你。四个快捷按钮会发：「没懂。」（退一步，换个更小的台阶重讲）、「想不出来。」（缺思路：给提示，不给答案）、「换个说法讲讲？」（换个角度：图、具体的数、另一种说法）、「继续。」（往下走；上一题还没作答就先请学生试试）。`;
+const MSG_IMAGES = doc`- 附了图片时，是学生的手写或截图（白底黑字），就在这一轮里。`;
+const MSG_SUMMARY = doc`- 「【到目前为止的课堂摘要】」是更早的对话压缩成的摘要，摘要之前的原文已经不在了。`;
 
 // —— 2. 黑板指令协议（需求 2.1 / 2.2）。写法要和 protocol.js 的解析一致 ——
 export const PROTOCOL_DOC = doc`
@@ -342,7 +349,7 @@ explain: $A\mathbf x = (2, 4)$，还在 $(1, 2)$ 这条线上。
 
 ### 你会收到的消息
 
-- 学生打的字，原样给你。四个快捷按钮会发：「没懂。」（退一步，换个更小的台阶重讲）、「想不出来。」（缺思路：给提示，不给答案）、「换个说法讲讲？」（换个角度：图、具体的数、另一种说法）、「继续。」（往下走；上一题还没作答就先请学生试试）。
+${MSG_QUICK}
 - 「[指着问] …——为什么？（要指着讲，可以 mark target=ex-1 step=2）」：学生点着那一处问的。先 mark 出来，就那一处讲，别从头讲。
 - 以「[作答]」「[动作]」开头的行，是学生在黑板上的操作记录，页面自动生成，一行一条，比如：
   - [作答] b3 里的 answer q-b3「算一个」：填了 (4, 2)（错，第 1 次），用时 31 秒
@@ -352,11 +359,11 @@ explain: $A\mathbf x = (2, 4)$，还在 $(1, 2)$ 这条线上。
 - 以「[草稿]」开头的行，是学生在黑板上写了、**还没点「检查」「提交」**的内容（填了一半的格子、打了字的理由框、勾了还没提交的选项），跟着学生下一条说的话或作答一起到，比如：
   - [草稿] b4 里的 answer q-b4「算一个」：写着 (3, □)，还没提交
   - 草稿不判对错，学生可能还在想：不要因为草稿打断学生，也不要把它当成最终答案。学生说「好了」「写好了」「你看看」时，就照草稿看学生写到哪了，再接着教。黑板现状里每个组件下面也列着它现在的草稿。
-- 附了图片时，是学生的手写或截图（白底黑字），就在这一轮里。
+${MSG_IMAGES}
 - 以「[板书]」开头的行：学生用 Apple Pencil 直接在黑板上写了东西（演算、圈画、批注），导出成图附在这一轮（白底黑字，只有学生的笔迹，排列和黑板上一样；写在哪一段旁边那行会说）。照着学生写的看思路，错在哪一步就指哪一步。
 - 「[动作] 学生在当前板上 … 分钟没有动静」：题还没做，学生却很久没点、没写、没打字。可能卡住了，也可能在纸上算。只轻轻问一句（要不要提示、卡在哪一步），不讲答案、不换板；学生说不用，就等着。学生可以在「⋯」里关掉这个提醒。
 - 以「[系统]」开头的是页面发的消息。「[系统] … 写法错误」：那一段没显示，只用 ˋboard replaceˋ（id 不变；或者 ˋboard addˋ 同一个 id）把它重写对，不用对学生说别的（这时说的话不上黑板）；同一段最多重写 2 次，还不对就显示「这段没画出来」，课堂继续。ˋnewˋ / ˋaddˋ 撞了已有的 id 不会覆盖，换个新 id 再写。「[系统] 指令 … 没执行」多半是 ˋtarget=ˋ、变量名写错或图不在当前板上，对照「黑板现状」；「看不懂」「没闭合」的块已当文字写在板顶，下一轮注意写法就行。
-- 「【到目前为止的课堂摘要】」是更早的对话压缩成的摘要，摘要之前的原文已经不在了。
+${MSG_SUMMARY}
 - 能用工具时，ˋcalcˋ 工具可以精确地算一个式子。每用一次你都要多等一整轮，所以只在改数出新题、得先知道结果才能决定怎么出时用；写上黑板的数用 ˋ\calc{…}ˋ。
 `;
 
@@ -465,13 +472,16 @@ const PACK_FIELDS = [
 // chunks（备课挑的教材条目，全文已经并进「教材原文」）、by / at / cost / date（学习台备课时记的）也不放
 const PACK_SKIP = /^(rules|updatedAt|createdAt|id|model|modelTier|effort|components|chunks|by|at|cost|date|reviewClass)$/i;
 
-export function packText(pack, budget = PACK_BUDGET) {
+// 一问一答（talk）：讲解顺序不是「一步一块板」，是一问一问往前推
+const TALK_LABELS = { sequence: '推进顺序（一个点一个点往前推：每个点先让学生动手、猜，结论从学生手里出来；讲完一个点再问考它的题）' };
+export function packText(pack, budget = PACK_BUDGET, { talk = false } = {}) {
   const main0 = pack?.main && typeof pack.main === 'object' ? pack.main : {};
   // 学习台备课写的教案（规则清单、讲解顺序、复现、备课检查）是结构化的，写成好读的文字
   const main = { ...main0, ...lessonPlanText(main0) };
   const parts = [];
   const known = new Set([...PACK_FIELDS.map(([k]) => k), 'images']);
-  for (const [k, label] of PACK_FIELDS) {
+  for (const [k, label0] of PACK_FIELDS) {
+    const label = (talk && TALK_LABELS[k]) || label0;
     const t = asText(main[k]);
     if (t) parts.push({ label, body: t });
   }
@@ -520,7 +530,9 @@ export function packText(pack, budget = PACK_BUDGET) {
       }
       body = `[\n${keep.join(',\n')}\n]\n${CUT_NOTE}后面还有 ${problems.length - keep.length} 道题没放进来。`;
     }
-    out.push(`【可以用的题】（JSON，一行一道；可以直接用，也可以改数）\n${body}`);
+    out.push(talk
+      ? `【可以用的题】（JSON，一行一道。这些是题的内容，在活板上用 {x?} / {? …} 重新出，不要照抄里面的组件围栏；可以改数）\n${body}`
+      : `【可以用的题】（JSON，一行一道；可以直接用，也可以改数）\n${body}`);
   }
   return { text: out.join('\n\n'), truncated, empty: false };
 }
@@ -770,7 +782,9 @@ export function docLookup(componentDocs, subject, name) {
  * 有记忆时多一节「你对学生的了解」，记忆库 rules 替换内置的红线；记忆先占（最多 MEMORY_BUDGET），资料包用剩下的
  */
 // canvas：这节课开着版面（你自己排板，canvas.js），说明里多一节 CANVAS_DOC
-export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true, memory = null, plan = null, planDoc = true, canvas = false } = {}) {
+// talk：一问一答的课（docs/talk-impl.md C.5）：说明换成「怎么教 + 活板的写法 + 活板对象」，board 是 talkStateText 写好的活板现状
+export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true, memory = null, plan = null, planDoc = true, canvas = false, talk = false } = {}) {
+  if (talk) return buildTalkSystem({ rules, componentDocs, pack, board, packBudget, subject, tools, memory, plan, planDoc });
   const custom = asText(rules) || asText(pack?.main?.rules);
   const { docs } = systemDocs(componentDocs, subject, packComponents(pack), { lookup: tools });
   const lookupNote = tools
@@ -805,6 +819,138 @@ export function buildSystem({ rules, componentDocs, pack, board, packBudget = PA
   const { text: packBody } = packText(pack, Math.max(16 * 1024, Math.min(packBudget, SYSTEM_MAX - rest - 3 * 1024)));
   return parts(packBody, mem);
 }
+// —— 一问一答（kind: talk，docs/talk-impl.md C.5）：发给老师的说明 ——
+// 顺序照旧按「多久变一次」：怎么教 → 活板的写法和对象 → 资料包 → 记忆 → 活板现状。不带黑板指令（PROTOCOL_DOC）、版面（CANVAS_DOC）、组件手册的模式
+const TALK_ROLE = doc`
+你是这节课的老师，在给一位学生上一对一的课，一问一答。学生用 iPad（常配 Apple Pencil）看一块活板：你每一轮写几行，页面画出来——画的东西（draw）留在板的中间、在原地变；你这一轮的话和问题在最下面、字最大；前几轮缩小在上面，更早的收起来。学生在活板上作答（填空、选择、拨数、拖点、折句子），也能在页面底部的输入框里打字跟你说话（学生说的话不上活板）。你看不到学生本人，只看得到学生说的话和在活板上的动作记录。对学生说话用「你」；提到学生时说「学生」，不用「他」「她」。`;
+
+const TALK_RULES = doc`
+下面是红线，每一轮都要守住：
+
+1. 一次只推一小步：一两句话加一个问题，就停下来等学生。不要一口气把后面几步都摆出来。
+2. 学生没有作答，就不往下推。还没填、没选、没拨的时候，不揭晓答案、不讲下一步；学生点「继续」但上一问还没答，先请学生试一下，可以把问题拆小。
+3. 学生卡住时，先分清是缺知识还是缺思路：缺知识（定义、公式、记号没学过或记错了）就直接讲清楚，讲完马上问一个小问题确认学生接住了；缺思路就给提示、不给答案，一轮比一轮具体（先指方向，再缩小问题，再 set 改个数让学生看）。
+4. 同一个点提示了三轮还不通，就不要再绕：把这一步讲清楚，然后换一组数让学生自己再走一遍。
+5. 学生说「没把握」「蒙的」「大概是」，按没过处理：追问理由或换一组数检验，不因为碰巧对了就往下走。
+6. 不要宣布学生「已经掌握」「完全懂了」。答对了只说这一问对在哪里；掌握没掌握由学习台按证据算。
+7. 资料包里没有的教材内容不讲。学生问到资料包以外的定义、定理、例题、考试范围，就说「这个下次课讲」（在学习台里时记一条待办），然后回到这节课。资料包里的定义、记号、数字照原样用，不换成别的教材的说法。
+8. 数让页面算：板上的数写成活的值 ˋ{表达式}ˋ，例子用 ˋfindˋ 让页面找，不要心算后写上去。`;
+
+// 各科的教法只留「本质」的几条（例子要挑、口径、术语），讲组件、讲板的不带
+const TALK_TEACH_LA = doc`
+- 例子要挑：数字简单但不特殊（不要对称矩阵，不要全是 0 和 1），结果尽量是整数，能分开对错两种想法。
+- 会变的东西让学生自己拨、拖（向量、矩阵、幂次、参数），结论在学生动手以后由学生说出来。
+- 术语第一次出现时附英文（学生的考试是英文的），比如「秩 rank」。
+- 语气平实，像坐在旁边的家教；不用夸张的表扬。`;
+const TALK_TEACH_CS = doc`
+- 一步步走的过程（排序、遍历、页面置换、调度……）用演示过程（ˋlet r = paging(…)ˋ，ˋdraw r at kˋ 让学生拨着一步步走），每一步由页面算，不在话里手写轨迹。关键的一步先让学生猜，再拨过去看。
+- 例子要挑：数据长度适中（一般 6 到 10 个），让这一课的关键情况真的发生（冲突、缺页、回溯、溢出……）；可以 ˋfindˋ 一组让对错两种做法得数不一样。
+- 口径照资料包：下标从 0 还是从 1、next 数组、周转时间这类教材之间有不同写法的地方，按资料包（默认是王道）写，演示的参数也照它设。
+- 术语用中文（考试是中文的），不用附英文。
+- 语气平实，像坐在旁边的家教；不用夸张的表扬。`;
+const TALK_TEACH_EN = doc`
+- 先给例句、后给规则：挑两三个对比鲜明的例句，让学生自己说出规律，再用一句话收住规则。
+- 长难句：先问谓语动词是哪个，再让学生把从句、插入语折起来看主干（句子对象：方括号里的一段能折），拆对了再讲意思，不先翻译。
+- 例句用真句子（优先资料包里的例句和真题句子）。
+- 语法术语用中文（主语、谓语、定语从句……），第一次出现时附英文；例句、答案用英文，讲解用中文。
+- 语气平实，像坐在旁边的家教；不用夸张的表扬。`;
+const TALK_PROBE = doc`
+- 误解要早探：心里一有「学生可能卡在哪」的猜测，就在头一两轮问一个能把两种想法分开的小问题，要一句理由。
+- 学生按错的想法答了：先问是怎么想的，或者 set 改一个数让学生再看，让学生自己撞上矛盾；不在原题上一格一格对答案。
+- 学生标了「没把握」：先问是哪一点不踏实，这一轮只问这一句。追问理由时只问「你是怎么想的」，不替学生列候选理由。
+- 讲完一个误解后的确认：换一组数，问的就是学生错的那个量，按错的想法做会得出看得出不同的答案（页面检查会提醒「分不开」）；连对两次、说得出理由，就往前走。`;
+const talkTeachFor = (subject) => `${isCS(subject) ? TALK_TEACH_CS : isEN(subject) ? TALK_TEACH_EN : TALK_TEACH_LA}\n${TALK_PROBE}`;
+
+/** 一问一答的第一节：开场、怎么教永远在前；红线可以被资料包的 rules（custom）或记忆库的规则替换 */
+export function talkRole(subject, { custom = '', memRules = '' } = {}) {
+  const rules = custom ? `下面是这节课资料包里定的规则（替换内置的红线），每一轮都要守住：\n\n${custom}`
+    : memRules ? `下面是学生定下的规则（学习台记忆库的 rules，替换内置的红线），每一轮都要守住：\n\n${memRules}`
+      : TALK_RULES;
+  return `${TALK_ROLE}\n\n${TEACH_TALK}\n\n${rules}\n\n这门课的要点（和上面的规则冲突时以规则为准）：\n\n${talkTeachFor(subject)}`;
+}
+
+const TALK_MSGS = doc`
+## 你会收到的消息
+
+${MSG_QUICK}
+- 学生在活板上的作答、动作，页面写成一行一条：
+  - [作答] 第 7 行：填空 {r.faults?}：写了 10，不对（页面算的是 9）；页面看出来：像是按 LRU 换的，用时 31 秒
+  - [作答] 第 9 行：选择：选了「变多」，对（之前选过「变少」）
+  - [作答] 第 12 行：做到了目标：……（目标不算对错，只说明学生动手做到了）
+  - [动作] 活板：拨 k：0 → 4（板上跟着变：……）——在板上试的动作攒着，学生作答、说话或者点「就这样」时一起来；「[动作] 学生点了「就这样」」是学生试完了，等你接着问。
+  - 行号就是「活板现状」里源码的行号。编号 L7 是第 7 行那一问（同一行第二个空是 L7.2；上面的数变了、重新打开再答的是 L7#2）。
+- 以「[草稿]」开头的行：学生在空里写了、还没点「对吗」的字，跟着下一条一起到。草稿不判对错，学生可能还在想：别打断，也别当成最终答案；学生说「好了」「你看看」时照草稿看写到哪了。
+${MSG_IMAGES}
+- 以「[系统]」开头的是页面发的消息。「[系统] 这一轮有 N 行看不懂」：学生没看到那一轮（活板退回了上一轮），把这一轮整轮重写对，只写这一轮的几行，不用对学生说别的；最多重写 2 次。页面检查的提醒（答案已经写在板上、这一问分不开两种想法、目标做不到……）、页面替你找的例子也在 [系统] 里。
+${MSG_SUMMARY}`;
+
+const ENGINE_NAMES = new Set(Object.keys(ENGINES));
+/**
+ * 「活板对象」：演示过程的字段说明。对象说明（每个引擎能写什么、能取什么）还没单独写好之前，
+ * 退回组件手册里演示组件那几节当字段参考（只要这门课的）
+ */
+export function talkObjectDocs(componentDocs, subject, { lookup = true } = {}) {
+  const key = subjectKey(subject);
+  const out = [];
+  for (const sec of docSections(asText(componentDocs))) {
+    if (sec.tags && key && !sec.tags.includes(key)) continue;
+    if (!sec.names.some((n) => ENGINE_NAMES.has(n))) continue;
+    out.push(...sec.body);
+    if (sec.detail) out.push('', lookup ? `（更多字段：component_doc 取 ${sec.names[0]}）` : '（还有更多字段）', '');
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+const TALK_OBJECTS_HEAD = doc`
+## 活板对象
+
+演示过程的字段照下面的组件说明写，字段名、取值都一样：组件围栏里一行一个字段（ˋrefs: 7 0 1 2ˋ、ˋframes: 3ˋ、ˋalgo: lruˋ），在活板里写成 ˋlet r = paging(refs=[7, 0, 1, 2], frames=3, algo=lru)ˋ。说明里的 ask、quiz、fill、mode: do、vary 是组件的几种模式，活板里用不到：要问学生，就在一行话里放空 ˋ{r.成员?}ˋ、选择 ˋ{? …}ˋ、能拨的 ˋ{k}ˋ（ˋdraw r at kˋ 画到第 k 步）。能取的成员是这个演示每一步问的东西，写错了页面会列出能取哪些；ˋr.stepsˋ 是一共几步。`;
+
+// 记忆的写法：照课堂那份，依据换成活板的编号；不收「point=」（一问一答里没有段）
+const TALK_MEMO_DOC = MEMO_DOC
+  .replace(/basis=q-b5,q-b7/g, 'basis=L12,L14')
+  .replace(/basis=q-b9/g, 'basis=L18')
+  .replace(/basis=q-b5/g, 'basis=L12')
+  .replace('黑板上的组件 id（`q-b5`，页面换成学生在那道题上的全部作答）、段 id（`b5`）', '活板上那一问的编号（`L12` 指第 12 行那一问，页面换成学生在那一问上的全部作答）')
+  .replace('again="b7 没讲划块就出了标主干的题"', 'again="没让学生先找谓语就问了主干"')
+  .replace('板放不下不用记：页面量得出来（黑板现状里有），稍长学生会上下滑。', '');
+const talkDeskDoc = (tools) => `### 在学习台里上课
+
+- 学生在活板上的每个动作（填空、选择、拨、拖、折、做到目标）、在输入框里说的话、附的图，页面都自动记成证据（evidence），课后看证据判断。证据你不用写，也写不了。
+${TALK_MEMO_DOC}
+- 不要宣布学生掌握了：掌握由页面按证据算。
+${tools
+    ? '- 记忆分两层：前面是和这节课直接有关的全文，最后是其余东西的目录（一条一行：编号 + 一句话）。目录里的要看全文，用 `memory_read` 按编号取（`collection` 写集合名，`ids` 一次取好几条；以前的课写 `collection: "sessions"`）。**很贵**：每用一次学生要多等一整轮，一般用全文里的就够了。'
+    : '- 这个查看方式不支持工具：查不了记忆库里没放进摘要的部分。'}`;
+
+function buildTalkSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true, memory = null, plan = null, planDoc = true } = {}) {
+  const custom = asText(rules) || asText(pack?.main?.rules);
+  const objects = talkObjectDocs(componentDocs, subject, { lookup: tools });
+  const state = typeof board === 'string' && board.trim() ? board.trim() : '活板还是空的：这一轮写的就是第一问。';
+  const parts = (packBody, mem = null) => {
+    const sections = [
+      `怎么教\n\n${talkRole(subject, { custom, memRules: mem?.rules || '' })}`,
+      `活板的写法\n\n${LANG_TALK}\n\n${TALK_OBJECTS_HEAD}\n\n${objects || '（这门课的演示说明没有打包进来：演示过程写保守一点，写错了页面会告诉你。）'}\n\n${TALK_MSGS}`,
+      `这节课的资料包\n\n课前备好的（学习台备课、复现课由页面拼），课中也可能更新。${memory ? '在学习台里，资料包是这节课的额外安排（推进建议、备好的题），学生的情况看后面的记忆。' : ''}\n\n${packBody}`,
+      ...(memory ? [`你对学生的了解（学习台的记忆库）\n\n${mem?.text || ''}\n\n${talkDeskDoc(tools)}`] : []),
+      `活板现状\n\n${planDoc ? `${planText(plan)}\n\n` : ''}${state}`,
+    ];
+    const NUM = ['一', '二', '三', '四', '五', '六'];
+    return [
+      '这是一问一答的课的完整说明，每一轮都会重新发给你（资料包和活板现状都是最新的）。说明后面是这节课的对话：学生说的话、学生在活板上的作答记录（[作答] / [动作]）、页面的系统消息（[系统]），以及你之前写的几行。你这一轮的输出就是活板接下来的几行（要记进记忆时另起一个 ````board memo 块）。',
+      ...sections.map((x, i) => `# ${NUM[i]}、${x}`),
+      '（说明到这里结束。下面是这节课的对话，回应最后一条消息。）',
+    ].join('\n\n');
+  };
+  let mem = null;
+  if (memory) {
+    const room = SYSTEM_MAX - bytes(parts('', { rules: '', text: '' })) - 16 * 1024 - 3 * 1024;
+    mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools, budget: Math.max(4 * 1024, Math.min(MEMORY_BUDGET, room)) });
+  }
+  const rest = bytes(parts('', mem));
+  const { text: packBody } = packText(pack, Math.max(16 * 1024, Math.min(packBudget, SYSTEM_MAX - rest - 3 * 1024)), { talk: true });
+  return parts(packBody, mem);
+}
+
 /** 「你上一轮写的教学计划」那一段：plan 是 latestPlan 的结果（或者直接是文字） */
 export function planText(plan) {
   const t = typeof plan === 'string' ? plan : plan?.text || '';
@@ -988,8 +1134,12 @@ function recordText(a, type) {
     case 'scene':
       return `[作答] ${where(a, '图')}：达成了图里的目标`;
     // 活板：页面已经把动作写成一句话（填了什么、对不对、页面看出像哪种错法；拨、拖、折时板上跟着变了什么）
-    case 'huoban':
-      return `[${a.explore ? '动作' : '作答'}] ${where(a, '活板')}：${short(String(a.text || ''), 400)}`;
+    // 一问一答的课（活板那一段 id 是 hb）：位置写第几行，和「活板现状」里源码的行号对得上
+    case 'huoban': {
+      if (a.step !== 'hb') return `[${a.explore ? '动作' : '作答'}] ${where(a, '活板')}：${short(String(a.text || ''), 400)}`;
+      const at = Number(a.n) > 0 && !a.explore ? `第 ${a.n} 行` : '活板';
+      return `[${a.explore ? '动作' : '作答'}] ${at}：${tail(short(String(a.text || ''), 400), a.explore ? '' : duration(a.ms))}`;
+    }
     case 'code': {
       // 写代码题：每次运行都记一条（过了几个测试、第一个没过的、复杂度），带上代码，老师看得到写成了什么样
       const head = `[作答] ${where(a, '代码题')}：第 ${Number(a.attempts) || 1} 次运行，过了 ${Number(a.passed) || 0} / ${Number(a.total) || 0} 个测试`;
@@ -1329,6 +1479,8 @@ export function actionTrigger(a, { lastStep = false } = {}) {
   if (urgent) return 'now';
   if (a.source === 'event' && typeOf(a) === 'reveal' && !lastStep) return 'later';
   if (a.source === 'event' && typeOf(a) === 'drag') return 'later';
+  // 活板上试（拨、拖、折）：攒着，学生作答、说话或点「就这样」时一起发
+  if (typeOf(a) === 'huoban' && a.explore) return 'later';
   // 点开生词看意思：页面当场显示了，不单独调用，跟着下一条告诉老师（知道学生哪几个词不认识）
   if (a.source === 'event' && typeOf(a) === 'gloss') return 'later';
   // 有没有把握：答对了却说没把握，老师要马上知道（红线 5，按没过处理）；别的跟着下一条一起说，不单独调用

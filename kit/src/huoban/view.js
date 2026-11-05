@@ -8,6 +8,8 @@ import { checkBoard } from './check.js';
 import { text, tex, f, isNumber, isVector, isMatrix } from './values.js';
 import { mdToHtml, tex2html, escapeHtml } from '../render.js';
 import { snapshot, animateFrom, settle } from '../morph.js';
+import { markDraft } from '../drafts.js';
+import { questionText, encValue, decValue, parseRecordId } from './talk.js';
 
 const COLORS = ['var(--blue)', 'var(--yellow)', 'var(--green)', 'var(--pink)', 'var(--lav)'];
 const key = (s) => String(s).replace(/\s+/g, '');
@@ -26,8 +28,9 @@ function valueHtml(v) {
 
 /**
  * 一块活板。opts：
- *   onAction({ text, kind, short, ok, value, misread, n })：学生的动作。kind：commit 作答（课堂里马上发给老师）、
- *     explore 在板上试（攒着）、info 页面自己做的事（找了例子）
+ *   onAction({ text, kind, short, ok, value, misread, n, k, sub, q, expr, … })：学生的动作。kind：commit 作答（课堂里马上发给老师）、
+ *     explore 在板上试（攒着）、info 页面自己做的事（找了例子）。n 是第几行、k 是这一行第几个控件，sub：blank / choice / goal / explore；
+ *     q 是人读得懂的题面，expr 是老师写的表达式；explore 带 name、to（拨到的值，存得进数据库的写法）、ckey（刷新后放回去用）
  *   onSource(src, problems)：读完、查完以后（problems：写法错误 + 教学检查 + 画面测量）
  */
 export class HuobanBoard {
@@ -43,11 +46,39 @@ export class HuobanBoard {
   }
 
   setSource(src, { quiet = false, check = true } = {}) {
+    // 学生正按着拨、拖：这时整块重画会把手势打断（手指下的东西没了）。先把量读进来，画等手势结束（gestureEnd）
+    if (this.gesture) {
+      this.src = String(src);
+      this.rt.load(this.src);
+      this.deferred = { quiet, check };
+      return;
+    }
     if (this.pending) { clearTimeout(this.pending.timer); this.settle(); }
     this.src = String(src);
     this.rt.load(this.src);
-    this.render();
+    this.paint();
     if (!quiet) this.opts.onSource?.(this.src, this.problems({ check }));
+  }
+
+  // 重画：正在写的空（光标在里面）画完放回去，光标放到末尾（老师边写边显示时学生正在写，不丢字、不收键盘）
+  paint() {
+    const ae = typeof document !== 'undefined' ? document.activeElement : null;
+    const fkey = ae && this.el.contains(ae) ? ae.closest?.('.hb-blank')?.dataset.key : null;
+    this.render();
+    if (!fkey) return;
+    const inp = this.el.querySelector(`.hb-blank[data-key="${CSS.escape(fkey)}"] input`);
+    if (!inp || inp.readOnly) return;
+    try { inp.focus({ preventScroll: true }); const L = inp.value.length; inp.setSelectionRange(L, L); } catch { /* 有的输入框不让放光标 */ }
+  }
+
+  gestureStart() { this.gesture = true; }
+  gestureEnd() {
+    this.gesture = false;
+    const d = this.deferred;
+    if (!d) return;
+    this.deferred = null;
+    this.paint();
+    if (!d.quiet) this.opts.onSource?.(this.src, this.problems({ check: d.check }));
   }
 
   /** 写法错误 + 教学检查 + 画面测量：[{ n, level, code, msg }] */
@@ -121,15 +152,22 @@ export class HuobanBoard {
     const el = document.createElement('p');
     el.className = 'hb-p';
     const parts = [];
-    ln.segs.forEach((sg, i) => {
+    // 空、选择的状态按行号记（第几行、这一行第几个控件），不按行的文字：两行文字一样不会串；applyOps 只往后接、set 只改 let 行，行号稳定
+    let k = 0;
+    ln.segs.forEach((sg) => {
       if (sg.k === 'text') { const s = document.createElement('span'); s.innerHTML = mdToHtml(sg.v, { inline: true }); el.appendChild(s); return; }
       const cell = sg.bare && this.rt.cells.get(sg.bare);
       if (sg.k === 'value' && cell?.input?.type === 'scrub') parts.push(this.scrub(el, cell));
       else if (sg.k === 'value') parts.push(this.value(el, sg));
-      else if (sg.k === 'blank') parts.push(this.blank(el, sg, `${ln.text}#${i}`, ln.n));
-      else if (sg.k === 'choice') parts.push(this.choice(el, sg, `${ln.text}#${i}`, ln.n));
+      else if (sg.k === 'blank') { k++; parts.push(this.blank(el, sg, `${ln.n}#${k}`, ln, k)); }
+      else if (sg.k === 'choice') { k++; parts.push(this.choice(el, sg, `${ln.n}#${k}`, ln, k)); }
     });
     return { el, update: (ctx) => parts.forEach((p) => p(ctx)) };
+  }
+
+  // 那一行人读得懂的样子（作答记录的题面）：活的值写成现在的值
+  lineQ(ln) {
+    return questionText(ln.segs, (sg) => text(this.rt.eval(sg.ast)));
   }
 
   value(parent, sg) {
@@ -168,8 +206,9 @@ export class HuobanBoard {
     n.addEventListener('pointerdown', (e) => {
       n.setPointerCapture?.(e.pointerId);
       const x0 = e.clientX, v0 = cur();
+      this.gestureStart();
       const move = (ev) => go(v0 + Math.round((ev.clientX - x0) / 26) * step);
-      const up = () => { n.removeEventListener('pointermove', move); n.removeEventListener('pointerup', up); n.removeEventListener('pointercancel', up); };
+      const up = () => { n.removeEventListener('pointermove', move); n.removeEventListener('pointerup', up); n.removeEventListener('pointercancel', up); this.gestureEnd(); };
       n.addEventListener('pointermove', move);
       n.addEventListener('pointerup', up);
       n.addEventListener('pointercancel', up);
@@ -184,24 +223,30 @@ export class HuobanBoard {
     };
   }
 
-  blank(parent, sg, id, n) {
+  blank(parent, sg, id, ln, k = 1) {
+    const n = ln.n;
     const w = document.createElement('span');
     w.className = 'hb-blank';
+    w.dataset.key = id;
     w.innerHTML = '<input type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="你的答案"><button type="button">对吗</button><span class="hb-note"></span>';
     parent.appendChild(w);
     const [input, btn, note] = w.children;
-    const st = this.blanks.get(id) || { status: '', sig: null, val: '', tries: 0 };
+    // round：上面的数变了、这个空重新打开过几次（作答记录按它分成不同的题）；draft：正在写、还没交的字（重画时放回去）
+    const st = this.blanks.get(id) || { status: '', sig: null, val: '', tries: 0, round: 1, draft: null };
     this.blanks.set(id, st);
-    input.value = st.val;
+    input.value = st.status === 'ok' ? st.val : st.draft ?? st.val;
+    input.addEventListener('input', () => { st.draft = input.value; });
+    // 草稿（drafts.js）：老师看得到没交的字；交过的、和上次交的一样的不算
+    markDraft(w, () => { if (st.status === 'ok') return ''; const v = input.value.trim(); return v === st.val ? '' : v; });
     const submit = () => {
       const given = input.value.trim();
       if (!given || st.status === 'ok') return;
       const r = this.rt.judge(sg.ast, given);
       if (r.error) return;
       st.tries++;
-      st.status = r.ok ? 'ok' : 'bad'; st.val = given; st.sig = text(r.expected);
+      st.status = r.ok ? 'ok' : 'bad'; st.val = given; st.sig = text(r.expected); st.draft = null;
       const why = r.misread ? `；页面看出来：${r.misread}` : '';
-      this.act({ kind: 'commit', n, ok: r.ok, value: given, misread: r.misread || undefined, q: sg.src,
+      this.act({ kind: 'commit', sub: 'blank', n, k, round: st.round, ok: r.ok, value: given, misread: r.misread || undefined, q: this.lineQ(ln), expr: sg.src, sig: st.sig,
         text: `填空 {${sg.src}?}：写了 ${given}，${r.ok ? '对' : `不对（页面算的是 ${text(r.expected)}）`}${why}${st.tries > 1 ? `（第 ${st.tries} 次）` : ''}`,
         short: `填了 ${given}，${r.ok ? '对' : '不对'}` });
       paint(true);
@@ -216,18 +261,26 @@ export class HuobanBoard {
       input.readOnly = st.status === 'ok';
     };
     return () => {
-      // 上面的量变了、答案跟着变：空重新打开
-      if (st.status === 'ok') {
+      // 上面的量变了、答案跟着变：空重新打开（算新的一道，round 加一；答错的也一样，之前的尝试是按旧的数做的）。
+      // 刷新后放回来的、没记下答案的（sig 是 null）照现在的算，不重开
+      if (st.status) {
         let sig; try { sig = text(this.rt.eval(sg.ast)); } catch { sig = null; }
-        if (sig !== st.sig) { st.status = ''; st.val = ''; input.value = ''; note.textContent = '数变了，再算一次'; } else note.textContent = '';
+        if (st.sig === null) st.sig = sig;
+        else if (sig !== st.sig) {
+          st.prev = st.val; st.status = ''; st.val = ''; st.tries = 0; st.sig = null; st.round = (st.round || 1) + 1; st.reopened = true;
+          input.value = st.draft ?? '';
+        }
       }
+      note.textContent = st.reopened && st.status !== 'ok' ? '数变了，再算一次' : '';
       paint(false);
     };
   }
 
-  choice(parent, sg, id, n) {
+  choice(parent, sg, id, ln, k = 1) {
+    const n = ln.n;
     const w = document.createElement('span');
     w.className = 'hb-choice';
+    w.dataset.key = id;
     parent.appendChild(w);
     const st = this.choices.get(id) || { picked: new Set(), done: false };
     this.choices.set(id, st);
@@ -240,7 +293,7 @@ export class HuobanBoard {
         st.picked.add(i);
         if (c.ok) st.done = true;
         const wrong = [...st.picked].filter((j) => !sg.choices[j].ok).map((j) => `「${sg.choices[j].t}」`);
-        this.act({ kind: 'commit', n, ok: c.ok, value: c.t, text: `选择：选了「${c.t}」，${c.ok ? '对' : '不对'}${c.ok && wrong.length ? `（之前选过 ${wrong.join('、')}）` : ''}`, short: `选了「${c.t}」` });
+        this.act({ kind: 'commit', sub: 'choice', n, k, opt: i, ok: c.ok, value: c.t, q: this.lineQ(ln), expr: sg.src, text: `选择：选了「${c.t}」，${c.ok ? '对' : '不对'}${c.ok && wrong.length ? `（之前选过 ${wrong.join('、')}）` : ''}`, short: `选了「${c.t}」` });
         paint();
       });
       w.appendChild(b);
@@ -258,14 +311,14 @@ export class HuobanBoard {
     el.className = 'hb-goal';
     el.innerHTML = '<span class="hb-dot" aria-hidden="true"></span><span class="hb-gt">目标：还没做到</span>';
     const t = el.querySelector('.hb-gt');
-    const id = `${ln.src}|${ln.msg}`;
+    const id = String(ln.n);
     return {
       el,
       update: (ctx) => {
         let ok = false;
         try { ok = !!this.rt.eval(ln.cond); } catch { ok = false; }
         // 做到过就一直算做到了（学生再拨走也不收回）
-        if (ok && !this.goalsDone.get(id)) { this.goalsDone.set(id, true); if (!ctx.first) this.act({ kind: 'commit', n: ln.n, ok: true, text: `做到了目标：${ln.msg}`, short: '做到了' }); }
+        if (ok && !this.goalsDone.get(id)) { this.goalsDone.set(id, true); if (!ctx.first) this.act({ kind: 'commit', sub: 'goal', n: ln.n, k: 1, ok: true, q: ln.msg, expr: ln.src, text: `做到了目标：${ln.msg}`, short: '做到了' }); }
         const done = !!this.goalsDone.get(id);
         el.classList.toggle('is-done', done);
         t.textContent = done ? ln.msg : '目标：还没做到';
@@ -303,7 +356,7 @@ export class HuobanBoard {
   update(ctx = {}) {
     this.rt.fresh();
     for (const b of this.blocks) b.update(ctx);
-    for (const x of this.rt.found.splice(0)) this.act({ kind: 'info', text: `页面替老师找了例子：${x.name} = ${text(x.value)}（试了 ${x.tries} 个，${x.ms} 毫秒）` });
+    for (const x of this.rt.found.splice(0)) this.act({ kind: 'info', name: x.name, value: text(x.value), text: `页面替老师找了例子：${x.name} = ${text(x.value)}（试了 ${x.tries} 个，${x.ms} 毫秒）` });
   }
 
   // —— 学生动了：记下动作和板上跟着变的东西（老师看到的就是这一行）——
@@ -333,9 +386,104 @@ export class HuobanBoard {
     const to = text(this.rt.get(p.name));
     if (to === p.from) return;
     const d = this.diff(p.before, p.name);
-    this.act({ kind: 'explore', text: `拨 ${p.name}：${p.from} → ${to}${d.length ? `（板上跟着变：${d.join('，')}）` : ''}`, short: `拨到 ${to}` });
+    this.act({ kind: 'explore', ...this.inputFacts(p.name), text: `拨 ${p.name}：${p.from} → ${to}${d.length ? `（板上跟着变：${d.join('，')}）` : ''}`, short: `拨到 ${to}` });
+  }
+  // 拨的、拖的量现在的值（存得进数据库的写法）和它是哪一个（名字 + 初值的写法：老师 set 改了初值就是新的一个，旧的值不放回去）
+  inputFacts(name) {
+    const cell = this.rt.cells.get(name);
+    let to = null;
+    try { to = encValue(this.rt.get(name)); } catch { to = null; }
+    return { sub: 'explore', name, to, ckey: cell ? this.rt.inputKey(cell) : undefined, n: cell?.n };
   }
   act(a) { this.opts.onAction?.(a); }
+
+  /**
+   * 板上现在的样子，给老师看的那几行（talk.js 的 talkStateText 写成字）：能动的量、每个空、选择、目标、找到的例子。
+   * 不碰 DOM：按运行时和记着的状态算
+   */
+  stateOf() {
+    const rt = this.rt;
+    rt.fresh();
+    const out = { src: this.src, inputs: [], blanks: [], choices: [], goals: [], finds: [] };
+    const tx = (f) => { try { return text(f()); } catch { return undefined; } };
+    const shown = (ln) => { if (ln.kind !== 'when') return true; try { return !!rt.eval(ln.cond); } catch { return false; } };
+    for (const ln of rt.board.lines) {
+      if (ln.kind === 'let') {
+        const c = ln.cell;
+        if (c.input) {
+          const range = c.input.type === 'scrub' ? `能拨 ${c.input.lo}..${c.input.hi}${c.input.step !== 1 ? `，一格 ${c.input.step}` : ''}` : '能在平面上拖';
+          out.inputs.push({ name: c.name, type: c.input.type, now: tx(() => rt.get(c.name)), init: tx(() => rt.eval(c.ast)), range });
+        } else if (c.find) {
+          const v = tx(() => rt.get(c.name));
+          if (v !== undefined) out.finds.push({ name: c.name, value: v });
+        }
+        continue;
+      }
+      if (ln.kind === 'goal') { out.goals.push({ id: `L${ln.n}`, n: ln.n, msg: ln.msg, done: !!this.goalsDone.get(String(ln.n)) }); continue; }
+      if (ln.kind !== 'prose' && ln.kind !== 'when') continue;
+      let k = 0;
+      for (const sg of ln.segs) {
+        if (sg.k !== 'blank' && sg.k !== 'choice') continue;
+        k++;
+        const key = `${ln.n}#${k}`;
+        if (sg.k === 'blank') {
+          const st = this.blanks.get(key) || {};
+          out.blanks.push({ id: `L${ln.n}${k > 1 ? `.${k}` : ''}${(st.round || 1) > 1 ? `#${st.round}` : ''}`, n: ln.n, expr: sg.src, status: st.status || '', val: st.val || '',
+            draft: st.status === 'ok' ? '' : String(st.draft ?? '').trim() !== String(st.val || '') ? String(st.draft ?? '').trim() : '',
+            tries: st.tries || 0, expected: tx(() => rt.eval(sg.ast)), reopened: !!st.reopened && st.status !== 'ok', prev: st.prev || '', visible: shown(ln) });
+        } else {
+          const st = this.choices.get(key) || { picked: new Set() };
+          out.choices.push({ id: `L${ln.n}${k > 1 ? `.${k}` : ''}`, n: ln.n, options: sg.choices.map((c) => c.t), picked: [...st.picked].map((i) => sg.choices[i]).filter(Boolean).map((c) => ({ t: c.t, ok: c.ok })), done: !!st.done });
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * 刷新后把学生的作答放回去（课堂的 restore）：recs 是这块活板的作答记录（block 是 L12 / L12.2 / L12#2），按时间先后。
+   * 要在 rt.load 之后、render 之前调（拨的值要放进运行时，空的状态要在画的时候用）
+   */
+  restoreWork(recs = []) {
+    const lastRound = new Map();
+    for (const r of recs) {
+      const id = parseRecordId(r.block);
+      if (!id || r.sub !== 'blank') continue;
+      const key = `${id.n}#${id.k}`;
+      lastRound.set(key, Math.max(lastRound.get(key) || 1, id.round));
+    }
+    for (const r of recs) {
+      if (r.sub === 'explore' || r.explore) {
+        const cell = r.name && this.rt.cells.get(r.name);
+        if (cell?.input && r.ckey && this.rt.inputKey(cell) === r.ckey && r.to !== undefined && r.to !== null) {
+          const v = decValue(r.to);
+          if (v !== null) this.rt.inputs.set(r.ckey, v);
+        }
+        continue;
+      }
+      const id = parseRecordId(r.block);
+      if (!id) continue;
+      const key = `${id.n}#${id.k}`;
+      if (r.sub === 'goal') { this.goalsDone.set(String(id.n), true); continue; }
+      if (r.sub === 'choice') {
+        const st = this.choices.get(key) || { picked: new Set(), done: false };
+        if (Number.isInteger(r.opt)) st.picked.add(r.opt);
+        if (r.ok === true) st.done = true;
+        this.choices.set(key, st);
+        continue;
+      }
+      if (r.sub !== 'blank' || id.round !== lastRound.get(key)) continue;
+      const st = this.blanks.get(key) || { status: '', sig: null, val: '', tries: 0, round: id.round, draft: null };
+      st.tries++;
+      st.status = r.ok ? 'ok' : 'bad';
+      st.val = String(r.value ?? '');
+      st.sig = typeof r.sig === 'string' ? r.sig : null;
+      st.round = id.round;
+      if (id.round > 1) st.reopened = true;
+      this.blanks.set(key, st);
+    }
+    this.rt.fresh();
+  }
 
   pulse(k) {
     if (reduceMotion()) return;
@@ -429,6 +577,7 @@ class PlaneView {
     const from = text(this.board.rt.get(name));
     const before = this.board.visible();
     this.drag = name;
+    this.board.gestureStart();
     this.svg.classList.add('is-dragging');
     const move = (ev) => {
       const w = this.toW(this.pt(ev)).map((c) => Math.max(-this.R, Math.min(this.R, Math.round(c / snap) * snap)));
@@ -439,8 +588,9 @@ class PlaneView {
       this.svg.removeEventListener('pointermove', move); this.svg.removeEventListener('pointerup', up); this.svg.removeEventListener('pointercancel', up);
       this.drag = null; this.svg.classList.remove('is-dragging');
       const to = text(this.board.rt.get(name));
-      if (to !== from) { const d = this.board.diff(before, name); this.board.act({ kind: 'explore', text: `拖 ${name}：${from} → ${to}${d.length ? `（${d.join('，')}）` : ''}`, short: `把 ${name} 拖到 ${to}` }); }
+      if (to !== from) { const d = this.board.diff(before, name); this.board.act({ kind: 'explore', ...this.board.inputFacts(name), text: `拖 ${name}：${from} → ${to}${d.length ? `（${d.join('，')}）` : ''}`, short: `把 ${name} 拖到 ${to}` }); }
       this.board.update({});
+      this.board.gestureEnd();
     };
     this.svg.addEventListener('pointermove', move); this.svg.addEventListener('pointerup', up); this.svg.addEventListener('pointercancel', up);
   }
@@ -524,7 +674,7 @@ class SentenceView {
           const shut = this.board.rt.toggleFold(s.cell, p.i);
           this.board.update({});
           const d = this.board.diff(before);
-          this.board.act({ kind: 'explore', text: `${shut ? '折起' : '展开'}「${p.t.trim()}」${d.length ? `（${d.join('，')}）` : ''}`, short: `${shut ? '折起' : '展开'}「${p.t.trim()}」` });
+          this.board.act({ kind: 'explore', sub: 'explore', name: s.cell, fold: p.i, shut, text: `${shut ? '折起' : '展开'}「${p.t.trim()}」${d.length ? `（${d.join('，')}）` : ''}`, short: `${shut ? '折起' : '展开'}「${p.t.trim()}」` });
         });
         this.el.appendChild(b);
       }

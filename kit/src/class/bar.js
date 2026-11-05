@@ -157,7 +157,8 @@ const ICON = {
 export { navLabel } from './pagenav.js';
 
 // stuck：「停久了提醒老师」开关 { on, onChange(on) }（不给就不显示这一项）；onHome：在学习台里上课时「回学习台」
-export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick, onNav, onHome = null, images = false, tag = MODEL_TAG, stuck = null, inkPending = null } = {}) {
+// actionsPending：一问一答里学生在活板上试过（拨、拖、折）、还没发的动作。有的话输入框空着也能发，发送键写「就这样 →」
+export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick, onNav, onHome = null, images = false, tag = MODEL_TAG, stuck = null, inkPending = null, actionsPending = null } = {}) {
   const el = document.createElement('div');
   el.className = 'class-bar';
   el.setAttribute('role', 'region');
@@ -376,16 +377,21 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
     penBtn.disabled = !enabled || full;
     shotBtn.disabled = !enabled || full;
     send.disabled = !enabled && !busy;
-    // 图标只在「发送 ↔ 停止」切换时换：每打一个字都换一遍的话，正好按在图标上的那一下会被吞掉
+    // 一问一答：试过了、还没发，输入框也空着：发送键变成「就这样 →」（点了就把试过的发给老师）
+    const tried = enabled && !busy && !ta.value.trim() && !attached.length && !!actionsPending?.();
+    // 图标只在「发送 ↔ 停止 ↔ 就这样」切换时换：每打一个字都换一遍的话，正好按在图标上的那一下会被吞掉
     //（按下时的节点被换掉，松开就不算点击；iPad 上点发送时提交候选词、随手写都会触发 input）
-    if (send.dataset.busy !== String(busy)) {
+    const look = busy ? 'stop' : tried ? 'tried' : 'send';
+    if (send.dataset.look !== look) {
+      send.dataset.look = look;
       send.dataset.busy = String(busy);
       send.classList.toggle('is-stop', busy);
-      send.innerHTML = busy ? ICON.stop : ICON.send;
-      send.setAttribute('aria-label', busy ? '停止这一轮' : '发送');
-      send.title = busy ? '停止这一轮' : '发送（回车）';
+      send.classList.toggle('is-tried', look === 'tried');
+      send.innerHTML = busy ? ICON.stop : tried ? '<span class="cb-tried">就这样 →</span>' : ICON.send;
+      send.setAttribute('aria-label', busy ? '停止这一轮' : tried ? '就这样：把试过的发给 Claude' : '发送');
+      send.title = busy ? '停止这一轮' : tried ? '就这样：把试过的发给 Claude' : '发送（回车）';
     }
-    send.classList.toggle('is-empty', !busy && !ta.value.trim() && !attached.length && !ink);
+    send.classList.toggle('is-empty', !busy && !ta.value.trim() && !attached.length && !ink && !tried);
     el.classList.toggle('is-busy', busy);
     el.classList.toggle('is-disabled', !enabled);
   }
@@ -395,7 +401,7 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
     if (!enabled) return;
     const text = ta.value.trim();
     // 什么都没写、也没附图：板上有新写的板书就只发板书（课堂把它导出成图），不然只是把光标放进输入框
-    if (!text && !attached.length && !inkPending?.()) { ta.focus({ preventScroll: true }); return; }
+    if (!text && !attached.length && !inkPending?.() && !actionsPending?.()) { ta.focus({ preventScroll: true }); return; }
     const imgs = attached.map((a) => a.blob);
     ta.value = '';
     clearAttach();
@@ -681,6 +687,8 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
     setStatus,
     get state() { return status.state; },
     setBusy(v) { busy = !!v; syncControls(); },
+    // 排着的动作变了（一问一答里试了一下）：发送键重新看一眼要不要变成「就这样」
+    syncSend() { syncControls(); },
     setImages,
     setTag(text) { $('.cb-tag').textContent = text || MODEL_TAG; },
     // 这节课调用 Claude 花了多少（usage.js 的 usageText），空的不显示

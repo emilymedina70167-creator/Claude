@@ -150,7 +150,9 @@ export function resolveBasis(tokens, { evidence = [], mem = {} } = {}) {
       if (s) ids.push(s.id); else missing.push(t);
       continue;
     }
-    const hit = evs.filter((e) => e.comp === t || e.step === t).sort((a, b) => (a.at || 0) - (b.at || 0));
+    // 一问一答的活板：L12 指第 12 行那一问，同一行的第二个控件（L12.2）、数变了重新打开再答的（L12#2）都算
+    const talkRow = /^L\d+$/.test(t);
+    const hit = evs.filter((e) => e.comp === t || e.step === t || (talkRow && /^[.#]/.test(String(e.comp ?? '').slice(t.length)) && String(e.comp ?? '').startsWith(t))).sort((a, b) => (a.at || 0) - (b.at || 0));
     if (hit.length) ids.push(...hit.map((e) => e.id));
     else missing.push(t);
   }

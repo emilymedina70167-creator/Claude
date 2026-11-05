@@ -158,6 +158,9 @@ body.has-keypad .class-bar, .class-bar.is-away {
 .cb-send svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .cb-send:active { transform: scale(.92); }
 .cb-send.is-empty { opacity: .38; }
+/* 一问一答：在活板上试过了，输入框空着：发送键写字「就这样 →」 */
+.cb-send.is-tried { width: auto; min-width: 44px; padding: 0 16px; border-radius: 22px; }
+.cb-tried { font: 600 15px/1 var(--sans); white-space: nowrap; pointer-events: none; }
 .cb-send.is-stop { color: var(--coral); background: rgb(var(--coral-rgb) / 0.12); box-shadow: inset 0 0 0 1.8px rgb(var(--coral-rgb) / 0.7); }
 .cb-send.is-stop svg { fill: currentColor; stroke: none; width: 18px; height: 18px; }
 .cb-send:disabled { opacity: .3; cursor: default; }

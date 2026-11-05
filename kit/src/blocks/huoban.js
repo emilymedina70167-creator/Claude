@@ -2,10 +2,18 @@
 // 写法错误、教学检查里要改的报成 session.problem（课堂会让老师重写），提醒报成软提醒；学生的作答记进 session.record（type: huoban）。
 import { session } from '../session.js';
 import { HuobanBoard } from '../huoban/view.js';
+import { TalkBoard } from '../huoban/talkview.js';
 
 export function huoban(el, src) {
   const box = document.createElement('div');
   el.appendChild(box);
+  // 一问一答的课（docs/talk-impl.md C.2）：画成按轮排的 TalkBoard，源码、轮次、作答都由课堂控制器给（el._hb），
+  // 这里什么都不画、不报：写法错误控制器自己用 problems() 比，不推进 session.problems（推了课堂会把整段当成写错）
+  if (session.talk) {
+    const board = new TalkBoard(box, { onAction: (a) => board.onAction?.(a) });
+    el._hb = board;
+    return board;
+  }
   const board = new HuobanBoard(box, {
     onAction: (a) => {
       if (a.kind === 'info') return;

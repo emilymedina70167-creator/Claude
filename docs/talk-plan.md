@@ -133,4 +133,4 @@
 - [ ] 第 1 批：
   - [x] 内核 `kit/src/huoban/`（`lang.js` 写法、`values.js` 精确的值（接 `exact.js`，算不出精确值退回小数）、`objects.js` 对象（61 个演示引擎一个适配器：`paging(refs=…, frames=f, algo=fifo)`，成员是引擎自己的问题 `r.faults` / `r.victim.2`，判空用引擎的判法、错了按 `variants` 看出像哪种错法；句子；找例子的范围）、`runtime.js`（量、输入、判空、`find` 模拟退火）），`tests/huoban.test.js`；还没接进页面，`la-kit.js` 没变
   - [ ] 画法 `huoban/view.js`（测试版的平面、句子、正文里的控件搬进来；演示过程用引擎现有的 `view` 画第几步；公式用 KaTeX）
-  - [ ] `kind: talk` 的课：开课、一问一答、核验 Opus 5.5、证据、下课、报告；e2e 加一段
+  - [x] `kind: talk` 的课：开课、一问一答、核验 Opus 5.5、证据、下课、报告；e2e 加一段（2026-11-05，照 `docs/talk-impl.md`：A 学习台接线；B 画面——空、选择、目标按行号记，正在写的字和光标重画不丢，拨、拖的手势不被打断，`TalkBoard` 的 `snapshot` / `restoreFrom`；C 课堂——`classroom.js` 的 `TALK` 分支：活板是 id 为 `hb` 的一段，`finishTalk` 把老师写的行接上去，新冒出来的写法错误就退回上一轮、整轮重写，边写边显示一行一行接，作答记成 `L12` / `L12.2` / `L12#2`，试过的攒着点「就这样 →」才发，刷新放回；`prompt.js` 的 `buildTalkSystem` 和 `huoban/talk.js` 的 `talkStateText`；D 模拟老师的剧本、e2e 的 `talk` 一段）。还没有真课

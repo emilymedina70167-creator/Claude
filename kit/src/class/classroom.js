@@ -51,6 +51,12 @@ import { ENGINES } from '../engines/registry.js';
 import { bandsOf, layoutText } from './canvas.js';
 import { askMessage, matchWhy, spotText, whyShownText } from './ask.js';
 import { createAskHere } from './askhere.js';
+// 一问一答的课（kind: talk，docs/talk-impl.md）：活板就是一段 steps（id 是 hb），老师每一轮写的几行接在它后面
+import { HB_ID, hbFence, hbSource, lineCount, talkLines, newErrors, rewriteText, recordId, parseRecordId, talkStateText, talkMeta } from '../huoban/talk.js';
+import { applyOps } from '../huoban/lang.js';
+import { checkText } from '../huoban/check.js';
+import { TalkBoard } from '../huoban/talkview.js';
+import { reportError } from '../errlog.js';
 
 export const MODEL = 'claude-opus-5-5';
 // 学生明确要求：讲课只能是 Opus 5.5、effort high；modelTier 只是平台要求的退路（退路的输出会被丢弃）
@@ -77,6 +83,10 @@ export async function renderClass(root, meta, desk = null) {
   // 版面模式（canvas.js，docs/canvas-plan.md）：课堂 Claude 自己排板。先在开关后面试：features.js 的 canvas，或地址带 ?canvas
   const CANVAS = FEATURES.canvas || /[?&]canvas\b/.test(location.search);
   if (CANVAS) { root.classList.add('is-canvas'); document.body.classList.add('class-canvas'); }
+  // 一问一答（docs/talk-impl.md）：同一个课堂，只是老师写活板的行、一问一答地推进。所有分叉都看 TALK；为假时和原来的课堂一字不差
+  const TALK = !!desk?.talk;
+  session.talk = TALK;
+  if (TALK) { root.classList.add('is-talk'); document.body.classList.add('class-talk'); }
   session.mode = 'class';
   session.live = true; // 共用 live 的行为：猜想默认不批改、作答逐次记录、组件要有 id
   session.stages = [];
@@ -173,7 +183,7 @@ export async function renderClass(root, meta, desk = null) {
   let nudged = false; // 这一轮已经提醒过「停了很久」
   let lastPrompt = null; // 开发面板看：上一轮发了多少字节
   // 被函数声明用到、而 restore() 在函数定义之前就会调到那些函数：要在这里先有值（let / const 有暂时性死区）
-  let raf = 0, pendingText = '', pendingStatus = ''; // 草稿：一帧最多画一次
+  let raf = 0, pendingText = '', pendingStatus = '', pendingClosing = false; // 草稿：一帧最多画一次
   let firstAt = 0; // 这一次调用黑板上出现第一个字的时候（performance.now）
   // 抢跑（spec.js）：{ say, key, ctl, promise, text（已经写出来的）, onText（接上以后画黑板的）, staged, bytes }
   let spec = null;
@@ -196,6 +206,14 @@ export async function renderClass(root, meta, desk = null) {
   const whySeg = new Map();
   const setWhy = (target, items, seg, seq) => { whys.set(target, items); whySeg.set(target, { seg: seg || target, seq }); };
   const dropWhys = (segId, seq) => { for (const [k, v] of whySeg) if (v.seg === segId && v.seq < seq) { whys.delete(k); whySeg.delete(k); } };
+  // —— 一问一答（TALK）：活板是 id 为 hb 的那一段，画在它那块板（hbPage）上；控制器从段里拿 TalkBoard 的实例 ——
+  let hbPage = 0;
+  let hbErrs = []; // 上一次画成功的活板上已经有的写法错误：这一轮只看新冒出来的
+  const toldChecks = new Set(); // 告诉过老师的检查提醒（同一条不每轮重说）
+  let talkInfo = null; // 正在收这一轮画的时候页面替老师找的例子（finishTalk 里写进提醒）
+  let closingDraft = false; // 正在写下课小结：草稿照普通的预览，不往活板上画
+  let lastStreamN = 0; // 这一轮边写边显示已经画上去几行（画过了，正式画的时候不再播一次进场）
+  let streamInfo = []; // 边写边显示时页面就替老师找到的例子（核验过了才算进这一轮的提醒）
 
   // 察觉卡住的开关（学生在「⋯」里可以开；记在这台设备上）。每提醒一次就是一整轮调用，默认关（docs/desk-plan.md 第 7 节）。
   // 本地试用带 ?stuck=秒数 时自动开
@@ -207,6 +225,8 @@ export async function renderClass(root, meta, desk = null) {
     stuck: { on: stuckOn, onChange: (v) => { stuckOn = v; lastActive = Date.now(); try { localStorage.setItem(stuckKey, v ? 'on' : 'off'); } catch { /* 无痕模式 */ } } },
     onSend: ({ text, images }) => { bv.go(bv.cur); enqueueStudent(text, images, true); },
     inkPending: () => hasFreshInk(),
+    // 一问一答：活板上试过的（拨、拖、折）还没发：输入框空着也能发，发送键写「就这样 →」
+    actionsPending: TALK ? () => !busy && queue.actions.length > 0 : null,
     onQuick: (label) => {
       if (busy) return;
       // 「继续」：这一轮还有没播的拍子时只走下一拍，不调用 Claude
@@ -223,7 +243,8 @@ export async function renderClass(root, meta, desk = null) {
   });
   bv.attachBar(bar);
   // 点着问（askhere.js）：点板上一行、一个公式、steps 的一步，问「为什么 / 没看懂 / 举个例子」；预写的「为什么」页面当场显示
-  const askHere = readOnly ? null : createAskHere({
+  // 一问一答（第一批）先不挂：活板上的东西一轮轮在挪，点着问的锚点会跟着乱
+  const askHere = readOnly || TALK ? null : createAskHere({
     board,
     onAsk: (spot, kind) => { if (teacher.available) enqueueStudent(askMessage(spot, kind), [], true); },
     onWhy: (spot) => matchWhy(whys, spot),
@@ -367,6 +388,8 @@ export async function renderClass(root, meta, desk = null) {
         }
         if (page) bv.ensurePage(page);
         const seg = { id: d.id, seq: d.seq || 0, page, place, title: d.title || '', md: String(d.md || ''), hidden: !!d.hidden, held: !!d.held, failed: !!d.failed, pending: false, sec: null, ...(d.point ? { point: d.point } : {}), ...(CANVAS && d.col !== undefined ? { col: d.col } : {}), ...(Number.isFinite(d.ord) ? { ord: d.ord } : {}) };
+        // 一问一答的活板：每一轮的行数、回显、小字、找到的例子都存在这一段上
+        if (TALK && d.id === HB_ID) Object.assign(seg, talkFields(d));
         segs.set(seg.id, seg);
         if (old) legacy.push(seg);
         if (!seg.hidden) mountRestored(seg);
@@ -392,6 +415,7 @@ export async function renderClass(root, meta, desk = null) {
       ].sort((a, b) => (a.at || 0) - (b.at || 0));
       recs.forEach((a) => { if (reportable(a)) addResult(a); });
       replayStudentWork(recs);
+      if (TALK) restoreHb(recs);
     } catch (e) {
       console.error(e);
       toast('课堂记录没读出来，先从头开始');
@@ -1070,7 +1094,247 @@ export async function renderClass(root, meta, desk = null) {
   }
 
   function saveSeg(seg) {
-    sink.put('steps', { id: seg.id, seq: seg.seq, page: seg.page || 0, place: seg.place || 'board', md: seg.md, title: seg.title || '', hidden: !!seg.hidden, failed: !!seg.failed, ...(seg.held ? { held: true } : {}), ...(seg.col !== undefined ? { col: seg.col } : {}), ...(Number.isFinite(seg.ord) ? { ord: seg.ord } : {}), ...(seg.point ? { point: seg.point } : {}), by: 'class', at: Date.now() });
+    sink.put('steps', { id: seg.id, seq: seg.seq, page: seg.page || 0, place: seg.place || 'board', md: seg.md, title: seg.title || '', hidden: !!seg.hidden, failed: !!seg.failed, ...(seg.held ? { held: true } : {}), ...(seg.col !== undefined ? { col: seg.col } : {}), ...(Number.isFinite(seg.ord) ? { ord: seg.ord } : {}), ...(seg.point ? { point: seg.point } : {}), ...(TALK && seg.id === HB_ID ? talkFields(seg) : {}), by: 'class', at: Date.now() });
+  }
+
+  // —— 一问一答（docs/talk-impl.md C）：活板这一段、每一轮写的行、学生的作答 ——
+  // 活板那一段上另存的：每一轮写完时有几行（bounds）、学生的回显、每一轮的小字、找到的例子、每一轮出现的时候
+  function talkFields(d) {
+    const arr = (v) => (Array.isArray(v) ? v : []);
+    return { bounds: arr(d.bounds).map(Number).filter(Number.isFinite), echo: arr(d.echo).map((x) => arr(x).map(String)), meta: arr(d.meta).map((x) => String(x ?? '')), finds: arr(d.finds).filter((x) => Array.isArray(x) && x.length === 2), t0s: arr(d.t0s).map(Number) };
+  }
+  // TalkBoard 的实例：blocks/huoban.js 在 session.talk 时画成 TalkBoard 挂在 el._hb 上
+  function hbBoard() { return segs.get(HB_ID)?.sec?.querySelector('.block-huoban')?._hb || null; }
+  function wireHb(hb) { if (hb && !hb.onAction) hb.onAction = (a) => onTalkAction(a); }
+
+  // 第一轮讲完（核验过了）才开活板：之前照常是欢迎牌和「开始上课」，开课抢跑的指纹两边一样
+  function ensureHb() {
+    let seg = segs.get(HB_ID);
+    if (seg?.sec) return seg;
+    const p = newPage({ lead: HB_ID, title: '' });
+    seg = { id: HB_ID, seq: ++segSeq, page: p.n, place: 'board', title: '', md: hbFence(''), hidden: false, failed: false, pending: false, sec: null, bounds: [], echo: [], meta: [], finds: [], t0s: [] };
+    const r = renderSeg(seg);
+    r.sec.classList.remove('class-pending');
+    seg.sec = r.sec;
+    segs.set(HB_ID, seg);
+    hbPage = p.n;
+    if (CANVAS) layoutPage(p.n);
+    wireHb(hbBoard());
+    return seg;
+  }
+
+  // 刷新后：段里存的源码、轮次画回去，学生的作答（空、选择、目标、拨的值）照记录放回去
+  function restoreHb(recs) {
+    const seg = segs.get(HB_ID);
+    const hb = hbBoard();
+    if (!seg || !hb) return;
+    hbPage = seg.page;
+    wireHb(hb);
+    // 「以前的课」翻看：只看，空、选择、拨都点不了
+    if (readOnly) hb.el.classList.add('is-readonly');
+    const mine = recs.filter((r) => r.source === 'record' && r.type === 'huoban');
+    try {
+      hb.restoreFrom({ src: hbSource(seg.md), bounds: seg.bounds, echo: seg.echo, meta: seg.meta, finds: seg.finds, t0s: seg.t0s }, mine);
+      hbErrs = hbErrors(hb).errs;
+    } catch (e) {
+      console.error(e);
+      reportError(e, { what: '活板没画回来', path: `sessions/${desk?.sid || ''}` });
+    }
+  }
+
+  // 活板上的写法错误：problems() 里 level 为 error 的（写法、算不出来、目标做不到），加上画出来才看得出的（算不出的值、画不出的图、公式写错）。
+  // 每一项 { n, line（那一行的字）, msg }；checks 是提醒（warn / info），给老师看
+  function hbErrors(hb) {
+    const rows = String(hb.src || '').split('\n');
+    const lineOf = (n) => (rows[n - 1] || '').trim();
+    let probs = [];
+    try { probs = hb.problems(); } catch (e) { probs = [{ n: 0, level: 'error', msg: `检查没跑完：${e.message}` }]; }
+    const errs = probs.filter((p) => p.level === 'error').map((p) => ({ n: p.n, line: lineOf(p.n), msg: String(p.msg || '').replace(/^第 \d+ 行[:：]\s*/, '') }));
+    const seen = new Set(errs.map((e) => e.n));
+    hb.el.querySelectorAll('.hb-bad, .hb-err, .katex-error').forEach((x) => {
+      const n = Number(x.closest('[data-n]')?.dataset.n) || 0;
+      if (seen.has(n)) return;
+      seen.add(n);
+      const msg = x.classList.contains('katex-error') ? `公式写不出来：${(x.title || x.textContent || '').slice(0, 160)}` : (x.querySelector('code') ? x.firstChild?.textContent || x.textContent : x.textContent || '').trim().replace(/^第 \d+ 行[:：]\s*/, '').slice(0, 200);
+      errs.push({ n, line: lineOf(n), msg });
+    });
+    return { errs, checks: probs.filter((p) => p.level !== 'error'), lineOf };
+  }
+
+  // 存活板这一段：md、bounds 只在一轮画成功以后改（finishTalk），别的时候只存回显这些（边写边显示时板上是预览，不能存成正式的）
+  function saveHb() {
+    const seg = segs.get(HB_ID);
+    const hb = hbBoard();
+    if (!seg || !hb) return;
+    const snap = hb.snapshot();
+    Object.assign(seg, { echo: snap.echo.slice(0, seg.bounds.length), meta: snap.meta.slice(0, seg.bounds.length), finds: snap.finds, t0s: snap.t0s.slice(0, seg.bounds.length) });
+    saveSeg(seg);
+  }
+
+  // 页面替老师找了例子（find）这类：记成一条 [系统] 提醒，跟着下一轮给老师；正在画这一轮时收进这一轮的提醒
+  function talkNote(text) {
+    if (talkInfo) { talkInfo.push(text); return; }
+    // 边写边显示时就找到了（这一轮还没核验）：先收着，核验过了跟着这一轮的提醒走，作废了就不要
+    if (stream?.talk) { (stream.info ||= []).push(text); return; }
+    addTurn({ role: 'system', kind: 'note', text: `[系统] ${text}` });
+  }
+
+  // 学生在活板上的动作（TalkBoard 的 onAction）→ 作答记录（证据），回显在那一轮下面
+  function onTalkAction(a) {
+    if (readOnly) return;
+    if (a.kind === 'info') { talkNote(String(a.text || '').replace('页面替老师', '页面替你')); return; }
+    const hb = hbBoard();
+    if (!hb) return;
+    const turn = Number.isFinite(a.n) ? hb.turnOf(a.n) : hb.cur;
+    const box = hb.el.querySelector(`.hb-turn[data-t="${turn}"]`) || null;
+    if (a.kind === 'explore') {
+      // 在板上试：不成一道题（不给 block），攒着跟下一条一起发；name / to / ckey 刷新后放回拨的值
+      session.record({ type: 'huoban', liveOnly: true, explore: true, step: HB_ID, text: a.text, name: a.name, ...(a.to !== undefined ? { to: a.to } : {}), ...(a.ckey ? { ckey: a.ckey } : {}), ...(a.fold !== undefined ? { fold: a.fold, shut: a.shut } : {}) });
+      bar.syncSend?.();
+    } else {
+      const id = recordId({ n: a.n, k: a.k || 1, round: a.round || 1 });
+      // el 是那一轮的框：session.record 按它的 data-t0 算用时（这一问出现到作答）
+      session.record({
+        type: 'huoban', block: id, step: HB_ID, n: a.n, sub: a.sub, q: a.q, expr: a.expr, text: a.text,
+        // 目标不算对错（学生动手做到了，不是答对一道题），不进掌握
+        ...(a.sub === 'goal' ? {} : { ok: a.ok, value: a.value }),
+        ...(a.misread ? { misread: a.misread } : {}), ...(a.sig !== undefined ? { sig: a.sig } : {}), ...(Number.isInteger(a.opt) ? { opt: a.opt } : {}),
+        ...(box ? { el: box } : {}),
+      });
+    }
+    if (a.short) hb.addEcho(a.short, turn);
+    saveHb();
+    lastActive = Date.now();
+  }
+
+  // 这一轮边写边显示：写完一整行就把它接到活板上（还没有活板的第一轮，画在「Claude 在写」那一框里）
+  function streamTalk(lines) {
+    if (!lines.length) return;
+    const seg = segs.get(HB_ID);
+    const hb = seg ? hbBoard() : null;
+    if (!stream) stream = { talk: true, n: 0, hbBase: seg ? hbSource(seg.md) : '', hbBounds: (seg?.bounds || []).slice() };
+    if (lines.length === stream.n) return;
+    stream.n = lines.length;
+    let next;
+    try { next = applyOps(stream.hbBase, lines.join('\n')); } catch { return; }
+    try {
+      // is-streaming：还没核验、还没查过的预览，画不出来的行先不露红框（写错了核验以后会退回去重写，学生不该看到）
+      if (hb) { hb.el.classList.add('is-streaming'); hb.show(next, [...stream.hbBounds, lineCount(next)], { quiet: true }); }
+      else if (draft) {
+        if (!draft.preview) {
+          const box = document.createElement('div');
+          box.className = 'class-talk-preview is-preview';
+          draft.box.appendChild(box);
+          draft.preview = new TalkBoard(box);
+          draft.preview.el.classList.add('is-streaming');
+        }
+        draft.preview.show(next, [lineCount(next)], { quiet: true });
+      }
+    } catch (e) { console.warn('活板的预览没画出来', e); return; }
+    scrollToNow(hb);
+  }
+
+  // 当前这一问（最下面那一框）露出来：被底部的条挡住就往上滚一点
+  function scrollToNow(hb) {
+    if (bv.view !== hbPage && hb) return;
+    const el = draft?.box?.isConnected ? draft.box : hb?.el.querySelector('.hb-now');
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const bottom = window.innerHeight - (bar?.height || 110) - 12;
+    if (r.bottom > bottom) window.scrollBy({ top: Math.min(r.bottom - bottom, Math.max(0, r.top - 80)), behavior: reduceMotion() ? 'auto' : 'smooth' });
+  }
+
+  // 下课以后学生再说话：回到活板那一块板（活板一直是讲课的地方，小结那块板只是看）
+  function toHbPage() {
+    if (!TALK || !hbPage || !pages.has(hbPage)) return;
+    if (bv.cur !== hbPage) bv.cur = hbPage;
+    if (bv.view !== hbPage) bv.show(hbPage, { animate: true });
+  }
+
+  // 每一轮给老师的「活板现状」（talk.js 的 talkStateText）：永远不为空
+  function talkState() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const screen = `学生的屏幕：${vw > vh ? '横屏' : '竖屏'} ${vw}×${vh}。`;
+    const seg = segs.get(HB_ID);
+    const hb = hbBoard();
+    if (!seg || !hb) return talkStateText({ screen });
+    let st = {};
+    try { st = hb.stateOf(); } catch (e) { console.warn('活板现状没算出来', e); }
+    return talkStateText({ ...st, src: hbSource(seg.md), bounds: seg.bounds, screen });
+  }
+
+  // 执行一问一答的一轮（finishTurn 的 TALK 分支）：老师写的几行接到活板上；有新冒出来的写法错误就退回上一轮、让它整轮重写。
+  // 返回 { retry, asks, notes, kinds, whole }，和 finishTurn 一样交给 converse
+  function finishTalk(res, toolCalls = [], { cost = undefined } = {}) {
+    const t = talkLines(res.text, { final: true });
+    const notes = [...t.notes];
+    let lines = t.lines;
+    if (res.truncated && lines.length) { lines = lines.slice(0, -1); notes.push('这一轮太长被截断了：最后一行没用，下一轮写短一点。'); }
+    turnMemos = [];
+    opTurn = { seq: turnSeq + 1, by: mock ? 'mock' : res.modelApplied || '' };
+    // board 块只执行 memo（改记忆）和 plan（教学计划）
+    const boardOps = t.ops.map((op) => execOp(op, [], notes));
+    const retry = [];
+    let shown = '';
+    const hadHb = !!segs.get(HB_ID);
+    if (lines.length) {
+      const seg = ensureHb();
+      const hb = hbBoard();
+      toHbPage();
+      const base = hbSource(seg.md);
+      const bounds0 = (seg.bounds || []).slice();
+      let next = null;
+      try { next = applyOps(base, lines.join('\n')); } catch (e) { reportError(e, { what: '活板', path: `sessions/${desk?.sid || ''}` }); }
+      if (next !== null && hb) {
+        const bounds = [...bounds0, lineCount(next)];
+        talkInfo = [];
+        let now = null;
+        try {
+          hb.show(next, bounds, { quiet: true, entering: !(hadHb && lastStreamN) });
+          now = hbErrors(hb);
+        } catch (e) {
+          reportError(e, { what: '活板', path: `sessions/${desk?.sid || ''}` });
+          now = { errs: [{ n: 0, line: '', msg: `这一轮画不出来：${e?.message || e}` }], checks: [], lineOf: () => '' };
+        }
+        const info = [...streamInfo, ...talkInfo];
+        talkInfo = null;
+        const fresh = newErrors(hbErrs, now.errs);
+        if (fresh.length) {
+          // 学生不看写错的板：退回上一轮，整轮重写（同一轮最多 MAX_REWRITES 次）
+          try { hb.show(base, bounds0, { quiet: true }); } catch (e) { reportError(e, { what: '活板', path: `sessions/${desk?.sid || ''}` }); }
+          const n = (rewrites.get('hb:turn') || 0) + 1;
+          rewrites.set('hb:turn', n);
+          if (n <= MAX_REWRITES) retry.push(rewriteText(fresh));
+          else {
+            rewrites.delete('hb:turn');
+            notes.push(`这一轮重写了 ${MAX_REWRITES} 次还是有看不懂的行（${fresh.map((e) => `「${e.line.slice(0, 60)}」`).join('、')}），学生看到的还是上一轮的活板。换个更简单的写法，或者先不问这一步。`);
+          }
+        } else {
+          rewrites.delete('hb:turn');
+          seg.md = hbFence(next);
+          seg.bounds = bounds;
+          hb.setMeta(bounds.length - 1, talkMeta({ ms: cost?.ms, mock: !!mock }));
+          hbErrs = now.errs;
+          saveHb();
+          // 检查的提醒（答案已经写在板上、分不开两种想法……）：没告诉过的跟着下一轮给老师
+          const newChecks = now.checks.filter((c) => { const k = `${c.code}|${now.lineOf(c.n)}|${String(c.msg).replace(/^第 \d+ 行[:：]\s*/, '')}`; if (toldChecks.has(k)) return false; toldChecks.add(k); return true; });
+          if (newChecks.length) notes.push(`页面检查了这一轮的活板：\n${checkText(newChecks)}`);
+          notes.push(...info);
+          shown = (hb.el.querySelector('.hb-now')?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 2000);
+        }
+      }
+    } else if (!t.ops.length) notes.push('这一轮没写活板的行：学生什么也没看到。');
+    lastStreamN = 0;
+    streamInfo = [];
+    refresh();
+    toHbPage();
+    const told = addTurn({ role: 'claude', text: res.text, boardOps, page: hbPage || undefined, talkPage: hbPage || undefined, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined, cost, ...(shown ? { shown } : {}) });
+    if (turnMemos.length) runMemo(turnMemos.splice(0), told.seq, hbPage || bv.cur);
+    nudged = false;
+    lastActive = Date.now();
+    bar.setStatus(res.truncated ? 'notice' : 'idle', res.truncated ? '这一轮太长，被截断了。' : '');
+    requestAnimationFrame(() => scrollToNow(hbBoard()));
+    return { retry, asks: [], notes, kinds: [], whole: retry.length > 0 };
   }
 
   function refresh() {
@@ -1146,15 +1410,32 @@ export async function renderClass(root, meta, desk = null) {
   const toldDrafts = new WeakMap(); // 放草稿的元素 → 上次告诉 Claude 的文字
   // 下课时：板上（没撤回的段里）所有还没提交的草稿；已经记成证据、内容没变的跳过
   const loggedDrafts = new WeakMap();
+  // 一问一答：活板每一轮都重画（元素换了），草稿按空的 data-key（第几行第几个）记，不然每一轮都当成新的再报一次
+  const toldKeys = new Map();
+  const loggedKeys = new Map();
+  const seenDraft = (d, byEl, byKey) => {
+    const k = TALK && d.el.dataset.key;
+    if (k ? byKey.get(k) === d.text : byEl.get(d.el) === d.text) return true;
+    if (k) byKey.set(k, d.text); else byEl.set(d.el, d.text);
+    return false;
+  };
+  // 一条草稿的位置：活板上的空写成那一问的编号（L12），和作答记录对得上
+  const draftOf = (seg, b, d) => {
+    const key = TALK && d.el.dataset.key;
+    if (key) {
+      const [n, k] = key.split('#').map(Number);
+      return { step: HB_ID, block: recordId({ n, k, round: hbBoard()?.blanks.get(key)?.round || 1 }), kind: '活板', title: '', label: '', text: d.text };
+    }
+    return { step: seg.id, block: b.dataset.bid, kind: [...b.classList].find((c) => c.startsWith('block-'))?.slice(6) || '', title: texText(b.querySelector('.w-title')), label: d.label, text: d.text };
+  };
   function allDrafts() {
     const out = [];
     for (const seg of [...segs.values()].sort((a, b) => a.seq - b.seq)) {
       if (!seg.sec || seg.hidden || seg.failed || seg.pending) continue;
       for (const b of seg.sec.querySelectorAll('.block[data-bid]')) {
         for (const d of draftsIn(b)) {
-          if (loggedDrafts.get(d.el) === d.text) continue;
-          loggedDrafts.set(d.el, d.text);
-          out.push({ step: seg.id, block: b.dataset.bid, kind: [...b.classList].find((c) => c.startsWith('block-'))?.slice(6) || '', title: texText(b.querySelector('.w-title')), label: d.label, text: d.text });
+          if (seenDraft(d, loggedDrafts, loggedKeys)) continue;
+          out.push(draftOf(seg, b, d));
         }
       }
     }
@@ -1167,9 +1448,8 @@ export async function renderClass(root, meta, desk = null) {
       if (!seg.sec || seg.hidden || seg.failed || seg.pending) continue;
       for (const b of seg.sec.querySelectorAll('.block[data-bid]')) {
         for (const d of draftsIn(b)) {
-          if (toldDrafts.get(d.el) === d.text) continue;
-          toldDrafts.set(d.el, d.text);
-          out.push({ step: seg.id, block: b.dataset.bid, kind: [...b.classList].find((c) => c.startsWith('block-'))?.slice(6) || '', title: texText(b.querySelector('.w-title')), label: d.label, text: d.text });
+          if (seenDraft(d, toldDrafts, toldKeys)) continue;
+          out.push(draftOf(seg, b, d));
         }
       }
     }
@@ -1281,7 +1561,10 @@ export async function renderClass(root, meta, desk = null) {
       started = true;
       const say = texts.join('\n');
       const drafts = freshDrafts().map(draftLine).filter(Boolean);
-      let text = [actions.length ? actionsMessage(actions) : '', drafts.join('\n'), ink?.line || '', say].filter(Boolean).join('\n\n');
+      // 一问一答：只有在板上试过的、输入框空着点了发送（「就这样 →」）：告诉老师学生试完了
+      const tried = TALK && !say.trim() && !imgs.length && actions.length > 0 && actions.every((a) => a.explore);
+      if (TALK) toHbPage();
+      let text = [actions.length ? actionsMessage(actions) : '', tried ? '[动作] 学生点了「就这样」：试完了，等你接着问。' : '', drafts.join('\n'), ink?.line || '', say].filter(Boolean).join('\n\n');
       if (imgs.length) text += teacher.images ? `\n（附了 ${imgs.length} 张图：学生的手写或截图，白底黑字。）` : `\n（学生附了 ${imgs.length} 张图，但这个查看方式发不了图，你看不到；需要的话请学生用文字说。）`;
       // 学生说的话不上黑板，只进课堂记录
       const turn = addTurn({ role: 'student', text: text.trim() || '（学生附了图）', say, actions: actions.map(actionText), drafts: drafts.length ? drafts : undefined, images: [], page: bv.cur || undefined });
@@ -1357,13 +1640,14 @@ export async function renderClass(root, meta, desk = null) {
   function buildInput(hist) {
     bv.measureFit();
     const level = Math.min(budgetLevel, 3);
-    const args = { rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg(), canvas: CANVAS, ...planArg() };
+    // 一问一答：说明换成一问一答的那一份（talk），黑板现状换成活板现状；对话里没有 board 段可省（也没有 board_read）
+    const args = { rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, board: TALK ? talkState() : boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg(), canvas: CANVAS && !TALK, ...planArg(), ...(TALK ? { talk: true } : {}) };
     // 有教材时，说明还剩的地方补上这一块所在的整章（bookroom.js）：每取一次教材要多等一整轮，多放原文不怎么变慢
     const system = desk?.books?.chunks?.length
       ? systemWithBooks(args, (room) => packForPrompt(teacher.tools, room)).system
       : buildSystem({ ...args, pack: packForPrompt(teacher.tools) });
     const maxBytes = Math.round(promptLimit() * [1, 0.85, 0.7, 0.55][level]);
-    const fit = fitTurns({ system, history: promptHistory(hist), maxBytes, stub: teacher.tools });
+    const fit = fitTurns({ system, history: promptHistory(hist), maxBytes, stub: teacher.tools && !TALK });
     return { fit, system, maxBytes, level };
   }
 
@@ -1386,6 +1670,8 @@ export async function renderClass(root, meta, desk = null) {
   }
   function startSpec() {
     if (spec) return;
+    // 一问一答：开课页的「开始上课。」照抢；开课以后不抢「继续。」（每一轮都以一问结尾，学生要先答）
+    if (TALK && started) return;
     const say = specFor(specState());
     if (!say) return;
     let input;
@@ -1499,7 +1785,7 @@ export async function renderClass(root, meta, desk = null) {
       streamPage = dropPreviews();
       committing = true;
       let out;
-      try { out = finishTurn(res, staged.calls, { keepTalk: rewriting, cost: cost(why) }); } finally { committing = false; streamPage = null; }
+      try { out = TALK ? finishTalk(res, staged.calls, { cost: cost(why) }) : finishTurn(res, staged.calls, { keepTalk: rewriting, cost: cost(why) }); } finally { committing = false; streamPage = null; }
       // 要它重写的段、它用 view_handwriting 要看的原图：再要一轮
       const wantImages = staged.images.length > 0 && !followed;
       if (round === MAX_ROUNDS - 1 && (out.retry.length || wantImages)) {
@@ -1518,9 +1804,11 @@ export async function renderClass(root, meta, desk = null) {
       }
       rewriting = out.retry.length > 0 && !wantImages;
       why = out.retry.length ? 'lint' : 'images';
-      const ask = out.retry.length ? `\n请把上面没显示的段重新写对：${out.asks.join('；')}。只写这几段，不用再对学生说别的。` : '';
+      // 一问一答（whole）：活板退回了上一轮，整轮重写；课堂：只重写没显示的段
+      const ask = out.whole ? '\n把这一轮整轮重写对，只写这一轮的几行（学生还没看到这一轮），不用再对学生说别的。'
+        : out.retry.length ? `\n请把上面没显示的段重新写对：${out.asks.join('；')}。只写这几段，不用再对学生说别的。` : '';
       // 写错的组件有完整写法的，附在后面（课堂说明里只有精简版）
-      const docs = out.retry.length ? lintDocs(COMPONENT_DOCS, session.subject, out.kinds) : '';
+      const docs = out.retry.length && !out.whole ? lintDocs(COMPONENT_DOCS, session.subject, out.kinds) : '';
       if (docs) lines.push(`\n${docs}`);
       const turn = addTurn({ role: 'system', kind: out.retry.length ? 'lint' : 'images', text: `[系统] ${lines.join('\n')}${ask}`, images: wantImages ? staged.ids : undefined });
       imgs = wantImages ? staged.images : [];
@@ -1736,6 +2024,22 @@ export async function renderClass(root, meta, desk = null) {
   // 确认是 Opus 5.5 之前都是草稿：话边生成边出现，要写的黑板内容只列出来（写什么、写在哪），不画 ——
   // keepTalk：这一轮只是重写写错的段，说的话不会换到板顶上，原来那句话照常露着、也不预览这一轮的话
   function ensureDraft({ keepTalk = false } = {}) {
+    // 一问一答：「Claude 在想 / 在写」放在活板的最下面（当前这一问的后面），不放板顶；还没有活板时放在黑板中间
+    if (TALK) {
+      const hbEl = segs.get(HB_ID)?.sec?.querySelector('.block-huoban');
+      const where = hbEl ? 'hb' : 'hero';
+      if (draft && draft.host === where && draft.box.isConnected) return draft;
+      clearDraft();
+      const box = document.createElement('div');
+      box.className = 'class-draft is-talk';
+      box.innerHTML = '<div class="class-draft-talk" hidden></div><div class="class-draft-ops" hidden></div>';
+      box.prepend(bar.indicator);
+      if (hbEl) { toHbPage(); hbEl.after(box); } else hero.appendChild(box);
+      draft = { box, host: where, keepTalk: false, talk: box.querySelector('.class-draft-talk'), ops: box.querySelector('.class-draft-ops') };
+      refresh();
+      requestAnimationFrame(() => scrollToNow(hbBoard()));
+      return draft;
+    }
     const host = pages.get(bv.cur) || null;
     if (draft && draft.host === (host?.n || 0)) return draft;
     clearDraft();
@@ -1753,9 +2057,22 @@ export async function renderClass(root, meta, desk = null) {
   function drawDraft(text, status = 'Claude 正在写黑板…') {
     pendingText = text;
     pendingStatus = status;
+    pendingClosing = closingDraft;
     if (raf) return;
     raf = requestAnimationFrame(() => {
       raf = 0;
+      // 一问一答（不是下课小结）：板顶不预览话；每写完一整行接到活板上（还没有活板时画在「Claude 在写」那一框里）
+      if (TALK && !pendingClosing) {
+        try {
+          const t = talkLines(pendingText, { final: false });
+          bar.setStatus('writing', 'Claude 在写…');
+          ensureDraft();
+          if (!firstAt && t.lines.length) firstAt = performance.now();
+          if (FEATURES.stream) streamTalk(t.lines);
+          bv.scheduleFit();
+        } catch (e) { console.warn('活板的草稿没画出来', e); }
+        return;
+      }
       try {
         const { segments } = parseOutput(pendingText);
         bar.setStatus('writing', pendingStatus);
@@ -1845,6 +2162,18 @@ export async function renderClass(root, meta, desk = null) {
   // 先画出来的段拿掉（核验过了要换成正式的；或者这一轮作废了）
   function dropPreviews({ rollback = false } = {}) {
     if (!stream) return;
+    // 一问一答：边写边显示画的是活板本身（接上了写完的行）。作废（rollback）就退回上一轮；核验过了 finishTalk 会照正式的再画一次
+    if (stream.talk) {
+      const s = stream;
+      stream = null;
+      lastStreamN = rollback ? 0 : s.n;
+      streamInfo = rollback ? [] : s.info || [];
+      const seg = segs.get(HB_ID);
+      const hb = hbBoard();
+      hb?.el.classList.remove('is-streaming');
+      if (rollback && seg && hb && s.n) { try { hb.show(hbSource(seg.md), (seg.bounds || []).slice(), { quiet: true }); } catch (e) { reportError(e, { what: '活板', path: `sessions/${desk?.sid || ''}` }); } }
+      return null;
+    }
     for (const seg of stream.list) { dropScenesOf(seg.sec); seg.sec.remove(); segs.delete(seg.id); }
     for (const sec of stream.hidden) sec.hidden = false;
     if (rollback) {
@@ -1864,7 +2193,7 @@ export async function renderClass(root, meta, desk = null) {
   function clearDraft() {
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
     if (!draft) return;
-    pages.get(draft.host)?.sec.classList.remove('is-drafting');
+    if (!TALK) pages.get(draft.host)?.sec.classList.remove('is-drafting');
     bar.indicator.remove();
     draft.box.remove();
     draft = null;
@@ -2139,8 +2468,10 @@ export async function renderClass(root, meta, desk = null) {
         },
       },
     ];
+    // 一问一答：对话里没有省略的段（整块活板的源码每一轮都在活板现状里），不给 board_read
+    const mine = TALK ? tools.filter((t) => t.name !== 'board_read') : tools;
     // 附图的工具（看手写原图、看讲义原图）：这个查看方式发不了图、或者这一轮已经补发过图，就不给
-    return view && teacher.images ? tools : tools.filter((t) => t.name !== 'view_handwriting' && t.name !== 'view_image');
+    return view && teacher.images ? mine : mine.filter((t) => t.name !== 'view_handwriting' && t.name !== 'view_image');
   }
 
   // —— 下课：让课堂 Claude 写一份小结，存进 class_notes（同样只收 Opus 5.5 写的），写在最后一块板上 ——
@@ -2180,24 +2511,28 @@ export async function renderClass(root, meta, desk = null) {
       const report = repObj ? reportText(repObj) : desk ? '（这一次页面没算出课后报告：整理单按这节课的对话写，basis 写组件 id 或段 id。）' : '';
       // 这节课的一页（memory/sheet.js）：页面自己拼，写在小结那块板的下面
       const sheet = sheetMd(repObj?.sheet || lessonSheet({ steps: steps() }));
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: boardState(), subject: session.subject, memory: memoryArg(), canvas: CANVAS, ...planArg() });
+      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: TALK ? talkState() : boardState(), subject: session.subject, memory: memoryArg(), canvas: CANVAS && !TALK, ...planArg(), ...(TALK ? { talk: true } : {}) });
       // 每几节课（或者某一类到了上限）顺带整理：合并重复的弱点、复现组、关于学生的记录（memo.js 的 tidyDue）
       const sp = desk?.block ? spaceOfId(desk.block) : desk?.space || spaceOfId('');
       const why = desk ? tidyDue(desk.mem, sp, desk.sid) : '';
       const tidy = why ? { why, text: tidyText(desk.mem, sp) } : null;
       // 后方复查出来的（memory/sentry.js，首页算好放在 meta/workorder）：这一科以前的结论后来的证据对不上的几条，整理单里顺带判断
-      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ report, review: desk?.review, opening: desk?.opening, slips: desk ? slipsToFold(desk.mem, sp) : '', plan: FEATURES.plan === false ? null : latestPlan(history), tidy, recheck: desk?.recheck?.[sp] || '' }) }], maxBytes: promptLimit(), stub: teacher.tools });
+      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ report, review: desk?.review, opening: desk?.opening, slips: desk ? slipsToFold(desk.mem, sp) : '', plan: FEATURES.plan === false ? null : latestPlan(history), tidy, recheck: desk?.recheck?.[sp] || '' }) }], maxBytes: promptLimit(), stub: teacher.tools && !TALK });
       // 小结边写边显示（以前要干等一两分钟才一下子出来），也记下等了多久
       const t0 = performance.now();
       firstAt = 0;
       const cost = (why) => callCost({ bytes: fit.bytes, why, ms: performance.now() - t0, first: firstAt ? firstAt - t0 : undefined });
       let res;
+      // 一问一答：小结不往活板上画（照普通的预览写在「Claude 在写」那一框里）
+      closingDraft = true;
       try {
         res = await teacher.call(fit.turns, { ...TEACH, cache: false, signal: ctl.signal, onText: ({ text }) => drawDraft(text, 'Claude 在写这节课的小结…') });
       } catch (e) {
         dropPreviews({ rollback: true });
         failTurn(e, '下课小结', cost('failed'));
         return false;
+      } finally {
+        closingDraft = false;
       }
       // 小结里不执行黑板指令：边写边显示时先画上来的段（小结里写了 board add 之类）都撤掉
       dropPreviews({ rollback: true });

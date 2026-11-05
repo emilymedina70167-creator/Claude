@@ -145,6 +145,9 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
   // 学习台里下课：小结后面接着写整理单（memo 块），依据用课后报告里的第一道题
   if (/下课|小结/.test(said)) return { kind: 'closing', text: closingText(conv) + (/整理单/.test(said) ? `\n${closingMemo(said)}` : '') };
 
+  // 一问一答的课（kind: talk，说明的开头写着）：写活板的行，一问一答
+  if (turns.length && textOf(turns[0].content).includes(TALK_MARK)) return talkReply({ said, conv, isSystem });
+
   // 一轮写了两块新板、第一块还很长：页面把第二块并进第一块（一轮最多一块新板），长的那块上下滑着看，不切成几屏
   if (!isSystem && /测试\s*[:：]?\s*长板/.test(said)) {
     const n = nextSeq(turns, memo);
@@ -944,6 +947,27 @@ function brokenIds(text, memo) {
 const suffixOf = (id) => (/^b(\d+)$/.exec(id)?.[1] ?? id);
 
 // —— 输入 ——
+
+// —— 一问一答（kind: talk，docs/talk-impl.md D.1）的剧本：不调用 Claude，写活板的行 ——
+// 第一轮：一个页面置换的过程（能拨着看第几步）+ 一个空；学生答对以后 set 改页框数（上面的空跟着重新打开）+ 一个选择；
+// 再一轮：自己拨页框数的目标（goal）。答错了给一句提示、不往前走；「测试:写错」故意写一行看不懂的（页面退回去、要它整轮重写）
+const TALK_MARK = '这是一问一答的课的完整说明';
+const TALK_REFS = 'refs=[1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5]';
+const TALK_STEPS = [
+  { mark: '一共缺页几次', text: ['（模拟老师）我们从一个具体的例子开始。', '# FIFO 换页', 'let f = 3', `let r = paging(${TALK_REFS}, frames=f, algo=fifo)`, 'let k = 0 拨 0..12', 'draw r at k', '拨一拨，看每一步页框里是什么：现在在第 {k} 步。', '{f} 个页框、按 FIFO 换：这串引用一共缺页几次？{r.faults?}'] },
+  { mark: 'set f = 4', text: ['对，9 次。现在给它多一个页框：', 'set f = 4', '页框从 3 个变成 4 个，缺页次数会怎样？{? 变少 | 一样 | *变多}'] },
+  { mark: 'goal g', text: ['这就是 Belady 异常：FIFO 下页框多了，缺页反而可能更多。你自己找一找：', 'let g = 3 拨 1..6', `let r2 = paging(${TALK_REFS}, frames=g, algo=fifo)`, '页框数 {g}，缺页 {r2.faults} 次。', 'goal g > 3 and r2.faults > 9 => "页框比 3 个多，缺页反而更多了"'] },
+];
+function talkReply({ said, conv, isSystem }) {
+  const mine = conv.filter((t) => t.role === 'assistant').map((t) => textOf(t.content));
+  const lines = (a) => `${a.join('\n')}\n`;
+  if (isSystem && /看不懂/.test(said)) return { kind: 'talk-fix', text: lines(['（模拟老师）我改一下这一轮。', '先算个简单的：$2 + 3 =$ {2 + 3?}']) };
+  if (!isSystem && /测试\s*[:：]?\s*写错/.test(said)) return { kind: 'talk-broken', text: lines(['（模拟老师）这一轮故意写错一行，页面应该退回去让我重写。', '这一行用了没定义的名字：{nosuch?}']) };
+  if (/不对/.test(said) && !/，对/.test(said)) return { kind: 'talk-hint', text: lines(['（模拟老师）不急。拨一拨上面的步数，一步一步数缺页的那几下：哪几步是缺页？']) };
+  const next = TALK_STEPS.find((s) => !mine.some((m) => m.includes(s.mark)));
+  if (next) return { kind: 'talk', text: lines(next.text) };
+  return { kind: 'talk-more', text: lines(['（模拟老师）收到。想清楚了就选一个往下走：{? *接着往下 | 先停一停}']) };
+}
 
 function toTurns(input) {
   if (Array.isArray(input)) return input.filter((t) => t && typeof t === 'object');

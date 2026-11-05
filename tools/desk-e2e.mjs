@@ -294,6 +294,73 @@ const SUITES = {
     return t;
   },
 
+  // 一问一答（kind: talk，docs/talk-impl.md D.2）：首页选「一问一答」开课（连点两下只开一节）；活板上填错一次、填对一次，证据里记成 L… 的作答；
+  // 上面的数变了、空重新打开再答（L…#2）；拨一下不调用，点「就这样」才调用；刷新以后空、选择、拨的值都在；直接下课，报告里有这几道题；
+  // 「以前的课」能翻看（只读、不调用）
+  async talk(browser) {
+    const t = await seeded(browser);
+    await t.page.click('.dk-form-b[data-form="talk"]'); await sleep(300);
+    const before = (await t.docs('sessions')).length;
+    await t.page.dblclick('.dk-class .dk-new');
+    const sid = await t.inClass();
+    const ss = await t.docs('sessions');
+    check(ss.length === before + 1, '连点两下「开新课」开出了不止一节');
+    check(ss.find((d) => d.id === sid)?.kind === 'talk', '选了一问一答，开出来的课不是 kind: talk');
+    const calls = () => t.page.evaluate(() => (window.LAKitEval?.teacher?.calls || []).filter((c) => c.method === 'call').length);
+    const idle = (what) => t.waitFor(async () => !(await t.page.evaluate(() => window.LAKit?.classroom?.busy)), { timeout: 30000, what });
+    await t.page.click('button:has-text("开始上课")');
+    await t.waitFor(() => t.page.$('.hb-board .hb-now .hb-blank input'), { timeout: 30000, what: '模拟老师写出第一问（活板上有一个空）' });
+    await idle('老师写完第一问');
+    // 填错一次、填对一次（回车交也行，这里点「对吗」）
+    const blank = '.hb-board .hb-blank';
+    await t.page.fill(`${blank} input`, '8'); await t.page.click(`${blank} button`);
+    await t.waitFor(() => t.page.$('.hb-echo span'), { what: '填错以后回显出来' });
+    await t.page.fill(`${blank} input`, '9'); await t.page.click(`${blank} button`);
+    const recs = await t.waitFor(async () => { const ev = (await t.docs('evidence')).filter((e) => e.session === sid && e.src === 'record' && /^L\d/.test(e.comp || '')); return ev.length >= 2 ? ev : null; }, { what: '证据里有 L… 的两条作答' });
+    check(recs.some((e) => e.ok === false) && recs.some((e) => e.ok === true), '证据里的两条不是一错一对');
+    check(recs.every((e) => e.q && !/\{/.test(e.q)), `作答记录的题面不是人读得懂的：${recs[0]?.q}`);
+    // 第二问：set 改了页框数（上面的空重新打开）+ 一个选择
+    await t.waitFor(() => t.page.$('.hb-now .hb-choice button'), { timeout: 30000, what: '第二问（选择）' });
+    await idle('老师写完第二问');
+    check(!(await t.page.$('.hb-blank.is-ok')), '页框数改了，上面那个空没有重新打开');
+    await t.page.fill(`${blank} input`, '10'); await t.page.click(`${blank} button`);
+    await t.page.evaluate(() => [...document.querySelectorAll('.hb-now .hb-choice button')].find((b) => b.textContent.includes('变多'))?.click());
+    await t.waitFor(() => t.page.$('.hb-goal'), { timeout: 30000, what: '第三问（目标）' });
+    await idle('老师写完第三问');
+    // 拨一下：攒着，不调用；发送键变成「就这样」，点了才调用
+    const n0 = await calls();
+    await t.page.click('.hb-scrub button[aria-label="加一"]');
+    await sleep(3000);
+    check((await calls()) === n0, '在活板上拨了一下就调用了老师（应该攒着）');
+    check((await t.text('.cb-send'))?.includes('就这样'), '拨过以后发送键没变成「就这样」');
+    await t.page.click('.cb-send');
+    await t.waitFor(async () => (await calls()) > n0, { what: '点「就这样」以后调用老师' });
+    await idle('老师接着写完');
+    const ev2 = (await t.docs('evidence')).filter((e) => e.session === sid && e.src === 'record');
+    check(ev2.some((e) => /^L\d+#2$/.test(e.comp || '') && e.ok === true), '重新打开的空再答，证据里没有 L…#2 那一道');
+    check(ev2.some((e) => e.explore && e.name === 'k'), '拨的那一下没记进证据');
+    // 刷新：空的状态、选择、拨的值都在
+    await t.page.reload(); await t.page.waitForLoadState('load');
+    await t.waitFor(() => t.page.$('.hb-board .hb-now'), { timeout: 20000, what: '刷新以后活板画回来' });
+    await sleep(800);
+    check((await t.page.$eval('.hb-blank.is-ok input', (x) => x.value).catch(() => '')) === '10', '刷新以后空里答对的 10 没了');
+    check(await t.page.$('.hb-choice button.is-ok'), '刷新以后选择的结果没了');
+    check((await t.text('.hb-scrub .hb-n'))?.trim() === '1', `刷新以后拨的值没放回去（现在是 ${await t.text('.hb-scrub .hb-n')}）`);
+    // 直接下课：报告里有这几道题
+    await t.open(); await t.page.waitForSelector('.dk-class .dk-go', { state: 'attached', timeout: 15000 });
+    await t.page.evaluate(() => document.querySelector('.dk-class .dk-close').click());
+    await t.answer('直接下课');
+    await t.waitFor(async () => { const x = (await t.docs('sessions')).find((d) => d.id === sid); return x?.status === 'closed' && x.report?.at ? x : null; }, { timeout: 20000, what: '直接下课以后报告写好' });
+    const rep = (await t.db())[`sessions/${sid}/report/main`];
+    check((rep?.items || []).filter((it) => /^L\d/.test(it.comp || '')).length >= 3, `报告里没有活板上的这几道题：${JSON.stringify((rep?.items || []).map((x) => x.comp))}`);
+    // 翻看黑板：活板画出来，只读，不调用
+    await t.open(`view/${sid}`);
+    await t.waitFor(() => t.page.$('.hb-board.is-readonly .hb-turn'), { timeout: 20000, what: '只读的活板画出来' });
+    await sleep(1500);
+    check((await calls()) === 0, '翻看以前的课调用了老师');
+    return t;
+  },
+
   // 练一练：题库里放两道挂着到期复现组的题。做完（中间写证据失败一次）结果照样算进去；
   // 另开一节做一道错的就回首页「直接下课」，复现组照样记「没过」（以前直接下课会把复现结果丢掉）
   async drill(browser) {

@@ -101,3 +101,14 @@
 .hb-past .hb-echo span { background: rgb(var(--chalk-rgb) / 0.08); color: var(--chalk); font-size: 13.5px; }
 .hb-tmeta { font-size: 12px; color: var(--muted); }
 .hb-more { justify-self: start; min-height: 44px; border: 0; background: none; color: var(--yellow); font: 15px var(--sans); cursor: pointer; padding: 0 4px; }
+
+/* 一问一答的课（classroom.js 的 TALK）：「Claude 在想 / 在写」在活板最下面；第一轮还没有活板时边写边画在黑板中间那一框里（点不了）。
+   第一批先不挂 Pencil 板书（活板一轮轮在挪，笔迹的锚点会跟着乱）：板书的开关藏起来 */
+.class-draft.is-talk { margin: 14px 0 6px; }
+.class-talk-preview { width: min(100%, 40em); text-align: left; pointer-events: none; }
+.class-hero .class-draft.is-talk { justify-items: stretch; width: min(100%, 40em); }
+body.class-talk .ink-fab, body.class-talk .la-tray { display: none !important; }
+.hb-board.is-readonly input, .hb-board.is-readonly button:not(.hb-more), .hb-board.is-readonly .hb-n, .hb-board.is-readonly .hb-plane { pointer-events: none; }
+.hb-board.is-readonly input { opacity: .8; }
+/* 边写边显示的预览：还没核验、没查过，画不出来的行先不露（写错了会退回去重写） */
+.hb-board.is-streaming .hb-err, .hb-board.is-streaming .hb-bad { display: none; }
