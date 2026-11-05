@@ -24,6 +24,7 @@ import { image } from './image.js';
 import { code } from './code.js';
 import { cloze, errfind, parse, drill, chunk, link as enLink, translate } from './english.js';
 import { gloss } from './gloss.js';
+import { huoban } from './huoban.js';
 import { stepperBlock } from '../stepper.js';
 import { ENGINES } from '../engines/registry.js';
 import { elimEngine } from '../engines/elim.js';
@@ -40,6 +41,8 @@ export const blocks = {
   let: letBlock, matrix, sketch, derive, image, code,
   // 英语（语法）：填空、改错、句子成分、句型操练（判分在 entext.js）
   cloze, errfind, parse, drill, chunk, link: enLink, translate, gloss,
+  // 活板（docs/talk-plan.md）：几行描述 → 能拨、能拖、能折的板；说明书里还没写，先给示例页和一问一答的课用
+  huoban,
   // 一步步走的演示（stepper.js 外壳 + engines/ 里的纯函数引擎，名字在 engines/registry.js）
   ...Object.fromEntries(Object.entries(ENGINES).filter(([k]) => k !== 'elim' && k !== 'pv').map(([k, e]) => [k, stepperBlock(e)])),
   elim: elimBlock(),

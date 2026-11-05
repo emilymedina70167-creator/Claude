@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>活板</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+## 页面置换：多给一块，会更好吗？
+
+```huoban
+let refs = 1 2 3 4 1 2 5 1 2 3 4 5
+let f = 3 拨 1..6
+let r = paging(refs=refs, frames=f, algo=fifo)
+用 FIFO 置换，分 {f} 个物理块，依次访问 {refs}。
+draw r
+数一数：一共缺页 {r.faults?} 次。
+物理块越多，缺页应该越少吧？拨一拨块数，看看是不是一直这样。
+goal faults(refs, f, fifo) > faults(refs, f - 1, fifo) => "多给一块，缺页反而多了。这就是 Belady 异常。"
+when faults(refs, f, fifo) > faults(refs, f - 1, fifo)：{f} 块比 {f - 1} 块多缺页。你觉得是 FIFO 的哪一点惹的祸？
+```
+
+## 一步步看：第几次访问时换出了谁
+
+```huoban
+let refs = 7 0 1 2 0 3 0 4
+let k = 4 拨 1..8
+let r = paging(refs=refs, frames=3, algo=lru)
+draw r at k
+拨到第 {k} 次访问。第 4 次访问时换出的是哪一页？{r.victim.1?}
+```
+
+## 特征向量：有没有只被拉长的方向？
+
+```huoban
+let A = [[2, 1], [1, 2]]
+let x = [1, 0] 拖 吸附 0.5
+draw A, x, A*x "Ax"
+淡紫色的网格是 $A$ 把整个平面变成的样子。$A$ 把 {x} 送到 {A*x}。
+有没有哪个方向，$A$ 只把它拉长、不转？拖动 $x$ 找一找。
+goal par(A*x, x) => "找到了：Ax 和 x 在一条线上。这样的 x 叫特征向量。"
+when par(A*x, x)：这时 $A\mathbf x$ 是 $\mathbf x$ 的 {lam(A, x)?} 倍。
+```
+
+## 定语从句：去掉哪几段，句子还站得住？
+
+```huoban
+let s = 句子("The man [whom I met] [yesterday] is [my teacher].")
+draw s
+点虚线框把它折起来，再点一下展开。
+剩下：{s.rest}
+goal s.rest == "The man is my teacher." => "主干是 The man is my teacher."
+when s.rest == "The man is my teacher."：whom 在从句里是什么成分？{? 主语 | *宾语 | 表语}
+```
+
+## 调度：时间片轮转
+
+```huoban
+let q = 2 拨 1..4
+let s = sched(procs="P1 0 5, P2 2 4, P3 4 1, P4 5 6", algo="rr q=" + q)
+draw s
+时间片 $q =$ {q}。平均周转时间是 {s.avg?}。
+```
+</script>

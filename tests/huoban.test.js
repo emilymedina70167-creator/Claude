@@ -156,3 +156,19 @@ test('追问：set 改量、留着原来的手势；别的行接在最后', () =
   assert.equal(text(rt.value('f')), '4');
   assert.equal(text(rt.value('g')), '2');
 });
+
+test('取第几个：r.victim.1、v.2 是成员，.5 还是小数', () => {
+  const rt = new Runtime();
+  rt.load('let v = [4, 5, 6]\nlet r = paging(refs=[7, 0, 1, 2, 0, 3], frames=3, algo=lru)');
+  assert.equal(text(rt.value('v.2')), '5');
+  assert.equal(text(rt.value('.5 + 1')), '3/2');
+  assert.equal(text(rt.value('r.victim.1')), '7');
+  assert.equal(text(rt.value('[1, 2].1')), '1');
+});
+
+test('控件写在公式 $…$ 里面：读的时候就报', () => {
+  const b = parseBoard('let q = 2 拨 1..4\n时间片 $q = {q}$\n时间片 $q =$ {q}，价格 \\$5 {q}');
+  assert.equal(b.errors.length, 1);
+  assert.match(b.errors[0].msg, /公式 \$…\$ 里面/);
+  assert.equal(b.errors[0].n, 2);
+});

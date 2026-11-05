@@ -164,3 +164,18 @@ export function mutateDomain(d, v, r) {
 }
 
 export { text, q };
+
+/** 常见错法下这一问的答案（引擎的 variants）：[{ label, value }]。教学检查用它看这一问分不分得开对错两种想法 */
+export function variantAnswers(p, name, idx = null) {
+  const out = [];
+  for (const v of p.engine.variants?.(p.input, p.fields) || []) {
+    try {
+      const vr = p.engine.run(v.input);
+      const vl = [];
+      vr.steps.forEach((s) => asksOf(s).forEach((a) => { if (a.tag === name) vl.push(a); }));
+      const a = idx === null ? vl[vl.length - 1] : vl[idx];
+      if (a) out.push({ label: v.label, value: askValue(a) });
+    } catch { /* 这种错法在这组数上算不了 */ }
+  }
+  return out;
+}

@@ -16,6 +16,7 @@ import classBoardCss from './class/board.css';
 import { renderDesk, classHash } from './memory/desk.js';
 import deskCss from './memory/desk.css';
 import themesCss from './themes.css';
+import huobanCss from './huoban/huoban.css';
 import { themeOf, storedTheme, applyTheme, DESK_DEFAULT } from './theme.js';
 import { VERSION } from './version.js';
 import { installErrlog, reportError } from './errlog.js';
@@ -55,7 +56,7 @@ function injectStyles() {
   document.body.insertAdjacentHTML('afterbegin', CHALK_FILTER);
   const style = document.createElement('style');
   style.id = 'la-kit-style';
-  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + deskCss + '\n' + themesCss;
+  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + deskCss + '\n' + huobanCss + '\n' + themesCss;
   document.head.appendChild(style);
   if (!document.querySelector('meta[name="viewport"]')) {
     const m = document.createElement('meta');

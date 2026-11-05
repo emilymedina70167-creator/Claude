@@ -20,7 +20,10 @@ export function tokenize(src) {
   while (i < src.length) {
     const c = src[i];
     if (/\s/.test(c)) { i++; continue; }
-    if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(src[i + 1] || '') && src[i - 1] !== '.')) {
+    // .5 是小数；r.victim.1、v.2 里的 .1 是取第几个（前一个是名字、右括号、右方括号时）
+    const prev = out[out.length - 1];
+    const member = prev && (prev.t === 'id' || (prev.t === 'op' && (prev.v === ')' || prev.v === ']')));
+    if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(src[i + 1] || '') && src[i - 1] !== '.' && !member)) {
       // 小数点后面必须是数字，所以 1..6 读成 1、..、6
       const s = /^\d*\.?\d+/.exec(src.slice(i))[0];
       out.push({ t: 'num', v: s });
@@ -173,6 +176,8 @@ export function parseProse(text) {
   let last = 0, m;
   while ((m = re.exec(text))) {
     if (m.index > last) segs.push({ k: 'text', v: text.slice(last, m.index) });
+    // 公式 $…$ 里面放不了控件（拨的、空、选择都是页面画的，KaTeX 排不进去）：写在公式外面
+    if ((text.slice(0, m.index).replace(/\\\$/g, '').match(/\$/g) || []).length % 2) throw err(`{${m[1].trim()}} 写在了公式 $…$ 里面：放到公式外面，比如 $q =$ {q}`);
     const inner = m[1].trim();
     if (/^[?？]/.test(inner)) {
       const opts = inner.slice(1).split('|').map((s) => s.trim()).filter(Boolean);
