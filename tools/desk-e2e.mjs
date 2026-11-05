@@ -643,6 +643,17 @@ const SUITES = {
     check(!(await t.db())['book_inbox/B90-001-a'], '并完了收件箱的记录没删');
     await sleep(600);
     check((await t.text('.dk-bookpage'))?.includes('转好了'), '教材页没写「转好了」');
+    check(!b.needsRebuild, '拼完了书上还记着「还要拼条目」');
+    // 上次并完了页、条目没拼完就关了页面（书上记着 needsRebuild，收件箱已经空了）：再打开接着拼
+    const done = (n, title) => ({ ...page(n), status: 'done', items: [{ kind: '习题', title, text: `第 ${title} 题.`, cont: false }] });
+    await plant(t, {
+      'books/B91': { title: '拼到一半的书', kind: 'textbook', space: 'math', subject: '线代', status: 'partial', pages: 2, pagesDone: 0, pagesLeft: 2, pagesStored: 2, chunks: 0, toc: [], needsRebuild: true, createdAt: 1, at: 1 },
+      'books/B91/pages/1': done(1, '1'),
+      'books/B91/pages/2': done(2, '2'),
+    });
+    await t.page.reload(); await sleep(1500);
+    const b2 = await t.waitFor(async () => { const x = (await t.db())['books/B91']; return x?.status === 'ready' && x.chunks === 2 && !x.needsRebuild ? x : null; }, { timeout: 20000, what: '打开学习台后接着把没拼完的书拼成条目' });
+    check(b2.pagesDone === 2, `接着拼以后转好的页数不对：${b2.pagesDone}`);
     return t;
   },
 
