@@ -15,6 +15,7 @@ import { toast } from '../record.js';
 import { attachErrlog, onError, markSeen, reportError } from '../errlog.js';
 import { healthCheck, healthRecord, sameDoc } from './health.js';
 import { guardDebrief, buildCorpus } from './guard.js';
+import { recheck as sentryRecheck, recheckText, workOrder } from './sentry.js';
 import { guardDb } from './writer.js';
 import { getStore, getDownloads } from '../live/store.js';
 import { VERSION, KIT_URL } from '../version.js';
@@ -135,7 +136,7 @@ export async function renderDesk(root, meta) {
     <section class="dk-card dk-recent"><h2 class="dk-h">最近记下的</h2><p class="dk-sub muted">课堂里的 Claude 和页面直接写进记忆的，不对就撤销（7 天内）。</p><div class="dk-pdone"></div></section>
     <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-backup" hidden><h2 class="dk-h">备份</h2><div class="dk-body"></div></section>
-    <section class="dk-card dk-check" hidden><h2 class="dk-h">自检</h2><div class="dk-body"></div><div class="dk-guard"></div><div class="dk-health"></div><div class="dk-errs"></div></section>
+    <section class="dk-card dk-check" hidden><h2 class="dk-h">自检</h2><div class="dk-body"></div><div class="dk-guard"></div><div class="dk-work"></div><div class="dk-health"></div><div class="dk-errs"></div></section>
     <section class="dk-card dk-colls" hidden><details class="dk-fold"><summary><h2 class="dk-h">记忆库</h2><span class="muted">每一类有几条、谁写</span></summary><div class="dk-body"></div></details></section>
     </div>
     <footer class="dk-foot">组件库 ${escapeHtml(VERSION)}</footer>
@@ -287,7 +288,7 @@ export async function renderDesk(root, meta) {
     for (const c of failed) res.problems.unshift({ coll: c, id: '', msg: `读不到 ${c}（${COLLECTIONS[c].label}），这一次的自检不全` });
     paint(res, today);
     writeBriefs(today);
-    if (!failed.size) { flushOpen(); proposeMastery(); runHealth(today); }
+    if (!failed.size) { flushOpen(); proposeMastery(); runHealth(today); runSentry(today); }
     const rec = memcheckRecord(res, { kit: VERSION, today });
     const json = JSON.stringify(rec);
     if (json !== lastCheck) {
@@ -302,6 +303,29 @@ export async function renderDesk(root, meta) {
         put('meta', 'ledger', { ...res.ledger, at: Date.now() }).catch(() => {});
       }
     }
+  }
+
+  // —— 后方的复查和工作单（sentry.js）：每次自检后算一遍，变了才写 meta/workorder；下课整理时课堂 Claude 带着这一科的复查几行 ——
+  let workDoc = null;
+  let lastWork = '';
+  db.doc('meta/workorder').onSnapshot((s) => { workDoc = s.exists ? s.data() : null; paintWork(); }, () => {});
+  function runSentry(today) {
+    const re = sentryRecheck(data);
+    const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: packs[k].main }])), re });
+    const doc = { v: 1, items, recheck: Object.fromEntries(SPACE_KEYS.map((k) => [k, recheckText(re, k)])), stale: re.stale.length, maybeSolved: re.maybeSolved.length };
+    const key = JSON.stringify(doc);
+    if (key === lastWork) return;
+    lastWork = key;
+    put('meta', 'workorder', { ...doc, today, at: Date.now() }).catch((err) => reportError(err, { what: '工作单没写进去' }));
+  }
+  const WORK_KIND = { backfill: '补收尾', recheck: '重判', resolve: '可能会了', newproblems: '缺新题', probe: '该测了', prep: '该备课' };
+  function paintWork() {
+    const box = $('.dk-work');
+    if (!box) return;
+    const items = (workDoc?.items || []).filter((x) => !x.space || x.space === space);
+    box.innerHTML = `<h3 class="dk-h3">后方的工作单</h3>
+      <p class="dk-sub muted">页面按记录算出来的、后方该做的事（这一科），价值高的在前。标「不另调用」的会并进下一次下课整理或开课。</p>
+      ${items.length ? `<ul class="dk-errlist">${items.slice(0, 8).map((x) => `<li><b>${escapeHtml(WORK_KIND[x.kind] || x.kind)}</b> ${inline(x.title)}<span class="muted">　${escapeHtml(x.why)} · ${escapeHtml(x.cost)}</span></li>`).join('')}</ul>${items.length > 8 ? `<details class="dk-soft"><summary>还有 ${items.length - 8} 件</summary><ul class="dk-errlist">${items.slice(8, 40).map((x) => `<li><b>${escapeHtml(WORK_KIND[x.kind] || x.kind)}</b> ${inline(x.title)}<span class="muted">　${escapeHtml(x.why)}</span></li>`).join('')}</ul></details>` : ''}` : '<p class="dk-ok">没有要做的。</p>'}`;
   }
 
   // —— 守卫（guard.js、memops.js）：写进记忆的每一条过六道检查。管理页「自检」里：各种结论几条、先暂存的（放行 / 不要）、最近挂提醒和拒掉的 ——
@@ -458,6 +482,7 @@ export async function renderDesk(root, meta) {
     paintBackup();
     paintPending();
     paintGuard();
+    paintWork();
     paintMine();
     paintDrill(today);
     paintWeek(today);
@@ -1423,6 +1448,8 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   }
   return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
     store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => goto(''), books, prevRead,
+    // 后方复查（sentry.js）首页算好的：下课整理时带给课堂 Claude 判断（只在下课那一次用，上课的每一轮不带）
+    recheck: await within(db.doc('meta/workorder').get().then((s) => (s.exists ? s.data().recheck || {} : {})), 3000, {}).catch(() => ({})),
     // 这节课换过的块（刷新以后接着换，前面换过的不丢）
     ...(Array.isArray(doc.blocks) && doc.blocks.length ? { blocks: doc.blocks.map(String) } : {}),
     writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),

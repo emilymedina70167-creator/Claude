@@ -533,6 +533,10 @@ const SUITES = {
     check(Array.isArray(h.fixed) && h.fixed.some((f) => String(f.id).includes('c-20261101-1')), 'meta/health 里没记这次修了什么');
     await t.route('manage');
     check((await t.text('.dk-check'))?.includes('体检'), '管理页的自检里看不到体检的结果');
+    // 后方的工作单（sentry.js）：首页算好写进 meta/workorder，管理页列出来
+    const wo = await t.waitFor(async () => (await t.db())['meta/workorder'], { timeout: 15000, what: '工作单写进 meta/workorder' });
+    check(Array.isArray(wo.items) && wo.recheck && typeof wo.recheck.math === 'string', 'meta/workorder 的样子不对');
+    check((await t.text('.dk-work'))?.includes('后方的工作单'), '管理页看不到后方的工作单');
     return t;
   },
 

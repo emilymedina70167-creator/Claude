@@ -1249,7 +1249,7 @@ function reviewDoc(review, opening) {
   return out.length ? `\n${out.join('\n')}\n` : '';
 }
 
-export function closingPrompt({ report = '', review = '', opening = null, slips = '', plan = null, tidy = null } = {}) {
+export function closingPrompt({ report = '', review = '', opening = null, slips = '', plan = null, tidy = null, recheck = '' } = {}) {
   const base = doc`
 下课了。请写这节课的小结，给以后的课看（下一节课的你会带着它）：学生掌握得怎么样、下一节从哪里接。
 
@@ -1279,7 +1279,7 @@ ${pt.trim()}` : base;
 - 是新的一件事：ˋlesson text="…" why="根因" slips=S-…ˋ；这节课新犯、上课时没记的，也直接写成守则，不用先写 slip；
 - 守则写成下次照着就能做的动作，带上判断的时机（「出一组题之前，逐题列出要用到的规则，没讲过的先讲完；讲不了的那题不出」），不写「注意」「小心」「要清楚」这种做不出来的话；一条只管一件事；
 - 意思重复的两条合成一条：留下的那条改写，另一条 ˋlesson id=T-7 status=retired into=T-3ˋ；不再适用的 ˋlesson id=T-5 status=retired why="…"ˋ。一科最多 20 条，到了上限页面不收新的，先合并。整理单直接写进记忆，学生在小结那块板上点开那行小字能撤销；上课时已经记过的不用再写。整理单只写在 memo 块里，小结正文里不用重复。
-${slips ? `\n${slips}\n` : ''}${tidy?.text ? `\n${tidyDoc(tidy)}\n` : ''}${reviewDoc(review, opening)}
+${slips ? `\n${slips}\n` : ''}${tidy?.text ? `\n${tidyDoc(tidy)}\n` : ''}${recheck ? `\n${recheck}\n` : ''}${reviewDoc(review, opening)}
 ${report}
 `}`;
 }
