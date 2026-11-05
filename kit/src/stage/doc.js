@@ -27,6 +27,7 @@ lift a.2 / drop a.2               抬起 / 放下（「这一格要动了」）
 pulse a.3                         闪一下
 paint a.1 a.6 g1 / unpaint a.1    染色
 dim a.1-5 / undim a.1-5           灰掉（排除在外的部分）
+cover a / uncover a.6             扣过去看不见值 / 翻开一格（查找、比较时「只能翻开看」就这样演）
 link a.1 a.6 g1 / unlink a        连一道弧（写好几格就依次连）/ 收掉连线
 hop a.1 -> a.6 color=g1 label="隔 5 个"     小点一格一格跳过去、数着跳了几下，留一道弧
 swap a.1 a.6                      交换（走弧线）

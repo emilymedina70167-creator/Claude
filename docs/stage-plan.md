@@ -26,9 +26,10 @@
 | 动作 | `kit/src/stage/motion.js`（纯函数） | 动作曲线 `EASE`、弧线 `arcPoints` / `arcPath`、时长 `moveDuration`、错开 `stagger`、出字 `revealDelays`、留读的时间 `readHold` |
 | 排版和镜头 | `kit/src/stage/layout.js`（纯函数） | 一排格子 `rowSlots`、镜头 `fitCamera`（竖着空时往上提，话贴在图上方）、贴字 `placeLabel`（先试上面，压着东西就往外让）、按「隔 d 个」分组 `strideGroups` |
 | 镜头指令 | `kit/src/stage/script.js`（纯函数） | 一行一个动作：`parseScript`，部件 `parseRef`（`a`、`a.3`、`a.2-5`、`a#8` 跟着走的那一个），话里的 `parseRich`（`{a.2}` 图上的东西、`{d}` 拨的数、`$d$` 字母、`[词]` 能飞走） |
+| 场景 | `kit/src/stage/scene.js`（纯数据） | 舞台上有什么、在哪、什么颜色、连着谁、贴着什么字、拨数是几、在等学生做什么。每一行先 `check`（写错了挡下、说清楚错在哪，别的行照演）再 `apply`；`dryRun` 一整段在副本上走；`stateText` 给老师看的「舞台现在」（照场景写，和画面一定对得上） |
 | 舞台 | `kit/src/stage/stage.js` + `stage.css` | 场景、镜头、话（一个字一个字写出来，`{a.2}` 画成和图上同色的小块）、贴着的字、连线、拨数、等学生点 / 拖 / 接着；一排格子 `ArrayObj`（跳格、交换走弧线、分组染色、出列成几排、合回去） |
 
-### 镜头指令（A 段的写法，B 段让 Opus 写之前再定）
+### 镜头指令（说明书原文在 `kit/src/stage/doc.js` 的 `STAGE_DOC`，例子照抄能演由 `tests/stage-doc.test.js` 守着）
 
 ```
 array a = 49 38 65 97 76 13 27 49′ 55 04
@@ -48,7 +49,10 @@ label flip a#1 a#8 "一样大，先后却换了" side=below tone=note
 retext n "…" / unlabel n
 fly say.1 -> key a#8 a#1   话里的 [词] 飞到图上
 camera a / camera a.1-7 / camera all
-ask tap a "…" / ask tap a#1 a#8 / ask drag a#1 a#6 / ask next "…" button="接着"
+ask tap a "…" expect=a.7 / ask tap a#1 a#8 / ask drag a#1 a#6 / ask next "…" button="接着" / ask say "…"
+move a#6 -> a.2            插入（中间的各让一格）
+write a.3 99 / compare a.3 a.8 / ptr mid a.5 / unptr mid / dim a.1-5 / undim
+cover a / uncover a.6       扣过去看不见值 / 翻开一格（查找时「只能翻开看」）
 wait 600
 ```
 
@@ -64,8 +68,35 @@ wait 600
 - **C. 补齐对象**：树、图、矩阵行变换、向量平面、句子；公式一项一项变形（同名项滑过去）；题目上舞台（用现有的判分）。算步骤用现有的演示组件（`engines/`），舞台负责演。
 - **D. 接进学习台**：作为新的上课方式替换一问一答的活板，接记忆、教材、证据、刷新放回、e2e。黑板课一直能用。
 
+## 画面怎么照场景演（stage.js）
+
+- 每一行：`scene.check` → `scene.apply` → 专门的动作（`do_hop` 跳格、`do_swap` 交换走弧线、`do_move` 插入、`do_write` 改值、`do_compare` 比较、`do_fly` 飞字、`do_say` 出字）→ `sync` 把画面对齐到场景（新的落下来 / 淡进来，挪了的滑过去，没了的淡掉，连线挪前藏、挪后画）。
+- 边写边演：`begin()` 开一轮，`push(到现在为止的全文)` 写完一行演一行，`&` 开头的并进正在演的那一批；`ask` 以后的行不演（一轮以 ask 结尾）；一轮没有 ask，页面替它加一个「接着」。
+- 记录：演过的每一行记进 `log`（学生拖动记成 `swap`、拨数记成 `set`）。`abort()` 作废一轮（不是 Opus 5.5）、`replay(log)` 刷新后放回，都是照 log 瞬间重放。
+- 学生：点（`armTap`）、拖（`armDrag`，放到同一排的另一格上就换）、拨（拨数是「试」，攒着跟回答一起说）、按钮、打字（底下一直有一条，`ask say` 时是主角）。`actText` 写给老师。
+
+## B 段：Opus 当导演（`proto/stage/live.js`）
+
+- 一轮：`firstMessage`（教法 + 指令 + 这节课 + 资料）/ `turnMessage`（学生做了什么 + 上一轮没演的行 + 舞台现在）→ Opus 5.5 high 边写边演 → 核验 `modelApplied`，不是就 `abort` 整轮退回、再要（最多两次，不加退路模型）→ 等学生 → 下一轮。
+- 调用失败不自己一直重试：舞台上出「再试一次」。
+- 角上：「Opus 5.5 在想… N 秒」，每一轮第一个镜头多久出来、写完多久、跳过几行。
+- 样子页的菜单：Opus 当场上一节（希尔排序 / 折半查找 / 直接插入排序 / 自己写一个），或看剧本。`?mock` 模拟老师走整条路。
+
 ## 进度
 
 - 2026-11-05 A 段：
   - 引擎骨架、希尔排序剧本、`tests/stage.test.js`（动作、镜头、贴字、指令读法）。
   - iPad 竖屏、横屏、白天、晚上都走过一遍：点对、点错两条路，拖、拨、飞字；页面没有报错。
+- 2026-11-05 B 段：
+  - 场景层、画面照场景演、记录和重放、边写边演、作废退回；
+  - 新指令：插入、改值、比较、指针、灰掉、`ask say` / `expect=`；
+  - 说明书 `doc.js`；样子页的 Opus 上课。
+  - 测试 `tests/stage-scene.test.js`、`tests/stage-doc.test.js`。
+  - 模拟老师走通了整条路：写错的行跳过并告诉老师，点错、按钮、拖、点、打字都收到。
+- 2026-11-05 B 段先自己验了一次（子代理拿和真上课一字不差的说明当老师，我扮学生，`tools/` 外的走查脚本把每一轮放到舞台上演、截图）：
+  - 折半查找四轮，一行没写错。每一轮都以等学生在画面上点结尾。旁白每轮一到两句。
+  - 用上了 `compare`、`dim`、`paint`、`ptr`、`cover`。
+  - 学生点错（一眼看见 33 直接点）时，第一次是用两句话解释「电脑看不见数」。补了 `cover` / `uncover` 以后，它马上改成把格子扣过去、一格一格翻。
+  - 同时暴露出一个并发的坑：同一格同时扣上又翻开，已修。
+  - 下一步要我在 iPad 上让真的 Opus 5.5 上一节：量第一个镜头多久出来，看拍得怎么样。
+

@@ -155,3 +155,45 @@ test('排版：分开排时格子下到第几排；两排格子上下摆开；�
   const g = linkGeom({ x: 0, y: 0, w: 64, h: 64 }, { x: 304, y: 0, w: 64, h: 64 });
   assert.ok(g.box.y < -20 && g.box.w === 304 && /^M32 -6 Q/.test(g.d));
 });
+
+test('扣过去 / 翻开：查找时「只能翻开看」（子代理当老师上折半查找时要的）', () => {
+  const s = run(new Scene(), 'array a = 7 10 13 16 19\ncover a\nuncover a.3');
+  assert.deepEqual(s.objects.get('a').cells.map((c) => c.covered), [true, true, false, true, true]);
+  assert.match(s.stateText(), /7（扣着） 10（扣着） 13 16（扣着）/);
+  // 并着写也一样：先扣上、再翻开一格
+  const t = run(new Scene(), 'array a = 1 2 3\ncover a\n& uncover a.2');
+  assert.deepEqual(t.objects.get('a').cells.map((c) => c.covered), [true, false, true]);
+});
+
+test('子代理当老师上的折半查找四轮：一行不错', () => {
+  const s = new Scene();
+  const turns = [
+    `array a = 7 10 13 16 19 29 32 33 37 41 43
+array k = 33
+label kt k.1 "要找的" side=left tone=note
+say "在这排里找 {k.1}。不从头一格格翻，先翻正中间那一格。"
+ptr mid a.6
+glow a.6
+wait 600
+compare k.1 a.6
+say "{k.1} 比 {a.6} 大，这一格不是。"
+ask tap a "{k.1} 还可能藏在哪一边？点那一边的任意一格。"`,
+    `say "对，在右边。{a.6} 左边的都比它小，更不可能是 {k.1}。"
+unglow a.6
+dim a.1-6
+paint a.7-11 g1
+unptr mid
+ask tap a "只剩这 5 格了。下一次先翻哪一格？" expect=a.9`,
+    `say "对，就是 {a.9}。现在像电脑一样，没翻开的都扣上。"
+cover a
+& uncover a.6
+uncover a.9
+ptr mid a.9
+compare k.1 a.9
+ask tap a "{k.1} 比它小。现在还可能藏在哪几格？点其中一格。"`,
+  ];
+  for (const src of turns) { assert.deepEqual(dryRun(s, src), []); run(s, src); }
+  const k = s.objects.get('k');
+  assert.equal(k.origin.x, Math.round((0 + 11 * 76 - 12) / 2 - 64 / 2), '一格的「要找的」放在正下方');
+});
+

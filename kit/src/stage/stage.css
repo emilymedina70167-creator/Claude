@@ -135,3 +135,10 @@
 .st-say-go { min-width: 56px; height: 48px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--st-brand) 12%, var(--st-card)); color: var(--st-brand); font: 600 16px var(--sans, sans-serif); cursor: pointer; }
 .st-say.is-main .st-say-go { background: var(--st-brand); color: var(--st-brand-ink); }
 .st-dock { flex-wrap: wrap; align-items: center; }
+
+/* 扣过去的格子：看不见值（查找时只能一格一格翻开看），背面一个「?」 */
+.st-cell.is-covered { background: color-mix(in srgb, var(--st-brand) 14%, var(--st-card)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--st-brand) 30%, transparent), 0 6px 16px -10px rgb(var(--shade-rgb, 25 45 40) / 0.4); }
+.st-cell.is-covered .st-v { visibility: hidden; }
+.st-cell.is-covered::before { content: "?"; position: absolute; inset: 0; display: grid; place-items: center; color: color-mix(in srgb, var(--st-brand) 60%, transparent); font: 600 24px/1 var(--sans, sans-serif); }
+
+.st-cell.is-covered[data-paint] { box-shadow: 0 0 0 2px var(--c), 0 6px 16px -10px rgb(var(--shade-rgb, 25 45 40) / 0.4); }

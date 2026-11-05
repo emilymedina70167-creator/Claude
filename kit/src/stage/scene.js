@@ -7,7 +7,7 @@
 // - 刷新、作废一轮：照记录（每一行指令，连学生拖、拨造成的变化）在新场景上重放一遍就回到原样；
 // - 告诉老师「舞台上现在有什么」（stateText）是照场景写的，和画面一定对得上。
 import { parseScript, parseRef, parseRich, COMMANDS } from './script.js';
-import { strideGroups, cellBox, objectBox, ptrBox, ARRAY_GAP } from './layout.js';
+import { strideGroups, cellBox, objectBox, ptrBox, ARRAY_GAP, CELL, GAP } from './layout.js';
 
 export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 export const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
@@ -120,10 +120,12 @@ export class Scene {
         if (vals.length > MAX_CELLS) throw new Error(`一排最多 ${MAX_CELLS} 格（写了 ${vals.length} 格）`);
         const old = this.objects.get(id);
         if (old) this.dropObject(id);
-        // 新的一排放在已有的东西下面
-        let y = 0;
-        for (const o of this.objects.values()) { const b = objectBox(o); y = Math.max(y, b.y + b.h + ARRAY_GAP); }
-        this.objects.set(id, { type: 'array', id, origin: { x: 0, y: old ? old.origin.y : y }, groupD: null, ptrs: new Map(), cells: vals.map((v, i) => ({ obj: id, key: i + 1, slot: i + 1, value: v, row: 0, paint: null, glow: false, lift: false, dim: false })) });
+        // 新的一排放在已有的东西下面，和最宽的那一排居中对齐（一格的「要找的数」放在正下方，不缩在左边）
+        let y = 0, left = 0, right = 0;
+        for (const o of this.objects.values()) { const b = objectBox(o); y = Math.max(y, b.y + b.h + ARRAY_GAP); left = Math.min(left, b.x); right = Math.max(right, b.x + b.w); }
+        const width = vals.length * (CELL + GAP) - GAP;
+        const x = this.objects.size ? Math.round((left + right) / 2 - width / 2) : 0;
+        this.objects.set(id, { type: 'array', id, origin: old ? { ...old.origin } : { x, y }, groupD: null, ptrs: new Map(), cells: vals.map((v, i) => ({ obj: id, key: i + 1, slot: i + 1, value: v, row: 0, paint: null, glow: false, lift: false, dim: false, covered: false })) });
         if (!this.focus) this.focus = null;
         return { id };
       }
@@ -134,11 +136,11 @@ export class Scene {
         this.words = parseRich(text).filter((p) => p.k === 'word').map((p) => p.v);
         return {};
       }
-      case 'glow': case 'unglow': case 'lift': case 'drop': case 'dim': case 'undim': {
+      case 'glow': case 'unglow': case 'lift': case 'drop': case 'dim': case 'undim': case 'cover': case 'uncover': {
         strayRefs(args);
         const cells = refsIn(args).length ? cellsIn(args) : (cmd.startsWith('un') || cmd === 'drop') ? [...this.objects.values()].flatMap((o) => o.cells) : null;
         if (!cells) throw new Error(`${cmd} 后面要写哪几格`);
-        const field = { glow: 'glow', unglow: 'glow', lift: 'lift', drop: 'lift', dim: 'dim', undim: 'dim' }[cmd];
+        const field = { glow: 'glow', unglow: 'glow', lift: 'lift', drop: 'lift', dim: 'dim', undim: 'dim', cover: 'covered', uncover: 'covered' }[cmd];
         const on = !cmd.startsWith('un') && cmd !== 'drop';
         cells.forEach((x) => { x[field] = on; });
         return { cells };
@@ -396,6 +398,7 @@ export class Scene {
   stateText() {
     const lines = [];
     if (!this.objects.size) lines.push('舞台上还是空的。');
+    else lines.push('（括号里的 #k：这一格一开始在第 k 格，写 名字#k 跟着它走；名字.k 是现在第 k 格）');
     for (const o of this.objects.values()) {
       const cells = [...o.cells].sort((a, b) => a.row - b.row || a.slot - b.slot);
       const tag = (c) => {
@@ -405,12 +408,12 @@ export class Scene {
         if (c.glow) bits.push('亮');
         if (c.lift) bits.push('抬起');
         if (c.dim) bits.push('灰');
+        if (c.covered) bits.push('扣着');
         return `${c.value}${bits.length ? `（${bits.join('、')}）` : ''}`;
       };
       const split = cells.some((c) => c.row);
       lines.push(`一排格子 ${o.id}（${o.cells.length} 格${o.groupD ? `，按隔 ${o.groupD} 个分了 ${strideGroups(o.cells.length, o.groupD).length} 组` : ''}${split ? '，每组下到自己的一排' : ''}）：`);
-      lines.push(`  第 1～${o.cells.length} 格：${[...o.cells].sort((a, b) => a.slot - b.slot).map(tag).join(' ')}`);
-      lines.push('  （#k 是「一开始在第 k 格的那一个」，写 a#k 跟着它走；a.k 是现在第 k 格）');
+      lines.push(`  ${o.cells.length > 1 ? `第 1～${o.cells.length} 格` : '第 1 格'}：${[...o.cells].sort((a, b) => a.slot - b.slot).map(tag).join(' ')}`);
       if (o.ptrs.size) lines.push(`  指针：${[...o.ptrs].map(([n, s]) => `${n} → 第 ${s} 格`).join('，')}`);
     }
     const ls = [...this.links.values()];

@@ -1,7 +1,8 @@
 // 舞台样子页的入口：选「看剧本」（A 段，不调用 Claude）或「Opus 5.5 上课」（B 段，当场写）。
 // 地址：?mock 模拟老师（本地）、?dev 给检查脚本留 window.LAStage、?blank 一块空舞台、#shell / #bsearch / #insert 直接开那一节
 import { Stage } from '../../kit/src/stage/stage.js';
-import { TOPICS } from '../../kit/src/stage/doc.js';
+import { TOPICS, turnMessage } from '../../kit/src/stage/doc.js';
+import { actText } from '../../kit/src/stage/stage.js';
 import css from '../../kit/src/stage/stage.css';
 import { scriptedLesson } from './scripted.js';
 import { liveLesson } from './live.js';
@@ -16,7 +17,7 @@ const q = new URLSearchParams(location.search);
 const MOCK = q.has('mock');
 let stage = null;
 let run = 0;
-if (q.has('dev')) window.LAStageDev = { acts: [], Stage };
+if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage };
 
 function fresh({ input }) {
   stage?.destroy();

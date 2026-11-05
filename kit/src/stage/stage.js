@@ -64,7 +64,8 @@ export class Stage {
   tween(node, frames, { duration = 500, delay = 0, easing = EASE.move } = {}) {
     if (!node || !frames.length) return Promise.resolve();
     const last = frames[frames.length - 1];
-    const apply = () => { for (const [k, v] of Object.entries(last)) if (k !== 'offset' && k !== 'easing') node.style[k] = v; };
+    // 动画停在最后一帧；完全不透明就不留在行内（不然盖住样式里的「灰掉」「淡」）
+    const apply = () => { for (const [k, v] of Object.entries(last)) if (k !== 'offset' && k !== 'easing') node.style[k] = k === 'opacity' && String(v) === '1' ? '' : v; };
     if (this.instant || typeof node.animate !== 'function') { apply(); return Promise.resolve(); }
     const a = node.animate(frames, { duration: this.dur(duration), delay: this.dur(delay), easing, fill: 'both' });
     return a.finished.catch(() => {}).then(() => { apply(); a.cancel(); });
@@ -366,6 +367,21 @@ export class Stage {
         n.classList.toggle('is-glow', x.glow);
         n.classList.toggle('is-lift', x.lift);
         n.classList.toggle('is-dim', x.dim);
+        // 扣过去 / 翻开：像翻一张牌（转到侧面那一刻换面）
+        if (!!n.__covered !== !!x.covered) {
+          const on = !!x.covered;
+          n.__covered = on;
+          if (this.instant || !n.__box) n.classList.toggle('is-covered', on);
+          else {
+            const t = tr(n.__box.x, n.__box.y);
+            jobs.push((async () => {
+              await this.tween(n, [{ transform: `${t} rotateY(0deg)` }, { transform: `${t} rotateY(90deg)` }], { duration: 180, delay: stagger(jobs.length, { step: 60 }), easing: EASE.in });
+              // 换面按场景现在的样子（同一格可能同时被扣上又翻开：& 并着演的两行）
+              n.classList.toggle('is-covered', !!x.covered);
+              await this.tween(n, [{ transform: `${t} rotateY(-90deg)` }, { transform: t }], { duration: 220, easing: EASE.out });
+            })());
+          }
+        }
         if (was !== (x.paint || null) && !this.instant && cmd === 'paint') jobs.push(this.pulse(x, stagger(jobs.length, { step: 50 })));
         if (!same(n.__box, b) && (!only || only.includes(x))) moving.push({ x, n, from: n.__box, to: b });
         // 话里指着它的小块跟着变色
