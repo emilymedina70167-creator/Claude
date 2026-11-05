@@ -264,7 +264,6 @@ table.bench th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
     <p>第二版是「一问一答」：Opus 每次只说一句话、只问一个问题，你在板上做或者说一句，它马上接下一句。下面是第一版的三块整板示范，留着对照。</p>
     <nav class="nav">
       <a href="#chat">一问一答（第二版）</a>
-      <a href="#speed">测速</a>
       <a href="#belady">整板 · 页面置换</a>
       <a href="#eigen">整板 · 特征向量</a>
       <a href="#clause">整板 · 定语从句</a>
@@ -303,7 +302,7 @@ table.bench th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
     </div>
   </section>
 
-  <section class="lesson" id="speed">
+  <section class="lesson" id="speed" hidden>
     <div class="lesson-head"><span class="subj">测速 · 第 0 批</span><span class="why">同一个一问一答的回合，把说明加长、把对话拉长，各调一次 Opus 5.5 high，看每多一点要多等几秒。</span></div>
     <div class="card chat">
       <p class="lint" style="font-size:14px;margin:0">一次只调一个（不挤占），顺序打乱。说明是用真的组件手册垫长的，对话是模拟的一问一答。结果存进这个页面的数据库，开发那边直接读，不用抄。跑的时候页面别关，可以切到别的 App 再回来看。</p>
