@@ -7,11 +7,10 @@ import { toDate, daysBetween, dueList } from './schema.js';
 import { spaceOfId } from './space.js';
 import { similarity, voidedIds, resolvedErrors } from './memo.js';
 import { lastActivity } from './report.js';
+import { isTeach } from './session.js';
 
 export const SENTRY_VERSION = 1;
 const DAY = 86400000;
-const KINDS = new Set(['class', 'live', 'unit', 'drill']);
-const kindOf = (s) => (KINDS.has(s?.kind) ? s.kind : 'class');
 const list = (v) => (Array.isArray(v) ? v : v == null || v === '' ? [] : [v]);
 const day = (at) => toDate(Number(at) || 0);
 // 一上来就对的作答（练一练的原题不算：原题对了只说明还记得这道）
@@ -84,9 +83,9 @@ export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now
   const gone = voidedIds(mem);
   const items = [];
   const obs = get('observations');
-  // 1. 没收尾的课：一节课堂下了课（或挂着三小时没动静）却没有课堂 Claude 写的小结
+  // 1. 没收尾的课：一节课堂（或一问一答）下了课（或挂着三小时没动静）却没有课堂 Claude 写的小结
   for (const s of get('sessions')) {
-    if (kindOf(s) !== 'class' || s.summary || obs.some((o) => o.session === s.id && o.kind === 'summary')) continue;
+    if (!isTeach(s) || s.summary || obs.some((o) => o.session === s.id && o.kind === 'summary')) continue;
     // 教研室补写的小结还暂存着（等我在「管理」里放行）：不再让它写一份
     if (get('pending').some((p) => p?.status === 'held' && p.coll === 'observations' && p.data?.kind === 'summary' && p.session === s.id)) continue;
     const quiet = s.status === 'closed' || now - lastActivity(s, get('evidence')) > 3 * 3600 * 1000;

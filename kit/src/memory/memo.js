@@ -24,6 +24,7 @@ import { courseOf, prefixOf, positionId, spaceOfId, spaceOfDoc, sharedFor } from
 // 提到学生不用「他」「她」（和 digest.js 的 neutral 一样；不 import digest.js，免得互相引用）
 const neutralText = (t) => String(t ?? '').replace(/(?<![其吉利])[他她](?![们人])/g, '学生');
 import { recallSpace, nextRecallId, RECALL_CAP } from './recall.js';
+import { isTeach } from './session.js';
 
 export const MEMO_KINDS = {
   pref: { tier: 'direct', coll: 'profile', label: '偏好' },
@@ -180,7 +181,7 @@ export const TIDY_EVERY = 5;
 export function tidyDue(mem = {}, space = '', sid = '') {
   const over = overCaps(mem, space);
   if (over.length) return `${over.map((x) => `${COLLECTIONS[x.coll]?.label || x.coll}到了上限（${x.n} / ${x.max}）`).join('、')}`;
-  const done = (Array.isArray(mem.sessions) ? mem.sessions : []).filter((x) => x && x.id !== sid && (x.kind || 'class') === 'class' && x.status === 'closed' && spaceOfDoc('sessions', x, mem) === space).length;
+  const done = (Array.isArray(mem.sessions) ? mem.sessions : []).filter((x) => x && x.id !== sid && isTeach(x) && x.status === 'closed' && spaceOfDoc('sessions', x, mem) === space).length;
   return (done + 1) % TIDY_EVERY === 0 ? `这一科上完第 ${done + 1} 节了（每 ${TIDY_EVERY} 节整理一次）` : '';
 }
 

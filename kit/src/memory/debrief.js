@@ -6,6 +6,7 @@
 // 复盘在课外、后台跑（lane: 'bg'），不让人等，可以把整节课从头看一遍。只存在这节课上，不往记忆库里加条目（不累加）。
 // 纯函数，有测试（tests/memory-debrief.test.js）；调用在 desk.js 的 fixDebriefs。
 import { parseOutput } from '../class/protocol.js';
+import { isTeach } from './session.js';
 
 export const DEBRIEF_VERSION = 1;
 export const DEBRIEF_HEAD = '你在给一节刚上完的课做复盘';
@@ -20,9 +21,9 @@ const cut = (s, n) => { const t = String(s ?? '').trim(); return t.length > n ? 
 const one = (s, n) => cut(String(s ?? '').replace(/\s+/g, ' '), n);
 const list = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v === '' ? [] : [v]);
 
-/** 这节课要不要复盘：下了课（报告不是暂时的）、上过课（不是练一练、不是实时黑板）、还没复盘过或者复盘的规矩改了 */
+/** 这节课要不要复盘：下了课（报告不是暂时的）、上过课（课堂或一问一答，不是练一练、不是实时黑板）、还没复盘过或者复盘的规矩改了 */
 export function needsDebrief(s) {
-  if (!s || (s.kind && s.kind !== 'class') || s.status !== 'closed') return false;
+  if (!s || !isTeach(s) || s.status !== 'closed') return false;
   if (!s.report || s.report.provisional) return false;
   return !s.debrief || (Number(s.debrief.v) || 0) < DEBRIEF_VERSION;
 }

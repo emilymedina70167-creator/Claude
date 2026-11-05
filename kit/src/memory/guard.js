@@ -73,7 +73,9 @@ export function buildCorpus({ turns = [], evidence = [] } = {}) {
     if (!t) continue;
     // 老师那一轮里的 memo 块、计划块不算「记录」：它们就是要核的东西本身（memo 里编的原话，在 memo 里当然找得到）
     const said = String(t.text || '').replace(/(`{3,})\s*board\s+(memo|plan)\b[\s\S]*?(\1|$)/g, '');
-    const txt = [said, t.say, ...(Array.isArray(t.actions) ? t.actions.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))) : [])].filter(Boolean).join('\n');
+    // shown：一问一答的课里学生在活板上看到的那一轮的字（docs/talk-impl.md C.3）。老师写的是活板的源码（{x?}、let 行），
+    // 学生看到、引的是画出来的字，核原话要在这里找得到
+    const txt = [said, t.shown, t.say, ...(Array.isArray(t.actions) ? t.actions.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))) : [])].filter(Boolean).join('\n');
     const n = normText(txt);
     if (Number.isFinite(Number(t.seq))) bySeq.set(Number(t.seq), n);
     parts.push(n);

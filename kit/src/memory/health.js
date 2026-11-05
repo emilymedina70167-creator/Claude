@@ -11,10 +11,9 @@
 import { COLLECTIONS, REVIEW_TIERS, applyChange, toDate, daysBetween, isDate } from './schema.js';
 import { spaceOfId } from './space.js';
 import { lastActivity } from './report.js';
+import { kindOf, isTeach } from './session.js';
 
 export const HEALTH_VERSION = 1;
-const KINDS = new Set(['class', 'live', 'unit', 'drill']);
-const kindOf = (s) => (KINDS.has(s?.kind) ? s.kind : 'class');
 const list = (v) => (Array.isArray(v) ? v : v == null || v === '' ? [] : [v]);
 const strip = ({ id: _, ...rest }) => rest;
 
@@ -70,7 +69,7 @@ export function healthCheck(mem = {}, { today = toDate(Date.now()), now = Date.n
       const blk = s.block || list(s.blocks)[0];
       const sp = blk ? spaceOfId(String(blk)) : '';
       if (sp) { patch.space = sp; why.push(`没写是哪一科：按块补成 ${sp}`); }
-      else if (kindOf(s) === 'class') note('sessions', s.id, '没写是哪一科、也没有块：首页分科时可能放错地方');
+      else if (isTeach(s)) note('sessions', s.id, '没写是哪一科、也没有块：首页分科时可能放错地方');
     }
     if (Object.keys(patch).length) fix('sessions', s, patch, why.join('；'));
     // 挂着的练习：练一练做到一半走了，几天都没回来（首页「直接下课」会照已做的算复现结果）
@@ -80,7 +79,7 @@ export function healthCheck(mem = {}, { today = toDate(Date.now()), now = Date.n
   }
   // 同一科挂着好几节没下课的课：上课时只接最新那一节，别的就一直挂着
   const openBy = {};
-  for (const s of sessions) if (s?.status === 'open' && kindOf(s) === 'class') (openBy[s.space || spaceOfId(String(s.block || ''))] ||= []).push(s.id);
+  for (const s of sessions) if (s?.status === 'open' && isTeach(s)) (openBy[s.space || spaceOfId(String(s.block || ''))] ||= []).push(s.id);
   for (const [sp, ids] of Object.entries(openBy)) if (ids.length > 2) note('sessions', '', `${sp} 挂着 ${ids.length} 节没下课的课（${ids.slice(0, 4).join('、')}…）：用不着的在首页直接下课或删掉`);
 
   // —— 记忆点、复现组：档位和状态（页面每天想一遍、练一练的结果会改它们）——

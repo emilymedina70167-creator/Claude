@@ -7,6 +7,7 @@ import { OUTCOME_TEXT } from './report.js';
 import { SPACES, positionId, packIds, filterSpace, courseOf, subjectOf, spaceOfId } from './space.js';
 import { classView, memoryCatalog, utf8 } from './digest.js';
 import { weaknessHits, pointCatalog } from './skills.js';
+import { isTeach } from './session.js';
 
 const cut = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 /** 截短给我看的一句（会按 Markdown 画）：不截在公式中间（$ 落单了整句就成了原始 LaTeX） */
@@ -163,7 +164,9 @@ export function classRows(mem = {}) {
       id: s.id, date: s.date || '', block: s.block || '', title: s.title || '', status: s.status || '',
       minutes: s.report?.activeMs ? Math.round(s.report.activeMs / 60000) : null, line: s.report?.line || '',
       verify: s.verify || null, summary: cutMd(first, 80), usage: s.usage || null, review: s.review || null, startedAt: s.startedAt || 0,
-      kind: ['live', 'unit'].includes(s.kind) ? s.kind : 'class',
+      kind: ['talk', 'live', 'unit'].includes(s.kind) ? s.kind : 'class',
+      // 课堂里的 Claude 讲的课（课堂、一问一答）：「接着上课」
+      teach: isTeach(s),
       // 练一练、课前热身（kind: drill）：列表里照旧算一行，「上一节」不算它
       drill: s.kind === 'drill',
       skills: s.skills || null,
@@ -337,10 +340,10 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
     `- 学习台：${deskUrl || kitUrl || '（地址问我要：在 claude.ai 打开学习台时地址栏里的那个）'}。说明书、组件写法、记忆、每节课都在它里面：先用 Artifact 工具 action: "read"、path: "CLAUDE-PROJECT.md" 读说明书，记忆用 ArtifactData 读。`,
     `- 这一科：${SPACES[space]?.label || space}（只列这一科的；学习台还有${Object.keys(SPACES).filter((k) => k !== space).map((k) => SPACES[k].label).join('、')}）。`,
     `- 今天 ${today}。${pos ? `学到 ${pos.block || '？'}；下一节：${cut(pos.next, 120)}${list(pos.debts).length ? `；欠账：${list(pos.debts).map((x) => cut(x, 60)).join('；')}` : ''}。` : '还没有 position。'}`,
-    last ? `- 上一节：${last.kind === 'class' ? '' : `${last.kind === 'live' ? '实时黑板' : '自学单元'} `}${last.id}（${last.block || '没写块'}）${last.line ? `，${last.line}` : ''}${last.summary ? `；小结开头：${last.summary}` : ''}。课后报告在 sessions/${last.id}/report/main。` : '- 还没有下过课。',
+    last ? `- 上一节：${last.kind === 'class' ? '' : `${{ talk: '一问一答', live: '实时黑板' }[last.kind] || '自学单元'} `}${last.id}（${last.block || '没写块'}）${last.line ? `，${last.line}` : ''}${last.summary ? `；小结开头：${last.summary}` : ''}。课后报告在 sessions/${last.id}/report/main。` : '- 还没有下过课。',
     ...opens.map((r) => (r.kind === 'live'
       ? `- 实时黑板 ${r.id}「${cut(r.title, 40)}」还开着：接着写就往 sessions/${r.id}/steps 写，黑板现状在 sessions/${r.id}/meta/now（说明书第五节）。`
-      : r.kind === 'unit' ? `- 自学单元 ${r.id}「${cut(r.title, 40)}」我还没学完。` : `- 有一节课堂还没下课：${r.id}。`)),
+      : r.kind === 'unit' ? `- 自学单元 ${r.id}「${cut(r.title, 40)}」我还没学完。` : `- 有一节${r.kind === 'talk' ? '一问一答的课' : '课堂'}还没下课：${r.id}。`)),
     due.length ? `- 到期的复现组：${due.map((d) => `${d.id}${d.days < 0 ? `（过期 ${-d.days} 天）` : ''}`).join('、')}（学习台首页能直接开复现课）。` : '',
     pack ? `- 已经备好的下一节：${cut(pack.unit || '', 60)}${pack.block ? `（${pack.block}）` : ''}。` : '',
     todo.length ? `- 现状（学习台自己处理，你只做开发）：\n${todo.map((t) => `  - ${t}`).join('\n')}` : '',

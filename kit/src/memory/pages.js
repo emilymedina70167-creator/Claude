@@ -190,7 +190,7 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
     return `<p><a class="dk-link" href="#classes">← 以前的课</a></p>
       <section class="dk-card"><h2 class="dk-h">${esc(r.date)} ${inline(r.title)}</h2>
         <p class="muted">${KIND_TEXT[r.kind]}${r.block ? ` · ${inline(blockName(r.block))}` : ''}${r.minutes !== null ? ` · ${r.minutes} 分钟` : ''}${r.usage?.calls ? ` · 调用 ${r.usage.calls} 轮，${esc(tokenText(r.usage.bytes))}` : ''}</p>
-        <div class="mm-acts"><button type="button" class="btn btn-primary" data-goto="${r.status === 'open' ? esc(sid) : `view/${esc(sid)}`}">${r.status === 'open' ? (r.kind === 'class' ? '接着上课' : '进去') : r.kind === 'unit' ? '翻看这个单元' : '翻看这节课的黑板'}</button>${purge ? `<button type="button" class="btn btn-danger" data-purge="${esc(sid)}">删掉这节课</button>` : ''}</div>
+        <div class="mm-acts"><button type="button" class="btn btn-primary" data-goto="${r.status === 'open' ? esc(sid) : `view/${esc(sid)}`}">${r.status === 'open' ? (r.teach ? '接着上课' : '进去') : r.kind === 'unit' ? '翻看这个单元' : '翻看这节课的黑板'}</button>${purge ? `<button type="button" class="btn btn-danger" data-purge="${esc(sid)}">删掉这节课</button>` : ''}</div>
         ${debriefHtml(r.debrief)}
         ${skillsHtml(r.skills)}
         ${sum ? `<div class="dk-memo-sub" role="heading" aria-level="3">下课小结</div><div class="dk-summary">${mdToHtml(sum.text || '')}</div>` : ''}

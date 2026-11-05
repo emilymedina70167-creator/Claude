@@ -13,6 +13,7 @@ import { voidedIds, resolvedErrors, pendingTitle, absorbedSlips } from './memo.j
 import { filterSpace, spaceOfId, positionId, sharedFor } from './space.js';
 import { dueList, toDate } from './schema.js';
 import { recallLine } from './recall.js';
+import { isTeach } from './session.js';
 
 const enc = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
 export const utf8 = (s) => (enc ? enc.encode(String(s)).length : Buffer.byteLength(String(s)));
@@ -87,7 +88,7 @@ const errorFull = (e, solved) => [
   e.q ? `  - 题面：${one(e.q, 600)}` : '', e.mine ? `  - 学生的答案：${one(e.mine, 400)}` : '', e.step ? `  - 错在：${one(e.step, 200)}` : '', e.cause ? `  - 根因：${one(e.cause, 300)}` : '',
 ].filter(Boolean).join('\n');
 // 以前的一节课：一行要点（哪一种课、哪一块、报告的一行、小结的开头）
-const KIND = { live: '实时黑板', unit: '自学单元' };
+const KIND = { talk: '一问一答', live: '实时黑板', unit: '自学单元' };
 const sessionLine = (s, obs, n = 80) => {
   const sum = obs.find((o) => o.id === s.summary) || obs.find((o) => o.session === s.id && o.kind === 'summary');
   const first = String(sum?.text || '').split('\n').map((l) => l.replace(/^[\s\d.、*#-]+/, '').replace(/\*\*/g, '').trim()).filter(Boolean);
@@ -349,7 +350,7 @@ export function memoryCatalog(view, { shown = new Set(), here = view.here, nearI
 export function earlierClasses(sessions = [], { session = '', block = '' } = {}) {
   const me = (sessions || []).find((s) => s?.id === session);
   const sp = spaceOfId(block || me?.block || '');
-  const before = (sessions || []).filter((s) => s && s.id !== session && (s.kind || 'class') === 'class' && spaceOfId(s.block || '') === sp
+  const before = (sessions || []).filter((s) => s && s.id !== session && isTeach(s) && spaceOfId(s.block || '') === sp
     && (!me?.startedAt || !s.startedAt || s.startedAt < me.startedAt)).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
   const out = [];
   if (before[0]) out.push(before[0].id);

@@ -12,8 +12,27 @@ import { COLLECTIONS, MEMORY_COLLECTIONS, assertWrite, toDate } from './schema.j
 export const SESSION_SCOPED = ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report', 'talk', 'ops', 'ops_done', 'lint', 'meta', 'unit'];
 // 一节课是哪一种：课堂（课堂里的 Claude 讲，页面开）、实时黑板（对话里的 Claude 一块板一块板写，它开）、自学单元（一次写完的课件）
 // 练习（drill）：页面自己挑题、判分，不调用 Claude（drills.js、drillrun.js）
-export const SESSION_KINDS = { class: '课堂', live: '实时黑板', unit: '自学单元', drill: '练习' };
+// 一问一答（talk）：也是课堂里的 Claude 讲，只是写在活板上、一问一答地推进（docs/talk-impl.md）；除了画面，别的和课堂一样
+export const SESSION_KINDS = { class: '课堂', talk: '一问一答', live: '实时黑板', unit: '自学单元', drill: '练习' };
 export const kindOf = (doc) => (SESSION_KINDS[doc?.kind] ? doc.kind : 'class');
+/** 课堂里的 Claude 讲的课（课堂、一问一答）：复盘、以前的课、小结收尾、整理、挂着没下课这些都按「上课」算 */
+export const TEACH_KINDS = ['class', 'talk'];
+export const isTeach = (doc) => TEACH_KINDS.includes(kindOf(doc));
+
+// 开新课用哪种形态：黑板（课堂）还是一问一答。记在这台设备上（首页主角卡的分段控件选的），开课、复现课、练一练「带着开课」都照它。
+// 读不到（无痕模式、沙箱不给 localStorage）就是黑板：课堂是一直以来的样子
+export const CLASS_FORM_KEY = 'la-class-form';
+export const CLASS_FORMS = { class: '黑板', talk: '一问一答' };
+const storageOf = (s) => (s === undefined ? globalThis.localStorage : s);
+export function classForm(storage) {
+  try { return storageOf(storage)?.getItem(CLASS_FORM_KEY) === 'talk' ? 'talk' : 'class'; } catch { return 'class'; }
+}
+/** 记下这台设备开课用哪种（只认 class / talk）；存不进去也不要紧，返回实际用的那种 */
+export function setClassForm(form, storage) {
+  const v = form === 'talk' ? 'talk' : 'class';
+  try { storageOf(storage)?.setItem(CLASS_FORM_KEY, v); } catch { /* 无痕模式：这次照选的开，下次回到黑板 */ }
+  return v;
+}
 const SID_RE = /^c-\d{8}-\d+$/;
 export const isSessionId = (s) => SID_RE.test(String(s || ''));
 
