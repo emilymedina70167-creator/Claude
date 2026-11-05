@@ -3,6 +3,8 @@
 // 安全线：我确认才写的那几类只有 confirm() 会写，而 confirm() 只由页面上我点的按钮调用（memoview.js），课堂 Claude 的输出走不到这里。
 import { toDate } from './schema.js';
 import { planEntry, pendingRecord, applyPending, rejectPending, undoPending, meChange, nextErrorId, nextWeaknessId, nextReviewId } from './memo.js';
+import { guardCandidate, buildCorpus, guardMark, guardReason, guardLog } from './guard.js';
+import { spaceOfId } from './space.js';
 
 const NEXT = { errors: nextErrorId, weaknesses: nextWeaknessId, reviews: nextReviewId };
 export const MEMO_MAX = 12;
@@ -36,8 +38,12 @@ export function createMemOps({ db, mem }) {
    * 执行一个 memo 块（课堂一轮的输出、下课整理单）。entries：protocol.js 读出来的；ctx：{ session, block, turn }。
    * 直接写的马上写进去；要我确认的只写改动单。返回 { pds（新的改动单）, rejected: [{ line, error }] }
    */
-  async function applyMemo(entries, { session = null, block = null, space = null, turn = null } = {}) {
+  // 守卫（guard.js）：每一条写进去之前看一遍。turns：这节课到现在的每一轮（课堂手上的 history，用来核原话、轮次、板上编号）；
+  // closing：下课整理单——被拒的没有下一轮能告诉它了，记进 meta/guard 的 carry，下一节同一科开课时资料包里带着
+  async function applyMemo(entries, { session = null, block = null, space = null, turn = null, turns = null, closing = false, author = 'class' } = {}) {
     const evidence = session ? rows(await db.collection('evidence').where('session', '==', session).get().catch(() => null)) : [];
+    const corpus = buildCorpus({ turns: turns || [], evidence });
+    const logs = [];
     const date = toDate(Date.now());
     // 同一块里的几条要编号的（两道新错题）：先在手上的副本里占住号，免得撞
     const local = { ...mem() };
@@ -58,12 +64,36 @@ export function createMemOps({ db, mem }) {
       let pd = pendingRecord(ch, { session, turn, by: 'class', line: e.line });
       if (!e.attrs.id && NEXT[ch.coll]) pd.autoId = true;
       try {
+        // 先算出写进去会是什么样（直接写的、要我确认的都算一遍），守卫看的是这一份；还没写
+        const m = await fresh(ch.coll, ch.target);
+        let r = null;
+        try { r = applyPending(pd, m, { date }); } catch (err) {
+          // 要我确认的那档（规则）以前不先算、直接记改动单：算不出来（编号到确认时才定）照旧，守卫看改动单里写的
+          if (pd.tier === 'direct') throw err;
+        }
+        const w = r ? r.writes.find((x) => x.coll === ch.coll) : { id: String(ch.target), doc: { ...(ch.data || {}), ...(ch.patch || {}) } };
+        const old = (m[ch.coll] || []).find((d) => String(d.id) === String(ch.target));
+        const { id: _o, ...before } = old || {};
+        // 课堂手上的记忆不一定带证据：这节课的证据（上面刚读的）一起给守卫，不然真有的依据会被当成找不到
+        const seen = new Set((local.evidence || []).map((x) => String(x.id)));
+        const g = guardCandidate({ coll: ch.coll, id: w.id, doc: w.doc, before: old ? before : null, author, session, basis: pd.basis, missingBasis: ch.missingBasis }, { mem: { ...local, evidence: [...(local.evidence || []), ...evidence.filter((x) => !seen.has(String(x.id)))] }, corpus });
+        if (g.verdict !== 'accept') logs.push(guardLog(g, { coll: ch.coll, id: w.id, session, author, line: e.line, closing }));
+        if (g.verdict === 'reject') { rejected.push({ line: e.line, error: guardReason(g), guard: true }); undoLocal(local, ch); continue; }
+        if (g.verdict === 'hold') {
+          // 先暂存：改动单记成 held，带守卫看出来的问题；在「管理 → 自检 → 守卫」里我能放行或者不要
+          const { id, ...doc } = { ...pd, status: 'held', guard: guardMark(g) };
+          await db.doc(`pending/${id}`).set(doc);
+          rejected.push({ line: e.line, error: `先暂存了：${guardReason(g)}`, held: true });
+          undoLocal(local, ch);
+          continue;
+        }
         if (pd.tier === 'direct') {
-          const r = applyPending(pd, await fresh(ch.coll, ch.target), { date });
+          // 挂提醒：照写，那一条上记着守卫看出来的问题（页面、以后写内容的 Claude 都看得到；Claude 写的话不动）
+          if (g.verdict === 'flag') w.doc = { ...w.doc, guard: guardMark(g) };
           await write(r.writes);
           pd = r.pd;
         } else {
-          const { id, ...doc } = pd;
+          const { id, ...doc } = g.verdict === 'flag' ? { ...pd, guard: guardMark(g) } : pd;
           await db.doc(`pending/${id}`).set(doc);
         }
         pds.push(pd);
@@ -71,12 +101,48 @@ export function createMemOps({ db, mem }) {
         rejected.push({ line: e.line, error: err?.message || String(err) });
       }
     }
+    // 暂存的不带进下一节（它在「管理」里等我放行，带过去会重复记）
+    await writeGuard(logs, closing ? rejected.filter((x) => !x.held).map((x) => ({ line: x.line, error: x.error })) : [], { session, space: space || (block ? spaceOfId(block) : 'math') });
     return { pds, rejected };
   }
 
+  // 被守卫拒掉、暂存的那一条：从手上的副本里拿掉（同一块后面的条目别以为它已经在了）
+  function undoLocal(local, ch) {
+    if (ch.op === 'add') local[ch.coll] = (local[ch.coll] || []).filter((d) => String(d.id) !== String(ch.target));
+  }
+
+  // 审计日志（guard_log，只记没直接收下的）和 meta/guard（每种结果几条；下课整理单没收的记进 carry，下一节开课带着）
+  async function writeGuard(logs, carry, { session, space }) {
+    if (!logs.length && !carry.length) return;
+    try {
+      for (const l of logs) await db.doc(`guard_log/${l.id}`).set(l.doc);
+      const ref = db.doc('meta/guard');
+      const cur = await ref.get().then((s) => (s.exists ? s.data() : {})).catch(() => ({}));
+      const counts = { ...(cur.counts || {}) };
+      for (const l of logs) counts[l.doc.verdict] = (counts[l.doc.verdict] || 0) + 1;
+      const carryAll = { ...(cur.carry || {}) };
+      if (carry.length) carryAll[space] = [...carry.map((x) => ({ ...x, session, at: Date.now() })), ...(carryAll[space] || [])].slice(0, 8);
+      await ref.set({ ...cur, counts, carry: carryAll, at: Date.now() });
+    } catch (err) { console.warn('守卫的记录没写成', err); }
+  }
+
+  /** 我在「管理 → 守卫」里放行一条暂存的：当成我确认，照常写进去 */
+  async function release(pd0) {
+    const pd = await freshPending(pd0);
+    if (pd.status !== 'held') throw new Error('这条已经不是暂存的了');
+    return confirmPd({ ...pd, status: 'open', released: true });
+  }
+  /** 不要这条暂存的 */
+  async function drop(pd0) {
+    const pd = await freshPending(pd0);
+    if (pd.status !== 'held') throw new Error('这条已经不是暂存的了');
+    return rejectPd({ ...pd, status: 'open' });
+  }
+
   /** 我点了「确认」（edits：在「改」里改过的字段） */
-  async function confirm(pd0, edits = null) {
-    let pd = await freshPending(pd0);
+  async function confirm(pd0, edits = null) { return confirmPd(await freshPending(pd0), edits); }
+  async function confirmPd(pd0, edits = null) {
+    let pd = pd0;
     let m = await fresh(pd.coll, pd.target);
     // 自动编的号这期间被占了（别的错题先确认了）：换下一个号
     if (pd.op === 'add' && pd.autoId && (m[pd.coll] || []).some((d) => String(d.id) === String(pd.target))) {
@@ -96,8 +162,9 @@ export function createMemOps({ db, mem }) {
     return r.pd;
   }
 
-  async function reject(pd0) {
-    const r = rejectPending(await freshPending(pd0));
+  async function reject(pd0) { return rejectPd(await freshPending(pd0)); }
+  async function rejectPd(pd) {
+    const r = rejectPending(pd);
     await write(r.writes);
     return r.pd;
   }
@@ -122,5 +189,5 @@ export function createMemOps({ db, mem }) {
     return r.pd;
   }
 
-  return { applyMemo, applyNow, confirm, reject, undo, me };
+  return { applyMemo, applyNow, confirm, reject, undo, me, release, drop };
 }

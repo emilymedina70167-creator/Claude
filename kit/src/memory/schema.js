@@ -177,7 +177,7 @@ export const COLLECTIONS = {
     id: { re: /^pd-[A-Za-z0-9_-]+$/, eg: '页面自动编号' },
     required: ['kind', 'coll', 'op', 'status', 'at'],
     // by: page 是页面自己按证据算的提议（掌握、练习后的复现组结果），一样等我确认；by: chat 是开发那边整理数据时提的（比如一次整理规则），也等我确认
-    enums: { op: ['add', 'update'], status: ['open', 'done', 'rejected', 'undone'], tier: ['direct', 'confirm', 'me'], by: ['class', 'me', 'page', 'chat'] },
+    enums: { op: ['add', 'update'], status: ['open', 'done', 'rejected', 'undone', 'held'], tier: ['direct', 'confirm', 'me'], by: ['class', 'me', 'page', 'chat'] },
     refs: { session: 'sessions' },
     tracked: ['status'],
   },

@@ -71,7 +71,9 @@ export function buildCorpus({ turns = [], evidence = [] } = {}) {
   const parts = [];
   for (const t of turns || []) {
     if (!t) continue;
-    const txt = [t.text, t.say, ...(Array.isArray(t.actions) ? t.actions.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))) : [])].filter(Boolean).join('\n');
+    // 老师那一轮里的 memo 块、计划块不算「记录」：它们就是要核的东西本身（memo 里编的原话，在 memo 里当然找得到）
+    const said = String(t.text || '').replace(/(`{3,})\s*board\s+(memo|plan)\b[\s\S]*?(\1|$)/g, '');
+    const txt = [said, t.say, ...(Array.isArray(t.actions) ? t.actions.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))) : [])].filter(Boolean).join('\n');
     const n = normText(txt);
     if (Number.isFinite(Number(t.seq))) bySeq.set(Number(t.seq), n);
     parts.push(n);
@@ -160,6 +162,9 @@ export function guardCandidate(cand, ctx = {}) {
   const basis = tokens.filter(isIdLike);
   const missing = basis.filter((b) => !allIds.has(b));
   if (missing.length) add('evidence', 'fail', 'basis-missing', `依据 ${missing.slice(0, 4).join('、')} 在记忆库里找不到`);
+  // 写了、但找不到被去掉的依据（memo.js 的 planEntry 去掉的，那一条照记）：像编号的要提醒（多半是编出来的证据编号）
+  const dropped = list(cand.missingBasis).map(String).filter(isIdLike);
+  if (dropped.length) add('evidence', 'warn', 'basis-dropped', `写的依据 ${dropped.slice(0, 4).join('、')} 这节课里没有，没算进去`);
   if (session) {
     const evs = get('evidence');
     const other = basis.map((b) => evs.find((e) => String(e.id) === b)).filter((e) => e?.session && e.session !== session);
@@ -238,3 +243,45 @@ export function guardCandidate(cand, ctx = {}) {
 function list(v) { return Array.isArray(v) ? v : v == null || v === '' ? [] : [v]; }
 function cut(s, n) { s = String(s ?? ''); return s.length > n ? `${s.slice(0, n)}…` : s; }
 function toDay(at) { const d = new Date(Number(at) || 0); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+
+/** 挂在那一条上的记号（挂提醒、暂存时）：哪几道看出了什么，不含 info */
+export function guardMark(g, now = Date.now()) {
+  return { v: GUARD_VERSION, at: now, verdict: g.verdict, checks: g.checks.filter((c) => c.level !== 'info').map(({ gate, code, msg }) => ({ gate, code, msg })) };
+}
+
+/** 给写的那个 Claude 看的原因（一行）：拒收、暂存时用 */
+export function guardReason(g) {
+  const main = g.checks.filter((c) => c.level === 'fail');
+  const list = (main.length ? main : g.checks.filter((c) => c.level === 'warn')).map((c) => c.msg);
+  return `守卫：${list.slice(0, 3).join('；')}`;
+}
+
+/** 审计日志的一条（guard_log/{id}）：谁写的、哪一条、结论、看出了什么、原来那一行 */
+export function guardLog(g, { coll, id, session = null, author = 'class', line = '', closing = false, now = Date.now() } = {}) {
+  const lid = `gl-${now.toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  return { id: lid, doc: { at: now, coll, target: String(id), session, author, verdict: g.verdict, closing: !!closing, ...(line ? { line: String(line).slice(0, 400) } : {}), checks: g.checks.map(({ gate, level, code, msg }) => ({ gate, level, code, msg })) } };
+}
+
+/**
+ * 守一份复盘（debrief.js 读出来的，首页后台事后写的：author lab）。每一条误解、节奏、习惯、建议、开场题各守一遍：
+ * 对不上的挪进 held（下一节的记忆摘要、首页、备课都不用它，我在「以前的课」里能看见），挂提醒的照用、记在 guard 里。
+ * 返回 { debrief（改好的，Claude 写的话不动）, held: 条数, flagged: 条数 }
+ */
+export function guardDebrief(debrief, { session, mem = {}, corpus = null, allComps = null, now = Date.now() } = {}) {
+  if (!debrief) return { debrief, held: 0, flagged: 0 };
+  const out = { ...debrief };
+  const held = [];
+  let flagged = 0;
+  const one = (part, item, i) => {
+    const doc = typeof item === 'string' ? { advice: item } : item;
+    const g = guardCandidate({ coll: 'debrief', id: `${session}.${part}${i}`, doc, author: 'lab', session }, { mem, corpus, allComps });
+    if (g.verdict === 'hold' || g.verdict === 'reject') { held.push({ part, item, guard: guardMark(g, now) }); return null; }
+    if (g.verdict === 'flag') { flagged++; return typeof item === 'string' ? item : { ...item, guard: guardMark(g, now) }; }
+    return item;
+  };
+  for (const part of ['mis', 'pace', 'habit', 'advice']) if (Array.isArray(out[part])) out[part] = out[part].map((x, i) => one(part, x, i)).filter((x) => x !== null);
+  if (out.opening) { const o = one('opening', out.opening, 0); if (o === null) delete out.opening; else out.opening = o; }
+  out.held = [...(Array.isArray(debrief.held) ? debrief.held : []), ...held];
+  out.guard = { v: GUARD_VERSION, at: now, held: held.length, flagged };
+  return { debrief: out, held: held.length, flagged };
+}

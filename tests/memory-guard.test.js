@@ -98,3 +98,9 @@ test('格式不对（缺必填）：拒收', () => {
   assert.equal(r.verdict, 'reject');
   assert.equal(r.checks[0].gate, 'format');
 });
+
+test('老师那一轮里的 memo 块不算记录：memo 里编的原话不能在 memo 自己身上找到', () => {
+  const c = buildCorpus({ turns: [{ seq: 1, role: 'student', say: '测试' }, { seq: 2, role: 'claude', text: '先记一下。\n\n````board memo\nslip text="学生说「我早就会了」"\n````\n' }] });
+  const r = guardCandidate({ coll: 'slips', id: 'S-1', doc: { by: 'class', date: '2026-11-05', text: '学生说「我早就会了」', session: SID }, author: 'class', session: SID }, { mem, corpus: c });
+  assert.equal(r.checks[0]?.code, 'quote-miss');
+});

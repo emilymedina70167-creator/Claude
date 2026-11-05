@@ -14,6 +14,7 @@ import { session } from '../session.js';
 import { toast } from '../record.js';
 import { attachErrlog, onError, markSeen, reportError } from '../errlog.js';
 import { healthCheck, healthRecord, sameDoc } from './health.js';
+import { guardDebrief, buildCorpus } from './guard.js';
 import { guardDb } from './writer.js';
 import { getStore, getDownloads } from '../live/store.js';
 import { VERSION, KIT_URL } from '../version.js';
@@ -25,7 +26,7 @@ import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA }
 import { createManualForm } from './manual.js';
 import { createMemOps } from './memops.js';
 import { createMemoView } from './memoview.js';
-import { resolvedErrors, voidedIds, activeLessons } from './memo.js';
+import { resolvedErrors, voidedIds, activeLessons, pendingTitle } from './memo.js';
 import { createPages } from './pages.js';
 import { reviewPack, deskBrief, briefId, todayReviews, reviewIdsOf, REVIEW_MAX, plainTitle } from './views.js';
 import { readOnlyDb } from './session.js';
@@ -134,7 +135,7 @@ export async function renderDesk(root, meta) {
     <section class="dk-card dk-recent"><h2 class="dk-h">最近记下的</h2><p class="dk-sub muted">课堂里的 Claude 和页面直接写进记忆的，不对就撤销（7 天内）。</p><div class="dk-pdone"></div></section>
     <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-backup" hidden><h2 class="dk-h">备份</h2><div class="dk-body"></div></section>
-    <section class="dk-card dk-check" hidden><h2 class="dk-h">自检</h2><div class="dk-body"></div><div class="dk-health"></div><div class="dk-errs"></div></section>
+    <section class="dk-card dk-check" hidden><h2 class="dk-h">自检</h2><div class="dk-body"></div><div class="dk-guard"></div><div class="dk-health"></div><div class="dk-errs"></div></section>
     <section class="dk-card dk-colls" hidden><details class="dk-fold"><summary><h2 class="dk-h">记忆库</h2><span class="muted">每一类有几条、谁写</span></summary><div class="dk-body"></div></details></section>
     </div>
     <footer class="dk-foot">组件库 ${escapeHtml(VERSION)}</footer>
@@ -303,6 +304,40 @@ export async function renderDesk(root, meta) {
     }
   }
 
+  // —— 守卫（guard.js、memops.js）：写进记忆的每一条过六道检查。管理页「自检」里：各种结论几条、先暂存的（放行 / 不要）、最近挂提醒和拒掉的 ——
+  let guardDoc = null;
+  let guardLogs = [];
+  db.doc('meta/guard').onSnapshot((s) => { guardDoc = s.exists ? s.data() : null; loadGuardLogs(); }, () => {});
+  async function loadGuardLogs() {
+    guardLogs = await db.collection('guard_log').orderBy('at', 'desc').limit(12).get().then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() })), () => []);
+    paintGuard();
+  }
+  const VERDICT = { flag: '挂提醒', hold: '暂存', reject: '拒收' };
+  const COLL_NAME = (c) => COLLECTIONS[c]?.label || (c === 'debrief' ? '复盘' : c);
+  function paintGuard() {
+    const box = $('.dk-guard');
+    if (!box) return;
+    const held = (data.pending || []).filter((p) => p.status === 'held');
+    const c = guardDoc?.counts || {};
+    const when = (t) => { const d = new Date(Number(t) || 0); return `${d.getMonth() + 1}/${d.getDate()}`; };
+    const carryN = Object.values(guardDoc?.carry || {}).reduce((n, l) => n + (l?.length || 0), 0);
+    box.innerHTML = `<h3 class="dk-h3">守卫</h3>
+      <p class="dk-sub muted">Claude 写进记忆的每一条先过一遍：依据在不在、引的原话在这节课的记录里找不找得到、有没有重复、能不能改别人写的。写的话不改，只决定收不收。</p>
+      <p>${['flag', 'hold', 'reject'].map((k) => `${VERDICT[k]} ${Number(c[k]) || 0}`).join(' · ')}${carryN ? `<span class="muted"> · ${carryN} 条没收的等下一节课补</span>` : ''}</p>
+      ${held.length ? `<p><b>先暂存的 ${held.length} 条</b>（事后写的、对不上这节课的记录）</p><div class="dk-held">${held.slice(0, 8).map((p) => `<div class="dk-edit-row" data-id="${escapeHtml(p.id)}"><span>${inline(pendingTitle(p, nameIn(() => data)))}<br><span class="muted">${escapeHtml((p.guard?.checks || []).map((x) => x.msg).join('；').slice(0, 160))}</span></span><button type="button" class="btn btn-sm dk-g-ok">放行</button><button type="button" class="btn btn-sm dk-g-no">不要</button></div>`).join('')}</div>` : ''}
+      ${guardLogs.length ? `<details class="dk-soft"><summary>最近的 ${guardLogs.length} 次</summary><ul class="dk-errlist">${guardLogs.map((l) => `<li><b>${VERDICT[l.verdict] || l.verdict}</b> ${escapeHtml(COLL_NAME(l.coll))}<span class="muted">　${escapeHtml((l.checks || []).filter((x) => x.level !== 'info').map((x) => x.msg).join('；').slice(0, 140))} · ${escapeHtml(when(l.at))}</span></li>`).join('')}</ul></details>` : '<p class="dk-ok">还没有拦过东西。</p>'}`;
+  }
+  $('.dk-guard').addEventListener('click', async (e) => {
+    const b = e.target.closest('.dk-g-ok, .dk-g-no');
+    if (!b) return;
+    const pd = data.pending.find((p) => p.id === b.closest('[data-id]').dataset.id);
+    if (!pd) return;
+    b.disabled = true;
+    try {
+      if (b.classList.contains('dk-g-ok')) { await ops.release(pd); toast('放行了，写进记忆（7 天内能撤）'); } else { await ops.drop(pd); toast('不要了'); }
+    } catch (err) { b.disabled = false; toast(`没成：${err?.message || err}`); }
+  });
+
   // —— 体检（health.js）：页面自己的机械数据按规则修好，拿不准的、Claude 写的内容只记下来。结果在 meta/health，管理页「自检」里看 ——
   let healthDoc = null;
   let healthBusy = false;
@@ -422,6 +457,7 @@ export async function renderDesk(root, meta) {
     paintManual();
     paintBackup();
     paintPending();
+    paintGuard();
     paintMine();
     paintDrill(today);
     paintWeek(today);
@@ -824,7 +860,10 @@ export async function renderDesk(root, meta) {
       if (res?.modelApplied && res.modelApplied !== MODEL) return;
       const got = parseDebrief(res.text);
       if (got.problems.includes('回的不是复盘')) { console.warn('复盘回的不是复盘', x.id, String(res.text).slice(0, 200)); return; }
-      const debrief = { v: DEBRIEF_VERSION, at: Date.now(), model: res.modelApplied || '', bytes: new TextEncoder().encode(prompt).length, mis: got.mis, pace: got.pace, habit: got.habit, opening: got.opening, advice: got.advice };
+      const raw = { v: DEBRIEF_VERSION, at: Date.now(), model: res.modelApplied || '', bytes: new TextEncoder().encode(prompt).length, mis: got.mis, pace: got.pace, habit: got.habit, opening: got.opening, advice: got.advice };
+      // 守卫：复盘里引的原话、轮次、板上编号要能在这节课的记录里找到；对不上的那几条先暂存（held），不进下一节的记忆摘要
+      const { debrief, held } = guardDebrief(raw, { session: x.id, mem: data, corpus: buildCorpus({ turns, evidence: data.evidence.filter((e) => e.session === x.id) }) });
+      if (held) reportError(`复盘有 ${held} 条对不上这节课的记录，先暂存了`, { what: '守卫', path: `sessions/${x.id}`, soft: true });
       // 读最新的再写（报告、归类可能刚写过这一条）
       const cur = await db.doc(`sessions/${x.id}`).get().then((r) => (r.exists ? r.data() : null));
       if (!cur) return;
@@ -1459,8 +1498,14 @@ export async function createClass(db, { block = null, main = null, problems = nu
     ...(!main?.reviewClass && reviewIdsOf(main?.review).length ? { opening: reviewIdsOf(main.review) } : {}),
   });
   const scoped = scopeDb(db, sid);
-  if (main) await scoped.doc('pack/main').set({ ...main, block: block || main.block || null });
+  // 上一节这一科下课整理单里被守卫拒掉的几条（memops.js 的 carry）：带进这节课的资料包，让课堂里的 Claude 顺带补（不单独调用），带过就清掉
+  const guardDoc = await db.doc('meta/guard').get().then((s) => (s.exists ? s.data() : null)).catch(() => null);
+  const carry = (guardDoc?.carry?.[sp] || []).slice(0, 8);
+  const carryText = carry.map((x) => `- ${String(x.line || '').slice(0, 200)}\n  没收的原因：${String(x.error || '').replace(/^守卫：/, '').slice(0, 200)}`).join('\n');
+  const main2 = carryText ? { ...(main || {}), carry: carryText } : main;
+  if (main2) await scoped.doc('pack/main').set({ ...main2, block: block || main2.block || null });
   if (problems) await scoped.doc('pack/problems').set(problems);
+  if (carry.length) await db.doc('meta/guard').set({ ...guardDoc, carry: { ...guardDoc.carry, [sp]: [] }, at: Date.now() }).catch(() => {});
   return sid;
 }
 

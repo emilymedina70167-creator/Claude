@@ -198,7 +198,9 @@ const SUITES = {
   // 要想起来的：评分写失败一次再点，只记一条证据；第一张写「第一次想」；评完数量归零；评分途中点「先到这」不再翻出下一张
   async recall(browser) {
     const t = await seeded(browser);
-    const due = Number((await t.text('.dk-trow[data-row="recall"] .dk-ic')) || 0);
+    // 首页的数字会往上滚（feel.js 的 rollNumber），滚的那一下字里有新旧两个数：等它停下来再读
+    const count = () => t.waitFor(async () => { const v = String((await t.text('.dk-trow[data-row="recall"] .dk-ic')) ?? '').trim(); return /^\d+$/.test(v) ? Number(v) + 1 : null; }, { timeout: 8000, what: '「要想起来的」那一行的数字' }).then((n) => n - 1);
+    const due = await count();
     const stamp = (k) => JSON.stringify([k.tier, k.last, k.result, k.lapses]);
     const before = new Map((await t.docs('recall')).map((k) => [k.id, stamp(k)]));
     check(due >= 2, `示例记忆里今天要想的只有 ${due} 条，测不了`);
@@ -231,7 +233,8 @@ const SUITES = {
     const rated = (await t.docs('recall')).filter((k) => before.get(k.id) !== stamp(k));
     check(rated.length === 2, `想了 2 条，记忆点里变了的有 ${rated.length} 条`);
     await t.page.click('.fl-close'); await sleep(800);
-    const left = Number((await t.text('.dk-trow[data-row="recall"] .dk-ic')) || 0);
+    await sleep(800);
+    const left = await count();
     check(left === due - 2, `想完 2 条，首页还写今天要想 ${left} 条（原来 ${due}）`);
     return t;
   },
@@ -412,6 +415,50 @@ const SUITES = {
     await t.answer('直接下课');
     await t.waitFor(async () => (await t.docs('sessions')).find((x) => x.id === sid)?.status === 'closed', { what: '从「⋯」菜单直接下课' });
     check(!(await t.page.$('.fl-menu')), '菜单点完没收起');
+    return t;
+  },
+
+  // 守卫：课堂里的 Claude 写 memo 块，对得上的收下、编原话 / 编证据编号的挂提醒（话不改）、重复的拒收（下一轮告诉它）；
+  // 管理页「自检 → 守卫」看得到
+  async guard(browser) {
+    const t = await seeded(browser);
+    await t.page.click('.dk-class .dk-new');
+    const sid = await t.inClass();
+    await t.page.click('button:has-text("开始上课")');
+    // 等模拟老师第一轮讲完（板上出了题）再说话：老师还在写的时候，发送键是「停止」
+    await t.waitFor(() => t.page.$('button:has-text("一个数")'), { timeout: 30000, what: '模拟老师写出第一道题' });
+    await sleep(2500);
+    const input = t.page.locator('textarea:visible, [contenteditable="true"]:visible').first();
+    await input.click(); await t.page.keyboard.type('测试:守卫'); await t.page.keyboard.press('Enter');
+    const logs = await t.waitFor(async () => { const l = Object.entries(await t.db()).filter(([k]) => k.startsWith('guard_log/')).map(([, v]) => v); return l.length >= 2 ? l : null; }, { timeout: 30000, what: '守卫记下挂提醒的几条' }).catch(async (e) => {
+      if (process.env.E2E_DEBUG) { const all = await t.db(); console.log('DBG turns', JSON.stringify(Object.entries(all).filter(([k]) => k.includes('/class_turns/')).map(([k, v]) => [k, v.role, String(v.text || v.say || '').slice(0, 300)]), null, 1)); console.log('DBG obs', JSON.stringify((await t.docs('observations')).filter((o) => o.session === sid))); console.log('ERRS', t.errors); }
+      throw e;
+    });
+    const obs = await t.docs('observations');
+    const good = obs.find((o) => o.session === sid && String(o.text).includes('想看守卫') && !String(o.text).endsWith('。'));
+    check(good && !good.guard, '引了学生刚说的原话那条应该照收、不挂提醒');
+    const slip = (await t.docs('slips')).find((x) => x.session === sid && String(x.text).includes('早就会了'));
+    check(slip?.guard?.verdict === 'flag' && slip.guard.checks.some((c) => c.code === 'quote-miss'), '编了原话的那条应该照写但挂提醒');
+    check(String(slip.text).includes('这一块我早就会了不用讲'), '挂提醒的那条，Claude 写的话被改了');
+    const fake = obs.find((o) => o.session === sid && String(o.text).includes('换一种题再测'));
+    check(fake?.guard?.checks?.some((c) => c.code === 'basis-dropped'), '编了证据编号的那条应该挂提醒');
+    check(!obs.some((o) => o.session === sid && String(o.text).endsWith('想看守卫。')), '和第一条几乎一样的那条应该拒收');
+    const turns = Object.entries(await t.db()).filter(([k]) => k.startsWith(`sessions/${sid}/class_turns/`)).map(([, v]) => v);
+    check(turns.some((x) => x.role === 'system' && /没记/.test(String(x.text))), '拒收的那条应该在下一轮告诉课堂 Claude');
+    await t.open('manage');
+    await t.waitFor(async () => /守卫/.test(await t.text('.dk-check') || '') && /挂提醒 [1-9]/.test(await t.text('.dk-guard') || ''), { timeout: 15000, what: '管理页的守卫一段写出挂提醒几条' });
+    // 下课整理单被拒的（carry）：下一节同一科开课时进资料包，带过就清掉
+    await plant(t, { 'meta/guard': { ...((await t.db())['meta/guard'] || {}), carry: { math: [{ line: 'error q="…" basis=ev-x', error: '守卫：依据 ev-x 在记忆库里找不到', session: sid, at: Date.now() }] } } });
+    await t.open();
+    await t.page.waitForSelector('.dk-class .dk-more', { timeout: 15000 });
+    await t.page.evaluate(() => document.querySelector('.dk-class .dk-close')?.click());
+    await t.answer('直接下课');
+    await t.waitFor(async () => (await t.docs('sessions')).find((x) => x.id === sid)?.status === 'closed', { what: '先把这节下课' });
+    await t.page.click('.dk-class .dk-new');
+    const next = await t.inClass((h) => h !== sid);
+    const pk = (await t.db())[`sessions/${next}/pack/main`];
+    check(/没收的原因：依据 ev-x/.test(pk?.carry || ''), '下一节的资料包里没有带上上一节没收的那条');
+    check(!((await t.db())['meta/guard']?.carry?.math || []).length, '带过的 carry 没清掉');
     return t;
   },
 

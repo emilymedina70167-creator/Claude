@@ -22,6 +22,7 @@
 // 「测试:示意图」sketch 当场画的图 + highlight + label= 标注；「测试:推导」derive 分拍板书 + figure play step；
 // 「测试:原图」image 贴讲义原图（本地用一张模拟的）；「测试:排序」演示组件 sort（快排一次划分，先猜枢轴落在哪）+ figure play step + mark；
 // 「测试:预案」board react + add … hold（答对由页面接，不再调用；答错照常调用）；「测试:拍子」一轮分四拍（说一句、写一段、圈一下……）。
+// 「测试:守卫」学习台里：memo 块写一条对得上的、一条编原话的、一条编证据编号的、一条重复的（守卫收下 / 挂提醒 / 拒收）。
 // 系统发来的「[动作] … 没有动静」（察觉卡住）→ 轻轻问一句；只带「[板书]」的消息 → 说收到了。
 
 export const DEV_LIMITS = Object.freeze({ maxPromptBytes: 262144, images: Object.freeze({ maxCount: 4, maxInputBytes: 20000000, mediaTypes: Object.freeze(['image/png', 'image/jpeg']) }) });
@@ -207,6 +208,23 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
         board(`add id=b${n + 1} title="拆开"`, String.raw`$$A=\begin{bmatrix}1\\2\end{bmatrix}\begin{bmatrix}1&1\end{bmatrix}=\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}$$`),
         '最后，你来判断：',
         board(`add id=b${n + 2} title="判断"`, fence('quiz', [`id: q-${n + 2}`, String.raw`q: $\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是`, '- [x] 一个数', '- [ ] 2×2 矩阵'].join('\n'))),
+      ),
+    };
+  }
+
+  // 守卫（memory/guard.js）：一条引了学生刚说的原话（收下）、一条编了一句原话（挂提醒）、一条依据编了一个没有的证据（挂提醒）、
+  // 一条和第一条几乎一样（拒收）
+  if (!isSystem && /测试\s*[:：]?\s*守卫/.test(said)) {
+    return {
+      kind: 'memo',
+      text: join(
+        '（模拟老师）先记几条。',
+        board('memo', [
+          `note text="学生原话「${said.replace(/"/g, '')}」，想看守卫" basis=say`,
+          'slip text="学生说「这一块我早就会了不用讲」，我没追问" lesson="先问一句再讲"',
+          'note text="（模拟老师）形状判断下次换一种题再测" basis=ev-zzzz-fake',
+          `note text="学生原话「${said.replace(/"/g, '')}」，想看守卫。" basis=say`,
+        ].join('\n')),
       ),
     };
   }

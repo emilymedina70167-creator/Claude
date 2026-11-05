@@ -287,7 +287,8 @@ export function planEntry(entry, ctx = {}) {
   const tidy = ['merged', 'void', 'retired', 'done'].includes(a.status);
   if (NEED_BASIS.has(kind) && !basis.length && !tidy && !(kind === 'pref' && a.id)) return { error: `${spec.label}要写依据：basis=组件 id / 证据 id / say（没有依据的结论不记）` };
   const reason = cut(a.reason || a.why || '', 300);
-  const base = { kind, tier: spec.tier, coll: spec.coll, basis, reason, label: spec.label };
+  // missingBasis：写了但找不到、被去掉的依据（守卫看：编了一个没有的证据编号是要提醒的）
+  const base = { kind, tier: spec.tier, coll: spec.coll, basis, reason, label: spec.label, ...(missing.length ? { missingBasis: missing } : {}) };
   const enumOk = (coll, field, v) => v === undefined || COLLECTIONS[coll].enums?.[field]?.includes(v);
   const sid = ctx.session || null;
   // 这节课已经新加了几条这一种（applyMemo 里同一块先写的也算：它们已经进了手上的副本）

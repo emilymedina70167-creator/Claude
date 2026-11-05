@@ -532,7 +532,9 @@ export async function renderClass(root, meta, desk = null) {
   }
 
   // 执行一轮里的 memo 块：都直接写；没记成的告诉课堂 Claude（不多跑一轮：跟着下一轮的提醒）
-  async function runMemo(entries0, seq, pageN) {
+  // 执行 memo 块（这一轮讲完以后，不在调用 Claude 的路上）。守卫（memory/guard.js）拿这节课到现在的每一轮核原话、轮次、板上编号；
+  // closing：下课整理单（被拒的记下来，下一节开课带着）
+  async function runMemo(entries0, seq, pageN, { closing = false } = {}) {
     // 改讲别的块：页面自己改（sessions 记下来，之后的证据、记忆摘要都按新的块），不进改动单
     const switches = entries0.filter((e) => e.kind === 'block');
     const entries = entries0.filter((e) => e.kind !== 'block');
@@ -549,7 +551,7 @@ export async function renderClass(root, meta, desk = null) {
     }
     if (!entries.length) return { pds: [], rejected: [] };
     try {
-      const r = await desk.memo.ops.applyMemo(entries, { session: desk.sid, block: desk.block, space: desk.space, turn: seq });
+      const r = await desk.memo.ops.applyMemo(entries, { session: desk.sid, block: desk.block, space: desk.space, turn: seq, turns: history.filter((t) => !t.discarded), closing });
       const p = pages.get(pageN);
       if (p && r.pds.length) { p.memo = [...(p.memo || []), ...r.pds.map((x) => x.id)]; savePage(p); bv.paint(p); }
       if (r.rejected.length) addTurn({ role: 'system', kind: 'note', text: `[系统] memo 里有 ${r.rejected.length} 条没记：\n${r.rejected.map((x) => `- ${x.line}\n  原因：${x.error}`).join('\n')}` });
@@ -2226,7 +2228,7 @@ export async function renderClass(root, meta, desk = null) {
       const closed = addTurn({ role: 'system', kind: 'closing', text: res.text, modelApplied: res.modelApplied, page: p.n, cost: cost('closing') });
       bv.show(p.n, { animate: true });
       // 整理单：都直接写进去，小结下面只有一行小字（点开能撤销）
-      const memo = memoEntries.length ? await runMemo(memoEntries, closed.seq, p.n) : null;
+      const memo = memoEntries.length ? await runMemo(memoEntries, closed.seq, p.n, { closing: true }) : null;
       // 课后报告（memory/report.js，页面代码算，不调用 Claude）：sessions/{编号}/report/main
       if (desk?.writeReport) desk.writeReport({ turns: history, steps: steps() }).catch((e) => { console.warn('课后报告没写成', e); toast('课后报告没写成，回学习台首页会再试'); });
       bar.setStatus('notice', !desk ? '下课了。小结已经存好，回对话告诉 Claude「下课了」。' : '下课了。小结和课后报告已经存进学习台。');
