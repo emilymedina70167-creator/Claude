@@ -8,6 +8,7 @@ import { spaceOfId } from './space.js';
 
 const NEXT = { errors: nextErrorId, weaknesses: nextWeaknessId, reviews: nextReviewId };
 export const MEMO_MAX = 12;
+const LAB_FRESH = ['errors', 'weaknesses', 'reviews', 'recall', 'lessons', 'observations', 'slips', 'profile', 'rules', 'position'];
 
 /**
  * db：学习台的数据库（没有 scopeDb 过的）；mem()：页面手上的记忆库（各类的数组，一直在订阅）。
@@ -47,6 +48,14 @@ export function createMemOps({ db, mem }) {
     const date = toDate(Date.now());
     // 同一块里的几条要编号的（两道新错题）：先在手上的副本里占住号，免得撞
     const local = { ...mem() };
+    // 教研室的回答几份一起并进来（labdesk.js 一份接一份）：手上那份记忆可能还没跟上上一份刚写的，
+    // 自动编号（K3、T-14、错题号）会撞、重复的看不出来。它不在上课那条路上，先从数据库把会写的几类读一遍新的
+    if (author === 'lab') {
+      for (const c of LAB_FRESH) {
+        const r = rows(await db.collection(c).get().catch(() => null));
+        if (r.length) local[c] = r;
+      }
+    }
     const pds = [];
     const rejected = [];
     // 一个 memo 块最多记 MEMO_MAX 条（归纳守则的 lesson 不算）：记得太多学生看不过来，挑要紧的。

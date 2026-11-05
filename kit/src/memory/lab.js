@@ -17,7 +17,7 @@ import { reportText } from './report.js';
 import { closingPrompt, MEMO_DOC } from '../class/prompt.js';
 import { componentDoc } from '../subject.js';
 
-export const LAB_VERSION = 2; // 单子的写法变了就加一：学习台打开时照新写法重拼（收件箱先按旧单子收完）
+export const LAB_VERSION = 3; // 单子的写法变了就加一：学习台打开时照新写法重拼（收件箱先按旧单子收完）
 // 一晚最多做几张（价值高的先）：补收尾的课最值，出新题其次，备课一科一张
 export const LAB_CAPS = { backfill: 2, newproblems: 3, probe: 2, prep: 3 };
 export const BRIEF_MAX = 600 * 1024; // 一张工作单子最多多大（数据库一条文档放得下；备课带的教材最大）
@@ -81,6 +81,7 @@ export function backfillBrief({ session = {}, transcript = '', memory = '', clos
 - 引学生的原话要一字不差地从下面的记录里抄（带上第几轮，比如「#43 学生说「……」」）；记录里没有的话不要写成引号里的原话；
 - 课堂里的 Claude 已经记过的（下面记忆里有的）不再记；以前的错题、弱点的话不要改写（要改只能改状态，或者写 \`doubt=\` 说明理由）；
 - basis= 写下面报告里的组件 id 或证据 id；
+- 不写 \`position\`（下一节从哪接以后来的课、课堂里的 Claude 写的为准，你改不了），怎么接写在小结第 4 点里；守则、关于学生、规则只能新加，不能改已有那条的话；
 - 这节课没讲完、没有证据的就不写，宁可少写。
 
 ### 学生的记忆（课堂里的 Claude 上课时带着的同一份）
