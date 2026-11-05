@@ -55,6 +55,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background:
@@ -215,6 +216,41 @@ select { min-height: 44px; border-radius: 12px; border: 0.5px solid var(--line);
 .say input { flex: 1 1 0; width: 0; min-width: 0; height: 44px; border-radius: 999px; border: 0.5px solid var(--line); background: var(--field); color: var(--ink); font: 16px var(--sans); padding: 0 16px; }
 .placeholder { color: var(--muted); font-size: 15px; padding: 18px 0; }
 .foot { color: var(--muted); font-size: 13px; text-align: center; }
+
+/* 一问一答 */
+.chat { padding: 22px clamp(16px, 3vw, 32px) 18px; display: grid; gap: 16px; }
+.chat-start { display: grid; gap: 12px; }
+.chat-start textarea { width: 100%; min-height: 70px; border-radius: 14px; border: 0.5px solid var(--line); background: var(--field); color: var(--ink); font: 16px/1.6 var(--sans); padding: 10px 14px; resize: vertical; }
+.chat-top { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; color: var(--muted); font-size: 14px; }
+.link { border: 0; background: none; color: var(--brand); font: 15px var(--sans); cursor: pointer; min-height: 44px; padding: 0 4px; }
+#chatBoard { display: grid; gap: 18px; min-width: 0; }
+#chatBoard > div { display: grid; gap: 14px; min-width: 0; }
+.turn { display: grid; gap: 8px; min-width: 0; }
+.turn p { margin: 0; }
+.past .turn { opacity: .58; transition: opacity .3s; }
+.past .turn:hover { opacity: .9; }
+.past .turn p { font-size: 15px; line-height: 1.85; }
+.past .turn.old { display: none; }
+.past.all .turn.old { display: grid; }
+.now .turn p { font-size: 20px; line-height: 2.05; }
+.now .turn.in > :not(.echo) { animation: rise .4s var(--spring); }
+.stage:empty { display: none; }
+.stage { border-radius: 16px; padding: 6px 0; }
+.echo { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.echo:empty { display: none; }
+.echo span { max-width: 82%; padding: 7px 14px; border-radius: 18px 18px 5px 18px; background: var(--brand); color: var(--brand-ink); font-size: 15px; line-height: 1.45; animation: rise .3s ease-out; }
+.past .echo span { background: var(--brand-soft); color: var(--ink); font-size: 13.5px; }
+.tmeta { font-size: 12px; color: var(--muted); }
+.morebtn { justify-self: start; }
+.typing { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 14px; min-height: 28px; }
+.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); opacity: .4; animation: blink 1.2s infinite; }
+.typing i:nth-child(2) { animation-delay: .2s; }
+.typing i:nth-child(3) { animation-delay: .4s; margin-right: 6px; }
+@keyframes blink { 40% { opacity: 1; transform: translateY(-2px); } }
+.bar { position: sticky; bottom: 0; display: flex; gap: 8px; padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px)); margin: 0 -6px; padding-left: 6px; padding-right: 6px; background: linear-gradient(to top, var(--card-solid) 70%, transparent); border-radius: 0 0 16px 16px; z-index: 2; }
+.bar input { flex: 1 1 0; width: 0; min-width: 0; height: 46px; border-radius: 999px; border: 0.5px solid var(--line); background: var(--field); color: var(--ink); font: 16px var(--sans); padding: 0 18px; }
+.lesson-body.two { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1000px) { .lesson-body.two { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 
@@ -222,47 +258,49 @@ select { min-height: 44px; border-radius: 12px; border: 0.5px solid var(--line);
   <header class="top">
     <div class="eyebrow">学习台 · 组件库机制升级 · 测试版</div>
     <h1><span class="seal">活</span>活板</h1>
-    <p>老师只写几行「例子是什么」，页面把它变成能拨、能拖、能折的东西，你一动，板上的图、句子里的数、空的答案一起跟着变。下面三块板都是老师写的几行字（右边能看、能改），最后一块让 Opus 5.5 当场写，计时。</p>
+    <p>第二版是「一问一答」：Opus 每次只说一句话、只问一个问题，你在板上做或者说一句，它马上接下一句。下面是第一版的三块整板示范，留着对照。</p>
     <nav class="nav">
-      <a href="#belady">408 · 页面置换</a>
-      <a href="#eigen">线代 · 特征向量</a>
-      <a href="#clause">英语 · 定语从句</a>
-      <a href="#live">让 Claude 现写一块</a>
+      <a href="#chat">一问一答（第二版）</a>
+      <a href="#belady">整板 · 页面置换</a>
+      <a href="#eigen">整板 · 特征向量</a>
+      <a href="#clause">整板 · 定语从句</a>
     </nav>
   </header>
 
-  <div id="lessons"></div>
-
-  <section class="lesson" id="live">
-    <div class="lesson-head"><span class="subj">实测</span><span class="why">你说想让学生发现什么，Opus 5.5 写一块活板；你在板上动，再「发给老师」，它只写要改的几行。</span></div>
-    <div class="card ask">
-      <textarea id="req" aria-label="这一次想教什么">让我自己发现：LRU 不会出现「多给一块反而多缺页」，FIFO 会。</textarea>
-      <div class="chips" id="sugg"></div>
-      <div class="row">
-        <button class="btn" id="go" type="button">写一块板</button>
-        <button class="btn ghost" id="stop" type="button" hidden>停</button>
-        <select id="effort" aria-label="想多久">
-          <option value="high" selected>effort high（和课堂一样）</option>
-          <option value="medium">effort medium</option>
-          <option value="low">effort low</option>
-        </select>
-      </div>
-      <div class="timing" id="timing"></div>
-    </div>
-    <div class="lesson-body">
-      <div class="card board" id="liveBoard"><div class="placeholder">还没写。点「写一块板」，Claude 写的时候板会一行一行长出来。</div></div>
-      <aside class="side">
-        <div class="card panel">
-          <h4>你对老师说</h4>
-          <div class="say"><input id="sayText" placeholder="比如：为什么会这样？（可以空着）" aria-label="对老师说"><button class="btn" id="send" type="button" disabled>发给老师</button></div>
-          <div class="lint" id="sendNote">你在板上的动作会一起发过去。</div>
+  <section class="lesson" id="chat">
+    <div class="lesson-head"><span class="subj">一问一答</span><span class="why">Opus 一次只问一个问题。你在板上做（选、填、拨、拖、折），或者在下面说一句，它就接着问。</span></div>
+    <div class="card chat">
+      <div class="chat-start" id="chatStart">
+        <textarea id="topic" aria-label="这一次想学什么">让我自己发现：FIFO 会出现「多给一块反而多缺页」，LRU 不会。</textarea>
+        <div class="chips" id="topicChips"></div>
+        <div class="row">
+          <button class="btn" id="begin" type="button">开始</button>
+          <select id="effort" aria-label="Opus 想多久">
+            <option value="high" selected>effort high（和课堂一样）</option>
+            <option value="medium">effort medium</option>
+            <option value="low">effort low</option>
+          </select>
         </div>
-        <div class="card panel"><h4>页面告诉老师的</h4><ul class="log" id="liveLog"><li class="empty">你在板上动一动，这里记下来。</li></ul></div>
-        <details class="card panel"><summary>老师写的源码</summary><textarea class="src" id="liveSrc" spellcheck="false" aria-label="源码"></textarea><div class="lint" id="liveLint"></div></details>
-        <details class="card panel"><summary>老师拿到的写法说明</summary><div class="lint" id="docSize"></div><textarea class="src" id="docText" readonly spellcheck="false" aria-label="写法说明"></textarea></details>
-      </aside>
+      </div>
+      <div class="chat-top" id="chatTop" hidden><span id="topicNow"></span><button class="link" id="restart" type="button">换一个</button></div>
+      <div id="chatBoard"></div>
+      <div class="typing" id="typing" hidden><i></i><i></i><i></i><span id="typingText">Opus 在想</span></div>
+      <div class="bar" id="bar" hidden>
+        <input id="say" autocomplete="off" placeholder="说一句（也可以直接在板上做）" aria-label="对老师说">
+        <button class="btn" id="sayBtn" type="button" disabled>发送</button>
+        <button class="btn ghost" id="stop" type="button" hidden>停</button>
+      </div>
+      <div class="timing" id="chatTiming"></div>
+    </div>
+    <div class="lesson-body two">
+      <details class="card panel"><summary>页面告诉老师的</summary><ul class="log" id="chatLog"><li class="empty">还没开始。</li></ul></details>
+      <details class="card panel"><summary>老师写过的源码</summary><textarea class="src" id="chatSrc" readonly spellcheck="false" aria-label="源码"></textarea><div class="lint" id="chatLint"></div></details>
+      <details class="card panel"><summary>老师拿到的写法说明</summary><div class="lint" id="docSize"></div><textarea class="src" id="docText" readonly spellcheck="false" aria-label="写法说明"></textarea></details>
     </div>
   </section>
+
+  <div id="lessons"></div>
+
 
   <div class="foot">测试版，不连学习台、不写记忆。引擎在 engine.js：读描述、算值、判分、替老师找例子。</div>
 </div>
@@ -328,12 +366,6 @@ when s.rest == "The man is my teacher."：那 whom 在从句 whom I met 里是�
   },
 ];
 
-const SUGGEST = [
-  '让我自己发现：LRU 不会出现「多给一块反而多缺页」，FIFO 会。',
-  '让我体会行列式为 0 时，整个平面被压成一条线。',
-  '让我发现非限制性定语从句为什么不能用 that。',
-  '让我发现 OPT 为什么是缺页最少的，以及它为什么做不出来。',
-];
 
 // —— 一块板：描述 → DOM；学生一动，整块重算，变了的地方才动 ——
 const COLORS = ['var(--cyan)', 'var(--ochre)', 'var(--green)', 'var(--rose)', 'var(--brand)'];
@@ -369,17 +401,21 @@ class Board {
     this.figInfo = new Map();
     this.rt.fresh();
     const lines = this.rt.board.lines;
-    // 先给图里的向量排颜色：正文里同一个式子用同一个颜色，文字和图连着
-    let ci = 0;
-    for (const ln of lines) if (ln.kind === 'draw') for (const it of ln.items) {
-      let v; try { v = this.rt.eval(it.ast); } catch { continue; }
-      if (HB.isVec(v) && v.length === 2 && !this.colors.has(key(it.src))) this.colors.set(key(it.src), COLORS[ci++ % COLORS.length]);
-    }
+    this.paintColors(lines);
     for (const ln of lines) {
       const b = this.block(ln);
       if (b) { this.el.appendChild(b.el); this.blocks.push(b); }
     }
     this.update({ first: true });
+  }
+
+  // 先给图里的向量排颜色：正文里同一个式子用同一个颜色，文字和图连着
+  paintColors(lines) {
+    let ci = 0;
+    for (const ln of lines) if (ln.kind === 'draw') for (const it of ln.items) {
+      let v; try { v = this.rt.eval(it.ast); } catch { continue; }
+      if (HB.isVec(v) && v.length === 2 && !this.colors.has(key(it.src))) this.colors.set(key(it.src), COLORS[ci++ % COLORS.length]);
+    }
   }
 
   block(ln) {
@@ -495,7 +531,7 @@ class Board {
       try { exp = this.rt.eval(sg.ast); } catch { return; }
       const ok = HB.checkAnswer(given, exp);
       st.status = ok ? 'ok' : 'bad'; st.val = given; st.sig = HB.fmt(exp);
-      this.log(`填空（${sg.src} 那一格）：写了 ${given}，${ok ? '对' : `不对（页面算的是 ${HB.fmt(exp)}）`}`);
+      this.log(`填空（${sg.src} 那一格）：写了 ${given}，${ok ? '对' : `不对（页面算的是 ${HB.fmt(exp)}）`}`, 'commit', ok ? `填了 ${given}，对` : `填了 ${given}，不对`);
       paint(true);
     };
     btn.addEventListener('click', submit);
@@ -532,7 +568,7 @@ class Board {
         if (st.done || st.picked.has(i)) return;
         st.picked.add(i);
         if (c.ok) st.done = true;
-        this.log(`选择：选了「${c.t}」，${c.ok ? '对' : '不对'}`);
+        this.log(`选择：选了「${c.t}」，${c.ok ? '对' : '不对'}`, 'commit', `选了「${c.t}」`);
         paint();
       });
       w.appendChild(b);
@@ -557,7 +593,7 @@ class Board {
         let ok = false;
         try { ok = !!this.rt.eval(ln.cond); } catch {}
         // 做到过就一直算做到了（学生再拨走也不收回）
-        if (ok && !this.goalsDone.get(id)) { this.goalsDone.set(id, true); if (!ctx.first) this.log(`做到了目标：${ln.msg}`); }
+        if (ok && !this.goalsDone.get(id)) { this.goalsDone.set(id, true); if (!ctx.first) this.log(`做到了目标：${ln.msg}`, 'commit', '做到了'); }
         const done = this.goalsDone.get(id);
         el.classList.toggle('done', !!done);
         dot.textContent = done ? '✓' : '?';
@@ -591,7 +627,7 @@ class Board {
     this.rt.fresh();
     for (const b of this.blocks) b.update(ctx);
     if (this.rt.found.length) {
-      for (const f of this.rt.found.splice(0)) this.log(`页面替老师找了例子：${f.name} = ${HB.fmt(f.value)}（试了 ${f.tries} 个，${f.ms} 毫秒）`);
+      for (const f of this.rt.found.splice(0)) this.log(`页面替老师找了例子：${f.name} = ${HB.fmt(f.value)}（试了 ${f.tries} 个，${f.ms} 毫秒）`, 'info');
     }
   }
 
@@ -628,9 +664,10 @@ class Board {
     const after = this.visible();
     const diffs = [];
     after.forEach((v, k) => { if (k !== p.name && p.before.has(k) && p.before.get(k) !== v && v.length < 60) diffs.push(`${k}：${p.before.get(k)} → ${v}`); });
-    this.log(`拨 ${p.name}：${HB.fmt(p.from)} → ${HB.fmt(to)}${diffs.length ? `（板上跟着变：${diffs.join('，')}）` : ''}`);
+    this.log(`拨 ${p.name}：${HB.fmt(p.from)} → ${HB.fmt(to)}${diffs.length ? `（板上跟着变：${diffs.join('，')}）` : ''}`, 'explore', `拨到 ${HB.fmt(to)}`);
   }
-  log(text) { this.onLog(text); }
+  // kind：commit 是作答（课上马上发给老师）、explore 是在板上试（攒着，学生点「就这样」再发）、info 是页面自己做的事；short 是给学生看的一句回显
+  log(text, kind = 'explore', short = text) { this.onLog(text, kind, short); }
 
   pulse(k) {
     this.el.querySelectorAll(`.vec[data-expr="${CSS.escape(k)}"]`).forEach((g) => { g.classList.remove('pulse'); void g.getBBox(); g.classList.add('pulse'); });
@@ -691,7 +728,7 @@ class PlaneView {
       if (to[0] !== from[0] || to[1] !== from[1]) {
         const after = this.board.visible(); const diffs = [];
         after.forEach((v, k) => { if (k !== name && before.has(k) && before.get(k) !== v && v.length < 60) diffs.push(`${k}：${before.get(k)} → ${v}`); });
-        this.board.log(`拖 ${name}：${HB.fmt(from)} → ${HB.fmt(to)}${diffs.length ? `（${diffs.join('，')}）` : ''}`);
+        this.board.log(`拖 ${name}：${HB.fmt(from)} → ${HB.fmt(to)}${diffs.length ? `（${diffs.join('，')}）` : ''}`, 'explore', `把 ${name} 拖到 ${HB.fmt(to)}`);
       }
       this.board.update({});
     };
@@ -812,7 +849,7 @@ class SentenceView {
         b.addEventListener('click', () => {
           const shut = !this.board.rt.get(s.cell).folded.has(p.i);
           const diffs = this.board.act('', () => this.board.rt.toggleFold(s.cell, p.i));
-          this.board.log(`${shut ? '折起' : '展开'}「${p.t.trim()}」${diffs.length ? `（${diffs.join('，')}）` : ''}`);
+          this.board.log(`${shut ? '折起' : '展开'}「${p.t.trim()}」${diffs.length ? `（${diffs.join('，')}）` : ''}`, 'explore', `${shut ? '折起' : '展开'}「${p.t.trim()}」`);
         });
         this.el.appendChild(b);
       }
@@ -883,141 +920,252 @@ const lessonsEl = document.getElementById('lessons');
 lessonsEl.style.display = 'grid'; lessonsEl.style.gap = '40px';
 EXAMPLES.forEach((ex) => lessonsEl.appendChild(lessonDom(ex)));
 
-// —— 让 Opus 5.5 当场写：同一份写法说明，计时 ——
-const DOC = `你是考研辅导老师，在一块「活板」上教学。不要先摆概念：先抛一个例子或问题，让学生动手（拨数、拖向量、折句子）、猜、碰壁，自己得出结论。每一步只推一小步。
-板上写的是几行描述，页面负责画、动、判分、记下学生做了什么。一行一条：
+// —— 一问一答：老师一次只写一句话、一个问题；学生一作答页面就发，老师接着写下一句 ——
+// 板上留着的东西（draw 画的）放在中间，当前这一问在它下面、字大；前面几轮缩小留在上面，再早的收起来。
+class ChatBoard extends Board {
+  constructor(el, opts) { super(el, opts); this.bounds = []; this.echo = []; this.times = []; this.showAll = false; }
+  turnOf(n) { for (let i = 0; i < this.bounds.length; i++) if (n <= this.bounds[i]) return i; return Math.max(0, this.bounds.length - 1); }
+  render() {
+    this.el.innerHTML = '';
+    this.blocks = [];
+    this.colors = new Map();
+    this.figInfo = new Map();
+    this.rt.fresh();
+    const lines = this.rt.board.lines;
+    this.paintColors(lines);
+    const mk = (c) => { const d = document.createElement('div'); d.className = c; return d; };
+    const past = mk('past' + (this.showAll ? ' all' : '')), stage = mk('stage'), now = mk('now');
+    const cur = Math.max(0, this.bounds.length - 1);
+    const boxes = [];
+    const box = (i) => { if (!boxes[i]) { boxes[i] = mk('turn'); boxes[i].dataset.t = i; } return boxes[i]; };
+    for (const ln of lines) {
+      const b = this.block(ln);
+      if (!b) continue;
+      this.blocks.push(b);
+      (ln.kind === 'draw' || ln.kind === 'title' ? stage : box(this.turnOf(ln.n))).appendChild(b.el);
+    }
+    for (let i = 0; i <= cur; i++) {
+      const d = box(i);
+      d.dataset.t = i;
+      if (this.times[i]) { const m = mk('tmeta'); m.textContent = `Opus · ${(this.times[i] / 1000).toFixed(1)} 秒`; d.prepend(m); }
+      const e = mk('echo');
+      (this.echo[i] || []).forEach((t) => { const s = document.createElement('span'); s.textContent = t; e.appendChild(s); });
+      d.appendChild(e);
+      if (i === cur) { if (this.entering) d.classList.add('in'); now.appendChild(d); }
+      else { if (i < cur - 2) d.classList.add('old'); past.appendChild(d); }
+    }
+    const hidden = Math.max(0, cur - 2);
+    if (hidden && !this.showAll) {
+      const more = document.createElement('button');
+      more.type = 'button'; more.className = 'link morebtn'; more.textContent = `前面还有 ${hidden} 轮`;
+      more.addEventListener('click', () => { this.showAll = true; past.classList.add('all'); more.remove(); });
+      past.prepend(more);
+    }
+    this.el.append(past, stage, now);
+    this.entering = false;
+    this.update({ first: true });
+  }
+  addEcho(text) {
+    const i = Math.max(0, this.bounds.length - 1);
+    (this.echo[i] || (this.echo[i] = [])).push(text);
+    const e = this.el.querySelector(`.now .turn[data-t="${i}"] .echo`);
+    if (e) { const s = document.createElement('span'); s.textContent = text; e.appendChild(s); }
+  }
+}
 
-# 标题
-let 名字 = 表达式              定义一个量。用到它的图、文字、空都会跟着它变
-let f = 3 拨 1..6              学生能拨的整数（文字里写 {f} 就是拨的控件）
-let x = [1, 0] 拖 吸附 0.5     学生能在平面上拖的二维向量
-let s = find v in 序列(15, 1..6) where 条件    页面替你搜一个满足条件的例子（不用你心算）；范围还有 整数(1..9)、向量(2, -3..3)、矩阵(2, -3..3)
-draw a, b, c                   画一张图：二维向量、2×2 矩阵（画成它变换后的网格）放进同一个平面，可以写 A*x "Ax" 起名；paging 的结果画成置换过程（几个就上下几张，共用同一个块数）；句子画成能折叠的句子
-普通的一行                     板上的文字。{表达式} 是活的值（和图上同一个式子同色）；{表达式?} 是一个空，答案页面按当时的值判；{? 选项 | *对的 | 选项} 是选择题
-when 条件：文字                条件成立时才出现的一行（学生做到了才给下一问）
-goal 条件 => "做到时说的话"     学生做到了，页面告诉你
+const DOC = `你是考研辅导老师，和学生面对面一问一答。节奏要快：每次只说一句话、只问一个问题。不讲一大段，不一次给好几问，不先讲结论。让学生动手、猜、说理由，从回答里看出学生是怎么想的，下一句就针对它。
+学生看到的是一块「活板」，你写几行描述，页面负责画、动、判分，学生作答后页面马上把结果发给你。
 
-表达式：数、"字符串"、[1, 2] 向量、[[1, 2], [3, 4]] 矩阵（按行）、let 右边可以写 1 2 3 4 这样空格隔开的一串数；+ - * / ^；== != > < >= <=；and or not；r.faults 这样取成员。
+每次输出 1 到 4 行，只输出这些行（不要解释、不要代码围栏、不要编号）：
+let 名字 = 表达式                 一个东西。后面可以加 拨 1..6（学生能拨的整数）或 拖 吸附 0.5（学生能在平面上拖的二维向量）
+draw a, b                         把东西画到板上（一直留着；以后用 set 改它，不要再画一遍）
+set 名字 = 表达式                 改板上已有的东西，学生看得到它变
+一行话                            你说的那一句（只有一个问题）。里面可以放一个作答的地方：{表达式?} 是空（页面按当时的值判对错）、{? 甲 | *乙 | 丙} 是选择（对的打 *）、{f} 写能拨的量就是拨的控件；{表达式} 是活的值
+goal 条件 => "做到时说的话"        学生动手做到了这件事，页面马上告诉你（比如拨到了反例、拖到了特征方向）
+let s = find v in 序列(15, 1..6) where 条件    页面替你搜一个满足条件的例子（不要心算例子）；范围还有 整数(1..9)、向量(2, -3..3)、矩阵(2, -3..3)
+
+表达式：数、"字符串"、[1, 2] 向量、[[1, 2], [3, 4]] 矩阵（按行）、let 右边可以写 1 2 3 4 这样空格隔开的一串数；+ - * / ^；== != > < >= <=；and or not；r.faults 取成员。
 函数：
 - 线代：det(A) T(A) inv(A) tr(A) dot(u, v) norm(v) col(A, j) par(u, v)（共线且都不是零）lam(A, x)（Ax 是 x 的几倍）eigs(A)（2×2 的实特征值）
-- 页面置换：paging(序列, 块数, fifo|lru|opt) → .faults 缺页次数、.hits；faults(序列, 块数, 算法)
-- 英语：句子("The man [whom I met] is here.")：方括号里是学生能折起的一段 → .rest 折完剩下的句子、.folded 折起了几段、.text 原句
+- 页面置换：paging(序列, 块数, fifo|lru|opt) 画成置换表 → .faults 缺页次数、.hits；faults(序列, 块数, 算法)
+- 英语：句子("The man [whom I met] is here.")：方括号里是学生能折起的一段 → .rest 折完剩下的、.text 原句
 - 通用：len sum min max abs round range(a, b) allint(列表) count(列表, x)
 
-第一次：输出整块板（8 到 14 行），先给一个具体的例子和一个要学生动手的问题，用 goal 接住学生的发现，用 when 放下一问。
-之后你会收到「学生的动作」（页面记的：拨了什么、拖到哪、填了什么、选了什么、做到了哪个目标）和学生说的话。这时只写要改的几行：
-set 名字 = 表达式              改一个已有的量（图和文字跟着变，学生看得到变化）
-新的几行                       接在板的最后（先一行回应学生，再给下一个问题）
-不要重写整块板。只输出板上的行：不要解释、不要代码围栏、不要 Markdown 标题以外的格式。`;
+第一次：一个具体的东西（let + draw）和一个问题。之后你会收到「学生：」后面的几条（拨了什么、拖到哪、填了什么对不对、选了什么、做到了什么、说的话）：
+- 对了：一句话认可（可以不说），马上问下一小步。
+- 错了：不直接给答案，问一个能让学生自己看出问题的问题，或者 set 改个数让学生再看。
+- 学生只是在板上试：看学生试到了哪，顺着问。`;
 
-document.getElementById('docText').value = DOC;
-document.getElementById('docSize').textContent = `一共 ${(new Blob([DOC]).size / 1024).toFixed(1)} KB（现在线代的组件说明是 38.5 KB）。`;
+const TOPICS = [
+  '让我自己发现：FIFO 会出现「多给一块反而多缺页」，LRU 不会。',
+  '让我自己找到特征向量是什么意思。',
+  '让我自己弄明白定语从句里 whom 和 who 怎么选。',
+  '让我体会行列式为 0 时平面被压扁。',
+];
 
-const sugg = document.getElementById('sugg');
-SUGGEST.forEach((s) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = s; b.addEventListener('click', () => { document.getElementById('req').value = s; }); sugg.appendChild(b); });
+const clean = (t) => String(t).replace(/^```[a-z]*\n?/gm, '').replace(/^```\s*$/gm, '').replace(/^\s*\d+[.、]\s+/gm, '');
+const doneLines = (t) => { const s = clean(t); const i = s.lastIndexOf('\n'); return i < 0 ? '' : s.slice(0, i); };
+const lineCount = (src) => String(src).split('\n').length;
 
-const live = {
-  board: null, turns: [], base: '', pendingLog: [], ctl: null,
-};
-const liveLog = document.getElementById('liveLog'), liveSrc = document.getElementById('liveSrc'), liveLint = document.getElementById('liveLint');
-const timing = document.getElementById('timing');
-const goBtn = document.getElementById('go'), stopBtn = document.getElementById('stop'), sendBtn = document.getElementById('send');
+const $ = (id) => document.getElementById(id);
+const chat = { board: null, turns: [], queue: [], timer: null, busy: false, want: false, retry: 0, ctl: null, stats: [], explore: false };
+const MOCK = /[?&]mock\b/.test(location.search);
 
-function newLiveBoard() {
-  const el = document.getElementById('liveBoard');
-  el.innerHTML = '';
-  live.board = new Board(el, {
-    onLog: (t) => { addLog(liveLog, t); live.pendingLog.push(t); },
-    onSource: (src, errs) => { if (document.activeElement !== liveSrc) liveSrc.value = src; showLint(liveLint, src, errs); },
-  });
+$('docText').value = DOC;
+$('docSize').textContent = `一共 ${(new Blob([DOC]).size / 1024).toFixed(1)} KB（现在课堂每一轮带的说明有一百多 KB）。`;
+TOPICS.forEach((t) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.addEventListener('click', () => { $('topic').value = t; }); $('topicChips').appendChild(b); });
+
+function chatLog(text, kind, short) {
+  if (!chat.board) return;
+  addLog($('chatLog'), text);
+  chat.queue.push(text);
+  if (kind === 'info') return;
+  chat.board.addEcho(short);
+  if (kind === 'commit') { clearTimeout(chat.timer); chat.timer = setTimeout(() => sendTurn(''), 650); }
+  else chat.explore = true;
+  paintBar();
 }
-let srcTm;
-liveSrc.addEventListener('input', () => { if (!live.board) return; clearTimeout(srcTm); srcTm = setTimeout(() => live.board.setSource(liveSrc.value), 450); });
 
-const clean = (t) => String(t).replace(/^```[a-z]*\n?/gm, '').replace(/^```\s*$/gm, '');
-const done = (t) => { const s = clean(t); const i = s.lastIndexOf('\n'); return i < 0 ? '' : s.slice(0, i); };
+function paintBar() {
+  const txt = $('say').value.trim();
+  const b = $('sayBtn');
+  b.textContent = txt ? '发送' : chat.explore ? '就这样 →' : '发送';
+  b.disabled = !txt && !chat.explore;
+}
+$('say').addEventListener('input', paintBar);
+$('say').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('sayBtn').click(); } });
+$('sayBtn').addEventListener('click', () => { const t = $('say').value.trim(); $('say').value = ''; sendTurn(t); });
+$('stop').addEventListener('click', () => chat.ctl?.abort());
+$('restart').addEventListener('click', () => { chat.ctl?.abort(); $('chatStart').hidden = false; $('chatTop').hidden = true; $('bar').hidden = true; $('chatBoard').innerHTML = ''; chat.board = null; $('chatTiming').innerHTML = ''; });
 
-async function callClaude(messages, onLines) {
-  const sample = await window.claude?.use?.('sample');
-  if (!sample) throw { code: 'unavailable', message: '这里调不了 Claude：要在 claude.ai 里打开这个页面。' };
-  live.ctl = new AbortController();
+$('begin').addEventListener('click', async () => {
+  const topic = $('topic').value.trim();
+  if (!topic) return;
+  $('chatStart').hidden = true; $('chatTop').hidden = false; $('bar').hidden = false;
+  $('topicNow').textContent = `在学：${topic}`;
+  $('chatLog').innerHTML = '<li class="empty">还没有动作。</li>';
+  chat.board = new ChatBoard($('chatBoard'), {
+    onLog: chatLog,
+    onSource: (src, errs) => { $('chatSrc').value = src; showLint($('chatLint'), src, errs); },
+  });
+  chat.turns = [{ role: 'user', content: `${DOC}\n\n这一次要学的：${topic}\n\n开始：写第一问。` }];
+  chat.queue = []; chat.stats = []; chat.explore = false; chat.retry = 0;
+  paintBar();
+  await teacherTurn();
+});
+
+async function sendTurn(said) {
+  const B = chat.board;
+  if (!B) return;
+  clearTimeout(chat.timer);
+  if (B.pending) { clearTimeout(B.pending.timer); B.settle(); }
+  if (chat.busy) { if (said) chat.queue.push(`（老师还在写时）学生说：${said}`), B.addEcho(said); chat.want = true; return; }
+  if (said) B.addEcho(said);
+  const acts = chat.queue.splice(0);
+  if (!acts.length && !said) return;
+  chat.explore = false; paintBar();
+  const msg = `学生：\n${acts.map((a) => '- ' + a).join('\n') || '-（没在板上动）'}${said ? `\n- 说：${said}` : ''}`;
+  addLog($('chatLog'), `（发给老师）${msg.replace(/\n/g, ' ')}`);
+  chat.turns.push({ role: 'user', content: msg });
+  await teacherTurn();
+}
+
+async function teacherTurn() {
+  const B = chat.board;
+  chat.busy = true;
+  $('typing').hidden = false; $('typingText').textContent = 'Opus 在想'; $('stop').hidden = false;
+  const base = B.src;
+  const prev = B.bounds.slice();
   const t0 = performance.now();
   let first = null;
   const tick = setInterval(() => paintTiming(t0, first, null), 200);
+  const show = (ops) => {
+    const src = base ? HB.applyOps(base, ops) : ops;
+    B.bounds = [...prev, lineCount(src)];
+    B.entering = B.bounds.length !== B.lastTurns; B.lastTurns = B.bounds.length;
+    B.setSource(src);
+  };
   try {
-    const res = await sample(messages, {
-      model: 'claude-opus-5-5', effort: document.getElementById('effort').value, modelTier: 'complex', cache: false, signal: live.ctl.signal,
-      onText: ({ text }) => {
-        if (first === null && text.trim()) first = performance.now();
-        onLines(done(text));
-      },
+    const res = await ask(chat.turns, (partial) => {
+      if (first === null && partial.trim()) { first = performance.now(); $('typingText').textContent = 'Opus 在写'; }
+      const ops = doneLines(partial);
+      if (ops.trim()) show(ops);
     });
+    const ops = clean(res.text).trim();
     const end = performance.now();
+    B.times[prev.length] = end - t0;
+    show(ops);
+    chat.turns.push({ role: 'assistant', content: ops });
+    chat.stats.push({ first: (first ?? end) - t0, total: end - t0 });
     paintTiming(t0, first, end, res);
-    return res.text;
-  } finally { clearInterval(tick); }
+    // 这一轮写错了：页面马上让它重写这一轮（课堂里也是这样，学生不用管）
+    const errs = B.rt.board.errors.filter((e) => e.n > (prev[prev.length - 1] || 0));
+    if (errs.length && chat.retry < 1) {
+      chat.retry++;
+      chat.turns.push({ role: 'user', content: `页面：这一轮有 ${errs.length} 行看不懂：${errs.map((e) => `「${e.line}」${e.msg}`).join('；')}。把这一轮整轮重写（只写这一轮的几行）。` });
+      B.bounds = prev; B.setSource(base, { quiet: true });
+      clearInterval(tick);
+      chat.busy = false;
+      return teacherTurn();
+    }
+    chat.retry = 0;
+  } catch (e) {
+    chat.turns.pop();
+    B.bounds = prev; if (base) B.setSource(base, { quiet: true });
+    $('chatTiming').innerHTML += `<span style="color:var(--red)">${esc(errText(e))}</span>`;
+  } finally {
+    clearInterval(tick);
+    chat.busy = false;
+    $('typing').hidden = true; $('stop').hidden = true;
+    if (chat.want) { chat.want = false; sendTurn(''); }
+  }
 }
 
 function paintTiming(t0, first, end, res) {
   const s = (ms) => (ms / 1000).toFixed(1) + ' 秒';
   const now = performance.now();
   const parts = [];
-  parts.push(first === null ? `想了 <b>${s(now - t0)}</b>，还没出字` : `出第一个字 <b>${s(first - t0)}</b>`);
-  if (end) parts.push(`写完 <b>${s(end - t0)}</b>`);
-  else if (first !== null) parts.push(`写了 ${s(now - first)}`);
-  if (res) {
-    parts.push(`${clean(res.text).length} 字`);
-    parts.push(`模型 ${esc(res.modelApplied || res.modelTierApplied || '（没说）')}`);
-    if (res.truncated) parts.push('被截断了');
+  if (!end) parts.push(first === null ? `想了 <b>${s(now - t0)}</b>` : `第一个字 <b>${s(first - t0)}</b>`);
+  else {
+    parts.push(`这一轮 <b>${s(end - t0)}</b>（第一个字 ${s((first ?? end) - t0)}）`);
+    const n = chat.stats.length;
+    if (n) parts.push(`${n} 轮平均 <b>${s(chat.stats.reduce((a, x) => a + x.total, 0) / n)}</b>`);
+    if (res) parts.push(`${esc(res.modelApplied || res.modelTierApplied || '模型没说')} · effort ${esc($('effort').value)}`);
   }
-  timing.innerHTML = parts.map((p) => `<span>${p}</span>`).join('');
+  $('chatTiming').innerHTML = parts.map((p) => `<span>${p}</span>`).join('');
 }
 
-goBtn.addEventListener('click', async () => {
-  const req = document.getElementById('req').value.trim();
-  if (!req) return;
-  newLiveBoard();
-  liveLog.innerHTML = '<li class="empty">你在板上动一动，这里记下来。</li>';
-  live.turns = [{ role: 'user', content: `${DOC}\n\n这一次要教的：${req}\n\n输出整块板。` }];
-  live.pendingLog = [];
-  goBtn.disabled = true; stopBtn.hidden = false; sendBtn.disabled = true;
-  try {
-    const text = await callClaude(live.turns, (src) => { if (src.trim()) live.board.setSource(src, { quiet: false }); });
-    live.board.setSource(clean(text).trim());
-    live.base = live.board.src;
-    live.turns.push({ role: 'assistant', content: clean(text).trim() });
-    sendBtn.disabled = false;
-  } catch (e) {
-    timing.innerHTML += `<span style="color:var(--red)">${esc(errText(e))}</span>`;
-  } finally { goBtn.disabled = false; stopBtn.hidden = true; }
-});
+async function ask(messages, onPartial) {
+  if (MOCK) return mockAsk(messages, onPartial);
+  const sample = await window.claude?.use?.('sample');
+  if (!sample) throw { code: 'unavailable', message: '这里调不了 Claude：要在 claude.ai 里打开这个页面。' };
+  chat.ctl = new AbortController();
+  return sample(messages, {
+    model: 'claude-opus-5-5', effort: $('effort').value, modelTier: 'complex', cache: false, signal: chat.ctl.signal,
+    onText: ({ text }) => onPartial(text),
+  });
+}
 
-stopBtn.addEventListener('click', () => live.ctl?.abort());
-
-sendBtn.addEventListener('click', async () => {
-  if (!live.board) return;
-  live.board.settle?.();
-  const said = document.getElementById('sayText').value.trim();
-  const acts = live.pendingLog.splice(0);
-  if (!acts.length && !said) { document.getElementById('sendNote').textContent = '你还没在板上动，也没说话。'; return; }
-  const msg = `学生的动作：\n${acts.length ? acts.map((a) => '- ' + a).join('\n') : '（没有）'}\n学生说：${said || '（没说话）'}\n\n只写要改的几行。`;
-  live.turns.push({ role: 'user', content: msg });
-  document.getElementById('sayText').value = '';
-  addLog(liveLog, `（发给老师：${acts.length} 条动作${said ? '，说「' + said + '」' : ''}）`);
-  sendBtn.disabled = true; goBtn.disabled = true; stopBtn.hidden = false;
-  const base = live.board.src;
-  try {
-    const text = await callClaude(live.turns, (ops) => { if (ops.trim()) live.board.setSource(HB.applyOps(base, ops)); });
-    const ops = clean(text).trim();
-    live.board.setSource(HB.applyOps(base, ops));
-    live.turns.push({ role: 'assistant', content: ops });
-    const n = ops.split('\n').filter((l) => l.trim()).length;
-    document.getElementById('sendNote').textContent = `老师这一轮写了 ${n} 行。`;
-  } catch (e) {
-    live.turns.pop();
-    timing.innerHTML += `<span style="color:var(--red)">${esc(errText(e))}</span>`;
-  } finally { sendBtn.disabled = false; goBtn.disabled = false; stopBtn.hidden = true; }
-});
+// 本地检查用（地址带 ?mock）：照剧本回，不调用 Claude
+const SCRIPT = [
+  `let refs = 1 2 3 4 1 2 5 1 2 3 4 5
+let f = 3 拨 1..6
+let r = paging(refs, f, fifo)
+draw r
+FIFO、3 个物理块，按这个顺序访问。你数数，一共缺页几次？{r.faults?}`,
+  `对。那给它 4 块，缺页会变多还是变少？{? 变少 | 变多 | *说不准}`,
+  `那就拨成 4 块看看：{f}
+goal faults(refs, f, fifo) > faults(refs, f - 1, fifo) => "多了一块，反而多缺一次"`,
+  `你觉得是 FIFO 的哪一点惹的祸？`,
+];
+async function mockAsk(messages, onPartial) {
+  const k = messages.filter((m) => m.role === 'assistant').length;
+  const text = SCRIPT[Math.min(k, SCRIPT.length - 1)];
+  await new Promise((r) => setTimeout(r, 700));
+  let out = '';
+  for (const line of text.split('\n')) { out += line + '\n'; onPartial(out); await new Promise((r) => setTimeout(r, 120)); }
+  return { text, modelApplied: 'mock' };
+}
 
 function errText(e) {
   const c = e && e.code;
