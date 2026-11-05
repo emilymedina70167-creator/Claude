@@ -10,8 +10,9 @@
 // chat 留着：以前的 log 里有 by: chat，开发那边修数据也用它。
 // 两种性质：history（只增不改：写错了追加一条更正）、state（可以改，每次改都在 log 里记一条）；meta 是页面自己的。
 
-export const ROLES = ['chat', 'class', 'page', 'me'];
-export const ROLE_TEXT = { chat: '开发那边（以前的对话里的 Claude）', class: '课堂里的 Claude', page: '页面', me: '我（在页面上点的）' };
+// lab：云端教研室事后补写的（docs/lab-plan.md）。它不直接写数据库（回答由页面并进来，用 class 的权限），只出现在 log 的 by、记录的 by 上
+export const ROLES = ['chat', 'class', 'page', 'me', 'lab'];
+export const ROLE_TEXT = { chat: '开发那边（以前的对话里的 Claude）', class: '课堂里的 Claude', page: '页面', me: '我（在页面上点的）', lab: '云端教研室（事后补写的）' };
 // 写进去以后多久之内还能撤销（docs/desk-plan.md 4.3；我还没定，先和自检提醒保留的天数一样）
 export const UNDO_DAYS = 7;
 

@@ -215,7 +215,7 @@ test('log 的写法：数组、日期、谁改的、改的哪个字段', () => {
   const msgs = checkMemory(m, { today: TODAY }).problems.map((p) => `${p.id}：${p.msg}`);
   assert.ok(msgs.includes('R4：log 要是数组：[{ date, by, field, from, to, basis }]'));
   assert.ok(msgs.includes('R5：log 第 1 条的 date 要写成 YYYY-MM-DD'));
-  assert.ok(msgs.includes('R5：log 第 1 条的 by 只能是 chat / class / page / me'));
+  assert.ok(msgs.includes('R5：log 第 1 条的 by 只能是 chat / class / page / me / lab'));
   assert.ok(msgs.includes('R5：log 第 1 条缺少 field（改的是哪个字段）'));
   assert.ok(msgs.includes('R5：log 第 1 条的 basis 要是数组（证据、错题的 id）'));
 });

@@ -109,3 +109,21 @@ test('drillOutcome：每道题的结果、复现组没过照记（原题都对�
   assert.equal(drillPack(res.rows.filter((x) => x.outcome === 'first'), drills), null);
   assert.equal(drillHistory(evidence)['d-b1'].outcome, 'ok');
 });
+
+test('教研室出的新题：第一次做、都一次做对，复现组才升档；再做一次就是原题；挑题时没做过的新题优先', async () => {
+  const drills = [{ id: 'd-lab-newproblems-R1-1', block: 'L2.2.1', q: '新', md: 'x', src: 'lab', review: 'R1' }, { id: 'd-a1', block: 'L2.2.1', q: '原', md: 'y' }];
+  const ev = (comp, ok) => toEvidence('record', toAnswer({ type: 'answer', block: comp, q: comp, ok, attempts: 1, final: true }), { session: 'c-20261010-1' });
+  const evidence = [ev('d-lab-newproblems-R1-1', true), ev('d-a1', true)];
+  const mem = sampleMemory('2026-10-10');
+  mem.reviews = [{ id: 'R1', title: '外积', tier: 3, last: '2026-10-01', blocks: ['L2.2.1'], status: 'active', log: [] }];
+  const first = drillOutcome({ drills, evidence, mem, reviews: ['R1'], fresh: new Set(['d-lab-newproblems-R1-1']) });
+  assert.deepEqual(first.reviewResults.map((x) => [x.id, x.passed, x.tier]), [['R1', true, 7]], '有没见过的新题、都对：升一档');
+  const again = drillOutcome({ drills, evidence, mem, reviews: ['R1'] });
+  assert.deepEqual(again.practiced, [{ id: 'R1', n: 2 }], '做过的新题是原题了');
+  const picked = pickDrills({ ...mem, drills: [...drills, { id: 'd-a2', block: 'L2.2.1', q: '原二', md: 'z' }], evidence: [] }, { space: 'math', today: '2026-10-10', n: 1 });
+  assert.equal(picked.items[0].id, 'd-lab-newproblems-R1-1');
+  // 掌握：教研室新题第一次做的那节课不算原题
+  const { markFresh, isOriginal } = await import('../kit/src/memory/mastery.js');
+  const items = markFresh([{ comp: 'd-lab-x-1', session: 's1', first: 1 }, { comp: 'd-lab-x-1', session: 's2', first: 9 }, { comp: 'd-1-q', session: 's1', first: 1 }]);
+  assert.deepEqual(items.map(isOriginal), [false, true, true]);
+});

@@ -63,3 +63,18 @@ test('工作单：没收尾的课、缺新题的复现组、该测的弱点（�
   const wo2 = workOrder({ ...mem, drills: [...mem.drills, { id: 'd-2', block: 'L2.2.2', src: 'lab', md: 'x' }, { id: 'd-3', block: 'L2.2.2', src: 'lab', md: 'y' }] }, { today: '2026-11-05', now, packs: { math: { main: { unit: '外积' } } } });
   assert.ok(!wo2.some((x) => x.kind === 'prep' || x.kind === 'newproblems'));
 });
+
+test('教研室出的题：探弱点的题还没做就不再出；新题做过一次就不算新题', () => {
+  const now = at('2026-11-05');
+  const w = { id: 'W5', title: '弱点', level: 'L1', status: 'active', blocks: ['L2.2.2'] };
+  const lab = (id, extra) => ({ id, block: 'L2.2.2', src: 'lab', md: 'x', ...extra });
+  const base = { weaknesses: [w], evidence: [], sessions: [], reviews: [], drills: [] };
+  assert.ok(workOrder(base, { today: '2026-11-05', now }).some((x) => x.kind === 'probe' && x.ref === 'W5'));
+  const probing = { ...base, drills: [lab('d-lab-probe-W5-1', { weakness: 'W5' }), lab('d-lab-probe-W5-2', { weakness: 'W5' })] };
+  assert.ok(!workOrder(probing, { today: '2026-11-05', now }).some((x) => x.kind === 'probe'), '题还没做，不再出');
+  const rv = { id: 'R2', title: '组', tier: 3, last: '2026-10-20', blocks: ['L2.2.2'] };
+  const withNew = { ...base, weaknesses: [], reviews: [rv], drills: [lab('d-lab-newproblems-R2-1', { review: 'R2' }), lab('d-lab-newproblems-R2-2', { review: 'R2' })] };
+  assert.ok(!workOrder(withNew, { today: '2026-11-05', now }).some((x) => x.kind === 'newproblems'));
+  const done = { ...withNew, evidence: [ev('x1', 'L2.2.2', '2026-10-30', true, { comp: 'd-lab-newproblems-R2-1' }), ev('x2', 'L2.2.2', '2026-10-30', true, { comp: 'd-lab-newproblems-R2-2' })] };
+  assert.ok(workOrder(done, { today: '2026-11-05', now }).some((x) => x.kind === 'newproblems' && x.ref === 'R2'), '做过的新题成了原题，到期了还要再出');
+});

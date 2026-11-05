@@ -28,7 +28,13 @@ export async function closeDrill(db, sid, { doc, drills = null, curriculum = nul
   if (!curriculum) curriculum = rows(await db.collection('curriculum').get().catch(() => null));
   const evidence = rows(await db.collection('evidence').where('session', '==', sid).get().catch(() => null));
   const mem = { reviews: rows(await db.collection('reviews').get().catch(() => null)), errors: rows(await db.collection('errors').get().catch(() => null)), curriculum };
-  const res = drillOutcome({ drills, evidence, mem, reviews: Array.isArray(doc.reviews) ? doc.reviews : [] });
+  // 教研室出的新题（src: lab）：以前别的课里没做过，这一次才算新题（复现组能升档）；做过的就是原题了
+  const fresh = new Set();
+  for (const d of drills.filter((x) => x.src === 'lab')) {
+    const before = rows(await db.collection('evidence').where('comp', '==', d.id).get().catch(() => null));
+    if (!before.some((e) => e.session && e.session !== sid)) fresh.add(d.id);
+  }
+  const res = drillOutcome({ drills, evidence, mem, reviews: Array.isArray(doc.reviews) ? doc.reviews : [], fresh });
   const today = toDate(Date.now());
   if (!readOnly && doc.status !== 'closed') {
     const ops = createMemOps({ db, mem: () => mem });

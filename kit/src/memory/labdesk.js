@@ -9,7 +9,7 @@ import { assertWrite } from './schema.js';
 import { scopeDb } from './session.js';
 import { pendingRecord } from './memo.js';
 import { guardCandidate, buildCorpus, guardMark, guardReason, guardLog } from './guard.js';
-import { labPicks, briefId, bytesOf, BRIEF_MAX, LAB_VERSION, srcOf, backfillMaterial, problemsMaterial, briefDoc, parseBackfill, parseProblems, problemLint, twinOf, prepBrief, checkReply, receipt } from './lab.js';
+import { LAB_CAPS, briefId, bytesOf, BRIEF_MAX, LAB_VERSION, srcOf, backfillMaterial, problemsMaterial, briefDoc, parseBackfill, parseProblems, problemLint, twinOf, prepBrief, checkReply, receipt } from './lab.js';
 import { reportError } from '../errlog.js';
 
 const docsOf = (snap) => (snap ? snap.docs.map((d) => ({ id: d.id, ...d.data() })) : []);
@@ -23,11 +23,18 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
   let briefs = [];
   let logs = [];
   let syncing = false;
+  const empty = new Set(); // 拼过、没有材料的（单子编号|材料指纹）：这次打开不再去读它的记录
   let again = null;
   let firstInbox = null;
   const firstDone = new Promise((r) => { firstInbox = r; });
   db.collection('lab_brief').onSnapshot((s) => { briefs = docsOf(s); onChange(); }, () => {});
   const loadLogs = () => db.collection('lab_inbox_log').orderBy('at', 'desc').limit(8).get().then((s) => { logs = docsOf(s); onChange(); }, () => {});
+  // 回执只留最近的 LOG_KEEP 份（教研室只看最近的几份；数据库一共只能放两万多条）
+  const LOG_KEEP = 40;
+  async function pruneLogs() {
+    const all = docsOf(await db.collection('lab_inbox_log').get().catch(() => null)).sort((a, b) => (b.at || 0) - (a.at || 0));
+    for (const r of all.slice(LOG_KEEP)) await db.doc(`lab_inbox_log/${r.id}`).delete().catch(() => {});
+  }
   loadLogs();
 
   /* ---------------- 拼单子 ---------------- */
@@ -57,25 +64,31 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
 
   /** 工作单变了（runSentry）：照它把单子同步好。收件箱第一遍做完再拼（别把教研室刚回答的那张单子先删了） */
   async function sync(items) {
-    if (syncing) { again = items; return; }
+    // 收件箱正在并：并完再拼（并进来的会改记忆、改单子的材料，先拼的话还没并的回答就对不上了）
+    if (syncing || inboxBusy) { again = items; return; }
     syncing = true;
     try {
       await Promise.race([firstDone, new Promise((r) => setTimeout(r, 8000))]);
-      const picks = labPicks(items);
       const have = new Map(docsOf(await db.collection('lab_brief').get().catch(() => null)).map((b) => [b.id, b]));
       const want = new Set();
-      for (const it of picks) {
+      // 照工作单的顺序拼，每种最多 LAB_CAPS 张；拼不成的（那节课一轮记录都没存）不占名额，轮到下一件
+      const n = {};
+      for (const it of items || []) {
+        if (!it || !(it.kind in LAB_CAPS) || (n[it.kind] || 0) >= LAB_CAPS[it.kind]) continue;
         const id = briefId(it);
-        want.add(id);
         const src = srcOf(it, getData(), packs);
+        if (empty.has(`${id}|${src}`)) continue;
         const old = have.get(id);
-        if (old && old.src === src && old.v === LAB_VERSION) continue;
+        if (old && old.src === src && old.v === LAB_VERSION) { want.add(id); n[it.kind] = (n[it.kind] || 0) + 1; continue; }
         let got = null;
         try { got = await build(it); } catch (err) { console.warn('教研室的单子没拼成', id, err?.message || err); }
-        if (!got) { want.delete(id); continue; }
-        if (bytesOf(got.prompt) > BRIEF_MAX) { reportError(`教研室的单子 ${id} 太大（${Math.round(bytesOf(got.prompt) / 1024)} KB），没写`, { what: '教研室', soft: true }); want.delete(id); continue; }
+        if (!got) { empty.add(`${id}|${src}`); continue; }
+        if (bytesOf(JSON.stringify(got)) > BRIEF_MAX) { reportError(`教研室的单子 ${id} 太大（${Math.round(bytesOf(JSON.stringify(got)) / 1024)} KB），没写`, { what: '教研室', soft: true }); empty.add(`${id}|${src}`); continue; }
         assertWrite('page', 'lab_brief');
-        await db.doc(`lab_brief/${id}`).set(briefDoc(it, got, src));
+        // 一张没写成（太大被数据库拒了、网络断了）不挡着后面几张
+        try { await db.doc(`lab_brief/${id}`).set(briefDoc(it, got, src)); } catch (err) { reportError(err, { what: '教研室的单子没写进去', path: `lab_brief/${id}`, soft: true }); empty.add(`${id}|${src}`); continue; }
+        want.add(id);
+        n[it.kind] = (n[it.kind] || 0) + 1;
       }
       // 工作单里没有了的（做完了、不用做了）：撤掉
       for (const id of have.keys()) if (!want.has(id)) await db.doc(`lab_brief/${id}`).delete().catch(() => {});
@@ -97,20 +110,23 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
     if (inboxBusy) { inboxNext = docs; return; }
     inboxBusy = true;
     try {
-      for (const d of docs.filter((x) => !done.has(x.id)).sort((a, b) => (a.at || 0) - (b.at || 0))) {
-        done.add(d.id);
+      // 同一天重做同一张单子，教研室写的是同一个编号：按「编号 + 交的时间」认，开着的页面也收得到第二份
+      const tag = (x) => `${x.id}|${x.at || ''}`;
+      for (const d of docs.filter((x) => !done.has(tag(x))).sort((a, b) => (a.at || 0) - (b.at || 0))) {
+        done.add(tag(d));
         let r;
         try { r = await takeOne(d); } catch (err) { r = receipt({ inbox: d, result: 'error', notes: [String(err?.message || err)] }); reportError(err, { what: '教研室的回答没并进来', path: `lab_inbox/${d.id}` }); }
         assertWrite('page', 'lab_inbox_log');
-        await db.doc(`lab_inbox_log/${d.id}`).set(r).catch(() => {});
+        // 回执写成了才删收件箱那条：回执没写成，教研室就不知道这份怎么样了，留着下次再并（并过的东西都有防重复）
+        try { await db.doc(`lab_inbox_log/${d.id}`).set(r); } catch (err) { reportError(err, { what: '教研室的回执没写进去', path: `lab_inbox_log/${d.id}`, soft: true }); done.delete(tag(d)); continue; }
         await db.doc(`lab_inbox/${d.id}`).delete().catch(() => {});
         await bump(r);
       }
     } finally {
       inboxBusy = false;
       firstInbox();
-      loadLogs();
-      if (inboxNext) { const x = inboxNext; inboxNext = null; take(x); }
+      if (docs.length) pruneLogs().then(loadLogs, loadLogs); else loadLogs();
+      if (inboxNext) { const x = inboxNext; inboxNext = null; take(x); } else if (again && !syncing) { const x = again; again = null; sync(x); }
     }
   }
 
@@ -144,10 +160,14 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
   async function takeBackfill(d, brief, meta) {
     const { session: sid, block, space } = brief.ctx || {};
     const got = parseBackfill(d.text, { parseOutput });
-    if (got.problems.length && !got.summary) return receipt({ inbox: d, brief, result: 'error', notes: got.problems });
+    if (got.fatal || !got.summary) return receipt({ inbox: d, brief, result: 'error', notes: got.problems });
     const cur = await db.doc(`sessions/${sid}`).get().then((s) => (s.exists ? s.data() : null)).catch(() => null);
     if (!cur) return receipt({ inbox: d, brief, result: 'stale', notes: ['这节课已经删了'] });
-    if (cur.summary) return receipt({ inbox: d, brief, result: 'stale', notes: ['这节课已经有小结了（课堂里写上了）'] });
+    // 已经有小结（课堂里写上了、上一份补写收了、或者还暂存着等我放行）：不再写第二份
+    const fresh = async (c) => docsOf(await db.collection(c).where('session', '==', sid).get().catch(() => null));
+    const hasSummary = (await fresh('observations')).some((o) => o.kind === 'summary' && o.status !== 'void');
+    const heldSummary = (await fresh('pending')).some((p) => p.status === 'held' && p.coll === 'observations' && p.data?.kind === 'summary');
+    if (cur.summary || hasSummary || heldSummary) return receipt({ inbox: d, brief, result: 'stale', notes: [heldSummary ? '这节课补写的小结还暂存着，等我在「管理」里放行' : '这节课已经有小结了'] });
     const turns = await scopeDb(db, sid).collection('class_turns').get().then((x) => x.docs.map((t) => t.data()), () => []);
     const evidence = (getData().evidence || []).filter((e) => e.session === sid);
     const corpus = buildCorpus({ turns, evidence });
@@ -170,7 +190,9 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
       } else {
         assertWrite('page', 'observations');
         await db.doc(`observations/${id}`).set(g.verdict === 'flag' ? { ...doc, guard: guardMark(g) } : doc);
-        await db.doc(`sessions/${sid}`).set({ ...cur, summary: id, backfilled: Date.now() });
+        // 写之前再读一遍这节课（复盘、归类、回来接着上的课可能刚写过），只加小结这两个字段
+        const now = await db.doc(`sessions/${sid}`).get().then((s) => (s.exists ? s.data() : null)).catch(() => null);
+        if (now && !now.summary) await db.doc(`sessions/${sid}`).set({ ...now, summary: id, backfilled: Date.now() });
         took.summary = 1;
       }
     }
@@ -181,14 +203,15 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
       held += r.rejected.filter((x) => x.held).length;
       rejected = [...rejected, ...r.rejected.filter((x) => !x.held)];
     }
-    const result = took.summary || took.memo ? (rejected.length || held ? 'partial' : 'ok') : 'error';
+    // 暂存的也算交上了（在「管理」里等我放行）：单子撤掉，不让教研室明晚再写一份
+    const result = took.summary || took.memo || held ? (rejected.length || held ? 'partial' : 'ok') : 'error';
     return receipt({ inbox: d, brief, result, took, rejected, held, notes });
   }
 
   // 出新题：每道题先看写法（lab.js 的 problemLint）、和题库里的比（twinOf），再在页面上画一遍，有写法错误的不收
   async function takeProblems(d, brief, meta) {
     const { target, block, subject } = brief.ctx || {};
-    const got = parseProblems(d.text, { brief: brief.id, block, target });
+    const got = parseProblems(d.text, { brief: brief.id, block, target, batch: Number(d.at) || Date.now() });
     const existing = (getData().drills || []).filter((x) => !String(x.id).startsWith(`d-lab-${brief.id}-`));
     const rejected = got.problems.map((p) => ({ line: '', error: p }));
     const kept = [];
@@ -214,6 +237,10 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
     host.style.cssText = 'position:fixed;left:-10000px;top:0;width:820px;visibility:hidden;pointer-events:none';
     document.body.appendChild(host);
     const before = kitSession.problems.length;
+    // 一道题单独画（练一练里也是一道一道画）：前面几道题 let 定义的量、登记的图不能借给这一道
+    const vars0 = kitSession.vars;
+    const scenes0 = new Map(kitSession.scenes);
+    kitSession.vars = {};
     // 写坏的组件 render.js 会往控制台报一次错：这里本来就是在找错（收在 session.problems 里），不让它算成页面出错
     const err0 = console.error;
     console.error = () => {};
@@ -226,6 +253,9 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
     } finally {
       console.error = err0;
       host.remove();
+      kitSession.vars = vars0;
+      kitSession.scenes.clear();
+      for (const [k, v] of scenes0) kitSession.scenes.set(k, v);
       kitSession.problems.splice(before);
     }
   }

@@ -39,14 +39,17 @@ const KB = (n) => `${Math.round(n / 1024)} KB`;
 
 if (cmd === 'briefs') {
   const items = workOrder(mem, { today: toDate(Date.now()) });
-  const picks = lab.labPicks(items).filter((x) => x.kind !== 'prep');
   const out = opt.out || join(dir, '..', 'lab-briefs');
   mkdirSync(out, { recursive: true });
-  for (const it of picks) {
+  // 和学习台一样：照工作单的顺序，每种最多 LAB_CAPS 张，拼不成的不占名额
+  const n = {};
+  for (const it of items.filter((x) => x.kind in lab.LAB_CAPS && x.kind !== 'prep')) {
+    if ((n[it.kind] || 0) >= lab.LAB_CAPS[it.kind]) continue;
     const got = it.kind === 'backfill'
       ? lab.backfillMaterial(mem, mem.sessions.find((s) => s.id === it.ref), { turns: turnsOf(it.ref), rep: reportOf(it.ref) })
       : lab.problemsMaterial(mem, it, { docs: DOCS });
     if (!got) { console.log(`跳过 ${it.kind} ${it.ref}：没有材料`); continue; }
+    n[it.kind] = (n[it.kind] || 0) + 1;
     const id = lab.briefId(it);
     const doc = lab.briefDoc(it, got, lab.srcOf(it, mem, {}));
     writeFileSync(join(out, `${id}.json`), JSON.stringify(doc));
