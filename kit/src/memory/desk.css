@@ -859,3 +859,11 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 .dk-errlist li { margin: 6px 0; line-height: 1.5; word-break: break-word; }
 .dk-errlist li.is-seen b { font-weight: 400; color: var(--muted); }
 .dk-err-trail { font-size: 12px; }
+
+/* 测速（speed.js）：管理页一段，按钮一排、结果一张小表 */
+.dk-sp-btns { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+.dk-sp-t { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; width: 100%; }
+.dk-sp-t th, .dk-sp-t td { padding: 7px 8px; text-align: left; border-bottom: 0.5px solid rgb(var(--chalk-rgb) / 0.1); white-space: nowrap; }
+.dk-sp-t th { font-weight: 600; font-size: 12.5px; color: rgb(var(--chalk-rgb) / 0.6); }
+.dk-sp-t .bad { color: var(--coral); }
+.dk-speed .dk-sp-table { overflow-x: auto; }

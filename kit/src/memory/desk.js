@@ -56,6 +56,8 @@ const SPACE_KEY = 'la-desk-space';
 const loadSpace = () => { try { const v = localStorage.getItem(SPACE_KEY); return SPACES[v] ? v : DEFAULT_SPACE; } catch { return DEFAULT_SPACE; } };
 import { renderClass, MODEL } from '../class/classroom.js';
 import { getAI } from '../ai.js';
+import { mountSpeed } from './speed.js';
+import { COMPONENT_DOCS } from '../class/docs.js';
 import { createBooksView } from '../books/bookview.js';
 import { createPlanner } from '../books/planview.js';
 import { createDevAI } from '../books/devmock.js';
@@ -139,6 +141,7 @@ export async function renderDesk(root, meta) {
     <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-backup" hidden><h2 class="dk-h">备份</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-check" hidden><h2 class="dk-h">自检</h2><div class="dk-body"></div><div class="dk-guard"></div><div class="dk-work"></div><div class="dk-health"></div><div class="dk-errs"></div></section>
+    <section class="dk-card dk-speed"><details class="dk-fold"><summary><h2 class="dk-h">测速</h2><span class="muted">说明和对话长短各要多等几秒</span></summary><div class="dk-body"></div></details></section>
     <section class="dk-card dk-colls" hidden><details class="dk-fold"><summary><h2 class="dk-h">记忆库</h2><span class="muted">每一类有几条、谁写</span></summary><div class="dk-body"></div></details></section>
     </div>
     <footer class="dk-foot">组件库 ${escapeHtml(VERSION)}</footer>
@@ -383,6 +386,11 @@ export async function renderDesk(root, meta) {
   let healthBusy = false;
   let lastHealth = '';
   db.doc('meta/health').onSnapshot((s) => { healthDoc = s.exists ? s.data() : null; paintHealth(); }, () => {});
+  // 测速（speed.js，docs/talk-plan.md 第 0 批）：结果写 meta/speed，开发那边读回来定一问一答每一轮能带多少
+  let speedDoc = null;
+  db.doc('meta/speed').get().then((s) => { speedDoc = s.exists ? s.data() : null; }, () => {}).finally(() => {
+    mountSpeed($('.dk-speed .dk-body'), { getAI: deskAI, put: (c, id, d) => put(c, id, d).then(() => { speedDoc = d; }), saved: () => speedDoc, padSource: COMPONENT_DOCS });
+  });
   async function runHealth(today) {
     if (healthBusy) return;
     healthBusy = true;

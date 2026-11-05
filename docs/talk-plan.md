@@ -100,7 +100,7 @@
 ## 进度
 
 - [x] 测试版第一版（整板）、第二版（一问一答）：`proto/live-lang/`
-- [ ] 第 0 批：测速页做好了（测试版 artifact 的「测速」，结果写进它的数据库 `bench/`，一问一答的真实回合写 `talk_turns/`），**等我在 iPad 上跑一遍**，开发那边 `ArtifactData list bench` 读回来填表
+- [ ] 第 0 批：测速做好了，在**学习台「管理 → 测速」**（`memory/speed.js`，结果写 `meta/speed`，开发那边 `ArtifactData get meta/speed` 读回来填表）。测试版 artifact 里先放过一份，加了数据库权限以后我在 iPad 上打不开（「go back」），所以搬进学习台；**等我在 iPad 上跑一遍**
 - [ ] 第 1 批：
   - [x] 内核 `kit/src/huoban/`（`lang.js` 写法、`values.js` 精确的值（接 `exact.js`，算不出精确值退回小数）、`objects.js` 对象（61 个演示引擎一个适配器：`paging(refs=…, frames=f, algo=fifo)`，成员是引擎自己的问题 `r.faults` / `r.victim.2`，判空用引擎的判法、错了按 `variants` 看出像哪种错法；句子；找例子的范围）、`runtime.js`（量、输入、判空、`find` 模拟退火）），`tests/huoban.test.js`；还没接进页面，`la-kit.js` 没变
   - [ ] 画法 `huoban/view.js`（测试版的平面、句子、正文里的控件搬进来；演示过程用引擎现有的 `view` 画第几步；公式用 KaTeX）
