@@ -1,0 +1,1029 @@
+<title>活板测试版</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&display=swap">
+<style>
+/* 版式：一节一个例子，左边是学生看到的板，右边是老师那一侧（追问、页面告诉老师的、源码）；窄屏上下叠 */
+:root {
+  --bg: #e9efe6;
+  --bg-a: rgba(168, 205, 186, 0.55);
+  --bg-b: rgba(196, 170, 222, 0.42);
+  --bg-c: rgba(222, 196, 140, 0.32);
+  --card: rgba(255, 255, 255, 0.74);
+  --card-solid: #fbfcf9;
+  --edge: rgba(255, 255, 255, 0.9);
+  --line: rgba(32, 44, 36, 0.12);
+  --ink: #1f2420;
+  --muted: #69716b;
+  --brand: #5b2a83;
+  --brand-ink: #ffffff;
+  --brand-soft: rgba(91, 42, 131, 0.1);
+  --ochre: #a86a12;
+  --cyan: #2b6a9c;
+  --green: #2f8063;
+  --rose: #a8557a;
+  --red: #c23a2b;
+  --ok: #2f8063;
+  --grid: rgba(32, 44, 36, 0.09);
+  --axis: rgba(32, 44, 36, 0.32);
+  --field: rgba(255, 255, 255, 0.9);
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 10px 30px rgba(40, 52, 44, 0.1);
+  --display: "Noto Serif SC", "Songti SC", "STSong", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --spring: cubic-bezier(.34, 1.4, .64, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161b; --bg-a: rgba(60, 110, 92, 0.28); --bg-b: rgba(120, 84, 160, 0.3); --bg-c: rgba(160, 130, 70, 0.16);
+    --card: rgba(34, 37, 45, 0.78); --card-solid: #20232a; --edge: rgba(255, 255, 255, 0.08); --line: rgba(255, 255, 255, 0.11);
+    --ink: #ecebe5; --muted: #9ea19c; --brand: #c9a7ee; --brand-ink: #1c1328; --brand-soft: rgba(201, 167, 238, 0.14);
+    --ochre: #e3ac4f; --cyan: #86b9e2; --green: #7cc6a4; --rose: #e19bb9; --red: #f08070; --ok: #7cc6a4;
+    --grid: rgba(255, 255, 255, 0.07); --axis: rgba(255, 255, 255, 0.3); --field: rgba(255, 255, 255, 0.06);
+    --shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 12px 34px rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161b; --bg-a: rgba(60, 110, 92, 0.28); --bg-b: rgba(120, 84, 160, 0.3); --bg-c: rgba(160, 130, 70, 0.16);
+  --card: rgba(34, 37, 45, 0.78); --card-solid: #20232a; --edge: rgba(255, 255, 255, 0.08); --line: rgba(255, 255, 255, 0.11);
+  --ink: #ecebe5; --muted: #9ea19c; --brand: #c9a7ee; --brand-ink: #1c1328; --brand-soft: rgba(201, 167, 238, 0.14);
+  --ochre: #e3ac4f; --cyan: #86b9e2; --green: #7cc6a4; --rose: #e19bb9; --red: #f08070; --ok: #7cc6a4;
+  --grid: rgba(255, 255, 255, 0.07); --axis: rgba(255, 255, 255, 0.3); --field: rgba(255, 255, 255, 0.06);
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 12px 34px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background:
+    radial-gradient(60% 40% at 8% 0%, var(--bg-a), transparent 70%),
+    radial-gradient(50% 36% at 100% 4%, var(--bg-b), transparent 70%),
+    radial-gradient(60% 40% at 50% 100%, var(--bg-c), transparent 70%),
+    var(--bg);
+  background-attachment: fixed;
+  color: var(--ink);
+  font: 16px/1.6 var(--sans);
+  -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 40px; }
+
+/* 页头 */
+.top { display: grid; gap: 14px; }
+.top .eyebrow { font-size: 13px; color: var(--muted); letter-spacing: .04em; }
+.top h1 { margin: 0; font: 700 clamp(30px, 5vw, 44px)/1.15 var(--display); display: flex; align-items: center; gap: 14px; text-wrap: balance; }
+.seal { display: inline-grid; place-items: center; width: 1.05em; height: 1.05em; border-radius: 8px; background: var(--brand); color: var(--brand-ink); font-size: .62em; letter-spacing: 0; }
+.top p { margin: 0; max-width: 62ch; color: var(--muted); }
+.nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.nav a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); color: var(--ink); text-decoration: none; font-size: 15px; }
+.nav a:active { transform: scale(.97); }
+
+/* 一节 */
+.lesson { display: grid; gap: 14px; scroll-margin-top: 16px; min-width: 0; }
+.wrap > *, #lessons > *, .lesson > *, .side > * { min-width: 0; }
+.lesson-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.subj { font-size: 13px; color: var(--brand); background: var(--brand-soft); border-radius: 999px; padding: 3px 12px; }
+.lesson-head .why { color: var(--muted); font-size: 14px; }
+.lesson-body { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 1000px) { .lesson-body { grid-template-columns: minmax(0, 1fr) 330px; } }
+
+.card { background: var(--card); border-radius: 22px; box-shadow: var(--shadow); -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); border: 0.5px solid var(--edge); }
+.board { padding: 26px clamp(18px, 3vw, 34px) 28px; display: grid; gap: 14px; min-width: 0; }
+.board h3 { margin: 0 0 4px; font: 700 clamp(22px, 3vw, 27px)/1.3 var(--display); text-wrap: balance; }
+.board p { margin: 0; font-size: 17.5px; line-height: 2.05; max-width: 64ch; }
+.board .when { transition: opacity .35s, transform .35s; }
+.board .when.off { display: none; }
+.board .when.in { animation: rise .45s var(--spring); }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+
+/* 活的值：和图上同色，点一下图上那一个闪 */
+.v { font-variant-numeric: tabular-nums; font-weight: 600; padding: 0 2px; border-radius: 6px; transition: background .3s; cursor: default; }
+.v[data-color] { border-bottom: 2px solid currentColor; cursor: pointer; }
+.v.flash { animation: flash .7s; }
+@keyframes flash { 0% { background: var(--brand-soft); } 100% { background: transparent; } }
+.v .mx { display: inline-grid; vertical-align: middle; gap: 0 10px; padding: 1px 8px; border-left: 2px solid currentColor; border-right: 2px solid currentColor; border-radius: 4px; line-height: 1.35; font-size: 15px; }
+
+/* 能拨的数 */
+.scrub { display: inline-flex; align-items: center; vertical-align: middle; height: 38px; border-radius: 999px; background: var(--brand-soft); border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent); margin: 0 3px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.scrub button { width: 38px; height: 38px; border: 0; background: none; color: var(--brand); font: 600 20px/1 var(--sans); cursor: pointer; border-radius: 999px; }
+.scrub button:active { transform: scale(.88); }
+.scrub button:disabled { opacity: .28; }
+.scrub .n { min-width: 1.8em; text-align: center; font: 700 19px/1 var(--sans); color: var(--brand); cursor: ew-resize; font-variant-numeric: tabular-nums; }
+.scrub.pulse .n { animation: bump .35s var(--spring); }
+@keyframes bump { 40% { transform: scale(1.3); } }
+
+/* 空和选择 */
+.blank { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; margin: 0 3px; }
+.blank input { width: 5.2em; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--field); color: var(--ink); font: 600 16px var(--sans); text-align: center; padding: 0 6px; }
+.blank input:focus { outline: none; border-color: var(--ochre); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ochre) 22%, transparent); }
+.blank button { height: 38px; min-width: 44px; border-radius: 10px; border: 0; background: var(--brand); color: var(--brand-ink); font: 600 15px var(--sans); cursor: pointer; }
+.blank.ok input { border-color: var(--ok); color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.blank.ok button { background: var(--ok); }
+.blank.bad input { border-color: var(--red); animation: shake .35s; }
+.blank .note { font-size: 13px; color: var(--muted); }
+@keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.choice { display: inline-flex; flex-wrap: wrap; gap: 6px; vertical-align: middle; margin: 0 3px; }
+.choice button { min-height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card-solid); color: var(--ink); font: 15px var(--sans); cursor: pointer; }
+.choice button:active { transform: scale(.96); }
+.choice button.ok { border-color: var(--ok); color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, var(--card-solid)); font-weight: 600; }
+.choice button.bad { border-color: var(--red); color: var(--red); text-decoration: line-through; }
+
+/* 目标 */
+.goal { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 14px; border: 1px dashed var(--line); color: var(--muted); font-size: 15px; transition: background .4s, border-color .4s, color .4s; }
+.goal .dot { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 1.5px dashed var(--muted); display: grid; place-items: center; font-size: 15px; }
+.goal.done { border-style: solid; border-color: color-mix(in srgb, var(--ok) 50%, transparent); background: color-mix(in srgb, var(--ok) 9%, transparent); color: var(--ink); }
+.goal.done .dot { border: 0; background: var(--ok); color: var(--card-solid); animation: bump .5s var(--spring); }
+
+/* 写法错误：页面报出来，课堂里会让老师自己改 */
+.err { border-radius: 12px; padding: 10px 14px; background: color-mix(in srgb, var(--red) 9%, transparent); color: var(--red); font-size: 14px; }
+.err code { display: block; margin-top: 4px; font: 13px var(--mono); color: var(--ink); opacity: .75; white-space: pre-wrap; word-break: break-all; }
+
+/* 图 */
+.fig { min-width: 0; overflow: hidden; }
+.plane { display: block; overflow: hidden; width: 100%; max-width: 440px; margin: 0 auto; touch-action: none; user-select: none; -webkit-user-select: none; }
+.plane .lbl { font: 600 15px var(--sans); paint-order: stroke; stroke: var(--card-solid); stroke-width: 4px; }
+.plane .hit { cursor: grab; }
+.plane .handle { transition: r .2s; }
+.plane.dragging .hit { cursor: grabbing; }
+.plane .vec.pulse { animation: vpulse .7s; }
+@keyframes vpulse { 30% { opacity: .35; } }
+.figcap { text-align: center; color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+.tl { overflow-x: auto; padding-bottom: 4px; display: grid; gap: 14px; }
+.tl-one { display: grid; gap: 6px; }
+.tl-name { font-size: 13px; color: var(--muted); letter-spacing: .03em; }
+.tl-grid { display: grid; gap: 4px; width: max-content; }
+.tl-grid .h { font: 600 13px var(--sans); color: var(--muted); text-align: center; align-self: center; }
+.tl-grid .rh { font-size: 12px; color: var(--muted); align-self: center; padding-right: 6px; white-space: nowrap; }
+.tl-grid .c { width: 34px; height: 34px; border-radius: 8px; background: var(--card-solid); border: 0.5px solid var(--line); display: grid; place-items: center; font: 600 15px var(--sans); font-variant-numeric: tabular-nums; transition: background .3s; }
+.tl-grid .c.empty { background: transparent; border-style: dashed; }
+.tl-grid .c.new { background: color-mix(in srgb, var(--ochre) 18%, var(--card-solid)); border-color: color-mix(in srgb, var(--ochre) 55%, transparent); }
+.tl-grid .c.hit { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--green) 60%, transparent); }
+.tl-grid .c.pop { animation: pop .45s var(--spring); }
+.tl-grid .m { text-align: center; font: 700 14px var(--sans); color: var(--red); height: 22px; }
+.tl-grid .m.no { color: transparent; }
+.tl-grid .c.row-in { animation: rowin .45s ease-out; }
+@keyframes pop { from { transform: scale(.55); opacity: .2; } }
+@keyframes rowin { from { opacity: 0; transform: translateY(-8px); } }
+
+.sent { font: 21px/2.3 Georgia, "Times New Roman", serif; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; padding: 6px 0; }
+.sent .w { white-space: pre-wrap; }
+.sent .fold { position: relative; display: inline-flex; align-items: center; max-width: 30em; min-height: 44px; padding: 0 10px; border-radius: 12px; border: 1.5px dashed color-mix(in srgb, var(--brand) 55%, transparent); background: var(--brand-soft); color: var(--ink); font: inherit; cursor: pointer; overflow: hidden; white-space: nowrap; transition: max-width .4s ease, padding .4s ease, background .3s; }
+.sent .fold:active { transform: scale(.97); }
+.sent .fold.shut { max-width: 2.6em; padding: 0 8px; background: color-mix(in srgb, var(--brand) 22%, transparent); color: transparent; }
+.sent .fold.shut::after { content: "⋯"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--brand); font-weight: 700; }
+.cells { display: flex; flex-wrap: wrap; gap: 4px; }
+.cells span { min-width: 34px; height: 34px; border-radius: 8px; background: var(--card-solid); border: 0.5px solid var(--line); display: grid; place-items: center; font-weight: 600; padding: 0 6px; }
+
+/* 老师那一侧 */
+.side { display: grid; gap: 12px; min-width: 0; }
+.panel { padding: 14px 16px; display: grid; gap: 10px; }
+.panel h4 { margin: 0; font: 600 13px var(--sans); color: var(--muted); letter-spacing: .04em; }
+.follow { display: grid; gap: 8px; }
+.follow button { text-align: left; min-height: 44px; padding: 8px 14px; border-radius: 12px; border: 0.5px solid var(--line); background: var(--card-solid); color: var(--ink); font: 15px var(--sans); cursor: pointer; }
+.follow button:active { transform: scale(.98); }
+.follow button[disabled] { opacity: .55; cursor: default; }
+.follow pre { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--brand-soft); font: 12.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; color: var(--ink); }
+.log { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; max-height: 260px; overflow: auto; }
+.log li { font-size: 13.5px; line-height: 1.5; padding: 6px 10px; border-radius: 10px; background: var(--card-solid); border: 0.5px solid var(--line); }
+.log li.new { animation: rise .35s ease-out; }
+.log .empty { color: var(--muted); background: none; border: 0; padding: 0; }
+details.panel summary { cursor: pointer; font: 600 13px var(--sans); color: var(--muted); letter-spacing: .04em; min-height: 28px; list-style: none; display: flex; justify-content: space-between; }
+details.panel summary::-webkit-details-marker { display: none; }
+details.panel summary::after { content: "›"; transition: transform .25s; }
+details.panel[open] summary::after { transform: rotate(90deg); }
+textarea.src { width: 100%; min-height: 220px; resize: vertical; border-radius: 12px; border: 0.5px solid var(--line); background: var(--field); color: var(--ink); font: 14px/1.6 var(--mono); padding: 10px 12px; }
+@media (pointer: coarse) { textarea.src { font-size: 16px; } }
+.lint { font-size: 13px; color: var(--muted); }
+.lint.bad { color: var(--red); }
+
+/* 现写 */
+.ask { padding: 20px clamp(16px, 3vw, 26px); display: grid; gap: 12px; }
+.ask textarea { width: 100%; min-height: 76px; border-radius: 14px; border: 0.5px solid var(--line); background: var(--field); color: var(--ink); font: 16px/1.6 var(--sans); padding: 10px 14px; resize: vertical; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button { min-height: 40px; padding: 0 14px; border-radius: 999px; border: 0.5px solid var(--line); background: var(--card-solid); color: var(--ink); font: 14px var(--sans); cursor: pointer; text-align: left; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn { min-height: 44px; padding: 0 20px; border-radius: 999px; border: 0; background: var(--brand); color: var(--brand-ink); font: 600 16px var(--sans); cursor: pointer; }
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.ghost { background: var(--card-solid); color: var(--ink); border: 0.5px solid var(--line); font-weight: 500; }
+select { min-height: 44px; border-radius: 12px; border: 0.5px solid var(--line); background: var(--card-solid); color: var(--ink); font: 15px var(--sans); padding: 0 12px; }
+.timing { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.timing b { color: var(--ink); font-weight: 600; }
+.say { display: flex; gap: 8px; }
+.say input { flex: 1 1 0; width: 0; min-width: 0; height: 44px; border-radius: 999px; border: 0.5px solid var(--line); background: var(--field); color: var(--ink); font: 16px var(--sans); padding: 0 16px; }
+.placeholder { color: var(--muted); font-size: 15px; padding: 18px 0; }
+.foot { color: var(--muted); font-size: 13px; text-align: center; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">学习台 · 组件库机制升级 · 测试版</div>
+    <h1><span class="seal">活</span>活板</h1>
+    <p>老师只写几行「例子是什么」，页面把它变成能拨、能拖、能折的东西，你一动，板上的图、句子里的数、空的答案一起跟着变。下面三块板都是老师写的几行字（右边能看、能改），最后一块让 Opus 5.5 当场写，计时。</p>
+    <nav class="nav">
+      <a href="#belady">408 · 页面置换</a>
+      <a href="#eigen">线代 · 特征向量</a>
+      <a href="#clause">英语 · 定语从句</a>
+      <a href="#live">让 Claude 现写一块</a>
+    </nav>
+  </header>
+
+  <div id="lessons"></div>
+
+  <section class="lesson" id="live">
+    <div class="lesson-head"><span class="subj">实测</span><span class="why">你说想让学生发现什么，Opus 5.5 写一块活板；你在板上动，再「发给老师」，它只写要改的几行。</span></div>
+    <div class="card ask">
+      <textarea id="req" aria-label="这一次想教什么">让我自己发现：LRU 不会出现「多给一块反而多缺页」，FIFO 会。</textarea>
+      <div class="chips" id="sugg"></div>
+      <div class="row">
+        <button class="btn" id="go" type="button">写一块板</button>
+        <button class="btn ghost" id="stop" type="button" hidden>停</button>
+        <select id="effort" aria-label="想多久">
+          <option value="high" selected>effort high（和课堂一样）</option>
+          <option value="medium">effort medium</option>
+          <option value="low">effort low</option>
+        </select>
+      </div>
+      <div class="timing" id="timing"></div>
+    </div>
+    <div class="lesson-body">
+      <div class="card board" id="liveBoard"><div class="placeholder">还没写。点「写一块板」，Claude 写的时候板会一行一行长出来。</div></div>
+      <aside class="side">
+        <div class="card panel">
+          <h4>你对老师说</h4>
+          <div class="say"><input id="sayText" placeholder="比如：为什么会这样？（可以空着）" aria-label="对老师说"><button class="btn" id="send" type="button" disabled>发给老师</button></div>
+          <div class="lint" id="sendNote">你在板上的动作会一起发过去。</div>
+        </div>
+        <div class="card panel"><h4>页面告诉老师的</h4><ul class="log" id="liveLog"><li class="empty">你在板上动一动，这里记下来。</li></ul></div>
+        <details class="card panel"><summary>老师写的源码</summary><textarea class="src" id="liveSrc" spellcheck="false" aria-label="源码"></textarea><div class="lint" id="liveLint"></div></details>
+        <details class="card panel"><summary>老师拿到的写法说明</summary><div class="lint" id="docSize"></div><textarea class="src" id="docText" readonly spellcheck="false" aria-label="写法说明"></textarea></details>
+      </aside>
+    </div>
+  </section>
+
+  <div class="foot">测试版，不连学习台、不写记忆。引擎在 engine.js：读描述、算值、判分、替老师找例子。</div>
+</div>
+
+<script src="engine.js"></script>
+<script>
+'use strict';
+
+// —— 三个例子：老师写的就是这几行 ——
+const EXAMPLES = [
+  {
+    id: 'belady', subj: '408 · 页面置换', why: '不讲「Belady 异常」这个词，让你自己拨出来',
+    src: `# 多给一块，会更好吗？
+let refs = 1 2 3 4 1 2 5 1 2 3 4 5
+let f = 3 拨 1..6
+let r = paging(refs, f, fifo)
+用 FIFO 置换，分 {f} 个物理块，依次访问 {refs}。
+draw r
+黄色是缺页时新调进来的页。数一数：一共缺页 {r.faults?} 次。
+物理块越多，缺页应该越少吧？拨一拨块数，看看是不是一直这样。
+goal faults(refs, f, fifo) > faults(refs, f - 1, fifo) => "多给一块，缺页反而多了。这就是 Belady 异常。"
+when faults(refs, f, fifo) > faults(refs, f - 1, fifo)：{f} 块比 {f - 1} 块多缺页 {faults(refs, f, fifo) - faults(refs, f - 1, fifo)} 次。你觉得是 FIFO 的什么性质惹的祸？`,
+    follow: [
+      { label: '「LRU 也会这样吗？」', ops: `let r2 = paging(refs, f, lru)
+draw r2
+同样拨 {f}，下面那张是 LRU。LRU 会不会多给一块反而多缺页？{? 会 | *不会}` },
+      { label: '「换个序列，让页面去找」', ops: `set refs = find s in 序列(15, 1..6) where faults(s, 4, fifo) > faults(s, 3, fifo)
+这是页面另外找的一个序列 {refs}。拨到 4 块试试，是不是又出现了？` },
+    ],
+  },
+  {
+    id: 'eigen', subj: '线代 · 特征向量', why: '先不给定义，让你拖出「只被拉长的方向」',
+    src: `# 有没有只被拉长、不被转动的方向？
+let A = [[2, 1], [1, 2]]
+let x = [1, 0] 拖 吸附 0.5
+draw A, x, A*x "Ax"
+淡紫色的网格是 A 把整个平面变成的样子。A 把 {x} 送到 {A*x}。
+拖动 x：大多数方向上，Ax 和 x 不在一条线上，被转了一个角度。
+有没有哪个方向，A 只把它拉长（或缩短），不转？
+goal par(A*x, x) => "找到了：Ax 和 x 在一条线上。这样的 x 叫特征向量。"
+when par(A*x, x)：这时 Ax 是 x 的 {lam(A, x)?} 倍。再找找，还有别的方向吗？`,
+    follow: [
+      { label: '「换一个会转的矩阵」', ops: `set A = [[0, -1], [1, 0]]
+现在 A 换成了 {A}。拖一圈，还找得到这样的方向吗？{? 找得到 | *找不到}` },
+      { label: '「让页面找一个特征值都是整数的」', ops: `set A = find M in 矩阵(2, -3..3) where allint(eigs(M)) and len(eigs(M)) == 2 and M != T(M)
+页面找了一个不对称的 A = {A}，它的两个方向也是整数倍。先拖出来，再说说这时 A 的网格有什么特点。` },
+    ],
+  },
+  {
+    id: 'clause', subj: '英语 · 定语从句', why: '不先讲「主干」，让你折出主干',
+    src: `# 去掉哪几段，句子还站得住？
+let s = 句子("The man [whom I met] [yesterday] is [my teacher].")
+draw s
+点虚线框把它折起来，再点一下展开。看看剩下的还是不是一个完整的句子。
+剩下：{s.rest}
+goal s.rest == "The man is my teacher." => "主干是 The man is my teacher.：whom I met yesterday 整段修饰 the man，拿掉它句子照样成立。"
+when s.rest == "The man is my teacher."：那 whom 在从句 whom I met 里是什么成分？{? 主语 | *宾语 | 表语}`,
+    follow: [
+      { label: '「换成逗号隔开的」', ops: `set s = 句子("My brother[, who lives in Nanjing,] is a doctor.")
+现在的句子是：{s.text}
+这里的 who 能换成 that 吗？{? 能 | *不能}` },
+    ],
+  },
+];
+
+const SUGGEST = [
+  '让我自己发现：LRU 不会出现「多给一块反而多缺页」，FIFO 会。',
+  '让我体会行列式为 0 时，整个平面被压成一条线。',
+  '让我发现非限制性定语从句为什么不能用 that。',
+  '让我发现 OPT 为什么是缺页最少的，以及它为什么做不出来。',
+];
+
+// —— 一块板：描述 → DOM；学生一动，整块重算，变了的地方才动 ——
+const COLORS = ['var(--cyan)', 'var(--ochre)', 'var(--green)', 'var(--rose)', 'var(--brand)'];
+const key = (s) => String(s).replace(/\s+/g, '');
+const reduceMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+class Board {
+  constructor(el, { onLog, onSource } = {}) {
+    this.el = el;
+    this.rt = new HB.Runtime();
+    this.onLog = onLog || (() => {});
+    this.onSource = onSource || (() => {});
+    this.blanks = new Map();
+    this.choices = new Map();
+    this.goalsDone = new Map();
+    this.src = '';
+  }
+
+  setSource(src, { quiet = false } = {}) {
+    // 学生刚拨过、还没记下来的那一下先记掉，免得和老师这次改的混成一条
+    if (this.pending) { clearTimeout(this.pending.timer); this.settle(); }
+    this.src = src;
+    this.rt.load(src);
+    this.render();
+    if (!quiet) this.onSource(src, this.rt.board.errors);
+  }
+
+  render() {
+    this.el.innerHTML = '';
+    this.blocks = [];
+    this.colors = new Map();
+    this.figInfo = new Map();
+    this.rt.fresh();
+    const lines = this.rt.board.lines;
+    // 先给图里的向量排颜色：正文里同一个式子用同一个颜色，文字和图连着
+    let ci = 0;
+    for (const ln of lines) if (ln.kind === 'draw') for (const it of ln.items) {
+      let v; try { v = this.rt.eval(it.ast); } catch { continue; }
+      if (HB.isVec(v) && v.length === 2 && !this.colors.has(key(it.src))) this.colors.set(key(it.src), COLORS[ci++ % COLORS.length]);
+    }
+    for (const ln of lines) {
+      const b = this.block(ln);
+      if (b) { this.el.appendChild(b.el); this.blocks.push(b); }
+    }
+    this.update({ first: true });
+  }
+
+  block(ln) {
+    if (ln.kind === 'title') { const h = document.createElement('h3'); h.textContent = ln.text; return { el: h, update() {} }; }
+    if (ln.kind === 'let') return null;
+    if (ln.kind === 'error') {
+      const d = document.createElement('div');
+      d.className = 'err';
+      d.innerHTML = `第 ${ln.n} 行：${esc(ln.msg)}<code>${esc(ln.line)}</code>`;
+      return { el: d, update() {} };
+    }
+    if (ln.kind === 'prose') return this.prose(ln, 'p');
+    if (ln.kind === 'when') {
+      const b = this.prose(ln, 'p');
+      b.el.classList.add('when', 'off');
+      const inner = b.update;
+      b.update = (ctx) => {
+        let on = false;
+        try { on = !!this.rt.eval(ln.cond); } catch {}
+        const was = !b.el.classList.contains('off');
+        b.el.classList.toggle('off', !on);
+        if (on && !was && !ctx.first) { b.el.classList.remove('in'); void b.el.offsetWidth; b.el.classList.add('in'); }
+        if (on) inner(ctx);
+      };
+      return b;
+    }
+    if (ln.kind === 'goal') return this.goal(ln);
+    if (ln.kind === 'draw') return this.figure(ln);
+    return null;
+  }
+
+  prose(ln, tag) {
+    const el = document.createElement(tag);
+    const parts = [];
+    ln.segs.forEach((sg, i) => {
+      if (sg.k === 'text') { el.appendChild(document.createTextNode(sg.v.replace(/\*\*/g, ''))); return; }
+      const cell = sg.bare && this.rt.cells.get(sg.bare);
+      if (sg.k === 'value' && cell && cell.input && cell.input.type === 'scrub') parts.push(this.scrub(el, cell));
+      else if (sg.k === 'value') parts.push(this.value(el, sg));
+      else if (sg.k === 'blank') parts.push(this.blank(el, sg, `${ln.text}#${i}`));
+      else if (sg.k === 'choice') parts.push(this.choice(el, sg, `${ln.text}#${i}`));
+    });
+    return { el, update: (ctx) => parts.forEach((p) => p(ctx)) };
+  }
+
+  value(parent, sg) {
+    const s = document.createElement('span');
+    s.className = 'v';
+    s.dataset.expr = key(sg.src);
+    const color = this.colors.get(key(sg.src));
+    if (color) { s.dataset.color = '1'; s.style.color = color; s.addEventListener('click', () => this.pulse(key(sg.src))); }
+    parent.appendChild(s);
+    let last = null;
+    return (ctx) => {
+      let html;
+      try {
+        const v = this.rt.eval(sg.ast);
+        html = HB.isMat(v) ? `<span class="mx" style="grid-template-columns: repeat(${v[0].length}, auto)">${v.flat().map((x) => `<span>${esc(HB.fmtNum(x))}</span>`).join('')}</span>` : esc(HB.fmt(v));
+      } catch (e) { html = `<span style="color:var(--red)">（${esc(e.message)}）</span>`; }
+      if (html !== last) {
+        s.innerHTML = html;
+        if (last !== null && !ctx.first) { s.classList.remove('flash'); void s.offsetWidth; s.classList.add('flash'); }
+        last = html;
+      }
+    };
+  }
+
+  scrub(parent, cell) {
+    const w = document.createElement('span');
+    w.className = 'scrub';
+    w.innerHTML = '<button type="button" aria-label="减一">‹</button><span class="n" role="spinbutton" tabindex="0"></span><button type="button" aria-label="加一">›</button>';
+    parent.appendChild(w);
+    const [minus, n, plus] = w.children;
+    const { lo, hi, step } = cell.input;
+    const cur = () => this.rt.get(cell.name);
+    const go = (v) => { v = Math.max(lo, Math.min(hi, Math.round(v / step) * step)); if (v !== cur()) this.scrubTo(cell.name, v); };
+    minus.addEventListener('click', () => go(cur() - step));
+    plus.addEventListener('click', () => go(cur() + step));
+    n.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') go(cur() - step); if (e.key === 'ArrowRight' || e.key === 'ArrowUp') go(cur() + step); });
+    // 按住数字左右拖：一格 26px
+    n.addEventListener('pointerdown', (e) => {
+      n.setPointerCapture(e.pointerId);
+      const x0 = e.clientX, v0 = cur();
+      const move = (ev) => go(v0 + Math.round((ev.clientX - x0) / 26) * step);
+      const up = () => { n.removeEventListener('pointermove', move); n.removeEventListener('pointerup', up); n.removeEventListener('pointercancel', up); };
+      n.addEventListener('pointermove', move);
+      n.addEventListener('pointerup', up);
+      n.addEventListener('pointercancel', up);
+    });
+    let last = null;
+    return (ctx) => {
+      const v = cur();
+      n.textContent = HB.fmtNum(v);
+      minus.disabled = v <= lo; plus.disabled = v >= hi;
+      if (last !== null && v !== last && !ctx.first) { w.classList.remove('pulse'); void w.offsetWidth; w.classList.add('pulse'); }
+      last = v;
+    };
+  }
+
+  blank(parent, sg, id) {
+    const w = document.createElement('span');
+    w.className = 'blank';
+    w.innerHTML = '<input type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="你的答案"><button type="button">对吗</button><span class="note"></span>';
+    parent.appendChild(w);
+    const [input, btn, note] = w.children;
+    const st = this.blanks.get(id) || { status: '', sig: null, val: '' };
+    this.blanks.set(id, st);
+    input.value = st.val;
+    const submit = () => {
+      const given = input.value.trim();
+      if (!given) return;
+      let exp;
+      try { exp = this.rt.eval(sg.ast); } catch { return; }
+      const ok = HB.checkAnswer(given, exp);
+      st.status = ok ? 'ok' : 'bad'; st.val = given; st.sig = HB.fmt(exp);
+      this.log(`填空（${sg.src} 那一格）：写了 ${given}，${ok ? '对' : `不对（页面算的是 ${HB.fmt(exp)}）`}`);
+      paint(true);
+    };
+    btn.addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+    const paint = (fresh) => {
+      w.classList.toggle('ok', st.status === 'ok');
+      w.classList.remove('bad');
+      if (st.status === 'bad' && fresh) { void w.offsetWidth; w.classList.add('bad'); }
+      btn.textContent = st.status === 'ok' ? '✓' : '对吗';
+      input.readOnly = st.status === 'ok';
+    };
+    return () => {
+      // 上面的量变了、答案跟着变：空重新打开
+      if (st.status === 'ok') {
+        let sig; try { sig = HB.fmt(this.rt.eval(sg.ast)); } catch {}
+        if (sig !== st.sig) { st.status = ''; st.val = ''; input.value = ''; note.textContent = '数变了，再算一次'; }
+        else note.textContent = '';
+      }
+      paint(false);
+    };
+  }
+
+  choice(parent, sg, id) {
+    const w = document.createElement('span');
+    w.className = 'choice';
+    parent.appendChild(w);
+    const st = this.choices.get(id) || { picked: new Set(), done: false };
+    this.choices.set(id, st);
+    sg.choices.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = c.t;
+      b.addEventListener('click', () => {
+        if (st.done || st.picked.has(i)) return;
+        st.picked.add(i);
+        if (c.ok) st.done = true;
+        this.log(`选择：选了「${c.t}」，${c.ok ? '对' : '不对'}`);
+        paint();
+      });
+      w.appendChild(b);
+    });
+    const paint = () => [...w.children].forEach((b, i) => {
+      b.classList.toggle('ok', st.picked.has(i) && sg.choices[i].ok);
+      b.classList.toggle('bad', st.picked.has(i) && !sg.choices[i].ok);
+    });
+    paint();
+    return () => {};
+  }
+
+  goal(ln) {
+    const el = document.createElement('div');
+    el.className = 'goal';
+    el.innerHTML = '<span class="dot">?</span><span class="t">目标：还没做到</span>';
+    const t = el.querySelector('.t'), dot = el.querySelector('.dot');
+    const id = ln.src + '|' + ln.msg;
+    return {
+      el,
+      update: (ctx) => {
+        let ok = false;
+        try { ok = !!this.rt.eval(ln.cond); } catch {}
+        // 做到过就一直算做到了（学生再拨走也不收回）
+        if (ok && !this.goalsDone.get(id)) { this.goalsDone.set(id, true); if (!ctx.first) this.log(`做到了目标：${ln.msg}`); }
+        const done = this.goalsDone.get(id);
+        el.classList.toggle('done', !!done);
+        dot.textContent = done ? '✓' : '?';
+        t.textContent = done ? ln.msg : '目标：还没做到';
+      },
+    };
+  }
+
+  figure(ln) {
+    const el = document.createElement('div');
+    el.className = 'fig';
+    let kind = null, view = null;
+    return {
+      el,
+      update: (ctx) => {
+        const vals = ln.items.map((it) => { try { return { it, v: this.rt.eval(it.ast) }; } catch (e) { return { it, e }; } });
+        const bad = vals.find((x) => x.e);
+        if (bad) { el.innerHTML = `<div class="err">第 ${ln.n} 行画不出来：${esc(bad.e.message)}<code>${esc(bad.it.src)}</code></div>`; kind = null; return; }
+        for (const { it, v } of vals) {
+          if (v && v.kind === 'paging') this.figInfo.set(`${key(it.src)} 的缺页`, String(v.faults));
+          else if (HB.isVec(v)) this.figInfo.set(key(it.src), HB.fmt(v));
+        }
+        const k = figKind(vals.map((x) => x.v));
+        if (k !== kind) { el.innerHTML = ''; kind = k; view = k === 'plane' ? new PlaneView(el, this, ln) : k === 'paging' ? new PagingView(el) : k === 'sentence' ? new SentenceView(el, this) : new CellsView(el); }
+        view.update(vals, ctx);
+      },
+    };
+  }
+
+  update(ctx = {}) {
+    this.rt.fresh();
+    for (const b of this.blocks) b.update(ctx);
+    if (this.rt.found.length) {
+      for (const f of this.rt.found.splice(0)) this.log(`页面替老师找了例子：${f.name} = ${HB.fmt(f.value)}（试了 ${f.tries} 个，${f.ms} 毫秒）`);
+    }
+  }
+
+  // 学生动了：记下动作和板上跟着变的东西（老师看到的就是这一行）
+  visible() {
+    const out = new Map();
+    this.el.querySelectorAll('.v').forEach((s) => { if (!s.closest('.when.off')) out.set(s.dataset.expr, s.textContent); });
+    // 图上看得到的也算：置换过程的缺页次数（学生数得出来）、向量的坐标
+    this.figInfo.forEach((v, k) => { if (!out.has(k)) out.set(k, v); });
+    return out;
+  }
+  act(desc, fn) {
+    const before = this.visible();
+    fn();
+    this.update({});
+    const after = this.visible();
+    const diffs = [];
+    after.forEach((v, k) => { if (before.has(k) && before.get(k) !== v && v.length < 60) diffs.push(`${k}：${before.get(k)} → ${v}`); });
+    return diffs;
+  }
+  scrubTo(name, v) {
+    const from = this.pending?.name === name ? this.pending.from : this.rt.get(name);
+    const before = this.pending?.name === name ? this.pending.before : this.visible();
+    this.rt.setInput(name, v);
+    this.update({});
+    clearTimeout(this.pending?.timer);
+    this.pending = { name, from, before, timer: setTimeout(() => this.settle(), 700) };
+  }
+  settle() {
+    const p = this.pending; this.pending = null;
+    if (!p) return;
+    const to = this.rt.get(p.name);
+    if (to === p.from) return;
+    const after = this.visible();
+    const diffs = [];
+    after.forEach((v, k) => { if (k !== p.name && p.before.has(k) && p.before.get(k) !== v && v.length < 60) diffs.push(`${k}：${p.before.get(k)} → ${v}`); });
+    this.log(`拨 ${p.name}：${HB.fmt(p.from)} → ${HB.fmt(to)}${diffs.length ? `（板上跟着变：${diffs.join('，')}）` : ''}`);
+  }
+  log(text) { this.onLog(text); }
+
+  pulse(k) {
+    this.el.querySelectorAll(`.vec[data-expr="${CSS.escape(k)}"]`).forEach((g) => { g.classList.remove('pulse'); void g.getBBox(); g.classList.add('pulse'); });
+    this.el.querySelectorAll(`.v[data-expr="${CSS.escape(k)}"]`).forEach((s) => { s.classList.remove('flash'); void s.offsetWidth; s.classList.add('flash'); });
+  }
+}
+
+function figKind(vs) {
+  if (vs.every((v) => v && v.kind === 'paging')) return 'paging';
+  if (vs.length === 1 && vs[0] && vs[0].kind === 'sentence') return 'sentence';
+  if (vs.every((v) => (HB.isVec(v) && v.length === 2) || (HB.isMat(v) && v.length === 2 && v[0].length === 2))) return 'plane';
+  return 'cells';
+}
+
+// —— 平面：向量画成箭头，2×2 矩阵画成变换后的网格；能拖的向量按住箭头尖拖 ——
+class PlaneView {
+  constructor(el, board, ln) {
+    this.board = board; this.ln = ln;
+    this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    this.svg.setAttribute('viewBox', '0 0 400 400');
+    this.svg.setAttribute('class', 'plane');
+    el.appendChild(this.svg);
+    this.cap = document.createElement('div');
+    this.cap.className = 'figcap';
+    el.appendChild(this.cap);
+    this.R = null; this.shown = null; this.anim = 0; this.drag = null;
+    this.svg.addEventListener('pointerdown', (e) => this.down(e));
+  }
+  pt(e) { const r = this.svg.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * 400, ((e.clientY - r.top) / r.height) * 400]; }
+  toW([px, py]) { const s = 180 / this.R; return [(px - 200) / s, -(py - 200) / s]; }
+  toS([x, y]) { const s = 180 / this.R; return [200 + x * s, 200 - y * s]; }
+  dragCells() { return this.items.filter((x) => { const c = this.board.rt.cells.get(x.it.src); return c && c.input && c.input.type === 'drag'; }); }
+  down(e) {
+    const p = this.pt(e);
+    let best = null, bd = 40;
+    for (const x of this.dragCells()) { const [sx, sy] = this.toS(x.v); const d = Math.hypot(sx - p[0], sy - p[1]); if (d < bd) { bd = d; best = x; } }
+    if (!best) {
+      // 点了一支箭头：句子里同一个式子闪一下
+      const g = e.target.closest?.('.vec'); if (g) this.board.pulse(g.dataset.expr);
+      return;
+    }
+    e.preventDefault();
+    this.svg.setPointerCapture(e.pointerId);
+    const name = best.it.src, snap = this.board.rt.cells.get(name).input.snap;
+    const from = this.board.rt.get(name);
+    const before = this.board.visible();
+    this.drag = name;
+    this.svg.classList.add('dragging');
+    const move = (ev) => {
+      const w = this.toW(this.pt(ev)).map((c) => Math.max(-this.R, Math.min(this.R, Math.round(c / snap) * snap)));
+      const cur = this.board.rt.get(name);
+      if (w[0] !== cur[0] || w[1] !== cur[1]) { this.board.rt.setInput(name, w); this.board.update({ drag: true }); }
+    };
+    const up = () => {
+      this.svg.removeEventListener('pointermove', move); this.svg.removeEventListener('pointerup', up); this.svg.removeEventListener('pointercancel', up);
+      this.drag = null; this.svg.classList.remove('dragging');
+      const to = this.board.rt.get(name);
+      if (to[0] !== from[0] || to[1] !== from[1]) {
+        const after = this.board.visible(); const diffs = [];
+        after.forEach((v, k) => { if (k !== name && before.has(k) && before.get(k) !== v && v.length < 60) diffs.push(`${k}：${before.get(k)} → ${v}`); });
+        this.board.log(`拖 ${name}：${HB.fmt(from)} → ${HB.fmt(to)}${diffs.length ? `（${diffs.join('，')}）` : ''}`);
+      }
+      this.board.update({});
+    };
+    this.svg.addEventListener('pointermove', move); this.svg.addEventListener('pointerup', up); this.svg.addEventListener('pointercancel', up);
+  }
+  update(vals, ctx) {
+    this.items = vals;
+    // 范围：拖的时候不变（不然图跟着缩放，手指下的点会跑），松手后再看要不要放大
+    if (!this.drag) {
+      let m = 2;
+      for (const { v } of vals) (HB.isMat(v) ? [v[0][0], v[1][0], v[0][1], v[1][1]] : v).forEach((c) => (m = Math.max(m, Math.abs(c))));
+      const R = Math.ceil(m * 1.25 + 0.5);
+      if (this.R === null || R > this.R || R < this.R - 2) this.R = R;
+    }
+    const target = vals.map((x) => (HB.isMat(x.v) ? x.v.map((r) => r.slice()) : x.v.slice()));
+    // 不是手指拖出来的变化（老师 set、换了矩阵）：滑过去
+    if (this.shown && !ctx.drag && !ctx.first && !reduceMotion() && this.shown.length === target.length) {
+      const from = this.shown, t0 = performance.now(), id = ++this.anim;
+      const lerp = (a, b, t) => (Array.isArray(a) ? a.map((x, i) => lerp(x, b[i], t)) : a + (b - a) * t);
+      const step = (now) => {
+        if (id !== this.anim) return;
+        const t = Math.min(1, (now - t0) / 550), e = 1 - Math.pow(1 - t, 3);
+        this.draw(target.map((b, i) => (sameShape(from[i], b) ? lerp(from[i], b, e) : b)));
+        if (t < 1) requestAnimationFrame(step); else this.shown = target;
+      };
+      requestAnimationFrame(step);
+    } else { this.anim++; this.draw(target); this.shown = target; }
+  }
+  draw(vs) {
+    const R = this.R, s = 180 / R;
+    const S = ([x, y]) => [200 + x * s, 200 - y * s];
+    let h = '';
+    for (let k = -R; k <= R; k++) { const a = 200 + k * s; h += `<line x1="${a}" y1="0" x2="${a}" y2="400" stroke="var(--grid)"/><line x1="0" y1="${a}" x2="400" y2="${a}" stroke="var(--grid)"/>`; }
+    h += `<line x1="0" y1="200" x2="400" y2="200" stroke="var(--axis)"/><line x1="200" y1="0" x2="200" y2="400" stroke="var(--axis)"/>`;
+    const L = R * 4;
+    vs.forEach((v, i) => {
+      if (!HB.isMat(v)) return;
+      const A = (p) => [v[0][0] * p[0] + v[0][1] * p[1], v[1][0] * p[0] + v[1][1] * p[1]];
+      let g = '';
+      for (let k = -L; k <= L; k++) {
+        const [a1, b1] = [S(A([k, -L])), S(A([k, L]))];
+        const [a2, b2] = [S(A([-L, k])), S(A([L, k]))];
+        g += `<line x1="${a1[0]}" y1="${a1[1]}" x2="${b1[0]}" y2="${b1[1]}"/><line x1="${a2[0]}" y1="${a2[1]}" x2="${b2[0]}" y2="${b2[1]}"/>`;
+      }
+      h += `<g stroke="var(--brand)" stroke-opacity="${k0(v) ? 0.5 : 0.22}" stroke-width="1.2">${g}</g>`;
+    });
+    const drags = new Set(this.dragCells().map((x) => x.it.src));
+    vs.forEach((v, i) => {
+      if (HB.isMat(v)) return;
+      const it = this.items[i].it;
+      const color = this.board.colors.get(key(it.src)) || 'var(--ink)';
+      const [x2, y2] = S(v);
+      const len = Math.hypot(x2 - 200, y2 - 200);
+      const ux = len > 1 ? (x2 - 200) / len : 0, uy = len > 1 ? (y2 - 200) / len : 0;
+      const hx = x2 - ux * 13, hy = y2 - uy * 13;
+      const head = len > 6 ? `<polygon points="${x2},${y2} ${hx - uy * 6.5},${hy + ux * 6.5} ${hx + uy * 6.5},${hy - ux * 6.5}" fill="${color}"/>` : '';
+      const lab = it.label || it.src.replace(/\*/g, '').replace(/\s+/g, '');
+      const lx = x2 + (ux || 0.7) * 16 + 4, ly = y2 + (uy || -0.7) * 16 + 5;
+      h += `<g class="vec" data-expr="${esc(key(it.src))}"><line x1="200" y1="200" x2="${len > 6 ? hx : x2}" y2="${len > 6 ? hy : y2}" stroke="${color}" stroke-width="3.2" stroke-linecap="round"/>${head}<text class="lbl" x="${lx}" y="${ly}" fill="${color}" text-anchor="middle">${esc(lab)}</text>`;
+      if (drags.has(it.src)) h += `<circle class="handle" cx="${x2}" cy="${y2}" r="${this.drag === it.src ? 11 : 8}" fill="${color}" fill-opacity=".9" stroke="var(--card-solid)" stroke-width="2.5"/><circle class="hit" cx="${x2}" cy="${y2}" r="26" fill="transparent"/>`;
+      h += '</g>';
+    });
+    this.svg.innerHTML = h;
+    this.cap.textContent = drags.size ? '按住彩色的圆点拖' : '';
+  }
+}
+const k0 = (M) => Math.abs(M[0][0] * M[1][1] - M[0][1] * M[1][0]) < 1e-9;
+const sameShape = (a, b) => (Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((x, i) => sameShape(x, b[i])) : typeof a === typeof b);
+
+// —— 页面置换：一列一次访问，一行一个物理块；变了的格子弹一下 ——
+class PagingView {
+  constructor(el) { this.el = document.createElement('div'); this.el.className = 'tl'; el.appendChild(this.el); this.prev = new Map(); this.rows = new Map(); }
+  update(vals, ctx) {
+    const next = new Map();
+    let h = '';
+    vals.forEach(({ v }, gi) => {
+      const n = v.cols.length;
+      h += `<div class="tl-one"><div class="tl-name">${v.alg.toUpperCase()} · ${v.f} 个物理块</div><div class="tl-grid" style="grid-template-columns: auto repeat(${n}, 34px)">`;
+      h += `<span class="rh">访问</span>` + v.cols.map((c) => `<span class="h">${c.ref}</span>`).join('');
+      for (let r = 0; r < v.f; r++) {
+        const rowNew = !ctx.first && (this.rows.get(gi) ?? v.f) <= r;
+        h += `<span class="rh">块 ${r + 1}</span>`;
+        v.cols.forEach((c, k) => {
+          const val = c.slots[r];
+          const id = `${gi}:${k}:${r}`;
+          next.set(id, val);
+          const cls = ['c'];
+          if (val === null) cls.push('empty');
+          else if (c.miss && c.slot === r) cls.push('new');
+          else if (!c.miss && c.slot === r) cls.push('hit');
+          if (rowNew) cls.push('row-in');
+          else if (!ctx.first && this.prev.has(id) && this.prev.get(id) !== val) cls.push('pop');
+          h += `<span class="${cls.join(' ')}" style="${rowNew || cls.includes('pop') ? `animation-delay:${k * 25}ms` : ''}">${val ?? ''}</span>`;
+        });
+      }
+      h += `<span class="rh">缺页</span>` + v.cols.map((c) => `<span class="m ${c.miss ? '' : 'no'}">${c.miss ? '✗' : '·'}</span>`).join('');
+      h += '</div></div>';
+      this.rows.set(gi, v.f);
+    });
+    this.el.innerHTML = h;
+    this.prev = next;
+  }
+}
+
+// —— 句子：虚线框是能折起的一段 ——
+class SentenceView {
+  constructor(el, board) { this.board = board; this.el = document.createElement('div'); this.el.className = 'sent'; el.appendChild(this.el); this.sig = null; }
+  update(vals) {
+    const s = vals[0].v;
+    const sig = s.text;
+    if (sig !== this.sig) {
+      this.sig = sig;
+      this.el.innerHTML = '';
+      for (const p of s.parts) {
+        if (!p.fold) { if (p.t.trim()) { const w = document.createElement('span'); w.className = 'w'; w.textContent = p.t.trim(); this.el.appendChild(w); } continue; }
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'fold'; b.textContent = p.t.trim(); b.dataset.i = p.i;
+        b.addEventListener('click', () => {
+          const shut = !this.board.rt.get(s.cell).folded.has(p.i);
+          const diffs = this.board.act('', () => this.board.rt.toggleFold(s.cell, p.i));
+          this.board.log(`${shut ? '折起' : '展开'}「${p.t.trim()}」${diffs.length ? `（${diffs.join('，')}）` : ''}`);
+        });
+        this.el.appendChild(b);
+      }
+    }
+    this.el.querySelectorAll('.fold').forEach((b) => { const shut = s.folded.has(Number(b.dataset.i)); b.classList.toggle('shut', shut); b.setAttribute('aria-label', shut ? `展开：${b.textContent}` : `折起：${b.textContent}`); });
+  }
+}
+
+class CellsView {
+  constructor(el) { this.el = document.createElement('div'); this.el.className = 'cells'; el.appendChild(this.el); }
+  update(vals) { this.el.innerHTML = vals.map(({ v }) => (Array.isArray(v) ? v : [v]).map((x) => `<span>${esc(HB.fmt(x))}</span>`).join('')).join('<span style="background:none;border:0">·</span>'); }
+}
+
+// —— 一节：板 + 老师那一侧 ——
+function lessonDom(ex) {
+  const sec = document.createElement('section');
+  sec.className = 'lesson'; sec.id = ex.id;
+  sec.innerHTML = `
+    <div class="lesson-head"><span class="subj">${esc(ex.subj)}</span><span class="why">${esc(ex.why)}</span></div>
+    <div class="lesson-body">
+      <div class="card board"></div>
+      <aside class="side">
+        <div class="card panel"><h4>老师的追问（点一下，看老师只写了几行）</h4><div class="follow"></div></div>
+        <div class="card panel"><h4>页面告诉老师的</h4><ul class="log"><li class="empty">你在板上动一动，这里记下来。</li></ul></div>
+        <details class="card panel"><summary>老师写的源码</summary><textarea class="src" spellcheck="false" aria-label="源码" id="src-${ex.id}"></textarea><div class="lint"></div></details>
+      </aside>
+    </div>`;
+  const boardEl = sec.querySelector('.board'), logEl = sec.querySelector('.log'), ta = sec.querySelector('textarea'), lint = sec.querySelector('.lint');
+  const board = new Board(boardEl, {
+    onLog: (t) => addLog(logEl, t),
+    onSource: (src, errs) => { if (document.activeElement !== ta) ta.value = src; showLint(lint, src, errs); },
+  });
+  board.setSource(ex.src);
+  let tm;
+  ta.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => board.setSource(ta.value), 450); });
+  const fol = sec.querySelector('.follow');
+  ex.follow.forEach((f) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = f.label;
+    b.addEventListener('click', () => {
+      b.disabled = true;
+      const lines = f.ops.split('\n').filter((l) => l.trim()).length;
+      board.setSource(HB.applyOps(board.src, f.ops));
+      const pre = document.createElement('pre');
+      pre.textContent = `老师写了 ${lines} 行：\n${f.ops}`;
+      b.after(pre);
+      addLog(logEl, `（老师追问：${f.label}）`);
+    });
+    fol.appendChild(b);
+  });
+  return sec;
+}
+
+function addLog(ul, text) {
+  ul.querySelector('.empty')?.remove();
+  const li = document.createElement('li');
+  li.className = 'new';
+  li.textContent = text;
+  ul.prepend(li);
+}
+function showLint(el, src, errs) {
+  const n = src.split('\n').filter((l) => l.trim()).length;
+  el.classList.toggle('bad', errs.length > 0);
+  el.textContent = errs.length ? `${n} 行，写法有 ${errs.length} 处要改：${errs.map((e) => `第 ${e.n} 行 ${e.msg}`).join('；')}` : `${n} 行，${new Blob([src]).size} 字节，写法没问题`;
+}
+
+const lessonsEl = document.getElementById('lessons');
+lessonsEl.style.display = 'grid'; lessonsEl.style.gap = '40px';
+EXAMPLES.forEach((ex) => lessonsEl.appendChild(lessonDom(ex)));
+
+// —— 让 Opus 5.5 当场写：同一份写法说明，计时 ——
+const DOC = `你是考研辅导老师，在一块「活板」上教学。不要先摆概念：先抛一个例子或问题，让学生动手（拨数、拖向量、折句子）、猜、碰壁，自己得出结论。每一步只推一小步。
+板上写的是几行描述，页面负责画、动、判分、记下学生做了什么。一行一条：
+
+# 标题
+let 名字 = 表达式              定义一个量。用到它的图、文字、空都会跟着它变
+let f = 3 拨 1..6              学生能拨的整数（文字里写 {f} 就是拨的控件）
+let x = [1, 0] 拖 吸附 0.5     学生能在平面上拖的二维向量
+let s = find v in 序列(15, 1..6) where 条件    页面替你搜一个满足条件的例子（不用你心算）；范围还有 整数(1..9)、向量(2, -3..3)、矩阵(2, -3..3)
+draw a, b, c                   画一张图：二维向量、2×2 矩阵（画成它变换后的网格）放进同一个平面，可以写 A*x "Ax" 起名；paging 的结果画成置换过程（几个就上下几张，共用同一个块数）；句子画成能折叠的句子
+普通的一行                     板上的文字。{表达式} 是活的值（和图上同一个式子同色）；{表达式?} 是一个空，答案页面按当时的值判；{? 选项 | *对的 | 选项} 是选择题
+when 条件：文字                条件成立时才出现的一行（学生做到了才给下一问）
+goal 条件 => "做到时说的话"     学生做到了，页面告诉你
+
+表达式：数、"字符串"、[1, 2] 向量、[[1, 2], [3, 4]] 矩阵（按行）、let 右边可以写 1 2 3 4 这样空格隔开的一串数；+ - * / ^；== != > < >= <=；and or not；r.faults 这样取成员。
+函数：
+- 线代：det(A) T(A) inv(A) tr(A) dot(u, v) norm(v) col(A, j) par(u, v)（共线且都不是零）lam(A, x)（Ax 是 x 的几倍）eigs(A)（2×2 的实特征值）
+- 页面置换：paging(序列, 块数, fifo|lru|opt) → .faults 缺页次数、.hits；faults(序列, 块数, 算法)
+- 英语：句子("The man [whom I met] is here.")：方括号里是学生能折起的一段 → .rest 折完剩下的句子、.folded 折起了几段、.text 原句
+- 通用：len sum min max abs round range(a, b) allint(列表) count(列表, x)
+
+第一次：输出整块板（8 到 14 行），先给一个具体的例子和一个要学生动手的问题，用 goal 接住学生的发现，用 when 放下一问。
+之后你会收到「学生的动作」（页面记的：拨了什么、拖到哪、填了什么、选了什么、做到了哪个目标）和学生说的话。这时只写要改的几行：
+set 名字 = 表达式              改一个已有的量（图和文字跟着变，学生看得到变化）
+新的几行                       接在板的最后（先一行回应学生，再给下一个问题）
+不要重写整块板。只输出板上的行：不要解释、不要代码围栏、不要 Markdown 标题以外的格式。`;
+
+document.getElementById('docText').value = DOC;
+document.getElementById('docSize').textContent = `一共 ${(new Blob([DOC]).size / 1024).toFixed(1)} KB（现在线代的组件说明是 38.5 KB）。`;
+
+const sugg = document.getElementById('sugg');
+SUGGEST.forEach((s) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = s; b.addEventListener('click', () => { document.getElementById('req').value = s; }); sugg.appendChild(b); });
+
+const live = {
+  board: null, turns: [], base: '', pendingLog: [], ctl: null,
+};
+const liveLog = document.getElementById('liveLog'), liveSrc = document.getElementById('liveSrc'), liveLint = document.getElementById('liveLint');
+const timing = document.getElementById('timing');
+const goBtn = document.getElementById('go'), stopBtn = document.getElementById('stop'), sendBtn = document.getElementById('send');
+
+function newLiveBoard() {
+  const el = document.getElementById('liveBoard');
+  el.innerHTML = '';
+  live.board = new Board(el, {
+    onLog: (t) => { addLog(liveLog, t); live.pendingLog.push(t); },
+    onSource: (src, errs) => { if (document.activeElement !== liveSrc) liveSrc.value = src; showLint(liveLint, src, errs); },
+  });
+}
+let srcTm;
+liveSrc.addEventListener('input', () => { if (!live.board) return; clearTimeout(srcTm); srcTm = setTimeout(() => live.board.setSource(liveSrc.value), 450); });
+
+const clean = (t) => String(t).replace(/^```[a-z]*\n?/gm, '').replace(/^```\s*$/gm, '');
+const done = (t) => { const s = clean(t); const i = s.lastIndexOf('\n'); return i < 0 ? '' : s.slice(0, i); };
+
+async function callClaude(messages, onLines) {
+  const sample = await window.claude?.use?.('sample');
+  if (!sample) throw { code: 'unavailable', message: '这里调不了 Claude：要在 claude.ai 里打开这个页面。' };
+  live.ctl = new AbortController();
+  const t0 = performance.now();
+  let first = null;
+  const tick = setInterval(() => paintTiming(t0, first, null), 200);
+  try {
+    const res = await sample(messages, {
+      model: 'claude-opus-5-5', effort: document.getElementById('effort').value, modelTier: 'complex', cache: false, signal: live.ctl.signal,
+      onText: ({ text }) => {
+        if (first === null && text.trim()) first = performance.now();
+        onLines(done(text));
+      },
+    });
+    const end = performance.now();
+    paintTiming(t0, first, end, res);
+    return res.text;
+  } finally { clearInterval(tick); }
+}
+
+function paintTiming(t0, first, end, res) {
+  const s = (ms) => (ms / 1000).toFixed(1) + ' 秒';
+  const now = performance.now();
+  const parts = [];
+  parts.push(first === null ? `想了 <b>${s(now - t0)}</b>，还没出字` : `出第一个字 <b>${s(first - t0)}</b>`);
+  if (end) parts.push(`写完 <b>${s(end - t0)}</b>`);
+  else if (first !== null) parts.push(`写了 ${s(now - first)}`);
+  if (res) {
+    parts.push(`${clean(res.text).length} 字`);
+    parts.push(`模型 ${esc(res.modelApplied || res.modelTierApplied || '（没说）')}`);
+    if (res.truncated) parts.push('被截断了');
+  }
+  timing.innerHTML = parts.map((p) => `<span>${p}</span>`).join('');
+}
+
+goBtn.addEventListener('click', async () => {
+  const req = document.getElementById('req').value.trim();
+  if (!req) return;
+  newLiveBoard();
+  liveLog.innerHTML = '<li class="empty">你在板上动一动，这里记下来。</li>';
+  live.turns = [{ role: 'user', content: `${DOC}\n\n这一次要教的：${req}\n\n输出整块板。` }];
+  live.pendingLog = [];
+  goBtn.disabled = true; stopBtn.hidden = false; sendBtn.disabled = true;
+  try {
+    const text = await callClaude(live.turns, (src) => { if (src.trim()) live.board.setSource(src, { quiet: false }); });
+    live.board.setSource(clean(text).trim());
+    live.base = live.board.src;
+    live.turns.push({ role: 'assistant', content: clean(text).trim() });
+    sendBtn.disabled = false;
+  } catch (e) {
+    timing.innerHTML += `<span style="color:var(--red)">${esc(errText(e))}</span>`;
+  } finally { goBtn.disabled = false; stopBtn.hidden = true; }
+});
+
+stopBtn.addEventListener('click', () => live.ctl?.abort());
+
+sendBtn.addEventListener('click', async () => {
+  if (!live.board) return;
+  live.board.settle?.();
+  const said = document.getElementById('sayText').value.trim();
+  const acts = live.pendingLog.splice(0);
+  if (!acts.length && !said) { document.getElementById('sendNote').textContent = '你还没在板上动，也没说话。'; return; }
+  const msg = `学生的动作：\n${acts.length ? acts.map((a) => '- ' + a).join('\n') : '（没有）'}\n学生说：${said || '（没说话）'}\n\n只写要改的几行。`;
+  live.turns.push({ role: 'user', content: msg });
+  document.getElementById('sayText').value = '';
+  addLog(liveLog, `（发给老师：${acts.length} 条动作${said ? '，说「' + said + '」' : ''}）`);
+  sendBtn.disabled = true; goBtn.disabled = true; stopBtn.hidden = false;
+  const base = live.board.src;
+  try {
+    const text = await callClaude(live.turns, (ops) => { if (ops.trim()) live.board.setSource(HB.applyOps(base, ops)); });
+    const ops = clean(text).trim();
+    live.board.setSource(HB.applyOps(base, ops));
+    live.turns.push({ role: 'assistant', content: ops });
+    const n = ops.split('\n').filter((l) => l.trim()).length;
+    document.getElementById('sendNote').textContent = `老师这一轮写了 ${n} 行。`;
+  } catch (e) {
+    live.turns.pop();
+    timing.innerHTML += `<span style="color:var(--red)">${esc(errText(e))}</span>`;
+  } finally { sendBtn.disabled = false; goBtn.disabled = false; stopBtn.hidden = true; }
+});
+
+function errText(e) {
+  const c = e && e.code;
+  if (c === 'cancelled') return '停了。';
+  if (c === 'not_granted') return '没有允许这个页面调用 Claude。';
+  if (c === 'rate_limited') return '调用太频繁了，过一会儿再试。';
+  return (e && e.message) || '出错了';
+}
+</script>
