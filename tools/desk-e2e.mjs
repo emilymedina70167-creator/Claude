@@ -626,6 +626,26 @@ const SUITES = {
     return t;
   },
 
+  // 教材的收件箱（Claude Code 转好写进 book_inbox）：并进各页、删掉记录、拼成条目，书目从「等转写」变成「转好了」
+  async inbox(browser) {
+    const t = await seeded(browser);
+    const page = (n) => ({ n, img: '', imgs: [], layer: '', size: [1200, 1600], status: 'todo', at: 1 });
+    await plant(t, {
+      'books/B90': { title: '测试用的习题册', kind: 'textbook', space: 'math', subject: '线代', status: 'partial', pages: 2, pagesDone: 0, pagesLeft: 2, pagesStored: 2, chunks: 0, toc: [], createdAt: 1, at: 1 },
+      'books/B90/pages/1': page(1),
+      'books/B90/pages/2': page(2),
+      'book_inbox/B90-001-a': { book: 'B90', batch: 'b001', by: 'test', at: 1, pages: { 1: [{ kind: '标题', level: 1, title: '第1章 行列式', text: '', cont: false }, { kind: '习题', title: '1', text: '计算 $\\det A$.', cont: false }], 2: [{ kind: '习题', title: '2', text: '求 $A^{-1}$.', cont: false }] } },
+    });
+    await t.page.reload(); await sleep(1500);
+    await t.route('books');
+    const b = await t.waitFor(async () => { const x = (await t.db())['books/B90']; return x?.status === 'ready' && x.chunks > 0 ? x : null; }, { timeout: 20000, what: '收件箱并进书里、拼成条目' });
+    check(b.pagesDone === 2, `转好的页数不对：${b.pagesDone}`);
+    check(!(await t.db())['book_inbox/B90-001-a'], '并完了收件箱的记录没删');
+    await sleep(600);
+    check((await t.text('.dk-bookpage'))?.includes('转好了'), '教材页没写「转好了」');
+    return t;
+  },
+
   async errors(browser) {
     const t = await seeded(browser);
     // 故意制造一个没接住的错误：应该被记进 meta/errors，管理页能看到

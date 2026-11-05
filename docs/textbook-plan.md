@@ -40,6 +40,7 @@
 - 我回 Claude Code 说「转 B3」：外部 Claude 用 `ArtifactData list` 把书和页存到本地，`node tools/books.mjs plan` 分批（一批 4 页，每批一份转写的规矩，就是原来的 `transcribePrompt`，开头说明这是学生自己的书、只存进私人学习台），每批交给一个转写助手（自己取那几张原页图、看图、写成 `bNNN.out.txt`），`node tools/books.mjs apply` 读回、拼成收件箱记录，`ArtifactData batch` 写进 `book_inbox`。
 - 收件箱：每批一条新记录 `book_inbox/{书-页-时间}` = `{ book, pages: { 页码: items }, by }`，不改已有的页、不用管版本号。学习台打开时（`bookview.js` 的 `takeInbox`）并进各页（`status: done`、`via: claude-code`），删掉这条，再把这本书拼一遍条目（`rebuild`，纯代码）。
 - 条目的「标成要重转」把那几页标回等转写，下次一起转。
+- **并的时候看得见、屏幕不熄**（2026-11-05 我说「两个都显示没转写」：其实正在并，只是一整本并完才拼条目、书目才变，中途关了页面就停在半路）：书目和书页写「正在并入转写（还剩 N 批）」（`bookview.js` 的 `inboxLeft`），并的时候请求屏幕常亮（`holdAwake`），每并完一批重画一次。e2e 的 `inbox` 一段。
 - **中途退出能接着存**：浏览器不让网页记住选过的文件，所以存 PDF 时页面在这台设备的浏览器（IndexedDB）里暂存一份（`books/stash.js`），书上记 `storing`（哪个文件、哪几页）。回来教材页显示「上次没存完 · 接着存」：有暂存就直接接着存，没有（清了数据、换了设备）就让我再选同一个 PDF；已经存过的页跳过。存完清掉 `storing`、删暂存。存的时候请求屏幕常亮（`navigator.wakeLock`），屏幕熄了页面会停。
 - **让电脑上的 Codex 转**（省 Claude 的额度）：照 `docs/codex-transcribe.md` 把那段话贴给 Codex，它看图转写、按同样的格式写成文本推进我的私有仓库；外部 Claude `node tools/books.mjs text` 读回、检查（缺页、【看不清】、字太少）、写进收件箱。学习台「存进学习台」能选已有的书：已经存过原图的页不再存，转好了还没原图的页只补图。
 - **PDF 放在我的私有仓库里**（更快，不用在学习台里存页；不要放进公开的开发仓库）：外部 Claude 把仓库接进会话，`node tools/books.mjs render` 在云端画页（`pdftoppm`，1200 像素宽，按 `crop.js` 同一套规则裁白边、认空白页，有文字层就一起取），原页图用 Artifact 的 asset 上传（一次 25 张）、「页码 → id」记进 `assets.json`，`plan --local` 直接用画好的图，`apply` 时收件箱带上书的信息 `info` 和每页的原页图 `meta`，学习台的 `takeInbox` 连书带页一起建（空白页记成转好了、没有内容）。
