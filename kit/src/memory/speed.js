@@ -43,7 +43,10 @@ export function padText(kb, source) {
   if (!want || !source) return '';
   let bytes = utf8(source);
   while (bytes.length < want) { const b = new Uint8Array(bytes.length * 2); b.set(bytes); b.set(bytes, bytes.length); bytes = b; }
-  return new TextDecoder().decode(bytes.slice(0, want)).replace(/�+$/, '');
+  // 切到半个汉字时末尾会解出替换字符：去掉（不写字面量，构建产物里不能有这个字符，学习台不收）
+  let t = new TextDecoder().decode(bytes.slice(0, want));
+  while (t.endsWith(String.fromCharCode(0xfffd))) t = t.slice(0, -1);
+  return t;
 }
 
 /** 一次测速发出去的整段：说明（垫到 kb）+ turns 轮模拟的一问一答，最后一条是学生的 */

@@ -16,7 +16,7 @@ test('条件：快速 6 次、完整 15 次；打乱不丢', () => {
 test('垫长：按字节垫到 kb，不切坏中文；说明加对话大小对得上', () => {
   const t = padText(40, SRC);
   assert.ok(Math.abs(new TextEncoder().encode(t).length - 40 * 1024) <= 3);
-  assert.ok(!t.includes('�'));
+  assert.ok(!t.includes(String.fromCharCode(0xfffd)));
   for (const c of [{ kb: 4, turns: 2 }, { kb: 160, turns: 30 }]) {
     const m = benchMessages(c, SRC);
     assert.equal(m[0].role, 'user');

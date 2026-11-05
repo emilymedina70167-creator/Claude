@@ -5716,7 +5716,7 @@ FIFO\u30013 \u4E2A\u7269\u7406\u5757\u3002\u4F60\u6570\u6570\u4E00\u5171\u7F3A\u
 - \u8BF4\uFF1A\u56E0\u4E3A\u5B83\u6700\u65E9\u8FDB\u6765`],["\u5BF9\u3002\u90A3\u7ED9\u5B83 4 \u5757\uFF0C\u7F3A\u9875\u4F1A\u53D8\u591A\u8FD8\u662F\u53D8\u5C11\uFF1F{? \u53D8\u5C11 | \u53D8\u591A | *\u8BF4\u4E0D\u51C6}",`\u5B66\u751F\uFF1A
 - \u9009\u62E9\uFF1A\u9009\u4E86\u300C\u53D8\u5C11\u300D\uFF0C\u4E0D\u5BF9`],["\u5148\u522B\u6025\u7740\u5B9A\uFF0C\u62E8\u6210 4 \u5757\u770B\u770B\uFF1A{f}",`\u5B66\u751F\uFF1A
 - \u62E8 f\uFF1A3 \u2192 4\uFF08r \u7684\u7F3A\u9875\uFF1A9 \u2192 10\uFF09
-- \u505A\u5230\u4E86\u76EE\u6807`]],f5=e=>new TextEncoder().encode(e);function Nle(e,t){let r=Math.max(0,e*1024);if(!r||!t)return"";let n=f5(t);for(;n.length<r;){let s=new Uint8Array(n.length*2);s.set(n),s.set(n,n.length),n=s}return new TextDecoder().decode(n.slice(0,r)).replace(/�+$/,"")}function Ble({kb:e,turns:t},r){let n=Math.round(f5(EO).length/1024),s=Nle(Math.max(0,e-n),r),a=[{role:"user",content:`${EO}
+- \u505A\u5230\u4E86\u76EE\u6807`]],f5=e=>new TextEncoder().encode(e);function Nle(e,t){let r=Math.max(0,e*1024);if(!r||!t)return"";let n=f5(t);for(;n.length<r;){let o=new Uint8Array(n.length*2);o.set(n),o.set(n,n.length),n=o}let s=new TextDecoder().decode(n.slice(0,r));for(;s.endsWith("\uFFFD");)s=s.slice(0,-1);return s}function Ble({kb:e,turns:t},r){let n=Math.round(f5(EO).length/1024),s=Nle(Math.max(0,e-n),r),a=[{role:"user",content:`${EO}
 
 ${s?`\u4E0B\u9762\u662F\u7EC4\u4EF6\u624B\u518C\u548C\u8D44\u6599\uFF08\u8FD9\u4E00\u8F6E\u4E0D\u4E00\u5B9A\u7528\u5F97\u7740\uFF09\uFF1A
 ${s}
