@@ -15,7 +15,7 @@ import { memoryDigest } from './digest.js';
 import { transcriptText } from './debrief.js';
 import { reportText } from './report.js';
 import { closingPrompt, MEMO_DOC } from '../class/prompt.js';
-import { componentDoc } from '../subject.js';
+import { componentDoc, isCS, isEN } from '../subject.js';
 
 export const LAB_VERSION = 3; // 单子的写法变了就加一：学习台打开时照新写法重拼（收件箱先按旧单子收完）
 // 一晚最多做几张（价值高的先）：补收尾的课最值，出新题其次，备课一科一张
@@ -128,7 +128,7 @@ export function problemsBrief({ target = {}, originals = [], errors = [], docs =
   const what = target.kind === 'review'
     ? `复现组「${target.title}」到期了，可题库里只有课上的原题（原题做对不算复现通过：学生记得答案，不等于会做）。要 ${n} 道**新题**：同一个机制、换数换情境，学生没见过。`
     : `弱点「${target.title}」（${target.level || ''}）好久没测了。要 ${n} 道**探题**：能直接看出这个毛病还在不在（会的人一次做对，有这个毛病的人会掉进去）。`;
-  const math = !/英语/.test(subject);
+  const math = !isCS(subject) && !isEN(subject);
   const weakLine = target.weaknesses?.length ? `\n这一组挂着的弱点：${target.weaknesses.join('；')}。题要能看出这几个毛病还在不在。\n` : '';
   return `${HEAD}
 
@@ -200,13 +200,14 @@ export function parseProblems(text, { brief = '', block = null, target = {}, at 
   return { items: out, problems };
 }
 
-// 页面核题之前先看的（不碰 DOM）：数学、408 的 answer 手写了数字却没有 let / \calc，页面没法再算一遍，不收
+// 页面核题之前先看的（不碰 DOM）：数学的 answer 手写了数字却没有 let / \calc，页面没法再算一遍，不收。
+// 408 的答案常常本来就是一串（先序序列、散列表、调度顺序，type: seq 之类），算不成式子：不管，靠教研室自己在命令行里算过；英语的答案是字
 const COMPUTED = /\\calc\{|^\s*```+\s*let\b|^\s*let\s+\w+\s*=|type\s*:\s*custom|^\s*use\s*:/m;
 export function problemLint(item, { subject = '' } = {}) {
   const md = String(item?.doc?.md || '');
   const errs = [];
   if (bytesOf(md) > 12 * 1024) errs.push('太长了（一道题不超过 12 KB）');
-  if (!/英语/.test(subject) && item.kind === 'answer' && /^\s*answer\s*[:：]\s*[-\d.\s/,;()[\]]+$/m.test(md) && !COMPUTED.test(md)) errs.push('答案是手写的数字，页面没法再算一遍：用 let 块和 \\calc 写');
+  if (!isCS(subject) && !isEN(subject) && !/^\s*type\s*:/m.test(md) && item.kind === 'answer' && /^\s*answer\s*[:：]\s*[-\d.\s/,;()[\]]+$/m.test(md) && !COMPUTED.test(md)) errs.push('答案是手写的数字，页面没法再算一遍：用 let 块和 \\calc 写');
   return errs;
 }
 

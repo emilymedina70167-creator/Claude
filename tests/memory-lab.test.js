@@ -51,6 +51,7 @@ test('出新题：读回答、换成题库编号、let 块跟着题；答案手�
   assert.deepEqual(problemLint(items[0], { subject: '线性代数' }), []);
   assert.equal(problemLint(items[1], { subject: '线性代数' }).length, 1, '手写的数字页面没法再算');
   assert.equal(problemLint(items[1], { subject: '英语' }).length, 0, '英语的答案本来就是字');
+  assert.equal(problemLint(items[1], { subject: '数据结构' }).length, 0, '408 的答案常常本来就是一串（序列、表）');
   assert.equal(twinOf(items[0], [{ id: 'd-old', md: items[0].doc.md.replace('d-lab-newproblems-R9-1', 'd-old') }])?.id, 'd-old');
   assert.equal(twinOf(items[0], [{ id: 'd-old', md: '```quiz\nq: 完全不一样\n```' }]), null);
   assert.equal(parseProblems('随便写的', {}).problems[0], '回的不是题（没有「=== 题 1」这样的段）');

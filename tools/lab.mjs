@@ -83,6 +83,10 @@ if (cmd === 'briefs') {
       for (const p of r.pds) console.log(`    + ${p.coll} ${p.target}：${String(p.line || '').slice(0, 90)}`);
     } else if (b.kind === 'newproblems' || b.kind === 'probe') {
       const got = lab.parseProblems(d.text, { brief: b.id, block: b.ctx.block, target: b.ctx.target });
+      // 学习台收题时还要在页面上画一遍：这里先拼一页，交给 check-lesson 在浏览器里画（每道题一节）
+      const pages = join(inboxDir, '..', 'lab-pages');
+      mkdirSync(pages, { recursive: true });
+      writeFileSync(join(pages, `${b.id}.html`), `<!doctype html>\n<meta charset="utf-8">\n<script src="la-kit.js"></script>\n<script type="text/markdown">\n---\nsubject: ${b.ctx.subject}\nunit: ${b.id}\n---\n\n${got.items.map((it) => `## 题 ${it.n}\n\n${it.doc.md}`).join('\n\n')}\n</script>\n`);
       for (const p of got.problems) console.log(`  问题：${p}`);
       for (const it of got.items) {
         const errs = lab.problemLint(it, { subject: b.ctx.subject });
@@ -91,6 +95,7 @@ if (cmd === 'briefs') {
       }
     } else console.log(`  ${b.kind}：只在学习台里并（要读资料包）`);
   }
+  console.log(`\n题拼成的页在 ${join(inboxDir, '..', 'lab-pages')}：node tools/check-lesson.mjs 那个目录/*.html（在浏览器里画一遍，和学习台收题时一样）`);
 } else {
   console.error(`不认识 ${cmd}`);
   process.exit(2);
