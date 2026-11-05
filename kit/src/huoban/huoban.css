@@ -1,8 +1,8 @@
-/* 活板（kit/src/huoban/view.js）：颜色都用风格的变量，浅色、深色、紫藤都跟着走。触控目标 ≥ 44px（行内的控件 40px 高、左右留白够大），输入框 16px */
+/* 活板（kit/src/huoban/view.js）：颜色都用风格的变量，浅色、深色、紫藤都跟着走。触控目标 ≥ 44px（拨数的 ‹ ›、空、「对吗」、选择都是 44px），输入框 16px */
 .hb-board { display: grid; gap: 14px; min-width: 0; }
 .hb-board > * { min-width: 0; }
 .hb-title { margin: 0 0 2px; font: 600 1.35em/1.3 var(--display, var(--hand)); text-wrap: balance; color: var(--chalk); }
-.hb-p { margin: 0; font-size: 1.08em; line-height: 2.05; color: var(--body); }
+.hb-p { margin: 0; font-size: 1.08em; line-height: 2.2; color: var(--body); }
 .hb-p .katex { font-size: 1.05em; }
 .hb-when.is-off { display: none; }
 .hb-when.is-in { animation: hb-rise .42s var(--spring, cubic-bezier(.34, 1.4, .64, 1)); }
@@ -16,8 +16,8 @@
 .hb-bad { color: var(--coral); font-weight: 400; }
 
 /* 能拨的数 */
-.hb-scrub { display: inline-flex; align-items: center; vertical-align: middle; height: 40px; margin: 0 3px; border-radius: 999px; background: rgb(var(--yellow-rgb) / 0.14); border: 1px solid rgb(var(--yellow-rgb) / 0.45); touch-action: none; user-select: none; -webkit-user-select: none; }
-.hb-scrub button { width: 40px; height: 40px; border: 0; background: none; color: var(--yellow); font: 600 20px/1 var(--sans); cursor: pointer; border-radius: 999px; }
+.hb-scrub { display: inline-flex; align-items: center; vertical-align: middle; height: 44px; margin: 0 3px; border-radius: 999px; background: rgb(var(--yellow-rgb) / 0.14); border: 1px solid rgb(var(--yellow-rgb) / 0.45); touch-action: none; user-select: none; -webkit-user-select: none; }
+.hb-scrub button { width: 44px; height: 44px; border: 0; background: none; color: var(--yellow); font: 600 20px/1 var(--sans); cursor: pointer; border-radius: 999px; }
 .hb-scrub button:active { transform: scale(.88); }
 .hb-scrub button:disabled { opacity: .3; }
 .hb-n { min-width: 1.8em; text-align: center; font: 700 19px/1 var(--sans); color: var(--yellow); cursor: ew-resize; font-variant-numeric: tabular-nums; }
@@ -26,16 +26,16 @@
 
 /* 空和选择 */
 .hb-blank { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; margin: 0 3px; }
-.hb-blank input { width: 5.4em; height: 40px; border-radius: 10px; border: 1px solid rgb(var(--chalk-rgb) / 0.22); background: rgb(var(--chalk-rgb) / 0.06); color: var(--chalk); font: 600 16px var(--sans); text-align: center; padding: 0 6px; }
+.hb-blank input { width: 5.4em; height: 44px; border-radius: 10px; border: 1px solid rgb(var(--chalk-rgb) / 0.22); background: rgb(var(--chalk-rgb) / 0.06); color: var(--chalk); font: 600 16px var(--sans); text-align: center; padding: 0 6px; }
 .hb-blank input:focus { outline: none; border-color: var(--yellow); box-shadow: 0 0 0 3px rgb(var(--yellow-rgb) / 0.22); }
-.hb-blank button { height: 40px; min-width: 48px; border-radius: 10px; border: 0; background: var(--yellow); color: var(--accent-ink, var(--board)); font: 600 15px var(--sans); cursor: pointer; }
+.hb-blank button { height: 44px; min-width: 52px; border-radius: 10px; border: 0; background: var(--yellow); color: var(--accent-ink, var(--board)); font: 600 15px var(--sans); cursor: pointer; }
 .hb-blank.is-ok input { border-color: var(--green); color: var(--green); background: rgb(var(--green-rgb) / 0.1); }
 .hb-blank.is-ok button { background: var(--green); }
 .hb-blank.is-bad input { border-color: var(--coral); animation: hb-shake .35s; }
 .hb-note { font-size: 13px; color: var(--muted); }
 @keyframes hb-shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 .hb-choice { display: inline-flex; flex-wrap: wrap; gap: 6px; vertical-align: middle; margin: 0 3px; }
-.hb-choice button { min-height: 40px; padding: 0 15px; border-radius: 999px; border: 1px solid rgb(var(--chalk-rgb) / 0.22); background: rgb(var(--chalk-rgb) / 0.05); color: var(--chalk); font: 15px var(--sans); cursor: pointer; }
+.hb-choice button { min-height: 44px; padding: 0 15px; border-radius: 999px; border: 1px solid rgb(var(--chalk-rgb) / 0.22); background: rgb(var(--chalk-rgb) / 0.05); color: var(--chalk); font: 15px var(--sans); cursor: pointer; }
 .hb-choice button:active { transform: scale(.96); }
 .hb-choice button.is-ok { border-color: var(--green); color: var(--green); background: rgb(var(--green-rgb) / 0.12); font-weight: 600; }
 .hb-choice button.is-bad { border-color: var(--coral); color: var(--coral); text-decoration: line-through; }
@@ -92,7 +92,7 @@
 .hb-past .hb-p { font-size: .95em; line-height: 1.85; }
 .hb-past .hb-turn.is-old { display: none; }
 .hb-past.is-all .hb-turn.is-old { display: grid; }
-.hb-now .hb-p { font-size: 1.22em; line-height: 2.05; }
+.hb-now .hb-p { font-size: 1.22em; line-height: 2.2; }
 .hb-now .hb-turn.is-in > :not(.hb-echo) { animation: hb-rise .4s var(--spring, ease-out); }
 .hb-stage:empty, .hb-past:empty { display: none; }
 .hb-echo { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
@@ -112,3 +112,6 @@ body.class-talk .ink-fab, body.class-talk .la-tray { display: none !important; }
 .hb-board.is-readonly input { opacity: .8; }
 /* 边写边显示的预览：还没核验、没查过，画不出来的行先不露（写错了会退回去重写） */
 .hb-board.is-streaming .hb-err, .hb-board.is-streaming .hb-bad { display: none; }
+/* 预览里新写的这一轮（当前一问那一框）还点不了：没核验，可能整轮作废；作答了也没有那道题（课堂的 onTalkAction 也会丢掉） */
+.hb-board.is-streaming .hb-now { pointer-events: none; }
+.hb-board.is-streaming .hb-now input { opacity: .8; }

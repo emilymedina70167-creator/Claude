@@ -52,7 +52,7 @@ import { bandsOf, layoutText } from './canvas.js';
 import { askMessage, matchWhy, spotText, whyShownText } from './ask.js';
 import { createAskHere } from './askhere.js';
 // 一问一答的课（kind: talk，docs/talk-impl.md）：活板就是一段 steps（id 是 hb），老师每一轮写的几行接在它后面
-import { HB_ID, hbFence, hbSource, lineCount, talkLines, newErrors, rewriteText, recordId, parseRecordId, talkStateText, talkMeta } from '../huoban/talk.js';
+import { HB_ID, hbFence, hbSource, lineCount, talkLines, talkOps, newErrors, rewriteText, recordId, parseRecordId, talkStateText, talkMeta } from '../huoban/talk.js';
 import { applyOps } from '../huoban/lang.js';
 import { checkText } from '../huoban/check.js';
 import { TalkBoard } from '../huoban/talkview.js';
@@ -63,6 +63,7 @@ export const MODEL = 'claude-opus-5-5';
 export const TEACH = { model: MODEL, effort: 'high', modelTier: 'complex' };
 const DEBOUNCE = 1500;
 const MAX_REWRITES = 2;
+const GESTURE_WAIT = 4000; // 一问一答：这一轮写完时学生还按着板，最多等这么久再画
 const MAX_ROUNDS = 6; // 一次学生发言最多连着几轮（重写、看手写原图）；防止意外的死循环
 const TURN_TEXT_MAX = 200 * 1024; // 数据库一个文档最多 256 KiB
 const pad6 = (n) => String(n).padStart(6, '0');
@@ -208,7 +209,7 @@ export async function renderClass(root, meta, desk = null) {
   const dropWhys = (segId, seq) => { for (const [k, v] of whySeg) if (v.seg === segId && v.seq < seq) { whys.delete(k); whySeg.delete(k); } };
   // —— 一问一答（TALK）：活板是 id 为 hb 的那一段，画在它那块板（hbPage）上；控制器从段里拿 TalkBoard 的实例 ——
   let hbPage = 0;
-  let hbErrs = []; // 上一次画成功的活板上已经有的写法错误：这一轮只看新冒出来的
+  let hbMemoRan = false; // 写错退回的那一轮已经执行过 memo 块：重写的那一轮不再执行（talk.js 的 talkOps）
   const toldChecks = new Set(); // 告诉过老师的检查提醒（同一条不每轮重说）
   let talkInfo = null; // 正在收这一轮画的时候页面替老师找的例子（finishTalk 里写进提醒）
   let closingDraft = false; // 正在写下课小结：草稿照普通的预览，不往活板上画
@@ -1135,7 +1136,6 @@ export async function renderClass(root, meta, desk = null) {
     const mine = recs.filter((r) => r.source === 'record' && r.type === 'huoban');
     try {
       hb.restoreFrom({ src: hbSource(seg.md), bounds: seg.bounds, echo: seg.echo, meta: seg.meta, finds: seg.finds, t0s: seg.t0s }, mine);
-      hbErrs = hbErrors(hb).errs;
     } catch (e) {
       console.error(e);
       reportError(e, { what: '活板没画回来', path: `sessions/${desk?.sid || ''}` });
@@ -1185,6 +1185,8 @@ export async function renderClass(root, meta, desk = null) {
     if (a.kind === 'info') { talkNote(String(a.text || '').replace('页面替老师', '页面替你')); return; }
     const hb = hbBoard();
     if (!hb) return;
+    // 边写边显示的预览里新写的那几行还没核验（这一轮可能作废、同一行号重写成别的题）：那里的作答不算（画面上也点不了）
+    if (stream?.talk && Number.isFinite(a.n) && a.n > lineCount(stream.hbBase)) return;
     const turn = Number.isFinite(a.n) ? hb.turnOf(a.n) : hb.cur;
     const box = hb.el.querySelector(`.hb-turn[data-t="${turn}"]`) || null;
     if (a.kind === 'explore') {
@@ -1219,7 +1221,8 @@ export async function renderClass(root, meta, desk = null) {
     try { next = applyOps(stream.hbBase, lines.join('\n')); } catch { return; }
     try {
       // is-streaming：还没核验、还没查过的预览，画不出来的行先不露红框（写错了核验以后会退回去重写，学生不该看到）
-      if (hb) { hb.el.classList.add('is-streaming'); hb.show(next, [...stream.hbBounds, lineCount(next)], { quiet: true }); }
+      // preview：不改学生的作答状态（set 改了数，空也先不重开），作废了退回去原样
+      if (hb) { hb.el.classList.add('is-streaming'); hb.show(next, [...stream.hbBounds, lineCount(next)], { quiet: true, preview: true }); }
       else if (draft) {
         if (!draft.preview) {
           const box = document.createElement('div');
@@ -1228,7 +1231,7 @@ export async function renderClass(root, meta, desk = null) {
           draft.preview = new TalkBoard(box);
           draft.preview.el.classList.add('is-streaming');
         }
-        draft.preview.show(next, [lineCount(next)], { quiet: true });
+        draft.preview.show(next, [lineCount(next)], { quiet: true, preview: true });
       }
     } catch (e) { console.warn('活板的预览没画出来', e); return; }
     scrollToNow(hb);
@@ -1264,19 +1267,23 @@ export async function renderClass(root, meta, desk = null) {
   }
 
   // 执行一问一答的一轮（finishTurn 的 TALK 分支）：老师写的几行接到活板上；有新冒出来的写法错误就退回上一轮、让它整轮重写。
-  // 返回 { retry, asks, notes, kinds, whole }，和 finishTurn 一样交给 converse
-  function finishTalk(res, toolCalls = [], { cost = undefined } = {}) {
+  // rewriting：这一轮是在重写上一次写错的一轮。返回 { retry, asks, notes, kinds, whole }，和 finishTurn 一样交给 converse
+  function finishTalk(res, toolCalls = [], { cost = undefined, rewriting = false } = {}) {
     const t = talkLines(res.text, { final: true });
     const notes = [...t.notes];
     let lines = t.lines;
     if (res.truncated && lines.length) { lines = lines.slice(0, -1); notes.push('这一轮太长被截断了：最后一行没用，下一轮写短一点。'); }
     turnMemos = [];
     opTurn = { seq: turnSeq + 1, by: mock ? 'mock' : res.modelApplied || '' };
-    // board 块只执行 memo（改记忆）和 plan（教学计划）
-    const boardOps = t.ops.map((op) => execOp(op, [], notes));
+    // board 块只执行 memo（改记忆）和 plan（教学计划）；重写的一轮里 memo 上一次已经执行过了，不再执行
+    const run = talkOps(t.ops, { rewriting, memoRan: hbMemoRan });
+    if (!rewriting) hbMemoRan = false;
+    if (run.skipped) notes.push('这一轮的 board memo 块没执行：写错退回的那一次已经记过了。');
+    const boardOps = run.ops.map((op) => execOp(op, [], notes));
     const retry = [];
     let shown = '';
     const hadHb = !!segs.get(HB_ID);
+    const where = { what: '活板', path: `sessions/${desk?.sid || ''}` };
     if (lines.length) {
       const seg = ensureHb();
       const hb = hbBoard();
@@ -1284,46 +1291,65 @@ export async function renderClass(root, meta, desk = null) {
       const base = hbSource(seg.md);
       const bounds0 = (seg.bounds || []).slice();
       let next = null;
-      try { next = applyOps(base, lines.join('\n')); } catch (e) { reportError(e, { what: '活板', path: `sessions/${desk?.sid || ''}` }); }
-      if (next !== null && hb) {
-        const bounds = [...bounds0, lineCount(next)];
-        talkInfo = [];
-        let now = null;
-        try {
-          hb.show(next, bounds, { quiet: true, entering: !(hadHb && lastStreamN) });
-          now = hbErrors(hb);
-        } catch (e) {
-          reportError(e, { what: '活板', path: `sessions/${desk?.sid || ''}` });
-          now = { errs: [{ n: 0, line: '', msg: `这一轮画不出来：${e?.message || e}` }], checks: [], lineOf: () => '' };
-        }
-        const info = [...streamInfo, ...talkInfo];
-        talkInfo = null;
-        const fresh = newErrors(hbErrs, now.errs);
-        if (fresh.length) {
-          // 学生不看写错的板：退回上一轮，整轮重写（同一轮最多 MAX_REWRITES 次）
-          try { hb.show(base, bounds0, { quiet: true }); } catch (e) { reportError(e, { what: '活板', path: `sessions/${desk?.sid || ''}` }); }
-          const n = (rewrites.get('hb:turn') || 0) + 1;
-          rewrites.set('hb:turn', n);
-          if (n <= MAX_REWRITES) retry.push(rewriteText(fresh));
-          else {
-            rewrites.delete('hb:turn');
-            notes.push(`这一轮重写了 ${MAX_REWRITES} 次还是有看不懂的行（${fresh.map((e) => `「${e.line.slice(0, 60)}」`).join('、')}），学生看到的还是上一轮的活板。换个更简单的写法，或者先不问这一步。`);
+      try { next = applyOps(base, lines.join('\n')); } catch (e) { reportError(e, where); }
+      if (hb) {
+        // 核验前存一份学生的作答状态：这一轮写错退回去时放回去（正式画会按新的数重开空，退回了就不该重开）
+        const work = hb.saveWork();
+        const t0keep = hb.t0s.slice();
+        // 基线：上一轮的板按学生「现在」拨到的值再量一次（学生在两轮之间拨到让旧行算不出来的值，不算老师这一轮写错）。
+        // 边写边显示时板上是预览，所以先退回上一轮再量。force：学生按着没松手也真的画（converse 已经等过一会儿）
+        let before = [];
+        try { hb.show(base, bounds0, { quiet: true, force: true }); before = hbErrors(hb).errs; } catch (e) { reportError(e, where); }
+        hb.t0s = t0keep;
+        if (next === null) hb.show(base, bounds0, { quiet: true, force: true });
+        else {
+          const bounds = [...bounds0, lineCount(next)];
+          talkInfo = [];
+          let now = null;
+          try {
+            hb.show(next, bounds, { quiet: true, force: true, entering: !(hadHb && lastStreamN) });
+            now = hbErrors(hb);
+          } catch (e) {
+            reportError(e, where);
+            now = { errs: [{ n: 0, line: '', msg: `这一轮画不出来：${e?.message || e}` }], checks: [], lineOf: () => '' };
           }
-        } else {
-          rewrites.delete('hb:turn');
-          seg.md = hbFence(next);
-          seg.bounds = bounds;
-          hb.setMeta(bounds.length - 1, talkMeta({ ms: cost?.ms, mock: !!mock }));
-          hbErrs = now.errs;
-          saveHb();
-          // 检查的提醒（答案已经写在板上、分不开两种想法……）：没告诉过的跟着下一轮给老师
-          const newChecks = now.checks.filter((c) => { const k = `${c.code}|${now.lineOf(c.n)}|${String(c.msg).replace(/^第 \d+ 行[:：]\s*/, '')}`; if (toldChecks.has(k)) return false; toldChecks.add(k); return true; });
-          if (newChecks.length) notes.push(`页面检查了这一轮的活板：\n${checkText(newChecks)}`);
-          notes.push(...info);
-          shown = (hb.el.querySelector('.hb-now')?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 2000);
+          const info = [...streamInfo, ...talkInfo];
+          talkInfo = null;
+          const fresh = newErrors(before, now.errs);
+          if (fresh.length) {
+            // 学生不看写错的板：退回上一轮（作答状态放回去、新那几行的状态不要），整轮重写（同一轮最多 MAX_REWRITES 次）
+            try { hb.loadWork(work); hb.dropAfter(lineCount(base)); hb.show(base, bounds0, { quiet: true, force: true }); } catch (e) { reportError(e, where); }
+            // memo 块照常执行了（改的是记忆，不跟着活板退回）：重写时告诉它别再写
+            if (turnMemos.length) hbMemoRan = true;
+            const n = (rewrites.get('hb:turn') || 0) + 1;
+            rewrites.set('hb:turn', n);
+            if (n <= MAX_REWRITES) retry.push(rewriteText(fresh, { memoRan: hbMemoRan }));
+            else {
+              rewrites.delete('hb:turn');
+              hbMemoRan = false;
+              notes.push(`这一轮重写了 ${MAX_REWRITES} 次还是有看不懂的行（${fresh.map((e) => `「${e.line.slice(0, 60)}」`).join('、')}），学生看到的还是上一轮的活板。换个更简单的写法，或者先不问这一步。`);
+            }
+          } else {
+            rewrites.delete('hb:turn');
+            hbMemoRan = false;
+            seg.md = hbFence(next);
+            seg.bounds = bounds;
+            hb.setMeta(bounds.length - 1, talkMeta({ ms: cost?.ms, mock: !!mock }));
+            saveHb();
+            // 检查的提醒（答案已经写在板上、分不开两种想法……）：没告诉过的跟着下一轮给老师
+            const newChecks = now.checks.filter((c) => { const k = `${c.code}|${now.lineOf(c.n)}|${String(c.msg).replace(/^第 \d+ 行[:：]\s*/, '')}`; if (toldChecks.has(k)) return false; toldChecks.add(k); return true; });
+            if (newChecks.length) notes.push(`页面检查了这一轮的活板：\n${checkText(newChecks)}`);
+            notes.push(...info);
+            // 学生看到的这一轮的字：按源码拼（活的值写成现在的值），守卫拿它核老师引的原话
+            try { shown = hb.turnText(bounds.length - 1).replace(/[ \t]+/g, ' ').trim().slice(0, 2000); } catch { shown = ''; }
+          }
         }
       }
-    } else if (!t.ops.length) notes.push('这一轮没写活板的行：学生什么也没看到。');
+    } else {
+      // 边写边显示画上去了、最后却没有一行算数（截断掉了最后一行）：板上的预览退回去
+      if (lastStreamN && hadHb) { const seg = segs.get(HB_ID), hb = hbBoard(); if (seg && hb) { try { hb.dropAfter(lineCount(hbSource(seg.md))); hb.show(hbSource(seg.md), (seg.bounds || []).slice(), { quiet: true, force: true }); } catch (e) { reportError(e, where); } } }
+      if (!t.ops.length) notes.push('这一轮没写活板的行：学生什么也没看到。');
+    }
     lastStreamN = 0;
     streamInfo = [];
     refresh();
@@ -1782,10 +1808,12 @@ export async function renderClass(root, meta, desk = null) {
       }
       budgetLevel = 0;
       saveNotes(staged);
+      // 一问一答：学生正按着板（拨、拖、按着按钮）就先等松手（最多 GESTURE_WAIT），核验这一轮要真的画出来量一遍，硬画会打断手势
+      if (TALK) { const hb = hbBoard(); if (hb?.gesture) await hb.whenIdle(GESTURE_WAIT); }
       streamPage = dropPreviews();
       committing = true;
       let out;
-      try { out = TALK ? finishTalk(res, staged.calls, { cost: cost(why) }) : finishTurn(res, staged.calls, { keepTalk: rewriting, cost: cost(why) }); } finally { committing = false; streamPage = null; }
+      try { out = TALK ? finishTalk(res, staged.calls, { cost: cost(why), rewriting }) : finishTurn(res, staged.calls, { keepTalk: rewriting, cost: cost(why) }); } finally { committing = false; streamPage = null; }
       // 要它重写的段、它用 view_handwriting 要看的原图：再要一轮
       const wantImages = staged.images.length > 0 && !followed;
       if (round === MAX_ROUNDS - 1 && (out.retry.length || wantImages)) {
@@ -2171,7 +2199,11 @@ export async function renderClass(root, meta, desk = null) {
       const seg = segs.get(HB_ID);
       const hb = hbBoard();
       hb?.el.classList.remove('is-streaming');
-      if (rollback && seg && hb && s.n) { try { hb.show(hbSource(seg.md), (seg.bounds || []).slice(), { quiet: true }); } catch (e) { reportError(e, { what: '活板', path: `sessions/${desk?.sid || ''}` }); } }
+      // 退回：预览新写的那几行的作答状态也不要（那几行不在板上了，下一轮同一行号是另一道题）；预览没改过上面几行的状态，照原样
+      if (rollback && seg && hb && s.n) {
+        const base = hbSource(seg.md);
+        try { hb.dropAfter(lineCount(base)); hb.show(base, (seg.bounds || []).slice(), { quiet: true }); } catch (e) { reportError(e, { what: '活板', path: `sessions/${desk?.sid || ''}` }); }
+      }
       return null;
     }
     for (const seg of stream.list) { dropScenesOf(seg.sec); seg.sec.remove(); segs.delete(seg.id); }

@@ -361,6 +361,104 @@ const SUITES = {
     return t;
   },
 
+  // 一问一答的几条边（复核员找到的）：作废的一轮退回去，学生答对的空还是答对的（预览不改作答状态）；
+  // 学生拨到让旧行算不出来的值，老师下一轮写对了不被退回；写错退回带 memo 块的一轮，重写时原样再带，复现组只升一档；
+  // 存下的 shown 是这一轮的字（不是上一轮、不带 KaTeX 的重复）；活板的控件 ≥ 44px
+  async talkfix(browser) {
+    const t = await seeded(browser);
+    await t.page.click('.dk-form-b[data-form="talk"]'); await sleep(300);
+    await t.page.click('.dk-class .dk-new');
+    const sid = await t.inClass();
+    const idle = (what) => t.waitFor(async () => !(await t.page.evaluate(() => window.LAKit?.classroom?.busy)), { timeout: 30000, what });
+    const turns = async () => Object.entries(await t.db()).filter(([k]) => k.startsWith(`sessions/${sid}/class_turns/`)).map(([, v]) => v).sort((a, b) => a.seq - b.seq);
+    const say = async (x) => { await t.page.fill('.cb-field textarea', x); await t.page.click('.cb-send'); await sleep(400); };
+    const fallback = (on) => t.page.evaluate((v) => { const c = document.querySelector('.dev-fallback'); c.checked = v; c.dispatchEvent(new Event('change')); }, on);
+    await t.page.click('button:has-text("开始上课")');
+    await t.waitFor(() => t.page.$('.hb-board .hb-now .hb-blank input'), { timeout: 30000, what: '第一问' });
+    await idle('老师写完第一问');
+    // 触控目标
+    const small = await t.page.evaluate(() => [...document.querySelectorAll('.hb-board .hb-scrub button, .hb-board .hb-blank input, .hb-board .hb-blank button')].map((x) => [x.className || x.tagName, x.getBoundingClientRect()]).filter(([, r]) => r.width && (r.height < 43.5 || r.width < 43.5)).map(([c, r]) => `${c} ${Math.round(r.width)}×${Math.round(r.height)}`));
+    check(!small.length, `活板上有控件不到 44px：${small.join('、')}`);
+    // 1. 作废的一轮（Opus 5.5 用不了）：预览里 set 改了页框数，退回去以后答对的空还是答对的
+    await fallback(true);
+    const blank = '.hb-board .hb-blank';
+    await t.page.fill(`${blank} input`, '9'); await t.page.click(`${blank} button`);
+    await t.waitFor(async () => (await turns()).some((x) => x.kind === 'fallback'), { timeout: 30000, what: '作废的一轮' });
+    await idle('作废以后停下');
+    await sleep(500);
+    check(await t.page.$('.hb-blank.is-ok'), '这一轮作废、退回去以后，答对的空被清空了');
+    check(!(await t.text('.hb-board'))?.includes('数变了'), '这一轮作废、退回去以后，空上挂着「数变了，再算一次」');
+    const st0 = await t.page.evaluate(() => document.querySelector('.block-huoban')?._hb?.stateOf()?.blanks?.[0]);
+    check(st0 && !st0.reopened && st0.id === 'L8', `作废以后活板现状里那个空记成了重开：${JSON.stringify(st0)}`);
+    await fallback(false);
+    await say('测试:除零');
+    await t.waitFor(() => t.page.$('.hb-now .hb-scrub'), { timeout: 30000, what: '能拨到 0 的那一问' });
+    await idle('老师写完能拨的那一问');
+    // 2. 老师边写边显示时学生按着「对吗」：一行行画上来不打断这一下，松手照样交上去
+    const dBlank = '.hb-now .hb-blank';
+    await t.page.fill(`${dBlank} input`, '7');
+    const dKey = await t.page.$eval(dBlank, (x) => x.dataset.key);
+    const sayNow = (x) => t.page.evaluate((v) => { const a = document.querySelector('.cb-field textarea'); a.value = v; a.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('.cb-form').requestSubmit(); }, x);
+    // 在页面里一气做完（鼠标坐标会跟着滚动、预览一行行画上来，从外面按不准）：发一句话，预览一画上来就在那个空的「对吗」上按下，
+    // 按着 1.5 秒（预览接着往上画），这期间按钮不该被换掉；松手、点击照样交上去
+    const kept = await t.page.evaluate(async ({ k, v }) => {
+      const a = document.querySelector('.cb-field textarea'); a.value = v; a.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('.cb-form').requestSubmit();
+      const t0 = Date.now();
+      while (!document.querySelector('.hb-board')?.classList.contains('is-streaming')) { if (Date.now() - t0 > 15000) return 'no-stream'; await new Promise((r) => setTimeout(r, 10)); }
+      const btn = document.querySelector(`.hb-blank[data-key="${k}"] button`);
+      const o = { bubbles: true, cancelable: true, pointerId: 9, pointerType: 'touch', isPrimary: true };
+      btn.dispatchEvent(new PointerEvent('pointerdown', o));
+      await new Promise((r) => setTimeout(r, 1500));
+      const still = btn.isConnected;
+      btn.dispatchEvent(new PointerEvent('pointerup', o));
+      if (still) btn.click();
+      return still ? 'ok' : 'replaced';
+    }, { k: dKey, v: '先等等' });
+    check(kept === 'ok', `边写边显示时按着「对吗」，按钮被重画换掉了（${kept}）：松手不算一次点击`);
+    await idle('老师写完这一轮');
+    await sleep(800);
+    const evD = (await t.docs('evidence')).filter((e) => e.session === sid && e.src === 'record' && e.value === '7');
+    check(evD.length === 1 && evD[0].ok === true, `边写边显示时按着「对吗」再松手，这次作答没记上（${evD.length} 条）`);
+    // 答对了自动发给老师：等它接着写完（下一轮是目标）
+    await t.waitFor(() => t.page.$('.hb-now .hb-goal'), { timeout: 30000, what: '答对以后老师写的下一轮（目标）' });
+    await idle('老师写完目标那一轮');
+    const goalTurn = (await turns()).filter((x) => x.role === 'claude').at(-1);
+    check(goalTurn?.shown && /页框数 3，缺页 9 次/.test(goalTurn.shown) && /目标：/.test(goalTurn.shown) && !/模拟老师 ·|对吗/.test(goalTurn.shown), `存下的 shown 不是这一轮的字：${goalTurn?.shown}`);
+    // 3. 学生拨到 0（旧行算不出来），老师下一轮写对：不退回、不要重写
+    await t.page.evaluate((k) => document.querySelector(`.hb-blank[data-key="${k}"]`).closest('.hb-p').querySelector('.hb-scrub button[aria-label="减一"]').click(), dKey);
+    await sleep(1200);
+    const lint0 = (await turns()).filter((x) => x.kind === 'lint').length;
+    const said0 = (await turns()).filter((x) => x.role === 'claude').length;
+    await say('继续');
+    await t.waitFor(async () => (await turns()).filter((x) => x.role === 'claude').length > said0, { timeout: 30000, what: '学生拨到 0 以后老师写的下一轮' });
+    await idle('老师写完下一轮');
+    check((await turns()).filter((x) => x.kind === 'lint').length === lint0, '学生把旧行拨到算不出来，老师写对的这一轮被当成写错退回了');
+    const cl = (await turns()).filter((x) => x.role === 'claude').at(-1);
+    check(cl?.shown && /想清楚了就选一个往下走/.test(cl.shown) && !/拨一拨这个数/.test(cl.shown), `学生拨到 0 以后老师写对的这一轮没收下（shown：${cl?.shown}）`);
+    // 4. 写错带 memo（写错的是只有画出来才查得到的值），学生一直按着拨数不松手：页面等一会儿就硬画出来查，照样退回、要它重写；
+    // 重写时原样再带的 memo 不再执行，复现组只升一档
+    const r0 = (await t.docs('reviews')).find((r) => r.id === 'R3');
+    const nb = await (await t.page.$('.hb-scrub .hb-n')).boundingBox();
+    await t.page.mouse.move(nb.x + nb.width / 2, nb.y + nb.height / 2);
+    await t.page.mouse.down();
+    await sayNow('测试:写错带记');
+    await sleep(7000);
+    await t.page.mouse.up();
+    await t.waitFor(async () => (await turns()).some((x) => x.kind === 'lint'), { timeout: 30000, what: '写错一行，要它重写' });
+    await t.waitFor(async () => (await turns()).filter((x) => x.role === 'claude').at(-1)?.text?.includes('我改一下'), { timeout: 30000, what: '重写的那一轮' });
+    await idle('重写完');
+    await sleep(1500);
+    const r1 = (await t.docs('reviews')).find((r) => r.id === 'R3');
+    check(r1 && r1.tier !== r0?.tier, `写错的那一轮里的 memo 没执行（R3 档位 ${r0?.tier} → ${r1?.tier}）`);
+    check(r1 && r1.tier === 7, `重写时原样再带的 memo 又执行了一次（R3 档位 ${r0?.tier} → ${r1?.tier}，应该是 7）`);
+    const fix = (await turns()).filter((x) => x.role === 'claude' && x.shown).at(-1);
+    check(fix && /2 \+ 3/.test(fix.shown) && !/2\+3=2 \+ 3/.test(fix.shown), `重写那一轮存下的 shown 不对：${fix?.shown}`);
+    // 5. 三轮以前的轮折起来，但能拨舞台上那张置换表的那一轮（拨步数 k）、有重新打开还没答的空的那一轮（拨到 0 的 d）不折
+    const fold = await t.page.evaluate(() => { const vis = (sel) => !!document.querySelector(sel)?.offsetParent; return { cur: document.querySelector('.block-huoban')?._hb?.cur, k: vis('.hb-turn[data-t="0"] .hb-scrub'), d: vis('.hb-turn[data-t="1"]'), t2: vis('.hb-turn[data-t="2"]'), more: document.querySelector('.hb-more')?.textContent || '' }; });
+    check(fold.cur >= 5 && fold.k && fold.d && !fold.t2 && /前面还有 1 轮/.test(fold.more), `折旧轮不对：${JSON.stringify(fold)}（第 0 轮能拨舞台上的图、第 1 轮有重开的空，应该看得见；第 2 轮应该折起来）`);
+    return t;
+  },
+
   // 练一练：题库里放两道挂着到期复现组的题。做完（中间写证据失败一次）结果照样算进去；
   // 另开一节做一道错的就回首页「直接下课」，复现组照样记「没过」（以前直接下课会把复现结果丢掉）
   async drill(browser) {

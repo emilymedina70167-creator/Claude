@@ -11,7 +11,7 @@ const KINDS = new Set(['answer', 'practice', 'quiz', 'stepper', 'steps', 'cloze'
 
 /** 这条作答在报告里是哪道题（和 report.js 的 itemKey 对得上） */
 export function sureKey(entry) {
-  return itemKey({ src: 'record', comp: entry?.block ?? '', q: entry?.q ?? '', title: entry?.title ?? '', detail: entry?.detail });
+  return itemKey({ src: 'record', comp: entry?.block ?? '', type: entry?.type, q: entry?.q ?? '', title: entry?.title ?? '', detail: entry?.detail });
 }
 
 /** 这条作答要不要问「有把握吗」：判出了对错、不是看答案 / 想不出来、这道题还没问过 */

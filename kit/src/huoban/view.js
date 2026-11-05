@@ -43,16 +43,58 @@ export class HuobanBoard {
     this.choices = new Map();
     this.goalsDone = new Map();
     this.src = '';
+    // 手势：拨、拖（gestureStart / gestureEnd 记次数），外加手指（笔、鼠标）按在板上的任何地方（pressed）。
+    // 按着的时候别处来的整块重画先不画：按下的那个按钮被换掉，松手就不算一次点击（老师边写边显示时每写完一行画一次）
+    this.gestureN = 0;
+    this.pressed = new Set();
+    this.waiters = [];
+    this.preview = false;
+    this.el.addEventListener('pointerdown', (e) => this.press(e), true);
   }
 
-  setSource(src, { quiet = false, check = true } = {}) {
+  get gesture() { return this.gestureN > 0 || this.pressed.size > 0; }
+
+  // 按下：等这根手指松开（window 上听，指针被别的元素捉走、手指滑出板也收得到）。松手以后的 click 还要落在原来的按钮上，所以等 click 过去再画
+  press(e) {
+    const id = e.pointerId;
+    if (this.pressed.has(id)) return;
+    this.pressed.add(id);
+    let timer = 0;
+    const release = () => {
+      clearTimeout(timer);
+      this.el.removeEventListener('click', clicked, true);
+      if (!this.pressed.delete(id)) return;
+      this.afterGesture();
+    };
+    const clicked = () => { clearTimeout(timer); setTimeout(release, 0); };
+    const up = (ev) => {
+      if (ev.pointerId !== id) return;
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+      if (ev.type === 'pointercancel') { release(); return; }
+      this.el.addEventListener('click', clicked, true);
+      timer = setTimeout(release, 150);
+    };
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+  }
+
+  /**
+   * preview：边写边显示、还没核验的预览。照画，但不改学生的作答状态（空不因为上面的数变了重新打开、目标不记做到）：
+   *   这一轮作废时退回去，学生答对的空还是答对的；核验过了正式画的那一次再按新的数重开。
+   * force：不等手势结束，马上画（课堂核验这一轮时要真的画出来、量一遍）
+   */
+  setSource(src, { quiet = false, check = true, force = false, preview = false } = {}) {
+    this.preview = !!preview;
     // 学生正按着拨、拖：这时整块重画会把手势打断（手指下的东西没了）。先把量读进来，画等手势结束（gestureEnd）
-    if (this.gesture) {
+    if (this.gesture && !force) {
       this.src = String(src);
       this.rt.load(this.src);
       this.deferred = { quiet, check };
       return;
     }
+    // 硬画：拨、拖的那个元素要被换掉了，它的松手可能再也收不到，次数清零（手指还按着的 pressed 照旧等松手）
+    if (force) { this.gestureN = 0; this.deferred = null; }
     if (this.pending) { clearTimeout(this.pending.timer); this.settle(); }
     this.src = String(src);
     this.rt.load(this.src);
@@ -71,14 +113,41 @@ export class HuobanBoard {
     try { inp.focus({ preventScroll: true }); const L = inp.value.length; inp.setSelectionRange(L, L); } catch { /* 有的输入框不让放光标 */ }
   }
 
-  gestureStart() { this.gesture = true; }
-  gestureEnd() {
-    this.gesture = false;
+  gestureStart() { this.gestureN++; }
+  gestureEnd() { this.gestureN = Math.max(0, this.gestureN - 1); this.afterGesture(); }
+  afterGesture() {
+    if (this.gesture) return;
     const d = this.deferred;
-    if (!d) return;
     this.deferred = null;
-    this.paint();
-    if (!d.quiet) this.opts.onSource?.(this.src, this.problems({ check: d.check }));
+    if (d) {
+      this.paint();
+      if (!d.quiet) this.opts.onSource?.(this.src, this.problems({ check: d.check }));
+    }
+    this.waiters.splice(0).forEach((r) => r());
+  }
+  /** 手势结束（最多等 ms 毫秒）：课堂核验这一轮之前等学生松手，免得硬画打断 */
+  whenIdle(ms = 4000) {
+    if (!this.gesture) return Promise.resolve();
+    return new Promise((r) => { this.waiters.push(r); setTimeout(r, ms); });
+  }
+
+  // —— 学生的作答状态（空、选择、目标）：课堂核验这一轮之前存一份，这一轮作废就放回去 ——
+  saveWork() {
+    return {
+      blanks: new Map([...this.blanks].map(([k, v]) => [k, { ...v }])),
+      choices: new Map([...this.choices].map(([k, v]) => [k, { ...v, picked: new Set(v.picked) }])),
+      goals: new Map(this.goalsDone),
+    };
+  }
+  /** 放回 saveWork 存的（之后要重画：画好的控件还连着旧的状态） */
+  loadWork(w) {
+    if (!w) return;
+    this.blanks = w.blanks; this.choices = w.choices; this.goalsDone = w.goals;
+  }
+  /** 第 n 行以后的作答状态不要了（退回上一轮：那几行已经不在板上，同一行号下次是另一道题） */
+  dropAfter(n) {
+    const lineOf = (k) => Number(String(k).split('#')[0]);
+    for (const m of [this.blanks, this.choices, this.goalsDone]) for (const k of [...m.keys()]) if (lineOf(k) > n) m.delete(k);
   }
 
   /** 写法错误 + 教学检查 + 画面测量：[{ n, level, code, msg }] */
@@ -263,7 +332,8 @@ export class HuobanBoard {
     return () => {
       // 上面的量变了、答案跟着变：空重新打开（算新的一道，round 加一；答错的也一样，之前的尝试是按旧的数做的）。
       // 刷新后放回来的、没记下答案的（sig 是 null）照现在的算，不重开
-      if (st.status) {
+      // 预览（还没核验的一轮）不改状态：作废了要原样退回去
+      if (st.status && !this.preview) {
         let sig; try { sig = text(this.rt.eval(sg.ast)); } catch { sig = null; }
         if (st.sig === null) st.sig = sig;
         else if (sig !== st.sig) {
@@ -318,7 +388,7 @@ export class HuobanBoard {
         let ok = false;
         try { ok = !!this.rt.eval(ln.cond); } catch { ok = false; }
         // 做到过就一直算做到了（学生再拨走也不收回）
-        if (ok && !this.goalsDone.get(id)) { this.goalsDone.set(id, true); if (!ctx.first) this.act({ kind: 'commit', sub: 'goal', n: ln.n, k: 1, ok: true, q: ln.msg, expr: ln.src, text: `做到了目标：${ln.msg}`, short: '做到了' }); }
+        if (ok && !this.goalsDone.get(id) && !this.preview) { this.goalsDone.set(id, true); if (!ctx.first) this.act({ kind: 'commit', sub: 'goal', n: ln.n, k: 1, ok: true, q: ln.msg, expr: ln.src, text: `做到了目标：${ln.msg}`, short: '做到了' }); }
         const done = !!this.goalsDone.get(id);
         el.classList.toggle('is-done', done);
         t.textContent = done ? ln.msg : '目标：还没做到';

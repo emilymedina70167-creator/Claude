@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  HB_ID, hbFence, hbSource, lineCount, talkLines, newErrors, rewriteText, recordId, parseRecordId, questionText, encValue, decValue, talkStateText, talkMeta,
+  HB_ID, hbFence, hbSource, lineCount, talkLines, talkOps, newErrors, rewriteText, recordId, parseRecordId, questionText, encValue, decValue, talkStateText, talkMeta,
 } from '../kit/src/huoban/talk.js';
 import { parseProse, applyOps } from '../kit/src/huoban/lang.js';
 import { Runtime } from '../kit/src/huoban/runtime.js';
@@ -13,6 +13,9 @@ import { buildSystem, actionTrigger, actionText, packText, talkObjectDocs, PROTO
 import { devReply } from '../kit/src/class/devteacher.js';
 import { resolveBasis } from '../kit/src/memory/memo.js';
 import { componentDocs } from '../kit/build-docs.js';
+import { itemsOf, itemKey } from '../kit/src/memory/report.js';
+import { sureKey } from '../kit/src/confidence.js';
+import { checkBoard } from '../kit/src/huoban/check.js';
 
 const DOCS = componentDocs(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8'));
 
@@ -196,4 +199,48 @@ test('模拟老师的一问一答剧本：置换表 + 一个空 → set 改块�
   assert.deepEqual(rt.board.errors, []);
   assert.equal(say('[动作] 学生点了「就这样」').kind, 'talk-more');
   assert.ok(!/[他她]/.test(conv.filter((t) => t.role === 'assistant').map((t) => t.content).join('\n')));
+});
+
+test('写错退回再重写：重写的那一轮不再执行 memo 块（上一次已经记过），plan 照常；提醒里说 memo 已经记下了', () => {
+  const ops = [{ op: 'memo', lines: ['review id=R3 result=过'] }, { op: 'plan', text: '下一步' }];
+  assert.deepEqual(talkOps(ops).ops, ops);
+  assert.deepEqual(talkOps(ops, { rewriting: true }).ops, ops); // 上一次没执行过 memo：照常执行
+  const r = talkOps(ops, { rewriting: true, memoRan: true });
+  assert.deepEqual(r.ops.map((o) => o.op), ['plan']);
+  assert.equal(r.skipped, 1);
+  assert.deepEqual(talkOps(ops, { memoRan: true }).ops, ops); // 不是重写（学生的新一轮）：照常
+  assert.match(rewriteText([{ line: '{x?}', msg: '不认识「x」' }], { memoRan: true }), /memo 块已经记下了/);
+  assert.doesNotMatch(rewriteText([{ line: '{x?}', msg: '不认识「x」' }]), /memo/);
+});
+
+test('活板的作答归题：同一个 L 编号是一道题，题面里活的值变了也不拆开（先错后对 = 改对了，不是一次对）', () => {
+  const ev = (q, ok, at) => ({ src: 'record', kind: 'answer', type: 'huoban', comp: 'L3', step: 'hb', sub: 'blank', q, ok, value: ok ? '2' : '1', at, session: 's1' });
+  const evs = [ev('现在 t = 1，det = 3；t 等于几时 det 为 0？t = □', false, 1), ev('现在 t = 2，det = 0；t 等于几时 det 为 0？t = □', true, 2)];
+  const items = itemsOf(evs);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].outcome, 'ok');
+  // 重开再答（L3#2）是另一道；别的组件照旧按题面分
+  assert.notEqual(itemKey({ ...evs[0], comp: 'L3#2' }), itemKey(evs[0]));
+  assert.equal(itemKey({ src: 'record', comp: 'L3', type: 'answer', q: '甲' }), 'L3|甲');
+  // 「有把握吗」的键和报告对得上
+  assert.equal(sureKey({ block: 'L3', type: 'huoban', q: '别的字' }), itemKey(evs[1]));
+});
+
+test('写法错误的基线按学生现在拨到的值量：学生把量拨到让旧行算不出来，老师这一轮写对了不算新错', () => {
+  // classroom.js 的 finishTalk 先把上一轮的板按现在的值画一遍、量一次，再画这一轮：这里用运行时和检查复现那两次量
+  const errsOf = (rt) => checkBoard(rt).filter((p) => p.level === 'error').map((p) => ({ line: (rt.src.split('\n')[p.n - 1] || '').trim(), msg: p.msg }));
+  const base = 'let k = 1 拨 0..4\n拨一拨：{6/k}，算 {6/k + 1?}';
+  const rt = new Runtime();
+  rt.load(base);
+  const stale = errsOf(rt); // 上一轮画成功时（k = 1）
+  assert.deepEqual(stale, []);
+  rt.setInput('k', 0);
+  rt.fresh();
+  const nowBase = errsOf(rt); // 学生拨到 0 以后再量上一轮
+  assert.ok(nowBase.length >= 1);
+  rt.load(applyOps(base, '好，换个问题：{2 + 3?}'));
+  rt.fresh();
+  const after = errsOf(rt);
+  assert.ok(newErrors(stale, after).length >= 1, '拿旧的基线比，会把老师没碰过的那一行当成新错');
+  assert.deepEqual(newErrors(nowBase, after), []);
 });

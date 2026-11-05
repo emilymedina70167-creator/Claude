@@ -78,10 +78,21 @@ export function newErrors(before = [], after = []) {
 }
 const errKey = (e) => `${String(e?.line ?? '').trim()}\u0000${String(e?.msg ?? '').replace(/^第 \d+ 行[:：]\s*/, '').trim()}`;
 
-/** 要它整轮重写时的那句提醒 */
-export function rewriteText(errs) {
+/** 要它整轮重写时的那句提醒；memoRan：这一轮的 board memo 块已经执行过了（改记忆不跟着活板退回去），重写时别再写 */
+export function rewriteText(errs, { memoRan = false } = {}) {
   const list = errs.map((e) => `「${String(e.line || '').slice(0, 120)}」${String(e.msg || '').replace(/^第 \d+ 行[:：]\s*/, '')}`);
-  return `这一轮有 ${errs.length} 行看不懂，学生看到的还是上一轮的活板：${list.join('；')}`;
+  return `这一轮有 ${errs.length} 行看不懂，学生看到的还是上一轮的活板：${list.join('；')}${memoRan ? '\n（这一轮的 board memo 块已经记下了，重写时不要再写 memo 块。）' : ''}`;
+}
+
+/**
+ * 这一轮的 board 块哪些要执行：重写写错的一轮（rewriting）时，上一次已经执行过 memo（memoRan），这次的 memo 块不再执行——
+ * 老师常把整轮原样再写一遍，同一份改动执行两次的话，复现组 result=过 这类会在升过的档位上再升一档。plan 照常（只留最新一份）。
+ * 返回 { ops（要执行的）, skipped（没执行的 memo 块有几个）}
+ */
+export function talkOps(ops = [], { rewriting = false, memoRan = false } = {}) {
+  if (!rewriting || !memoRan) return { ops: ops.slice(), skipped: 0 };
+  const keep = ops.filter((o) => o.op !== 'memo');
+  return { ops: keep, skipped: ops.length - keep.length };
 }
 
 // —— 作答记录的编号：第 12 行那一问是 L12；同一行第二个控件 L12.2；上面的数变了、同一个空重新打开再答，算新的一道 L12#2 ——

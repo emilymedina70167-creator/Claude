@@ -23,6 +23,9 @@
 // 「测试:原图」image 贴讲义原图（本地用一张模拟的）；「测试:排序」演示组件 sort（快排一次划分，先猜枢轴落在哪）+ figure play step + mark；
 // 「测试:预案」board react + add … hold（答对由页面接，不再调用；答错照常调用）；「测试:拍子」一轮分四拍（说一句、写一段、圈一下……）。
 // 「测试:守卫」学习台里：memo 块写一条对得上的、一条编原话的、一条编证据编号的、一条重复的（守卫收下 / 挂提醒 / 拒收）。
+// 一问一答的课里：「测试:写错」写一行看不懂的；「测试:写错带记」写一行算不出来的值（只有画出来才查得到）还带 memo（review R3 过），
+// 重写时原样再带（只该升一档）；
+// 「测试:除零」一个能拨到 0 的量（拨到 0 以后旧行算不出来，老师下一轮写对了不该被退回）。
 // 系统发来的「[动作] … 没有动静」（察觉卡住）→ 轻轻问一句；只带「[板书]」的消息 → 说收到了。
 
 export const DEV_LIMITS = Object.freeze({ maxPromptBytes: 262144, images: Object.freeze({ maxCount: 4, maxInputBytes: 20000000, mediaTypes: Object.freeze(['image/png', 'image/jpeg']) }) });
@@ -961,7 +964,12 @@ const TALK_STEPS = [
 function talkReply({ said, conv, isSystem }) {
   const mine = conv.filter((t) => t.role === 'assistant').map((t) => textOf(t.content));
   const lines = (a) => `${a.join('\n')}\n`;
-  if (isSystem && /看不懂/.test(said)) return { kind: 'talk-fix', text: lines(['（模拟老师）我改一下这一轮。', '先算个简单的：$2 + 3 =$ {2 + 3?}']) };
+  // 重写：老师常把整轮原样再写一遍，上一次带了 memo 块就照样再带（页面不该再执行一次）
+  const memo = ['```board memo', 'review id=R3 result=过 basis=say', '```'];
+  if (isSystem && /看不懂/.test(said)) return { kind: 'talk-fix', text: lines(['（模拟老师）我改一下这一轮。', '先算个简单的：$2 + 3 =$ {2 + 3?}', ...(mine.at(-1)?.includes('review id=R3') ? memo : [])]) };
+  if (!isSystem && /测试\s*[:：]?\s*写错带记/.test(said)) return { kind: 'talk-broken', text: lines(['（模拟老师）这一轮写错一行，还带一个 memo 块。', '这一行的值算不出来（画出来才看得出）：{6/0}', ...memo]) };
+  // 「测试:除零」：一个能拨到 0 的量；学生拨到 0 以后旧行算不出来，老师下一轮写对了不该被退回
+  if (!isSystem && /测试\s*[:：]?\s*除零/.test(said)) return { kind: 'talk', text: lines(['（模拟老师）拨一拨这个数：', 'let d = 1 拨 0..3', '6 除以 {d} 是 {6/d}，再加 1 呢？{6/d + 1?}']) };
   if (!isSystem && /测试\s*[:：]?\s*写错/.test(said)) return { kind: 'talk-broken', text: lines(['（模拟老师）这一轮故意写错一行，页面应该退回去让我重写。', '这一行用了没定义的名字：{nosuch?}']) };
   if (/不对/.test(said) && !/，对/.test(said)) return { kind: 'talk-hint', text: lines(['（模拟老师）不急。拨一拨上面的步数，一步一步数缺页的那几下：哪几步是缺页？']) };
   const next = TALK_STEPS.find((s) => !mine.some((m) => m.includes(s.mark)));
