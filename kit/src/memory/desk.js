@@ -63,7 +63,7 @@ import { createBooksView } from '../books/bookview.js';
 import { createPlanner } from '../books/planview.js';
 import { createDevAI } from '../books/devmock.js';
 import { loadBooks } from '../books/importer.js';
-import { readHistory } from '../books/textbook.js';
+import { normalizeBooks, readHistory } from '../books/textbook.js';
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
 import { renderGuided } from '../guided.js';
@@ -1518,10 +1518,26 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   if (kind === 'unit') return enterUnit(root, meta, { db, store, sid, doc, block, title, readOnly, finish });
   // 教材（books/）：这一科的书和条目，开课时读一次。资料包点名的条目全文放进资料包，别的课堂里按需取
   step('读教材');
-  const books = await within(loadBooks(db, space), 8000, { books: [], chunks: [] });
+  // 课堂拿到的是同一个对象：8 秒没读完就先开课，读完了填进去（课堂每一轮现取 desk.books），不再整节课没有教材
+  // （2026-11-05：英语书分 35 段存，一本接一本读超了 8 秒，老师说「资料包里没有书页」，要学生再传）。
+  // normalizeBooks：分段存的拼回一本、认出书页，课程地图写「书页 010–025」的块就能找到原文
+  const books = { books: [], chunks: [], loading: true };
+  books.ready = loadBooks(db, space).then((r) => {
+    Object.assign(books, normalizeBooks(r), { loading: false, failed: r.failed || [] });
+    if (r.failed?.length) reportError(new Error(`有 ${r.failed.length} 本教材没读到`), { what: '读教材', path: r.failed.join(',') });
+  }, (err) => {
+    Object.assign(books, { loading: false, failed: ['*'] });
+    reportError(err, { what: '读教材' });
+  });
+  await within(books.ready, 8000, null);
+  if (books.loading) reportError(new Error('开课时 8 秒没读完教材，先开课、接着在后台读'), { what: '读教材' });
   // 上一节同一块的课用 textbook_read 取过的教材：这节课一开始就放进「教材原文」（接着往下的几条页面也顺带放），
   // 不用开讲先取一轮——课程地图还没挂教材条目时，英语课每节都要先取（2026-11-02 三节课取了 30 次，每次多等一整轮）
-  const prevRead = !readOnly && !doc.review && books.chunks.length && !(Array.isArray(main?.chunks) && main.chunks.length) ? await within(priorReads(db, mem.sessions || [], { sid, block, books }), 5000, []) : [];
+  // 教材还没读完时在后台算，算好了放进同一个数组（课堂每一轮现取）
+  const prevRead = [];
+  const wantPrev = !readOnly && !doc.review && !(Array.isArray(main?.chunks) && main.chunks.length);
+  const fillPrev = async () => { if (wantPrev && books.chunks.length) prevRead.push(...await within(priorReads(db, mem.sessions || [], { sid, block, books }), 5000, [])); };
+  if (books.loading) books.ready.then(fillPrev).catch(() => {}); else await fillPrev();
   step('画黑板');
   if (readOnly) {
     return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {

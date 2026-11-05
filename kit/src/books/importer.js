@@ -417,11 +417,29 @@ export function modelOfPages(pages = []) {
   return [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
 }
 
-/** 学习台里某一科的书和全部条目（课堂开课时读一次；条目多，不订阅） */
-export async function loadBooks(db, space = null) {
+/**
+ * 学习台里某一科的书和全部条目（课堂开课时读一次；条目多，不订阅）。
+ * 几本同时读（以前一本接一本：英语传成 35 段，开课 8 秒没读完，整节课没有教材，2026-11-05）；
+ * 一本读不到再试一次，还不行跳过这一本、记在 failed 里（不让一本拖垮全部）
+ */
+export async function loadBooks(db, space = null, { parallel = 6 } = {}) {
   const books = docsOf(await db.collection('books').get()).filter((b) => !space || !b.space || b.space === space);
-  const chunks = [];
-  for (const b of books) chunks.push(...docsOf(await db.collection(`books/${b.id}/chunks`).get()).map((c) => ({ ...c, book: c.book || b.id })));
+  const per = new Array(books.length);
+  const failed = [];
+  let next = 0;
+  const one = async (b) => {
+    for (let k = 0; ; k++) {
+      try { return docsOf(await db.collection(`books/${b.id}/chunks`).get()).map((c) => ({ ...c, book: c.book || b.id })); }
+      catch (err) { if (k >= 1) throw err; }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(parallel, books.length) }, async () => {
+    while (next < books.length) {
+      const i = next++;
+      try { per[i] = await one(books[i]); } catch { per[i] = []; failed.push(books[i].id); }
+    }
+  }));
+  const chunks = per.flat();
   chunks.sort((a, b) => (a.book === b.book ? (a.seq || 0) - (b.seq || 0) : String(a.book).localeCompare(String(b.book), undefined, { numeric: true })));
-  return { books, chunks };
+  return failed.length ? { books, chunks, failed } : { books, chunks };
 }

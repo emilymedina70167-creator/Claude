@@ -7,7 +7,7 @@ import { toast } from '../record.js';
 import { assertWrite, toDate, dueList } from '../memory/schema.js';
 import { mapPrompt, parseMap, mapDoc, prepPrompt, parsePrep, parsePages, openTodos } from './plan.js';
 import { loadBooks } from './importer.js';
-import { blockChunks, chunkLine } from './textbook.js';
+import { blockChunks, chunkLine, chunksByPages, normalizeBooks } from './textbook.js';
 import { memoryDigest } from '../memory/digest.js';
 import { prefixOf, packIds, subjectOf, sharedFor, spaceOfId, filterSpace, COURSES } from '../memory/space.js';
 import { activeLessons } from '../memory/memo.js';
@@ -95,11 +95,13 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     const data = getData();
     const block = data.curriculum.find((b) => b.id === blockId);
     if (!block) throw new Error(`课程地图里没有 ${blockId}`);
-    const { books, chunks } = await loadBooks(db, sp);
-    // 这一块挂着的条目，加上我写的教材页范围里的（课程地图还没挂好、或者想按书页备的时候）
+    // 分段存的书拼回一本、认出书页（和课堂同一套）：课程地图写了书页的块不挂条目也找得到
+    const { books, chunks } = normalizeBooks(await loadBooks(db, sp));
+    // 这一块挂着的条目，加上我写的教材页范围里的（课程地图还没挂好、或者想按书页备的时候）：认得出书页的按书页，认不出的按这份文件的页
     const range = parsePages(pages);
-    const byPage = range ? chunks.filter((c) => Number(c.page) >= range[0] && Number(c.page) <= range[1]) : [];
-    const material = [...new Map([...blockChunks(block, chunks), ...byPage].map((c) => [c.id, c])).values()].sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    const printed = range ? chunksByPages([range], chunks) : [];
+    const byPage = range ? (printed.length ? printed : chunks.filter((c) => Number(c.page) >= range[0] && Number(c.page) <= range[1])) : [];
+    const material = [...new Map([...blockChunks(block, chunks), ...byPage].map((c) => [c.id, c])).values()].sort((a, b) => (a.vol === b.vol ? (a.vseq || 0) - (b.vseq || 0) : String(a.vol).localeCompare(String(b.vol))));
     const subject = subjectOf(blockId);
     const today = toDate(Date.now());
     // 记忆：和课堂里带的同一份（全文 + 目录）；规则：全部（备课和资料包的规矩是给对话里的 Claude 的，现在备课的就是它的活）

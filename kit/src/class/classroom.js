@@ -315,14 +315,21 @@ export async function renderClass(root, meta, desk = null) {
   }
   function packForPrompt(tools, room = 0) {
     const tb = textbookNow(tools, room);
-    if (!tb.textbook && !tb.catalog && !earlier) return pack;
+    // 教材还在后台读 / 没读到：明说，免得老师以为学生没传、让学生再传（2026-11-05）
+    const bookNote = desk?.books?.loading ? '页面还在读学习台里的教材（学生已经传好了），下一轮就放进「教材原文」。这一轮先别讲要照书讲的内容，也不要让学生传书。'
+      : desk?.books?.failed?.length && !desk.books.chunks?.length ? '这节课页面没读到学习台里的教材（网络问题，学生已经传好了）：不要让学生传书，请学生刷新页面再进这节课。'
+        : '';
+    if (!tb.textbook && !tb.catalog && !earlier && !bookNote) return pack;
     const main = { ...(pack.main || {}) };
+    if (bookNote) main['教材'] = bookNote;
     if (tb.textbook) main.textbook = [main.textbook, tb.textbook].filter((x) => x && (typeof x !== 'string' || x.trim())).map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join('\n\n');
     if (tb.catalog) main['教材目录（按需取）'] = tb.catalog;
     if (earlier) main[EARLIER_LABEL] = earlier;
     return { ...pack, main };
   }
   syncPackImages();
+  // 教材是开课以后才读完的（desk.js 8 秒没读完先开课）：读完了把点名条目的原页图补上
+  desk?.books?.ready?.then?.(() => syncPackImages()).catch(() => {});
   // 以前的课：开课时页面先取好（和 memory_read 取 sessions 给的一样），放进资料包，第一轮不用先取一整轮再开讲
   const EARLIER_LABEL = '以前的课（页面开课时替你取好的，和 memory_read 取 sessions 给的一样，不用再取）';
   // 记忆库是订阅着读进来的，刚开课时可能还没到：开课 2 秒后、或者第一次调用时再挑（只挑一次）
