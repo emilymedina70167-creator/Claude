@@ -208,6 +208,26 @@ const SUITES = {
   },
 
   // 要想起来的：评分写失败一次再点，只记一条证据；第一张写「第一次想」；评完数量归零；评分途中点「先到这」不再翻出下一张
+  // 410 分的进度（score.js）：首页那张卡、掌握一变数字跟着变、点开面板、关上
+  async score(browser) {
+    const t = await seeded(browser);
+    const num = async () => Number((await t.text('.dk-score-n b')) || NaN);
+    const n0 = await t.waitFor(async () => { const n = await num(); return Number.isFinite(n) ? n : null; }, { what: '首页的 410 卡画出来' });
+    check((await t.text('.dk-score'))?.includes('410'), '410 卡上没写目标');
+    // 一块写成复现通过 30 天那档（替身数据库直接放进去，刷新一下读到）：分跟着涨
+    const db = await t.db();
+    await plant(t, { 'mastery/L2.2.2': { ...(db['mastery/L2.2.2'] || {}), state: '复现通过', tier: 30 } });
+    await t.page.reload(); await sleep(1500);
+    const n1 = await t.waitFor(async () => { const n = await num(); return n > n0 ? n : null; }, { what: '掌握升档以后 410 卡上的分涨了' });
+    check(n1 > n0, `分没涨：${n0} → ${n1}`);
+    await t.page.click('.dk-score-btn'); await sleep(900);
+    check(await t.page.$('.fl-panel .dk-sc-how'), '点 410 卡没出面板（或面板里没有「怎么算的」）');
+    check((await t.text('.fl-panel'))?.includes('学习台里还没有这一部分'), '面板里没标出学习台里还没有的部分');
+    await t.page.click('.fl-close'); await sleep(800);
+    check(!(await t.page.$('.fl-panel')), '410 的面板关不上');
+    return t;
+  },
+
   async recall(browser) {
     const t = await seeded(browser);
     // 首页的数字会往上滚（feel.js 的 rollNumber），滚的那一下字里有新旧两个数：等它停下来再读
