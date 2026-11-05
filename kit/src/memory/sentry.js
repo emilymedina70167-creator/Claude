@@ -87,6 +87,8 @@ export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now
   // 1. 没收尾的课：一节课堂下了课（或挂着三小时没动静）却没有课堂 Claude 写的小结
   for (const s of get('sessions')) {
     if (kindOf(s) !== 'class' || s.summary || obs.some((o) => o.session === s.id && o.kind === 'summary')) continue;
+    // 教研室补写的小结还暂存着（等我在「管理」里放行）：不再让它写一份
+    if (get('pending').some((p) => p?.status === 'held' && p.coll === 'observations' && p.data?.kind === 'summary' && p.session === s.id)) continue;
     const quiet = s.status === 'closed' || now - lastActivity(s, get('evidence')) > 3 * 3600 * 1000;
     const real = (Number(s.report?.items) || 0) > 0 || (Number(s.report?.activeMs) || 0) > 5 * 60000;
     if (!quiet || !real) continue;

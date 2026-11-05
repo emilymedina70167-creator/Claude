@@ -179,15 +179,17 @@ export function guardCandidate(cand, ctx = {}) {
     const prescriptive = coll === 'debrief' && (doc.advice || doc.q || doc.what);
     // 这一条挂着的记忆（归纳守则的 slips=、挂的错题、about=、依据里的记忆编号）里的话也算出处：
     // 下课归纳守则时引的是以前别的课记的失误原文，那几句本来就不在这节课的记录里
-    const refIds = new Set([...list(doc.slips), ...list(doc.errors), ...list(doc.about), ...list(doc.weakness), ...list(cand.basis), ...list(doc.basis)].map(String));
-    const refAll = refIds.size ? ['slips', 'errors', 'weaknesses', 'observations', 'lessons', 'reviews'].flatMap((c) => get(c).filter((d) => refIds.has(String(d.id))).map((d) => normText(textOf(c, d)))).join('\n') : '';
+    // 只认失误（它们的原文本来就是别的课当场记的），不认 Claude 自己写的弱点、错题、观察——不然编的原话挂在一条自己写的记录上就混过去了
+    const refIds = new Set([...list(doc.slips), ...list(cand.basis), ...list(doc.basis)].map(String).filter((x) => /^S-/.test(x)));
+    const refAll = refIds.size ? get('slips').filter((d) => d && refIds.has(String(d.id))).map((d) => normText(textOf('slips', d))).join('\n') : '';
     for (const q of findQuotes(text)) {
       if (!q.cited || (prescriptive && !(q.adjacent && q.turn != null))) continue;
       // 原话中间省略了一段（「cat with owner … operant conditioning」）：每一截都要找得到
       const pieces = q.quote.split(/…+|\.{3,}/).map(normText).filter((x) => x.length >= 2);
       if (!pieces.length) continue;
       const turnText = q.turn != null ? corpus.bySeq.get(q.turn) : null;
-      if (pieces.every((x) => turnText?.includes(x) || corpus.all.includes(x) || refAll.includes(x))) continue;
+      // 指着这节课的第几轮（#12 学生说「…」）就只认这节课的记录；挂着的失误原文只给没写轮次的引号用
+      if (pieces.every((x) => turnText?.includes(x) || corpus.all.includes(x) || (q.turn == null && refAll.includes(x)))) continue;
       // 一字不差找不到：大体对得上（照抄时漏了几个字、换了标点）只算提醒里的轻的
       const close = containment(q.quote, corpus.all) >= 0.85;
       // 大体对得上（缩写了几个字、换了标点）只记一笔；找不到才是提醒

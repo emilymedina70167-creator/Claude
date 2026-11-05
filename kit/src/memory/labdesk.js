@@ -64,7 +64,8 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
 
   /** 工作单变了（runSentry）：照它把单子同步好。收件箱第一遍做完再拼（别把教研室刚回答的那张单子先删了） */
   async function sync(items) {
-    if (syncing) { again = items; return; }
+    // 收件箱正在并：并完再拼（并进来的会改记忆、改单子的材料，先拼的话还没并的回答就对不上了）
+    if (syncing || inboxBusy) { again = items; return; }
     syncing = true;
     try {
       await Promise.race([firstDone, new Promise((r) => setTimeout(r, 8000))]);
@@ -82,7 +83,7 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
         let got = null;
         try { got = await build(it); } catch (err) { console.warn('教研室的单子没拼成', id, err?.message || err); }
         if (!got) { empty.add(`${id}|${src}`); continue; }
-        if (bytesOf(got.prompt) > BRIEF_MAX) { reportError(`教研室的单子 ${id} 太大（${Math.round(bytesOf(got.prompt) / 1024)} KB），没写`, { what: '教研室', soft: true }); empty.add(`${id}|${src}`); continue; }
+        if (bytesOf(JSON.stringify(got)) > BRIEF_MAX) { reportError(`教研室的单子 ${id} 太大（${Math.round(bytesOf(JSON.stringify(got)) / 1024)} KB），没写`, { what: '教研室', soft: true }); empty.add(`${id}|${src}`); continue; }
         assertWrite('page', 'lab_brief');
         // 一张没写成（太大被数据库拒了、网络断了）不挡着后面几张
         try { await db.doc(`lab_brief/${id}`).set(briefDoc(it, got, src)); } catch (err) { reportError(err, { what: '教研室的单子没写进去', path: `lab_brief/${id}`, soft: true }); empty.add(`${id}|${src}`); continue; }
@@ -109,12 +110,15 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
     if (inboxBusy) { inboxNext = docs; return; }
     inboxBusy = true;
     try {
-      for (const d of docs.filter((x) => !done.has(x.id)).sort((a, b) => (a.at || 0) - (b.at || 0))) {
-        done.add(d.id);
+      // 同一天重做同一张单子，教研室写的是同一个编号：按「编号 + 交的时间」认，开着的页面也收得到第二份
+      const tag = (x) => `${x.id}|${x.at || ''}`;
+      for (const d of docs.filter((x) => !done.has(tag(x))).sort((a, b) => (a.at || 0) - (b.at || 0))) {
+        done.add(tag(d));
         let r;
         try { r = await takeOne(d); } catch (err) { r = receipt({ inbox: d, result: 'error', notes: [String(err?.message || err)] }); reportError(err, { what: '教研室的回答没并进来', path: `lab_inbox/${d.id}` }); }
         assertWrite('page', 'lab_inbox_log');
-        await db.doc(`lab_inbox_log/${d.id}`).set(r).catch(() => {});
+        // 回执写成了才删收件箱那条：回执没写成，教研室就不知道这份怎么样了，留着下次再并（并过的东西都有防重复）
+        try { await db.doc(`lab_inbox_log/${d.id}`).set(r); } catch (err) { reportError(err, { what: '教研室的回执没写进去', path: `lab_inbox_log/${d.id}`, soft: true }); done.delete(tag(d)); continue; }
         await db.doc(`lab_inbox/${d.id}`).delete().catch(() => {});
         await bump(r);
       }
@@ -122,7 +126,7 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
       inboxBusy = false;
       firstInbox();
       if (docs.length) pruneLogs().then(loadLogs, loadLogs); else loadLogs();
-      if (inboxNext) { const x = inboxNext; inboxNext = null; take(x); }
+      if (inboxNext) { const x = inboxNext; inboxNext = null; take(x); } else if (again && !syncing) { const x = again; again = null; sync(x); }
     }
   }
 
@@ -156,10 +160,14 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
   async function takeBackfill(d, brief, meta) {
     const { session: sid, block, space } = brief.ctx || {};
     const got = parseBackfill(d.text, { parseOutput });
-    if (got.problems.length && !got.summary) return receipt({ inbox: d, brief, result: 'error', notes: got.problems });
+    if (got.fatal || !got.summary) return receipt({ inbox: d, brief, result: 'error', notes: got.problems });
     const cur = await db.doc(`sessions/${sid}`).get().then((s) => (s.exists ? s.data() : null)).catch(() => null);
     if (!cur) return receipt({ inbox: d, brief, result: 'stale', notes: ['这节课已经删了'] });
-    if (cur.summary) return receipt({ inbox: d, brief, result: 'stale', notes: ['这节课已经有小结了（课堂里写上了）'] });
+    // 已经有小结（课堂里写上了、上一份补写收了、或者还暂存着等我放行）：不再写第二份
+    const fresh = async (c) => docsOf(await db.collection(c).where('session', '==', sid).get().catch(() => null));
+    const hasSummary = (await fresh('observations')).some((o) => o.kind === 'summary' && o.status !== 'void');
+    const heldSummary = (await fresh('pending')).some((p) => p.status === 'held' && p.coll === 'observations' && p.data?.kind === 'summary');
+    if (cur.summary || hasSummary || heldSummary) return receipt({ inbox: d, brief, result: 'stale', notes: [heldSummary ? '这节课补写的小结还暂存着，等我在「管理」里放行' : '这节课已经有小结了'] });
     const turns = await scopeDb(db, sid).collection('class_turns').get().then((x) => x.docs.map((t) => t.data()), () => []);
     const evidence = (getData().evidence || []).filter((e) => e.session === sid);
     const corpus = buildCorpus({ turns, evidence });
@@ -182,7 +190,9 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
       } else {
         assertWrite('page', 'observations');
         await db.doc(`observations/${id}`).set(g.verdict === 'flag' ? { ...doc, guard: guardMark(g) } : doc);
-        await db.doc(`sessions/${sid}`).set({ ...cur, summary: id, backfilled: Date.now() });
+        // 写之前再读一遍这节课（复盘、归类、回来接着上的课可能刚写过），只加小结这两个字段
+        const now = await db.doc(`sessions/${sid}`).get().then((s) => (s.exists ? s.data() : null)).catch(() => null);
+        if (now && !now.summary) await db.doc(`sessions/${sid}`).set({ ...now, summary: id, backfilled: Date.now() });
         took.summary = 1;
       }
     }
@@ -193,14 +203,15 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
       held += r.rejected.filter((x) => x.held).length;
       rejected = [...rejected, ...r.rejected.filter((x) => !x.held)];
     }
-    const result = took.summary || took.memo ? (rejected.length || held ? 'partial' : 'ok') : 'error';
+    // 暂存的也算交上了（在「管理」里等我放行）：单子撤掉，不让教研室明晚再写一份
+    const result = took.summary || took.memo || held ? (rejected.length || held ? 'partial' : 'ok') : 'error';
     return receipt({ inbox: d, brief, result, took, rejected, held, notes });
   }
 
   // 出新题：每道题先看写法（lab.js 的 problemLint）、和题库里的比（twinOf），再在页面上画一遍，有写法错误的不收
   async function takeProblems(d, brief, meta) {
     const { target, block, subject } = brief.ctx || {};
-    const got = parseProblems(d.text, { brief: brief.id, block, target });
+    const got = parseProblems(d.text, { brief: brief.id, block, target, batch: Number(d.at) || Date.now() });
     const existing = (getData().drills || []).filter((x) => !String(x.id).startsWith(`d-lab-${brief.id}-`));
     const rejected = got.problems.map((p) => ({ line: '', error: p }));
     const kept = [];
@@ -226,6 +237,10 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
     host.style.cssText = 'position:fixed;left:-10000px;top:0;width:820px;visibility:hidden;pointer-events:none';
     document.body.appendChild(host);
     const before = kitSession.problems.length;
+    // 一道题单独画（练一练里也是一道一道画）：前面几道题 let 定义的量、登记的图不能借给这一道
+    const vars0 = kitSession.vars;
+    const scenes0 = new Map(kitSession.scenes);
+    kitSession.vars = {};
     // 写坏的组件 render.js 会往控制台报一次错：这里本来就是在找错（收在 session.problems 里），不让它算成页面出错
     const err0 = console.error;
     console.error = () => {};
@@ -238,6 +253,9 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
     } finally {
       console.error = err0;
       host.remove();
+      kitSession.vars = vars0;
+      kitSession.scenes.clear();
+      for (const [k, v] of scenes0) kitSession.scenes.set(k, v);
       kitSession.problems.splice(before);
     }
   }

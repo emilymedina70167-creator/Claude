@@ -194,7 +194,7 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
   // 失误：已经归纳进守则的不再带（守则里有了），只带还没归纳的，最近的在前
   const absorbed = absorbedSlips(mem.lessons);
   const slips = get('slips').filter((s) => !absorbed.has(String(s.id))).sort(byDate('date'));
-  sections.push({ coll: 'slips', head: '## 还没归纳进守则的教学失误（最近的在前；下课时并进守则）', limit: SLIPS_FULL, items: slips.map((s) => ({ key: `slips/${s.id}`, text: `- ${s.id}（${s.date || ''}，${s.by === 'class' ? '课堂里的 Claude' : '以前对话里的 Claude'}）${one(s.text, 300)}${s.lesson ? ` → ${one(s.lesson, 200)}` : ''}` })) });
+  sections.push({ coll: 'slips', head: '## 还没归纳进守则的教学失误（最近的在前；下课时并进守则）', limit: SLIPS_FULL, items: slips.map((s) => ({ key: `slips/${s.id}`, text: `- ${s.id}（${s.date || ''}，${s.by === 'class' ? '课堂里的 Claude' : s.by === 'lab' ? '课后补写的' : '以前对话里的 Claude'}）${one(s.text, 300)}${s.lesson ? ` → ${one(s.lesson, 200)}` : ''}` })) });
   // 还在等学生确认的改动（memo 写的错题、弱点、复现组、位置）：已经提过了，别再提
   const open = (Array.isArray(mem.pending) ? mem.pending : []).filter((p) => p && p.status === 'open').sort((a, b) => (a.at || 0) - (b.at || 0));
   sections.push({ coll: 'pending', head: '## 以前提的、还没写进去的改动（不用再提）', items: open.map((p) => ({ text: `- ${one(pendingTitle(p), 160)}` })) });

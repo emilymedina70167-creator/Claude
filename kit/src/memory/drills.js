@@ -28,7 +28,7 @@ export function fencesOf(md) {
   while ((m = re.exec(String(md ?? '')))) {
     const body = m[3].replace(/\n$/, '');
     const id = body.match(/^\s*id\s*[:：]\s*([\w\-.~:@+]+)\s*$/m)?.[1] || '';
-    out.push({ lang: m[2].toLowerCase(), body, id, raw: m[0] });
+    out.push({ lang: m[2].toLowerCase(), body, id, raw: m[0], fence: m[1] });
   }
   return out;
 }
@@ -41,7 +41,9 @@ export function drillId(session, comp) {
 /** 组件原文换成题库编号（写了 id 就换掉，没写就加一行） */
 export function withId(fence, id) {
   const body = /^\s*id\s*[:：]/m.test(fence.body) ? fence.body.replace(/^\s*id\s*[:：].*$/m, `id: ${id}`) : `id: ${id}\n${fence.body}`;
-  return `\`\`\`${fence.lang}\n${body}\n\`\`\``;
+  // 原来用几个反引号就用几个（组件里面还套着 ``` 的，换成三个会被截断）
+  const f = fence.fence || '```';
+  return `${f}${fence.lang}\n${body}\n${f}`;
 }
 
 // 抄不了的：图（拖一拖、看一看，判不了对错）、let（单独抄）、猜想（等 Claude 看）、代码题（太长、要跑测试，以后再说）

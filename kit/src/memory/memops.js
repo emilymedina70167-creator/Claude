@@ -67,6 +67,8 @@ export function createMemOps({ db, mem }) {
       if (!free(e) && ++n > MEMO_MAX) { rejected.push({ line: e.line, error: `一次最多记 ${MEMO_MAX} 条（归纳守则不算），这条没记：挑要紧的` }); continue; }
       const ch = planEntry(e, { mem: local, evidence, session, block, space, date });
       if (ch.error) { rejected.push({ line: e.line, error: ch.error }); continue; }
+      // 事后补写的不改「下一节从哪接」：之后可能又上过课，课堂里当场写的那条为准（单子里也说了）
+      if (author === 'lab' && ch.coll === 'position') { rejected.push({ line: e.line, error: '事后补写的不写 position（下一节怎么接写在小结里）' }); continue; }
       // 教研室事后写的（lab.js）：新加的记成它写的、标「事后补写」（守卫按这个认，页面上也看得出不是课堂当场写的）
       if (author === 'lab' && ch.op === 'add' && ch.data) ch.data = { ...ch.data, ...('by' in ch.data ? { by: 'lab' } : {}), ...(session && ['observations', 'slips', 'errors'].includes(ch.coll) ? { backfill: true } : {}) };
       if (ch.op === 'add') local[ch.coll] = [...(local[ch.coll] || []), { id: ch.target, ...(ch.data || {}) }];
@@ -141,7 +143,14 @@ export function createMemOps({ db, mem }) {
   async function release(pd0) {
     const pd = await freshPending(pd0);
     if (pd.status !== 'held') throw new Error('这条已经不是暂存的了');
-    return confirmPd({ ...pd, status: 'open', released: true });
+    const done = await confirmPd({ ...pd, status: 'open', released: true });
+    // 放行的是教研室补写的小结：这节课记上小结（工作单就不再列它，也不会再补写一份）
+    if (pd.coll === 'observations' && pd.data?.kind === 'summary' && pd.session) {
+      const ref = db.doc(`sessions/${pd.session}`);
+      const s = await ref.get().catch(() => null);
+      if (s?.exists && !s.data().summary) await ref.set({ ...s.data(), summary: String(pd.target), backfilled: Date.now() }).catch(() => {});
+    }
+    return done;
   }
   /** 不要这条暂存的 */
   async function drop(pd0) {

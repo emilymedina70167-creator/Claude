@@ -96,11 +96,14 @@ export function parseBackfill(text, { parseOutput }) {
   const memos = out.ops.filter((o) => o.op === 'memo');
   const summary = out.segments.filter((x) => x.type === 'speech').map((x) => x.text).join('\n\n').trim();
   const problems = [];
+  // memo 块没闭合：parseOutput 把整块当成了话，小结里会混进 memo 的原文、整理单一条都没有——整份不收，让教研室重写
+  const fatal = /^\s*`{3,}\s*board\b/m.test(summary);
+  if (fatal) problems.push('memo 块没闭合（结尾少了四个反引号），整份没收');
   if (summary.length < 40) problems.push('小结太短（或者没写）');
   if (!memos.length) problems.push('没有整理单（memo 块）');
   const entries = memos.flatMap((o) => o.entries || []);
   const errors = memos.flatMap((o) => o.errors || []).concat(out.rejected.map((r) => r.error));
-  return { summary, entries, errors, problems };
+  return { summary: fatal ? '' : summary, entries: fatal ? [] : entries, errors, problems, fatal };
 }
 
 /* ---------------- 出新题：复现组、好久没测的弱点 ---------------- */
@@ -156,8 +159,10 @@ ${docs}
  * 读出新题的回答：[{ n, why, md, kind, fences }]；problems：整体的问题。
  * 每道题的组件编号换成题库编号 d-lab-{单子}-{第几题}（再出一次同一张单子会盖掉同一个编号，不会越堆越多）
  */
-export function parseProblems(text, { brief = '', block = null, target = {}, at = Date.now() } = {}) {
-  const parts = String(text ?? '').replace(/\r\n?/g, '\n').split(/^===\s*题\s*(\d+)\s*$/m);
+// batch：这一份回答的时间（题号里带着，下一次再给同一组出题不会盖掉上一批：做过的题要留着算原题）
+export function parseProblems(text, { brief = '', block = null, target = {}, at = Date.now(), batch = at } = {}) {
+  // 段头「=== 题 2」后面可以跟几个字（「=== 题 2：难一点」）
+  const parts = String(text ?? '').replace(/\r\n?/g, '\n').split(/^===\s*题\s*(\d+)[^\n]*$/m);
   const out = [];
   const problems = [];
   for (let i = 1; i < parts.length; i += 2) {
@@ -169,7 +174,7 @@ export function parseProblems(text, { brief = '', block = null, target = {}, at 
     const main = fences.filter((f) => f.lang !== 'let');
     if (!main.length) { problems.push(`题 ${n}：没有组件`); continue; }
     if (main.length > 1) problems.push(`题 ${n}：一段里有 ${main.length} 个组件，只收第一个`);
-    const id = `d-lab-${brief}-${n}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120);
+    const id = `d-lab-${brief}-${Number(batch).toString(36)}-${n}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120);
     const md = [...lets.map((f) => f.raw), withId(main[0], id)].join('\n\n');
     const sp = block ? spaceOfId(String(block)) : '';
     out.push({
@@ -284,7 +289,8 @@ export function briefDoc(item, got, src, now = Date.now()) {
 export function checkReply(inbox = {}, brief = null) {
   if (!inbox.brief) return { ok: false, why: '回答里没写是哪一张单子（brief）' };
   if (!brief) return { ok: false, why: `单子 ${inbox.brief} 已经没了（这件事做完了，或者不用做了）` };
-  if (inbox.key && brief.key && inbox.key !== brief.key) return { ok: false, why: '这张单子的材料变了（学生又上了课、或者已经有人做了），按新的单子重做' };
+  if (!inbox.key) return { ok: false, why: '回答里没抄单子的 key' };
+  if (brief.key && inbox.key !== brief.key) return { ok: false, why: '这张单子的材料变了（学生又上了课、或者已经有人做了），按新的单子重做' };
   if (typeof inbox.text !== 'string' || inbox.text.trim().length < 20) return { ok: false, why: '回答是空的' };
   return { ok: true, why: '' };
 }
