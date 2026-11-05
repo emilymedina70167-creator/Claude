@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head><body>
+<title>希尔排序舞台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600&display=swap">
+<style>
+  /* 舞台的样子：照学习台的紫藤（白天水墨、晚上墨夜），整页就是一块舞台 */
+  :root {
+    --chalk-rgb: 27 34 32; --yellow-rgb: 150 112 42; --blue-rgb: 61 90 153; --pink-rgb: 161 76 106; --green-rgb: 47 122 97; --coral-rgb: 178 58 43;
+    --shade-rgb: 25 45 40; --muted: #5e6b66; --lav: #6b3a78; --orange: #9a6a3c; --card-solid: #fffffc; --brand: #4a1b52; --brand-ink: #ffffff;
+    --sans: -apple-system, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    --display: "Noto Serif SC", "Songti SC", serif;
+    --page: #f0f2ec;
+    --page-bg:
+      radial-gradient(900px 640px at -8% -12%, rgb(150 205 182 / 0.5), transparent 62%),
+      radial-gradient(820px 620px at 108% -4%, rgb(206 172 224 / 0.52), transparent 60%),
+      radial-gradient(1100px 720px at 50% 115%, rgb(232 210 158 / 0.4), transparent 62%), #f0f2ec;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --chalk-rgb: 238 242 238; --yellow-rgb: 214 178 110; --blue-rgb: 147 169 224; --pink-rgb: 227 154 181; --green-rgb: 124 194 164; --coral-rgb: 226 100 78;
+    --shade-rgb: 0 0 0; --muted: #9daaa3; --lav: #d3b0da; --orange: #d9a878; --card-solid: #222927; --brand: #e6d2ea; --brand-ink: #2a1530; --page: #151a18;
+    --page-bg:
+      radial-gradient(900px 640px at -8% -12%, rgb(70 140 118 / 0.34), transparent 62%),
+      radial-gradient(820px 620px at 108% -4%, rgb(150 100 172 / 0.34), transparent 60%),
+      radial-gradient(1100px 720px at 50% 115%, rgb(160 130 70 / 0.2), transparent 62%), #151a18;
+    color-scheme: dark;
+  } }
+  :root[data-theme="dark"] {
+    --chalk-rgb: 238 242 238; --yellow-rgb: 214 178 110; --blue-rgb: 147 169 224; --pink-rgb: 227 154 181; --green-rgb: 124 194 164; --coral-rgb: 226 100 78;
+    --shade-rgb: 0 0 0; --muted: #9daaa3; --lav: #d3b0da; --orange: #d9a878; --card-solid: #222927; --brand: #e6d2ea; --brand-ink: #2a1530; --page: #151a18;
+    --page-bg:
+      radial-gradient(900px 640px at -8% -12%, rgb(70 140 118 / 0.34), transparent 62%),
+      radial-gradient(820px 620px at 108% -4%, rgb(150 100 172 / 0.34), transparent 60%),
+      radial-gradient(1100px 720px at 50% 115%, rgb(160 130 70 / 0.2), transparent 62%), #151a18;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--page); background: var(--page-bg); background-attachment: fixed; color: rgb(var(--chalk-rgb)); overflow: hidden; }
+  #stage { position: fixed; inset: 0; }
+  #again {
+    position: fixed; z-index: 5; top: calc(env(safe-area-inset-top, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px);
+    width: 44px; height: 44px; border: 0; border-radius: 999px; background: rgb(var(--chalk-rgb) / 0.07); color: rgb(var(--chalk-rgb) / 0.7);
+    font: 20px/1 var(--sans); cursor: pointer;
+  }
+  #again:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .st-error { position: absolute; left: 16px; right: 16px; bottom: 16px; padding: 12px; border-radius: 12px; background: rgb(var(--coral-rgb) / 0.12); color: rgb(var(--coral-rgb)); font: 14px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
+</style>
+<div id="stage"></div>
+<button id="again" type="button" aria-label="从头再演一遍" title="从头再演一遍">↺</button>
+<script src="stage-demo.js"></script>
+
+</body></html>
