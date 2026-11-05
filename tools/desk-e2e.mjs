@@ -124,6 +124,18 @@ async function plant(t, docs) {
     localStorage.setItem(k, JSON.stringify(all));
   }, docs);
 }
+/** 页面开着的时候往替身数据库里放（像别的设备写的）：在同一个站点的另一页里写，开着的那页收到 storage 事件重读，不会被它手上的旧副本盖掉 */
+async function plantLive(t, docs) {
+  const p = await t.ctx.newPage();
+  await p.goto(BASE.replace('desk.html?dev', 'la-kit.js'));
+  await p.evaluate((docs) => {
+    const k = [...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).find((x) => x.startsWith('la-devdb:'));
+    const all = JSON.parse(localStorage.getItem(k));
+    Object.assign(all, docs);
+    localStorage.setItem(k, JSON.stringify(all));
+  }, docs);
+  await p.close();
+}
 const todayIn = (t) => t.page.evaluate(() => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; });
 
 function check(cond, msg) { if (!cond) throw new Error(msg); }
@@ -459,6 +471,60 @@ const SUITES = {
     const pk = (await t.db())[`sessions/${next}/pack/main`];
     check(/没收的原因：依据 ev-x/.test(pk?.carry || ''), '下一节的资料包里没有带上上一节没收的那条');
     check(!((await t.db())['meta/guard']?.carry?.math || []).length, '带过的 carry 没清掉');
+    return t;
+  },
+
+  // 云端教研室（docs/lab-plan.md）：首页照工作单拼单子 lab_brief；模拟教研室交回答 lab_inbox：
+  // 补收尾（小结 + 整理单：引对了的照收、编原话的暂存）、出新题（好的进题库、写坏的不收）、备课（写进资料包），每份都有回执
+  async lab(browser) {
+    const t = await seeded(browser);
+    const sid = 'c-20261101-1';
+    const at = Date.parse('2026-11-01T10:00:00+08:00');
+    await plant(t, {
+      [`sessions/${sid}`]: { kind: 'class', status: 'closed', date: '2026-11-01', block: 'L2.2.2', space: 'math', subject: '线性代数', title: '内积', startedAt: at, endedAt: at + 1800000, report: { items: 2, activeMs: 900000, line: '两道题' } },
+      [`sessions/${sid}/class_turns/1`]: { seq: 1, role: 'student', say: '内积算出来是一个数吗', text: '内积算出来是一个数吗', at: at + 1000, session: sid },
+      [`sessions/${sid}/class_turns/2`]: { seq: 2, role: 'claude', text: '对，是一个数。看这道题。\n\n````board new id=b1 title="内积"\n```quiz\nid: qz-b1\nq: αᵀβ 是什么\n- [x] 一个数\n- [ ] 一个矩阵\n```\n````', modelApplied: 'claude-opus-5-5', at: at + 2000, session: sid },
+      'reviews/R9': { title: '内积的形状', family: '形状', tier: 3, last: '2026-10-20', result: '过', blocks: ['L2.2.2'], log: [] },
+      'evidence/ev-e2e-lab1': { kind: 'answer', session: sid, comp: 'qz-b1', block: 'L2.2.2', ok: false, value: '一个矩阵', src: 'record', at: at + 3000, turn: 2 },
+    });
+    await t.open('manage');
+    const briefs = await t.waitFor(async () => { const b = await t.docs('lab_brief'); return b.some((x) => x.kind === 'backfill') && b.some((x) => x.kind === 'newproblems' || x.kind === 'probe') ? b : null; }, { timeout: 20000, what: '首页照工作单拼出教研室的单子（补收尾、出新题）' }).catch(async (e) => { if (process.env.E2E_DEBUG) { const all = await t.db(); console.log('WO', JSON.stringify(all['meta/workorder']?.items?.map((x) => [x.kind, x.ref])), 'BR', Object.keys(all).filter((k) => k.startsWith('lab_')), t.errors, JSON.stringify(all['meta/errors'])); } throw e; });
+    const bf = briefs.find((x) => x.kind === 'backfill' && x.ref === sid);
+    check(bf && bf.prompt.includes('内积算出来是一个数吗') && bf.prompt.includes('整理单'), '补收尾的单子里没有这节课的记录或下课的要求');
+    check(!/[他她]/.test(bf.prompt.split('### 学生的记忆')[0].replace(/「[他她]」/g, '')), '单子开头的说明里称呼学生用了他 / 她');
+    const np = briefs.find((x) => x.kind === 'newproblems' || x.kind === 'probe');
+    const pp = briefs.find((x) => x.kind === 'prep');
+    const quiz = '```quiz\nid: x\nq: 两个 3 维列向量 a、b，aᵀb 的结果是什么\n- [x] 一个数\n- [ ] 一个 3×3 矩阵\n- [ ] 一个 3 维向量\n```';
+    await plantLive(t, {
+      'lab_inbox/e2e-1': { brief: bf.id, key: bf.key, by: 'lab', model: 'claude-opus-5-5', at: Date.now(), text: '1. 这节课讲了什么：讲了内积，用了一道选择题 qz-b1。\n2. 学生哪里卡住：#1 学生问「内积算出来是一个数吗」，qz-b1 选成了一个矩阵。\n3. 哪里看起来懂了但证据不够：只做过一道。\n4. 建议下一节怎么接：先换数再测一次内积的结果是什么。\n\n````board memo\nnote text="#1 学生问「内积算出来是一个数吗」，下一节开头换数再测"\nslip text="#2 学生说「我早就背熟了」，老师没追问"\n````' },
+      'lab_inbox/e2e-2': { brief: np.id, key: np.key, by: 'lab', at: Date.now() + 1, text: `=== 题 1\n针对：内积的结果是数还是矩阵\n${quiz}\n\n=== 题 2\n针对：写坏的\n\`\`\`answer\nid: y\nq: 这道题没有答案\n\`\`\`` },
+      ...(pp ? { 'lab_inbox/e2e-3': { brief: pp.id, key: pp.key, by: 'lab', at: Date.now() + 2, text: '{"unit":"内积","goal":"会算内积、知道结果是一个数","route":"先猜再算","sequence":[{"step":1,"point":"内积的定义","how":"先让学生猜"}],"problems":[]}' } } : {}),
+      'lab_inbox/e2e-4': { brief: 'backfill-nothing', key: 'x', by: 'lab', at: Date.now() + 3, text: '这张单子不存在，应该写一条过时的回执' },
+    });
+    const logs = await t.waitFor(async () => { const l = await t.docs('lab_inbox_log'); return l.length >= (pp ? 4 : 3) ? l : null; }, { timeout: 20000, what: '学习台读完教研室的回答、写回执' }).catch(async (e) => { if (process.env.E2E_DEBUG) { const all = await t.db(); console.log('KEYS', Object.keys(all).filter((k) => k.startsWith('lab_')), JSON.stringify(Object.entries(all).filter(([k]) => k.startsWith('lab_inbox_log')).map(([k, v]) => [k, v])), t.errors, JSON.stringify(all['meta/errors'])); } throw e; });
+    check(!(await t.docs('lab_inbox')).length, '读过的回答没从收件箱删掉');
+    const r1 = logs.find((x) => x.id === 'e2e-1');
+    check(r1?.result === 'partial' && r1.took?.summary === 1 && r1.held >= 1, `补收尾的回执不对：${JSON.stringify(r1)}`);
+    const obs = await t.docs('observations');
+    const sum = obs.find((o) => o.session === sid && o.kind === 'summary');
+    check(sum?.by === 'lab' && sum.backfill && String(sum.text).startsWith('1. 这节课讲了什么'), '补写的小结没写进去、或者没标事后补写');
+    check((await t.docs('sessions')).find((x) => x.id === sid)?.summary === sum.id, '这节课没记上小结');
+    const note = obs.find((o) => o.session === sid && String(o.text).includes('下一节开头换数再测'));
+    check(note?.by === 'lab' && note.backfill && !note.guard, '引对了原话的那条应该照收（标事后补写）');
+    const held = (await t.docs('pending')).find((p) => p.status === 'held' && p.by === 'lab' && String(p.line || '').includes('早就背熟了'));
+    check(held && !(await t.docs('slips')).some((x) => String(x.text).includes('早就背熟了')), '编了原话的那条应该先暂存、不写进去');
+    const r2 = logs.find((x) => x.id === 'e2e-2');
+    check(r2?.result === 'partial' && r2.took?.drills === 1 && r2.rejected?.length === 1, `出新题的回执不对：${JSON.stringify(r2)}`);
+    const dr = (await t.docs('drills')).filter((d) => d.src === 'lab');
+    check(dr.length === 1 && dr[0].md.includes(`id: ${dr[0].id}`) && dr[0].block, '好的那道新题没进题库（或者编号没换）');
+    if (pp) {
+      check(logs.find((x) => x.id === 'e2e-3')?.result === 'ok', '备课的回执不对');
+      check((await t.db())['pack/main']?.by === 'lab', '教研室备的课没写进资料包');
+    }
+    check(logs.find((x) => x.id === 'e2e-4')?.result === 'stale', '对不上单子的回答应该写过时的回执');
+    await t.waitFor(async () => /云端教研室/.test(await t.text('.dk-work') || '') && /交回来的/.test(await t.text('.dk-work') || ''), { what: '管理页「后方的工作单」里写出教研室交回来的' });
+    // 做完的单子撤掉了：补收尾那张没了
+    await t.waitFor(async () => !(await t.docs('lab_brief')).some((x) => x.id === bf.id), { what: '做完的补收尾单子撤掉' });
     return t;
   },
 

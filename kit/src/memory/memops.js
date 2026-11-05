@@ -58,10 +58,12 @@ export function createMemOps({ db, mem }) {
       if (!free(e) && ++n > MEMO_MAX) { rejected.push({ line: e.line, error: `一次最多记 ${MEMO_MAX} 条（归纳守则不算），这条没记：挑要紧的` }); continue; }
       const ch = planEntry(e, { mem: local, evidence, session, block, space, date });
       if (ch.error) { rejected.push({ line: e.line, error: ch.error }); continue; }
+      // 教研室事后写的（lab.js）：新加的记成它写的、标「事后补写」（守卫按这个认，页面上也看得出不是课堂当场写的）
+      if (author === 'lab' && ch.op === 'add' && ch.data) ch.data = { ...ch.data, ...('by' in ch.data ? { by: 'lab' } : {}), ...(session && ['observations', 'slips', 'errors'].includes(ch.coll) ? { backfill: true } : {}) };
       if (ch.op === 'add') local[ch.coll] = [...(local[ch.coll] || []), { id: ch.target, ...(ch.data || {}) }];
       // 同一块里对同一条改两次（守则又犯两次）：第二条要看到第一条改过的
       else if (ch.tier === 'direct') local[ch.coll] = (local[ch.coll] || []).map((d) => (String(d.id) === String(ch.target) ? { ...d, ...(ch.patch || {}) } : d));
-      let pd = pendingRecord(ch, { session, turn, by: 'class', line: e.line });
+      let pd = pendingRecord(ch, { session, turn, by: author === 'lab' ? 'lab' : 'class', line: e.line });
       if (!e.attrs.id && NEXT[ch.coll]) pd.autoId = true;
       try {
         // 先算出写进去会是什么样（直接写的、要我确认的都算一遍），守卫看的是这一份；还没写

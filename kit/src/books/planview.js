@@ -87,13 +87,14 @@ export function createPlanner({ db, getAI, model, getData, space }) {
   }
 
   /* —— 备课 —— */
-  /** 给 block 备课，写进这一科的 pack/main、pack/problems。onStep(msg) 报进度 */
-  async function prep(blockId, { onStep = () => {}, pages = '' } = {}) {
+  /**
+   * 备课要发的整份内容（不调用）：首页「让 Claude 备课」和云端教研室（lab.js 的 prepBrief）用同一份。
+   * 返回 { prompt, ctx }：ctx 是读回答时要用的（parsePrep 的参数、预演要的记忆）
+   */
+  async function prepInput(blockId, { pages = '', sp = space() } = {}) {
     const data = getData();
-    const sp = space();
     const block = data.curriculum.find((b) => b.id === blockId);
     if (!block) throw new Error(`课程地图里没有 ${blockId}`);
-    onStep('读资料…');
     const { books, chunks } = await loadBooks(db, sp);
     // 这一块挂着的条目，加上我写的教材页范围里的（课程地图还没挂好、或者想按书页备的时候）
     const range = parsePages(pages);
@@ -117,20 +118,37 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     const todoSnap = await db.doc('meta/todos').get().catch(() => null);
     const doneTodos = todoSnap?.exists ? (todoSnap.data().done || []) : [];
     const todos = openTodos(data, sp, doneTodos).slice(-20);
-    onStep('Claude 在备课（一次调用，一两分钟）…');
-    const r = await ask(prepPrompt({ block, material, books, memoryText: mem.text, rulesText: rules, components, subject, recent, due: dueText, lessons, todos }));
-    const { main, problems } = parsePrep(r.text, { block, chunkIds: material.map((c) => c.id), components, today, reviewIds: due.map((d) => d.id), todos });
-    if (range) main.pages = `${range[0]}-${range[1]}`;
-    main.cost = { bytes: r.bytes, model: r.model };
-    const ids = packIds(sp);
+    const prompt = prepPrompt({ block, material, books, memoryText: mem.text, rulesText: rules, components, subject, recent, due: dueText, lessons, todos });
+    return { prompt, ctx: { block: blockId, sp, subject, today, range, chunkIds: material.map((c) => c.id), components, reviewIds: due.map((d) => d.id), todos, memoryText: mem.text } };
+  }
+
+  /** 读备课的回答、写进这一科的资料包；by：谁备的（lab 是云端教研室），之后后台预演一遍 */
+  async function prepFinish(text, ctx, { bytes = 0, model: m = '', by = '' } = {}) {
+    const block = getData().curriculum.find((b) => b.id === ctx.block) || { id: ctx.block };
+    const { main, problems } = parsePrep(text, { block, chunkIds: ctx.chunkIds, components: ctx.components, today: toDate(Date.now()), reviewIds: ctx.reviewIds, todos: ctx.todos });
+    if (ctx.range) main.pages = `${ctx.range[0]}-${ctx.range[1]}`;
+    main.cost = { bytes, model: m };
+    if (by) main.by = by;
+    const ids = packIds(ctx.sp);
     await db.doc(`pack/${ids.main}`).set(main);
     await db.doc(`pack/${ids.problems}`).set(problems);
-    // 补上的待办等开课时才记成补了（desk.js 的 newClass）：备了没上、又重新备别的块，待办不丢
-    onStep('备好了；后台在按你的记录把教案预演一遍（不用等，可以直接开课）');
     // 上一节（这一科）下课后的复盘：预演时对照还没消的误解
+    const mine = filterSpace(getData(), ctx.sp);
     const lastDebrief = mine.sessions.filter((x) => x.debrief).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0]?.debrief;
-    rehearse({ main, problems, memoryText: mem.text, debrief: lastDebrief ? debriefText(lastDebrief) : '', subject, packId: ids.main })
+    rehearse({ main, problems, memoryText: ctx.memoryText, debrief: lastDebrief ? debriefText(lastDebrief) : '', subject: ctx.subject, packId: ids.main })
       .catch((e) => console.warn('课前预演没做成', e?.message || e?.code || e));
+    return main;
+  }
+
+  /** 给 block 备课，写进这一科的 pack/main、pack/problems。onStep(msg) 报进度 */
+  async function prep(blockId, { onStep = () => {}, pages = '' } = {}) {
+    onStep('读资料…');
+    const { prompt, ctx } = await prepInput(blockId, { pages });
+    onStep('Claude 在备课（一次调用，一两分钟）…');
+    const r = await ask(prompt);
+    // 补上的待办等开课时才记成补了（desk.js 的 newClass）：备了没上、又重新备别的块，待办不丢
+    const main = await prepFinish(r.text, ctx, { bytes: r.bytes, model: r.model });
+    onStep('备好了；后台在按你的记录把教案预演一遍（不用等，可以直接开课）');
     return main;
   }
 
@@ -184,5 +202,5 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     return parts.join('');
   }
 
-  return { openMap, prep, prepHtml };
+  return { openMap, prep, prepInput, prepFinish, prepHtml };
 }

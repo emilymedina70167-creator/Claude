@@ -1,6 +1,6 @@
 # 学习台 · 给 Claude 的教学说明
 
-> **版本：2026-11-05b**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-05c**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份说明的**最新版**一直放在**学习台** artifact 里（文件 `CLAUDE-PROJECT.md`）。每个新对话里，第一次做和学习有关的事（写黑板、备课、读课堂记录、改记忆）之前，先用 `Artifact` 工具读它：`action: "read"`，`url` 是上面的学习台地址，`path: "CLAUDE-PROJECT.md"`。
 > - 读到的版本比你手上这份新：以读到的为准，这份里和它不一样的地方全部作废。回复里顺便告诉我「项目指令里的说明是旧版（版本号），学习台里是新版（版本号）」。
@@ -725,7 +725,7 @@ b = [1, 1, -2]
 
 课堂里的 Claude 改记忆、我在学习台上改记忆，每一条都先记一张改动单。编号 `pd-…`。字段：`kind`（`pref` 偏好 / `slip` 失误 / `note` 观察 / `propose` 提议 / `error` 错题 / `weakness` 弱点 / `review` 复现组 / `recall` 记忆点 / `position` 下一节 / `mastery` 掌握（页面按证据算的提议）；练习做完页面出的复现组结果也是 `review`，`by` 是 `page`）、`tier`（`direct` 直接写的 / `confirm` 要我确认的 / `me` 我自己改的）、`by`（`class` / `me` / `page` 页面按证据算的）、`coll`、`target`（改哪一条）、`op`（`add` 新加 / `update` 改）、`data`（新加的内容）或 `patch`（改的字段）、`reason`、`basis`（依据：证据 id、记忆里的编号）、`session`、`turn`、`status`、`at`、`log`。
 
-- `status`：`open` 等我确认、`done` 写进去了（`doneAt`；改的写在 `applied`：每个字段的 `from`、`to`；我在「改」里改过的在 `edited`）、`rejected` 我点了「不要」、`undone` 我撤销了（`undoneAt`）、`held` 守卫先暂存了（引的原话、轮次对不上这类，`guard` 里写着看出了什么；我在「管理 → 自检 → 守卫」里放行或者不要）。被守卫拒收、暂存的条目不会写进记忆；写进去但挂了提醒的，那一条上有 `guard` 字段（`verdict: flag`、`checks`）。
+- `status`：`open` 等我确认、`done` 写进去了（`doneAt`；改的写在 `applied`：每个字段的 `from`、`to`；我在「改」里改过的在 `edited`）、`rejected` 我点了「不要」、`undone` 我撤销了（`undoneAt`）、`held` 守卫先暂存了（引的原话、轮次对不上这类，`guard` 里写着看出了什么；我在「管理 → 自检 → 守卫」里放行或者不要）。被守卫拒收、暂存的条目不会写进记忆；写进去但挂了提醒的，那一条上有 `guard` 字段（`verdict: flag`、`checks`）。带 `by: "lab"`、`backfill: true` 的是**云端教研室**事后补写的（每晚在云端照学习台出的单子 `lab_brief` 做，回答进 `lab_inbox`，学习台过了守卫才并进来，回执在 `lab_inbox_log`）：`lab_brief`、`lab_inbox`、`lab_inbox_log` 由学习台和教研室管，你不要写。
 - **撤销**：写进去 7 天内我能撤。状态类（弱点、复现组、位置、偏好）退回旧值（也记一条 `by: "me"` 的 log）；新加的偏好、弱点、复现组改成 `status: "void"`（复现组的 `status` 还有 `active` / `paused` 我暂停了 / `done` 停掉了 / `void`）。历史类（错题、失误、观察）原条不动，追加一条作废的更正：`corrects` 指向原条、`void: true`、`note` 写为什么。**读记忆时 `void` 的、被作废更正指向的都当没有**；错题有一条 `resolved: true` 的更正指向它，就是我标了已解决。
 - **掌握的提议（`kind: "mastery"`、`by: "page"`）**：页面按证据算的（不调用 Claude）：两道不同的题一次对、没标没把握 → 基础题过；之后隔够 1 / 3 / 7 / 14 / 30 天又一次对（新题；练一练里的原题做对不算）→ 复现通过到那一档；过了以后第一次就错、想不出来、看了答案 → 掉了。从记忆里现有的状态出发，只看那以后的证据。算出来直接写进 `mastery`（log 的 `by` 是 `page`，`ref` 是改动单）。你写的掌握状态照旧直接写，页面以你写的为起点往后算。
 - `status: "open"` 的是以前留下的（那时还要我确认）：学习台打开时页面会直接写进去。

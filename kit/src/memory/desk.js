@@ -17,6 +17,8 @@ import { healthCheck, healthRecord, sameDoc } from './health.js';
 import { guardDebrief, buildCorpus } from './guard.js';
 import { recheck as sentryRecheck, recheckText, workOrder } from './sentry.js';
 import { guardDb } from './writer.js';
+import { createLabDesk } from './labdesk.js';
+import { receiptLine } from './lab.js';
 import { getStore, getDownloads } from '../live/store.js';
 import { VERSION, KIT_URL } from '../version.js';
 import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toDate } from './schema.js';
@@ -308,7 +310,10 @@ export async function renderDesk(root, meta) {
   // —— 后方的复查和工作单（sentry.js）：每次自检后算一遍，变了才写 meta/workorder；下课整理时课堂 Claude 带着这一科的复查几行 ——
   let workDoc = null;
   let lastWork = '';
+  let lab = null;
   db.doc('meta/workorder').onSnapshot((s) => { workDoc = s.exists ? s.data() : null; paintWork(); }, () => {});
+  // 云端教研室（labdesk.js、docs/lab-plan.md）：照工作单拼单子 lab_brief，收它的回答 lab_inbox（过守卫、写回执）
+  lab = createLabDesk({ db, getData: () => data, packs, planner, ops, onChange: () => paintWork() });
   function runSentry(today) {
     const re = sentryRecheck(data);
     const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: packs[k].main }])), re });
@@ -317,6 +322,16 @@ export async function renderDesk(root, meta) {
     if (key === lastWork) return;
     lastWork = key;
     put('meta', 'workorder', { ...doc, today, at: Date.now() }).catch((err) => reportError(err, { what: '工作单没写进去' }));
+    lab.sync(items);
+  }
+  // 教研室这一段：等它做的单子几张、最近几份回答收了什么（回执）
+  function labHtml() {
+    if (!lab) return '';
+    const bs = lab.briefs();
+    const ls = lab.logs();
+    const when = (t) => { const d = new Date(Number(t) || 0); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+    return `<p class="dk-lab"><b>云端教研室</b>　${bs.length ? `等它做的 ${bs.length} 张单子（${bs.slice(0, 4).map((b) => escapeHtml(WORK_KIND[b.kind] || b.kind)).join('、')}${bs.length > 4 ? '……' : ''}）` : '没有等它做的单子'}</p>
+      ${ls.length ? `<details class="dk-soft"><summary>它最近交回来的 ${ls.length} 份</summary><ul class="dk-errlist">${ls.map((r) => `<li>${escapeHtml(receiptLine(r))}<span class="muted">　${escapeHtml(when(r.at))}${r.rejected?.length ? `　${escapeHtml(r.rejected.map((x) => x.error).join('；').slice(0, 160))}` : ''}</span></li>`).join('')}</ul></details>` : ''}`;
   }
   const WORK_KIND = { backfill: '补收尾', recheck: '重判', resolve: '可能会了', newproblems: '缺新题', probe: '该测了', prep: '该备课' };
   function paintWork() {
@@ -325,6 +340,7 @@ export async function renderDesk(root, meta) {
     const items = (workDoc?.items || []).filter((x) => !x.space || x.space === space);
     box.innerHTML = `<h3 class="dk-h3">后方的工作单</h3>
       <p class="dk-sub muted">页面按记录算出来的、后方该做的事（这一科），价值高的在前。标「不另调用」的会并进下一次下课整理或开课。</p>
+      ${labHtml()}
       ${items.length ? `<ul class="dk-errlist">${items.slice(0, 8).map((x) => `<li><b>${escapeHtml(WORK_KIND[x.kind] || x.kind)}</b> ${inline(x.title)}<span class="muted">　${escapeHtml(x.why)} · ${escapeHtml(x.cost)}</span></li>`).join('')}</ul>${items.length > 8 ? `<details class="dk-soft"><summary>还有 ${items.length - 8} 件</summary><ul class="dk-errlist">${items.slice(8, 40).map((x) => `<li><b>${escapeHtml(WORK_KIND[x.kind] || x.kind)}</b> ${inline(x.title)}<span class="muted">　${escapeHtml(x.why)}</span></li>`).join('')}</ul></details>` : ''}` : '<p class="dk-ok">没有要做的。</p>'}`;
   }
 

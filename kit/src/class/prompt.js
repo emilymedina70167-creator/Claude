@@ -95,7 +95,7 @@ export function memoryRules(subject, rulesText) {
 }
 
 // 学习台里上课时，记忆摘要后面附的说明：能写什么、不能写什么、怎么写（docs/desk-plan.md 4.1：写记忆用输出里的 memo 块，不用工具）
-const MEMO_DOC = doc`
+export const MEMO_DOC = doc`
 - **改记忆写在这一轮的输出里**，和黑板指令一样用一个 ˋmemoˋ 块（不用工具：每调一次工具要多跑一整轮，很贵），一行一条，可以和别的 board 块写在同一轮：
 
   ˋˋˋˋboard memo
