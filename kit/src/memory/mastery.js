@@ -25,8 +25,9 @@ export const MASTERY_RULE = {
   text: '两道不同的题一次对、没标没把握 → 基础题过（一节课里只算最后一次失手以后的）；之后隔够 1 / 3 / 7 / 14 / 30 天、那节课一上来就做对（新题，练一练里的原题不算）→ 复现通过到那一档；一上来就错了、看了答案、想不出来 → 掉了',
 };
 
-/** 练一练里做的原题（题库编号 d-…）：做对不算数，做错照样算失手 */
-export const isOriginal = (it) => /^d-/.test(String(it?.comp || ''));
+/** 练一练里做的原题（题库编号 d-…）：做对不算数，做错照样算失手。
+ * 教研室出的新题（d-lab-…）第一次做的那节课不算原题（it.fresh，masteryProposals 标的）：学生没见过，正是复现要的新题；以后再做就是原题了 */
+export const isOriginal = (it) => /^d-/.test(String(it?.comp || '')) && !it?.fresh;
 const CLEAN = (it) => it.outcome === 'first' && it.sure !== false && !isOriginal(it);
 // 改对了（第一次错）也算失手：考试只有一次机会
 // 试出来的选择题（report.js 的 guess）outcome 是 ok，本来就算失手
@@ -130,6 +131,20 @@ function startOf(doc, pending = []) {
  * mem：整个记忆库（evidence、mastery、pending、curriculum、sessions）。
  * 只提块（课程地图里有的）和块里的知识点（证据的 tags 写了的）。
  */
+/** 教研室出的题（d-lab-…）第一次做的那节课的几步标上 fresh（isOriginal 不把它当原题） */
+export function markFresh(items = []) {
+  const first = new Map();
+  for (const it of items) {
+    const c = String(it?.comp || '');
+    if (!/^d-lab-/.test(c) || !it.session) continue;
+    const t = Number(it.first) || Number(it.end) || 0;
+    const cur = first.get(c);
+    if (!cur || t < cur.t) first.set(c, { t, session: it.session });
+  }
+  for (const it of items) if (first.get(String(it?.comp || ''))?.session === it.session) it.fresh = true;
+  return items;
+}
+
 export function masteryProposals(mem = {}, { rule = MASTERY_RULE } = {}) {
   const gone = voidedIds(mem);
   const mastery = (mem.mastery || []).filter((d) => d && !gone.has(`mastery/${d.id}`));
@@ -139,6 +154,7 @@ export function masteryProposals(mem = {}, { rule = MASTERY_RULE } = {}) {
   const evs = retagEvidence((mem.evidence || []).filter((e) => e && (e.src === 'record' || e.src === 'event')), mem.sessions || []);
   const catalog = pointCatalog(mem.sessions || [], mastery);
   const items = itemsOf(evs, new Map(), { bySession: true });
+  markFresh(items);
   const byTarget = new Map();
   for (const it of items) {
     for (const t of it.tags || []) {

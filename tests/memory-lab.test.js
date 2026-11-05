@@ -1,23 +1,15 @@
 // 云端教研室（kit/src/memory/lab.js、docs/lab-plan.md）：页面拼工作单子、读回答，不碰 DOM
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { labPicks, briefId, hashOf, backfillBrief, parseBackfill, problemsBrief, parseProblems, problemLint, twinOf, prepBrief, checkReply, receipt, receiptLine, LAB_CAPS } from '../kit/src/memory/lab.js';
+import { briefId, hashOf, backfillBrief, parseBackfill, problemsBrief, parseProblems, problemLint, twinOf, prepBrief, checkReply, receipt, receiptLine, LAB_CAPS } from '../kit/src/memory/lab.js';
 import { parseOutput } from '../kit/src/class/protocol.js';
 import { closingPrompt } from '../kit/src/class/prompt.js';
 
-test('labPicks：只拼教研室能做的几种，每种有上限，按工作单的顺序', () => {
-  const items = [
-    ...Array.from({ length: 4 }, (_, i) => ({ kind: 'backfill', ref: `c-${i}`, value: 90 })),
-    { kind: 'recheck', ref: 'weaknesses/W1', value: 70 },
-    ...Array.from({ length: 5 }, (_, i) => ({ kind: 'newproblems', ref: `R${i}`, value: 60 })),
-    { kind: 'prep', ref: 'L2.2.3', space: 'math', value: 50 },
-  ];
-  const p = labPicks(items);
-  assert.equal(p.filter((x) => x.kind === 'backfill').length, LAB_CAPS.backfill);
-  assert.equal(p.filter((x) => x.kind === 'newproblems').length, LAB_CAPS.newproblems);
-  assert.ok(!p.some((x) => x.kind === 'recheck'), '重判并进下课整理，不交给教研室');
+test('briefId / hashOf：单子编号能当文档编号，指纹跟着材料变', () => {
   assert.equal(briefId({ kind: 'prep', ref: 'L2.2.3' }), 'prep-L2_2_3');
+  assert.equal(briefId({ kind: 'recheck', ref: 'weaknesses/W1' }), 'recheck-weaknesses_W1');
   assert.notEqual(hashOf('a|1'), hashOf('a|2'));
+  assert.deepEqual(Object.keys(LAB_CAPS).sort(), ['backfill', 'newproblems', 'prep', 'probe']);
 });
 
 test('补收尾的单子：带着整节课的记录和课堂下课时那份要求；说明里不用他 / 她', () => {

@@ -102,11 +102,13 @@ export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now
   }
   // 3. 到期的复现组只有原题（练一练的原题不算复现通过）：缺新题
   const drills = get('drills').filter((d) => d && d.status !== 'void' && !d.broken);
+  const tried = new Set(get('evidence').map((e) => String(e?.comp || '')).filter((c) => c.startsWith('d-')));
   for (const d of dueList(get('reviews'), today).filter((x) => x.days <= 0)) {
     const rv = get('reviews').find((x) => String(x.id) === d.id);
     if (!rv || gone.has(`reviews/${rv.id}`)) continue;
     const blocks = list(rv.blocks).map(String);
-    const fresh = drills.filter((x) => x.src !== 'board' && blocks.includes(String(x.block || '')));
+    // 新题：不是课上抄来的、学生还没做过的（做过一次就是原题了，到期了还得再出）
+    const fresh = drills.filter((x) => x.src !== 'board' && !tried.has(String(x.id)) && (String(x.review || '') === String(rv.id) || blocks.includes(String(x.block || ''))));
     if (fresh.length >= 2) continue;
     items.push({ kind: 'newproblems', space: rv.space || spaceOfId(String(blocks[0] || '')), ref: String(rv.id), title: rv.title || rv.id, why: `${d.days < 0 ? `过期 ${-d.days} 天` : '今天到期'}，题库里只有课上的原题`, value: 60 + Math.min(20, -d.days), cost: '一次 Opus 5.5 出 3～5 道新题（守卫核过答案才进题库）' });
   }
@@ -119,6 +121,8 @@ export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now
     const lastAt = Math.max(0, ...get('evidence').filter((e) => blocks.includes(String(e.block || ''))).map((e) => Number(e.at) || 0));
     const idle = lastAt ? Math.floor((now - lastAt) / DAY) : null;
     if (idle !== null && idle < 14) continue;
+    // 教研室已经出了探这个弱点的题、学生还没做：等做完再说（不然每晚再出三道，题库越堆越多）
+    if (drills.filter((x) => String(x.weakness || '') === String(w.id) && !tried.has(String(x.id))).length >= 2) continue;
     probes.push({ kind: 'probe', space: w.space || spaceOfId(blocks[0]), ref: String(w.id), title: w.title || w.id, why: idle === null ? '挂了以后一次都没测过' : `${idle} 天没测`, value: w.level === 'L0' ? 32 : 30, cost: '下一节这一科开头一道探题，不另调用', idle: idle ?? 9999 });
   }
   items.push(...probes.sort((a, b) => b.value - a.value || b.idle - a.idle).slice(0, 6).map(({ idle: _, ...x }) => x));

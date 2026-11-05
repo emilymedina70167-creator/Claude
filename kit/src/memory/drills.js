@@ -132,7 +132,7 @@ export function pickDrills(mem = {}, { space = 'math', today = toDate(Date.now()
     if (!h && d.orig === 'first' && d.at && toDate(d.at) === today) continue;
     const why = [];
     let s = 0;
-    const rv = reviews.filter((r) => list(r.blocks).includes(String(d.block)) || list(r.weaknesses).some((w) => list(d.errors).some((e) => weakOf(e) === w)));
+    const rv = reviews.filter((r) => String(d.review || '') === String(r.id) || list(r.blocks).includes(String(d.block)) || list(r.weaknesses).some((w) => list(d.errors).some((e) => weakOf(e) === w)));
     if (rv.length) { s += 100; why.push(`复现组 ${rv.map((r) => r.id).join('、')} 到期`); }
     const st = stateOf(String(d.block));
     const lastLog = [...(st?.log || [])].reverse().find((e) => e?.field === 'state' || e?.field === 'tier');
@@ -148,6 +148,8 @@ export function pickDrills(mem = {}, { space = 'math', today = toDate(Date.now()
     if (h && !CLEAN(h)) { s += 35; why.push('上次练错了'); }
     else if (!h && ['wrong', 'giveup', 'revealed', 'ok'].includes(d.orig)) { s += 20; why.push('课上没一次做对'); }
     if (CLEAN(h)) s -= 10;
+    // 教研室出的、还没做过的新题：复现要的就是没见过的题（原题做对不算复现通过），探弱点的题是专门测那个毛病的
+    if (d.src === 'lab' && !h) { s += d.weakness ? 45 : 30; why.push(d.weakness ? `探弱点 ${d.weakness}` : '新题'); }
     scored.push({ id: d.id, block: String(d.block || ''), score: s, why: why.join('；') || '复习', at: Number(d.at) || 0 });
   }
   scored.sort((a, b) => b.score - a.score || b.at - a.at || a.id.localeCompare(b.id));
@@ -164,7 +166,7 @@ export function pickDrills(mem = {}, { space = 'math', today = toDate(Date.now()
   const chosen = pool.slice(0, n);
   const items = interleave(chosen);
   const used = new Set(items.map((x) => x.block));
-  return { items, reviews: reviews.filter((r) => list(r.blocks).some((b) => used.has(b)) || items.some((x) => (x.why || '').includes(String(r.id)))).map((r) => String(r.id)) };
+  return { items, reviews: reviews.filter((r) => list(r.blocks).some((b) => used.has(b)) || items.some((x) => (x.why || '').includes(String(r.id)) || String(drills.find((d) => d.id === x.id)?.review || '') === String(r.id))).map((r) => String(r.id)) };
 }
 
 /** 排顺序：挨着的两道尽量不是同一块（考试时也不会告诉你这题是哪一章的） */
@@ -185,14 +187,15 @@ export function interleave(items) {
  * 这一次练习的结果。drills：这次的题（题库的文档，带 id）；evidence：这次练习的证据；mem：记忆库（复现组）；reviews：这次练到的复现组编号。
  * 返回 { rows: [{ id, block, outcome, sure, clean, q }], wrong: [题库编号], reviewResults: [{ id, passed, basis }] }
  */
-export function drillOutcome({ drills = [], evidence = [], mem = {}, reviews = [] } = {}) {
+// fresh：这一次是第一次做的教研室新题（题库编号的集合，drillrun.js 查过以前的作答）
+export function drillOutcome({ drills = [], evidence = [], mem = {}, reviews = [], fresh = new Set() } = {}) {
   const items = itemsOf(evidence, new Map());
   const rows = drills.map((d) => {
     const mine = items.filter((it) => it.comp === d.id);
     // 分步的题（steps、演示组件）：一步没一次对就不算干净
     const outcome = !mine.length ? 'skip' : mine.some((x) => ['giveup', 'revealed'].includes(x.outcome)) ? 'giveup' : mine.some((x) => x.outcome === 'wrong') ? 'wrong' : mine.some((x) => x.outcome === 'ok') ? 'ok' : mine.every((x) => x.outcome === 'open') ? 'open' : 'first';
     const sure = mine.some((x) => x.sure === false) ? false : mine.some((x) => x.sure === true) ? true : null;
-    return { id: d.id, block: String(d.block || ''), point: d.point || '', q: d.q || '', outcome, sure, clean: outcome === 'first' && sure !== false, evidence: mine.flatMap((x) => x.evidence || []) };
+    return { id: d.id, block: String(d.block || ''), point: d.point || '', q: d.q || '', outcome, sure, clean: outcome === 'first' && sure !== false, fresh: fresh.has(d.id), evidence: mine.flatMap((x) => x.evidence || []) };
   });
   const reviewResults = [];
   const practiced = [];
@@ -202,13 +205,13 @@ export function drillOutcome({ drills = [], evidence = [], mem = {}, reviews = [
     const errWeak = (eid) => (mem.errors || []).find((e) => String(e.id) === eid)?.weakness;
     const mine = rows.filter((row) => {
       const d = drills.find((x) => x.id === row.id);
-      return list(r.blocks).includes(row.block) || list(r.weaknesses).some((w) => list(d?.errors).some((e) => errWeak(e) === w));
+      return String(d?.review || '') === String(r.id) || list(r.blocks).includes(row.block) || list(r.weaknesses).some((w) => list(d?.errors).some((e) => errWeak(e) === w));
     }).filter((row) => row.outcome !== 'skip' && row.outcome !== 'open');
     if (!mine.length) continue;
     const passed = mine.every((x) => x.clean);
     // 练一练的题是原题：都对了只说明还记得这几道，按我的规则（新题、不是原题换数）不算复现通过，档位不动（practiced）；
-    // 有一道没一次做对，连原题都不会了，照样记没过
-    if (passed) { practiced.push({ id: String(r.id), n: mine.length }); continue; }
+    // 里面有教研室出的、第一次做的新题，又都一次做对：这才是复现通过，档位往上走。有一道没一次做对，照样记没过
+    if (passed && !mine.some((x) => x.fresh)) { practiced.push({ id: String(r.id), n: mine.length }); continue; }
     reviewResults.push({ id: String(r.id), passed, tier: nextTier(r.tier, passed), basis: mine.flatMap((x) => x.evidence.slice(-2)).slice(0, 20), n: mine.length, bad: mine.filter((x) => !x.clean).length });
   }
   return { rows, wrong: rows.filter((x) => ['wrong', 'giveup', 'ok'].includes(x.outcome) || x.sure === false).map((x) => x.id), reviewResults, practiced };

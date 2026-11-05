@@ -20,7 +20,7 @@ import { componentDoc, isCS, isEN } from '../subject.js';
 export const LAB_VERSION = 3; // 单子的写法变了就加一：学习台打开时照新写法重拼（收件箱先按旧单子收完）
 // 一晚最多做几张（价值高的先）：补收尾的课最值，出新题其次，备课一科一张
 export const LAB_CAPS = { backfill: 2, newproblems: 3, probe: 2, prep: 3 };
-export const BRIEF_MAX = 600 * 1024; // 一张工作单子最多多大（数据库一条文档放得下；备课带的教材最大）
+export const BRIEF_MAX = 480 * 1024; // 一张工作单子最多多大（数据库一条文档放得下；备课带的教材最大）
 const PROBLEMS_N = 3;
 
 const cut = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
@@ -37,21 +37,6 @@ export function hashOf(s) {
   const t = String(s ?? '');
   for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
   return h.toString(36);
-}
-
-/**
- * 工作单里哪几项要拼成单子：只做教研室能做的三种（补收尾、出新题、备课；好久没测的弱点也是出新题），
- * 每种最多 LAB_CAPS 张，价值高的先（工作单本来就按价值排好了）
- */
-export function labPicks(items = []) {
-  const n = {};
-  const out = [];
-  for (const it of items || []) {
-    if (!it || !(it.kind in LAB_CAPS)) continue;
-    n[it.kind] = (n[it.kind] || 0) + 1;
-    if (n[it.kind] <= LAB_CAPS[it.kind]) out.push(it);
-  }
-  return out;
 }
 
 /* ---------------- 单子里共用的话 ---------------- */
