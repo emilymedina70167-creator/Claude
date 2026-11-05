@@ -89,10 +89,12 @@ export function fakeDb(key) {
     if ((n % 2 === 0) !== even) throw new TypeError(`${p} 有 ${n} 段，${even ? '文档要偶数段' : '集合要奇数段'}`);
   };
 
+  // 和 claude.ai 真的数据库一样：数据库、文档引用、集合引用都是冻住的对象（属性改不了、不能重新配置）。
+  // 包一层 Proxy 去换掉它们的方法会撞上 Proxy 的规矩，真机上整页报错（2026-11-05 晚上学习台打不开就是这样）；替身也冻上，本地就能报出来
   function docRef(path) {
     check(path, true);
     const id = path.split('/').pop();
-    return {
+    return Object.freeze({
       id, path,
       async get() { return snapDoc(id, all[path]); },
       async set(data) { await faultGate(path); all[path] = clone(data); changed(); },
@@ -109,7 +111,7 @@ export function fakeDb(key) {
         return () => subs.delete(f);
       },
       collection: (sub) => collRef(`${path}/${sub}`),
-    };
+    });
   }
 
   function query(path, filters = [], order = null, lim = 0) {
@@ -137,7 +139,7 @@ export function fakeDb(key) {
         },
       };
     };
-    return {
+    return Object.freeze({
       where: (f, op, v) => query(path, [...filters, [f, op, v]], order, lim),
       orderBy: (f, dir = 'asc') => query(path, filters, [f, dir], lim),
       limit: (n) => query(path, filters, order, n),
@@ -156,25 +158,26 @@ export function fakeDb(key) {
         subs.add(f); setTimeout(f, 0);
         return () => subs.delete(f);
       },
-    };
+    });
   }
 
   function collRef(path) {
     check(path, false);
-    return Object.assign(query(path), {
+    return Object.freeze({
+      ...query(path),
       path,
       doc: (id) => docRef(`${path}/${id || newId()}`),
       async add(data) { const r = docRef(`${path}/${newId()}`); await r.set(data); return r; },
     });
   }
 
-  return {
+  return Object.freeze({
     doc: docRef,
     collection: collRef,
     // 开发面板用：清空 / 导出
     _dump: () => clone(all),
     _clear: () => { all = {}; changed(); },
-  };
+  });
 }
 
 function merge(a, b) {

@@ -61,3 +61,20 @@ test('guardDb：嵌套的集合、读照旧', async () => {
   assert.equal(s.data().n, 7);
   assert.equal(guardDb(db), db, '包过的不再包一层');
 });
+
+test('真的数据库是冻住的对象：包一层也不能撞 Proxy 的规矩（2026-11-05 学习台在 iPad 上一打开就报错）', async () => {
+  const { guardDb } = await import('../kit/src/memory/writer.js');
+  const { scopeDb, readOnlyDb } = await import('../kit/src/memory/session.js');
+  const writes = [];
+  const ref = (path) => Object.freeze({ id: path.split('/').pop(), path, set: async (d) => { writes.push([path, d]); }, get: async () => ({ exists: false, data: () => undefined }), onSnapshot: () => () => {}, collection: (c) => coll(`${path}/${c}`) });
+  const coll = (path) => Object.freeze({ path, doc: (id) => ref(`${path}/${id}`), where: () => coll(path), get: async () => ({ docs: [] }), onSnapshot: () => () => {} });
+  const db = Object.freeze({ doc: ref, collection: coll });
+  const g = guardDb(db);
+  await g.doc('meta/x').set({ a: 1 });
+  await g.collection('evidence').where('a', '==', 1).get();
+  await g.collection('notes').doc('n1').set({ b: 2 });
+  await scopeDb(db, 'c-20261106-1').doc('steps/s1').set({ c: 3 });
+  await readOnlyDb(db).doc('meta/y').set({ d: 4 });
+  assert.equal(g.doc('meta/x').path, 'meta/x');
+  assert.deepEqual(writes.map((w) => w[0]), ['meta/x', 'notes/n1', 'sessions/c-20261106-1/steps/s1']);
+});

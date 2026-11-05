@@ -69,36 +69,33 @@ export function guardDb(db, { waits = RETRY_WAITS } = {}) {
     return p;
   }
   const bind = (t, k) => { const v = t[k]; return typeof v === 'function' ? v.bind(t) : v; };
+  // Proxy 的目标是一个空对象，真的那个放在闭包里：claude.ai 的数据库对象是冻住的，直接包它、又返回换过的方法，
+  // 会违反 Proxy 的规矩（冻住的属性 get 必须原样返回），整页报错
+  const over = (real, get) => new Proxy({}, { get: (_, k) => get(real, k), has: (_, k) => k in real });
   function wrapDoc(ref, path) {
-    return new Proxy(ref, {
-      get(t, k) {
+    return over(ref, (t, k) => {
         if (k === 'set') return (data, ...rest) => guarded(path, 'set', () => t.set(data, ...rest), data);
         if (k === 'update') return (data, ...rest) => guarded(path, 'update', () => t.update(data, ...rest), null);
         if (k === 'delete') return (...rest) => guarded(path, 'delete', () => t.delete(...rest), null);
         if (k === 'collection') return (c) => wrapColl(t.collection(c), `${path}/${c}`);
         return bind(t, k);
-      },
     });
   }
   function wrapQuery(q, path) {
-    return new Proxy(q, {
-      get(t, k) {
+    return over(q, (t, k) => {
         if (k === 'where' || k === 'orderBy' || k === 'limit') return (...a) => wrapQuery(t[k](...a), path);
         if (k === 'doc') return (id) => (id === undefined ? wrapDoc(t.doc(), `${path}/?`) : wrapDoc(t.doc(id), `${path}/${id}`));
         // add：没有编号，失败重试会多写一份，所以只记、不重试
         if (k === 'add') return (data) => t.add(data).catch((err) => { reportError(err, { what: '写数据库没成（add）', path }); throw err; });
         return bind(t, k);
-      },
     });
   }
   const wrapColl = wrapQuery;
-  return new Proxy(db, {
-    get(t, k) {
-      if (k === '__guarded') return true;
-      if (k === 'doc') return (p) => wrapDoc(t.doc(p), String(p));
-      if (k === 'collection') return (c) => wrapColl(t.collection(c), String(c));
-      return bind(t, k);
-    },
+  return over(db, (t, k) => {
+    if (k === '__guarded') return true;
+    if (k === 'doc') return (p) => wrapDoc(t.doc(p), String(p));
+    if (k === 'collection') return (c) => wrapColl(t.collection(c), String(c));
+    return bind(t, k);
   });
 }
 

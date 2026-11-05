@@ -34,12 +34,14 @@ export function scopeDb(db, sid) {
   const scoped = (path) => SESSION_SCOPED.includes(String(path).split('/')[0]);
   const fix = (path) => (scoped(path) ? `sessions/${sid}/${path}` : path);
   // 用 Proxy 转发、方法绑在原对象上：真数据库的引用可能用私有字段，换了 this 就不能用
-  const wrap = (target, over) => new Proxy(target, {
-    get(t, k) {
+  // 目标是空对象、真的引用放闭包里（真的引用可能是冻住的，直接包它又换掉 set 会违反 Proxy 的规矩）
+  const wrap = (t, over) => new Proxy({}, {
+    get(_, k) {
       if (k in over) return over[k];
       const v = t[k];
       return typeof v === 'function' ? v.bind(t) : v;
     },
+    has: (_, k) => k in over || k in t,
   });
   const docRef = (ref) => wrap(ref, { set: (data, ...rest) => ref.set({ ...data, session: sid }, ...rest) });
   return {
@@ -60,12 +62,14 @@ export function scopeDb(db, sid) {
  */
 export function readOnlyDb(db) {
   const nop = () => Promise.resolve();
-  const wrap = (target, over) => new Proxy(target, {
-    get(t, k) {
+  // 目标是空对象、真的引用放闭包里（真的引用可能是冻住的，直接包它又换掉 set 会违反 Proxy 的规矩）
+  const wrap = (t, over) => new Proxy({}, {
+    get(_, k) {
       if (k in over) return over[k];
       const v = t[k];
       return typeof v === 'function' ? v.bind(t) : v;
     },
+    has: (_, k) => k in over || k in t,
   });
   const docRef = (ref) => wrap(ref, { set: nop, update: nop, delete: nop });
   return {
