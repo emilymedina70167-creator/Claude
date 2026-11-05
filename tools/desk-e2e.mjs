@@ -97,7 +97,7 @@ async function openPage(browser, { clock = null } = {}) {
     async inClass(match = () => true) {
       await page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash) && match(decodeURIComponent(u.hash.slice(1))), { timeout: 20000 });
       await page.waitForLoadState('load');
-      await t.waitFor(() => page.evaluate(() => /开始上课|下一题|这次练习/.test(document.body.innerText)), { timeout: 20000, what: '课堂（或练习）画出来' });
+      await t.waitFor(() => page.evaluate(() => /开始上课|下一题|这次练习/.test(document.body?.innerText || '')), { timeout: 20000, what: '课堂（或练习）画出来' });
       return decodeURIComponent(new URL(page.url()).hash.slice(1));
     },
     async route(h) { await page.evaluate((x) => { location.hash = x; }, h); await sleep(700); },
