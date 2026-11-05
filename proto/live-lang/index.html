@@ -250,6 +250,9 @@ select { min-height: 44px; border-radius: 12px; border: 0.5px solid var(--line);
 .bar { position: sticky; bottom: 0; display: flex; gap: 8px; padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px)); margin: 0 -6px; padding-left: 6px; padding-right: 6px; background: linear-gradient(to top, var(--card-solid) 70%, transparent); border-radius: 0 0 16px 16px; z-index: 2; }
 .bar input { flex: 1 1 0; width: 0; min-width: 0; height: 46px; border-radius: 999px; border: 0.5px solid var(--line); background: var(--field); color: var(--ink); font: 16px var(--sans); padding: 0 18px; }
 .lesson-body.two { grid-template-columns: minmax(0, 1fr); }
+table.bench { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; min-width: 100%; }
+table.bench th, table.bench td { padding: 7px 10px; border-bottom: 0.5px solid var(--line); text-align: left; white-space: nowrap; }
+table.bench th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
 @media (min-width: 1000px) { .lesson-body.two { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
@@ -261,6 +264,7 @@ select { min-height: 44px; border-radius: 12px; border: 0.5px solid var(--line);
     <p>第二版是「一问一答」：Opus 每次只说一句话、只问一个问题，你在板上做或者说一句，它马上接下一句。下面是第一版的三块整板示范，留着对照。</p>
     <nav class="nav">
       <a href="#chat">一问一答（第二版）</a>
+      <a href="#speed">测速</a>
       <a href="#belady">整板 · 页面置换</a>
       <a href="#eigen">整板 · 特征向量</a>
       <a href="#clause">整板 · 定语从句</a>
@@ -296,6 +300,21 @@ select { min-height: 44px; border-radius: 12px; border: 0.5px solid var(--line);
       <details class="card panel"><summary>页面告诉老师的</summary><ul class="log" id="chatLog"><li class="empty">还没开始。</li></ul></details>
       <details class="card panel"><summary>老师写过的源码</summary><textarea class="src" id="chatSrc" readonly spellcheck="false" aria-label="源码"></textarea><div class="lint" id="chatLint"></div></details>
       <details class="card panel"><summary>老师拿到的写法说明</summary><div class="lint" id="docSize"></div><textarea class="src" id="docText" readonly spellcheck="false" aria-label="写法说明"></textarea></details>
+    </div>
+  </section>
+
+  <section class="lesson" id="speed">
+    <div class="lesson-head"><span class="subj">测速 · 第 0 批</span><span class="why">同一个一问一答的回合，把说明加长、把对话拉长，各调一次 Opus 5.5 high，看每多一点要多等几秒。</span></div>
+    <div class="card chat">
+      <p class="lint" style="font-size:14px;margin:0">一次只调一个（不挤占），顺序打乱。说明是用真的组件手册垫长的，对话是模拟的一问一答。结果存进这个页面的数据库，开发那边直接读，不用抄。跑的时候页面别关，可以切到别的 App 再回来看。</p>
+      <div class="row">
+        <button class="btn" id="benchQuick" type="button">快速：6 次（约 3～5 分钟）</button>
+        <button class="btn ghost" id="benchFull" type="button">完整：15 次（约 8～12 分钟）</button>
+        <button class="btn ghost" id="benchStop" type="button" hidden>停</button>
+      </div>
+      <div class="timing" id="benchNow"></div>
+      <div style="overflow-x:auto"><table class="bench" id="benchTable" hidden><thead><tr><th>说明</th><th>对话</th><th>第一个字</th><th>写完</th><th>写了</th><th>模型</th></tr></thead><tbody></tbody></table></div>
+      <div class="lint" id="benchSum"></div>
     </div>
   </section>
 
@@ -1097,6 +1116,7 @@ async function teacherTurn() {
     show(ops);
     chat.turns.push({ role: 'assistant', content: ops });
     chat.stats.push({ first: (first ?? end) - t0, total: end - t0 });
+    saveRow(`talk_turns/${Date.now()}`, { first: Math.round((first ?? end) - t0), total: Math.round(end - t0), effort: $('effort').value, inBytes: new Blob([chat.turns.map((m) => m.content).join('\n')]).size, out: ops.length, turn: prev.length, model: res.modelApplied || '', text: ops.slice(0, 400), at: new Date().toISOString() });
     paintTiming(t0, first, end, res);
     // 这一轮写错了：页面马上让它重写这一轮（课堂里也是这样，学生不用管）
     const errs = B.rt.board.errors.filter((e) => e.n > (prev[prev.length - 1] || 0));
@@ -1166,6 +1186,104 @@ async function mockAsk(messages, onPartial) {
   for (const line of text.split('\n')) { out += line + '\n'; onPartial(out); await new Promise((r) => setTimeout(r, 120)); }
   return { text, modelApplied: 'mock' };
 }
+
+// —— 测速（第 0 批）：说明长短 × 对话长短，各调一次 Opus 5.5 high；结果写进数据库 bench/ ——
+let dbP = null;
+const getDb = () => (dbP || (dbP = (async () => { try { return (await window.claude?.use?.('db')) || null; } catch { return null; } })()));
+async function saveRow(path, row) { try { const db = await getDb(); if (db) await db.doc(path).set(row); } catch {} }
+
+let padText = null;
+async function pad(kb) {
+  if (kb <= 0) return '';
+  if (padText === null) { try { padText = await (await fetch('pad.txt')).text(); } catch { padText = ''; } }
+  const enc = new TextEncoder().encode(padText);
+  // 不够就重复（真的组件手册垫长，和课堂里那份差不多）
+  const want = kb * 1024;
+  let bytes = enc;
+  while (bytes.length && bytes.length < want) { const b = new Uint8Array(bytes.length * 2); b.set(bytes); b.set(bytes, bytes.length); bytes = b; }
+  return new TextDecoder().decode(bytes.slice(0, want)).replace(/\uFFFD+$/, '');
+}
+
+const HIST = [
+  ['let refs = 1 2 3 4 1 2 5 1 2 3 4 5\nlet f = 3 拨 1..6\nlet r = paging(refs, f, fifo)\ndraw r\nFIFO、3 个物理块，按这个顺序访问。你数数，一共缺页几次？{r.faults?}', '学生：\n- 填空（r.faults 那一格）：写了 8，不对（页面算的是 9）'],
+  ['你少数了一次。第 7 次访问 5 的时候，块里有 5 吗？{? 有 | *没有}', '学生：\n- 选择：选了「没有」，对'],
+  ['那这次缺页时，被换出去的是哪一页？{r.refs.1?}', '学生：\n- 填空：写了 1，对'],
+  ['为什么偏偏是它被换出去？', '学生：\n- 说：因为它最早进来'],
+  ['对。那给它 4 块，缺页会变多还是变少？{? 变少 | 变多 | *说不准}', '学生：\n- 选择：选了「变少」，不对'],
+  ['先别急着定，拨成 4 块看看：{f}', '学生：\n- 拨 f：3 → 4（板上跟着变：r 的缺页：9 → 10）\n- 做到了目标：多了一块，反而多缺一次'],
+];
+function history(n) {
+  const out = [];
+  for (let i = 0; i < n; i++) { const [a, u] = HIST[i % HIST.length]; out.push({ role: 'assistant', content: a }, { role: 'user', content: i === n - 1 ? u : u }); }
+  return out;
+}
+async function benchInput(kb, turns) {
+  const doc = typeof DOC === 'string' ? DOC : '';
+  const docBytes = new Blob([doc]).size;
+  const filler = await pad(Math.max(0, kb - Math.round(docBytes / 1024)));
+  const head = `${doc}\n\n${filler ? `下面是这一科的组件手册和资料（这一轮不一定用得着）：\n${filler}\n\n` : ''}这一次要学的：让我自己发现 FIFO 会出现「多给一块反而多缺页」。\n\n开始：写第一问。`;
+  const hist = history(Math.max(1, turns));
+  const msgs = [{ role: 'user', content: head }, ...hist];
+  // 最后一条一定是学生的
+  msgs.push({ role: 'assistant', content: '你觉得是 FIFO 的哪一点惹的祸？' }, { role: 'user', content: `学生：\n- 说：它只看谁先进来，不看最近用没用（第 ${turns} 轮）` });
+  return msgs;
+}
+
+const bench = { stop: false, running: false };
+function shuffle(a, seed) { let s = seed; const r = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+async function runBench(conds) {
+  if (bench.running) return;
+  const sample = await window.claude?.use?.('sample');
+  if (!sample) { $('benchNow').innerHTML = '<span style="color:var(--red)">这里调不了 Claude：要在 claude.ai 里打开这个页面。</span>'; return; }
+  bench.running = true; bench.stop = false;
+  $('benchQuick').disabled = $('benchFull').disabled = true; $('benchStop').hidden = false;
+  const runId = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+  const tb = $('benchTable'); tb.hidden = false; tb.tBodies[0].innerHTML = '';
+  const rows = [];
+  const list = shuffle(conds.slice(), Date.now() & 0xffff);
+  for (let i = 0; i < list.length && !bench.stop; i++) {
+    const [kb, turns] = list[i];
+    const msgs = await benchInput(kb, turns);
+    const inBytes = new Blob([msgs.map((m) => m.content).join('\n')]).size;
+    const t0 = performance.now();
+    let first = null;
+    const tick = setInterval(() => { $('benchNow').innerHTML = `<span>第 ${i + 1} / ${list.length} 次：说明约 <b>${kb} KB</b> · 对话 <b>${turns} 轮</b></span><span>${first === null ? '想了' : '第一个字'} <b>${(((first ?? performance.now()) - t0) / 1000).toFixed(1)} 秒</b></span>`; }, 200);
+    bench.ctl = new AbortController();
+    const row = { run: runId, i, kb, turns, inBytes, effort: 'high', at: new Date().toISOString() };
+    try {
+      const res = await sample(msgs, { model: 'claude-opus-5-5', effort: 'high', modelTier: 'complex', cache: false, signal: bench.ctl.signal, onText: ({ text }) => { if (first === null && text.trim()) first = performance.now(); } });
+      const end = performance.now();
+      Object.assign(row, { first: Math.round((first ?? end) - t0), total: Math.round(end - t0), out: (res.text || '').length, model: res.modelApplied || res.modelTierApplied || '', text: String(res.text || '').slice(0, 400) });
+    } catch (e) {
+      Object.assign(row, { error: e?.code || String(e?.message || e), total: Math.round(performance.now() - t0) });
+      if (e?.code === 'rate_limited' || e?.code === 'not_granted' || e?.code === 'cancelled') bench.stop = true;
+    } finally { clearInterval(tick); }
+    rows.push(row);
+    saveRow(`bench/${runId}-${String(i).padStart(2, '0')}`, row);
+    const tr = document.createElement('tr');
+    const s = (ms) => (ms == null ? '—' : (ms / 1000).toFixed(1) + ' 秒');
+    tr.innerHTML = `<td>${kb} KB</td><td>${turns} 轮</td><td>${row.error ? `<span style="color:var(--red)">${esc(row.error)}</span>` : s(row.first)}</td><td>${s(row.total)}</td><td>${row.out ?? '—'} 字</td><td>${esc(row.model || '')}</td>`;
+    tb.tBodies[0].appendChild(tr);
+    paintBenchSum(rows);
+  }
+  $('benchNow').innerHTML = bench.stop ? '<span>停了。已经跑完的存下来了。</span>' : `<span>跑完了，${rows.length} 次都存进了数据库（bench/${runId}-…）。</span>`;
+  saveRow(`bench/${runId}`, { run: runId, n: rows.length, done: !bench.stop, at: new Date().toISOString(), ua: navigator.userAgent.slice(0, 160) });
+  bench.running = false;
+  $('benchQuick').disabled = $('benchFull').disabled = false; $('benchStop').hidden = true;
+}
+
+function paintBenchSum(rows) {
+  const ok = rows.filter((r) => !r.error && r.model);
+  if (!ok.length) return;
+  const by = (k) => { const m = new Map(); ok.forEach((r) => { const a = m.get(r[k]) || []; a.push(r.first); m.set(r[k], a); }); return [...m].sort((a, b) => a[0] - b[0]).map(([v, a]) => `${v}${k === 'kb' ? ' KB' : ' 轮'}：${(a.reduce((x, y) => x + y, 0) / a.length / 1000).toFixed(1)} 秒`).join('，'); };
+  const notOpus = ok.filter((r) => r.model !== 'claude-opus-5-5').length;
+  $('benchSum').textContent = `第一个字平均——按说明长短：${by('kb')}；按对话长短：${by('turns')}。${notOpus ? `有 ${notOpus} 次不是 Opus 5.5 回的。` : ''}`;
+}
+
+$('benchQuick').addEventListener('click', () => runBench([[4, 2], [40, 2], [160, 2], [4, 30], [40, 30], [160, 30]]));
+$('benchFull').addEventListener('click', () => runBench([4, 16, 40, 100, 160].flatMap((kb) => [2, 10, 30].map((t) => [kb, t]))));
+$('benchStop').addEventListener('click', () => { bench.stop = true; bench.ctl?.abort(); });
 
 function errText(e) {
   const c = e && e.code;
