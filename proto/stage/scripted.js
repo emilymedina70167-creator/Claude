@@ -1,21 +1,10 @@
 // 舞台的样子（A 段，docs/stage-plan.md）：希尔排序这一段按剧本演，不调用 Claude。
 // 每一轮就是以后老师当场写的一轮镜头指令（kit/src/stage/script.js 的写法），学生点了什么决定下一轮演哪段——
-// 剧本里「答错了怎么演」是这里替老师写好的，真上课时是老师看着学生的操作当场写
-import { Stage } from '../../kit/src/stage/stage.js';
-import css from '../../kit/src/stage/stage.css';
+// 剧本里「答错了怎么演」是这里替老师写好的，真上课时是老师看着学生的操作当场写（live.js）
 
-const style = document.createElement('style');
-style.textContent = css;
-document.head.appendChild(style);
-
-const host = document.getElementById('stage');
-const again = document.getElementById('again');
-let stage = null;
-let run = 0;
-
-async function lesson(my) {
-  const alive = () => my === run;
-  const play = async (src) => { if (!alive()) throw new Error('stop'); return stage.play(src); };
+/** 照剧本演一遍；alive() 变成假（换了一节、点了重来）就停 */
+export async function scriptedLesson(stage, alive) {
+  const play = async (src) => { if (!alive()) throw new Error('stop'); const r = await stage.play(src); if (r.errors.length) console.warn('没演的行', r.errors); return r.act; };
 
   // 第一轮：一排数，先不讲规则，只让人注意那两个 49
   await play(`
@@ -55,7 +44,7 @@ async function lesson(my) {
 
   // 第三轮：剩下的一口气配完，数一数几组；把「隔几个」交给学生拨
   await play(`
-    unlabel hop:1
+    unlabel hop:a1
     say "剩下的也这样配对。"
     link a.3 a.8 g3
     & paint a.3 a.8 g3
@@ -128,27 +117,3 @@ async function lesson(my) {
   `);
   await play(`ask next "" button="再看一遍"`);
 }
-
-async function start() {
-  const my = ++run;
-  stage?.destroy();
-  stage = new Stage(host, { onAct: (a) => { if (window.LAStageDev) window.LAStageDev.acts.push(a); } });
-  window.LAStage = stage;
-  try {
-    await lesson(my);
-    if (my === run) start();
-  } catch (err) {
-    if (err.message === 'stop') return;
-    console.error(err);
-    const p = document.createElement('pre');
-    p.className = 'st-error';
-    p.textContent = `演不下去了：${err.message}`;
-    host.appendChild(p);
-  }
-}
-
-again.addEventListener('click', start);
-const dev = new URLSearchParams(location.search);
-if (dev.has('dev')) window.LAStageDev = { acts: [], Stage };
-// ?blank：不演剧本，只留一块空舞台（检查脚本自己往上写镜头）
-if (dev.has('blank')) { stage = new Stage(host); window.LAStage = stage; } else start();

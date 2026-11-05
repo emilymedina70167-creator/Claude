@@ -12,6 +12,7 @@
 export const COMMANDS = new Set([
   'array', 'say', 'glow', 'unglow', 'lift', 'drop', 'paint', 'unpaint', 'link', 'unlink', 'hop', 'swap',
   'group', 'split', 'merge', 'label', 'retext', 'unlabel', 'dial', 'set', 'camera', 'wait', 'ask', 'clear', 'pulse', 'fly',
+  'move', 'write', 'compare', 'ptr', 'unptr', 'dim', 'undim',
 ]);
 
 /** 一行拆成记号：字符串（"…" 或 「…」）、箭头、key=value、别的词 */

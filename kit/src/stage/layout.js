@@ -1,6 +1,33 @@
 // 舞台的排版和镜头（docs/stage-plan.md）：格子摆在哪、镜头对准哪、字贴在哪不挡东西。纯函数，有测试（tests/stage.test.js）。
 // 坐标都是「世界坐标」（设计用的像素），镜头把世界缩放平移到屏幕上：屏幕 = 世界 × s + (tx, ty)
 
+/** 一格多大、格子之间、分开排时一排一排隔多远、两排格子之间隔多远（场景和画面共用，画面的 CSS 也是这个尺寸） */
+export const CELL = 64, GAP = 12, ROW_GAP = 22, SPLIT_GAP = 40, IDX_H = 22, PTR_H = 26, ARRAY_GAP = 70;
+
+/** 分开排时第 row 排离原来那一排多远（row = 0 是原位） */
+export const rowY = (row) => (row ? CELL + SPLIT_GAP + (row - 1) * (CELL + ROW_GAP) : 0);
+/** 第 slot 格（从 1 数）原位的框 */
+export const slotBox = (o, slot) => ({ x: o.origin.x + (slot - 1) * (CELL + GAP), y: o.origin.y, w: CELL, h: CELL });
+/** 一格现在在哪（按它的位置、在第几排、抬没抬起） */
+export function cellBox(o, c) {
+  const s = slotBox(o, c.slot);
+  return { x: s.x, y: s.y + rowY(c.row) - (c.lift ? 12 : 0), w: CELL, h: CELL };
+}
+/** 指针（格子下面的小箭头和名字）：同一格上有几个就往下叠 */
+export function ptrBox(o, slot, k = 0) {
+  const s = slotBox(o, slot);
+  return { x: s.x - 8, y: s.y + CELL + IDX_H + 2 + k * PTR_H, w: CELL + 16, h: PTR_H };
+}
+/** 一排格子整个占的地方：原位（连序号）、分开排的格子、指针 */
+export function objectBox(o) {
+  const boxes = [];
+  for (let i = 1; i <= o.cells.length; i++) { const s = slotBox(o, i); boxes.push({ ...s, h: CELL + IDX_H }); }
+  for (const c of o.cells) boxes.push(cellBox(o, c));
+  const at = new Map();
+  for (const [, slot] of o.ptrs || []) { const k = at.get(slot) || 0; at.set(slot, k + 1); boxes.push(ptrBox(o, slot, k)); }
+  return bbox(boxes);
+}
+
 /** 一排格子的位置（左上角）：n 格，从 x0 开始，中间留 gap */
 export function rowSlots(n, { cell = 64, gap = 12, x0 = 0, y0 = 0 } = {}) {
   return Array.from({ length: n }, (_, i) => ({ x: x0 + i * (cell + gap), y: y0, w: cell, h: cell }));
@@ -83,3 +110,22 @@ export function strideGroups(n, d) {
     return out;
   });
 }
+
+/**
+ * 两格之间的连线：原位的两格拱一道弧（同时好几组时一组一组的弧高错开），分开排时是两格中心之间一条横线。
+ * A、B 是两格的框。返回 { d（SVG 路径）, box（占的地方：贴字、镜头要让开）, rail }
+ */
+export function linkGeom(A, B, { tier = 0, rail = false } = {}) {
+  const r = (v) => Math.round(v * 10) / 10;
+  if (rail) {
+    const a = { x: A.x + A.w / 2, y: A.y + A.h / 2 }, b = { x: B.x + B.w / 2, y: B.y + B.h / 2 };
+    return { d: `M${r(a.x)} ${r(a.y)} L${r(b.x)} ${r(b.y)}`, box: bbox([{ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) - 3, w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) + 6 }]), rail: true };
+  }
+  const a = { x: A.x + A.w / 2, y: A.y - 6 }, b = { x: B.x + B.w / 2, y: B.y - 6 };
+  const dist = Math.hypot(b.x - a.x, b.y - a.y);
+  const h = Math.max(18 + 5 * tier, Math.min(100, dist * (0.16 + 0.03 * tier)));
+  // 二次贝塞尔：弧顶比两头高 h，控制点在两倍高处
+  const cx = (a.x + b.x) / 2, cy = Math.min(a.y, b.y) - 2 * h;
+  return { d: `M${r(a.x)} ${r(a.y)} Q${r(cx)} ${r(cy)} ${r(b.x)} ${r(b.y)}`, box: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) - h - 2, w: Math.abs(b.x - a.x), h: h + Math.abs(b.y - a.y) + 2 }, rail: false };
+}
+

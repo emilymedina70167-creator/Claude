@@ -116,3 +116,22 @@
 
 @media (max-width: 600px) { .st-line { font-size: 19px; } }
 @media (prefers-reduced-motion: reduce) { .st-cell.is-tap::after, .st-cell.is-drag::after { animation: none; opacity: .5; } }
+
+/* 灰掉的格子（比如查找时已经排除的那一半） */
+.st-cell.is-dim { opacity: .32; }
+
+/* 指针：格子下面一个小箭头和名字（low / mid / high、i / j） */
+.st-ptr { position: absolute; left: 0; top: 0; width: 80px; height: 26px; display: flex; align-items: center; justify-content: center; gap: 3px; color: var(--st-brand); font: 600 14px/1 var(--sans, sans-serif); pointer-events: none; }
+.st-ptr i { font-style: normal; font-size: 10px; }
+
+/* 比较：两格之间冒出来的「65 > 49′」 */
+.st-compare { position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 12px; background: var(--st-card); box-shadow: 0 0 0 1px var(--st-line), 0 10px 22px -14px rgb(var(--shade-rgb, 25 45 40) / 0.45); font: 600 18px/1 var(--sans, sans-serif); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.st-compare b { color: var(--st-brand); font-size: 20px; }
+
+/* 打字回答：底下一条（ask say 时它是主角） */
+.st-say { pointer-events: auto; display: flex; gap: 8px; width: min(100%, 520px); }
+.st-say input { flex: 1; min-width: 0; height: 48px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--st-card); color: var(--st-ink); font: 16px var(--sans, sans-serif); box-shadow: 0 0 0 1px var(--st-line); }
+.st-say input:focus { outline: none; box-shadow: 0 0 0 2px var(--st-brand); }
+.st-say-go { min-width: 56px; height: 48px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--st-brand) 12%, var(--st-card)); color: var(--st-brand); font: 600 16px var(--sans, sans-serif); cursor: pointer; }
+.st-say.is-main .st-say-go { background: var(--st-brand); color: var(--st-brand-ink); }
+.st-dock { flex-wrap: wrap; align-items: center; }

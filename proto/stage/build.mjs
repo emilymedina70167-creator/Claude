@@ -1,4 +1,4 @@
-// 舞台样子页的构建：demo.js（连同 kit/src/stage/）打成一个文件，页面 page.html 原样拷过去。
+// 舞台样子页的构建：main.js（剧本 scripted.js、Opus 上课 live.js，连同 kit/src/stage/）打成一个文件，页面 page.html 原样拷过去。
 // dist/index.html 是发布用的（claude.ai 自己补 doctype 和 head），dist/local.html 是本地开浏览器看的
 import { build } from 'esbuild';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 const out = 'proto/stage/dist';
 mkdirSync(out, { recursive: true });
 await build({
-  entryPoints: ['proto/stage/demo.js'], bundle: true, minify: !process.env.DEBUG, format: 'iife',
+  entryPoints: ['proto/stage/main.js'], bundle: true, minify: !process.env.DEBUG, format: 'iife',
   target: ['safari16', 'chrome110'], loader: { '.css': 'text' }, outfile: `${out}/stage-demo.js`, logLevel: 'info',
 });
 const page = readFileSync('proto/stage/page.html', 'utf8');

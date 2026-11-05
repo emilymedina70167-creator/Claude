@@ -1,4 +1,4 @@
-<title>希尔排序舞台</title>
+<title>舞台试课</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600&display=swap">
@@ -33,6 +33,7 @@
       radial-gradient(1100px 720px at 50% 115%, rgb(160 130 70 / 0.2), transparent 62%), #151a18;
     color-scheme: dark;
   }
+  [hidden] { display: none !important; }
   html, body { height: 100%; }
   body { margin: 0; background: var(--page); background: var(--page-bg); background-attachment: fixed; color: rgb(var(--chalk-rgb)); overflow: hidden; }
   #stage { position: fixed; inset: 0; }
@@ -42,8 +43,52 @@
     font: 20px/1 var(--sans); cursor: pointer;
   }
   #again:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  #think { position: fixed; z-index: 5; top: calc(env(safe-area-inset-top, 0px) + 18px); left: calc(env(safe-area-inset-left, 0px) + 16px); padding: 8px 14px; border-radius: 999px; background: rgb(var(--chalk-rgb) / 0.07); color: rgb(var(--chalk-rgb) / 0.72); font: 14px/1 var(--sans); font-variant-numeric: tabular-nums; }
+  #think::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--brand); vertical-align: 1px; animation: think 1.1s ease-in-out infinite; }
+  @keyframes think { 50% { opacity: .25; } }
+  #hud { position: fixed; z-index: 5; left: calc(env(safe-area-inset-left, 0px) + 14px); bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); max-width: calc(100% - 28px); display: flex; flex-wrap: wrap; gap: 4px 12px; font: 12px/1.5 var(--sans); color: rgb(var(--chalk-rgb) / 0.55); font-variant-numeric: tabular-nums; pointer-events: auto; }
+  #hud b { color: rgb(var(--chalk-rgb) / 0.8); font-weight: 600; }
+  #hud .bad { color: rgb(var(--coral-rgb)); }
+  #menu { position: fixed; inset: 0; z-index: 8; display: grid; place-items: center; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); background: var(--page); background: var(--page-bg); overflow: auto; }
+  .m-card { width: min(100%, 560px); display: grid; gap: 22px; }
+  .m-card h1 { margin: 0; font: 600 34px/1.2 var(--display); letter-spacing: .02em; }
+  .m-lede { margin: -10px 0 0; color: rgb(var(--chalk-rgb) / 0.7); font: 17px/1.6 var(--sans); }
+  .m-group { display: grid; gap: 10px; padding: 18px; border-radius: 18px; background: var(--card-solid); box-shadow: 0 0 0 1px rgb(var(--chalk-rgb) / 0.08), 0 14px 30px -22px rgb(var(--shade-rgb) / 0.45); }
+  .m-group h2 { margin: 0; font: 600 18px/1.3 var(--sans); }
+  .m-note { margin: 0; color: rgb(var(--chalk-rgb) / 0.6); font: 14px/1.55 var(--sans); }
+  .m-topics { display: flex; flex-wrap: wrap; gap: 10px; }
+  .m-topic { min-height: 48px; padding: 0 20px; border: 0; border-radius: 999px; background: var(--brand); color: var(--brand-ink); font: 600 16px var(--sans); cursor: pointer; }
+  .m-topic.is-quiet { justify-self: start; background: rgb(var(--chalk-rgb) / 0.07); color: rgb(var(--chalk-rgb)); }
+  .m-topic:active { scale: .97; }
+  .m-own { display: flex; gap: 8px; }
+  .m-own input { flex: 1; min-width: 0; height: 48px; padding: 0 16px; border: 0; border-radius: 12px; background: rgb(var(--chalk-rgb) / 0.06); color: rgb(var(--chalk-rgb)); font: 16px var(--sans); }
+  .m-own input:focus { outline: 2px solid var(--brand); }
+  .m-own button { min-width: 72px; height: 48px; border: 0; border-radius: 12px; background: rgb(var(--chalk-rgb) / 0.08); color: rgb(var(--chalk-rgb)); font: 600 16px var(--sans); cursor: pointer; }
+  .m-topic:focus-visible, .m-own button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
   .st-error { position: absolute; left: 16px; right: 16px; bottom: 16px; padding: 12px; border-radius: 12px; background: rgb(var(--coral-rgb) / 0.12); color: rgb(var(--coral-rgb)); font: 14px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
 </style>
 <div id="stage"></div>
-<button id="again" type="button" aria-label="从头再演一遍" title="从头再演一遍">↺</button>
+<button id="again" type="button" aria-label="回到开头" title="回到开头">↺</button>
+<div id="think" hidden></div>
+<div id="hud" hidden></div>
+<section id="menu">
+  <div class="m-card">
+    <h1>舞台试课</h1>
+    <p class="m-lede">用画面讲课的一对一。老师对画面做事，你在画面上点、拖、拨。</p>
+    <div class="m-group">
+      <h2>Opus 5.5 当场上一节</h2>
+      <p class="m-note" id="menu-note">每一轮都是 Opus 5.5 看着你的操作当场写的。左下角显示第一个镜头多久出来。</p>
+      <div class="m-topics" id="topics"></div>
+      <form id="own" class="m-own">
+        <input id="own-text" type="text" placeholder="或者写一个想学的点，比如「快速排序的一趟划分」" aria-label="想学什么">
+        <button type="submit">开始</button>
+      </form>
+    </div>
+    <div class="m-group">
+      <h2>看剧本演示</h2>
+      <p class="m-note">希尔排序那一段按剧本演，不调用 Claude。</p>
+      <button type="button" id="pick-script" class="m-topic is-quiet">希尔排序（剧本）</button>
+    </div>
+  </div>
+</section>
 <script src="stage-demo.js"></script>
