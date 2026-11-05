@@ -7731,6 +7731,25 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 .hb-cells i { width: 10px; }
 @media (prefers-reduced-motion: reduce) { .hb-board *, .hb-board *::before, .hb-board *::after { animation: none !important; transition: none !important; } }
 .hb-seq { letter-spacing: .06em; word-spacing: .15em; }
+
+/* \u4E00\u95EE\u4E00\u7B54\uFF08talkview.js\uFF09\uFF1A\u753B\u7684\u4E1C\u897F\u5728\u4E2D\u95F4\uFF0C\u5F53\u524D\u4E00\u95EE\u5728\u4E0B\u9762\u5B57\u5927\uFF0C\u524D\u51E0\u8F6E\u7F29\u5C0F\uFF0C\u5B66\u751F\u7684\u56DE\u663E\u9760\u53F3 */
+.hb-talk { gap: 18px; }
+.hb-talk > div { display: grid; gap: 14px; min-width: 0; }
+.hb-turn { display: grid; gap: 8px; min-width: 0; }
+.hb-past .hb-turn { opacity: .58; transition: opacity .3s; }
+.hb-past .hb-turn:hover { opacity: .9; }
+.hb-past .hb-p { font-size: .95em; line-height: 1.85; }
+.hb-past .hb-turn.is-old { display: none; }
+.hb-past.is-all .hb-turn.is-old { display: grid; }
+.hb-now .hb-p { font-size: 1.22em; line-height: 2.05; }
+.hb-now .hb-turn.is-in > :not(.hb-echo) { animation: hb-rise .4s var(--spring, ease-out); }
+.hb-stage:empty, .hb-past:empty { display: none; }
+.hb-echo { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.hb-echo:empty { display: none; }
+.hb-echo span { max-width: 82%; padding: 7px 14px; border-radius: 18px 18px 5px 18px; background: rgb(var(--yellow-rgb) / 0.9); color: var(--accent-ink, var(--board)); font: 15px/1.45 var(--sans); animation: hb-rise .3s ease-out; }
+.hb-past .hb-echo span { background: rgb(var(--chalk-rgb) / 0.08); color: var(--chalk); font-size: 13.5px; }
+.hb-tmeta { font-size: 12px; color: var(--muted); }
+.hb-more { justify-self: start; min-height: 44px; border: 0; background: none; color: var(--yellow); font: 15px var(--sans); cursor: pointer; padding: 0 4px; }
 `;var oue=new Set(["answer","practice","quiz","stepper","steps","cloze","errfind","parse","drill","chunk","link","recognize","findbug"]);function OF(e){return _h({src:"record",comp:e?.block??"",q:e?.q??"",title:e?.title??"",detail:e?.detail})}function aue(e,t=new Set){if(Ar.confidence===!1||!e||!e.block)return!1;let r=String(e.type||"").replace(/-try$/,"");return!oue.has(r)||typeof e.ok!="boolean"||e.revealed||e.giveup?!1:!t.has(OF(e))}var DF=new Set;function iue(e,t){if(!t?.isConnected||!J.sink||!aue(e,DF))return;let r=OF(e);DF.add(r);let n=t.querySelector(":scope > .widget > .w-body")||t;n.querySelectorAll(":scope > .sure-ask:not(.is-done)").forEach(o=>o.remove());let s=document.createElement("div");s.className="sure-ask",s.setAttribute("role","group"),s.setAttribute("aria-label","\u8FD9\u9898\u6709\u6CA1\u6709\u628A\u63E1"),s.innerHTML='<span class="sure-q">\u8FD9\u9898\u6709\u628A\u63E1\u5417\uFF1F</span><button type="button" class="btn sure-btn" data-sure="1">\u6709\u628A\u63E1</button><button type="button" class="btn sure-btn" data-sure="0">\u6CA1\u628A\u63E1</button>',s.addEventListener("click",o=>{let a=o.target.closest(".sure-btn");if(!a||s.classList.contains("is-done"))return;let i=a.dataset.sure==="1";J.event("sure",t,{sure:i,key:r,ok:e.ok,title:e.title||void 0}),s.classList.add("is-done"),s.innerHTML=`<span class="sure-q">\u8BB0\u4E0B\u4E86\uFF1A${i?"\u6709\u628A\u63E1":"\u6CA1\u628A\u63E1"}${!i&&e.ok?"\uFF08\u8FD9\u9898\u5148\u4E0D\u7B97\u8FC7\uFF0C\u518D\u6765\u4E00\u9053\u540C\u7C7B\u7684\uFF09":""}</span>`}),n.appendChild(s)}J.hooks.push(iue);pO();var lue="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Long+Cang&family=Noto+Serif+SC:wght@400;600;700;900&display=swap",cue=`<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
   <filter id="la-chalk" x="-10%" y="-10%" width="120%" height="120%">
     <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="7" result="n"/>

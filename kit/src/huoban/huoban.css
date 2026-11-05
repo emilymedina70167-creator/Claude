@@ -82,3 +82,22 @@
 .hb-cells i { width: 10px; }
 @media (prefers-reduced-motion: reduce) { .hb-board *, .hb-board *::before, .hb-board *::after { animation: none !important; transition: none !important; } }
 .hb-seq { letter-spacing: .06em; word-spacing: .15em; }
+
+/* 一问一答（talkview.js）：画的东西在中间，当前一问在下面字大，前几轮缩小，学生的回显靠右 */
+.hb-talk { gap: 18px; }
+.hb-talk > div { display: grid; gap: 14px; min-width: 0; }
+.hb-turn { display: grid; gap: 8px; min-width: 0; }
+.hb-past .hb-turn { opacity: .58; transition: opacity .3s; }
+.hb-past .hb-turn:hover { opacity: .9; }
+.hb-past .hb-p { font-size: .95em; line-height: 1.85; }
+.hb-past .hb-turn.is-old { display: none; }
+.hb-past.is-all .hb-turn.is-old { display: grid; }
+.hb-now .hb-p { font-size: 1.22em; line-height: 2.05; }
+.hb-now .hb-turn.is-in > :not(.hb-echo) { animation: hb-rise .4s var(--spring, ease-out); }
+.hb-stage:empty, .hb-past:empty { display: none; }
+.hb-echo { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.hb-echo:empty { display: none; }
+.hb-echo span { max-width: 82%; padding: 7px 14px; border-radius: 18px 18px 5px 18px; background: rgb(var(--yellow-rgb) / 0.9); color: var(--accent-ink, var(--board)); font: 15px/1.45 var(--sans); animation: hb-rise .3s ease-out; }
+.hb-past .hb-echo span { background: rgb(var(--chalk-rgb) / 0.08); color: var(--chalk); font-size: 13.5px; }
+.hb-tmeta { font-size: 12px; color: var(--muted); }
+.hb-more { justify-self: start; min-height: 44px; border: 0; background: none; color: var(--yellow); font: 15px var(--sans); cursor: pointer; padding: 0 4px; }
