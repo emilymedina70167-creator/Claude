@@ -1,3 +1,4 @@
 node_modules/
 tools/.tmp/
 .e2e-fail/
+.claude/worktrees/

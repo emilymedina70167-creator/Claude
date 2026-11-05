@@ -44,6 +44,7 @@ import { lessonSheet, sheetMd } from '../memory/sheet.js';
 import { slipsToFold, blockSwitch, tidyDue, tidyText } from '../memory/memo.js';
 import { spaceOfId, subjectOf } from '../memory/space.js';
 import { textbookForClass, readChunks, searchChunks, readHistory } from '../books/textbook.js';
+import { systemWithBooks } from './bookroom.js';
 import { planLocal, markFired, reactNote, armedText, rebuildRules, dropForSeg } from './react.js';
 import { beatPlan, shouldPlay, DEFERRED_OPS } from './beats.js';
 import { ENGINES } from '../engines/registry.js';
@@ -278,7 +279,8 @@ export async function renderClass(root, meta, desk = null) {
     if (mock && !session.packImages.length) { const demo = ensureDemoSlide(); if (demo) session.packImages = [demo]; }
   }
   // 学习台里的教材（desk.books）：点名条目的全文并进资料包的「教材原文」，目录作为资料包的一节；没有书就是原来的资料包
-  function textbookNow(tools = true) {
+  // room：这一轮说明里还能再放多少字节（class/bookroom.js 算的）：这一块所在的整章往里补，老师一般不用再取
+  function textbookNow(tools = true, room = 0) {
     const b = desk?.books;
     if (!b?.chunks?.length) return { textbook: '', catalog: '', images: [] };
     const block = (desk.mem?.curriculum || []).find((x) => x.id === (desk.block || pack.main?.block));
@@ -287,10 +289,10 @@ export async function renderClass(root, meta, desk = null) {
     // 上一节同一块取过的（desk.prevRead）排在前面，这节课取的在后面（最近取的优先留着）
     const mine = calls.length ? readHistory(calls, b.chunks, b.books) : [];
     const read = [...(desk.prevRead || []).filter((id) => !mine.includes(id)), ...mine];
-    return textbookForClass({ main: pack.main, block, books: b.books, chunks: b.chunks, tools, read });
+    return textbookForClass({ main: pack.main, block, books: b.books, chunks: b.chunks, tools, read, room });
   }
-  function packForPrompt(tools) {
-    const tb = textbookNow(tools);
+  function packForPrompt(tools, room = 0) {
+    const tb = textbookNow(tools, room);
     if (!tb.textbook && !tb.catalog && !earlier) return pack;
     const main = { ...(pack.main || {}) };
     if (tb.textbook) main.textbook = [main.textbook, tb.textbook].filter((x) => x && (typeof x !== 'string' || x.trim())).map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join('\n\n');
@@ -1355,7 +1357,11 @@ export async function renderClass(root, meta, desk = null) {
   function buildInput(hist) {
     bv.measureFit();
     const level = Math.min(budgetLevel, 3);
-    const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(teacher.tools), board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg(), canvas: CANVAS, ...planArg() });
+    const args = { rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg(), canvas: CANVAS, ...planArg() };
+    // 有教材时，说明还剩的地方补上这一块所在的整章（bookroom.js）：每取一次教材要多等一整轮，多放原文不怎么变慢
+    const system = desk?.books?.chunks?.length
+      ? systemWithBooks(args, (room) => packForPrompt(teacher.tools, room)).system
+      : buildSystem({ ...args, pack: packForPrompt(teacher.tools) });
     const maxBytes = Math.round(promptLimit() * [1, 0.85, 0.7, 0.55][level]);
     const fit = fitTurns({ system, history: promptHistory(hist), maxBytes, stub: teacher.tools });
     return { fit, system, maxBytes, level };
@@ -2062,7 +2068,7 @@ export async function renderClass(root, meta, desk = null) {
       },
       ...(desk?.books?.chunks?.length ? [{
         name: 'textbook_read',
-        description: '取教材、文稿、讲义的全文（学习台的资料；资料包里的「教材目录」有编号）。ids 写条目编号数组（B1-23.1），连着的一串写范围「B1-10.1~B1-17.3」；或者 pages 写书页「10-17」（book 写哪本，不写就是全部）。**一次取够一整节**：每调用一次你要多等一整轮、整份说明再读一遍，一条一条取很贵。取到的全文页面会一直留在资料包的「教材原文」里（这节课后面每一轮都带着），**取过的不要再取**。',
+        description: '取教材、文稿、讲义的全文（学习台的资料；资料包里的「教材目录」有编号）。这一块所在的整章，页面一般已经放进资料包的「教材原文」了：先看那里，没有的再取。ids 写条目编号数组（B1-23.1），连着的一串写范围「B1-10.1~B1-17.3」；或者 pages 写书页「10-17」（book 写哪本，不写就是全部）。**一次取够一整节**：每调用一次你要多等一整轮、整份说明再读一遍，一条一条取很贵。取到的全文页面会一直留在资料包的「教材原文」里（这节课后面每一轮都带着），**取过的不要再取**。',
         inputSchema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' } }, pages: { type: 'string' }, book: { type: 'string' } } },
         async execute(input) {
           const ids = Array.isArray(input?.ids) ? input.ids.map(String) : String(input?.ids ?? '').split(/[,，\s]+/).filter(Boolean);

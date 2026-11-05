@@ -148,7 +148,11 @@ export function blockChunks(block, chunks = []) {
 // read：这节课取过的条目（readHistory，最近的在后面）。它们一直留在「教材原文」里，最多 readMax（最近取的优先）；
 // 备课点名的条目照旧最多 max。取过的排在前面（资料包太长要截时从末尾截，先截的是备课点名、它还没取过的），各自按书里的顺序
 // ahead：顺着往下讲是常态，取过的里最靠后的那条之后，再顺带放 aheadMax 的接下来几条（同一本书），讲到那里不用先取
-export function textbookForClass({ main = null, block = null, books = [], chunks = [], tools = true, max = 40 * 1024, read = [], readMax = 32 * 1024, aheadMax = 12 * 1024 } = {}) {
+// room：再往里放多少字节（课堂按这一轮整份说明还剩多少算好给，class/bookroom.js；0 就是上面这些）。
+// 这一块所在的整章（点名的、挂着的、取过的条目所在的章）其余条目按离这些条目的远近往里放（同样远先放后面的：顺着往下讲是常态），
+// 整章都放下了再放章外紧挨着的几条（最多 nearMax）。实测（2026-11-02、03 三节课 68 轮）老师调了 21 次 textbook_read，
+// 每次多等一整轮（10 秒以上），而说明从 4 KB 加到 160 KB 出第一个字的时间看不出变化：多放原文比让它取划算得多
+export function textbookForClass({ main = null, block = null, books = [], chunks = [], tools = true, max = 40 * 1024, read = [], readMax = 32 * 1024, aheadMax = 12 * 1024, room = 0, nearMax = 16 * 1024 } = {}) {
   if (!chunks.length) return { textbook: '', catalog: '', images: [] };
   const named = (Array.isArray(main?.chunks) ? main.chunks : []).map((id) => chunks.find((c) => c.id === id)).filter(Boolean);
   const mine = named.length ? named : blockChunks(block, chunks);
@@ -190,9 +194,13 @@ export function textbookForClass({ main = null, block = null, books = [], chunks
     used += bytes(t);
     pick.set(c.id, t);
   }
+  // 整章：锚是点名 / 挂着的和取过的（接着往下顺带的不算：它可能已经跨进下一章）
+  const readIds = kept.slice(0, nRead ?? kept.length);
+  const fill = chapterFill({ chunks, anchors: [...mine.map((c) => c.id), ...readIds], pick, textOf, room, nearMax });
   const seq = (id) => chunks.find((c) => c.id === id)?.seq ?? 0;
   const inOrder = (ids) => [...ids].sort((a, b) => seq(a) - seq(b)).map((id) => pick.get(id));
   const full = [...inOrder(kept), ...inOrder([...pick.keys()].filter((id) => !kept.includes(id)))];
+  if (fill.ids.length || fill.chapters.some((x) => x.all)) full.unshift(fillNote(fill, books));
   if (kept.length) {
     const n = nRead ?? kept.length;
     full.unshift(`（前面 ${kept.length} 条是页面替你留着的：其中 ${n} 条是你这节课用 textbook_read 取过的${kept.length > n ? `，${kept.length - n} 条是接着往下的几条` : ''}。这节课后面每一轮都带着，照着讲不用再取。）`);
@@ -201,8 +209,75 @@ export function textbookForClass({ main = null, block = null, books = [], chunks
   const around = [...new Set([...mine.map((c) => c.id), ...kept])];
   const cat = bookCatalog(books, chunks, { around: around.length ? around : null, max: 6 * 1024 });
   const how = tools
-    ? '上面没放全文的条目，用 textbook_read 取（取过的页面会一直留在「教材原文」里，不用再取）：ids 写编号，连着的一串写范围「B1-10.1~B1-17.3」，或者 pages 写书页「10-17」——**要讲一整节就一次取一整节**，不要一条一条取；不知道在哪就用 textbook_search 按词找（比如「伴随矩阵」「克拉默」）；要核对转写、照原页讲，用 textbook_page 看那条的原页图，或者用 image 组件把原页贴上黑板（name 写条目编号）。每用一次工具要多等一整轮，挑准了再取。'
+    ? (fill.chapters.some((x) => x.all) ? '这一章的原文都在「教材原文」里，一般不用 textbook_read。' : '')
+      + '上面没放全文的条目，用 textbook_read 取（取过的页面会一直留在「教材原文」里，不用再取）：ids 写编号，连着的一串写范围「B1-10.1~B1-17.3」，或者 pages 写书页「10-17」——**要讲一整节就一次取一整节**，不要一条一条取；不知道在哪就用 textbook_search 按词找（比如「伴随矩阵」「克拉默」）；要核对转写、照原页讲，用 textbook_page 看那条的原页图，或者用 image 组件把原页贴上黑板（name 写条目编号）。每用一次工具要多等一整轮，挑准了再取。'
     : '这个查看方式不能用工具：目录里的条目取不了全文。';
   const images = mine.flatMap((c) => (Array.isArray(c.img) ? c.img.slice(0, 2) : []).map((id, i) => ({ name: i ? `${c.id}-${i + 1}` : c.id, id, title: `${c.title}（原页${c.page ? ` p.${c.page}` : ''}）` }))).slice(0, 16);
-  return { textbook: full.join('\n\n'), catalog: cat ? `${cat}\n\n${how}` : '', images };
+  return { textbook: full.join('\n\n'), catalog: cat ? `${cat}\n\n${how}` : '', images, fill: { ids: fill.ids, chapters: fill.chapters } };
+}
+
+const chapterKey = (c) => `${c.book}|${c.chapter || ''}`;
+
+/**
+ * 往 pick 里按远近补整章（改 pick）。anchors：已经放进去的点名 / 挂着的 / 取过的条目编号；room：最多再放多少字节。
+ * 一个方向（往后 / 往前）放不下就停在那个方向，不跳过去放更远的（原文中间不留洞）。
+ * 返回 { ids: 补进去的, chapters: [{ book, chapter, n（这一章几条）, all（全放下了没有）}] }
+ */
+export function chapterFill({ chunks = [], anchors = [], pick, textOf, room = 0, nearMax = 16 * 1024 }) {
+  const out = { ids: [], chapters: [] };
+  const base = anchors.map((id) => chunks.find((c) => c.id === id)).filter(Boolean);
+  if (!(room > 0) || !base.length) return out;
+  const chs = new Set(base.map(chapterKey));
+  const books = new Set(base.map((c) => c.book));
+  // 离最近的锚多远（按书里的顺序 seq），往后的是 +1、往前的是 -1；同样远先放往后的
+  const where = (c, from) => {
+    let d = Infinity, dir = 1;
+    for (const a of from) {
+      if (a.book !== c.book) continue;
+      const k = (c.seq ?? 0) - (a.seq ?? 0);
+      if (Math.abs(k) < d || (Math.abs(k) === d && k > 0)) { d = Math.abs(k); dir = k > 0 ? 1 : -1; }
+    }
+    return { c, d, dir };
+  };
+  const byNear = (list, from = base) => list.map((c) => where(c, from)).sort((x, y) => x.d - y.d || y.dir - x.dir || (x.c.seq ?? 0) - (y.c.seq ?? 0));
+  let left = room;
+  const put = (cands, cap) => {
+    const stop = new Set();
+    let got = 0;
+    for (const x of cands) {
+      if (stop.has(x.dir)) continue;
+      const w = bytes(textOf(x.c)) + 2; // 段与段之间的空行
+      if (w > left || got + w > cap) { stop.add(x.dir); continue; }
+      left -= w;
+      got += w;
+      pick.set(x.c.id, textOf(x.c));
+      out.ids.push(x.c.id);
+    }
+  };
+  put(byNear(chunks.filter((c) => chs.has(chapterKey(c)) && !pick.has(c.id))), Infinity);
+  for (const k of chs) {
+    const all = chunks.filter((c) => chapterKey(c) === k);
+    const [book, ...rest] = k.split('|');
+    out.chapters.push({ book, chapter: rest.join('|'), n: all.length, all: all.every((c) => pick.has(c.id)) });
+  }
+  // 整章都放下了：章外紧挨着的（同一本书，上一章的末尾、下一章的开头）再放一点，讲到边上不用先取。远近从这一章的两头量
+  if (out.chapters.every((x) => x.all) && left > 0) {
+    const edge = chunks.filter((c) => chs.has(chapterKey(c)));
+    put(byNear(chunks.filter((c) => books.has(c.book) && !chs.has(chapterKey(c)) && !pick.has(c.id)), edge), nearMax);
+  }
+  return out;
+}
+
+// 「教材原文」开头的一句：这一章的原文放了多少、要不要再取
+function fillNote(fill, books = []) {
+  const name = (x) => (x.chapter ? `「${one(x.chapter, 30)}」` : `《${one(books.find((b) => b.id === x.book)?.title || x.book, 30)}》`);
+  const all = fill.chapters.filter((x) => x.all);
+  const part = fill.chapters.filter((x) => !x.all);
+  return [
+    '（页面开课时按这一块放好了整章的原文：',
+    all.length ? `${all.map(name).join('、')}的 ${all.reduce((n, x) => n + x.n, 0)} 条全在下面，一般不用 textbook_read` : '',
+    all.length && part.length ? '；' : '',
+    part.length ? `${part.map(name).join('、')}放不下全部，下面是离这节课讲到的地方最近的那些，目录里没放全文的再取` : '',
+    '。）',
+  ].join('');
 }
