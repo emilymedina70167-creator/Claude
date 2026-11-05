@@ -20,7 +20,8 @@ function fieldText(v, name) {
   if (typeof v === 'string') return v;
   if (typeof v === 'boolean') return v ? 'on' : 'off';
   if (isNumber(v)) return isQ(v) ? v.toString() : String(v);
-  if (isMatrix(v)) return v.map((r) => r.map((x) => fieldText(x)).join(' ')).join('; ');
+  // 矩阵写成组件说明里的样子 [[1, 2], [3, 4]]（det、elim、eig 都认这种）
+  if (isMatrix(v)) return `[${v.map((r) => `[${r.map((x) => fieldText(x)).join(', ')}]`).join(', ')}]`;
   if (isVector(v)) return v.map((x) => fieldText(x)).join(' ');
   if (Array.isArray(v)) return v.map((x) => fieldText(x)).join(' ');
   if (v && typeof v.digits === 'string') return v.digits;
