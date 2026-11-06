@@ -107,7 +107,7 @@
 .class-draft.is-talk { margin: 14px 0 6px; }
 .class-talk-preview { width: min(100%, 40em); text-align: left; pointer-events: none; }
 .class-hero .class-draft.is-talk { justify-items: stretch; width: min(100%, 40em); }
-body.class-talk .ink-fab, body.class-talk .la-tray { display: none !important; }
+body.is-talk-class .ink-fab, body.is-talk-class .la-tray { display: none !important; }
 .hb-board.is-readonly input, .hb-board.is-readonly button:not(.hb-more), .hb-board.is-readonly .hb-n, .hb-board.is-readonly .hb-plane { pointer-events: none; }
 .hb-board.is-readonly input { opacity: .8; }
 /* 边写边显示的预览：还没核验、没查过，画不出来的行先不露（写错了会退回去重写） */

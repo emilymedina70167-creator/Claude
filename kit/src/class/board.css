@@ -274,6 +274,10 @@
 }
 .class-welcome[hidden] { display: none; }
 .class-welcome .live-empty-art { margin-bottom: 26px; }
+.class-welcome-card { display: flex; flex-direction: column; align-items: center; }
+.la-lesson .class-welcome-unit { margin: 0 0 10px; font: 400 clamp(30px, 4.4vw, 38px)/1.25 var(--hand); color: var(--chalk); max-width: 20em; text-wrap: balance; }
+.la-lesson .class-welcome-unit:empty { display: none; }
+.la-lesson .class-welcome-unit .katex { font-size: .85em; }
 .class-welcome-text { font-family: var(--hand); font-size: clamp(25px, 3.6vw, 30px); line-height: 1.5; color: var(--chalk); opacity: .92; margin: 0 0 28px; max-width: 24em; text-wrap: balance; }
 .class-welcome-text code { font-size: 14px; font-family: var(--mono); }
 .class-start { min-width: 210px; }
