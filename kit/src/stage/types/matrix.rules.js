@@ -16,7 +16,7 @@
 // 已经是阶梯形以后不判（老师可能要接着化成行最简形），只有把阶梯形弄乱了才算错。
 // 交出去的动作里的数写成字符串（和 matrix.js 场景里存的一样）：存进记录、发给老师时 JSON 不丢东西；收的时候 Q 和字符串都认。
 import { Q, rrefOf } from '../../exact.js';
-import { parseOps, opText, echelon, zeroRows, toQ } from './matrix.js';
+import { parseOps, opText, echelon, zeroRows, toQ, rowopText } from './matrix.js';
 
 const ONE = new Q(1n);
 const isOne = (q) => q.n === 1n && q.d === 1n;
@@ -350,6 +350,13 @@ export function actSrc(o, act) {
 }
 const made = (o, op) => { const act = toAct(op); return { act, src: actSrc(o, act) }; };
 
+/** 一行镜头指令 → check 认的动作（actSrc 倒过来）：rowop M r2 - 2r1（几步用逗号隔开）。改一格（write）这些不判，给 null */
+function lineAct(o, c, h) {
+  if (c.cmd !== 'rowop' || h.words[0] !== o.id) return null;
+  const op = rowopText(h).trim();
+  return op ? { type: 'rowop', op } : null;
+}
+
 // 手势里的部件：一行（行左边的把手、那一行本身，或者那一行的一格）写 { row: 3 }（一格 { r: 3, c: 1 } 也算第 3 行）；行号写 { label: 3 }
 const rowOf = (x) => (x?.row ?? x?.r ?? null);
 const labelOf = (x) => x?.label ?? null;
@@ -446,4 +453,5 @@ const predicates = {
   },
 };
 
-export const matrixRules = { next, check, predicates, facts, gestures };
+// 做完了（成了阶梯形）只对交给了学生做行变换的矩阵算：空着的乘积、学生只拨数的矩阵不算
+export const matrixRules = { next, check, predicates, facts, gestures, actOf: lineAct, doneBy: ['rowop'] };

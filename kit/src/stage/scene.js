@@ -16,6 +16,8 @@ import { bbox } from './layout.js';
 import { parseGoal, evalGoal, goalStatus, checkPreds, clauseKey } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder } from './value.js';
+import { rulesOf, done as nextDone } from './rules.js';
+import { judge } from './referee.js';
 
 export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 export const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
@@ -58,6 +60,28 @@ export function affordsOf(t) {
   return { ...(t.drag ? { drag: '拖' } : {}), ...(t.affords || {}) };
 }
 
+// 手势表里的动作（rules.js 的 gestures：rotate、rowop、mark……）给老师看的一句：按五种通用手势说
+const GESTURE_TEXT = { tap: '点', 'drop-on': '拖到上面', 'drop-at': '拖到空处', span: '拉一段', write: '写一个值' };
+const gestureText = (g) => [].concat(g?.gesture || []).map((k) => GESTURE_TEXT[k] || k).join(' / ');
+/** open 那一行老师事先定的：走偏了怎么办（wrong）、什么时候叫老师（call）、学生能不能撤一步（undo）。默认照做、只记下 */
+const POLICY = {
+  wrong: { quiet: '照做、只记下', mark: '照做、淡淡圈一下', block: '不让做、弹回去' },
+  call: { wrong: '一走偏就叫你', done: '做完才叫你' },
+  undo: { on: '学生能撤一步', off: '不能撤' },
+};
+const DEFAULT_POLICY = { wrong: 'quiet', call: null, undo: false };
+function policyIn(opts, rules, label) {
+  for (const k of ['wrong', 'call', 'undo']) {
+    if (opts[k] == null) continue;
+    const ok = POLICY[k];
+    if (!ok[opts[k]]) throw new Error(`${k}= 只能写 ${Object.keys(ok).join(' ')} 里的一个（${Object.entries(ok).map(([v, t]) => `${v} ${t}`).join('；')}），没有「${opts[k]}」`);
+  }
+  if (!rules && (opts.wrong != null || opts.call != null)) throw new Error(`${label}页面判不了对错（没有规则），wrong= / call= 用不上：去掉它们再写`);
+  return { wrong: opts.wrong || DEFAULT_POLICY.wrong, call: opts.call || DEFAULT_POLICY.call, undo: opts.undo === 'on' };
+}
+/** 不是默认的那几项，照老师的写法写出来（舞台现状里给老师看） */
+const policyText = (p) => (p ? [p.wrong !== 'quiet' ? `wrong=${p.wrong}` : '', p.call ? `call=${p.call}` : '', p.undo ? 'undo=on' : ''].filter(Boolean).join('、') : '');
+
 export class Scene {
   constructor() {
     this.objects = new Map(); // id → { type, id, origin, …（各种东西自己的数据） }
@@ -74,6 +98,9 @@ export class Scene {
     this.goals = new Map(); // id → { id, text, when, cond, met }
     this.reactions = new Map(); // 挑战 id → [行]：做到了的那一刻页面马上演（老师预写的确认和下一小问）
     this.labelRects = []; // 贴的字画在哪（stage.js 量了写回）：[{ x, y, w, h, objs }]，摆东西时后造的东西让开（reflow）
+    // —— 裁判（referee.js）接进来以后 ——
+    this.slips = new Map(); // 东西 id → { refs, src }：学生走偏的那一下淡淡圈着（open … wrong=mark），那样东西下一次变了就收掉
+    this.doneState = new Map(); // 东西 id → 上一行以后做没做完（rules.js 的 done）：从没做完变成做完的那一行才算「学生做完了」
   }
 
   clone() {
@@ -87,10 +114,12 @@ export class Scene {
     s.say = this.say;
     s.words = [...this.words];
     s.waiting = this.waiting ? { ...this.waiting } : null;
-    for (const [k, v] of this.opens) s.opens.set(k, { ...v, refs: [...v.refs] });
+    for (const [k, v] of this.opens) s.opens.set(k, { ...v, refs: [...v.refs], ...(v.policy ? { policy: { ...v.policy } } : {}) });
     for (const [k, g] of this.goals) s.goals.set(k, structuredClone(g));
     for (const [k, r] of this.reactions) s.reactions.set(k, [...r]);
     s.labelRects = this.labelRects.map((r) => ({ ...r, objs: [...r.objs] }));
+    for (const [k, v] of this.slips) s.slips.set(k, { ...v, refs: [...v.refs] });
+    s.doneState = new Map(this.doneState);
     return s;
   }
 
@@ -183,25 +212,126 @@ export class Scene {
   liveValue(src, ctx) { return evalLive(src, this, ctx); }
 
   // —— 一行指令改场景（画面怎么演由 stage.js 管）。返回这一行的要点（画面用），写错了抛错 ——
-  // 每一行之后：跟着别的东西算出来的（乘积……）重算（fx.derived），挑战判一遍，刚做到的（fx.goalsMet）把预写的行交出来（fx.reactions）
-  apply(c) {
+  // 每一行之后：跟着别的东西算出来的（乘积……）重算（fx.derived），挑战判一遍，刚做到的（fx.goalsMet）把预写的行交出来（fx.reactions）。
+  // by（'student' | 'teacher'）：这一行是谁做的，有规则的东西上的动作先过裁判（judgeLine）——学生的不合规则、老师不让做的不演
+  // （fx.blocked，舞台一点不动）；老师的照演，结论在 fx.judged 里。不给 by（检查一行、老写法、重放老师的行）就不过裁判，和以前一样。
+  // 裁判在场景里：重放（刷新、作废一轮）时学生的行照样过一遍，淡淡圈着的、预写的「做对一步」用掉没有，都和当时一样
+  apply(c, { by = null, open = null, judged } = {}) {
     if (c.on) return this.stash(c);
+    const j = judged !== undefined ? judged : by ? this.judgeLine(c, { by, open }) : null;
+    if (j && !j.apply) return { blocked: true, judged: j };
+    const target = this.ownTarget(c);
+    const before = j?.by === 'student' && this.objects.has(j.obj) ? structuredClone(this.objects.get(j.obj)) : null; // 学生这一下以后的事实要比前后
+    if (target) this.unslip(target); // 那样东西又变了：上一下淡淡圈着的收掉
     const fx = this.applyOne(c) || {};
     this.reflow();
     const derived = [...(fx.derived || []), ...this.derive()];
     if (derived.length) fx.derived = derived;
     // 跟着算的重算以后可能变大了（{A B} 多了一行、格里的数变长）：摆在下面的往下让（乘积的一格照旧不重排，和以前一样）
     if (derived.some((d) => !d.part && d.changed.length)) this.reflow();
+    const reactions = [];
+    if (j) {
+      fx.judged = j;
+      const o = this.objects.get(j.obj);
+      // 这一下以后写给老师的事实（规则交的：谁转上来了、哪一行变成什么、key 里还差几段）
+      if (before && o) { try { j.after = rulesOf(o)?.facts(before, o, j.act) || []; } catch { j.after = []; } }
+      if (j.mark && o) this.slip(j.obj, c);
+      // 学生做对一步：老师预写的确认、下一小问（@t.right，只演一次）
+      if (j.by === 'student' && j.verdict?.right === true) reactions.push(...this.take(`${j.obj}.right`).map((src) => ({ right: j.obj, src })));
+    }
     const met = this.checkGoals();
     if (met.length) {
       fx.goalsMet = met;
-      fx.reactions = met.flatMap((id) => { const r = this.reactions.get(id) || []; this.reactions.delete(id); return r.map((src) => ({ goal: id, src })); });
+      reactions.push(...met.flatMap((id) => this.take(id).map((src) => ({ goal: id, src }))));
     }
+    // 学生（或老师）这一行把交给学生做的东西做完了：@t.done 的行交出来，课堂按 by 决定叫不叫老师
+    const fin = this.checkDone();
+    if (fin.length) {
+      fx.done = fin;
+      reactions.push(...fin.flatMap((id) => this.take(`${id}.done`).map((src) => ({ done: id, src }))));
+    }
+    if (reactions.length || met.length) fx.reactions = reactions;
     return fx;
+  }
+  /** 预写的行拿出来（演一次就没了） */
+  take(key) { const r = this.reactions.get(key) || []; this.reactions.delete(key); return r; }
+
+  /**
+   * 一行在有规则的东西上做的动作，过裁判（referee.js 的 judge）：{ obj, act, src, by, policy, verdict, apply, call, facts, mark, failed? }
+   * （apply 以后学生的那一下还多 after：规则交的「这一下以后」的事实）；
+   * 不是动作（say、glow……）、那样东西没交规则、规则不判这种指令的，是 null。学生的照 open 那一行老师定的 wrong= / call= 办。
+   * 规则自己出错（check 抛了）：当没判（right 是 null），照做、不拦学生，记下 failed（画面那边写进出错记录、告诉老师没判成）
+   */
+  judgeLine(c, { by = 'student', open = null } = {}) {
+    if (!c?.cmd || c.on || (by !== 'student' && by !== 'teacher')) return null;
+    const id = this.ownTarget(c);
+    const o = id && this.objects.get(id);
+    const rules = rulesOf(o);
+    if (!rules) return null;
+    let act = null;
+    try { act = rules.actOf(o, c, this.helpers(c)); } catch { act = null; } // 写得读不懂的：交给那种东西自己的指令报错
+    if (!act) return null;
+    const policy = by === 'student' ? this.policyOf(id, open, c.cmd) : {};
+    const base = { obj: id, act, src: lineOf(c), by, policy };
+    try {
+      return { ...base, ...judge(this, id, act, policy, { by }) };
+    } catch (err) {
+      return { ...base, verdict: { legal: true, right: null, misread: null, why: null, next: null }, apply: true, call: null, facts: [], mark: false, failed: err?.message || String(err) };
+    }
+  }
+  /** 学生这一下是从哪一项 open 来的：那一项老师定的 policy（拿不准是哪一项就找这样东西开放着的任何一项） */
+  policyOf(id, open, cmd) {
+    const e = (open && this.opens.get(`${id}:${open}`)) || this.opens.get(`${id}:${cmd}`) || [...this.opens.values()].find((x) => x.obj === id && x.policy);
+    return e?.policy || {};
+  }
+  /** 这一行是哪样东西自己的指令（rotate、rowop、mark、write……）、对哪一样做：那样东西的 id；不是就 null */
+  ownTarget(c) {
+    if (!c?.cmd || CREATE[c.cmd] || !Object.values(TYPES).some((t) => t.commands?.[c.cmd])) return null;
+    for (const a of c.args || []) {
+      if (a.t !== 'word') continue;
+      const r = parseRef(a.v);
+      if (r && this.objects.has(r.obj)) return r.obj;
+    }
+    return null;
+  }
+  /** 学生走偏的那一下淡淡圈着：这一行写的部件（没写部件就是整样东西）；画面照部件上的 slip 画 */
+  slip(id, c) {
+    const refs = this.helpers(c).refsIn().filter((w) => parseRef(w)?.obj === id && w !== id);
+    const list = refs.length ? refs : [id];
+    for (const r of list) for (const p of this.parts(r)) p.slip = true;
+    this.slips.set(id, { refs: list, src: lineOf(c) });
+  }
+  unslip(id) {
+    if (!this.slips.has(id)) return;
+    this.slips.delete(id);
+    const o = this.objects.get(id);
+    if (o) for (const p of typeOf(o).parts(o)) delete p.slip;
+  }
+  /** 交给了学生做的东西（open 了规则 doneBy 里的动作）里，这一行从没做完变成做完了的；刚交给学生时已经做完的不算 */
+  checkDone() {
+    const out = [];
+    const seen = new Set();
+    for (const e of this.opens.values()) {
+      if (seen.has(e.obj) || !this.doneOpen(e.obj)) continue;
+      seen.add(e.obj);
+      let now = false;
+      try { now = nextDone(this, e.obj); } catch { now = false; }
+      const was = this.doneState.get(e.obj);
+      this.doneState.set(e.obj, now);
+      if (now && was === false) out.push(e.obj);
+    }
+    for (const id of [...this.doneState.keys()]) if (!seen.has(id)) this.doneState.delete(id);
+    return out;
+  }
+  /** 这样东西交给学生做了没有（open 了它的规则说「做完」要看的动作） */
+  doneOpen(id) {
+    const by = rulesOf(this.objects.get(id))?.doneBy || [];
+    return [...this.opens.values()].some((e) => e.obj === id && by.includes(e.action));
   }
 
   // @g1 开头的行：先记着，g1 做到了再演。在现在的舞台上把这一挑战记着的行连着试一遍，写错了当场告诉老师
   stash(c) {
+    if (String(c.on).includes('.')) return this.stashOn(c);
     const g = this.goals.get(c.on);
     if (!g) throw new Error(`先写 goal ${c.on} "给学生看的挑战" when="…"，再写 @${c.on} 开头的行`);
     if (g.met) throw new Error(`挑战 ${c.on} 已经做到了，@${c.on} 的行不会再演`);
@@ -220,6 +350,31 @@ export class Scene {
     }
     this.reactions.set(c.on, [...list, c.body]);
     return { stashed: c.on };
+  }
+  /**
+   * @t.done / @t.right 开头的行：t 做完了（规则说没有下一步了）、学生在 t 上做对一步时页面马上演（硬性规定：只收做对了、做完了；
+   * 走偏以后说什么永远等老师看着学生写）。在今天的舞台上连着试一遍，写错了当场告诉老师
+   */
+  stashOn(c) {
+    const [name, kind] = String(c.on).split('.');
+    if (kind === 'wrong') throw new Error('走偏以后怎么讲要等你看着学生写，不能预写');
+    if (kind !== 'done' && kind !== 'right') throw new Error(`@${name}. 后面只能写 done（做完了）或 right（学生做对一步），没有「${kind}」`);
+    const o = this.objects.get(name);
+    if (!o) throw new Error(this.goals.has(name) ? `${name} 是挑战：做到了演的行写 @${name}，@名字.${kind} 写在舞台上的东西上` : `舞台上没有「${name}」`);
+    const rules = rulesOf(o);
+    if (!rules) throw new Error(`${typeOf(o).label}页面判不了对错（没有规则），@${name}.${kind} 的行不会演`);
+    if (kind === 'done' && !this.doneOpen(name)) throw new Error(`先把要做的交给学生（${rules.doneBy.map((a) => `open ${name} ${a}`).join(' / ') || `open ${name} …`}），@${name}.done 的行才会演`);
+    if (kind === 'right' && ![...this.opens.values()].some((e) => e.obj === name)) throw new Error(`先 open ${name} …（交给学生动），@${name}.right 的行才会演`);
+    const key = `${name}.${kind}`;
+    const list = this.reactions.get(key) || [];
+    const trial = this.clone();
+    trial.trial = true;
+    for (const x of parseScript([...list, c.body].join('\n'))) {
+      if (x.on) throw new Error('@ 的行里不能再写 @');
+      trial.applyOne(x);
+    }
+    this.reactions.set(key, [...list, c.body]);
+    return { stashed: key };
   }
 
   applyOne(c) {
@@ -407,15 +562,20 @@ export class Scene {
         const o = this.objects.get(r.obj);
         const t = typeOf(o);
         const affords = affordsOf(t);
-        const names = Object.keys(affords);
+        // 手势表里的动作（open t rotate、open M rowop、open s mark）也认：学生的每一下页面先过裁判
+        const rules = rulesOf(o);
+        const gestures = rules?.gestures || {};
+        const names = [...new Set([...Object.keys(affords), ...Object.keys(gestures)])];
+        const what = (k) => affords[k] || gestureText(gestures[k]);
         if (!names.length) throw new Error(`${t.label}还不能开放给学生直接动`);
         const action = words[1] || names[0];
-        if (!affords[action]) throw new Error(`${t.label}能开放的是：${names.map((k) => `${k}（${affords[k]}）`).join('、')}，没有「${action}」`);
+        if (!names.includes(action)) throw new Error(`${t.label}能开放的是：${names.map((k) => `${k}（${what(k)}）`).join('、')}，没有「${action}」`);
         if (r.mark) this.parts(target);
         // 跟着算的（{A + B}、{A v}）：数是页面照式子算的，学生拨了、拖了也会被算回去
         if (o.live || (r.mark && this.parts(target).some((p) => p.live))) throw new Error(`${o.live ? o.id : target} 是跟着算的，学生动不了`);
         t.canOpen?.(this, o, action, h);
-        const e = { obj: o.id, action, refs: r.mark ? [target] : [], lo: null, hi: null };
+        const policy = policyIn(opts, rules, t.label);
+        const e = { obj: o.id, action, refs: r.mark ? [target] : [], lo: null, hi: null, policy, gesture: gestures[action] || null };
         if (action === 'edit') {
           const [lo, hi] = parseRange(opts.range || '-9..9');
           if (!(lo <= hi)) throw new Error('range 要写成 小..大，比如 range=-3..3');
@@ -528,6 +688,11 @@ export class Scene {
     if (!keepLabels) for (const [k, l] of this.labels) if (l.refs.some((r) => parseRef(r)?.obj === id)) this.labels.delete(k);
     this.binds = this.binds.filter((b) => b.obj !== id);
     for (const [k, e] of this.opens) if (e.obj === id) this.opens.delete(k);
+    // 换了一样新的：上一样淡淡圈着的、做没做完、预写的做完 / 做对一步都不算了
+    this.slips.delete(id);
+    this.doneState.delete(id);
+    this.reactions.delete(`${id}.done`);
+    this.reactions.delete(`${id}.right`);
   }
 
   // —— 跟着算的量（value.js）——
@@ -678,7 +843,10 @@ export class Scene {
     if (dials.length) lines.push(`能拨的数：${dials.map(([n, v]) => `${n} = ${v.v}（${v.lo}～${v.hi}）`).join('，')}`);
     if (this.say) lines.push(`最后说的话：${this.say}`);
     if (this.waiting) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案' }[this.waiting.kind]}${this.waiting.refs.length ? ` ${this.waiting.refs.join(' ')}` : ''}`);
-    if (this.opens.size) lines.push(`学生能直接动的：${[...this.opens.values()].map((e) => { const o = this.objects.get(e.obj); const what = affordsOf(typeOf(o))[e.action]; return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}）`; }).join('；')}`);
+    if (this.opens.size) lines.push(`学生能直接动的：${[...this.opens.values()].map((e) => { const o = this.objects.get(e.obj); const what = affordsOf(typeOf(o))[e.action] || gestureText(e.gesture); const pol = policyText(e.policy); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}${pol ? `；${pol}` : ''}）`; }).join('；')}`);
+    if (this.slips.size) lines.push(`淡淡圈着（学生走偏的那一下，照你写的 wrong=mark；那样东西再变就收掉）：${[...this.slips.values()].map((x) => `${x.refs.join(' ')}（${x.src}）`).join('；')}`);
+    const pre = [...this.reactions].filter(([k, r]) => k.includes('.') && r.length).map(([k, r]) => { const [id, kind] = k.split('.'); return `${id} ${kind === 'done' ? '做完了' : '学生做对一步'}页面马上演你预写的 ${r.length} 行`; });
+    if (pre.length) lines.push(`预写的：${pre.join('；')}`);
     for (const g of this.goals.values()) {
       const r = this.reactions.get(g.id);
       lines.push(`挑战 ${g.id}「${g.text}」when="${g.when}"：${goalStatus(this, g)}${r?.length ? `；做到了页面马上演你预写的 ${r.length} 行` : ''}`);

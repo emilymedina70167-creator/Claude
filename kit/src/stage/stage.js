@@ -13,6 +13,7 @@ import { judgeAnswer, sameAnswer } from './answer.js';
 export { sameAnswer };
 import { VIEWS } from './types/views.js';
 import { PointerRouter } from './pointer.js';
+import { reportError } from '../errlog.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
@@ -93,6 +94,7 @@ export class Stage {
     this.labelNodes = new Map(); // id → { node, box, sig, anchor }
     this.cam = { s: 1, tx: 0, ty: 0 };
     this.pending = []; // 学生在等待期间的试（拨数），跟着下一次回答一起告诉老师
+    this.teacherAudit = []; // 老师这一轮演的行里，页面核过不是正确的下一步的（裁判的话）：课堂下一条发给老师时带上、清掉
     this.build();
   }
 
@@ -172,6 +174,7 @@ export class Stage {
     n.classList.toggle('is-glow', !!x.glow);
     n.classList.toggle('is-lift', !!x.lift);
     n.classList.toggle('is-dim', !!x.dim);
+    n.classList.toggle('is-slip', !!x.slip); // 学生走偏的那一下淡淡圈着（open … wrong=mark，scene.js 的 slip）
     if (was !== (x.paint || null) && !this.instant && ctx?.cmd === 'paint') ctx.jobs.push(this.pulse(x, stagger(ctx.jobs.length, { step: 50 })));
     if (!!n.__covered !== !!x.covered) {
       n.__covered = !!x.covered;
@@ -341,6 +344,7 @@ export class Stage {
   async rollback(mark) {
     this.cancelWait?.();
     this.cancelBeat?.();
+    this.teacherAudit = []; // 作废的那一轮不进对话：页面核过它的几步也不说了
     await this.replay(this.log.slice(0, mark));
   }
 
@@ -359,7 +363,7 @@ export class Stage {
           continue;
         }
         if (c.cmd === 'say') asked = null;
-        await this.exec({ ...c, lenient: true }, { by: row.by, turn: row.turn });
+        await this.exec({ ...c, lenient: true }, { by: row.by, turn: row.turn, open: row.open || null });
       }
     }
     if (asked) await this.say(asked, { ask: true });
@@ -433,20 +437,44 @@ export class Stage {
   }
 
   // —— 一行 ——
-  async exec(c, { by = 'teacher', turn = this.turnNo } = {}) {
+  // act / told：学生的那一下（studentDo）——裁判的结论挂到 act 上，场景改好了（或者没让做）就 told()，课堂这时才收到这一下。
+  // open：学生这一下是从哪一项 open 来的（照那一项老师定的 wrong=），记进 log，重放时照它
+  async exec(c, { by = 'teacher', turn = this.turnNo, act = null, told = null, open = act?.open || null } = {}) {
     if (by !== 'student' && this.dragging) await this.dragDone;
+    // 学生的一下先过裁判（scene.js 的 judgeLine）：不合这个世界的规则、老师写了 wrong=block 又走偏了的不演、弹回去（不记进 log）。
+    // 重放时学生的行照样过（淡淡圈着的、预写的「做对一步」和当时一样）；老师的行只在当场核，重放不核
+    const judged = by === 'student' ? this.scene.judgeLine(c, { by, open }) : undefined;
+    if (judged && act) judgedAct(act, judged);
+    if (judged?.failed && !this.instant) reportError(judged.failed, { what: `舞台的规则判学生这一下时出错：${judged.src}` });
+    if (judged && !judged.apply) {
+      if (act) act.blocked = true;
+      told?.();
+      if (!this.instant) await this.snapBack(judged.obj);
+      return { blocked: true, judged };
+    }
     const err = this.scene.check(c);
     if (err) {
       this.errors.push({ line: c.line, src: c.src?.trim(), error: err });
+      told?.();
       return null;
     }
     const pre = this.capture();
     // 这一行之前东西都在哪（镜头先走的时候连「之前」一起框，见 keepInView 的 extra）
     const before = this.instant || !this.scene.objects.size ? null : bbox([...this.scene.objects.keys()].map((id) => this.scene.objectBox(id)));
-    const fx = this.scene.apply(c);
+    const fx = this.scene.apply(c, by === 'student' ? { judged: judged ?? null } : { by: this.instant || by !== 'teacher' ? null : by });
     this.execTurn = turn;
-    this.log.push({ src: c.src?.trim() || '', by, turn });
-    if (by === 'teacher' && !this.instant) this.onLine?.(c);
+    this.log.push({ src: c.src?.trim() || '', by, turn, ...(by === 'student' && open ? { open } : {}) });
+    if (by === 'teacher' && !this.instant) {
+      this.onLine?.(c);
+      // 老师的这一步不是正确的下一步：照演（可能是故意演错），下一条发给老师时说一声
+      for (const f of fx?.judged?.facts || []) if (this.teacherAudit.length < AUDIT_MAX && !this.teacherAudit.includes(f)) this.teacherAudit.push(f);
+      if (fx?.judged?.failed) reportError(fx.judged.failed, { what: `舞台的规则核老师这一行时出错：${fx.judged.src}` });
+    }
+    if (act) {
+      if (fx?.judged?.after?.length) act.facts = fx.judged.after;
+      if (fx?.derived?.length) act.derived = slimDerived(fx.derived);
+    }
+    told?.();
     try {
       const choreo = c.on ? null : this.choreoOf(c, fx); // @g1 的行只是记着，不演
       // 镜头先走：场景已经是这一行之后的样子，镜头这就开始挪，和东西一起动（以前等东西动完才挪，中间一段东西跑出屏幕）
@@ -471,12 +499,27 @@ export class Stage {
       this.errors.push({ line: c.line, src: c.src?.trim(), error: `画面没演好：${e.message}` });
       await this.sync({ pre });
     }
-    if (fx?.goalsMet?.length) {
-      if (!this.instant) { this.celebrate(fx.goalsMet); this.react(fx.reactions || [], turn); }
-      // 先排上预写的行再告诉课堂（课堂等 reacting 演完，看学生手上还有没有事）
-      this.onGoal?.(fx.goalsMet, { by, instant: this.instant, reacted: (fx.reactions || []).length });
+    const reacts = fx?.reactions || [];
+    if (!this.instant) {
+      if (fx?.goalsMet?.length) this.celebrate(fx.goalsMet);
+      // 预写的行（挑战做到了、做完了、学生做对一步）：马上演
+      if (fx?.goalsMet?.length || fx?.done?.length || reacts.length) this.react(reacts, turn);
     }
+    // 先排上预写的行再告诉课堂（课堂等 reacting 演完，看学生手上还有没有事）
+    if (fx?.goalsMet?.length) this.onGoal?.(fx.goalsMet, { by, instant: this.instant, reacted: reacts.filter((r) => r.goal).length });
+    if (fx?.done?.length) this.onDone?.(fx.done, { by, instant: this.instant, reacted: reacts.filter((r) => r.done).length });
     return fx;
+  }
+  /** 没让做的那一下：拖着的部件滑回原处（场景一点没动） */
+  async snapBack(id) {
+    const jobs = [];
+    for (const n of this.nodes.values()) {
+      if (n.__obj !== id || !n.__box || n instanceof SVGElement) continue;
+      n.classList.remove('is-hold', 'is-over');
+      const to = tr(n.__box.x, n.__box.y);
+      if (n.style.transform && n.style.transform !== to) jobs.push(this.tween(n, [{ transform: n.style.transform }, { transform: to }], { duration: 360, easing: EASE.spring }));
+    }
+    await Promise.all(jobs);
   }
 
   // —— 量画出来的样子（排版的根：每种东西自己估的大小不一定对，画出来才知道）——
@@ -1024,15 +1067,21 @@ export class Stage {
     return node;
   }
 
-  // 学生的动作改了舞台（拨数、拖过去换位置、拖动平面上的向量）：照一行指令走场景（记进 log，刷新、作废都照它放回）
+  // 学生的动作改了舞台（拨数、拖过去换位置、拖动平面上的向量、转一下、做一步行变换、拉一段括号）：照一行指令走场景
+  // （记进 log，刷新、作废都照它放回）。先过裁判：结论挂在 act 上（act.verdict），场景改好了（或者没让做）才交给课堂——
+  // 以前是一拖完马上交，那时还不知道这一下对不对、做完了没有
   studentDo(src, act) {
     const [c] = parseScript(src);
-    this.studentChain = (this.studentChain || Promise.resolve()).then(() => this.exec({ ...c, dragged: act.type === 'drag' }, { by: 'student' })).catch(() => {});
     if (act.type === 'dial') {
       const last = this.pending.findLast?.((p) => p.type === 'dial' && p.name === act.name);
       if (last) last.path.push(act.value); else this.pending.push({ ...act, path: [act.from ?? null, act.value].filter((v) => v != null) });
     }
-    this.onAct?.(act);
+    let sent = false;
+    const told = () => { if (!sent) { sent = true; this.onAct?.(act); } };
+    this.studentChain = (this.studentChain || Promise.resolve())
+      .then(() => this.exec({ ...c, dragged: act.type === 'drag' }, { by: 'student', act, told }))
+      .catch(() => {})
+      .then(told);
     return this.studentChain;
   }
 
@@ -1234,6 +1283,22 @@ export function stageLines(text) {
   });
 }
 
+// 老师一轮里核出来的不对的几步最多带几条（一轮演的行有限；再多也只是同一个错一路错下去）
+const AUDIT_MAX = 8;
+const nextText = (x) => (x == null ? null : typeof x === 'string' ? x : x.why || null);
+/** 裁判的结论挂到学生的那一下上（events.js 写给老师；存进证据、对话的是这一份，不带规则内部的动作） */
+function judgedAct(act, j) {
+  const v = j.verdict || {};
+  act.src = j.src;
+  act.verdict = { legal: v.legal !== false, right: v.right ?? null, misread: v.misread ?? null, why: v.why ?? null, next: nextText(v.next) };
+  if (j.call === 'now') act.call = 'now';
+  if (j.mark) act.marked = true;
+  if (j.failed) act.failed = true;
+  if (j.policy?.call === 'done') act.patient = true; // 老师写了做完才叫：试的这几下不算进「试了好多下」
+}
+/** 跟着变的（scene.js 的 fx.derived）存得下的样子：不带部件本身 */
+const slimDerived = (list) => list.map((d) => ({ id: d.id, changed: (d.changed || []).map((x) => ({ ref: x.ref, ...(x.expr != null ? { expr: x.expr } : {}), from: x.from, to: x.to })), ...(d.error ? { error: d.error } : {}) }));
+
 /** 学生这一下做了什么，写给老师看（和舞台现状一起发） */
 export function actText(act) {
   if (!act) return '';
@@ -1251,6 +1316,8 @@ export function actText(act) {
     if (act.type === 'edit') return `学生把 ${act.ref} 从 ${act.from === '' ? '空' : act.from} 拨到 ${act.to}`;
     if (act.type === 'explain') return `学生点了 ${act.ref}，看它怎么一行乘一列算出来`;
     if (act.type === 'goal') return `学生做到了挑战 ${act.id}「${act.text}」`;
+    // 过了裁判的一下（rotate、rowop、mark……）：学生那一行指令，后面是这一下做了什么（裁判的结论 events.js 接着写）
+    if (act.src && act.verdict) return `学生 ${act.src}${act.verdict.why && act.verdict.legal !== false ? `（${act.verdict.why}）` : ''}`;
     return '';
   })();
   return [...tries, main].filter(Boolean).join('\n');

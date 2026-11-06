@@ -7,6 +7,10 @@
 //   facts(before, after, act) → [话]
 //   gestures { tap / drag / ...: { gesture, ... } }
 //   standard(o) → { steps, variants }（可选）
+//   actOf(o, c, h) → 动作 | null                一行镜头指令（rotate t#3 right、rowop M r2 - 2r1、mark s.2-4 V）→ check 认的动作；
+//                                               不判的指令是 null。学生、老师的每一行都照它过裁判（场景里，所以重放出来一样）
+//   doneBy [动作名]                              open 了这几个动作的东西，next 走到 null 才算「学生做完了」（@名字.done、叫老师）：
+//                                               树的平衡、矩阵的阶梯形只对交给了学生做的东西有意义（一棵本来就平衡、没 open 的树不是学生做完的）
 
 const REGISTRY = new Map();
 
@@ -16,6 +20,8 @@ const DEFAULTS = {
   predicates: {},
   facts: () => [],
   gestures: {},
+  actOf: () => null,
+  doneBy: [],
 };
 
 /** 登记一种东西的规则；缺的项给默认值（不判、不拦） */

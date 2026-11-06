@@ -232,6 +232,13 @@ function termsOf(rhs, bad) {
  * 逗号隔开是连着做的几步：r2 - 4r1, r3 - 7r1；列变换把 r 换成 c）。
  * 返回 [{ line: 'r' | 'c', kind: 'swap' | 'scale' | 'add' | 'comb', i, j, a, b }]（a、b 是 Q：第 i 行 ← a·第 i 行 + b·第 j 行）
  */
+/** rowop 那一行里写的行变换（名字后面的部分）原样拼回来：r2=r2-3r1 连着写时被读成了 key=value，也拼回来（matrix.rules.js 的 actOf 也用它） */
+export function rowopText(h) {
+  const opt = Object.entries(h.opts).filter(([k]) => /^[rRcC]\d+$/.test(k)).map(([k, v]) => `${k}=${v}`);
+  const rest = h.args.slice(1).map((a) => (a.t === 'word' ? a.v : a.t === 'eq' ? '=' : a.t === 'arrow' ? '->' : '')).join(' ');
+  return [...opt, rest].join(' ');
+}
+
 export function parseOps(text, o) {
   const raw = String(text ?? '').trim();
   if (!raw) throw new Error(`rowop 后面写一步行变换，比如 rowop ${o.id} r2 - 3r1`);
@@ -470,10 +477,7 @@ export const matrix = {
     // rowop m r2 - 3r1：一步（或逗号隔开的几步）初等行变换；每一步的写法贴在它改的那一行右边（op:m、op:m:2……，下一次行变换换掉）
     rowop(scene, c, h) {
       const o = matrixOf(scene, h.words[0], 'rowop');
-      // 原样拼回老师写的式子：r2=r2-3r1 连着写时被读成了 key=value，也拼回来
-      const opt = Object.entries(h.opts).filter(([k]) => /^[rRcC]\d+$/.test(k)).map(([k, v]) => `${k}=${v}`);
-      const rest = h.args.slice(1).map((a) => (a.t === 'word' ? a.v : a.t === 'eq' ? '=' : a.t === 'arrow' ? '->' : '')).join(' ');
-      const ops = parseOps([...opt, rest].join(' '), o);
+      const ops = parseOps(rowopText(h), o);
       const done = ops.map((op) => applyOp(o, op));
       o.stairs = false; // 数变了，阶梯线收起（要的话再画一次）
       delete o.live; // 跟着算的做了行变换：就是一个普通的矩阵了（不然依赖一变又算回去，行变换白做）

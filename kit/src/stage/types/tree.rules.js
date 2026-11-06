@@ -11,7 +11,7 @@
 // 离平衡很远的树（老师用二叉排序树的插法造的一条长链）照这样转还是可能绕回去：先照着往下试转，
 // 会回到转过的样子就改成一层一层摆（shapeStep），摆法本身一定走得完；只有往上转一层会压过 8 层时那一下照课本转
 // （量过几千棵到 8 层、31 个结点的随机二叉排序树，都不绕圈、每一下都转得了）。
-import { imbalance, levelOrder, heightOf, depths, cmpValues, bfOf, bfText, snapshot, rotStruct, descend, traversal, treePath, MAX_DEPTH, MAX_NODES } from './tree.js';
+import { imbalance, levelOrder, heightOf, depths, cmpValues, bfOf, bfText, snapshot, rotStruct, descend, traversal, treePath, MAX_DEPTH, MAX_NODES, rotKind, SIDES } from './tree.js';
 import { avlEngine } from '../../engines/balanced.js';
 import { levelOrder as engineOrder } from '../../engines/treeview.js';
 
@@ -339,6 +339,34 @@ export function actSrc(o, act) {
   throw new Error(`树没有「${act.type}」这个动作`);
 }
 const made = (o, act) => ({ act, src: actSrc(o, act) });
+
+/**
+ * 一行镜头指令 → check 认的动作（actSrc 倒过来）：rotate t#3 right / rotate t.50 LR、insert t 35 / insert t.70 left 65。
+ * 别的指令（换值、删、遍历……）不判，给 null；写得读不懂的也给 null（树自己的指令会把错说清楚）
+ */
+function lineAct(o, c, h) {
+  const own = (w) => String(w).match(/^[A-Za-z_]\w*/)?.[0] === o.id;
+  const refs = h.refsIn().filter(own);
+  const rest = h.words.filter((w) => !h.scene.isRef(w));
+  if (c.cmd === 'rotate') {
+    const ps = refs.filter((r) => r !== o.id).flatMap((r) => h.scene.parts(r));
+    const k = rotKind(rest[0]);
+    if (ps.length !== 1 || !k) return null;
+    return k === 'left' || k === 'right' ? { type: 'rotate', at: ps[0].key, dir: k } : { type: 'rotate', at: ps[0].key, kind: k };
+  }
+  if (c.cmd === 'insert') {
+    const side = rest.find((w) => SIDES[w]);
+    const vals = rest.filter((w) => !SIDES[w]);
+    const value = vals.length === 1 ? vals[0] : vals.length ? null : h.str;
+    if (value == null || !refs.length) return null;
+    if (refs[0] === o.id) return side ? null : { type: 'insert', value: String(value) };
+    const ps = h.scene.parts(refs[0]);
+    if (ps.length !== 1 || !side) return null;
+    return { type: 'insert', value: String(value), parent: ps[0].key, side: SIDES[side] };
+  }
+  return null;
+}
+
 const trayValue = (value) => (value == null || value === '' ? null : String(value));
 
 const gestures = {
@@ -416,4 +444,5 @@ function standard(o) {
   return { input, steps: run.steps, log: run.log, rotations, final: keys(run.final), variants: avlEngine.variants(input) };
 }
 
-export const treeRules = { next, check, predicates, facts, gestures, standard };
+// 做完了（平衡了、托盘也插完了）只对交给了学生转、插的树算
+export const treeRules = { next, check, predicates, facts, gestures, standard, actOf: lineAct, doneBy: ['rotate', 'insert', 'place'] };

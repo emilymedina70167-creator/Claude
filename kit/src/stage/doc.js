@@ -110,11 +110,40 @@ export function firstMessage(opts) {
 }
 
 /**
- * 学生做完以后发给老师的一条：学生做了什么、舞台现在是什么样（照场景写的，和画面一样）、上一轮哪几行没演（写错了）
+ * 学生动了以后跟着算的东西变了什么（scene.js 的 fx.derived，两种样子：乘积一格一条 { part, before, after, id, changed }；
+ * 跟着算的一样东西一条 { id, changed: [{ ref, expr?, from, to }] }，算不出来 { id, changed: [], error }）→ 一行一行。
+ * 同一格变了几次写从第一次之前变成最后的，变回原样的不写；算不出来的写最后一次的原因（后来又算出来了就不写）
  */
-export function turnMessage({ act = '', state = '', errors = [] } = {}) {
+export function derivedLines(derived = []) {
+  const cells = new Map(); // ref（带式子）→ { ref, expr, from, to }
+  const errs = new Map(); // id → 原因
+  for (const d of derived || []) {
+    if (!d) continue;
+    if (d.error) { errs.set(d.id, d.error); continue; }
+    for (const x of d.changed || []) {
+      const k = `${x.ref}|${x.expr ?? ''}`;
+      const had = cells.get(k);
+      if (had) had.to = x.to; else cells.set(k, { ref: x.ref, expr: x.expr ?? null, from: x.from, to: x.to });
+      errs.delete(d.id);
+    }
+  }
+  const shown = (v) => (v === '' || v == null ? '空' : String(v));
+  const out = [...cells.values()].filter((x) => shown(x.from) !== shown(x.to)).map((x) => `${x.ref}${x.expr ? ` 里的 {${x.expr}}` : ''} 从 ${shown(x.from)} 变成 ${shown(x.to)}`);
+  // 原因前面的「{式子}」和前面写的重了（scene.js 的 stateText 也这样去）
+  for (const [id, e] of errs) out.push(`${id} 算不出来：${String(e).replace(/^「\{[^{}]*\}」(算不出来：|里的)?/, '')}`);
+  return out;
+}
+
+/**
+ * 学生做完以后发给老师的一条：学生做了什么、跟着变的（页面重算的）、页面核过老师上一轮的几步（不是正确的下一步的那几步）、
+ * 上一轮哪几行没演（写错了）、舞台现在是什么样（照场景写的，和画面一样）。后加的两块只在有内容时出现
+ */
+export function turnMessage({ act = '', state = '', errors = [], audit = [], derived = [] } = {}) {
   const parts = [];
   parts.push(act ? `[学生]\n${act}` : '[学生] 没有动作');
+  const moved = derivedLines(derived);
+  if (moved.length) parts.push(`[跟着变的]（学生动了以后页面当场重算的）\n${moved.map((l) => `- ${l}`).join('\n')}`);
+  if (audit.length) parts.push(`[页面核过你上一轮的几步]（这几步不是正确的下一步；页面照演了、没拦你，是故意演错的就不用管）\n${audit.map((l) => `- ${l}`).join('\n')}`);
   if (errors.length) parts.push(`[上一轮没演的行]（写错了，页面跳过了，别的行照演）\n${errors.map((e) => `- 第 ${e.line} 行「${e.src}」：${e.error}`).join('\n')}`);
   parts.push(`[舞台现在]\n${state}`);
   parts.push('写下一轮。');

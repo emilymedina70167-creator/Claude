@@ -434,7 +434,8 @@ function target(h, cmd, { need = true } = {}) {
   parts.sort((a, b) => a.slot - b.slot);
   return { o, parts, whole, refs };
 }
-const restText = (h, refs) => h.str ?? h.words.filter((w) => !refs.includes(w) && !isColor(w)).join(' ');
+/** 一行里部件以外写的字（mark s.2-4 主语 的「主语」；sentence.rules.js 的 actOf 也用它） */
+export const restText = (h, refs) => h.str ?? h.words.filter((w) => !refs.includes(w) && !isColor(w)).join(' ');
 const contiguous = (parts) => parts.every((p, i) => !i || p.slot === parts[i - 1].slot + 1);
 const sameKeys = (a, b) => a.length === b.length && a.every((k) => b.includes(k));
 const foldOfKey = (o, k) => o.folds.find((f) => f.keys.includes(k));

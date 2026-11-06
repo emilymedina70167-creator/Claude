@@ -19,6 +19,8 @@ import { turnMessage } from './doc.js';
 import { eventOf, triggers, eventsText, tryCount, TRY_MAX, QUIET_MS } from './events.js';
 
 const enc = typeof TextEncoder === 'function' ? new TextEncoder() : null;
+/** 这一段学生做的事带着的「跟着变的」（stage.js 挂在每一下上的 act.derived）摊成一张，doc.js 的 turnMessage 再并成一行一格 */
+const derivedOf = (events) => events.flatMap((e) => e.act?.derived || []);
 const bytes = (s) => (enc ? enc.encode(String(s)).length : String(s).length);
 export const RETRY = new Set(['再试一次', '再要一次']);
 
@@ -145,7 +147,9 @@ export function createLoop(host) {
     // 学生点「接着」叫的老师：不写过了几秒（提前想好的那一轮才对得上）
     const byNext = events.at(-1)?.act?.type === 'next';
     const said = eventsText(events, { goals: stage.scene.goals, secs: byNext || !S.armedAt ? null : Math.round((performance.now() - S.armedAt) / 1000) });
-    const msg = turnMessage({ act: said, state: stage.scene.stateText(), errors: S.lastErrors });
+    // 页面核过老师上一轮的几步（不是正确的下一步的）、学生动了以后跟着变的：一起写进这一条，核过的说过就清掉
+    const msg = turnMessage({ act: said, state: stage.scene.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(events) });
+    stage.teacherAudit = [];
     const say = events.filter((e) => e.act?.type === 'say').map((e) => e.act.text).join('\n');
     clearTimeout(S.saveTimer);
     Object.assign(p.row, { pending: false, text: said, msg, events, log: [...p.base, ...stage.log.slice(S.logFrom)], ...(say ? { say } : {}) });
@@ -178,6 +182,19 @@ export function createLoop(host) {
     if (S.ended || RETRY.has(act.button)) return;
     addEvent(eventOf(act, { help: HELP, at: Date.now() }));
     flush();
+  }
+  // 交给学生做的东西（open t rotate、open M rowop……）做完了（规则说没有下一步了）：没预写做完以后的行就叫老师；
+  // 预写了（@t.done），和做到挑战一样，演完学生手上还有事就先不叫
+  function onDone(ids, { by = 'student', instant, reacted = 0 } = {}) {
+    if (instant || S.ended || host.readOnly || by !== 'student') return;
+    const e = { kind: 'done', ids, reacted, at: Date.now() };
+    addEvent(e);
+    if (!reacted) { flush(); return; }
+    Promise.resolve(stage.reacting).then(() => {
+      const w = stage.scene.waiting;
+      if ((w && w.button !== HELP) || stage.pendingGoals().length) { e.quiet = true; savePending(); armIdle(); maybeSpec(); return; }
+      flush();
+    });
   }
   function onGoal(ids, { by = 'student', instant, reacted = 0 } = {}) {
     if (instant || S.ended || host.readOnly) return;
@@ -220,7 +237,7 @@ export function createLoop(host) {
     const said = eventsText([...(S.pending?.events || []), eventOf(act, { help: HELP })], { goals: stage.scene.goals });
     const after = stage.scene.clone();
     after.waiting = null;
-    const msg = turnMessage({ act: said, state: after.stateText(), errors: S.lastErrors });
+    const msg = turnMessage({ act: said, state: after.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(S.pending?.events || []) });
     const input = host.messages({ next: msg });
     const s = S.spec = { msg, input, text: '', res: null, err: null, listeners: [], t0: performance.now(), dead: false, done: false, adopted: false };
     s.record = () => host.addTurn({ role: 'system', kind: 'spec', discarded: true, text: '提前想好的下一轮没用上（学生做的和预想的不一样）', cost: host.cost({ bytes: inBytes(input), why: 'spec', ms: performance.now() - s.t0 }) });
@@ -240,13 +257,16 @@ export function createLoop(host) {
     if (s.done) s.record();
   }
 
-  // 学生的每个动作：证据交给 host；开放给学生直接动的、拨数是「试」，攒进这一段
+  // 学生的每个动作：证据交给 host；开放给学生直接动的、拨数是「试」，攒进这一段。
+  // 老师在 open 那一行写了 call=wrong、裁判说这一下走偏了（act.call === 'now'）：这一件事马上叫老师
   function onAct(a) {
     if (!a) return;
     host.evidence?.act?.(a, S.lastClaude);
     if (S.ended || host.readOnly) return;
     if (a.open || a.type === 'dial') {
-      addEvent(eventOf(a, { help: HELP, at: Date.now() }));
+      const e = eventOf(a, { help: HELP, at: Date.now() });
+      addEvent(e);
+      if (triggers(e)) { flush(); return; }
       onTry();
     }
   }
@@ -280,6 +300,7 @@ export function createLoop(host) {
 
   stage.onAnswer = onAnswer;
   stage.onGoal = onGoal;
+  stage.onDone = onDone;
   return {
     teach, flush, finalize, dropSpec, resume, close, reopen, onAct,
     get busy() { return S.busy; },

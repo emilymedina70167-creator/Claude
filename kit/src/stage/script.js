@@ -67,11 +67,11 @@ export function parseScript(src) {
   String(src ?? '').split('\n').forEach((raw, k) => {
     let line = raw.trim();
     if (!line || line.startsWith('#') || line.startsWith('//')) return;
-    // @g1 开头：挑战 g1 做到了的那一刻页面马上演的行（先记着，不演）
+    // @g1 开头：挑战 g1 做到了的那一刻页面马上演的行（先记着，不演）；@t.done / @t.right：t 做完了、学生做对一步时（scene.js 的 stash 再查后半截）
     let on = null;
-    const at = line.match(/^@([A-Za-z_]\w*)\s+(.+)$/);
+    const at = line.match(/^@([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s+(.+)$/);
     const body = at ? at[2].trim() : null;
-    if (at) { on = at[1]; line = body; } else if (line.startsWith('@')) { out.push({ cmd: null, error: '要写成 @挑战的名字 一行指令（比如 @g1 say "对！"）', line: k + 1, src: raw }); return; }
+    if (at) { on = at[1]; line = body; } else if (line.startsWith('@')) { out.push({ cmd: null, error: '要写成 @挑战的名字 一行指令（比如 @g1 say "对！"），或 @东西.done / @东西.right 一行指令', line: k + 1, src: raw }); return; }
     let par = false;
     if (line.startsWith('&')) { par = true; line = line.slice(1).trim(); }
     try {

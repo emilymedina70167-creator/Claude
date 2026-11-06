@@ -13,7 +13,7 @@ export const MAX_NODES = 31;
 export const MAX_DEPTH = 8; // 最多几层
 export const TAG_ROOM = 18; // 结点角上的小字、下面的访问号占的地方（镜头、贴字、别的东西都让开）
 const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
-const SIDES = { left: 'left', right: 'right', l: 'left', r: 'right', 左: 'left', 右: 'right', L: 'left', R: 'right' };
+export const SIDES = { left: 'left', right: 'right', l: 'left', r: 'right', 左: 'left', 右: 'right', L: 'left', R: 'right' };
 const KINDS = { pre: 'pre', in: 'in', post: 'post', level: 'level', preorder: 'pre', inorder: 'in', postorder: 'post', 先序: 'pre', 前序: 'pre', 中序: 'in', 后序: 'post', 层序: 'level' };
 const KIND_NAMES = { pre: '先序', in: '中序', post: '后序', level: '层序' };
 
@@ -328,7 +328,8 @@ export function rotStruct(s, aKey, dir) {
   if (!p) s.root = bKey; else if (p.left === aKey) p.left = bKey; else p.right = bKey;
   return bKey;
 }
-const rotKind = (raw) => {
+/** rotate 后面写的那个词 → right / left / LL / RR / LR / RL（tree.rules.js 的 actOf 照它读老师、学生写的行） */
+export const rotKind = (raw) => {
   if (!raw) return null;
   const w = String(raw);
   if (/^(ll|rr|lr|rl)$/i.test(w)) return w.toUpperCase();

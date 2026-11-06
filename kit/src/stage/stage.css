@@ -123,6 +123,8 @@
 
 /* 灰掉的格子（比如查找时已经排除的那一半） */
 .st-cell.is-dim { opacity: .32; }
+/* 学生走偏的那一下淡淡圈着（open … wrong=mark）：不出字，那样东西再变就收掉。各种东西的部件都挂 is-slip（stage.js 的 flagPart） */
+.st-stage .is-slip { outline: 2px dashed color-mix(in srgb, var(--st-red) 42%, transparent); outline-offset: 5px; }
 
 /* 指针：格子下面一个小箭头和名字（low / mid / high、i / j） */
 .st-ptr { position: absolute; left: 0; top: 0; width: 80px; height: 26px; display: flex; align-items: center; justify-content: center; gap: 3px; color: var(--st-brand); font: 600 14px/1 var(--sans, sans-serif); pointer-events: none; }

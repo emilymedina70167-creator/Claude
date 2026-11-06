@@ -69,7 +69,9 @@ test('乘积跟着重算：算出来的格在 A、B 变了以后马上变（交�
 test('open / close：能开放的动作、乘积只能 explain、一排格子能 drag；写在舞台现状里', () => {
   const sc = setup();
   run(sc, 'open B edit range=-3..3\nopen C explain');
-  assert.deepEqual(sc.opens.get('B:edit'), { obj: 'B', action: 'edit', refs: [], lo: -3, hi: 3 });
+  // 多了老师事先定的 policy（没写就是默认：照做、只记下）和手势表里的那一项（第 8 个任务）
+  const e = sc.opens.get('B:edit');
+  assert.deepEqual({ ...e, gesture: e.gesture?.gesture }, { obj: 'B', action: 'edit', refs: [], lo: -3, hi: 3, policy: { wrong: 'quiet', call: null, undo: false }, gesture: 'write' });
   assert.match(sc.stateText(), /学生能直接动的：B edit（点一格，拨里面的数，-3～3）；C explain/);
   assert.match(dryRun(sc, 'open C edit')[0].error, /是乘积/);
   assert.match(dryRun(sc, 'open A explain')[0].error, /不是乘积/);

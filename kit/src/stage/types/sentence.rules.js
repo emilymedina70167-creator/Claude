@@ -8,7 +8,7 @@
 // （成分名照 sentence.js 的 roleName / sameRole 对：V 和「谓语」是一个，分词、to do 是非谓语，只写「从句」对得上任何一种从句）。
 // 拉错了的括号留着也不碍事（舞台上没有让学生收括号的手势），只看 key 里的每一段有没有拉对。
 import { judgeSpans } from '../../entext.js';
-import { sentence, ordered, roleName, sameRole, phraseOf } from './sentence.js';
+import { sentence, ordered, roleName, sameRole, phraseOf, restText } from './sentence.js';
 
 export { roleName, ROLE_NAMES } from './sentence.js';
 
@@ -231,6 +231,17 @@ export function actSrc(o, act) {
 }
 const made = (o, act) => ({ act, src: actSrc(o, act) });
 
+/** 一行镜头指令 → check 认的动作（actSrc 倒过来）：mark s.2-4 V（连着的一段）。折起来、挪词这些不判，给 null */
+function lineAct(o, c, h) {
+  if (c.cmd !== 'mark') return null;
+  const refs = h.refsIn().filter((w) => String(w).match(/^[A-Za-z_]\w*/)?.[0] === o.id);
+  if (!refs.length || refs.includes(o.id)) return null;
+  const slots = [...new Set(refs.flatMap((r) => h.scene.parts(r)).map((p) => p.slot))].sort((a, b) => a - b);
+  if (!slots.length || slots.at(-1) - slots[0] + 1 !== slots.length) return null; // 不连着的几个词不是一段
+  const role = restText(h, refs).trim();
+  return role ? { type: 'mark', from: slots[0], to: slots.at(-1), role } : null;
+}
+
 // 手势里的一个词：部件（句子的词，带 key、slot）或者 { slot: 第几个 }；返回现在第几个
 function slotOf(o, x) {
   if (x == null) return null;
@@ -308,4 +319,5 @@ const predicates = {
   },
 };
 
-export const sentenceRules = { next, check, predicates, facts, gestures };
+// 做完了（key 里每一段都拉对了）只对交给了学生拉括号的句子算
+export const sentenceRules = { next, check, predicates, facts, gestures, actOf: lineAct, doneBy: ['mark'] };
