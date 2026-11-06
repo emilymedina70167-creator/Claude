@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { levelOrder } from '../kit/src/stage/types/tree.js';
+import { levelOrder, imbalance, serialize } from '../kit/src/stage/types/tree.js';
 import { treeRules as R, actSrc } from '../kit/src/stage/types/tree.rules.js';
 import { rulesOf, predicateOf, gestureOf, done } from '../kit/src/stage/rules.js';
 import { avlEngine } from '../kit/src/engines/balanced.js';
@@ -18,6 +18,10 @@ const valOf = (o, k) => o.nodes.find((n) => n.key === k).value;
 const vals = (o) => levelOrder(o).map((n) => n.value).join(' ');
 const rot = (o, v, dir) => ({ type: 'rotate', at: keyOf(o, v), dir });
 const LR3 = 'tree t = _\ninsert t 50\ninsert t 30\ninsert t 40';
+// 平衡二叉树的课：老师 open 了 rotate（open 的写法 T8 才接进场景，这里直接记上）
+const avlLesson = (s) => { s.opens.set('t:rotate', { obj: 't', action: 'rotate', refs: [], lo: null, hi: null }); return s; };
+// next 给的每一个动作照做都判对
+const allRight = (o, nx, scene) => { for (const a of nx.acts) assert.equal(R.check(o, a, scene).right, true, `next 给的 ${actSrc(o, a)} 要判对`); };
 
 // 引擎从空树依次插：每插一个转了几下（最小不平衡子树的根、型），最后的层序
 function engineRef(seq) {
@@ -143,6 +147,7 @@ test('走偏随便几下以后照 next 都能转平、插完（随机）', () =>
     for (let nx = R.next(T(s)); nx; nx = R.next(T(s))) {
       const o = T(s);
       assert.ok(++steps < 300, `第 ${k} 组走不完`);
+      allRight(o, nx, s);
       if (wrong < 3 && o.nodes.length > 2 && rnd() < 0.3) {
         // 随便找一个转得了的结点转一下
         const tries = o.nodes.flatMap((x) => ['left', 'right'].map((dir) => ({ type: 'rotate', at: x.key, dir })));
@@ -192,6 +197,74 @@ test('离平衡很远的树（老师用二叉排序树的插法造的长链）�
     for (const v of vs) if (!dryRun(s, `insert t ${v}`).length) run(s, `insert t ${v}`);
     settle(s);
   }
+});
+
+// 王道的做法（不经过规则）：最小不平衡子树的根和型 → 第一下
+function textbookFirst(o) {
+  const b = imbalance(o);
+  const n = o.nodes.find((x) => x.key === b.key);
+  const [at, dir] = { LL: [b.key, 'right'], RR: [b.key, 'left'], LR: [n.left, 'left'], RL: [n.right, 'right'] }[b.kind];
+  return { type: 'rotate', at, dir };
+}
+// 照这一下转完，再照 next 往下转：转得平、不回到转之前、不绕圈
+function noLoopAfter(s, act) {
+  const c = s.clone();
+  const seen = new Set([serialize(T(s))]);
+  run(c, actSrc(T(s), act));
+  for (let i = 0; i < 60; i++) {
+    const o = c.objects.get('t');
+    const nx = R.next(o);
+    if (!nx || nx.acts[0].type !== 'rotate') return true;
+    if (seen.has(serialize(o))) return false;
+    seen.add(serialize(o));
+    run(c, actSrc(o, nx.acts[0]));
+  }
+  return false;
+}
+
+test('走偏以后照王道转最小不平衡子树：转完不绕回去就判对（页面挑的不是它也一样）；绕回去的不算', () => {
+  let a = 20261107;
+  const rnd = () => { a = (a * 1103515245 + 12345) % 2 ** 31; return a / 2 ** 31; };
+  let differs = 0, refused = 0;
+  for (let k = 0; k < 300; k++) {
+    const seen = new Set();
+    const n = 5 + Math.floor(rnd() * 10);
+    while (seen.size < n) seen.add(1 + Math.floor(rnd() * 99));
+    const s = make(`tree t = _ tray="${[...seen].join(' ')}"`);
+    let wrong = 0, steps = 0;
+    for (let nx = R.next(T(s)); nx; nx = R.next(T(s))) {
+      const o = T(s);
+      assert.ok(++steps < 300);
+      allRight(o, nx, s);
+      if (nx.acts[0].type === 'rotate' && wrong) {
+        const tb = textbookFirst(o);
+        const first = nx.acts[0];
+        if (tb.at !== first.at || tb.dir !== first.dir) {
+          const ok = noLoopAfter(s, tb);
+          const v = R.check(o, tb, s);
+          assert.equal(v.right, ok, `${vals(o)}：照课本 ${actSrc(o, tb)}${ok ? '转完不绕回去，该判对' : '会绕回去，不该判对'}`);
+          if (ok) differs++; else refused++;
+        }
+      }
+      if (wrong < 3 && o.nodes.length > 2 && rnd() < 0.3) {
+        const ok = o.nodes.flatMap((x) => ['left', 'right'].map((dir) => ({ type: 'rotate', at: x.key, dir }))).filter((t) => R.check(o, t).legal);
+        const t = ok[Math.floor(rnd() * ok.length)];
+        if (t) { run(s, actSrc(o, t)); wrong++; continue; }
+      }
+      run(s, actSrc(o, nx.acts[0]));
+    }
+    assert.equal(R.predicates.avl(T(s)), true);
+  }
+  assert.ok(differs > 20, `页面挑的不是最小不平衡子树、照课本转也判对的状态要量到一些（${differs}）`);
+  assert.ok(refused > 0, `也要量到照课本会转回去的（LR 转完第一下孙子 +2）（${refused}）`);
+});
+
+test('LR 转完第一下孙子自己也失衡：照课本转孙子就转回去了，不算对；next 只给在根那里转', () => {
+  const s = make('tree t = 50 30 70 20 40\ninsert t 35\nrotate t.30 left');
+  const o = T(s);
+  const nx = R.next(o);
+  assert.deepEqual(nx.acts.map((x) => `${valOf(o, x.at)} ${x.dir}`), ['50 right']);
+  assert.equal(R.check(o, rot(o, 40, 'right')).right, false, '40 右旋是把刚才那一下转回去');
 });
 
 test('换值弄坏 bst：swap t.30 t.50 以后 bst 是 false', () => {
@@ -263,16 +336,34 @@ test('老师一行写整个型（rotate t.50 LR）也判：对的、当成单旋
   assert.match(rl.misread, /从下往上读/);
 });
 
-test('插入：还没转平就插、托盘不按顺序插，都不是正确的下一步；别的动作不判', () => {
-  const s = make(`${LR3}\nwrite t.50 50`);
+test('插入：平衡二叉树的课上还没转平就插、托盘不按顺序插，都不是正确的下一步；别的动作不判', () => {
+  const s = avlLesson(make(`${LR3}\nwrite t.50 50`));
   T(s).tray = ['60'];
-  const v = R.check(T(s), { type: 'insert', value: '60' });
+  const v = R.check(T(s), { type: 'insert', value: '60' }, s);
   assert.equal(v.right, false);
   assert.match(v.misread, /还没转平/);
+  assert.match(v.next.why, /^先在 30 左旋/);
   const o = T(make('tree t = 50 30 70 tray="20 80"'));
   assert.match(R.check(o, { type: 'insert', value: '80' }).misread, /按顺序/);
   assert.equal(R.check(o, { type: 'insert', value: '20' }).right, true);
   assert.equal(R.check(o, { type: 'swap', a: 1, b: 2 }).right, null);
+});
+
+test('二叉排序树的课（没 open rotate）：没平衡的树上摆对了就对，不说还没转平；open 了 rotate 才说', () => {
+  const s = make('tree t = 10 _ 20 _ 30 tray="40"');
+  const o = T(s);
+  const at30 = { type: 'insert', value: '40', parent: keyOf(o, 30), side: 'right' };
+  assert.equal(R.check(o, at30, s).right, true);
+  assert.equal(R.check(o, { type: 'insert', value: '40' }, s).right, true);
+  const left = R.check(o, { ...at30, side: 'left' }, s);
+  assert.equal(left.right, false);
+  assert.match(left.misread, /该在 30 的右边/);
+  assert.match(left.next.why, /插入 40/);
+  assert.equal(R.check(o, at30).right, true, '不给场景时也按二叉排序树判');
+  avlLesson(s);
+  const v = R.check(o, at30, s);
+  assert.equal(v.right, false);
+  assert.match(v.misread, /还没转平/);
 });
 
 test('托盘：tree t = … tray="…" 存进 o.tray，插进去一个就拿掉一个；写错了说清楚', () => {

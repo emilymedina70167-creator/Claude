@@ -73,10 +73,10 @@ function fixPlan(o) {
   return { ...best, deepest: best.root === bad[0], bad };
 }
 
-// 照课本的转法一下一下转下去，转得平、不绕回转过的样子
-function settles(o) {
+// 照课本的转法一下一下转下去，转得平、不绕回转过的样子（avoid：也不许回到这个样子——试一下别的转法时，不许绕回转之前）
+function settles(o, avoid = null) {
   const s = snapshot(o);
-  const seen = new Set();
+  const seen = new Set(avoid ? [avoid] : []);
   for (let i = 0; i < SETTLE_STEPS; i++) {
     const p = fixPlan(s);
     if (!p) return true;
@@ -108,15 +108,35 @@ function shapeStep(o) {
   return go(o.root, 0, ins.length - 1);
 }
 
-/** 现在该怎么转（null 是都平衡了）：{ fix: 课本的转法, first } 或 { shape: 一层一层摆的这一下, first }；first 是 [在哪个结点, 往哪边] */
+// 走偏以后挑的不一定是最小不平衡子树（最深的那个）：学生照王道转最深的那个，只要转完照着往下转得平、不绕回转之前，也算对。
+// LR 转完第一下孙子自己 +2 的时候，照课本转它就是转回去，这里排除掉
+function textbookAlt(o, first, bad) {
+  const z = bad[0];
+  const kind = kindAt(o, z);
+  const steps = stepsOf(o, z, kind);
+  if (steps[0][0] === first[0] && steps[0][1] === first[1]) return null;
+  const r = turned(o, [steps[0]]);
+  if (r.fail != null || r.deep || !settles(r.s, sigOf(o))) return null;
+  return { root: z, kind, steps, first: steps[0] };
+}
+
+/**
+ * 现在该怎么转（null 是都平衡了）：{ fix: 课本的转法 } 或 { shape: 一层一层摆的这一下 }，
+ * first 是 [在哪个结点, 往哪边]；alt 是另一个也算对的（照课本转最小不平衡子树），没有是 null
+ */
 function plan(o) {
   const p = fixPlan(o);
   if (!p) return null;
-  if (settles(o)) return { fix: p, first: p.steps[0] };
-  const sh = shapeStep(o);
-  // 往上转一层会把旁边的结点压过 8 层（老师造的很深的树）：这一下先照课本转，树先矮下来
-  if (turned(o, [[sh.at, sh.dir]]).deep) return { fix: p, first: p.steps[0] };
-  return { shape: sh, bad: p.bad, first: [sh.at, sh.dir] };
+  const pick = () => {
+    if (settles(o)) return { fix: p, first: p.steps[0] };
+    const sh = shapeStep(o);
+    // 往上转一层会把旁边的结点压过 8 层（老师造的很深的树）：这一下先照课本转，树先矮下来
+    if (turned(o, [[sh.at, sh.dir]]).deep) return { fix: p, first: p.steps[0] };
+    return { shape: sh, first: [sh.at, sh.dir] };
+  };
+  const pl = { ...pick(), bad: p.bad };
+  pl.alt = textbookAlt(o, pl.first, p.bad);
+  return pl;
 }
 
 // —— 下一步 ——
@@ -125,25 +145,30 @@ const procOf = (o, p) => (p.steps.length === 2
   ? `先在 ${nameOf(o, p.steps[0][0])} ${turn(p.steps[0][1])}，再在 ${nameOf(o, p.root)} ${turn(p.steps[1][1])}`
   : `在 ${nameOf(o, p.root)} ${turn(p.steps[0][1])}`);
 const shapeProc = (o, sh) => `以 ${nameOf(o, sh.root)} 为根的这棵子树，根该是中间的 ${nameOf(o, sh.want)}：在 ${nameOf(o, sh.at)} ${turn(sh.dir)}，把 ${nameOf(o, sh.want)} 往上转一层`;
+const altWhy = (o, a) => `照课本先转最小不平衡子树 ${nameOf(o, a.root)}（${a.kind} 型：${procOf(o, a)}）也行`;
 function planWhy(o, pl) {
-  if (pl.shape) return `离平衡还远（${pl.bad.map((k) => nameOf(o, k)).join('、')} 都失衡），照课本的转法会转回去，一层一层摆：${shapeProc(o, pl.shape)}`;
+  const also = pl.alt ? `；${altWhy(o, pl.alt)}` : '';
+  if (pl.shape) return `离平衡还远（${pl.bad.map((k) => nameOf(o, k)).join('、')} 都失衡），照课本的转法会转回去，一层一层摆：${shapeProc(o, pl.shape)}${also}`;
   const p = pl.fix;
   return p.deepest
     ? `最小不平衡子树的根是 ${nameOf(o, p.root)}，${p.kind} 型：${procOf(o, p)}`
-    : `${p.bad.map((k) => nameOf(o, k)).join('、')} 都失衡；按 ${nameOf(o, p.root)} 的 ${p.kind} 型转${p.left === 0 ? '能一起转平' : ''}：${procOf(o, p)}`;
+    : `${p.bad.map((k) => nameOf(o, k)).join('、')} 都失衡；按 ${nameOf(o, p.root)} 的 ${p.kind} 型转${p.left === 0 ? '能一起转平' : ''}：${procOf(o, p)}${also}`;
 }
 const landing = (o, v) => { const d = descend(o, v); return d.parent == null ? `树是空的，${v} 当根` : `从根比下去，落在 ${nameOf(o, d.parent)} 的${ZH[d.side]}边`; };
 // 托盘里下一个能插的（已经在树里的插不了，跳过）
 const nextTray = (o) => (o.tray || []).find((v) => descend(o, v).found == null) ?? null;
 
-function rotateAct(pl) {
+// 可接受的几下：先是页面挑的那一下，再是照课本转最小不平衡子树（走偏以后才可能不一样）
+function rotateActs(pl) {
   const [at, dir] = pl.first;
-  return pl.fix ? { type: 'rotate', at, dir, kind: pl.fix.kind, root: pl.fix.root } : { type: 'rotate', at, dir };
+  const out = [pl.fix ? { type: 'rotate', at, dir, kind: pl.fix.kind, root: pl.fix.root } : { type: 'rotate', at, dir }];
+  if (pl.alt) out.push({ type: 'rotate', at: pl.alt.first[0], dir: pl.alt.first[1], kind: pl.alt.kind, root: pl.alt.root });
+  return out;
 }
 
 function next(o) {
   const pl = plan(o);
-  if (pl) return { acts: [rotateAct(pl)], why: planWhy(o, pl) };
+  if (pl) return { acts: rotateActs(pl), why: planWhy(o, pl) };
   const v = nextTray(o);
   if (v != null) return { acts: [{ type: 'insert', value: v }], why: `托盘里下一个是 ${v}：${landing(o, v)}` };
   return null;
@@ -151,12 +176,13 @@ function next(o) {
 
 /** check 的 next：「现在正确的是……」（裁判拼「你在 50 右旋，现在正确的是先在 30 左旋（…）」） */
 function nowRight(o, pl = plan(o)) {
-  if (pl?.shape) return { why: `在 ${nameOf(o, pl.first[0])} ${turn(pl.first[1])}（一层一层摆：${nameOf(o, pl.shape.want)} 该是以 ${nameOf(o, pl.shape.root)} 为根的这棵子树的根）`, acts: [rotateAct(pl)] };
+  const also = pl?.alt ? `；${altWhy(o, pl.alt)}` : '';
+  if (pl?.shape) return { why: `在 ${nameOf(o, pl.first[0])} ${turn(pl.first[1])}（一层一层摆：${nameOf(o, pl.shape.want)} 该是以 ${nameOf(o, pl.shape.root)} 为根的这棵子树的根）${also}`, acts: rotateActs(pl) };
   if (pl) {
     const p = pl.fix;
     const [at, dir] = pl.first;
     const tag = p.deepest ? `最小不平衡子树的根是 ${nameOf(o, p.root)}，${p.kind} 型` : `${p.kind} 型`;
-    return { why: `${p.steps.length === 2 ? '先' : ''}在 ${nameOf(o, at)} ${turn(dir)}（${tag}）`, acts: [rotateAct(pl)] };
+    return { why: `${p.steps.length === 2 ? '先' : ''}在 ${nameOf(o, at)} ${turn(dir)}（${tag}）${also}`, acts: rotateActs(pl) };
   }
   const nx = next(o);
   if (nx) return { why: `插入 ${nx.acts[0].value}（${landing(o, nx.acts[0].value)}）`, acts: nx.acts };
@@ -186,10 +212,12 @@ function checkRotate(o, act) {
       cant = `${nameOf(o, k)} 没有${ZH[d === 'right' ? 'left' : 'right']}孩子，${turn(d)}转不了（${d === 'right' ? '右旋是左孩子转上来' : '左旋是右孩子转上来'}）`;
     } else if (Math.max(0, ...depths(r.s).values()) >= MAX_DEPTH) cant = `转完树超过 ${MAX_DEPTH} 层，放不下`;
   }
-  // 一层一层摆的时候（离平衡还远）只认那一下，不套课本的错法
+  // next 给的哪一下都算对（页面挑的那一下、照课本转最小不平衡子树）；老师写整个型时比根和型。
+  // 一层一层摆的时候（离平衡还远）不套课本的错法
+  const same = (f) => z === f[0] && dir === f[1];
+  const sameKind = (q) => !!q && z === q.root && kind === q.kind;
   let right = false;
-  if (pl?.fix) right = kind ? z === pl.fix.root && kind === pl.fix.kind : z === pl.first[0] && dir === pl.first[1];
-  else if (pl) right = !kind && z === pl.first[0] && dir === pl.first[1];
+  if (pl) right = kind ? sameKind(pl.fix) || sameKind(pl.alt) : same(pl.first) || (!!pl.alt && same(pl.alt.first));
   const misread = () => (!pl ? '树已经平衡了，不用转' : pl.fix ? misreadOf(o, pl.fix, z, dir, kind) : null);
   if (cant) return { legal: false, right: false, misread: misread(), why: cant, next: now() };
   if (right) return { legal: true, right: true, misread: null, why, next: null };
@@ -218,12 +246,20 @@ function misreadOf(o, p, at, dir, kind) {
   return null;
 }
 
-// insert { value, parent?, side? }：没给位置时页面从根比下去落；给了位置（学生自己摆）和二叉排序树该落的地方比
-function checkInsert(o, act) {
+// insert { value, parent?, side? }：没给位置时页面从根比下去落；给了位置（学生自己摆）和二叉排序树该落的地方比。
+// 「还没转平就插」只在平衡二叉树的课上算错（这棵树 open 了 rotate）；二叉排序树的插入课上树本来就可以不平衡
+function checkInsert(o, act, scene) {
   const v = act.value == null ? '' : String(act.value);
   const at = act.parent != null;
   const why = at ? `${v} 放在 ${nameOf(o, act.parent)} 的${ZH[act.side] || ''}边` : `插入 ${v}`;
-  const no = (w) => ({ legal: false, right: false, misread: null, why: w, next: nowRight(o) });
+  const pl = scene?.opens?.has(`${o.id}:rotate`) ? plan(o) : null;
+  // 现在正确的是：平衡二叉树的课上还失衡就是转；不然是插托盘里下一个（没有托盘就是这个数）落在哪
+  const now = () => {
+    if (pl) return nowRight(o, pl);
+    const nv = nextTray(o) ?? (descend(o, v).found == null ? v : null);
+    return nv == null ? { why: '已经插完了', acts: [] } : { why: `插入 ${nv}（${landing(o, nv)}）`, acts: [{ type: 'insert', value: nv }] };
+  };
+  const no = (w) => ({ legal: false, right: false, misread: null, why: w, next: now() });
   if (!v || v === '_') return no('插入要写一个数');
   const d = descend(o, v);
   if (d.found != null) return no(`${v} 已经在树里了（二叉排序树里不放一样的值）`);
@@ -235,9 +271,8 @@ function checkInsert(o, act) {
     if (p[act.side] != null) return no(`${nameOf(o, p.key)} 的${ZH[act.side]}边已经有 ${nameOf(o, p[act.side])} 了`);
     if (depths(o).get(p.key) + 1 >= MAX_DEPTH) return no(`树最多 ${MAX_DEPTH} 层，再长就放不下了`);
   } else if (d.path.length >= MAX_DEPTH) return no(`树最多 ${MAX_DEPTH} 层，再长就放不下了`);
-  const pl = plan(o);
-  const wrong = (misread) => ({ legal: true, right: false, misread, why, next: nowRight(o, pl) });
-  // 正确的下一步是转（还失衡）时插数不对；托盘按顺序插（平衡二叉树插的先后不同，长出来的树不同）
+  const wrong = (misread) => ({ legal: true, right: false, misread, why, next: now() });
+  // 平衡二叉树的课上正确的下一步是转（还失衡）时插数不对；托盘按顺序插（插的先后不同，长出来的树不同）
   if (pl) return wrong(`还没转平就插了下一个数：${planWhy(o, pl)}`);
   if (at && (d.parent !== act.parent || d.side !== act.side)) {
     return wrong(`这里不是二叉排序树里 ${v} 该在的位置（${d.parent == null ? '树是空的，该当根' : `该在 ${nameOf(o, d.parent)} 的${ZH[d.side]}边`}）`);
@@ -247,9 +282,9 @@ function checkInsert(o, act) {
   return { legal: true, right: true, misread: null, why, next: null };
 }
 
-function check(o, act) {
+function check(o, act, scene) {
   if (act?.type === 'rotate') return checkRotate(o, act);
-  if (act?.type === 'insert') return checkInsert(o, act);
+  if (act?.type === 'insert') return checkInsert(o, act, scene);
   return { legal: true, right: null }; // 别的动作（换值、删……）不判
 }
 
