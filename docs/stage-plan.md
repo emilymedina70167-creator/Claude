@@ -108,4 +108,5 @@ wait 600
   - 只能 Opus 5.5：不是就 `abort` 整轮退回、再要，最多两次。
   - 下课：报告放进输入 → 小结 + 整理单 → 写观察、`sessions` 记 `verify` `usage` → 课后报告。只读翻看照 log 放回。
   - 本地 `?dev` 的模拟老师在 `stage/devteacher.js`；e2e 的 `stage` 一段整条走一遍。
+- 2026-11-06 题卡 `card`（`types/card.js`）：把题拿上舞台，题面、已知、一步步的提示一行一个部件，能扣着到时候翻开；答题用 `ask value answer=`（页面当场判，数按数比）。每一轮的说明按科目只带用得上的东西（`doc.js` 的 `SUBJECT_TYPES`）。
 
