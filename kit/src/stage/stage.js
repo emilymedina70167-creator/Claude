@@ -9,6 +9,7 @@ import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHo
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf } from './scene.js';
+import { judgeAnswer } from './answer.js';
 import { VIEWS } from './types/views.js';
 import { PointerRouter } from './pointer.js';
 
@@ -1183,9 +1184,10 @@ export class Stage {
           if (!text) return;
           let act = { type: 'say', text };
           if (w.kind === 'value') {
-            const right = sameAnswer(text, w.answer);
-            act = { type: 'value', text, answer: w.answer, right };
-            if (!right) { form.classList.remove('is-bad'); void form.offsetWidth; form.classList.add('is-bad'); }
+            let j;
+            try { j = judgeAnswer(text, { type: w.type, answer: w.answer, wrongs: w.wrongs, free: w.free }, this.scene); } catch { j = { ok: false, misread: null, shown: String(w.answer ?? '') }; }
+            act = { type: 'value', text, answer: j.shown, right: j.ok, misread: j.misread };
+            if (j.ok === false) { form.classList.remove('is-bad'); void form.offsetWidth; form.classList.add('is-bad'); }
           }
           this.onAct?.(act);
           finish(act);
@@ -1255,7 +1257,10 @@ export function actText(act) {
     if (act.type === 'drag') return act.text || '学生拖了一下';
     if (act.type === 'next') return `学生点了「${act.button}」`;
     if (act.type === 'say') return `学生说：「${act.text}」`;
-    if (act.type === 'value') return `学生填了「${act.text}」——正确答案是 ${act.answer}，${act.right ? '填对了' : '填错了'}`;
+    if (act.type === 'value') {
+      if (act.right == null) return `学生填了「${act.text}」（这一问只收不判）`;
+      return `学生填了「${act.text}」——正确答案是 ${act.answer}，${act.right ? '填对了' : `填错了${act.misread ? `（页面看出来：${act.misread}）` : ''}`}`;
+    }
     if (act.type === 'edit') return `学生把 ${act.ref} 从 ${act.from === '' ? '空' : act.from} 拨到 ${act.to}`;
     if (act.type === 'explain') return `学生点了 ${act.ref}，看它怎么一行乘一列算出来`;
     if (act.type === 'goal') return `学生做到了挑战 ${act.id}「${act.text}」`;

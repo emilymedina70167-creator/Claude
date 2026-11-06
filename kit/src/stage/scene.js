@@ -14,6 +14,7 @@ import { parseScript, parseRef, parseRich, addCommands } from './script.js';
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox } from './layout.js';
 import { parseGoal, evalGoal, goalStatus } from './goal.js';
+import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder } from './value.js';
 
 export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
@@ -378,9 +379,11 @@ export class Scene {
           if (ps.length < 1) throw new Error('ask drag 要写能拖的东西');
           for (const o of new Set(ps.map((p) => p.obj))) if (!typeOf(this.objects.get(o)).drag) throw new Error(`${typeOf(this.objects.get(o)).label}不能拖`);
         }
-        if (kind === 'value' && opts.answer == null) throw new Error('ask value 要写 answer=正确答案（页面当场判）');
+        // ask value：answer= 可以不写（只收不判）、可以是 {式子}；type= wrong= free= 见 answer.js
+        const spec = kind === 'value' ? { type: opts.type, answer: opts.answer, wrongs: opts.wrong, free: opts.free } : null;
+        if (spec) checkSpec(spec, this);
         if (str != null) { this.say = str; this.words = parseRich(str).filter((p) => p.k === 'word').map((p) => p.v); }
-        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: opts.expect || null, answer: opts.answer ?? null };
+        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: opts.expect || null, answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null };
         if (opts.expect) this.parts(opts.expect);
         return { kind };
       }
