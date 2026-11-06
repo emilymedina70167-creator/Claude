@@ -32,6 +32,9 @@ export function mergeErrors(list = [], entries = [], { cap = ERR_MAX } = {}) {
   return out.slice(0, cap);
 }
 
+/** 浏览器自己发的、不是页面出错的几句（纯函数） */
+export const isNoise = (msg) => /^ResizeObserver loop (completed with undelivered notifications|limit exceeded)/.test(String(msg || ''));
+
 /** 错误对象 → 一条记录里的字（纯函数） */
 export function describe(err) {
   if (err == null) return { msg: '（空的错误）', stack: '' };
@@ -69,6 +72,8 @@ export function installErrlog() {
   window.addEventListener('error', (ev) => {
     // 图片、脚本加载失败（ev.target 是元素）也会冒到这里：有原因的才记
     if (ev?.target && ev.target !== window && ev.target.tagName) { reportError(`${ev.target.tagName.toLowerCase()} 加载失败：${ev.target.src || ev.target.href || ''}`, { soft: true }); return; }
+    // 浏览器自己的提示，不是错（尺寸监听在同一帧里送不完，下一帧照送；2026-11-05 课堂里记了 4 次）
+    if (isNoise(ev?.message || ev?.error?.message)) return;
     reportError(ev?.error || ev?.message || ev);
   }, true);
   window.addEventListener('unhandledrejection', (ev) => reportError(ev?.reason ?? ev, { what: '没接住的 Promise' }));

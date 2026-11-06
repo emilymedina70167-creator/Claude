@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { arcPoints, arcPath, moveDuration, stagger, revealDelays, readHold } from '../kit/src/stage/motion.js';
 import { rowSlots, bbox, fitCamera, toScreen, placeLabel, overlaps, strideGroups } from '../kit/src/stage/layout.js';
+import '../kit/src/stage/scene.js'; // 各种东西自己的指令（array、swap……）由它注册进来
 import { tokenize, parseScript, parseRef, parseRich, richLength, COMMANDS } from '../kit/src/stage/script.js';
 
 test('弧线：两头对得上，dir=-1 往屏幕上方拱（左往右、右往左都是）', () => {
@@ -92,10 +93,13 @@ test('镜头指令写错了：不认得的指令、引号没收尾，记成错�
 });
 
 test('部件的写法：整个、第几格、几格到几格、跟着走的那一个', () => {
-  assert.deepEqual(parseRef('a'), { obj: 'a', kind: 'all' });
-  assert.deepEqual(parseRef('a.3'), { obj: 'a', kind: 'slot', lo: 3, hi: 3 });
-  assert.deepEqual(parseRef('a.5-2'), { obj: 'a', kind: 'slot', lo: 2, hi: 5 });
-  assert.deepEqual(parseRef('a#8'), { obj: 'a', kind: 'key', lo: 8, hi: 8 });
+  assert.deepEqual(parseRef('a'), { obj: 'a', mark: null, sel: null, kind: 'all' });
+  assert.deepEqual(parseRef('a.3'), { obj: 'a', mark: '.', sel: '3', kind: 'slot', lo: 3, hi: 3 });
+  assert.deepEqual(parseRef('a.5-2'), { obj: 'a', mark: '.', sel: '5-2', kind: 'slot', lo: 2, hi: 5 });
+  assert.deepEqual(parseRef('a#8'), { obj: 'a', mark: '#', sel: '8', kind: 'key', lo: 8, hi: 8 });
+  // 别的东西的部件：树的结点、矩阵的格、边（怎么读由那种东西自己定）
+  assert.deepEqual(parseRef('t.A'), { obj: 't', mark: '.', sel: 'A' });
+  assert.deepEqual(parseRef('m.2,3'), { obj: 'm', mark: '.', sel: '2,3' });
   assert.equal(parseRef('3a'), null);
   assert.equal(parseRef('a.'), null);
 });

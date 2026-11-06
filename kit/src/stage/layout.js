@@ -4,30 +4,6 @@
 /** 一格多大、格子之间、分开排时一排一排隔多远、两排格子之间隔多远（场景和画面共用，画面的 CSS 也是这个尺寸） */
 export const CELL = 64, GAP = 12, ROW_GAP = 22, SPLIT_GAP = 40, IDX_H = 22, PTR_H = 26, ARRAY_GAP = 70;
 
-/** 分开排时第 row 排离原来那一排多远（row = 0 是原位） */
-export const rowY = (row) => (row ? CELL + SPLIT_GAP + (row - 1) * (CELL + ROW_GAP) : 0);
-/** 第 slot 格（从 1 数）原位的框 */
-export const slotBox = (o, slot) => ({ x: o.origin.x + (slot - 1) * (CELL + GAP), y: o.origin.y, w: CELL, h: CELL });
-/** 一格现在在哪（按它的位置、在第几排、抬没抬起） */
-export function cellBox(o, c) {
-  const s = slotBox(o, c.slot);
-  return { x: s.x, y: s.y + rowY(c.row) - (c.lift ? 12 : 0), w: CELL, h: CELL };
-}
-/** 指针（格子下面的小箭头和名字）：同一格上有几个就往下叠 */
-export function ptrBox(o, slot, k = 0) {
-  const s = slotBox(o, slot);
-  return { x: s.x - 8, y: s.y + CELL + IDX_H + 2 + k * PTR_H, w: CELL + 16, h: PTR_H };
-}
-/** 一排格子整个占的地方：原位（连序号）、分开排的格子、指针 */
-export function objectBox(o) {
-  const boxes = [];
-  for (let i = 1; i <= o.cells.length; i++) { const s = slotBox(o, i); boxes.push({ ...s, h: CELL + IDX_H }); }
-  for (const c of o.cells) boxes.push(cellBox(o, c));
-  const at = new Map();
-  for (const [, slot] of o.ptrs || []) { const k = at.get(slot) || 0; at.set(slot, k + 1); boxes.push(ptrBox(o, slot, k)); }
-  return bbox(boxes);
-}
-
 /** 一排格子的位置（左上角）：n 格，从 x0 开始，中间留 gap */
 export function rowSlots(n, { cell = 64, gap = 12, x0 = 0, y0 = 0 } = {}) {
   return Array.from({ length: n }, (_, i) => ({ x: x0 + i * (cell + gap), y: y0, w: cell, h: cell }));

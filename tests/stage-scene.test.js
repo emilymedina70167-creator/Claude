@@ -3,7 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun, compareValues } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { cellBox, linkGeom, objectBox } from '../kit/src/stage/layout.js';
+import { linkGeom } from '../kit/src/stage/layout.js';
+import { cellBox, array as arrayType } from '../kit/src/stage/types/array.js';
+const objectBox = (o) => arrayType.objectBox(o);
 
 const run = (scene, src) => { for (const c of parseScript(src)) scene.apply(c); return scene; };
 const values = (s, id = 'a') => [...s.objects.get(id).cells].sort((x, y) => x.slot - y.slot).map((c) => c.value);

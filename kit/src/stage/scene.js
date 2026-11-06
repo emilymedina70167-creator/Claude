@@ -6,15 +6,23 @@
 // - 老师边写边演时，每一行先在场景上试，不会把画面演坏；
 // - 刷新、作废一轮：照记录（每一行指令，连学生拖、拨造成的变化）在新场景上重放一遍就回到原样；
 // - 告诉老师「舞台上现在有什么」（stateText）是照场景写的，和画面一定对得上。
-import { parseScript, parseRef, parseRich, COMMANDS } from './script.js';
-import { strideGroups, cellBox, objectBox, ptrBox, ARRAY_GAP, CELL, GAP } from './layout.js';
+//
+// 舞台上的东西分几种（一排格子、树、图、矩阵、平面、句子、式子……），每一种是 types/ 下的一个模块：
+// 怎么造、部件怎么写（a.3 / t.A / m.2,3）、部件在哪、自己的指令（swap / insert / rowop……）、给老师看的现状。
+// 这里只管各种东西共用的：点亮、染色、连线、贴字、拨数、镜头、说话、等学生。
+import { parseScript, parseRef, parseRich, addCommands } from './script.js';
+import { TYPES, typeOf, CREATE } from './types/index.js';
+import { bbox } from './layout.js';
 
 export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 export const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
-export const MAX_CELLS = 16;
+export const OBJECT_GAP = 70; // 两样东西上下摆开隔多远
 const isColor = (w) => COLORS.includes(w);
 const prime = (v) => String(v).replace(/[′']/g, '');
 const numOf = (v) => (/^-?\d+(\.\d+)?$/.test(prime(v)) ? Number(prime(v)) : null);
+
+// 每种东西自己的指令也认（script.js 读一行时按这个判断是不是指令）
+addCommands([...Object.keys(CREATE), ...Object.values(TYPES).flatMap((t) => Object.keys(t.commands || {}))]);
 
 /** 两个值比大小（49′ 和 49 一样大）：-1 / 0 / 1；数比数，别的按字 */
 export function compareValues(a, b) {
@@ -24,22 +32,25 @@ export function compareValues(a, b) {
   return s < t ? -1 : s > t ? 1 : 0;
 }
 
+/** 一个部件在场景里的编号（画面用它找节点、话里的小块用它找部件）：'a:3'、't:A' */
+export const pidOf = (p) => `${p.obj}:${p.key}`;
+
 export class Scene {
   constructor() {
-    this.objects = new Map(); // id → { type: 'array', id, cells, origin, groupD, ptrs }
+    this.objects = new Map(); // id → { type, id, origin, …（各种东西自己的数据） }
     this.links = new Map(); // key → { key, a: { obj, key }, b: { obj, key }, color, tier }
     this.labels = new Map(); // id → { id, refs, text, side, tone, link }
-    this.vars = new Map(); // name → { v, lo, hi, at }
-    this.binds = []; // { kind: 'group', obj, v }
+    this.vars = new Map(); // name → { v, lo, hi, at, shown }
+    this.binds = []; // { kind, obj, v }：跟着拨的数变的
     this.focus = null; // null = 全部；或者部件的写法
     this.say = '';
     this.words = []; // 这一句话里能飞走的 [词]
-    this.waiting = null; // { kind, refs, prompt, button }
+    this.waiting = null; // { kind, refs, prompt, button, expect, answer }
   }
 
   clone() {
     const s = new Scene();
-    for (const [k, o] of this.objects) s.objects.set(k, { ...o, cells: o.cells.map((c) => ({ ...c })), origin: { ...o.origin }, ptrs: new Map(o.ptrs) });
+    for (const [k, o] of this.objects) s.objects.set(k, structuredClone(o));
     for (const [k, l] of this.links) s.links.set(k, { ...l, a: { ...l.a }, b: { ...l.b } });
     for (const [k, l] of this.labels) s.labels.set(k, { ...l, refs: [...l.refs] });
     for (const [k, v] of this.vars) s.vars.set(k, { ...v });
@@ -52,39 +63,39 @@ export class Scene {
   }
 
   // —— 部件 ——
-  /** 部件的写法 → 格子（按位置排好）；写错了抛错（错误的话直接给老师看） */
-  cells(word) {
+  type(o) { return typeOf(o); }
+  /** 部件的写法 → 部件（按那种东西自己的顺序排好）；写错了抛错（错误的话直接给老师看） */
+  parts(word) {
     const r = typeof word === 'string' ? parseRef(word) : word;
     if (!r) throw new Error(`「${word}」不是舞台上的东西`);
     const o = this.objects.get(r.obj);
-    if (!o) throw new Error(`舞台上没有「${r.obj}」${this.objects.size ? `（有的是：${[...this.objects.keys()].join('、')}）` : '（先用 array 造一个）'}`);
-    if (r.kind === 'all') return [...o.cells].sort((a, b) => a.slot - b.slot);
-    const by = r.kind === 'slot' ? 'slot' : 'key';
-    const out = o.cells.filter((c) => c[by] >= r.lo && c[by] <= r.hi).sort((a, b) => a[by] - b[by]);
-    if (out.length !== r.hi - r.lo + 1) throw new Error(`${o.id} 只有 ${o.cells.length} 格，没有${r.kind === 'key' ? '一开始在' : ''}第 ${r.lo}${r.hi !== r.lo ? `–${r.hi}` : ''} 格`);
-    return out;
+    if (!o) throw new Error(`舞台上没有「${r.obj}」${this.objects.size ? `（有的是：${[...this.objects.keys()].join('、')}）` : `（先造一个：${Object.keys(CREATE).join(' / ')}）`}`);
+    const t = typeOf(o);
+    if (!r.mark) return t.parts(o);
+    return t.pick(o, r.mark, r.sel, typeof word === 'string' ? word : `${r.obj}${r.mark}${r.sel}`);
   }
+  /** 旧名字（只有一排格子的时候叫 cells） */
+  cells(word) { return this.parts(word); }
   isRef(word) { const r = parseRef(word); return !!(r && this.objects.has(r.obj)); }
-  refOf(c) { return `${c.obj}#${c.key}`; }
-  cellBox(c) { return cellBox(this.objects.get(c.obj), c); }
-  objectBox(id) { return objectBox(this.objects.get(id)); }
-  ptrBoxes() {
-    const out = [];
-    for (const o of this.objects.values()) {
-      const at = new Map();
-      for (const [name, slot] of o.ptrs) { const k = at.get(slot) || 0; at.set(slot, k + 1); out.push({ obj: o.id, name, slot, ...ptrBox(o, slot, k) }); }
-    }
-    return out;
-  }
-  groups(id) {
-    const o = this.objects.get(id);
-    return o.groupD ? strideGroups(o.cells.length, o.groupD) : [o.cells.map((c) => c.slot).sort((a, b) => a - b)];
-  }
+  /** 跟着它走的写法（a#3、t.A）：话里的小块、记录、给老师看都用它 */
+  refOf(p) { return typeOf(this.objects.get(p.obj)).ref(p); }
+  partBox(p) { const o = this.objects.get(p.obj); return typeOf(o).partBox(o, p); }
+  cellBox(p) { return this.partBox(p); }
+  objectBox(id) { const o = this.objects.get(id); return typeOf(o).objectBox(o); }
+  allParts() { return [...this.objects.values()].flatMap((o) => typeOf(o).parts(o)); }
+  /** 各种东西挡着的地方（贴字时让开）：格子、序号、指针、树的边…… */
+  obstacles() { return [...this.objects.values()].flatMap((o) => (typeOf(o).obstacles ? typeOf(o).obstacles(o) : typeOf(o).parts(o).map((p) => typeOf(o).partBox(o, p)))); }
   num(v) {
     if (/^-?\d+(\.\d+)?$/.test(String(v))) return Number(v);
     const x = this.vars.get(v);
     if (!x) throw new Error(`没有叫「${v}」的数（先用 dial 造一个）`);
     return x.v;
+  }
+  /** 新的一样东西放哪：已有东西的下面，和它们居中对齐 */
+  slotFor(w) {
+    if (!this.objects.size) return { x: 0, y: 0 };
+    const b = bbox([...this.objects.values()].map((o) => typeOf(o).objectBox(o)));
+    return { x: Math.round(b.x + b.w / 2 - w / 2), y: b.y + b.h + OBJECT_GAP };
   }
 
   // —— 检查一行：写错了返回一句话（给老师看），没错返回 null ——
@@ -98,187 +109,110 @@ export class Scene {
     }
   }
 
-  // —— 一行指令改场景（画面怎么演由 stage.js 管）。返回这一行的要点（画面用），写错了抛错 ——
-  apply(c) {
-    if (!c.cmd || !COMMANDS.has(c.cmd)) throw new Error(c.error || `没有「${c.cmd}」这个指令`);
-    const { cmd, args, opts } = c;
+  // 一行里常用的几样（各种东西的指令也拿它用）
+  helpers(c) {
+    const { args, opts } = c;
     const words = args.filter((a) => a.t === 'word').map((a) => a.v);
     const str = args.find((a) => a.t === 'str')?.v;
+    const strs = args.filter((a) => a.t === 'str').map((a) => a.v);
     const arrow = args.findIndex((a) => a.t === 'arrow');
-    const refsIn = (list) => list.filter((a) => a.t === 'word' && this.isRef(a.v)).map((a) => a.v);
-    const cellsIn = (list) => refsIn(list).flatMap((w) => this.cells(w));
+    const refsIn = (list = args) => list.filter((a) => a.t === 'word' && this.isRef(a.v)).map((a) => a.v);
+    const partsIn = (list = args) => refsIn(list).flatMap((w) => this.parts(w));
     // 写了部件却不是部件的词（多半是写错了名字）：提醒出来，不默默忽略
-    const strayRefs = (list, allow = []) => {
-      for (const a of list) if (a.t === 'word' && !this.isRef(a.v) && !allow.includes(a.v) && parseRef(a.v)?.kind !== 'all' && /[.#]/.test(a.v)) throw new Error(`「${a.v}」不是舞台上的东西`);
+    const strayRefs = (list = args, allow = []) => {
+      for (const a of list) if (a.t === 'word' && !this.isRef(a.v) && !allow.includes(a.v) && /^[A-Za-z_]\w*[.#]./.test(a.v)) throw new Error(`「${a.v}」不是舞台上的东西`);
     };
+    return { args, opts, words, str, strs, arrow, refsIn, partsIn, cellsIn: partsIn, strayRefs, scene: this, isColor, COLORS };
+  }
+
+  // —— 一行指令改场景（画面怎么演由 stage.js 管）。返回这一行的要点（画面用），写错了抛错 ——
+  apply(c) {
+    if (!c.cmd) throw new Error(c.error || '看不懂这一行');
+    const h = this.helpers(c);
+    const { cmd } = c;
+    const { args, opts, words, str, arrow, refsIn, partsIn, strayRefs } = h;
+    // 造一样东西（array / tree / matrix……）
+    if (CREATE[cmd]) {
+      const t = CREATE[cmd];
+      const id = words[0];
+      if (!id || !/^[A-Za-z_]\w*$/.test(id)) throw new Error(`要写成 ${cmd} 名字 = …（名字用英文字母开头）`);
+      if (id === 'say' || id.startsWith('dial')) throw new Error(`「${id}」这个名字留着别的用，换一个`);
+      const old = this.objects.get(id);
+      const o = t.make(this, c, h, old);
+      if (old) this.dropObject(id, { keepLabels: true });
+      o.type = t.type;
+      o.id = id;
+      this.objects.set(id, o);
+      return { id, created: true };
+    }
+    // 各种东西自己的指令：按第一个部件是哪种东西找（swap 给格子、rowop 给矩阵……）
+    const own = this.ownerOf(c, h);
+    if (own) return own(this, c, h);
     switch (cmd) {
-      case 'array': {
-        const [id, ...vals] = words;
-        if (!id || !/^[A-Za-z_]\w*$/.test(id)) throw new Error('要写成 array 名字 = 一个个值（名字用英文字母）');
-        if (!args.some((a) => a.t === 'eq')) throw new Error('要写成 array 名字 = 一个个值');
-        if (!vals.length) throw new Error('array 后面要有值');
-        if (vals.length > MAX_CELLS) throw new Error(`一排最多 ${MAX_CELLS} 格（写了 ${vals.length} 格）`);
-        const old = this.objects.get(id);
-        if (old) this.dropObject(id);
-        // 新的一排放在已有的东西下面，和最宽的那一排居中对齐（一格的「要找的数」放在正下方，不缩在左边）
-        let y = 0, left = 0, right = 0;
-        for (const o of this.objects.values()) { const b = objectBox(o); y = Math.max(y, b.y + b.h + ARRAY_GAP); left = Math.min(left, b.x); right = Math.max(right, b.x + b.w); }
-        const width = vals.length * (CELL + GAP) - GAP;
-        const x = this.objects.size ? Math.round((left + right) / 2 - width / 2) : 0;
-        this.objects.set(id, { type: 'array', id, origin: old ? { ...old.origin } : { x, y }, groupD: null, ptrs: new Map(), cells: vals.map((v, i) => ({ obj: id, key: i + 1, slot: i + 1, value: v, row: 0, paint: null, glow: false, lift: false, dim: false, covered: false })) });
-        if (!this.focus) this.focus = null;
-        return { id };
-      }
       case 'say': {
         const text = str ?? '';
-        for (const p of parseRich(text)) if (p.k === 'ref') this.cells(p.v); // 话里指着的东西要真有
+        for (const p of parseRich(text)) if (p.k === 'ref') this.parts(p.v); // 话里指着的东西要真有
         this.say = text;
         this.words = parseRich(text).filter((p) => p.k === 'word').map((p) => p.v);
         return {};
       }
       case 'glow': case 'unglow': case 'lift': case 'drop': case 'dim': case 'undim': case 'cover': case 'uncover': {
-        strayRefs(args);
-        const cells = refsIn(args).length ? cellsIn(args) : (cmd.startsWith('un') || cmd === 'drop') ? [...this.objects.values()].flatMap((o) => o.cells) : null;
-        if (!cells) throw new Error(`${cmd} 后面要写哪几格`);
+        strayRefs();
+        const parts = refsIn().length ? partsIn() : (cmd.startsWith('un') || cmd === 'drop') ? this.allParts() : null;
+        if (!parts) throw new Error(`${cmd} 后面要写对哪几个做`);
         const field = { glow: 'glow', unglow: 'glow', lift: 'lift', drop: 'lift', dim: 'dim', undim: 'dim', cover: 'covered', uncover: 'covered' }[cmd];
         const on = !cmd.startsWith('un') && cmd !== 'drop';
-        cells.forEach((x) => { x[field] = on; });
-        return { cells };
+        parts.forEach((x) => { x[field] = on; });
+        return { cells: parts, parts };
       }
       case 'pulse': {
-        strayRefs(args);
-        const cells = cellsIn(args);
-        if (!cells.length) throw new Error('pulse 后面要写哪几格');
-        return { cells };
+        strayRefs();
+        const parts = partsIn();
+        if (!parts.length) throw new Error('pulse 后面要写哪几个');
+        return { cells: parts, parts };
       }
       case 'paint': case 'unpaint': {
-        strayRefs(args);
-        const cells = cellsIn(args);
-        if (!cells.length) throw new Error(`${cmd} 后面要写哪几格`);
+        strayRefs();
+        const parts = partsIn();
+        if (!parts.length) throw new Error(`${cmd} 后面要写哪几个`);
         const color = cmd === 'paint' ? words.find(isColor) || 'g1' : null;
         const bad = words.find((w) => /^g\d+$/.test(w) && !isColor(w));
         if (bad) throw new Error(`颜色只有 g1～g6（${COLORS.map((k) => `${k} ${COLOR_NAMES[k]}`).join('、')}）`);
-        cells.forEach((x) => { x.paint = color; });
-        return { cells, color };
+        parts.forEach((x) => { x.paint = color; });
+        return { cells: parts, parts, color };
+      }
+      case 'compare': {
+        strayRefs();
+        const parts = partsIn();
+        if (parts.length !== 2) throw new Error('compare 要正好两个（比如 compare a.3 a.8）');
+        return { a: parts[0], b: parts[1], sign: compareValues(parts[0].value, parts[1].value) };
       }
       case 'link': {
-        strayRefs(args);
-        const cells = cellsIn(args);
-        if (cells.length < 2) throw new Error('link 要至少两格');
+        strayRefs();
+        const parts = partsIn();
+        if (parts.length < 2) throw new Error('link 要至少两个');
         const color = words.find(isColor) || 'g1';
         const made = [];
-        for (let i = 0; i + 1 < cells.length; i++) made.push(this.addLink(cells[i], cells[i + 1], color));
+        for (let i = 0; i + 1 < parts.length; i++) made.push(this.addLink(parts[i], parts[i + 1], color));
         return { links: made.filter(Boolean) };
       }
       case 'unlink': {
-        strayRefs(args);
-        const cells = refsIn(args).length ? cellsIn(args) : null;
-        const ids = cells ? new Set(cells.map((x) => this.refOf(x))) : null;
+        strayRefs();
+        const parts = refsIn().length ? partsIn() : null;
+        const ids = parts ? new Set(parts.map(pidOf)) : null;
         const gone = [];
-        for (const [k, l] of this.links) if (!ids || ids.has(`${l.a.obj}#${l.a.key}`) || ids.has(`${l.b.obj}#${l.b.key}`)) { this.links.delete(k); gone.push(k); }
+        for (const [k, l] of this.links) if (!ids || ids.has(`${l.a.obj}:${l.a.key}`) || ids.has(`${l.b.obj}:${l.b.key}`)) { this.links.delete(k); gone.push(k); }
         // 跳格留下的字跟着弧走
         for (const [k, l] of this.labels) if (l.link && gone.includes(l.link)) this.labels.delete(k);
         return { gone };
-      }
-      case 'hop': {
-        if (arrow < 0) throw new Error('要写成 hop 从哪格 -> 到哪格');
-        const [from] = cellsIn(args.slice(0, arrow)), [to] = cellsIn(args.slice(arrow + 1));
-        if (!from || !to) throw new Error('hop 要两头都是格子');
-        if (from.obj !== to.obj || from.row !== to.row) throw new Error('hop 只能在同一排里跳');
-        if (from === to) throw new Error('hop 的两头是同一格');
-        const color = opts.color || words.find(isColor) || 'g1';
-        if (!isColor(color)) throw new Error('颜色只有 g1～g6');
-        const link = this.addLink(from, to, color) || this.linkKey(from, to);
-        if (opts.label) this.labels.set(`hop:${from.obj}${from.key}`, { id: `hop:${from.obj}${from.key}`, refs: [this.refOf(from), this.refOf(to)], text: opts.label, side: 'above', tone: 'soft', link });
-        return { from, to, color, link, label: opts.label ? `hop:${from.obj}${from.key}` : null };
-      }
-      case 'swap': {
-        strayRefs(args);
-        const cells = cellsIn(args);
-        if (cells.length !== 2) throw new Error(`swap 要正好两格（写了 ${cells.length} 格）`);
-        const [a, b] = cells;
-        if (a.obj !== b.obj) throw new Error('swap 的两格要在同一排格子里');
-        if (a === b) throw new Error('swap 的两格是同一格');
-        [a.slot, b.slot] = [b.slot, a.slot];
-        return { a, b };
-      }
-      case 'move': {
-        // move a#6 -> a.2：把这一格挪到第 2 格，中间的格子各让一格（插入）
-        if (arrow < 0) throw new Error('要写成 move 哪格 -> 第几格');
-        const [x] = cellsIn(args.slice(0, arrow));
-        const dest = args.slice(arrow + 1).find((a) => a.t === 'word' && parseRef(a.v)?.kind === 'slot');
-        if (!x || !dest) throw new Error('move 要写成 move a#6 -> a.2');
-        const r = parseRef(dest.v);
-        const o = this.objects.get(x.obj);
-        if (r.obj !== x.obj) throw new Error('move 只能挪到同一排格子里');
-        if (r.lo < 1 || r.lo > o.cells.length) throw new Error(`${o.id} 只有 ${o.cells.length} 格`);
-        const from = x.slot, to = r.lo;
-        const moved = [];
-        for (const c2 of o.cells) {
-          if (c2 === x) continue;
-          if (from < to && c2.slot > from && c2.slot <= to) { c2.slot--; moved.push(c2); }
-          if (from > to && c2.slot >= to && c2.slot < from) { c2.slot++; moved.push(c2); }
-        }
-        x.slot = to;
-        return { cell: x, moved };
-      }
-      case 'write': {
-        // write a.3 99：这一格换成别的值
-        const [x] = cellsIn(args);
-        const val = words.filter((w) => !this.isRef(w)).at(-1) ?? str;
-        if (!x || val == null) throw new Error('要写成 write a.3 新的值');
-        const before = x.value;
-        x.value = String(val);
-        return { cell: x, before };
-      }
-      case 'compare': {
-        strayRefs(args);
-        const cells = cellsIn(args);
-        if (cells.length !== 2) throw new Error('compare 要正好两格');
-        return { a: cells[0], b: cells[1], sign: compareValues(cells[0].value, cells[1].value) };
-      }
-      case 'ptr': {
-        // ptr low a.1 [label="low"]：格子下面一个小箭头，同名的再写就挪过去
-        const name = words[0];
-        if (!name || this.isRef(name)) throw new Error('要写成 ptr 名字 a.3');
-        const [x] = cellsIn(args.slice(1));
-        if (!x) throw new Error('ptr 要指着一格');
-        for (const o of this.objects.values()) if (o.id !== x.obj) o.ptrs.delete(name);
-        this.objects.get(x.obj).ptrs.set(name, x.slot);
-        return { name, cell: x };
-      }
-      case 'unptr': {
-        const names = words.length ? words : null;
-        for (const o of this.objects.values()) for (const n of [...o.ptrs.keys()]) if (!names || names.includes(n)) o.ptrs.delete(n);
-        return {};
-      }
-      case 'group': {
-        const id = words[0];
-        const o = this.objects.get(id);
-        if (!o) throw new Error(`舞台上没有「${id}」`);
-        const v = opts.stride ?? '1';
-        const d = this.num(v);
-        if (!(d >= 1)) throw new Error('stride 要是正整数');
-        this.binds = this.binds.filter((b) => !(b.kind === 'group' && b.obj === id));
-        if (!/^\d+$/.test(String(v))) this.binds.push({ kind: 'group', obj: id, v });
-        return this.regroup(id, d);
-      }
-      case 'split': case 'merge': {
-        const o = this.objects.get(words[0]);
-        if (!o) throw new Error(`舞台上没有「${words[0]}」`);
-        if (cmd === 'split') {
-          const rowOf = new Map();
-          strideGroups(o.cells.length, o.groupD || 1).forEach((g, gi) => g.forEach((s) => rowOf.set(s, gi + 1)));
-          o.cells.forEach((x) => { x.row = rowOf.get(x.slot); });
-        } else o.cells.forEach((x) => { x.row = 0; });
-        return { id: o.id };
       }
       case 'label': {
         const id = words[0];
         if (!id || this.isRef(id)) throw new Error('要写成 label 名字 贴在哪 "字"');
         const refs = args.slice(1).filter((a) => a.t === 'word' && (this.labels.has(a.v) || this.isRef(a.v))).map((a) => a.v);
-        for (const r of refs) if (!this.labels.has(r)) this.cells(r);
+        for (const r of refs) if (!this.labels.has(r)) this.parts(r);
         if (str == null) throw new Error('label 要有字（写在引号里）');
+        for (const p of parseRich(str)) if (p.k === 'ref') this.parts(p.v);
         this.labels.set(id, { id, refs, text: str, side: opts.side || null, tone: opts.tone || null, link: null });
         return { id };
       }
@@ -290,7 +224,7 @@ export class Scene {
       }
       case 'unlabel': {
         const ids = words.length ? words : [...this.labels.keys()].filter((k) => !k.startsWith('dial:'));
-        for (const k of ids) { this.labels.delete(k); if (k.startsWith('dial:')) this.vars.get(k.slice(5)) && (this.vars.get(k.slice(5)).shown = false); }
+        for (const k of ids) { this.labels.delete(k); if (k.startsWith('dial:') && this.vars.get(k.slice(5))) this.vars.get(k.slice(5)).shown = false; }
         return { ids };
       }
       case 'dial': {
@@ -314,9 +248,9 @@ export class Scene {
         return this.onVar(words[0]);
       }
       case 'camera': {
-        strayRefs(args);
-        this.focus = words[0] === 'all' || !words.length ? null : refsIn(args);
-        if (this.focus) for (const r of this.focus) this.cells(r);
+        strayRefs();
+        this.focus = words[0] === 'all' || !words.length ? null : refsIn();
+        if (this.focus) for (const r of this.focus) this.parts(r);
         return {};
       }
       case 'wait': {
@@ -330,20 +264,25 @@ export class Scene {
         const id = args[arrow + 1]?.v;
         if (arrow < 0 || !id) throw new Error('要写成 fly say.1 -> 名字 贴在哪');
         const refs = refsIn(args.slice(arrow + 2));
-        refs.forEach((r) => this.cells(r));
+        refs.forEach((r) => this.parts(r));
         this.labels.set(id, { id, refs, text: this.words[n - 1], side: opts.side || null, tone: 'key', link: null });
         return { id, word: n - 1 };
       }
       case 'ask': {
         const kind = words[0];
-        if (!['tap', 'drag', 'next', 'say'].includes(kind)) throw new Error(`ask 后面写 tap / drag / next / say，没有「${kind}」`);
-        if (str) for (const p of parseRich(str)) if (p.k === 'ref') this.cells(p.v);
+        if (!['tap', 'drag', 'next', 'say', 'value'].includes(kind)) throw new Error(`ask 后面写 tap / drag / next / say / value，没有「${kind}」`);
+        if (str) for (const p of parseRich(str)) if (p.k === 'ref') this.parts(p.v);
         const refs = refsIn(args.slice(1));
-        refs.forEach((r) => this.cells(r));
-        if (kind === 'drag' && refs.flatMap((r) => this.cells(r)).length < 2) throw new Error('ask drag 要写能拖的几格（至少两格）');
+        refs.forEach((r) => this.parts(r));
+        if (kind === 'drag') {
+          const ps = refs.flatMap((r) => this.parts(r));
+          if (ps.length < 1) throw new Error('ask drag 要写能拖的东西');
+          for (const o of new Set(ps.map((p) => p.obj))) if (!typeOf(this.objects.get(o)).drag) throw new Error(`${typeOf(this.objects.get(o)).label}不能拖`);
+        }
+        if (kind === 'value' && opts.answer == null) throw new Error('ask value 要写 answer=正确答案（页面当场判）');
         if (str != null) { this.say = str; this.words = parseRich(str).filter((p) => p.k === 'word').map((p) => p.v); }
-        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: opts.expect || null };
-        if (opts.expect) this.cells(opts.expect);
+        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: opts.expect || null, answer: opts.answer ?? null };
+        if (opts.expect) this.parts(opts.expect);
         return { kind };
       }
       case 'clear': {
@@ -353,79 +292,90 @@ export class Scene {
         for (const v of this.vars.values()) v.shown = false;
         return {};
       }
+      case 'remove': {
+        // remove a：把一样东西拿下舞台
+        const id = words[0];
+        if (!this.objects.has(id)) throw new Error(`舞台上没有「${id}」`);
+        this.dropObject(id);
+        return { id, removed: true };
+      }
       default:
-        throw new Error(`「${cmd}」还没做`);
+        throw new Error(`没有「${cmd}」这个指令`);
     }
   }
 
-  linkKey(a, b) { return [`${a.obj}#${a.key}`, `${b.obj}#${b.key}`].sort().join('~'); }
+  // 这一行是不是某种东西自己的指令：第一个部件（或者第一个词是东西的名字）是哪种东西，就问那种东西
+  ownerOf(c, h) {
+    const { cmd } = c;
+    const owners = Object.values(TYPES).filter((t) => t.commands?.[cmd]);
+    if (!owners.length) return null;
+    let target = null;
+    for (const a of c.args) {
+      if (a.t !== 'word') continue;
+      const r = parseRef(a.v);
+      if (r && this.objects.has(r.obj)) { target = this.objects.get(r.obj); break; }
+    }
+    if (!target) {
+      // 指令只有一种东西有：交给它（它自己报「舞台上没有……」）
+      if (owners.length === 1) return owners[0].commands[cmd];
+      throw new Error(`${cmd} 要写对哪一样东西做`);
+    }
+    const t = typeOf(target);
+    if (!t.commands?.[cmd]) throw new Error(`${t.label}没有「${cmd}」（${owners.map((x) => x.label).join('、')}才有）`);
+    void h;
+    return t.commands[cmd];
+  }
+
+  linkKey(a, b) { return [pidOf(a), pidOf(b)].sort().join('~'); }
   addLink(a, b, color, tier = 0) {
     const key = this.linkKey(a, b);
     if (this.links.has(key)) { const l = this.links.get(key); l.color = color; return null; }
     this.links.set(key, { key, a: { obj: a.obj, key: a.key }, b: { obj: b.obj, key: b.key }, color, tier });
     return key;
   }
-  dropObject(id) {
+  dropObject(id, { keepLabels = false } = {}) {
     this.objects.delete(id);
-    for (const [k, l] of this.links) if (l.a.obj === id) this.links.delete(k);
-    for (const [k, l] of this.labels) if (l.refs.some((r) => parseRef(r)?.obj === id)) this.labels.delete(k);
+    for (const [k, l] of this.links) if (l.a.obj === id || l.b.obj === id) this.links.delete(k);
+    if (!keepLabels) for (const [k, l] of this.labels) if (l.refs.some((r) => parseRef(r)?.obj === id)) this.labels.delete(k);
+    this.binds = this.binds.filter((b) => b.obj !== id);
   }
-  // 按隔 d 个重新分组：这一排原来的连线收掉，每组染一种颜色、连起来（只有一组就不染）
-  regroup(id, d) {
-    const o = this.objects.get(id);
-    o.groupD = d;
-    const gone = [];
-    for (const [k, l] of this.links) if (l.a.obj === id) { this.links.delete(k); gone.push(k); }
-    for (const [k, l] of this.labels) if (l.link && gone.includes(l.link)) this.labels.delete(k);
-    const groups = strideGroups(o.cells.length, d);
-    const made = [];
-    groups.forEach((g, gi) => {
-      const cells = g.map((s) => o.cells.find((x) => x.slot === s));
-      const color = groups.length === 1 ? null : COLORS[gi % COLORS.length];
-      cells.forEach((x) => { x.paint = color; });
-      if (color) for (let i = 0; i + 1 < cells.length; i++) made.push({ key: this.addLink(cells[i], cells[i + 1], color, gi) || this.linkKey(cells[i], cells[i + 1]), group: gi });
-    });
-    return { id, groups: groups.length, gone, made };
-  }
-  // 拨的数变了：跟着它的分组重新分
+  // 拨的数变了：跟着它的东西（分组、平面上的变换……）重新算
   onVar(name) {
-    const out = { name, regroup: [] };
-    for (const b of this.binds) if (b.v === name && b.kind === 'group' && this.objects.has(b.obj)) out.regroup.push(this.regroup(b.obj, this.vars.get(name).v));
+    const out = { name, regroup: [], binds: [] };
+    for (const b of this.binds) {
+      if (b.v !== name || !this.objects.has(b.obj)) continue;
+      const o = this.objects.get(b.obj);
+      const t = typeOf(o);
+      const r = t.onVar?.(this, o, b, this.vars.get(name).v);
+      if (r) { out.binds.push(r); if (b.kind === 'group') out.regroup.push(r); }
+    }
     return out;
+  }
+  /** 一部件找回来（跟着它走的写法） */
+  partOf(obj, key) {
+    const o = this.objects.get(obj);
+    return o ? typeOf(o).parts(o).find((p) => p.key === key) || null : null;
   }
 
   /** 给老师看的「舞台上现在有什么」：和画面一定对得上（照场景写） */
   stateText() {
     const lines = [];
     if (!this.objects.size) lines.push('舞台上还是空的。');
-    else lines.push('（括号里的 #k：这一格一开始在第 k 格，写 名字#k 跟着它走；名字.k 是现在第 k 格）');
-    for (const o of this.objects.values()) {
-      const cells = [...o.cells].sort((a, b) => a.row - b.row || a.slot - b.slot);
-      const tag = (c) => {
-        const bits = [];
-        if (c.key !== c.slot) bits.push(`#${c.key}`);
-        if (c.paint) bits.push(COLOR_NAMES[c.paint]);
-        if (c.glow) bits.push('亮');
-        if (c.lift) bits.push('抬起');
-        if (c.dim) bits.push('灰');
-        if (c.covered) bits.push('扣着');
-        return `${c.value}${bits.length ? `（${bits.join('、')}）` : ''}`;
-      };
-      const split = cells.some((c) => c.row);
-      lines.push(`一排格子 ${o.id}（${o.cells.length} 格${o.groupD ? `，按隔 ${o.groupD} 个分了 ${strideGroups(o.cells.length, o.groupD).length} 组` : ''}${split ? '，每组下到自己的一排' : ''}）：`);
-      lines.push(`  ${o.cells.length > 1 ? `第 1～${o.cells.length} 格` : '第 1 格'}：${[...o.cells].sort((a, b) => a.slot - b.slot).map(tag).join(' ')}`);
-      if (o.ptrs.size) lines.push(`  指针：${[...o.ptrs].map(([n, s]) => `${n} → 第 ${s} 格`).join('，')}`);
-    }
+    const hints = new Set();
+    for (const o of this.objects.values()) { const t = typeOf(o); if (t.hint) hints.add(t.hint); }
+    for (const h of hints) lines.push(h);
+    for (const o of this.objects.values()) lines.push(...typeOf(o).describe(o, this));
     const ls = [...this.links.values()];
-    if (ls.length) lines.push(`连线：${ls.map((l) => `${l.a.obj}#${l.a.key}–${l.b.obj}#${l.b.key}${l.color ? ` ${COLOR_NAMES[l.color]}` : ''}`).join('，')}`);
+    if (ls.length) lines.push(`连线：${ls.map((l) => `${this.refOfKey(l.a)}–${this.refOfKey(l.b)}${l.color ? ` ${COLOR_NAMES[l.color]}` : ''}`).join('，')}`);
     const labels = [...this.labels.values()].filter((l) => !l.dial);
     if (labels.length) lines.push(`贴着的字：${labels.map((l) => `${l.id}「${l.text}」${l.refs.length ? `（贴在 ${l.refs.join(' ')}）` : ''}`).join('；')}`);
     const dials = [...this.vars].filter(([, v]) => v.shown);
     if (dials.length) lines.push(`能拨的数：${dials.map(([n, v]) => `${n} = ${v.v}（${v.lo}～${v.hi}）`).join('，')}`);
     if (this.say) lines.push(`最后说的话：${this.say}`);
-    if (this.waiting) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答' }[this.waiting.kind]}${this.waiting.refs.length ? ` ${this.waiting.refs.join(' ')}` : ''}`);
+    if (this.waiting) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案' }[this.waiting.kind]}${this.waiting.refs.length ? ` ${this.waiting.refs.join(' ')}` : ''}`);
     return lines.join('\n');
   }
+  refOfKey(k) { const p = this.partOf(k.obj, k.key); return p ? this.refOf(p) : `${k.obj}:${k.key}`; }
 }
 
 /**

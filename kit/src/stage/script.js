@@ -8,12 +8,13 @@
 //
 // 部件的写法：a（整个）、a.3（第 3 格，按现在的位置）、a.2-5（第 2 到 5 格）、a#8（一开始在第 8 格的那一个，跟着它走）
 
-/** 认得的指令（写错了页面报出来，不默默忽略） */
+/** 认得的指令（写错了页面报出来，不默默忽略）。这里是各种东西共用的；每种东西自己的指令（swap、insert、rowop……）由 types/ 注册进来 */
 export const COMMANDS = new Set([
-  'array', 'say', 'glow', 'unglow', 'lift', 'drop', 'paint', 'unpaint', 'link', 'unlink', 'hop', 'swap',
-  'group', 'split', 'merge', 'label', 'retext', 'unlabel', 'dial', 'set', 'camera', 'wait', 'ask', 'clear', 'pulse', 'fly',
-  'move', 'write', 'compare', 'ptr', 'unptr', 'dim', 'undim', 'cover', 'uncover',
+  'say', 'glow', 'unglow', 'lift', 'drop', 'paint', 'unpaint', 'link', 'unlink', 'pulse', 'compare',
+  'label', 'retext', 'unlabel', 'dial', 'set', 'camera', 'wait', 'ask', 'clear', 'fly', 'remove',
+  'dim', 'undim', 'cover', 'uncover',
 ]);
+export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
 
 /** 一行拆成记号：字符串（"…" 或 「…」）、箭头、key=value、别的词 */
 export function tokenize(line) {
@@ -85,15 +86,21 @@ export function parseScript(src) {
 }
 
 /**
- * 部件的写法 → { obj, kind, lo, hi }：kind 是 all（整个）、slot（按现在的位置，lo..hi）、key（一开始在哪一格的那一个）。
+ * 部件的写法 → { obj, mark, sel }：a（整个，mark 是 null）、a.3 / t.A / m.2,3（mark 是 '.'）、a#8（mark 是 '#'）。
+ * sel 怎么读由那种东西自己定（types/）；sel 是数或「数-数」时顺带给 kind / lo / hi（一排格子用：slot 按现在的位置、key 按一开始的位置）。
  * 不是部件的写法给 null
  */
 export function parseRef(word) {
-  const m = String(word ?? '').match(/^([A-Za-z_]\w*)(?:([.#])(\d+)(?:-(\d+))?)?$/);
+  const m = String(word ?? '').match(/^([A-Za-z_]\w*)(?:([.#])([^\s{}"「」]+))?$/);
   if (!m) return null;
-  if (!m[2]) return { obj: m[1], kind: 'all' };
-  const lo = Number(m[3]), hi = Number(m[4] ?? m[3]);
-  return { obj: m[1], kind: m[2] === '.' ? 'slot' : 'key', lo: Math.min(lo, hi), hi: Math.max(lo, hi) };
+  if (!m[2]) return { obj: m[1], mark: null, sel: null, kind: 'all' };
+  const out = { obj: m[1], mark: m[2], sel: m[3] };
+  const n = m[3].match(/^(\d+)(?:-(\d+))?$/);
+  if (n) {
+    const lo = Number(n[1]), hi = Number(n[2] ?? n[1]);
+    Object.assign(out, { kind: m[2] === '.' ? 'slot' : 'key', lo: Math.min(lo, hi), hi: Math.max(lo, hi) });
+  }
+  return out;
 }
 
 /**

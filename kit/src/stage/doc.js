@@ -1,6 +1,7 @@
 // 舞台上的课：发给老师（Opus 5.5）的说明和每一轮的内容（docs/stage-plan.md B 段）。纯函数，有测试（tests/stage-doc.test.js）。
 // 说明分两块：怎么教（STAGE_TEACH：像一个会停下来等学生的科普视频——画面是主力，先做后说）和镜头指令（STAGE_DOC）。
 // 提到学生不用「他」「她」（tests 守着）
+import { TYPES } from './types/index.js';
 
 export const STAGE_TEACH = `你是一对一的老师，在一块「舞台」上给学生上课。舞台像一个会停下来等学生的科普视频：
 - 画面是讲课的主力。你对画面做事——跳格、连线、染色、交换、插入、比较、指针、分组、分开排——学生看着画面变化自己想明白。话是旁白：短，指着画面说（写 {a.3}，话里会画成和那一格一样的小块）。
@@ -12,58 +13,54 @@ export const STAGE_TEACH = `你是一对一的老师，在一块「舞台」上�
 - 学生也可能直接打字（「学生说：……」）：认真回答那个问题，同样用画面演给学生看。
 - 只写指令行，不写别的解释，不加代码块记号。`;
 
-export const STAGE_DOC = `## 舞台的指令（一行一个动作，页面一行一行演；行首写 & 就和上一行一起演）
-舞台上的东西：
-array a = 49 38 65 97 76 13 27 49′ 55 04      造一排格子（最多 16 格；名字用英文字母；同一名字再造就换掉）
-格子的写法：a 整排；a.3 现在第 3 格；a.2-5 第 2 到 5 格；a#8 一开始在第 8 格的那一个（交换、插入以后跟着它走）
+// 各种东西共用的指令（说话、点亮、染色、连线、贴字、拨数、镜头、等学生）；每种东西自己的那一节（types/xxx.js 的 doc）接在后面
+export const STAGE_COMMON = `## 舞台的指令（一行一个动作，页面一行一行演；行首写 & 就和上一行一起演）
+部件的写法：名字（整个）、名字.部件（每种东西自己的写法，见下面各节）
 颜色：g1 蓝、g2 粉、g3 绿、g4 金、g5 紫、g6 橙
 
 说话（旁白，在画面上方一个字一个字写出来）：
-say "从 {a.1} 往后数 5 个，落在 {a.6}。"    {a.1} 画成那一格的小块；{d} 是拨的数的值；$d$ 是字母；[不稳定] 是能飞到图上的词
+say "从 {a.1} 往后数 5 个，落在 {a.6}。"    {a.1} 画成那个部件的小块；{d} 是拨的数的值；$d$ 是字母；[不稳定] 是能飞到图上的词
 
-对格子做事：
+对任何部件都能做：
 glow a.1 a.8 / unglow a.1 a.8      点亮（提醒注意）
-lift a.2 / drop a.2               抬起 / 放下（「这一格要动了」）
+lift a.2 / drop a.2               抬起 / 放下（「这一个要动了」）
 pulse a.3                         闪一下
 paint a.1 a.6 g1 / unpaint a.1    染色
 dim a.1-5 / undim a.1-5           灰掉（排除在外的部分）
-cover a / uncover a.6             扣过去看不见值 / 翻开一格（查找、比较时「只能翻开看」就这样演）
-link a.1 a.6 g1 / unlink a        连一道弧（写好几格就依次连）/ 收掉连线
-hop a.1 -> a.6 color=g1 label="隔 5 个"     小点一格一格跳过去、数着跳了几下，留一道弧
-swap a.1 a.6                      交换（走弧线）
-move a#6 -> a.2                   插入：挪到第 2 格，中间的各让一格
-write a.3 99                      改一格的值
-compare a.3 a.8                   两格比大小（中间冒出「65 > 49」）
-ptr mid a.5 / unptr mid           格子下面的指针（同名的再写就挪过去）
-group a stride=5                  按「隔 5 个」分组：每组染色、连起来（stride 可以写拨的数的名字，学生一拨就重新分）
-split a / merge a                 每组下到自己的一排 / 合回一排
+cover a / uncover a.6             扣过去看不见值 / 翻开一个（查找、比较时「只能翻开看」就这样演）
+link a.1 a.6 g1 / unlink a        连一道弧（写好几个就依次连）/ 收掉连线
+compare a.3 a.8                   两个比大小（中间冒出「65 > 49」）
+remove a                          把一样东西拿下舞台
 
 贴在图上的字（舞台上的东西，能改、能拿掉）：
-label t a#1 a#8 "一样大，先后却换了" side=below tone=note     贴在这几格旁边（side：above / below / left / right；tone：note 小字、key 重点、soft 淡）
+label t a#1 a#8 "一样大，先后却换了" side=below tone=note     贴在这几个旁边（side：above / below / left / right；tone：note 小字、key 重点、soft 淡）
 retext t "新的字" / unlabel t / unlabel（全拿掉）
-fly say.1 -> k a#8 a#1           上一句话里第 1 个 [词] 飞到这几格旁边，变成贴着的字（给概念起名字时用）
+fly say.1 -> k a#8 a#1           上一句话里第 1 个 [词] 飞到这几个旁边，变成贴着的字（给概念起名字时用）
 
 能拨的数：
-dial d = 5 range=1-5 at=a         格子下面一个能拨的数（学生拨它，跟着它的分组、字一起变）
+dial d = 5 range=1-5 at=a         一个能拨的数（学生拨它，跟着它的东西一起变）
 label n dial:d "{d} 组" side=right   字可以贴在拨数旁边
 set d 5                            你来拨
 unlabel dial:d                     收起拨数
 
-镜头：camera a.1-7（凑近这几格）/ camera all（看全部）；wait 600（停一下，毫秒）
+镜头：camera a.1-7（凑近这几个）/ camera all（看全部）；wait 600（停一下，毫秒）
 
 等学生（每一轮最后一行，一轮只有一个）：
-ask tap a "那 {a.2} 和谁一组？"            学生点一格（写 a 是哪一格都能点；写 a#1 a#8 是只能点这几格）
-ask tap a "…" expect=a.7                   你预期的那一格：页面告诉你学生点没点对
-ask drag a#1 a#6 "把小的拖到前面"          学生按住一格拖到同一排另一格上，两格交换（页面照做，再告诉你）
+ask tap a "那 {a.2} 和谁一组？"            学生点一个（写 a 是哪一个都能点；写 a#1 a#8 是只能点这几个）
+ask tap a "…" expect=a.7                   你预期的那一个：页面告诉你学生点没点对
+ask drag a#1 a#6 "把小的拖到前面"          学生拖（能拖的东西才行，见各节）
 ask next "拨一下 $d$，看出规律点下面" button="看出来了"     学生看完 / 拨完点按钮
 ask say "你觉得为什么？"                    学生写一句话
+ask value "一共比较了几次？" answer=4      学生填一个答案，页面当场判对错（数按数比，3/4 = 0.75）`;
 
-例子（一轮）：
-hop a.2 -> a.7 color=g2
-paint a.2 a.7 g2
-say "从 {a.2} 往后跳 5 下，落在 {a.7}。"
-lift a.3
-ask tap a "那 {a.3} 和谁一组？"`;
+/** 整份指令说明：共用的 + 舞台上能放的每一种东西 */
+export function stageDoc() {
+  const parts = [STAGE_COMMON, '## 舞台上能放的东西'];
+  for (const t of Object.values(TYPES)) if (t.doc && t.create.length) parts.push(t.doc);
+  parts.push(`例子（一轮）：\n${TYPES.array.example}`);
+  return parts.join('\n\n');
+}
+export const STAGE_DOC = stageDoc();
 
 /** 第一轮：说明 + 这节课学什么 + 资料 */
 export function stageSystem({ topic = '', material = '' } = {}) {

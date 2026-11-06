@@ -33,3 +33,11 @@ test('describe：Error、字符串、带 code 的对象、空', () => {
   assert.equal(describe(null).msg, '（空的错误）');
   assert.notEqual(errKey({ where: 'a', msg: 'x' }), errKey({ where: 'b', msg: 'x' }));
 });
+
+test('浏览器自己的提示（ResizeObserver 送不完）不记', async () => {
+  const { isNoise } = await import('../kit/src/errlog.js');
+  assert.ok(isNoise('ResizeObserver loop completed with undelivered notifications.'));
+  assert.ok(isNoise('ResizeObserver loop limit exceeded'));
+  assert.ok(!isNoise('TypeError: x is undefined'));
+});
+
