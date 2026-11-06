@@ -6,8 +6,10 @@ import { tree } from './tree.js';
 import { graph } from './graph.js';
 import { matrix } from './matrix.js';
 import { plane } from './plane.js';
+import { sentence } from './sentence.js';
+import { tex } from './tex.js';
 
-export const TYPES = { array, tree, graph, matrix, plane, card };
+export const TYPES = { array, tree, graph, matrix, plane, sentence, tex, card };
 
 /** 造东西的指令 → 那种东西（array → 一排格子、tree → 树……） */
 export const CREATE = {};

@@ -100,7 +100,7 @@ test('部件的写法：t.40 按值、t#3 按层序、t.30* 整棵子树；写�
   assert.match(err(s, 'say "看 {t.99}"'), /没有值是 99/);
   // 别的东西没有树的指令；树也没有一排格子的指令
   const m = make(`${BASE}\narray a = 1 2 3`);
-  assert.match(err(m, 'tag a.1 x'), /一排格子没有「tag」（树、图才有）/);
+  assert.match(err(m, 'tag a.1 x'), /一排格子没有「tag」（树、图(、句子)?才有）/);
   assert.match(err(m, 'hop t.50 -> t.30'), /树没有「hop」/);
   assert.match(err(new Scene(), 'insert t 35'), /舞台上没有「t」/);
 });
