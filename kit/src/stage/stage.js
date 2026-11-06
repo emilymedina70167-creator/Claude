@@ -17,16 +17,16 @@ const svg = (tag, attrs = {}, parent) => { const e = document.createElementNS(SV
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const tr = (x, y, s = 1) => `translate(${x}px, ${y}px)${s !== 1 ? ` scale(${s})` : ''}`;
 const CAPTION_MAX = 3; // 话最多留几句在画面上（这一轮说过的，旧的淡一点）
+export const HELP = '给个提示'; // 挑战还没做到时，页面替老师挂的那一问的按钮
 
 /**
- * 一段讲完怎么往下走（这台设备记着）：tap 停下来等学生点「接着」（默认）、auto 停一会儿自己往下。
- * 2026-11-06 第一节真课：一轮三句话、两张矩阵、一格一格算乘积、两张贴的字一口气演完，学生说像放视频，来不及看就过了
+ * 一段讲完怎么往下走：flow 连着演（默认）、tap 停下来等学生点「接着」。
+ * 2026-11-06 第一节真课学生说像放视频、来不及看就过了，先加了一段一停；学生又说一段一停也还是放片子——
+ * 毛病不在快慢，在学生只能看。所以改成活的舞台（E 段：学生随时直接动、挑战当场判、老师在后台跟着），
+ * 一段一停只留作选项（proto 用），课堂里不再出现
  */
-export const PACES = { tap: '一段一停', auto: '自动往下' };
-const PACE_KEY = 'la-stage-pace';
-export function storedPace() {
-  try { const v = localStorage.getItem(PACE_KEY); return PACES[v] ? v : 'tap'; } catch { return 'tap'; }
-}
+export const PACES = { flow: '连着演', tap: '一段一停' };
+export function storedPace() { return 'flow'; }
 /** 一句写成一行指令里的字：引号挑字里没有的那一种 */
 export function quoteText(t) {
   const s = String(t ?? '');
@@ -70,17 +70,18 @@ export class Stage {
     this.ink = svg('svg', { class: 'st-ink', width: 1, height: 1 }, this.world); // 连线：在最上面
     this.caption = el('div', 'st-caption', this.view);
     this.caption.setAttribute('aria-live', 'polite');
+    this.goalsEl = el('div', 'st-goals', this.view);
+    this.goalsEl.setAttribute('aria-live', 'polite');
     this.dock = el('div', 'st-dock', this.view);
     this.flyLayer = el('div', 'st-fly', this.view);
     this.ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => requestAnimationFrame(() => this.refocus(false))) : null;
     this.ro?.observe(this.view);
   }
-  destroy() { this.ro?.disconnect(); this.root.remove(); this.cancelWait?.(); this.cancelBeat?.(); }
+  destroy() { this.ro?.disconnect(); this.resetOpens(); this.root.remove(); this.cancelWait?.(); this.cancelBeat?.(); }
   setPace(p) {
     if (!PACES[p]) return;
     this.pace = p;
-    try { localStorage.setItem(PACE_KEY, p); } catch { /* 没有存储：这一次照样用 */ }
-    if (p === 'auto') this.cancelBeat?.(); // 正停着等学生：换成自动就接着往下
+    if (p !== 'tap') this.cancelBeat?.(); // 正停着等学生：换成连着演就接着往下
   }
 
   // —— 动画：都走这一个口（速度、「减少动态」、重放统一管）——
@@ -168,7 +169,8 @@ export class Stage {
     const mark = this.log.length;
     this.errors = [];
     let taken = 0;
-    let chain = Promise.resolve();
+    // 先等学生刚才那一下、做到挑战时预写的行演完，老师新写的才接着演（不叠在一起）
+    let chain = Promise.all([this.studentChain, this.reacting]).catch(() => {});
     let running = null;
     let asked = null;
     let lines = 0;
@@ -185,11 +187,12 @@ export class Stage {
     const enqueue = (c) => {
       if (dead) return;
       if (asked) { this.errors.push({ line: c.line, src: c.src?.trim(), error: 'ask 之后的行不演（一轮以 ask 结尾）' }); return; }
-      if (c.cmd === 'ask') asked = c;
+      // @g1 的行只是记着（做到挑战时才演）：不算这一轮的那一问、那一句话
+      if (c.cmd === 'ask' && !c.on) asked = c;
       lines++;
       if (c.par && running) { running.jobs.push(run(c)); return; }
-      const pause = by === 'teacher' && c.cmd === 'say' && said;
-      if (c.cmd === 'say') said = true;
+      const pause = by === 'teacher' && c.cmd === 'say' && !c.on && said;
+      if (c.cmd === 'say' && !c.on) said = true;
       const batch = { jobs: [] };
       chain = chain.then(async () => {
         if (dead) return;
@@ -224,20 +227,23 @@ export class Stage {
       if (!this.instant && !dead && (asked || auto)) {
         if (!this.scene.waiting) {
           // 一轮没有 ask，或者 ask 那一行写错了没演上：页面替它等，不让课停在半空。
-          // 写错的那一问照样把问题留在画面上，学生用话答（第一节真课 `ask tap q#2 q#3 "哪一句说得对？"` 写错了，问题没了、也没有按钮，课就停住了）
+          // 写错的那一问照样把问题留在画面上，学生用话答（第一节真课 `ask tap q#2 q#3 "哪一句说得对？"` 写错了，问题没了、也没有按钮，课就停住了）；
+          // 挑战还没做到：学生在画面上试，旁边一个「给个提示」
           const q = asked ? (asked.args || []).find((a) => a.t === 'str')?.v : '';
-          const src = q ? `ask say ${quoteText(q)}` : 'ask next';
+          const src = q ? `ask say ${quoteText(q)}` : this.pendingGoals().length ? `ask next "" button="${HELP}"` : 'ask next';
           const [c] = parseScript(src);
           await this.exec({ ...c, line: 0, src }, { by: 'page', turn });
         }
         armedResolve();
-        act = await this.waitAct();
+        act = await this.armWait();
       }
       armedResolve();
       return { act, errors: [...this.errors], lines, mark };
     };
     const abort = async () => { dead = true; this.cancelBeat?.(); await chain.catch(() => {}); armedResolve(); await this.rollback(mark); };
-    return { push: (text) => { if (!dead) { last = text; feed(text, false); } }, end, abort, turn, mark, armed };
+    // 还一行没演就不要了（学生在老师想的时候又做了事，这一轮写的已经过时）：不退回——学生这期间动过的照样留着
+    const drop = () => { dead = true; armedResolve(); };
+    return { push: (text) => { if (!dead) { last = text; feed(text, false); } }, end, abort, drop, turn, mark, armed };
   }
 
   /**
@@ -245,8 +251,7 @@ export class Stage {
    * 自动往下时停一会儿就走。话一轮里一直留着，所以学生停多久都看得到刚才说了什么
    */
   async beat(prev, { by, turn, alive }) {
-    if (this.instant) return;
-    if (this.pace === 'auto') { await this.wait(1400); return; }
+    if (this.instant || this.pace !== 'tap') return;
     for (;;) {
       const choice = await new Promise((resolve) => {
         const bar = el('div', 'st-beat', this.dock);
@@ -306,18 +311,22 @@ export class Stage {
     let asked = null;
     for (const row of log) {
       for (const c of parseScript(row.src)) {
-        if (c.cmd === 'ask') {
+        // @g1 ask 是记着的（做到挑战才演）：照样记回去，不算已经问过的那一问
+        if (c.cmd === 'ask' && !c.on) {
           try { const s = this.scene.clone(); s.apply(c); asked = s.waiting?.prompt || asked; } catch { /* 这一行当时就没演 */ }
           continue;
         }
         if (c.cmd === 'say') asked = null;
-        await this.exec(c, { by: row.by, turn: row.turn });
+        await this.exec({ ...c, lenient: true }, { by: row.by, turn: row.turn });
       }
     }
     if (asked) await this.say(asked, { ask: true });
     this.instant = false;
     this.scene.waiting = null;
+    this.armedFor = null;
+    this.armedP = null;
     await this.sync();
+    this.syncOpens();
     await this.refocus(false);
   }
   clearAll() {
@@ -328,6 +337,8 @@ export class Stage {
     this.labelNodes.forEach((l) => l.node.remove()); this.labelNodes.clear();
     this.caption.replaceChildren();
     this.captionTurn = null;
+    this.goalsEl.replaceChildren();
+    this.resetOpens();
     this.dock.replaceChildren();
   }
 
@@ -344,10 +355,14 @@ export class Stage {
     this.log.push({ src: c.src?.trim() || '', by, turn });
     if (by === 'teacher' && !this.instant) this.onLine?.(c);
     try {
-      const choreo = this.choreoOf(c, fx);
+      const choreo = c.on ? null : this.choreoOf(c, fx); // @g1 的行只是记着，不演
       if (choreo) await choreo(c, fx, pre);
       await this.sync({ pre, cmd: c.cmd, fx });
       if (!this.instant && c.cmd !== 'camera') this.keepInView();
+      // 跟着算出来的（乘积……）变了：闪一下，让学生看见「我一拨，它就跟着变」
+      if (!this.instant && fx?.derived?.length) fx.derived.forEach((d, i) => this.pulse(d.part, stagger(i, { step: 45 })));
+      if (fx?.created || fx?.removed) this.resetOpens();
+      this.syncOpens();
       // 贴上去的字：读一下再演下一行（第一节真课两张接连冒出来，一张 0.4 秒就过去了）
       if (!this.instant && (c.cmd === 'label' || c.cmd === 'retext')) {
         const str = (c.args || []).find((a) => a.t === 'str')?.v || '';
@@ -358,7 +373,94 @@ export class Stage {
       this.errors.push({ line: c.line, src: c.src?.trim(), error: `画面没演好：${e.message}` });
       await this.sync({ pre });
     }
+    if (fx?.goalsMet?.length) {
+      if (!this.instant) { this.celebrate(fx.goalsMet); this.react(fx.reactions || [], turn); }
+      // 先排上预写的行再告诉课堂（课堂等 reacting 演完，看学生手上还有没有事）
+      this.onGoal?.(fx.goalsMet, { by, instant: this.instant, reacted: (fx.reactions || []).length });
+    }
     return fx;
+  }
+
+  // —— 活的舞台（docs/stage-plan.md E 段）——
+  /** 还没做到的挑战 */
+  pendingGoals() { return [...this.scene.goals.values()].filter((g) => !g.met); }
+  /**
+   * 挑战做到了：马上演老师预写的行（一句确认、揭开下一小问——答案固定的，见硬性规定），不等老师；
+   * 预写里有 ask 就换掉正在等的那一问；什么都没写、挑战也都做完了，收起「给个提示」，等老师接着讲
+   */
+  react(list, turn) {
+    this.reacting = (this.reacting || Promise.resolve()).then(async () => {
+      await this.studentChain;
+      for (const { src } of list) for (const c of parseScript(src)) await this.exec({ ...c, lenient: true }, { by: 'teacher', turn });
+      const w = this.scene.waiting;
+      if (w && w !== this.armedFor) { this.cancelWait?.(); this.armWait(); return; }
+      if (this.armedFor?.button === HELP && !this.pendingGoals().length) this.cancelWait?.();
+    }).catch((e) => { this.errors.push({ line: 0, src: '', error: `预写的行没演好：${e.message}` }); });
+    return this.reacting;
+  }
+  /** 刚做到的挑战：任务条那一行打勾，条件里提到的东西亮一下 */
+  celebrate(ids) {
+    for (const id of ids) {
+      const g = this.scene.goals.get(id);
+      if (!g) continue;
+      const objs = new Set(g.cond.flatMap((cl) => [cl.l, cl.r]).filter((w) => w && this.scene.objects.has(w)));
+      let i = 0;
+      for (const ob of objs) for (const p of this.scene.parts(ob).slice(0, 12)) this.pulse(p, stagger(i++, { step: 35 }));
+    }
+  }
+  /** 开放给学生直接动的：照场景挂上、收起（东西重造过就全部重挂） */
+  syncOpens() {
+    if (this.instant || !this.withInput) return;
+    this.armedOpens ||= new Map();
+    const want = this.scene.opens;
+    const sig = (e) => `${e.refs.join(' ')}|${e.lo}|${e.hi}`;
+    for (const [k, a] of this.armedOpens) if (!want.has(k) || a.sig !== sig(want.get(k))) { a.off(); this.armedOpens.delete(k); }
+    for (const [k, e] of want) if (!this.armedOpens.has(k)) this.armedOpens.set(k, { off: this.armOpen(e), sig: sig(e) });
+  }
+  resetOpens() { this.armedOpens?.forEach((a) => a.off()); this.armedOpens = new Map(); }
+  armOpen(e) {
+    const o = this.scene.objects.get(e.obj);
+    const view = o && VIEWS[o.type];
+    if (!view) return () => {};
+    if (e.action === 'drag') {
+      // 拖：每拖完一下收起来重挂（手柄、监听跟着新位置）；算出来的（u + v）不能拖
+      const parts = (e.refs.length ? e.refs.flatMap((r) => this.scene.parts(r)) : this.scene.parts(e.obj)).filter((p) => p.expr == null);
+      const offs = parts.map((p) => view.drag?.(this, p, parts, (act, src) => this.openDone(e, act, src)) || (() => {}));
+      return () => offs.forEach((f) => f());
+    }
+    const fn = view.affords?.[e.action];
+    return fn ? fn(this, o, e, (act, src) => this.openDone(e, act, src)) : () => {};
+  }
+  openDone(e, act, src) {
+    const a = { ...act, open: e.action };
+    if (e.action === 'drag') { const k = `${e.obj}:${e.action}`; this.armedOpens.get(k)?.off(); this.armedOpens.delete(k); }
+    const p = src ? this.studentDo(src, a) : Promise.resolve(this.onAct?.(a));
+    return p.then(() => this.syncOpens());
+  }
+  /** 挑战：左上角一条一条（做到了打勾）；照场景对齐 */
+  syncGoals() {
+    const host = this.goalsEl;
+    const have = new Map([...host.children].filter((n) => !n.classList.contains('is-out')).map((n) => [n.dataset.id, n]));
+    for (const g of this.scene.goals.values()) {
+      let n = have.get(g.id);
+      have.delete(g.id);
+      if (!n) {
+        n = el('div', 'st-goal', host);
+        n.dataset.id = g.id;
+        el('i', 'st-goal-mark', n);
+        el('span', 'st-goal-t', n);
+        if (!this.instant) this.tween(n, [{ opacity: 0, transform: 'translateY(-8px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 380, easing: EASE.out });
+      }
+      if (n.__text !== g.text) { const t = n.lastChild; t.replaceChildren(); this.richInto(t, g.text); n.__text = g.text; }
+      if (g.met && !n.classList.contains('is-met')) {
+        n.classList.add('is-met');
+        if (!this.instant) this.tween(n.firstChild, [{ transform: 'scale(.4)' }, { transform: 'scale(1.25)', offset: 0.6 }, { transform: 'scale(1)' }], { duration: 520, easing: EASE.spring });
+      }
+    }
+    for (const n of have.values()) {
+      n.classList.add('is-out');
+      this.tween(n, [{ opacity: 1 }, { opacity: 0 }], { duration: 260 }).then(() => n.remove());
+    }
   }
   // 这一行的专门动作：刚造出来的东西出场；那种东西自己的（swap、insert……）；共用的（说话、比较、飞字……）
   choreoOf(c, fx) {
@@ -442,6 +544,7 @@ export class Stage {
     const ctx = { pre, only, entering, cmd, fx, jobs };
     const moves = [];
     for (const o of sc.objects.values()) moves.push(...(VIEWS[o.type]?.sync(this, o, ctx) || []));
+    this.syncGoals();
     // 没了的部件、没了的东西
     for (const [k, n] of this.nodes) if (n.__live !== this.syncMark && !only) this.dropNode(k);
     for (const id of [...this.decors.keys()]) if (!sc.objects.has(id)) { this.dropDecor(id); this.decors.delete(id); }
@@ -667,7 +770,7 @@ export class Stage {
   // 学生的动作改了舞台（拨数、拖过去换位置、拖动平面上的向量）：照一行指令走场景（记进 log，刷新、作废都照它放回）
   studentDo(src, act) {
     const [c] = parseScript(src);
-    this.studentChain = (this.studentChain || Promise.resolve()).then(() => this.exec({ ...c, dragged: act.type === 'drag' }, { by: 'student' }));
+    this.studentChain = (this.studentChain || Promise.resolve()).then(() => this.exec({ ...c, dragged: act.type === 'drag' }, { by: 'student' })).catch(() => {});
     if (act.type === 'dial') {
       const last = this.pending.findLast?.((p) => p.type === 'dial' && p.name === act.name);
       if (last) last.path.push(act.value); else this.pending.push({ ...act, path: [act.from ?? null, act.value].filter((v) => v != null) });
@@ -680,7 +783,8 @@ export class Stage {
   viewSize() { return { w: this.view.clientWidth || 800, h: this.view.clientHeight || 600 }; }
   reserve() {
     const ch = Math.max(84, (this.caption.offsetHeight || 0) + 34);
-    return { top: ch + 18, bottom: this.dock.childElementCount ? 104 : 40 };
+    const gh = this.goalsEl?.childElementCount ? this.goalsEl.offsetHeight + 14 : 0;
+    return { top: ch + 18 + gh, bottom: this.dock.childElementCount ? 104 : 40 };
   }
   focusBox() {
     const sc = this.scene;
@@ -738,6 +842,23 @@ export class Stage {
   }
 
   // —— 等学生：点、拖、点按钮、打字、填一个答案；等待期间拨数是「试」，攒着跟回答一起说 ——
+  /**
+   * 挂上现在场景里的那一问（一轮演完、做到挑战时预写的行里有 ask 都走这里）：答了 onAnswer 告诉课堂，
+   * 被换掉（预写的新一问、作废）是 cancel
+   */
+  armWait() {
+    const w = this.scene.waiting;
+    if (!w) return Promise.resolve(null);
+    if (this.armedFor === w && this.armedP) return this.armedP;
+    if (this.armedFor) this.cancelWait?.(); // 还挂着上一问（「给个提示」、被预写的新一问换掉的）：先收起，同一时间只等一问
+    this.armedFor = w;
+    this.armedP = this.waitAct().then((act) => {
+      if (this.armedFor === w) { this.armedFor = null; this.armedP = null; }
+      if (act && act.type !== 'cancel') this.onAnswer?.(act, w);
+      return act;
+    });
+    return this.armedP;
+  }
   waitAct() {
     const w = this.scene.waiting;
     if (!w) return Promise.resolve(null);
@@ -750,7 +871,7 @@ export class Stage {
         offs.forEach((f) => f());
         this.dock.replaceChildren();
         this.cancelWait = null;
-        this.scene.waiting = null;
+        if (this.scene.waiting === w) this.scene.waiting = null;
         await this.studentChain;
         const tries = this.pending.splice(0);
         resolve({ ...act, tries });
@@ -871,6 +992,9 @@ export function actText(act) {
     if (act.type === 'next') return `学生点了「${act.button}」`;
     if (act.type === 'say') return `学生说：「${act.text}」`;
     if (act.type === 'value') return `学生填了「${act.text}」——正确答案是 ${act.answer}，${act.right ? '填对了' : '填错了'}`;
+    if (act.type === 'edit') return `学生把 ${act.ref} 从 ${act.from === '' ? '空' : act.from} 拨到 ${act.to}`;
+    if (act.type === 'explain') return `学生点了 ${act.ref}，看它怎么一行乘一列算出来`;
+    if (act.type === 'goal') return `学生做到了挑战 ${act.id}「${act.text}」`;
     return '';
   })();
   return [...tries, main].filter(Boolean).join('\n');

@@ -502,10 +502,7 @@ const SUITES = {
     await tap('a:9');
     const rec = await t.waitFor(async () => (await t.docs('evidence')).find((e) => e.session === sid && e.src === 'record' && /^S\d+$/.test(e.comp || '')), { what: '点对的那一格记成 S… 的作答' });
     check(rec.ok === true, `点了预期的那一格，作答记成了 ok=${rec.ok}`);
-    // 第二轮：两句话中间停下来等学生点「接着」（上一句留在画面上）；故意写错的一行跳过，memo 块写进记忆，ask value 当场判
-    await t.waitFor(() => t.page.$('.st-beat-go'), { timeout: 30000, what: '第二轮讲完一段停下来等「接着」' });
-    check(!(await t.page.evaluate(() => window.LAStage.scene.waiting)), '一段一停的时候不该在等作答');
-    await t.page.click('.st-beat-go');
+    // 第二轮：两句话连着演（上一句留在画面上）；故意写错的一行跳过，memo 块写进记忆，ask value 当场判
     await t.waitFor(() => t.page.$('.st-say.is-main input'), { timeout: 30000, what: '第二轮问一个要填的答案' });
     check(await t.page.evaluate(() => /对，在右边/.test(document.querySelector('.st-caption').textContent) && /灰掉的这一半/.test(document.querySelector('.st-caption').textContent)), '第二轮说过的两句话没有都留在画面上');
     const tt = await turns();
@@ -515,22 +512,36 @@ const SUITES = {
     await t.waitFor(async () => (await t.docs('evidence')).some((e) => e.session === sid && e.src === 'record' && e.value === '5' && e.ok === true), { what: '填的答案记成作答（页面判对）' });
     const st = (await turns()).filter((x) => x.role === 'student').at(-1);
     check(/swap 要正好两格/.test(st?.msg || ''), '写错的那一行没在下一轮告诉老师');
-    // 第三轮：翻开中间那一格，停下来时点「再看一遍」（倒回去重演这一段），再停着的时候刷新：
-    // 老师这一轮写完就存了（还没演完、没有 log），刷新以后照它写的字放回，接着等最后一问
-    await t.waitFor(() => t.page.$('.st-beat-again'), { timeout: 30000, what: '第三轮讲完一段停下来（有「再看一遍」）' });
-    await t.page.click('.st-beat-again');
-    await t.waitFor(() => t.page.$('.st-beat-go'), { timeout: 20000, what: '「再看一遍」演完又停下来' });
-    const again = await t.page.evaluate(() => ({ covered: window.LAStage.scene.objects.get('a').cells.filter((c) => c.covered).length, mid: window.LAStage.scene.objects.get('a').ptrs.get('mid') }));
-    check(again.covered === 4 && again.mid === 9, `「再看一遍」以后舞台不对：${JSON.stringify(again)}`);
-    await sleep(300);
+    // 第三轮（活的舞台）：开放一排格子、一个挑战；页面替老师挂「给个提示」。挑战还没做到时刷新：照记录放回，挑战还在、接着等
+    await t.waitFor(() => t.page.evaluate(() => !!document.querySelector('.st-goal') && window.LAStage?.scene.waiting?.button === '给个提示'), { timeout: 30000, what: '第三轮出挑战、挂上「给个提示」' });
     await t.page.reload(); await t.page.waitForLoadState('load');
-    await t.waitFor(() => t.page.evaluate(() => window.LAStage?.scene.waiting?.kind === 'say'), { timeout: 20000, what: '刷新以后最后一问接着等' });
-    const back = await t.page.evaluate(() => { const s = window.LAStage.scene; const a = s.objects.get('a'); return { dim: a.cells.filter((c) => c.dim).length, covered: a.cells.filter((c) => c.covered).length, ptr: a.ptrs.get('mid') }; });
-    check(back.dim === 6 && back.covered === 4 && back.ptr === 9, `刷新以后舞台没照记录放回：${JSON.stringify(back)}`);
-    check(await t.page.evaluate(() => /翻开是/.test(document.querySelector('.st-caption').textContent) && /接下来往哪边/.test(document.querySelector('.st-caption').textContent)), '刷新以后这一轮说过的话、最后一问没放回画面上');
+    await t.waitFor(() => t.page.evaluate(() => window.LAStage?.scene.waiting?.button === '给个提示' && window.LAStage.scene.goals.has('g1')), { timeout: 20000, what: '刷新以后挑战还在、接着等' });
+    const back = await t.page.evaluate(() => { const s = window.LAStage.scene; const a = s.objects.get('a'); return { dim: a.cells.filter((c) => c.dim).length, covered: a.cells.filter((c) => c.covered).length, ptr: a.ptrs.get('mid'), open: s.opens.has('b:drag') }; });
+    check(back.dim === 6 && back.covered === 4 && back.ptr === 9 && back.open, `刷新以后舞台没照记录放回：${JSON.stringify(back)}`);
+    check(await t.page.evaluate(() => /翻开是/.test(document.querySelector('.st-caption').textContent)), '刷新以后这一轮说过的话没放回画面上');
+    // 学生自己拖：每拖一下页面当场照做；排好的那一刻挑战打勾、预写的一句和下一问马上出来，不叫老师（老师那一轮还没来）
+    const claudeTurns = async () => (await turns()).filter((x) => x.role === 'claude').length;
+    const before = await claudeTurns();
+    const drag = async (from, to) => { const a = await node(from), b = await node(to); check(a && b, `舞台上没有 ${from} / ${to}`); await t.page.mouse.move(a.x, a.y); await t.page.mouse.down(); for (let i = 1; i <= 8; i++) await t.page.mouse.move(a.x + (b.x - a.x) * i / 8, a.y + (b.y - a.y) * i / 8); await t.page.mouse.up(); await sleep(900); };
+    await drag('b:1', 'b:3');
+    await drag('b:3', 'b:2');
+    await t.waitFor(() => t.page.evaluate(() => window.LAStage.scene.goals.get('g1')?.met && window.LAStage.scene.waiting?.kind === 'say'), { timeout: 15000, what: '排好以后挑战打勾、预写的下一问出来' });
+    check(await t.page.$('.st-goal.is-met'), '做到的挑战没有打勾');
+    await t.waitFor(async () => (await t.docs('evidence')).some((e) => e.session === sid && e.src === 'record' && e.value === 'goal' && e.ok === true), { what: '做到挑战记成作答' });
+    await sleep(800);
+    check(await claudeTurns() === before, '预写的下一问还在等学生，页面却又叫了老师');
+    const pend = (await turns()).filter((x) => x.role === 'student').at(-1);
+    check(pend?.pending && (pend.events || []).filter((e) => e.kind === 'try').length === 2, `学生拖的两下没攒进还没发出去的那一段：${JSON.stringify(pend?.events)}`);
     await t.page.fill('#st-say-input', '往左，因为 33 比 37 小'); await t.page.click('.st-say-go');
     await t.waitFor(async () => (await t.docs('evidence')).some((e) => e.session === sid && e.src === 'say' && /往左/.test(e.text || '')), { what: '打的字记成学生说的话' });
+    const sent = await t.waitFor(async () => (await turns()).find((x) => x.role === 'student' && !x.pending && /往左/.test(x.msg || '')), { what: '学生说的话连同攒下的拖、做到挑战一起发给老师' });
+    check(/学生拨了|学生把 3/.test(sent?.msg || '') || /拖到/.test(sent?.msg || ''), `发给老师的没写学生怎么拖的：${sent?.msg}`);
+    check(/做到了挑战 g1/.test(sent?.msg || '') && /往左/.test(sent?.msg || ''), `发给老师的没写做到了挑战、学生说的话：${sent?.msg}`);
     await t.waitFor(() => t.page.$('.st-next'), { timeout: 30000, what: '第四轮' });
+    await sleep(1500);
+    await t.page.click('.st-next');
+    await t.waitFor(async () => (await turns()).filter((x) => x.role === 'claude').at(-1)?.cost?.spec === 'hit', { timeout: 30000, what: '点了「接着」以后接上提前想好的那一轮' });
+    await t.waitFor(() => t.page.$('.st-next'), { timeout: 30000, what: '第五轮' });
     // 下课：小结、整理单（position 写进记忆）、报告里有 S… 的题
     await t.page.click('.sc-end');
     await t.answer('下课');
@@ -545,6 +556,32 @@ const SUITES = {
     await sleep(1200);
     check(!(await t.page.$('.sc-end')), '只读的舞台课还能点「下课」');
     check(/模拟老师讲完了/.test(await t.page.$eval('.st-caption', (n) => n.textContent)), '只读的舞台课上面没有最后说的那句话');
+    return t;
+  },
+
+  // 舞台课卡住了：挑战还没做到、学生一直没动，页面自己叫老师（?dev&quiet=3 把等待缩成 3 秒），发过去的写着「几秒没动」
+  async stagestuck(browser) {
+    const t = await seeded(browser);
+    await t.page.click('.dk-form-b[data-form="stage"]'); await sleep(300);
+    await t.page.click('.dk-class .dk-new');
+    await t.page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash), { timeout: 20000 });
+    await t.page.waitForLoadState('load');
+    const sid = decodeURIComponent(new URL(t.page.url()).hash.slice(1));
+    const turns = async () => Object.entries(await t.db()).filter(([k]) => k.startsWith(`sessions/${sid}/class_turns/`)).map(([, v]) => v).sort((a, b) => a.seq - b.seq);
+    const node = (pid) => t.page.evaluate((k) => { const r = window.LAStage?.nodes.get(k)?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null; }, pid);
+    await t.waitFor(() => t.page.$('.st-cell.is-tap'), { timeout: 30000, what: '第一轮' });
+    await sleep(400);
+    const p = await node('a:9'); await t.page.mouse.move(p.x, p.y); await t.page.mouse.down(); await t.page.mouse.up();
+    await t.waitFor(() => t.page.$('.st-say.is-main input'), { timeout: 30000, what: '第二轮' });
+    await t.page.fill('#st-say-input', '5'); await t.page.click('.st-say-go');
+    await t.waitFor(() => t.page.evaluate(() => window.LAStage?.scene.waiting?.button === '给个提示'), { timeout: 30000, what: '第三轮的挑战' });
+    // 带上 quiet=3 重新打开：照记录放回、接着等；3 秒不动就叫老师
+    const url = new URL(t.page.url());
+    url.search = `${url.search}${url.search ? '&' : '?'}quiet=3`;
+    await t.page.goto(url.toString()); await t.page.waitForLoadState('load');
+    const sent = await t.waitFor(async () => (await turns()).find((x) => x.role === 'student' && !x.pending && (x.events || []).some((e) => e.kind === 'stuck')), { timeout: 30000, what: '学生一直没动，页面自己叫老师' });
+    check(/3 秒没动，挑战 g1 还没做到/.test(sent.msg || ''), `发给老师的没写学生几秒没动：${sent.msg}`);
+    await t.waitFor(async () => (await turns()).some((x) => x.role === 'claude' && x.seq > sent.seq), { timeout: 30000, what: '老师接着写了一轮' });
     return t;
   },
 

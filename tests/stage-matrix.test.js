@@ -217,7 +217,7 @@ test('乘法：product 把 A、B 排成一行、后面 = C；mul 一格是 A 的
   assert.deepEqual(fx.items[0].terms.map((t) => `${t.av}×${t.bv}=${t.p}`), ['1×0=0', '2×1=2', '3×4=12']);
   assert.deepEqual(fx.items[0].terms.map((t) => t.a), ['1.1', '1.2', '1.3']);
   assert.deepEqual(fx.items[0].terms.map((t) => t.b), ['1.2', '2.2', '3.2']);
-  assert.match(s.stateText(), /矩阵 C = A B（2×2）：\n  第 1 行：□  14\n  第 2 行：□  □\n  还空着：C\.1,1 C\.2,1 C\.2,2/);
+  assert.match(s.stateText(), /矩阵 C = A B（2×2；算出来的 1 格跟着 A、B 自动重算）：\n  第 1 行：□  14\n  第 2 行：□  □\n  还空着：C\.1,1 C\.2,1 C\.2,2/);
   one(s, 'mul C');
   assert.deepEqual(rows(s, 'C'), [['-1', '14'], ['-2', '2']]);
   // 乘积的部件写法照常
@@ -269,9 +269,15 @@ test('给老师看的现状：写法提示、每一行的数和样子、还空�
 
 test('说明里的例子照抄能演：一行不错', () => {
   assert.deepEqual(dryRun(new Scene(), matrix.example), []);
+  // 例子是活的一轮：算一格做示范，剩下的交给学生点开看；做到了预写的行把 B 交给学生拨、再给下一个挑战
   const s = run(new Scene(), matrix.example);
-  assert.deepEqual(rows(s), [['1', '2', '3'], ['0', '-3', '-6'], ['0', '0', '1']]);
-  assert.equal(s.parts('C.1,1')[0].value, '19');
-  assert.equal(s.waiting.kind, 'tap');
+  assert.equal(s.parts('C.1,1')[0].value, '0');
+  assert.equal(s.parts('C.2,2')[0].value, '');
+  assert.ok(s.opens.has('C:explain') && s.goals.has('g1') && s.reactions.get('g1').length === 3);
+  for (const c of parseScript('mul C.1,2\nmul C.2,1')) s.apply(c);
+  const [fx] = parseScript('mul C.2,2').map((c) => s.apply(c));
+  assert.deepEqual(fx.goalsMet, ['g1']);
+  for (const r of fx.reactions) for (const c of parseScript(r.src)) s.apply({ ...c, lenient: true });
+  assert.ok(s.opens.has('B:edit') && s.goals.has('g2') && !s.goals.get('g2').met);
   assert.doesNotMatch(matrix.doc + matrix.hint, /[他她]/);
 });

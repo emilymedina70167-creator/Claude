@@ -13,6 +13,7 @@
 import { parseScript, parseRef, parseRich, addCommands } from './script.js';
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox } from './layout.js';
+import { parseGoal, evalGoal, goalStatus } from './goal.js';
 
 export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 export const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
@@ -47,6 +48,11 @@ export function compareValues(a, b) {
 /** 一个部件在场景里的编号（画面用它找节点、话里的小块用它找部件）：'a:3'、't:A' */
 export const pidOf = (p) => `${p.obj}:${p.key}`;
 
+/** 一种东西能开放给学生直接动的：{ 动作: 给老师看的一句 } */
+export function affordsOf(t) {
+  return { ...(t.drag ? { drag: '拖' } : {}), ...(t.affords || {}) };
+}
+
 export class Scene {
   constructor() {
     this.objects = new Map(); // id → { type, id, origin, …（各种东西自己的数据） }
@@ -58,6 +64,10 @@ export class Scene {
     this.say = '';
     this.words = []; // 这一句话里能飞走的 [词]
     this.waiting = null; // { kind, refs, prompt, button, expect, answer }
+    // —— 活的舞台（E 段）：学生随时能直接动的、挑战、挑战做到了马上演的 ——
+    this.opens = new Map(); // 'B:edit' → { obj, action, refs, lo, hi }：开放给学生直接动的
+    this.goals = new Map(); // id → { id, text, when, cond, met }
+    this.reactions = new Map(); // 挑战 id → [行]：做到了的那一刻页面马上演（老师预写的确认和下一小问）
   }
 
   clone() {
@@ -71,6 +81,9 @@ export class Scene {
     s.say = this.say;
     s.words = [...this.words];
     s.waiting = this.waiting ? { ...this.waiting } : null;
+    for (const [k, v] of this.opens) s.opens.set(k, { ...v, refs: [...v.refs] });
+    for (const [k, g] of this.goals) s.goals.set(k, structuredClone(g));
+    for (const [k, r] of this.reactions) s.reactions.set(k, [...r]);
     return s;
   }
 
@@ -138,7 +151,38 @@ export class Scene {
   }
 
   // —— 一行指令改场景（画面怎么演由 stage.js 管）。返回这一行的要点（画面用），写错了抛错 ——
+  // 每一行之后：跟着别的东西算出来的（乘积……）重算（fx.derived），挑战判一遍，刚做到的（fx.goalsMet）把预写的行交出来（fx.reactions）
   apply(c) {
+    if (c.on) return this.stash(c);
+    const fx = this.applyOne(c) || {};
+    const derived = this.derive();
+    if (derived.length) fx.derived = derived;
+    const met = this.checkGoals();
+    if (met.length) {
+      fx.goalsMet = met;
+      fx.reactions = met.flatMap((id) => { const r = this.reactions.get(id) || []; this.reactions.delete(id); return r.map((src) => ({ goal: id, src })); });
+    }
+    return fx;
+  }
+
+  // @g1 开头的行：先记着，g1 做到了再演。在现在的舞台上把这一挑战记着的行连着试一遍，写错了当场告诉老师
+  stash(c) {
+    const g = this.goals.get(c.on);
+    if (!g) throw new Error(`先写 goal ${c.on} "给学生看的挑战" when="…"，再写 @${c.on} 开头的行`);
+    if (g.met) throw new Error(`挑战 ${c.on} 已经做到了，@${c.on} 的行不会再演`);
+    const list = this.reactions.get(c.on) || [];
+    const trial = this.clone();
+    trial.goals.get(c.on).met = true;
+    trial.trial = true; // 这是在今天的舞台上试：真演的时候学生已经动过了（「现在就成立」这种检查不算数）
+    for (const x of parseScript([...list, c.body].join('\n'))) {
+      if (x.on) throw new Error('@ 的行里不能再写 @');
+      trial.applyOne(x);
+    }
+    this.reactions.set(c.on, [...list, c.body]);
+    return { stashed: c.on };
+  }
+
+  applyOne(c) {
     if (!c.cmd) throw new Error(c.error || '看不懂这一行');
     const h = this.helpers(c);
     const { cmd } = c;
@@ -304,6 +348,57 @@ export class Scene {
         for (const v of this.vars.values()) v.shown = false;
         return {};
       }
+      case 'open': {
+        // open B edit range=-3..3：学生随时能直接动它（拨格子、拖向量、点乘积看怎么算）；动的每一下页面当场算、记下来
+        const target = words[0];
+        if (!target || !this.isRef(target)) throw new Error(`要写成 open 舞台上的东西 动作（比如 open B edit range=-3..3）${target ? `：舞台上没有「${target}」` : ''}`);
+        const r = parseRef(target);
+        const o = this.objects.get(r.obj);
+        const t = typeOf(o);
+        const affords = affordsOf(t);
+        const names = Object.keys(affords);
+        if (!names.length) throw new Error(`${t.label}还不能开放给学生直接动`);
+        const action = words[1] || names[0];
+        if (!affords[action]) throw new Error(`${t.label}能开放的是：${names.map((k) => `${k}（${affords[k]}）`).join('、')}，没有「${action}」`);
+        if (r.mark) this.parts(target);
+        t.canOpen?.(this, o, action, h);
+        const e = { obj: o.id, action, refs: r.mark ? [target] : [], lo: null, hi: null };
+        if (action === 'edit') {
+          const [lo, hi] = parseRange(opts.range || '-9..9');
+          if (!(lo <= hi)) throw new Error('range 要写成 小..大，比如 range=-3..3');
+          e.lo = lo; e.hi = hi;
+        }
+        this.opens.set(`${o.id}:${action}`, e);
+        return { open: e };
+      }
+      case 'close': {
+        // close B / close B edit / close（全收起）
+        const ids = [...this.opens.keys()].filter((k) => { const e = this.opens.get(k); return (!words[0] || e.obj === parseRef(words[0])?.obj) && (!words[1] || e.action === words[1]); });
+        if (words[0] && !ids.length) throw new Error(`「${words.join(' ')}」没有开放着`);
+        ids.forEach((k) => this.opens.delete(k));
+        return { closed: ids };
+      }
+      case 'goal': {
+        // goal g1 "改 B 里的一个数，让 AB 还是 O" when="C = O"：给学生的挑战；页面每一下都判，做到了马上告诉老师
+        const id = words[0];
+        if (!id || !/^[A-Za-z_]\w*$/.test(id)) throw new Error('要写成 goal 名字 "给学生看的挑战" when="C = O, D != O"');
+        if (this.objects.has(id)) throw new Error(`「${id}」是舞台上一样东西的名字，挑战换一个名字（g1、g2……）`);
+        if (str == null) throw new Error(`要写成 goal ${id} "给学生看的挑战" when="…"（挑战的话写在引号里）`);
+        if (!opts.when) throw new Error(`goal ${id} 要写 when="做到什么算做到"（比如 when="C = O, D != O"），页面照它判`);
+        for (const p of parseRich(str)) if (p.k === 'ref') this.parts(p.v);
+        const cond = parseGoal(opts.when);
+        // 老师当场写的挑战一写下就成立，多半是写错了，当场告诉老师；预写的行、重放的时候学生可能已经做到了：照收，下面马上算做到
+        if (!this.trial && !c.lenient && evalGoal(this, cond)) throw new Error(`「${opts.when}」现在就已经成立了：挑战要学生动手以后才做得到`);
+        this.goals.set(id, { id, text: str, when: opts.when, cond, met: false });
+        this.reactions.delete(id);
+        return { goal: id };
+      }
+      case 'ungoal': {
+        const ids = words.length ? words : [...this.goals.keys()];
+        for (const k of ids) if (!this.goals.has(k)) throw new Error(`没有叫「${k}」的挑战`);
+        ids.forEach((k) => { this.goals.delete(k); this.reactions.delete(k); });
+        return { ungoal: ids };
+      }
       case 'remove': {
         // remove a：把一样东西拿下舞台
         const id = words[0];
@@ -347,8 +442,10 @@ export class Scene {
     for (let i = 1; i < list.length; i++) {
       const o = list[i];
       const me = typeOf(o).objectBox(o);
+      const tied = new Set(typeOf(o).anchors?.(o) || []); // 和它排成一体的（乘积和它的两个因子）不比
       let need = -Infinity;
       for (let j = 0; j < i; j++) {
+        if (tied.has(list[j].id)) continue;
         const b = typeOf(list[j]).objectBox(list[j]);
         // 横着有重叠的才算「在上面」
         if (b.x < me.x + me.w && me.x < b.x + b.w) need = Math.max(need, b.y + b.h + OBJECT_GAP / 2);
@@ -369,6 +466,32 @@ export class Scene {
     for (const [k, l] of this.links) if (l.a.obj === id || l.b.obj === id) this.links.delete(k);
     if (!keepLabels) for (const [k, l] of this.labels) if (l.refs.some((r) => parseRef(r)?.obj === id)) this.labels.delete(k);
     this.binds = this.binds.filter((b) => b.obj !== id);
+    for (const [k, e] of this.opens) if (e.obj === id) this.opens.delete(k);
+  }
+
+  /** 跟着别的东西算出来的（乘积 C = A B：A、B 变了 C 跟着变）：重算到不再变（最多三遍，链着的乘积） */
+  derive() {
+    const out = [];
+    for (let pass = 0; pass < 3; pass++) {
+      let changed = false;
+      for (const o of this.objects.values()) {
+        const r = typeOf(o).derive?.(this, o) || [];
+        if (r.length) { out.push(...r); changed = true; }
+      }
+      if (!changed) break;
+    }
+    return out;
+  }
+  /** 挑战判一遍：这一行以后刚做到的（做到了就一直算做到，不会因为学生接着拨又「没做到」） */
+  checkGoals() {
+    const met = [];
+    for (const g of this.goals.values()) {
+      if (g.met) continue;
+      let ok = false;
+      try { ok = evalGoal(this, g.cond); } catch { ok = false; }
+      if (ok) { g.met = true; met.push(g.id); }
+    }
+    return met;
   }
   // 拨的数变了：跟着它的东西（分组、平面上的变换……）重新算
   onVar(name) {
@@ -404,6 +527,11 @@ export class Scene {
     if (dials.length) lines.push(`能拨的数：${dials.map(([n, v]) => `${n} = ${v.v}（${v.lo}～${v.hi}）`).join('，')}`);
     if (this.say) lines.push(`最后说的话：${this.say}`);
     if (this.waiting) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案' }[this.waiting.kind]}${this.waiting.refs.length ? ` ${this.waiting.refs.join(' ')}` : ''}`);
+    if (this.opens.size) lines.push(`学生能直接动的：${[...this.opens.values()].map((e) => { const o = this.objects.get(e.obj); const what = affordsOf(typeOf(o))[e.action]; return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}）`; }).join('；')}`);
+    for (const g of this.goals.values()) {
+      const r = this.reactions.get(g.id);
+      lines.push(`挑战 ${g.id}「${g.text}」when="${g.when}"：${goalStatus(this, g)}${r?.length ? `；做到了页面马上演你预写的 ${r.length} 行` : ''}`);
+    }
     return lines.join('\n');
   }
   refOfKey(k) { const p = this.partOf(k.obj, k.key); return p ? this.refOf(p) : `${k.obj}:${k.key}`; }

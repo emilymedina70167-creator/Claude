@@ -2,7 +2,8 @@
 // 专门的动作：行变换（副本乘上系数飘到目标行上面再加进去、交换两行走弧线、一行乘倍数）、改一个数、
 // 乘法的一格（A 的一行和 B 的一列一起亮，逐对相乘排成一条算式，加出来的数飞进那一格）。
 import { EASE, moveDuration, stagger, arcPoints } from '../motion.js';
-import { MX, layout, stairsPoints, zeroRows } from './matrix.js';
+import { MX, layout, stairsPoints, zeroRows, toQ, eqWidth } from './matrix.js';
+import { Q } from '../../exact.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const tr = (x, y, s = 1) => `translate(${x}px, ${y}px)${s !== 1 ? ` scale(${s})` : ''}`;
@@ -267,7 +268,104 @@ async function mulOne(stage, fx, it, f) {
   stage.tween(line, [{ opacity: 1 }, { opacity: 0 }], { duration: 400, delay: D(1600) }).then(() => { line.remove(); if (work.get(stage) === line) work.delete(stage); });
 }
 
+/**
+ * 拨数器：点开放的一格，格子上方浮出「− 数 +」（屏幕上的一层，按钮够 44px，不跟着镜头缩小）；拨一下写一下（学生的 write），
+ * 乘积跟着当场重算、闪一下。点别处收起。格子、数都按 key 现取（重放以后场景是新的）
+ */
+function editAfford(stage, o, e, done) {
+  const id = o.id;
+  const keys = (e.refs.length ? e.refs.flatMap((r) => stage.scene.parts(r)) : o.cells).map((x) => x.key);
+  const nodeOf = (k) => stage.nodes.get(`${id}:${k}`);
+  const live = (k) => stage.scene.partOf(id, k);
+  let pop = null, cur = null, busy = false;
+  const close = () => { pop?.remove(); pop = null; if (cur != null) nodeOf(cur)?.classList.remove('is-editing'); cur = null; };
+  // 拨数器放在矩阵下沿下面、对着这一列（矩阵上面多半是老师的话，不挡住）；屏幕底下放不下才放到这一格上面
+  const place = () => {
+    const n = cur != null && nodeOf(cur);
+    const m = stage.scene.objects.get(id);
+    if (!pop || !n?.__box || !m) return;
+    const b = n.__box, L = layout(m).box;
+    const below = stage.toScreen({ x: b.x + b.w / 2, y: L.y + L.h });
+    const above = stage.toScreen({ x: b.x + b.w / 2, y: b.y });
+    const h = pop.offsetHeight, vh = stage.view.clientHeight || 800;
+    const y = below.y + 10 + h < vh - 96 ? below.y + 10 : above.y - h - 10;
+    const x = Math.max(8, Math.min((stage.view.clientWidth || 800) - pop.offsetWidth - 8, below.x - pop.offsetWidth / 2));
+    pop.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+  };
+  const paint = () => {
+    const x = cur != null && live(cur);
+    if (!pop || !x) { close(); return; }
+    const q = toQ(x.value);
+    pop.querySelector('.mx-step-v').textContent = x.value === '' ? '?' : String(x.value).replace('-', '−');
+    pop.querySelector('.mx-step-dec').disabled = !!q && q.toNumber() <= e.lo;
+    pop.querySelector('.mx-step-inc').disabled = !!q && q.toNumber() >= e.hi;
+    place();
+  };
+  const step = async (d) => {
+    const x = cur != null && live(cur);
+    if (!x || busy) return;
+    const q = toQ(x.value) || new Q(0n);
+    let nv = q.add(Q.from(d));
+    if (nv.toNumber() < e.lo) nv = Q.from(e.lo);
+    if (nv.toNumber() > e.hi) nv = Q.from(e.hi);
+    if (nv.toString() === x.value) return;
+    const ref = `${id}.${x.r},${x.c}`;
+    busy = true;
+    try { await done({ type: 'edit', ref, from: x.value, to: nv.toString() }, `write ${ref} ${nv.toString()}`); } finally { busy = false; }
+    paint();
+  };
+  const openFor = (k) => {
+    if (cur === k) return;
+    close();
+    cur = k;
+    nodeOf(k)?.classList.add('is-editing');
+    pop = el('div', 'mx-step', stage.view);
+    const dec = el('button', 'mx-step-b mx-step-dec', pop); dec.type = 'button'; dec.textContent = '−'; dec.setAttribute('aria-label', '小一点');
+    el('span', 'mx-step-v', pop);
+    const inc = el('button', 'mx-step-b mx-step-inc', pop); inc.type = 'button'; inc.textContent = '+'; inc.setAttribute('aria-label', '大一点');
+    dec.addEventListener('click', () => step(-1));
+    inc.addEventListener('click', () => step(1));
+    paint();
+    stage.tween(pop, [{ opacity: 0, scale: '.85' }, { opacity: 1, scale: '1' }], { duration: 240, easing: EASE.spring });
+  };
+  const offs = keys.map((k) => {
+    const n = nodeOf(k);
+    if (!n) return () => {};
+    n.classList.add('is-editable');
+    const on = (ev) => { ev.preventDefault(); openFor(k); };
+    n.addEventListener('pointerup', on);
+    return () => { n.classList.remove('is-editable', 'is-editing'); n.removeEventListener('pointerup', on); };
+  });
+  const away = (ev) => { if (pop && !ev.target.closest?.('.mx-step, .mx-cell.is-editable')) close(); };
+  stage.view.addEventListener('pointerdown', away);
+  return () => { offs.forEach((f) => f()); close(); stage.view.removeEventListener('pointerdown', away); };
+}
+
+/** 点乘积的一格：当场演这一格怎么一行乘一列算出来（还空着的就当场算上，学生的 mul）；演着的时候再点不理 */
+function explainAfford(stage, o, e, done) {
+  const id = o.id;
+  let busy = false;
+  const keys = (e.refs.length ? e.refs.flatMap((r) => stage.scene.parts(r)) : o.cells).map((x) => x.key);
+  const offs = keys.map((k) => {
+    const n = stage.nodes.get(`${id}:${k}`);
+    if (!n) return () => {};
+    n.classList.add('is-explain');
+    const on = async (ev) => {
+      ev.preventDefault();
+      const x = stage.scene.partOf(id, k);
+      if (busy || !x) return;
+      busy = true;
+      const ref = `${id}.${x.r},${x.c}`;
+      try { await done({ type: 'explain', ref, value: x.value }, `mul ${ref}`); } finally { busy = false; }
+    };
+    n.addEventListener('pointerup', on);
+    return () => { n.classList.remove('is-explain'); n.removeEventListener('pointerup', on); };
+  });
+  return () => offs.forEach((f) => f());
+}
+
 export const matrixView = {
+  affords: { edit: editAfford, explain: explainAfford },
   sync(stage, o, ctx) {
     ensureCss();
     const L = layout(o);
@@ -303,7 +401,10 @@ export const matrixView = {
     if (o.aug) put(stage, stage.decor(o.id, 'bar', () => el('div', 'mx-bar', stage.layer)), { x: L.barX, y: box.y + 8, h: box.h - 16 }, ctx, entering);
     if (o.product) {
       const eq = stage.decor(o.id, 'eq', () => { const n = el('div', 'mx-eq', stage.layer); n.textContent = '='; return n; });
-      put(stage, eq, { x: box.x - MX.EQ, y: box.y + box.h / 2 - 22 }, ctx, entering);
+      // 另起一行的乘积（A、B 已经排在别的乘积里）：前面写上是谁乘谁
+      const pre = o.prefix ? `${o.prefix} =` : '=';
+      if (eq.textContent !== pre) { eq.textContent = pre; eq.classList.toggle('is-named', !!o.prefix); }
+      put(stage, eq, { x: box.x - eqWidth(o), y: box.y + box.h / 2 - 22 }, ctx, entering);
     }
     // 阶梯线：每个非零行的主元左边竖下来，沿这一行下沿走到下一个主元
     const pts = o.stairs ? stairsPoints(o) : null;
@@ -389,9 +490,23 @@ export const matrixView = {
 .mx-cell.is-tap { cursor: pointer; touch-action: none; }
 .mx-cell.is-tap .mx-ring { animation: st-breathe 1.8s ease-in-out infinite; }
 .mx-cell.is-press { scale: .94; transition: scale .12s; }
+/* 开放给学生直接动的：能拨的格底下一道虚线（像能拖的滑块），拨着的那一格一圈主色；乘积能点开看的格淡淡一层底 */
+.mx-cell.is-editable { cursor: pointer; touch-action: manipulation; }
+.mx-cell.is-editable::before { content: ""; position: absolute; left: 14px; right: 14px; bottom: 5px; border-bottom: 2px dotted color-mix(in srgb, var(--st-brand) 55%, transparent); pointer-events: none; }
+.mx-cell.is-editing { box-shadow: 0 0 0 2px var(--st-brand), 0 0 0 7px color-mix(in srgb, var(--st-brand) 14%, transparent); background: var(--st-card); }
+.mx-cell.is-explain { cursor: pointer; touch-action: manipulation; }
+.mx-cell.is-explain:not(.is-blank) { background: color-mix(in srgb, var(--st-brand) 6%, transparent); }
+.mx-step { position: absolute; left: 0; top: 0; z-index: 20; display: inline-flex; align-items: center; height: 52px; padding: 0 4px; border-radius: 999px;
+  background: var(--st-card); box-shadow: 0 0 0 1px var(--st-line), 0 14px 28px -14px rgb(var(--shade-rgb, 25 45 40) / 0.5); }
+.mx-step-b { width: 46px; height: 46px; border: 0; border-radius: 999px; background: none; color: var(--st-brand); font: 600 26px/1 var(--sans, sans-serif); cursor: pointer; }
+.mx-step-b:disabled { opacity: .25; cursor: default; }
+.mx-step-b:active { scale: .88; }
+.mx-step-b:focus-visible { outline: 2px solid var(--st-brand); outline-offset: 2px; }
+.mx-step-v { min-width: 2.4em; text-align: center; font: 600 21px/1 var(--sans, sans-serif); font-variant-numeric: tabular-nums; color: var(--st-ink); }
 .mx-brk { fill: var(--st-ink); stroke: var(--st-ink); stroke-width: .4; stroke-linejoin: round; }
 .mx-bar { position: absolute; left: 0; top: 0; width: 0; border-left: 1.6px solid rgb(var(--chalk-rgb, 27 34 32) / 0.5); pointer-events: none; }
 .mx-eq { position: absolute; left: 0; top: 0; width: 56px; height: 44px; display: grid; place-items: center; font: 400 32px/1 var(--sans, sans-serif); color: var(--st-ink); pointer-events: none; }
+.mx-eq.is-named { width: 104px; justify-items: end; padding-right: 12px; box-sizing: border-box; font-size: 28px; font-style: italic; font-family: "Latin Modern Math", "Cambria Math", "Times New Roman", serif; }
 .mx-stairs { fill: none; stroke: var(--st-brand); stroke-width: 2; stroke-linejoin: round; opacity: .75; }
 .mx-ghost { position: absolute; left: 0; top: 0; height: 52px; display: grid; place-items: center; border-radius: 12px; z-index: 6; pointer-events: none;
   background: var(--st-card); color: var(--st-g1); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--st-g1) 55%, transparent), 0 12px 24px -12px rgb(var(--shade-rgb, 25 45 40) / 0.5); }

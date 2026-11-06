@@ -152,3 +152,17 @@
 
 .st-cell.is-covered[data-paint] { box-shadow: 0 0 0 2px var(--c), 0 6px 16px -10px rgb(var(--shade-rgb, 25 45 40) / 0.4); }
 .st-under { z-index: 0; }
+
+/* 挑战（活的舞台）：左上角像游戏的任务条，一条一个；做到了圈里打勾、整条淡成石绿 */
+.st-goals { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); top: 12px; right: max(16px, env(safe-area-inset-right, 0px)); z-index: 4; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none; }
+.st-goal { position: relative; display: inline-flex; align-items: center; gap: 10px; max-width: min(100%, 560px); padding: 9px 14px 9px 10px; border-radius: 14px;
+  background: color-mix(in srgb, var(--st-card) 88%, transparent); box-shadow: 0 0 0 1px var(--st-line), 0 8px 20px -14px rgb(var(--shade-rgb, 25 45 40) / 0.45);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); font: 500 16px/1.45 var(--sans, sans-serif); color: var(--st-ink); transition: background-color .4s, color .4s, box-shadow .4s; }
+.st-goal-mark { flex: none; position: relative; width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--st-brand) 55%, transparent); }
+.st-goal-t > * { display: inline-block; }
+.st-goal-t .st-ch { white-space: pre; }
+.st-goal-t .st-chip { pointer-events: auto; }
+.st-goal.is-met { color: var(--st-muted); background: color-mix(in srgb, var(--st-g3) 10%, var(--st-card)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--st-g3) 35%, transparent); }
+.st-goal.is-met .st-goal-mark { background: var(--st-g3); box-shadow: none; }
+.st-goal.is-met .st-goal-mark::after { content: ""; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.4px 2.4px 0; transform: rotate(45deg); }
+@media (max-width: 600px) { .st-goal { font-size: 15px; } }

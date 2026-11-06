@@ -59,3 +59,16 @@ SVG 节点也可以当部件节点：`flagPart` 照样加 class，`pulse` 和翻
   2. 用 Playwright 在页面里调 `window.LAStage.play(\`…镜头指令…\`)`，iPad 竖屏 820×1180、横屏 1180×820，白天晚上都截图看；
   3. 学生的点、拖用鼠标事件模拟（`window.LAStage.nodes.get('t:A')` 是部件的节点）。
 - 不要改舞台共用的文件（`stage.js` `scene.js` `script.js` `layout.js` `motion.js` `stage.css` `doc.js`）。真需要共用的东西缺了，在交回的报告里写清楚缺什么、为什么，由合并的人加。
+
+
+## 活的舞台要的几样（E 段，可选）
+
+| 字段 | 给谁用 |
+|---|---|
+| `affords: { 动作: '给老师看的一句' }`（数据模块） | `open 名字 动作` 能开放的动作；`drag: true` 的东西自动有 `drag` |
+| `canOpen(scene, o, action)` | 开放之前再查一遍（乘积不能 edit），不行就抛错，错误的话给老师看 |
+| `affords: { 动作(stage, o, e, done) }`（画法模块） | 挂上学生直接动的画面，返回收起的函数；学生动了一下调 `done(act, '学生的那一行指令')`（返回 Promise，舞台演完才 resolve） |
+| `derive(scene, o)` | 跟着别的东西算出来的（乘积），每一行之后重算，交出变了的 `[{ part, before, after }]` |
+| `measure(o)` | 挑战拿来整个比的：矩阵 `{ kind: 'matrix', rows }`、一排 `{ kind: 'list', values }` |
+| `anchors(o)` | 排版时和谁是一体的（`reflow` 不拿它们比上下）：和 A、B 排成一行的乘积 |
+| `docSetup` | 测试用的舞台（说明里某一行要的、例子里没有的，比如已经是阶梯形的矩阵） |

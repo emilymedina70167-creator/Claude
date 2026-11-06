@@ -13,6 +13,7 @@ export const COMMANDS = new Set([
   'say', 'glow', 'unglow', 'lift', 'drop', 'paint', 'unpaint', 'link', 'unlink', 'pulse', 'compare',
   'label', 'retext', 'unlabel', 'dial', 'set', 'camera', 'wait', 'ask', 'clear', 'fly', 'remove',
   'dim', 'undim', 'cover', 'uncover',
+  'open', 'close', 'goal', 'ungoal',
 ]);
 export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
 
@@ -66,6 +67,11 @@ export function parseScript(src) {
   String(src ?? '').split('\n').forEach((raw, k) => {
     let line = raw.trim();
     if (!line || line.startsWith('#') || line.startsWith('//')) return;
+    // @g1 开头：挑战 g1 做到了的那一刻页面马上演的行（先记着，不演）
+    let on = null;
+    const at = line.match(/^@([A-Za-z_]\w*)\s+(.+)$/);
+    const body = at ? at[2].trim() : null;
+    if (at) { on = at[1]; line = body; } else if (line.startsWith('@')) { out.push({ cmd: null, error: '要写成 @挑战的名字 一行指令（比如 @g1 say "对！"）', line: k + 1, src: raw }); return; }
     let par = false;
     if (line.startsWith('&')) { par = true; line = line.slice(1).trim(); }
     try {
@@ -77,7 +83,7 @@ export function parseScript(src) {
       const opts = {};
       const args = [];
       for (const t of toks) if (t.t === 'opt') opts[t.k] = t.v; else args.push(t);
-      out.push({ cmd, args, opts, par, line: k + 1, src: raw });
+      out.push({ cmd, args, opts, par, line: k + 1, src: raw, ...(on ? { on, body } : {}) });
     } catch (err) {
       out.push({ cmd: null, error: err.message, line: k + 1, src: raw });
     }

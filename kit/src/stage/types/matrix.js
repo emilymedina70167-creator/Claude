@@ -103,11 +103,13 @@ export function layout(o) {
 }
 export const sizeOf = (o) => layout({ ...o, origin: { x: 0, y: 0 } }).box;
 export function cellBox(o, x, L = layout(o)) { return { x: L.colX[x.c], y: L.rowY(x.r), w: L.cw[x.c], h: MX.CH }; }
+/** 乘积前面那一块多宽：「=」，另起一行的写「BA =」 */
+export const eqWidth = (o) => (o.prefix ? 104 : MX.EQ);
 function objectBox(o) {
   const b = layout(o).box;
   if (!o.product) return b;
   // 乘积：前面的「=」和整排下面那条算式也算它的地方（镜头要把算式框进来）
-  const eq = { x: b.x - MX.EQ, y: b.y, w: b.w + MX.EQ, h: b.h };
+  const eq = { x: b.x - eqWidth(o), y: b.y, w: b.w + eqWidth(o), h: b.h };
   if (!o.band) return { ...eq, h: b.h + MX.BAND };
   const x = Math.min(eq.x, o.band.x), y = Math.min(eq.y, o.band.y);
   return { x, y, w: Math.max(eq.x + eq.w, o.band.x + o.band.w) - x, h: Math.max(eq.y + eq.h, o.band.y + o.band.h) - y };
@@ -116,7 +118,7 @@ function objectBox(o) {
 export function decorBoxes(o) {
   const b = layout(o).box;
   const out = [{ x: b.x, y: b.y, w: 16, h: b.h }, { x: b.x + b.w - 16, y: b.y, w: 16, h: b.h }];
-  if (o.product) out.push({ x: b.x - MX.EQ, y: b.y + b.h / 2 - 20, w: MX.EQ, h: 40 });
+  if (o.product) out.push({ x: b.x - eqWidth(o), y: b.y + b.h / 2 - 20, w: eqWidth(o), h: 40 });
   return out;
 }
 /** 阶梯线经过的点（世界坐标）：每个非零行的主元左边竖下来，再沿这一行的下沿走到下一行的主元。不是阶梯形给 null */
@@ -322,8 +324,20 @@ function makeProduct(scene, c, h) {
   if (A.cols !== B.rows) throw new Error(`${an} 是 ${A.rows}×${A.cols}，${bn} 是 ${B.rows}×${B.cols}：${an} 的列数要等于 ${bn} 的行数才能乘`);
   const cells = [];
   for (let r = 1; r <= A.rows; r++) for (let k = 1; k <= B.cols; k++) cells.push(newCell(id, r, k, ''));
-  const o = { origin: { x: 0, y: 0 }, rows: A.rows, cols: B.cols, aug: null, cells, stairs: false, product: { a: an, b: bn } };
+  // calc：算出来的那几格（key）。A、B 变了，这几格跟着重算（derive）；还空着的格照旧空着，等老师或学生算
+  const o = { origin: { x: 0, y: 0 }, rows: A.rows, cols: B.cols, aug: null, cells, stairs: false, product: { a: an, b: bn }, calc: [] };
   const sa = sizeOf(A), sb = sizeOf(B), sc = sizeOf(o);
+  // A 或 B 已经排在别的乘积里（先 AB 再 BA，讲「换了顺序」时最常见）：挪它们会把那一排拆散。
+  // 不挪，这个乘积另起一行，前面写「BA =」；算一格时照样从 A、B 现在的地方飞过来
+  const busy = [...scene.objects.values()].some((x) => x.type === 'matrix' && x.product && x.id !== id && [x.product.a, x.product.b].some((f) => f === an || f === bn));
+  if (busy) {
+    o.prefix = `${an}${bn}`;
+    const eqw = eqWidth(o);
+    const slot = scene.slotFor(eqw + sc.w);
+    o.origin = { x: slot.x + eqw, y: slot.y };
+    o.band = { x: o.origin.x - eqw, y: o.origin.y + sc.h + 8, w: eqw + sc.w, h: MX.BAND - 8 };
+    return o;
+  }
   const ba = layout(A).box;
   const total = sa.w + MX.AB + sb.w + MX.EQ + sc.w;
   const cx = ba.x + sa.w / 2, cy = ba.y + Math.max(sa.h, sb.h) / 2;
@@ -422,6 +436,8 @@ export const matrix = {
       const before = x.value;
       setValue(x, numOr(val, 'write ').toString());
       o.stairs = false;
+      // 乘积里手写的一格：不再跟着 A、B 重算（老师故意写一个错的给学生找）
+      if (o.calc) o.calc = o.calc.filter((k) => k !== x.key);
       return { cell: x, before };
     },
     // pivot m.1,1：主元框起来（跟着那个数走：交换两行时框也跟过去）
@@ -463,10 +479,39 @@ export const matrix = {
       const items = ps.filter((x) => x.obj === o.id).map((x) => {
         const { terms, sum } = productTerms(A, B, x.r, x.c);
         setValue(x, sum);
+        if (!o.calc.includes(x.key)) o.calc.push(x.key);
         return { key: x.key, r: x.r, c: x.c, terms, sum };
       });
       return { id: o.id, a: A.id, b: B.id, items };
     },
+  },
+  // —— 活的舞台：学生能直接动的、跟着算的、拿来判挑战的 ——
+  affords: { edit: '点一格，拨里面的数', explain: '点乘积的一格，看它怎么一行乘一列算出来' },
+  canOpen(scene, o, action) {
+    if (action === 'edit' && o.product) throw new Error(`${o.id} 是乘积，数是算出来的：开放 ${o.product.a}、${o.product.b} 的数让学生拨（open ${o.product.b} edit）`);
+    if (action === 'explain' && !o.product) throw new Error(`${o.id} 不是乘积：open … explain 写在乘积上（open C explain）`);
+  },
+  /** 算出来的格跟着 A、B 重算：变了的交出来（画面让它闪一下） */
+  derive(scene, o) {
+    if (!o.product || !o.calc?.length) return [];
+    const A = scene.objects.get(o.product.a), B = scene.objects.get(o.product.b);
+    if (!A || !B || A.type !== 'matrix' || B.type !== 'matrix' || A.cols !== B.rows || A.rows !== o.rows || B.cols !== o.cols) return [];
+    const out = [];
+    for (const k of o.calc) {
+      const x = o.cells.find((y) => y.key === k);
+      if (!x) continue;
+      let sum;
+      try { ({ sum } = productTerms(A, B, x.r, x.c)); } catch { continue; }
+      if (x.value !== sum) { const before = x.value; setValue(x, sum); out.push({ part: x, before, after: sum }); }
+    }
+    return out;
+  },
+  /** 排版时和谁是一体的（reflow 不拿它们比上下）：和 A、B 排成一行的乘积 */
+  anchors(o) { return o.product && !o.prefix ? [o.product.a, o.product.b] : []; },
+  measure(o) {
+    const rows = [];
+    for (let r = 1; r <= o.rows; r++) rows.push(rowCells(o, r).map((x) => x.value));
+    return { kind: 'matrix', rows };
   },
   describe(o) {
     const tag = (x) => {
@@ -480,7 +525,7 @@ export const matrix = {
       return `${x.value === '' ? '□' : x.value}${bits.length ? `（${bits.join('、')}）` : ''}`;
     };
     const zero = new Set(zeroRows(o));
-    const lines = [`矩阵 ${o.id}${o.product ? ` = ${o.product.a} ${o.product.b}` : ''}（${o.rows}×${o.cols}${o.aug ? `，增广矩阵：竖线在第 ${o.aug} 列后面` : ''}）：`];
+    const lines = [`矩阵 ${o.id}${o.product ? ` = ${o.product.a} ${o.product.b}` : ''}（${o.rows}×${o.cols}${o.aug ? `，增广矩阵：竖线在第 ${o.aug} 列后面` : ''}${o.calc?.length ? `；算出来的 ${o.calc.length} 格跟着 ${o.product.a}、${o.product.b} 自动重算` : ''}）：`];
     for (let r = 1; r <= o.rows; r++) lines.push(`  第 ${r} 行：${rowCells(o, r).map(tag).join('  ')}${zero.has(r) ? '（全为 0）' : ''}`);
     if (o.stairs) lines.push(`  画着阶梯线：非零行 ${o.rows - zero.size} 行`);
     const blank = o.cells.filter((x) => x.value === '').sort(sortRC);
@@ -497,18 +542,22 @@ write m.2,3 5                     改一个数
 pivot m.1,1 / unpivot m           主元框起来
 stairs m / unstairs m             画阶梯线（已经是阶梯形才行），全零行淡下去
 product C = A B                   A、B 排成一行，后面「= C」（C 先空着）
-mul C.1,2                         A 的第 1 行、B 的第 2 列一起亮，逐对相乘再相加，写进 C.1,2（mul C 一格格全算）`,
-  example: `matrix m = 1 2 3 / 4 5 6 / 7 8 10
-pivot m.1,1
-rowop m r2 - 4r1, r3 - 7r1
-say "{m.1,1} 下面的数都消成 0 了。"
-rowop m r3 - 2r2
-stairs m
-matrix A = 1 2 / 3 4
-matrix B = 5 6 / 7 8
+mul C.1,2                         A 的第 1 行、B 的第 2 列一起亮，逐对相乘再相加，写进 C.1,2（mul C 一格格全算）；算出来的格以后跟着 A、B 自动重算
+open B edit range=-3..3           学生点 B 的一格就能拨里面的数（AB、BA 当场跟着变）
+open C explain                    学生点乘积的一格，页面当场演它怎么一行乘一列算出来（还空着的就当场算上）`,
+  // 测试用（tests/stage-doc.test.js）：说明里 stairs 那一行要一个已经是阶梯形的矩阵
+  docSetup: 'matrix m = 1 2 3 / 0 1 4 / 0 0 1',
+  example: `matrix A = 1 1 / -1 -1
+matrix B = 1 -1 / -1 1 beside=A
 product C = A B
 mul C.1,1
-ask tap A "算 {C.1,2} 要用 A 的哪一行？点那一行里的一个数。"`,
+say "{C.1,1} 是 A 的第 1 行乘 B 的第 1 列。剩下三格你来：点一格，看它怎么算出来。"
+open C explain
+goal g1 "点出 AB 剩下的三格" when="C = O"
+@g1 say "A、B 都不是 O，乘出来却是 O。"
+@g1 open B edit range=-3..3
+@g1 goal g2 "改 B 里的一个数，让 AB 不再是 O" when="C != O"
+`,
 };
 
 export { setValue, matrixOf, lineOf };

@@ -76,6 +76,8 @@ export const array = {
     return { origin, groupD: null, ptrs: new Map(), cells: vals.map((v, i) => ({ obj: id, key: i + 1, slot: i + 1, value: v, row: 0, paint: null, glow: false, lift: false, dim: false, covered: false })) };
   },
   parts(o) { return [...o.cells].sort((a, b) => a.slot - b.slot); },
+  /** 挑战拿来判的：按现在的先后（a sorted、a = b） */
+  measure(o) { return { kind: 'list', values: [...o.cells].sort((a, b) => a.slot - b.slot).map((x) => x.value) }; },
   pick(o, mark, sel, word) {
     const r = parseRef(word);
     if (r?.lo == null) throw new Error(`「${word}」：一排格子写 ${o.id}.3（第 3 格）、${o.id}.2-5（第 2 到 5 格）或 ${o.id}#8（一开始在第 8 格的那一个）`);
@@ -220,12 +222,11 @@ group a stride=5                  按「隔 5 个」分组：每组染色、连�
 split a / merge a                 每组下到自己的一排 / 合回一排
 ask drag a#1 a#6 "把小的拖到前面"   学生按住一格拖到同一排另一格上，两格交换（页面照做，再告诉你）`,
   example: `array a = 49 38 65 97 76 13 27 49′ 55 04
-hop a.2 -> a.7 color=g2
-paint a.2 a.7 g2
-say "从 {a.2} 往后跳 5 下，落在 {a.7}。"
-swap a.1 a.6
-move a#6 -> a.2
-ptr mid a.5
-lift a.3
-ask tap a "那 {a.3} 和谁一组？"`,
+hop a.1 -> a.6 color=g1
+paint a.1 a.6 g1
+say "从 {a.1} 往后跳 5 下，落在 {a.6}：这两个是一组。"
+open a
+goal g1 "把这一组排好：小的拖到前面" when="a.1 < a.6"
+@g1 say "对，这一组排好了。"
+@g1 ask tap a "那 {a.2} 和谁一组？"`,
 };
