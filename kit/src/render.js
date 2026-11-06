@@ -312,3 +312,8 @@ function editDistance(a, b) {
   }
   return d[a.length][b.length];
 }
+
+// 标题里的 Unicode 上标（Aⁿ、tr(A)ⁿ⁻¹、αβᵀ）：宋体大字里这些字落到别的字体，又粗又高、基线不齐；
+// 换回普通的字放进 <sup>，跟着标题的字体走
+const SUP_CHARS = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', 'ⁿ': 'n', '⁻': '−', '⁺': '+', 'ᵀ': 'T', 'ⁱ': 'i', 'ʲ': 'j', 'ᵏ': 'k' };
+export const supRuns = (html) => String(html).replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ⁻⁺ᵀⁱʲᵏ]+/g, (m) => `<sup class="dk-sup">${[...m].map((c) => SUP_CHARS[c]).join('')}</sup>`);

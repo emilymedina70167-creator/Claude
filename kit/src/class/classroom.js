@@ -7,7 +7,7 @@
 // 作答 answers / events、课堂记录 class_turns、课后小结 class_notes、资料包 pack。
 // 在学习台里上课（desk，docs/learner-memory-spec.md 第 2 批）：这节课的数据放在 sessions/{编号}/ 下面（memory/session.js 的 scopeDb），
 // 作答和动作只写进 evidence（证据），观察、下课小结写进 observations，课堂 Claude 每一轮带着记忆摘要，多两个工具 slip_note、memory_read。
-import { renderLesson, mdToHtml, escapeHtml } from '../render.js';
+import { renderLesson, mdToHtml, escapeHtml, supRuns } from '../render.js';
 import { session } from '../session.js';
 import { link } from '../link.js';
 import { getAI, errorText, laned } from '../ai.js';
@@ -87,7 +87,8 @@ export async function renderClass(root, meta, desk = null) {
   // 一问一答（docs/talk-impl.md）：同一个课堂，只是老师写活板的行、一问一答地推进。所有分叉都看 TALK；为假时和原来的课堂一字不差
   const TALK = !!desk?.talk;
   session.talk = TALK;
-  if (TALK) { root.classList.add('is-talk'); document.body.classList.add('class-talk'); }
+  // body 上不叫 class-talk：板顶那句话的样式也叫 .class-talk，撞了名整页 body 会多一道金线、多一圈内边距
+  if (TALK) { root.classList.add('is-talk'); document.body.classList.add('is-talk-class'); }
   session.mode = 'class';
   session.live = true; // 共用 live 的行为：猜想默认不批改、作答逐次记录、组件要有 id
   session.stages = [];
@@ -100,11 +101,12 @@ export async function renderClass(root, meta, desk = null) {
     unitHtml: mdToHtml(unitName, { inline: true }),
     stageExtra: `
         <div class="class-hero" hidden></div>
-        <div class="class-welcome">
+        <div class="class-welcome"><div class="class-welcome-card">
           <div class="live-empty-art" aria-hidden="true"><i></i><i></i><i></i></div>
+          <p class="class-welcome-unit">${supRuns(mdToHtml(unitName, { inline: true }))}</p>
           <p class="class-welcome-text">正在准备课堂…</p>
           <button type="button" class="btn btn-primary btn-lg class-start" hidden>开始上课</button>
-        </div>`,
+        </div></div>`,
     isBusy: () => busy,
     seqOf: (id) => segs.get(id)?.seq,
     decorate: (p) => decoratePage(p),

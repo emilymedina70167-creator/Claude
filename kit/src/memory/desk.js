@@ -9,7 +9,7 @@
 // 课程地图、弱点表、以前的课的页面（desk-plan 第 3 批）后面做。
 import { sheetMd } from './sheet.js';
 import { ask, choose } from '../dialog.js';
-import { mdToHtml, escapeHtml, frontMatter } from '../render.js';
+import { mdToHtml, escapeHtml, frontMatter, supRuns } from '../render.js';
 import { session } from '../session.js';
 import { toast } from '../record.js';
 import { attachErrlog, onError, markSeen, reportError } from '../errlog.js';
@@ -1415,10 +1415,8 @@ export async function renderDesk(root, meta) {
   }
 }
 
-// 标题里的 Unicode 上标（Aⁿ、tr(A)ⁿ⁻¹、αβᵀ）：宋体大字里这些字落到别的字体，又粗又高、基线不齐；
-// 换回普通的字放进 <sup>，跟着标题的字体走
-const SUP = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', 'ⁿ': 'n', '⁻': '−', '⁺': '+', 'ᵀ': 'T', 'ⁱ': 'i', 'ʲ': 'j', 'ᵏ': 'k' };
-export const supRuns = (html) => String(html).replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ⁻⁺ᵀⁱʲᵏ]+/g, (m) => `<sup class="dk-sup">${[...m].map((c) => SUP[c]).join('')}</sup>`);
+// 标题里的 Unicode 上标换成 <sup>：supRuns 在 render.js（课堂开课的那张卡也用）
+export { supRuns };
 
 // —— 在学习台里上一节课 ——
 // 课堂的数据放在 sessions/{编号}/ 下面；记忆库一直订阅着（每一轮的记忆摘要用最新的）；sessions/{编号} 由页面改（核验、下课）

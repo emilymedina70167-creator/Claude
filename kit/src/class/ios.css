@@ -1,0 +1,338 @@
+/* ===== 课堂的 iOS 质感（2026-11-06）=====
+   学习台是 iOS 的版式（紫藤：毛玻璃的分组卡、0.5px 的细线、胶囊、南大紫的主按钮），进了课堂却还是粉笔那一套：
+   板顶的话左边一道金线、翻板是三个粉笔描边的圆钮、拨数和「对吗」是土黄的、提示是粉笔虚线框。这里把课堂、一问一答的活板
+   换成和学习台同一家：
+   - 浮着的东西（底部的输入框、翻板、快捷回答、「⋯」菜单、板列表、提示、点着问）是毛玻璃（--panel + --glass），一道 0.5px 的边；
+   - 老师说的话是一张毛玻璃卡（不是金线），学生的回显是 iMessage 的气泡（南大紫），前几轮淡下去；
+   - 当前一问是一张白卡，答的东西（空、选择、拨数）是 iOS 的控件：浅底的输入框、白卡的胶囊、步进器；
+   - 主色只有南大紫（--brand），对是石绿、错是朱砂，重点照旧是泥金（--yellow）。
+   只在紫藤（ink / inknight）里生效：别的风格（以前写了 theme: 的课件）照旧。颜色都从风格的变量取，变量的名字一个没改
+   （舞台引擎也在用 --chalk-rgb、--card-solid、--brand 这些）。只是 CSS：发给课堂 Claude 的说明不变，不影响速度和额度。 */
+
+:root[data-theme^="ink"] body.class-on {
+  --ios-spring: cubic-bezier(.34, 1.36, .64, 1);
+  --ios-hair: 0.5px solid rgb(var(--chalk-rgb) / 0.12);
+  --ios-float: 0 1px 2px rgb(var(--shade-rgb) / 0.06), 0 12px 32px -14px rgb(var(--shade-rgb) / 0.32);
+  --ios-tint: color-mix(in srgb, var(--brand) 11%, transparent);
+  --ios-tint-hi: color-mix(in srgb, var(--brand) 18%, transparent);
+}
+@supports (transition-timing-function: linear(0, 1)) {
+  :root[data-theme^="ink"] body.class-on { --ios-spring: linear(0, 0.0419, 0.1416, 0.2692, 0.4039, 0.5325, 0.6475, 0.7452, 0.8248, 0.8871, 0.934, 0.9678, 0.991, 1.006, 1.0146, 1.0188, 1.0199, 1.0191, 1.0171, 1.0145, 1.0118, 1.0093, 1.007, 1.005, 1.0035, 1.0022, 1.0013, 1.0006, 1.0002, 0.9999, 0.9997, 0.9996, 0.9996, 0.9997, 0.9998, 1); }
+}
+
+/* —— 开课前：一张毛玻璃卡，上面一枚南大紫的「课」图标（三道白线），课名用宋体大字 —— */
+:root[data-theme^="ink"] .class-welcome-card {
+  width: min(560px, 100%); padding: 40px 36px 34px; border-radius: 28px;
+  background: var(--panel); box-shadow: var(--panel-edge), var(--lift); -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none);
+  animation: iosZoom .5s var(--ios-spring) both;
+}
+:root[data-theme^="ink"] .class-welcome .live-empty-art {
+  flex-direction: column; justify-content: center; align-items: flex-start; gap: 7px; width: 64px; height: 64px; margin: 0 0 22px; padding: 0 15px;
+  border-radius: 18px; background: var(--brand);
+  box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--brand) 70%, transparent), inset 0 0.5px 0 rgb(var(--card-solid-rgb) / 0.25);
+}
+:root[data-theme^="ink"] .class-welcome .live-empty-art i { height: 4px; width: 100%; border-radius: 2px; background: var(--brand-ink); opacity: .95; filter: none; transform: none; }
+:root[data-theme^="ink"] .class-welcome .live-empty-art i:nth-child(2) { width: 72%; opacity: .7; }
+:root[data-theme^="ink"] .class-welcome .live-empty-art i:nth-child(3) { width: 46%; opacity: .5; }
+:root[data-theme^="ink"] .la-lesson .class-welcome-unit { font: 700 clamp(28px, 4vw, 34px)/1.25 var(--display, var(--hand)); letter-spacing: .02em; margin-bottom: 12px; }
+:root[data-theme^="ink"] .la-lesson .class-welcome-text { max-width: 26em; margin: 0 0 26px; font: 17px/1.65 var(--sans); color: var(--muted); opacity: 1; }
+:root[data-theme^="ink"] .class-start { min-width: 240px; min-height: 52px; border-radius: 14px; font: 600 17px/1 var(--sans); }
+
+/* —— 板头：标题下面老师说的话是一张毛玻璃卡（不是一道金线）。草稿（还没核验）是同一张卡，淡一点、边是虚的 —— */
+:root[data-theme^="ink"] .class-page-head { margin-top: 8px; }
+:root[data-theme^="ink"] .class-talk,
+:root[data-theme^="ink"] .class-draft-talk {
+  margin: 12px 0 8px; padding: 14px 20px 14px 26px; border-radius: 20px;
+  background: var(--panel); box-shadow: var(--panel-edge), var(--ios-float);
+  -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none);
+  font-size: 17.5px; line-height: 1.7;
+}
+:root[data-theme^="ink"] .class-talk::before,
+:root[data-theme^="ink"] .class-draft-talk::before {
+  /* 左上角一枚南大紫的小点：这是老师在说（取代原来那道粉笔线） */
+  content: ""; position: absolute; left: 12px; top: 27px; bottom: auto; width: 6px; height: 6px; border: 0; border-radius: 50%;
+  background: var(--brand); filter: none; opacity: .9;
+}
+:root[data-theme^="ink"] .class-draft-talk { opacity: 1; color: rgb(var(--chalk-rgb) / 0.72); box-shadow: inset 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.16), var(--ios-float); }
+:root[data-theme^="ink"] .class-draft-talk::before { animation: ctBreathe 1.4s ease-in-out infinite; }
+:root[data-theme^="ink"] .is-canvas-page > .class-talk { margin: 10px 0 4px; }
+/* 板顶那句话是谁说的：一枚小小的灰胶囊，核验过的前面一个小绿点 */
+:root[data-theme^="ink"] .class-by { padding: 1px 8px 1px 7px; border: 0; background: rgb(var(--chalk-rgb) / 0.06); color: var(--muted); font: 500 11.5px/1.6 var(--sans); letter-spacing: .01em; vertical-align: 2px; }
+:root[data-theme^="ink"] .class-by:not(.is-mock)::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: var(--green); vertical-align: 1px; }
+:root[data-theme^="ink"] .class-draft-ops { padding-left: 4px; }
+:root[data-theme^="ink"] .class-draft-op { border: 0; padding: 5px 12px 6px; background: rgb(var(--chalk-rgb) / 0.06); font-size: 13.5px; }
+:root[data-theme^="ink"] .class-draft-op.is-writing { color: var(--brand); background: var(--ios-tint); }
+:root[data-theme^="ink"] .class-draft-op.is-writing::before { background: var(--brand); }
+:root[data-theme^="ink"] .class-draft-op::before { width: 6px; height: 6px; }
+
+/* 「Claude 在想 / 在写」：iMessage 的「正在输入」——一个毛玻璃的小气泡里三个灰点轮流亮 */
+:root[data-theme^="ink"] .class-thinking { padding-left: 2px; gap: 12px; font-size: 15px; color: var(--muted); opacity: 1; }
+:root[data-theme^="ink"] .ct-ind {
+  width: auto; height: 34px; gap: 5px; padding: 0 13px; border-radius: 17px 17px 17px 6px;
+  background: var(--panel); box-shadow: var(--panel-edge), 0 4px 14px -8px rgb(var(--shade-rgb) / 0.3);
+  -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none);
+}
+:root[data-theme^="ink"] .ct-ind i,
+:root[data-theme^="ink"] .ct-ind i:nth-child(2),
+:root[data-theme^="ink"] .ct-ind i:nth-child(3) { width: 8px; height: 8px; background: rgb(var(--chalk-rgb) / 0.55); filter: none; animation: iosTyping 1.3s ease-in-out infinite; }
+:root[data-theme^="ink"] .ct-ind i:nth-child(2) { animation-delay: .16s; }
+:root[data-theme^="ink"] .ct-ind i:nth-child(3) { animation-delay: .32s; }
+@keyframes iosTyping { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-3px); opacity: 1; } }
+:root[data-theme^="ink"] .ct-scribble { left: 13px; top: 10px; }
+:root[data-theme^="ink"] .ct-scribble path { stroke: var(--brand); filter: none; }
+:root[data-theme^="ink"] .class-thinking[data-state="writing"] .ct-ind { width: 60px; }
+:root[data-theme^="ink"] .ct-elapsed { font-size: 13px; }
+/* 第一轮还没有板：气泡放大、字用正文字体（宋体大字的「在想」像海报） */
+:root[data-theme^="ink"] .class-hero .class-thinking { gap: 18px; font: 500 19px/1.5 var(--sans); color: var(--muted); }
+:root[data-theme^="ink"] .class-hero .ct-ind { width: auto; height: 46px; gap: 8px; padding: 0 18px; border-radius: 23px 23px 23px 8px; }
+:root[data-theme^="ink"] .class-hero .ct-ind i { width: 10px; height: 10px; filter: none; }
+:root[data-theme^="ink"] .class-hero .class-thinking[data-state="writing"] .ct-ind { width: 92px; }
+:root[data-theme^="ink"] .class-hero .ct-scribble { left: 18px; top: 15px; width: 56px; }
+
+/* 拍子：一条分段控件似的胶囊「‹ 2 / 4 下一拍 ›」 */
+:root[data-theme^="ink"] .class-beats { gap: 6px; margin-top: 10px; }
+:root[data-theme^="ink"] .class-beats button { border: 0; border-radius: 999px; background: var(--btn-bg); font-weight: 500; }
+:root[data-theme^="ink"] .class-beats .class-beat-next { color: var(--brand-ink); background: var(--brand); border: 0; }
+:root[data-theme^="ink"] .class-beat-at { color: var(--muted); font-variant-numeric: tabular-nums; }
+:root[data-theme^="ink"] .class-seg.beat-focus { animation-name: iosFocus; }
+@keyframes iosFocus { 0% { box-shadow: 0 0 0 0 transparent; } 30% { box-shadow: 0 0 0 6px var(--ios-tint); } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+/* —— 常驻栏（这节课的记号）：毛玻璃的卡；标题是一行小号的灰字（像 iOS 分组的组名），不抢板的标题 —— */
+:root[data-theme^="ink"] .class-pin { background: var(--panel); border-radius: 16px; box-shadow: var(--panel-edge), var(--ios-float); -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none); }
+:root[data-theme^="ink"] .class-pin::before { display: none; }
+@media (orientation: portrait), (max-width: 999px) {
+  /* 竖屏的常驻栏是一条横着滚的：影子会被滚动框裁成一道硬边，所以影子收小、框底下多留一点 */
+  :root[data-theme^="ink"] .class-pins-body { padding: 2px 4px 12px; margin-bottom: -8px; }
+  :root[data-theme^="ink"] .class-pin { box-shadow: var(--panel-edge), 0 1px 2px rgb(var(--shade-rgb) / 0.05), 0 6px 14px -9px rgb(var(--shade-rgb) / 0.3); }
+}
+:root[data-theme^="ink"] .class-pins-head { font: 600 12.5px/1.3 var(--sans); letter-spacing: .04em; color: var(--muted); }
+:root[data-theme^="ink"] .class-pin.is-clipped::after { color: var(--brand); background: linear-gradient(to bottom, rgb(var(--card-solid-rgb) / 0), rgb(var(--card-solid-rgb) / 0.94) 55%); border-radius: 0 0 16px 16px; }
+
+/* 步骤序号：一枚南大紫的圆点（版面里的课也是，不再落回泥金） */
+:root[data-theme^="ink"] .is-class .st-n { color: var(--brand-ink); }
+:root[data-theme^="ink"] .is-class .st-n::before { background: var(--brand); border: 0; filter: none; }
+/* 正在做的那一步：同一枚紫点外面一圈淡紫的光（原来是一枚泥金的点盖在上面）；揭开过的一步是石绿 */
+:root[data-theme^="ink"] .is-class .st-item.is-current .st-n::after { inset: 4px; background: var(--brand); box-shadow: 0 0 0 4px var(--ios-tint-hi); opacity: 1; }
+:root[data-theme^="ink"] .is-class .st-item.is-current .st-n { color: var(--brand-ink); }
+:root[data-theme^="ink"] .is-class .st-item.is-revealed .st-n { color: var(--green); }
+:root[data-theme^="ink"] .is-class .st-item.is-revealed .st-n::before { background: rgb(var(--green-rgb) / 0.14); }
+
+/* 版面里的 ⤢：一枚小小的毛玻璃圆钮；铺满的那一段是一张大的毛玻璃卡 */
+:root[data-theme^="ink"] .cv-zoom { width: 36px; height: 36px; top: 6px; right: 6px; border-radius: 50%; color: var(--muted); font-size: 16px; background: rgb(var(--chalk-rgb) / 0.05); }
+:root[data-theme^="ink"] .cv-zoom::after { content: ""; position: absolute; inset: -4px; }
+:root[data-theme^="ink"] .cv-zoom:hover, :root[data-theme^="ink"] .cv-zoom:focus-visible { color: var(--brand); background: var(--ios-tint); }
+:root[data-theme^="ink"] .class-page-body.is-canvas .class-seg.is-zoomed {
+  border-radius: 24px; padding: 20px 28px; background: rgb(var(--card-solid-rgb) / 0.92); -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none);
+  box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.1), 0 30px 80px -20px rgb(var(--shade-rgb) / 0.45);
+  animation: iosZoom .42s var(--ios-spring) both;
+}
+@keyframes iosZoom { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+/* 栏和栏之间：一道 0.5px 的细线（不是粉笔线） */
+:root[data-theme^="ink"] .cv-col + .cv-col::before { width: 0.5px; background: rgb(var(--chalk-rgb) / 0.14); filter: none; }
+
+/* 下课小结、这节课的一页、刷新前的作答、重写不出来的段：卡片，不是左边一道线 */
+:root[data-theme^="ink"] .class-closing {
+  padding: 18px 22px 20px; border-radius: 20px; background: var(--panel); box-shadow: var(--panel-edge), var(--ios-float);
+  -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none);
+}
+:root[data-theme^="ink"] .class-closing::before { display: none; }
+:root[data-theme^="ink"] .class-foot { border-top: var(--ios-hair); }
+:root[data-theme^="ink"] .class-sheet { padding: 18px 22px 10px; border-left: 0; border-radius: 20px; background: rgb(var(--card-solid-rgb) / 0.86); box-shadow: inset 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.1), var(--ios-float); }
+:root[data-theme^="ink"] .class-sheet-h { color: var(--chalk); font-weight: 700; }
+:root[data-theme^="ink"] .class-prev { border-left: 0; border-radius: 14px; padding: 10px 14px; background: rgb(var(--blue-rgb) / 0.07); }
+:root[data-theme^="ink"] .class-failed-box { border: 0; border-radius: 14px; background: rgb(var(--coral-rgb) / 0.08); box-shadow: inset 0 0 0 0.5px rgb(var(--coral-rgb) / 0.3); }
+
+/* 点着问：一个 iOS 的弹出菜单（毛玻璃、一排按钮、中间细线隔开），点过的那一处左边一道南大紫 */
+:root[data-theme^="ink"] .ask-menu {
+  gap: 0; padding: 0; border-radius: 14px; overflow: hidden;
+  background: rgb(var(--card-solid-rgb) / 0.82); -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none);
+  box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.12), 0 18px 44px -12px rgb(var(--shade-rgb) / 0.4);
+  animation: iosPop .28s var(--ios-spring) both; transform-origin: top center;
+}
+:root[data-theme^="ink"] .ask-menu button { border-radius: 0; background: none; padding: 0 16px; font-weight: 500; }
+:root[data-theme^="ink"] .ask-menu button + button { box-shadow: inset 0.5px 0 0 rgb(var(--chalk-rgb) / 0.14); }
+:root[data-theme^="ink"] .ask-menu button:first-child { color: var(--brand); background: none; font-weight: 600; }
+:root[data-theme^="ink"] .ask-menu button:active { background: rgb(var(--chalk-rgb) / 0.07); }
+@keyframes iosPop { from { opacity: 0; transform: scale(.92) translateY(-4px); } to { opacity: 1; transform: none; } }
+:root[data-theme^="ink"] :is(.is-pointed, .is-asked) { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--brand) 70%, transparent); background: linear-gradient(to right, var(--ios-tint), transparent 60%); border-radius: 4px; }
+:root[data-theme^="ink"] .ask-note { border-left: 0; padding: 10px 14px; border-radius: 14px; background: var(--ios-tint); }
+:root[data-theme^="ink"] .ask-more { background: var(--btn-bg); color: var(--muted); border-radius: 999px; }
+
+/* —— 底部：输入框是一条毛玻璃胶囊，上面一排是翻板（一整颗胶囊：‹ 第 3 / 3 块 ›）和快捷回答（一颗颗胶囊） —— */
+:root[data-theme^="ink"] .class-bar::before {
+  /* 板滚到底下时的淡出：一段渐变，最下面实一点（按钮后面的字不和按钮叠在一起） */
+  background: linear-gradient(to top, rgb(var(--bar-rgb) / 0.92) 0, rgb(var(--bar-rgb) / 0.7) calc(100% - 46px), rgb(var(--bar-rgb) / 0) 100%);
+}
+:root[data-theme^="ink"] .cb-pill {
+  border-radius: 26px; background: rgb(var(--card-solid-rgb) / 0.78);
+  -webkit-backdrop-filter: var(--glass, blur(20px)); backdrop-filter: var(--glass, blur(20px));
+  box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.1), 0 2px 6px -2px rgb(var(--shade-rgb) / 0.08), 0 14px 34px -16px rgb(var(--shade-rgb) / 0.34);
+}
+:root[data-theme^="ink"] .cb-pill::before { border: 0; }
+:root[data-theme^="ink"] .cb-pill:has(textarea:focus) { box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--brand) 40%, transparent), 0 0 0 4px var(--ios-tint), 0 14px 34px -16px rgb(var(--shade-rgb) / 0.34); }
+:root[data-theme^="ink"] .class-bar.is-drop .cb-pill,
+:root[data-theme^="ink"] .class-bar.tray-open .cb-pill { box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand) 55%, transparent), 0 14px 34px -16px rgb(var(--shade-rgb) / 0.34); }
+/* 在想、在写：上沿一道南大紫的光慢慢走过去 */
+:root[data-theme^="ink"] .cb-pill::after { left: 28px; right: 28px; top: 0; height: 1.5px; background-image: linear-gradient(90deg, transparent, var(--brand), transparent); filter: none; }
+:root[data-theme^="ink"] .cb-field textarea { font-size: 16px; padding-left: 8px; }
+:root[data-theme^="ink"] .cb-field textarea::placeholder { color: rgb(var(--chalk-rgb) / 0.38); }
+:root[data-theme^="ink"] .cb-tool { color: rgb(var(--chalk-rgb) / 0.62); }
+:root[data-theme^="ink"] .cb-tool.on { color: var(--brand); background: var(--ios-tint); }
+:root[data-theme^="ink"] .cb-more.has-ink::after { background: var(--brand); box-shadow: 0 0 0 2px rgb(var(--card-solid-rgb)); }
+/* 发送：南大紫的圆钮；没字的时候是一枚灰的（iMessage 那样），不是一枚褪色的紫 */
+:root[data-theme^="ink"] .cb-send { background: var(--brand); color: var(--brand-ink); box-shadow: 0 6px 14px -8px color-mix(in srgb, var(--brand) 70%, transparent); transition: background .25s, color .25s, box-shadow .25s, transform .4s var(--ios-spring), width .4s var(--ios-spring); }
+:root[data-theme^="ink"] .cb-send.is-empty { opacity: 1; background: rgb(var(--chalk-rgb) / 0.1); color: rgb(var(--chalk-rgb) / 0.4); box-shadow: none; }
+:root[data-theme^="ink"] .cb-send.is-stop { color: var(--coral); background: rgb(var(--coral-rgb) / 0.12); box-shadow: none; }
+:root[data-theme^="ink"] .cb-send:active, :root[data-theme^="ink"] .cb-tool:active { transform: scale(.88); }
+
+/* 翻板：一整颗毛玻璃胶囊，‹ 和 › 是里面的两个圆钮，中间「第 3 / 3 块」 */
+:root[data-theme^="ink"] .cb-nav {
+  gap: 0; padding: 2px; border-radius: 999px; background: rgb(var(--card-solid-rgb) / 0.72);
+  -webkit-backdrop-filter: var(--glass, blur(20px)); backdrop-filter: var(--glass, blur(20px));
+  box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.1), 0 6px 18px -10px rgb(var(--shade-rgb) / 0.3);
+}
+:root[data-theme^="ink"] .cb-nav-btn { width: 40px; height: 40px; background: none; box-shadow: none; color: var(--chalk); transition: transform .4s var(--ios-spring), background .2s; }
+:root[data-theme^="ink"] .cb-nav-btn svg { width: 20px; height: 20px; stroke-width: 2.4; }
+:root[data-theme^="ink"] .cb-nav-btn:not(:disabled):active { transform: scale(.86); background: rgb(var(--chalk-rgb) / 0.07); }
+:root[data-theme^="ink"] .cb-nav-btn:disabled { opacity: .25; }
+:root[data-theme^="ink"] .cb-nav-label { min-height: 40px; padding: 0 8px 1px; border-radius: 999px; font-size: 14px; }
+:root[data-theme^="ink"] .cb-nav-label[aria-expanded="true"] { color: var(--brand); background: var(--ios-tint); }
+:root[data-theme^="ink"] .cb-nav-label[aria-expanded="true"] .cb-nav-n { color: var(--brand); }
+:root[data-theme^="ink"] .cb-now { margin: 0 2px 0 4px; min-height: 36px; color: var(--brand-ink); background: var(--brand); box-shadow: none; }
+:root[data-theme^="ink"] .cb-now.is-live { animation: iosNowPulse 1.6s ease-in-out infinite; }
+@keyframes iosNowPulse { 50% { box-shadow: 0 0 0 5px var(--ios-tint-hi); } }
+/* 快捷回答：一颗颗毛玻璃胶囊 */
+:root[data-theme^="ink"] .cb-q { font-weight: 500; font-size: 14.5px; color: var(--chalk); transition: transform .4s var(--ios-spring), color .2s; }
+:root[data-theme^="ink"] .cb-q::before {
+  inset: 4px 0; border: 0; border-radius: 999px; background: rgb(var(--card-solid-rgb) / 0.72);
+  -webkit-backdrop-filter: var(--glass, blur(20px)); backdrop-filter: var(--glass, blur(20px));
+  box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.1), 0 4px 12px -8px rgb(var(--shade-rgb) / 0.3);
+}
+:root[data-theme^="ink"] .cb-q:active { transform: scale(.92); }
+@media (hover: hover) { :root[data-theme^="ink"] .cb-q:not(:disabled):hover::before { background: rgb(var(--card-solid-rgb) / 0.95); } }
+/* 「下面还有」挂在翻板条里时 */
+:root[data-theme^="ink"] .class-more { color: var(--brand-ink); background: var(--brand); box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--brand) 70%, transparent); }
+:root[data-theme^="ink"] .class-more.in-bar { box-shadow: none; }
+
+/* 「⋯」菜单、板列表：iOS 的弹出菜单——毛玻璃、圆角 14、一行一件事、行之间 0.5px 细线，从按钮那里弹出来 */
+:root[data-theme^="ink"] :is(.cb-menu, .cb-pages) {
+  padding: 0; border-radius: 16px; overflow: hidden;
+  background: rgb(var(--card-solid-rgb) / 0.8); -webkit-backdrop-filter: var(--glass, blur(24px)); backdrop-filter: var(--glass, blur(24px));
+  box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.12), 0 24px 60px -18px rgb(var(--shade-rgb) / 0.45), 0 4px 12px -6px rgb(var(--shade-rgb) / 0.15);
+  animation: iosMenuIn .34s var(--ios-spring) both;
+}
+:root[data-theme^="ink"] .cb-pages { overflow-y: auto; }
+@keyframes iosMenuIn { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: none; } }
+:root[data-theme^="ink"] :is(.cb-item, .cb-menu .ink-fab) { min-height: 48px; border-radius: 0; padding: 0 18px; font-size: 16.5px; }
+:root[data-theme^="ink"] :is(.cb-item, .cb-menu .ink-fab) svg { opacity: .7; }
+:root[data-theme^="ink"] .cb-menu > :is(.cb-item, .cb-font, .cb-dock) + :is(.cb-item, .cb-font) { box-shadow: inset 0 0.5px 0 rgb(var(--chalk-rgb) / 0.12); }
+:root[data-theme^="ink"] .cb-menu .ink-fab.on { color: var(--brand); }
+:root[data-theme^="ink"] .cb-menu .ink-fab.on::after { font: 500 14px/1 var(--sans); color: var(--brand); opacity: 1; }
+:root[data-theme^="ink"] .cb-end.is-armed { background: rgb(var(--coral-rgb) / 0.1); }
+:root[data-theme^="ink"] .cb-font { padding: 6px 12px 6px 18px; font-size: 16px; color: var(--chalk); }
+:root[data-theme^="ink"] .cb-font .btn { border-radius: 10px; }
+:root[data-theme^="ink"] .cb-tag { margin: 0; padding: 12px 18px 4px; border-top: 0; box-shadow: inset 0 6px 0 rgb(var(--chalk-rgb) / 0.05); font-size: 12px; color: var(--muted); }
+:root[data-theme^="ink"] .cb-usage { margin: 0; padding: 0 18px 4px; color: var(--muted); }
+:root[data-theme^="ink"] .cb-ver { margin: 0; padding: 2px 18px 12px; color: var(--muted); }
+:root[data-theme^="ink"] .cb-copy + .cb-ver { margin-top: 0; padding-top: 10px; border-top: 0; box-shadow: inset 0 0.5px 0 rgb(var(--chalk-rgb) / 0.12); }
+:root[data-theme^="ink"] .cb-page-item { min-height: 48px; border-radius: 0; padding: 6px 18px; align-items: center; }
+:root[data-theme^="ink"] .cb-page-item + .cb-page-item { box-shadow: inset 0 0.5px 0 rgb(var(--chalk-rgb) / 0.1); }
+:root[data-theme^="ink"] .cb-page-item.is-view { background: var(--ios-tint); }
+:root[data-theme^="ink"] .cb-page-item.is-view b { color: var(--brand); }
+:root[data-theme^="ink"] .cb-page-item i { color: var(--brand); font-weight: 500; }
+
+/* 提示、出错：毛玻璃的一条，「重试」是一颗南大紫的胶囊 */
+:root[data-theme^="ink"] .cb-status {
+  border-radius: 18px; background: rgb(var(--card-solid-rgb) / 0.82); -webkit-backdrop-filter: var(--glass, blur(20px)); backdrop-filter: var(--glass, blur(20px));
+  box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.12), 0 10px 26px -14px rgb(var(--shade-rgb) / 0.35);
+}
+:root[data-theme^="ink"] .cb-status[data-state="error"] { box-shadow: 0 0 0 0.5px rgb(var(--coral-rgb) / 0.45), 0 10px 26px -14px rgb(var(--shade-rgb) / 0.35); }
+:root[data-theme^="ink"] .cb-retry { color: var(--brand-ink); }
+:root[data-theme^="ink"] .cb-retry::before { inset: 4px 0; border: 0; border-radius: 999px; background: var(--brand); filter: none; }
+/* 手写板、粘贴图片：从输入框上面升起来的一张毛玻璃卡 */
+:root[data-theme^="ink"] :is(.cb-slate, .cb-paste) {
+  border-radius: 22px; background: rgb(var(--card-solid-rgb) / 0.86); -webkit-backdrop-filter: var(--glass, blur(24px)); backdrop-filter: var(--glass, blur(24px));
+  box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.12), 0 24px 60px -20px rgb(var(--shade-rgb) / 0.45);
+}
+:root[data-theme^="ink"] .cb-slate-head strong { color: var(--chalk); }
+:root[data-theme^="ink"] :is(.cb-slate-x, .cb-paste-x) { color: var(--brand); font-weight: 600; }
+:root[data-theme^="ink"] .cb-paste-zone { border-radius: 14px; background: var(--field); box-shadow: var(--field-edge); }
+:root[data-theme^="ink"] .cb-paste-zone:focus { box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--brand) 50%, transparent), 0 0 0 4px var(--ios-tint); }
+:root[data-theme^="ink"] .cb-thumb img { border-radius: 8px; rotate: 0deg; background: rgb(var(--card-solid-rgb)); box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.15), 0 6px 14px -6px rgb(var(--shade-rgb) / 0.4); }
+:root[data-theme^="ink"] .cb-unattach { background: rgb(var(--chalk-rgb) / 0.75); color: rgb(var(--card-solid-rgb)); box-shadow: 0 0 0 2px rgb(var(--card-solid-rgb)); font-size: 15px; }
+
+/* =====================================================================
+   一问一答的活板（huoban/talkview.js）：像一段 iOS 的对话——
+   老师那一轮是正文的字，前几轮淡下去；学生的回显是右边的南大紫气泡；当前一问放在一张白卡里，答的东西是 iOS 的控件
+   ===================================================================== */
+:root[data-theme^="ink"] .hb-talk { gap: 22px; }
+:root[data-theme^="ink"] .hb-tmeta { font: 600 11.5px/1.4 var(--sans); letter-spacing: .04em; color: var(--muted); text-transform: none; }
+:root[data-theme^="ink"] .hb-past .hb-turn { opacity: .62; }
+:root[data-theme^="ink"] .hb-past .hb-p { color: var(--body); }
+/* 当前一问：一张白卡（不是满屏的字），一眼看得出「现在问的是这个」 */
+:root[data-theme^="ink"] .hb-now:not(:empty) {
+  padding: 16px 22px 18px; border-radius: 22px;
+  background: rgb(var(--card-solid-rgb) / 0.9); -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none);
+  box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.08), 0 1px 2px rgb(var(--shade-rgb) / 0.05), 0 16px 40px -22px rgb(var(--shade-rgb) / 0.35);
+}
+:root[data-theme^="ink"] .hb-now .hb-p { font-size: 1.16em; color: var(--chalk); }
+/* 学生的回显：iMessage 的气泡，右边、南大紫、尾巴朝右下；前几轮的是灰气泡 */
+:root[data-theme^="ink"] .hb-echo { gap: 4px; }
+:root[data-theme^="ink"] .hb-echo span {
+  padding: 8px 15px 9px; border-radius: 20px 20px 6px 20px; background: var(--brand); color: var(--brand-ink);
+  font: 15px/1.4 var(--sans); box-shadow: 0 4px 12px -8px color-mix(in srgb, var(--brand) 80%, transparent);
+  animation: iosBubble .42s var(--ios-spring) both; transform-origin: right bottom;
+}
+:root[data-theme^="ink"] .hb-echo span + span { border-top-right-radius: 6px; }
+:root[data-theme^="ink"] .hb-past .hb-echo span { background: rgb(var(--chalk-rgb) / 0.08); color: var(--chalk); font-size: 13.5px; box-shadow: none; animation: none; }
+@keyframes iosBubble { from { opacity: 0; transform: scale(.8) translateY(6px); } to { opacity: 1; transform: none; } }
+:root[data-theme^="ink"] .hb-more { color: var(--brand); font-weight: 500; }
+:root[data-theme^="ink"] .hb-title { font-weight: 700; letter-spacing: .02em; }
+
+/* 拨数：iOS 的步进器——一颗白卡胶囊，‹ › 是南大紫，中间的数是墨色 */
+:root[data-theme^="ink"] .hb-scrub {
+  border: 0; background: rgb(var(--card-solid-rgb));
+  box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.14), 0 2px 6px -2px rgb(var(--shade-rgb) / 0.14);
+}
+:root[data-theme^="ink"] .hb-scrub button { color: var(--brand); font-weight: 500; transition: transform .35s var(--ios-spring), background .2s; }
+:root[data-theme^="ink"] .hb-scrub button:not(:disabled):active { transform: scale(.85); background: var(--ios-tint); }
+:root[data-theme^="ink"] .hb-n { color: var(--chalk); font-weight: 650; min-width: 2em; box-shadow: inset 0.5px 0 0 rgb(var(--chalk-rgb) / 0.12), inset -0.5px 0 0 rgb(var(--chalk-rgb) / 0.12); line-height: 26px; }
+/* 空：浅底的输入框，聚焦一圈南大紫的光；「对吗」是一颗南大紫的按钮，对了变石绿 */
+:root[data-theme^="ink"] .hb-blank { gap: 6px; }
+:root[data-theme^="ink"] .hb-blank input { border: 0; border-radius: 12px; background: var(--field); box-shadow: var(--field-edge); transition: box-shadow .2s, background .2s; }
+:root[data-theme^="ink"] .hb-blank input:focus { border: 0; background: rgb(var(--card-solid-rgb)); box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--brand) 55%, transparent), 0 0 0 4px var(--ios-tint); }
+:root[data-theme^="ink"] .hb-blank button { border-radius: 12px; background: var(--brand); color: var(--brand-ink); transition: transform .35s var(--ios-spring), background .25s; }
+:root[data-theme^="ink"] .hb-blank button:active { transform: scale(.9); }
+:root[data-theme^="ink"] .hb-blank.is-ok input { background: rgb(var(--green-rgb) / 0.1); box-shadow: inset 0 0 0 0.5px rgb(var(--green-rgb) / 0.45); }
+:root[data-theme^="ink"] .hb-blank.is-ok button { background: var(--green); color: rgb(var(--card-solid-rgb)); }
+:root[data-theme^="ink"] .hb-blank.is-bad input { box-shadow: inset 0 0 0 1px rgb(var(--coral-rgb) / 0.6); background: rgb(var(--coral-rgb) / 0.06); }
+:root[data-theme^="ink"] .hb-note { font-size: 12.5px; }
+/* 选择：一颗颗白卡胶囊（不是灰圈） */
+:root[data-theme^="ink"] .hb-choice { gap: 8px; }
+:root[data-theme^="ink"] .hb-choice button {
+  border: 0; background: rgb(var(--card-solid-rgb)); font-weight: 500;
+  box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.14), 0 2px 6px -2px rgb(var(--shade-rgb) / 0.14);
+  transition: transform .35s var(--ios-spring), background .2s, box-shadow .2s, color .2s;
+}
+:root[data-theme^="ink"] .hb-choice button:active { transform: scale(.93); }
+:root[data-theme^="ink"] .hb-choice button.is-ok { background: rgb(var(--green-rgb) / 0.12); box-shadow: inset 0 0 0 0.5px rgb(var(--green-rgb) / 0.55); }
+:root[data-theme^="ink"] .hb-choice button.is-bad { background: rgb(var(--coral-rgb) / 0.07); box-shadow: inset 0 0 0 0.5px rgb(var(--coral-rgb) / 0.45); }
+/* 目标：一张浅底的卡，左边一圈细环，做到了是一枚石绿的勾 */
+:root[data-theme^="ink"] .hb-goal { border: 0; border-radius: 16px; background: rgb(var(--chalk-rgb) / 0.045); box-shadow: inset 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.1); }
+:root[data-theme^="ink"] .hb-dot { border: 1.5px solid rgb(var(--chalk-rgb) / 0.25); }
+:root[data-theme^="ink"] .hb-goal.is-done { background: rgb(var(--green-rgb) / 0.1); box-shadow: inset 0 0 0 0.5px rgb(var(--green-rgb) / 0.4); }
+:root[data-theme^="ink"] .hb-goal.is-done .hb-dot {
+  display: grid; place-items: center; background: var(--green);
+}
+:root[data-theme^="ink"] .hb-goal.is-done .hb-dot::after { content: ""; width: 10px; height: 5px; margin-top: -2px; border: solid rgb(var(--card-solid-rgb)); border-width: 0 0 2px 2px; transform: rotate(-45deg); }
+/* 折起来的句子、一排格子、写错的行 */
+:root[data-theme^="ink"] .hb-fold { border: 0; background: var(--ios-tint); box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--brand) 35%, transparent); }
+:root[data-theme^="ink"] .hb-fold.is-shut { background: var(--ios-tint-hi); }
+:root[data-theme^="ink"] .hb-fold.is-shut::after { color: var(--brand); }
+:root[data-theme^="ink"] .hb-cells span { border: 0; border-radius: 9px; background: rgb(var(--card-solid-rgb)); box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.14), 0 1px 3px rgb(var(--shade-rgb) / 0.08); }
+:root[data-theme^="ink"] .hb-err { border-radius: 14px; background: rgb(var(--coral-rgb) / 0.08); box-shadow: inset 0 0 0 0.5px rgb(var(--coral-rgb) / 0.3); }
+:root[data-theme^="ink"] .hb-proc-name { font: 600 12px/1.4 var(--sans); letter-spacing: .04em; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme^="ink"] :is(.ct-ind i, .class-draft-talk::before, .cb-now.is-live, .hb-echo span, .ask-menu, .cb-menu, .cb-pages, .class-seg.is-zoomed) { animation: none !important; }
+}
