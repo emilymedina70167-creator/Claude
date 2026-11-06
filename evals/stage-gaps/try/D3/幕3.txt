@@ -1,0 +1,48 @@
+# D3 第 3 幕：Prim，从 A 长出来；篱笆、金色过篱笆的路、「离树最近」牌子
+graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:5 C-E:9 D-E:2 D-F:6 E-F:3 pos="A=0,0 B=1,0 D=2,0 C=0,1 E=1,1 F=2,1"
+dim g.edges
+paint g.A g4
+paint g.A~B g4
+paint g.A~C g4
+undim g.A~B g.A~C
+tag g.B 4经A
+tag g.C 2经A
+tag g.D —
+tag g.E —
+tag g.F —
+say "换个修法：从 {g.A} 开始，只许接在已经修好的这一块上。"
+ask tap g.edges "点一条金色的路" expect=g.A~C
+学生: tap g.A~C
+# 老师：C 圈进来，金色的路换一批，牌子改数（页面没有「篱笆」、没有自动换牌子）
+paint g.C g4
+unpaint g.A~C
+paint g.A~C g3
+unpaint g.A~B
+paint g.A~B g4
+undim g.B~C g.C~D g.C~E
+paint g.B~C g4
+paint g.C~D g4
+paint g.C~E g4
+untag g.C
+tag g.B 1经C
+tag g.D 5经C
+tag g.E 9经C
+say "{g.C} 进来，{g.B} 的牌子为什么变了？"
+ask say "说说看"
+学生: say 因为C到B只要1
+# 学生又去点一条不挨篱笆的路（D–E），页面照样只是「点了」
+ask tap g.edges "接着点一条金色的路" expect=g.B~C
+学生: tap g.D~E
+# 修完以后两行小条对比（老师自己写、自己染色）
+array kr = BC1 AC2 DE2 EF3 BD5
+array pr = AC2 BC1 BD5 DE2 EF3
+paint kr.1 pr.2 g1
+paint kr.2 pr.1 g2
+paint kr.3 pr.4 g3
+paint kr.4 pr.5 g5
+paint kr.5 pr.3 g6
+label lk kr.1 "Kruskal" side=left tone=note
+label lp pr.1 "Prim" side=left tone=note
+say "和 Kruskal 修出来的比一比。"
+ask say "边一样，顺序为什么不一样？"
+学生: say 不知道

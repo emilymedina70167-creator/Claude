@@ -1,0 +1,23 @@
+# D3 第 10 幕：真题自己做——2020 Kruskal 加边次序、2016 Dijkstra 表
+graph g = a-b:20 a-e:9 a-c:12 b-e:11 b-d:6 b-f:5 e-c:10 e-d:14 c-d:18 d-f:7
+card q = "2020：用 Kruskal 求最小生成树，依次选出的边是？" "A. (b,f) (b,d) (a,e) (c,e) (b,e)" "B. (b,f) (b,d) (b,e) (a,e) (c,e)" "C. (a,e) (b,e) (c,e) (b,d) (b,f)" "D. (a,e) (c,e) (b,e) (b,f) (b,d)"
+say "这两道自己来，我不插嘴。图上点边的顺序就是你的答案。"
+ask tap g.edges "按你的顺序点第 1 条边"
+学生: tap g.b~f
+# 每点一条都叫了老师：老师只能自己标序号再问下一条
+label n1 g.b~f "①" side=above tone=key
+ask tap g.edges "第 2 条"
+学生: tap g.b~d
+label n2 g.b~d "②" side=above tone=key
+ask tap g.edges "第 3 条"
+学生: tap g.b~e
+label n3 g.b~e "③" side=above tone=key
+ask tap q.2-5 "点满 5 条以后选一个选项" expect=q.2
+学生: tap q.3
+# 2016：表格一格一格写
+remove g
+remove q
+graph h = 1>2:5 1>5:4 2>3:2 2>4:9 4>1:2 5>2:6 3>5:6 6>3:2 5>6:5 5>4:7
+card tb = "第 1 轮：2:? 3:? 4:? 5:? 6:?" "第 2 轮：…" "集合 S：…"
+ask value "第 2 轮，顶点 6 写几？" answer=9
+学生: value 5

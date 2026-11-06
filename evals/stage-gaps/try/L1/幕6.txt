@@ -1,0 +1,27 @@
+# L1 第 6 幕：(A−E)(A−2E) 化成 A² − 3A + 2E；练习 2.2 f(A)
+matrix A = 2 -1 / -3 3
+tex f = "\hl{p}{A\cdot A} + \hl{q}{A\cdot(-2E)} + \hl{r}{(-E)\cdot A} + \hl{s}{(-E)\cdot(-2E)}"
+tex x = "\hl{p}{x^2} \hl{q}{-2x} \hl{r}{-x} + \hl{s}{2}"
+link f.p x.p g1
+link f.q x.q g2
+link f.r x.r g3
+link f.s x.s g4
+say "把 {f} 的四块化到不能再化，和下面数的那张比一比。"
+ask tap f "先化哪一块？点它"
+学生: tap f.q
+retex f "\hl{p}{A^2} \hl{q}{-2A} \hl{r}{-A} + \hl{s}{2E}"
+next f "= \hl{p}{A^2} \hl{q}{-3A} + \hl{s}{2E}" q=r
+card q = "f(x) = x² − 5x + 3，A = $\begin{pmatrix}2&-1\\-3&3\end{pmatrix}$，f(A) = ？"
+matrix Ans = 1 1 / 1 1
+label la Ans "你的 f(A)" side=left tone=note
+say "练习 2.2，你来算 f(A)，把四个数写进 {Ans}。"
+open Ans edit range=-20..20
+goal g1 "写出 f(A)" when="Ans = O"
+@g1 say "对，是零矩阵。"
+学生: write Ans.1,1 0
+学生: write Ans.1,2 3
+学生: write Ans.2,1 3
+学生: write Ans.2,2 0
+ask say "说说你怎么算的"
+学生: say A² − 5A + 3，每格加 3
+say "嗯。"

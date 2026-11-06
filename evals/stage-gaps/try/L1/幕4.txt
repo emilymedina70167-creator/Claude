@@ -1,0 +1,28 @@
+# L1 第 4 幕：A 锁着，找能和 A 换的 B，收藏 4 对
+matrix A = 1 2 / 0 3
+matrix B = 0 1 / 1 0 beside=A
+product P = A B
+mul P
+product Q = B A
+mul Q
+label lp P "AB" side=left tone=note
+label lq Q "BA" side=left tone=note
+say "{A} 锁着，你去找能和它换的 B，越不一样越好。"
+open B edit range=-3..3
+goal g1 "让 AB = BA，B 不能是 O" when="P = Q, B != O"
+@g1 say "并上了！再找一个不一样的。"
+@g1 goal g2 "再找一张不一样的 B" when="P = Q, B != O"
+学生: write B.1,2 0
+学生: write B.2,1 0
+学生: write B.1,1 1
+学生: write B.2,2 1
+学生: write B.1,2 2
+学生: write B.2,2 3
+say "看看你找到的这几张 B，它们和 {A} 有什么关系？"
+ask say "这些 B 的共同点"
+学生: say 都是 A 的几倍加 E 的几倍
+matrix A = 2 0 / 0 3
+say "换一个 A，再找。"
+goal g3 "让 AB = BA" when="P = Q, B != O"
+学生: write B.1,2 1
+say "嗯。"

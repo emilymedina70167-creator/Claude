@@ -1,0 +1,36 @@
+# D3 第 7 幕：同一张图并排跑 Prim 和 Dijkstra
+graph p = A-D:1 A-B:3 A-C:4 B-C:2 pos="A=0,0 B=1,0 C=1,1 D=0,1"
+graph d = A-D:1 A-B:3 A-C:4 B-C:2 pos="A=0,0 B=1,0 C=1,1 D=0,1"
+label tp p.A "Prim，从 A 长：离树最近的那条路" side=above tone=key
+label td d.A "Dijkstra，从 A 出发：离 A 多远" side=above tone=key
+tag p.B 3
+tag p.C 4
+tag p.D 1
+tag d ∞
+tag d.A 0
+relax d.A -> d.B
+relax d.A -> d.C
+relax d.A -> d.D
+paint p.A d.A g4
+say "同一张图、同一个起点，两种做法一起来：左边一步，右边一步。"
+ask tap p.nodes "左边先锁谁？" expect=p.D
+学生: tap p.D
+paint p.D g4
+paint p.A~D g4
+ask tap d.nodes "右边呢？" expect=d.D
+学生: tap d.D
+paint d.D g4
+paint d.A~D g1
+# 跳到两边都锁了 B
+paint p.B p.A~B g4
+paint d.B d.A~B g4
+say "两边都锁了 {p.B}。看 C 的牌子。"
+ask value "左边（Prim）C 的牌子写几？" answer=2
+学生: value 2
+ask value "右边（Dijkstra）C 的牌子写几？" answer=4
+学生: value 2
+# 叠成一张、沿金色走里程累加：没有这种指令，老师只能 walk
+walk p.A p.B p.C
+walk d.A d.C
+ask say "沿金色走，A 到 C 多远？图里最近的是多少？"
+学生: say 5和4

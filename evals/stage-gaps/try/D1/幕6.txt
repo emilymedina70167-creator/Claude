@@ -1,0 +1,28 @@
+# D1 第 6 幕：看一趟的结果推增量（2014、2018 真题）
+array a = 9 1 4 13 7 8 20 23 15
+dial d = 2 range=1-8 at=a
+label dl dial:d "{d} 条链" side=right
+group a stride=d
+card o = "A. 2" "B. 3" "C. 4" "D. 5"
+say "这排是排完一趟的样子。组内排过，每条链该是什么样？"
+ask say "每条链该是什么样？"
+学生: say 每条链都该从小到大
+say "证据呢？指给我看：d=2 坏在哪一对？"
+ask tap a "点前大后小那一对里前面那张" expect=a.1
+学生: tap a.1
+compare a.1 a.3
+set d 3
+say "d=3 呢？"
+ask tap o "选哪个？" expect=o.2
+学生: tap o.2
+# 2018：三排、两个拨数；「拿上一排真排一趟」没有能写的指令
+array p0 = 8 3 9 11 2 1 4 7 5 10 6
+array p1 = 1 3 7 5 2 6 4 9 11 10 8
+array p2 = 1 2 6 4 3 7 5 8 11 10 9
+dial e = 3 range=1-10 at=p1
+dial f = 2 range=1-10 at=p2
+group p1 stride=e
+group p2 stride=f
+say "用你刚才那招。"
+ask tap p1 "第一趟 d=3 坏在哪？点前大后小那一对里前面那张" expect=p1.2
+学生: tap p1.1

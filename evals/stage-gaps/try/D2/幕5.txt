@@ -1,0 +1,34 @@
+# D2 第 5 幕：四种叫法；从空树插一串
+tree f1 = 50 30 60 20 40 _ _ 10
+tree f2 = 20 10 40 _ _ 30 50 _ _ _ 60
+tree f3 = 50 45 _ _ 47
+tree f4 = 24 13 53 _ _ 37 90 _ 48
+bf f1
+bf f2
+bf f3
+bf f4
+card k = "LL" "RR" "LR" "RL"
+say "字母说的是：从红的那个往新结点走，头两步各往哪边。"
+# 标签卡拖到小图上：没有拖字的动作；只能一张图一张图问
+ask tap k "{f3} 那张是哪一型？" expect=k.3
+学生: tap k.3
+remove f1
+remove f2
+remove f3
+remove f4
+# 空树：先试 tree t = _
+tree t = _
+say "从空树开始，一个一个插。歪了先说谁、哪一型，再动手。"
+insert t 34
+insert t 23
+insert t 15
+bf t
+ask tap t "谁歪了？点 A" expect=t.34
+学生: tap t.34
+ask tap k "哪一型？" expect=k.1
+学生: tap k.1
+rotate t.34 LL
+insert t 98
+insert t 115
+ask tap t "谁歪了？点 A" expect=t.34
+学生: tap t.23

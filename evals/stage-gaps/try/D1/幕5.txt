@@ -1,0 +1,19 @@
+# D1 第 5 幕：学生自己从头排一遍（综合题 02）
+array k = 50 26 38 80 70 90 8 30 40 20
+label kl k "关键字" side=above tone=soft
+say "这回全是你自己的。增量 5、3、1，每趟写出结果。写之前先数有几个数。"
+# 一行 10 个空格让学生写：格子写不进去（open 只有拖）。先试 ask value 收一整排
+ask value "d=5 一趟以后是什么？（10 个数，空格隔开）" answer="50 8 30 40 20 90 26 38 80 70"
+学生: value 26 38 50 70 80 8 20 30 40 90
+# 第二种办法：给一排让学生拖着排，答案藏成一排扣着的格子，挑战比两排
+array r = 50 8 30 40 20 90 26 38 80 70
+label rl r "d=3 后：在这一排上拖着排" side=above tone=note
+array x = 26 8 30 40 20 80 50 38 90 70
+cover x
+open r
+goal g1 "d=3 这一趟排对" when="r = x"
+@g1 say "这一趟对了。"
+@g1 ask next "接着写 d=1 那一趟" button="好"
+学生: swap r#1 r#7
+学生: swap r#6 r#9
+学生: next

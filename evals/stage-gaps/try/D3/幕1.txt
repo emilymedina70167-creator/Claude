@@ -1,0 +1,35 @@
+# D3 第 1 幕：村子地图，学生点路修路，看连通块、成圈
+graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:5 C-E:9 D-E:2 D-F:6 E-F:3 pos="A=0,0 B=1,0 D=2,0 C=0,1 E=1,1 F=2,1"
+dim g.edges
+paint g.A g1
+paint g.B g2
+paint g.C g3
+paint g.D g4
+paint g.E g5
+paint g.F g6
+label st g.E "修了 0 条 · 花了 0 · 分成 6 块" side=below tone=note
+say "6 个村子要通网线，路上的数是修这条要花的钱。"
+say "修哪几条？都连上就行，越便宜越好。"
+goal g1 "把 6 个村子都连上" when="g connected"
+ask tap g.edges "点一条路，修上它"
+学生: tap g.B~C
+# 老师照学生点的那条修：变实线、两头合成一种颜色、状态栏改数（都得老师自己算、自己写）
+undim g.B~C
+paint g.B~C g3
+paint g.B g3
+retext st "修了 1 条 · 花了 1 · 分成 5 块"
+ask tap g.edges "接着点"
+学生: tap g.A~C
+undim g.A~C
+paint g.A~C g3
+paint g.A g3
+retext st "修了 2 条 · 花了 3 · 分成 4 块"
+ask tap g.edges "接着点"
+学生: tap g.A~B
+# 成圈：页面没有成圈提示，老师自己描
+undim g.A~B
+paint g.A~B g2
+link g.A g.B g2
+retext st "修了 3 条 · 花了 7 · 分成 4 块（A–B–C 成了圈）"
+ask tap g.edges "再点一条拆掉看看"
+学生: tap g.A~B

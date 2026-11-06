@@ -1,0 +1,38 @@
+# D4 第 4 幕：一趟定一个，两边各自再划：代码窗填框、划分树、调用栈；试验台、检查台
+array a = 27 38 13 49 76 97 65 49′
+paint a.4 g4
+label st a.4 "站定" side=below tone=key
+card code = "pivotpos = Partition(A, low, high);" "QuickSort(A, □, □);" "QuickSort(A, □, □);"
+card stk = "调用栈：QuickSort(1,8)"
+tree t = 49 [27·38·13] [76·97·65·49′]
+say "Partition 回来的是 4。下面两行该调用谁？把框填上。"
+ask value "第一行 QuickSort(A, □, □) 填什么？（写成 1 3）" answer="1 3"
+学生: value 1 3
+rewrite code.2 "QuickSort(A, 1, 3);"
+say "点盒子，让它们各自再划。"
+ask tap t "点一个盒子"
+学生: tap t#2
+# 「页面快放这一段的划分、盒子变成圆加两个小盒子」：没有这种指令，老师自己改树、改那一排
+write t#2 27
+insert t.27 left 13
+insert t.27 right 38
+write a.1 13
+write a.3 27
+label st2 a.3 "站定" side=below tone=key
+addline stk "QuickSort(1,3)"
+ask next "看好了点下面" button="接着划"
+学生: next
+# 检查台：四排，学生点出「站定」的数（一次只能点一个，点了就叫老师）
+remove t
+remove a
+array A = 2 3 5 4 6 7 9
+array B = 2 7 5 6 4 3 9
+array C = 3 2 5 4 7 6 9
+array D = 4 2 3 5 7 6 9
+label la A.1 "A" side=left tone=note
+label lb B.1 "B" side=left tone=note
+label lc C.1 "C" side=left tone=note
+label ld D.1 "D" side=left tone=note
+say "这四个里哪个不可能是第二趟的结果？先在每一排上点出你觉得已经站定的数。"
+ask tap C "在 C 这一排点一个你觉得站定的数" expect=C.7
+学生: tap C.3

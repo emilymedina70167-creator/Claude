@@ -1,0 +1,22 @@
+# D3 分支 1：Dijkstra 写成边权（像 Prim）。看页面认不认得出、能不能沿学生的前驱走出里程
+graph g = 1>2:10 1>5:5 2>3:1 2>5:2 3>4:4 4>1:7 4>3:6 5>2:3 5>3:9 5>4:2
+paint g.1 g.5 g4
+tag g.1 0
+tag g.5 5
+tag g.2 10
+tag g.3 ∞
+tag g.4 ∞
+glow g.5~2 g.5~3 g.5~4
+ask value "{g.2} 的牌子改成几？" answer=8
+学生: value 3
+ask value "{g.4} 的牌子改成几？" answer=7
+学生: value 2
+# 照学生的写法摆上牌子，再沿学生的前驱 1→5→2→3 走一遍：页面没有一段段累加的里程
+tag g.2 3
+tag g.4 2
+tag g.3 1
+paint g.5~2 g.2~3 g.1~5 g4
+walk g.1 g.5 g.2 g.3
+say "沿你画的箭头从 {g.1} 走到 {g.3}，脚下走了多远？牌子上写的是几？"
+ask value "脚下走了多远？" answer=9
+学生: value 9

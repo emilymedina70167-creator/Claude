@@ -1,0 +1,22 @@
+# L1 分支 1：以为 (A+B)² = A² + 2AB + B²；条件只想到 A、B 都是 O
+matrix A = 1 2 / 2 4
+matrix B = 2 2 / -1 -1 beside=A
+product P = A B
+mul P
+product Q = B A
+mul Q
+say "{P} 和 {Q} 一格一格对着看。"
+compare P.1,1 Q.1,1
+compare P.1,2 Q.1,2
+compare P.2,1 Q.2,1
+compare P.2,2 Q.2,2
+ask say "什么时候 (A+B)² = A² + 2AB + B²？"
+学生: say A、B 都是零矩阵
+write B.1,1 5
+write B.1,2 0
+write B.2,1 0
+write B.2,2 5
+say "B 换成 5E：{P} 和 {Q} 一样了，可 B 不是 O。你的条件漏了谁？"
+ask say "改一改你的条件"
+学生: say AB = BA
+say "对。"

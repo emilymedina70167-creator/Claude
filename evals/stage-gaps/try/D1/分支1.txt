@@ -1,0 +1,18 @@
+# D1 分支 1：稳定性按日常意思判。页面要提供：相等元素每一趟谁在前、各在哪组、翻在哪一趟、直接比过几次；
+# 只留两张 49 的显示；同一输入两串增量并排回放
+array a = 49 38 65 97 76 13 27 49′ 55 04
+array b = 49 38 65 97 76 13 27 49′ 55 04
+label la a "增量 5,3,1" side=left tone=soft
+label lb b "增量 5,2,1" side=left tone=soft
+group a stride=5
+group b stride=5
+# 两排都只能老师一格格走；d=5 两排一样
+swap a#1 a#6
+swap a#3 a#8
+swap b#1 b#6
+swap b#3 b#8
+dim a
+undim a#1 a#8
+say "只看这两张：{a#1} 和 {a#8} 在同一组里比过吗？"
+ask say "比过吗？"
+学生: say 没比过

@@ -1,0 +1,20 @@
+# D3 分支 2：只在刚锁的点指到的点里挑；锁了 3（13）以后 2→3 来了更短的 9
+graph g = 1>2:10 1>5:5 2>3:1 2>5:2 3>4:4 4>1:7 4>3:6 5>2:3 5>3:9 5>4:2
+paint g.1 g.5 g.4 g4
+tag g.1 0
+tag g.5 5
+tag g.4 7
+tag g.2 8
+tag g.3 13
+ask tap g.2 g.3 "第 3 轮锁谁？" expect=g.2
+学生: tap g.3
+paint g.3 g4
+paint g.2 g4
+glow g.2~3
+# 3 已经锁死，relax 会不会拦、会不会画裂缝？
+relax g.2 -> g.3
+# 倒回第 3 轮开头：说明里没有倒回的指令；候场队伍只能老师自己摆一排
+array q = 2 3
+label lq q.1 "还没锁的：2（8）3（13）" side=above tone=note
+ask say "锁的是离起点最近的，还是离刚锁的那个最近的？"
+学生: say 离起点最近的

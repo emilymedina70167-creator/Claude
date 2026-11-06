@@ -1,0 +1,27 @@
+# D3 第 4 幕：最便宜的树不止一棵；拨 C–D 的价钱，看「最便宜的树几棵、总价」
+graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:5 C-E:9 D-E:2 D-F:6 E-F:3 pos="A=0,0 B=1,0 D=2,0 C=0,1 E=1,1 F=2,1"
+dim g.edges
+undim g.B~C g.A~C g.B~D g.D~E g.E~F
+paint g.B~C g.A~C g.B~D g.D~E g.E~F g4
+label st g.E "总价 13" side=below tone=key
+dial cd = 5 range=1-10 at=g.C~D
+label lcd dial:cd "C–D = {cd}" side=right
+label box g.D "最便宜的树：? 棵 · 总价 ?" side=above tone=note
+say "不拆光重来，只换一条路，还能修出一棵 13 的吗？"
+ask tap g.edges "先点一条要拆的路"
+学生: tap g.B~D
+dim g.B~D
+unpaint g.B~D
+ask tap g.edges "再点一条要修的路" expect=g.C~D
+学生: tap g.C~D
+undim g.C~D
+paint g.C~D g4
+retext st "总价 13（又一棵）"
+# 拨 C–D：页面会不会跟着改边上的价钱、重算棵数？（工具没法替学生拨，老师 set 一下看）
+set cd 4
+say "把 C–D 拨成 4 呢？"
+ask next "拨一下 $cd$，看右上角" button="看好了"
+学生: next
+say "什么时候一定只有一棵？"
+ask say "说说看"
+学生: say 有同价的就一定不止一棵

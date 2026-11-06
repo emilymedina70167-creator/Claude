@@ -1,0 +1,42 @@
+# L1 第 2 幕：(A+B)² 拆成四块，AB 和 BA 并不起来，差是 BA − AB
+matrix A = 1 2 / 2 4
+matrix B = 2 2 / -1 -1 beside=A
+say "先写你觉得 (A+B)² 是多少。"
+ask say "(A+B)² = ？"
+学生: say A²+2AB+B²
+product Q1 = A A
+mul Q1
+product Q2 = A B
+mul Q2
+product Q3 = B A
+mul Q3
+product Q4 = B B
+mul Q4
+tex f = "(A+B)(A+B) = \hl{aa}{AA} + \hl{ab}{AB} + \hl{ba}{BA} + \hl{bb}{BB}"
+link f.ab Q2 g1
+link f.ba Q3 g2
+say "你写的 2AB，是哪两块并起来的？把 {Q2} 拖到 {Q3} 上并一下。"
+ask drag Q2 Q3 "把 AB 拖到 BA 上"
+学生: drag Q2.1,1 Q3.1,1
+compare Q2 Q3
+matrix S = 3 4 / 1 3
+product T = S S
+mul T
+label lt T "真的 (A+B)²" side=left tone=key
+matrix F = 7 12 / 9 19
+label lf F "公式 A² + 2AB + B²" side=left tone=key
+matrix Dd = 6 12 / -3 -6
+label ld Dd "差" side=left tone=note
+say "{T} 减 {F}，差是 {Dd}。这个差，你在上面见过吗？"
+ask tap Q3 "点出和差一样的那一块" expect=Q3.1,1
+学生: tap Q3.1,1
+say "对，差就是 BA − AB。"
+open A edit range=-3..3
+open B edit range=-3..3
+goal g1 "拨 A、B，让 AB 和 BA 并得起来" when="Q2 = Q3"
+@g1 ask say "什么时候 (A+B)² = A² + 2AB + B²？"
+学生: write B.1,2 0
+学生: write B.2,1 0
+学生: write B.2,2 2
+学生: say AB = BA 的时候
+say "对。"

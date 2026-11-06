@@ -1,0 +1,33 @@
+# D2 第 3 幕：拐了个弯，要拎两下
+tree t = 15 3
+bf t
+insert t 7
+say "还是那一招。让 15 别红。"
+ask tap t "按住谁往上拎？" expect=t.7
+学生: tap t.3
+# 拎 3 过 15 = 在 15 右旋：弯拐到另一边
+rotate t.15 right
+ask tap t "现在按住谁？" expect=t.7
+学生: tap t.7
+# 拎 7 过 15（现在 7 是 15 的左孩子）= 在 15 右旋；拉直以后再拎 7 过 3 = 在 3 左旋
+rotate t.15 right
+ask tap t "直了。现在按住谁？" expect=t.7
+学生: tap t.7
+rotate t.3 left
+say "三个里最后谁在顶上？在底下那排数里，它排第几？"
+ask say "谁在顶上？排第几？"
+学生: say 7，排第二，中间那个
+tree u = 24 13 53 _ _ 37 90
+bf u
+say "这一题你自己来，插 48。完了告诉我 37 的左右孩子是谁。"
+insert u 48
+ask tap u "按住谁往上拎？" expect=u.37
+学生: tap u.53
+rotate u.24 left
+ask tap u "{u.53} 红了。撤回来了：再点一个" expect=u.37
+学生: tap u.37
+tree u = 24 13 53 _ _ 37 90 _ 48
+bf u
+rotate u.24 RL
+ask tap u "{u.37} 的左孩子是谁？" expect=u.24
+学生: tap u.24

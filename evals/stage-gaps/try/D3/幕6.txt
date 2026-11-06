@@ -1,0 +1,40 @@
+# D3 第 6 幕：Dijkstra 全程（图 6.17），表 6.2 一列一列长出来
+graph g = 1>2:10 1>5:5 2>3:1 2>5:2 3>4:4 4>1:7 4>3:6 5>2:3 5>3:9 5>4:2
+paint g.1 g4
+tag g ∞
+tag g.1 0
+relax g.1 -> g.2
+relax g.1 -> g.5
+paint g.1~2 g.1~5 g4
+card tb = "顶点 2：10（经 1）" "顶点 3：∞" "顶点 4：∞" "顶点 5：5（经 1）" "集合 S：{1}"
+array q = 5 2 3 4
+label lq q.1 "还没锁的（按牌子排）" side=above tone=note
+say "跟刚才三个点一样，你来：先锁谁？"
+ask tap g.nodes "点一个没锁的点锁上" expect=g.5
+学生: tap g.5
+paint g.5 g4
+glow g.5~2 g.5~3 g.5~4
+say "5 锁了，它的箭头指到谁，谁就可能要改。"
+ask value "{g.2} 的牌子写几？（不改就写原来的数）" answer=8
+# 学生写成 5→2 的边权（分支 1 那种）
+学生: value 3
+relax g.5 -> g.2
+relax g.5 -> g.3
+relax g.5 -> g.4
+unpaint g.1~2
+paint g.5~2 g.5~4 g4
+unglow g.5~2 g.5~3 g.5~4
+rewrite tb.1 "顶点 2：10 → 8（经 5）"
+rewrite tb.2 "顶点 3：∞ → 14（经 5）"
+rewrite tb.3 "顶点 4：∞ → 7（经 5）"
+rewrite tb.5 "集合 S：{1, 5}"
+write q.1 4
+write q.2 2
+write q.3 3
+write q.4 —
+ask tap g.nodes "下一个锁谁？" expect=g.4
+学生: tap g.4
+# 四轮做完以后，学生自己沿前驱倒着划回 1：舞台上只有老师能 walk
+walk g.1 g.5 g.2 g.3
+ask say "沿着金色箭头，把 1 到 3 的最短路径倒着读出来。"
+学生: say 3 2 5 1

@@ -1,0 +1,36 @@
+# D1 第 4 幕：两个 49 的先后翻了
+# 时间轴没有能写的东西：用四排快照（初始 / d=5 后 / d=3 后 / d=1 后）代替
+array a = 49 38 65 97 76 13 27 49′ 55 04
+label xa a#1 "先" side=above tone=key
+label xb a#8 "后" side=above tone=key
+paint a#1 g2
+paint a#8 g1
+card q = "对一下" "输入：___ 在前" "输出：___ 在前"
+say "希尔稳不稳？先别说结论，把小表填了。"
+ask say "输入谁在前？输出谁在前？"
+学生: say 输入49在前，输出49′在前
+# 老师按 d=5、3、1 走一遍（页面不会自己跑希尔，只能分组 + 一格格 swap / move）
+group a stride=5
+swap a#1 a#6
+swap a#2 a#7
+swap a#3 a#8
+swap a#4 a#9
+swap a#5 a#10
+wait 400
+group a stride=3
+swap a#9 a#2
+swap a#7 a#10
+say "在哪一下翻过来的？自己找。"
+ask tap a "点那个先跑到前面去的 49" expect=a#8
+学生: tap a#8
+say "这一下，{a#1} 和 {a#8} 比过吗？"
+ask say "它们俩比过吗？各在哪一组？"
+学生: say 没比过，49在第1组，49′在第3组
+# 沙盘：4 格、托盘里 1 2 2̄ 3。学生只能拖两格互换，页面不会跑 d=2,1
+array s = 1 2 2̄ 3
+label st s "沙盘：增量 2, 1" side=above tone=note
+open s
+say "自己造一个翻的：把它摆成一排，我替你跑 d=2,1。"
+ask next "摆好了点下面" button="摆好了"
+学生: swap s#1 s#3
+学生: next

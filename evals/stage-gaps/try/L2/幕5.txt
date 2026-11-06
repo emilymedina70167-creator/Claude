@@ -1,0 +1,9 @@
+# L2 第 5 幕：系数换成 λ、常数换成含 μ 的式子，拨着看解的样子
+dial l = 0 range=-4..4
+dial m = 1 range=-4..4
+matrix M = 1 2 l | m+1 / 1 0 -4 | m-1 / 1 2 -2 | 0
+tex f = "\begin{pmatrix}1&2&\lambda&\mid&\mu+1\\1&0&-4&\mid&\mu-1\\1&2&-2&\mid&0\end{pmatrix}"
+say "拨 {l}、{m}，想办法让方程组没有解。"
+ask value "最后一行左边那个数 −2 − λ，什么时候是 0？λ = ？" answer=-2
+学生: value -2
+say "嗯。"

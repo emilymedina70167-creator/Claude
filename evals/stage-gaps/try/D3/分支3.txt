@@ -1,0 +1,15 @@
+# D3 分支 3：2020 题点成了从 b 起的 Prim；重播学生的顺序、和价目单、和 Prim 并排
+graph g = a-b:20 a-e:9 a-c:12 b-e:11 b-d:6 b-f:5 e-c:10 e-d:14 c-d:18 d-f:7
+array k = bf5 bd6 df7 ae9 ce10 be11 ac12 ed14 cd18 ab20
+# 重播：只能老师一条一条 paint，没有「按学生顺序重播」「能快能慢能停」
+paint g.b~f g4
+wait 600
+paint g.b~d g4
+wait 600
+paint g.b~e g4
+glow k.4 k.5
+say "重播到 {k.6}：比 11 便宜、也不成圈的，还有谁？"
+# 点了成圈的 (d,f)：页面不说成圈，老师自己 link
+link g.d g.f g2
+ask tap k "点一张还亮着的卡片" expect=k.4
+学生: tap k.4

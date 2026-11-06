@@ -1,0 +1,26 @@
+# D2 第 2 幕：「拎」一下就是一次旋转
+tree t = 50 30 60 20 40
+bf t
+say "只许用这一招：按住一个结点往上拎，拎过它的爸爸。让 50 别红。"
+insert t 10
+# 学生按住结点往上拖：说明里树只能 open 成「拖到另一个结点上换值」。先看学生真拖会怎样
+open t
+ask next "拎好了点下面" button="平了"
+学生: swap t.30 t.50
+学生: next
+# 换值把二叉排序树弄坏了；改成学生点要拎的那个，老师替学生转。先「撤一步」：重造插入后的树
+close t
+tree t = 50 30 60 20 40 _ _ 10
+bf t
+ask tap t "你想按住谁往上拎？点它" expect=t.30
+学生: tap t.20
+# 拎 20 过 30 = 在 30 那里右旋
+rotate t.30 right
+ask tap t "50 还红。撤回来了，再点一个" expect=t.30
+学生: tap t.30
+tree t = 50 30 60 20 40 _ _ 10
+bf t
+rotate t.50 right
+say "平了。谁上去了？"
+ask tap t "{t.40} 现在挂在谁身上？" expect=t.50
+学生: tap t.50

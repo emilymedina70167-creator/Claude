@@ -1,0 +1,32 @@
+# D4 第 2 幕：挖坑划分：49 拿出来，j 从右往左找小的填坑，i 从左往右找大的填坑
+array a = 49 38 65 97 76 13 27 49′
+array pv = 49
+paint pv.1 g4
+lift pv.1
+label lpv pv.1 "枢轴" side=left tone=note
+write a.1 坑
+ptr i a.1
+ptr j a.8
+paint a#8 g1
+label rule a.1-8 "卡只能放进坑里" side=above tone=key
+card log = "记录"
+say "49 先拿出来，第 1 格空了。左边该放什么样的数？从哪头找一张来填？"
+ask tap a "j 从右往左找，停在哪一张？" expect=a.7
+学生: tap a.7
+ptr j a.7
+paint a.7 g1
+say "{a.7} 比 49 小。把它填进坑里。"
+open a
+goal g1 "把 {a.7} 填进坑里" when="a.1 = 27"
+@g1 addline log "j 走到 7：27<49 → 27 填第 1 格，坑到第 7 格"
+@g1 ask tap a "坑跑到第 7 格了。轮到 i 往右找：停在哪一张？" expect=a.3
+学生: swap a#7 a#1
+学生: tap a.3
+ptr i a.3
+goal g2 "把 {a.3} 填进坑里" when="a.7 = 65"
+@g2 addline log "i 走到 3：65≥49 → 65 填第 7 格，坑到第 3 格"
+@g2 ask tap a "j 接着往左：停在哪？" expect=a.6
+# 学生没用坑，直接把 65 和 13 对调了：页面照做，规则牌拦不住
+学生: swap a#3 a#6
+学生: swap a#3 a#1
+学生: tap a.6

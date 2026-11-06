@@ -1,0 +1,29 @@
+# D3 第 8 幕：负权边让 Dijkstra 锁错；负权回路没有最短
+graph g = 0>1:7 1>2:-5 0>2:5 pos="0=0,1 1=1,0 2=2,1"
+paint g.0 g4
+tag g ∞
+tag g.0 0
+relax g.0 -> g.1
+relax g.0 -> g.2
+dial w = -5 range=-6-3 at=g.1~2
+label box g.2 "Dijkstra 锁出来的到 2：?　真的最短到 2：?" side=below tone=note
+say "同样的玩法，这张你再锁一遍。"
+ask tap g.1 g.2 "先锁哪一个？" expect=g.2
+学生: tap g.2
+paint g.2 g4
+ask tap g.1 "再锁 {g.1}" expect=g.1
+学生: tap g.1
+paint g.1 g4
+glow g.1~2
+# 2 已经锁了，可 7+(−5)=2 更小：页面有没有「裂开」？relax 会不会照改已锁的 2？
+relax g.1 -> g.2
+say "第 5 幕你说 3 敢锁，凭的是哪句话？这里哪句不成立了？"
+ask next "拨一下 $w$，看到多少开始锁错" button="找到了"
+学生: next
+# 换成图 6.18(b)：负权回路，绕圈里程越来越小
+unlabel box
+remove g
+graph h = 0>1:1 1>2:1 1>0:-2 pos="0=0,1 1=1,0 2=2,1"
+walk h.0 h.1 h.0 h.1 h.0
+ask value "绕着这一圈走，0 到 0 最短是多少？" answer=-2
+学生: value -2

@@ -1,0 +1,29 @@
+# L1 第 5 幕：珠串 (AB)(AB) → AABB，每一步拿一张依据卡
+matrix A = 3 4 / -1 -2
+matrix B = 1 1 / -3 -2 beside=A
+product P = A B
+mul P
+product R = P P
+mul R
+tex f = "(\hl{a1}{A}\hl{b1}{B})(\hl{a2}{A}\hl{b2}{B})"
+card k = "结合律（挪括号）" "数乘结合律" "EC = C" "CE = C" "交换（指出哪两颗）"
+say "第一串：把 {f} 变成 AABB。每动一步，拿一张依据卡。"
+retex f "\hl{a1}{A}(\hl{b1}{B}\hl{a2}{A})\hl{b2}{B}"
+ask tap k "括号这样挪，凭哪条？"
+学生: tap k.1
+next f "= \hl{a1}{A}(\hl{a2}{A}\hl{b1}{B})\hl{b2}{B}"
+ask tap k "{f.b1} 和 {f.a2} 换位，凭哪条？"
+学生: tap k.5
+product X = B A
+mul X
+product Y = A B
+mul Y
+glow f.b1 f.a2
+say "{X} 和 {Y} 不一样，这一步过不去。"
+ask say "卡在哪两颗中间？"
+学生: say B 和 A
+tex g = "(5\hl{e}{E})\hl{c}{C}"
+say "第二串：证 (5E)C = C(5E)。每动一下都要拿一张卡。"
+ask tap k "第一步凭哪条？"
+学生: tap k.5
+say "嗯。"

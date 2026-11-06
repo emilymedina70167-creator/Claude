@@ -1,0 +1,22 @@
+# L2 第 4 幕：学生自己一步一张消成阶梯形，从下往上读出解
+matrix M0 = 1 2 0 | 2 / 1 0 -4 | 0 / 1 2 -2 | 0
+matrix M1 = 1 2 0 | 2 / 1 0 -4 | 0 / 1 2 -2 | 0
+say "把 {M1} 台阶线下面全变成 0。一步改一张，写下这一步做了什么。"
+open M1 edit range=-6..6
+goal g1 "台阶线下面全是 0" when="M1.2,1 = 0, M1.3,1 = 0, M1.3,2 = 0"
+@g1 stairs M1
+@g1 say "阶梯形 ✓"
+@g1 ask value "最下面一行里只剩谁？x3 = ？" answer=1
+学生: write M1.2,1 0
+学生: write M1.2,2 -2
+学生: write M1.2,3 4
+学生: write M1.2,4 -2
+学生: write M1.3,1 0
+学生: write M1.3,2 0
+学生: write M1.3,3 -2
+学生: write M1.3,4 -2
+学生: value 1
+say "x3 = 1。往上一行呢？"
+ask value "x2 = ？" answer=-1
+学生: value -3
+say "嗯。"

@@ -1,0 +1,13 @@
+# D1 分支 3：倒推增量只比第 1 个和第 1+d 个。页面要提供：照学生的检查规则跑、每条链坏在哪几对、学生查了哪几条链
+array p1 = 1 3 7 5 2 6 4 9 11 10 8
+dial e = 3 range=1-10 at=p1
+label le dial:e "{e} 条链" side=right
+group p1 stride=e
+say "你比的是哪两个？写下你的检查规则。"
+ask say "我比的是哪两个？"
+学生: say 只比第1个和第1+d个
+# 页面能不能照这条规则把四个选项都跑一遍：没有能写的指令；老师只能自己比
+compare p1.1 p1.4
+compare p1.2 p1.5
+ask tap p1 "第二条链从第 2 个往下走：坏在哪一对？点前面那张" expect=p1.2
+学生: tap p1.2

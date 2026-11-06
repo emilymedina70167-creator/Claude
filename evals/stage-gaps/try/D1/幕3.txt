@@ -1,0 +1,43 @@
+# D1 第 3 幕：d 缩小到 1，叫出名字；试验台
+array a = 13 27 49′ 55 04 49 38 65 97 76
+array b = 13 04 49′ 38 27 49 55 65 97 76
+label lb b "第 1 幕的下排" side=left tone=soft
+dim b
+dial d = 5 range=1-9 at=a
+label dl dial:d "d = {d}" side=right
+group a stride=d
+card q = "趟数记录" "d=5：13 27 49′ 55 04 49 38 65 97 76｜挪 5 格｜累计 5"
+say "再来一趟，这回隔 3。"
+ask next "把 $d$ 拨到 3，看它怎么分组" button="拨好了"
+# 工具里学生拨不了拨数：只能按按钮，老师替学生拨
+学生: next
+set d 3
+split a
+open a
+# 49′ 和 49 一样大：写 a.3 < a.6 永远做不到（说明里只有 <），这一对只好不写
+goal g1 "三组各自排好" when="a.1 < a.4, a.4 < a.7, a.7 < a.10, a.2 < a.5, a.5 < a.8, a.6 < a.9"
+goal g2 "这一排和第 1 幕的下排一样" when="a = b"
+@g1 close a
+@g1 merge a
+@g1 undim b
+@g2 say "和第 1 幕的下排一模一样。"
+@g1 ask say "认得这一排吗？还差什么才算排好？"
+学生: swap a#7 a#4
+学生: swap a#5 a#2
+学生: say 跟第一幕的下排一样，还要d=1再走一遍
+addline q "d=3：13 04 49′ 38 27 49 55 65 97 76｜挪 2 格｜累计 7"
+set d 1
+# d=1：页面不会照直接插入自动走，老师一张张 move
+move a#5 -> a.1
+move a#7 -> a.3
+move a#2 -> a.3
+move a#10 -> a.9
+addline q "d=1：04 13 27 38 49′ 49 55 65 76 97｜挪 5 格｜累计 12"
+say "一共挪了几格？跟第 1 幕上排比。"
+ask value "三趟一共挪了几格？" answer=12
+学生: value 12
+say "这就叫希尔排序，也叫缩小增量排序。"
+say "找一串三趟以内、比 5,3,1 还省的。"
+# 试验台：输入一串增量自动跑没有能写的东西，只能让学生打字，老师自己算
+ask say "写一串增量"
+学生: say 7,2,1

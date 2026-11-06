@@ -1,0 +1,14 @@
+# D1 分支 2：「隔 5」读成「连续 5 个一段」。页面要提供：按学生自己的分法分组、排、落回；学生那排接着做 d=1 要挪几格；认出是哪种错法
+array a = 49 38 65 97 76 13 27 49′ 55 04
+# 学生连成一段一组：说明里分组只有 group stride=；试着让学生拖成自己以为的结果
+open a
+ask next "按你分的组排好，点下面" button="排好了"
+学生: swap a#1 a#2
+学生: swap a#6 a#10
+学生: next
+array c = 13 27 49′ 55 04 49 38 65 97 76
+label lc c "隔 5 分组排完" side=left tone=soft
+label la a "你排的" side=left tone=soft
+say "两排都接着只做 d=1：哪排还要挪得多？"
+ask say "哪排还要挪得多？"
+学生: say 不知道

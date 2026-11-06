@@ -1,0 +1,16 @@
+# D3 第 9 幕：谁快——拨点数、边数，三个计步器、一张小坐标
+graph g = A-B:3 B-C:5 C-D:2 D-E:7 E-F:4 F-G:6 G-H:1
+dial v = 8 range=4-16
+dial e = 7 range=3-28
+label lv dial:v "点数 |V| = {v}" side=right
+label le dial:e "边数 |E| = {e}" side=right
+label cnt g.A "Prim 走了 ? 步 · Kruskal 走了 ? 步 · Dijkstra：挑最小 ? 步 + 改 dist ? 步" side=above tone=note
+say "拨边数，看哪个表在动。"
+ask next "拨一下 $e$，看哪个计步器在动" button="看好了"
+学生: next
+# 老师替学生拨一下：图会不会长出边、计步器会不会动
+set e 16
+set v 10
+say "再拨点数。"
+ask say "边多（稠密）用谁、边少点多（稀疏）用谁？"
+学生: say 稠密用Kruskal

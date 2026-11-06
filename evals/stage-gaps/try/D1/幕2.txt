@@ -1,0 +1,28 @@
+# D1 第 2 幕：隔 5 格分组、组内插入
+array a = 49 38 65 97 76 13 27 49′ 55 04
+label ca a "挪了 0 格" side=right tone=key
+label rule a "新规矩：每张牌只跟隔 5 格的牌比，一跳就跳 5 格" side=above tone=note
+ask tap a "点 {a.1}，它能跟谁比？" expect=a.6
+学生: tap a.6
+# 学生自己连线分组：没有学生画弧的动作，只能问一组一组点；老师替学生连
+link a.1 a.6 g1
+say "对，隔 5 格。全连上：一共几组、每组几张？"
+ask say "一共几组、每组几张？"
+学生: say 第1和第6、第2和第7……一共5组，每组2张
+# 分组和泳道只能老师按 stride 做，不能按学生连的线
+unlink a
+group a stride=5
+split a
+say "每组各排各的：小的拖到前面。"
+open a
+goal g1 "每条泳道排成从小到大" when="a.1 < a.6, a.2 < a.7, a.3 < a.8, a.4 < a.9, a.5 < a.10"
+@g1 say "五条都排好了。"
+@g1 close a
+@g1 merge a
+@g1 ask tap a "看 {a#10}：这一趟谁跳得最远？" expect=a#10
+学生: swap a#6 a#1
+学生: swap a#7 a#2
+学生: swap a#8 a#3
+学生: swap a#9 a#4
+学生: swap a#10 a#5
+学生: tap a#10

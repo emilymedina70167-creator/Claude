@@ -1,0 +1,12 @@
+# D2 分支 3：删除以后最多转几次。页面要提供：删了以后往上每个结点的平衡因子；每修一处那个位置的高度前后；修了几处
+tree t = 8 5 11 3 7 10 12 2 4 6 _ 9 _ _ _ 1
+bf t
+delete t.12
+ask tap t "谁红了？" expect=t.11
+学生: tap t.11
+rotate t.11 LL
+ask tap t "修好了。现在呢？" expect=t.8
+学生: tap t.8
+rotate t.8 LL
+ask value "一共修了几处？" answer=2
+学生: value 2

@@ -1,0 +1,34 @@
+# L1 第 7 幕：(A+E)³ 化成 aA + bE；A 的 n 次方拆成 E + N
+card q = "A² = 2A，把 (A+E)³ 化成 aA + bE" "a = ？"
+matrix A = 1 1 / 1 1
+product A2 = A A
+mul A2
+say "这题你上次说不会。现在 A 和 E 能换，你来展开 (A+E)³。"
+ask value "a 是几？" answer=13
+学生: value 13
+ask value "b 是几？" answer=1
+学生: value 1
+remove q
+remove A2
+matrix A = 1 1 0 / 0 1 1 / 0 0 1
+say "这个 {A} 的 n 次方。先多乘几次看看。"
+ask next "乘一次 A" button="×A"
+学生: next
+product A2 = A A
+mul A2
+ask next "再乘一次" button="×A"
+学生: next
+product A3 = A2 A
+mul A3
+matrix E = 1 0 0 / 0 1 0 / 0 0 1
+matrix N = 0 1 0 / 0 0 1 / 0 0 0 beside=E
+product N2 = N N
+mul N2
+product N3 = N2 N
+mul N3
+dial n = 3 range=2-6 at=N
+label ln dial:n "n = {n}" side=right
+say "拨 {n}，看 {A3} 右上角。"
+ask value "A¹⁰⁰ 右上角是几？" answer=4950
+学生: value 4950
+say "对。"

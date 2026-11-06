@@ -1,0 +1,23 @@
+# D2 第 6 幕：高 h 层的 AVL 至少几个结点
+# 结点里不写数：试着都写成 ·
+tree s = · · · · · · ·
+bf s
+card tb = "h：1 2 3 4 5 6" "最少几个：1 2 ? ? ? ?" "最多几个：1 3 ? ? ? ?"
+say "摘叶子，摘到最少。规矩：不许有红的，还得是 3 层。"
+# 学生点叶子摘掉：没有学生删结点的动作；只能 ask tap 一下，老师 delete
+ask tap s "点一个要摘的叶子"
+学生: tap s#7
+delete s#7
+ask tap s "再点一个"
+学生: tap s#6
+delete s#6
+ask tap s "再点一个"
+学生: tap s#5
+delete s#5
+ask value "3 层最少几个结点？" answer=4
+学生: value 4
+# 5 层：把两张存下的小卡拖到根下面拼起来——没有；老师直接按层序造一棵最瘦的 5 层
+tree s = 8 5 11 3 7 10 12 2 4 6 _ 9 _ _ _ 1
+bf s
+ask value "20 个结点的 AVL，最多能有几层？" answer=6
+学生: value 5

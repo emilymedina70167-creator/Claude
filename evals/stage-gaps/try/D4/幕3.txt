@@ -1,0 +1,37 @@
+# D4 第 3 幕：真题 04 自己划一趟：先猜落点，指针「点一下自己走」，再对选项
+array a = 46 79 56 38 40 84
+paint a.1 g4
+card opt = "A (38, 40, 46, 56, 79, 84)" "B (40, 38, 46, 79, 56, 84)" "C (40, 38, 46, 56, 79, 84)" "D (40, 38, 46, 84, 56, 79)"
+cover opt
+say "先别动手：{a.1} 最后会在第几格？"
+ask tap a "点你猜的那一格"
+学生: tap a.3
+write a.1 坑
+array pv = 46
+paint pv.1 g4
+ptr i a.1
+ptr j a.6
+card ctl = "让 i 走" "让 j 走"
+say "做一遍看看。这次指针点一下它自己走，但该谁走、找到的往哪放，你来定。"
+ask tap ctl "该谁走？" expect=ctl.2
+学生: tap ctl.2
+# 「j 自己往左走、停在第一张比 46 小的」：页面不会自己找，只能老师 hop 再挪指针
+hop a.6 -> a.5 color=g5
+ptr j a.5
+open a
+goal g1 "把找到的那张放进坑里" when="a.1 = 40"
+@g1 ask tap ctl "下一步该谁走？" expect=ctl.1
+学生: swap a.5 a.1
+学生: tap ctl.1
+# 跳到做完：一排 40 38 46 56 79 84，翻开选项（原先这里写的是 array a = 40 38 46 56 79 84，同名重造以后整块舞台缩到一角、格子空了；改成一格一格 write）
+write a.2 38
+write a.3 46
+write a.4 56
+write a.5 79
+unpaint a.5
+paint a.3 g4
+label br a.3 "{40 38} 46 {56 79 84}" side=below tone=note
+uncover opt
+say "四个里哪个是你这一排？"
+ask tap opt "点一个选项" expect=opt.3
+学生: tap opt.4

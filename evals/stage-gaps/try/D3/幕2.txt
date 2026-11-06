@@ -1,0 +1,57 @@
+# D3 第 2 幕：Kruskal，照价目单一张张决定修不修；到 AB4 看两头颜色
+graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:5 C-E:9 D-E:2 D-F:6 E-F:3 pos="A=0,0 B=1,0 D=2,0 C=0,1 E=1,1 F=2,1"
+dim g.edges
+paint g.A g1
+paint g.B g2
+paint g.C g3
+paint g.D g4
+paint g.E g5
+paint g.F g6
+array k = BC1 AC2 DE2 EF3 AB4 BD5 CD5 DF6 CE9
+glow k.1
+label cc g.B "连通分量：6" side=above tone=key
+card c = "修" "不修"
+say "刚才你先挑便宜的。这回照价目单，从上往下一张一张来。"
+say "{k.1}：要，还是不要？"
+ask tap c "要还是不要？"
+学生: tap c.1
+undim g.B~C
+paint g.B~C g3
+paint g.B g3
+paint k.1 g3
+unglow k.1
+glow k.2
+retext cc "连通分量：5"
+ask tap c "{k.2}：要还是不要？"
+学生: tap c.1
+undim g.A~C
+paint g.A~C g3
+paint g.A g3
+paint k.2 g3
+unglow k.2
+glow k.3
+retext cc "连通分量：4"
+ask tap c "{k.3}：要还是不要？"
+学生: tap c.1
+undim g.D~E
+paint g.D~E g4
+paint g.E g4
+paint k.3 g4
+unglow k.3
+glow k.4
+retext cc "连通分量：3"
+ask tap c "{k.4}：要还是不要？"
+学生: tap c.1
+undim g.E~F
+paint g.E~F g4
+paint g.F g4
+paint k.4 g4
+unglow k.4
+glow k.5
+retext cc "连通分量：2"
+ask tap c "{k.5}：要还是不要？"
+学生: tap c.1
+# 学生把 AB4 也修了：页面没有「两头已经同色」的判断，老师自己看颜色
+glow g.A g.B
+ask say "修了这条，多连上了哪个村子？"
+学生: say 好像没有多连上谁

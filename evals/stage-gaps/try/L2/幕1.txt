@@ -1,0 +1,21 @@
+# L2 第 1 幕：用 a1、a2、a3 凑出 β 的配方；配方不止一个
+plane p range=-4..6
+vec p a1 = 1 0 color=g1
+vec p a2 = 0 1 color=g6
+vec p a3 = 1 1 color=g3
+point p b = 3 2
+label lb p.b "β" side=right tone=key
+dial x = 0 range=-4..4 at=p
+dial y = 0 range=-4..4 at=p
+dial z = 0 range=-4..4 at=p
+vec p s1 = x a1 color=g1
+vec p s2 = y a2 color=g6
+vec p s3 = z a3 color=g3
+sum p c = s1 + s2 + s3
+tex f = "x_1\begin{pmatrix}1\\0\end{pmatrix} + x_2\begin{pmatrix}0\\1\end{pmatrix} + x_3\begin{pmatrix}1\\1\end{pmatrix} = \begin{pmatrix}3\\2\end{pmatrix}"
+say "三根箭头各拉几倍、首尾接起来，让尖落到 {p.b} 上。"
+goal g1 "让链的尖落到星上" when="p.c = p.b"
+@g1 say "凑到了！还有别的拉法吗？"
+set x 3
+set y 2
+say "老师先拨一组。"

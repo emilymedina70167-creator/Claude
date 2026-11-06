@@ -1,0 +1,23 @@
+# D3 第 5 幕：三个点的 Dijkstra 种子：暂时的牌子、锁、锁了再改
+graph g = 0>1:3 1>2:1 0>2:7 pos="0=0,1 1=1,0 2=2,1"
+paint g.0 g4
+tag g ∞
+tag g.0 0
+say "从 {g.0} 出发到 {g.1}、到 {g.2} 各多远？现在只知道 0 直接能到的。"
+glow g.0~1 g.0~2
+relax g.0 -> g.1
+relax g.0 -> g.2
+unglow g.0~1 g.0~2
+ask tap g.1 g.2 "两个牌子，你敢先锁死哪一个？"
+# 学生先锁了 2（7）：错的那一种，看页面有没有「锁」和「裂缝」
+学生: tap g.2
+paint g.2 g4
+say "好，先锁 {g.2}。再锁 {g.1}。"
+paint g.1 g4
+glow g.1~2
+relax g.1 -> g.2
+ask value "2 的牌子现在该写几？" answer=4
+学生: value 1
+say "{g.1} 自己离 0 是几？"
+ask say "凭什么 3 敢锁？有没有更近的路去 1？"
+学生: say 因为3最小
