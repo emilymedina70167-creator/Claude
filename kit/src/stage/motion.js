@@ -58,7 +58,16 @@ export function revealDelays(n, { per = 22, max = 900 } = {}) {
   return Array.from({ length: n }, (_, i) => Math.round(i * step));
 }
 
-/** 一句话出来以后留多久给人读：按字数，有上下限（中文大约一秒八到十个字，画面同时在动，不用等读完） */
+/**
+ * 一句话出来以后、画面接着动之前留多久：按字数，有上下限。
+ * 第一版按「一秒八到十个字、画面在动也不用等读完」只留 35 毫秒一个字（最多 1.4 秒），真课里学生说根本来不及看就过了
+ * （2026-11-06）：讲新东西时一秒五六个字才读得进去。话现在一轮里一直留在画面上，这里只管「读完这句再动」
+ */
 export function readHold(chars) {
-  return Math.round(Math.max(250, Math.min(1400, chars * 35)));
+  return Math.round(Math.max(700, Math.min(3200, chars * 90)));
+}
+
+/** 贴上去的字留多久再演下一行（按字数，短的也停一下，不然几张接连冒出来看不过来） */
+export function labelHold(chars) {
+  return Math.round(Math.max(500, Math.min(1800, chars * 55)));
 }

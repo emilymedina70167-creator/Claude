@@ -1,7 +1,7 @@
 // 舞台（kit/src/stage/，docs/stage-plan.md）不碰 DOM 的部分：动作、排版和镜头、镜头指令的读法
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { arcPoints, arcPath, moveDuration, stagger, revealDelays, readHold } from '../kit/src/stage/motion.js';
+import { arcPoints, arcPath, moveDuration, stagger, revealDelays, readHold, labelHold } from '../kit/src/stage/motion.js';
 import { rowSlots, bbox, fitCamera, toScreen, placeLabel, overlaps, strideGroups } from '../kit/src/stage/layout.js';
 import '../kit/src/stage/scene.js'; // 各种东西自己的指令（array、swap……）由它注册进来
 import { tokenize, parseScript, parseRef, parseRich, richLength, COMMANDS } from '../kit/src/stage/script.js';
@@ -28,7 +28,8 @@ test('时长和错开：远的慢一点但有上限；一组东西依次出发',
   // 出字：长句总时长有上限，短句一个字一个字
   assert.equal(revealDelays(200).at(-1) <= 900, true);
   assert.deepEqual(revealDelays(3), [0, 22, 44]);
-  assert.ok(readHold(2) === 250 && readHold(1000) === 1400);
+  assert.ok(readHold(2) === 700 && readHold(30) === 2700 && readHold(1000) === 3200);
+  assert.ok(labelHold(2) === 500 && labelHold(20) === 1100 && labelHold(1000) === 1800);
 });
 
 test('镜头：放进屏幕上能用的地方（去掉顶上的话、底下的按钮），竖着空的时候往上提', () => {

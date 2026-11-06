@@ -44,7 +44,8 @@ export const card = {
   parts(o) { return o.lines; },
   pick(o, mark, sel, word) {
     const m = String(sel).match(/^(\d+)(?:-(\d+))?$/);
-    if (mark !== '.' || !m) throw new Error(`「${word}」：题卡写 ${o.id}.2（第 2 行）或 ${o.id}.2-3`);
+    // q#2 也认：一排格子的 # 是第几格，老师顺手写成 # 的不少（第一节真课的 ask tap q#2 q#3 就是这样没演上）
+    if ((mark !== '.' && mark !== '#') || !m) throw new Error(`「${word}」：题卡写 ${o.id}.2（第 2 行）或 ${o.id}.2-3`);
     const lo = Number(m[1]), hi = Number(m[2] ?? m[1]);
     const out = o.lines.filter((l) => l.key >= Math.min(lo, hi) && l.key <= Math.max(lo, hi));
     if (!out.length || out.length !== Math.abs(hi - lo) + 1) throw new Error(`${o.id} 只有 ${o.lines.length} 行`);

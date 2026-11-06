@@ -8,7 +8,7 @@
 //   老师的一轮 { role: 'claude', text（原样）, log（这一轮演了的行）, modelApplied, cost }
 //   学生的一轮 { role: 'student', text（写给老师看的那一句）, act, msg（发给老师的整条：学生做了什么 + 舞台现在）, log（学生拖、拨造成的行）}
 // 刷新后照各轮的 log 瞬间重放，最后一问照旧等学生。
-import { Stage, actText } from './stage.js';
+import { Stage, actText, stageLines, PACES } from './stage.js';
 import { buildStageSystem, turnMessage, firstMessage } from './doc.js';
 import { getAI } from '../ai.js';
 import { createSink } from '../live/sync.js';
@@ -49,7 +49,7 @@ export async function renderStageClass(root, meta = {}, desk) {
       <button type="button" class="sc-home" aria-label="回学习台">← 学习台</button>
       <div class="sc-title" role="heading" aria-level="1"></div>
       <span class="sc-think" hidden></span>
-      ${readOnly ? '<span class="sc-ro">只读</span>' : '<button type="button" class="sc-end">下课</button>'}
+      ${readOnly ? '<span class="sc-ro">只读</span>' : '<button type="button" class="sc-pace" aria-label="一段演完怎么往下走"></button><button type="button" class="sc-end">下课</button>'}
     </header>
     <div class="sc-stage"></div>
     <section class="sc-closing" hidden></section>`;
@@ -62,6 +62,11 @@ export async function renderStageClass(root, meta = {}, desk) {
   const stage = new Stage($('.sc-stage'), { input: !readOnly, onAct: (a) => onAct(a) });
   window.LAStage = stage;
   if (store.dev) window.LAStageClass = { stage, history: () => history };
+  // 一段演完：停下来等我点「接着」，还是停一会儿自己往下（这台设备记着）
+  const paceBtn = $('.sc-pace');
+  const paintPace = () => { if (paceBtn) { paceBtn.textContent = PACES[stage.pace]; paceBtn.dataset.pace = stage.pace; } };
+  paceBtn?.addEventListener('click', () => { stage.setPace(stage.pace === 'tap' ? 'auto' : 'tap'); paintPace(); });
+  paintPace();
 
   // —— 谁来讲课：claude.ai 里是真的 Opus 5.5；本地 ?dev 用模拟老师（不花额度）——
   const ai = readOnly ? null : await getAI();
@@ -78,12 +83,15 @@ export async function renderStageClass(root, meta = {}, desk) {
   let ended = false;
   let busy = false;
 
+  const putTurn = (row) => sink?.put('class_turns', { id: pad(row.seq), ...row });
   const addTurn = (t) => {
     const row = { ...t, seq: ++seq, at: Date.now(), session: sid };
     history.push(row);
-    sink?.put('class_turns', { id: pad(row.seq), ...row });
+    putTurn(row);
     return row;
   };
+  // 一轮演了哪几行：存着的 log；还没演完就刷新了的（没有 log）照老师写的字一行一行放回（写错的行重放时照样挡下）
+  const logOf = (t) => t.log || (t.role === 'claude' ? stageLines(t.text).filter((l) => l && l.trim() && !/^#/.test(l.trim())).map((src) => ({ src: src.trim(), by: 'teacher' })) : []);
 
   // —— 每一轮发给老师的：整份说明（每一轮现拼：记忆、资料包可能变了）+ 这节课的对话 ——
   function packWithBooks() {
@@ -159,21 +167,20 @@ export async function renderStageClass(root, meta = {}, desk) {
       const text = res.text || '';
       const mark = turn.mark;
       // 演完这一轮（等到 ask 那一行准备好），记下老师这一轮和它演了的行
+      // 这一轮写完就先存下（一段一停时一轮要演好几分钟，中途刷新不能丢）；演完、等学生了，再补上演了的行
       const ended0 = turn.end(text);
-      await waitArmed();
-      const teacherLog = stage.log.slice(mark).filter((r) => r.by !== 'student');
-      const claude = addTurn({ role: 'claude', text, modelApplied: res.modelApplied || 'mock', cost, log: teacherLog });
+      const claude = addTurn({ role: 'claude', text, modelApplied: res.modelApplied || 'mock', cost });
       await runMemo(text, claude.seq);
       thinking(false);
       busy = false;
+      await Promise.race([turn.armed, ended0]);
+      const teacherLog = stage.log.slice(mark).filter((r) => r.by !== 'student');
+      claude.log = teacherLog;
+      putTurn(claude);
       const result = await ended0;
       if (result.dead || ended) return null;
       return onStudent(result, claude, mark + teacherLog.length);
     }
-  }
-  // end() 在等学生的时候不返回：等到舞台在等学生（或者这一轮演完）
-  async function waitArmed() {
-    for (let i = 0; i < 600 && !stage.scene.waiting; i++) await new Promise((r) => setTimeout(r, 50));
   }
 
   // 学生做完：证据、学生的一轮（带发给老师的整条），接着下一轮
@@ -303,7 +310,7 @@ export async function renderStageClass(root, meta = {}, desk) {
   // —— 开课 / 刷新后放回 ——
   const live = history.filter((t) => !t.discarded);
   const closingTurn = live.find((t) => t.kind === 'closing');
-  const log = live.filter((t) => t.role === 'claude' || t.role === 'student').flatMap((t) => (t.log || []).map((r) => ({ ...r, turn: t.seq })));
+  const log = live.filter((t) => t.role === 'claude' || t.role === 'student').flatMap((t) => logOf(t).map((r) => ({ ...r, turn: t.seq })));
   if (log.length) await stage.replay(log);
   if (closingTurn) {
     ended = true;
@@ -316,7 +323,7 @@ export async function renderStageClass(root, meta = {}, desk) {
   if (!last) { teach('turn'); return { stage, history }; }
   if (last.role === 'student') { teach('turn'); return { stage, history }; }
   // 最后是老师那一轮：照它最后的 ask 接着等学生
-  const askLine = [...(last.log || [])].reverse().find((r) => /^ask\b/.test(r.src))?.src || 'ask next';
+  const askLine = [...logOf(last)].reverse().find((r) => /^ask\b/.test(r.src))?.src || 'ask next';
   (async () => {
     const t = stage.begin();
     const mark = stage.log.length;

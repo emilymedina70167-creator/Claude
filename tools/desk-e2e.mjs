@@ -502,8 +502,12 @@ const SUITES = {
     await tap('a:9');
     const rec = await t.waitFor(async () => (await t.docs('evidence')).find((e) => e.session === sid && e.src === 'record' && /^S\d+$/.test(e.comp || '')), { what: '点对的那一格记成 S… 的作答' });
     check(rec.ok === true, `点了预期的那一格，作答记成了 ok=${rec.ok}`);
-    // 第二轮：故意写错的一行跳过，memo 块写进记忆，ask value 当场判
+    // 第二轮：两句话中间停下来等学生点「接着」（上一句留在画面上）；故意写错的一行跳过，memo 块写进记忆，ask value 当场判
+    await t.waitFor(() => t.page.$('.st-beat-go'), { timeout: 30000, what: '第二轮讲完一段停下来等「接着」' });
+    check(!(await t.page.evaluate(() => window.LAStage.scene.waiting)), '一段一停的时候不该在等作答');
+    await t.page.click('.st-beat-go');
     await t.waitFor(() => t.page.$('.st-say.is-main input'), { timeout: 30000, what: '第二轮问一个要填的答案' });
+    check(await t.page.evaluate(() => /对，在右边/.test(document.querySelector('.st-caption').textContent) && /灰掉的这一半/.test(document.querySelector('.st-caption').textContent)), '第二轮说过的两句话没有都留在画面上');
     const tt = await turns();
     check(tt.some((x) => x.role === 'claude' && Array.isArray(x.log) && x.log.some((r) => /^array a/.test(r.src))), '老师那一轮没把演了的行记进 class_turns');
     await t.waitFor(async () => (await t.docs('observations')).some((o) => o.session === sid && /第一次就能说出往哪边找/.test(o.text || '')), { what: 'memo 块里的 note 写进记忆' });
@@ -511,12 +515,19 @@ const SUITES = {
     await t.waitFor(async () => (await t.docs('evidence')).some((e) => e.session === sid && e.src === 'record' && e.value === '5' && e.ok === true), { what: '填的答案记成作答（页面判对）' });
     const st = (await turns()).filter((x) => x.role === 'student').at(-1);
     check(/swap 要正好两格/.test(st?.msg || ''), '写错的那一行没在下一轮告诉老师');
-    // 第三轮：翻开中间那一格，问一句话；刷新以后照记录放回，接着等
-    await t.waitFor(() => t.page.$('.st-say.is-main input') && t.page.evaluate(() => window.LAStage?.scene.waiting?.kind === 'say'), { timeout: 30000, what: '第三轮问一句话' });
+    // 第三轮：翻开中间那一格，停下来时点「再看一遍」（倒回去重演这一段），再停着的时候刷新：
+    // 老师这一轮写完就存了（还没演完、没有 log），刷新以后照它写的字放回，接着等最后一问
+    await t.waitFor(() => t.page.$('.st-beat-again'), { timeout: 30000, what: '第三轮讲完一段停下来（有「再看一遍」）' });
+    await t.page.click('.st-beat-again');
+    await t.waitFor(() => t.page.$('.st-beat-go'), { timeout: 20000, what: '「再看一遍」演完又停下来' });
+    const again = await t.page.evaluate(() => ({ covered: window.LAStage.scene.objects.get('a').cells.filter((c) => c.covered).length, mid: window.LAStage.scene.objects.get('a').ptrs.get('mid') }));
+    check(again.covered === 4 && again.mid === 9, `「再看一遍」以后舞台不对：${JSON.stringify(again)}`);
+    await sleep(300);
     await t.page.reload(); await t.page.waitForLoadState('load');
     await t.waitFor(() => t.page.evaluate(() => window.LAStage?.scene.waiting?.kind === 'say'), { timeout: 20000, what: '刷新以后最后一问接着等' });
     const back = await t.page.evaluate(() => { const s = window.LAStage.scene; const a = s.objects.get('a'); return { dim: a.cells.filter((c) => c.dim).length, covered: a.cells.filter((c) => c.covered).length, ptr: a.ptrs.get('mid') }; });
     check(back.dim === 6 && back.covered === 4 && back.ptr === 9, `刷新以后舞台没照记录放回：${JSON.stringify(back)}`);
+    check(await t.page.evaluate(() => /翻开是/.test(document.querySelector('.st-caption').textContent) && /接下来往哪边/.test(document.querySelector('.st-caption').textContent)), '刷新以后这一轮说过的话、最后一问没放回画面上');
     await t.page.fill('#st-say-input', '往左，因为 33 比 37 小'); await t.page.click('.st-say-go');
     await t.waitFor(async () => (await t.docs('evidence')).some((e) => e.session === sid && e.src === 'say' && /往左/.test(e.text || '')), { what: '打的字记成学生说的话' });
     await t.waitFor(() => t.page.$('.st-next'), { timeout: 30000, what: '第四轮' });

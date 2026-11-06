@@ -5,7 +5,7 @@
 // （每种东西自己的在 types/xxx.view.js 的 choreo，共用的说话、比较、飞字在这里）→ sync 把画面对齐到场景
 // （每种东西的 view.sync 造 / 改自己的节点，挪动、连线、贴字、拨数这里统一演）。
 // 演过的每一行记进 log（学生拖、拨造成的变化也记成一行），刷新或作废一轮时照 log 瞬间重放（replay）。
-import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold } from './motion.js';
+import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHold } from './motion.js';
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf } from './scene.js';
@@ -16,15 +16,34 @@ const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cl
 const svg = (tag, attrs = {}, parent) => { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (parent) parent.appendChild(e); return e; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const tr = (x, y, s = 1) => `translate(${x}px, ${y}px)${s !== 1 ? ` scale(${s})` : ''}`;
+const CAPTION_MAX = 3; // 话最多留几句在画面上（这一轮说过的，旧的淡一点）
+
+/**
+ * 一段讲完怎么往下走（这台设备记着）：tap 停下来等学生点「接着」（默认）、auto 停一会儿自己往下。
+ * 2026-11-06 第一节真课：一轮三句话、两张矩阵、一格一格算乘积、两张贴的字一口气演完，学生说像放视频，来不及看就过了
+ */
+export const PACES = { tap: '一段一停', auto: '自动往下' };
+const PACE_KEY = 'la-stage-pace';
+export function storedPace() {
+  try { const v = localStorage.getItem(PACE_KEY); return PACES[v] ? v : 'tap'; } catch { return 'tap'; }
+}
+/** 一句写成一行指令里的字：引号挑字里没有的那一种 */
+export function quoteText(t) {
+  const s = String(t ?? '');
+  if (!s.includes('"')) return `"${s}"`;
+  if (!s.includes('」')) return `「${s}」`;
+  return `"${s.replace(/"/g, '”')}"`;
+}
 
 export { COLOR_NAMES };
 
 export class Stage {
-  constructor(host, { onAct = null, onLine = null, speed = 1, input = true } = {}) {
+  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null } = {}) {
     this.host = host;
     this.onAct = onAct;
     this.onLine = onLine; // 每演完老师的一行（量「第一个镜头多久出来」、收起「老师在想」）
     this.speed = speed;
+    this.pace = PACES[pace] ? pace : storedPace();
     this.withInput = input;
     this.reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.instant = false; // 重放时：不演动画、不等学生
@@ -56,7 +75,13 @@ export class Stage {
     this.ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => requestAnimationFrame(() => this.refocus(false))) : null;
     this.ro?.observe(this.view);
   }
-  destroy() { this.ro?.disconnect(); this.root.remove(); this.cancelWait?.(); }
+  destroy() { this.ro?.disconnect(); this.root.remove(); this.cancelWait?.(); this.cancelBeat?.(); }
+  setPace(p) {
+    if (!PACES[p]) return;
+    this.pace = p;
+    try { localStorage.setItem(PACE_KEY, p); } catch { /* 没有存储：这一次照样用 */ }
+    if (p === 'auto') this.cancelBeat?.(); // 正停着等学生：换成自动就接着往下
+  }
 
   // —— 动画：都走这一个口（速度、「减少动态」、重放统一管）——
   dur(ms) { return this.instant ? 0 : this.reduced ? 1 : Math.max(1, ms / this.speed); }
@@ -148,17 +173,33 @@ export class Stage {
     let asked = null;
     let lines = 0;
     let dead = false; // 这一轮作废了（不是指定的模型）：后面的行不演
+    let said = false; // 这一轮已经开口说过：再有一句 say 就是新的一段，开演之前停下来
+    let beat = null; // 正在演的这一段 { start: 开演时 log 多长, cmds }：「再看一遍」照它倒回去重演
+    let armedResolve;
+    const armed = new Promise((r) => { armedResolve = r; }); // 这一轮演完、在等学生了（或者作废了）
+    const run = (c) => {
+      const rec = { c, ok: true };
+      if (by === 'teacher') (beat ||= { start: this.log.length, cmds: [] }).cmds.push(rec);
+      return this.exec(c, { by, turn }).then((r) => { if (r === null) rec.ok = false; return r; });
+    };
     const enqueue = (c) => {
       if (dead) return;
       if (asked) { this.errors.push({ line: c.line, src: c.src?.trim(), error: 'ask 之后的行不演（一轮以 ask 结尾）' }); return; }
       if (c.cmd === 'ask') asked = c;
       lines++;
-      if (c.par && running) { running.jobs.push(this.exec(c, { by, turn })); return; }
+      if (c.par && running) { running.jobs.push(run(c)); return; }
+      const pause = by === 'teacher' && c.cmd === 'say' && said;
+      if (c.cmd === 'say') said = true;
       const batch = { jobs: [] };
       chain = chain.then(async () => {
         if (dead) return;
+        if (pause) {
+          await this.beat(beat, { by, turn, alive: () => !dead });
+          beat = null;
+          if (dead) return;
+        }
         running = batch;
-        batch.jobs.push(this.exec(c, { by, turn }));
+        batch.jobs.push(run(c));
         // & 开头的行可能在这一批开演以后才写出来：等到这一批的活都演完（期间新并进来的也等）
         for (let k = 0; k < batch.jobs.length; k++) await batch.jobs[k];
         running = null;
@@ -180,20 +221,79 @@ export class Stage {
       feed(text != null ? text : last, true);
       await chain;
       let act = null;
-      if (!this.instant && (asked || auto)) {
-        // 一轮没有 ask：页面替它等一下（按钮「接着」和打字），不让课停在半空
-        if (!asked) await this.exec({ cmd: 'ask', args: [{ t: 'word', v: 'next' }], opts: {}, line: 0, src: 'ask next' }, { by: 'page', turn });
+      if (!this.instant && !dead && (asked || auto)) {
+        if (!this.scene.waiting) {
+          // 一轮没有 ask，或者 ask 那一行写错了没演上：页面替它等，不让课停在半空。
+          // 写错的那一问照样把问题留在画面上，学生用话答（第一节真课 `ask tap q#2 q#3 "哪一句说得对？"` 写错了，问题没了、也没有按钮，课就停住了）
+          const q = asked ? (asked.args || []).find((a) => a.t === 'str')?.v : '';
+          const src = q ? `ask say ${quoteText(q)}` : 'ask next';
+          const [c] = parseScript(src);
+          await this.exec({ ...c, line: 0, src }, { by: 'page', turn });
+        }
+        armedResolve();
         act = await this.waitAct();
       }
+      armedResolve();
       return { act, errors: [...this.errors], lines, mark };
     };
-    const abort = async () => { dead = true; await chain.catch(() => {}); await this.rollback(mark); };
-    return { push: (text) => { if (!dead) { last = text; feed(text, false); } }, end, abort, turn, mark };
+    const abort = async () => { dead = true; this.cancelBeat?.(); await chain.catch(() => {}); armedResolve(); await this.rollback(mark); };
+    return { push: (text) => { if (!dead) { last = text; feed(text, false); } }, end, abort, turn, mark, armed };
+  }
+
+  /**
+   * 一段演完、下一段开演之前：停下来等学生点「接着」（点舞台上空的地方也行），「再看一遍」把这一段倒回去重演。
+   * 自动往下时停一会儿就走。话一轮里一直留着，所以学生停多久都看得到刚才说了什么
+   */
+  async beat(prev, { by, turn, alive }) {
+    if (this.instant) return;
+    if (this.pace === 'auto') { await this.wait(1400); return; }
+    for (;;) {
+      const choice = await new Promise((resolve) => {
+        const bar = el('div', 'st-beat', this.dock);
+        const again = prev?.cmds.some((x) => x.ok) ? el('button', 'st-beat-again', bar) : null;
+        if (again) { again.type = 'button'; again.textContent = '↺ 再看一遍'; }
+        const go = el('button', 'st-next st-beat-go', bar);
+        go.type = 'button';
+        go.textContent = '接着 ›';
+        this.tween(bar, [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 300, easing: EASE.out });
+        let over = false;
+        const onView = (e) => { if (!e.target.closest?.('.st-dock, button, input, .st-chip, .st-word')) done('go'); };
+        const done = (k) => {
+          if (over) return;
+          over = true;
+          this.view.removeEventListener('pointerup', onView);
+          bar.remove();
+          this.cancelBeat = null;
+          resolve(k);
+        };
+        go.addEventListener('click', () => done('go'));
+        again?.addEventListener('click', () => done('again'));
+        this.view.addEventListener('pointerup', onView);
+        this.cancelBeat = () => done('go');
+        this.keepInView();
+      });
+      if (choice !== 'again' || !alive()) return;
+      await this.rewatch(prev, { by, turn });
+      if (!alive()) return;
+    }
+  }
+  /** 把刚演完的一段倒回去再演一遍：先瞬间退回这一段开演之前，再照原来的先后（& 的照样一起）演 */
+  async rewatch(beat, { by, turn }) {
+    await this.replay(this.log.slice(0, beat.start));
+    let jobs = [];
+    for (const { c, ok } of beat.cmds) {
+      if (!ok) continue;
+      if (c.par && jobs.length) { jobs.push(this.exec(c, { by, turn })); continue; }
+      await Promise.all(jobs);
+      jobs = [this.exec(c, { by, turn })];
+    }
+    await Promise.all(jobs);
   }
 
   /** 作废这一轮：照 log 退回这一轮开始之前的样子 */
   async rollback(mark) {
     this.cancelWait?.();
+    this.cancelBeat?.();
     await this.replay(this.log.slice(0, mark));
   }
 
@@ -214,7 +314,7 @@ export class Stage {
         await this.exec(c, { by: row.by, turn: row.turn });
       }
     }
-    if (asked) await this.say(asked);
+    if (asked) await this.say(asked, { ask: true });
     this.instant = false;
     this.scene.waiting = null;
     await this.sync();
@@ -227,6 +327,7 @@ export class Stage {
     this.paths.forEach((p) => p.remove()); this.paths.clear();
     this.labelNodes.forEach((l) => l.node.remove()); this.labelNodes.clear();
     this.caption.replaceChildren();
+    this.captionTurn = null;
     this.dock.replaceChildren();
   }
 
@@ -239,6 +340,7 @@ export class Stage {
     }
     const pre = this.capture();
     const fx = this.scene.apply(c);
+    this.execTurn = turn;
     this.log.push({ src: c.src?.trim() || '', by, turn });
     if (by === 'teacher' && !this.instant) this.onLine?.(c);
     try {
@@ -246,6 +348,11 @@ export class Stage {
       if (choreo) await choreo(c, fx, pre);
       await this.sync({ pre, cmd: c.cmd, fx });
       if (!this.instant && c.cmd !== 'camera') this.keepInView();
+      // 贴上去的字：读一下再演下一行（第一节真课两张接连冒出来，一张 0.4 秒就过去了）
+      if (!this.instant && (c.cmd === 'label' || c.cmd === 'retext')) {
+        const str = (c.args || []).find((a) => a.t === 'str')?.v || '';
+        await this.wait(labelHold(richLength(parseRich(str))));
+      }
     } catch (e) {
       // 画面出错不能把课卡住：记下来，画面照场景重画一遍
       this.errors.push({ line: c.line, src: c.src?.trim(), error: `画面没演好：${e.message}` });
@@ -286,7 +393,7 @@ export class Stage {
   async do_pulse(c, fx) { await Promise.all(fx.parts.map((x, i) => this.pulse(x, stagger(i, { step: 60 })))); }
   async do_camera() { await this.refocus(true); }
   async do_wait(c, fx) { await this.wait(fx.ms); }
-  async do_ask() { const w = this.scene.waiting; if (w?.prompt) await this.say(w.prompt); }
+  async do_ask() { const w = this.scene.waiting; if (w?.prompt) await this.say(w.prompt, { ask: true }); }
 
   // 比较：两个亮一下，中间冒出「65 > 49′」，停一会儿再收起
   async do_compare(c, fx) {
@@ -307,7 +414,7 @@ export class Stage {
 
   // 话里的 [词] 飞到图上：sync 先把落点算好（字先藏着），这里从那个词的位置飞过去
   async do_fly(c, fx) {
-    const word = this.caption.querySelectorAll('.st-line:not(.is-out) .st-word')[fx.word];
+    const word = [...this.caption.querySelectorAll('.st-line:not(.is-out)[data-kind="say"]')].at(-1)?.querySelectorAll('.st-word')[fx.word];
     await this.sync({ hide: [fx.id] });
     const l = this.labelNodes.get(fx.id);
     if (!l || !word || this.instant) { if (l) l.node.style.opacity = ''; return; }
@@ -505,13 +612,23 @@ export class Stage {
   }
 
   // —— 说的话：一个字一个字写出来 ——
-  async say(text) {
-    [...this.caption.children].forEach((n) => {
+  // 一轮里说过的话留在画面上（旧的淡一点、小一点，最多 CAPTION_MAX 句），老师新一轮开口时才收起；
+  // 第一版每句话都把上一句擦掉，等学生的时候只剩问题，前面讲了什么全没了
+  async say(text, { ask = false } = {}) {
+    let live = [...this.caption.querySelectorAll('.st-line:not(.is-out)')];
+    const out = (n) => {
       n.classList.add('is-out');
       this.tween(n, [{ opacity: 1, transform: 'translateY(0)' }, { opacity: 0, transform: 'translateY(-14px)' }], { duration: 260, easing: EASE.in }).then(() => n.remove());
-    });
-    if (!text) return;
+    };
+    if (!text) { live.forEach(out); return; }
+    if (ask && live.at(-1)?.__text === text) return; // 刷新以后重新等最后一问：这句已经在上面了
+    if (!ask && this.captionTurn !== this.execTurn) { live.forEach(out); live = []; }
+    this.captionTurn = this.execTurn;
+    live.forEach((n) => n.classList.add('is-past'));
+    live.slice(0, Math.max(0, live.length - (CAPTION_MAX - 1))).forEach(out);
     const line = el('p', 'st-line', this.caption);
+    line.__text = text;
+    line.dataset.kind = ask ? 'ask' : 'say';
     const glyphs = [];
     this.richInto(line, text, { glyphs, words: [] });
     if (this.instant) return;
@@ -562,8 +679,7 @@ export class Stage {
   // —— 镜头 ——
   viewSize() { return { w: this.view.clientWidth || 800, h: this.view.clientHeight || 600 }; }
   reserve() {
-    const cap = this.caption.querySelector('.st-line:not(.is-out)');
-    const ch = Math.max(84, (cap?.offsetHeight || 0) + 34);
+    const ch = Math.max(84, (this.caption.offsetHeight || 0) + 34);
     return { top: ch + 18, bottom: this.dock.childElementCount ? 104 : 40 };
   }
   focusBox() {

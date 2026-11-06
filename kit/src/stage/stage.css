@@ -79,8 +79,11 @@
 
 /* 说的话：在屏幕上方，一个字一个字写出来 */
 /* 说的话的下沿贴着镜头里那块东西的上方（stage.js 的 placeCaption 写 bottom），往上长 */
-.st-caption { position: absolute; left: 0; right: 0; top: auto; bottom: 70%; padding: 0 max(24px, env(safe-area-inset-right, 0px)) 0 max(24px, env(safe-area-inset-left, 0px)); display: grid; align-items: end; justify-items: center; pointer-events: none; }
-.st-line { grid-area: 1 / 1; margin: 0; width: min(100%, 34em); font: 500 22px/1.65 var(--sans, sans-serif); letter-spacing: .01em; text-wrap: pretty; }
+/* 一轮里说过的话一句接一句往下排，最新的一句在最下面（离画面最近）；旧的淡一点、小一点，学生随时回头看 */
+.st-caption { position: absolute; left: 0; right: 0; top: auto; bottom: 70%; padding: 0 max(24px, env(safe-area-inset-right, 0px)) 0 max(24px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 2px; pointer-events: none; }
+.st-line { margin: 0; width: min(100%, 748px); font: 500 22px/1.65 var(--sans, sans-serif); letter-spacing: .01em; text-wrap: pretty; transition: font-size .35s, color .35s; }
+.st-line.is-past { font-size: 17px; line-height: 1.6; color: var(--st-muted); }
+.st-line.is-out { position: absolute; left: 0; right: 0; bottom: 0; margin: 0 auto; }
 .st-line > * { display: inline-block; }
 .st-line .st-ch { white-space: pre; }
 .st-caption .st-chip, .st-caption .st-word { pointer-events: auto; }
@@ -114,7 +117,7 @@
 .st-next:active { scale: .96; }
 .st-chip:focus-visible, .st-next:focus-visible, .st-dial-b:focus-visible { outline: 2px solid var(--st-brand); outline-offset: 2px; }
 
-@media (max-width: 600px) { .st-line { font-size: 19px; } }
+@media (max-width: 600px) { .st-line { font-size: 19px; } .st-line.is-past { font-size: 15px; } }
 @media (prefers-reduced-motion: reduce) { .st-cell.is-tap::after, .st-cell.is-drag::after { animation: none; opacity: .5; } }
 
 /* 灰掉的格子（比如查找时已经排除的那一半） */
@@ -135,6 +138,12 @@
 .st-say-go { min-width: 56px; height: 48px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--st-brand) 12%, var(--st-card)); color: var(--st-brand); font: 600 16px var(--sans, sans-serif); cursor: pointer; }
 .st-say.is-main .st-say-go { background: var(--st-brand); color: var(--st-brand-ink); }
 .st-dock { flex-wrap: wrap; align-items: center; }
+
+/* 一段演完停下来：「接着」往下演，「再看一遍」把这一段倒回去重演 */
+.st-beat { pointer-events: auto; display: flex; gap: 10px; align-items: center; }
+.st-beat-again { min-height: 50px; padding: 0 20px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--st-brand) 10%, var(--st-card)); color: var(--st-brand); font: 600 16px/1 var(--sans, sans-serif); cursor: pointer; box-shadow: 0 0 0 1px color-mix(in srgb, var(--st-brand) 22%, transparent); }
+.st-beat-again:active { scale: .96; }
+.st-beat-again:focus-visible { outline: 2px solid var(--st-brand); outline-offset: 2px; }
 
 /* 扣过去的格子：看不见值（查找时只能一格一格翻开看），背面一个「?」 */
 .st-cell.is-covered { background: color-mix(in srgb, var(--st-brand) 14%, var(--st-card)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--st-brand) 30%, transparent), 0 6px 16px -10px rgb(var(--shade-rgb, 25 45 40) / 0.4); }
