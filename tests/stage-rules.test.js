@@ -101,3 +101,9 @@ test('predicateOf 和 gestureOf', () => {
   assert.equal(gestureOf(sc.objects.get('c'), 'drag'), null);
   assert.equal(gestureOf(sc.objects.get('z'), 'tap'), null);
 });
+
+test('交了规则但没交 next 的种类不算做完', () => {
+  registerRules('checkonly', { check: () => ({ legal: true, right: true }) });
+  const sc = { objects: new Map([['k', { type: 'checkonly', id: 'k' }]]) };
+  assert.equal(done(sc, 'k'), false);
+});

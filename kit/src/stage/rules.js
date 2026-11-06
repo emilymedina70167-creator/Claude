@@ -21,8 +21,11 @@ const DEFAULTS = {
 /** 登记一种东西的规则；缺的项给默认值（不判、不拦） */
 export function registerRules(type, rules = {}) {
   const r = { ...DEFAULTS, ...rules };
+  // 记下这种东西有没有交 next：没交的 next 默认 null，不能当成「做完了」
+  const hasNext = typeof rules.next === 'function';
   // 显式写了 undefined / null 的也退回默认，免得裁判到处判空
   for (const k of Object.keys(DEFAULTS)) if (r[k] == null) r[k] = DEFAULTS[k];
+  r.hasNext = hasNext;
   REGISTRY.set(type, r);
   return r;
 }
@@ -48,5 +51,5 @@ export function gestureOf(o, action) {
 export function done(scene, objId) {
   const o = scene?.objects?.get(objId);
   const r = rulesOf(o);
-  return !!r && r.next(o, scene) === null;
+  return !!r && r.hasNext && r.next(o, scene) === null;
 }
