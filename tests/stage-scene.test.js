@@ -199,3 +199,17 @@ ask tap a "{k.1} 比它小。现在还可能藏在哪几格？点其中一格。
   assert.equal(k.origin.x, Math.round((0 + 11 * 76 - 12) / 2 - 64 / 2), '一格的「要找的」放在正下方');
 });
 
+test('拨数的范围能写负数（-3..3），比大小认分数', async () => {
+  const { parseRange } = await import('../kit/src/stage/scene.js');
+  assert.deepEqual(parseRange('-3..3'), [-3, 3]);
+  assert.deepEqual(parseRange('1-5'), [1, 5]);
+  assert.deepEqual(parseRange('0.5..2'), [0.5, 2]);
+  assert.ok(Number.isNaN(parseRange('abc')[0]));
+  const s = run(new Scene(), 'array a = 1 2\ndial k = 0 range=-3..3');
+  assert.deepEqual([s.vars.get('k').lo, s.vars.get('k').hi], [-3, 3]);
+  s.apply(parseScript('set k -2')[0]);
+  assert.equal(s.vars.get('k').v, -2);
+  assert.equal(compareValues('1/2', '0.4'), 1);
+  assert.equal(compareValues('−3/4', '-0.75'), 0);
+});
+

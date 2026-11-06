@@ -1,0 +1,514 @@
+// 舞台上的矩阵（线代：初等行变换、消元求秩和解方程组、矩阵乘法「行乘列」）：数据和指令，不碰 DOM（画法在 matrix.view.js）。
+// 纯函数，有测试（tests/stage-matrix.test.js）。照 array.js 的样子写（docs/stage-types.md）。
+//
+// 数都是精确分数（exact.js 的 Q）：场景里存成字符串（'-3/2'；'' 是乘积里还空着的格），副本（structuredClone）不丢东西，算的时候再变回 Q。
+// 一格（部件）的 key 是造它时的位置（'2.3'），交换两行时格子带着数走过去（r、c 跟着变）；m.2,3 永远指「现在」第 2 行第 3 列。
+import { Q } from '../../exact.js';
+
+export const MAX_ROWS = 6, MAX_COLS = 8;
+const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
+const ZERO = new Q(0n), ONE = new Q(1n);
+
+/**
+ * 排版（场景和画面共用，画面的 CSS 也是这个尺寸）：一行多高、一格最窄、两列之间、括号到格子、上下留白、
+ * 增广的竖线多占的宽、乘积前面的「=」、乘法里 A 和 B 之间、乘积下面留给算式的一条
+ */
+export const MX = { CH: 52, MINW: 52, GAP: 6, PAD: 22, VPAD: 6, AUG: 20, EQ: 56, AB: 22, BAND: 66, BESIDE: 48 };
+
+// —— 数 ——
+const NUM_RE = /^([-+]?)(\d+(?:\.\d+)?|\.\d+)(?:\/(\d+(?:\.\d+)?))?$/;
+/** 一个数的写法 → Q（3、-2、1/2、-1/2、0.5、(1/2)、−3）；不是数给 null */
+export function toQ(w) {
+  const s = String(w ?? '').trim().replace(/[−–]/g, '-').replace(/^\((.*)\)$/, '$1');
+  const m = s.match(NUM_RE);
+  if (!m) return null;
+  let q = Q.from(Number(m[2]));
+  if (m[3] != null) {
+    const d = Q.from(Number(m[3]));
+    if (d.zero) return null;
+    q = q.div(d);
+  }
+  return m[1] === '-' ? q.neg() : q;
+}
+const numOr = (w, what = '') => {
+  const q = toQ(w);
+  if (!q) throw new Error(`${what}「${w}」不是数（写成 3、-2、1/2、0.5）`);
+  return q;
+};
+const qOf = (o, x) => {
+  if (x.value === '') throw new Error(`${o.id}.${x.r},${x.c} 还空着`);
+  return toQ(x.value);
+};
+
+/**
+ * 矩阵的写法 → { rows（每行一串精确的数，字符串）, aug（竖线在第几列后面，没有是 null） }。
+ * 认 1 2 3 / 4 5 6（/ 分行）、1 2; 3 4、[[1 2][3 4]]；写 | 是增广矩阵的竖线（每行写在同一个位置，或者只在第一行写）
+ */
+export function parseRows(words) {
+  const s = words.join(' ').replace(/\]\s*,?\s*\[/g, ' / ').replace(/[[\]]/g, ' ').replace(/[;；]/g, ' / ').replace(/[,，]/g, ' ');
+  const rows = [[]];
+  const bars = [null];
+  for (let t of s.split(/\s+/).filter(Boolean)) {
+    if (t === '/') { rows.push([]); bars.push(null); continue; }
+    if (t === '|') { bars[bars.length - 1] = rows.at(-1).length; continue; }
+    // 「/3」「2/」：斜线贴着数写的也当分行
+    let after = false;
+    if (/^\/./.test(t)) { rows.push([]); bars.push(null); t = t.slice(1); }
+    if (/.\/$/.test(t)) { after = true; t = t.slice(0, -1); }
+    rows.at(-1).push(numOr(t).toString());
+    if (after) { rows.push([]); bars.push(null); }
+  }
+  while (rows.length > 1 && !rows.at(-1).length) { rows.pop(); bars.pop(); }
+  if (!rows[0].length) throw new Error('矩阵要有数：写成 matrix m = 1 2 / 3 4（/ 分行）');
+  rows.forEach((r, i) => { if (!r.length) throw new Error(`第 ${i + 1} 行是空的（两个 / 中间要有数）`); });
+  rows.forEach((r, i) => { if (r.length !== rows[0].length) throw new Error(`第 ${i + 1} 行有 ${r.length} 个数，第 1 行有 ${rows[0].length} 个（每行要一样多）`); });
+  if (rows.length > MAX_ROWS || rows[0].length > MAX_COLS) throw new Error(`舞台上的矩阵最多 ${MAX_ROWS} 行 ${MAX_COLS} 列（写了 ${rows.length}×${rows[0].length}）`);
+  const set = [...new Set(bars.filter((b) => b != null))];
+  if (set.length > 1) throw new Error('增广矩阵的竖线 | 每行要写在同一个位置');
+  const aug = set.length ? set[0] : null;
+  if (aug != null && (aug < 1 || aug >= rows[0].length)) throw new Error('竖线 | 要写在两个数中间');
+  return { rows, aug };
+}
+
+// —— 排版 ——
+/** 一个数画出来大约多宽（像素）：分数上下叠着，按长的那一半算 */
+export function textWidth(v) {
+  const s = String(v ?? '');
+  if (!s) return 24;
+  const m = s.match(/^(-?)(\d+)\/(\d+)$/);
+  if (m) return (m[1] ? 15 : 0) + Math.max(m[2].length, m[3].length) * 11 + 6;
+  return s.length * 14.6;
+}
+/** 每一列多宽（从 1 数）：这一列最长的那个数定 */
+export function colWidths(o) {
+  const w = Array(o.cols + 1).fill(MX.MINW);
+  w[0] = 0;
+  for (const x of o.cells) w[x.c] = Math.max(w[x.c], Math.ceil(textWidth(x.value) + 22));
+  return w;
+}
+/** 整个矩阵的排版：每列的左边、每行的上边、括号里面的外框、增广竖线在哪 */
+export function layout(o) {
+  const cw = colWidths(o);
+  const colX = [0];
+  let x = o.origin.x + MX.PAD;
+  for (let c = 1; c <= o.cols; c++) {
+    if (o.aug && c === o.aug + 1) x += MX.AUG;
+    colX[c] = x;
+    x += cw[c] + MX.GAP;
+  }
+  const w = x - MX.GAP + MX.PAD - o.origin.x;
+  const h = o.rows * MX.CH + 2 * MX.VPAD;
+  const rowY = (r) => o.origin.y + MX.VPAD + (r - 1) * MX.CH;
+  return { cw, colX, rowY, box: { x: o.origin.x, y: o.origin.y, w, h }, barX: o.aug ? colX[o.aug + 1] - (MX.AUG + MX.GAP) / 2 : null };
+}
+export const sizeOf = (o) => layout({ ...o, origin: { x: 0, y: 0 } }).box;
+export function cellBox(o, x, L = layout(o)) { return { x: L.colX[x.c], y: L.rowY(x.r), w: L.cw[x.c], h: MX.CH }; }
+function objectBox(o) {
+  const b = layout(o).box;
+  if (!o.product) return b;
+  // 乘积：前面的「=」和整排下面那条算式也算它的地方（镜头要把算式框进来）
+  const eq = { x: b.x - MX.EQ, y: b.y, w: b.w + MX.EQ, h: b.h };
+  if (!o.band) return { ...eq, h: b.h + MX.BAND };
+  const x = Math.min(eq.x, o.band.x), y = Math.min(eq.y, o.band.y);
+  return { x, y, w: Math.max(eq.x + eq.w, o.band.x + o.band.w) - x, h: Math.max(eq.y + eq.h, o.band.y + o.band.h) - y };
+}
+/** 括号、竖线、「=」占的地方（贴字时让开） */
+export function decorBoxes(o) {
+  const b = layout(o).box;
+  const out = [{ x: b.x, y: b.y, w: 16, h: b.h }, { x: b.x + b.w - 16, y: b.y, w: 16, h: b.h }];
+  if (o.product) out.push({ x: b.x - MX.EQ, y: b.y + b.h / 2 - 20, w: MX.EQ, h: 40 });
+  return out;
+}
+/** 阶梯线经过的点（世界坐标）：每个非零行的主元左边竖下来，再沿这一行的下沿走到下一行的主元。不是阶梯形给 null */
+export function stairsPoints(o) {
+  let piv;
+  try { piv = echelon(o); } catch { return null; }
+  if (!piv.length) return null;
+  const L = layout(o);
+  const xl = (c) => L.colX[c] - MX.GAP / 2 - 2;
+  const yb = (r) => L.rowY(r) + MX.CH;
+  const pts = [{ x: xl(piv[0].c), y: L.rowY(1) + 6 }];
+  piv.forEach((p, i) => {
+    pts.push({ x: xl(p.c), y: yb(p.r) });
+    const next = piv[i + 1];
+    pts.push({ x: next ? xl(next.c) : L.colX[o.cols] + L.cw[o.cols] + 4, y: yb(p.r) });
+  });
+  return pts;
+}
+
+// —— 部件 ——
+const sortRC = (a, b) => a.r - b.r || a.c - b.c;
+const lineOf = (o, kind, k) => o.cells.filter((x) => (kind === 'r' ? x.r : x.c) === k).sort(sortRC);
+export const rowCells = (o, r) => lineOf(o, 'r', r);
+export const colCells = (o, c) => lineOf(o, 'c', c);
+const cellAt = (o, r, c) => o.cells.find((x) => x.r === r && x.c === c);
+function setValue(x, v) { x.value = v; x.label = v === '' ? '?' : null; }
+const newCell = (id, r, c, v) => ({ obj: id, key: `${r}.${c}`, r, c, value: v, label: v === '' ? '?' : null, paint: null, glow: false, lift: false, dim: false, covered: false, pivot: false });
+
+/** 舞台上叫这个名字的矩阵；没有就说清楚怎么写 */
+function matrixOf(scene, id, cmd) {
+  const o = id && scene.objects.get(id);
+  if (!o) throw new Error(`${cmd} 后面先写矩阵的名字（比如 ${cmd} m …）${id ? `：舞台上没有「${id}」` : ''}`);
+  if (o.type !== 'matrix') throw new Error(`「${id}」不是矩阵`);
+  return o;
+}
+
+/** 新的一样东西放在 beside= 那样东西的右边（上下居中）；没写就照舞台的规矩放在已有东西下面 */
+export function placeFor(scene, size, opts) {
+  if (opts?.beside) {
+    const t = scene.objects.get(opts.beside);
+    if (!t) throw new Error(`beside=${opts.beside}：舞台上没有「${opts.beside}」`);
+    const b = scene.objectBox(opts.beside);
+    return { x: Math.round(b.x + b.w + MX.BESIDE), y: Math.round(b.y + b.h / 2 - size.h / 2) };
+  }
+  return scene.slotFor(size.w);
+}
+
+// —— 行变换 ——
+const SUBS = '₀₁₂₃₄₅₆₇₈₉';
+const sub = (n) => String(n).replace(/\d/g, (d) => SUBS[d]);
+const minus = (s) => String(s).replace(/-/g, '−');
+const isOne = (q) => q.n === 1n && q.d === 1n;
+const isNegOne = (q) => q.n === -1n && q.d === 1n;
+// 系数写在 r 前面：1 不写、−1 写成 −、分数加括号（课本的写法）
+const coefText = (q) => (isOne(q) ? '' : isNegOne(q) ? '−' : q.integer ? minus(q) : `(${minus(q)})`);
+/** 一步行变换照课本的样子写出来：r₂ − 3r₁、r₁ ↔ r₃、3r₂、r₂ ÷ 3、2r₂ − 3r₁ */
+export function opText(op) {
+  const L = (k) => `${op.line}${sub(k)}`;
+  if (op.kind === 'swap') return `${L(op.i)} ↔ ${L(op.j)}`;
+  const { a, b } = op;
+  if (!b) return (a.n === 1n || a.n === -1n) && a.d > 1n ? `${L(op.i)} ÷ ${a.n < 0n ? `(−${a.d})` : a.d}` : `${coefText(a)}${L(op.i)}`;
+  const neg = b.n < 0n;
+  return `${coefText(a)}${L(op.i)} ${neg ? '−' : '+'} ${coefText(neg ? b.neg() : b)}${L(op.j)}`;
+}
+
+// 一个式子拆成项：r2 - 3r1 → [{ line: r, k: 2, q: 1 }, { line: r, k: 1, q: -3 }]；系数能写 3、1/2、(1/2)、(-1/2)，也能写在后面 r2*3、r2/3
+function termsOf(rhs, bad) {
+  const out = [];
+  let i = 0;
+  const rest = () => rhs.slice(i);
+  while (i < rhs.length) {
+    let sign = 1;
+    if (rhs[i] === '+' || rhs[i] === '-') { if (rhs[i] === '-') sign = -1; i++; } else if (out.length) throw bad();
+    let q = ONE;
+    const m = /^\(([^()]+)\)\*?/.exec(rest()) || /^(\d+(?:\.\d+)?(?:\/\d+(?:\.\d+)?)?)\*?/.exec(rest());
+    if (m && /^[rc]\d/.test(rhs.slice(i + m[0].length))) {
+      q = toQ(m[1]);
+      if (!q) throw bad();
+      i += m[0].length;
+    }
+    const v = /^([rc])(\d+)/.exec(rest());
+    if (!v) throw bad();
+    i += v[0].length;
+    const post = /^([*/])(\(([^()]+)\)|-?\d+(?:\.\d+)?(?:\/\d+)?)/.exec(rest());
+    if (post) {
+      const k = toQ(post[3] ?? post[2]);
+      if (!k) throw bad();
+      if (post[1] === '/') { if (k.zero) throw new Error('不能除以 0'); q = q.div(k); } else q = q.mul(k);
+      i += post[0].length;
+    }
+    out.push({ line: v[1], k: Number(v[2]), q: sign < 0 ? q.neg() : q });
+  }
+  if (!out.length) throw bad();
+  return out;
+}
+
+/**
+ * 一行行变换的写法 → 一步步（照课本：r2 - 3r1、r2 = r2 - 3r1、r3 + 1/2 r1、r1 <-> r3、3r2、-r1、r2 / 3、2r2 - 3r1；
+ * 逗号隔开是连着做的几步：r2 - 4r1, r3 - 7r1；列变换把 r 换成 c）。
+ * 返回 [{ line: 'r' | 'c', kind: 'swap' | 'scale' | 'add' | 'comb', i, j, a, b }]（a、b 是 Q：第 i 行 ← a·第 i 行 + b·第 j 行）
+ */
+export function parseOps(text, o) {
+  const raw = String(text ?? '').trim();
+  if (!raw) throw new Error(`rowop 后面写一步行变换，比如 rowop ${o.id} r2 - 3r1`);
+  const s = raw.replace(/\s+/g, '').replace(/[−–]/g, '-').replace(/[×·]/g, '*').replace(/÷/g, '/').replace(/[RC]/g, (ch) => ch.toLowerCase())
+    .replace(/[₀-₉]/g, (d) => String(SUBS.indexOf(d))).replace(/_/g, '').replace(/<->|<=>|<>|↔|⇄|⟷/g, '~');
+  const ops = s.split(/[,，;；]/).filter(Boolean).map((part) => {
+    const bad = () => new Error(`看不懂「${part.replace(/~/g, ' <-> ')}」：行变换写成 r2 - 3r1、r1 <-> r2、3r2、r2 / 3（列变换把 r 换成 c）`);
+    const size = (line) => (line === 'r' ? o.rows : o.cols);
+    const check = (line, k) => { if (!(k >= 1 && k <= size(line))) throw new Error(`${o.id} 只有 ${size(line)} ${line === 'r' ? '行' : '列'}，没有 ${line}${k}`); };
+    let m = /^([rc])(\d+)~([rc])(\d+)$/.exec(part);
+    if (m) {
+      if (m[1] !== m[3]) throw new Error('行和列不能互换：r1 <-> r2 或 c1 <-> c2');
+      const i = Number(m[2]), j = Number(m[4]);
+      check(m[1], i); check(m[1], j);
+      if (i === j) throw new Error(`「${part}」：两行是同一行`);
+      return { line: m[1], kind: 'swap', i, j };
+    }
+    if (part.includes('~')) throw bad();
+    let target = null, rhs = part;
+    m = /^([rc])(\d+)=(.+)$/.exec(part);
+    if (m) { target = { line: m[1], k: Number(m[2]) }; rhs = m[3]; } else if (part.includes('=')) throw bad();
+    const terms = termsOf(rhs, bad);
+    target ||= terms[0];
+    const line = target.line;
+    if (terms.some((t) => t.line !== line)) throw new Error(`「${part}」：一步里行和列不能混着写`);
+    terms.forEach((t) => check(line, t.k));
+    const coef = new Map();
+    for (const t of terms) coef.set(t.k, (coef.get(t.k) || ZERO).add(t.q));
+    const a = coef.get(target.k);
+    if (!a) throw new Error(`「${part}」：${line}${target.k} 自己要在式子里（比如 ${line}${target.k} - 3${line}${target.k === 1 ? 2 : 1}）`);
+    if (a.zero) throw new Error(`「${part}」：${line}${target.k} 前面的系数不能是 0（那不是初等变换）`);
+    const others = [...coef].filter(([k, q]) => k !== target.k && !q.zero);
+    if (others.length > 1) throw new Error(`「${part}」：一步只能加上一${line === 'r' ? '行' : '列'}的倍数，分成两步用逗号隔开（比如 r3 - r1, r3 + r2）`);
+    if (!others.length) {
+      if (isOne(a)) throw new Error(`「${part}」什么也没变`);
+      return { line, kind: 'scale', i: target.k, a, b: null, j: null };
+    }
+    const [[j, b]] = others;
+    return { line, kind: isOne(a) ? 'add' : 'comb', i: target.k, j, a, b };
+  });
+  const lines = new Set(ops.map((x) => x.line));
+  if (lines.size > 1) throw new Error('一行里行变换和列变换不要混着写，分成两行');
+  return ops;
+}
+
+// 做一步，记下画面要的：目标那一行（列）每格的 key、原来的数、做完的数；从哪一行加过来、那一行的数、乘过系数的数
+function applyOp(o, op) {
+  const T = lineOf(o, op.line, op.i);
+  const fx = { line: op.line, kind: op.kind, i: op.i, j: op.j, a: op.a?.toString() ?? null, b: op.b?.toString() ?? null, text: opText(op), keys: T.map((x) => x.key), before: T.map((x) => x.value) };
+  if (op.kind === 'swap') {
+    const S = lineOf(o, op.line, op.j);
+    const f = op.line === 'r' ? 'r' : 'c';
+    T.forEach((x) => { x[f] = op.j; });
+    S.forEach((x) => { x[f] = op.i; });
+    fx.other = S.map((x) => x.key);
+    return fx;
+  }
+  const S = op.j ? lineOf(o, op.line, op.j) : null;
+  const t = T.map((x) => qOf(o, x));
+  const s = S ? S.map((x) => qOf(o, x)) : null;
+  const mid = t.map((v) => v.mul(op.a));
+  const scaled = s ? s.map((v) => v.mul(op.b)) : null;
+  const after = mid.map((v, k) => (scaled ? v.add(scaled[k]) : v));
+  T.forEach((x, k) => setValue(x, after[k].toString()));
+  Object.assign(fx, { mid: mid.map(String), after: after.map(String), src: S?.map((x) => x.key) ?? null, srcVals: s?.map(String) ?? null, scaled: scaled?.map(String) ?? null });
+  return fx;
+}
+
+/** 阶梯形的主元：每个非零行第一个不为 0 的数 [{ r, c }]；不是阶梯形抛错（说清楚哪一行不对） */
+export function echelon(o) {
+  const lead = [];
+  for (let r = 1; r <= o.rows; r++) {
+    const row = rowCells(o, r);
+    const k = row.findIndex((x) => !qOf(o, x).zero);
+    lead.push(k < 0 ? null : row[k].c);
+  }
+  let prev = 0, zero = false;
+  lead.forEach((c, i) => {
+    if (c == null) { zero = true; return; }
+    if (zero) throw new Error(`${o.id} 还不是阶梯形：全为 0 的行下面，第 ${i + 1} 行不全为 0`);
+    if (c <= prev) throw new Error(`${o.id} 还不是阶梯形：第 ${i + 1} 行第一个不为 0 的数没有在第 ${i} 行那个的右边`);
+    prev = c;
+  });
+  return lead.map((c, i) => (c ? { r: i + 1, c } : null)).filter(Boolean);
+}
+/** 全为 0 的行（行号） */
+export function zeroRows(o) {
+  const out = [];
+  for (let r = 1; r <= o.rows; r++) if (rowCells(o, r).every((x) => x.value !== '' && toQ(x.value).zero)) out.push(r);
+  return out;
+}
+
+// product C = A B：A、B 排成一行（A 留在原处、B 挪到 A 右边），后面「= C」，三个上下居中；C 的格先空着
+function makeProduct(scene, c, h) {
+  if (!h.args.some((a) => a.t === 'eq')) throw new Error('要写成 product C = A B');
+  const [id, an, bn, ...more] = h.words;
+  if (more.length || !an || !bn) throw new Error('要写成 product C = A B（两个舞台上的矩阵）');
+  const A = scene.objects.get(an), B = scene.objects.get(bn);
+  for (const [n, x] of [[an, A], [bn, B]]) if (!x || x.type !== 'matrix') throw new Error(`product 要两个舞台上的矩阵：「${n}」${x ? '不是矩阵' : '舞台上没有'}`);
+  if (an === id || bn === id) throw new Error('乘积换一个名字（不能和 A、B 同名）');
+  if (A.aug || B.aug) throw new Error('增广矩阵不能拿来乘');
+  if (A.cols !== B.rows) throw new Error(`${an} 是 ${A.rows}×${A.cols}，${bn} 是 ${B.rows}×${B.cols}：${an} 的列数要等于 ${bn} 的行数才能乘`);
+  const cells = [];
+  for (let r = 1; r <= A.rows; r++) for (let k = 1; k <= B.cols; k++) cells.push(newCell(id, r, k, ''));
+  const o = { origin: { x: 0, y: 0 }, rows: A.rows, cols: B.cols, aug: null, cells, stairs: false, product: { a: an, b: bn } };
+  const sa = sizeOf(A), sb = sizeOf(B), sc = sizeOf(o);
+  const ba = layout(A).box;
+  const total = sa.w + MX.AB + sb.w + MX.EQ + sc.w;
+  const cx = ba.x + sa.w / 2, cy = ba.y + Math.max(sa.h, sb.h) / 2;
+  const left = Math.round(cx - total / 2);
+  A.origin = { x: left, y: Math.round(cy - sa.h / 2) };
+  B.origin = { x: left + sa.w + MX.AB, y: Math.round(cy - sb.h / 2) };
+  o.origin = { x: B.origin.x + sb.w + MX.EQ, y: Math.round(cy - sc.h / 2) };
+  // 算一格时那条算式写在整排（A B = C）下面：镜头要把这一条框进来
+  const bottom = Math.max(A.origin.y + sa.h, B.origin.y + sb.h, o.origin.y + sc.h);
+  o.band = { x: left, y: bottom + 8, w: total, h: MX.BAND - 8 };
+  return o;
+}
+
+// 一格乘积：A 的第 r 行和 B 的第 c 列逐对相乘再相加
+function productTerms(A, B, r, c) {
+  const row = rowCells(A, r), col = colCells(B, c);
+  const terms = row.map((x, k) => ({ a: x.key, b: col[k].key, av: qOf(A, x).toString(), bv: qOf(B, col[k]).toString(), p: qOf(A, x).mul(qOf(B, col[k])).toString() }));
+  const sum = terms.reduce((s, t) => s.add(toQ(t.p)), ZERO).toString();
+  return { terms, sum };
+}
+
+export const matrix = {
+  type: 'matrix',
+  label: '矩阵',
+  create: ['matrix', 'product'],
+  drag: false,
+  hint: '（矩阵：名字.2,3 是第 2 行第 3 列，名字.r2 是第 2 行，名字.c3 是第 3 列；交换两行时数跟着走，名字.2,3 指的总是现在的第 2 行第 3 列）',
+  make(scene, c, h, old) {
+    if (c.cmd === 'product') return makeProduct(scene, c, h);
+    if (!h.args.some((a) => a.t === 'eq')) throw new Error('要写成 matrix 名字 = 1 2 / 3 4（/ 分行）');
+    const id = h.words[0];
+    const { rows, aug } = parseRows(h.words.slice(1));
+    const cells = [];
+    rows.forEach((row, i) => row.forEach((v, k) => cells.push(newCell(id, i + 1, k + 1, v))));
+    const o = { origin: { x: 0, y: 0 }, rows: rows.length, cols: rows[0].length, aug, cells, stairs: false, product: null };
+    o.origin = old && !h.opts.beside ? { ...old.origin } : placeFor(scene, sizeOf(o), h.opts);
+    return o;
+  },
+  parts(o) { return [...o.cells].sort(sortRC); },
+  pick(o, mark, sel, word) {
+    const bad = () => new Error(`「${word}」：矩阵写 ${o.id}.2,3（第 2 行第 3 列）、${o.id}.r2（第 2 行）或 ${o.id}.c3（第 3 列）`);
+    if (mark !== '.') throw bad();
+    const size = `${o.id} 是 ${o.rows}×${o.cols} 的`;
+    let m = String(sel).match(/^(\d+)[,，](\d+)$/);
+    if (m) {
+      const r = Number(m[1]), c = Number(m[2]);
+      if (r < 1 || r > o.rows) throw new Error(`${size}，没有第 ${r} 行`);
+      if (c < 1 || c > o.cols) throw new Error(`${size}，没有第 ${c} 列`);
+      return [cellAt(o, r, c)];
+    }
+    m = String(sel).match(/^([rc])(\d+)(?:-(\d+))?$/);
+    if (m) {
+      const lo = Math.min(Number(m[2]), Number(m[3] ?? m[2])), hi = Math.max(Number(m[2]), Number(m[3] ?? m[2]));
+      const n = m[1] === 'r' ? o.rows : o.cols;
+      if (lo < 1 || hi > n) throw new Error(`${size}，没有第 ${hi > n ? hi : lo} ${m[1] === 'r' ? '行' : '列'}`);
+      return o.cells.filter((x) => { const k = m[1] === 'r' ? x.r : x.c; return k >= lo && k <= hi; }).sort(sortRC);
+    }
+    throw bad();
+  },
+  ref(p) { return `${p.obj}.${p.r},${p.c}`; },
+  partBox(o, p) { return cellBox(o, p); },
+  objectBox,
+  obstacles(o) {
+    const L = layout(o);
+    return [...o.cells.map((x) => cellBox(o, x, L)), ...decorBoxes(o)];
+  },
+  commands: {
+    // rowop m r2 - 3r1：一步（或逗号隔开的几步）初等行变换；每一步的写法贴在它改的那一行右边（op:m、op:m:2……，下一次行变换换掉）
+    rowop(scene, c, h) {
+      const o = matrixOf(scene, h.words[0], 'rowop');
+      // 原样拼回老师写的式子：r2=r2-3r1 连着写时被读成了 key=value，也拼回来
+      const opt = Object.entries(h.opts).filter(([k]) => /^[rRcC]\d+$/.test(k)).map(([k, v]) => `${k}=${v}`);
+      const rest = h.args.slice(1).map((a) => (a.t === 'word' ? a.v : a.t === 'eq' ? '=' : a.t === 'arrow' ? '->' : '')).join(' ');
+      const ops = parseOps([...opt, rest].join(' '), o);
+      const done = ops.map((op) => applyOp(o, op));
+      o.stairs = false; // 数变了，阶梯线收起（要的话再画一次）
+      const id = `op:${o.id}`;
+      for (const k of [...scene.labels.keys()]) if (k === id || k.startsWith(`${id}:`)) scene.labels.delete(k);
+      const labels = done.map((d, n) => {
+        const lid = n ? `${id}:${n + 1}` : id;
+        const refs = (d.kind === 'swap' ? [d.i, d.j] : [d.i]).map((k) => `${o.id}.${d.line}${k}`);
+        scene.labels.set(lid, { id: lid, refs, text: d.text, side: d.line === 'r' ? 'right' : 'below', tone: 'op', link: null });
+        return lid;
+      });
+      return { id: o.id, ops: done, labels };
+    },
+    // write m.2,3 5：改一个数
+    write(scene, c, h) {
+      h.strayRefs();
+      const ps = h.partsIn();
+      if (ps.length !== 1) throw new Error(`write 一次改一格（写成 write ${ps[0]?.obj || 'm'}.2,3 5）`);
+      const x = ps[0];
+      const o = scene.objects.get(x.obj);
+      const val = h.words.filter((w) => !scene.isRef(w)).at(-1);
+      if (val == null) throw new Error('要写成 write m.2,3 新的数');
+      const before = x.value;
+      setValue(x, numOr(val, 'write ').toString());
+      o.stairs = false;
+      return { cell: x, before };
+    },
+    // pivot m.1,1：主元框起来（跟着那个数走：交换两行时框也跟过去）
+    pivot(scene, c, h) {
+      h.strayRefs();
+      const ps = h.partsIn();
+      if (!ps.length) throw new Error('pivot 后面写要框起来的那一格，比如 pivot m.1,1');
+      ps.forEach((x) => { x.pivot = true; });
+      return { parts: ps };
+    },
+    unpivot(scene, c, h) {
+      h.strayRefs();
+      const ps = h.refsIn().length ? h.partsIn() : [...scene.objects.values()].filter((o) => o.type === 'matrix').flatMap((o) => o.cells);
+      ps.forEach((x) => { x.pivot = false; });
+      return { parts: ps };
+    },
+    // stairs m：画阶梯线（要已经是阶梯形）；全为 0 的行跟着淡下去
+    stairs(scene, c, h) {
+      const o = matrixOf(scene, h.words[0], 'stairs');
+      const piv = echelon(o);
+      o.stairs = true;
+      return { id: o.id, pivots: piv };
+    },
+    unstairs(scene, c, h) {
+      const ids = h.words.length ? [matrixOf(scene, h.words[0], 'unstairs').id] : [...scene.objects.values()].filter((o) => o.type === 'matrix').map((o) => o.id);
+      ids.forEach((id) => { scene.objects.get(id).stairs = false; });
+      return { ids };
+    },
+    // mul C.1,2：A 的第 1 行和 B 的第 2 列逐对相乘再相加，写进 C.1,2（mul C.r1、mul C：一格一格算）
+    mul(scene, c, h) {
+      h.strayRefs();
+      const ps = h.partsIn();
+      if (!ps.length) throw new Error('mul 后面写算乘积的哪一格（比如 mul C.1,2；mul C 一格一格全算）');
+      const o = scene.objects.get(ps[0].obj);
+      if (o.type !== 'matrix' || !o.product) throw new Error(`${o.id} 不是乘积（先写 product ${o.id} = A B）`);
+      const A = scene.objects.get(o.product.a), B = scene.objects.get(o.product.b);
+      if (!A || !B || A.type !== 'matrix' || B.type !== 'matrix') throw new Error(`${o.product.a} 或 ${o.product.b} 已经不在舞台上了`);
+      if (A.cols !== B.rows || A.rows !== o.rows || B.cols !== o.cols) throw new Error(`${o.product.a}、${o.product.b} 的尺寸变了，乘不出 ${o.rows}×${o.cols} 的 ${o.id}（重新 product 一次）`);
+      const items = ps.filter((x) => x.obj === o.id).map((x) => {
+        const { terms, sum } = productTerms(A, B, x.r, x.c);
+        setValue(x, sum);
+        return { key: x.key, r: x.r, c: x.c, terms, sum };
+      });
+      return { id: o.id, a: A.id, b: B.id, items };
+    },
+  },
+  describe(o) {
+    const tag = (x) => {
+      const bits = [];
+      if (x.paint) bits.push(COLOR_NAMES[x.paint]);
+      if (x.glow) bits.push('亮');
+      if (x.lift) bits.push('抬起');
+      if (x.dim) bits.push('灰');
+      if (x.pivot) bits.push('主元框着');
+      if (x.covered) bits.push('扣着');
+      return `${x.value === '' ? '□' : x.value}${bits.length ? `（${bits.join('、')}）` : ''}`;
+    };
+    const zero = new Set(zeroRows(o));
+    const lines = [`矩阵 ${o.id}${o.product ? ` = ${o.product.a} ${o.product.b}` : ''}（${o.rows}×${o.cols}${o.aug ? `，增广矩阵：竖线在第 ${o.aug} 列后面` : ''}）：`];
+    for (let r = 1; r <= o.rows; r++) lines.push(`  第 ${r} 行：${rowCells(o, r).map(tag).join('  ')}${zero.has(r) ? '（全为 0）' : ''}`);
+    if (o.stairs) lines.push(`  画着阶梯线：非零行 ${o.rows - zero.size} 行`);
+    const blank = o.cells.filter((x) => x.value === '').sort(sortRC);
+    if (blank.length) lines.push(`  还空着：${blank.map((x) => `${o.id}.${x.r},${x.c}`).join(' ')}`);
+    return lines;
+  },
+  doc: `矩阵（线代：行变换、消元、秩、乘法）：
+matrix m = 1 2 3 / 4 5 6 / 7 8 10   造矩阵（/ 分行；数能写 -3、1/2；| 是增广矩阵的竖线；beside=p 放在 p 右边）
+写法：m.2,3 第 2 行第 3 列；m.r2 第 2 行；m.c3 第 3 列
+rowop m r2 - 3r1                  行变换：r1 的副本乘 -3 飘到 r2 上加进去（也能写 r2 = r2 - 3r1、r3 + 1/2 r1；连着几步用逗号：r2 - 4r1, r3 - 7r1）
+rowop m r1 <-> r3                 交换两行（走弧线）
+rowop m 3r2                       一行乘倍数（-r1、r2 / 3）；列变换把 r 换成 c
+write m.2,3 5                     改一个数
+pivot m.1,1 / unpivot m           主元框起来
+stairs m / unstairs m             画阶梯线（已经是阶梯形才行），全零行淡下去
+product C = A B                   A、B 排成一行，后面「= C」（C 先空着）
+mul C.1,2                         A 的第 1 行、B 的第 2 列一起亮，逐对相乘再相加，写进 C.1,2（mul C 一格格全算）`,
+  example: `matrix m = 1 2 3 / 4 5 6 / 7 8 10
+pivot m.1,1
+rowop m r2 - 4r1, r3 - 7r1
+say "{m.1,1} 下面的数都消成 0 了。"
+rowop m r3 - 2r2
+stairs m
+matrix A = 1 2 / 3 4
+matrix B = 5 6 / 7 8
+product C = A B
+mul C.1,1
+ask tap A "算 {C.1,2} 要用 A 的哪一行？点那一行里的一个数。"`,
+};
+
+export { setValue, matrixOf, lineOf };

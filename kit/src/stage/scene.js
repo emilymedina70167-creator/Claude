@@ -18,8 +18,20 @@ export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 export const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
 export const OBJECT_GAP = 70; // 两样东西上下摆开隔多远
 const isColor = (w) => COLORS.includes(w);
-const prime = (v) => String(v).replace(/[′']/g, '');
-const numOf = (v) => (/^-?\d+(\.\d+)?$/.test(prime(v)) ? Number(prime(v)) : null);
+const prime = (v) => String(v).replace(/[′']/g, '').replace(/[−–]/g, '-').trim();
+// 数：整数、小数、分数（-3/4）
+const numOf = (v) => {
+  const t = prime(v);
+  if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
+  const m = t.match(/^(-?\d+)\/(\d+)$/);
+  return m && Number(m[2]) ? Number(m[1]) / Number(m[2]) : null;
+};
+
+/** 拨数的范围：1..5、-3..3、1-5（老写法）；读不懂给 [NaN, NaN] */
+export function parseRange(r) {
+  const m = String(r).trim().match(/^(-?\d+(?:\.\d+)?)\s*(?:\.\.|~|～|-)\s*(-?\d+(?:\.\d+)?)$/);
+  return m ? [Number(m[1]), Number(m[2])] : [NaN, NaN];
+}
 
 // 每种东西自己的指令也认（script.js 读一行时按这个判断是不是指令）
 addCommands([...Object.keys(CREATE), ...Object.values(TYPES).flatMap((t) => Object.keys(t.commands || {}))]);
@@ -231,8 +243,8 @@ export class Scene {
         // dial d = 5 range=1-5 at=a
         const [name, val] = words;
         if (!name || !/^[A-Za-z_]\w*$/.test(name)) throw new Error('要写成 dial 名字 = 值 range=1-9');
-        const [lo, hi] = String(opts.range || '1-9').split('-').map(Number);
-        if (!(lo <= hi)) throw new Error('range 要写成 小-大，比如 range=1-5');
+        const [lo, hi] = parseRange(opts.range || '1-9');
+        if (!(lo <= hi)) throw new Error('range 要写成 小..大，比如 range=1..5、range=-3..3（1-5 也认）');
         const v = Number(val ?? lo);
         const at = opts.at || [...this.objects.keys()][0] || null;
         this.vars.set(name, { v: Math.max(lo, Math.min(hi, v)), lo, hi, at, shown: true });

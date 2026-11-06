@@ -38,11 +38,14 @@ test('说明里的例子照抄就能演：例子那一轮；共用的每一条�
     const sc = ready(`${t.example.split('\n')[0]}\ndial d = 5 range=1-5`);
     // 每一条在刚造好的东西上演；要前面先做的（先 tag 距离再 relax），在照说明先后一条接一条演下来的舞台上演，两种有一种能演就行
     const fresh = sc.clone();
+    // 第三种：整个例子演完的舞台（要好几样东西的写法：两个矩阵相乘、两个向量相加）
+    const full = ready(`${t.example}\ndial d = 5 range=1-5\ndial k = 2 range=-3..3`);
     for (const l of firsts(t.doc)) {
       n++;
       const e = dryRun(fresh, l);
       const e2 = e.length ? dryRun(sc, l) : [];
-      if (e.length && e2.length) bad.push(`${t.label}：${l} → ${e[0].error}`);
+      const e3 = e.length && e2.length ? dryRun(full, l) : [];
+      if (e.length && e2.length && e3.length) bad.push(`${t.label}：${l} → ${e[0].error}`);
       if (!e2.length || !e.length) { try { for (const c of parseScript(l)) if (c.cmd !== 'ask') sc.apply(c); } catch { /* 这一条只在刚造好的上能演 */ } }
     }
   }
