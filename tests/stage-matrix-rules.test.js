@@ -118,7 +118,8 @@ test('next 给的可接受的下一步不止一个：先消下面哪一格都行
   assert.ok(pa.includes('r1 / 2'), '先把主元化成 1');
   assert.equal(chk(p, 'r1 / 2').right, true);
   assert.equal(chk(p, '2r2 - 3r1').right, true, '两行都乘一下（免得出分数）也消得掉');
-  assert.equal(chk(p, '3r1').right, false, '乘一个别的数不是下一步');
+  assert.equal(chk(p, '3r1').right, true, '一行乘一个不是 0 的数弄不乱前面，也算对');
+  assert.match(chk(p, '3r1').why, /倍乘第 1 行/);
   // 主元那一格是 0：先换一行上来
   const z = M(make('matrix M = 0 1 / 1 2 / 2 3'));
   const za = actTexts(z);
@@ -303,4 +304,97 @@ test('手势表：行的把手拖到另一行上是倍加，拖到行号上是�
   assert.ok(w.toAct(o, { to: { r: 2, c: 3 }, value: 'abc' }).error);
   assert.ok(w.toAct(o, { to: { r: 5, c: 1 }, value: '1' }).error, '没有第 5 行');
   for (const src of ['rowop M r3 - 2r1', 'rowop M r2 + (1/2)r1', 'rowop M r1 <-> r3', 'rowop M r2 / 2', 'rowop M -3r2', 'rowop M (-1/2)r2', 'write M.2,3 -3/2']) assert.deepEqual(dryRun(make(L2), src), [], src);
+});
+
+test('化简一步（提公因数、变号）判对：elim.js 自己每消一行就这样做；拿下面一行加到主元那一行上凑成 ±1 也对，没凑出来照旧判错', () => {
+  const s = make(L2);
+  run(s, 'rowop M r2 - r1');
+  const o = M(s);
+  for (const [t, note] of [['r2 / (-2)', /化简第 2 行/], ['r2 / 2', /化简第 2 行/], ['-r2', /第 2 行变号/]]) {
+    const v = chk(o, t);
+    assert.equal(v.right, true, `${t} 判对`);
+    assert.equal(v.misread, null);
+    assert.match(v.why, note);
+  }
+  const u = M(make('matrix M = 3 1 / 2 5'));
+  const v = chk(u, 'r1 - r2');
+  assert.equal(v.right, true, 'r1 − r2 把主元凑成 1');
+  assert.match(v.why, /把主元凑成 1/);
+  assert.match(chk(u, 'r1 - 2r2').why, /把主元凑成 −1/);
+  assert.ok(actTexts(u).includes('r1 - r2'), '凑 ±1 也在 acts 里');
+  assert.equal(chk(u, 'r1 + r2').right, false, '没凑出 1、也没消掉什么');
+  assert.equal(chk(u, 'r1 / 3').right, true);
+  assert.match(chk(u, 'r1 / 3').why, /把主元化成 1/);
+  // 主元已经是 1：再拿下面一行去加不是凑主元
+  assert.equal(chk(M(make(L2)), 'r1 - 2r2').right, false);
+  // 拿消好的行去凑也是弄乱
+  const w = M(make('matrix M = 1 2 0 / 0 3 1 / 0 2 5'));
+  assert.equal(chk(w, 'r2 - r3').right, true);
+  assert.match(chk(w, 'r2 - 2r1').misread, /弄乱/);
+});
+
+test('判断式 rankA：增广矩阵只算竖线左边（系数矩阵的秩），不是增广矩阵时和 rank 一样', () => {
+  const s = make('matrix M = 1 1 | 1 / 1 1 | 2\nmatrix A = 1 2 / 2 4');
+  assert.equal(predicateOf(s, 'M', 'rankA')(['1']), true, 'r(A) = 1');
+  assert.equal(predicateOf(s, 'M', 'rank')(['2']), true, 'r(A | b) = 2：无解');
+  assert.equal(predicateOf(s, 'M', 'rankA')(['2']), false);
+  assert.equal(predicateOf(s, 'A', 'rankA')(['1']), true);
+  assert.equal(predicateOf(s, 'A', 'rank')(['1']), true);
+  assert.throws(() => predicateOf(s, 'M', 'rankA')([]), /rankA=2/);
+  // 挑战：改右边的一个数让方程组无解（r(A) = 1、r(A | b) = 2）
+  const t = make('matrix M = 1 1 | 1 / 1 1 | 1');
+  run(t, 'goal g1 "改右边一个数，让它无解" when="M rankA=1, M rank=2"');
+  assert.deepEqual(t.apply(parseScript('write M.2,3 2')[0]).goalsMet, ['g1']);
+});
+
+// 现在这一张写回舞台上的写法（换一个场景接着走，不动原来的）
+const matSrc = (o) => `matrix M = ${rows(o).map((r) => (o.aug ? `${r.slice(0, o.aug).join(' ')} | ${r.slice(o.aug).join(' ')}` : r.join(' '))).join(' / ')}`;
+// elim.js 的一步（多项式、从 0 数）→ 舞台上的一步：照它的结构换，不经过文字
+const fromElim = (e) => ({ line: 'r', kind: e.kind, i: e.i + 1, j: e.j == null ? null : e.j + 1,
+  a: e.kind === 'swap' ? null : String((e.kind === 'comb' ? e.a : e.kind === 'scale' ? e.k : P(1)).constValue()),
+  b: e.kind === 'add' ? String(e.k.constValue()) : e.kind === 'comb' ? String(e.b.constValue()) : null });
+
+test('随机走错几下以后接着判：next 的每一下都判对、照着走都到得了阶梯形；elim.js 的 doHint 给的那一下也判对', () => {
+  let a = 1106;
+  const rnd = () => { a = (a * 1103515245 + 12345) % 2 ** 31; return a / 2 ** 31; };
+  const any = (xs) => xs[Math.floor(rnd() * xs.length)];
+  let wrongs = 0, hints = 0;
+  for (let k = 0; k < 60; k++) {
+    const m = 2 + Math.floor(rnd() * 3), n = 2 + Math.floor(rnd() * 3);
+    const aug = n >= 3 && rnd() < 0.4 ? n - 1 : null;
+    const vals = Array.from({ length: m }, () => Array.from({ length: n }, () => (rnd() < 0.3 ? '0' : String(Math.floor(rnd() * 7) - 3))));
+    const s = make(`matrix M = ${vals.map((r) => (aug ? `${r.slice(0, aug).join(' ')} | ${r.slice(aug).join(' ')}` : r.join(' '))).join(' / ')}`);
+    for (let step = 0; step < 10; step++) {
+      const o = M(s);
+      const nx = R.next(o);
+      if (nx) {
+        allRight(o, nx);
+        // 从这里照 next 随便挑着走，走得完
+        const t = make(matSrc(o));
+        follow(t, (len) => Math.floor(rnd() * len));
+        assert.equal(R.predicates.stairs(M(t)), true);
+        // elim.js 自己会怎么走（它只看竖线左边：左边消完了它就没有下一步）
+        const G = polyOf(rows(o));
+        const hint = E.doHint({ M: G, n: aug ?? n, m, target: 'ref', history: [] });
+        if (hint) {
+          const h = { type: 'rowop', op: [fromElim(hint)] };
+          assert.equal(R.check(o, h).right, true, `${matSrc(o)}：elim.js 给的 ${actSrc(o, h)} 判对`);
+          hints++;
+        }
+      }
+      // 一半照 next，一半随便来一步（倍加 k 取 ±1、±2、1/2，换任两行，倍乘 −1、2、1/2）
+      let line;
+      if (nx && rnd() < 0.5) line = actSrc(o, any(nx.acts));
+      else {
+        const i = 1 + Math.floor(rnd() * m);
+        let j = 1 + Math.floor(rnd() * (m - 1));
+        if (j >= i) j++;
+        const kind = any(['add', 'add', 'swap', 'scale']);
+        line = `rowop M ${kind === 'swap' ? `r${i} <-> r${j}` : kind === 'scale' ? `${any(['-1', '2', '(1/2)'])}r${i}` : `r${i} ${any(['+', '-'])} ${any(['', '2', '(1/2)'])}r${j}`}`;
+        wrongs++;
+      }
+      run(s, line);
+    }
+  }
+  assert.ok(wrongs > 200 && hints > 200, `随便走了 ${wrongs} 下、对了 ${hints} 次 elim.js 的提示`);
 });

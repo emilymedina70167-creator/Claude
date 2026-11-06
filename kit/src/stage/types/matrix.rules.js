@@ -8,7 +8,9 @@
 //   - 把主元下面一个不是 0 的格消成 0 的倍加。先消哪一格都行；拿主元那一行加，或者拿下面这一列也不是 0 的别的行加都行——
 //     当前行往下的几行在前面消好的列上全是 0，加过来弄不乱前面。两行都乘一下的写法（2r2 − 3r1，免得出分数）check 也认；
 //   - 换一行这一列不是 0 的上来当主元（主元那一格是 0 时只能这样）；
-//   - 把主元化成 1 的倍乘。
+//   - 把主元化成 1 的倍乘；拿下面一行加到主元那一行上，把主元凑成 ±1（3 1 / 2 5 上的 r1 − r2）；
+//   - 任何一行乘一个不是 0 的数（提公因数、变号：r2 / 2、−r2；elim.js 自己每消一行就这样化简一下）：倍乘弄不乱前面消好的列，
+//     check 都认，acts 里只列把主元化成 1 的那一个（乘几都行，列不完）。
 // 增广矩阵先只在竖线左边找主元，整行一起变。左边消完了、右边还不是阶梯形（无解的方程组：0 = 1、0 = 2 两行）时，
 // 接着在右边那一列消：这样 next 走完就是 stairs（matrix.js 的 echelon 看整张），「做完」和挑战的「M stairs」是一回事。
 // 已经是阶梯形以后不判（老师可能要接着化成行最简形），只有把阶梯形弄乱了才算错。
@@ -19,6 +21,7 @@ import { parseOps, opText, echelon, zeroRows, toQ } from './matrix.js';
 const ONE = new Q(1n);
 const isOne = (q) => q.n === 1n && q.d === 1n;
 const isNegOne = (q) => q.n === -1n && q.d === 1n;
+const isUnit = (q) => isOne(q) || isNegOne(q);
 const num = (q) => String(q).replace(/-/g, '−');
 const SUBS = '₀₁₂₃₄₅₆₇₈₉';
 const rowName = (i) => `r${String(i + 1).replace(/\d/g, (d) => SUBS[d])}`; // 第 i 行（从 0 数）照课本写成 r₃
@@ -139,8 +142,10 @@ function actsOf(md, pl) {
   const sources = p.zero ? nz : [r, ...nz.filter((i) => i !== r)]; // 拿主元那一行加的在前
   const elims = [];
   for (const j of sources) for (const i of targets) if (i !== j) elims.push(mkAdd(i, j, G[i][c].div(G[j][c]).neg()));
-  if (p.zero) return [...swaps, ...elims];
-  return [...elims, ...swaps, ...(isOne(p) ? [] : [mkScale(r, ONE.div(p))])];
+  // 拿下面一行加到主元那一行上，把主元凑成 1 或 −1（主元已经是 ±1 就不用凑）
+  const units = isUnit(p) ? [] : targets.flatMap((j) => [ONE, ONE.neg()].map((t) => mkAdd(r, j, t.sub(p).div(G[j][c]))));
+  if (p.zero) return [...swaps, ...elims, ...units];
+  return [...elims, ...swaps, ...units, ...(isOne(p) ? [] : [mkScale(r, ONE.div(p))])];
 }
 
 /** 这一步是不是可接受的下一步（按做出来的样子认：两行都乘一下的写法、写成一行字的都认） */
@@ -151,7 +156,23 @@ function acceptable(md, pl, op) {
   const i = op.i - 1, j = op.j - 1;
   if (op.kind === 'swap') return (i === r && j > r && nz.includes(j)) || (j === r && i > r && nz.includes(i));
   if (op.kind === 'scale') return i === r && !G[r][c].zero && isOne(G[r][c].mul(op.a));
-  return i > r && nz.includes(i) && j >= r && nz.includes(j) && i !== j && G[i][c].mul(op.a).add(G[j][c].mul(op.b)).zero;
+  const after = G[i][c].mul(op.a).add(G[j][c].mul(op.b));
+  // 凑主元：动的是主元那一行，拿下面这一列不是 0 的一行加（下面的行在消好的列上全是 0，弄不乱前面），主元成了 ±1
+  if (i === r) return j > r && nz.includes(j) && !isUnit(G[r][c]) && isUnit(after);
+  return i > r && nz.includes(i) && j >= r && nz.includes(j) && i !== j && after.zero;
+}
+
+// 一行乘一个不是 0 的数：「这一下做了什么」后面补一句（变号、化简、倍乘），老师一看就知道是化简不是走偏
+const rowSize = (row) => row.reduce((s, q) => s + (q.n < 0n ? -q.n : q.n) + q.d, 0n);
+function scaleNote(md, op, G1) {
+  if (isNegOne(op.a)) return `第 ${op.i} 行变号`;
+  return rowSize(G1[op.i - 1]) < rowSize(md.G[op.i - 1]) ? `化简第 ${op.i} 行` : `倍乘第 ${op.i} 行`;
+}
+// 判对的一步的那句补充：化 1、凑 ±1、化简（没有就是 null）
+function rightNote(md, pl, op, G1) {
+  if (op.kind === 'scale') return op.i - 1 === pl.r && isOne(G1[pl.r][pl.c]) ? '把主元化成 1' : scaleNote(md, op, G1);
+  if (op.kind !== 'swap' && op.i - 1 === pl.r) return `把主元凑成 ${num(G1[pl.r][pl.c])}`;
+  return null;
 }
 
 // —— 话 ——
@@ -162,14 +183,14 @@ function planWhy(md, pl) {
   const acts = actsOf(md, pl);
   const where = pl.right ? `竖线左边已经是阶梯形了，右边那一列（第 ${c + 1} 列）` : `第 ${c + 1} 列`;
   if (p.zero) {
-    const more = nz.length > 1 ? `（换 ${nz.slice(1).map(rowName).join('、')} 上来也行；下面几行之间先消也行）` : '';
+    const more = `（${nz.length > 1 ? `换 ${nz.slice(1).map(rowName).join('、')} 上来也行；下面几行之间先消也行；` : ''}拿下面一行加过来凑成 ±1 也行）`;
     return `${where}：${cellName(md, r, c)} 是 0，下面 ${cellVal(md, nz[0], c)} 不是 0，先换上来：${opText(acts[0])}${more}`;
   }
   const targets = nz.filter((i) => i > r);
   const also = [
     targets.length > 1 ? '先消哪一格都行' : '',
     '换别的这一列不是 0 的行当主元也行',
-    isOne(p) ? '' : '先把主元化成 1 也行',
+    isOne(p) ? '' : isUnit(p) ? '先把主元化成 1 也行' : '先把主元化成 1、或者拿下面一行加过来凑成 ±1 也行',
   ].filter(Boolean);
   return `${where}：主元是 ${cellVal(md, r, c)}，下面的 ${targets.map((i) => cellVal(md, i, c)).join('、')} 要消成 0；先 ${opText(acts[0])}（${also.join('；')}）`;
 }
@@ -223,24 +244,27 @@ function check(o, act) {
   } catch (e) {
     return { legal: false, right: false, misread: null, why: e.message, next: nowRight(md) };
   }
-  const why = ops.map((op) => opText(op)).join('，');
+  const said = [];
   let anyRight = false, wrongAt = null, misread = null;
   // 连着几步（r2 - r1, r3 - r1）：一步一步从做完上一步的样子判，每一步都对才对；错在哪一步，「现在正确的」就从那里算
   for (const op of ops) {
     const bad = illegal(md, op);
     if (bad) return { legal: false, right: false, misread: null, why: bad, next: nowRight(md) };
     const G1 = applyGrid(md.G, op);
+    let note = null;
     if (op.line === 'r' && !hasBlank(md.G)) {
       const pl = plan(md);
-      if (pl && acceptable(md, pl, op)) anyRight = true;
-      else {
+      // 倍乘弄不乱前面消好的列（0 乘几都是 0）：阶梯形以前都算对
+      if (pl && (acceptable(md, pl, op) || op.kind === 'scale')) { anyRight = true; note = rightNote(md, pl, op, G1); } else {
         const m = misreadOf(md, pl, op, G1);
         // 已经是阶梯形了：往下化行最简形不判，只有弄乱了才是错
         if ((pl || m) && !wrongAt) { wrongAt = md; misread = m; }
       }
     }
+    said.push(note ? `${opText(op)}（${note}）` : opText(op));
     md = withGrid(md, G1);
   }
+  const why = said.join('，');
   if (wrongAt) return { legal: true, right: false, misread, why, next: nowRight(wrongAt) };
   return { legal: true, right: anyRight ? true : null, misread: null, why, next: null };
 }
@@ -397,11 +421,17 @@ const predicates = {
     const G = gridOf(o);
     return piv.every(({ r, c }) => isOne(G[r - 1][c - 1]) && G.every((row, i) => i === r - 1 || row[c - 1].zero));
   },
-  // 秩是几（整张的秩：增广矩阵就是 r(A | b)）
+  // 秩是几（整张的秩：增广矩阵就是 r(A | b)；r(A) 写 rankA）
   rank: (o, [k] = []) => {
     if (!/^\d+$/.test(String(k ?? ''))) throw new Error('rank 要写秩是几：M rank=2');
     if (!filled(o)) return null;
     return rrefOf(gridOf(o)).rank === Number(k);
+  },
+  // 系数矩阵的秩：增广矩阵只算竖线左边（r(A)，和 rank 的 r(A | b) 比有没有解）；不是增广矩阵时和 rank 一样
+  rankA: (o, [k] = []) => {
+    if (!/^\d+$/.test(String(k ?? ''))) throw new Error('rankA 要写系数矩阵的秩是几：M rankA=2');
+    if (!filled(o)) return null;
+    return rrefOf(gridOf(o).map((row) => row.slice(0, o.aug ?? o.cols))).rank === Number(k);
   },
   // 和舞台上的 B 行等价（化成行最简形一样，解也一样）
   same: (o, [id] = [], scene) => {
