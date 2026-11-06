@@ -21,7 +21,7 @@ const mem = (init = {}) => { const m = { ...init }; return { getItem: (k) => (k 
 
 test('isTeach：课堂和一问一答是课堂里的 Claude 讲的；实时黑板、自学单元、练习不是；没写 kind 的旧课是课堂', () => {
   assert.equal(SESSION_KINDS.talk, '一问一答');
-  assert.deepEqual(TEACH_KINDS, ['class', 'talk']);
+  assert.deepEqual(TEACH_KINDS, ['class', 'talk', 'stage']);
   assert.equal(kindOf({ kind: 'talk' }), 'talk');
   assert.equal(isTeach({ kind: 'talk' }), true);
   assert.equal(isTeach({ kind: 'class' }), true);

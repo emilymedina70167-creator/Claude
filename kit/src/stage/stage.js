@@ -156,13 +156,12 @@ export class Stage {
       });
     };
     const feed = (text, final) => {
-      const raw = String(text ?? '').replace(/^```[^\n]*\n?/gm, '');
-      const all = raw.split('\n');
+      const all = stageLines(text);
       const done = final ? all : all.slice(0, -1);
       const fresh = done.slice(taken);
       taken = done.length;
       if (!fresh.length) return;
-      const cmds = parseScript(fresh.map((l) => (l.trim() ? l : '#')).join('\n'));
+      const cmds = parseScript(fresh.map((l) => (l == null || !l.trim() ? '#' : l)).join('\n'));
       const base = taken - fresh.length;
       for (const c of cmds) enqueue({ ...c, line: c.line + base, src: c.src ?? fresh[c.line - 1] });
     };
@@ -687,6 +686,23 @@ export class Stage {
     n.addEventListener('pointercancel', leave);
     return () => { n.classList.remove('is-tap', 'is-press'); n.removeEventListener('pointerdown', on); n.removeEventListener('pointerup', up); n.removeEventListener('pointerleave', leave); n.removeEventListener('pointercancel', leave); };
   }
+}
+
+/**
+ * 老师这一轮写的字 → 要演的行（行号不变，不演的行是 null）：代码块记号那几行不演；
+ * ````board memo / plan 块里的是记进记忆、写给自己的，不是镜头（课堂那边照旧读它们）
+ */
+export function stageLines(text) {
+  let inBoard = false;
+  return String(text ?? '').split('\n').map((l) => {
+    const t = l.trim();
+    if (/^`{3,}/.test(t)) {
+      if (inBoard) { inBoard = false; return null; }
+      if (/^`{3,}\s*board\b/i.test(t)) inBoard = true;
+      return null;
+    }
+    return inBoard ? null : l;
+  });
 }
 
 /** 填的答案和正确答案一样吗（数按数比：0.50 = .5 = 1/2；别的去掉空格、不分大小写） */

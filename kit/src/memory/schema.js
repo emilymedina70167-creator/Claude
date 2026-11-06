@@ -144,7 +144,7 @@ export const COLLECTIONS = {
     label: '每节课', kind: 'state', writers: ['page', 'chat'],
     id: { re: /^c-[A-Za-z0-9_-]+$/, eg: 'c-20261028-2（当天第几节）' },
     required: ['date'],
-    enums: { space: ['math', 'cs', 'en'], kind: ['class', 'talk', 'live', 'unit', 'drill'], status: ['open', 'closed'] },
+    enums: { space: ['math', 'cs', 'en'], kind: ['class', 'talk', 'stage', 'live', 'unit', 'drill'], status: ['open', 'closed'] },
     dates: ['date'],
     refs: { block: 'curriculum' },
     tracked: [],

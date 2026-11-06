@@ -64,6 +64,7 @@ import { createPlanner } from '../books/planview.js';
 import { createDevAI } from '../books/devmock.js';
 import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
+import { renderStageClass } from '../stage/classroom.js';
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
 import { renderGuided } from '../guided.js';
@@ -609,7 +610,7 @@ export async function renderDesk(root, meta) {
     box.querySelector('.dk-body').innerHTML = `
       ${openPd.length ? `<p><a class="dk-link dk-to-pending" href="#">还有 ${openPd.length} 条以前留下的没写进去 ↓</a></p>` : ''}
       <div class="dk-hero-wrap"><div class="dk-hero">
-        <p class="dk-eyebrow">${escapeHtml(SPACES[space].label)}${open ? (kindOf(open) === 'talk' ? '这节一问一答还没下课' : '这节课还没下课') : main ? '备好的下一节' : '的下一节'}${main?.by === 'desk' ? '<span class="muted">（学习台备的）</span>' : ''}</p>
+        <p class="dk-eyebrow">${escapeHtml(SPACES[space].label)}${open ? (kindOf(open) === 'talk' ? '这节一问一答还没下课' : kindOf(open) === 'stage' ? '这节舞台课还没下课' : '这节课还没下课') : main ? '备好的下一节' : '的下一节'}${main?.by === 'desk' ? '<span class="muted">（学习台备的）</span>' : ''}</p>
         <h2 class="dk-hero-t${heroLen > 26 ? ' is-xlong' : heroLen > 13 ? ' is-long' : ''}">${supRuns(inline(open ? (open.title && open.title !== unit ? open.title : (open.block && data.curriculum.find((c) => String(c.id) === String(open.block))?.title) || heroT) : heroT))}</h2>
         ${heroS ? `<p class="dk-hero-s dk-goal" title="点一下看全文">${inline(heroS)}</p>` : ''}
         ${debts.length ? `<p class="dk-owe" title="点一下看全文">还欠着：${debts.map((x) => inline(x)).join('；')}</p>` : ''}
@@ -1539,6 +1540,19 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   const fillPrev = async () => { if (wantPrev && books.chunks.length) prevRead.push(...await within(priorReads(db, mem.sessions || [], { sid, block, books }), 5000, [])); };
   if (books.loading) books.ready.then(fillPrev).catch(() => {}); else await fillPrev();
   step('画黑板');
+  // 舞台课（kind: stage，docs/stage-plan.md D 段）：整屏一块舞台，自己的控制器；记忆、教材、证据、报告照旧
+  if (kind === 'stage') {
+    return renderStageClass(root, { ...meta, unit: doc.title || meta.unit }, {
+      store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, mem, books, prevRead, readOnly,
+      updateSession, onHome: () => goto(readOnly ? `classes/${sid}` : ''),
+      recheck: readOnly ? {} : await within(db.doc('meta/workorder').get().then((s) => (s.exists ? s.data().recheck || {} : {})), 3000, {}).catch(() => ({})),
+      writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),
+      makeReport: ({ turns, steps } = {}) => makeReport(db, sid, { doc: { ...doc, endedAt: doc.endedAt || Date.now() }, turns, steps }),
+      memo: readOnly ? null : { ops, view: createMemoView({ db, ops, nameOf: nameIn(() => mem) }) },
+      review: doc.review || null,
+      opening: doc.opening || null,
+    });
+  }
   if (readOnly) {
     return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
       store: { ...store, db: readOnlyDb(scopeDb(db, sid)), assets: null }, sid, block, space, mem, readOnly: true, books, talk: kind === 'talk',
@@ -1622,7 +1636,7 @@ export async function createClass(db, { block = null, main = null, problems = nu
   const sp = block ? spaceOfId(block) : space;
   await db.doc(`sessions/${sid}`).set({
     date: today, block: block || null, title: String(main?.unit || unit), status: 'open', startedAt: Date.now(), space: sp, ...(block ? { subject: subjectOf(block) } : {}),
-    ...(kind === 'talk' ? { kind: 'talk' } : {}),
+    ...(kind === 'talk' || kind === 'stage' ? { kind } : {}),
     pack: main ? { unit: main.unit || '', goal: main.goal || '', updatedAt: main.updatedAt || null } : null,
     // 复现课（views.js 的 reviewPack，reviewClass）记 review：这节课就是复现这几组；备课写的开头复现（[{ id, how }]）记 opening
     ...(main?.reviewClass && reviewIdsOf(main.review).length ? { review: reviewIdsOf(main.review) } : {}),

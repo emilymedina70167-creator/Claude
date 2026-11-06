@@ -2,6 +2,8 @@
 // 说明分两块：怎么教（STAGE_TEACH：像一个会停下来等学生的科普视频——画面是主力，先做后说）和镜头指令（STAGE_DOC）。
 // 提到学生不用「他」「她」（tests 守着）
 import { TYPES } from './types/index.js';
+import { MEMO_DOC, packText, PACK_BUDGET } from '../class/prompt.js';
+import { memoryDigest } from '../memory/digest.js';
 
 export const STAGE_TEACH = `你是一对一的老师，在一块「舞台」上给学生上课。舞台像一个会停下来等学生的科普视频：
 - 画面是讲课的主力。你对画面做事——跳格、连线、染色、交换、插入、比较、指针、分组、分开排——学生看着画面变化自己想明白。话是旁白：短，指着画面说（写 {a.3}，话里会画成和那一格一样的小块）。
@@ -106,3 +108,56 @@ export const TOPICS = {
     material: '直接插入排序：把表分成前面的有序区和后面的无序区，初始有序区只有第 1 个元素；每次取无序区的第一个元素，在有序区里从后往前比较，比它大的依次后移一位，空出的位置放入它（相等时不越过，所以稳定）。n 个元素做 n − 1 趟。最好 O(n)（本来有序），最坏、平均 O(n²)；空间 O(1)。例子：49 38 65 97 76 13 27 49′。',
   },
 };
+
+// —— 在学习台里上的舞台课（D 段）：每一轮的整份说明 ——
+const enc = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
+const bytes = (t) => (enc ? enc.encode(String(t)).length : Buffer.byteLength(String(t)));
+export const STAGE_SYSTEM_MAX = 150 * 1024;
+
+// 记忆的写法：照课堂那份，依据换成舞台上那一问的编号（S5 = 第 5 轮最后那个 ask）；不收「point=」（舞台上没有段）
+export const STAGE_MEMO_DOC = MEMO_DOC
+  .replace(/basis=q-b5,q-b7/g, 'basis=S5,S7')
+  .replace(/basis=q-b9/g, 'basis=S9')
+  .replace(/basis=q-b5/g, 'basis=S5')
+  .replace('黑板上的组件 id（`q-b5`，页面换成学生在那道题上的全部作答）、段 id（`b5`）', '舞台上那一问的编号（`S5` 指第 5 轮最后那个 ask，页面换成学生在那一问上的作答）')
+  .replace('again="b7 没讲划块就出了标主干的题"', 'again="没让学生先在画面上找谓语就问了主干"')
+  .replace('和黑板指令一样用一个', '和镜头指令写在同一轮，另起一个')
+  .replace('板放不下不用记：页面量得出来（黑板现状里有），稍长学生会上下滑。', '')
+  .replace(/上课时板上不显示记了什么（不打扰学生），下课小结那块板上有一行小字，学生点开能撤销。/, '上课时舞台上不显示记了什么（不打扰学生），学生事后在学习台里能看到、能撤销。');
+
+const DESK_STAGE = `### 在学习台里上课
+- 学生在舞台上的每个动作（点、拖、拨、按钮、填的答案、打的字），页面都自动记成证据，课后看证据判断。证据你不用写，也写不了。
+- 要记进记忆时，在这一轮的镜头指令后面另起一个 \`\`\`\`board memo 块（块里的行不会上舞台）：
+${STAGE_MEMO_DOC}
+- 不要宣布学生掌握了：掌握由页面按证据算。`;
+
+/**
+ * 舞台课每一轮的整份说明（学习台里）：怎么教 → 舞台的写法 → 资料包（含教材原文）→ 你对学生的了解。
+ * memory：{ mem, block, space, session }；pack：{ main, problems }（main.textbook 里可以已经放好了教材原文）
+ */
+export function buildStageSystem({ pack = null, memory = null, rules = '', title = '' } = {}) {
+  const parts = (packBody, mem) => {
+    const custom = [rules, mem?.rules].filter((x) => String(x || '').trim()).join('\n\n');
+    const sections = [
+      `怎么教\n\n${STAGE_TEACH}${custom ? `\n\n学习台里的规则（学生定下的，照做；和上面冲突时以这里为准）：\n${custom}` : ''}`,
+      `舞台的写法\n\n${stageDoc()}`,
+      `这节课${title ? `：${title}` : ''}\n\n课前备好的资料包（教材原文、推进建议、备好的题）。照这里的口径讲，例子可以自己换。\n\n${packBody}`,
+      ...(memory ? [`你对学生的了解（学习台的记忆库）\n\n${mem?.text || ''}\n\n${DESK_STAGE}`] : []),
+    ];
+    const NUM = ['一', '二', '三', '四', '五'];
+    return [
+      '这是一节舞台课的完整说明，每一轮都会重新发给你（资料包和记忆都是最新的）。说明后面是这节课的对话：学生在舞台上做了什么、舞台现在的样子、页面的提醒，以及你之前写的几轮镜头指令。你这一轮的输出就是舞台接下来的几行镜头指令（要记进记忆时另起一个 ````board memo 块）。',
+      ...sections.map((x, i) => `# ${NUM[i]}、${x}`),
+      '（说明到这里结束。下面是这节课的对话，回应最后一条消息。）',
+    ].join('\n\n');
+  };
+  let mem = null;
+  if (memory) {
+    const room = STAGE_SYSTEM_MAX - bytes(parts('', { rules: '', text: '' })) - 40 * 1024;
+    mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools: false, budget: Math.max(4 * 1024, Math.min(28 * 1024, room)) });
+  }
+  const rest = bytes(parts('', mem));
+  const { text: packBody } = packText(pack || { main: null, problems: null }, Math.max(12 * 1024, Math.min(PACK_BUDGET, STAGE_SYSTEM_MAX - rest - 2 * 1024)), { talk: true });
+  return parts(packBody || '（这节课没有备好的资料包：按课程地图的这一块讲。）', mem);
+}
+

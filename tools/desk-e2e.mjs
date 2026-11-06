@@ -481,6 +481,61 @@ const SUITES = {
 
   // 练一练：题库里放两道挂着到期复现组的题。做完（中间写证据失败一次）结果照样算进去；
   // 另开一节做一道错的就回首页「直接下课」，复现组照样记「没过」（以前直接下课会把复现结果丢掉）
+  // 舞台课（kind: stage，docs/stage-plan.md D 段）：首页选「舞台」开课，模拟老师一轮轮写镜头指令；
+  // 点对一格（证据里一条 S… 的作答，ok）、填一个答案（页面当场判）；老师写的 memo 块写进记忆；写错的一行跳过、下一轮告诉老师；
+  // 刷新以后舞台照记录放回、最后一问接着等；打一句话；下课：小结、整理单、课后报告里有 S… 的题；以前的课能翻看（只读、不调用）
+  async stage(browser) {
+    const t = await seeded(browser);
+    await t.page.click('.dk-form-b[data-form="stage"]'); await sleep(300);
+    await t.page.click('.dk-class .dk-new');
+    await t.page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash), { timeout: 20000 });
+    await t.page.waitForLoadState('load');
+    await t.waitFor(() => t.page.$('.sc-root .st-stage'), { timeout: 20000, what: '舞台课画出来' });
+    const sid = decodeURIComponent(new URL(t.page.url()).hash.slice(1));
+    check((await t.docs('sessions')).find((d) => d.id === sid)?.kind === 'stage', '选了舞台，开出来的课不是 kind: stage');
+    const node = (pid) => t.page.evaluate((k) => { const r = window.LAStage?.nodes.get(k)?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null; }, pid);
+    const tap = async (pid) => { const p = await node(pid); check(p, `舞台上没有 ${pid}`); await t.page.mouse.move(p.x, p.y); await t.page.mouse.down(); await t.page.mouse.up(); };
+    const turns = async () => Object.entries(await t.db()).filter(([k]) => k.startsWith(`sessions/${sid}/class_turns/`)).map(([, v]) => v).sort((a, b) => a.seq - b.seq);
+    // 第一轮：一排格子、要找的数、比一次，等学生点
+    await t.waitFor(() => t.page.$('.st-cell.is-tap'), { timeout: 30000, what: '模拟老师写出第一轮（舞台上能点格子）' });
+    await sleep(500);
+    await tap('a:9');
+    const rec = await t.waitFor(async () => (await t.docs('evidence')).find((e) => e.session === sid && e.src === 'record' && /^S\d+$/.test(e.comp || '')), { what: '点对的那一格记成 S… 的作答' });
+    check(rec.ok === true, `点了预期的那一格，作答记成了 ok=${rec.ok}`);
+    // 第二轮：故意写错的一行跳过，memo 块写进记忆，ask value 当场判
+    await t.waitFor(() => t.page.$('.st-say.is-main input'), { timeout: 30000, what: '第二轮问一个要填的答案' });
+    const tt = await turns();
+    check(tt.some((x) => x.role === 'claude' && Array.isArray(x.log) && x.log.some((r) => /^array a/.test(r.src))), '老师那一轮没把演了的行记进 class_turns');
+    await t.waitFor(async () => (await t.docs('observations')).some((o) => o.session === sid && /第一次就能说出往哪边找/.test(o.text || '')), { what: 'memo 块里的 note 写进记忆' });
+    await t.page.fill('#st-say-input', '5'); await t.page.click('.st-say-go');
+    await t.waitFor(async () => (await t.docs('evidence')).some((e) => e.session === sid && e.src === 'record' && e.value === '5' && e.ok === true), { what: '填的答案记成作答（页面判对）' });
+    const st = (await turns()).filter((x) => x.role === 'student').at(-1);
+    check(/swap 要正好两格/.test(st?.msg || ''), '写错的那一行没在下一轮告诉老师');
+    // 第三轮：翻开中间那一格，问一句话；刷新以后照记录放回，接着等
+    await t.waitFor(() => t.page.$('.st-say.is-main input') && t.page.evaluate(() => window.LAStage?.scene.waiting?.kind === 'say'), { timeout: 30000, what: '第三轮问一句话' });
+    await t.page.reload(); await t.page.waitForLoadState('load');
+    await t.waitFor(() => t.page.evaluate(() => window.LAStage?.scene.waiting?.kind === 'say'), { timeout: 20000, what: '刷新以后最后一问接着等' });
+    const back = await t.page.evaluate(() => { const s = window.LAStage.scene; const a = s.objects.get('a'); return { dim: a.cells.filter((c) => c.dim).length, covered: a.cells.filter((c) => c.covered).length, ptr: a.ptrs.get('mid') }; });
+    check(back.dim === 6 && back.covered === 4 && back.ptr === 9, `刷新以后舞台没照记录放回：${JSON.stringify(back)}`);
+    await t.page.fill('#st-say-input', '往左，因为 33 比 37 小'); await t.page.click('.st-say-go');
+    await t.waitFor(async () => (await t.docs('evidence')).some((e) => e.session === sid && e.src === 'say' && /往左/.test(e.text || '')), { what: '打的字记成学生说的话' });
+    await t.waitFor(() => t.page.$('.st-next'), { timeout: 30000, what: '第四轮' });
+    // 下课：小结、整理单（position 写进记忆）、报告里有 S… 的题
+    await t.page.click('.sc-end');
+    await t.answer('下课');
+    await t.waitFor(() => t.page.$('.sc-closing:not([hidden]) .sc-sum'), { timeout: 30000, what: '下课小结画出来' });
+    const s = await t.waitFor(async () => { const x = (await t.docs('sessions')).find((d) => d.id === sid); return x?.status === 'closed' && x.report?.at ? x : null; }, { timeout: 20000, what: '下课以后报告写好' });
+    check(s.verify?.turns >= 4, `下课时 verify 记得不对：${JSON.stringify(s.verify)}`);
+    const rep = (await t.db())[`sessions/${sid}/report/main`];
+    check((rep?.items || []).filter((it) => /^S\d/.test(it.comp || '')).length >= 2, `报告里没有舞台上的题：${JSON.stringify((rep?.items || []).map((x) => x.comp))}`);
+    // 翻看：照记录放回，只读、不调用
+    await t.open(`view/${sid}`);
+    await t.waitFor(() => t.page.$('.sc-root .st-cell'), { timeout: 20000, what: '只读的舞台画出来' });
+    await sleep(1200);
+    check(!(await t.page.$('.sc-end')), '只读的舞台课还能点「下课」');
+    return t;
+  },
+
   async drill(browser) {
     const t = await seeded(browser);
     const plant = async () => t.page.evaluate(() => {

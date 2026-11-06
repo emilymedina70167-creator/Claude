@@ -164,7 +164,7 @@ export function classRows(mem = {}) {
       id: s.id, date: s.date || '', block: s.block || '', title: s.title || '', status: s.status || '',
       minutes: s.report?.activeMs ? Math.round(s.report.activeMs / 60000) : null, line: s.report?.line || '',
       verify: s.verify || null, summary: cutMd(first, 80), usage: s.usage || null, review: s.review || null, startedAt: s.startedAt || 0,
-      kind: ['talk', 'live', 'unit'].includes(s.kind) ? s.kind : 'class',
+      kind: ['talk', 'stage', 'live', 'unit'].includes(s.kind) ? s.kind : 'class',
       // 课堂里的 Claude 讲的课（课堂、一问一答）：「接着上课」
       teach: isTeach(s),
       // 练一练、课前热身（kind: drill）：列表里照旧算一行，「上一节」不算它
@@ -343,7 +343,7 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
     last ? `- 上一节：${last.kind === 'class' ? '' : `${{ talk: '一问一答', live: '实时黑板' }[last.kind] || '自学单元'} `}${last.id}（${last.block || '没写块'}）${last.line ? `，${last.line}` : ''}${last.summary ? `；小结开头：${last.summary}` : ''}。课后报告在 sessions/${last.id}/report/main。` : '- 还没有下过课。',
     ...opens.map((r) => (r.kind === 'live'
       ? `- 实时黑板 ${r.id}「${cut(r.title, 40)}」还开着：接着写就往 sessions/${r.id}/steps 写，黑板现状在 sessions/${r.id}/meta/now（说明书第五节）。`
-      : r.kind === 'unit' ? `- 自学单元 ${r.id}「${cut(r.title, 40)}」我还没学完。` : `- 有一节${r.kind === 'talk' ? '一问一答的课' : '课堂'}还没下课：${r.id}。`)),
+      : r.kind === 'unit' ? `- 自学单元 ${r.id}「${cut(r.title, 40)}」我还没学完。` : `- 有一节${r.kind === 'talk' ? '一问一答的课' : r.kind === 'stage' ? '舞台课' : '课堂'}还没下课：${r.id}。`)),
     due.length ? `- 到期的复现组：${due.map((d) => `${d.id}${d.days < 0 ? `（过期 ${-d.days} 天）` : ''}`).join('、')}（学习台首页能直接开复现课）。` : '',
     pack ? `- 已经备好的下一节：${cut(pack.unit || '', 60)}${pack.block ? `（${pack.block}）` : ''}。` : '',
     todo.length ? `- 现状（学习台自己处理，你只做开发）：\n${todo.map((t) => `  - ${t}`).join('\n')}` : '',
