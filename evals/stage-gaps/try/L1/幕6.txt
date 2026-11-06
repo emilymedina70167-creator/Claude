@@ -6,7 +6,7 @@ link f.p x.p g1
 link f.q x.q g2
 link f.r x.r g3
 link f.s x.s g4
-say "把 {f} 的四块化到不能再化，和下面数的那张比一比。"
+say "把 {f} 的四块化到不能再化，先看 {f.q}，和下面数的那张比一比。"
 ask tap f "先化哪一块？点它"
 学生: tap f.q
 retex f "\hl{p}{A^2} \hl{q}{-2A} \hl{r}{-A} + \hl{s}{2E}"
