@@ -181,6 +181,49 @@ export function nodeBox(o, p) {
 /** 空树时根的位置（画一个虚圈，插进来就长在这里） */
 export const rootSpot = (o) => ({ x: o.origin.x - NODE / 2, y: o.origin.y - NODE / 2, w: NODE, h: NODE });
 const roomy = (b) => ({ x: b.x - TAG_ROOM, y: b.y - TAG_ROOM, w: b.w + 2 * TAG_ROOM, h: b.h + TAG_ROOM + 12 });
+/** 结点（连角标）占的地方，不算托盘：拖托盘里的数进树时，落在这一块里就是插进树里 */
+export const treeArea = (o) => bbox(o.nodes.length ? o.nodes.map((n) => roomy(nodeBox(o, n))) : [roomy(rootSpot(o))]);
+const nodesArea = treeArea;
+
+export const TRAY_GAP = 20; // 托盘里两个数之间（能拖时外面一圈呼吸的光，挨太近就叠在一起）
+const TRAY_TOP = 22; // 托盘离树最下面一层多远
+const TRAY_PAD = 10; // 托盘的底板比里面的数宽出去多少
+/** 托盘（待插的数）画在哪：树下面一排圆，和结点一样大，正中对着根（世界坐标）。没有托盘是 [] */
+export function trayBoxes(o) {
+  const vals = o.tray || [];
+  if (!vals.length) return [];
+  const b = nodesArea(o);
+  const w = vals.length * NODE + (vals.length - 1) * TRAY_GAP;
+  const x0 = o.origin.x - w / 2, y = b.y + b.h + TRAY_TOP;
+  return vals.map((value, i) => ({ value, x: x0 + i * (NODE + TRAY_GAP), y, w: NODE, h: NODE }));
+}
+/** 托盘的底板（包着那一排数）；没有托盘是 null */
+export function trayArea(o) {
+  const bs = trayBoxes(o);
+  if (!bs.length) return null;
+  const b = bbox(bs);
+  return { x: b.x - TRAY_PAD, y: b.y - TRAY_PAD, w: b.w + 2 * TRAY_PAD, h: b.h + 2 * TRAY_PAD };
+}
+/**
+ * 能放新结点的空位（open t place：学生把托盘的数拖到某个结点下面）：每个结点缺孩子的那一边、空树的根。
+ * 一个孩子都没有的，空位离它半个间距；另一边有孩子的，和那个孩子对称（排版就是这样摆的）。再长会超过最多那几层（MAX_DEPTH）的不给。
+ * 返回 [{ parent（结点的 key，空树是 null）, side, box（世界坐标）}]
+ */
+export function slotSpots(o) {
+  if (o.root == null) return [{ parent: null, side: null, box: rootSpot(o) }];
+  const pos = layoutTree(o), d = depths(o), out = [];
+  for (const n of levelOrder(o)) {
+    const p = pos.get(n.key);
+    if (!p || (d.get(n.key) || 0) + 1 >= MAX_DEPTH) continue;
+    for (const side of ['left', 'right']) {
+      if (n[side] != null) continue;
+      const sib = n[side === 'left' ? 'right' : 'left'];
+      const dx = sib != null && pos.get(sib) ? p.x - pos.get(sib).x : side === 'left' ? -SEP / 2 : SEP / 2;
+      out.push({ parent: n.key, side, box: { x: o.origin.x + p.x + dx - NODE / 2, y: o.origin.y + p.y + LEVEL - NODE / 2, w: NODE, h: NODE } });
+    }
+  }
+  return out;
+}
 
 /** 结构（旋转前后、动画的中间一步用）：{ root, nodes: [{ key, left, right }] } */
 export const snapshot = (o) => ({ root: o.root, nodes: o.nodes.map((n) => ({ key: n.key, left: n.left, right: n.right })) });
@@ -392,15 +435,18 @@ export const tree = {
   },
   ref(p) { return p.dup ? `${p.obj}#${p.key}` : `${p.obj}.${p.value}`; },
   partBox: nodeBox,
+  // 托盘也是树的地方：镜头框进来，别的东西、贴的字让开
   objectBox(o) {
-    const boxes = o.nodes.map((n) => roomy(nodeBox(o, n)));
-    return bbox(boxes.length ? boxes : [roomy(rootSpot(o))]);
+    const tray = trayArea(o);
+    return tray ? bbox([nodesArea(o), tray]) : nodesArea(o);
   },
-  // 贴字让开：结点（连角标）、每条边上取几点
+  // 贴字让开：结点（连角标）、每条边上取几点、托盘
   obstacles(o) {
     const B = boxesFor(o);
     const out = [...B.values()].map(roomy);
     if (!out.length) out.push(roomy(rootSpot(o)));
+    const tray = trayArea(o);
+    if (tray) out.push(tray);
     for (const [a, b] of edgesOf(o)) {
       const A = B.get(a), C = B.get(b);
       if (!A || !C) continue;

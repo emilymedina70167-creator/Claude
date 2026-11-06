@@ -69,7 +69,56 @@ function placeDecor(stage, o, ctx, live, key, g, create, appear) {
   return n;
 }
 
+// 拉一段（open s mark）时跟着手的临时括号：拉过的词淡淡上一层底，词下面一道主色的线（跨行的一行一段）；不带 data-obj，排版不算它
+function spanPreview(stage, o0) {
+  const id = o0.id;
+  const segs = [];
+  let lit = [];
+  const clear = () => { segs.splice(0).forEach((n) => n.remove()); lit.forEach((n) => n.classList.remove('is-span')); lit = []; };
+  return {
+    set(a, b) {
+      clear();
+      const o = stage.scene.objects.get(id);
+      if (!o || a?.slot == null || b?.slot == null) return;
+      const lo = Math.min(a.slot, b.slot), hi = Math.max(a.slot, b.slot);
+      const rows = new Map();
+      for (const w of ordered(o)) {
+        if (w.slot < lo || w.slot > hi) continue;
+        const n = stage.nodeOf(w);
+        if (n) { n.classList.add('is-span'); lit.push(n); }
+        const bx = stage.scene.partBox(w);
+        const k = Math.round(bx.y);
+        if (!rows.has(k)) rows.set(k, []);
+        rows.get(k).push(bx);
+      }
+      for (const bs of rows.values()) {
+        const x = Math.min(...bs.map((q) => q.x)), r = Math.max(...bs.map((q) => q.x + q.w)), y = Math.max(...bs.map((q) => q.y + q.h));
+        const n = el('div', 'sn-span', stage.layer);
+        n.style.transform = tr(x - 2, y + 3);
+        n.style.width = `${r - x + 4}px`;
+        segs.push(n);
+      }
+    },
+    // 拉好的那一段在屏幕上的框（成分标签那一排贴着它）
+    rect() {
+      const rs = [...lit, ...segs].map((n) => stage.screenRect(n)).filter(Boolean);
+      if (!rs.length) return null;
+      const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y));
+      return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y };
+    },
+    remove: clear,
+  };
+}
+
 export const sentenceView = {
+  // 通用手势（gesturedom.js）抓哪儿：一个词（拉一段从它起、到它止；折起一段点它），一道括号（点它折起来）
+  grips: {
+    word: (stage, o, e) => (e.refs.length ? e.refs.flatMap((r) => stage.scene.parts(r)) : ordered(o))
+      .filter((w) => !stage.nodeOf(w)?.classList.contains('is-folded'))
+      .map((w) => ({ key: `w:${w.key}`, part: () => stage.scene.partOf(o.id, w.key), node: () => stage.nodes.get(`${o.id}:${w.key}`) })),
+    bracket: (stage, o) => layout(o).brackets.map((g) => ({ key: `br:${g.id}`, part: () => ({ mark: g.mark }), node: () => stage.decor(o.id, `br:${g.id}`) })),
+  },
+  spanPreview,
   sync(stage, o, ctx) {
     ensureCss();
     ensureMeasure(stage);
@@ -408,6 +457,9 @@ export const sentenceView = {
 .sn-word.is-hold { z-index: 5; cursor: grabbing; background: var(--st-card); box-shadow: 0 0 0 2px var(--st-brand), 0 16px 26px -14px rgb(var(--shade-rgb, 25 45 40) / 0.55); }
 @keyframes sn-breathe { 0%, 100% { opacity: .12; } 50% { opacity: .6; } }
 @media (prefers-reduced-motion: reduce) { .sn-word.is-tap::after, .sn-word.is-drag::after { animation: none; opacity: .45; } }
+.sn-word.is-span { background: color-mix(in srgb, var(--st-brand) 11%, transparent); }
+.sn-span { position: absolute; left: 0; top: 0; height: 9px; box-sizing: border-box; border: 2.5px solid var(--st-brand); border-top: 0; border-radius: 0 0 8px 8px; pointer-events: none; z-index: 4; }
+.sn-br.is-tap { opacity: 1; border-width: 2.5px; }
 .sn-caret { position: absolute; left: 0; top: 0; width: 3px; height: ${WORD_H - 8}px; border-radius: 2px; background: var(--st-brand); transition: opacity .15s; pointer-events: none; }
 
 /* 括号：词下面一道，两头翘上来贴着词；套在外面的那道竖线长一点，把里面的围住；跨到下一行的那头淡掉 */

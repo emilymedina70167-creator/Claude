@@ -5,7 +5,9 @@
 //   check(o, act, scene) → { legal, right, misread, why, next }
 //   predicates { 名字: (o, args, scene) → true | false | null }
 //   facts(before, after, act) → [话]
-//   gestures { tap / drag / ...: { gesture, ... } }
+//   gestures { 动作: { gesture, from, to, toAct, ask?, pick?, choices? } }   五种通用手势在它这里是什么（gestures.js 照它翻成一行指令；
+//                                               ask 说放下以后要不要先问一个值（倍数框），pick + choices 是拉好一段以后点的那一排）
+//   slipRefs(o, act) → [部件的写法] | null（可选）  学生走偏的那一下淡淡圈哪儿，那一行没写部件时（rowop M r3 - 2r1 圈第 3 行）
 //   standard(o) → { steps, variants }（可选）
 //   actOf(o, c, h) → 动作 | null                一行镜头指令（rotate t#3 right、rowop M r2 - 2r1、mark s.2-4 V）→ check 认的动作；
 //                                               不判的指令是 null。学生、老师的每一行都照它过裁判（场景里，所以重放出来一样）

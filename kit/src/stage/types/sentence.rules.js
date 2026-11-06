@@ -8,7 +8,7 @@
 // （成分名照 sentence.js 的 roleName / sameRole 对：V 和「谓语」是一个，分词、to do 是非谓语，只写「从句」对得上任何一种从句）。
 // 拉错了的括号留着也不碍事（舞台上没有让学生收括号的手势），只看 key 里的每一段有没有拉对。
 import { judgeSpans } from '../../entext.js';
-import { sentence, ordered, roleName, sameRole, phraseOf, restText } from './sentence.js';
+import { sentence, ordered, roleName, sameRole, phraseOf, restText, roleColor, ROLE_NAMES } from './sentence.js';
 
 export { roleName, ROLE_NAMES } from './sentence.js';
 
@@ -281,9 +281,24 @@ function foldAct(o, { from, to } = {}) {
   return made(o, { type: 'fold', from: p, to: q });
 }
 
+// 拉好一段以后点的那一排成分：常用的几个（只列 key 里有的，等于把答案告诉了学生），key 里还有别的成分也补上（不然拉对了也点不出来）。
+// 按钮上写中文、小字是缩写，颜色和画出来的括号一样（roleColor）；点了交缩写（mark s.2-4 V）
+const SPAN_ROLES = ['S', 'V', 'O', 'P', 'A', 'Attr', 'RC', 'NF'];
+function spanChoices(o) {
+  const out = [];
+  const add = (r) => {
+    const name = roleName(r);
+    if (!r || out.some((c) => c.value === r || (name && roleName(c.value) === name))) return; // V1、V2 和 V 是同一个按钮
+    out.push({ value: r, text: ROLE_NAMES[r] || name || r, sub: r, paint: roleColor(r) });
+  };
+  SPAN_ROLES.forEach(add);
+  if (o?.key && !o.key.void) for (const sp of o.key.spans) add(sp.role);
+  return out;
+}
+
 const gestures = {
   // 从一个词拉到另一个词，再点成分标签（value 是点的那个成分）：mark s.2-5 V
-  mark: { gesture: 'span', from: 'word', to: 'word', pick: 'role', toAct: markAct },
+  mark: { gesture: 'span', from: 'word', to: 'word', pick: 'role', choices: spanChoices, toAct: markAct },
   // open s fold：点一段（括号或括号里的词）折起来：fold s.3-6
   fold: { gesture: 'tap', on: ['bracket', 'word'], toAct: foldAct },
 };

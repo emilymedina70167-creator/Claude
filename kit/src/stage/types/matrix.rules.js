@@ -25,6 +25,7 @@ const isUnit = (q) => isOne(q) || isNegOne(q);
 const num = (q) => String(q).replace(/-/g, '−');
 const SUBS = '₀₁₂₃₄₅₆₇₈₉';
 const rowName = (i) => `r${String(i + 1).replace(/\d/g, (d) => SUBS[d])}`; // 第 i 行（从 0 数）照课本写成 r₃
+const subs = (n) => String(n).replace(/\d/g, (d) => SUBS[d]);
 
 // —— 现在的数 ——
 
@@ -393,13 +394,28 @@ function rowopAct(o, { from, to, value } = {}) {
   return made(o, mkScale(row - 1, k));
 }
 
+// 放下以后要不要先问倍数（gestures.js 的 askFor）：拖到另一行上（倍加）、点行号（倍乘）弹倍数框；拖到行号上是对调，不用问。
+// hint 是拖着悬在那一行上时先给学生看的样子
+function rowopAsk(o, { kind, from, to } = {}) {
+  const ok = (k) => Number.isInteger(k) && k >= 1 && k <= o.rows;
+  if (kind === 'tap') {
+    const row = labelOf(from || to) ?? rowOf(from || to);
+    return ok(row) ? { input: 'keypad', prompt: `${rowName(row - 1)} 乘几？`, hint: `k·${rowName(row - 1)}` } : null;
+  }
+  if (kind !== 'drop-on' || !to || labelOf(to) != null) return null;
+  const s = rowOf(from) ?? labelOf(from), t = rowOf(to);
+  if (!ok(s) || !ok(t) || s === t) return null;
+  return { input: 'keypad', prompt: `${rowName(t - 1)} 加上 ${rowName(s - 1)} 的几倍？`, hint: `${rowName(t - 1)} + k·${rowName(s - 1)}` };
+}
+
 const gestures = {
   // 行的把手拖到另一行上：倍加（弹出倍数框，value 是框里写的 k，翻成 rowop M r3 + k r1）；拖到行号上：两行对调（rowop M r1 <-> r3）；
   // 点行号：倍乘（倍数框，rowop M k r2）
-  rowop: { gesture: ['drop-on', 'tap'], from: 'row', to: ['row', 'label'], tap: 'label', toAct: rowopAct },
+  rowop: { gesture: ['drop-on', 'tap'], from: 'row', to: ['row', 'label'], tap: 'label', toAct: rowopAct, ask: rowopAsk },
   // 点一格写一个数（open M edit input=keypad 时是数字键盘；能写分数、负数）
   edit: {
     gesture: 'write', on: 'cell',
+    ask: (o, { to, from } = {}) => { const x = to || from; return { input: 'keypad', prompt: x?.r ? `${o.id}${subs(x.r)}${subs(x.c)} 写成几？` : '写一个数' }; },
     toAct(o, { to, from, value } = {}) {
       const x = to || from;
       const r = x?.r, c = x?.c;
@@ -453,5 +469,13 @@ const predicates = {
   },
 };
 
+/** 学生走偏的那一步淡淡圈哪儿（scene.js 的 slip）：这一步改了的那一行（对调是两行），不是整张 */
+function slipRefs(o, act) {
+  if (act?.type !== 'rowop') return null;
+  let ops;
+  try { ops = opsOf(o, act); } catch { return null; }
+  return [...new Set(ops.flatMap((op) => (op.kind === 'swap' ? [op.i, op.j] : [op.i]).map((k) => `${o.id}.${op.line}${k}`)))];
+}
+
 // 行变换的每一下都判（改一格不判）；做完了（成了阶梯形）只对交给了学生做行变换的矩阵算：学生只拨数的矩阵不算
-export const matrixRules = { next, check, predicates, facts, gestures, actOf: lineAct, judges: ['rowop'], doneBy: ['rowop'] };
+export const matrixRules = { next, check, predicates, facts, gestures, slipRefs, actOf: lineAct, judges: ['rowop'], doneBy: ['rowop'] };

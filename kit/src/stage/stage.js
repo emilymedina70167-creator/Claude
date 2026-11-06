@@ -13,6 +13,8 @@ import { judgeAnswer, sameAnswer } from './answer.js';
 export { sameAnswer };
 import { VIEWS } from './types/views.js';
 import { PointerRouter } from './pointer.js';
+import { armGesture } from './gesturedom.js';
+import { undoLines } from './gestures.js';
 import { reportError } from '../errlog.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -213,6 +215,9 @@ export class Stage {
     const turn = ++this.turnNo;
     const mark = this.log.length;
     this.errors = [];
+    // 老师这一轮演完以前不能撤（重放会把演到一半的这一轮整个重来）；演完了 end 里再定这一回合从哪儿起
+    this.undoFloor = Infinity;
+    this.syncUndo();
     let taken = 0;
     // 先等学生刚才那一下、做到挑战时预写的行演完，老师新写的才接着演（不叠在一起）
     let chain = Promise.all([this.studentChain, this.reacting]).catch(() => {});
@@ -268,6 +273,8 @@ export class Stage {
       if (dead) return { act: null, errors: [], lines, mark, dead: true };
       feed(text != null ? text : last, true);
       await chain;
+      // 撤一步只撤这以后学生做的（老师看过、照它讲了的不撤；和课堂循环这一段从 log 的哪里开始是同一处）
+      if (!dead) { this.undoFloor = this.log.length; this.syncUndo(); }
       let act = null;
       if (!this.instant && !dead && (asked || auto)) {
         if (!this.scene.waiting) {
@@ -368,6 +375,7 @@ export class Stage {
     }
     if (asked) await this.say(asked, { ask: true });
     this.instant = false;
+    if (Number.isFinite(this.undoFloor)) this.undoFloor = Math.min(this.undoFloor, this.log.length); // 老师正演着的一轮里重放（作废、再看一遍）：照样不能撤
     this.scene.waiting = null;
     this.armedFor = null;
     this.armedP = null;
@@ -671,9 +679,11 @@ export class Stage {
     if (this.instant || !this.withInput) return;
     this.armedOpens ||= new Map();
     const want = this.scene.opens;
-    const sig = (e) => `${e.refs.join(' ')}|${e.lo}|${e.hi}`;
+    const sig = (e) => `${e.refs.join(' ')}|${e.lo}|${e.hi}|${e.input || ''}`;
     for (const [k, a] of this.armedOpens) if (!want.has(k) || a.sig !== sig(want.get(k))) { a.off(); this.armedOpens.delete(k); }
-    for (const [k, e] of want) if (!this.armedOpens.has(k)) this.armedOpens.set(k, { off: this.armOpen(e), sig: sig(e) });
+    // 还挂着的通用手势照东西现在的样子补挂（托盘少了一个、长出新结点、多了一道括号）
+    for (const [k, e] of want) { const a = this.armedOpens.get(k); if (!a) this.armedOpens.set(k, { off: this.armOpen(e), sig: sig(e) }); else a.off.refresh?.(); }
+    this.syncUndo();
   }
   resetOpens() { this.armedOpens?.forEach((a) => a.off()); this.armedOpens = new Map(); }
   armOpen(e) {
@@ -686,15 +696,53 @@ export class Stage {
       const offs = parts.map((p) => this.armDrag(view, p, parts, (act, src) => this.openDone(e, act, src)));
       return () => offs.forEach((f) => f());
     }
-    const fn = view.affords?.[e.action];
-    return fn ? fn(this, o, e, (act, src) => this.openDone(e, act, src)) : () => {};
+    // 那种东西自己画的（矩阵的 ± 拨数器、点乘积看怎么算）照旧；写了 input=keypad 的、手势表里的动作走通用手势（gesturedom.js）
+    const fn = !e.input && view.affords?.[e.action];
+    if (fn) return fn(this, o, e, (act, src) => this.openDone(e, act, src));
+    return e.gesture ? armGesture(this, e, view, (act, src) => this.openDone(e, act, src)) : () => {};
   }
   // 拖完、拨完：照一行学生的指令演。能拖的不收起来再挂（以前收起来、等这一下演完才挂回去，紧接着再拖就拿不到——「掉」了）：
-  // pointer.js 每次按下都按东西现在的位置找，dragSpec 也按 key 现取，用不着重挂
+  // pointer.js 每次按下都按东西现在的位置找，dragSpec 也按 key 现取，用不着重挂。演完给回这一下（裁判的结论、拦没拦都在上面）
   openDone(e, act, src) {
     const a = { ...act, open: e.action };
     const p = src ? this.studentDo(src, a) : Promise.resolve(this.onAct?.(a));
-    return p.then(() => this.syncOpens());
+    return p.then(() => { this.syncOpens(); return a; });
+  }
+
+  // —— 撤一步（open … undo=on）：去掉这一回合学生的最后一行，照 log 重放；正在等的那一问照样等着 ——
+  /** 有哪一项 open 写了 undo=on 才有「撤一步」；这一回合学生还没做过就按不了 */
+  syncUndo() {
+    const on = this.withInput && !this.instant && [...this.scene.opens.values()].some((e) => e.policy?.undo);
+    if (!on) { this.undoBtn?.remove(); this.undoBtn = null; return; }
+    if (!this.undoBtn) {
+      const b = this.undoBtn = el('button', 'st-undo', this.view);
+      b.type = 'button';
+      b.textContent = '↶ 撤一步';
+      b.addEventListener('click', () => this.undo());
+    }
+    this.undoBtn.disabled = this.undoBusy || undoLines(this.log, { from: this.undoFloor || 0 }).length === this.log.length;
+  }
+  async undo() {
+    if (this.undoBusy || this.dragging) return;
+    this.undoBusy = true;
+    this.syncUndo();
+    try {
+      await Promise.all([this.studentChain, this.reacting]).catch(() => {});
+      const lines = undoLines(this.log, { from: this.undoFloor || 0 });
+      const gone = this.log.find((r, i) => lines[i] !== r);
+      if (!gone) return;
+      // 重放会收起正在等的那一问：先收起（攒着的拨数留着），放完照原样挂回去
+      const w = this.scene.waiting, tries = [...this.pending], waiting = this.armedP;
+      this.cancelWait?.();
+      await waiting;
+      await this.replay(lines);
+      this.pending = tries;
+      if (w) { this.scene.waiting = w; this.armWait(); }
+      this.onAct?.({ type: 'undo', src: gone.src, open: gone.open || 'undo' });
+    } finally {
+      this.undoBusy = false;
+      this.syncUndo();
+    }
   }
   /** 挑战：左上角一条一条（做到了打勾）；照场景对齐 */
   syncGoals() {
@@ -1317,8 +1365,11 @@ export function actText(act) {
     if (act.type === 'edit') return `学生把 ${act.ref} 从 ${act.from === '' ? '空' : act.from} 拨到 ${act.to}`;
     if (act.type === 'explain') return `学生点了 ${act.ref}，看它怎么一行乘一列算出来`;
     if (act.type === 'goal') return `学生做到了挑战 ${act.id}「${act.text}」`;
+    if (act.type === 'undo') return `学生撤回了自己的上一下：${act.src}（舞台已经退回去了）`;
     // 过了裁判的一下（rotate、rowop、mark……）：学生那一行指令，后面是这一下做了什么（裁判的结论 events.js 接着写）
     if (act.src && act.verdict) return `学生 ${act.src}${act.verdict.why && act.verdict.legal !== false ? `（${act.verdict.why}）` : ''}`;
+    // 通用手势做的、页面不判的一下（键盘写一格、折起一段）：照那一行写
+    if (act.src) return `学生 ${act.src}`;
     return '';
   })();
   return [...tries, main].filter(Boolean).join('\n');

@@ -2,7 +2,7 @@
 // 专门的动作：行变换（副本乘上系数飘到目标行上面再加进去、交换两行走弧线、一行乘倍数）、改一个数、
 // 乘法的一格（A 的一行和 B 的一列一起亮，逐对相乘排成一条算式，加出来的数飞进那一格）。
 import { EASE, moveDuration, stagger, arcPoints } from '../motion.js';
-import { MX, layout, stairsPoints, zeroRows, toQ, eqWidth } from './matrix.js';
+import { MX, layout, stairsPoints, zeroRows, toQ, eqWidth, rowCells } from './matrix.js';
 import { Q } from '../../exact.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -366,8 +366,82 @@ function explainAfford(stage, o, e, done) {
   return () => offs.forEach((f) => f());
 }
 
+// open M rowop：每行左边一个把手（拖它）、再往左是行号（拖到上面对调、点它倍乘）。位置只看这一行（第 r 行永远是现在的第 r 行）
+const GRIP_W = 30, LAB_W = 40, HANDLE_H = 44, HANDLE_GAP = 6;
+function handleBoxes(o, r, L = layout(o)) {
+  const y = L.rowY(r) + (MX.CH - HANDLE_H) / 2;
+  const grip = { x: L.box.x - GRIP_W - HANDLE_GAP, y, w: GRIP_W, h: HANDLE_H };
+  return { grip, label: { x: grip.x - LAB_W - HANDLE_GAP, y, w: LAB_W, h: HANDLE_H } };
+}
+function syncHandles(stage, o, ctx) {
+  const on = stage.withInput && stage.scene.opens.has(`${o.id}:rowop`) && !o.product;
+  const want = new Set();
+  if (on) {
+    const L = layout(o);
+    for (let r = 1; r <= o.rows; r++) {
+      const b = handleBoxes(o, r, L);
+      for (const [k, box, make] of [[`grip:${r}`, b.grip, () => { const n = el('div', 'mx-grip', stage.layer); n.setAttribute('aria-label', `第 ${r} 行的把手`); el('i', '', n); return n; }],
+        [`lab:${r}`, b.label, () => { const n = el('div', 'mx-lab', stage.layer); n.textContent = `r${sub(r)}`; return n; }]]) {
+        want.add(k);
+        put(stage, stage.decor(o.id, k, make), box, ctx, ctx.entering === o.id);
+      }
+    }
+  }
+  stage.dropDecor(o.id, (k) => (k.startsWith('grip:') || k.startsWith('lab:')) && !want.has(k));
+}
+// 拖一行的把手：这一行的数复制一份跟着手走（和行变换时飘过去的副本一样），原来那一行淡淡上色
+function rowLift(stage, id, r) {
+  const o = stage.scene.objects.get(id);
+  if (!o) return null;
+  const L = layout(o);
+  const cells = rowCells(o, r);
+  const x0 = L.colX[1], w = L.colX[o.cols] + L.cw[o.cols] - x0;
+  const g = el('div', 'mx-ghost mx-rowghost', stage.layer);
+  g.style.width = `${w}px`;
+  for (const x of cells) { const v = el('span', 'mx-v', g); v.style.left = `${L.colX[x.c] - x0}px`; v.style.width = `${L.cw[x.c]}px`; setNum(v, x.value); }
+  const box = { x: x0, y: L.rowY(r), w, h: MX.CH };
+  g.style.transform = tr(box.x, box.y);
+  const ns = cells.map((x) => stage.nodeOf(x)).filter(Boolean);
+  ns.forEach((n) => n.classList.add('is-source'));
+  return { el: g, box, restore: () => ns.forEach((n) => n.classList.remove('is-source')) };
+}
+const ROW_CLS = { 'is-drop': 'is-rowdrop', 'is-over': 'is-rowover', 'is-nodrop': 'is-rownodrop' };
+const union = (rs) => { const l = rs.filter(Boolean); if (!l.length) return null; const x = Math.min(...l.map((r) => r.x)), y = Math.min(...l.map((r) => r.y)); return { x, y, w: Math.max(...l.map((r) => r.x + r.w)) - x, h: Math.max(...l.map((r) => r.y + r.h)) - y }; };
+
 export const matrixView = {
   affords: { edit: editAfford, explain: explainAfford },
+  // 通用手势（gesturedom.js）抓哪儿：一行（把手；当落点时是整行）、行号、一格（open M edit input=keypad 点一格写数）
+  grips: {
+    row: (stage, o) => Array.from({ length: o.rows }, (_, i) => {
+      const r = i + 1, id = o.id;
+      const cellNodes = () => { const m = stage.scene.objects.get(id); return m ? rowCells(m, r).map((x) => stage.nodeOf(x)).filter(Boolean) : []; };
+      return {
+        key: `row:${r}`, cls: '',
+        part: () => ({ row: r }),
+        node: () => stage.decor(id, `grip:${r}`),
+        box: () => { const m = stage.scene.objects.get(id); return m ? handleBoxes(m, r).grip : null; },
+        area: () => union([stage.screenRect(stage.decor(id, `grip:${r}`)), ...cellNodes().map((n) => stage.screenRect(n))]),
+        light(cls, on) { stage.decor(id, `grip:${r}`)?.classList.toggle(cls, on); if (ROW_CLS[cls]) cellNodes().forEach((n) => n.classList.toggle(ROW_CLS[cls], on)); },
+        lift: () => rowLift(stage, id, r),
+      };
+    }),
+    label: (stage, o) => Array.from({ length: o.rows }, (_, i) => ({
+      key: `lab:${i + 1}`,
+      part: () => ({ label: i + 1 }),
+      node: () => stage.decor(o.id, `lab:${i + 1}`),
+      box: () => { const m = stage.scene.objects.get(o.id); return m ? handleBoxes(m, i + 1).label : null; },
+    })),
+    cell: (stage, o, e) => (e.refs.length ? e.refs.flatMap((r) => stage.scene.parts(r)) : o.cells).map((x) => ({
+      key: `cell:${x.key}`, cls: 'is-editable',
+      part: () => stage.scene.partOf(o.id, x.key),
+      node: () => stage.nodes.get(`${o.id}:${x.key}`),
+    })),
+  },
+  // 拖着悬在行号上：先说是对调（倍加、倍乘的样子是手势表 ask 给的 hint）
+  gestureHint(stage, o, e, r) {
+    const op = r?.act?.op?.[0];
+    return op?.kind === 'swap' ? `${op.line}${sub(op.i)} ↔ ${op.line}${sub(op.j)}` : '';
+  },
   sync(stage, o, ctx) {
     ensureCss();
     const L = layout(o);
@@ -422,12 +496,13 @@ export const matrixView = {
       }
     }
     stage.dropDecor(o.id, (k) => (k === 'stairs' && !pts) || (k === 'bar' && !o.aug) || (k === 'eq' && !o.product));
+    syncHandles(stage, o, ctx);
     return moves;
   },
 
   // 括号先淡进来，数一个个落下（从左上往右下）
   async enter(stage, o) {
-    const ds = ['bl', 'br', 'bar', 'eq'].map((k) => stage.decor(o.id, k)).filter(Boolean);
+    const ds = ['bl', 'br', 'bar', 'eq', ...Array.from({ length: o.rows }, (_, i) => [`lab:${i + 1}`, `grip:${i + 1}`]).flat()].map((k) => stage.decor(o.id, k)).filter(Boolean);
     ds.forEach((d, i) => stage.tween(d, [{ opacity: 0 }, { opacity: 1 }], { duration: 380, delay: i * 50, easing: EASE.out }));
     await Promise.all(o.cells.map((x) => {
       const n = stage.nodeOf(x), b = n?.__box;
@@ -505,6 +580,21 @@ export const matrixView = {
 .mx-step-b:active { scale: .88; }
 .mx-step-b:focus-visible { outline: 2px solid var(--st-brand); outline-offset: 2px; }
 .mx-step-v { min-width: 2.4em; text-align: center; font: 600 21px/1 var(--sans, sans-serif); font-variant-numeric: tabular-nums; color: var(--st-ink); }
+/* open M rowop：行号和把手（拖把手到另一行上倍加、拖到行号上对调、点行号倍乘）；拖着的时候能放的那几行淡淡一层底 */
+.mx-grip, .mx-lab { position: absolute; left: 0; top: 0; height: ${HANDLE_H}px; box-sizing: border-box; display: grid; place-items: center; border-radius: 12px; touch-action: none; transition: background-color .2s, box-shadow .2s, opacity .2s; }
+.mx-grip { width: ${GRIP_W}px; cursor: grab; color: color-mix(in srgb, var(--st-brand) 70%, transparent); }
+.mx-grip i { width: 10px; height: 20px; background: radial-gradient(circle, currentColor 1.6px, transparent 2.1px) 0 0 / 5px 6.6px; }
+.mx-grip.is-lifted { opacity: .35; }
+.mx-grip.is-press, .mx-lab.is-press { scale: .94; transition: scale .12s; }
+.mx-lab { width: ${LAB_W}px; cursor: pointer; font: 600 17px/1 var(--sans, sans-serif); color: var(--st-muted); background: color-mix(in srgb, var(--st-brand) 5%, transparent); box-shadow: 0 0 0 1px var(--st-line); }
+.mx-lab.is-drop { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--st-brand) 45%, transparent); color: var(--st-brand); }
+.mx-lab.is-over { background: color-mix(in srgb, var(--st-brand) 14%, transparent); box-shadow: 0 0 0 2px var(--st-brand); color: var(--st-brand); }
+.mx-lab.is-nodrop { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--st-red) 55%, transparent); }
+.mx-cell.is-rowdrop { background: color-mix(in srgb, var(--st-brand) 5%, transparent); }
+.mx-cell.is-rowover { background: color-mix(in srgb, var(--st-brand) 14%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--st-brand) 45%, transparent); }
+.mx-cell.is-rownodrop { background: color-mix(in srgb, var(--st-red) 8%, transparent); }
+.mx-rowghost { display: block; }
+.mx-rowghost > .mx-v { position: absolute; top: 0; height: 100%; display: inline-flex; justify-content: center; }
 .mx-brk { fill: var(--st-ink); stroke: var(--st-ink); stroke-width: .4; stroke-linejoin: round; }
 .mx-bar { position: absolute; left: 0; top: 0; width: 0; border-left: 1.6px solid rgb(var(--chalk-rgb, 27 34 32) / 0.5); pointer-events: none; }
 .mx-eq { position: absolute; left: 0; top: 0; width: 56px; height: 44px; display: grid; place-items: center; font: 400 32px/1 var(--sans, sans-serif); color: var(--st-ink); pointer-events: none; }

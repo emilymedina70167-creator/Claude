@@ -2,7 +2,7 @@
 // 插入、查找（圈从根一路比下去）、删除（后继的值飞上来顶替）、旋转（结点和子树沿弧转过去、树枝重连）、换值、遍历这些专门的动作。
 // 树变了（插、删、转）整棵重新排版：sync 把要挪的结点交给舞台统一演，新长出来的从父结点那里长出来
 import { EASE, stagger } from '../motion.js';
-import { NODE, LEVEL, SEP, layoutTree, boxesFor, edgesOf, levelOrder, depths, rootSpot, bfOf, bfText } from './tree.js';
+import { NODE, LEVEL, SEP, TAG_ROOM, layoutTree, boxesFor, edgesOf, levelOrder, depths, rootSpot, bfOf, bfText, trayBoxes, trayArea, treeArea, slotSpots } from './tree.js';
 import { el, svg, tr, same, centerOf, ensureCss, placeLines, follow, vanish, Ring, cmpBadge, flyText, swapValue, setOrder, setTag, sizeValue, NODE_CSS } from './node.view.js';
 
 const R = NODE / 2;
@@ -68,6 +68,74 @@ function dress(stage, o, p, n, side, { animate }) {
   return jobs.filter(Boolean);
 }
 
+// 托盘（tray="47 10"）：树下面一排待插的数，插进去一个就少一个（插的那一下树从父结点那里长出新结点，托盘里那一个淡掉）
+function syncTray(stage, o, ctx) {
+  const want = new Set();
+  const entering = ctx.entering === o.id;
+  const put = (n, b, made) => {
+    const was = n.__box;
+    n.__box = b;
+    if (made || stage.instant || !was) {
+      n.style.transform = tr(b.x, b.y);
+      if (b.w != null && n.classList.contains('tr-tray')) { n.style.width = `${b.w}px`; n.style.height = `${b.h}px`; }
+      if (made && (entering || !stage.instant)) n.style.opacity = '0';
+      if (made && !entering && !stage.instant) ctx.jobs.push(stage.tween(n, [{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: 200, easing: EASE.out }).then(() => { n.style.opacity = ''; }));
+      return;
+    }
+    if (same(was, b) && was.w === b.w) return;
+    const f0 = { transform: tr(was.x, was.y) }, f1 = { transform: tr(b.x, b.y) };
+    if (n.classList.contains('tr-tray')) { f0.width = `${was.w}px`; f1.width = `${b.w}px`; n.style.width = `${b.w}px`; n.style.height = `${b.h}px`; }
+    ctx.jobs.push(stage.tween(n, [f0, f1], { duration: 520, easing: EASE.move }));
+  };
+  const area = trayArea(o);
+  if (area) {
+    want.add('tray');
+    let made = false;
+    const bg = stage.decor(o.id, 'tray', () => { made = true; return el('div', 'tr-tray', stage.layer); });
+    put(bg, area, made);
+  }
+  for (const b of trayBoxes(o)) {
+    const k = `tray:${b.value}`;
+    want.add(k);
+    let made = false;
+    const n = stage.decor(o.id, k, () => {
+      made = true;
+      const n = el('div', 'st-cell tr-node tr-chip', stage.layer);
+      const v = el('span', 'st-v', n);
+      v.textContent = b.value;
+      sizeValue(v, b.value);
+      return n;
+    });
+    put(n, b, made);
+  }
+  stage.dropDecor(o.id, (k) => (k === 'tray' || k.startsWith('tray:')) && !want.has(k));
+}
+
+// 通用手势（gesturedom.js）抓哪儿：结点、托盘里的数、整棵树（拖进来插入）、空位（自己摆）。部件、节点都按 key 现取
+const nodeGrips = (stage, id, list) => list.map((p) => ({
+  key: `n:${p.key}`,
+  part: () => stage.scene.partOf(id, p.key),
+  node: () => stage.nodes.get(`${id}:${p.key}`),
+  box: () => { const x = stage.scene.partOf(id, p.key); return x ? stage.scene.partBox(x) : null; },
+}));
+// 只在拖的时候画出来的落点（整棵树那一块、一个个空位）：show(true) 画上、show(false) 收掉；不带 data-obj，排版不算它
+function shownGrip(stage, key, part, box, cls) {
+  let n = null;
+  return {
+    key, part, box, node: () => n,
+    show(on) {
+      if (on && !n) {
+        const b = box();
+        if (!b) return;
+        n = el('div', cls, stage.layer);
+        n.style.transform = tr(b.x, b.y);
+        n.style.width = `${b.w}px`;
+        n.style.height = `${b.h}px`;
+      } else if (!on && n) { n.remove(); n = null; }
+    },
+  };
+}
+
 function nodeEl(stage, p, b, hidden) {
   const n = el('div', 'st-cell tr-node', stage.layer);
   el('span', 'st-v', n).textContent = p.value;
@@ -112,9 +180,35 @@ export const treeView = {
       ctx.jobs.push(stage.tween(f.n, [{ opacity: 0, transform: tr(pb.x, pb.y, 0.35) }, { opacity: 1, transform: tr(f.b.x, f.b.y) }], { duration: 620, delay: moves.length ? 260 : 0, easing: EASE.spring }));
     }
     syncEdges(stage, o, o, { hidden: entering, delay: fresh.length ? 200 : 0, jobs: ctx.jobs });
+    syncTray(stage, o, ctx);
     if (!stage.instant && (moves.length || fresh.length)) ctx.jobs.push(follow(stage, o.id));
     else placeLines(stage, o.id);
     return moves;
+  },
+
+  grips: {
+    // rotate：拖的是结点（open t.30* rotate 只拖那几个），放的是它的父亲（手势表交 toAct 判是不是父亲）
+    node: (stage, o, e) => nodeGrips(stage, o.id, e.refs.length ? e.refs.flatMap((r) => stage.scene.parts(r)) : o.nodes),
+    parent: (stage, o) => nodeGrips(stage, o.id, o.nodes),
+    // 托盘里的数：插进去它就没了（consumed：拎走的样子演完再放回）
+    tray: (stage, o) => (o.tray || []).map((v) => ({
+      key: `tray:${v}`, value: v, consumed: true,
+      part: () => ({ tray: v }),
+      node: () => stage.decor(o.id, `tray:${v}`),
+      box: () => { const t = stage.scene.objects.get(o.id); return t ? trayBoxes(t).find((b) => b.value === v) || null : null; },
+    })),
+    // insert：拖到树上哪儿都行，页面从根比下去
+    tree: (stage, o) => [shownGrip(stage, 'tree', () => ({ tree: o.id }), () => { const t = stage.scene.objects.get(o.id); if (!t) return null; const b = treeArea(t); return { x: b.x + TAG_ROOM / 2, y: b.y + TAG_ROOM / 2, w: b.w - TAG_ROOM, h: b.h - TAG_ROOM }; }, 'tr-zone')],
+    // place：一个个空位（结点缺孩子的那一边）
+    slot: (stage, o) => slotSpots(o).map((sp) => shownGrip(stage, `slot:${sp.parent}:${sp.side}`, () => ({ slot: { parent: sp.parent, side: sp.side } }), () => sp.box, 'tr-spot')),
+  },
+  // 拖着悬在落点上：先说放下会怎样（「在 50 右旋」「47 放在 45 的右边」）
+  gestureHint(stage, o, e, r) {
+    const a = r?.act;
+    const val = (k) => o.nodes.find((n) => n.key === k)?.value ?? '';
+    if (a?.type === 'rotate') return `在 ${val(a.at)} ${a.dir === 'right' ? '右旋' : '左旋'}`;
+    if (a?.type === 'insert') return a.parent != null ? `${a.value} 放在 ${val(a.parent)} 的${a.side === 'left' ? '左' : '右'}边` : `插入 ${a.value}`;
+    return '';
   },
 
   // 一层一层长出来：根先落下，孩子从父结点那里长出来，树枝跟着长
@@ -138,6 +232,8 @@ export const treeView = {
       const line = par && stage.decor(o.id, `e:${par.key}>${p.key}`);
       if (line) jobs.push(stage.tween(line, [{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: delay + 60 }));
     }
+    // 托盘跟着树一起淡进来
+    for (const [k, n] of stage.decors.get(o.id) || []) if (k === 'tray' || k.startsWith('tray:')) jobs.push(stage.tween(n, [{ opacity: 0 }, { opacity: 1 }], { duration: 360, delay: 160 + (d.size ? Math.max(...d.values()) : 0) * 170 }).then(() => { n.style.opacity = ''; }));
     jobs.push(follow(stage, o.id, { min: 500 }));
     await Promise.all(jobs);
   },
@@ -367,6 +463,13 @@ export const treeView = {
 .tr-edge[data-paint] { stroke: var(--c); stroke-width: 3.5; }
 .tr-edge.is-dim { opacity: .28; }
 .tr-empty { position: absolute; left: 0; top: 0; width: ${NODE}px; height: ${NODE}px; box-sizing: border-box; border-radius: 50%; border: 1.5px dashed rgb(var(--chalk-rgb, 27 34 32) / 0.28); }
+.tr-tray { position: absolute; left: 0; top: 0; box-sizing: border-box; border-radius: 40px; background: color-mix(in srgb, var(--st-brand) 5%, transparent); border: 1.5px dashed color-mix(in srgb, var(--st-brand) 26%, transparent); pointer-events: none; }
+.tr-chip { z-index: 2; }
+.tr-chip.is-drag::after { border-radius: 50%; }
+.tr-zone { position: absolute; left: 0; top: 0; box-sizing: border-box; border-radius: 28px; border: 2px dashed color-mix(in srgb, var(--st-brand) 30%, transparent); pointer-events: none; transition: background-color .2s, border-color .2s; }
+.tr-zone.is-over { background: color-mix(in srgb, var(--st-brand) 7%, transparent); border-color: var(--st-brand); }
+.tr-spot { position: absolute; left: 0; top: 0; box-sizing: border-box; border-radius: 50%; border: 2px dashed color-mix(in srgb, var(--st-brand) 40%, transparent); pointer-events: none; transition: background-color .2s, border-color .2s, scale .2s; }
+.tr-spot.is-over { background: color-mix(in srgb, var(--st-brand) 12%, transparent); border-color: var(--st-brand); scale: 1.08; }
 .tr-miss { position: absolute; left: 0; top: 0; width: ${NODE}px; height: ${NODE}px; box-sizing: border-box; border-radius: 50%; border: 2px dashed var(--st-red); color: var(--st-red); display: grid; place-items: center; font: 600 16px/1 var(--sans, sans-serif); pointer-events: none; }
 `,
 };

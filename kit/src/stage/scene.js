@@ -240,7 +240,7 @@ export class Scene {
       const o = this.objects.get(j.obj);
       // 这一下以后写给老师的事实（规则交的：谁转上来了、哪一行变成什么、key 里还差几段）
       if (before && o) { try { j.after = rulesOf(o)?.facts(before, o, j.act) || []; } catch (err) { j.after = []; ruleErrors.push(`${typeOf(o).label}的规则写事实时出错：${err?.message || err}`); } }
-      if (j.mark && o) this.slip(j.obj, c);
+      if (j.mark && o) this.slip(j.obj, c, j.act);
       // 学生做对一步：老师预写的确认、下一小问（@t.right，只演一次）
       if (j.by === 'student' && j.verdict?.right === true) reactions.push(...this.take(`${j.obj}.right`).map((src) => ({ right: j.obj, src })));
     }
@@ -300,10 +300,15 @@ export class Scene {
     }
     return null;
   }
-  /** 学生走偏的那一下淡淡圈着：这一行写的部件（没写部件就是整样东西）；画面照部件上的 slip 画 */
-  slip(id, c) {
+  /**
+   * 学生走偏的那一下淡淡圈着：这一行写的部件；没写部件的（rowop M r3 - 2r1）问规则这一下改了哪儿（slipRefs：改了的那一行），
+   * 规则也说不出就是整样东西。画面照部件上的 slip 画
+   */
+  slip(id, c, act = null) {
     const refs = this.helpers(c).refsIn().filter((w) => parseRef(w)?.obj === id && w !== id);
-    const list = refs.length ? refs : [id];
+    let own = null;
+    try { own = refs.length ? null : rulesOf(this.objects.get(id))?.slipRefs?.(this.objects.get(id), act); } catch { own = null; }
+    const list = refs.length ? refs : own?.length ? own : [id];
     for (const r of list) for (const p of this.parts(r)) p.slip = true;
     this.slips.set(id, { refs: list, src: lineOf(c) });
   }
@@ -590,6 +595,12 @@ export class Scene {
         t.canOpen?.(this, o, action, h);
         const policy = policyIn(opts, rules, { label: t.label, id: o.id, action });
         const e = { obj: o.id, action, refs: r.mark ? [target] : [], lo: null, hi: null, policy, gesture: gestures[action] || null };
+        // input=keypad：写一个值的手势用数字键盘（open M edit input=keypad）；不写照旧（矩阵的 edit 是 ± 拨数器）
+        if (opts.input != null) {
+          if (opts.input !== 'keypad') throw new Error(`input= 只能写 keypad（数字键盘，能写分数、负数），没有「${opts.input}」`);
+          if (!(gestures[action] && [].concat(gestures[action].gesture).includes('write'))) throw new Error(`input=keypad 只用在写一个值的动作上（${Object.entries(gestures).filter(([, g]) => [].concat(g.gesture).includes('write')).map(([k]) => `open ${o.id} ${k}`).join(' / ') || `${t.label}没有`}），${action} 用不上`);
+          e.input = 'keypad';
+        }
         if (action === 'edit') {
           const [lo, hi] = parseRange(opts.range || '-9..9');
           if (!(lo <= hi)) throw new Error('range 要写成 小..大，比如 range=-3..3');
@@ -857,7 +868,7 @@ export class Scene {
     if (dials.length) lines.push(`能拨的数：${dials.map(([n, v]) => `${n} = ${v.v}（${v.lo}～${v.hi}）`).join('，')}`);
     if (this.say) lines.push(`最后说的话：${this.say}`);
     if (this.waiting) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案' }[this.waiting.kind]}${this.waiting.refs.length ? ` ${this.waiting.refs.join(' ')}` : ''}`);
-    if (this.opens.size) lines.push(`学生能直接动的：${[...this.opens.values()].map((e) => { const o = this.objects.get(e.obj); const what = affordsOf(typeOf(o))[e.action] || gestureText(e.gesture); const pol = policyText(e.policy); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}${pol ? `；${pol}` : ''}）`; }).join('；')}`);
+    if (this.opens.size) lines.push(`学生能直接动的：${[...this.opens.values()].map((e) => { const o = this.objects.get(e.obj); const what = (e.input ? null : affordsOf(typeOf(o))[e.action]) || gestureText(e.gesture); const pol = [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、'); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}${pol ? `；${pol}` : ''}）`; }).join('；')}`);
     if (this.slips.size) lines.push(`淡淡圈着（学生走偏的那一下，照你写的 wrong=mark；那样东西再变就收掉）：${[...this.slips.values()].map((x) => `${x.refs.join(' ')}（${x.src}）`).join('；')}`);
     const pre = [...this.reactions].filter(([k, r]) => k.includes('.') && r.length).map(([k, r]) => { const [id, kind] = k.split('.'); return `${id} ${kind === 'done' ? '做完了' : '学生做对一步'}页面马上演你预写的 ${r.length} 行`; });
     if (pre.length) lines.push(`预写的：${pre.join('；')}`);

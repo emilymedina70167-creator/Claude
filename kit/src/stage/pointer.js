@@ -43,8 +43,8 @@ export class PointerRouter {
 
   down(e) {
     if (this.s || (e.pointerType === 'mouse' && e.button > 0)) return;
-    // 真的按钮、输入框、拨数器、话里的小块自己管
-    if (e.target.closest?.('button, input, textarea, select, a, .st-dock, .mx-step, .st-dial')) return;
+    // 真的按钮、输入框、拨数器、话里的小块、浮出来的数字键盘和一排选项（keypad.js 的 .st-gpop）自己管
+    if (e.target.closest?.('button, input, textarea, select, a, .st-dock, .mx-step, .st-dial, .st-gpop')) return;
     const pt = this.local(e);
     const cands = [];
     for (const [id, t] of this.targets) { let rect = null; try { rect = t.rect(); } catch { rect = null; } if (rect) cands.push({ id, t, prio: t.prio || 0, rect }); }
