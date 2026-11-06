@@ -69,7 +69,8 @@
 
 /* 贴着东西的字：舞台上的东西，能改、能挪、能飞过来 */
 .st-label {
-  position: absolute; left: 0; top: 0; white-space: nowrap; padding: 7px 13px; border-radius: 12px;
+  /* 字长了折行，不往一边拉成一长条（以前不折，一张贴字比竖屏还宽，镜头只好缩得很小） */
+  position: absolute; left: 0; top: 0; width: max-content; max-width: 21em; white-space: normal; text-wrap: pretty; padding: 7px 13px; border-radius: 12px;
   font: 500 17px/1.3 var(--sans, sans-serif); background: color-mix(in srgb, var(--st-card) 88%, transparent);
   box-shadow: 0 0 0 1px var(--st-line), 0 8px 18px -12px rgb(var(--shade-rgb, 25 45 40) / 0.4);
 }
@@ -166,3 +167,6 @@
 .st-goal.is-met .st-goal-mark { background: var(--st-g3); box-shadow: none; }
 .st-goal.is-met .st-goal-mark::after { content: ""; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.4px 2.4px 0; transform: rotate(45deg); }
 @media (max-width: 600px) { .st-goal { font-size: 15px; } }
+
+/* 有能拖的东西时：整块舞台不让浏览器拿去滚动、缩放（手势插进来会把拖到一半的东西取消掉）；舞台本来就不滚动 */
+.st-view.has-drag { touch-action: none; }

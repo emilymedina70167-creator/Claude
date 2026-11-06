@@ -397,73 +397,79 @@ export const planeView = {
     },
   },
 
-  // 学生拖：按住箭头尖（或点）拖，箭头跟着手，松手吸到最近的格点上；跟着它算的（u + v……）当场跟着走
-  drag(stage, it, peers, done) {
-    const o = stage.scene.objects.get(it.obj), root = o && rootOf(stage, o), n = stage.nodeOf(it);
-    if (!root || !n) return () => {};
-    const st = root.__st;
-    n.classList.add('is-drag');
-    // 手柄是一块透明的 HTML（48px，盖在箭头尖上）：iPad 上不让浏览器把拖动当成滚动、缩放
-    const handle = document.createElement('div');
-    handle.className = 'pl-handle';
-    stage.layer.appendChild(handle);
-    const at = () => st.drawn.get(it.key) || { x: num(it.x), y: num(it.y) };
-    const place = () => { const T = toWorld(o, at().x, at().y); handle.style.transform = `translate(${r1(T.x - 24)}px, ${r1(T.y - 24)}px)`; };
-    place();
-    let off = null, p = null, cur = null;
-    const where = (e) => fromWorld(o, stage.toWorld(e.clientX, e.clientY));
-    const show = (s) => {
-      const S = toWorld(o, s.x, s.y), T = toWorld(o, p.x, p.y);
-      n.__snap.setAttribute('cx', r1(S.x));
-      n.__snap.setAttribute('cy', r1(S.y));
-      n.__coord.setAttribute('x', r1(T.x));
-      n.__coord.setAttribute('y', r1(T.y - 30));
-      n.__coord.textContent = `(${String(s.x).replace('-', '−')}, ${String(s.y).replace('-', '−')})`;
+  // 学生拖（手指的事在 pointer.js）：按住箭头尖（或点）拖，箭头跟着手，松手吸到最近的格点上；跟着它算的（u + v……）当场跟着走。
+  // 拿的地方每次按下时按箭头「现在」画在哪算（以前另挂一块透明手柄，拖完一次、吸格点的动画没走完它就停在半路，下一次按不到）
+  dragSpec(stage, it0) {
+    const id = it0.obj, key = it0.key;
+    const ctx = () => {
+      const o = stage.scene.objects.get(id), root = o && rootOf(stage, o);
+      const it = o?.items.find((x) => x.key === key);
+      return o && root && it ? { o, root, st: root.__st, it, n: stage.nodes.get(`${id}:${key}`) } : null;
     };
-    const down = (e) => {
-      e.preventDefault();
-      handle.setPointerCapture?.(e.pointerId);
-      st.anim?.stop();
-      const f = where(e), a = at();
-      off = { x: a.x - f.x, y: a.y - f.y };
-      p = { ...a };
-      cur = snap(o, p);
-      st.drag = { key: it.key, p };
-      n.classList.add('is-hold');
-      show(cur);
+    const tip = (c) => c.st.drawn.get(key) || { x: num(c.it.x), y: num(c.it.y) };
+    let off = null, p = null;
+    const show = (c, s) => {
+      const S = toWorld(c.o, s.x, s.y), T = toWorld(c.o, p.x, p.y);
+      c.n.__snap.setAttribute('cx', r1(S.x));
+      c.n.__snap.setAttribute('cy', r1(S.y));
+      c.n.__coord.setAttribute('x', r1(T.x));
+      c.n.__coord.setAttribute('y', r1(T.y - 30));
+      c.n.__coord.textContent = `(${String(s.x).replace('-', '−')}, ${String(s.y).replace('-', '−')})`;
     };
-    const move = (e) => {
-      if (!off) return;
-      const f = where(e);
-      p = { x: Math.max(o.xlo, Math.min(o.xhi, f.x + off.x)), y: Math.max(o.ylo, Math.min(o.yhi, f.y + off.y)) };
-      st.drag = { key: it.key, p };
-      cur = snap(o, p);
-      render(stage, o, root);
-      place();
-      show(cur);
-    };
-    const up = () => {
-      if (!off) return;
-      off = null;
-      n.classList.remove('is-hold');
-      // 手放开的地方交给画面（再滑到格点上），场景照「vec p u = 3 1」改
-      st.drag = null;
-      st.free.set(it.key, p);
-      const s = snap(o, p);
-      const same = !it.expr && num(it.x) === s.x && num(it.y) === s.y;
-      if (same) { animate(stage, o, root, { goal: goalOf(o, stage.scene), ms: 360 }).then(place); return; }
-      const what = it.kind === 'vec' ? '向量' : '点';
-      const was = `(${it.x}, ${it.y})`;
-      done({ type: 'drag', ref: `${o.id}.${it.name}`, from: [it.x, it.y], to: [String(s.x), String(s.y)], text: `学生把${what} ${o.id}.${it.name}${it.kind === 'vec' ? ' 的末端' : ''}拖到了 (${s.x}, ${s.y})（原来在 ${was}），舞台已经照做了` }, `${it.kind === 'vec' ? 'vec' : 'point'} ${o.id} ${it.name} = ${s.x} ${s.y}`);
-    };
-    handle.addEventListener('pointerdown', down);
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', up);
-    handle.addEventListener('pointercancel', up);
-    return () => {
-      n.classList.remove('is-drag', 'is-hold');
-      handle.remove();
-      if (st.drag?.key === it.key) st.drag = null;
+    return {
+      // 手指能按到的地方：箭头尖四周一块（屏幕上 52px，镜头缩小了也够手指按）
+      rect() {
+        const c = ctx();
+        if (!c) return null;
+        const a = tip(c), S = stage.toScreenLive(toWorld(c.o, a.x, a.y));
+        return { x: S.x - 26, y: S.y - 26, w: 52, h: 52 };
+      },
+      start(w) {
+        const c = ctx();
+        if (!c?.n) throw new Error('这个向量不在了');
+        c.st.anim?.stop();
+        const f = fromWorld(c.o, w), a = tip(c);
+        off = { x: a.x - f.x, y: a.y - f.y };
+        p = { ...a };
+        c.st.drag = { key, p };
+        c.n.classList.add('is-hold');
+        show(c, snap(c.o, p));
+      },
+      move(w) {
+        const c = ctx();
+        if (!c || !off) return;
+        const f = fromWorld(c.o, w);
+        p = { x: Math.max(c.o.xlo, Math.min(c.o.xhi, f.x + off.x)), y: Math.max(c.o.ylo, Math.min(c.o.yhi, f.y + off.y)) };
+        c.st.drag = { key, p };
+        render(stage, c.o, c.root);
+        show(c, snap(c.o, p));
+      },
+      drop() {
+        const c = ctx();
+        if (!c || !off || !p) return null;
+        off = null;
+        c.n.classList.remove('is-hold');
+        // 手放开的地方交给画面（再滑到格点上），场景照「vec p u = 3 1」改
+        c.st.drag = null;
+        c.st.free.set(key, p);
+        const s = snap(c.o, p);
+        const same = !c.it.expr && num(c.it.x) === s.x && num(c.it.y) === s.y;
+        if (same) { animate(stage, c.o, c.root, { goal: goalOf(c.o, stage.scene), ms: 360 }); return null; }
+        const what = c.it.kind === 'vec' ? '向量' : '点';
+        const was = `(${c.it.x}, ${c.it.y})`;
+        return {
+          act: { type: 'drag', ref: `${c.o.id}.${c.it.name}`, from: [c.it.x, c.it.y], to: [String(s.x), String(s.y)], text: `学生把${what} ${c.o.id}.${c.it.name}${c.it.kind === 'vec' ? ' 的末端' : ''}拖到了 (${s.x}, ${s.y})（原来在 ${was}），舞台已经照做了` },
+          src: `${c.it.kind === 'vec' ? 'vec' : 'point'} ${c.o.id} ${c.it.name} = ${s.x} ${s.y}`,
+        };
+      },
+      cancel() {
+        const c = ctx();
+        off = null;
+        if (!c) return;
+        c.n?.classList.remove('is-hold');
+        c.st.drag = null;
+        animate(stage, c.o, c.root, { goal: goalOf(c.o, stage.scene), ms: 360 });
+      },
     };
   },
 
@@ -506,8 +512,6 @@ export const planeView = {
 .pl-coord { font: 600 16px var(--sans, sans-serif); fill: var(--st-brand); font-variant-numeric: tabular-nums; opacity: 0; pointer-events: none;
   paint-order: stroke; stroke: color-mix(in srgb, var(--st-card) 90%, transparent); stroke-width: 5px; stroke-linejoin: round; }
 .is-hold > .pl-coord { opacity: 1; }
-.pl-handle { position: absolute; left: 0; top: 0; width: 48px; height: 48px; border-radius: 50%; touch-action: none; cursor: grab; z-index: 4; }
-.pl-handle:active { cursor: grabbing; }
 @media (prefers-reduced-motion: reduce) { .is-tap > .pl-ring, .is-drag > .pl-ring { animation: none; opacity: .5; } }
 `,
 };

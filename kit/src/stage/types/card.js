@@ -14,7 +14,8 @@ export function rowsOf(text) {
   for (const p of parseRich(text)) n += p.k === 'ref' ? 2 : [...String(p.v)].reduce((k, ch) => k + (/[\u0000-\u00ff]/.test(ch) ? 0.5 : 1), 0);
   return Math.max(1, Math.ceil(n / PER_ROW));
 }
-const lineH = (l) => rowsOf(l.text) * ROW_H + 2 * 6;
+// 一行多高：画面量过的（l.mh，card.view.js 写回：字折了几行只有画出来才知道）就用量的，没量过按字数估
+export const lineH = (l) => l.mh ?? rowsOf(l.text) * ROW_H + 2 * 6;
 
 function lineBox(o, l) {
   let y = o.origin.y + PAD;

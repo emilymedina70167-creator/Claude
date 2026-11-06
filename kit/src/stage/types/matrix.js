@@ -103,6 +103,15 @@ export function layout(o) {
 }
 export const sizeOf = (o) => layout({ ...o, origin: { x: 0, y: 0 } }).box;
 export function cellBox(o, x, L = layout(o)) { return { x: L.colX[x.c], y: L.rowY(x.r), w: L.cw[x.c], h: MX.CH }; }
+/**
+ * 乘积下面写算式的那一条在哪：存的是相对乘积自己左上角的位置（o.band），乘积被推下去、整排挪了它跟着走
+ * （以前存的是造出来那一刻的绝对位置，乘积挪走了它还留在原地，乘积占的地方就被拉成从原地到新地的一大块）
+ */
+export function bandOf(o) {
+  const r = o.band;
+  if (!r) return null;
+  return { x: o.origin.x + r.dx, y: o.origin.y + r.dy, w: r.w, h: r.h };
+}
 /** 乘积前面那一块多宽：「=」，另起一行的写「BA =」 */
 export const eqWidth = (o) => (o.prefix ? 104 : MX.EQ);
 function objectBox(o) {
@@ -110,9 +119,10 @@ function objectBox(o) {
   if (!o.product) return b;
   // 乘积：前面的「=」和整排下面那条算式也算它的地方（镜头要把算式框进来）
   const eq = { x: b.x - eqWidth(o), y: b.y, w: b.w + eqWidth(o), h: b.h };
-  if (!o.band) return { ...eq, h: b.h + MX.BAND };
-  const x = Math.min(eq.x, o.band.x), y = Math.min(eq.y, o.band.y);
-  return { x, y, w: Math.max(eq.x + eq.w, o.band.x + o.band.w) - x, h: Math.max(eq.y + eq.h, o.band.y + o.band.h) - y };
+  const band = bandOf(o);
+  if (!band) return { ...eq, h: b.h + MX.BAND };
+  const x = Math.min(eq.x, band.x), y = Math.min(eq.y, band.y);
+  return { x, y, w: Math.max(eq.x + eq.w, band.x + band.w) - x, h: Math.max(eq.y + eq.h, band.y + band.h) - y };
 }
 /** 括号、竖线、「=」占的地方（贴字时让开） */
 export function decorBoxes(o) {
@@ -335,7 +345,7 @@ function makeProduct(scene, c, h) {
     const eqw = eqWidth(o);
     const slot = scene.slotFor(eqw + sc.w);
     o.origin = { x: slot.x + eqw, y: slot.y };
-    o.band = { x: o.origin.x - eqw, y: o.origin.y + sc.h + 8, w: eqw + sc.w, h: MX.BAND - 8 };
+    o.band = { dx: -eqw, dy: sc.h + 8, w: eqw + sc.w, h: MX.BAND - 8 };
     return o;
   }
   const ba = layout(A).box;
@@ -347,7 +357,7 @@ function makeProduct(scene, c, h) {
   o.origin = { x: B.origin.x + sb.w + MX.EQ, y: Math.round(cy - sc.h / 2) };
   // 算一格时那条算式写在整排（A B = C）下面：镜头要把这一条框进来
   const bottom = Math.max(A.origin.y + sa.h, B.origin.y + sb.h, o.origin.y + sc.h);
-  o.band = { x: left, y: bottom + 8, w: total, h: MX.BAND - 8 };
+  o.band = { dx: left - o.origin.x, dy: bottom + 8 - o.origin.y, w: total, h: MX.BAND - 8 };
   return o;
 }
 
@@ -402,7 +412,8 @@ export const matrix = {
   objectBox,
   obstacles(o) {
     const L = layout(o);
-    return [...o.cells.map((x) => cellBox(o, x, L)), ...decorBoxes(o)];
+    // 乘积下面那一条（算一格时写算式的地方）也挡着：不然贴的字摆进去，一算就压上
+    return [...o.cells.map((x) => cellBox(o, x, L)), ...decorBoxes(o), ...(o.band ? [bandOf(o)] : [])];
   },
   commands: {
     // rowop m r2 - 3r1：一步（或逗号隔开的几步）初等行变换；每一步的写法贴在它改的那一行右边（op:m、op:m:2……，下一次行变换换掉）

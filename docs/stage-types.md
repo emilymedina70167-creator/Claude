@@ -72,3 +72,12 @@ SVG 节点也可以当部件节点：`flagPart` 照样加 class，`pulse` 和翻
 | `measure(o)` | 挑战拿来整个比的：矩阵 `{ kind: 'matrix', rows }`、一排 `{ kind: 'list', values }` |
 | `anchors(o)` | 排版时和谁是一体的（`reflow` 不拿它们比上下）：和 A、B 排成一行的乘积 |
 | `docSetup` | 测试用的舞台（说明里某一行要的、例子里没有的，比如已经是阶梯形的矩阵） |
+
+
+## 拖和点、排版（2026-11-06 以后的约定）
+
+- **拖**：画法写 `dragSpec(stage, part, peers)`，返回 `{ rect?(), start(w), move(w), drop(w) → { act, src } | null, cancel() }`（`w` 是世界坐标）。手指的事（挑按到哪个、抓住手指、浏览器取消、镜头和老师的行等手指松开）都在 `pointer.js`，画法不要自己挂 pointer 监听。部件、节点按 key 现取（`stage.scene.partOf(id, key)`、`stage.nodes.get(`${id}:${key}`)`）：拖之前舞台可能刚重放过。
+- **点**：`stage.armTap(part, fn)`（正在等的那一问）、`stage.armPress(pid, fn, { cls })`（开放给学生直接动的），也走 `pointer.js`。
+- **大小**：`objectBox` 尽量算准，算不准的舞台会量（每个节点 `data-obj` 由 `partNode` / `decor` 自动打上，`measure` 量出来多出去的写回 `o.ext`）。能量的就量了写回场景（题卡 `l.mh`），调 `stage.relayout()`。**存在东西上的位置都要相对它自己的 origin**（乘积的 `band` 就因为存了绝对位置，挪了以后占的地方被拉长）。
+- **装饰跟着东西走**：底卡、括号这类 `decor` 的位置每次 `sync` 都要按现在的框重摆，不能只在造出来时摆一次。
+- 改完跑 `npm run check:stage`（排版检查 + 手指检查）。

@@ -2,7 +2,7 @@
 // 每种东西的画法都照这个样子（types/views.js 注册）：
 //   sync(stage, o, ctx) → 要挪的 [{ part, node, from, to }]（造 / 改节点；挪动由舞台统一演，连线先藏后画）
 //   enter(stage, o)：刚造出来时怎么出场；choreo：自己指令的专门动作 (stage, c, fx, pre)；
-//   drag(stage, part, peers, done)：学生拖（没有就不能拖）；rail(o, p)：连线画成横线还是拱弧
+//   dragSpec(stage, part, peers)：学生拖的时候这一格怎么跟着手、放下算什么（手指的事在 pointer.js；没有就不能拖）；rail(o, p)：连线画成横线还是拱弧
 import { EASE, moveDuration, stagger, arcPoints } from '../motion.js';
 import { CELL } from '../layout.js';
 import { slotBox, ptrBoxes } from './array.js';
@@ -139,43 +139,60 @@ export const arrayView = {
     },
   },
 
-  // 学生拖：按住一格左右拖，放到同一排的另一格上就换过去
-  drag(stage, x, peers, done) {
-    const n = stage.nodeOf(x);
-    if (!n) return () => {};
-    n.classList.add('is-drag');
-    let start = null, base = null;
-    const target = (px) => {
+  // 学生拖（手指的事在 pointer.js）：按住一格跟着手走（左右跟着、上下只跟一点，看得出还在这一排），
+  // 靠近哪一格就吸到哪一格（亮一圈），放下就和它换；哪一格都不靠近就滑回原处。
+  // 部件、节点都按 key 现取：拖之前舞台可能刚重放过、换过位置
+  dragSpec(stage, x, peers) {
+    const id = x.obj, key = x.key, row = x.row;
+    const keys = peers.filter((p) => p.obj === id && p.key !== key).map((p) => p.key);
+    const node = (k = key) => stage.nodes.get(`${id}:${k}`);
+    const part = (k = key) => stage.scene.partOf(id, k);
+    let base = null, grab = null, over = null;
+    const near = (cx) => {
       let best = null, bd = Infinity;
-      for (const p of peers) {
-        if (p === x || p.row !== x.row || p.obj !== x.obj) continue;
-        const d = Math.abs(stage.scene.partBox(p).x - px);
-        if (d < bd) { bd = d; best = p; }
+      for (const k of keys) {
+        const p = part(k);
+        if (!p || p.row !== part()?.row) continue;
+        const b = stage.scene.partBox(p);
+        const d = Math.abs(b.x + b.w / 2 - cx);
+        if (d < bd) { bd = d; best = k; }
       }
-      return bd < CELL * 0.75 ? best : null;
+      return bd < CELL * 0.8 ? best : null;
     };
-    const down = (e) => { e.preventDefault(); n.setPointerCapture?.(e.pointerId); start = { x: e.clientX, y: e.clientY }; base = stage.scene.partBox(x); n.classList.add('is-hold'); };
-    const move = (e) => {
-      if (!start) return;
-      const dx = (e.clientX - start.x) / stage.cam.s, dy = (e.clientY - start.y) / stage.cam.s;
-      n.style.transform = `${tr(base.x + dx, base.y + dy * 0.35)} scale(1.08)`;
-      const t = target(base.x + dx);
-      peers.forEach((p) => stage.nodeOf(p)?.classList.toggle('is-over', p === t));
+    const light = (k) => { if (over === k) return; if (over != null) node(over)?.classList.remove('is-over'); over = k; if (k != null) node(k)?.classList.add('is-over'); };
+    return {
+      start(w) {
+        const p = part(), n = node();
+        if (!p || !n) throw new Error('这一格不在了');
+        base = stage.scene.partBox(p);
+        grab = { x: w.x - base.x, y: w.y - base.y };
+        n.getAnimations?.().forEach((a) => a.cancel());
+        n.classList.add('is-hold');
+      },
+      move(w) {
+        const n = node();
+        if (!n || !base) return;
+        const x0 = w.x - grab.x, y0 = base.y + (w.y - grab.y - base.y) * 0.35;
+        n.style.transform = `${tr(x0, y0)} scale(1.08)`;
+        light(near(x0 + base.w / 2));
+      },
+      drop(w) {
+        const t = over;
+        light(null);
+        node()?.classList.remove('is-hold');
+        if (t == null) return null;
+        const a = part(), b = part(t);
+        if (!a || !b) return null;
+        void w; void row;
+        return { act: { type: 'drag', a: { key: a.key, value: a.value, slot: a.slot }, b: { key: b.key, value: b.value, slot: b.slot } }, src: `swap ${id}#${a.key} ${id}#${b.key}` };
+      },
+      cancel() {
+        light(null);
+        const n = node();
+        if (!n || !base) return;
+        n.classList.remove('is-hold');
+        stage.tween(n, [{ transform: n.style.transform }, { transform: tr(base.x, base.y) }], { duration: 360, easing: EASE.spring });
+      },
     };
-    const up = (e) => {
-      if (!start) return;
-      const dx = (e.clientX - start.x) / stage.cam.s;
-      start = null;
-      n.classList.remove('is-hold');
-      peers.forEach((p) => stage.nodeOf(p)?.classList.remove('is-over'));
-      const t = target(base.x + dx);
-      if (t) { done({ type: 'drag', a: { key: x.key, value: x.value, slot: x.slot }, b: { key: t.key, value: t.value, slot: t.slot } }, `swap ${x.obj}#${x.key} ${t.obj}#${t.key}`); return; }
-      stage.tween(n, [{ transform: n.style.transform }, { transform: tr(base.x, base.y) }], { duration: 360, easing: EASE.spring });
-    };
-    n.addEventListener('pointerdown', down);
-    n.addEventListener('pointermove', move);
-    n.addEventListener('pointerup', up);
-    n.addEventListener('pointercancel', up);
-    return () => { n.classList.remove('is-drag', 'is-hold'); n.removeEventListener('pointerdown', down); n.removeEventListener('pointermove', move); n.removeEventListener('pointerup', up); n.removeEventListener('pointercancel', up); };
   },
 };

@@ -68,6 +68,7 @@ export class Scene {
     this.opens = new Map(); // 'B:edit' → { obj, action, refs, lo, hi }：开放给学生直接动的
     this.goals = new Map(); // id → { id, text, when, cond, met }
     this.reactions = new Map(); // 挑战 id → [行]：做到了的那一刻页面马上演（老师预写的确认和下一小问）
+    this.labelRects = []; // 贴的字画在哪（stage.js 量了写回）：[{ x, y, w, h, objs }]，摆东西时后造的东西让开（reflow）
   }
 
   clone() {
@@ -84,6 +85,7 @@ export class Scene {
     for (const [k, v] of this.opens) s.opens.set(k, { ...v, refs: [...v.refs] });
     for (const [k, g] of this.goals) s.goals.set(k, structuredClone(g));
     for (const [k, r] of this.reactions) s.reactions.set(k, [...r]);
+    s.labelRects = this.labelRects.map((r) => ({ ...r, objs: [...r.objs] }));
     return s;
   }
 
@@ -106,10 +108,32 @@ export class Scene {
   refOf(p) { return typeOf(this.objects.get(p.obj)).ref(p); }
   partBox(p) { const o = this.objects.get(p.obj); return typeOf(o).partBox(o, p); }
   cellBox(p) { return this.partBox(p); }
-  objectBox(id) { const o = this.objects.get(id); return typeOf(o).objectBox(o); }
+  /**
+   * 一样东西占的地方：那种东西自己算的（按字数估的、按格子数算的）再加上画面量出来多出去的（o.ext，stage.js 的 measure 写回）。
+   * 摆东西、贴字、镜头都用这一个：估小了别的东西就会摆上来压着它（2026-11-06 题卡的字折了两行，估的只有一行，压到了下面）
+   */
+  objectBox(id) {
+    const o = this.objects.get(id);
+    const b = typeOf(o).objectBox(o);
+    const e = o.ext;
+    return e ? { x: b.x - e.l, y: b.y - e.t, w: b.w + e.l + e.r, h: b.h + e.t + e.b } : b;
+  }
   allParts() { return [...this.objects.values()].flatMap((o) => typeOf(o).parts(o)); }
   /** 各种东西挡着的地方（贴字时让开）：格子、序号、指针、树的边…… */
-  obstacles() { return [...this.objects.values()].flatMap((o) => (typeOf(o).obstacles ? typeOf(o).obstacles(o) : typeOf(o).parts(o).map((p) => typeOf(o).partBox(o, p)))); }
+  obstacles() {
+    return [...this.objects.values()].flatMap((o) => {
+      const own = typeOf(o).obstacles ? typeOf(o).obstacles(o) : typeOf(o).parts(o).map((p) => typeOf(o).partBox(o, p));
+      // 量出来多出去的那几条（估的框外面还画着东西）也挡着
+      const e = o.ext, b = typeOf(o).objectBox(o);
+      if (!e) return own;
+      const strips = [];
+      if (e.t > 0) strips.push({ x: b.x - e.l, y: b.y - e.t, w: b.w + e.l + e.r, h: e.t });
+      if (e.b > 0) strips.push({ x: b.x - e.l, y: b.y + b.h, w: b.w + e.l + e.r, h: e.b });
+      if (e.l > 0) strips.push({ x: b.x - e.l, y: b.y, w: e.l, h: b.h });
+      if (e.r > 0) strips.push({ x: b.x + b.w, y: b.y, w: e.r, h: b.h });
+      return [...own, ...strips];
+    });
+  }
   num(v) {
     if (/^-?\d+(\.\d+)?$/.test(String(v))) return Number(v);
     const x = this.vars.get(v);
@@ -119,7 +143,7 @@ export class Scene {
   /** 新的一样东西放哪：已有东西的下面，和它们居中对齐 */
   slotFor(w) {
     if (!this.objects.size) return { x: 0, y: 0 };
-    const b = bbox([...this.objects.values()].map((o) => typeOf(o).objectBox(o)));
+    const b = bbox([...this.objects.keys()].map((id) => this.objectBox(id)));
     return { x: Math.round(b.x + b.w / 2 - w / 2), y: b.y + b.h + OBJECT_GAP };
   }
 
@@ -155,6 +179,7 @@ export class Scene {
   apply(c) {
     if (c.on) return this.stash(c);
     const fx = this.applyOne(c) || {};
+    this.reflow();
     const derived = this.derive();
     if (derived.length) fx.derived = derived;
     const met = this.checkGoals();
@@ -203,7 +228,7 @@ export class Scene {
     }
     // 各种东西自己的指令：按第一个部件是哪种东西找（swap 给格子、rowop 给矩阵……）
     const own = this.ownerOf(c, h);
-    if (own) { const fx = own(this, c, h); this.reflow(); return fx; }
+    if (own) return own(this, c, h);
     switch (cmd) {
       case 'say': {
         const text = str ?? '';
@@ -439,16 +464,23 @@ export class Scene {
    */
   reflow() {
     const list = [...this.objects.values()];
+    const order = new Map(list.map((o, i) => [o.id, i]));
     for (let i = 1; i < list.length; i++) {
       const o = list[i];
-      const me = typeOf(o).objectBox(o);
+      const me = this.objectBox(o.id);
       const tied = new Set(typeOf(o).anchors?.(o) || []); // 和它排成一体的（乘积和它的两个因子）不比
       let need = -Infinity;
       for (let j = 0; j < i; j++) {
         if (tied.has(list[j].id)) continue;
-        const b = typeOf(list[j]).objectBox(list[j]);
+        const b = this.objectBox(list[j].id);
         // 横着有重叠的才算「在上面」
         if (b.x < me.x + me.w && me.x < b.x + b.w) need = Math.max(need, b.y + b.h + OBJECT_GAP / 2);
+      }
+      // 贴在先造的东西上的字也算：字找不到空地方、只好摆到后造的东西那里时，后造的往下让（字只躲东西，这样东西也给字让地方）。
+      // 贴的东西里有它自己、有更晚造的，不算（贴在 A、B 两个上面的字不推 B）
+      for (const r of this.labelRects) {
+        if (!r.objs.length || r.objs.some((id) => !order.has(id) || order.get(id) >= i)) continue;
+        if (r.x < me.x + me.w && me.x < r.x + r.w && r.y < me.y + me.h) need = Math.max(need, r.y + r.h + OBJECT_GAP / 3);
       }
       if (me.y < need && o.origin) o.origin = { ...o.origin, y: o.origin.y + (need - me.y) };
     }

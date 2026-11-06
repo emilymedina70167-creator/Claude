@@ -298,69 +298,61 @@ export const treeView = {
     },
   },
 
-  // 学生拖：按住一个结点，把它的值拖出来，放到另一个结点上，两个就换值（堆的上滤、下滤自己动手做）
-  drag(stage, x, peers, done) {
-    const n = stage.nodeOf(x);
-    if (!n) return () => {};
-    n.classList.add('is-drag');
-    let start = null, ghost = null, from = null;
-    const target = (wx, wy) => {
-      let best = null, bd = Infinity;
-      for (const p of peers) {
-        if (p === x || p.obj !== x.obj) continue;
-        const c = centerOf(stage.scene.partBox(p));
-        const d = Math.hypot(c.x - wx, c.y - wy);
-        if (d < bd) { bd = d; best = p; }
-      }
-      return bd < NODE * 0.8 ? best : null;
-    };
+  // 学生拖（手指的事在 pointer.js）：按住一个结点，把它的值拖出来，靠近哪个结点就亮哪个，放上去两个就换值（堆的上滤、下滤自己动手做）；
+  // 没靠近别的结点就飞回去。部件、节点按 key 现取
+  dragSpec(stage, x, peers) {
+    const id = x.obj, key = x.key;
+    const keys = peers.filter((p) => p.obj === id && p.key !== key).map((p) => p.key);
+    const node = (k = key) => stage.nodes.get(`${id}:${k}`);
+    const part = (k = key) => stage.scene.partOf(id, k);
     const at = (p) => tr(p.x - NODE / 2, p.y - NODE / 2);
-    const down = (e) => {
-      e.preventDefault();
-      n.setPointerCapture?.(e.pointerId);
-      start = stage.toWorld(e.clientX, e.clientY);
-      from = centerOf(n.__box);
-      n.classList.add('is-hold');
-      const v = n.querySelector('.st-v');
-      ghost = el('div', 'nv-fly is-drag', stage.layer);
-      ghost.textContent = v.textContent;
-      ghost.style.transform = at(from);
-      v.style.visibility = 'hidden';
+    let start = null, from = null, ghost = null, over = null, q = null;
+    const near = (p) => {
+      let best = null, bd = Infinity;
+      for (const k of keys) { const pp = part(k); if (!pp) continue; const c = centerOf(stage.scene.partBox(pp)); const d = Math.hypot(c.x - p.x, c.y - p.y); if (d < bd) { bd = d; best = k; } }
+      return bd < NODE * 0.9 ? best : null;
     };
-    const move = (e) => {
-      if (!start) return;
-      const p = stage.toWorld(e.clientX, e.clientY);
-      const q = { x: from.x + p.x - start.x, y: from.y + p.y - start.y };
-      ghost.style.transform = `${at(q)} scale(1.15)`;
-      ghost.__at = q;
-      const t = target(q.x, q.y);
-      peers.forEach((pp) => stage.nodeOf(pp)?.classList.toggle('is-over', pp === t));
+    const light = (k) => { if (over === k) return; if (over != null) node(over)?.classList.remove('is-over'); over = k; if (k != null) node(k)?.classList.add('is-over'); };
+    const clear = () => { light(null); node()?.classList.remove('is-hold'); };
+    return {
+      start(w) {
+        const n = node();
+        if (!n || !part()) throw new Error('这个结点不在了');
+        start = w;
+        from = centerOf(stage.scene.partBox(part()));
+        q = from;
+        n.classList.add('is-hold');
+        const v = n.querySelector('.st-v');
+        ghost = el('div', 'nv-fly is-drag', stage.layer);
+        ghost.textContent = v?.textContent ?? '';
+        ghost.style.transform = at(from);
+        if (v) v.style.visibility = 'hidden';
+      },
+      move(w) {
+        if (!start || !ghost) return;
+        q = { x: from.x + w.x - start.x, y: from.y + w.y - start.y };
+        ghost.style.transform = `${at(q)} scale(1.15)`;
+        light(near(q));
+      },
+      drop() {
+        const t = over;
+        clear();
+        const a = part(), b = t != null ? part(t) : null;
+        if (!a || !b || !ghost) return null;
+        node().__drop = q;
+        ghost.remove();
+        ghost = null;
+        return { act: { type: 'drag', text: `学生把 ${a.value}（${stage.scene.refOf(a)}）拖到 ${b.value}（${stage.scene.refOf(b)}）上，两个结点换了值（舞台已经照做了）`, from: stage.scene.refOf(a), to: stage.scene.refOf(b) }, src: `swap ${id}#${a.key} ${id}#${b.key}` };
+      },
+      async cancel() {
+        clear();
+        const g = ghost;
+        ghost = null;
+        if (g && from) { await stage.tween(g, [{ transform: g.style.transform }, { transform: at(from) }], { duration: 360, easing: EASE.spring }); g.remove(); }
+        const v = node()?.querySelector('.st-v');
+        if (v) v.style.visibility = '';
+      },
     };
-    const up = async () => {
-      if (!start) return;
-      start = null;
-      n.classList.remove('is-hold');
-      peers.forEach((pp) => stage.nodeOf(pp)?.classList.remove('is-over'));
-      const q = ghost.__at || from;
-      const t = target(q.x, q.y);
-      const g = ghost;
-      ghost = null;
-      if (t) {
-        n.__drop = q;
-        g.remove();
-        done({ type: 'drag', text: `学生把 ${x.value}（${stage.scene.refOf(x)}）拖到 ${t.value}（${stage.scene.refOf(t)}）上，两个结点换了值（舞台已经照做了）`, from: stage.scene.refOf(x), to: stage.scene.refOf(t) }, `swap ${x.obj}#${x.key} ${t.obj}#${t.key}`);
-        return;
-      }
-      // 没放到别的结点上：值飞回去
-      await stage.tween(g, [{ transform: g.style.transform }, { transform: at(from) }], { duration: 360, easing: EASE.spring });
-      g.remove();
-      n.querySelector('.st-v').style.visibility = '';
-    };
-    n.addEventListener('pointerdown', down);
-    n.addEventListener('pointermove', move);
-    n.addEventListener('pointerup', up);
-    n.addEventListener('pointercancel', up);
-    return () => { n.classList.remove('is-drag', 'is-hold'); n.removeEventListener('pointerdown', down); n.removeEventListener('pointermove', move); n.removeEventListener('pointerup', up); n.removeEventListener('pointercancel', up); };
   },
 
   css: `${NODE_CSS}

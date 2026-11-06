@@ -112,3 +112,14 @@ test('话里的写法：{a.2} 是图上的东西，{d} 是拨的数，$d$ 是字
   assert.equal(parseRich('{a#8}')[0].k, 'ref');
   assert.equal(richLength(parseRich('{a.1}好')), 3);
 });
+
+test('手指按下去拿哪一个：落在里面的最小那个；落在空处挑半径以内最近的；正在等的那一问先；太远谁也不拿', async () => {
+  const { pickTarget } = await import('../kit/src/stage/layout.js');
+  const a = { id: 'a', rect: { x: 0, y: 0, w: 60, h: 60 } }, b = { id: 'b', rect: { x: 72, y: 0, w: 60, h: 60 } }, big = { id: 'big', rect: { x: -10, y: -10, w: 300, h: 200 } };
+  assert.equal(pickTarget({ x: 30, y: 30 }, [big, a, b]).id, 'a');
+  assert.equal(pickTarget({ x: 64, y: 30 }, [a, b]).id, 'a');
+  assert.equal(pickTarget({ x: 69, y: 30 }, [a, b]).id, 'b');
+  assert.equal(pickTarget({ x: 160, y: 30 }, [a, b], { radius: 30 }).id, 'b');
+  assert.equal(pickTarget({ x: 200, y: 30 }, [a, b], { radius: 30 }), null);
+  assert.equal(pickTarget({ x: 64, y: 30 }, [a, { ...b, prio: 1 }]).id, 'b');
+});

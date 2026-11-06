@@ -105,3 +105,24 @@ export function linkGeom(A, B, { tier = 0, rail = false } = {}) {
   return { d: `M${r(a.x)} ${r(a.y)} Q${r(cx)} ${r(cy)} ${r(b.x)} ${r(b.y)}`, box: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) - h - 2, w: Math.abs(b.x - a.x), h: h + Math.abs(b.y - a.y) + 2 }, rail: false };
 }
 
+
+/**
+ * 手指按下去是要动哪一个（舞台的点、拖都走它，stage/pointer.js）：
+ * 落在某个东西里面就是它（落在好几个里面挑最小的那个，最具体）；落在空的地方，挑离得最近、在 radius 以内的那个——
+ * 手指比格子的边粗，按偏一点、按在两个东西之间也要拿得到，不能「掉」。
+ * pt：{ x, y }；cands：[{ id, rect: { x, y, w, h }, prio? }]（prio 大的先：正在等的那一问比随时能拖的先）；都在屏幕坐标。返回那一个或 null
+ */
+export function pickTarget(pt, cands, { radius = 30 } = {}) {
+  let best = null;
+  const inside = (r) => pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h;
+  const dist = (r) => Math.hypot(Math.max(r.x - pt.x, 0, pt.x - (r.x + r.w)), Math.max(r.y - pt.y, 0, pt.y - (r.y + r.h)));
+  for (const c of cands) {
+    const r = c.rect;
+    if (!r || !(r.w > 0) || !(r.h > 0)) continue;
+    const d = inside(r) ? 0 : dist(r);
+    if (d > radius) continue;
+    const key = [-(c.prio || 0), d, d === 0 ? r.w * r.h : 0];
+    if (!best || key[0] < best.key[0] || (key[0] === best.key[0] && (key[1] < best.key[1] || (key[1] === best.key[1] && key[2] < best.key[2])))) best = { c, key };
+  }
+  return best ? best.c : null;
+}

@@ -11,7 +11,8 @@
     "docs:size": "node tools/docs-size.mjs",
     "gallery": "node tools/gallery.mjs",
     "check:pages": "node tools/check-lesson.mjs --quiet kit/examples/unit-matrix-vector.html kit/examples/408-demo.html kit/examples/la-demo.html kit/examples/demo.html kit/examples/figures.html kit/examples/ds-8.2.3-shell-sort.html kit/examples/ds-linear-demo.html kit/examples/ds-trees-demo.html kit/examples/ds-trees2-demo.html kit/examples/ds-trace2-demo.html kit/examples/os2-demo.html kit/examples/pv-demo.html kit/examples/co2-demo.html kit/examples/cn2-demo.html kit/examples/en-demo.html kit/examples/practice-demo.html kit/examples/answer-demo.html kit/examples/live-tools.board.json",
-    "e2e": "node tools/desk-e2e.mjs"
+    "e2e": "node tools/desk-e2e.mjs",
+    "check:stage": "node proto/stage/build.mjs && node tools/stage-audit.mjs && node tools/stage-touch.mjs"
   },
   "dependencies": {
     "katex": "0.16.9",

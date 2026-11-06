@@ -279,17 +279,33 @@ function editAfford(stage, o, e, done) {
   const live = (k) => stage.scene.partOf(id, k);
   let pop = null, cur = null, busy = false;
   const close = () => { pop?.remove(); pop = null; if (cur != null) nodeOf(cur)?.classList.remove('is-editing'); cur = null; };
-  // 拨数器放在矩阵下沿下面、对着这一列（矩阵上面多半是老师的话，不挡住）；屏幕底下放不下才放到这一格上面
+  // 拨数器放哪：矩阵下沿下面对着这一列 → 矩阵上面 → 右边 → 左边，挑第一个不压着别的东西、话、挑战、底下一条、也不出屏幕的；
+  // 都压着就挑压得最少的（以前只看下面放不放得下，下面有 BA 那一排时就压在 BA 上）
   const place = () => {
     const n = cur != null && nodeOf(cur);
     const m = stage.scene.objects.get(id);
     if (!pop || !n?.__box || !m) return;
     const b = n.__box, L = layout(m).box;
-    const below = stage.toScreen({ x: b.x + b.w / 2, y: L.y + L.h });
-    const above = stage.toScreen({ x: b.x + b.w / 2, y: b.y });
-    const h = pop.offsetHeight, vh = stage.view.clientHeight || 800;
-    const y = below.y + 10 + h < vh - 96 ? below.y + 10 : above.y - h - 10;
-    const x = Math.max(8, Math.min((stage.view.clientWidth || 800) - pop.offsetWidth - 8, below.x - pop.offsetWidth / 2));
+    const w = pop.offsetWidth, h = pop.offsetHeight, vw = stage.view.clientWidth || 800, vh = stage.view.clientHeight || 800;
+    const S = (p) => stage.toScreen(p);
+    const colX = S({ x: b.x + b.w / 2, y: 0 }).x;
+    const cands = [
+      { x: colX - w / 2, y: S({ x: 0, y: L.y + L.h }).y + 10 },
+      { x: colX - w / 2, y: S({ x: 0, y: L.y }).y - h - 10 },
+      { x: S({ x: L.x + L.w, y: 0 }).x + 12, y: S({ x: 0, y: b.y + b.h / 2 }).y - h / 2 },
+      { x: S({ x: L.x, y: 0 }).x - w - 12, y: S({ x: 0, y: b.y + b.h / 2 }).y - h / 2 },
+    ];
+    const blocks = stage.screenBlocks(id);
+    const cost = (c) => {
+      const r = { x: c.x, y: c.y, w, h };
+      let k = 0;
+      if (r.x < 8 || r.y < 8 || r.x + w > vw - 8 || r.y + h > vh - 8) k += 1e6;
+      for (const q of blocks) { const ox = Math.min(r.x + w, q.x + q.w) - Math.max(r.x, q.x), oy = Math.min(r.y + h, q.y + q.h) - Math.max(r.y, q.y); if (ox > 0 && oy > 0) k += ox * oy; }
+      return k;
+    };
+    let best = cands[0], bc = Infinity;
+    for (const c of cands) { const k = cost(c); if (k < bc) { bc = k; best = c; } if (!k) break; }
+    const x = Math.max(8, Math.min(vw - w - 8, best.x)), y = Math.max(8, Math.min(vh - h - 8, best.y));
     pop.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
   };
   const paint = () => {
@@ -328,14 +344,8 @@ function editAfford(stage, o, e, done) {
     paint();
     stage.tween(pop, [{ opacity: 0, scale: '.85' }, { opacity: 1, scale: '1' }], { duration: 240, easing: EASE.spring });
   };
-  const offs = keys.map((k) => {
-    const n = nodeOf(k);
-    if (!n) return () => {};
-    n.classList.add('is-editable');
-    const on = (ev) => { ev.preventDefault(); openFor(k); };
-    n.addEventListener('pointerup', on);
-    return () => { n.classList.remove('is-editable', 'is-editing'); n.removeEventListener('pointerup', on); };
-  });
+  // 点一格：走舞台的 pointer.js（按偏一点也拿得到，和能拖的不打架）
+  const offs = keys.map((k) => { const off = stage.armPress(`${id}:${k}`, () => openFor(k), { cls: 'is-editable' }); return () => { off(); nodeOf(k)?.classList.remove('is-editing'); }; });
   const away = (ev) => { if (pop && !ev.target.closest?.('.mx-step, .mx-cell.is-editable')) close(); };
   stage.view.addEventListener('pointerdown', away);
   return () => { offs.forEach((f) => f()); close(); stage.view.removeEventListener('pointerdown', away); };
@@ -346,21 +356,13 @@ function explainAfford(stage, o, e, done) {
   const id = o.id;
   let busy = false;
   const keys = (e.refs.length ? e.refs.flatMap((r) => stage.scene.parts(r)) : o.cells).map((x) => x.key);
-  const offs = keys.map((k) => {
-    const n = stage.nodes.get(`${id}:${k}`);
-    if (!n) return () => {};
-    n.classList.add('is-explain');
-    const on = async (ev) => {
-      ev.preventDefault();
-      const x = stage.scene.partOf(id, k);
-      if (busy || !x) return;
-      busy = true;
-      const ref = `${id}.${x.r},${x.c}`;
-      try { await done({ type: 'explain', ref, value: x.value }, `mul ${ref}`); } finally { busy = false; }
-    };
-    n.addEventListener('pointerup', on);
-    return () => { n.classList.remove('is-explain'); n.removeEventListener('pointerup', on); };
-  });
+  const offs = keys.map((k) => stage.armPress(`${id}:${k}`, async () => {
+    const x = stage.scene.partOf(id, k);
+    if (busy || !x) return;
+    busy = true;
+    const ref = `${id}.${x.r},${x.c}`;
+    try { await done({ type: 'explain', ref, value: x.value }, `mul ${ref}`); } finally { busy = false; }
+  }, { cls: 'is-explain' }));
   return () => offs.forEach((f) => f());
 }
 

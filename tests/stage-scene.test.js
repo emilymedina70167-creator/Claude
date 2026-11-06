@@ -213,3 +213,34 @@ test('拨数的范围能写负数（-3..3），比大小认分数', async () => 
   assert.equal(compareValues('−3/4', '-0.75'), 0);
 });
 
+
+test('排版的根：量出来多出去的（o.ext）算进占的地方；后造的东西让开先造的东西和贴在它上面的字；乘积写算式那一条跟着乘积走', async () => {
+  const { parseScript } = await import('../kit/src/stage/script.js');
+  const run = (sc, src) => { for (const c of parseScript(src)) sc.apply(c); };
+  const sc = new Scene();
+  run(sc, 'array a = 1 2 3\narray b = 4 5 6');
+  const a0 = sc.objectBox('a'), b0 = sc.objectBox('b');
+  // 画出来比估的高（比如题卡的字折了行）：占的地方跟着变大，下面的往下让
+  sc.objects.get('a').ext = { l: 0, t: 0, r: 0, b: 120 };
+  assert.equal(sc.objectBox('a').h, a0.h + 120);
+  sc.reflow();
+  assert.ok(sc.objectBox('b').y >= a0.y + a0.h + 120, '下面的东西没让开量出来多出去的那一块');
+  // 贴在 a 上的字占了 b 的地方：b 往下让；贴在 a、b 两个上面的字不推 b
+  const sc2 = new Scene();
+  run(sc2, 'array a = 1 2 3\narray b = 4 5 6');
+  const bb = sc2.objectBox('b');
+  sc2.labelRects = [{ x: bb.x, y: bb.y - 10, w: 80, h: 40, objs: ['a', 'b'] }];
+  sc2.reflow();
+  assert.equal(sc2.objectBox('b').y, bb.y);
+  sc2.labelRects = [{ x: bb.x, y: bb.y - 10, w: 80, h: 40, objs: ['a'] }];
+  sc2.reflow();
+  assert.ok(sc2.objectBox('b').y >= bb.y + 30, '贴在先造的东西上的字没让后造的东西让开');
+  // 乘积被推下去：写算式那一条跟着走（存的是相对位置），乘积占的地方不会被拉长
+  const sc3 = new Scene();
+  run(sc3, 'matrix A = 1 1 / -1 -1\nmatrix B = 1 -1 / -1 1 beside=A\nproduct C = A B\nproduct D = B A');
+  const d0 = sc3.objectBox('D');
+  sc3.objects.get('D').origin.y += 200;
+  const d1 = sc3.objectBox('D');
+  assert.equal(d1.h, d0.h);
+  assert.equal(d1.y, d0.y + 200);
+});

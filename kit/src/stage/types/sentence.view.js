@@ -310,18 +310,19 @@ export const sentenceView = {
     },
   },
 
-  // 学生拖：按住一个词拖到两个词中间（出一道竖线指着落在哪），放手就挪过去
-  drag(stage, x, peers, done) {
-    const n = stage.nodeOf(x);
-    if (!n || n.classList.contains('is-folded')) return () => {};
-    n.classList.add('is-drag');
-    let start = null, base = null, caret = null;
+  // 学生拖（手指的事在 pointer.js）：按住一个词拖到两个词中间（出一道竖线指着落在哪），放手就挪过去；离哪个空都远就滑回去
+  dragSpec(stage, x0) {
+    const id = x0.obj, key = x0.key;
     const sc = stage.scene;
+    const node = () => stage.nodes.get(`${id}:${key}`);
+    const part = () => sc.partOf(id, key);
+    if (node()?.classList.contains('is-folded')) return null;
+    let start = null, base = null, caret = null, g = null;
     const gaps = () => {
-      const o = sc.objects.get(x.obj);
+      const o = sc.objects.get(id);
       const L = layout(o);
       const out = [];
-      const own = L.items.findIndex((it) => it.keys.includes(x.key));
+      const own = L.items.findIndex((it) => it.keys.includes(key));
       L.items.forEach((it, i) => {
         const line = L.lines[it.line];
         const y = (o.origin?.y ?? 0) + line.wordY + WORD_H / 2;
@@ -332,60 +333,53 @@ export const sentenceView = {
         // 一行最后一样后面的空
         if (!L.items[i + 1] || L.items[i + 1].line !== it.line) out.push({ at: i + 1, x: it.box.x + it.box.w + it.punctW + 6, y });
       });
-      return { out: out.filter((g) => g.at !== own && g.at !== own + 1), L, own };
+      return { out: out.filter((q) => q.at !== own && q.at !== own + 1), L };
     };
     const nearest = (p) => {
       const { out } = gaps();
       let best = null, bd = Infinity;
-      for (const g of out) { const d = Math.hypot(g.x - p.x, (g.y - p.y) * 1.6); if (d < bd) { bd = d; best = g; } }
+      for (const q of out) { const d = Math.hypot(q.x - p.x, (q.y - p.y) * 1.6); if (d < bd) { bd = d; best = q; } }
       return bd < 160 ? best : null;
     };
-    const down = (e) => {
-      e.preventDefault();
-      try { n.setPointerCapture?.(e.pointerId); } catch { /* 合成的事件没有真的指针 */ }
-      start = { x: e.clientX, y: e.clientY };
-      base = sc.partBox(x);
-      n.classList.add('is-hold');
-      caret = el('div', 'sn-caret', stage.layer);
-      caret.style.opacity = '0';
-    };
-    const move = (e) => {
-      if (!start) return;
-      const dx = (e.clientX - start.x) / stage.cam.s, dy = (e.clientY - start.y) / stage.cam.s;
-      n.style.transform = `${tr(base.x + dx, base.y + dy)} scale(1.06)`;
-      const g = nearest({ x: base.x + base.w / 2 + dx, y: base.y + base.h / 2 + dy });
-      if (g) { caret.style.opacity = '1'; caret.style.transform = tr(g.x - 1.5, g.y - WORD_H / 2 + 4); } else caret.style.opacity = '0';
-    };
-    const up = (e) => {
-      if (!start) return;
-      const dx = (e.clientX - start.x) / stage.cam.s, dy = (e.clientY - start.y) / stage.cam.s;
-      start = null;
-      n.classList.remove('is-hold');
-      caret?.remove();
-      caret = null;
-      const g = nearest({ x: base.x + base.w / 2 + dx, y: base.y + base.h / 2 + dy });
-      if (g) {
+    const clear = () => { node()?.classList.remove('is-hold'); caret?.remove(); caret = null; };
+    return {
+      start(w) {
+        const x = part(), n = node();
+        if (!x || !n) throw new Error('这个词不在了');
+        start = w;
+        base = sc.partBox(x);
+        n.getAnimations?.().forEach((a) => a.cancel());
+        n.classList.add('is-hold');
+        caret = el('div', 'sn-caret', stage.layer);
+        caret.style.opacity = '0';
+      },
+      move(w) {
+        const n = node();
+        if (!start || !n) return;
+        const dx = w.x - start.x, dy = w.y - start.y;
+        n.style.transform = `${tr(base.x + dx, base.y + dy)} scale(1.06)`;
+        g = nearest({ x: base.x + base.w / 2 + dx, y: base.y + base.h / 2 + dy });
+        if (g) { caret.style.opacity = '1'; caret.style.transform = tr(g.x - 1.5, g.y - WORD_H / 2 + 4); } else caret.style.opacity = '0';
+      },
+      drop() {
+        clear();
+        const x = part();
+        if (!g || !x) return null;
         const { L } = gaps();
         // 落在第 at 样前面：前面一共几个词（不算自己）→ 挪到第几个
         let count = 0;
-        for (let i = 0; i < g.at; i++) count += L.items[i].keys.filter((k) => k !== x.key).length;
-        const o = sc.objects.get(x.obj);
-        const ws = ordered(o).filter((w) => w.key !== x.key);
+        for (let i = 0; i < g.at; i++) count += L.items[i].keys.filter((k) => k !== key).length;
+        const o = sc.objects.get(id);
+        const ws = ordered(o).filter((w) => w.key !== key);
         const after = ws[count - 1];
         const where = after ? `「${after.value}」后面` : '句首';
-        done({ type: 'drag', text: `学生把「${x.value}」拖到了${where}（舞台已经照做了）`, word: x.value, to: count + 1 }, `move ${x.obj}#${x.key} -> ${x.obj}.${count + 1}`);
-        return;
-      }
-      stage.tween(n, [{ transform: n.style.transform }, { transform: tr(base.x, base.y) }], { duration: 360, easing: EASE.spring });
-    };
-    n.addEventListener('pointerdown', down);
-    n.addEventListener('pointermove', move);
-    n.addEventListener('pointerup', up);
-    n.addEventListener('pointercancel', up);
-    return () => {
-      n.classList.remove('is-drag', 'is-hold');
-      caret?.remove();
-      n.removeEventListener('pointerdown', down); n.removeEventListener('pointermove', move); n.removeEventListener('pointerup', up); n.removeEventListener('pointercancel', up);
+        return { act: { type: 'drag', text: `学生把「${x.value}」拖到了${where}（舞台已经照做了）`, word: x.value, to: count + 1 }, src: `move ${id}#${key} -> ${id}.${count + 1}` };
+      },
+      cancel() {
+        clear();
+        const n = node();
+        if (n && base) stage.tween(n, [{ transform: n.style.transform }, { transform: tr(base.x, base.y) }], { duration: 360, easing: EASE.spring });
+      },
     };
   },
 
