@@ -263,11 +263,23 @@ const valueIn = (scene, h, cmd, example, sides = false) => {
   if (isNull(v)) throw new Error('值不能是 _');
   return String(v);
 };
+// 托盘（tray="47 10"）：待插的数，按顺序；插进去一个就拿掉一个（tree.rules.js 的下一步从这里取）
+function readTray(text, nodes) {
+  const vals = String(text).split(/[\s,，、]+/).filter(Boolean);
+  if (!vals.length) throw new Error('tray= 写待插的数，空格隔开：tray="47 10"');
+  for (const [i, v] of vals.entries()) {
+    if (isNull(v)) throw new Error('托盘里不能有 _（写待插的数）');
+    if (nodes.some((n) => cmpValues(n.value, v) === 0)) throw new Error(`托盘里的 ${v} 已经在树里了（二叉排序树里不放一样的值）`);
+    if (vals.findIndex((w) => cmpValues(w, v) === 0) !== i) throw new Error(`托盘里 ${v} 写了两次`);
+  }
+  if (nodes.length + vals.length > MAX_NODES) throw new Error(`一棵树最多 ${MAX_NODES} 个结点：树上 ${nodes.length} 个，托盘里 ${vals.length} 个，插完放不下`);
+  return vals;
+}
 const checkDepth = (o, depth) => { if (depth >= MAX_DEPTH) throw new Error(`树最多 ${MAX_DEPTH} 层，再长就放不下了`); };
 const checkSize = (o) => { if (o.nodes.length >= MAX_NODES) throw new Error(`一棵树最多 ${MAX_NODES} 个结点`); };
 
 // 二叉排序树从根比下去：走过的结点、每一步比出来的大小、最后停在谁下面哪一边（找到了就是那个结点）
-function descend(o, value) {
+export function descend(o, value) {
   const path = [], cmps = [];
   let cur = o.root, parent = null, side = null;
   while (cur != null) {
@@ -288,6 +300,9 @@ function grow(scene, o, parent, side, value, extra) {
   o.nodes.push(newNode(o.id, key, value));
   if (parent == null) o.root = key; else nodeAt(o, parent)[side] = key;
   refreshDup(o);
+  // 托盘里有这个数：插进来了就从托盘拿掉（插的是托盘以外的数，托盘不动）
+  const t = o.tray?.indexOf(String(value)) ?? -1;
+  if (t >= 0) o.tray.splice(t, 1);
   return { id: o.id, key, value: String(value), parent, side, ...extra };
 }
 
@@ -303,7 +318,7 @@ function tidy(scene, o, gone) {
 }
 
 // 旋转（只动结构 { root, nodes }）：右旋 a——a 的左孩子 b 上来，b 的右子树挂到 a 的左边
-function rotStruct(s, aKey, dir) {
+export function rotStruct(s, aKey, dir) {
   const by = new Map(s.nodes.map((n) => [n.key, n]));
   const a = by.get(aKey);
   const bKey = dir === 'right' ? a.left : a.right;
@@ -341,6 +356,7 @@ export const tree = {
     const nodes = built.map((b, i) => ({ ...newNode(id, i + 1, b.value), left: b.left != null ? b.left + 1 : null, right: b.right != null ? b.right + 1 : null }));
     const o = { origin: { x: 0, y: 0 }, root: nodes.length ? 1 : null, next: nodes.length + 1, nodes, bf: false, visits: 0, last: null };
     if (Math.max(0, ...depths(o).values()) >= MAX_DEPTH) throw new Error(`树最多 ${MAX_DEPTH} 层`);
+    if (h.opts.tray != null) o.tray = readTray(h.opts.tray, nodes);
     refreshDup(o);
     if (old?.type === 'tree') o.origin = { ...old.origin };
     else {
@@ -624,6 +640,7 @@ export const tree = {
     if (visited.length) lines.push(`  访问顺序：${visited.map(shown).join(' ')}`);
     const tags = ns.filter((n) => n.tag != null);
     if (tags.length) lines.push(`  角上的小字：${tags.map((n) => `${shown(n)}「${n.tag}」`).join(' ')}`);
+    if (o.tray?.length) lines.push(`  托盘（待插）：${o.tray.join(' ')}`);
     if (o.bf && ns.length) {
       const bad = imbalance(o);
       lines.push(`  平衡因子：${ns.map((n) => `${shown(n)} ${bfText(bfOf(o, n.key))}`).join('，')}${bad ? `（失衡：最小不平衡子树的根是 ${shown(nodeAt(o, bad.key))}，${bad.kind} 型）` : '（都平衡）'}`);

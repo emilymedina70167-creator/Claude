@@ -8,8 +8,13 @@ import { matrix } from './matrix.js';
 import { plane } from './plane.js';
 import { sentence } from './sentence.js';
 import { tex } from './tex.js';
+import { registerRules } from '../rules.js';
+import { treeRules } from './tree.rules.js';
 
 export const TYPES = { array, tree, graph, matrix, plane, sentence, tex, card };
+
+// 每种东西的规则（rules.js：下一步、判一下、判断式、事实、手势表）：舞台一加载就登记好；没交规则的东西照旧能用，只是不判
+registerRules('tree', treeRules);
 
 /** 造东西的指令 → 那种东西（array → 一排格子、tree → 树……） */
 export const CREATE = {};
