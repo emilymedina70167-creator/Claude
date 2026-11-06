@@ -4,11 +4,12 @@ import { Stage } from '../../kit/src/stage/stage.js';
 import { TOPICS, turnMessage } from '../../kit/src/stage/doc.js';
 import { actText } from '../../kit/src/stage/stage.js';
 import css from '../../kit/src/stage/stage.css';
+import { viewCss } from '../../kit/src/stage/types/views.js';
 import { scriptedLesson } from './scripted.js';
 import { liveLesson } from './live.js';
 
 const style = document.createElement('style');
-style.textContent = css;
+style.textContent = `${css}\n${viewCss()}`;
 document.head.appendChild(style);
 
 const $ = (id) => document.getElementById(id);
