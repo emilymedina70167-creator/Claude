@@ -1,0 +1,15 @@
+# 矩阵那一轮（kit/src/stage/types/matrix.js 的例子）：学生点开乘积剩下三格做到 g1，预写的行接着给 g2；拨 B.1,1 做到 g2，页面叫老师
+matrix A = 1 1 / -1 -1
+matrix B = 1 -1 / -1 1 beside=A
+product C = A B
+mul C.1,1
+say "{C.1,1} 是 A 的第 1 行乘 B 的第 1 列。剩下三格你来：点一格，看它怎么算出来。"
+open C explain
+goal g1 "点出 AB 剩下的三格" when="C = O"
+@g1 say "A、B 都不是 O，乘出来却是 O。"
+@g1 open B edit range=-3..3
+@g1 goal g2 "改 B 里的一个数，让 AB 不再是 O" when="C != O"
+学生: mul C.1,2
+学生: mul C.2,1
+学生: mul C.2,2
+学生: write B.1,1 2
