@@ -96,9 +96,14 @@ function setup(segments) {
       await new Promise((r) => setTimeout(r, 50));
     }
   };
-  // 学生直接动画面：照各自画法里造出的那一下（types/*.view.js），走交给学生的那一项（stage.openDone）
+  // 学生直接动画面：照各自画法里造出的那一下（types/*.view.js），走交给学生的那一项（stage.openDone）。
+  // 真页面能做多少这里就做多少：只动交给了学生的部件；矩阵的格照拨数器一格一格 ±1、限在 range 里；
+  // 写错、舞台演不上的那一下先在场景的副本上试（dryRun），演不上就记成没演上、不交给课堂循环（不然发给老师的会写「舞台已经照做了」）
   const NEED = { write: 'edit', mul: 'explain', swap: 'drag', move: 'drag', vec: 'drag' };
-  T.studentDo = (cmd, rest) => {
+  // 分数 a/b 加整数 k（矩阵里存的是字符串：'-3/2'、'4'）
+  const frac = (v) => { const m = String(v ?? '').replace(/[−–]/g, '-').trim().match(/^(-?\d+)(?:\/(\d+))?$/); return m ? [Number(m[1]), Number(m[2] || 1)] : null; };
+  const fstr = ([a, b]) => { const g = (x, y) => (y ? g(y, x % y) : Math.abs(x)); const d = g(a, b) || 1; return b / d === 1 ? String(a / d) : `${a / d}/${b / d}`; };
+  T.studentDo = async (cmd, rest) => {
     const sc = st.scene;
     const first = rest.split(/\s+/)[0];
     const obj = first.split(/[.#]/)[0];
@@ -107,35 +112,80 @@ function setup(segments) {
     const need = NEED[cmd];
     const e = [...sc.opens.values()].find((x) => x.obj === obj && x.action === need);
     if (!e) return { untouched: `${obj} 没有交给学生 ${need}，学生动不了` };
-    const one = (ref) => sc.parts(ref)[0];
-    let act, src;
-    if (cmd === 'write') {
-      const [ref, to] = rest.split(/\s+/);
-      act = { type: 'edit', ref, from: one(ref).value, to };
-      src = `write ${ref} ${to}`;
-    } else if (cmd === 'mul') {
-      act = { type: 'explain', ref: first, value: one(first).value };
-      src = `mul ${first}`;
-    } else if (cmd === 'swap') {
-      const [ra, rb] = rest.split(/\s+/);
-      const a = one(ra), b = one(rb);
-      act = o.type === 'tree'
-        ? { type: 'drag', text: `学生把 ${a.value}（${sc.refOf(a)}）拖到 ${b.value}（${sc.refOf(b)}）上，两个结点换了值（舞台已经照做了）`, from: sc.refOf(a), to: sc.refOf(b) }
-        : { type: 'drag', a: { key: a.key, value: a.value, slot: a.slot }, b: { key: b.key, value: b.value, slot: b.slot } };
-      src = `swap ${obj}#${a.key} ${obj}#${b.key}`;
-    } else if (cmd === 'move') {
-      const w = one(first);
-      act = { type: 'drag', text: `学生把「${w.value}」拖到了 ${rest.slice(first.length).trim()}（舞台已经照做了）`, word: w.value };
-      src = `move ${rest}`;
-    } else if (cmd === 'vec') {
-      const m = rest.match(/^(\w+)\s+(\w+)\s*=\s*(\S+)\s+(\S+)$/);
-      if (!m) return { error: '要写成 学生: vec p u = 3 1' };
-      const it = (o.items || []).find((x) => x.key === m[2] || x.name === m[2]) || {};
-      act = { type: 'drag', ref: `${m[1]}.${m[2]}`, from: [it.x, it.y], to: [m[3], m[4]], text: `学生把向量 ${m[1]}.${m[2]} 的末端拖到了 (${m[3]}, ${m[4]})（原来在 (${it.x}, ${it.y})），舞台已经照做了` };
-      src = `vec ${rest}`;
-    }
-    st.openDone(e, act, src);
-    return {};
+    let one;
+    try { one = (ref) => { const p = sc.parts(ref)[0]; if (!p) throw new Error(`「${ref}」不是一个部件`); return p; }; one(first); } catch (err) { return { error: err.message }; }
+    // 只交了几个部件（open B.1,1 edit）：别的部件学生碰不到
+    const allowed = e.refs.length ? new Set(e.refs.flatMap((r) => sc.parts(r)).map((x) => x.key)) : null;
+    const mine = (p) => !allowed || allowed.has(p.key);
+    const tryLine = (src) => window.LAStageDev.dryRun(sc, src)[0]?.error || null;
+    const go = async (act, src) => {
+      const bad = tryLine(src);
+      if (bad) return { error: `「${src}」演不上：${bad}` };
+      await st.openDone(e, act, src);
+      return null;
+    };
+    try {
+      if (cmd === 'write') {
+        const [ref, to] = rest.split(/\s+/);
+        const x = one(ref);
+        if (!mine(x)) return { untouched: `${ref} 没有交给学生 edit（只交了 ${e.refs.join(' ')}），学生动不了` };
+        const from = frac(x.value === '' ? '0' : x.value), t = frac(to);
+        if (!from || !t) return { error: `拨不到「${to}」：拨数器只能一格一格 ±1 地拨` };
+        // 差要是整数才拨得到：from + k = to
+        const k = (t[0] * from[1] - from[0] * t[1]) / (t[1] * from[1]);
+        if (!Number.isInteger(k)) return { error: `拨不到 ${to}：${ref} 现在是 ${x.value}，拨数器一下只能 ±1` };
+        const tv = t[0] / t[1];
+        if (tv < e.lo || tv > e.hi) return { error: `拨不到 ${to}：这一格只能在 ${e.lo}～${e.hi} 里拨（range）` };
+        let cur = from;
+        for (let i = 0; i < Math.abs(k); i++) {
+          const nx = [cur[0] + Math.sign(k) * cur[1], cur[1]];
+          const r = await go({ type: 'edit', ref, from: fstr(cur), to: fstr(nx) }, `write ${ref} ${fstr(nx)}`);
+          if (r) return r;
+          cur = nx;
+        }
+        return { steps: Math.abs(k) };
+      }
+      if (cmd === 'mul') {
+        const x = one(first);
+        if (!mine(x)) return { untouched: `${first} 没有交给学生 explain，学生动不了` };
+        return (await go({ type: 'explain', ref: first, value: x.value }, `mul ${first}`)) || {};
+      }
+      if (cmd === 'swap') {
+        const [ra, rb] = rest.split(/\s+/);
+        const a = one(ra), b = one(rb);
+        if (!mine(a) || !mine(b)) return { untouched: `${ra} ${rb} 没有都交给学生，学生动不了` };
+        const act = o.type === 'tree'
+          ? { type: 'drag', text: `学生把 ${a.value}（${sc.refOf(a)}）拖到 ${b.value}（${sc.refOf(b)}）上，两个结点换了值（舞台已经照做了）`, from: sc.refOf(a), to: sc.refOf(b) }
+          : { type: 'drag', a: { key: a.key, value: a.value, slot: a.slot }, b: { key: b.key, value: b.value, slot: b.slot } };
+        return (await go(act, `swap ${obj}#${a.key} ${obj}#${b.key}`)) || {};
+      }
+      if (cmd === 'move') {
+        // 照 sentence.view.js 的 drop()：落在第几个词前面 → 发给老师「拖到了「…」后面 / 句首」，场景照 move s#k -> s.N 改
+        const m = rest.match(/^(\S+)\s+(?:(after|before)\s+(\S+)|(?:->|→)\s*\S+?\.(\d+))$/);
+        if (!m) return { error: '要写成 学生: move s.7 after s.1（或 before s.1、-> s.2）' };
+        const x = one(m[1]);
+        if (sc.parts(m[1]).length !== 1) return { error: '学生一次只能拖一个词' };
+        const ws = [...o.words].sort((p, q) => p.slot - q.slot).filter((w) => w.key !== x.key);
+        let count;
+        if (m[2]) { const y = one(m[3]); const i = ws.findIndex((w) => w.key === y.key); if (i < 0) return { error: '不能拖到自己旁边' }; count = m[2] === 'after' ? i + 1 : i; }
+        else count = Math.max(0, Math.min(ws.length, Number(m[4]) - 1));
+        const after = ws[count - 1];
+        const where = after ? `「${after.value}」后面` : '句首';
+        return (await go({ type: 'drag', text: `学生把「${x.value}」拖到了${where}（舞台已经照做了）`, word: x.value, to: count + 1 }, `move ${obj}#${x.key} -> ${obj}.${count + 1}`)) || {};
+      }
+      if (cmd === 'vec') {
+        // 照 plane.view.js 的 drop()：点写成 point、向量写成 vec；只有平面上已经有的、不是算出来的才能拖
+        const m = rest.match(/^(\w+)\s+(\w+)\s*=\s*(\S+)\s+(\S+)$/);
+        if (!m) return { error: '要写成 学生: vec p u = 3 1' };
+        const it = (o.items || []).find((x) => x.key === m[2] || x.name === m[2]);
+        if (!it) return { error: `平面 ${m[1]} 上没有「${m[2]}」，学生拖不了` };
+        if (it.expr) return { error: `${m[1]}.${m[2]} 是算出来的，学生拖不了` };
+        const what = it.kind === 'vec' ? '向量' : '点';
+        const act = { type: 'drag', ref: `${m[1]}.${it.name}`, from: [it.x, it.y], to: [m[3], m[4]], text: `学生把${what} ${m[1]}.${it.name}${it.kind === 'vec' ? ' 的末端' : ''}拖到了 (${m[3]}, ${m[4]})（原来在 (${it.x}, ${it.y})），舞台已经照做了` };
+        return (await go(act, `${it.kind === 'vec' ? 'vec' : 'point'} ${m[1]} ${it.name} = ${m[3]} ${m[4]}`)) || {};
+      }
+    } catch (err) { return { error: err.message }; }
+    return { error: `不认得「${cmd}」` };
   };
   // 回答正在等的那一问：next / value / say 照真的按钮和输入框；tap / drag 给出部件在屏幕上的中心，手指在外面按
   T.answer = (cmd, rest) => {
@@ -155,7 +205,8 @@ function setup(segments) {
       return {};
     }
     const center = (ref) => {
-      const p = st.scene.parts(ref)[0];
+      let p;
+      try { p = st.scene.parts(ref)[0]; } catch { return null; }
       const n = p && st.nodes.get(`${p.obj}:${p.key}`);
       if (!n) return null;
       const r = n.getBoundingClientRect();
@@ -173,11 +224,21 @@ const browser = await chromium.launch();
 let crashed = false;
 const results = [];
 for (const file of opt.files) {
-  const steps = parseTry(readFileSync(file, 'utf8'));
-  const segments = steps.filter((s) => s.kind === 'teacher').map((s) => s.src);
   const r = { file: basename(file), views: [] };
+  let steps;
+  // 一个文件写错（学生那一行的动作不认得）：报出来，接着跑下一个文件
+  try { steps = parseTry(readFileSync(file, 'utf8')); } catch (err) {
+    crashed = true;
+    r.views.push({ tag: '读文件', steps: [], stopped: `读不懂这个文件：${err.message}` });
+    results.push(r);
+    if (!opt.json) console.log(`${formatReport(r)}\n`);
+    continue;
+  }
+  const segments = steps.filter((s) => s.kind === 'teacher').map((s) => s.src);
   for (const v of VIEWS) {
     const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, hasTouch: true, deviceScaleFactor: 1 });
+    const view = { tag: v.tag, steps: [], stopped: null };
+    try {
     const page = await ctx.newPage();
     const cdp = await ctx.newCDPSession(page);
     const errs = [];
@@ -187,7 +248,6 @@ for (const file of opt.files) {
     await page.evaluate(`window.__measure = ${measure.toString()}`);
     await page.evaluate(setup, segments);
     const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
-    const view = { tag: v.tag, steps: [], stopped: null };
     let seg = -1;
     for (let k = 0; k < steps.length; k++) {
       const step = steps[k];
@@ -236,8 +296,14 @@ for (const file of opt.files) {
     }
     const rep = await page.evaluate(() => window.__try.reportErr || null);
     if (rep) { view.stopped = [view.stopped, `课堂循环报错：${rep}`].filter(Boolean).join('\n'); crashed = true; }
-    r.views.push(view);
-    await ctx.close();
+    } catch (err) {
+      // 工具自己出错：已经演过的步照样交出去，退出码 2
+      crashed = true;
+      view.stopped = [view.stopped, `工具出错，后面的步没跑：${err.message.split('\n')[0]}`].filter(Boolean).join('\n');
+    } finally {
+      r.views.push(view);
+      await ctx.close().catch(() => {});
+    }
   }
   results.push(r);
   if (!opt.json) console.log(`${formatReport(r)}\n`);

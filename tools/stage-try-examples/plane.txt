@@ -1,0 +1,7 @@
+# 平面上拖点和拖向量：点照真页面写成 point，没有的东西拖不了
+plane p range=-3..3
+point p P = 1 2
+vec p u = 1 1
+open p drag
+学生: vec p P = 2 2
+学生: vec p zz = 1 1

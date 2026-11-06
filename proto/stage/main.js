@@ -6,6 +6,7 @@ import { actText, HELP } from '../../kit/src/stage/stage.js';
 import { createLoop } from '../../kit/src/stage/loop.js';
 import { eventsText } from '../../kit/src/stage/events.js';
 import { goalStatus } from '../../kit/src/stage/goal.js';
+import { dryRun } from '../../kit/src/stage/scene.js';
 import css from '../../kit/src/stage/stage.css';
 import { viewCss } from '../../kit/src/stage/types/views.js';
 import katexCss from 'virtual:katex-css';
@@ -27,7 +28,7 @@ const MOCK = q.has('mock');
 let stage = null;
 let run = 0;
 // ?dev：检查脚本用（tools/stage-try.mjs 拿 createLoop 照学习台的课堂循环演一幕）
-if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, createLoop, eventsText, goalStatus, HELP };
+if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, createLoop, eventsText, goalStatus, HELP, dryRun };
 
 function fresh({ input }) {
   stage?.destroy();

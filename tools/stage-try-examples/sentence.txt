@@ -1,0 +1,5 @@
+# 句子里拖一个词：发给老师的那句话照真页面写（拖到了「…」后面 / 句首）
+sentence s = "He left the office two hours ago."
+open s drag
+ask next "把 ago 拖到 He 后面看看" button="好了"
+学生: move s.7 after s.1
