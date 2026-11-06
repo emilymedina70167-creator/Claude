@@ -202,7 +202,19 @@ export class Stage {
     this.instant = true;
     this.clearAll();
     this.log = [];
-    for (const row of log) for (const c of parseScript(row.src)) if (c.cmd !== 'ask') await this.exec(c, { by: row.by, turn: row.turn });
+    // ask 不重放（不等学生），可它问的那句话是画面的一部分：最后一句是 ask 问的，就照样写在上面（只读回看、刷新以后看得到问了什么）
+    let asked = null;
+    for (const row of log) {
+      for (const c of parseScript(row.src)) {
+        if (c.cmd === 'ask') {
+          try { const s = this.scene.clone(); s.apply(c); asked = s.waiting?.prompt || asked; } catch { /* 这一行当时就没演 */ }
+          continue;
+        }
+        if (c.cmd === 'say') asked = null;
+        await this.exec(c, { by: row.by, turn: row.turn });
+      }
+    }
+    if (asked) await this.say(asked);
     this.instant = false;
     this.scene.waiting = null;
     await this.sync();

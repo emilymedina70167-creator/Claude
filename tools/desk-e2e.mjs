@@ -533,6 +533,7 @@ const SUITES = {
     await t.waitFor(() => t.page.$('.sc-root .st-cell'), { timeout: 20000, what: '只读的舞台画出来' });
     await sleep(1200);
     check(!(await t.page.$('.sc-end')), '只读的舞台课还能点「下课」');
+    check(/模拟老师讲完了/.test(await t.page.$eval('.st-caption', (n) => n.textContent)), '只读的舞台课上面没有最后说的那句话');
     return t;
   },
 
