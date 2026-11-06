@@ -58,3 +58,13 @@ test('每一轮：学生做了什么、上一轮没演的行（第几行、原�
   assert.match(m, /写下一轮。$/);
   assert.doesNotMatch(turnMessage({ act: 'x', state: 'y' }), /没演的行/);
 });
+
+test('按科目只带用得上的东西：英语课不带一排格子（只列名字），例子换成那门课的', async () => {
+  const { stageDoc } = await import('../kit/src/stage/doc.js');
+  const en = stageDoc('英语');
+  assert.doesNotMatch(en, /array a = 49/);
+  assert.match(en, /说明没带的：一排格子（array）/);
+  assert.match(stageDoc('数据结构'), /array a = 49/);
+  assert.match(stageDoc(''), /array a = 49/);
+});
+

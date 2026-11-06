@@ -18,7 +18,7 @@ import { callCost } from '../class/usage.js';
 import { closingPrompt } from '../class/prompt.js';
 import { reportText } from '../memory/report.js';
 import { slipsToFold, tidyDue, tidyText } from '../memory/memo.js';
-import { spaceOfId } from '../memory/space.js';
+import { spaceOfId, subjectOf } from '../memory/space.js';
 import { textbookForClass } from '../books/textbook.js';
 import { reportError } from '../errlog.js';
 import { choose } from '../dialog.js';
@@ -97,7 +97,7 @@ export async function renderStageClass(root, meta = {}, desk) {
     return { ...pack, main };
   }
   function system() {
-    return buildStageSystem({ pack: packWithBooks(), memory: desk.mem ? { mem: desk.mem, block: desk.block, space: desk.space, session: sid } : null, title: meta.unit || '' });
+    return buildStageSystem({ pack: packWithBooks(), memory: desk.mem ? { mem: desk.mem, block: desk.block, space: desk.space, session: sid } : null, title: meta.unit || '', subject: desk.block ? subjectOf(desk.block) : '' });
   }
   function messages(extra = null) {
     const live = history.filter((t) => !t.discarded && (t.role === 'claude' || t.role === 'student'));

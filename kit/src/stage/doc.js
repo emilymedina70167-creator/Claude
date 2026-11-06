@@ -55,11 +55,32 @@ ask next "拨一下 $d$，看出规律点下面" button="看出来了"     学�
 ask say "你觉得为什么？"                    学生写一句话
 ask value "一共比较了几次？" answer=4      学生填一个答案，页面当场判对错（数按数比，3/4 = 0.75）`;
 
-/** 整份指令说明：共用的 + 舞台上能放的每一种东西 */
-export function stageDoc() {
+/**
+ * 每门课用得上的东西（说明里只带这几种，其余的只列一个名字）：题卡、式子哪门课都带。
+ * 没写科目（样子页）就全带
+ */
+export const SUBJECT_TYPES = {
+  数据结构: ['array', 'tree', 'graph', 'card', 'tex'],
+  操作系统: ['array', 'graph', 'card', 'tex', 'matrix'],
+  组成原理: ['array', 'card', 'tex', 'matrix'],
+  计网: ['array', 'graph', 'card', 'tex'],
+  线代: ['matrix', 'plane', 'tex', 'card', 'array'],
+  英语: ['sentence', 'card'],
+};
+
+/** 整份指令说明：共用的 + 舞台上能放的东西（subject：这节课是哪门课，只带用得上的那几种） */
+export function stageDoc(subject = '') {
+  const want = SUBJECT_TYPES[subject] || null;
   const parts = [STAGE_COMMON, '## 舞台上能放的东西'];
-  for (const t of Object.values(TYPES)) if (t.doc && t.create.length) parts.push(t.doc);
-  parts.push(`例子（一轮）：\n${TYPES.array.example}`);
+  const skipped = [];
+  for (const t of Object.values(TYPES)) {
+    if (!t.doc || !t.create.length) continue;
+    if (want && !want.includes(t.type)) { skipped.push(`${t.label}（${t.create.join(' / ')}）`); continue; }
+    parts.push(t.doc);
+  }
+  if (skipped.length) parts.push(`（这门课一般用不上、说明没带的：${skipped.join('、')}）`);
+  const exType = want && !want.includes('array') ? TYPES[want.find((k) => TYPES[k]?.example)] : TYPES.array;
+  parts.push(`例子（一轮）：\n${(exType || TYPES.array).example}`);
   return parts.join('\n\n');
 }
 export const STAGE_DOC = stageDoc();
@@ -135,12 +156,12 @@ ${STAGE_MEMO_DOC}
  * 舞台课每一轮的整份说明（学习台里）：怎么教 → 舞台的写法 → 资料包（含教材原文）→ 你对学生的了解。
  * memory：{ mem, block, space, session }；pack：{ main, problems }（main.textbook 里可以已经放好了教材原文）
  */
-export function buildStageSystem({ pack = null, memory = null, rules = '', title = '' } = {}) {
+export function buildStageSystem({ pack = null, memory = null, rules = '', title = '', subject = '' } = {}) {
   const parts = (packBody, mem) => {
     const custom = [rules, mem?.rules].filter((x) => String(x || '').trim()).join('\n\n');
     const sections = [
       `怎么教\n\n${STAGE_TEACH}${custom ? `\n\n学习台里的规则（学生定下的，照做；和上面冲突时以这里为准）：\n${custom}` : ''}`,
-      `舞台的写法\n\n${stageDoc()}`,
+      `舞台的写法\n\n${stageDoc(subject)}`,
       `这节课${title ? `：${title}` : ''}\n\n课前备好的资料包（教材原文、推进建议、备好的题）。照这里的口径讲，例子可以自己换。\n\n${packBody}`,
       ...(memory ? [`你对学生的了解（学习台的记忆库）\n\n${mem?.text || ''}\n\n${DESK_STAGE}`] : []),
     ];
