@@ -14,7 +14,7 @@
 // 正确拆法由老师给（页面不自己分析英语语法）：sentence s = "…" key="[S The man [RC who lives next door]] [V is] a doctor."，
 // 照黑板 parse 组件的括号写法（entext.js 的 parseBrackets）读成 o.key，判法在 sentence.rules.js
 import { bbox } from '../layout.js';
-import { parseBrackets, tokenizeSentence } from '../../entext.js';
+import { parseBrackets, tokenizeSentence, ROLES } from '../../entext.js';
 
 export const MAX_WORDS = 60;
 export const WRAP = 800; // 一行最宽（世界坐标的像素；镜头再缩放到屏幕上）
@@ -97,6 +97,35 @@ export function roleColor(label) {
   if (/状语|介词|^(A|Adv|AdvC|PP)\d*$/.test(s)) return 'g4';
   if (/从句|^(NC|AC|Cl)\d*$/.test(s)) return 'g5';
   return null;
+}
+
+// —— 成分名 → 成分（拆成分的判法用，sentence.rules.js；造句子读 key= 时也要查，所以和 roleColor 放在一起，认同一批写法）——
+// 缩写照 entext.js 的 ROLES，外加 roleColor 认的 Adv、PP（状语）和 NC、AC、Cl（从句的泛称）；缩写分大小写（do、a 是英文词，不是成分）。
+// 中文写完整的成分名；roleColor 按「含这几个字」认的（分词、不定式、动名词、谓语动词、时间状语、介词短语……）也认。
+// 只写「从句」是泛称：对得上 key 里任何一种从句（sameRole）
+export const CLAUSE_ROLES = ['定语从句', '主语从句', '宾语从句', '表语从句', '同位语从句', '状语从句'];
+export const ROLE_NAMES = { ...ROLES, V: '谓语', S: '主语', O: '宾语', RC: '定语从句', Adv: '状语', PP: '状语', NC: '从句', AC: '从句', Cl: '从句' };
+const ROLE_ZH = new Set([...Object.values(ROLES), '从句']);
+// 含这几个字就认成这一种（先长后短：宾语补足语不是宾语，非谓语在前面先认掉了）
+const ROLE_HAS = [[/宾补|宾语补足语/, '宾补'], [/补足语/, '补语'], [/谓语/, '谓语'], [/主语/, '主语'], [/间接宾语/, '间接宾语'], [/直接宾语/, '直接宾语'], [/宾语/, '宾语'],
+  [/表语/, '表语'], [/补语/, '补语'], [/同位语/, '同位语'], [/定语/, '定语'], [/状语|介词/, '状语']];
+/** 成分名 → 成分（「谓语1」「V2」编了号的去掉号）；认不出是 null */
+export function roleName(label) {
+  const s = String(label ?? '').trim().replace(/(\D)\d+$/, '$1');
+  if (!s) return null;
+  if (Object.hasOwn(ROLE_NAMES, s)) return ROLE_NAMES[s];
+  if (/^(to do|doing|done)$/i.test(s) || /非谓语|分词|不定式|动名词/.test(s)) return '非谓语';
+  const clause = CLAUSE_ROLES.find((c) => s.includes(c));
+  if (clause) return clause;
+  if (/从句/.test(s)) return '从句';
+  if (ROLE_ZH.has(s)) return s;
+  return ROLE_HAS.find(([re]) => re.test(s))?.[1] ?? null;
+}
+/** 两个成分是不是一回事：一样，或者一边是泛称「从句」、另一边是某种从句 */
+export function sameRole(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return (a === '从句' && CLAUSE_ROLES.includes(b)) || (b === '从句' && CLAUSE_ROLES.includes(a));
 }
 
 // —— 排版：词排成几行（折起来的一段是一个小方块），算出每个词、括号、标签、斜线、箭头在哪。纯函数 ——
@@ -337,7 +366,7 @@ function spread(list, groupOf, gap = 6) {
 }
 
 // —— 部件的写法 ——
-function ordered(o) { return [...o.words].sort((a, b) => a.slot - b.slot); }
+export function ordered(o) { return [...o.words].sort((a, b) => a.slot - b.slot); }
 /** s.3 / s.who / s.who:2 → 现在第几个（从 1 数）；写错了抛错 */
 function posOf(o, t, word) {
   const ws = ordered(o);
@@ -428,6 +457,13 @@ export function sentenceText(o, { folds = false } = {}) {
   }
   return `${out.join(' ')}${o.end || ''}`;
 }
+/** 一段词照原句写出来（中间的标点、所有格的撇号照原句：workers' productivity）；头上的开引号、尾巴上的逗号句号不带 */
+export function phraseOf(words) {
+  return words.map((w, i) => {
+    const tail = i < words.length - 1 ? shownPunct(w.punct) : (String(w.punct ?? '').match(/^['’]+/)?.[0] ?? '');
+    return `${i ? w.lead || '' : ''}${w.value}${tail}`;
+  }).join(' ');
+}
 
 // —— 改写：新句子里的词和原来的词配对（同一个词，不管大小写；同样的词按先后配；剩下的前几个字母一样的也算同一个，比如 realize → realized）——
 export function matchWords(oldWords, newWords) {
@@ -477,6 +513,9 @@ export function parseKey(words, src) {
   if (/\[(?![A-Za-z])/.test(s)) throw new Error('key= 的括号里先写成分的英文缩写（S、V、O、P、RC、NF……），再写词，比如 [S The man]');
   let parsed;
   try { parsed = parseBrackets(s); } catch (e) { throw new Error(`key= 写错了：${e.message}`); }
+  // 认不出的成分名当场报（照收的话学生标什么都对不上，又看不出为什么）
+  const odd = parsed.spans.find((sp) => !roleName(sp.role));
+  if (odd) throw new Error(`key= 里的成分「${odd.role}」认不出，能写：${Object.entries(ROLE_NAMES).map(([k, v]) => `${k} ${v}`).join('、')}（编号 V1、V2 也行）`);
   // 句子的词再按 entext 的切法切一遍（U.S. 会切成 U、S 两个）：每一小块记着它是句子里的哪个词
   const flat = [];
   for (const w of [...words].sort((a, b) => a.slot - b.slot)) {
@@ -501,6 +540,24 @@ export function parseKey(words, src) {
     return { role: sp.role, keys, depth: sp.depth };
   });
   return { src: s, spans };
+}
+
+/**
+ * key 现在怎么样（没写 key 是 null）：{ n（几段）, void（被 rewrite 作废了）, split: [{ n（第几段）, role, text }]（被 move 拆散、拉不成一段的）}。
+ * 「舞台现在」（describe）用它，老师看得到 key 收下了没有、为什么判不了（判法里的同一件事在 sentence.rules.js 的 keySpans）
+ */
+export function keyStatus(o) {
+  if (!o?.key) return null;
+  if (o.key.void) return { n: 0, void: o.key.void, split: [] };
+  const slot = new Map(o.words.map((w) => [w.key, w.slot]));
+  const split = [];
+  o.key.spans.forEach((sp, i) => {
+    const slots = sp.keys.map((k) => slot.get(k));
+    if (slots.some((v) => v == null) || Math.max(...slots) - Math.min(...slots) + 1 !== slots.length) {
+      split.push({ n: i + 1, role: sp.role, text: phraseOf(o.words.filter((w) => sp.keys.includes(w.key)).sort((a, b) => a.key - b.key)) });
+    }
+  });
+  return { n: o.key.spans.length, void: null, split };
 }
 
 export const sentence = {
@@ -763,8 +820,8 @@ export const sentence = {
       o.folds = keep(o.folds);
       o.cuts = o.cuts.filter((k) => alive.has(k) && pos.get(k) !== next.length);
       o.refers = o.refers.filter((r) => alive.has(r.from) && alive.has(r.to));
-      // 原来的正确拆法是那一句的：改写以后对不上了，作废（不拿旧的去判新句子）
-      delete o.key;
+      // 原来的正确拆法是那一句的：改写以后对不上了，作废（不拿旧的去判新句子）；记着作废了，老师在「舞台现在」和下一步里看得到
+      if (o.key) o.key = { src: o.key.src, spans: [], void: 'rewrite' };
       return { id: o.id, removed, added: next.filter((w) => !old.some((x) => x.key === w.key)).map((w) => w.key), moved, changed };
     },
   },
@@ -787,6 +844,8 @@ export const sentence = {
       const lv = new Map(L.marks.map((m) => [m.mark, m.level]));
       lines.push(`  括号（词下面）：${o.marks.map((m) => `${spanText(o, m.keys)} ${m.label}${lv.get(m.id) > 1 ? `（第 ${lv.get(m.id)} 层${color(m.color)}）` : m.color ? `（${COLOR_NAMES[m.color]}）` : ''}`).join('；')}`);
     }
+    const ks = keyStatus(o);
+    if (ks) lines.push(`  key：${ks.void ? '作废了（rewrite 换了句子；要判就重新造这句、带上新的 key=）' : ks.split.length ? ks.split.map((x) => `第 ${x.n} 段 [${x.role} ${x.text}] 被 move 拆散了，那一段不能再拉对`).join('；') : `收下了（${ks.n} 段）`}`);
     if (o.tags.length) lines.push(`  标签（词上面）：${o.tags.map((t) => `${spanText(o, t.keys)} ${t.label}`).join('；')}`);
     if (o.folds.length) lines.push(`  折起来的：${o.folds.map((f) => `${spanText(o, f.keys)} →「${f.label || '……'}」`).join('；')}`);
     if (o.cuts.length) lines.push(`  断开：${[...o.cuts].map((k) => o.words.find((w) => w.key === k)).sort((a, b) => a.slot - b.slot).map((w) => `${o.id}.${w.slot} ${w.value} 后面`).join('，')}`);

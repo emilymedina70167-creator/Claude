@@ -1,41 +1,30 @@
 // 句子（拆成分）的规则（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 1 节）：照老师造句子时给的正确拆法
 // （key="[S The man [RC who lives next door]] [V is] a doctor."，sentence.js 的 parseKey 读成 o.key）逐词比学生拉的括号、
-// 认四种错法；下一步、挑战用的判断式、手势表。纯函数，有测试（tests/stage-sentence-rules.test.js）；在 types/index.js 里登记。
+// 认四种错法；下一步、写给老师的事实、挑战用的判断式、手势表。纯函数，有测试（tests/stage-sentence-rules.test.js）；在 types/index.js 里登记。
 //
-// 页面不自己分析英语语法：拉得对不对只看 key。说「像哪种错」时用到一点词形（to、-ing、-ed、be / have），只用来挑说法，不改判对错。
+// 页面不自己分析英语语法：拉得对不对只看 key，说「像哪种错」也只说 key 印证得了的（「把非谓语当成了谓语」要那几个词落在 key 的非谓语里；
+// 只有「谓语只圈了一半」挑说法时看一眼 be / have 后面是不是分词）。认不出就不说，宁可 misread 是 null，也不给老师写错的事实。
 // 一段 = 现在连着的几个词（从第几个到第几个）。拉对一段：舞台上有一道括号正好是 key 里的这一段、成分一样
-// （成分名照 roleName 对：V 和「谓语」是一个；括号下写中文、写缩写都认）。拉错了的括号留着也不碍事（舞台上没有让学生收括号的手势），
-// 只看 key 里的每一段有没有拉对。
-import { ROLES, judgeSpans } from '../../entext.js';
-import { sentence } from './sentence.js';
+// （成分名照 sentence.js 的 roleName / sameRole 对：V 和「谓语」是一个，分词、to do 是非谓语，只写「从句」对得上任何一种从句）。
+// 拉错了的括号留着也不碍事（舞台上没有让学生收括号的手势），只看 key 里的每一段有没有拉对。
+import { judgeSpans } from '../../entext.js';
+import { sentence, ordered, roleName, sameRole, phraseOf } from './sentence.js';
 
-// —— 成分名 ——
+export { roleName, ROLE_NAMES } from './sentence.js';
 
-// 舞台上写的成分名 → 成分；表里没有的照 entext.js 的 ROLES（缩写 → 中文名），中文名就是它自己
-export const ROLE_NAMES = { V: '谓语', 谓语: '谓语', S: '主语', 主语: '主语', O: '宾语', 宾语: '宾语', RC: '定语从句', 定语从句: '定语从句' };
-const CODES = new Map(Object.keys(ROLES).map((k) => [k.toLowerCase(), k]));
-/** 成分名 → 成分（「谓语1」「V2」这种编了号的去掉号；缩写不管大小写） */
-export function roleName(label) {
-  const base = String(label ?? '').trim().replace(/(\D)\d+$/, '$1');
-  if (Object.hasOwn(ROLE_NAMES, base)) return ROLE_NAMES[base];
-  const code = CODES.get(base.toLowerCase());
-  if (code) return Object.hasOwn(ROLE_NAMES, code) ? ROLE_NAMES[code] : ROLES[code];
-  return base;
-}
 // 主干：最外层的主语、谓语、宾语、表语（和作这几种成分的从句）
 const MAIN = new Set(['主语', '谓语', '宾语', '间接宾语', '直接宾语', '表语', '补语', '宾补', '主语从句', '宾语从句', '表语从句']);
 
 // —— 词 ——
 
-const ordered = (o) => [...o.words].sort((a, b) => a.slot - b.slot);
 const lower = (w) => String(w ?? '').toLowerCase().replace(/’/g, "'");
 const at = (o, a, b) => (a === b ? `${o.id}.${a}` : `${o.id}.${a}-${b}`);
-const textOf = (o, a, b) => ordered(o).filter((w) => w.slot >= a && w.slot <= b).map((w) => w.value).join(' ');
+const textOf = (o, a, b) => phraseOf(ordered(o).filter((w) => w.slot >= a && w.slot <= b));
 const slotMap = (o) => new Map(o.words.map((w) => [w.key, w.slot]));
 
-/** key 里的每一段按现在的位置：{ role（key 里写的）, name（成分）, keys, depth, from, to, ok（现在还连着、拉得成一段）}，从外到里；没写 key 是 null */
+/** key 里的每一段按现在的位置：{ role（key 里写的）, name（成分）, keys, depth, from, to, ok（现在还连着、拉得成一段）}，从外到里；没写 key、key 作废了是 null */
 function keySpans(o) {
-  if (!o?.key?.spans?.length) return null;
+  if (!o?.key?.spans?.length || o.key.void) return null;
   const slot = slotMap(o);
   return o.key.spans.map((sp) => {
     const slots = sp.keys.map((k) => slot.get(k)).filter((v) => v != null);
@@ -43,21 +32,30 @@ function keySpans(o) {
     return { role: sp.role, name: roleName(sp.role), keys: sp.keys, depth: sp.depth, from, to, ok: slots.length === sp.keys.length && to - from + 1 === slots.length };
   }).sort((p, q) => p.depth - q.depth || p.from - q.from);
 }
-/** 舞台上现在的括号（连着的才算一段）：[{ role（成分）, from, to }] */
-function markSpans(o) {
+/** 判不了的时候怎么说：没写 key，还是写了但被 rewrite 作废了 */
+const noKeyWhy = (o) => (o?.key?.void ? `${o.id} 的 key 跟着 rewrite 作废了，要判就重写 key（重新造这句、带上新的 key=）` : `${o.id} 没写 key=（正确拆法），页面不判`);
+
+/**
+ * 舞台上现在的括号（连着的才算一段）：[{ role（成分）, from, to }]。
+ * 成分写的是泛称（「从句」）、key 里同一段是某种从句时，记成 key 的那种，judgeSpans 才比得上
+ */
+function markSpans(o, ks) {
   const slot = slotMap(o);
   const out = [];
   for (const m of o.marks || []) {
     const slots = m.keys.map((k) => slot.get(k)).filter((v) => v != null);
     if (!slots.length) continue;
     const from = Math.min(...slots), to = Math.max(...slots);
-    if (to - from + 1 === slots.length) out.push({ role: roleName(m.label), from, to });
+    if (to - from + 1 !== slots.length) continue;
+    const name = roleName(m.label);
+    const k = ks.find((x) => x.ok && x.from === from && x.to === to && sameRole(x.name, name));
+    out.push({ role: k ? k.name : name ?? m.label, from, to });
   }
   return out;
 }
 /** key 里还没拉对的段（照 keySpans 的顺序，从外到里）：拿 judgeSpans 比，范围一样、成分一样才算拉对，多拉的不算 */
 function leftOf(o, ks) {
-  const r = judgeSpans(markSpans(o), ks.filter((k) => k.ok).map((k) => ({ role: k.name, from: k.from, to: k.to })));
+  const r = judgeSpans(markSpans(o, ks), ks.filter((k) => k.ok).map((k) => ({ role: k.name, from: k.from, to: k.to })));
   const right = new Set(r.right.map((x) => `${x.from}-${x.to}`));
   return ks.filter((k) => !k.ok || !right.has(`${k.from}-${k.to}`));
 }
@@ -65,15 +63,15 @@ function leftOf(o, ks) {
 // —— 下一步 ——
 
 const actOf = (k) => ({ type: 'mark', from: k.from, to: k.to, role: k.role });
-const spreadText = (o, k) => k.keys.map((key) => o.words.find((w) => w.key === key)?.value).filter(Boolean).join(' ');
-const spanLine = (o, k) => (k.ok ? `${at(o, k.from, k.to)} ${k.name}（${textOf(o, k.from, k.to)}）` : `${k.name}（${spreadText(o, k)}）的词被挪开了，拉不成一段`);
-// 写话时拉得成的在前（挪开了的放最后说一声）
+const spreadText = (o, k) => phraseOf(o.words.filter((w) => k.keys.includes(w.key)).sort((a, b) => a.key - b.key));
+const spanLine = (o, k) => (k.ok ? `${at(o, k.from, k.to)} ${k.name}（${textOf(o, k.from, k.to)}）` : `${k.name}（${spreadText(o, k)}）被 move 拆散了，拉不成一段`);
+// 写话时拉得成的在前（拆散了的放最后说一声）
 const okFirst = (list) => [...list.filter((k) => k.ok), ...list.filter((k) => !k.ok)];
 
 function next(o) {
   const ks = keySpans(o);
-  // 没写正确拆法：页面不判，也不算做完（next 是 null 就是做完了）
-  if (!ks) return { acts: [], why: `${o.id} 没写 key=（正确拆法），页面不判` };
+  // 没写正确拆法（或者作废了）：页面不判，也不算做完（next 是 null 就是做完了）
+  if (!ks) return { acts: [], why: noKeyWhy(o) };
   const left = okFirst(leftOf(o, ks));
   if (!left.length) return null;
   const [first, ...rest] = left;
@@ -96,32 +94,18 @@ function nowRight(o, ks, rel = null) {
 
 // —— 像哪种错 ——
 
+// 「谓语只圈了一半」挑说法用：key 里的谓语是不是 be / have 加分词（只挑说法；那一段是一个谓语，是 key 说的）
 const BE_HAVE = new Set(['am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'has', 'have', 'had', 'having']);
-// 常见的不规则过去分词（-ed 结尾的另认）
 const DONE = new Set(('been done gone seen known given taken written shown grown drawn born borne chosen spoken broken driven eaten fallen '
   + 'forgotten hidden ridden risen stolen thrown worn frozen beaten bitten blown flown made built held found brought bought caught taught '
   + 'thought left kept felt lost meant met paid said sold sent spent stood told understood won begun sung swum drunk').split(' '));
-// 词尾像 -ing / -ed 却不是分词的常见词
-const NOT_FORM = /thing$|^(during|morning|evening|ceiling|string|spring|hundred|indeed|speed|proceed|succeed|exceed|sacred|naked|wicked)$/;
-const looksIng = (w) => /^[a-z]{3,}ing$/.test(w) && !NOT_FORM.test(w);
-const looksDone = (w) => DONE.has(w) || (/^[a-z]{3,}ed$/.test(w) && !NOT_FORM.test(w));
-
-/** 这几个词像不像非谓语（to do / doing / done）：像就说出是哪一种，不像是 null。before 是这几个词前面那个词 */
-function nonFinite(ws, before) {
-  const first = lower(ws[0]);
-  const text = ws.join(' ');
-  if (first === 'to' && ws.length > 1) return `${text} 是 to do`;
-  if (lower(before) === 'to') return `to ${text} 是 to do`;
-  if (looksIng(first)) return `${text} 是 doing`;
-  if (looksDone(first)) return `${text} 是 done`;
-  return null;
-}
+const looksPart = (w) => DONE.has(w) || /^[a-z]{3,}(ing|ed)$/.test(w);
 
 /** 谓语只圈了一半时怎么说：key 里的谓语是 be / have 加分词的，点出这两样合起来才是一个谓语 */
 function halfText(o, k) {
   const ws = ordered(o).filter((w) => w.slot >= k.from && w.slot <= k.to).map((w) => lower(w.value));
   const aux = ws.findIndex((w) => BE_HAVE.has(w));
-  const part = aux >= 0 && ws.slice(aux + 1).some((w) => looksIng(w) || looksDone(w));
+  const part = aux >= 0 && ws.slice(aux + 1).some(looksPart);
   const text = textOf(o, k.from, k.to);
   return part ? `谓语只圈了一半（be/have 和后面的分词合起来是一个谓语：${text}）` : `谓语只圈了一半（谓语是「${text}」这一整段）`;
 }
@@ -156,37 +140,42 @@ function runsOutside(a, b, vs) {
   return runs;
 }
 
+/**
+ * 把非谓语当成了谓语：标成谓语的这一截落在 key 的非谓语里（[NF …]，或者 key 里写成 doing / done 的一段）。
+ * 只引落在那一段里的词；key 没说是非谓语的（从句里 key 没拉的谓语、to + 名词、名词）不说
+ */
+function nonFiniteText(o, ks, p, q) {
+  const nf = ks.filter((k) => k.ok && k.name === '非谓语' && k.from <= q && p <= k.to).sort((x, y) => (x.to - x.from) - (y.to - y.from))[0];
+  if (!nf) return null;
+  const lo = Math.max(p, nf.from), hi = Math.min(q, nf.to);
+  const whole = textOf(o, nf.from, nf.to);
+  return lo === nf.from && hi === nf.to ? `「${whole}」是非谓语，不是谓语` : `${textOf(o, lo, hi)} 在非谓语「${whole}」里，不是谓语`;
+}
+
 // 不是 key 里的那一段：像哪种错（docs/superpowers/plans/2026-11-06-stage-base.md 第 7 个任务的表；认不出来的给 null）。
-// rel 是 key 里学生最像在拉的那一段（「现在正确的」先说它）
-function misreadOf(o, ks, a, b, name) {
-  const ws = ordered(o);
-  const words = (p, q) => ws.slice(p - 1, q).map((w) => w.value);
+// rel 是 key 里学生最像在拉的那一段（「现在正确的」先说它）；shown 是学生写的成分（认得出写中文名）
+function misreadOf(o, ks, a, b, name, shown) {
   const overlaps = (k) => k.from <= b && a <= k.to;
   if (name === '谓语') {
     const vs = ks.filter((k) => k.ok && k.name === '谓语');
     // 谓语只圈了一半：拉的是 key 里一个谓语里面的一部分（一样的那段已经判对了）
     const half = vs.find((k) => a >= k.from && b <= k.to);
     if (half) return { rel: half, misread: halfText(o, half) };
-    // 把非谓语当成了谓语：拉的这一段和谓语不沾边，或者整个包住了谓语，多出来的那几个词是 to do / doing / done（或者在 key 的非谓语里）
+    // 拉的这一段和谓语不沾边，或者整个包住了谓语：多出来的那几截落在 key 的非谓语里
     const touched = vs.filter(overlaps);
     if (touched.every((k) => a <= k.from && b >= k.to)) {
       for (const [p, q] of runsOutside(a, b, touched)) {
-        const nfSpan = ks.find((k) => k.name === '非谓语' && k.ok && p >= k.from && q <= k.to);
-        const nf = nonFinite(words(p, q), ws[p - 2]?.value) || (nfSpan && `${words(p, q).join(' ')} 在非谓语「${textOf(o, nfSpan.from, nfSpan.to)}」里`);
-        if (nf) return { rel: touched[0] || vs[0] || null, misread: `把非谓语当成了谓语：${nf}，不是谓语` };
+        const nf = nonFiniteText(o, ks, p, q);
+        if (nf) return { rel: touched[0] || vs[0] || null, misread: `把非谓语当成了谓语：${nf}` };
       }
     }
   }
   // 段对了，成分不对
   const same = ks.find((k) => k.ok && k.from === a && k.to === b);
-  if (same) return { rel: same, misread: `成分标错了：这一段是${same.name}，不是${name}` };
-  // 断早、断晚：和 key 里的一段沾边、两头各差不过两个词。先找同一成分的；
-  // 学生写的成分 key 里根本没有（写成了「从句」）才看别的成分，而且不看把这一段整个包在里面的——
-  // 把 lives 标成谓语（从句里的谓语，key 没拉）、把 has been running 的 running 标成非谓语，都不是断错了地方，宁可不说
+  if (same) return { rel: same, misread: `成分标错了：这一段是${same.name}，不是${shown}` };
+  // 断早、断晚：同一成分（写泛称「从句」的对得上任何一种从句）的一段，沾边、两头各差不过两个词；成分也不一样的不说
   const dist = (k) => Math.abs(a - k.from) + Math.abs(b - k.to);
-  const near = (list) => list.filter((k) => k.ok && overlaps(k) && Math.abs(a - k.from) <= 2 && Math.abs(b - k.to) <= 2).sort((p, q) => dist(p) - dist(q))[0];
-  const strictlyIn = (k) => a >= k.from && b <= k.to;
-  const k = near(ks.filter((x) => x.name === name)) || (ks.some((x) => x.name === name) ? null : near(ks.filter((x) => !strictlyIn(x))));
+  const k = ks.filter((x) => x.ok && sameRole(x.name, name) && overlaps(x) && Math.abs(a - x.from) <= 2 && Math.abs(b - x.to) <= 2).sort((p, q) => dist(p) - dist(q))[0];
   if (k) return { rel: k, misread: edgeText(o, k, a, b) };
   return { rel: null, misread: null };
 }
@@ -207,12 +196,27 @@ function check(o, act) {
   const label = String(act.role ?? '').trim();
   if (!label) return no('拉好一段还要写它是什么成分（主语、谓语……）');
   if (label.length > 16) return no('成分的名字要短（16 个字以内）');
-  if (!ks) return { legal: true, right: null }; // 没写正确拆法：不判
+  if (!ks) return { legal: true, right: null }; // 没写正确拆法（或者作废了）：不判
   const why = `${at(o, a, b)} 标成${label}（${textOf(o, a, b)}）`;
   const name = roleName(label);
-  if (ks.some((k) => k.ok && k.from === a && k.to === b && k.name === name)) return { legal: true, right: true, misread: null, why, next: null };
-  const { misread, rel } = misreadOf(o, ks, a, b, name);
+  if (ks.some((k) => k.ok && k.from === a && k.to === b && sameRole(k.name, name))) return { legal: true, right: true, misread: null, why, next: null };
+  const { misread, rel } = misreadOf(o, ks, a, b, name, name ?? label);
   return { legal: true, right: false, misread, why, next: nowRight(o, ks, rel) };
+}
+
+// —— 写给老师的事实 ——
+
+// 拉了一段以后：这一段对不对（不对的说像哪种错），key 里还差哪几段（判对的时候裁判不写话，还差什么就靠这里告诉老师）
+function facts(before, after, act) {
+  if (!before || !after || act?.type !== 'mark') return [];
+  const kb = keySpans(before), ka = keySpans(after);
+  if (!kb || !ka) return [];
+  const v = check(before, act);
+  if (!v.legal) return [];
+  const out = [v.right ? `这一段对了：${v.why}` : `这一段不对：${v.why}（${v.misread || 'key 里没有这一段'}）`];
+  const left = okFirst(leftOf(after, ka));
+  out.push(left.length ? `key 里还差 ${left.length} 段没拉对：${left.map((k) => spanLine(after, k)).join('、')}` : '正确拆法的每一段都拉对了');
+  return out;
 }
 
 // —— 手势表（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 3 节）——
@@ -276,7 +280,7 @@ const gestures = {
 // —— 挑战用的判断式（when="s parsed, s main, s span s.2-5 = V"）——
 
 const predicates = {
-  // key 里的每一段都拉对了
+  // key 里的每一段都拉对了（没写 key、key 作废了是 null：判不了）
   parsed: (o) => {
     const ks = keySpans(o);
     return ks ? leftOf(o, ks).length === 0 : null;
@@ -299,8 +303,9 @@ const predicates = {
     if (ref && ref[1] !== o.id) throw new Error(`span ${m[1]}：写 ${o.id} 里的词（${o.id} span ${o.id}.2-5 = V）`);
     const keys = new Set(sentence.pick(o, ref ? ref[2] : '.', ref ? ref[3] : m[1], m[1]).map((w) => w.key));
     const role = roleName(m[2]);
-    return (o.marks || []).some((mk) => mk.keys.length === keys.size && mk.keys.every((k) => keys.has(k)) && roleName(mk.label) === role);
+    if (!role) throw new Error(`span 的成分「${m[2]}」认不出（写 V、谓语、S、主语、RC、定语从句……）`);
+    return (o.marks || []).some((mk) => mk.keys.length === keys.size && mk.keys.every((k) => keys.has(k)) && sameRole(roleName(mk.label), role));
   },
 };
 
-export const sentenceRules = { next, check, predicates, gestures };
+export const sentenceRules = { next, check, predicates, facts, gestures };

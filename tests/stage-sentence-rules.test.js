@@ -8,6 +8,7 @@ import { parseScript } from '../kit/src/stage/script.js';
 import { sentenceRules as R, actSrc, roleName } from '../kit/src/stage/types/sentence.rules.js';
 import { rulesOf, predicateOf, gestureOf, done } from '../kit/src/stage/rules.js';
 import { parseBrackets, judgeSpans } from '../kit/src/entext.js';
+import { sentence } from '../kit/src/stage/types/sentence.js';
 
 const run = (s, src) => { for (const c of parseScript(src)) s.apply(c); return s; };
 const make = (src) => run(new Scene(), src);
@@ -35,7 +36,15 @@ test('句子登记了规则；舞台上的成分名和 entext 的 ROLES 对上',
   assert.equal(roleName('NF'), '非谓语', '其余照 ROLES');
   assert.equal(roleName('P'), '表语');
   assert.equal(roleName('谓语1'), '谓语', '编了号的也认');
-  assert.equal(roleName('v'), '谓语', '缩写不管大小写');
+  // 舞台 mark 已有的写法（roleColor 认的那一批）：非谓语一族、从句（泛称）、状语一族
+  for (const x of ['分词', '过去分词', '现在分词', '不定式', '动名词', 'to do', 'doing', 'done', '非谓语']) assert.equal(roleName(x), '非谓语', x);
+  assert.equal(roleName('从句'), '从句', '泛称');
+  assert.equal(roleName('非限制性定语从句'), '定语从句');
+  assert.equal(roleName('时间状语从句'), '状语从句');
+  for (const x of ['Adv', 'PP', '介词短语', '时间状语', 'A']) assert.equal(roleName(x), '状语', x);
+  assert.equal(roleName('宾语补足语'), '宾补');
+  // 只认完整的成分名和大写缩写：英文词 do、a、小写的 v 不是成分
+  for (const x of ['do', 'a', 'v', 'nf', '插入语', '']) assert.equal(roleName(x), null, x);
 });
 
 test('key=：照括号写法读成正确拆法，存在 o.key（每段记词的编号，挪了词跟着走）', () => {
@@ -44,7 +53,7 @@ test('key=：照括号写法读成正确拆法，存在 o.key（每段记词的�
     ['S', '1 2 3 4 5 6', 0], ['RC', '3 4 5 6', 1], ['V', '7', 0],
   ]);
   // 大小写、标点前后的空格不管；句末的点写不写都行（只比词）
-  const o2 = S(make('sentence s = "He has been running." key="[s he] [V HAS been running]"'));
+  const o2 = S(make('sentence s = "He has been running." key="[S he] [V HAS been running]"'));
   assert.deepEqual(o2.key.spans.map((x) => x.keys.join(' ')), ['1', '2 3 4']);
   const o3 = S(make('sentence s = "Fortunately, the White House is starting to pay attention." key="Fortunately , [S the White House] [V is starting] [O to pay attention] ."'));
   assert.deepEqual(o3.key.spans.map((x) => x.keys.join(' ')), ['2 3 4', '5 6', '7 8 9']);
@@ -61,6 +70,10 @@ test('key 对不上句子：造句子时当场报错，写出第一个对不上�
   assert.match(err(e, 'sentence s = "He runs." key="He runs."'), /key=.*\[成分/);
   assert.match(err(e, 'sentence s = "He runs." key="[主语 He] [V runs]"'), /英文缩写/);
   assert.match(err(e, 'sentence s = "He runs." key="[S [SC He]] [V runs]"'), /同一段词/);
+  // key 里写了认不出的成分名：当场报错，列出能写的（照收的话学生标什么都对不上）
+  assert.match(err(e, 'sentence s = "He left early." key="[S He] [V left] [Xyz early]"'), /成分「Xyz」认不出，能写：.*S 主语.*V 谓语/);
+  assert.match(err(e, 'sentence s = "He left early." key="[S He] [v left]"'), /成分「v」认不出/);
+  assert.equal(err(e, 'sentence s = "He left early." key="[S He] [V left] [Adv early]"'), undefined, 'Adv 认得（舞台 roleColor 认的缩写）');
 });
 
 test('全对：照 key 拉三段以后 parsed 成立、做完了；next 一次给所有还没拉对的段，从外到里', () => {
@@ -83,6 +96,9 @@ test('全对：照 key 拉三段以后 parsed 成立、做完了；next 一次�
   assert.equal(predicateOf(s, 's', 'parsed')(), true);
 });
 
+// E2 原句里带撇号、连字符的一句（审查量的那一句）
+const E2W = ["It hoped they would learn how shop-floor lighting affected workers' productivity.",
+  "[S It] [V hoped] [ObC they [V would learn] [ObC how shop-floor lighting [V affected] workers' productivity]]."];
 // E2 第 1、2 幕的真题句：几层从句套着（括号里还有谓语）
 const E2 = [
   ['The great question is who should benefit from the analysis of all the data that our lives now generate.',
@@ -152,23 +168,47 @@ test('谓语只圈了一半：key 是 be/have + 分词，学生只圈了 be 或 
   assert.match(R.check(S(c), mk(8, 8, 'V'), c).misread, /只圈了一半/);
 });
 
-test('把非谓语当成了谓语：圈的是 to do / doing / done，key 里它不是谓语', () => {
+test('把非谓语当成了谓语：只在 key 印证时说（标成谓语的那一截落在 key 的非谓语里），只引那一段里的词', () => {
   const s = make(POLICY);
   const o = S(s);
-  // 圈 help（前面是 to）、to help、designed、整段非谓语
+  // 圈 help、to help、designed、整段非谓语：都落在 key 的 [NF designed to help small businesses] 里
   for (const [a, b] of [[4, 4], [3, 4], [2, 2], [2, 6]]) {
     const v = R.check(o, mk(a, b, 'V'), s);
     assert.equal(v.right, false);
     assert.match(v.misread, /把非谓语当成了谓语/, `圈 s.${a}-${b} 当谓语`);
+    assert.match(v.next.why, /^谓语是 s\.8（fail）/, '现在正确的先说真的谓语');
   }
-  assert.match(R.check(o, mk(4, 4, 'V'), s).misread, /to help 是 to do/);
-  assert.match(R.check(o, mk(2, 2, 'V'), s).misread, /designed 是 done/);
+  assert.equal(R.check(o, mk(4, 4, 'V'), s).misread, '把非谓语当成了谓语：help 在非谓语「designed to help small businesses」里，不是谓语');
+  assert.equal(R.check(o, mk(2, 6, 'V'), s).misread, '把非谓语当成了谓语：「designed to help small businesses」是非谓语，不是谓语');
+  // 只引落在非谓语里的那几个词，不带进 Policies
+  assert.equal(R.check(o, mk(1, 2, 'V'), s).misread, '把非谓语当成了谓语：designed 在非谓语「designed to help small businesses」里，不是谓语');
   assert.equal(R.check(o, mk(8, 8, 'V'), s).right, true, '真的谓语是 fail');
-  // 把后面的 to pay 也圈进了谓语
-  const h = make(HOUSE);
-  const v = R.check(S(h), mk(5, 8, 'V'), h);
-  assert.match(v.misread, /把非谓语当成了谓语/);
-  assert.match(v.misread, /to pay/);
+  // 把后面的 to pay 也圈进了谓语（key 把 to pay attention 标成非谓语时）
+  const h = make('sentence s = "Fortunately, the White House is starting to pay attention." key="Fortunately, [S the White House] [V is starting] [NF to pay attention]."');
+  assert.equal(R.check(S(h), mk(5, 8, 'V'), h).misread, '把非谓语当成了谓语：to pay 在非谓语「to pay attention」里，不是谓语');
+  // key 写成 done / doing 的一段也算非谓语
+  const p = make('sentence s = "Passing the cafe, I saw a friend." key="[doing Passing the cafe], [S I] [V saw] [O a friend]."');
+  assert.equal(R.check(S(p), mk(1, 4, 'V'), p).misread, '把非谓语当成了谓语：「Passing the cafe」是非谓语，不是谓语', '不带进 I');
+});
+
+test('key 没说是非谓语的不说「把非谓语当成了谓语」：从句里 key 没拉的谓语、to + 名词、名词', () => {
+  const none = (src, key, a, b, role = 'V') => {
+    const s = make(`sentence s = "${src}" key="${key}"`);
+    const v = R.check(S(s), mk(a, b, role), s);
+    assert.equal(v.right, false);
+    assert.doesNotMatch(v.misread ?? '', /非谓语/, `${src} s.${a}-${b}：${v.misread}`);
+    return v.misread;
+  };
+  // 从句里的过去式谓语（key 没拉从句里的 V）
+  assert.equal(none('The man who lived next door is a doctor.', '[S The man [RC who lived next door]] [V is] a doctor.', 4, 4), null);
+  assert.equal(none('The report that he made last year is wrong.', '[S The report [RC that he made last year]] [V is] wrong.', 5, 5, '谓语'), null);
+  assert.equal(none("It hoped they would learn how shop-floor lighting affected workers' productivity.", "[S It] [V hoped] [O they would learn how shop-floor lighting affected workers' productivity].", 9, 9), null);
+  // 谓语多圈了介词短语：是断晚了，不是 to do
+  assert.match(none('Millions of mothers have gone to work.', '[S Millions of mothers] [V have gone] to work.', 4, 7), /谓语这一段断晚了.*多圈了 to work/);
+  none('He went to the station.', '[S He] [V went] to the station.', 2, 5);
+  assert.match(none('Every morning she walks to school.', 'Every morning [S she] [V walks] to school.', 4, 6), /断晚了/);
+  // 名词
+  assert.equal(none('The building collapsed.', '[S The building] [V collapsed].', 2, 2), null);
 });
 
 test('断早、断晚：一段的边界和 key 差一两个词', () => {
@@ -188,12 +228,37 @@ test('断早、断晚：一段的边界和 key 差一两个词', () => {
   assert.match(R.check(S(t), mk(1, 5, 'S'), t).misread, /主语这一段断早了.*还差 situation/);
   // 差得远的不算断早断晚
   assert.equal(R.check(o, mk(3, 3, 'RC'), s).misread, null);
-  // 写的成分 key 里没有：看别的成分的一段
+  // 写泛称「从句」：对得上 key 里的定语从句
   assert.match(R.check(o, mk(3, 7, '从句'), s).misread, /从句断晚了：定语从句是「who lives next door」/);
+  // 别的成分不改看别的成分的一段（成分也错了，不只是断错了地方）
+  const th = make('sentence s = "Thinking is essentially a process of making connections in the brain." key="[S Thinking] [V is] essentially [P a process of making connections in the brain]."');
+  assert.equal(R.check(S(th), mk(1, 2, '定语从句'), th).misread, null);
+  assert.equal(R.check(S(th), mk(1, 2, 'P'), th).misread, null);
   // 不是断错了地方的不硬说：lives 标成谓语（从句里的谓语，key 没拉）、running 标成非谓语（它在谓语 has been running 里）
   assert.equal(R.check(o, mk(4, 4, 'V'), s).misread, null);
   const r = make('sentence s = "He has been running." key="[S He] [V has been running]."');
   assert.equal(R.check(S(r), mk(4, 4, '非谓语'), r).misread, null);
+});
+
+test('成分名：舞台已有的写法都认；分词、to do 和非谓语是一回事，「从句」对得上任何一种从句', () => {
+  const s = make(POLICY);
+  for (const r of ['非谓语', 'NF', '不定式', '分词', '过去分词', 'to do', 'done', '动名词']) assert.equal(R.check(S(s), mk(2, 6, r), s).right, true, r);
+  const m = make(MAN);
+  for (const r of ['从句', '定语从句', 'RC', '非限制性定语从句']) assert.equal(R.check(S(m), mk(3, 6, r), m).right, true, r);
+  assert.equal(R.check(S(m), mk(3, 6, '宾语从句'), m).misread, '成分标错了：这一段是定语从句，不是宾语从句', '写了另一种从句是错的');
+  assert.equal(R.check(S(m), mk(1, 6, '从句'), m).misread, '成分标错了：这一段是主语，不是从句', '泛称只对得上从句');
+  // 学生写泛称，拉完照样算 parsed
+  run(m, 'mark s.1-6 主语\nmark s.7 谓语\nmark s.3-6 从句');
+  assert.equal(R.predicates.parsed(S(m)), true);
+  assert.equal(predicateOf(m, 's', 'span')(['s.3-6', '=', '定语从句']), true);
+  assert.throws(() => predicateOf(m, 's', 'span')(['s.3-6', '=', 'Xyz']), /认不出/);
+  // key 用 roleColor 认的缩写 Adv、A：学生标「状语」
+  for (const k of ['Adv', 'A']) {
+    const e = make(`sentence s = "He left early." key="[S He] [V left] [${k} early]."`);
+    assert.equal(R.check(S(e), mk(3, 3, '状语'), e).right, true, k);
+  }
+  // 认不出的成分名：判错，话里照学生写的
+  assert.equal(R.check(S(m), mk(3, 6, '插入语'), m).misread, '成分标错了：这一段是定语从句，不是插入语');
 });
 
 test('段对了、成分不对', () => {
@@ -287,9 +352,63 @@ test('手势表：从一个词拉到另一个词再点成分 → mark；点一�
   assert.ok(f.toAct(S(s), { to: { mark: m.id } }).error, '已经折起来了');
 });
 
-test('改写整句以后原来的 key 不再对得上：作废，不判', () => {
+test('key 的状态：收下了 / rewrite 以后作废 / move 拆散了一段，老师在「舞台现在」和下一步里看得到', () => {
+  const desc = (s) => sentence.describe(S(s)).join('\n');
   const s = make(MAN);
+  assert.match(desc(s), /\n {2}key：收下了（3 段）/);
+  assert.doesNotMatch(sentence.describe(S(make('sentence s = "He runs."'))).join('\n'), /key：/, '没写 key 不提');
+  // rewrite：作废，不判，下一步说清楚是作废了（不是没写）
+  run(s, 'goal g1 "拆完" when="s parsed"');
   run(s, 'rewrite s "The man living next door is a doctor."');
-  assert.equal(S(s).key, undefined);
-  assert.equal(R.check(S(s), mk(7, 7, 'V'), s).right, null);
+  assert.equal(S(s).key.void, 'rewrite');
+  assert.equal(R.check(S(s), mk(6, 6, 'V'), s).right, null);
+  assert.equal(R.predicates.parsed(S(s)), null);
+  assert.equal(R.predicates.main(S(s)), null);
+  assert.match(R.next(S(s)).why, /key 跟着 rewrite 作废了，要判就重写 key/);
+  assert.deepEqual(R.next(S(s)).acts, []);
+  assert.equal(done(s, 's'), false);
+  assert.match(desc(s), /key：作废了（rewrite/);
+  assert.deepEqual(R.facts(S(s), S(s), mk(6, 6, 'V')), [], 'key 作废了不写事实');
+  // move 把 lives 挪到 a 后面：主语、定语从句都拆散了，只剩谓语拉得成
+  const m = make(MAN);
+  run(m, 'move s.4 after s.8');
+  const nx = R.next(S(m));
+  assert.deepEqual(nx.acts.map((a) => a.role), ['V']);
+  assert.match(nx.why, /定语从句（who lives next door）被 move 拆散了，拉不成一段/);
+  assert.match(desc(m), /key：第 1 段 \[S The man who lives next door\] 被 move 拆散了，那一段不能再拉对；第 2 段 \[RC who lives next door\] 被 move 拆散了/);
+  run(m, 'mark s.6 V');
+  assert.equal(R.check(S(m), mk(6, 6, 'V'), m).right, true, 'is 挪到第 6 个了，照样判对');
+  assert.equal(R.predicates.parsed(S(m)), false, '拆散了的那几段拉不对');
+  assert.notEqual(R.next(S(m)), null);
+  assert.equal(done(m, 's'), false);
+});
+
+test('写给老师的事实：拉了一段以后这一段对不对、key 里还差哪几段（用原句的词）', () => {
+  const step = (s, line) => { const before = structuredClone(S(s)); const c = parseScript(line)[0]; s.apply(c); return before; };
+  const act = (line) => { const m = line.match(/^mark s\.(\d+)(?:-(\d+))? (.+)$/); return mk(Number(m[1]), Number(m[2] ?? m[1]), m[3]); };
+  const s = make(MAN);
+  let b = step(s, 'mark s.3-6 定语从句');
+  assert.deepEqual(R.facts(b, S(s), act('mark s.3-6 定语从句')), [
+    '这一段对了：s.3-6 标成定语从句（who lives next door）',
+    'key 里还差 2 段没拉对：s.1-6 主语（The man who lives next door）、s.7 谓语（is）',
+  ]);
+  b = step(s, 'mark s.7-8 V');
+  assert.deepEqual(R.facts(b, S(s), act('mark s.7-8 V')), [
+    '这一段不对：s.7-8 标成V（is a）（谓语这一段断晚了：谓语是「is」（结尾多圈了 a））',
+    'key 里还差 2 段没拉对：s.1-6 主语（The man who lives next door）、s.7 谓语（is）',
+  ]);
+  b = step(s, 'mark s.8-9 宾语');
+  assert.equal(R.facts(b, S(s), act('mark s.8-9 宾语'))[0], '这一段不对：s.8-9 标成宾语（a doctor）（key 里没有这一段）');
+  step(s, 'mark s.1-6 主语');
+  b = step(s, 'mark s.7 谓语');
+  assert.deepEqual(R.facts(b, S(s), act('mark s.7 谓语')), ['这一段对了：s.7 标成谓语（is）', '正确拆法的每一段都拉对了']);
+  // 撇号、连字符照原句（workers' productivity）
+  const e = make(`sentence s = "${E2W[0]}" key="${E2W[1]}"`);
+  b = step(e, 'mark s.2 V');
+  const f = R.facts(b, S(e), act('mark s.2 V'));
+  assert.match(f[1], /how shop-floor lighting affected workers' productivity/);
+  // 没写 key、折起来：不写
+  const k = make('sentence s = "He runs."\nmark s.2 V');
+  assert.deepEqual(R.facts(S(k), S(k), mk(2, 2, 'V')), []);
+  assert.deepEqual(R.facts(S(s), S(s), { type: 'fold', from: 3, to: 6 }), []);
 });
