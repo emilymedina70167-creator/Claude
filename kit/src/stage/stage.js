@@ -9,7 +9,8 @@ import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHo
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf } from './scene.js';
-import { judgeAnswer } from './answer.js';
+import { judgeAnswer, sameAnswer } from './answer.js';
+export { sameAnswer };
 import { VIEWS } from './types/views.js';
 import { PointerRouter } from './pointer.js';
 
@@ -1231,20 +1232,6 @@ export function stageLines(text) {
     }
     return inBoard ? null : l;
   });
-}
-
-/** 填的答案和正确答案一样吗（数按数比：0.50 = .5 = 1/2；别的去掉空格、不分大小写） */
-export function sameAnswer(text, answer) {
-  const norm = (s) => String(s ?? '').replace(/\s+/g, '').replace(/[，,]/g, ',').toLowerCase();
-  const num = (s) => {
-    const t = norm(s);
-    if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
-    const m = t.match(/^(-?\d+)\/(\d+)$/);
-    return m && Number(m[2]) ? Number(m[1]) / Number(m[2]) : null;
-  };
-  const a = num(text), b = num(answer);
-  if (a != null && b != null) return Math.abs(a - b) < 1e-9;
-  return norm(text) === norm(answer);
 }
 
 /** 学生这一下做了什么，写给老师看（和舞台现状一起发） */

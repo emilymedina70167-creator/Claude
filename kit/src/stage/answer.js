@@ -10,6 +10,22 @@ import { parseAnswer, matchText } from '../entext.js';
 import { toQ } from './types/matrix.js';
 import { evalLive } from './value.js';
 
+
+/** 填的答案和正确答案一样吗（数按数比：0.50 = .5 = 1/2；别的去掉空格、不分大小写） */
+export function sameAnswer(text, answer) {
+  const norm = (s) => String(s ?? '').replace(/\s+/g, '').replace(/[，,]/g, ',').toLowerCase();
+  const num = (s) => {
+    const t = norm(s);
+    if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
+    const m = t.match(/^(-?\d+)\/(\d+)$/);
+    return m && Number(m[2]) ? Number(m[1]) / Number(m[2]) : null;
+  };
+  const a = num(text), b = num(answer);
+  if (a != null && b != null) return Math.abs(a - b) < 1e-9;
+  return norm(text) === norm(answer);
+}
+
+
 export const ANSWER_TYPES = ['num', 'formula', 'matrix', 'set', 'equation', 'seq', 'en'];
 
 /** type= 的写法检查：不认得的当场报错并列出能写的（没写 type 照旧：答案是数就按数，不然按英文比） */
@@ -107,8 +123,6 @@ function makeCheck(type, ans, { free } = {}) {
   }
 }
 
-// 没写 type：答案是数就按数比（0.5 = 1/2），不然按英文比（不分大小写、空格）
-const guessType = (ans) => (toQ(ans) ? 'num' : 'en');
 
 /**
  * 判一个答案。spec = { type, answer, wrongs（wrong= 的原文或 parseWrongs 的结果）, free }。
@@ -120,14 +134,15 @@ export function judgeAnswer(given, spec = {}, scene = null) {
   const raw = spec.answer;
   if (raw == null || String(raw).trim() === '') return { ok: null, misread: null, shown: '' };
   const ans = resolveAnswer(raw, scene);
-  const t = type || guessType(ans);
-  const check = makeCheck(t, ans, spec);
+  // 没写 type：旧写法，照 sameAnswer 比（去掉空白、数按数比），同一个答案对错不变
+  const t = type || 'plain';
+  const check = t === 'plain' ? (g) => sameAnswer(g, ans) : makeCheck(t, ans, spec);
   if (check(given)) return { ok: true, misread: null, shown: ans };
   const wrongs = typeof spec.wrongs === 'string' ? parseWrongs(spec.wrongs) : spec.wrongs || [];
   let misread = null;
   for (const w of wrongs) {
     let hit = false;
-    try { hit = makeCheck(t, resolveAnswer(w.text, scene), spec)(given); } catch { /* 这条错答自己写得不对，不当它对上了 */ }
+    try { hit = (t === 'plain' ? sameAnswer(given, resolveAnswer(w.text, scene)) : makeCheck(t, resolveAnswer(w.text, scene), spec)(given)); } catch { /* 这条错答自己写得不对，不当它对上了 */ }
     if (hit) { misread = w.why || `像是常见错答「${w.text}」`; break; }
   }
   return { ok: false, misread, shown: ans };
@@ -143,5 +158,5 @@ export function checkSpec(spec = {}, scene = null) {
     return;
   }
   if (/\{/.test(String(raw))) { if (scene) evalLive(String(raw).trim(), scene); return; }
-  makeCheck(type || guessType(String(raw).trim()), String(raw).trim(), spec);
+  if (type) makeCheck(type, String(raw).trim(), spec);
 }

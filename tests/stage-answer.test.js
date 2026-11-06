@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { Scene } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
 import { judgeAnswer } from '../kit/src/stage/answer.js';
+import { sameAnswer } from '../kit/src/stage/stage.js';
 import { actText } from '../kit/src/stage/stage.js';
 
 const run = (scene, src) => { for (const c of parseScript(src)) scene.apply(c); return scene; };
@@ -76,4 +77,13 @@ test('actText：只收不判、错答说明只进给老师的话', () => {
   const t = actText({ type: 'value', text: '3', answer: '2', right: false, misread: '漏了 E' });
   assert.match(t, /填错了/);
   assert.match(t, /漏了 E/);
+});
+
+test('旧写法（没写 type）：答案不是数、填法带空格，对错和 sameAnswer 一样', () => {
+  const pairs = [['1, 2', '1,2'], ['(1,2)', '(1, 2)'], ['x = 2', 'x=2'], ['A B', 'AB'], ['x^2', 'x ^ 2'], ['x+1', 'x + 1'], ['X+1', 'x + 1'], ['x+1', 'x+2'], ['0.50', '1/2']];
+  for (const [given, answer] of pairs) {
+    assert.equal(judgeAnswer(given, { answer }).ok, sameAnswer(given, answer), `${given} / ${answer}`);
+    assert.equal(judgeAnswer(answer, { answer: given }).ok, sameAnswer(answer, given), `${answer} / ${given}`);
+  }
+  assert.equal(judgeAnswer('1, 2', { answer: '1,2' }).ok, true);
 });
