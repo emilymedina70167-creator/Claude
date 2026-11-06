@@ -11,7 +11,10 @@
 //   rewrite 改写整句：同样的词滑到新位置，新的淡进来（「从句 → 非谓语」「倒装 → 正常语序」）
 // 部件：s.3 现在第 3 个词、s.2-5 第 2 到 5 个、s.who 这个词（出现几次时 s.who:2）、s.who-door 从 who 到 door、
 //      s#3 一开始第 3 个的那个词（挪了、改写了跟着它走）
+// 正确拆法由老师给（页面不自己分析英语语法）：sentence s = "…" key="[S The man [RC who lives next door]] [V is] a doctor."，
+// 照黑板 parse 组件的括号写法（entext.js 的 parseBrackets）读成 o.key，判法在 sentence.rules.js
 import { bbox } from '../layout.js';
+import { parseBrackets, tokenizeSentence } from '../../entext.js';
 
 export const MAX_WORDS = 60;
 export const WRAP = 800; // 一行最宽（世界坐标的像素；镜头再缩放到屏幕上）
@@ -462,6 +465,44 @@ function keepOrder(seq) {
   return keep;
 }
 
+// —— 正确拆法 key= ——
+/**
+ * key 的括号写法 → { src, spans: [{ role（key 里写的缩写）, keys（这一段的词，按一开始的编号：挪了词跟着走）, depth（套在第几层）}] }。
+ * key 里的词要和句子一个一个对上：两边都按 entext.js 的切法切（parse 组件判分用的就是它），只比词，不管大小写；
+ * 标点不比（括号的头尾只落在词上），所以标点前后有没有空格、句末的点写没写都行。对不上的当场报错，写出第一个对不上的词
+ */
+export function parseKey(words, src) {
+  const s = String(src ?? '').trim();
+  if (!s.includes('[')) throw new Error('key= 要用 [成分 词…] 标出正确拆法，比如 key="[S The man] [V is] a doctor."（成分写缩写：S、V、O、RC……）');
+  if (/\[(?![A-Za-z])/.test(s)) throw new Error('key= 的括号里先写成分的英文缩写（S、V、O、P、RC、NF……），再写词，比如 [S The man]');
+  let parsed;
+  try { parsed = parseBrackets(s); } catch (e) { throw new Error(`key= 写错了：${e.message}`); }
+  // 句子的词再按 entext 的切法切一遍（U.S. 会切成 U、S 两个）：每一小块记着它是句子里的哪个词
+  const flat = [];
+  for (const w of [...words].sort((a, b) => a.slot - b.slot)) {
+    for (const t of tokenizeSentence(w.value)) if (t.word) flat.push({ w: t.w, word: w });
+  }
+  const mine = []; // key 里的词
+  const ord = new Map(); // key 的记号下标 → 第几个词
+  for (const t of parsed.tokens) if (t.word) { ord.set(t.i, mine.length); mine.push(t.w); }
+  const n = Math.min(flat.length, mine.length);
+  for (let i = 0; i < n; i++) {
+    if (norm(flat[i].w) !== norm(mine[i])) throw new Error(`key= 里的词和句子对不上：句子第 ${flat[i].word.slot} 个词是「${flat[i].word.value}」，key 里是「${mine[i]}」（key 照抄句子，只加 [成分 …] 括号）`);
+  }
+  if (mine.length < flat.length) throw new Error(`key= 里少了词：句子从第 ${flat[n].word.slot} 个词「${flat[n].word.value}」起，key 里没有（key 照抄整句）`);
+  if (mine.length > flat.length) throw new Error(`key= 里多了词：「${mine.slice(n).join(' ')}」句子里没有（key 照抄句子，只加 [成分 …] 括号）`);
+  // 舞台上一段词只挂一道括号（同一段再 mark 就换掉），所以 key 里同一段词不能有两个成分
+  const seen = new Map();
+  const spans = parsed.spans.map((sp) => {
+    const keys = [...new Set(flat.slice(ord.get(sp.from), ord.get(sp.to) + 1).map((x) => x.word.key))];
+    const sig = keys.join(',');
+    if (seen.has(sig)) throw new Error(`key= 里 [${seen.get(sig)} …] 和 [${sp.role} …] 是同一段词：舞台上一段词只挂一个成分，留一个`);
+    seen.set(sig, sp.role);
+    return { role: sp.role, keys, depth: sp.depth };
+  });
+  return { src: s, spans };
+}
+
 export const sentence = {
   type: 'sentence',
   label: '句子',
@@ -478,6 +519,8 @@ export const sentence = {
       width: WRAP, end, marks: [], tags: [], folds: [], cuts: [], refers: [], seq: 1, nextKey: words.length + 1,
       words: words.map((w, i) => ({ obj: id, key: i + 1, slot: i + 1, value: w.value, lead: w.lead, punct: w.punct, paint: null, glow: false, lift: false, dim: false, covered: false })),
     };
+    // 正确拆法（老师给的，页面拿它逐词比学生拉的括号；sentence.rules.js）
+    if (h.opts.key != null) o.key = parseKey(o.words, h.opts.key);
     o.origin = old ? { ...old.origin } : scene.slotFor(layout({ ...o, origin: { x: 0, y: 0 } }).box.w);
     return o;
   },
@@ -720,6 +763,8 @@ export const sentence = {
       o.folds = keep(o.folds);
       o.cuts = o.cuts.filter((k) => alive.has(k) && pos.get(k) !== next.length);
       o.refers = o.refers.filter((r) => alive.has(r.from) && alive.has(r.to));
+      // 原来的正确拆法是那一句的：改写以后对不上了，作废（不拿旧的去判新句子）
+      delete o.key;
       return { id: o.id, removed, added: next.filter((w) => !old.some((x) => x.key === w.key)).map((w) => w.key), moved, changed };
     },
   },
