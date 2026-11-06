@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { STAGE_TEACH, STAGE_DOC, stageSystem, firstMessage, turnMessage, TOPICS } from '../kit/src/stage/doc.js';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { COMMANDS, parseScript } from '../kit/src/stage/script.js';
+import { TYPES } from '../kit/src/stage/types/index.js';
 
 const bytes = (s) => Buffer.byteLength(s);
 
@@ -23,7 +24,9 @@ test('说明里的例子照抄就能演：例子那一轮，和每一条「指�
   // 每一行指令说明的第一段（「 / 」前、两个空格前）都能在这块舞台上演
   const lines = STAGE_DOC.split('\n').map((l) => l.split(/\s{2,}|\s\/\s/)[0].trim()).filter((l) => COMMANDS.has(l.split(' ')[0]) && !l.startsWith('array'));
   const ready = new Scene();
-  for (const src of [setup, 'label t a.1 "字"', 'say "看 [不稳定]"']) for (const c of parseScript(src)) ready.apply(c);
+  // 别的几种东西各造一个（它们例子的第一行），说明里它们那一节的指令才有东西可指
+  const others = Object.values(TYPES).filter((t) => t !== TYPES.array && t.example).map((t) => t.example.split('\n')[0]);
+  for (const src of [setup, ...others, 'label t a.1 "字"', 'say "看 [不稳定]"']) for (const c of parseScript(src)) ready.apply(c);
   const bad = [];
   for (const l of lines) { const e = dryRun(ready, l); if (e.length) bad.push(`${l} → ${e[0].error}`); }
   assert.deepEqual(bad, []);

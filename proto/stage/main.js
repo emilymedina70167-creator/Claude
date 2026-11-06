@@ -4,12 +4,17 @@ import { Stage } from '../../kit/src/stage/stage.js';
 import { TOPICS, turnMessage } from '../../kit/src/stage/doc.js';
 import { actText } from '../../kit/src/stage/stage.js';
 import css from '../../kit/src/stage/stage.css';
+import katexCss from 'virtual:katex-css';
 import { scriptedLesson } from './scripted.js';
 import { liveLesson } from './live.js';
 
 const style = document.createElement('style');
 style.textContent = css;
 document.head.appendChild(style);
+// 式子（types/tex）用的 KaTeX 样式和字体
+const katexStyle = document.createElement('style');
+katexStyle.textContent = katexCss;
+document.head.appendChild(katexStyle);
 
 const $ = (id) => document.getElementById(id);
 const host = $('stage');
