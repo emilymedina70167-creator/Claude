@@ -1,0 +1,21 @@
+# L3 第 2 幕：特征向量 Aξ = λξ；λ 可以是负的；零向量不算
+plane p range=-5..5
+matrix A = 3 1 / 2 2
+vec p v = 1 1 color=g1
+span p v stay
+open p.v drag
+plane q range=-5..5 beside=p
+matrix C = 1 2 / 3 0
+vec q u = 1 0 color=g1
+open q.u drag
+say "沿 {p.v} 这条线拖，框里填几？"
+ask value "Av = □·v，□ = ？" answer=4
+学生: vec p v = -1 -1
+学生: value 4
+say "拖到原点呢？"
+ask say "v 是零向量时 □ 填几？"
+学生: say 哪个都行
+say "右边的 {C}，把特征方向找全。"
+goal g1 "让 u 落在 (2, −3)" when="q.u = q.t"
+学生: vec q u = 2 -3
+say "嗯。"

@@ -1,0 +1,10 @@
+# D4 分支 3：复杂度搅在一起。堆排的每一次筛画成一根竖条，建堆、排序两堆分开站
+array bh = 1 2 2 4
+array bs = 4 3 2 3 2 1 0
+label lbh bh.1 "建堆：4 次筛" side=left tone=note
+label lbs bs.1 "排序：7 次筛" side=left tone=note
+dial n = 8 range=8-64
+say "这是 n = 8 时每一次筛比较了几次。"
+set n 16
+ask value "排序那一堆加起来是几？" answer=15
+学生: value 105

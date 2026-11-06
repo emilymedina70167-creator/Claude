@@ -1,0 +1,14 @@
+# L2 第 8 幕：B13-36.1 自己做（写字区、三维、λ/a 滑块都试不了，只试题卡和答题）
+card q = "已知 Ax = b 存在两个不同的解" "(1) 求 λ、a；(2) 求通解"
+tex f = "A = \begin{pmatrix}\lambda&1&1\\0&\lambda-1&0\\1&1&\lambda\end{pmatrix},\ b = \begin{pmatrix}a\\1\\1\end{pmatrix}"
+say "两个不同的解，说明是哪一种情形？"
+ask say "写出你的推理"
+学生: say 无穷多解，r(A) = r(A|b) < 3
+ask say "|A| = ？"
+学生: say (λ-1)^2(λ+1)
+ask value "λ = ？" answer=-1
+学生: value 1
+say "λ = 1 时，第 2 个方程写出来是什么？"
+ask value "a = ？" answer=-2
+学生: value -2
+say "嗯。"

@@ -1,0 +1,26 @@
+# D4 第 10 幕：两条跑道同时跑快排、堆排，比较次数和辅助空间；反例台看稳不稳定
+array qs = 49 38 65 97 76 13 27 49′
+array hs = 49 38 65 97 76 13 27 49′
+label lq qs.1 "快速排序：比较 ? 次 · 栈最高 ? 格" side=above tone=note
+label lh hs.1 "堆排序：比较 ? 次 · 辅助 1 格" side=above tone=note
+card pre = "排好的" "倒着的" "课本的" "随机"
+dial n = 8 range=8-64
+say "同一组数，两种都跑一下。换成排好的再跑。"
+ask tap pre "点一个预设" expect=pre.1
+学生: tap pre.1
+# 页面不会跑排序、不会数比较次数：老师只能自己写进去
+retext lq "快速排序：比较 28 次 · 栈最高 8 格"
+retext lh "堆排序：比较 27 次 · 辅助 1 格"
+say "把账填上。"
+ask value "快排最坏的时间复杂度？（写 n^2 这样）" answer=n^2
+学生: value O(n^2)
+# 反例台：三张卡，相等的两个分红蓝；「排」以后连线、看交叉——只能老师摆
+remove qs
+remove hs
+array r = 3 2 2′
+paint r.2 g2
+paint r.3 g1
+say "造三个数，让快排把两个 2 的先后换掉。"
+open r
+ask next "排好了点「排」" button="排"
+学生: next

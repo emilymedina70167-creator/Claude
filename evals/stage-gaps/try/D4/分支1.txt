@@ -1,0 +1,17 @@
+# D4 分支 1：树高公式搞反。n 拨到 7、8、15、16 看层数跳；最瘦的 4 层平衡树按层排进数组出现空格
+tree c = 1 2 3 4 5 6 7
+dial n = 7 range=1-20
+label ln dial:n "n = {n}" side=right
+say "把 $n$ 拨到 8：第 8 个结点坐哪？"
+set n 8
+# 拨数不会让树长出第 8 个结点：老师只能自己 append
+append c 8
+ask value "到几个结点才有第 4 层？" answer=8
+学生: value 15
+# 最瘦的 4 层平衡二叉树，按层排进一排：空格得老师自己写
+tree b = 5 3 7 2 4 _ 8 1
+array lay = 5 3 7 2 4 _ 8 1
+glow lay.6
+say "它按层排进一排，第 6 格是空的。"
+ask say "写出 h 层完全二叉树结点数的夹子"
+学生: say 2^h-1 ≤ n ≤ 2^(h-1)

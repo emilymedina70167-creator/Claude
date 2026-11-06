@@ -1,0 +1,13 @@
+# D4 分支 2：稳定性。3 2 2′ 跑快排，红蓝两条线从输入连到输出，看交叉
+array r = 3 2 2′
+array o = 2′ 2 3
+paint r.2 o.2 g2
+paint r.3 o.1 g1
+label lr r.1 "输入" side=left tone=note
+label lo o.1 "输出" side=left tone=note
+# 连线能跨两排吗？交叉的地方页面会不会标出来？
+link r.2 o.2 g2
+link r.3 o.1 g1
+say "输入里 {r.2} 在 {r.3} 前，输出里谁在前？"
+ask say "写那一句：输入里谁在前，输出里谁在前"
+学生: say 输入2在前，输出2′在前，换了

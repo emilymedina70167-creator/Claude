@@ -1,0 +1,5 @@
+# L3 第 3 幕补试：式子先造、平面后造（不带题卡、不带拨数），看平面在不在
+tex f = "(\lambda E - A)\xi = 0"
+plane p range=-4..4
+vec p e1 = 1 0 color=g1
+say "看平面。"

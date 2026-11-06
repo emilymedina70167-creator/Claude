@@ -1,0 +1,28 @@
+# D4 第 9 幕：插入 63：先放到最后、再往上换；留最大的 3 个用小根堆
+tree t = 87 45 78 32 17 65 53 09
+array a = 87 45 78 32 17 65 53 09
+say "63 进来了，它只能先坐在哪？"
+append t 63
+open t
+goal g1 "让 63 往上走到站住" when="t#2 = 63"
+@g1 say "站住了。"
+@g1 ask value "往上走一共比了几次？" answer=3
+学生: swap t.63 t.32
+# 63 在第 4 个，和爸爸 45 换（是父子；页面并不查是不是父子，见第 7 幕）
+学生: swap t.63 t.45
+学生: value 2
+# 第二段：数据带一张张流进来，三个位置的小堆，开关大根 / 小根
+remove t
+remove a
+array s = 31 72 15 88 46 93 27 64 81 12 57 99
+cover s
+uncover s.1 s.2 s.3
+tree k = 15 31 72
+card sw = "大根堆" "小根堆"
+say "从这一串里留下最大的 3 个，手里只有 3 个位置。先选："
+ask tap sw "大根堆还是小根堆？" expect=sw.2
+学生: tap sw.2
+uncover s.4
+card act = "顶掉堆顶" "扔掉"
+ask tap act "{s.4} 来了：顶掉堆顶，还是扔掉？" expect=act.1
+学生: tap act.1

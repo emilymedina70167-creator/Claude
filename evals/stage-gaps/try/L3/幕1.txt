@@ -1,0 +1,22 @@
+# L3 第 1 幕：矩阵把大多数方向拧歪，只有个别方向只被拉长
+plane p range=-5..5
+vec p e1 = 1 0 color=g6
+vec p e2 = 0 1 color=g3
+sum p s = e1 + e2
+matrix D = 2 0 / 0 1
+say "{D} 作用一次：看 {p.e1}、{p.e2}。"
+transform p D
+wait 800
+untransform p
+matrix A = 3 1 / 2 2
+transform p A
+say "换成 {A}，两根都拐了。"
+wait 800
+untransform p
+vec p v = 1 0 color=g1
+vec p w = A v color=g4
+open p.v drag
+say "还有没有只变长、不拐弯的方向？拖 {p.v} 找。"
+ask drag p.v "拖蓝箭头，找只被拉长的方向"
+学生: vec p v = 1 1
+say "嗯。"

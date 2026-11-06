@@ -1,0 +1,12 @@
+# L3 第 1 幕补试：变换以后的样子；Av 跟着 v 只能拿 transform 凑
+plane p range=-5..5
+matrix A = 3 1 / 2 2
+vec p v = 1 1 color=g1
+vec p u = 1 0 color=g6
+span p v stay
+transform p A
+say "作用 {A} 以后：{p.v} 还在原来那条线上，{p.u} 拐了。"
+open p.v drag
+goal g1 "拖 v" when="p.v = p.u"
+学生: vec p v = 2 1
+say "嗯。"

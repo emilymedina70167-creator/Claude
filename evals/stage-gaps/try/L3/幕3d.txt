@@ -1,0 +1,7 @@
+# L3 第 3 幕补试：平面先造，再加拨数 at=p 和扣着的题卡，看平面在不在
+plane p range=-4..4
+vec p e1 = 1 0 color=g1
+dial lam = 0 range=-2..6 at=p
+card k = "A = (3 1; 2 2)"
+cover k.1
+say "看平面。"

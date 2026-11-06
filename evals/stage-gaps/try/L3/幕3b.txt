@@ -1,0 +1,13 @@
+# L3 第 3 幕补试：平面先造、式子后造，看平面还在不在；λE − A 只能老师一个个 λ 写出来
+plane p range=-4..4
+vec p e1 = 1 0 color=g1
+vec p e2 = 0 1 color=g6
+sum p s = e1 + e2
+tex f = "\hl{a}{A\xi} = \hl{l}{\lambda\xi}"
+next f "(\lambda E - A)\xi = 0"
+matrix M = 1 -1 / -2 2
+transform p M
+say "λ = 4 时 λE − A 是 {M}：正方形压成了一条线。"
+ask next "看好了点下面" button="看好了"
+学生: next
+say "嗯。"
