@@ -1,0 +1,13 @@
+# E2 第 5 幕：没有门也能断。隐形门：句尾多放一个 that，学生把它拖进一条缝；挑战判 that 是不是落在 hoped 后面
+sentence s = "It hoped they would learn how shop-floor lighting affected workers' productivity. (that)"
+glow s.2 s.4-5 s.9
+mark s.6-11 从句
+say "剩下的还有两盏灯，可门没了。门藏在哪条缝里？"
+open s
+goal g1 "把 (that) 插进门藏着的那条缝" when="s.3 = s#12"
+@g1 mark s.3-12 从句
+@g1 say "门被省掉了——主谓主谓，后面的是从句。"
+@g1 ask say "两层各是什么从句？"
+学生: move s.12 after s.3
+学生: move s.4 after s.2
+学生: say 两层都是宾语从句

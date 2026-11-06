@@ -1,0 +1,23 @@
+# E3 第 5 幕：介词后面只能接 doing。六张「前面的词」卡：先猜再翻；Seeing is believing 用一排格子拼，挑战判拼没拼对
+card q = "enjoy ＿＿" "want ＿＿" "begin ＿＿" "of ＿＿" "without ＿＿" "by ＿＿"
+card b = "enjoy：doing 能 / to do 不能" "want：doing 不能 / to do 能" "begin：两个都能" "of：只能 doing" "without：只能 doing" "by：只能 doing"
+cover b
+say "先猜：每个词后面接 doing 还是 to do？"
+ask say "六个词各接什么？（按顺序写 doing / to do）"
+学生: say doing to do doing to do doing doing
+uncover b
+say "of、without、by 有什么共同点？"
+ask say "介词后面接什么？"
+学生: say 介词后面只能接 doing
+sentence t = "The trick is to direct these funds better."
+mark t.4-8 表语
+say "is 后面这块是宾语吗？"
+rewrite t "To direct these funds better is the trick."
+array k = is believing Seeing to
+open k
+goal g1 "拼出一句对的" when="k.1 = k#3, k.2 = k#1, k.3 = k#2"
+@g1 say "对，前后一个样。"
+ask next "拼好点下面" button="拼好了"
+学生: swap k#3 k#1
+学生: swap k#1 k#2
+学生: next

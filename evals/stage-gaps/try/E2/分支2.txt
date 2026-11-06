@@ -1,0 +1,14 @@
+# E2 分支 2：见 that、and 就开门。想要：0 盏灯的门后面是一面墙，and 的两只手拉到它连的两样；that 换 this 标出唯一变的词
+sentence s = "If we are serious about ensuring that our science is both meaningful and reproducible, we must ensure that our institutions incentivise that kind of science."
+glow s.3 s.10 s.16-17 s.21
+ask tap s "哪个词是门？点一个" 
+学生: tap s.22
+mark s.22-25 从句
+label wall s.22-25 "门后 0 盏灯：一面墙" side=below tone=key
+link s.13 s.12 g1
+link s.13 s.14 g1
+rewrite s "If we are serious about ensuring that our science is both meaningful and reproducible, we must ensure that our institutions incentivise this kind of science."
+pulse s.22
+say "换成 {s.22}，句子照样成立。"
+ask say "这个 that 是门吗？"
+学生: say 不是，是那种

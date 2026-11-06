@@ -1,0 +1,27 @@
+# E2 第 1 幕：把谓语全点亮。舞台上学生一次只能点一个词（ask tap），每点一下就叫一次老师，灯、计数、焊在一起都要老师自己画
+sentence s = "The great question is who should benefit from the analysis of all the data that our lives now generate."
+label cnt s.1 "灯 0 盏 · 事 0 件" side=above tone=key
+say "一件事只有一个谓语。把这句话里的谓语全点亮——亮几盏灯，就是几件事。"
+ask tap s "点亮一个谓语"
+学生: tap s.4
+glow s.4
+tag s.4 灯1
+retext cnt "灯 1 盏 · 事 1 件"
+ask tap s "还有吗？再点一个"
+学生: tap s.7
+glow s.7
+tag s.7 灯2
+retext cnt "灯 2 盏 · 事 2 件"
+ask tap s "还有吗？"
+学生: tap s.6
+untag s.7
+tag s.6-7 灯2
+glow s.6
+ask tap s "还有吗？"
+学生: tap s.19
+glow s.19
+tag s.19 灯3
+retext cnt "灯 3 盏 · 事 3 件"
+say "三盏灯：{s.4}、{s.6-7}、{s.19}。"
+ask next "好了点下面" button="就这些"
+学生: next

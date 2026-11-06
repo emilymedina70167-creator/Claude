@@ -1,0 +1,19 @@
+# E3 第 3 幕：doing / to do 带着宾语整块当主语，谓语用单数。is / are 拨轮换成点选；括号右把手换成「主语到哪个词结束」
+sentence s = "Making friends be extremely important to teenagers."
+sentence c = "is are"
+say "先拨：{s.3} 换成 is 还是 are？"
+ask tap c "谓语用 is 还是 are？" expect=c.1
+学生: tap c.2
+rewrite s "Making friends are extremely important to teenagers."
+say "把主语框出来。"
+ask tap s "主语到哪个词结束？" expect=s.2
+学生: tap s.2
+mark s.1-2 主语
+label one s.1-2 "一件事" side=above tone=key
+remove c
+sentence t = "To anticipate every imaginable driving situation is a difficult programming problem."
+mark t.1-2 主语
+label hole t.2 "预见……什么？" side=above tone=note
+say "这个主语从哪到哪？{t.2} 后面那个小口要填上。"
+ask tap t "主语的右边到哪个词？" expect=t.6
+学生: tap t.4

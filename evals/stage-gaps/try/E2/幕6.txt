@@ -1,0 +1,12 @@
+# E2 第 6 幕：自己拆一句四层的长难句。学生能做的只有点、拖词、写字：搭括号、钩子、套娃图都要靠写字说出来
+sentence s = "The most famous of these efforts was initiated by Noam Chomsky, who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar."
+say "这一句你自己来，拆好了按『就这样』。"
+ask say "拆成几件事、谁套着谁？写出来"
+学生: say 四件事：was initiated / who suggested / that humans are born / that dictates，一层套一层
+mark s.12-27 从句
+mark s.14-27 从句
+mark s.23-27 从句
+refer s.12 -> s.11
+refer s.23 -> s.22
+say "四层，一层套一层——拆开了。"
+ask next "看好了点下面" button="好"

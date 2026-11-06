@@ -1,0 +1,15 @@
+# E1 第 6 幕（改过的写法）：挑战里比词改用 s#4 这种「一开始第几个」；挑副词用 ask drag；中文积木用一排格子拖换
+sentence s = "Scientific publishing has long been a licence to print money."
+mark s.3-5 谓语
+say "胶囊里有不长动词样子的词吗？挑出来。"
+ask drag s.4 "把胶囊里不长动词样子的那个词拖出去"
+学生: drag s.4 s.10
+array c = 一本万利 科学出版业 一直是 长期以来
+say "排中文：哪块先说？"
+open c
+goal g2 "把中文排成通顺的顺序" when="c.1 = c#2, c.2 = c#4, c.3 = c#3"
+@g2 say "对，时间状语放在谓语前面。"
+@g2 ask next "下一张" button="下一张"
+学生: swap c#2 c#1
+学生: swap c#4 c#1
+学生: next

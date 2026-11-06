@@ -1,0 +1,14 @@
+# E3 分支 3：按「挨着谁」判修饰谁（Passing 连到 cafe）。想要：代入窗按连到的词自动出代入句、标出逗号和隔着的词、句子主语是谁、By 1830 两种挂法
+sentence b = "Passing the cafe, I saw a friend."
+ask tap b "Passing 修饰谁？" expect=b.4
+学生: tap b.3
+card w = "代入 cafe：the cafe passes the cafe（咖啡馆经过咖啡馆）"
+cut b.3
+glow b.2
+say "{b.1} 和 {b.3} 中间隔着 {b.2}，后面还有逗号。"
+ask tap b "换一个再试" expect=b.4
+学生: tap b.4
+sentence c = "By 1830 the former Spanish and Portuguese colonies had become independent nations."
+card two = "挂到 colonies：1830 年以前的殖民地已经成为独立的国家" "挂到整句：到 1830 年，以前西班牙和葡萄牙的殖民地已经成为独立的国家"
+ask tap two "哪种挂法对？" expect=two.2
+学生: tap two.2

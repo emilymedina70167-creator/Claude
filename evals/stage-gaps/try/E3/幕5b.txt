@@ -1,0 +1,5 @@
+# E3 第 5 幕补一下：话里指题卡的一行，小块上写的是那一行的字还是「第 4 行」
+card q = "enjoy ＿＿" "want ＿＿" "begin ＿＿" "of ＿＿" "without ＿＿" "by ＿＿"
+say "{q.4} 后面接什么？"
+ask tap q "哪个词后面只能接 doing？" expect=q.4
+学生: tap q.4

@@ -1,0 +1,17 @@
+# E3 第 7 幕：状语的逻辑主语是句子的主语。「整个句子」那道横杠没有：连到句子主语只能点 I；逗号小墙用 cut 画
+sentence a = "I saw a passing plane."
+sentence b = "Passing the cafe, I saw a friend."
+cut b.3
+tag b.4 句子主语
+say "两个 passing，各修饰谁？"
+ask tap b "Passing 修饰谁？" expect=b.4
+学生: tap b.3
+refer b.1 -> b.3
+card w = "代入 cafe：the cafe passes the cafe（咖啡馆经过咖啡馆）" "代入 I：I pass the cafe（我经过咖啡馆）"
+say "把你连的那个放进去读一读。"
+ask tap w "哪张读得通？" expect=w.2
+学生: tap w.2
+refer b.1 -> b.4
+label zh b.1-3 "经过那个咖啡馆时" side=below tone=key
+ask say "定语和状语差在哪？"
+学生: say 定语修饰名词 状语修饰句子

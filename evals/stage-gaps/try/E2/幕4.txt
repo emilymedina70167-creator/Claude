@@ -1,0 +1,19 @@
+# E2 第 4 幕：一层层折起来，从外往里读；中文栏三格按嵌套拼起来。折、开只有老师能做；中文用 ask say 一格一格收；拼句、飞到名词前面页面不会
+sentence s = "The great question is who should benefit from the analysis of all the data that our lives now generate."
+mark s.5-19 从句
+mark s.15-19 从句
+fold s.15-19
+fold s.5-19
+say "全折起来，只读最外面一层。"
+ask say "主句的中文："
+学生: say 重要的问题是……
+unfold s
+fold s.15-19
+say "打开一层——这一层里也只有一盏灯。"
+ask say "who 这一层的中文："
+学生: say 谁应该从对所有数据的分析中获益
+unfold s
+card zh = "主句：重要的问题是▢" "who 层：谁应该从对所有数据的分析中获益" "that 层：我们的生活现在产生的"
+say "看那块中文飞到哪了。"
+ask say "that 这一层的中文："
+学生: say 我们的生活现在产生的

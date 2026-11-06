@@ -1,0 +1,12 @@
+# E1 分支 1：学生只圈了 has。想要页面「按学生圈的读」：has 当谓语、been 悬空、给每个词的词形。舞台上只能老师自己改写、自己贴「悬空」
+sentence s = "Scientific publishing has long been a licence to print money."
+say "先圈这一句的谓语。"
+ask say "谓语是哪几个词？"
+学生: say has
+mark s.3 谓语
+label hang s.5 "这个词归谁？" side=above tone=key
+lift s.5
+tex f = "\hl{h}{have} + \hl{d}{done}"
+say "把 {s.3} 和 {s.5} 往这两格里放。"
+ask tap s "been 是 be 的哪种形式？点它" expect=s.5
+学生: tap s.5

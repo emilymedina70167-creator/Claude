@@ -1,0 +1,26 @@
+# E1 第 5 幕：完成进行 = have + been + doing。拼图用式子的 \hl 项硬凑（retex 让同名的项滑过去），学生点共用的那个词；
+# 拼好的放进空槽、强调结果 / 过程的开关都只能由老师 rewrite
+tex f = "\hl{h}{have} + \hl{d}{done} \quad\quad \hl{b}{be} + \hl{g}{doing}"
+sentence s = "That kind of electronic spying ___ for decades."
+say "这两块能拼起来，试试。"
+ask next "想好怎么拼了点下面" button="拼"
+学生: next
+retex f "\hl{h}{have} + \hl{b}{been} + \hl{g}{doing}"
+paint f.b g4
+say "中间那个词归哪一块？"
+ask tap f "中间那个共用的词是哪个？" expect=f.b
+学生: tap f.b
+card k = "be 的形式" "do：be" "did：was / were" "done：been" "doing：being"
+glow k.4
+say "{f.b} 是 be 的哪种形式？"
+ask tap k "been 在哪一格？" expect=k.4
+学生: tap k.3
+rewrite s "That kind of electronic spying has been going on for decades."
+refer s.6 -> s.2
+dim s.3-5
+sentence w = "We have been working hard for several months."
+dial e = 1 range=1-2 at=w
+label el dial:e "{e}：1 强调过程 2 强调结果" side=right
+say "对着中文拨这个开关——哪句在说『一直在做』？"
+ask tap s "spying 那句里哪块告诉你在强调过程？" expect=s.10-11
+学生: tap s.11

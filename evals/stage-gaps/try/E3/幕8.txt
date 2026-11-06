@@ -1,0 +1,20 @@
+# E3 第 8 幕：自己拆 8 月拆错的句子。圈谓语换成点；框非谓语块、折起来只有老师能做；用法树用 tree 硬凑，学生拖卡片挂到叶子上做不了
+sentence s = "Policies designed to help small businesses often fail."
+say "这句你 8 月拆过。用今天的办法自己拆：先找谓语。"
+ask tap s "谓语是哪个？" expect=s.8
+学生: tap s.4
+say "{s.4} 前面有 {s.3}。"
+ask tap s "再找一次谓语" expect=s.8
+学生: tap s.8
+mark s.8 谓语
+mark s.2-6 定语
+refer s.2 -> s.1
+fold s.2-6
+label main s.8 "主干：Policies … fail" side=above tone=key
+card old = "8 月的旧答案" "主干：policies help small businesses" "译文：设计的支持来帮助经常失败的小企业"
+ask say "主干是什么？翻译写下来。"
+学生: say Policies fail 旨在帮助小企业的政策往往会失败
+tree t = 用法 名词 修饰 主语 宾语 定语 状语
+say "把今天的句子挂到树上。"
+ask tap t "Making friends 挂到哪片叶子？" expect=t.主语
+学生: tap t.主语

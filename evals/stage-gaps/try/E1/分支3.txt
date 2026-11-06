@@ -1,0 +1,13 @@
+# E1 分支 3：中文积木排成英文语序（状语留在句末）。想要：中文积木和英文块之间的对应线、每块的成分、状语在谓语前还是句末
+sentence e = "The question of GDP and its usefulness has annoyed policymakers for over half a century."
+array c = GDP及其有效性的问题 一直困扰着 政策制定者 半个多世纪以来
+link e.8 c.2 g1
+link e.11 c.4 g2
+mark e.11-15 时间状语
+say "读一读你排的中文，「{c.4}」放在哪儿顺？"
+open c
+goal g1 "把时间状语挪到前面" when="c.1 = c#4"
+@g1 say "中文里时间放在前面。"
+@g1 ask say "中文里时间、地点放在哪儿？"
+学生: swap c#4 c#1
+学生: say 放在前面

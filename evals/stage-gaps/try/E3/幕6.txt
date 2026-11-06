@@ -1,0 +1,16 @@
+# E3 第 6 幕：定语看名词和动词的关系。学生拉不了线：改成点「它修饰谁」；代入窗是题卡（老师写好三张代入句）；拨轮和代入卡联动做不了
+sentence s = "The human nose is an underrate tool."
+mark s.4 谓语
+say "这些动词没座位了，它们去修饰谁？"
+ask tap s "underrate 修饰谁？点那个名词" expect=s.7
+学生: tap s.7
+refer s.6 -> s.7
+card w = "代入 tool：" "主动：the tool underrates …（工具去低估别的）" "被动：the tool is underrated（工具被低估）" "目的：the tool is to underrate …（工具是为了去低估）"
+say "把 {s.7} 放进去读：工具低估别人，还是工具被低估？"
+ask tap w "哪张读得通？" expect=w.3
+学生: tap w.3
+rewrite s "The human nose is an underrated tool."
+label zh s.6-7 "被低估的工具" side=below tone=key
+say "三句做完，填表。"
+ask say "doing、done、to do 各是哪种关系？"
+学生: say doing 主动 done 被动 to do 目的

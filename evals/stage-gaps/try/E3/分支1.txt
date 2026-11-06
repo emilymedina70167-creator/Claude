@@ -1,0 +1,14 @@
+# E3 分支 1：把非谓语当谓语（圈了 help）。想要：页面按学生的拆法算有几个谓语、哪个没主语；to 锁；-ed 两种读法并排；按学生拆法直译的中文
+sentence s = "Policies designed to help small businesses often fail."
+ask tap s "谓语是哪个？" expect=s.8
+学生: tap s.4
+label seat s.4 "座位上：help" side=above tone=key
+label two s.8 "fail 也有时态：谁失败？" side=above tone=key
+pulse s.4 s.8
+label lock s.3-4 "to 锁着" side=below tone=note
+sentence r1 = "Policies designed (did) … fail."
+sentence r2 = "Policies designed (done) to help small businesses often fail."
+card old = "8 月：主干 policies help small businesses" "8 月：设计的支持来帮助经常失败的小企业"
+say "两道金线挤一把座位：{s.4} 和 {s.8}。"
+ask drag s.8 "把真正的谓语拖到座位上（句首）"
+学生: drag s.8 s.1

@@ -1,0 +1,29 @@
+# E1 第 3 幕：完成 = 站在一个时间点回头看。时间轴用平面的 x 轴（原点是「现在」），小人用一根能拖的向量；sent 是过去的一个点
+plane p range=-4..4
+point p S = -2 0
+label sent p.S "sent（寄来优惠券）" side=below tone=note
+vec p me = -2 0 color=g4
+label lamp p.me "小人站在这儿，灯往身后照" side=above tone=note
+sentence s = "He had never gambled before the casino sent him a coupon."
+mark s.2-4 谓语
+say "拖这个小人，盯住胶囊——哪个词跟着它变？"
+open p.me drag
+goal g1 "把小人拖到「现在」" when="p.me = (0,0)"
+@g1 rewrite s "He has never gambled before."
+@g1 say "站到现在，{s.2} 换了。"
+ask next "拖过三处点下面" button="拖好了"
+学生: vec p me = 0 0
+学生: vec p me = 3 0
+学生: next
+say "那 had 在说什么？"
+ask say "had 在说什么？"
+学生: say 已经在那之前了
+rewrite s "By 1830 the former Spanish and Portuguese colonies had become independent nations."
+unlabel sent
+remove p
+array yr = 1800 1810 1820 1830 1840 2026
+ptr 小人 yr.6
+say "小人该站哪儿？「变成独立国家」在哪一段？你来摆。"
+open yr
+ask tap yr "小人该站在哪一年？" expect=yr.4
+学生: tap yr.4

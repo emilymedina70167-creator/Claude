@@ -1,0 +1,24 @@
+# E3 第 2 幕：to do 一定不是谓语；doing / done 挨着 be / have 才合成谓语。圈谓语只能写出来；把 is 拿出去只能拖到句尾
+sentence a = "Every cat with an owner, for instance, is running a small-scale study in operant conditioning."
+sentence b = "Fortunately, the White House is starting to pay attention."
+sentence c = "The human nose is an underrated tool."
+sentence d = "The human nose is underrated."
+say "每句圈出完整的谓语，一句只有一个。"
+ask say "四句的谓语各是哪几个词？"
+学生: say is / is starting to pay / is / is underrated
+say "把①里的 {a.8} 拿出来，running 还是谓语吗？"
+open a
+goal g1 "把 is 拖出句子" when="a.8 != a#8"
+@g1 say "is 走了，这句没有谓语了。"
+@g1 ask say "running 还是谓语吗？"
+学生: move a.8 after a.15
+学生: say 不是了，它一个人当不了谓语
+move a#8 before a#9
+mark a.8-9 谓语
+mark b.5-6 谓语
+mark c.4 谓语
+mark d.4-5 谓语
+label lock b.7-8 "to 锁：吸不上" side=below tone=note
+say "同样是 doing、done，什么时候算谓语？"
+ask say "写一句规律"
+学生: say 挨着 be 才算

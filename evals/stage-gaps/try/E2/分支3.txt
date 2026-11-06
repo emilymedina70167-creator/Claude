@@ -1,0 +1,10 @@
+# E2 分支 3：从句挂错主人。想要：「代回去」——把钩住的名词塞回关系词的位置读一遍，单三和复数一起亮。舞台上要老师自己写代回去的句子
+sentence s = "The most famous of these efforts was initiated by Noam Chomsky, who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar."
+ask tap s "最后那个 that 说的是谁？" expect=s.22
+学生: tap s.15
+refer s.23 -> s.15
+sentence back = "humans dictates a universal grammar."
+glow back.1 back.2
+say "代回去读：{back.1} {back.2}——撞了。"
+ask tap s "换一个钩子再试" expect=s.22
+学生: tap s.22

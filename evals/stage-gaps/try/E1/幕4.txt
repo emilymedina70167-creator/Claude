@@ -1,0 +1,32 @@
+# E1 第 4 幕：现在完成 vs 一般过去。事件条用平面上从原点出发的向量（原点 = 15 年前，x = 3 是「现在」），学生拖右端；
+# 第二排 He has left 那句：学生把 ago 拖进句子；「完成 = 做完了吗」用题卡点选
+plane p range=-1..5
+point p N = 3 0
+label now p.N "现在" side=below tone=key
+vec p bar = 3 0 color=g1
+label bl p.bar "学英语" side=above tone=note
+sentence s = "We have learned English for 15 years."
+mark s.2-3 谓语
+say "拉这条的右头，看句子什么时候少了 have。"
+open p.bar drag
+goal g1 "把右头拉离「现在」" when="p.bar != (3, 0)"
+@g1 rewrite s "We learned English for 15 years."
+@g1 say "离开现在，{s.2} 就只剩一个词了。"
+ask next "拉过几下点下面" button="拉好了"
+学生: vec p bar = 1 0
+学生: next
+card q = "完成 = 做完了吗？" "是" "不一定"
+ask tap q "完成 = 做完了吗？" expect=q.3
+学生: tap q.2
+remove p
+remove q
+sentence h = "He has left, so I cannot find him now. ago"
+mark h.2-3 谓语
+say "把 {h.10} 放进去试试。"
+open h
+goal g2 "把 ago 放到 left 后面" when="h.4 = ago"
+@g2 rewrite h "He left two hours ago."
+@g2 say "有了 ago，has 掉了。"
+ask next "试完点下面" button="好了"
+学生: move h.10 after h.3
+学生: next

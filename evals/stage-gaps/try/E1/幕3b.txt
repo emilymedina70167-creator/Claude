@@ -1,0 +1,15 @@
+# E1 第 3 幕（改过的写法）：挑战不能写坐标，改成拿「现在」那个点 N 比小人那根向量；话里指小人、指年份
+plane p range=-4..4
+point p N = 0 0
+point p S = -2 0
+vec p me = -2 0 color=g4
+sentence s = "He had never gambled before the casino sent him a coupon."
+mark s.2-4 谓语
+say "拖 {p.me}，盯住 {s.2-4}——哪个词跟着它变？"
+open p.me drag
+goal g1 "把小人拖到「现在」" when="p.me = p.N"
+@g1 rewrite s "He has never gambled before the casino sent him a coupon."
+@g1 say "站到现在，{s.2} 换成了 has。"
+@g1 ask next "看好了点下面" button="看到了"
+学生: vec p me = 0 0
+学生: next

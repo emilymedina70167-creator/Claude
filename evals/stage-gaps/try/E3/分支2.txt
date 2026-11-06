@@ -1,0 +1,14 @@
+# E3 分支 2：框主语断在 imaginable。想要：名词词组里每个修饰词指向中心名词的箭头、被括号切断的变红、按学生括号直译
+sentence s = "To anticipate every imaginable driving situation is a difficult programming problem."
+ask tap s "主语到哪个词结束？" expect=s.6
+学生: tap s.4
+mark s.1-4 主语
+refer s.3 -> s.6
+refer s.4 -> s.6
+refer s.5 -> s.6
+paint s.5-6 g2
+label cutoff s.5-6 "被切在外面" side=below tone=key
+label zh s.1-11 "按你框的读：预见每种可能的……，驾驶情况是一个困难的编程问题" side=below tone=soft
+say "{s.3}、{s.4}、{s.5} 都指着 {s.6}。"
+ask tap s "主语的右边到哪？" expect=s.6
+学生: tap s.6

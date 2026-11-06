@@ -1,0 +1,25 @@
+# E1 第 4 幕（改过的写法）：挑战不能直接写坐标、不能写词，绕路：拿「现在」那个点比向量，拿 h#10（一开始第 10 个词 ago）比位置
+plane p range=-1..5
+point p N = 3 0
+vec p bar = 3 0 color=g1
+sentence s = "We have learned English for 15 years."
+mark s.2-3 谓语
+say "拉这条的右头，看句子什么时候少了 have。"
+open p.bar drag
+goal g1 "把右头拉离「现在」" when="p.bar != p.N"
+@g1 rewrite s "We learned English for 15 years."
+@g1 say "离开现在，{s.2} 就只剩一个词了。"
+@g1 ask next "看好了点下面" button="看到了"
+学生: vec p bar = 1 0
+学生: next
+remove p
+sentence h = "He has left, so I cannot find him now. ago"
+mark h.2-3 谓语
+say "把 {h.10} 放进去试试。"
+open h
+goal g2 "把 ago 放到 left 后面" when="h.4 = h#10"
+@g2 rewrite h "He left two hours ago."
+@g2 say "有了 ago，has 掉了。"
+@g2 ask next "看好了点下面" button="好"
+学生: move h.10 after h.3
+学生: next

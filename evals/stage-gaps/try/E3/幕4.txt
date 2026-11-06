@@ -1,0 +1,22 @@
+# E3 第 4 幕：to do 作主语挪到句尾、句首 It 占位。学生一次只能拖一个词：先试学生拖 To，再看老师整块挪和 It
+sentence s = "To anticipate every imaginable driving situation is a difficult programming problem."
+mark s.1-6 主语
+say "主语这么长，头重脚轻。把它整块挪到句尾，看看句首会怎样。"
+open s
+goal g1 "把主语整块挪到句尾" when="s.11 = s#6"
+@g1 rewrite s "It is a difficult programming problem to anticipate every imaginable driving situation."
+@g1 refer s.1 -> s.7
+@g1 ask say "这个 It 指谁？"
+学生: move s.1 after s.11
+学生: move s.1 after s.11
+move s.1-6 after s.11
+rewrite s "It is a difficult programming problem to anticipate every imaginable driving situation."
+refer s.1 -> s.7
+say "整块挪过去，句首空了，冒出 {s.1}。"
+ask say "这个 It 指谁？"
+学生: say 指后面那个 to anticipate
+sentence j = "It also raises questions concerning values."
+say "这一句里找一块「真正的主语」去换 It。"
+open j
+ask drag j.5 "把你觉得是真正主语的那块拖到句首"
+学生: drag j.5 j.1

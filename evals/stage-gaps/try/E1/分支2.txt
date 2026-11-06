@@ -1,0 +1,13 @@
+# E1 分支 2：学生把 had become 判成一般过去。想要：把句子换成学生说的时态、按时态画在时间轴上、和原句并排。舞台上换句子要老师写好，时间轴没有
+sentence o = "By 1830 the former Spanish and Portuguese colonies had become independent nations."
+ask say "had become 是什么时态？"
+学生: say 一般过去时
+sentence w = "The colonies became independent nations in 1830."
+array yr = 1800 1810 1820 1830 1840 2026
+ptr 站点 yr.4
+paint yr.1-4 g1
+label a o "原句：站在 1830 回头看" side=right tone=note
+label b w "你说的一般过去：1830 那一点" side=right tone=note
+say "两句并排：哪一句是原句的画面？"
+ask tap o "点原句里决定时态的那个词" expect=o.9
+学生: tap o.10

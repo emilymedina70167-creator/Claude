@@ -1,0 +1,26 @@
+# E1 第 6 幕：真题演练。圈谓语换成「把谓语里不是动词的词拖出来」；图鉴是题卡，点一格；中文积木是一排格子，学生拖着换位置
+sentence s = "Scientific publishing has long been a licence to print money."
+card k = "放进哪一格？" "一般现在" "一般过去" "现在完成" "现在进行"
+array c = 一本万利 科学出版业 一直是 长期以来
+say "先圈这一句的谓语，按你想的圈。"
+ask say "这一句的谓语是哪几个词？写出来。"
+学生: say has long been
+mark s.3-5 谓语
+say "胶囊里有不长动词样子的词吗？挑出来。"
+open s
+goal g1 "把副词挑出胶囊" when="s.5 != been"
+@g1 say "挑出去了，剩下的合拢。"
+ask tap s "挑出来的是哪个？" expect=s.4
+学生: move s.4 after s.10
+学生: tap s.10
+say "放进图鉴哪一格？"
+ask tap k "has long been 放进哪一格？" expect=k.4
+学生: tap k.3
+say "排中文：哪块先说？"
+open c
+goal g2 "把中文排成通顺的顺序" when="c.1 = 科学出版业, c.2 = 长期以来, c.3 = 一直是, c.4 = 一本万利"
+@g2 say "对，时间状语放在谓语前面。"
+ask next "排好点下面" button="排好了"
+学生: swap c#2 c#1
+学生: swap c#4 c#2
+学生: next

@@ -1,0 +1,19 @@
+# E2 第 3 幕：who、that 两层，钩子挂到 data，拎走 who 看 that 跟不跟着走。钩子换成点名词，绳子是 refer，拎走用 fold，套盒用两层 mark
+sentence s = "The great question is who should benefit from the analysis of all the data that our lives now generate."
+glow s.4 s.6-7 s.19
+mark s.5-14 从句
+mark s.15-19 从句
+say "that our lives now generate——生成的是什么？"
+ask tap s "把钩子挂到它说的那个词上" expect=s.14
+学生: tap s.14
+refer s.15 -> s.14
+fold s.5-14
+say "拎走 who 这件事，看看 that 那件事怎么了。"
+ask say "that 那件事现在怎么了？"
+学生: say 它还留在下面
+unfold s
+unmark s.5-14
+mark s.5-19 从句
+fold s.5-19
+say "再拎一次。"
+ask next "看好了点下面" button="好"

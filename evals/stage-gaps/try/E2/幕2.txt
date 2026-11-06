@@ -1,0 +1,21 @@
+# E2 第 2 幕：从 that 开门，括号拖到哪结束、括号里实时数灯。学生拖不了括号：只能点「这件事到哪个词结束」，括号和灯数老师画
+sentence s = "The hardest task that television asks of anyone is to turn the power off after he has turned it on."
+glow s.6 s.9 s.17-18
+card tools = "并列连词 and / but / or" "从属连词 because / if / after / while…" "关系词 that / who / what / how / which…"
+dim tools
+say "连接词是门，门后面就是一件事。从 {s.4} 开始，这件事到哪结束？"
+ask tap s "that 这件事到哪个词结束？" expect=s.8
+学生: tap s.13
+mark s.4-13 从句
+label n2 s.4-13 "括号里 2 盏灯" side=above tone=key
+say "括号里挤了两盏灯：{s.6} 和 {s.9}。"
+ask tap s "再挑一次结束的词" expect=s.8
+学生: tap s.8
+unlabel n2
+mark s.4-8 从句
+mark s.15-20 从句
+undim tools.3
+undim tools.2
+mark s.1-3 主句
+say "三件事各一盏灯——断开了。"
+ask next "看好了点下面" button="好"

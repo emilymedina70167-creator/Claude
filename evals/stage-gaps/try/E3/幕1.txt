@@ -1,0 +1,21 @@
+# E3 第 1 幕：一句只有一把谓语座位。laugh 的形态拨轮换成一张词形卡（学生点一格），座位和计数是贴着的字，金线银线、主语括号都要老师画
+sentence s = "laugh probably has little influence on physical fitness."
+paint s.1 s.3 g4
+label seat s.3 "谓语座位（1 把）" side=above tone=key
+label cnt s.8 "想当谓语的动词 2 · 座位 1" side=right tone=note
+card f = "laugh 换成：" "laughs" "laughed" "laughing" "to laugh" "laughed（done）"
+say "两个动词，一把座位。拨一拨 {s.1}，让这句话通顺。"
+ask tap f "laugh 换成哪一个？"
+学生: tap f.2
+rewrite s "laughs probably has little influence on physical fitness."
+pulse s.1 s.3
+say "{s.1} 和 {s.3} 都想坐那把座位。"
+ask tap f "再换一个试试"
+学生: tap f.4
+rewrite s "Laughing probably has little influence on physical fitness."
+mark s.1 主语
+retext cnt "想当谓语的动词 1 · 座位 1"
+label zh s.1-8 "笑对身体健康的影响可能很小" side=below tone=soft
+say "通了。它现在还是谓语吗？在句子里当什么？"
+ask say "laughing 在句子里当什么？"
+学生: say 当主语

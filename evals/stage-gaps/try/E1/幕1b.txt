@@ -1,0 +1,13 @@
+# E1 第 1 幕后半：谓语已经是 4 个词，点胶囊里的一个词，看页面是不是整块一起亮；再点胶囊外的词
+sentence s = "Railroads will have been combining with each other."
+mark s.2-5 谓语
+say "四个词，还是一个谓语。"
+ask tap s "点这一块里随便哪个词。" expect=s.2-5
+学生: tap s.4
+glow s.2-5
+label one s.2-5 "一整块" side=above tone=key
+say "点 {s.4}，亮的是整块 {s.2-5}。"
+ask tap s "再点一个块外面的词。"
+学生: tap s.1
+say "时态 = 时间 × 状态，变化全在谓语这一块里。"
+ask next "看好了点下面" button="明白了"

@@ -1,0 +1,11 @@
+# E2 分支 1：谓语认不准。想要：「时态拨盘」一拨整句换时态，页面对齐出哪几块变了，和学生点的灯逐盏对照；主语插座。舞台上只能老师整句 rewrite
+sentence s = "If we are serious about ensuring that our science is both meaningful and reproducible, we must ensure that our institutions incentivise that kind of science."
+glow s.3 s.6 s.10
+tag s.6 灯
+say "拨到过去，看哪几块跟着变。"
+ask next "看好了点下面" button="拨"
+学生: next
+rewrite s "If we were serious about ensuring that our science was both meaningful and reproducible, we had to ensure that our institutions incentivised that kind of science."
+say "{s.6} 没变。"
+ask tap s "哪盏灯没跟着变？" expect=s.6
+学生: tap s.6
