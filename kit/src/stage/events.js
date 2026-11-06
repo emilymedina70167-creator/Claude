@@ -29,7 +29,8 @@ export const triggers = (e) => !e.quiet && (!!e.now || ['answer', 'goal', 'done'
  */
 export function eventOf(act, { help = '', at = 0 } = {}) {
   if (act.type === 'next' && help && act.button === help) return { kind: 'help', act: slim(act), at };
-  if (act.open || act.type === 'dial') return { kind: 'try', act: slim(act), at, ...(act.call === 'now' || act.verdict?.call === 'now' ? { now: true } : {}), ...(act.patient ? { patient: true } : {}) };
+  // 撤一步也是「试」（攒着写给老师），可不算进「试了好多下」：撤几下不该凑出叫老师
+  if (act.open || act.type === 'dial') return { kind: 'try', act: slim(act), at, ...(act.call === 'now' || act.verdict?.call === 'now' ? { now: true } : {}), ...(act.patient || act.type === 'undo' ? { patient: true } : {}) };
   return { kind: 'answer', act: slim(act), at };
 }
 
@@ -132,5 +133,5 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
   return [...(tries.length ? capTries(tryLines(tries), rest) : []), ...rest].filter(Boolean).join('\n');
 }
 
-/** 自从上一次叫老师，学生试了几下（拨、拖、点开看都算；老师写了 call=done 的东西上试的不算） */
+/** 自从上一次叫老师，学生试了几下（拨、拖、点开看都算；老师写了 call=done 的东西上试的、撤一步不算） */
 export const tryCount = (events) => events.filter((e) => e.kind === 'try' && !e.patient).length;

@@ -8,8 +8,9 @@
 import { EASE } from './motion.js';
 import { pickTarget } from './layout.js';
 import { parseScript } from './script.js';
-import { gestureAct, askFor, kindsOf } from './gestures.js';
+import { gestureAct, askFor, kindsOf, writeRange } from './gestures.js';
 import { openKeypad, openChoices } from './keypad.js';
+import { reportError } from '../errlog.js';
 
 const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
 const tr = (x, y, s = 1) => `translate(${x}px, ${y}px)${s !== 1 ? ` scale(${s})` : ''}`;
@@ -21,6 +22,17 @@ export function screenOf(stage, b) {
   if (!b) return null;
   const p = stage.toScreenLive({ x: b.x, y: b.y }), s = stage.liveCam().s;
   return { x: p.x, y: p.y, w: b.w * s, h: b.h * s };
+}
+/** open 那一项写的部件（open t.30* rotate）；没写是 fallback。部件后来没了（删了、改写了）就当没有，不让整种手势跟着出错 */
+export function openParts(stage, e, fallback) {
+  if (!e.refs.length) return fallback;
+  return e.refs.flatMap((r) => { try { return stage.scene.parts(r); } catch { return []; } });
+}
+/** 手指按的框至少 44px 见方（矩阵的行把手、行号画得窄，按的地方不能跟着窄） */
+export function atLeast(r, min = 44) {
+  if (!r) return r;
+  const w = Math.max(r.w, min), h = Math.max(r.h, min);
+  return { x: r.x + r.w / 2 - w / 2, y: r.y + r.h / 2 - h / 2, w, h };
 }
 const rectOf = (stage, g) => { try { return g.rect?.() || stage.screenRect(g.node?.()) || screenOf(stage, g.box?.()); } catch { return null; } };
 const areaOf = (stage, g) => { try { return g.area?.() || rectOf(stage, g); } catch { return null; } };
@@ -72,7 +84,13 @@ export function armGesture(stage, e, view, done) {
   if (!g || !view?.grips) return Object.assign(() => {}, { refresh() {} });
   const kinds = kindsOf(g);
   const obj = () => stage.scene.objects.get(e.obj);
-  const gripsOf = (name) => { const fn = view.grips[name]; const o = obj(); if (!fn || !o) return []; try { return fn(stage, o, e) || []; } catch { return []; } };
+  // 画法交的把手出错：这一种手势就没了，记进出错记录（不默默吞掉）
+  const gripsOf = (name) => {
+    const fn = view.grips[name];
+    const o = obj();
+    if (!fn || !o) return [];
+    try { return fn(stage, o, e) || []; } catch (err) { reportError(err, { what: `舞台的手势：${o.type} 的「${name}」把手出错（open ${e.obj} ${e.action}）` }); return []; }
+  };
   const armed = new Map(); // key → { off, grip, cls }
   const clsOf = (grip, kind) => grip.cls ?? (kind === 'tap' || kind === 'write' ? 'is-tap' : 'is-drag');
 
@@ -83,11 +101,26 @@ export function armGesture(stage, e, view, done) {
   const blocked = (src) => {
     try { const [c] = parseScript(src); const j = stage.scene.judgeLine(c, { by: 'student', open: e.action }); return !!j && !j.apply; } catch { return false; }
   };
-  // 一下手势要先问一个值：数字键盘、一排选项；问到了再翻成指令（翻不成就在那块上说为什么，不收）
+  // 一下手势要先问一个值：数字键盘、一排选项；问到了再翻成指令（翻不成就在那块上说为什么，不收）。
+  // 浮出来的那一块不比手势活得久：这一项收起了（off）一起收；按「确定」时这一项已经不是开着的那一项、东西重造过了，悄悄收起、不交
+  let popup = null;
   const asking = (ask, anchor, ctx, kind, after = null) => {
-    const go = (extra) => { const r = gestureAct(stage.scene, e, { ...ctx, ...extra }); if (r.error) return r.error; send(r, kind); return null; };
-    if (ask.pick) return openChoices(stage, { anchor, choices: ask.choices, prompt: ask.prompt || '', onPick: (v) => go({ role: v }), onClose: after });
-    return openKeypad(stage, { anchor, prompt: ask.prompt || '', onOk: (text) => go({ value: text }), onClose: after });
+    popup?.close();
+    const o0 = obj();
+    const go = (extra) => {
+      if (stage.scene.opens.get(`${e.obj}:${e.action}`) !== e || obj() !== o0) return null;
+      if (kind === 'write') { const bad = writeRange(e, extra.value); if (bad) return bad; }
+      const r = gestureAct(stage.scene, e, { ...ctx, ...extra });
+      if (r.error) return r.error;
+      // 裁判会拦下的（wrong=block、这个世界做不到）：照样交（课堂要知道学生试了什么），那一块不收、晃一下说一句中性的
+      const no = blocked(r.src);
+      send(r, kind);
+      return no ? '这一下没让做' : null;
+    };
+    const closed = () => { popup = null; after?.(); };
+    const opts = { anchor, prompt: ask.prompt || '', onClose: closed };
+    popup = ask.pick ? openChoices(stage, { ...opts, choices: ask.choices, onPick: (v) => go({ role: v }) }) : openKeypad(stage, { ...opts, onOk: (text) => go({ value: text }) });
+    return popup;
   };
 
   // —— 点一下（tap）、点一格写一个值（write）——
@@ -249,7 +282,7 @@ export function armGesture(stage, e, view, done) {
   const refresh = () => {
     const want = plan();
     const keys = new Set(want.map((w) => w.key));
-    for (const [k, a] of armed) if (!keys.has(k)) { a.off(); a.grip.node?.()?.classList.remove(a.cls); armed.delete(k); }
+    for (const [k, a] of armed) if (!keys.has(k)) { a.off(); if (a.cls) a.grip.node?.()?.classList.remove(a.cls); armed.delete(k); }
     for (const w of want) {
       const cls = clsOf(w.grip, w.kind);
       const had = armed.get(w.key);
@@ -258,7 +291,7 @@ export function armGesture(stage, e, view, done) {
     }
   };
   refresh();
-  const off = () => { for (const a of armed.values()) { a.off(); if (a.cls) a.grip.node?.()?.classList.remove(a.cls); } armed.clear(); };
+  const off = () => { popup?.close(); for (const a of armed.values()) { a.off(); if (a.cls) a.grip.node?.()?.classList.remove(a.cls); } armed.clear(); };
   off.refresh = refresh;
   return off;
 }

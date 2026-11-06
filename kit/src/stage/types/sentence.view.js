@@ -3,6 +3,7 @@
 // 位置全由 sentence.js 的 layout 算（这里只照着画、照着动），所以画面和给老师看的现状、贴字让开的地方一定对得上
 import { EASE, moveDuration, stagger, arcPoints } from '../motion.js';
 import { layout, setMeasure, FONTS, WORD_H, shownPunct } from './sentence.js';
+import { openParts } from '../gesturedom.js';
 
 const tr = (x, y, s = 1) => `translate(${x}px, ${y}px)${s !== 1 ? ` scale(${s})` : ''}`;
 const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
@@ -113,7 +114,7 @@ function spanPreview(stage, o0) {
 export const sentenceView = {
   // 通用手势（gesturedom.js）抓哪儿：一个词（拉一段从它起、到它止；折起一段点它），一道括号（点它折起来）
   grips: {
-    word: (stage, o, e) => (e.refs.length ? e.refs.flatMap((r) => stage.scene.parts(r)) : ordered(o))
+    word: (stage, o, e) => openParts(stage, e, ordered(o))
       .filter((w) => !stage.nodeOf(w)?.classList.contains('is-folded'))
       .map((w) => ({ key: `w:${w.key}`, part: () => stage.scene.partOf(o.id, w.key), node: () => stage.nodes.get(`${o.id}:${w.key}`) })),
     bracket: (stage, o) => layout(o).brackets.map((g) => ({ key: `br:${g.id}`, part: () => ({ mark: g.mark }), node: () => stage.decor(o.id, `br:${g.id}`) })),

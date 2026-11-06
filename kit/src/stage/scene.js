@@ -18,6 +18,7 @@ import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder } from './value.js';
 import { rulesOf, done as nextDone } from './rules.js';
 import { judge } from './referee.js';
+import { gestureGrabs } from './gestures.js';
 
 export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 export const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
@@ -601,10 +602,23 @@ export class Scene {
           if (!(gestures[action] && [].concat(gestures[action].gesture).includes('write'))) throw new Error(`input=keypad 只用在写一个值的动作上（${Object.entries(gestures).filter(([, g]) => [].concat(g.gesture).includes('write')).map(([k]) => `open ${o.id} ${k}`).join(' / ') || `${t.label}没有`}），${action} 用不上`);
           e.input = 'keypad';
         }
-        if (action === 'edit') {
+        // 拨数器默认 -9～9；键盘写的值不写 range= 就不限（写了照它收，gestures.js 的 writeRange）
+        if (action === 'edit' && !(e.input && opts.range == null)) {
           const [lo, hi] = parseRange(opts.range || '-9..9');
           if (!(lo <= hi)) throw new Error('range 要写成 小..大，比如 range=-3..3');
           e.lo = lo; e.hi = hi;
+        }
+        // 同一样东西上另一项开着的、要用手指抓同一处的（open t 和 open t rotate 都拖结点、open t insert 和 place 都拖托盘、
+        // open s mark 和 fold 都按词）：同一处按下去只拿得到先挂的那一个，后开的这一项学生永远用不上——当场报，不默默收下
+        const grabs = (x) => (x.action === 'drag' || (affords[x.action] && !x.input) ? new Set(['part']) : gestureGrabs(x.gesture));
+        const keysOf = (x) => { if (!x.refs.length) return null; try { return new Set(x.refs.flatMap((rf) => this.parts(rf)).map((p) => p.key)); } catch { return null; } };
+        const meet = (a, b) => { const A = keysOf(a), B = keysOf(b); return !A || !B || [...A].some((k) => B.has(k)); };
+        for (const [k, x] of this.opens) {
+          if (x.obj !== o.id || k === `${o.id}:${action}`) continue;
+          const shared = [...grabs(e)].filter((gr) => grabs(x).has(gr) && (gr !== 'part' || meet(e, x)));
+          if (!shared.length) continue;
+          const xwhat = (x.input ? null : affords[x.action]) || gestureText(x.gesture);
+          throw new Error(`${o.id} 已经开着 ${x.action}（${xwhat}），${action} 也要用手指抓${shared.includes('part') ? '同样的部件' : '同一处'}，学生只做得了先开的那一种：一次开一种，先 close ${o.id} ${x.action} 再 open ${o.id} ${action}`);
         }
         this.opens.set(`${o.id}:${action}`, e);
         return { open: e };

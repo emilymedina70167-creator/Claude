@@ -531,6 +531,20 @@ const SUITES = {
     const before = await claudeTurns();
     const drag = async (from, to) => { const a = await node(from), b = await node(to); check(a && b, `舞台上没有 ${from} / ${to}`); await t.page.mouse.move(a.x, a.y); await t.page.mouse.down(); for (let i = 1; i <= 8; i++) await t.page.mouse.move(a.x + (b.x - a.x) * i / 8, a.y + (b.y - a.y) * i / 8); await t.page.mouse.up(); await sleep(900); };
     await drag('b:1', 'b:3');
+    // 撤一步（open b undo=on）：多拖一下再撤，舞台退回去；刷新以后撤之前的那一下还在（撤的时候 log 只能少那一行，不然这一段学生做的存不进去）
+    const order = () => t.page.evaluate(() => window.LAStage.scene.objects.get('b').cells.sort((x, y) => x.slot - y.slot).map((x) => x.value).join(' '));
+    check(await order() === '2 1 3', `拖一下以后不是 2 1 3：${await order()}`);
+    await drag('b:1', 'b:2');
+    check(await order() === '2 3 1', `又拖一下以后不是 2 3 1：${await order()}`);
+    const len0 = await t.page.evaluate(() => window.LAStage.log.length);
+    await t.page.click('.st-undo');
+    await t.waitFor(async () => (await order()) === '2 1 3', { timeout: 8000, what: '撤一步以后退回 2 1 3' });
+    check(await t.page.evaluate(() => window.LAStage.log.length) === len0 - 1, '撤一步以后舞台的 log 不是正好少一行');
+    check(await t.page.evaluate(() => window.LAStage.scene.waiting?.button === '给个提示'), '撤一步以后那一问（给个提示）没接着等');
+    await t.waitFor(async () => { const p = (await turns()).filter((x) => x.role === 'student').at(-1); return p?.pending && (p.log || []).length === 1 && (p.events || []).some((e) => e.act?.type === 'undo'); }, { what: '撤一步以后存着的这一段只剩撤之前的那一下、记着撤了一步' });
+    await t.page.reload(); await t.page.waitForLoadState('load');
+    await t.waitFor(() => t.page.evaluate(() => window.LAStage?.scene.waiting?.button === '给个提示'), { timeout: 20000, what: '撤一步以后刷新，接着等' });
+    check(await order() === '2 1 3', `撤一步以后刷新，撤之前的那一下没放回来：${await order()}`);
     await drag('b:3', 'b:2');
     await t.waitFor(() => t.page.evaluate(() => window.LAStage.scene.goals.get('g1')?.met && window.LAStage.scene.waiting?.kind === 'say'), { timeout: 15000, what: '排好以后挑战打勾、预写的下一问出来' });
     check(await t.page.$('.st-goal.is-met'), '做到的挑战没有打勾');
@@ -538,12 +552,13 @@ const SUITES = {
     await sleep(800);
     check(await claudeTurns() === before, '预写的下一问还在等学生，页面却又叫了老师');
     const pend = (await turns()).filter((x) => x.role === 'student').at(-1);
-    check(pend?.pending && (pend.events || []).filter((e) => e.kind === 'try').length === 2, `学生拖的两下没攒进还没发出去的那一段：${JSON.stringify(pend?.events)}`);
+    check(pend?.pending && (pend.events || []).filter((e) => e.kind === 'try').length === 4, `学生拖的三下、撤的一下没攒进还没发出去的那一段：${JSON.stringify(pend?.events)}`);
     await t.page.fill('#st-say-input', '往左，因为 33 比 37 小'); await t.page.click('.st-say-go');
     await t.waitFor(async () => (await t.docs('evidence')).some((e) => e.session === sid && e.src === 'say' && /往左/.test(e.text || '')), { what: '打的字记成学生说的话' });
     const sent = await t.waitFor(async () => (await turns()).find((x) => x.role === 'student' && !x.pending && /往左/.test(x.msg || '')), { what: '学生说的话连同攒下的拖、做到挑战一起发给老师' });
     check(/学生拨了|学生把 3/.test(sent?.msg || '') || /拖到/.test(sent?.msg || ''), `发给老师的没写学生怎么拖的：${sent?.msg}`);
     check(/做到了挑战 g1/.test(sent?.msg || '') && /往左/.test(sent?.msg || ''), `发给老师的没写做到了挑战、学生说的话：${sent?.msg}`);
+    check(/学生撤回了自己的上一下/.test(sent?.msg || ''), `发给老师的没写学生撤了一步：${sent?.msg}`);
     await t.waitFor(() => t.page.$('.st-next'), { timeout: 30000, what: '第四轮' });
     await sleep(1500);
     await t.page.click('.st-next');

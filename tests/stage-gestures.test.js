@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { gestureAct, askFor, undoLines, kindsOf, normValue } from '../kit/src/stage/gestures.js';
+import { gestureAct, askFor, undoLines, undoPlan, kindsOf, normValue, writeRange, UNDO_TOLD, UNDO_NO } from '../kit/src/stage/gestures.js';
+import { eventOf, tryCount } from '../kit/src/stage/events.js';
 import { padKey } from '../kit/src/stage/keypad.js';
 import { trayBoxes, slotSpots, tree as treeType, NODE } from '../kit/src/stage/types/tree.js';
 import { actText } from '../kit/src/stage/stage.js';
@@ -31,12 +32,13 @@ test('树：结点拖到它的父亲上是在父亲那里转（左孩子转上�
 });
 
 test('树：托盘的数拖进树是插入（页面从根比下去），拖到空位上是学生自己摆', () => {
-  const s = run('tree t = 50 30 70 tray="47 10"\nopen t insert\nopen t place');
+  const s = run('tree t = 50 30 70 tray="47 10"\nopen t insert');
   assert.equal(gestureAct(s, open(s, 't:insert'), { value: '47', to: { tree: 't' } }).src, 'insert t 47');
-  const spot = slotSpots(s.objects.get('t')).find((x) => x.parent === 2 && x.side === 'right');
+  const p = run('tree t = 50 30 70 tray="47 10"\nopen t place');
+  const spot = slotSpots(p.objects.get('t')).find((x) => x.parent === 2 && x.side === 'right');
   assert.ok(spot, '30 的右边是一个空位');
-  assert.equal(gestureAct(s, open(s, 't:place'), { value: '47', to: { slot: { parent: spot.parent, side: spot.side } } }).src, 'insert t#2 right 47');
-  assert.ok(gestureAct(s, open(s, 't:place'), { value: '47', to: { slot: { parent: 1, side: 'left' } } }).error, '50 的左边已经有 30 了');
+  assert.equal(gestureAct(p, open(p, 't:place'), { value: '47', to: { slot: { parent: spot.parent, side: spot.side } } }).src, 'insert t#2 right 47');
+  assert.ok(gestureAct(p, open(p, 't:place'), { value: '47', to: { slot: { parent: 1, side: 'left' } } }).error, '50 的左边已经有 30 了');
 });
 
 test('树：托盘画在树下面一排、算进树占的地方；空位在缺孩子的那一边、太深的不给', () => {
@@ -162,4 +164,77 @@ test('矩阵：学生走偏的那一步（wrong=mark）只淡淡圈着改了的�
   s.apply(c, { judged: j });
   const M = s.objects.get('M');
   assert.deepEqual(M.cells.filter((x) => x.slip).map((x) => `${x.r},${x.c}`), ['3,1', '3,2']);
+});
+
+test('撤一步只撤一下的那一行：别的行一行不少（课堂循环存的那一段照旧对得上）', () => {
+  // 第 1 轮老师的行（含页面补的 ask），学生做了两下；撤第二下：长度只少一，学生那一段从 S.logFrom 起还是第一下
+  const log = [
+    { src: 'matrix M = 1 2 / 3 4', by: 'teacher', turn: 1 },
+    { src: 'open M rowop undo=on', by: 'teacher', turn: 1 },
+    { src: 'ask next "" button="给个提示"', by: 'page', turn: 1 },
+    { src: 'rowop M r2 - 3r1', by: 'student', turn: 1, open: 'rowop' },
+    { src: 'rowop M r1 <-> r2', by: 'student', turn: 1, open: 'rowop' },
+  ];
+  const logFrom = 3;
+  const plan = undoPlan(log, { from: logFrom });
+  assert.equal(plan.gone, log[4]);
+  assert.equal(plan.lines.length, log.length - 1);
+  assert.deepEqual(plan.lines.slice(logFrom).map((r) => r.src), ['rowop M r2 - 3r1']);
+  assert.deepEqual(plan.lines.slice(0, logFrom), log.slice(0, logFrom), 'ask 那一行照样在');
+});
+
+test('撤一步：引出过预写、做到挑战、做完了的那一下撤不了；没写 undo=on 的那一项（拨数）也撤不了，都不往前跳', () => {
+  const base = [{ src: 'tree t = 50 30 _ 20', by: 'teacher', turn: 1 }];
+  const told = [...base, { src: 'rotate t#1 right', by: 'student', turn: 1, open: 'rotate', reacted: true }];
+  const p = undoPlan(told);
+  assert.equal(p.gone, null);
+  assert.equal(p.why, UNDO_TOLD);
+  assert.equal(undoLines(told).length, told.length, '不撤');
+  // 最后一下是拨数（那一项没写 undo=on）：前面能撤的也不跳过去撤（不然先后乱了）
+  const opens = new Map([['t:rotate', { obj: 't', action: 'rotate', policy: { undo: true } }], ['k', { obj: 'k', action: 'dial' }]]);
+  const undoable = (row) => [...opens.values()].some((e) => e.action === row.open && e.policy?.undo);
+  const dial = [...base, { src: 'rotate t#1 right', by: 'student', turn: 1, open: 'rotate' }, { src: 'set k 2', by: 'student', turn: 1 }];
+  const q = undoPlan(dial, { undoable });
+  assert.equal(q.gone, null);
+  assert.equal(q.why, UNDO_NO);
+  assert.equal(undoPlan(dial.slice(0, 2), { undoable }).gone?.src, 'rotate t#1 right');
+  // 还没做过：没有可说的
+  assert.deepEqual(undoPlan(base), { lines: base, gone: null, why: null, index: -1 });
+});
+
+test('同一样东西开两项会抢同一处手指的：第二项当场报，说先 close 哪一项', () => {
+  const tree = 'tree t = 50 30 70 tray="47 10"';
+  assert.throws(() => run(`${tree}\nopen t\nopen t rotate`), /t 已经开着 drag[\s\S]*close t drag/);
+  assert.throws(() => run(`${tree}\nopen t insert\nopen t place`), /close t insert/);
+  assert.throws(() => run('sentence s = "The man is a doctor."\nopen s mark\nopen s fold'), /close s mark/);
+  assert.throws(() => run('sentence s = "The man is a doctor."\nopen s\nopen s mark'), /close s drag/);
+});
+
+test('抢不到同一处的可以一起开：树的转和插、矩阵的行变换和拨格子；同一项再开一次是换掉它；部件不重的也行', () => {
+  assert.doesNotThrow(() => run('tree t = 50 30 70 tray="47"\nopen t rotate\nopen t insert'));
+  assert.doesNotThrow(() => run('matrix M = 1 2 / 3 4\nopen M rowop\nopen M edit'));
+  assert.doesNotThrow(() => run('matrix M = 1 2 / 3 4\nopen M edit\nopen M edit input=keypad'));
+  assert.doesNotThrow(() => run('tree t = 50 30 70\nopen t rotate\nclose t rotate\nopen t'));
+  assert.doesNotThrow(() => run('array a = 3 1 2 5\nopen a.1-2\nopen a.3-4'), '同一项（drag）再开一次是换掉它');
+});
+
+test('键盘写一格：写了 range= 照它收，不写不限（舞台现状也就不写范围）', () => {
+  const s = run('matrix M = 1 2 / 3 4\nopen M edit input=keypad range=-3..3');
+  const e = open(s, 'M:edit');
+  assert.equal(writeRange(e, '5/2'), null);
+  assert.match(writeRange(e, '7/2'), /-3～3/);
+  assert.match(writeRange(e, '−4'), /-3～3/);
+  const free = open(run('matrix M = 1 2 / 3 4\nopen M edit input=keypad'), 'M:edit');
+  assert.equal(free.lo, null);
+  assert.equal(writeRange(free, '99'), null);
+  assert.doesNotMatch(run('matrix M = 1 2 / 3 4\nopen M edit input=keypad').stateText(), /～/);
+  assert.match(s.stateText(), /M edit（[^）]*-3～3/);
+  // 拨数器照旧默认 -9～9
+  assert.equal(open(run('matrix M = 1 2 / 3 4\nopen M edit'), 'M:edit').lo, -9);
+});
+
+test('撤一步不算「试」的次数（不会撤几下就凑出「试了好多下」去叫老师）', () => {
+  const ev = [eventOf({ type: 'undo', src: 'rotate t#1 right', open: 'rotate' }), eventOf({ type: 'rowop', src: 'rowop M r2 - r1', open: 'rowop' })];
+  assert.equal(ev[0].kind, 'try');
+  assert.equal(tryCount(ev), 1);
 });

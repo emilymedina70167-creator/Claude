@@ -44,13 +44,57 @@ export function askFor(g, o, kind, ctx = {}) {
   return own || null;
 }
 
+/** 撤不了时按钮下面那一句（中性：不说对错） */
+export const UNDO_TOLD = '这一下已经告诉老师了，撤不了';
+export const UNDO_NO = '这一下不能撤';
+
 /**
- * 撤一步（open … undo=on）：去掉最后一行学生的（老师的、页面的不动），不改原来的。from：这一回合从 log 的哪里开始，
- * 以前的不撤（老师已经看过、照它讲了）。没有能撤的就原样给回（长度一样）
+ * 撤一步（open … undo=on）要撤哪一行：from（这一回合从 log 的哪里开始，以前的老师已经看过、照它讲了）以后学生的最后一行。
+ * 返回 { lines（去掉那一行，别的一行不少、先后不变）, gone（撤掉的那一行）, why（撤不了的话）, index }。
+ * 撤不了的不往前跳（跳过去撤更早的一行，先后就乱了）：
+ *   - 那一下引出过预写、做到了挑战、做完了（reacted）：预写只演一次，「做到了」也已经告诉课堂——UNDO_TOLD；
+ *   - 那一下不是从写了 undo=on 的那一项来的（undoable 说不行，比如拨数）——UNDO_NO。
+ * 这一回合学生还没做过：gone、why 都是 null
  */
-export function undoLines(lines = [], { from = 0 } = {}) {
-  for (let i = lines.length - 1; i >= Math.max(0, from); i--) {
-    if (lines[i]?.by === 'student') return [...lines.slice(0, i), ...lines.slice(i + 1)];
-  }
-  return [...lines];
+export function undoPlan(lines = [], { from = 0, undoable = null } = {}) {
+  let i = lines.length - 1;
+  for (; i >= Math.max(0, from); i--) if (lines[i]?.by === 'student') break;
+  if (i < Math.max(0, from)) return { lines, gone: null, why: null, index: -1 };
+  const row = lines[i];
+  if (row.reacted) return { lines, gone: null, why: UNDO_TOLD, index: i };
+  if (undoable && !undoable(row)) return { lines, gone: null, why: UNDO_NO, index: i };
+  return { lines: [...lines.slice(0, i), ...lines.slice(i + 1)], gone: row, why: null, index: i };
+}
+/** 撤一步以后的 log（撤不了就原样，长度一样） */
+export const undoLines = (lines = [], opts = {}) => [...undoPlan(lines, opts).lines];
+
+// 一项 open 用手指抓哪几种地方：部件（树的结点、句子的词、矩阵的格）统一叫 part，别的照手势表的名字（托盘、行把手、行号、括号）
+const PART_GRIPS = new Set(['part', 'node', 'word', 'cell']);
+/**
+ * 手势表那一项要抓的：拖、拉的起点（from），点、写的地方（tap / on）。拖到哪儿（to）不算：落点不抢手指。
+ * 两项 open 抓同一种地方，同一处按下去只拿得到先挂的那一个，后开的那一项就没声没息地用不了——场景当场报（scene.js 的 open）
+ */
+export function gestureGrabs(g) {
+  const out = new Set();
+  const add = (n) => { for (const x of [].concat(n || [])) out.add(PART_GRIPS.has(x) ? 'part' : x); };
+  const ks = kindsOf(g);
+  if (ks.some((k) => k === 'drop-on' || k === 'drop-at' || k === 'span')) add(g.from);
+  if (ks.includes('tap')) add(g.tap || g.on);
+  if (ks.includes('write')) add(g.on);
+  return out;
+}
+
+// 写的值是几（3、-2、3/2、0.5）：比 range 用；读不懂是 null（toAct 自己会说）
+const numOf = (v) => {
+  const m = String(normValue(v) ?? '').match(/^(-?\d+(?:\.\d+)?)(?:\/(\d+(?:\.\d+)?))?$/);
+  if (!m) return null;
+  const d = m[2] == null ? 1 : Number(m[2]);
+  return d ? Number(m[1]) / d : null;
+};
+/** 写一个值（键盘）时老师写了 range=：出了范围的说一句（不收）；没写 range 不限 */
+export function writeRange(e, value) {
+  if (e?.lo == null || e?.hi == null) return null;
+  const x = numOf(value);
+  if (x == null || (x >= e.lo - 1e-9 && x <= e.hi + 1e-9)) return null;
+  return `这一格只能写 ${e.lo}～${e.hi} 之间的数`;
 }

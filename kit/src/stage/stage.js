@@ -14,7 +14,7 @@ export { sameAnswer };
 import { VIEWS } from './types/views.js';
 import { PointerRouter } from './pointer.js';
 import { armGesture } from './gesturedom.js';
-import { undoLines } from './gestures.js';
+import { undoPlan } from './gestures.js';
 import { reportError } from '../errlog.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -471,7 +471,9 @@ export class Stage {
     const before = this.instant || !this.scene.objects.size ? null : bbox([...this.scene.objects.keys()].map((id) => this.scene.objectBox(id)));
     const fx = this.scene.apply(c, by === 'student' ? { judged: judged ?? null } : { by: this.instant || by !== 'teacher' ? null : by });
     this.execTurn = turn;
-    this.log.push({ src: c.src?.trim() || '', by, turn, ...(by === 'student' && open ? { open } : {}) });
+    // 学生这一下引出了预写的行、做到了挑战、做完了：记在这一行上，撤一步撤不了它（预写只演一次，「做到了」也已经告诉课堂）
+    const reacted = by === 'student' && !!(fx?.goalsMet?.length || fx?.done?.length || fx?.reactions?.length);
+    this.log.push({ src: c.src?.trim() || '', by, turn, ...(by === 'student' && open ? { open } : {}), ...(reacted ? { reacted: true } : {}) });
     if (by === 'teacher' && !this.instant) {
       this.onLine?.(c);
       // 老师的这一步不是正确的下一步：照演（可能是故意演错），下一条发给老师时说一声
@@ -641,7 +643,7 @@ export class Stage {
       out.push({ x: b.x * c.s + c.tx, y: b.y * c.s + c.ty, w: b.w * c.s, h: b.h * c.s });
     }
     for (const l of this.labelNodes.values()) if (l.box) out.push({ x: l.box.x * c.s + c.tx, y: l.box.y * c.s + c.ty, w: l.box.w * c.s, h: l.box.h * c.s });
-    for (const n of [...this.caption.querySelectorAll('.st-line:not(.is-out)'), ...this.goalsEl.children, ...this.dock.children]) { const r = this.screenRect(n); if (r) out.push(r); }
+    for (const n of [...this.caption.querySelectorAll('.st-line:not(.is-out)'), ...this.goalsEl.children, ...this.dock.children, ...(this.undoBox ? [this.undoBox] : [])]) { const r = this.screenRect(n); if (r) out.push(r); }
     return out;
   }
   /** 画法量到了自己的真实大小、写回场景（题卡每一行折了几行……）：这一轮对齐完再排一遍 */
@@ -710,17 +712,32 @@ export class Stage {
   }
 
   // —— 撤一步（open … undo=on）：去掉这一回合学生的最后一行，照 log 重放；正在等的那一问照样等着 ——
-  /** 有哪一项 open 写了 undo=on 才有「撤一步」；这一回合学生还没做过就按不了 */
+  /** 这一回合能撤哪一行（gestures.js 的 undoPlan）：只撤从写了 undo=on 的那一项来的（拨数、别的 open 来的撤不了） */
+  undoPlan() {
+    const undoable = (row) => {
+      if (!row.open) return false;
+      let id = null;
+      try { id = this.scene.ownTarget(parseScript(row.src)[0]); } catch { id = null; }
+      const es = id ? [this.scene.opens.get(`${id}:${row.open}`)] : [...this.scene.opens.values()].filter((x) => x.action === row.open);
+      return es.some((x) => x?.policy?.undo);
+    };
+    return undoPlan(this.log, { from: this.undoFloor || 0, undoable });
+  }
+  /** 有哪一项 open 写了 undo=on 才有「撤一步」；这一回合学生还没做过就按不了，撤不了的那一下在按钮下面说一句（中性，不说对错） */
   syncUndo() {
     const on = this.withInput && !this.instant && [...this.scene.opens.values()].some((e) => e.policy?.undo);
-    if (!on) { this.undoBtn?.remove(); this.undoBtn = null; return; }
-    if (!this.undoBtn) {
-      const b = this.undoBtn = el('button', 'st-undo', this.view);
+    if (!on) { this.undoBox?.remove(); this.undoBox = this.undoBtn = null; return; }
+    if (!this.undoBox) {
+      this.undoBox = el('div', 'st-undo-box', this.view);
+      const b = this.undoBtn = el('button', 'st-undo', this.undoBox);
       b.type = 'button';
       b.textContent = '↶ 撤一步';
       b.addEventListener('click', () => this.undo());
+      el('span', 'st-undo-why', this.undoBox);
     }
-    this.undoBtn.disabled = this.undoBusy || undoLines(this.log, { from: this.undoFloor || 0 }).length === this.log.length;
+    const plan = this.undoBusy ? null : this.undoPlan();
+    this.undoBtn.disabled = !plan?.gone;
+    this.undoBox.lastChild.textContent = plan?.why || '';
   }
   async undo() {
     if (this.undoBusy || this.dragging) return;
@@ -728,17 +745,19 @@ export class Stage {
     this.syncUndo();
     try {
       await Promise.all([this.studentChain, this.reacting]).catch(() => {});
-      const lines = undoLines(this.log, { from: this.undoFloor || 0 });
-      const gone = this.log.find((r, i) => lines[i] !== r);
-      if (!gone) return;
+      const plan = this.undoPlan();
+      if (!plan.gone) return;
       // 重放会收起正在等的那一问：先收起（攒着的拨数留着），放完照原样挂回去
-      const w = this.scene.waiting, tries = [...this.pending], waiting = this.armedP;
+      const w = this.scene.waiting, tries = [...this.pending], waiting = this.armedP, floor = this.undoFloor;
       this.cancelWait?.();
       await waiting;
-      await this.replay(lines);
+      await this.replay(plan.lines);
+      // 重放不把 ask 那几行（不重演的）推回 log：log 要和撤之前一模一样、只少撤掉的那一行，课堂循环存这一段（从 S.logFrom 起）才对得上
+      this.log = [...plan.lines];
+      this.undoFloor = floor;
       this.pending = tries;
       if (w) { this.scene.waiting = w; this.armWait(); }
-      this.onAct?.({ type: 'undo', src: gone.src, open: gone.open || 'undo' });
+      this.onAct?.({ type: 'undo', src: plan.gone.src, open: plan.gone.open || 'undo' });
     } finally {
       this.undoBusy = false;
       this.syncUndo();

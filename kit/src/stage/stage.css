@@ -210,7 +210,10 @@
 .st-choice small { font-size: 12px; font-weight: 600; opacity: .7; }
 .st-choice:active { scale: .95; }
 
-.st-undo { position: absolute; top: 12px; right: max(16px, env(safe-area-inset-right, 0px)); z-index: 5; min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; cursor: pointer;
+.st-undo-box { position: absolute; top: 12px; right: max(16px, env(safe-area-inset-right, 0px)); z-index: 5; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 220px; }
+.st-undo-why { font: 500 13px/1.35 var(--sans, sans-serif); color: var(--st-muted); text-align: right; }
+.st-undo-why:empty { display: none; }
+.st-undo { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; cursor: pointer;
   background: var(--st-card); color: var(--st-brand); font: 600 16px/1 var(--sans, sans-serif); box-shadow: 0 0 0 1px var(--st-line), 0 8px 18px -12px rgb(var(--shade-rgb, 25 45 40) / 0.45); }
 .st-undo:disabled { opacity: .4; cursor: default; }
 .st-undo:active:not(:disabled) { scale: .96; }

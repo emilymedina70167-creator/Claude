@@ -4,6 +4,7 @@
 import { EASE, stagger } from '../motion.js';
 import { NODE, LEVEL, SEP, TAG_ROOM, layoutTree, boxesFor, edgesOf, levelOrder, depths, rootSpot, bfOf, bfText, trayBoxes, trayArea, treeArea, slotSpots } from './tree.js';
 import { el, svg, tr, same, centerOf, ensureCss, placeLines, follow, vanish, Ring, cmpBadge, flyText, swapValue, setOrder, setTag, sizeValue, NODE_CSS } from './node.view.js';
+import { openParts } from '../gesturedom.js';
 
 const R = NODE / 2;
 const pidOf = (o, k) => `${o.id}:${k}`;
@@ -188,7 +189,7 @@ export const treeView = {
 
   grips: {
     // rotate：拖的是结点（open t.30* rotate 只拖那几个），放的是它的父亲（手势表交 toAct 判是不是父亲）
-    node: (stage, o, e) => nodeGrips(stage, o.id, e.refs.length ? e.refs.flatMap((r) => stage.scene.parts(r)) : o.nodes),
+    node: (stage, o, e) => nodeGrips(stage, o.id, openParts(stage, e, o.nodes)),
     parent: (stage, o) => nodeGrips(stage, o.id, o.nodes),
     // 托盘里的数：插进去它就没了（consumed：拎走的样子演完再放回）
     tray: (stage, o) => (o.tray || []).map((v) => ({

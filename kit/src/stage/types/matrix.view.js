@@ -4,6 +4,7 @@
 import { EASE, moveDuration, stagger, arcPoints } from '../motion.js';
 import { MX, layout, stairsPoints, zeroRows, toQ, eqWidth, rowCells } from './matrix.js';
 import { Q } from '../../exact.js';
+import { openParts, atLeast } from '../gesturedom.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const tr = (x, y, s = 1) => `translate(${x}px, ${y}px)${s !== 1 ? ` scale(${s})` : ''}`;
@@ -367,7 +368,8 @@ function explainAfford(stage, o, e, done) {
 }
 
 // open M rowop：每行左边一个把手（拖它）、再往左是行号（拖到上面对调、点它倍乘）。位置只看这一行（第 r 行永远是现在的第 r 行）
-const GRIP_W = 30, LAB_W = 40, HANDLE_H = 44, HANDLE_GAP = 6;
+// 世界坐标里把手 36、行号 44 宽；按的框在屏幕上至少 44px（镜头缩小时也是，gesturedom.js 的 atLeast）
+const GRIP_W = 36, LAB_W = 44, HANDLE_H = 44, HANDLE_GAP = 8;
 function handleBoxes(o, r, L = layout(o)) {
   const y = L.rowY(r) + (MX.CH - HANDLE_H) / 2;
   const grip = { x: L.box.x - GRIP_W - HANDLE_GAP, y, w: GRIP_W, h: HANDLE_H };
@@ -402,8 +404,10 @@ function rowLift(stage, id, r) {
   const box = { x: x0, y: L.rowY(r), w, h: MX.CH };
   g.style.transform = tr(box.x, box.y);
   const ns = cells.map((x) => stage.nodeOf(x)).filter(Boolean);
+  const grip = stage.decor(id, `grip:${r}`);
   ns.forEach((n) => n.classList.add('is-source'));
-  return { el: g, box, restore: () => ns.forEach((n) => n.classList.remove('is-source')) };
+  grip?.classList.add('is-lifted');
+  return { el: g, box, restore: () => { ns.forEach((n) => n.classList.remove('is-source')); grip?.classList.remove('is-lifted'); } };
 }
 const ROW_CLS = { 'is-drop': 'is-rowdrop', 'is-over': 'is-rowover', 'is-nodrop': 'is-rownodrop' };
 const union = (rs) => { const l = rs.filter(Boolean); if (!l.length) return null; const x = Math.min(...l.map((r) => r.x)), y = Math.min(...l.map((r) => r.y)); return { x, y, w: Math.max(...l.map((r) => r.x + r.w)) - x, h: Math.max(...l.map((r) => r.y + r.h)) - y }; };
@@ -419,6 +423,7 @@ export const matrixView = {
         key: `row:${r}`, cls: '',
         part: () => ({ row: r }),
         node: () => stage.decor(id, `grip:${r}`),
+        rect: () => atLeast(stage.screenRect(stage.decor(id, `grip:${r}`))),
         box: () => { const m = stage.scene.objects.get(id); return m ? handleBoxes(m, r).grip : null; },
         area: () => union([stage.screenRect(stage.decor(id, `grip:${r}`)), ...cellNodes().map((n) => stage.screenRect(n))]),
         light(cls, on) { stage.decor(id, `grip:${r}`)?.classList.toggle(cls, on); if (ROW_CLS[cls]) cellNodes().forEach((n) => n.classList.toggle(ROW_CLS[cls], on)); },
@@ -429,9 +434,10 @@ export const matrixView = {
       key: `lab:${i + 1}`,
       part: () => ({ label: i + 1 }),
       node: () => stage.decor(o.id, `lab:${i + 1}`),
+      rect: () => atLeast(stage.screenRect(stage.decor(o.id, `lab:${i + 1}`))),
       box: () => { const m = stage.scene.objects.get(o.id); return m ? handleBoxes(m, i + 1).label : null; },
     })),
-    cell: (stage, o, e) => (e.refs.length ? e.refs.flatMap((r) => stage.scene.parts(r)) : o.cells).map((x) => ({
+    cell: (stage, o, e) => openParts(stage, e, o.cells).map((x) => ({
       key: `cell:${x.key}`, cls: 'is-editable',
       part: () => stage.scene.partOf(o.id, x.key),
       node: () => stage.nodes.get(`${o.id}:${x.key}`),
