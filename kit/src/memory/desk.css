@@ -869,9 +869,6 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 .dk-speed .dk-sp-table { overflow-x: auto; }
 /* 开新课用哪种：黑板 / 一问一答（docs/talk-impl.md A.5）。一个小的分段控件挨着「开新课」，选了记在这台设备上；
    不接滑块（主角卡常常重画，每次 wireThumb 会越挂越多监听），选中的一格自己是白底 */
-.dk-form { flex: 0 0 auto; }
-.dk-form .dk-space { min-width: 0; min-height: 44px; padding: 0 14px; font-size: 14px; }
-.dk-form .dk-space::before { content: none; }
 
 /* —— 410 分的进度（score.js，docs/score-plan.md）：主角卡下面一张卡，点开是面板 ——
    四科一条分段的条：每段的长短是这一科的目标分，里面实的一截是攒下的；颜色和每一科的颜色一样，政治是墨色 */

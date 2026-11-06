@@ -22,7 +22,7 @@ import { receiptLine } from './lab.js';
 import { getStore, getDownloads } from '../live/store.js';
 import { VERSION, KIT_URL } from '../version.js';
 import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toDate } from './schema.js';
-import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, classForm, setClassForm, CLASS_FORMS } from './session.js';
+import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, classForm } from './session.js';
 import { buildReport, reportLine, REPORT_VERSION, lastActivity, reportText } from './report.js';
 import { needsDebrief, transcriptText, debriefPrompt, parseDebrief, debriefText, debriefView, DEBRIEF_VERSION } from './debrief.js';
 import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA } from './backup.js';
@@ -571,8 +571,6 @@ export async function renderDesk(root, meta) {
     // 没下课的：课堂（一问一答也算）、对话里的 Claude 开的实时黑板、自学单元，都列出来（最新的在前）
     const opens = mine.sessions.filter((x) => x.status === 'open').sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
     const open = opens.find(isTeach);
-    // 开新课用哪种：黑板 / 一问一答（这台设备记着）
-    const form = classForm();
     // 上一节（这一科下了课的最近一节）：课后报告的要点、花了多少
     // 练一练、课前热身不算一节课：不然做完热身，「上一节」就成了那节练习，「下次先测」也跟着没了
     const last = mine.sessions.filter((x) => x.status === 'closed' && kindOf(x) !== 'drill').sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0))[0];
@@ -610,14 +608,13 @@ export async function renderDesk(root, meta) {
     box.querySelector('.dk-body').innerHTML = `
       ${openPd.length ? `<p><a class="dk-link dk-to-pending" href="#">还有 ${openPd.length} 条以前留下的没写进去 ↓</a></p>` : ''}
       <div class="dk-hero-wrap"><div class="dk-hero">
-        <p class="dk-eyebrow">${escapeHtml(SPACES[space].label)}${open ? (kindOf(open) === 'talk' ? '这节一问一答还没下课' : kindOf(open) === 'stage' ? '这节舞台课还没下课' : '这节课还没下课') : main ? '备好的下一节' : '的下一节'}${main?.by === 'desk' ? '<span class="muted">（学习台备的）</span>' : ''}</p>
+        <p class="dk-eyebrow">${escapeHtml(SPACES[space].label)}${open ? (kindOf(open) === 'talk' ? '这节一问一答还没下课' : '这节课还没下课') : main ? '备好的下一节' : '的下一节'}${main?.by === 'desk' ? '<span class="muted">（学习台备的）</span>' : ''}</p>
         <h2 class="dk-hero-t${heroLen > 26 ? ' is-xlong' : heroLen > 13 ? ' is-long' : ''}">${supRuns(inline(open ? (open.title && open.title !== unit ? open.title : (open.block && data.curriculum.find((c) => String(c.id) === String(open.block))?.title) || heroT) : heroT))}</h2>
         ${heroS ? `<p class="dk-hero-s dk-goal" title="点一下看全文">${inline(heroS)}</p>` : ''}
         ${debts.length ? `<p class="dk-owe" title="点一下看全文">还欠着：${debts.map((x) => inline(x)).join('；')}</p>` : ''}
         <div class="dk-hero-acts">
           ${open ? `<button type="button" class="btn btn-primary btn-lg dk-go" data-sid="${escapeHtml(open.id)}">接着上课</button>` : ''}
           <button type="button" class="btn ${open ? '' : 'btn-primary btn-lg'} dk-new"${prepBusy || opening ? ' disabled' : ''}>开新课</button>
-          <div class="dk-spaces dk-form" role="radiogroup" aria-label="开新课用哪种">${Object.entries(CLASS_FORMS).map(([v, t]) => `<button type="button" class="dk-space dk-form-b" role="radio" data-form="${v}" aria-selected="${v === form}" aria-checked="${v === form}">${t}</button>`).join('')}</div>
           ${open ? `<button type="button" class="btn dk-more" data-sid="${escapeHtml(open.id)}" aria-label="这节课的更多操作" title="直接下课、删掉这节课"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/></svg></button><span hidden><button type="button" class="dk-close" data-sid="${escapeHtml(open.id)}"></button><button type="button" class="dk-purge" data-sid="${escapeHtml(open.id)}"></button></span>` : ''}
         </div>
         ${last ? `<a class="dk-lastline" href="#classes/${escapeHtml(last.id)}">上一节 ${escapeHtml(String(last.date || '').slice(5).replace('-', '/'))}${lastLine ? `：${escapeHtml(lastLine)}` : ''}</a>` : ''}
@@ -683,13 +680,6 @@ export async function renderDesk(root, meta) {
       paintClass();
     });
     box.querySelector('.dk-new').addEventListener('click', () => newClass(block)); // openOne 管防连点和失败
-    // 黑板 / 一问一答：只记在这台设备上、只改选中的样子（不重画整张卡：后台写数据时 paintClass 会再画，照记下的画）
-    box.querySelector('.dk-form').addEventListener('click', (e) => {
-      const b = e.target.closest('.dk-form-b');
-      if (!b) return;
-      const v = setClassForm(b.dataset.form);
-      box.querySelectorAll('.dk-form-b').forEach((x) => { x.setAttribute('aria-selected', String(x.dataset.form === v)); x.setAttribute('aria-checked', String(x.dataset.form === v)); });
-    });
   }
 
   // —— 删掉一节课（purge.js）：测试开的、不要的课，连黑板、对话、证据、这节课记下的笔记一起删 ——
@@ -1624,9 +1614,9 @@ async function priorReads(db, sessions, { sid, block, books }) {
 /**
  * 开一节课堂：sessions/{编号}，资料包抄一份进去。首页「开新课」「开复现课」、练习做完「带着没过的开课」共用。
  * main / problems：这节课的资料包；space：没有块时算哪一科；taken：已经有的课的编号（不撞号）。返回新课的编号
- * kind：'class'（黑板）或 'talk'（一问一答）；黑板照旧不写 kind（以前的课都没写，kindOf 当成课堂）
+ * kind：新开的都是 'stage'（舞台，session.js 的 classForm）；'class'（黑板）不写 kind（以前的课都没写，kindOf 当成课堂），'talk' 只有自动测试还开
  */
-export async function createClass(db, { block = null, main = null, problems = null, space = 'math', unit = '学习台', taken = [], kind = 'class' } = {}) {
+export async function createClass(db, { block = null, main = null, problems = null, space = 'math', unit = '学习台', taken = [], kind = 'stage' } = {}) {
   const today = toDate(Date.now());
   const sid = sessionId(today, taken);
   assertWrite('page', 'sessions');

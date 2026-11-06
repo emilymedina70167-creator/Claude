@@ -93,11 +93,17 @@ async function openPage(browser, { clock = null } = {}) {
     async home() { await page.evaluate(() => { location.hash = ''; }); await sleep(600); },
     /** 整页打开到某个地址（先离开，免得和页面自己的 location.reload 撞在一起） */
     async open(hash = '') { await page.goto('about:blank'); await page.goto(`${BASE}${hash ? `#${hash}` : ''}`); await page.waitForLoadState('load'); await sleep(800); },
-    /** 点了开课的按钮以后：等进到课堂（页面自己改地址、整页刷新）、开课页画好 */
+    /** 开新课一律是舞台；旧的黑板 / 一问一答只有 ?dev&form=class / talk 还开得出来（它们的代码还在给以前的课用）：整页换成带 form 的首页 */
+    async openForm(f) {
+      await page.goto('about:blank'); await page.goto(`${BASE}&form=${f}`); await page.waitForLoadState('load');
+      await t.waitFor(async () => (await t.text('.dk-class'))?.includes('开新课'), { what: `带 form=${f} 的首页画好` });
+      await sleep(500);
+    },
+    /** 点了开课的按钮以后：等进到课堂（页面自己改地址、整页刷新）、开课页画好（舞台课一进来就开讲，没有「开始上课」） */
     async inClass(match = () => true) {
       await page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash) && match(decodeURIComponent(u.hash.slice(1))), { timeout: 20000 });
       await page.waitForLoadState('load');
-      await t.waitFor(() => page.evaluate(() => /开始上课|下一题|这次练习/.test(document.body?.innerText || '')), { timeout: 20000, what: '课堂（或练习）画出来' });
+      await t.waitFor(() => page.evaluate(() => /开始上课|下一题|这次练习/.test(document.body?.innerText || '') || !!document.querySelector('.sc-root .st-stage')), { timeout: 20000, what: '课堂（舞台、练习）画出来' });
       return decodeURIComponent(new URL(page.url()).hash.slice(1));
     },
     async route(h) { await page.evaluate((x) => { location.hash = x; }, h); await sleep(700); },
@@ -286,6 +292,7 @@ const SUITES = {
   // 一整节课：连点两下「开新课」只开一节；上课、作答；回首页直接下课；报告是正式的；以前的课、翻看黑板都打得开
   async class(browser) {
     const t = await seeded(browser);
+    await t.openForm('class');
     const before = (await t.docs('sessions')).length;
     await t.page.dblclick('.dk-class .dk-new');
     const sid = await t.inClass();
@@ -314,18 +321,18 @@ const SUITES = {
     return t;
   },
 
-  // 一问一答（kind: talk，docs/talk-impl.md D.2）：首页选「一问一答」开课（连点两下只开一节）；活板上填错一次、填对一次，证据里记成 L… 的作答；
+  // 一问一答（kind: talk，docs/talk-impl.md D.2）：自动测试开一节（首页不再给选，?dev&form=talk；连点两下只开一节）；活板上填错一次、填对一次，证据里记成 L… 的作答；
   // 上面的数变了、空重新打开再答（L…#2）；拨一下不调用，点「就这样」才调用；刷新以后空、选择、拨的值都在；直接下课，报告里有这几道题；
   // 「以前的课」能翻看（只读、不调用）
   async talk(browser) {
     const t = await seeded(browser);
-    await t.page.click('.dk-form-b[data-form="talk"]'); await sleep(300);
+    await t.openForm('talk');
     const before = (await t.docs('sessions')).length;
     await t.page.dblclick('.dk-class .dk-new');
     const sid = await t.inClass();
     const ss = await t.docs('sessions');
     check(ss.length === before + 1, '连点两下「开新课」开出了不止一节');
-    check(ss.find((d) => d.id === sid)?.kind === 'talk', '选了一问一答，开出来的课不是 kind: talk');
+    check(ss.find((d) => d.id === sid)?.kind === 'talk', 'form=talk 开出来的课不是 kind: talk');
     const calls = () => t.page.evaluate(() => (window.LAKitEval?.teacher?.calls || []).filter((c) => c.method === 'call').length);
     const idle = (what) => t.waitFor(async () => !(await t.page.evaluate(() => window.LAKit?.classroom?.busy)), { timeout: 30000, what });
     await t.page.click('button:has-text("开始上课")');
@@ -386,7 +393,7 @@ const SUITES = {
   // 存下的 shown 是这一轮的字（不是上一轮、不带 KaTeX 的重复）；活板的控件 ≥ 44px
   async talkfix(browser) {
     const t = await seeded(browser);
-    await t.page.click('.dk-form-b[data-form="talk"]'); await sleep(300);
+    await t.openForm('talk');
     await t.page.click('.dk-class .dk-new');
     const sid = await t.inClass();
     const idle = (what) => t.waitFor(async () => !(await t.page.evaluate(() => window.LAKit?.classroom?.busy)), { timeout: 30000, what });
@@ -481,18 +488,18 @@ const SUITES = {
 
   // 练一练：题库里放两道挂着到期复现组的题。做完（中间写证据失败一次）结果照样算进去；
   // 另开一节做一道错的就回首页「直接下课」，复现组照样记「没过」（以前直接下课会把复现结果丢掉）
-  // 舞台课（kind: stage，docs/stage-plan.md D 段）：首页选「舞台」开课，模拟老师一轮轮写镜头指令；
+  // 舞台课（kind: stage，docs/stage-plan.md D 段）：首页「开新课」（开新课一律是舞台），模拟老师一轮轮写镜头指令；
   // 点对一格（证据里一条 S… 的作答，ok）、填一个答案（页面当场判）；老师写的 memo 块写进记忆；写错的一行跳过、下一轮告诉老师；
   // 刷新以后舞台照记录放回、最后一问接着等；打一句话；下课：小结、整理单、课后报告里有 S… 的题；以前的课能翻看（只读、不调用）
   async stage(browser) {
     const t = await seeded(browser);
-    await t.page.click('.dk-form-b[data-form="stage"]'); await sleep(300);
+    check(!(await t.page.$('.dk-form, [data-form]')), '首页还有「黑板 / 一问一答 / 舞台」的选项');
     await t.page.click('.dk-class .dk-new');
     await t.page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash), { timeout: 20000 });
     await t.page.waitForLoadState('load');
     await t.waitFor(() => t.page.$('.sc-root .st-stage'), { timeout: 20000, what: '舞台课画出来' });
     const sid = decodeURIComponent(new URL(t.page.url()).hash.slice(1));
-    check((await t.docs('sessions')).find((d) => d.id === sid)?.kind === 'stage', '选了舞台，开出来的课不是 kind: stage');
+    check((await t.docs('sessions')).find((d) => d.id === sid)?.kind === 'stage', '开新课开出来的不是舞台（kind: stage）');
     const node = (pid) => t.page.evaluate((k) => { const r = window.LAStage?.nodes.get(k)?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null; }, pid);
     const tap = async (pid) => { const p = await node(pid); check(p, `舞台上没有 ${pid}`); await t.page.mouse.move(p.x, p.y); await t.page.mouse.down(); await t.page.mouse.up(); };
     const turns = async () => Object.entries(await t.db()).filter(([k]) => k.startsWith(`sessions/${sid}/class_turns/`)).map(([, v]) => v).sort((a, b) => a.seq - b.seq);
@@ -562,7 +569,6 @@ const SUITES = {
   // 舞台课卡住了：挑战还没做到、学生一直没动，页面自己叫老师（?dev&quiet=3 把等待缩成 3 秒），发过去的写着「几秒没动」
   async stagestuck(browser) {
     const t = await seeded(browser);
-    await t.page.click('.dk-form-b[data-form="stage"]'); await sleep(300);
     await t.page.click('.dk-class .dk-new');
     await t.page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash), { timeout: 20000 });
     await t.page.waitForLoadState('load');
@@ -723,6 +729,7 @@ const SUITES = {
   // 管理页「自检 → 守卫」看得到
   async guard(browser) {
     const t = await seeded(browser);
+    await t.openForm('class'); // 模拟老师的「测试:守卫」在黑板课里；守卫本身两种课共用（memops.applyMemo）
     await t.page.click('.dk-class .dk-new');
     const sid = await t.inClass();
     await t.page.click('button:has-text("开始上课")');

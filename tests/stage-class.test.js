@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stageLines, sameAnswer, actText } from '../kit/src/stage/stage.js';
 import { buildStageSystem, STAGE_MEMO_DOC, STAGE_SYSTEM_MAX } from '../kit/src/stage/doc.js';
-import { classForm, setClassForm, SESSION_KINDS, isTeach } from '../kit/src/memory/session.js';
+import { classForm, SESSION_KINDS, isTeach } from '../kit/src/memory/session.js';
 import { sampleMemory } from '../kit/src/memory/sample.js';
 
 test('老师这一轮：代码块记号不演，board memo 块里的行不上舞台（行号不变）', () => {
@@ -48,13 +48,14 @@ test('每一轮的整份说明：怎么教、舞台的写法、资料包、记�
   assert.doesNotMatch(buildStageSystem({}), /你对学生的了解/);
 });
 
-test('开课的形态多了舞台；舞台课算讲课的课（报告、复盘、掌握照黑板课那样算）', () => {
-  const box = new Map();
-  const st = { getItem: (k) => box.get(k) ?? null, setItem: (k, v) => box.set(k, v) };
-  assert.equal(classForm(st), 'class');
-  assert.equal(setClassForm('stage', st), 'stage');
-  assert.equal(classForm(st), 'stage');
-  assert.equal(setClassForm('瞎写', st), 'class');
+test('开新课一律是舞台；只有自动测试（?dev&form=）还能开出旧的两种；舞台课算讲课的课（报告、复盘、掌握照黑板课那样算）', () => {
+  assert.equal(classForm(''), 'stage');
+  assert.equal(classForm('?form=class'), 'stage', '不是 ?dev 的地址不认 form');
+  assert.equal(classForm('?dev&form=class'), 'class');
+  assert.equal(classForm('?dev&form=talk'), 'talk');
+  assert.equal(classForm('?dev&form=瞎写'), 'stage');
+  // node 里没有 location：不传就读全局的，也是舞台
+  assert.equal(classForm(), 'stage');
   assert.equal(SESSION_KINDS.stage, '舞台');
   assert.ok(isTeach({ kind: 'stage' }));
 });

@@ -1,8 +1,8 @@
-// 一问一答的课（kind: talk）接进学习台（docs/talk-impl.md A 部分）：哪种课算「课堂里的 Claude 讲的」、开课形态记在这台设备上、
+// 一问一答的课（kind: talk）接进学习台（docs/talk-impl.md A 部分）：哪种课算「课堂里的 Claude 讲的」、
 // 写死 'class' 的那几处都认 talk
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isTeach, kindOf, SESSION_KINDS, TEACH_KINDS, classForm, setClassForm, CLASS_FORM_KEY } from '../kit/src/memory/session.js';
+import { isTeach, kindOf, SESSION_KINDS, TEACH_KINDS } from '../kit/src/memory/session.js';
 import { COLLECTIONS } from '../kit/src/memory/schema.js';
 import { validateWrite } from '../kit/src/memory/writer.js';
 import { needsDebrief } from '../kit/src/memory/debrief.js';
@@ -16,9 +16,6 @@ import { itemsOf } from '../kit/src/memory/report.js';
 const TODAY = '2026-11-05';
 const NOW = Date.parse('2026-11-05T12:00:00+08:00');
 
-// 一个最小的 localStorage
-const mem = (init = {}) => { const m = { ...init }; return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, m }; };
-
 test('isTeach：课堂和一问一答是课堂里的 Claude 讲的；实时黑板、自学单元、练习不是；没写 kind 的旧课是课堂', () => {
   assert.equal(SESSION_KINDS.talk, '一问一答');
   assert.deepEqual(TEACH_KINDS, ['class', 'talk', 'stage']);
@@ -28,24 +25,6 @@ test('isTeach：课堂和一问一答是课堂里的 Claude 讲的；实时黑�
   assert.equal(isTeach({}), true, '以前的课没写 kind');
   assert.equal(isTeach(null), true, 'kindOf 照旧当成课堂');
   for (const k of ['live', 'unit', 'drill']) assert.equal(isTeach({ kind: k }), false, k);
-});
-
-test('classForm：读不到 localStorage（没有、抛错）时是黑板；只认 talk；setClassForm 存不进去也返回选的', () => {
-  assert.equal(classForm(null), 'class');
-  assert.equal(classForm({ getItem: () => { throw new Error('SecurityError'); } }), 'class');
-  // node 里没有 localStorage：不传就读全局的，也是黑板
-  assert.equal(classForm(), 'class');
-  assert.equal(classForm(mem()), 'class');
-  assert.equal(classForm(mem({ [CLASS_FORM_KEY]: 'talk' })), 'talk');
-  assert.equal(classForm(mem({ [CLASS_FORM_KEY]: 'live' })), 'class', '只认 class / talk');
-  const s = mem();
-  assert.equal(setClassForm('talk', s), 'talk');
-  assert.equal(s.m[CLASS_FORM_KEY], 'talk');
-  assert.equal(classForm(s), 'talk');
-  assert.equal(setClassForm('别的', s), 'class');
-  assert.equal(classForm(s), 'class');
-  assert.equal(setClassForm('talk', { setItem: () => { throw new Error('QuotaExceeded'); } }), 'talk');
-  assert.equal(setClassForm('talk', null), 'talk');
 });
 
 test('schema：sessions 的 kind 能写 talk（不然 guardDb 当成不守规矩记进出错记录）', () => {

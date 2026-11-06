@@ -19,20 +19,16 @@ export const kindOf = (doc) => (SESSION_KINDS[doc?.kind] ? doc.kind : 'class');
 export const TEACH_KINDS = ['class', 'talk', 'stage'];
 export const isTeach = (doc) => TEACH_KINDS.includes(kindOf(doc));
 
-// 开新课用哪种形态：黑板（课堂）、一问一答，还是舞台（用画面讲课，docs/stage-plan.md）。记在这台设备上（首页主角卡的分段控件选的），开课、复现课、练一练「带着开课」都照它。
-// 读不到（无痕模式、沙箱不给 localStorage）就是黑板：课堂是一直以来的样子
-export const CLASS_FORM_KEY = 'la-class-form';
+// 开新课一律是舞台（用画面讲课，docs/stage-plan.md）：2026-11-06 我说学习台直接用现在的舞台，黑板、一问一答的选项去掉。
+// 开课、复现课、练一练「带着开课」都开舞台。以前开的黑板 / 一问一答的课照旧能接着上、能翻看（kindOf 认得），只是不再新开。
+// 只有自动测试（?dev&form=class / talk）还能开出旧的两种：它们的代码还在给以前的课用（只读翻看、实时黑板共用的板），要有人守着
 export const CLASS_FORMS = { class: '黑板', talk: '一问一答', stage: '舞台' };
-const FORM_OK = (v) => (Object.hasOwn(CLASS_FORMS, v) ? v : 'class');
-const storageOf = (s) => (s === undefined ? globalThis.localStorage : s);
-export function classForm(storage) {
-  try { return FORM_OK(storageOf(storage)?.getItem(CLASS_FORM_KEY)); } catch { return 'class'; }
-}
-/** 记下这台设备开课用哪种（只认 class / talk / stage）；存不进去也不要紧，返回实际用的那种 */
-export function setClassForm(form, storage) {
-  const v = FORM_OK(form);
-  try { storageOf(storage)?.setItem(CLASS_FORM_KEY, v); } catch { /* 无痕模式：这次照选的开，下次回到黑板 */ }
-  return v;
+export function classForm(search) {
+  try {
+    const q = new URLSearchParams(search === undefined ? globalThis.location?.search || '' : search);
+    const f = q.has('dev') ? q.get('form') : null;
+    return f && Object.hasOwn(CLASS_FORMS, f) ? f : 'stage';
+  } catch { return 'stage'; }
 }
 const SID_RE = /^c-\d{8}-\d+$/;
 export const isSessionId = (s) => SID_RE.test(String(s || ''));

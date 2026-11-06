@@ -1,6 +1,6 @@
 # 学习台 · 给 Claude 的教学说明
 
-> **版本：2026-11-06d**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-06e**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份说明的**最新版**一直放在**学习台** artifact 里（文件 `CLAUDE-PROJECT.md`）。每个新对话里，第一次做和学习有关的事（写黑板、备课、读课堂记录、改记忆）之前，先用 `Artifact` 工具读它：`action: "read"`，`url` 是上面的学习台地址，`path: "CLAUDE-PROJECT.md"`。
 > - 读到的版本比你手上这份新：以读到的为准，这份里和它不一样的地方全部作废。回复里顺便告诉我「项目指令里的说明是旧版（版本号），学习台里是新版（版本号）」。
@@ -2587,7 +2587,7 @@ count: 3
 
 ### 每节课和证据（证据页面写，你读）
 
-- **`sessions`**：编号 `c-20261027-1`（日期 - 当天第几节，三种课共用一套编号）。`kind`：`class` 课堂（页面开，不写就是它）、`talk` 一问一答、`stage` 舞台课（这两种也是页面开：用画面讲课，老师写镜头指令，每一轮的 `class_turns` 带 `log`，作答的组件 id 是 `S5` 这种——第 5 轮最后那一问）、`live` 实时黑板、`unit` 自学单元（这两种由你开，第五节、第一节）。`date`、`block`（这节课的块）、`space`、`title`、`status`（`open` 还在上 / `closed` 下课了、用完了）、`startedAt`、`endedAt`、`pack`（开课时资料包的 `unit`、`goal`）、`verify`（核验了几轮、作废了几轮）、`summary`（下课小结那条观察的 id）、`usage`（这节课调用 Claude 花了多少，见第六节「课后：读课堂记录」的 `cost`）、`report`（课后报告的要点：`line` 一行字、`items` 做了几题、`first` 一次对几题、`at`、`v`、`provisional`）、`skills`（知识点归类，第七节「课后报告」后面）。这节课的东西都在 `sessions/{编号}/` 下面（课堂：`steps`、`class_turns`、`class_pages`、`pack`；实时黑板：`steps`、`talk`、`ops`、`ops_done`、`meta`、`lint`、`uploads`；自学单元：`unit`；三种都有课后报告 `report`）。
+- **`sessions`**：编号 `c-20261027-1`（日期 - 当天第几节，三种课共用一套编号）。`kind`：`stage` 舞台课（页面开，现在新开的课都是它：用画面讲课，老师写镜头指令，每一轮的 `class_turns` 带 `log`，作答的组件 id 是 `S5` 这种——第 5 轮最后那一问）、`class` 课堂（不写 kind 就是它）和 `talk` 一问一答（以前的课，不再新开）、`live` 实时黑板、`unit` 自学单元（这两种由你开，第五节、第一节）。`date`、`block`（这节课的块）、`space`、`title`、`status`（`open` 还在上 / `closed` 下课了、用完了）、`startedAt`、`endedAt`、`pack`（开课时资料包的 `unit`、`goal`）、`verify`（核验了几轮、作废了几轮）、`summary`（下课小结那条观察的 id）、`usage`（这节课调用 Claude 花了多少，见第六节「课后：读课堂记录」的 `cost`）、`report`（课后报告的要点：`line` 一行字、`items` 做了几题、`first` 一次对几题、`at`、`v`、`provisional`）、`skills`（知识点归类，第七节「课后报告」后面）。这节课的东西都在 `sessions/{编号}/` 下面（课堂：`steps`、`class_turns`、`class_pages`、`pack`；实时黑板：`steps`、`talk`、`ops`、`ops_done`、`meta`、`lint`、`uploads`；自学单元：`unit`；三种都有课后报告 `report`）。
 - **`evidence`**：编号 `ev-…`，页面自动编。每条都有 `session`、`block`（这节课的块）、`tags`（知识点标签：`["L2.2.1", "L2.2.1#tr"]`，后一个来自课堂里的 Claude 给那一段标的 `point=`）、`kind`、`src`、`at`：
   - `src: "record"`：一次作答。`kind` 是组件（`answer`、`practice`、`quiz`、`predict`、`steps`、`conjecture`……），`comp` 是组件的 id，`step` 是黑板上的段，`q` 题面，`text` / `value` 我写的、选的，`ok` 程序判的对错（判不了是 null），`attempts` 第几次，`ms` 用时，`giveup` 想不出来，`final` 这道题的最终结果，`images` 手写原图，`transcript` 转写。
   - `src: "event"`：一个动作。`kind` 是 `reveal`（揭开一步）、`giveup`、`drag`（拖动，`detail` 里是变量和松手时的值）、`sure`（我点的「有把握 / 没把握」，`detail.sure` 是 true / false，`detail.key` 是课后报告里那道题的键，`detail.ok` 那题判的对错）、`open`（打开）、`end`（下课）等。
