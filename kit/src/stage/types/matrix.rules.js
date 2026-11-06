@@ -453,5 +453,5 @@ const predicates = {
   },
 };
 
-// 做完了（成了阶梯形）只对交给了学生做行变换的矩阵算：空着的乘积、学生只拨数的矩阵不算
-export const matrixRules = { next, check, predicates, facts, gestures, actOf: lineAct, doneBy: ['rowop'] };
+// 行变换的每一下都判（改一格不判）；做完了（成了阶梯形）只对交给了学生做行变换的矩阵算：学生只拨数的矩阵不算
+export const matrixRules = { next, check, predicates, facts, gestures, actOf: lineAct, judges: ['rowop'], doneBy: ['rowop'] };

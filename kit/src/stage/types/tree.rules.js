@@ -166,8 +166,12 @@ function rotateActs(pl) {
   return out;
 }
 
-function next(o) {
-  const pl = plan(o);
+// scene：这棵树在哪个舞台上。二叉排序树的插入课（交给学生 insert / place、没交 rotate）树本来就可以不平衡：不排旋转，
+// 下一步只看托盘，托盘插完了就是做完（和 checkInsert 的口径一样）。不给 scene、没交给学生插的，照旧按平衡二叉树算
+const bstLesson = (o, scene) => !!scene?.opens && !scene.opens.has(`${o.id}:rotate`) && (scene.opens.has(`${o.id}:insert`) || scene.opens.has(`${o.id}:place`));
+function next(o, scene) {
+  const avl = !bstLesson(o, scene);
+  const pl = avl ? plan(o) : null;
   if (pl) return { acts: rotateActs(pl), why: planWhy(o, pl) };
   const v = nextTray(o);
   if (v != null) return { acts: [{ type: 'insert', value: v }], why: `托盘里下一个是 ${v}：${landing(o, v)}` };
@@ -444,5 +448,5 @@ function standard(o) {
   return { input, steps: run.steps, log: run.log, rotations, final: keys(run.final), variants: avlEngine.variants(input) };
 }
 
-// 做完了（平衡了、托盘也插完了）只对交给了学生转、插的树算
-export const treeRules = { next, check, predicates, facts, gestures, standard, actOf: lineAct, doneBy: ['rotate', 'insert', 'place'] };
+// 转、插的每一下都判；做完了（平衡了、托盘也插完了；只交了插入的课是托盘插完了）只对交给了学生转、插的树算
+export const treeRules = { next, check, predicates, facts, gestures, standard, actOf: lineAct, judges: ['rotate', 'insert', 'place'], doneBy: ['rotate', 'insert', 'place'] };

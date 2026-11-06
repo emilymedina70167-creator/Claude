@@ -563,6 +563,8 @@ export const matrix = {
   canOpen(scene, o, action) {
     if (action === 'edit' && o.product) throw new Error(`${o.id} 是乘积，数是算出来的：开放 ${o.product.a}、${o.product.b} 的数让学生拨（open ${o.product.b} edit）`);
     if (action === 'explain' && !o.product) throw new Error(`${o.id} 不是乘积：open … explain 写在乘积上（open C explain）`);
+    // 乘积的数跟着 A、B 算：学生做一步行变换，同一下就被算回去了
+    if (action === 'rowop' && o.product) throw new Error(`${o.id} 是乘积，数跟着 ${o.product.a}、${o.product.b} 算，学生做了行变换也会被算回去：要学生消元就造一个普通的矩阵（matrix M = …）再 open M rowop`);
   },
   /** 算出来的格跟着 A、B 重算：变了的交出来（画面让它闪一下） */
   derive(scene, o) {

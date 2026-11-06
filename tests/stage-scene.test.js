@@ -307,9 +307,9 @@ test('@t.done：插完、转平以后交出预写的行；没 open 的树、本�
   const b = run(new Scene(), 'tree t = 20 10 30');
   assert.equal(b.apply(one('open t rotate')).done, undefined);
   assert.equal(stu(b, 'swap t.10 t.30', 'drag').done, undefined);
-  // 空着的乘积 open 了 rowop：一开始就没有下一步，不算做完
+  // 乘积不能交给学生做行变换（数跟着 A、B 算，做了也会被算回去）
   const p = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix B = 1 0 / 0 1\nproduct C = A B');
-  assert.equal(p.apply(one('open C rowop')).done, undefined);
+  assert.match(p.check(one('open C rowop')), /是乘积.*算回去/);
   // 没写 key 的句子：永远不算做完
   const q = run(new Scene(), 'sentence s = "He is running."\nopen s mark');
   assert.equal(stu(q, 'mark s.1 S', 'mark').done, undefined);
@@ -407,4 +407,89 @@ test('学生、老师写的一行读成规则认的动作：rotate（一下 / �
   assert.deepEqual(act(s, 'mark s.2-3 V'), { type: 'mark', from: 2, to: 3, role: 'V' });
   assert.equal(act(s, 'mark s.1 s.3 V'), null, '不连着的几个词不是一段');
   assert.match(s.judgeLine(one('mark s.2 V'), { by: 'student' }).verdict.misread, /谓语只圈了一半/);
+});
+
+test('二叉排序树的课（只交了 insert / place）：托盘插完就是做完，插完失衡也演 @t.done', () => {
+  const s = run(new Scene(), 'tree t = 50 tray="30 20 10"\nopen t insert\n@t.done say "插完了。"');
+  assert.equal(stu(s, 'insert t 30', 'insert').done, undefined);
+  assert.equal(stu(s, 'insert t 20', 'insert').judged.verdict.right, true, '二叉排序树的课不说还没转平');
+  const fx = stu(s, 'insert t 10', 'insert');
+  assert.deepEqual(fx.done, ['t'], '托盘空了就做完（树不平衡也一样）');
+  assert.deepEqual(fx.reactions, [{ done: 't', src: 'say "插完了。"' }]);
+  assert.doesNotMatch(s.stateText(), /预写的/);
+  const p = run(new Scene(), 'tree t = 50 tray="30 20"\nopen t place\n@t.done say "摆完了。"');
+  stu(p, 'insert t#1 left 30', 'place');
+  assert.deepEqual(stu(p, 'insert t.30 left 20', 'place').done, ['t']);
+  // 交了 rotate 的还是平衡二叉树的课：插完失衡没做完
+  const a = run(new Scene(), 'tree t = 50 tray="30 20"\nopen t insert\nopen t rotate');
+  stu(a, 'insert t 30', 'insert');
+  assert.equal(stu(a, 'insert t 20', 'insert').done, undefined);
+});
+
+test('写了不会生效的 wrong= / call= / 预写，当场报错说清为什么', () => {
+  const m = run(new Scene(), 'matrix B = 1 2 / 3 4');
+  assert.match(m.check(one('open B edit wrong=mark')), /B 的 edit|edit 页面判不了对错.*open B rowop/);
+  assert.match(run(new Scene(), 'tree t = 30 20 _ 10').check(one('open t drag wrong=block')), /drag 页面判不了对错.*open t rotate/);
+  assert.match(run(new Scene(), 'sentence s = "He is running." key="[S He] [V is running]."').check(one('open s fold call=wrong')), /fold 页面判不了对错/);
+  assert.equal(m.check(one('open B rowop wrong=mark')), null);
+  // @t.right：只交了拖的树，没有一下会被判对
+  const d = run(new Scene(), 'tree t = 30 20 _ 10\nopen t drag');
+  assert.match(d.check(one('@t.right say "对"')), /open t rotate/);
+  // @s.done：没写 key 的句子永远判不出做完
+  const k = run(new Scene(), 'sentence s = "He is running."\nopen s mark');
+  assert.match(k.check(one('@s.done say "好"')), /判不了 s.*没写 key/);
+  assert.match(k.check(one('@s.right say "好"')), /没写 key/);
+  // 现在就已经做完了（平衡、没托盘的树；已经是阶梯形的矩阵）
+  assert.match(run(new Scene(), 'tree t = 20 10 30\nopen t rotate').check(one('@t.done say "x"')), /现在就已经做完了/);
+  assert.match(run(new Scene(), 'matrix M = 1 2 / 0 1\nopen M rowop').check(one('@M.right say "x"')), /现在就已经做完了/);
+});
+
+test('规则的 next、facts 自己出错：不拦这一行，交出 ruleErrors（画面写进出错记录）', async () => {
+  const { registerRules } = await import('../kit/src/stage/rules.js');
+  const { treeRules } = await import('../kit/src/stage/types/tree.rules.js');
+  const s = run(new Scene(), 'tree t = 50 30 70 20 40 _ _ _ _ 35\nopen t rotate');
+  registerRules('tree', { ...treeRules, next: () => { throw new Error('下一步坏了'); }, facts: () => { throw new Error('事实坏了'); } });
+  try {
+    const fx = stu(s, 'rotate t.30 left', 'rotate');
+    assert.equal(fx.blocked, undefined);
+    assert.ok(fx.ruleErrors.some((e) => /下一步坏了/.test(e)) && fx.ruleErrors.some((e) => /事实坏了/.test(e)), JSON.stringify(fx.ruleErrors));
+  } finally { registerRules('tree', treeRules); }
+});
+
+// 手势那边（第 9 个任务）走 act → actSrc → 一行指令 → actOf → act：两头要对得上，判的才是学生做的那一下
+const core = (a) => (a.type === 'rotate' ? { type: a.type, at: a.at, ...(a.dir ? { dir: a.dir } : { kind: a.kind }) }
+  : a.type === 'insert' ? { type: a.type, value: String(a.value), ...(a.parent != null ? { parent: a.parent, side: a.side } : {}) }
+    : a.type === 'mark' ? { type: a.type, from: a.from, to: a.to, role: a.role } : a);
+const back = (s, id, src) => s.judgeLine(one(src), { by: 'student' })?.act;
+
+test('来回：树的动作写成一行再读回来，一样', async () => {
+  const { treeRules, actSrc } = await import('../kit/src/stage/types/tree.rules.js');
+  const s = run(new Scene(), 'tree t = 50 30 70 20 40 _ _ _ _ 35 tray="80 60"\nopen t rotate\nopen t place');
+  const o = s.objects.get('t');
+  const acts = [...treeRules.next(o, s).acts, { type: 'rotate', at: 1, dir: 'right' }, { type: 'rotate', at: 1, kind: 'LR' }, { type: 'rotate', at: 2, kind: 'RL' },
+    { type: 'insert', value: '80' }, { type: 'insert', value: '60', parent: 3, side: 'left' }, { type: 'insert', value: '49′' }];
+  for (const a of acts) assert.deepEqual(core(back(s, 't', actSrc(o, a))), core(a), actSrc(o, a));
+});
+
+test('来回：矩阵的行变换写成一行再读回来，一样（换行、倍乘、倍加、分数倍、两行都乘、几步）', async () => {
+  const { matrixRules, actSrc } = await import('../kit/src/stage/types/matrix.rules.js');
+  const s = run(new Scene(), 'matrix M = 2 4 1 / 3 5 2 / 1 1 7\nopen M rowop');
+  const o = s.objects.get('M');
+  const ops = (op) => ({ type: 'rowop', op });
+  const acts = [...matrixRules.next(o, s).acts, ops('r1 <-> r3'), ops('-r2'), ops('r2 / 2'), ops('(-1/2)r2'), ops('r3 - 2r1'), ops('2r2 - 3r1'), ops('r2 + (3/2)r1'), ops('r2 - r1, r3 - r1')];
+  for (const a of acts) {
+    const src = actSrc(o, a);
+    const b = back(s, 'M', src);
+    assert.equal(actSrc(o, b), src, src);
+    const [x, y] = [matrixRules.check(o, a), matrixRules.check(o, b)];
+    assert.deepEqual([y.legal, y.right, y.misread], [x.legal, x.right, x.misread], src);
+  }
+});
+
+test('来回：句子拉一段写成一行再读回来，一样（一个词、一段、带空格的成分名）', async () => {
+  const { sentenceRules, actSrc } = await import('../kit/src/stage/types/sentence.rules.js');
+  const s = run(new Scene(), 'sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] a doctor."\nopen s mark');
+  const o = s.objects.get('s');
+  const acts = [...sentenceRules.next(o, s).acts, { type: 'mark', from: 7, to: 7, role: 'V' }, { type: 'mark', from: 3, to: 6, role: '定语从句' }, { type: 'mark', from: 1, to: 2, role: 'to do' }, { type: 'mark', from: 8, to: 9, role: 'O' }];
+  for (const a of acts) assert.deepEqual(core(back(s, 's', actSrc(o, a))), core(a), actSrc(o, a));
 });

@@ -470,6 +470,7 @@ export class Stage {
       for (const f of fx?.judged?.facts || []) if (this.teacherAudit.length < AUDIT_MAX && !this.teacherAudit.includes(f)) this.teacherAudit.push(f);
       if (fx?.judged?.failed) reportError(fx.judged.failed, { what: `舞台的规则核老师这一行时出错：${fx.judged.src}` });
     }
+    if (!this.instant) for (const e of fx?.ruleErrors || []) reportError(e, { what: `舞台的规则出错：${c.src?.trim() || ''}` });
     if (act) {
       if (fx?.judged?.after?.length) act.facts = fx.judged.after;
       if (fx?.derived?.length) act.derived = slimDerived(fx.derived);

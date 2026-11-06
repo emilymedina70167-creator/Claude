@@ -70,13 +70,17 @@ const POLICY = {
   undo: { on: '学生能撤一步', off: '不能撤' },
 };
 const DEFAULT_POLICY = { wrong: 'quiet', call: null, undo: false };
-function policyIn(opts, rules, label) {
+// wrong= / call= 只对页面判对错的动作（规则的 judges）起作用：写在别的动作上（拨格子、拖、折起来）永远不生效，当场报，不默默收下
+function policyIn(opts, rules, { label, id, action }) {
   for (const k of ['wrong', 'call', 'undo']) {
     if (opts[k] == null) continue;
     const ok = POLICY[k];
     if (!ok[opts[k]]) throw new Error(`${k}= 只能写 ${Object.keys(ok).join(' ')} 里的一个（${Object.entries(ok).map(([v, t]) => `${v} ${t}`).join('；')}），没有「${opts[k]}」`);
   }
-  if (!rules && (opts.wrong != null || opts.call != null)) throw new Error(`${label}页面判不了对错（没有规则），wrong= / call= 用不上：去掉它们再写`);
+  const judges = rules?.judges || [];
+  if ((opts.wrong != null || opts.call != null) && !judges.includes(action)) {
+    throw new Error(`${label}的 ${action} 页面判不了对错（${judges.length ? `判对错的是 ${judges.map((a) => `open ${id} ${a}`).join(' / ')}` : '没有规则'}），wrong= / call= 用不上：去掉它们再写`);
+  }
   return { wrong: opts.wrong || DEFAULT_POLICY.wrong, call: opts.call || DEFAULT_POLICY.call, undo: opts.undo === 'on' };
 }
 /** 不是默认的那几项，照老师的写法写出来（舞台现状里给老师看） */
@@ -230,11 +234,12 @@ export class Scene {
     // 跟着算的重算以后可能变大了（{A B} 多了一行、格里的数变长）：摆在下面的往下让（乘积的一格照旧不重排，和以前一样）
     if (derived.some((d) => !d.part && d.changed.length)) this.reflow();
     const reactions = [];
+    const ruleErrors = []; // 规则自己出错（facts、next 抛了）：不拦这一行，交给画面记进出错记录（stage.js）
     if (j) {
       fx.judged = j;
       const o = this.objects.get(j.obj);
       // 这一下以后写给老师的事实（规则交的：谁转上来了、哪一行变成什么、key 里还差几段）
-      if (before && o) { try { j.after = rulesOf(o)?.facts(before, o, j.act) || []; } catch { j.after = []; } }
+      if (before && o) { try { j.after = rulesOf(o)?.facts(before, o, j.act) || []; } catch (err) { j.after = []; ruleErrors.push(`${typeOf(o).label}的规则写事实时出错：${err?.message || err}`); } }
       if (j.mark && o) this.slip(j.obj, c);
       // 学生做对一步：老师预写的确认、下一小问（@t.right，只演一次）
       if (j.by === 'student' && j.verdict?.right === true) reactions.push(...this.take(`${j.obj}.right`).map((src) => ({ right: j.obj, src })));
@@ -245,7 +250,8 @@ export class Scene {
       reactions.push(...met.flatMap((id) => this.take(id).map((src) => ({ goal: id, src }))));
     }
     // 学生（或老师）这一行把交给学生做的东西做完了：@t.done 的行交出来，课堂按 by 决定叫不叫老师
-    const fin = this.checkDone();
+    const fin = this.checkDone(ruleErrors);
+    if (ruleErrors.length) fx.ruleErrors = ruleErrors;
     if (fin.length) {
       fx.done = fin;
       reactions.push(...fin.flatMap((id) => this.take(`${id}.done`).map((src) => ({ done: id, src }))));
@@ -308,14 +314,14 @@ export class Scene {
     if (o) for (const p of typeOf(o).parts(o)) delete p.slip;
   }
   /** 交给了学生做的东西（open 了规则 doneBy 里的动作）里，这一行从没做完变成做完了的；刚交给学生时已经做完的不算 */
-  checkDone() {
+  checkDone(errors = []) {
     const out = [];
     const seen = new Set();
     for (const e of this.opens.values()) {
       if (seen.has(e.obj) || !this.doneOpen(e.obj)) continue;
       seen.add(e.obj);
       let now = false;
-      try { now = nextDone(this, e.obj); } catch { now = false; }
+      try { now = nextDone(this, e.obj); } catch (err) { now = false; errors.push(`${e.obj} 的规则算下一步时出错：${err?.message || err}`); }
       const was = this.doneState.get(e.obj);
       this.doneState.set(e.obj, now);
       if (now && was === false) out.push(e.obj);
@@ -363,8 +369,16 @@ export class Scene {
     if (!o) throw new Error(this.goals.has(name) ? `${name} 是挑战：做到了演的行写 @${name}，@名字.${kind} 写在舞台上的东西上` : `舞台上没有「${name}」`);
     const rules = rulesOf(o);
     if (!rules) throw new Error(`${typeOf(o).label}页面判不了对错（没有规则），@${name}.${kind} 的行不会演`);
-    if (kind === 'done' && !this.doneOpen(name)) throw new Error(`先把要做的交给学生（${rules.doneBy.map((a) => `open ${name} ${a}`).join(' / ') || `open ${name} …`}），@${name}.done 的行才会演`);
-    if (kind === 'right' && ![...this.opens.values()].some((e) => e.obj === name)) throw new Error(`先 open ${name} …（交给学生动），@${name}.right 的行才会演`);
+    // 先查写下去能不能起作用：要交给学生的是页面判对错（.right）、能做完（.done）的动作；规则现在算得出下一步。起不了作用的当场说为什么
+    const need = kind === 'done' ? rules.doneBy : rules.judges;
+    const given = [...this.opens.values()].some((e) => e.obj === name && need.includes(e.action));
+    if (!given) throw new Error(`先把要做的交给学生（${need.map((a) => `open ${name} ${a}`).join(' / ') || `${typeOf(o).label}没有页面判得了的动作`}），@${name}.${kind} 的行才会演`);
+    if (!c.lenient) {
+      let nx;
+      try { nx = rules.next(o, this); } catch (err) { throw new Error(`页面算不出 ${name} 的下一步（${err.message}），@${name}.${kind} 的行不会演`); }
+      if (nx === null) throw new Error(`${name} 现在就已经做完了（没有下一步），学生不用再动手，@${name}.${kind} 的行不会演`);
+      if (!nx?.acts?.length) throw new Error(`页面判不了 ${name}：${nx?.why || '算不出下一步'}，@${name}.${kind} 的行不会演`);
+    }
     const key = `${name}.${kind}`;
     const list = this.reactions.get(key) || [];
     const trial = this.clone();
@@ -574,7 +588,7 @@ export class Scene {
         // 跟着算的（{A + B}、{A v}）：数是页面照式子算的，学生拨了、拖了也会被算回去
         if (o.live || (r.mark && this.parts(target).some((p) => p.live))) throw new Error(`${o.live ? o.id : target} 是跟着算的，学生动不了`);
         t.canOpen?.(this, o, action, h);
-        const policy = policyIn(opts, rules, t.label);
+        const policy = policyIn(opts, rules, { label: t.label, id: o.id, action });
         const e = { obj: o.id, action, refs: r.mark ? [target] : [], lo: null, hi: null, policy, gesture: gestures[action] || null };
         if (action === 'edit') {
           const [lo, hi] = parseRange(opts.range || '-9..9');

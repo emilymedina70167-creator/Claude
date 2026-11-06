@@ -319,5 +319,5 @@ const predicates = {
   },
 };
 
-// 做完了（key 里每一段都拉对了）只对交给了学生拉括号的句子算
-export const sentenceRules = { next, check, predicates, facts, gestures, actOf: lineAct, doneBy: ['mark'] };
+// 拉括号的每一下都判（折起来不判）；做完了（key 里每一段都拉对了）只对交给了学生拉括号的句子算
+export const sentenceRules = { next, check, predicates, facts, gestures, actOf: lineAct, judges: ['mark'], doneBy: ['mark'] };

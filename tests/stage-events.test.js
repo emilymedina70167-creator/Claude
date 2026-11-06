@@ -80,4 +80,7 @@ test('长度上限：试了 30 下，[学生] 一块不超过 2 KB，前面的�
   assert.match(t, /学生点了「给个提示」$/, '叫老师的那件事留着');
   // 不长的不并
   assert.doesNotMatch(eventsText(ev.slice(0, 3)), /之前又试了/);
+  // 试的几下全是拨数（不出细节）、叫老师的那件事本身很长：没什么可并的，不写「之前又试了 0 下」
+  const dials = Array.from({ length: 5 }, () => eventOf({ type: 'dial', name: 'k', value: 2 }));
+  assert.doesNotMatch(eventsText([...dials, eventOf({ type: 'say', text: '长'.repeat(1000) })]), /之前又试了 0 下/);
 });

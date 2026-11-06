@@ -88,7 +88,7 @@ function tryLines(tries) {
 function capTries(items, rest) {
   const fits = (lines) => bytesOf(HEAD + lines.join('\n')) <= STUDENT_MAX;
   const all = items.map((x) => x.text);
-  if (fits([...all, ...rest])) return all;
+  if (!all.length || fits([...all, ...rest])) return all; // 没有一行细节（只拨了数）就没什么可并的，不写「之前又试了 0 下」
   let n = 0, right = 0, wrong = 0, k = 0;
   const head = () => `之前又试了 ${n} 下${right + wrong ? `（页面判了 ${right + wrong} 下：${right} 下是正确的下一步，${wrong} 下不是）` : ''}，细节省了`;
   while (k < items.length) {
