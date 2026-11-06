@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { STAGE_TEACH, STAGE_DOC, stageSystem, firstMessage, turnMessage, TOPICS } from '../kit/src/stage/doc.js';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { COMMANDS, parseScript } from '../kit/src/stage/script.js';
+import { TYPES } from '../kit/src/stage/types/index.js';
 
 const bytes = (s) => Buffer.byteLength(s);
 
@@ -20,8 +21,10 @@ test('说明里的例子照抄就能演：例子那一轮，和每一条「指�
   const s = new Scene();
   const setup = 'array a = 49 38 65 97 76 13 27 49′ 55 04\ndial d = 5 range=1-5 at=a';
   assert.deepEqual(dryRun(s, `${setup}\n${ex}`), []);
-  // 每一行指令说明的第一段（「 / 」前、两个空格前）都能在这块舞台上演
-  const lines = STAGE_DOC.split('\n').map((l) => l.split(/\s{2,}|\s\/\s/)[0].trim()).filter((l) => COMMANDS.has(l.split(' ')[0]) && !l.startsWith('array'));
+  // 每一行指令说明的第一段（「 / 」前、两个空格前）都能在这块舞台上演。
+  // 一排格子以外的各种东西（树、图……）的那一节，由它自己的测试在摆好它的舞台上照抄来演（tests/stage-tree.test.js 等）
+  const others = new Set(Object.values(TYPES).filter((t) => t !== TYPES.array).flatMap((t) => (t.doc || '').split('\n')));
+  const lines = STAGE_DOC.split('\n').filter((l) => !others.has(l)).map((l) => l.split(/\s{2,}|\s\/\s/)[0].trim()).filter((l) => COMMANDS.has(l.split(' ')[0]) && !l.startsWith('array'));
   const ready = new Scene();
   for (const src of [setup, 'label t a.1 "字"', 'say "看 [不稳定]"']) for (const c of parseScript(src)) ready.apply(c);
   const bad = [];
