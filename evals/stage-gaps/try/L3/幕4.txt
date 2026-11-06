@@ -1,0 +1,18 @@
+# L3 第 4 幕：3 阶 |λE − A| 一行一行化，根带重数，和迹、行列式对上
+tex f = "|\lambda E - A| = \begin{vmatrix}\lambda-2&-2&2\\-2&\lambda-5&4\\2&4&\lambda-5\end{vmatrix}"
+card k = "tr A = 12" "|A| = 10"
+cover k.1
+cover k.2
+say "一行一行写，能凑公因子就先凑，别急着展开。"
+ask say "写下一行"
+学生: say |λ-2 -2 0; -2 λ-5 λ-1; 2 4 λ-1|
+next f "= \begin{vmatrix}\lambda-2&-2&0\\-2&\lambda-5&\lambda-1\\2&4&\lambda-1\end{vmatrix}"
+ask say "接着写，写到因式乘积"
+学生: say λ^2 - 11λ + 10
+say "写完把根加起来，和对角线比一比。"
+ask tap k "翻开一张小卡"
+学生: tap k.1
+uncover k.1
+ask value "三个根加起来是几？" answer=12
+学生: value 11
+say "嗯。"

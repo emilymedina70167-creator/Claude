@@ -22,6 +22,7 @@ set cd 4
 say "把 C–D 拨成 4 呢？"
 ask next "拨一下 $cd$，看右上角" button="看好了"
 学生: next
+say "指着 {g.A~C} 和 {g.D~E}：这两条也一样价钱，怎么没多出一棵？"
 say "什么时候一定只有一棵？"
 ask say "说说看"
 学生: say 有同价的就一定不止一棵

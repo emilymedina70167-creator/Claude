@@ -1,0 +1,16 @@
+# L3 第 7 幕：2E 和剪切 J 特征值一样，J 却凑不出两条特征线
+plane p range=-3..3
+vec p e1 = 1 0 color=g1
+vec p e2 = 0 1 color=g6
+sum p s = e1 + e2
+plane q range=-3..3
+vec q e1 = 1 0 color=g1
+vec q e2 = 0 1 color=g6
+sum q s = e1 + e2
+transform p = 2 0 / 0 2
+transform q = 2 1 / 0 2
+say "左边 2E，右边 J。两边各把特征方向找全。"
+card t = "特征多项式：□ / □" "tr：□ / □" "行列式：□ / □" "秩：□ / □"
+ask value "J 有几条特征线？" answer=1
+学生: value 1
+say "嗯。"

@@ -25,5 +25,5 @@ unlabel box
 remove g
 graph h = 0>1:1 1>2:1 1>0:-2 pos="0=0,1 1=1,0 2=2,1"
 walk h.0 h.1 h.0 h.1 h.0
-ask value "绕着这一圈走，0 到 0 最短是多少？" answer=-2
-学生: value -2
+ask say "绕着这一圈走，0 到 0 最短是多少？"
+学生: say 每绕一圈少 1，没有最短
