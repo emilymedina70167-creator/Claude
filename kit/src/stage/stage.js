@@ -150,7 +150,12 @@ export class Stage {
       }
     }
     // 话里、字里指着它的小块跟着变色、变值
-    this.root.querySelectorAll(`.st-chip[data-cell="${CSS.escape(pidOf(x))}"]`).forEach((ch) => { if (x.paint) ch.dataset.paint = x.paint; else delete ch.dataset.paint; const t = this.chipText(x); if (ch.textContent !== t) ch.textContent = t; });
+    this.root.querySelectorAll(`.st-chip[data-cell="${CSS.escape(pidOf(x))}"]`).forEach((ch) => {
+      if (x.paint) ch.dataset.paint = x.paint; else delete ch.dataset.paint;
+      if (ch.dataset.group || ch.closest('.st-caption, .st-goals')) return; // 话里说的那一刻是多少就是多少
+      const t = this.chipText(x);
+      if (ch.textContent !== t) ch.textContent = t;
+    });
   }
   chipText(p) { return String(p.label ?? p.value ?? p.key); }
 
@@ -705,11 +710,15 @@ export class Stage {
     const chip = el('button', 'st-chip');
     chip.type = 'button';
     try {
-      const [x] = this.scene.parts(ref);
-      chip.textContent = this.chipText(x);
+      const ps = this.scene.parts(ref);
+      const [x] = ps;
+      // 一整行、一整列（A.r1）：写这几个数（四个以内），多了写它的名字；点了整组闪一下
+      chip.textContent = ps.length > 1 ? (ps.length <= 4 ? ps.map((p) => this.chipText(p)).join(' ') : ref) : this.chipText(x);
       chip.dataset.cell = pidOf(x);
+      if (ps.length > 1) chip.dataset.group = '1';
       if (x.paint) chip.dataset.paint = x.paint;
-      chip.addEventListener('click', () => { const [obj, ...k] = String(chip.dataset.cell || '').split(':'); const key = k.join(':'); const p = this.scene.partOf(obj, /^\d+$/.test(key) ? Number(key) : key) || this.scene.partOf(obj, key); if (p) this.pulse(p); });
+      const keys = ps.map((p) => [p.obj, p.key]);
+      chip.addEventListener('click', () => keys.forEach(([obj, key], i) => { const p = this.scene.partOf(obj, key); if (p) this.pulse(p, stagger(i, { step: 40 })); }));
     } catch { chip.textContent = ref; chip.classList.add('is-bad'); }
     return chip;
   }
