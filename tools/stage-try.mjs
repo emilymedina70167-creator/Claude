@@ -174,12 +174,12 @@ function setup(segments) {
         return (await go({ type: 'drag', text: `学生把「${x.value}」拖到了${where}（舞台已经照做了）`, word: x.value, to: count + 1 }, `move ${obj}#${x.key} -> ${obj}.${count + 1}`)) || {};
       }
       if (cmd === 'vec') {
-        // 照 plane.view.js 的 drop()：点写成 point、向量写成 vec；只有平面上已经有的、不是算出来的才能拖
+        // 照 plane.view.js 的 drop()：点写成 point、向量写成 vec；只有平面上已经有的、不是算出来的（u + v、{A v}）才能拖
         const m = rest.match(/^(\w+)\s+(\w+)\s*=\s*(\S+)\s+(\S+)$/);
         if (!m) return { error: '要写成 学生: vec p u = 3 1' };
         const it = (o.items || []).find((x) => x.key === m[2] || x.name === m[2]);
         if (!it) return { error: `平面 ${m[1]} 上没有「${m[2]}」，学生拖不了` };
-        if (it.expr) return { error: `${m[1]}.${m[2]} 是算出来的，学生拖不了` };
+        if (it.expr || it.live) return { error: `${m[1]}.${m[2]} 是算出来的，学生拖不了` };
         const what = it.kind === 'vec' ? '向量' : '点';
         const act = { type: 'drag', ref: `${m[1]}.${it.name}`, from: [it.x, it.y], to: [m[3], m[4]], text: `学生把${what} ${m[1]}.${it.name}${it.kind === 'vec' ? ' 的末端' : ''}拖到了 (${m[3]}, ${m[4]})（原来在 (${it.x}, ${it.y})），舞台已经照做了` };
         return (await go(act, `${it.kind === 'vec' ? 'vec' : 'point'} ${m[1]} ${it.name} = ${m[3]} ${m[4]}`)) || {};

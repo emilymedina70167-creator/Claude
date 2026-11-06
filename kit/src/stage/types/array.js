@@ -63,6 +63,7 @@ export const array = {
   type: 'array',
   label: '一排格子',
   create: ['array'],
+  remake: true, // 造它的那一行里能写 {式子}（value.js）：依赖一变，场景照新的数把这一行重新造一遍
   drag: true,
   hint: '（一排格子：名字.k 是现在第 k 格；括号里的 #k 是「一开始在第 k 格的那一个」，写 名字#k 跟着它走）',
   make(scene, c, h, old) {

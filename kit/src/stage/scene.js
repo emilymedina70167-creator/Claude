@@ -14,6 +14,7 @@ import { parseScript, parseRef, parseRich, addCommands } from './script.js';
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox } from './layout.js';
 import { parseGoal, evalGoal, goalStatus } from './goal.js';
+import { parseLive, evalLive, fillLine, liveOrder } from './value.js';
 
 export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 export const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
@@ -47,6 +48,9 @@ export function compareValues(a, b) {
 
 /** 一个部件在场景里的编号（画面用它找节点、话里的小块用它找部件）：'a:3'、't:A' */
 export const pidOf = (p) => `${p.obj}:${p.key}`;
+
+/** 这一行的原文（跟着算的东西记着它；行首的 & 不要） */
+const lineOf = (c) => String(c.src ?? '').trim().replace(/^&\s*/, '');
 
 /** 一种东西能开放给学生直接动的：{ 动作: 给老师看的一句 } */
 export function affordsOf(t) {
@@ -171,8 +175,11 @@ export class Scene {
     const strayRefs = (list = args, allow = []) => {
       for (const a of list) if (a.t === 'word' && !this.isRef(a.v) && !allow.includes(a.v) && /^[A-Za-z_]\w*[.#]./.test(a.v)) throw new Error(`「${a.v}」不是舞台上的东西`);
     };
-    return { args, opts, words, str, strs, arrow, refsIn, partsIn, cellsIn: partsIn, strayRefs, scene: this, isColor, COLORS };
+    // 跟着算的量（value.js）：各种东西造的时候拆 {…}、算式子用；line 是这一行的原文
+    return { args, opts, words, str, strs, arrow, refsIn, partsIn, cellsIn: partsIn, strayRefs, scene: this, isColor, COLORS, parseLive, liveValue: (src, ctx) => this.liveValue(src, ctx), line: lineOf(c) };
   }
+  /** 算一个 {式子}（value.js 的 evalLive）：{ value, deps }；ctx.plane 是写在哪个平面上 */
+  liveValue(src, ctx) { return evalLive(src, this, ctx); }
 
   // —— 一行指令改场景（画面怎么演由 stage.js 管）。返回这一行的要点（画面用），写错了抛错 ——
   // 每一行之后：跟着别的东西算出来的（乘积……）重算（fx.derived），挑战判一遍，刚做到的（fx.goalsMet）把预写的行交出来（fx.reactions）
@@ -180,8 +187,10 @@ export class Scene {
     if (c.on) return this.stash(c);
     const fx = this.applyOne(c) || {};
     this.reflow();
-    const derived = this.derive();
+    const derived = [...(fx.derived || []), ...this.derive()];
     if (derived.length) fx.derived = derived;
+    // 跟着算的重算以后可能变大了（{A B} 多了一行、格里的数变长）：摆在下面的往下让（乘积的一格照旧不重排，和以前一样）
+    if (derived.some((d) => !d.part && d.changed.length)) this.reflow();
     const met = this.checkGoals();
     if (met.length) {
       fx.goalsMet = met;
@@ -219,10 +228,19 @@ export class Scene {
       if (!id || !/^[A-Za-z_]\w*$/.test(id)) throw new Error(`要写成 ${cmd} 名字 = …（名字用英文字母开头）`);
       if (id === 'say' || id.startsWith('dial')) throw new Error(`「${id}」这个名字留着别的用，换一个`);
       const old = this.objects.get(id);
-      const o = t.make(this, c, h, old);
-      if (old) this.dropObject(id, { keepLabels: true });
+      // 一排格子、图这类：造它的那一行里的 {…} 先算成数再造（依赖一变照新的数重新造，见 remake）；
+      // 矩阵、平面自己拆 {…}（格子在原地改）；别的东西（题卡、句子、式子）的 {…} 写在引号里，是话里的小块
+      const filled = t.remake ? fillLine(h.line, this) : null;
+      const cc = filled ? parseScript(filled.text)[0] : c;
+      if (!cc?.cmd) throw new Error(cc?.error || '看不懂这一行');
+      const o = t.make(this, cc, filled ? this.helpers(cc) : h, old);
+      // 式子里没用到舞台上的东西（{2^3}）就只是一个数，不算跟着算的
+      if (filled?.deps.length) o.live = { line: h.line, exprs: filled.exprs, vals: filled.vals, deps: filled.deps };
       o.type = t.type;
       o.id = id;
+      // 跟着算的不能转着圈（X 跟着 Y、Y 又跟着 X）：先查，写错了舞台上已有的东西不动
+      this.liveCheck(this.nodesOf(o), id);
+      if (old) this.dropObject(id, { keepLabels: true });
       this.objects.set(id, o);
       return { id, created: true };
     }
@@ -386,6 +404,8 @@ export class Scene {
         const action = words[1] || names[0];
         if (!affords[action]) throw new Error(`${t.label}能开放的是：${names.map((k) => `${k}（${affords[k]}）`).join('、')}，没有「${action}」`);
         if (r.mark) this.parts(target);
+        // 跟着算的（{A + B}、{A v}）：数是页面照式子算的，学生拨了、拖了也会被算回去
+        if (o.live || (r.mark && this.parts(target).some((p) => p.live))) throw new Error(`${o.live ? o.id : target} 是跟着算的，学生动不了`);
         t.canOpen?.(this, o, action, h);
         const e = { obj: o.id, action, refs: r.mark ? [target] : [], lo: null, hi: null };
         if (action === 'edit') {
@@ -501,14 +521,97 @@ export class Scene {
     for (const [k, e] of this.opens) if (e.obj === id) this.opens.delete(k);
   }
 
-  /** 跟着别的东西算出来的（乘积 C = A B：A、B 变了 C 跟着变）：重算到不再变（最多三遍，链着的乘积） */
+  // —— 跟着算的量（value.js）——
+  /**
+   * 一样东西在依赖图里的结：用了 {…} 的东西自己是一个（live，要重算）；各种东西还可以交出别的（乘积跟着 A、B，
+   * 平面上的向量跟着别的向量），这些只拿来排先后、查环，重算照旧是它们自己的 derive / refresh
+   */
+  nodesOf(o) {
+    const t = typeOf(o);
+    const out = [];
+    if (o.live) out.push({ id: o.id, obj: o.id, deps: o.live.deps, live: true, rec: o.live, text: t.liveText?.(o) ?? o.live.line });
+    for (const n of t.depNodes?.(o) || []) out.push({ obj: o.id, ...n });
+    return out;
+  }
+  liveNodes() { return [...this.objects.values()].flatMap((o) => this.nodesOf(o)); }
+  /**
+   * 加进来这几个结以后会不会转着圈：会就抛错（错误里列出环上的名字）。obj：换掉的是哪样东西（它原来的结不算）。
+   * 环上没有跟着算的（只是乘积换着乘：C = A B 以后 A = C B）不管，照旧收下
+   */
+  liveCheck(add, obj) {
+    if (!add.length) return;
+    const ids = new Set(add.map((n) => n.id));
+    const nodes = [...this.liveNodes().filter((n) => n.obj !== obj && !ids.has(n.id)), ...add];
+    try { liveOrder(nodes); } catch (err) {
+      const by = new Map(nodes.map((n) => [n.id, n]));
+      if (err.cycle?.some((id) => by.get(id)?.live)) throw err;
+    }
+  }
+  /**
+   * 重算一个跟着算的：在原地改的（矩阵改格、平面上的向量挪过去）交给那种东西的 relive，别的照新的数重新造（remake）。
+   * 变了返回 { id, changed: [{ ref, from, to }], parts（画面闪的部件） }；算不出来（不可逆、拿掉了、维数对不上）原来的值不动，
+   * 记在 rec.error 里（舞台现状写给老师），第一次出错时返回 { id, changed: [], error }
+   */
+  relive(n) {
+    const o = this.objects.get(n.obj);
+    const t = typeOf(o);
+    let r;
+    try {
+      r = t.relive ? t.relive(this, o, n) : this.remake(o);
+    } catch (err) {
+      if (n.rec.error === err.message) return null;
+      n.rec.error = err.message;
+      return { id: o.id, changed: [], error: err.message };
+    }
+    delete n.rec.error;
+    return r.changed.length ? { id: o.id, changed: r.changed, parts: r.parts || [] } : null;
+  }
+  /** 一排格子、图这类：造它的那一行照新的数重新造一遍（名字、位置不变；连线只留部件还在的） */
+  remake(o) {
+    const L = o.live;
+    const f = fillLine(L.line, this);
+    if (!f) return { changed: [] };
+    if (f.vals.every((v, i) => v === L.vals[i])) return { changed: [] };
+    const c = parseScript(f.text)[0];
+    if (!c?.cmd) throw new Error(c?.error || '看不懂这一行');
+    const t = typeOf(o);
+    const o2 = t.make(this, c, this.helpers(c), o);
+    Object.assign(o2, { type: o.type, id: o.id, live: { line: L.line, exprs: f.exprs, vals: f.vals, deps: f.deps } });
+    this.objects.set(o.id, o2);
+    for (const [k, l] of this.links) if ((l.a.obj === o.id && !this.partOf(o.id, l.a.key)) || (l.b.obj === o.id && !this.partOf(o.id, l.b.key))) this.links.delete(k);
+    const changed = f.vals.map((v, i) => (v === L.vals[i] ? null : { ref: o.id, expr: f.exprs[i], from: L.vals[i], to: v })).filter(Boolean);
+    return { changed, parts: t.parts(o2).slice(0, 12) };
+  }
+
+  /**
+   * 跟着别的东西算出来的：先重算用了 {…} 的（按依赖的先后），再跑各种东西自己的 derive（乘积 C = A B：A、B 变了 C 跟着变）；
+   * 重算到不再变。没有跟着算的时候最多三遍（链着的乘积，和以前一样），每多一个跟着算的多一遍。
+   * 乘积的一格照旧一格一条 { part, before, after }，多带 id、changed（和跟着算的一样写，给老师的事实用）
+   */
   derive() {
     const out = [];
-    for (let pass = 0; pass < 3; pass++) {
+    const nodes0 = this.liveNodes();
+    const passes = 3 + nodes0.filter((n) => n.live).length;
+    for (let pass = 0; pass < passes; pass++) {
       let changed = false;
+      const nodes = pass ? this.liveNodes() : nodes0;
+      const live = new Map(nodes.filter((n) => n.live).map((n) => [n.id, n]));
+      if (live.size) {
+        let order;
+        try { order = liveOrder(nodes); } catch { order = nodes.map((n) => n.id); }
+        for (const id of order) {
+          const n = live.get(id);
+          if (!n || !this.objects.has(n.obj)) continue;
+          const r = this.relive(n);
+          if (r) { out.push(r); if (r.changed.length) changed = true; }
+        }
+      }
       for (const o of this.objects.values()) {
         const r = typeOf(o).derive?.(this, o) || [];
-        if (r.length) { out.push(...r); changed = true; }
+        if (r.length) {
+          for (const d of r) out.push(Object.assign(d, { id: o.id, changed: [{ ref: this.refOf(d.part), from: d.before, to: d.after }] }));
+          changed = true;
+        }
       }
       if (!changed) break;
     }
@@ -535,6 +638,9 @@ export class Scene {
       const r = t.onVar?.(this, o, b, this.vars.get(name).v);
       if (r) { out.binds.push(r); if (b.kind === 'group') out.regroup.push(r); }
     }
+    // 写了 {k} 的（格里的 {k}、{k A}……）当场跟着重算：变了的交给 apply 一起写进 fx.derived
+    const derived = this.derive();
+    if (derived.length) out.derived = derived;
     return out;
   }
   /** 一部件找回来（跟着它走的写法） */
@@ -551,6 +657,10 @@ export class Scene {
     for (const o of this.objects.values()) { const t = typeOf(o); if (t.hint) hints.add(t.hint); }
     for (const h of hints) lines.push(h);
     for (const o of this.objects.values()) lines.push(...typeOf(o).describe(o, this));
+    const lives = this.liveNodes().filter((n) => n.live);
+    // 错误前面的「{式子}」和前面写的重了，去掉
+    const why = (e) => e.replace(/^「\{[^{}]*\}」(算不出来：|里的)?/, '');
+    if (lives.length) lines.push(`跟着算的（依赖一变，页面当场重算；学生动不了）：${lives.map((n) => `${n.text}${n.rec.error ? `（现在算不出来：${why(n.rec.error)}；停在上一次算出来的数）` : ''}`).join('；')}`);
     const ls = [...this.links.values()];
     if (ls.length) lines.push(`连线：${ls.map((l) => `${this.refOfKey(l.a)}–${this.refOfKey(l.b)}${l.color ? ` ${COLOR_NAMES[l.color]}` : ''}`).join('，')}`);
     const labels = [...this.labels.values()].filter((l) => !l.dial);

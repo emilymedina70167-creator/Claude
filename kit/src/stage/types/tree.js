@@ -328,6 +328,7 @@ export const tree = {
   type: 'tree',
   label: '树',
   create: ['tree'],
+  remake: true, // 造它的那一行里能写 {式子}（value.js）：依赖一变，场景照新的数把这一行重新造一遍
   drag: true,
   hint: '（树：名字.40 是值为 40 的结点；名字#3 是层序第 3 个结点，跟着结点走（值重复、换值以后用它）；名字.40* 是 40 和它下面整棵子树）',
   make(scene, c, h, old) {

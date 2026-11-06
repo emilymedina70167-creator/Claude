@@ -455,8 +455,8 @@ export class Stage {
       if (!this.instant && c.cmd !== 'camera') {
         if (this.heldLabels?.size) { await this.keepInView(); await this.revealLabels(); } else this.keepInView();
       }
-      // 跟着算出来的（乘积……）变了：闪一下，让学生看见「我一拨，它就跟着变」
-      if (!this.instant && fx?.derived?.length) fx.derived.forEach((d, i) => this.pulse(d.part, stagger(i, { step: 45 })));
+      // 跟着算出来的（乘积、{A + B}……）变了：闪一下，让学生看见「我一拨，它就跟着变」（乘积一格一条交 part，跟着算的一样东西一条交 parts）
+      if (!this.instant && fx?.derived?.length) fx.derived.flatMap((d) => d.parts || (d.part ? [d.part] : [])).forEach((p, i) => this.pulse(p, stagger(i, { step: 45 })));
       if (fx?.created || fx?.removed) this.resetOpens();
       this.syncOpens();
       // 贴上去的字：读一下再演下一行（第一节真课两张接连冒出来，一张 0.4 秒就过去了）
@@ -635,8 +635,8 @@ export class Stage {
     const view = o && VIEWS[o.type];
     if (!view) return () => {};
     if (e.action === 'drag') {
-      // 拖：算出来的（u + v）不能拖
-      const parts = (e.refs.length ? e.refs.flatMap((r) => this.scene.parts(r)) : this.scene.parts(e.obj)).filter((p) => p.expr == null);
+      // 拖：算出来的（u + v、{A v}）不能拖
+      const parts = (e.refs.length ? e.refs.flatMap((r) => this.scene.parts(r)) : this.scene.parts(e.obj)).filter((p) => p.expr == null && !p.live);
       const offs = parts.map((p) => this.armDrag(view, p, parts, (act, src) => this.openDone(e, act, src)));
       return () => offs.forEach((f) => f());
     }

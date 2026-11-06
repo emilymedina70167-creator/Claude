@@ -3,7 +3,8 @@
 //
 // 数都是精确分数（exact.js 的 Q）：场景里存成字符串（'-3/2'；'' 是乘积里还空着的格），副本（structuredClone）不丢东西，算的时候再变回 Q。
 // 一格（部件）的 key 是造它时的位置（'2.3'），交换两行时格子带着数走过去（r、c 跟着变）；m.2,3 永远指「现在」第 2 行第 3 列。
-import { Q } from '../../exact.js';
+// 跟着算的（value.js）：格里写 {k}、{A.1,2}，或者整个矩阵写 = {A + B}、{P^-1}；依赖一变场景叫 relive，在原地改格。
+import { Q, isQ, isQVec, isQMat } from '../../exact.js';
 
 export const MAX_ROWS = 6, MAX_COLS = 8;
 const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
@@ -42,9 +43,10 @@ const qOf = (o, x) => {
 
 /**
  * 矩阵的写法 → { rows（每行一串精确的数，字符串）, aug（竖线在第几列后面，没有是 null） }。
- * 认 1 2 3 / 4 5 6（/ 分行）、1 2; 3 4、[[1 2][3 4]]；写 | 是增广矩阵的竖线（每行写在同一个位置，或者只在第一行写）
+ * 认 1 2 3 / 4 5 6（/ 分行）、1 2; 3 4、[[1 2][3 4]]；写 | 是增广矩阵的竖线（每行写在同一个位置，或者只在第一行写）。
+ * slot(词, 第几行, 第几列)：不是数的词先问它（格里的 {k} 换成的占位），给了字就用它
  */
-export function parseRows(words) {
+export function parseRows(words, slot) {
   const s = words.join(' ').replace(/\]\s*,?\s*\[/g, ' / ').replace(/[[\]]/g, ' ').replace(/[;；]/g, ' / ').replace(/[,，]/g, ' ');
   const rows = [[]];
   const bars = [null];
@@ -55,7 +57,7 @@ export function parseRows(words) {
     let after = false;
     if (/^\/./.test(t)) { rows.push([]); bars.push(null); t = t.slice(1); }
     if (/.\/$/.test(t)) { after = true; t = t.slice(0, -1); }
-    rows.at(-1).push(numOr(t).toString());
+    rows.at(-1).push(slot?.(t, rows.length, rows.at(-1).length + 1) ?? numOr(t).toString());
     if (after) { rows.push([]); bars.push(null); }
   }
   while (rows.length > 1 && !rows.at(-1).length) { rows.pop(); bars.pop(); }
@@ -322,6 +324,48 @@ export function zeroRows(o) {
   return out;
 }
 
+// —— 跟着算的（{…}，value.js）——
+const unionDeps = (list) => [...new Set(list.flatMap((k) => k.deps))];
+/** 算出来的值 → 每一行的数（字符串）：矩阵照写，向量是一列；一个数不行 */
+function rowsOfValue(v, src) {
+  if (isQ(v)) throw new Error(`「{${src}}」算出来是数 ${v}，不是矩阵（要一格跟着算，写 matrix M = 1 {k} / 0 1）`);
+  const rows = isQMat(v) ? v.map((r) => r.map(String)) : isQVec(v) ? v.map((x) => [String(x)]) : null;
+  if (!rows) throw new Error(`「{${src}}」算出来的不是矩阵`);
+  if (rows.length > MAX_ROWS || rows[0].length > MAX_COLS) throw new Error(`「{${src}}」算出来是 ${rows.length}×${rows[0].length}，舞台上的矩阵最多 ${MAX_ROWS} 行 ${MAX_COLS} 列`);
+  return rows;
+}
+// 格里的 {…} 只认拨数的名字或一格（{k}、{A.1,2}）：一格里是一个数；要算式子就整个矩阵跟着算
+function cellLive(h, id, src) {
+  if (!h.scene.vars.has(src) && !/^[A-Za-z_]\w*[.#]\S+$/.test(src)) throw new Error(`格里的 {${src}} 只能写拨数的名字（{k}）或舞台上的一格（{A.1,2}）；要算式子就整个矩阵跟着算：matrix ${id} = {A + B}`);
+  const { value, deps } = h.liveValue(src);
+  if (!isQ(value)) throw new Error(`「{${src}}」不是一个数，格里要一个数`);
+  return { value: value.toString(), deps };
+}
+/**
+ * 写了 {…} 的矩阵：整个 = {A + B} 是 { rows, live: { whole, deps } }；格里的 {k} 是 { rows, aug, live: { cells: [{ key, expr, deps }], deps } }
+ */
+function liveRows(h, id, text) {
+  const { parts } = h.parseLive(text);
+  const exprs = parts.filter((p) => p.k === 'expr');
+  if (exprs.length === 1 && parts.every((p) => p.k === 'expr' || !p.v.trim())) {
+    const src = exprs[0].v;
+    const { value, deps } = h.liveValue(src);
+    return { rows: rowsOfValue(value, src), aug: null, live: { line: h.line, whole: src, deps } };
+  }
+  // 每个 {…} 换成一个占位的词，照原来的写法读行列，读到占位时算那一格
+  const slots = [];
+  const marked = parts.map((p) => (p.k === 'text' ? p.v : ` §${slots.push(p.v) - 1} `)).join('');
+  const cells = [];
+  const { rows, aug } = parseRows([marked], (t, r, c) => {
+    const m = t.match(/^§(\d+)$/);
+    if (!m) return null;
+    const v = cellLive(h, id, slots[m[1]]);
+    cells.push({ key: `${r}.${c}`, expr: slots[m[1]], deps: v.deps });
+    return v.value;
+  });
+  return { rows, aug, live: { line: h.line, cells, deps: unionDeps(cells) } };
+}
+
 // product C = A B：A、B 排成一行（A 留在原处、B 挪到 A 右边），后面「= C」，三个上下居中；C 的格先空着
 function makeProduct(scene, c, h) {
   if (!h.args.some((a) => a.t === 'eq')) throw new Error('要写成 product C = A B');
@@ -376,13 +420,20 @@ export const matrix = {
   drag: false,
   hint: '（矩阵：名字.2,3 是第 2 行第 3 列，名字.r2 是第 2 行，名字.c3 是第 3 列；交换两行时数跟着走，名字.2,3 指的总是现在的第 2 行第 3 列）',
   make(scene, c, h, old) {
-    if (c.cmd === 'product') return makeProduct(scene, c, h);
+    if (c.cmd === 'product') {
+      if (h.words.some((w) => /[{}]/.test(w))) throw new Error('product 里不写 {…}：要跟着算就写 matrix C = {A B}');
+      return makeProduct(scene, c, h);
+    }
     if (!h.args.some((a) => a.t === 'eq')) throw new Error('要写成 matrix 名字 = 1 2 / 3 4（/ 分行）');
     const id = h.words[0];
-    const { rows, aug } = parseRows(h.words.slice(1));
+    const words = h.words.slice(1);
+    const live = words.some((w) => /[{}]/.test(w)) ? liveRows(h, id, words.join(' ')) : null;
+    const { rows, aug } = live || parseRows(words);
     const cells = [];
     rows.forEach((row, i) => row.forEach((v, k) => cells.push(newCell(id, i + 1, k + 1, v))));
     const o = { origin: { x: 0, y: 0 }, rows: rows.length, cols: rows[0].length, aug, cells, stairs: false, product: null };
+    // 式子里没用到舞台上的东西（{[[1, 2], [3, 4]]}）就只是一次算好的数
+    if (live?.live.deps.length) o.live = live.live;
     o.origin = old && !h.opts.beside ? { ...old.origin } : placeFor(scene, sizeOf(o), h.opts);
     return o;
   },
@@ -425,6 +476,7 @@ export const matrix = {
       const ops = parseOps([...opt, rest].join(' '), o);
       const done = ops.map((op) => applyOp(o, op));
       o.stairs = false; // 数变了，阶梯线收起（要的话再画一次）
+      delete o.live; // 跟着算的做了行变换：就是一个普通的矩阵了（不然依赖一变又算回去，行变换白做）
       const id = `op:${o.id}`;
       for (const k of [...scene.labels.keys()]) if (k === id || k.startsWith(`${id}:`)) scene.labels.delete(k);
       const labels = done.map((d, n) => {
@@ -449,6 +501,12 @@ export const matrix = {
       o.stairs = false;
       // 乘积里手写的一格：不再跟着 A、B 重算（老师故意写一个错的给学生找）
       if (o.calc) o.calc = o.calc.filter((k) => k !== x.key);
+      // 跟着算的矩阵里手写的一格也一样：这一格不再跟着算
+      if (o.live?.whole) o.live.fixed = [...new Set([...(o.live.fixed || []), x.key])];
+      else if (o.live?.cells) {
+        o.live.cells = o.live.cells.filter((k) => k.key !== x.key);
+        if (o.live.cells.length) o.live.deps = unionDeps(o.live.cells); else delete o.live;
+      }
       return { cell: x, before };
     },
     // pivot m.1,1：主元框起来（跟着那个数走：交换两行时框也跟过去）
@@ -516,6 +574,61 @@ export const matrix = {
       if (x.value !== sum) { const before = x.value; setValue(x, sum); out.push({ part: x, before, after: sum }); }
     }
     return out;
+  },
+  /** 依赖图里的结（场景拿来排先后、查环）：乘积跟着它的两个因子 */
+  depNodes(o) { return o.product ? [{ id: o.id, deps: [o.product.a, o.product.b] }] : []; },
+  /**
+   * 跟着算的重算（场景按依赖的先后叫）：在原地改格（画面闪变了的格）；依赖换了尺寸（A、B 重新造成 3×3）就跟着换尺寸。
+   * 先全算好再改，算不出来抛错（场景记下来告诉老师，原来的数不动）
+   */
+  relive(scene, o) {
+    const L = o.live;
+    const changed = [], parts = [];
+    const put = (x, v) => {
+      if (x.value === v) return;
+      changed.push({ ref: `${o.id}.${x.r},${x.c}`, from: x.value, to: v });
+      setValue(x, v);
+      parts.push(x);
+    };
+    if (L.whole) {
+      const { value, deps } = scene.liveValue(L.whole);
+      const rows = rowsOfValue(value, L.whole);
+      L.deps = deps;
+      if (rows.length !== o.rows || rows[0].length !== o.cols) {
+        const was = new Map(o.cells.map((x) => [`${x.r}.${x.c}`, x.value]));
+        Object.assign(o, { rows: rows.length, cols: rows[0].length, aug: null, cells: [] });
+        L.fixed = [];
+        rows.forEach((row, i) => row.forEach((v, k) => {
+          const x = newCell(o.id, i + 1, k + 1, v);
+          o.cells.push(x);
+          if (was.get(x.key) !== v) { changed.push({ ref: `${o.id}.${x.r},${x.c}`, from: was.get(x.key) ?? '', to: v }); parts.push(x); }
+        }));
+      } else {
+        const fixed = new Set(L.fixed || []);
+        for (const x of o.cells) if (!fixed.has(x.key)) put(x, rows[x.r - 1][x.c - 1]);
+      }
+    } else {
+      const next = L.cells.map((k) => {
+        const r = scene.liveValue(k.expr);
+        if (!isQ(r.value)) throw new Error(`「{${k.expr}}」不是一个数，格里要一个数`);
+        k.deps = r.deps;
+        return [o.cells.find((y) => y.key === k.key), r.value.toString()];
+      });
+      L.deps = unionDeps(L.cells);
+      for (const [x, v] of next) if (x) put(x, v);
+    }
+    if (changed.length) o.stairs = false;
+    return { changed, parts };
+  },
+  /** 舞台现状里写它跟着什么算：S = {A + B}；M.1,2 = {k} */
+  liveText(o) {
+    const L = o.live;
+    const at = (key) => { const x = o.cells.find((y) => y.key === key); return x ? `${o.id}.${x.r},${x.c}` : null; };
+    if (L.whole) {
+      const fixed = (L.fixed || []).map(at).filter(Boolean);
+      return `${o.id} = {${L.whole}}${fixed.length ? `（${fixed.join(' ')} 是手写的，不跟着算）` : ''}`;
+    }
+    return L.cells.map((k) => `${at(k.key)} = {${k.expr}}`).join('，');
   },
   /** 排版时和谁是一体的（reflow 不拿它们比上下）：和 A、B 排成一行的乘积 */
   anchors(o) { return o.product && !o.prefix ? [o.product.a, o.product.b] : []; },

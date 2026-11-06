@@ -385,6 +385,7 @@ export const graph = {
   type: 'graph',
   label: '图',
   create: ['graph'],
+  remake: true, // 造它的那一行里能写 {式子}（value.js）：依赖一变，场景照新的数把这一行重新造一遍
   hint: '（图：名字.A 是结点，名字.A~B 是边（paint、glow、dim 对边也行），名字.nodes 全部结点，名字.edges 全部边）',
   make(scene, c, h, old) {
     const eq = h.args.findIndex((a) => a.t === 'eq');

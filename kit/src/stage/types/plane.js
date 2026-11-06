@@ -4,7 +4,8 @@
 // 坐标是数学里的 (x, y)（y 朝上），都是精确分数（存成字符串，副本不丢东西）；画面里一格画成 UNIT 像素。
 // 线性变换：网格记着「现在是哪个矩阵变过去的」（M）；每个向量、点记着现在的坐标和变换前的坐标（home），退回原样时回到 home。
 // 跟着别的向量算的（w = 2u − v、w = k·u）只记式子，每次照式子重新算：u 被拖、k 被拨、平面被变换，w 都跟着走。
-import { Q } from '../../exact.js';
+// 写成 {式子} 的（vec p w = {A v}，value.js）：式子里能用舞台上的矩阵、拨数，平面上的向量直接写名字；依赖一变场景叫 relive 重算。
+import { Q, isQVec, isQMat } from '../../exact.js';
 import { bbox } from '../layout.js';
 import { toQ, parseRows, placeFor } from './matrix.js';
 
@@ -189,6 +190,26 @@ function checkCycle(o, self, expr) {
   }
 }
 
+/** {式子} 算出来的 → 坐标（两个数：向量、2×1 或 1×2 的矩阵） */
+function coordsOfValue(v, src) {
+  const flat = isQVec(v) ? v : isQMat(v) && (v.length === 1 || v[0].length === 1) ? v.flat() : null;
+  if (!flat || flat.length !== 2) throw new Error(`「{${src}}」算出来不是两个数：平面上的向量要两个数（比如 {A v}，A 是 2×2）`);
+  return flat.map(String);
+}
+// vec p w = {A v}：整个 = 后面是一个 {式子}；算出坐标，记着式子（rec 放进 it.live）
+function liveItem(scene, h, o, cmd, name, text, guide) {
+  if (guide) throw new Error(`sum 不写 {…}：要跟着算写 vec ${o.id} ${name} = {…}`);
+  const { parts } = h.parseLive(text);
+  const exprs = parts.filter((p) => p.k === 'expr');
+  if (exprs.length !== 1 || parts.some((p) => p.k === 'text' && p.v.trim())) throw new Error(`要写成 ${cmd} ${o.id} ${name} = {A v}（整个式子写在一对 {} 里）`);
+  const src = exprs[0].v;
+  const { value, deps } = h.liveValue(src, { plane: o.id });
+  const coords = coordsOfValue(value, src);
+  // 依赖成环（w 跟着 z、z 又跟着 w）：先查
+  scene.liveCheck([{ id: `${o.id}.${name}`, obj: o.id, deps, live: true }]);
+  return { coords, rec: deps.length ? { line: h.line, expr: src, deps } : null };
+}
+
 // vec / point / sum 共用：加一个，或者把已有的挪到新坐标、换成新的式子
 function setItem(scene, h, cmd, kind, guide = false) {
   const o = planeOf(scene, h.words[0], cmd);
@@ -199,12 +220,15 @@ function setItem(scene, h, cmd, kind, guide = false) {
   if (!rhs.length) throw new Error(`「=」后面要写${kind === 'pt' ? '坐标' : '坐标或式子'}`);
   let it = o.items.find((i) => i.name === name);
   if (it && it.kind !== kind) throw new Error(`「${name}」已经是平面上的${it.kind === 'vec' ? '向量' : '点'}了，换一个名字`);
-  const coords = coordsOf(rhs);
+  const live = rhs.some((w) => /[{}]/.test(w)) ? liveItem(scene, h, o, cmd, name, rhs.join(' '), guide) : null;
+  const coords = live ? live.coords : coordsOf(rhs);
   if (kind === 'pt' && !coords) throw new Error(`点要写坐标：point ${o.id} ${name} = 2 3`);
   if (guide && coords) throw new Error(`sum 要写成 sum ${o.id} ${name} = u + v（坐标用 vec）`);
   const expr = coords ? null : parseCombo(rhs.join(' '), o, scene, name);
   if (guide && expr.length < 2) throw new Error(`sum 要两项以上：sum ${o.id} ${name} = u + v`);
   if (expr) checkCycle(o, name, expr);
+  // 线性组合绕过跟着算的向量转回自己（w = {A z}，又写 z = w + u）：也是环
+  if (expr) scene.liveCheck([{ id: `${o.id}.${name}`, obj: o.id, deps: expr.map((t) => `${o.id}.${t.of}`) }]);
   const color = h.opts.color;
   if (color != null && !COLORS.includes(color)) throw new Error(`颜色只有 g1～g6（${COLORS.map((k) => `${k} ${COLOR_NAMES[k]}`).join('、')}）`);
   const fresh = !it;
@@ -217,6 +241,7 @@ function setItem(scene, h, cmd, kind, guide = false) {
   const before = fresh ? null : [it.x, it.y];
   it.expr = expr;
   it.guide = guide;
+  if (live?.rec) it.live = live.rec; else delete it.live;
   if (coords) { setXY(it, coords[0], coords[1]); setHome(o, it); }
   if (expr) for (const t of expr) if (t.dial && !scene.binds.some((b) => b.kind === 'vec' && b.obj === o.id && b.v === t.dial)) scene.binds.push({ kind: 'vec', obj: o.id, v: t.dial });
   refresh(o, scene);
@@ -316,6 +341,28 @@ export const plane = {
     refresh(o, scene);
     return { id: o.id };
   },
+  /** 依赖图里的结（场景拿来排先后、查环）：写成 {式子} 的向量要重算（live）；线性组合只用来查环（它们照旧 refresh） */
+  depNodes(o) {
+    return o.items.flatMap((it) => {
+      const id = `${o.id}.${it.name}`;
+      if (it.live) return [{ id, key: it.key, deps: it.live.deps, live: true, rec: it.live, text: `${id} = {${it.live.expr}}` }];
+      if (it.expr) return [{ id, key: it.key, deps: it.expr.map((t) => `${o.id}.${t.of}`) }];
+      return [];
+    });
+  },
+  /** 写成 {式子} 的向量重算：坐标变了挪过去，跟着它的线性组合一起走 */
+  relive(scene, o, n) {
+    const it = o.items.find((i) => i.key === n.key);
+    const { value, deps } = scene.liveValue(it.live.expr, { plane: o.id });
+    const [x, y] = coordsOfValue(value, it.live.expr);
+    it.live.deps = deps;
+    if (x === it.x && y === it.y) return { changed: [] };
+    const from = it.value;
+    setXY(it, x, y);
+    setHome(o, it);
+    refresh(o, scene);
+    return { changed: [{ ref: `${o.id}.${it.name}`, from, to: it.value }], parts: [it] };
+  },
   commands: {
     // vec p u = 2 1：加向量 / 挪到新坐标；vec p w = 2u - v、vec p w = k u：跟着算的
     vec(scene, c, h) { return setItem(scene, h, 'vec', 'vec'); },
@@ -336,6 +383,7 @@ export const plane = {
       o.items = o.items.filter((i) => !gone.has(i.name));
       // 跟着拿掉的那个算的：定在现在的位置
       for (const it of o.items) if (it.expr?.some((t) => gone.has(t.of))) { it.expr = null; it.guide = false; setHome(o, it); }
+      for (const it of o.items) if (it.live?.deps.some((d) => [...gone].some((n) => d === `${o.id}.${n}`))) { delete it.live; setHome(o, it); }
       o.spans = o.spans.filter((s) => !s.of.some((n) => gone.has(n)));
       for (const [k, l] of scene.labels) if (l.refs.some((r) => [...gone].some((n) => r === `${o.id}.${n}`))) scene.labels.delete(k);
       for (const [k, l] of scene.links) if ((l.a.obj === o.id && gone.has(l.a.key)) || (l.b.obj === o.id && gone.has(l.b.key))) scene.links.delete(k);
@@ -366,7 +414,8 @@ export const plane = {
       const o = planeOf(scene, h.words[0], 'transform');
       const A = matrixArg(scene, h.words.slice(1), o);
       const from = o.M;
-      for (const it of o.items) if (!it.expr) { const [x, y] = apply2(A, it.x, it.y); setXY(it, x, y); }
+      // 跟着算的（线性组合、{A v}）不直接变：它们依赖的变过去以后照式子重算
+      for (const it of o.items) if (!it.expr && !it.live) { const [x, y] = apply2(A, it.x, it.y); setXY(it, x, y); }
       o.M = mul2(A, o.M);
       refresh(o, scene);
       // 用的是舞台上的矩阵：画面让它闪一下（看得出是谁在变换平面）
@@ -377,7 +426,7 @@ export const plane = {
       const o = planeOf(scene, h.words[0], 'untransform');
       const from = o.M;
       for (const it of o.items) {
-        if (it.expr) continue;
+        if (it.expr || it.live) continue;
         if (it.hx != null) setXY(it, it.hx, it.hy);
         it.hx = it.x;
         it.hy = it.y;
@@ -399,8 +448,8 @@ export const plane = {
       if (it.covered) bits.push('扣着');
       if (it.guide) bits.push('首尾相接画着');
       if (num(it.x) < o.xlo || num(it.x) > o.xhi || num(it.y) < o.ylo || num(it.y) > o.yhi) bits.push('出了网格');
-      const def = it.expr ? ` = ${exprText(it.expr)}` : '';
-      const home = changed && !it.expr && it.hx != null && (it.hx !== it.x || it.hy !== it.y) ? `，变换前是 (${it.hx}, ${it.hy})` : '';
+      const def = it.expr ? ` = ${exprText(it.expr)}` : it.live ? ` = {${it.live.expr}}` : '';
+      const home = changed && !it.expr && !it.live && it.hx != null && (it.hx !== it.x || it.hy !== it.y) ? `，变换前是 (${it.hx}, ${it.hy})` : '';
       lines.push(`  ${it.kind === 'vec' ? '向量' : '点'} ${it.name}${def} = (${it.x}, ${it.y})${bits.length ? `（${bits.join('、')}）` : ''}${home}`);
     }
     if (changed) lines.push(`  网格做过线性变换：现在是矩阵 (${matText(o.M)}) 变过去的样子（untransform 退回原样）`);
