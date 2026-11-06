@@ -34,8 +34,17 @@ test('说明里的例子照抄就能演：例子那一轮；共用的每一条�
     if (!t.doc) continue;
     assert.ok(t.example, `${t.label}要有能照抄的例子`);
     assert.deepEqual(dryRun(new Scene(), t.example), [], `${t.label}的例子`);
-    const sc = ready(`${t.example}\ndial d = 5 range=1-5`);
-    for (const l of firsts(t.doc)) { n++; const e = dryRun(sc, l); if (e.length) bad.push(`${t.label}：${l} → ${e[0].error}`); }
+    // 只演例子的第一行（造出来）：后面的写法各自在刚造好的东西上演，互不干扰（比如插过 35 再插一次就该报错）
+    const sc = ready(`${t.example.split('\n')[0]}\ndial d = 5 range=1-5`);
+    // 每一条在刚造好的东西上演；要前面先做的（先 tag 距离再 relax），在照说明先后一条接一条演下来的舞台上演，两种有一种能演就行
+    const fresh = sc.clone();
+    for (const l of firsts(t.doc)) {
+      n++;
+      const e = dryRun(fresh, l);
+      const e2 = e.length ? dryRun(sc, l) : [];
+      if (e.length && e2.length) bad.push(`${t.label}：${l} → ${e[0].error}`);
+      if (!e2.length || !e.length) { try { for (const c of parseScript(l)) if (c.cmd !== 'ask') sc.apply(c); } catch { /* 这一条只在刚造好的上能演 */ } }
+    }
   }
   assert.deepEqual(bad, []);
   assert.ok(n >= 10, `各种东西的说明里一共 ${n} 条写法`);

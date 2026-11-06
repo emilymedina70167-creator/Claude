@@ -147,7 +147,7 @@ export class Scene {
     }
     // 各种东西自己的指令：按第一个部件是哪种东西找（swap 给格子、rowop 给矩阵……）
     const own = this.ownerOf(c, h);
-    if (own) return own(this, c, h);
+    if (own) { const fx = own(this, c, h); this.reflow(); return fx; }
     switch (cmd) {
       case 'say': {
         const text = str ?? '';
@@ -324,6 +324,25 @@ export class Scene {
     if (!t.commands?.[cmd]) throw new Error(`${t.label}没有「${cmd}」（${owners.map((x) => x.label).join('、')}才有）`);
     void h;
     return t.commands[cmd];
+  }
+
+  /**
+   * 东西长大了（树多长了一层、矩阵多了一行、题卡加了一行）：摆在它下面的往下让，不压着它。
+   * 只往下推、不往上拉（老师和学生看惯了的位置不乱跳）；按摆上舞台的先后
+   */
+  reflow() {
+    const list = [...this.objects.values()];
+    for (let i = 1; i < list.length; i++) {
+      const o = list[i];
+      const me = typeOf(o).objectBox(o);
+      let need = -Infinity;
+      for (let j = 0; j < i; j++) {
+        const b = typeOf(list[j]).objectBox(list[j]);
+        // 横着有重叠的才算「在上面」
+        if (b.x < me.x + me.w && me.x < b.x + b.w) need = Math.max(need, b.y + b.h + OBJECT_GAP / 2);
+      }
+      if (me.y < need && o.origin) o.origin = { ...o.origin, y: o.origin.y + (need - me.y) };
+    }
   }
 
   linkKey(a, b) { return [pidOf(a), pidOf(b)].sort().join('~'); }

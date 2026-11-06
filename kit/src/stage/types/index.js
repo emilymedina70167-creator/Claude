@@ -2,8 +2,10 @@
 // 加一种：照 array.js 的样子写 types/xxx.js + types/xxx.view.js，在这里和 views.js 各加一行
 import { array } from './array.js';
 import { card } from './card.js';
+import { tree } from './tree.js';
+import { graph } from './graph.js';
 
-export const TYPES = { array, card };
+export const TYPES = { array, tree, graph, card };
 
 /** 造东西的指令 → 那种东西（array → 一排格子、tree → 树……） */
 export const CREATE = {};

@@ -93,6 +93,15 @@ export class Stage {
     if (!m) return;
     for (const [k, n] of m) if (test(k)) { m.delete(k); this.tween(n, [{ opacity: 1 }, { opacity: 0 }], { duration: 200 }).then(() => n.remove()); }
   }
+  /** 拿掉一个部件的节点：从它现在的透明度淡掉（已经缩没、淡没的直接删，不会闪回来） */
+  dropNode(pid) {
+    const n = this.nodes.get(pid);
+    if (!n) return;
+    this.nodes.delete(pid);
+    const op = Number(getComputedStyle(n).opacity);
+    if (this.instant || !(op > 0.02)) { n.remove(); return; }
+    this.tween(n, [{ opacity: op }, { opacity: 0 }], { duration: 220 }).then(() => n.remove());
+  }
   // 共用的几种样子：染色、点亮、抬起、灰掉、扣过去（像翻一张牌）
   flagPart(n, x, ctx) {
     const was = n.dataset.paint || null;
@@ -315,7 +324,7 @@ export class Stage {
     const moves = [];
     for (const o of sc.objects.values()) moves.push(...(VIEWS[o.type]?.sync(this, o, ctx) || []));
     // 没了的部件、没了的东西
-    for (const [k, n] of this.nodes) if (n.__live !== this.syncMark && !only) { this.nodes.delete(k); this.tween(n, [{ opacity: 1 }, { opacity: 0 }], { duration: 220 }).then(() => n.remove()); }
+    for (const [k, n] of this.nodes) if (n.__live !== this.syncMark && !only) this.dropNode(k);
     for (const id of [...this.decors.keys()]) if (!sc.objects.has(id)) { this.dropDecor(id); this.decors.delete(id); }
     // 挪了的：连线先藏、挪完再画；按各自给的先后错开
     if (moves.length) {
@@ -478,7 +487,7 @@ export class Stage {
       chip.textContent = this.chipText(x);
       chip.dataset.cell = pidOf(x);
       if (x.paint) chip.dataset.paint = x.paint;
-      chip.addEventListener('click', () => this.pulse(x));
+      chip.addEventListener('click', () => { const [obj, ...k] = String(chip.dataset.cell || '').split(':'); const key = k.join(':'); const p = this.scene.partOf(obj, /^\d+$/.test(key) ? Number(key) : key) || this.scene.partOf(obj, key); if (p) this.pulse(p); });
     } catch { chip.textContent = ref; chip.classList.add('is-bad'); }
     return chip;
   }
@@ -567,8 +576,12 @@ export class Stage {
     const to = `translate(${next.tx}px, ${next.ty}px) scale(${next.s})`;
     this.cam = next;
     this.placeCaption(box, animate);
+    // 上一次镜头还在走：停在它现在的位置，从那里接着走（不然它走完会把旧镜头写回去，cam 和画面对不上）
+    const cur = this.world.getAnimations?.() || [];
+    const live = cur.length ? getComputedStyle(this.world).transform : null;
+    cur.forEach((a) => a.cancel());
     if (!animate || this.instant) { this.world.style.transform = to; return; }
-    await this.tween(this.world, [{ transform: from }, { transform: to }], { duration: 760, easing: EASE.move });
+    await this.tween(this.world, [{ transform: live && live !== 'none' ? live : from }, { transform: to }], { duration: 760, easing: EASE.move });
   }
   refocus(animate = true) { return this.camera(this.focusBox(), animate); }
   // 新东西跑出镜头了（新贴的字、长高的弧），镜头挪一挪；不用挪也让话让开
