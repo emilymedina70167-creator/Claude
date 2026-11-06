@@ -179,8 +179,10 @@ export function createLoop(host) {
     addEvent(eventOf(act, { help: HELP, at: Date.now() }));
     flush();
   }
-  function onGoal(ids, { instant, reacted = 0 } = {}) {
+  function onGoal(ids, { by = 'student', instant, reacted = 0 } = {}) {
     if (instant || S.ended || host.readOnly) return;
+    // 老师（或页面替老师补的行）让挑战成立了：不是学生做到的，不叫老师，攒着跟下一条发
+    if (by !== 'student') { addEvent({ kind: 'goal-by-teacher', ids, at: Date.now() }); return; }
     for (const id of ids) host.evidence?.goal?.(id, stage.scene.goals.get(id), S.lastClaude);
     const e = { kind: 'goal', ids, reacted, at: Date.now() };
     addEvent(e);

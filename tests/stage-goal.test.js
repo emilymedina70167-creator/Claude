@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
 import { parseGoal, evalGoal } from '../kit/src/stage/goal.js';
+import { registerRules } from '../kit/src/stage/rules.js';
 
 const run = (sc, src) => { const out = []; for (const c of parseScript(src)) out.push(sc.apply(c)); return out; };
 const setup = () => {
@@ -106,4 +107,40 @@ test('@ 的行写错了当场挡下（连着前面记着的一起试）', () => 
   assert.deepEqual(dryRun(sc, '@g1 product F = A E'), []);
   assert.match(dryRun(sc, '@g1 swap E.1')[0].error, /./);
   assert.match(parseScript('@ say "x"')[0].error, /@挑战的名字/);
+});
+
+test('49′ 不等于 49；比大小、sorted 照旧按数', () => {
+  const sc = new Scene();
+  run(sc, 'array a = 13 49 49′ 65');
+  assert.equal(evalGoal(sc, parseGoal('a.3 = 49')), false);
+  assert.equal(evalGoal(sc, parseGoal('a.3 != 49')), true);
+  assert.equal(evalGoal(sc, parseGoal('a.3 = 49′')), true);
+  assert.equal(evalGoal(sc, parseGoal('a.2 = 49')), true);
+  assert.equal(evalGoal(sc, parseGoal('a.3 >= 49')), true);
+  assert.equal(evalGoal(sc, parseGoal('a sorted')), true);
+});
+
+test('每种东西的判断式：名字 判断式 参数；写错了报能写哪些；判不了算没成立', () => {
+  registerRules('array', { predicates: { even: (o) => o.cells.every((c) => Number(c.value) % 2 === 0), atLeast: (o, [k]) => o.cells.length >= Number(k), unknown: () => null } });
+  const sc = new Scene();
+  run(sc, 'array x = 2 4\narray y = 2 3');
+  assert.deepEqual(parseGoal('x atLeast=2, y even'), [{ l: 'x', pred: 'atLeast', args: ['2'] }, { l: 'y', pred: 'even', args: [] }]);
+  assert.equal(evalGoal(sc, parseGoal('x even')), true);
+  assert.equal(evalGoal(sc, parseGoal('y even')), false);
+  assert.equal(evalGoal(sc, parseGoal('x atLeast 2')), true);
+  assert.equal(evalGoal(sc, parseGoal('x atLeast=3')), false);
+  assert.equal(evalGoal(sc, parseGoal('x unknown')), false);
+  assert.throws(() => evalGoal(sc, parseGoal('x odd')), /没有判断式「odd」，能写：even、atLeast、unknown/);
+  assert.throws(() => run(sc, 'goal g1 "让 x 是奇数" when="x odd"'), /能写：even/);
+  assert.equal(run(sc, 'goal g2 "让 y 都是偶数" when="y even"').length, 1);
+});
+
+test('预写的挑战，条件每一句都在触发它的挑战里：g1 一做到它就成立，当场报错；条件不同的照收；重放不查', () => {
+  const sc = setup();
+  run(sc, 'goal g1 "让 AB 不是 O" when="D != O, C = O"');
+  assert.throws(() => run(sc, '@g1 goal g2 "再来" when="C = O, D != O"'), /挑战 g2 的条件在 g1 做到时就已经成立了/);
+  assert.throws(() => run(sc, '@g1 goal g2 "再来" when="D!=O"'), /学生不用再动手/);
+  run(sc, '@g1 goal g2 "再来" when="D != O, A != B"');
+  assert.equal(sc.reactions.get('g1').length, 1);
+  assert.doesNotThrow(() => sc.apply({ ...parseScript('@g1 goal g4 "再来" when="C = O"')[0], lenient: true }));
 });

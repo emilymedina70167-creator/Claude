@@ -64,6 +64,10 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
       const g = goals.get(id);
       lines.push(`学生做到了挑战 ${id}${g ? `「${g.text}」` : ''}${e.reacted ? `（页面已经演了你预写的 ${e.reacted} 行）` : '（你没预写做到以后的行）'}`);
     }
+    else if (e.kind === 'goal-by-teacher') for (const id of e.ids || []) {
+      const g = goals.get(id);
+      lines.push(`你这一轮让挑战 ${id}${g ? `「${g.text}」` : ''}成立了（不是学生做到的）`);
+    }
     else if (e.kind === 'help') lines.push(`学生点了「${e.act.button}」`);
     else if (e.kind === 'stuck') lines.push(e.text || `学生 ${Math.round(QUIET_MS / 1000)} 秒没动，挑战还没做到`);
     else if (e.kind === 'tries') lines.push(e.text || `学生试了 ${TRY_MAX} 下还没做到`);

@@ -13,7 +13,7 @@
 import { parseScript, parseRef, parseRich, addCommands } from './script.js';
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox } from './layout.js';
-import { parseGoal, evalGoal, goalStatus } from './goal.js';
+import { parseGoal, evalGoal, goalStatus, checkPreds, clauseKey } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder } from './value.js';
 
@@ -208,10 +208,15 @@ export class Scene {
     const list = this.reactions.get(c.on) || [];
     const trial = this.clone();
     trial.goals.get(c.on).met = true;
-    trial.trial = true; // 这是在今天的舞台上试：真演的时候学生已经动过了（「现在就成立」这种检查不算数）
+    trial.trial = true; // 这是在今天的舞台上试：真演的时候学生已经动过了（「现在就成立」这种检查不算数，换成比条件的字）
     for (const x of parseScript([...list, c.body].join('\n'))) {
       if (x.on) throw new Error('@ 的行里不能再写 @');
-      trial.applyOne(x);
+      const fx = trial.applyOne(x);
+      // 预写的挑战，条件每一句都在 g1 的条件里：g1 一做到它就成立，学生不用再动手（今天的舞台上学生还没动，查不出来，所以比条件的字）
+      if (fx?.goal && !c.lenient) {
+        const mine = new Set(g.cond.map(clauseKey));
+        if (trial.goals.get(fx.goal).cond.every((cl) => mine.has(clauseKey(cl)))) throw new Error(`挑战 ${fx.goal} 的条件在 ${c.on} 做到时就已经成立了，学生不用再动手；换一个要学生再动手才做得到的条件`);
+      }
     }
     this.reactions.set(c.on, [...list, c.body]);
     return { stashed: c.on };
@@ -435,6 +440,7 @@ export class Scene {
         if (!opts.when) throw new Error(`goal ${id} 要写 when="做到什么算做到"（比如 when="C = O, D != O"），页面照它判`);
         for (const p of parseRich(str)) if (p.k === 'ref') this.parts(p.v);
         const cond = parseGoal(opts.when);
+        checkPreds(this, cond);
         // 老师当场写的挑战一写下就成立，多半是写错了，当场告诉老师；预写的行、重放的时候学生可能已经做到了：照收，下面马上算做到
         if (!this.trial && !c.lenient && evalGoal(this, cond)) throw new Error(`「${opts.when}」现在就已经成立了：挑战要学生动手以后才做得到`);
         this.goals.set(id, { id, text: str, when: opts.when, cond, met: false });

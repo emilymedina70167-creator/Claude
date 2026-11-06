@@ -31,3 +31,9 @@ test('写给老师：同一格连着拨的并成一条路，点开看的并成�
   assert.match(eventsText([eventOf({ type: 'say', text: '为什么换了顺序就不一样' })]), /学生说：「为什么换了顺序就不一样」/);
   assert.doesNotMatch(eventsText([eventOf({ type: 'say', text: 'x' })], { secs: 2 }), /过了/);
 });
+
+test('老师做到的挑战：不叫老师，写给老师「不是学生做到的」', () => {
+  assert.equal(triggers({ kind: 'goal-by-teacher', ids: ['g1'] }), false);
+  const t = eventsText([{ kind: 'goal-by-teacher', ids: ['g1'] }], { goals: new Map([['g1', { text: '让 AB 是 O' }]]) });
+  assert.equal(t, '你这一轮让挑战 g1「让 AB 是 O」成立了（不是学生做到的）');
+});

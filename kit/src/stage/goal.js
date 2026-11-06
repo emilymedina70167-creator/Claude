@@ -6,7 +6,11 @@
 //
 // 两边能写：舞台上的东西（C、a）、一个部件（B.1,2、a.3、a#8）、数（3、-1/2）、拨的数的名字、O（零矩阵）、I（单位矩阵）。
 // 比较：=（==）、!=（≠）、<、<=（≤）、>、>=（≥）；一排东西还能写「a sorted」「a sorted desc」。
+// 每种东西自己的判断式：「名字 判断式名 [参数…]」，比如 t avl、M rank=2、s parsed（rules.js 的 predicates，参数原样交给它）。
+// = / != 比一格时 49′ 和 49 是两个东西（′ 是同一个数的另一个记号，稳定性要看它们的先后）；比大小、sorted 照旧按数。
 // 还空着的格（乘积没算出来的）不算成立：C 还没算完，C = O 和 C != O 都不成立。
+
+import { predicateOf, rulesOf } from './rules.js';
 
 const OPS = ['!=', '≠', '==', '<=', '>=', '≤', '≥', '=', '<', '>'];
 const OP_RE = /^(.+?)\s*(!=|≠|==|<=|>=|≤|≥|=|<|>)\s*(.+)$/;
@@ -20,6 +24,12 @@ export function parseGoal(text) {
   return parts.map((p) => {
     const so = p.match(/^(\S+)\s+sorted(?:\s+(asc|desc))?$/i);
     if (so) return { l: so[1], sorted: (so[2] || 'asc').toLowerCase() };
+    // 名字 判断式名 [参数…]：第二个词以字母开头（C = O、a.4 > 1 的第二个词是符号，不会撞上）；rank=2 拆成 rank 和 2
+    const pm = p.match(/^([^\s=!<>≠≤≥]+)\s+([A-Za-z_]\w*)(\S*)((?:\s+\S+)*)$/);
+    if (pm) {
+      const first = pm[3].replace(/^=/, '');
+      return { l: pm[1], pred: pm[2], args: [first, ...pm[4].trim().split(/\s+/)].filter(Boolean) };
+    }
     const m = p.match(OP_RE);
     if (!m) throw new Error(`「${p}」看不懂：写成 C = O、D != O、B.1,2 > 0、a sorted`);
     const op = { '≠': '!=', '==': '=', '≤': '<=', '≥': '>=' }[m[2]] || m[2];
@@ -43,6 +53,7 @@ const sameNum = (a, b) => Math.abs(a - b) < 1e-9;
  */
 export function operand(scene, w) {
   const word = String(w).trim();
+  if (word.includes('′')) return { k: 'num', v: word }; // 49′ 不是 49
   if (numOf(word) != null) return { k: 'num', v: numOf(word) };
   if (scene.objects.has(word)) {
     const o = scene.objects.get(word);
@@ -79,6 +90,8 @@ function sameMeasure(a, b) {
 }
 function cmpScalar(a, b, op) {
   if (a === '' || b === '' || a == null || b == null) return false;
+  // 比一格是不是同一个：带 ′ 的和不带的不是同一个（49′ ≠ 49）；比大小照旧按数
+  if ((op === '=' || op === '!=') && /′/.test(`${a}${b}`)) return (String(a).trim() === String(b).trim()) === (op === '=');
   const p = numOf(a), q = numOf(b);
   if (p == null || q == null) {
     const s = String(a).trim(), t = String(b).trim();
@@ -90,8 +103,27 @@ function cmpScalar(a, b, op) {
 }
 const scalarOf = (x) => (x.k === 'num' ? [x.v] : x.k === 'parts' ? x.parts.map((p) => p.value) : null);
 
+/** 判断式写错了的话：这样东西没有它，说出能写哪些 */
+function predMissing(scene, cl) {
+  const o = scene.objects.get(cl.l);
+  if (!o) return `「${cl.l}」不是舞台上的东西（「${cl.l} ${cl.pred}」要先有这样东西）`;
+  const names = Object.keys(rulesOf(o)?.predicates || {});
+  return names.length ? `${scene.type(o).label}「${cl.l}」没有判断式「${cl.pred}」，能写：${names.join('、')}` : `${scene.type(o).label}「${cl.l}」还没有判断式可写（能比的有 =、!=、sorted）`;
+}
+/** 写下挑战时就查：判断式名对不对（不看现在成不成立） */
+export function checkPreds(scene, cond) {
+  for (const cl of cond) if (cl.pred && !predicateOf(scene, cl.l, cl.pred)) throw new Error(predMissing(scene, cl));
+}
+/** 一句条件规范化成一个键（去掉空格），看两个挑战的条件有没有一样的句子 */
+export const clauseKey = (cl) => (cl.sorted ? `${cl.l}sorted${cl.sorted}` : cl.pred ? `${cl.l}:${cl.pred}:${cl.args.join(',')}` : `${cl.l}${cl.op}${cl.r}`).replace(/\s+/g, '');
+
 /** 一句条件成不成立（还空着的算不成立）；两边对不上（矩阵和数比）抛错 */
 export function evalClause(scene, cl) {
+  if (cl.pred) {
+    const fn = predicateOf(scene, cl.l, cl.pred);
+    if (!fn) throw new Error(predMissing(scene, cl));
+    return fn(cl.args) === true; // 判不了（null）算没成立
+  }
   const L = operand(scene, cl.l);
   if (cl.sorted) {
     if (L.k !== 'obj' || L.m.kind !== 'list') throw new Error(`「${cl.l} sorted」只能写一排东西`);
@@ -133,7 +165,7 @@ export function goalStatus(scene, g) {
   const bits = g.cond.map((cl) => {
     let ok = false;
     try { ok = evalClause(scene, cl); } catch { ok = false; }
-    return `${cl.sorted ? `${cl.l} sorted${cl.sorted === 'desc' ? ' desc' : ''}` : `${cl.l} ${cl.op} ${cl.r}`}${ok ? ' ✓' : ' ✗'}`;
+    return `${cl.sorted ? `${cl.l} sorted${cl.sorted === 'desc' ? ' desc' : ''}` : cl.pred ? `${cl.l} ${cl.pred}${cl.args.length ? ` ${cl.args.join(' ')}` : ''}` : `${cl.l} ${cl.op} ${cl.r}`}${ok ? ' ✓' : ' ✗'}`;
   });
   return `还没做到（${bits.join('，')}）`;
 }
