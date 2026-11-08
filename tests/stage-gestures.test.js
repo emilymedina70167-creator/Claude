@@ -189,6 +189,7 @@ test('撤一步：引出过预写、做到挑战、做完了的那一下撤不�
   const p = undoPlan(told);
   assert.equal(p.gone, null);
   assert.equal(p.why, UNDO_TOLD);
+  assert.equal(UNDO_TOLD, '这一下已经记下了，撤不了', '中性：不说对错，也不说给谁看（样子页没有老师）');
   assert.equal(undoLines(told).length, told.length, '不撤');
   // 最后一下是拨数（那一项没写 undo=on）：前面能撤的也不跳过去撤（不然先后乱了）
   const opens = new Map([['t:rotate', { obj: 't', action: 'rotate', policy: { undo: true } }], ['k', { obj: 'k', action: 'dial' }]]);

@@ -41,7 +41,7 @@ goal g1 "把 M 消成阶梯形" when="M stairs"
     how: '从一个词拉到另一个词（只要一个词就点它），松手再点成分',
     script: `sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."
 say "拆这一句：按住一个词拉到另一个词，松手再点它是什么成分。"
-open s mark undo=on
+open s mark wrong=mark undo=on
 goal g1 "拉出主语、谓语、表语，再拉出主语里的从句" when="s parsed"
 @s.right say "对。接着拉别的成分。"
 @s.done fold s.3-6
@@ -81,12 +81,16 @@ export function refereeEntry(act) {
   };
 }
 
-/** 挑战做到了、东西做完了（舞台的 onGoal / onDone）→ 角上那一块的一条 */
+/**
+ * 挑战做到了、东西做完了（舞台的 onGoal / onDone）→ 角上那一块的一条。只占一行（演了几行预写跟在后面）：
+ * 它们排在引出它们的那一下下面，一组要在竖屏那一条里放得下
+ */
+const reactedText = (n) => (n ? `马上演了老师预写的 ${n} 行` : '');
 export function goalEntry(goals, { reacted = 0 } = {}) {
-  return { tone: 'goal', head: `做到了挑战「${goals.map((g) => g.text).join('」「')}」`, src: '', verdict: '', lines: reacted ? [['预写', `马上演了老师预写的 ${reacted} 行`]] : [] };
+  return { tone: 'goal', head: `做到了挑战「${goals.map((g) => g.text).join('」「')}」`, src: '', verdict: reactedText(reacted), lines: [] };
 }
 export function doneEntry({ reacted = 0 } = {}) {
-  return { tone: 'goal', head: '做完了：页面算出没有下一步了', src: '', verdict: '', lines: reacted ? [['预写', `马上演了老师预写的 ${reacted} 行`]] : [] };
+  return { tone: 'goal', head: '做完了：页面算出没有下一步了', src: '', verdict: reactedText(reacted), lines: [] };
 }
 
 /**

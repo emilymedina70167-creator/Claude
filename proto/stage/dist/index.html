@@ -68,7 +68,7 @@
   .m-own button { min-width: 72px; height: 48px; border: 0; border-radius: 12px; background: rgb(var(--chalk-rgb) / 0.08); color: rgb(var(--chalk-rgb)); font: 600 16px var(--sans); cursor: pointer; }
   .m-topic:focus-visible, .m-own button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
   /* 试手感（feel.js）：裁判判成什么写在角上那一块（只在这一页）。舞台让出它的地方（镜头不把东西摆到它下面）：竖屏在下面一条、横屏在右边一栏 */
-  body.is-feel { --feel-h: 236px; --feel-w: 340px; }
+  body.is-feel { --feel-h: 264px; --feel-w: 340px; }
   body.is-feel #stage { bottom: calc(var(--feel-h) + env(safe-area-inset-bottom, 0px)); }
   #feel {
     position: fixed; z-index: 6; left: calc(env(safe-area-inset-left, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
@@ -96,6 +96,7 @@
   #feel .f-mark { width: 1.1em; font-weight: 700; text-align: center; }
   #feel .f-what { font-weight: 600; color: rgb(var(--chalk-rgb)); }
   #feel .f-verdict { color: rgb(var(--chalk-rgb) / 0.7); }
+  #feel .is-goal .f-verdict { color: rgb(var(--chalk-rgb) / 0.55); font-size: 12.5px; }
   #feel .is-right .f-mark, #feel .is-right .f-verdict, #feel .is-goal .f-mark { color: rgb(var(--green-rgb)); }
   #feel .is-wrong .f-mark, #feel .is-wrong .f-verdict, #feel .is-cant .f-mark, #feel .is-cant .f-verdict { color: rgb(var(--coral-rgb)); }
   #feel .f-src { display: block; margin: 1px 0 0 calc(1.1em + 8px); font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: rgb(var(--chalk-rgb) / 0.55); }

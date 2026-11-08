@@ -93,14 +93,16 @@ test('消元：倍数写错淡淡圈着第 2 行、说倍数不对；r₂ − 2r
   assert.match(right.said.join(''), /成了阶梯形/);
 });
 
-test('拆句子：只拉 The man 当主语照做、只记下；四段拉对做完，演「对。」一次、折起从句、「拆完了」', () => {
+test('拆句子：只拉 The man 当主语照做、那两个词淡淡圈着；四段拉对做完，演「对。」一次、折起从句、「拆完了」', () => {
   const s = setUp('parse');
   const w = (k) => part(s, `s#${k}`);
   const wrong = student(s, 'mark', { from: w(1), to: w(2), role: 'S' });
   assert.equal(wrong.src, 'mark s.1-2 S');
   assert.equal(wrong.judged.verdict.right, false);
   assert.equal(wrong.judged.apply, true);
-  assert.match(refereeEntry(actOf(wrong)).lines.find(([k]) => k === '画面')[1], /只记下（wrong=quiet）/);
+  assert.equal(wrong.judged.mark, true);
+  assert.deepEqual(s.parts('s').filter((p) => p.slip).map((p) => p.key), [1, 2], '拉错的那一段淡淡圈着');
+  assert.match(refereeEntry(actOf(wrong)).lines.find(([k]) => k === '画面')[1], /淡淡圈了一下（wrong=mark）/);
   const t = setUp('parse');
   const v = (k) => part(t, `s#${k}`);
   const said = [];
@@ -120,5 +122,5 @@ test('角上那一块只照裁判给的写：做不到、页面不判、撤一�
   assert.equal(refereeEntry({ src: 'write M.1,2 3/4' }).verdict, '页面不判这一下');
   assert.equal(refereeEntry({ type: 'undo', src: 'rotate t#1 left' }).head, '撤回了上一下');
   assert.equal(refereeEntry({ src: 'x', verdict: { legal: true, right: true, why: '40 左旋' }, facts: ['现在每个结点都平衡了'] }).lines[0][1], '现在每个结点都平衡了');
-  assert.deepEqual(goalEntry([{ text: '把树转平' }], { reacted: 1 }).lines, [['预写', '马上演了老师预写的 1 行']]);
+  assert.deepEqual(goalEntry([{ text: '把树转平' }], { reacted: 1 }), { tone: 'goal', head: '做到了挑战「把树转平」', src: '', verdict: '马上演了老师预写的 1 行', lines: [] });
 });

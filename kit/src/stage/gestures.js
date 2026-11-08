@@ -45,7 +45,7 @@ export function askFor(g, o, kind, ctx = {}) {
 }
 
 /** 撤不了时按钮下面那一句（中性：不说对错） */
-export const UNDO_TOLD = '这一下已经告诉老师了，撤不了';
+export const UNDO_TOLD = '这一下已经记下了，撤不了';
 export const UNDO_NO = '这一下不能撤';
 
 /**

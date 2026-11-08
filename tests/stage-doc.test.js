@@ -212,3 +212,19 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
   assert.equal(run('array a = 1 2 3\nlabel x a.1 "字"\nremove a').labels.size, 0);
   assert.equal(run('tree t = 50 30 70\nlabel x t.30 "字"\ndelete t.30').labels.size, 0);
 });
+
+test('说明里写的两条开法：同一项再开一次是换掉它（照新写的 wrong= / range= / undo=）；预写的行照写的先后排着', () => {
+  assert.match(STAGE_COMMON, /同一项再开一次是换掉它：再写一遍 open，照新写的 wrong=、range=、undo= 办/);
+  assert.match(STAGE_COMMON, /预写的行照先后演，say 要等读完：换 open、出新 goal 写在 say 前面/);
+  const run = (src) => { const s = new Scene(); for (const c of parseScript(src)) s.apply(c); return s; };
+  // 再写一遍：不报「一次开一种」，换成新的办法
+  let s = run('tree t = 30 20 40 _ _ _ 45 tray="47"\nopen t insert\nopen t rotate wrong=block');
+  assert.deepEqual(dryRun(s, 'open t rotate wrong=mark undo=on'), []);
+  s.apply(parseScript('open t rotate wrong=mark undo=on')[0]);
+  assert.deepEqual(s.opens.get('t:rotate').policy, { wrong: 'mark', call: null, undo: true });
+  s = run('matrix B = 1 2 / 3 4\nopen B edit range=-3..3\nopen B edit range=0..5');
+  assert.deepEqual([s.opens.get('B:edit').lo, s.opens.get('B:edit').hi], [0, 5]);
+  // 预写在 g1 下面照写的先后排着（舞台做到时一行一行照这个先后演）
+  s = run('tree t = 30 20 40 _ _ _ 45 tray="47"\nopen t insert\nopen t rotate wrong=block\ngoal g1 "插进去" when="t height=4"\n@g1 open t rotate wrong=mark undo=on\n@g1 goal g2 "转平" when="t avl"\n@g1 say "失衡了。"');
+  assert.deepEqual(s.reactions.get('g1'), ['open t rotate wrong=mark undo=on', 'goal g2 "转平" when="t avl"', 'say "失衡了。"']);
+});
