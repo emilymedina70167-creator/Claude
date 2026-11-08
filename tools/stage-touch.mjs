@@ -1,5 +1,6 @@
 // 舞台上的手指（kit/src/stage/pointer.js）用真的触摸检查一遍：CDP Input.dispatchTouchEvent → pointerType: touch，和 iPad 上一样。
-// 按偏一点也拿得到、松在两格中间吸到近的那一格、拖到一半浏览器取消（pointercancel）算松在那里、平面上的向量连着拖两次（第二次在吸格点的动画还没走完时）。
+// 按偏一点也拿得到、松在两格中间吸到近的那一格、拖到一半浏览器取消（pointercancel）算松在那里、平面上的向量连着拖两次（第二次在吸格点的动画还没走完时）、
+// 做到挑战时东西跳一下（pulse）和预写的行同时挪它，跳完不把它放回原处。
 //   node tools/stage-touch.mjs        （先 node proto/stage/build.mjs）  没问题退出码 0
 import { chromium } from './playwright.mjs';
 import { resolve, dirname, join } from 'node:path';
@@ -52,6 +53,20 @@ t = await tipScreen();
 await drag(t, { x: t.x + unit * 1.0, y: t.y + unit * 2.0 }, { steps: 8 });
 await page.waitForTimeout(900);
 expect('平面上的向量连着拖两次（第二次在动画没走完时）', JSON.stringify(await tipOf()), '{"x":"3","y":"0"}');
+// 5. 做到挑战时舞台让东西跳一下（celebrate 的 pulse），预写的 fold 同时让后面的词补位：跳完不能把词放回跳之前的地方
+await play('sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."\nopen s mark\ngoal g1 "拆完" when="s parsed"\n@g1 fold s.3-6');
+await page.evaluate(async () => { const st = window.LAStage; for (const src of ['mark s.1-6 S', 'mark s.3-6 RC', 'mark s.7 V']) await st.studentDo(src, { type: 'gesture', open: 'mark' }); });
+A = await box('s:8'); B = await box('s:9');
+await drag({ x: A.cx, y: A.cy }, { x: B.cx, y: B.cy });
+await page.waitForTimeout(400);
+const role = await page.evaluate(() => { const b = [...document.querySelectorAll('.st-choices .st-choice')].find((x) => x.querySelector('span')?.textContent === '表语'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+if (role) { await touch('touchStart', role.x, role.y); await page.waitForTimeout(40); await touch('touchEnd'); }
+await page.evaluate(async () => { const st = window.LAStage; await st.studentChain; await st.reacting; });
+await page.waitForTimeout(1500);
+expect('做到挑战、预写的 fold 补位以后，每个词都在它该在的地方', await page.evaluate(() => {
+  const st = window.LAStage;
+  return [...st.nodes.entries()].filter(([k, n]) => k.startsWith('s:') && !n.classList.contains('is-folded')).filter(([, n]) => n.style.transform !== `translate(${n.__box.x}px, ${n.__box.y}px)`).map(([k, n]) => `${k} ${n.style.transform}`).join('、') || '都在';
+}), '都在');
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

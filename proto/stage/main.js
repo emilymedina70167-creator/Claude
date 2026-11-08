@@ -1,5 +1,6 @@
-// 舞台样子页的入口：选「看剧本」（A 段，不调用 Claude）或「Opus 5.5 上课」（B 段，当场写）。
-// 地址：?mock 模拟老师（本地）、?dev 给检查脚本留 window.LAStage、?blank 一块空舞台、#shell / #bsearch / #insert 直接开那一节
+// 舞台样子页的入口：选「看剧本」（A 段，不调用 Claude）、「Opus 5.5 上课」（B 段，当场写）或「试手感」（三个样板，不调用 Claude，feel.js）。
+// 地址：?mock 模拟老师（本地）、?dev 给检查脚本留 window.LAStage、?blank 一块空舞台、#shell / #bsearch / #insert 直接开那一节、
+// #feel-avl / #feel-elim / #feel-parse 直接开那一段试手感
 import { Stage } from '../../kit/src/stage/stage.js';
 import { TOPICS, turnMessage } from '../../kit/src/stage/doc.js';
 import { actText, HELP } from '../../kit/src/stage/stage.js';
@@ -14,6 +15,7 @@ import { viewCss, VIEWS } from '../../kit/src/stage/types/views.js';
 import katexCss from 'virtual:katex-css';
 import { scriptedLesson } from './scripted.js';
 import { liveLesson } from './live.js';
+import { FEELS, feelLesson, createPanel, refereeEntry } from './feel.js';
 
 const style = document.createElement('style');
 style.textContent = `${css}\n${viewCss()}`;
@@ -32,10 +34,10 @@ let run = 0;
 // ?dev：检查脚本用（tools/stage-try.mjs 拿 createLoop 照学习台的课堂循环演一幕；学生的手势照画法的把手、手势表、裁判走）
 if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, createLoop, eventsText, goalStatus, HELP, dryRun, parseScript, gestureAct, askFor, writeRange, VIEWS };
 
-function fresh({ input }) {
+function fresh({ input, onAct = null }) {
   stage?.destroy();
   host.querySelectorAll('.st-error').forEach((n) => n.remove());
-  stage = new Stage(host, { input, onAct: (a) => window.LAStageDev?.acts.push(a) });
+  stage = new Stage(host, { input, onAct: (a) => { window.LAStageDev?.acts.push(a); onAct?.(a); } });
   window.LAStage = stage;
   return stage;
 }
@@ -52,6 +54,7 @@ function showError(err) {
 async function startScripted() {
   const my = ++run;
   hideMenu();
+  feelOff();
   hud(null);
   const st = fresh({ input: false });
   try { await scriptedLesson(st, () => my === run); if (my === run) startScripted(); } catch (err) { showError(err); }
@@ -60,12 +63,27 @@ async function startScripted() {
 async function startLive(topic) {
   const my = ++run;
   hideMenu();
+  feelOff();
   hud({ title: topic.title });
   const st = fresh({ input: true });
   try {
     await liveLesson(st, topic, { alive: () => my === run, mock: MOCK, status: (s) => my === run && hud({ title: topic.title, ...s }), thinking: (on, round) => my === run && think(on, round) });
   } catch (err) { think(false); showError(err); }
 }
+
+// —— 试手感（feel.js）：一段老师的镜头指令，学生的每一下照真的裁判走；裁判判成什么写在角上那一块（只在这一页）——
+let panel = null;
+async function startFeel(key) {
+  const my = ++run;
+  hideMenu();
+  hud(null);
+  think(false);
+  document.body.classList.add('is-feel');
+  panel = createPanel($('feel'), { onRestart: () => startFeel(key) });
+  const st = fresh({ input: true, onAct: (a) => my === run && panel?.add(refereeEntry(a)) });
+  try { await feelLesson(st, key, { panel }); } catch (err) { showError(err); }
+}
+function feelOff() { document.body.classList.remove('is-feel'); panel?.hide(); panel = null; }
 
 // —— 角上的两样：老师在想（计时）、每一轮多快 ——
 let thinkTimer = null;
@@ -96,7 +114,7 @@ function hud(s) {
 }
 
 // —— 开头的菜单 ——
-function showMenu() { ++run; stage?.destroy(); stage = null; think(false); hud(null); $('menu').hidden = false; }
+function showMenu() { ++run; stage?.destroy(); stage = null; think(false); hud(null); feelOff(); $('menu').hidden = false; }
 function hideMenu() { $('menu').hidden = true; }
 
 $('pick-script').addEventListener('click', startScripted);
@@ -108,6 +126,16 @@ for (const [key, t] of Object.entries(TOPICS)) {
   b.addEventListener('click', () => startLive(t));
   $('topics').appendChild(b);
   if (location.hash === `#${key}`) queueMicrotask(() => startLive(t));
+}
+for (const [key, f] of Object.entries(FEELS)) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'm-topic';
+  b.textContent = f.title;
+  b.setAttribute('aria-label', `试手感：${f.title}`);
+  b.addEventListener('click', () => startFeel(key));
+  $('feels').appendChild(b);
+  if (location.hash === `#feel-${key}`) queueMicrotask(() => startFeel(key));
 }
 $('own').addEventListener('submit', (e) => {
   e.preventDefault();

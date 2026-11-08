@@ -981,6 +981,10 @@ export class Stage {
     if (!n?.__box || n instanceof SVGElement) return;
     const t = tr(n.__box.x, n.__box.y);
     await this.tween(n, [{ transform: t }, { transform: `${t} scale(1.1)` }, { transform: t }], { duration: 420, delay, easing: EASE.out });
+    // 跳的这一下里它被挪走了（做到挑战时跳一下，预写的 fold 同时让后面的词补位）：停下时写回的是开跳时的位置，
+    // 照它现在该在的地方放回去（别的动画还在动它就不管，那一个停下时会写它的终点）
+    const now = n.__box && tr(n.__box.x, n.__box.y);
+    if (now && now !== t && n.style.transform === t && !n.getAnimations?.().length) n.style.transform = now;
   }
 
   // —— 贴着的字和拨数：新的淡进来、字变了的换字、锚挪了的跟过去、没了的淡掉 ——

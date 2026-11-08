@@ -67,16 +67,57 @@
   .m-own input:focus { outline: 2px solid var(--brand); }
   .m-own button { min-width: 72px; height: 48px; border: 0; border-radius: 12px; background: rgb(var(--chalk-rgb) / 0.08); color: rgb(var(--chalk-rgb)); font: 600 16px var(--sans); cursor: pointer; }
   .m-topic:focus-visible, .m-own button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  /* 试手感（feel.js）：裁判判成什么写在角上那一块（只在这一页）。舞台让出它的地方（镜头不把东西摆到它下面）：竖屏在下面一条、横屏在右边一栏 */
+  body.is-feel { --feel-h: 236px; --feel-w: 340px; }
+  body.is-feel #stage { bottom: calc(var(--feel-h) + env(safe-area-inset-bottom, 0px)); }
+  #feel {
+    position: fixed; z-index: 6; left: calc(env(safe-area-inset-left, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    max-height: calc(var(--feel-h) - 12px); display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 10px 14px; box-sizing: border-box;
+    border-radius: 16px; background: var(--card-solid); box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.14), 0 12px 28px -20px rgb(var(--shade-rgb) / 0.5);
+    font: 13px/1.5 var(--sans); color: rgb(var(--chalk-rgb) / 0.86);
+  }
+  @media (orientation: landscape) and (min-width: 900px) {
+    body.is-feel #stage { bottom: 0; right: calc(var(--feel-w) + env(safe-area-inset-right, 0px)); }
+    body.is-feel #stage .st-undo-box { right: 16px; } /* 横屏时「回到开头」在右边那一栏上面，撤一步不用再让它 */
+    #feel { left: auto; top: calc(env(safe-area-inset-top, 0px) + 68px); bottom: auto; width: calc(var(--feel-w) - 12px); max-height: calc(100% - 80px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
+  }
+  #feel .f-head { display: flex; align-items: center; gap: 10px; }
+  #feel .f-title { flex: 1; min-width: 0; font: 600 14px/1.3 var(--sans); color: rgb(var(--chalk-rgb)); }
+  #feel .f-again { min-width: 64px; min-height: 44px; margin: -6px -4px -6px 0; padding: 0 14px; border: 0; border-radius: 999px; background: rgb(var(--chalk-rgb) / 0.07); color: rgb(var(--chalk-rgb)); font: 600 15px var(--sans); cursor: pointer; }
+  #feel .f-again:active { scale: .96; }
+  #feel .f-again:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  #feel .f-how { margin: 0; color: rgb(var(--chalk-rgb) / 0.6); font-size: 12.5px; }
+  #feel .f-log { flex: 1; min-height: 0; margin: 0; padding: 0; list-style: none; overflow: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 8px; }
+  #feel .f-empty { color: rgb(var(--chalk-rgb) / 0.5); }
+  #feel .f-item { padding-top: 6px; border-top: 0.5px solid rgb(var(--chalk-rgb) / 0.12); opacity: .55; }
+  #feel .f-item.is-new { opacity: 1; }
+  #feel .f-item:first-child, #feel .f-item.is-follow { border-top: 0; padding-top: 0; }
+  #feel .f-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+  #feel .f-mark { width: 1.1em; font-weight: 700; text-align: center; }
+  #feel .f-what { font-weight: 600; color: rgb(var(--chalk-rgb)); }
+  #feel .f-verdict { color: rgb(var(--chalk-rgb) / 0.7); }
+  #feel .is-right .f-mark, #feel .is-right .f-verdict, #feel .is-goal .f-mark { color: rgb(var(--green-rgb)); }
+  #feel .is-wrong .f-mark, #feel .is-wrong .f-verdict, #feel .is-cant .f-mark, #feel .is-cant .f-verdict { color: rgb(var(--coral-rgb)); }
+  #feel .f-src { display: block; margin: 1px 0 0 calc(1.1em + 8px); font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: rgb(var(--chalk-rgb) / 0.55); }
+  #feel .f-line { display: flex; gap: 8px; margin-left: calc(1.1em + 8px); }
+  #feel .f-k { flex: none; min-width: 3em; color: rgb(var(--chalk-rgb) / 0.5); }
+  #feel .f-t { min-width: 0; }
   .st-error { position: absolute; left: 16px; right: 16px; bottom: 16px; padding: 12px; border-radius: 12px; background: rgb(var(--coral-rgb) / 0.12); color: rgb(var(--coral-rgb)); font: 14px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
 </style>
 <div id="stage"></div>
 <button id="again" type="button" aria-label="回到开头" title="回到开头">↺</button>
 <div id="think" hidden></div>
 <div id="hud" hidden></div>
+<aside id="feel" hidden aria-live="polite"></aside>
 <section id="menu">
   <div class="m-card">
     <h1>舞台试课</h1>
     <p class="m-lede">用画面讲课的一对一。老师对画面做事，你在画面上点、拖、拨。</p>
+    <div class="m-group">
+      <h2>试手感</h2>
+      <p class="m-note">拎结点转平、拖行消元、拉括号拆句子。不调用 Claude：每一下照真的裁判判，裁判判成什么写在角上；做到了演老师预写的一句。</p>
+      <div class="m-topics" id="feels"></div>
+    </div>
     <div class="m-group">
       <h2>Opus 5.5 当场上一节</h2>
       <p class="m-note" id="menu-note">每一轮都是 Opus 5.5 看着你的操作当场写的。左下角显示第一个镜头多久出来。</p>
