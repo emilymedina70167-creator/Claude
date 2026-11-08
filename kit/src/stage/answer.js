@@ -82,7 +82,8 @@ function resolveAnswer(answer, scene) {
 function gridOf(text) {
   const words = String(text ?? '').trim().replace(/\n+/g, ' / ').split(/\s+/).filter(Boolean);
   if (!words.length) throw new Error('还没写矩阵');
-  return parseRows(words).rows.map((r) => r.map((c) => toQ(c)));
+  // 不受舞台上矩阵的大小上限管：{A'} 这种答案可能比舞台上能放的大（6×8 的 A 转过来是 8×6），判起来不碍事
+  return parseRows(words, null, { cap: false }).rows.map((r) => r.map((c) => toQ(c)));
 }
 const sameGrid = (a, b) => a.length === b.length && a.every((r, i) => r.length === b[i].length && r.every((q, j) => q.cmp(b[i][j]) === 0));
 const shapeText = (g) => `${g.length}×${g[0].length}`;

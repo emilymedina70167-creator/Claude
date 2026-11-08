@@ -462,3 +462,41 @@ test('I2 定语 / Attr 对得上 key 里的定语从句（和泛称「从句」�
   const a = make('sentence s = "The man living next door is a doctor." key="[S The man [Attr living next door]] [V is] [P a doctor]."');
   assert.equal(R.check(S(a), mk(3, 5, '定语从句'), a).right, false);
 });
+
+// —— 复核（final-rereview.md）：套着的从句里的成分，不拿去和外面一层同一种成分的一段比 ——
+test('复核 key 里套着的从句：从句里的主语（who、he、I）不拿去和外面一层的主语比，key 没拆这个从句就不判', () => {
+  const full = 'sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."';
+  const s = make(full);
+  const v = R.check(S(s), mk(3, 3, '主语'), s);
+  assert.equal(v.right, null, 'who 是定语从句的主语：key 没拆这个从句');
+  assert.equal(v.misread, null);
+  // 照说明的例子写了 wrong=mark call=wrong：不圈、不叫，事实写「页面不判」
+  const sc = make(`${full}\nopen s mark wrong=mark call=wrong`);
+  const fx = sc.apply(parseScript('mark s.3 主语')[0], { by: 'student', open: 'mark' });
+  assert.equal(fx.judged.mark, false);
+  assert.equal(fx.judged.call, null);
+  assert.match(fx.judged.after[0], /页面不判/);
+  // 外面一层的照旧：主语是 s.1-6，标 s.1-2 是主语还是不对
+  assert.equal(R.check(S(s), mk(1, 2, '主语'), s).right, false);
+  // that 从句里的 he、省略了关系词的从句里的 I：不判，也不说断早断晚
+  const f = make('sentence s = "The fact that he left surprised us." key="[S The fact [Cl that he left]] [V surprised] [O us]."');
+  assert.equal(R.check(S(f), mk(4, 4, '主语'), f).right, null);
+  const b = make('sentence s = "The book I read is good." key="[S The book [RC I read]] [V is] [P good]."');
+  const bv = R.check(S(b), mk(3, 3, '主语'), b);
+  assert.equal(bv.right, null);
+  assert.equal(bv.misread, null, '不能说「主语这一段开头断晚了」');
+  // 从句里的谓语不说是「非谓语」：外面一层的非谓语不拿来比从句里面
+  const p = make('sentence s = "Policies designed to help people who need help often fail." key="[S Policies [NF designed to help people [RC who need help]]] often [V fail]."');
+  const pv = R.check(S(p), mk(7, 7, '谓语'), p);
+  assert.notEqual(pv.right, false, 'need 是定语从句的谓语');
+  assert.doesNotMatch(pv.misread ?? '', /非谓语/);
+});
+
+test('复核 key 拆了从句：从句里的一段照从句自己的那几段判（对、错都照它）；从句本身断早断晚照旧', () => {
+  const s = make('sentence s = "The man who lives next door is a doctor." key="[S The man [RC [S who] [V lives] next door]] [V is] [P a doctor]."');
+  assert.equal(R.check(S(s), mk(3, 3, '主语'), s).right, true, 'key 说 who 是从句的主语');
+  assert.equal(R.check(S(s), mk(3, 4, '主语'), s).right, false, '和从句自己的主语沾边、范围不一样');
+  assert.equal(R.check(S(s), mk(4, 4, '谓语'), s).right, true);
+  assert.match(R.check(S(s), mk(3, 5, '定语从句'), s).misread, /从句断早了/, '从句自己的边界照旧说');
+  assert.equal(R.check(S(s), mk(1, 2, '主语'), s).right, false, '外面一层照旧');
+});

@@ -9,7 +9,7 @@
 // 拉错了的括号留着也不碍事（舞台上没有让学生收括号的手势），只看 key 里的每一段有没有拉对。
 // key 可以不全（老师只拉了要讲的几段）：学生拉了 key 没拉、也不和 key 冲突的一段，页面不判（right 是 null），不说「不对」。
 import { judgeSpans } from '../../entext.js';
-import { sentence, ordered, roleName, sameRole, phraseOf, restText, roleColor, ROLE_NAMES } from './sentence.js';
+import { sentence, ordered, roleName, sameRole, phraseOf, restText, roleColor, ROLE_NAMES, CLAUSE_ROLES } from './sentence.js';
 
 export { roleName, ROLE_NAMES } from './sentence.js';
 
@@ -36,6 +36,23 @@ function keySpans(o) {
     const from = Math.min(...slots), to = Math.max(...slots);
     return { role: sp.role, name: roleName(sp.role), keys: sp.keys, depth: sp.depth, from, to, ok: slots.length === sp.keys.length && to - from + 1 === slots.length };
   }).sort((p, q) => p.depth - q.depth || p.from - q.from);
+}
+
+// —— 一层一层：key 里的从句 ——
+// 一段从句：成分是某种从句（RC、Cl……），或者 key 在它里面直接标了谓语（[S What [S he] [V said]] 的 S）。
+// 套在从句里的一段只和同一层的比：定语从句里的 who 标成主语，不拿去和外面那个主语（The man who lives next door）比——
+// key 没拆这个从句，页面就不知道从句里面对不对（以前说「这一段不对」，照 wrong=mark / call=wrong 还圈出来、马上叫老师）
+const isClause = (ks, k) => CLAUSE_ROLES.includes(k.name) || k.name === '从句' || ks.some((v) => v.ok && v.name === '谓语' && v.depth === k.depth + 1 && v.from >= k.from && v.to <= k.to);
+/** a–b 最里层的从句：key 里把它严格包在里面（不是正好这一段）的、最深的一段从句；在顶层是 null */
+function clauseOf(ks, a, b) {
+  let best = null;
+  for (const k of ks) if (k.ok && isClause(ks, k) && k.from <= a && b <= k.to && !(k.from === a && k.to === b) && (!best || k.depth > best.depth)) best = k;
+  return best;
+}
+/** 学生拉的 a–b 和 key 里哪几段在同一层（最里层的从句一样）：只有它们拿来比「同一种成分、范围不一样」 */
+function peersOf(ks, a, b) {
+  const c = clauseOf(ks, a, b);
+  return { clause: c, peer: (k) => k.ok && clauseOf(ks, k.from, k.to) === c };
 }
 /** 判不了的时候怎么说：没写 key，还是写了但被 rewrite 作废了 */
 const noKeyWhy = (o) => (o?.key?.void ? `${o.id} 的 key 跟着 rewrite 作废了，要判就重写 key（重新造这句、带上新的 key=）` : `${o.id} 没写 key=（正确拆法），页面不判`);
@@ -149,8 +166,8 @@ function runsOutside(a, b, vs) {
  * 把非谓语当成了谓语：标成谓语的这一截落在 key 的非谓语里（[NF …]，或者 key 里写成 doing / done 的一段）。
  * 只引落在那一段里的词；key 没说是非谓语的（从句里 key 没拉的谓语、to + 名词、名词）不说
  */
-function nonFiniteText(o, ks, p, q) {
-  const nf = ks.filter((k) => k.ok && k.name === '非谓语' && k.from <= q && p <= k.to).sort((x, y) => (x.to - x.from) - (y.to - y.from))[0];
+function nonFiniteText(o, ks, p, q, peer = () => true) {
+  const nf = ks.filter((k) => k.ok && peer(k) && k.name === '非谓语' && k.from <= q && p <= k.to).sort((x, y) => (x.to - x.from) - (y.to - y.from))[0];
   if (!nf) return null;
   const lo = Math.max(p, nf.from), hi = Math.min(q, nf.to);
   const whole = textOf(o, nf.from, nf.to);
@@ -161,6 +178,7 @@ function nonFiniteText(o, ks, p, q) {
 // rel 是 key 里学生最像在拉的那一段（「现在正确的」先说它）；shown 是学生写的成分（认得出写中文名）
 function misreadOf(o, ks, a, b, name, shown) {
   const overlaps = (k) => k.from <= b && a <= k.to;
+  const { clause, peer } = peersOf(ks, a, b);
   if (name === '谓语') {
     const vs = ks.filter((k) => k.ok && k.name === '谓语');
     // 谓语只圈了一半：拉的是 key 里一个谓语里面的一部分（一样的那段已经判对了）
@@ -170,7 +188,7 @@ function misreadOf(o, ks, a, b, name, shown) {
     const touched = vs.filter(overlaps);
     if (touched.every((k) => a <= k.from && b >= k.to)) {
       for (const [p, q] of runsOutside(a, b, touched)) {
-        const nf = nonFiniteText(o, ks, p, q);
+        const nf = nonFiniteText(o, ks, p, q, peer);
         if (nf) return { rel: touched[0] || vs[0] || null, misread: `把非谓语当成了谓语：${nf}` };
       }
     }
@@ -178,25 +196,28 @@ function misreadOf(o, ks, a, b, name, shown) {
   // 段对了，成分不对
   const same = ks.find((k) => k.ok && k.from === a && k.to === b);
   if (same) return { rel: same, misread: `成分标错了：这一段是${same.name}，不是${shown}` };
-  // 断早、断晚：同一成分（写泛称「从句」的对得上任何一种从句）的一段，沾边、两头各差不过两个词；成分也不一样的不说
+  // 断早、断晚：同一成分（写泛称「从句」的对得上任何一种从句）的一段，沾边、两头各差不过两个词；成分也不一样的不说。
+  // 只比同一层的（从句里的 I 不说成外面那个主语断晚了）；包住它的那个从句本身，学生写的正是这种从句时也比（从句断早了）
   const dist = (k) => Math.abs(a - k.from) + Math.abs(b - k.to);
-  const k = ks.filter((x) => x.ok && fits(x.name, name) && overlaps(x) && Math.abs(a - x.from) <= 2 && Math.abs(b - x.to) <= 2).sort((p, q) => dist(p) - dist(q))[0];
+  const near = (x) => peer(x) || (x === clause && x.name === name);
+  const k = ks.filter((x) => x.ok && near(x) && fits(x.name, name) && overlaps(x) && Math.abs(a - x.from) <= 2 && Math.abs(b - x.to) <= 2).sort((p, q) => dist(p) - dist(q))[0];
   if (k) return { rel: k, misread: edgeText(o, k, a, b) };
   return { rel: null, misread: null };
 }
 
 /**
  * 学生拉的这一段和 key 冲突在哪（不冲突是 null）：跨过了 key 里一段的边界（一头在里面、一头在外面）；
- * 和 key 里一段是同一段词、成分不一样；和 key 里同一种成分的一段沾边、范围不一样。
- * key 只说了它拉的那几段：不冲突的段（key 没拉的 a doctor、从句里 key 没拉的谓语）页面不知道对不对，不判（硬说不对就是假话）
+ * 和 key 里一段是同一段词、成分不一样；和 key 里同一层（peersOf）同一种成分的一段沾边、范围不一样。
+ * key 只说了它拉的那几段：不冲突的段（key 没拉的 a doctor、从句里 key 没拉的谓语、key 没拆的从句里的主语）页面不知道对不对，不判（硬说不对就是假话）
  */
 function conflictOf(o, ks, a, b, name) {
+  const { peer } = peersOf(ks, a, b);
   for (const k of ks) {
     if (!k.ok) continue;
     const text = textOf(o, k.from, k.to);
     if ((a < k.from && b >= k.from && b < k.to) || (a > k.from && a <= k.to && b > k.to)) return `和 key 里的${k.name}「${text}」交叉`;
     if (a === k.from && b === k.to) return `key 里这一段是${k.name}`;
-    if (fits(k.name, name) && k.from <= b && a <= k.to) return `key 里${k.name}是「${text}」`;
+    if (peer(k) && fits(k.name, name) && k.from <= b && a <= k.to) return `key 里${k.name}是「${text}」`;
   }
   return null;
 }

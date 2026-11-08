@@ -311,3 +311,11 @@ test('I3 矩阵做了行变换不再跟着算：舞台现状里也说一声', ()
   const sc = run(new Scene(), 'dial k = 2 range=0..5\nmatrix M = 1 {k} / 0 1\nrowop M r1 - r2');
   assert.match(sc.stateText(), /M 已经不跟着 \{k\} 变了：你动过它的结构（rowop M r1 - r2）/);
 });
+
+test('复核 学生（ask drag）换了跟着算的一排：舞台现状写「学生动过它的结构」（老师读这一句）', () => {
+  const sc = run(new Scene(), 'dial k = 1 range=0..9\narray a = {k} 3 5');
+  sc.apply(parseScript('swap a.1 a.3')[0], { by: 'student', judged: null });
+  assert.match(sc.stateText(), /a 已经不跟着 \{k\} 变了：学生动过它的结构（swap a\.1 a\.3）/);
+  const t = run(new Scene(), 'dial k = 1 range=0..9\narray a = {k} 3 5\nswap a.1 a.3');
+  assert.match(t.stateText(), /你动过它的结构/);
+});

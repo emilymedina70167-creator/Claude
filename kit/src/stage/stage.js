@@ -480,7 +480,7 @@ export class Stage {
     const pre = this.capture();
     // 这一行之前东西都在哪（镜头先走的时候连「之前」一起框，见 keepInView 的 extra）
     const before = this.instant || !this.scene.objects.size ? null : bbox([...this.scene.objects.keys()].map((id) => this.scene.objectBox(id)));
-    const fx = this.scene.apply(c, by === 'student' ? { judged: judged ?? null } : { by: this.instant || by !== 'teacher' ? null : by });
+    const fx = this.scene.apply(c, by === 'student' ? { by: 'student', judged: judged ?? null } : { by: this.instant || by !== 'teacher' ? null : by });
     this.execTurn = turn;
     // 学生这一下引出了预写的行、做到了挑战、做完了：记在这一行上，撤一步撤不了它（预写只演一次，「做到了」也已经告诉课堂）
     const reacted = by === 'student' && !!(fx?.goalsMet?.length || fx?.done?.length || fx?.reactions?.length);

@@ -285,3 +285,19 @@ test('I6 老师那一轮还在写的时候学生动了：学生那一段排在�
   assert.match(input.at(-1), /^U:[\s\S]*学生拖了一下[\s\S]*我答了/);
   assert.match(input.at(-2), /^A:say "x"/);
 });
+
+test('复核 撤一步跳过没演上的那一下（M4）：同一行先演上、后来又没演上，撤的是演上的那一下', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  const stage = { log: [], scene: new Scene(), teacherAudit: [], reacting: null, studentChain: null, pendingGoals: () => [] };
+  const rows = [];
+  const host = { stage, addTurn: (r) => { const x = { ...r, seq: rows.length + 1 }; rows.push(x); return x; }, putTurn: () => {}, note: () => {} };
+  const loop = createLoop(host);
+  loop.onAct({ type: 'edit', open: 'edit', ref: 'B.1,1', from: '0', to: '1', line: 'write B.1,1 1', derived: [{ id: 'C', changed: [{ ref: 'C.1,1', from: '0', to: '1' }] }] });
+  loop.onAct({ type: 'edit', open: 'edit', ref: 'B.1,1', from: '1', to: '1', line: 'write B.1,1 1', error: '这一下演不了' });
+  loop.onAct({ type: 'undo', src: 'write B.1,1 1', open: 'edit' });
+  stage.onAnswer({ type: 'say', text: '好了' });
+  await tick();
+  const m = rows.find((r) => r.role === 'student' && !r.pending)?.msg || '';
+  assert.doesNotMatch(m, /\[跟着变的\]/, '演上的那一下撤掉了，它引起的变化不写');
+});

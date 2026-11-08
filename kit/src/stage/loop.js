@@ -280,9 +280,10 @@ export function createLoop(host) {
     if (!a) return;
     host.evidence?.act?.(a, S.lastClaude);
     if (S.ended || host.readOnly) return;
-    // 撤一步：这一段里最后一件撤掉的那一行（src 对得上、还没撤过）记成撤回了，它引起的「跟着变的」不再写给老师
+    // 撤一步：这一段里最后一件撤掉的那一行（src 对得上、还没撤过、真的演上了：没让做的、没演上的不在 log 里）记成撤回了，
+    // 它引起的「跟着变的」不再写给老师
     if (a.type === 'undo' && S.pending) {
-      const hit = S.pending.events.findLast((e) => e.kind === 'try' && !e.undone && !e.act?.blocked && e.act?.type !== 'undo' && (e.act?.src ?? e.act?.line) === a.src);
+      const hit = S.pending.events.findLast((e) => e.kind === 'try' && !e.undone && !e.act?.blocked && !e.act?.error && e.act?.type !== 'undo' && (e.act?.src ?? e.act?.line) === a.src);
       if (hit) hit.undone = true;
     }
     if (a.open || a.type === 'dial') {

@@ -228,7 +228,10 @@ export class Scene {
     const target = this.ownTarget(c);
     const before = j?.by === 'student' && this.objects.has(j.obj) ? structuredClone(this.objects.get(j.obj)) : null; // 学生这一下以后的事实要比前后
     if (target) this.unslip(target); // 那样东西又变了：上一下淡淡圈着的收掉
-    const fx = this.applyOne(c) || {};
+    // 这一行是谁做的（unlive 写给老师「你 / 学生动过它的结构」）；重放时老师的行不给 by，当老师的
+    this.actor = by === 'student' || j?.by === 'student' ? 'student' : 'teacher';
+    let fx;
+    try { fx = this.applyOne(c) || {}; } finally { this.actor = null; }
     this.reflow();
     const derived = [...(fx.derived || []), ...this.derive()];
     if (derived.length) fx.derived = derived;
@@ -797,7 +800,7 @@ export class Scene {
     const L = o.live;
     if (!L) return;
     const exprs = L.exprs || (L.whole ? [L.whole] : (L.cells || []).map((k) => k.expr));
-    o.unlived = { exprs: [...new Set(exprs)], src };
+    o.unlived = { exprs: [...new Set(exprs)], src, by: this.actor || 'teacher' };
     delete o.live;
   }
   /**
@@ -899,7 +902,7 @@ export class Scene {
     // 错误前面的「{式子}」和前面写的重了，去掉
     const why = (e) => e.replace(/^「\{[^{}]*\}」(算不出来：|里的)?/, '');
     if (lives.length) lines.push(`跟着算的（依赖一变，页面当场重算；学生动不了）：${lives.map((n) => `${n.text}${n.rec.error ? `（现在算不出来：${why(n.rec.error)}；停在上一次算出来的数）` : ''}`).join('；')}`);
-    for (const o of this.objects.values()) if (o.unlived) lines.push(`${o.id} 已经不跟着 ${o.unlived.exprs.map((e) => `{${e}}`).join('、')} 变了：你动过它的结构（${o.unlived.src}），现在照现在的样子留着`);
+    for (const o of this.objects.values()) if (o.unlived) lines.push(`${o.id} 已经不跟着 ${o.unlived.exprs.map((e) => `{${e}}`).join('、')} 变了：${o.unlived.by === 'student' ? '学生' : '你'}动过它的结构（${o.unlived.src}），现在照现在的样子留着`);
     const ls = [...this.links.values()];
     if (ls.length) lines.push(`连线：${ls.map((l) => `${this.refOfKey(l.a)}–${this.refOfKey(l.b)}${l.color ? ` ${COLOR_NAMES[l.color]}` : ''}`).join('，')}`);
     const labels = [...this.labels.values()].filter((l) => !l.dial);

@@ -158,3 +158,11 @@ test('M3 wrong= 每条照 type 验：方程的错答带 =、矩阵的错答用 ;
   assert.equal(sc.check(parseScript('ask value "A²" type=matrix answer={A^2} wrong="{A}=只乘了一次"')[0]), null);
   assert.equal(judgeAnswer('1 1 / 0 1', { type: 'matrix', answer: '{A^2}', wrongs: '{A}=只乘了一次' }, sc).misread, '只乘了一次');
 });
+
+test('复核 答案矩阵不受舞台上矩阵的 6×8 上限管：{A\'} 是 8×2 也判得了', () => {
+  const sc = run(new Scene(), 'matrix A = 1 2 3 4 5 6 7 8 / 1 1 1 1 1 1 1 1');
+  assert.equal(sc.check(parseScript('ask value "Aᵀ" type=matrix answer={A\'}')[0]), null);
+  const spec = { type: 'matrix', answer: "{A'}" };
+  assert.equal(judgeAnswer('1 1 / 2 1 / 3 1 / 4 1 / 5 1 / 6 1 / 7 1 / 8 1', spec, sc).ok, true);
+  assert.equal(judgeAnswer('1 1 / 2 1 / 3 1 / 4 1 / 5 1 / 6 1 / 7 1 / 8 2', spec, sc).ok, false);
+});

@@ -44,9 +44,10 @@ const qOf = (o, x) => {
 /**
  * 矩阵的写法 → { rows（每行一串精确的数，字符串）, aug（竖线在第几列后面，没有是 null） }。
  * 认 1 2 3 / 4 5 6（/ 分行）、1 2; 3 4、[[1 2][3 4]]；写 | 是增广矩阵的竖线（每行写在同一个位置，或者只在第一行写）。
- * slot(词, 第几行, 第几列)：不是数的词先问它（格里的 {k} 换成的占位），给了字就用它
+ * slot(词, 第几行, 第几列)：不是数的词先问它（格里的 {k} 换成的占位），给了字就用它。
+ * cap：查舞台上能放多大（判答案时不查：答案不上舞台）
  */
-export function parseRows(words, slot) {
+export function parseRows(words, slot, { cap = true } = {}) {
   const s = words.join(' ').replace(/\]\s*,?\s*\[/g, ' / ').replace(/[[\]]/g, ' ').replace(/[;；]/g, ' / ').replace(/[,，]/g, ' ');
   const rows = [[]];
   const bars = [null];
@@ -64,7 +65,7 @@ export function parseRows(words, slot) {
   if (!rows[0].length) throw new Error('矩阵要有数：写成 matrix m = 1 2 / 3 4（/ 分行）');
   rows.forEach((r, i) => { if (!r.length) throw new Error(`第 ${i + 1} 行是空的（两个 / 中间要有数）`); });
   rows.forEach((r, i) => { if (r.length !== rows[0].length) throw new Error(`第 ${i + 1} 行有 ${r.length} 个数，第 1 行有 ${rows[0].length} 个（每行要一样多）`); });
-  if (rows.length > MAX_ROWS || rows[0].length > MAX_COLS) throw new Error(`舞台上的矩阵最多 ${MAX_ROWS} 行 ${MAX_COLS} 列（写了 ${rows.length}×${rows[0].length}）`);
+  if (cap && (rows.length > MAX_ROWS || rows[0].length > MAX_COLS)) throw new Error(`舞台上的矩阵最多 ${MAX_ROWS} 行 ${MAX_COLS} 列（写了 ${rows.length}×${rows[0].length}）`);
   const set = [...new Set(bars.filter((b) => b != null))];
   if (set.length > 1) throw new Error('增广矩阵的竖线 | 每行要写在同一个位置');
   const aug = set.length ? set[0] : null;
