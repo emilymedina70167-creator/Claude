@@ -131,7 +131,10 @@ export function parseCombo(text, o, scene, self) {
     if (coef === '' || coef === '-') { k = coef === '-' ? (neg ? '1' : '-1') : neg ? '-1' : '1'; neg = false; } else if (toQ(coef)) { k = (neg ? toQ(coef).neg() : toQ(coef)).toString(); neg = false; } else if (scene.vars.has(coef.replace(/^-/, ''))) {
       dial = coef.replace(/^-/, '');
       if (coef.startsWith('-')) neg = !neg;
-    } else throw new Error(`「${coef}」不是数，也不是拨的数（拨的数先用 dial 造：dial ${coef} = 1 range=0-3）`);
+    } else if (scene.objects.has(coef)) {
+      // vec p w = A v：照字面写的矩阵乘向量。系数只收数和拨数，要算式子写在 {} 里（跟着算，value.js）
+      throw new Error(`「${coef}」是舞台上的${scene.type(scene.objects.get(coef)).label}，不是系数：要它乘向量写成 {}，vec ${o.id} ${self} = {${coef} ${name}}（跟着 ${coef}、${name} 变）`);
+    } else throw new Error(`「${coef}」不是数，也不是拨的数（系数写数或拨数：dial ${coef} = 1 range=0-3；要算式子就写在 {} 里：vec ${o.id} ${self} = {…}）`);
     return { of: name, k, dial, neg };
   });
 }
@@ -465,6 +468,7 @@ plane p range=-4..4               造坐标平面（网格、坐标轴，y 朝�
 写法：p.u 向量 u（从原点出发的箭头）；p.P 点 P
 vec p u = 2 1 color=g1            加向量；再写一次就滑到新坐标
 vec p w = 2u - v                  线性组合（u、v 变了它跟着变；系数能写拨的数：vec p w = k u）
+vec p w = {A v}                   跟着算：矩阵 A 乘 v（A、v 一变 w 跟着变；学生拖不动 w）
 point p P = 2 3                   加一个点
 sum p w = u + v                   首尾相接画出和（平行四边形法则）
 span p u / span p u v / unspan p  淡淡涂上张成的直线或整个平面（写 stay 就停在这时的样子）

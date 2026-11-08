@@ -93,6 +93,28 @@ test('镜头指令写错了：不认得的指令、引号没收尾，记成错�
   assert.ok(COMMANDS.has('fly') && COMMANDS.has('dial'));
 });
 
+test('{式子} 带空格也是一个词：answer={A + B}、vec p w = {A v}、格里的 {k + 1}；{ 没收尾、多了 } 当场报（话给老师看）', async () => {
+  const { Scene, dryRun } = await import('../kit/src/stage/scene.js');
+  const words = (l) => tokenize(l).map((t) => (t.t === 'opt' ? `${t.k}=${t.v}` : t.v ?? t.t));
+  assert.deepEqual(words('ask value "A + B？" type=matrix answer={A + B}'), ['ask', 'value', 'A + B？', 'type=matrix', 'answer={A + B}']);
+  assert.deepEqual(words('vec p w = {A v}'), ['vec', 'p', 'w', 'eq', '{A v}']);
+  assert.deepEqual(words('matrix M = 1 {k + 1} / 0 1'), ['matrix', 'M', 'eq', '1', '{k + 1}', '/', '0', '1']);
+  assert.deepEqual(words('graph g = A-B:{k + 1} B-C:4'), ['graph', 'g', 'eq', 'A-B:{k + 1}', 'B-C:4']);
+  // 原来的写法分出来一样：不带空格的 {k}、引号里的 {a.3}（话里的小块）
+  assert.deepEqual(words('matrix M = 1 {k} / 0 1'), ['matrix', 'M', 'eq', '1', '{k}', '/', '0', '1']);
+  assert.deepEqual(words('say "{a.3} 和 {d}" answer={A^5}'), ['say', '{a.3} 和 {d}', 'answer={A^5}']);
+  const [open] = parseScript('matrix M = 1 {k / 0 1');
+  assert.equal(open.cmd, null);
+  assert.match(open.error, /「\{k \/ 0 1」的 \{ 没有收尾：式子写在一对 \{\} 里/);
+  assert.match(parseScript('matrix M = 1 k} / 0 1')[0].error, /多了一个 \}/);
+  // 在舞台上：带空格的式子照样算（以前切成「{A」「+」「B}」，报「「{{A}」写错了」）
+  const sc = new Scene();
+  for (const c of parseScript('matrix A = 1 1 / -1 -1\nmatrix B = 1 -1 / -1 1\nplane p range=-4..4\nvec p v = 1 2\ndial k = 2 range=-3..3')) sc.apply(c);
+  assert.deepEqual(dryRun(sc, 'ask value "A + B？" type=matrix answer={A + B}\nvec p w = {A v}\ngraph g = A-B:{k + 1} B-C:4\nmatrix S = { A + B }'), []);
+  // 矩阵的格里只收拨数或一格（第 1 个任务定的）：{k + 1} 读成一个词，报的是矩阵自己那句
+  assert.match(dryRun(sc, 'matrix N = 1 {k + 1} / 0 1')[0].error, /只能写拨数的名字/);
+});
+
 test('部件的写法：整个、第几格、几格到几格、跟着走的那一个', () => {
   assert.deepEqual(parseRef('a'), { obj: 'a', mark: null, sel: null, kind: 'all' });
   assert.deepEqual(parseRef('a.3'), { obj: 'a', mark: '.', sel: '3', kind: 'slot', lo: 3, hi: 3 });

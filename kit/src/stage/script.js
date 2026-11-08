@@ -17,7 +17,17 @@ export const COMMANDS = new Set([
 ]);
 export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
 
-/** 一行拆成记号：字符串（"…" 或 「…」）、箭头、key=value、别的词 */
+/** s[at] 是 {：和它配对的 } 后面那一格（套着的也数着配）；没收尾就抛错，话直接给老师看 */
+function braceEnd(s, at) {
+  let depth = 0;
+  for (let k = at; k < s.length; k++) {
+    if (s[k] === '{') depth++;
+    else if (s[k] === '}' && --depth === 0) return k + 1;
+  }
+  throw new Error(`「${s.slice(at, at + 16)}${s.length - at > 16 ? '…' : ''}」的 { 没有收尾：式子写在一对 {} 里（里面能带空格，比如 {A + B}）`);
+}
+
+/** 一行拆成记号：字符串（"…" 或 「…」）、箭头、key=value、别的词（{式子} 连同里面的空格算一个词） */
 export function tokenize(line) {
   const out = [];
   let i = 0;
@@ -38,6 +48,9 @@ export function tokenize(line) {
     while (j < s.length && !/\s/.test(s[j]) && s[j] !== '"' && s[j] !== '「' && s[j] !== '“' && !s.startsWith('->', j) && s[j] !== '→') {
       // key="带空格的字"：等号后面紧跟引号时整个吃进来
       if (s[j] === '=' && j > i && (s[j + 1] === '"' || s[j + 1] === '「')) break;
+      // {式子}（value.js）：配对的一对 {} 整个留在这个词里，里面能带空格（answer={A + B}、vec p w = {A v}、A-B:{k + 1}）
+      if (s[j] === '{') { j = braceEnd(s, j); continue; }
+      if (s[j] === '}') throw new Error(`多了一个 }：「${s.slice(i, j + 1)}」（式子写在一对 {} 里）`);
       j++;
     }
     const word = s.slice(i, j);

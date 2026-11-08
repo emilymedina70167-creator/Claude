@@ -63,6 +63,10 @@ test('说明里的例子照抄就能演：例子那一轮；共用的每一条�
       if (!e2.length || !e.length) { try { for (const c of parseScript(l)) if (c.cmd !== 'ask') sc.apply(c); } catch { /* 这一条只在刚造好的上能演 */ } }
     }
   }
+  // 上面只演第一个词认得的行：拼错的（rowopp m …、@t.done sayy …）会被当成说明文字跳过。看着像指令的行，指令都要认得
+  const looks = /^(@[\w.]+\s+)?([a-z]+)(\s|$)/;
+  const sections = [['共用', STAGE_COMMON], ...Object.values(TYPES).flatMap((t) => [[t.label, t.doc || ''], [`${t.label}的例子`, t.example || '']])];
+  for (const [name, doc] of sections) for (const l of doc.split('\n')) { const m = l.match(looks); if (m && !COMMANDS.has(m[2]) && !CREATE[m[2]]) bad.push(`${name}：「${l.slice(0, 40)}」看着像指令，却不认得「${m[2]}」`); }
   assert.deepEqual(bad, []);
   assert.ok(n >= 10, `各种东西的说明里一共 ${n} 条写法`);
 });
@@ -126,6 +130,7 @@ test('说明不清楚的 10 条都写明了', () => {
 test('底座的新写法都在说明里：open 的 wrong= / call= / undo=、预写 @名字.done / .right、{式子}、type=；三个样板各列出手势表和判断式', async () => {
   const C = STAGE_COMMON;
   for (const w of ['wrong=quiet', 'wrong=mark', 'wrong=block', 'call=wrong', 'call=done', 'undo=on', '@t.done', '@t.right', '走偏不能预写', '{式子}', 'type=', 'input=keypad']) assert.ok((C + STAGE_TEACH + STAGE_DOC).includes(w), `说明里要有「${w}」`);
+  for (const k of ['matrix', 'plane', 'graph']) assert.match(TYPES[k].doc, /\{[^{}\s]+( [^{}]+)?\}/, `${TYPES[k].label}那一节要有 {式子} 的写法`);
   // 页面不做教学决定：默认照做、只记下
   assert.match(C, /wrong=quiet[^\n]*默认/);
   // 每种交了规则的东西：手势表里的每个动作都有一行 open（学生怎么动、翻成哪一行），每个判断式都写了
@@ -149,7 +154,9 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
   const M = 'matrix A = 1 1 / -1 -1\nmatrix B = 1 -1 / -1 1 beside=A\ndial k = 2 range=-3..3\nmatrix m = 2 4 / 1 3';
   const S = 'sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] a doctor."';
   const T = 'tree t = 50 30 _ 20';
+  const P = 'plane p range=-4..4\nmatrix A = 1 1 / 0 1 beside=p\nvec p v = 1 2\ndial k = 1 range=-3..3';
   const plays = [
+    [P, 'vec p w = {A v}'], [P, 'vec p w = {A v + v}'], [M, 'ask value "A + B？" type=matrix answer={A + B}'], ['dial k = 2 range=1..5', 'graph g = A-B:{k + 1} B-C:4'],
     [`${A}\nopen a`, 'close a drag'], [A, 'open a undo=on'], [`${A}\nmatrix A = 1 2 / 3 4`, 'matrix S = {d A}'], [A, 'array b = {d} 3 5'],
     [A, 'goal g1 "x" when="a.1 < a#6"'], [A, 'goal g1 "x" when="a sorted desc"'], [A, 'goal g1 "x" when="a.1 < d"'], [M, 'goal g1 "x" when="B = O, A != I"'],
     [`${T}\nopen t rotate`, '@t.right say "对。"'], [T, 'open t rotate wrong=block call=done'],
@@ -168,7 +175,9 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
     [A, 'goal g1 "x" when="a.1 = ago"', /不是舞台上的东西/], [`${T}\nopen t rotate`, '@t.wrong say "x"', /不能预写/],
     [`${M}\ngoal g1 "x" when="m stairs"`, '@g1 stairs m', /阶梯形/], ['sentence s = "The man is a doctor."\nopen s mark', '@s.done say "x"', /key/],
     ['tree t = 50 30 70\nopen t', 'open t rotate', /一次开一种/], [M, 'open m edit wrong=mark', /判不了对错/],
-    [M, 'ask value "A + B？" type=matrix answer={A + B}', /写错了/], [M, 'rowop m r2 + k r1', /看不懂/], [M, 'matrix N = 1 {det(A)} / 0 1', /只能写拨数/],
+    [M, 'rowop m r2 + k r1', /看不懂/], [P, 'transform p = 1 {k} / 0 1', /2×2 矩阵/],
+    [P, 'vec p w = A v', /vec p w = \{A v\}/], [A, 'ask value "?" type=en', /没写 answer=/], [M, 'matrix N = 1 {k / 0 1', /没有收尾/],
+    [`${M}\nmatrix N = 1 {k} / 0 1`, 'open N edit', /跟着算的/], [M, 'matrix N = 1 {det(A)} / 0 1', /只能写拨数/],
     [`${M}\nmatrix S = {A + B}`, 'open S edit', /跟着算的/], [`${M}\nproduct C = A B`, 'open C rowop', /乘积/],
     ['graph g = A-B:4\ntag g ?\ntag g.A 0', 'relax g.A -> g.B', /不是数/], ['tree t = 50 30', 'tag t.50 "一二三四五六七八九"', /8 个字/],
     [S, 'tag s.7 "一二三四五六七八九"', /8 个字/], [`${A}\nlabel x a.1 "字"`, 'remove x', /舞台上没有/],
