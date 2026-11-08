@@ -1,0 +1,42 @@
+# D2 第 3 幕：拐了个弯，要拎两下；三个里排中间的上去
+tree t = 15 3 tray="7"
+bf t
+say "还是那一招。让 15 别红。"
+open t insert
+open t rotate wrong=quiet undo=on
+@t.done glow t
+@t.done say "平了。"
+@t.done ask say "三个里最后谁在顶上？在 3、7、15 里它排第几？"
+# 学生：拖 7 进去；拎 3 过 15（弯拐到另一边）；撤；拎 7 过 3（拉直）；拎 7 过 15（平）
+学生: insert t 7
+学生: rotate t.15 right
+学生: undo
+学生: rotate t.3 left
+学生: rotate t.15 right
+学生: say 7在顶上，排第二，大小排中间的那个上去了
+# 老师接：打开「拎两层」（学生按住孙子直接拎过爷爷）——说明里没有这种手势，只能老师一行转两下
+tree t = 15 3 _ _ 7
+bf t
+say "按住 7 直接拎过 15，就是这两下连着做。"
+rotate t.15 LR
+ask next "看好了点下面" button="好"
+学生: next
+# 换成 2010 真题树
+remove t
+tree u = 24 13 53 _ _ 37 90 tray="48"
+bf u
+say "这一题你自己来，插 48。完了告诉我 37 的左右孩子是谁。"
+open u insert
+open u rotate wrong=quiet undo=on
+@u.done glow u
+@u.done say "平了。"
+@u.done ask tap u "{u.37} 的左孩子是谁？点它" expect=u.24
+# 学生：先照第 2 幕拎 53 过 24（RL 当成 RR），撤；37 拎过 53；37 拎过 24
+学生: insert u 48
+学生: rotate u.24 left
+学生: undo
+学生: rotate u.53 right
+学生: rotate u.24 left
+学生: tap u.24
+ask tap u "{u.37} 的右孩子呢？" expect=u.53
+学生: tap u.53

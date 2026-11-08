@@ -1,0 +1,33 @@
+# D2 分支 1：类型叫反——RL 标成 LR（从新结点往上读）；或标对了却先拎 98 过 23
+tree t = 23 15 98 _ _ 34 115 tray="28"
+bf t
+open t insert
+@t.done ask value "A 是 23。哪一型？" type=en answer=RL wrong="LR=从新结点往上读，字母倒过来了;LL=只看了离 28 最近的两步;RR=按往哪边转起名"
+学生: insert t 28
+学生: value LR
+# 老师接：照学生标的「L、R」从 A 往下走——页面不会自己画，只能老师照着走：第一步往左到 15，第二步往右是空位
+walk t.23 t.15
+label q1 t.15 "右边是空的？" side=right tone=note
+say "照你的 LR：从 {t.23} 先往左，再往右……"
+wait 600
+# 再照真的路走：①往右到 98、②往左到 34
+walk t.23 t.98 t.34
+paint t.98 t.34 g1
+say "真的路：先往右到 {t.98}，再往左到 {t.34}。"
+# 照学生的类型去转：LR 先在 15 左旋，15 没有右孩子，转不起来——交给学生拎试试
+open t rotate wrong=quiet call=wrong undo=on
+ask next "照你的 LR 拎一下试试，拎不动点下面" button="拎不动"
+学生: rotate t.15 left
+学生: next
+# 老师接：「按旋转方向起名」那种：标对了 RL，却先拎 98 过 23（call=wrong：一走偏页面马上叫老师）
+say "再看另一种：先拎 {t.98} 过 {t.23}。"
+ask next "拎完点下面" button="好"
+学生: rotate t.23 left
+# 老师接：不说对错，接着做 107（也是 RL）
+close t rotate
+tree t = 34 23 98 15 28 _ 115 tray="107"
+bf t
+open t insert
+@t.done ask value "A 是 98。哪一型？" type=en answer=RL wrong="LR=从新结点往上读，字母倒过来了;LL=只看了离 107 最近的两步;RR=按往哪边转起名"
+学生: insert t 107
+学生: value RL

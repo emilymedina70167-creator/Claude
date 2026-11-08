@@ -1,0 +1,34 @@
+# D2 第 2 幕：「拎」一下就是一次旋转
+# 新开一块板：上一幕的红树缩到右上角——做不到；这里只造新树
+tree t = 50 30 60 20 40 tray="10"
+bf t
+say "只许用这一招：按住一个结点往上拎，拎过它的爸爸。让 50 别红。"
+open t insert
+open t rotate wrong=quiet undo=on
+@t.done glow t
+@t.done say "平了。谁上去了？"
+@t.done ask tap t "{t.40} 本来挂在 {t.30} 身上，现在挂在谁身上？点它" expect=t.50
+# 学生：拖 10 进树，先拎 20 过 30，再拎 10 过 20，不行撤两步，再拎 30 过 50
+学生: insert t 10
+学生: rotate t.30 right
+学生: rotate t.20 right
+学生: undo
+学生: undo
+学生: rotate t.50 right
+学生: tap t.50
+# 老师接：转之前转之后中序没变（没有数轴，借中序遍历的访问号指）
+traverse t in
+say "转完以后，从左往右读，这排数有谁换了位置吗？"
+ask say "有谁换了位置吗？"
+学生: say 没有，还是10 20 30 40 50 60
+# 老师接：马上给镜像，不说话
+unvisit t
+remove t
+tree m = 20 10 40 _ _ 30 50 tray="60"
+bf m
+open m insert
+open m rotate wrong=quiet undo=on
+@m.done glow m
+@m.done say "平了。"
+学生: insert m 60
+学生: rotate m.20 left

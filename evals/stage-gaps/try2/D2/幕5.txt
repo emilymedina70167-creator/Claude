@@ -1,0 +1,96 @@
+# D2 第 5 幕：四种叫法；从空树插一串，先说谁歪了、哪一型，再动手
+# 上方四张刚插完还红着的小图
+tree f1 = 50 30 60 20 40 _ _ 10
+tree f2 = 20 10 40 _ _ 30 50 _ _ _ 60
+tree f3 = 50 45 _ _ 47
+tree f4 = 24 13 53 _ _ 37 90 _ 48
+bf f1
+bf f2
+bf f3
+bf f4
+# 从红结点 A 到新结点的粗箭头、①②：试 link 连弧、label 贴字
+link f1.50 f1.30 f1.20 g1
+link f4.24 f4.53 f4.37 g1
+label n1 f1.30 "①" side=left tone=key
+label n2 f1.20 "②" side=left tone=key
+say "字母说的是：从红的那个往新结点走，头两步各往哪边。"
+# 标签卡拖到小图上：没有拖字卡的动作；四张一次写成一串，页面判
+ask value "从上到下四张图各是哪一型？（空格隔开）" type=seq answer="LL RR LR RL" wrong="LL RR RL LR=双旋两张倒过来读了;RR LL RL LR=按往哪边转起名"
+学生: value LL RR RL LR
+# 老师接：空树 + 数字卡（只能按顺序拖）。「歪了就停下来先说」：页面不会在歪的那一下叫老师，只能托盘先只放到 15
+remove f1
+remove f2
+remove f3
+remove f4
+unlabel
+tree t = _ tray="34 23 15"
+bf t
+card k = "LL" "RR" "LR" "RL"
+say "从空树开始，一个一个插。歪了先说谁、哪一型，再动手。"
+open t insert wrong=block
+# 预写的 ask 写下时就在今天的舞台上试：空树上还没有 34，写不了 expect=t.34
+@t.done ask tap t "歪了。A 是谁？点它" expect=t.34
+@t.done ask tap t "歪了。A 是谁？点它"
+学生: insert t 23
+学生: insert t 34
+学生: insert t 23
+学生: insert t 15
+学生: tap t.34
+# 老师接：类型
+ask tap k "哪一型？点卡" expect=k.1
+学生: tap k.1
+# 老师接：两格都填了才交出拎
+open t rotate wrong=quiet undo=on
+say "对。动手。"
+@t.done say "平了。"
+学生: rotate t.34 right
+# 老师接：托盘续上 98 115（同名再造就是换掉，托盘只能重造整棵树）
+close t rotate
+tree t = 23 15 34 tray="98 115"
+bf t
+open t insert wrong=block
+@t.done ask tap t "歪了。A 是谁？点它" expect=t.34
+学生: insert t 98
+学生: insert t 115
+学生: tap t.23
+# 老师接：学生点了 23。先不说，问型，再让后果说话
+ask tap k "哪一型？点卡" expect=k.2
+学生: tap k.2
+open t rotate wrong=quiet undo=on
+@t.done say "平了。"
+学生: rotate t.23 left
+# 老师接：平了但树不同（回第 4 幕那根高度尺：没有）。学生「撤一步」撤不过老师这一轮，老师把插完 115 的树重造
+tree t = 23 15 34 _ _ _ 98 _ 115
+bf t
+open t rotate wrong=quiet undo=on
+@t.done say "平了。"
+say "平了，但和只修 {t.34} 的那棵不一样。回到插完 115，改修 {t.34}。"
+学生: rotate t.34 left
+# 老师接：28 这一张插完不许拎，在空架子上把调完的树摆出来
+close t rotate
+tree t = 23 15 98 _ _ 34 115 tray="28"
+bf t
+open t insert wrong=block
+@t.done ask tap t "歪了。A 是谁？点它" expect=t.23
+学生: insert t 28
+学生: tap t.23
+ask tap k "哪一型？点卡" expect=k.4
+学生: tap k.4
+# 空架子：一棵空树 + 托盘（只能按托盘的顺序摆，页面按二叉排序树的插法判摆的位置）
+tree w = _ tray="34 23 98 15 28 115"
+say "这次不许拎，直接把调完的树摆出来。"
+open w place wrong=mark undo=on
+# 挑战写不出「托盘摆完了」「6 个结点」：只能写平衡、还是二叉排序树、3 层
+goal g1 "把调完的树摆出来" when="w avl, w bst, w height=3"
+@g1 say "摆好了。"
+@w.done say "托盘摆完了。"
+学生: insert w 34
+学生: insert w.34 left 23
+学生: insert w.34 right 98
+学生: insert w.23 left 15
+# 4 个结点时挑战就成立了（页面叫了老师）；老师让接着摆。学生把 28 摆到 98 的左边（左右顺序乱了）
+say "还没摆完，接着摆。"
+学生: insert w.98 left 28
+学生: undo
+学生: insert w.23 right 28
+学生: insert w.98 right 115
