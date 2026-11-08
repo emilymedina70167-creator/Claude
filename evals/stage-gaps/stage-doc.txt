@@ -103,7 +103,7 @@ tree t = 50 30 70 tray="20 40 80"   带托盘：待插的数按顺序摆在树�
 学生自己转、自己插（页面判每一下）：
 open t rotate wrong=mark undo=on    学生把一个结点拖到它的父亲上 = 在父亲那里转（左孩子拖上去 = rotate t#1 right）
 open t insert                       学生把托盘里的数拖进树 = insert t 47（页面从根比下去）
-open t place                        学生把托盘里的数拖到一个空位 = insert t.45 right 47（学生自己摆；和 insert 一次开一种）
+open t place                        学生把托盘里的数拖到一个空位 = insert t#2 right 47（摆在 #2 的右边：学生自己摆；和 insert 一次开一种）
 @t.done say "插完了，也平了。"         t 做完了马上演（做完 = 平衡了、托盘插完了；只开 insert / place 的是托盘插完了）
 判断式（goal 的 when=）：t avl（平衡了）、t bst（还是二叉排序树）、t height=4（有几层）
 

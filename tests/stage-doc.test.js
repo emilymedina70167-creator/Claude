@@ -140,3 +140,66 @@ test('底座的新写法都在说明里：open 的 wrong= / call= / undo=、预�
   const { ANSWER_TYPES } = await import('../kit/src/stage/answer.js');
   for (const k of ANSWER_TYPES) assert.match(C, new RegExp(`type=[^\\n]*\\b${k}\\b`), `type=${k}`);
 });
+
+// 说明文字里（两个空格后面）写的写法和说法，上面那条照抄测试不演：这里一条条演，说的报错真的报、说的样子真的是那样
+test('说明文字里写的写法也成立：行内的写法照抄能演、说会报错的真报错、三个样板「学生怎么动 = 翻成哪一行」和页面真交出的一样', async () => {
+  const { gestureAct } = await import('../kit/src/stage/gestures.js');
+  const run = (src) => { const s = new Scene(); for (const c of parseScript(src)) s.apply(c); return s; };
+  const A = 'array a = 49 38 65 97 76 13 27 49′ 55 04\ndial d = 5 range=1-5 at=a';
+  const M = 'matrix A = 1 1 / -1 -1\nmatrix B = 1 -1 / -1 1 beside=A\ndial k = 2 range=-3..3\nmatrix m = 2 4 / 1 3';
+  const S = 'sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] a doctor."';
+  const T = 'tree t = 50 30 _ 20';
+  const plays = [
+    [`${A}\nopen a`, 'close a drag'], [A, 'open a undo=on'], [`${A}\nmatrix A = 1 2 / 3 4`, 'matrix S = {d A}'], [A, 'array b = {d} 3 5'],
+    [A, 'goal g1 "x" when="a.1 < a#6"'], [A, 'goal g1 "x" when="a sorted desc"'], [A, 'goal g1 "x" when="a.1 < d"'], [M, 'goal g1 "x" when="B = O, A != I"'],
+    [`${T}\nopen t rotate`, '@t.right say "对。"'], [T, 'open t rotate wrong=block call=done'],
+    [M, 'ask value "A + B？" type=matrix answer="{A + B}"'], [A, 'ask value "?" answer=4 wrong="3=漏了 E; 0=当成数 0"'], [A, 'ask value "你怎么想？"'],
+    [A, 'ask value "?" type=formula answer=n free=n'], [A, 'ask value "?" type=set answer="(1, 3]"'], [A, 'ask value "?" type=equation answer="x + y = 1"'],
+    [A, 'ask value "?" type=seq answer="1 2 3"'], [A, 'ask value "?" type=en answer="has been"'],
+    [M, 'matrix N = 1 {A.1,2} / 0 1'], ['matrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0', "matrix P = {A B}\nmatrix U = {2A}\nmatrix V = {A^-1}\nmatrix W = {A'}\narray x = {det(A)} 1"],
+    ['dial k = 2 range=1..5', 'graph g = A-B:{k} B-C:4'], ['graph g = A-B:4\ntag g ∞\ntag g.A 0', 'relax g.A -> g.B'],
+    [`${A}\nlabel x a.1 "字"`, 'unlabel x'], [T, 'goal g1 "x" when="t avl, t height=2"'],
+    [M, 'goal g1 "x" when="m stairs, m rref, m rank=2, m rankA=2, m same A"'], [S, 'goal g1 "x" when="s parsed, s main, s span s.1-6 = S"'], [S, 'mark s.3-6 从句'],
+  ];
+  const bad = [];
+  for (const [setup, line] of plays) { const e = dryRun(run(setup), line); if (e.length) bad.push(`${line} → ${e[0].error}`); }
+  // 说明里说「会报错」「不能写」「写不进去」的
+  const fails = [
+    [A, 'goal g1 "x" when="a.1 = ago"', /不是舞台上的东西/], [`${T}\nopen t rotate`, '@t.wrong say "x"', /不能预写/],
+    [`${M}\ngoal g1 "x" when="m stairs"`, '@g1 stairs m', /阶梯形/], ['sentence s = "The man is a doctor."\nopen s mark', '@s.done say "x"', /key/],
+    ['tree t = 50 30 70\nopen t', 'open t rotate', /一次开一种/], [M, 'open m edit wrong=mark', /判不了对错/],
+    [M, 'ask value "A + B？" type=matrix answer={A + B}', /写错了/], [M, 'rowop m r2 + k r1', /看不懂/], [M, 'matrix N = 1 {det(A)} / 0 1', /只能写拨数/],
+    [`${M}\nmatrix S = {A + B}`, 'open S edit', /跟着算的/], [`${M}\nproduct C = A B`, 'open C rowop', /乘积/],
+    ['graph g = A-B:4\ntag g ?\ntag g.A 0', 'relax g.A -> g.B', /不是数/], ['tree t = 50 30', 'tag t.50 "一二三四五六七八九"', /8 个字/],
+    [S, 'tag s.7 "一二三四五六七八九"', /8 个字/], [`${A}\nlabel x a.1 "字"`, 'remove x', /舞台上没有/],
+  ];
+  for (const [setup, line, re] of fails) { const e = dryRun(run(setup), line); if (!e.length || !re.test(e[0].error)) bad.push(`${line} 应当报错（${re}），实际：${e[0]?.error || '照演了'}`); }
+  assert.deepEqual(bad, []);
+  // 三个样板：学生动一下，页面交出的那一行就是说明里「= 」后面写的
+  const said = (t, src) => assert.ok(TYPES[t].doc.includes(src), `${TYPES[t].label}的说明里要写「${src}」（页面真交出的）`);
+  let s = run('tree t = 50 30 _ 20 tray="47"\nopen t rotate\nopen t insert');
+  said('tree', gestureAct(s, s.opens.get('t:rotate'), { from: s.parts('t.30')[0], to: s.parts('t.50')[0] }).src);
+  said('tree', gestureAct(s, s.opens.get('t:insert'), { value: '47' }).src);
+  s = run('tree t = 50 30 tray="47"\nopen t place');
+  said('tree', gestureAct(s, s.opens.get('t:place'), { value: '47', to: { slot: { parent: 2, side: 'right' } } }).src);
+  s = run('matrix m = 2 4 1 / 6 3 0\nopen m rowop\nopen m edit input=keypad');
+  said('matrix', gestureAct(s, s.opens.get('m:rowop'), { from: { row: 1 }, to: { row: 2 }, value: '-3' }).src);
+  said('matrix', gestureAct(s, s.opens.get('m:rowop'), { from: { row: 1 }, to: { label: 2 } }).src);
+  said('matrix', gestureAct(s, s.opens.get('m:rowop'), { from: { label: 1 }, value: '−1/2' }).src);
+  said('matrix', gestureAct(s, s.opens.get('m:edit'), { to: { r: 2, c: 3 }, value: '-3/2' }).src);
+  s = run(`${S}\nopen s mark`);
+  said('sentence', gestureAct(s, s.opens.get('s:mark'), { from: s.parts('s.1')[0], to: s.parts('s.6')[0], role: 'S' }).src);
+  s = run('sentence s = "The man who lives next door is a doctor."\nmark s.3-6 RC\nopen s fold');
+  said('sentence', gestureAct(s, s.opens.get('s:fold'), { to: s.parts('s.4')[0] }).src);
+  // 说法：默认 wrong=quiet 照做只记下；乘 0、没有孩子能转上来永远不演；@t.right 只演一次；贴的部件没了字跟着消失
+  s = run(`${T}\nopen t rotate\n@t.right say "对。"`);
+  const quiet = s.apply(parseScript('rotate t.30 right')[0], { by: 'student', open: 'rotate' });
+  assert.ok(!quiet.blocked && quiet.judged.verdict.right === false && !quiet.judged.mark, '默认照做、只记下');
+  s = run(`${T}\nopen t rotate\n@t.right say "对。"`);
+  assert.equal(s.apply(parseScript('rotate t.50 right')[0], { by: 'student', open: 'rotate' }).reactions.length, 1);
+  assert.equal(s.reactions.get('t.right'), undefined, '@t.right 只演一次');
+  assert.equal(run('matrix m = 2 4 / 6 3\nopen m rowop').judgeLine(parseScript('rowop m 0r1')[0], { by: 'student', open: 'rowop' }).apply, false);
+  assert.equal(run('tree t = 50 30\nopen t rotate').judgeLine(parseScript('rotate t.30 right')[0], { by: 'student', open: 'rotate' }).verdict.legal, false);
+  assert.equal(run('array a = 1 2 3\nlabel x a.1 "字"\nremove a').labels.size, 0);
+  assert.equal(run('tree t = 50 30 70\nlabel x t.30 "字"\ndelete t.30').labels.size, 0);
+});
