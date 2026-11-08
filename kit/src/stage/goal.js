@@ -127,12 +127,13 @@ const measuresIn = (cl) => (cl.pred ? [] : cl.sorted ? [cl.l] : [cl.l, cl.r]).fi
 /**
  * 写下挑战时就查：判断式名对不对；run 时再把每个判断式跑一遍（不看现在成不成立）——参数写错（t height=abc）、
  * 这样东西本身判不了（句子没写 key、key 作废了）判断式自己抛错，当场报；返回 null（乘积还空着）是之后判得了，照收。
- * 量查名字和括号里的东西（size(t)、count(q) 当场报）；量数不了（没写 key）不报，挑战照收、写「判不了」。
+ * 量查名字和括号里的东西（size(t)、count(q) 当场报）；run 时以后也数不了的（没写 key、增广矩阵的 det）也当场报，
+ * 现在还空着的（乘积没算）照收、写「判不了」。
  * 重放旧课不跑（run 是假的）：当时收下的照样收下
  */
 export function checkPreds(scene, cond, { run = false } = {}) {
   for (const cl of cond) {
-    for (const w of measuresIn(cl)) checkMeasure(scene, w);
+    for (const w of measuresIn(cl)) checkMeasure(scene, w, { run });
     if (!cl.pred) continue;
     const fn = predicateOf(scene, cl.l, cl.pred);
     if (!fn) throw new Error(predMissing(scene, cl));

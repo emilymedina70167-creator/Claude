@@ -527,3 +527,31 @@ test('题卡里的量：和话里一样写下时查、画成现在的数', () =>
   run(sc, 'card q = "第一行"');
   assert.match(sc.check(parseScript('addline q "{size(t)}"')[0]) || '', /没有量「size」/);
 });
+
+test('改字也查量（retext、题卡的 rewrite）；以后也数不了的写下时报；旧课照收、{f(x)} 照原样写', async () => {
+  const { measureShown } = await import('../kit/src/stage/rules.js');
+  const sc = run(new Scene(), 'tree t = 50 30 70\nsentence s2 = "The man is a doctor."\nlabel n t "结点"\ncard q = "第一行"');
+  const chk = (line) => sc.check(parseScript(line)[0]);
+  assert.match(chk('retext n "{size(t)}"') || '', /没有量「size」/);
+  assert.equal(chk('retext n "结点 {count(t)}"'), null);
+  assert.match(chk('rewrite q.1 "{size(t)}"') || '', /没有量「size」/);
+  assert.equal(chk('rewrite q.1 "一共 {count(t)} 个"'), null);
+  // 没写 key：以后也数不了，贴的字、话、改字都当场报
+  assert.match(chk('label m s2 "谓语 {verbs(s2)}"') || '', /以后也数不了：s2 没写 key/);
+  assert.match(chk('say "谓语有 {verbs(s2)} 个"') || '', /以后也数不了/);
+  assert.match(chk('retext n "{verbs(s2)}"') || '', /以后也数不了/);
+  assert.match(chk('label m t "{tray(t.50)}"') || '', /以后也数不了：t\.50 没有 tray/);
+  // 重放旧课：照收；旧课的 {f(x)}（x 不在舞台上）、{size(t)} 照原样写，和以前一样；数不了的画「?」
+  const old = (line) => sc.apply({ ...parseScript(line)[0], lenient: true });
+  assert.doesNotThrow(() => old('label a t "看 {f( x )} 和 {size(t)}"'));
+  assert.doesNotThrow(() => old('retext n "{verbs(s2)}"'));
+  assert.doesNotThrow(() => old('rewrite q.1 "{size(t)}"'));
+  const shown = (text) => parseRich(text).map((p) => (p.k === 'measure' ? measureShown(sc, p.v) : p.k === 'var' ? String(sc.vars.get(p.v)?.v ?? p.v) : p.v)).join('');
+  assert.equal(shown('看 {f( x )} 和 {size(t)}'), '看 f( x ) 和 size(t)', '和以前 {f(x)} 当成拨数写原样一样');
+  assert.equal(shown('{verbs(s2)}'), '?');
+  assert.equal(shown('{tray(t.50)}'), '?', '本来就没有');
+  assert.equal(shown('{count(t)} 个'), '3 个');
+  // 旧课以前也不查 retext 里的 {a.3}：重放时照旧不查；新写的查
+  assert.doesNotThrow(() => old('retext n "{t.99}"'));
+  assert.match(chk('retext n "{t.99}"') || '', /没有值是 99 的结点/);
+});

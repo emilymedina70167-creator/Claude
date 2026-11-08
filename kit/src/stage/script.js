@@ -142,7 +142,8 @@ export function parseRich(text) {
       // 量和 value.js 的 evalLive 同一条规矩：名字(东西或部件)，名字不是 exact.js 本来就有的函数（{det(A)}、{rank(M)} 照旧是式子）。
       // 这里看不到舞台：括号里的东西在不在、名字是不是它的量，场景写下这一行时查（scene.js 的 checkRich）
       const ms = !r && parseMeasure(inner);
-      if (ms && !isExactFunc(ms.name) && parseRef(ms.arg)) out.push({ k: 'measure', v: `${ms.name}(${ms.arg})` });
+      // v 照原样（连空格）：不是量的（旧课的 {f(x)}）画回原来的字
+      if (ms && !isExactFunc(ms.name) && parseRef(ms.arg)) out.push({ k: 'measure', v: inner });
       else out.push(r && r.kind !== 'all' ? { k: 'ref', v: inner } : { k: 'var', v: inner });
     }
     else if (m[2] != null) out.push({ k: 'math', v: m[2] });

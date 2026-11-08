@@ -216,13 +216,14 @@ export class Scene {
   /** 算一个 {式子}（value.js 的 evalLive）：{ value, deps }；ctx.plane 是写在哪个平面上 */
   liveValue(src, ctx) { return evalLive(src, this, ctx); }
   /**
-   * 话、贴的字、挑战的字里写的：{a.2} 要真有；{count(t)} 的量名、括号里的东西要对（数不了不碍事，画「?」）。
-   * 重放旧课（lenient）不查量：以前 {f(x)} 只是原样写出来的字，当时收下的照样收下
+   * 话、贴的字、挑战的字、题卡里写的：{a.2} 要真有；{count(t)} 的量名、括号里的东西要对，以后也数不了的（没写 key）当场报
+   * （现在还空着的照收，画「?」）。重放旧课（lenient）不查量：以前 {f(x)} 只是原样写出来的字，当时收下的照样收下。
+   * replayRefs 是假的（retext、题卡的 rewrite 以前不查 {a.2}）：重放时 {a.2} 也照旧不查
    */
-  checkRich(text, c) {
+  checkRich(text, c, { replayRefs = true } = {}) {
     for (const p of parseRich(text)) {
-      if (p.k === 'ref') this.parts(p.v);
-      else if (p.k === 'measure' && !c?.lenient) checkMeasure(this, p.v);
+      if (p.k === 'ref') { if (replayRefs || !c?.lenient) this.parts(p.v); }
+      else if (p.k === 'measure' && !c?.lenient) checkMeasure(this, p.v, { run: true });
     }
   }
 
@@ -522,6 +523,7 @@ export class Scene {
       case 'retext': {
         const l = this.labels.get(words[0]);
         if (!l) throw new Error(`没有叫「${words[0]}」的字${this.labels.size ? `（有的是：${[...this.labels.keys()].join('、')}）` : ''}`);
+        this.checkRich(str ?? '', c, { replayRefs: false });
         l.text = str ?? '';
         return { id: l.id };
       }

@@ -407,6 +407,7 @@ test('秩和自由变量：rank 是整张（增广的是 r(A | b)）、rankA 是
   assert.equal(v('free(M)'), 1);
   assert.equal(v('det(M)'), null);
   assert.match(evalMeasure(s, 'det(M)').why, /没有 det/);
+  assert.equal(evalMeasure(s, 'det(M)').never, true, '本来就没有：以后也数不了');
   const line = measureLine(s, M(s));
   assert.equal(line, '页面算的：rank(M) = 2，rankA(M) = 1，free(M) = 1');
   assert.doesNotMatch(line, /det\(M\)|页面数不了/, '本来就没有的不列，也不算数不了');

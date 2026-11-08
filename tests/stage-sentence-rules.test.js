@@ -515,5 +515,6 @@ test('谓语几个：照 key 数，key 的段整个落在范围里才算；key �
   const r = evalMeasure(t, 'verbs(s2)');
   assert.equal(r.value, null);
   assert.match(r.why, /s2 没写 key/);
+  assert.equal(r.never, true, '没写 key 以后也数不了');
   assert.equal(measureLine(t, t.objects.get('s2')), '页面数不了：s2 没写 key');
 });

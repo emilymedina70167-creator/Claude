@@ -214,11 +214,12 @@ test('挑战里写量：count(t) = 7 和判断式写在一起', () => {
   assert.deepEqual(fx.goalsMet, ['g1']);
 });
 
-test('量判不了（没写 key、乘积还空着）：挑战写「判不了」不写 ✗，也不算做到', () => {
+test('量判不了（写下以后 key 作废了、乘积还空着、重放旧课）：挑战写「判不了」不写 ✗，也不算做到', () => {
+  // 写下时 key 还在（数得了），后来 rewrite 把 key 作废了
   const sc = new Scene();
-  run(sc, 'sentence s2 = "The man is a doctor."\ngoal g1 "找出谓语" when="verbs(s2) = 1"');
+  run(sc, 'sentence s = "The man is a doctor." key="[S The man] [V is] [P a doctor]."\ngoal g1 "找出谓语" when="verbs(s) = 2"\nrewrite s "The men are doctors."');
   const g = sc.goals.get('g1');
-  assert.match(goalStatus(sc, g), /verbs\(s2\) = 1 判不了：s2 没写 key/);
+  assert.match(goalStatus(sc, g), /verbs\(s\) = 2 判不了：s 的 key 跟着 rewrite 作废了/);
   assert.doesNotMatch(goalStatus(sc, g), /✗/);
   assert.equal(evalGoal(sc, g.cond), false);
   assert.deepEqual(sc.checkGoals(), []);
@@ -234,6 +235,23 @@ test('量判不了（没写 key、乘积还空着）：挑战写「判不了」�
   // 算出来以后照常判
   run(m, 'mul C');
   assert.equal(h.met, true);
+  // 重放旧课（lenient）：当时收下的照样收下，没写 key 的也是「判不了」
+  const r = new Scene();
+  run(r, 'sentence s2 = "The man is a doctor."');
+  r.apply({ ...one('goal g1 "找出谓语" when="verbs(s2) = 1"'), lenient: true });
+  assert.match(goalStatus(r, r.goals.get('g1')), /verbs\(s2\) = 1 判不了：s2 没写 key/);
+  assert.deepEqual(r.checkGoals(), []);
+});
+
+test('以后也数不了的量写下挑战时当场报（第一轮 I4 的规矩）：增广矩阵、不是方阵的 det，没写 key 的句子；还空着的照收', () => {
+  const sc = new Scene();
+  run(sc, 'matrix M = 1 2 | 1 / 2 4 | -1\nmatrix N = 1 2 3 / 4 5 6\nsentence s2 = "The man is a doctor."\nmatrix A = 1 2 / 3 4\nmatrix B = 1 0 / 0 1\nproduct C = A B');
+  assert.match(sc.check(one('goal g1 "x" when="det(M) = 0"')) || '', /「det\(M\)」页面数不了，以后也数不了：M 没有 det（不是方阵，或者是增广矩阵）/);
+  assert.match(sc.check(one('goal g1 "x" when="det(N) = 0"')) || '', /以后也数不了/);
+  assert.match(sc.check(one('goal g1 "x" when="verbs(s2) = 1"')) || '', /以后也数不了：s2 没写 key/);
+  assert.match(sc.check(one('goal g1 "x" when="rank(M.r1) = 1"')) || '', /以后也数不了：M\.r1 没有 rank/);
+  assert.equal(sc.check(one('goal g1 "C 满秩" when="rank(C) = 2"')), null, '还空着：之后数得了');
+  assert.equal(sc.check(one('goal g1 "C 可逆" when="det(C) != 0"')), null, '方阵还空着：之后数得了');
 });
 
 test('量写错当场报：这种东西没有这个量、舞台上没有这样东西', () => {

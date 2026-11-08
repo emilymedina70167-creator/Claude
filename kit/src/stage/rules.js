@@ -88,10 +88,13 @@ export function parseMeasure(word) {
 const labelOf = (scene, o) => { try { return scene.type(o).label; } catch { return o.type; } };
 
 /**
- * 量写得对不对（不算）：{ name, arg, o, fn, parts }。括号里不是东西或部件、东西不在、这种东西没有这个量、部件写错了都抛错，
- * 错误的话给老师看。写下挑战、话、贴的字时查的就是它
+ * 量写得对不对：{ name, arg, o, fn, parts }。括号里不是东西或部件、东西不在、这种东西没有这个量、部件写错了都抛错，
+ * 错误的话给老师看。写下挑战、话、贴的字时查的就是它。
+ * run（写下新的一行时）还算一遍：以后也数不了的（这样东西本身数不了：句子没写 key；本来就没有：增广矩阵的 det）当场报——
+ * 第一轮 I4 的规矩，永远判不了的挑战、永远是「?」的字是老师写错了；现在还空着的（乘积没算）之后数得了，照收。
+ * 不 run（重放旧课）只查写法：当时收下的照样收下
  */
-export function checkMeasure(scene, word) {
+export function checkMeasure(scene, word, { run = false } = {}) {
   const m = parseMeasure(word);
   if (!m) throw new Error(`「${word}」不是量的写法：写成 count(t)、height(t.50)`);
   const id = m.arg.match(/^([A-Za-z_]\w*)([.#].+)?$/);
@@ -109,26 +112,41 @@ export function checkMeasure(scene, word) {
     throw new Error(names.length ? `${labelOf(scene, o)}「${o.id}」没有量「${m.name}」，能写：${names.join('、')}` : `${labelOf(scene, o)}「${o.id}」没有量可写`);
   }
   const parts = id[2] ? scene.parts(m.arg) : null;
+  if (run) {
+    const r = runMeasure(scene, word);
+    if (r.never) throw new Error(`「${word}」页面数不了，以后也数不了：${r.why}`);
+  }
   return { ...m, o, fn, parts };
 }
 
-// 算一个量：{ value, why, none }。none 是这样东西本来就没有这个量（measureLine 不列它）
+// 算一个量：{ value, why, none, never }。none 是这样东西本来就没有这个量（measureLine 不列它）；
+// never 是以后也数不了：本来就没有，或者量自己抛错（这样东西本身数不了）。null 是现在还数不了，之后会有
 function runMeasure(scene, word) {
   const m = checkMeasure(scene, word);
   let v;
-  try { v = m.fn(m.o, m.parts, scene); } catch (err) { return { value: null, why: String(err?.message || err), none: false }; }
-  if (v === undefined) return { value: null, why: `${m.arg} 没有 ${m.name}${m.fn.none ? `（${m.fn.none}）` : ''}`, none: true };
-  if (v == null || !Number.isFinite(v)) return { value: null, why: m.fn.blank ? `${m.arg} ${m.fn.blank}` : `${m.arg} 现在还数不了 ${m.name}`, none: false };
-  return { value: v, why: null, none: false };
+  try { v = m.fn(m.o, m.parts, scene); } catch (err) { return { value: null, why: String(err?.message || err), none: false, never: true }; }
+  if (v === undefined) return { value: null, why: `${m.arg} 没有 ${m.name}${m.fn.none ? `（${m.fn.none}）` : ''}`, none: true, never: true };
+  if (v == null || !Number.isFinite(v)) return { value: null, why: m.fn.blank ? `${m.arg} ${m.fn.blank}` : `${m.arg} 现在还数不了 ${m.name}`, none: false, never: false };
+  return { value: v, why: null, none: false, never: false };
 }
 
 /**
- * 量现在是几：{ value: 数 | null, why }。东西不在、这种东西没有这个量抛错（写错了）；
- * 量自己抛的错（句子没写 key）不往外抛，变成 { value: null, why: 那句话 }——挑战写「判不了」、答案写「页面没判成」、贴的字画「?」
+ * 量现在是几：{ value: 数 | null, why }，以后也数不了的多一项 never: true。东西不在、这种东西没有这个量抛错（写错了）；
+ * 量自己抛的错（句子没写 key）不往外抛，变成 { value: null, why: 那句话, never: true }——挑战写「判不了」、答案写「页面没判成」、贴的字画「?」
  */
 export function evalMeasure(scene, word) {
-  const { value, why } = runMeasure(scene, word);
-  return { value, why };
+  const { value, why, never } = runMeasure(scene, word);
+  return never ? { value, why, never } : { value, why };
+}
+
+/**
+ * 话、贴的字、挑战、题卡里的 {量} 画成什么：数得出画数；数不了（还空着、没写 key、本来就没有）画「?」；
+ * 不是量（旧课重放进来的 {f(x)}：x 不在舞台上、名字不是这样东西的量）照原样写字——和以前当成拨数原样写出来一样
+ */
+export function measureShown(scene, word) {
+  let r;
+  try { r = evalMeasure(scene, word); } catch { return word; }
+  return r.value == null ? '?' : measureText(r.value);
 }
 
 /** 量写给人看：整数照写，不是整数的写成分数（det 可能是 1/2），实在凑不成分数的写小数 */

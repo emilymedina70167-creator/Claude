@@ -74,6 +74,7 @@ export const card = {
       const [l] = h.partsIn();
       if (!l || scene.objects.get(l.obj).type !== 'card') throw new Error('要写成 rewrite q.2 "新的字"');
       if (h.str == null) throw new Error('rewrite 要有新的字（写在引号里）');
+      scene.checkRich(h.str, c, { replayRefs: false }); // 和造题卡一样查（以前不查 {a.3}，重放旧课时照旧不查）
       l.text = h.str;
       return { line: l };
     },

@@ -2,7 +2,7 @@
 // 假种类 counter 在这里注册；每个测试文件是独立进程，不用注销。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { registerRules, rulesOf, predicateOf, gestureOf, done, parseMeasure, evalMeasure, measureLine } from '../kit/src/stage/rules.js';
+import { registerRules, rulesOf, predicateOf, gestureOf, done, parseMeasure, evalMeasure, measureLine, measureShown, checkMeasure } from '../kit/src/stage/rules.js';
 import { judge } from '../kit/src/stage/referee.js';
 
 registerRules('counter', {
@@ -122,8 +122,9 @@ test('量的接口：数得出给数；暂时数不了给 null；本来就没有
   const sc = (n, ok = true) => ({ objects: new Map([['m', { type: 'meter', id: 'm', n, ok }], ['z', { type: 'plain', id: 'z' }]]) });
   assert.deepEqual(evalMeasure(sc(4), 'n(m)'), { value: 4, why: null });
   assert.deepEqual(evalMeasure(sc(0), 'n(m)'), { value: null, why: 'm 还空着' });
-  assert.deepEqual(evalMeasure(sc(4, false), 'half(m)'), { value: null, why: 'm 没写 key' });
-  assert.deepEqual(evalMeasure(sc(4), 'sq(m)'), { value: null, why: 'm 没有 sq（不是方阵）' });
+  // 这样东西本身数不了（量抛错）、本来就没有（undefined）：以后也数不了，带 never（写下时当场报）；还空着的没有
+  assert.deepEqual(evalMeasure(sc(4, false), 'half(m)'), { value: null, why: 'm 没写 key', never: true });
+  assert.deepEqual(evalMeasure(sc(4), 'sq(m)'), { value: null, why: 'm 没有 sq（不是方阵）', never: true });
   assert.throws(() => evalMeasure(sc(4), 'size(m)'), /没有量「size」，能写：n、half、sq/);
   assert.throws(() => evalMeasure(sc(4), 'n(q)'), /舞台上没有「q」/);
   assert.throws(() => evalMeasure(sc(4), 'n(z)'), /没有量/);
@@ -132,4 +133,24 @@ test('量的接口：数得出给数；暂时数不了给 null；本来就没有
   assert.equal(measureLine(sc(0, false), sc(0, false).objects.get('m')), '页面数不了：m 还空着；m 没写 key');
   assert.equal(measureLine(sc(4), sc(4).objects.get('z')), null, '没交量的东西没有这一行');
   assert.equal(measureLine(sc(3), sc(3).objects.get('m')), '页面算的：n(m) = 3，half(m) = 3/2', '不是整数的写成分数');
+});
+
+test('写下时查量：以后也数不了的（本身数不了、本来就没有）当场报；现在还空着的照收', () => {
+  const sc = (n, ok = true) => ({ objects: new Map([['m', { type: 'meter', id: 'm', n, ok }]]) });
+  assert.throws(() => checkMeasure(sc(4, false), 'half(m)', { run: true }), /「half\(m\)」页面数不了，以后也数不了：m 没写 key/);
+  assert.throws(() => checkMeasure(sc(4), 'sq(m)', { run: true }), /以后也数不了：m 没有 sq（不是方阵）/);
+  assert.doesNotThrow(() => checkMeasure(sc(0), 'n(m)', { run: true }), '还空着：之后数得了');
+  assert.doesNotThrow(() => checkMeasure(sc(4, false), 'half(m)'), '不 run 只查写法（重放旧课）');
+});
+
+test('量画成什么：数得出画数，数不了画「?」，不是量（旧课的 {f(x)}、东西不在、名字不对）照原样写字', () => {
+  const sc = (n, ok = true) => ({ objects: new Map([['m', { type: 'meter', id: 'm', n, ok }]]) });
+  assert.equal(measureShown(sc(4), 'n(m)'), '4');
+  assert.equal(measureShown(sc(3), 'half(m)'), '3/2');
+  assert.equal(measureShown(sc(0), 'n(m)'), '?', '还空着');
+  assert.equal(measureShown(sc(4, false), 'half(m)'), '?', '本身数不了');
+  assert.equal(measureShown(sc(4), 'sq(m)'), '?', '本来就没有');
+  assert.equal(measureShown(sc(4), 'f(x)'), 'f(x)', '舞台上没有 x：照原样');
+  assert.equal(measureShown(sc(4), 'size(m)'), 'size(m)', '不是 m 的量：照原样');
+  assert.equal(measureShown(sc(4), 'f( x )'), 'f( x )', '原样连空格');
 });
