@@ -1,12 +1,16 @@
 # 学生直接动画面的几种情况（审查找出来的）：写错部件不崩；没交给学生的格子不能拨；越出 range 拨不到；
-# 一次 write 照真页面一格一格 ±1 地拨（1 → 2 → 3 是两下）；舞台没演上的那一下不交给课堂循环
+# 一次 write 照真页面一格一格 ±1 地拨（1 → 2 → 3 是两下）；舞台没演上的那一下不交给课堂循环；
+# 写了 input=keypad 的一格是数字键盘（通用手势 write）：一下写成 -3/2，不是拨数器
 matrix A = 1 1 / -1 -1
 matrix B = 1 -1 / -1 1 beside=A
 product C = A B
 mul C
 open B.1,1 edit range=-3..3
+matrix K = 1 0 / 0 1
+open K edit input=keypad
 goal g1 "让 C.1,1 变成 2" when="C.1,1 = 2"
 学生: write B.3,1 2
 学生: write B.2,2 2
 学生: write B.1,1 99
+学生: write K.1,2 -3/2
 学生: write B.1,1 3

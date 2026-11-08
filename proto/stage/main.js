@@ -7,8 +7,10 @@ import { createLoop } from '../../kit/src/stage/loop.js';
 import { eventsText } from '../../kit/src/stage/events.js';
 import { goalStatus } from '../../kit/src/stage/goal.js';
 import { dryRun } from '../../kit/src/stage/scene.js';
+import { parseScript } from '../../kit/src/stage/script.js';
+import { gestureAct, askFor, writeRange } from '../../kit/src/stage/gestures.js';
 import css from '../../kit/src/stage/stage.css';
-import { viewCss } from '../../kit/src/stage/types/views.js';
+import { viewCss, VIEWS } from '../../kit/src/stage/types/views.js';
 import katexCss from 'virtual:katex-css';
 import { scriptedLesson } from './scripted.js';
 import { liveLesson } from './live.js';
@@ -27,8 +29,8 @@ const q = new URLSearchParams(location.search);
 const MOCK = q.has('mock');
 let stage = null;
 let run = 0;
-// ?dev：检查脚本用（tools/stage-try.mjs 拿 createLoop 照学习台的课堂循环演一幕）
-if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, createLoop, eventsText, goalStatus, HELP, dryRun };
+// ?dev：检查脚本用（tools/stage-try.mjs 拿 createLoop 照学习台的课堂循环演一幕；学生的手势照画法的把手、手势表、裁判走）
+if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, createLoop, eventsText, goalStatus, HELP, dryRun, parseScript, gestureAct, askFor, writeRange, VIEWS };
 
 function fresh({ input }) {
   stage?.destroy();

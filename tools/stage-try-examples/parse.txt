@@ -1,0 +1,19 @@
+# 句子：学生自己拉括号（从一个词拉到另一个词，再点成分），页面照 key 判每一下（wrong=mark：照做、淡淡圈一下）。
+# 谓语只拉了 has：攒着里有「只圈了一半」；撤一步，那道括号没了；成分那一排没有的（宾补）点不了；
+# 拉对谓语、主语、从句、宾语：做完了，页面叫老师。第二段：老师收起 mark、交出 fold；没交的 mark 动不了，没有括号的一段折不起来，点从句的括号折起来
+sentence s = "She has been reading the book that I lent her." key="[S She] [V has been reading] [O the book [RC that I lent her]]."
+say "先找谓语：从一个词拉到另一个词，再点它是什么成分。"
+open s mark wrong=mark undo=on
+学生: mark s.2-2 V
+学生: undo
+学生: mark s.2-4 V
+学生: mark s.1 S
+学生: mark s.7-10 RC
+学生: mark s.5-10 宾补
+学生: mark s.5-10 宾语
+close s mark
+open s fold
+say "主干拉出来了。从句修饰 book：点它的括号折起来，只看主干。"
+学生: mark s.1 S
+学生: fold s.1-3
+学生: fold s.7-10

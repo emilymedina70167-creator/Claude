@@ -1,0 +1,21 @@
+# 消元：学生自己做行变换（行左边的把手拖到另一行上 = 倍加、倍数框写几倍；拖到行号上 = 对调；点行号 = 倍乘），页面判每一下。
+# 一行乘 0 这个世界做不到：弹回去，照样告诉课堂循环（攒着里有「做不到」）；倍数不对的那一下 wrong=mark 照做、淡淡圈着，撤一步退回去；
+# 一下做两步翻不成手势；消成阶梯形叫老师。第二段：含参的那一格跟着拨数变（[跟着变的]），拨到秩掉下来做到 g2
+matrix A = 0 1 2 / 1 2 1 / 2 5 4
+say "第一列的主元是 0。你来消成阶梯形：拖一行左边的把手。"
+open A rowop wrong=mark undo=on
+goal g1 "把 A 消成阶梯形" when="A stairs"
+学生: rowop A 0r2
+学生: rowop A r1 <-> r2
+学生: rowop A r3 - r1
+学生: undo
+学生: rowop A r3 - 2r1, r3 - r2
+学生: rowop A r3 - 2r1
+学生: rowop A r3 - r2
+say "成了阶梯形，秩是 2。再看带参数的：k 取几，M 的秩会掉下来？"
+dial k = 1 range=1-6 at=M
+matrix M = 1 2 / 2 {k}
+goal g2 "拨 k，让 M 的秩变成 1" when="M rank=1"
+学生: dial k 3
+学生: dial k 9
+学生: dial k 4

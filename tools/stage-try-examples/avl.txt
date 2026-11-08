@@ -1,0 +1,20 @@
+# 平衡二叉树：学生自己插、自己转（托盘里的数拖进树 = insert；一个结点拖到它的父亲上 = 在父亲那里转）。
+# 插入 45 以后 50 失衡、LR 型。老师写了 wrong=block：学生在 50 左旋（型从下往上读成了 RL）不让做、弹回去，攒着里写像哪种错；
+# 托盘里没有的数拖不了、20 没有左孩子转不了（翻不成手势，记成没演上）；插入的那一下没写 undo=on 撤不了；
+# 在 30 左旋、撤一步、再转一次、在 50 右旋转平：预写的 @t.done 当场演（里面有下一问），不叫老师
+tree t = 50 30 60 20 40 tray="45"
+bf t
+say "把 45 插进去，再自己转平：把一个结点拖到它的父亲上，就是在父亲那里转。"
+open t insert
+open t rotate wrong=block undo=on
+@t.done say "转平了：40 转上来当了根。"
+@t.done ask tap t "45 现在挂在谁下面？点它。" expect=t.50
+学生: insert t 99
+学生: insert t 45
+学生: undo
+学生: rotate t.50 left
+学生: rotate t.20 right
+学生: rotate t.30 left
+学生: undo
+学生: rotate t.30 left
+学生: rotate t.50 right
