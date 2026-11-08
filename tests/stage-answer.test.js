@@ -166,3 +166,14 @@ test('复核 答案矩阵不受舞台上矩阵的 6×8 上限管：{A\'} 是 8×
   assert.equal(judgeAnswer('1 1 / 2 1 / 3 1 / 4 1 / 5 1 / 6 1 / 7 1 / 8 1', spec, sc).ok, true);
   assert.equal(judgeAnswer('1 1 / 2 1 / 3 1 / 4 1 / 5 1 / 6 1 / 7 1 / 8 2', spec, sc).ok, false);
 });
+
+test('量判不了不当答错：answer={verbs(s2)} 在 s2 没写 key 时页面没判成', () => {
+  const sc = run(new Scene(), 'sentence s2 = "The man is a doctor."\ntree t = 50 30 70');
+  const r = judgeAnswer('1', { answer: '{verbs(s2)}' }, sc);
+  assert.equal(r.ok, null);
+  assert.match(r.failed, /页面没判成/);
+  assert.equal(judgeAnswer('3', { answer: '{count(t)}' }, sc).ok, true);
+  assert.equal(judgeAnswer('2', { answer: '{height(t)}' }, sc).ok, true);
+  assert.equal(judgeAnswer('3', { answer: '{height(t)}' }, sc).ok, false);
+  assert.equal(sc.check(parseScript('ask value "几个结点？" answer={count(t)}')[0]), null);
+});

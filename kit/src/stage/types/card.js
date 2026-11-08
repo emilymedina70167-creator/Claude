@@ -11,7 +11,7 @@ const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6:
 /** 一行字大约占几行（中文一个字一份，英文、数字半份）；页面上量出来的会略有出入，镜头和贴字够用 */
 export function rowsOf(text) {
   let n = 0;
-  for (const p of parseRich(text)) n += p.k === 'ref' ? 2 : [...String(p.v)].reduce((k, ch) => k + (/[\u0000-\u00ff]/.test(ch) ? 0.5 : 1), 0);
+  for (const p of parseRich(text)) n += p.k === 'ref' || p.k === 'measure' ? 2 : [...String(p.v)].reduce((k, ch) => k + (/[\u0000-\u00ff]/.test(ch) ? 0.5 : 1), 0);
   return Math.max(1, Math.ceil(n / PER_ROW));
 }
 // 一行多高：画面量过的（l.mh，card.view.js 写回：字折了几行只有画出来才知道）就用量的，没量过按字数估
@@ -38,7 +38,7 @@ export const card = {
     const texts = h.strs;
     if (!texts.length) throw new Error('要写成 card 名字 = "第一行" "第二行"……（每一行一对引号）');
     if (texts.length > 12) throw new Error('一张题卡最多 12 行');
-    for (const t of texts) for (const p of parseRich(t)) if (p.k === 'ref') scene.parts(p.v);
+    for (const t of texts) scene.checkRich(t, c); // 话里的 {a.3} 要真有，{count(t)} 的量名要对
     const origin = old ? { ...old.origin } : scene.slotFor(CARD_W);
     return { origin, lines: texts.map((t, i) => mkLine(id, i + 1, t)) };
   },
@@ -63,7 +63,7 @@ export const card = {
       if (!o || o.type !== 'card') throw new Error(`舞台上没有叫「${h.words[0]}」的题卡`);
       if (h.str == null) throw new Error('要写成 addline 名字 "这一行的字"');
       if (o.lines.length >= 12) throw new Error('一张题卡最多 12 行');
-      for (const p of parseRich(h.str)) if (p.k === 'ref') scene.parts(p.v);
+      scene.checkRich(h.str, c);
       const l = mkLine(o.id, o.lines.length + 1, h.str);
       if (h.opts.covered === 'on' || h.words.includes('covered')) l.covered = true;
       o.lines.push(l);

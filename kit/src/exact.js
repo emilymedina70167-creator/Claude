@@ -482,6 +482,8 @@ function radix(x, n, base) {
 
 // 这些函数 expr.js 有、但结果一般不是有理数：交给小数去算
 const FLOAT_ONLY = new Set(['rot', 'sin', 'cos', 'tan', 'atan2', 'exp', 'ln', 'log', 'normpdf', 'normcdf', 'binompmf', 'poissonpmf', 'exppdf', 'unifpdf']);
+/** 式子里认得的函数名（det、rank、inv……、算法函数、只能算小数的 sin 这些）：舞台的 {…} 里这些照旧交给这里算，不换成量（stage/value.js） */
+export const isExactFunc = (name) => Object.hasOwn(FUNCS, name) || Object.hasOwn(EXTRA, name) || FLOAT_ONLY.has(name);
 
 function run(n, vars) {
   switch (n.t) {

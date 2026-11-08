@@ -7,6 +7,8 @@
 //   ask tap a "{a.2} 和谁一组？"                  停下来等学生点
 //
 // 部件的写法：a（整个）、a.3（第 3 格，按现在的位置）、a.2-5（第 2 到 5 格）、a#8（一开始在第 8 格的那一个，跟着它走）
+import { parseMeasure } from './rules.js';
+import { isExactFunc } from '../exact.js';
 
 /** 认得的指令（写错了页面报出来，不默默忽略）。这里是各种东西共用的；每种东西自己的指令（swap、insert、rowop……）由 types/ 注册进来 */
 export const COMMANDS = new Set([
@@ -124,7 +126,8 @@ export function parseRef(word) {
 
 /**
  * 话里的写法拆成一段段：{a.2} 是舞台上的东西（画成和它一样颜色的小块，点了图上那个闪一下）、{d} 是拨的数、
- * $d$ 是式子里的字母、[不稳定] 是能飞到图上去的词。返回 [{ k: 'text' | 'ref' | 'var' | 'math' | 'word', v }]
+ * {count(t)} 是页面数的量（画成现在的数，跟着变；数不了画「?」）、$d$ 是式子里的字母、[不稳定] 是能飞到图上去的词。
+ * 返回 [{ k: 'text' | 'ref' | 'var' | 'measure' | 'math' | 'word', v }]
  */
 export function parseRich(text) {
   const out = [];
@@ -136,7 +139,11 @@ export function parseRich(text) {
     if (m[1] != null) {
       const inner = m[1].trim();
       const r = parseRef(inner);
-      out.push(r && r.kind !== 'all' ? { k: 'ref', v: inner } : { k: 'var', v: inner });
+      // 量和 value.js 的 evalLive 同一条规矩：名字(东西或部件)，名字不是 exact.js 本来就有的函数（{det(A)}、{rank(M)} 照旧是式子）。
+      // 这里看不到舞台：括号里的东西在不在、名字是不是它的量，场景写下这一行时查（scene.js 的 checkRich）
+      const ms = !r && parseMeasure(inner);
+      if (ms && !isExactFunc(ms.name) && parseRef(ms.arg)) out.push({ k: 'measure', v: `${ms.name}(${ms.arg})` });
+      else out.push(r && r.kind !== 'all' ? { k: 'ref', v: inner } : { k: 'var', v: inner });
     }
     else if (m[2] != null) out.push({ k: 'math', v: m[2] });
     else out.push({ k: 'word', v: m[3] });
@@ -148,5 +155,5 @@ export function parseRich(text) {
 
 /** 话里一共几个字（出字动画、留多久给人读按它算） */
 export function richLength(parts) {
-  return parts.reduce((n, p) => n + (p.k === 'ref' ? 2 : String(p.v).length), 0);
+  return parts.reduce((n, p) => n + (p.k === 'ref' || p.k === 'measure' ? 2 : String(p.v).length), 0);
 }

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
 import { sentenceRules as R, actSrc, roleName } from '../kit/src/stage/types/sentence.rules.js';
-import { rulesOf, predicateOf, gestureOf, done } from '../kit/src/stage/rules.js';
+import { rulesOf, predicateOf, gestureOf, done, evalMeasure, measureLine } from '../kit/src/stage/rules.js';
 import { parseBrackets, judgeSpans } from '../kit/src/entext.js';
 import { sentence } from '../kit/src/stage/types/sentence.js';
 
@@ -499,4 +499,21 @@ test('复核 key 拆了从句：从句里的一段照从句自己的那几段判
   assert.equal(R.check(S(s), mk(4, 4, '谓语'), s).right, true);
   assert.match(R.check(S(s), mk(3, 5, '定语从句'), s).misread, /从句断早了/, '从句自己的边界照旧说');
   assert.equal(R.check(S(s), mk(1, 2, '主语'), s).right, false, '外面一层照旧');
+});
+
+test('谓语几个：照 key 数，key 的段整个落在范围里才算；key 还差几段；没写 key 数不了', () => {
+  const s = make('sentence s = "The man who lives next door is a doctor." key="[S The man [RC who [V lives] next door]] [V is] a doctor."');
+  assert.equal(evalMeasure(s, 'verbs(s)').value, 2);
+  assert.equal(evalMeasure(s, 'verbs(s.3-6)').value, 1);
+  assert.equal(evalMeasure(s, 'verbs(s.3-4)').value, 1);
+  assert.equal(evalMeasure(s, 'verbs(s.5-9)').value, 1, 'lives 不在 5-9 里');
+  assert.equal(evalMeasure(s, 'left(s)').value, 4);
+  run(s, 'mark s.7 V');
+  assert.equal(evalMeasure(s, 'left(s)').value, 3);
+  assert.equal(evalMeasure(s, 'left(s.3-6)').value, 2, '这一段里还差 RC、V 两段');
+  const t = make('sentence s2 = "The man is a doctor."');
+  const r = evalMeasure(t, 'verbs(s2)');
+  assert.equal(r.value, null);
+  assert.match(r.why, /s2 没写 key/);
+  assert.equal(measureLine(t, t.objects.get('s2')), '页面数不了：s2 没写 key');
 });

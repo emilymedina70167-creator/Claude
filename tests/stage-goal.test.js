@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { parseGoal, evalGoal } from '../kit/src/stage/goal.js';
+import { parseGoal, evalGoal, goalStatus } from '../kit/src/stage/goal.js';
 import { registerRules } from '../kit/src/stage/rules.js';
 
 const run = (sc, src) => { const out = []; for (const c of parseScript(src)) out.push(sc.apply(c)); return out; };
@@ -189,4 +189,59 @@ test("M2 比一格：ASCII 的 ' 和 ′ 一样是撇（49' 不是 49）", () =>
   run(sc, 'swap a.3 a.4');
   assert.equal(sc.goals.get('g2').met, true);
   assert.equal(evalGoal(sc, parseGoal("a.4 = 49′")), true, '两种撇写法一样');
+});
+
+// 王道综合题 03 转平以后的树（34 23 15 98 115 28 107 依次插）
+const AVL7 = 'tree t = 34 23 107 15 28 98 115';
+const status = (sc, when) => goalStatus(sc, { cond: parseGoal(when), met: false });
+
+test('挑战里写量：count(t) = 7 和判断式写在一起', () => {
+  assert.deepEqual(parseGoal('count(t) = 7, t avl'), [{ l: 'count(t)', op: '=', r: '7' }, { l: 't', pred: 'avl', args: [] }]);
+  assert.deepEqual(parseGoal('height( t.50 ) >= 2'), [{ l: 'height(t.50)', op: '>=', r: '2' }], '括号里的空格不碍事');
+  const four = new Scene();
+  run(four, 'tree t = 50 30 70 20');
+  assert.match(status(four, 'count(t) = 7, t avl'), /count\(t\) = 7 ✗/);
+  assert.equal(evalGoal(four, parseGoal('count(t) = 7, t avl')), false);
+  const seven = new Scene();
+  run(seven, AVL7);
+  assert.equal(evalGoal(seven, parseGoal('count(t) = 7, t avl, height(t) = 3')), true);
+  assert.equal(evalGoal(seven, parseGoal('height(t.107) < height(t)')), true, '两边都能写量');
+  // 学生插到 7 个就做到
+  run(four, 'goal g1 "插到 7 个" when="count(t) = 7"');
+  run(four, 'insert t 10\ninsert t 40');
+  assert.equal(four.goals.get('g1').met, false);
+  const fx = four.apply(parseScript('insert t 60')[0]);
+  assert.deepEqual(fx.goalsMet, ['g1']);
+});
+
+test('量判不了（没写 key、乘积还空着）：挑战写「判不了」不写 ✗，也不算做到', () => {
+  const sc = new Scene();
+  run(sc, 'sentence s2 = "The man is a doctor."\ngoal g1 "找出谓语" when="verbs(s2) = 1"');
+  const g = sc.goals.get('g1');
+  assert.match(goalStatus(sc, g), /verbs\(s2\) = 1 判不了：s2 没写 key/);
+  assert.doesNotMatch(goalStatus(sc, g), /✗/);
+  assert.equal(evalGoal(sc, g.cond), false);
+  assert.deepEqual(sc.checkGoals(), []);
+  assert.equal(g.met, false);
+  const m = new Scene();
+  run(m, 'matrix A = 1 2 / 3 4\nmatrix B = 1 0 / 0 1\nproduct C = A B\ngoal g1 "C 满秩" when="rank(C) = 2"');
+  const h = m.goals.get('g1');
+  assert.match(goalStatus(m, h), /rank\(C\) = 2 判不了：C 还有空着的格/);
+  assert.doesNotMatch(goalStatus(m, h), /✗/);
+  assert.equal(evalGoal(m, h.cond), false);
+  assert.deepEqual(m.checkGoals(), []);
+  assert.match(m.stateText(), /挑战 g1「C 满秩」when="rank\(C\) = 2"：还没做到（rank\(C\) = 2 判不了：C 还有空着的格）/);
+  // 算出来以后照常判
+  run(m, 'mul C');
+  assert.equal(h.met, true);
+});
+
+test('量写错当场报：这种东西没有这个量、舞台上没有这样东西', () => {
+  const sc = new Scene();
+  run(sc, 'tree t = 50 30 70');
+  assert.match(sc.check(one('goal g1 "长高" when="size(t) = 3"')) || '', /能写：count、height、tray/);
+  assert.match(sc.check(one('goal g1 "长高" when="count(q) = 3"')) || '', /舞台上没有「q」/);
+  assert.match(sc.check(one('goal g1 "长高" when="height(t.99) = 3"')) || '', /没有值是 99 的结点/);
+  assert.match(sc.check(one('goal g1 "长高" when="count(t) = 3"')) || '', /现在就已经成立了/, '量算得出来，照旧查一写下就成立的');
+  assert.equal(sc.check(one('goal g1 "长高" when="count(t) = 4"')), null);
 });

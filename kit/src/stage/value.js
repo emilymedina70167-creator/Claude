@@ -5,10 +5,11 @@
 // 式子交给黑板已有的精确计算（exact.js 的 evaluateExact：分数、矩阵加减乘、数乘、转置、求逆、行列式都现成），
 // 这里只管舞台这边的事：一行里的 {…} 拆出来、式子里的名字换成舞台上的值、用到了谁（依赖）、按依赖排先后、查环。
 // 场景（scene.js）把用了 {…} 的东西记成 o.live = { line, deps, … }，每一行之后照这里排的先后重算。
-import { evaluateExact, exactText, isQ, isQVec, isQMat, Q } from '../exact.js';
+import { evaluateExact, exactText, isQ, isQVec, isQMat, Q, isExactFunc } from '../exact.js';
 import { names } from '../expr.js';
 import { parseRef } from './script.js';
 import { toQ } from './types/matrix.js';
+import { evalMeasure } from './rules.js';
 
 const QUOTES = { '"': '"', '「': '」', '“': '”' };
 
@@ -94,6 +95,8 @@ export function scopeOf(scene, { plane } = {}) {
 // —— 写法的容错：B.1,2 这类部件、省略的乘号（A v）、上标（P⁻¹、A²、Aᵀ）——
 // 部件写法：名字.2,3 / 名字.u / 名字#3（前面不能贴着字母数字或点，不然 0.5、x1.2 会被认错）
 const REF_RE = /(?<![\w.#])([A-Za-z_]\w*)([.#])(\d+[,，]\d+|\w+)/g;
+// 量的写法：名字(东西或部件)（rules.js 的 parseMeasure，这里找一行里的每一处）
+const MEASURE_RE = /(?<![\w.#])([A-Za-z_]\w*)\(\s*([^()\s]+)\s*\)/g;
 const SUPS = [[/⁻¹/g, '^(-1)'], [/²/g, '^2'], [/³/g, '^3'], [/ᵀ/g, "'"]];
 const TOK = /\s*(?:(0[xX][0-9A-Fa-f_]+|0[bB][01_]+|\d+\.?\d*|\.\d+)|([A-Za-z_Ͱ-Ͽ][\wͰ-Ͽ]*)|(\*\*|<=|>=|==|!=|\S))/y;
 // exact.js 只认数后面省略乘号（2u）；舞台上老师常写 A v、P B、(A + B) v：两样值挨着就补一个 *（名字后面紧跟括号是函数，除非它是舞台上的值）
@@ -129,8 +132,22 @@ export function evalLive(src, scene, { plane } = {}) {
   const vars = scopeOf(scene, { plane });
   const local = new Set(plane ? (scene.objects.get(plane)?.items || []).map((i) => i.name) : []);
   const refs = new Map(); // 占位的名字 → 部件写法
+  const ms = new Map(); // 占位的名字 → 量算的是哪样东西（依赖）
   let text = raw.replace(/[−–]/g, '-');
   for (const [re, to] of SUPS) text = text.replace(re, to);
+  // 量（count(t)、rankA(M)）先换成页面数出来的数：括号里是舞台上的东西或部件、名字不是 exact.js 本来就有的函数才换——
+  // det(A)、rank(M) 照旧交给 exact.js（写满时两边算的一样，旧课的 {det(A)} 一字不变）；名字不是这样东西的量当场报（size(t)）
+  text = text.replace(MEASURE_RE, (m, name, arg) => {
+    const obj = parseRef(arg)?.obj;
+    if (isExactFunc(name) || !obj || !scene.objects.has(obj)) return m;
+    let r;
+    try { r = evalMeasure(scene, `${name}(${arg})`); } catch (e) { throw new Error(`${shown}里的「${m}」：${e.message}`); }
+    if (r.value == null) throw new Error(`${shown}里的「${m}」页面数不了：${r.why}`);
+    const k = `_m${ms.size}_`;
+    ms.set(k, obj);
+    Object.defineProperty(vars, k, { value: Q.from(r.value), enumerable: true });
+    return ` ${k} `;
+  });
   text = text.replace(REF_RE, (m, obj) => {
     if (!scene.objects.has(obj)) throw new Error(`${shown}里的「${m}」：舞台上没有「${obj}」`);
     let v;
@@ -157,6 +174,7 @@ export function evalLive(src, scene, { plane } = {}) {
   const add = (d) => { if (!deps.includes(d)) deps.push(d); };
   for (const n of used) {
     if (refs.has(n)) add(refs.get(n));
+    else if (ms.has(n)) add(ms.get(n));
     else if (local.has(n)) add(`${plane}.${n}`);
     else if (scene.objects.has(n) || scene.vars.has(n)) add(n);
   }

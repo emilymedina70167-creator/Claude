@@ -11,7 +11,7 @@
 // 离平衡很远的树（老师用二叉排序树的插法造的一条长链）照这样转还是可能绕回去：先照着往下试转，
 // 会回到转过的样子就改成一层一层摆（shapeStep），摆法本身一定走得完；只有往上转一层会压过 8 层时那一下照课本转
 // （量过几千棵到 8 层、31 个结点的随机二叉排序树，都不绕圈、每一下都转得了）。
-import { imbalance, levelOrder, heightOf, depths, cmpValues, bfOf, bfText, snapshot, rotStruct, descend, traversal, treePath, MAX_DEPTH, MAX_NODES, rotKind, SIDES } from './tree.js';
+import { imbalance, levelOrder, heightOf, depths, bfOf, bfText, snapshot, rotStruct, descend, traversal, treePath, MAX_DEPTH, MAX_NODES, rotKind, SIDES, isBst } from './tree.js';
 import { avlEngine } from '../../engines/balanced.js';
 import { levelOrder as engineOrder } from '../../engines/treeview.js';
 
@@ -408,18 +408,25 @@ const gestures = {
   },
 };
 
+// —— 量（count(t)、height(t.50)、tray(t)；rules.js 的 measures）——
+// 写部件（t.50、t.50*）是以它为根的那棵子树：height(t.107) 是那棵子树几层、count(t.107) 是那棵子树几个结点
+const rootsOf = (o, parts) => parts.map((p) => p.key);
+const measures = {
+  count: (o, parts) => (parts ? new Set(rootsOf(o, parts).flatMap((k) => levelOrder(o, k).map((n) => n.key))).size : levelOrder(o).length),
+  height: (o, parts) => (parts ? Math.max(0, ...rootsOf(o, parts).map((k) => heightOf(o, k))) : heightOf(o, o.root)),
+  // 托盘是整棵树的：写部件的没有这个量
+  tray: Object.assign((o, parts) => (parts ? undefined : (o.tray || []).length), { none: '托盘是整棵树的，写树的名字' }),
+};
+
 // —— 挑战用的判断式（when="t avl, t bst, t height=4"）——
 
 const predicates = {
   avl: (o) => isAvl(o),
-  // 中序递增（一样大的算递增：49′ 和 49 比起来一样大）
-  bst: (o) => {
-    const vs = traversal(o, o.root, 'in').order.map((k) => nodeAt(o, k).value);
-    return vs.every((v, i) => !i || cmpValues(vs[i - 1], v) <= 0);
-  },
+  bst: (o) => isBst(o),
+  // 带数字的旧写法照旧认，里面用量算（和 height(t) = 4 是同一个数）
   height: (o, [h] = []) => {
     if (!/^\d+$/.test(String(h ?? ''))) throw new Error('height 要写树有几层：t height=4');
-    return heightOf(o, o.root) === Number(h);
+    return measures.height(o, null) === Number(h);
   },
 };
 
@@ -432,7 +439,7 @@ const predicates = {
  */
 function standard(o) {
   const tray = o.tray || [];
-  if (!tray.length || !isAvl(o) || !predicates.bst(o)) return null;
+  if (!tray.length || !isAvl(o) || !isBst(o)) return null;
   const vals = levelOrder(o).map((n) => n.value);
   const fields = vals.length ? { avl: vals.join(' '), ops: tray.map((v) => `insert ${v}`).join(', ') } : { avl: tray.join(' ') };
   let input, run;
@@ -449,4 +456,4 @@ function standard(o) {
 }
 
 // 转、插的每一下都判；做完了（平衡了、托盘也插完了；只交了插入的课是托盘插完了）只对交给了学生转、插的树算
-export const treeRules = { next, check, predicates, facts, gestures, standard, actOf: lineAct, judges: ['rotate', 'insert', 'place'], doneBy: ['rotate', 'insert', 'place'] };
+export const treeRules = { next, check, predicates, measures, facts, gestures, standard, actOf: lineAct, judges: ['rotate', 'insert', 'place'], doneBy: ['rotate', 'insert', 'place'] };

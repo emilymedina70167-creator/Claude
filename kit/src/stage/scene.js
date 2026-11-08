@@ -16,7 +16,7 @@ import { bbox } from './layout.js';
 import { parseGoal, evalGoal, goalStatus, checkPreds, clauseKey } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder } from './value.js';
-import { rulesOf, done as nextDone } from './rules.js';
+import { rulesOf, done as nextDone, checkMeasure, measureLine } from './rules.js';
 import { judge } from './referee.js';
 import { gestureGrabs } from './gestures.js';
 
@@ -215,6 +215,16 @@ export class Scene {
   }
   /** 算一个 {式子}（value.js 的 evalLive）：{ value, deps }；ctx.plane 是写在哪个平面上 */
   liveValue(src, ctx) { return evalLive(src, this, ctx); }
+  /**
+   * 话、贴的字、挑战的字里写的：{a.2} 要真有；{count(t)} 的量名、括号里的东西要对（数不了不碍事，画「?」）。
+   * 重放旧课（lenient）不查量：以前 {f(x)} 只是原样写出来的字，当时收下的照样收下
+   */
+  checkRich(text, c) {
+    for (const p of parseRich(text)) {
+      if (p.k === 'ref') this.parts(p.v);
+      else if (p.k === 'measure' && !c?.lenient) checkMeasure(this, p.v);
+    }
+  }
 
   // —— 一行指令改场景（画面怎么演由 stage.js 管）。返回这一行的要点（画面用），写错了抛错 ——
   // 每一行之后：跟着别的东西算出来的（乘积……）重算（fx.derived），挑战判一遍，刚做到的（fx.goalsMet）把预写的行交出来（fx.reactions）。
@@ -444,7 +454,7 @@ export class Scene {
     switch (cmd) {
       case 'say': {
         const text = str ?? '';
-        for (const p of parseRich(text)) if (p.k === 'ref') this.parts(p.v); // 话里指着的东西要真有
+        this.checkRich(text, c); // 话里指着的东西要真有
         this.say = text;
         this.words = parseRich(text).filter((p) => p.k === 'word').map((p) => p.v);
         return {};
@@ -505,7 +515,7 @@ export class Scene {
         const refs = args.slice(1).filter((a) => a.t === 'word' && (this.labels.has(a.v) || this.isRef(a.v))).map((a) => a.v);
         for (const r of refs) if (!this.labels.has(r)) this.parts(r);
         if (str == null) throw new Error('label 要有字（写在引号里）');
-        for (const p of parseRich(str)) if (p.k === 'ref') this.parts(p.v);
+        this.checkRich(str, c);
         this.labels.set(id, { id, refs, text: str, side: opts.side || null, tone: opts.tone || null, link: null });
         return { id };
       }
@@ -564,7 +574,7 @@ export class Scene {
       case 'ask': {
         const kind = words[0];
         if (!['tap', 'drag', 'next', 'say', 'value'].includes(kind)) throw new Error(`ask 后面写 tap / drag / next / say / value，没有「${kind}」`);
-        if (str) for (const p of parseRich(str)) if (p.k === 'ref') this.parts(p.v);
+        if (str) this.checkRich(str, c);
         const refs = refsIn(args.slice(1));
         refs.forEach((r) => this.parts(r));
         if (kind === 'drag') {
@@ -651,7 +661,7 @@ export class Scene {
         if (this.objects.has(id)) throw new Error(`「${id}」是舞台上一样东西的名字，挑战换一个名字（g1、g2……）`);
         if (str == null) throw new Error(`要写成 goal ${id} "给学生看的挑战" when="…"（挑战的话写在引号里）`);
         if (!opts.when) throw new Error(`goal ${id} 要写 when="做到什么算做到"（比如 when="C = O, D != O"），页面照它判`);
-        for (const p of parseRich(str)) if (p.k === 'ref') this.parts(p.v);
+        this.checkRich(str, c);
         const cond = parseGoal(opts.when);
         checkPreds(this, cond, { run: !c.lenient });
         // 老师当场写的挑战一写下就成立，多半是写错了，当场告诉老师；预写的行、重放的时候学生可能已经做到了：照收，下面马上算做到
@@ -897,7 +907,13 @@ export class Scene {
     const hints = new Set();
     for (const o of this.objects.values()) { const t = typeOf(o); if (t.hint) hints.add(t.hint); }
     for (const h of hints) lines.push(h);
-    for (const o of this.objects.values()) lines.push(...typeOf(o).describe(o, this));
+    for (const o of this.objects.values()) {
+      const t = typeOf(o);
+      lines.push(...t.describe(o, this));
+      // 页面数得出的量（rules.js 的 measures）和那种东西自己交的几句（树的 avl / bst），老师不用自己数
+      const ml = measureLine(this, o, t.pageBits?.(o, this) || []);
+      if (ml) lines.push(`  ${ml}`);
+    }
     const lives = this.liveNodes().filter((n) => n.live);
     // 错误前面的「{式子}」和前面写的重了，去掉
     const why = (e) => e.replace(/^「\{[^{}]*\}」(算不出来：|里的)?/, '');

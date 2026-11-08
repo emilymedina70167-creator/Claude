@@ -9,6 +9,7 @@ import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHo
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf } from './scene.js';
+import { evalMeasure, measureText } from './rules.js';
 import { judgeAnswer, sameAnswer } from './answer.js';
 export { sameAnswer };
 import { VIEWS } from './types/views.js';
@@ -886,6 +887,7 @@ export class Stage {
     const moves = [];
     for (const o of sc.objects.values()) moves.push(...(VIEWS[o.type]?.sync(this, o, ctx) || []));
     this.syncGoals();
+    this.syncMeasures();
     // 整样东西挪了地方（大小没变：乘积把 A、B 排成一行、下面的东西被推下去）：它的每一部分同一时间、同样快地走，
     // 不按先后错开——错开的话括号已经到了、数还在半路，压到旁边那一样上（2026-11-06 量出来的）。错开只留给里面的重排（分组、排序）
     const boxes = new Map([...sc.objects.keys()].map((id) => [id, sc.objectBox(id)]));
@@ -1069,7 +1071,16 @@ export class Stage {
     await Promise.all(jobs);
   }
 
-  // 话、字里的写法画出来：{a.2} 是同色同数的小块，{d} 是拨的数，$d$ 是字母，[词] 能飞走
+  // 话、贴的字、挑战里的量（{count(t)}）：画成现在的数；数不了（没写 key、矩阵还空着、拿掉了）画「?」，不报错
+  measureShown(word) {
+    try { const r = evalMeasure(this.scene, word); return r.value == null ? '?' : measureText(r.value); } catch { return '?'; }
+  }
+  // 每次 sync 照场景重写一遍（字的长短变了，下面 syncLabels 量大小时用的是新的）
+  syncMeasures() {
+    for (const s of this.root.querySelectorAll('.st-measure')) { const v = this.measureShown(s.dataset.measure); if (s.textContent !== v) s.textContent = v; }
+  }
+
+  // 话、字里的写法画出来：{a.2} 是同色同数的小块，{d} 是拨的数，{count(t)} 是页面数的量，$d$ 是字母，[词] 能飞走
   richInto(node, text, { glyphs = null, words = null } = {}) {
     for (const p of parseRich(text)) {
       if (p.k === 'text') {
@@ -1077,6 +1088,7 @@ export class Stage {
         else node.appendChild(document.createTextNode(p.v));
       } else if (p.k === 'ref') { const chip = this.chip(p.v); node.appendChild(chip); glyphs?.push(chip); }
       else if (p.k === 'var') { const s = el('span', 'st-var', node); s.dataset.var = p.v; s.textContent = String(this.scene.vars.get(p.v)?.v ?? p.v); glyphs?.push(s); }
+      else if (p.k === 'measure') { const s = el('span', 'st-measure', node); s.dataset.measure = p.v; s.textContent = this.measureShown(p.v); glyphs?.push(s); }
       else if (p.k === 'math') { const s = el('i', 'st-math', node); s.textContent = p.v; glyphs?.push(s); }
       else { const s = el('span', 'st-word', node); s.textContent = p.v; glyphs?.push(s); words?.push(s); }
     }

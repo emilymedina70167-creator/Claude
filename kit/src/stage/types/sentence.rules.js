@@ -384,5 +384,21 @@ const predicates = {
   },
 };
 
+// —— 量（verbs(s)、verbs(s.4-14)、left(s)；rules.js 的 measures）——
+// 照 key 数（页面不自己分析英语）：写一段时，key 的段整个落在这一段里才算。没写 key、key 作废了这句话本身数不了，抛错
+const noKey = (o) => new Error(o?.key?.void ? `${o.id} 的 key 跟着 rewrite 作废了` : `${o.id} 没写 key`);
+function spansIn(o, parts) {
+  const ks = keySpans(o);
+  if (!ks) throw noKey(o);
+  const keys = parts && new Set(parts.map((w) => w.key));
+  return { ks, inside: (k) => !keys || k.keys.every((x) => keys.has(x)) };
+}
+const measures = {
+  // key 里的谓语几段
+  verbs: (o, parts) => { const { ks, inside } = spansIn(o, parts); return ks.filter((k) => k.name === '谓语' && inside(k)).length; },
+  // key 里还没拉对的几段
+  left: (o, parts) => { const { ks, inside } = spansIn(o, parts); return leftOf(o, ks).filter(inside).length; },
+};
+
 // 拉括号的每一下都判（折起来不判）；做完了（key 里每一段都拉对了）只对交给了学生拉括号的句子算
-export const sentenceRules = { next, check, predicates, facts, gestures, actOf: lineAct, judges: ['mark'], doneBy: ['mark'] };
+export const sentenceRules = { next, check, predicates, measures, facts, gestures, actOf: lineAct, judges: ['mark'], doneBy: ['mark'] };

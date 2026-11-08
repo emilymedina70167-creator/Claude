@@ -260,6 +260,12 @@ export function traversal(o, start, kind) {
   return { order, tour, at };
 }
 
+/** 还是二叉排序树：中序递增（一样大的算递增：49′ 和 49 比起来一样大）。挑战的 t bst 和舞台现状里「bst 是」是同一个 */
+export function isBst(o) {
+  const vs = traversal(o, o.root, 'in').order.map((k) => nodeAt(o, k).value);
+  return vs.every((v, i) => !i || cmpValues(vs[i - 1], v) <= 0);
+}
+
 /** 最小不平衡子树的根（最深的 |平衡因子| ≥ 2 的结点）和王道的四种型 */
 export function imbalance(o) {
   const d = depths(o);
@@ -682,6 +688,11 @@ export const tree = {
     // bf t：每个结点角上标平衡因子（页面算，树变了跟着变）；unbf t 收起
     bf(scene, c, h) { const { o } = treeIn(scene, h, 'bf'); o.bf = true; return { id: o.id }; },
     unbf(scene, c, h) { const { o } = treeIn(scene, h, 'unbf'); o.bf = false; return { id: o.id }; },
+  },
+  // 舞台现状里「页面算的」那一行后半句（rules.js 的 measureLine）：判断式 avl / bst 现在是不是，失衡的说出是谁、哪一型
+  pageBits(o) {
+    const bad = imbalance(o);
+    return [`avl ${bad ? `否（最小不平衡子树的根是 ${shown(nodeAt(o, bad.key))}，${bad.kind} 型）` : '是'}`, `bst ${isBst(o) ? '是' : '否'}`];
   },
   describe(o) {
     const ns = levelOrder(o);

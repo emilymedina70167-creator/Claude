@@ -15,7 +15,7 @@
 // 接着在右边那一列消：这样 next 走完就是 stairs（matrix.js 的 echelon 看整张），「做完」和挑战的「M stairs」是一回事。
 // 已经是阶梯形以后不判（老师可能要接着化成行最简形），只有把阶梯形弄乱了才算错。
 // 交出去的动作里的数写成字符串（和 matrix.js 场景里存的一样）：存进记录、发给老师时 JSON 不丢东西；收的时候 Q 和字符串都认。
-import { Q, rrefOf } from '../../exact.js';
+import { Q, rrefOf, det } from '../../exact.js';
 import { parseOps, opText, echelon, zeroRows, toQ, rowopText } from './matrix.js';
 
 const ONE = new Q(1n);
@@ -428,6 +428,21 @@ const gestures = {
   },
 };
 
+// —— 量（rank(M)、rankA(M)、free(M)、det(M)；rules.js 的 measures）——
+// 写整张矩阵；写部件（M.r1）没有这几个量。还有空着的格（乘积没算完）现在数不了，是 null
+const wholeOnly = (f) => Object.assign((o, parts) => (parts ? undefined : !filled(o) ? null : f(o)), { none: '量写整张矩阵，比如 rank(M)', blank: '还有空着的格' });
+const rankA = (o) => rrefOf(gridOf(o).map((row) => row.slice(0, o.aug ?? o.cols))).rank;
+const measures = {
+  // 整张的秩：增广矩阵就是 r(A | b)
+  rank: wholeOnly((o) => rrefOf(gridOf(o)).rank),
+  // 竖线左边（系数矩阵）的秩 r(A)；不是增广矩阵时和 rank 一样
+  rankA: wholeOnly(rankA),
+  // 自由变量几个：系数的列数 − r(A)
+  free: wholeOnly((o) => (o.aug ?? o.cols) - rankA(o)),
+  // 行列式：只有方阵、不是增广矩阵才有（别的本来就没有，不是数不了；先看形状，不是方阵的空着也是「没有」）
+  det: Object.assign((o, parts) => (parts || o.aug || o.rows !== o.cols ? undefined : !filled(o) ? null : det(gridOf(o)).toNumber()), { none: '不是方阵，或者是增广矩阵', blank: '还有空着的格' }),
+};
+
 // —— 挑战用的判断式（when="M stairs, M rank=2, M same B"）——
 
 const predicates = {
@@ -445,16 +460,17 @@ const predicates = {
     return piv.every(({ r, c }) => isOne(G[r - 1][c - 1]) && G.every((row, i) => i === r - 1 || row[c - 1].zero));
   },
   // 秩是几（整张的秩：增广矩阵就是 r(A | b)；r(A) 写 rankA）
+  // 带数字的旧写法照旧认，里面用量算（和 rank(M) = 2 是同一个数）
   rank: (o, [k] = []) => {
     if (!/^\d+$/.test(String(k ?? ''))) throw new Error('rank 要写秩是几：M rank=2');
-    if (!filled(o)) return null;
-    return rrefOf(gridOf(o)).rank === Number(k);
+    const v = measures.rank(o, null);
+    return v == null ? null : v === Number(k);
   },
   // 系数矩阵的秩：增广矩阵只算竖线左边（r(A)，和 rank 的 r(A | b) 比有没有解）；不是增广矩阵时和 rank 一样
   rankA: (o, [k] = []) => {
     if (!/^\d+$/.test(String(k ?? ''))) throw new Error('rankA 要写系数矩阵的秩是几：M rankA=2');
-    if (!filled(o)) return null;
-    return rrefOf(gridOf(o).map((row) => row.slice(0, o.aug ?? o.cols))).rank === Number(k);
+    const v = measures.rankA(o, null);
+    return v == null ? null : v === Number(k);
   },
   // 和舞台上的 B 行等价（化成行最简形一样，解也一样）
   same: (o, [id] = [], scene) => {
@@ -478,4 +494,4 @@ function slipRefs(o, act) {
 }
 
 // 行变换的每一下都判（改一格不判）；做完了（成了阶梯形）只对交给了学生做行变换的矩阵算：学生只拨数的矩阵不算
-export const matrixRules = { next, check, predicates, facts, gestures, slipRefs, actOf: lineAct, judges: ['rowop'], doneBy: ['rowop'] };
+export const matrixRules = { next, check, predicates, measures, facts, gestures, slipRefs, actOf: lineAct, judges: ['rowop'], doneBy: ['rowop'] };

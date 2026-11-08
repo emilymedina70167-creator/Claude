@@ -6,7 +6,7 @@ import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
 import { parseOps, toQ } from '../kit/src/stage/types/matrix.js';
 import { matrixRules as R, actSrc } from '../kit/src/stage/types/matrix.rules.js';
-import { rulesOf, predicateOf, gestureOf, done } from '../kit/src/stage/rules.js';
+import { rulesOf, predicateOf, gestureOf, done, evalMeasure, measureLine } from '../kit/src/stage/rules.js';
 import { Q } from '../kit/src/exact.js';
 import { P } from '../kit/src/poly.js';
 import * as E from '../kit/src/engines/elim.js';
@@ -397,4 +397,30 @@ test('随机走错几下以后接着判：next 的每一下都判对、照着走
     }
   }
   assert.ok(wrongs > 200 && hints > 200, `随便走了 ${wrongs} 下、对了 ${hints} 次 elim.js 的提示`);
+});
+
+test('秩和自由变量：rank 是整张（增广的是 r(A | b)）、rankA 是竖线左边、free 是系数的列数减 rankA；det 只有不是增广的方阵才有', () => {
+  const s = make('matrix M = 1 2 | 1 / 2 4 | -1');
+  const v = (w, sc = s) => evalMeasure(sc, w).value;
+  assert.equal(v('rank(M)'), 2);
+  assert.equal(v('rankA(M)'), 1);
+  assert.equal(v('free(M)'), 1);
+  assert.equal(v('det(M)'), null);
+  assert.match(evalMeasure(s, 'det(M)').why, /没有 det/);
+  const line = measureLine(s, M(s));
+  assert.equal(line, '页面算的：rank(M) = 2，rankA(M) = 1，free(M) = 1');
+  assert.doesNotMatch(line, /det\(M\)|页面数不了/, '本来就没有的不列，也不算数不了');
+  const a = make('matrix A = 1 2 / 3 4');
+  assert.equal(v('det(A)', a), -2);
+  assert.equal(v('rank(A)', a), 2);
+  assert.equal(v('free(A)', a), 0);
+  assert.equal(v('det(A)', make('matrix A = 1 2 3 / 4 5 6')), null, '不是方阵');
+  // 乘积还空着：暂时数不了
+  const c = make('matrix A = 1 2 / 3 4\nmatrix B = 1 0 / 0 1\nproduct C = A B');
+  assert.deepEqual(evalMeasure(c, 'rank(C)'), { value: null, why: 'C 还有空着的格' });
+  assert.equal(measureLine(c, M(c, 'C')), '页面数不了：C 还有空着的格');
+  // 旧判断式照旧
+  assert.equal(predicateOf(s, 'M', 'rank')(['2']), true);
+  assert.equal(predicateOf(s, 'M', 'rankA')(['1']), true);
+  assert.equal(predicateOf(c, 'C', 'rank')(['2']), null, '还空着照旧判不了');
 });

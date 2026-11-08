@@ -16,6 +16,12 @@
 //                                               （矩阵的 edit、句子的 fold 也在手势表里，可页面不判对错，写了 wrong= 当场报）
 //   doneBy [动作名]                              open 了这几个动作的东西，next 走到 null 才算「学生做完了」（@名字.done、叫老师）：
 //                                               树的平衡、矩阵的阶梯形只对交给了学生做的东西有意义（一棵本来就平衡、没 open 的树不是学生做完的）
+//   measures { 名字: (o, parts, scene) → 数 | null | undefined }（可选，docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.1）
+//                                               页面数得出的量，写成 count(t)、height(t.50)：parts 是写了部件时的 scene.parts(…)，写整样东西是 null。
+//                                               null 是现在还数不了（矩阵还空着，之后会有）；这样东西本身数不了（句子没写 key）就抛错，错误的话给老师看；
+//                                               undefined 是这样东西本来就没有这个量（不是方阵的 det）。函数上可以挂两句话：
+//                                               blank（null 的时候说什么，「还有空着的格」）、none（undefined 的时候括号里补一句为什么）
+//   brief(o)、changed(before, after)（可选）     这一轮后面的任务用；没交是 null
 
 const REGISTRY = new Map();
 
@@ -28,6 +34,9 @@ const DEFAULTS = {
   actOf: () => null,
   judges: [],
   doneBy: [],
+  measures: {},
+  brief: null,
+  changed: null,
 };
 
 /** 登记一种东西的规则；缺的项给默认值（不判、不拦） */
@@ -64,4 +73,92 @@ export function done(scene, objId) {
   const o = scene?.objects?.get(objId);
   const r = rulesOf(o);
   return !!r && r.hasNext && r.next(o, scene) === null;
+}
+
+// —— 量（count(t)、height(t.50)、rank(M)、verbs(s.4-14)）：判断式答「是不是」，量答「几个」——
+// 舞台现状、挑战、答案、话和贴的字四处用同一个写法、同一份算法；页面数，不是老师数
+
+/** 量的写法 → { name, arg }：名字(东西或部件)，括号里没有空格、没有括号；别的写法是 null */
+export function parseMeasure(word) {
+  const m = String(word ?? '').trim().match(/^([A-Za-z_]\w*)\(\s*([^()\s]+)\s*\)$/);
+  return m ? { name: m[1], arg: m[2] } : null;
+}
+
+// 那种东西叫什么（报错用）：真的场景问 types/，测试里假的场景没有，就写种类名
+const labelOf = (scene, o) => { try { return scene.type(o).label; } catch { return o.type; } };
+
+/**
+ * 量写得对不对（不算）：{ name, arg, o, fn, parts }。括号里不是东西或部件、东西不在、这种东西没有这个量、部件写错了都抛错，
+ * 错误的话给老师看。写下挑战、话、贴的字时查的就是它
+ */
+export function checkMeasure(scene, word) {
+  const m = parseMeasure(word);
+  if (!m) throw new Error(`「${word}」不是量的写法：写成 count(t)、height(t.50)`);
+  const id = m.arg.match(/^([A-Za-z_]\w*)([.#].+)?$/);
+  if (!id) throw new Error(`「${word}」：括号里写舞台上的东西或部件（${m.name}(t)、${m.name}(t.50)）`);
+  const o = scene.objects.get(id[1]);
+  if (!o) {
+    // 照场景自己的说法（「舞台上没有 q（有的是……）」）
+    if (typeof scene.parts === 'function') scene.parts(m.arg);
+    throw new Error(`舞台上没有「${id[1]}」`);
+  }
+  const ms = rulesOf(o)?.measures || {};
+  const fn = ms[m.name];
+  if (typeof fn !== 'function') {
+    const names = Object.keys(ms);
+    throw new Error(names.length ? `${labelOf(scene, o)}「${o.id}」没有量「${m.name}」，能写：${names.join('、')}` : `${labelOf(scene, o)}「${o.id}」没有量可写`);
+  }
+  const parts = id[2] ? scene.parts(m.arg) : null;
+  return { ...m, o, fn, parts };
+}
+
+// 算一个量：{ value, why, none }。none 是这样东西本来就没有这个量（measureLine 不列它）
+function runMeasure(scene, word) {
+  const m = checkMeasure(scene, word);
+  let v;
+  try { v = m.fn(m.o, m.parts, scene); } catch (err) { return { value: null, why: String(err?.message || err), none: false }; }
+  if (v === undefined) return { value: null, why: `${m.arg} 没有 ${m.name}${m.fn.none ? `（${m.fn.none}）` : ''}`, none: true };
+  if (v == null || !Number.isFinite(v)) return { value: null, why: m.fn.blank ? `${m.arg} ${m.fn.blank}` : `${m.arg} 现在还数不了 ${m.name}`, none: false };
+  return { value: v, why: null, none: false };
+}
+
+/**
+ * 量现在是几：{ value: 数 | null, why }。东西不在、这种东西没有这个量抛错（写错了）；
+ * 量自己抛的错（句子没写 key）不往外抛，变成 { value: null, why: 那句话 }——挑战写「判不了」、答案写「页面没判成」、贴的字画「?」
+ */
+export function evalMeasure(scene, word) {
+  const { value, why } = runMeasure(scene, word);
+  return { value, why };
+}
+
+/** 量写给人看：整数照写，不是整数的写成分数（det 可能是 1/2），实在凑不成分数的写小数 */
+export function measureText(v) {
+  if (Number.isInteger(v)) return String(v);
+  for (let d = 2; d <= 1000; d++) {
+    const n = Math.round(v * d);
+    if (Math.abs(n / d - v) < 1e-9) return `${n}/${d}`;
+  }
+  return String(Math.round(v * 1e6) / 1e6);
+}
+
+/**
+ * 舞台现状里每样东西多的一行：「页面算的：count(t) = 6，height(t) = 4；avl 否（…），bst 是；页面数不了：…」。
+ * 只算写整样东西的量；extra 是那种东西自己交的几句（types/ 的 pageBits：树的 avl / bst）。数不了的写在最后；
+ * 这样东西本来就没有的量（增广矩阵的 det）不列，也不算数不了——不然每一轮都多一句没用的。没交量的东西是 null
+ */
+export function measureLine(scene, o, extra = []) {
+  const names = Object.keys(rulesOf(o)?.measures || {});
+  if (!names.length) return null;
+  const vals = [], miss = [];
+  for (const name of names) {
+    const w = `${name}(${o.id})`;
+    let r;
+    try { r = runMeasure(scene, w); } catch (err) { r = { value: null, why: String(err?.message || err), none: false }; }
+    if (r.value != null) vals.push(`${w} = ${measureText(r.value)}`);
+    else if (!r.none && !miss.includes(r.why)) miss.push(r.why);
+  }
+  const bits = [];
+  if (vals.length || extra.length) bits.push(`页面算的：${[vals.join('，'), extra.join('，')].filter(Boolean).join('；')}`);
+  if (miss.length) bits.push(`页面数不了：${miss.join('；')}`);
+  return bits.length ? bits.join('；') : null;
 }

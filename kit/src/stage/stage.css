@@ -89,7 +89,7 @@
 .st-line .st-ch { white-space: pre; }
 .st-caption .st-chip, .st-caption .st-word { pointer-events: auto; }
 .st-math { font-family: "Latin Modern Math", "Cambria Math", "Times New Roman", serif; font-style: italic; font-size: 1.12em; padding: 0 .06em; }
-.st-var { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--st-brand); }
+.st-var, .st-measure { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--st-brand); }
 .st-word { font-weight: 700; color: var(--st-brand); border-bottom: 2px solid color-mix(in srgb, var(--st-brand) 35%, transparent); }
 .st-word.is-flown { color: color-mix(in srgb, var(--st-brand) 45%, transparent); border-bottom-style: dashed; }
 .st-ghost { position: absolute; left: 0; top: 0; font: 700 22px/1.25 var(--display, "Noto Serif SC", serif); color: var(--st-brand); transform-origin: 0 0; white-space: nowrap; }

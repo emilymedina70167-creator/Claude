@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene } from '../kit/src/stage/scene.js';
-import { parseScript } from '../kit/src/stage/script.js';
+import { parseScript, parseRich } from '../kit/src/stage/script.js';
 import { parseLive, evalLive, liveOrder, scopeOf, numText } from '../kit/src/stage/value.js';
 import { Q } from '../kit/src/exact.js';
 
@@ -231,13 +231,13 @@ test('旧写法不变', () => {
   run(s, 'plane p range=-4..4\nvec p u = 2 1\nvec p v = -1 2\nvec p w = 2u - v\ndial k = 2 range=0-4 at=p\nvec p z = k u\nset k 3');
   assert.deepEqual(at(s, 'w'), ['5', '0']);
   assert.deepEqual(at(s, 'z'), ['6', '3']);
-  // 改之前（ab74486）存下的舞台现状：一个字都不变
-  assert.equal(s.stateText(), '（矩阵：名字.2,3 是第 2 行第 3 列，名字.r2 是第 2 行，名字.c3 是第 3 列；交换两行时数跟着走，名字.2,3 指的总是现在的第 2 行第 3 列）\n（平面：名字.u 是向量 u（从原点出发的箭头），名字.P 是点 P；坐标是数学里的 (x, y)，y 朝上）\n矩阵 A（2×3）：\n  第 1 行：1  2  3\n  第 2 行：-1  0  1/2\n矩阵 B（3×2）：\n  第 1 行：3  0\n  第 2 行：2  1\n  第 3 行：-2  4\n矩阵 C = A B（2×2；算出来的 4 格跟着 A、B 自动重算）：\n  第 1 行：1  14\n  第 2 行：-4  2\n平面 p（x 从 -4 到 4，y 从 -4 到 4；一格是 1）：\n  向量 u = (2, 1)（蓝）\n  向量 v = (-1, 2)（粉）\n  向量 w = 2u - v = (5, 0)（绿、出了网格）\n  向量 z = k·u = (6, 3)（金、出了网格）\n能拨的数：k = 3（0～4）');
+  // 改之前（ab74486）存下的舞台现状：一个字都不变；只多了每张矩阵下面「页面算的」那一行（第二轮的量，逐行核过）
+  assert.equal(s.stateText(), '（矩阵：名字.2,3 是第 2 行第 3 列，名字.r2 是第 2 行，名字.c3 是第 3 列；交换两行时数跟着走，名字.2,3 指的总是现在的第 2 行第 3 列）\n（平面：名字.u 是向量 u（从原点出发的箭头），名字.P 是点 P；坐标是数学里的 (x, y)，y 朝上）\n矩阵 A（2×3）：\n  第 1 行：1  2  3\n  第 2 行：-1  0  1/2\n  页面算的：rank(A) = 2，rankA(A) = 2，free(A) = 1\n矩阵 B（3×2）：\n  第 1 行：3  0\n  第 2 行：2  1\n  第 3 行：-2  4\n  页面算的：rank(B) = 2，rankA(B) = 2，free(B) = 0\n矩阵 C = A B（2×2；算出来的 4 格跟着 A、B 自动重算）：\n  第 1 行：1  14\n  第 2 行：-4  2\n  页面算的：rank(C) = 2，rankA(C) = 2，free(C) = 0，det(C) = 58\n平面 p（x 从 -4 到 4，y 从 -4 到 4；一格是 1）：\n  向量 u = (2, 1)（蓝）\n  向量 v = (-1, 2)（粉）\n  向量 w = 2u - v = (5, 0)（绿、出了网格）\n  向量 z = k·u = (6, 3)（金、出了网格）\n能拨的数：k = 3（0～4）');
   // 乘积换着乘（C = A B 以后把 A 换成 C B）这种老写法照旧收下、照旧只重算三遍，不当成跟着算的环
   const t = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix B = 1 0 / 0 1\nproduct C = A B\nmul C');
   assert.equal(err(t, 'product A = C B'), null);
   run(t, 'product A = C B\nmul A\nwrite B.1,1 2');
-  assert.equal(t.stateText(), '（矩阵：名字.2,3 是第 2 行第 3 列，名字.r2 是第 2 行，名字.c3 是第 3 列；交换两行时数跟着走，名字.2,3 指的总是现在的第 2 行第 3 列）\n矩阵 B（2×2）：\n  第 1 行：2  0\n  第 2 行：0  1\n矩阵 C = A B（2×2；算出来的 4 格跟着 A、B 自动重算）：\n  第 1 行：32  2\n  第 2 行：96  4\n矩阵 A = C B（2×2；算出来的 4 格跟着 C、B 自动重算）：\n  第 1 行：64  2\n  第 2 行：192  4');
+  assert.equal(t.stateText(), '（矩阵：名字.2,3 是第 2 行第 3 列，名字.r2 是第 2 行，名字.c3 是第 3 列；交换两行时数跟着走，名字.2,3 指的总是现在的第 2 行第 3 列）\n矩阵 B（2×2）：\n  第 1 行：2  0\n  第 2 行：0  1\n  页面算的：rank(B) = 2，rankA(B) = 2，free(B) = 0，det(B) = 2\n矩阵 C = A B（2×2；算出来的 4 格跟着 A、B 自动重算）：\n  第 1 行：32  2\n  第 2 行：96  4\n  页面算的：rank(C) = 2，rankA(C) = 2，free(C) = 0，det(C) = -64\n矩阵 A = C B（2×2；算出来的 4 格跟着 C、B 自动重算）：\n  第 1 行：64  2\n  第 2 行：192  4\n  页面算的：rank(A) = 2，rankA(A) = 2，free(A) = 0，det(A) = -128');
 });
 
 // —— 整条分支的最终审查（I3）：跟着算的一排格子、树、图，依赖一变照造它的那一行重新造——老师后来做的不能没声没息地丢 ——
@@ -318,4 +318,28 @@ test('复核 学生（ask drag）换了跟着算的一排：舞台现状写「�
   assert.match(sc.stateText(), /a 已经不跟着 \{k\} 变了：学生动过它的结构（swap a\.1 a\.3）/);
   const t = run(new Scene(), 'dial k = 1 range=0..9\narray a = {k} 3 5\nswap a.1 a.3');
   assert.match(t.stateText(), /你动过它的结构/);
+});
+
+test('{量(…)}：rankA、count 这些换成页面数的；det、rank 照旧交给 exact.js；数不了报「页面数不了」', () => {
+  const sc = run(new Scene(), 'matrix M = 1 2 | 1 / 2 4 | -1\nmatrix A = 1 2 / 3 4\ntree t = 34 23 107 15 28 98 115\nsentence s2 = "The man is a doctor."');
+  const r = evalLive('{rank(M)}', sc);
+  assert.equal(r.value.toString(), '2', 'rank 走 exact.js：整张（增广的是 r(A | b)），和量一样');
+  assert.ok(r.deps.includes('M'));
+  const ra = evalLive('{rankA(M)}', sc);
+  assert.equal(ra.value.toString(), '1');
+  assert.ok(ra.deps.includes('M'), '量也记依赖');
+  const c = evalLive('{count(t) + 1}', sc);
+  assert.equal(c.value.toString(), '8');
+  assert.deepEqual(c.deps, ['t']);
+  assert.equal(evalLive('{2 height(t.107)}', sc).value.toString(), '4', '量和省略的乘号');
+  assert.throws(() => evalLive('{verbs(s2)}', sc), /页面数不了：s2 没写 key/);
+  assert.throws(() => evalLive('{size(t)}', sc), /没有量「size」/);
+  assert.equal(evalLive('{det(A)}', sc).value.toString(), '-2');
+  assert.ok(!parseRich('{det(A)}').some((p) => p.k === 'measure'), 'det(A) 照旧是式子');
+  assert.ok(!parseRich('{rank(M)}').some((p) => p.k === 'measure'));
+  // 跟着量算：树长了，一排格子跟着变
+  run(sc, 'array a = {count(t)} 0');
+  assert.equal(sc.objects.get('a').cells.find((x) => x.slot === 1).value, '7');
+  run(sc, 'insert t 120');
+  assert.equal(sc.objects.get('a').cells.find((x) => x.slot === 1).value, '8');
 });

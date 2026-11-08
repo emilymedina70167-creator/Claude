@@ -2,7 +2,7 @@
 // 假种类 counter 在这里注册；每个测试文件是独立进程，不用注销。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { registerRules, rulesOf, predicateOf, gestureOf, done } from '../kit/src/stage/rules.js';
+import { registerRules, rulesOf, predicateOf, gestureOf, done, parseMeasure, evalMeasure, measureLine } from '../kit/src/stage/rules.js';
 import { judge } from '../kit/src/stage/referee.js';
 
 registerRules('counter', {
@@ -106,4 +106,30 @@ test('交了规则但没交 next 的种类不算做完', () => {
   registerRules('checkonly', { check: () => ({ legal: true, right: true }) });
   const sc = { objects: new Map([['k', { type: 'checkonly', id: 'k' }]]) };
   assert.equal(done(sc, 'k'), false);
+});
+
+test('量的写法：名字(东西或部件)', () => {
+  assert.deepEqual(parseMeasure('height(t.50)'), { name: 'height', arg: 't.50' });
+  assert.equal(parseMeasure('count( t )').arg, 't');
+  assert.equal(parseMeasure('t.50'), null);
+  assert.equal(parseMeasure('count(t) + 1'), null, '整个词是一个量才算');
+});
+
+test('量的接口：数得出给数；暂时数不了给 null；本来就没有给 undefined；数不了抛的错变成 why；名字写错当场报', () => {
+  const none = Object.assign(() => undefined, { none: '不是方阵' });
+  const blank = Object.assign((o) => (o.n ? o.n : null), { blank: '还空着' });
+  registerRules('meter', { measures: { n: blank, half: (o) => { if (!o.ok) throw new Error(`${o.id} 没写 key`); return o.n / 2; }, sq: none } });
+  const sc = (n, ok = true) => ({ objects: new Map([['m', { type: 'meter', id: 'm', n, ok }], ['z', { type: 'plain', id: 'z' }]]) });
+  assert.deepEqual(evalMeasure(sc(4), 'n(m)'), { value: 4, why: null });
+  assert.deepEqual(evalMeasure(sc(0), 'n(m)'), { value: null, why: 'm 还空着' });
+  assert.deepEqual(evalMeasure(sc(4, false), 'half(m)'), { value: null, why: 'm 没写 key' });
+  assert.deepEqual(evalMeasure(sc(4), 'sq(m)'), { value: null, why: 'm 没有 sq（不是方阵）' });
+  assert.throws(() => evalMeasure(sc(4), 'size(m)'), /没有量「size」，能写：n、half、sq/);
+  assert.throws(() => evalMeasure(sc(4), 'n(q)'), /舞台上没有「q」/);
+  assert.throws(() => evalMeasure(sc(4), 'n(z)'), /没有量/);
+  // 一行「页面算的」：本来就没有的不列；数不了的写在最后
+  assert.equal(measureLine(sc(4), sc(4).objects.get('m'), ['好']), '页面算的：n(m) = 4，half(m) = 2；好');
+  assert.equal(measureLine(sc(0, false), sc(0, false).objects.get('m')), '页面数不了：m 还空着；m 没写 key');
+  assert.equal(measureLine(sc(4), sc(4).objects.get('z')), null, '没交量的东西没有这一行');
+  assert.equal(measureLine(sc(3), sc(3).objects.get('m')), '页面算的：n(m) = 3，half(m) = 3/2', '不是整数的写成分数');
 });

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun, compareValues } from '../kit/src/stage/scene.js';
-import { parseScript } from '../kit/src/stage/script.js';
+import { parseScript, parseRich } from '../kit/src/stage/script.js';
 import { linkGeom } from '../kit/src/stage/layout.js';
 import { cellBox, array as arrayType } from '../kit/src/stage/types/array.js';
 const objectBox = (o) => arrayType.objectBox(o);
@@ -492,4 +492,38 @@ test('来回：句子拉一段写成一行再读回来，一样（一个词、�
   const o = s.objects.get('s');
   const acts = [...sentenceRules.next(o, s).acts, { type: 'mark', from: 7, to: 7, role: 'V' }, { type: 'mark', from: 3, to: 6, role: '定语从句' }, { type: 'mark', from: 1, to: 2, role: 'to do' }, { type: 'mark', from: 8, to: 9, role: 'O' }];
   for (const a of acts) assert.deepEqual(core(back(s, 's', actSrc(o, a))), core(a), actSrc(o, a));
+});
+
+test('话里的量：{count(t)} 是页面数的；写下时查量名', () => {
+  assert.ok(parseRich('结点 {count(t)}').some((p) => p.k === 'measure' && p.v === 'count(t)'));
+  assert.ok(parseRich('{height( t.50 )}').some((p) => p.k === 'measure'));
+  assert.deepEqual(parseRich('{d}').map((p) => p.k), ['var'], '拨的数照旧');
+  assert.deepEqual(parseRich('{a.2}').map((p) => p.k), ['ref'], '部件照旧');
+  const sc = run(new Scene(), 'tree t = 50 30 70');
+  assert.equal(sc.check(parseScript('label n t "结点 {count(t)}"')[0]), null);
+  assert.match(sc.check(parseScript('label n t "{size(t)}"')[0]) || '', /没有量「size」/);
+  assert.match(sc.check(parseScript('say "一共 {size(t)} 个"')[0]) || '', /没有量「size」/);
+  assert.match(sc.check(parseScript('goal g1 "长到 {size(t)} 层" when="t height=4"')[0]) || '', /没有量「size」/);
+  assert.match(sc.check(parseScript('ask next "现在 {count(q)} 个"')[0]) || '', /舞台上没有「q」/);
+  // 重放旧课不加新的检查
+  assert.doesNotThrow(() => sc.apply({ ...parseScript('say "一共 {size(t)} 个"')[0], lenient: true }));
+});
+
+test('现状里页面算的：每样东西 describe 后面一行；数不了的写「页面数不了」', () => {
+  const sc = run(new Scene(), 'tree t = 50 30 60 20 40 _ _ 10');
+  assert.ok(sc.stateText().includes('页面算的：count(t) = 6，height(t) = 4，tray(t) = 0；avl 否（最小不平衡子树的根是 50，LL 型），bst 是'));
+  const ok = run(new Scene(), 'tree t = 50 30 70');
+  assert.ok(ok.stateText().includes('页面算的：count(t) = 3，height(t) = 2，tray(t) = 0；avl 是，bst 是'));
+  const s = run(new Scene(), 'sentence s2 = "The man is a doctor."');
+  assert.ok(s.stateText().includes('页面数不了：s2 没写 key'));
+  // 没交量的东西没有这一行
+  assert.doesNotMatch(run(new Scene(), 'array a = 3 1 2').stateText(), /页面算的|页面数不了/);
+});
+
+test('题卡里的量：和话里一样写下时查、画成现在的数', () => {
+  const sc = run(new Scene(), 'tree t = 50 30 70');
+  assert.equal(sc.check(parseScript('card q = "一共 {count(t)} 个结点"')[0]), null);
+  assert.match(sc.check(parseScript('card q = "一共 {size(t)} 个结点"')[0]) || '', /没有量「size」/);
+  run(sc, 'card q = "第一行"');
+  assert.match(sc.check(parseScript('addline q "{size(t)}"')[0]) || '', /没有量「size」/);
 });

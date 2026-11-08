@@ -10,15 +10,18 @@
 // = / != 比一格时 49′ 和 49 是两个东西（′ 是同一个数的另一个记号，稳定性要看它们的先后；ASCII 的 ' 也当撇）；比大小、sorted 照旧按数。
 // 还空着的格（乘积没算出来的）不算成立：C 还没算完，C = O 和 C != O 都不成立。
 // 判断式返回 null 是「现在判不了」（乘积还空着，之后会有）；这样东西本身永远判不了（句子没写 key）判断式抛错，写下挑战时当场报。
+// 量（rules.js 的 measures）写在比较的两边：count(t) = 7、height(t.107) < height(t)、verbs(s.4-14) = 1。量数不了（没写 key、矩阵还空着）
+// 这一句不成立、写「判不了」，不写 ✗（学生也许已经做对了，是页面数不了）；量名写错写下挑战时当场报。
 
-import { predicateOf, rulesOf } from './rules.js';
+import { predicateOf, rulesOf, parseMeasure, checkMeasure, evalMeasure } from './rules.js';
 
 const OPS = ['!=', '≠', '==', '<=', '>=', '≤', '≥', '=', '<', '>'];
 const OP_RE = /^(.+?)\s*(!=|≠|==|<=|>=|≤|≥|=|<|>)\s*(.+)$/;
 
 /** 条件的写法 → [{ l, op, r } | { l, sorted: 'asc' | 'desc' }]；写错了抛错（错误的话直接给老师看） */
 export function parseGoal(text) {
-  const s = String(text ?? '').trim();
+  // 量的括号里的空格去掉（height( t.50 )）：不然下面按空格认判断式时会把它拆开
+  const s = String(text ?? '').trim().replace(/([A-Za-z_]\w*)\(\s*([^()\s]+)\s*\)/g, '$1($2)');
   if (!s) throw new Error('when= 要写条件，比如 when="C = O, D != O"');
   // 逗号后面紧跟数字的是部件（B.1,2），不是分句
   const parts = s.split(/\s*(?:,(?!\d)|[;；，]|\s+and\s+|并且|且|&&)\s*/).map((x) => x.trim()).filter(Boolean);
@@ -49,8 +52,8 @@ export function numOf(v) {
 const sameNum = (a, b) => Math.abs(a - b) < 1e-9;
 
 /**
- * 一边是什么：{ k: 'num', v } / { k: 'zero' } / { k: 'id' } / { k: 'parts', parts } / { k: 'obj', o, m }（m 是那种东西的 measure）。
- * 舞台上没有、读不懂的抛错
+ * 一边是什么：{ k: 'num', v } / { k: 'zero' } / { k: 'id' } / { k: 'parts', parts } / { k: 'obj', o, m }（m 是那种东西的 measure）；
+ * 量（count(t)）是数，数不了是 { k: 'null', why }（比较一律不成立）。舞台上没有、读不懂的抛错
  */
 // 带撇的数（49′、49'）：和不带撇的不是同一个；比一格时两种撇写法一样
 const PRIMED = /^[-+]?\d+(\.\d+)?'+$/;
@@ -59,6 +62,10 @@ export function operand(scene, w) {
   const word = String(w).trim();
   if (word.includes('′') || PRIMED.test(word)) return { k: 'num', v: primeOf(word) }; // 49′ 不是 49
   if (numOf(word) != null) return { k: 'num', v: numOf(word) };
+  if (parseMeasure(word)) {
+    const r = evalMeasure(scene, word);
+    return r.value == null ? { k: 'null', why: r.why } : { k: 'num', v: r.value };
+  }
   if (scene.objects.has(word)) {
     const o = scene.objects.get(word);
     const t = scene.type(o);
@@ -69,7 +76,7 @@ export function operand(scene, w) {
   if (word === 'I') return { k: 'id' };
   if (scene.vars?.has(word)) return { k: 'num', v: scene.vars.get(word).v };
   if (scene.isRef(word)) return { k: 'parts', parts: scene.parts(word) };
-  throw new Error(`「${word}」不是舞台上的东西（能写东西的名字、部件、数、O、I）`);
+  throw new Error(`「${word}」不是舞台上的东西（能写东西的名字、部件、数、O、I、量 count(t)）`);
 }
 
 // 一个 measure 里的数全填上了没有；矩阵 { kind: 'matrix', rows: [[值]] }，一排 { kind: 'list', values }
@@ -114,13 +121,18 @@ function predMissing(scene, cl) {
   const names = Object.keys(rulesOf(o)?.predicates || {});
   return names.length ? `${scene.type(o).label}「${cl.l}」没有判断式「${cl.pred}」，能写：${names.join('、')}` : `${scene.type(o).label}「${cl.l}」还没有判断式可写（能比的有 =、!=、sorted）`;
 }
+// 一句比较里写的量（两边）
+const measuresIn = (cl) => (cl.pred ? [] : cl.sorted ? [cl.l] : [cl.l, cl.r]).filter((w) => parseMeasure(w));
+
 /**
  * 写下挑战时就查：判断式名对不对；run 时再把每个判断式跑一遍（不看现在成不成立）——参数写错（t height=abc）、
  * 这样东西本身判不了（句子没写 key、key 作废了）判断式自己抛错，当场报；返回 null（乘积还空着）是之后判得了，照收。
+ * 量查名字和括号里的东西（size(t)、count(q) 当场报）；量数不了（没写 key）不报，挑战照收、写「判不了」。
  * 重放旧课不跑（run 是假的）：当时收下的照样收下
  */
 export function checkPreds(scene, cond, { run = false } = {}) {
   for (const cl of cond) {
+    for (const w of measuresIn(cl)) checkMeasure(scene, w);
     if (!cl.pred) continue;
     const fn = predicateOf(scene, cl.l, cl.pred);
     if (!fn) throw new Error(predMissing(scene, cl));
@@ -139,6 +151,7 @@ export function evalClause(scene, cl) {
   }
   const L = operand(scene, cl.l);
   if (cl.sorted) {
+    if (L.k === 'null') return false;
     if (L.k !== 'obj' || L.m.kind !== 'list') throw new Error(`「${cl.l} sorted」只能写一排东西`);
     if (!filled(L.m)) return false;
     const vs = L.m.values.map(numOf);
@@ -146,6 +159,7 @@ export function evalClause(scene, cl) {
     return vs.every((v, i) => !i || (cl.sorted === 'desc' ? vs[i - 1] >= v : vs[i - 1] <= v));
   }
   const R = operand(scene, cl.r);
+  if (L.k === 'null' || R.k === 'null') return false; // 量数不了：不成立（写给老师的是「判不了」）
   const { op } = cl;
   const whole = (x) => x.k === 'obj' || x.k === 'zero' || x.k === 'id';
   if (whole(L) || whole(R)) {
@@ -172,9 +186,15 @@ export function evalGoal(scene, cond) {
   return cond.every((cl) => evalClause(scene, cl));
 }
 
-/** 一句条件现在怎么样：true / false；判断式说现在判不了（乘积还空着）是 null */
+/** 这一句里数不了的那个量：{ k: 'null', why }；没有是 null */
+function nullSide(scene, cl) {
+  for (const w of measuresIn(cl)) { const x = operand(scene, w); if (x.k === 'null') return x; }
+  return null;
+}
+
+/** 一句条件现在怎么样：true / false；判断式说现在判不了（乘积还空着）、量数不了（没写 key）是 null */
 function clauseState(scene, cl) {
-  if (!cl.pred) return evalClause(scene, cl);
+  if (!cl.pred) return nullSide(scene, cl) ? null : evalClause(scene, cl);
   const fn = predicateOf(scene, cl.l, cl.pred);
   if (!fn) throw new Error(predMissing(scene, cl));
   const r = fn(cl.args);
@@ -186,7 +206,11 @@ export function goalStatus(scene, g) {
   if (g.met) return '做到了';
   const bits = g.cond.map((cl) => {
     let mark;
-    try { const ok = clauseState(scene, cl); mark = ok == null ? ' 判不了' : ok ? ' ✓' : ' ✗'; } catch (err) { mark = ` 判不了：${err?.message || err}`; }
+    try {
+      const ok = clauseState(scene, cl);
+      const why = ok == null ? nullSide(scene, cl)?.why : null;
+      mark = ok == null ? ` 判不了${why ? `：${why}` : ''}` : ok ? ' ✓' : ' ✗';
+    } catch (err) { mark = ` 判不了：${err?.message || err}`; }
     return `${cl.sorted ? `${cl.l} sorted${cl.sorted === 'desc' ? ' desc' : ''}` : cl.pred ? `${cl.l} ${cl.pred}${cl.args.length ? ` ${cl.args.join(' ')}` : ''}` : `${cl.l} ${cl.op} ${cl.r}`}${mark}`;
   });
   return `还没做到（${bits.join('，')}）`;

@@ -6,7 +6,7 @@ import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
 import { levelOrder, imbalance, serialize } from '../kit/src/stage/types/tree.js';
 import { treeRules as R, actSrc } from '../kit/src/stage/types/tree.rules.js';
-import { rulesOf, predicateOf, gestureOf, done } from '../kit/src/stage/rules.js';
+import { rulesOf, predicateOf, gestureOf, done, evalMeasure } from '../kit/src/stage/rules.js';
 import { avlEngine } from '../kit/src/engines/balanced.js';
 import { levelOrder as engineLevel } from '../kit/src/engines/treeview.js';
 
@@ -464,4 +464,24 @@ test('standard：借平衡二叉树引擎从现在的样子跑出整段旋转序
   assert.equal(vals(T(s)), s2.final.join(' '));
   assert.equal(R.standard(T(make(LR3))), null, '还失衡的树引擎接不住');
   assert.equal(R.standard(T(make('tree t = 50 30'))), null, '托盘空的');
+});
+
+test('量对王道的例子：从空树依次插 34 23 15 98 115 28 107 转平以后数一数；托盘还剩几个', () => {
+  const s = make('tree t = _ tray="34 23 15 98 115 28 107"');
+  assert.equal(evalMeasure(s, 'tray(t)').value, 7);
+  follow(s);
+  assert.equal(evalMeasure(s, 'count(t)').value, 7);
+  assert.equal(evalMeasure(s, 'height(t)').value, 3);
+  assert.equal(evalMeasure(s, 'height(t.107)').value, 2, '写部件是那棵子树的高');
+  assert.equal(evalMeasure(s, 'count(t.107)').value, 3, '写部件是那棵子树的结点数');
+  assert.equal(evalMeasure(s, 'tray(t)').value, 0);
+  assert.equal(evalMeasure(make('tree t = 50 30 tray="47 10"'), 'tray(t)').value, 2);
+  assert.equal(evalMeasure(make('tree t = _'), 'height(t)').value, 0);
+  assert.match(evalMeasure(s, 'tray(t.107)').why, /没有 tray/, '托盘是整棵树的');
+});
+
+test('旧判断式照旧：t height=4 里面改用量算，写法不变', () => {
+  const s = make('tree t = 50 30 60 20 40 _ _ 10');
+  assert.equal(predicateOf(s, 't', 'height')(['4']), true);
+  assert.equal(predicateOf(s, 't', 'height')(['3']), false);
 });
