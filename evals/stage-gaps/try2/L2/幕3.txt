@@ -1,0 +1,50 @@
+# L2 第 3 幕：学生先写增广矩阵；倍加 r3 + k·r1：只有第 3 行变，P 一直满足三个方程（三维的三张平面、铰链要三维，这里只量矩阵这一半）
+tex e = "\hl{e1}{x_1 + 2x_2 = 2},\quad \hl{e2}{x_1 - 4x_3 = 0},\quad \hl{e3}{x_1 + 2x_2 - 2x_3 = 0}"
+matrix T = 1 2 0 | 2 / 1 0 -4 | 0 / 1 2 -2 | 0
+cover T
+matrix M = 0 0 0 | 0 / 0 0 0 | 0 / 0 0 0 | 0
+label lh M "x1    x2    x3  |  b" side=above tone=note
+say "先把三个方程抄成增广矩阵：一列只放一个未知数的系数。"
+open M edit input=keypad
+goal g1 "写出增广矩阵" when="M same T"
+@g1 say "对，写对了。"
+学生: write M.1,1 1
+学生: write M.1,2 2
+学生: write M.1,4 2
+学生: write M.2,1 1
+学生: write M.2,3 -4
+学生: write M.3,1 1
+学生: write M.3,2 2
+学生: write M.3,3 -2
+# 拨 k：拿一张初等矩阵 E3 乘 M 代替「拖把手、拨 k」，第 3 行跟着变；P 代进去的值也跟着算
+remove T
+close M
+dial k = 0 range=-3..3 at=M
+matrix E3 = 1 0 0 / 0 1 0 / {k} 0 1
+matrix N = {E3 M} beside=E3
+label ln N "r3 + k·r1 以后" side=above tone=key
+matrix Pv = 4 / -1 / 1 / -1
+matrix Res = {N Pv} beside=Pv
+label lp Pv "P = (4, −1, 1)" side=above tone=note
+label lr Res "P 代进每个方程（左边 − 右边）" side=above tone=note
+say "把第 1 行的 k 倍加到第 3 行上。拨 {k}，盯着：谁在动、谁不动、P 走没走。"
+goal g2 "拨到第 3 行第 1 个数变成 0" when="N.3,1 = 0"
+@g2 say "做到了。"
+@g2 ask say "拨的时候什么没动？第 3 个方程现在是什么样？"
+学生: dial k 2
+学生: dial k -1
+学生: say 第 1、2 行没动，P 一直满足，第 3 行变成 −2x3 = −2
+# 再交给学生真的做一次：拖第 1 行的把手到第 3 行上、倍数框写几倍
+remove E3
+remove N
+remove Res
+remove Pv
+unlabel dial:k
+open M rowop wrong=quiet undo=on
+say "这回你自己在 {M} 上做：把第 1 行的把手拖到第 3 行上，写倍数。"
+goal g3 "让第 3 行第 1 个数变成 0" when="M.3,1 = 0"
+@g3 say "做到了：这叫倍加。"
+学生: rowop M r3 + 2r1
+学生: undo
+学生: rowop M r3 - r1
+say "嗯。"
