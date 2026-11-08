@@ -615,11 +615,11 @@ export const graph = {
     return lines;
   },
   doc: `图（BFS / DFS、最小生成树、最短路、拓扑排序）：
-graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:8 D-E:3    造一张无向图（:4 是权，可以不写；有向写 A>B；单独的结点写 E；最多 16 个；自动排好）
+graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:8 D-E:3    造一张无向图（:4 是权，可以不写，也能写 {式子}：A-B:{k}；有向写 A>B；单独的结点写 E；最多 16 个；自动排好）
 graph h = A-B B-C A-C pos="A=0,0 B=2,0 C=1,1"     自己给坐标（每个结点都给，一个单位约一条边长，y 往下）
 写法：g.A 结点；g.A~B 边（paint、glow、dim 对边也行：Kruskal 选进来的染色、成环的灰掉）；g.nodes 全部结点；g.edges 全部边
-tag g.A 0 / tag g ∞ / untag g     结点旁边写个数（dist、lowcost……），改了会换一下
-relax g.A -> g.B                  松弛：A 的数 + 边权 比 B 的小就改成它（小点带着数沿边过去）
+tag g.A 0 / tag g ∞ / untag g     结点旁边写个数（dist、lowcost……，最多 8 个字），改了会换一下
+relax g.A -> g.B                  松弛：A 的数 + 边权 比 B 的小就改成它（小点带着数沿边过去）；只认数，先 tag g ∞ 再 tag g.A 0（写 ? 会报不是数）
 visit g.A g.C / unvisit g         编访问号（和上一个访问的有边，圈就沿边走过去）
 walk g.A g.B g.D                  一个圈沿着边走过这几个（要相邻）
 take g.A                          拓扑排序：拿掉 A 和它的边，A 排到下面的序列里

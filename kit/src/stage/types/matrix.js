@@ -665,6 +665,8 @@ export const matrix = {
   doc: `矩阵（线代：行变换、消元、秩、乘法）：
 matrix m = 1 2 3 / 4 5 6 / 7 8 10   造矩阵（/ 分行；数能写 -3、1/2；| 是增广矩阵的竖线；beside=p 放在 p 右边）
 写法：m.2,3 第 2 行第 3 列；m.r2 第 2 行；m.c3 第 3 列
+matrix N = 1 {k} / 0 1              格里的 {…} 只写拨数（{k}）或一格（{A.1,2}），跟着它变
+matrix S = {A + B}                  整个矩阵跟着算（{A B}、{2A}、{k A}、{A^-1}、{A'}）；跟着算的学生动不了
 rowop m r2 - 3r1                  行变换：r1 的副本乘 -3 飘到 r2 上加进去（也能写 r2 = r2 - 3r1、r3 + 1/2 r1；连着几步用逗号：r2 - 4r1, r3 - 7r1）
 rowop m r1 <-> r3                 交换两行（走弧线）
 rowop m 3r2                       一行乘倍数（-r1、r2 / 3）；列变换把 r 换成 c
@@ -673,8 +675,14 @@ pivot m.1,1 / unpivot m           主元框起来
 stairs m / unstairs m             画阶梯线（已经是阶梯形才行），全零行淡下去
 product C = A B                   A、B 排成一行，后面「= C」（C 先空着）
 mul C.1,2                         A 的第 1 行、B 的第 2 列一起亮，逐对相乘再相加，写进 C.1,2（mul C 一格格全算）；算出来的格以后跟着 A、B 自动重算
-open B edit range=-3..3           学生点 B 的一格就能拨里面的数（AB、BA 当场跟着变）
-open C explain                    学生点乘积的一格，页面当场演它怎么一行乘一列算出来（还空着的就当场算上）`,
+open B edit range=-3..3           学生点 B 的一格用 ± 拨里面的数（AB、BA 当场跟着变）
+open C explain                    学生点乘积的一格，页面当场演它怎么一行乘一列算出来（还空着的就当场算上）
+学生自己消元（rowop 页面判每一下；乘积不能 open rowop）：
+open m rowop wrong=mark call=wrong    学生把一行左边的把手拖到另一行上 = 倍加（弹倍数框写 -3：rowop m r2 - 3r1）；拖到行号上 = 对调（rowop m r1 <-> r2）；点行号 = 倍乘（rowop m (-1/2)r1）
+open m edit input=keypad          学生点一格用数字键盘写（能写 -3/2；写了 range= 才限范围）= write m.2,3 -3/2（页面不判，告诉你的就是这一行）
+判断式（when=）：m stairs（阶梯形）、m rref（行最简形）、m rank=2（整张的秩，增广的是 r(A | b)）、m rankA=2（竖线左边的秩 r(A)）、m same B（和 B 行等价）
+做完了 = 成了阶梯形（@m.done 这时演）；往上化成行最简形页面不判对错，要的话写 goal … when="m rref"
+ask value "A² 是？" type=matrix answer={A^2} wrong="1 1 / 1 1=逐格平方了"     学生写一张矩阵（行用 / 隔开），页面照 A 现算答案`,
   // 测试用（tests/stage-doc.test.js）：说明里 stairs 那一行要一个已经是阶梯形的矩阵
   docSetup: 'matrix m = 1 2 3 / 0 1 4 / 0 0 1',
   example: `matrix A = 1 1 / -1 -1

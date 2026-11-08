@@ -707,9 +707,16 @@ rotate t.50 right                 右旋（left 左旋）；也能写 LL / RR / 
 walk t.50 t.30 t.40               一个圈沿着树枝走过这几个（查找路径）
 visit t.50 t.30 / unvisit t       按顺序编访问号（遍历一步一步来）
 traverse t in upto=3              整趟遍历：pre / in / post / level，upto 走到第几个停（不写走完）
-tag t.50 "h=3" / untag t          结点角上写个小字
+tag t.50 "h=3" / untag t          结点角上写个小字（最多 8 个字）
 bf t / unbf t                     每个结点标平衡因子（跟着树变；舞台现状里写出失衡的是谁、哪一型）
-ask drag t "把它往上换"             学生把一个结点的值拖到另一个结点上，两个换值（页面照做，再告诉你）`,
+ask drag t "把它往上换"             学生把一个结点的值拖到另一个结点上，两个换值（页面照做，再告诉你）
+tree t = 50 30 70 tray="20 40 80"   带托盘：待插的数按顺序摆在树下面，插进去一个拿掉一个
+学生自己转、自己插（页面判每一下）：
+open t rotate wrong=mark undo=on    学生把一个结点拖到它的父亲上 = 在父亲那里转（左孩子拖上去 = rotate t#1 right）
+open t insert                       学生把托盘里的数拖进树 = insert t 47（页面从根比下去）
+open t place                        学生把托盘里的数拖到一个空位 = insert t.45 right 47（学生自己摆；和 insert 一次开一种）
+@t.done say "插完了，也平了。"         t 做完了马上演（做完 = 平衡了、托盘插完了；只开 insert / place 的是托盘插完了）
+判断式（goal 的 when=）：t avl（平衡了）、t bst（还是二叉排序树）、t height=4（有几层）`,
   example: `tree t = 50 30 70 20 40 _ 80
 say "这是一棵二叉排序树：左边都比根小，右边都比根大。"
 insert t 35

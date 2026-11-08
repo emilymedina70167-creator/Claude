@@ -300,7 +300,15 @@ test('说明里的例子照抄能演（一行不错），每一条指令写法�
   const s = new Scene();
   assert.deepEqual(dryRun(s, sentence.example), []);
   run(s, sentence.example);
+  // 例子是活的一轮：老师标好谓语，把拉括号交给学生（页面照 key 判），挑战做到了预写的两行折起从句、问主语的核心词
+  assert.ok(s.opens.has('s:mark') && s.goals.has('g1') && s.reactions.get('g1').length === 2);
+  const did = (src) => s.apply(parseScript(src)[0], { by: 'student', open: 'mark' });
+  assert.equal(did('mark s.1-6 S').judged.verdict.right, true);
+  const fx = did('mark s.3-6 RC');
+  assert.deepEqual(fx.goalsMet, ['g1']);
+  for (const r of fx.reactions) for (const c of parseScript(r.src)) s.apply({ ...c, lenient: true });
   assert.equal(s.waiting.kind, 'tap');
+  assert.match(s.stateText(), /折起来的：s\.3-6/);
   // 说明里每一行「指令 …」的第一段，在刚造好的句子上都能演
   const ready = run(new Scene(), sentence.example.split('\n')[0]);
   const lines = sentence.doc.split('\n').map((l) => l.split(/\s{2,}|\s\/\s/)[0].trim()).filter((l) => /^[a-z]+ /.test(l));

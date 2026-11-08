@@ -23,7 +23,9 @@ test('说明里的例子照抄就能演：例子那一轮；共用的每一条�
   // 引号外面的第一个「两个以上空格」或「 / 」之前是写法，后面是说明
   const head = (l) => { let q = null; for (let i = 0; i < l.length; i++) { const ch = l[i]; if (q) { if (ch === q) q = null; continue; } if (ch === '"') { q = '"'; continue; } if (ch === '「') { q = '」'; continue; } if (l.startsWith('  ', i) || l.startsWith(' / ', i)) return l.slice(0, i).trim(); } return l.trim(); };
   // 造东西的那一行（matrix m = 1 2 / 3 4）里的「 / 」是分行，不是另一种写法：只按两个空格切
-  const firsts = (doc) => doc.split('\n').map((l) => (CREATE[l.split(' ')[0]] ? l.split(/\s{2,}/)[0].trim() : head(l))).filter((l) => COMMANDS.has(l.split(' ')[0]));
+  // @g1 / @t.done 开头的预写也照抄能演（在前面先写了 goal、open 的舞台上）：看 @ 后面那一行的指令
+  const cmdOf = (l) => (l.startsWith('@') ? l.split(' ')[1] : l.split(' ')[0]);
+  const firsts = (doc) => doc.split('\n').map((l) => (CREATE[l.split(' ')[0]] ? l.split(/\s{2,}/)[0].trim() : head(l))).filter((l) => COMMANDS.has(cmdOf(l)));
   const ready = (src) => { const sc = new Scene(); for (const c of parseScript(src)) if (c.cmd !== 'ask') sc.apply(c); return sc; };
   const bad = [];
   // 共用的：在一排格子上演（先造好拨数、贴好字、说一句带 [词] 的话）
@@ -92,3 +94,49 @@ test('按科目只带用得上的东西：英语课不带一排格子（只列�
   assert.match(stageDoc(''), /array a = 49/);
 });
 
+
+// 缺口单「说明写得不清楚」那一节（docs/stage-gaps.md）：助手照说明写错过、要试好几次才对的 10 条，说明里逐条写明
+test('说明不清楚的 10 条都写明了', () => {
+  const C = STAGE_COMMON;
+  const lineOf = (doc, re) => doc.split('\n').find((l) => re.test(l)) || '';
+  // 1. ask value 不一定要写 answer=（只收不判）
+  assert.match(lineOf(C, /^ask value /), /answer= 可以不写/);
+  // 2. tag 最多 8 个字（树、图、句子都有 tag）
+  for (const k of ['tree', 'graph', 'sentence']) assert.match(lineOf(TYPES[k].doc, /^tag /), /最多 8 个字/, `${TYPES[k].label}的 tag`);
+  // 3. goal 的 when= 能写什么：部件比部件、每种东西的判断式
+  assert.match(lineOf(C, /^when= /), /部件比部件[^\n]*判断式/);
+  // 4. expect= 只能写一个部件
+  assert.match(lineOf(C, /expect=/), /只写一个部件/);
+  // 5. 拨数能驱动的是写成 {式子} 的值
+  assert.match(lineOf(C, /^dial /), /能写进 \{式子\} 里驱动任何量/);
+  // 6. retex 换掉最后一行、next 留着上一行
+  assert.match(lineOf(TYPES.tex.doc, /^retex /), /换掉[^\n]*next/);
+  assert.match(lineOf(TYPES.tex.doc, /^next /), /留着/);
+  // 7. 预写的行写下那一刻就在今天的舞台上试
+  assert.match(C, /写下时就在今天的舞台上试一遍/);
+  // 8. 题卡里的 $x$ 只是斜体字母，矩阵写不了
+  assert.match(lineOf(TYPES.card.doc, /\$x\$/), /矩阵[^\n]*写不了/);
+  // 9. 句子留空位现在没有写法（第 3 个子项目）
+  assert.match(TYPES.sentence.doc, /留空位[^\n]*现在没有/);
+  // 10. relax 前先 tag g ∞；贴的字跟着部件消失，拿掉字用 unlabel
+  assert.match(lineOf(TYPES.graph.doc, /^relax /), /tag g ∞/);
+  assert.match(lineOf(C, /字跟着消失/), /unlabel/);
+});
+
+test('底座的新写法都在说明里：open 的 wrong= / call= / undo=、预写 @名字.done / .right、{式子}、type=；三个样板各列出手势表和判断式', async () => {
+  const C = STAGE_COMMON;
+  for (const w of ['wrong=quiet', 'wrong=mark', 'wrong=block', 'call=wrong', 'call=done', 'undo=on', '@t.done', '@t.right', '走偏不能预写', '{式子}', 'type=', 'input=keypad']) assert.ok((C + STAGE_TEACH + STAGE_DOC).includes(w), `说明里要有「${w}」`);
+  // 页面不做教学决定：默认照做、只记下
+  assert.match(C, /wrong=quiet[^\n]*默认/);
+  // 每种交了规则的东西：手势表里的每个动作都有一行 open（学生怎么动、翻成哪一行），每个判断式都写了
+  const { rulesOf } = await import('../kit/src/stage/rules.js');
+  for (const t of Object.values(TYPES)) {
+    const r = rulesOf({ type: t.type });
+    if (!r || !t.doc) continue;
+    for (const a of Object.keys(r.gestures)) assert.match(t.doc, new RegExp(`^open \\w+ ${a}\\b[^\\n]*= `, 'm'), `${t.label}的 open … ${a}：写学生怎么动、翻成哪一行`);
+    for (const p of Object.keys(r.predicates)) assert.match(t.doc, new RegExp(`^判断式[^\\n]*\\b${p}\\b`, 'm'), `${t.label}的判断式 ${p}`);
+  }
+  // type= 能写的每一种
+  const { ANSWER_TYPES } = await import('../kit/src/stage/answer.js');
+  for (const k of ANSWER_TYPES) assert.match(C, new RegExp(`type=[^\\n]*\\b${k}\\b`), `type=${k}`);
+});
