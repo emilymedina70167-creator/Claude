@@ -40,6 +40,8 @@ node tools/stage-try.mjs evals/stage-gaps/try/L1/幕1.txt --shots /tmp/shots
 node tools/stage-gaps-check.mjs report
 ```
 
+只重新量了几块几幕的，写进 `report2/`，用 `node tools/stage-gaps-check.mjs report2` 查（只查报告里有的块、打了标的幕）。
+
 `stage-doc.txt` 要按新的说明重新生成：
 
 ```bash

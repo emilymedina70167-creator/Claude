@@ -41,3 +41,24 @@ test('对照报告：理想里有的块，报告里整节没有', () => {
   const p = checkReport(report(), { L1: ideal(), L2: ideal() });
   assert.ok(p.some((x) => x.includes('L2')), p.join('\n'));
 });
+
+test('部分重量：只有一块、一幕打满了标，合格', () => {
+  const md = ['## L1', ...marks(2)].join('\n');
+  assert.deepEqual(checkReport(md, { L1: ideal(), L2: ideal() }, { partial: true }), []);
+  assert.ok(checkReport(md, { L1: ideal() }).length > 0, '不带 partial 照旧要全');
+});
+test('部分重量：一幕只打了几项', () => {
+  const md = ['## L1', ...marks(2, '事实')].join('\n');
+  const p = checkReport(md, { L1: ideal() }, { partial: true });
+  assert.ok(p.length === 1 && p[0].includes('第 2 幕') && p[0].includes('事实'), p.join('\n'));
+});
+test('部分重量：标了理想里没有的幕和分支', () => {
+  const md = ['## L1', ...marks(2), '- ✅ 第 9 幕·画面：x', '- ✅ 分支 7·页面要提供什么：x'].join('\n');
+  const p = checkReport(md, { L1: ideal() }, { partial: true });
+  assert.ok(p.some((x) => x.includes('第 9 幕')) && p.some((x) => x.includes('分支 7')), p.join('\n'));
+});
+test('部分重量：打了标的分支和 ⚠️ 的子行照查', () => {
+  const md = ['## L1', '- ⚠️ 分支 1·页面要提供什么：缺', '  - 要的：x'].join('\n');
+  const p = checkReport(md, { L1: ideal() }, { partial: true });
+  assert.ok(p.some((x) => x.includes('指令')) && p.some((x) => x.includes('结果')) && !p.some((x) => x.includes('分支 2')), p.join('\n'));
+});

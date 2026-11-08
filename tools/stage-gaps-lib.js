@@ -54,13 +54,15 @@ export function checkIdeal(md) {
 /**
  * 对照报告的问题（空就是合格）。ideals：{ 块编号: 理想演法 }，只放这一科的。
  * 每一幕每一项、每个分支的「页面要提供什么」都要有一行打了标的；⚠️ 和 ❌ 下面要有「要的」「指令」「结果」
+ * partial（重新量只量了几块几幕）：没有 `## 块` 这一节的块不查；块里只查打了标的幕 / 分支（幕要六项齐、分支要那一项）；
+ * 标了理想里没有的幕 / 分支编号算错
  */
-export function checkReport(md, ideals) {
+export function checkReport(md, ideals, { partial = false } = {}) {
   const out = [];
   const blocks = new Map(sections(md, 2).map((s) => [s.title.split(/\s/)[0], s.body]));
   for (const [id, imd] of Object.entries(ideals)) {
     const body = blocks.get(id);
-    if (body == null) { out.push(`${id}：报告里没有「## ${id}」这一节`); continue; }
+    if (body == null) { if (partial) continue; out.push(`${id}：报告里没有「## ${id}」这一节`); continue; }
     const lines = body.split('\n');
     const marked = new Map(); // 「第 2 幕·事实」→ 标
     lines.forEach((l, i) => {
@@ -74,8 +76,16 @@ export function checkReport(md, ideals) {
       for (const k of ['要的', '指令', '结果']) if (!sub.some((s) => new RegExp(`^- ${k}[：:][ \\t]*\\S`).test(s))) out.push(`${id} ${key}：${m[1]} 下面缺「${k}」`);
     });
     const { acts, branches } = idealShape(imd);
-    for (const n of acts) for (const k of MARK_ITEMS) if (!marked.has(`第 ${n} 幕·${k}`)) out.push(`${id}：第 ${n} 幕的「${k}」没有打标`);
-    for (const n of branches) if (!marked.has(`分支 ${n}·页面要提供什么`)) out.push(`${id}：分支 ${n} 的「页面要提供什么」没有打标`);
+    if (partial) {
+      for (const key of marked.keys()) {
+        const a = key.match(/^第 (\d+) 幕·/), b = key.match(/^分支 (\d+)·/);
+        if (a && !acts.includes(Number(a[1]))) out.push(`${id}：理想演法里没有第 ${a[1]} 幕（${key}）`);
+        if (b && !branches.includes(Number(b[1]))) out.push(`${id}：理想演法里没有分支 ${b[1]}（${key}）`);
+      }
+    }
+    const touched = (prefix) => [...marked.keys()].some((k) => k.startsWith(prefix));
+    for (const n of acts) if (!partial || touched(`第 ${n} 幕·`)) for (const k of MARK_ITEMS) if (!marked.has(`第 ${n} 幕·${k}`)) out.push(`${id}：第 ${n} 幕的「${k}」没有打标`);
+    for (const n of branches) if ((!partial || touched(`分支 ${n}·`)) && !marked.has(`分支 ${n}·页面要提供什么`)) out.push(`${id}：分支 ${n} 的「页面要提供什么」没有打标`);
   }
   return out;
 }
