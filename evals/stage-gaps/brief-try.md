@@ -26,6 +26,14 @@ node proto/stage/build.mjs
     - `学生: swap a#1 a#3`：拖格子，或者拖树的结点换值
     - `学生: move s.3 after s.5`：拖句子里的词
     - `学生: vec p u = 3 1`：拖平面上的向量
+    - `学生: rotate t.30 left`：在 30 往左转（把 30 的右孩子拖到 30 上）
+    - `学生: insert t 47`：托盘里的 47 拖进树；`学生: insert t.45 right 47`：拖到 45 右边的空位（`open t place`）
+    - `学生: rowop M r3 - 2r1`：r1 的把手拖到 r3 上、倍数框写 -2；`学生: rowop M r1 <-> r3`：拖到行号上；`学生: rowop M 3r2`：点行号、写 3
+    - `学生: write M.2,3 -3/2`：老师写了 `open M edit input=keypad` 时用数字键盘写一格
+    - `学生: mark s.2-4 V`：从 s.2 拉到 s.4、点成分；`学生: fold s.3-6`：点这一段的括号折起来
+    - `学生: dial k 3`：拨数器拨到 3
+    - `学生: undo`：撤一步（老师 `open … undo=on` 时）
+    - 这几种都和真的手指走同一条路：页面的裁判先判，老师写了 `wrong=block` 又走偏的不演、弹回去；报告里分「没演上」和「页面没让做」
   - **回答正在等的那一问**（老师 `ask` 的）：
     - `学生: tap a.7`：点
     - `学生: drag a#1 a#6`：拖
