@@ -1,0 +1,37 @@
+# L1 分支 2：f(A) 的常数项当成数（每格加 3 / 丢了 3），零矩阵写成数字 0
+matrix A = 2 -1 / -3 3
+card q = "练习 2.2：f(x) = x² − 5x + 3，A 是上面那张，f(A) = ？"
+say "练习 2.2，你来算 f(A)。"
+ask value "f(A) = ？（行用 / 隔开）" type=matrix answer={A^2 - 5 A + 3 E} wrong="0 3 / 3 0=每格加了 3（常数当成数）; -3 0 / 0 -3=漏了常数 3E; -3 6 / 24 -3=A² 按格平方了; 0=写成数字 0"
+# 先交一个老师没预先列出的错法（5A 只乘了第 1 格）
+学生: value 0 -4 / -12 12
+say "再算一遍。"
+ask value "f(A) = ？（行用 / 隔开）" type=matrix answer={A^2 - 5 A + 3 E} wrong="0 3 / 3 0=每格加了 3（常数当成数）; -3 0 / 0 -3=漏了常数 3E; -3 6 / 24 -3=A² 按格平方了; 0=写成数字 0"
+学生: value 0 3 / 3 0
+# 配方台：三项三张牌，A²、−5A 是真矩阵；+3 是一个数
+matrix T1 = {A^2}
+matrix T2 = {-5 A} beside=T1
+label l1 T1 "x² → A²" side=above tone=note
+label l2 T2 "−5x → −5A" side=above tone=note
+# 数直接加到矩阵上：这个世界加不上
+matrix S0 = {A^2 - 5 A + 3}
+matrix Th = 3 3 / 3 3
+matrix TE = {3 E} beside=Th
+label lth Th "你偷偷换成的：全是 3" side=above tone=note
+label lte TE "3E" side=above tone=note
+say "3 是一个数，加不到 {T2} 这种表上。你每格加 3，等于把 3 换成了 {Th}。"
+ask say "f(x) 里的 3 是 3·x⁰，x⁰ 到了 A 这边是谁？"
+学生: say E
+matrix S = {A^2 - 5 A + 3 E}
+matrix W = 0 3 / 3 0 beside=S
+matrix Wd = {W - S}
+label ls S "A² − 5A + 3E" side=above tone=key
+label lw W "你写的" side=above tone=note
+label lwd Wd "多出来的" side=left tone=note
+say "贴上 E，3 只铺在对角线上，合计是 {S}。你写的多出来 {Wd}。"
+ask value "f(A) = ？" type=matrix answer={A^2 - 5 A + 3 E} wrong="0=写成数字 0"
+学生: value 0
+say "答案槽里放的是一个数，还是一张表？"
+ask value "f(A) = ？" type=matrix answer={A^2 - 5 A + 3 E}
+学生: value 0 0 / 0 0
+say "对，零矩阵。"

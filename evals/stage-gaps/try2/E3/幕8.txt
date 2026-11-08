@@ -1,0 +1,18 @@
+# E3 第 8 幕：自己拆 8 月拆错的句子。学生自己拉谓语、框非谓语块、贴「定语」（open s mark，key 里 designed … 是定语、to help … 是非谓语），页面照 key 判；
+# 折起来：学生点括号（open s fold，和 mark 一次一种）；拉线到 Policies、主干行自动写、旧答案并排、卡片挂到树上没有
+sentence s = "Policies designed to help small businesses often fail." key="[S Policies [Attr designed [NF to help small businesses]]] often [V fail]."
+say "这句你 8 月拆过。用今天的办法自己拆：先找谓语。"
+open s mark undo=on
+goal g1 "先找谓语" when="s span s.8 = V"
+@g1 say "对，{s.8}。再把多出来的那一块框出来，点它当什么。"
+@g1 goal g2 "框出修饰的那一块" when="s span s.2-6 = Attr"
+学生: mark s.4 V
+学生: mark s.8 V
+学生: mark s.2-5 定语
+学生: mark s.2-6 定语
+close s mark
+open s fold
+say "把定语折起来，只看剩下的。"
+ask say "主干是什么？翻译写下来。"
+学生: fold s.2-6
+学生: say Policies fail 旨在帮助小企业的政策往往会失败

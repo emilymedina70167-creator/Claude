@@ -1,0 +1,20 @@
+# E2 第 6 幕：自己拆一句四层的长难句。学生自己拉谓语和三层从句的括号（open s mark call=done，wrong=quiet 页面不出判语、试多少下都不叫老师）；全拉对时预写的一句（goal s parsed）。
+# 钩子（who → Chomsky 这样）学生挂不了；「就这样」是 ask next 的按钮；套娃图、中文四格页面不会
+sentence s = "The most famous of these efforts was initiated by Noam Chomsky, who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar." key="The most famous of these efforts [V was initiated] by Noam Chomsky, [Cl who [V suggested] [Cl that humans [V are born] with an innate language-acquisition capacity [Cl that [V dictates] a universal grammar]]]."
+say "这一句你自己来，拆好了按『就这样』。"
+open s mark undo=on call=done
+goal g1 "拆成几件事、谁套着谁" when="s parsed"
+@g1 say "四层，一层套一层——拆开了。"
+ask next "拆好了点下面" button="就这样"
+学生: mark s.8 V
+学生: undo
+学生: mark s.7-8 V
+学生: mark s.13 V
+学生: mark s.16-17 V
+学生: mark s.21 V
+学生: mark s.24 V
+学生: mark s.12-27 从句
+学生: mark s.14-22 从句
+学生: mark s.23-27 从句
+学生: mark s.14-27 从句
+学生: next

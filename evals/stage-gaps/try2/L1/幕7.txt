@@ -1,0 +1,61 @@
+# L1 第 7 幕：(A+E)³ 化成 aA + bE（页面代具体的 A 验）；Aⁿ：拨 n 看幂、学生自己拆 A = P + Q、写含 n 的 Aⁿ
+card q = "A² = 2A，把 (A+E)³ 化成 aA + bE（上次说不会的那题）"
+matrix A = 1 1 / 1 1
+matrix A2 = {A^2} beside=A
+label la2 A2 "A² = 2A" side=above tone=note
+matrix L = {(A + E)^3}
+cover L
+matrix ab = 0 0
+label lab ab "a、b 写在这两格" side=above tone=note
+matrix R = {ab.1,1 A + ab.1,2 E} beside=ab
+label lr R "aA + bE" side=above tone=note
+say "这题你上次说不会。现在 A 和 E 能换，你来展开 (A+E)³，把 a、b 写进 {ab}。"
+open ab edit input=keypad
+goal g1 "写出 a、b：(A+E)³ = aA + bE" when="L = R"
+@g1 uncover L
+@g1 say "13A + E，对。"
+学生: write ab.1,1 7
+学生: write ab.1,2 1
+学生: write ab.1,1 13
+# 主题：A 是 3 阶，拨 n 看 Aⁿ（代替一下下按「×A」）
+remove q
+remove A2
+remove L
+remove R
+remove ab
+matrix A = 1 1 0 / 0 1 1 / 0 0 1
+dial n = 1 range=1-6 at=A
+matrix Pn = {A^n} beside=A
+label lpn Pn "A 的 n 次方" side=above tone=key
+say "这个 {A} 的 n 次方。拨 {n}，多乘几次看看右上角。"
+ask next "拨几下 n，看出规律点下面" button="看出来了"
+学生: dial n 4
+学生: next
+matrix P = 0 0 0 / 0 0 0 / 0 0 0
+matrix Q = {A - P} beside=P
+matrix Cm = {P Q - Q P}
+label lp P "拆出来的一张（你来写）" side=above tone=note
+label lq Q "剩下的一张" side=above tone=note
+label lc Cm "PQ − QP" side=above tone=note
+say "把 A 拆成两张牌的和，拆完要能用二项式，两张牌得满足什么？"
+open P edit input=keypad
+goal g2 "把 A 拆成能换的两张：PQ = QP，两张都不是 O" when="Cm = O, P != O, Q != O"
+@g2 matrix Q2 = {Q^2}
+@g2 matrix Q3 = {Q^3} beside=Q2
+@g2 say "能换。看 {Q} 自己乘几次。"
+学生: write P.1,1 1
+学生: write P.2,2 1
+学生: write P.3,3 1
+say "写出 Aⁿ。"
+# 照说明：type=matrix 的答案是「1 2 / 0 1」，格里写含 n 的式子
+ask value "Aⁿ = ？" type=matrix answer="1 n n*(n-1)/2 / 0 1 n / 0 0 1" free=n
+学生: say 写在哪？
+# 写不进去（页面把错交给老师），就一格一格问（type=formula free=n）
+ask value "Aⁿ 右上角那一格 = ？" type=formula free=n=1..30 answer="n*(n-1)/2" wrong="n^2=写成 n²; n*(n+1)/2=写成 n(n+1)/2"
+学生: value n(n+1)/2
+say "代 n = 2 看看：{Pn} 右上角是几？"
+ask value "Aⁿ 右上角那一格 = ？" type=formula free=n=1..30 answer="n*(n-1)/2"
+学生: value n(n-1)/2
+ask value "A¹⁰⁰ = ？" type=matrix answer={A^100}
+学生: value 1 100 4950 / 0 1 100 / 0 0 1
+say "嗯。"

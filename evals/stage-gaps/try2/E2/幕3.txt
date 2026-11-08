@@ -1,0 +1,34 @@
+# E2 第 3 幕：who、that 两层。学生自己拉两段从句的括号（open s mark）；钩子换成点名词（ask tap）、绳子是老师的 refer；
+# 「拎起来」= 学生点括号折起来（open s fold，和 mark 一次只能开一种）；拉长 who 的括号 = 再拉一道 s.5-19（旧的那道收不掉）
+sentence s = "The great question is who should benefit from the analysis of all the data that our lives now generate." key="The great question [V is] [Cl who [V should benefit] from the analysis of all the data [Cl that our lives now [V generate]]]."
+mark s.4 V
+mark s.6-7 V
+mark s.19 V
+say "给 {s.5} 和 {s.15} 这两件事各拉一道括号。"
+open s mark undo=on
+ask next "拉好了点下面" button="拉好了"
+学生: mark s.5-14 从句
+学生: mark s.15-19 从句
+学生: next
+close s mark
+say "that our lives now generate——生成的是什么？"
+ask tap s "把钩子挂到它说的那个词上" expect=s.14
+学生: tap s.14
+refer s.15 -> s.14
+open s fold
+say "拎走 {s.5} 这件事：点它的括号。"
+ask next "拎完点下面" button="看好了"
+学生: fold s.5-14
+学生: next
+unfold s
+close s fold
+open s mark undo=on
+say "绳子被拽着：{s.15} 那件事还挂在 {s.14} 上。"
+goal g1 "让 who 那件事把 that 那件事装进去" when="s span s.5-19 = 从句"
+@g1 close s mark
+@g1 open s fold
+@g1 say "再拎一次。"
+学生: mark s.5-19 从句
+ask next "拎完点下面" button="看好了"
+学生: fold s.5-19
+学生: next

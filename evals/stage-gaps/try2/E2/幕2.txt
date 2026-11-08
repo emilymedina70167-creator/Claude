@@ -1,0 +1,23 @@
+# E2 第 2 幕：从连接词开门、拉到哪结束，每段只能有一盏灯。学生自己拉谓语和从句的括号（open s mark，key 标了三个谓语和两段从句，从句写泛称 Cl）；
+# key 里 to turn the power off 标成非谓语（看把 to turn 拉成谓语时页面怎么说）；拉长了缩回来用「撤一步」再拉；三段各一盏灯时预写的一句（goal 用 span 判断式）。括号里几盏灯、剩下的部分、工具盘亮卡页面都不会
+sentence s = "The hardest task that television asks of anyone is to turn the power off after he has turned it on." key="The hardest task [Cl that television [V asks] of anyone] [V is] [NF to turn the power off] [Cl after he [V has turned] it on]."
+card tools = "并列连词 and / but / or" "从属连词 because / if / after / while…" "关系词 that / who / what / how / which…"
+dim tools
+say "连接词是门，门后面就是一件事。先拉出谓语，再从门拉到这件事结束。"
+open s mark undo=on
+goal g1 "每段只有一盏灯" when="s span s.6 = V, s span s.9 = V, s span s.17-18 = V, s span s.4-8 = 从句, s span s.15-20 = 从句"
+@g1 undim tools.2-3
+@g1 say "三件事各一盏灯——断开了。"
+@g1 ask say "为什么 {s.4} 那件事不拉到 {s.15} 前面？"
+学生: mark s.6 V
+学生: mark s.9 V
+学生: mark s.17-18 V
+学生: mark s.10-11 V
+学生: undo
+学生: mark s.4-14 从句
+学生: undo
+学生: mark s.4-9 从句
+学生: undo
+学生: mark s.4-8 从句
+学生: mark s.15-20 从句
+学生: say 再往后就是第二个谓语 is 了

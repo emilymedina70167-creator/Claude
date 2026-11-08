@@ -1,0 +1,35 @@
+# E3 第 4 幕：to do 作主语挪到句尾、句首用 It 占位。学生整块拖（open s，拖词）只能拖一个词；It 冒出来是做到挑战以后预写的 rewrite；
+# 第二句学生自己框出 to do 块（open j mark，key 把 It 和 to do 块都标成主语），页面照 key 判；框好以后拖回句首又只能一个词一个词拖
+sentence s = "To anticipate every imaginable driving situation is a difficult programming problem."
+mark s.1-6 主语
+open s
+say "主语这么长，头重脚轻。把它整块挪到句尾，看看句首会怎样。"
+goal g1 "把主语整块挪到句尾" when="s.6 = s#1, s.11 = s#6"
+@g1 rewrite s "It is a difficult programming problem to anticipate every imaginable driving situation."
+@g1 refer s.1 -> s.7
+@g1 say "整块挪过去，句首空了，冒出 {s.1}。"
+@g1 ask say "这个 It 指谁？"
+学生: move s.1-6 after s.11
+学生: move s.1 after s.11
+学生: move s.1 after s.11
+ask say "这个 It 指谁？"
+学生: say 指后面那个 to anticipate
+remove s
+sentence j = "It is painful to read these roundabout accounts today." key="[S It] [V is] [P painful] [S to read these roundabout accounts today]."
+open j mark undo=on
+say "反过来：先把真正的主语框出来。从 {j.4} 拉到它结束。"
+goal g2 "框出真正的主语" when="j span j.4-9 = S"
+@g2 close j mark
+@g2 open j
+@g2 say "框好了。把它挪回句首。"
+学生: mark j.4-8 S
+学生: mark j.4-9 S
+学生: move j.4 -> j.1
+remove j
+sentence k = 「It also raises questions concerning "values."」
+open k
+say "这一句也找一块「真正的主语」去换 {k.1}。"
+ask next "换好了点下面" button="换好了"
+学生: move k.5-6 -> k.1
+学生: move k.5 -> k.1
+学生: next

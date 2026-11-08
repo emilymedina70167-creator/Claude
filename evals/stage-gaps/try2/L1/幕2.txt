@@ -1,0 +1,51 @@
+# L1 第 2 幕：(A+B)² 拆开是四块，AB 和 BA 并不起来，差是 BA − AB；A、B 解锁后一切跟着算
+matrix A = 1 2 / 2 4
+matrix B = 2 2 / -1 -1 beside=A
+say "先写你觉得 (A+B)² 是多少。"
+ask say "(A+B)² = ？"
+学生: say A²+2AB+B²
+# 方块图：只能四张跟着算的矩阵排成两行两列，角上贴「谁乘谁」
+tex f = "(\hl{l1}{A}+\hl{l2}{B})(\hl{r1}{A}+\hl{r2}{B})"
+matrix AA = {A A}
+matrix AB = {A B} beside=AA
+matrix BA = {B A}
+matrix BB = {B B} beside=BA
+label c1 AA "AA" side=left tone=note
+label c2 AB "AB" side=right tone=note
+label c3 BA "BA" side=left tone=note
+label c4 BB "BB" side=right tone=note
+link f.l1 AA f.r1 g1
+link f.l1 AB f.r2 g2
+link f.l2 BA f.r1 g3
+link f.l2 BB f.r2 g4
+say "你写的 2AB，是哪两块并起来的？把 {AB} 拖到 {BA} 上并一下。"
+ask drag AB BA "把 AB 拖到 BA 上并一下"
+学生: drag AB.1,1 BA.1,1
+# 拖不了：老师自己一格一格比
+unlink f
+compare AB.1,1 BA.1,1
+compare AB.1,2 BA.1,2
+matrix T = {(A + B)^2}
+matrix F = {A^2 + 2 A B + B^2} beside=T
+matrix Sum = {AA + AB + BA + BB}
+matrix Dd = {T - F} beside=Sum
+label lt T "真的 (A+B)²" side=above tone=key
+label lf F "公式 A²+2AB+B²" side=above tone=key
+label ls Sum "四块合计" side=above tone=note
+label ld Dd "差" side=above tone=note
+say "四块加起来就是 {T}。公式 {F} 和它差了 {Dd}。"
+ask tap BA "这个差，你在方块图里见过吗？点那一块" expect=BA
+学生: tap BA.2,1
+open A edit range=-3..3
+open B edit range=-3..3
+say "现在 A、B 的数你都能拨。多拨几组，看差怎么变。"
+goal g1 "拨 A、B，让差变成 O" when="Dd = O"
+@g1 pulse Dd
+学生: write B.1,2 0
+学生: write B.2,1 0
+学生: write B.2,2 0
+学生: write B.2,2 2
+say "什么时候差是 O？"
+ask say "(A+B)² = A² + 2AB + B² 什么时候成立？"
+学生: say AB = BA 的时候
+say "嗯。"

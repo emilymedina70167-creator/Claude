@@ -1,0 +1,10 @@
+# E3 分支 3：按「挨着谁」判非谓语修饰谁。学生连不了线（没有学生连线的手势），只能点词，或者把「修饰谁」换成贴成分（定语 / 状语）让页面照 key 判；
+# 代入句、逗号和隔着的词、句子主语、By 1830 两种挂法的直译：页面不给，老师写题卡
+sentence b = "Passing the cafe, I saw a friend." key="[A Passing the cafe], [S I] [V saw] [O a friend]."
+ask tap b "Passing 修饰谁？点它" expect=b.4
+学生: tap b.3
+open b mark undo=on
+say "换个办法：把 {b.1} 这一块框出来，点它当定语还是状语。"
+ask next "框好了点下面" button="框好了"
+学生: mark b.1-3 定语
+学生: next

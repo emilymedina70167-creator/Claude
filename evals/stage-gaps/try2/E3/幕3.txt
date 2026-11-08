@@ -1,0 +1,28 @@
+# E3 第 3 幕：doing / to do 连着宾语整块当主语，谓语用单数。is / are 拨轮换成点选（另一句里的两个词）；
+# 框主语：学生自己拉括号（open … mark，key 标了主语），页面照 key 说断早断晚；框对时预写译文。右把手一块一块扩换成再拉一道，插口、骨架格子没有
+sentence s = "Making friends be extremely important to teenagers." key="[S Making friends] [V be] extremely important to teenagers."
+sentence c = "is are"
+say "先选：{s.3} 换成 is 还是 are？"
+ask tap c "谓语用 is 还是 are？" expect=c.1
+学生: tap c.2
+rewrite c "is are"
+say "先不管对不对：把主语框出来。"
+open s mark undo=on
+goal g1 "把主语框出来" when="s span s.1-2 = S"
+@g1 label one s.1-2 "一件事" side=above tone=key
+@g1 ask tap c "一件事用 is 还是 are？" expect=c.1
+学生: mark s.2 S
+学生: mark s.1-2 S
+学生: tap c.1
+remove c
+rewrite s "Making friends is extremely important to teenagers."
+sentence t = "To anticipate every imaginable driving situation is a difficult programming problem." key="[S To anticipate every imaginable driving situation] [V is] [P a difficult programming problem]."
+open t mark undo=on
+say "这个主语从哪到哪？从 {t.1} 拉到它结束。"
+goal g2 "框出 to anticipate 这个主语" when="t span t.1-6 = S"
+@g2 label zh t "预见每种可能的驾驶情况是个困难的编程问题" side=below tone=soft
+@g2 ask say "什么样的东西能当主语？写一句"
+学生: mark t.1-2 S
+学生: mark t.1-4 S
+学生: mark t.1-6 S
+学生: say doing 和 to do 连着后面一串当名词

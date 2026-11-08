@@ -1,0 +1,29 @@
+# E3 第 2 幕：to do 一定不是谓语；doing / done 挨着 be / have 才算。四句各带 key，学生自己拉谓语的括号（四句都 open mark），页面照 key 说「只圈了一半」「非谓语当成了谓语」；
+# 一句拉完（@a.done、@d.done）只闪一下，不然页面当场叫老师；四句都拉对时预写：没圈的动词上贴小签，再换成拖词（托盘没有：is 只能拖到句尾），看拖走以后那道「谓语」括号怎么样
+sentence a = "Every cat with an owner, for instance, is running a small-scale study in operant conditioning." key="Every cat with an owner, for instance, [V is running] a small-scale study in operant conditioning."
+sentence b = "Fortunately, the White House is starting to pay attention." key="Fortunately, the White House [V is starting] [NF to pay attention]."
+sentence c = "The human nose is an underrated tool." key="The human nose [V is] an [NF underrated] tool."
+sentence d = "The human nose is underrated." key="The human nose [V is underrated]."
+say "每句拉出完整的谓语，一句只有一个。"
+open a mark undo=on
+open b mark undo=on
+open c mark undo=on
+open d mark undo=on
+goal g1 "四句各拉出一个完整的谓语" when="a span a.8-9 = V, b span b.5-6 = V, c span c.4 = V, d span d.4-5 = V"
+@g1 tag b.7 "to do"
+@g1 tag c.6 "done"
+@g1 close a mark
+@g1 open a
+@g1 goal g2 "把①里的 is 拖出去" when="a.15 = a#8"
+@g1 say "四句各一个。把①里的 {a.8} 拖到句尾，running 还是谓语吗？"
+@a.done pulse a.8-9
+@d.done pulse d.4-5
+学生: mark a.8 V
+学生: mark b.5-8 V
+学生: mark c.4 V
+学生: mark d.4-5 V
+学生: mark a.8-9 V
+学生: mark b.5-6 V
+学生: move a.8 after a.15
+ask say "running 还是谓语吗？"
+学生: say 不是了，它一个人当不了谓语

@@ -1,0 +1,19 @@
+# E2 分支 1：谓语认不准。学生自己点灯（open s mark，key 里 ensuring … 标成非谓语），页面照 key 说「非谓语当成了谓语」「谓语只圈了一半」；
+# 时态拨盘：拨数驱动不了句子，只能学生点按钮、老师整句 rewrite；看 rewrite 以后灯（括号）、key 怎么样
+sentence s = "If we are serious about ensuring that our science is both meaningful and reproducible, we must ensure that our institutions incentivise that kind of science." key="[Cl If we [V are] serious about [NF ensuring [Cl that our science [V is] both meaningful and reproducible]]], we [V must ensure] [Cl that our institutions [V incentivise] that kind of science]."
+say "把这句话里的谓语全拉出来。"
+open s mark undo=on
+ask next "拉完了点下面" button="就这些"
+学生: mark s.3 V
+学生: mark s.6 V
+学生: mark s.10 V
+学生: mark s.17 V
+学生: mark s.21 V
+学生: next
+say "拨到过去，看哪几块跟着变。"
+ask next "拨一下" button="拨到过去"
+学生: next
+rewrite s "If we were serious about ensuring that our science was both meaningful and reproducible, we had to ensure that our institutions incentivised that kind of science."
+say "{s.6} 没变，{s.18} 前面多了 had to。"
+ask tap s "哪盏灯没跟着变？" expect=s.6
+学生: tap s.6

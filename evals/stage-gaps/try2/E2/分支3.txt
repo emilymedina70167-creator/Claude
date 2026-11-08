@@ -1,0 +1,13 @@
+# E2 分支 3：从句挂错主人。学生挂不了钩子（没有学生连线的手势），只能点一个词；「代回去」的句子、单三和复数撞没撞、穿墙页面都不会：老师另造一句
+sentence s = "The most famous of these efforts was initiated by Noam Chomsky, who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar." key="The most famous of these efforts [V was initiated] by Noam Chomsky, [Cl who [V suggested] [Cl that humans [V are born] with an innate language-acquisition capacity [Cl that [V dictates] a universal grammar]]]."
+mark s.12-27 从句
+mark s.14-27 从句
+mark s.23-27 从句
+ask tap s "最后那个 that 说的是谁？把钩子挂上去" expect=s.22
+学生: tap s.15
+refer s.23 -> s.15
+sentence back = "humans dictates a universal grammar."
+glow back.1 back.2
+say "代回去读：{back.1} {back.2}——撞了。"
+ask tap s "换一个钩子再试" expect=s.22
+学生: tap s.22

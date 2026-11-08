@@ -1,0 +1,10 @@
+# E3 分支 1：把非谓语当成谓语（圈了 help，又圈 designed）。学生自己拉（open s mark），页面照 key 说的：help 在非谓语 to help … 里、正确的谓语是 fail；
+# 按学生的拆法算几个谓语、fail 没主语、to 锁拖不上、-ed 两种读法、按学生拆法的直译、8 月的错题原文：页面不给
+sentence s = "Policies designed to help small businesses often fail." key="[S Policies [Attr designed [NF to help small businesses]]] often [V fail]."
+say "先找谓语。"
+open s mark undo=on
+ask next "找好了点下面" button="就这个"
+学生: mark s.4 V
+学生: undo
+学生: mark s.2 V
+学生: next

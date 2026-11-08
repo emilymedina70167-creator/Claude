@@ -1,0 +1,11 @@
+# E3 分支 2：框非谓语词组从名词前那串修饰词中间断开。学生自己拉（open … mark），页面照 key 说「断早了，结尾还差 …」；
+# 名词词组里谁修饰谁的箭头、被切断的变红、及物动词缺宾语的插口、按学生括号的直译、以前同一模式的错题：页面不给
+sentence t = "To anticipate every imaginable driving situation is a difficult programming problem." key="[S To anticipate every imaginable driving situation] [V is] [P a difficult programming problem]."
+sentence c = "The computer is the 21st century's culture machine." key="[S The computer] [V is] [P the 21st century's culture machine]."
+say "框出 {t} 的主语、{c} 的表语。"
+open t mark undo=on
+open c mark undo=on
+ask next "框好了点下面" button="框好了"
+学生: mark t.1-4 S
+学生: mark c.4-6 P
+学生: next

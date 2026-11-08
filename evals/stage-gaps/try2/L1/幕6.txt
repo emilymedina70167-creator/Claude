@@ -1,0 +1,41 @@
+# L1 第 6 幕：(A−E)(A−2E) 的四块各有真矩阵跟着算，化成 A² − 3A + 2E；练习 2.2 f(A)（答案按矩阵判、认错法）
+matrix A = 2 -1 / -3 3
+tex g = "\hl{p}{A\cdot A} + \hl{q}{A\cdot(-2E)} + \hl{r}{(-E)\cdot A} + \hl{s}{(-E)\cdot(-2E)}"
+matrix B1 = {A A}
+matrix B2 = {A (-2 E)} beside=B1
+matrix B3 = {(-E) A}
+matrix B4 = {(-E)(-2 E)} beside=B3
+label c1 B1 "A·A" side=left tone=note
+label c2 B2 "A·(−2E)" side=right tone=note
+label c3 B3 "(−E)·A" side=left tone=note
+label c4 B4 "(−E)·(−2E)" side=right tone=note
+tex x = "(x-1)(x-2) = \hl{p}{x^2} \hl{q}{-2x} \hl{r}{-x} + \hl{s}{2}"
+say "把 {g} 的四块化到不能再化。每块下面是 A 真乘出来的。"
+ask tap g "先化哪一块？点它"
+学生: tap g.q
+retex g "\hl{p}{A^2} \hl{q}{-2A} \hl{r}{-A} + \hl{s}{2E}"
+next g "= \hl{p}{A^2} \hl{q}{-3A} + \hl{s}{2E}" q=r
+matrix Tot = {A^2 - 3 A + 2 E}
+matrix Dir = {(A - E)(A - 2 E)} beside=Tot
+label lt Tot "A² − 3A + 2E" side=above tone=key
+label ld Dir "(A−E)(A−2E) 直接乘" side=above tone=key
+say "和下面 {x} 比一比。x² − 3x + 2 能拆成 (x−1)(x−2)，换成 A 为什么也行？"
+ask say "为什么数的公式能搬过来？"
+学生: say 因为 A 和 E 能换
+card q = "练习 2.2：f(x) = x² − 5x + 3，A 是上面那张，f(A) = ？"
+say "练习 2.2，你来算 f(A)。"
+ask value "f(A) = ？（矩阵一行一行写，行用 / 隔开）" type=matrix answer={A^2 - 5 A + 3 E} wrong="0 3 / 3 0=每格加了 3（常数当成数）; -3 0 / 0 -3=漏了常数 3E; -3 6 / 24 -3=A² 按格平方了; 0=写成数字 0"
+学生: value 0 3 / 3 0
+# 配方台：常数项直接加到矩阵上，这个世界加不上
+matrix Y = {A^2 - 5 A + 3}
+matrix Th = 3 3 / 3 3
+matrix TE = {3 E} beside=Th
+label lth Th "每格加 3" side=above tone=note
+label lte TE "3E" side=above tone=note
+say "f(x) 里的 3 是 3·x⁰。x⁰ 到了 A 这边是谁？{Th} 和 {TE} 哪张才对？"
+ask value "f(A) = ？" type=matrix answer={A^2 - 5 A + 3 E} wrong="0 3 / 3 0=每格加了 3; 0=写成数字 0"
+学生: value 0
+say "答案槽里放的是一个数，还是一张表？"
+ask value "f(A) = ？" type=matrix answer={A^2 - 5 A + 3 E} wrong="0=写成数字 0"
+学生: value 0 0 / 0 0
+say "对，是零矩阵。"

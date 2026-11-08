@@ -1,0 +1,51 @@
+# L1 第 4 幕：A 锁着，找能和 A 换的 B（差 BA − AB 跟着算），收藏、换 A、测试机
+matrix A = 1 2 / 0 3
+label la A "A（锁着）" side=above tone=note
+matrix B = 0 1 / 1 0 beside=A
+label lb B "B（你来拨）" side=above tone=note
+matrix AB = {A B}
+matrix BA = {B A} beside=AB
+matrix Df = {B A - A B}
+label l1 AB "AB" side=left tone=note
+label l2 BA "BA" side=right tone=note
+label l3 Df "差 BA − AB" side=left tone=key
+say "{A} 锁着，你去找能和它换的 {B}，越不一样越好。"
+open B edit range=-3..3
+goal g1 "让 AB、BA 并得起来，B 不能是 O" when="Df = O, B != O"
+@g1 say "并上了！"
+# 想预写「再找一张不一样的」：条件写下时就成立，收不进
+@g1 goal g2 "再找一张不一样的 B" when="Df = O, B != O"
+学生: write B.1,2 0
+学生: write B.2,1 0
+学生: write B.1,1 1
+学生: write B.2,2 1
+# 页面叫老师（做到了）：老师把这张 B 抄成一张固定的「收藏」，下一个挑战排除它
+matrix K1 = 1 0 / 0 1
+label lk1 K1 "收藏 1" side=above tone=note
+goal g2 "再找一张不一样的 B" when="Df = O, B != O, B != K1"
+@g2 say "又并上一对！"
+say "收下了。再找一张不一样的。"
+学生: write B.2,2 2
+学生: write B.2,2 1
+学生: write B.1,2 2
+学生: write B.2,2 3
+matrix K2 = 1 2 / 0 3 beside=K1
+label lk2 K2 "收藏 2" side=above tone=note
+say "看看架上这几张 B，它们和 {A} 有什么关系？"
+ask say "这些 B 的共同点"
+学生: say 都是 A 的几倍加 E 的几倍
+matrix A = 2 0 / 0 3
+say "换一个 A，再找。"
+goal g3 "让 AB = BA，B 不能是 O" when="Df = O, B != O"
+学生: write B.1,2 0
+# 测试机：只能老师摆几张固定的 A 当「随机」的，各算一个差
+matrix R1 = 1 1 / 0 1
+matrix R2 = 0 1 / 1 0 beside=R1
+matrix R3 = 2 -1 / 3 5 beside=R2
+matrix T1 = {B R1 - R1 B}
+matrix T2 = {B R2 - R2 B} beside=T1
+matrix T3 = {B R3 - R3 B} beside=T2
+say "把你的 {B} 和这三张 A 各换一下，差是 O 才算能换。"
+ask say "哪些矩阵和任何矩阵都能换？"
+学生: say 对角的
+say "嗯。"

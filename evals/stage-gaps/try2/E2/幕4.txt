@@ -1,0 +1,33 @@
+# E2 第 4 幕：分层次。学生自己「拎」（open s fold，点括号折起来，undo=on 撤回来再拎另一层）；缺口和接缝：老师把括号的字写成「从句·留洞」「从句·挂件」，
+# 折起来的小方块上就是这几个字。先折里层再折外层、学生自己点开一层、中文栏按结构拼、中文块飞到名词前面：照说明写不出来
+sentence s = "The great question is who should benefit from the analysis of all the data that our lives now generate." key="The great question [V is] [Cl who [V should benefit] from the analysis of all the data [Cl that our lives now [V generate]]]."
+mark s.4 V
+mark s.6-7 V
+mark s.19 V
+mark s.5-19 "从句·留洞"
+mark s.15-19 "从句·挂件"
+open s fold undo=on
+say "先拎一下 {s.5}，再单拎 {s.15}——一个留下了什么，另一个呢？"
+ask say "拎完说说：各留下了什么？"
+学生: fold s.5-19
+学生: undo
+学生: fold s.15-19
+学生: say who 走了 is 后面空了，that 走了句子还是完整的
+say "全折起来，只读最外面一层：先折里层，再折外层。"
+ask next "折好了点下面" button="折好了"
+学生: fold s.15-19
+学生: fold s.5-19
+学生: next
+card zh = "主句：" "who 层：" "that 层："
+say "从最外层写起：{zh.1}"
+ask say "主句的中文："
+学生: say 重要的问题是……
+unfold s
+fold s.15-19
+say "打开一层——这一层里也只有一盏灯。"
+ask say "who 这一层的中文："
+学生: say 谁应该从对所有数据的分析中获益
+unfold s
+say "看 {s.15} 这一层挂在哪。"
+ask say "that 这一层的中文："
+学生: say 我们的生活现在产生的

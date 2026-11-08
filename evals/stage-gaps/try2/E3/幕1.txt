@@ -1,0 +1,25 @@
+# E3 第 1 幕：一句只有一把谓语座位。词形拨轮做不了（要词形）：换成一张词形卡（学生点一行），老师按点的那一行 rewrite；
+# rewrite 以后 key 作废，老师重新造这一句带上 key，学生自己给 Laughing 拉括号、点成分（回答「在句子里当什么」）
+sentence s = "laugh probably has little influence on physical fitness."
+paint s.1 s.3 g4
+label seat s.3 "谓语座位（1 把）" side=above tone=key
+label cnt s "想当谓语的动词 2 · 座位 1" side=below tone=note
+card f = "laughs" "laughed" "laughing" "to laugh"
+say "两个动词，一把座位。换一换 {s.1}，让这句话通顺。"
+ask tap f "laugh 换成哪一个？"
+学生: tap f.1
+rewrite s "laughs probably has little influence on physical fitness."
+pulse s.1 s.3
+say "{s.1} 和 {s.3} 都想坐那把座位。"
+ask tap f "再换一个试试" expect=f.3
+学生: tap f.3
+sentence s = "Laughing probably has little influence on physical fitness." key="[S Laughing] probably [V has] little influence on physical fitness."
+paint s.3 g4
+retext cnt "想当谓语的动词 1 · 座位 1"
+open s mark
+say "通了。{s.1} 现在还是谓语吗？在句子里当什么？"
+goal g1 "给 Laughing 拉一道括号，点它当什么" when="s span s.1 = S"
+@g1 label zh s "笑对身体健康的影响可能很小" side=below tone=soft
+@g1 say "对，变成像名词的东西，当主语。"
+学生: mark s.1 V
+学生: mark s.1 S
