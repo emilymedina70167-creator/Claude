@@ -52,6 +52,8 @@ export function regroup(scene, o, d) {
   return { id: o.id, groups: groups.length, gone, made };
 }
 
+const FLAGS = ['paint', 'glow', 'lift', 'dim', 'covered'];
+
 const one = (h, list, what) => {
   const ps = h.partsIn(list);
   if (!ps.length) throw new Error(`${what}要指着一格`);
@@ -64,6 +66,19 @@ export const array = {
   label: '一排格子',
   create: ['array'],
   remake: true, // 造它的那一行里能写 {式子}（value.js）：依赖一变，场景照新的数把这一行重新造一遍
+  // 跟着算的一排上做了这几样（换位置、改值）就不再跟着算（scene.js 的 unlive）：照那一行重新造会把它们冲掉
+  reshape: ['swap', 'move', 'write'],
+  /** 重新造（scene.js 的 remake）：老师做过的样子按格（key）带到新造的那一份；换过位置的不会走到这里 */
+  carry(old, o) {
+    for (const x of o.cells) {
+      const y = old.cells.find((c) => c.key === x.key);
+      if (!y) continue;
+      for (const f of FLAGS) x[f] = y[f];
+      x.row = y.row;
+    }
+    o.groupD = old.groupD;
+    o.ptrs = new Map([...old.ptrs].filter(([, s]) => s <= o.cells.length));
+  },
   drag: true,
   hint: '（一排格子：名字.k 是现在第 k 格；括号里的 #k 是「一开始在第 k 格的那一个」，写 名字#k 跟着它走）',
   make(scene, c, h, old) {

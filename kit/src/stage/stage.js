@@ -13,7 +13,7 @@ import { judgeAnswer, sameAnswer } from './answer.js';
 export { sameAnswer };
 import { VIEWS } from './types/views.js';
 import { PointerRouter } from './pointer.js';
-import { armGesture } from './gesturedom.js';
+import { armGesture, noteAt } from './gesturedom.js';
 import { undoPlan } from './gestures.js';
 import { reportError } from '../errlog.js';
 
@@ -366,7 +366,7 @@ export class Stage {
       for (const c of parseScript(row.src)) {
         // @g1 ask 是记着的（做到挑战才演）：照样记回去，不算已经问过的那一问
         if (c.cmd === 'ask' && !c.on) {
-          try { const s = this.scene.clone(); s.apply(c); asked = s.waiting?.prompt || asked; } catch { /* 这一行当时就没演 */ }
+          try { const s = this.scene.clone(); s.apply({ ...c, lenient: true }); asked = s.waiting?.prompt || asked; } catch { /* 这一行当时就没演 */ }
           continue;
         }
         if (c.cmd === 'say') asked = null;
@@ -462,6 +462,17 @@ export class Stage {
     }
     const err = this.scene.check(c);
     if (err) {
+      if (by === 'student' && !this.instant) {
+        // 学生的一下过了裁判、场景却演不了（页面造的行很少会这样）：不算进老师没演的行；记在这一下上（告诉老师「没演上」），
+        // 学生那边说一句中性的话（以前没声没息：拖的东西不动、也没人说为什么），记进出错记录
+        if (act) act.error = err;
+        told?.();
+        noteAt(this, '这一下没演上，再试一次', null, { bad: false });
+        reportError(new Error(err), { what: `舞台：学生的一下过了裁判却演不了：${c.src?.trim() || ''}` });
+        const id = judged?.obj || this.scene.ownTarget(c);
+        if (id) await this.snapBack(id);
+        return null;
+      }
       this.errors.push({ line: c.line, src: c.src?.trim(), error: err });
       told?.();
       return null;
@@ -707,7 +718,8 @@ export class Stage {
   // 拖完、拨完：照一行学生的指令演。能拖的不收起来再挂（以前收起来、等这一下演完才挂回去，紧接着再拖就拿不到——「掉」了）：
   // pointer.js 每次按下都按东西现在的位置找，dragSpec 也按 key 现取，用不着重挂。演完给回这一下（裁判的结论、拦没拦都在上面）
   openDone(e, act, src) {
-    const a = { ...act, open: e.action };
+    // line：这一下照哪一行演的（撤一步时课堂循环照它认出撤的是哪一下；裁判判的那几种另有 act.src）
+    const a = { ...act, open: e.action, ...(src ? { line: String(src).trim() } : {}) };
     const p = src ? this.studentDo(src, a) : Promise.resolve(this.onAct?.(a));
     return p.then(() => { this.syncOpens(); return a; });
   }
@@ -1308,8 +1320,10 @@ export class Stage {
           let act = { type: 'say', text };
           if (w.kind === 'value') {
             let j;
-            try { j = judgeAnswer(text, { type: w.type, answer: w.answer, wrongs: w.wrongs, free: w.free }, this.scene); } catch { j = { ok: false, misread: null, shown: String(w.answer ?? '') }; }
-            act = { type: 'value', text, answer: j.shown, right: j.ok, misread: j.misread };
+            // 判的时候出了错（写下时验过了，可 {P^-1} 现在算不出来：学生把 P 拨成了不可逆）：页面没判成，不当学生答错、不晃红框，记进出错记录
+            try { j = judgeAnswer(text, { type: w.type, answer: w.answer, wrongs: w.wrongs, free: w.free }, this.scene); } catch (err) { j = { ok: null, misread: null, shown: String(w.answer ?? ''), failed: `页面没判成：${err?.message || err}` }; }
+            if (j.failed) reportError(new Error(j.failed), { what: `舞台的 ask value 判答案：${w.prompt || ''}（answer=${w.answer}）` });
+            act = { type: 'value', text, answer: j.shown, right: j.ok, misread: j.misread, ...(j.failed ? { failed: j.failed } : {}) };
             if (j.ok === false) { form.classList.remove('is-bad'); void form.offsetWidth; form.classList.add('is-bad'); }
           }
           this.onAct?.(act);
@@ -1377,12 +1391,15 @@ export function actText(act) {
   if (!act) return '';
   const tries = (act.tries || []).filter((t) => t.type === 'dial').map((t) => `学生拨了 ${t.name}：${t.path.join(' → ')}（停在 ${t.path.at(-1)}）`);
   const main = (() => {
+    // 过了裁判、场景却演不了：照那一行说没演上，不说「舞台已经照做了」（events.js 的 verdictText 这时不再接结论）
+    if (act.error) return `学生 ${act.src || act.line || act.type}——没演上：${act.error}（舞台没动）`;
     if (act.type === 'tap') return `学生点了 ${act.ref}（${act.value}${act.slot != null && act.key !== act.slot ? `，#${act.key}` : ''}）${act.expected ? `——你预期的是 ${act.expected}，${act.right ? '点对了' : '点的不是它'}` : ''}`;
     if (act.type === 'drag' && act.a && act.b) return `学生把 ${act.a.value}（#${act.a.key}）拖到 ${act.b.value}（#${act.b.key}）那一格，两格换了位置（舞台已经照做了）`;
     if (act.type === 'drag') return act.text || '学生拖了一下';
     if (act.type === 'next') return `学生点了「${act.button}」`;
     if (act.type === 'say') return `学生说：「${act.text}」`;
     if (act.type === 'value') {
+      if (act.failed) return `学生填了「${act.text}」——${typeof act.failed === 'string' ? act.failed : '页面这一下没判成'}（不知道对不对，你看着判）`;
       if (act.right == null) return `学生填了「${act.text}」（这一问只收不判）`;
       return `学生填了「${act.text}」——正确答案是 ${act.answer}，${act.right ? '填对了' : `填错了${act.misread ? `（页面看出来：${act.misread}）` : ''}`}`;
     }

@@ -379,6 +379,7 @@ const nodesIn = (h, cmd, example) => {
   for (const p of ps) if (p.kind !== 'node') throw new Error(`${cmd} 对结点做（写的 ${p.label} 是边）`);
   return ps;
 };
+const FLAGS = ['paint', 'glow', 'lift', 'dim', 'covered'];
 const adjacent = (o, a, b) => liveEdges(o).some((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a));
 
 export const graph = {
@@ -386,6 +387,31 @@ export const graph = {
   label: '图',
   create: ['graph'],
   remake: true, // 造它的那一行里能写 {式子}（value.js）：依赖一变，场景照新的数把这一行重新造一遍
+  /**
+   * 重新造（scene.js 的 remake：拨了一条边的权）：老师这几轮做的按结点名、边带到新造的那一份——旁边的数（tag、relax 改的）、
+   * 访问号、拿掉的结点和边、标度、样子。以前全丢了，老师只听说「{w} 从 4 变成 6」
+   */
+  carry(old, o) {
+    for (const n of o.nodes) {
+      const m = old.nodes.find((x) => x.key === n.key);
+      if (!m) continue;
+      for (const f of FLAGS) n[f] = m[f];
+      n.tag = m.tag;
+      n.value = m.tag ?? n.key;
+      n.order = m.order;
+    }
+    for (const e of o.edges) {
+      const m = old.edges.find((x) => x.key === e.key);
+      if (!m) continue;
+      for (const f of FLAGS) e[f] = m[f];
+      e.gone = m.gone;
+    }
+    const has = (k) => o.nodes.some((n) => n.key === k);
+    o.taken = old.taken.filter(has);
+    o.visits = Math.max(0, ...o.nodes.map((n) => n.order || 0));
+    o.last = has(old.last) ? old.last : null;
+    o.deg = old.deg;
+  },
   hint: '（图：名字.A 是结点，名字.A~B 是边（paint、glow、dim 对边也行），名字.nodes 全部结点，名字.edges 全部边）',
   make(scene, c, h, old) {
     const eq = h.args.findIndex((a) => a.t === 'eq');

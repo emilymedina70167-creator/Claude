@@ -480,7 +480,7 @@ export const matrix = {
       const ops = parseOps(rowopText(h), o);
       const done = ops.map((op) => applyOp(o, op));
       o.stairs = false; // 数变了，阶梯线收起（要的话再画一次）
-      delete o.live; // 跟着算的做了行变换：就是一个普通的矩阵了（不然依赖一变又算回去，行变换白做）
+      scene.unlive(o, c.src?.trim() || ''); // 跟着算的做了行变换：就是一个普通的矩阵了（不然依赖一变又算回去，行变换白做），舞台现状里说一声
       const id = `op:${o.id}`;
       for (const k of [...scene.labels.keys()]) if (k === id || k.startsWith(`${id}:`)) scene.labels.delete(k);
       const labels = done.map((d, n) => {
@@ -682,7 +682,7 @@ open m rowop wrong=mark call=wrong    学生把一行左边的把手拖到另一
 open m edit input=keypad          学生点一格用数字键盘写（能写 -3/2；写了 range= 才限范围）= write m.2,3 -3/2（页面不判，告诉你的就是这一行）
 判断式（when=）：m stairs（阶梯形）、m rref（行最简形）、m rank=2（整张的秩，增广的是 r(A | b)）、m rankA=2（竖线左边的秩 r(A)）、m same B（和 B 行等价）
 做完了 = 成了阶梯形（@m.done 这时演）；往上化成行最简形页面不判对错，要的话写 goal … when="m rref"
-ask value "A² 是？" type=matrix answer={A^2} wrong="1 1 / 1 1=逐格平方了"     学生写一张矩阵（行用 / 隔开），页面照 A 现算答案`,
+ask value "A² 是？" type=matrix answer={A^2} wrong="1 1 / 1 1=逐格平方了"     学生写一张矩阵（行用「 / 」或 ; 隔开，1/3 是一格分数），页面照 A 现算答案`,
   // 测试用（tests/stage-doc.test.js）：说明里 stairs 那一行要一个已经是阶梯形的矩阵
   docSetup: 'matrix m = 1 2 3 / 0 1 4 / 0 0 1',
   example: `matrix A = 1 1 / -1 -1

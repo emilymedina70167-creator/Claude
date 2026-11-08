@@ -19,8 +19,11 @@ import { turnMessage } from './doc.js';
 import { eventOf, triggers, eventsText, tryCount, TRY_MAX, QUIET_MS } from './events.js';
 
 const enc = typeof TextEncoder === 'function' ? new TextEncoder() : null;
-/** 这一段学生做的事带着的「跟着变的」（stage.js 挂在每一下上的 act.derived）摊成一张，doc.js 的 turnMessage 再并成一行一格 */
-const derivedOf = (events) => events.flatMap((e) => e.act?.derived || []);
+/**
+ * 这一段学生做的事带着的「跟着变的」（stage.js 挂在每一下上的 act.derived）摊成一张，doc.js 的 turnMessage 再并成一行一格。
+ * 撤回了的那一下（undone）不算：舞台已经退回去了，再写它引起的变化就和 [舞台现在] 对不上
+ */
+const derivedOf = (events) => events.flatMap((e) => (e.undone ? [] : e.act?.derived || []));
 const bytes = (s) => (enc ? enc.encode(String(s)).length : String(s).length);
 export const RETRY = new Set(['再试一次', '再要一次']);
 
@@ -109,6 +112,8 @@ export function createLoop(host) {
       S.playing = new Promise((r) => { donePlay = r; });
       const ended0 = turn.end(text);
       const claude = host.addTurn({ role: 'claude', text, modelApplied: res.modelApplied || 'mock', cost });
+      // 老师写着的时候学生攒下的那一段，存成的学生轮在老师这一轮前面：挪到后面（发给老师的对话照先后，最后一条是学生的）
+      if (S.pending && S.pending.row.seq < claude.seq) movePending();
       S.lastClaude = claude.seq;
       await host.runMemo?.(text, claude.seq);
       host.thinking?.(false);
@@ -133,6 +138,18 @@ export function createLoop(host) {
     if (!S.pending) S.pending = { row: host.addTurn({ role: 'student', pending: true, text: '', events: [] }), events: [], base: [] };
     S.pending.events.push(e);
     savePending();
+  }
+  /**
+   * 这一段的学生轮挪到最新：原来那一条作废（刷新、拼对话都不再看它），换一条新的 seq 接着攒。
+   * 学生轮一有事就先存（刷新也在），所以老师那一轮还在写时就有了一条，seq 比老师那一轮小
+   */
+  function movePending() {
+    const p = S.pending;
+    clearTimeout(S.saveTimer);
+    Object.assign(p.row, { discarded: true, moved: true });
+    host.putTurn(p.row);
+    p.row = host.addTurn({ role: 'student', pending: true, text: '', events: p.events, log: p.row.log || [] });
+    savePending(true);
   }
   // 还没发出去的那一段也存着（刷新以后接着攒）；连着拨的时候攒一会儿再写
   function savePending(now = false) {
@@ -263,6 +280,11 @@ export function createLoop(host) {
     if (!a) return;
     host.evidence?.act?.(a, S.lastClaude);
     if (S.ended || host.readOnly) return;
+    // 撤一步：这一段里最后一件撤掉的那一行（src 对得上、还没撤过）记成撤回了，它引起的「跟着变的」不再写给老师
+    if (a.type === 'undo' && S.pending) {
+      const hit = S.pending.events.findLast((e) => e.kind === 'try' && !e.undone && !e.act?.blocked && e.act?.type !== 'undo' && (e.act?.src ?? e.act?.line) === a.src);
+      if (hit) hit.undone = true;
+    }
     if (a.open || a.type === 'dial') {
       const e = eventOf(a, { help: HELP, at: Date.now() });
       addEvent(e);

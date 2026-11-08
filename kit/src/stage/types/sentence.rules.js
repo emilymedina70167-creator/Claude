@@ -1,5 +1,5 @@
 // 句子（拆成分）的规则（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 1 节）：照老师造句子时给的正确拆法
-// （key="[S The man [RC who lives next door]] [V is] a doctor."，sentence.js 的 parseKey 读成 o.key）逐词比学生拉的括号、
+// （key="[S The man [RC who lives next door]] [V is] [P a doctor]."，sentence.js 的 parseKey 读成 o.key）逐词比学生拉的括号、
 // 认四种错法；下一步、写给老师的事实、挑战用的判断式、手势表。纯函数，有测试（tests/stage-sentence-rules.test.js）；在 types/index.js 里登记。
 //
 // 页面不自己分析英语语法：拉得对不对只看 key，说「像哪种错」也只说 key 印证得了的（「把非谓语当成了谓语」要那几个词落在 key 的非谓语里；
@@ -7,10 +7,15 @@
 // 一段 = 现在连着的几个词（从第几个到第几个）。拉对一段：舞台上有一道括号正好是 key 里的这一段、成分一样
 // （成分名照 sentence.js 的 roleName / sameRole 对：V 和「谓语」是一个，分词、to do 是非谓语，只写「从句」对得上任何一种从句）。
 // 拉错了的括号留着也不碍事（舞台上没有让学生收括号的手势），只看 key 里的每一段有没有拉对。
+// key 可以不全（老师只拉了要讲的几段）：学生拉了 key 没拉、也不和 key 冲突的一段，页面不判（right 是 null），不说「不对」。
 import { judgeSpans } from '../../entext.js';
 import { sentence, ordered, roleName, sameRole, phraseOf, restText, roleColor, ROLE_NAMES } from './sentence.js';
 
 export { roleName, ROLE_NAMES } from './sentence.js';
+
+// 学生写的成分对得上 key 里的这一种吗：一样，或者学生写的是泛称——「从句」对任何一种从句（sameRole），
+// 「定语」（Attr）对定语从句（定语从句也是定语；反过来 key 写定语、学生写定语从句不放宽：key 没说那一段是从句）
+const fits = (keyName, mine) => sameRole(keyName, mine) || (mine === '定语' && keyName === '定语从句');
 
 // 主干：最外层的主语、谓语、宾语、表语（和作这几种成分的从句）
 const MAIN = new Set(['主语', '谓语', '宾语', '间接宾语', '直接宾语', '表语', '补语', '宾补', '主语从句', '宾语从句', '表语从句']);
@@ -48,7 +53,7 @@ function markSpans(o, ks) {
     const from = Math.min(...slots), to = Math.max(...slots);
     if (to - from + 1 !== slots.length) continue;
     const name = roleName(m.label);
-    const k = ks.find((x) => x.ok && x.from === from && x.to === to && sameRole(x.name, name));
+    const k = ks.find((x) => x.ok && x.from === from && x.to === to && fits(x.name, name));
     out.push({ role: k ? k.name : name ?? m.label, from, to });
   }
   return out;
@@ -175,9 +180,25 @@ function misreadOf(o, ks, a, b, name, shown) {
   if (same) return { rel: same, misread: `成分标错了：这一段是${same.name}，不是${shown}` };
   // 断早、断晚：同一成分（写泛称「从句」的对得上任何一种从句）的一段，沾边、两头各差不过两个词；成分也不一样的不说
   const dist = (k) => Math.abs(a - k.from) + Math.abs(b - k.to);
-  const k = ks.filter((x) => x.ok && sameRole(x.name, name) && overlaps(x) && Math.abs(a - x.from) <= 2 && Math.abs(b - x.to) <= 2).sort((p, q) => dist(p) - dist(q))[0];
+  const k = ks.filter((x) => x.ok && fits(x.name, name) && overlaps(x) && Math.abs(a - x.from) <= 2 && Math.abs(b - x.to) <= 2).sort((p, q) => dist(p) - dist(q))[0];
   if (k) return { rel: k, misread: edgeText(o, k, a, b) };
   return { rel: null, misread: null };
+}
+
+/**
+ * 学生拉的这一段和 key 冲突在哪（不冲突是 null）：跨过了 key 里一段的边界（一头在里面、一头在外面）；
+ * 和 key 里一段是同一段词、成分不一样；和 key 里同一种成分的一段沾边、范围不一样。
+ * key 只说了它拉的那几段：不冲突的段（key 没拉的 a doctor、从句里 key 没拉的谓语）页面不知道对不对，不判（硬说不对就是假话）
+ */
+function conflictOf(o, ks, a, b, name) {
+  for (const k of ks) {
+    if (!k.ok) continue;
+    const text = textOf(o, k.from, k.to);
+    if ((a < k.from && b >= k.from && b < k.to) || (a > k.from && a <= k.to && b > k.to)) return `和 key 里的${k.name}「${text}」交叉`;
+    if (a === k.from && b === k.to) return `key 里这一段是${k.name}`;
+    if (fits(k.name, name) && k.from <= b && a <= k.to) return `key 里${k.name}是「${text}」`;
+  }
+  return null;
 }
 
 // —— 判一下 ——
@@ -199,8 +220,10 @@ function check(o, act) {
   if (!ks) return { legal: true, right: null }; // 没写正确拆法（或者作废了）：不判
   const why = `${at(o, a, b)} 标成${label}（${textOf(o, a, b)}）`;
   const name = roleName(label);
-  if (ks.some((k) => k.ok && k.from === a && k.to === b && sameRole(k.name, name))) return { legal: true, right: true, misread: null, why, next: null };
+  if (ks.some((k) => k.ok && k.from === a && k.to === b && fits(k.name, name))) return { legal: true, right: true, misread: null, why, next: null };
   const { misread, rel } = misreadOf(o, ks, a, b, name, name ?? label);
+  // 认得出的四种错法都落在和 key 重叠的段上；别的段和 key 不冲突就不判（key 没拉的，页面不知道对不对）
+  if (!misread && !conflictOf(o, ks, a, b, name)) return { legal: true, right: null, misread: null, why, next: null };
   return { legal: true, right: false, misread, why, next: nowRight(o, ks, rel) };
 }
 
@@ -213,7 +236,10 @@ function facts(before, after, act) {
   if (!kb || !ka) return [];
   const v = check(before, act);
   if (!v.legal) return [];
-  const out = [v.right ? `这一段对了：${v.why}` : `这一段不对：${v.why}（${v.misread || 'key 里没有这一段'}）`];
+  const name = roleName(String(act.role ?? '').trim());
+  const out = [v.right ? `这一段对了：${v.why}`
+    : v.right == null ? `${v.why}：页面不判（key 里没有这一段）`
+      : `这一段不对：${v.why}（${v.misread || conflictOf(before, kb, Math.min(act.from, act.to ?? act.from), Math.max(act.from, act.to ?? act.from), name) || 'key 里没有这一段'}）`];
   const left = okFirst(leftOf(after, ka));
   out.push(left.length ? `key 里还差 ${left.length} 段没拉对：${left.map((k) => spanLine(after, k)).join('、')}` : '正确拆法的每一段都拉对了');
   return out;
@@ -305,18 +331,21 @@ const gestures = {
 
 // —— 挑战用的判断式（when="s parsed, s main, s span s.2-5 = V"）——
 
+// 没写 key、key 作废了：这句话本身永远判不了（不是「还没做到」），抛错——写下挑战时当场报，舞台现状里写「判不了」和原因
+const cannot = (o, what) => new Error(o?.key?.void ? `${o.id} 的 key 跟着 rewrite 作废了，页面判不了 ${what}（要判就重新造这句、带上新的 key=）` : `${o.id} 没写 key=（正确拆法），页面判不了 ${what}`);
 const predicates = {
-  // key 里的每一段都拉对了（没写 key、key 作废了是 null：判不了）
+  // key 里的每一段都拉对了
   parsed: (o) => {
     const ks = keySpans(o);
-    return ks ? leftOf(o, ks).length === 0 : null;
+    if (!ks) throw cannot(o, 'parsed');
+    return leftOf(o, ks).length === 0;
   },
   // 主干（最外层的主语、谓语、宾语 / 表语）拉对了
   main: (o) => {
     const ks = keySpans(o);
-    if (!ks) return null;
+    if (!ks) throw cannot(o, 'main');
     const trunk = ks.filter((k) => k.depth === 0 && MAIN.has(k.name));
-    if (!trunk.length) return null;
+    if (!trunk.length) throw new Error(`${o.id} 的 key 里没有主干（最外层的主语、谓语、宾语、表语），页面判不了 main`);
     const left = new Set(leftOf(o, ks));
     return trunk.every((k) => !left.has(k));
   },
@@ -330,7 +359,7 @@ const predicates = {
     const keys = new Set(sentence.pick(o, ref ? ref[2] : '.', ref ? ref[3] : m[1], m[1]).map((w) => w.key));
     const role = roleName(m[2]);
     if (!role) throw new Error(`span 的成分「${m[2]}」认不出（写 V、谓语、S、主语、RC、定语从句……）`);
-    return (o.marks || []).some((mk) => mk.keys.length === keys.size && mk.keys.every((k) => keys.has(k)) && sameRole(roleName(mk.label), role));
+    return (o.marks || []).some((mk) => mk.keys.length === keys.size && mk.keys.every((k) => keys.has(k)) && fits(role, roleName(mk.label)));
   },
 };
 

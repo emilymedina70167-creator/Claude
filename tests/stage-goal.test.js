@@ -146,3 +146,47 @@ test('预写的挑战，条件每一句都在触发它的挑战里：g1 一做�
   assert.equal(sc.reactions.get('g1').length, 1);
   assert.doesNotThrow(() => sc.apply({ ...parseScript('@g1 goal g4 "再来" when="C = O"')[0], lenient: true }));
 });
+
+// —— 整条分支的最终审查（I4、M2）——
+const one = (src) => parseScript(src)[0];
+
+test('I4 永远判不了的挑战写下时就报：句子没写 key、key 作废了；判断式的参数写错（预写里也查）；乘积还空着这种之后会有的照收', () => {
+  const s = new Scene();
+  run(s, 'sentence s = "The man is a doctor."\nopen s mark');
+  assert.match(s.check(one('goal g1 "拆完" when="s parsed"')) || '', /s 没写 key=.*页面判不了/);
+  assert.match(s.check(one('goal g2 "主干" when="s main"')) || '', /s 没写 key=/);
+  assert.equal(s.check(one('goal g3 "谓语" when="s span s.3 = V"')), null, '不靠 key 的照收');
+  const k = new Scene();
+  run(k, 'sentence s = "The man is a doctor." key="[S The man] [V is] [P a doctor]."\nrewrite s "The men are doctors."');
+  assert.match(k.check(one('goal g1 "拆完" when="s parsed"')) || '', /作废/);
+  // 预写里的挑战也查（以前预写的那一份不跑判断式，写错了也照收）
+  const t = new Scene();
+  run(t, 'tree t = 50 30 70\ngoal g1 "长高" when="t height=4"');
+  assert.match(t.check(one('@g1 goal g2 "再长" when="t height=abc"')) || '', /height 要写树有几层/);
+  // 乘积还空着：判不了（null），之后算出来就判得了，照收
+  const m = new Scene();
+  run(m, 'matrix A = 1 2 / 3 4\nmatrix B = 1 0 / 0 1\nproduct C = A B');
+  assert.equal(m.check(one('goal g1 "C 是阶梯形" when="C stairs"')), null);
+  // 重放旧课：当时收下的照样收下
+  assert.doesNotThrow(() => s.apply({ ...one('goal g1 "拆完" when="s parsed"'), lenient: true }));
+});
+
+test('I4 舞台现状：判不了的那一句写「判不了」，不写 ✗；后来作废了的写原因', () => {
+  const m = new Scene();
+  run(m, 'matrix A = 1 2 / 3 4\nmatrix B = 1 0 / 0 1\nproduct C = A B\ngoal g1 "C 是阶梯形" when="C stairs"');
+  assert.match(m.stateText(), /还没做到（C stairs 判不了）/);
+  const k = new Scene();
+  run(k, 'sentence s = "The man is a doctor." key="[S The man] [V is] [P a doctor]."\nopen s mark\ngoal g1 "拆完" when="s parsed"\nrewrite s "The men are doctors."');
+  assert.match(k.stateText(), /还没做到（s parsed 判不了：s 的 key 跟着 rewrite 作废了/);
+});
+
+test("M2 比一格：ASCII 的 ' 和 ′ 一样是撇（49' 不是 49）", () => {
+  const sc = new Scene();
+  run(sc, "array a = 49 38 49' 13");
+  run(sc, `goal g2 "y" when="a.4 = 49'"`);
+  run(sc, 'swap a.1 a.4');
+  assert.equal(sc.goals.get('g2').met, false, '换过去的是不带撇的 49');
+  run(sc, 'swap a.3 a.4');
+  assert.equal(sc.goals.get('g2').met, true);
+  assert.equal(evalGoal(sc, parseGoal("a.4 = 49′")), true, '两种撇写法一样');
+});

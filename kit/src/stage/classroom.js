@@ -143,7 +143,8 @@ export async function renderStageClass(root, meta = {}, desk) {
         const w = stage.scene.waiting;
         const q = w?.prompt || stage.scene.say || '';
         if (a.type === 'tap' && a.expected) sink.record({ type: 'stage', block: comp, q, value: a.value, text: a.ref, ok: !!a.right, turn: at });
-        else if (a.type === 'value') sink.record({ type: 'stage', block: comp, q, value: a.text, text: a.text, ok: !!a.right, turn: at });
+        // 只收不判、页面没判成的（right 是 null）不记对错：记成 false 会被当成答错算进掌握
+        else if (a.type === 'value') sink.record({ type: 'stage', block: comp, q, value: a.text, text: a.text, ok: typeof a.right === 'boolean' ? a.right : null, turn: at });
         else if (a.type === 'say') sink.put('evidence', sayEvidence(a.text, { session: sid, block: desk.block, turn: at }));
         else sink.event({ type: `stage-${a.type}`, block: comp, detail: { ...a, tries: undefined }, turn: at });
       },

@@ -7,8 +7,9 @@
 // 两边能写：舞台上的东西（C、a）、一个部件（B.1,2、a.3、a#8）、数（3、-1/2）、拨的数的名字、O（零矩阵）、I（单位矩阵）。
 // 比较：=（==）、!=（≠）、<、<=（≤）、>、>=（≥）；一排东西还能写「a sorted」「a sorted desc」。
 // 每种东西自己的判断式：「名字 判断式名 [参数…]」，比如 t avl、M rank=2、s parsed（rules.js 的 predicates，参数原样交给它）。
-// = / != 比一格时 49′ 和 49 是两个东西（′ 是同一个数的另一个记号，稳定性要看它们的先后）；比大小、sorted 照旧按数。
+// = / != 比一格时 49′ 和 49 是两个东西（′ 是同一个数的另一个记号，稳定性要看它们的先后；ASCII 的 ' 也当撇）；比大小、sorted 照旧按数。
 // 还空着的格（乘积没算出来的）不算成立：C 还没算完，C = O 和 C != O 都不成立。
+// 判断式返回 null 是「现在判不了」（乘积还空着，之后会有）；这样东西本身永远判不了（句子没写 key）判断式抛错，写下挑战时当场报。
 
 import { predicateOf, rulesOf } from './rules.js';
 
@@ -51,9 +52,12 @@ const sameNum = (a, b) => Math.abs(a - b) < 1e-9;
  * 一边是什么：{ k: 'num', v } / { k: 'zero' } / { k: 'id' } / { k: 'parts', parts } / { k: 'obj', o, m }（m 是那种东西的 measure）。
  * 舞台上没有、读不懂的抛错
  */
+// 带撇的数（49′、49'）：和不带撇的不是同一个；比一格时两种撇写法一样
+const PRIMED = /^[-+]?\d+(\.\d+)?'+$/;
+const primeOf = (x) => String(x).trim().replace(/'/g, '′');
 export function operand(scene, w) {
   const word = String(w).trim();
-  if (word.includes('′')) return { k: 'num', v: word }; // 49′ 不是 49
+  if (word.includes('′') || PRIMED.test(word)) return { k: 'num', v: primeOf(word) }; // 49′ 不是 49
   if (numOf(word) != null) return { k: 'num', v: numOf(word) };
   if (scene.objects.has(word)) {
     const o = scene.objects.get(word);
@@ -91,7 +95,7 @@ function sameMeasure(a, b) {
 function cmpScalar(a, b, op) {
   if (a === '' || b === '' || a == null || b == null) return false;
   // 比一格是不是同一个：带 ′ 的和不带的不是同一个（49′ ≠ 49）；比大小照旧按数
-  if ((op === '=' || op === '!=') && /′/.test(`${a}${b}`)) return (String(a).trim() === String(b).trim()) === (op === '=');
+  if ((op === '=' || op === '!=') && (/′/.test(`${a}${b}`) || PRIMED.test(String(a).trim()) || PRIMED.test(String(b).trim()))) return (primeOf(a) === primeOf(b)) === (op === '=');
   const p = numOf(a), q = numOf(b);
   if (p == null || q == null) {
     const s = String(a).trim(), t = String(b).trim();
@@ -110,9 +114,18 @@ function predMissing(scene, cl) {
   const names = Object.keys(rulesOf(o)?.predicates || {});
   return names.length ? `${scene.type(o).label}「${cl.l}」没有判断式「${cl.pred}」，能写：${names.join('、')}` : `${scene.type(o).label}「${cl.l}」还没有判断式可写（能比的有 =、!=、sorted）`;
 }
-/** 写下挑战时就查：判断式名对不对（不看现在成不成立） */
-export function checkPreds(scene, cond) {
-  for (const cl of cond) if (cl.pred && !predicateOf(scene, cl.l, cl.pred)) throw new Error(predMissing(scene, cl));
+/**
+ * 写下挑战时就查：判断式名对不对；run 时再把每个判断式跑一遍（不看现在成不成立）——参数写错（t height=abc）、
+ * 这样东西本身判不了（句子没写 key、key 作废了）判断式自己抛错，当场报；返回 null（乘积还空着）是之后判得了，照收。
+ * 重放旧课不跑（run 是假的）：当时收下的照样收下
+ */
+export function checkPreds(scene, cond, { run = false } = {}) {
+  for (const cl of cond) {
+    if (!cl.pred) continue;
+    const fn = predicateOf(scene, cl.l, cl.pred);
+    if (!fn) throw new Error(predMissing(scene, cl));
+    if (run) fn(cl.args);
+  }
 }
 /** 一句条件规范化成一个键（去掉空格），看两个挑战的条件有没有一样的句子 */
 export const clauseKey = (cl) => (cl.sorted ? `${cl.l}sorted${cl.sorted}` : cl.pred ? `${cl.l}:${cl.pred}:${cl.args.join(',')}` : `${cl.l}${cl.op}${cl.r}`).replace(/\s+/g, '');
@@ -159,13 +172,22 @@ export function evalGoal(scene, cond) {
   return cond.every((cl) => evalClause(scene, cl));
 }
 
-/** 写给老师看的一句：条件现在哪一句成立、哪一句还没有 */
+/** 一句条件现在怎么样：true / false；判断式说现在判不了（乘积还空着）是 null */
+function clauseState(scene, cl) {
+  if (!cl.pred) return evalClause(scene, cl);
+  const fn = predicateOf(scene, cl.l, cl.pred);
+  if (!fn) throw new Error(predMissing(scene, cl));
+  const r = fn(cl.args);
+  return r == null ? null : r === true;
+}
+
+/** 写给老师看的一句：条件现在哪一句成立、哪一句还没有、哪一句页面判不了（不写成 ✗：那是假话，学生也许已经做对了） */
 export function goalStatus(scene, g) {
   if (g.met) return '做到了';
   const bits = g.cond.map((cl) => {
-    let ok = false;
-    try { ok = evalClause(scene, cl); } catch { ok = false; }
-    return `${cl.sorted ? `${cl.l} sorted${cl.sorted === 'desc' ? ' desc' : ''}` : cl.pred ? `${cl.l} ${cl.pred}${cl.args.length ? ` ${cl.args.join(' ')}` : ''}` : `${cl.l} ${cl.op} ${cl.r}`}${ok ? ' ✓' : ' ✗'}`;
+    let mark;
+    try { const ok = clauseState(scene, cl); mark = ok == null ? ' 判不了' : ok ? ' ✓' : ' ✗'; } catch (err) { mark = ` 判不了：${err?.message || err}`; }
+    return `${cl.sorted ? `${cl.l} sorted${cl.sorted === 'desc' ? ' desc' : ''}` : cl.pred ? `${cl.l} ${cl.pred}${cl.args.length ? ` ${cl.args.join(' ')}` : ''}` : `${cl.l} ${cl.op} ${cl.r}`}${mark}`;
   });
   return `还没做到（${bits.join('，')}）`;
 }

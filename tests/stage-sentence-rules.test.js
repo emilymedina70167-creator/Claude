@@ -112,6 +112,7 @@ test('E2 的两句：照 next 拉完就 parsed；每一段判得和 entext 的 j
     const s = make(`sentence s = "${text}" key="${key}"`);
     const o = S(s);
     // 和 judgeSpans 对拍：学生拉任意一段（一到五个词）、标成 key 里出现过的任一成分，check 判对 ⟺ judgeSpans 在记号下标里判对
+    // （判不对的里面，和 key 不冲突的段是 null：页面不判，见 I2 那几条）
     const ans = parseBrackets(key);
     const tokOf = ans.tokens.filter((t) => t.word).map((t) => t.i); // 第几个词 → 记号下标
     const roles = [...new Set(ans.spans.map((x) => x.role))];
@@ -119,7 +120,7 @@ test('E2 的两句：照 next 拉完就 parsed；每一段判得和 entext 的 j
       for (let b = a; b <= Math.min(o.words.length, a + 4); b++) {
         for (const role of roles) {
           const mine = judgeSpans([{ role, from: tokOf[a - 1], to: tokOf[b - 1] }], ans.spans).right.length === 1;
-          assert.equal(R.check(o, mk(a, b, role), s).right, mine, `${text.slice(0, 20)}… s.${a}-${b} ${role}`);
+          assert.equal(R.check(o, mk(a, b, role), s).right === true, mine, `${text.slice(0, 20)}… s.${a}-${b} ${role}`);
         }
       }
     }
@@ -195,10 +196,15 @@ test('key 没说是非谓语的不说「把非谓语当成了谓语」：从句�
   const none = (src, key, a, b, role = 'V') => {
     const s = make(`sentence s = "${src}" key="${key}"`);
     const v = R.check(S(s), mk(a, b, role), s);
-    assert.equal(v.right, false);
+    assert.notEqual(v.right, true);
     assert.doesNotMatch(v.misread ?? '', /非谓语/, `${src} s.${a}-${b}：${v.misread}`);
     return v.misread;
   };
+  // key 没拉的（从句里的谓语、主语里的一个词）：和 key 不冲突，页面不判
+  const free = (src, key, a, b, role = 'V') => { const s = make(`sentence s = "${src}" key="${key}"`); return R.check(S(s), mk(a, b, role), s).right; };
+  assert.equal(free('The man who lived next door is a doctor.', '[S The man [RC who lived next door]] [V is] a doctor.', 4, 4), null);
+  assert.equal(free('The building collapsed.', '[S The building] [V collapsed].', 2, 2), null);
+  assert.equal(free('He went to the station.', '[S He] [V went] to the station.', 2, 5), false, '和 key 里的谓语沾边、范围不一样：照旧判错');
   // 从句里的过去式谓语（key 没拉从句里的 V）
   assert.equal(none('The man who lived next door is a doctor.', '[S The man [RC who lived next door]] [V is] a doctor.', 4, 4), null);
   assert.equal(none('The report that he made last year is wrong.', '[S The report [RC that he made last year]] [V is] wrong.', 5, 5, '谓语'), null);
@@ -279,8 +285,9 @@ test('没写 key 不判；拉不了的一段是这个世界的物理（legal: fa
   const v = R.check(o, mk(7, 7, 'V'), s);
   assert.equal(v.legal, true);
   assert.equal(v.right, null);
-  assert.equal(R.predicates.parsed(o), null, '没有 key 判不了');
-  assert.equal(R.predicates.main(o), null);
+  // 没有 key 永远判不了：判断式抛错（写下挑战时当场报，见 stage-goal 的 I4）
+  assert.throws(() => R.predicates.parsed(o), /s 没写 key=（正确拆法），页面判不了 parsed/);
+  assert.throws(() => R.predicates.main(o), /页面判不了 main/);
   assert.equal(done(s, 's'), false, '没写 key 的句子不算做完');
   assert.deepEqual(R.next(o).acts, []);
   const k = make(MAN);
@@ -362,8 +369,8 @@ test('key 的状态：收下了 / rewrite 以后作废 / move 拆散了一段，
   run(s, 'rewrite s "The man living next door is a doctor."');
   assert.equal(S(s).key.void, 'rewrite');
   assert.equal(R.check(S(s), mk(6, 6, 'V'), s).right, null);
-  assert.equal(R.predicates.parsed(S(s)), null);
-  assert.equal(R.predicates.main(S(s)), null);
+  assert.throws(() => R.predicates.parsed(S(s)), /key 跟着 rewrite 作废了，页面判不了 parsed/);
+  assert.throws(() => R.predicates.main(S(s)), /作废/);
   assert.match(R.next(S(s)).why, /key 跟着 rewrite 作废了，要判就重写 key/);
   assert.deepEqual(R.next(S(s)).acts, []);
   assert.equal(done(s, 's'), false);
@@ -398,7 +405,7 @@ test('写给老师的事实：拉了一段以后这一段对不对、key 里还�
     'key 里还差 2 段没拉对：s.1-6 主语（The man who lives next door）、s.7 谓语（is）',
   ]);
   b = step(s, 'mark s.8-9 宾语');
-  assert.equal(R.facts(b, S(s), act('mark s.8-9 宾语'))[0], '这一段不对：s.8-9 标成宾语（a doctor）（key 里没有这一段）');
+  assert.equal(R.facts(b, S(s), act('mark s.8-9 宾语'))[0], 's.8-9 标成宾语（a doctor）：页面不判（key 里没有这一段）');
   step(s, 'mark s.1-6 主语');
   b = step(s, 'mark s.7 谓语');
   assert.deepEqual(R.facts(b, S(s), act('mark s.7 谓语')), ['这一段对了：s.7 标成谓语（is）', '正确拆法的每一段都拉对了']);
@@ -411,4 +418,47 @@ test('写给老师的事实：拉了一段以后这一段对不对、key 里还�
   const k = make('sentence s = "He runs."\nmark s.2 V');
   assert.deepEqual(R.facts(S(k), S(k), mk(2, 2, 'V')), []);
   assert.deepEqual(R.facts(S(s), S(s), { type: 'fold', from: 3, to: 6 }), []);
+});
+
+// —— 整条分支的最终审查（I2）：key 不全的时候，页面只判 key 说得上的段 ——
+const E2Q = 'sentence s = "The great question is who should benefit from the analysis of all the data that our lives now generate." key="The great question [V is] [Cl who [V should benefit] from the analysis of all the data [Cl that our lives now [V generate]]]."';
+
+test('I2 key 没拉的一段：不跨 key 里一段的边界、不和 key 抢同一段词、不和 key 里同一种成分沾边，页面不判（right 是 null）', () => {
+  const s = make(MAN); // key 没拉 a doctor
+  const v = R.check(S(s), mk(8, 9, '表语'), s);
+  assert.equal(v.right, null);
+  assert.equal(v.misread, null);
+  // 照说明的例子写了 wrong=mark call=wrong：不圈、不叫
+  const sc = make(`${MAN}\nopen s mark wrong=mark call=wrong`);
+  const fx = sc.apply(parseScript('mark s.8-9 表语')[0], { by: 'student', open: 'mark' });
+  assert.equal(fx.judged.verdict.right, null);
+  assert.equal(fx.judged.mark, false);
+  assert.equal(fx.judged.call, null);
+  assert.match(fx.judged.after[0], /s\.8-9 标成表语（a doctor）：页面不判（key 里没有这一段）/);
+  // E2：key 没拉主语，学生拉了主语
+  const e = make(E2Q);
+  assert.equal(R.check(S(e), mk(1, 3, '主语'), e).right, null);
+});
+
+test('I2 和 key 冲突的照旧判错：跨过 key 里一段的边界、和 key 里同一种成分沾边（范围不一样）', () => {
+  const s = make(MAN);
+  const x = R.check(S(s), mk(6, 7, '主语'), s); // door is：跨过了主语的边界
+  assert.equal(x.right, false);
+  const before = structuredClone(S(s));
+  s.apply(parseScript('mark s.6-7 主语')[0]);
+  assert.match(R.facts(before, S(s), mk(6, 7, '主语'))[0], /^这一段不对：s\.6-7 标成主语（door is）（和 key 里的主语「The man who lives next door」交叉）/);
+  assert.equal(R.check(S(s), mk(1, 2, '主语'), s).right, false, 'key 里主语是 s.1-6：同一种成分、范围不一样');
+  const e = make(E2Q);
+  assert.equal(R.check(S(e), mk(3, 5, '主语'), e).right, false, '跨过了 who 那个从句的边界');
+  assert.equal(R.check(S(make('sentence s = "He went to the station." key="[S He] [V went] to the station."')), mk(2, 5, 'V'), null).right, false, '谓语多圈了好几个词');
+});
+
+test('I2 定语 / Attr 对得上 key 里的定语从句（和泛称「从句」一样放宽）；key 写的是定语、学生写定语从句不放宽', () => {
+  const s = make(MAN);
+  for (const r of ['定语', 'Attr']) assert.equal(R.check(S(s), mk(3, 6, r), s).right, true, r);
+  run(s, 'mark s.1-6 主语\nmark s.7 谓语\nmark s.3-6 定语');
+  assert.equal(R.predicates.parsed(S(s)), true);
+  assert.equal(predicateOf(s, 's', 'span')(['s.3-6', '=', '定语从句']), true);
+  const a = make('sentence s = "The man living next door is a doctor." key="[S The man [Attr living next door]] [V is] [P a doctor]."');
+  assert.equal(R.check(S(a), mk(3, 5, '定语从句'), a).right, false);
 });

@@ -353,6 +353,7 @@ export class Scene {
     trial.trial = true; // 这是在今天的舞台上试：真演的时候学生已经动过了（「现在就成立」这种检查不算数，换成比条件的字）
     for (const x of parseScript([...list, c.body].join('\n'))) {
       if (x.on) throw new Error('@ 的行里不能再写 @');
+      if (c.lenient) x.lenient = true; // 重放旧课：预写的行当时收下了，照样收下（不加新的检查）
       const fx = trial.applyOne(x);
       // 预写的挑战，条件每一句都在 g1 的条件里：g1 一做到它就成立，学生不用再动手（今天的舞台上学生还没动，查不出来，所以比条件的字）
       if (fx?.goal && !c.lenient) {
@@ -391,6 +392,7 @@ export class Scene {
     trial.trial = true;
     for (const x of parseScript([...list, c.body].join('\n'))) {
       if (x.on) throw new Error('@ 的行里不能再写 @');
+      if (c.lenient) x.lenient = true;
       trial.applyOne(x);
     }
     this.reactions.set(key, [...list, c.body]);
@@ -427,7 +429,15 @@ export class Scene {
     }
     // 各种东西自己的指令：按第一个部件是哪种东西找（swap 给格子、rowop 给矩阵……）
     const own = this.ownerOf(c, h);
-    if (own) return own(this, c, h);
+    if (own) {
+      const fx = own(this, c, h);
+      // 跟着算的一排格子、树上换了位置、长了 / 删了结点、改了值（那种东西的 reshape）：不再跟着算，不然依赖一变照造它的那一行
+      // 重新造，老师这一步白做、还没人知道（像矩阵做了行变换一样）
+      const id = this.ownTarget(c);
+      const o = id && this.objects.get(id);
+      if (o?.live && typeOf(o).reshape?.includes(cmd)) this.unlive(o, lineOf(c));
+      return fx;
+    }
     switch (cmd) {
       case 'say': {
         const text = str ?? '';
@@ -559,9 +569,10 @@ export class Scene {
           if (ps.length < 1) throw new Error('ask drag 要写能拖的东西');
           for (const o of new Set(ps.map((p) => p.obj))) if (!typeOf(this.objects.get(o)).drag) throw new Error(`${typeOf(this.objects.get(o)).label}不能拖`);
         }
-        // ask value：answer= 可以不写（只收不判）、可以是 {式子}；type= wrong= free= 见 answer.js
+        // ask value：answer= 可以不写（只收不判）、可以是 {式子}；type= wrong= free= 见 answer.js。
+        // 写下时 {式子} 现算一遍、answer 和每条错答照 type 造好判法，对不上当场报；重放旧课不加新的检查（当时收下的照样收下）
         const spec = kind === 'value' ? { type: opts.type, answer: opts.answer, wrongs: opts.wrong, free: opts.free } : null;
-        if (spec) checkSpec(spec, this);
+        if (spec) checkSpec(spec, this, { strict: !c.lenient });
         if (str != null) { this.say = str; this.words = parseRich(str).filter((p) => p.k === 'word').map((p) => p.v); }
         this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: opts.expect || null, answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null };
         if (opts.expect) this.parts(opts.expect);
@@ -639,7 +650,7 @@ export class Scene {
         if (!opts.when) throw new Error(`goal ${id} 要写 when="做到什么算做到"（比如 when="C = O, D != O"），页面照它判`);
         for (const p of parseRich(str)) if (p.k === 'ref') this.parts(p.v);
         const cond = parseGoal(opts.when);
-        checkPreds(this, cond);
+        checkPreds(this, cond, { run: !c.lenient });
         // 老师当场写的挑战一写下就成立，多半是写错了，当场告诉老师；预写的行、重放的时候学生可能已经做到了：照收，下面马上算做到
         if (!this.trial && !c.lenient && evalGoal(this, cond)) throw new Error(`「${opts.when}」现在就已经成立了：挑战要学生动手以后才做得到`);
         this.goals.set(id, { id, text: str, when: opts.when, cond, met: false });
@@ -779,7 +790,20 @@ export class Scene {
     delete n.rec.error;
     return r.changed.length ? { id: o.id, changed: r.changed, parts: r.parts || [] } : null;
   }
-  /** 一排格子、图这类：造它的那一行照新的数重新造一遍（名字、位置不变；连线只留部件还在的） */
+  /**
+   * 跟着算的东西被老师动了结构（换位置、转、行变换）：从此是一样普通的东西，记一笔（舞台现状里告诉老师它不再跟着哪几个式子变了）
+   */
+  unlive(o, src) {
+    const L = o.live;
+    if (!L) return;
+    const exprs = L.exprs || (L.whole ? [L.whole] : (L.cells || []).map((k) => k.expr));
+    o.unlived = { exprs: [...new Set(exprs)], src };
+    delete o.live;
+  }
+  /**
+   * 一排格子、图这类：造它的那一行照新的数重新造一遍（名字、位置不变；连线只留部件还在的）。
+   * 老师后来在它上面做的（染色、旁边的数、访问号、拿掉的结点……）交给那种东西的 carry 按部件带到新造的那一份
+   */
   remake(o) {
     const L = o.live;
     const f = fillLine(L.line, this);
@@ -790,6 +814,7 @@ export class Scene {
     const t = typeOf(o);
     const o2 = t.make(this, c, this.helpers(c), o);
     Object.assign(o2, { type: o.type, id: o.id, live: { line: L.line, exprs: f.exprs, vals: f.vals, deps: f.deps } });
+    t.carry?.(o, o2);
     this.objects.set(o.id, o2);
     for (const [k, l] of this.links) if ((l.a.obj === o.id && !this.partOf(o.id, l.a.key)) || (l.b.obj === o.id && !this.partOf(o.id, l.b.key))) this.links.delete(k);
     const changed = f.vals.map((v, i) => (v === L.vals[i] ? null : { ref: o.id, expr: f.exprs[i], from: L.vals[i], to: v })).filter(Boolean);
@@ -874,6 +899,7 @@ export class Scene {
     // 错误前面的「{式子}」和前面写的重了，去掉
     const why = (e) => e.replace(/^「\{[^{}]*\}」(算不出来：|里的)?/, '');
     if (lives.length) lines.push(`跟着算的（依赖一变，页面当场重算；学生动不了）：${lives.map((n) => `${n.text}${n.rec.error ? `（现在算不出来：${why(n.rec.error)}；停在上一次算出来的数）` : ''}`).join('；')}`);
+    for (const o of this.objects.values()) if (o.unlived) lines.push(`${o.id} 已经不跟着 ${o.unlived.exprs.map((e) => `{${e}}`).join('、')} 变了：你动过它的结构（${o.unlived.src}），现在照现在的样子留着`);
     const ls = [...this.links.values()];
     if (ls.length) lines.push(`连线：${ls.map((l) => `${this.refOfKey(l.a)}–${this.refOfKey(l.b)}${l.color ? ` ${COLOR_NAMES[l.color]}` : ''}`).join('，')}`);
     const labels = [...this.labels.values()].filter((l) => !l.dial);

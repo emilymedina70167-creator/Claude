@@ -82,6 +82,8 @@ SVG 节点也可以当部件节点：`flagPart` 照样加 class，`pulse` 和翻
 | 字段 | 是什么 |
 |---|---|
 | `remake: true`（数据模块） | 最省事的一种（一排格子、树、图）：造它的那一行里的 `{…}` 先由场景算成数（`fillLine`），再交给 `make`；依赖变了，场景照新的数把这一行重新造一遍（名字、位置不变，连线只留部件还在的）。`o.live = { line, exprs, vals, deps }` 场景写，不用管 |
+| `carry(old, o)`（配 `remake`） | 重新造出来的那一份 `o` 上补回老师后来做的（染色、旁边的数、访问号、拿掉的结点……），按部件的 key 从 `old` 抄过去。不交的话拨一下数，老师这几轮做的全没了 |
+| `reshape: [指令名]`（配 `remake`） | 做了就不再跟着算的指令（一排格子的 swap / move / write、树的 insert / rotate……：照那一行重新造会把它们冲掉）。场景在这样的指令以后 `unlive`：去掉 `o.live`，舞台现状里写「已经不跟着 {k} 变了：你动过它的结构」。在原地改的（矩阵）自己的指令里叫 `scene.unlive(o, 那一行)` |
 | 自己拆 `{…}` | 要在原地改的（矩阵改格、平面上的向量挪过去）：`make` / 指令里用 `h.parseLive(text)` 拆、`h.liveValue(src, { plane })` 算（得 `{ value, deps }`，value 是 `exact.js` 的 Q / 向量 / 矩阵），自己写 `o.live`（或部件上的 `it.live`）。`h.line` 是这一行的原文。写错、算不出来就抛错 |
 | `depNodes(o)` | 依赖图里另外的结 `[{ id, deps, key?, live?, rec?, text? }]`：乘积跟着两个因子、平面上的线性组合跟着别的向量。`live: true` 的会被重算（叫 `relive`），别的只拿来排先后、查环 |
 | `relive(scene, o, n)` | 重算一个结（整样东西的 `o.live`，或 `depNodes` 给的 `live` 结），在原地改，返回 `{ changed: [{ ref, from, to }], parts }`（parts 是画面闪的部件）。算不出来（不可逆、维数不对）就抛错：场景记下原因写给老师，原来的数不动 |

@@ -3,7 +3,8 @@
 // 形状见 docs/superpowers/specs/2026-11-06-stage-base-design.md 第 1 节：
 //   next(o, scene) → { acts, why } | null       null 是做完了
 //   check(o, act, scene) → { legal, right, misread, why, next }
-//   predicates { 名字: (o, args, scene) → true | false | null }
+//   predicates { 名字: (o, args, scene) → true | false | null }  null 是现在判不了（之后会有：乘积还空着）；
+//                                               这样东西本身永远判不了（句子没写 key）就抛错，写下挑战时当场报
 //   facts(before, after, act) → [话]
 //   gestures { 动作: { gesture, from, to, toAct, ask?, pick?, choices? } }   五种通用手势在它这里是什么（gestures.js 照它翻成一行指令；
 //                                               ask 说放下以后要不要先问一个值（倍数框），pick + choices 是拉好一段以后点的那一排）

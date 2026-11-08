@@ -27,6 +27,7 @@ export function cmpValues(a, b) {
   return s < t ? -1 : s > t ? 1 : 0;
 }
 
+const FLAGS = ['paint', 'glow', 'lift', 'dim', 'covered'];
 const nodeAt = (o, k) => o.nodes.find((n) => n.key === k) || null;
 const parentOf = (o, k) => o.nodes.find((n) => n.left === k || n.right === k) || null;
 const isNull = (v) => v === '_' || v === 'null' || v === '∅';
@@ -388,6 +389,21 @@ export const tree = {
   label: '树',
   create: ['tree'],
   remake: true, // 造它的那一行里能写 {式子}（value.js）：依赖一变，场景照新的数把这一行重新造一遍
+  // 跟着算的树上做了这几样（插、删、换值、改值、转）就不再跟着算（scene.js 的 unlive）：照那一行重新造会把它们冲掉
+  reshape: ['insert', 'append', 'delete', 'swap', 'write', 'rotate'],
+  /** 重新造（scene.js 的 remake）：角上的小字、访问号、样子按结点（层序编号 key）带过去；结构没变过（变了就不再跟着算） */
+  carry(old, o) {
+    for (const n of o.nodes) {
+      const m = nodeAt(old, n.key);
+      if (!m) continue;
+      for (const f of FLAGS) n[f] = m[f];
+      n.tag = m.tag;
+      n.order = m.order;
+    }
+    o.visits = old.visits;
+    o.last = nodeAt(o, old.last) ? old.last : null;
+    o.bf = old.bf;
+  },
   drag: true,
   hint: '（树：名字.40 是值为 40 的结点；名字#3 是层序第 3 个结点，跟着结点走（值重复、换值以后用它）；名字.40* 是 40 和它下面整棵子树）',
   make(scene, c, h, old) {

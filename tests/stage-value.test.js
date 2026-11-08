@@ -239,3 +239,75 @@ test('旧写法不变', () => {
   run(t, 'product A = C B\nmul A\nwrite B.1,1 2');
   assert.equal(t.stateText(), '（矩阵：名字.2,3 是第 2 行第 3 列，名字.r2 是第 2 行，名字.c3 是第 3 列；交换两行时数跟着走，名字.2,3 指的总是现在的第 2 行第 3 列）\n矩阵 B（2×2）：\n  第 1 行：2  0\n  第 2 行：0  1\n矩阵 C = A B（2×2；算出来的 4 格跟着 A、B 自动重算）：\n  第 1 行：32  2\n  第 2 行：96  4\n矩阵 A = C B（2×2；算出来的 4 格跟着 C、B 自动重算）：\n  第 1 行：64  2\n  第 2 行：192  4');
 });
+
+// —— 整条分支的最终审查（I3）：跟着算的一排格子、树、图，依赖一变照造它的那一行重新造——老师后来做的不能没声没息地丢 ——
+
+test('I3 图：拨了边权重新造，老师写的旁边的数、访问顺序、染色、亮、拿掉的结点和边、度都按结点 / 边带过去', () => {
+  const sc = run(new Scene(), 'dial w = 4 range=1..9\ngraph g = A-B:{w} A-C:2 B-C:1 C-D:3\ntag g ∞\ntag g.A 0\nrelax g.A -> g.C\nvisit g.A\npaint g.A~C g1\nglow g.B\ndeg g\ntake g.D');
+  const fx = one(sc, 'set w 6');
+  assert.deepEqual(changedOf(fx, 'g'), [{ ref: 'g', expr: 'w', from: '4', to: '6' }]);
+  const g = sc.objects.get('g');
+  const n = (k) => g.nodes.find((x) => x.key === k);
+  const e = (k) => g.edges.find((x) => x.key === k);
+  assert.equal(e('A~B').w, '6');
+  assert.deepEqual(['A', 'B', 'C'].map((k) => n(k).tag), ['0', '∞', '2']);
+  assert.equal(n('C').value, '2');
+  assert.equal(n('A').order, 1);
+  assert.equal(e('A~C').paint, 'g1');
+  assert.equal(n('B').glow, true);
+  assert.equal(g.deg, true);
+  assert.deepEqual(g.taken, ['D']);
+  assert.equal(e('C~D').gone, true);
+  assert.match(sc.stateText(), /旁边的数：A 0，B ∞，C 2/);
+  assert.match(sc.stateText(), /访问顺序：A/);
+  // 访问号接着往下编
+  one(sc, 'visit g.C');
+  assert.equal(n('C').order, 2);
+});
+
+test('I3 一排格子：拨了照新的数重新造，染色、指针、分组留着；换了位置（swap）就不再跟着算，舞台现状里说一声', () => {
+  const sc = run(new Scene(), 'dial k = 1 range=0..9\narray a = {k} 3 5\npaint a.2 g1\nptr i a.3');
+  one(sc, 'set k 2');
+  const a = () => sc.objects.get('a');
+  const vals = () => [...a().cells].sort((x, y) => x.slot - y.slot).map((c) => c.value);
+  assert.deepEqual(vals(), ['2', '3', '5']);
+  assert.equal(a().cells.find((c) => c.key === 2).paint, 'g1');
+  assert.equal(a().ptrs.get('i'), 3);
+  one(sc, 'swap a.1 a.3');
+  assert.equal(a().live, undefined, '换了位置就是一排普通的格子');
+  one(sc, 'set k 7');
+  assert.deepEqual(vals(), ['5', '3', '2'], '拨了也不再照那一行重新造（换的位置还在）');
+  assert.match(sc.stateText(), /a 已经不跟着 \{k\} 变了：你动过它的结构（swap a\.1 a\.3）/);
+  assert.equal(err(sc, 'open a'), null, '不跟着算了，学生能动');
+  // move、write 也一样
+  const s2 = run(new Scene(), 'dial k = 1 range=0..9\narray b = {k} 3 5\nwrite b.2 9');
+  assert.equal(s2.objects.get('b').live, undefined);
+  one(s2, 'set k 4');
+  assert.deepEqual([...s2.objects.get('b').cells].sort((x, y) => x.slot - y.slot).map((c) => c.value), ['1', '9', '5']);
+});
+
+test('I3 树：拨了照新的数重新造（角上的小字、染色、访问号留着）；转过、插过就不再跟着算', () => {
+  const sc = run(new Scene(), 'dial h = 40 range=0..99\ntree t = 50 30 70 {h}\ntag t.50 "+1"\npaint t.30 g2\nvisit t.50');
+  const t = () => sc.objects.get('t');
+  const fx = one(sc, 'set h 20');
+  assert.deepEqual(changedOf(fx, 't'), [{ ref: 't', expr: 'h', from: '40', to: '20' }]);
+  const node = (k) => t().nodes.find((x) => x.key === k);
+  assert.deepEqual([1, 2, 3, 4].map((k) => node(k).value), ['50', '30', '70', '20']);
+  assert.equal(node(1).tag, '+1');
+  assert.equal(node(2).paint, 'g2');
+  assert.equal(node(1).order, 1);
+  assert.equal(t().visits, 1);
+  one(sc, 'rotate t.50 right');
+  assert.equal(t().live, undefined);
+  one(sc, 'set h 25');
+  assert.equal(t().root, 2, '转过的样子还在');
+  assert.equal(node(4).value, '20');
+  assert.match(sc.stateText(), /t 已经不跟着 \{h\} 变了：你动过它的结构（rotate t\.50 right）/);
+  const s2 = run(new Scene(), 'dial h = 40 range=0..99\ntree u = 50 30 70 {h}\ninsert u 60');
+  assert.equal(s2.objects.get('u').live, undefined);
+});
+
+test('I3 矩阵做了行变换不再跟着算：舞台现状里也说一声', () => {
+  const sc = run(new Scene(), 'dial k = 2 range=0..5\nmatrix M = 1 {k} / 0 1\nrowop M r1 - r2');
+  assert.match(sc.stateText(), /M 已经不跟着 \{k\} 变了：你动过它的结构（rowop M r1 - r2）/);
+});

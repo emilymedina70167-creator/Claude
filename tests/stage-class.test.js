@@ -223,3 +223,65 @@ test('课堂循环：call=wrong 走偏的一下马上叫老师；做完了没预
   await tick();
   assert.match(sent(c.rows)[0]?.msg || '', /学生把 t 做完了/);
 });
+
+// —— 整条分支的最终审查（I5、I6）——
+
+test('I5 撤一步以后：[跟着变的] 不再写撤掉的那一下引起的变化（[学生] 里那一下照写，后面跟着「撤回了」）', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  const stage = { log: [], scene: new Scene(), teacherAudit: [], reacting: null, studentChain: null, pendingGoals: () => [] };
+  const rows = [];
+  const host = { stage, addTurn: (r) => { const x = { ...r, seq: rows.length + 1 }; rows.push(x); return x; }, putTurn: () => {}, note: () => {} };
+  const loop = createLoop(host);
+  // 学生拨了 B.1,1（乘积 C 跟着变）、又拨了 B.2,2（C.2,2 跟着变），再撤回最后那一下
+  loop.onAct({ type: 'edit', open: 'edit', ref: 'B.1,1', from: '0', to: '1', line: 'write B.1,1 1', derived: [{ id: 'C', changed: [{ ref: 'C.1,1', from: '0', to: '1' }] }] });
+  loop.onAct({ type: 'edit', open: 'edit', ref: 'B.2,2', from: '0', to: '2', line: 'write B.2,2 2', derived: [{ id: 'C', changed: [{ ref: 'C.2,2', from: '0', to: '4' }] }] });
+  loop.onAct({ type: 'undo', src: 'write B.2,2 2', open: 'edit' });
+  stage.onAnswer({ type: 'say', text: '好了' });
+  await tick();
+  const m = rows.find((r) => r.role === 'student' && !r.pending)?.msg || '';
+  assert.match(m, /学生拨了 B\.2,2/);
+  assert.match(m, /撤回了自己的上一下：write B\.2,2 2/);
+  assert.match(m, /\[跟着变的\][^\n]*\n- C\.1,1 从 0 变成 1/, '没撤的那一下照写');
+  assert.doesNotMatch(m, /C\.2,2/, '撤掉的那一下引起的变化不写');
+});
+
+test('I6 老师那一轮还在写的时候学生动了：学生那一段排在老师那一轮后面，发给老师的对话照先后、最后一条是学生的', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const wait = (ms = 10) => new Promise((r) => setTimeout(r, ms));
+  const history = [];
+  let seq = 0;
+  const addTurn = (t) => { const row = { ...t, seq: ++seq }; history.push(row); return row; };
+  const scene = { goals: new Map(), waiting: { kind: 'say' }, clone() { return { ...this, stateText: () => 'S' }; }, stateText: () => 'S' };
+  let resolveCall;
+  const calls = [];
+  const stage = {
+    log: [], errors: [], reacting: Promise.resolve(), studentChain: Promise.resolve(), teacherAudit: [], scene,
+    pendingGoals: () => [],
+    begin() { const mark = this.log.length; let armedR; const armed = new Promise((r) => (armedR = r)); return { mark, push() {}, end() { armedR(); return new Promise(() => {}); }, drop() {}, abort: async () => {}, armed }; },
+    play: async () => ({}),
+  };
+  const messages = () => history.filter((t) => !t.discarded && !t.pending && (t.role === 'claude' || t.role === 'student')).map((t) => `${t.role === 'claude' ? 'A' : 'U'}:${t.role === 'claude' ? t.text : t.msg}`);
+  const host = {
+    stage, mock: true, model: 'm', teach: {}, quietMs: 1e9,
+    messages, addTurn, putTurn() {}, cost: (c) => c, thinking() {},
+    call: (input) => { calls.push(input); return new Promise((r) => { resolveCall = r; }); },
+  };
+  const loop = createLoop(host);
+  const p = loop.teach('turn');
+  await wait();
+  // 老师还在写（调用没返回）：学生动了一下（试，不叫老师）
+  loop.onAct({ type: 'drag', open: 'drag', text: '学生拖了一下' });
+  resolveCall({ text: 'say "x"', modelApplied: 'm' });
+  await p;
+  await wait();
+  // 学生答了：叫老师
+  stage.onAnswer({ type: 'say', text: '我答了' });
+  await wait(50);
+  const live = history.filter((t) => !t.discarded && (t.role === 'claude' || t.role === 'student'));
+  assert.deepEqual(live.map((t) => t.role), ['claude', 'student'], history.map((t) => `${t.seq}:${t.role}${t.discarded ? '(作废)' : ''}`).join(' '));
+  assert.ok(live[0].seq < live[1].seq);
+  const input = calls[1];
+  assert.match(input.at(-1), /^U:[\s\S]*学生拖了一下[\s\S]*我答了/);
+  assert.match(input.at(-2), /^A:say "x"/);
+});

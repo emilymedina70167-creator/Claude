@@ -84,3 +84,15 @@ test('长度上限：试了 30 下，[学生] 一块不超过 2 KB，前面的�
   const dials = Array.from({ length: 5 }, () => eventOf({ type: 'dial', name: 'k', value: 2 }));
   assert.doesNotMatch(eventsText([...dials, eventOf({ type: 'say', text: '长'.repeat(1000) })]), /之前又试了 0 下/);
 });
+
+// —— 整条分支的最终审查（M4）——
+test('M4 学生的一下过了裁判、场景却演不了：写给老师「没演上」和原因，不说「舞台已经照做了」', () => {
+  const act = { type: 'drag', open: 'drag', a: { value: '3', key: 1 }, b: { value: '?', key: 9 }, line: 'swap a.1 a.9', error: 'a 只有 3 格，没有第 9 格' };
+  const t = eventsText([eventOf(act, { at: 1 })]);
+  assert.match(t, /没演上：a 只有 3 格，没有第 9 格/);
+  assert.doesNotMatch(t, /舞台已经照做了/);
+  const judged = { type: 'rotate', open: 'rotate', src: 'rotate t#1 right', verdict: { legal: true, right: true, misread: null, why: '50 右旋', next: null }, error: '树最多 8 层' };
+  const u = eventsText([eventOf(judged, { at: 1 })]);
+  assert.match(u, /没演上：树最多 8 层/);
+  assert.doesNotMatch(u, /是正确的下一步/);
+});

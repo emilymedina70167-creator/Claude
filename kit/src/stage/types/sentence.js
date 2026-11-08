@@ -11,7 +11,7 @@
 //   rewrite 改写整句：同样的词滑到新位置，新的淡进来（「从句 → 非谓语」「倒装 → 正常语序」）
 // 部件：s.3 现在第 3 个词、s.2-5 第 2 到 5 个、s.who 这个词（出现几次时 s.who:2）、s.who-door 从 who 到 door、
 //      s#3 一开始第 3 个的那个词（挪了、改写了跟着它走）
-// 正确拆法由老师给（页面不自己分析英语语法）：sentence s = "…" key="[S The man [RC who lives next door]] [V is] a doctor."，
+// 正确拆法由老师给（页面不自己分析英语语法）：sentence s = "…" key="[S The man [RC who lives next door]] [V is] [P a doctor]."，
 // 照黑板 parse 组件的括号写法（entext.js 的 parseBrackets）读成 o.key，判法在 sentence.rules.js
 import { bbox } from '../layout.js';
 import { parseBrackets, tokenizeSentence, ROLES } from '../../entext.js';
@@ -510,7 +510,7 @@ function keepOrder(seq) {
  */
 export function parseKey(words, src) {
   const s = String(src ?? '').trim();
-  if (!s.includes('[')) throw new Error('key= 要用 [成分 词…] 标出正确拆法，比如 key="[S The man] [V is] a doctor."（成分写缩写：S、V、O、RC……）');
+  if (!s.includes('[')) throw new Error('key= 要用 [成分 词…] 标出正确拆法，比如 key="[S The man] [V is] [P a doctor]."（成分写缩写：S、V、O、RC……）');
   if (/\[(?![A-Za-z])/.test(s)) throw new Error('key= 的括号里先写成分的英文缩写（S、V、O、P、RC、NF……），再写词，比如 [S The man]');
   let parsed;
   try { parsed = parseBrackets(s); } catch (e) { throw new Error(`key= 写错了：${e.message}`); }
@@ -857,7 +857,7 @@ export const sentence = {
     return lines;
   },
   doc: `句子（英语长难句：先找谓语，再分主干、从句、非谓语、插入语，按意群断开）：
-sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] a doctor."      造一句（标点贴着前一个词，长了自动折行；句子里有 " 就用「」括起来）；key= 是正确拆法：照抄句子，加 [成分 词…]（成分写缩写 S V O P A Attr RC NF……），学生拉的括号页面照它判，不写不判
+sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."      造一句（标点贴着前一个词，长了自动折行；句子里有 " 就用「」括起来）；key= 是正确拆法：照抄句子，加 [成分 词…]（成分写缩写 S V O P A Attr RC NF……），学生拉的括号页面照它判（key 没拉的段不判），不写不判
 写法：s.3 现在第 3 个词；s.2-5 第 2 到 5 个；s.who 这个词（出现几次写 s.that:2）；s.who-door 从 who 到 door；s#3 一开始第 3 个的那个词（挪了、改写了跟着走）
 mark s.1-6 主语 / unmark s.1-6     词下面一道括号、下面写成分（套着的一层层往下排；颜色按成分，也能写 g1～g6）
 tag s.7 V / untag s.7             词上面的小标签（S、V、谓语1；最多 8 个字）
@@ -868,12 +868,13 @@ refer s.3 -> s.2 / unrefer s.3    箭头：which、it 指的是谁
 rewrite s "The man living next door is a doctor."    改写整句：同样的词滑到新位置，新的淡进来
 ask drag s.7 "把 is 挪到句首"         学生按住一个词拖到别处（页面照做，再告诉你）
 学生自己拆（mark 页面照 key 判每一下）：
-open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的）= mark s.1-6 S；「从句」对得上 key 里任何一种从句
+open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的）= mark s.1-6 S；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句
 open s fold                         学生点一道括号或括号里的词 = fold s.3-6（页面不判；和 mark 一次开一种）
 判断式（when=）：s parsed（key 里每一段都拉对了）、s main（主干拉对了）、s span s.2-5 = V（这一段现在挂着这个成分）；没写 key 判不了，@s.done 也不收
 句子里留空位让学生填词：现在没有写法（要填就 ask value … type=en）`,
-  example: `sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] a doctor."
+  example: `sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."
 mark s.7 V
+mark s.8-9 P
 say "谓语是 {s.7}。它前面一长串是主语，里面还套着一个从句。"
 open s mark wrong=mark
 goal g1 "拉出主语，再拉出主语里的从句" when="s parsed"

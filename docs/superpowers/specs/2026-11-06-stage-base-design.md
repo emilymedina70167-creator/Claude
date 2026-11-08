@@ -107,7 +107,7 @@
 **句子（拆成分）** `types/sentence.rules.js`
 - **正确拆法由老师造句子时给出**，用黑板已有的括号写法：
   ```
-  sentence s = "…" key="[S The man [RC who lives next door]] [V is] a doctor."
+  sentence s = "…" key="[S The man [RC who lives next door]] [V is] [P a doctor]."
   ```
   页面不自己分析英语语法。
 - `check`：用 `kit/src/entext.js` 的 `parseBrackets` / `judgeSpans` 逐词比。错法：

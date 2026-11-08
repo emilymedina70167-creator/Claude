@@ -40,7 +40,7 @@ export function eventOf(act, { help = '', at = 0 } = {}) {
  */
 export function verdictText(a) {
   const v = a?.verdict;
-  if (!v) return '';
+  if (!v || a.error) return ''; // 没演上的一下（actText 已经说了）不接裁判的结论
   if (a.failed) return '——页面这一下没判成（照做了）';
   if (v.legal === false) return `——做不到：${v.why || '这一下做不到'}（没演，弹回去了）`;
   if (v.right === true) return '——是正确的下一步';

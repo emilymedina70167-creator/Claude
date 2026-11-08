@@ -80,7 +80,7 @@ function setup(segments) {
   T.pending = () => {
     const evs = T.loop.pending?.events || [];
     const said = eventsText(evs, { goals: st.scene.goals });
-    const derived = evs.flatMap((e) => e.act?.derived || []);
+    const derived = evs.flatMap((e) => (e.undone ? [] : e.act?.derived || [])); // 撤回了的那一下不算（和 loop.js 的 derivedOf 一样）
     if (!derived.length) return said;
     const msg = window.LAStageDev.turnMessage({ act: said, derived });
     const at = msg.indexOf('[跟着变的]'), end = msg.indexOf('\n\n[舞台现在]');
