@@ -1,0 +1,28 @@
+# L2 分支 1：缺项不补 0，−4 落进了 x2 那一列
+tex e = "\hl{e1}{x_1 + 2x_2 = 2},\quad \hl{e2}{x_1 - 4x_3 = 0},\quad \hl{e3}{x_1 + 2x_2 - 2x_3 = 0}"
+matrix T = 1 2 0 | 2 / 1 0 -4 | 0 / 1 2 -2 | 0
+cover T
+matrix M = 0 0 0 | 0 / 0 0 0 | 0 / 0 0 0 | 0
+label lh M "x₁    x₂    x₃  |  b" side=above tone=note
+say "把三个方程抄成增广矩阵。"
+open M edit input=keypad
+goal g1 "写出增广矩阵" when="M same T"
+@g1 say "对。"
+学生: write M.1,1 1
+学生: write M.1,2 2
+学生: write M.1,4 2
+学生: write M.2,1 1
+学生: write M.2,2 -4
+学生: write M.3,1 1
+学生: write M.3,2 2
+学生: write M.3,3 -2
+# 页面叫老师（试了好多下）：老师把 P 代进学生写的每一行
+matrix Pv = 4 / -1 / 1 / -1
+matrix Res = {M Pv} beside=Pv
+label lp Pv "P = (4, −1, 1)" side=above tone=note
+label lr Res "P 代进你写的每一行" side=above tone=key
+glow M.2,2
+say "P 满足 {e.e2}，代进你写的第 2 行却不是 0。{M.2,2} 是跟着谁的？"
+学生: write M.2,2 0
+学生: write M.2,3 -4
+say "嗯。"

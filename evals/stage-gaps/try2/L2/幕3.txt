@@ -27,7 +27,7 @@ matrix Pv = 4 / -1 / 1 / -1
 matrix Res = {N Pv} beside=Pv
 label lp Pv "P = (4, −1, 1)" side=above tone=note
 label lr Res "P 代进每个方程（左边 − 右边）" side=above tone=note
-say "把第 1 行的 k 倍加到第 3 行上。拨 {k}，盯着：谁在动、谁不动、P 走没走。"
+say "把 {M.r1} 的 k 倍加到 {M.r3} 上。拨 k，盯着：谁在动、谁不动、{Pv} 走没走。"
 goal g2 "拨到第 3 行第 1 个数变成 0" when="N.3,1 = 0"
 @g2 say "做到了。"
 @g2 ask say "拨的时候什么没动？第 3 个方程现在是什么样？"

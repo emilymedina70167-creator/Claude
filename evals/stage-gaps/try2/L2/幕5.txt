@@ -1,0 +1,42 @@
+# L2 第 5 幕：系数换成 λ、常数换成 μ + 1、μ − 1，拨着看解的样子（三维的平面、P、平行记号要三维）
+dial l = 0 range=-4..4
+dial m = 1 range=-4..4
+label ll dial:l "λ = {l}" side=right
+label lm dial:m "μ = {m}" side=right
+# 小地图：一个平面，当前 (λ, μ) 一个点
+plane p range=-4..4
+point p Q = {l} {m}
+# 照提示改：点只能写成一个向量式子，拿两根单位向量凑
+vec p i = 1 0 color=g3
+vec p j = 0 1 color=g3
+point p Q = {l i + m j}
+label lq p.Q "(λ, μ)" side=right tone=note
+# μ + 1、μ − 1 不能直接写进格里（格里只认拨数或一格）：凑一张辅助矩阵
+matrix K = 1 0 / 0 -1
+matrix H = {m E + K} beside=K
+label lk K "辅助：凑 μ + 1、μ − 1" side=above tone=soft
+dim K H
+matrix M = 1 2 {l} | {H.1,1} / 1 0 -4 | {H.2,2} / 1 2 -2 | 0
+say "方程组里换进了 λ、μ。刚才的两步消元（r2 − r1、r3 − r1），带着字母再走一遍。"
+ask value "消完以后最后一行第 3 个数是？（用 λ 写）" type=formula free=λ answer="-2-λ" wrong="2+λ=符号反了"
+学生: value -λ-2
+ask value "最后一行右边那个数是？（用 μ 写）" type=formula free=μ answer="-μ-1" wrong="μ+1=符号反了; -μ+1=常数抄错"
+学生: value μ+1
+say "右边是第 3 个方程减第 1 个：0 − (μ + 1)。"
+ask value "最后一行右边那个数是？" type=formula free=μ answer="-μ-1"
+学生: value -μ-1
+# 阶梯形跟着 λ、μ 变：拿一张初等矩阵乘 M 代替「学生带字母写的那张跟着变」
+matrix E1 = 1 0 0 / -1 1 0 / -1 0 1
+matrix S = {E1 M} beside=E1
+label ls S "消了两步以后（跟着 λ、μ 变）" side=above tone=key
+dim E1
+say "拨 λ、μ，想办法让三个方程没有公共解。"
+goal g1 "拨到无解" when="M rankA=2, M rank=3"
+@g1 say "挑战完成：没有解了。"
+@g1 goal g2 "再拨到解不止一个" when="M rank=2, M rankA=2"
+@g2 say "挑战完成：解不止一个。"
+@g2 ask say "哪些 (λ, μ) 不是一个解？看 {S} 最后一行。"
+学生: dial l -2
+学生: dial m -1
+学生: say λ = −2、μ ≠ −1 时无解；λ = −2、μ = −1 时无穷多
+say "嗯。"

@@ -1,0 +1,32 @@
+# L2 分支 3：只看系数那一边就下结论（B13-36.1：|A| = 0 直接写 λ = 1 或 λ = −1）
+dial l = 0 range=-2..2
+dial a = 0 range=-4..4
+label ll dial:l "λ = {l}" side=right
+label la dial:a "a = {a}" side=right
+matrix H = {l E - E}
+label lh H "辅助：凑 λ − 1" side=above tone=soft
+dim H
+matrix M = {l} 1 1 | {a} / 0 {H.1,1} 0 | 1 / 1 1 {l} | 1
+say "两个不同的解，你算出 |A| = 0 就写了 λ = 1 或 λ = −1。把 λ 拨到 1，看看第 2 个方程。"
+goal g1 "把 λ 拨到 1" when="l = 1"
+@g1 ask say "第 2 个方程现在写出来是什么？"
+学生: dial l 1
+学生: say 0 = 1
+# 老师想分开看 r(A)、r(A | b)：只能拿判断式写挑战，写下就成立的收不进
+goal g2 "看 r(A)" when="M rankA=1"
+# 再让学生把 a 从 −4 拨到 4，看是不是一路都没有解
+say "λ = 1 时，把 {a} 从 −4 拨到 4，有没有哪个 a 有解？"
+ask next "拨完点下面" button="拨完了"
+学生: dial a -4
+学生: dial a 4
+学生: next
+# 把这一张抄成数，老师自己消一遍、画阶梯线，看页面怎么说
+matrix W = 1 1 1 | 4 / 0 0 0 | 1 / 1 1 1 | 1
+rowop W r3 - r1
+rowop W r2 <-> r3
+rowop W r3 + 1/3 r2
+stairs W
+say "消完是 {W}：{W.r2} 读回来是什么？"
+ask say "系数那边少了一级台阶，还要看哪里？"
+学生: say 还要看最后一列
+say "嗯。"

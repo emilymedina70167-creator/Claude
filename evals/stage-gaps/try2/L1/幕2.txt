@@ -23,6 +23,7 @@ ask drag AB BA "把 AB 拖到 BA 上并一下"
 学生: drag AB.1,1 BA.1,1
 # 拖不了：老师自己一格一格比
 unlink f
+compare AB BA
 compare AB.1,1 BA.1,1
 compare AB.1,2 BA.1,2
 matrix T = {(A + B)^2}

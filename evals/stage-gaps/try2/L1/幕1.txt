@@ -5,6 +5,8 @@ matrix C = 1 0 / 2 1 beside=B
 label tb B "你上次造的" side=above tone=note
 product P = A B
 mul P
+# D 想要一张空牌
+matrix D = _ _ / _ _
 matrix D = 0 0 / 0 0
 matrix AC = {A C}
 matrix AD = {A D} beside=AC
