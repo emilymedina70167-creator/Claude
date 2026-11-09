@@ -1049,9 +1049,12 @@ export class Scene {
           for (const o of new Set(ps.map((p) => p.obj))) if (!typeOf(this.objects.get(o)).drag) throw new Error(`${typeOf(this.objects.get(o)).label}不能拖`);
         }
         // ask value：answer= 可以不写（只收不判）、可以是 {式子}；type= wrong= free= 见 answer.js。
-        // 写下时 {式子} 现算一遍、answer 和每条错答照 type 造好判法，对不上当场报；重放旧课不加新的检查（当时收下的照样收下）
-        const spec = kind === 'value' ? { type: opts.type, answer: opts.answer, wrongs: opts.wrong, free: opts.free } : null;
-        if (spec) checkSpec(spec, this, { strict: !c.lenient });
+        // 写下时 {式子} 现算一遍、answer 和每条错答照 type 造好判法，对不上当场报；重放旧课不加新的检查（当时收下的照样收下）。
+        // 重放旧课的这一问记着 lenient：{…} 算不出来（第一轮以前字面写的 answer={…}）照字面比。预写的行也带 lenient，
+        // 可它写下时照新规矩验过了：判的时候算不出来是学生把舞台拨成了算不了的样子，照旧「页面没判成」，不照字面比（不然对的也判错）
+        const oldAsk = !!c.lenient && !c.prewrite;
+        const spec = kind === 'value' ? { type: opts.type, answer: opts.answer, wrongs: opts.wrong, free: opts.free, ...(oldAsk ? { lenient: true } : {}) } : null;
+        if (spec) checkSpec(spec, this, { strict: !c.lenient, lenient: oldAsk });
         if (str != null) { this.say = str; this.words = parseRich(str).filter((p) => p.k === 'word').map((p) => p.v); }
         // 这一轮写在前面的 @ask.right 跟着这一问走（学生答对它时页面马上演，只演一次）。预写里的 ask（舞台演 @g1 的行时带 prewrite）不拿：
         // 那几行可能插在老师这一轮中间演，@ask.right 是写给这一轮最后那一问的
@@ -1064,7 +1067,7 @@ export class Scene {
           rightKey = `ask.right#${++this.askSeq}`;
           for (const a of this.ahead.values()) if (a.from === 'ask.right') a.from = rightKey;
         } else if (!c.prewrite) this.dropAhead('ask.right');
-        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}) };
+        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}) };
         if (opts.expect && kind !== 'pick') this.parts(opts.expect);
         return { kind };
       }

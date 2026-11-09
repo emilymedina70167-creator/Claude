@@ -150,6 +150,46 @@
 .st-say.is-main .st-say-go { background: var(--st-brand); color: var(--st-brand-ink); }
 .st-dock { flex-wrap: wrap; align-items: center; }
 
+/* 按格写含 n 的式子（ask value … type=matrix free=n，stage.js 的 armGrid）：一格一个式子框（formulainput.js 的 formulaGrid），
+   外面一对方括号，每格下面是写成公式的预览；框 48px 高、字 18px（≥16px，iPad 聚焦不放大） */
+.st-say.st-fgrid { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px 12px; width: min(100%, 680px); padding: 12px 14px; box-sizing: border-box; border-radius: 22px;
+  background: color-mix(in srgb, var(--st-card) 86%, transparent); box-shadow: 0 0 0 1px var(--st-line), 0 12px 28px -18px rgb(var(--shade-rgb, 25 45 40) / 0.45);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.st-fgrid .fi-grid-wrap { position: relative; padding: 4px 16px; width: 100%; box-sizing: border-box; }
+.st-fgrid .fi-grid-wrap::before, .st-fgrid .fi-grid-wrap::after { content: ""; position: absolute; top: 0; bottom: 0; width: 9px; border: 2px solid color-mix(in srgb, var(--st-ink) 70%, transparent); }
+.st-fgrid .fi-grid-wrap::before { left: 0; border-right: none; border-radius: 6px 0 0 6px; }
+.st-fgrid .fi-grid-wrap::after { right: 0; border-left: none; border-radius: 0 6px 6px 0; }
+.st-fgrid .fi-grid { display: grid; gap: 8px 10px; }
+.st-fgrid .fi { display: flex; flex-direction: column; gap: 2px; width: 100%; min-width: 0; }
+.st-fgrid .fi-text { flex: none; width: 100%; height: 48px; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 12px; background: var(--st-card); color: var(--st-ink);
+  font: 500 18px var(--sans, sans-serif); text-align: center; caret-color: var(--st-brand); box-shadow: 0 0 0 1px var(--st-line); }
+.st-fgrid .fi-text:focus { outline: none; box-shadow: 0 0 0 2px var(--st-brand); }
+.st-fgrid .fi-text::placeholder { color: var(--st-muted); font-size: 14px; }
+.st-fgrid .fi-preview { min-height: 0; padding: 0 4px; font-size: 16px; color: var(--st-ink); text-align: center; overflow-x: auto; overflow-y: hidden; }
+.st-fgrid .fi-preview:empty { display: none; }
+/* 写成公式的预览只在正在写的那一格下面（3×3 九个预览摞起来，横屏时连同小键盘把舞台挤没了）；读不懂的那一格一直写着为什么 */
+.st-fgrid .fi:not(:focus-within) .fi-preview:not(.is-bad) { display: none; }
+.st-fgrid .fi-preview.is-bad { font: 13px/1.4 var(--sans, sans-serif); color: var(--st-red); }
+/* 「对吗」在右下角，和方括号底对齐；还空着、读不懂时那句话在整块下面 */
+.st-fgrid-foot { display: contents; }
+.st-fgrid-msg { grid-column: 1 / -1; grid-row: 2; font: 14px/1.4 var(--sans, sans-serif); color: var(--st-red); }
+.st-fgrid-msg:empty { display: none; }
+.st-fgrid .st-say-go { grid-column: 2; grid-row: 1; min-width: 72px; }
+/* 写式子的符号小键盘：整页共用的一块（挂在 body 上，黑板也用它）。有舞台的页面照舞台的样子画：白卡、细线、南大紫的「完成」；每个键至少 44px */
+body:has(.st-stage) .keypad.kp-formula { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: none; gap: 8px; justify-content: center;
+  padding: 10px max(12px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+  border: 0; background: color-mix(in srgb, var(--card-solid, #fffffc) 90%, transparent); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  box-shadow: 0 -0.5px 0 rgb(var(--chalk-rgb, 27 34 32) / 0.16), 0 -14px 30px -20px rgb(var(--shade-rgb, 25 45 40) / 0.45); }
+body:has(.st-stage) .keypad.kp-formula.show { display: flex; }
+body:has(.st-stage) .keypad.kp-formula .kp-keys { display: grid; grid-template-columns: repeat(6, minmax(46px, 64px)); gap: 6px; }
+body:has(.st-stage) .keypad.kp-formula .kp-side { display: grid; grid-template-rows: 1fr; width: min(96px, 20vw); }
+body:has(.st-stage) .keypad.kp-formula button { min-height: 46px; border: 0; border-radius: 10px; background: var(--card-solid, #fffffc); color: rgb(var(--chalk-rgb, 27 34 32));
+  font: 500 20px/1 var(--sans, sans-serif); font-variant-numeric: tabular-nums; box-shadow: 0 0 0 1px rgb(var(--chalk-rgb, 27 34 32) / 0.12), 0 1px 0 rgb(var(--shade-rgb, 25 45 40) / 0.18);
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+body:has(.st-stage) .keypad.kp-formula button:active { scale: .95; background: color-mix(in srgb, var(--brand, #4a1b52) 10%, var(--card-solid, #fffffc)); }
+body:has(.st-stage) .keypad.kp-formula .kp-var { font: italic 22px/1 KaTeX_Math, "Times New Roman", serif; color: var(--brand, #4a1b52); }
+body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52); color: var(--brand-ink, #fff); font: 600 18px/1 var(--sans, sans-serif); box-shadow: none; }
+
 /* 一段演完停下来：「接着」往下演，「再看一遍」把这一段倒回去重演 */
 .st-beat { pointer-events: auto; display: flex; gap: 10px; align-items: center; }
 .st-beat-again { min-height: 50px; padding: 0 20px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--st-brand) 10%, var(--st-card)); color: var(--st-brand); font: 600 16px/1 var(--sans, sans-serif); cursor: pointer; box-shadow: 0 0 0 1px color-mix(in srgb, var(--st-brand) 22%, transparent); }

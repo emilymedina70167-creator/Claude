@@ -10,7 +10,8 @@ import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, C
 import { parseScript, parseRich, richLength } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, pickText, unplayedNotes, compareFact, mergeFact } from './scene.js';
 import { measureShown } from './rules.js';
-import { judgeAnswer, sameAnswer } from './answer.js';
+import { judgeAnswer, sameAnswer, gridShape, gridAnswerText } from './answer.js';
+import { formulaGrid, hideFormulaPad } from '../formulainput.js';
 export { sameAnswer };
 import { VIEWS } from './types/views.js';
 import { PointerRouter } from './pointer.js';
@@ -1567,8 +1568,11 @@ export class Stage {
           finish(act);
         }, { once: true });
       }
+      // ask value … type=matrix free=n：一格一个式子框（太大了、算不出多大时照旧一个输入框写一行字）
+      const shape = w.kind === 'value' ? gridShape(w, sc) : null;
+      if (shape) offs.push(this.armGrid(w, shape, finish));
       // 打字：一直在（学生可以不点格子，直接说「我不懂」）；ask say / ask value 时把它放到最前面
-      if (this.withInput || w.kind === 'value' || w.kind === 'say') {
+      else if (this.withInput || w.kind === 'value' || w.kind === 'say') {
         const form = el('form', 'st-say', this.dock);
         const input = el('input', '', form);
         input.type = 'text';
@@ -1586,12 +1590,8 @@ export class Stage {
           if (!text) return;
           let act = { type: 'say', text };
           if (w.kind === 'value') {
-            let j;
-            // 判的时候出了错（写下时验过了，可 {P^-1} 现在算不出来：学生把 P 拨成了不可逆）：页面没判成，不当学生答错、不晃红框，记进出错记录
-            try { j = judgeAnswer(text, { type: w.type, answer: w.answer, wrongs: w.wrongs, free: w.free }, this.scene); } catch (err) { j = { ok: null, misread: null, shown: String(w.answer ?? ''), failed: `页面没判成：${err?.message || err}` }; }
-            if (j.failed) reportError(new Error(j.failed), { what: `舞台的 ask value 判答案：${w.prompt || ''}（answer=${w.answer}）` });
-            act = { type: 'value', text, answer: j.shown, right: j.ok, misread: j.misread, ...(j.failed ? { failed: j.failed } : {}) };
-            if (j.ok === false) { form.classList.remove('is-bad'); void form.offsetWidth; form.classList.add('is-bad'); }
+            act = this.judgeValue(w, text, text);
+            if (act.right === false) { form.classList.remove('is-bad'); void form.offsetWidth; form.classList.add('is-bad'); }
           }
           this.onAct?.(act);
           finish(act);
@@ -1600,6 +1600,65 @@ export class Stage {
       }
       this.keepInView();
     });
+  }
+
+  /**
+   * 判一个填的答案 → 回答的 act。given 是写的一行字或按格交的 string[][]，text 是记进回答、写给老师的那一行字。
+   * 判的时候出了错（写下时验过了，可 {P^-1} 现在算不出来：学生把 P 拨成了不可逆）：页面没判成，不当学生答错、不晃红框，记进出错记录
+   */
+  judgeValue(w, given, text) {
+    let j;
+    try { j = judgeAnswer(given, { type: w.type, answer: w.answer, wrongs: w.wrongs, free: w.free, lenient: w.lenient }, this.scene); } catch (err) { j = { ok: null, misread: null, shown: String(w.answer ?? ''), failed: `页面没判成：${err?.message || err}` }; }
+    if (j.failed) reportError(new Error(j.failed), { what: `舞台的 ask value 判答案：${w.prompt || ''}（answer=${w.answer}）` });
+    return { type: 'value', text, answer: j.shown, right: j.ok, misread: j.misread, ...(j.failed ? { failed: j.failed } : {}) };
+  }
+
+  /**
+   * 按格写含 n 的式子（ask value … type=matrix free=n）：一格一个式子框（formulainput.js 的 formulaGrid，和黑板同一个），
+   * 交的是每格写的原样（string[][]），判、记进回答、写给老师的那一行字照老师写 answer= 的样子（gridAnswerText：1 n n(n-1)/2 / 0 1 n / 0 0 1）。
+   * 学生只看到对不对：哪一格不对只告诉老师（页面不替老师指错）。符号小键盘是整页一块、贴在屏幕底下：开着时底下这一条让到它上面，
+   * 镜头跟着让（reserve 量的是这一条的高）。返回收起时做的事
+   */
+  armGrid(w, { rows, cols, names }, finish) {
+    const form = el('form', 'st-say st-fgrid is-main', this.dock);
+    form.noValidate = true;
+    const grid = formulaGrid(form, { rows, cols, names, keys: names });
+    const foot = el('div', 'st-fgrid-foot', form);
+    const msg = el('div', 'st-fgrid-msg', foot);
+    msg.setAttribute('aria-live', 'polite');
+    const go = el('button', 'st-say-go', foot);
+    go.type = 'submit';
+    go.textContent = '对吗';
+    let timer = null;
+    const lift = () => {
+      const kp = document.querySelector('.keypad.show');
+      const over = kp ? Math.max(0, this.view.getBoundingClientRect().bottom - kp.getBoundingClientRect().top) : 0;
+      const pad = over ? `${Math.ceil(over) + 12}px` : '';
+      if (this.dock.style.paddingBottom === pad) return;
+      this.dock.style.paddingBottom = pad;
+      this.keepInView();
+    };
+    // 点进一格：小键盘马上出来，跟着让；离开：等一会儿再落回去——按「对吗」的那一下小键盘先收起，这一条要是马上落下去，
+    // 手指抬起来时按钮已经不在手指下面，这一下就落空了
+    form.addEventListener('focusin', () => { clearTimeout(timer); requestAnimationFrame(lift); });
+    form.addEventListener('focusout', () => { clearTimeout(timer); timer = setTimeout(lift, 400); });
+    form.addEventListener('input', () => { msg.textContent = ''; });
+    grid.onEnter(() => form.requestSubmit());
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      // 还空着、读不懂的格：就在这里说（每格下面的预览也写着为什么），不交、不算学生答错
+      try { grid.read(); } catch (err) {
+        msg.textContent = err.message;
+        form.classList.remove('is-shake'); void form.offsetWidth; form.classList.add('is-shake');
+        return;
+      }
+      const cells = grid.values();
+      const act = this.judgeValue(w, cells, gridAnswerText(cells));
+      hideFormulaPad();
+      this.onAct?.(act);
+      finish(act);
+    });
+    return () => { clearTimeout(timer); hideFormulaPad(); this.dock.style.paddingBottom = ''; };
   }
 
   // 点：也走 pointer.js（按偏一点、按在两个东西中间也拿得到；正在等的那一问 prio 高，比随时能拖的先）

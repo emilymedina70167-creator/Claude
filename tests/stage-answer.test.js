@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { judgeAnswer, checkSpec } from '../kit/src/stage/answer.js';
+import { judgeAnswer, checkSpec, formulaRows, gridAnswerText, autoWrongs, gridShape } from '../kit/src/stage/answer.js';
 import { sameAnswer } from '../kit/src/stage/stage.js';
 import { actText } from '../kit/src/stage/stage.js';
 
@@ -176,4 +176,231 @@ test('量判不了不当答错：answer={verbs(s2)} 在 s2 没写 key 时页面�
   assert.equal(judgeAnswer('2', { answer: '{height(t)}' }, sc).ok, true);
   assert.equal(judgeAnswer('3', { answer: '{height(t)}' }, sc).ok, false);
   assert.equal(sc.check(parseScript('ask value "几个结点？" answer={count(t)}')[0]), null);
+});
+
+// —— 第二轮 Task 13：按格的含 n 矩阵、省乘号、[[…]]、五条现算的常见错答、数集的大括号、重放旧课照字面 ——
+
+const AN = { type: 'matrix', free: 'n', answer: '1 n n(n-1)/2 / 0 1 n / 0 0 1' };
+const AN_CELLS = [['1', 'n', 'n(n-1)/2'], ['0', '1', 'n'], ['0', '0', '1']];
+
+test('按格的 Aⁿ：一格一个式子，逐格代 n 判', () => {
+  assert.equal(judgeAnswer(AN_CELLS, AN).ok, true);
+  // 写法不同、等价的都对（展开的、带乘号的、换了先后的、小数系数、带空格的）
+  for (const c13 of ['(n^2-n)/2', 'n*(n-1)/2', '(n-1)n/2', 'n (n-1) / 2', '0.5n(n-1)', '(1/2)(n^2 - n)', 'n²/2 - n/2']) {
+    const g = AN_CELLS.map((r) => [...r]);
+    g[0][2] = c13;
+    const r = judgeAnswer(g, AN);
+    assert.equal(r.ok, true, c13);
+    assert.equal(r.misread, null, c13);
+  }
+  // 一行字交（和老师写 answer= 一样的写法）、[[…]] 交也认
+  assert.equal(judgeAnswer('1 n n(n-1)/2 / 0 1 n / 0 0 1', AN).ok, true);
+  assert.equal(judgeAnswer('[[1, n, (n^2-n)/2], [0, 1, n], [0, 0, 1]]', AN).ok, true);
+  // 一格不对：说第几行第几格、学生写的、代哪个 n、两边各是几
+  const g = AN_CELLS.map((r) => [...r]);
+  g[0][2] = 'n^2/2';
+  const r = judgeAnswer(g, AN);
+  assert.equal(r.ok, false);
+  const m = r.misread.match(/^第 1 行第 3 格不对：学生写 n²\/2，代 n = (\d+) 是 ([\d.]+)，该是 ([\d.]+)$/);
+  assert.ok(m, r.misread);
+  const n = Number(m[1]);
+  assert.equal(Number(m[2]), n * n / 2);
+  assert.equal(Number(m[3]), n * (n - 1) / 2);
+  // 几格都错写第一格
+  const two = AN_CELLS.map((r) => [...r]);
+  two[1][2] = '2n';
+  two[0][1] = 'n+1';
+  assert.match(judgeAnswer(two, AN).misread, /^第 1 行第 2 格不对：学生写 n\+1，/);
+  // 大小对不上：不对，说一声（按格的式子框交不出这种，一行字交得出）
+  const sh = judgeAnswer('1 n / 0 1', AN);
+  assert.equal(sh.ok, false);
+  assert.match(sh.misread, /2×2.*3×3/);
+  // 负号、分数：−n 和 -n、(-1)n 一样；1/2 和 0.5 一样
+  const neg = { type: 'matrix', free: 'n', answer: '1 -n / 0 1/2' };
+  for (const x of ['−n', '(-1)n', '-1*n', '0-n']) assert.equal(judgeAnswer([['1', x], ['0', '0.5']], neg).ok, true, x);
+  assert.equal(judgeAnswer([['1', 'n'], ['0', '1/2']], neg).ok, false);
+  // 学生那一格页面读不懂：不对，告诉老师读不懂哪一格
+  const bad = judgeAnswer([['1', 'm'], ['0', '1/2']], neg);
+  assert.equal(bad.ok, false);
+  assert.match(bad.misread, /第 1 行第 2 格.*读不懂/);
+});
+
+test('按格的 Aⁿ：写下时就查（每行一样多、只用 free= 的变量），写错照真的原因说', () => {
+  assert.doesNotThrow(() => checkSpec(AN));
+  assert.throws(() => checkSpec({ ...AN, answer: '1 n / 0' }), /第 2 行/);
+  assert.throws(() => checkSpec({ ...AN, answer: '1 m / 0 1' }), /「m」/);
+  assert.throws(() => checkSpec({ ...AN, answer: '1 m / 0 1' }), /free=/);
+  // wrong= 也照按格的式子读：大小要和答案一样
+  const w = { ...AN, wrongs: '1 n n^2/2 / 0 1 n / 0 0 1=当成了 n²/2' };
+  assert.doesNotThrow(() => checkSpec(w));
+  const g = AN_CELLS.map((r) => [...r]);
+  g[0][2] = 'n*n/2';
+  assert.equal(judgeAnswer(g, w).misread, '当成了 n²/2');
+  assert.throws(() => checkSpec({ ...AN, wrongs: '1 n / 0 1=错的' }), /wrong=.*2×2.*3×3/);
+  // 舞台上：ask value 收下这一行，等着的那一问带着 free；学生那边按格画的大小页面先算好
+  const sc = new Scene();
+  assert.equal(sc.check(parseScript('ask value "Aⁿ = ？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"')[0]), null);
+  sc.apply(parseScript('ask value "Aⁿ = ？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"')[0]);
+  assert.equal(sc.waiting.free, 'n');
+  assert.deepEqual(gridShape(sc.waiting, sc), { rows: 3, cols: 3, names: ['n'] });
+  assert.equal(gridShape({ type: 'matrix', answer: '1 2 / 3 4' }, sc), null, '没写 free= 照旧一个输入框');
+});
+
+test('两种 /：两边空着的分行，贴着的是一格分数（不写 free= 照旧按数比）', () => {
+  const spec = { type: 'matrix', answer: '1 1/2 / 0 1' };
+  assert.equal(judgeAnswer('1 0.5 / 0 1', spec).ok, true);
+  assert.equal(judgeAnswer('1 1/3 / 0 1', spec).ok, false);
+  assert.deepEqual(formulaRows('1 n n(n-1)/2 / 0 1 n / 0 0 1'), AN_CELLS);
+  assert.deepEqual(formulaRows('2^n n/2 / 0 1'), [['2^n', 'n/2'], ['0', '1']]);
+});
+
+test('省乘号：answer、wrong=、学生写的都照同一种读法（2n = 2*n = 2 n）', () => {
+  const spec = { type: 'formula', free: 'n', answer: '2n' };
+  assert.equal(judgeAnswer('2*n', spec).ok, true);
+  assert.equal(judgeAnswer('2 n', spec).ok, true);
+  assert.equal(judgeAnswer('n+n', spec).ok, true);
+  assert.equal(judgeAnswer('n n', { ...spec, wrongs: 'n^2=写成了平方' }).misread, '写成了平方');
+  // 以前 n(n-1)/2 当成了函数 n(…)，写下就报「算不出来」
+  const tri = { type: 'formula', free: 'n', answer: 'n(n-1)/2' };
+  assert.doesNotThrow(() => checkSpec(tri));
+  for (const g of ['(n^2-n)/2', 'n*(n-1)/2', 'n(n-1)/2', '(n-1)n/2']) assert.equal(judgeAnswer(g, tri).ok, true, g);
+  assert.equal(judgeAnswer('n^2/2', tri).ok, false);
+  // 写错的原因照舞台的写法说（free=，不说黑板的 formula: / let）
+  assert.throws(() => checkSpec({ type: 'formula', free: 'n', answer: '2m' }), (e) => /「m」/.test(e.message) && !/let|formula:/.test(e.message));
+});
+
+test('[[…]] 写得一样也判对（以前格里的 n 2^(n-1) 读不了，一字不差也判错）', () => {
+  const spec = { type: 'matrix', free: 'n', answer: '[[2^n, n 2^(n-1)], [0, 2^n]]' };
+  assert.doesNotThrow(() => checkSpec(spec));
+  assert.equal(judgeAnswer('[[2^n, n 2^(n-1)], [0, 2^n]]', spec).ok, true);
+  assert.equal(judgeAnswer([['2^n', 'n*2^(n-1)'], ['0', '2^n']], spec).ok, true);
+  assert.equal(judgeAnswer([['2^n', 'n*2^n'], ['0', '2^n']], spec).ok, false);
+});
+
+test('按格交的写成一行字：一行里的格用空格隔开，行之间「 / 」；读回来一样', () => {
+  const text = gridAnswerText(AN_CELLS);
+  assert.equal(text, '1 n n(n-1)/2 / 0 1 n / 0 0 1');
+  assert.deepEqual(formulaRows(text), AN_CELLS);
+  assert.match(actText({ type: 'value', text, answer: AN.answer, right: true, misread: null }), /学生填了「1 n n\(n-1\)\/2 \/ 0 1 n \/ 0 0 1」/);
+  // 格里带空格的（学生写 n (n-1)/2、2 n）：去掉不改意思的空格，读回来还是一格、判起来一样
+  const spaced = [['1', '2 n'], ['n (n - 1) / 2', '-1']];
+  const t2 = gridAnswerText(spaced);
+  const back = formulaRows(t2);
+  assert.equal(back.length, 2);
+  assert.equal(back[0].length, 2);
+  assert.equal(back[1].length, 2);
+  const s2 = { type: 'matrix', free: 'n', answer: '1 2n / n(n-1)/2 -1' };
+  assert.equal(judgeAnswer(spaced, s2).ok, true);
+  assert.equal(judgeAnswer(t2, s2).ok, true);
+  assert.equal(judgeAnswer(back, s2).ok, true);
+});
+
+const AB = () => run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix B = 1 0 / 1 1');
+const mx = (answer, wrongs) => ({ type: 'matrix', answer, ...(wrongs ? { wrongs } : {}) });
+
+test('五条现算的常见错答：对上了告诉老师「像是……」', () => {
+  const sc = AB();
+  const say = (given, answer) => judgeAnswer(given, mx(answer), sc);
+  // A B 交成 B A
+  const ba = say('1 2 / 4 6', '{A B}');
+  assert.equal(ba.ok, false);
+  assert.equal(ba.misread, '像是乘反了（算成了 B A）');
+  assert.match(say('1 4 / 9 16', '{A^2}').misread, /各自 2 次方/);
+  assert.match(say('3 6 / 3 4', '{3 A}').misread, /只乘了第一行/);
+  assert.match(say('3 2 / 3 4', '{3 A}').misread, /只乘了一格/);
+  assert.match(say('1 1/2 / 1/3 1/4', '{A^-1}').misread, /取了倒数/);
+  assert.match(say('4 -2 / -3 1', '{A^-1}').misread, /没除以行列式/);
+  assert.match(say('1 2 / 3 4', "{A'}").misread, /没转置/);
+  // 对的照样对、别的错答没有说明（页面只认这五种，不猜）
+  assert.equal(say('3 2 / 7 4', '{A B}').ok, true);
+  assert.equal(say('3 2 / 7 4', '{A B}').misread, null);
+  assert.equal(say('9 9 / 9 9', '{A B}').misread, null);
+  // 不是方阵的转置：没转置的那张大小都不一样，照样认得出
+  const wide = run(new Scene(), 'matrix C = 1 2 3 / 4 5 6');
+  assert.match(judgeAnswer('1 2 3 / 4 5 6', mx("{C'}"), wide).misread, /没转置/);
+  // 写法：k 是拨数、乘号写出来、上标也认
+  const k = run(new Scene(), 'dial k = 3 range=1..5\nmatrix A = 1 2 / 3 4');
+  assert.match(judgeAnswer('3 6 / 3 4', mx('{k A}'), k).misread, /只乘了第一行/);
+  assert.match(judgeAnswer('1 4 / 9 16', mx('{A²}'), k).misread, /各自 2 次方/);
+  assert.match(judgeAnswer('1 1/2 / 1/3 1/4', mx('{A⁻¹}'), k).misread, /取了倒数/);
+  assert.match(judgeAnswer('1 2 / 4 6', mx('{A*B}'), sc).misread, /乘反了/);
+});
+
+test('现算出来和正确答案一样的那条不要；算不出来的那条跳过', () => {
+  // 对称矩阵：没转置和转置了一样
+  const sym = run(new Scene(), 'matrix A = 1 2 / 2 1');
+  assert.ok(!autoWrongs("{A'}", sym).some((w) => /没转置/.test(w.why)));
+  // 学生写 A 本身就是对的，不说「没转置」
+  const r = judgeAnswer('1 2 / 2 1', mx("{A'}"), sym);
+  assert.equal(r.ok, true);
+  assert.equal(r.misread, null);
+  // 对角矩阵：每格各自平方和真的平方一样；1 倍：只乘第一行和乘了整张一样
+  const diag = run(new Scene(), 'matrix D = 2 0 / 0 3');
+  assert.deepEqual(autoWrongs('{D^2}', diag), []);
+  assert.ok(!autoWrongs('{1 D}', diag).some((w) => /第一行/.test(w.why)));
+  // 行列式是 1：伴随矩阵就是逆，不说「没除以行列式」；有一格是 0，取不了倒数，那条跳过
+  const u = run(new Scene(), 'matrix U = 1 1 / 0 1');
+  assert.deepEqual(autoWrongs('{U^-1}', u), []);
+  const p = run(new Scene(), 'matrix P = 2 1 / 0 1');
+  const ws = autoWrongs('{P^-1}', p);
+  assert.deepEqual(ws.map((w) => w.why), ['像是伴随矩阵没除以行列式']);
+  assert.equal(ws[0].text, '1 -1 / 0 2');
+  // 乘反了算不出来（A 是 2×3、B 是 3×4，B A 乘不了）：跳过
+  const nm = run(new Scene(), 'matrix A = 1 2 3 / 4 5 6\nmatrix B = 1 0 0 1 / 0 1 0 1 / 0 0 1 1');
+  assert.deepEqual(autoWrongs('{A B}', nm), []);
+  // 不是这五种、不是 {…}：没有
+  const sc = AB();
+  assert.deepEqual(autoWrongs('{A + B}', sc), []);
+  assert.deepEqual(autoWrongs('1 2 / 3 4', sc), []);
+  assert.deepEqual(autoWrongs('{A B}', null), []);
+});
+
+test('老师的 wrong= 先比', () => {
+  const sc = AB();
+  const r = judgeAnswer('1 2 / 3 4', mx("{A'}", '1 2 / 3 4=老师写的'), sc);
+  assert.equal(r.ok, false);
+  assert.equal(r.misread, '老师写的');
+});
+
+test('type=set 的大括号：{1, 5} 只有数和逗号就当数集；学生写 {1,5}、1, 5 都对', () => {
+  const sc = AB();
+  const spec = { type: 'set', answer: '{1, 5}' };
+  assert.doesNotThrow(() => checkSpec(spec, sc));
+  assert.doesNotThrow(() => checkSpec(spec));
+  for (const g of ['{1,5}', '1, 5', '{5, 1}', '1，5', '1、5', '{1、5}', 'x=1 或 x=5']) assert.equal(judgeAnswer(g, spec, sc).ok, true, g);
+  assert.equal(judgeAnswer('1、5', { type: 'set', answer: '{1、5}' }, sc).ok, true);
+  // 不等式里的逗号照旧是「且」
+  assert.equal(judgeAnswer('x > 1, x < 3', { type: 'set', answer: '(1, 3)' }, sc).ok, true);
+  assert.equal(judgeAnswer('{1}', spec, sc).ok, false);
+  assert.equal(judgeAnswer('[1, 5]', spec, sc).ok, false);
+  assert.equal(judgeAnswer('{-1, 1/2}', { type: 'set', answer: '{-1, 1/2}' }, sc).ok, true);
+  assert.equal(sc.check(parseScript('ask value "解是？" type=set answer={1, 5}')[0]), null);
+  // 还读不懂（里面有别的）：照实说被当成了式子
+  assert.throws(() => checkSpec({ type: 'set', answer: '{1, a}' }, sc), /「\{1, a\}」被当成了式子/);
+  // 别的 type 的 {…} 照旧是式子
+  assert.throws(() => checkSpec({ type: 'num', answer: '{1, 5}' }, sc));
+});
+
+test('重放旧课（lenient）：{…} 算不出来照字面比，不报；新演的照旧报', () => {
+  const sc = AB();
+  assert.doesNotThrow(() => checkSpec({ answer: '{x y}' }, sc, { strict: false, lenient: true }));
+  assert.doesNotThrow(() => checkSpec({ answer: '{x y}', type: 'num' }, sc, { strict: false, lenient: true }));
+  assert.equal(judgeAnswer('{x y}', { answer: '{x y}', lenient: true }, sc).ok, true);
+  assert.equal(judgeAnswer('{x  Y}', { answer: '{x y}', lenient: true }, sc).ok, true);
+  assert.equal(judgeAnswer('x y', { answer: '{x y}', lenient: true }, sc).ok, false);
+  // 算得出来的照旧现算
+  assert.equal(judgeAnswer('3 2 / 7 4', { type: 'matrix', answer: '{A B}', lenient: true }, sc).ok, true);
+  // 不是 lenient：照旧报、照旧没判成
+  assert.throws(() => checkSpec({ answer: '{x y}' }, sc, { strict: false }));
+  assert.throws(() => checkSpec({ answer: '{x y}' }, sc));
+  assert.equal(judgeAnswer('{x y}', { answer: '{x y}' }, sc).ok, null);
+  // 舞台上：重放旧课的 ask（lenient）收下，等着的那一问带着 lenient；预写的行（lenient + prewrite）写下时验过了，不照字面
+  const s = AB();
+  assert.doesNotThrow(() => s.apply({ ...parseScript('ask value "?" answer={x y}')[0], lenient: true }));
+  assert.equal(s.waiting.lenient, true);
+  assert.equal(judgeAnswer('{x y}', s.waiting, s).ok, true);
+  const p = AB();
+  p.apply({ ...parseScript('ask value "?" type=matrix answer={A B}')[0], lenient: true, prewrite: true });
+  assert.ok(!p.waiting.lenient);
+  assert.throws(() => AB().apply(parseScript('ask value "?" answer={x y}')[0]));
 });

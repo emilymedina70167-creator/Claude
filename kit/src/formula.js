@@ -263,7 +263,8 @@ export function compareFormula(expected, given, { free, scope = {} } = {}) {
   const why = b.err ? `你的式子算不出来（${b.err}）` : `你的式子得 $${valueTeX(b.got)}$，应该是 $${valueTeX(b.want)}$`;
   const msg = `${good.length ? `${listTeX(good)} 时对得上；` : ''}${listTeX([b])} 时${why}。`;
   const note = `代值检查：${good.length ? `${list(good)} 对，` : ''}${list(bad, 4)} 不对`;
-  return { ok: false, msg, note, checked: rows.length };
+  // bad：对不上的那几组（{ at, want, got, err }）：舞台写给老师「代 n = 3 是 4.5，该是 3」要用两边的值
+  return { ok: false, msg, note, checked: rows.length, bad };
 }
 
 // 含参数的多项式（paramcalc.js 算出来、记着参数名 param）在这一组值上的值；别的原样
@@ -339,13 +340,13 @@ function splitList(s) {
   return out.some((x) => !x) ? null : out;
 }
 
-/** 逐格比：expected / given 都是 [[式子]]。返回 { ok, wrong: [格的序号（按行数）], first: { r, c, msg } } */
+/** 逐格比：expected / given 都是 [[式子]]。返回 { ok, wrong: [格的序号（按行数）], first: { r, c, msg, bad（对不上的那几组值） } } */
 export function compareCells(expected, given, opts) {
   const wrong = [];
   let first = null;
   expected.forEach((row, r) => row.forEach((e, c) => {
     const res = compareFormula(e, given[r][c], opts);
-    if (!res.ok) { wrong.push(r * row.length + c); first ??= { r, c, msg: res.msg, powerBan: res.powerBan }; }
+    if (!res.ok) { wrong.push(r * row.length + c); first ??= { r, c, msg: res.msg, powerBan: res.powerBan, bad: res.bad || [] }; }
   }));
   return { ok: !wrong.length, wrong, first };
 }

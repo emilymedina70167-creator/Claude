@@ -1,8 +1,14 @@
 // 含 n 的式子作答框：一个输入框，下面实时写成公式（学生看得到自己写的是什么），配一个符号小键盘（iPad）。
 // 接口和 mathinput.js 的格子一样（read / text / partial / mark / markAll / fill / lock / clear / onEnter），
 // answer、steps 不用分两套写。读懂写法、代值比较在 formula.js
+import katex from 'katex';
 import { normalizeFormula, formulaTeX } from './formula.js';
-import { tex2html } from './render.js';
+
+// 预览直接交给 KaTeX：formulaTeX 写出来的式子里没有 \calc、\hl 这些课件里的写法，用不着 render.js 的 tex2html；
+// 不 import render.js，舞台（kit/src/stage/）用这个框时不连带整套组件
+function texHtml(tex) {
+  try { return katex.renderToString(tex, { displayMode: false, throwOnError: false, strict: false }); } catch { return ''; }
+}
 
 const SHOW = { alpha: 'α', beta: 'β', gamma: 'γ', lambda: 'λ', mu: 'μ', theta: 'θ' };
 
@@ -23,7 +29,7 @@ export function formulaInput(container, { names = [], keys = names, placeholder 
     preview.classList.remove('is-bad');
     if (!t) { preview.innerHTML = ''; return; }
     try {
-      preview.innerHTML = tex2html(formulaTeX(normalizeFormula(t, { names })), false);
+      preview.innerHTML = texHtml(formulaTeX(normalizeFormula(t, { names })));
     } catch (e) {
       preview.textContent = e.message;
       preview.classList.add('is-bad');
@@ -99,6 +105,9 @@ function showPad(names) {
 }
 const btn = ([k, label, cls]) => `<button type="button" data-k="${k}"${cls ? ` class="${cls}"` : ''}>${label}</button>`;
 
+/** 收起符号小键盘（舞台那一问被换掉、页面把输入框整个拿掉时：焦点没走，小键盘不会自己收） */
+export function hideFormulaPad() { if (pad?.classList.contains('show')) hidePad(); }
+
 function hidePad() {
   pad?.classList.remove('show');
   target?.blur();
@@ -155,6 +164,8 @@ export function formulaGrid(container, { rows, cols, names = [], keys = names } 
       });
     },
     text() { return `[${at((f) => f.partial() || '?').map((row) => `[${row.join(', ')}]`).join(', ')}]`; },
+    // 每格写的原样（没读懂之前的字，空的是 ''）：舞台交给页面判、写给老师的是学生写的样子
+    values() { return at((f) => f.partial()); },
     partial() { return cells.some((f) => f.partial()) ? this.text() : ''; },
     mark(wrong = []) { cells.forEach((f, i) => f.markAll(wrong.includes(i) ? 'is-wrong' : '')); },
     markAll(cls) { cells.forEach((f) => f.markAll(cls)); },

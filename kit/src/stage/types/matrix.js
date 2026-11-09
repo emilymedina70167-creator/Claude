@@ -870,7 +870,9 @@ open m rowop wrong=mark call=wrong    学生把一行左边的把手拖到另一
 open m edit input=keypad          学生点一格用数字键盘写（能写 -3/2；写了 range= 才限范围）= write m.2,3 -3/2（页面不判，告诉你的就是这一行）
 判断式（when=）：m stairs（阶梯形）、m rref（行最简形）、m rank=2（整张的秩，增广的是 r(A | b)）、m rankA=2（竖线左边的秩 r(A)）、m same B（和 B 行等价）
 做完了 = 成了阶梯形（@m.done 这时演）；往上化成行最简形页面不判对错，要的话写 goal … when="m rref"
-ask value "A² 是？" type=matrix answer={A^2} wrong="1 1 / 1 1=逐格平方了"     学生写一张矩阵（行用「 / 」或 ; 隔开，1/3 是一格分数），页面照 A 现算答案`,
+ask value "A² 是？" type=matrix answer={A^2} wrong="1 1 / 1 1=逐格平方了"     学生写一张矩阵（行用「 / 」或 ; 隔开，1/3 是一格分数），页面照 A 现算答案
+ask value "Aⁿ 是？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"     每格是含 n 的式子：学生一格一个式子框，页面逐格代 n 判，哪一格不对告诉你
+answer={A B}、{A^2}、{3 A}、{A^-1}、{A'} 时页面自己认乘反、逐格乘方、只乘一行或一格、逐格取倒数或没除以行列式、没转置，对上了告诉你（你写的 wrong= 先比）`,
   // 测试用（tests/stage-doc.test.js）：说明里 stairs 那一行要一个已经是阶梯形的矩阵；整张拖的三行要 AB、BA、Sum、X、Y
   docSetup: 'matrix m = 1 2 3 / 0 1 4 / 0 0 1\nmatrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix AB = {A B}\nmatrix BA = {B A}\nmatrix Sum = collect\nmatrix X = {-2 A}\nmatrix Y = {-A}',
   example: `matrix A = 1 1 / -1 -1

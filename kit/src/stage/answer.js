@@ -1,14 +1,16 @@
-// 舞台上 ask value 的判答案（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 5 节）：
+// 舞台上 ask value 的判答案（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 5 节，第二轮第 10 节）：
 // type= 选一种现成的判法（数、含 n 的式子、矩阵、数集、方程组、序列、英文），answer 可以是 {式子}（页面照舞台现在的样子现算），也可以不写（只收不判）。
 // 常见错答 wrong="3=漏了 E; 0=当成数 0"：对上了就把「漏了 E」记下来，只进给老师的那一段；学生那边只看到对或不对。
+// answer 是 {A B}、{A^2}、{3 A}、{A^-1}、{A'} 这五种时，页面自己照固定的改法现算几条常见错答（autoWrongs），也只告诉老师。
+// type=matrix 写了 free=n：每格是含 n 的式子，学生那边一格一个式子框，逐格代 n 判（formulaRows、gridAnswerText）。
 // 纯函数，不碰 DOM，有测试（tests/stage-answer.test.js）。判法本身都是黑板上已有的，这里只接线。
-import { calcValue, exactText, isQ, isQVec, isQMat } from '../exact.js';
-import { parseFree, formulaSpec, compareFormula, normalizeFormula, matrixCells, compareCells } from '../formula.js';
+import { calcValue, exactText, isQ, isQVec, isQMat, Q, mul, det, inv } from '../exact.js';
+import { parseFree, formulaSpec, compareFormula, normalizeFormula, matrixCells, compareCells, FORMULA_FUNCS } from '../formula.js';
 import { intervalSpec, equationSpec } from '../anstypes.js';
 import { parseSeqAnswer, checkSeq } from '../textcheck.js';
 import { parseAnswer, matchText } from '../entext.js';
 import { toQ, parseRows } from './types/matrix.js';
-import { evalLive } from './value.js';
+import { evalLive, numText } from './value.js';
 
 
 /** 填的答案和正确答案一样吗（数按数比：0.50 = .5 = 1/2；别的去掉空格、不分大小写） */
@@ -68,12 +70,26 @@ function valueText(v) {
 }
 
 const isLive = (s) => /^\{[^{}]*\}$/.test(String(s ?? '').trim());
-/** answer 是 {式子} 时现算成文字（矩阵写成「1 2 / 0 1」）；不是就原样 */
-function resolveAnswer(answer, scene) {
+// type=set 的 {1, 5}：大括号里只有数、逗号、空格，是数集的写法（几个值），不是要页面现算的式子（第一轮这样写会报一句看不懂的错）
+const SET_BRACES = /^\{[\s\d.,，、/+\-−]*\}$/;
+const liveIn = (s, type) => isLive(s) && !(type === 'set' && SET_BRACES.test(String(s).trim()));
+/**
+ * answer 是 {式子} 时现算成文字（矩阵写成「1 2 / 0 1」）；不是就原样。
+ * lenient（重放旧课）：算不出来就照字面——第一轮以前的课里 answer={…} 可能就是字面写的，不是式子
+ */
+function resolveAnswer(answer, scene, { type = null, lenient = false } = {}) {
   const s = String(answer ?? '').trim();
-  if (!isLive(s)) return s;
-  if (!scene) throw new Error(`answer=${s} 是跟着算的，要在舞台上才算得出来`);
-  return valueText(evalLive(s, scene).value);
+  if (!liveIn(s, type)) return s;
+  if (!scene) {
+    if (lenient) return s;
+    throw new Error(`answer=${s} 是跟着算的，要在舞台上才算得出来`);
+  }
+  try { return valueText(evalLive(s, scene).value); } catch (e) {
+    if (lenient) return s;
+    // 数集想写几个值却写了别的（{1, a}）：照实说页面把它当成了式子，不只报一句式子算不出来
+    if (type === 'set') throw new Error(`answer=「${s}」被当成了式子（{…} 是页面照舞台现算的）：${e.message}；数集的几个值写成 {1, 5}，大括号里只写数和逗号`);
+    throw e;
+  }
 }
 
 // —— 矩阵：「1 2 / 3 4」——
@@ -89,6 +105,88 @@ const sameGrid = (a, b) => a.length === b.length && a.every((r, i) => r.length =
 const shapeText = (g) => `${g.length}×${g[0].length}`;
 // 学生写的里面斜线两边贴着数的那一块（1 2/3 4 的 2/3）：页面照写法读成了分数
 const fracIn = (text) => String(text ?? '').split(/[\s,，;]+/).find((w) => /^[-+]?\(?\d+(\.\d+)?\/\d+(\.\d+)?\)?$/.test(w)) || null;
+
+// —— 按格的式子：「1 n n(n-1)/2 / 0 1 n / 0 0 1」——
+/**
+ * 一行字 → 每一格的式子（string[][]）。和老师写 answer=、造矩阵一样：括号外面两边空着的 /（还有 ;、换行）分行，
+ * 只贴着一边的 / 也当分行；两边都贴着的 / 是除（n(n-1)/2 是一格）。格用空格或逗号隔开，括号里的空格、逗号不算
+ */
+export function formulaRows(text) {
+  const s = String(text ?? '').trim().replace(/\s*\n\s*/g, ' / ');
+  const rows = [[]];
+  let cur = '', depth = 0;
+  const cell = () => { if (cur) rows.at(-1).push(cur); cur = ''; };
+  const row = () => { cell(); rows.push([]); };
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (depth === 0) {
+      if (/\s/.test(ch) || ch === ',' || ch === '，') { cell(); continue; }
+      if (ch === ';' || ch === '；') { row(); continue; }
+      if (ch === '/' && !(/\S/.test(s[i - 1] ?? '') && /\S/.test(s[i + 1] ?? ''))) { row(); continue; }
+    }
+    if ('([{'.includes(ch)) depth++;
+    else if (')]}'.includes(ch)) depth = Math.max(0, depth - 1);
+    cur += ch;
+  }
+  cell();
+  while (rows.length > 1 && !rows.at(-1).length) rows.pop();
+  return rows;
+}
+
+// 一格里的空格：运算符、括号两边的不改意思，去掉；两个字母数字中间的是省掉的乘号，写成 ·（2 n → 2·n，函数名后面的直接贴上：tr A → trA）。
+// 这样一格写成一行字以后还是一格（格之间用空格隔开）
+function tidyCell(c) {
+  let t = String(c ?? '').trim();
+  if (!t) return '_';
+  t = t.replace(/([\p{L}\p{N}_.']+)\s+(?=[\p{L}\p{N}_.])/gu, (m, w) => (FORMULA_FUNCS.includes(w) ? w : `${w}·`)).replace(/\s+/g, '');
+  // 括号外面还有逗号、分号（写错了的一格）：整格括起来，读回来不被切开
+  let depth = 0;
+  for (const ch of t) { if ('([{'.includes(ch)) depth++; else if (')]}'.includes(ch)) depth--; else if (depth === 0 && /[,，;；]/.test(ch)) return `(${t})`; }
+  return t;
+}
+/** 按格交的答案写成一行字（formulaRows 反过来）：一行里的格用空格隔开，行之间「 / 」，和老师写 answer= 一样；空格子写 _ */
+export function gridAnswerText(rows) {
+  return (rows || []).map((r) => (r || []).map(tidyCell).join(' ')).join(' / ');
+}
+
+/** 一格一格的式子：交来的 string[][]，或一行字（[[…]] 也认）；每行一样多，不然抛中文原因 */
+function cellGrid(src) {
+  const rows = Array.isArray(src) ? src.map((r) => (Array.isArray(r) ? r.map((c) => String(c ?? '').trim()) : [])) : matrixCells(src) || formulaRows(src);
+  if (!rows.length || !rows[0].length) throw new Error('还没写矩阵');
+  rows.forEach((r, i) => { if (!r.length) throw new Error(`第 ${i + 1} 行是空的（两个 / 中间要有式子）`); });
+  rows.forEach((r, i) => { if (r.length !== rows[0].length) throw new Error(`第 ${i + 1} 行有 ${r.length} 格，第 1 行有 ${rows[0].length} 格（每行要一样多）`); });
+  return rows;
+}
+
+// 黑板（formula.js）的报错说的是课件的写法（formula:、answer:、在 let 里给出）：换成舞台的写法再说
+const stageWords = (msg) => String(msg).replace(/formula:/g, 'free=').replace(/answer:\s*/g, 'answer=').replace(/在 let 里给出它的值/g, '舞台上的式子只能用 free= 写的变量');
+/** 老师写的一个式子（answer=、wrong= 的一格）→ 读懂以后的表达式：和学生写的走同一个 normalizeFormula（2n、n(n-1)/2 都认） */
+function teacherFormula(text, names, what) {
+  try { return normalizeFormula(text, { names }); } catch (e) {
+    const hint = /^不认识/.test(e.message) ? `；式子里的变量写在 free= 里（现在是 ${names.length ? names.join('、') : '没有'}）` : '';
+    throw new Error(`${what}「${text}」读不懂：${e.message}${hint}`);
+  }
+}
+// 写给老师的式子：上标写成上标（n^2/2 → n²/2），别的照学生写的
+const SUPER = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', '-': '⁻' };
+const prettyFormula = (t) => String(t ?? '').trim().replace(/\s+/g, ' ').replace(/\^(?:\((-?\d+)\)|(-?\d+))/g, (m, a, b) => [...(a ?? b)].map((c) => SUPER[c]).join(''));
+// 代进去算出来的一个值写给老师：整数、有限小数照写（4.5），别的写分数；负号写 −
+function valueWord(v) {
+  if (isQ(v)) return numText(v).replace(/^-/, '−');
+  if (typeof v === 'number' && Number.isFinite(v)) return String(Math.round(v * 1e6) / 1e6).replace(/^-/, '−');
+  return '？';
+}
+/** 一格对不上写给老师：第 1 行第 3 格不对：学生写 n²/2，代 n = 3 是 4.5，该是 3（挑 n ≥ 2、学生的式子算得出来的那一组） */
+function cellNote(first, raw) {
+  const where = `第 ${first.r + 1} 行第 ${first.c + 1} 格不对：学生写 ${prettyFormula(raw)}`;
+  const bad = first.bad || [];
+  const big = (b) => Object.values(b.at).every((v) => v >= 2);
+  const b = bad.find((x) => !x.err && big(x)) || bad.find((x) => !x.err) || bad[0];
+  if (!b) return where;
+  const at = Object.entries(b.at).map(([k, v]) => `${k} = ${v}`).join('，');
+  const got = b.err ? `算不出来（${b.err}）` : `是 ${valueWord(b.got)}`;
+  return `${where}，${at ? `代 ${at} ` : '算出来'}${got}，该是 ${valueWord(b.want)}`;
+}
 
 /** 一个数：0.5、1/2、2^3 都认，按精确值比 */
 function numOf(text) {
@@ -107,6 +205,40 @@ const no = (note = null) => ({ ok: false, note });
 const unread = (e) => no(`页面读不懂这个写法（${e.message}）`);
 
 /**
+ * 按格写的式子的判法：answer 是 [[…]] 或「1 n n(n-1)/2 / 0 1 n / 0 0 1」，free 是 free= 的原文（[[…]] 不写 free= 时格里只有数）。
+ * 每一格照学生的读法（normalizeFormula）读懂，造的时候每格代一遍、算不出来当场报；判的时候逐格代值比（compareCells）
+ */
+function cellsCheck(ans, free) {
+  let fr;
+  try { fr = parseFree(String(free ?? '').trim() ? free : '-'); } catch (e) { throw new Error(stageWords(e.message)); }
+  const names = fr.map((f) => f.name);
+  const rows = cellGrid(ans);
+  const want = rows.map((r, i) => r.map((c, j) => teacherFormula(c, names, `第 ${i + 1} 行第 ${j + 1} 格`)));
+  for (let i = 0; i < want.length; i++) for (let j = 0; j < want[i].length; j++) {
+    try { compareFormula(want[i][j], want[i][j], { free: fr, scope: {} }); } catch (e) { throw new Error(`第 ${i + 1} 行第 ${j + 1} 格「${rows[i][j]}」代不进去：${stageWords(e.message)}`); }
+  }
+  const check = (g) => {
+    let mine;
+    try { mine = cellGrid(g); } catch (e) { return unread(e); }
+    if (mine.length !== want.length || mine[0].length !== want[0].length) return no(`学生写的是 ${shapeText(mine)} 的，答案是 ${shapeText(want)} 的`);
+    const read = [];
+    for (let i = 0; i < mine.length; i++) {
+      read.push([]);
+      for (let j = 0; j < mine[i].length; j++) {
+        if (!mine[i][j] || mine[i][j] === '_') return no(`第 ${i + 1} 行第 ${j + 1} 格还空着`);
+        try { read[i].push(normalizeFormula(mine[i][j], { names })); } catch (e) { return no(`第 ${i + 1} 行第 ${j + 1} 格页面读不懂（${e.message}）`); }
+      }
+    }
+    // 标准答案写下时代过了：这里再抛（某一格所有取值都算不出来）是页面没判成，交给 judgeAnswer 记 ok: null
+    const res = compareCells(want, read, { free: fr, scope: {} });
+    return res.ok ? yes : no(cellNote(res.first, mine[res.first.r][res.first.c]));
+  };
+  check.shape = [want.length, want[0].length];
+  check.cells = true; // 收 string[][]（按格的式子框交的）
+  return check;
+}
+
+/**
  * 按 type 造一个 check(写的) → { ok, note }。造的时候就查 answer 写得对不对（写错抛中文原因）。
  * ans 已经是文字（{式子} 算过了）；free 是 formula / matrix 的自变量写法
  */
@@ -120,22 +252,24 @@ function makeCheck(type, ans, { free } = {}) {
     }
     case 'formula': {
       if (!String(free ?? '').trim()) throw new Error('type=formula 要写 free=n（式子里的变量，比如 free=n，或 free=n=1..8）');
-      const spec = formulaSpec(ans, free, {});
-      return bool((g) => {
-        try { return compareFormula(spec.expected, normalizeFormula(g, { names: spec.names }), { free: spec.free, scope: {} }).ok; } catch { return false; }
-      });
+      let fr;
+      try { fr = parseFree(free); } catch (e) { throw new Error(stageWords(e.message)); }
+      const names = fr.map((f) => f.name);
+      // 老师写的和学生写的走同一种读法（2n、n(n-1)/2：以前 n(…) 被当成函数，写下就报算不出来）；
+      // 照这种读法读不了、黑板原来的读法读得了的照旧收（以前收下的写法不变）
+      let src = null, err = null;
+      try { src = teacherFormula(ans, names, 'answer='); } catch (e) { err = e; }
+      let spec;
+      try { spec = formulaSpec(src ?? ans, free, {}); } catch (e) { throw err || new Error(stageWords(e.message)); }
+      return (g) => {
+        let mine;
+        try { mine = normalizeFormula(g, { names: spec.names }); } catch (e) { return unread(e); }
+        try { return compareFormula(spec.expected, mine, { free: spec.free, scope: {} }).ok ? yes : no(); } catch { return no(); }
+      };
     }
     case 'matrix': {
-      const cells = matrixCells(ans);
-      if (cells) {
-        // 按格写的式子：[[2^n, n 2^(n-1)], [0, 2^n]]
-        const fr = parseFree(free || '-');
-        return bool((g) => {
-          const mine = matrixCells(g);
-          if (!mine || mine.length !== cells.length || mine[0].length !== cells[0].length) return false;
-          try { return compareCells(cells, mine.map((r) => r.map((x) => normalizeFormula(x, { names: fr.map((f) => f.name) }))), { free: fr, scope: {} }).ok; } catch { return false; }
-        });
-      }
+      // 按格写的式子：[[2^n, n 2^(n-1)], [0, 2^n]]，或者写了 free= 的「1 n n(n-1)/2 / 0 1 n / 0 0 1」
+      if (matrixCells(ans) || String(free ?? '').trim()) return cellsCheck(ans, free);
       const want = gridOf(ans);
       const check = (g) => {
         let mine;
@@ -144,10 +278,17 @@ function makeCheck(type, ans, { free } = {}) {
         const f = mine.length !== want.length || mine[0].length !== want[0].length ? fracIn(g) : null;
         return no(f ? `页面把「${f}」读成了一格分数，读出来是 ${shapeText(mine)} 的（分行要在 / 两边各空一格）` : null);
       };
-      check.grid = want;
+      check.shape = [want.length, want[0].length];
       return check;
     }
-    case 'set': { const sp = intervalSpec(ans); return bool((g) => sp.check(g).ok); }
+    case 'set': {
+      // 「、」和逗号一样（数集的写法里都是「且」；大括号里只认逗号隔开几个值）
+      const comma = (x) => String(x ?? '').replace(/、/g, ',');
+      const sp = intervalSpec(comma(ans));
+      // 学生只写了几个数、用逗号隔开（1, 5）：就是这几个值。数集的写法里逗号是「且」，1, 5 读成「是 1 又是 5」，对的也判错
+      const bare = (g) => (/^\s*[-−+]?[\d.]+(\/\d+)?(\s*[,，]\s*[-−+]?[\d.]+(\/\d+)?)+\s*$/.test(g) ? `{${g}}` : g);
+      return bool((g) => sp.check(bare(comma(g))).ok);
+    }
     case 'equation': { const sp = equationSpec(ans); return bool((g) => sp.check(g).ok); }
     case 'seq': { const alts = parseSeqAnswer(ans); return bool((g) => checkSeq(g, alts).ok); }
     case 'en': { const { alts } = parseAnswer(ans); return bool((g) => matchText(g, alts).ok); }
@@ -155,25 +296,96 @@ function makeCheck(type, ans, { free } = {}) {
   }
 }
 
+// —— 页面自己认的常见错答（第二轮第 10 节）：answer 整个是下面五种之一时，照固定的改法现算 ——
+const NAME = '[A-Za-z_][A-Za-z0-9_]*';
+const NUM = '[-+]?\\d+(?:\\.\\d+)?(?:\\/\\d+)?';
+const SUP_IN = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-' };
+const RE = {
+  two: new RegExp(`^(${NAME})(?:\\s*\\*\\s*|\\s+)(${NAME})$`), // A B、A*B、k A
+  scale: new RegExp(`^\\(?\\s*(${NUM})\\s*\\)?\\s*\\*?\\s*(${NAME})$`), // 3 A、3A、(-1/2) A
+  power: new RegExp(`^(${NAME})\\s*\\^\\s*(?:\\(\\s*(\\d+)\\s*\\)|(\\d+))$`), // A^2、A^(3)、A²
+  inverse: new RegExp(`^(?:(${NAME})\\s*\\^\\s*(?:\\(\\s*-\\s*1\\s*\\)|-\\s*1)|inv\\s*\\(\\s*(${NAME})\\s*\\))$`), // A^-1、A⁻¹、inv(A)
+  transpose: new RegExp(`^(?:(${NAME})\\s*'|T\\s*\\(\\s*(${NAME})\\s*\\))$`), // A'、Aᵀ、T(A)
+};
+const powQ = (q, k) => { let r = Q.int(1); for (let i = 0; i < k; i++) r = r.mul(q); return r; };
+
 /**
- * 照 spec 把判法造好：{ ans（正确答案写成字）, check, wrongs: [{ text, why, check }] }。
- * {式子} 现算出来再照 type 造一遍（算出来的和 type 对不上就抛）；wrong= 每一条也照 type 造（矩阵的错答格数要和答案一样：
- * 写成 1 2; 3 5 的，; 把一条错答切成了两条）。strict：写下这一行的时候，错答造不出来就抛；判的时候造不出来的那一条跳过
+ * answer 是 {X Y}、{X^k}（k ≥ 2）、{k X}、{X^-1}、{X'} 时，照舞台现在的样子现算常见错答：[{ text（写成「1 2 / 3 4」）, why }]。
+ * 乘反了（Y X）、每格各自 k 次方、只乘了第一行 / 只乘了 (1,1) 一格、每格取倒数 / 伴随矩阵没除以行列式（det × X⁻¹）、没转置（X 本身）。
+ * 现算出来和正确答案一样的那条不要（对称矩阵没转置也对、对角矩阵逐格平方也对）；算不出来的那条（有一格是 0 取不了倒数、B A 乘不了）跳过。
+ * 只做这五种，不做通用的错法生成：别的错靠老师写 wrong=
  */
-function buildJudge(type, spec, scene, { strict = false } = {}) {
+export function autoWrongs(raw, scene) {
+  const s = String(raw ?? '').trim();
+  if (!scene || !isLive(s)) return [];
+  let right;
+  try { right = evalLive(s, scene).value; } catch { return []; }
+  if (!isQMat(right)) return [];
+  const body = s.slice(1, -1).replace(/[−–]/g, '-').replace(/[·×]/g, '*').replace(/ᵀ/g, "'")
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/g, (m) => `^(${[...m].map((c) => SUP_IN[c]).join('')})`).trim();
+  const valueOf = (w) => evalLive(`{${w}}`, scene).value;
+  const matOf = (w) => { const v = valueOf(w); if (!isQMat(v)) throw new Error(`${w} 不是矩阵`); return v; };
+  const cands = [];
+  const scaleWrongs = (k, X) => {
+    cands.push({ why: '像是只乘了第一行', fn: () => X.map((r, i) => (i === 0 ? r.map((q) => k.mul(q)) : r.slice())) });
+    cands.push({ why: '像是只乘了一格', fn: () => X.map((r, i) => r.map((q, j) => (i === 0 && j === 0 ? k.mul(q) : q))) });
+  };
+  let m;
+  try {
+    if ((m = body.match(RE.two))) {
+      const [, x, y] = m;
+      const a = valueOf(x);
+      if (isQMat(a)) cands.push({ why: `像是乘反了（算成了 ${y} ${x}）`, fn: () => mul(matOf(y), a) });
+      else if (isQ(a)) scaleWrongs(a, matOf(y));
+    } else if ((m = body.match(RE.scale))) scaleWrongs(toQ(m[1]), matOf(m[2]));
+    else if ((m = body.match(RE.power)) && Number(m[2] ?? m[3]) >= 2) {
+      const k = Number(m[2] ?? m[3]), X = matOf(m[1]);
+      cands.push({ why: `像是每一格各自 ${k} 次方了`, fn: () => X.map((r) => r.map((q) => powQ(q, k))) });
+    } else if ((m = body.match(RE.inverse))) {
+      const X = matOf(m[1] ?? m[2]);
+      cands.push({ why: '像是每一格取了倒数', fn: () => X.map((r) => r.map((q) => Q.int(1).div(q))) });
+      cands.push({ why: '像是伴随矩阵没除以行列式', fn: () => mul(det(X), inv(X)) });
+    } else if ((m = body.match(RE.transpose))) {
+      const X = matOf(m[1] ?? m[2]);
+      cands.push({ why: '像是没转置', fn: () => X });
+    }
+  } catch { return []; } // 名字不是舞台上的矩阵、拨数：不是这五种
+  const out = [];
+  for (const c of cands) {
+    let v;
+    try { v = c.fn(); } catch { continue; }
+    if (!isQMat(v) || sameGrid(v, right)) continue;
+    const text = valueText(v);
+    if (out.some((w) => w.text === text)) continue; // 两条算出来一样（只有一行时只乘第一行 = 只乘一格）：留前面那条
+    out.push({ text, why: c.why });
+  }
+  return out;
+}
+
+/**
+ * 照 spec 把判法造好：{ ans（正确答案写成字）, check, wrongs: [{ text, why, check }], autos() }。
+ * {式子} 现算出来再照 type 造一遍（算出来的和 type 对不上就抛）；wrong= 每一条也照 type 造（矩阵的错答格数要和答案一样：
+ * 写成 1 2; 3 5 的，; 把一条错答切成了两条）。strict：写下这一行的时候，错答造不出来就抛；判的时候造不出来的那一条跳过。
+ * lenient（重放旧课）：{…} 算不出来照字面比，照 type 造不出判法就按字比
+ */
+function buildJudge(type, spec, scene, { strict = false, lenient = false } = {}) {
   const t = type || 'plain';
   const raw = String(spec.answer).trim();
-  const ans = resolveAnswer(raw, scene);
+  const ans = resolveAnswer(raw, scene, { type: t, lenient });
+  const literal = liveIn(raw, t) && ans === raw; // 重放旧课、算不出来：照字面
   // {式子} 算出来的照 type 造不出判法：说清楚算出来的是什么（answer={A^2} 算出来是「1 2 / 0 1」，照 type=num 判不了）
   const at = (what, value, e) => new Error(`${what} 算出来是「${value}」，照 type=${t} 判不了：${e.message}`);
   let check;
-  try { check = makeCheck(t, ans, spec); } catch (e) { throw isLive(raw) ? at(`answer=${raw}`, ans, e) : e; }
+  try { check = makeCheck(t, ans, spec); } catch (e) {
+    if (literal) check = makeCheck('plain', ans, spec);
+    else throw isLive(raw) && liveIn(raw, t) ? at(`answer=${raw}`, ans, e) : e;
+  }
   const make = (text) => {
-    const v = resolveAnswer(text, scene);
+    const v = resolveAnswer(text, scene, { type: t, lenient });
     let c;
-    try { c = makeCheck(t, v, spec); } catch (e) { throw isLive(text) ? at(`wrong= 的「${text}」`, v, e) : e; }
-    if (check.grid && c.grid && (c.grid.length !== check.grid.length || c.grid[0].length !== check.grid[0].length)) {
-      throw new Error(`wrong= 的「${text}」是 ${shapeText(c.grid)} 的，答案是 ${shapeText(check.grid)}：错答里矩阵的行用「 / 」隔开（「;」是隔开几条错答的）`);
+    try { c = makeCheck(t, v, spec); } catch (e) { throw liveIn(text, t) ? at(`wrong= 的「${text}」`, v, e) : e; }
+    if (check.shape && c.shape && (c.shape[0] !== check.shape[0] || c.shape[1] !== check.shape[1])) {
+      throw new Error(`wrong= 的「${text}」是 ${c.shape.join('×')} 的，答案是 ${check.shape.join('×')}：错答里矩阵的行用「 / 」隔开（「;」是隔开几条错答的）`);
     }
     return c;
   };
@@ -188,13 +400,16 @@ function buildJudge(type, spec, scene, { strict = false } = {}) {
     }
     wrongs.push({ ...w, check: c });
   }
-  return { ans, check, wrongs };
+  // 页面现算的常见错答：判错了、老师的 wrong= 都没对上才算（不和格数比：没转置的那张大小可能就不一样）
+  const autos = () => (literal ? [] : autoWrongs(raw, scene).flatMap((w) => { try { return [{ ...w, check: makeCheck(t, w.text, spec) }]; } catch { return []; } }));
+  return { ans, check, wrongs, autos };
 }
 
 
 /**
- * 判一个答案。spec = { type, answer, wrongs（wrong= 的原文或 parseWrongs 的结果）, free }。
- * 返回 { ok: true | false | null, misread: 常见错答的说明 | 页面看出来的写法问题 | null, shown: 正确答案写成字, failed? }。
+ * 判一个答案。given 是学生写的一行字，或者按格的式子框交的 string[][]；spec = { type, answer, wrongs（wrong= 的原文或
+ * parseWrongs 的结果）, free, lenient（重放旧课的那一问） }。
+ * 返回 { ok: true | false | null, misread: 常见错答的说明 | 页面看出来的写法问题、哪一格不对 | null, shown: 正确答案写成字, failed? }。
  * ok 是 null：老师没写 answer，只收不判；或者这一下页面没判成（failed 写原因：写下时验过了，判的时候 {P^-1} 算不出来——
  * 学生把 P 拨成了不可逆——这不是学生答错）。misread 只进给老师，学生那边只看到 ok
  */
@@ -202,23 +417,43 @@ export function judgeAnswer(given, spec = {}, scene = null) {
   const type = checkType(spec.type);
   const raw = spec.answer;
   if (raw == null || String(raw).trim() === '') return { ok: null, misread: null, shown: '' };
-  let j, r;
+  let j, r, g = given;
   try {
-    j = buildJudge(type, spec, scene);
-    r = j.check(given);
+    j = buildJudge(type, spec, scene, { lenient: !!spec.lenient });
+    // 按格交的给不是按格判的（一行字的判法）：写成一行字再判
+    const flat = (c) => (Array.isArray(given) && !c.cells ? gridAnswerText(given) : given);
+    g = flat(j.check);
+    r = j.check(g);
+    const hit = (x) => { try { return x.check(flat(x.check)).ok; } catch { return false; } };
+    if (r.ok) return { ok: true, misread: null, shown: j.ans };
+    // 老师的 wrong= 先比，再比页面现算的
+    const w = j.wrongs.find(hit) || j.autos().find(hit);
+    return { ok: false, misread: w ? w.why || `像是常见错答「${w.text}」` : r.note, shown: j.ans };
   } catch (e) {
     return { ok: null, misread: null, shown: j?.ans ?? String(raw).trim(), failed: `页面没判成：${e.message}` };
   }
-  if (r.ok) return { ok: true, misread: null, shown: j.ans };
-  const w = j.wrongs.find((x) => { try { return x.check(given).ok; } catch { return false; } });
-  return { ok: false, misread: w ? w.why || `像是常见错答「${w.text}」` : r.note, shown: j.ans };
+}
+
+/**
+ * 按格的式子框画多大：type=matrix 写了 free= 时 { rows, cols, names（式子里的变量） }，不然 null（一个输入框）。
+ * 太大的（超过 4×4）也是 null：一格一个框在 iPad 上摆不下，照旧一行字写
+ */
+export function gridShape(spec = {}, scene = null) {
+  if (String(spec.type ?? '').trim().toLowerCase() !== 'matrix' || !String(spec.free ?? '').trim()) return null;
+  try {
+    const names = parseFree(spec.free).map((f) => f.name);
+    const rows = cellGrid(resolveAnswer(spec.answer, scene, { type: 'matrix', lenient: !!spec.lenient }));
+    if (rows.length > 4 || rows[0].length > 4) return null;
+    return { rows: rows.length, cols: rows[0].length, names };
+  } catch { return null; }
 }
 
 /**
  * 写 ask value 这一行时先检查：type= 认得、wrong= 读得懂；answer、每一条错答照 type 造一遍判法（{式子} 在舞台上现算一遍再造），
- * 写错当场报。strict 是假的（重放旧课）：只做以前那几样检查，当时收下的照样收下
+ * 写错当场报。strict 是假的（预写的行、重放旧课）：只做以前那几样检查，当时收下的照样收下；
+ * lenient（重放旧课）：{…} 算不出来（第一轮以前字面写的 answer={…}）、照 type 造不出判法都不报，判的时候照字面比、没判成照实说
  */
-export function checkSpec(spec = {}, scene = null, { strict = true } = {}) {
+export function checkSpec(spec = {}, scene = null, { strict = true, lenient = false } = {}) {
   const type = checkType(spec.type);
   const raw = spec.answer;
   if (raw == null || String(raw).trim() === '') {
@@ -226,14 +461,17 @@ export function checkSpec(spec = {}, scene = null, { strict = true } = {}) {
     if (type || wrongs.length) throw new Error('ask value 写了 type= / wrong= 却没写 answer=：要判对错就写 answer=，只收不判就都不写');
     return;
   }
-  const live = /\{/.test(String(raw)) || /\{/.test(String(spec.wrongs ?? ''));
+  const s = String(raw).trim();
+  const setLit = type === 'set' && SET_BRACES.test(s);
+  const live = (/\{/.test(s) && !setLit) || /\{/.test(String(spec.wrongs ?? ''));
   if (!strict) {
     if (typeof spec.wrongs === 'string') parseWrongs(spec.wrongs);
-    if (/\{/.test(String(raw))) { if (scene) evalLive(String(raw).trim(), scene); return; }
-    if (type) makeCheck(type, String(raw).trim(), spec);
+    const quiet = (fn) => { try { fn(); } catch (e) { if (!lenient) throw e; } };
+    if (/\{/.test(s) && !setLit) { if (scene) quiet(() => evalLive(s, scene)); return; }
+    if (type) quiet(() => makeCheck(type, s, spec));
     return;
   }
   // 不在舞台上（测试里单拿出来查）：算不了 {式子}，只查写死的答案
-  if (live && !scene) { if (type && !isLive(raw)) makeCheck(type, String(raw).trim(), spec); return; }
+  if (live && !scene) { if (type && !liveIn(s, type)) makeCheck(type, s, spec); return; }
   buildJudge(type, spec, scene, { strict: true });
 }
