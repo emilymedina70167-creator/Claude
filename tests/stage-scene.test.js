@@ -1100,6 +1100,15 @@ test('after=：学生每做完一次那个动作页面替老师存；老师做�
   assert.equal(serialize(s.keeps.get('t').get('插入后')), after47);
   run(s, 'insert t 50');
   assert.equal(serialize(s.keeps.get('t').get('插入后')), after47, '老师插的不存');
+  // after=off：不再替老师存；已经存下的照留着
+  run(s, 'keep t "插入后" after=off');
+  assert.equal(s.autoKeep.has('t'), false);
+  assert.doesNotMatch(s.stateText(), /学生每做完一次/);
+  assert.match(s.stateText(), /^t 存着：插入后$/m);
+  stu(s, 'insert t 60', 'insert');
+  assert.equal(serialize(s.keeps.get('t').get('插入后')), after47, '停了以后学生插的也不存');
+  assert.equal(dryRun(s, 'keep t "插入后" after=off')[0].error, 't 的「插入后」没写过 after=，用不着 off');
+  assert.match(dryRun(run(new Scene(), `${T47}\nkeep t "转平后" after=rotate`), 'keep t "插入后" after=off')[0].error, /页面替你存的：「转平后」after=rotate/);
   // 学生从「摆到空位」那一项插的（open t place 交的是 insert t#2 right 47）：指令是 insert，也算
   const p = run(new Scene(), `${T47}\nopen t place\nkeep t "摆好了" after=place`);
   stu(p, 'insert t#6 right 47', 'place');
@@ -1185,7 +1194,7 @@ test('回去不动显示的：开着的子树高、平衡因子，学生点着�
   assert.equal(t.nodes[0].pick, 'on');
 });
 
-test('拿下舞台清掉存档；同名重造不清（换了一种东西才清）', () => {
+test('拿下舞台清掉存档；同名重造不清存档（换了一种东西才清），学生最后那一下之前的样子清掉', () => {
   const s = run(new Scene(), `${T47}\nopen t insert\nkeep t "开始"\nkeep t "插入后" after=insert`);
   stu(s, 'insert t 47', 'insert');
   run(s, 'remove t');
@@ -1196,7 +1205,9 @@ test('拿下舞台清掉存档；同名重造不清（换了一种东西才清�
   stu(r, 'insert t 47', 'insert');
   run(r, 'tree t = 1 2 3');
   assert.equal(r.keeps.get('t').has('开始'), true);
-  assert.equal(r.lastBefore.has('t'), true);
+  // 学生最后那一下之前的样子重造了就不算了：back t 不能把老师的重造悄悄抹掉
+  assert.equal(r.lastBefore.has('t'), false);
+  assert.equal(dryRun(r, 'back t')[0].error, 't 上学生还没动过');
   run(r, 'back t "开始"');
   assert.equal(ser(r), '30 20 40 10 25 _ 45');
   // 换了一种东西：存的是树的样子，回不到一排格子上
@@ -1217,4 +1228,19 @@ test('open 的 back=：学生那边一个「回到……」按钮（不是默认
   assert.match(dryRun(s, 'open t rotate back="插入后"')[0].error, /back=/);
   assert.match(dryRun(s, 'open t.30 back="插入后"')[0].error, /整样东西/);
   assert.match(dryRun(s, 'open t back="插入后" undo=on')[0].error, /back=/);
+});
+
+test('back 以后挑战照实写：做到过的现在不成立写「做到过；现在不成立」；又做到时写做到了，不再庆祝、不再演预写的', () => {
+  const s = run(new Scene(), `${T47}\nopen t insert\nkeep t "开始"\ngoal g1 "把 47 插进去" when="t height=4"\n@g1 say "对。"`);
+  const fx = stu(s, 'insert t 47', 'insert');
+  assert.deepEqual(fx.goalsMet, ['g1']);
+  assert.deepEqual(fx.reactions, [{ goal: 'g1', src: 'say "对。"' }]);
+  assert.match(s.stateText(), /^挑战 g1「把 47 插进去」when="t height=4"：做到了$/m);
+  run(s, 'back t "开始"');
+  assert.equal(s.goals.get('g1').met, true, '做到过就一直算做到（预写的已经演了、也告诉了老师）');
+  assert.match(s.stateText(), /^挑战 g1「把 47 插进去」when="t height=4"：做到过；现在不成立（t height 4 ✗）$/m);
+  const again = stu(s, 'insert t 47', 'insert');
+  assert.equal(again.goalsMet, undefined, '不再庆祝一次');
+  assert.equal(again.reactions, undefined, '预写的只演一次');
+  assert.match(s.stateText(), /^挑战 g1「把 47 插进去」when="t height=4"：做到了$/m);
 });

@@ -1045,16 +1045,24 @@ export class Scene {
       }
       case 'keep': {
         // keep t "插入后"：把 t 现在的样子存下（只存这样东西的数据）；同名的换掉。
-        // keep t "插入后" after=insert：先只登记，以后学生每做完一次 insert 页面替老师存成「插入后」（老师自己做的不存）
+        // keep t "插入后" after=insert：先只登记，以后学生每做完一次 insert 页面替老师存成「插入后」（老师自己做的不存）；after=off 停掉
         const id = words[0];
         const o = this.keptObject(id, 'keep');
         if (words.length > 1) throw new Error(`名字写在引号里：keep ${id} "${words.slice(1).join(' ')}"`);
         if (!str) throw new Error(`要写成 keep ${id} "名字"（back ${id} "名字" 回到这一刻）`);
+        // after=off：不再替老师存这个名字（已经存下的照留着，back 照样回得去）
+        if (opts.after === 'off') {
+          const auto = this.autoKeep.get(id);
+          if (!auto?.has(str)) throw new Error(`${id} 的「${str}」没写过 after=，用不着 off${auto?.size ? `（页面替你存的：${[...auto].map(([n, a]) => `「${n}」after=${a}`).join('、')}）` : ''}`);
+          auto.delete(str);
+          if (!auto.size) this.autoKeep.delete(id);
+          return { keep: id, name: str, after: 'off' };
+        }
         const names = new Set([...(this.keeps.get(id)?.keys() || []), ...(this.autoKeep.get(id)?.keys() || [])]);
         if (!names.has(str) && names.size >= KEEP_MAX) throw new Error(`${id} 最多存 ${KEEP_MAX} 个：同名的会换掉，先换掉一个`);
         if (opts.after != null) {
           const { opens, all } = this.actionsOf(o);
-          if (!all.has(opts.after)) throw new Error(`after= 写学生的一种动作（${id} 上学生能做的：${opens.join(' / ') || '没有'}），没有「${opts.after}」`);
+          if (!all.has(opts.after)) throw new Error(`after= 写学生的一种动作（${id} 上学生能做的：${opens.join(' / ') || '没有'}；不再替你存写 after=off），没有「${opts.after}」`);
           if (!this.autoKeep.has(id)) this.autoKeep.set(id, new Map());
           this.autoKeep.get(id).set(str, opts.after);
           return { keep: id, name: str, after: opts.after };
@@ -1161,7 +1169,7 @@ export class Scene {
    */
   replaceObject(id, o) { this.objects.set(id, o); }
   // keepPlace：同名重造，objects 里留着它的位子（replaceObject 换进去），只清连线、open 这些
-  // keepSaves：同名重造留着存档（keep / back）；拿下舞台（remove，以后 merge 拿掉的那一张）连存档一起清
+  // keepSaves：同名重造留着存档（keep / back，lastBefore 不留）；拿下舞台（remove，以后 merge 拿掉的那一张）连存档一起清
   dropObject(id, { keepLabels = false, keepPlace = false, keepSaves = false } = {}) {
     if (!keepPlace) this.objects.delete(id);
     for (const [k, l] of this.links) if (l.a.obj === id || l.b.obj === id) this.links.delete(k);
@@ -1174,7 +1182,9 @@ export class Scene {
     this.reactions.delete(`${id}.done`);
     this.reactions.delete(`${id}.right`);
     if (this.picked?.obj === id) this.picked = null; // 学生点的是上一样的部件：不算了
-    if (!keepSaves) { this.keeps.delete(id); this.autoKeep.delete(id); this.lastBefore.delete(id); }
+    if (!keepSaves) { this.keeps.delete(id); this.autoKeep.delete(id); }
+    // 学生最后那一下之前的样子：重造了就不算了（不然老师重造以后一句 back t 把重造悄悄抹掉）；存档照留
+    this.lastBefore.delete(id);
   }
 
   // —— 一次点几样（ask pick）——

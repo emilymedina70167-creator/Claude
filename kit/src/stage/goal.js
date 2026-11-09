@@ -217,17 +217,24 @@ export function clauseMarks(scene, g) {
   });
 }
 
-/** 写给老师看的一句：条件现在哪一句成立、哪一句还没有、哪一句页面判不了（不写成 ✗：那是假话，学生也许已经做对了） */
+/**
+ * 写给老师看的一句：条件现在哪一句成立、哪一句还没有、哪一句页面判不了（不写成 ✗：那是假话，学生也许已经做对了）。
+ * 做到过的挑战一直算做到（预写的行已经演了、也已经告诉了老师，撤不回来），可现在不成立了（学生按「回到……」、
+ * 接着拨走了）照实写「做到过；现在不成立」——不然老师读到「做到了」、看到的却是没做到的样子
+ */
 export function goalStatus(scene, g) {
-  if (g.met) return '做到了';
-  const bits = g.cond.map((cl) => {
-    let mark;
+  const marks = g.cond.map((cl) => {
+    let ok, mark;
     try {
-      const ok = clauseState(scene, cl);
+      ok = clauseState(scene, cl);
       const why = ok == null ? nullSide(scene, cl)?.why : null;
       mark = ok == null ? ` 判不了${why ? `：${why}` : ''}` : ok ? ' ✓' : ' ✗';
-    } catch (err) { mark = ` 判不了：${err?.message || err}`; }
-    return `${clauseText(cl)}${mark}`;
+    } catch (err) { ok = null; mark = ` 判不了：${err?.message || err}`; }
+    return { ok, text: `${clauseText(cl)}${mark}` };
   });
-  return `还没做到（${bits.join('，')}）`;
+  const bits = marks.map((m) => m.text).join('，');
+  if (!g.met) return `还没做到（${bits}）`;
+  if (marks.some((m) => m.ok === false)) return `做到过；现在不成立（${bits}）`;
+  if (marks.some((m) => m.ok == null)) return `做到过；现在判不了（${bits}）`;
+  return '做到了';
 }
