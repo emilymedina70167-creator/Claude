@@ -84,8 +84,10 @@ function whereOf(a) {
  */
 function pathKey(a) {
   if (a.error || a.blocked || a.failed) return null;
+  // 页面判了对错的一下（以后拨数也过裁判时）不并进路：错法要单独写出来，不能藏在一条路里
+  if ((a.verdict?.right ?? null) !== null || a.verdict?.legal === false) return null;
   if (a.type === 'dial') return `dial:${a.name}`;
-  if (a.type === 'edit' && (a.verdict?.right ?? null) === null && a.verdict?.legal !== false) return `edit:${a.ref}`;
+  if (a.type === 'edit') return `edit:${a.ref}`;
   return null;
 }
 /**
@@ -106,7 +108,8 @@ function pathRow(p) {
   const multi = new Set(m0.map((x) => x.goal)).size > 1;
   for (const c of m0) {
     const same = (x) => x.goal === c.goal && x.clause === c.clause;
-    const seq = [c.ok, ...p.moves.map((m) => (m.marks || []).find(same)?.ok ?? null)];
+    // 一个停下的值一个符号：没写从几拨起（旧的拨数事件没有 from）就没有「拨之前」那个值，拨之前的符号也不写（不然整串错开一格）
+    const seq = [...(start == null ? [] : [c.ok]), ...p.moves.map((m) => (m.marks || []).find(same)?.ok ?? null)];
     bits.push(`${multi ? `${c.goal} ` : ''}${c.clause}：${seq.map(SYM).join(' ')}`);
   }
   const head = `学生拨了 ${dial ? a0.name : a0.ref}：${vals.map(minus).join(' → ')}${bits.length ? `（${bits.join('；')}）` : ''}`;
@@ -124,11 +127,15 @@ function tryLines(tries) {
   const rows = [];
   const paths = new Map();
   let explain = null;
+  // 一条路最后停在哪：下一下要从这里拨起才接得上
+  const endOf = (p) => { const m = p.moves.at(-1); return String(m.type === 'dial' ? m.value : m.to); };
   tries.forEach((e, i) => {
     const a = e.act || {};
     const key = pathKey(a);
     if (key) {
       let p = paths.get(key);
+      // 中间这个数、这一格被别的动过（判了对错的那一下、行变换……）：从几拨起对不上就另起一条，不然路上的数是假的
+      if (p && a.from != null && String(a.from) !== endOf(p)) p = null;
       if (!p) { p = { kind: 'path', moves: [], ...whereOf(a), src: '', right: 0, wrong: 0, misread: null }; paths.set(key, p); rows.push(p); }
       p.moves.push(a);
       p.last = i;
@@ -141,7 +148,8 @@ function tryLines(tries) {
       if (!explain.refs.includes(a.ref)) explain.refs.push(a.ref);
       return;
     }
-    const main = actText(a);
+    // 不并进路的拨数（页面判了对错的、没演上的）：actText 不写拨数，照拨格子的样子写一句
+    const main = actText(a) || (a.type === 'dial' ? `学生把 ${a.name} 从 ${minus(a.from ?? '?')} 拨到 ${minus(a.value)}` : '');
     if (!main) return;
     const v = verdictParts(a);
     const facts = (a.facts || []).filter(Boolean);
@@ -154,6 +162,7 @@ function tryLines(tries) {
       right: judged && a.verdict.legal !== false && a.verdict.right === true ? 1 : 0,
       wrong: judged && a.verdict.right === false ? 1 : 0,
       misread: judged && a.verdict.legal !== false && a.verdict.right === false ? a.verdict.misread || null : null,
+      how: v.how, // 照老师写的 wrong=block 没让做 / wrong=mark 圈了一下：和错法一样不并进「之前又试了」
     });
   });
   return rows.map((r) => {
@@ -167,7 +176,8 @@ function tryLines(tries) {
  * 试的那几行放不下：按要紧程度压（rest 是叫老师的那几件事，一字不动）。依次，放得下就停：
  * 1. 原样；2. 「正确的是」和事实只留每样东西的最后一下；3. 连着几下都是正确的下一步并成「接着 N 下」；
  * 4. 从前往后把没有错法的几行并成「之前又试了 N 下」；5. 同一种错法并成「像是… ×N（部件…）」。
- * 有错法的那几下永远不省（老师要从它们看学生卡在哪），再放不下也不删
+ * 有错法的那几下永远不省（老师要从它们看学生卡在哪），再放不下也不删；页面照老师写的 wrong=block 拦下、wrong=mark 圈了的那几下也一样
+ * （老师得知道页面替它拦了、圈了哪几下），同一种也只并成「不是正确的下一步 ×N（…）；照你写的 wrong=block 没让做…」一行
  */
 function capTries(items, rest) {
   const fits = (lines) => bytesOf(HEAD + [...lines, ...rest].join('\n')) <= STUDENT_MAX;
@@ -198,21 +208,28 @@ function capTries(items, rest) {
   }
   rows = merged;
   if (fits(texts())) return texts();
-  // 4. 从前往后，没有错法的几行并进开头一行（有错法的跳过、留在原处）
+  // 4. 从前往后，没有错法、页面也没拦没圈的几行并进开头一行（别的跳过、留在原处）
+  const kept = (r) => !!(r.misread || r.how);
   let n = 0, right = 0, wrong = 0;
   const head = () => `之前又试了 ${n} 下${right + wrong ? `（页面判了 ${right + wrong} 下：${right} 下是正确的下一步，${wrong} 下不是）` : ''}，细节省了`;
   const withHead = () => (n ? [head(), ...texts()] : texts());
   for (const r of rows) {
-    if (r.misread) continue;
+    if (kept(r)) continue;
     r.gone = true;
     n += r.n || 1; right += r.right || 0; wrong += r.wrong || 0;
     if (fits(withHead())) return withHead();
   }
-  // 5. 同一种错法并成一行，放在这一种第一次出现的地方（下数多的先并）
+  // 5. 同一种错法（连同页面拦没拦、圈没圈）并成一行，放在这一种第一次出现的地方（下数多的先并）
   const groups = new Map();
-  for (const r of rows) if (!r.gone && r.misread) { if (!groups.has(r.misread)) groups.set(r.misread, []); groups.get(r.misread).push(r); }
+  for (const r of rows) {
+    if (r.gone || !kept(r)) continue;
+    const k = `${r.misread || ''}|${r.how || ''}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
   for (const g of [...groups.values()].filter((x) => x.length >= 2).sort((a, b) => b.length - a.length)) {
-    g[0].text = `像是${g[0].misread} ×${g.length}（${g.map((r) => r.refs).join('、')}）`;
+    const [r0] = g;
+    g[0].text = `${r0.misread ? `像是${r0.misread}` : '不是正确的下一步'} ×${g.length}（${g.map((r) => r.refs).join('、')}）${r0.how || ''}`;
     for (const r of g.slice(1)) r.gone = true;
     if (fits(withHead())) break;
   }

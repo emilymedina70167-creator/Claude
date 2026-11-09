@@ -29,14 +29,17 @@ function objectBox(o) {
 const LABEL_MAX = 20;
 /**
  * 一行画出来的字（话里的小块写它的名字、$x$ 写 x），截到 20 个字：部件的 value / label。
- * [学生] 里「学生点了 f.3（laughing）」、话里的小块 {f.3} 都写它（以前写「第 3 行」，老师得回头数是哪一句）
+ * [学生] 里「学生点了 f.3（laughing）」、话里的小块 {f.3} 都写它（以前写「第 3 行」，老师得回头数是哪一句）。
+ * 一行全是空白（给了 key）：写「第 k 行」，不写成空的「（）」
  */
-export function lineLabel(text) {
+export function lineLabel(text, key = null) {
   const plain = parseRich(text).map((p) => p.v).join('').trim();
+  if (!plain && key != null) return `第 ${key} 行`;
   const chars = [...plain];
   return chars.length > LABEL_MAX ? `${chars.slice(0, LABEL_MAX).join('')}…` : plain;
 }
-const mkLine = (obj, key, text) => ({ obj, key, text, value: lineLabel(text), label: lineLabel(text), paint: null, glow: false, lift: false, dim: false, covered: false });
+// coverLabel：扣着的时候小块写什么（stage.js 的 chipTextOf）——扣着的一行常常是答案、提示，小块写了它的字就提前给学生看了
+const mkLine = (obj, key, text) => ({ obj, key, text, value: lineLabel(text, key), label: lineLabel(text, key), coverLabel: `第 ${key} 行`, paint: null, glow: false, lift: false, dim: false, covered: false });
 
 export const card = {
   type: 'card',
@@ -86,7 +89,7 @@ export const card = {
       if (h.str == null) throw new Error('rewrite 要有新的字（写在引号里）');
       scene.checkRich(h.str, c, { replayRefs: false }); // 和造题卡一样查（以前不查 {a.3}，重放旧课时照旧不查）
       l.text = h.str;
-      l.value = l.label = lineLabel(h.str);
+      l.value = l.label = lineLabel(h.str, l.key);
       return { line: l };
     },
   },

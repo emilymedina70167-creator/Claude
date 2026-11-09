@@ -201,7 +201,7 @@ export class Stage {
       if (ch.textContent !== t) ch.textContent = t;
     });
   }
-  chipText(p) { return String(p.label ?? p.value ?? p.key); }
+  chipText(p) { return chipTextOf(p); }
 
   // —— 演一段（整段写好的） ——
   async play(src, { by = 'teacher', auto = false } = {}) {
@@ -1362,7 +1362,7 @@ export class Stage {
       const partsOf = (refs) => (refs.length ? refs.flatMap((r) => sc.parts(r)) : sc.allParts());
       if (w.kind === 'tap') {
         for (const x of partsOf(w.refs)) offs.push(this.armTap(x, () => {
-          const act = { type: 'tap', ref: sc.refOf(x), pid: pidOf(x), key: x.key, slot: x.slot, value: this.chipText(x) };
+          const act = { type: 'tap', ref: sc.refOf(x), pid: pidOf(x), key: x.key, slot: x.slot, value: tapValueOf(x) };
           if (x.slot != null) act.ref = `${x.obj}.${x.slot}`;
           if (w.expect) { const [e] = sc.parts(w.expect); act.expected = w.expect; act.right = e === x; }
           this.onAct?.(act);
@@ -1468,6 +1468,14 @@ function judgedAct(act, j) {
 }
 /** 跟着变的（scene.js 的 fx.derived）存得下的样子：不带部件本身 */
 const slimDerived = (list) => list.map((d) => ({ id: d.id, changed: (d.changed || []).map((x) => ({ ref: x.ref, ...(x.expr != null ? { expr: x.expr } : {}), from: x.from, to: x.to })), ...(d.error ? { error: d.error } : {}) }));
+
+/**
+ * 一个部件画成小块（话里的 {q.3}、贴的字、比大小的牌子）写什么：label，没有就 value、key。
+ * 扣着、自己交了 coverLabel 的（题卡的一行）写 coverLabel（「第 3 行」）：扣着的字不能从小块里漏给学生
+ */
+export const chipTextOf = (p) => String(p.covered && p.coverLabel != null ? p.coverLabel : p.label ?? p.value ?? p.key);
+/** 学生点了一个部件，写给老师的那个字：和小块一样；扣着的再说一声扣着（「学生点了 q.3（第 3 行，扣着）」） */
+export const tapValueOf = (p) => (p.covered && p.coverLabel != null ? `${p.coverLabel}，扣着` : chipTextOf(p));
 
 /** 学生这一下做了什么，写给老师看（和舞台现状一起发） */
 export function actText(act) {

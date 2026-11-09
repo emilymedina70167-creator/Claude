@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
 import { card, rowsOf } from '../kit/src/stage/types/card.js';
-import { actText } from '../kit/src/stage/stage.js';
+import { actText, chipTextOf, tapValueOf } from '../kit/src/stage/stage.js';
 
 const run = (s, src) => { for (const c of parseScript(src)) s.apply(c); return s; };
 
@@ -63,4 +63,23 @@ test('部件写它显示的字：点了一行写那一行的字（截到 20 个�
   assert.equal(q.parts('q.2')[0].label, '比较 a.1 和 x');
   run(q, 'rewrite q.2 "新的一行"');
   assert.equal(q.parts('q.2')[0].label, '新的一行');
+});
+
+test('题卡一行全是空白写「第 k 行」；扣着的一行小块不漏字（写「第 k 行」），点了告诉老师扣着', () => {
+  const s = run(new Scene(), 'card q = "题面" "   " "答案是 29"\ncover q.3');
+  assert.equal(s.parts('q.2')[0].label, '第 2 行', '空白的一行不写成空的（）');
+  assert.match(actText({ type: 'tap', ref: 'q.2', key: 2, value: tapValueOf(s.parts('q.2')[0]) }), /学生点了 q\.2（第 2 行）/);
+  const [p3] = s.parts('q.3');
+  assert.equal(chipTextOf(p3), '第 3 行', '扣着的一行：话里的 {q.3} 不写「答案是 29」');
+  assert.doesNotMatch(chipTextOf(p3), /29/);
+  assert.match(actText({ type: 'tap', ref: 'q.3', key: 3, value: tapValueOf(p3) }), /学生点了 q\.3（第 3 行，扣着）/);
+  // 翻开以后照写那一行的字；加一行扣着的提示也一样
+  run(s, 'uncover q.3');
+  assert.equal(chipTextOf(s.parts('q.3')[0]), '答案是 29');
+  assert.equal(tapValueOf(s.parts('q.3')[0]), '答案是 29');
+  run(s, 'addline q "提示：先找 mid" covered=on');
+  assert.equal(chipTextOf(s.parts('q.4')[0]), '第 4 行');
+  // 别的东西扣着照旧（没有 coverLabel）：这一条只管题卡
+  const a = run(new Scene(), 'array a = 7 9\ncover a.1');
+  assert.equal(chipTextOf(a.parts('a.1')[0]), '7');
 });

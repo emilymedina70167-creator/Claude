@@ -226,6 +226,107 @@ test('拨数只写一次：拨数事件写一条路，回答那一下不再带',
   assert.match(t, /学生点了「看出来了」$/);
 });
 
+// —— 复核修正（task-4-review 的 Minor 1～3）——
+test('拨数没写从几拨起（旧的事件没有 from）：✓ ✗ 一个停下的值一个，不错开', () => {
+  const m = (ok) => [{ goal: 'g1', clause: 'k = 3', ok }];
+  const ev = [
+    eventOf({ type: 'dial', name: 'k', value: 1, marks0: m(false), marks: m(false) }),
+    eventOf({ type: 'dial', name: 'k', value: 2, marks: m(false) }),
+    eventOf({ type: 'dial', name: 'k', value: 3, marks: m(true), met: ['g1'] }),
+  ];
+  assert.equal(eventsText(ev), '学生拨了 k：1 → 2 → 3（停在 3；拨到 3 时做到了 g1；k = 3：✗ ✗ ✓）');
+});
+
+test('拨数也过了裁判、判了对错的一下：不并进路，单独一行写出错法', () => {
+  const ev = [
+    eventOf({ type: 'dial', name: 't', value: 0, from: 1 }),
+    eventOf({ type: 'dial', name: 't', value: -1, from: 0, verdict: { legal: true, right: false, misread: '把正负弄反了', why: 't 拨到 −1', next: '拨到 1' } }),
+    eventOf({ type: 'dial', name: 't', value: -2, from: -1 }),
+  ];
+  const t = eventsText(ev);
+  assert.match(t, /像是把正负弄反了/);
+  assert.match(t, /学生拨了 t：1 → 0（停在 0）/);
+  assert.match(t, /学生把 t 从 0 拨到 −1——不是正确的下一步，像是把正负弄反了/);
+  assert.doesNotMatch(t, /1 → 0 → −1/, '判了错的一下不在路上');
+  // 那一下以后接着拨：从 −1 拨起，和前面那条路接不上，另起一条（不写成假的「1 → 0 → −2」）
+  assert.equal(t, '学生拨了 t：1 → 0（停在 0）\n学生把 t 从 0 拨到 −1——不是正确的下一步，像是把正负弄反了；正确的是拨到 1\n学生拨了 t：−1 → −2（停在 −2）');
+  // 拨格子也一样：中间被别的动过（from 对不上），另起一条
+  const u = eventsText([
+    eventOf({ type: 'edit', ref: 'B.1,1', from: '1', to: '2', open: 'edit' }),
+    eventOf({ type: 'rowop', open: 'rowop', src: 'rowop B 2r1', verdict: { legal: true, right: null, misread: null, why: '倍乘第 1 行', next: null } }),
+    eventOf({ type: 'edit', ref: 'B.1,1', from: '4', to: '5', open: 'edit' }),
+  ]);
+  assert.equal(u, '学生拨了 B.1,1：1 → 2\n学生 rowop B 2r1（倍乘第 1 行）\n学生拨了 B.1,1：4 → 5');
+});
+
+test('页面照 wrong=block 拦下、照 wrong=mark 圈了的那几下：不并进「之前又试了」，同一种只并成 ×N 一行', () => {
+  const blk = (k) => ({ kind: 'try', act: { type: 'rotate', open: 'rotate', src: `rotate t#${k} right`, blocked: true, verdict: { legal: true, right: false, misread: null, why: `第 ${k} 个结点 右旋，${'转错了方向'.repeat(6)}`, next: '先在 30 左旋' } } });
+  const mrk = (k) => ({ kind: 'try', act: { type: 'rotate', open: 'rotate', src: `rotate t#${k} left`, marked: true, verdict: { legal: true, right: false, misread: null, why: `第 ${k} 个结点 左旋，${'转错了方向'.repeat(6)}`, next: '先在 30 左旋' } } });
+  const ok = (k) => ({ kind: 'try', act: { type: 'rotate', open: 'rotate', src: `rotate t#${k} left`, verdict: { legal: true, right: true, misread: null, why: `第 ${k} 个结点 左旋，${'转对了'.repeat(8)}`, next: null } } });
+  const plain = (k) => ({ kind: 'try', act: { type: 'rotate', open: 'rotate', src: `rotate t#${k} right`, verdict: { legal: true, right: false, misread: null, why: `第 ${k} 个结点 右旋，${'转错了方向'.repeat(6)}`, next: '先在 30 左旋' } } });
+  const ev = [];
+  for (let k = 1; k <= 12; k++) ev.push(ok(k), plain(k), k % 2 ? blk(k) : mrk(k));
+  const t = eventsText(ev);
+  assert.ok(bytes(`[学生]\n${t}`) <= 3072, `超了：${bytes(t)}`);
+  const lines = t.split('\n');
+  // 拦下的 6 下、圈了的 6 下：要么每下一行，要么各并成一行，下数、部件一个不少
+  const count = (re, merged) => lines.reduce((n, l) => n + (l.startsWith('不是正确的下一步 ×') && merged.test(l) ? Number(l.match(/×(\d+)/)[1]) : re.test(l) && !l.startsWith('不是正确的下一步 ×') ? 1 : 0), 0);
+  assert.equal(count(/wrong=block 没让做/, /wrong=block 没让做/), 6, t);
+  assert.equal(count(/wrong=mark/, /wrong=mark/), 6, t);
+  const mb = lines.find((l) => l.startsWith('不是正确的下一步 ×') && /wrong=block/.test(l));
+  if (mb) assert.equal(mb, '不是正确的下一步 ×6（t#1、t#3、t#5、t#7、t#9、t#11）；照你写的 wrong=block 没让做，弹回去了');
+  // 只说「不是」的那几下照旧并进开头一行
+  assert.match(t, /^之前又试了 \d+ 下（页面判了/);
+});
+
+// 随机造几百段（固定的种子）：压完不超过 3 KB；每一种错法、拦下的、圈了的一下不少；总下数、对的、错的和造的一样
+test('压缩的保证：随机几百段，错法、拦下、圈了的都在，下数一下不差', () => {
+  let seed = 20261109;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const pick = (xs) => xs[Math.floor(rnd() * xs.length)];
+  const MIS = ['谓语只圈了一半', '把非谓语当成了谓语：ensuring 在非谓语里', '型从下往上读了：从 50 往下看是 LR 型'];
+  const pad = (n) => '要点'.repeat(Math.floor(rnd() * n));
+  for (let round = 0; round < 400; round++) {
+    const len = 1 + Math.floor(rnd() * 120);
+    const ev = [];
+    const want = { n: 0, right: 0, wrong: 0, mis: new Map(), blocked: 0, marked: 0 };
+    for (let k = 1; k <= len; k++) {
+      const kind = pick(['right', 'right', 'mis', 'plain', 'block', 'mark', 'none']);
+      const v = { legal: true, right: kind === 'right' ? true : kind === 'none' ? null : false, misread: kind === 'mis' ? pick(MIS) : null, why: `s.${k} ${pad(10)}`, next: kind === 'right' || kind === 'none' ? null : `谓语是 s.${k}${pad(30)}` };
+      const act = { type: 'mark', open: 'mark', src: `mark s.${k} V`, verdict: v, facts: rnd() < 0.5 ? [`这一下以后 ${pad(80)}`] : [] };
+      if (kind === 'block') act.blocked = true;
+      if (kind === 'mark') act.marked = true;
+      ev.push({ kind: 'try', act });
+      want.n++;
+      if (v.right === true) want.right++;
+      if (v.right === false) want.wrong++;
+      if (v.misread) want.mis.set(v.misread, (want.mis.get(v.misread) || 0) + 1);
+      if (kind === 'block') want.blocked++;
+      if (kind === 'mark') want.marked++;
+    }
+    const t = eventsText(ev);
+    const what = `第 ${round} 段（${len} 下）`;
+    assert.ok(bytes(`[学生]\n${t}`) <= 3072, `${what} 超了`);
+    const got = { n: 0, right: 0, wrong: 0, mis: new Map(), blocked: 0, marked: 0 };
+    for (const l of t.split('\n')) {
+      let m;
+      if ((m = l.match(/^之前又试了 (\d+) 下(?:（页面判了 \d+ 下：(\d+) 下是正确的下一步，(\d+) 下不是）)?，细节省了$/))) { got.n += +m[1]; got.right += +(m[2] || 0); got.wrong += +(m[3] || 0); continue; }
+      if ((m = l.match(/^接着 (\d+) 下都是正确的下一步/))) { got.n += +m[1]; got.right += +m[1]; continue; }
+      const x = l.match(/^(?:像是(.+)|不是正确的下一步) ×(\d+)（/);
+      const k = x ? +x[2] : 1;
+      const mis = x ? x[1] : l.match(/，像是(.+?)(?:；|$)/)?.[1];
+      got.n += k;
+      if (x || /——不是正确的下一步/.test(l)) got.wrong += k;
+      else if (/——是正确的下一步/.test(l)) got.right += k;
+      if (mis) got.mis.set(mis, (got.mis.get(mis) || 0) + k);
+      if (/wrong=block 没让做/.test(l)) got.blocked += k;
+      if (/wrong=mark/.test(l)) got.marked += k;
+    }
+    assert.deepEqual([got.n, got.right, got.wrong, got.blocked, got.marked], [want.n, want.right, want.wrong, want.blocked, want.marked], `${what}\n${t}`);
+    assert.deepEqual([...got.mis].sort(), [...want.mis].sort(), `${what} 错法`);
+  }
+});
+
 // —— 整条分支的最终审查（M4）——
 test('M4 学生的一下过了裁判、场景却演不了：写给老师「没演上」和原因，不说「舞台已经照做了」', () => {
   const act = { type: 'drag', open: 'drag', a: { value: '3', key: 1 }, b: { value: '?', key: 9 }, line: 'swap a.1 a.9', error: 'a 只有 3 格，没有第 9 格' };
