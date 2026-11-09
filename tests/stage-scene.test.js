@@ -8,6 +8,7 @@ import { undoPlan } from '../kit/src/stage/gestures.js';
 import { actText } from '../kit/src/stage/stage.js';
 import { linkGeom } from '../kit/src/stage/layout.js';
 import { cellBox, array as arrayType } from '../kit/src/stage/types/array.js';
+import { goalStatus } from '../kit/src/stage/goal.js';
 const objectBox = (o) => arrayType.objectBox(o);
 
 const run = (scene, src) => { for (const c of parseScript(src)) scene.apply(c); return scene; };
@@ -713,6 +714,19 @@ test('clone 带着这一轮的新状态（检查、试演、抢跑都在副本�
   assert.equal(k.autoKeep.get('t').has('别的'), false);
   assert.equal(k.lastBefore.get('t').root, 1);
   assert.equal(new Scene().clone().keeps.size, 0);
+  // Task 8：套着的预写（ahead：g2 还没有）、还没被 ask 拿走的 @ask.right。@g2 先过 check、预写试演都在克隆上跑
+  const a = run(new Scene(), 'array k = 3 1 2\nopen k\ngoal g1 "排好" when="k sorted"\n@g1 goal g2 "倒过来" when="k sorted desc"\n@g2 say "倒好了"\n@ask.right say "对"');
+  const ac = a.clone();
+  assert.deepEqual(ac.ahead, a.ahead);
+  assert.deepEqual(ac.askRight, a.askRight);
+  assert.equal(ac.stateText(), a.stateText());
+  assert.equal(ac.check(one('@g2 say "再来"')), null, '克隆上也认得 g2 是套着的预写');
+  ac.ahead.get('g2').lines.push('say "x"');
+  ac.askRight.push('say "y"');
+  assert.deepEqual(a.ahead.get('g2').lines, ['say "倒好了"']);
+  assert.deepEqual(a.askRight, ['say "对"']);
+  assert.equal(new Scene().clone().askRight, null);
+  assert.equal(new Scene().clone().ahead.size, 0);
 });
 
 test('看不全：画面写回的 clipped 写进现状（藏着的、已经拿下舞台的不写）', () => {
@@ -1243,4 +1257,188 @@ test('back 以后挑战照实写：做到过的现在不成立写「做到过；
   assert.equal(again.goalsMet, undefined, '不再庆祝一次');
   assert.equal(again.reactions, undefined, '预写的只演一次');
   assert.match(s.stateText(), /^挑战 g1「把 47 插进去」when="t height=4"：做到了$/m);
+});
+
+// —— 预写和挑战（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.1）——
+const K312 = 'array k = 3 1 2\nopen k\ngoal g1 "排好" when="k sorted"';
+// 舞台演预写的行：照老师的行（带 lenient，prewrite：不算学生的一下）
+const playPre = (s, fx) => { for (const r of fx.reactions || []) for (const c of parseScript(r.src)) s.apply({ ...c, lenient: true, prewrite: true }, { by: 'teacher' }); };
+
+test('预写能套三层：@g1 里写出的 goal g2 接着写 @g2、@g3；第四层报', async () => {
+  const { PREWRITE_DEPTH } = await import('../kit/src/stage/scene.js');
+  assert.equal(PREWRITE_DEPTH, 3);
+  const s = run(new Scene(), `${K312}\n@g1 goal g2 "倒过来" when="k sorted desc"\n@g2 goal g3 "第一格是 2" when="k.1 = 2"\n@g3 say "好"`);
+  assert.deepEqual(s.ahead.get('g2'), { lines: ['goal g3 "第一格是 2" when="k.1 = 2"'], depth: 2, from: 'g1' });
+  assert.deepEqual(s.ahead.get('g3'), { lines: ['say "好"'], depth: 3, from: 'g2' });
+  assert.match(s.stateText(), /挑战 g2 还没出（g1 做到时才出），做到了页面马上演你预写的 1 行（第 2 层）/);
+  run(s, '@g3 goal g4 "第一格是 1" when="k.1 = 1"');
+  assert.throws(() => run(s, '@g4 say "x"'), /^Error: 预写最多三层：@g4 已经是第 4 层（再往下要等你看着学生写）$/);
+  assert.match(s.check(one('@g4 say "x"')), /最多三层/);
+  // 前面哪一层都没写出 goal g9：照旧报先写 goal
+  assert.match(s.check(one('@g9 say "x"')), /先写 goal g9/);
+  // 套着的预写也在今天的舞台上照先后试：g1、g2 算做到、演它们的行，再演 @g3 这一行（写错照样当场报）
+  assert.match(s.check(one('@g3 swap k.1')), /两格/);
+  assert.equal(s.check(one('@g3 swap k.9 k.1')), null, '指着还没有的部件（k.9）只查写法');
+  assert.equal(s.check(one('@g3 say "{k.1}"')), null);
+});
+
+test('套着的预写演出来：学生做到 g1，g2 出来、@g2 的行挪过去；学生再做到 g2 演 @g2 的行', () => {
+  const s = run(new Scene(), `${K312}\n@g1 say "排好了"\n@g1 goal g2 "倒过来" when="k sorted desc"\n@g2 say "倒好了"`);
+  stu(s, 'swap k.1 k.2', 'drag'); // 1 3 2
+  const fx = stu(s, 'swap k.2 k.3', 'drag'); // 1 2 3
+  assert.deepEqual(fx.goalsMet, ['g1']);
+  assert.deepEqual(fx.reactions.map((r) => r.src), ['say "排好了"', 'goal g2 "倒过来" when="k sorted desc"']);
+  playPre(s, fx);
+  assert.ok(s.goals.has('g2'));
+  assert.deepEqual(s.reactions.get('g2'), ['say "倒好了"'], 'goal 那一句不再把挪过来的行删掉');
+  assert.equal(s.ahead.has('g2'), false);
+  const fx2 = stu(s, 'swap k.1 k.3', 'drag'); // 3 2 1
+  assert.deepEqual(fx2.goalsMet, ['g2']);
+  assert.deepEqual(fx2.reactions, [{ goal: 'g2', src: 'say "倒好了"' }]);
+});
+
+test('@ask.right：下一个 ask 拿走；跟着的那一问页面判不了对错、没有那一问都报；@ask.wrong 报', () => {
+  const a = run(new Scene(), 'array a = 3 1 2\n@ask.right say "对"\nask next "看一眼"');
+  assert.equal(a.askRightProblem(), '@ask.right 要跟着一个页面判得了对错的 ask');
+  const b = run(new Scene(), 'array a = 3 1 2\n@ask.right say "对"\nask tap a "最大的是哪个？" expect=a.1');
+  assert.equal(b.askRightProblem(), null);
+  assert.deepEqual(b.waiting.right, ['say "对"']);
+  assert.equal(b.askRight, null);
+  assert.match(b.stateText(), /学生答对这一问时页面马上演你预写的 1 行/);
+  assert.equal(run(new Scene(), 'array a = 3 1 2\n@ask.right say "对"').askRightProblem(), '@ask.right 要跟着一个页面判得了对错的 ask', '还没被拿走');
+  assert.equal(run(new Scene(), 'array a = 3 1 2\n@ask.right say "对"\nask value "几格" answer=3').askRightProblem(), null);
+  assert.equal(run(new Scene(), 'array a = 3 1 2\n@ask.right say "对"\nask value "几格"').askRightProblem(), '@ask.right 要跟着一个页面判得了对错的 ask', '只收不判');
+  assert.equal(run(new Scene(), 'tree t = 30 20 40\n@ask.right say "对"\nask pick t "哪几个"').askRightProblem(), '@ask.right 要跟着一个页面判得了对错的 ask');
+  assert.equal(run(new Scene(), 'tree t = 30 20 40\n@ask.right say "对"\nask pick t "哪几个" expect="t.20 t.40"').askRightProblem(), null);
+  assert.equal(b.check(one('@ask.wrong say "x"')), '走偏以后怎么讲要等你看着学生写，不能预写');
+  assert.match(b.check(one('@ask.maybe say "x"')), /只能写 right/);
+  assert.match(b.check(one('@ask.right swap a.1')), /两格/, '写错了照样当场报');
+  assert.match(b.check(one('array ask = 1 2')), /留着别的用/);
+});
+
+test('「或」的挑战真的会做到：有一组都成立就算；写下时有一组已经成立就报；clauseMarks 每一组的每一句都标', () => {
+  const s = run(new Scene(), 'array k = 1 2 3 4\nopen k\ngoal g1 "换两格" when="k.1 = 4, k.2 = 2 | k.1 = 3, k.2 = 1"');
+  assert.match(s.stateText(), /还没做到（k\.1 = 4 ✗，k\.2 = 2 ✓ \| k\.1 = 3 ✗，k\.2 = 1 ✗）/);
+  const fx = stu(s, 'swap k.1 k.4', 'drag'); // 4 2 3 1
+  assert.ok(fx.goalsMet.includes('g1'));
+  assert.equal(s.goals.get('g1').met, true);
+  assert.match(s.stateText(), /挑战 g1「换两格」when="k\.1 = 4, k\.2 = 2 \| k\.1 = 3, k\.2 = 1"：做到了/);
+  assert.match(s.check(one('goal g2 "x" when="k.1 = 4 | k.1 = 9"')), /现在就已经成立了/);
+  assert.equal(s.check(one('goal g2 "x" when="k.1 = 8 | k.1 = 9"')), null);
+  assert.deepEqual(s.clauseMarks(['g1']).map((m) => `${m.clause} ${m.ok}`), ['k.1 = 4 true', 'k.2 = 2 true', 'k.1 = 3 false', 'k.2 = 1 false']);
+  assert.match(s.check(one('goal g3 "x" when="k.1 = 8 | "')), /\| 两边都要写条件/);
+});
+
+test('按了按钮才判（on=）：条件成立也不自己算做到；只在学生按那个按钮时判；press 那一行交出做到的和预写的行', () => {
+  const s = run(new Scene(), 'array a = 1 2 3\nopen a\ngoal g1 "排好了就点「就这样」" when="a sorted" on="就这样"');
+  assert.deepEqual(s.checkGoals(), []);
+  assert.equal(s.goals.get('g1').met, false);
+  assert.match(s.stateText(), /学生按「就这样」时才判/);
+  assert.deepEqual(s.judgeOn('接着'), []);
+  assert.deepEqual(s.judgeOn('就这样').map(({ id, met }) => ({ id, met })), [{ id: 'g1', met: true }]);
+  assert.equal(s.goals.get('g1').met, true);
+  // 学生按按钮时舞台记的一行 press：判了、做到了交出预写的行（和别的挑战一样）；没成立照实交 met: false
+  const p = run(new Scene(), 'array a = 2 1 3\nopen a\ngoal g1 "…" when="a sorted" on="就这样"\n@g1 say "对"');
+  const no = p.apply(one('press "就这样"'), { by: 'student' });
+  assert.equal(no.goalsMet, undefined);
+  assert.deepEqual(no.onGoals.map(({ id, met }) => ({ id, met })), [{ id: 'g1', met: false }]);
+  assert.match(no.onGoals[0].status, /还没做到（a sorted ✗）/);
+  stu(p, 'swap a.1 a.2', 'drag');
+  assert.equal(p.goals.get('g1').met, false, '成立了也要等按钮');
+  const yes = p.apply(one('press "就这样"'), { by: 'student' });
+  assert.deepEqual(yes.goalsMet, ['g1']);
+  assert.deepEqual(yes.reactions, [{ goal: 'g1', src: 'say "对"' }]);
+  assert.ok(p.hasOn('就这样') === false && s.hasOn('就这样') === false);
+  assert.match(run(new Scene(), 'array a = 2 1 3').check(one('goal g1 "x" when="a sorted" on=""')), /on= 写按钮上的字/);
+});
+
+test('收集型挑战（collect= n=）：收不一样的才收、每收一张演一次 @g1；拨回收过的那张记 dup 不收；收齐了算做到', () => {
+  const s = run(new Scene(), 'matrix A = 1 1 / 0 1\nmatrix B = 1 0 / 1 0\nopen B edit range=-3..3\nmatrix Dd = {A B - B A}\ngoal g1 "再找一张不一样的 B，让 AB = BA" when="Dd = O" collect=B n=3\n@g1 say "又一张"');
+  const g = s.goals.get('g1');
+  const ed = (line) => stu(s, line, 'edit');
+  ed('write B.2,1 0');
+  let fx = ed('write B.2,2 1'); // B = I
+  assert.equal(fx.goalsMet, undefined);
+  assert.deepEqual(fx.reactions, [{ goal: 'g1', src: 'say "又一张"', collect: true }], '每收一张都演（只看不拿）');
+  assert.deepEqual(s.reactions.get('g1'), ['say "又一张"']);
+  for (const l of ['write B.1,1 2', 'write B.1,2 1']) ed(l);
+  fx = ed('write B.2,2 2'); // (2 1; 0 2)
+  assert.equal(fx.reactions.length, 1);
+  assert.equal(g.collect.got.length, 2);
+  assert.match(goalStatus(s, g), /收了 2 \/ 3/);
+  assert.match(s.stateText(), /还没做到（收了 2 \/ 3；Dd = O ✓）；做到了页面马上演你预写的 1 行（每收一张演一次）/);
+  // 拨回第一张（I）：和收过的一样，不收、不演
+  for (const l of ['write B.1,1 1', 'write B.1,2 0']) ed(l);
+  fx = ed('write B.2,2 1');
+  assert.equal(g.collect.dup, 1);
+  assert.equal(g.collect.got.length, 2);
+  assert.ok(!fx.reactions?.length);
+  // 第三张不一样的：收齐了
+  for (const l of ['write B.1,1 0', 'write B.1,2 1']) ed(l);
+  fx = ed('write B.2,2 0'); // (0 1; 0 0)
+  assert.deepEqual(fx.goalsMet, ['g1']);
+  assert.equal(g.met, true);
+  assert.equal(g.collect.got.length, 3);
+  assert.deepEqual(fx.reactions, [{ goal: 'g1', src: 'say "又一张"' }]);
+  // 老师的一下不替学生收
+  const t = run(new Scene(), 'matrix A = 1 1 / 0 1\nmatrix B = 1 0 / 1 0\nopen B edit range=-3..3\nmatrix Dd = {A B - B A}\ngoal g1 "x" when="Dd = O" collect=B n=2');
+  t.apply(one('write B.2,1 0'), { by: 'teacher' });
+  t.apply(one('write B.2,2 1'), { by: 'teacher' });
+  assert.equal(t.goals.get('g1').collect.got.length, 0);
+  // 写法：collect 要跟着 n=；n 要写
+  const base = run(new Scene(), 'matrix B = 1 0 / 1 0\narray a = 2 1');
+  assert.match(base.check(one('goal g1 "x" when="a sorted" collect=B')), /n= 写收几张/);
+  assert.match(base.check(one('goal g1 "x" when="a sorted" n=3')), /跟着 collect= 写/);
+  assert.match(base.check(one('goal g1 "x" when="a sorted" collect=Q n=3')), /舞台上没有「Q」/);
+  assert.match(base.check(one('goal g1 "x" when="a sorted" call=later')), /call= 只能写 now/);
+});
+
+test('预写里指着还没有的部件：写下时只查写法、照收；演的时候还没有，舞台告诉老师那一行没演上', () => {
+  const s = run(new Scene(), 'tree t = _ tray="34"\nopen t insert\n@t.done ask tap t "点刚插进来的" expect=t.34');
+  assert.deepEqual(s.reactions.get('t.done'), ['ask tap t "点刚插进来的" expect=t.34']);
+  assert.match(s.check(one('@t.done ask tapp t "x" expect=t.34')), /ask 后面写 tap/, '写法错了照样报');
+  const fx = stu(s, 'insert t 34', 'insert');
+  assert.deepEqual(fx.done, ['t']);
+  const [c] = parseScript(fx.reactions[0].src);
+  assert.equal(s.missedPrewrite({ ...c, lenient: true, prewrite: true }), null, '插进来以后就有了，照演');
+  const m = run(new Scene(), 'tree t = _ tray="34"\nopen t insert\n@t.done ask tap t "点刚插进来的" expect=t.99');
+  const fm = stu(m, 'insert t 34', 'insert');
+  const [cm] = parseScript(fm.reactions[0].src);
+  assert.match(m.missedPrewrite({ ...cm, lenient: true, prewrite: true }), /^预写的这一行没演上：「ask tap t "点刚插进来的" expect=t\.99」——.*99/);
+});
+
+test('预写只在学生的一下演：老师的行让挑战成立、做完，预写的行拿掉不演（fx.unplayed）；刷新重放照样拿掉、不说；演预写的行（lenient）不算学生的一下', async () => {
+  const { unplayedText } = await import('../kit/src/stage/scene.js');
+  const src = 'array k = 2 1 3\nopen k\ngoal g1 "排好" when="k sorted"\n@g1 say "排好了"\ngoal g2 "倒过来" when="k sorted desc"\n@g2 say "倒好了"';
+  const s = run(new Scene(), src);
+  const fx = s.apply(one('swap k.1 k.2'), { by: 'teacher' });
+  assert.deepEqual(fx.goalsMet, ['g1']);
+  assert.deepEqual(fx.reactions, []);
+  assert.deepEqual(fx.unplayed, ['g1']);
+  assert.equal(s.reactions.has('g1'), false, '拿掉了');
+  assert.equal(unplayedText('g1'), '你这一轮让挑战 g1 成立了，@g1 的行没演');
+  assert.equal(unplayedText('t.done'), '你这一轮把 t 做完了，@t.done 的行没演');
+  // 同一段 log 照 stage.js 的 replay 放（行带 lenient、replay，老师的行不给 by）：一样拿掉，不出 unplayed，现状一样
+  const r = new Scene();
+  let last;
+  for (const c of parseScript(`${src}\nswap k.1 k.2`)) last = r.apply({ ...c, lenient: true, replay: true }, { by: null });
+  assert.deepEqual(last.goalsMet, ['g1']);
+  assert.equal(last.unplayed, undefined);
+  assert.equal(r.reactions.has('g1'), false);
+  assert.equal(r.stateText(), s.stateText());
+  // 只带 lenient、不带 replay 的老师的行（舞台演预写的行就是这样）让 g2 成立：照老师的行办，不触发 @g2
+  const p = s.apply({ ...one('swap k.1 k.3'), lenient: true, prewrite: true }, { by: 'teacher' });
+  assert.deepEqual(p.goalsMet, ['g2']);
+  assert.deepEqual(p.reactions, []);
+  assert.deepEqual(p.unplayed, ['g2']);
+  // 老师做完：@t.done 也拿掉
+  const t = run(new Scene(), 'tree t = 30 20 tray="10"\nopen t insert\nopen t rotate\n@t.done say "平了"');
+  stu(t, 'insert t 10', 'insert');
+  const td = t.apply(one('rotate t.30 right'), { by: 'teacher' });
+  assert.deepEqual(td.done, ['t']);
+  assert.deepEqual(td.unplayed, ['t.done']);
+  assert.equal(t.reactions.has('t.done'), false);
+  // 学生做到的照旧演
+  const u = run(new Scene(), src);
+  assert.deepEqual(stu(u, 'swap k.1 k.2', 'drag').reactions, [{ goal: 'g1', src: 'say "排好了"' }]);
 });

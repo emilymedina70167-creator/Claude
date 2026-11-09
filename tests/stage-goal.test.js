@@ -93,7 +93,8 @@ test('挑战：写下就已经成立的不收；做到的那一行交出 goalsMe
 @g1 goal g2 "再让 AB 变回 O" when="C = O"`);
   assert.equal(sc.reactions.get('g1').length, 2);
   assert.match(sc.stateText(), /挑战 g1「让 AB 不再是 O」when="C != O"：还没做到（C != O ✗）；做到了页面马上演你预写的 2 行/);
-  const [fx] = run(sc, 'write B.1,1 2');
+  // 学生的一下（第二轮起预写的行只在学生的一下演，老师的一下拿掉不演）
+  const fx = sc.apply(parseScript('write B.1,1 2')[0], { by: 'student' });
   assert.deepEqual(fx.goalsMet, ['g1']);
   assert.deepEqual(fx.reactions.map((r) => r.src), ['say "对，{C.1,1} 不是 0 了。"', 'goal g2 "再让 AB 变回 O" when="C = O"']);
   assert.equal(sc.reactions.has('g1'), false);
@@ -262,4 +263,23 @@ test('量写错当场报：这种东西没有这个量、舞台上没有这样�
   assert.match(sc.check(one('goal g1 "长高" when="height(t.99) = 3"')) || '', /没有值是 99 的结点/);
   assert.match(sc.check(one('goal g1 "长高" when="count(t) = 3"')) || '', /现在就已经成立了/, '量算得出来，照旧查一写下就成立的');
   assert.equal(sc.check(one('goal g1 "长高" when="count(t) = 4"')), null);
+});
+
+test('「或」：| 隔开几组，有一组都成立就算做到；只满足一组的半边不算；goalStatus 一组一组写', async () => {
+  const { parseWhen, evalWhen } = await import('../kit/src/stage/goal.js');
+  const when = 'k.1 = 3, k.2 = 1 | k.1 = 4, k.2 = 2';
+  const alts = parseWhen(when);
+  assert.equal(alts.length, 2);
+  assert.deepEqual(alts[0], parseGoal('k.1 = 3, k.2 = 1'));
+  assert.deepEqual(parseWhen('C = O'), [parseGoal('C = O')], '没有 | 就是一组');
+  const at = (vals) => { const sc = new Scene(); run(sc, `array k = ${vals}`); return sc; };
+  assert.equal(evalWhen(at('1 2 3 4'), alts), false);
+  assert.equal(evalWhen(at('3 1 2 4'), alts), true, '照第一组换出来的');
+  assert.equal(evalWhen(at('4 2 3 1'), alts), true, '照第二组换出来的');
+  assert.equal(evalWhen(at('3 2 1 4'), alts), false, '只满足第一组的半边');
+  assert.equal(evalWhen(at('1 2 3 4'), parseWhen('k.1 = 9 | k sorted')), true);
+  assert.throws(() => parseWhen('k.1 = 3 |'), /\| 两边都要写条件/);
+  const sc = at('3 2 1 4');
+  run(sc, `goal g1 "换两格" when="${when}"`);
+  assert.equal(goalStatus(sc, sc.goals.get('g1')), '还没做到（k.1 = 3 ✓，k.2 = 1 ✗ | k.1 = 4 ✗，k.2 = 2 ✓）');
 });

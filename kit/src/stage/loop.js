@@ -16,7 +16,8 @@
 //   mock、model、teach（叫老师的参数）、quietMs、readOnly
 import { HELP } from './stage.js';
 import { turnMessage, gridsOf } from './doc.js';
-import { eventOf, triggers, eventsText, tryCount, TRY_MAX, QUIET_MS } from './events.js';
+import { eventOf, triggers, eventsText, tryCount, hasWork, TRY_MAX, QUIET_MS } from './events.js';
+import { shapeText } from './goal.js';
 
 const enc = typeof TextEncoder === 'function' ? new TextEncoder() : null;
 /**
@@ -204,7 +205,8 @@ export function createLoop(host) {
     try {
       await S.playing;
       await Promise.all([stage.reacting, stage.studentChain]).catch(() => {});
-      if (S.ended || !S.pending || S.flight || S.busy) return;
+      // 等的时候那件事可能已经攒起来了（预写演完，学生手上又有事：settle 把它记成 quiet）：没有要老师接的就不叫
+      if (S.ended || !S.pending || S.flight || S.busy || !S.pending.events.some(triggers)) return;
       const row = finalize();
       // 提前想好的那一轮：学生真的只点了「接着」、发出去的一字不差，接上
       if (S.spec && !S.spec.dead && S.spec.msg === row.msg) pre = adopt(S.spec);
@@ -212,37 +214,73 @@ export function createLoop(host) {
     } finally { S.flushing = false; }
     if (!S.ended && !S.flight && !S.busy) teach('turn', pre);
   }
-  function onAnswer(act) {
-    if (S.ended || RETRY.has(act.button)) return;
-    addEvent(eventOf(act, { help: HELP, at: Date.now() }));
-    flush();
-  }
-  // 交给学生做的东西（open t rotate、open M rowop……）做完了（规则说没有下一步了）：没预写做完以后的行就叫老师；
-  // 预写了（@t.done），和做到挑战一样，演完学生手上还有事就先不叫
-  function onDone(ids, { by = 'student', instant, reacted = 0 } = {}) {
-    if (instant || S.ended || host.readOnly || by !== 'student') return;
-    const e = { kind: 'done', ids, reacted, at: Date.now() };
-    addEvent(e);
-    if (!reacted) { flush(); return; }
+  /**
+   * 做到挑战、做完、答对一问以后，学生手上还有事就攒着，没事了才叫老师（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.2）。
+   * 等预写的行演完再看（events.js 的 hasWork）：挑战写了 call=now 就马上叫；还有事：这件事 quiet、记下那时有什么事（held，
+   * 跟着下一条告诉老师「没叫你」），舞台手上没有一问时替它挂「给个提示」（学生还能打字）；没事了：挂着的 ask next 先收起，叫老师
+   */
+  function settle(e, { now = false, reacts = null } = {}) {
     Promise.resolve(stage.reacting).then(() => {
-      const w = stage.scene.waiting;
-      if ((w && w.button !== HELP) || stage.pendingGoals().length) { e.quiet = true; savePending(); armIdle(); maybeSpec(); return; }
+      if (S.ended || host.readOnly) return;
+      // 预写的行真演了几行（演不上的舞台记了 missed，也另告诉了老师）：照实写，不说「演了 N 行」的假话
+      if (reacts?.length) {
+        const n = reacts.filter((r) => !r.missed).length;
+        if (n !== e.reacted) { e.reacted = n; e.missed = reacts.length - n; savePending(true); }
+      }
+      const held = now ? [] : hasWork(stage.scene);
+      if (held.length) {
+        e.quiet = true;
+        e.held = held;
+        savePending(true);
+        if (!S.flight && !S.busy) stage.holdAsk?.();
+        armIdle();
+        maybeSpec();
+        return;
+      }
+      if (stage.scene.waiting?.kind === 'next') stage.cancelWait?.();
       flush();
     });
   }
-  function onGoal(ids, { by = 'student', instant, reacted = 0 } = {}) {
+  const callNow = (ids) => ids.some((id) => stage.scene.goals.get(id)?.call === 'now');
+  function onAnswer(act, w, { reacts = null } = {}) {
+    if (S.ended || RETRY.has(act.button)) return;
+    const e = eventOf(act, { help: HELP, at: Date.now() });
+    addEvent(e);
+    // 按了按钮才判的挑战（on=）做到了：和别的挑战一样看学生手上还有没有事；没做到照常叫老师（这一下本身是回答）
+    const met = e.kind === 'answer' ? (act.onGoals || []).filter((x) => x.met).map((x) => x.id) : [];
+    if (met.length) { settle(e, { now: callNow(met) }); return; }
+    // 答对了、页面演了 @ask.right 预写的行：学生手上还有事就攒着
+    if (e.kind === 'answer' && act.reacted) { e.reacted = act.reacted; settle(e, { reacts }); return; }
+    flush();
+  }
+  // 交给学生做的东西（open t rotate、open M rowop……）做完了（规则说没有下一步了）：学生手上没事了才叫老师（预写了 @t.done 的演完再看）。
+  // 老师做完的不叫（预写的行也不演，舞台告诉老师「@t.done 的行没演」）
+  function onDone(ids, { by = 'student', instant, reacted = 0, reacts = null } = {}) {
+    if (instant || S.ended || host.readOnly || by !== 'student') return;
+    const e = { kind: 'done', ids, reacted, at: Date.now() };
+    addEvent(e);
+    settle(e, { reacts });
+  }
+  function onGoal(ids, { by = 'student', instant, reacted = 0, reacts = null, pressed = false } = {}) {
     if (instant || S.ended || host.readOnly) return;
     // 老师（或页面替老师补的行）让挑战成立了：不是学生做到的，不叫老师，攒着跟下一条发
     if (by !== 'student') { addEvent({ kind: 'goal-by-teacher', ids, at: Date.now() }); return; }
     for (const id of ids) host.evidence?.goal?.(id, stage.scene.goals.get(id), S.lastClaude);
     const e = { kind: 'goal', ids, reacted, at: Date.now() };
+    // 收集型：收齐的那几张照那一刻的样子记下（发出去时写「学生收齐了 g1 的 3 张：B = …」）
+    const col = {};
+    for (const id of ids) { const c = stage.scene.goals.get(id)?.collect; if (c) col[id] = { obj: c.obj, n: c.n, got: c.got.map(shapeText), dup: c.dup }; }
+    if (Object.keys(col).length) e.collected = col;
+    // 学生按了按钮才判的（press）：这一下本身是回答，叫不叫老师由回答那一件事定（onAnswer），这一件跟着它
+    if (pressed) {
+      e.quiet = true;
+      addEvent(e);
+      // 演不上的预写照实数（叫不叫老师由回答那一件事定）
+      if (reacts?.length) Promise.resolve(stage.reacting).then(() => { const n = reacts.filter((r) => !r.missed).length; if (n !== e.reacted) { e.reacted = n; e.missed = reacts.length - n; savePending(true); } });
+      return;
+    }
     addEvent(e);
-    // 预写的行演完再看：学生手上又有事了（预写里的一问、新的挑战），先不叫老师；什么都没了才叫
-    Promise.resolve(stage.reacting).then(() => {
-      const w = stage.scene.waiting;
-      if ((w && w.button !== HELP) || stage.pendingGoals().length) { e.quiet = true; savePending(); armIdle(); maybeSpec(); return; }
-      flush();
-    });
+    settle(e, { now: callNow(ids), reacts });
   }
   // 挑战还没做到：试了好多下、很久没动，叫老师（老师当场看着学生怎么试的写提示；学生照样能接着试）
   function armIdle() {
@@ -267,6 +305,8 @@ export function createLoop(host) {
     if (!host.call || S.ended || host.readOnly || S.spec || S.flight || S.pending?.events.some((x) => !x.quiet)) return;
     const w = stage.scene.waiting;
     if (!w || w.kind !== 'next' || w.button === HELP || RETRY.has(w.button) || stage.pendingGoals().length) return;
+    // 按了这个按钮才判的挑战（on=）：点了会判、会记一行，提前想的那一份一定对不上
+    if (stage.scene.hasOn?.(w.button || '接着')) return;
     const act = { type: 'next', button: w.button || '接着' };
     const said = eventsText([...(S.pending?.events || []), eventOf(act, { help: HELP })], { goals: stage.scene.goals });
     const after = stage.scene.clone();

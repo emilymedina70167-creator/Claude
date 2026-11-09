@@ -366,3 +366,39 @@ test('拨数的路：学生先点的几样以后第一次变的那一句落在�
   assert.equal(t.split(diff).length - 1, 1, t);
   assert.match(t, /学生拨了 k：1 → 2 → 3 → 4（停在 4）。学生先点的 2 个里/);
 });
+
+// —— 学生手上没事了才叫老师（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.2）——
+test('hasWork：还挂着要答的一问、没做到的挑战、交给了学生还没做完的东西；ask next（连「给个提示」）不算', async () => {
+  const { hasWork } = await import('../kit/src/stage/events.js');
+  const { Scene } = await import('../kit/src/stage/scene.js');
+  const { parseScript } = await import('../kit/src/stage/script.js');
+  const at = (src) => { const s = new Scene(); for (const c of parseScript(src)) s.apply(c); return s; };
+  assert.deepEqual(hasWork(at('array a = 3 1 2\nask tap a "点一个" expect=a.1')), ['还有一问没答（ask tap）']);
+  assert.deepEqual(hasWork(at('tree t = 30 20 40\nask pick t "哪几个"')), ['还有一问没答（ask pick）']);
+  assert.deepEqual(hasWork(at('array a = 3 1 2\nask drag a#1 a#2 "拖过去"')), ['还有一问没答（ask drag）']);
+  assert.deepEqual(hasWork(at('array a = 3 1 2\nask value "几格" answer=3')), ['还有一问没答（ask value）']);
+  assert.deepEqual(hasWork(at('array a = 3 1 2\nask say "为什么"')), ['还有一问没答（ask say）']);
+  assert.deepEqual(hasWork(at('array a = 3 1 2\nopen a\ngoal g2 "排好" when="a sorted"')), ['挑战 g2「排好」还没做到']);
+  assert.deepEqual(hasWork(at('tree t = 30 20 _ 10\nopen t rotate')), ['t 还没做完']);
+  assert.deepEqual(hasWork(at('tree t = 30 20 _ 10\nopen t rotate\nmatrix M = 1 2 / 2 5\nopen M rowop')), ['t、M 还没做完']);
+  assert.deepEqual(hasWork(at('array a = 3 1 2\nask next "好"')), []);
+  assert.deepEqual(hasWork(at('array a = 3 1 2\nask next button="给个提示"')), []);
+  // 页面判不了的（没写 key 的句子永远等不到做完）不挡着
+  assert.deepEqual(hasWork(at('sentence s = "He is running."\nopen s mark')), []);
+  assert.deepEqual(hasWork(at('tree t = 20 10 30\nopen t rotate')), [], '已经做完了');
+  assert.deepEqual(hasWork(new Scene()), []);
+});
+
+test('攒着没叫老师的那一句：做完、做到挑战、答对一问后面写「那时 …，没叫你」；收齐了写收了哪几张', async () => {
+  const { collectText } = await import('../kit/src/stage/events.js');
+  assert.equal(eventsText([{ kind: 'done', ids: ['d'], reacted: 1, quiet: true, held: ['a、b、c 还没做完'] }]), '学生把 d 做完了（页面已经演了你预写的 1 行）；那时 a、b、c 还没做完，没叫你');
+  assert.equal(eventsText([{ kind: 'goal', ids: ['g1'], reacted: 2, quiet: true, held: ['还有一问没答（ask tap）', '挑战 g2「再来」还没做到'] }], { goals: new Map([['g1', { text: '排好' }]]) }),
+    '学生做到了挑战 g1「排好」（页面已经演了你预写的 2 行）；那时 还有一问没答（ask tap），挑战 g2「再来」还没做到，没叫你');
+  assert.equal(eventsText([eventOf({ type: 'tap', ref: 'a.3', value: '7', key: 3, slot: 3, expected: 'a.3', right: true, reacted: 1 })].map((e) => ({ ...e, reacted: 1 }))),
+    '学生点了 a.3（7）——你预期的是 a.3，点对了\n学生答对了（页面已经演了你预写的 1 行）');
+  const c = { obj: 'B', n: 3, got: ['(1 0; 0 1)', '(2 1; 0 2)', '(0 1; 0 0)'], dup: 2 };
+  assert.equal(collectText('g1', c), '学生收齐了 g1 的 3 张：B = (1 0; 0 1)、(2 1; 0 2)、(0 1; 0 0)（另有 2 下和收过的一样，没收）');
+  assert.match(eventsText([{ kind: 'goal', ids: ['g1'], reacted: 1, collected: { g1: c } }]), /^学生收齐了 g1 的 3 张：B = \(1 0; 0 1\)、\(2 1; 0 2\)、\(0 1; 0 0\)（另有 2 下和收过的一样，没收）/);
+  // 收的时候是 measure（挑战上的 collect）也写得出来
+  assert.equal(collectText('g1', { obj: 'B', got: [{ kind: 'matrix', rows: [['1', '0'], ['0', '-1']] }], dup: 0 }), '学生收齐了 g1 的 1 张：B = (1 0; 0 −1)');
+});

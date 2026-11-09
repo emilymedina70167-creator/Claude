@@ -4,6 +4,8 @@
 // 所以攒着，等到有要老师接的事——答了老师问的、做到了挑战、打字、点「给个提示」、试了好多下还没做到、很久没动——
 // 一起写成一段发过去。老师照它看学生是怎么试的、卡在哪，再当场写下一步。
 import { actText } from './stage.js';
+import { rulesOf } from './rules.js';
+import { shapeText } from './goal.js';
 
 /** 试了几下还没做到就叫老师（不等学生自己点提示） */
 export const TRY_MAX = 8;
@@ -25,6 +27,43 @@ const text = (x) => (typeof x === 'string' ? x : x?.why || '');
  * 试的一下本来攒着；老师在 open 那一行写了 call=wrong、学生这一下走偏了（now）：马上叫
  */
 export const triggers = (e) => !e.quiet && (!!e.now || ['answer', 'goal', 'done', 'help', 'stuck', 'tries'].includes(e.kind));
+
+/**
+ * 学生手上还有什么事（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.2）：做到挑战、做完、答对一问以后，有事就攒着，
+ * 没事了才叫老师。空的就是没事了。有事是：
+ *   - 还挂着要学生答的一问（tap / pick / drag / value / say）；ask next（连页面挂的「给个提示」）不算：点它就是叫老师；
+ *   - 还没做到的挑战；
+ *   - 交给了学生（open 了规则 doneBy 里的动作）、还没做完的东西——规则算得出下一步才算（页面判不了的，比如没写 key 的句子，
+ *     永远等不到它做完，不能拿它挡着不叫老师）
+ */
+export function hasWork(scene) {
+  const out = [];
+  const w = scene?.waiting;
+  if (w && w.kind !== 'next') out.push(`还有一问没答（ask ${w.kind}）`);
+  for (const g of scene?.goals?.values() || []) if (!g.met) out.push(`挑战 ${g.id}「${g.text}」还没做到`);
+  const undone = [];
+  for (const e of scene?.opens?.values() || []) {
+    if (undone.includes(e.obj) || !scene.doneOpen?.(e.obj)) continue;
+    const o = scene.objects.get(e.obj);
+    const r = rulesOf(o);
+    if (!r?.hasNext) continue;
+    let nx = null;
+    try { nx = r.next(o, scene); } catch { nx = null; }
+    if (nx?.acts?.length) undone.push(e.obj);
+  }
+  if (undone.length) out.push(`${undone.join('、')} 还没做完`);
+  return out;
+}
+/** 攒着的那一件事后面接的半句：那时学生手上还有什么事、没叫老师 */
+const heldText = (e) => (e?.held?.length ? `；那时 ${e.held.join('，')}，没叫你` : '');
+/**
+ * 收集型挑战收齐了：学生收齐了 g1 的 3 张：B = (1 0; 0 1)、(2 1; 0 2)、(0 1; 0 0)（另有 2 下和收过的一样，没收）。
+ * c 是挑战上的 collect（got 是 measure），或者课堂循环记下的那一刻的样子（got 已经是字）
+ */
+export function collectText(id, c) {
+  const got = (c.got || []).map((m) => (typeof m === 'string' ? m : shapeText(m)));
+  return `学生收齐了 ${id} 的 ${got.length} 张：${c.obj} = ${got.join('、')}${c.dup ? `（另有 ${c.dup} 下和收过的一样，没收）` : ''}`;
+}
 
 /**
  * 一个动作 → 一件事：{ kind: 'answer' | 'help' | 'try' | 'goal' | 'done' | 'stuck' | 'tries', act?, text?, at }
@@ -254,7 +293,10 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
     if (e.kind === 'try') continue;
     if (e.kind === 'goal') for (const id of e.ids || []) {
       const g = goals.get(id);
-      lines.push(`学生做到了挑战 ${id}${g ? `「${g.text}」` : ''}${e.reacted ? `（页面已经演了你预写的 ${e.reacted} 行）` : '（你没预写做到以后的行）'}`);
+      const c = e.collected?.[id] || g?.collect;
+      const pre = e.reacted ? `（页面已经演了你预写的 ${e.reacted} 行）` : e.missed ? '（你预写的行都没演上）' : '（你没预写做到以后的行）';
+      // 收集型：收齐了写收了哪几张（每收一张页面都演了预写的行）
+      lines.push(c ? `${collectText(id, c)}${e.reacted ? `；页面每收一张都演了你预写的行` : ''}${heldText(e)}` : `学生做到了挑战 ${id}${g ? `「${g.text}」` : ''}${pre}${heldText(e)}`);
     }
     else if (e.kind === 'goal-by-teacher') for (const id of e.ids || []) {
       const g = goals.get(id);
@@ -262,14 +304,19 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
     }
     else if (e.kind === 'done') {
       const ids = (e.ids || []).join('、');
-      lines.push(`学生把 ${ids} 做完了（页面算出来没有下一步了）${e.reacted ? `（页面已经演了你预写的 ${e.reacted} 行）` : '（你没预写做完以后的行）'}`);
+      lines.push(`学生把 ${ids} 做完了${e.reacted ? `（页面已经演了你预写的 ${e.reacted} 行）` : e.missed ? '（页面算出来没有下一步了）（你预写的行都没演上）' : '（页面算出来没有下一步了）（你没预写做完以后的行）'}${heldText(e)}`);
     }
     else if (e.kind === 'help') lines.push(`学生点了「${e.act.button}」`);
     else if (e.kind === 'stuck') lines.push(e.text || `学生 ${Math.round(QUIET_MS / 1000)} 秒没动，挑战还没做到`);
     else if (e.kind === 'tries') lines.push(e.text || `学生试了 ${TRY_MAX} 下还没做到`);
     // 页面记下的一句（老师演的那一下改了学生先点的几样：stage.js 的 onNote）：不叫老师、不算「试」，照写
     else if (e.kind === 'note') lines.push(e.text || '');
-    else if (e.act) lines.push(actText(dialed ? { ...e.act, tries: undefined } : e.act));
+    else if (e.act) {
+      lines.push(actText(dialed ? { ...e.act, tries: undefined } : e.act));
+      // 答对了这一问、页面演了 @ask.right 预写的行（学生手上还有事就攒着，写那时有什么事）
+      if (e.reacted || e.missed) lines.push(`学生答对了（${e.reacted ? `页面已经演了你预写的 ${e.reacted} 行` : '你预写的行都没演上'}）${heldText(e)}`);
+      else if (e.held?.length) lines.push(`（${e.held.join('，')}，没叫你）`);
+    }
   }
   // 老师写了 call=wrong、学生走偏了才叫的：说一声为什么这时候叫
   if (events.some((e) => e.now)) lines.push('（你在 open 那一行写了 call=wrong：学生走偏了，页面马上叫你）');

@@ -3,6 +3,7 @@
 //
 //   goal g1 "改 B 里的一个数，让 AB 还是 O" when="C = O"
 //   goal g2 "让 BA 不是 O" when="C = O, D != O"          逗号（或 且、and、；）连着的都要成立
+//   goal g3 "换两格" when="k.1 = 3, k.2 = 1 | k.1 = 4, k.2 = 2"   | 隔开几组：有一组都成立就算做到
 //
 // 两边能写：舞台上的东西（C、a）、一个部件（B.1,2、a.3、a#8）、数（3、-1/2）、拨的数的名字、O（零矩阵）、I（单位矩阵）。
 // 比较：=（==）、!=（≠）、<、<=（≤）、>、>=（≥）；一排东西还能写「a sorted」「a sorted desc」。
@@ -14,6 +15,7 @@
 // 这一句不成立、写「判不了」，不写 ✗（学生也许已经做对了，是页面数不了）；量名写错写下挑战时当场报。
 
 import { predicateOf, rulesOf, parseMeasure, checkMeasure, evalMeasure } from './rules.js';
+import { gridText } from './value.js';
 
 const OPS = ['!=', '≠', '==', '<=', '>=', '≤', '≥', '=', '<', '>'];
 const OP_RE = /^(.+?)\s*(!=|≠|==|<=|>=|≤|≥|=|<|>)\s*(.+)$/;
@@ -40,6 +42,18 @@ export function parseGoal(text) {
     if (!OPS.includes(m[2])) throw new Error(`「${m[2]}」不是比较`);
     return { l: m[1].trim(), op, r: m[3].trim() };
   });
+}
+
+/**
+ * 「或」：用 | 隔开几组，每一组照旧是 parseGoal（逗号连着的都要成立）→ [[句子…], …]；只有一组就是 [parseGoal(text)]。
+ * 写错了抛错（哪一组空着也报）
+ */
+export function parseWhen(text) {
+  const s = String(text ?? '').trim();
+  if (!s) throw new Error('when= 要写条件，比如 when="C = O, D != O"');
+  const groups = s.split(/\s*\|\|?\s*/);
+  if (groups.length > 1 && groups.some((g) => !g.trim())) throw new Error(`「${s}」：| 两边都要写条件（有一组都成立就算做到），比如 when="k.1 = 3 | k.1 = 4"`);
+  return groups.map((g) => parseGoal(g));
 }
 
 // —— 数：整数、小数、分数（-3/4），′ 和真的减号也认 ——
@@ -91,7 +105,8 @@ function isIdentity(m) {
   if (m.rows.length !== m.rows[0].length) return false;
   return m.rows.every((row, i) => row.every((v, j) => { const n = numOf(v); return n != null && sameNum(n, i === j ? 1 : 0); }));
 }
-function sameMeasure(a, b) {
+/** 两份 measure 是不是同一个（数按数比）；还没填满是 null。收集型挑战拿它比收过的几张 */
+export function sameMeasure(a, b) {
   if (!filled(a) || !filled(b)) return null;
   if (a.kind !== b.kind) return false;
   if (a.kind === 'matrix' && (a.rows.length !== b.rows.length || a.rows[0].length !== b.rows[0].length)) return false;
@@ -187,6 +202,20 @@ export function evalGoal(scene, cond) {
   return cond.every((cl) => evalClause(scene, cl));
 }
 
+/** 「或」：有一组都成立就算做到（alts 是 parseWhen 的结果；只有一组和 evalGoal 一样） */
+export function evalWhen(scene, alts) {
+  return alts.some((cond) => evalGoal(scene, cond));
+}
+/** 挑战的几组条件：新记的有 alts；以前的（只有 cond）当成一组 */
+export const altsOf = (g) => g.alts || [g.cond];
+
+/** 一样东西现在的样子写成一行给老师看（收集型挑战收了哪几张）：矩阵 (1 0; 0 1)，一排 3 1 2 */
+export function shapeText(m) {
+  if (!m) return '?';
+  if (m.kind === 'matrix') return gridText(m.rows);
+  return (m.values || []).map((v) => (v === '' || v == null ? '_' : String(v))).join(' ');
+}
+
 /** 这一句里数不了的那个量：{ k: 'null', why }；没有是 null */
 function nullSide(scene, cl) {
   for (const w of measuresIn(cl)) { const x = operand(scene, w); if (x.k === 'null') return x; }
@@ -210,7 +239,8 @@ export const clauseText = (cl) => (cl.sorted ? `${cl.l} sorted${cl.sorted === 'd
  * 这一句可能又不成立了；拨数的路每停一次都要照实标）。判不了（量数不了、乘积还空着、判断式出错）是 null
  */
 export function clauseMarks(scene, g) {
-  return g.cond.map((cl) => {
+  // 「或」的每一组的每一句都标（拨数的路要照实写每一句在每一停成不成立）
+  return altsOf(g).flat().map((cl) => {
     let ok;
     try { ok = clauseState(scene, cl); } catch { ok = null; }
     return { clause: clauseText(cl), ok: ok == null ? null : !!ok };
@@ -223,18 +253,27 @@ export function clauseMarks(scene, g) {
  * 接着拨走了）照实写「做到过；现在不成立」——不然老师读到「做到了」、看到的却是没做到的样子
  */
 export function goalStatus(scene, g) {
-  const marks = g.cond.map((cl) => {
-    let ok, mark;
+  const mark = (cl) => {
+    let ok, m;
     try {
       ok = clauseState(scene, cl);
       const why = ok == null ? nullSide(scene, cl)?.why : null;
-      mark = ok == null ? ` 判不了${why ? `：${why}` : ''}` : ok ? ' ✓' : ' ✗';
-    } catch (err) { ok = null; mark = ` 判不了：${err?.message || err}`; }
-    return { ok, text: `${clauseText(cl)}${mark}` };
+      m = ok == null ? ` 判不了${why ? `：${why}` : ''}` : ok ? ' ✓' : ' ✗';
+    } catch (err) { ok = null; m = ` 判不了：${err?.message || err}`; }
+    return { ok, text: `${clauseText(cl)}${m}` };
+  };
+  // 一组一组写（| 隔开）：一组都成立就是成立，有一句不成立就是不成立，别的是判不了；几组里有一组成立就算成立
+  const groups = altsOf(g).map((cond) => {
+    const ms = cond.map(mark);
+    const ok = ms.some((x) => x.ok === false) ? false : ms.some((x) => x.ok == null) ? null : true;
+    return { ok, text: ms.map((x) => x.text).join('，') };
   });
-  const bits = marks.map((m) => m.text).join('，');
-  if (!g.met) return `还没做到（${bits}）`;
-  if (marks.some((m) => m.ok === false)) return `做到过；现在不成立（${bits}）`;
-  if (marks.some((m) => m.ok == null)) return `做到过；现在判不了（${bits}）`;
+  const now = groups.some((x) => x.ok === true) ? true : groups.every((x) => x.ok === false) ? false : null;
+  const bits = groups.map((x) => x.text).join(' | ');
+  const c = g.collect;
+  // 收集型：没收齐时写收了几张（条件现在成不成立照写）
+  if (!g.met) return `还没做到（${c ? `收了 ${c.got.length} / ${c.n}；` : ''}${bits}）`;
+  if (now === false) return `做到过；现在不成立（${bits}）`;
+  if (now == null) return `做到过；现在判不了（${bits}）`;
   return '做到了';
 }

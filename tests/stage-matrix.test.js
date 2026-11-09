@@ -274,8 +274,9 @@ test('说明里的例子照抄能演：一行不错', () => {
   assert.equal(s.parts('C.1,1')[0].value, '0');
   assert.equal(s.parts('C.2,2')[0].value, '');
   assert.ok(s.opens.has('C:explain') && s.goals.has('g1') && s.reactions.get('g1').length === 3);
-  for (const c of parseScript('mul C.1,2\nmul C.2,1')) s.apply(c);
-  const [fx] = parseScript('mul C.2,2').map((c) => s.apply(c));
+  // 学生点开看的几下（预写的行只在学生的一下演）
+  for (const c of parseScript('mul C.1,2\nmul C.2,1')) s.apply(c, { by: 'student' });
+  const [fx] = parseScript('mul C.2,2').map((c) => s.apply(c, { by: 'student' }));
   assert.deepEqual(fx.goalsMet, ['g1']);
   for (const r of fx.reactions) for (const c of parseScript(r.src)) s.apply({ ...c, lenient: true });
   assert.ok(s.opens.has('B:edit') && s.goals.has('g2') && !s.goals.get('g2').met);

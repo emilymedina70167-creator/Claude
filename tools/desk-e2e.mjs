@@ -490,7 +490,8 @@ const SUITES = {
   // 另开一节做一道错的就回首页「直接下课」，复现组照样记「没过」（以前直接下课会把复现结果丢掉）
   // 舞台课（kind: stage，docs/stage-plan.md D 段）：首页「开新课」（开新课一律是舞台），模拟老师一轮轮写镜头指令；
   // 点对一格（证据里一条 S… 的作答，ok）、填一个答案（页面当场判）；老师写的 memo 块写进记忆；写错的一行跳过、下一轮告诉老师；
-  // 刷新以后舞台照记录放回、最后一问接着等；打一句话；下课：小结、整理单、课后报告里有 S… 的题；以前的课能翻看（只读、不调用）
+  // 刷新以后舞台照记录放回、最后一问接着等；打一句话；交一次 ask pick（猜对了马上演 @ask.right、手上还有事不叫老师）、按一次「回到……」；
+  // 下课：小结、整理单、课后报告里有 S… 的题；以前的课能翻看（只读、不调用）
   async stage(browser) {
     const t = await seeded(browser);
     check(!(await t.page.$('.dk-form, [data-form]')), '首页还有「黑板 / 一问一答 / 舞台」的选项');
@@ -563,7 +564,31 @@ const SUITES = {
     await sleep(1500);
     await t.page.click('.st-next');
     await t.waitFor(async () => (await turns()).filter((x) => x.role === 'claude').at(-1)?.cost?.spec === 'hit', { timeout: 30000, what: '点了「接着」以后接上提前想好的那一轮' });
-    await t.waitFor(() => t.page.$('.st-next'), { timeout: 30000, what: '第五轮' });
+    // 第五轮：一棵树交给学生插、存了「开始」；先猜插了 47 以后哪几个会变（ask pick）。猜对了马上演 @ask.right 的一句；
+    // 树还没插完（学生手上还有事）就不叫老师，页面替它挂「给个提示」（学生还能打字），板顶那句话还在
+    await t.waitFor(() => t.page.evaluate(() => window.LAStage?.scene.waiting?.kind === 'pick' && !!document.querySelector('.st-pick-go')), { timeout: 30000, what: '第五轮问「猜好了」那一问' });
+    await sleep(800);
+    const before5 = await claudeTurns();
+    const pidOfRef = (ref) => t.page.evaluate((r) => { const p = window.LAStage.scene.parts(r)[0]; return `${p.obj}:${p.key}`; }, ref);
+    for (const r of ['t.45', 't.40', 't.30']) { await tap(await pidOfRef(r)); await sleep(200); }
+    await t.page.click('.st-pick-go');
+    await t.waitFor(() => t.page.evaluate(() => /对，就是这三个/.test(document.querySelector('.st-caption')?.textContent || '') && window.LAStage?.scene.waiting?.button === '给个提示'), { timeout: 15000, what: '猜对了马上演 @ask.right 的一句、页面替它挂「给个提示」' });
+    await sleep(800);
+    check(await claudeTurns() === before5, '猜对了、树还没插完（学生手上还有事），页面却叫了老师');
+    const treeNow = () => t.page.evaluate(() => { const s = window.LAStage.scene; return { open: s.opens.has('t:insert'), tray: (s.objects.get('t').tray || []).join(' '), state: s.stateText().split('\n').filter((l) => /^树 t/.test(l)).join('\n') }; });
+    const t5 = await treeNow();
+    check(t5.open && t5.tray === '47', `猜完以后树不是还交给学生插、托盘里还有 47：${JSON.stringify(t5)}`);
+    check(await t.page.evaluate(() => /对，就是这三个/.test(document.querySelector('.st-caption')?.textContent || '')), '页面替它挂「给个提示」以后，板顶 @ask.right 那句话没了');
+    // 按「回到开始」：t 照原样；再打一句话发出去，这一条 [学生] 里有点了「回到开始」、答对了没叫老师
+    await t.page.click('.st-back');
+    await t.waitFor(() => t.page.evaluate(() => window.LAStage.log.some((r) => /^back t "开始"/.test(r.src))), { timeout: 8000, what: '按「回到开始」记成学生的一行' });
+    check(JSON.stringify(await treeNow()) === JSON.stringify(t5), `按「回到开始」以后 t 变了：${JSON.stringify(await treeNow())}`);
+    await t.page.fill('#st-say-input', '47 插在 45 的右边'); await t.page.click('.st-say-go');
+    const sent5 = await t.waitFor(async () => (await turns()).find((x) => x.role === 'student' && !x.pending && /47 插在 45 的右边/.test(x.msg || '')), { what: '学生说的话连同攒下的猜对、回到开始一起发给老师' });
+    check(/学生点了「回到开始」/.test(sent5.msg || ''), `发给老师的没写学生点了「回到开始」：${sent5.msg}`);
+    check(/学生答对了（页面已经演了你预写的 1 行）；那时 t 还没做完，没叫你/.test(sent5.msg || ''), `发给老师的没写答对了、那时为什么没叫老师：${sent5.msg}`);
+    // 第六轮（和第四轮一样）
+    await t.waitFor(() => t.page.evaluate(() => /模拟老师讲完了/.test(document.querySelector('.st-caption')?.textContent || '') && [...document.querySelectorAll('.st-next')].some((b) => /^好/.test(b.textContent.trim()))), { timeout: 30000, what: '第六轮' });
     // 下课：小结、整理单（position 写进记忆）、报告里有 S… 的题
     await t.page.click('.sc-end');
     await t.answer('下课');

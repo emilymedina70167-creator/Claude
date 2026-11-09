@@ -8,6 +8,7 @@ import { classForm, SESSION_KINDS, isTeach } from '../kit/src/memory/session.js'
 import { sampleMemory } from '../kit/src/memory/sample.js';
 import { Scene } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
+import { eventsText } from '../kit/src/stage/events.js';
 
 test('老师这一轮：代码块记号不演，board memo 块里的行不上舞台（行号不变）', () => {
   const lines = stageLines('say "看"\n```\nglow a.1\n```\n````board memo\nnote text="x" basis=S1\n````\nask next "好"');
@@ -155,15 +156,17 @@ const OLD_LOGS = {
     state: ["（平面：名字.u 是向量 u（从原点出发的箭头），名字.P 是点 P；坐标是数学里的 (x, y)，y 朝上）","平面 p（x 从 -3 到 3，y 从 -3 到 3；一格是 1）：","  点 P = (1, 2)","  向量 u = (2, 1)（蓝）","  向量 w = {2 u} = (4, 2)（粉、出了网格）","跟着算的（依赖一变，页面当场重算；学生动不了）：p.w = {2 u}","学生能直接动的：p drag（拖）"],
   },
 };
-function replayScene(log) {
+// 照 stage.js 的 replay：行带 lenient 和 replay（刷新重放自己的标记）；ask 不重放，它拿走的 @ask.right 一并丢掉
+function replayInto(log) {
   const s = new Scene();
   for (const [by, src] of log) for (const c of parseScript(src)) {
-    if (c.cmd === 'ask' && !c.on) continue;
-    try { s.apply({ ...c, lenient: true }, { by: by === 's' ? 'student' : null }); } catch { /* 当时就没演 */ }
+    if (c.cmd === 'ask' && !c.on) { s.askRight = null; continue; }
+    try { s.apply({ ...c, lenient: true, replay: true }, { by: by === 's' ? 'student' : null }); } catch { /* 当时就没演 */ }
   }
   s.waiting = null;
-  return s.stateText();
+  return s;
 }
+const replayScene = (log) => replayInto(log).stateText();
 
 test('旧 log 照放：没有新写法的课，重放出来的「舞台现在」和改裁判之前一字不差', () => {
   for (const [k, { log, state }] of Object.entries(OLD_LOGS)) assert.equal(replayScene(log), state.join('\n'), k);
@@ -345,4 +348,160 @@ test('课堂循环：页面记下的一句（老师演的那一下改了学生�
   await wait(20);
   assert.ok(rows2.some((r) => r.kind === 'fallback'));
   assert.deepEqual((loop2.pending?.events || []).filter((e) => e.kind === 'note'), []);
+});
+
+test('刷新以后 @ask.right 不挂到下一问：重放跳过 ask 时一并丢掉', () => {
+  const s = replayInto([['t', 'array a = 3 1 2'], ['t', '@ask.right say "对"'], ['t', 'ask tap a "最大的是哪个？" expect=a.3']]);
+  assert.equal(s.askRight, null);
+  s.apply(parseScript('ask tap a "最小的是哪个？" expect=a.2')[0]);
+  assert.equal(s.waiting.right, undefined);
+});
+
+// —— 学生手上没事了才叫老师（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.2）：假的舞台（真的场景），数叫了几次老师 ——
+function fakeClass(src) {
+  const scene = new Scene();
+  for (const c of parseScript(src)) scene.apply(c);
+  const stage = {
+    log: [], errors: [], scene, teacherAudit: [], reacting: Promise.resolve(), studentChain: Promise.resolve(),
+    pendingGoals: () => [...scene.goals.values()].filter((g) => !g.met),
+    begin() { let armedR; const armed = new Promise((r) => { armedR = r; }); return { mark: this.log.length, turn: 1, push() {}, end() { armedR(); return new Promise(() => {}); }, drop() {}, abort: async () => {}, armed }; },
+    play: async () => ({}),
+    holds: 0, holdAsk() { this.holds++; },
+    // 收起等着的那一问（和真的舞台一样：等着的那一问没了）
+    cancelled: 0, cancelWait() { this.cancelled++; scene.waiting = null; },
+  };
+  const rows = [];
+  let calls = 0;
+  const host = {
+    stage, mock: true, model: 'm', teach: {}, quietMs: 1e9, messages: () => [{ content: 'x' }], putTurn() {}, cost: (c) => c, thinking() {},
+    addTurn: (r) => { const x = { ...r, seq: rows.length + 1 }; rows.push(x); return x; },
+    call: async () => { calls++; return { text: 'say "好"', modelApplied: 'm' }; },
+  };
+  return { stage, scene, rows, host, calls: () => calls };
+}
+const sentRows = (rows) => rows.filter((r) => r.role === 'student' && !r.pending);
+const wait = (ms = 10) => new Promise((r) => setTimeout(r, ms));
+const stuLine = (scene, line, open = 'drag') => scene.apply(parseScript(line)[0], { by: 'student', open });
+
+test('课堂循环：做到挑战以后学生手上还有事就攒着（预写出了一问），答完才叫；没事了叫（挂着的 ask next 先收起）；call=now 马上叫', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  // 做到 g1，预写出了一问：不叫，事件 quiet、带 held，页面替它挂「给个提示」
+  const a = fakeClass('array k = 2 1 3\nopen k\ngoal g1 "排好" when="k sorted"');
+  const la = createLoop(a.host);
+  stuLine(a.scene, 'swap k.1 k.2');
+  a.scene.apply(parseScript('ask tap k "最大的是哪个？" expect=k.3')[0]); // 预写的那一问（舞台演的）
+  a.stage.onGoal(['g1'], { by: 'student', reacted: 2 });
+  await wait();
+  assert.equal(a.calls(), 0);
+  const e = la.pending.events.find((x) => x.kind === 'goal');
+  assert.equal(e.quiet, true);
+  assert.deepEqual(e.held, ['还有一问没答（ask tap）']);
+  assert.equal(a.stage.holds, 1);
+  // 答完那一问：叫一次，[学生] 里有「没叫你」那一句
+  a.scene.waiting = null;
+  a.stage.onAnswer({ type: 'tap', ref: 'k.3', value: '3', key: 3, slot: 3, expected: 'k.3', right: true });
+  await wait();
+  assert.equal(a.calls(), 1);
+  assert.match(sentRows(a.rows)[0].msg, /学生做到了挑战 g1「排好」（页面已经演了你预写的 2 行）；那时 还有一问没答（ask tap），没叫你\n学生点了 k\.3/);
+  la.close();
+  // 没事了：挂着的 ask next 先收起，叫老师
+  const b = fakeClass('array k = 2 1 3\nopen k\ngoal g1 "排好" when="k sorted"\nask next "好了点我" button="好了"');
+  const lb = createLoop(b.host);
+  stuLine(b.scene, 'swap k.1 k.2');
+  b.stage.onGoal(['g1'], { by: 'student', reacted: 1 });
+  await wait();
+  assert.equal(b.calls(), 1);
+  assert.equal(b.stage.cancelled, 1);
+  lb.close();
+  // call=now：还有别的挑战没做到，照样马上叫
+  const c = fakeClass('array k = 2 1 3\nopen k\ngoal g1 "排好" when="k sorted" call=now\narray q = 1 2\nopen q\ngoal g2 "倒过来" when="q sorted desc"');
+  const lc = createLoop(c.host);
+  stuLine(c.scene, 'swap k.1 k.2');
+  c.stage.onGoal(['g1'], { by: 'student', reacted: 0 });
+  await wait();
+  assert.equal(c.calls(), 1);
+  lc.close();
+  // 一样的情形没写 call=now：攒着
+  const d = fakeClass('array k = 2 1 3\nopen k\ngoal g1 "排好" when="k sorted"\narray q = 1 2\nopen q\ngoal g2 "倒过来" when="q sorted desc"');
+  const ld = createLoop(d.host);
+  stuLine(d.scene, 'swap k.1 k.2');
+  d.stage.onGoal(['g1'], { by: 'student', reacted: 0 });
+  await wait();
+  assert.equal(d.calls(), 0);
+  assert.deepEqual(ld.pending.events[0].held, ['挑战 g2「倒过来」还没做到']);
+  // 做完了也一样：还有挑战没做到就攒着
+  d.stage.onDone(['t'], { by: 'student', reacted: 1 });
+  await wait();
+  assert.equal(d.calls(), 0);
+  assert.match(eventsText(ld.pending.events, { goals: d.scene.goals }), /学生把 t 做完了（页面已经演了你预写的 1 行）；那时 挑战 g2「倒过来」还没做到，没叫你/);
+  ld.close();
+});
+
+test('课堂循环：刷新以后照旧规矩攒的事件只叫一次；新来的照 hasWork 攒着；瞬间重放不叫', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const f = fakeClass('array k = 2 1 3\nopen k\ngoal g1 "排好" when="k sorted"\narray q = 1 2\nopen q\ngoal g2 "倒过来" when="q sorted desc"');
+  const lf = createLoop(f.host);
+  stuLine(f.scene, 'swap k.1 k.2');
+  // 刷新以前攒的：照旧规矩的 goal 事件（不带 quiet），舞台上学生还有事（g2 没做到）
+  const pendingRow = f.host.addTurn({ role: 'student', pending: true, text: '', events: [{ kind: 'goal', ids: ['g1'], reacted: 1, at: 1 }], log: [] });
+  await lf.resume({ pendingRow, askLine: 'ask next' });
+  await wait(30);
+  assert.equal(f.calls(), 1, '只叫一次，不因为现在学生手上有事就吞掉');
+  // 新来的一件、学生还有事：攒着
+  f.scene.apply(parseScript('goal g3 "倒过来排" when="k sorted desc"')[0]);
+  stuLine(f.scene, 'swap k.1 k.3');
+  f.stage.onGoal(['g3'], { by: 'student', reacted: 0 });
+  await wait(30);
+  assert.equal(f.calls(), 1);
+  assert.equal(lf.pending.events.at(-1).quiet, true);
+  // 瞬间重放（刷新、撤一步、作废）时的「做到」：不记、不叫
+  const n = lf.pending.events.length;
+  f.stage.onGoal(['g2'], { by: 'student', instant: true });
+  f.stage.onDone(['t'], { by: 'student', instant: true });
+  await wait(30);
+  assert.equal(f.calls(), 1);
+  assert.equal(lf.pending.events.length, n);
+  lf.close();
+});
+
+test('课堂循环：答对一问、页面演了 @ask.right 预写的行——演完挂着新的一问不叫，什么都没有了才叫', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const a = fakeClass('array a = 3 1 2\nask tap a "最小的是哪个？" expect=a.2'); // 预写里的新一问已经挂上
+  const la = createLoop(a.host);
+  a.stage.onAnswer({ type: 'tap', ref: 'a.1', value: '3', key: 1, slot: 1, expected: 'a.1', right: true, reacted: 1 });
+  await wait();
+  assert.equal(a.calls(), 0);
+  assert.deepEqual(la.pending.events[0].held, ['还有一问没答（ask tap）']);
+  la.close();
+  const b = fakeClass('array a = 3 1 2');
+  const lb = createLoop(b.host);
+  b.stage.onAnswer({ type: 'tap', ref: 'a.1', value: '3', key: 1, slot: 1, expected: 'a.1', right: true, reacted: 1 });
+  await wait();
+  assert.equal(b.calls(), 1);
+  assert.match(sentRows(b.rows)[0].msg, /学生点了 a\.1（3）——你预期的是 a\.1，点对了\n学生答对了（页面已经演了你预写的 1 行）/);
+  lb.close();
+  // 答错了（或者这一问没预写）照旧马上叫
+  const c = fakeClass('array a = 3 1 2\nask tap a "最小的是哪个？" expect=a.2');
+  const lc = createLoop(c.host);
+  c.stage.onAnswer({ type: 'tap', ref: 'a.1', value: '3', key: 1, slot: 1, expected: 'a.2', right: false });
+  await wait();
+  assert.equal(c.calls(), 1);
+  lc.close();
+});
+
+test('课堂循环：预写的行演不上（舞台记了 missed）照实数，不说「演了 N 行」', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const a = fakeClass('array a = 3 1 2');
+  const la = createLoop(a.host);
+  a.stage.onDone(['t'], { by: 'student', reacted: 1, reacts: [{ done: 't', src: 'ask tap t "x" expect=t.99', missed: true }] });
+  await wait();
+  assert.equal(a.calls(), 1);
+  assert.match(sentRows(a.rows)[0].msg, /学生把 t 做完了（页面算出来没有下一步了）（你预写的行都没演上）/);
+  la.close();
+  const b = fakeClass('array a = 3 1 2');
+  const lb = createLoop(b.host);
+  b.stage.onAnswer({ type: 'tap', ref: 'a.1', value: '3', key: 1, slot: 1, expected: 'a.1', right: true, reacted: 2 }, null, { reacts: [{ ask: true, src: 'say "对"' }, { ask: true, src: 'ask tap a "x" expect=a.9', missed: true }] });
+  await wait();
+  assert.match(sentRows(b.rows)[0].msg, /学生答对了（页面已经演了你预写的 1 行）/);
+  lb.close();
 });
