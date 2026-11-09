@@ -4,12 +4,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { gestureAct, askFor, undoLines, undoPlan, kindsOf, normValue, writeRange, UNDO_TOLD, UNDO_NO, ARMED_GESTURES, ARMED_GRIPS, ARMED_PRESS, armable, kindArmed, PRESS_OF, HOLD_MS, PRESS_TEXT, choosePress, gestureGrabs, openGrabs, AFFORD_PRESS, closeAct, idleOf } from '../kit/src/stage/gestures.js';
+import { gestureAct, dropVerdict, BLOCK_HINT, askFor, undoLines, undoPlan, kindsOf, normValue, writeRange, UNDO_TOLD, UNDO_NO, ARMED_GESTURES, ARMED_GRIPS, ARMED_PRESS, armable, kindArmed, PRESS_OF, HOLD_MS, PRESS_TEXT, choosePress, gestureGrabs, openGrabs, AFFORD_PRESS, closeAct, idleOf } from '../kit/src/stage/gestures.js';
 import { gestureOf } from '../kit/src/stage/rules.js';
 import { TYPES } from '../kit/src/stage/types/index.js';
 import { affordsOf } from '../kit/src/stage/scene.js';
 import { eventOf, tryCount } from '../kit/src/stage/events.js';
-import { padKey } from '../kit/src/stage/keypad.js';
+import { padKey, keyOf } from '../kit/src/stage/keypad.js';
 import { trayBoxes, slotSpots, tree as treeType, NODE } from '../kit/src/stage/types/tree.js';
 import { actText } from '../kit/src/stage/stage.js';
 
@@ -572,4 +572,51 @@ test('现状里跟着算的那一行：开着整张拖（compare / put / merge�
   assert.ok(!s.stateText().includes(HEAD));
   run('close', s);
   assert.ok(s.stateText().includes(`${HEAD}AB = {A B}；BA = {B A}`));
+});
+
+test('拖着悬在落点上：拿现在的舞台问会不会被拦（不是拖起来那一刻的）；翻不成指令的说为什么；要先问倍数的不问', () => {
+  // 50 只有左孩子 30：树是平衡的，30 拖到 50 上（50 右旋）不是正确的下一步，wrong=block 会拦下
+  const s = run('tree t = 50 30\nopen t rotate wrong=block');
+  const e = open(s, 't:rotate');
+  const ctx = () => ({ from: part(s, 't.30'), to: part(s, 't.50') });
+  const v1 = dropVerdict(s, e, ctx(), 'drop-on');
+  assert.equal(v1.r.src, 'rotate t#1 right');
+  assert.equal(v1.blocked, true);
+  assert.equal(v1.why, BLOCK_HINT);
+  assert.doesNotMatch(v1.why, /平衡|不是正确/, '说得中性：不替老师说对错');
+  // 拖着的这一会儿舞台变了（老师插了 20，成了 LL 型）：同一处现在不拦了
+  run('insert t 20', s);
+  const v2 = dropVerdict(s, e, ctx(), 'drop-on');
+  assert.equal(v2.blocked, false);
+  assert.equal(v2.why, '');
+  // 翻不成指令的（拖到不是父亲的结点上）：why 是手势的那一句，不算拦
+  const v3 = dropVerdict(s, e, { from: part(s, 't.20'), to: part(s, 't.50') }, 'drop-on');
+  assert.ok(v3.r.error && v3.why === v3.r.error);
+  assert.equal(v3.blocked, false);
+  // 放下以后要先问倍数的（矩阵倍加）：现在判不了，照旧能放
+  const m = run('matrix M = 1 2 / 3 4\nopen M rowop wrong=block');
+  const v4 = dropVerdict(m, open(m, 'M:rowop'), { from: { row: 1 }, to: { row: 2 } }, 'drop-on');
+  assert.ok(v4.ask);
+  assert.equal(v4.blocked, false);
+});
+
+test('数字键盘收实体键：数字、- / .、退格、回车；别的不收', () => {
+  for (const k of ['0', '7', '9', '-', '/', '.']) assert.equal(keyOf({ key: k }), k);
+  assert.equal(keyOf({ key: 'Backspace' }), '⌫');
+  assert.equal(keyOf({ key: 'Enter' }), 'ok');
+  assert.equal(keyOf({ key: 'a' }), null);
+  assert.equal(keyOf({ key: 'Escape' }), null);
+  assert.equal(keyOf({ key: '7', metaKey: true }), null, '带 ⌘ 的是系统的快捷键，不收');
+  assert.equal(keyOf({ key: 'r', ctrlKey: true }), null);
+  assert.equal(keyOf({}), null);
+  // 小数点：前面是数字、还没有小数点、不在分数线后面才接上
+  assert.equal(padKey('3', '.'), '3.');
+  assert.equal(padKey('3.', '.'), '3.');
+  assert.equal(padKey('3/', '.'), '3/');
+  assert.equal(padKey('3/4', '.'), '3/4');
+  assert.equal(padKey('', '.'), '');
+  assert.equal(padKey('-', '.'), '-');
+  assert.equal(padKey('3.5', '.'), '3.5');
+  assert.equal(padKey('3.', '5'), '3.5');
+  assert.equal(padKey('3.', '/'), '3.', '小数点后面没数字不能写分数线');
 });

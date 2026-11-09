@@ -154,3 +154,35 @@ test('量画成什么：数得出画数，数不了画「?」，不是量（旧�
   assert.equal(measureShown(sc(4), 'size(m)'), 'size(m)', '不是 m 的量：照原样');
   assert.equal(measureShown(sc(4), 'f( x )'), 'f( x )', '原样连空格');
 });
+
+test('二叉排序树上示范旋转不核：规则此刻要的不是旋转（next 里没有同一种动作）就不写「现在正确的是」', async () => {
+  const { Scene } = await import('../kit/src/stage/scene.js');
+  const { parseScript } = await import('../kit/src/stage/script.js');
+  const run = (src) => { const s = new Scene(); for (const c of parseScript(src)) s.apply(c); return s; };
+  const one = (src) => parseScript(src)[0];
+  // 二叉排序树的插入课：只开 insert、托盘还有数。老师在 30 那里左旋给学生看：规则此刻要的是插数，不拿 AVL 核旋转
+  const bst = run('tree t = 30 20 40 tray="50 60"\nopen t insert');
+  assert.deepEqual(bst.judgeLine(one('rotate t.30 left'), { by: 'teacher' }).facts, []);
+  assert.deepEqual(bst.apply(one('rotate t.30 left'), { by: 'teacher' }).judged.facts, []);
+  // 平衡二叉树的课（开着 rotate）、树失衡：照旧核出现在正确的是什么
+  const avl = run('tree t = _\ninsert t 50\ninsert t 30\ninsert t 40\nopen t rotate');
+  assert.match(avl.judgeLine(one('rotate t.50 right'), { by: 'teacher' }).facts.join('\n'), /你在 50 右旋，现在正确的是先在 30 左旋/);
+});
+
+test('老师的一步：next 抛错不写事实；next 里有同一种的照旧核', () => {
+  registerRules('flaky', {
+    next: () => { throw new Error('坏了'); },
+    check: () => ({ legal: true, right: false, why: '加 2', next: '加 1' }),
+  });
+  const sc = { objects: new Map([['f', { type: 'flaky', id: 'f' }]]) };
+  assert.deepEqual(judge(sc, 'f', jump, {}, { by: 'teacher' }).facts, []);
+  // 学生的照旧判（不问 next）
+  assert.ok(judge(sc, 'f', jump).facts.length);
+  registerRules('other', {
+    next: () => ({ acts: [{ type: 'insert' }], why: '插' }),
+    check: () => ({ legal: true, right: false, why: '转', next: '插' }),
+  });
+  const so = { objects: new Map([['o', { type: 'other', id: 'o' }]]) };
+  assert.deepEqual(judge(so, 'o', { type: 'rotate' }, {}, { by: 'teacher' }).facts, [], '规则要的是插，老师转一下不核');
+  assert.equal(judge(so, 'o', { type: 'insert' }, {}, { by: 'teacher' }).facts.length, 1, '同一种照旧核');
+});

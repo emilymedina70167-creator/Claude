@@ -79,7 +79,21 @@ test('题卡一行全是空白写「第 k 行」；扣着的一行小块不漏�
   assert.equal(tapValueOf(s.parts('q.3')[0]), '答案是 29');
   run(s, 'addline q "提示：先找 mid" covered=on');
   assert.equal(chipTextOf(s.parts('q.4')[0]), '第 4 行');
-  // 别的东西扣着照旧（没有 coverLabel）：这一条只管题卡
-  const a = run(new Scene(), 'array a = 7 9\ncover a.1');
-  assert.equal(chipTextOf(a.parts('a.1')[0]), '7');
+  // 树的结点这类没交位置写法的，扣着照旧写值（一排格子见下一条）
+  const t = run(new Scene(), 'tree t = 7 3 9\ncover t.3');
+  assert.equal(chipTextOf(t.parts('t.3')[0]), '3');
+});
+
+test('一排格子扣着的一格：小块写「第 k 格」不漏值，换了位置跟着变；翻开以后写值；写给老师的照旧写值', () => {
+  const a = run(new Scene(), 'array a = 7 9 29\ncover a.3');
+  assert.equal(chipTextOf(a.parts('a.3')[0]), '第 3 格');
+  assert.doesNotMatch(chipTextOf(a.parts('a.3')[0]), /29/);
+  assert.equal(chipTextOf(a.parts('a.1')[0]), '7', '没扣着的照旧写值');
+  // 换了位置：写现在在第几格（a#3 是一开始在第 3 格的那一个）
+  run(a, 'swap a.1 a.3');
+  assert.equal(chipTextOf(a.parts('a#3')[0]), '第 1 格');
+  // 学生点了扣着的一格：写给老师的是值（老师知道里面是几）
+  assert.equal(tapValueOf(a.parts('a#3')[0]), '29');
+  run(a, 'uncover a.1');
+  assert.equal(chipTextOf(a.parts('a.1')[0]), '29');
 });

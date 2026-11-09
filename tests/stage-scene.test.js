@@ -727,6 +727,15 @@ test('clone 带着这一轮的新状态（检查、试演、抢跑都在副本�
   assert.deepEqual(a.askRight, ['say "对"']);
   assert.equal(new Scene().clone().askRight, null);
   assert.equal(new Scene().clone().ahead.size, 0);
+  // Task 14：拨数要挂在还没造的东西上（dialAt：先记着，造出来再挂）。克隆上造 M 也挂得上，改克隆的不动原来的
+  const d = run(new Scene(), 'dial k = 1 range=0..3 at=M');
+  const dc = d.clone();
+  assert.deepEqual(dc.dialAt, d.dialAt);
+  assert.equal(dc.stateText(), d.stateText());
+  run(dc, 'matrix M = 1 {k}');
+  assert.deepEqual(dc.labels.get('dial:k').refs, ['M']);
+  assert.equal(d.dialAt.get('k'), 'M');
+  assert.equal(new Scene().clone().dialAt.size, 0);
 });
 
 test('看不全：画面写回的 clipped 写进现状（藏着的、已经拿下舞台的不写）', () => {
@@ -1618,4 +1627,65 @@ test('按法一样的照旧报：两项都是点、都是按住再拖；按法�
   const S = 'sentence s = "The man is a doctor."';
   assert.deepEqual(dryRun(run(new Scene(), `${S}\nopen s`), 'open s mark'), []);
   assert.match(dryRun(run(new Scene(), `${S}\nopen s`), 'open s move')[0]?.error || '', /都是按住再拖/);
+});
+
+test('给个提示不动说的话：不带话的 ask next 不清掉最后说的那一句', () => {
+  const s = run(new Scene(), 'array a = 3 1 2\nsay "先看左边"\nask next button="给个提示"');
+  assert.equal(s.say, '先看左边');
+  assert.match(s.stateText(), /最后说的话：先看左边/);
+  // 带 "" 的才清（老师自己写的照旧）
+  run(s, 'ask next "" button="接着"');
+  assert.equal(s.say, '');
+});
+
+test('拨数先写、东西后造：dial k … at=M 写在 M 之前先记着，M 第一次造出来时挂上（同名重造不再挂）', () => {
+  const s = run(new Scene(), 'dial k = 1 range=0..3 at=M');
+  assert.deepEqual(s.labels.get('dial:k').refs, []);
+  assert.match(s.stateText(), /k 要挂在 M 上，M 还没造/);
+  // 先记着的进了克隆（检查、试演都在克隆上跑）
+  assert.match(s.clone().stateText(), /k 要挂在 M 上，M 还没造/);
+  const c = s.clone();
+  assert.equal(dryRun(c, 'matrix M = 1 {k}').length, 0);
+  run(c, 'matrix M = 1 {k}');
+  assert.match(s.stateText(), /k 要挂在 M 上，M 还没造/, '改克隆的不动原来的');
+  run(s, 'matrix M = 1 {k}');
+  assert.deepEqual(s.labels.get('dial:k').refs, ['M']);
+  assert.doesNotMatch(s.stateText(), /还没造/);
+  // 同名重造：不再挂一遍（老师之后自己挪过的不被拉回去）
+  s.labels.get('dial:k').refs = [];
+  run(s, 'matrix M = 2 {k}');
+  assert.deepEqual(s.labels.get('dial:k').refs, []);
+  // 收起拨数（unlabel dial:k）以后 M 才造：不挂，也不再说要挂
+  const u = run(new Scene(), 'dial k = 1 range=0..3 at=M\nunlabel dial:k');
+  assert.doesNotMatch(u.stateText(), /还没造/);
+  run(u, 'matrix M = 1 {k}');
+  assert.equal(u.labels.has('dial:k'), false);
+  // 同名的拨数重写、挂到已有的东西上：先记着的那一项作废
+  const r = run(new Scene(), 'array a = 1 2\ndial k = 1 range=0..3 at=M\ndial k = 1 range=0..3 at=a');
+  assert.deepEqual(r.labels.get('dial:k').refs, ['a']);
+  assert.doesNotMatch(r.stateText(), /还没造/);
+  run(r, 'matrix M = 1 {k}');
+  assert.deepEqual(r.labels.get('dial:k').refs, ['a']);
+  // 东西在的照旧当场挂
+  assert.deepEqual(run(new Scene(), 'array a = 1 2\ndial k = 1 at=a').labels.get('dial:k').refs, ['a']);
+});
+
+test('乘积上照旧不能写一格：open C explain 照收，open C edit 报「是乘积」（两项碰不到一起，不加 openKeys）', () => {
+  const s = run(new Scene(), 'matrix A = 1 1 / -1 -1\nmatrix B = 1 -1 / -1 1 beside=A\nproduct C = A B\nmul C.1,1');
+  assert.deepEqual(dryRun(s, 'open C explain'), []);
+  run(s, 'open C explain');
+  assert.ok(s.opens.has('C:explain'));
+  const [err] = dryRun(s, 'open C edit');
+  assert.match(err.error, /乘积/);
+  assert.equal(s.opens.has('C:edit'), false);
+});
+
+test('比大小（compareValues）和挑战判数用同一个 numOf：分数、小数、真的减号、带撇', async () => {
+  const { numOf } = await import('../kit/src/stage/goal.js');
+  assert.equal(compareValues('1/2', '0.5'), 0);
+  assert.equal(compareValues('−3', '-3'), 0, '真的减号');
+  assert.equal(compareValues('49′', '49'), 0);
+  assert.equal(compareValues('9', '10'), -1, '按数比，不按字');
+  assert.equal(compareValues('b', 'a'), 1, '不是数的按字');
+  assert.deepEqual(['1/2', '0.5', '−3', '49′', 'x', '', null, '3/0'].map(numOf), [0.5, 0.5, -3, 49, null, null, null, null]);
 });

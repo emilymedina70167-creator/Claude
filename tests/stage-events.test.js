@@ -402,3 +402,24 @@ test('攒着没叫老师的那一句：做完、做到挑战、答对一问后�
   // 收的时候是 measure（挑战上的 collect）也写得出来
   assert.equal(collectText('g1', { obj: 'B', got: [{ kind: 'matrix', rows: [['1', '0'], ['0', '-1']] }], dup: 0 }), '学生收齐了 g1 的 1 张：B = (1 0; 0 −1)');
 });
+
+test('中间被别的动过、另起的一条路：舞台照同一条规矩另起（pathGoesOn），开头那一下带着 marks0，✓ ✗ 照样写', async () => {
+  const { pathKey, pathEnd, pathGoesOn } = await import('../kit/src/stage/stage.js');
+  // 同一条规矩：从几拨起对得上就接着；没写从几拨起的照旧接着；路的开头（还没有停在哪）总是接得上
+  assert.equal(pathGoesOn('2', { from: '2' }), true);
+  assert.equal(pathGoesOn('2', { from: 2 }), true);
+  assert.equal(pathGoesOn('2', { from: '4' }), false);
+  assert.equal(pathGoesOn('2', {}), true);
+  assert.equal(pathGoesOn(null, { from: '4' }), true);
+  assert.equal(pathEnd({ type: 'dial', value: -1 }), '-1');
+  assert.equal(pathEnd({ type: 'edit', to: '5' }), '5');
+  assert.equal(pathKey({ type: 'edit', ref: 'B.1,1' }), 'edit:B.1,1');
+  assert.equal(pathKey({ type: 'edit', ref: 'B.1,1', blocked: true }), null);
+  const m = (ok) => [{ goal: 'g1', clause: 'B = O', ok }];
+  const u = eventsText([
+    eventOf({ type: 'edit', ref: 'B.1,1', from: '1', to: '2', open: 'edit', marks0: m(false), marks: m(false) }),
+    eventOf({ type: 'rowop', open: 'rowop', src: 'rowop B 2r1', verdict: { legal: true, right: null, misread: null, why: '倍乘第 1 行', next: null } }),
+    eventOf({ type: 'edit', ref: 'B.1,1', from: '4', to: '0', open: 'edit', marks0: m(false), marks: m(true), met: ['g1'] }),
+  ]);
+  assert.equal(u, '学生拨了 B.1,1：1 → 2（B = O：✗ ✗）\n学生 rowop B 2r1（倍乘第 1 行）\n学生拨了 B.1,1：4 → 0（拨到 0 时做到了 g1；B = O：✗ ✓）');
+});

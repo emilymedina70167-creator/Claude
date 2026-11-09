@@ -416,3 +416,16 @@ test('学生那边用什么写：全是数的数字键盘，要打字母、括�
   assert.deepEqual(answerInput({ type: 'formula', free: 'n', answer: '2n' }, sc), { kind: 'formula', names: ['n'] });
   assert.deepEqual(answerInput({ type: 'matrix', free: 'n', answer: '1 n / 0 1' }, sc), { kind: 'grid', rows: 2, cols: 2, names: ['n'] });
 });
+
+test('页面替老师挂的那一问（helpLine）：不带 ""，不动最后说的话', async () => {
+  const { helpLine } = await import('../kit/src/stage/stage.js');
+  assert.equal(helpLine('', true), 'ask next button="给个提示"');
+  assert.doesNotMatch(helpLine('', true), /""/);
+  assert.equal(helpLine('', false), 'ask next');
+  assert.equal(helpLine('那一问', true), 'ask say "那一问"');
+  assert.equal(helpLine('说 "对" 吗', false), 'ask say 「说 "对" 吗」', '照 quoteText 挑引号');
+  // 演一遍：最后说的话还在
+  const s = run(new Scene(), `array a = 3 1 2\nsay "先看左边"\n${helpLine('', true)}`);
+  assert.equal(s.say, '先看左边');
+  assert.equal(s.waiting.button, '给个提示');
+});

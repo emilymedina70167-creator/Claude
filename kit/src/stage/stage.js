@@ -76,6 +76,16 @@ export function quoteText(t) {
   return `"${s.replace(/"/g, '”')}"`;
 }
 
+/**
+ * 页面替老师挂的那一问（一轮演完没有 ask、学生手上还有事攒着时）：q 是老师写错了没演上的那一问的话（照样留在画面上，学生用话答）；
+ * 没有话、还有没做到的挑战时一个「给个提示」；都没有是「接着」。不带 ""：不动最后说的那一句（ask 带 "" 会把它清掉，
+ * 老师看的现状里「最后说的话」就没了，撤一步重放以后又回来）
+ */
+export function helpLine(q, hasGoals) {
+  if (q) return `ask say ${quoteText(q)}`;
+  return hasGoals ? `ask next button="${HELP}"` : 'ask next';
+}
+
 export { COLOR_NAMES };
 
 export class Stage {
@@ -97,7 +107,7 @@ export class Stage {
     this.paths = new Map(); // 连线 key → path
     this.labelNodes = new Map(); // id → { node, box, sig, anchor }
     this.cam = { s: 1, tx: 0, ty: 0 };
-    this.dialRuns = new Map(); // 'dial:t' / 'edit:B.2,2' → 这一条路开头时还没做到的挑战 ids（studentDo 每一下照它标 ✓ ✗；老师新的一轮起重新数）
+    this.dialRuns = new Map(); // 'dial:t' / 'edit:B.2,2' → { ids：这一条路开头时还没做到的挑战（studentDo 每一下照它标 ✓ ✗）, end：停在哪 }；老师新的一轮起重新数
     this.teacherAudit = []; // 老师这一轮演的行里，页面核过不是正确的下一步的（裁判的话）：课堂下一条发给老师时带上、清掉
     this.build();
     this.noteView();
@@ -307,9 +317,9 @@ export class Stage {
         if (!this.scene.waiting) {
           // 一轮没有 ask，或者 ask 那一行写错了没演上：页面替它等，不让课停在半空。
           // 写错的那一问照样把问题留在画面上，学生用话答（第一节真课 `ask tap q#2 q#3 "哪一句说得对？"` 写错了，问题没了、也没有按钮，课就停住了）；
-          // 挑战还没做到：学生在画面上试，旁边一个「给个提示」
+          // 挑战还没做到：学生在画面上试，旁边一个「给个提示」（helpLine：不带话，最后说的那一句还在）
           const q = asked ? (asked.args || []).find((a) => a.t === 'str')?.v : '';
-          const src = q ? `ask say ${quoteText(q)}` : this.pendingGoals().length ? `ask next "" button="${HELP}"` : 'ask next';
+          const src = helpLine(q, this.pendingGoals().length > 0);
           const [c] = parseScript(src);
           await this.exec({ ...c, line: 0, src }, { by: 'page', turn });
         }
@@ -787,7 +797,7 @@ export class Stage {
    */
   async holdAsk() {
     if (this.instant || this.scene.waiting || this.undoFloor === Infinity) return;
-    const src = `ask next button="${HELP}"`;
+    const src = helpLine('', true);
     const [c] = parseScript(src);
     await this.exec({ ...c, line: 0, src }, { by: 'page', turn: this.turnNo });
     this.armWait();
@@ -903,7 +913,9 @@ export class Stage {
     this.syncUndo();
     try {
       const src = `back ${obj} ${quoteText(name)}`;
+      const typed = this.typedNow();
       await this.studentDo(src, { type: 'back', obj, name, open: 'back', line: src });
+      this.putTyped(typed);
     } finally {
       this.backBusy = false;
       this.syncUndo();
@@ -917,8 +929,9 @@ export class Stage {
       await Promise.all([this.studentChain, this.reacting]).catch(() => {});
       const plan = this.undoPlan();
       if (!plan.gone) return;
-      // 重放会收起正在等的那一问：先收起（攒着的拨数留着），放完照原样挂回去
+      // 重放会收起正在等的那一问：先收起（攒着的拨数留着），放完照原样挂回去；打了一半的字也存下、挂回去以后填回
       const w = this.scene.waiting, waiting = this.armedP, floor = this.undoFloor;
+      const typed = this.typedNow();
       // 那一问的 @ask.right 里套着的预写在场景上（重放会丢掉）：放完照原样放回去
       const under = w?.rightKey ? this.scene.aheadUnder(w.rightKey) : [];
       const seq = this.scene.askSeq;
@@ -930,12 +943,36 @@ export class Stage {
       // 重放不把 ask 那几行（不重演的）推回 log：log 要和撤之前一模一样、只少撤掉的那一行，课堂循环存这一段（从 S.logFrom 起）才对得上
       this.log = [...plan.lines];
       this.undoFloor = floor;
-      if (w) { this.scene.waiting = w; this.armWait(); }
+      if (w) { this.scene.waiting = w; this.armWait(); this.putTyped(typed); }
       this.onAct?.({ type: 'undo', src: plan.gone.src, open: plan.gone.open || 'undo' });
     } finally {
       this.undoBusy = false;
       this.syncUndo();
     }
+  }
+  /**
+   * 正在等的那一问里学生打了一半的字：对老师说的输入框（#st-say-input）、一个式子框、按格的每一格（.st-fgrid）。
+   * 撤一步要重放、照原样重挂那一问，挂回去的框是空的，打了一半的字就丢了：重放前存下，挂回去以后填回（putTyped）。
+   * 撤一步、回到……都走它（两个按钮互相挡着，各自在自己那一下里存、填，不另加一道挡）
+   */
+  typedNow() {
+    const w = this.scene.waiting;
+    const say = this.dock.querySelector('#st-say-input')?.value || '';
+    const cells = [...this.dock.querySelectorAll('.st-fgrid .fi-text')].map((n) => n.value);
+    return w && (say || cells.some(Boolean)) ? { w, say, cells } : null;
+  }
+  /** 填回 typedNow 存的字：那一问换掉了（预写里的新一问）不填；只填空着的框（框没被换掉、学生这一会儿又打过的不盖） */
+  putTyped(t) {
+    if (!t || this.scene.waiting !== t.w) return;
+    const say = this.dock.querySelector('#st-say-input');
+    if (say && !say.value && t.say) say.value = t.say;
+    const cells = [...this.dock.querySelectorAll('.st-fgrid .fi-text')];
+    if (cells.length !== t.cells.length) return; // 格数变了（答案照舞台现算，撤回去以后大小不一样）：对不上哪一格，不填
+    cells.forEach((n, i) => {
+      if (n.value || !t.cells[i]) return;
+      n.value = t.cells[i];
+      n.dispatchEvent(new Event('input', { bubbles: true })); // 下面的预览跟着写成公式
+    });
   }
   /** 挑战：左上角一条一条（做到了打勾）；照场景对齐 */
   syncGoals() {
@@ -1364,6 +1401,8 @@ export class Stage {
         act.met = [...this.scene.goals.values()].filter((g) => g.met && !run.met0.has(g.id)).map((g) => g.id);
         // 没演上的一下不算路上的一步（events.js 单独写一行）：它开的头不算，下一下重新开头
         if (run.first && (act.blocked || act.error || act.failed)) this.dialRuns.delete(runKey);
+        // 算进路上的一下：记下停在哪，下一下从别处拨起（中间被别的动过）就另起一条
+        else if (pathKey(act) === runKey && this.dialRuns.get(runKey) === run.r) run.r.end = pathEnd(act);
       }
       this.onAct?.(act);
     };
@@ -1371,10 +1410,12 @@ export class Stage {
       .then(() => {
         // 照这一下真演的时候判（前一下可能还在演）
         if (runKey) {
-          let ids = this.dialRuns.get(runKey);
-          const first = !ids;
-          if (first) { ids = this.pendingGoals().map((g) => g.id); this.dialRuns.set(runKey, ids); act.marks0 = this.scene.clauseMarks(ids); }
-          run = { ids, first, met0: new Set([...this.scene.goals.values()].filter((g) => g.met).map((g) => g.id)) };
+          let r = this.dialRuns.get(runKey);
+          // 中间这个数、这一格被别的动过（从几拨起对不上）：events.js 写给老师时另起一条路，这里也另起，新的一条开头带 marks0（✓ ✗ 照样写得出）
+          if (r && !pathGoesOn(r.end, act)) { this.dialRuns.delete(runKey); r = null; }
+          const first = !r;
+          if (first) { r = { ids: this.pendingGoals().map((g) => g.id), end: null }; this.dialRuns.set(runKey, r); act.marks0 = this.scene.clauseMarks(r.ids); }
+          run = { r, ids: r.ids, first, met0: new Set([...this.scene.goals.values()].filter((g) => g.met).map((g) => g.id)) };
         }
         return this.exec({ ...c, dragged: act.type === 'drag' }, { by: 'student', act, told });
       })
@@ -1734,16 +1775,39 @@ export function factsOf(fx) {
   return out;
 }
 
+/**
+ * 拨数、拨格子的一下并进哪一条路（同一个数、同一格连着拨的都并成一条；events.js 写给老师、studentDo 标 ✓ ✗ 用同一套）。
+ * 没让做、没演上、页面判了对错的一下不算路上的一步，单独一行
+ */
+export function pathKey(a) {
+  if (a.error || a.blocked || a.failed) return null;
+  // 页面判了对错的一下（以后拨数也过裁判时）不并进路：错法要单独写出来，不能藏在一条路里
+  if ((a.verdict?.right ?? null) !== null || a.verdict?.legal === false) return null;
+  if (a.type === 'dial') return `dial:${a.name}`;
+  if (a.type === 'edit') return `edit:${a.ref}`;
+  return null;
+}
+/** 路上的一下停在哪（下一下要从这里拨起才接得上） */
+export const pathEnd = (a) => String(a.type === 'dial' ? a.value : a.to);
+/** 这一下接不接得上停在 end 的那一条路：从几拨起对不上（中间这个数、这一格被别的动过）就另起一条；没写从几拨起的照旧接着 */
+export const pathGoesOn = (end, a) => end == null || a.from == null || String(a.from) === String(end);
+
 /** 跟着变的（scene.js 的 fx.derived）存得下的样子：不带部件本身 */
 const slimDerived = (list) => list.map((d) => ({ id: d.id, changed: (d.changed || []).map((x) => ({ ref: x.ref, ...(x.expr != null ? { expr: x.expr } : {}), from: x.from, to: x.to })), ...(d.error ? { error: d.error } : {}) }));
 
+// 扣着的部件画成小块写什么：写位置、不写值。自己交了 coverLabel 的写它（题卡的一行「第 3 行」）；
+// 一排格子（coverSlot）写现在在第几格（换了位置跟着变）；别的没交的是 null（照旧写值）
+const coverText = (p) => (p.coverLabel != null ? p.coverLabel : p.coverSlot && p.slot != null ? `第 ${p.slot} 格` : null);
 /**
  * 一个部件画成小块（话里的 {q.3}、贴的字、比大小的牌子）写什么：label，没有就 value、key。
- * 扣着、自己交了 coverLabel 的（题卡的一行）写 coverLabel（「第 3 行」）：扣着的字不能从小块里漏给学生
+ * 扣着的写它的位置（coverText：「第 3 行」「第 3 格」）：扣着的字不能从小块里漏给学生
  */
-export const chipTextOf = (p) => String(p.covered && p.coverLabel != null ? p.coverLabel : p.label ?? p.value ?? p.key);
-/** 学生点了一个部件，写给老师的那个字：和小块一样；扣着的再说一声扣着（「学生点了 q.3（第 3 行，扣着）」） */
-export const tapValueOf = (p) => (p.covered && p.coverLabel != null ? `${p.coverLabel}，扣着` : chipTextOf(p));
+export const chipTextOf = (p) => String((p.covered ? coverText(p) : null) ?? p.label ?? p.value ?? p.key);
+/**
+ * 学生点了一个部件，写给老师的那个字：写它的字；题卡扣着的一行写「第 3 行，扣着」（「学生点了 q.3（第 3 行，扣着）」）。
+ * 一排格子扣着的一格照旧写值：写给老师的，老师知道里面是几
+ */
+export const tapValueOf = (p) => (p.covered && p.coverLabel != null ? `${p.coverLabel}，扣着` : String(p.label ?? p.value ?? p.key));
 
 /** 学生这一下做了什么，写给老师看（和舞台现状一起发） */
 export function actText(act) {

@@ -10,8 +10,7 @@
 // 碰 DOM，靠浏览器里真的触摸检查（tools/stage-touch.mjs）；不碰 DOM 的部分在 gestures.js（有测试）。
 import { EASE } from './motion.js';
 import { pickTarget } from './layout.js';
-import { parseScript } from './script.js';
-import { gestureAct, askFor, kindsOf, kindArmed, writeRange, closeAct, ARMED_GRIPS, PRESS_OF } from './gestures.js';
+import { gestureAct, askFor, kindsOf, kindArmed, writeRange, closeAct, dropVerdict, wouldBlock, ARMED_GRIPS, PRESS_OF } from './gestures.js';
 import { openKeypad, openChoices } from './keypad.js';
 import { reportError } from '../errlog.js';
 
@@ -124,10 +123,8 @@ export function armGesture(stage, e, view, done) {
   // 学生的这一下：动作带上是哪种手势、那一行指令（页面不判的也有一行可写给老师）
   const actOf = (r, kind) => ({ ...r.act, gesture: kind, src: r.src });
   const send = (r, kind) => Promise.resolve(done(actOf(r, kind), r.src));
-  // 放下以前先问裁判这一下会不会被拦（wrong=block、这个世界做不到）：会拦就让拎着的东西飞回去，不用等演
-  const blocked = (src) => {
-    try { const [c] = parseScript(src); const j = stage.scene.judgeLine(c, { by: 'student', open: e.action }); return !!j && !j.apply; } catch { return false; }
-  };
+  // 放下的那一刻先问裁判这一下会不会被拦（wrong=block、这个世界做不到）：会拦就让拎着的东西飞回去，不用等演。拿舞台现在的样子问
+  const blocked = (src) => wouldBlock(stage.scene, e, src);
   // 一下手势要先问一个值：数字键盘、一排选项；问到了再翻成指令（翻不成就在那块上说为什么，不收）。
   // 浮出来的那一块不比手势活得久：这一项收起了（off）一起收；按「确定」时这一项已经不是开着的那一项、东西重造过了，悄悄收起、不交
   let popup = null;
@@ -195,6 +192,16 @@ export function armGesture(stage, e, view, done) {
       stage.tween(L.el, [{ transform: L.el.style.transform }, { transform: tr(L.box.x, L.box.y) }], { duration: 340, easing: EASE.spring }).then(() => { L.el.remove(); if (!keep) L.restore(); });
     };
     const drop = (L) => { L?.el?.remove(); L?.restore(); };
+    // 悬上一个落点时拿舞台现在的样子再问一遍（拖起来以后前一下还在演、预写在演，舞台变了）：能不能放、先说会怎样、会不会被拦。
+    // 拖起来那一刻问的只用来淡淡标出能放的地方；松手以后照旧以裁判为准
+    const fresh = (x) => {
+      let v;
+      try { v = dropVerdict(stage.scene, e, { from: st.from, to: x.t.part(), value: st.value }, kind); } catch { return; } // 落点没了：照拖起来时的
+      x.ok = !!v.ask || (!v.r?.error && !v.blocked);
+      x.hint = v.ask ? v.ask.hint || v.ask.prompt : (view.gestureHint?.(stage, obj(), e, v.r) || '');
+      x.why = v.why;
+      light(x.t, 'is-drop', x.ok);
+    };
     const over = (x) => {
       if (st.over === x) return;
       if (st.over) { light(st.over.t, 'is-over', false); light(st.over.t, 'is-nodrop', false); }
@@ -202,6 +209,7 @@ export function armGesture(stage, e, view, done) {
       st.hint?.remove();
       st.hint = null;
       if (!x) return;
+      fresh(x);
       light(x.t, x.ok ? 'is-over' : 'is-nodrop', true);
       const text = x.ok ? x.hint : x.why;
       if (text) { st.hint = el('div', `st-g-note is-hint${x.ok ? '' : ' is-bad'}`, stage.view); st.hint.textContent = text; placeAbove(stage, st.hint, areaOf(stage, x.t)); }
@@ -327,6 +335,15 @@ export function armGesture(stage, e, view, done) {
       st.over = x;
       st.hint?.remove();
       st.hint = null;
+      if (x) {
+        // 和拖到上面一样：悬上去时拿舞台现在的样子再问一遍（拉起来以后舞台可能变了）
+        try {
+          const v = dropVerdict(stage.scene, e, { from: st.from, to: x.t.part() }, 'line');
+          x.ok = !v.r?.error && !v.blocked;
+          x.why = v.why;
+          light(x.t, 'is-drop', x.ok);
+        } catch { /* 落点没了：照拉起来时的 */ }
+      }
       st.path?.classList.toggle('is-on', !!x?.ok);
       if (!x) return;
       light(x.t, x.ok ? 'is-over' : 'is-nodrop', true);

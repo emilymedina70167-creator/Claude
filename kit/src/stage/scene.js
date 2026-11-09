@@ -13,7 +13,8 @@
 import { parseScript, parseRef, parseRich, addCommands } from './script.js';
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
-import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure } from './goal.js';
+// numOf：数（整数、小数、分数 -3/4，′ 和真的减号也认），比大小用；和挑战判数是同一个
+import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure, numOf } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder, termText } from './value.js';
 import { rulesOf, done as nextDone, checkMeasure, measureLine, changedKeys } from './rules.js';
@@ -43,13 +44,6 @@ function groupText(k) {
 const goalIdIn = (src) => String(src ?? '').trim().match(/^goal\s+([A-Za-z_]\w*)/)?.[1] || null;
 const isColor = (w) => COLORS.includes(w);
 const prime = (v) => String(v).replace(/[′']/g, '').replace(/[−–]/g, '-').trim();
-// 数：整数、小数、分数（-3/4）
-const numOf = (v) => {
-  const t = prime(v);
-  if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t);
-  const m = t.match(/^(-?\d+)\/(\d+)$/);
-  return m && Number(m[2]) ? Number(m[1]) / Number(m[2]) : null;
-};
 
 /** 拨数的范围：1..5、-3..3、1-5（老写法）；读不懂给 [NaN, NaN] */
 export function parseRange(r) {
@@ -229,6 +223,8 @@ export class Scene {
     this.keeps = new Map(); // 东西 id → Map(名字 → 那一刻的样子 snapOf)：keep t "插入后" 存，back t "插入后" 回去
     this.autoKeep = new Map(); // 东西 id → Map(名字 → 动作)：keep t "插入后" after=insert，学生每做完一次 insert 页面存成「插入后」
     this.lastBefore = new Map(); // 东西 id → 学生最后那一下之前它的样子（snapOf）：back t 回到那里，隔着老师的一轮也行
+    // —— 拨数要挂在还没造的东西上（dial k … at=M 写在 matrix M = … {k} 之前）——
+    this.dialAt = new Map(); // 拨数的名字 → 要挂上的东西 id：先记着，那样东西第一次造出来时挂上（同名重造不再挂）
   }
 
   clone() {
@@ -261,6 +257,7 @@ export class Scene {
     for (const [k, m] of this.keeps) s.keeps.set(k, new Map([...m].map(([n, v]) => [n, structuredClone(v)])));
     for (const [k, m] of this.autoKeep) s.autoKeep.set(k, new Map(m));
     for (const [k, v] of this.lastBefore) s.lastBefore.set(k, structuredClone(v));
+    s.dialAt = new Map(this.dialAt);
     return s;
   }
 
@@ -864,6 +861,13 @@ export class Scene {
         if (!hidden && !opts.beside) this.placeFresh(o);
         this.objects.set(id, o);
       }
+      // 先写了要挂在它上面的拨数：第一次造出来时挂上，挂完就不记了（同名重造不再挂一遍）
+      for (const [name, at] of this.dialAt) {
+        if (at !== id) continue;
+        this.dialAt.delete(name);
+        const l = this.labels.get(`dial:${name}`);
+        if (l) l.refs = [id];
+      }
       return { id, created: true };
     }
     // 各种东西自己的指令：按第一个部件是哪种东西找（swap 给格子、rowop 给矩阵……）
@@ -974,7 +978,7 @@ export class Scene {
       }
       case 'unlabel': {
         const ids = words.length ? words : [...this.labels.keys()].filter((k) => !k.startsWith('dial:'));
-        for (const k of ids) { this.labels.delete(k); if (k.startsWith('dial:') && this.vars.get(k.slice(5))) this.vars.get(k.slice(5)).shown = false; }
+        for (const k of ids) { this.labels.delete(k); if (k.startsWith('dial:') && this.vars.get(k.slice(5))) this.vars.get(k.slice(5)).shown = false; if (k.startsWith('dial:')) this.dialAt.delete(k.slice(5)); }
         return { ids };
       }
       case 'dial': {
@@ -987,6 +991,8 @@ export class Scene {
         const at = opts.at || [...this.objects.keys()][0] || null;
         this.vars.set(name, { v: Math.max(lo, Math.min(hi, v)), lo, hi, at, shown: true });
         this.labels.set(`dial:${name}`, { id: `dial:${name}`, refs: at && this.objects.has(at) ? [at] : [], text: '', side: 'below', tone: 'dial', link: null, dial: name });
+        // at= 写的东西还没造（dial 写在 matrix M = … {k} 之前，造 M 要先有 k）：先记着，M 造出来时挂上（以前就一直浮着、不挂）
+        if (at && !this.objects.has(at)) this.dialAt.set(name, at); else this.dialAt.delete(name);
         return { name };
       }
       case 'set': {
@@ -1740,6 +1746,8 @@ export class Scene {
     if (labels.length) lines.push(`贴着的字：${labels.map((l) => `${l.id}「${l.text}」${l.refs.length ? `（贴在 ${l.refs.join(' ')}）` : ''}`).join('；')}`);
     const dials = [...this.vars].filter(([, v]) => v.shown);
     if (dials.length) lines.push(`能拨的数：${dials.map(([n, v]) => `${n} = ${v.v}（${v.lo}～${v.hi}）`).join('，')}`);
+    const waitAt = [...this.dialAt].filter(([n]) => this.labels.has(`dial:${n}`));
+    if (waitAt.length) lines.push(`${waitAt.map(([n, at]) => `${n} 要挂在 ${at} 上，${at} 还没造`).join('；')}（造出来就挂上去）`);
     // 扫一遍拨数：跟着拨数算的东西，每个能拨到的值的要点（页面不真拨），老师不用自己一个个试；全都说不出的不写
     for (const [n, v] of dials) {
       for (const e of this.sweep(n)) {

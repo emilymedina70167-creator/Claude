@@ -3,7 +3,7 @@
 // 学生在舞台上随时能动（拨格子、拖、点开看怎么算），这些是「试」：一下一下都告诉老师太碎、也太慢（每叫一次老师就是一整轮），
 // 所以攒着，等到有要老师接的事——答了老师问的、做到了挑战、打字、点「给个提示」、试了好多下还没做到、很久没动——
 // 一起写成一段发过去。老师照它看学生是怎么试的、卡在哪，再当场写下一步。
-import { actText } from './stage.js';
+import { actText, pathKey, pathEnd, pathGoesOn } from './stage.js';
 import { rulesOf } from './rules.js';
 import { shapeText } from './goal.js';
 
@@ -125,17 +125,6 @@ function whereOf(a) {
   return { obj: objOf(parts[0] || words[0] || a.ref), refs: parts.length ? parts.join(' ') : words.length ? words.join(' ') : a.ref || '' };
 }
 /**
- * 拨数、拨格子的一下并进哪一条路（同一个数、同一格连着拨的都并成一条）。没让做、没演上、页面判了对错的一下不算路上的一步，单独一行
- */
-function pathKey(a) {
-  if (a.error || a.blocked || a.failed) return null;
-  // 页面判了对错的一下（以后拨数也过裁判时）不并进路：错法要单独写出来，不能藏在一条路里
-  if ((a.verdict?.right ?? null) !== null || a.verdict?.legal === false) return null;
-  if (a.type === 'dial') return `dial:${a.name}`;
-  if (a.type === 'edit') return `edit:${a.ref}`;
-  return null;
-}
-/**
  * 一条路写成一行：学生拨了 B.2,2：−1 → 0 → 1 → 2（停在 …；拨到 2 时做到了 g1；Dd = O：✗ ✗ ✗ ✓）。
  * 括号里：停在哪（拨数才有）、拨到哪做到了哪个挑战、挑战每一句在每一个停下的值上成不成立（第一下的 marks0 是拨之前，每一下的 marks 是拨完）。
  * 最后一下的事实（from= 的「M1 第 2 行变了…」）接在后面；前几下的事实说的是拨到一半的样子，不写
@@ -174,15 +163,14 @@ function tryLines(tries) {
   const rows = [];
   const paths = new Map();
   let explain = null;
-  // 一条路最后停在哪：下一下要从这里拨起才接得上
-  const endOf = (p) => { const m = p.moves.at(-1); return String(m.type === 'dial' ? m.value : m.to); };
   tries.forEach((e, i) => {
     const a = e.act || {};
     const key = pathKey(a);
     if (key) {
       let p = paths.get(key);
       // 中间这个数、这一格被别的动过（判了对错的那一下、行变换……）：从几拨起对不上就另起一条，不然路上的数是假的
-      if (p && a.from != null && String(a.from) !== endOf(p)) p = null;
+      // （舞台那边照同一条规矩另起，新的一条路开头那一下带着 marks0，✓ ✗ 照样写得出：stage.js 的 studentDo）
+      if (p && !pathGoesOn(pathEnd(p.moves.at(-1)), a)) p = null;
       if (!p) { p = { kind: 'path', moves: [], ...whereOf(a), src: '', right: 0, wrong: 0, misread: null }; paths.set(key, p); rows.push(p); }
       p.moves.push(a);
       p.last = i;

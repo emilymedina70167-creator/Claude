@@ -6,6 +6,7 @@
 // 同一处按法不一样的能一起开，一下只认成一种（choosePress）；学生做的东西头上的 ✕ 照手势表的 close 翻（closeAct）。每种东西在规则文件里交一张手势表（rules.js 的 gestures）：这几种手势在它这里是什么动作、翻成哪一行指令
 // （toAct），要不要先问一个值（ask：倍数框；pick + choices：成分标签）。这里不认识任何具体的东西。
 import { gestureOf } from './rules.js';
+import { parseScript } from './script.js';
 
 /** 手势表那一项交的手势（一种或几种：矩阵的 rowop 是 drop-on 和 tap） */
 export const kindsOf = (g) => [].concat(g?.gesture || []);
@@ -119,6 +120,32 @@ export function askFor(g, o, kind, ctx = {}) {
   if (kind === 'write') return own || { input: 'keypad', prompt: '写一个数' };
   if (kind === 'span' && g.pick) return { pick: g.pick, choices: typeof g.choices === 'function' ? g.choices(o, ctx) : [] };
   return own || null;
+}
+
+/** 悬在一个会被裁判拦下的落点上时那一句（中性：不说对错、不说像哪种错，和数字键盘的「这一下没让做」一样） */
+export const BLOCK_HINT = '这一下不让做';
+/** 照这一行学生指令，裁判会不会拦下（wrong=block 又走偏了、这个世界做不到）：拿 scene 现在的样子问；问不成算不拦（松手以后照旧以裁判为准） */
+export function wouldBlock(scene, e, src) {
+  try {
+    const [c] = parseScript(src);
+    const j = scene?.judgeLine?.(c, { by: 'student', open: e?.action });
+    return !!j && !j.apply;
+  } catch { return false; }
+}
+/**
+ * 拖着的这一下放在一个落点上会怎样，拿现在的舞台问（拖起来以后舞台还会变：前一下还在演、预写在演、老师插了一个数）：
+ * { ask, r, why, blocked }。ask 是放下以后先问一个值（倍数框：这时还判不了，照旧能放）；r 是 gestureAct 翻成的那一行或 { error }；
+ * why 是放不下的那一句（翻不成指令的照手势说，会被拦下的是 BLOCK_HINT）；blocked 是裁判会拦下。
+ * 只给画面用（悬上去标能不能放、拎着的飞不飞回去）；松手以后照旧以裁判为准
+ */
+export function dropVerdict(scene, e, ctx = {}, kind) {
+  const o = scene?.objects?.get(e?.obj);
+  const ask = askFor(e?.gesture || gestureOf(o, e?.action), o, kind, ctx);
+  if (ask) return { ask, r: null, why: '', blocked: false };
+  const r = gestureAct(scene, e, ctx);
+  if (r.error) return { ask: null, r, why: r.error, blocked: false };
+  const blocked = wouldBlock(scene, e, r.src);
+  return { ask: null, r, why: blocked ? BLOCK_HINT : '', blocked };
 }
 
 /** 撤不了时按钮下面那一句（中性：不说对错） */

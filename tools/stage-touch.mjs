@@ -1,7 +1,7 @@
 // 舞台上的手指（kit/src/stage/pointer.js）用真的触摸检查一遍：CDP Input.dispatchTouchEvent → pointerType: touch，和 iPad 上一样。
 // 按偏一点也拿得到、松在两格中间吸到近的那一格、拖到一半浏览器取消（pointercancel）算松在那里、平面上的向量连着拖两次（第二次在吸格点的动画还没走完时）、
 // 做到挑战时东西跳一下（pulse）和预写的行同时挪它，跳完不把它放回原处；同一项只换了 wrong= 再开一次，键盘、成分那一排照新的那一项交；
-// 手指按「回到插入后」（open … back=）回到存着的样子、撤一步撤得了它。
+// 手指按「回到插入后」（open … back=）回到存着的样子、撤一步撤得了它；撤一步留住打了一半的字、外接键盘写进数字键盘、拖着悬上去照现在的舞台问（Task 14）。
 // 第二轮的手势层（Task 11）：同一句上又拉又折又拖（滑、点、按住 0.35 秒再拖，每一下只交一种，哪种都不像就作罢、浮一句）、只开一种照旧按下就拖、
 // ✕ 的点区 ≥ 44 收掉学生的括号和线、从钩拉线（词、外框）、整张矩阵拖去比 / 放进合计 / 并同类项、摘叶子和删、点小方块展开、按住一个词挪。
 //   node tools/stage-touch.mjs        （先 node proto/stage/build.mjs）  没问题退出码 0
@@ -441,6 +441,59 @@ for (const [i, v] of ['1', 'n', '0', '1'].entries()) await cells[i].fill(v);
 await tapAt(await centerOf('.st-fgrid .st-say-go'));
 await page.waitForTimeout(500);
 expect('type=matrix free=n：交上去页面判对', await lastRight(), '1 n / 0 1 true');
+// 19. 第一轮留下的（Task 14）：撤一步留住打了一半的字（输入框、按格的每一格）；外接键盘写进数字键盘；拖着悬上去拿现在的舞台问
+await play('array a = 3 1 2\nopen a undo=on\nask say "为什么这样换？"');
+await page.evaluate(async () => { await window.LAStage.studentDo('swap a.1 a.2', { type: 'drag', open: 'drag' }); });
+await page.waitForTimeout(400);
+await page.fill('#st-say-input', '因为左边比');
+await tapAt(await centerOf('.st-undo'));
+await page.waitForTimeout(1200);
+expect('撤一步：数回去了、打了一半的字还在', `${await page.evaluate(() => window.LAStage.scene.objects.get('a').cells.sort((x, y) => x.slot - y.slot).map((x) => x.value).join(' '))}｜${await page.evaluate(() => document.querySelector('#st-say-input')?.value)}`, '3 1 2｜因为左边比');
+await play('array a = 3 1 2\nopen a undo=on\nask value "Aⁿ 是？" type=matrix free=n answer="1 n / 0 1"');
+await page.evaluate(async () => { await window.LAStage.studentDo('swap a.1 a.2', { type: 'drag', open: 'drag' }); });
+await page.waitForTimeout(400);
+const half = await page.$$('.st-fgrid .fi-text');
+await half[0].fill('1');
+await half[1].fill('n+');
+await page.evaluate(() => document.activeElement?.blur?.());
+await page.waitForTimeout(500);
+await tapAt(await centerOf('.st-undo'));
+await page.waitForTimeout(1200);
+expect('撤一步：按格的每一格照原样', await page.evaluate(() => [...document.querySelectorAll('.st-fgrid .fi-text')].map((n) => n.value).join('|')), '1|n+||');
+await page.evaluate(() => document.activeElement?.blur?.());
+await page.waitForTimeout(500);
+// 对老师说的那一行聚焦着时点一格：键盘接过外接键盘的键（那一行失焦），字不进那一行
+await play('matrix M = 1 2 / 3 4\nopen M edit input=keypad\nask say "随便说"');
+await page.focus('#st-say-input');
+B = await box('M:1.1');
+await tapAt({ x: B.cx, y: B.cy });
+await page.waitForTimeout(400);
+await page.keyboard.type('-3/2');
+expect('外接键盘：那一行聚焦着时点一格，字不进那一行', JSON.stringify(await page.evaluate(() => document.querySelector('#st-say-input')?.value)), '""');
+expect('外接键盘：数字键盘上写着 −3/2', await page.evaluate(() => document.querySelector('.st-keypad .st-kp-v')?.textContent), '−3/2');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(900);
+expect('外接键盘：回车交上去、键盘收起', `${await lastAct()}｜${!!(await page.$('.st-keypad'))}`, 'write M.1,1 -3/2｜false');
+// 平衡的 50-30：30 拖到 50 上会被 wrong=block 拦下；挪开、老师插了 20（LL 型）再悬上去，照现在的舞台说
+await play('tree t = 50 30\nopen t rotate wrong=block');
+const tnode = (v) => page.evaluate((v) => { const st = window.LAStage; const n = st.scene.objects.get('t').nodes.find((x) => x.value === String(v)); return `t:${n.key}`; }, v);
+const hoverOf = (pid) => page.evaluate((pid) => { const el = window.LAStage.nodes.get(pid); const h = document.querySelector('.st-g-note.is-hint'); return `${el.classList.contains('is-over') ? 'over' : ''}${el.classList.contains('is-nodrop') ? 'nodrop' : ''}｜${h?.textContent || ''}`; }, pid);
+const p50 = await tnode(50);
+A = await box(await tnode(30)); B = await box(p50);
+const away = { x: B.cx + 200, y: B.cy + 200 };
+const slide = async (a, b) => { for (let i = 1; i <= 10; i++) { await touch('touchMove', a.x + (b.x - a.x) * i / 10, a.y + (b.y - a.y) * i / 10); await page.waitForTimeout(16); } };
+await touch('touchStart', A.cx, A.cy);
+await slide({ x: A.cx, y: A.cy }, { x: B.cx, y: B.cy });
+await page.waitForTimeout(100);
+expect('悬在会被拦的落点上：标成不能放、说一句中性的', await hoverOf(p50), 'nodrop｜这一下不让做');
+await slide({ x: B.cx, y: B.cy }, away);
+await page.evaluate(() => window.LAStage.scene.apply(window.LAStageDev.parseScript('insert t 20')[0]));
+await slide(away, { x: B.cx, y: B.cy });
+await page.waitForTimeout(100);
+expect('拖着的时候舞台变了，再悬上去照现在的说', await hoverOf(p50), 'over｜在 50 右旋');
+await touch('touchEnd');
+await page.waitForTimeout(1200);
+expect('松手照裁判演了', await page.evaluate(() => window.LAStage.log.at(-1)?.src), 'rotate t#1 right');
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

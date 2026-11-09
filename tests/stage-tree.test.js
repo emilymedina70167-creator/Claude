@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { tree, layoutTree, movedSubtree, cornerRect, snapshot, buildLevel, serialize, levelOrder, traversal, treePath, imbalance, NODE, SEP, LEVEL, COL, TAG_ROOM, TAG_TOP } from '../kit/src/stage/types/tree.js';
+import { isBst, cmpValues, tree, layoutTree, movedSubtree, cornerRect, snapshot, buildLevel, serialize, levelOrder, traversal, treePath, imbalance, NODE, SEP, LEVEL, COL, TAG_ROOM, TAG_TOP } from '../kit/src/stage/types/tree.js';
 
 const run = (scene, src) => { for (const c of parseScript(src)) scene.apply(c); return scene; };
 const make = (src) => run(new Scene(), src);
@@ -509,4 +509,23 @@ test('说明里的例子照抄就能演（一行不错）；说明里每一条�
   }
   assert.deepEqual(bad, []);
   assert.doesNotMatch(tree.doc + tree.hint + tree.example, /[他她]/);
+});
+
+test('isBst 钉住重复值和带撇的值：中序不减就算（一样大的算递增，两边都行）；49′ 和 49 一样大；比的是数，不是字', () => {
+  // 一样大的放左边、右边都算（中序 13 49 49 / 49 49 50）
+  assert.equal(isBst(T(make('tree t = 49 13 49'))), true);
+  assert.equal(isBst(T(make('tree t = 49 49 50'))), true);
+  // 重复的值不在中间（中序 49 13 49）：不是
+  assert.equal(isBst(T(make('tree t = 49 49 _ _ 13'))), false);
+  // 49′ 和 49 一样大：在哪一边都算；比别的数照数比
+  assert.equal(isBst(T(make('tree t = 49 13 49′'))), true);
+  assert.equal(isBst(T(make('tree t = 49′ 49 50'))), true);
+  assert.equal(isBst(T(make("tree t = 49 13 49'"))), true, "' 和 ′ 一样");
+  assert.equal(isBst(T(make('tree t = 49′ 50 13'))), false, '带撇的照数比：50 在 49′ 左边不对');
+  assert.equal(cmpValues('49′', '49'), 0);
+  // 按数比，不按字比（字比 9 > 10）
+  assert.equal(isBst(T(make('tree t = 10 9 100'))), true);
+  // 造的时候定排法：有重复值的二叉排序树照样按中序排
+  assert.equal(T(make('tree t = 49 13 49′')).layout, 'inorder');
+  assert.equal(T(make('tree t = 49′ 50 13')).layout, 'compact');
 });
