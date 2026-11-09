@@ -9,8 +9,11 @@ import { actText } from './stage.js';
 export const TRY_MAX = 8;
 /** 挑战还没做到、学生多久没动就叫老师（毫秒） */
 export const QUIET_MS = 45000;
-/** 发给老师的 [学生] 一块最多多少字节（UTF-8，连那一行标题）：学生在老师想的时候试了好多下，前面的并成一句，不整段发过去 */
-export const STUDENT_MAX = 2048;
+/**
+ * 发给老师的 [学生] 一块最多多少字节（UTF-8，连那一行标题）：学生在老师想的时候试了好多下，按要紧程度压（capTries），不整段发过去。
+ * 2 KB 压掉的正是老师要的那几下（错法），提到 3 KB（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 4 节）
+ */
+export const STUDENT_MAX = 3072;
 const HEAD = '[学生]\n';
 const enc = typeof TextEncoder === 'function' ? new TextEncoder() : null;
 const bytesOf = (t) => (enc ? enc.encode(String(t)).length : String(t).length);
@@ -35,77 +38,197 @@ export function eventOf(act, { help = '', at = 0 } = {}) {
 }
 
 /**
+ * 裁判的结论拆成三截：pre（对不对、像哪种错）、next（「；正确的是…」）、how（没让做 / 圈了一下）。
+ * 压的时候「正确的是」只留在每样东西的最后一下（之前那几下的「正确的是」说的是那时候的样子，学生已经接着动了），结论一直留着
+ */
+function verdictParts(a) {
+  const none = { pre: '', next: '', how: '' };
+  const v = a?.verdict;
+  if (!v || a.error) return none; // 没演上的一下（actText 已经说了）不接裁判的结论
+  if (a.failed) return { ...none, pre: '——页面这一下没判成（照做了）' };
+  if (v.legal === false) return { ...none, pre: `——做不到：${v.why || '这一下做不到'}（没演，弹回去了）` };
+  if (v.right === true) return { ...none, pre: '——是正确的下一步' };
+  if (v.right !== false) return none;
+  const nx = text(v.next);
+  return {
+    pre: `——不是正确的下一步${v.misread ? `，像是${v.misread}` : ''}`,
+    next: nx ? `；正确的是${nx}` : '',
+    how: a.blocked ? '；照你写的 wrong=block 没让做，弹回去了' : a.marked ? '；照做了，画面上那一处淡淡圈了一下（wrong=mark）' : '',
+  };
+}
+
+/**
  * 裁判的结论（stage.js 挂在动作上的 act.verdict）写成跟在这一下后面的半句：对不对、像哪种错、正确的是什么、没让做 / 圈了一下。
  * 不判的（right 是 null）、没过裁判的是空的
  */
 export function verdictText(a) {
-  const v = a?.verdict;
-  if (!v || a.error) return ''; // 没演上的一下（actText 已经说了）不接裁判的结论
-  if (a.failed) return '——页面这一下没判成（照做了）';
-  if (v.legal === false) return `——做不到：${v.why || '这一下做不到'}（没演，弹回去了）`;
-  if (v.right === true) return '——是正确的下一步';
-  if (v.right !== false) return '';
-  const nx = text(v.next);
-  const how = a.blocked ? '；照你写的 wrong=block 没让做，弹回去了' : a.marked ? '；照做了，画面上那一处淡淡圈了一下（wrong=mark）' : '';
-  return `——不是正确的下一步${v.misread ? `，像是${v.misread}` : ''}${nx ? `；正确的是${nx}` : ''}${how}`;
+  const p = verdictParts(a);
+  return `${p.pre}${p.next}${p.how}`;
 }
 /** 存得下的样子（不带 tries 里的大东西） */
 export const slim = (a) => JSON.parse(JSON.stringify({ ...a, tries: a.tries?.map((t) => ({ type: t.type, name: t.name, path: t.path })) }));
 
+const minus = (v) => String(v).replace(/^-/, '−');
+const SYM = (ok) => (ok === true ? '✓' : ok === false ? '✗' : '?');
+const objOf = (w) => String(w ?? '').match(/^[A-Za-z_]\w*/)?.[0] || null;
+/** 这一下在哪样东西上（每样东西只有最后一下留「正确的是」和事实）、动了哪几个部件（错法并成 ×N 时括号里写它） */
+function whereOf(a) {
+  if (a.type === 'dial') return { obj: `dial:${a.name}`, refs: String(a.name) };
+  if (a.type === 'edit' && a.ref) return { obj: objOf(a.ref), refs: a.ref };
+  const words = String(a.src || a.line || '').trim().split(/\s+/).filter(Boolean).slice(1);
+  const parts = words.filter((w) => /^[A-Za-z_]\w*[.#]/.test(w));
+  return { obj: objOf(parts[0] || words[0] || a.ref), refs: parts.length ? parts.join(' ') : words.length ? words.join(' ') : a.ref || '' };
+}
 /**
- * 试的几下 → 一行一行：同一格连着拨的几下并成一条路（B.1,1：1 → 2 → 3）；点开看的几格并成一句；
- * 过了裁判的一下后面跟结论和这一下以后的事实。{ text, n（这一行是几下）, right, wrong（其中判对、判错几下）}
+ * 拨数、拨格子的一下并进哪一条路（同一个数、同一格连着拨的都并成一条）。没让做、没演上、页面判了对错的一下不算路上的一步，单独一行
  */
-function tryLines(tries) {
-  const out = [];
-  const edits = new Map(); // ref → { path }
-  const order = [];
-  const explained = [];
-  for (const e of tries) {
-    const a = e.act;
-    if (a.type === 'edit') {
-      let x = edits.get(a.ref);
-      if (!x) { x = { ref: a.ref, path: [a.from === '' ? '空' : a.from] }; edits.set(a.ref, x); order.push({ k: 'edit', ref: a.ref }); }
-      x.path.push(a.to);
-    } else if (a.type === 'explain') {
-      if (!explained.length) order.push({ k: 'explain' });
-      if (!explained.includes(a.ref)) explained.push(a.ref);
-    } else {
-      const facts = (a.facts || []).filter(Boolean);
-      const main = actText(a);
-      order.push({ k: 'other', text: main ? `${main}${verdictText(a)}${facts.length ? `。${facts.join('；')}` : ''}` : '', right: a.verdict?.right === true ? 1 : 0, wrong: a.verdict?.right === false ? 1 : 0 });
-    }
+function pathKey(a) {
+  if (a.error || a.blocked || a.failed) return null;
+  if (a.type === 'dial') return `dial:${a.name}`;
+  if (a.type === 'edit' && (a.verdict?.right ?? null) === null && a.verdict?.legal !== false) return `edit:${a.ref}`;
+  return null;
+}
+/**
+ * 一条路写成一行：学生拨了 B.2,2：−1 → 0 → 1 → 2（停在 …；拨到 2 时做到了 g1；Dd = O：✗ ✗ ✗ ✓）。
+ * 括号里：停在哪（拨数才有）、拨到哪做到了哪个挑战、挑战每一句在每一个停下的值上成不成立（第一下的 marks0 是拨之前，每一下的 marks 是拨完）。
+ * 最后一下的事实（from= 的「M1 第 2 行变了…」）接在后面；前几下的事实说的是拨到一半的样子，不写
+ */
+function pathRow(p) {
+  const a0 = p.moves[0];
+  const dial = a0.type === 'dial';
+  const to = (m) => (dial ? m.value : m.to);
+  const start = dial ? a0.from : a0.from === '' ? '空' : a0.from;
+  const vals = [...(start == null ? [] : [start]), ...p.moves.map(to)];
+  const bits = [];
+  if (dial) bits.push(`停在 ${minus(vals.at(-1))}`);
+  for (const m of p.moves) for (const id of m.met || []) bits.push(`拨到 ${minus(to(m))} 时做到了 ${id}`);
+  const m0 = Array.isArray(a0.marks0) ? a0.marks0 : [];
+  const multi = new Set(m0.map((x) => x.goal)).size > 1;
+  for (const c of m0) {
+    const same = (x) => x.goal === c.goal && x.clause === c.clause;
+    const seq = [c.ok, ...p.moves.map((m) => (m.marks || []).find(same)?.ok ?? null)];
+    bits.push(`${multi ? `${c.goal} ` : ''}${c.clause}：${seq.map(SYM).join(' ')}`);
   }
-  const nExplain = tries.filter((e) => e.act.type === 'explain').length;
-  for (const o of order) {
-    if (o.k === 'edit') { const x = edits.get(o.ref); out.push({ text: `学生拨了 ${x.ref}：${x.path.join(' → ')}`, n: x.path.length - 1 }); }
-    else if (o.k === 'explain') out.push({ text: `学生点开看了 ${explained.join('、')} 怎么算出来`, n: nExplain });
-    else if (o.text) out.push({ text: o.text, n: 1, right: o.right, wrong: o.wrong });
-  }
-  return out;
+  const head = `学生拨了 ${dial ? a0.name : a0.ref}：${vals.map(minus).join(' → ')}${bits.length ? `（${bits.join('；')}）` : ''}`;
+  const facts = (p.moves.at(-1).facts || []).filter(Boolean);
+  const tail = facts.length ? `。${facts.join('；')}` : '';
+  return { ...p, full: head + tail, short: head, tail, n: p.moves.length };
 }
 
-/** 试的那几行太长：从前面起并成「之前又试了 N 下」，留最近几下的细节（rest 是叫老师的那几件事，一字不动） */
+/**
+ * 试的几下 → 一行一行（每一行 { full 原样, short 去掉「正确的是」和事实, tail 去掉的那一截, obj, refs, src, n 是几下,
+ * right / wrong 其中判对、判错几下, misread 像哪种错, last 最后一下是第几件 }）：同一格、同一个拨数连着拨的几下并成一条路；
+ * 点开看的几格并成一句；过了裁判的一下后面跟结论和这一下以后的事实
+ */
+function tryLines(tries) {
+  const rows = [];
+  const paths = new Map();
+  let explain = null;
+  tries.forEach((e, i) => {
+    const a = e.act || {};
+    const key = pathKey(a);
+    if (key) {
+      let p = paths.get(key);
+      if (!p) { p = { kind: 'path', moves: [], ...whereOf(a), src: '', right: 0, wrong: 0, misread: null }; paths.set(key, p); rows.push(p); }
+      p.moves.push(a);
+      p.last = i;
+      return;
+    }
+    if (a.type === 'explain') {
+      if (!explain) { explain = { kind: 'explain', refs: [], n: 0, obj: null, tail: '', right: 0, wrong: 0, misread: null }; rows.push(explain); }
+      explain.n++;
+      explain.last = i;
+      if (!explain.refs.includes(a.ref)) explain.refs.push(a.ref);
+      return;
+    }
+    const main = actText(a);
+    if (!main) return;
+    const v = verdictParts(a);
+    const facts = (a.facts || []).filter(Boolean);
+    const judged = !a.error && !a.failed && a.verdict;
+    rows.push({
+      kind: 'one', ...whereOf(a), src: a.src || a.line || main, last: i, n: 1,
+      full: `${main}${v.pre}${v.next}${v.how}${facts.length ? `。${facts.join('；')}` : ''}`,
+      short: `${main}${v.pre}${v.how}`,
+      tail: `${v.next}${facts.length ? `。${facts.join('；')}` : ''}`,
+      right: judged && a.verdict.legal !== false && a.verdict.right === true ? 1 : 0,
+      wrong: judged && a.verdict.right === false ? 1 : 0,
+      misread: judged && a.verdict.legal !== false && a.verdict.right === false ? a.verdict.misread || null : null,
+    });
+  });
+  return rows.map((r) => {
+    if (r.kind === 'path') return pathRow(r);
+    if (r.kind === 'explain') { const t = `学生点开看了 ${r.refs.join('、')} 怎么算出来`; return { ...r, full: t, short: t }; }
+    return r;
+  });
+}
+
+/**
+ * 试的那几行放不下：按要紧程度压（rest 是叫老师的那几件事，一字不动）。依次，放得下就停：
+ * 1. 原样；2. 「正确的是」和事实只留每样东西的最后一下；3. 连着几下都是正确的下一步并成「接着 N 下」；
+ * 4. 从前往后把没有错法的几行并成「之前又试了 N 下」；5. 同一种错法并成「像是… ×N（部件…）」。
+ * 有错法的那几下永远不省（老师要从它们看学生卡在哪），再放不下也不删
+ */
 function capTries(items, rest) {
-  const fits = (lines) => bytesOf(HEAD + lines.join('\n')) <= STUDENT_MAX;
-  const all = items.map((x) => x.text);
-  if (!all.length || fits([...all, ...rest])) return all; // 没有一行细节（只拨了数）就没什么可并的，不写「之前又试了 0 下」
-  let n = 0, right = 0, wrong = 0, k = 0;
-  const head = () => `之前又试了 ${n} 下${right + wrong ? `（页面判了 ${right + wrong} 下：${right} 下是正确的下一步，${wrong} 下不是）` : ''}，细节省了`;
-  while (k < items.length) {
-    n += items[k].n || 1; right += items[k].right || 0; wrong += items[k].wrong || 0; k++;
-    if (fits([head(), ...all.slice(k), ...rest])) break;
+  const fits = (lines) => bytesOf(HEAD + [...lines, ...rest].join('\n')) <= STUDENT_MAX;
+  const all = items.map((x) => x.full);
+  if (!all.length || fits(all)) return all; // 没有一行细节就没什么可并的，不写「之前又试了 0 下」
+  // 2. 每样东西只有最后一下留「正确的是」和事实（没写在哪样东西上的各算各的）
+  const lastOf = new Map();
+  for (const x of items) {
+    if (!x.tail) continue;
+    const k = x.obj ?? x;
+    if (!lastOf.has(k) || x.last > lastOf.get(k).last) lastOf.set(k, x);
   }
-  return [head(), ...all.slice(k)];
+  const keeps = (x) => !x.tail || lastOf.get(x.obj ?? x) === x;
+  let rows = items.map((x) => ({ ...x, keep: keeps(x), text: keeps(x) ? x.full : x.short }));
+  const texts = () => rows.filter((r) => !r.gone).map((r) => r.text);
+  if (fits(texts())) return texts();
+  // 3. 连着 ≥ 2 下是正确的下一步：并成一行，括号里最多列 6 下；留着「正确的是」、事实的那一下照样接在后面
+  const merged = [];
+  for (let i = 0; i < rows.length;) {
+    let j = i;
+    while (j < rows.length && rows[j].kind === 'one' && rows[j].right) j++;
+    if (j - i < 2) { merged.push(rows[i]); i = Math.max(i + 1, j); continue; }
+    const run = rows.slice(i, j);
+    const list = run.slice(0, 6).map((r) => r.src).join('、') + (run.length > 6 ? '、…' : '');
+    const tails = run.filter((r) => r.keep && r.tail).map((r) => r.tail).join('');
+    merged.push({ kind: 'run', text: `接着 ${run.length} 下都是正确的下一步（${list}）${tails}`, n: run.length, right: run.length, wrong: 0, misread: null });
+    i = j;
+  }
+  rows = merged;
+  if (fits(texts())) return texts();
+  // 4. 从前往后，没有错法的几行并进开头一行（有错法的跳过、留在原处）
+  let n = 0, right = 0, wrong = 0;
+  const head = () => `之前又试了 ${n} 下${right + wrong ? `（页面判了 ${right + wrong} 下：${right} 下是正确的下一步，${wrong} 下不是）` : ''}，细节省了`;
+  const withHead = () => (n ? [head(), ...texts()] : texts());
+  for (const r of rows) {
+    if (r.misread) continue;
+    r.gone = true;
+    n += r.n || 1; right += r.right || 0; wrong += r.wrong || 0;
+    if (fits(withHead())) return withHead();
+  }
+  // 5. 同一种错法并成一行，放在这一种第一次出现的地方（下数多的先并）
+  const groups = new Map();
+  for (const r of rows) if (!r.gone && r.misread) { if (!groups.has(r.misread)) groups.set(r.misread, []); groups.get(r.misread).push(r); }
+  for (const g of [...groups.values()].filter((x) => x.length >= 2).sort((a, b) => b.length - a.length)) {
+    g[0].text = `像是${g[0].misread} ×${g.length}（${g.map((r) => r.refs).join('、')}）`;
+    for (const r of g.slice(1)) r.gone = true;
+    if (fits(withHead())) break;
+  }
+  // 6. 还放不下也不删错法的那几行（叫老师的那件事本身超了也不截，和第一轮一样）
+  return withHead();
 }
 
 /**
  * 攒下的事 → 写给老师看的一段（先写学生怎么试的，再写叫老师的那件事）。
  * goals：挑战 id → { text }（写「做到了挑战 g1「…」」用）；reacted：做到时演了几行预写的。
- * 连 [学生] 那一行不超过 STUDENT_MAX：试得多时只留最近几下的细节，前面的并成「之前又试了 N 下」（叫老师的那件事一字不动）
+ * 连 [学生] 那一行不超过 STUDENT_MAX：试得多时按要紧程度压（capTries；错法那几下不省，叫老师的那件事一字不动）
  */
 export function eventsText(events, { goals = new Map(), secs = null } = {}) {
   const tries = events.filter((e) => e.kind === 'try');
+  // 拨数现在一下一下记成试的事件、写成一条路；旧的存档里回答那一下还带着 tries（以前拨数攒在那里）：有路了就不再写一遍
+  const dialed = tries.some((e) => e.act?.type === 'dial');
   const lines = [];
   for (const e of events) {
     if (e.kind === 'try') continue;
@@ -124,7 +247,7 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
     else if (e.kind === 'help') lines.push(`学生点了「${e.act.button}」`);
     else if (e.kind === 'stuck') lines.push(e.text || `学生 ${Math.round(QUIET_MS / 1000)} 秒没动，挑战还没做到`);
     else if (e.kind === 'tries') lines.push(e.text || `学生试了 ${TRY_MAX} 下还没做到`);
-    else if (e.act) lines.push(actText(e.act));
+    else if (e.act) lines.push(actText(dialed ? { ...e.act, tries: undefined } : e.act));
   }
   // 老师写了 call=wrong、学生走偏了才叫的：说一声为什么这时候叫
   if (events.some((e) => e.now)) lines.push('（你在 open 那一行写了 call=wrong：学生走偏了，页面马上叫你）');

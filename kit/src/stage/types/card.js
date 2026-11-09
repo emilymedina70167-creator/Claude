@@ -26,7 +26,17 @@ function objectBox(o) {
   const h = o.lines.reduce((n, l) => n + lineH(l) + GAP, 0) - GAP + 2 * PAD;
   return { x: o.origin.x, y: o.origin.y, w: CARD_W, h: Math.max(h, 2 * PAD + ROW_H) };
 }
-const mkLine = (obj, key, text) => ({ obj, key, text, value: `第 ${key} 行`, label: `第 ${key} 行`, paint: null, glow: false, lift: false, dim: false, covered: false });
+const LABEL_MAX = 20;
+/**
+ * 一行画出来的字（话里的小块写它的名字、$x$ 写 x），截到 20 个字：部件的 value / label。
+ * [学生] 里「学生点了 f.3（laughing）」、话里的小块 {f.3} 都写它（以前写「第 3 行」，老师得回头数是哪一句）
+ */
+export function lineLabel(text) {
+  const plain = parseRich(text).map((p) => p.v).join('').trim();
+  const chars = [...plain];
+  return chars.length > LABEL_MAX ? `${chars.slice(0, LABEL_MAX).join('')}…` : plain;
+}
+const mkLine = (obj, key, text) => ({ obj, key, text, value: lineLabel(text), label: lineLabel(text), paint: null, glow: false, lift: false, dim: false, covered: false });
 
 export const card = {
   type: 'card',
@@ -76,6 +86,7 @@ export const card = {
       if (h.str == null) throw new Error('rewrite 要有新的字（写在引号里）');
       scene.checkRich(h.str, c, { replayRefs: false }); // 和造题卡一样查（以前不查 {a.3}，重放旧课时照旧不查）
       l.text = h.str;
+      l.value = l.label = lineLabel(h.str);
       return { line: l };
     },
   },

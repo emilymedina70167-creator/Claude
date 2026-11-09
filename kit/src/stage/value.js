@@ -221,6 +221,14 @@ export function numText(q) {
   if (d !== 1n || k > 6) return q.toString();
   return String(q.toNumber());
 }
+/**
+ * 一张矩阵现在的数写成一行给老师看：(2 0; 0 −2)。负号写 −（和舞台上画的一样），空格子（''）写 _（造的时候写的就是 _）。
+ * [跟着变的] 写整张矩阵用它（doc.js 的 derivedLines）
+ */
+export function gridText(rows) {
+  const cell = (v) => (v === '' || v == null ? '_' : String(v).replace(/^-/, '−'));
+  return `(${(rows || []).map((row) => row.map(cell).join(' ')).join('; ')})`;
+}
 /** 值写给老师看（报错里用）：3/4、[1, 2]、[[1, 2], [3, 4]] */
 export const valueText = (v) => { try { return exactText(v); } catch { return '？'; } };
 

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
 import { card, rowsOf } from '../kit/src/stage/types/card.js';
+import { actText } from '../kit/src/stage/stage.js';
 
 const run = (s, src) => { for (const c of parseScript(src)) s.apply(c); return s; };
 
@@ -43,4 +44,23 @@ test('题卡和一排格子一起：放在格子下面、居中；行的框一�
 
 test('说明里的例子照抄能演', () => {
   assert.deepEqual(dryRun(new Scene(), card.example), []);
+});
+
+test('部件写它显示的字：点了一行写那一行的字（截到 20 个字），不写「第 k 行」', () => {
+  const s = run(new Scene(), 'card f = "laughs" "laughing" "to laugh"');
+  const [p] = s.parts('f.2');
+  assert.equal(p.label, 'laughing');
+  assert.equal(p.value, 'laughing');
+  // 舞台交给课堂的点一下：value 是部件画出来的字（stage.js 的 chipText：label ?? value ?? key）
+  const tap = { type: 'tap', ref: 'f.2', key: p.key, value: String(p.label ?? p.value ?? p.key) };
+  assert.match(actText(tap), /学生点了 f\.2（laughing）/);
+  // 30 个字的一行：截成 20 个字加「…」
+  const long = '一二三四五六七八九十'.repeat(3);
+  const q = run(new Scene(), `card q = "${long}"`);
+  assert.equal(q.parts('q.1')[0].label, `${long.slice(0, 20)}…`);
+  // 话里的小块、斜体字母照画出来的字写（不带记号）；改了字跟着换
+  run(q, 'array a = 7 8\naddline q "比较 {a.1} 和 $x$"');
+  assert.equal(q.parts('q.2')[0].label, '比较 a.1 和 x');
+  run(q, 'rewrite q.2 "新的一行"');
+  assert.equal(q.parts('q.2')[0].label, '新的一行');
 });

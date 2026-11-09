@@ -1,0 +1,404 @@
+{
+ "幕6": [
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 8,
+    "to": 8,
+    "role": "V",
+    "gesture": "span",
+    "src": "mark s.8 V",
+    "open": "mark",
+    "line": "mark s.8 V",
+    "verdict": {
+     "legal": true,
+     "right": false,
+     "misread": "谓语只圈了一半（be/have 和后面的分词合起来是一个谓语：was initiated）",
+     "why": "s.8 标成V（initiated）",
+     "next": "谓语是 s.7-8（was initiated）；还没拉对的还有：s.12-27 从句（who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.13 谓语（suggested）、s.14-27 从句（that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.16-17 谓语（are born）、s.23-27 从句（that dictates a universal grammar）、s.24 谓语（dictates）"
+    },
+    "patient": true,
+    "facts": [
+     "这一段不对：s.8 标成V（initiated）（谓语只圈了一半（be/have 和后面的分词合起来是一个谓语：was initiated））",
+     "key 里还差 7 段没拉对：s.7-8 谓语（was initiated）、s.12-27 从句（who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.13 谓语（suggested）、s.14-27 从句（that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.16-17 谓语（are born）、s.23-27 从句（that dictates a universal grammar）、s.24 谓语（dictates）",
+     "学生的括号：s.8 V（initiated）里有 key 的谓语 0 个；括号外有 key 的谓语 3 个；跨着括号边的 1 个",
+     "多拉的：s.8 V（initiated；key 里没有这一段）"
+    ]
+   },
+   "at": 1794187187580,
+   "patient": true,
+   "undone": true
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "undo",
+    "src": "mark s.8 V",
+    "open": "mark"
+   },
+   "at": 1794187189324,
+   "patient": true
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 7,
+    "to": 8,
+    "role": "V",
+    "gesture": "span",
+    "src": "mark s.7-8 V",
+    "open": "mark",
+    "line": "mark s.7-8 V",
+    "verdict": {
+     "legal": true,
+     "right": true,
+     "misread": null,
+     "why": "s.7-8 标成V（was initiated）",
+     "next": null
+    },
+    "patient": true,
+    "facts": [
+     "这一段对了：s.7-8 标成V（was initiated）",
+     "key 里还差 6 段没拉对：s.12-27 从句（who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.13 谓语（suggested）、s.14-27 从句（that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.16-17 谓语（are born）、s.23-27 从句（that dictates a universal grammar）、s.24 谓语（dictates）",
+     "学生的括号：s.7-8 V（was initiated）里有 key 的谓语 1 个；括号外有 key 的谓语 3 个"
+    ]
+   },
+   "at": 1794187190469,
+   "patient": true
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 13,
+    "to": 13,
+    "role": "V",
+    "gesture": "span",
+    "src": "mark s.13 V",
+    "open": "mark",
+    "line": "mark s.13 V",
+    "verdict": {
+     "legal": true,
+     "right": true,
+     "misread": null,
+     "why": "s.13 标成V（suggested）",
+     "next": null
+    },
+    "patient": true,
+    "facts": [
+     "这一段对了：s.13 标成V（suggested）",
+     "key 里还差 5 段没拉对：s.12-27 从句（who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.14-27 从句（that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.16-17 谓语（are born）、s.23-27 从句（that dictates a universal grammar）、s.24 谓语（dictates）",
+     "学生的括号：s.7-8 V（was initiated）里有 key 的谓语 1 个；s.13 V（suggested）里有 key 的谓语 1 个；括号外有 key 的谓语 2 个"
+    ]
+   },
+   "at": 1794187192184,
+   "patient": true
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 16,
+    "to": 17,
+    "role": "V",
+    "gesture": "span",
+    "src": "mark s.16-17 V",
+    "open": "mark",
+    "line": "mark s.16-17 V",
+    "verdict": {
+     "legal": true,
+     "right": true,
+     "misread": null,
+     "why": "s.16-17 标成V（are born）",
+     "next": null
+    },
+    "patient": true,
+    "facts": [
+     "这一段对了：s.16-17 标成V（are born）",
+     "key 里还差 4 段没拉对：s.12-27 从句（who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.14-27 从句（that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.23-27 从句（that dictates a universal grammar）、s.24 谓语（dictates）",
+     "学生的括号：s.7-8 V（was initiated）里有 key 的谓语 1 个；s.13 V（suggested）里有 key 的谓语 1 个；s.16-17 V（are born）里有 key 的谓语 1 个；括号外有 key 的谓语 1 个"
+    ]
+   },
+   "at": 1794187193901,
+   "patient": true
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 21,
+    "to": 21,
+    "role": "V",
+    "gesture": "span",
+    "src": "mark s.21 V",
+    "open": "mark",
+    "line": "mark s.21 V",
+    "verdict": {
+     "legal": true,
+     "right": null,
+     "misread": null,
+     "why": "s.21 标成V（language-acquisition）",
+     "next": null
+    },
+    "patient": true,
+    "facts": [
+     "s.21 标成V（language-acquisition）：页面不判（key 里没有这一段）",
+     "key 里还差 4 段没拉对：s.12-27 从句（who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.14-27 从句（that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.23-27 从句（that dictates a universal grammar）、s.24 谓语（dictates）",
+     "学生的括号：s.7-8 V（was initiated）里有 key 的谓语 1 个；s.13 V（suggested）里有 key 的谓语 1 个；s.16-17 V（are born）里有 key 的谓语 1 个；s.21 V（language-acquisition）里有 key 的谓语 0 个；括号外有 key 的谓语 1 个",
+     "多拉的：s.21 V（language-acquisition；key 里没有这一段）"
+    ]
+   },
+   "at": 1794187195703,
+   "patient": true
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 24,
+    "to": 24,
+    "role": "V",
+    "gesture": "span",
+    "src": "mark s.24 V",
+    "open": "mark",
+    "line": "mark s.24 V",
+    "verdict": {
+     "legal": true,
+     "right": true,
+     "misread": null,
+     "why": "s.24 标成V（dictates）",
+     "next": null
+    },
+    "patient": true,
+    "facts": [
+     "这一段对了：s.24 标成V（dictates）",
+     "key 里还差 3 段没拉对：s.12-27 从句（who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.14-27 从句（that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.23-27 从句（that dictates a universal grammar）",
+     "学生的括号：s.7-8 V（was initiated）里有 key 的谓语 1 个；s.13 V（suggested）里有 key 的谓语 1 个；s.16-17 V（are born）里有 key 的谓语 1 个；s.21 V（language-acquisition）里有 key 的谓语 0 个；s.24 V（dictates）里有 key 的谓语 1 个；括号外有 key 的谓语 0 个"
+    ]
+   },
+   "at": 1794187197420,
+   "patient": true
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 12,
+    "to": 27,
+    "role": "Cl",
+    "gesture": "span",
+    "src": "mark s.12-27 Cl",
+    "open": "mark",
+    "line": "mark s.12-27 Cl",
+    "verdict": {
+     "legal": true,
+     "right": true,
+     "misread": null,
+     "why": "s.12-27 标成Cl（who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar）",
+     "next": null
+    },
+    "patient": true,
+    "facts": [
+     "这一段对了：s.12-27 标成Cl（who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar）",
+     "key 里还差 2 段没拉对：s.14-27 从句（that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.23-27 从句（that dictates a universal grammar）",
+     "学生的括号：s.7-8 V（was initiated）里有 key 的谓语 1 个；s.12-27 Cl（who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar）里有 key 的谓语 3 个；s.13 V（suggested）里有 key 的谓语 1 个；s.16-17 V（are born）里有 key 的谓语 1 个；s.21 V（language-acquisition）里有 key 的谓语 0 个；s.24 V（dictates）里有 key 的谓语 1 个；括号外有 key 的谓语 0 个"
+    ]
+   },
+   "at": 1794187199223,
+   "patient": true
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 14,
+    "to": 22,
+    "role": "Cl",
+    "gesture": "span",
+    "src": "mark s.14-22 Cl",
+    "open": "mark",
+    "line": "mark s.14-22 Cl",
+    "verdict": {
+     "legal": true,
+     "right": null,
+     "misread": null,
+     "why": "s.14-22 标成Cl（that humans are born with an innate language-acquisition capacity）",
+     "next": null
+    },
+    "patient": true,
+    "facts": [
+     "s.14-22 标成Cl（that humans are born with an innate language-acquisition capacity）：页面不判（key 里没有这一段）",
+     "key 里还差 2 段没拉对：s.14-27 从句（that humans are born with an innate language-acquisition capacity that dictates a universal grammar）、s.23-27 从句（that dictates a universal grammar）",
+     "学生的括号：s.7-8 V（was initiated）里有 key 的谓语 1 个；s.12-27 Cl（who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar）里有 key 的谓语 3 个；s.13 V（suggested）里有 key 的谓语 1 个；s.14-22 Cl（that humans are born with an innate language-acquisition capacity）里有 key 的谓语 1 个；s.16-17 V（are born）里有 key 的谓语 1 个；s.21 V（language-acquisition）里有 key 的谓语 0 个；s.24 V（dictates）里有 key 的谓语 1 个；括号外有 key 的谓语 0 个",
+     "多拉的：s.14-22 Cl（that humans are born with an innate language-acquisition capacity；key 里没有这一段）、s.21 V（language-acquisition；key 里没有这一段）"
+    ]
+   },
+   "at": 1794187201114,
+   "patient": true
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 23,
+    "to": 27,
+    "role": "Cl",
+    "gesture": "span",
+    "src": "mark s.23-27 Cl",
+    "open": "mark",
+    "line": "mark s.23-27 Cl",
+    "verdict": {
+     "legal": true,
+     "right": true,
+     "misread": null,
+     "why": "s.23-27 标成Cl（that dictates a universal grammar）",
+     "next": null
+    },
+    "patient": true,
+    "facts": [
+     "这一段对了：s.23-27 标成Cl（that dictates a universal grammar）",
+     "key 里还差 1 段没拉对：s.14-27 从句（that humans are born with an innate language-acquisition capacity that dictates a universal grammar）",
+     "学生的括号：s.7-8 V（was initiated）里有 key 的谓语 1 个；s.12-27 Cl（who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar）里有 key 的谓语 3 个；s.13 V（suggested）里有 key 的谓语 1 个；s.14-22 Cl（that humans are born with an innate language-acquisition capacity）里有 key 的谓语 1 个；s.16-17 V（are born）里有 key 的谓语 1 个；s.21 V（language-acquisition）里有 key 的谓语 0 个；s.23-27 Cl（that dictates a universal grammar）里有 key 的谓语 1 个；s.24 V（dictates）里有 key 的谓语 1 个；括号外有 key 的谓语 0 个"
+    ]
+   },
+   "at": 1794187202924,
+   "patient": true
+  }
+ ],
+ "分支1": [
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 3,
+    "to": 3,
+    "role": "V",
+    "gesture": "span",
+    "src": "mark s.3 V",
+    "open": "mark",
+    "line": "mark s.3 V",
+    "verdict": {
+     "legal": true,
+     "right": true,
+     "misread": null,
+     "why": "s.3 标成V（are）",
+     "next": null
+    },
+    "facts": [
+     "这一段对了：s.3 标成V（are）",
+     "key 里还差 7 段没拉对：s.1-14 从句（If we are serious about ensuring that our science is both meaningful and reproducible）、s.16-17 谓语（must ensure）、s.18-25 从句（that our institutions incentivise that kind of science）、s.6-14 非谓语（ensuring that our science is both meaningful and reproducible）、s.21 谓语（incentivise）、s.7-14 从句（that our science is both meaningful and reproducible）、s.10 谓语（is）",
+     "学生的括号：s.3 V（are）里有 key 的谓语 1 个；括号外有 key 的谓语 3 个"
+    ]
+   },
+   "at": 1794187241507
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 6,
+    "to": 6,
+    "role": "V",
+    "gesture": "span",
+    "src": "mark s.6 V",
+    "open": "mark",
+    "line": "mark s.6 V",
+    "verdict": {
+     "legal": true,
+     "right": false,
+     "misread": "把非谓语当成了谓语：ensuring 在非谓语「ensuring that our science is both meaningful and reproducible」里，不是谓语",
+     "why": "s.6 标成V（ensuring）",
+     "next": "谓语是 s.16-17（must ensure）；还没拉对的还有：s.1-14 从句（If we are serious about ensuring that our science is both meaningful and reproducible）、s.18-25 从句（that our institutions incentivise that kind of science）、s.6-14 非谓语（ensuring that our science is both meaningful and reproducible）、s.21 谓语（incentivise）、s.7-14 从句（that our science is both meaningful and reproducible）、s.10 谓语（is）"
+    },
+    "facts": [
+     "这一段不对：s.6 标成V（ensuring）（把非谓语当成了谓语：ensuring 在非谓语「ensuring that our science is both meaningful and reproducible」里，不是谓语）",
+     "key 里还差 7 段没拉对：s.1-14 从句（If we are serious about ensuring that our science is both meaningful and reproducible）、s.16-17 谓语（must ensure）、s.18-25 从句（that our institutions incentivise that kind of science）、s.6-14 非谓语（ensuring that our science is both meaningful and reproducible）、s.21 谓语（incentivise）、s.7-14 从句（that our science is both meaningful and reproducible）、s.10 谓语（is）",
+     "学生的括号：s.3 V（are）里有 key 的谓语 1 个；s.6 V（ensuring）里有 key 的谓语 0 个；括号外有 key 的谓语 3 个",
+     "多拉的：s.6 V（ensuring；key 里没有这一段）"
+    ]
+   },
+   "at": 1794187243218
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 10,
+    "to": 10,
+    "role": "V",
+    "gesture": "span",
+    "src": "mark s.10 V",
+    "open": "mark",
+    "line": "mark s.10 V",
+    "verdict": {
+     "legal": true,
+     "right": true,
+     "misread": null,
+     "why": "s.10 标成V（is）",
+     "next": null
+    },
+    "facts": [
+     "这一段对了：s.10 标成V（is）",
+     "key 里还差 6 段没拉对：s.1-14 从句（If we are serious about ensuring that our science is both meaningful and reproducible）、s.16-17 谓语（must ensure）、s.18-25 从句（that our institutions incentivise that kind of science）、s.6-14 非谓语（ensuring that our science is both meaningful and reproducible）、s.21 谓语（incentivise）、s.7-14 从句（that our science is both meaningful and reproducible）",
+     "学生的括号：s.3 V（are）里有 key 的谓语 1 个；s.6 V（ensuring）里有 key 的谓语 0 个；s.10 V（is）里有 key 的谓语 1 个；括号外有 key 的谓语 2 个"
+    ]
+   },
+   "at": 1794187244937
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 17,
+    "to": 17,
+    "role": "V",
+    "gesture": "span",
+    "src": "mark s.17 V",
+    "open": "mark",
+    "line": "mark s.17 V",
+    "verdict": {
+     "legal": true,
+     "right": false,
+     "misread": "谓语只圈了一半（谓语是「must ensure」这一整段）",
+     "why": "s.17 标成V（ensure）",
+     "next": "谓语是 s.16-17（must ensure）；还没拉对的还有：s.1-14 从句（If we are serious about ensuring that our science is both meaningful and reproducible）、s.18-25 从句（that our institutions incentivise that kind of science）、s.6-14 非谓语（ensuring that our science is both meaningful and reproducible）、s.21 谓语（incentivise）、s.7-14 从句（that our science is both meaningful and reproducible）"
+    },
+    "facts": [
+     "这一段不对：s.17 标成V（ensure）（谓语只圈了一半（谓语是「must ensure」这一整段））",
+     "key 里还差 6 段没拉对：s.1-14 从句（If we are serious about ensuring that our science is both meaningful and reproducible）、s.16-17 谓语（must ensure）、s.18-25 从句（that our institutions incentivise that kind of science）、s.6-14 非谓语（ensuring that our science is both meaningful and reproducible）、s.21 谓语（incentivise）、s.7-14 从句（that our science is both meaningful and reproducible）",
+     "学生的括号：s.3 V（are）里有 key 的谓语 1 个；s.6 V（ensuring）里有 key 的谓语 0 个；s.10 V（is）里有 key 的谓语 1 个；s.17 V（ensure）里有 key 的谓语 0 个；括号外有 key 的谓语 1 个；跨着括号边的 1 个",
+     "多拉的：s.6 V（ensuring；key 里没有这一段）、s.17 V（ensure；key 里没有这一段）"
+    ]
+   },
+   "at": 1794187246734
+  },
+  {
+   "kind": "try",
+   "act": {
+    "type": "mark",
+    "from": 21,
+    "to": 21,
+    "role": "V",
+    "gesture": "span",
+    "src": "mark s.21 V",
+    "open": "mark",
+    "line": "mark s.21 V",
+    "verdict": {
+     "legal": true,
+     "right": true,
+     "misread": null,
+     "why": "s.21 标成V（incentivise）",
+     "next": null
+    },
+    "facts": [
+     "这一段对了：s.21 标成V（incentivise）",
+     "key 里还差 5 段没拉对：s.1-14 从句（If we are serious about ensuring that our science is both meaningful and reproducible）、s.16-17 谓语（must ensure）、s.18-25 从句（that our institutions incentivise that kind of science）、s.6-14 非谓语（ensuring that our science is both meaningful and reproducible）、s.7-14 从句（that our science is both meaningful and reproducible）",
+     "学生的括号：s.3 V（are）里有 key 的谓语 1 个；s.6 V（ensuring）里有 key 的谓语 0 个；s.10 V（is）里有 key 的谓语 1 个；s.17 V（ensure）里有 key 的谓语 0 个；s.21 V（incentivise）里有 key 的谓语 1 个；括号外有 key 的谓语 0 个；跨着括号边的 1 个"
+    ]
+   },
+   "at": 1794187248620
+  }
+ ]
+}

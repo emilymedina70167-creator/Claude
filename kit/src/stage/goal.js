@@ -202,6 +202,21 @@ function clauseState(scene, cl) {
   return r == null ? null : r === true;
 }
 
+/** 一句条件写给老师看的样子（C = O、a sorted desc、t avl、m rank 2） */
+export const clauseText = (cl) => (cl.sorted ? `${cl.l} sorted${cl.sorted === 'desc' ? ' desc' : ''}` : cl.pred ? `${cl.l} ${cl.pred}${cl.args.length ? ` ${cl.args.join(' ')}` : ''}` : `${cl.l} ${cl.op} ${cl.r}`);
+
+/**
+ * 挑战每一句现在成不成立：[{ clause, ok: true | false | null }]，不管挑战做没做到（做到了就一直算做到，可学生接着拨，
+ * 这一句可能又不成立了；拨数的路每停一次都要照实标）。判不了（量数不了、乘积还空着、判断式出错）是 null
+ */
+export function clauseMarks(scene, g) {
+  return g.cond.map((cl) => {
+    let ok;
+    try { ok = clauseState(scene, cl); } catch { ok = null; }
+    return { clause: clauseText(cl), ok: ok == null ? null : !!ok };
+  });
+}
+
 /** 写给老师看的一句：条件现在哪一句成立、哪一句还没有、哪一句页面判不了（不写成 ✗：那是假话，学生也许已经做对了） */
 export function goalStatus(scene, g) {
   if (g.met) return '做到了';
@@ -212,7 +227,7 @@ export function goalStatus(scene, g) {
       const why = ok == null ? nullSide(scene, cl)?.why : null;
       mark = ok == null ? ` 判不了${why ? `：${why}` : ''}` : ok ? ' ✓' : ' ✗';
     } catch (err) { mark = ` 判不了：${err?.message || err}`; }
-    return `${cl.sorted ? `${cl.l} sorted${cl.sorted === 'desc' ? ' desc' : ''}` : cl.pred ? `${cl.l} ${cl.pred}${cl.args.length ? ` ${cl.args.join(' ')}` : ''}` : `${cl.l} ${cl.op} ${cl.r}`}${mark}`;
+    return `${clauseText(cl)}${mark}`;
   });
   return `还没做到（${bits.join('，')}）`;
 }

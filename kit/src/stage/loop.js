@@ -15,12 +15,13 @@
 //   evidence?.goal(id, goal, seq) / evidence?.act(a, seq)   记成证据（学习台）
 //   mock、model、teach（叫老师的参数）、quietMs、readOnly
 import { HELP } from './stage.js';
-import { turnMessage } from './doc.js';
+import { turnMessage, gridsOf } from './doc.js';
 import { eventOf, triggers, eventsText, tryCount, TRY_MAX, QUIET_MS } from './events.js';
 
 const enc = typeof TextEncoder === 'function' ? new TextEncoder() : null;
 /**
- * 这一段学生做的事带着的「跟着变的」（stage.js 挂在每一下上的 act.derived）摊成一张，doc.js 的 turnMessage 再并成一行一格。
+ * 这一段学生做的事带着的「跟着变的」（stage.js 挂在每一下上的 act.derived）摊成一张，doc.js 的 turnMessage 再按东西写
+ * （一格一行，矩阵变了一半以上写整张：要舞台现在每张矩阵的数，gridsOf）。
  * 撤回了的那一下（undone）不算：舞台已经退回去了，再写它引起的变化就和 [舞台现在] 对不上
  */
 const derivedOf = (events) => events.flatMap((e) => (e.undone ? [] : e.act?.derived || []));
@@ -165,7 +166,7 @@ export function createLoop(host) {
     const byNext = events.at(-1)?.act?.type === 'next';
     const said = eventsText(events, { goals: stage.scene.goals, secs: byNext || !S.armedAt ? null : Math.round((performance.now() - S.armedAt) / 1000) });
     // 页面核过老师上一轮的几步（不是正确的下一步的）、学生动了以后跟着变的：一起写进这一条，核过的说过就清掉
-    const msg = turnMessage({ act: said, state: stage.scene.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(events) });
+    const msg = turnMessage({ act: said, state: stage.scene.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(events), grids: gridsOf(stage.scene) });
     stage.teacherAudit = [];
     const say = events.filter((e) => e.act?.type === 'say').map((e) => e.act.text).join('\n');
     clearTimeout(S.saveTimer);
@@ -254,7 +255,7 @@ export function createLoop(host) {
     const said = eventsText([...(S.pending?.events || []), eventOf(act, { help: HELP })], { goals: stage.scene.goals });
     const after = stage.scene.clone();
     after.waiting = null;
-    const msg = turnMessage({ act: said, state: after.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(S.pending?.events || []) });
+    const msg = turnMessage({ act: said, state: after.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(S.pending?.events || []), grids: gridsOf(stage.scene) });
     const input = host.messages({ next: msg });
     const s = S.spec = { msg, input, text: '', res: null, err: null, listeners: [], t0: performance.now(), dead: false, done: false, adopted: false };
     s.record = () => host.addTurn({ role: 'system', kind: 'spec', discarded: true, text: '提前想好的下一轮没用上（学生做的和预想的不一样）', cost: host.cost({ bytes: inBytes(input), why: 'spec', ms: performance.now() - s.t0 }) });

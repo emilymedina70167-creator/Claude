@@ -1,7 +1,8 @@
 // 活的舞台：学生做的事哪些马上叫老师、攒下来的怎么写给老师（kit/src/stage/events.js）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { eventOf, triggers, eventsText, tryCount, TRY_MAX } from '../kit/src/stage/events.js';
+import { readFileSync } from 'node:fs';
+import { eventOf, triggers, eventsText, tryCount, TRY_MAX, STUDENT_MAX } from '../kit/src/stage/events.js';
 
 test('哪些马上叫老师：答了问的、点了提示；开放给学生直接动的、拨数是「试」，攒着', () => {
   const help = '给个提示';
@@ -70,19 +71,159 @@ test('call=wrong：走偏的那一下马上叫老师；做完了没预写就叫�
   assert.equal(tryCount([{ kind: 'try', patient: true }, { kind: 'try' }]), 1);
 });
 
-test('长度上限：试了 30 下，[学生] 一块不超过 2 KB，前面的并成「之前又试了 N 下」', () => {
-  const ev = Array.from({ length: 30 }, (_, i) => rot(i + 1, { legal: true, right: i % 3 === 0, misread: i % 3 ? '型从下往上读了：从 50 往下看是 LR 型（先在 30 左旋，再在 50 右旋），像是读成了 RL' : null, why: `第 ${i + 1} 个结点 右旋`, next: i % 3 ? '先在 30 左旋（最小不平衡子树的根是 50，LR 型）' : null }));
+test('长度上限：试了 30 下，[学生] 一块不超过 3 KB；没有错法的并成「之前又试了 N 下」，同一种错法并成「像是… ×N」', () => {
+  const MIS = '型从下往上读了：从 50 往下看是 LR 型（先在 30 左旋，再在 50 右旋），像是读成了 RL';
+  const ev = Array.from({ length: 30 }, (_, i) => rot(i + 1, { legal: true, right: i % 3 === 0, misread: i % 3 ? MIS : null, why: `第 ${i + 1} 个结点 右旋`, next: i % 3 ? '先在 30 左旋（最小不平衡子树的根是 50，LR 型）' : null }));
   ev.push({ kind: 'help', act: { type: 'next', button: '给个提示' } });
   const t = eventsText(ev);
-  assert.ok(enc.encode(`[学生]\n${t}`).length <= 2048, `超了：${enc.encode(t).length}`);
-  assert.match(t, /之前又试了 \d+ 下/);
-  assert.match(t, /rotate t#30 right/, '最近的几下留着细节');
+  assert.equal(STUDENT_MAX, 3072);
+  assert.ok(enc.encode(`[学生]\n${t}`).length <= 3072, `超了：${enc.encode(t).length}`);
+  // 没有错法的那 10 下（都是正确的下一步）并成开头一行
+  assert.match(t, /^之前又试了 10 下（页面判了 10 下：10 下是正确的下一步，0 下不是），细节省了$/m);
+  // 那 20 下同一种错法并成一行：次数是 20，括号里 20 个部件一个不少（第 30 下的也在）
+  const refs = Array.from({ length: 30 }, (_, i) => i + 1).filter((k) => (k - 1) % 3).map((k) => `t#${k}`);
+  const merged = t.split('\n').filter((l) => l.startsWith(`像是${MIS} ×`));
+  assert.equal(merged.length, 1, t);
+  assert.equal(merged[0], `像是${MIS} ×20（${refs.join('、')}）`);
+  assert.ok(refs.includes('t#30'));
   assert.match(t, /学生点了「给个提示」$/, '叫老师的那件事留着');
   // 不长的不并
   assert.doesNotMatch(eventsText(ev.slice(0, 3)), /之前又试了/);
-  // 试的几下全是拨数（不出细节）、叫老师的那件事本身很长：没什么可并的，不写「之前又试了 0 下」
+  // 试的几下全是拨数、叫老师的那件事本身很长：不写「之前又试了 0 下」
   const dials = Array.from({ length: 5 }, () => eventOf({ type: 'dial', name: 'k', value: 2 }));
   assert.doesNotMatch(eventsText([...dials, eventOf({ type: 'say', text: '长'.repeat(1000) })]), /之前又试了 0 下/);
+});
+
+// —— 按要紧程度压（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 4 节）——
+const bytes = (t) => enc.encode(t).length;
+const SAMPLES = JSON.parse(readFileSync(new URL('./fixtures/stage-tries-e2.json', import.meta.url), 'utf8'));
+const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+test('错法那几下一定在：真的试演取下来的几段（原样、重复三遍），压完不超过 3 KB，每一种错法都在，并成 ×N 的次数、部件都对', () => {
+  for (const [name, evs] of Object.entries(SAMPLES)) {
+    // 重复十遍：一定压到第 5 条（同一种错法并成 ×N），真的错法文字也照样认得出
+    for (const [tag, ev] of [['原样', evs], ['重复三遍', [...evs, ...evs, ...evs]], ['重复十遍', Array.from({ length: 10 }, () => evs).flat()]]) {
+      const what = `${name}（${tag}）`;
+      const t = eventsText(ev);
+      assert.ok(bytes(`[学生]\n${t}`) <= 3072, `${what} 超了：${bytes(t)}`);
+      // 样本里每一种错法：哪几下（部件）
+      const kinds = new Map();
+      for (const e of ev) {
+        const v = e.act?.verdict;
+        if (e.kind !== 'try' || v?.right !== false || !v.misread || e.act.error) continue;
+        if (!kinds.has(v.misread)) kinds.set(v.misread, []);
+        kinds.get(v.misread).push(e.act.src.split(' ')[1]);
+      }
+      assert.ok(kinds.size, `${what}：样本里要有错法`);
+      for (const [m, refs] of kinds) {
+        assert.ok(t.includes(m), `${what}：错法「${m}」不见了\n${t}`);
+        const lines = t.split('\n');
+        const merged = lines.map((l) => l.match(new RegExp(`^像是${esc(m)} ×(\\d+)（(.*)）$`))).filter(Boolean);
+        if (merged.length) {
+          assert.equal(merged.length, 1, `${what}：同一种只并成一行`);
+          assert.equal(Number(merged[0][1]), refs.length, `${what}：×N 的 N`);
+          assert.deepEqual(merged[0][2].split('、'), refs, `${what}：括号里的部件`);
+        } else {
+          assert.equal(lines.filter((l) => l.includes(`像是${m}`)).length, refs.length, `${what}：没并的每一下一行`);
+        }
+      }
+    }
+  }
+});
+
+test('长事实只留最后一下；连着的正确的下一步并成「接着 N 下」；错法那几下要么都在、要么并成一行', () => {
+  const long = (k) => `这一段对了：s.${k} 标成V；${'还差几段没拉对'.repeat(8)}`;
+  const why = (k) => `s.${k} 标成V（${'word '.repeat(5).trim()}）`;
+  const right = (k) => ({ kind: 'try', act: { type: 'mark', open: 'mark', src: `mark s.${k} V`, verdict: { legal: true, right: true, misread: null, why: why(k), next: null }, facts: [long(k)] } });
+  const wrong = (k) => ({ kind: 'try', act: { type: 'mark', open: 'mark', src: `mark s.${k} V`, verdict: { legal: true, right: false, misread: '谓语只圈了一半', why: why(k), next: `谓语是 s.${k}-${k + 1}` }, facts: [long(k)] } });
+  const none = (k) => ({ kind: 'try', act: { type: 'mark', open: 'mark', src: `mark s.${k} Cl`, verdict: { legal: true, right: null, misread: null, why: `s.${k} 标成Cl（${'word '.repeat(5).trim()}）`, next: null }, facts: [long(k)] } });
+  const ev = [];
+  for (let k = 1; k <= 30; k++) {
+    ev.push(right(k));
+    if ([8, 12, 19, 21, 23].includes(k)) ev.push(wrong(k));
+    if ([5, 15, 27, 29].includes(k)) ev.push(none(k));
+  }
+  ev.push(wrong(25));
+  assert.equal(ev.length, 40);
+  for (const e of ev) assert.ok(bytes(`。${e.act.facts[0]}`) >= 190, '每下的事实约 200 字节');
+  const t = eventsText(ev);
+  assert.ok(bytes(`[学生]\n${t}`) <= 3072, `超了：${bytes(t)}`);
+  const lines = t.split('\n');
+  const mis = lines.filter((l) => l.includes('谓语只圈了一半'));
+  assert.ok(mis.length === 6 || (mis.length === 1 && mis[0] === '像是谓语只圈了一半 ×6（s.8、s.12、s.19、s.21、s.23、s.25）'), t);
+  assert.match(t, /接着 \d+ 下都是正确的下一步（mark s\.\d+ V、/);
+  // 「正确的是」和长事实只在最后一下
+  const withNext = lines.filter((l) => l.includes('正确的是'));
+  assert.ok(withNext.every((l) => l === lines.at(-1)), t);
+  assert.ok(lines.slice(0, -1).every((l) => !l.includes('还差几段没拉对')), t);
+});
+test('放得下就原样：和改之前一字不差', () => {
+  const ev = [
+    eventOf({ type: 'rotate', open: 'rotate', src: 'rotate t#1 right', blocked: true, verdict: { legal: true, right: false, misread: '型从下往上读了', why: '50 右旋', next: '先在 30 左旋' } }),
+    eventOf({ type: 'edit', ref: 'B.1,1', from: '1', to: '2', open: 'edit' }),
+    eventOf({ type: 'edit', ref: 'B.1,1', from: '2', to: '3', open: 'edit' }),
+    eventOf({ type: 'rotate', open: 'rotate', src: 'rotate t#2 left', facts: ['30 转上来了', '现在 50 的左子树高 2、右子树高 0'], verdict: { legal: true, right: true, misread: null, why: '30 左旋', next: null } }),
+    { kind: 'help', act: { type: 'next', button: '给个提示' } },
+  ];
+  // 改之前跑出来的（kit/src/stage/events.js 在 82d0973）
+  assert.equal(eventsText(ev), '学生 rotate t#1 right（50 右旋）——不是正确的下一步，像是型从下往上读了；正确的是先在 30 左旋；照你写的 wrong=block 没让做，弹回去了\n学生拨了 B.1,1：1 → 2 → 3\n学生 rotate t#2 left（30 左旋）——是正确的下一步。30 转上来了；现在 50 的左子树高 2、右子树高 0\n学生点了「给个提示」');
+});
+
+test('去掉的只有「正确的是」：照你写的 wrong=block 那一句结论还在', () => {
+  const ev = [
+    { kind: 'try', act: { type: 'rotate', open: 'rotate', src: 'rotate t#1 right', blocked: true, verdict: { legal: true, right: false, misread: null, why: '50 右旋', next: `先在 30 左旋，${'最小不平衡子树的根是 50'.repeat(10)}` } } },
+    { kind: 'try', act: { type: 'rotate', open: 'rotate', src: 'rotate t#2 left', facts: ['现在 '.repeat(395)], verdict: { legal: true, right: true, misread: null, why: '30 左旋', next: null } } },
+  ];
+  assert.match(eventsText(ev.slice(0, 1)), /；正确的是先在 30 左旋[^；]*；照你写的 wrong=block 没让做/, '放得下时照旧');
+  assert.ok(bytes(`[学生]\n${ev.map((e) => eventsText([e])).join('\n')}`) > 3072, '原样放不下');
+  const t = eventsText(ev);
+  assert.ok(bytes(`[学生]\n${t}`) <= 3072, `超了：${bytes(t)}`);
+  const [first] = t.split('\n');
+  assert.equal(first, '学生 rotate t#1 right（50 右旋）——不是正确的下一步；照你写的 wrong=block 没让做，弹回去了');
+  assert.match(t, /现在 现在/, '最后一下的事实留着');
+});
+
+test('拨数的路留最后一下的事实：前几下的去掉', () => {
+  const ev = [
+    eventOf({ type: 'edit', ref: 'M1.2,1', from: '2', to: '1', open: 'edit', facts: ['M1 第 2 行变了，像 r2 − (1/2)r1；第 2 格该是 1，写的是 4'] }),
+    eventOf({ type: 'edit', ref: 'M1.2,1', from: '1', to: '0', open: 'edit', facts: ['M1 第 2 行变了，像 r2 − r1；第 2 格该是 2，写的是 4'] }),
+    eventOf({ type: 'edit', ref: 'M1.2,1', from: '0', to: '-1', open: 'edit', facts: ['M1 第 2 行变了，像 r2 − r1；和 M0 同解：否'] }),
+  ];
+  const t = eventsText(ev);
+  assert.equal(t, '学生拨了 M1.2,1：2 → 1 → 0 → −1。M1 第 2 行变了，像 r2 − r1；和 M0 同解：否');
+});
+
+test('拨数的路：一下一下并成一条，停在哪、拨到哪做到了挑战', () => {
+  const ev = [
+    eventOf({ type: 'dial', name: 't', value: 0, from: 1 }),
+    eventOf({ type: 'dial', name: 't', value: -1, from: 0, met: ['g1'] }),
+  ];
+  const t = eventsText(ev);
+  assert.match(t, /学生拨了 t：1 → 0 → −1（停在 −1；拨到 −1 时做到了 g1）/);
+  assert.equal(eventsText([eventOf({ type: 'dial', name: 'k', value: 3, from: 2 })]), '学生拨了 k：2 → 3（停在 3）');
+});
+
+test('拨格子的路：每停一次挑战的每一句成不成立（✓ ✗）', () => {
+  const m = (ok) => [{ goal: 'g1', clause: 'Dd = O', ok }];
+  const ev = [
+    eventOf({ type: 'edit', ref: 'B.2,2', from: '-1', to: '0', open: 'edit', marks0: m(false), marks: m(false) }),
+    eventOf({ type: 'edit', ref: 'B.2,2', from: '0', to: '1', open: 'edit', marks: m(false) }),
+    eventOf({ type: 'edit', ref: 'B.2,2', from: '1', to: '2', open: 'edit', marks: m(true), met: ['g1'] }),
+  ];
+  const t = eventsText(ev);
+  assert.match(t, /−1 → 0 → 1 → 2/);
+  assert.match(t, /Dd = O：✗ ✗ ✗ ✓/);
+  assert.equal(t, '学生拨了 B.2,2：−1 → 0 → 1 → 2（拨到 2 时做到了 g1；Dd = O：✗ ✗ ✗ ✓）');
+  // 判不了的写 ?，两句各一串
+  const two = (a, b) => [{ goal: 'g1', clause: 'Dd = O', ok: a }, { goal: 'g1', clause: 'rank(B) = 1', ok: b }];
+  const u = eventsText([eventOf({ type: 'edit', ref: 'B.1,1', from: '1', to: '2', open: 'edit', marks0: two(false, null), marks: two(true, false) })]);
+  assert.equal(u, '学生拨了 B.1,1：1 → 2（Dd = O：✗ ✓；rank(B) = 1：? ✗）');
+});
+
+test('拨数只写一次：拨数事件写一条路，回答那一下不再带', () => {
+  const t = eventsText([eventOf({ type: 'dial', name: 't', value: 0, from: 1 }), eventOf({ type: 'next', button: '看出来了' })]);
+  assert.equal((t.match(/学生拨了 t/g) || []).length, 1, t);
+  assert.match(t, /学生点了「看出来了」$/);
 });
 
 // —— 整条分支的最终审查（M4）——

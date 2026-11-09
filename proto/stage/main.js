@@ -2,7 +2,7 @@
 // 地址：?mock 模拟老师（本地）、?dev 给检查脚本留 window.LAStage、?blank 一块空舞台、#shell / #bsearch / #insert 直接开那一节、
 // #feel-avl / #feel-elim / #feel-parse 直接开那一段试手感
 import { Stage } from '../../kit/src/stage/stage.js';
-import { TOPICS, turnMessage } from '../../kit/src/stage/doc.js';
+import { TOPICS, turnMessage, gridsOf } from '../../kit/src/stage/doc.js';
 import { actText, HELP } from '../../kit/src/stage/stage.js';
 import { createLoop } from '../../kit/src/stage/loop.js';
 import { eventsText } from '../../kit/src/stage/events.js';
@@ -32,7 +32,7 @@ const MOCK = q.has('mock');
 let stage = null;
 let run = 0;
 // ?dev：检查脚本用（tools/stage-try.mjs 拿 createLoop 照学习台的课堂循环演一幕；学生的手势照画法的把手、手势表、裁判走）
-if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, createLoop, eventsText, goalStatus, HELP, dryRun, parseScript, gestureAct, askFor, writeRange, VIEWS };
+if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, gridsOf, createLoop, eventsText, goalStatus, HELP, dryRun, parseScript, gestureAct, askFor, writeRange, VIEWS };
 
 function fresh({ input, onAct = null }) {
   stage?.destroy();

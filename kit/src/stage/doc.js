@@ -4,6 +4,10 @@
 import { TYPES } from './types/index.js';
 import { MEMO_DOC, packText, PACK_BUDGET } from '../class/prompt.js';
 import { memoryDigest } from '../memory/digest.js';
+import { gridText } from './value.js';
+
+const enc = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
+const bytes = (t) => (enc ? enc.encode(String(t)).length : Buffer.byteLength(String(t)));
 
 export const STAGE_TEACH = `你是一对一的老师，在一块「舞台」上给学生上课。舞台像一个能上手玩的科普动画：画面是活的，学生随时能直接动它，页面当场算、当场变。你决定教什么、怎么引导；画得好、动得顺、算得对是页面的事。
 - 画面是讲课的主力。你对画面做事——挪、交换、插入、连线、染色、比较、分组、旋转、变换、拆开、折起来、一项一项变形（每种东西有自己的动作，见「舞台上能放的东西」）——学生看着画面变化自己想明白。话是旁白：短，指着画面说（写 {a.3}，话里会画成和那个部件一样的小块）。
@@ -123,39 +127,94 @@ export function firstMessage(opts) {
   return `${stageSystem(opts)}\n\n舞台现在是空的。写第一轮：先造出要用的东西，让学生看到一个具体的例子、能自己动手试，以一个 ask 或一个挑战 goal 结尾。`;
 }
 
+/** [跟着变的] 一块最多多少字节（UTF-8，连每行前面的「- 」）：超了以后后面的东西只写名字，现在的数老师看 [舞台现在] */
+export const DERIVED_MAX = 1536;
+const CELL_REF = /^([A-Za-z_]\w*)\.(\d+),(\d+)$/;
+const lineBytes = (ls) => ls.reduce((n, l) => n + bytes(`- ${l}\n`), 0);
+
+/** 舞台上每张矩阵现在的数：Map<名字, 一行一行的字>（[跟着变的] 写整张时拿它做「之后」）；没有 objects 的场景（测试里的假场景）是空的 */
+export function gridsOf(scene) {
+  const out = new Map();
+  if (!scene?.objects) return out;
+  for (const o of scene.objects.values()) {
+    if (o?.type !== 'matrix' || !Array.isArray(o.cells)) continue;
+    const rows = [];
+    for (let r = 1; r <= o.rows; r++) rows.push(o.cells.filter((x) => x.r === r).sort((a, b) => a.c - b.c).map((x) => String(x.value ?? '')));
+    out.set(o.id, rows);
+  }
+  return out;
+}
+
+/**
+ * 一张矩阵变了的格占一半以上（至少两格）：写成整张「Dd：(2 0; 0 −2) → (0 0; 0 0)」，比一格一行好读（老师要看的是整张成了什么）。
+ * 之后的那张是舞台现在的数，之前的那张是现在的数换回变了的格的 from。有一格对不上这张矩阵（式子里的、出了现在的行列）就不写整张
+ */
+function wholeGrid(id, xs, grids) {
+  const g = grids?.get?.(id);
+  if (!g || xs.length < 2) return null;
+  const total = g.reduce((n, row) => n + row.length, 0);
+  if (xs.length * 2 < total) return null;
+  const before = g.map((row) => [...row]);
+  for (const x of xs) {
+    const m = x.expr == null && String(x.ref).match(CELL_REF);
+    if (!m || m[1] !== id) return null;
+    const r = Number(m[2]) - 1, c = Number(m[3]) - 1;
+    if (!before[r] || c >= before[r].length) return null;
+    before[r][c] = x.from ?? '';
+  }
+  return `${id}：${gridText(before)} → ${gridText(g)}`;
+}
+
 /**
  * 学生动了以后跟着算的东西变了什么（scene.js 的 fx.derived，两种样子：乘积一格一条 { part, before, after, id, changed }；
- * 跟着算的一样东西一条 { id, changed: [{ ref, expr?, from, to }] }，算不出来 { id, changed: [], error }）→ 一行一行。
- * 同一格变了几次写从第一次之前变成最后的，变回原样的不写；算不出来的写最后一次的原因（后来又算出来了就不写）
+ * 跟着算的一样东西一条 { id, changed: [{ ref, expr?, from, to }] }，算不出来 { id, changed: [], error }）→ 一行一行，按东西写。
+ * 同一格变了几次写从第一次之前变成最后的，变回原样的不写；算不出来的写最后一次的原因（后来又算出来了就不写）。
+ * grids（gridsOf：每张矩阵现在的数）：一张矩阵一半以上的格变了写整张。超过 DERIVED_MAX 以后后面的东西只写名字；
+ * 算不出来的那几句一直写（只写名字就成了「也跟着变了」，是假话）
  */
-export function derivedLines(derived = []) {
-  const cells = new Map(); // ref（带式子）→ { ref, expr, from, to }
+export function derivedLines(derived = [], { grids = null } = {}) {
+  const cells = new Map(); // ref（带式子）→ { id, ref, expr, from, to }
   const errs = new Map(); // id → 原因
+  const ids = []; // 东西按第一次变的先后
   for (const d of derived || []) {
     if (!d) continue;
     if (d.error) { errs.set(d.id, d.error); continue; }
     for (const x of d.changed || []) {
       const k = `${x.ref}|${x.expr ?? ''}`;
       const had = cells.get(k);
-      if (had) had.to = x.to; else cells.set(k, { ref: x.ref, expr: x.expr ?? null, from: x.from, to: x.to });
+      if (had) had.to = x.to; else cells.set(k, { id: d.id, ref: x.ref, expr: x.expr ?? null, from: x.from, to: x.to });
+      if (!ids.includes(d.id)) ids.push(d.id);
       errs.delete(d.id);
     }
   }
   const shown = (v) => (v === '' || v == null ? '空' : String(v));
-  const out = [...cells.values()].filter((x) => shown(x.from) !== shown(x.to)).map((x) => `${x.ref}${x.expr ? ` 里的 {${x.expr}}` : ''} 从 ${shown(x.from)} 变成 ${shown(x.to)}`);
+  const moved = [...cells.values()].filter((x) => shown(x.from) !== shown(x.to));
+  const cellLine = (x) => `${x.ref}${x.expr ? ` 里的 {${x.expr}}` : ''} 从 ${shown(x.from)} 变成 ${shown(x.to)}`;
   // 原因前面的「{式子}」和前面写的重了（scene.js 的 stateText 也这样去）
-  for (const [id, e] of errs) out.push(`${id} 算不出来：${String(e).replace(/^「\{[^{}]*\}」(算不出来：|里的)?/, '')}`);
-  return out;
+  const errLines = [...errs].map(([id, e]) => `${id} 算不出来：${String(e).replace(/^「\{[^{}]*\}」(算不出来：|里的)?/, '')}`);
+  let room = DERIVED_MAX - lineBytes(errLines);
+  const out = [], names = [];
+  for (const id of ids) {
+    const xs = moved.filter((x) => x.id === id);
+    if (!xs.length) continue;
+    const whole = wholeGrid(id, xs, grids);
+    const ls = whole ? [whole] : xs.map(cellLine);
+    if (names.length || lineBytes(ls) > room) { names.push(id); continue; }
+    out.push(...ls);
+    room -= lineBytes(ls);
+  }
+  return [...out, ...errLines, ...(names.length ? [`${names.join('、')} 也跟着变了（现在的数见舞台现在）`] : [])];
 }
 
 /**
- * 学生做完以后发给老师的一条：学生做了什么、跟着变的（页面重算的）、页面核过老师上一轮的几步（不是正确的下一步的那几步）、
- * 上一轮哪几行没演（写错了）、舞台现在是什么样（照场景写的，和画面一样）。后加的两块只在有内容时出现
+ * 学生做完以后发给老师的一条：学生做了什么、跟着变的（页面重算的；grids 是 gridsOf(场景)，矩阵变了一半以上写整张）、
+ * 页面核过老师上一轮的几步（不是正确的下一步的那几步）、上一轮哪几行没演（写错了）、舞台现在是什么样（照场景写的，和画面一样）。
+ * 后加的两块只在有内容时出现
  */
-export function turnMessage({ act = '', state = '', errors = [], audit = [], derived = [] } = {}) {
+export function turnMessage({ act = '', state = '', errors = [], audit = [], derived = [], grids = null } = {}) {
   const parts = [];
   parts.push(act ? `[学生]\n${act}` : '[学生] 没有动作');
-  const moved = derivedLines(derived);
+  const moved = derivedLines(derived, { grids });
   if (moved.length) parts.push(`[跟着变的]（学生动了以后页面当场重算的）\n${moved.map((l) => `- ${l}`).join('\n')}`);
   if (audit.length) parts.push(`[页面核过你上一轮的几步]（这几步不是正确的下一步；页面照演了、没拦你，是故意演错的就不用管）\n${audit.map((l) => `- ${l}`).join('\n')}`);
   if (errors.length) parts.push(`[上一轮没演的行]（写错了，页面跳过了，别的行照演）\n${errors.map((e) => `- 第 ${e.line} 行「${e.src}」：${e.error}`).join('\n')}`);
@@ -184,8 +243,6 @@ export const TOPICS = {
 };
 
 // —— 在学习台里上的舞台课（D 段）：每一轮的整份说明 ——
-const enc = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
-const bytes = (t) => (enc ? enc.encode(String(t)).length : Buffer.byteLength(String(t)));
 export const STAGE_SYSTEM_MAX = 150 * 1024;
 
 // 记忆的写法：照课堂那份，依据换成舞台上那一问的编号（S5 = 第 5 轮最后那个 ask）；不收「point=」（舞台上没有段）

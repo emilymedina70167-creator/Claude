@@ -13,7 +13,7 @@
 import { parseScript, parseRef, parseRich, addCommands } from './script.js';
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
-import { parseGoal, evalGoal, goalStatus, checkPreds, clauseKey } from './goal.js';
+import { parseGoal, evalGoal, goalStatus, checkPreds, clauseKey, clauseMarks } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder } from './value.js';
 import { rulesOf, done as nextDone, checkMeasure, measureLine } from './rules.js';
@@ -1117,6 +1117,13 @@ export class Scene {
     return ids.map((id, i) => ({ id, list: lists[i] }));
   }
 
+  /**
+   * 照给的挑战（ids）判每一句现在成不成立：[{ goal, clause, ok: true | false | null }]，不管做没做到——
+   * 拨数的路每停一次标 ✓ ✗（stage.js 的 studentDo），只看还没做到的，做到的那一停就标不出 ✓。没有的挑战跳过
+   */
+  clauseMarks(ids = []) {
+    return ids.flatMap((id) => { const g = this.goals.get(id); return g ? clauseMarks(this, g).map((m) => ({ goal: id, ...m })) : []; });
+  }
   /** 挑战判一遍：这一行以后刚做到的（做到了就一直算做到，不会因为学生接着拨又「没做到」） */
   checkGoals() {
     const met = [];

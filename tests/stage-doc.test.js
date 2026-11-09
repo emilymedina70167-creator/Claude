@@ -1,7 +1,8 @@
 // 舞台上的课发给老师的说明（kit/src/stage/doc.js）：说明里的例子照抄就能演；不用「他」「她」；每一轮的那条写清楚学生做了什么、舞台现在什么样、哪几行没演
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STAGE_TEACH, STAGE_DOC, STAGE_COMMON, stageSystem, firstMessage, turnMessage, TOPICS } from '../kit/src/stage/doc.js';
+import { STAGE_TEACH, STAGE_DOC, STAGE_COMMON, stageSystem, firstMessage, turnMessage, TOPICS, derivedLines, gridsOf, DERIVED_MAX } from '../kit/src/stage/doc.js';
+import { gridText } from '../kit/src/stage/value.js';
 import { TYPES, CREATE } from '../kit/src/stage/types/index.js';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { COMMANDS, parseScript } from '../kit/src/stage/script.js';
@@ -227,4 +228,49 @@ test('说明里写的两条开法：同一项再开一次是换掉它（照新�
   // 预写在 g1 下面照写的先后排着（舞台做到时一行一行照这个先后演）
   s = run('tree t = 30 20 40 _ _ _ 45 tray="47"\nopen t insert\nopen t rotate wrong=block\ngoal g1 "插进去" when="t height=4"\n@g1 open t rotate wrong=mark undo=on\n@g1 goal g2 "转平" when="t avl"\n@g1 say "失衡了。"');
   assert.deepEqual(s.reactions.get('g1'), ['open t rotate wrong=mark undo=on', 'goal g2 "转平" when="t avl"', 'say "失衡了。"']);
+});
+
+// —— [跟着变的] 按东西写（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 4 节）——
+test('跟着变的按东西写：一张矩阵一半以上的格变了写整张；只变了一格照旧一格一行；太长了后面的只写名字', () => {
+  const grids = new Map([['Dd', [['0', '0'], ['0', '0']]]]);
+  const derived = [{ id: 'Dd', changed: [{ ref: 'Dd.1,1', from: '2', to: '0' }, { ref: 'Dd.2,2', from: '-2', to: '0' }] }];
+  assert.deepEqual(derivedLines(derived, { grids }), ['Dd：(2 0; 0 −2) → (0 0; 0 0)']);
+  assert.match(turnMessage({ act: 'x', state: 'y', derived, grids }), /\n- Dd：\(2 0; 0 −2\) → \(0 0; 0 0\)\n/);
+  // 没给 grids（旧的调用）照旧一格一行
+  assert.deepEqual(derivedLines(derived), ['Dd.1,1 从 2 变成 0', 'Dd.2,2 从 -2 变成 0']);
+  // 只变了一格
+  assert.deepEqual(derivedLines([{ id: 'Dd', changed: [{ ref: 'Dd.1,1', from: '2', to: '0' }] }], { grids }), ['Dd.1,1 从 2 变成 0']);
+  // 30 张 3×3 都变了：整块 ≤ 1.5 KB，多一行尾巴说后面的名字
+  const g30 = new Map(), d30 = [];
+  for (let i = 1; i <= 30; i++) {
+    const id = `M${i}`;
+    g30.set(id, [['0', '0', '0'], ['0', '0', '0'], ['0', '0', '0']]);
+    d30.push({ id, changed: Array.from({ length: 9 }, (_, k) => ({ ref: `${id}.${Math.floor(k / 3) + 1},${(k % 3) + 1}`, from: String(10 + k), to: '0' })) });
+  }
+  const out = derivedLines(d30, { grids: g30 });
+  assert.equal(DERIVED_MAX, 1536);
+  const tail = out.at(-1);
+  assert.match(tail, /也跟着变了（现在的数见舞台现在）$/);
+  assert.match(tail, /M30/);
+  assert.ok(bytes(out.slice(0, -1).map((l) => `- ${l}`).join('\n')) <= 1536, `${bytes(out.slice(0, -1).join('\n'))}`);
+  assert.equal(out[0], 'M1：(10 11 12; 13 14 15; 16 17 18) → (0 0 0; 0 0 0; 0 0 0)');
+  // 写了的和只写名字的加起来正好 30 张、一张不少
+  const named = tail.replace(/ 也跟着变了.*$/, '').split('、');
+  assert.equal(out.length - 1 + named.length, 30);
+  // 算不出来的那一句不并进名字（「跟着变了」是假话）
+  const err = derivedLines([...d30, { id: 'P', changed: [], error: '「{A^-1}」算不出来：A 不可逆' }], { grids: g30 });
+  assert.ok(err.includes('P 算不出来：A 不可逆'));
+  assert.doesNotMatch(err.at(-1), /、P 也跟着变了|^P 也/);
+});
+
+test('gridsOf、gridText：舞台上每张矩阵现在的数；空格子写 _，负号写 −', () => {
+  assert.equal(gridsOf({}).size, 0);
+  assert.equal(gridText([['1', ''], ['', '-2']]), '(1 _; _ −2)');
+  assert.equal(gridText([['2', '0'], ['0', '-2']]), '(2 0; 0 −2)');
+  const s = new Scene();
+  for (const c of parseScript('matrix A = 1 2 / 3 -4\narray a = 1 2\nmatrix B = 1 _ / _ 2')) s.apply(c);
+  const g = gridsOf(s);
+  assert.deepEqual([...g.keys()], ['A', 'B']);
+  assert.deepEqual(g.get('A'), [['1', '2'], ['3', '-4']]);
+  assert.equal(gridText(g.get('B')), '(1 _; _ 2)');
 });

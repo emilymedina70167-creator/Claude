@@ -96,7 +96,7 @@ export class Stage {
     this.paths = new Map(); // 连线 key → path
     this.labelNodes = new Map(); // id → { node, box, sig, anchor }
     this.cam = { s: 1, tx: 0, ty: 0 };
-    this.pending = []; // 学生在等待期间的试（拨数），跟着下一次回答一起告诉老师
+    this.dialRuns = new Map(); // 'dial:t' / 'edit:B.2,2' → 这一条路开头时还没做到的挑战 ids（studentDo 每一下照它标 ✓ ✗；老师新的一轮起重新数）
     this.teacherAudit = []; // 老师这一轮演的行里，页面核过不是正确的下一步的（裁判的话）：课堂下一条发给老师时带上、清掉
     this.build();
     this.noteView();
@@ -217,6 +217,8 @@ export class Stage {
     const turn = ++this.turnNo;
     const mark = this.log.length;
     this.errors = [];
+    // 叫老师之前那一段学生做的事刚发出去：拨数、拨格子的路从头数（和课堂循环攒的那一段对齐）
+    this.dialRuns = new Map();
     // 老师这一轮演完以前不能撤（重放会把演到一半的这一轮整个重来）；演完了 end 里再定这一回合从哪儿起
     this.undoFloor = Infinity;
     this.syncUndo();
@@ -802,14 +804,13 @@ export class Stage {
       const plan = this.undoPlan();
       if (!plan.gone) return;
       // 重放会收起正在等的那一问：先收起（攒着的拨数留着），放完照原样挂回去
-      const w = this.scene.waiting, tries = [...this.pending], waiting = this.armedP, floor = this.undoFloor;
+      const w = this.scene.waiting, waiting = this.armedP, floor = this.undoFloor;
       this.cancelWait?.();
       await waiting;
       await this.replay(plan.lines);
       // 重放不把 ask 那几行（不重演的）推回 log：log 要和撤之前一模一样、只少撤掉的那一行，课堂循环存这一段（从 S.logFrom 起）才对得上
       this.log = [...plan.lines];
       this.undoFloor = floor;
-      this.pending = tries;
       if (w) { this.scene.waiting = w; this.armWait(); }
       this.onAct?.({ type: 'undo', src: plan.gone.src, open: plan.gone.open || 'undo' });
     } finally {
@@ -1215,16 +1216,37 @@ export class Stage {
   // 学生的动作改了舞台（拨数、拖过去换位置、拖动平面上的向量、转一下、做一步行变换、拉一段括号）：照一行指令走场景
   // （记进 log，刷新、作废都照它放回）。先过裁判：结论挂在 act 上（act.verdict），场景改好了（或者没让做）才交给课堂——
   // 以前是一拖完马上交，那时还不知道这一下对不对、做完了没有
+  //
+  // 拨数、拨格子（± 拨数器）的每一下还挂上挑战每一句那时成不成立，events.js 照它把一条路写成「Dd = O：✗ ✗ ✗ ✓」：
+  // 一条路的第一下记下那时还没做到的挑战（ids），marks0 是这一下之前；每一下都拿这一组 ids 判（做到了的那一停照样标得出 ✓），
+  // marks 是这一下之后，met 是这一下做到的挑战
   studentDo(src, act) {
     const [c] = parseScript(src);
-    if (act.type === 'dial') {
-      const last = this.pending.findLast?.((p) => p.type === 'dial' && p.name === act.name);
-      if (last) last.path.push(act.value); else this.pending.push({ ...act, path: [act.from ?? null, act.value].filter((v) => v != null) });
-    }
+    const runKey = act.type === 'dial' ? `dial:${act.name}` : act.type === 'edit' ? `edit:${act.ref}` : null;
+    let run = null;
     let sent = false;
-    const told = () => { if (!sent) { sent = true; this.onAct?.(act); } };
+    const told = () => {
+      if (sent) return;
+      sent = true;
+      if (run) {
+        act.marks = this.scene.clauseMarks(run.ids);
+        act.met = [...this.scene.goals.values()].filter((g) => g.met && !run.met0.has(g.id)).map((g) => g.id);
+        // 没演上的一下不算路上的一步（events.js 单独写一行）：它开的头不算，下一下重新开头
+        if (run.first && (act.blocked || act.error || act.failed)) this.dialRuns.delete(runKey);
+      }
+      this.onAct?.(act);
+    };
     this.studentChain = (this.studentChain || Promise.resolve())
-      .then(() => this.exec({ ...c, dragged: act.type === 'drag' }, { by: 'student', act, told }))
+      .then(() => {
+        // 照这一下真演的时候判（前一下可能还在演）
+        if (runKey) {
+          let ids = this.dialRuns.get(runKey);
+          const first = !ids;
+          if (first) { ids = this.pendingGoals().map((g) => g.id); this.dialRuns.set(runKey, ids); act.marks0 = this.scene.clauseMarks(ids); }
+          run = { ids, first, met0: new Set([...this.scene.goals.values()].filter((g) => g.met).map((g) => g.id)) };
+        }
+        return this.exec({ ...c, dragged: act.type === 'drag' }, { by: 'student', act, told });
+      })
       .catch(() => {})
       .then(told);
     return this.studentChain;
@@ -1332,8 +1354,8 @@ export class Stage {
         this.cancelWait = null;
         if (this.scene.waiting === w) this.scene.waiting = null;
         await this.studentChain;
-        const tries = this.pending.splice(0);
-        resolve({ ...act, tries });
+        // 等着的时候拨的数不再塞进回答（act.tries）：每一下都是试的事件，events.js 写成一条路，回答那一下只写回答
+        resolve({ ...act });
       };
       this.cancelWait = () => finish({ type: 'cancel' });
       const sc = this.scene;
@@ -1450,6 +1472,7 @@ const slimDerived = (list) => list.map((d) => ({ id: d.id, changed: (d.changed |
 /** 学生这一下做了什么，写给老师看（和舞台现状一起发） */
 export function actText(act) {
   if (!act) return '';
+  // 以前等着的时候拨的数攒在回答的 act.tries 里：旧的存档照旧写出来（新的拨数是试的事件，events.js 写成一条路）
   const tries = (act.tries || []).filter((t) => t.type === 'dial').map((t) => `学生拨了 ${t.name}：${t.path.join(' → ')}（停在 ${t.path.at(-1)}）`);
   const main = (() => {
     // 过了裁判、场景却演不了：照那一行说没演上，不说「舞台已经照做了」（events.js 的 verdictText 这时不再接结论）

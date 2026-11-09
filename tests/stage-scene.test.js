@@ -806,3 +806,20 @@ test('扫一遍拨数：能拨的值太多不扫；只有一种时写「都是�
   // 没有跟着拨数算的东西：不写
   assert.doesNotMatch(run(new Scene(), 'dial d = 1 range=1..3\narray a = 1 2 3').stateText(), /^拨 d/m);
 });
+
+test('clauseMarks 照给的挑战判：做到了也照判（✓）；判不了是 null；没有的挑战不写', () => {
+  const s = run(new Scene(), 'dial t = 1 range=-2..2\ngoal g1 "拨到 −1" when="t = -1"');
+  assert.deepEqual(s.clauseMarks(['g1']), [{ goal: 'g1', clause: 't = -1', ok: false }]);
+  s.apply(parseScript('set t 0')[0], { by: 'student' });
+  s.apply(parseScript('set t -1')[0], { by: 'student' });
+  assert.equal(s.goals.get('g1').met, true);
+  assert.deepEqual(s.clauseMarks(['g1']), [{ goal: 'g1', clause: 't = -1', ok: true }], '做到了也照判');
+  // 量数不了（s2 没写 key，重放旧课收下的）：null，不是 false
+  run(s, 'sentence s2 = "The man is a doctor."');
+  s.apply({ ...parseScript('goal g2 "找出谓语" when="verbs(s2) = 1"')[0], lenient: true });
+  assert.deepEqual(s.clauseMarks(['g2']).map((x) => [x.clause, x.ok]), [['verbs(s2) = 1', null]]);
+  assert.deepEqual(s.clauseMarks(['nope']), []);
+  // 几句条件各一条
+  const m = run(new Scene(), 'matrix A = 1 0 / 0 1\ndial k = 1 range=0..3\ngoal g3 "…" when="k > 1, A = I"');
+  assert.deepEqual(m.clauseMarks(['g3']).map((x) => [x.goal, x.clause, x.ok]), [['g3', 'k > 1', false], ['g3', 'A = I', true]]);
+});

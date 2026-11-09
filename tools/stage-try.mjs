@@ -6,7 +6,7 @@
 //
 //   node tools/stage-try.mjs 文件.txt …     不给文件就跑 tools/stage-try-examples/ 下的全部
 //   --shots 目录                            每一步之后竖屏、横屏各存一张
-//   --json                                  打印 JSON（不打印报告）
+//   --json                                  打印 JSON（不打印报告；每一步带 events：那一刻还没发出去的那一段事件）
 // 学生的行（「学生:」开头）能写的见 tools/stage-try-lib.js 的 STUDENT_FORMS：write / swap / move / vec / mul 照各自的画法；
 // rotate t.30 left、insert t 47、insert t.45 right 47、rowop M r3 - 2r1 / r1 <-> r3 / 3r2、mark s.2-4 V、fold s.3-6 先翻成手势的输入
 // （在 30 往左转 = 30 的右孩子拖到 30 上；倍加 = r1 的把手拖到 r3 上、倍数框写 -2），照东西现在的样子找到手指按得到的把手，
@@ -82,7 +82,7 @@ function setup(segments) {
     const said = eventsText(evs, { goals: st.scene.goals });
     const derived = evs.flatMap((e) => (e.undone ? [] : e.act?.derived || [])); // 撤回了的那一下不算（和 loop.js 的 derivedOf 一样）
     if (!derived.length) return said;
-    const msg = window.LAStageDev.turnMessage({ act: said, derived });
+    const msg = window.LAStageDev.turnMessage({ act: said, derived, grids: window.LAStageDev.gridsOf(st.scene) });
     const at = msg.indexOf('[跟着变的]'), end = msg.indexOf('\n\n[舞台现在]');
     return [said, at >= 0 ? msg.slice(at, end >= 0 ? end : undefined) : ''].filter(Boolean).join('\n');
   };
@@ -456,7 +456,7 @@ for (const file of opt.files) {
     let seg = -1;
     for (let k = 0; k < steps.length; k++) {
       const step = steps[k];
-      const out = { step, played: 0, errors: [], state: '', goals: [], called: null, pending: '', untouched: null, issues: [], shot: '' };
+      const out = { step, played: 0, errors: [], state: '', goals: [], called: null, pending: '', events: [], untouched: null, issues: [], shot: '' };
       await page.evaluate(() => { window.__try.called = null; });
       if (step.kind === 'teacher') {
         seg++;
@@ -491,11 +491,13 @@ for (const file of opt.files) {
         await page.evaluate((max) => window.__try.settle(max), IDLE_MAX);
       }
       await page.waitForTimeout(SETTLE);
-      const snap = await page.evaluate(() => { const T = window.__try; return { called: T.called, state: T.state(), goals: T.goals(), pending: T.pending(), idle: T.idle() }; });
+      // events：那一刻还没发出去的那一段事件（存得下的样子，和课堂循环存进学生轮的一样），给测试取样（tests/fixtures/stage-tries-*.json）
+      const snap = await page.evaluate(() => { const T = window.__try; return { called: T.called, state: T.state(), goals: T.goals(), pending: T.pending(), idle: T.idle(), events: JSON.parse(JSON.stringify(T.loop.pending?.events || [])) }; });
       if (snap.called) out.called = { why: snap.called.why, msg: snap.called.msg };
       out.state = snap.called?.state || snap.state;
       out.goals = snap.called?.goals || snap.goals;
       out.pending = snap.pending;
+      out.events = snap.events;
       if (out.note) out.state = `（${out.note}）\n${out.state}`;
       out.issues = (await page.evaluate(() => window.__measure()))?.issues || [];
       if (opt.shots) { out.shot = join(opt.shots, `${basename(file, '.txt')}-${v.tag}-${k + 1}.png`); await page.screenshot({ path: out.shot }); }
