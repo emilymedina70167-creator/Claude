@@ -96,9 +96,11 @@ expect('拨到 4 秩掉下来：做到 g2，叫了老师', /做到了挑战/.tes
 const pa = run('parse.txt');
 expect('parse.txt：退出码 0', pa.code === 0);
 const half = stepOf(pa, 'mark s.2-2 V');
-expect('学生: mark s.2-2 V：有「只圈了一半」', /只圈了一半/.test(said(half)) && /mark s\.2 V/.test(half?.did || ''));
+// 成分那一排交的是中文：写 V 照 roleName 点「谓语」，交出去的是 mark s.2 谓语
+expect('学生: mark s.2-2 V：点的是「谓语」，有「只圈了一半」', /只圈了一半/.test(said(half)) && /点「谓语」 → mark s\.2 谓语/.test(half?.did || ''));
 const pu = stepOf(pa, 'undo');
-expect('撤一步：那道括号没了', /mark s\.2 V/.test(pu?.undone || '') && pu?.state === before(pa, half)?.state);
+expect('撤一步：那道括号没了', /mark s\.2 谓语/.test(pu?.undone || '') && pu?.state === before(pa, half)?.state);
+expect('学生点的成分画中文：舞台现在里那道括号写两种名字', /s\.2-4 谓语（V）/.test(stepOf(pa, 'mark s.2-4 V')?.state || ''));
 expect('成分那一排没有「宾补」：点不了，记成没演上', /宾补/.test(errs(stepOf(pa, 'mark s.5-10 宾补'))));
 expect('拉完了：做完了，叫了老师', /做完|答了|做到/.test(stepOf(pa, 'mark s.5-10 宾语')?.called?.why || '') && /做完了/.test(stepOf(pa, 'mark s.5-10 宾语')?.called?.msg || ''));
 expect('收起 mark 以后再拉：老师没有 open 这个动作', /老师没有 open 这个动作/.test(errs(stepOf(pa, 'mark s.1 S', 1))));

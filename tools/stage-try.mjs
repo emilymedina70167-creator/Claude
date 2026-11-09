@@ -156,7 +156,9 @@ function setup(segments) {
     let extra = {};
     let shown = what;
     if (ask?.pick) {
-      const c = (ask.choices || []).find((x) => [x.value, x.text, x.sub].some((t) => t != null && String(t) === String(role)));
+      // 成分那一排交的是中文（学生点「谓语」）：写 V、谓语、V1 都照 roleName 挑那一个按钮（真页面上也只有这一个）
+      const same = (x) => [x.value, x.text, x.sub].some((t) => t != null && String(t) === String(role));
+      const c = (ask.choices || []).find(same) || (ask.choices || []).find((x) => D.roleName && D.roleName(role) && D.roleName(x.value) === D.roleName(role));
       if (!c) return { error: `${what}以后，成分那一排点不到「${role}」（那一排是：${(ask.choices || []).map((x) => (x.text && x.text !== x.value ? `${x.text} ${x.value}` : x.value)).join('、')}）` };
       extra = { role: c.value };
       shown += `，点「${c.text || c.value}」`;

@@ -193,11 +193,23 @@ export const sentenceView = {
       paint(n, g.color);
       n.classList.toggle('is-openl', g.openL);
       n.classList.toggle('is-openr', g.openR);
+      // 被挪开拆散了：断开的虚线（画面不说「这还是一段」）
+      n.classList.toggle('is-broken', !!g.broken);
     });
+    // 括号下的字（学生点的是中文就画中文，老师写什么画什么）；tally 开着时学生的括号后面带一个数
     for (const g of L.marks) {
-      const n = placeDecor(stage, o, ctx, live, `mk:${g.id}`, g, () => { const n = el('div', 'sn-mk', stage.layer); n.textContent = g.text; return n; }, pop(240));
-      if (n.textContent !== g.text) n.textContent = g.text;
+      const n = placeDecor(stage, o, ctx, live, `mk:${g.id}`, g, () => { const n = el('div', 'sn-mk', stage.layer); el('span', 'sn-mk-t', n); return n; }, pop(240));
+      const t = n.querySelector('.sn-mk-t') || el('span', 'sn-mk-t', n);
+      if (t.textContent !== g.text) t.textContent = g.text;
+      let b = n.querySelector('.sn-tally');
+      if (g.tally != null) { if (!b) b = el('b', 'sn-tally', n); if (b.textContent !== String(g.tally)) b.textContent = String(g.tally); } else b?.remove();
       paint(n, g.color);
+      n.classList.toggle('is-broken', !!g.broken);
+    }
+    // tally 剩下的那几个：句尾一个小牌子
+    for (const g of L.tallies || []) {
+      const n = placeDecor(stage, o, ctx, live, `tl:${g.id}`, g, () => el('div', 'sn-tally-rest', stage.layer), pop(260));
+      if (n.textContent !== g.text) n.textContent = g.text;
     }
     for (const g of L.tags) {
       const n = placeDecor(stage, o, ctx, live, `tag:${g.id}`, g, () => { const n = el('div', 'sn-tag', stage.layer); n.textContent = g.text; return n; },
@@ -229,12 +241,14 @@ export const sentenceView = {
         const g = svg('g', { class: 'sn-refs' }, stage.under);
         svg('path', { class: 'sn-ref', d: r.d }, g);
         svg('path', { class: 'sn-tip', d: tipPath(r.tip) }, g);
+        svg('path', { class: 'sn-cap', d: r.cap || '' }, g); // 指到一段：那一段上面的小横线（指一个词时是空的）
         return g;
       });
       paint(g, r.color);
-      const [line, tip] = g.children;
+      const [line, tip, cap] = g.children;
+      const sig = `${r.d}|${r.cap || ''}`;
       if (fresh) {
-        g.__d = r.d;
+        g.__d = sig;
         if (ctx.entering === o.id) g.style.opacity = '0';
         else if (!stage.instant) {
           const len = line.getTotalLength?.() || 200;
@@ -242,13 +256,14 @@ export const sentenceView = {
           tip.style.opacity = '0';
           ctx.jobs.push(stage.tween(line, [{ strokeDashoffset: `${len}` }, { strokeDashoffset: '0' }], { duration: 560, delay: 120, easing: EASE.out }).then(() => { line.style.strokeDasharray = ''; line.style.strokeDashoffset = ''; return stage.tween(tip, [{ opacity: 0 }, { opacity: 1 }], { duration: 180 }); }));
         }
-      } else if (g.__d !== r.d) {
-        g.__d = r.d;
-        if (stage.instant) { line.setAttribute('d', r.d); tip.setAttribute('d', tipPath(r.tip)); }
+      } else if (g.__d !== sig) {
+        g.__d = sig;
+        if (stage.instant) { line.setAttribute('d', r.d); tip.setAttribute('d', tipPath(r.tip)); cap.setAttribute('d', r.cap || ''); }
         else ctx.jobs.push((async () => {
           await stage.tween(g, [{ opacity: 1 }, { opacity: 0 }], { duration: 160 });
           line.setAttribute('d', r.d);
           tip.setAttribute('d', tipPath(r.tip));
+          cap.setAttribute('d', r.cap || '');
           await stage.tween(g, [{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: 380 });
         })());
       }
@@ -470,6 +485,14 @@ export const sentenceView = {
 .sn-br.is-openl.is-openr { -webkit-mask-image: linear-gradient(90deg, transparent, #000 26px, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(90deg, transparent, #000 26px, #000 calc(100% - 26px), transparent); }
 .sn-mk { position: absolute; left: 0; top: 0; box-sizing: border-box; text-align: center; white-space: nowrap; pointer-events: none;
   font: 600 ${FONTS.mark.size}px/18px var(--sans, sans-serif); color: var(--c, var(--st-muted)); }
+/* 被挪开拆散了的括号：断开的虚线，成分字变淡（字后面带「?」，layout 里加的） */
+.sn-br.is-broken { border-style: dashed; opacity: .5; }
+.sn-mk.is-broken { opacity: .5; }
+/* tally s V：括号字后面的数（里面 key 的谓语几个）、句尾括号外剩下的几个 */
+.sn-tally { display: inline-grid; place-items: center; min-width: 16px; height: 16px; margin-left: 4px; padding: 0 3px; box-sizing: border-box; border-radius: 8px; vertical-align: 1px;
+  font: 700 11px/1 var(--sans, sans-serif); color: var(--st-card); background: var(--c, var(--st-muted)); }
+.sn-tally-rest { position: absolute; left: 0; top: 0; box-sizing: border-box; display: grid; place-items: center; white-space: nowrap; pointer-events: none; border-radius: 11px;
+  font: 700 ${FONTS.tag.size}px/1 var(--sans, sans-serif); color: var(--st-muted); background: color-mix(in srgb, var(--st-muted) 10%, var(--st-card)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--st-muted) 26%, transparent); }
 .sn-tag { position: absolute; left: 0; top: 0; box-sizing: border-box; text-align: center; white-space: nowrap; pointer-events: none; border-radius: 6px;
   font: 700 ${FONTS.tag.size}px/20px var(--sans, sans-serif); letter-spacing: .02em; color: var(--c, var(--st-muted));
   background: color-mix(in srgb, var(--c, var(--st-muted)) 13%, var(--st-card)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--c, var(--st-muted)) 26%, transparent); }
@@ -485,6 +508,7 @@ export const sentenceView = {
 /* 指代的箭头 */
 .sn-ref { fill: none; stroke: var(--c, var(--st-brand)); stroke-width: 2; stroke-linecap: round; opacity: .8; }
 .sn-tip { fill: var(--c, var(--st-brand)); opacity: .9; }
+.sn-cap { fill: none; stroke: var(--c, var(--st-brand)); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
 `,
 };
 

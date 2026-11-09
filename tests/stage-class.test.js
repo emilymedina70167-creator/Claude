@@ -114,7 +114,7 @@ const OLD_LOGS = {
       ["t", "ask next \"把 is 拖到前面看看\" button=\"好了\""],
       ["s", "move s#7 -> s.1"],
     ],
-    state: ["（句子：名字.3 现在第 3 个词，名字.2-5 第 2 到 5 个，名字.who 这个词（出现几次写 名字.who:2），名字.who-door 从 who 到 door；括号里的 #k 是「一开始第 k 个的那个词」，写 名字#k 跟着它走）","句子 s（9 个词）：is The man who lives next door a doctor.","  词：1 is（#7）  2 The（#1）  3 man（#2）  4 who（#3）  5 lives（#4）  6 next（#5）  7 door（#6）  8 a  9 doctor","  括号（词下面）：s.2-7 主语（蓝）；s.1 谓语（粉）","  页面数不了：s 没写 key","学生能直接动的：s drag（拖）"],
+    state: ["（句子：名字.3 现在第 3 个词，名字.2-5 第 2 到 5 个，名字.who 这个词（出现几次写 名字.who:2），名字.who-door 从 who 到 door；括号里的 #k 是「一开始第 k 个的那个词」，写 名字#k 跟着它走）","句子 s（9 个词）：is The man who lives next door a doctor.","  词：1 is（#7）  2 The（#1）  3 man（#2）  4 who（#3）  5 lives（#4）  6 next（#5）  7 door（#6）  8 a  9 doctor","  括号（词下面）：s.2-7 主语（S），蓝；s.1 谓语（V），粉","  页面数不了：s 没写 key","学生能直接动的：s drag（拖）"],
   },
   array: {
     log: [

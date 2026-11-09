@@ -1,7 +1,7 @@
 // 舞台上的课发给老师的说明（kit/src/stage/doc.js）：说明里的例子照抄就能演；不用「他」「她」；每一轮的那条写清楚学生做了什么、舞台现在什么样、哪几行没演
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STAGE_TEACH, STAGE_DOC, STAGE_COMMON, stageSystem, firstMessage, turnMessage, TOPICS, derivedLines, gridsOf, DERIVED_MAX } from '../kit/src/stage/doc.js';
+import { STAGE_TEACH, STAGE_DOC, STAGE_COMMON, stageSystem, firstMessage, turnMessage, TOPICS, derivedLines, gridsOf, DERIVED_MAX, stageDoc, SUBJECT_TYPES } from '../kit/src/stage/doc.js';
 import { gridText } from '../kit/src/stage/value.js';
 import { TYPES, CREATE } from '../kit/src/stage/types/index.js';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
@@ -13,8 +13,10 @@ test('说明里提到学生不用「他」「她」', () => {
   for (const t of [STAGE_TEACH, STAGE_DOC, ...Object.values(TOPICS).map((x) => x.topic + x.material)]) assert.doesNotMatch(t, /[他她]/);
 });
 
-test('说明不长（每一轮都带）：教法 + 指令 ≤ 24 KB（说明长短不影响出第一个字的快慢，docs/talk-plan.md 量过；这里防的是写成长篇）', () => {
-  assert.ok(bytes(STAGE_TEACH + STAGE_DOC) <= 24 * 1024, `现在 ${bytes(STAGE_TEACH + STAGE_DOC)} 字节`);
+test('说明不长（每一轮都带）：每门课的教法 + 这门课的说明 ≤ 24 KB（说明长短不影响出第一个字的快慢，docs/talk-plan.md 量过；这里防的是写成长篇）', () => {
+  // 量的是真发出去的那一份：学习台里每一节都有块，照块的科目带说明（stageDoc(科目)）；全带的那份只给测试照抄例子，不再限长
+  const over = Object.keys(SUBJECT_TYPES).map((s) => [s, bytes(STAGE_TEACH + stageDoc(s))]).filter(([, n]) => n > 24 * 1024);
+  assert.deepEqual(over.map(([s, n]) => `${s} ${n} 字节`), []);
 });
 
 test('说明里的例子照抄就能演：例子那一轮；共用的每一条写法；每一种东西那一节的每一条写法', () => {
@@ -139,7 +141,7 @@ test('底座的新写法都在说明里：open 的 wrong= / call= / undo=、预�
   for (const t of Object.values(TYPES)) {
     const r = rulesOf({ type: t.type });
     if (!r || !t.doc) continue;
-    for (const a of Object.keys(r.gestures)) assert.match(t.doc, new RegExp(`^open \\w+ ${a}\\b[^\\n]*= `, 'm'), `${t.label}的 open … ${a}：写学生怎么动、翻成哪一行`);
+    for (const a of Object.keys(r.gestures)) assert.match(t.doc, new RegExp(`^open \\S+ ${a}\\b[^\\n]*= `, 'm'), `${t.label}的 open … ${a}：写学生怎么动、翻成哪一行（可以只开几个部件：open s.6 refer）`);
     for (const p of Object.keys(r.predicates)) assert.match(t.doc, new RegExp(`^判断式[^\\n]*\\b${p}\\b`, 'm'), `${t.label}的判断式 ${p}`);
   }
   // type= 能写的每一种
@@ -149,7 +151,7 @@ test('底座的新写法都在说明里：open 的 wrong= / call= / undo=、预�
 
 // 说明文字里（两个空格后面）写的写法和说法，上面那条照抄测试不演：这里一条条演，说的报错真的报、说的样子真的是那样
 test('说明文字里写的写法也成立：行内的写法照抄能演、说会报错的真报错、三个样板「学生怎么动 = 翻成哪一行」和页面真交出的一样', async () => {
-  const { gestureAct } = await import('../kit/src/stage/gestures.js');
+  const { gestureAct, askFor } = await import('../kit/src/stage/gestures.js');
   const run = (src) => { const s = new Scene(); for (const c of parseScript(src)) s.apply(c); return s; };
   const A = 'array a = 49 38 65 97 76 13 27 49′ 55 04\ndial d = 5 range=1-5 at=a';
   const M = 'matrix A = 1 1 / -1 -1\nmatrix B = 1 -1 / -1 1 beside=A\ndial k = 2 range=-3..3\nmatrix m = 2 4 / 1 3';
@@ -198,9 +200,15 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
   said('matrix', gestureAct(s, s.opens.get('m:rowop'), { from: { label: 1 }, value: '−1/2' }).src);
   said('matrix', gestureAct(s, s.opens.get('m:edit'), { to: { r: 2, c: 3 }, value: '-3/2' }).src);
   s = run(`${S}\nopen s mark`);
-  said('sentence', gestureAct(s, s.opens.get('s:mark'), { from: s.parts('s.1')[0], to: s.parts('s.6')[0], role: 'S' }).src);
+  // 成分按钮交的是中文（学生点「主语」）：照那一排里「S」那个按钮交的
+  const subj = askFor(s.opens.get('s:mark').gesture, s.objects.get('s'), 'span', {}).choices.find((c) => c.sub === 'S');
+  said('sentence', gestureAct(s, s.opens.get('s:mark'), { from: s.parts('s.1')[0], to: s.parts('s.6')[0], role: subj.value }).src);
   s = run('sentence s = "The man who lives next door is a doctor."\nmark s.3-6 RC\nopen s fold');
   said('sentence', gestureAct(s, s.opens.get('s:fold'), { to: s.parts('s.4')[0] }).src);
+  s = run('sentence s = "The man who lives next door is a doctor."\nopen s.6 refer');
+  said('sentence', gestureAct(s, s.opens.get('s:refer'), { from: s.parts('s.6')[0], to: s.parts('s.2')[0] }).src);
+  // 共用里「页面判对错的动作」把句子的 refer 也列上（refer 能写 wrong=）
+  assert.match(STAGE_COMMON, /页面判对错的动作（[^）]*句子的 mark refer）/);
   // 说法：默认 wrong=quiet 照做只记下；乘 0、没有孩子能转上来永远不演；@t.right 只演一次；贴的部件没了字跟着消失
   s = run(`${T}\nopen t rotate\n@t.right say "对。"`);
   const quiet = s.apply(parseScript('rotate t.30 right')[0], { by: 'student', open: 'rotate' });

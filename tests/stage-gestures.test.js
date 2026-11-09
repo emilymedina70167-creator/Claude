@@ -105,14 +105,49 @@ test('手势要不要先问一个值：倍加、倍乘弹倍数框，对调不�
   const s = run('sentence s = "The man is a doctor." key="[S The man] [V is] [P a doctor]."\nopen s mark');
   const pick = askFor(open(s, 's:mark').gesture, s.objects.get('s'), 'span', { from: part(s, 's.1'), to: part(s, 's.2') });
   assert.equal(pick.pick, 'role');
+  // 按钮上写中文、小字是缩写；点了交中文（学生点「定语」括号上就画「定语」）
+  const subs = pick.choices.map((c) => c.sub);
+  for (const r of ['S', 'V', 'O', 'P', 'RC']) assert.ok(subs.includes(r), `成分按钮里有 ${r}`);
   const vals = pick.choices.map((c) => c.value);
-  for (const r of ['S', 'V', 'O', 'P', 'RC']) assert.ok(vals.includes(r), `成分按钮里有 ${r}`);
+  for (const r of ['主语', '谓语', '宾语', '表语', '定语从句']) assert.ok(vals.includes(r), `点了交「${r}」`);
+  assert.ok(pick.choices.every((c) => c.value === c.text), '交的就是按钮上写的中文');
   assert.equal(new Set(vals).size, vals.length, '不重复');
   assert.ok(pick.choices.every((c) => c.text && c.value), '每个按钮有字');
-  assert.equal(pick.choices.find((c) => c.value === 'V').paint, 'g2', '颜色和括号一样（roleColor）');
+  assert.equal(pick.choices.find((c) => c.sub === 'V').paint, 'g2', '颜色和括号一样（roleColor）');
   // key 里有常用的那几个以外的成分：也给按钮（不然拉对了也点不出来）
   const s2 = run('sentence s = "What he said is true." key="[SC What he said] [V is] [P true]."\nopen s mark');
-  assert.ok(askFor(open(s2, 's:mark').gesture, s2.objects.get('s'), 'span', {}).choices.some((c) => c.value === 'SC'));
+  assert.ok(askFor(open(s2, 's:mark').gesture, s2.objects.get('s'), 'span', {}).choices.some((c) => c.sub === 'SC' && c.value === '主语从句'));
+  // key 里一段写了几种的（Attr/NF）：每一种都有按钮
+  const s3 = run('sentence s = "A fund designed to help grew." key="[S A fund [Attr/NF designed to help]] [V grew]."\nopen s mark');
+  assert.ok(askFor(open(s3, 's:mark').gesture, s3.objects.get('s'), 'span', {}).choices.some((c) => c.sub === 'NF'));
+});
+
+test('句子：从 that 的钩拉一条线，松在词、括号、句子外框上 = refer s.6 -> s.5 / s.4-5 / s', () => {
+  const s = run('sentence s = "The books on the shelf that I bought yesterday are new." links="that -> books; !that -> shelf=就近连了名词"\nopen s.6 refer');
+  const e = open(s, 's:refer');
+  assert.deepEqual(kindsOf(e.gesture), ['line']);
+  assert.equal(e.gesture.from, 'hook');
+  assert.deepEqual(e.gesture.to, ['word', 'bracket', 'sentence']);
+  assert.deepEqual(e.refs, ['s.6']);
+  const r = gestureAct(s, e, { from: part(s, 's.6'), to: part(s, 's.5') });
+  assert.equal(r.src, 'refer s.6 -> s.5');
+  assert.deepEqual(r.act, { type: 'refer', from: 6, to: { from: 5, to: 5 } });
+  // 先拉出一道括号，线松在这道括号上：连到这一段
+  run('mark s.4-5 O', s);
+  const m = s.objects.get('s').marks[0];
+  assert.equal(gestureAct(s, e, { from: part(s, 's.6'), to: { mark: m.id } }).src, 'refer s.6 -> s.4-5');
+  // 松在句子外框上：连到整句
+  assert.equal(gestureAct(s, e, { from: part(s, 's.6'), to: { whole: true } }).src, 'refer s.6 -> s');
+  assert.ok(gestureAct(s, e, { from: part(s, 's.6'), to: part(s, 's.6') }).error, '连回自己');
+  assert.ok(gestureAct(s, e, { from: part(s, 's.6') }).error, '没松在哪儿');
+  assert.ok(gestureAct(s, e, { from: part(s, 's.6'), to: { mark: 'm99' } }).error, '没有这道括号');
+  // 翻出来的那一行照演
+  run('refer s.6 -> s.4-5', s);
+  assert.deepEqual(s.objects.get('s').refers.map((x) => [x.from, x.toKeys, x.whole]), [[6, [4, 5], false]]);
+  // 钩和拉括号抓的地方不一样，能一起开
+  assert.doesNotThrow(() => run('open s mark', s));
+  // 学生拉的线写给老师（裁判的结论 events.js 接着写）
+  assert.equal(actText({ type: 'refer', src: 'refer s.6 -> s.5', verdict: { legal: true, right: false, why: 'that 连到 shelf' } }), '学生 refer s.6 -> s.5（that 连到 shelf）');
 });
 
 test('写的值：键盘上的减号、全角斜线规整成指令里的写法', () => {

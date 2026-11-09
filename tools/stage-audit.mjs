@@ -67,6 +67,20 @@ label k t.50 "根" side=above tone=key
 say "按顺序插进二叉排序树：{a.1} 是根。"
 ask tap t "40 插在哪？"` });
   out.push({ name: '句子', src: TYPES.sentence?.example || '' });
+  // 学生拉的括号（中文字、tally 的数）、从钩上拉到一段的线、被挪开拆散的括号（虚线、带「?」）
+  out.push({ name: '句子:学生拉的', src: `sentence s = "The books on the shelf that I bought yesterday are new." key="[S The books on the shelf [RC that I [V bought] yesterday]] [V are] [P new]." links="that -> s.1-2"
+sentence t = "She has been reading the book." key="[S She] [V has been reading] [O the book]."
+open s mark
+open s.6 refer
+open t mark
+tally s V
+mark s.1-5 主语
+学生: mark s.6-9 定语从句
+学生: mark s.10 谓语
+学生: refer s.6 -> s.1-2
+学生: mark t.2-4 谓语
+move t.3 after t.6
+ask tap s "that 指的是哪几个词？"` });
   // 真课第三轮（同一节）：BA 另起一行、比一格、贴字、题卡
   out.push({ name: '真课:乘法第三轮', src: `matrix A = 1 1 / -1 -1
 matrix B = 1 -1 / -1 1 beside=A
@@ -137,13 +151,15 @@ for (const v of VIEWS) {
         st.clearAll(); st.log = [];
         window.__samples = [];
         const timer = setInterval(() => { try { window.__samples.push(window.__measure(true)); } catch { /* 正在换 */ } }, 250);
-        const t = st.begin({ auto: true }); t.end(src); await t.armed;
+        // 一行一行真演只演老师的行（学生那几下要照 open 的那一项过裁判，只在瞬间放到最后时放）
+        const t = st.begin({ auto: true }); t.end(src.split('\n').filter((l) => !/^学生:/.test(l)).join('\n')); await t.armed;
         clearInterval(timer);
       }
       else {
         // 瞬间放到最后，再照老师那一轮的样子挂上最后一问（底下一条也要量）
         const lines = src.split('\n').filter((l) => l.trim());
-        await st.replay(lines.map((s) => ({ src: s, by: 'teacher' })));
+        // 「学生: mark s.6-9 定语从句」是学生那一下（照 open 的那一项，和课堂里存的 log 一样）
+        await st.replay(lines.map((s) => { const m = s.match(/^学生:\s*(\S+)(.*)$/); return m ? { src: `${m[1]}${m[2]}`, by: 'student', open: m[1] } : { src: s, by: 'teacher' }; }));
         const ask = [...lines].reverse().find((l) => /^ask\b/.test(l.trim()));
         const t = st.begin({ auto: true }); t.end(ask || ''); await t.armed;
       }

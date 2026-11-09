@@ -244,6 +244,51 @@ test('refer：同一行拱一道箭头（行上面留出地方）；不在同一
   } else assert.equal(T.refers.length, 1);
 });
 
+test('旧的 refer 照旧：refer s.3 -> s.2（词到词）演出来、画出来、写给老师的和第一轮一字不差', () => {
+  const s = run(new Scene(), S1);
+  const fx = s.apply(parseScript('refer s.3 -> s.2')[0]);
+  assert.deepEqual(fx, { id: 's', from: 3, to: 2 });
+  const o = s.objects.get('s');
+  // 改之前量下来的（第一轮的样子）
+  assert.deepEqual(layout(o).refers, [{ from: 3, to: 2, color: null, d: 'M169.5 26.5 C169.5 6 99 6 99 26.5', tip: { x: 99, y: 26.48 }, box: { x: 99, y: 9.120000000000001, w: 70.5, h: 17.36 } }]);
+  assert.deepEqual(layout(o).tags, []);
+  assert.deepEqual(sentence.describe(o), ['句子 s（9 个词）：The man who lives next door is a doctor.', '  词：1 The  2 man  3 who  4 lives  5 next  6 door  7 is  8 a  9 doctor', '  箭头：s.3 who → s.2 man']);
+  assert.deepEqual(o.refers.map((r) => [r.from, r.to, r.toKeys, r.whole, r.color]), [[3, 2, null, false, null]]);
+  // 不在同一行的照旧写「→ people」
+  const t = run(new Scene(), `${LONG}\nrefer t.who -> t.people`);
+  assert.deepEqual(layout(t.objects.get('t')).refers.map((r) => r.d), ['M714.2 29.1 C714.2 6 629.2 6 629.2 29.1']);
+});
+
+test('refer 指到一段、整句：同一行拱到那一段的正中，那一段上面一道小横线；整句、跨行的在词头上写「→ …」', () => {
+  const s = run(new Scene(), 'sentence s = "The books on the shelf that I bought yesterday are new."');
+  const o = s.objects.get('s');
+  const fx = s.apply(parseScript('refer s.6 -> s.1-2')[0]);
+  assert.deepEqual(fx, { id: 's', from: 6, to: 2, toKeys: [1, 2] });
+  let L = layout(o);
+  assert.equal(L.refers.length, 1);
+  const [r] = L.refers;
+  const b1 = L.boxes.get(1), b2 = L.boxes.get(2);
+  assert.ok(Math.abs(r.tip.x - (b1.x + b2.x + b2.w) / 2) < 0.5, '箭头尖在 The books 的正中');
+  assert.match(r.cap, /^M[\d.]+ [\d.]+ L/, '那一段上面一道小横线');
+  assert.ok(r.box.x <= b1.x + 4.5 && r.box.x + r.box.w >= b2.x + b2.w - 4.5, '占的地方把那道小横线框进去（别的东西、贴字让开）');
+  assert.match(err(s, 'refer s.6 -> s.5-7'), /指到的那一段不能含 that 自己/);
+  assert.match(err(s, 'refer s -> s.2'), /refer 从一个词连出去/);
+  // 整句：词头上写「→ 整句」
+  s.apply(parseScript('refer s.6 -> s')[0]);
+  L = layout(o);
+  assert.equal(L.refers.length, 0);
+  assert.ok(L.tags.some((g) => g.refer && g.text === '→ 整句'));
+  assert.deepEqual(o.refers.map((x) => [x.from, x.to, x.toKeys, x.whole]), [[6, null, null, true]]);
+  // 收掉照旧
+  run(s, 'unrefer s.6');
+  assert.equal(o.refers.length, 0);
+  // 挪开以后那一段不连着了：改成在词头上写，不拱一道穿过别的词的线
+  const m = run(new Scene(), 'sentence s = "The books on the shelf that I bought yesterday are new."\nrefer s.6 -> s.1-2\nmove s.1 after s.4');
+  const M = layout(m.objects.get('s'));
+  assert.equal(M.refers.length, 0);
+  assert.ok(M.tags.some((g) => g.refer && /^→ /.test(g.text)));
+});
+
 test('rewrite：同样的词配上原来的（不分大小写、realize → realized 也算），新的词另起 key；括号按头尾留着', () => {
   const s = run(new Scene(), 'sentence s = "Only then did I realize how much the old man, who had lived alone for years, needed help."');
   const o = s.objects.get('s');
@@ -287,7 +332,8 @@ test('给老师看的现状：一个个词带编号和状态、括号（第几�
   assert.match(t, /名字\.3 现在第 3 个词/);
   assert.match(t, /句子 s（9 个词）：The man who lives next door is doctor a\./);
   assert.match(t, /1 The {2}2 man {2}3 who .* 7 is（粉） {2}8 doctor（#9） {2}9 a（#8）/);
-  assert.match(t, /括号（词下面）：s\.1-6 主语（第 2 层，蓝）；s\.3-6 定语从句（紫）/);
+  // 成分写两种名字（中文（缩写）），后面是第几层、颜色
+  assert.match(t, /括号（词下面）：s\.1-6 主语（S），第 2 层，蓝；s\.3-6 定语从句（RC），紫/);
   assert.match(t, /标签（词上面）：s\.7 V/);
   assert.match(t, /断开：s\.6 door 后面/);
   assert.match(t, /箭头：s\.3 who → s\.2 man/);
@@ -342,4 +388,38 @@ test('拆散的括号：括号记的词被挪开、不挨着了（brokenMarks）
   assert.deepEqual(brokenMarks(s.objects.get('s')), [id]);
   run(s, 'move s.2 after s.8');
   assert.deepEqual(brokenMarks(s.objects.get('s')), [], '挪回来又挨着了');
+});
+
+test('拆散的括号画成断开的虚线、成分字带「?」；老师本来就拉成两截的照旧画实线', () => {
+  const s = run(new Scene(), `${KEY2}\nmark s.7-9 O`);
+  const o = s.objects.get('s');
+  assert.ok(layout(o).brackets.every((b) => !b.broken));
+  run(s, 'move s.8 after s.1');
+  const L = layout(o);
+  assert.ok(L.brackets.length >= 2 && L.brackets.every((b) => b.broken), '断开的每一截都是虚线');
+  assert.ok(L.marks.every((m) => m.broken && m.text === 'O?'), L.marks.map((m) => m.text).join(' '));
+  // 老师拉成两截的（did … realize 这种）：不是被挪开拆散的
+  const t = run(new Scene(), 'sentence s = "Only then did I realize it."\nmark s.3 s.5 谓语');
+  assert.ok(layout(t.objects.get('s')).brackets.every((b) => !b.broken));
+  assert.ok(layout(t.objects.get('s')).marks.every((m) => m.text === '谓语'));
+});
+
+test('tally s V：每道学生的括号上标里面 key 的谓语几个，剩下的在句尾标；画出来的数和现状写的一样', () => {
+  const s = run(new Scene(), `${KEY2}\nopen s mark\ntally s V`);
+  const o = s.objects.get('s');
+  let L = layout(o);
+  assert.deepEqual(L.tallies.map((t) => t.text), ['括号外 2'], '还没拉括号：两个谓语都在括号外');
+  s.apply(parseScript('mark s.3-6 定语从句')[0], { by: 'student', open: 'mark' });
+  run(s, 'mark s.1-2 主语'); // 老师拉的不标
+  L = layout(o);
+  const mine = o.marks.find((m) => m.by === 'student');
+  assert.deepEqual(L.marks.filter((m) => m.tally != null).map((m) => [m.mark, m.tally]), [[mine.id, 1]]);
+  assert.deepEqual(L.tallies.map((t) => t.text), ['括号外 1']);
+  assert.match(s.stateText(), /\n {2}标着的数（tally V，key 的谓语）：s\.3-6 定语从句 1 个；括号外 1 个/);
+  // 括号上的数不压着别的字
+  const pieces = [...L.marks, ...L.tallies, ...L.tags];
+  for (let i = 0; i < pieces.length; i++) for (let j = i + 1; j < pieces.length; j++) assert.ok(!overlaps(pieces[i], pieces[j], 0), `${pieces[i].text} 压着 ${pieces[j].text}`);
+  run(s, 'untally s');
+  assert.deepEqual(layout(o).tallies, []);
+  assert.ok(layout(o).marks.every((m) => m.tally == null));
 });

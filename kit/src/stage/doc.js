@@ -61,7 +61,7 @@ open a                              交给学生直接动（这里是拖着两�
 close a                             收回来（close a 动作：只收那一种）
 一样东西一次开一种会抢同一个部件的手势（open t 和 open t rotate 都拖结点）：第二项当场报错，先 close 前一项
 同一项再开一次是换掉它：再写一遍 open，照新写的 wrong=、range=、undo= 办
-页面判对错的动作（树的 rotate insert place、矩阵的 rowop、句子的 mark）在 open 那一行写你事先定的，页面只照它办：
+页面判对错的动作（树的 rotate insert place、矩阵的 rowop、句子的 mark refer）在 open 那一行写你事先定的，页面只照它办：
   wrong=quiet 照做、只记下（默认，不写就是它）/ wrong=mark 照做、那一处淡淡圈一下 / wrong=block 不让做、弹回去
   call=wrong 一走偏就叫你 / call=done 试的不算「试了好几下」，做完叫你（点提示、很久没动照样叫）/ 不写：攒着，等答了、做到了、试了好几下、很久没动才叫
   这个世界做不到的（一行乘 0、没有孩子能转上来）永远不演、弹回去；每一下都告诉你页面判的：对不对、像哪种错、正确的下一步

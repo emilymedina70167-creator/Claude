@@ -81,7 +81,7 @@ export function affordsOf(t) {
 }
 
 // 手势表里的动作（rules.js 的 gestures：rotate、rowop、mark……）给老师看的一句：按五种通用手势说
-const GESTURE_TEXT = { tap: '点', 'drop-on': '拖到上面', 'drop-at': '拖到空处', span: '拉一段', write: '写一个值' };
+const GESTURE_TEXT = { tap: '点', 'drop-on': '拖到上面', 'drop-at': '拖到空处', span: '拉一段', line: '拉一条线', write: '写一个值' };
 const gestureText = (g) => [].concat(g?.gesture || []).map((k) => GESTURE_TEXT[k] || k).join(' / ');
 /** open 那一行老师事先定的：走偏了怎么办（wrong）、什么时候叫老师（call）、学生能不能撤一步（undo）。默认照做、只记下 */
 const POLICY = {

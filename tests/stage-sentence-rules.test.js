@@ -8,7 +8,9 @@ import { parseScript } from '../kit/src/stage/script.js';
 import { sentenceRules as R, actSrc, roleName, bracketFacts } from '../kit/src/stage/types/sentence.rules.js';
 import { rulesOf, predicateOf, gestureOf, done, evalMeasure, measureLine } from '../kit/src/stage/rules.js';
 import { parseBrackets, judgeSpans } from '../kit/src/entext.js';
-import { sentence } from '../kit/src/stage/types/sentence.js';
+import { sentence, roleAbbr } from '../kit/src/stage/types/sentence.js';
+import { askFor } from '../kit/src/stage/gestures.js';
+import { eventOf, eventsText } from '../kit/src/stage/events.js';
 
 const run = (s, src) => { for (const c of parseScript(src)) s.apply(c); return s; };
 const make = (src) => run(new Scene(), src);
@@ -579,4 +581,217 @@ test('学生括号：key 一个谓语都没标时不说谓语几个（key 说不
   stuMark(s, 'mark s.6-7 O');
   assert.deepEqual(bracketFacts(S(s)), ['key 里没有的：s.6-7 O（a doctor）']);
   assert.doesNotMatch(s.stateText(), /谓语 0 个/);
+});
+
+// —— 拉一条线：links= 和 refer（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 2.2）——
+// that 指的是 books（定语从句 that I bought yesterday 修饰 books：are new 的是书），就近的 shelf 是常见的错连
+const BOOKS_S = 'sentence s = "The books on the shelf that I bought yesterday are new."';
+const BOOKS = `${BOOKS_S} links="that -> books; !that -> shelf=就近连了名词"`;
+/**
+ * 学生照 open 的那一项做一下：过裁判、演（和 stage.js 的 studentDo 一样），再照 stage.js 的 judgedAct 拼出挂在这一下上的样子
+ * （events.js 写给老师的就是它）
+ */
+function stu(s, line, open) {
+  const [c] = parseScript(line);
+  const j = s.judgeLine(c, { by: 'student', open });
+  const fx = s.apply(c, { judged: j ?? null });
+  const v = j?.verdict || {};
+  const next = v.next == null ? null : typeof v.next === 'string' ? v.next : v.next.why || null;
+  const act = { type: c.cmd, open, src: j?.src ?? line, ...(j ? { verdict: { legal: v.legal !== false, right: v.right ?? null, misread: v.misread ?? null, why: v.why ?? null, next } } : {}),
+    ...(j?.mark ? { marked: true } : {}), ...(fx?.judged?.after?.length ? { facts: fx.judged.after } : {}) };
+  return { j, fx, act };
+}
+
+test('links= 判连线：连到正确的那一条是对的；对上 ! 那一条说像哪种错（老师写的）；正确的下一步是正确那一条', () => {
+  const s = make(`${BOOKS}\nopen s.6 refer`);
+  const o = S(s);
+  // 下标换成词的 key（挪了词跟着走）
+  assert.deepEqual(o.links.pairs, [{ from: 6, to: { keys: [2] } }]);
+  assert.deepEqual(o.links.wrongs, [{ from: 6, to: { keys: [5] }, why: '就近连了名词' }]);
+  const wrong = stu(s, 'refer s.6 -> s.5', 'refer');
+  assert.deepEqual(wrong.j.act, { type: 'refer', from: 6, to: { from: 5, to: 5 } });
+  assert.equal(wrong.j.verdict.legal, true);
+  assert.equal(wrong.j.verdict.right, false);
+  assert.equal(wrong.j.verdict.why, 'that 连到 shelf');
+  assert.equal(wrong.j.verdict.misread, '就近连了名词（你在 links= 里写的）');
+  assert.equal(eventsText([eventOf(wrong.act)]), '学生 refer s.6 -> s.5（that 连到 shelf）——不是正确的下一步，像是就近连了名词（你在 links= 里写的）；正确的是把 that 连到 s.2（books）');
+  assert.equal(R.predicates.linked(o), false);
+  assert.match(s.stateText(), /\n {2}links=：收下了（1 条，常见的错连 1 条）/);
+  // rewrite 以后作废（和 key 一样）：不判、linked 判不了，现状里写
+  const rw = make(`${BOOKS}\nopen s.6 refer`);
+  run(rw, 'rewrite s "The books that I bought yesterday on the shelf are new."');
+  assert.equal(stu(rw, 'refer s.3 -> s.2', 'refer').j.verdict.right, null);
+  assert.throws(() => R.predicates.linked(S(rw)), /links= 跟着 rewrite 作废了/);
+  assert.match(rw.stateText(), /links=：作废了/);
+  // 改成连到 books：对了，linked 成立
+  const right = stu(s, 'refer s.6 -> s.2', 'refer');
+  assert.equal(right.j.verdict.right, true);
+  assert.equal(right.j.verdict.why, 'that 连到 books');
+  assert.deepEqual(o.refers.map((r) => [r.from, r.to, r.toKeys, r.whole, r.by]), [[6, 2, null, false, 'student']], '一个词只连一条：换掉了连到 shelf 的那条');
+  assert.equal(R.predicates.linked(o), true);
+  assert.deepEqual(right.fx.judged.after, ['links= 的每一条都连对了']);
+  // 对不上 ! 的错连：不对，可页面说不出像哪种错
+  const odd = stu(make(`${BOOKS}\nopen s.6 refer`), 'refer s.6 -> s.9', 'refer');
+  assert.equal(odd.j.verdict.right, false);
+  assert.equal(odd.j.verdict.misread, null);
+  assert.equal(odd.j.verdict.next.why, '把 that 连到 s.2（books）');
+  // 挑战照它判
+  const g = make(`${BOOKS}\nopen s.6 refer\ngoal g1 "that 连到它指的词" when="s linked"`);
+  assert.equal(stu(g, 'refer s.6 -> s.5', 'refer').fx.goalsMet, undefined);
+  assert.deepEqual(stu(g, 'refer s.6 -> s.2', 'refer').fx.goalsMet, ['g1']);
+});
+
+test('links= 的写法：一头写词（只出现一次时）、s.6、s.1-2、s（整句）；同一个词有好几个、写错了当场报', () => {
+  assert.deepEqual(S(make(`${BOOKS_S} links="s.6 -> s.2"`)).links.pairs, [{ from: 6, to: { keys: [2] } }]);
+  assert.deepEqual(S(make(`${BOOKS_S} links="that -> s.1-2"`)).links.pairs, [{ from: 6, to: { keys: [1, 2] } }]);
+  assert.deepEqual(S(make(`${BOOKS_S} links="that -> s"`)).links.pairs, [{ from: 6, to: { whole: true } }]);
+  assert.equal(S(make(BOOKS_S)).links, undefined, '不写 links= 就没有');
+  const e = new Scene();
+  assert.equal(err(e, `${BOOKS_S} links="the -> books"`), 'links= 的「the」在句子里有 2 个，写成 s.1 这样的部件');
+  assert.match(err(e, `${BOOKS_S} links="that -> cats"`), /links= .*没有「cats」/);
+  assert.match(err(e, `${BOOKS_S} links="that books"`), /links= 要写成/);
+  assert.match(err(e, `${BOOKS_S} links="that -> that"`), /两头是同一个词/);
+  assert.match(err(e, `${BOOKS_S} links="s.1-2 -> s.6"`), /links= 的左边写一个词/);
+  assert.match(err(e, `${BOOKS_S} links="that -> books; that -> shelf"`), /「that」连了两条/);
+  assert.match(err(e, `${BOOKS_S} links="!that -> shelf"`), /至少写一条/);
+  assert.match(err(e, `${BOOKS_S} links="that -> t.2"`), /写 s 里的词/);
+});
+
+test('连到一段、整句（同一句）：refer s.6 -> s.1-2、refer s.6 -> s 照 links= 判', () => {
+  const span = make(`${BOOKS_S} links="that -> s.1-2"\nopen s.6 refer`);
+  const a = stu(span, 'refer s.6 -> s.1-2', 'refer');
+  assert.deepEqual(a.j.act, { type: 'refer', from: 6, to: { from: 1, to: 2 } });
+  assert.equal(a.j.verdict.right, true);
+  assert.equal(a.j.verdict.why, 'that 连到 The books');
+  assert.deepEqual(S(span).refers.map((r) => [r.from, r.toKeys, r.whole]), [[6, [1, 2], false]]);
+  assert.equal(R.predicates.linked(S(span)), true);
+  // 只连到 books 一个词：不是 links= 写的那一段
+  const b = stu(make(`${BOOKS_S} links="that -> s.1-2"\nopen s.6 refer`), 'refer s.6 -> s.2', 'refer');
+  assert.equal(b.j.verdict.right, false);
+  assert.equal(b.j.verdict.next.why, '把 that 连到 s.1-2（The books）');
+  // 整句（只测连到整句的写法：英语上 that 连不到整句，别抄进说明）
+  const whole = make(`${BOOKS_S} links="that -> s"\nopen s.6 refer`);
+  const w = stu(whole, 'refer s.6 -> s', 'refer');
+  assert.deepEqual(w.j.act, { type: 'refer', from: 6, to: { whole: true } });
+  assert.equal(w.j.verdict.right, true);
+  assert.equal(w.j.verdict.why, 'that 连到整句');
+  assert.deepEqual(S(whole).refers.map((r) => [r.from, r.toKeys, r.whole]), [[6, null, true]]);
+  assert.match(whole.stateText(), /箭头：s\.6 that → 整句/);
+  assert.match(span.stateText(), /箭头：s\.6 that → s\.1-2 The books/);
+});
+
+test('没写 links= 不判：refer 的 right 是 null；when="s linked" 写下就报', () => {
+  const s = make(`${BOOKS_S}\nopen s.6 refer`);
+  const r = stu(s, 'refer s.6 -> s.5', 'refer');
+  assert.equal(r.j.verdict.legal, true);
+  assert.equal(r.j.verdict.right, null);
+  assert.equal(r.j.verdict.why, 'that 连到 shelf', '连的是什么照样写');
+  assert.equal(eventsText([eventOf(r.act)]), '学生 refer s.6 -> s.5（that 连到 shelf）');
+  assert.deepEqual(r.fx.judged.after, []);
+  assert.match(err(s, 'goal g1 "连好" when="s linked"'), /没写 links=/);
+  assert.throws(() => R.predicates.linked(S(s)), /s 没写 links=，页面判不了 linked/);
+  // links= 里没写 that 连谁的词：也不判
+  const x = make(`${BOOKS_S} links="that -> books"\nopen s refer`);
+  assert.equal(stu(x, 'refer s.8 -> s.2', 'refer').j.verdict.right, null);
+  // 连到自己：这一下做不到
+  assert.equal(x.judgeLine(parseScript('refer s.6 -> s.6')[0], { by: 'student', open: 'refer' }).verdict.legal, false);
+});
+
+test('refer 进了页面判对错的动作：能写 wrong=（mark 一样），fold 照旧不能；做完照旧只看 mark', () => {
+  assert.doesNotThrow(() => make(`${BOOKS}\nopen s.6 refer wrong=mark`));
+  assert.throws(() => make(`${BOOKS}\nopen s fold wrong=mark`), /判不了对错/);
+  assert.deepEqual(R.judges, ['mark', 'refer']);
+  assert.deepEqual(R.doneBy, ['mark']);
+  // wrong=mark：连错的那一下照做、淡淡圈着
+  const s = make(`${BOOKS}\nopen s.6 refer wrong=mark`);
+  const r = stu(s, 'refer s.6 -> s.5', 'refer');
+  assert.equal(r.j.mark, true);
+  assert.equal(S(s).refers.length, 1);
+  // 钩和拉括号抓的地方不一样：同一句上能一起开
+  assert.doesNotThrow(() => make(`${BOOKS}\nopen s mark\nopen s.6 refer`));
+  // 拉线不算「做完」：只开了 refer 的句子不会因为连对了就叫「做完了」
+  const k = make(`${BOOKS_S} key="[S The books on the shelf [RC that I bought yesterday]] [V are] [P new]." links="that -> books"\nopen s.6 refer`);
+  assert.equal(k.doneOpen('s'), false);
+});
+
+test('Attr/NF：key 里一段写几种成分，哪一种都算对；学生把它当谓语时说「把非谓语当成了谓语」', () => {
+  const FUND = 'sentence s = "A fund designed to help small businesses grew." key="[S A fund [Attr/NF designed [NF to help small businesses]]] [V grew]."';
+  const o = S(make(FUND));
+  assert.deepEqual(o.key.spans.map((x) => [x.role, x.roles, x.keys.join(' ')]), [
+    ['S', ['S'], '1 2 3 4 5 6 7'], ['Attr', ['Attr', 'NF'], '3 4 5 6 7'], ['NF', ['NF'], '4 5 6 7'], ['V', ['V'], '8'],
+  ]);
+  const s = make(FUND);
+  assert.equal(R.check(S(s), mk(3, 7, '定语'), s).right, true);
+  assert.equal(R.check(S(s), mk(3, 7, 'NF'), s).right, true);
+  assert.equal(R.check(S(s), mk(3, 7, '非谓语'), s).right, true);
+  assert.equal(R.check(S(s), mk(3, 7, 'Attr'), s).right, true);
+  assert.match(R.check(S(s), mk(3, 3, 'V'), s).misread, /把非谓语当成了谓语/);
+  assert.match(R.check(S(s), mk(3, 7, '主语'), s).misread, /成分标错了：这一段是定语或非谓语，不是主语/);
+  // 拉成哪一种，parsed 都算这一段拉对了
+  run(s, 'mark s.1-7 S\nmark s.3-7 非谓语\nmark s.4-7 NF\nmark s.8 V');
+  assert.equal(R.predicates.parsed(S(s)), true);
+  // 写错了照旧当场报
+  assert.match(err(new Scene(), 'sentence s = "A fund grew." key="[S A fund] [V/Xyz grew]."'), /成分「Xyz」认不出/);
+});
+
+test('两种错一起：成分不对、范围差一两个词时，挑重叠最多的那一段 key，范围和成分一起说', () => {
+  const GOAL = 'sentence s = "The goal is to direct these funds better." key="[S The goal] [V is] [P to direct these funds better]."';
+  const s = make(GOAL);
+  const v = R.check(S(s), mk(4, 7, 'O'), s);
+  assert.equal(v.right, false);
+  assert.equal(v.misread, '成分标错了，范围也差一点：这一段是表语（to direct these funds better），学生拉的少了 better');
+  assert.equal(R.check(S(s), mk(3, 8, 'O'), s).misread, '成分标错了，范围也差一点：这一段是表语（to direct these funds better），学生拉的多了 is');
+  // 只占了那一段的一小半（these funds 可能是 direct 的宾语，key 没拆这一层）：页面不知道对不对，不判
+  assert.equal(R.check(S(s), mk(6, 7, 'O'), s).right, null);
+  // 成分和 key 那一段不是一类（宾表补 / 状语）、又整个落在那一段里：可能是里面的一层，不说
+  assert.equal(R.check(S(s), mk(4, 7, '状语'), s).right, null);
+  // 范围对了、成分不对，照旧只说成分；成分对了、范围不对，照旧说断早断晚
+  assert.match(R.check(S(s), mk(4, 8, 'O'), s).misread, /^成分标错了：这一段是表语，不是宾语$/);
+  assert.match(R.check(S(s), mk(4, 7, 'P'), s).misread, /表语这一段断早了/);
+});
+
+test('exact：key 的每一段都拉对了、也没多拉；parsed 不管多拉的', () => {
+  const s = make(`${MAN}\nopen s mark\ngoal g1 "拆完、不多拉" when="s exact"`);
+  for (const l of ['mark s.1-6 S', 'mark s.3-6 RC', 'mark s.7 V']) stuMark(s, l);
+  assert.equal(s.goals.get('g1').met, true, '刚好拉对');
+  const t = make(`${MAN}\nopen s mark`);
+  for (const l of ['mark s.1-6 S', 'mark s.3-6 RC', 'mark s.7 V', 'mark s.8-9 P']) stuMark(t, l);
+  assert.equal(R.predicates.parsed(S(t)), true);
+  assert.equal(R.predicates.exact(S(t)), false, '多拉了 a doctor');
+  run(t, 'unmark s.8-9');
+  assert.equal(R.predicates.exact(S(t)), true);
+  // 拉对的段成分写错一道：parsed、exact 都不成立
+  stuMark(t, 'mark s.8-9 P');
+  stuMark(t, 'mark s.7 S');
+  assert.equal(R.predicates.parsed(S(t)), false);
+  assert.equal(R.predicates.exact(S(t)), false);
+  // 老师自己拉的、key 里没有的括号不算学生多拉的
+  const u = make(`${MAN}\nmark s.8-9 表语\nopen s mark`);
+  for (const l of ['mark s.1-6 S', 'mark s.3-6 RC', 'mark s.7 V']) stuMark(u, l);
+  assert.equal(R.predicates.exact(S(u)), true);
+  assert.throws(() => R.predicates.exact(S(make('sentence s = "He runs."'))), /没写 key=.*判不了 exact/);
+});
+
+test('中文的括号字：学生点「定语」交出 mark s.2-6 定语；现状里两种名字都写，事实只写括号上的那一个', () => {
+  const s = make('sentence s = "Policies designed to help small businesses often fail." key="[S Policies [Attr designed [NF to help small businesses]]] often [V fail]."\nopen s mark');
+  const o = S(s);
+  const word = (k) => o.words.find((w) => w.slot === k);
+  const g = gestureOf(o, 'mark');
+  const pick = askFor(g, o, 'span', { from: word(2), to: word(6) });
+  const attr = pick.choices.find((c) => c.text === '定语');
+  assert.deepEqual([attr.value, attr.sub], ['定语', 'Attr'], '按钮上中文、小字缩写，交中文');
+  const r = g.toAct(o, { from: word(2), to: word(6), role: attr.value });
+  assert.equal(r.src, 'mark s.2-6 定语');
+  const fx = stuMark(s, r.src);
+  assert.equal(fx.judged.verdict.right, true);
+  assert.match(s.stateText(), /s\.2-6 定语（Attr）/);
+  assert.ok(fx.judged.after.some((f) => f.includes('标成定语（designed to help small businesses）')), fx.judged.after.join('\n'));
+  assert.ok(fx.judged.after.every((f) => !f.includes('（Attr）')), fx.judged.after.join('\n'));
+  // 老师写缩写：现状里也写成两种名字
+  const t = make('sentence s = "Policies designed to help small businesses often fail."\nmark s.2-6 Attr\nmark s.8 V\nmark s.1 主语');
+  assert.match(t.stateText(), /括号（词下面）：s\.2-6 定语（Attr），紫；s\.8 谓语（V），粉；s\.1 主语（S），蓝/);
+  assert.equal(roleAbbr('定语'), 'Attr');
+  assert.equal(roleAbbr('谓语1'), 'V1');
+  assert.equal(roleAbbr('Adv'), 'Adv', '缩写照老师写的');
+  assert.equal(roleAbbr('插入语'), null);
 });

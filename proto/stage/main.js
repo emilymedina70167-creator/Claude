@@ -10,6 +10,7 @@ import { goalStatus } from '../../kit/src/stage/goal.js';
 import { dryRun } from '../../kit/src/stage/scene.js';
 import { parseScript } from '../../kit/src/stage/script.js';
 import { gestureAct, askFor, writeRange } from '../../kit/src/stage/gestures.js';
+import { roleName } from '../../kit/src/stage/types/sentence.js';
 import css from '../../kit/src/stage/stage.css';
 import { viewCss, VIEWS } from '../../kit/src/stage/types/views.js';
 import katexCss from 'virtual:katex-css';
@@ -32,7 +33,7 @@ const MOCK = q.has('mock');
 let stage = null;
 let run = 0;
 // ?dev：检查脚本用（tools/stage-try.mjs 拿 createLoop 照学习台的课堂循环演一幕；学生的手势照画法的把手、手势表、裁判走）
-if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, gridsOf, createLoop, eventsText, goalStatus, HELP, dryRun, parseScript, gestureAct, askFor, writeRange, VIEWS };
+if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, gridsOf, createLoop, eventsText, goalStatus, HELP, dryRun, parseScript, gestureAct, askFor, writeRange, VIEWS, roleName };
 
 function fresh({ input, onAct = null }) {
   stage?.destroy();

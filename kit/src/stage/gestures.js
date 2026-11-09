@@ -1,8 +1,8 @@
 // 通用手势（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 3 节）不碰 DOM 的那一半：手指的事都在 gesturedom.js，
 // 这里只管「按下的部件、松手处的部件或空位、写的值 → 一行学生指令」和「撤一步」。纯函数，有测试（tests/stage-gestures.test.js）。
 //
-// 五种手势所有东西共用：tap 点一个部件、drop-on 拖到另一个部件上、drop-at 拖到空处（托盘里的拖进来）、span 从一个部件拉到另一个、
-// write 往一个部件里写一个值。每种东西在规则文件里交一张手势表（rules.js 的 gestures）：五种手势在它这里是什么动作、翻成哪一行指令
+// 六种手势所有东西共用：tap 点一个部件、drop-on 拖到另一个部件上、drop-at 拖到空处（托盘里的拖进来）、span 从一个部件拉到另一个、
+// line 从一个钩拉出一条线松在别处（句子的 refer）、write 往一个部件里写一个值。每种东西在规则文件里交一张手势表（rules.js 的 gestures）：这几种手势在它这里是什么动作、翻成哪一行指令
 // （toAct），要不要先问一个值（ask：倍数框；pick + choices：成分标签）。这里不认识任何具体的东西。
 import { gestureOf } from './rules.js';
 
@@ -78,7 +78,7 @@ export function gestureGrabs(g) {
   const out = new Set();
   const add = (n) => { for (const x of [].concat(n || [])) out.add(PART_GRIPS.has(x) ? 'part' : x); };
   const ks = kindsOf(g);
-  if (ks.some((k) => k === 'drop-on' || k === 'drop-at' || k === 'span')) add(g.from);
+  if (ks.some((k) => k === 'drop-on' || k === 'drop-at' || k === 'span' || k === 'line')) add(g.from);
   if (ks.includes('tap')) add(g.tap || g.on);
   if (ks.includes('write')) add(g.on);
   return out;

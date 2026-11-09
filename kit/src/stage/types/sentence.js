@@ -7,7 +7,7 @@
 //   fold  一段折成一个小方块，只留主干（其余的词滑过去补位）；unfold 展开
 //   move  一个词 / 一段挪到别处（讲倒装、还原语序），别的词让开
 //   cut   两个词之间一道斜线（意群断句）
-//   refer 箭头：which / it 指的是谁
+//   refer 箭头：which / it 指的是谁（指一个词、一段、整句；links= 是老师给的答案，学生从钩上拉线时照它判）
 //   rewrite 改写整句：同样的词滑到新位置，新的淡进来（「从句 → 非谓语」「倒装 → 正常语序」）
 // 部件：s.3 现在第 3 个词、s.2-5 第 2 到 5 个、s.who 这个词（出现几次时 s.who:2）、s.who-door 从 who 到 door、
 //      s#3 一开始第 3 个的那个词（挪了、改写了跟着它走）
@@ -16,7 +16,7 @@
 import { bbox } from '../layout.js';
 import { parseBrackets, tokenizeSentence, ROLES } from '../../entext.js';
 // 规则那边照 key 数的学生括号（舞台现状里写）。两个模块互相 import：都只在函数里用对方的东西，加载的先后不碍事
-import { bracketFacts } from './sentence.rules.js';
+import { bracketFacts, tallyOf } from './sentence.rules.js';
 
 export const MAX_WORDS = 60;
 export const WRAP = 800; // 一行最宽（世界坐标的像素；镜头再缩放到屏幕上）
@@ -123,6 +123,29 @@ export function roleName(label) {
   if (ROLE_ZH.has(s)) return s;
   return ROLE_HAS.find(([re]) => re.test(s))?.[1] ?? null;
 }
+// 中文成分名 → 缩写（ROLES 倒过来，外加泛称「从句」）：舞台现状里括号写两种名字（s.2-6 定语（Attr）），老师认得出学生点的是哪一种
+const ABBR = { ...Object.fromEntries(Object.entries(ROLES).map(([k, v]) => [v, k])), 从句: 'Cl' };
+/**
+ * 成分名 → 缩写：「定语」→ Attr，「谓语1」→ V1；本来就是缩写的照老师写的（Adv 还是 Adv）；认不出的是 null。
+ * 只给舞台现状的括号那一行用（括号上、事实里照括号上写的，一个名字）
+ */
+export function roleAbbr(label) {
+  const s = String(label ?? '').trim();
+  const base = s.replace(/(\D)\d+$/, '$1'), num = s.slice(base.length);
+  if (Object.hasOwn(ROLE_NAMES, base)) return s;
+  const name = roleName(s);
+  return name && ABBR[name] ? `${ABBR[name]}${num}` : null;
+}
+/** 括号在舞台现状里的写法：中文（缩写），老师写缩写的也补上中文；认不出的照写 */
+export function roleBoth(label) {
+  const s = String(label ?? '').trim();
+  const base = s.replace(/(\D)\d+$/, '$1'), num = s.slice(base.length);
+  const abbr = roleAbbr(s);
+  if (!abbr) return s;
+  const zh = Object.hasOwn(ROLE_NAMES, base) ? `${ROLE_NAMES[base]}${num}` : s;
+  return zh === abbr ? s : `${zh}（${abbr}）`;
+}
+
 /** 两个成分是不是一回事：一样，或者一边是泛称「从句」、另一边是某种从句 */
 export function sameRole(a, b) {
   if (!a || !b) return false;
@@ -138,7 +161,7 @@ export function sameRole(a, b) {
 // 画面一次 sync 要问几十遍每个词在哪：同一个样子只排一次（检查一行时的副本是新对象，自己再排）
 const laid = new WeakMap();
 export function layout(o) {
-  const sig = JSON.stringify([o.origin, o.width, o.end, o.words, o.marks, o.tags, o.folds, o.cuts, o.refers, measureRev]);
+  const sig = JSON.stringify([o.origin, o.width, o.end, o.words, o.marks, o.tags, o.folds, o.cuts, o.refers, o.tally, measureRev]);
   const hit = laid.get(o);
   if (hit?.sig === sig) return hit.lay;
   const lay = place(o);
@@ -234,11 +257,30 @@ function place(o) {
   // 5. 竖着排：每一行上面留标签（和箭头）的地方，下面按括号有几层留地方
   const tagged = new Set();
   for (const t of o.tags || []) if (!inOneFold(t.keys)) for (const [a] of runsOf(t.keys)) tagged.add(a);
-  // 指代：同一行拱一道箭头；不在同一行时一道线要横穿好几层括号，改成在 which 头上写「→ people」
+  // 指代：同一行拱一道箭头；不在同一行时一道线要横穿好几层括号，改成在 which 头上写「→ people」。
+  // 指到一段的（toKeys）：那一段连着、和 which 在同一行就拱到那一段的正中，上面一道小横线标出是哪一段；不然也写「→ The books」。
+  // 指到整句的（whole，主句）：写「→ 整句」
   const arcs = [], hops = [];
   for (const r of o.refers || []) {
-    const A = itemOf.get(r.from), B = itemOf.get(r.to);
-    if (A == null || B == null || A === B) continue;
+    const A = itemOf.get(r.from);
+    if (A == null) continue;
+    if (r.whole) { hops.push({ refer: r, A, text: '→ 整句' }); tagged.add(A); continue; }
+    if (r.toKeys) {
+      const idx = [...new Set(r.toKeys.map((k) => itemOf.get(k)).filter((v) => v != null))].sort((p, q) => p - q);
+      if (!idx.length) continue;
+      const B0 = idx[0], B1 = idx[idx.length - 1];
+      const flat = B1 - B0 + 1 === idx.length && idx.every((i) => items[i].line === items[A].line) && !idx.includes(A);
+      if (!flat) { hops.push({ refer: r, A, text: `→ ${shortPhrase(o, r.toKeys)}` }); tagged.add(A); continue; }
+      const dx = Math.abs(items[A].x - (items[B0].x + items[B1].x + items[B1].w) / 2);
+      const h = Math.max(18, Math.min(40, 14 + dx * 0.09));
+      const lift = (i) => (tagged.has(i) ? TAG_ROOM - 4 : 4);
+      arcs.push({ refer: r, A, B: B0, B1, h, lift });
+      const L = lines[items[A].line];
+      L.arcRoom = Math.max(L.arcRoom, Math.max(lift(A), ...idx.map(lift)) + h + 6);
+      continue;
+    }
+    const B = itemOf.get(r.to);
+    if (B == null || A === B) continue;
     if (items[A].line !== items[B].line) { hops.push({ refer: r, A, B }); tagged.add(A); continue; }
     const dx = Math.abs(items[A].x - items[B].x);
     const h = Math.max(18, Math.min(40, 14 + dx * 0.09));
@@ -263,7 +305,12 @@ function place(o) {
     for (const k of it.keys) boxes.set(k, it.box);
   });
   const wordBottom = (L) => oy + L.wordY + WORD_H;
-  // 7. 括号：一段跨了几行就分几截（接着上一行的那头不画竖的那一小截）；字写在最长的那一截下面
+  // 7. 括号：一段跨了几行就分几截（接着上一行的那头不画竖的那一小截）；字写在最长的那一截下面。
+  // 被挪开拆散了的（brokenMarks；老师本来就拉成两截的不算）：每一截画成断开的虚线，成分字变淡、带「?」（画面不说「它还是谓语」）。
+  // tally s V 开着：学生的每道括号的字后面带一个数（里面 key 的谓语几个），剩下的写在句尾（tallyOf，sentence.rules.js）
+  const broken = new Set(brokenMarks(o).filter((id) => !o.marks.find((m) => m.id === id)?.apart));
+  const tal = o.tally ? tallyOf(o) : null;
+  const TALLY_W = 22;
   const brackets = [], markLabels = [];
   for (const br of brs) {
     const segs = [];
@@ -280,11 +327,17 @@ function place(o) {
       const lineY = wordBottom(L) + BR_TOP + (depth - 1) * LEVEL_H;
       const top = wordBottom(L) + 3;
       const seg = { id: `${br.mark.id}:${br.a}:${k}`, mark: br.mark.id, color: br.mark.color, level: br.level, depth, line: s.line, x: x0, y: top, w: x1 - x0, h: lineY - top, openL: k > 0, openR: k < segs.length - 1 };
+      if (broken.has(br.mark.id)) seg.broken = true;
       brackets.push(seg);
       if (!best || seg.w > best.w + 0.5) best = seg;
     });
-    const w = Math.round(textWidth(br.mark.label, 'mark') + 8), h = 18;
-    markLabels.push({ id: `${br.mark.id}:${br.a}`, mark: br.mark.id, text: br.mark.label, color: br.mark.color, level: br.level, depth: best.depth, line: best.line, x: best.x + best.w / 2 - w / 2, y: best.y + best.h + 3, w, h, seg: best });
+    const text = broken.has(br.mark.id) ? `${br.mark.label}?` : br.mark.label;
+    const n = tal?.each.get(br.mark.id);
+    const w = Math.round(textWidth(text, 'mark') + 8 + (n != null ? TALLY_W : 0)), h = 18;
+    const lab = { id: `${br.mark.id}:${br.a}`, mark: br.mark.id, text, color: br.mark.color, level: br.level, depth: best.depth, line: best.line, x: best.x + best.w / 2 - w / 2, y: best.y + best.h + 3, w, h, seg: best };
+    if (broken.has(br.mark.id)) lab.broken = true;
+    if (n != null) lab.tally = n;
+    markLabels.push(lab);
   }
   // 括号下的字：先挪进外面那层括号里面（不压着外层的竖线），再把同一层挤着的推开
   for (const l of markLabels) {
@@ -309,7 +362,7 @@ function place(o) {
   for (const hp of hops) {
     const it = items[hp.A], L = lines[it.line];
     const to = items[hp.B];
-    const text = `→ ${to.word ? to.word.value : to.label}`;
+    const text = hp.text ?? `→ ${to.word ? to.word.value : to.label}`;
     const w = Math.round(textWidth(text, 'tag') + 12), h = 20;
     tags.push({ id: `ref:${hp.refer.from}`, text, color: hp.refer.color || null, refer: true, line: it.line, x: it.box.x + it.box.w / 2 - w / 2, y: oy + L.wordY - h - 3, w, h });
   }
@@ -324,18 +377,39 @@ function place(o) {
     const L = lines[it.line];
     cuts.push({ key: it.keys.at(-1), x: cx - 9, y: oy + L.wordY + 3, w: 18, h: WORD_H - 6 });
   }
-  // 10. 箭头：拱在两个词上面（在小标签的上面过去）
+  // 10. 箭头：拱在两个词上面（在小标签的上面过去）；指到一段的拱到那一段的正中，那一段上面一道两头翘下去的小横线（cap）
+  const r1 = (v) => Math.round(v * 10) / 10;
   const refers = arcs.map((a) => {
     const P = items[a.A].box, Q = items[a.B].box;
-    const r1 = (v) => Math.round(v * 10) / 10;
+    if (a.B1 != null) {
+      const Q1 = items[a.B1].box;
+      const run = [];
+      for (let i = a.B; i <= a.B1; i++) run.push(i);
+      const capY = Math.min(...run.map((i) => items[i].box.y - a.lift(i)));
+      const x0 = Q.x + 4, x1 = Q1.x + Q1.w - 4;
+      const p = { x: P.x + P.w / 2, y: P.y - a.lift(a.A) }, q = { x: (x0 + x1) / 2, y: capY };
+      const top = Math.min(p.y, q.y) - a.h;
+      const d = `M${r1(p.x)} ${r1(p.y)} C${r1(p.x)} ${r1(top)} ${r1(q.x)} ${r1(top)} ${r1(q.x)} ${r1(q.y)}`;
+      const cap = `M${r1(x0)} ${r1(capY + 5)} L${r1(x0)} ${r1(capY)} L${r1(x1)} ${r1(capY)} L${r1(x1)} ${r1(capY + 5)}`;
+      const bx = Math.min(p.x, x0), bw = Math.max(p.x, x1) - bx;
+      return { from: a.refer.from, to: a.refer.to, toKeys: a.refer.toKeys, color: a.refer.color || null, d, cap, tip: { x: q.x, y: q.y }, box: { x: bx, y: top + a.h * 0.25 - 2, w: bw, h: Math.max(p.y, capY + 5) - top - a.h * 0.25 + 2 } };
+    }
     const p = { x: P.x + P.w / 2, y: P.y - a.lift(a.A) }, q = { x: Q.x + Q.w / 2, y: Q.y - a.lift(a.B) };
     const top = Math.min(p.y, q.y) - a.h;
     const d = `M${r1(p.x)} ${r1(p.y)} C${r1(p.x)} ${r1(top)} ${r1(q.x)} ${r1(top)} ${r1(q.x)} ${r1(q.y)}`;
     return { from: a.refer.from, to: a.refer.to, color: a.refer.color || null, d, tip: { x: q.x, y: q.y }, box: { x: Math.min(p.x, q.x), y: top + a.h * 0.25 - 2, w: Math.abs(p.x - q.x), h: Math.max(p.y, q.y) - top - a.h * 0.25 + 2 } };
   });
-  const all = [...items.map((it) => ({ x: it.box.x - it.leadW, y: it.box.y, w: it.w, h: it.box.h })), ...brackets, ...markLabels, ...tags, ...cuts, ...refers.map((r) => r.box)];
+  // 11. tally 剩下的（括号外的几个）：句尾，最后一样的后面
+  const tallies = [];
+  if (tal && items.length) {
+    const it = items[items.length - 1], L = lines[it.line];
+    const text = `括号外 ${tal.rest}`;
+    const w = Math.round(textWidth(text, 'tag') + 14), h = 22;
+    tallies.push({ id: 'tally:rest', text, x: it.box.x + it.box.w + it.punctW + 10, y: oy + L.wordY + (WORD_H - h) / 2, w, h, line: it.line });
+  }
+  const all = [...items.map((it) => ({ x: it.box.x - it.leadW, y: it.box.y, w: it.w, h: it.box.h })), ...brackets, ...markLabels, ...tags, ...cuts, ...refers.map((r) => r.box), ...tallies];
   const box = bbox(all) || { x: ox, y: oy, w: 1, h: 1 };
-  return { items, lines, boxes, pills, brackets, marks: markLabels, tags, cuts, refers, box };
+  return { items, lines, boxes, pills, brackets, marks: markLabels, tags, cuts, refers, tallies, box };
 }
 
 // 同一组（同一行、同一层）的字挤着的推开：挤在一起的几个合成一串，这一串整体摆在它们想去的地方的正中
@@ -460,6 +534,11 @@ export function sentenceText(o, { folds = false } = {}) {
   }
   return `${out.join(' ')}${o.end || ''}`;
 }
+/** 箭头指到的一段写在词头上（「→ The books」）：长了只写开头两个词 */
+function shortPhrase(o, keys) {
+  const ws = o.words.filter((w) => keys.includes(w.key)).sort((a, b) => a.slot - b.slot);
+  return ws.length > 3 ? `${phraseOf(ws.slice(0, 2))} …` : phraseOf(ws);
+}
 /** 一段词照原句写出来（中间的标点、所有格的撇号照原句：workers' productivity）；头上的开引号、尾巴上的逗号句号不带 */
 export function phraseOf(words) {
   return words.map((w, i) => {
@@ -514,11 +593,15 @@ export function parseKey(words, src) {
   const s = String(src ?? '').trim();
   if (!s.includes('[')) throw new Error('key= 要用 [成分 词…] 标出正确拆法，比如 key="[S The man] [V is] [P a doctor]."（成分写缩写：S、V、O、RC……）');
   if (/\[(?![A-Za-z])/.test(s)) throw new Error('key= 的括号里先写成分的英文缩写（S、V、O、P、RC、NF……），再写词，比如 [S The man]');
+  // 一段几种成分（[Attr/NF designed …]：定语、非谓语都对）：parseBrackets 的成分只认一个词，先换成一个记号，读完再拆开
+  const OR = '_or_';
+  if (/\[[A-Za-z]\w*(?:\/[A-Za-z]\w*)*\/(?![A-Za-z])/.test(s)) throw new Error('key= 里一段几种成分写成 [Attr/NF 词…]：/ 两边都写成分的缩写');
   let parsed;
-  try { parsed = parseBrackets(s); } catch (e) { throw new Error(`key= 写错了：${e.message}`); }
+  try { parsed = parseBrackets(s.replace(/\[([A-Za-z]\w*(?:\/[A-Za-z]\w*)+)(?=\s)/g, (_, r) => `[${r.split('/').join(OR)}`)); } catch (e) { throw new Error(`key= 写错了：${e.message.split(OR).join('/')}`); }
+  for (const sp of parsed.spans) sp.roles = sp.role.split(OR);
   // 认不出的成分名当场报（照收的话学生标什么都对不上，又看不出为什么）
-  const odd = parsed.spans.find((sp) => !roleName(sp.role));
-  if (odd) throw new Error(`key= 里的成分「${odd.role}」认不出，能写：${Object.entries(ROLE_NAMES).map(([k, v]) => `${k} ${v}`).join('、')}（编号 V1、V2 也行）`);
+  const odd = parsed.spans.flatMap((sp) => sp.roles).find((r) => !roleName(r));
+  if (odd) throw new Error(`key= 里的成分「${odd}」认不出，能写：${Object.entries(ROLE_NAMES).map(([k, v]) => `${k} ${v}`).join('、')}（编号 V1、V2 也行；一段几种写 Attr/NF）`);
   // 句子的词再按 entext 的切法切一遍（U.S. 会切成 U、S 两个）：每一小块记着它是句子里的哪个词
   const flat = [];
   for (const w of [...words].sort((a, b) => a.slot - b.slot)) {
@@ -538,11 +621,64 @@ export function parseKey(words, src) {
   const spans = parsed.spans.map((sp) => {
     const keys = [...new Set(flat.slice(ord.get(sp.from), ord.get(sp.to) + 1).map((x) => x.word.key))];
     const sig = keys.join(',');
-    if (seen.has(sig)) throw new Error(`key= 里 [${seen.get(sig)} …] 和 [${sp.role} …] 是同一段词：舞台上一段词只挂一个成分，留一个`);
-    seen.set(sig, sp.role);
-    return { role: sp.role, keys, depth: sp.depth };
+    const role = sp.roles.join('/');
+    if (seen.has(sig)) throw new Error(`key= 里 [${seen.get(sig)} …] 和 [${role} …] 是同一段词：舞台上一段词只挂一个成分，留一个（两种都算对写 [${seen.get(sig)}/${role} …]）`);
+    seen.set(sig, role);
+    // role 是第一种（写给老师、按钮的颜色照它），roles 是写了的每一种：学生标哪一种都算拉对
+    return { role: sp.roles[0], roles: sp.roles, keys, depth: sp.depth };
   });
   return { src: s, spans };
+}
+
+// —— 指代的答案 links=（照黑板 link 组件的写法，entext.js 的 parseLink：几条用 ; 隔开，! 开头是常见的错连，= 后面是它说明了什么）——
+/**
+ * 一头的写法 → 词的 key（一开始的编号，挪了词跟着走）：词（句子里只有一个时）、s.6、s.1-2、s#6、s（整句，就是主句）。
+ * 返回 { keys } 或 { whole: true }；写错了抛错
+ */
+function linkEnd(o, src, raw) {
+  const t = String(src ?? '').trim();
+  if (!t) throw new Error(`links= 的「${raw}」：两头都要写，比如 that -> books`);
+  if (t === o.id) return { whole: true };
+  const ref = t.match(/^([A-Za-z_]\w*)([.#])(.+)$/);
+  if (ref && ref[1] !== o.id && !o.words.some((w) => norm(w.value) === norm(t))) throw new Error(`links= 的「${t}」：写 ${o.id} 里的词（${o.id}.6、${o.id}.1-2、整句写 ${o.id}）`);
+  if (ref && ref[1] === o.id) return { keys: sentence.pick(o, ref[2], ref[3], t).map((w) => w.key) };
+  const hits = ordered(o).filter((w) => norm(w.value) === norm(t));
+  if (!hits.length) throw new Error(`links= 的「${raw}」：${o.id} 里没有「${t}」这个词（写词本身，或者写 ${o.id}.6 这样的部件）`);
+  if (hits.length > 1) throw new Error(`links= 的「${t}」在句子里有 ${hits.length} 个，写成 ${o.id}.${hits[0].slot} 这样的部件`);
+  return { keys: [hits[0].key] };
+}
+/** 一头写成比得上的字：'15'、'15-16'、'3,5'（按 key，挪了词照样比得上）、'整句' 写 's'（gestures、判法都照它比） */
+export function targetKey(t) {
+  if (!t) return '';
+  if (t.whole) return 's';
+  const ks = [...new Set(t.keys || [])].sort((a, b) => a - b);
+  const runs = [];
+  for (const k of ks) { const r = runs[runs.length - 1]; if (r && r[1] === k - 1) r[1] = k; else runs.push([k, k]); }
+  return runs.map(([a, b]) => (a === b ? `${a}` : `${a}-${b}`)).join(',');
+}
+/** links="that -> books; !that -> shelf=就近连了名词" → { src, pairs: [{ from: key, to }], wrongs: [{ from, to, why }] }（to 是 linkEnd 的样子） */
+export function parseLinks(o, src) {
+  const pairs = [], wrongs = [];
+  for (const raw of String(src ?? '').split(/[;；\n]/).map((x) => x.trim()).filter(Boolean)) {
+    const bad = raw.startsWith('!');
+    const body = bad ? raw.slice(1) : raw;
+    const eq = bad ? body.indexOf('=') : -1;
+    const m = /^(.+?)\s*(?:->|→|=>)\s*(.+)$/.exec((eq < 0 ? body : body.slice(0, eq)).trim());
+    if (!m) throw new Error(`links= 要写成 词 -> 它指的词（${o.id}.6 -> ${o.id}.2、that -> books，几条用 ; 隔开，! 开头是常见的错连），「${raw}」看不懂`);
+    const a = linkEnd(o, m[1], raw), b = linkEnd(o, m[2], raw);
+    if (a.whole || a.keys.length !== 1) throw new Error(`links= 的左边写一个词（钩挂在它上面）：「${m[1].trim()}」`);
+    if (!b.whole && b.keys.length === 1 && b.keys[0] === a.keys[0]) throw new Error(`links= 的「${raw}」：两头是同一个词`);
+    const item = { from: a.keys[0], to: b };
+    if (bad) wrongs.push({ ...item, why: eq < 0 ? '' : body.slice(eq + 1).trim() });
+    else pairs.push(item);
+  }
+  if (!pairs.length) throw new Error(`links= 至少写一条正确的：词 -> 它指的词，比如 links="that -> books"（! 开头的是常见的错连）`);
+  const seen = new Set();
+  for (const p of pairs) {
+    if (seen.has(p.from)) throw new Error(`links= 里「${o.words.find((w) => w.key === p.from).value}」连了两条：一个词只连一条`);
+    seen.add(p.from);
+  }
+  return { src: String(src), pairs, wrongs };
 }
 
 /**
@@ -593,6 +729,8 @@ export const sentence = {
     };
     // 正确拆法（老师给的，页面拿它逐词比学生拉的括号；sentence.rules.js）
     if (h.opts.key != null) o.key = parseKey(o.words, h.opts.key);
+    // 指代的答案（老师给的，学生从钩上拉线时页面照它判；sentence.rules.js）
+    if (h.opts.links != null) o.links = parseLinks({ ...o, id }, h.opts.links);
     o.origin = old ? { ...old.origin } : scene.slotFor(layout({ ...o, origin: { x: 0, y: 0 } }).box.w);
     return o;
   },
@@ -624,7 +762,7 @@ export const sentence = {
     const L = layout(o);
     return [
       ...L.items.map((it) => ({ x: it.box.x - it.leadW - 2, y: it.box.y, w: it.w + 4, h: it.box.h })),
-      ...L.brackets, ...L.marks, ...L.tags, ...L.cuts, ...L.refers.map((r) => r.box),
+      ...L.brackets, ...L.marks, ...L.tags, ...L.cuts, ...L.refers.map((r) => r.box), ...L.tallies,
     ];
   },
   commands: {
@@ -642,10 +780,12 @@ export const sentence = {
       // 谁拉的（这一行是学生做的还是老师写的，scene.js 的 apply 记着）：学生的括号页面另外数里面的谓语、多拉的、拆散的；
       // 同一段再标就换成这一回标的人
       const by = scene.actor === 'student' ? 'student' : 'teacher';
-      if (had) Object.assign(had, { label, color, by });
+      // 拉的时候就不连着（did … realize 这种老师故意拉成两截的）：记着，画面不当成「被挪开拆散了」画虚线
+      const apart = !contiguous(parts);
+      if (had) { Object.assign(had, { label, color, by }); if (apart) had.apart = true; else delete had.apart; }
       else {
         if (o.marks.length >= 24) throw new Error('一句上最多 24 道括号，先 unmark 几道');
-        o.marks.push({ id: `m${o.seq++}`, keys, label, color, by });
+        o.marks.push({ id: `m${o.seq++}`, keys, label, color, by, ...(apart ? { apart: true } : {}) });
       }
       return { id: o.id, mark: had?.id || o.marks.at(-1).id };
     },
@@ -789,28 +929,37 @@ export const sentence = {
       o.cuts = o.cuts.filter((k) => !gone.includes(k));
       return { id: o.id };
     },
-    // refer s.3 -> s.2：箭头（which / it / that 指的是谁）；unrefer s.3 / unrefer s
+    // refer s.3 -> s.2：箭头（which / it / that 指的是谁）；指到一段 refer s.6 -> s.1-2、指到整句（主句）refer s.6 -> s；unrefer s.3 / unrefer s。
+    // 一个词只连一条（再连就换掉）
     refer(scene, c, h) {
       const { args, arrow } = h;
-      if (arrow < 0) throw new Error('要写成 refer s.3 -> s.2（从 which 指到它说的那个词）');
+      if (arrow < 0) throw new Error('要写成 refer s.3 -> s.2（从 which 指到它说的那个词；指一段写 s.1-2，指整句写 s）');
       const a = target({ ...h, refsIn: () => h.refsIn(args.slice(0, arrow)) }, 'refer');
       const b = target({ ...h, refsIn: () => h.refsIn(args.slice(arrow + 1)) }, 'refer');
       if (a.o !== b.o) throw new Error('refer 的两头要在同一句里');
-      if (a.whole || b.whole) throw new Error('refer 的两头各写一个词，比如 refer s.3 -> s.2');
-      const from = a.parts[0].key, to = b.parts[b.parts.length - 1].key;
-      if (from === to) throw new Error('refer 的两头是同一个词');
+      if (a.whole) throw new Error(`refer 从一个词连出去，比如 refer ${a.o.id}.3 -> ${a.o.id}.2`);
+      const from = a.parts[0].key;
+      // 指到一段（不只一个词）：toKeys 是那一段；一个词照旧 toKeys 是 null（第一轮的写法一字不变）；整句 whole
+      const whole = !!b.whole && b.refs.every((r) => r === b.o.id);
+      const span = !whole && b.parts.length > 1 ? b.parts.map((p) => p.key) : null;
+      const to = whole ? null : b.parts[b.parts.length - 1].key;
+      if (!whole && !span && from === to) throw new Error('refer 的两头是同一个词');
+      if (span && !contiguous(b.parts)) throw new Error(`refer 指到的一段要连着（${b.refs.join(' ')} 不连着）`);
+      if (span?.includes(from)) throw new Error(`refer 指到的那一段不能含 ${a.parts[0].value} 自己`);
       const bad = h.words.find((w) => /^g\d+$/.test(w) && !isColor(w));
       if (bad) throw new Error('颜色只有 g1～g6');
       const color = h.words.find(isColor) || null;
       const o = a.o;
+      // 谁连的：学生拉的线以后头上有 ✕ 能自己收掉
+      const by = scene.actor === 'student' ? 'student' : 'teacher';
       o.refers = o.refers.filter((r) => r.from !== from);
-      o.refers.push({ from, to, color });
-      return { id: o.id, from, to };
+      o.refers.push({ from, to, toKeys: span, whole, color, by });
+      return { id: o.id, from, to, ...(span ? { toKeys: span } : {}), ...(whole ? { whole: true } : {}) };
     },
     unrefer(scene, c, h) {
       const { o, parts, whole } = target(h, 'unrefer');
       const keys = new Set(parts.map((p) => p.key));
-      const gone = whole ? o.refers : o.refers.filter((r) => keys.has(r.from) || keys.has(r.to));
+      const gone = whole ? o.refers : o.refers.filter((r) => keys.has(r.from) || keys.has(r.to) || (r.toKeys || []).some((k) => keys.has(k)));
       if (!gone.length) throw new Error(`${o.id} 上${whole ? '' : '这几个词'}没有箭头`);
       o.refers = o.refers.filter((r) => !gone.includes(r));
       return { id: o.id };
@@ -854,9 +1003,10 @@ export const sentence = {
       o.tags = keep(o.tags);
       o.folds = keep(o.folds);
       o.cuts = o.cuts.filter((k) => alive.has(k) && pos.get(k) !== next.length);
-      o.refers = o.refers.filter((r) => alive.has(r.from) && alive.has(r.to));
+      o.refers = o.refers.filter((r) => alive.has(r.from) && (r.whole || (r.toKeys ? r.toKeys.every((k) => alive.has(k)) : alive.has(r.to))));
       // 原来的正确拆法是那一句的：改写以后对不上了，作废（不拿旧的去判新句子）；记着作废了，老师在「舞台现在」和下一步里看得到
       if (o.key) o.key = { src: o.key.src, spans: [], void: 'rewrite' };
+      if (o.links) o.links = { src: o.links.src, pairs: [], wrongs: [], void: 'rewrite' };
       return { id: o.id, removed, added: next.filter((w) => !old.some((x) => x.key === w.key)).map((w) => w.key), moved, changed };
     },
   },
@@ -874,21 +1024,35 @@ export const sentence = {
     };
     const lines = [`句子 ${o.id}（${o.words.length} 个词${L.lines.length > 1 ? `，排成 ${L.lines.length} 行` : ''}）：${sentenceText(o, { folds: true })}`];
     lines.push(`  词：${ordered(o).map(tag).join('  ')}`);
-    const color = (c) => (c ? `，${COLOR_NAMES[c]}` : '');
     if (o.marks.length) {
       const lv = new Map(L.marks.map((m) => [m.mark, m.level]));
-      lines.push(`  括号（词下面）：${o.marks.map((m) => `${spanText(o, m.keys)} ${m.label}${lv.get(m.id) > 1 ? `（第 ${lv.get(m.id)} 层${color(m.color)}）` : m.color ? `（${COLOR_NAMES[m.color]}）` : ''}`).join('；')}`);
+      // 成分写两种名字（定语（Attr）、谓语（V））：学生点的是中文、老师写的多半是缩写，两边都认得出（事实里照括号上写的，一个名字）
+      const extra = (m) => [lv.get(m.id) > 1 ? `第 ${lv.get(m.id)} 层` : '', m.color ? COLOR_NAMES[m.color] : ''].filter(Boolean).join('，');
+      lines.push(`  括号（词下面）：${o.marks.map((m) => `${spanText(o, m.keys)} ${roleBoth(m.label)}${extra(m) ? `，${extra(m)}` : ''}`).join('；')}`);
       // 学生拉的括号：里面 key 的谓语几个、多拉的、key 里没有的、被挪开拆散的（页面照 key 数，sentence.rules.js）
       for (const f of bracketFacts(o)) lines.push(`  ${f}`);
     }
+    // tally s V：学生看到的数（每道学生括号上、句尾），照 key 数；数不了的说为什么
+    if (o.tally) {
+      const t = tallyOf(o);
+      const head = `  标着的数（tally ${o.tally}${t ? `，key 的${roleName(o.tally)}` : ''}）：`;
+      if (!t) lines.push(`${head}页面数不了（${o.key?.void ? `${o.id} 的 key 跟着 rewrite 作废了` : `${o.id} 没写 key`}），画面上没标`);
+      else {
+        const each = o.marks.filter((m) => t.each.has(m.id)).map((m) => `${spanText(o, m.keys)} ${m.label} ${t.each.get(m.id)} 个`);
+        lines.push(`${head}${[...each, `括号外 ${t.rest} 个`].join('；')}`);
+      }
+    }
     const ks = keyStatus(o);
+    // 指代的答案收下了没有（和 key 一样，老师看得到 refer 判不判、为什么判不了）
+    if (o.links) lines.push(`  links=：${o.links.void ? '作废了（rewrite 换了句子；要判就重新造这句、带上新的 links=）' : `收下了（${o.links.pairs.length} 条${o.links.wrongs.length ? `，常见的错连 ${o.links.wrongs.length} 条` : ''}）`}`);
     if (ks) lines.push(`  key：${ks.void ? '作废了（rewrite 换了句子；要判就重新造这句、带上新的 key=）' : ks.split.length ? ks.split.map((x) => `第 ${x.n} 段 [${x.role} ${x.text}] 被 move 拆散了，那一段不能再拉对`).join('；') : `收下了（${ks.n} 段）`}`);
     if (o.tags.length) lines.push(`  标签（词上面）：${o.tags.map((t) => `${spanText(o, t.keys)} ${t.label}`).join('；')}`);
     if (o.folds.length) lines.push(`  折起来的：${o.folds.map((f) => `${spanText(o, f.keys)} →「${f.label || '……'}」`).join('；')}`);
     if (o.cuts.length) lines.push(`  断开：${[...o.cuts].map((k) => o.words.find((w) => w.key === k)).sort((a, b) => a.slot - b.slot).map((w) => `${o.id}.${w.slot} ${w.value} 后面`).join('，')}`);
     if (o.refers.length) {
       const at = (k) => { const w = o.words.find((x) => x.key === k); return `${o.id}.${w.slot} ${w.value}`; };
-      lines.push(`  箭头：${o.refers.map((r) => `${at(r.from)} → ${at(r.to)}`).join('，')}`);
+      const toText = (r) => (r.whole ? '整句' : r.toKeys ? `${spanText(o, r.toKeys)} ${phraseOf(o.words.filter((w) => r.toKeys.includes(w.key)).sort((a, b) => a.slot - b.slot))}` : at(r.to));
+      lines.push(`  箭头：${o.refers.map((r) => `${at(r.from)} → ${toText(r)}`).join('，')}`);
     }
     return lines;
   },
@@ -900,13 +1064,14 @@ tag s.7 V / untag s.7             词上面的小标签（S、V、谓语1；最�
 fold s.3-6 / unfold s.3           折成一个小方块只留主干（别的词滑过去补位；方块上写这一段的成分，也能 fold s.3-6 "从句"）
 move s.3 after s.5                挪到别处讲倒装、还原语序（也能 before s.1、-> s.1），别的词让开
 cut s.6 / uncut s                 第 6 个词后面断开（意群的斜线）
-refer s.3 -> s.2 / unrefer s.3    箭头：which、it 指的是谁
+refer s.3 -> s.2 / unrefer s.3    箭头：which、it 指的是谁（指一段写 s.1-2，指整句写 s）
 rewrite s "The man living next door is a doctor."    改写整句：同样的词滑到新位置，新的淡进来
 ask drag s.7 "把 is 挪到句首"         学生按住一个词拖到别处（页面照做，再告诉你）
 学生自己拆（mark 页面照 key 判每一下）：
-open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的）= mark s.1-6 S；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句
+open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的，交中文）= mark s.1-6 主语；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句；key 写 [Attr/NF …] 是两种都对
 open s fold                         学生点一道括号或括号里的词 = fold s.3-6（页面不判；和 mark 一次开一种）
-判断式（when=）：s parsed（key 里每一段都拉对了）、s main（主干拉对了）、s span s.2-5 = V（这一段现在挂着这个成分）；没写 key 判不了，@s.done 也不收
+open s.6 refer                      学生从 s.6 的钩上拉线，松在词、括号、句子外框上 = refer s.6 -> s.2 / s.1-2 / s（整句）；造句子时写 links="that -> books; !that -> shelf=就近连了名词" 就照它判（! 是常见的错连）
+判断式（when=）：s parsed（key 里每一段都拉对了，多拉的不管）、s exact（拉对了、也没多拉）、s main（主干拉对了）、s span s.2-5 = V（这一段现在挂着这个成分）、s linked（links= 每一条都连对了）；没写 key / links= 判不了，@s.done 也不收
 句子里留空位让学生填词：现在没有写法（要填就 ask value … type=en）`,
   example: `sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."
 mark s.7 V

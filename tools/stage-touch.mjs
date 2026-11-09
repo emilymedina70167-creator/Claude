@@ -91,7 +91,8 @@ await page.waitForTimeout(400);
 const subj = await page.evaluate(() => { const b = [...document.querySelectorAll('.st-choices .st-choice')].find((x) => x.querySelector('span')?.textContent === '主语'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
 if (subj) await tapAt(subj);
 await page.waitForTimeout(1200);
-expect('只换了 wrong= 再开一次：点成分交出去了、照新的 wrong=mark 圈着', await lastAct(), 'mark s.1-2 S 圈着');
+// 成分按钮交的是中文（点「主语」交 mark s.1-2 主语）
+expect('只换了 wrong= 再开一次：点成分交出去了、照新的 wrong=mark 圈着', await lastAct(), 'mark s.1-2 主语 圈着');
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');
