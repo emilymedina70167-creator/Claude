@@ -641,3 +641,11 @@ test('屏幕上的数字键盘有小数点键：0 . 5 写成 0.5，矩阵收成�
   run(r.src, m);
   assert.equal(m.parts('M.2,1')[0].value, '5/2');
 });
+
+test('逗号当小数点：外接键盘的逗号（有的布局小数点是逗号）、键盘上照小数点接', () => {
+  assert.equal(keyOf({ key: ',' }), '.');
+  assert.equal(keyOf({ key: '，' }), '.');
+  assert.equal(padKey('3', ','), '3.');
+  assert.equal(padKey('3.', ','), '3.');
+  assert.equal(padKey('3/', ','), '3/');
+});

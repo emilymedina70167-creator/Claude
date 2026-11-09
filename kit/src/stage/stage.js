@@ -552,6 +552,7 @@ export class Stage {
       if (fx?.pickDiff) act.pickDiff = fx.pickDiff;
       if (fx?.derived?.length) act.derived = slimDerived(fx.derived);
       if (fx?.back) act.summary = fx.back.summary; // 按「回到……」：回到以后的样子（actText 写给老师）
+      if (fx?.hidden) act.hidden = fx.hidden; // 点开看怎么算碰到扣着的格：学生那边演成 ?，写给老师照实说是几（hiddenText）
       if (fx?.onGoals) act.onGoals = fx.onGoals.map(({ id, met, status }) => ({ id, met, status })); // 按了按钮才判的挑战
     }
     // 老师的行（连预写的行）让挑战成立、让东西做完了：预写的行拿掉没演（只在学生的一下演），跟着下一条告诉老师
@@ -1798,6 +1799,11 @@ const slimDerived = (list) => list.map((d) => ({ id: d.id, changed: (d.changed |
 // 一个部件画成小块写什么、写给老师写什么（扣着的不漏值）：在 scene.js（pickDiff 写给老师也用），这里照旧导出
 export { chipTextOf, tapValueOf };
 
+/** 点开看怎么算碰到的扣着的格（matrix.js 的 mul 交的 hidden）：写给老师照实说是几、扣着；学生那边演成「?」 */
+export function hiddenText(list) {
+  return list?.length ? `（扣着的演成了 ?：${list.map((h) => `${h.ref}（${h.value === '' ? '空' : h.value}，扣着）`).join('、')}）` : '';
+}
+
 /** 学生这一下做了什么，写给老师看（和舞台现状一起发） */
 export function actText(act) {
   if (!act) return '';
@@ -1818,7 +1824,7 @@ export function actText(act) {
       return `学生填了「${act.text}」——正确答案是 ${act.answer}，${act.right ? '填对了' : `填错了${act.misread ? `（页面看出来：${act.misread}）` : ''}`}`;
     }
     if (act.type === 'edit') return `学生把 ${act.ref} 从 ${act.from === '' ? '空' : act.from} 拨到 ${act.to}`;
-    if (act.type === 'explain') return `学生点了 ${act.ref}，看它怎么一行乘一列算出来`;
+    if (act.type === 'explain') return `学生点了 ${act.ref}，看它怎么一行乘一列算出来${hiddenText(act.hidden)}`;
     if (act.type === 'goal') return `学生做到了挑战 ${act.id}「${act.text}」`;
     if (act.type === 'undo') return `学生撤回了自己的上一下：${act.src}（舞台已经退回去了）`;
     // 学生按的「回到……」（open … back=）：回到以后的样子写在括号里（树写层序、矩阵写整张……，scene.js 的 summaryOf）

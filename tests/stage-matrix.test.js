@@ -473,3 +473,14 @@ test('扣着的一格：学生看的小块写「M 第 2 行第 1 列」，不写
   assert.equal(tapValueOf(p), '37，扣着');
   assert.equal(chipTextOf(s.parts('M.1,2')[0], M), '2', '没扣着的照旧写值');
 });
+
+test('点开看怎么算碰到扣着的格：mul 交出参与的扣着的格（写给老师照实说是几），画面照它画成 ?', () => {
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix B = 5 6 / 7 8 beside=A\nproduct C = A B\ncover C.1,1\ncover A.1,2\ncover B.2,2');
+  const [fx] = parseScript('mul C.1,1').map((c) => s.apply(c, { by: 'student' }));
+  // C.1,1 = 1×5 + 2×7 = 19：参与的有 A 的第 1 行（A.1,2 扣着）、B 的第 1 列、C.1,1（扣着）；B.2,2 不在这一格的算式里
+  assert.deepEqual(fx.hidden, [{ ref: 'C.1,1', value: '19' }, { ref: 'A.1,2', value: '2' }]);
+  // 没扣着的不交
+  const t = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix B = 5 6 / 7 8 beside=A\nproduct C = A B');
+  const [g] = parseScript('mul C.1,1').map((c) => t.apply(c, { by: 'student' }));
+  assert.equal(g.hidden, undefined);
+});

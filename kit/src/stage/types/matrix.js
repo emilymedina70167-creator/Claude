@@ -668,13 +668,23 @@ export const matrix = {
       const A = scene.objects.get(o.product.a), B = scene.objects.get(o.product.b);
       if (!A || !B || A.type !== 'matrix' || B.type !== 'matrix') throw new Error(`${o.product.a} 或 ${o.product.b} 已经不在舞台上了`);
       if (A.cols !== B.rows || A.rows !== o.rows || B.cols !== o.cols) throw new Error(`${o.product.a}、${o.product.b} 的尺寸变了，乘不出 ${o.rows}×${o.cols} 的 ${o.id}（重新 product 一次）`);
+      // 扣着的格（学生要先猜的）在这一格的算式里：画面把它演成「?」（matrix.view.js 的 mulOne），写给老师的照实说是几、扣着（hidden）
+      const hidden = [];
+      const note = (m, x) => {
+        if (!x?.covered) return;
+        const ref = `${m.id}.${x.r},${x.c}`;
+        if (!hidden.some((h) => h.ref === ref)) hidden.push({ ref, value: x.value });
+      };
       const items = ps.filter((x) => x.obj === o.id).map((x) => {
         const { terms, sum } = productTerms(A, B, x.r, x.c);
         setValue(x, sum);
         if (!o.calc.includes(x.key)) o.calc.push(x.key);
+        note(o, x);
+        for (const y of rowCells(A, x.r)) note(A, y);
+        for (const y of colCells(B, x.c)) note(B, y);
         return { key: x.key, r: x.r, c: x.c, terms, sum };
       });
-      return { id: o.id, a: A.id, b: B.id, items };
+      return { id: o.id, a: A.id, b: B.id, items, ...(hidden.length ? { hidden } : {}) };
     },
     // put AB Sum：AB 放进收集用的 Sum，Sum 跟着算 {AA + AB}（第一张放进来时 Sum 照它的大小）；学生把 AB 整张拖到 Sum 上就是这一行
     put(scene, c, h) {

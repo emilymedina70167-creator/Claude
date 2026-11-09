@@ -4,7 +4,7 @@
 import { EASE, moveDuration, stagger, arcPoints } from '../motion.js';
 import { MX, layout, stairsPoints, zeroRows, toQ, eqWidth, rowCells, emptyCollect } from './matrix.js';
 import { Q } from '../../exact.js';
-import { openParts, atLeast, screenOf } from '../gesturedom.js';
+import { openParts, atLeast, screenOf, noteAt } from '../gesturedom.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const tr = (x, y, s = 1) => `translate(${x}px, ${y}px)${s !== 1 ? ` scale(${s})` : ''}`;
@@ -141,14 +141,16 @@ async function addLine(stage, o, op, f = 1) {
   try {
     if (op.kind === 'comb') await scaleLine(stage, o, op, op.mid, f);
     const up = (b) => ({ ...b, y: b.y - 10 });
-    const G = SB.map((b, k) => ghost(stage, b, op.srcVals[k]));
+    // 扣着的格抬起来的副本也画「?」（副本上写着它的数，等于翻开了；落进去以后目标格照旧扣着）
+    const hid = (k) => !!stage.scene.partOf(o.id, op.src[k])?.covered;
+    const G = SB.map((b, k) => ghost(stage, b, hid(k) ? '?' : op.srcVals[k]));
     await Promise.all(G.map((g, k) => stage.tween(g, [{ opacity: 0, transform: tr(SB[k].x, SB[k].y) }, { opacity: 1, transform: tr(SB[k].x, SB[k].y - 10) }], { duration: D(300), delay: stagger(k, { step: D(40) }), easing: EASE.out })));
     if (op.b !== '1') {
       const off = await badge(stage, `×${paren(op.b)}`, SB.map(up), op.line, f);
       await Promise.all(G.map(async (g, k) => {
         const b = up(SB[k]);
         await stage.tween(g, [{ transform: tr(b.x, b.y) }, { transform: `${tr(b.x, b.y)} scale(0.8)`, opacity: 0.4 }], { duration: D(150), delay: stagger(k, { step: D(70) }) + D(80), easing: EASE.in });
-        setNum(g.firstChild, op.scaled[k]);
+        setNum(g.firstChild, hid(k) ? '?' : op.scaled[k]);
         await stage.tween(g, [{ transform: `${tr(b.x, b.y)} scale(0.8)`, opacity: 0.4 }, { transform: tr(b.x, b.y), opacity: 1 }], { duration: D(320), easing: EASE.spring });
       }));
       await stage.wait(D(160));
@@ -202,6 +204,11 @@ async function mulOne(stage, fx, it, f) {
   const rowN = it.terms.map((t) => nodeAt(stage, fx.a, t.a)), colN = it.terms.map((t) => nodeAt(stage, fx.b, t.b));
   if (!C || !cn?.__box || rowN.some((n) => !n?.__box) || colN.some((n) => !n?.__box)) return;
   const D = (ms) => ms * f;
+  // 扣着的格（学生要先猜的）：演怎么算，不演扣着的数——算式里、飞过去的副本都画成「?」（结果格扣着时结果也是 ?）
+  const sc = stage.scene;
+  const hid = (id, k) => !!sc.partOf(id, k)?.covered;
+  const av = (t) => (hid(fx.a, t.a) ? '?' : t.av), bv = (t) => (hid(fx.b, t.b) ? '?' : t.bv);
+  const sum = hid(fx.id, it.key) ? '?' : it.sum;
   rowN.forEach((n) => n.classList.add('is-mrow'));
   colN.forEach((n) => n.classList.add('is-mcol'));
   cn.classList.add('is-target');
@@ -215,17 +222,17 @@ async function mulOne(stage, fx, it, f) {
     const plus = k ? el('span', 'mx-w-op', line) : null;
     if (plus) plus.textContent = '+';
     const a = el('span', 'mx-w-n', line);
-    setNum(a, t.av, { paren: k > 0 });
+    setNum(a, av(t), { paren: k > 0 });
     const x = el('span', 'mx-w-x', line);
     x.textContent = '×';
     const b = el('span', 'mx-w-n', line);
-    setNum(b, t.bv, { paren: true });
+    setNum(b, bv(t), { paren: true });
     return { plus, a, x, b };
   });
   const eq = el('span', 'mx-w-op', line);
   eq.textContent = '=';
   const res = el('span', 'mx-w-n mx-w-res', line);
-  setNum(res, it.sum);
+  setNum(res, sum);
   [...line.children].slice(1).forEach((s) => { s.style.opacity = '0'; });
   // 写在整排（A B = C）下面的正中（照现在 A、B、C 在哪算）
   const w = line.offsetWidth || 200;
@@ -248,7 +255,7 @@ async function mulOne(stage, fx, it, f) {
     rowN[k].classList.add('is-pair');
     colN[k].classList.add('is-pair');
     if (s.plus) stage.tween(s.plus, [{ opacity: 0 }, { opacity: 1 }], { duration: D(200) });
-    await Promise.all([fly(rowN[k], t.av, s.a, D(620), -1), fly(colN[k], t.bv, s.b, D(620), 1)]);
+    await Promise.all([fly(rowN[k], av(t), s.a, D(620), -1), fly(colN[k], bv(t), s.b, D(620), 1)]);
     await stage.tween(s.x, [{ opacity: 0 }, { opacity: 1 }], { duration: D(160) });
     rowN[k].classList.remove('is-pair');
     colN[k].classList.remove('is-pair');
@@ -258,7 +265,7 @@ async function mulOne(stage, fx, it, f) {
   await stage.tween(res, [{ opacity: 0, transform: 'scale(0.6)' }, { opacity: 1, transform: 'scale(1)' }], { duration: D(320), easing: EASE.spring });
   // 结果飞进那一格
   const rb = { x: at.x + res.offsetLeft + res.offsetWidth / 2 - cn.__box.w / 2, y: at.y + res.offsetTop + res.offsetHeight / 2 - MX.CH / 2, w: cn.__box.w };
-  const g = ghost(stage, rb, it.sum, 'is-fly is-res');
+  const g = ghost(stage, rb, sum, 'is-fly is-res');
   await stage.tween(g, arcPoints(rb, cn.__box, { dir: -1, lift: 0.25, min: 16, max: 50 }).map((p) => ({ transform: tr(p.x, p.y, 0.74 + 0.26 * p.t), offset: p.t })), { duration: D(560), easing: EASE.move });
   g.remove();
   await flip(stage, cn, cn.__box, it.sum, { f });
@@ -311,7 +318,7 @@ function editAfford(stage, o, e, done) {
   };
   const paint = () => {
     const x = cur != null && live(cur);
-    if (!pop || !x) { close(); return; }
+    if (!pop || !x || x.covered) { close(); return; } // 拨着的时候被老师扣上了：收起（拨数器上写着它的数）
     const q = toQ(x.value);
     pop.querySelector('.mx-step-v').textContent = x.value === '' ? '?' : String(x.value).replace('-', '−');
     pop.querySelector('.mx-step-dec').disabled = !!q && q.toNumber() <= e.lo;
@@ -334,6 +341,8 @@ function editAfford(stage, o, e, done) {
   const openFor = (k) => {
     if (cur === k) return;
     close();
+    // 扣着的格不打开拨数器（上面写着它的数，等于翻开了）：浮一句中性的，不交、不告诉老师
+    if (live(k)?.covered) { noteAt(stage, '这一格还扣着', stage.screenRect(nodeOf(k)), { bad: false }); return; }
     cur = k;
     nodeOf(k)?.classList.add('is-editing');
     pop = el('div', 'mx-step', stage.view);

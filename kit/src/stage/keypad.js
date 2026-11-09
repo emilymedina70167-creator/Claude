@@ -9,7 +9,7 @@ const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cl
 
 /**
  * 键盘上按一个键以后的字：数字往后接；减号只在最前面（再按一下去掉）；斜线一个、前面要有数字；
- * 小数点一个、前面要有数字、不在斜线后面（-3/2、0.5 都写得出，3/0.5 不收）；⌫ 退一个
+ * 小数点一个（逗号也当小数点）、前面要有数字、不在斜线后面（-3/2、0.5 都写得出，3/0.5 不收）；⌫ 退一个
  */
 export function padKey(text, key) {
   const t = String(text ?? '');
@@ -17,12 +17,12 @@ export function padKey(text, key) {
   if (key === '−' || key === '-') return t.startsWith('-') ? t.slice(1) : t.length >= MAX ? t : `-${t}`;
   if (t.length >= MAX) return t;
   if (key === '/') return /\d$/.test(t) && !t.includes('/') ? `${t}/` : t;
-  if (key === '.') return /\d$/.test(t) && !t.includes('.') && !t.includes('/') ? `${t}.` : t;
+  if (key === '.' || key === ',' || key === '，') return /\d$/.test(t) && !t.includes('.') && !t.includes('/') ? `${t}.` : t;
   return /^\d$/.test(key) ? t + key : t;
 }
 
 /**
- * 外接键盘（iPad 的妙控键盘、试演时的 Playwright）按的一个键 → 键盘上的哪个键：数字、- / .、退格（⌫）、回车（ok）；别的是 null（不收）。
+ * 外接键盘（iPad 的妙控键盘、试演时的 Playwright）按的一个键 → 键盘上的哪个键：数字、- / .（逗号也当小数点）、退格（⌫）、回车（ok）；别的是 null（不收）。
  * 带 ⌘ / Ctrl / Option 的是系统的快捷键，不收
  */
 export function keyOf(e) {
@@ -31,6 +31,7 @@ export function keyOf(e) {
   if (typeof k !== 'string') return null;
   if (/^\d$/.test(k) || k === '-' || k === '/' || k === '.') return k;
   if (k === '−') return '-';
+  if (k === ',' || k === '，') return '.'; // 有的键盘布局（欧洲的数字小键盘）小数点是逗号
   if (k === 'Backspace') return '⌫';
   if (k === 'Enter') return 'ok';
   return null;

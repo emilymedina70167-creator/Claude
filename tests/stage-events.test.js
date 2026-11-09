@@ -423,3 +423,13 @@ test('中间被别的动过、另起的一条路：舞台照同一条规矩另�
   ]);
   assert.equal(u, '学生拨了 B.1,1：1 → 2（B = O：✗ ✗）\n学生 rowop B 2r1（倍乘第 1 行）\n学生拨了 B.1,1：4 → 0（拨到 0 时做到了 g1；B = O：✗ ✓）');
 });
+
+test('点开看怎么算碰到扣着的格：写给老师照实说是几、扣着（学生那边演成 ?）', () => {
+  const t = eventsText([
+    eventOf({ type: 'explain', ref: 'C.1,1', open: 'explain', hidden: [{ ref: 'C.1,1', value: '19' }, { ref: 'A.1,2', value: '2' }] }),
+    eventOf({ type: 'explain', ref: 'C.1,2', open: 'explain' }),
+  ]);
+  assert.equal(t, '学生点开看了 C.1,1、C.1,2 怎么算出来（扣着的演成了 ?：C.1,1（19，扣着）、A.1,2（2，扣着））');
+  // 一下的写法（actText）也一样
+  assert.match(eventsText([{ kind: 'answer', act: { type: 'explain', ref: 'C.1,1', hidden: [{ ref: 'C.1,1', value: '-3/2' }] } }]), /C\.1,1（-3\/2，扣着）/);
+});

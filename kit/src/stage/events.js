@@ -3,7 +3,7 @@
 // 学生在舞台上随时能动（拨格子、拖、点开看怎么算），这些是「试」：一下一下都告诉老师太碎、也太慢（每叫一次老师就是一整轮），
 // 所以攒着，等到有要老师接的事——答了老师问的、做到了挑战、打字、点「给个提示」、试了好多下还没做到、很久没动——
 // 一起写成一段发过去。老师照它看学生是怎么试的、卡在哪，再当场写下一步。
-import { actText, pathKey, pathEnd, pathGoesOn } from './stage.js';
+import { actText, pathKey, pathEnd, pathGoesOn, hiddenText } from './stage.js';
 import { rulesOf } from './rules.js';
 import { shapeText } from './goal.js';
 
@@ -177,10 +177,11 @@ function tryLines(tries) {
       return;
     }
     if (a.type === 'explain') {
-      if (!explain) { explain = { kind: 'explain', refs: [], n: 0, obj: null, tail: '', right: 0, wrong: 0, misread: null }; rows.push(explain); }
+      if (!explain) { explain = { kind: 'explain', refs: [], hidden: [], n: 0, obj: null, tail: '', right: 0, wrong: 0, misread: null }; rows.push(explain); }
       explain.n++;
       explain.last = i;
       if (!explain.refs.includes(a.ref)) explain.refs.push(a.ref);
+      for (const h of a.hidden || []) if (!explain.hidden.some((x) => x.ref === h.ref)) explain.hidden.push(h);
       return;
     }
     // 不并进路的拨数（页面判了对错的、没演上的）：actText 不写拨数，照拨格子的样子写一句
@@ -202,7 +203,7 @@ function tryLines(tries) {
   });
   return rows.map((r) => {
     if (r.kind === 'path') return pathRow(r);
-    if (r.kind === 'explain') { const t = `学生点开看了 ${r.refs.join('、')} 怎么算出来`; return { ...r, full: t, short: t }; }
+    if (r.kind === 'explain') { const t = `学生点开看了 ${r.refs.join('、')} 怎么算出来${hiddenText(r.hidden)}`; return { ...r, full: t, short: t }; }
     return r;
   });
 }

@@ -483,6 +483,30 @@ expect('数字键盘：点出 0.5', await page.evaluate(() => document.querySele
 await tapAt(await keyAt('确定'));
 await page.waitForTimeout(900);
 expect('数字键盘：0.5 交上去、记成 1/2', `${await lastAct()}｜${await page.evaluate(() => window.LAStage.scene.parts('M.1,1')[0].value)}`, 'write M.1,1 1/2｜1/2');
+// 扣着的格点开看怎么算：A.1,2（11）、C.1,1（1×5 + 11×7 = 82）扣着，点 C.1,1——演的时候学生看得到的字里没有 11、82（画成 ?），写给老师的照实说
+await play('matrix A = 1 11 / 3 4\nmatrix B = 5 6 / 7 8 beside=A\nproduct C = A B\ncover C.1,1\ncover A.1,2\nopen C explain');
+await page.evaluate(() => {
+  const seen = window.__seen = [];
+  const look = () => { for (const n of document.querySelectorAll('.mx-work, .mx-ghost')) seen.push(n.innerText); seen.push(window.LAStage.view.innerText); };
+  window.__mo = new MutationObserver(look);
+  window.__mo.observe(window.LAStage.view, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style'] });
+});
+B = await box('C:1.1');
+await tapAt({ x: B.cx, y: B.cy });
+await page.waitForTimeout(5200);
+expect('点开看怎么算：扣着的数没出现在学生看得到的字里', await page.evaluate(() => { window.__mo.disconnect(); const all = window.__seen.join('\n'); return /11|82/.test(all) ? all.match(/.*(11|82).*/)[0] : '没有'; }), '没有');
+expect('点开看怎么算：算式里扣着的画成 ?', await page.evaluate(() => String(window.__seen.some((t) => /1\s*×\s*5\s*\+\s*\?\s*×\s*7\s*=\s*\?/.test(t)))), 'true');
+expect('点开看怎么算：写给老师的照实说', await page.evaluate(() => window.LAStageDev.actText(window.LAStageDev.acts.at(-1))), '学生点了 C.1,1，看它怎么一行乘一列算出来（扣着的演成了 ?：C.1,1（82，扣着）、A.1,2（11，扣着））');
+// 扣着的格不打开拨数器（上面写着它的数），浮一句「这一格还扣着」
+await play('matrix B = 5 6 / 7 8\ncover B.1,1\nopen B edit range=-9..9');
+B = await box('B:1.1');
+await tapAt({ x: B.cx, y: B.cy });
+await page.waitForTimeout(400);
+expect('扣着的格点了不出拨数器、浮一句', `${!!(await page.$('.mx-step'))}｜${await page.evaluate(() => document.querySelector('.st-g-note')?.textContent || '')}`, 'false｜这一格还扣着');
+B = await box('B:1.2');
+await tapAt({ x: B.cx, y: B.cy });
+await page.waitForTimeout(400);
+expect('没扣着的格照旧出拨数器', await page.evaluate(() => document.querySelector('.mx-step .mx-step-v')?.textContent || '没有'), '6');
 // 平衡的 50-30：30 拖到 50 上会被 wrong=block 拦下——悬上去照常说会怎样（不先说对错），放下以后才弹回去、照样交给课堂
 await play('tree t = 50 30\nopen t rotate wrong=block');
 const tnode = (v) => page.evaluate((v) => { const st = window.LAStage; const n = st.scene.objects.get('t').nodes.find((x) => x.value === String(v)); return `t:${n.key}`; }, v);
