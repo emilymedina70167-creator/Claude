@@ -1,0 +1,50 @@
+# L1 分支 1（第三次）：以为 (A+B)² = A² + 2AB + B² 本来就对；条件只想到「A、B 都是 O」；把「不一定成立」说成「不成立」
+matrix A = 1 2 / 2 4
+matrix B = 2 2 / -1 -1 beside=A
+say "先写你觉得 (A+B)² 是多少。"
+ask say "(A+B)² = ？"
+学生: say A² + 2AB + B²，直接展开不就是这个
+matrix AB = {A B}
+matrix BA = {B A} beside=AB
+label l1 AB "AB" side=left tone=note
+label l2 BA "BA" side=right tone=note
+matrix T = {(A + B)^2}
+matrix F = {A^2 + 2 A B + B^2} beside=T
+matrix Dd = {T - F}
+label lt T "真的 (A+B)²" side=above tone=key
+label lf F "你的公式" side=above tone=key
+label ld Dd "差" side=left tone=note
+# 两块对质：整张逐格比
+compare AB BA
+say "{AB} 和 {BA} 一格一格比。你的公式和真的差了 {Dd}。"
+compare Dd BA
+ask say "什么时候 (A+B)² = A² + 2AB + B²？"
+学生: say A、B 都是零矩阵
+# 条件太窄：老师把 B 依次换成 5E、A 自己、A + E（重造的 B 留在原处）
+matrix B = {5 E}
+say "B 换成 5E：{Dd} 是 O，可 B 不是 O。"
+wait 800
+matrix B = {A}
+say "B 换成 A 自己，也是 O。"
+wait 800
+matrix B = {A + E}
+say "B 换成 A + E，还是 O。你的条件漏了谁？"
+ask say "改一改你的条件"
+学生: say 那就是不成立
+matrix B = {5 E}
+say "这一对成立了，那该说不成立，还是不一定成立？"
+ask say "改一改"
+学生: say 不一定成立，AB = BA 时成立
+# 2.1 选了 (A)：两个结果之差和 AB − BA 比（藏一张两者之差，现状里看是不是全 0）
+matrix A = 3 4 / -1 -2
+matrix B = 1 1 / -3 -2
+matrix X = {(A - B)(A + B) - (A^2 - B^2)}
+matrix Y = {A B - B A} beside=X
+label lx X "两个结果之差" side=above tone=key
+label ly Y "AB − BA" side=above tone=key
+matrix Z = {X - Y} hide=on
+compare X Y
+say "{X} 和 {Y} 一样吗？"
+ask say "两个结果为什么不一样？"
+学生: say 差的就是 AB − BA
+say "嗯。"

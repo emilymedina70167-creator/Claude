@@ -1,0 +1,67 @@
+# D2 第 6 幕：高 h 层的 AVL 至少几个结点：最瘦的是「根 + 最瘦的 h−1 层 + 最瘦的 h−2 层」
+# 只看形状：3 层的满树（结点里写 ·），右上角两个计数（这一轮能写跟着算的量）
+tree s = · · · · · · ·
+bf s
+label c s "结点 {count(s)} · 高 {height(s)}" side=right tone=key
+# 两行空表 h = 1…6：拿矩阵凑（第 1 行最少、第 2 行最多；h = 1、2 两格已填，其余空格子），表头贴一条字
+matrix T = 1 2 _ _ _ _ / 1 3 _ _ _ _
+label hd T "h = 1 到 6；上一行最少几个，下一行最多几个" side=above tone=note
+open s pluck undo=on
+say "摘叶子，摘到最少。规矩：不许有红的，还得是 3 层。"
+goal g1 "最瘦的 3 层" when="count(s) = 4, s avl, height(s) = 3"
+@g1 glow c
+@g1 say "这就是最瘦的 3 层。"
+# 学生：摘 #7、#6，点里面的 #2（只能摘叶子），摘 #3（根红了），撤，摘 #5
+学生: delete s#7
+学生: delete s#6
+学生: delete s#2
+学生: delete s#3
+学生: undo
+学生: delete s#5
+# 老师接：「就这样」存成小卡——没有；4 层的满树同样摘
+close s pluck
+tree s4 = · · · · · · · · · · · · · · ·
+bf s4
+label c4 s4 "结点 {count(s4)} · 高 {height(s4)}" side=right tone=key
+open s4 pluck undo=on
+say "4 层的，同样。"
+goal g2 "最瘦的 4 层" when="count(s4) = 7, s4 avl, height(s4) = 4"
+# 计数贴的字亮不了（上面 @g1 glow c 报错），改成整棵树亮
+@g2 glow s4
+@g2 ask say "根的左边像谁？右边像谁？"
+学生: delete s4#15
+学生: delete s4#14
+学生: delete s4#13
+学生: delete s4#12
+学生: delete s4#11
+学生: delete s4#10
+学生: delete s4#9
+学生: delete s4#7
+学生: say 左边是最瘦的3层，右边是最瘦的2层
+# 老师接：小卡半透明叠到左右子树上、拖小卡到空根下面拼 5 层——都没有；老师直接造一棵最瘦的 5 层
+remove s
+unlabel c
+ungoal g1
+ungoal g2
+close s4 pluck
+tree s5 = · · · · · · · · · · _ · _ _ _ ·
+bf s5
+label c5 s5 "结点 {count(s5)} · 高 {height(s5)}" side=right tone=key
+say "5 层的不用摘，拼一棵：左边最瘦的 4 层，右边最瘦的 3 层。"
+ask next "数好了点下面" button="数好了"
+学生: next
+# 老师接：表交给学生写（键盘写一格），页面逐格判；填完问 20 个结点最多几层（4 / 5 / 6 / 7 点一个）
+card m = "4" "5" "6" "7"
+open T edit input=keypad
+say "把表填完。"
+goal g3 "把表填完" when="T.1,3 = 4, T.1,4 = 7, T.1,5 = 12, T.1,6 = 20, T.2,3 = 7, T.2,4 = 15, T.2,5 = 31, T.2,6 = 63"
+@g3 ask tap m "20 个结点的 AVL，最多能有几层？" expect=m.3
+学生: write T.1,3 4
+学生: write T.1,4 7
+学生: write T.1,5 12
+学生: write T.1,6 20
+学生: write T.2,3 7
+学生: write T.2,4 15
+学生: write T.2,5 31
+学生: write T.2,6 63
+学生: tap m.3

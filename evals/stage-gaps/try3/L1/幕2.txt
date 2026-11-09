@@ -1,0 +1,70 @@
+# L1 第 2 幕（第三次）：(A+B)² 拆开是四块；AB 拖到 BA 上逐格比；四块放进合计；公式牌和真的相减出差；A、B 解锁后一切跟着算
+matrix A = 1 2 / 2 4
+matrix B = 2 2 / -1 -1 beside=A
+say "先写你觉得 (A+B)² 是多少。"
+ask say "(A+B)² = ？"
+学生: say A²+2AB+B²
+# 方块图：四张跟着算的矩阵排成两行两列，角上贴「谁乘谁」
+tex f = "(\hl{l1}{A}+\hl{l2}{B})(\hl{r1}{A}+\hl{r2}{B})"
+matrix AA = {A A}
+matrix AB = {A B} beside=AA
+matrix BA = {B A}
+matrix BB = {B B} beside=BA
+label c1 AA "AA" side=left tone=note
+label c2 AB "AB" side=right tone=note
+label c3 BA "BA" side=left tone=note
+label c4 BB "BB" side=right tone=note
+link f.l1 AA f.r1 g1
+link f.l1 AB f.r2 g2
+link f.l2 BA f.r1 g3
+link f.l2 BB f.r2 g4
+say "你写的 2AB，是哪两块并起来的？把 {AB} 拖到 {BA} 上并一下。"
+open AB compare
+ask next "并完点下面" button="并好了"
+学生: compare AB BA
+学生: next
+# 并不起来：四块放进合计，和真的比
+unlink f
+close AB
+matrix T = {(A + B)^2}
+matrix F = {A^2 + 2 A B + B^2} beside=T
+label lt T "真的 (A+B)²" side=above tone=key
+label lf F "公式 A²+2AB+B²" side=above tone=key
+matrix Sum = collect
+label ls Sum "合计（把四块拖进来）" side=above tone=note
+open AA put
+open AB put
+open BA put
+open BB put
+matrix Dd = collect -
+label ld Dd "差（真的 − 公式）" side=above tone=note
+matrix TF = {T - F} hide=on
+say "并不起来。那把四块一块块拖进合计，看合计和 {T} 一不一样。"
+goal g1 "四块都放进合计" when="Sum = T"
+@g1 open T put
+@g1 open F put
+@g1 goal g3 "把公式牌和真的相减：先放真的、再放公式进「差」" when="Dd = TF"
+@g1 say "合计和真的一样。再把公式牌和真的相减。"
+学生: put AA Sum
+学生: put AB Sum
+学生: put BA Sum
+学生: put BB Sum
+学生: put T Dd
+学生: put F Dd
+say "这个差，你在方块图里见过它吗？"
+@ask.right say "对，就是 BA 那一块。"
+ask tap AA AB BA BB "点出和差一样的那一块" expect=BA
+学生: tap BA.2,1
+open A edit range=-3..3
+open B edit range=-3..3
+say "现在 A、B 的数你都能拨。多拨几组，看差怎么变。"
+goal g2 "拨 A、B，让差变成 O" when="Dd = O"
+@g2 pulse Dd
+ask say "多拨几组；拨够三组以后写一句：(A+B)² = A² + 2AB + B² 什么时候成立？"
+学生: write B.1,2 0
+学生: write B.2,1 0
+学生: write B.2,2 0
+学生: write B.2,2 2
+学生: write B.1,2 1
+学生: say AB = BA 的时候
+say "嗯。"

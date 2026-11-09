@@ -1,0 +1,70 @@
+# L1 第 3 幕（第三次）：练习 2.1 学生自己搭 (A−B)(A+B)（两个拨数代替拖边沿标签）；−BA 拖到 AB 上抵消不掉；各块放进合计
+card q = "练习 2.1：A、B 如下，A² − B² 和 (A−B)(A+B) 分别是？" "(A) 两个都是 (7 5; −4 −1)" "(B) 两个都是 (−4 −2; 8 10)" "(C) A² − B² = (7 5; −4 −1)，(A−B)(A+B) = (−4 −2; 8 10)" "(D) A² − B² = (−4 −2; 8 10)，(A−B)(A+B) = (7 5; −4 −1)"
+matrix A = 3 4 / -1 -2
+matrix B = 1 1 / -3 -2 beside=A
+dial s = 1 range=-1..1 at=A
+dial t = 1 range=-1..1 at=B
+label ls dial:s "左边括号：A + {s}·B" side=right
+label lt dial:t "右边括号：A + {t}·B" side=right
+matrix AA = {A A}
+matrix AB = {t A B} beside=AA
+matrix BA = {s B A}
+matrix BB = {s t B B} beside=BA
+label c1 AA "A·A" side=left tone=note
+label c2 AB "A·(tB)" side=right tone=note
+label c3 BA "(sB)·A" side=left tone=note
+label c4 BB "(sB)·(tB)" side=right tone=note
+# 页面算的：四块现在加起来、(A−B)(A+B) 直接乘（都藏着）
+matrix Bld = {AA + AB + BA + BB} hide=on
+matrix Dir = {(A - B)(A + B)} hide=on
+say "这题你自己来：拨两个括号里 B 前面的号，搭出 (A−B)(A+B)。"
+open BA merge
+goal g1 "搭出 (A−B)(A+B)" when="Bld = Dir"
+@g1 say "搭对了。数里 −ab 和 ba 会消掉。"
+@g1 ask say "把 {BA} 拖到 {AB} 上试试：消得掉吗？"
+学生: dial t -1
+学生: dial s -1
+学生: dial t 1
+学生: merge BA AB
+学生: say 消不掉，弹回来了
+# 并不了：两块放进中间那格看剩下什么，各块放进合计
+close BA
+matrix Mid = collect
+label lm Mid "中间两块合起来" side=above tone=key
+matrix Tot = collect
+label lto Tot "四块合计" side=above tone=note
+open AA put
+open AB put
+open BA put
+open BB put
+open Mid put
+say "消不掉。把 {AB}、{BA} 放进中间那格，看剩下什么；再把各块放进合计。"
+goal g2 "合计和 (A−B)(A+B) 直接乘的一样" when="Tot = Dir"
+@g2 show Dir
+@g2 label ldi Dir "(A−B)(A+B) 直接乘" side=above tone=note
+@g2 say "合计和直接乘的叠上了。"
+学生: put AB Mid
+学生: put BA Mid
+学生: put AA Tot
+学生: put Mid Tot
+学生: put BB Tot
+# 另一个方块：A² − B²
+matrix B2 = {B B}
+label lb2 B2 "B·B" side=left tone=note
+matrix D2 = collect -
+label ld2 D2 "A² − B²（先放 A·A，再放 B·B）" side=above tone=key
+open B2 put
+say "再搭 A² − B²：把 A·A、B·B 放进 {D2}。"
+ask say "放好以后看：A² − B² 和 (A−B)(A+B) 一样吗？"
+学生: put AA D2
+学生: put B2 D2
+学生: say 不一样
+say "两个结果都有了。选哪一项？"
+@ask.right ask tap AA Mid BB "两个结果为什么不一样？指一块给我看" expect=Mid
+ask tap q "选哪一项？" expect=q.4
+学生: tap q.4
+学生: tap Mid.1,1
+say "嗯。为什么？"
+ask say "写一句为什么"
+学生: say 因为 AB ≠ BA，中间剩下 AB − BA
+say "对，(C)。"

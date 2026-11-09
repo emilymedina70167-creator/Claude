@@ -1,0 +1,67 @@
+# L2 第 6 幕（第三次）：自由变量、特解、导出组、通解（Q 沿 L 拖、L 平移成 L0、点沿 L 跑要三维；这里量矩阵、代回去、扫一遍 k 的那一半）
+matrix M = 1 2 -2 | 0 / 0 -2 -2 | -2 / 0 0 0 | 0 vars="x1 x2 x3"
+stairs M
+glow M.c3
+# 空格子上挂不了跟着算的：退回 0
+matrix Eta = _ / _ / 0
+matrix R1 = {coef(M) Eta - rhs(M)} hide=on
+matrix Eta = 0 / 0 / 0
+matrix R1 = {coef(M) Eta - rhs(M)} hide=on
+label le Eta "x3 = 0 时的点（你来写）" side=above tone=note
+say "第 3 列没有台阶头，x3 你说了算。让 x3 = 0，解出 x1、x2，写进 {Eta}。"
+open Eta edit input=keypad
+goal g1 "写出 x3 = 0 时的解" when="R1 = O, Eta.3,1 = 0"
+@g1 say "对，代回去全是 0。"
+学生: write Eta.1,1 2
+学生: write Eta.2,1 1
+学生: write Eta.1,1 -2
+# 第二个点 x3 = 1，再连一根箭头（两点之差跟着算）
+matrix Q1 = 0 / 0 / 1 beside=Eta
+matrix R2 = {coef(M) Q1 - rhs(M)} hide=on
+matrix Df = {Q1 - Eta}
+label lq Q1 "x3 = 1 时的点（你来写）" side=above tone=note
+label ld Df "两点连成的箭头" side=left tone=key
+say "再让 x3 = 1，写进 {Q1}。看两点连成的箭头 {Df}。"
+open Q1 edit input=keypad
+goal g2 "写出 x3 = 1 时的解" when="R2 = O, Q1.3,1 = 1"
+@g2 say "对。"
+学生: write Q1.1,1 2
+学生: write Q1.2,1 0
+# 把右边慢慢换成 0：右边那一格跟着拨数（重造的 M 留在原处）
+dial c = -2 range=-2..0 at=M
+matrix M = 1 2 -2 | 0 / 0 -2 -2 | {c} / 0 0 0 | 0 vars="x1 x2 x3"
+stairs M
+matrix Xi = 0 / 0 / 1 beside=Q1
+matrix R3 = {coef(M) Xi} hide=on
+label lx Xi "右边换成 0 以后，x3 = 1（你来写）" side=above tone=note
+say "把右边全换成 0：拨 c 到 0。右边是 0 的方程组里，x3 = 1 时解是什么？写进 {Xi}。"
+open Xi edit input=keypad
+goal g3 "写出 Ax = 0 在 x3 = 1 时的解" when="R3 = O, Xi != O"
+@g3 say "对，它和那根箭头一样。"
+学生: dial c 0
+学生: write Xi.1,1 2
+学生: write Xi.2,1 0
+# 学生把 (2, 0, 1) 当成 ξ（带着右边那一列算的）：拿拨数 k 扫一遍它写的通解，代回去看
+dial k = 0 range=-3..3 at=Xi
+matrix X = {Eta + k Xi}
+matrix Rk = {coef(M) X - rhs(M)} hide=on
+label lxk X "η + k·你的 ξ" side=above tone=key
+set c -2
+say "右边先换回去。拨 k，看 η + k·你的 ξ 代回去还是不是 0。"
+ask next "拨几下 k，看完点下面" button="看完了"
+学生: dial k 1
+学生: next
+say "k = 1 就不是解了。你的 ξ 是在哪个方程组里取的？"
+ask say "为什么？"
+学生: say 我用了右边是 -2 的那组，应该用右边是 0 的
+set c 0
+say "在右边是 0 的那组里重新取 x3 = 1。"
+goal g4 "改对 ξ" when="R3 = O, Xi != O"
+@g4 say "对，ξ = (4, −1, 1)，和箭头一样。"
+学生: write Xi.1,1 4
+学生: write Xi.2,1 -1
+set c -2
+@ask.right say "对。"
+ask value "L 上随便一个点：x = ？（一格写一个含 k 的式子）" type=matrix free=k=-3..3 answer="-2+4k / 1-k / k"
+学生: value 2-4k / -k / 1-k
+say "嗯。"

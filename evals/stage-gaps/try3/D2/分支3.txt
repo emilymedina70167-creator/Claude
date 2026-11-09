@@ -1,0 +1,27 @@
+# D2 分支 3：删除以后最多转几次答「2」
+# 第 6 幕那棵 12 个结点、5 层的最瘦树，填上 1～12；每个结点的子树高（heights）开着
+tree t = 8 5 11 3 7 10 12 2 4 6 _ 9 _ _ _ 1
+bf t
+heights t
+say "删一个结点呢，最多修几处？"
+ask value "删一个结点以后，最多要修几处？" type=en answer=树高 wrong="2=把插入时双旋那两下搬过来;1=和插入一样，只修一处"
+学生: value 2
+# 老师接：学生点 12 删掉（这一轮学生能自己删），红了就自己修
+open t delete
+open t rotate wrong=quiet undo=on
+say "点 {t.12} 删掉它。红了就修，修到全平。"
+# 先试 @t.done（树现在是平的：页面说「已经做完了」不收），再用挑战数结点：删掉一个、又平了
+@t.done glow t
+goal g1 "删掉 12，修到全平" when="count(t) = 11, t avl"
+@g1 glow t
+@g1 ask value "这回修了几处？" answer=2
+学生: delete t.12
+学生: rotate t.11 right
+学生: rotate t.8 right
+学生: value 2
+# 老师接：11 原来那个位置的高度尺「删之前 3 → 修完 2」、和插入那根尺并排——没有；试贴一条跟着算的字（跟着 10 这个结点）
+label h t.10 "删之前 3 → 修完 {height(t.10)}" side=right tone=note
+say "这棵比删之前矮了一截，上面就跟着歪了。"
+# 滑块「树高 5 / 7 / 9」自动删、自动修：拨数驱动不了树的形状；树最多 31 个结点，33、88 个的最瘦树造不出来
+ask say "删一个，最多修几处？"
+学生: say 可能一路修到根，和树高一个量级

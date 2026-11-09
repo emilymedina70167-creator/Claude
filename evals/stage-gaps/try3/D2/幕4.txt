@@ -1,0 +1,37 @@
+# D2 第 4 幕：红了好几个时只修离新结点最近的那个；修好了那棵子树变回插入前的高度，上面的自己就好
+# 第 1 幕插完 47 的树放回中间；每个结点的子树高度（heights）；50 那个位置旁边的高度尺（没有：试一条跟着算的字）
+tree t = 20 10 40 5 15 30 50 _ _ _ _ 25 35 45 _ _ _ _ _ _ 47
+bf t
+heights t
+label h t.50 "插入前 2 → 现在 {height(t.50)}" side=right tone=note
+keep t "插入后"
+open t back="插入后"
+say "红了两个。先点你打算先修哪个，再动手。"
+ask tap t.20 t.50 "先修哪个？点它" expect=t.50
+学生: tap t.20
+# 老师接：交给学生拎，走偏马上叫老师（让后果说话）
+open t rotate wrong=quiet call=wrong undo=on
+say "好，就修 {t.20}。动手拎。"
+@t.done glow t
+@t.done say "平了。"
+@t.done ask say "20 你一下都没碰，它怎么也好了？"
+学生: rotate t.20 left
+# 老师接：指着还红的 50
+pulse t.50
+say "你修的是谁？还红的是谁？"
+ask tap t "还红的是谁？点它" expect=t.50
+学生: tap t.50
+# 老师接：学生自己点「回到插入后」，改修 50
+say "点「回到插入后」，这次修 {t.50}。"
+ask next "修完点下面" button="修完了"
+学生: back t "插入后"
+学生: rotate t.45 left
+学生: rotate t.50 right
+学生: say 50那棵转完又变回原来的高度了，上面就跟没插一样
+# 老师接：指高度尺；「一处」「可能好几处」两个按钮 + 下面一个理由框（答对时预写揭开理由那一问）
+card k = "一处" "可能好几处"
+say "看这根尺。那插一个数，最多要修几处？"
+@ask.right ask say "为什么？写一句"
+ask tap k "点一个" expect=k.1
+学生: tap k.1
+学生: say 修好的那棵子树高度回到插入前，上面的平衡因子都不变

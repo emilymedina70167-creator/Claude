@@ -1,0 +1,34 @@
+# L2 第 5 幕（第三次）：系数换成 λ、常数换成 μ + 1、μ − 1（格里直接写式子），拨着看解的样子（三维的平面、P、平行记号要三维）
+plane p range=-4..4
+dial l = 0 range=-4..4
+dial m = 1 range=-4..4
+label ll dial:l "λ = {l}" side=right
+label lm dial:m "μ = {m}" side=right
+# 小地图：一个平面，当前 (λ, μ) 一个点
+point p Q = {l} {m}
+# 照提示改：点只收一个整体的式子，拿一列藏着的矩阵凑
+matrix V = {l} / {m} hide=on
+point p Q = {V}
+label lq p.Q "(λ, μ)" side=right tone=note
+matrix M = 1 2 {l} | {m + 1} / 1 0 -4 | {m - 1} / 1 2 -2 | 0 vars="x1 x2 x3"
+say "方程组里换进了 λ、μ。刚才的两步消元（r2 − r1、r3 − r1），带着字母再走一遍。"
+@ask.right say "对。"
+ask value "两步消完以后的整张（竖线不用写，一格写一个式子）" type=matrix free="λ=-4..4,μ=-4..4" answer="1 2 λ μ+1 / 0 -2 -4-λ -2 / 0 0 -2-λ -μ-1"
+学生: value 1 2 λ μ+1 / 0 -2 -4-λ -2 / 0 0 -2-λ μ+1
+say "右边是第 3 个方程减第 1 个：0 − (μ + 1)。"
+@ask.right say "对。"
+ask value "再写一遍" type=matrix free="λ=-4..4,μ=-4..4" answer="1 2 λ μ+1 / 0 -2 -4-λ -2 / 0 0 -2-λ -μ-1"
+学生: value 1 2 λ μ+1 / 0 -2 -4-λ -2 / 0 0 -2-λ -μ-1
+# 阶梯形跟着 λ、μ 变：格里写「这一格减第 1 行那一格」，页面从 M 算
+matrix S = {M.1,1} {M.1,2} {M.1,3} | {M.1,4} / {M.2,1 - M.1,1} {M.2,2 - M.1,2} {M.2,3 - M.1,3} | {M.2,4 - M.1,4} / {M.3,1 - M.1,1} {M.3,2 - M.1,2} {M.3,3 - M.1,3} | {M.3,4 - M.1,4} vars="x1 x2 x3" beside=M
+label ls S "消了两步以后（跟着 λ、μ 变）" side=above tone=key
+say "拨 λ、μ，想办法让三个方程没有公共解。"
+goal g1 "拨到无解" when="rankA(M) = 2, rank(M) = 3"
+@g1 say "挑战完成：没有解了。"
+@g1 goal g2 "再拨到解不止一个" when="rank(M) = 2, rankA(M) = 2"
+@g2 say "挑战完成：解不止一个。"
+@g2 ask say "哪些 (λ, μ) 不是一个解？看 {S} 最后一行。"
+学生: dial l -2
+学生: dial m -1
+学生: say λ = −2、μ ≠ −1 时无解；λ = −2、μ = −1 时无穷多
+say "嗯。"

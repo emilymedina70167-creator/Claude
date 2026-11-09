@@ -1,0 +1,57 @@
+# L1 第 4 幕（第三次）：A 锁着，找能和 A 换的 B（差 BA − AB 跟着算），收集型挑战收 4 张；换 A 再收；测试机
+matrix A = 1 2 / 0 3
+label la A "A（锁着）" side=above tone=note
+matrix B = 0 1 / 1 0 beside=A
+label lb B "B（你来拨）" side=above tone=note
+matrix AB = {A B}
+matrix BA = {B A} beside=AB
+matrix Df = {B A - A B}
+label l1 AB "AB" side=left tone=note
+label l2 BA "BA" side=right tone=note
+label l3 Df "差 BA − AB" side=left tone=key
+say "{A} 锁着，你去找能和它换的 {B}，越不一样越好。"
+open B edit range=-3..3
+goal g1 "让 AB、BA 并得起来，B 不能是 O；收 4 张互不相同的 B" when="Df = O, B != O" collect=B n=4
+@g1 pulse Df
+@g1 say "并上了！"
+学生: write B.1,2 0
+学生: write B.2,1 0
+学生: write B.1,1 1
+学生: write B.2,2 1
+# 再收一次一样的：不收
+学生: write B.2,2 2
+学生: write B.2,2 1
+学生: write B.1,2 2
+# 第 8 下：页面叫老师（试了好多下）
+say "收下一张了。接着找，越不一样越好。"
+学生: write B.2,2 3
+学生: write B.2,2 2
+# 走过 (1 1; 0 2)，再试一张对角的 (1 0; 0 2)：差不是 O
+学生: write B.1,2 0
+学生: write B.1,1 2
+# 页面收齐叫老师
+say "看看收下的这几张 B，它们和 {A} 有什么关系？"
+ask say "这些 B 的共同点"
+学生: say 都是 A 的几倍加 E 的几倍
+matrix A = 2 0 / 0 3
+matrix B = 0 1 / 1 0
+open B edit range=-3..3
+say "换一个 A，再收。"
+goal g2 "让 AB = BA，B 不能是 O；收 3 张不一样的" when="Df = O, B != O" collect=B n=3
+@g2 say "又一张！"
+学生: write B.1,2 0
+学生: write B.2,1 0
+学生: write B.1,1 1
+学生: write B.2,2 1
+学生: write B.2,2 2
+# 测试机：只能老师摆几张固定的 A 当「随机」的，各算一个差
+matrix R1 = 1 1 / 0 1
+matrix R2 = 0 1 / 1 0 beside=R1
+matrix R3 = 2 -1 / 3 5 beside=R2
+matrix T1 = {B R1 - R1 B}
+matrix T2 = {B R2 - R2 B} beside=T1
+matrix T3 = {B R3 - R3 B} beside=T2
+say "把你的 {B} 和这三张 A 各换一下，差是 O 才算能换。"
+ask say "哪些矩阵和任何矩阵都能换？"
+学生: say 对角的
+say "嗯。"

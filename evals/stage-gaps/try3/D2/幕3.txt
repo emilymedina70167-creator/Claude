@@ -1,0 +1,51 @@
+# D2 第 3 幕：拐了个弯，要拎两下；三个里大小排中间的那个升到顶
+tree t = 15 3 tray="7"
+bf t
+keep t "插入后" after=insert
+open t insert
+open t rotate wrong=quiet undo=on
+open t back="插入后"
+say "还是那一招。让 15 别红。"
+@t.done glow t
+@t.done say "平了。"
+@t.done ask say "三个里最后谁在顶上？在底下那排数里，它排第几？"
+# 学生：拖 7 进去；拎 3 过 15（弯拐到另一边）；又把 15 拎回去（来回一次）；拎 7 过 3（拉直）；拎 7 过 15（平）
+学生: insert t 7
+学生: rotate t.15 right
+学生: rotate t.3 left
+学生: rotate t.3 left
+学生: rotate t.15 right
+学生: say 7在顶上，排第二，大小排中间的那个上去了
+# 老师接：平了以后在底下那排数上括住 3、7、15，中间那个加粗（没有数轴：试贴一条字在三个结点下面、把 7 染金）
+label b t.3 t.7 t.15 "3 < 7 < 15" side=below tone=key
+paint t.7 g4
+say "排中间的上去了。"
+ask next "看好了点下面" button="好"
+学生: next
+# 老师接：「拎两层」：学生按住孙子直接拎过爷爷——说明里没有这种手势；回到插入后，试学生一下转两层
+unlabel b
+back t "插入后"
+say "按住 {t.7} 直接拎过 {t.15} 试试。"
+ask next "试完点下面" button="好"
+学生: rotate t.15 LR
+学生: next
+# 老师接：换成 2010 真题树
+remove t
+unlabel
+tree u = 24 13 53 _ _ 37 90 tray="48"
+bf u
+keep u "插入后" after=insert
+open u insert
+open u rotate wrong=quiet undo=on
+open u back="插入后"
+say "这一题你自己来，插 48。完了告诉我 37 的左右孩子是谁。"
+@u.done glow u
+@u.done say "平了。"
+@u.done ask pick u "点出 {u.37} 的左右孩子" button="点好了" expect="u.24 u.53"
+# 学生：先照第 2 幕拎 53 过 24（RL 当成 RR），回到插入后；37 拎过 53；37 拎过 24；点出 37 的左右孩子
+学生: insert u 48
+学生: rotate u.24 left
+学生: back u "插入后"
+学生: rotate u.53 right
+学生: rotate u.24 left
+学生: pick u.24 u.53

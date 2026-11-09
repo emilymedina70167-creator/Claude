@@ -1,0 +1,131 @@
+# D2 第 5 幕：四种叫法是「从 A 往新结点走的头两步」；从空树插一串，每次先说谁歪了、哪一型，再动手
+# 上方四张刚插完还红着的小图（f1 LL、f2 RR、f3 LR、f4 RL）
+tree f1 = 50 30 60 20 40 _ _ 10
+tree f2 = 20 10 40 _ _ 30 50 _ _ _ 60
+tree f3 = 50 45 _ _ 47
+tree f4 = 24 13 53 _ _ 37 90 _ 48
+bf f1
+bf f2
+bf f3
+bf f4
+# 从红结点 A 到新结点的粗箭头、按先后标 ①②：没有沿树枝的箭头；试把路上的结点染色、头两步的结点角上写 ①②
+paint f1.50 f1.30 f1.20 g1
+paint f4.24 f4.53 f4.37 g1
+tag f1.30 "①"
+tag f1.20 "②"
+tag f4.53 "①"
+tag f4.37 "②"
+say "王道给这四种起了名。字母说的是：从红的那个往新结点走，头两步各往哪边。"
+# 四张标签卡拖到小图上：没有拖字卡到图上的动作；四张一次写成一串，页面判
+ask value "从上到下四张图各是哪一型？（空格隔开）" type=seq answer="LL RR LR RL" wrong="LL RR RL LR=双旋两张倒过来读了（从新结点往上读）;RR LL RL LR=按往哪边转起名"
+学生: value LL RR RL LR
+# 老师接：指着第 4 张图的 ①② 让学生再读一遍
+pulse f4.53 f4.37
+say "看第 4 张：从 {f4.24} 出发，① 往哪边，② 往哪边？"
+ask value "再写一遍四张的型" type=seq answer="LL RR LR RL"
+学生: value LL RR LR RL
+# 老师接：空树 + 一排七张数字卡（只能按顺序拖）。「歪了就停下来先说」：挑战数结点数，到 3 个时预写的一问马上出来
+remove f1
+remove f2
+remove f3
+remove f4
+tree t = _ tray="34 23 15 98 115 28 107"
+bf t
+keep t "插入后" after=insert
+card k = "LL" "RR" "LR" "RL"
+say "从空树开始，一个一个插。歪了先说谁、哪一型，再动手。"
+open t insert wrong=block
+goal g1 "一个一个插" when="count(t) = 3"
+@g1 ask tap t "歪了。A 是谁？点它" expect=t.34
+学生: insert t 23
+学生: insert t 34
+学生: insert t 23
+学生: insert t 15
+学生: tap t.34
+# 老师接：类型（点对了那张卡边上一个小勾：试预写在答对时把那张卡染绿）
+@ask.right paint k.1 g3
+ask tap k "哪一型？点卡" expect=k.1
+学生: tap k.1
+# 老师接：两格都填了才交出拎；下一次歪（5 个结点）先收回拎、再问 A
+ungoal g1
+open t rotate wrong=quiet call=wrong undo=on
+goal g2 "接着插" when="count(t) = 5"
+@g2 close t rotate
+@g2 ask tap t "歪了。A 是谁？点它" expect=t.34
+say "对。动手。"
+学生: rotate t.34 right
+学生: insert t 98
+学生: insert t 115
+学生: tap t.23
+# 老师接：学生点了 23。先不说，问型，再让后果说话
+ask tap k "哪一型？点卡" expect=k.2
+学生: tap k.2
+open t rotate wrong=quiet call=wrong undo=on
+say "动手。"
+学生: rotate t.23 left
+# 老师接：平了但树不同（call=wrong 马上叫老师）；回到插完 115，量 34 那棵插入前后的高度（heights）
+back t "插入后"
+heights t
+say "回到插完 115。看 {t.34} 这棵：插 98、115 以前多高，现在多高？"
+ask next "看好了点下面" button="看好了"
+学生: next
+# 老师接：改修 34
+say "那该修谁？动手。"
+ungoal g2
+goal g3 "接着插" when="count(t) = 6"
+@g3 close t rotate
+@g3 ask tap t "歪了。A 是谁？点它" expect=t.23
+学生: rotate t.34 left
+学生: insert t 28
+学生: tap t.23
+# 老师接：类型
+unheights t
+ask tap k "哪一型？点卡" expect=k.4
+学生: tap k.4
+# 老师接：28 这一张插完不许拎，在空架子上把调完的树摆出来（没有四层的空架子：一棵空树 + 托盘，学生往空位上摆；托盘按大小排，不把根告诉学生）
+ungoal g3
+close t insert
+tree w = _ tray="15 23 28 34 98 115"
+open w place wrong=mark undo=on
+say "这次不许拎，直接把调完的树摆出来。"
+goal g4 "把调完的树摆出来" when="count(w) = 6, w avl, w bst"
+@g4 say "摆好了。"
+学生: insert w 34
+学生: insert w.34 left 23
+学生: insert w.34 right 98
+学生: insert w.23 left 15
+# 4 个结点时挑战不该打勾；学生把 28 摆到 98 的左边（左右顺序乱了），撤，再摆对
+学生: insert w.98 left 28
+学生: undo
+学生: insert w.23 right 28
+学生: insert w.98 right 115
+# 老师接：107 也是插完不许拎；胶片「存这一格」没有，最后数格子也没有，只能问一句
+remove w
+ungoal g4
+tree t = 34 23 98 15 28 _ 115 tray="107"
+bf t
+open t insert
+goal g5 "插 107" when="count(t) = 7"
+@g5 ask tap t "歪了。A 是谁？点它" expect=t.98
+say "接着插 107。"
+学生: insert t 107
+学生: tap t.98
+ask tap k "哪一型？点卡" expect=k.4
+学生: tap k.4
+ungoal g5
+close t insert
+tree w = _ tray="15 23 28 34 98 107 115"
+open w place wrong=mark undo=on
+say "同样，直接摆出来。"
+goal g6 "把调完的树摆出来" when="count(w) = 7, w avl, w bst"
+学生: insert w 34
+学生: insert w.34 left 23
+学生: insert w.34 right 107
+学生: insert w.23 left 15
+学生: insert w.23 right 28
+学生: insert w.107 left 98
+学生: insert w.107 right 115
+# 老师接：胶片——没有；只能问
+say "题目要每次插入后的树。题目给了几个数？你画了几棵？"
+ask value "题目给了几个数？" answer=7
+学生: value 7

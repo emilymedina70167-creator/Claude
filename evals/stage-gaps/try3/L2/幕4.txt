@@ -1,0 +1,68 @@
+# L2 第 4 幕（第三次）：学生自己一步一张地消（空格子、from= 页面比上一张），从下往上读出 P（三维的平面、P 要三维）
+matrix M0 = 1 2 0 | 2 / 1 0 -4 | 0 / 1 2 -2 | 0 vars="x1 x2 x3"
+label l0 M0 "原来的" side=above tone=note
+matrix M1 = _ _ _ | _ / _ _ _ | _ / _ _ _ | _ from=M0 vars="x1 x2 x3" beside=M0
+label l1 M1 "第一步写在这里" side=above tone=note
+say "把台阶线下面全变成 0，一步写一张。先做第一步，把新的整张写进 {M1}。"
+open M1 edit input=keypad
+ask value "这一步做了什么？（比如 r2 − r1）"
+学生: write M1.1,1 1
+学生: write M1.1,2 2
+学生: write M1.1,3 0
+学生: write M1.1,4 2
+学生: write M1.2,1 0
+学生: write M1.2,2 -2
+学生: write M1.2,3 4
+学生: write M1.2,4 -2
+学生: write M1.3,1 1
+学生: write M1.3,2 2
+学生: write M1.3,3 -2
+学生: write M1.3,4 0
+学生: value r2 - r1
+# 老师看到页面比出来的那一格：P 代进去，问学生
+matrix Pv = 4 / -1 / 1
+matrix R1 = {coef(M1) Pv - rhs(M1)} beside=Pv
+label lp Pv "P = (4, −1, 1)" side=above tone=note
+label lr1 R1 "P 代进你这张（左 − 右）" side=above tone=note
+glow M1.r2
+say "把 P 代进去：你这张第 2 行不是 0 了。P 还在你这一行上吗？"
+goal g1 "改对这一行：和原来的同解" when="M1 same M0"
+@g1 remove R1
+@g1 remove Pv
+@g1 unglow M1
+@g1 matrix M2 = _ _ _ | _ / _ _ _ | _ / _ _ _ | _ from=M1 vars="x1 x2 x3" beside=M1
+@g1 label l2 M2 "第二步写在这里" side=above tone=note
+@g1 open M2 edit input=keypad
+@g1 say "对，P 又回来了。下一步写进 {M2}。"
+@g1 ask value "第二步做了什么？"
+学生: write M1.2,3 -4
+学生: write M2.1,1 1
+学生: write M2.1,2 2
+学生: write M2.1,3 0
+学生: write M2.1,4 2
+学生: write M2.2,1 0
+学生: write M2.2,2 -2
+学生: write M2.2,3 -4
+学生: write M2.2,4 -2
+学生: write M2.3,1 0
+学生: write M2.3,2 0
+学生: write M2.3,3 -2
+学生: write M2.3,4 -2
+学生: value r3 - r1
+say "最下面一行里只剩谁？从它开始往上读。"
+stairs M2
+@ask.right say "对。"
+ask value "x3 = ？" answer=1
+学生: value 1
+ask value "往上一行：x2 = ？" answer=-1 wrong="1=符号错了; -3=把 −4x3 当成 +4x3"
+学生: value -3
+say "把 x3 = 1 代进 {M2.r2} 再算一遍。"
+ask value "x2 = ？" answer=-1
+学生: value -1
+ask value "x1 = ？" answer=4
+学生: value 4
+say "台阶一共几级？"
+@ask.right say "对：台阶数就是秩。"
+ask value "台阶几级？" answer={rank(M2)}
+学生: value 3
+say "嗯。"

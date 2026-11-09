@@ -1,0 +1,67 @@
+# L1 第 6 幕（第三次）：(A−E)(A−2E) 的四块各有真矩阵跟着算；同一个矩阵的倍数才并得上（merge）；化成 A² − 3A + 2E；练习 2.2 f(A)
+matrix A = 2 -1 / -3 3
+matrix B1 = {A A}
+matrix B2 = {A (-2 E)} beside=B1
+matrix B3 = {(-E) A}
+matrix B4 = {(-E)(-2 E)} beside=B3
+label c1 B1 "A·A" side=left tone=note
+label c2 B2 "A·(−2E)" side=right tone=note
+label c3 B3 "(−E)·A" side=left tone=note
+label c4 B4 "(−E)·(−2E)" side=right tone=note
+tex x = "(x-1)(x-2):\quad \hl{p}{x^2},\ \hl{q}{-2x},\ \hl{r}{-x},\ \hl{s}{2}"
+matrix Dir = {(A - E)(A - 2 E)} hide=on
+say "把这四块化到不能再化。每块里是 A 真乘出来的。先试试把 {B2} 拖到 {B3} 上并一下。"
+open B2 merge
+ask next "试完点下面" button="试好了"
+学生: merge B2 B3
+学生: next
+# 并不上（页面不认 A·(−2E) 是 A 的倍数）：老师先把每块化开（依据卡没有，老师替学生化），再交给学生并
+matrix B2 = {-2 A}
+matrix B3 = {-A}
+matrix B4 = {2 E}
+matrix B1 = {A^2}
+retext c2 "−2A"
+retext c3 "−A"
+retext c4 "2E"
+retext c1 "A²"
+open B1 merge
+open B2 merge
+say "化开了。现在再并：只有都是 A 的几倍才并得上。"
+matrix M3 = {-3 A} hide=on
+goal g1 "并成三块" when="B3 = M3"
+@g1 say "并上了：−3A。"
+学生: merge B1 B3
+学生: merge B2 B3
+matrix Tot = collect
+label lt Tot "合计" side=above tone=key
+close B1
+open B1 put
+open B3 put
+open B4 put
+say "把剩下的几块放进合计，和直接乘的比。"
+goal g2 "合计和 (A−E)(A−2E) 直接乘的一样" when="Tot = Dir"
+@g2 show Dir
+@g2 label ld Dir "(A−E)(A−2E) 直接乘" side=above tone=key
+@g2 link x.p B1 g1
+@g2 link x.q B3 g2
+@g2 link x.s B4 g4
+@g2 say "叠上了。和上面数的那张比一比。"
+@g2 ask say "x² − 3x + 2 能拆成 (x−1)(x−2)，换成 A 为什么也行？"
+学生: put B1 Tot
+学生: put B3 Tot
+学生: put B4 Tot
+学生: say 因为 A 和 E 能换
+card q = "练习 2.2：f(x) = x² − 5x + 3，A 是上面那张，f(A) = ？"
+say "练习 2.2，你来算 f(A)。"
+@ask.right say "对，是零矩阵。"
+ask value "f(A) = ？（矩阵一行一行写，行用 / 隔开）" type=matrix answer={A^2 - 5 A + 3 E} wrong="0 3 / 3 0=每格加了 3（常数当成数）; -3 0 / 0 -3=漏了常数 3E"
+学生: value 0 3 / 3 0
+say "f(x) 里的 3 是 3·x⁰。x⁰ 到了 A 这边是谁？"
+@ask.right say "对，是零矩阵。"
+ask value "f(A) = ？" type=matrix answer={A^2 - 5 A + 3 E}
+学生: value -3 6 / 24 -3
+say "{A}² 是 A 乘 A，不是每格平方。再算一遍。"
+@ask.right say "对，是零矩阵。"
+ask value "f(A) = ？" type=matrix answer={A^2 - 5 A + 3 E}
+学生: value 0 0 / 0 0
+say "嗯。"
