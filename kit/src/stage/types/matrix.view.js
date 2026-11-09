@@ -2,7 +2,7 @@
 // 专门的动作：行变换（副本乘上系数飘到目标行上面再加进去、交换两行走弧线、一行乘倍数）、改一个数、
 // 乘法的一格（A 的一行和 B 的一列一起亮，逐对相乘排成一条算式，加出来的数飞进那一格）。
 import { EASE, moveDuration, stagger, arcPoints } from '../motion.js';
-import { MX, layout, stairsPoints, zeroRows, toQ, eqWidth, rowCells } from './matrix.js';
+import { MX, layout, stairsPoints, zeroRows, toQ, eqWidth, rowCells, emptyCollect } from './matrix.js';
 import { Q } from '../../exact.js';
 import { openParts, atLeast } from '../gesturedom.js';
 
@@ -470,6 +470,8 @@ export const matrixView = {
       // 专门的动作没演到的（重放、学生拨了数……）：直接换成场景里的数
       if (n.__val !== x.value) { setNum(n.firstChild, x.value); n.__val = x.value; }
       n.classList.toggle('is-blank', x.value === '');
+      // 收集用的还空着：那一个空格写「放进来」（学生把矩阵拖进来；放进第一张以后照它的大小）
+      n.classList.toggle('is-collect', emptyCollect(o));
       n.classList.toggle('is-pivot', !!x.pivot);
       n.classList.toggle('is-zero', zero.has(x.r));
       stage.flagPart(n, x, ctx);
@@ -562,6 +564,7 @@ export const matrixView = {
 .mx-cell::after { content: ""; position: absolute; inset: 4px 2px; border-radius: 11px; border: 2.2px solid var(--st-brand); opacity: 0; transform: scale(1.35); transition: opacity .3s, transform .45s cubic-bezier(.34,1.45,.64,1); pointer-events: none; }
 .mx-cell.is-pivot::after { opacity: 1; transform: scale(1); }
 .mx-cell.is-blank::before { content: ""; position: absolute; inset: 8px 10px; border-radius: 9px; border: 1.5px dashed rgb(var(--chalk-rgb, 27 34 32) / 0.28); }
+.mx-cell.is-collect .mx-v::before { content: "放进来"; font: 500 15px/1 var(--sans, sans-serif); letter-spacing: .04em; color: var(--st-muted); }
 .mx-cell.is-covered .mx-v { visibility: hidden; }
 .mx-cell.is-covered::before { content: "?"; position: absolute; inset: 6px 4px; display: grid; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--st-brand) 12%, var(--st-card)); color: color-mix(in srgb, var(--st-brand) 60%, transparent); font: 600 22px/1 var(--sans, sans-serif); }
 .mx-cell.is-target { background: color-mix(in srgb, var(--st-gold) 13%, transparent); }

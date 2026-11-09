@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
 import { matrix, parseOps, parseRows, opText, echelon, layout, stairsPoints, toQ, MX } from '../kit/src/stage/types/matrix.js';
+import { compareFact, mergeFact } from '../kit/src/stage/scene.js';
+import { factsOf } from '../kit/src/stage/stage.js';
 
 const run = (scene, src) => { for (const c of parseScript(src)) scene.apply(c); return scene; };
 const one = (scene, line) => scene.apply(parseScript(line)[0]);
@@ -313,4 +315,133 @@ test('vars=、from= 记在矩阵上（读回方程、和上一张比用）；写
   assert.match(err(s, 'matrix M2 = 1 2 | 3 from=a'), /from=a：「a」不是矩阵/);
   assert.match(err(s, 'matrix M2 = 1 2 / 3 4 from=M0'), /from=M0：M0 是 2×4 的，M2 是 2×2 的/);
   assert.match(err(s, 'matrix M2 = 1 2 | 3 vars="x y z"'), /vars= 写了 3 个未知数/);
+});
+
+test('并同类项：merge X Y 把 {-2 A} 并进 {-A} 成 {(-3) A}，X 拿下舞台；A 再变 Y 照新的式子跟着变', () => {
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix X = {-2 A}\nmatrix Y = {-A}');
+  const fx = one(s, 'merge X Y');
+  assert.equal(s.objects.has('X'), false);
+  assert.deepEqual(rows(s, 'Y'), [['-3', '-6'], ['-9', '-12']]);
+  assert.equal(s.objects.get('Y').live.whole, '(-3) A');
+  assert.equal(fx.merge.x, 'X');
+  assert.equal(fx.merge.y, 'Y');
+  assert.equal(fx.merge.to.k.toString(), '-3');
+  assert.equal(fx.merge.to.base, 'A');
+  assert.equal(fx.merge.from.k.toString(), '-2');
+  assert.equal(fx.merge.into.k.toString(), '-1');
+  assert.ok(fx.removed);
+  assert.equal(mergeFact(fx.merge), '学生把 X（−2A）拖到 Y（−A）上：并成了 −3A');
+  one(s, 'write A.1,1 2');
+  assert.deepEqual(rows(s, 'Y'), [['-6', '-6'], ['-9', '-12']]);
+  assert.match(s.stateText(), /Y = \{\(-3\) A\}/);
+  // 写错的：说清楚
+  assert.match(err(s, 'merge Y'), /merge X Y/);
+  assert.match(err(s, 'merge Y Q'), /舞台上没有「Q」/);
+  assert.match(err(s, 'merge Y Y'), /自己/);
+  // 还有东西跟着 X 算：X 拿不下来
+  run(s, 'matrix X = {2 A}\nmatrix Z = {X + A}');
+  assert.match(err(s, 'merge X Y'), /Z 跟着 X 算，X 拿不下来，并不了/);
+});
+
+test('抵消：{2 A} 并 {-2 A}，Y 全是 0，现状写「Y = O（抵消了）」', () => {
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix X = {2 A}\nmatrix Y = {-2 A}');
+  const fx = one(s, 'merge X Y');
+  assert.ok(s.objects.get('Y').cells.every((x) => x.value === '0'));
+  assert.match(s.stateText(), /Y = O（抵消了）/);
+  assert.equal(mergeFact(fx.merge), '学生把 X（2A）拖到 Y（−2A）上：并成了 O（抵消了）');
+  // A 变了 Y 照旧是 O；再并进一张就不是抵消了
+  one(s, 'write A.1,1 9');
+  assert.ok(s.objects.get('Y').cells.every((x) => x.value === '0'));
+  run(s, 'matrix W = {3 A}\nmerge W Y');
+  assert.doesNotMatch(s.stateText(), /抵消了/);
+  assert.deepEqual(rows(s, 'Y'), [['27', '6'], ['9', '12']]);
+});
+
+test('收集：matrix Sum = collect 空着时一个空格，放进第一张以后照它的大小；放了就是跟着算的 {AA + AB}；collect - 是第一张减后面的；大小不一样放不进去', () => {
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix AA = {A A}\nmatrix AB = {A B}\nmatrix BA = {B A}\nmatrix Sum = collect');
+  const S0 = s.objects.get('Sum');
+  assert.equal(S0.rows, 1);
+  assert.equal(S0.cols, 1);
+  assert.equal(S0.cells[0].value, '');
+  assert.deepEqual(S0.collect, { sign: '+', terms: [] });
+  assert.match(s.stateText(), /矩阵 Sum（收集用的，加起来；还空着/);
+  one(s, 'put AA Sum');
+  assert.deepEqual(rows(s, 'Sum'), [['7', '10'], ['15', '22']]);
+  const fx = one(s, 'put AB Sum');
+  assert.equal(s.objects.get('Sum').live.whole, 'AA + AB');
+  assert.deepEqual(s.objects.get('Sum').collect.terms, ['AA', 'AB']);
+  assert.deepEqual(rows(s, 'Sum'), [['9', '11'], ['19', '25']]);
+  assert.ok(fx.derived?.some((d) => d.id === 'Sum'), '变了的格画面闪一下');
+  assert.match(s.stateText(), /Sum = \{AA \+ AB\}/);
+  assert.match(s.stateText(), /收集用的（加起来）：Sum = AA \+ AB/);
+  // A 变了 Sum 跟着变
+  one(s, 'write A.1,1 0');
+  assert.deepEqual(rows(s, 'Sum'), [['8', '8'], ['16', '25']]);
+  // 第一张减后面的
+  run(s, 'matrix Dd = collect -\nput AB Dd\nput BA Dd');
+  assert.equal(s.objects.get('Dd').live.whole, 'AB - BA');
+  assert.deepEqual(rows(s, 'Dd'), [['-1', '-4'], ['4', '1']]);
+  // 大小不一样：放不进去（学生的一下这个世界做不到，弹回去）
+  run(s, 'matrix C = 1 2 3 / 4 5 6');
+  assert.match(err(s, 'put C Sum'), /Sum 是 2×2 的，C 是 2×3，放不进去/);
+  const bad = s.apply(parseScript('put C Sum')[0], { by: 'student', open: 'put' });
+  assert.ok(bad.blocked);
+  assert.equal(bad.judged.verdict.legal, false);
+  assert.equal(bad.judged.verdict.why, 'Sum 是 2×2 的，C 是 2×3，放不进去');
+  assert.equal(s.objects.get('Sum').live.whole, 'AA + AB');
+  // 不是收集用的
+  assert.match(err(s, 'put AB A'), /A 不是收集用的矩阵（写 matrix A = collect）/);
+  assert.match(err(s, 'put Sum Sum'), /自己/);
+  // 学生只能往里放：收集用的拨不了、不能做行变换
+  const e = run(new Scene(), 'matrix E = collect');
+  assert.match(err(e, 'open E edit'), /收集用的/);
+  assert.match(err(e, 'matrix F = collect *'), /collect -/);
+});
+
+test('整张拖去比：compare P Q 逐格比，不一样的格写出来；两张都不变', () => {
+  const s = run(new Scene(), 'matrix P = 1 3 / -1 2\nmatrix Q = 1 5 / 1 2');
+  const fx = one(s, 'compare P Q');
+  assert.equal(fx.compare.whole, true);
+  assert.equal(fx.compare.total, 4);
+  assert.equal(compareFact(fx), '学生把 P 拖到 Q 上比：4 格里 2 格不一样——(1,2) 3 和 5，(2,1) −1 和 1（两张都没变）');
+  assert.equal(compareFact(fx.compare), compareFact(fx));
+  assert.deepEqual(rows(s, 'P'), [['1', '3'], ['-1', '2']]);
+  assert.deepEqual(rows(s, 'Q'), [['1', '5'], ['1', '2']]);
+  run(s, 'matrix R = 1 3 / -1 2');
+  assert.equal(compareFact(one(s, 'compare P R')), '学生把 P 拖到 R 上比：4 格都一样（两张都没变）');
+  run(s, 'matrix T = 1 2 3 / 4 5 6');
+  assert.match(compareFact(one(s, 'compare P T')), /P 是 2×2 的，T 是 2×3 的，不一样大/);
+  // 两格比大小照旧
+  assert.equal(one(s, 'compare P.1,1 Q.1,2').sign, -1);
+});
+
+test('compare、merge 的事实进学生的这一下（factsOf）：compare 不过裁判、merge 以后 X 不在了，都照 fx 交', () => {
+  const s = run(new Scene(), 'matrix P = 1 3 / -1 2\nmatrix Q = 1 5 / 1 2\nopen P compare');
+  const fx = s.apply(parseScript('compare P Q')[0], { by: 'student', open: 'compare' });
+  assert.ok(factsOf(fx).some((f) => f.includes('4 格里 2 格不一样')), factsOf(fx).join('；'));
+  const s2 = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix X = {-2 A}\nmatrix Y = {-A}\nopen X merge');
+  const fx2 = s2.apply(parseScript('merge X Y')[0], { by: 'student', open: 'merge' });
+  assert.equal(s2.objects.has('X'), false);
+  assert.ok(factsOf(fx2).some((f) => f.includes('并成了 −3A')), factsOf(fx2).join('；'));
+  // 放进收集用的：照裁判交的事实
+  const s3 = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix AA = {A A}\nmatrix AB = {A B}\nmatrix Sum = collect\nput AA Sum\nopen AB put');
+  const fx3 = s3.apply(parseScript('put AB Sum')[0], { by: 'student', open: 'put' });
+  assert.deepEqual(factsOf(fx3), ['学生把 AB 放进了 Sum：Sum = {AA + AB}']);
+  assert.deepEqual(factsOf({ judged: { after: ['x'] } }), ['x']);
+  assert.deepEqual(factsOf({ judged: { after: ['x'] }, pickDiff: 'p' }), ['x', 'p']);
+  assert.deepEqual(factsOf({}), []);
+  assert.deepEqual(factsOf(null), []);
+});
+
+test('跟着算的也能开 compare / put / merge（数照旧由式子定）；别的照旧报', () => {
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix AB = {A B}');
+  assert.equal(err(s, 'open AB compare'), null);
+  assert.equal(err(s, 'open AB put'), null);
+  assert.equal(err(s, 'open AB merge'), null);
+  assert.match(err(s, 'open AB edit'), /AB 是跟着算的，学生动不了/);
+  assert.match(err(s, 'open AB rowop'), /AB 是跟着算的，学生动不了/);
+  // 整张的把手：写整张矩阵的名字
+  assert.match(err(s, 'open A.1,1 compare'), /写整张矩阵的名字/);
+  // 三种都不判对错：写 wrong= 当场报
+  assert.match(err(s, 'open AB compare wrong=mark'), /判不了对错/);
 });

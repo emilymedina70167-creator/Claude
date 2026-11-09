@@ -18,8 +18,8 @@ export const kindsOf = (g) => [].concat(g?.gesture || []);
 export const ARMED_GESTURES = new Set(['tap', 'drop-on', 'drop-at', 'span', 'write']);
 /**
  * 画法（各种东西的 view.grips）现在交得出的把手，名字和手势表里 from / on / tap / to 写的一样。手势表里写了、画法还没交的
- * （句子的钩 hook、两个词之间的空隙 gap、小方块 pill、✕ 的 xmark / xrefer、句子外框 sentence，第二轮 Task 11 做）：
- * 起点没有就拿不起来，落点没有就放不下——那一种手势算挂不上，和 ARMED_GESTURES 一样不对老师说学生能动。Task 10、11 交了以后加进来
+ * （句子的钩 hook、两个词之间的空隙 gap、小方块 pill、✕ 的 xmark / xrefer、句子外框 sentence、矩阵整张的 whole，第二轮 Task 11 做）：
+ * 起点没有就拿不起来，落点没有就放不下——那一种手势算挂不上，和 ARMED_GESTURES 一样不对老师说学生能动。Task 11 交了以后加进来
  */
 export const ARMED_GRIPS = new Set(['node', 'parent', 'tray', 'tree', 'slot', 'row', 'label', 'cell', 'word', 'bracket']);
 /**
@@ -85,7 +85,7 @@ export function normValue(v) {
 /**
  * 一下手势 → 一行学生指令：{ act, src } | { error }。
  * e 是场景里 open 的那一项（scene.opens 的值：{ obj, action, gesture, … }）；from / to 是部件（scene.parts 给的）或
- * 那种东西自己认的写法（{ row: 3 }、{ label: 3 }、{ slot: { parent, side } }、{ tree }）；value 是写的值、托盘里的数；role 是点的成分
+ * 那种东西自己认的写法（{ row: 3 }、{ label: 3 }、{ slot: { parent, side } }、{ tree }、整张矩阵 { obj, whole: true }）；value 是写的值、托盘里的数；role 是点的成分
  */
 export function gestureAct(scene, e, { from, to, value, role } = {}) {
   const o = scene?.objects?.get(e?.obj);
@@ -93,7 +93,8 @@ export function gestureAct(scene, e, { from, to, value, role } = {}) {
   const g = e.gesture || gestureOf(o, e.action);
   if (typeof g?.toAct !== 'function') return { error: `${o.id} 的 ${e.action} 不是通用手势` };
   let r;
-  try { r = g.toAct(o, { from, to, value: normValue(value), role }); } catch (err) { return { error: err?.message || String(err) }; }
+  // scene 也交给它：整张拖到另一张上（矩阵的 put）要看落的那一张是不是收集用的
+  try { r = g.toAct(o, { from, to, value: normValue(value), role, scene }); } catch (err) { return { error: err?.message || String(err) }; }
   if (r?.error) return { error: r.error };
   if (!r?.src) return { error: '这一下翻不成一行指令' };
   return { act: r.act, src: r.src };

@@ -199,6 +199,16 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
   said('matrix', gestureAct(s, s.opens.get('m:rowop'), { from: { row: 1 }, to: { label: 2 } }).src);
   said('matrix', gestureAct(s, s.opens.get('m:rowop'), { from: { label: 1 }, value: '−1/2' }).src);
   said('matrix', gestureAct(s, s.opens.get('m:edit'), { to: { r: 2, c: 3 }, value: '-3/2' }).src);
+  // 整张拖：拖去比、放进收集用的、并同类项（跟着算的也能开，学生拨不了它的数）
+  const W = (id) => ({ obj: id, whole: true });
+  s = run(`${M}\nmatrix AB = {A B}\nmatrix BA = {B A}\nmatrix Sum = collect\nmatrix X = {-2 A}\nmatrix Y = {-A}\nopen AB compare\nopen X merge`);
+  said('matrix', gestureAct(s, s.opens.get('AB:compare'), { from: W('AB'), to: W('BA') }).src);
+  said('matrix', gestureAct(s, s.opens.get('X:merge'), { from: W('X'), to: W('Y') }).src);
+  s.apply(parseScript('close AB compare')[0]);
+  s.apply(parseScript('open AB put')[0]);
+  said('matrix', gestureAct(s, s.opens.get('AB:put'), { from: W('AB'), to: W('Sum') }).src);
+  assert.doesNotMatch(TYPES.matrix.doc, /学生 open 不了|跟着算的学生动不了/);
+  assert.equal(TYPES.matrix.doc.match(/学生拨不了，只能 open compare \/ put \/ merge/g)?.length, 2, '格里的 {k}、整张 {A + B} 两行都改');
   s = run(`${S}\nopen s mark`);
   // 成分按钮交的是中文（学生点「主语」）：照那一排里「S」那个按钮交的
   const subj = askFor(s.opens.get('s:mark').gesture, s.objects.get('s'), 'span', {}).choices.find((c) => c.sub === 'S');

@@ -470,8 +470,8 @@ test('✕ 收线：别的线也指着这个词时写成 unrefer s.4 -> s.1，只
   assert.deepEqual(w.objects.get('s').refers, []);
 });
 
-test('画面还交不出的把手（空隙、小方块、✕、钩）和同一处分按法（Task 11 做）：现状不说学生能动；做好了（ARMED_GRIPS、ARMED_PRESS）照写', () => {
-  for (const g of ['gap', 'pill', 'xmark', 'xrefer', 'hook', 'sentence']) assert.equal(ARMED_GRIPS.has(g), false, `画面还没交 ${g}`);
+test('画面还交不出的把手（空隙、小方块、✕、钩、整张矩阵）和同一处分按法（Task 11 做）：现状不说学生能动；做好了（ARMED_GRIPS、ARMED_PRESS）照写', () => {
+  for (const g of ['gap', 'pill', 'xmark', 'xrefer', 'hook', 'sentence', 'whole']) assert.equal(ARMED_GRIPS.has(g), false, `画面还没交 ${g}`);
   for (const g of ['node', 'parent', 'tray', 'tree', 'slot', 'row', 'label', 'cell', 'word', 'bracket']) assert.ok(ARMED_GRIPS.has(g), g);
   assert.equal(ARMED_PRESS.mixed, false);
   const s = run('sentence s = "The man who lives next door is a doctor."\nopen s move');
@@ -486,4 +486,33 @@ test('画面还交不出的把手（空隙、小方块、✕、钩）和同一�
   assert.deepEqual(kindsOf(rg).filter((k) => kindArmed(rg, k)), ['drop-on', 'tap']);
   ARMED_GRIPS.add('gap');
   try { assert.match(s.stateText(), /\n学生能直接动的：s move（拖到空处）/); } finally { ARMED_GRIPS.delete('gap'); }
+});
+
+test('整张的手势：open AB compare / put、open X merge 按住整张拖到另一张上；落点都是 { obj, whole: true }', () => {
+  const W = (id) => ({ obj: id, whole: true });
+  const s = run('matrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix AB = {A B}\nmatrix BA = {B A}\nmatrix Sum = collect\nmatrix X = {-2 A}\nmatrix Y = {-A}\nopen AB compare\nopen X merge');
+  const cmp = open(s, 'AB:compare');
+  assert.deepEqual(kindsOf(cmp.gesture), ['drop-on']);
+  assert.deepEqual([...gestureGrabs(cmp.gesture)], ['whole|hold']);
+  const r = gestureAct(s, cmp, { from: W('AB'), to: W('BA') });
+  assert.equal(r.src, 'compare AB BA');
+  assert.deepEqual(r.act, { type: 'compare', a: 'AB', b: 'BA' });
+  assert.ok(gestureAct(s, cmp, { from: W('AB'), to: W('AB') }).error, '拖回自己身上');
+  assert.ok(gestureAct(s, cmp, { from: W('AB'), to: null }).error);
+  run('close AB compare\nopen AB put', s);
+  const put = open(s, 'AB:put');
+  assert.equal(gestureAct(s, put, { from: W('AB'), to: W('Sum') }).src, 'put AB Sum');
+  assert.match(gestureAct(s, put, { from: W('AB'), to: W('BA') }).error, /BA 不是收集用的矩阵/);
+  assert.equal(gestureAct(s, open(s, 'X:merge'), { from: W('X'), to: W('Y') }).src, 'merge X Y');
+  // 同一张开两种整张拖：同一处、同一种按法，当场报
+  assert.match(s.check(parseScript('open AB compare')[0]), /都是按住再拖/);
+  // 整张的把手画面还交不出（Task 11 做）：现状不说学生能动；交了以后照写
+  assert.equal(armable(put.gesture), false);
+  assert.match(s.stateText(), /开着、页面还画不了的（学生现在动不了）：X merge（拖到上面）；AB put（拖到上面）/);
+  ARMED_GRIPS.add('whole');
+  try { assert.match(s.stateText(), /\n学生能直接动的：X merge（拖到上面）；AB put（拖到上面）/); } finally { ARMED_GRIPS.delete('whole'); }
+  // 学生这一下写给老师：那一行，后面接页面算的事实
+  const fx = s.apply(parseScript('put AB Sum')[0], { by: 'student', open: 'put' });
+  assert.equal(actText({ type: 'put', into: 'Sum', open: 'put', src: 'put AB Sum', verdict: { legal: true, right: null } }), '学生 put AB Sum');
+  assert.ok(!fx.blocked);
 });

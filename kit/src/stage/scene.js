@@ -15,7 +15,7 @@ import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
 import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure } from './goal.js';
 import { checkSpec } from './answer.js';
-import { parseLive, evalLive, fillLine, liveOrder } from './value.js';
+import { parseLive, evalLive, fillLine, liveOrder, termText } from './value.js';
 import { rulesOf, done as nextDone, checkMeasure, measureLine, changedKeys } from './rules.js';
 import { judge } from './referee.js';
 import { openGrabs, grabClash, placeOf, pressOf, PRESS_TEXT, ARMED_PRESS, armable } from './gestures.js';
@@ -911,6 +911,10 @@ export class Scene {
       }
       case 'compare': {
         strayRefs();
+        // 两头都是整张（compare P Q）、那种东西会逐格比（矩阵）：fx.compare 交不一样的格，两张都不变（学生拖去比的那一下照它写事实）
+        const refs = refsIn();
+        const ws = refs.length === 2 && refs.every((w) => !parseRef(w).mark) ? refs.map((w) => this.objects.get(w)) : null;
+        if (ws && ws[0].type === ws[1].type && typeOf(ws[0]).compareWhole) return { compare: typeOf(ws[0]).compareWhole(ws[0], ws[1]) };
         const parts = partsIn();
         if (parts.length !== 2) throw new Error('compare 要正好两个（比如 compare a.3 a.8）');
         return { a: parts[0], b: parts[1], sign: compareValues(parts[0].value, parts[1].value) };
@@ -1134,8 +1138,9 @@ export class Scene {
         const action = words[1] || names[0];
         if (!names.includes(action)) throw new Error(`${t.label}能开放的是：${names.map((k) => `${k}（${what(k)}）`).join('、')}，没有「${action}」`);
         if (r.mark) this.parts(target);
-        // 跟着算的（{A + B}、{A v}）：数是页面照式子算的，学生拨了、拖了也会被算回去
-        if (o.live || (r.mark && this.parts(target).some((p) => p.live))) throw new Error(`${o.live ? o.id : target} 是跟着算的，学生动不了`);
+        // 跟着算的（{A + B}、{A v}）：数是页面照式子算的，学生拨了、拖了也会被算回去。手势表里写了 live 的照收
+        // （矩阵整张拖去比、放进收集用的、并同类项：数照旧由式子定，学生拨不乱）
+        if (!gestures[action]?.live && (o.live || (r.mark && this.parts(target).some((p) => p.live)))) throw new Error(`${o.live ? o.id : target} 是跟着算的，学生动不了`);
         t.canOpen?.(this, o, action, h);
         const policy = policyIn(opts, rules, { label: t.label, id: o.id, action });
         // seq：第几个开的（同一项再开一次算新开的）。画面照它的先后挂手指（stage.js 的 syncOpens），同一处按法分不清时先开的那一项按得出
@@ -1804,6 +1809,33 @@ export class Scene {
     const p = this.partOf(k.obj, k.key);
     return p ? this.refOf(p) : `${k.obj}:${k.key}`;
   }
+}
+
+// 比的那一格的数写给老师看：负号写 −，空着的写 □
+const cellText = (v) => (v === '' || v == null ? '□' : String(v).replace(/^-/, '−'));
+/** 逐格比（compare P Q）写出几格不一样时最多列几格（6×8 的矩阵全列出来太长） */
+export const COMPARE_LIST = 8;
+/**
+ * 学生把一张矩阵拖到另一张上比（fx.compare，scene 的 compare 两头是整张时交的）写给老师的一句：
+ * 「学生把 P 拖到 Q 上比：4 格里 2 格不一样——(1,2) 3 和 5，(2,1) −1 和 1（两张都没变）」。给 fx 或 fx.compare 都行；不是整张比是 null
+ */
+export function compareFact(x) {
+  const c = x?.whole ? x : x?.compare;
+  if (!c?.whole) return null;
+  const head = `学生把 ${c.a} 拖到 ${c.b} 上比：`;
+  if (!c.diff) return `${head}${c.a} 是 ${c.shape.a.join('×')} 的，${c.b} 是 ${c.shape.b.join('×')} 的，不一样大，页面没逐格比（两张都没变）`;
+  if (!c.diff.length) return `${head}${c.total} 格都一样（两张都没变）`;
+  const list = c.diff.slice(0, COMPARE_LIST).map((d) => `(${d.r},${d.c}) ${cellText(d.a)} 和 ${cellText(d.b)}`).join('，');
+  const more = c.diff.length > COMPARE_LIST ? `，还有 ${c.diff.length - COMPARE_LIST} 格` : '';
+  return `${head}${c.total} 格里 ${c.diff.length} 格不一样——${list}${more}（两张都没变）`;
+}
+/**
+ * 学生把 X 拖到 Y 上并同类项（fx.merge = { x, y, from, into, to }）写给老师的一句：「学生把 X（−2A）拖到 Y（−A）上：并成了 −3A」；
+ * 并成 0 写「并成了 O（抵消了）」。X 已经不在舞台上，裁判那样东西拿不到，所以照 fx 交（stage.js 的 factsOf）
+ */
+export function mergeFact(m) {
+  if (!m) return null;
+  return `学生把 ${m.x}（${termText(m.from)}）拖到 ${m.y}（${termText(m.into)}）上：并成了 ${m.to.k.zero ? 'O（抵消了）' : termText(m.to)}`;
 }
 
 /** 一行演完交的「预写的行没演」（fx.unplayed）写成给老师的几句（舞台交 onNote） */

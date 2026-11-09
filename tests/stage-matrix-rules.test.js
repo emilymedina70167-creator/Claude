@@ -608,3 +608,27 @@ test('changed：数变了的格（ask pick 交了以后和真变了的比）；�
   const M = t.objects.get('M');
   assert.deepEqual(R.changed(b2, M).map((k) => { const x = M.cells.find((c) => c.key === k); return `${x.r},${x.c}`; }), ['1,1', '1,2', '2,1', '2,2']);
 });
+
+test('并同类项认不出、不同类：这个世界做不到（legal: false），学生的一下弹回去；只认 数 × 同一个矩阵，不说「不是同类项」', () => {
+  const s = make('matrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix X = {A + B}\nmatrix Y = {A}\nmatrix Z = {-2 A}\nmatrix W = {-B}\nmatrix N = 1 2 / 3 4');
+  const v = R.check(M(s, 'X'), { type: 'merge', into: 'Y' }, s);
+  assert.equal(v.legal, false);
+  assert.equal(v.why, '页面看不出是不是同类项（只认 数 × 矩阵）');
+  const v2 = R.check(M(s, 'Z'), { type: 'merge', into: 'W' }, s);
+  assert.equal(v2.legal, false);
+  assert.equal(v2.why, 'Z 是 −2·A，W 是 −1·B，不是同一个矩阵的倍数，并不了');
+  // 不是跟着算的（一张写满数的矩阵）也看不出
+  assert.equal(R.check(M(s, 'N'), { type: 'merge', into: 'Y' }, s).why, '页面看不出是不是同类项（只认 数 × 矩阵）');
+  // 能并的：照收，不判对错
+  assert.deepEqual(R.check(M(s, 'Z'), { type: 'merge', into: 'Y' }, s), { legal: true, right: null });
+  for (const k of ['compare', 'put', 'merge']) assert.ok(!R.judges.includes(k), `${k} 不判对错`);
+  // 学生的一下：照这一行过裁判，做不到就弹回去，舞台一点不动
+  run(s, 'open Z merge');
+  const fx = s.apply(parseScript('merge Z W')[0], { by: 'student', open: 'merge' });
+  assert.ok(fx.blocked);
+  assert.ok(s.objects.has('Z'));
+  assert.deepEqual(R.actOf(M(s, 'Z'), parseScript('merge Z W')[0], s.helpers(parseScript('merge Z W')[0])), { type: 'merge', into: 'W' });
+  assert.deepEqual(R.actOf(M(s, 'Z'), parseScript('put Z Sum')[0], s.helpers(parseScript('put Z Sum')[0])), { type: 'put', into: 'Sum' });
+  // 收集用的不是 Sum：put 也做不到
+  assert.equal(R.check(M(s, 'Z'), { type: 'put', into: 'Y' }, s).why, 'Y 不是收集用的矩阵（写 matrix Y = collect）');
+});

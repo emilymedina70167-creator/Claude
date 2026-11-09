@@ -6,8 +6,9 @@
 //   predicates { 名字: (o, args, scene) → true | false | null }  null 是现在判不了（之后会有：乘积还空着）；
 //                                               这样东西本身永远判不了（句子没写 key）就抛错，写下挑战时当场报
 //   facts(before, after, act, scene) → [话]   scene 是这一下所在的舞台（from=M0 的矩阵要找 M0）；只用前三个的照旧
-//   gestures { 动作: { gesture, from, to, toAct, ask?, pick?, choices? } }   通用手势（六种）在它这里是什么（gestures.js 照它翻成一行指令；
-//                                               ask 说放下以后要不要先问一个值（倍数框），pick + choices 是拉好一段以后点的那一排）
+//   gestures { 动作: { gesture, from, to, toAct, ask?, pick?, choices?, live? } }   通用手势（六种）在它这里是什么（gestures.js 照它翻成一行指令；
+//                                               toAct(o, { from, to, value, role, scene })；ask 说放下以后要不要先问一个值（倍数框），
+//                                               pick + choices 是拉好一段以后点的那一排；live 是跟着算的也能开（矩阵整张拖：数照旧由式子定））
 //   slipRefs(o, act) → [部件的写法] | null（可选）  学生走偏的那一下淡淡圈哪儿，那一行没写部件时（rowop M r3 - 2r1 圈第 3 行）
 //   standard(o) → { steps, variants }（可选）
 //   actOf(o, c, h) → 动作 | null                一行镜头指令（rotate t#3 right、rowop M r2 - 2r1、mark s.2-4 V）→ check 认的动作；

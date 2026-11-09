@@ -16,7 +16,7 @@
 // 已经是阶梯形以后不判（老师可能要接着化成行最简形），只有把阶梯形弄乱了才算错。
 // 交出去的动作里的数写成字符串（和 matrix.js 场景里存的一样）：存进记录、发给老师时 JSON 不丢东西；收的时候 Q 和字符串都认。
 import { Q, rrefOf, det } from '../../exact.js';
-import { parseOps, opText, echelon, zeroRows, toQ, rowopText } from './matrix.js';
+import { parseOps, opText, echelon, zeroRows, toQ, rowopText, putPlan, mergePlan } from './matrix.js';
 
 const ONE = new Q(1n);
 const isOne = (q) => q.n === 1n && q.d === 1n;
@@ -236,7 +236,14 @@ function misreadOf(md, pl, op, G1) {
 
 // —— 判一下 ——
 
-function check(o, act) {
+// 整张拖（put、merge）：不判对错，只看这个世界做不做得到（放不进去、并不了：legal: false，学生的一下弹回去，记一笔给老师）
+function wholeCheck(o, act, scene) {
+  const p = act.type === 'put' ? putPlan(scene, o.id, act.into) : mergePlan(scene, o.id, act.into);
+  return p.error ? { legal: false, right: null, misread: null, why: p.error, next: null } : { legal: true, right: null };
+}
+
+function check(o, act, scene) {
+  if ((act?.type === 'put' || act?.type === 'merge') && scene?.objects) return wholeCheck(o, act, scene);
   if (act?.type !== 'rowop') return { legal: true, right: null }; // 改一格（write）这些不判
   let md = modelOf(o);
   let ops;
@@ -496,6 +503,11 @@ function writeFacts(after, act, scene) {
 function facts(before, after, act, scene) {
   if (!before || !after) return [];
   if (act?.type === 'write') return writeFacts(after, act, scene);
+  // 放进收集用的：Sum 现在的式子（Sum 还在，照这里交；并同类项以后 X 不在了，那一句照 scene.js 的 fx.merge 交）
+  if (act?.type === 'put') {
+    const S = scene?.objects?.get(act.into);
+    return S?.live?.whole ? [`学生把 ${after.id} 放进了 ${S.id}：${S.id} = {${S.live.whole}}`] : [];
+  }
   if (act?.type !== 'rowop') return [];
   let ops;
   try { ops = opsOf(before, act); } catch { return []; }
@@ -542,6 +554,8 @@ export function actSrc(o, act) {
     return `rowop ${o.id} ${ops.map((p) => opSrc(norm(p))).join(', ')}`;
   }
   if (act.type === 'write') return `write ${o.id}.${act.r},${act.c} ${act.value}`;
+  if (act.type === 'put' || act.type === 'merge') return `${act.type} ${o.id} ${act.into}`;
+  if (act.type === 'compare') return `compare ${act.a ?? o.id} ${act.b}`;
   throw new Error(`矩阵没有「${act.type}」这个动作`);
 }
 const made = (o, op) => { const act = toAct(op); return { act, src: actSrc(o, act) }; };
@@ -551,6 +565,8 @@ const made = (o, op) => { const act = toAct(op); return { act, src: actSrc(o, ac
  * 认它是为了学生写满一行时 facts 和 from= 的那一张比）。别的给 null
  */
 function lineAct(o, c, h) {
+  // 整张拖的两种（put AB Sum、merge X Y）：不判对错，认它是为了先问这个世界做不做得到（放不进去、并不了就弹回去）
+  if ((c.cmd === 'put' || c.cmd === 'merge') && h.words[0] === o.id) return h.words[1] ? { type: c.cmd, into: h.words[1] } : null;
   if (c.cmd === 'write') {
     const ps = h.partsIn();
     if (ps.length !== 1 || ps[0].obj !== o.id) return null;
@@ -612,6 +628,27 @@ function rowopAsk(o, { kind, from, to } = {}) {
   return { input: 'keypad', prompt: `${rowName(t - 1)} 加上 ${rowName(s - 1)} 的几倍？`, hint: `${rowName(t - 1)} + k·${rowName(s - 1)}` };
 }
 
+// 整张的把手（矩阵的括号那一圈，画法的 grips.whole）交的是 { obj: 名字, whole: true }：按住一整张拖到另一张上。
+// put 落在不是收集用的矩阵上翻不成一行（不交，那一处说为什么）；大小不一样、并不了的照样翻，裁判判做不到、弹回去（记一笔给老师）
+const wholeOf = (x) => (x?.whole && x.obj ? x.obj : null);
+const WHOLE_TO = { compare: '拖到另一张矩阵上逐格比', put: '拖到收集用的矩阵上（matrix Sum = collect）', merge: '拖到另一张矩阵上并同类项' };
+function wholeAct(kind) {
+  return (o, { from, to, scene } = {}) => {
+    const a = wholeOf(from) ?? o.id;
+    if (a !== o.id) return { error: `从 ${o.id} 的括号拖起` };
+    const b = wholeOf(to);
+    if (!b) return { error: WHOLE_TO[kind] };
+    if (b === o.id) return { error: `拖到另一张矩阵上（${o.id} 拖回了自己身上）` };
+    const T = scene?.objects?.get(b);
+    if (scene && T?.type !== 'matrix') return { error: `「${b}」不是舞台上的矩阵` };
+    if (kind === 'put' && T && !T.collect) return { error: `${b} 不是收集用的矩阵（写 matrix ${b} = collect）` };
+    const act = kind === 'compare' ? { type: 'compare', a: o.id, b } : { type: kind, into: b };
+    return { act, src: actSrc(o, act) };
+  };
+}
+// 跟着算的也能开（live）：数照旧由式子定，学生拨不乱（scene.js 的 open 照它放行）
+const whole = (kind) => ({ gesture: 'drop-on', from: 'whole', to: 'whole', live: true, toAct: wholeAct(kind) });
+
 const gestures = {
   // 行的把手拖到另一行上：倍加（弹出倍数框，value 是框里写的 k，翻成 rowop M r3 + k r1）；拖到行号上：两行对调（rowop M r1 <-> r3）；
   // 点行号：倍乘（倍数框，rowop M k r2）
@@ -630,6 +667,10 @@ const gestures = {
       return { act, src: actSrc(o, act) };
     },
   },
+  // 整张拖到另一张上：逐格比（compare AB BA，两张都不变）、放进收集用的（put AB Sum）、并同类项（merge X Y）。都不判对错
+  compare: whole('compare'),
+  put: whole('put'),
+  merge: whole('merge'),
 };
 
 // —— 量（rank(M)、rankA(M)、free(M)、det(M)；rules.js 的 measures）——

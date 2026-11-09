@@ -288,3 +288,60 @@ export function liveOrder(nodes) {
   for (const n of nodes) visit(n.id);
   return order;
 }
+
+// —— 同类项（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 2.3：学生把一张矩阵拖到另一张上并同类项）——
+// 只认「数 × 同一个矩阵（或同一串乘积）」：-2 A、-A、(1/2) A、3 A B、2A。别的写法（A + B、A'、A^2、2 (A + B)）页面看不出，
+// 是 null——不说「不是同类项」（A^2 和 A A 是一回事，页面不按值猜，免得说错）
+const FACTOR_RE = /^[A-Za-z_]\w*$/;
+const COEF_RE = /^(\((?:\s*[+-]?\s*)\d+(?:\.\d+)?(?:\s*\/\s*\d+(?:\.\d+)?)?\s*\)|\d+(?:\.\d+)?(?:\/\d+(?:\.\d+)?)?)\s*\*?\s*/;
+/** 认不出时的话（mergeTerms 的 error、并同类项做不到时给老师、给学生的） */
+export const TERM_UNKNOWN = '页面看不出是不是同类项（只认 数 × 矩阵）';
+
+/**
+ * 一个式子 → { k（Q：系数）, base（因子的名字，空格隔开：'A'、'A B'） } | null（不是 数 × 矩阵）。
+ * 外面的 {} 不算；减号能写 −；系数能贴着名字（2A）、能加括号（(-3) A，并好的 {(k) base} 就是这样写的）；乘号 * · × 可写可不写。
+ * matrix(名字)：给了就要每个因子都是它认的矩阵（拨数 k 写在前面的 {k A}：k 不是矩阵，看不出，是 null）
+ */
+export function termOf(src, { matrix = null } = {}) {
+  let s = String(src ?? '').trim().replace(/^\{([^{}]*)\}$/, '$1').trim().replace(/[−–]/g, '-').replace(/[·×]/g, '*');
+  let neg = false;
+  const sign = s.match(/^([+-])\s*/);
+  if (sign) { neg = sign[1] === '-'; s = s.slice(sign[0].length); }
+  let k = Q.from(1);
+  const m = s.match(COEF_RE);
+  if (m) {
+    const q = toQ(m[1].replace(/\s+/g, ''));
+    if (!q) return null;
+    k = q;
+    s = s.slice(m[0].length);
+  }
+  const factors = s.split(/\s*\*\s*|\s+/).filter(Boolean);
+  if (!factors.length || !factors.every((f) => FACTOR_RE.test(f))) return null;
+  if (matrix && !factors.every((f) => matrix(f))) return null;
+  return { k: neg ? k.neg() : k, base: factors.join(' ') };
+}
+
+const minusText = (s) => String(s).replace(/-/g, '−');
+// 因子写在一起：都是一个字母的连着写（AB），名字长的用 · 隔开（AA·AB），不把两个名字读成一个
+const baseText = (base) => { const fs = String(base).split(' '); return fs.every((f) => f.length === 1) ? fs.join('') : fs.join('·'); };
+/** 一项写给老师看：−2A、−A、A、(1/2)A、3AB；系数是 0 写 O（抵消了） */
+export function termText(t) {
+  if (!t) return '?';
+  if (t.k.zero) return 'O';
+  const neg = t.k.n < 0n;
+  const a = neg ? t.k.neg() : t.k;
+  const coef = a.n === 1n && a.d === 1n ? '' : a.integer ? String(a) : `(${a})`;
+  return `${neg ? '−' : ''}${coef}${baseText(t.base)}`;
+}
+// 报「并不了」时系数照写（−1·B，不省成 −B：看得出是几倍）
+const dotText = (t) => `${minusText(t.k.integer ? t.k : `(${t.k})`)}·${baseText(t.base)}`;
+
+/**
+ * 两项并成一项：{ k, base }（系数加起来，0 就是抵消了）| { error }。
+ * 认不出写法的（a、b 是 null）说页面看不出；base 不一样说不是同一个矩阵的倍数。names：报错里两张矩阵叫什么（默认 X、Y）
+ */
+export function mergeTerms(a, b, { x = 'X', y = 'Y' } = {}) {
+  if (!a || !b) return { error: TERM_UNKNOWN };
+  if (a.base !== b.base) return { error: `${x} 是 ${dotText(a)}，${y} 是 ${dotText(b)}，不是同一个矩阵的倍数，并不了` };
+  return { k: a.k.add(b.k), base: a.base };
+}

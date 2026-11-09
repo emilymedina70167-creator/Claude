@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene } from '../kit/src/stage/scene.js';
 import { parseScript, parseRich } from '../kit/src/stage/script.js';
-import { parseLive, evalLive, liveOrder, scopeOf, numText } from '../kit/src/stage/value.js';
+import { parseLive, evalLive, liveOrder, scopeOf, numText, termOf, mergeTerms, termText } from '../kit/src/stage/value.js';
 import { Q } from '../kit/src/exact.js';
 
 const run = (scene, src) => { for (const c of parseScript(src)) scene.apply(c); return scene; };
@@ -383,4 +383,43 @@ test('coef(M)、rhs(M)：增广矩阵竖线左边、右边那一列；不是增�
   // 竖线右边不止一列（矩阵方程 AX = B）：rhs 是那几列
   run(sc, 'matrix H = 1 0 | 1 2 / 0 1 | 3 4');
   assert.deepEqual(evalLive('{rhs(H)}', sc).value.map((r) => r.map(String)), [['1', '2'], ['3', '4']]);
+});
+
+test('同类项：termOf 认「数 × 同一个矩阵（或同一串乘积）」，别的是 null；mergeTerms 并成一项，不同类、认不出照实说', () => {
+  const t = (src, o) => { const r = termOf(src, o); return r && { k: r.k.toString(), base: r.base }; };
+  assert.deepEqual(t('-2 A'), { k: '-2', base: 'A' });
+  assert.deepEqual(t('-A'), { k: '-1', base: 'A' });
+  assert.deepEqual(t('(1/2) A'), { k: '1/2', base: 'A' });
+  assert.deepEqual(t('3 A B'), { k: '3', base: 'A B' });
+  assert.deepEqual(t('A B'), { k: '1', base: 'A B' });
+  assert.equal(termOf('A + B'), null);
+  assert.equal(termOf('A - 2 B'), null);
+  const m = mergeTerms(termOf('-2 A'), termOf('-A'));
+  assert.equal(m.k.toString(), '-3');
+  assert.equal(m.base, 'A');
+  // 别的写法：数贴着名字、真的减号、括号里的负数、乘号、外面的 {}；并好的 {(k) base} 也认得
+  assert.deepEqual(t('2A'), { k: '2', base: 'A' });
+  assert.deepEqual(t('−3 A'), { k: '-3', base: 'A' });
+  assert.deepEqual(t('(-3) A'), { k: '-3', base: 'A' });
+  assert.deepEqual(t('2*A*B'), { k: '2', base: 'A B' });
+  assert.deepEqual(t('{-A}'), { k: '-1', base: 'A' });
+  // 页面看不出的：转置、乘方、逆、套括号、只有数
+  for (const s of ["A'", 'A^2', 'A^-1', '2 (A + B)', '3', '', 'A -B']) assert.equal(termOf(s), null, s);
+  // 给了 matrix：每个因子都要是舞台上的矩阵（拨数 k 写在前面的 {k A} 认不出，不说「不是同类项」）
+  assert.equal(termOf('k A', { matrix: (n) => n === 'A' }), null);
+  assert.deepEqual(t('2 A', { matrix: (n) => n === 'A' }), { k: '2', base: 'A' });
+  // 并不了：照实说
+  assert.equal(mergeTerms(termOf('-2 A'), termOf('-B')).error, 'X 是 −2·A，Y 是 −1·B，不是同一个矩阵的倍数，并不了');
+  assert.equal(mergeTerms(termOf('-2 A'), termOf('-B'), { x: 'P', y: 'Q' }).error, 'P 是 −2·A，Q 是 −1·B，不是同一个矩阵的倍数，并不了');
+  assert.equal(mergeTerms(termOf('A + B'), termOf('A')).error, '页面看不出是不是同类项（只认 数 × 矩阵）');
+  assert.equal(mergeTerms(termOf('A'), null).error, '页面看不出是不是同类项（只认 数 × 矩阵）');
+  // 抵消：k 是 0
+  assert.ok(mergeTerms(termOf('2 A'), termOf('-2 A')).k.zero);
+  // 写给老师看的样子
+  assert.equal(termText(termOf('-2 A')), '−2A');
+  assert.equal(termText(termOf('-A')), '−A');
+  assert.equal(termText(termOf('A')), 'A');
+  assert.equal(termText(termOf('(1/2) A')), '(1/2)A');
+  assert.equal(termText(termOf('3 A B')), '3AB');
+  assert.equal(termText(mergeTerms(termOf('2 A'), termOf('-2 A'))), 'O');
 });

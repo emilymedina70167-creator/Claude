@@ -8,7 +8,7 @@
 import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHold } from './motion.js';
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
-import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, pickText, unplayedNotes } from './scene.js';
+import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, pickText, unplayedNotes, compareFact, mergeFact } from './scene.js';
 import { measureShown } from './rules.js';
 import { judgeAnswer, sameAnswer } from './answer.js';
 export { sameAnswer };
@@ -531,9 +531,9 @@ export class Stage {
     }
     if (!this.instant) for (const e of fx?.ruleErrors || []) reportError(e, { what: `舞台的规则出错：${c.src?.trim() || ''}` });
     if (act) {
-      // 这一下以后写给老师的事实：裁判交的（谁转上来了、哪一行变成什么），学生先点了几样（ask pick）以后第一次变的那一句。
+      // 这一下以后写给老师的事实（factsOf：裁判交的、ask pick 以后第一次变的、拖去比、并同类项）。
       // pickDiff 另记一份：拨数连着几下并成一条路时只写最后一下的事实，这一句落在前几下也要留着（events.js 的 pathRow）
-      const facts = [...(fx?.judged?.after || []), ...(fx?.pickDiff ? [fx.pickDiff] : [])];
+      const facts = factsOf(fx);
       if (facts.length) act.facts = facts;
       if (fx?.pickDiff) act.pickDiff = fx.pickDiff;
       if (fx?.derived?.length) act.derived = slimDerived(fx.derived);
@@ -997,8 +997,15 @@ export class Stage {
   async do_wait(c, fx) { await this.wait(fx.ms); }
   async do_ask() { const w = this.scene.waiting; if (w?.prompt) await this.say(w.prompt, { ask: true }); }
 
-  // 比较：两个亮一下，中间冒出「65 > 49′」，停一会儿再收起
+  // 比较：两个亮一下，中间冒出「65 > 49′」，停一会儿再收起。整张比（compare P Q）：两张里不一样的格各闪两下
   async do_compare(c, fx) {
+    if (fx.compare) {
+      const k = fx.compare;
+      const parts = [];
+      for (const d of k.diff || []) for (const id of [k.a, k.b]) { try { parts.push(...this.scene.parts(`${id}.${d.r},${d.c}`)); } catch { /* 那一张不在了 */ } }
+      for (let i = 0; i < 2; i++) await Promise.all(parts.map((p, j) => this.pulse(p, stagger(j, { step: 30 }))));
+      return;
+    }
     const { a, b, sign } = fx;
     const A = this.scene.partBox(a), B = this.scene.partBox(b);
     const badge = el('div', 'st-compare', this.layer);
@@ -1637,6 +1644,20 @@ function judgedAct(act, j) {
   if (j.failed) act.failed = true;
   if (j.policy?.call === 'done') act.patient = true; // 老师写了做完才叫：试的这几下不算进「试了好多下」
 }
+/**
+ * 学生这一下进 act.facts 的几句：裁判交的（fx.judged.after）、ask pick 以后第一次变的（fx.pickDiff）、整张拖去比（fx.compare：
+ * 共用指令，不过裁判）、并同类项（fx.merge：X 已经不在舞台上，裁判那样东西拿不到）——后两句只能照 fx 交。什么都没有是 []
+ */
+export function factsOf(fx) {
+  if (!fx) return [];
+  const out = [...(fx.judged?.after || [])];
+  if (fx.pickDiff) out.push(fx.pickDiff);
+  const cmp = compareFact(fx.compare);
+  if (cmp) out.push(cmp);
+  if (fx.merge) out.push(mergeFact(fx.merge));
+  return out;
+}
+
 /** 跟着变的（scene.js 的 fx.derived）存得下的样子：不带部件本身 */
 const slimDerived = (list) => list.map((d) => ({ id: d.id, changed: (d.changed || []).map((x) => ({ ref: x.ref, ...(x.expr != null ? { expr: x.expr } : {}), from: x.from, to: x.to })), ...(d.error ? { error: d.error } : {}) }));
 

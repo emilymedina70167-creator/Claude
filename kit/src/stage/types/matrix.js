@@ -5,11 +5,13 @@
 // 一格（部件）的 key 是造它时的位置（'2.3'），交换两行时格子带着数走过去（r、c 跟着变）；m.2,3 永远指「现在」第 2 行第 3 列。
 // 跟着算的（value.js）：格里写算成一个数的式子（{k}、{A.1,2}、{l - 1}），或者整个矩阵写 = {A + B}、{P^-1}；依赖一变场景叫 relive，在原地改格。
 // 格里写 _ 是空着的一格（matrix D = _ _ / _ _：等学生填的空牌，填满以前判断式、量都判不了）。
+// 整张当把手（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 2.3）：收集用的矩阵（matrix Sum = collect）学生把矩阵放进来就跟着算
+// {AA + AB}（put）；两张同一个矩阵的倍数并成一项（merge，只认 数 × 矩阵，value.js 的 termOf）；拖去逐格比（compare，scene.js 照 compareWhole）。
 import { Q, isQ, isQVec, isQMat } from '../../exact.js';
 // 规则那边算的读回方程、解的样子（舞台现状里写）。两个模块互相 import：都只在函数里用对方的东西，加载的先后不碍事
 import { readBack, solutionText } from './matrix.rules.js';
-// 整张写成一句（value.js 也 import 这里：同样只在函数里用）
-import { gridText } from '../value.js';
+// 整张写成一句、同类项（value.js 也 import 这里：同样只在函数里用）
+import { gridText, termOf, mergeTerms } from '../value.js';
 
 export const MAX_ROWS = 6, MAX_COLS = 8;
 const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
@@ -87,11 +89,15 @@ export function textWidth(v) {
   if (m) return (m[1] ? 15 : 0) + Math.max(m[2].length, m[3].length) * 11 + 6;
   return s.length * 14.6;
 }
+/** 收集用的、还没放进东西（画成一个写着「放进来」的空格） */
+export const emptyCollect = (o) => !!o.collect && !o.collect.terms.length;
 /** 每一列多宽（从 1 数）：这一列最长的那个数定 */
 export function colWidths(o) {
   const w = Array(o.cols + 1).fill(MX.MINW);
   w[0] = 0;
   for (const x of o.cells) w[x.c] = Math.max(w[x.c], Math.ceil(textWidth(x.value) + 22));
+  // 收集用的还空着：那一格写着「放进来」，宽一点（放进第一张以后照那一张的大小）
+  if (emptyCollect(o)) w[1] = Math.max(w[1], 96);
   return w;
 }
 /** 整个矩阵的排版：每列的左边、每行的上边、括号里面的外框、增广竖线在哪 */
@@ -403,6 +409,73 @@ function readExtras(scene, o, id, opts) {
   }
 }
 
+// —— 收集用的矩阵、并同类项（整张当把手）——
+const SIGN_TEXT = { '+': '加起来', '-': '第一张减后面的' };
+/** 收集用的式子：加起来是 AA + AB，减的是第一张减后面的 AB - BA */
+const collectSrc = (sign, terms) => terms.join(sign === '-' ? ' - ' : ' + ');
+
+// matrix Sum = collect（放进来的加起来）/ matrix Dd = collect -（第一张减后面的）：空着时是一个空格，学生把矩阵拖进来（put）才有数
+function makeCollect(scene, id, rest, opts, old) {
+  const sign = !rest.length || (rest.length === 1 && rest[0] === '+') ? '+' : rest.length === 1 && /^[-−]$/.test(rest[0]) ? '-' : null;
+  if (!sign) throw new Error('收集用的矩阵写成 matrix Sum = collect（放进来的加起来）或 matrix Dd = collect -（第一张减后面的）');
+  for (const k of ['vars', 'from']) if (opts[k] != null) throw new Error(`收集用的矩阵不写 ${k}=（数照放进来的那几张算）`);
+  const o = { origin: { x: 0, y: 0 }, rows: 1, cols: 1, aug: null, cells: [newCell(id, 1, 1, '')], stairs: false, product: null, collect: { sign, terms: [] } };
+  o.origin = old && !opts.beside ? { ...old.origin } : placeFor(scene, sizeOf(o), opts);
+  return o;
+}
+
+/**
+ * put AB Sum 做不做得到（学生的一下：裁判照它判 legal；老师的一行：照它报错）：{ error } | { A, S, terms, whole, deps }。
+ * Sum 要是收集用的；AB 不能还有空着的格；Sum 里已经有东西了，AB 要和它一样大；放进去不能转着圈（AB 跟着 Sum 算）
+ */
+export function putPlan(scene, an, sn) {
+  if (!an || !sn) return { error: '要写成 put AB Sum（把 AB 放进收集用的 Sum）' };
+  for (const n of [an, sn]) {
+    const x = scene.objects.get(n);
+    if (!x) return { error: `舞台上没有「${n}」` };
+    if (x.type !== 'matrix') return { error: `「${n}」不是矩阵` };
+  }
+  const A = scene.objects.get(an), S = scene.objects.get(sn);
+  if (!S.collect) return { error: `${sn} 不是收集用的矩阵（写 matrix ${sn} = collect）` };
+  if (an === sn) return { error: `${sn} 不能放进它自己` };
+  const blank = A.cells.filter((x) => x.value === '').sort(sortRC)[0];
+  if (blank) return { error: `${an}.${blank.r},${blank.c} 还空着，${an} 放不进去` };
+  if (S.collect.terms.length && (S.rows !== A.rows || S.cols !== A.cols)) return { error: `${sn} 是 ${S.rows}×${S.cols} 的，${an} 是 ${A.rows}×${A.cols}，放不进去` };
+  const terms = [...S.collect.terms, an];
+  const whole = collectSrc(S.collect.sign, terms);
+  let deps;
+  try {
+    ({ deps } = scene.liveValue(whole));
+    scene.liveCheck([{ id: sn, obj: sn, deps, live: true }], sn);
+  } catch (err) { return { error: err.message }; }
+  return { A, S, terms, whole, deps };
+}
+
+// 跟着算的整张（没有手写的格）：认得出是 数 × 矩阵 才是一项
+const liveTerm = (o, scene) => (o.live?.whole && !o.live.fixed?.length ? termOf(o.live.whole, { matrix: (n) => scene.objects.get(n)?.type === 'matrix' }) : null);
+/**
+ * merge X Y 做不做得到：{ error } | { X, Y, from, into, to, whole }（from / into 是 X、Y 原来的那一项，to 是并好的，whole 是 Y 的新式子）。
+ * 只认 数 × 同一个矩阵（或同一串乘积）：认不出的说页面看不出，不说「不是同类项」；还有东西跟着 X 算，X 拿不下来
+ */
+export function mergePlan(scene, xn, yn) {
+  if (!xn || !yn) return { error: '要写成 merge X Y（把 X 并进 Y：同一个矩阵的倍数并成一项）' };
+  for (const n of [xn, yn]) {
+    const x = scene.objects.get(n);
+    if (!x) return { error: `舞台上没有「${n}」` };
+    if (x.type !== 'matrix') return { error: `「${n}」不是矩阵` };
+  }
+  if (xn === yn) return { error: `${xn} 并到自己身上什么也没变（拖到另一张上）` };
+  const X = scene.objects.get(xn), Y = scene.objects.get(yn);
+  const from = liveTerm(X, scene), into = liveTerm(Y, scene);
+  const to = mergeTerms(from, into, { x: xn, y: yn });
+  if (to.error) return { error: to.error };
+  // X 拿下舞台以后跟着它算的就算不出来了（别的跟着算的、乘积、收集用的里放着它）
+  const head = (d) => String(d).match(/^[A-Za-z_]\w*/)?.[0];
+  const users = [...new Set(scene.liveNodes().filter((n) => n.obj !== xn && (n.deps || []).some((d) => head(d) === xn)).map((n) => n.obj))];
+  if (users.length) return { error: `${users.join('、')} 跟着 ${xn} 算，${xn} 拿不下来，并不了` };
+  return { X, Y, from, into, to, whole: `(${to.k}) ${to.base}` };
+}
+
 // product C = A B：A、B 排成一行（A 留在原处、B 挪到 A 右边），后面「= C」，三个上下居中；C 的格先空着
 function makeProduct(scene, c, h) {
   if (!h.args.some((a) => a.t === 'eq')) throw new Error('要写成 product C = A B');
@@ -450,6 +523,9 @@ function productTerms(A, B, r, c) {
   return { terms, sum };
 }
 
+/** 整张当把手的三种动作（手势表里 from: 'whole'）：跟着算的也能开（数照旧由式子定，学生拨不乱） */
+export const WHOLE_ACTS = ['compare', 'put', 'merge'];
+
 export const matrix = {
   type: 'matrix',
   label: '矩阵',
@@ -464,6 +540,7 @@ export const matrix = {
     if (!h.args.some((a) => a.t === 'eq')) throw new Error('要写成 matrix 名字 = 1 2 / 3 4（/ 分行）');
     const id = h.words[0];
     const words = h.words.slice(1);
+    if (words[0] === 'collect') return makeCollect(scene, id, words.slice(1), h.opts, old);
     const live = words.some((w) => /[{}]/.test(w)) ? liveRows(h, words.join(' ')) : null;
     const { rows, aug } = live || parseRows(words, null, { blank: true });
     const cells = [];
@@ -512,6 +589,8 @@ export const matrix = {
       const done = ops.map((op) => applyOp(o, op));
       o.stairs = false; // 数变了，阶梯线收起（要的话再画一次）
       scene.unlive(o, c.src?.trim() || ''); // 跟着算的做了行变换：就是一个普通的矩阵了（不然依赖一变又算回去，行变换白做），舞台现状里说一声
+      delete o.collect; // 收集用的也一样：再放进来会照放过的那几张重算，行变换白做
+      delete o.cancelled;
       const id = `op:${o.id}`;
       for (const k of [...scene.labels.keys()]) if (k === id || k.startsWith(`${id}:`)) scene.labels.delete(k);
       const labels = done.map((d, n) => {
@@ -588,14 +667,61 @@ export const matrix = {
       });
       return { id: o.id, a: A.id, b: B.id, items };
     },
+    // put AB Sum：AB 放进收集用的 Sum，Sum 跟着算 {AA + AB}（第一张放进来时 Sum 照它的大小）；学生把 AB 整张拖到 Sum 上就是这一行
+    put(scene, c, h) {
+      h.strayRefs();
+      const [an, sn, ...more] = h.words;
+      if (more.length) throw new Error('要写成 put AB Sum（一次放一张）');
+      const p = putPlan(scene, an, sn);
+      if (p.error) throw new Error(p.error);
+      const S = p.S;
+      S.collect.terms = p.terms;
+      S.live = { line: `matrix ${S.id} = {${p.whole}}`, whole: p.whole, deps: p.deps };
+      delete S.cancelled;
+      const r = matrix.relive(scene, S);
+      // 变了的格交出来（画面闪一下，[跟着变的] 写给老师）
+      return { id: S.id, put: { from: an, into: S.id, whole: p.whole }, ...(r.changed.length ? { derived: [{ id: S.id, changed: r.changed, parts: r.parts }] } : {}) };
+    },
+    // merge X Y：X 并进 Y（同一个矩阵的倍数：{-2 A} 和 {-A} 并成 {(-3) A}），X 拿下舞台（连存档一起清，scene.js 的 dropObject）；并成 0 是 O
+    merge(scene, c, h) {
+      h.strayRefs();
+      const [xn, yn, ...more] = h.words;
+      if (more.length) throw new Error('要写成 merge X Y（一次并两张）');
+      const p = mergePlan(scene, xn, yn);
+      if (p.error) throw new Error(p.error);
+      const { X, Y, from, into, to } = p;
+      scene.dropObject(X.id);
+      Y.live = { line: `matrix ${Y.id} = {${p.whole}}`, whole: p.whole, deps: Y.live.deps };
+      const r = matrix.relive(scene, Y);
+      if (to.k.zero) Y.cancelled = true; else delete Y.cancelled;
+      return { id: Y.id, removed: true, merge: { x: X.id, y: Y.id, from, into, to }, ...(r.changed.length ? { derived: [{ id: Y.id, changed: r.changed, parts: r.parts }] } : {}) };
+    },
   },
   // —— 活的舞台：学生能直接动的、跟着算的、拿来判挑战的 ——
   affords: { edit: '点一格，拨里面的数', explain: '点乘积的一格，看它怎么一行乘一列算出来' },
-  canOpen(scene, o, action) {
+  canOpen(scene, o, action, h) {
     if (action === 'edit' && o.product) throw new Error(`${o.id} 是乘积，数是算出来的：开放 ${o.product.a}、${o.product.b} 的数让学生拨（open ${o.product.b} edit）`);
     if (action === 'explain' && !o.product) throw new Error(`${o.id} 不是乘积：open … explain 写在乘积上（open C explain）`);
     // 乘积的数跟着 A、B 算：学生做一步行变换，同一下就被算回去了
     if (action === 'rowop' && o.product) throw new Error(`${o.id} 是乘积，数跟着 ${o.product.a}、${o.product.b} 算，学生做了行变换也会被算回去：要学生消元就造一个普通的矩阵（matrix M = …）再 open M rowop`);
+    // 整张拖（compare / put / merge）：拖的是一整张，写部件没有意义
+    if (WHOLE_ACTS.includes(action) && /[.#]/.test(String(h?.words?.[0] ?? ''))) throw new Error(`open … ${action} 写整张矩阵的名字（open ${o.id} ${action}）：学生拖的是一整张`);
+    // 收集用的：学生只能往里放（还空着时它也不是跟着算的，这里挡一下）
+    if (o.collect && (action === 'edit' || action === 'rowop')) throw new Error(`${o.id} 是收集用的矩阵：学生只能往里放（open AB put，学生把 AB 拖进 ${o.id}）`);
+  },
+  /**
+   * 两张整张逐格比（scene.js 的 compare：两头都是整张矩阵）：{ whole, a, b, diff: [{ r, c, a, b }], total, shape }；
+   * 不一样大逐格比不了，diff、total 是 null（compareFact 照 shape 说）
+   */
+  compareWhole(A, B) {
+    const shape = { a: [A.rows, A.cols], b: [B.rows, B.cols] };
+    if (A.rows !== B.rows || A.cols !== B.cols) return { whole: true, a: A.id, b: B.id, diff: null, total: null, shape };
+    const diff = [];
+    for (const x of [...A.cells].sort(sortRC)) {
+      const y = cellAt(B, x.r, x.c);
+      if (String(x.value) !== String(y?.value)) diff.push({ r: x.r, c: x.c, a: x.value, b: y?.value ?? '' });
+    }
+    return { whole: true, a: A.id, b: B.id, diff, total: A.cells.length, shape };
   },
   /** 算出来的格跟着 A、B 重算：变了的交出来（画面让它闪一下） */
   derive(scene, o) {
@@ -692,11 +818,17 @@ export const matrix = {
       return `${x.value === '' ? '□' : x.value}${bits.length ? `（${bits.join('、')}）` : ''}`;
     };
     const zero = new Set(zeroRows(o));
-    const lines = [`矩阵 ${o.id}${o.product ? ` = ${o.product.a} ${o.product.b}` : ''}（${o.rows}×${o.cols}${o.aug ? `，增广矩阵：竖线在第 ${o.aug} 列后面` : ''}${o.calc?.length ? `；算出来的 ${o.calc.length} 格跟着 ${o.product.a}、${o.product.b} 自动重算` : ''}）：`];
+    const empty = emptyCollect(o);
+    // 收集用的还空着：不写 1×1（那只是一个等着放的空格），写放进第一张以后照它的大小
+    const size = empty ? `收集用的，${SIGN_TEXT[o.collect.sign]}；还空着，放进第一张以后照那一张的大小` : `${o.rows}×${o.cols}`;
+    const lines = [`矩阵 ${o.id}${o.product ? ` = ${o.product.a} ${o.product.b}` : ''}（${size}${o.aug ? `，增广矩阵：竖线在第 ${o.aug} 列后面` : ''}${o.calc?.length ? `；算出来的 ${o.calc.length} 格跟着 ${o.product.a}、${o.product.b} 自动重算` : ''}）：`];
     for (let r = 1; r <= o.rows; r++) lines.push(`  第 ${r} 行：${rowCells(o, r).map(tag).join('  ')}${zero.has(r) ? '（全为 0）' : ''}`);
     if (o.stairs) lines.push(`  画着阶梯线：非零行 ${o.rows - zero.size} 行`);
     const blank = o.cells.filter((x) => x.value === '').sort(sortRC);
-    if (blank.length) lines.push(`  还空着：${blank.map((x) => `${o.id}.${x.r},${x.c}`).join(' ')}`);
+    if (blank.length && !empty) lines.push(`  还空着：${blank.map((x) => `${o.id}.${x.r},${x.c}`).join(' ')}`);
+    if (o.collect && !empty) lines.push(`  收集用的（${SIGN_TEXT[o.collect.sign]}）：${o.id} = ${collectSrc(o.collect.sign, o.collect.terms)}；学生只能往里放`);
+    // 并同类项并成了 0：整张都是 0 才这样写（老师之后改了一格就不是了）
+    if (o.cancelled && o.cells.every((x) => x.value !== '' && toQ(x.value).zero)) lines.push(`  ${o.id} = O（抵消了）`);
     // 方程组（增广、右边一列）：解的样子、每一行读回成方程（矛盾行标出来），老师不用自己数秩、自己读
     const sol = solutionText(o);
     if (sol) lines.push(`  ${sol}`);
@@ -707,8 +839,9 @@ export const matrix = {
   doc: `矩阵（线代：行变换、消元、秩、乘法）：
 matrix m = 1 2 3 / 4 5 6 / 7 8 10   造矩阵（/ 分行；数能写 -3、1/2；| 是增广矩阵的竖线；beside=p 放在 p 右边）
 写法：m.2,3 第 2 行第 3 列；m.r2 第 2 行；m.c3 第 3 列
-matrix N = 1 {k} / 0 1              格里的 {…} 写算成一个数的式子（{k}、{A.1,2}、{l - 1}），跟着它变；整张就算跟着算的，学生 open 不了
-matrix S = {A + B}                  整个矩阵跟着算（{A B}、{2A}、{k A}、{A^-1}、{A'}）；跟着算的学生动不了
+matrix N = 1 {k} / 0 1              格里的 {…} 写算成一个数的式子（{k}、{A.1,2}、{l - 1}），跟着它变；整张就算跟着算的，学生拨不了，只能 open compare / put / merge
+matrix S = {A + B}                  整个矩阵跟着算（{A B}、{2A}、{k A}、{A^-1}、{A'}）；跟着算的学生拨不了，只能 open compare / put / merge
+matrix Sum = collect                收集用的（collect - 是第一张减后面的）：空着是一个空格，学生把矩阵放进来就跟着算 {AA + AB}
 rowop m r2 - 3r1                  行变换：r1 的副本乘 -3 飘到 r2 上加进去（也能写 r2 = r2 - 3r1、r3 + 1/2 r1；连着几步用逗号：r2 - 4r1, r3 - 7r1）
 rowop m r1 <-> r3                 交换两行（走弧线）
 rowop m 3r2                       一行乘倍数（-r1、r2 / 3）；列变换把 r 换成 c
@@ -719,14 +852,17 @@ product C = A B                   A、B 排成一行，后面「= C」（C 先�
 mul C.1,2                         A 的第 1 行、B 的第 2 列一起亮，逐对相乘再相加，写进 C.1,2（mul C 一格格全算）；算出来的格以后跟着 A、B 自动重算
 open B edit range=-3..3           学生点 B 的一格用 ± 拨里面的数（AB、BA 当场跟着变）
 open C explain                    学生点乘积的一格，页面当场演它怎么一行乘一列算出来（还空着的就当场算上）
+open AB compare                   学生把 AB 整张拖到另一张上 = compare AB BA（逐格比，两张都不变）
+open AB put                       学生把 AB 拖进收集用的 Sum = put AB Sum（大小不一样放不进去）
+open X merge                      学生把 X 拖到 Y 上并同类项 = merge X Y（只认 数 × 同一个矩阵：{-2 A} 并 {-A} 成 {-3 A}，X 拿下舞台；并成 0 是 O）；三种都不判对错
 学生自己消元（rowop 页面判每一下；乘积不能 open rowop）：
 open m rowop wrong=mark call=wrong    学生把一行左边的把手拖到另一行上 = 倍加（弹倍数框写 -3：rowop m r2 - 3r1）；拖到行号上 = 对调（rowop m r1 <-> r2）；点行号 = 倍乘（rowop m (-1/2)r1）
 open m edit input=keypad          学生点一格用数字键盘写（能写 -3/2；写了 range= 才限范围）= write m.2,3 -3/2（页面不判，告诉你的就是这一行）
 判断式（when=）：m stairs（阶梯形）、m rref（行最简形）、m rank=2（整张的秩，增广的是 r(A | b)）、m rankA=2（竖线左边的秩 r(A)）、m same B（和 B 行等价）
 做完了 = 成了阶梯形（@m.done 这时演）；往上化成行最简形页面不判对错，要的话写 goal … when="m rref"
 ask value "A² 是？" type=matrix answer={A^2} wrong="1 1 / 1 1=逐格平方了"     学生写一张矩阵（行用「 / 」或 ; 隔开，1/3 是一格分数），页面照 A 现算答案`,
-  // 测试用（tests/stage-doc.test.js）：说明里 stairs 那一行要一个已经是阶梯形的矩阵
-  docSetup: 'matrix m = 1 2 3 / 0 1 4 / 0 0 1',
+  // 测试用（tests/stage-doc.test.js）：说明里 stairs 那一行要一个已经是阶梯形的矩阵；整张拖的三行要 AB、BA、Sum、X、Y
+  docSetup: 'matrix m = 1 2 3 / 0 1 4 / 0 0 1\nmatrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix AB = {A B}\nmatrix BA = {B A}\nmatrix Sum = collect\nmatrix X = {-2 A}\nmatrix Y = {-A}',
   example: `matrix A = 1 1 / -1 -1
 matrix B = 1 -1 / -1 1 beside=A
 product C = A B
