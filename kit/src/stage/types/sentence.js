@@ -1070,7 +1070,7 @@ ask drag s.7 "把 is 挪到句首"         学生按住一个词拖到别处（�
 学生自己拆（mark 页面照 key 判每一下）：
 open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的，交中文）= mark s.1-6 主语；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句；key 写 [Attr/NF …] 是两种都对
 open s fold                         学生点一道括号或括号里的词 = fold s.3-6（页面不判；和 mark 一次开一种）
-open s.6 refer                      学生从 s.6 的钩上拉线，松在词、括号、句子外框上 = refer s.6 -> s.2 / s.1-2 / s（整句）；造句子时写 links="that -> books; !that -> shelf=就近连了名词" 就照它判（! 是常见的错连）
+open s.3 refer                      学生从 who 的钩上拉线，松在词、括号、句子外框上 = refer s.3 -> s.2 / s.1-2 / s（整句）；造句子时写 links="who -> s.1-2; !who -> door=连到了从句里的名词" 就照它判（! 是常见的错连）
 判断式（when=）：s parsed（key 里每一段都拉对了，多拉的不管）、s exact（拉对了、也没多拉）、s main（主干拉对了）、s span s.2-5 = V（这一段现在挂着这个成分）、s linked（links= 每一条都连对了）；没写 key / links= 判不了，@s.done 也不收
 句子里留空位让学生填词：现在没有写法（要填就 ask value … type=en）`,
   example: `sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."

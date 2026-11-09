@@ -740,11 +740,31 @@ test('两种错一起：成分不对、范围差一两个词时，挑重叠最�
   const v = R.check(S(s), mk(4, 7, 'O'), s);
   assert.equal(v.right, false);
   assert.equal(v.misread, '成分标错了，范围也差一点：这一段是表语（to direct these funds better），学生拉的少了 better');
-  assert.equal(R.check(S(s), mk(3, 8, 'O'), s).misread, '成分标错了，范围也差一点：这一段是表语（to direct these funds better），学生拉的多了 is');
-  // 只占了那一段的一小半（these funds 可能是 direct 的宾语，key 没拆这一层）：页面不知道对不对，不判
+  // 从同一个词起头、多拉了：照说「多了」
+  const cat = make(CAT);
+  assert.equal(R.check(S(cat), mk(10, 13, 'P'), cat).misread, '成分标错了，范围也差一点：这一段是宾语（a small-scale study），学生拉的多了 in');
+  // 跨过 key 一段的边（本来就和 key 冲突）：照说，头尾差在哪都说
+  const man = make(MAN);
+  const x = R.check(S(man), mk(2, 5, 'P'), man);
+  assert.equal(x.right, false);
+  assert.equal(x.misread, '成分标错了，范围也差一点：这一段是定语从句（who lives next door），学生拉的少了 door，多了 man');
+  // 不说假话（复核找到的反例）：整个落在 key 一段里、不从同一个词起头的，可能正是 key 没拆的那一层——these funds 是 directing 的宾语
+  for (const [src, a, b] of [['sentence s = "His job is directing these funds." key="[S His job] [V is] [P directing these funds]."', 5, 6], ['sentence s = "Their aim is helping small firms." key="[S Their aim] [V is] [P helping small firms]."', 5, 6]]) {
+    const t = make(src);
+    for (const role of ['O', '宾语']) {
+      const r = R.check(S(t), mk(a, b, role), t);
+      assert.equal(r.right, null, `${src} ${a}-${b} ${role}`);
+      assert.equal(r.misread ?? null, null);
+    }
+  }
+  // 简报那一句里也一样：只占了那一段的一小半、不从同一个词起头（these funds）不判；包住 is 又不从同一个词起头的（is to direct …）也不判
   assert.equal(R.check(S(s), mk(6, 7, 'O'), s).right, null);
-  // 成分和 key 那一段不是一类（宾表补 / 状语）、又整个落在那一段里：可能是里面的一层，不说
+  assert.equal(R.check(S(s), mk(3, 8, 'O'), s).right, null);
+  // 从同一个词起头、可成分和 key 那一段不是一类：可能是换个角度说同一段（to pay 标非谓语说的是动词的样子），不说
   assert.equal(R.check(S(s), mk(4, 7, '状语'), s).right, null);
+  const house = make(HOUSE);
+  assert.equal(R.check(S(house), mk(7, 8, '非谓语'), house).right, null);
+  assert.match(R.check(S(house), mk(7, 8, '表语'), house).misread, /^成分标错了，范围也差一点：这一段是宾语（to pay attention），学生拉的少了 attention$/);
   // 范围对了、成分不对，照旧只说成分；成分对了、范围不对，照旧说断早断晚
   assert.match(R.check(S(s), mk(4, 8, 'O'), s).misread, /^成分标错了：这一段是表语，不是宾语$/);
   assert.match(R.check(S(s), mk(4, 7, 'P'), s).misread, /表语这一段断早了/);

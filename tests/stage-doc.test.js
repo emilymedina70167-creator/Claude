@@ -205,8 +205,13 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
   said('sentence', gestureAct(s, s.opens.get('s:mark'), { from: s.parts('s.1')[0], to: s.parts('s.6')[0], role: subj.value }).src);
   s = run('sentence s = "The man who lives next door is a doctor."\nmark s.3-6 RC\nopen s fold');
   said('sentence', gestureAct(s, s.opens.get('s:fold'), { to: s.parts('s.4')[0] }).src);
-  s = run('sentence s = "The man who lives next door is a doctor."\nopen s.6 refer');
-  said('sentence', gestureAct(s, s.opens.get('s:refer'), { from: s.parts('s.6')[0], to: s.parts('s.2')[0] }).src);
+  // 说明的例句里 s.3 是 who（指 The man）：从它的钩拉到 man、拉到 The man 那一段，页面交出的两行都写在说明里
+  s = run('sentence s = "The man who lives next door is a doctor."\nopen s.3 refer\nmark s.1-2 主语');
+  said('sentence', gestureAct(s, s.opens.get('s:refer'), { from: s.parts('s.3')[0], to: s.parts('s.2')[0] }).src);
+  assert.equal(gestureAct(s, s.opens.get('s:refer'), { from: s.parts('s.3')[0], to: { mark: s.objects.get('s').marks[0].id } }).src, 'refer s.3 -> s.1-2');
+  assert.ok(TYPES.sentence.doc.includes('= refer s.3 -> s.2 / s.1-2 / s（整句）'), '拉到一段、整句的写法也在那一行');
+  // 说明里 links= 的例子照抄到例句上能演（指的是 The man）
+  assert.deepEqual(dryRun(new Scene(), 'sentence s = "The man who lives next door is a doctor." links="who -> s.1-2; !who -> door=连到了从句里的名词"'), []);
   // 共用里「页面判对错的动作」把句子的 refer 也列上（refer 能写 wrong=）
   assert.match(STAGE_COMMON, /页面判对错的动作（[^）]*句子的 mark refer）/);
   // 说法：默认 wrong=quiet 照做只记下；乘 0、没有孩子能转上来永远不演；@t.right 只演一次；贴的部件没了字跟着消失

@@ -221,8 +221,13 @@ function misreadOf(o, ks, a, b, name, shown) {
 /**
  * 两种错一起出（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 5 节）：成分对不上 key 的那一段、范围又和它差一两个词（多的、少的加起来）。
  * 同一层（peer）里挑重叠最多的那一段，先说它是什么、再说范围差在哪：「成分标错了，范围也差一点：这一段是表语（…），学生拉的少了 better」。
- * 不说假话：key 只说了那一段是什么，没说它里面、外面一层是什么——学生拉的大半不是那一段的词（these funds 可能是 direct 的宾语）、
- * 或者整个落在里面 / 包住它、成分又和它不是一类（roleColor 的同一种颜色：宾表补、定语同位……）的，可能是 key 没拆的那一层，不说
+ * 不说假话：key 只说了那一段是什么，没说它里面、外面一层是什么。学生拉的跨过了那一段的边（本来就和 key 冲突）才照说；
+ * 整个落在那一段里、或者整个包住它的，要两样都成立才说：
+ *   - 和它从同一个词起头（学生是在拉这一段、只是尾巴差了）。不从同一个词起头的可能正是 key 没拆的那一层：
+ *     [P directing these funds] 里的 these funds 是 directing 的宾语；
+ *   - 成分和它是一类（roleColor 的同一种颜色：宾语表语补语一类……）。不是一类的可能是换了个角度说同一段：
+ *     [O to pay attention] 里拉 to pay 标非谓语，说的是动词的样子，不一定错。
+ * 也要大半是那一段的词（重叠的比那一段、学生拉的都多一半）
  */
 function bothWrong(o, ks, a, b, name, peer) {
   const len = (p, q) => q - p + 1;
@@ -236,7 +241,7 @@ function bothWrong(o, ks, a, b, name, peer) {
     if (common * 2 <= len(k.from, k.to) || common * 2 <= len(a, b)) continue;
     const cross = (a < k.from && b < k.to) || (a > k.from && b > k.to);
     const kin = !!name && k.names.some((n) => roleColor(n) && roleColor(n) === roleColor(name));
-    if (cross || kin) hits.push({ k, common, diff });
+    if (cross || (a === k.from && kin)) hits.push({ k, common, diff });
   }
   const best = hits.sort((p, q) => q.common - p.common || p.diff - q.diff)[0];
   if (!best) return null;

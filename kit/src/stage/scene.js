@@ -18,7 +18,7 @@ import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder } from './value.js';
 import { rulesOf, done as nextDone, checkMeasure, measureLine } from './rules.js';
 import { judge } from './referee.js';
-import { gestureGrabs } from './gestures.js';
+import { gestureGrabs, armable } from './gestures.js';
 
 export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 /** 扫一遍拨数：能拨到的值超过这么多就不扫（现状里只说一句太多，不让每一轮的现状变长、算得太久） */
@@ -1196,7 +1196,12 @@ export class Scene {
     if (this.say) lines.push(`最后说的话：${this.say}`);
     // 问的、开放的、挑战要动的东西后来藏起来了：照写，补一句学生点不到（不然老师等一个永远不来的回答）
     if (this.waiting) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案' }[this.waiting.kind]}${this.waiting.refs.length ? ` ${this.waiting.refs.join(' ')}` : ''}${hiddenNote(this.hiddenIn([...this.waiting.refs, ...(this.waiting.expect && this.isRef(this.waiting.expect) ? [this.waiting.expect] : [])]))}`);
-    if (this.opens.size) lines.push(`学生能直接动的：${[...this.opens.values()].map((e) => { const o = this.objects.get(e.obj); const what = (e.input ? null : affordsOf(typeOf(o))[e.action]) || gestureText(e.gesture); const pol = [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、'); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}${pol ? `；${pol}` : ''}）${hiddenNote(this.hiddenIn([e.obj]))}`; }).join('；')}`);
+    const openText = (e) => { const o = this.objects.get(e.obj); const what = (e.input ? null : affordsOf(typeOf(o))[e.action]) || gestureText(e.gesture); const pol = [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、'); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}${pol ? `；${pol}` : ''}）${hiddenNote(this.hiddenIn([e.obj]))}`; };
+    // 画面还挂不上的手势（句子的拉线，gestures.js 的 ARMED_GESTURES）：不说学生能动，单独一句（开着、不默默吞掉）
+    const opens = [...this.opens.values()];
+    const can = opens.filter((e) => armable(e.gesture)), cannot = opens.filter((e) => !armable(e.gesture));
+    if (can.length) lines.push(`学生能直接动的：${can.map(openText).join('；')}`);
+    if (cannot.length) lines.push(`开着、页面还画不了的（学生现在动不了）：${cannot.map(openText).join('；')}`);
     if (this.slips.size) lines.push(`淡淡圈着（学生走偏的那一下，照你写的 wrong=mark；那样东西再变就收掉）：${[...this.slips.values()].map((x) => `${x.refs.join(' ')}（${x.src}）`).join('；')}`);
     const pre = [...this.reactions].filter(([k, r]) => k.includes('.') && r.length).map(([k, r]) => { const [id, kind] = k.split('.'); return `${id} ${kind === 'done' ? '做完了' : '学生做对一步'}页面马上演你预写的 ${r.length} 行`; });
     if (pre.length) lines.push(`预写的：${pre.join('；')}`);

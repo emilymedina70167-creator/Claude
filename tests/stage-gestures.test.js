@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { gestureAct, askFor, undoLines, undoPlan, kindsOf, normValue, writeRange, UNDO_TOLD, UNDO_NO } from '../kit/src/stage/gestures.js';
+import { gestureAct, askFor, undoLines, undoPlan, kindsOf, normValue, writeRange, UNDO_TOLD, UNDO_NO, ARMED_GESTURES, armable } from '../kit/src/stage/gestures.js';
 import { eventOf, tryCount } from '../kit/src/stage/events.js';
 import { padKey } from '../kit/src/stage/keypad.js';
 import { trayBoxes, slotSpots, tree as treeType, NODE } from '../kit/src/stage/types/tree.js';
@@ -148,6 +148,23 @@ test('句子：从 that 的钩拉一条线，松在词、括号、句子外框�
   assert.doesNotThrow(() => run('open s mark', s));
   // 学生拉的线写给老师（裁判的结论 events.js 接着写）
   assert.equal(actText({ type: 'refer', src: 'refer s.6 -> s.5', verdict: { legal: true, right: false, why: 'that 连到 shelf' } }), '学生 refer s.6 -> s.5（that 连到 shelf）');
+});
+
+test('画面还挂不上的手势（拉线，Task 11 才做）：现状不说学生能动，单独写一句；画面做好了（ARMED_GESTURES 加上 line）才写进「学生能直接动的」', () => {
+  const s = run('sentence s = "The books on the shelf that I bought yesterday are new." links="that -> books"\nopen s mark\nopen s.6 refer wrong=mark');
+  assert.equal(ARMED_GESTURES.has('line'), false, '画面还没做拉线');
+  assert.equal(armable(open(s, 's:refer').gesture), false);
+  assert.equal(armable(open(s, 's:mark').gesture), true);
+  assert.equal(armable(null), true, '拖、点开看（不是手势表里的）照旧动得了');
+  const t = s.stateText();
+  assert.match(t, /\n学生能直接动的：s mark（拉一段）\n/);
+  assert.doesNotMatch(t, /学生能直接动的：[^\n]*refer/);
+  assert.match(t, /\n开着、页面还画不了的（学生现在动不了）：s\.6 refer（拉一条线；wrong=mark）/);
+  // 只开了拉线：没有「学生能直接动的」那一行
+  assert.doesNotMatch(run('sentence s = "The books are new."\nopen s.1 refer').stateText(), /学生能直接动的/);
+  // Task 11 做好以后把 line 加进 ARMED_GESTURES：照旧写进「学生能直接动的」
+  ARMED_GESTURES.add('line');
+  try { assert.match(s.stateText(), /学生能直接动的：s mark（拉一段）；s\.6 refer（拉一条线；wrong=mark）/); } finally { ARMED_GESTURES.delete('line'); }
 });
 
 test('写的值：键盘上的减号、全角斜线规整成指令里的写法', () => {

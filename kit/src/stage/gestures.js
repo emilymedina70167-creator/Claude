@@ -9,6 +9,15 @@ import { gestureOf } from './rules.js';
 /** 手势表那一项交的手势（一种或几种：矩阵的 rowop 是 drop-on 和 tap） */
 export const kindsOf = (g) => [].concat(g?.gesture || []);
 
+/**
+ * 画面（gesturedom.js）现在真挂得上的手势。句子的 line（从钩上拉线）手势表里有了、画面还没做（第二轮 Task 11 做）：
+ * 开着这种手势的那一项，舞台现状不写进「学生能直接动的」（不能对老师说学生能拉线），单独写一句页面还画不了。
+ * Task 11 做好拉线以后把 'line' 加进来
+ */
+export const ARMED_GESTURES = new Set(['tap', 'drop-on', 'drop-at', 'span', 'write']);
+/** open 的这一项学生现在真动得了吗：不是手势表里的（拖、点开看）照旧动得了；手势表里的要有一种画面挂得上 */
+export const armable = (g) => !g || kindsOf(g).some((k) => ARMED_GESTURES.has(k));
+
 /** 写的值规整成指令里的写法：键盘上的减号（−）、全角斜线 */
 export function normValue(v) {
   if (v == null) return v;
