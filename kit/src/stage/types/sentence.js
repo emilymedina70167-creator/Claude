@@ -15,6 +15,8 @@
 // 照黑板 parse 组件的括号写法（entext.js 的 parseBrackets）读成 o.key，判法在 sentence.rules.js
 import { bbox } from '../layout.js';
 import { parseBrackets, tokenizeSentence, ROLES } from '../../entext.js';
+// 规则那边照 key 数的学生括号（舞台现状里写）。两个模块互相 import：都只在函数里用对方的东西，加载的先后不碍事
+import { bracketFacts } from './sentence.rules.js';
 
 export const MAX_WORDS = 60;
 export const WRAP = 800; // 一行最宽（世界坐标的像素；镜头再缩放到屏幕上）
@@ -561,6 +563,18 @@ export function keyStatus(o) {
   return { n: o.key.spans.length, void: null, split };
 }
 
+/**
+ * 拆散了的括号（id）：括号记的词现在在句子里不挨着了（move 把中间的词挪走、或者把括号里的一个词挪出去）。
+ * 拆散的不算一段（sentence.rules.js 的 markSpans 也跳过它们）：画面画成断开的虚线，现状里告诉老师
+ */
+export function brokenMarks(o) {
+  const slot = new Map((o?.words || []).map((w) => [w.key, w.slot]));
+  return (o?.marks || []).filter((m) => {
+    const slots = m.keys.map((k) => slot.get(k));
+    return slots.some((v) => v == null) || Math.max(...slots) - Math.min(...slots) + 1 !== slots.length;
+  }).map((m) => m.id);
+}
+
 export const sentence = {
   type: 'sentence',
   label: '句子',
@@ -625,10 +639,13 @@ export const sentence = {
       const color = h.words.find(isColor) || (isColor(h.opts.color) ? h.opts.color : null) || roleColor(label);
       const keys = parts.map((p) => p.key);
       const had = o.marks.find((m) => sameKeys(m.keys, keys));
-      if (had) Object.assign(had, { label, color });
+      // 谁拉的（这一行是学生做的还是老师写的，scene.js 的 apply 记着）：学生的括号页面另外数里面的谓语、多拉的、拆散的；
+      // 同一段再标就换成这一回标的人
+      const by = scene.actor === 'student' ? 'student' : 'teacher';
+      if (had) Object.assign(had, { label, color, by });
       else {
         if (o.marks.length >= 24) throw new Error('一句上最多 24 道括号，先 unmark 几道');
-        o.marks.push({ id: `m${o.seq++}`, keys, label, color });
+        o.marks.push({ id: `m${o.seq++}`, keys, label, color, by });
       }
       return { id: o.id, mark: had?.id || o.marks.at(-1).id };
     },
@@ -645,6 +662,23 @@ export const sentence = {
       }
       if (!gone.length) throw new Error(`${whole ? o.id : refs.join(' ')} 上没有${label ? `「${label}」的` : ''}括号${o.marks.length ? `（有的是：${o.marks.map((m) => `${spanText(o, m.keys)} ${m.label}`).join('；')}）` : ''}`);
       o.marks = o.marks.filter((m) => !gone.includes(m));
+      return { id: o.id };
+    },
+    // tally s V：每道学生的括号上标里面 key 的谓语（写别的成分就数那一种）几个，剩下的在句尾标（画面跟着变）；untally s 收起。
+    // 照 key 数：没写 key 的句子以后也数不了，写下就报
+    tally(scene, c, h) {
+      const { o, whole, refs } = target(h, 'tally');
+      if (!whole) throw new Error(`tally 写整句的名字：tally ${o.id} V`);
+      const label = restText(h, refs).trim();
+      if (!label) throw new Error(`tally 后面要写成分，比如 tally ${o.id} V（数每道学生括号里 key 的谓语几个）`);
+      if (!roleName(label)) throw new Error(`tally 的成分「${label}」认不出（写 V、谓语、S、主语、O……）`);
+      if (!c.lenient && (!o.key || o.key.void)) throw new Error(o.key?.void ? `${o.id} 的 key 跟着 rewrite 作废了，页面数不了，tally 标不出来` : `${o.id} 没写 key=（正确拆法），页面数不了，tally 标不出来`);
+      o.tally = label;
+      return { id: o.id };
+    },
+    untally(scene, c, h) {
+      const { o } = target(h, 'untally');
+      o.tally = null;
       return { id: o.id };
     },
     // tag s.7 V：词上面一个小标签（同一段再标就换掉）
@@ -844,6 +878,8 @@ export const sentence = {
     if (o.marks.length) {
       const lv = new Map(L.marks.map((m) => [m.mark, m.level]));
       lines.push(`  括号（词下面）：${o.marks.map((m) => `${spanText(o, m.keys)} ${m.label}${lv.get(m.id) > 1 ? `（第 ${lv.get(m.id)} 层${color(m.color)}）` : m.color ? `（${COLOR_NAMES[m.color]}）` : ''}`).join('；')}`);
+      // 学生拉的括号：里面 key 的谓语几个、多拉的、被挪开拆散的（页面照 key 数，sentence.rules.js）
+      for (const f of bracketFacts(o)) lines.push(`  ${f}`);
     }
     const ks = keyStatus(o);
     if (ks) lines.push(`  key：${ks.void ? '作废了（rewrite 换了句子；要判就重新造这句、带上新的 key=）' : ks.split.length ? ks.split.map((x) => `第 ${x.n} 段 [${x.role} ${x.text}] 被 move 拆散了，那一段不能再拉对`).join('；') : `收下了（${ks.n} 段）`}`);

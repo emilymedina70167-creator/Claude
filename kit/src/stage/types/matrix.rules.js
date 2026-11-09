@@ -300,8 +300,195 @@ function statusFact(o, md, pl) {
   return `还不是阶梯形：${where}主元 ${cellVal(md, r, c)} 下面还有 ${nz.filter((i) => i > r).map((i) => cellVal(md, i, c)).join('、')} 要消成 0`;
 }
 
-function facts(before, after, act) {
-  if (!before || !after || act?.type !== 'rowop') return [];
+// —— 页面算得出的（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.2）：读回的方程、解的样子、from=M0 猜行变换 ——
+// 舞台现状（matrix.js 的 describe）每一轮写、扫拨数（scene.js 的 sweep）每个值写一次；学生写满一行时和 M0 比。不判对错，只说算出来的
+
+const eqQ = (a, b) => a.n === b.n && a.d === b.d;
+const full = (row) => !!row && row.every((x) => x != null);
+const sameRow = (a, b) => a.length === b.length && a.every((x, c) => eqQ(x, b[c]));
+/** 是一个方程组：增广、竖线右边正好一列（[A | E] 这种右边好几列的不读成方程） */
+const isSystem = (o) => o.aug != null && o.cols - o.aug === 1;
+/** 未知数的名字：vars= 写的（个数对得上才用：跟着算重新造以后可能换了尺寸），不写就是 x1、x2…… */
+const varsOf = (o) => (Array.isArray(o.vars) && o.vars.length === o.aug ? o.vars : Array.from({ length: o.aug }, (_, i) => `x${i + 1}`));
+/** 等号左边：系数是 0 的项不写，1 不写、分数加括号（(1/2)x2，coefSrc），负号单独拿出来写成 −；第一项是负的写 −x1，全是 0 写 0 */
+function lhsText(row, names) {
+  let out = '';
+  row.forEach((q, i) => {
+    if (q.zero) return;
+    const neg = q.n < 0n;
+    const term = `${coefSrc(neg ? q.neg() : q)}${names[i]}`;
+    out += out ? ` ${neg ? '−' : '+'} ${term}` : `${neg ? '−' : ''}${term}`;
+  });
+  return out || '0';
+}
+
+/**
+ * 增广矩阵每一行读回成方程：['第 1 行读回来：x1 + 2x2 − x3 = 1', '第 2 行：x2 + x3 = 2', '第 3 行：0 = −3（矛盾）']。
+ * 不是方程组的是 []；还空着的行不读（写满了的行照样读：读出来的方程是真的）
+ */
+export function readBack(o) {
+  if (!isSystem(o)) return [];
+  const names = varsOf(o);
+  const out = [];
+  gridOf(o).forEach((row, i) => {
+    if (!full(row)) return;
+    const lhs = row.slice(0, o.aug), b = row[o.aug];
+    const bad = lhs.every((q) => q.zero) && !b.zero;
+    out.push(`第 ${i + 1} 行${out.length ? '' : '读回来'}：${lhsText(lhs, names)} = ${num(b)}${bad ? '（矛盾）' : ''}`);
+  });
+  return out;
+}
+
+// 方程组的秩：{ rA, rAb, free }；不是方程组、还有空着的格是 null
+function solved(o) {
+  if (!isSystem(o) || !filled(o)) return null;
+  const G = gridOf(o);
+  const rA = rrefOf(G.map((r) => r.slice(0, o.aug))).rank;
+  return { rA, rAb: rrefOf(G).rank, free: o.aug - rA };
+}
+const shapeOf = (s) => (s.rA < s.rAb ? '无解' : s.free ? `无穷多解（${s.free} 个自由变量）` : '唯一解');
+
+/** 解的样子：r(A) = 2，r(A | b) = 3：无解 / 唯一解 / 无穷多解（1 个自由变量）。不是方程组、有空格是 null */
+export function solutionText(o) {
+  const s = solved(o);
+  return s ? `r(A) = ${s.rA}，r(A | b) = ${s.rAb}：${shapeOf(s)}` : null;
+}
+
+/** 扫拨数用的要点（rules.js 的 brief）：方程组写解的样子（无解带上两个秩），别的写秩；有空格是 null */
+export function brief(o) {
+  if (!filled(o)) return null;
+  const s = solved(o);
+  if (s) return s.rA < s.rAb ? `无解（r(A) = ${s.rA}，r(A | b) = ${s.rAb}）` : shapeOf(s);
+  return `r = ${rrefOf(gridOf(o)).rank}`;
+}
+
+// 猜出来的一步照课本写（和舞台上的写法一样用普通数字：r2 − r1、r1 ↔ r2、(1/2)r2、−r2）
+const rowRef = (i) => `r${i + 1}`;
+function guessText(g) {
+  if (g.kind === 'swap') return `${rowRef(g.i)} ↔ ${rowRef(g.j)}`;
+  const neg = g.k.n < 0n;
+  const a = coefSrc(neg ? g.k.neg() : g.k);
+  return g.kind === 'scale' ? `${neg ? '−' : ''}${a}${rowRef(g.i)}` : `${rowRef(g.i)} ${neg ? '−' : '+'} ${a}${rowRef(g.j)}`;
+}
+const KIND_ORDER = { add: 0, scale: 1, swap: 2 };
+const absQ = (q) => (q.n < 0n ? q.neg() : q);
+
+// 变了的一行（第 i 行，从 0 数）像哪一步：试「原来这一行 + k × 另一行」「乘 k」「和另一行对调」，挑对上格子最多的；
+// 一样多时倍加先于倍乘、倍乘先于对调，再挑另一行靠前、|k| 小的。对上不到一半：猜不出（guess 是 null）
+function rowGuess(G0, G1, i) {
+  const want = G1[i], src = G0[i];
+  const cands = [];
+  G0.forEach((rj, j) => {
+    if (j === i || !full(rj)) return;
+    const seen = new Set();
+    rj.forEach((y, c) => {
+      if (y.zero) return;
+      const k = want[c].sub(src[c]).div(y);
+      if (k.zero || seen.has(String(k))) return; // 加 0 倍什么也没变，不是一步
+      seen.add(String(k));
+      cands.push({ kind: 'add', i, j, k, cand: src.map((x, cc) => x.add(k.mul(rj[cc]))) });
+    });
+  });
+  const c0 = src.findIndex((x) => !x.zero);
+  if (c0 >= 0) {
+    const k = want[c0].div(src[c0]);
+    if (!k.zero && !isOne(k)) cands.push({ kind: 'scale', i, j: null, k, cand: src.map((x) => x.mul(k)) });
+  }
+  G0.forEach((rj, j) => {
+    // 对调是两行一起变：另一行也写满了，就要正好是这一行原来的样子（另一行没变、只是抄了一份过来的，不是对调）
+    if (j === i || !full(rj) || !sameRow(want, rj) || (full(G1[j]) && !sameRow(G1[j], src))) return;
+    cands.push({ kind: 'swap', i, j, k: null, cand: rj });
+  });
+  for (const x of cands) x.score = x.cand.reduce((s, q, c) => s + (eqQ(q, want[c]) ? 1 : 0), 0);
+  cands.sort((a, b) => b.score - a.score || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || (a.j ?? -1) - (b.j ?? -1) || (a.k && b.k ? absQ(a.k).cmp(absQ(b.k)) : 0));
+  const best = cands[0];
+  if (!best || best.score < Math.ceil(want.length / 2)) return { i: i + 1, guess: null, bad: [] };
+  const guess = { kind: best.kind, i: i + 1, ...(best.j != null ? { j: best.j + 1 } : {}), ...(best.k ? { k: String(best.k) } : {}), text: guessText(best) };
+  const bad = [];
+  best.cand.forEach((q, c) => { if (!eqQ(q, want[c])) bad.push({ c: c + 1, want: String(q), got: String(want[c]) }); });
+  return { i: i + 1, guess, bad };
+}
+
+/**
+ * 从 G0 到 G1（Q 的二维数组，还空着的格是 null）像哪一步初等行变换：只比两边都写满了的行。
+ * { rows（变了的行，从 1 数）, same（和 G0 行等价、同解；有空格说不了是 null）, guess, bad（猜的那一步该是几、写的是几：{ c, want, got }）,
+ *   each（每个变了的行各自猜的）, kept（写满了、没变的行）, blank（G1 里还没写满的行）}。
+ * 只变了一行就是那一行猜的；两行正好对调是那一下对调；变了好几行、凑不成一步的 guess 是 null，各行的看 each
+ */
+export function inferRowOp(G0, G1) {
+  const n = Math.min(G0.length, G1.length);
+  const changed = [], kept = [], blank = [];
+  for (let i = 0; i < n; i++) {
+    if (!full(G1[i])) { blank.push(i + 1); continue; }
+    if (!full(G0[i])) continue;
+    if (sameRow(G0[i], G1[i])) kept.push(i + 1); else changed.push(i);
+  }
+  const each = changed.map((i) => rowGuess(G0, G1, i));
+  let guess = null, bad = [];
+  if (each.length === 1) ({ guess, bad } = each[0]);
+  else if (each.length === 2) {
+    // 两行正好换了个位置：就是一下对调（各行单看也许像倍乘，可一下就说得通的是对调）
+    const [a, b] = changed;
+    if (sameRow(G1[a], G0[b]) && sameRow(G1[b], G0[a])) {
+      const g = { kind: 'swap', i: a, j: b };
+      guess = { kind: 'swap', i: a + 1, j: b + 1, text: guessText(g) };
+    }
+  }
+  let same = null;
+  const dims = G0.length === G1.length && G0[0]?.length === G1[0]?.length;
+  if (!dims) same = false;
+  else if (G0.every(full) && G1.every(full)) {
+    const a = rrefOf(G0).R, b = rrefOf(G1).R;
+    same = a.every((row, i) => sameRow(row, b[i]));
+  }
+  return { rows: changed.map((i) => i + 1), same, guess, bad, each, kept, blank };
+}
+
+const listOf = (ks) => ks.join('、');
+const badText = (b) => `第 ${b.c} 格该是 ${num(b.want)}，写的是 ${num(b.got)}`;
+/**
+ * 造的时候写了 from=M0 的一张，学生写满一行时和 M0 比（不判对错）：
+ * 「M1 第 2 行变了，像 r2 − r1；第 3 格该是 −4，写的是 4；第 1、3 行没变；和 M0 同解：否」；猜不出写「看不出是哪一种初等行变换」。
+ * M0 不在了、换了尺寸：照说页面比不了
+ */
+export function fromFact(o, M0) {
+  const name = M0?.id ?? o.from;
+  if (!M0) return `${o.id} 是从 ${name} 化过来的，可舞台上已经没有 ${name} 了，页面比不了`;
+  if (M0.type !== 'matrix') return `舞台上的 ${name} 已经不是矩阵了，页面比不了 ${o.id} 和它`;
+  if (M0.rows !== o.rows || M0.cols !== o.cols) return `${name} 现在是 ${M0.rows}×${M0.cols} 的，和 ${o.id} 不一样大，页面比不了`;
+  const r = inferRowOp(gridOf(M0), gridOf(o));
+  const bits = [];
+  if (!r.rows.length) bits.push(r.kept.length ? `${o.id} 写满了的第 ${listOf(r.kept)} 行都和 ${name} 一样` : `${o.id} 还没有写满的行`);
+  else if (r.guess) bits.push(`${o.id} 第 ${listOf(r.rows)} 行变了，像 ${r.guess.text}`, ...r.bad.map(badText));
+  else if (r.rows.length === 1) bits.push(`${o.id} 第 ${r.rows[0]} 行变了，看不出是哪一种初等行变换`);
+  else {
+    const one = (e) => (e.guess ? `第 ${e.i} 行像 ${e.guess.text}${e.bad.length ? `（${e.bad.map(badText).join('；')}）` : ''}` : `第 ${e.i} 行看不出是哪一种初等行变换`);
+    bits.push(`${o.id} 第 ${listOf(r.rows)} 行变了，凑不成一步：${r.each.map(one).join('，')}`);
+  }
+  if (r.rows.length && r.kept.length) bits.push(`第 ${listOf(r.kept)} 行没变`);
+  if (r.blank.length) bits.push(`第 ${listOf(r.blank)} 行还没写满`);
+  if (r.same == null) bits.push(`还有空着的格，和 ${name} 同不同解还说不了`);
+  else if (r.same) bits.push(`和 ${name} 同解：是`);
+  else {
+    // 不是行等价的两个方程组也可能同解：两个都无解（解都是空的）。这时不说「同解：否」，免得说错
+    const a = solved(M0), b = solved(o);
+    bits.push(a && b && a.rA < a.rAb && b.rA < b.rAb ? `和 ${name} 不是行等价的（两个都无解）` : `和 ${name} 同解：否`);
+  }
+  return bits.join('；');
+}
+
+// 学生写满一行（写完这一格，这一行没有空着的了）：造的时候写了 from= 的和 M0 比一次。没给场景找不到 M0，不写
+function writeFacts(after, act, scene) {
+  if (!after.from || !scene?.objects) return [];
+  const row = after.cells.filter((x) => x.r === Number(act.r));
+  if (!row.length || row.some((x) => x.value === '')) return [];
+  return [fromFact(after, scene.objects.get(after.from) ?? null)];
+}
+
+function facts(before, after, act, scene) {
+  if (!before || !after) return [];
+  if (act?.type === 'write') return writeFacts(after, act, scene);
+  if (act?.type !== 'rowop') return [];
   let ops;
   try { ops = opsOf(before, act); } catch { return []; }
   const md0 = modelOf(before);
@@ -351,8 +538,17 @@ export function actSrc(o, act) {
 }
 const made = (o, op) => { const act = toAct(op); return { act, src: actSrc(o, act) }; };
 
-/** 一行镜头指令 → check 认的动作（actSrc 倒过来）：rowop M r2 - 2r1（几步用逗号隔开）。改一格（write）这些不判，给 null */
+/**
+ * 一行镜头指令 → check 认的动作（actSrc 倒过来）：rowop M r2 - 2r1（几步用逗号隔开）、write M.2,3 -3/2（改一格：check 不判对错，
+ * 认它是为了学生写满一行时 facts 和 from= 的那一张比）。别的给 null
+ */
 function lineAct(o, c, h) {
+  if (c.cmd === 'write') {
+    const ps = h.partsIn();
+    if (ps.length !== 1 || ps[0].obj !== o.id) return null;
+    const q = toQ(h.words.filter((w) => !h.scene.isRef(w)).at(-1));
+    return q ? { type: 'write', r: ps[0].r, c: ps[0].c, value: q.toString() } : null;
+  }
   if (c.cmd !== 'rowop' || h.words[0] !== o.id) return null;
   const op = rowopText(h).trim();
   return op ? { type: 'rowop', op } : null;
@@ -494,4 +690,5 @@ function slipRefs(o, act) {
 }
 
 // 行变换的每一下都判（改一格不判）；做完了（成了阶梯形）只对交给了学生做行变换的矩阵算：学生只拨数的矩阵不算
-export const matrixRules = { next, check, predicates, measures, facts, gestures, slipRefs, actOf: lineAct, judges: ['rowop'], doneBy: ['rowop'] };
+// brief：跟着拨数算的矩阵，扫拨数时每个值写的要点（scene.js 的 sweep）
+export const matrixRules = { next, check, predicates, measures, facts, gestures, slipRefs, brief, actOf: lineAct, judges: ['rowop'], doneBy: ['rowop'] };

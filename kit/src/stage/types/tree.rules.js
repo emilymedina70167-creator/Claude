@@ -311,8 +311,11 @@ function rotateFacts(before, after, act) {
   if (after.root !== before.root && after.root != null) out.push(`${nameOf(after, after.root)} 成了整棵树的根`);
   const bad = unbalanced(after);
   out.push(bad.length ? `还失衡：${bad.map((k) => `${nameOf(after, k)}（${bfText(bfOf(after, k))}）`).join('、')}` : '现在每个结点都平衡了');
+  out.push(sizeFact(after));
   return out;
 }
+// 插、转以后树多大（页面数的，老师不用自己数）
+const sizeFact = (o) => `现在 ${levelOrder(o).length} 个结点、${heightOf(o, o.root)} 层`;
 
 function insertFacts(before, after, act) {
   const had = new Set(before.nodes.map((n) => n.key));
@@ -324,6 +327,7 @@ function insertFacts(before, after, act) {
     : `插入 ${fresh.value}：树是空的，${fresh.value} 当根`];
   const bad = imbalance(after);
   if (bad) out.push(`插完失衡：最小不平衡子树的根是 ${nameOf(after, bad.key)}（${bfText(bad.bf)}），${bad.kind} 型`);
+  out.push(sizeFact(after));
   return out;
 }
 

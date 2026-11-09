@@ -485,3 +485,25 @@ test('旧判断式照旧：t height=4 里面改用量算，写法不变', () => 
   assert.equal(predicateOf(s, 't', 'height')(['4']), true);
   assert.equal(predicateOf(s, 't', 'height')(['3']), false);
 });
+
+test('子树高、结点数：heights t 以后现状里写每个结点的子树高（层序）；插、转以后的事实写现在几个结点、几层', () => {
+  const s = make('tree t = 50 30 60 20 40 _ _ 10 tray="70"');
+  assert.doesNotMatch(s.stateText(), /子树高/, '老师没写 heights t 不写');
+  run(s, 'heights t');
+  assert.equal(T(s).heights, true);
+  assert.ok(s.stateText().includes('  子树高：50 4，30 3，60 1，20 2，40 1，10 1'), s.stateText());
+  run(s, 'unheights t');
+  assert.doesNotMatch(s.stateText(), /子树高/);
+  run(s, 'open t insert');
+  const fx = s.apply(parseScript('insert t 70')[0], { by: 'student', open: 'insert' });
+  assert.ok(fx.judged.after.includes('现在 7 个结点、4 层'), fx.judged.after.join('\n'));
+  // 旋转以后也写
+  const r = make(LR3);
+  const before = structuredClone(T(r));
+  run(r, 'rotate t.30 left');
+  assert.equal(R.facts(before, T(r), rot(before, 30, 'left')).at(-1), '现在 3 个结点、3 层');
+  // 跟着算重新造的树带着 heights
+  const d = make('dial k = 5 range=1..9\ntree t = 50 {k} 60\nheights t');
+  run(d, 'set k 7');
+  assert.equal(T(d).heights, true);
+});

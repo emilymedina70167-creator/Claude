@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { sentence, layout, splitSentence, matchWords, roleColor, spanText, sentenceText, WRAP, WORD_H } from '../kit/src/stage/types/sentence.js';
+import { sentence, layout, splitSentence, matchWords, roleColor, spanText, sentenceText, brokenMarks, WRAP, WORD_H } from '../kit/src/stage/types/sentence.js';
 import { overlaps } from '../kit/src/stage/layout.js';
 
 const run = (scene, src) => { for (const c of parseScript(src)) scene.apply(c); return scene; };
@@ -319,4 +319,27 @@ test('说明里的例子照抄能演（一行不错），每一条指令写法�
   assert.doesNotMatch(sentence.doc + sentence.hint + sentence.example, /[他她]/);
   assert.equal(sentence.drag, true);
   assert.ok(WORD_H >= 44, '词能点（至少 44px 高）');
+});
+
+const KEY2 = 'sentence s = "The man who lives next door is a doctor." key="[S The man [RC who [V lives] next door]] [V is] a doctor."';
+
+test('tally / untally：标学生括号里 key 的某种成分几个（o.tally）；不写成分、认不出、没写 key 报错', () => {
+  const s = run(new Scene(), `${KEY2}\ntally s V`);
+  assert.equal(s.objects.get('s').tally, 'V');
+  run(s, 'untally s');
+  assert.equal(s.objects.get('s').tally, null);
+  assert.match(err(s, 'tally s') || '', /tally 后面要写成分/);
+  assert.match(err(s, 'tally s xyz') || '', /认不出/);
+  assert.match(err(s, 'tally s.3-6 V') || '', /tally 写整句的名字/);
+  assert.match(err(run(new Scene(), S1), 'tally s V') || '', /没写 key/);
+});
+
+test('拆散的括号：括号记的词被挪开、不挨着了（brokenMarks）；没挪的时候是空的', () => {
+  const s = run(new Scene(), `${KEY2}\nmark s.7-9 O`);
+  const id = s.objects.get('s').marks[0].id;
+  assert.deepEqual(brokenMarks(s.objects.get('s')), []);
+  run(s, 'move s.8 after s.1');
+  assert.deepEqual(brokenMarks(s.objects.get('s')), [id]);
+  run(s, 'move s.2 after s.8');
+  assert.deepEqual(brokenMarks(s.objects.get('s')), [], '挪回来又挨着了');
 });

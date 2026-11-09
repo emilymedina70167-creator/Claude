@@ -1,7 +1,7 @@
 // 舞台的场景（kit/src/stage/scene.js）：一行指令先检查再改场景；写错的挡下、说清楚错在哪；给老师看的现状照场景写
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Scene, dryRun, compareValues } from '../kit/src/stage/scene.js';
+import { Scene, dryRun, compareValues, SWEEP_MAX, sweepLine } from '../kit/src/stage/scene.js';
 import { parseScript, parseRich } from '../kit/src/stage/script.js';
 import { linkGeom } from '../kit/src/stage/layout.js';
 import { cellBox, array as arrayType } from '../kit/src/stage/types/array.js';
@@ -400,7 +400,9 @@ test('学生、老师写的一行读成规则认的动作：rotate（一下 / �
   assert.equal(t.judgeLine(one('say "看"'), { by: 'student' }), null);
   const m = run(new Scene(), 'matrix M = 1 2 3 / 2 4 7 / 1 3 5\nopen M rowop');
   assert.deepEqual(act(m, 'rowop M r2 - 2r1, r3 - r1'), { type: 'rowop', op: 'r2 - 2r1, r3 - r1' });
-  assert.equal(act(m, 'write M.1,1 5'), null);
+  // 改一格也读成动作（check 不判对错，right 是 null）：学生写满一行时 from= 的矩阵要拿它和原来那一张比
+  assert.deepEqual(act(m, 'write M.1,1 5'), { type: 'write', r: 1, c: 1, value: '5' });
+  assert.equal(m.judgeLine(one('write M.1,1 5'), { by: 'student' }).verdict.right, null);
   // 漏乘倍数：不是正确的下一步，说像哪种错
   assert.match(m.judgeLine(one('rowop M r2 - r1'), { by: 'student' }).verdict.misread, /倍数不对/);
   const s = run(new Scene(), 'sentence s = "He is running." key="[S He] [V is running]."\nopen s mark');
@@ -762,4 +764,45 @@ test('link 一格和它自己那样东西（link a.1 a）：照连一道弧，�
   run(old, 'array a = 1 2 3\narray b = 4 5');
   assert.doesNotThrow(() => old.apply({ ...parseScript('link a a b')[0], lenient: true }));
   assert.equal(old.links.size, 1, '跳过 a–a 那一对，a–b 照连');
+});
+
+// —— 扫一遍拨数（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.3）——
+
+test('扫一遍拨数：跟着拨数算的矩阵，每个能拨到的值算一遍解的样子写进现状；真的舞台不动', () => {
+  const s = run(new Scene(), 'dial l = 0 range=-3..3\nmatrix M = 1 {l} | 1 / {l} 1 | 1');
+  const before = JSON.stringify(s.objects.get('M').cells);
+  const st = s.stateText();
+  assert.ok(st.includes('拨 l（−3～3）时 M：l = −1 无解（r(A) = 1，r(A | b) = 2）；l = 1 无穷多解（1 个自由变量）；别的唯一解'), st);
+  // 写在能拨的数那一行后面
+  const lines = st.split('\n');
+  assert.equal(lines.findIndex((x) => x.startsWith('拨 l')), lines.findIndex((x) => x.startsWith('能拨的数')) + 1);
+  assert.equal(s.vars.get('l').v, 0);
+  assert.equal(JSON.stringify(s.objects.get('M').cells), before, 'M 的格一个没变');
+  // sweep 交每个值的要点；只取跟着它算的、交了 brief 的
+  run(s, 'matrix A = 1 2 / 3 4\narray a = 1 {l} 3');
+  const sw = s.sweep('l');
+  assert.deepEqual(sw.map((x) => x.id), ['M']);
+  assert.deepEqual(sw[0].list.map((x) => x.v), [-3, -2, -1, 0, 1, 2, 3]);
+  assert.equal(sw[0].list[2].brief, '无解（r(A) = 1，r(A | b) = 2）');
+  // 间接跟着算：S 跟着 l，T 跟着 S
+  const t = run(new Scene(), 'dial k = 1 range=0..2\nmatrix A = 1 2 / 2 4\nmatrix S = {k A}\nmatrix T = {S + A}');
+  assert.deepEqual(t.sweep('k').map((x) => x.id), ['S', 'T']);
+  assert.ok(t.stateText().includes('拨 k（0～2）时 S：k = 0 r = 0；别的 r = 1'), t.stateText());
+  assert.ok(t.stateText().includes('拨 k（0～2）时 T 都是 r = 1'), t.stateText());
+});
+
+test('扫一遍拨数：能拨的值太多不扫；只有一种时写「都是」；算不出来的值照说', () => {
+  const s = run(new Scene(), 'dial l = 0 range=-20..20\nmatrix M = 1 {l} | 1 / {l} 1 | 1');
+  assert.ok(s.stateText().includes('l 能拨的值太多，页面没扫'));
+  assert.equal(SWEEP_MAX, 25);
+  assert.equal(sweepLine('l', { lo: -3, hi: 3 }, 'M', [-3, -2, -1].map((v) => ({ v, brief: '唯一解' }))), '拨 l（−3～3）时 M 都是唯一解');
+  assert.equal(sweepLine('l', { lo: -20, hi: 20 }, 'M', null), 'l 能拨的值太多，页面没扫');
+  assert.equal(sweepLine('l', { lo: 0, hi: 4 }, 'M', [0, 1, 2, 3, 4].map((v) => ({ v, brief: v >= 2 && v <= 3 ? '无解' : '唯一解' }))), '拨 l（0～4）时 M：l = 2～3 无解；别的唯一解');
+  // 求逆在 k = 0 时算不出来：那个值不能拿上一次的数顶上
+  const inv = run(new Scene(), 'dial k = 1 range=0..2\nmatrix A = {k} 0 / 0 1\nmatrix B = {A^-1}');
+  const b = inv.sweep('k').find((x) => x.id === 'B');
+  assert.equal(b.list[0].brief, null, 'k = 0 时 A 不可逆，B 算不出来');
+  assert.ok(inv.stateText().includes('拨 k（0～2）时 B：k = 0 算不出来；别的 r = 2'), inv.stateText());
+  // 没有跟着拨数算的东西：不写
+  assert.doesNotMatch(run(new Scene(), 'dial d = 1 range=1..3\narray a = 1 2 3').stateText(), /^拨 d/m);
 });

@@ -21,6 +21,8 @@ import { judge } from './referee.js';
 import { gestureGrabs } from './gestures.js';
 
 export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
+/** 扫一遍拨数：能拨到的值超过这么多就不扫（现状里只说一句太多，不让每一轮的现状变长、算得太久） */
+export const SWEEP_MAX = 25;
 export const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
 export const OBJECT_GAP = 70; // 两样东西上下摆开隔多远
 const isColor = (w) => COLORS.includes(w);
@@ -103,6 +105,42 @@ function policyIn(opts, rules, { label, id, action }) {
 }
 /** 不是默认的那几项，照老师的写法写出来（舞台现状里给老师看） */
 const policyText = (p) => (p ? [p.wrong !== 'quiet' ? `wrong=${p.wrong}` : '', p.call ? `call=${p.call}` : '', p.undo ? 'undo=on' : ''].filter(Boolean).join('、') : '');
+
+const minus = (v) => String(v).replace(/-/g, '−');
+/**
+ * 学生能拨到的值（从小到大）：舞台上的拨数器一下 ±1、碰到两头停在头上（stage.js 的 dialNode），所以是从现在的值、从两头一格一格数过去的那几个。
+ * 超过 SWEEP_MAX 个是 null
+ */
+function dialValues({ v, lo, hi }) {
+  if (!(hi - lo <= SWEEP_MAX * 3)) return null;
+  const vals = new Set([lo, hi]);
+  for (const [start, step] of [[v, 1], [v, -1], [lo, 1], [hi, -1]]) for (let k = 0; ; k++) { const t = start + step * k; if (t < lo || t > hi) break; vals.add(t); }
+  return vals.size > SWEEP_MAX ? null : [...vals].sort((a, b) => a - b);
+}
+// 「都是」「别的」后面空不空一格：中文接着写（别的唯一解），字母、数字开头的隔一格（别的 r = 2）
+const spaced = (b) => (/^[A-Za-z0-9(]/.test(b) ? ` ${b}` : b);
+/**
+ * 扫一遍拨数写成一行（舞台现状里拨数那一行后面）：拨 l（−3～3）时 M：l = −1 无解（…）；l = 1 无穷多解（1 个自由变量）；别的唯一解。
+ * 挨着的值要点一样并成一段（l = 2～3），值最多的那一种写成「别的…」，只有一种写「都是…」；算不出来的值写「算不出来」。
+ * list 是 null（或者比 SWEEP_MAX 多）：能拨的值太多，没扫
+ */
+export function sweepLine(name, { lo, hi }, id, list) {
+  if (!list || list.length > SWEEP_MAX) return `${name} 能拨的值太多，页面没扫`;
+  const head = `拨 ${name}（${minus(lo)}～${minus(hi)}）时 ${id}`;
+  const said = list.map((x) => ({ v: x.v, b: x.brief ?? '算不出来' }));
+  const count = new Map();
+  for (const x of said) count.set(x.b, (count.get(x.b) || 0) + 1);
+  if (count.size <= 1) return `${head} 都是${spaced(said[0]?.b ?? '算不出来')}`;
+  let most = null;
+  for (const [b, n] of count) if (most == null || n > count.get(most)) most = b;
+  const runs = [];
+  for (const x of said) {
+    const r = runs.at(-1);
+    if (r && r.b === x.b) r.to = x.v; else runs.push({ b: x.b, from: x.v, to: x.v });
+  }
+  const at = (r) => `${name} = ${minus(r.from)}${r.to !== r.from ? `～${minus(r.to)}` : ''}`;
+  return `${head}：${[...runs.filter((r) => r.b !== most).map((r) => `${at(r)} ${r.b}`), `别的${spaced(most)}`].join('；')}`;
+}
 
 export class Scene {
   constructor() {
@@ -325,8 +363,8 @@ export class Scene {
     if (j) {
       fx.judged = j;
       const o = this.objects.get(j.obj);
-      // 这一下以后写给老师的事实（规则交的：谁转上来了、哪一行变成什么、key 里还差几段）
-      if (before && o) { try { j.after = rulesOf(o)?.facts(before, o, j.act) || []; } catch (err) { j.after = []; ruleErrors.push(`${typeOf(o).label}的规则写事实时出错：${err?.message || err}`); } }
+      // 这一下以后写给老师的事实（规则交的：谁转上来了、哪一行变成什么、key 里还差几段）；带上场景：from=M0 的矩阵要找 M0
+      if (before && o) { try { j.after = rulesOf(o)?.facts(before, o, j.act, this) || []; } catch (err) { j.after = []; ruleErrors.push(`${typeOf(o).label}的规则写事实时出错：${err?.message || err}`); } }
       if (j.mark && o) this.slip(j.obj, c, j.act);
       // 学生做对一步：老师预写的确认、下一小问（@t.right，只演一次）
       if (j.by === 'student' && j.verdict?.right === true) reactions.push(...this.take(`${j.obj}.right`).map((src) => ({ right: j.obj, src })));
@@ -1022,6 +1060,63 @@ export class Scene {
     }
     return out;
   }
+  // —— 扫一遍拨数（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.3）——
+  /** 照依赖图（liveOrder 那几条边）直接、间接跟着拨数 name 算的东西（按舞台上的先后） */
+  dependents(name) {
+    const nodes = this.liveNodes();
+    const hit = new Set();
+    const objOf = (d) => (this.objects.has(d) ? d : parseRef(d)?.obj);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const n of nodes) {
+        if (hit.has(n.obj) || !(n.deps || []).some((d) => d === name || hit.has(objOf(d)))) continue;
+        hit.add(n.obj);
+        grew = true;
+      }
+    }
+    return [...this.objects.keys()].filter((id) => hit.has(id));
+  }
+  /** id 和它一路跟着算的上游里有没有这一下算不出来的（停在上一次算出来的数：拿它说要点就是说错） */
+  staleFrom(id) {
+    const seen = new Set();
+    const todo = [id];
+    while (todo.length) {
+      const x = todo.pop();
+      if (seen.has(x) || !this.objects.has(x)) continue;
+      seen.add(x);
+      for (const n of this.nodesOf(this.objects.get(x))) {
+        if (n.live && n.rec.error) return true;
+        for (const d of n.deps || []) todo.push(this.objects.has(d) ? d : parseRef(d)?.obj);
+      }
+    }
+    return false;
+  }
+  /**
+   * 把拨数 name 能拨到的每个值都算一遍（不真拨：每个值在副本上 set、跟着重算）：[{ id, list: [{ v, brief }] }]。
+   * 只取跟着它算（直接或间接）、规则交了 brief 的东西；算不出来、说不出要点的值 brief 是 null。能拨的值太多（超过 SWEEP_MAX）list 是 null
+   */
+  sweep(name) {
+    const x = this.vars.get(name);
+    if (!x) return [];
+    const ids = this.dependents(name).filter((id) => typeof rulesOf(this.objects.get(id))?.brief === 'function');
+    if (!ids.length) return [];
+    const vals = dialValues(x);
+    if (!vals) return ids.map((id) => ({ id, list: null }));
+    const lists = ids.map(() => []);
+    for (const v of vals) {
+      const s = this.clone();
+      s.vars.get(name).v = v;
+      try { s.onVar(name); } catch { /* 跟着算的算不出来记在各自的 rec.error 上，下面照它说算不出来 */ }
+      ids.forEach((id, i) => {
+        const o = s.objects.get(id);
+        let b = null;
+        if (o && !s.staleFrom(id)) { try { b = rulesOf(o).brief(o) ?? null; } catch { b = null; } }
+        lists[i].push({ v, brief: b });
+      });
+    }
+    return ids.map((id, i) => ({ id, list: lists[i] }));
+  }
+
   /** 挑战判一遍：这一行以后刚做到的（做到了就一直算做到，不会因为学生接着拨又「没做到」） */
   checkGoals() {
     const met = [];
@@ -1083,6 +1178,14 @@ export class Scene {
     if (labels.length) lines.push(`贴着的字：${labels.map((l) => `${l.id}「${l.text}」${l.refs.length ? `（贴在 ${l.refs.join(' ')}）` : ''}`).join('；')}`);
     const dials = [...this.vars].filter(([, v]) => v.shown);
     if (dials.length) lines.push(`能拨的数：${dials.map(([n, v]) => `${n} = ${v.v}（${v.lo}～${v.hi}）`).join('，')}`);
+    // 扫一遍拨数：跟着拨数算的东西，每个能拨到的值的要点（页面不真拨），老师不用自己一个个试；全都说不出的不写
+    for (const [n, v] of dials) {
+      for (const e of this.sweep(n)) {
+        if (e.list && e.list.every((y) => y.brief == null)) continue;
+        const line = sweepLine(n, v, e.id, e.list);
+        if (!lines.includes(line)) lines.push(line);
+      }
+    }
     if (this.say) lines.push(`最后说的话：${this.say}`);
     // 问的、开放的、挑战要动的东西后来藏起来了：照写，补一句学生点不到（不然老师等一个永远不来的回答）
     if (this.waiting) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案' }[this.waiting.kind]}${this.waiting.refs.length ? ` ${this.waiting.refs.join(' ')}` : ''}${hiddenNote(this.hiddenIn([...this.waiting.refs, ...(this.waiting.expect && this.isRef(this.waiting.expect) ? [this.waiting.expect] : [])]))}`);

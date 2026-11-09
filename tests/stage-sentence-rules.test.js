@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { sentenceRules as R, actSrc, roleName } from '../kit/src/stage/types/sentence.rules.js';
+import { sentenceRules as R, actSrc, roleName, bracketFacts } from '../kit/src/stage/types/sentence.rules.js';
 import { rulesOf, predicateOf, gestureOf, done, evalMeasure, measureLine } from '../kit/src/stage/rules.js';
 import { parseBrackets, judgeSpans } from '../kit/src/entext.js';
 import { sentence } from '../kit/src/stage/types/sentence.js';
@@ -517,4 +517,51 @@ test('谓语几个：照 key 数，key 的段整个落在范围里才算；key �
   assert.match(r.why, /s2 没写 key/);
   assert.equal(r.never, true, '没写 key 以后也数不了');
   assert.equal(measureLine(t, t.objects.get('s2')), '页面数不了：s2 没写 key');
+});
+
+// —— 学生的括号（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.2）——
+const TWO_V = 'sentence s = "The man who lives next door is a doctor." key="[S The man [RC who [V lives] next door]] [V is] a doctor."';
+const stuMark = (s, line) => s.apply(parseScript(line)[0], { by: 'student', open: 'mark' });
+
+test('学生括号里的谓语数：每道学生的括号里 key 的谓语几个、括号外几个；多拉的；被挪开拆散的；老师拉的不算', () => {
+  const s = make(`${TWO_V}\nopen s mark\nmark s.1-2 S`);
+  assert.deepEqual(bracketFacts(S(s)), [], '老师拉的括号不算');
+  stuMark(s, 'mark s.3-6 定语从句');
+  assert.equal(S(s).marks.at(-1).by, 'student');
+  assert.equal(S(s).marks[0].by, 'teacher');
+  assert.ok(bracketFacts(S(s)).includes('学生的括号：s.3-6 定语从句（who lives next door）里有 key 的谓语 1 个；括号外有 key 的谓语 1 个'), bracketFacts(S(s)).join('\n'));
+  stuMark(s, 'mark s.8-9 O');
+  const f = bracketFacts(S(s));
+  assert.ok(f.includes('多拉的：s.8-9 O（a doctor；key 里没有）'), f.join('\n'));
+  assert.ok(f.includes('学生的括号：s.3-6 定语从句（who lives next door）里有 key 的谓语 1 个；s.8-9 O（a doctor）里有 key 的谓语 0 个；括号外有 key 的谓语 1 个'), f.join('\n'));
+  // 现状里也写
+  assert.match(s.stateText(), /\n {2}多拉的：s\.8-9 O（a doctor；key 里没有）/);
+  // 拉了 s.7-9 O 以后 a 挪到句首：那道括号拆散了，不算一段
+  const m = make(`${TWO_V}\nopen s mark`);
+  stuMark(m, 'mark s.7-9 O');
+  run(m, 'move s.8 after s.1');
+  assert.ok(bracketFacts(S(m)).some((x) => /^拆散的：.*被挪开拆散了，不算一段$/.test(x)), bracketFacts(S(m)).join('\n'));
+  assert.ok(bracketFacts(S(m)).includes('拆散的：s.2 s.8-9 那道 O 被挪开拆散了，不算一段'));
+  assert.ok(!bracketFacts(S(m)).some((x) => x.startsWith('学生的括号')), '拆散的不当一段数');
+  // 没写 key：不数谓语，拆散的照说
+  const k = make('sentence s = "The man who lives next door is a doctor."\nopen s mark');
+  stuMark(k, 'mark s.3-6 定语从句');
+  assert.deepEqual(bracketFacts(S(k)), []);
+});
+
+test('学生括号的事实：拉了一道以后只写变了的那几行', () => {
+  const s = make(`${TWO_V}\nopen s mark`);
+  let fx = stuMark(s, 'mark s.3-6 定语从句');
+  assert.ok(fx.judged.after.includes('学生的括号：s.3-6 定语从句（who lives next door）里有 key 的谓语 1 个；括号外有 key 的谓语 1 个'), fx.judged.after.join('\n'));
+  // 多拉一道：学生的括号那一行变了、多拉的那一行是新的
+  fx = stuMark(s, 'mark s.8-9 O');
+  assert.ok(fx.judged.after.includes('多拉的：s.8-9 O（a doctor；key 里没有）'));
+  // 同一道再标一次成分：多拉的那一行没变，不写
+  fx = stuMark(s, 'mark s.3-6 RC');
+  assert.ok(!fx.judged.after.some((x) => x.startsWith('多拉的')), fx.judged.after.join('\n'));
+  assert.ok(fx.judged.after.some((x) => x.startsWith('学生的括号：s.3-6 RC')), '成分改了，那一行变了');
+  // 前后一样的行一概不进
+  const before = bracketFacts(S(s));
+  fx = stuMark(s, 'mark s.3-6 RC');
+  assert.deepEqual(fx.judged.after.filter((x) => before.includes(x)), []);
 });

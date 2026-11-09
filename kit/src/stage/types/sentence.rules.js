@@ -9,7 +9,7 @@
 // 拉错了的括号留着也不碍事（舞台上没有让学生收括号的手势），只看 key 里的每一段有没有拉对。
 // key 可以不全（老师只拉了要讲的几段）：学生拉了 key 没拉、也不和 key 冲突的一段，页面不判（right 是 null），不说「不对」。
 import { judgeSpans } from '../../entext.js';
-import { sentence, ordered, roleName, sameRole, phraseOf, restText, roleColor, ROLE_NAMES, CLAUSE_ROLES } from './sentence.js';
+import { sentence, ordered, roleName, sameRole, phraseOf, restText, roleColor, spanText, brokenMarks, ROLE_NAMES, CLAUSE_ROLES } from './sentence.js';
 
 export { roleName, ROLE_NAMES } from './sentence.js';
 
@@ -250,11 +250,46 @@ function check(o, act) {
 
 // —— 写给老师的事实 ——
 
-// 拉了一段以后：这一段对不对（不对的说像哪种错），key 里还差哪几段（判对的时候裁判不写话，还差什么就靠这里告诉老师）
+/**
+ * 学生拉的括号（m.by 是 student）那几行（舞台现状每一轮写，拉了一道以后只写变了的）：
+ *   学生的括号：s.3-6 定语从句（who lives next door）里有 key 的谓语 1 个；括号外有 key 的谓语 1 个
+ *   多拉的：s.8-9 O（a doctor；key 里没有）
+ *   拆散的：s.2 s.8-9 那道 O 被挪开拆散了，不算一段
+ * 成分照括号上写的（学生点的是什么就写什么）。谓语照 key 数（整段落在括号里才算在里面）；没写 key、key 作废了只说拆散的
+ */
+export function bracketFacts(o) {
+  const mine = (o?.marks || []).filter((m) => m.by === 'student');
+  if (!mine.length) return [];
+  const broken = new Set(brokenMarks(o));
+  const slot = slotMap(o);
+  const span = (m) => { const xs = m.keys.map((k) => slot.get(k)); return { m, from: Math.min(...xs), to: Math.max(...xs), keys: new Set(m.keys) }; };
+  const whole = mine.filter((m) => !broken.has(m.id)).map(span).sort((p, q) => p.from - q.from || q.to - p.to);
+  const out = [];
+  const ks = keySpans(o);
+  if (ks && whole.length) {
+    const verbs = ks.filter((k) => k.name === '谓语');
+    const inside = (b, k) => k.keys.every((x) => b.keys.has(x));
+    const touches = (k) => whole.some((b) => k.keys.some((x) => b.keys.has(x)));
+    const outer = verbs.filter((k) => !touches(k)).length;
+    const across = verbs.filter((k) => touches(k) && !whole.some((b) => inside(b, k))).length;
+    const each = whole.map((b) => `${at(o, b.from, b.to)} ${b.m.label}（${textOf(o, b.from, b.to)}）里有 key 的谓语 ${verbs.filter((k) => inside(b, k)).length} 个`);
+    out.push(`学生的括号：${[...each, `括号外有 key 的谓语 ${outer} 个`, ...(across ? [`跨着括号边的 ${across} 个`] : [])].join('；')}`);
+    const extra = whole.filter((b) => !ks.some((k) => k.ok && k.from === b.from && k.to === b.to));
+    if (extra.length) out.push(`多拉的：${extra.map((b) => `${at(o, b.from, b.to)} ${b.m.label}（${textOf(o, b.from, b.to)}；key 里没有）`).join('、')}`);
+  }
+  const split = mine.filter((m) => broken.has(m.id));
+  if (split.length) out.push(`拆散的：${split.map((m) => `${spanText(o, m.keys)} 那道 ${m.label}`).join('、')} 被挪开拆散了，不算一段`);
+  return out;
+}
+
+// 拉了一段以后：这一段对不对（不对的说像哪种错），key 里还差哪几段（判对的时候裁判不写话，还差什么就靠这里告诉老师）；
+// 学生的括号那几行（bracketFacts）只写这一下变了的
 function facts(before, after, act) {
   if (!before || !after || act?.type !== 'mark') return [];
+  const was = new Set(bracketFacts(before));
+  const changed = bracketFacts(after).filter((f) => !was.has(f));
   const kb = keySpans(before), ka = keySpans(after);
-  if (!kb || !ka) return [];
+  if (!kb || !ka) return changed;
   const v = check(before, act);
   if (!v.legal) return [];
   const name = roleName(String(act.role ?? '').trim());
@@ -263,7 +298,7 @@ function facts(before, after, act) {
       : `这一段不对：${v.why}（${v.misread || conflictOf(before, kb, Math.min(act.from, act.to ?? act.from), Math.max(act.from, act.to ?? act.from), name) || 'key 里没有这一段'}）`];
   const left = okFirst(leftOf(after, ka));
   out.push(left.length ? `key 里还差 ${left.length} 段没拉对：${left.map((k) => spanLine(after, k)).join('、')}` : '正确拆法的每一段都拉对了');
-  return out;
+  return [...out, ...changed];
 }
 
 // —— 手势表（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 3 节）——

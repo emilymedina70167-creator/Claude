@@ -409,6 +409,7 @@ export const tree = {
     o.visits = old.visits;
     o.last = nodeAt(o, old.last) ? old.last : null;
     o.bf = old.bf;
+    if (old.heights) o.heights = true;
   },
   drag: true,
   hint: '（树：名字.40 是值为 40 的结点；名字#3 是层序第 3 个结点，跟着结点走（值重复、换值以后用它）；名字.40* 是 40 和它下面整棵子树）',
@@ -688,6 +689,9 @@ export const tree = {
     // bf t：每个结点角上标平衡因子（页面算，树变了跟着变）；unbf t 收起
     bf(scene, c, h) { const { o } = treeIn(scene, h, 'bf'); o.bf = true; return { id: o.id }; },
     unbf(scene, c, h) { const { o } = treeIn(scene, h, 'unbf'); o.bf = false; return { id: o.id }; },
+    // heights t：每个结点角上标子树高（页面算，树变了跟着变；舞台现状里每一轮写出来）；unheights t 收起。挂不挂老师定
+    heights(scene, c, h) { const { o } = treeIn(scene, h, 'heights'); o.heights = true; return { id: o.id }; },
+    unheights(scene, c, h) { const { o } = treeIn(scene, h, 'unheights'); o.heights = false; return { id: o.id }; },
   },
   // 舞台现状里「页面算的」那一行后半句（rules.js 的 measureLine）：判断式 avl / bst 现在是不是，失衡的说出是谁、哪一型
   pageBits(o) {
@@ -719,6 +723,7 @@ export const tree = {
       const bad = imbalance(o);
       lines.push(`  平衡因子：${ns.map((n) => `${shown(n)} ${bfText(bfOf(o, n.key))}`).join('，')}${bad ? `（失衡：最小不平衡子树的根是 ${shown(nodeAt(o, bad.key))}，${bad.kind} 型）` : '（都平衡）'}`);
     }
+    if (o.heights && ns.length) lines.push(`  子树高：${ns.map((n) => `${shown(n)} ${heightOf(o, n.key)}`).join('，')}`);
     return lines;
   },
   doc: `树（二叉树遍历、二叉排序树、平衡二叉树、堆）：

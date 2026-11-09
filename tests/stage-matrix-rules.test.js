@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
 import { parseOps, toQ } from '../kit/src/stage/types/matrix.js';
-import { matrixRules as R, actSrc } from '../kit/src/stage/types/matrix.rules.js';
+import { matrixRules as R, actSrc, readBack, solutionText, brief, inferRowOp, fromFact } from '../kit/src/stage/types/matrix.rules.js';
 import { rulesOf, predicateOf, gestureOf, done, evalMeasure, measureLine } from '../kit/src/stage/rules.js';
 import { Q } from '../kit/src/exact.js';
 import { P } from '../kit/src/poly.js';
@@ -424,4 +424,106 @@ test('秩和自由变量：rank 是整张（增广的是 r(A | b)）、rankA 是
   assert.equal(predicateOf(s, 'M', 'rank')(['2']), true);
   assert.equal(predicateOf(s, 'M', 'rankA')(['1']), true);
   assert.equal(predicateOf(c, 'C', 'rank')(['2']), null, '还空着照旧判不了');
+});
+
+// —— 页面算的写出来（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.2）——
+
+test('读回和矛盾行：增广矩阵每一行读回成方程，0 = −3 标出矛盾；vars= 换未知数；现状里写 r(A)、r(A | b) 和解的样子', () => {
+  const s = make('matrix M = 1 2 -1 | 1 / 0 1 1 | 2 / 0 0 0 | -3');
+  assert.deepEqual(readBack(M(s)), ['第 1 行读回来：x1 + 2x2 − x3 = 1', '第 2 行：x2 + x3 = 2', '第 3 行：0 = −3（矛盾）']);
+  const v = make('matrix M = 1 2 -1 | 1 / 0 1 1 | 2 / 0 0 0 | -3 vars="x y z"');
+  assert.equal(readBack(M(v))[0], '第 1 行读回来：x + 2y − z = 1');
+  const st = s.stateText();
+  assert.ok(st.includes('r(A) = 2，r(A | b) = 3：无解'), st);
+  assert.ok(st.includes('第 1 行读回来：x1 + 2x2 − x3 = 1；第 2 行：x2 + x3 = 2；第 3 行：0 = −3（矛盾）'), st);
+  // 系数：分数加括号、−1 写「−」、0 不写；左边全是 0 写 0；第一项是负的
+  const f = make('matrix M = 1/2 0 -1/3 | -1/2 / -1 0 0 | 0 / 0 0 0 | 0');
+  assert.deepEqual(readBack(M(f)), ['第 1 行读回来：(1/2)x1 − (1/3)x3 = −1/2', '第 2 行：−x1 = 0', '第 3 行：0 = 0']);
+  // 不是增广矩阵不读回；还空着的行不读
+  assert.deepEqual(readBack(M(make('matrix M = 1 2 / 3 4'))), []);
+  assert.deepEqual(readBack(M(make('matrix M = 1 2 | 1 / _ 1 | 2'))), ['第 1 行读回来：x1 + 2x2 = 1']);
+  assert.equal(solutionText(M(make('matrix M = 1 2 | 1 / _ 1 | 2'))), null, '有空格不说解');
+  assert.equal(solutionText(M(make('matrix M = 1 2 / 3 4'))), null, '不是增广矩阵');
+});
+
+test('解的样子：无穷多解几个自由变量、唯一解；brief 写要点（扫拨数用），别的矩阵写秩，有空格是 null', () => {
+  const n = make('matrix N = 1 2 | 3 / 0 0 | 0');
+  assert.equal(solutionText(M(n, 'N')), 'r(A) = 1，r(A | b) = 1：无穷多解（1 个自由变量）');
+  const u = make('matrix U = 1 0 | 1 / 0 1 | 2');
+  assert.equal(solutionText(M(u, 'U')), 'r(A) = 2，r(A | b) = 2：唯一解');
+  assert.ok(u.stateText().includes('r(A) = 2，r(A | b) = 2：唯一解'));
+  assert.equal(brief(M(n, 'N')), '无穷多解（1 个自由变量）');
+  assert.equal(brief(M(u, 'U')), '唯一解');
+  assert.equal(brief(M(make('matrix M = 1 1 | 1 / 1 1 | 2'))), '无解（r(A) = 1，r(A | b) = 2）');
+  assert.equal(brief(M(make('matrix A = 1 2 / 2 4'), 'A')), 'r = 1');
+  assert.equal(brief(M(make('matrix A = 1 _ / 2 4'), 'A')), null);
+  assert.equal(rulesOf(M(u, 'U')).brief, brief, '交给场景扫拨数');
+});
+
+test('from=M0：学生写满一行就和 M0 比，猜是哪一种初等行变换、哪一格不对、同不同解；猜不出照说', () => {
+  const s = make('matrix M0 = 1 2 0 | 2 / 2 2 -4 | 2 / 0 0 -2 | -2\nmatrix M1 = 1 2 0 | 2 / _ _ _ | _ / 0 0 -2 | -2 from=M0\nopen M1 edit input=keypad');
+  const stu = (line) => s.apply(parseScript(line)[0], { by: 'student', open: 'edit' });
+  for (const line of ['write M1.2,1 1', 'write M1.2,2 0', 'write M1.2,3 4']) {
+    const fx = stu(line);
+    assert.ok(fx.judged, `${line} 过了裁判`);
+    assert.equal(fx.judged.verdict.right, null, '改一格不判对错');
+    assert.ok(!(fx.judged.after || []).some((f) => f.includes('变了')), `${line}：这一行还没写满，不比`);
+  }
+  const fx = stu('write M1.2,4 0');
+  assert.ok(fx.judged.after.includes('M1 第 2 行变了，像 r2 − r1；第 3 格该是 −4，写的是 4；第 1、3 行没变；和 M0 同解：否'), fx.judged.after.join('\n'));
+  // 改成 5 7 9 | 11：看不出
+  let last;
+  for (const line of ['write M1.2,1 5', 'write M1.2,2 7', 'write M1.2,3 9', 'write M1.2,4 11']) last = stu(line);
+  assert.ok(last.judged.after.some((f) => f.includes('看不出是哪一种初等行变换')), last.judged.after.join('\n'));
+  assert.equal(last.judged.after[0], 'M1 第 2 行变了，看不出是哪一种初等行变换；第 1、3 行没变；和 M0 同解：否');
+  // 写对了：同解
+  for (const line of ['write M1.2,1 0', 'write M1.2,2 -2', 'write M1.2,3 -4', 'write M1.2,4 -2']) last = stu(line);
+  assert.equal(last.judged.after[0], 'M1 第 2 行变了，像 r2 − 2r1；第 1、3 行没变；和 M0 同解：是');
+  // 没写 from= 的矩阵改一格没有事实
+  const p = make('matrix A = 1 2 / 3 4\nopen A edit input=keypad');
+  assert.deepEqual(p.apply(parseScript('write A.1,1 5')[0], { by: 'student', open: 'edit' }).judged.after, []);
+  // check、actOf 认 write
+  assert.deepEqual(R.check(M(s, 'M1'), { type: 'write', r: 2, c: 1, value: '1' }), { legal: true, right: null });
+});
+
+test('inferRowOp：对调、倍乘、倍加；只比两边都写满的行；猜不出是 null；M0 拿掉了照说', () => {
+  const g = (rows) => rows.map((r) => r.map((x) => (x == null ? null : toQ(x))));
+  // 第 3 行是前两行的和（秩 2）：换了一行的那一张和它不一定同解
+  const G0 = g([['1', '2', '3'], ['4', '5', '6'], ['5', '7', '9']]);
+  const sw = inferRowOp(G0, g([['4', '5', '6'], ['1', '2', '3'], ['5', '7', '9']]));
+  assert.equal(sw.guess.kind, 'swap');
+  assert.equal(sw.guess.text, 'r1 ↔ r2');
+  assert.deepEqual(sw.rows, [1, 2]);
+  assert.equal(sw.same, true);
+  assert.deepEqual(sw.bad, []);
+  const sc = inferRowOp(G0, g([['1', '2', '3'], ['2', '5/2', '3'], ['5', '7', '9']]));
+  assert.equal(sc.guess.kind, 'scale');
+  assert.equal(sc.guess.text, '(1/2)r2');
+  assert.equal(sc.same, true);
+  const ad = inferRowOp(G0, g([['1', '2', '3'], ['0', '-3', '-7'], ['5', '7', '9']]));
+  assert.deepEqual({ kind: ad.guess.kind, i: ad.guess.i, j: ad.guess.j, k: ad.guess.k, text: ad.guess.text }, { kind: 'add', i: 2, j: 1, k: '-4', text: 'r2 − 4r1' });
+  assert.deepEqual(ad.bad, [{ c: 3, want: '-6', got: '-7' }]);
+  assert.equal(ad.same, false);
+  // 第 2 行本来是第 1 行的 2 倍：两行对调了，单看第 1 行也像倍乘，说的是一下对调
+  const D0 = g([['1', '2'], ['2', '4']]);
+  const dd = inferRowOp(D0, g([['2', '4'], ['1', '2']]));
+  assert.equal(dd.guess.kind, 'swap');
+  assert.equal(dd.guess.text, 'r1 ↔ r2');
+  // 第 2 行还空着：不比，同不同解说不了
+  const part = inferRowOp(G0, g([['1', '2', '3'], [null, '5', '6'], ['5', '7', '9']]));
+  assert.deepEqual(part.rows, []);
+  assert.equal(part.same, null);
+  // 换上来一行、另一行还空着：像对调
+  const half = inferRowOp(G0, g([['4', '5', '6'], [null, null, null], ['5', '7', '9']]));
+  assert.equal(half.guess?.kind, 'swap');
+  // 第 1 行抄成第 2 行、第 2 行没变：不是对调
+  const copy = inferRowOp(G0, g([['4', '5', '6'], ['4', '5', '6'], ['5', '7', '9']]));
+  assert.notEqual(copy.guess?.kind, 'swap');
+  // M0 拿掉了、改了大小：照说页面比不了
+  const s = make('matrix M0 = 1 2 / 3 4\nmatrix M1 = 1 2 / _ _ from=M0\nopen M1 edit input=keypad');
+  run(s, 'matrix M0 = 1 2 3 / 4 5 6');
+  s.apply(parseScript('write M1.2,1 3')[0], { by: 'student', open: 'edit' });
+  const fx = s.apply(parseScript('write M1.2,2 4')[0], { by: 'student', open: 'edit' });
+  assert.match(fx.judged.after[0], /M0 现在是 2×3 的，和 M1 不一样大，页面比不了/);
+  assert.match(fromFact(M(s, 'M1'), null), /舞台上已经没有 M0 了，页面比不了/);
 });

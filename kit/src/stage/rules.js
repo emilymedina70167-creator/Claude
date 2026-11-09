@@ -5,7 +5,7 @@
 //   check(o, act, scene) → { legal, right, misread, why, next }
 //   predicates { 名字: (o, args, scene) → true | false | null }  null 是现在判不了（之后会有：乘积还空着）；
 //                                               这样东西本身永远判不了（句子没写 key）就抛错，写下挑战时当场报
-//   facts(before, after, act) → [话]
+//   facts(before, after, act, scene) → [话]   scene 是这一下所在的舞台（from=M0 的矩阵要找 M0）；只用前三个的照旧
 //   gestures { 动作: { gesture, from, to, toAct, ask?, pick?, choices? } }   五种通用手势在它这里是什么（gestures.js 照它翻成一行指令；
 //                                               ask 说放下以后要不要先问一个值（倍数框），pick + choices 是拉好一段以后点的那一排）
 //   slipRefs(o, act) → [部件的写法] | null（可选）  学生走偏的那一下淡淡圈哪儿，那一行没写部件时（rowop M r3 - 2r1 圈第 3 行）
@@ -21,7 +21,9 @@
 //                                               null 是现在还数不了（矩阵还空着，之后会有）；这样东西本身数不了（句子没写 key）就抛错，错误的话给老师看；
 //                                               undefined 是这样东西本来就没有这个量（不是方阵的 det）。函数上可以挂两句话：
 //                                               blank（null 的时候说什么，「还有空着的格」）、none（undefined 的时候括号里补一句为什么）
-//   brief(o)、changed(before, after)（可选）     这一轮后面的任务用；没交是 null
+//   brief(o) → 一句话 | null（可选）             这样东西现在的要点（矩阵：唯一解 / 无穷多解（1 个自由变量）/ r = 2）：
+//                                               跟着拨数算的东西，舞台现状里把每个能拨到的值都算一遍（scene.js 的 sweep），说不出是 null
+//   changed(before, after)（可选）               这一轮后面的任务用；没交是 null
 
 const REGISTRY = new Map();
 

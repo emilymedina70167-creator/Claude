@@ -6,6 +6,8 @@
 // 跟着算的（value.js）：格里写算成一个数的式子（{k}、{A.1,2}、{l - 1}），或者整个矩阵写 = {A + B}、{P^-1}；依赖一变场景叫 relive，在原地改格。
 // 格里写 _ 是空着的一格（matrix D = _ _ / _ _：等学生填的空牌，填满以前判断式、量都判不了）。
 import { Q, isQ, isQVec, isQMat } from '../../exact.js';
+// 规则那边算的读回方程、解的样子（舞台现状里写）。两个模块互相 import：都只在函数里用对方的东西，加载的先后不碍事
+import { readBack, solutionText } from './matrix.rules.js';
 
 export const MAX_ROWS = 6, MAX_COLS = 8;
 const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
@@ -687,6 +689,11 @@ export const matrix = {
     if (o.stairs) lines.push(`  画着阶梯线：非零行 ${o.rows - zero.size} 行`);
     const blank = o.cells.filter((x) => x.value === '').sort(sortRC);
     if (blank.length) lines.push(`  还空着：${blank.map((x) => `${o.id}.${x.r},${x.c}`).join(' ')}`);
+    // 方程组（增广、右边一列）：解的样子、每一行读回成方程（矛盾行标出来），老师不用自己数秩、自己读
+    const sol = solutionText(o);
+    if (sol) lines.push(`  ${sol}`);
+    const back = readBack(o);
+    if (back.length) lines.push(`  ${back.join('；')}`);
     return lines;
   },
   doc: `矩阵（线代：行变换、消元、秩、乘法）：
