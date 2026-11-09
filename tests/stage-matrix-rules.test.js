@@ -616,7 +616,7 @@ test('并同类项认不出、不同类：这个世界做不到（legal: false�
   assert.equal(v.why, '页面看不出是不是同类项（只认 数 × 矩阵）');
   const v2 = R.check(M(s, 'Z'), { type: 'merge', into: 'W' }, s);
   assert.equal(v2.legal, false);
-  assert.equal(v2.why, 'Z 是 −2·A，W 是 −1·B，不是同一个矩阵的倍数，并不了');
+  assert.equal(v2.why, 'Z 是 −2·A，W 是 −1·B，写法上不是同一个矩阵的倍数（页面只按写法认），并不了');
   // 不是跟着算的（一张写满数的矩阵）也看不出
   assert.equal(R.check(M(s, 'N'), { type: 'merge', into: 'Y' }, s).why, '页面看不出是不是同类项（只认 数 × 矩阵）');
   // 能并的：照收，不判对错

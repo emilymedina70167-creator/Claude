@@ -1721,7 +1721,12 @@ export class Scene {
     const lives = this.liveNodes().filter((n) => n.live);
     // 错误前面的「{式子}」和前面写的重了，去掉
     const why = (e) => e.replace(/^「\{[^{}]*\}」(算不出来：|里的)?/, '');
-    if (lives.length) lines.push(`跟着算的（依赖一变，页面当场重算；学生动不了）：${lives.map((n) => `${n.text}${n.rec.error ? `（现在算不出来：${why(n.rec.error)}；停在上一次算出来的数）` : ''}`).join('；')}`);
+    const liveItem = (n) => `${n.text}${n.rec.error ? `（现在算不出来：${why(n.rec.error)}；停在上一次算出来的数）` : ''}`;
+    // 开着整张拖（手势表写了 live 的：矩阵的 compare / put / merge）的那几样学生拖得动，另起一行照实说；别的、旧课照旧一行
+    const dragged = new Set([...this.opens.values()].filter((e) => e.gesture?.live).map((e) => e.obj));
+    const still = lives.filter((n) => !dragged.has(n.obj)), drag = lives.filter((n) => dragged.has(n.obj));
+    if (still.length) lines.push(`跟着算的（依赖一变，页面当场重算；学生动不了）：${still.map(liveItem).join('；')}`);
+    if (drag.length) lines.push(`跟着算的（依赖一变，页面当场重算；学生拨不了，只能拖整张（compare / put / merge））：${drag.map(liveItem).join('；')}`);
     const clipped = this.clipped.filter((id) => this.objects.has(id) && !this.objects.get(id).hidden);
     if (clipped.length) lines.push(`画面上看不全：${clipped.join('、')}`);
     for (const o of this.objects.values()) if (o.unlived) lines.push(`${o.id} 已经不跟着 ${o.unlived.exprs.map((e) => `{${e}}`).join('、')} 变了：${o.unlived.by === 'student' ? '学生' : '你'}动过它的结构（${o.unlived.src}），现在照现在的样子留着`);

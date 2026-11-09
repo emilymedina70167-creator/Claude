@@ -516,3 +516,30 @@ test('整张的手势：open AB compare / put、open X merge 按住整张拖到�
   assert.equal(actText({ type: 'put', into: 'Sum', open: 'put', src: 'put AB Sum', verdict: { legal: true, right: null } }), '学生 put AB Sum');
   assert.ok(!fx.blocked);
 });
+
+test('现状里跟着算的那一行：开着整张拖（compare / put / merge）的那几样另起一行写「学生拨不了，只能拖整张」；别的、没开的照旧「学生动不了」', () => {
+  const HEAD = '跟着算的（依赖一变，页面当场重算；学生动不了）：';
+  const DRAG = '跟着算的（依赖一变，页面当场重算；学生拨不了，只能拖整张（compare / put / merge））：';
+  const src = 'matrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix AB = {A B}\nmatrix BA = {B A}';
+  // 没开：一字不变（旧课的现状照旧）
+  const s = run(src);
+  assert.ok(s.stateText().includes(`${HEAD}AB = {A B}；BA = {B A}`));
+  assert.ok(!s.stateText().includes('只能拖整张'));
+  // 开着 AB compare：AB 另起一行，BA 照旧
+  run('open AB compare', s);
+  assert.ok(s.stateText().includes(`${HEAD}BA = {B A}\n${DRAG}AB = {A B}`), s.stateText());
+  // 画面交得出整张的把手以后（Task 11）：照旧这样写，学生能直接动的里有 AB compare
+  ARMED_GRIPS.add('whole');
+  try {
+    const t = s.stateText();
+    assert.ok(t.includes(`${DRAG}AB = {A B}`));
+    assert.match(t, /\n学生能直接动的：AB compare（拖到上面）/);
+    assert.doesNotMatch(t, /学生动不了）：[^\n]*AB = \{A B\}/);
+  } finally { ARMED_GRIPS.delete('whole'); }
+  // 都开着：只剩拖的那一行；收起来又回到原样
+  run('open BA put', s);
+  assert.ok(s.stateText().includes(`${DRAG}AB = {A B}；BA = {B A}`));
+  assert.ok(!s.stateText().includes(HEAD));
+  run('close', s);
+  assert.ok(s.stateText().includes(`${HEAD}AB = {A B}；BA = {B A}`));
+});

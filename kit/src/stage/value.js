@@ -338,10 +338,11 @@ const dotText = (t) => `${minusText(t.k.integer ? t.k : `(${t.k})`)}·${baseText
 
 /**
  * 两项并成一项：{ k, base }（系数加起来，0 就是抵消了）| { error }。
- * 认不出写法的（a、b 是 null）说页面看不出；base 不一样说不是同一个矩阵的倍数。names：报错里两张矩阵叫什么（默认 X、Y）
+ * 认不出写法的（a、b 是 null）说页面看不出；base 不一样说写法上不是同一个矩阵的倍数。names：报错里两张矩阵叫什么（默认 X、Y）
  */
 export function mergeTerms(a, b, { x = 'X', y = 'Y' } = {}) {
   if (!a || !b) return { error: TERM_UNKNOWN };
-  if (a.base !== b.base) return { error: `${x} 是 ${dotText(a)}，${y} 是 ${dotText(b)}，不是同一个矩阵的倍数，并不了` };
+  // 只按写法说（A、B 恰好能交换、恰好相等时 {A B} 和 {B A} 数上是一回事，页面不按值猜）
+  if (a.base !== b.base) return { error: `${x} 是 ${dotText(a)}，${y} 是 ${dotText(b)}，写法上不是同一个矩阵的倍数（页面只按写法认），并不了` };
   return { k: a.k.add(b.k), base: a.base };
 }

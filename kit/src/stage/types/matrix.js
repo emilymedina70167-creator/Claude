@@ -473,8 +473,15 @@ export function mergePlan(scene, xn, yn) {
   const head = (d) => String(d).match(/^[A-Za-z_]\w*/)?.[0];
   const users = [...new Set(scene.liveNodes().filter((n) => n.obj !== xn && (n.deps || []).some((d) => head(d) === xn)).map((n) => n.obj))];
   if (users.length) return { error: `${users.join('、')} 跟着 ${xn} 算，${xn} 拿不下来，并不了` };
-  return { X, Y, from, into, to, whole: `(${to.k}) ${to.base}` };
+  return { X, Y, from, into, to, whole: mergedSrc(to) };
 }
+/**
+ * 并好的那一项写成 Y 的式子：1 倍写 A、−1 倍写 -A、0 倍写 0 A（还跟着 A 的大小，现状里写 O）、别的写 (k) A。
+ * 都是 termOf 认得的写法：再并一张照样并
+ */
+const mergedSrc = (t) => (t.k.zero ? `0 ${t.base}` : t.k.n === 1n && t.k.d === 1n ? t.base : t.k.n === -1n && t.k.d === 1n ? `-${t.base}` : `(${t.k}) ${t.base}`);
+/** 并同类项并成了 0、格也真的全是 0（老师后来改了一格就不算） */
+const cancelledNow = (o) => !!o.cancelled && o.cells.every((x) => x.value !== '' && toQ(x.value).zero);
 
 // product C = A B：A、B 排成一行（A 留在原处、B 挪到 A 右边），后面「= C」，三个上下居中；C 的格先空着
 function makeProduct(scene, c, h) {
@@ -708,6 +715,8 @@ export const matrix = {
     if (WHOLE_ACTS.includes(action) && /[.#]/.test(String(h?.words?.[0] ?? ''))) throw new Error(`open … ${action} 写整张矩阵的名字（open ${o.id} ${action}）：学生拖的是一整张`);
     // 收集用的：学生只能往里放（还空着时它也不是跟着算的，这里挡一下）
     if (o.collect && (action === 'edit' || action === 'rowop')) throw new Error(`${o.id} 是收集用的矩阵：学生只能往里放（open AB put，学生把 AB 拖进 ${o.id}）`);
+    // 并完 X 连同它上面开着的这一项一起拿下舞台：撤一步的按钮会没声没息地没了，写下时就说
+    if (action === 'merge' && h?.opts?.undo === 'on') throw new Error(`merge 会把 ${o.id} 拿下舞台，撤不了：不要写 undo=on`);
   },
   /**
    * 两张整张逐格比（scene.js 的 compare：两头都是整张矩阵）：{ whole, a, b, diff: [{ r, c, a, b }], total, shape }；
@@ -788,6 +797,7 @@ export const matrix = {
     const L = o.live;
     const at = (key) => { const x = o.cells.find((y) => y.key === key); return x ? `${o.id}.${x.r},${x.c}` : null; };
     if (L.whole) {
+      if (cancelledNow(o)) return `${o.id} = O（并同类项抵消了）`;
       const fixed = (L.fixed || []).map(at).filter(Boolean);
       return `${o.id} = {${L.whole}}${fixed.length ? `（${fixed.join(' ')} 是手写的，不跟着算）` : ''}`;
     }
@@ -828,7 +838,7 @@ export const matrix = {
     if (blank.length && !empty) lines.push(`  还空着：${blank.map((x) => `${o.id}.${x.r},${x.c}`).join(' ')}`);
     if (o.collect && !empty) lines.push(`  收集用的（${SIGN_TEXT[o.collect.sign]}）：${o.id} = ${collectSrc(o.collect.sign, o.collect.terms)}；学生只能往里放`);
     // 并同类项并成了 0：整张都是 0 才这样写（老师之后改了一格就不是了）
-    if (o.cancelled && o.cells.every((x) => x.value !== '' && toQ(x.value).zero)) lines.push(`  ${o.id} = O（抵消了）`);
+    if (cancelledNow(o)) lines.push(`  ${o.id} = O（抵消了）`);
     // 方程组（增广、右边一列）：解的样子、每一行读回成方程（矛盾行标出来），老师不用自己数秩、自己读
     const sol = solutionText(o);
     if (sol) lines.push(`  ${sol}`);
@@ -854,7 +864,7 @@ open B edit range=-3..3           学生点 B 的一格用 ± 拨里面的数（
 open C explain                    学生点乘积的一格，页面当场演它怎么一行乘一列算出来（还空着的就当场算上）
 open AB compare                   学生把 AB 整张拖到另一张上 = compare AB BA（逐格比，两张都不变）
 open AB put                       学生把 AB 拖进收集用的 Sum = put AB Sum（大小不一样放不进去）
-open X merge                      学生把 X 拖到 Y 上并同类项 = merge X Y（只认 数 × 同一个矩阵：{-2 A} 并 {-A} 成 {-3 A}，X 拿下舞台；并成 0 是 O）；三种都不判对错
+open X merge                      学生把 X 拖到 Y 上并同类项 = merge X Y（只认 数 × 同一个矩阵：{-2 A} 并 {-A} 成 {-3 A}，X 拿下舞台，撤不了、不写 undo=on；并成 0 是 O）；三种都不判对错
 学生自己消元（rowop 页面判每一下；乘积不能 open rowop）：
 open m rowop wrong=mark call=wrong    学生把一行左边的把手拖到另一行上 = 倍加（弹倍数框写 -3：rowop m r2 - 3r1）；拖到行号上 = 对调（rowop m r1 <-> r2）；点行号 = 倍乘（rowop m (-1/2)r1）
 open m edit input=keypad          学生点一格用数字键盘写（能写 -3/2；写了 range= 才限范围）= write m.2,3 -3/2（页面不判，告诉你的就是这一行）

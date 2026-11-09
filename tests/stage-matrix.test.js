@@ -341,6 +341,19 @@ test('并同类项：merge X Y 把 {-2 A} 并进 {-A} 成 {(-3) A}，X 拿下舞
   // 还有东西跟着 X 算：X 拿不下来
   run(s, 'matrix X = {2 A}\nmatrix Z = {X + A}');
   assert.match(err(s, 'merge X Y'), /Z 跟着 X 算，X 拿不下来，并不了/);
+  // 并好的系数照常写：1 倍写 A、−1 倍写 -A（再并一张照样认得）
+  const t = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix X = {2 A}\nmatrix Y = {-A}\nmatrix U = {-2 A}\nmatrix V = {A}\nmerge X Y\nmerge U V');
+  assert.equal(t.objects.get('Y').live.whole, 'A');
+  assert.equal(t.objects.get('V').live.whole, '-A');
+  assert.match(t.stateText(), /Y = \{A\}；V = \{-A\}/);
+  assert.doesNotMatch(t.stateText(), /\(1\)|\(-1\)/);
+  run(t, 'merge Y V');
+  assert.equal(t.objects.get('V').live.whole, '0 A');
+  // 写了 undo=on：并完 X 和它上面开着的这一项一起拿下舞台，撤一步的按钮会没声没息地没了，写下时就说
+  const u = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix X = {-2 A}\nmatrix Y = {-A}');
+  assert.equal(err(u, 'open X merge undo=on'), 'merge 会把 X 拿下舞台，撤不了：不要写 undo=on');
+  assert.equal(err(u, 'open X merge'), null);
+  assert.equal(err(u, 'open X compare undo=on'), null, 'compare 不拿掉东西，撤得了');
 });
 
 test('抵消：{2 A} 并 {-2 A}，Y 全是 0，现状写「Y = O（抵消了）」', () => {
@@ -348,6 +361,10 @@ test('抵消：{2 A} 并 {-2 A}，Y 全是 0，现状写「Y = O（抵消了）�
   const fx = one(s, 'merge X Y');
   assert.ok(s.objects.get('Y').cells.every((x) => x.value === '0'));
   assert.match(s.stateText(), /Y = O（抵消了）/);
+  // 式子也写 O，不写 (0) A（还跟着 A 的大小：里面记的是 0 A）
+  assert.match(s.stateText(), /跟着算的[^\n]*Y = O（并同类项抵消了）/);
+  assert.doesNotMatch(s.stateText(), /\(0\)|\{0 A\}/);
+  assert.equal(s.objects.get('Y').live.whole, '0 A');
   assert.equal(mergeFact(fx.merge), '学生把 X（2A）拖到 Y（−2A）上：并成了 O（抵消了）');
   // A 变了 Y 照旧是 O；再并进一张就不是抵消了
   one(s, 'write A.1,1 9');

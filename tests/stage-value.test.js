@@ -409,8 +409,8 @@ test('同类项：termOf 认「数 × 同一个矩阵（或同一串乘积）」
   assert.equal(termOf('k A', { matrix: (n) => n === 'A' }), null);
   assert.deepEqual(t('2 A', { matrix: (n) => n === 'A' }), { k: '2', base: 'A' });
   // 并不了：照实说
-  assert.equal(mergeTerms(termOf('-2 A'), termOf('-B')).error, 'X 是 −2·A，Y 是 −1·B，不是同一个矩阵的倍数，并不了');
-  assert.equal(mergeTerms(termOf('-2 A'), termOf('-B'), { x: 'P', y: 'Q' }).error, 'P 是 −2·A，Q 是 −1·B，不是同一个矩阵的倍数，并不了');
+  assert.equal(mergeTerms(termOf('-2 A'), termOf('-B')).error, 'X 是 −2·A，Y 是 −1·B，写法上不是同一个矩阵的倍数（页面只按写法认），并不了');
+  assert.equal(mergeTerms(termOf('-2 A'), termOf('-B'), { x: 'P', y: 'Q' }).error, 'P 是 −2·A，Q 是 −1·B，写法上不是同一个矩阵的倍数（页面只按写法认），并不了');
   assert.equal(mergeTerms(termOf('A + B'), termOf('A')).error, '页面看不出是不是同类项（只认 数 × 矩阵）');
   assert.equal(mergeTerms(termOf('A'), null).error, '页面看不出是不是同类项（只认 数 × 矩阵）');
   // 抵消：k 是 0
