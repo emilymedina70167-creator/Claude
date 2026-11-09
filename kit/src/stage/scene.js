@@ -235,6 +235,8 @@ export class Scene {
     // 拿走 @ask.right 的那一问记一个编号（waiting.rightKey = ask.right#N）：它里面套着的预写（ahead 的 from）跟着这一问，
     // 这一问没答对就收尾、整组拿掉，不和下一问的 @ask.right 混在一起
     this.askSeq = 0;
+    // 话里光秃秃的一个名字现在还不是拨数、也不是舞台上的东西（{Xi} 写在造 Xi 之前，或者拼错了的 {kk}）：这一轮演完再看（looseProblems）
+    this.loose = []; // [{ name, line, src }]
     this.labelRects = []; // 贴的字画在哪（stage.js 量了写回）：[{ x, y, w, h, objs }]，摆东西时后造的东西让开（reflow）
     // —— 裁判（referee.js）接进来以后 ——
     this.slips = new Map(); // 东西 id → { refs, src }：学生走偏的那一下淡淡圈着（open … wrong=mark），那样东西下一次变了就收掉
@@ -271,6 +273,7 @@ export class Scene {
     for (const [k, a] of this.ahead) s.ahead.set(k, { ...a, lines: [...a.lines] });
     s.askRight = this.askRight ? [...this.askRight] : null;
     s.askSeq = this.askSeq;
+    s.loose = this.loose.map((x) => ({ ...x }));
     s.labelRects = this.labelRects.map((r) => ({ ...r, objs: [...r.objs] }));
     for (const [k, v] of this.slips) s.slips.set(k, { ...v, refs: [...v.refs] });
     s.doneState = new Map(this.doneState);
@@ -435,12 +438,34 @@ export class Scene {
     for (const p of parseRich(text)) {
       if (p.k === 'ref') { if (replayRefs || !c?.lenient) this.parts(p.v); }
       else if (p.k === 'measure' && !c?.lenient) checkMeasure(this, p.v, { run: true });
-      // 光秃秃的一个名字（{kk}）既不是拨数、也不是舞台上的东西：多半是拼错了（拨数叫 k），学生看到的是「kk」两个字母（复核修正，控制者裁定）。
-      // 只管新写的行、只管一个名字；带运算的（{k + 1}）、重放旧课照旧
+      // 光秃秃的一个名字（{kk}）现在既不是拨数、也不是舞台上的东西：同一轮后面造出来的（say 写在 matrix Xi 前面）是对的，
+      // 到这一轮演完还不是的多半是拼错了，学生看到的是「kk」两个字母（复核修正，控制者裁定）。这一行照演，记下来，一轮演完舞台问 looseProblems。
+      // 预写的试演（trial）照旧当场报：它写下时就在今天的舞台上试。只管新写的行、只管一个名字；带运算的（{k + 1}）、重放旧课照旧
       else if (p.k === 'var' && !c?.lenient && BARE_NAME.test(p.v) && !this.vars.has(p.v) && !this.objects.has(p.v)) {
-        throw new Error(`「{${p.v}}」不是拨数，也不是舞台上的东西（${this.vars.size ? `拨数有：${[...this.vars.keys()].join('、')}` : '拨数要先写 dial'}；要指着的东西先造出来，再写这一句）`);
+        if (this.trial) throw new Error(this.looseText(p.v));
+        this.loose.push({ name: p.v, line: c?.line ?? 0, src: String(c?.src ?? '').trim() });
       }
     }
+  }
+
+  looseText(name) {
+    return `「{${name}}」不是拨数，也不是舞台上的东西，学生看到的是「${name}」几个字母（${this.vars.size ? `拨数有：${[...this.vars.keys()].join('、')}` : '拨数要先写 dial'}）`;
+  }
+  /**
+   * 这一轮话里写的光秃秃的名字，到这一轮演完还不是拨数、也不是舞台上的东西的（舞台在一轮演完时问，和 askRightProblem 一样）：
+   * [{ line, src, error, kept: true }]（kept：那一行照演了，写给老师时和没演的行分开）。问完清掉
+   */
+  looseProblems() {
+    const seen = new Set();
+    const out = [];
+    for (const x of this.loose) {
+      const k = `${x.line}|${x.name}`;
+      if (seen.has(k) || this.vars.has(x.name) || this.objects.has(x.name)) continue;
+      seen.add(k);
+      out.push({ line: x.line, src: x.src, error: this.looseText(x.name), kept: true });
+    }
+    this.loose = [];
+    return out;
   }
 
   // —— 一行指令改场景（画面怎么演由 stage.js 管）。返回这一行的要点（画面用），写错了抛错 ——

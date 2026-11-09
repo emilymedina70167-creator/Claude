@@ -63,7 +63,7 @@ function setup(segments) {
     },
     putTurn: (row) => {
       if (row.role === 'claude' && row.segment != null && row.log) {
-        T.played.set(row.segment, { played: row.log.filter((x) => x.by === 'teacher').length, errors: [...st.errors].map((e) => ({ line: e.line, src: e.src, error: e.error })) });
+        T.played.set(row.segment, { played: row.log.filter((x) => x.by === 'teacher').length, errors: [...st.errors].map((e) => ({ line: e.line, src: e.src, error: e.error, ...(e.kept ? { kept: true } : {}) })) });
       }
       if (row.role === 'student' && !row.pending) {
         // 叫老师的那几件事（做到挑战和做完了常常是同一下）：都写上

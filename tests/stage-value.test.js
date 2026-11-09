@@ -383,23 +383,39 @@ test('引号里的 {rank(M)}、{det(A)} 是量：画成现在的数、跟着变�
   assert.equal(measureShown(old, 'det(q)'), 'det(q)');
 });
 
-// 复核第 2 轮（控制者裁定）：话里光秃秃的一个名字既不是拨数、也不是舞台上的东西（拼错的 {kk}），学生看到的是「kk」两个字母——新写的当场报
-test('引号里的 {名字} 拼错了（不是拨数、不是舞台上的东西）新写的当场报；拨数、东西、部件照旧；带运算的、旧课重放照旧', () => {
+// 复核第 2、3 轮（控制者裁定）：话里光秃秃的一个名字既不是拨数、也不是舞台上的东西（拼错的 {kk}），学生看到的是「kk」两个字母。
+// 同一轮后面才造的（say 写在 matrix Xi 前面）是对的：一轮演完再看（looseProblems），还不是的告诉老师，那一行照演
+test('引号里的 {名字}：同一轮后面造的、后面写的拨数不报；一轮演完还不认得的（拼错了）报，那一行照演；预写当场报；旧课重放照旧', async () => {
+  const { turnMessage } = await import('../kit/src/stage/doc.js');
   const sc = run(new Scene(), 'dial k = 2 range=-3..3\nmatrix M = 1 {k} / 0 1\ngoal g1 "拨到 0" when="k = 0"');
-  assert.match(err(sc, 'say "拨到 {kk} 看看"'), /「\{kk\}」不是拨数，也不是舞台上的东西（拨数有：k；/);
-  assert.match(err(sc, 'label n M "现在是 {kk}"'), /「\{kk\}」不是拨数/);
-  assert.match(err(sc, 'goal g2 "把 {kk} 拨到 1" when="k = 1"'), /「\{kk\}」不是拨数/);
-  assert.match(err(sc, 'ask next "{kk} 拨好了吗？"'), /「\{kk\}」不是拨数/);
-  assert.match(err(sc, 'card q = "第一行" "{kk}"'), /「\{kk\}」不是拨数/);
-  assert.match(err(sc, '@g1 say "{kk}"'), /「\{kk\}」不是拨数/, '预写也在今天的舞台上试');
-  assert.match(err(new Scene(), 'say "{k}"'), /拨数要先写 dial/);
+  // 写下时不报、照演
+  for (const l of ['say "拨到 {kk} 看看"', 'label n M "现在是 {kk}"', 'ask next "{kk} 拨好了吗？"', 'card q = "第一行" "{kk}"']) assert.equal(err(sc, l), null, l);
+  const line = (src, n) => ({ ...parseScript(src)[0], line: n, src });
+  sc.apply(line('say "先看 {Xi}，拨到 {kk}，再拨 {k2}"', 4));
+  sc.apply(line('goal g2 "把 {kk} 拨到 1" when="k = 1"', 5));
+  run(sc, 'matrix Xi = 0 / 1\ndial k2 = 1 range=0..3');
+  // 一轮演完：Xi、k2 后来有了，不报；kk 还不认得，一行一条，写那一行（照演了）
+  const probs = sc.looseProblems();
+  assert.deepEqual(probs.map((p) => [p.line, p.kept]), [[4, true], [5, true]]);
+  assert.match(probs[0].error, /^「\{kk\}」不是拨数，也不是舞台上的东西，学生看到的是「kk」几个字母（拨数有：k、k2）/);
+  assert.equal(probs[0].src, 'say "先看 {Xi}，拨到 {kk}，再拨 {k2}"');
+  assert.deepEqual(sc.looseProblems(), [], '问完清掉');
+  assert.equal(sc.say, '先看 {Xi}，拨到 {kk}，再拨 {k2}', '那一行照演了');
+  // 写给老师：和没演的行分开写
+  const msg = turnMessage({ act: 'x', state: 'y', errors: [{ line: 2, src: 'swap a.9', error: '没有第 9 格' }, ...probs] });
+  assert.match(msg, /\[上一轮没演的行\][^\n]*\n- 第 2 行「swap a\.9」：没有第 9 格\n\n\[上一轮照演了、可写错了的行\]（页面照演了，学生看到的是原样的字）\n- 第 4 行/);
+  assert.doesNotMatch(turnMessage({ act: 'x', state: 'y', errors: probs }), /没演的行/);
   // 拨数、东西的名字、部件照旧；带运算的不管
-  for (const ok of ['say "拨到 {k}"', 'say "把 {M} 化简"', 'say "看 {M.1,2}"', 'say "{k + 1}"', 'label n dial:k "{k} 组"']) assert.equal(err(sc, ok), null, ok);
-  // 旧课重放（lenient）：照收，照旧画原来的字
+  for (const ok of ['say "拨到 {k}"', 'say "把 {M} 化简"', 'say "看 {M.1,2}"', 'say "{k + 1}"', 'label n dial:k "{k} 组"']) { sc.apply(parseScript(ok)[0]); assert.deepEqual(sc.looseProblems(), [], ok); }
+  // 预写在今天的舞台上试：当场报（和以前一样）
+  assert.match(err(sc, '@g1 say "{kk}"'), /「\{kk\}」不是拨数/);
+  // 旧课重放（lenient）：照收、不记，照旧画原来的字
   sc.apply({ ...parseScript('say "拨到 {kk} 看看"')[0], lenient: true });
-  assert.equal(sc.say, '拨到 {kk} 看看');
+  assert.deepEqual(sc.looseProblems(), []);
   assert.deepEqual(parseRich(sc.say).filter((p) => p.k !== 'text'), [{ k: 'var', v: 'kk' }]);
-  assert.equal(sc.vars.get('kk'), undefined, '画的时候没有这个拨数，照原样写「kk」');
+  // 副本带着这一轮还没着落的名字（检查、试演在副本上跑）
+  sc.apply(line('say "{qq}"', 9));
+  assert.deepEqual(sc.clone().loose, [{ name: 'qq', line: 9, src: 'say "{qq}"' }]);
 });
 
 test('格里的式子：算成一个数就收，跟着拨数变；算出来是矩阵、名字不认得照实说', () => {

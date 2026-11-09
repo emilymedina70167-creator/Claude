@@ -108,5 +108,11 @@ expect('没有括号的一段折不起来：记成没演上', /没有括号/.tes
 const fo = stepOf(pa, 'fold s.7-10');
 expect('点从句的括号折起来', !errs(fo) && /fold s\.7-10/.test(fo?.did || '') && /学生 fold s\.7-10/.test(said(fo)));
 
+// 话里光秃秃的名字：同一轮后面造的不报；拼错的一轮演完才报（照演了，kept），不算没演上
+const lo = run('loose.txt');
+const loT = lo.out?.[0]?.views?.[0]?.steps?.[0];
+expect('loose.txt：退出码 0', lo.code === 0);
+expect('同一轮后面才造的 {Xi} 不报；拼错的 {kk} 一轮演完报，那一行照演了', (loT?.errors || []).length === 1 && loT.errors[0].kept === true && /「\{kk\}」不是拨数/.test(loT.errors[0].error) && loT.played === 4);
+
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');
 process.exit(bad.length ? 1 : 0);

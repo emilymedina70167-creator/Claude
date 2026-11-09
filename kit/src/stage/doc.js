@@ -233,7 +233,8 @@ export function derivedLines(derived = [], { grids = null } = {}) {
 
 /**
  * 学生做完以后发给老师的一条：学生做了什么、跟着变的（页面重算的；grids 是 gridsOf(场景)，矩阵变了一半以上写整张）、
- * 页面核过老师上一轮的几步（不是正确的下一步的那几步）、上一轮哪几行没演（写错了）、舞台现在是什么样（照场景写的，和画面一样）。
+ * 页面核过老师上一轮的几步（不是正确的下一步的那几步）、上一轮哪几行没演（写错了）、哪几行照演了可写错了（errors 里 kept 的）、
+ * 舞台现在是什么样（照场景写的，和画面一样）。
  * 后加的两块只在有内容时出现
  */
 export function turnMessage({ act = '', state = '', errors = [], audit = [], derived = [], grids = null } = {}) {
@@ -242,7 +243,10 @@ export function turnMessage({ act = '', state = '', errors = [], audit = [], der
   const moved = derivedLines(derived, { grids });
   if (moved.length) parts.push(`[跟着变的]（学生动了以后页面当场重算的）\n${moved.map((l) => `- ${l}`).join('\n')}`);
   if (audit.length) parts.push(`[页面核过你上一轮的几步]（这几步不是正确的下一步；页面照演了、没拦你，是故意演错的就不用管）\n${audit.map((l) => `- ${l}`).join('\n')}`);
-  if (errors.length) parts.push(`[上一轮没演的行]（写错了，页面跳过了，别的行照演）\n${errors.map((e) => `- 第 ${e.line} 行「${e.src}」：${e.error}`).join('\n')}`);
+  const skipped = errors.filter((e) => !e.kept), kept = errors.filter((e) => e.kept);
+  if (skipped.length) parts.push(`[上一轮没演的行]（写错了，页面跳过了，别的行照演）\n${skipped.map((e) => `- 第 ${e.line} 行「${e.src}」：${e.error}`).join('\n')}`);
+  // 照演了、可有写错的（话里拼错的 {kk}）：页面不替你改，下一轮你改过来
+  if (kept.length) parts.push(`[上一轮照演了、可写错了的行]（页面照演了，学生看到的是原样的字）\n${kept.map((e) => `- 第 ${e.line} 行「${e.src}」：${e.error}`).join('\n')}`);
   parts.push(`[舞台现在]\n${state}`);
   parts.push('写下一轮。');
   return parts.join('\n\n');

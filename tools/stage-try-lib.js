@@ -172,7 +172,7 @@ export function formatReport(r) {
       out.push('', `### ${title(x.step, i + 1)}`);
       if (x.step.kind === 'teacher') out.push(`演上了 ${x.played} 行`);
       if (x.did) out.push(`手指做的：${x.did}`);
-      if (x.errors?.length) out.push('没演上的行：', ...x.errors.map((e) => `- 第 ${e.line} 行「${e.src}」：${e.error}`));
+      if (x.errors?.length) out.push('没演上的行：', ...x.errors.map((e) => `- 第 ${e.line} 行「${e.src}」${e.kept ? '（照演了）' : ''}：${e.error}`));
       if (x.blocked) out.push(`页面没让做（弹回去了）：${x.blocked}`);
       if (x.undone) out.push(`撤掉的那一下：${x.undone}`);
       out.push('舞台现在：', block(x.state));

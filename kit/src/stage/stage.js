@@ -232,6 +232,7 @@ export class Stage {
     const turn = ++this.turnNo;
     const mark = this.log.length;
     this.errors = [];
+    this.scene.loose = []; // 话里还没着落的名字只算这一轮的（上一轮作废了留下的不算）
     // 叫老师之前那一段学生做的事刚发出去：拨数、拨格子的路从头数（和课堂循环攒的那一段对齐）
     this.dialRuns = new Map();
     // 老师这一轮演完以前不能撤（重放会把演到一半的这一轮整个重来）；演完了 end 里再定这一回合从哪儿起
@@ -296,6 +297,8 @@ export class Stage {
       if (dead) return { act: null, errors: [], lines, mark, dead: true };
       feed(text != null ? text : last, true);
       await chain;
+      // 话里光秃秃的名字到这一轮演完还不是拨数、也不是舞台上的东西（拼错了）：告诉老师，那一行照演了（同一轮后面才造的不报）
+      if (!dead && !this.instant) this.errors.push(...this.scene.looseProblems());
       // @ask.right 没着落（这一轮没有 ask、拿走它的那一问页面判不了对错）：当场告诉老师，丢掉（不能挂到下一轮的一问上，也不能被页面替它挂的那一问拿走）
       if (!dead && !this.instant) {
         const bad = this.scene.askRightProblem();
@@ -1296,6 +1299,8 @@ export class Stage {
   // 每次 sync 照场景重写一遍（字的长短变了，下面 syncLabels 量大小时用的是新的）
   syncMeasures() {
     for (const s of this.root.querySelectorAll('.st-measure')) { const v = measureShown(this.scene, s.dataset.measure); if (s.textContent !== v) s.textContent = v; }
+    // 话里的 {k2} 写在 dial k2 之前：拨数有了就换成它那时的数（只换这一次，和别的话里的拨数一样说完就不跟着变）
+    for (const s of this.root.querySelectorAll('.st-var[data-pending]')) { const x = this.scene.vars.get(s.dataset.var); if (x) { s.textContent = String(x.v); delete s.dataset.pending; } }
   }
 
   // 话、字里的写法画出来：{a.2} 是同色同数的小块，{d} 是拨的数，{count(t)} 是页面数的量，$d$ 是字母，[词] 能飞走
@@ -1305,7 +1310,15 @@ export class Stage {
         if (glyphs) for (const ch of p.v) { const s = el('span', 'st-ch', node); s.textContent = ch; glyphs.push(s); }
         else node.appendChild(document.createTextNode(p.v));
       } else if (p.k === 'ref') { const chip = this.chip(p.v); node.appendChild(chip); glyphs?.push(chip); }
-      else if (p.k === 'var') { const s = el('span', 'st-var', node); s.dataset.var = p.v; s.textContent = String(this.scene.vars.get(p.v)?.v ?? p.v); glyphs?.push(s); }
+      else if (p.k === 'var') {
+        const s = el('span', 'st-var', node);
+        s.dataset.var = p.v;
+        const x = this.scene.vars.get(p.v);
+        s.textContent = String(x?.v ?? p.v);
+        // 写的时候还没有这个拨数（同一轮后面才写 dial）：先写名字，有了以后 syncMeasures 换成数
+        if (!x) s.dataset.pending = '1';
+        glyphs?.push(s);
+      }
       else if (p.k === 'measure') { const s = el('span', 'st-measure', node); s.dataset.measure = p.v; s.textContent = measureShown(this.scene, p.v); glyphs?.push(s); }
       else if (p.k === 'math') { const s = el('i', 'st-math', node); s.textContent = p.v; glyphs?.push(s); }
       else { const s = el('span', 'st-word', node); s.textContent = p.v; glyphs?.push(s); words?.push(s); }

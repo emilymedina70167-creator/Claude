@@ -736,6 +736,15 @@ test('clone 带着这一轮的新状态（检查、试演、抢跑都在副本�
   assert.deepEqual(dc.labels.get('dial:k').refs, ['M']);
   assert.equal(d.dialAt.get('k'), 'M');
   assert.equal(new Scene().clone().dialAt.size, 0);
+  // Task 15 复核：这一轮话里还没着落的名字（loose：一轮演完再看）。改克隆的不动原来的
+  const l = run(new Scene(), 'say "看 {Xi}"');
+  const lc = l.clone();
+  assert.deepEqual(lc.loose, l.loose);
+  assert.equal(l.loose.length, 1);
+  lc.loose.push({ name: 'x', line: 0, src: '' });
+  lc.loose[0].name = 'y';
+  assert.deepEqual(l.loose.map((x) => x.name), ['Xi']);
+  assert.deepEqual(new Scene().clone().loose, []);
 });
 
 test('看不全：画面写回的 clipped 写进现状（藏着的、已经拿下舞台的不写）', () => {
