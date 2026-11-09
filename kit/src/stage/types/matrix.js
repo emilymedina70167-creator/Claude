@@ -8,6 +8,8 @@
 import { Q, isQ, isQVec, isQMat } from '../../exact.js';
 // 规则那边算的读回方程、解的样子（舞台现状里写）。两个模块互相 import：都只在函数里用对方的东西，加载的先后不碍事
 import { readBack, solutionText } from './matrix.rules.js';
+// 整张写成一句（value.js 也 import 这里：同样只在函数里用）
+import { gridText } from '../value.js';
 
 export const MAX_ROWS = 6, MAX_COLS = 8;
 const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
@@ -671,6 +673,12 @@ export const matrix = {
     const rows = [];
     for (let r = 1; r <= o.rows; r++) rows.push(rowCells(o, r).map((x) => x.value));
     return { kind: 'matrix', rows };
+  },
+  // 一句话写现在的样子（存档点 back 以后告诉老师，scene.js 的 summaryOf）：整张 (1 −2; 3 4)，空格子写 _
+  summary(o) {
+    const rows = [];
+    for (let r = 1; r <= o.rows; r++) rows.push(o.cells.filter((x) => x.r === r).sort((a, b) => a.c - b.c).map((x) => String(x.value ?? '')));
+    return gridText(rows);
   },
   describe(o) {
     const tag = (x) => {

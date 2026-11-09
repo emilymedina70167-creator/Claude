@@ -33,8 +33,8 @@ export const triggers = (e) => !e.quiet && (!!e.now || ['answer', 'goal', 'done'
  */
 export function eventOf(act, { help = '', at = 0 } = {}) {
   if (act.type === 'next' && help && act.button === help) return { kind: 'help', act: slim(act), at };
-  // 撤一步也是「试」（攒着写给老师），可不算进「试了好多下」：撤几下不该凑出叫老师
-  if (act.open || act.type === 'dial') return { kind: 'try', act: slim(act), at, ...(act.call === 'now' || act.verdict?.call === 'now' ? { now: true } : {}), ...(act.patient || act.type === 'undo' ? { patient: true } : {}) };
+  // 撤一步、按「回到……」也是「试」（攒着写给老师），可不算进「试了好多下」：撤几下、回去几次不该凑出叫老师
+  if (act.open || act.type === 'dial') return { kind: 'try', act: slim(act), at, ...(act.call === 'now' || act.verdict?.call === 'now' ? { now: true } : {}), ...(act.patient || act.type === 'undo' || act.type === 'back' ? { patient: true } : {}) };
   return { kind: 'answer', act: slim(act), at };
 }
 

@@ -495,7 +495,8 @@ export class Stage {
     const pre = this.capture();
     // 这一行之前东西都在哪（镜头先走的时候连「之前」一起框，见 keepInView 的 extra）
     const before = this.instant || !this.scene.objects.size ? null : bbox(this.scene.shownIds().map((id) => this.scene.objectBox(id)));
-    const fx = this.scene.apply(c, by === 'student' ? { by: 'student', judged: judged ?? null } : { by: this.instant || by !== 'teacher' ? null : by });
+    // open 也交给场景：老师写的 keep … after=place 认学生这一下是从哪一项来的
+    const fx = this.scene.apply(c, by === 'student' ? { by: 'student', judged: judged ?? null, open } : { by: this.instant || by !== 'teacher' ? null : by });
     this.execTurn = turn;
     // 学生这一下引出了预写的行、做到了挑战、做完了：记在这一行上，撤一步撤不了它（预写只演一次，「做到了」也已经告诉课堂）
     const reacted = by === 'student' && !!(fx?.goalsMet?.length || fx?.done?.length || fx?.reactions?.length);
@@ -514,6 +515,7 @@ export class Stage {
       if (facts.length) act.facts = facts;
       if (fx?.pickDiff) act.pickDiff = fx.pickDiff;
       if (fx?.derived?.length) act.derived = slimDerived(fx.derived);
+      if (fx?.back) act.summary = fx.back.summary; // 按「回到……」：回到以后的样子（actText 写给老师）
     }
     // 老师（连预写的行）这一下改了学生先点的几样：写成一句交给课堂，跟着下一条告诉老师（不叫老师，loop.js 的 onNote）
     if (fx?.pickDiff && by !== 'student' && !this.instant) this.onNote?.(`${fx.pickDiff}（你演的 ${c.src?.trim() || c.cmd}）`, { turn });
@@ -784,35 +786,75 @@ export class Stage {
   }
 
   // —— 撤一步（open … undo=on）：去掉这一回合学生的最后一行，照 log 重放；正在等的那一问照样等着 ——
-  /** 这一回合能撤哪一行（gestures.js 的 undoPlan）：只撤从写了 undo=on 的那一项来的（拨数、别的 open 来的撤不了） */
+  /**
+   * 这一回合能撤哪一行（gestures.js 的 undoPlan）：只撤从写了 undo=on 的那一项来的（拨数、别的 open 来的撤不了），
+   * 学生按的「回到……」都撤得了（scene.js 的 undoable）
+   */
   undoPlan() {
-    const undoable = (row) => {
-      if (!row.open) return false;
-      let id = null;
-      try { id = this.scene.ownTarget(parseScript(row.src)[0]); } catch { id = null; }
-      const es = id ? [this.scene.opens.get(`${id}:${row.open}`)] : [...this.scene.opens.values()].filter((x) => x.action === row.open);
-      return es.some((x) => x?.policy?.undo);
-    };
-    return undoPlan(this.log, { from: this.undoFloor || 0, undoable });
+    return undoPlan(this.log, { from: this.undoFloor || 0, undoable: (row) => this.scene.undoable(row) });
   }
-  /** 有哪一项 open 写了 undo=on 才有「撤一步」；这一回合学生还没做过就按不了，撤不了的那一下在按钮下面说一句（中性，不说对错） */
+  /**
+   * 右上角一排：老师开的「回到……」（open t back="插入后"，一个名字一个；还没存时按不了），有哪一项 open 写了 undo=on 才有「撤一步」。
+   * 撤一步这一回合学生还没做过就按不了，撤不了的那一下在按钮下面说一句（中性，不说对错）
+   */
   syncUndo() {
-    const on = this.withInput && !this.instant && [...this.scene.opens.values()].some((e) => e.policy?.undo);
-    if (!on) { this.undoBox?.remove(); this.undoBox = this.undoBtn = null; return; }
+    const live = this.withInput && !this.instant;
+    const opens = live ? [...this.scene.opens.values()] : [];
+    const on = opens.some((e) => e.policy?.undo);
+    const backs = opens.filter((e) => e.action === 'back');
+    if (!on && !backs.length) { this.undoBox?.remove(); this.undoBox = this.undoRow = this.undoBtn = null; this.backBtns = new Map(); return; }
     if (!this.undoBox) {
       this.undoBox = el('div', 'st-undo-box', this.view);
-      const b = this.undoBtn = el('button', 'st-undo', this.undoBox);
+      this.undoRow = el('div', 'st-undo-row', this.undoBox);
+      el('span', 'st-undo-why', this.undoBox);
+      this.backBtns = new Map();
+    }
+    // 「回到……」照开着的对齐：收掉的拿走，新开的排在「撤一步」前面
+    const want = new Map(backs.map((e) => [`${e.obj}:${e.name}`, e]));
+    for (const [k, b] of this.backBtns) if (!want.has(k)) { b.remove(); this.backBtns.delete(k); }
+    for (const [k, e] of want) {
+      let b = this.backBtns.get(k);
+      if (!b) {
+        b = el('button', 'st-back', this.undoRow);
+        b.type = 'button';
+        b.dataset.obj = e.obj;
+        b.dataset.name = e.name;
+        b.textContent = `回到${e.name}`;
+        b.addEventListener('click', () => this.goBack(b.dataset.obj, b.dataset.name));
+        if (this.undoBtn) this.undoRow.insertBefore(b, this.undoBtn);
+        this.backBtns.set(k, b);
+      }
+      b.disabled = !!(this.undoBusy || this.backBusy) || !this.scene.keeps.get(e.obj)?.has(e.name);
+    }
+    if (on && !this.undoBtn) {
+      const b = this.undoBtn = el('button', 'st-undo', this.undoRow);
       b.type = 'button';
       b.textContent = '↶ 撤一步';
       b.addEventListener('click', () => this.undo());
-      el('span', 'st-undo-why', this.undoBox);
     }
-    const plan = this.undoBusy ? null : this.undoPlan();
-    this.undoBtn.disabled = !plan?.gone;
+    if (!on && this.undoBtn) { this.undoBtn.remove(); this.undoBtn = null; }
+    const plan = !on || this.undoBusy ? null : this.undoPlan();
+    if (this.undoBtn) this.undoBtn.disabled = !!this.backBusy || !plan?.gone;
     this.undoBox.lastChild.textContent = plan?.why || '';
   }
+  /**
+   * 学生按「回到……」：照学生的一行 back t "插入后" 走（studentDo：先过 check、记进 log，open 记成 back，撤一步撤得了），
+   * 课堂收到的这一下带着回到以后的样子（actText）
+   */
+  async goBack(obj, name) {
+    if (this.backBusy || this.undoBusy || this.dragging) return;
+    this.backBusy = true;
+    this.syncUndo();
+    try {
+      const src = `back ${obj} ${quoteText(name)}`;
+      await this.studentDo(src, { type: 'back', obj, name, open: 'back', line: src });
+    } finally {
+      this.backBusy = false;
+      this.syncUndo();
+    }
+  }
   async undo() {
-    if (this.undoBusy || this.dragging) return;
+    if (this.undoBusy || this.backBusy || this.dragging) return;
     this.undoBusy = true;
     this.syncUndo();
     try {
@@ -1553,6 +1595,11 @@ export function actText(act) {
     if (act.type === 'explain') return `学生点了 ${act.ref}，看它怎么一行乘一列算出来`;
     if (act.type === 'goal') return `学生做到了挑战 ${act.id}「${act.text}」`;
     if (act.type === 'undo') return `学生撤回了自己的上一下：${act.src}（舞台已经退回去了）`;
+    // 学生按的「回到……」（open … back=）：回到以后的样子写在括号里（树写层序、矩阵写整张……，scene.js 的 summaryOf）
+    if (act.type === 'back') {
+      const now = act.summary ? `（${act.summary}）` : '';
+      return act.name != null ? `学生点了「回到${act.name}」：${act.obj} 回到了${act.name}的样子${now}` : `学生让 ${act.obj} 回到了上一下之前的样子${now}`;
+    }
     // 过了裁判的一下（rotate、rowop、mark……）：学生那一行指令，后面是这一下做了什么（裁判的结论 events.js 接着写）
     if (act.src && act.verdict) return `学生 ${act.src}${act.verdict.why && act.verdict.legal !== false ? `（${act.verdict.why}）` : ''}`;
     // 通用手势做的、页面不判的一下（键盘写一格、折起一段）：照那一行写

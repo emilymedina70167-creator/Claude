@@ -1,6 +1,7 @@
 // 舞台上的手指（kit/src/stage/pointer.js）用真的触摸检查一遍：CDP Input.dispatchTouchEvent → pointerType: touch，和 iPad 上一样。
 // 按偏一点也拿得到、松在两格中间吸到近的那一格、拖到一半浏览器取消（pointercancel）算松在那里、平面上的向量连着拖两次（第二次在吸格点的动画还没走完时）、
-// 做到挑战时东西跳一下（pulse）和预写的行同时挪它，跳完不把它放回原处；同一项只换了 wrong= 再开一次，键盘、成分那一排照新的那一项交。
+// 做到挑战时东西跳一下（pulse）和预写的行同时挪它，跳完不把它放回原处；同一项只换了 wrong= 再开一次，键盘、成分那一排照新的那一项交；
+// 手指按「回到插入后」（open … back=）回到存着的样子、撤一步撤得了它。
 //   node tools/stage-touch.mjs        （先 node proto/stage/build.mjs）  没问题退出码 0
 import { chromium } from './playwright.mjs';
 import { resolve, dirname, join } from 'node:path';
@@ -93,6 +94,27 @@ if (subj) await tapAt(subj);
 await page.waitForTimeout(1200);
 // 成分按钮交的是中文（点「主语」交 mark s.1-2 主语）
 expect('只换了 wrong= 再开一次：点成分交出去了、照新的 wrong=mark 圈着', await lastAct(), 'mark s.1-2 主语 圈着');
+// 7. 存档点：学生插进 47（页面替老师存成「插入后」）、又转了一下，手指按「回到插入后」：t 回到插入后的样子（这一下先在克隆上 check，
+// 克隆上要有存档）；按钮至少 44px、还没存时按不了；撤一步撤的是这一下
+await play('tree t = 30 20 40 10 25 _ 45 tray="47"\nopen t insert\nopen t rotate undo=on\nkeep t "插入后" after=insert\nopen t back="插入后"');
+const backBtn = () => page.evaluate(() => { const b = document.querySelector('.st-back'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width, h: r.height, off: b.disabled, text: b.textContent }; });
+const levelT = () => page.evaluate(() => window.LAStage.scene.stateText().match(/树 t[^：]*：层序 ([^\n]*)/)?.[1] || '');
+let bb = await backBtn();
+expect('「回到插入后」按钮：还没存时按不了', JSON.stringify(bb && { off: bb.off, text: bb.text }), '{"off":true,"text":"回到插入后"}');
+await page.evaluate(async () => { const st = window.LAStage; await st.studentDo('insert t 47', { type: 'gesture', open: 'insert' }); await st.studentDo('rotate t.40 left', { type: 'gesture', open: 'rotate' }); });
+await page.waitForTimeout(900);
+bb = await backBtn();
+expect('「回到插入后」按钮至少 44px 高、学生插完以后按得了', String(bb.h >= 44 && bb.w >= 44 && !bb.off), 'true');
+if (process.env.STAGE_TOUCH_SHOT) await page.screenshot({ path: process.env.STAGE_TOUCH_SHOT }); // 想看一眼按钮排得怎么样：STAGE_TOUCH_SHOT=存到哪.png
+await tapAt(bb);
+await page.waitForTimeout(1200);
+expect('按「回到插入后」：t 回到插入后的样子', await levelT(), '30 20 40 10 25 _ 45 _ _ _ _ _ 47');
+expect('课堂收到的这一下', await page.evaluate(() => window.LAStageDev.actText(window.LAStageDev.acts.at(-1))), '学生点了「回到插入后」：t 回到了插入后的样子（层序 30 20 40 10 25 _ 45 _ _ _ _ _ 47）');
+expect('log 里是学生的一行 back、open 记成 back', await page.evaluate(() => JSON.stringify((({ src, by, open }) => ({ src, by, open }))(window.LAStage.log.at(-1)))), '{"src":"back t \\"插入后\\"","by":"student","open":"back"}');
+const undoAt = await page.evaluate(() => { const b = document.querySelector('.st-undo'); const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, off: b.disabled }; });
+await tapAt(undoAt);
+await page.waitForTimeout(1200);
+expect('撤一步撤的是按「回到插入后」那一下：回到转完的样子', await levelT(), '30 20 45 10 25 40 47');
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

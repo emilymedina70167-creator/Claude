@@ -698,6 +698,8 @@ export const tree = {
     const bad = imbalance(o);
     return [`avl ${bad ? `否（最小不平衡子树的根是 ${shown(nodeAt(o, bad.key))}，${bad.kind} 型）` : '是'}`, `bst ${isBst(o) ? '是' : '否'}`];
   },
+  // 一句话写现在的样子（存档点 back 以后告诉老师「回到了……的样子」，scene.js 的 summaryOf）
+  summary(o) { return `层序 ${serialize(o)}`; },
   describe(o) {
     const ns = levelOrder(o);
     const lines = [`树 ${o.id}（${ns.length ? `${ns.length} 个结点，${heightOf(o, o.root)} 层` : '空树'}）：层序 ${serialize(o)}`];

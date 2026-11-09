@@ -210,6 +210,8 @@ export const array = {
       return { id: o.id };
     },
   },
+  // 一句话写现在的样子（存档点 back 以后告诉老师，scene.js 的 summaryOf）：那一排数
+  summary(o) { return [...o.cells].sort((a, b) => a.slot - b.slot).map((c) => c.value).join(' '); },
   describe(o) {
     const tag = (c) => {
       const bits = [];

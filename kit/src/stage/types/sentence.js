@@ -1010,6 +1010,8 @@ export const sentence = {
       return { id: o.id, removed, added: next.filter((w) => !old.some((x) => x.key === w.key)).map((w) => w.key), moved, changed };
     },
   },
+  // 一句话写现在的样子（存档点 back 以后告诉老师，scene.js 的 summaryOf）：那一句（折起来的写成［…］，和现状一样）
+  summary(o) { return sentenceText(o, { folds: true }); },
   describe(o) {
     const L = layout(o);
     const tag = (w) => {

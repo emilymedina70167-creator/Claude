@@ -71,6 +71,15 @@ test('call=wrong：走偏的那一下马上叫老师；做完了没预写就叫�
   assert.equal(tryCount([{ kind: 'try', patient: true }, { kind: 'try' }]), 1);
 });
 
+test('学生按「回到……」（open … back=）：攒着写给老师，和撤一步一样不算进「试了好多下」', () => {
+  const e = eventOf({ type: 'back', obj: 't', name: '插入后', open: 'back', line: 'back t "插入后"', summary: '层序 30 20 40' });
+  assert.equal(e.kind, 'try');
+  assert.equal(e.patient, true);
+  assert.equal(triggers(e), false);
+  assert.equal(tryCount([e, e, e]), 0);
+  assert.equal(eventsText([e]), '学生点了「回到插入后」：t 回到了插入后的样子（层序 30 20 40）');
+});
+
 test('长度上限：试了 30 下，[学生] 一块不超过 3 KB；没有错法的并成「之前又试了 N 下」，同一种错法并成「像是… ×N」', () => {
   const MIS = '型从下往上读了：从 50 往下看是 LR 型（先在 30 左旋，再在 50 右旋），像是读成了 RL';
   const ev = Array.from({ length: 30 }, (_, i) => rot(i + 1, { legal: true, right: i % 3 === 0, misread: i % 3 ? MIS : null, why: `第 ${i + 1} 个结点 右旋`, next: i % 3 ? '先在 30 左旋（最小不平衡子树的根是 50，LR 型）' : null }));

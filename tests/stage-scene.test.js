@@ -1,8 +1,11 @@
 // 舞台的场景（kit/src/stage/scene.js）：一行指令先检查再改场景；写错的挡下、说清楚错在哪；给老师看的现状照场景写
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Scene, dryRun, compareValues, SWEEP_MAX, sweepLine, expectHit, pickAnswer, pickText, pickDiffText } from '../kit/src/stage/scene.js';
+import { Scene, dryRun, compareValues, SWEEP_MAX, sweepLine, expectHit, pickAnswer, pickText, pickDiffText, KEEP_MAX, snapOf, restoreSnap } from '../kit/src/stage/scene.js';
 import { parseScript, parseRich } from '../kit/src/stage/script.js';
+import { serialize } from '../kit/src/stage/types/tree.js';
+import { undoPlan } from '../kit/src/stage/gestures.js';
+import { actText } from '../kit/src/stage/stage.js';
 import { linkGeom } from '../kit/src/stage/layout.js';
 import { cellBox, array as arrayType } from '../kit/src/stage/types/array.js';
 const objectBox = (o) => arrayType.objectBox(o);
@@ -690,6 +693,26 @@ test('clone 带着这一轮的新状态（检查、试演、抢跑都在副本�
   assert.deepEqual(p.waiting.refs, ['t']);
   assert.deepEqual(p.waiting.expect, ['t.45', 't.40']);
   assert.equal(new Scene().clone().picked, null);
+  // Task 7：存档（keeps）、页面替老师存的（autoKeep）、学生每一下之前的样子（lastBefore）。学生按的 back 先过 check（在克隆上试）：
+  // 克隆上没有存档就报「没存过」
+  const k = run(new Scene(), 'tree t = 30 20 40 10 25 _ 45 tray="47"\nopen t insert\nkeep t "开始"\nkeep t "插入后" after=insert');
+  stu(k, 'insert t 47', 'insert');
+  const kc = k.clone();
+  assert.deepEqual(kc.keeps, k.keeps);
+  assert.deepEqual(kc.autoKeep, k.autoKeep);
+  assert.deepEqual(kc.lastBefore, k.lastBefore);
+  assert.equal(kc.stateText(), k.stateText());
+  assert.equal(kc.check(one('back t "插入后"')), null);
+  assert.equal(k.check(one('back t "开始"')), null);
+  assert.equal(k.check(one('back t')), null);
+  // 深拷：改克隆的不动原来的
+  kc.keeps.get('t').delete('开始');
+  kc.autoKeep.get('t').set('别的', 'rotate');
+  kc.lastBefore.get('t').root = 99;
+  assert.ok(k.keeps.get('t').has('开始'));
+  assert.equal(k.autoKeep.get('t').has('别的'), false);
+  assert.equal(k.lastBefore.get('t').root, 1);
+  assert.equal(new Scene().clone().keeps.size, 0);
 });
 
 test('看不全：画面写回的 clipped 写进现状（藏着的、已经拿下舞台的不写）', () => {
@@ -981,4 +1004,217 @@ test('expect 写整样东西或一段：点到里面哪一个都算；哪种东�
   // ask tap 的 expect 写一段、整样东西照收
   assert.equal(dryRun(s, 'ask tap a "…" expect=a.1-3').length, 0);
   assert.equal(dryRun(s, 'ask tap AB "…" expect=AB').length, 0);
+});
+
+// —— 存档点 keep / back（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 7 节）——
+const T47 = 'tree t = 30 20 40 10 25 _ 45 tray="47"';
+const ser = (s, id = 't') => serialize(s.objects.get(id));
+
+test('存了再回去：只换这样东西的数据；位置、open、贴的字不动；avl、做完照回去以后的样子重判', () => {
+  const s = run(new Scene(), `${T47}\nopen t insert\nopen t rotate\n@t.done say "平了。"\nlabel n t.30 "根"\narray a = 3 1 2`);
+  stu(s, 'insert t 47', 'insert');
+  run(s, 'keep t "插入后"');
+  const kept = ser(s);
+  assert.match(s.stateText(), /avl 否/);
+  assert.deepEqual(stu(s, 'rotate t.40 left', 'rotate').done, ['t']);
+  assert.notEqual(ser(s), kept);
+  run(s, 'swap a.1 a.2');
+  const t0 = s.objects.get('t');
+  const origin = { ...t0.origin };
+  const opens = JSON.stringify([...s.opens]);
+  const labels = JSON.stringify([...s.labels]);
+  const a = JSON.stringify(s.objects.get('a'));
+  run(s, 'back t "插入后"');
+  assert.equal(ser(s), kept);
+  assert.equal(s.objects.get('t'), t0, '还是同一样东西（画面照 id 找它）');
+  assert.deepEqual(s.objects.get('t').origin, origin);
+  assert.equal(JSON.stringify([...s.opens]), opens);
+  assert.equal(JSON.stringify([...s.labels]), labels);
+  assert.equal(JSON.stringify(s.objects.get('a')), a, '别的东西不动');
+  assert.deepEqual(s.objects.get('t').tray, [], '托盘也是数据：插入后托盘是空的');
+  // 照回去以后的样子重判：又失衡了；学生再转平，规则从那里接着算（又算一次做完了）
+  assert.match(s.stateText(), /avl 否（最小不平衡子树的根是 40，RR 型）/);
+  assert.deepEqual(stu(s, 'rotate t.40 left', 'rotate').done, ['t']);
+});
+
+test('回到学生最后那一下之前：隔着老师的一轮也行；老师自己动的不算学生动过', () => {
+  const s = run(new Scene(), `${T47}\nopen t insert\nopen t rotate`);
+  stu(s, 'insert t 47', 'insert');
+  const before = ser(s);
+  stu(s, 'rotate t.40 left', 'rotate');
+  run(s, 'say "你转了 40，再看看。"');
+  run(s, 'back t');
+  assert.equal(ser(s), before);
+  // 托盘跟着回来
+  const u = run(new Scene(), `${T47}\nopen t insert`);
+  stu(u, 'insert t 47', 'insert');
+  run(u, 'back t');
+  assert.equal(ser(u), '30 20 40 10 25 _ 45');
+  assert.deepEqual(u.objects.get('t').tray, ['47']);
+  assert.equal(dryRun(run(new Scene(), T47), 'back t')[0].error, 't 上学生还没动过');
+  assert.equal(dryRun(run(new Scene(), `${T47}\ninsert t 47`), 'back t')[0].error, 't 上学生还没动过');
+});
+
+test('隔着一轮、刷新：整段 log 放回来现状一字不差；学生按的 back 撤得了（撤的是 back 那一行）', () => {
+  const log = [
+    { src: T47, by: 'teacher', turn: 1 },
+    { src: 'keep t "插入后" after=insert', by: 'teacher', turn: 1 },
+    { src: 'open t insert', by: 'teacher', turn: 1 },
+    { src: 'open t rotate undo=on', by: 'teacher', turn: 1 },
+    { src: 'open t back="插入后"', by: 'teacher', turn: 1 },
+    { src: 'insert t 47', by: 'student', turn: 1, open: 'insert' },
+    { src: 'rotate t.40 left', by: 'student', turn: 1, open: 'rotate' },
+    { src: 'say "转得对。回到你转之前，再想想。"', by: 'teacher', turn: 2 },
+    { src: 'back t', by: 'teacher', turn: 2 },
+    { src: 'rotate t.30 left', by: 'student', turn: 2, open: 'rotate' },
+    { src: 'back t "插入后"', by: 'student', turn: 2, open: 'back' },
+  ];
+  const go = (rows, lenient) => {
+    const s = new Scene();
+    for (const r of rows) for (const c of parseScript(r.src)) s.apply(lenient ? { ...c, lenient: true } : c, r.by === 'student' ? { by: 'student', open: r.open } : {});
+    return s;
+  };
+  const live = go(log, false);
+  const afterInsert = go(log.slice(0, 6), false);
+  assert.equal(ser(live), ser(afterInsert));
+  const again = go(log, true);
+  assert.equal(again.stateText(), live.stateText());
+  assert.match(live.stateText(), /t 存着：插入后/);
+  // 撤一步：这一回合（老师第二轮以后）学生的最后一行是按的 back
+  const plan = undoPlan(log, { from: 9, undoable: (r) => live.undoable(r) });
+  assert.equal(plan.gone?.src, 'back t "插入后"');
+  assert.equal(plan.index, 10);
+  assert.equal(go(plan.lines, true).stateText(), go(log.slice(0, 10), false).stateText());
+  // back 不是从写了 undo=on 的那一项来的也撤得了；别的照旧只认 undo=on
+  assert.equal(live.undoable({ src: 'back t "插入后"', by: 'student', open: 'back' }), true);
+  assert.equal(live.undoable({ src: 'insert t 50', by: 'student', open: 'insert' }), false);
+  assert.equal(live.undoable({ src: 'rotate t.30 left', by: 'student', open: 'rotate' }), true);
+});
+
+test('after=：学生每做完一次那个动作页面替老师存；老师做的不存；写错了说能写什么', () => {
+  const s = run(new Scene(), `${T47}\nopen t insert\nkeep t "插入后" after=insert`);
+  assert.equal(s.keeps.get('t')?.has('插入后') ?? false, false, '只是登记：学生还没插');
+  assert.deepEqual([...s.autoKeep.get('t')], [['插入后', 'insert']]);
+  stu(s, 'insert t 47', 'insert');
+  const after47 = ser(s);
+  assert.equal(serialize(s.keeps.get('t').get('插入后')), after47);
+  run(s, 'insert t 50');
+  assert.equal(serialize(s.keeps.get('t').get('插入后')), after47, '老师插的不存');
+  // 学生从「摆到空位」那一项插的（open t place 交的是 insert t#2 right 47）：指令是 insert，也算
+  const p = run(new Scene(), `${T47}\nopen t place\nkeep t "摆好了" after=place`);
+  stu(p, 'insert t#6 right 47', 'place');
+  assert.equal(serialize(p.keeps.get('t').get('摆好了')), ser(p));
+  assert.match(dryRun(s, 'keep t "x" after=fly')[0].error, /after= 写学生的一种动作.*没有「fly」/);
+  assert.match(dryRun(s, 'keep t 插入后')[0].error, /名字写在引号里/);
+  assert.match(dryRun(s, 'keep t')[0].error, /keep t "名字"/);
+  assert.match(dryRun(s, 'keep t.30 "x"')[0].error, /整样东西/);
+  assert.match(dryRun(s, 'keep zz "x"')[0].error, /舞台上没有「zz」/);
+});
+
+test('存不了的：跟着算的报错；一样东西最多存 6 个，同名的换掉；没存过的名字说存着哪些', () => {
+  assert.equal(dryRun(run(new Scene(), 'dial k = 1 range=0..3\narray a = 1 {k} 3'), 'keep a "开始"')[0].error, 'a 是跟着算的，不能存');
+  assert.equal(dryRun(run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix B = 1 0 / 0 1\nproduct C = A B'), 'keep C "开始"')[0].error, 'C 是跟着算的，不能存');
+  const s = run(new Scene(), T47);
+  assert.equal(KEEP_MAX, 6);
+  for (let i = 1; i <= KEEP_MAX; i++) run(s, `keep t "第${i}步"`);
+  assert.equal(dryRun(s, 'keep t "第7步"')[0].error, 't 最多存 6 个：同名的会换掉，先换掉一个');
+  assert.equal(dryRun(s, 'keep t "第7步" after=insert')[0].error, 't 最多存 6 个：同名的会换掉，先换掉一个');
+  run(s, 'insert t 47\nkeep t "第1步"');
+  assert.equal(s.keeps.get('t').size, 6, '同名第二次是换掉');
+  assert.equal(serialize(s.keeps.get('t').get('第1步')), ser(s));
+  assert.equal(dryRun(s, 'back t "插入后"')[0].error, 't 没存过「插入后」（存着：第1步、第2步、第3步、第4步、第5步、第6步）');
+  assert.equal(dryRun(run(new Scene(), T47), 'back t "插入后"')[0].error, 't 没存过「插入后」（存着：没有）');
+  assert.match(dryRun(run(new Scene(), `${T47}\nkeep t "插入后" after=insert`), 'back t "插入后"')[0].error, /^t 没存过「插入后」（存着：没有；学生做完一次 insert 才存）$/);
+});
+
+test('告诉老师：学生点了「回到插入后」，写回到以后的样子', () => {
+  const s = run(new Scene(), `${T47}\nopen t insert\nopen t rotate`);
+  stu(s, 'insert t 47', 'insert');
+  run(s, 'keep t "插入后"');
+  const kept = ser(s);
+  stu(s, 'rotate t.40 left', 'rotate');
+  const fx = stu(s, 'back t "插入后"', 'back');
+  assert.deepEqual(fx.back, { id: 't', name: '插入后', summary: `层序 ${kept}` });
+  assert.equal(actText({ type: 'back', obj: 't', name: '插入后', open: 'back', line: 'back t "插入后"', summary: fx.back.summary }), `学生点了「回到插入后」：t 回到了插入后的样子（层序 ${kept}）`);
+  // 每种东西交一句 summary：矩阵写 gridText，句子写那一句，一排格子写那一排数
+  const m = run(new Scene(), 'matrix M = 1 -2 / 3 4\nopen M rowop\nkeep M "开始"');
+  stu(m, 'rowop M r2 - 3r1', 'rowop');
+  assert.equal(m.apply(one('back M "开始"')).back.summary, '(1 −2; 3 4)');
+  const q = run(new Scene(), 'sentence s = "one two three four"\nkeep s "开始"\nmove s.3 after s.4');
+  assert.equal(q.apply(one('back s "开始"')).back.summary, 'one two three four');
+  const a = run(new Scene(), 'array a = 3 1 2\nkeep a "开始"\nswap a.1 a.3');
+  assert.equal(a.apply(one('back a "开始"')).back.summary, '3 1 2');
+});
+
+test('现状：存着哪些、页面替老师存的；开着的「回到……」按钮', () => {
+  const s = run(new Scene(), `${T47}\nkeep t "插入后"\nkeep t "转平后"`);
+  assert.match(s.stateText(), /^t 存着：插入后、转平后$/m);
+  run(s, 'open t back="插入后"');
+  assert.match(s.stateText(), /学生能直接动的：[^\n]*t back（按钮「回到插入后」）/);
+  const a = run(new Scene(), `${T47}\nopen t insert\nkeep t "插入后" after=insert\nopen t back="插入后"`);
+  assert.match(a.stateText(), /^t 存着：没有；学生每做完一次 insert 页面存成「插入后」$/m);
+  assert.match(a.stateText(), /t back（按钮「回到插入后」；还没存，按不了）/);
+  assert.doesNotMatch(run(new Scene(), T47).stateText(), /存着/);
+});
+
+test('回去不动显示的：开着的子树高、平衡因子，学生点着的圈照 key 留着；藏着的照旧藏着', () => {
+  const s = run(new Scene(), `${T47}\nopen t insert\nopen t rotate`);
+  stu(s, 'insert t 47', 'insert');
+  run(s, 'keep t "插入后"\nheights t\nbf t');
+  run(s, 'pick t.45 t.40');
+  stu(s, 'rotate t.40 left', 'rotate');
+  const o = s.objects.get('t');
+  o.ext = { l: 1, r: 2, t: 3, b: 4 };
+  run(s, 'back t "插入后"');
+  assert.equal(o.heights, true);
+  assert.equal(o.bf, true);
+  assert.deepEqual(o.ext, { l: 1, r: 2, t: 3, b: 4 });
+  assert.deepEqual([45, 40, 30].map((v) => pickOf(s, v)), ['on', 'on', undefined]);
+  run(s, 'hide t\nback t');
+  assert.equal(o.hidden, true);
+  // 纯函数：snapOf 不带位置；restoreSnap 不倒回显示的状态
+  const t = run(new Scene(), T47).objects.get('t');
+  const snap = snapOf(t);
+  assert.equal('origin' in snap, false);
+  t.heights = true;
+  t.nodes[0].pick = 'on';
+  t.tray = [];
+  restoreSnap(t, snap);
+  assert.deepEqual(t.tray, ['47']);
+  assert.equal(t.heights, true);
+  assert.equal(t.nodes[0].pick, 'on');
+});
+
+test('拿下舞台清掉存档；同名重造不清（换了一种东西才清）', () => {
+  const s = run(new Scene(), `${T47}\nopen t insert\nkeep t "开始"\nkeep t "插入后" after=insert`);
+  stu(s, 'insert t 47', 'insert');
+  run(s, 'remove t');
+  assert.equal(s.keeps.has('t'), false);
+  assert.equal(s.autoKeep.has('t'), false);
+  assert.equal(s.lastBefore.has('t'), false);
+  const r = run(new Scene(), `${T47}\nopen t insert\nkeep t "开始"`);
+  stu(r, 'insert t 47', 'insert');
+  run(r, 'tree t = 1 2 3');
+  assert.equal(r.keeps.get('t').has('开始'), true);
+  assert.equal(r.lastBefore.has('t'), true);
+  run(r, 'back t "开始"');
+  assert.equal(ser(r), '30 20 40 10 25 _ 45');
+  // 换了一种东西：存的是树的样子，回不到一排格子上
+  run(r, 'array t = 1 2 3');
+  assert.equal(r.keeps.has('t'), false);
+});
+
+test('open 的 back=：学生那边一个「回到……」按钮（不是默认的拖）；能开好几个；没存过的名字报', () => {
+  const s = run(new Scene(), `${T47}\nkeep t "插入后"\nopen t back="插入后"`);
+  assert.deepEqual(s.opens.get('t:back:插入后'), { obj: 't', action: 'back', name: '插入后', refs: [] });
+  assert.equal(s.opens.has('t:drag'), false);
+  run(s, 'keep t "开始"\nopen t back="开始"');
+  assert.ok(s.opens.has('t:back:插入后') && s.opens.has('t:back:开始'));
+  run(s, 'close t back');
+  assert.equal([...s.opens.keys()].length, 0);
+  assert.match(dryRun(run(new Scene(), T47), 'open t back="插入后"')[0].error, /^t 没存过「插入后」（存着：没有）/);
+  assert.equal(dryRun(run(new Scene(), `${T47}\nkeep t "插入后" after=insert`), 'open t back="插入后"').length, 0, '页面以后替老师存的照收');
+  assert.match(dryRun(s, 'open t rotate back="插入后"')[0].error, /back=/);
+  assert.match(dryRun(s, 'open t.30 back="插入后"')[0].error, /整样东西/);
+  assert.match(dryRun(s, 'open t back="插入后" undo=on')[0].error, /back=/);
 });

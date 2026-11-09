@@ -142,6 +142,41 @@ export function sweepLine(name, { lo, hi }, id, list) {
   return `${head}：${[...runs.filter((r) => r.b !== most).map((r) => `${at(r)} ${r.b}`), `别的${spaced(most)}`].join('；')}`;
 }
 
+// —— 存档点（keep / back，docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 7 节）：只管一样东西 ——
+/** 一样东西最多存几个名字（同名的换掉；页面替老师存的 after= 也算一个） */
+export const KEEP_MAX = 6;
+/**
+ * 回去时照现在留着、不倒回的：位置、身份，和老师、画面当时挂出来的样子——藏着、另起的那一列、画面量出来的大小、
+ * 开着的子树高 / 平衡因子 / 句尾的数。它们不是这样东西的数据：倒回去会把存档以后老师挂上的一起撤掉
+ */
+const AS_IS = ['origin', 'id', 'type', 'hidden', 'colStart', 'ext', 'heights', 'tally', 'bf'];
+/** 部件上照 key 留着现在的：学生点着的圈（ask pick）、走偏的那一下淡淡圈着的 */
+const PART_AS_IS = ['pick', 'slip'];
+/** 存下一样东西现在的样子（存档、学生每一下之前）：整份拷一份，位置不要（回去时照现在的位置） */
+export function snapOf(o) {
+  const { origin, ...rest } = o;
+  void origin;
+  return structuredClone(rest);
+}
+/**
+ * 一样东西回到存着的样子：只换数据（结构、值、托盘、染色、角上的字……），AS_IS 的照现在留着，部件上的圈照 key 留着现在的
+ * （存档里没有的部件就没了）。在原地改：还是同一样东西
+ */
+export function restoreSnap(o, snap) {
+  const t = typeOf(o);
+  const now = Object.fromEntries(AS_IS.filter((k) => k in o).map((k) => [k, o[k]]));
+  const marks = new Map(t.parts(o).map((p) => [p.key, PART_AS_IS.filter((f) => f in p).map((f) => [f, p[f]])]));
+  for (const k of Object.keys(o)) delete o[k];
+  Object.assign(o, structuredClone(snap));
+  for (const k of AS_IS) delete o[k];
+  Object.assign(o, now);
+  for (const p of t.parts(o)) {
+    for (const f of PART_AS_IS) delete p[f];
+    for (const [f, v] of marks.get(p.key) || []) p[f] = v;
+  }
+  return o;
+}
+
 export class Scene {
   constructor() {
     this.objects = new Map(); // id → { type, id, origin, …（各种东西自己的数据） }
@@ -166,6 +201,10 @@ export class Scene {
     this.clipped = []; // 镜头摆好以后还出了屏幕的东西（id）：舞台现状里告诉老师「画面上看不全」
     // —— 一次点几样（ask pick 交的那一下，pick 那一行）——
     this.picked = null; // { obj, keys, refs, reveal, diffDone, changed? }：学生点着的几样（圈着，老师下一轮演完收掉）；changed 是之后第一次变时变了的 key
+    // —— 存档点（keep / back）：只管一样东西的数据，都是 log 里的行引出来的，重放照样回来 ——
+    this.keeps = new Map(); // 东西 id → Map(名字 → 那一刻的样子 snapOf)：keep t "插入后" 存，back t "插入后" 回去
+    this.autoKeep = new Map(); // 东西 id → Map(名字 → 动作)：keep t "插入后" after=insert，学生每做完一次 insert 页面存成「插入后」
+    this.lastBefore = new Map(); // 东西 id → 学生最后那一下之前它的样子（snapOf）：back t 回到那里，隔着老师的一轮也行
   }
 
   clone() {
@@ -190,6 +229,10 @@ export class Scene {
     s.view = this.view ? { ...this.view } : null;
     s.clipped = [...this.clipped];
     s.picked = this.picked ? { ...this.picked, keys: [...this.picked.keys], refs: [...this.picked.refs], ...(this.picked.changed ? { changed: [...this.picked.changed] } : {}) } : null;
+    // 存档：学生按的 back 先过 check（在副本上试），副本上没有就报「没存过」
+    for (const [k, m] of this.keeps) s.keeps.set(k, new Map([...m].map(([n, v]) => [n, structuredClone(v)])));
+    for (const [k, m] of this.autoKeep) s.autoKeep.set(k, new Map(m));
+    for (const [k, v] of this.lastBefore) s.lastBefore.set(k, structuredClone(v));
     return s;
   }
 
@@ -352,14 +395,18 @@ export class Scene {
     if (c.on) return this.stash(c);
     const j = judged !== undefined ? judged : by ? this.judgeLine(c, { by, open }) : null;
     if (j && !j.apply) return { blocked: true, judged: j };
-    const target = this.ownTarget(c);
+    // back t 也算动了 t（淡淡圈着的收掉；学生按的是「学生最后那一下」）
+    const target = this.ownTarget(c) || (c.cmd === 'back' ? this.backTarget(c) : null);
+    const student = by === 'student' || j?.by === 'student';
+    // 学生的一下：这一下之前那样东西的样子（back t 回到这里，隔着老师的一轮也行）
+    const prev = student && target ? snapOf(this.objects.get(target)) : null;
     const before = j?.by === 'student' && this.objects.has(j.obj) ? structuredClone(this.objects.get(j.obj)) : null; // 学生这一下以后的事实要比前后
     // 学生点过几样（ask pick）、还没变过：这一行之前那样东西的样子，之后和真变了的比（只比一次）
     const pk = this.picked && !this.picked.diffDone && this.objects.has(this.picked.obj) ? this.picked : null;
     const pkBefore = pk ? structuredClone(this.objects.get(pk.obj)) : null;
     if (target) this.unslip(target); // 那样东西又变了：上一下淡淡圈着的收掉
     // 这一行是谁做的（unlive 写给老师「你 / 学生动过它的结构」）；重放时老师的行不给 by，当老师的
-    this.actor = by === 'student' || j?.by === 'student' ? 'student' : 'teacher';
+    this.actor = student ? 'student' : 'teacher';
     let fx;
     try { fx = this.applyOne(c) || {}; } finally { this.actor = null; }
     this.reflow();
@@ -367,6 +414,8 @@ export class Scene {
     if (derived.length) fx.derived = derived;
     // 跟着算的重算以后可能变大了（{A B} 多了一行、格里的数变长）：摆在下面的往下让（乘积的一格照旧不重排，和以前一样）
     if (derived.some((d) => !d.part && d.changed.length)) this.reflow();
+    // 学生这一下演上了：记下之前的样子；after= 替老师存的是重算完的样子（平面上跟着算的向量也到了位）
+    if (prev && this.objects.has(target)) this.studentMoved(target, prev, c, open);
     const reactions = [];
     const ruleErrors = []; // 规则自己出错（facts、next 抛了）：不拦这一行，交给画面记进出错记录（stage.js）
     if (j) {
@@ -411,6 +460,62 @@ export class Scene {
   }
   /** 预写的行拿出来（演一次就没了） */
   take(key) { const r = this.reactions.get(key) || []; this.reactions.delete(key); return r; }
+
+  // —— 存档点（keep / back）——
+  /** back 那一行回的是哪样东西（舞台上没有就 null，applyOne 自己报） */
+  backTarget(c) {
+    const w = (c.args || []).find((a) => a.t === 'word')?.v;
+    return w && this.objects.has(w) ? w : null;
+  }
+  /** 学生的一下演上了：记下这一下之前的样子；做的是老师 after= 写的那个动作（指令名或从哪一项 open 来的）就替老师存 */
+  studentMoved(id, prev, c, open) {
+    this.lastBefore.set(id, prev);
+    for (const [name, act] of this.autoKeep.get(id) || []) if (act === c.cmd || act === open) this.saveKeep(id, name);
+  }
+  saveKeep(id, name) {
+    if (!this.keeps.has(id)) this.keeps.set(id, new Map());
+    this.keeps.get(id).set(name, snapOf(this.objects.get(id)));
+  }
+  /** keep / back / open … back= 写的那样东西：要是整样东西、在舞台上、不是跟着算的（数照式子算：存了、回去了也会被算回来） */
+  keptObject(id, cmd) {
+    if (!id) throw new Error(cmd === 'back' ? '要写成 back 舞台上的东西 "名字"（回到存着的那一刻，比如 back t "插入后"），或 back 舞台上的东西（回到学生最后那一下之前）' : `要写成 keep 舞台上的东西 "名字"（比如 keep t "插入后"）`);
+    const r = parseRef(id);
+    if (r?.mark && this.objects.has(r.obj)) throw new Error(`${cmd} 写整样东西的名字（${r.obj}）：存的、回去的是一整样`);
+    const o = this.objects.get(id);
+    if (!o) throw new Error(`舞台上没有「${id}」`);
+    // 跟着算的：用了 {…} 的（矩阵格里有 {k} 的也算）、乘积（整样跟着 A、B）
+    if (this.nodesOf(o).some((n) => n.id === o.id)) throw new Error(cmd === 'back' ? `${id} 是跟着算的，回不去（数照式子算）` : `${id} 是跟着算的，不能存`);
+    return o;
+  }
+  /** 没存过这个名字时的话：存着哪些；页面以后替老师存的说一声什么时候才存 */
+  unsavedError(id, name) {
+    const have = [...(this.keeps.get(id)?.keys() || [])];
+    const act = this.autoKeep.get(id)?.get(name);
+    return `${id} 没存过「${name}」（存着：${have.join('、') || '没有'}${act ? `；学生做完一次 ${act} 才存` : ''}）`;
+  }
+  /** 学生在这样东西上能做的动作（after= 收的）：指令名、open 的动作名 */
+  actionsOf(o) {
+    const t = typeOf(o);
+    const opens = [...new Set([...Object.keys(affordsOf(t)), ...Object.keys(rulesOf(o)?.gestures || {})])];
+    return { opens, all: new Set([...opens, ...Object.keys(t.commands || {})]) };
+  }
+  /** 一样东西现在的样子写成一句（告诉老师「回到了……的样子」）：那种东西交的 summary，没有就是现状的第一行 */
+  summaryOf(o) {
+    const t = typeOf(o);
+    return t.summary ? t.summary(o) : t.describe(o, this)[0] || '';
+  }
+  /**
+   * 撤一步撤得了这一行吗（gestures.js 的 undoPlan 问它；stage.js 的撤一步、测试同一处）：学生按的「回到……」（open … back=）都撤得了；
+   * 别的只撤从写了 undo=on 的那一项来的（拨数、别的 open 来的撤不了）
+   */
+  undoable(row) {
+    if (!row?.open) return false;
+    if (row.open === 'back') return true;
+    let id = null;
+    try { id = this.ownTarget(parseScript(row.src)[0]); } catch { id = null; }
+    const es = id ? [this.opens.get(`${id}:${row.open}`)] : [...this.opens.values()].filter((x) => x.action === row.open);
+    return es.some((x) => x?.policy?.undo);
+  }
 
   /**
    * 一行在有规则的东西上做的动作，过裁判（referee.js 的 judge）：{ obj, act, src, by, policy, verdict, apply, call, facts, mark, failed? }
@@ -577,7 +682,8 @@ export class Scene {
       // 同名重造留在原处：各种东西的 make 照 old 留着位置时，在 objects 里的先后也不变——先后变了 reflow 会把它推到最底下。
       // 换了地方的（写了 beside=、乘积照 A、B 重新排、换了一种东西）照旧排到最后，像新造的一样摆
       const kept = !!old && samePlace(old.origin, o.origin);
-      if (old) this.dropObject(id, { keepLabels: true, keepPlace: kept });
+      // 同名重造不清存档（老师重造一样东西，还能回到以前存的那一刻）；换了一种东西才清（树的样子放不回一排格子上）
+      if (old) this.dropObject(id, { keepLabels: true, keepPlace: kept, keepSaves: old.type === t.type });
       if (kept) {
         if (old.colStart) o.colStart = true;
         this.replaceObject(id, o);
@@ -819,6 +925,21 @@ export class Scene {
         const o = this.objects.get(r.obj);
         // 藏着的东西学生看不见、动不了：开放给学生也是白开（重放旧课照收）
         if (o.hidden && !c.lenient) throw new Error(hiddenError([o.id]));
+        // open t back="插入后"：学生那边一个「回到插入后」按钮（点了 = back t "插入后"）。back= 是选项不是动作名：先看它，
+        // 不然下面会把动作默认成手势表的第一个（拖）。一个名字一项，能开好几个
+        if (opts.back != null) {
+          if (r.mark) throw new Error(`open … back= 写整样东西的名字（open ${r.obj} back="${opts.back}"）：回去的是一整样`);
+          if (words[1]) throw new Error(`back= 自己是一项（学生那边一个「回到${opts.back}」按钮），不和 ${words[1]} 写在一行：分成两行 open`);
+          const extra = Object.keys(opts).filter((k) => k !== 'back');
+          if (extra.length) throw new Error(`open … back= 只写名字（学生那边一个「回到${opts.back}」按钮，点了撤得了），${extra.map((k) => `${k}=`).join(' ')} 用不上`);
+          this.keptObject(o.id, 'back');
+          if (!opts.back) throw new Error(`back= 写存过的名字（open ${o.id} back="插入后"）`);
+          // 要回去的名字得存过，或者老师写了 after= 页面以后会替它存（还没存时按钮按不了）
+          if (!c.lenient && !this.keeps.get(o.id)?.has(opts.back) && !this.autoKeep.get(o.id)?.has(opts.back)) throw new Error(`${this.unsavedError(o.id, opts.back)}：先 keep ${o.id} "${opts.back}"`);
+          const e = { obj: o.id, action: 'back', name: opts.back, refs: [] };
+          this.opens.set(`${o.id}:back:${opts.back}`, e);
+          return { open: e };
+        }
         const t = typeOf(o);
         const affords = affordsOf(t);
         // 手势表里的动作（open t rotate、open M rowop、open s mark）也认：学生的每一下页面先过裁判
@@ -922,6 +1043,43 @@ export class Scene {
         }
         return { [cmd === 'hide' ? 'hidden' : 'shown']: words };
       }
+      case 'keep': {
+        // keep t "插入后"：把 t 现在的样子存下（只存这样东西的数据）；同名的换掉。
+        // keep t "插入后" after=insert：先只登记，以后学生每做完一次 insert 页面替老师存成「插入后」（老师自己做的不存）
+        const id = words[0];
+        const o = this.keptObject(id, 'keep');
+        if (words.length > 1) throw new Error(`名字写在引号里：keep ${id} "${words.slice(1).join(' ')}"`);
+        if (!str) throw new Error(`要写成 keep ${id} "名字"（back ${id} "名字" 回到这一刻）`);
+        const names = new Set([...(this.keeps.get(id)?.keys() || []), ...(this.autoKeep.get(id)?.keys() || [])]);
+        if (!names.has(str) && names.size >= KEEP_MAX) throw new Error(`${id} 最多存 ${KEEP_MAX} 个：同名的会换掉，先换掉一个`);
+        if (opts.after != null) {
+          const { opens, all } = this.actionsOf(o);
+          if (!all.has(opts.after)) throw new Error(`after= 写学生的一种动作（${id} 上学生能做的：${opens.join(' / ') || '没有'}），没有「${opts.after}」`);
+          if (!this.autoKeep.has(id)) this.autoKeep.set(id, new Map());
+          this.autoKeep.get(id).set(str, opts.after);
+          return { keep: id, name: str, after: opts.after };
+        }
+        this.saveKeep(id, str);
+        return { keep: id, name: str };
+      }
+      case 'back': {
+        // back t "插入后"：t 回到存着的那一刻；back t：回到学生最后那一下之前（隔着老师的一轮也行）。
+        // 只换这样东西的数据（restoreSnap）：位置、open、别的东西、贴的字、挑战都不动；之后照常重算跟着它的、判挑战、看做完了没有
+        const id = words[0];
+        const o = this.keptObject(id, 'back');
+        if (words.length > 1) throw new Error(`名字写在引号里：back ${id} "${words.slice(1).join(' ')}"`);
+        const snap = str != null ? this.keeps.get(id)?.get(str) : this.lastBefore.get(id);
+        if (!snap) throw new Error(str != null ? this.unsavedError(id, str) : `${id} 上学生还没动过`);
+        // 同名重造成了另一种东西：存的样子放不回去（同名重造不清存档，换了种类才清，这里再挡一下）
+        if (snap.type !== o.type) throw new Error(`${id} 现在是${typeOf(o).label}，存的是以前的样子，回不去`);
+        restoreSnap(o, snap);
+        // 回去以后没了的部件：连到它的线剪掉，跟着那道弧的字一起（和删掉结点、照新的数重新造一样）
+        const lost = (e) => e.obj === id && e.key != null && !this.partOf(id, e.key);
+        const cut = [];
+        for (const [k, l] of this.links) if (lost(l.a) || lost(l.b)) { this.links.delete(k); cut.push(k); }
+        for (const [k, l] of this.labels) if (l.link && cut.includes(l.link)) this.labels.delete(k);
+        return { id, back: { id, name: str ?? null, summary: this.summaryOf(o) } };
+      }
       case 'remove': {
         // remove a：把一样东西拿下舞台
         const id = words[0];
@@ -1003,7 +1161,8 @@ export class Scene {
    */
   replaceObject(id, o) { this.objects.set(id, o); }
   // keepPlace：同名重造，objects 里留着它的位子（replaceObject 换进去），只清连线、open 这些
-  dropObject(id, { keepLabels = false, keepPlace = false } = {}) {
+  // keepSaves：同名重造留着存档（keep / back）；拿下舞台（remove，以后 merge 拿掉的那一张）连存档一起清
+  dropObject(id, { keepLabels = false, keepPlace = false, keepSaves = false } = {}) {
     if (!keepPlace) this.objects.delete(id);
     for (const [k, l] of this.links) if (l.a.obj === id || l.b.obj === id) this.links.delete(k);
     if (!keepLabels) for (const [k, l] of this.labels) if (l.refs.some((r) => parseRef(r)?.obj === id)) this.labels.delete(k);
@@ -1015,6 +1174,7 @@ export class Scene {
     this.reactions.delete(`${id}.done`);
     this.reactions.delete(`${id}.right`);
     if (this.picked?.obj === id) this.picked = null; // 学生点的是上一样的部件：不算了
+    if (!keepSaves) { this.keeps.delete(id); this.autoKeep.delete(id); this.lastBefore.delete(id); }
   }
 
   // —— 一次点几样（ask pick）——
@@ -1289,12 +1449,18 @@ export class Scene {
     const w = this.waiting;
     const asked = w ? [...w.refs, ...(Array.isArray(w.expect) ? w.expect : w.expect && this.isRef(w.expect) ? [w.expect] : [])] : [];
     if (w) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案', pick: '点几样' }[w.kind]}${w.refs.length ? ` ${w.refs.join(' ')}` : ''}${hiddenNote(this.hiddenIn(asked))}`);
-    const openText = (e) => { const o = this.objects.get(e.obj); const what = (e.input ? null : affordsOf(typeOf(o))[e.action]) || gestureText(e.gesture); const pol = [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、'); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}${pol ? `；${pol}` : ''}）${hiddenNote(this.hiddenIn([e.obj]))}`; };
+    const openText = (e) => { if (e.action === 'back') return `${e.obj} back（按钮「回到${e.name}」${this.keeps.get(e.obj)?.has(e.name) ? '' : '；还没存，按不了'}）`; const o = this.objects.get(e.obj); const what = (e.input ? null : affordsOf(typeOf(o))[e.action]) || gestureText(e.gesture); const pol = [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、'); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}${pol ? `；${pol}` : ''}）${hiddenNote(this.hiddenIn([e.obj]))}`; };
     // 画面还挂不上的手势（句子的拉线，gestures.js 的 ARMED_GESTURES）：不说学生能动，单独一句（开着、不默默吞掉）
     const opens = [...this.opens.values()];
     const can = opens.filter((e) => armable(e.gesture)), cannot = opens.filter((e) => !armable(e.gesture));
     if (can.length) lines.push(`学生能直接动的：${can.map(openText).join('；')}`);
     if (cannot.length) lines.push(`开着、页面还画不了的（学生现在动不了）：${cannot.map(openText).join('；')}`);
+    // 存档点：每样东西存着哪几个名字（back t "名字" 回去）、页面以后替老师存的
+    for (const id of this.objects.keys()) {
+      const names = [...(this.keeps.get(id)?.keys() || [])];
+      const auto = [...(this.autoKeep.get(id) || [])];
+      if (names.length || auto.length) lines.push(`${id} 存着：${names.join('、') || '没有'}${auto.map(([n, a]) => `；学生每做完一次 ${a} 页面存成「${n}」`).join('')}`);
+    }
     if (this.slips.size) lines.push(`淡淡圈着（学生走偏的那一下，照你写的 wrong=mark；那样东西再变就收掉）：${[...this.slips.values()].map((x) => `${x.refs.join(' ')}（${x.src}）`).join('；')}`);
     const pre = [...this.reactions].filter(([k, r]) => k.includes('.') && r.length).map(([k, r]) => { const [id, kind] = k.split('.'); return `${id} ${kind === 'done' ? '做完了' : '学生做对一步'}页面马上演你预写的 ${r.length} 行`; });
     if (pre.length) lines.push(`预写的：${pre.join('；')}`);
