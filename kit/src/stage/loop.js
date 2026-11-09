@@ -16,7 +16,7 @@
 //   mock、model、teach（叫老师的参数）、quietMs、readOnly
 import { HELP } from './stage.js';
 import { turnMessage, gridsOf } from './doc.js';
-import { eventOf, triggers, eventsText, tryCount, hasWork, TRY_MAX, QUIET_MS } from './events.js';
+import { eventOf, triggers, eventsText, tryCount, hasWork, undoneOf, TRY_MAX, QUIET_MS } from './events.js';
 import { shapeText } from './goal.js';
 
 const enc = typeof TextEncoder === 'function' ? new TextEncoder() : null;
@@ -259,12 +259,15 @@ export function createLoop(host) {
     if (instant || S.ended || host.readOnly || by !== 'student') return;
     const e = { kind: 'done', ids, reacted, at: Date.now() };
     addEvent(e);
-    settle(e, { reacts });
+    // 老师在 open 那一行写了 call=done（做完叫你）：明写的盖过「手上没事了才叫」，马上叫
+    const told = ids.some((id) => [...stage.scene.opens.values()].some((x) => x.obj === id && x.policy?.call === 'done'));
+    settle(e, { reacts, now: told });
   }
-  function onGoal(ids, { by = 'student', instant, reacted = 0, reacts = null, pressed = false } = {}) {
+  function onGoal(ids, { by = 'student', instant, reacted = 0, reacts = null, pressed = false, prewrite = false, fresh = null } = {}) {
     if (instant || S.ended || host.readOnly) return;
-    // 老师（或页面替老师补的行）让挑战成立了：不是学生做到的，不叫老师，攒着跟下一条发
-    if (by !== 'student') { addEvent({ kind: 'goal-by-teacher', ids, at: Date.now() }); return; }
+    // 老师（或页面替老师补的行）让挑战成立了：不是学生做到的，不叫老师，攒着跟下一条发。舞台演预写的行时成立的（pre）、
+    // 预写出的挑战一出来就成立的（fresh）照实写，不说「你这一轮让它成立了」
+    if (by !== 'student') { addEvent({ kind: 'goal-by-teacher', ids, at: Date.now(), ...(prewrite ? { pre: true } : {}), ...(prewrite && fresh && ids.includes(fresh) ? { fresh: [fresh] } : {}) }); return; }
     for (const id of ids) host.evidence?.goal?.(id, stage.scene.goals.get(id), S.lastClaude);
     const e = { kind: 'goal', ids, reacted, at: Date.now() };
     // 收集型：收齐的那几张照那一刻的样子记下（发出去时写「学生收齐了 g1 的 3 张：B = …」）
@@ -283,12 +286,27 @@ export function createLoop(host) {
     settle(e, { now: callNow(ids), reacts });
   }
   // 挑战还没做到：试了好多下、很久没动，叫老师（老师当场看着学生怎么试的写提示；学生照样能接着试）
+  /**
+   * 学生手上的事没人看着、该兜底的：还没做到的挑战（goals）；或者叫老师的事攒着了、只因为交给学生的东西还没做完（left）——
+   * 学生看不见自己还有事（不像挂着一问，问题就在眼前），不兜底就僵在那里。挂着要答的一问时不算
+   */
+  function idleWhy() {
+    const goals = stage.pendingGoals();
+    if (goals.length) return { goals };
+    const w = stage.scene.waiting;
+    if ((w && w.kind !== 'next') || !S.pending?.events.some((e) => e.held?.length)) return null;
+    const left = undoneOf(stage.scene);
+    return left.length ? { left } : null;
+  }
+  // 挑战还没做到、或者攒着等东西做完：很久没动叫老师（老师当场看着学生怎么试的写提示；学生照样能接着试）
   function armIdle() {
     clearTimeout(S.idleTimer);
-    if (S.ended || host.readOnly || S.flight || !stage.pendingGoals().length || S.pending?.stuck) return;
+    if (S.ended || host.readOnly || S.flight || !idleWhy() || S.pending?.stuck) return;
     S.idleTimer = setTimeout(() => {
-      if (S.ended || S.flight || !stage.pendingGoals().length || S.pending?.stuck) return;
-      addEvent({ kind: 'stuck', text: `学生 ${Math.round(quietMs / 1000)} 秒没动，挑战 ${stage.pendingGoals().map((g) => g.id).join('、')} 还没做到`, at: Date.now() });
+      const why = idleWhy();
+      if (S.ended || S.flight || !why || S.pending?.stuck) return;
+      const secs = Math.round(quietMs / 1000);
+      addEvent({ kind: 'stuck', text: why.goals ? `学生 ${secs} 秒没动，挑战 ${why.goals.map((g) => g.id).join('、')} 还没做到` : `学生 ${secs} 秒没动；那时 ${why.left.join('、')} 还没做完`, at: Date.now() });
       S.pending.stuck = true;
       flush();
     }, quietMs);
@@ -296,8 +314,9 @@ export function createLoop(host) {
   function onTry() {
     armIdle();
     const p = S.pending;
-    if (!p || p.triedOut || !stage.pendingGoals().length) return;
-    if (tryCount(p.events) >= TRY_MAX) { p.triedOut = true; addEvent({ kind: 'tries', at: Date.now() }); flush(); }
+    const why = idleWhy();
+    if (!p || p.triedOut || !why) return;
+    if (tryCount(p.events) >= TRY_MAX) { p.triedOut = true; addEvent({ kind: 'tries', ...(why.goals ? {} : { text: `学生试了 ${TRY_MAX} 下；那时 ${why.left.join('、')} 还没做完` }), at: Date.now() }); flush(); }
   }
 
   // —— 提前想：这一轮以「接着」结尾、学生只能点它，就趁学生看的时候先把下一轮要来（发出去的和真点了以后一字不差才接上）——

@@ -202,9 +202,12 @@ export function evalGoal(scene, cond) {
   return cond.every((cl) => evalClause(scene, cl));
 }
 
-/** 「或」：有一组都成立就算做到（alts 是 parseWhen 的结果；只有一组和 evalGoal 一样） */
+/**
+ * 「或」：有一组都成立就算做到（alts 是 parseWhen 的结果）。每一组各判各的：一组判不了（那样东西拿掉了、判断式出错）当那一组不成立，
+ * 别的组照样判——和 goalStatus 一组一组写的对得上。写下时哪一组写错，scene.js 的 goal 拿 evalGoal 一组组判，照样当场报
+ */
 export function evalWhen(scene, alts) {
-  return alts.some((cond) => evalGoal(scene, cond));
+  return alts.some((cond) => { try { return evalGoal(scene, cond); } catch { return false; } });
 }
 /** 挑战的几组条件：新记的有 alts；以前的（只有 cond）当成一组 */
 export const altsOf = (g) => g.alts || [g.cond];

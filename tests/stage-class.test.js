@@ -160,7 +160,7 @@ const OLD_LOGS = {
 function replayInto(log) {
   const s = new Scene();
   for (const [by, src] of log) for (const c of parseScript(src)) {
-    if (c.cmd === 'ask' && !c.on) { s.askRight = null; continue; }
+    if (c.cmd === 'ask' && !c.on) { s.skipAsk(); continue; }
     try { s.apply({ ...c, lenient: true, replay: true }, { by: by === 's' ? 'student' : null }); } catch { /* 当时就没演 */ }
   }
   s.waiting = null;
@@ -504,4 +504,58 @@ test('课堂循环：预写的行演不上（舞台记了 missed）照实数，�
   await wait();
   assert.match(sentRows(b.rows)[0].msg, /学生答对了（页面已经演了你预写的 1 行）/);
   lb.close();
+});
+
+test('复核：open 写了 call=done 的东西做完了马上叫老师（老师明写的盖过「手上没事了才叫」）', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const a = fakeClass('tree t = 30 20 _ 10\nopen t rotate call=done\narray k = 2 1\nopen k\ngoal g2 "排" when="k sorted"');
+  const la = createLoop(a.host);
+  try {
+    a.scene.apply(parseScript('rotate t.30 right')[0], { by: 'student', open: 'rotate' });
+    a.stage.onDone(['t'], { by: 'student', reacted: 0 });
+    await wait();
+    assert.equal(a.calls(), 1);
+  } finally { la.close(); }
+});
+
+test('复核：只因为东西没做完攒着（没有挑战）：照样很久没动、试了好几下叫老师，写那时什么没做完', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const loops = [];
+  const pickRight = (st) => st.onAnswer({ type: 'pick', refs: ['t.45'], expected: 't.45', same: true, extra: [], missing: [], reacted: 1 }, null, { reacts: [{ ask: true, src: 'say "对"' }] });
+  try {
+    // e2e 第五轮的情形：猜对了、演了 @ask.right，树还没插完
+    const a = fakeClass('tree t = 30 20 40 10 25 _ 45 tray="47"\nopen t insert');
+    a.host.quietMs = 40;
+    const la = createLoop(a.host);
+    loops.push(la);
+    pickRight(a.stage);
+    await wait(20);
+    assert.equal(a.calls(), 0, '先攒着');
+    await wait(80);
+    assert.equal(a.calls(), 1);
+    assert.match(sentRows(a.rows)[0].msg, /学生 0 秒没动；那时 t 还没做完/);
+    // 试了好几下
+    const b = fakeClass('tree t = 30 20 40 10 25 _ 45 tray="47"\nopen t insert');
+    const lb = createLoop(b.host);
+    loops.push(lb);
+    pickRight(b.stage);
+    await wait();
+    for (let i = 0; i < 8; i++) lb.onAct({ type: 'drag', open: 'insert', text: '学生拖了一下' });
+    await wait();
+    assert.equal(b.calls(), 1);
+    assert.match(sentRows(b.rows)[0].msg, /学生试了 8 下；那时 t 还没做完/);
+    // 挂着一问攒着的（学生看得见问题）：不加定时
+    const c = fakeClass('tree t = 30 20 40 10 25 _ 45 tray="47"\nopen t insert\nask tap t "点 45" expect=t.45');
+    c.host.quietMs = 40;
+    const lc = createLoop(c.host);
+    loops.push(lc);
+    pickRight(c.stage);
+    await wait(120);
+    assert.equal(c.calls(), 0);
+  } finally { for (const l of loops) l.close(); }
+});
+
+test('复核：预写出的挑战一出来就成立，写给老师的那一句照实说', () => {
+  assert.equal(eventsText([{ kind: 'goal-by-teacher', ids: ['g2'], fresh: ['g2'] }], { goals: new Map([['g2', { text: '第二格是 2' }]]) }), '预写出的挑战 g2「第二格是 2」一出来就已经成立了（不是学生做到的）');
+  assert.equal(eventsText([{ kind: 'goal-by-teacher', ids: ['g2'], pre: true }], { goals: new Map([['g2', { text: '第二格是 2' }]]) }), '你预写的行让挑战 g2「第二格是 2」成立了（不是学生做到的）');
 });

@@ -8,7 +8,7 @@
 import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHold } from './motion.js';
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
-import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, pickText, unplayedText } from './scene.js';
+import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, pickText, unplayedNotes } from './scene.js';
 import { measureShown } from './rules.js';
 import { judgeAnswer, sameAnswer } from './answer.js';
 export { sameAnswer };
@@ -235,6 +235,7 @@ export class Stage {
     let dead = false; // 这一轮作废了（不是指定的模型）：后面的行不演
     let said = false; // 这一轮已经开口说过：再有一句 say 就是新的一段，开演之前停下来
     let askRightAt = null; // 这一轮第一行 @ask.right（演完以后它没着落，报在这一行上）
+    const goalAt = new Map(); // 这一轮写的挑战在第几行（on= 的按钮学生手上没有，报在那一行上）
     let beat = null; // 正在演的这一段 { start: 开演时 log 多长, cmds }：「再看一遍」照它倒回去重演
     let armedResolve;
     const armed = new Promise((r) => { armedResolve = r; }); // 这一轮演完、在等学生了（或者作废了）
@@ -249,6 +250,7 @@ export class Stage {
       // @g1 的行只是记着（做到挑战时才演）：不算这一轮的那一问、那一句话
       if (c.cmd === 'ask' && !c.on) asked = c;
       if (c.on === 'ask.right' && !askRightAt) askRightAt = { line: c.line, src: c.src?.trim() };
+      if (c.cmd === 'goal' && !c.on) { const id = (c.args || []).find((a) => a.t === 'word')?.v; if (id) goalAt.set(id, { line: c.line, src: c.src?.trim() }); }
       lines++;
       if (c.par && running) { running.jobs.push(run(c)); return; }
       const pause = by === 'teacher' && c.cmd === 'say' && !c.on && said;
@@ -288,8 +290,7 @@ export class Stage {
         const bad = this.scene.askRightProblem();
         if (bad) {
           this.errors.push({ line: askRightAt?.line ?? 0, src: askRightAt?.src || '@ask.right …', error: bad });
-          this.scene.askRight = null;
-          if (this.scene.waiting?.right) delete this.scene.waiting.right;
+          this.scene.dropAskRight();
         }
       }
       // 学生上一次点的几样（ask pick）圈到老师这一轮演完：照一行 unpick 收掉，记进这一轮的 log（刷新照它放回）。
@@ -310,6 +311,12 @@ export class Stage {
           const src = q ? `ask say ${quoteText(q)}` : this.pendingGoals().length ? `ask next "" button="${HELP}"` : 'ask next';
           const [c] = parseScript(src);
           await this.exec({ ...c, line: 0, src }, { by: 'page', turn });
+        }
+        // on= 写的按钮学生手上没有：这个挑战判不了，告诉老师（报在写它的那一行上，这一轮没写就报那个挑战）
+        for (const msg of this.scene.onProblems()) {
+          const id = msg.match(/^挑战 (\S+)/)?.[1];
+          const at = goalAt.get(id);
+          this.errors.push({ line: at?.line ?? 0, src: at?.src || `goal ${id} …`, error: msg });
         }
         armedResolve();
         act = await this.armWait();
@@ -392,13 +399,14 @@ export class Stage {
         // @g1 ask 是记着的（做到挑战才演）：照样记回去，不算已经问过的那一问
         if (c.cmd === 'ask' && !c.on) {
           try { const s = this.scene.clone(); s.apply({ ...c, lenient: true }); asked = s.waiting?.prompt || asked; } catch { /* 这一行当时就没演 */ }
-          // 这一问不重放：它拿走的 @ask.right 一并丢掉（不然挂到刷新以后的下一问上，演出上一问的确认）
-          this.scene.askRight = null;
+          // 这一问不重放：它拿走的 @ask.right（连同里面套着的）一并丢掉（不然挂到刷新以后的下一问上，演出上一问的确认）
+          this.scene.skipAsk();
           continue;
         }
         if (c.cmd === 'say') asked = null;
         // replay：刷新重放（不借 lenient）。挑战成立、东西做完时照第一轮把预写的行拿掉不演（当时演了的行本来就在 log 里），也不说「没演」
-        await this.exec({ ...c, lenient: true, replay: true }, { by: row.by, turn: row.turn, open: row.open || null });
+        // 当时是舞台演的预写的行（log 里记 pre）：照样带 prewrite（演出 goal g2 时捡套着的 @g2 的行，和当时一样）
+        await this.exec({ ...c, lenient: true, replay: true, ...(row.pre ? { prewrite: true } : {}) }, { by: row.by, turn: row.turn, open: row.open || null });
       }
     }
     if (asked) await this.say(asked, { ask: true });
@@ -514,7 +522,7 @@ export class Stage {
     this.execTurn = turn;
     // 学生这一下引出了预写的行、做到了挑战、做完了：记在这一行上，撤一步撤不了它（预写只演一次，「做到了」也已经告诉课堂）
     const reacted = by === 'student' && !!(fx?.goalsMet?.length || fx?.done?.length || fx?.reactions?.length);
-    this.log.push({ src: c.src?.trim() || '', by, turn, ...(by === 'student' && open ? { open } : {}), ...(reacted ? { reacted: true } : {}) });
+    this.log.push({ src: c.src?.trim() || '', by, turn, ...(by === 'student' && open ? { open } : {}), ...(reacted ? { reacted: true } : {}), ...(c.prewrite ? { pre: true } : {}) });
     if (by === 'teacher' && !this.instant) {
       this.onLine?.(c);
       // 老师的这一步不是正确的下一步：照演（可能是故意演错），下一条发给老师时说一声
@@ -533,7 +541,7 @@ export class Stage {
       if (fx?.onGoals) act.onGoals = fx.onGoals.map(({ id, met, status }) => ({ id, met, status })); // 按了按钮才判的挑战
     }
     // 老师的行（连预写的行）让挑战成立、让东西做完了：预写的行拿掉没演（只在学生的一下演），跟着下一条告诉老师
-    if (!this.instant) for (const k of fx?.unplayed || []) this.onNote?.(unplayedText(k), { turn });
+    if (!this.instant) for (const t of unplayedNotes(fx)) this.onNote?.(t, { turn });
     // 老师（连预写的行）这一下改了学生先点的几样：写成一句交给课堂，跟着下一条告诉老师（不叫老师，loop.js 的 onNote）
     if (fx?.pickDiff && by !== 'student' && !this.instant) this.onNote?.(`${fx.pickDiff}（你演的 ${c.src?.trim() || c.cmd}）`, { turn });
     told?.();
@@ -570,7 +578,8 @@ export class Stage {
       // 先排上预写的行再告诉课堂（课堂等 reacting 演完，看学生手上还有没有事）。瞬间重放（刷新、撤一步、作废）时不告诉：那时做到的都是以前的事
       // reacts：这几行预写演不上的，react 会在上面记 missed（课堂等演完照它数真演了几行，不说假话）
       const forGoal = reacts.filter((r) => r.goal && !r.collect), forDone = reacts.filter((r) => r.done);
-      if (fx?.goalsMet?.length) this.onGoal?.(fx.goalsMet, { by, instant: false, reacted: forGoal.length, reacts: forGoal, pressed: !!fx.pressed });
+      // 不是学生做到的：是舞台演预写的行时成立的（prewrite）、这一行刚写出的挑战一出来就成立（fresh），写给老师照实说
+      if (fx?.goalsMet?.length) this.onGoal?.(fx.goalsMet, { by, instant: false, reacted: forGoal.length, reacts: forGoal, pressed: !!fx.pressed, prewrite: !!c.prewrite, fresh: fx.goal || null });
       if (fx?.done?.length) this.onDone?.(fx.done, { by, instant: false, reacted: forDone.length, reacts: forDone });
     }
     return fx;
@@ -755,6 +764,8 @@ export class Stage {
         for (const c of parseScript(r.src)) {
           // 预写的行照老师的行演（带 lenient：写下时查过了；prewrite：不算学生的一下，又让别的挑战成立也不再触发预写，里面的 ask 不拿 @ask.right）。
           // 演不上的（写下时指着还没有的部件，现在还是没有）不演，记在那一项上（missed），跟着下一条告诉老师
+          // 收集型的 @g1 每收一张都演：里面写出的挑战已经有了就跳过（不重写它、不清掉 @g2 的行）
+          if (r.keepGoals && c.cmd === 'goal') { const id = (c.args || []).find((a) => a.t === 'word')?.v; if (id && this.scene.goals.has(id)) continue; }
           const miss = this.scene.missedPrewrite({ ...c, lenient: true, prewrite: true });
           if (miss) { r.missed = true; this.onNote?.(miss, { turn }); continue; }
           await this.exec({ ...c, lenient: true, prewrite: true }, { by: 'teacher', turn });
@@ -902,9 +913,14 @@ export class Stage {
       if (!plan.gone) return;
       // 重放会收起正在等的那一问：先收起（攒着的拨数留着），放完照原样挂回去
       const w = this.scene.waiting, waiting = this.armedP, floor = this.undoFloor;
+      // 那一问的 @ask.right 里套着的预写在场景上（重放会丢掉）：放完照原样放回去
+      const under = w?.rightKey ? this.scene.aheadUnder(w.rightKey) : [];
+      const seq = this.scene.askSeq;
       this.cancelWait?.();
       await waiting;
       await this.replay(plan.lines);
+      this.scene.askSeq = Math.max(this.scene.askSeq, seq);
+      for (const [k, a] of under) this.scene.ahead.set(k, a);
       // 重放不把 ask 那几行（不重演的）推回 log：log 要和撤之前一模一样、只少撤掉的那一行，课堂循环存这一段（从 S.logFrom 起）才对得上
       this.log = [...plan.lines];
       this.undoFloor = floor;
@@ -1443,7 +1459,7 @@ export class Stage {
           delete w.right;
           act.reacted = reacts.length;
           this.react(reacts, this.turnNo);
-        }
+        } else if (w.right || w.rightKey) this.scene.endAsk(w); // 没答对（答错、判不了、打了字、点了按钮）：这一问的 @ask.right 连同套着的拿掉
         this.onAnswer?.(act, w, reacts ? { reacts } : {});
       }
       return act;

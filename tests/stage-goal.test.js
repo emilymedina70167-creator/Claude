@@ -283,3 +283,26 @@ test('「或」：| 隔开几组，有一组都成立就算做到；只满足一
   run(sc, `goal g1 "换两格" when="${when}"`);
   assert.equal(goalStatus(sc, sc.goals.get('g1')), '还没做到（k.1 = 3 ✓，k.2 = 1 ✗ | k.1 = 4 ✗，k.2 = 2 ✓）');
 });
+
+test('复核：「或」里有一组判不了（那样东西拿掉了），别的组照样判得做到；写下时哪一组写错照样当场报', async () => {
+  const { parseWhen, evalWhen } = await import('../kit/src/stage/goal.js');
+  const sc = new Scene();
+  run(sc, 'array k = 2 1 3\nopen k\ntree t = 30 20 _ 10\ngoal g1 "排好或者平衡" when="t avl | k sorted"\nremove t');
+  assert.equal(evalWhen(sc, parseWhen('t avl | k sorted')), false);
+  const fx = sc.apply(parseScript('swap k.1 k.2')[0], { by: 'student', open: 'drag' });
+  assert.deepEqual(fx.goalsMet, ['g1']);
+  assert.equal(goalStatus(sc, sc.goals.get('g1')), '做到了');
+  assert.throws(() => run(new Scene(), 'matrix A = 1 0 / 0 1\nmatrix B = 1 2 / 3 4\ngoal g1 "x" when="A < B | A = B"'), /整个东西只能比一样不一样/);
+});
+
+test('复核：重放旧课（lenient）时挑战那一行新加的检查不报：call=、n=、on=""、| 两边空着照收', () => {
+  for (const line of ['goal g1 "排好" when="k sorted" call=done', 'goal g1 "排好" when="k sorted" n=3', 'goal g1 "排好" when="k sorted" on=""']) {
+    const s = new Scene();
+    run(s, 'array k = 2 1 3\nopen k');
+    assert.doesNotThrow(() => s.apply({ ...parseScript(line)[0], lenient: true, replay: true }), line);
+    assert.ok(s.goals.has('g1'), line);
+    assert.equal(s.goals.get('g1').call, null);
+    assert.equal(s.goals.get('g1').on, null);
+    assert.match(s.check(parseScript(line)[0]) || '', /./, `新写的照样报：${line}`);
+  }
+});

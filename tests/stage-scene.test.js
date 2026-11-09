@@ -1359,7 +1359,7 @@ test('收集型挑战（collect= n=）：收不一样的才收、每收一张演
   ed('write B.2,1 0');
   let fx = ed('write B.2,2 1'); // B = I
   assert.equal(fx.goalsMet, undefined);
-  assert.deepEqual(fx.reactions, [{ goal: 'g1', src: 'say "又一张"', collect: true }], '每收一张都演（只看不拿）');
+  assert.deepEqual(fx.reactions, [{ goal: 'g1', src: 'say "又一张"', collect: true, keepGoals: true }], '每收一张都演（只看不拿）');
   assert.deepEqual(s.reactions.get('g1'), ['say "又一张"']);
   for (const l of ['write B.1,1 2', 'write B.1,2 1']) ed(l);
   fx = ed('write B.2,2 2'); // (2 1; 0 2)
@@ -1379,7 +1379,7 @@ test('收集型挑战（collect= n=）：收不一样的才收、每收一张演
   assert.deepEqual(fx.goalsMet, ['g1']);
   assert.equal(g.met, true);
   assert.equal(g.collect.got.length, 3);
-  assert.deepEqual(fx.reactions, [{ goal: 'g1', src: 'say "又一张"' }]);
+  assert.deepEqual(fx.reactions, [{ goal: 'g1', src: 'say "又一张"', keepGoals: true }]);
   // 老师的一下不替学生收
   const t = run(new Scene(), 'matrix A = 1 1 / 0 1\nmatrix B = 1 0 / 1 0\nopen B edit range=-3..3\nmatrix Dd = {A B - B A}\ngoal g1 "x" when="Dd = O" collect=B n=2');
   t.apply(one('write B.2,1 0'), { by: 'teacher' });
@@ -1441,4 +1441,99 @@ test('预写只在学生的一下演：老师的行让挑战成立、做完，�
   // 学生做到的照旧演
   const u = run(new Scene(), src);
   assert.deepEqual(stu(u, 'swap k.1 k.2', 'drag').reactions, [{ goal: 'g1', src: 'say "排好了"' }]);
+});
+
+// —— Task 8 复核修正 ——
+// 舞台演预写的行（stage.js 的 react 本身，拿假的舞台跑：exec 交给场景，onNote 记下来）
+async function reactOn(s, list) {
+  const { Stage } = await import('../kit/src/stage/stage.js');
+  const { unplayedNotes } = await import('../kit/src/stage/scene.js');
+  // exec 照 stage.js 的 exec 交场景、把「预写的行没演」交 onNote（同一个 unplayedNotes）
+  const fake = { scene: s, studentChain: null, reacting: null, armedFor: null, errors: [], notes: [], onNote(t) { this.notes.push(t); }, async exec(c, { by }) { const fx = s.apply(c, { by: by === 'teacher' ? 'teacher' : null }); for (const t of unplayedNotes(fx)) this.onNote(t); return fx; }, cancelWait() {}, armWait() {} };
+  await Stage.prototype.react.call(fake, list, 1);
+  return fake;
+}
+
+test('@ask.right 里套着的预写：那一问没答对、被换掉、这一轮演完没着落、刷新跳过，整组拿掉；老师直接写的同名挑战不捡旧行', () => {
+  const base = 'array a = 3 1 2\nopen a\n@ask.right say "对"\n@ask.right goal g2 "排好" when="a sorted"\n@g2 say "（旧的预写）好极了"';
+  // 答错（舞台照 endAsk 收尾）
+  const s = run(new Scene(), `${base}\nask tap a "最大的是哪个？" expect=a.1`);
+  assert.equal(s.ahead.get('g2').from, s.waiting.rightKey);
+  s.endAsk(s.waiting);
+  s.waiting = null;
+  assert.doesNotMatch(s.stateText(), /还没出/);
+  run(s, 'goal g2 "把最小的拖到最前面" when="a.1 = 1"');
+  assert.equal(s.reactions.get('g2'), undefined, '不捡旧的预写行');
+  const fx = stu(s, 'swap a.1 a.2', 'drag');
+  assert.deepEqual(fx.goalsMet, ['g2']);
+  assert.deepEqual(fx.reactions, []);
+  // 被下一问换掉
+  const r = run(new Scene(), `${base}\nask tap a "最大的是哪个？" expect=a.1`);
+  run(r, 'ask tap a "最小的是哪个？" expect=a.2');
+  assert.equal(r.ahead.size, 0);
+  assert.doesNotMatch(r.stateText(), /还没出/);
+  // 这一轮演完没着落（没有 ask、跟着的一问判不了对错）
+  const p = run(new Scene(), base);
+  assert.equal(p.askRightProblem(), '@ask.right 要跟着一个页面判得了对错的 ask');
+  p.dropAskRight();
+  assert.equal(p.askRight, null);
+  assert.equal(p.ahead.size, 0);
+  const q = run(new Scene(), `${base}\nask next "看一眼"`);
+  q.dropAskRight();
+  assert.equal(q.waiting.right, undefined);
+  assert.equal(q.ahead.size, 0);
+  // 刷新重放跳过 ask
+  const f = run(new Scene(), base);
+  f.skipAsk();
+  assert.equal(f.askRight, null);
+  assert.equal(f.ahead.size, 0);
+  // 答对：照常演出 goal g2，@g2 的行挪过去
+  const ok = run(new Scene(), `${base}\nask tap a "最大的是哪个？" expect=a.1`);
+  const lines = ok.waiting.right;
+  delete ok.waiting.right;
+  ok.waiting = null;
+  for (const src of lines) for (const c of parseScript(src)) ok.apply({ ...c, lenient: true, prewrite: true }, { by: 'teacher' });
+  assert.deepEqual(ok.reactions.get('g2'), ['say "（旧的预写）好极了"']);
+  // 老师直接写的同名挑战不捡还在等着的那一组的行（@g1 里写出的 goal g2 演出来时才捡）
+  const d = run(new Scene(), `${K312}\n@g1 goal g2 "倒过来" when="k sorted desc"\n@g2 say "倒好了"`);
+  assert.match(d.check(one('goal g2 "第一格是 1" when="k.1 = 1"')), /^g2 是你预写的挑战（g1 做到时才出），直接写会和它撞名：换一个名字$/);
+  assert.ok(d.ahead.has('g2'), '还是 g1 那一组的');
+  assert.equal(d.check(one('goal g9 "第一格是 1" when="k.1 = 1"')), null);
+});
+
+test('收集型的 @g1 里写了 goal g2：每收一张不重写 g2（@g2 的行留着）', async () => {
+  const s = run(new Scene(), 'matrix A = 1 1 / 0 1\nmatrix B = 1 0 / 1 0\nopen B edit range=-3..3\nmatrix Dd = {A B - B A}\narray k = 2 1\nopen k\ngoal g1 "x" when="Dd = O" collect=B n=3\n@g1 goal g2 "排" when="k sorted"\n@g2 say "排好了"');
+  stu(s, 'write B.2,1 0', 'edit');
+  await reactOn(s, stu(s, 'write B.2,2 1', 'edit').reactions);
+  assert.deepEqual(s.reactions.get('g2'), ['say "排好了"']);
+  for (const l of ['write B.1,1 2', 'write B.1,2 1']) stu(s, l, 'edit');
+  await reactOn(s, stu(s, 'write B.2,2 2', 'edit').reactions);
+  assert.deepEqual(s.reactions.get('g2'), ['say "排好了"'], '第二张时 goal g2 不再演一遍');
+});
+
+test('舞台演预写的行：演不上的不演，交 onNote；预写出的挑战一出来就成立照实说', async () => {
+  const s = run(new Scene(), 'tree t = _ tray="34"\nopen t insert\n@t.done ask tap t "点刚插进来的" expect=t.99\n@t.done say "插好了"');
+  const fx = stu(s, 'insert t 34', 'insert');
+  const st = await reactOn(s, fx.reactions);
+  assert.equal(st.notes.length, 1);
+  assert.match(st.notes[0], /^预写的这一行没演上：「ask tap t "点刚插进来的" expect=t\.99」——/);
+  assert.equal(fx.reactions[0].missed, true);
+  assert.equal(fx.reactions[1].missed, undefined);
+  assert.equal(s.say, '插好了');
+  // 学生一下同时满足 g1 和预写出的 g2 的条件：g2 是预写的行造出来的、一出来就成立
+  const g = run(new Scene(), 'array k = 2 1 3\nopen k\ngoal g1 "第一格是 1" when="k.1 = 1"\n@g1 goal g2 "第二格是 2" when="k.2 = 2"\n@g2 say "好"');
+  const r = await reactOn(g, stu(g, 'swap k.1 k.2', 'drag').reactions);
+  assert.deepEqual(r.notes, ['预写出的挑战 g2 一出来就已经成立了，@g2 的行没演']);
+  const { unplayedText } = await import('../kit/src/stage/scene.js');
+  assert.equal(unplayedText('g3', { prewrite: true }), '你预写的行让挑战 g3 成立了，@g3 的行没演');
+  assert.equal(unplayedText('t.done', { prewrite: true }), '你预写的行把 t 做完了，@t.done 的行没演');
+  assert.equal(unplayedText('g3'), '你这一轮让挑战 g3 成立了，@g3 的行没演');
+});
+
+test('on= 写的按钮这一轮没有：一轮演完报一句；有这个按钮不报', () => {
+  const s = run(new Scene(), 'array a = 2 1 3\nopen a\ngoal g1 "排好就按" when="a sorted" on="就这样"\nask next "排好了按一下" button="好了"');
+  assert.deepEqual(s.onProblems(), ['挑战 g1 写了 on="就这样"，可学生手上的这一问没有「就这样」这个按钮：学生按不到，这个挑战判不了（ask next 写 button="就这样"）']);
+  assert.deepEqual(run(new Scene(), 'array a = 2 1 3\nopen a\ngoal g1 "x" when="a sorted" on="就这样"\nask next "排好了按一下" button="就这样"').onProblems(), []);
+  assert.deepEqual(run(new Scene(), 'array a = 2 1 3\nopen a\ngoal g1 "x" when="a sorted" on="接着"\nask next "排好了点接着"').onProblems(), [], 'ask next 不写 button 就是「接着」');
+  assert.equal(run(new Scene(), 'array a = 2 1 3\nopen a\ngoal g1 "x" when="a sorted" on="就这样"').onProblems().length, 1, '没有一问');
 });
