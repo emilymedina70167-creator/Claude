@@ -124,16 +124,16 @@ export function parseRef(word) {
   return out;
 }
 
-/**
- * 话里的写法拆成一段段：{a.2} 是舞台上的东西（画成和它一样颜色的小块，点了图上那个闪一下）、{d} 是拨的数、
- * {count(t)} 是页面数的量（画成现在的数，跟着变；数不了画「?」）、$d$ 是式子里的字母、[不稳定] 是能飞到图上去的词。
- * 返回 [{ k: 'text' | 'ref' | 'var' | 'measure' | 'math' | 'word', v }]
- */
 // 引号里的字（话、贴的字、挑战、问题、题卡）里也当量的 exact.js 函数名：量名里撞上 exact.js 函数的就这两个（tests/stage-value.test.js 守着）。
 // 引号外面（answer=、格里、when=）照旧：value.js 的 evalLive 把 {det(A)}、{rank(M)} 交给 exact.js（写满时两边算的一样）。
 // 有意的不同（Task 15 复核，控制者裁定）：旧课引号里写过 {det(A)} 的，重放时画成数，以前照原样写「det(A)」
 export const RICH_MEASURES = new Set(['rank', 'det']);
 
+/**
+ * 话里的写法拆成一段段：{a.2} 是舞台上的东西（画成和它一样颜色的小块，点了图上那个闪一下）、{d} 是拨的数、
+ * {count(t)} 是页面数的量（画成现在的数，跟着变；数不了画「?」）、$d$ 是式子里的字母、[不稳定] 是能飞到图上去的词。
+ * 返回 [{ k: 'text' | 'ref' | 'var' | 'measure' | 'math' | 'word', v }]
+ */
 export function parseRich(text) {
   const out = [];
   const s = String(text ?? '');

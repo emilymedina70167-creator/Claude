@@ -383,6 +383,25 @@ test('引号里的 {rank(M)}、{det(A)} 是量：画成现在的数、跟着变�
   assert.equal(measureShown(old, 'det(q)'), 'det(q)');
 });
 
+// 复核第 2 轮（控制者裁定）：话里光秃秃的一个名字既不是拨数、也不是舞台上的东西（拼错的 {kk}），学生看到的是「kk」两个字母——新写的当场报
+test('引号里的 {名字} 拼错了（不是拨数、不是舞台上的东西）新写的当场报；拨数、东西、部件照旧；带运算的、旧课重放照旧', () => {
+  const sc = run(new Scene(), 'dial k = 2 range=-3..3\nmatrix M = 1 {k} / 0 1\ngoal g1 "拨到 0" when="k = 0"');
+  assert.match(err(sc, 'say "拨到 {kk} 看看"'), /「\{kk\}」不是拨数，也不是舞台上的东西（拨数有：k；/);
+  assert.match(err(sc, 'label n M "现在是 {kk}"'), /「\{kk\}」不是拨数/);
+  assert.match(err(sc, 'goal g2 "把 {kk} 拨到 1" when="k = 1"'), /「\{kk\}」不是拨数/);
+  assert.match(err(sc, 'ask next "{kk} 拨好了吗？"'), /「\{kk\}」不是拨数/);
+  assert.match(err(sc, 'card q = "第一行" "{kk}"'), /「\{kk\}」不是拨数/);
+  assert.match(err(sc, '@g1 say "{kk}"'), /「\{kk\}」不是拨数/, '预写也在今天的舞台上试');
+  assert.match(err(new Scene(), 'say "{k}"'), /拨数要先写 dial/);
+  // 拨数、东西的名字、部件照旧；带运算的不管
+  for (const ok of ['say "拨到 {k}"', 'say "把 {M} 化简"', 'say "看 {M.1,2}"', 'say "{k + 1}"', 'label n dial:k "{k} 组"']) assert.equal(err(sc, ok), null, ok);
+  // 旧课重放（lenient）：照收，照旧画原来的字
+  sc.apply({ ...parseScript('say "拨到 {kk} 看看"')[0], lenient: true });
+  assert.equal(sc.say, '拨到 {kk} 看看');
+  assert.deepEqual(parseRich(sc.say).filter((p) => p.k !== 'text'), [{ k: 'var', v: 'kk' }]);
+  assert.equal(sc.vars.get('kk'), undefined, '画的时候没有这个拨数，照原样写「kk」');
+});
+
 test('格里的式子：算成一个数就收，跟着拨数变；算出来是矩阵、名字不认得照实说', () => {
   const sc = run(new Scene(), 'dial l = 2 range=-3..3\nmatrix A = 1 2 / 3 4\nmatrix M = 1 {l - 1} / {2 l} 1');
   assert.equal(sc.parts('M.1,2')[0].value, '1');

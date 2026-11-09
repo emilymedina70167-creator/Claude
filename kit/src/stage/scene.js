@@ -31,6 +31,8 @@ export const OBJECT_GAP = 70; // 两样东西上下摆开隔多远
  * 要等老师看着学生写（硬性规定：教学不预制，docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.1）
  */
 export const PREWRITE_DEPTH = 3;
+// 话里的 {名字}：光秃秃的一个名字（checkRich 查它是不是拨数、舞台上的东西）
+const BARE_NAME = /^[A-Za-z_]\w*$/;
 /** @ask.right 跟着的那一问页面判不了对错（或者没有那一问）时报的话 */
 export const ASK_RIGHT_ERROR = '@ask.right 要跟着一个页面判得了对错的 ask';
 /** 这一问页面判不判得了对错：点（写了 expect=）、点几样（写了 expect=）、填一个答案（写了 answer=） */
@@ -433,6 +435,11 @@ export class Scene {
     for (const p of parseRich(text)) {
       if (p.k === 'ref') { if (replayRefs || !c?.lenient) this.parts(p.v); }
       else if (p.k === 'measure' && !c?.lenient) checkMeasure(this, p.v, { run: true });
+      // 光秃秃的一个名字（{kk}）既不是拨数、也不是舞台上的东西：多半是拼错了（拨数叫 k），学生看到的是「kk」两个字母（复核修正，控制者裁定）。
+      // 只管新写的行、只管一个名字；带运算的（{k + 1}）、重放旧课照旧
+      else if (p.k === 'var' && !c?.lenient && BARE_NAME.test(p.v) && !this.vars.has(p.v) && !this.objects.has(p.v)) {
+        throw new Error(`「{${p.v}}」不是拨数，也不是舞台上的东西（${this.vars.size ? `拨数有：${[...this.vars.keys()].join('、')}` : '拨数要先写 dial'}；要指着的东西先造出来，再写这一句）`);
+      }
     }
   }
 
