@@ -11,14 +11,18 @@
 // rotate t.30 left、insert t 47、insert t.45 right 47、rowop M r3 - 2r1 / r1 <-> r3 / 3r2、mark s.2-4 V、fold s.3-6 先翻成手势的输入
 // （在 30 往左转 = 30 的右孩子拖到 30 上；倍加 = r1 的把手拖到 r3 上、倍数框写 -2），照东西现在的样子找到手指按得到的把手，
 // 走规则文件的手势表（gestures.js 的 gestureAct）和真的 openDone；undo 是「撤一步」（先问 stage.undoPlan），dial k 3 是拨数器一格一格拨。
-// 翻不成手势的（结点没有那边的孩子、托盘里没有这个数、老师没有 open 这个动作）记成没演上、写明为什么，不交给课堂循环
+// 翻不成手势的（结点没有那边的孩子、托盘里没有这个数、老师没有 open 这个动作）记成没演上、写明为什么，不交给课堂循环。
+// 第二轮的写法是真的触摸（CDP 的 touchStart / touchMove / touchEnd，和 iPad 上一样走 pointer.js、gesturedom.js）：
+// pick t.45 t.50 点几个再点「点好了」、refer s.23 -> s.15 从钩上滑出一条线、unrefer / unmark 点 ✕、move s.1-6 after s.11 按住括号 0.4 秒再拖、
+// unfold 点小方块、delete 点结点、compare / put / merge 按住括号拖到另一张上、back t "插入后" 点「回到插入后」、按格的 value 一格一格点进去写。
+// 按之前照 pointer.js 挑把手的办法核过手指真按得到；按完照舞台交给课堂循环的那一下说交成了哪一行（交成了别的一种也照实写）
 // 页面报错或工具自己出错退出码 2，否则 0（没演上的行、排版问题只写进报告：这是量东西的工具，不是检查）
 import { chromium } from './playwright.mjs';
 import { readFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
-import { resolve, dirname, join, basename } from 'node:path';
+import { resolve, dirname, join, basename, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { measure } from './stage-measure.mjs';
-import { parseTry, formatReport } from './stage-try-lib.js';
+import { parseTry, formatReport, HANDS } from './stage-try-lib.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PAGE = join(ROOT, 'proto/stage/dist/local.html');
@@ -130,7 +134,7 @@ function setup(segments) {
   // 手指按得到的是画法交的把手（types/*.view.js 的 grips：open 只交了几个部件的、折起来的词、托盘里有的数、空着的位置都照画面），
   // 按下、放下的把手交给手势表（gestures.js 的 gestureAct）；放下以后要先写倍数、点成分的照 askFor 问（gesturedom.js 一样）
   const D = window.LAStageDev;
-  const gripsOf = (o, e, name) => { const fn = D.VIEWS[o.type]?.grips?.[name]; if (!fn) return []; try { return fn(st, o, e) || []; } catch { return []; } };
+  const gripsOf = (o, e, name, role = 'from') => { const fn = D.VIEWS[o.type]?.grips?.[name]; if (!fn) return []; try { return fn(st, o, e, { role }) || []; } catch { return []; } };
   const partOf = (gr) => { try { return gr.part(); } catch { return null; } };
   const find = (o, e, names, test) => {
     for (const n of [].concat(names || [])) for (const gr of gripsOf(o, e, n)) { const p = partOf(gr); if (p != null && test(p, gr)) return gr; }
@@ -425,13 +429,307 @@ function setup(segments) {
     return { touch: pts };
   };
   T.state = () => st.scene.stateText();
+
+  // —— 真的手指（第二轮的写法，stage-try-lib.js 的 HANDS 和按格的 value）：这里只找手指按哪儿、松在哪儿，外面照 CDP 的触摸按、滑、按住再拖 ——
+  // 按的那一点照 pointer.js 挑把手的办法核一遍（pickTarget：prio 高的先、落在里面最小的那个；按在按钮、输入框、底下那一条上 pointer.js 不收），
+  // 松的那一点照 gesturedom.js 找落点的办法核（离手指 28 像素以内、落在里面最小的那个）：真的手指按不到（被别的盖住、被正在等的那一问抢走）
+  // 就说按不到，不替手指另找一条路。按完以后学生这一下交没交、交成哪一行，照舞台交给课堂循环的那几下（onAct）说
+  T.acts = [];
+  T.notes = [];
+  st.onAct = (a) => { T.acts.push(a); T.loop.onAct(a); };
+  // 浮出来的那一句（gesturedom.js 的 noteAt：翻不成一行、这一下没认出来……）：手指什么都没交时写进报告
+  new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.classList?.contains('st-g-note') && !n.classList.contains('is-hint')) T.notes.push(n.textContent || ''); })
+    .observe(st.view, { childList: true });
+  T.mark = () => ({ acts: T.acts.length, notes: T.notes.length });
+  const toClient = (p) => { const v = st.view.getBoundingClientRect(); return { x: v.left + p.x, y: v.top + p.y }; };
+  const scr = (b) => { if (!b) return null; const p = st.toScreenLive({ x: b.x, y: b.y }), s = st.liveCam().s; return { x: p.x, y: p.y, w: b.w * s, h: b.h * s }; };
+  const gRect = (g) => { try { return g.rect?.() || st.screenRect(g.node?.()) || scr(g.box?.()); } catch { return null; } };
+  const gArea = (g) => { try { return g.area?.() || gRect(g); } catch { return null; } };
+  const sameR = (a, b) => a && b && Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && Math.abs(a.w - b.w) < 1 && Math.abs(a.h - b.h) < 1;
+  const NOPE = 'button, input, textarea, select, a, .st-dock, .mx-step, .st-dial, .st-gpop'; // pointer.js 的 down 不收按在这些上的
+  // 一个框里手指按哪儿：先正中，再在框里一格格找
+  const samples = (r) => {
+    const out = [{ x: r.x + r.w / 2, y: r.y + r.h / 2 }];
+    for (const fy of [0.5, 0.3, 0.7, 0.15, 0.85]) for (const fx of [0.5, 0.3, 0.7, 0.15, 0.85, 0.05, 0.95]) out.push({ x: r.x + r.w * fx, y: r.y + r.h * fy });
+    return out;
+  };
+  // 框 r 里手指按下去 pointer.js 挑中的是 mine 认的那一个的一点（屏幕坐标）；哪儿都不是就 null
+  const reach = (r, mine) => {
+    if (!r || !(r.w > 0) || !(r.h > 0)) return null;
+    const cands = [];
+    for (const [id, t] of st.pointer.targets) { let rect = null; try { rect = t.rect(); } catch { rect = null; } if (rect) cands.push({ id, t, prio: t.prio || 0, rect }); }
+    for (const p of samples(r)) {
+      const c = toClient(p);
+      const under = document.elementFromPoint(c.x, c.y);
+      if (!under || !st.view.contains(under) || under.closest?.(NOPE)) continue;
+      const hit = D.pickTarget(p, cands, { radius: 30 });
+      if (hit && mine(hit)) return c;
+    }
+    return null;
+  };
+  // 画法交的一个把手（gripsOf）：手指按得到它的一点；inside 是只在这一块里找（整张矩阵按括号那一条）
+  const pressGrip = (g, inside = null) => { const r = gRect(g); return reach(inside || r, (hit) => hit.t.name === g.key && sameR(hit.rect, r)); };
+  // 拖着、拉着松在 want 上：照 gesturedom.js 在这一组落点里挑（targets 和它拖起来那一刻挂的一样）
+  const dropAt = (targets, want) => {
+    const r = gArea(want);
+    if (!r) return null;
+    const cands = targets.map((t, i) => ({ id: i, t, rect: gArea(t) }));
+    for (const p of samples(r)) { const hit = D.pickTarget(p, cands, { radius: 28 }); if (hit?.t === want) return toClient(p); }
+    return null;
+  };
+  // 底下那一条、右上角的按钮：按得到（没被盖住、不是灰的）的正中
+  const btnAt = (b) => {
+    if (!b || b.disabled) return null;
+    const r = b.getBoundingClientRect();
+    if (!r.width) return null;
+    const c = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    const top = document.elementFromPoint(c.x, c.y);
+    return top && (top === b || b.contains(top)) ? c : null;
+  };
+  const say = (p) => `${st.scene.tapRef(p)}（${p.value ?? ''}）`;
+  const keysOf = (ref) => new Set(st.scene.parts(ref).map((p) => p.key));
+  const sameKeys = (m, ks) => m.keys.length === ks.size && m.keys.every((k) => ks.has(k));
+  T.loc = (k) => { try { return T.locs?.[k]?.() || null; } catch { return null; } };
+  T.focused = (i) => document.activeElement === T.cells?.[i];
+  /**
+   * 一下真的手指 → 怎么按：{ what（写进报告：手指做的）, expect（交出的该是哪一种）, moves: [{ how: tap | slide | hold | type, a, b, ms, text, focus }] }；
+   * a / b 是 T.locs 里的名字（外面按之前现找：点进一格以后底下那一条会让到符号小键盘上面，格子跟着挪）；
+   * { error } 是手指做不到（老师没开、没有这个部件、按不到）；{ fallback } 是走第一轮的画法（只开了 open s 的拖词、只有一个输入框的 value）
+   */
+  T.plan = (g) => {
+    const sc = st.scene;
+    T.locs = {};
+    T.cells = null;
+    const ready = (names) => names.find((n) => !T.loc(n));
+    if (g.action === 'value') {
+      const form = [...st.dock.querySelectorAll('.st-fgrid')].at(-1);
+      if (!form) return { fallback: true };
+      const cells = T.cells = [...form.querySelectorAll('.fi-text')];
+      const ok = form.querySelector('.st-say-go');
+      const one = form.classList.contains('st-fone');
+      const rows = one ? [[g.text.trim()]] : D.formulaRows(g.text);
+      const flat = rows.flat();
+      if (!one) {
+        const pos = cells.map((c) => (c.getAttribute('aria-label') || '').match(/第 (\d+) 行第 (\d+) 列/)).filter(Boolean);
+        const R = Math.max(0, ...pos.map((m) => Number(m[1]))), Cn = Math.max(0, ...pos.map((m) => Number(m[2])));
+        if (rows.length !== R || rows.some((r) => r.length !== Cn)) return { error: `这一问是 ${R}×${Cn} 的格子，「${g.text}」切出来是 ${rows.map((r) => r.length).join('、')} 格一行（「 / 」分行、空格分格）` };
+      }
+      const moves = [];
+      flat.forEach((text, i) => {
+        T.locs[`c${i}`] = () => btnAt(cells[i]);
+        moves.push({ how: 'tap', a: `c${i}`, focus: i }, { how: 'type', text });
+      });
+      T.locs.ok = () => btnAt(ok);
+      moves.push({ how: 'tap', a: 'ok' });
+      if (!T.loc('c0')) return { error: '第一格手指点不到（被盖住了）' };
+      return { what: one ? `点进式子框写 ${g.text}，再点「对吗」` : `一格一格写 ${rows.map((r) => r.join(' ')).join(' / ')}，再点「对吗」`, expect: 'value', moves };
+    }
+    if (g.action === 'pick') {
+      const w = sc.waiting;
+      if (!w || w.kind !== 'pick') return { error: `现在等的不是 ask pick（${w ? `在等 ask ${w.kind}` : '没有在等的那一问'}）` };
+      const allowed = w.refs?.length ? new Set(w.refs.flatMap((r) => sc.parts(r)).map((p) => `${p.obj}:${p.key}`)) : null;
+      const moves = [];
+      for (const [i, ref] of g.refs.entries()) {
+        const one = onePart(ref);
+        if (one.error) return one;
+        const pid = `${one.p.obj}:${one.p.key}`;
+        if (allowed && !allowed.has(pid)) return { error: `${ref} 不在这一问能点的里面` };
+        T.locs[`p${i}`] = () => { const r = st.screenRect(st.nodes.get(pid)); return reach(r, (hit) => (hit.prio || 0) >= 2 && sameR(hit.rect, r)); };
+        if (!T.loc(`p${i}`)) return { error: `手指点不到 ${ref}（被别的盖住了）` };
+        moves.push({ how: 'tap', a: `p${i}` });
+      }
+      T.locs.go = () => btnAt([...st.dock.querySelectorAll('.st-pick-go')].at(-1));
+      moves.push({ how: 'tap', a: 'go' });
+      return { what: `点 ${g.refs.join('、')}，再点「${w.button || '点好了'}」`, expect: 'pick', moves };
+    }
+    if (g.action === 'back') {
+      const b = [...st.view.querySelectorAll('.st-back')].find((x) => x.dataset.obj === g.obj && x.dataset.name === g.name);
+      if (!b) return { error: `没有「回到${g.name}」按钮：老师没写 open ${g.obj} back="${g.name}"` };
+      if (b.disabled) return { error: `「回到${g.name}」还按不了（还没存过，或者正在撤一步）` };
+      T.locs.a = () => btnAt(b);
+      if (!T.loc('a')) return { error: `「回到${g.name}」被盖住了，手指点不到` };
+      return { what: `点「回到${g.name}」`, expect: 'back', moves: [{ how: 'tap', a: 'a' }] };
+    }
+    const o = sc.objects.get(g.obj);
+    if (!o) return { error: `舞台上没有「${g.obj}」` };
+    const open = (action) => sc.opens.get(`${o.id}:${action}`);
+    const gr = (e, name, role = 'from') => gripsOf(o, role === 'to' ? { ...e, refs: [] } : e, name, role);
+    let p;
+    if (g.action === 'refer' || g.action === 'unrefer') {
+      const e = open('refer');
+      if (!e) return notOpen(o, 'refer');
+      const a = onePart(g.action === 'refer' ? g.from : g.at);
+      if (a.error) return a;
+      if (g.action === 'unrefer') {
+        const x = gr(e, 'xrefer').find((t) => partOf(t)?.refer === a.p.key);
+        if (!x) return { error: `${say(a.p)}连出去的线上没有 ✕：学生自己连的线才有` };
+        T.locs.a = () => pressGrip(x);
+        if (ready(['a'])) return { error: `${say(a.p)}线上的 ✕ 手指点不到（被别的盖住了）` };
+        return { what: `点 ${say(a.p)}连出去那条线上的 ✕`, expect: 'unrefer', moves: [{ how: 'tap', a: 'a' }] };
+      }
+      const hook = gr(e, 'hook').find((t) => partOf(t)?.key === a.p.key);
+      if (!hook) return { error: `${say(a.p)}上没有钩：老师 open 的是 ${e.refs.join(' ') || o.id} refer，或者这个词折起来了` };
+      // 落点和 gesturedom.js 拉起来那一刻挂的一样：词、括号、句子外框（不跟着 open 写的部件走），钩挂着的那个词不算
+      const targets = [...gr(e, 'word', 'to'), ...gr(e, 'bracket', 'to'), ...gr(e, 'sentence', 'to')].filter((t) => { const q = partOf(t); return !(q && q.obj === a.p.obj && q.key === a.p.key); });
+      let want, where;
+      if (g.to === o.id) { want = targets.find((t) => t.key === 'frame:b'); where = '句子外框'; } else {
+        const ks = keysOf(g.to);
+        if (!ks.size) return { error: `「${g.to}」一个词也没有` };
+        if (ks.size === 1) { want = targets.find((t) => ks.has(partOf(t)?.key)); where = say(sc.parts(g.to)[0]); } else {
+          want = targets.find((t) => { const id = partOf(t)?.mark; const m = id != null && (o.marks || []).find((x) => x.id === id); return m && sameKeys(m, ks); });
+          where = `${g.to} 那道括号`;
+          if (!want) return { error: `${g.to} 上没有括号：线只能松在一个词、一道括号或句子外框上` };
+        }
+      }
+      if (!want) return { error: `${g.to} 不是线能松的地方` };
+      T.locs.a = () => pressGrip(hook);
+      T.locs.b = () => dropAt(targets, want);
+      const miss = ready(['a', 'b']);
+      if (miss) return { error: miss === 'a' ? `${say(a.p)}的钩手指按不到（被别的盖住了）` : `${where}手指松不到（离别的落点太近）` };
+      return { what: `从 ${say(a.p)}的钩拉线，松在${where}上`, expect: 'refer', moves: [{ how: 'slide', a: 'a', b: 'b' }] };
+    }
+    if (g.action === 'unmark') {
+      const e = open('mark');
+      if (!e) return notOpen(o, 'mark');
+      const ks = keysOf(g.span);
+      const mine = (o.marks || []).filter((m) => m.by === 'student');
+      const m = mine.find((x) => sameKeys(x, ks)) || (ks.size === 1 ? mine.filter((x) => x.keys.some((k) => ks.has(k))).sort((x, y) => x.keys.length - y.keys.length)[0] : null);
+      if (!m) return { error: `${g.span} 上没有学生拉的括号（✕ 只在学生自己拉的括号上）` };
+      const x = gr(e, 'xmark').find((t) => partOf(t)?.mark === m.id);
+      if (!x) return { error: `${g.span} 那道括号上没有 ✕` };
+      T.locs.a = () => pressGrip(x);
+      if (ready(['a'])) return { error: `${g.span} 那道括号上的 ✕ 手指点不到（被别的盖住了）` };
+      return { what: `点 ${g.span} 那道括号上的 ✕`, expect: 'unmark', moves: [{ how: 'tap', a: 'a' }] };
+    }
+    if (g.action === 'move') {
+      const e = open('move');
+      if (!e) return { fallback: true }; // 只开了 open s（拖一个词）：照第一轮的画法
+      if (g.where === 'to') return { error: 'open s move 是拖到两个词之间：写 move s.1-6 after s.11（或 before s.1）' };
+      let ps;
+      try { ps = sc.parts(g.span); } catch (err) { return { error: err.message }; }
+      if (!ps.length) return { error: `「${g.span}」一个词也没有` };
+      const ks = new Set(ps.map((x) => x.key));
+      // 一段按它的括号（正好是这一段的那一道；括号折了行是几截，哪一截按得到都行），一个词按这个词
+      const from = ps.length > 1
+        ? gr(e, 'bracket').filter((t) => { const id = partOf(t)?.mark; const m = id != null && (o.marks || []).find((x) => x.id === id); return m && sameKeys(m, ks); })
+        : gr(e, 'word').filter((t) => partOf(t)?.key === ps[0].key);
+      if (!from.length) return { error: ps.length > 1 ? `${g.span} 上没有括号：整段挪要按住它的括号（先拉一道括号）` : `${say(ps[0])}手指拿不起来（折起来了，或者 open 没交这个词）` };
+      const at = onePart(g.at);
+      if (at.error) return at;
+      const after = g.where === 'after' ? at.p.slot : at.p.slot - 1;
+      const gaps = gr(e, 'gap', 'to');
+      const want = gaps.find((t) => partOf(t)?.gap?.after === after);
+      if (!want) return { error: `${say(at.p)}${g.where === 'after' ? '后面' : '前面'}没有空隙（折起来的那一段里面放不下）` };
+      T.locs.a = () => from.map((t) => pressGrip(t)).find(Boolean) || null;
+      T.locs.b = () => dropAt(gaps, want);
+      const miss = ready(['a', 'b']);
+      if (miss) return { error: miss === 'a' ? `${ps.length > 1 ? `${g.span} 的括号` : say(ps[0])}手指按不到（被别的盖住了）` : `${say(at.p)}${g.where === 'after' ? '后面' : '前面'}的空隙手指松不到` };
+      return { what: `按住 ${ps.length > 1 ? `${g.span} 的括号` : say(ps[0])} 0.4 秒，拖到 ${say(at.p)}${g.where === 'after' ? '后面' : '前面'}`, expect: 'move', moves: [{ how: 'hold', a: 'a', b: 'b', ms: 400 }] };
+    }
+    if (g.action === 'unfold') {
+      const e = open('fold');
+      if (!e) return notOpen(o, 'fold');
+      const one = onePart(g.at);
+      if (one.error) return one;
+      p = one.p;
+      const pill = gr(e, 'pill').find((t) => { const id = partOf(t)?.pill; const f = id != null && (o.folds || []).find((x) => x.id === id); return f && f.keys.includes(p.key); });
+      if (!pill) return { error: `${say(p)}没有折起来：没有小方块可点` };
+      T.locs.a = () => pressGrip(pill);
+      if (ready(['a'])) return { error: `${say(p)}所在的小方块手指点不到（被别的盖住了）` };
+      return { what: `点 ${say(p)}所在的小方块`, expect: 'unfold', moves: [{ how: 'tap', a: 'a' }] };
+    }
+    if (g.action === 'delete') {
+      const e = open('pluck') || open('delete');
+      if (!e) return notOpen(o, 'pluck（或 delete）');
+      const one = onePart(g.at);
+      if (one.error) return one;
+      p = one.p;
+      const n = gr(e, 'node').find((t) => partOf(t)?.key === p.key);
+      if (!n) return { error: `${say(p)}没有交给学生（open 只交了 ${e.refs.join(' ')}）` };
+      T.locs.a = () => pressGrip(n);
+      if (ready(['a'])) return { error: `${say(p)}手指点不到（被别的盖住了）` };
+      return { what: `点 ${say(p)}`, expect: 'delete', moves: [{ how: 'tap', a: 'a' }] };
+    }
+    if (g.action === 'compare' || g.action === 'put' || g.action === 'merge') {
+      const e = open(g.action);
+      if (!e) return notOpen(o, g.action);
+      // 按住括号那一条（格上开着别的时，格是格自己的）：两道括号哪一道按得到都行
+      const from = gr(e, 'whole');
+      const zones = gr(e, 'whole', 'to');
+      const want = zones.find((t) => partOf(t)?.obj === g.to);
+      if (!want) return { error: `「${g.to}」不是舞台上能放的矩阵（藏着的、不是矩阵的放不上去）` };
+      T.locs.a = () => from.map((t) => pressGrip(t, st.screenRect(st.decor(o.id, t.key.split(':')[1]))) || pressGrip(t)).find(Boolean) || null;
+      T.locs.b = () => dropAt(zones, want);
+      const miss = ready(['a', 'b']);
+      if (miss) return { error: miss === 'a' ? `${o.id} 的括号手指按不到（被别的盖住了，或者被正在等的那一问抢走）` : `${g.to} 上手指松不到` };
+      return { what: `按住 ${o.id} 的括号 0.4 秒，拖到 ${g.to} 上`, expect: g.action, moves: [{ how: 'hold', a: 'a', b: 'b', ms: 400 }] };
+    }
+    return { error: `不认得「${g.action}」` };
+  };
+  // 按完以后：这一下交没交、交成哪一行（照舞台交给课堂循环的 act）；没让做的照裁判说为什么
+  T.since = (m, plan) => {
+    const acts = T.acts.slice(m.acts);
+    const notes = T.notes.slice(m.notes);
+    if (!acts.length) return { error: `${plan.what}：页面什么都没交${notes.length ? `（浮了一句「${notes.at(-1)}」）` : ''}` };
+    // pick、填的答案没有一行指令（回答一问）：写成学生交的样子
+    const lineOf = (a) => a.line || a.src || (a.type === 'pick' ? `pick ${(a.refs || []).join(' ')}` : a.type === 'value' ? `value ${a.text}` : a.type);
+    const out = { did: `${plan.what} → ${acts.map(lineOf).join('；')}` };
+    const bad = acts.find((a) => a.error);
+    if (bad) out.error = `「${lineOf(bad)}」没演上：${bad.error}`;
+    const blk = acts.find((a) => a.blocked);
+    if (blk) {
+      let facts = [];
+      try { const [c] = D.parseScript(lineOf(blk)); facts = st.scene.judgeLine(c, { by: 'student', open: blk.open })?.facts || []; } catch { facts = []; }
+      out.blocked = facts.join('；') || [blk.verdict?.why, blk.verdict?.misread && `像是${blk.verdict.misread}`].filter(Boolean).join('；') || '这一下没让做';
+    }
+    const cmdOf = (a) => (['pick', 'value', 'back'].includes(a.type) ? a.type : String(lineOf(a)).split(/\s+/)[0]);
+    if (!acts.some((a) => cmdOf(a) === plan.expect)) out.kept = `手指这一下页面认成了「${acts.map(lineOf).join('；')}」，不是 ${plan.expect}（照那一下演了）`;
+    return out;
+  };
+}
+
+// 真的手指（第二轮的写法）：照 T.plan 一下一下按（点、滑、按住再拖、键盘写一格），按完等课堂循环停下来，再看交了什么。
+// 走第一轮画法的（fallback）给 null
+async function hands(page, touch, step) {
+  const g = step.cmd === 'value' ? { action: 'value', text: step.args } : step.gesture;
+  const m = await page.evaluate(() => window.__try.mark());
+  const plan = await page.evaluate((x) => window.__try.plan(x), g);
+  if (plan.fallback) return null;
+  if (plan.error) return { error: plan.error };
+  const at = (k) => page.evaluate((k) => window.__try.loc(k), k);
+  for (const mv of plan.moves) {
+    if (mv.how === 'type') { await page.keyboard.type(mv.text, { delay: 15 }); await page.waitForTimeout(80); continue; }
+    const a = await at(mv.a);
+    if (!a) return { error: `${plan.what}：${mv.a === 'go' || mv.a === 'ok' ? '那个按钮还按不了（灰着，或者被盖住了）' : '手指按不到那一处（被别的盖住了）'}` };
+    if (mv.how === 'tap') {
+      await touch('touchStart', a.x, a.y);
+      await page.waitForTimeout(40);
+      await touch('touchEnd');
+      await page.waitForTimeout(160);
+      if (mv.focus != null && !(await page.evaluate((i) => window.__try.focused(i), mv.focus))) return { error: `${plan.what}：点了第 ${mv.focus + 1} 格，没点进去` };
+      continue;
+    }
+    // 滑：按下就拉；按住再拖：按满 HOLD_MS（0.35 秒）再挪，同一处还能点、滑时才认成拖
+    await touch('touchStart', a.x, a.y);
+    if (mv.how === 'hold') await page.waitForTimeout(mv.ms || 400);
+    const b = await at(mv.b);
+    if (!b) { await touch('touchEnd'); return { error: `${plan.what}：松手的那一处找不到了` }; }
+    const n = 12;
+    for (let i = 1; i <= n; i++) { await touch('touchMove', a.x + (b.x - a.x) * i / n, a.y + (b.y - a.y) * i / n); await page.waitForTimeout(16); }
+    await page.waitForTimeout(60);
+    await touch('touchEnd');
+  }
+  await page.waitForTimeout(80);
+  await page.evaluate((max) => window.__try.settle(max), IDLE_MAX);
+  return page.evaluate(([mk, p]) => window.__try.since(mk, p), [m, plan]);
 }
 
 const browser = await chromium.launch();
 let crashed = false;
 const results = [];
 for (const file of opt.files) {
-  const r = { file: basename(file), views: [] };
+  // path：照仓库根目录的相对路径（tools/stage-try-diff.mjs 拿它对基线里同一个文件；不同目录下同名的「分支1.txt」分得开）
+  const r = { file: basename(file), path: relative(ROOT, file), views: [] };
   let steps;
   // 一个文件写错（学生那一行的动作不认得）：报出来，接着跑下一个文件
   try { steps = parseTry(readFileSync(file, 'utf8')); } catch (err) {
@@ -473,12 +771,16 @@ for (const file of opt.files) {
         if (got) Object.assign(out, got);
         else out.errors.push({ line: step.line, src: '', error: `这一段没演完（${s}）` });
       } else {
-        // 手势的那几种：写法本身就翻不成手势的（parseTry 已经说了为什么）不用开页面
-        const res = step.how !== 'do' ? await page.evaluate(([c, a]) => window.__try.answer(c, a), [step.cmd, step.args])
-          : step.gesture?.error ? { error: step.gesture.error }
-            : step.gesture ? await page.evaluate((g) => window.__try.gesture(g), step.gesture)
+        // 手势的那几种：写法本身就翻不成手势的（parseTry 已经说了为什么）不用开页面；第二轮的写法照真的手指按（hands），
+        // 只开了 open s 的拖词、只有一个输入框的 value 照第一轮的画法
+        let res = step.gesture?.error ? { error: step.gesture.error } : HANDS.has(step.cmd) || step.cmd === 'value' ? await hands(page, touch, step) : null;
+        if (!res) {
+          res = step.how !== 'do' ? await page.evaluate(([c, a]) => window.__try.answer(c, a), [step.cmd, step.args])
+            : step.gesture && !HANDS.has(step.cmd) ? await page.evaluate((g) => window.__try.gesture(g), step.gesture)
               : await page.evaluate(([c, a]) => window.__try.studentDo(c, a), [step.cmd, step.args]);
+        }
         if (res.error) out.errors.push({ line: step.line, src: step.src, error: res.error });
+        if (res.kept) out.errors.push({ line: step.line, src: step.src, error: res.kept, kept: true });
         if (res.untouched) out.untouched = res.untouched;
         if (res.did) out.did = res.did;
         if (res.blocked) out.blocked = res.blocked;
@@ -523,5 +825,5 @@ for (const file of opt.files) {
   if (!opt.json) console.log(`${formatReport(r)}\n`);
 }
 await browser.close();
-if (opt.json) console.log(JSON.stringify(results, null, 2));
-process.exit(crashed ? 2 : 0);
+// 写进管道时（检查脚本 execFile 读它）stdout 是异步的：写完了再退出，直接 process.exit 会把一大段 JSON 截掉、读不全
+process.stdout.write(opt.json ? `${JSON.stringify(results, null, 2)}\n` : '', () => process.exit(crashed ? 2 : 0));

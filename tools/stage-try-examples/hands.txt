@@ -1,0 +1,66 @@
+# 第二轮的学生写法（真的手指：点、滑、按住 0.35 秒再拖、点 ✕、一格一格填），每种一条。
+# 句子：同一句上开着 mark、fold、move（还有 his 的钩）：拉括号是在词上滑、折是点、挪是按住 0.4 秒再拖，每一下只认成一种；
+# 点小方块展开、从钩拉线又点 ✕ 收掉、拉一道括号又点 ✕ 收掉；最后按住主语的括号挪到 s.11 后面
+sentence s = "The man who lives next door is a famous heart doctor, and his sister works at the city hospital where he often helps her." key="[S The man [RC who lives next door]] [V is] [P a famous heart doctor], and [S his sister] [V works] [A at the city hospital [RC where [S he] often [V helps] her]]." links="his -> s.2"
+open s mark
+open s fold
+open s move
+open s.13 refer
+say "拉括号、折起来、挪一段、从 his 的钩上拉线都行。"
+ask next "试完点下面" button="试好了"
+学生: mark s.1-6 S
+学生: mark s.3-6 RC
+学生: fold s.3-6
+学生: unfold s.5
+学生: refer s.13 -> s.2
+学生: unrefer s.13
+学生: mark s.21 S
+学生: unmark s.21
+学生: move s.1-6 after s.11
+学生: next
+# 树：插进 47（页面替老师存成「插入后」；托盘里还剩一个，没做完、不叫老师）、点叶子 7 摘掉、点「回到插入后」回到存的样子
+remove s
+tree t = 30 7 45 _ _ 40 50 tray="47 35"
+open t insert
+open t pluck
+keep t "插入后" after=insert
+open t back="插入后"
+say "把 47 拖进树，再摘一片叶子。"
+ask next "好了点下面" button="好了"
+学生: insert t 47
+学生: delete t.7
+学生: back t "插入后"
+学生: next
+# ask pick：照先后点 45、50，再点「点好了」
+close t pluck
+ask pick t "47 插进来时，除了根还比过哪几个？都点出来" button="点好了" expect="t.45 t.50"
+学生: pick t.45 t.50
+# 矩阵：按住 AB 的括号拖到 BA 上逐格比（两张都不变）
+remove t
+matrix A = 1 2 / 0 1
+matrix B = 1 0 / 3 1 beside=A
+matrix AB = {A B}
+matrix BA = {B A} beside=AB
+matrix Sum = collect
+open AB compare
+ask next "比好了点下面" button="比好了"
+学生: compare AB BA
+学生: next
+# 放进合计、并同类项（X 拿下舞台）
+close AB compare
+open AB put
+matrix X = {-2 A}
+matrix Y = {-A} beside=X
+open X merge
+ask next "好了点下面" button="好了"
+学生: put AB Sum
+学生: merge X Y
+学生: next
+# 按格的 Aⁿ：一格一个式子框，一格一格点进去写
+remove AB
+remove BA
+remove Sum
+remove Y
+matrix N = 1 1 0 / 0 1 1 / 0 0 1
+ask value "Nⁿ 是？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"
+学生: value 1 n n(n-1)/2 / 0 1 n / 0 0 1

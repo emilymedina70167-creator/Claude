@@ -1,7 +1,7 @@
 // 舞台试演工具（tools/stage-try.mjs）不碰浏览器的那一半：读一幕的文件、把学生的一行翻成手势的输入、写报告
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTry, formatReport, studentGesture, STUDENT_FORMS } from '../tools/stage-try-lib.js';
+import { parseTry, formatReport, studentGesture, STUDENT_FORMS, mustHits, goalsMetWhere, MUST, tryDiff, diffText } from '../tools/stage-try-lib.js';
 
 test('老师的行并成一段，学生的一行一步', () => {
   const s = parseTry('matrix A = 1 1 / -1 -1\n\nsay "看"\n学生: write A.1,1 2\n学生：next\nmul C');
@@ -118,4 +118,146 @@ test('报告：手指做的那一下、翻成的那一行、页面没让做（�
     { ...base, step: { kind: 'student', how: 'do', cmd: 'undo', args: '', line: 10 }, undone: 'rotate t#2 left' },
   ] }] });
   for (const k of ['手指做的：把 t.60 拖到 t.50 上 → rotate t#1 left', '页面没让做（弹回去了）：这一下不是正确的下一步', '撤掉的那一下：rotate t#2 left', '第 2 步：学生 第 10 行 undo']) assert.ok(out.includes(k), k);
+});
+
+// —— 第二轮的学生写法（真的手指：点、滑、按住 0.35 秒再拖、点 ✕、一格一格填）——
+const NEW_FORMS = [
+  'pick t.45 t.50', 'refer s.23 -> s.15', 'unrefer s.23', 'unmark s.21', 'move s.1-6 after s.11', 'unfold s.5', 'delete t.7',
+  'compare AB BA', 'put AB Sum', 'merge X Y', 'back t "插入后"', 'value 1 n n(n-1)/2 / 0 1 n / 0 0 1',
+];
+
+test('新的学生写法：12 种各一条，回答一问的是 pick、value，别的 10 种直接动画面；翻成的手势都不带 error', () => {
+  const s = parseTry(NEW_FORMS.map((f) => `学生: ${f}`).join('\n'));
+  assert.equal(s.length, 12);
+  assert.deepEqual(s.map((x) => x.cmd), ['pick', 'refer', 'unrefer', 'unmark', 'move', 'unfold', 'delete', 'compare', 'put', 'merge', 'back', 'value']);
+  for (const x of s) {
+    assert.equal(x.how, ['pick', 'value'].includes(x.cmd) ? 'answer' : 'do', `${x.cmd} 的 how`);
+    assert.ok(!x.gesture?.error, `${x.src}：${x.gesture?.error}`);
+  }
+  for (const f of NEW_FORMS) assert.ok(STUDENT_FORMS.includes(f), `学生能写的列表里有 ${f}`);
+  const by = Object.fromEntries(s.map((x) => [x.cmd, x]));
+  assert.deepEqual(by.pick.gesture, { action: 'pick', refs: ['t.45', 't.50'] });
+  assert.deepEqual(by.refer.gesture, { obj: 's', action: 'refer', from: 's.23', to: 's.15' });
+  assert.deepEqual(by.unrefer.gesture, { obj: 's', action: 'unrefer', at: 's.23' });
+  assert.deepEqual(by.unmark.gesture, { obj: 's', action: 'unmark', span: 's.21' });
+  assert.deepEqual(by.move.gesture, { obj: 's', action: 'move', span: 's.1-6', where: 'after', at: 's.11' });
+  assert.deepEqual(by.unfold.gesture, { obj: 's', action: 'unfold', at: 's.5' });
+  assert.deepEqual(by.delete.gesture, { obj: 't', action: 'delete', at: 't.7' });
+  assert.deepEqual(by.compare.gesture, { obj: 'AB', action: 'compare', to: 'BA' });
+  assert.deepEqual(by.put.gesture, { obj: 'AB', action: 'put', to: 'Sum' });
+  assert.deepEqual(by.merge.gesture, { obj: 'X', action: 'merge', to: 'Y' });
+  assert.deepEqual(by.back.gesture, { obj: 't', action: 'back', name: '插入后' });
+  // 按格的那一问：答案照原样交给页面，页面看是一个框还是一格一格的（answer.js 的 formulaRows 切开）
+  assert.equal(by.value.gesture, undefined);
+  assert.equal(by.value.args, '1 n n(n-1)/2 / 0 1 n / 0 0 1');
+});
+
+test('新的学生写法的几种变体：线松在一道括号、整句；挪到最前面；refer 写 →；back 写中文引号', () => {
+  const g = (line) => studentGesture(...line.split(/\s+(.*)/s).slice(0, 2));
+  assert.deepEqual(g('refer s.6 -> s.1-2'), { obj: 's', action: 'refer', from: 's.6', to: 's.1-2' });
+  assert.deepEqual(g('refer s.6 → s'), { obj: 's', action: 'refer', from: 's.6', to: 's' });
+  assert.deepEqual(g('move s.7 before s.1'), { obj: 's', action: 'move', span: 's.7', where: 'before', at: 's.1' });
+  assert.deepEqual(g('move s.3 -> s.1'), { obj: 's', action: 'move', span: 's.3', where: 'to', at: 's.1' });
+  assert.deepEqual(g('back t 「回到前」'), { obj: 't', action: 'back', name: '回到前' });
+  assert.deepEqual(g('unmark s.2-5'), { obj: 's', action: 'unmark', span: 's.2-5' });
+  assert.deepEqual(g('delete t#4'), { obj: 't', action: 'delete', at: 't#4' });
+});
+
+test('新的学生写法写错了：说清楚为什么（不抛错）', () => {
+  const g = (line) => studentGesture(...line.split(/\s+(.*)/s).slice(0, 2));
+  for (const [line, re] of [
+    ['pick', /pick t\.45 t\.50/],
+    ['pick t', /pick t\.45 t\.50/],
+    ['refer s.23', /refer s\.23 -> s\.15/],
+    ['refer s -> s.2', /refer s\.23 -> s\.15/],
+    ['refer s.3 -> t.2', /同一句/],
+    ['unrefer s', /unrefer s\.23/],
+    ['unmark', /unmark s\.21/],
+    ['move s.1-6', /move s\.1-6 after s\.11/],
+    ['unfold s', /unfold s\.5/],
+    ['delete t', /delete t\.7/],
+    ['compare AB', /compare AB BA/],
+    ['put AB.1,1 Sum', /put AB Sum/],
+    ['merge X', /merge X Y/],
+    ['back t', /back t "插入后"/],
+  ]) {
+    const r = g(line);
+    assert.ok(r.error, `${line}：{ error }`);
+    assert.match(r.error, re, line);
+  }
+});
+
+test('stage-must 攒着的也查：叫老师的那几条、最后一步还攒着没发出去的', () => {
+  const step = (called, pending) => ({ step: { kind: 'student' }, called: called ? { why: '答了', msg: called } : null, pending });
+  // 最后一步没叫老师、攒着的里有：算 ✓
+  assert.equal(mustHits([step('[学生]\n学生填了「3」', ''), step(null, '学生拨了 k：1 → 2（停在 2）')], /学生拨了 \S+：/).length, 1);
+  // 只在前面某一步攒着过（后来发出去了、或者被别的换掉了），最后一步没有：不算
+  assert.equal(mustHits([step(null, '学生拨了 k：1 → 2'), step(null, '学生点了「好了」')], /学生拨了 \S+：/).length, 0);
+  // 叫老师的那一条里有：哪一步都算
+  const hits = mustHits([step('学生拨了 k：1 → 2', ''), step(null, ''), step('r(A) = 2', '')], /学生拨了 \S+：|r\(A\) = \d/);
+  assert.deepEqual(hits.map((h) => [h.step, h.where]), [[0, 'called'], [2, 'called']]);
+  // 带 g 的正则不因为 lastIndex 漏掉
+  assert.equal(mustHits([step('无解', ''), step('无解', '')], /无解/g).length, 2);
+  assert.deepEqual(mustHits([], /x/), []);
+});
+
+test('stage-must 的表：照设计第 13 节，正则对得上舞台写的样子', () => {
+  const files = MUST.flatMap((m) => m.files);
+  for (const f of ['L2/分支3.txt', 'L2/幕5.txt', 'L2/幕4.txt', 'D2/幕5.txt', 'D2/幕6.txt', 'E2/幕1.txt', 'E2/幕6.txt', 'E2/分支1.txt', 'E3/幕8.txt', 'L1/幕3.txt', 'E3/幕1.txt']) assert.ok(files.includes(f), f);
+  const hit = (file, text) => MUST.find((m) => m.files.includes(file)).checks.map((c) => c.re.test(text));
+  // 三幕一组（was initiated 在 E2 第 6 幕、to help 在 E3 第 8 幕、分支 1 两种都有）：一条事实三幕里有一幕有就算；别的每一幕各查
+  assert.deepEqual(MUST.filter((m) => m.anyOf).map((m) => m.files), [['E2/幕6.txt', 'E2/分支1.txt', 'E3/幕8.txt']]);
+  assert.deepEqual(MUST.find((m) => m.files.includes('D2/幕5.txt')).files, ['D2/幕5.txt']);
+  assert.deepEqual(hit('L2/分支3.txt', '页面算的：rankA(M) = 1，rank(M) = 2\n0 = −3\n拨 l（1 → 2）'), [true, true, true, true]);
+  assert.deepEqual(hit('L2/幕5.txt', 'r(A) = 2，r(A | b) = 3：无解\n学生拨了 l：1 → 2'), [true, true, true, true]);
+  assert.deepEqual(hit('L2/幕4.txt', '第 3 格该是 −4'), [true]);
+  assert.deepEqual(hit('E2/幕6.txt', '学生 mark s.4 谓语——was 只圈了一半\n学生 mark s.9 谓语（ensuring）——把非谓语当成了谓语'), [true, true]);
+  assert.deepEqual(hit('E2/幕6.txt', 'was\n只圈了一半'), [false, false], '要在同一行里');
+  assert.deepEqual(hit('L1/幕3.txt', '学生拨了 k：1 → 2 → 3（拨到 3 时做到了 g1）'), [true]);
+  assert.deepEqual(hit('E3/幕1.txt', '学生点了 q.2（laughing）'), [true]);
+  assert.deepEqual(hit('E3/幕1.txt', '学生点了 q.2（laugh）'), [false], '题卡那一行写的不是 laughs / laughing');
+  assert.deepEqual(hit('D2/幕5.txt', 'count(t) = 6，height(t) = 4，tray(t) = 0'), [true, true, true]);
+  assert.ok(MUST.find((m) => m.files.includes('D2/幕5.txt')).noMetAt, '幕 5 另查 4 个结点时不打勾');
+});
+
+test('幕 5 另查：现状是 4 个结点的那几步，没有挑战是「做到了」（做到过、现在不成立的不算）', () => {
+  const st = (state, ...goals) => ({ step: { kind: 'student' }, state, goals: goals.map((status, i) => ({ id: `g${i + 1}`, text: '', status })) });
+  const re = /树 \S+（4 个结点/;
+  assert.deepEqual(goalsMetWhere([st('树 w（3 个结点，2 层）', '还没做到'), st('树 w（4 个结点，3 层）', '做到了'), st('树 w（4 个结点，3 层）', '做到过；现在不成立（…）')], re), [1]);
+  assert.deepEqual(goalsMetWhere([st('树 w（4 个结点，3 层）', '还没做到（w height 3 ✗）'), st('树 w（6 个结点，3 层）', '做到了')], re), []);
+});
+
+test('stage-try-diff：基线里没错的、现在报错的；演上的行少了；新多了没交给学生的；没跑到的步', () => {
+  const T = (line, played, errors = []) => ({ step: { kind: 'teacher', line }, played, errors });
+  const S = (line, cmd, extra = {}) => ({ step: { kind: 'student', line, cmd, args: '' }, errors: [], untouched: null, ...extra });
+  const view = (tag, steps, stopped = null) => ({ tag, steps, stopped });
+  const base = [{ file: 'a.txt', path: 'try/D1/a.txt', views: [view('竖屏', [T(1, 5, [{ line: 3, src: 'swap a.9 a.1', error: '没有第 9 格' }]), S(6, 'next'), T(7, 4), S(9, 'tap')])] }];
+  // 一模一样：没有不同
+  assert.deepEqual(tryDiff(base, structuredClone(base)), []);
+  const now = structuredClone(base);
+  const v = now[0].views[0];
+  v.steps[0].errors = [{ line: 3, src: 'swap a.9 a.1', error: '换了说法：a 只有 8 格' }, { line: 4, src: 'pulse a.2', error: '没有 a.2' }];
+  v.steps[2].played = 3;
+  v.steps[3].untouched = 'a 没有交给学生 drag';
+  const d = tryDiff(base, now);
+  assert.deepEqual(d.map((x) => [x.path, x.view, x.step, x.kind]), [
+    ['try/D1/a.txt', '竖屏', 1, 'error'], ['try/D1/a.txt', '竖屏', 3, 'played'], ['try/D1/a.txt', '竖屏', 4, 'untouched'],
+  ]);
+  assert.match(d[0].text, /第 4 行「pulse a\.2」：没有 a\.2/, '改了说法的报错不算（同一行基线里就报了）');
+  assert.match(d[1].text, /演上了 3 行（基线 4 行）/);
+  // 现在少跑了步、少了文件、照演了的提醒也列出来
+  const short = structuredClone(base);
+  short[0].views[0].steps = short[0].views[0].steps.slice(0, 2);
+  short[0].views[0].stopped = '后面的步没跑：页面在等老师';
+  short[0].views[0].steps[0].errors.push({ line: 2, src: 'say "{kk}"', error: '「{kk}」不是拨数', kept: true });
+  const d2 = tryDiff(base, short);
+  assert.deepEqual(d2.map((x) => x.kind), ['error', 'missing']);
+  assert.match(d2[0].text, /照演了/);
+  assert.match(d2[1].text, /第 3、4 步没跑到（后面的步没跑：页面在等老师）/);
+  assert.deepEqual(tryDiff(base, []).map((x) => x.kind), ['file']);
+  // 没有 path 的照文件名对（tools/stage-try.mjs 以前的输出）
+  const noPath = structuredClone(base).map(({ path, ...r }) => r);
+  assert.deepEqual(tryDiff(noPath, noPath), []);
+  assert.match(diffText(d), /3 处不同/);
+  assert.match(diffText([]), /没有不同/);
 });

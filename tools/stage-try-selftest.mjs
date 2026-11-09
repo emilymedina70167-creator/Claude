@@ -114,5 +114,41 @@ const loT = lo.out?.[0]?.views?.[0]?.steps?.[0];
 expect('loose.txt：退出码 0', lo.code === 0);
 expect('同一轮后面才造的 {Xi} 不报；拼错的 {kk} 一轮演完报，那一行照演了', (loT?.errors || []).length === 1 && loT.errors[0].kept === true && /「\{kk\}」不是拨数/.test(loT.errors[0].error) && loT.played === 4);
 
+// 9. 第二轮的学生写法：真的触摸（点、滑、按住 0.4 秒再拖、点 ✕、一格一格填），每种一条（hands.txt）
+const h = run('hands.txt');
+// 没跑完时写出为什么（工具的报错、停下来的那一句），不然下面一串 ✗ 看不出原因
+const why = (r) => [r.err, ...(r.out?.[0]?.views || []).map((v) => v.stopped)].filter(Boolean).join('；').slice(0, 600);
+expect(`hands.txt：退出码 0${h.code ? `（${why(h)}）` : ''}`, h.code === 0);
+expect('hands.txt：竖屏、横屏每一步都演上了（没有没演上的行、没有页面报错）', (h.out?.[0]?.views || []).length === 2 && h.out[0].views.every((v) => !v.stopped && v.steps.every((s) => !s.errors?.length)));
+const did = (s) => s?.did || '';
+// 一样东西在舞台现在里的那一块（「树 t…」「矩阵 AB…」那一行和下面缩进的几行）
+const blockOf = (st, head) => (String(st || '').split('\n').reduce((acc, l) => {
+  if (acc.on && !/^ {2}\S/.test(l)) acc.on = false;
+  if (l.startsWith(head)) acc.on = true;
+  if (acc.on) acc.out.push(l);
+  return acc;
+}, { on: false, out: [] }).out.join('\n'));
+const mv = stepOf(h, 'move s.1-6 after s.11');
+expect('同一句上开着 mark、fold、move：那一步之前三种都开着', /s 开着：mark（滑）、fold（点）、move（按住再拖）/.test(before(h, mv)?.state || ''));
+expect('学生: move s.1-6 after s.11：按住括号 0.4 秒再拖，只交了一行 move、演上了', !errs(mv) && /^按住 s\.1-6 的括号 0\.4 秒，拖到 s\.11（doctor,?）后面 → move s\.1-6 after s\.11$/.test(did(mv)) && /句子 s[^\n]*：is a famous heart doctor, The man who lives next door and/.test(mv?.state || ''));
+const um = stepOf(h, 'unmark s.21');
+expect('学生: unmark s.21 点 ✕：攒着里有「收掉了自己拉的」', !errs(um) && /点 s\.21 那道括号上的 ✕ → unmark s\.21/.test(did(um)) && /收掉了自己拉的 s\.21/.test(said(um)));
+const rf = stepOf(h, 'refer s.13 -> s.2');
+expect('学生: refer s.13 -> s.2 从钩上滑出一条线：照 links= 判对', /从 s\.13（his）的钩拉线，松在s\.2（man）上 → refer s\.13 -> s\.2/.test(did(rf)) && /links= 的每一条都连对了/.test(said(rf)));
+expect('学生: unrefer s.13 点线上的 ✕：攒着里有「收掉了自己连的」', /→ unrefer s\.13/.test(did(stepOf(h, 'unrefer s.13'))) && /收掉了自己连的 s\.13/.test(said(stepOf(h, 'unrefer s.13'))));
+expect('学生: unfold s.5 点小方块：展开那一段', /所在的小方块 → unfold s\.3/.test(did(stepOf(h, 'unfold s.5'))));
+const ins = stepOf(h, 'insert t 47'), del = stepOf(h, 'delete t.7'), bk = stepOf(h, 'back t "插入后"');
+expect('学生: delete t.7 点叶子摘掉（open t pluck）', !errs(del) && /^点 t\.7（7） → delete t#\d+$/.test(did(del)) && !/ 7 /.test(blockOf(del?.state, '树 t').split('\n')[0] + ' '));
+expect('学生: back t "插入后" 点按钮：现状和存的时候一样', /点「回到插入后」 → back t "插入后"/.test(did(bk)) && !!blockOf(bk?.state, '树 t') && blockOf(bk?.state, '树 t') === blockOf(ins?.state, '树 t') && blockOf(del?.state, '树 t') !== blockOf(ins?.state, '树 t'));
+const pk = stepOf(h, 'pick t.45 t.50');
+expect('学生: pick t.45 t.50：攒着里有「学生点了 2 个」', !errs(pk) && /点 t\.45、t\.50，再点「点好了」/.test(did(pk)) && /学生点了 2 个：t\.45、t\.50/.test(said(pk)));
+const cp = stepOf(h, 'compare AB BA');
+expect('学生: compare AB BA 按住括号拖过去：攒着里有「格里」「不一样」', !errs(cp) && /格里/.test(said(cp)) && /不一样/.test(said(cp)));
+expect('compare 以后 AB、BA 没变', ['矩阵 AB', '矩阵 BA'].every((m) => !!blockOf(cp?.state, m) && blockOf(cp?.state, m) === blockOf(before(h, cp)?.state, m)));
+expect('学生: put AB Sum 放进合计', /学生把 AB 放进了 Sum/.test(said(stepOf(h, 'put AB Sum'))));
+expect('学生: merge X Y 并同类项', /并成了 −3A/.test(said(stepOf(h, 'merge X Y'))));
+const gv = stepOf(h, 'value 1 n n(n-1)/2 / 0 1 n / 0 0 1');
+expect('学生: value 1 n n(n-1)/2 / 0 1 n / 0 0 1 一格一格填：判成对', /^一格一格写 /.test(did(gv)) && /填对了/.test(said(gv)));
+
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');
 process.exit(bad.length ? 1 : 0);

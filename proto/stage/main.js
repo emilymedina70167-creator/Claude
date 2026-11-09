@@ -1,6 +1,6 @@
 // 舞台样子页的入口：选「看剧本」（A 段，不调用 Claude）、「Opus 5.5 上课」（B 段，当场写）或「试手感」（三个样板，不调用 Claude，feel.js）。
 // 地址：?mock 模拟老师（本地）、?dev 给检查脚本留 window.LAStage、?blank 一块空舞台、#shell / #bsearch / #insert 直接开那一节、
-// #feel-avl / #feel-elim / #feel-parse 直接开那一段试手感
+// #feel-avl / #feel-elim / #feel-parse 直接开那一段试手感（第二轮的 #feel-bst / #feel-whole / #feel-hands）
 import { Stage } from '../../kit/src/stage/stage.js';
 import { TOPICS, turnMessage, gridsOf } from '../../kit/src/stage/doc.js';
 import { actText, HELP } from '../../kit/src/stage/stage.js';
@@ -11,6 +11,8 @@ import { dryRun } from '../../kit/src/stage/scene.js';
 import { parseScript } from '../../kit/src/stage/script.js';
 import { gestureAct, askFor, writeRange } from '../../kit/src/stage/gestures.js';
 import { roleName } from '../../kit/src/stage/types/sentence.js';
+import { pickTarget } from '../../kit/src/stage/layout.js';
+import { formulaRows } from '../../kit/src/stage/answer.js';
 import css from '../../kit/src/stage/stage.css';
 import { viewCss, VIEWS } from '../../kit/src/stage/types/views.js';
 import katexCss from 'virtual:katex-css';
@@ -32,8 +34,9 @@ const q = new URLSearchParams(location.search);
 const MOCK = q.has('mock');
 let stage = null;
 let run = 0;
-// ?dev：检查脚本用（tools/stage-try.mjs 拿 createLoop 照学习台的课堂循环演一幕；学生的手势照画法的把手、手势表、裁判走）
-if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, gridsOf, createLoop, eventsText, goalStatus, HELP, dryRun, parseScript, gestureAct, askFor, writeRange, VIEWS, roleName };
+// ?dev：检查脚本用（tools/stage-try.mjs 拿 createLoop 照学习台的课堂循环演一幕；学生的手势照画法的把手、手势表、裁判走；
+// 真的手指那几种拿 pickTarget 核手指按得到、formulaRows 把按格的答案切成一格一格）
+if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, gridsOf, createLoop, eventsText, goalStatus, HELP, dryRun, parseScript, gestureAct, askFor, writeRange, VIEWS, roleName, pickTarget, formulaRows };
 
 function fresh({ input, onAct = null }) {
   stage?.destroy();
@@ -110,7 +113,11 @@ function hud(s) {
   if (s.model) parts.push(s.model);
   if (s.voided) parts.push(`<span class="bad">作废了一轮（${s.voided}）</span>`);
   if (s.error) parts.push(`<span class="bad">${s.error}</span>`);
-  if (s.errors?.length) parts.push(`<span class="bad" title="${s.errors.map((e) => `第 ${e.line} 行 ${e.src}：${e.error}`).join('\n').replace(/"/g, '&quot;')}">跳过 ${s.errors.length} 行</span>`);
+  // 跳过的只数没演的；照演了、可写错了的（话里拼错的名字，kept）另算一项：那一行学生看到了
+  const tip = (es) => es.map((e) => `第 ${e.line} 行 ${e.src}：${e.error}`).join('\n').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  const skipped = (s.errors || []).filter((e) => !e.kept), kept = (s.errors || []).filter((e) => e.kept);
+  if (skipped.length) parts.push(`<span class="bad" title="${tip(skipped)}">跳过 ${skipped.length} 行</span>`);
+  if (kept.length) parts.push(`<span class="bad" title="${tip(kept)}">照演了、可写错了 ${kept.length} 行</span>`);
   el.innerHTML = parts.map((p) => `<span>${p}</span>`).join('');
 }
 
