@@ -187,9 +187,13 @@ export function setOrder(stage, n, num, { pop = false } = {}) {
   return stage.tween(b, [{ transform: 'scale(0.2)', opacity: 0 }, { transform: 'scale(1.25)', opacity: 1, offset: 0.6 }, { transform: 'scale(1)', opacity: 1 }], { duration: 420, easing: EASE.out });
 }
 
-/** 角上的小字：新的弹出来；换数时旧的往上淡走、新的从下面进来；null 收起 */
-export function setTag(stage, n, text, { animate = true, bad = false, auto = false } = {}) {
-  let t = n.querySelector(':scope > .nv-tag:not(.is-gone)');
+/**
+ * 角上的小字：新的弹出来；换数时旧的往上淡走、新的从下面进来；null 收起。
+ * slot：一个结点上贴好几种（树：tag 左上、平衡因子右上、子树高右下）时各是各的一枚（data-slot），不写就是唯一的那一枚（图）
+ */
+export function setTag(stage, n, text, { animate = true, bad = false, auto = false, slot = null } = {}) {
+  const pick = slot ? `[data-slot="${slot}"]` : ':not([data-slot])';
+  let t = n.querySelector(`:scope > .nv-tag${pick}:not(.is-gone)`);
   if (text == null) {
     if (!t) return null;
     t.classList.add('is-gone');
@@ -201,6 +205,7 @@ export function setTag(stage, n, text, { animate = true, bad = false, auto = fal
   t?.classList.toggle('is-auto', auto);
   if (!t) {
     t = el('span', 'nv-tag', n);
+    if (slot) t.dataset.slot = slot;
     t.textContent = s;
     t.classList.toggle('is-bad', bad);
     t.classList.toggle('is-auto', auto);

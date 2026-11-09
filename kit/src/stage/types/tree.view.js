@@ -1,8 +1,10 @@
 // 树的画法（types/tree.js 的画面那一半）：圆的结点、树枝（画在 stage.under，动画时每一帧跟着结点走）、角上的小字、访问号；
-// 插入、查找（圈从根一路比下去）、删除（后继的值飞上来顶替）、旋转（结点和子树沿弧转过去、树枝重连）、换值、遍历这些专门的动作。
-// 树变了（插、删、转）整棵重新排版：sync 把要挪的结点交给舞台统一演，新长出来的从父结点那里长出来
+// 插入、查找（圈从根一路比下去）、删除（后继的值飞上来顶替）、旋转（结点只上下移、树枝重连，换父亲的那棵子树描橙色）、换值、遍历这些专门的动作。
+// 树变了（插、删、转）照中序重新排版（tree.js 的 layoutTree：插入只挪右边的，旋转只上下移）：sync 把要挪的结点交给舞台统一演，
+// 新长出来的从父结点那里长出来。树长宽了不重排：第一列不动，镜头往后退（stage.js 的 keepInView）
 import { EASE, stagger } from '../motion.js';
-import { NODE, LEVEL, SEP, TAG_ROOM, layoutTree, boxesFor, edgesOf, levelOrder, depths, rootSpot, bfOf, bfText, trayBoxes, trayArea, treeArea, slotSpots } from './tree.js';
+import { bbox, grow } from '../layout.js';
+import { NODE, LEVEL, COL, TAG_ROOM, CORNER_H, boxesFor, edgesOf, levelOrder, depths, rootSpot, bfOf, bfText, heightOf, cornerRect, trayBoxes, trayArea, treeArea, slotSpots } from './tree.js';
 import { el, svg, tr, same, centerOf, ensureCss, placeLines, follow, vanish, Ring, cmpBadge, flyText, swapValue, setOrder, setTag, sizeValue, NODE_CSS } from './node.view.js';
 import { openParts } from '../gesturedom.js';
 
@@ -19,13 +21,6 @@ function drawEdge(line, a, b) {
   line.setAttribute('x1', r(a.x + dx * k)); line.setAttribute('y1', r(a.y + dy * k));
   line.setAttribute('x2', r(b.x - dx * k)); line.setAttribute('y2', r(b.y - dy * k));
   line.style.visibility = d < NODE + 2 ? 'hidden' : '';
-}
-
-// 结点在左孩子、右孩子、根的位置：角上的小字贴在外侧（不压着从父结点下来的那条树枝）
-function setSide(n, side) {
-  n.classList.toggle('is-left', side === 'left');
-  n.classList.toggle('is-right', side === 'right');
-  n.classList.toggle('is-root', side === 'root');
 }
 
 // 树枝对齐到某个结构：新的淡进来、没了的淡掉；两头染成同一种颜色时树枝也染上（路径、子树一眼看得出），一头灰了树枝也灰
@@ -55,16 +50,17 @@ function syncEdges(stage, o, struct, { hidden = false, delay = 0, jobs = null } 
   stage.dropDecor(o.id, (k) => k.startsWith('e:') && !want.has(k));
 }
 
-// 结点身上的东西：值、左右、角上的小字（自己写的优先；开着 bf 就是平衡因子）、访问号
-function dress(stage, o, p, n, side, { animate }) {
+// 结点身上的东西：值、角上的三种小字（各贴一个角，一起开着也不叠：老师写的 tag 左上、开着 bf 的平衡因子右上、
+// 开着 heights 的子树高右下；以前 tag 和平衡因子挤一个角，写了 tag 就看不见平衡因子）、正下方的访问号
+function dress(stage, o, p, n, { animate }) {
   const v = n.querySelector('.st-v');
   if (v.textContent !== p.value && !n.__busy) v.textContent = p.value;
   sizeValue(v, v.textContent);
-  setSide(n, side);
-  const bf = o.bf ? bfOf(o, p.key) : 0;
-  const tag = p.tag ?? (o.bf ? bfText(bf) : null);
+  const bf = o.bf ? bfOf(o, p.key) : null;
   const jobs = [];
-  jobs.push(setTag(stage, n, tag, { animate, bad: p.tag == null && Math.abs(bf) >= 2, auto: p.tag == null }));
+  jobs.push(setTag(stage, n, p.tag ?? null, { animate, slot: 'tag' }));
+  jobs.push(setTag(stage, n, bf == null ? null : bfText(bf), { animate, bad: bf != null && Math.abs(bf) >= 2, auto: true, slot: 'bf' }));
+  jobs.push(setTag(stage, n, o.heights ? String(heightOf(o, p.key)) : null, { animate, auto: true, slot: 'h' }));
   jobs.push(setOrder(stage, n, p.order, { pop: animate }));
   return jobs.filter(Boolean);
 }
@@ -146,12 +142,14 @@ function nodeEl(stage, p, b, hidden) {
   return n;
 }
 
+// 角上的小字贴在哪（tree.js 的 cornerRect，测试量过不叠、不压值）：CSS 照它写
+const TL = cornerRect('tag', 24), TR = cornerRect('bf', 24), BR = cornerRect('height', 24), OR = cornerRect('order', 24);
+
 export const treeView = {
   sync(stage, o, ctx) {
     ensureCss('tree', treeView.css);
     const sc = stage.scene;
     const entering = ctx.entering === o.id;
-    const pos = layoutTree(o);
     // 空树：根的位置一个虚圈（插进来就长在这里）
     if (o.root == null) {
       stage.decor(o.id, 'empty', () => {
@@ -169,7 +167,7 @@ export const treeView = {
       let made = false;
       const n = stage.partNode(p, () => { made = true; return nodeEl(stage, p, b, entering || !stage.instant); });
       stage.flagPart(n, p, ctx);
-      ctx.jobs.push(...dress(stage, o, p, n, pos.get(p.key)?.side || 'root', { animate: animate && !made }));
+      ctx.jobs.push(...dress(stage, o, p, n, { animate: animate && !made }));
       if (made) { if (!entering) fresh.push({ p, n, b }); continue; }
       if (!same(n.__box, b) && (!ctx.only || ctx.only.includes(p))) moves.push({ part: p, node: n, from: n.__box, to: b, order: 0, duration: 640 });
     }
@@ -281,7 +279,9 @@ export const treeView = {
       }
       await stage.sync({ pre, cmd: 'delete', fx });
     },
-    // 旋转：两个结点和挂着的子树一起沿弧转过去（右旋顺时针、左旋逆时针），树枝跟着结点走、换到新的父结点上；双旋是两下
+    // 旋转：照中序排，转前转后横坐标不变，结点只上下移（转上来的往上、转下去的往下，挂着的子树跟着）；树枝换到新的父结点上。
+    // 换了父亲的那棵子树（右旋 a：b 原来的右子树挂到 a 的左边）先描一道橙色，新父亲转下来接住它时闪一下——只是画面，不改什么。
+    // 双旋是两下，每一下各描各的
     async rotate(stage, c, fx) {
       if (stage.instant) return;
       const o = stage.scene.objects.get(fx.id);
@@ -289,22 +289,21 @@ export const treeView = {
         const to = boxesFor(o, st.snap);
         const na = stage.nodes.get(pidOf(o, st.a)), nb = stage.nodes.get(pidOf(o, st.b));
         if (!na || !nb) continue;
-        const cw = st.dir === 'right';
         na.classList.add('is-hot'); nb.classList.add('is-hot');
-        await Promise.all([stage.pulse(nodeIn(o, st.a)), stage.pulse(nodeIn(o, st.b))]);
-        const pos = layoutTree(st.snap);
+        const moved = st.moved != null ? regraft(stage, o, st) : null;
+        await Promise.all([stage.pulse(nodeIn(o, st.a)), stage.pulse(nodeIn(o, st.b)), moved?.shown]);
         const jobs = [];
         for (const p of o.nodes) {
           const n = stage.nodes.get(pidOf(o, p.key)), b = to.get(p.key);
-          if (!n || !b) continue;
-          setSide(n, pos.get(p.key)?.side || 'root');
-          if (same(n.__box, b)) continue;
-          jobs.push(stage.moveNode(p, turnFrames(n.__box, b, cw), b, { duration: 980, easing: EASE.move }));
+          if (!n || !b || same(n.__box, b)) continue;
+          jobs.push(stage.moveNode(p, [{ transform: tr(n.__box.x, n.__box.y) }, { transform: tr(b.x, b.y) }], b, { duration: 820, easing: EASE.move }));
         }
-        syncEdges(stage, o, st.snap, { delay: 380, jobs });
+        syncEdges(stage, o, st.snap, { delay: 320, jobs });
+        moved?.relink();
         jobs.push(follow(stage, o.id));
         await Promise.all(jobs);
         na.classList.remove('is-hot'); nb.classList.remove('is-hot');
+        if (moved) await moved.arrive();
         if (i < fx.steps.length - 1) await stage.wait(320);
       }
     },
@@ -456,13 +455,22 @@ export const treeView = {
 .st-cell.tr-node { width: ${NODE}px; height: ${NODE}px; border-radius: 50%; }
 .st-cell.tr-node.is-tap::after, .st-cell.tr-node.is-drag::after { border-radius: 50%; }
 .st-cell.tr-node.is-hot { box-shadow: 0 0 0 2.5px var(--st-gold), 0 0 0 8px color-mix(in srgb, var(--st-gold) 22%, transparent), 0 10px 20px -12px rgb(var(--shade-rgb, 25 45 40) / 0.5); z-index: 3; }
-.tr-node > .nv-tag { top: -12px; left: 38px; }
-.tr-node.is-left > .nv-tag { left: auto; right: 38px; }
-.tr-node > .nv-ord { left: 50%; bottom: -12px; margin-left: -12px; }
+.tr-node > .nv-tag { top: ${TL.y}px; }
+.tr-node > .nv-tag[data-slot="tag"] { right: ${NODE - TL.x - TL.w}px; }
+.tr-node > .nv-tag[data-slot="bf"] { left: ${TR.x}px; }
+.tr-node > .nv-tag[data-slot="h"] { top: auto; bottom: ${NODE - BR.y - CORNER_H}px; left: ${BR.x}px; min-width: 22px; padding: 0 5px; border-radius: 7px; font-weight: 500; }
+.tr-node > .nv-ord { left: ${OR.x}px; bottom: ${NODE - OR.y - OR.h}px; }
+.tr-moved { position: absolute; left: 0; top: 0; box-sizing: border-box; border-radius: ${NODE / 2 + 10}px; border: 2.5px solid var(--st-g6); background: color-mix(in srgb, var(--st-g6) 7%, transparent); pointer-events: none; }
+.tr-moved.is-arrive { animation: tr-arrive .45s ease-in-out 2; }
+.st-cell.tr-node.is-arrive { animation: tr-arrive-node .45s ease-in-out 2; }
+@keyframes tr-arrive { 50% { background: color-mix(in srgb, var(--st-g6) 18%, transparent); box-shadow: 0 0 0 7px color-mix(in srgb, var(--st-g6) 22%, transparent); } }
+@keyframes tr-arrive-node { 50% { box-shadow: 0 0 0 2.5px var(--st-g6), 0 0 0 8px color-mix(in srgb, var(--st-g6) 22%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .tr-moved.is-arrive, .st-cell.tr-node.is-arrive { animation: none; } }
 .nv-fly.is-drag { z-index: 7; cursor: grabbing; }
 .tr-edge { stroke: rgb(var(--chalk-rgb, 27 34 32) / 0.32); stroke-width: 2.5; stroke-linecap: round; transition: stroke .35s, stroke-width .35s, opacity .35s; }
 .tr-edge[data-paint] { stroke: var(--c); stroke-width: 3.5; }
 .tr-edge.is-dim { opacity: .28; }
+.tr-edge.is-moved { stroke: var(--st-g6); stroke-width: 3.5; }
 .tr-empty { position: absolute; left: 0; top: 0; width: ${NODE}px; height: ${NODE}px; box-sizing: border-box; border-radius: 50%; border: 1.5px dashed rgb(var(--chalk-rgb, 27 34 32) / 0.28); }
 .tr-tray { position: absolute; left: 0; top: 0; box-sizing: border-box; border-radius: 40px; background: color-mix(in srgb, var(--st-brand) 5%, transparent); border: 1.5px dashed color-mix(in srgb, var(--st-brand) 26%, transparent); pointer-events: none; }
 .tr-chip { z-index: 2; }
@@ -475,19 +483,40 @@ export const treeView = {
 `,
 };
 
-// 旋转时一个结点从 a 走到 b：沿一道弧（右旋顺时针、左旋逆时针拱），像整棵转过去
-function turnFrames(a, b, cw) {
-  const p0 = centerOf(a), p1 = centerOf(b);
-  const dx = p1.x - p0.x, dy = p1.y - p0.y, d = Math.hypot(dx, dy) || 1;
-  const k = Math.min(64, d * 0.32);
-  // 屏幕坐标 y 朝下：顺时针转，弧往弦的「左手边」拱
-  const nx = cw ? dy / d : -dy / d, ny = cw ? -dx / d : dx / d;
-  const cx = (p0.x + p1.x) / 2 + nx * k, cy = (p0.y + p1.y) / 2 + ny * k;
-  return Array.from({ length: 17 }, (_, i) => {
-    const t = i / 16, u = 1 - t;
-    const x = u * u * p0.x + 2 * u * t * cx + t * t * p1.x, y = u * u * p0.y + 2 * u * t * cy + t * t * p1.y;
-    return { transform: tr(x - a.w / 2, y - a.h / 2), offset: t };
+// 旋转里换了父亲的那棵子树（st.moved 是它的根）：外面描一道橙色的圈（子树占着连着的几列、下面几层，框里没有别的结点），
+// 原来连着它的那根树枝也染橙；转完连到新父亲的那根染橙，整棵闪一下，再收掉。只是画面后果，场景里什么都不记
+function regraft(stage, o, st) {
+  const keys = levelOrder(st.snap, st.moved).map((n) => n.key);
+  const boxes = keys.map((k) => stage.nodes.get(pidOf(o, k))?.__box).filter(Boolean);
+  const area = bbox(boxes);
+  if (!area) return null;
+  const b = grow(area, 10); // 不出结点让出来的那一圈（treeArea），排版检查不报
+  // 记成这一样东西的 decor：中途清舞台、拿掉这棵树时跟着收掉，不会留下一个孤零零的橙框
+  const ring = stage.decor(o.id, 'moved', () => {
+    const n = el('div', 'tr-moved');
+    stage.layer.prepend(n); // 在结点下面（树枝在更下面的 stage.under）
+    return n;
   });
+  ring.style.transform = tr(b.x, b.y);
+  ring.style.width = `${b.w}px`;
+  ring.style.height = `${b.h}px`;
+  const nodes = keys.map((k) => stage.nodes.get(pidOf(o, k))).filter(Boolean);
+  const edge = (from) => stage.decor(o.id, `e:${from}>${st.moved}`);
+  edge(st.b)?.classList.add('is-moved');
+  return {
+    shown: stage.tween(ring, [{ opacity: 0, transform: `${tr(b.x, b.y)} scale(1.06)` }, { opacity: 1, transform: tr(b.x, b.y) }], { duration: 300, easing: EASE.out }),
+    // 树枝换好了（syncEdges 刚画上新父亲那一根）
+    relink() { edge(st.a)?.classList.add('is-moved'); },
+    async arrive() {
+      ring.classList.add('is-arrive');
+      nodes.forEach((n) => n.classList.add('is-arrive'));
+      await stage.wait(900);
+      nodes.forEach((n) => n.classList.remove('is-arrive'));
+      edge(st.a)?.classList.remove('is-moved');
+      stage.dropDecor(o.id, (k) => k === 'moved'); // 淡掉、拿下（双旋的第二下另描一个）
+      await stage.wait(200);
+    },
+  };
 }
 
 async function shrink(stage, n) {
@@ -525,7 +554,7 @@ async function descendShow(stage, fx, pre, { end }) {
     return;
   }
   // 往空位那边探一下（插入时树接着长开，新结点从这里长出来；查找时冒出一个「空」）
-  const dx = fx.side === 'left' ? -SEP / 2 : SEP / 2;
+  const dx = fx.side === 'left' ? -COL / 2 : COL / 2; // 空位在半列的地方（tree.js 的 slotSpots）
   if (end === 'miss') {
     const b = box(fx.path.at(-1));
     const g = el('div', 'tr-miss', stage.layer);

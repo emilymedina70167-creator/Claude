@@ -1,17 +1,20 @@
 // 舞台上的二叉树（遍历、二叉排序树、平衡二叉树、堆）：数据和指令，不碰 DOM（画法在 tree.view.js）。纯函数，有测试（tests/stage-tree.test.js）。
 // 结点是部件：key 是跟着它走的编号（造的时候层序第几个，后长出来的接着编），value 是显示的值，左右孩子记 key。
-// 排版（layoutTree）按子树宽度：左子树整个在根的左边、右子树整个在根的右边，各让开半个间距——
-// 兄弟、堂兄弟不重叠，二叉排序树从左到右正好从小到大。根一直在 origin（造的时候摆好的地方），树长大了往两边、往下长。
+// 排版（layoutTree）照中序名次：一个结点一列（和黑板 engines/treeview.js 一样），纵坐标照层——插入时只有新结点右边的往右让一列，
+// 旋转不改中序，结点只上下移，学生盯着的那几个不会左右乱跑。origin 是「第一列、根那一层」的中心，造的时候定下；树往右、往下长，
+// 放不下镜头往后退（stage.js 的 keepInView），不重排。堆也一样按中序（不左右对称）
 // 部件的写法：t.40（值是 40 的那个，值唯一时）、t#3（层序第 3 个，跟着结点走：堆里换值、值有重复时用）、t.40*（40 和它整棵子树）
 import { bbox } from '../layout.js';
 import { parseRef } from '../script.js';
 
 export const NODE = 56; // 结点的直径
 export const SEP = 86; // 同一层两个结点的中心至少隔多远（中间留着贴角标的地方）
+export const COL = SEP; // 一列多宽：中序第 k 个（从 0 数）的中心在第一列右边 k × COL
 export const LEVEL = 92; // 一层多高（中心到中心）
 export const MAX_NODES = 31;
 export const MAX_DEPTH = 8; // 最多几层
-export const TAG_ROOM = 18; // 结点角上的小字、下面的访问号占的地方（镜头、贴字、别的东西都让开）
+export const TAG_ROOM = 18; // 结点左右角上的小字、下面的访问号占的地方（镜头、贴字、别的东西都让开）
+export const TAG_TOP = 30; // 结点上面两个角标占的高（cornerRect：浮在结点上方一点，不压从父结点下来的树枝）
 const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
 export const SIDES = { left: 'left', right: 'right', l: 'left', r: 'right', 左: 'left', 右: 'right', L: 'left', R: 'right' };
 const KINDS = { pre: 'pre', in: 'in', post: 'post', level: 'level', preorder: 'pre', inorder: 'in', postorder: 'post', 先序: 'pre', 前序: 'pre', 中序: 'in', 后序: 'post', 层序: 'level' };
@@ -120,48 +123,71 @@ export function depths(o) {
 // —— 排版 ——
 const LAYOUT_CACHE = new Map();
 /**
- * 每个结点的中心（相对根，根在 0, 0；y 往下一层 LEVEL）。struct 是 { root, nodes: [{ key, left, right }] }（树本身也行）。
- * 左子树整个在 −SEP/2 往左、右子树整个在 +SEP/2 往右：两个孩子对称摆开，距离按两边子树要的宽度取大的。
- * 返回 Map(key → { x, y, depth, side })，side 是 'root' / 'left' / 'right'（角标贴在外侧，不压进来的那条边）
+ * 每个结点的中心（相对第一列、根那一层：第一列在 x = 0，根在 y = 0；y 往下一层 LEVEL）。struct 是 { root, nodes: [{ key, left, right }] }（树本身也行）。
+ * 横坐标是中序名次 × COL：一个结点一列，不会重叠，二叉排序树从左到右正好从小到大；同一层的两个结点中间至少隔着一列
+ * （中序挨着的两个总是一个是另一个的祖先，不在同一层），角标贴在两边碰不到邻居的。
+ * 返回 Map(key → { x, y, depth, side, col })，side 是 'root' / 'left' / 'right'，col 是中序名次（从 0 数）
  */
 export function layoutTree(struct) {
   const sig = `${struct.root}|${struct.nodes.map((n) => `${n.key}:${n.left ?? ''},${n.right ?? ''}`).join(';')}`;
   const hit = LAYOUT_CACHE.get(sig);
   if (hit) return hit;
   const by = new Map(struct.nodes.map((n) => [n.key, n]));
-  const off = new Map();
-  const half = SEP / 2;
-  // 返回这棵子树每一层的左右边（相对它的根）
-  const shape = (k) => {
-    const n = by.get(k);
-    const L = n.left != null && by.has(n.left) ? shape(n.left) : null;
-    const R = n.right != null && by.has(n.right) ? shape(n.right) : null;
-    let d = half;
-    for (const c of L || []) d = Math.max(d, c.r + half);
-    for (const c of R || []) d = Math.max(d, half - c.l);
-    if (L) off.set(n.left, -d);
-    if (R) off.set(n.right, d);
-    const out = [{ l: 0, r: 0 }];
-    for (let i = 0; i < Math.max(L?.length || 0, R?.length || 0); i++) {
-      const a = L?.[i], b = R?.[i];
-      out.push({ l: Math.min(a ? a.l - d : Infinity, b ? b.l + d : Infinity), r: Math.max(a ? a.r - d : -Infinity, b ? b.r + d : -Infinity) });
-    }
-    return out;
-  };
   const pos = new Map();
-  if (struct.root != null && by.has(struct.root)) {
-    shape(struct.root);
-    const place = (k, x, depth, side) => {
-      const n = by.get(k);
-      pos.set(k, { x, y: depth * LEVEL, depth, side });
-      if (n.left != null && by.has(n.left)) place(n.left, x + off.get(n.left), depth + 1, 'left');
-      if (n.right != null && by.has(n.right)) place(n.right, x + off.get(n.right), depth + 1, 'right');
-    };
-    place(struct.root, 0, 0, 'root');
-  }
+  let col = 0;
+  // 中序走一遍：先左子树、再自己、再右子树（最多 8 层，递归不深）
+  const walk = (k, depth, side) => {
+    const n = by.get(k);
+    if (!n || pos.has(k)) return;
+    if (n.left != null) walk(n.left, depth + 1, 'left');
+    pos.set(k, { x: col * COL, y: depth * LEVEL, depth, side, col });
+    col++;
+    if (n.right != null) walk(n.right, depth + 1, 'right');
+  };
+  if (struct.root != null) walk(struct.root, 0, 'root');
   if (LAYOUT_CACHE.size > 400) LAYOUT_CACHE.clear();
   LAYOUT_CACHE.set(sig, pos);
   return pos;
+}
+
+/**
+ * 一次旋转里换了父亲的那棵子树的根（右旋 a：a 的左孩子 b 转上来，b 原来的右子树挂到 a 的左边——就是它）；
+ * 没有这棵子树（b 那一边是空的）、或者 before → after 不是一次旋转，给 null。画面拿它描一道橙色（tree.view.js）
+ */
+export function movedSubtree(before, after) {
+  const parents = (s) => {
+    const m = new Map();
+    for (const n of s.nodes) for (const c of [n.left, n.right]) if (c != null) m.set(c, n.key);
+    return m;
+  };
+  const P0 = parents(before), P1 = parents(after);
+  const keys = new Set([...before.nodes, ...after.nodes].map((n) => n.key));
+  const changed = [...keys].filter((k) => (P0.get(k) ?? null) !== (P1.get(k) ?? null));
+  // 转的两个：原来 a 是 b 的父亲，转完 b 是 a 的父亲
+  const pivots = new Set();
+  for (const k of changed) { const p = P0.get(k); if (p != null && P1.get(p) === k) { pivots.add(k); pivots.add(p); } }
+  if (pivots.size !== 2) return null;
+  const rest = changed.filter((k) => !pivots.has(k));
+  return rest.length === 1 ? rest[0] : null;
+}
+
+/**
+ * 结点角上的小字贴在哪（相对结点框的左上角；w 是小字多宽）：老师写的 tag 左上、平衡因子右上、子树高右下，访问号在正下方。
+ * 三样分开贴，一起开着也不叠、不压结点里的值。上面两个浮在结点上方、各占半边（左上的往左长、右上的往右长）：
+ * 照中序排，父结点在左上或右上隔几列，树枝往上翘的角度从 47° 到很平，贴在圆的斜角上就压着进来的那根树枝；
+ * 往上提到正上方两侧，任何一根都碰不到（tests/stage-tree.test.js 量过）。右下那个让开正下方的访问号。画面的 CSS（tree.view.js）照这里的数写
+ */
+export const CORNER_H = 22;
+const CORNER_MID = 2; // 上面两个离结点竖着的中线多远（中间留一道缝）
+const CORNER_LOW = 12; // 右下那个、访问号低出结点多少
+const ORDER_W = 24, ORDER_H = 24;
+export function cornerRect(kind, w = 24) {
+  const top = -(TAG_TOP - 2); // 上面两个的上沿（下沿离圆顶 6）
+  if (kind === 'tag') return { x: NODE / 2 - CORNER_MID - w, y: top, w, h: CORNER_H };
+  if (kind === 'bf') return { x: NODE / 2 + CORNER_MID, y: top, w, h: CORNER_H };
+  if (kind === 'height') return { x: NODE - 10, y: NODE + CORNER_LOW - CORNER_H, w, h: CORNER_H };
+  if (kind === 'order') return { x: NODE / 2 - ORDER_W / 2, y: NODE + CORNER_LOW - ORDER_H, w: Math.max(ORDER_W, w), h: ORDER_H };
+  throw new Error(`角上没有「${kind}」`);
 }
 
 /** 照某个结构（旋转的中间一步）每个结点的框；不传就是树现在的样子 */
@@ -181,7 +207,7 @@ export function nodeBox(o, p) {
 }
 /** 空树时根的位置（画一个虚圈，插进来就长在这里） */
 export const rootSpot = (o) => ({ x: o.origin.x - NODE / 2, y: o.origin.y - NODE / 2, w: NODE, h: NODE });
-const roomy = (b) => ({ x: b.x - TAG_ROOM, y: b.y - TAG_ROOM, w: b.w + 2 * TAG_ROOM, h: b.h + TAG_ROOM + 12 });
+const roomy = (b) => ({ x: b.x - TAG_ROOM, y: b.y - TAG_TOP, w: b.w + 2 * TAG_ROOM, h: b.h + TAG_TOP + 12 });
 /** 结点（连角标）占的地方，不算托盘：拖托盘里的数进树时，落在这一块里就是插进树里 */
 export const treeArea = (o) => bbox(o.nodes.length ? o.nodes.map((n) => roomy(nodeBox(o, n))) : [roomy(rootSpot(o))]);
 const nodesArea = treeArea;
@@ -189,13 +215,13 @@ const nodesArea = treeArea;
 export const TRAY_GAP = 20; // 托盘里两个数之间（能拖时外面一圈呼吸的光，挨太近就叠在一起）
 const TRAY_TOP = 22; // 托盘离树最下面一层多远
 const TRAY_PAD = 10; // 托盘的底板比里面的数宽出去多少
-/** 托盘（待插的数）画在哪：树下面一排圆，和结点一样大，正中对着根（世界坐标）。没有托盘是 [] */
+/** 托盘（待插的数）画在哪：树下面一排圆，和结点一样大，正中对着树的正中（世界坐标；根不一定在正中了）。没有托盘是 [] */
 export function trayBoxes(o) {
   const vals = o.tray || [];
   if (!vals.length) return [];
   const b = nodesArea(o);
   const w = vals.length * NODE + (vals.length - 1) * TRAY_GAP;
-  const x0 = o.origin.x - w / 2, y = b.y + b.h + TRAY_TOP;
+  const x0 = b.x + b.w / 2 - w / 2, y = b.y + b.h + TRAY_TOP;
   return vals.map((value, i) => ({ value, x: x0 + i * (NODE + TRAY_GAP), y, w: NODE, h: NODE }));
 }
 /** 托盘的底板（包着那一排数）；没有托盘是 null */
@@ -207,7 +233,8 @@ export function trayArea(o) {
 }
 /**
  * 能放新结点的空位（open t place：学生把托盘的数拖到某个结点下面）：每个结点缺孩子的那一边、空树的根。
- * 一个孩子都没有的，空位离它半个间距；另一边有孩子的，和那个孩子对称（排版就是这样摆的）。再长会超过最多那几层（MAX_DEPTH）的不给。
+ * 照中序排，放进去的结点会落在它和中序的邻居中间：空位就画在半列的地方、下一层（左边空着是它左边半列，右边空着是右边半列）。
+ * 那里上下挨着的两列都不在这一层（缺左孩子的，中序前一个是它的祖先），不会压着别的结点。再长会超过最多那几层（MAX_DEPTH）的不给。
  * 返回 [{ parent（结点的 key，空树是 null）, side, box（世界坐标）}]
  */
 export function slotSpots(o) {
@@ -218,8 +245,7 @@ export function slotSpots(o) {
     if (!p || (d.get(n.key) || 0) + 1 >= MAX_DEPTH) continue;
     for (const side of ['left', 'right']) {
       if (n[side] != null) continue;
-      const sib = n[side === 'left' ? 'right' : 'left'];
-      const dx = sib != null && pos.get(sib) ? p.x - pos.get(sib).x : side === 'left' ? -SEP / 2 : SEP / 2;
+      const dx = side === 'left' ? -COL / 2 : COL / 2;
       out.push({ parent: n.key, side, box: { x: o.origin.x + p.x + dx - NODE / 2, y: o.origin.y + p.y + LEVEL - NODE / 2, w: NODE, h: NODE } });
     }
   }
@@ -427,11 +453,10 @@ export const tree = {
     refreshDup(o);
     if (old?.type === 'tree') o.origin = { ...old.origin };
     else {
-      // 摆在已有的东西下面、居中；根在 origin
-      const xs = [0, ...[...layoutTree(o).values()].map((p) => p.x)];
-      const lo = Math.min(...xs), hi = Math.max(...xs);
-      const s = scene.slotFor(hi - lo + NODE + 2 * TAG_ROOM);
-      o.origin = { x: s.x + TAG_ROOM + NODE / 2 - lo, y: s.y + TAG_ROOM + NODE / 2 };
+      // 摆在已有的东西下面、居中；origin 是第一列、根那一层（定下了就不动：以后长宽了往右长，镜头往后退）
+      const hi = Math.max(0, ...[...layoutTree(o).values()].map((p) => p.x));
+      const s = scene.slotFor(hi + NODE + 2 * TAG_ROOM);
+      o.origin = { x: s.x + TAG_ROOM + NODE / 2, y: s.y + TAG_TOP + NODE / 2 };
     }
     return o;
   },
@@ -463,7 +488,8 @@ export const tree = {
     const tray = trayArea(o);
     return tray ? bbox([nodesArea(o), tray]) : nodesArea(o);
   },
-  // 贴字让开：结点（连角标）、每条边上取几点、托盘
+  // 贴字让开：结点（连角标）、每条边上隔一小段取一点、托盘。照中序排，靠近根的树枝常常横跨好几列（两三百像素长），
+  // 只取三点时字会落在两点中间、压着树枝：按长短取，点和点隔不到 36 像素
   obstacles(o) {
     const B = boxesFor(o);
     const out = [...B.values()].map(roomy);
@@ -473,7 +499,12 @@ export const tree = {
     for (const [a, b] of edgesOf(o)) {
       const A = B.get(a), C = B.get(b);
       if (!A || !C) continue;
-      for (const t of [0.3, 0.5, 0.7]) out.push({ x: A.x + (C.x - A.x) * t + NODE / 2 - 7, y: A.y + (C.y - A.y) * t + NODE / 2 - 7, w: 14, h: 14 });
+      const len = Math.hypot(C.x - A.x, C.y - A.y);
+      const n = Math.max(3, Math.ceil((len - NODE) / 36));
+      for (let i = 1; i <= n; i++) {
+        const t = (NODE / 2 + (len - NODE) * i / (n + 1)) / (len || 1);
+        out.push({ x: A.x + (C.x - A.x) * t + NODE / 2 - 7, y: A.y + (C.y - A.y) * t + NODE / 2 - 7, w: 14, h: 14 });
+      }
     }
     return out;
   },
@@ -591,6 +622,7 @@ export const tree = {
       const s = snapshot(o);
       const steps = [];
       for (const [dir, at] of ROT[kind]) {
+        const was = structuredClone(s);
         const by = new Map(s.nodes.map((n) => [n.key, n]));
         const pivot = at ? by.get(a.key)[at] : a.key;
         const pn = pivot != null ? by.get(pivot) : null;
@@ -602,7 +634,8 @@ export const tree = {
           throw new Error(`${ROT[kind].length > 1 ? `${kind} 型：` : ''}${who} 没有${zh(need)}孩子，${dir === 'right' ? '右旋' : '左旋'}转不了（${dir === 'right' ? '右旋是左孩子转上来' : '左旋是右孩子转上来'}）`);
         }
         const b = rotStruct(s, pivot, dir);
-        steps.push({ dir, a: pivot, b, snap: structuredClone(s) });
+        // moved：换了父亲的那棵子树（画面描一道橙色）；横坐标不变，它也不挪——是新父亲转下来接住它
+        steps.push({ dir, a: pivot, b, snap: structuredClone(s), moved: movedSubtree(was, s) });
       }
       const deep = Math.max(0, ...depths({ ...o, ...s, nodes: s.nodes }).values());
       checkDepth(o, deep);

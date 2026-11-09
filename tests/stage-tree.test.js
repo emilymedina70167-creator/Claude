@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { tree, layoutTree, buildLevel, serialize, levelOrder, traversal, treePath, imbalance, NODE, SEP, LEVEL } from '../kit/src/stage/types/tree.js';
+import { tree, layoutTree, movedSubtree, cornerRect, snapshot, buildLevel, serialize, levelOrder, traversal, treePath, imbalance, NODE, SEP, LEVEL, COL, TAG_ROOM, TAG_TOP } from '../kit/src/stage/types/tree.js';
 
 const run = (scene, src) => { for (const c of parseScript(src)) scene.apply(c); return scene; };
 const make = (src) => run(new Scene(), src);
@@ -44,40 +44,186 @@ test('造写错了说清楚怎么写', () => {
   assert.throws(() => buildLevel(['_', '1']), /不能是 _/);
 });
 
-test('排版：同一层隔开至少 SEP，左子树整个在左边、右子树整个在右边（二叉排序树从左到右就是从小到大）', () => {
-  const rnd = ((a) => () => { a = (a * 1103515245 + 12345) % 2 ** 31; return a / 2 ** 31; })(7);
+// 排版（第二轮）：横坐标照中序名次（一个结点一列，COL = SEP），纵坐标照层；都相对「第一列、根那一层」（o.origin）
+const inorder = (o) => traversal(o, o.root, 'in').order;
+function randomBst(seed, n = 14) {
+  const rnd = ((a) => () => { a = (a * 1103515245 + 12345) % 2 ** 31; return a / 2 ** 31; })(seed);
+  const s = make('tree t = 50');
+  const used = new Set([50]);
+  for (let i = 0; i < n; i++) {
+    const v = Math.floor(rnd() * 100);
+    if (used.has(v)) continue;
+    used.add(v);
+    if (dryRun(s, `insert t ${v}`).length) continue; // 太深的跳过
+    run(s, `insert t ${v}`);
+  }
+  return s;
+}
+
+test('一个结点一列：x 两两不同，照中序从小到大、每两列隔 86；y 是第几层 × LEVEL；同一层至少隔两列（角标有地方）', () => {
+  assert.equal(COL, 86);
+  assert.equal(COL, SEP);
   for (let k = 0; k < 40; k++) {
-    const s = make('tree t = 50');
-    const used = new Set([50]);
-    for (let i = 0; i < 14; i++) {
-      const v = Math.floor(rnd() * 100);
-      if (used.has(v)) continue;
-      used.add(v);
-      if (dryRun(s, `insert t ${v}`).length) continue; // 太深的跳过
-      run(s, `insert t ${v}`);
-    }
-    const o = T(s);
+    const o = T(randomBst(7 + k));
     const pos = layoutTree(o);
-    const nodes = [...o.nodes].sort((a, b) => Number(a.value) - Number(b.value));
-    for (let i = 1; i < nodes.length; i++) assert.ok(pos.get(nodes[i].key).x > pos.get(nodes[i - 1].key).x, '从左到右从小到大');
+    const ord = inorder(o);
+    assert.equal(new Set(ord.map((key) => pos.get(key).x)).size, ord.length, '一个结点一列');
+    ord.forEach((key, i) => {
+      assert.equal(pos.get(key).col, i, 'col 是中序名次');
+      assert.equal(pos.get(key).x, i * COL);
+    });
+    for (let i = 1; i < ord.length; i++) assert.equal(pos.get(ord[i]).x - pos.get(ord[i - 1]).x, 86);
+    const byValue = [...o.nodes].sort((a, b) => Number(a.value) - Number(b.value));
+    for (let i = 1; i < byValue.length; i++) assert.ok(pos.get(byValue[i].key).x > pos.get(byValue[i - 1].key).x, '二叉排序树从左到右从小到大');
     const rows = new Map();
-    for (const n of o.nodes) { const p = pos.get(n.key); if (!rows.has(p.y)) rows.set(p.y, []); rows.get(p.y).push(p.x); }
-    for (const xs of rows.values()) { xs.sort((a, b) => a - b); for (let i = 1; i < xs.length; i++) assert.ok(xs[i] - xs[i - 1] >= SEP - 1e-9, '同一层不挤'); }
+    for (const n of o.nodes) {
+      const p = pos.get(n.key);
+      assert.equal(p.y, p.depth * LEVEL);
+      if (!rows.has(p.y)) rows.set(p.y, []);
+      rows.get(p.y).push(p.col);
+    }
+    for (const cols of rows.values()) { cols.sort((a, b) => a - b); for (let i = 1; i < cols.length; i++) assert.ok(cols[i] - cols[i - 1] >= 2, '同一层的两个结点中间隔着别的列'); }
     for (const n of o.nodes) for (const side of ['left', 'right']) if (n[side] != null) {
       const p = pos.get(n.key), c = pos.get(n[side]);
       assert.equal(c.y, p.y + LEVEL);
       assert.ok(side === 'left' ? c.x < p.x : c.x > p.x);
       assert.equal(c.side, side);
     }
+    assert.equal(Math.min(...[...pos.values()].map((p) => p.x)), 0, '第一列在 0');
   }
-  // 完全二叉树对称、紧凑：最下面一层正好隔 SEP
-  const full = layoutTree(T(make('tree t = 1 2 3 4 5 6 7')));
-  assert.deepEqual([4, 5, 6, 7].map((k) => full.get(k).x), [-1.5, -0.5, 0.5, 1.5].map((v) => v * SEP));
   // 两棵树上下摆开不重叠
   const s2 = make(`${BASE}\ntree u = 1 2 3`);
   const A = tree.objectBox(T(s2)), B = tree.objectBox(T(s2, 'u'));
   assert.ok(B.y > A.y + A.h);
   assert.equal(tree.partBox(T(s2), at(T(s2), 50)).w, NODE);
+});
+
+test('旋转前后横坐标不变（中序不变）：只上下移；换父亲的那棵子树记在每一步上', () => {
+  const s = make('tree t = 50 30 60 20 40 _ _ 10');
+  const o = T(s);
+  const xs = () => new Map(o.nodes.map((n) => [n.value, tree.partBox(o, n).x]));
+  const ys = () => new Map(o.nodes.map((n) => [n.value, tree.partBox(o, n).y]));
+  const x0 = xs(), y0 = ys();
+  const before = snapshot(o);
+  const fx = s.apply(parseScript('rotate t.50 right')[0]);
+  assert.deepEqual(xs(), x0, '每个结点的 x 一样');
+  assert.notEqual(ys().get('50'), y0.get('50'), '原来的根往下走了一层');
+  assert.equal(ys().get('50'), y0.get('50') + LEVEL);
+  assert.equal(ys().get('30'), y0.get('30') - LEVEL, '30 转上来当根');
+  assert.equal(ys().get('40'), y0.get('40'), '40 换了父亲，层数没变');
+  // 「换父亲的那棵子树」：右旋 50，30 的右子树 40 挂到 50 的左边
+  assert.equal(movedSubtree(before, snapshot(o)), at(o, 40).key);
+  assert.equal(fx.steps[0].moved, at(o, 40).key, 'rotate 的每一步带着它（画面描橙色用）');
+  // 没有中间那棵子树：null
+  const s2 = make('tree t = 30 20 _ 10');
+  const b2 = snapshot(T(s2));
+  const fx2 = s2.apply(parseScript('rotate t.30 right')[0]);
+  assert.equal(movedSubtree(b2, snapshot(T(s2))), null);
+  assert.equal(fx2.steps[0].moved, null);
+  // 双旋每一步各算各的：LR 先左旋 10（20 的左子树 15 换到 10 的右边），再右旋 30（20 的右子树 25 换到 30 的左边）
+  const s3 = make('tree t = 30 10 40 5 20 _ _ _ _ 15 25');
+  const o3 = T(s3);
+  const x3 = new Map(o3.nodes.map((n) => [n.value, tree.partBox(o3, n).x]));
+  const fx3 = s3.apply(parseScript('rotate t.30 LR')[0]);
+  assert.deepEqual(fx3.steps.map((st) => o3.nodes.find((n) => n.key === st.moved)?.value), ['15', '25']);
+  assert.deepEqual(new Map(o3.nodes.map((n) => [n.value, tree.partBox(o3, n).x])), x3, '双旋也不左右挪');
+  // 不是一次旋转（插了一个结点、两处换了父亲）：null
+  assert.equal(movedSubtree(snapshot(T(make('tree t = 2 1'))), snapshot(T(make('tree t = 2 1 3')))), null);
+});
+
+test('插入只挪右边：中序在新结点右边的往右让一列，左边的不动；第一列不动', () => {
+  const s = make('tree t = 30 20 40 10 25 _ 45');
+  const o = T(s);
+  const origin = { ...o.origin };
+  const x0 = new Map(o.nodes.map((n) => [n.value, tree.partBox(o, n).x]));
+  run(s, 'insert t 27');
+  for (const v of ['10', '20', '25']) assert.equal(tree.partBox(o, at(o, v)).x, x0.get(v), `${v} 在 27 左边，不动`);
+  for (const v of ['30', '40', '45']) assert.equal(tree.partBox(o, at(o, v)).x, x0.get(v) + 86, `${v} 在 27 右边，往右一列`);
+  assert.equal(tree.partBox(o, at(o, 27)).x, x0.get('25') + 86, '27 接在 25 那一列的右边');
+  assert.deepEqual(o.origin, origin, 'origin（第一列）造的时候定下，插入不动它');
+  // 插一个最小的：它占第一列，别的都往右让一列
+  run(s, 'insert t 5');
+  assert.equal(tree.partBox(o, at(o, 5)).x + NODE / 2, o.origin.x, '最小的在第一列');
+  assert.equal(tree.partBox(o, at(o, 10)).x, x0.get('10') + 86);
+  // 删掉一个：右边的往左回一列
+  run(s, 'delete t.5');
+  assert.equal(tree.partBox(o, at(o, 10)).x, x0.get('10'));
+  // 新造的树：第一列、根那一层就是 origin
+  const f = T(make('tree t = 50 30 70'));
+  assert.equal(tree.partBox(f, at(f, 30)).x + NODE / 2, f.origin.x);
+  assert.equal(tree.partBox(f, at(f, 50)).y + NODE / 2, f.origin.y);
+});
+
+test('贴字让开长树枝：照中序排靠近根的树枝横跨好几列，树枝上每一处离让开的点都不远', () => {
+  const s = make('tree t = 23 15 98 _ _ 34 115 28');
+  const o = T(s);
+  // 离最近的让开的框多远（在框里是 0）：结点那一圈、树枝上取的点都算
+  const obs = tree.obstacles(o);
+  const near = (p) => Math.min(...obs.map((b) => Math.hypot(Math.max(b.x - p.x, 0, p.x - b.x - b.w), Math.max(b.y - p.y, 0, p.y - b.y - b.h))));
+  for (const n of o.nodes) for (const side of ['left', 'right']) {
+    if (n[side] == null) continue;
+    const A = tree.partBox(o, n), C = tree.partBox(o, o.nodes.find((x) => x.key === n[side]));
+    const a = { x: A.x + NODE / 2, y: A.y + NODE / 2 }, c = { x: C.x + NODE / 2, y: C.y + NODE / 2 };
+    const len = Math.hypot(c.x - a.x, c.y - a.y);
+    for (let t = NODE / 2; t <= len - NODE / 2; t += 4) {
+      const p = { x: a.x + (c.x - a.x) * t / len, y: a.y + (c.y - a.y) * t / len };
+      assert.ok(near(p) <= 12, `${n.value}→${side} 的树枝上 ${Math.round(t)} 处离让开的地方 ${Math.round(near(p))}`);
+    }
+  }
+});
+
+test('堆也按中序：完全二叉树的 x 等于中序名次 × 86（不左右对称）', () => {
+  const o = T(make('tree h = 1 2 3 4 5 6 7'), 'h');
+  const pos = layoutTree(o);
+  assert.deepEqual(inorder(o).map((k) => o.nodes.find((n) => n.key === k).value), ['4', '2', '5', '1', '6', '3', '7']);
+  inorder(o).forEach((k, i) => assert.equal(pos.get(k).x, i * 86));
+  const h = T(make('tree h = 10 20 30 40'), 'h');
+  assert.deepEqual(inorder(h).map((k) => layoutTree(h).get(k).x), [0, 86, 172, 258]);
+  assert.notEqual(layoutTree(h).get(h.root).x, 86 * 1.5, '根不在正中：照中序是第 3 列');
+});
+
+test('角标分开：tag 左上、平衡因子右上、子树高右下、访问号正下方——一起开着也不叠、不压结点里的值', () => {
+  const value = { x: 8, y: 15, w: NODE - 16, h: 26 }; // 结点里的值（最长 4 个字，小一号）占的地方
+  const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  for (const w of [24, 28]) {
+    const rs = { tag: cornerRect('tag', w), bf: cornerRect('bf', w), height: cornerRect('height', 24), order: cornerRect('order', 28) };
+    assert.ok(rs.tag.x + rs.tag.w <= NODE / 2 && rs.tag.y < 0, 'tag 在左上');
+    assert.ok(rs.bf.x >= NODE / 2 && rs.bf.y < 0, '平衡因子在右上');
+    assert.ok(rs.height.x >= NODE / 2 && rs.height.y + rs.height.h > NODE, '子树高在右下');
+    const names = Object.keys(rs);
+    for (const k of names) assert.ok(!hit(rs[k], value), `${k} 不压值`);
+    for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) assert.ok(!hit(rs[names[i]], rs[names[j]]), `${names[i]} 和 ${names[j]} 不叠`);
+    // 都在结点让出来的那一圈里（TAG_ROOM 左右、TAG_TOP 上面、下面 12：镜头、贴字、别的东西让开的地方）
+    for (const k of names) { const r = rs[k]; assert.ok(r.x >= -TAG_ROOM && r.x + r.w <= NODE + TAG_ROOM && r.y >= -TAG_TOP && r.y + r.h <= NODE + 12, `${k} 在让出来的地方里`); }
+    // 上面两个不压从父结点下来的那根树枝：左孩子的树枝从右上来、右孩子的从左上来，父亲隔几列都一样（往上翘得越平，离得越远）
+    const c = NODE / 2;
+    for (const k of [1, 2, 3, 5]) for (const dir of [-1, 1]) {
+      const px = c + dir * k * COL, py = c - LEVEL;
+      const len = Math.hypot(px - c, py - c);
+      for (let t = NODE / 2; t < len - NODE / 2; t += 2) {
+        const pt = { x: c + (px - c) * t / len, y: c + (py - c) * t / len, w: 0.01, h: 0.01 };
+        assert.ok(!hit(rs.tag, pt) && !hit(rs.bf, pt), `宽 ${w} 的角标不压隔 ${k} 列的树枝（${dir < 0 ? '从左上' : '从右上'}来）`);
+      }
+    }
+  }
+  // 挨着的结点：同一层至少隔两列，左边那个的右上碰不到右边那个的左上；挨着的两列差一层，上角、下角都碰不到
+  const at2 = (r, dx, dy) => ({ ...r, x: r.x + dx, y: r.y + dy });
+  assert.ok(!hit(cornerRect('bf', 36), at2(cornerRect('tag', 36), 2 * COL, 0)), '同一层两个结点的角标碰不到');
+  assert.ok(!hit(cornerRect('height', 24), at2(cornerRect('tag', 36), COL, LEVEL)), '右下那个的 tag 碰不到左上那个的子树高');
+  assert.ok(!hit(cornerRect('order', 28), at2(cornerRect('bf', 28), -COL, LEVEL)), '左下那个的平衡因子碰不到右上那个的访问号');
+  assert.ok(!hit(at2(cornerRect('bf', 36), 0, LEVEL), at2(cornerRect('height', 24), COL, 0)), '左下那个的平衡因子碰不到右上那个的子树高');
+});
+
+test('重放出来一样：现状里没有坐标，按中序排以后旧 log 放回的「舞台现在」一字不差', () => {
+  const log = [
+    ['t', 'tree t = 50 30 60 20 40 _ _ 10 tray="35 45"'], ['t', 'bf t'], ['t', 'heights t'], ['t', 'tag t.50 "根"'], ['t', 'rotate t.50 right'],
+    ['t', 'open t insert'], ['s', 'insert t 35'], ['t', 'delete t.20'], ['s', 'insert t 45'], ['t', 'rotate t.30 RL'], ['t', 'traverse t in upto=3'],
+    ['t', 'tree h = 1 2 3 4 5 6 7'], ['t', 'append h 8'], ['t', 'swap h.8 h.4'],
+  ];
+  const s = new Scene();
+  for (const [by, src] of log) for (const c of parseScript(src)) s.apply({ ...c, lenient: true, replay: true }, { by: by === 's' ? 'student' : null });
+  assert.deepEqual(s.stateText().split('\n'), ['（树：名字.40 是值为 40 的结点；名字#3 是层序第 3 个结点，跟着结点走（值重复、换值以后用它）；名字.40* 是 40 和它下面整棵子树）', '树 t（7 个结点，3 层）：层序 40 30 50 10 35 45 60', '  40：左 30，右 50；30：左 10，右 35；50：左 45，右 60', '  访问顺序：10 30 35', '  角上的小字：50「根」', '  平衡因子：40 0，30 0，50 0，10 0，35 0，45 0，60 0（都平衡）', '  子树高：40 3，30 2，50 2，10 1，35 1，45 1，60 1', '  页面算的：count(t) = 7，height(t) = 3，tray(t) = 0；avl 是，bst 是', '树 h（8 个结点，4 层）：层序 1 2 3 8 5 6 7 4', '  1：左 2，右 3；2：左 8，右 5；3：左 6，右 7；8：左 4', '  页面算的：count(h) = 8，height(h) = 4，tray(h) = 0；avl 是，bst 否', '学生能直接动的：t insert（拖到空处）']);
+  assert.doesNotMatch(s.stateText(), /\d+px|x ?= ?\d|坐标/);
 });
 
 test('部件的写法：t.40 按值、t#3 按层序、t.30* 整棵子树；写错了说清楚', () => {
