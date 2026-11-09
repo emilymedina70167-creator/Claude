@@ -177,7 +177,7 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
     ['tree t = 50 30 70\nopen t', 'open t rotate', /一次开一种/], [M, 'open m edit wrong=mark', /判不了对错/],
     [M, 'rowop m r2 + k r1', /看不懂/], [P, 'transform p = 1 {k} / 0 1', /2×2 矩阵/],
     [P, 'vec p w = A v', /vec p w = \{A v\}/], [A, 'ask value "?" type=en', /没写 answer=/], [M, 'matrix N = 1 {k / 0 1', /没有收尾/],
-    [`${M}\nmatrix N = 1 {k} / 0 1`, 'open N edit', /跟着算的/], [M, 'matrix N = 1 {det(A)} / 0 1', /只能写拨数/],
+    [`${M}\nmatrix N = 1 {k} / 0 1`, 'open N edit', /跟着算的/], [M, 'matrix X = 1 {2 A}', /算出来是矩阵/],
     [`${M}\nmatrix S = {A + B}`, 'open S edit', /跟着算的/], [`${M}\nproduct C = A B`, 'open C rowop', /乘积/],
     ['graph g = A-B:4\ntag g ?\ntag g.A 0', 'relax g.A -> g.B', /不是数/], ['tree t = 50 30', 'tag t.50 "一二三四五六七八九"', /8 个字/],
     [S, 'tag s.7 "一二三四五六七八九"', /8 个字/], [`${A}\nlabel x a.1 "字"`, 'remove x', /舞台上没有/],

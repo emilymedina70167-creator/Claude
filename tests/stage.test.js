@@ -111,8 +111,8 @@ test('{式子} 带空格也是一个词：answer={A + B}、vec p w = {A v}、格
   const sc = new Scene();
   for (const c of parseScript('matrix A = 1 1 / -1 -1\nmatrix B = 1 -1 / -1 1\nplane p range=-4..4\nvec p v = 1 2\ndial k = 2 range=-3..3')) sc.apply(c);
   assert.deepEqual(dryRun(sc, 'ask value "A + B？" type=matrix answer={A + B}\nvec p w = {A v}\ngraph g = A-B:{k + 1} B-C:4\nmatrix S = { A + B }'), []);
-  // 矩阵的格里只收拨数或一格（第 1 个任务定的）：{k + 1} 读成一个词，报的是矩阵自己那句
-  assert.match(dryRun(sc, 'matrix N = 1 {k + 1} / 0 1')[0].error, /只能写拨数的名字/);
+  // 矩阵的格里写算成一个数的式子（第二轮放宽的）：{k + 1} 读成一个词，照收
+  assert.deepEqual(dryRun(sc, 'matrix N = 1 {k + 1} / 0 1'), []);
 });
 
 test('部件的写法：整个、第几格、几格到几格、跟着走的那一个', () => {
@@ -144,4 +144,38 @@ test('手指按下去拿哪一个：落在里面的最小那个；落在空处�
   assert.equal(pickTarget({ x: 160, y: 30 }, [a, b], { radius: 30 }).id, 'b');
   assert.equal(pickTarget({ x: 200, y: 30 }, [a, b], { radius: 30 }), null);
   assert.equal(pickTarget({ x: 64, y: 30 }, [a, { ...b, prio: 1 }]).id, 'b');
+});
+
+test('另起一列（columnSlot）：横屏往下摆会缩得太小、摆右边缩得少，就摆右边、和最上面那样顶齐；竖屏照旧往下', async () => {
+  const { columnSlot } = await import('../kit/src/stage/layout.js');
+  const gap = 70;
+  // 已经竖着摆了三张 300 高的矩阵
+  const boxes = [0, 1, 2].map((i) => ({ x: 0, y: i * (300 + gap), w: 300, h: 300 }));
+  const size = { w: 300, h: 300 };
+  const wide = columnSlot(boxes, size, { w: 1180, h: 820 }, { gap });
+  assert.deepEqual(wide, { x: 300 + gap, y: 0, column: true, start: true });
+  const tall = columnSlot(boxes, size, { w: 820, h: 1180 }, { gap });
+  assert.deepEqual(tall, { x: 0, y: 3 * (300 + gap), column: false, start: false });
+  // 不知道屏幕多大：照旧往下摆
+  assert.equal(columnSlot(boxes, size, null, { gap }).column, false);
+  // 舞台上还没有东西
+  assert.deepEqual(columnSlot([], size, { w: 1180, h: 820 }, { gap }), { x: 0, y: 0, column: false, start: false });
+  // 已经另起了一列：接着摆在这一列下面（不缩得更小就先摆满这一列）
+  const col = [{ x: 370, y: 0, w: 300, h: 300 }];
+  const next = columnSlot([...boxes, ...col], { w: 300, h: 200 }, { w: 1180, h: 820 }, { gap, last: col });
+  assert.deepEqual(next, { x: 370, y: 370, column: true, start: false });
+  // 比这一列宽：左边和这一列对齐，不横着伸到左边那一列底下（伸过去 reflow 会把它推到左边那一列下面）
+  assert.equal(columnSlot([...boxes, ...col], { w: 700, h: 200 }, { w: 1180, h: 820 }, { gap, last: col }).x, 370);
+});
+
+test('连到整样东西的弧：上下摆着的从上面那一样的下沿连到下面那一样的上沿（不竖着穿过上面那一样）；排成一排的照旧从上沿拱', async () => {
+  const { wholeLinkGeom, linkGeom } = await import('../kit/src/stage/layout.js');
+  const A = { x: 0, y: 0, w: 200, h: 120 }, B = { x: 40, y: 200, w: 160, h: 120 };
+  for (const g of [wholeLinkGeom(A, B), wholeLinkGeom(B, A)]) {
+    assert.match(g.d, /^M100 124 C100 160 120 160 120 196$/);
+    assert.deepEqual(g.box, { x: 100, y: 124, w: 20, h: 72 });
+    assert.ok(!overlaps(g.box, A) && !overlaps(g.box, B), '走的是两样东西中间的空当');
+  }
+  const C = { x: 300, y: 20, w: 100, h: 100 };
+  assert.deepEqual(wholeLinkGeom(A, C), linkGeom(A, C));
 });

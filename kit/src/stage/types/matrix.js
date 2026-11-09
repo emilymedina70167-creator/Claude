@@ -3,7 +3,8 @@
 //
 // 数都是精确分数（exact.js 的 Q）：场景里存成字符串（'-3/2'；'' 是乘积里还空着的格），副本（structuredClone）不丢东西，算的时候再变回 Q。
 // 一格（部件）的 key 是造它时的位置（'2.3'），交换两行时格子带着数走过去（r、c 跟着变）；m.2,3 永远指「现在」第 2 行第 3 列。
-// 跟着算的（value.js）：格里写 {k}、{A.1,2}，或者整个矩阵写 = {A + B}、{P^-1}；依赖一变场景叫 relive，在原地改格。
+// 跟着算的（value.js）：格里写算成一个数的式子（{k}、{A.1,2}、{l - 1}），或者整个矩阵写 = {A + B}、{P^-1}；依赖一变场景叫 relive，在原地改格。
+// 格里写 _ 是空着的一格（matrix D = _ _ / _ _：等学生填的空牌，填满以前判断式、量都判不了）。
 import { Q, isQ, isQVec, isQMat } from '../../exact.js';
 
 export const MAX_ROWS = 6, MAX_COLS = 8;
@@ -45,9 +46,9 @@ const qOf = (o, x) => {
  * 矩阵的写法 → { rows（每行一串精确的数，字符串）, aug（竖线在第几列后面，没有是 null） }。
  * 认 1 2 3 / 4 5 6（/ 分行）、1 2; 3 4、[[1 2][3 4]]；写 | 是增广矩阵的竖线（每行写在同一个位置，或者只在第一行写）。
  * slot(词, 第几行, 第几列)：不是数的词先问它（格里的 {k} 换成的占位），给了字就用它。
- * cap：查舞台上能放多大（判答案时不查：答案不上舞台）
+ * cap：查舞台上能放多大（判答案时不查：答案不上舞台）；blank：_ 是空着的一格（造矩阵时认，判答案时不认：空着的不是答案）
  */
-export function parseRows(words, slot, { cap = true } = {}) {
+export function parseRows(words, slot, { cap = true, blank = false } = {}) {
   const s = words.join(' ').replace(/\]\s*,?\s*\[/g, ' / ').replace(/[[\]]/g, ' ').replace(/[;；]/g, ' / ').replace(/[,，]/g, ' ');
   const rows = [[]];
   const bars = [null];
@@ -58,7 +59,7 @@ export function parseRows(words, slot, { cap = true } = {}) {
     let after = false;
     if (/^\/./.test(t)) { rows.push([]); bars.push(null); t = t.slice(1); }
     if (/.\/$/.test(t)) { after = true; t = t.slice(0, -1); }
-    rows.at(-1).push(slot?.(t, rows.length, rows.at(-1).length + 1) ?? numOr(t).toString());
+    rows.at(-1).push(slot?.(t, rows.length, rows.at(-1).length + 1) ?? (blank && t === '_' ? '' : numOr(t).toString()));
     if (after) { rows.push([]); bars.push(null); }
   }
   while (rows.length > 1 && !rows.at(-1).length) { rows.pop(); bars.pop(); }
@@ -342,17 +343,18 @@ function rowsOfValue(v, src) {
   if (rows.length > MAX_ROWS || rows[0].length > MAX_COLS) throw new Error(`「{${src}}」算出来是 ${rows.length}×${rows[0].length}，舞台上的矩阵最多 ${MAX_ROWS} 行 ${MAX_COLS} 列`);
   return rows;
 }
-// 格里的 {…} 只认拨数的名字或一格（{k}、{A.1,2}）：一格里是一个数；要算式子就整个矩阵跟着算
-function cellLive(h, id, src) {
-  if (!h.scene.vars.has(src) && !/^[A-Za-z_]\w*[.#]\S+$/.test(src)) throw new Error(`格里的 {${src}} 只能写拨数的名字（{k}）或舞台上的一格（{A.1,2}）；要算式子就整个矩阵跟着算：matrix ${id} = {A + B}`);
+// 格里的 {…} 写算成一个数的式子（{k}、{A.1,2}、{l - 1}、{2 k}、{det(A)}）：一格里是一个数；算出来是矩阵、向量照实说
+// （第一轮只认拨数的名字或一格；放宽以后旧写法一个不少，旧课照样放回）
+const notNumber = (v) => (isQMat(v) ? '矩阵' : isQVec(v) ? '向量' : '别的');
+function cellLive(h, src) {
   const { value, deps } = h.liveValue(src);
-  if (!isQ(value)) throw new Error(`「{${src}}」不是一个数，格里要一个数`);
+  if (!isQ(value)) throw new Error(`「{${src}}」算出来是${notNumber(value)}，格里要一个数`);
   return { value: value.toString(), deps };
 }
 /**
  * 写了 {…} 的矩阵：整个 = {A + B} 是 { rows, live: { whole, deps } }；格里的 {k} 是 { rows, aug, live: { cells: [{ key, expr, deps }], deps } }
  */
-function liveRows(h, id, text) {
+function liveRows(h, text) {
   const { parts } = h.parseLive(text);
   const exprs = parts.filter((p) => p.k === 'expr');
   if (exprs.length === 1 && parts.every((p) => p.k === 'expr' || !p.v.trim())) {
@@ -367,11 +369,34 @@ function liveRows(h, id, text) {
   const { rows, aug } = parseRows([marked], (t, r, c) => {
     const m = t.match(/^§(\d+)$/);
     if (!m) return null;
-    const v = cellLive(h, id, slots[m[1]]);
+    const v = cellLive(h, slots[m[1]]);
     cells.push({ key: `${r}.${c}`, expr: slots[m[1]], deps: v.deps });
     return v.value;
-  });
+  }, { blank: true });
   return { rows, aug, live: { line: h.line, cells, deps: unionDeps(cells) } };
+}
+
+/**
+ * 造矩阵时另外记下的（matrix.rules.js 读）：vars="x y z" 读回方程用的未知数（不写就是 x1、x2……）；from=M0 这一张是从 M0
+ * 化过来的（学生写满一行就和 M0 比，猜是哪一种行变换）。写下时查得出来的错当场报
+ */
+function readExtras(scene, o, id, opts) {
+  if (opts.vars != null) {
+    const names = String(opts.vars).split(/[\s,，]+/).filter(Boolean);
+    const want = o.aug ?? o.cols;
+    if (names.length !== want) throw new Error(`vars= 写了 ${names.length} 个未知数，${id} ${o.aug ? '竖线左边' : ''}有 ${want} 列（一列一个，比如 vars="x y z"）`);
+    if (new Set(names).size !== names.length) throw new Error(`vars= 里的未知数重名了：${opts.vars}`);
+    o.vars = names;
+  }
+  if (opts.from != null) {
+    const src = String(opts.from);
+    const M0 = scene.objects.get(src);
+    if (!M0) throw new Error(`from=${src}：舞台上没有「${src}」`);
+    if (M0.type !== 'matrix') throw new Error(`from=${src}：「${src}」不是矩阵`);
+    if (src === id) throw new Error(`from= 写上一张矩阵的名字，不能写 ${id} 自己`);
+    if (M0.rows !== o.rows || M0.cols !== o.cols) throw new Error(`from=${src}：${src} 是 ${M0.rows}×${M0.cols} 的，${id} 是 ${o.rows}×${o.cols} 的（化过来的要一样大）`);
+    o.from = src;
+  }
 }
 
 // product C = A B：A、B 排成一行（A 留在原处、B 挪到 A 右边），后面「= C」，三个上下居中；C 的格先空着
@@ -435,11 +460,12 @@ export const matrix = {
     if (!h.args.some((a) => a.t === 'eq')) throw new Error('要写成 matrix 名字 = 1 2 / 3 4（/ 分行）');
     const id = h.words[0];
     const words = h.words.slice(1);
-    const live = words.some((w) => /[{}]/.test(w)) ? liveRows(h, id, words.join(' ')) : null;
-    const { rows, aug } = live || parseRows(words);
+    const live = words.some((w) => /[{}]/.test(w)) ? liveRows(h, words.join(' ')) : null;
+    const { rows, aug } = live || parseRows(words, null, { blank: true });
     const cells = [];
     rows.forEach((row, i) => row.forEach((v, k) => cells.push(newCell(id, i + 1, k + 1, v))));
     const o = { origin: { x: 0, y: 0 }, rows: rows.length, cols: rows[0].length, aug, cells, stairs: false, product: null };
+    readExtras(scene, o, id, h.opts);
     // 式子里没用到舞台上的东西（{[[1, 2], [3, 4]]}）就只是一次算好的数
     if (live?.live.deps.length) o.live = live.live;
     o.origin = old && !h.opts.beside ? { ...old.origin } : placeFor(scene, sizeOf(o), h.opts);
@@ -617,7 +643,7 @@ export const matrix = {
     } else {
       const next = L.cells.map((k) => {
         const r = scene.liveValue(k.expr);
-        if (!isQ(r.value)) throw new Error(`「{${k.expr}}」不是一个数，格里要一个数`);
+        if (!isQ(r.value)) throw new Error(`「{${k.expr}}」算出来是${notNumber(r.value)}，格里要一个数`);
         k.deps = r.deps;
         return [o.cells.find((y) => y.key === k.key), r.value.toString()];
       });
@@ -666,7 +692,7 @@ export const matrix = {
   doc: `矩阵（线代：行变换、消元、秩、乘法）：
 matrix m = 1 2 3 / 4 5 6 / 7 8 10   造矩阵（/ 分行；数能写 -3、1/2；| 是增广矩阵的竖线；beside=p 放在 p 右边）
 写法：m.2,3 第 2 行第 3 列；m.r2 第 2 行；m.c3 第 3 列
-matrix N = 1 {k} / 0 1              格里的 {…} 只写拨数（{k}）或一格（{A.1,2}），跟着它变；整张就算跟着算的，学生 open 不了
+matrix N = 1 {k} / 0 1              格里的 {…} 写算成一个数的式子（{k}、{A.1,2}、{l - 1}），跟着它变；整张就算跟着算的，学生 open 不了
 matrix S = {A + B}                  整个矩阵跟着算（{A B}、{2A}、{k A}、{A^-1}、{A'}）；跟着算的学生动不了
 rowop m r2 - 3r1                  行变换：r1 的副本乘 -3 飘到 r2 上加进去（也能写 r2 = r2 - 3r1、r3 + 1/2 r1；连着几步用逗号：r2 - 4r1, r3 - 7r1）
 rowop m r1 <-> r3                 交换两行（走弧线）

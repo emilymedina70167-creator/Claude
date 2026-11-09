@@ -36,6 +36,41 @@ export function fitCamera(box, view, { pad = 36, maxScale = 1.6, minScale = 0.35
   return { s, tx: view.w / 2 - c.x * s, ty: y0 - box.y * s };
 }
 
+/**
+ * 镜头能用的那块屏幕：四边留白（stage.js 的 fitCamera 用的 pad）、顶上的话、底下一条按上课时常见的大小去掉
+ * （话一两行时顶上约 102，底下有按钮、输入框时约 76）。摆新东西时拿它比（scene.js 的 placeFresh）：拿整块屏幕比，
+ * 话和按钮占的地方没算进去，东西缩到一半了还觉得放得下
+ */
+export const CAMERA_ROOM = { pad: 28, top: 102, bottom: 76 };
+export const cameraRoom = (view) => (view?.w > 0 && view?.h > 0 ? { w: Math.max(1, view.w - 2 * CAMERA_ROOM.pad), h: Math.max(1, view.h - CAMERA_ROOM.top - CAMERA_ROOM.bottom - 2 * CAMERA_ROOM.pad) } : null);
+
+/**
+ * 新的一样东西摆哪：照旧往下摆（已有东西的下面、居中）；横屏东西一多，往下摆以后整块放进屏幕要缩得比 minScale 还小，
+ * 而摆到最右一列的右边（和最上面那样东西顶齐）缩得少一点，就另起一列。已经另起过一列（last：这一列里的几样的框），
+ * 「往下摆」就是摆在这一列下面（左边和这一列对齐，不伸到左边那一列底下：伸过去 reflow 会把它推到那一列下面）；
+ * 缩得不比照旧往下摆更小就先摆它，一列摆满再另起。
+ * boxes：已有东西的框；size：{ w, h }；view：{ w, h }（屏幕大小，不知道就照旧往下摆）；gap：两样东西隔多远（scene.js 的
+ * OBJECT_GAP：layout.js 不 import scene.js，由调用的一方传进来）。
+ * 返回新东西的框的左上角 { x, y }、column（不是照旧往下摆）、start（另起了一列）
+ */
+export function columnSlot(boxes, size, view, { gap, minScale = 0.6, last = null } = {}) {
+  const all = bbox(boxes);
+  if (!all) return { x: 0, y: 0, column: false, start: false };
+  const down = { x: Math.round(all.x + all.w / 2 - size.w / 2), y: all.y + all.h + gap, column: false, start: false };
+  if (!(view?.w > 0 && view?.h > 0)) return down;
+  // 摆下去以后整块放进屏幕能放多大
+  const scale = (p) => { const b = bbox([all, { x: p.x, y: p.y, w: size.w, h: size.h }]); return Math.min(view.w / b.w, view.h / b.h); };
+  const col = bbox(last || []);
+  const below = col ? { x: Math.max(col.x, Math.round(col.x + col.w / 2 - size.w / 2)), y: col.y + col.h + gap, column: true, start: false } : null;
+  // 同样大挑前面的：先摆满这一列，再照旧往下
+  let best = below && scale(below) >= scale(down) ? below : down;
+  if (scale(best) < minScale) {
+    const right = { x: all.x + all.w + gap, y: all.y, column: true, start: true };
+    if (scale(right) > scale(best)) best = right;
+  }
+  return best;
+}
+
 /** 世界里的一个框在屏幕上的样子 */
 export const toScreen = (b, cam) => ({ x: b.x * cam.s + cam.tx, y: b.y * cam.s + cam.ty, w: b.w * cam.s, h: b.h * cam.s });
 
@@ -105,6 +140,19 @@ export function linkGeom(A, B, { tier = 0, rail = false } = {}) {
   return { d: `M${r(a.x)} ${r(a.y)} Q${r(cx)} ${r(cy)} ${r(b.x)} ${r(b.y)}`, box: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) - h - 2, w: Math.abs(b.x - a.x), h: h + Math.abs(b.y - a.y) + 2 }, rail: false };
 }
 
+/**
+ * 连到整样东西的连线（link AB BA、link f.l1 AA）：A、B 是两头的框（整样东西的 objectBox，或者部件的框）。
+ * 一个在另一个上面（上下隔开）：上面那一样的下沿中点连到下面那一样的上沿中点，竖着出去、竖着进来，走两样东西中间的空当
+ * （照两格之间那样从上沿拱弧，下面那一样的弧会竖着穿过上面那一样）；横着排成一排的照旧从上沿拱一道弧（linkGeom）
+ */
+export function wholeLinkGeom(A, B, { tier = 0 } = {}) {
+  const [top, bot] = A.y + A.h <= B.y ? [A, B] : B.y + B.h <= A.y ? [B, A] : [null, null];
+  if (!top) return linkGeom(A, B, { tier });
+  const r = (v) => Math.round(v * 10) / 10;
+  const a = { x: top.x + top.w / 2, y: top.y + top.h + 4 }, b = { x: bot.x + bot.w / 2, y: bot.y - 4 };
+  const k = Math.max(0, (b.y - a.y) / 2);
+  return { d: `M${r(a.x)} ${r(a.y)} C${r(a.x)} ${r(a.y + k)} ${r(b.x)} ${r(b.y - k)} ${r(b.x)} ${r(b.y)}`, box: { x: Math.min(a.x, b.x), y: a.y, w: Math.abs(b.x - a.x), h: Math.max(0, b.y - a.y) }, rail: false };
+}
 
 /**
  * 手指按下去是要动哪一个（舞台的点、拖都走它，stage/pointer.js）：

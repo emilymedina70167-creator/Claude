@@ -97,6 +97,28 @@ export function scopeOf(scene, { plane } = {}) {
 const REF_RE = /(?<![\w.#])([A-Za-z_]\w*)([.#])(\d+[,，]\d+|\w+)/g;
 // 量的写法：名字(东西或部件)（rules.js 的 parseMeasure，这里找一行里的每一处）
 const MEASURE_RE = /(?<![\w.#])([A-Za-z_]\w*)\(\s*([^()\s]+)\s*\)/g;
+// 增广矩阵拆开：coef(M) 竖线左边（系数矩阵）、rhs(M) 竖线右边（常数项）——要验 A x = b 就写 {coef(M) P - rhs(M)}
+const SLICE_RE = /(?<![\w.#])(coef|rhs)\(\s*([A-Za-z_]\w*)\s*\)/g;
+/**
+ * 增广矩阵的一半：coef 是 Q 的二维数组（竖线左边）；rhs 是竖线右边，照舞台上一列的矩阵（matrix P = 1 / 2）的样子
+ * 也是二维数组（n×1），和 coef(M) P 算出来的一样，能直接相减（exact.js 里 n×1 的矩阵和向量不能相加）
+ */
+function sliceOf(scene, fn, id) {
+  const o = scene.objects.get(id);
+  if (!o) throw new Error(`舞台上没有「${id}」`);
+  if (o.type !== 'matrix') throw new Error(`「${id}」是${scene.type(o).label}，${fn}(…) 写增广矩阵`);
+  if (!o.aug) throw new Error(`${id} 不是增广矩阵（${fn} 拆的是竖线 | ${fn === 'coef' ? '左边' : '右边'}）`);
+  // 只看用到的那一半：左边还空着不碍 rhs 的事；还空着的格照它在 M 里的位置报
+  const want = (x) => (fn === 'coef' ? x.c <= o.aug : x.c > o.aug);
+  const rows = [];
+  for (let r = 1; r <= o.rows; r++) {
+    rows.push(o.cells.filter((x) => x.r === r && want(x)).sort((a, b) => a.c - b.c).map((x) => {
+      if (x.value === '') throw new Error(`${o.id}.${x.r},${x.c} 还空着`);
+      return toQ(x.value);
+    }));
+  }
+  return rows;
+}
 const SUPS = [[/⁻¹/g, '^(-1)'], [/²/g, '^2'], [/³/g, '^3'], [/ᵀ/g, "'"]];
 const TOK = /\s*(?:(0[xX][0-9A-Fa-f_]+|0[bB][01_]+|\d+\.?\d*|\.\d+)|([A-Za-z_Ͱ-Ͽ][\wͰ-Ͽ]*)|(\*\*|<=|>=|==|!=|\S))/y;
 // exact.js 只认数后面省略乘号（2u）；舞台上老师常写 A v、P B、(A + B) v：两样值挨着就补一个 *（名字后面紧跟括号是函数，除非它是舞台上的值）
@@ -135,6 +157,15 @@ export function evalLive(src, scene, { plane } = {}) {
   const ms = new Map(); // 占位的名字 → 量算的是哪样东西（依赖）
   let text = raw.replace(/[−–]/g, '-');
   for (const [re, to] of SUPS) text = text.replace(re, to);
+  // coef(M)、rhs(M) 先换成拆出来的那一半（在量前面：不然被当成矩阵的量，报「没有量 coef」）；依赖是 M
+  text = text.replace(SLICE_RE, (m, fn, id) => {
+    let v;
+    try { v = sliceOf(scene, fn, id); } catch (e) { throw new Error(`${shown}里的「${m}」：${e.message}`); }
+    const k = `_s${ms.size}_`;
+    ms.set(k, id);
+    Object.defineProperty(vars, k, { value: v, enumerable: true });
+    return ` ${k} `;
+  });
   // 量（count(t)、rankA(M)）先换成页面数出来的数：括号里是舞台上的东西或部件、名字不是 exact.js 本来就有的函数才换——
   // det(A)、rank(M) 照旧交给 exact.js（写满时两边算的一样，旧课的 {det(A)} 一字不变）；名字不是这样东西的量当场报（size(t)）
   text = text.replace(MEASURE_RE, (m, name, arg) => {

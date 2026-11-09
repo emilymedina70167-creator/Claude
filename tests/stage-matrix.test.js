@@ -281,3 +281,35 @@ test('说明里的例子照抄能演：一行不错', () => {
   assert.ok(s.opens.has('B:edit') && s.goals.has('g2') && !s.goals.get('g2').met);
   assert.doesNotMatch(matrix.doc + matrix.hint, /[他她]/);
 });
+
+test('空格子：_ 是空着的一格，填满以前量、判断式都判不了；学生写进去以后是数', async () => {
+  const { evalMeasure, predicateOf } = await import('../kit/src/stage/rules.js');
+  const s = run(new Scene(), 'matrix D = _ _ / _ _');
+  const D = s.objects.get('D');
+  assert.equal(D.cells.length, 4);
+  assert.ok(D.cells.every((x) => x.value === ''));
+  assert.equal(evalMeasure(s, 'rank(D)').value, null);
+  assert.equal(predicateOf(s, 'D', 'stairs')([]), null);
+  run(s, 'write D.1,1 1');
+  assert.equal(s.parts('D.1,1')[0].value, '1');
+  assert.equal(s.parts('D.2,2')[0].value, '');
+  // 一行里空着的和数混着写、增广的竖线照旧
+  run(s, 'matrix M1 = 1 2 | 3 / _ _ | _');
+  assert.deepEqual(rows(s, 'M1'), [['1', '2', '3'], ['', '', '']]);
+  assert.equal(s.objects.get('M1').aug, 2);
+  // 判答案时不认 _（答案不上舞台，空着的格不是一个答案）
+  assert.throws(() => parseRows(['1 _'], null, { cap: false }), /不是数/);
+});
+
+test('vars=、from= 记在矩阵上（读回方程、和上一张比用）；写错了当场说', () => {
+  const s = run(new Scene(), 'matrix M0 = 1 2 0 | 2 / 2 2 -4 | 2\nmatrix M1 = 1 2 0 | 2 / _ _ _ | _ from=M0 vars="x y z"');
+  const M1 = s.objects.get('M1');
+  assert.equal(M1.from, 'M0');
+  assert.deepEqual(M1.vars, ['x', 'y', 'z']);
+  assert.equal(s.objects.get('M0').from ?? null, null);
+  assert.match(err(s, 'matrix M2 = 1 2 | 3 from=Q'), /from=Q：舞台上没有「Q」/);
+  run(s, 'array a = 1 2');
+  assert.match(err(s, 'matrix M2 = 1 2 | 3 from=a'), /from=a：「a」不是矩阵/);
+  assert.match(err(s, 'matrix M2 = 1 2 / 3 4 from=M0'), /from=M0：M0 是 2×4 的，M2 是 2×2 的/);
+  assert.match(err(s, 'matrix M2 = 1 2 | 3 vars="x y z"'), /vars= 写了 3 个未知数/);
+});

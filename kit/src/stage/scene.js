@@ -12,7 +12,7 @@
 // 这里只管各种东西共用的：点亮、染色、连线、贴字、拨数、镜头、说话、等学生。
 import { parseScript, parseRef, parseRich, addCommands } from './script.js';
 import { TYPES, typeOf, CREATE } from './types/index.js';
-import { bbox } from './layout.js';
+import { bbox, columnSlot, cameraRoom } from './layout.js';
 import { parseGoal, evalGoal, goalStatus, checkPreds, clauseKey } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder } from './value.js';
@@ -55,6 +55,20 @@ export const pidOf = (p) => `${p.obj}:${p.key}`;
 
 /** 这一行的原文（跟着算的东西记着它；行首的 & 不要） */
 const lineOf = (c) => String(c.src ?? '').trim().replace(/^&\s*/, '');
+/** 整样东西挪一挪（另起一列、show 摆回来）：origin 是左上角（x），式子是横着的中线（cx）；别的位置都跟着 origin 算 */
+function shiftObject(o, dx, dy) {
+  const g = { ...o.origin };
+  if ('cx' in g) g.cx += dx; else g.x += dx;
+  g.y += dy;
+  o.origin = g;
+}
+const samePlace = (a, b) => !!a && !!b && Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((k) => a[k] === b[k]);
+/** 造东西时的 hide=：on 藏着（照样算、现状照样写，画面上不摆），off 摆出来；不写的新东西摆着，同名重造照旧（留在原处） */
+function hiddenOf(opts, old) {
+  if (opts.hide == null) return !!old?.hidden;
+  if (opts.hide !== 'on' && opts.hide !== 'off') throw new Error(`hide= 只能写 on（藏着：照样算、画面上不摆）或 off，没有「${opts.hide}」`);
+  return opts.hide === 'on';
+}
 
 /** 一种东西能开放给学生直接动的：{ 动作: 给老师看的一句 } */
 export function affordsOf(t) {
@@ -106,6 +120,9 @@ export class Scene {
     // —— 裁判（referee.js）接进来以后 ——
     this.slips = new Map(); // 东西 id → { refs, src }：学生走偏的那一下淡淡圈着（open … wrong=mark），那样东西下一次变了就收掉
     this.doneState = new Map(); // 东西 id → 上一行以后做没做完（rules.js 的 done）：从没做完变成做完的那一行才算「学生做完了」
+    // —— 画面写回的（stage.js 量了写回，和 labelRects 一样）——
+    this.view = null; // 屏幕多大 { w, h }：摆新东西时看往下摆会不会缩得太小、要不要另起一列（不知道就照旧往下摆）
+    this.clipped = []; // 镜头摆好以后还出了屏幕的东西（id）：舞台现状里告诉老师「画面上看不全」
   }
 
   clone() {
@@ -125,6 +142,9 @@ export class Scene {
     s.labelRects = this.labelRects.map((r) => ({ ...r, objs: [...r.objs] }));
     for (const [k, v] of this.slips) s.slips.set(k, { ...v, refs: [...v.refs] });
     s.doneState = new Map(this.doneState);
+    // 这一轮新加的场景状态都要带上：检查、试演、抢跑都在副本上跑，少带一项就在缺东西的副本上判
+    s.view = this.view ? { ...this.view } : null;
+    s.clipped = [...this.clipped];
     return s;
   }
 
@@ -158,9 +178,11 @@ export class Scene {
     return e ? { x: b.x - e.l, y: b.y - e.t, w: b.w + e.l + e.r, h: b.h + e.t + e.b } : b;
   }
   allParts() { return [...this.objects.values()].flatMap((o) => typeOf(o).parts(o)); }
-  /** 各种东西挡着的地方（贴字时让开）：格子、序号、指针、树的边…… */
+  /** 画面上摆着的东西（藏着的不算）：画、镜头、摆新东西、往下让都只看这几样；照摆上舞台的先后 */
+  shownIds() { return [...this.objects.values()].filter((o) => !o.hidden).map((o) => o.id); }
+  /** 各种东西挡着的地方（贴字时让开）：格子、序号、指针、树的边……（藏着的不挡） */
   obstacles() {
-    return [...this.objects.values()].flatMap((o) => {
+    return [...this.objects.values()].filter((o) => !o.hidden).flatMap((o) => {
       const own = typeOf(o).obstacles ? typeOf(o).obstacles(o) : typeOf(o).parts(o).map((p) => typeOf(o).partBox(o, p));
       // 量出来多出去的那几条（估的框外面还画着东西）也挡着
       const e = o.ext, b = typeOf(o).objectBox(o);
@@ -179,11 +201,32 @@ export class Scene {
     if (!x) throw new Error(`没有叫「${v}」的数（先用 dial 造一个）`);
     return x.v;
   }
-  /** 新的一样东西放哪：已有东西的下面，和它们居中对齐 */
+  /** 新的一样东西放哪：画面上摆着的东西的下面，和它们居中对齐（横屏放不下另起一列由 placeFresh 再看一眼） */
   slotFor(w) {
-    if (!this.objects.size) return { x: 0, y: 0 };
-    const b = bbox([...this.objects.keys()].map((id) => this.objectBox(id)));
+    const ids = this.shownIds();
+    if (!ids.length) return { x: 0, y: 0 };
+    const b = bbox(ids.map((id) => this.objectBox(id)));
     return { x: Math.round(b.x + b.w / 2 - w / 2), y: b.y + b.h + OBJECT_GAP };
+  }
+  /**
+   * 刚造出来、照旧往下摆的那一样（各种东西自己用 slotFor 摆的）：屏幕一横、东西一多，往下摆整块要缩得太小，右边有地方就
+   * 另起一列（layout.js 的 columnSlot；比的是镜头能用的那块屏幕 cameraRoom），整样挪过去。按它造出来的真实大小看，
+   * 各种东西不用各自改摆法。again：show 摆回来，照摆新东西的规矩重新摆（往下或另起一列）
+   */
+  placeFresh(o, { again = false } = {}) {
+    const ids = this.shownIds().filter((id) => id !== o.id);
+    if (!ids.length || !o.origin) return;
+    const boxes = new Map(ids.map((id) => [id, this.objectBox(id)]));
+    const all = bbox([...boxes.values()]);
+    const me = typeOf(o).objectBox(o);
+    if (!again && me.y < all.y + all.h) return; // 不是摆在下面的（beside=、和 A、B 排成一行的乘积）：不动
+    // 已经另起过一列：这一列是最后一个另起的那一样和它后面摆的
+    const start = ids.findLastIndex((id) => this.objects.get(id).colStart);
+    const last = start < 0 ? null : ids.slice(start).map((id) => boxes.get(id));
+    const s = columnSlot([...boxes.values()], me, cameraRoom(this.view), { gap: OBJECT_GAP, last });
+    if (!again && !s.column) return; // 照旧往下摆：各种东西自己摆的就是
+    shiftObject(o, s.x - me.x, s.y - me.y);
+    if (s.start) o.colStart = true; else delete o.colStart;
   }
 
   // —— 检查一行：写错了返回一句话（给老师看），没错返回 null ——
@@ -430,15 +473,26 @@ export class Scene {
       const filled = t.remake ? fillLine(h.line, this) : null;
       const cc = filled ? parseScript(filled.text)[0] : c;
       if (!cc?.cmd) throw new Error(cc?.error || '看不懂这一行');
+      const hidden = hiddenOf(opts, old);
       const o = t.make(this, cc, filled ? this.helpers(cc) : h, old);
       // 式子里没用到舞台上的东西（{2^3}）就只是一个数，不算跟着算的
       if (filled?.deps.length) o.live = { line: h.line, exprs: filled.exprs, vals: filled.vals, deps: filled.deps };
       o.type = t.type;
       o.id = id;
+      if (hidden) o.hidden = true;
       // 跟着算的不能转着圈（X 跟着 Y、Y 又跟着 X）：先查，写错了舞台上已有的东西不动
       this.liveCheck(this.nodesOf(o), id);
-      if (old) this.dropObject(id, { keepLabels: true });
-      this.objects.set(id, o);
+      // 同名重造留在原处：各种东西的 make 照 old 留着位置时，在 objects 里的先后也不变——先后变了 reflow 会把它推到最底下。
+      // 换了地方的（写了 beside=、乘积照 A、B 重新排、换了一种东西）照旧排到最后，像新造的一样摆
+      const kept = !!old && samePlace(old.origin, o.origin);
+      if (old) this.dropObject(id, { keepLabels: true, keepPlace: kept });
+      if (kept) {
+        if (old.colStart) o.colStart = true;
+        this.replaceObject(id, o);
+      } else {
+        if (!hidden && !opts.beside) this.placeFresh(o);
+        this.objects.set(id, o);
+      }
       return { id, created: true };
     }
     // 各种东西自己的指令：按第一个部件是哪种东西找（swap 给格子、rowop 给矩阵……）
@@ -493,19 +547,30 @@ export class Scene {
       }
       case 'link': {
         strayRefs();
-        const parts = partsIn();
-        if (parts.length < 2) throw new Error('link 要至少两个');
         const color = words.find(isColor) || 'g1';
+        const refs = refsIn();
+        // 写整样东西的那一头（link AB BA、link f.l1 AA f.r1）连到那样东西上：一道弧（以前把它的每一格连成一串，满屏弧线，
+        // unlink f 也收不掉块里的那几道）。只写一样东西（link a）照旧把它的部件依次连起来
+        const ends = refs.length >= 2 ? refs.flatMap((w) => (parseRef(w).mark ? this.parts(w) : [{ obj: w, key: null }])) : partsIn();
+        if (ends.length < 2) throw new Error('link 要至少两个');
         const made = [];
-        for (let i = 0; i + 1 < parts.length; i++) made.push(this.addLink(parts[i], parts[i + 1], color));
+        for (let i = 0; i + 1 < ends.length; i++) {
+          const a = ends[i], b = ends[i + 1];
+          if (a.obj === b.obj && (a.key == null || b.key == null)) throw new Error(`link 的两头是同一样东西 ${a.obj}${a.key == null && b.key == null ? '' : ' 和它里面的部件'}（连 ${a.obj} 里面的两个部件写 ${a.obj}.…）`);
+          made.push(this.addLink(a, b, color));
+        }
         return { links: made.filter(Boolean) };
       }
       case 'unlink': {
         strayRefs();
-        const parts = refsIn().length ? partsIn() : null;
+        const refs = refsIn();
+        const parts = refs.length ? partsIn() : null;
         const ids = parts ? new Set(parts.map(pidOf)) : null;
+        // 写整样东西（unlink AB）：连着它的线都收，整张连的、连着它里面部件的都算
+        const objs = new Set(refs.filter((w) => !parseRef(w).mark));
+        const hit = (e) => objs.has(e.obj) || (e.key != null && ids.has(`${e.obj}:${e.key}`));
         const gone = [];
-        for (const [k, l] of this.links) if (!ids || ids.has(`${l.a.obj}:${l.a.key}`) || ids.has(`${l.b.obj}:${l.b.key}`)) { this.links.delete(k); gone.push(k); }
+        for (const [k, l] of this.links) if (!ids || hit(l.a) || hit(l.b)) { this.links.delete(k); gone.push(k); }
         // 跳格留下的字跟着弧走
         for (const [k, l] of this.labels) if (l.link && gone.includes(l.link)) this.labels.delete(k);
         return { gone };
@@ -678,6 +743,34 @@ export class Scene {
         ids.forEach((k) => { this.goals.delete(k); this.reactions.delete(k); });
         return { ungoal: ids };
       }
+      case 'hide': case 'show': {
+        // hide R / show R：藏起来（照样算、现状照样写，画面上不摆）、摆回来；哪种东西都能藏
+        if (!words.length) throw new Error(`${cmd} 后面写舞台上东西的名字（比如 ${cmd} R）`);
+        for (const w of words) {
+          const r = parseRef(w);
+          if (r?.mark && this.objects.has(r.obj)) throw new Error(`${cmd} 写整样东西的名字（${r.obj}），不写部件（${w}）`);
+          if (!this.objects.has(w)) throw new Error(`舞台上没有「${w}」`);
+        }
+        for (const id of words) {
+          const o = this.objects.get(id);
+          if (cmd === 'hide') { o.hidden = true; continue; }
+          if (!o.hidden) continue;
+          delete o.hidden;
+          // 藏着的时候没人给它让地方，它也没跟着别人往下让：原来的地方压着画面上的东西，或者在所有东西下面（hide=on 造的
+          // 从来没摆过，是造的那一刻往下摆的地方；后来另起了一列的话该摆进那一列），照摆新东西的规矩重新摆、排到最后（像刚造的一样）。
+          // 夹在中间、没压着的（beside= 摆的、摆过又藏起来的）留在原处
+          const me = this.objectBox(id);
+          const others = this.shownIds().filter((k) => k !== id).map((k) => this.objectBox(k));
+          const all = bbox(others);
+          const blocked = others.some((b) => b.x < me.x + me.w && me.x < b.x + b.w && b.y < me.y + me.h && me.y < b.y + b.h);
+          if (all && (blocked || me.y >= all.y + all.h)) {
+            this.placeFresh(o, { again: true });
+            this.objects.delete(id);
+            this.objects.set(id, o);
+          }
+        }
+        return { [cmd === 'hide' ? 'hidden' : 'shown']: words };
+      }
       case 'remove': {
         // remove a：把一样东西拿下舞台
         const id = words[0];
@@ -717,7 +810,7 @@ export class Scene {
    * 只往下推、不往上拉（老师和学生看惯了的位置不乱跳）；按摆上舞台的先后
    */
   reflow() {
-    const list = [...this.objects.values()];
+    const list = [...this.objects.values()].filter((o) => !o.hidden); // 藏着的不推别人、也不被推
     const order = new Map(list.map((o, i) => [o.id, i]));
     for (let i = 1; i < list.length; i++) {
       const o = list[i];
@@ -740,15 +833,27 @@ export class Scene {
     }
   }
 
-  linkKey(a, b) { return [pidOf(a), pidOf(b)].sort().join('~'); }
+  // 一头是整样东西（key 是 null）：那一头的编号就是东西的名字（部件的编号带「:」，撞不上）
+  linkKey(a, b) { return [a, b].map((e) => (e.key == null ? e.obj : pidOf(e))).sort().join('~'); }
+  /**
+   * 连一道弧。一头可以是整样东西（{ obj, key: null }，link AB BA）：画面那一头用 objectBox；这样的线记 whole: true
+   * （照新的数重新造时它那一头没有部件可找，不能当成部件没了剪掉）
+   */
   addLink(a, b, color, tier = 0) {
     const key = this.linkKey(a, b);
     if (this.links.has(key)) { const l = this.links.get(key); l.color = color; return null; }
-    this.links.set(key, { key, a: { obj: a.obj, key: a.key }, b: { obj: b.obj, key: b.key }, color, tier });
+    const whole = a.key == null || b.key == null;
+    this.links.set(key, { key, a: { obj: a.obj, key: a.key }, b: { obj: b.obj, key: b.key }, color, tier, ...(whole ? { whole: true } : {}) });
     return key;
   }
-  dropObject(id, { keepLabels = false } = {}) {
-    this.objects.delete(id);
+  /**
+   * 同名重造：换成新造的那一份，在 objects 里的先后不变（先后变了 reflow 会把它推到最底下）。
+   * Map 换一个还在的键的值不改先后（dropObject 的 keepPlace 留着键），objects 还是同一个 Map；不在了才排到最后
+   */
+  replaceObject(id, o) { this.objects.set(id, o); }
+  // keepPlace：同名重造，objects 里留着它的位子（replaceObject 换进去），只清连线、open 这些
+  dropObject(id, { keepLabels = false, keepPlace = false } = {}) {
+    if (!keepPlace) this.objects.delete(id);
     for (const [k, l] of this.links) if (l.a.obj === id || l.b.obj === id) this.links.delete(k);
     if (!keepLabels) for (const [k, l] of this.labels) if (l.refs.some((r) => parseRef(r)?.obj === id)) this.labels.delete(k);
     this.binds = this.binds.filter((b) => b.obj !== id);
@@ -829,9 +934,14 @@ export class Scene {
     const t = typeOf(o);
     const o2 = t.make(this, c, this.helpers(c), o);
     Object.assign(o2, { type: o.type, id: o.id, live: { line: L.line, exprs: f.exprs, vals: f.vals, deps: f.deps } });
+    // 画面上的样子照旧：藏着的还藏着，另起的那一列还是那一列
+    if (o.hidden) o2.hidden = true;
+    if (o.colStart) o2.colStart = true;
     t.carry?.(o, o2);
     this.objects.set(o.id, o2);
-    for (const [k, l] of this.links) if ((l.a.obj === o.id && !this.partOf(o.id, l.a.key)) || (l.b.obj === o.id && !this.partOf(o.id, l.b.key))) this.links.delete(k);
+    // 部件没了的连线剪掉；连到整样东西的那一头没有部件（partOf(obj, null) 是 null），不能当成部件没了剪掉
+    const lost = (e) => e.obj === o.id && e.key != null && !this.partOf(o.id, e.key);
+    for (const [k, l] of this.links) if (lost(l.a) || lost(l.b)) this.links.delete(k);
     const changed = f.vals.map((v, i) => (v === L.vals[i] ? null : { ref: o.id, expr: f.exprs[i], from: L.vals[i], to: v })).filter(Boolean);
     return { changed, parts: t.parts(o2).slice(0, 12) };
   }
@@ -911,7 +1021,9 @@ export class Scene {
     for (const h of hints) lines.push(h);
     for (const o of this.objects.values()) {
       const t = typeOf(o);
-      lines.push(...t.describe(o, this));
+      const d = t.describe(o, this);
+      if (o.hidden && d.length) d[0] = `（藏着，画面上不摆）${d[0]}`;
+      lines.push(...d);
       // 页面数得出的量（rules.js 的 measures）和那种东西自己交的几句（树的 avl / bst），老师不用自己数
       const ml = measureLine(this, o, t.pageBits?.(o, this) || []);
       if (ml) lines.push(`  ${ml}`);
@@ -920,6 +1032,8 @@ export class Scene {
     // 错误前面的「{式子}」和前面写的重了，去掉
     const why = (e) => e.replace(/^「\{[^{}]*\}」(算不出来：|里的)?/, '');
     if (lives.length) lines.push(`跟着算的（依赖一变，页面当场重算；学生动不了）：${lives.map((n) => `${n.text}${n.rec.error ? `（现在算不出来：${why(n.rec.error)}；停在上一次算出来的数）` : ''}`).join('；')}`);
+    const clipped = this.clipped.filter((id) => this.objects.has(id) && !this.objects.get(id).hidden);
+    if (clipped.length) lines.push(`画面上看不全：${clipped.join('、')}`);
     for (const o of this.objects.values()) if (o.unlived) lines.push(`${o.id} 已经不跟着 ${o.unlived.exprs.map((e) => `{${e}}`).join('、')} 变了：${o.unlived.by === 'student' ? '学生' : '你'}动过它的结构（${o.unlived.src}），现在照现在的样子留着`);
     const ls = [...this.links.values()];
     if (ls.length) lines.push(`连线：${ls.map((l) => `${this.refOfKey(l.a)}–${this.refOfKey(l.b)}${l.color ? ` ${COLOR_NAMES[l.color]}` : ''}`).join('，')}`);
@@ -939,7 +1053,11 @@ export class Scene {
     }
     return lines.join('\n');
   }
-  refOfKey(k) { const p = this.partOf(k.obj, k.key); return p ? this.refOf(p) : `${k.obj}:${k.key}`; }
+  refOfKey(k) {
+    if (k.key == null) return k.obj; // 整样东西的连线
+    const p = this.partOf(k.obj, k.key);
+    return p ? this.refOf(p) : `${k.obj}:${k.key}`;
+  }
 }
 
 /**

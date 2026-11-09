@@ -39,7 +39,8 @@ function objectBox(o) {
 export function regroup(scene, o, d) {
   o.groupD = d;
   const gone = [];
-  for (const [k, l] of scene.links) if (l.a.obj === o.id) { scene.links.delete(k); gone.push(k); }
+  // 只收这一排自己的格子之间的线：整样东西到整样东西的那一道（link a b）不是分组画的
+  for (const [k, l] of scene.links) if (l.a.obj === o.id && !l.whole) { scene.links.delete(k); gone.push(k); }
   for (const [k, l] of scene.labels) if (l.link && gone.includes(l.link)) scene.labels.delete(k);
   const groups = strideGroups(o.cells.length, d);
   const made = [];

@@ -77,9 +77,13 @@ test('格里的 {k} 跟着拨数变', () => {
   const fx = one(sc, 'set k 3');
   assert.equal(rows(sc, 'M')[0][1], '3');
   assert.deepEqual(changedOf(fx, 'M'), [{ ref: 'M.1,2', from: '1', to: '3' }]);
-  // 格里只认拨数名或部件
-  assert.match(err(sc, 'matrix N = 1 {k + 1} / 0 1'), /只能写拨数的名字/);
-  assert.match(err(sc, 'matrix N = 1 {q} / 0 1'), /只能写拨数的名字/);
+  // 格里写算成一个数的式子都收（第二轮放宽的），跟着 k 变；名字不认得照实说
+  run(sc, 'matrix K = 1 {k + 1} / 0 1');
+  assert.equal(rows(sc, 'K')[0][1], '4');
+  one(sc, 'set k 1');
+  assert.equal(rows(sc, 'K')[0][1], '2');
+  one(sc, 'set k 3');
+  assert.match(err(sc, 'matrix N = 1 {q} / 0 1'), /「q」不是拨数，也不是舞台上的东西/);
   // 格里写一格也行：跟着那一格变
   run(sc, 'matrix B = 5 6 / 7 8\nmatrix N = {B.2,1} 0 / 0 {k}');
   assert.deepEqual(rows(sc, 'N'), [['7', '0'], ['0', '3']]);
@@ -342,4 +346,41 @@ test('{量(…)}：rankA、count 这些换成页面数的；det、rank 照旧交
   assert.equal(sc.objects.get('a').cells.find((x) => x.slot === 1).value, '7');
   run(sc, 'insert t 120');
   assert.equal(sc.objects.get('a').cells.find((x) => x.slot === 1).value, '8');
+});
+
+test('格里的式子：算成一个数就收，跟着拨数变；算出来是矩阵、名字不认得照实说', () => {
+  const sc = run(new Scene(), 'dial l = 2 range=-3..3\nmatrix A = 1 2 / 3 4\nmatrix M = 1 {l - 1} / {2 l} 1');
+  assert.equal(sc.parts('M.1,2')[0].value, '1');
+  assert.equal(sc.parts('M.2,1')[0].value, '4');
+  const fx = one(sc, 'set l 3');
+  assert.equal(sc.parts('M.1,2')[0].value, '2');
+  assert.equal(sc.parts('M.2,1')[0].value, '6');
+  assert.deepEqual(changedOf(fx, 'M'), [{ ref: 'M.1,2', from: '1', to: '2' }, { ref: 'M.2,1', from: '4', to: '6' }]);
+  // 量、行列式、一格都能写在格里
+  run(sc, 'matrix N = {det(A)} {A.1,2 + l} / 0 1');
+  assert.deepEqual(rows(sc, 'N'), [['-2', '5'], ['0', '1']]);
+  assert.throws(() => run(sc, 'matrix X = 1 {2 A}'), /「\{2 A\}」算出来是矩阵，格里要一个数/);
+  assert.match(err(sc, 'matrix X = 1 {q}'), /「q」不是拨数，也不是舞台上的东西/);
+  assert.match(sc.stateText(), /M\.1,2 = \{l - 1\}，M\.2,1 = \{2 l\}/);
+});
+
+test('coef(M)、rhs(M)：增广矩阵竖线左边、右边那一列；不是增广的照实说', () => {
+  const sc = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix M = 1 2 | 5 / 3 4 | 6\nmatrix P = 1 / 2\nmatrix R = {coef(M) P - rhs(M)}');
+  assert.deepEqual(rows(sc, 'R'), [['0'], ['5']]);
+  assert.deepEqual(evalLive('{coef(M)}', sc).value.map((r) => r.map(String)), [['1', '2'], ['3', '4']]);
+  assert.deepEqual(evalLive('{rhs(M)}', sc).deps, ['M']);
+  // M 变了，R 跟着变
+  one(sc, 'write M.1,3 1');
+  assert.deepEqual(rows(sc, 'R'), [['4'], ['5']]);
+  assert.throws(() => evalLive('{coef(A)}', sc), /coef\(A\)」：A 不是增广矩阵/);
+  assert.throws(() => evalLive('{rhs(Q)}', sc), /舞台上没有「Q」/);
+  // 还空着的格用到才报
+  run(sc, 'matrix E = 1 _ | 2 / 0 1 | 3');
+  assert.throws(() => evalLive('{coef(E)}', sc), /E\.1,2 还空着/);
+  assert.deepEqual(evalLive('{rhs(E)}', sc).value.map((r) => r.map(String)), [['2'], ['3']]);
+  run(sc, 'matrix G = 1 2 | 5 / 0 1 | _');
+  assert.throws(() => evalLive('{rhs(G)}', sc), /G\.2,3 还空着/);
+  // 竖线右边不止一列（矩阵方程 AX = B）：rhs 是那几列
+  run(sc, 'matrix H = 1 0 | 1 2 / 0 1 | 3 4');
+  assert.deepEqual(evalLive('{rhs(H)}', sc).value.map((r) => r.map(String)), [['1', '2'], ['3', '4']]);
 });

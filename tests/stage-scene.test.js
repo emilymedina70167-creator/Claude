@@ -555,3 +555,167 @@ test('改字也查量（retext、题卡的 rewrite）；以后也数不了的写
   assert.doesNotThrow(() => old('retext n "{t.99}"'));
   assert.match(chk('retext n "{t.99}"') || '', /没有值是 99 的结点/);
 });
+
+test('同名重造留在原处：objects 的先后不变、位置不变，后面的东西照旧摆在它下面', () => {
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix P = 1 0 / 0 1');
+  const before = { ...s.objects.get('P').origin };
+  run(s, 'matrix P = {B A}');
+  assert.deepEqual([...s.objects.keys()], ['A', 'B', 'P']);
+  assert.deepEqual(s.objects.get('P').origin, before);
+  // 不在最后的那一样重造：照旧夹在中间（以前掉到最底下，reflow 照先后把它推到所有东西下面）
+  const t = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix P = 1 0 / 0 1\nmatrix B = 0 1 / 1 0');
+  const p0 = { ...t.objects.get('P').origin }, b0 = { ...t.objects.get('B').origin };
+  run(t, 'matrix P = {A A}');
+  assert.deepEqual([...t.objects.keys()], ['A', 'P', 'B']);
+  assert.deepEqual(t.objects.get('P').origin, p0);
+  assert.deepEqual(t.objects.get('B').origin, b0);
+  // 重造得更大：摆在下面的往下让
+  run(t, 'matrix P = 1 0 / 0 1 / 1 1');
+  assert.deepEqual([...t.objects.keys()], ['A', 'P', 'B']);
+  assert.ok(t.objects.get('B').origin.y > b0.y, '长高了一行，B 往下让');
+  assert.match(t.stateText(), /矩阵 A[\s\S]*矩阵 P[\s\S]*矩阵 B/);
+});
+
+test('整张连线：两头是整样东西连一道弧；跟着算重新造以后还在；unlink X 收掉连着 X 和 X 里部件的线', () => {
+  const s = run(new Scene(), 'matrix AB = 1 2 / 3 4\nmatrix BA = 5 6 / 7 8 beside=AB\nlink AB BA');
+  assert.equal(s.links.size, 1);
+  const [l] = s.links.values();
+  assert.equal(l.whole, true);
+  assert.deepEqual([l.a, l.b], [{ obj: 'AB', key: null }, { obj: 'BA', key: null }]);
+  assert.match(s.stateText(), /连线：AB–BA 蓝/);
+  // 副本照样带着
+  assert.equal([...s.clone().links.values()][0].whole, true);
+  run(s, 'unlink AB');
+  assert.equal(s.links.size, 0);
+  run(s, 'link AB.1,1 BA.2,2');
+  assert.equal(s.links.size, 1);
+  run(s, 'unlink AB');
+  assert.equal(s.links.size, 0, '连着 AB 里一格的线也收掉');
+  // 只写部件的 unlink 不收整张的
+  run(s, 'link AB BA g2');
+  run(s, 'unlink AB.1,1');
+  assert.equal(s.links.size, 1);
+  assert.match(dryRun(s, 'link AB AB')[0]?.error || '', /两头是同一样东西/);
+  assert.match(dryRun(s, 'link AB AB.1,1')[0]?.error || '', /两头是同一样东西 AB 和它里面的部件/);
+  // 一头是部件、一头是整张（缺口单里的方块图：link f.l1 AA f.r1）：连到整张上，不把 AA 连成一串格；unlink f 收得干净
+  const m = run(new Scene(), 'tex f = "(\\hl{l1}{A}+\\hl{l2}{B})(\\hl{r1}{A}+\\hl{r2}{B})"\nmatrix AA = 1 2 / 3 4\nlink f.l1 AA f.r1 g1');
+  assert.equal(m.links.size, 2);
+  assert.ok([...m.links.values()].every((x) => x.whole && [x.a, x.b].some((e) => e.obj === 'AA' && e.key == null)));
+  assert.match(m.stateText(), /连线：f\.l1–AA 蓝，AA–f\.r1 蓝|连线：AA–f\.l1 蓝，AA–f\.r1 蓝|连线：f\.l1–AA 蓝，f\.r1–AA 蓝|连线：AA–f\.l1 蓝，f\.r1–AA 蓝/);
+  run(m, 'unlink f');
+  assert.equal(m.links.size, 0);
+  // 只写一样东西：照旧把它的部件依次连起来
+  assert.equal(run(new Scene(), 'array a = 1 2 3\nlink a').links.size, 2);
+  // 跟着拨数照新的数重新造（remake）：整样东西的线没有部件，不当成部件没了剪掉
+  const t = run(new Scene(), 'dial d = 2 range=1..5\narray p = {d} 1\narray q = 3 4\nlink p q');
+  assert.equal(t.links.size, 1);
+  run(t, 'set d 3');
+  assert.equal(t.objects.get('p').cells[0].value, '3');
+  assert.equal(t.links.size, 1);
+  // 分组只收这一排自己的线
+  run(t, 'group p stride=1');
+  assert.equal([...t.links.values()].filter((x) => x.whole).length, 1);
+});
+
+test('藏起来：hide=on 造的、hide 的东西照样算、现状照样写，画面上不摆；show 摆回来；哪种东西都能藏', () => {
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix R = 1 2 hide=on');
+  assert.equal(s.objects.get('R').hidden, true);
+  assert.deepEqual(s.shownIds(), ['A']);
+  const st = s.stateText();
+  assert.match(st, /（藏着，画面上不摆）矩阵 R（1×2）：\n  第 1 行：1  2/);
+  run(s, 'show R');
+  assert.deepEqual(s.shownIds(), ['A', 'R']);
+  assert.doesNotMatch(s.stateText(), /藏着/);
+  // 不是矩阵也认
+  run(s, 'array k = 1 2 hide=on');
+  assert.ok(!s.shownIds().includes('k'));
+  run(s, 'array a = 5 6\nhide a');
+  assert.ok(!s.shownIds().includes('a'));
+  run(s, 'hide A R');
+  assert.deepEqual(s.shownIds(), []);
+  // 藏着的照样算：跟着它算的照样变
+  run(s, 'matrix S = {A + A} hide=on\nwrite A.1,1 5');
+  assert.equal(s.parts('S.1,1')[0].value, '10');
+  // 摆东西、往下推不算藏着的：新造的摆在看得见的下面
+  const t = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix H = 1 0 / 0 1 / 1 1 hide=on\nmatrix B = 0 1 / 1 0');
+  const hb = t.objectBox('H'), bb = t.objectBox('B'), ab = t.objectBox('A');
+  assert.ok(bb.y < ab.y + ab.h + 100, 'B 紧挨着 A，没给藏着的 H 留地方');
+  // show：原来的地方压着看得见的东西，照摆新东西的规矩摆到下面、排到最后；没压着就留在原处
+  run(t, 'show H');
+  assert.deepEqual([...t.objects.keys()], ['A', 'B', 'H']);
+  assert.ok(t.objectBox('H').y > bb.y + bb.h, `H 摆到 B 下面（原来在 ${hb.y}）`);
+  // 摆过又藏起来、夹在中间没压着东西的：留在原处，先后也不变
+  const a1 = { ...t.objects.get('A').origin };
+  run(t, 'hide A\nshow A');
+  assert.deepEqual(t.objects.get('A').origin, a1, '没压着东西：留在原处');
+  assert.deepEqual([...t.objects.keys()], ['A', 'B', 'H']);
+  // 同名重造照旧藏着（留在原处）；hide=off 摆出来
+  run(t, 'matrix R = 1 2 hide=on\nmatrix R = 3 4');
+  assert.ok(t.objects.get('R').hidden);
+  run(t, 'matrix R = 3 4 hide=off');
+  assert.ok(!t.objects.get('R').hidden);
+  // 写错了说清楚
+  assert.match(dryRun(t, 'hide Z')[0]?.error || '', /舞台上没有「Z」/);
+  assert.match(dryRun(t, 'hide A.1,1')[0]?.error || '', /整样东西/);
+  assert.match(dryRun(t, 'matrix Q = 1 hide=yes')[0]?.error || '', /hide= 只能写 on/);
+  assert.match(dryRun(t, 'hide')[0]?.error || '', /hide 后面写/);
+});
+
+test('clone 带着这一轮的新状态（检查、试演、抢跑都在副本上跑）', () => {
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix X = 1 0 / 0 1\narray a = 1 2 3\nlink A X');
+  s.view = { w: 1180, h: 820 };
+  s.clipped = ['X'];
+  const c = s.clone();
+  assert.equal(c.stateText(), s.stateText());
+  assert.deepEqual(c.view, s.view);
+  assert.deepEqual(c.clipped, s.clipped);
+  c.clipped.push('a');
+  c.view.w = 1;
+  assert.deepEqual(s.clipped, ['X']);
+  assert.equal(s.view.w, 1180);
+  assert.deepEqual(new Scene().clone().clipped, []);
+  assert.equal(new Scene().clone().view, null);
+});
+
+test('看不全：画面写回的 clipped 写进现状（藏着的、已经拿下舞台的不写）', () => {
+  const s = run(new Scene(), 'matrix X = 1 2 / 3 4\nmatrix Rk = 1 0 / 0 1\nmatrix H = 1 hide=on');
+  assert.doesNotMatch(s.stateText(), /看不全/);
+  s.clipped = ['X', 'Rk'];
+  assert.match(s.stateText(), /画面上看不全：X、Rk/);
+  s.clipped = ['X', 'H', 'Gone'];
+  assert.match(s.stateText(), /画面上看不全：X$/m);
+});
+
+test('横屏另起一列：往下摆会缩得太小、右边有地方就摆右边，和最上面那样东西顶齐；竖屏照旧往下', () => {
+  // 四行的矩阵 220 高：横屏镜头能用的那块（去掉话、底下一条、留白）摆三张就满了
+  const src = 'matrix A = 1 2 / 3 4 / 5 6 / 7 8\nmatrix B = 1 2 / 3 4 / 5 6 / 7 8\nmatrix C = 1 2 / 3 4 / 5 6 / 7 8\nmatrix D = 1 2 / 3 4 / 5 6 / 7 8\nmatrix E = 1 2 / 3 4 / 5 6 / 7 8\nmatrix F = 1 2 / 3 4\nmatrix G = 1 2 / 3 4 / 5 6 / 7 8';
+  const wide = new Scene();
+  wide.view = { w: 1180, h: 820 };
+  run(wide, src);
+  const box = (id) => wide.objectBox(id);
+  assert.ok(box('B').y > box('A').y && box('C').y > box('B').y && box('B').x === box('A').x, '前三张照旧往下摆');
+  assert.equal(box('D').y, box('A').y, '第四张另起一列，和最上面那张顶齐');
+  assert.ok(box('D').x >= box('A').x + box('A').w, '摆在右边');
+  assert.ok(wide.objects.get('D').colStart);
+  assert.ok(box('E').y > box('D').y && box('E').x === box('D').x, '再下一张接着摆在这一列下面');
+  assert.ok(box('F').y > box('E').y && box('F').x === box('D').x);
+  assert.equal(box('G').y, box('A').y, '这一列也满了：再另起一列');
+  // 左边那一列长高了：往下让的只有左边那一列
+  const d0 = box('D').y, b0 = box('B').y;
+  run(wide, 'matrix A = 1 2 / 3 4 / 5 6 / 7 8 / 9 10');
+  assert.ok(box('B').y > b0);
+  assert.equal(box('D').y, d0);
+  // 照 log 放回（同一个屏幕）一模一样
+  const again = new Scene();
+  again.view = { w: 1180, h: 820 };
+  run(again, `${src}\nmatrix A = 1 2 / 3 4 / 5 6 / 7 8 / 9 10`);
+  for (const id of wide.objects.keys()) assert.deepEqual(again.objectBox(id), wide.objectBox(id), id);
+  const tall = new Scene();
+  tall.view = { w: 820, h: 1180 };
+  run(tall, src);
+  assert.ok(tall.objectBox('E').y > tall.objectBox('D').y && tall.objectBox('E').x === tall.objectBox('D').x, '竖屏照旧往下摆');
+  // 不知道屏幕多大（测试、旧课的纯场景）：照旧往下摆
+  const none = run(new Scene(), src);
+  assert.ok(none.objectBox('G').y > none.objectBox('F').y);
+  assert.ok(![...none.objects.values()].some((o) => o.colStart));
+});
