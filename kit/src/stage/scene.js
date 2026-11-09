@@ -16,7 +16,7 @@ import { bbox, columnSlot, cameraRoom } from './layout.js';
 import { parseGoal, evalGoal, goalStatus, checkPreds, clauseKey, clauseMarks } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder } from './value.js';
-import { rulesOf, done as nextDone, checkMeasure, measureLine } from './rules.js';
+import { rulesOf, done as nextDone, checkMeasure, measureLine, changedKeys } from './rules.js';
 import { judge } from './referee.js';
 import { gestureGrabs, armable } from './gestures.js';
 
@@ -164,6 +164,8 @@ export class Scene {
     // —— 画面写回的（stage.js 量了写回，和 labelRects 一样）——
     this.view = null; // 屏幕多大 { w, h }：摆新东西时看往下摆会不会缩得太小、要不要另起一列（不知道就照旧往下摆）
     this.clipped = []; // 镜头摆好以后还出了屏幕的东西（id）：舞台现状里告诉老师「画面上看不全」
+    // —— 一次点几样（ask pick 交的那一下，pick 那一行）——
+    this.picked = null; // { obj, keys, refs, reveal, diffDone, changed? }：学生点着的几样（圈着，老师下一轮演完收掉）；changed 是之后第一次变时变了的 key
   }
 
   clone() {
@@ -176,7 +178,8 @@ export class Scene {
     s.focus = this.focus ? [...this.focus] : null;
     s.say = this.say;
     s.words = [...this.words];
-    s.waiting = this.waiting ? { ...this.waiting } : null;
+    // ask pick 的 refs、expect 是数组：各拷一份（改副本的不动原来的）
+    s.waiting = this.waiting ? { ...this.waiting, refs: [...this.waiting.refs], ...(Array.isArray(this.waiting.expect) ? { expect: [...this.waiting.expect] } : {}) } : null;
     for (const [k, v] of this.opens) s.opens.set(k, { ...v, refs: [...v.refs], ...(v.policy ? { policy: { ...v.policy } } : {}) });
     for (const [k, g] of this.goals) s.goals.set(k, structuredClone(g));
     for (const [k, r] of this.reactions) s.reactions.set(k, [...r]);
@@ -186,6 +189,7 @@ export class Scene {
     // 这一轮新加的场景状态都要带上：检查、试演、抢跑都在副本上跑，少带一项就在缺东西的副本上判
     s.view = this.view ? { ...this.view } : null;
     s.clipped = [...this.clipped];
+    s.picked = this.picked ? { ...this.picked, keys: [...this.picked.keys], refs: [...this.picked.refs], ...(this.picked.changed ? { changed: [...this.picked.changed] } : {}) } : null;
     return s;
   }
 
@@ -206,6 +210,8 @@ export class Scene {
   isRef(word) { const r = parseRef(word); return !!(r && this.objects.has(r.obj)); }
   /** 跟着它走的写法（a#3、t.A）：话里的小块、记录、给老师看都用它 */
   refOf(p) { return typeOf(this.objects.get(p.obj)).ref(p); }
+  /** 学生点的那一个写给老师的名字：有位置的（一排格子、句子的词）写第几个（a.3，和老师写 ask、expect 的写法一样），别的照那种东西的写法 */
+  tapRef(p) { return p.slot != null ? `${p.obj}.${p.slot}` : this.refOf(p); }
   partBox(p) { const o = this.objects.get(p.obj); return typeOf(o).partBox(o, p); }
   cellBox(p) { return this.partBox(p); }
   /**
@@ -348,6 +354,9 @@ export class Scene {
     if (j && !j.apply) return { blocked: true, judged: j };
     const target = this.ownTarget(c);
     const before = j?.by === 'student' && this.objects.has(j.obj) ? structuredClone(this.objects.get(j.obj)) : null; // 学生这一下以后的事实要比前后
+    // 学生点过几样（ask pick）、还没变过：这一行之前那样东西的样子，之后和真变了的比（只比一次）
+    const pk = this.picked && !this.picked.diffDone && this.objects.has(this.picked.obj) ? this.picked : null;
+    const pkBefore = pk ? structuredClone(this.objects.get(pk.obj)) : null;
     if (target) this.unslip(target); // 那样东西又变了：上一下淡淡圈着的收掉
     // 这一行是谁做的（unlive 写给老师「你 / 学生动过它的结构」）；重放时老师的行不给 by，当老师的
     this.actor = by === 'student' || j?.by === 'student' ? 'student' : 'teacher';
@@ -369,6 +378,22 @@ export class Scene {
       // 学生做对一步：老师预写的确认、下一小问（@t.right，只演一次）
       if (j.by === 'student' && j.verdict?.right === true) reactions.push(...this.take(`${j.obj}.right`).map((src) => ({ right: j.obj, src })));
     }
+    // 点了以后第一次改了那样东西（谁改的都算，跟着拨数重算的也算）：哪几个真变了，和学生先点的比（fx.pickDiff：学生的一下写进事实，
+    // 老师的一下画面交给课堂记一句）。规则交的 changed 说变了哪些；点过的部件这一下没了也算变了
+    if (pk && this.picked === pk && this.objects.has(pk.obj)) {
+      const now = this.objects.get(pk.obj);
+      const partsOf = (x) => typeOf(x).parts(x);
+      let keys = [];
+      try { keys = changedKeys(now, pkBefore, now, partsOf); } catch (err) { ruleErrors.push(`${typeOf(now).label}的规则算这一下变了哪些时出错：${err?.message || err}`); }
+      const have = new Set(partsOf(now).map((p) => p.key));
+      const gone = pk.keys.filter((k) => !have.has(k));
+      if (keys.length || gone.length) {
+        pk.diffDone = true;
+        pk.changed = [...keys, ...gone];
+        fx.pickDiff = pickDiffText(this, pk, pk.changed);
+      }
+    }
+    if (this.picked) this.paintPicks(); // 照新的样子重画圈（跟着算的重新造过、reveal 刚分出虚实）
     const met = this.checkGoals();
     if (met.length) {
       fx.goalsMet = met;
@@ -712,13 +737,29 @@ export class Scene {
       }
       case 'ask': {
         const kind = words[0];
-        if (!['tap', 'drag', 'next', 'say', 'value'].includes(kind)) throw new Error(`ask 后面写 tap / drag / next / say / value，没有「${kind}」`);
+        if (!['tap', 'drag', 'next', 'say', 'value', 'pick'].includes(kind)) throw new Error(`ask 后面写 tap / drag / next / say / value / pick，没有「${kind}」`);
         if (str) this.checkRich(str, c);
         const refs = refsIn(args.slice(1));
         refs.forEach((r) => this.parts(r));
+        // ask pick 的 expect= 写几个，空格隔开（expect="t.50 t.45 t.40"）；别的 ask 照旧是一个
+        const expects = kind === 'pick' && opts.expect ? String(opts.expect).trim().split(/\s+/).filter(Boolean) : null;
         // 要学生点、拖的东西藏着：学生看不见，永远等不来（重放旧课照收）
-        const veiled = this.hiddenIn([...refs, ...(opts.expect && this.isRef(opts.expect) ? [opts.expect] : [])]);
+        const veiled = this.hiddenIn([...refs, ...(expects || (opts.expect && this.isRef(opts.expect) ? [opts.expect] : []))]);
         if (veiled.length && !c.lenient) throw new Error(hiddenError(veiled));
+        if (opts.reveal != null && kind !== 'pick') throw new Error('reveal= 只用在 ask pick 上（之后哪一下改了学生点的几样，圈画成实线、虚线）');
+        const reveal = kind === 'pick' ? revealOf(opts.reveal) : false;
+        if (kind === 'pick') {
+          // 一次点几样：只写东西名是哪个都能点，写部件是只能点这几个；交的那一行、圈都按一样东西记
+          if (!refs.length) throw new Error(`ask pick 后面写能点的东西：ask pick t "…" 是 t 里哪个都能点，ask pick t#1 t#3 "…" 是只能点这几个`);
+          const objs = [...new Set(refs.map((r) => parseRef(r).obj))];
+          if (objs.length > 1) throw new Error(`ask pick 一次只点一样东西里的（写了 ${objs.join('、')}）：分成几问`);
+          const can = new Set(refs.flatMap((r) => this.parts(r)).map(pidOf));
+          for (const w of expects || []) {
+            let ps;
+            try { ps = this.parts(w); } catch (err) { throw new Error(`expect 里的 ${w} 不在能点的里面（${err.message}）`); }
+            if (!ps.every((p) => can.has(pidOf(p)))) throw new Error(`expect 里的 ${w} 不在能点的里面（能点的是 ${refs.join(' ')}）`);
+          }
+        }
         if (kind === 'drag') {
           const ps = refs.flatMap((r) => this.parts(r));
           if (ps.length < 1) throw new Error('ask drag 要写能拖的东西');
@@ -729,9 +770,39 @@ export class Scene {
         const spec = kind === 'value' ? { type: opts.type, answer: opts.answer, wrongs: opts.wrong, free: opts.free } : null;
         if (spec) checkSpec(spec, this, { strict: !c.lenient });
         if (str != null) { this.say = str; this.words = parseRich(str).filter((p) => p.k === 'word').map((p) => p.v); }
-        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: opts.expect || null, answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null };
-        if (opts.expect) this.parts(opts.expect);
+        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(kind === 'pick' ? { reveal } : {}) };
+        if (opts.expect && kind !== 'pick') this.parts(opts.expect);
         return { kind };
+      }
+      case 'pick': {
+        // pick t.45 t.40 reveal=on：学生一次点了这几个（ask pick 交的那一下：页面照学生点的写这一行，记进 log，刷新照它放回）。
+        // 这一行自己带全、不读 waiting：刷新时 ask 不重放，等着的那一问是空的，reveal 只能从这一行拿；和 expect 比是交的那一刻页面比的，进回答
+        strayRefs();
+        const refs = refsIn();
+        if (!refs.length) throw new Error('pick 后面写点了哪几个（比如 pick t.45 t.40）');
+        if (refs.some((w) => !parseRef(w).mark)) throw new Error(`pick 写点了哪几个部件（${refs[0]}.…），不写整样东西`);
+        const objs = [...new Set(refs.map((w) => parseRef(w).obj))];
+        if (objs.length > 1) throw new Error(`pick 一次只点一样东西里的（写了 ${objs.join('、')}）`);
+        if (this.objects.get(objs[0]).hidden && !c.lenient) throw new Error(hiddenError(objs));
+        const reveal = revealOf(opts.reveal);
+        const keys = [...new Set(partsIn().map((p) => p.key))];
+        this.clearPicks(); // 新点的一次换掉上一次的
+        this.picked = { obj: objs[0], keys, refs, reveal, diffDone: false };
+        this.paintPicks();
+        return { picked: objs[0] };
+      }
+      case 'unpick': {
+        // unpick / unpick t：收掉学生点着的（老师那一轮演完页面自己写一行 unpick，见 stage.js 的 begin）
+        const id = words[0];
+        if (id) {
+          if (parseRef(id)?.mark) throw new Error(`unpick 写整样东西的名字（unpick ${parseRef(id).obj}），收掉那一样上点着的`);
+          if (!this.objects.has(id)) throw new Error(`舞台上没有「${id}」`);
+          if (this.picked?.obj !== id) throw new Error(`${id} 上没有学生点着的`);
+        }
+        const was = this.picked?.obj ?? null;
+        this.clearPicks();
+        this.picked = null;
+        return { unpicked: was };
       }
       case 'clear': {
         this.labels.clear();
@@ -943,6 +1014,24 @@ export class Scene {
     this.doneState.delete(id);
     this.reactions.delete(`${id}.done`);
     this.reactions.delete(`${id}.right`);
+    if (this.picked?.obj === id) this.picked = null; // 学生点的是上一样的部件：不算了
+  }
+
+  // —— 一次点几样（ask pick）——
+  /** 学生点着的几样画成什么（部件上的 pick，画面照它画圈）：reveal=on、之后已经变过一次的，变了的 changed（实线）、没变的 same（虚线淡掉）；别的都是 on */
+  paintPicks() {
+    const k = this.picked;
+    const o = k && this.objects.get(k.obj);
+    if (!o) return;
+    const on = new Set(k.keys), ch = new Set(k.changed || []);
+    for (const p of typeOf(o).parts(o)) {
+      if (on.has(p.key)) p.pick = k.reveal && k.diffDone ? (ch.has(p.key) ? 'changed' : 'same') : 'on';
+      else delete p.pick;
+    }
+  }
+  clearPicks() {
+    const o = this.picked && this.objects.get(this.picked.obj);
+    if (o) for (const p of typeOf(o).parts(o)) delete p.pick;
   }
 
   // —— 跟着算的量（value.js）——
@@ -1194,8 +1283,12 @@ export class Scene {
       }
     }
     if (this.say) lines.push(`最后说的话：${this.say}`);
+    // 学生点着的几样（画面上圈着）：老师这一轮演完页面收掉；reveal=on 的变过一次以后写哪几个画了实线、哪几个虚线
+    if (this.picked && this.objects.has(this.picked.obj)) lines.push(pickedLine(this, this.picked));
     // 问的、开放的、挑战要动的东西后来藏起来了：照写，补一句学生点不到（不然老师等一个永远不来的回答）
-    if (this.waiting) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案' }[this.waiting.kind]}${this.waiting.refs.length ? ` ${this.waiting.refs.join(' ')}` : ''}${hiddenNote(this.hiddenIn([...this.waiting.refs, ...(this.waiting.expect && this.isRef(this.waiting.expect) ? [this.waiting.expect] : [])]))}`);
+    const w = this.waiting;
+    const asked = w ? [...w.refs, ...(Array.isArray(w.expect) ? w.expect : w.expect && this.isRef(w.expect) ? [w.expect] : [])] : [];
+    if (w) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案', pick: '点几样' }[w.kind]}${w.refs.length ? ` ${w.refs.join(' ')}` : ''}${hiddenNote(this.hiddenIn(asked))}`);
     const openText = (e) => { const o = this.objects.get(e.obj); const what = (e.input ? null : affordsOf(typeOf(o))[e.action]) || gestureText(e.gesture); const pol = [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、'); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}${pol ? `；${pol}` : ''}）${hiddenNote(this.hiddenIn([e.obj]))}`; };
     // 画面还挂不上的手势（句子的拉线，gestures.js 的 ARMED_GESTURES）：不说学生能动，单独一句（开着、不默默吞掉）
     const opens = [...this.opens.values()];
@@ -1216,6 +1309,80 @@ export class Scene {
     const p = this.partOf(k.obj, k.key);
     return p ? this.refOf(p) : `${k.obj}:${k.key}`;
   }
+}
+
+/** reveal= 只认 on / off；不写是 off（圈的虚实挂不挂出来给学生看是老师定的，页面不替老师开） */
+function revealOf(v) {
+  if (v == null) return false;
+  if (v !== 'on' && v !== 'off') throw new Error(`reveal= 只能写 on（之后哪一下改了学生点的几样，变了的圈画实线、没变的画虚线淡掉）或 off，没有「${v}」`);
+  return v === 'on';
+}
+
+/**
+ * 学生点的这一个是不是老师预期的（ask tap … expect=）：expect 写一个部件、一段（a.1-3）、整样东西（AB）都行，点到里面哪一个都算，
+ * 哪种东西都一样。按东西 + key 比（重放过的场景是新的一份，部件不是同一个对象）。expect 现在不在舞台上（学生动过）：null，比不了
+ */
+export function expectHit(scene, expect, part) {
+  let ps;
+  try { ps = scene.parts(expect); } catch { return null; }
+  return ps.some((p) => p.obj === part.obj && p.key === part.key);
+}
+
+const uniqParts = (ps) => { const seen = new Set(); return ps.filter((p) => { const k = pidOf(p); if (seen.has(k)) return false; seen.add(k); return true; }); };
+/**
+ * 学生交了 ask pick（点了 refs 这几个）：和老师的 expect 比 → 回答 { type: 'pick', refs, expected, same, extra, missing }。
+ * 交的那一刻在舞台上比（那时等着的那一问还在）；expect 里写一段、写整样东西是里面每一个都要点到。名字照 tapRef（点的先后照学生点的）。
+ * 没写 expect：expected 是 null、same 是 null；预期的部件这一刻不在舞台上了：same 是 null，why 说为什么（不当学生点错）
+ */
+export function pickAnswer(scene, refs, expect) {
+  const mine = uniqParts(refs.flatMap((r) => scene.parts(r)));
+  const out = { type: 'pick', refs: mine.map((p) => scene.tapRef(p)), expected: expect?.length ? expect.join(' ') : null, same: null, extra: [], missing: [] };
+  if (!out.expected) return out;
+  let want;
+  try { want = uniqParts(expect.flatMap((w) => scene.parts(w))); } catch (err) { return { ...out, why: err.message }; }
+  const W = new Set(want.map(pidOf)), P = new Set(mine.map(pidOf));
+  out.extra = mine.filter((p) => !W.has(pidOf(p))).map((p) => scene.tapRef(p));
+  out.missing = want.filter((p) => !P.has(pidOf(p))).map((p) => scene.tapRef(p));
+  out.same = !out.extra.length && !out.missing.length;
+  return out;
+}
+/** ask pick 的回答写给老师：学生点了 4 个：t.45、t.50、t.40、t.20——你预期的是 t.50 t.45 t.40 t.20：一样（多点了 t.30，漏了 t.20） */
+export function pickText(a) {
+  const refs = a?.refs || [];
+  const head = `学生点了 ${refs.length} 个：${refs.join('、')}`;
+  if (a?.expected == null) return head;
+  const diff = a.same === true ? '一样'
+    : a.same == null ? `页面比不了${a.why ? `（${a.why}）` : ''}`
+      : [a.extra?.length ? `多点了 ${a.extra.join('、')}` : '', a.missing?.length ? `漏了 ${a.missing.join('、')}` : ''].filter(Boolean).join('，');
+  return `${head}——你预期的是 ${a.expected}：${diff}`;
+}
+// 点着的每一个现在叫什么：还在的照 tapRef；这一下没了的，照交的那一行写的（一个部件一个写法时对得上），后面说没了
+function pickedNames(scene, picked) {
+  const o = scene.objects.get(picked.obj);
+  const byKey = new Map((o ? typeOf(o).parts(o) : []).map((p) => [p.key, p]));
+  const aligned = picked.refs.length === picked.keys.length;
+  return picked.keys.map((k, i) => ({ k, t: byKey.has(k) ? scene.tapRef(byKey.get(k)) : `${aligned ? picked.refs[i] : `${picked.obj} 里点过的一个`}（没了）` }));
+}
+const listOr = (xs) => (xs.length ? xs.join('、') : '没有');
+/**
+ * 学生点了几样以后，第一次改了那样东西的一下：学生先点的 3 个里，这一下以后变了的：t.45、t.40；没变的：t.20；变了却没点的：t.30。
+ * keys 是这一下变了的部件（rules.js 的 changedKeys，再加上点过、这一下没了的）；空的写「没有」
+ */
+export function pickDiffText(scene, picked, keys) {
+  const ch = new Set(keys);
+  const mine = pickedNames(scene, picked);
+  const o = scene.objects.get(picked.obj);
+  const missed = (o ? typeOf(o).parts(o) : []).filter((p) => ch.has(p.key) && !picked.keys.includes(p.key)).map((p) => scene.tapRef(p));
+  return `学生先点的 ${picked.keys.length} 个里，这一下以后变了的：${listOr(mine.filter((x) => ch.has(x.k)).map((x) => x.t))}；没变的：${listOr(mine.filter((x) => !ch.has(x.k)).map((x) => x.t))}；变了却没点的：${listOr(missed)}`;
+}
+// 舞台现状里点着的那一行
+function pickedLine(scene, picked) {
+  const mine = pickedNames(scene, picked);
+  const ch = new Set(picked.changed || []);
+  const how = !picked.reveal ? ''
+    : picked.diffDone ? `；reveal=on：变了的实线 ${listOr(mine.filter((x) => ch.has(x.k)).map((x) => x.t))}，没变的虚线 ${listOr(mine.filter((x) => !ch.has(x.k)).map((x) => x.t))}`
+      : '；reveal=on：之后第一下改了它们，变了的画实线、没变的画虚线';
+  return `圈着学生点的：${mine.map((x) => x.t).join('、')}（你这一轮演完页面收掉${how}）`;
 }
 
 /**

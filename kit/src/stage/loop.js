@@ -74,13 +74,13 @@ export function createLoop(host) {
         res = pre ? await pre.attach(onText) : await host.call(input, { ...host.teach, cache: false, onText });
       } catch (err) {
         S.flight = null;
-        if (f.playing) await turn.abort(); else turn.drop();
+        if (f.playing) { await turn.abort(); dropNotes(turn.turn); } else turn.drop();
         host.thinking?.(false);
         host.addTurn({ role: 'system', kind: 'error', discarded: true, text: `调用出错：${err?.message || err?.code || err}`, cost: host.cost({ bytes: nb, why: 'failed', ms: performance.now() - t0 }) });
         host.report?.(err, { what: '舞台课调用 Claude' });
         S.busy = false;
         if (S.ended) return null;
-        const again = await stage.play('ask next "老师那边没连上。点一下再试。" button="再试一次"');
+        const again = await stage.play('ask next "老师那边没连上。点一下再试。" button="再试一次"', { unpick: false });
         if (again.act?.type === 'next' && !S.ended) return teach(why);
         return null;
       }
@@ -98,12 +98,12 @@ export function createLoop(host) {
       }
       // 只能是指定的模型（Opus 5.5）：不是就整轮作废（先画上去的也退回去），再要一次（最多两次，不加退路模型）
       if (!host.mock && res?.modelApplied !== host.model) {
-        if (f.playing) await turn.abort(); else turn.drop();
+        if (f.playing) { await turn.abort(); dropNotes(turn.turn); } else turn.drop();
         host.thinking?.(false);
         host.addTurn({ role: 'system', kind: 'fallback', discarded: true, text: 'Opus 5.5 不可用，这一轮作废', modelApplied: res?.modelApplied || null, cost: { ...cost, why: 'failed' } });
         if (tries < 2) continue;
         S.busy = false;
-        const again = await stage.play('ask next "这一轮不是 Opus 5.5 写的，作废了。点一下再要一次。" button="再要一次"');
+        const again = await stage.play('ask next "这一轮不是 Opus 5.5 写的，作废了。点一下再要一次。" button="再要一次"', { unpick: false });
         if (again.act?.type === 'next' && !S.ended) return teach(why);
         return null;
       }
@@ -132,6 +132,22 @@ export function createLoop(host) {
       maybeSpec();
       return claude;
     }
+  }
+
+  // —— 页面记下的一句（老师演的那一下改了学生先点的几样，stage.js 的 onNote）：不叫老师、不算「试」，跟着下一条发 ——
+  // quiet：攒着它不挡提前想（发出去的整条照样带着它，对得上）。「再看一遍」重演同一行又来一句一样的：不重复记
+  function onNote(text, { turn } = {}) {
+    if (S.ended || host.readOnly || !text) return;
+    if (S.pending?.events.some((e) => e.kind === 'note' && e.text === text && e.turn === turn)) return;
+    addEvent({ kind: 'note', text, at: Date.now(), quiet: true, ...(turn != null ? { turn } : {}) });
+  }
+  // 作废的那一轮演过的行退回去了：它演的时候记下的几句也不算（不然告诉老师一个已经退回去的变化）
+  function dropNotes(no) {
+    const p = S.pending;
+    if (!p) return;
+    const n = p.events.length;
+    p.events = p.events.filter((e) => !(e.kind === 'note' && e.turn === no));
+    if (p.events.length !== n) savePending(true);
   }
 
   // —— 学生做的事：答了问的、做到挑战马上叫老师；试（拨、拖、点开看）攒着 ——
@@ -301,7 +317,8 @@ export function createLoop(host) {
    */
   async function resume({ lastClaude = 0, pendingRow = null, askLine = 'ask next' } = {}) {
     S.lastClaude = lastClaude;
-    const t = stage.begin();
+    // 只是把最后那一问重新挂上，不是老师的一轮：学生点着的几样（ask pick 的圈）留着，等老师下一轮演完再收
+    const t = stage.begin({ unpick: false });
     t.end(askLine);
     await t.armed;
     S.logFrom = stage.log.length;
@@ -325,6 +342,7 @@ export function createLoop(host) {
   stage.onAnswer = onAnswer;
   stage.onGoal = onGoal;
   stage.onDone = onDone;
+  stage.onNote = onNote;
   return {
     teach, flush, finalize, dropSpec, resume, close, reopen, onAct,
     get busy() { return S.busy; },

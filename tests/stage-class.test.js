@@ -302,3 +302,46 @@ test('复核 撤一步跳过没演上的那一下（M4）：同一行先演上�
   const m = rows.find((r) => r.role === 'student' && !r.pending)?.msg || '';
   assert.doesNotMatch(m, /\[跟着变的\]/, '演上的那一下撤掉了，它引起的变化不写');
 });
+
+test('课堂循环：页面记下的一句（老师演的那一下改了学生先点的几样）不叫老师、跟着下一条发；「再看一遍」重演不重复记；作废的那一轮记的不算', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const wait = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+  const stage = { log: [], scene: new Scene(), teacherAudit: [], reacting: null, studentChain: null, pendingGoals: () => [] };
+  const rows = [];
+  const host = { stage, addTurn: (r) => { const x = { ...r, seq: rows.length + 1 }; rows.push(x); return x; }, putTurn: () => {}, note: () => {} };
+  const loop = createLoop(host);
+  const note = '学生先点的 3 个里，这一下以后变了的：t.45、t.40；没变的：t.20；变了却没点的：t.30（你演的 insert t 47）';
+  stage.onNote(note, { turn: 4 });
+  stage.onNote(note, { turn: 4 });
+  await wait();
+  assert.equal(rows.filter((r) => r.role === 'student' && !r.pending).length, 0, '不叫老师');
+  assert.equal(loop.pending.events.length, 1, '重演同一行不重复记');
+  stage.onAnswer({ type: 'say', text: '原来 30 也变了' });
+  await wait();
+  const m = rows.find((r) => r.role === 'student' && !r.pending)?.msg || '';
+  assert.ok(m.includes(`${note}\n学生说：「原来 30 也变了」`), m);
+
+  // 作废的那一轮（不是指定的模型）：演的时候记下的那一句跟着退回去
+  const s2 = {
+    log: [], errors: [], reacting: Promise.resolve(), studentChain: Promise.resolve(), teacherAudit: [], scene: new Scene(), pendingGoals: () => [],
+    begin() { const armed = new Promise(() => {}); return { mark: 0, turn: 9, push() {}, end() { return new Promise(() => {}); }, drop() {}, abort: async () => {}, armed }; },
+    play: () => new Promise(() => {}),
+  };
+  const rows2 = [];
+  let calls = 0;
+  const host2 = {
+    stage: s2, mock: false, model: 'want', teach: {}, quietMs: 1e9, messages: () => [{ content: 'x' }], putTurn() {}, cost: (c) => c, thinking() {},
+    addTurn: (r) => { const x = { ...r, seq: rows2.length + 1 }; rows2.push(x); return x; },
+    call: async () => {
+      if (++calls > 1) return new Promise(() => {});
+      s2.onLine(); // 演上了一行
+      s2.onNote(note, { turn: 9 });
+      return { text: 'insert t 47', modelApplied: 'other' };
+    },
+  };
+  const loop2 = createLoop(host2);
+  loop2.teach('turn');
+  await wait(20);
+  assert.ok(rows2.some((r) => r.kind === 'fallback'));
+  assert.deepEqual((loop2.pending?.events || []).filter((e) => e.kind === 'note'), []);
+});

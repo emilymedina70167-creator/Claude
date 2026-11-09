@@ -112,8 +112,8 @@ test('说明不清楚的 10 条都写明了', () => {
   for (const k of ['tree', 'graph', 'sentence']) assert.match(lineOf(TYPES[k].doc, /^tag /), /最多 8 个字/, `${TYPES[k].label}的 tag`);
   // 3. goal 的 when= 能写什么：部件比部件、每种东西的判断式
   assert.match(lineOf(C, /^when= /), /部件比部件[^\n]*判断式/);
-  // 4. expect= 只能写一个部件
-  assert.match(lineOf(C, /expect=/), /只写一个部件/);
+  // 4. expect= 写整样东西或一段，点到里面哪一个都算（第二轮改了意思：以前只认一个部件）
+  assert.match(lineOf(C, /expect=/), /写整样东西或一段/);
   // 5. 拨数能驱动的是写成 {式子} 的值
   assert.match(lineOf(C, /^dial /), /能写进 \{式子\} 里驱动任何量/);
   // 6. retex 换掉最后一行、next 留着上一行

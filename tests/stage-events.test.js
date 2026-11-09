@@ -338,3 +338,22 @@ test('M4 学生的一下过了裁判、场景却演不了：写给老师「没�
   assert.match(u, /没演上：树最多 8 层/);
   assert.doesNotMatch(u, /是正确的下一步/);
 });
+
+test('页面的一句话（{ kind: note }：老师演的那一下改了学生先点的几样）：不叫老师、不算「试」，照写那句话', () => {
+  const note = { kind: 'note', text: 'x', at: 1 };
+  assert.equal(triggers(note), false);
+  assert.equal(tryCount([note, note]), 0);
+  assert.match(eventsText([note]), /x/);
+  // 和学生答的一起发：照先后写
+  const ans = eventOf({ type: 'pick', refs: ['t.45', 't.40'], expected: 't.45 t.40', same: true, extra: [], missing: [] }, { at: 2 });
+  assert.equal(ans.kind, 'answer');
+  assert.equal(eventsText([note, ans]), 'x\n学生点了 2 个：t.45、t.40——你预期的是 t.45 t.40：一样');
+});
+
+test('拨数的路：学生先点的几样以后第一次变的那一句落在路的前几下也留着（只写一次）', () => {
+  const diff = '学生先点的 2 个里，这一下以后变了的：C.1,1；没变的：C.2,2；变了却没点的：没有';
+  const ev = (from, value, extra = {}) => ({ kind: 'try', act: { type: 'dial', name: 'k', from, value, ...extra }, at: 0 });
+  const t = eventsText([ev(1, 2, { facts: [diff], pickDiff: diff }), ev(2, 3), ev(3, 4)]);
+  assert.equal(t.split(diff).length - 1, 1, t);
+  assert.match(t, /学生拨了 k：1 → 2 → 3 → 4（停在 4）。学生先点的 2 个里/);
+});

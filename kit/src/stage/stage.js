@@ -8,7 +8,7 @@
 import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHold } from './motion.js';
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
-import { Scene, compareValues, COLOR_NAMES, pidOf } from './scene.js';
+import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, pickText } from './scene.js';
 import { measureShown } from './rules.js';
 import { judgeAnswer, sameAnswer } from './answer.js';
 export { sameAnswer };
@@ -179,6 +179,9 @@ export class Stage {
     n.classList.toggle('is-lift', !!x.lift);
     n.classList.toggle('is-dim', !!x.dim);
     n.classList.toggle('is-slip', !!x.slip); // 学生走偏的那一下淡淡圈着（open … wrong=mark，scene.js 的 slip）
+    // 学生一次点的几样（ask pick 交了，scene.js 的 picked）：圈着；reveal=on 时之后第一下改了它们，没变的那几个画虚线淡掉
+    n.classList.toggle('is-pick', !!x.pick);
+    n.classList.toggle('is-pick-same', x.pick === 'same');
     if (was !== (x.paint || null) && !this.instant && ctx?.cmd === 'paint') ctx.jobs.push(this.pulse(x, stagger(ctx.jobs.length, { step: 50 })));
     if (!!n.__covered !== !!x.covered) {
       n.__covered = !!x.covered;
@@ -204,16 +207,17 @@ export class Stage {
   chipText(p) { return chipTextOf(p); }
 
   // —— 演一段（整段写好的） ——
-  async play(src, { by = 'teacher', auto = false } = {}) {
-    const t = this.begin({ by, auto });
+  async play(src, { by = 'teacher', auto = false, unpick = true } = {}) {
+    const t = this.begin({ by, auto, unpick });
     return t.end(src);
   }
 
   /**
    * 开一轮：老师边写边演。push(到现在为止写出来的全部文字) 每写完一行就演一行；end() 等这一轮演完、等到学生回答。
-   * 返回 { push, end, abort }；end() 的结果是 { act, errors, lines }
+   * 返回 { push, end, abort }；end() 的结果是 { act, errors, lines }。
+   * unpick：这一轮演完收掉学生上一次点的几样（ask pick 的圈）；不是老师的一轮（刷新以后重新挂那一问、连不上时那一问）写 false
    */
-  begin({ by = 'teacher', auto = true } = {}) {
+  begin({ by = 'teacher', auto = true, unpick = true } = {}) {
     const turn = ++this.turnNo;
     const mark = this.log.length;
     this.errors = [];
@@ -277,6 +281,12 @@ export class Stage {
       if (dead) return { act: null, errors: [], lines, mark, dead: true };
       feed(text != null ? text : last, true);
       await chain;
+      // 学生上一次点的几样（ask pick）圈到老师这一轮演完：照一行 unpick 收掉，记进这一轮的 log（刷新照它放回）。
+      // 这一轮里才交的不收（上一问还挂着时学生交的，老师还没看到）
+      if (!dead && unpick && this.scene.picked && !this.log.slice(mark).some((r) => /^pick\b/.test(r.src))) {
+        const [c] = parseScript('unpick');
+        await this.exec({ ...c, line: 0, src: 'unpick' }, { by: 'teacher', turn });
+      }
       // 撤一步只撤这以后学生做的（老师看过、照它讲了的不撤；和课堂循环这一段从 log 的哪里开始是同一处）
       if (!dead) { this.undoFloor = this.log.length; this.syncUndo(); }
       let act = null;
@@ -498,9 +508,15 @@ export class Stage {
     }
     if (!this.instant) for (const e of fx?.ruleErrors || []) reportError(e, { what: `舞台的规则出错：${c.src?.trim() || ''}` });
     if (act) {
-      if (fx?.judged?.after?.length) act.facts = fx.judged.after;
+      // 这一下以后写给老师的事实：裁判交的（谁转上来了、哪一行变成什么），学生先点了几样（ask pick）以后第一次变的那一句。
+      // pickDiff 另记一份：拨数连着几下并成一条路时只写最后一下的事实，这一句落在前几下也要留着（events.js 的 pathRow）
+      const facts = [...(fx?.judged?.after || []), ...(fx?.pickDiff ? [fx.pickDiff] : [])];
+      if (facts.length) act.facts = facts;
+      if (fx?.pickDiff) act.pickDiff = fx.pickDiff;
       if (fx?.derived?.length) act.derived = slimDerived(fx.derived);
     }
+    // 老师（连预写的行）这一下改了学生先点的几样：写成一句交给课堂，跟着下一条告诉老师（不叫老师，loop.js 的 onNote）
+    if (fx?.pickDiff && by !== 'student' && !this.instant) this.onNote?.(`${fx.pickDiff}（你演的 ${c.src?.trim() || c.cmd}）`, { turn });
     told?.();
     try {
       const choreo = c.on ? null : this.choreoOf(c, fx); // @g1 的行只是记着，不演
@@ -1362,12 +1378,48 @@ export class Stage {
       const partsOf = (refs) => (refs.length ? refs.flatMap((r) => sc.parts(r)) : sc.allParts());
       if (w.kind === 'tap') {
         for (const x of partsOf(w.refs)) offs.push(this.armTap(x, () => {
-          const act = { type: 'tap', ref: sc.refOf(x), pid: pidOf(x), key: x.key, slot: x.slot, value: tapValueOf(x) };
-          if (x.slot != null) act.ref = `${x.obj}.${x.slot}`;
-          if (w.expect) { const [e] = sc.parts(w.expect); act.expected = w.expect; act.right = e === x; }
+          const act = { type: 'tap', ref: sc.tapRef(x), pid: pidOf(x), key: x.key, slot: x.slot, value: tapValueOf(x) };
+          // expect 写整样东西或一段：点到里面哪一个都算（以前只认写的第一个部件）；比不了（预期的那几个不在了）是 null
+          if (w.expect) { act.expected = w.expect; act.right = expectHit(sc, w.expect, x); }
           this.onAct?.(act);
           finish(act);
         }));
+      }
+      if (w.kind === 'pick') {
+        // 一次点几样：点一下亮一圈、再点取消，按按钮交。交的那一下照学生的一行 pick … 走（记进 log，刷新照它放回；
+        // ask 写了 reveal=on 就带上：重放时 ask 不重放，只能从这一行拿），和 expect 比是交的这一刻比的、进回答。
+        // 一个都没点时按钮按不了（觉得一个都不是，可以在下面直接写一句）
+        const chosen = new Map(); // pid → 部件，照点的先后
+        const btn = el('button', 'st-next st-pick-go', this.dock);
+        btn.type = 'button';
+        btn.textContent = `${w.button || '点好了'} →`;
+        btn.disabled = true;
+        this.tween(btn, [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 360, easing: EASE.out });
+        for (const x of partsOf(w.refs)) {
+          const pid = pidOf(x);
+          offs.push(this.armTap(x, () => {
+            if (over) return;
+            if (chosen.has(pid)) chosen.delete(pid); else chosen.set(pid, x);
+            this.nodes.get(pid)?.classList.toggle('is-picking', chosen.has(pid));
+            btn.disabled = !chosen.size;
+          }));
+        }
+        offs.push(() => { for (const pid of chosen.keys()) this.nodes.get(pid)?.classList.remove('is-picking'); });
+        btn.addEventListener('click', async () => {
+          if (over || btn.disabled) return;
+          // 照场景现在的样子找回点的几个（点完以后学生可能又动过别的）：没了的不算
+          const ps = [...chosen.values()].map((x) => sc.partOf(x.obj, x.key)).filter(Boolean);
+          if (!ps.length) { chosen.clear(); return; }
+          btn.disabled = true;
+          const refs = ps.map((p) => sc.refOf(p));
+          let act;
+          try { act = pickAnswer(sc, refs, w.expect); } catch (err) {
+            act = { type: 'pick', refs: ps.map((p) => sc.tapRef(p)), expected: w.expect?.join(' ') ?? null, same: null, extra: [], missing: [], why: `页面没比成：${err?.message || err}` };
+            reportError(err, { what: `舞台的 ask pick 和 expect 比：${w.prompt || ''}` });
+          }
+          await this.studentDo(`pick ${refs.join(' ')}${w.reveal ? ' reveal=on' : ''}`, act);
+          finish(act);
+        });
       }
       if (w.kind === 'drag') {
         const peers = partsOf(w.refs);
@@ -1376,7 +1428,8 @@ export class Stage {
           offs.push(this.armDrag(v, x, peers, async (act, src) => { if (src) await this.studentDo(src, act); else this.onAct?.(act); finish(act); }, { prio: 2 }));
         }
       }
-      if (w.kind === 'next' || w.button) {
+      // ask pick 的按钮是交点了的几样（上面挂过了），不是「接着」
+      if ((w.kind === 'next' || w.button) && w.kind !== 'pick') {
         const b = el('button', 'st-next', this.dock);
         b.type = 'button';
         b.textContent = `${w.button || '接着'} →`;
@@ -1485,7 +1538,8 @@ export function actText(act) {
   const main = (() => {
     // 过了裁判、场景却演不了：照那一行说没演上，不说「舞台已经照做了」（events.js 的 verdictText 这时不再接结论）
     if (act.error) return `学生 ${act.src || act.line || act.type}——没演上：${act.error}（舞台没动）`;
-    if (act.type === 'tap') return `学生点了 ${act.ref}（${act.value}${act.slot != null && act.key !== act.slot ? `，#${act.key}` : ''}）${act.expected ? `——你预期的是 ${act.expected}，${act.right ? '点对了' : '点的不是它'}` : ''}`;
+    if (act.type === 'tap') return `学生点了 ${act.ref}（${act.value}${act.slot != null && act.key !== act.slot ? `，#${act.key}` : ''}）${act.expected ? `——你预期的是 ${act.expected}，${act.right === true ? '点对了' : act.right === false ? '点的不是它' : '页面比不了（预期的那个现在不在舞台上）'}` : ''}`;
+    if (act.type === 'pick') return pickText(act);
     if (act.type === 'drag' && act.a && act.b) return `学生把 ${act.a.value}（#${act.a.key}）拖到 ${act.b.value}（#${act.b.key}）那一格，两格换了位置（舞台已经照做了）`;
     if (act.type === 'drag') return act.text || '学生拖了一下';
     if (act.type === 'next') return `学生点了「${act.button}」`;

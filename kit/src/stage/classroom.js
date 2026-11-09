@@ -142,7 +142,8 @@ export async function renderStageClass(root, meta = {}, desk) {
         const comp = `S${at || seq}`; // 这一问：老师第几轮的（记忆块的 basis 写它）
         const w = stage.scene.waiting;
         const q = w?.prompt || stage.scene.say || '';
-        if (a.type === 'tap' && a.expected) sink.record({ type: 'stage', block: comp, q, value: a.value, text: a.ref, ok: !!a.right, turn: at });
+        // 预期的那几个这一刻不在舞台上（right 是 null，页面比不了）：不记对错，和下面只收不判的一样
+        if (a.type === 'tap' && a.expected) sink.record({ type: 'stage', block: comp, q, value: a.value, text: a.ref, ok: typeof a.right === 'boolean' ? a.right : null, turn: at });
         // 只收不判、页面没判成的（right 是 null）不记对错：记成 false 会被当成答错算进掌握
         else if (a.type === 'value') sink.record({ type: 'stage', block: comp, q, value: a.text, text: a.text, ok: typeof a.right === 'boolean' ? a.right : null, turn: at });
         else if (a.type === 'say') sink.put('evidence', sayEvidence(a.text, { session: sid, block: desk.block, turn: at }));

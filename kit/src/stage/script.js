@@ -15,7 +15,7 @@ export const COMMANDS = new Set([
   'say', 'glow', 'unglow', 'lift', 'drop', 'paint', 'unpaint', 'link', 'unlink', 'pulse', 'compare',
   'label', 'retext', 'unlabel', 'dial', 'set', 'camera', 'wait', 'ask', 'clear', 'fly', 'remove',
   'dim', 'undim', 'cover', 'uncover',
-  'open', 'close', 'goal', 'ungoal', 'hide', 'show',
+  'open', 'close', 'goal', 'ungoal', 'hide', 'show', 'pick', 'unpick',
 ]);
 export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
 

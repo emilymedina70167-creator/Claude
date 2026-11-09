@@ -513,5 +513,8 @@ export const planeView = {
   paint-order: stroke; stroke: color-mix(in srgb, var(--st-card) 90%, transparent); stroke-width: 5px; stroke-linejoin: round; }
 .is-hold > .pl-coord { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .is-tap > .pl-ring, .is-drag > .pl-ring { animation: none; opacity: .5; } }
+/* 一次点几样（ask pick）：点了的、交了的那一圈常亮（平面上是 SVG，stage.css 的 outline 画不出来）；reveal=on 以后没变的虚线淡掉 */
+.pl-items .is-picking > .pl-ring, .pl-items .is-pick > .pl-ring { animation: none; opacity: 1; stroke-width: 3; }
+.pl-items .is-pick-same > .pl-ring { stroke-dasharray: 5 4; opacity: .38; }
 `,
 };

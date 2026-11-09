@@ -6,7 +6,7 @@ import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
 import { parseOps, toQ } from '../kit/src/stage/types/matrix.js';
 import { matrixRules as R, actSrc, readBack, solutionText, brief, inferRowOp, fromFact } from '../kit/src/stage/types/matrix.rules.js';
-import { rulesOf, predicateOf, gestureOf, done, evalMeasure, measureLine } from '../kit/src/stage/rules.js';
+import { rulesOf, predicateOf, gestureOf, done, evalMeasure, measureLine, changedKeys } from '../kit/src/stage/rules.js';
 import { Q } from '../kit/src/exact.js';
 import { P } from '../kit/src/poly.js';
 import * as E from '../kit/src/engines/elim.js';
@@ -591,4 +591,20 @@ test('inferRowOp 随机：真的一步初等行变换（对调、倍乘、倍加
     named++;
   }
   assert.ok(named > 1500, `真的一步变了的有 ${named} 组`);
+});
+
+test('changed：数变了的格（ask pick 交了以后和真变了的比）；没变的格、多出来的格不算', () => {
+  const s = make('matrix M = 1 0 2 / 3 5 4');
+  const before = structuredClone(s.objects.get('M'));
+  run(s, 'rowop M r2 - 3r1');
+  const o = s.objects.get('M');
+  // 第 2 行：3 → 0、5 → 5（没变）、4 → −2
+  assert.deepEqual(R.changed(before, o), ['2.1', '2.3']);
+  assert.deepEqual(changedKeys(o, before, o), ['2.1', '2.3']);
+  const t = make('matrix M = 1 2 / 3 4');
+  const b2 = structuredClone(t.objects.get('M'));
+  // 对调两行：格子整个挪走（key 跟着格走），按位置比，四个位置的数都变了
+  run(t, 'rowop M r1 <-> r2');
+  const M = t.objects.get('M');
+  assert.deepEqual(R.changed(b2, M).map((k) => { const x = M.cells.find((c) => c.key === k); return `${x.r},${x.c}`; }), ['1,1', '1,2', '2,1', '2,2']);
 });

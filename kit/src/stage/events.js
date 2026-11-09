@@ -27,7 +27,8 @@ const text = (x) => (typeof x === 'string' ? x : x?.why || '');
 export const triggers = (e) => !e.quiet && (!!e.now || ['answer', 'goal', 'done', 'help', 'stuck', 'tries'].includes(e.kind));
 
 /**
- * 一个动作 → 一件事：{ kind: 'answer' | 'help' | 'try' | 'goal' | 'done' | 'stuck' | 'tries', act?, text?, at }。
+ * 一个动作 → 一件事：{ kind: 'answer' | 'help' | 'try' | 'goal' | 'done' | 'stuck' | 'tries', act?, text?, at }
+ * （另有页面记下的一句 { kind: 'note', text }：loop.js 收 stage.onNote，不叫老师、不算「试」）。
  * 试的一下：裁判说马上叫老师（act.call === 'now'）记 now；老师写了 call=done（做完才叫）的东西上试的记 patient，不算进「试了好多下」
  */
 export function eventOf(act, { help = '', at = 0 } = {}) {
@@ -113,7 +114,9 @@ function pathRow(p) {
     bits.push(`${multi ? `${c.goal} ` : ''}${c.clause}：${seq.map(SYM).join(' ')}`);
   }
   const head = `学生拨了 ${dial ? a0.name : a0.ref}：${vals.map(minus).join(' → ')}${bits.length ? `（${bits.join('；')}）` : ''}`;
-  const facts = (p.moves.at(-1).facts || []).filter(Boolean);
+  // 学生先点的几样（ask pick）以后第一次变的那一句只说一次：落在路的前几下也留着，不跟着前几下的事实去掉
+  const once = p.moves.slice(0, -1).map((m) => m.pickDiff).filter(Boolean);
+  const facts = [...once, ...(p.moves.at(-1).facts || [])].filter(Boolean);
   const tail = facts.length ? `。${facts.join('；')}` : '';
   return { ...p, full: head + tail, short: head, tail, n: p.moves.length };
 }
@@ -264,6 +267,8 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
     else if (e.kind === 'help') lines.push(`学生点了「${e.act.button}」`);
     else if (e.kind === 'stuck') lines.push(e.text || `学生 ${Math.round(QUIET_MS / 1000)} 秒没动，挑战还没做到`);
     else if (e.kind === 'tries') lines.push(e.text || `学生试了 ${TRY_MAX} 下还没做到`);
+    // 页面记下的一句（老师演的那一下改了学生先点的几样：stage.js 的 onNote）：不叫老师、不算「试」，照写
+    else if (e.kind === 'note') lines.push(e.text || '');
     else if (e.act) lines.push(actText(dialed ? { ...e.act, tries: undefined } : e.act));
   }
   // 老师写了 call=wrong、学生走偏了才叫的：说一声为什么这时候叫

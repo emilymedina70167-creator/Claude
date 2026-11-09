@@ -698,5 +698,14 @@ function slipRefs(o, act) {
 }
 
 // 行变换的每一下都判（改一格不判）；做完了（成了阶梯形）只对交给了学生做行变换的矩阵算：学生只拨数的矩阵不算
+/**
+ * 这一下数变了的格（ask pick 交了以后和真变了的比，rules.js 的 changedKeys）：同一个位置前后的数不一样的，交现在在那儿的格的 key，
+ * 按行列排；多出来的行、列不算。按位置比、不按格比：对调两行时格子整个挪走（key 跟着格走），按格比就成了「都没变」
+ */
+function changed(before, after) {
+  const was = new Map((before?.cells || []).map((x) => [`${x.r},${x.c}`, String(x.value)]));
+  return [...(after?.cells || [])].sort((a, b) => a.r - b.r || a.c - b.c).filter((x) => { const v = was.get(`${x.r},${x.c}`); return v != null && v !== String(x.value); }).map((x) => x.key);
+}
+
 // brief：跟着拨数算的矩阵，扫拨数时每个值写的要点（scene.js 的 sweep）
-export const matrixRules = { next, check, predicates, measures, facts, gestures, slipRefs, brief, actOf: lineAct, judges: ['rowop'], doneBy: ['rowop'] };
+export const matrixRules = { next, check, predicates, measures, facts, changed, gestures, slipRefs, brief, actOf: lineAct, judges: ['rowop'], doneBy: ['rowop'] };

@@ -338,6 +338,21 @@ function facts(before, after, act) {
   return [];
 }
 
+/**
+ * 这一下改了哪些结点（ask pick 交了以后和真变了的比，rules.js 的 changedKeys）：前后都在、平衡因子 / 父亲 / 哪一边 / 第几层 / 值
+ * 变了的（层序）。新长出来的不算——问的是「已经在树上的哪几个会变」；转一下整棵挪了层的都算变了
+ */
+function changed(before, after) {
+  if (!before || !after) return [];
+  const had = new Map(before.nodes.map((n) => [n.key, n]));
+  const d0 = depths(before), d1 = depths(after);
+  const up = (s, k) => { const p = parentOf(s, k); return p ? `${p.key}${p.left === k ? 'L' : 'R'}` : ''; };
+  return levelOrder(after).filter((n) => {
+    const m = had.get(n.key);
+    return !!m && (m.value !== n.value || bfOf(before, n.key) !== bfOf(after, n.key) || up(before, n.key) !== up(after, n.key) || d0.get(n.key) !== d1.get(n.key));
+  }).map((n) => n.key);
+}
+
 // —— 手势表（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 3 节）——
 
 /** 一个动作 → 学生那一行镜头指令（结点用 #编号：跟着结点走，值重复也指得清） */
@@ -460,4 +475,4 @@ function standard(o) {
 }
 
 // 转、插的每一下都判；做完了（平衡了、托盘也插完了；只交了插入的课是托盘插完了）只对交给了学生转、插的树算
-export const treeRules = { next, check, predicates, measures, facts, gestures, standard, actOf: lineAct, judges: ['rotate', 'insert', 'place'], doneBy: ['rotate', 'insert', 'place'] };
+export const treeRules = { next, check, predicates, measures, facts, changed, gestures, standard, actOf: lineAct, judges: ['rotate', 'insert', 'place'], doneBy: ['rotate', 'insert', 'place'] };

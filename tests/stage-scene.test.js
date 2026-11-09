@@ -1,7 +1,7 @@
 // 舞台的场景（kit/src/stage/scene.js）：一行指令先检查再改场景；写错的挡下、说清楚错在哪；给老师看的现状照场景写
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Scene, dryRun, compareValues, SWEEP_MAX, sweepLine } from '../kit/src/stage/scene.js';
+import { Scene, dryRun, compareValues, SWEEP_MAX, sweepLine, expectHit, pickAnswer, pickText, pickDiffText } from '../kit/src/stage/scene.js';
 import { parseScript, parseRich } from '../kit/src/stage/script.js';
 import { linkGeom } from '../kit/src/stage/layout.js';
 import { cellBox, array as arrayType } from '../kit/src/stage/types/array.js';
@@ -677,6 +677,19 @@ test('clone 带着这一轮的新状态（检查、试演、抢跑都在副本�
   assert.equal(s.view.w, 1180);
   assert.deepEqual(new Scene().clone().clipped, []);
   assert.equal(new Scene().clone().view, null);
+  // Task 6：学生一次点的几样（picked）、ask pick 等着的（refs、expect 是数组：各拷一份，改克隆的不动原来的）
+  const p = run(new Scene(), 'tree t = 30 20 40 10 25 _ 45\npick t.45 t.40 t.20 reveal=on\nask pick t "哪几个会变？" expect="t.45 t.40"');
+  const pc = p.clone();
+  assert.deepEqual(pc.picked, p.picked);
+  assert.equal(pc.stateText(), p.stateText());
+  assert.match(p.stateText(), /圈着学生点的：t\.45、t\.40、t\.20/);
+  pc.picked.keys.push(99);
+  pc.waiting.refs.push('t.10');
+  pc.waiting.expect.push('t.10');
+  assert.equal(p.picked.keys.length, 3);
+  assert.deepEqual(p.waiting.refs, ['t']);
+  assert.deepEqual(p.waiting.expect, ['t.45', 't.40']);
+  assert.equal(new Scene().clone().picked, null);
 });
 
 test('看不全：画面写回的 clipped 写进现状（藏着的、已经拿下舞台的不写）', () => {
@@ -822,4 +835,134 @@ test('clauseMarks 照给的挑战判：做到了也照判（✓）；判不了�
   // 几句条件各一条
   const m = run(new Scene(), 'matrix A = 1 0 / 0 1\ndial k = 1 range=0..3\ngoal g3 "…" when="k > 1, A = I"');
   assert.deepEqual(m.clauseMarks(['g3']).map((x) => [x.goal, x.clause, x.ok]), [['g3', 'k > 1', false], ['g3', 'A = I', true]]);
+});
+
+// —— 一次点几样（ask pick）；expect 写整样东西或一段（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 2.5、第 9 节）——
+const AVL = 'tree t = 30 20 40 10 25 _ 45';
+const pickOf = (s, v) => s.objects.get('t').nodes.find((n) => n.value === String(v)).pick;
+
+test('ask pick 的写法：只写东西名哪个都能点、写部件只能点这几个；expect 写好几个，不在能点的里面当场报', () => {
+  const s = run(new Scene(), `${AVL}\nask pick t "插进 47 以后，哪几个结点的平衡因子会变？都点出来" button="猜好了" expect="t.45 t.40 t.30"`);
+  assert.equal(s.waiting.kind, 'pick');
+  assert.deepEqual(s.waiting.refs, ['t']);
+  assert.equal(s.waiting.button, '猜好了');
+  assert.deepEqual(s.waiting.expect, ['t.45', 't.40', 't.30']);
+  assert.equal(s.waiting.reveal, false);
+  assert.match(s.stateText(), /在等学生：点几样 t/);
+  assert.equal(run(new Scene(), `${AVL}\nask pick t "…" reveal=on`).waiting.reveal, true);
+  assert.equal(run(new Scene(), `${AVL}\nask pick t "…"`).waiting.expect, null);
+  const base = run(new Scene(), AVL);
+  assert.match(dryRun(base, 'ask pick t "…" expect="t.45 t.99"')[0].error, /不在能点的里面|没有/);
+  const only = run(new Scene(), `${AVL}\nask pick t#1 t#3 "…"`);
+  assert.deepEqual(only.waiting.refs, ['t#1', 't#3']);
+  assert.match(dryRun(base, 'ask pick t#1 t#3 "…" expect="t.20"')[0].error, /expect 里的 t\.20 不在能点的里面/);
+  assert.equal(dryRun(base, 'ask pick t#1 t#3 "…" expect="t.30 t.40"').length, 0);
+  assert.match(dryRun(base, 'ask pick t "…" reveal=yes')[0].error, /reveal= 只能写 on/);
+  assert.match(dryRun(base, 'ask pick "…"')[0].error, /ask pick 后面写/);
+  // 一次只点一样东西里的（交的那一行、圈都是按一样东西记的）
+  assert.match(dryRun(run(new Scene(), `${AVL}\narray a = 1 2 3`), 'ask pick t a "…"')[0].error, /一样东西/);
+});
+
+test('交了和预期比：一样；多点了、漏了；没写 expect 只说点了哪几个；预期的不在了说比不了', () => {
+  const s = run(new Scene(), `${AVL}\nask pick t "…" expect="t.45 t.40 t.30"`);
+  const ok = pickAnswer(s, ['t.45', 't.40', 't.30'], s.waiting.expect);
+  assert.deepEqual({ ...ok }, { type: 'pick', refs: ['t.45', 't.40', 't.30'], expected: 't.45 t.40 t.30', same: true, extra: [], missing: [] });
+  assert.match(pickText(ok), /：一样$/);
+  const off = pickAnswer(s, ['t.45', 't.40', 't.20'], s.waiting.expect);
+  assert.equal(off.same, false);
+  assert.equal(pickText(off), '学生点了 3 个：t.45、t.40、t.20——你预期的是 t.45 t.40 t.30：多点了 t.20，漏了 t.30');
+  // 点的先后照学生点的，预期照老师写的
+  assert.match(pickText(pickAnswer(s, ['t.30', 't.45', 't.40'], s.waiting.expect)), /^学生点了 3 个：t\.30、t\.45、t\.40——你预期的是 t\.45 t\.40 t\.30：一样$/);
+  assert.equal(pickText(pickAnswer(s, ['t.45'], null)), '学生点了 1 个：t.45');
+  // 预期写一段、写整样东西也认（点到里面的每一个才算一样）
+  const a = run(new Scene(), 'array a = 5 6 7 8');
+  assert.match(pickText(pickAnswer(a, ['a#1', 'a#2'], ['a.1-2'])), /：一样$/);
+  assert.match(pickText(pickAnswer(a, ['a#1'], ['a.1-2'])), /：漏了 a\.2$/);
+  // 交的那一刻预期的部件已经不在（学生动过）：说比不了，不说错
+  const gone = pickAnswer(s, ['t.45'], ['t.99']);
+  assert.equal(gone.same, null);
+  assert.match(pickText(gone), /页面比不了/);
+});
+
+test('之后那一下和真变了的比：只在点了以后第一次变时说一次；学生的、老师的都算', () => {
+  const s = run(new Scene(), AVL);
+  const fx0 = s.apply(parseScript('pick t.45 t.40 t.20')[0], { by: 'student' });
+  assert.equal(fx0.pickDiff, undefined);
+  assert.deepEqual(s.picked, { obj: 't', keys: [6, 3, 2], refs: ['t.45', 't.40', 't.20'], reveal: false, diffDone: false });
+  // 只是点亮、染色：东西没变，不算
+  assert.equal(s.apply(parseScript('paint t.45 g2')[0]).pickDiff, undefined);
+  const fx = s.apply(parseScript('insert t 47')[0], { by: 'student' });
+  assert.equal(fx.pickDiff, '学生先点的 3 个里，这一下以后变了的：t.45、t.40；没变的：t.20；变了却没点的：t.30');
+  assert.equal(s.picked.diffDone, true);
+  assert.equal(s.apply(parseScript('insert t 50')[0]).pickDiff, undefined);
+  // 空的写「没有」；点过的那个这一下没了，算变了
+  const t = run(new Scene(), 'tree t = 30 20 40\npick t.20');
+  assert.equal(t.apply(parseScript('insert t 50')[0]).pickDiff, '学生先点的 1 个里，这一下以后变了的：没有；没变的：t.20；变了却没点的：t.30、t.40');
+  assert.equal(pickDiffText(t, { obj: 't', keys: [2], refs: ['t.20'] }, [2]), '学生先点的 1 个里，这一下以后变了的：t.20；没变的：没有；变了却没点的：没有');
+});
+
+test('reveal=on 才画虚实：变了的 changed、没变的 same；不写 reveal 一直是 on；unpick 收掉', () => {
+  const s = run(new Scene(), `${AVL}\npick t.45 t.40 t.20 reveal=on`);
+  assert.equal(pickOf(s, 45), 'on');
+  assert.equal(pickOf(s, 30), undefined);
+  run(s, 'insert t 47');
+  assert.deepEqual([45, 40, 20, 30].map((v) => pickOf(s, v)), ['changed', 'changed', 'same', undefined]);
+  assert.match(s.stateText(), /reveal=on：变了的实线 t\.45、t\.40，没变的虚线 t\.20/);
+  const n = run(new Scene(), `${AVL}\npick t.45 t.40 t.20\ninsert t 47`);
+  assert.deepEqual([45, 40, 20].map((v) => pickOf(n, v)), ['on', 'on', 'on']);
+  run(n, 'unpick');
+  assert.equal(n.picked, null);
+  assert.ok(n.objects.get('t').nodes.every((x) => x.pick === undefined));
+  assert.doesNotMatch(n.stateText(), /圈着/);
+  // unpick 写了东西名：只收那一样的；那一样上没有点着的当场报；什么都没点着的 unpick 不报（页面自动写的那一行）
+  assert.match(dryRun(run(new Scene(), `${AVL}\narray a = 1 2\npick t.45`), 'unpick a')[0].error, /a 上没有学生点着的/);
+  assert.equal(dryRun(run(new Scene(), AVL), 'unpick').length, 0);
+  // 新点的一次换掉上一次的
+  const again = run(new Scene(), `${AVL}\npick t.45 t.40\npick t.20`);
+  assert.deepEqual([45, 40, 20].map((v) => pickOf(again, v)), [undefined, undefined, 'on']);
+  // pick 写部件、写一样东西里的、写得出来的
+  assert.match(dryRun(run(new Scene(), AVL), 'pick t')[0].error, /不写整样东西/);
+  assert.match(dryRun(run(new Scene(), AVL), 'pick')[0].error, /pick 后面写/);
+});
+
+test('刷新照放：ask 不重放、行带 lenient，pick 那一行自己带着 reveal，虚实和当场演的一样', () => {
+  const log = [
+    { src: AVL, by: 'teacher' },
+    { src: 'ask pick t "插进 47 以后，哪几个结点的平衡因子会变？" button="猜好了" expect="t.45 t.40 t.30" reveal=on', by: 'teacher' },
+    { src: 'pick t.45 t.40 t.20 reveal=on', by: 'student' },
+    { src: 'insert t 47', by: 'student' },
+  ];
+  const live = new Scene();
+  for (const r of log) live.apply(parseScript(r.src)[0], r.by === 'student' ? { by: 'student' } : {});
+  const back = new Scene();
+  for (const r of log) {
+    const c = parseScript(r.src)[0];
+    if (c.cmd === 'ask') continue; // stage.js 的 replay：ask 不重放
+    back.apply({ ...c, lenient: true }, r.by === 'student' ? { by: 'student' } : {});
+  }
+  assert.equal(back.waiting, null);
+  assert.deepEqual(back.picked.keys, live.picked.keys);
+  assert.equal(back.picked.reveal, true);
+  assert.deepEqual([45, 40, 20].map((v) => pickOf(back, v)), ['changed', 'changed', 'same']);
+  assert.deepEqual([45, 40, 20].map((v) => pickOf(back, v)), [45, 40, 20].map((v) => pickOf(live, v)));
+  run(back, 'unpick');
+  assert.equal(back.picked, null);
+  // 拿下舞台、同名重造：点着的不算了
+  const gone = run(new Scene(), `${AVL}\npick t.45`);
+  run(gone, 'tree t = 1 2 3');
+  assert.equal(gone.picked, null);
+});
+
+test('expect 写整样东西或一段：点到里面哪一个都算；哪种东西都一样；比不了是 null', () => {
+  const s = run(new Scene(), 'matrix AB = 1 2 / 3 4\narray a = 1 2 3 4 5');
+  assert.equal(expectHit(s, 'AB', s.parts('AB.2,1')[0]), true);
+  assert.equal(expectHit(s, 'AB.1,1', s.parts('AB.2,1')[0]), false);
+  assert.equal(expectHit(s, 'a.1-3', s.parts('a.2')[0]), true);
+  assert.equal(expectHit(s, 'a.1-3', s.parts('a.4')[0]), false);
+  assert.equal(expectHit(s, 'a', s.parts('a.5')[0]), true);
+  assert.equal(expectHit(s, 'a.1-3', s.parts('AB.1,1')[0]), false);
+  assert.equal(expectHit(s, 'q.3', s.parts('a.3')[0]), null);
+  // ask tap 的 expect 写一段、整样东西照收
+  assert.equal(dryRun(s, 'ask tap a "…" expect=a.1-3').length, 0);
+  assert.equal(dryRun(s, 'ask tap AB "…" expect=AB').length, 0);
 });

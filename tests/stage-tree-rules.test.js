@@ -6,7 +6,7 @@ import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
 import { levelOrder, imbalance, serialize } from '../kit/src/stage/types/tree.js';
 import { treeRules as R, actSrc } from '../kit/src/stage/types/tree.rules.js';
-import { rulesOf, predicateOf, gestureOf, done, evalMeasure } from '../kit/src/stage/rules.js';
+import { rulesOf, predicateOf, gestureOf, done, evalMeasure, changedKeys } from '../kit/src/stage/rules.js';
 import { avlEngine } from '../kit/src/engines/balanced.js';
 import { levelOrder as engineLevel } from '../kit/src/engines/treeview.js';
 
@@ -506,4 +506,24 @@ test('子树高、结点数：heights t 以后现状里写每个结点的子树�
   const d = make('dial k = 5 range=1..9\ntree t = 50 {k} 60\nheights t');
   run(d, 'set k 7');
   assert.equal(T(d).heights, true);
+});
+
+test('changed：这一下改了哪些结点（ask pick 交了以后和真变了的比）——前后都在、平衡因子 / 父亲 / 哪一边 / 第几层变了的，新长出来的不算', () => {
+  const s = make('tree t = 30 20 40 10 25 _ 45');
+  const before = structuredClone(T(s));
+  run(s, 'insert t 47');
+  const o = T(s);
+  const vs = (keys) => keys.map((k) => valOf(o, k)).sort();
+  assert.deepEqual(vs(R.changed(before, o)), ['30', '40', '45']);
+  assert.deepEqual(vs(changedKeys(o, before, o)), ['30', '40', '45']);
+  // 转一下：转上来的、降下去的、整棵挪了层的都变了；别的不动
+  const r = make('tree t = 50 30 70 20 40\ninsert t 10');
+  const b2 = structuredClone(T(r));
+  run(r, `rotate t#${keyOf(T(r), 50)} right`);
+  assert.deepEqual(R.changed(b2, T(r)).map((k) => valOf(T(r), k)).sort(), ['10', '20', '30', '40', '50', '70']);
+  // 只是染色：没变
+  const p = make('tree t = 30 20 40');
+  const b3 = structuredClone(T(p));
+  run(p, 'paint t.20 g2');
+  assert.deepEqual(R.changed(b3, T(p)), []);
 });
