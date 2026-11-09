@@ -416,3 +416,11 @@
   - 代价：别的格看不到写成公式的样子，点进去才看得到；横屏 3×3 加小键盘时舞台上的东西缩得比较小。
 - **`formulainput.js` 的预览直接交给 KaTeX**（不再 import `render.js` 的 `tex2html`）：舞台用这个框时不连带整套组件；`formulaTeX` 写出来的式子里没有 `\calc`、`\hl`，黑板上的预览一样。`formulaGrid` 多 `values()`（每格写的原样）、模块多 `hideFormulaPad()`（那一问被换掉、整块拿掉时收起小键盘）。`formula.js` 的 `compareFormula` 不对时多交 `bad`（对不上的那几组值），`compareCells` 的 `first` 带着它。
 - **说明**：线代那一节加两行（按格的 Aⁿ、页面自己认的五种），每门带矩阵的课多约 400 字节（线代 18646 → 19047）。Task 15 整体改写时可以再压。
+- **（复核修正，控制者裁定）`ask value` 照 type 换写法**（`answer.js` 的 `answerInput`；第一轮所有 `ask value` 都是数字键盘，英文、方程、数集、式子在 iPad 上几乎打不进去）：
+  - `type=num`、不写 `free=` 的 `type=matrix`：数字键盘（`decimal`）。
+  - `type=en`、`seq`、`equation`、`set`、没写 type 的字、只收不判：普通键盘（`text`）。
+  - 所有输入框都关掉自动大写、自动纠错、拼写检查：答案照写的比，iPad 不许把 had started 改成 Had started。字 16px，框 48px 高。
+  - `type=formula`：一个式子框，配和按格那一问同一块符号小键盘（`armFormula` 的 `formula` 那一支）。n、^、括号一下就点到，写成公式的预览一直在框下面。还空着、读不懂时不交、在下面说为什么，和按格的一样。`type=matrix free=n` 大过 4×4 时照旧一个输入框写一行字，用普通键盘。
+  - 控制者原话是「不写 type 用普通键盘」。我多分了一种：不写 type、答案（`{…}` 现算以后）是一个数时用数字键盘。不写 type 时数按数比，说明里的头一个例子就是 `answer=4`。
+  - 代价：不写 type 的数字题学生想写「不知道」时，要在 iPad 键盘上切到字母（数字键盘在 iPad 上也能切）。
+  - 量过：`tools/stage-touch.mjs` 第 18 节，每种 type 看键盘和三个开关、写一个答案交上去判对；式子框点进去出小键盘、点 2、n、「对吗」判对。

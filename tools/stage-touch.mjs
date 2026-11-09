@@ -391,6 +391,56 @@ const g5 = await (async () => { const a = await wordBox('s', 5), b = await wordB
 await drag({ x: A.cx, y: A.cy }, g5, { steps: 12 });
 await settle();
 expect('只开 move：按下拖一个词到 s.5 后面', await added(before), 'move s.3 after s.5');
+
+// 18. ask value 照 type 换写法（复核：以前全是数字键盘，英文、方程、数集、式子在 iPad 上几乎打不进去）：
+// 全是数的数字键盘；要打字母、括号、= 的普通键盘，不许 iPad 替学生改大小写、改拼写；式子是一个式子框配符号小键盘。每一种写一个答案交上去，页面判对
+const centerOf = (sel) => page.evaluate((sel) => { const n = document.querySelector(sel); if (!n) return null; const r = n.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, sel);
+const lastRight = () => page.evaluate(() => { const a = window.LAStageDev.acts.at(-1); return a?.type === 'value' ? `${a.text} ${a.right}` : '没交'; });
+const field = () => page.evaluate(() => {
+  const i = document.querySelector('#st-say-input');
+  if (!i) return '没有输入框';
+  const fs = parseFloat(getComputedStyle(i).fontSize), h = i.getBoundingClientRect().height;
+  return `${i.inputMode} 大写${i.getAttribute('autocapitalize')} 纠错${i.getAttribute('autocorrect')} 拼写${i.spellcheck}${fs >= 16 ? '' : ` 字 ${fs}px`}${h >= 44 ? '' : ` 高 ${h}px`}`;
+});
+const KEYS = [
+  ['type=num', 'type=num answer=3/4', '0.75', 'decimal'],
+  ['type=matrix（全是数）', 'type=matrix answer={A^2}', '7 10 / 15 22', 'decimal'],
+  ['不写 type、答案是数', 'answer={a.3-a.1}', '16', 'decimal'],
+  ['type=en', 'type=en answer="had started"', 'had started', 'text'],
+  ['type=seq', 'type=seq answer="A C B"', 'A C B', 'text'],
+  ['type=equation', 'type=equation answer="x + y = 3"', 'x+y=3', 'text'],
+  ['type=set', 'type=set answer={1, 5}', '{1, 5}', 'text'],
+  ['不写 type、答案是字', 'answer="x + 1"', 'x+1', 'text'],
+];
+for (const [what, opts, ans, mode] of KEYS) {
+  await play(`matrix A = 1 2 / 3 4\narray a = 49 38 65\nask value "答案是？" ${opts}`);
+  expect(`${what}：输入框`, await field(), `${mode} 大写off 纠错off 拼写false`);
+  await page.fill('#st-say-input', ans);
+  const go = await centerOf('.st-say-go');
+  await tapAt(go);
+  await page.waitForTimeout(300);
+  expect(`${what}：写「${ans}」交上去`, await lastRight(), `${ans} true`);
+}
+// type=formula：一个式子框（inputmode none，不弹系统键盘），点进去出符号小键盘，点 2、n、对吗
+await play('ask value "第 n 项是？" type=formula free=n answer=2n');
+expect('type=formula：一个式子框、不弹系统键盘', await page.evaluate(() => { const i = document.querySelector('.st-fone .fi-text'); return i ? `${i.getAttribute('inputmode')} ${parseFloat(getComputedStyle(i).fontSize) >= 16} ${i.getBoundingClientRect().height >= 44}` : '没有'; }), 'none true true');
+await tapAt(await centerOf('.st-fone .fi-text'));
+await page.waitForTimeout(300);
+expect('type=formula：点进去出符号小键盘、有 n 键', await page.evaluate(() => { const k = document.querySelector('.keypad.show [data-k="n"]'); if (!k) return '没有'; const r = k.getBoundingClientRect(); return String(Math.min(r.width, r.height) >= 44); }), 'true');
+expect('type=formula：小键盘不压着式子框和「对吗」', await page.evaluate(() => { const kp = document.querySelector('.keypad.show').getBoundingClientRect(); return String(document.querySelector('.st-fone').getBoundingClientRect().bottom <= kp.top); }), 'true');
+for (const k of ['2', 'n']) { await tapAt(await centerOf(`.keypad.show [data-k="${k}"]`)); await page.waitForTimeout(60); }
+expect('type=formula：小键盘写进了框里', await page.evaluate(() => document.querySelector('.st-fone .fi-text').value), '2n');
+await tapAt(await centerOf('.st-fone .st-say-go'));
+await page.waitForTimeout(500);
+expect('type=formula：交上去页面判对、小键盘收起', `${await lastRight()} ${await page.evaluate(() => !document.querySelector('.keypad.show'))}`, '2n true true');
+// type=matrix free=n：一格一个式子框，填满交上去（写给老师的是一行字）
+await play('ask value "Aⁿ = ？" type=matrix free=n answer="1 n / 0 1"');
+const cells = await page.$$('.st-fgrid .fi-text');
+expect('type=matrix free=n：四格式子框、不弹系统键盘', `${cells.length} ${await page.evaluate(() => [...document.querySelectorAll('.st-fgrid .fi-text')].every((i) => i.getAttribute('inputmode') === 'none'))}`, '4 true');
+for (const [i, v] of ['1', 'n', '0', '1'].entries()) await cells[i].fill(v);
+await tapAt(await centerOf('.st-fgrid .st-say-go'));
+await page.waitForTimeout(500);
+expect('type=matrix free=n：交上去页面判对', await lastRight(), '1 n / 0 1 true');
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

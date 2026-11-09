@@ -150,7 +150,7 @@
 .st-say.is-main .st-say-go { background: var(--st-brand); color: var(--st-brand-ink); }
 .st-dock { flex-wrap: wrap; align-items: center; }
 
-/* 按格写含 n 的式子（ask value … type=matrix free=n，stage.js 的 armGrid）：一格一个式子框（formulainput.js 的 formulaGrid），
+/* 按格写含 n 的式子（ask value … type=matrix free=n，stage.js 的 armFormula）：一格一个式子框（formulainput.js 的 formulaGrid），
    外面一对方括号，每格下面是写成公式的预览；框 48px 高、字 18px（≥16px，iPad 聚焦不放大） */
 .st-say.st-fgrid { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px 12px; width: min(100%, 680px); padding: 12px 14px; box-sizing: border-box; border-radius: 22px;
   background: color-mix(in srgb, var(--st-card) 86%, transparent); box-shadow: 0 0 0 1px var(--st-line), 0 12px 28px -18px rgb(var(--shade-rgb, 25 45 40) / 0.45);
@@ -168,7 +168,11 @@
 .st-fgrid .fi-preview { min-height: 0; padding: 0 4px; font-size: 16px; color: var(--st-ink); text-align: center; overflow-x: auto; overflow-y: hidden; }
 .st-fgrid .fi-preview:empty { display: none; }
 /* 写成公式的预览只在正在写的那一格下面（3×3 九个预览摞起来，横屏时连同小键盘把舞台挤没了）；读不懂的那一格一直写着为什么 */
-.st-fgrid .fi:not(:focus-within) .fi-preview:not(.is-bad) { display: none; }
+.st-fgrid:not(.st-fone) .fi:not(:focus-within) .fi-preview:not(.is-bad) { display: none; }
+/* 一个式子框（ask value … type=formula）：和一个输入框一样宽，字靠左 */
+.st-say.st-fgrid.st-fone { width: min(100%, 520px); }
+.st-fone .fi-text { padding: 0 16px; text-align: left; }
+.st-fone .fi-preview { text-align: left; }
 .st-fgrid .fi-preview.is-bad { font: 13px/1.4 var(--sans, sans-serif); color: var(--st-red); }
 /* 「对吗」在右下角，和方括号底对齐；还空着、读不懂时那句话在整块下面 */
 .st-fgrid-foot { display: contents; }

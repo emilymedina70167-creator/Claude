@@ -449,6 +449,28 @@ export function gridShape(spec = {}, scene = null) {
 }
 
 /**
+ * 学生那边用什么写这一问的答案（第一轮所有 ask value 都是数字键盘，英文、方程、数集、式子在 iPad 上几乎打不进去）：
+ *   { kind: 'grid', rows, cols, names }  按格的式子框（type=matrix 写了 free=）
+ *   { kind: 'formula', names }           一个式子框，配符号小键盘（type=formula）：n、^、括号一下就点到
+ *   { kind: 'decimal' }                  数字键盘：type=num、不写 free= 的 matrix（全是数），没写 type 而答案是一个数（不写 type 时数按数比）
+ *   { kind: 'text' }                     普通键盘：en、seq、equation、set、没写 type 的字、只收不判
+ */
+export function answerInput(spec = {}, scene = null) {
+  const grid = gridShape(spec, scene);
+  if (grid) return { kind: 'grid', ...grid };
+  const t = String(spec.type ?? '').trim().toLowerCase();
+  const free = String(spec.free ?? '').trim();
+  if (t === 'formula') { try { return { kind: 'formula', names: parseFree(free).map((f) => f.name) }; } catch { return { kind: 'text' }; } }
+  if (t === 'num' || (t === 'matrix' && !free)) return { kind: 'decimal' };
+  if (!t && String(spec.answer ?? '').trim()) {
+    let ans = '';
+    try { ans = resolveAnswer(spec.answer, scene, { lenient: !!spec.lenient }); } catch { /* 现在算不出来：照普通键盘 */ }
+    if (/^[-−+]?\d+(\.\d+)?(\/\d+)?$/.test(ans.trim())) return { kind: 'decimal' };
+  }
+  return { kind: 'text' };
+}
+
+/**
  * 写 ask value 这一行时先检查：type= 认得、wrong= 读得懂；answer、每一条错答照 type 造一遍判法（{式子} 在舞台上现算一遍再造），
  * 写错当场报。strict 是假的（预写的行、重放旧课）：只做以前那几样检查，当时收下的照样收下；
  * lenient（重放旧课）：{…} 算不出来（第一轮以前字面写的 answer={…}）、照 type 造不出判法都不报，判的时候照字面比、没判成照实说

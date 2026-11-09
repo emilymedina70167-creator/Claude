@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { judgeAnswer, checkSpec, formulaRows, gridAnswerText, autoWrongs, gridShape } from '../kit/src/stage/answer.js';
+import { judgeAnswer, checkSpec, formulaRows, gridAnswerText, autoWrongs, gridShape, answerInput } from '../kit/src/stage/answer.js';
 import { sameAnswer } from '../kit/src/stage/stage.js';
 import { actText } from '../kit/src/stage/stage.js';
 
@@ -403,4 +403,16 @@ test('重放旧课（lenient）：{…} 算不出来照字面比，不报；新�
   p.apply({ ...parseScript('ask value "?" type=matrix answer={A B}')[0], lenient: true, prewrite: true });
   assert.ok(!p.waiting.lenient);
   assert.throws(() => AB().apply(parseScript('ask value "?" answer={x y}')[0]));
+});
+
+test('学生那边用什么写：全是数的数字键盘，要打字母、括号、= 的普通键盘，式子配符号小键盘（复核：以前全是数字键盘）', () => {
+  const sc = run(new Scene(), 'matrix A = 1 2 / 3 4\narray a = 49 38 65');
+  const kind = (spec) => answerInput(spec, sc).kind;
+  assert.equal(kind({ type: 'num', answer: '3/4' }), 'decimal');
+  assert.equal(kind({ type: 'matrix', answer: '{A^2}' }), 'decimal');
+  assert.equal(kind({ answer: '4' }), 'decimal', '不写 type、答案是一个数：数按数比');
+  assert.equal(kind({ answer: '{a.3-a.1}' }), 'decimal');
+  for (const spec of [{ type: 'en', answer: 'had started' }, { type: 'seq', answer: 'A C B' }, { type: 'equation', answer: 'x + y = 3' }, { type: 'set', answer: '{1, 5}' }, { answer: 'x + 1' }, {}, { type: 'matrix', free: 'n', answer: '1 n 1 1 1 / 0 1 1 1 1 / 0 0 1 1 1 / 0 0 0 1 1 / 0 0 0 0 1' }]) assert.equal(kind(spec), 'text', JSON.stringify(spec));
+  assert.deepEqual(answerInput({ type: 'formula', free: 'n', answer: '2n' }, sc), { kind: 'formula', names: ['n'] });
+  assert.deepEqual(answerInput({ type: 'matrix', free: 'n', answer: '1 n / 0 1' }, sc), { kind: 'grid', rows: 2, cols: 2, names: ['n'] });
 });

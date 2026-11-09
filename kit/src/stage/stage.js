@@ -10,8 +10,8 @@ import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, C
 import { parseScript, parseRich, richLength } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, pickText, unplayedNotes, compareFact, mergeFact } from './scene.js';
 import { measureShown } from './rules.js';
-import { judgeAnswer, sameAnswer, gridShape, gridAnswerText } from './answer.js';
-import { formulaGrid, hideFormulaPad } from '../formulainput.js';
+import { judgeAnswer, sameAnswer, answerInput, gridAnswerText } from './answer.js';
+import { formulaInput, formulaGrid, hideFormulaPad } from '../formulainput.js';
 export { sameAnswer };
 import { VIEWS } from './types/views.js';
 import { PointerRouter } from './pointer.js';
@@ -1568,9 +1568,10 @@ export class Stage {
           finish(act);
         }, { once: true });
       }
-      // ask value … type=matrix free=n：一格一个式子框（太大了、算不出多大时照旧一个输入框写一行字）
-      const shape = w.kind === 'value' ? gridShape(w, sc) : null;
-      if (shape) offs.push(this.armGrid(w, shape, finish));
+      // ask value 照 type 换写法（answer.js 的 answerInput）：type=matrix free=n 一格一个式子框、type=formula 一个式子框（都配符号小键盘），
+      // 别的是输入框：全是数的数字键盘，要打字母、括号、= 的普通键盘
+      const how = w.kind === 'value' ? answerInput(w, sc) : null;
+      if (how?.kind === 'grid' || how?.kind === 'formula') offs.push(this.armFormula(w, how, finish));
       // 打字：一直在（学生可以不点格子，直接说「我不懂」）；ask say / ask value 时把它放到最前面
       else if (this.withInput || w.kind === 'value' || w.kind === 'say') {
         const form = el('form', 'st-say', this.dock);
@@ -1580,7 +1581,14 @@ export class Stage {
         input.placeholder = w.kind === 'value' ? '写答案' : w.kind === 'say' ? '写下你的想法…' : '想说点什么也可以直接写';
         input.setAttribute('aria-label', w.kind === 'value' ? '答案' : '对老师说');
         input.enterKeyHint = 'send';
-        if (w.kind === 'value') input.inputMode = 'decimal';
+        if (w.kind === 'value') {
+          input.inputMode = how.kind === 'decimal' ? 'decimal' : 'text';
+          // 答案照写的比：iPad 不许替学生改大小写、改拼写（had started 被自动改成 Had started、联想成别的词）
+          input.autocomplete = 'off';
+          input.setAttribute('autocapitalize', 'off');
+          input.setAttribute('autocorrect', 'off');
+          input.spellcheck = false;
+        }
         const go = el('button', 'st-say-go', form);
         go.type = 'submit';
         go.textContent = w.kind === 'value' ? '对吗' : '说';
@@ -1614,15 +1622,18 @@ export class Stage {
   }
 
   /**
-   * 按格写含 n 的式子（ask value … type=matrix free=n）：一格一个式子框（formulainput.js 的 formulaGrid，和黑板同一个），
-   * 交的是每格写的原样（string[][]），判、记进回答、写给老师的那一行字照老师写 answer= 的样子（gridAnswerText：1 n n(n-1)/2 / 0 1 n / 0 0 1）。
-   * 学生只看到对不对：哪一格不对只告诉老师（页面不替老师指错）。符号小键盘是整页一块、贴在屏幕底下：开着时底下这一条让到它上面，
-   * 镜头跟着让（reserve 量的是这一条的高）。返回收起时做的事
+   * 写式子（formulainput.js，和黑板同一个框、同一块符号小键盘）：how 是 answerInput 交的。
+   *   grid（ask value … type=matrix free=n）：一格一个式子框，交的是每格写的原样（string[][]），判、记进回答、写给老师的那一行字
+   *     照老师写 answer= 的样子（gridAnswerText：1 n n(n-1)/2 / 0 1 n / 0 0 1）；学生只看到对不对，哪一格不对只告诉老师（页面不替老师指错）。
+   *   formula（ask value … type=formula）：一个式子框，交的是写的那一行字。
+   * 符号小键盘是整页一块、贴在屏幕底下：开着时底下这一条让到它上面，镜头跟着让（reserve 量的是这一条的高）。返回收起时做的事
    */
-  armGrid(w, { rows, cols, names }, finish) {
-    const form = el('form', 'st-say st-fgrid is-main', this.dock);
+  armFormula(w, { kind, rows, cols, names }, finish) {
+    const one = kind === 'formula';
+    const form = el('form', `st-say st-fgrid${one ? ' st-fone' : ''} is-main`, this.dock);
     form.noValidate = true;
-    const grid = formulaGrid(form, { rows, cols, names, keys: names });
+    const grid = one ? formulaInput(form, { names, keys: names, placeholder: '写式子' }) : formulaGrid(form, { rows, cols, names, keys: names });
+    if (one) grid.root.querySelector('.fi-text').setAttribute('aria-label', '答案（式子）');
     const foot = el('div', 'st-fgrid-foot', form);
     const msg = el('div', 'st-fgrid-msg', foot);
     msg.setAttribute('aria-live', 'polite');
@@ -1646,14 +1657,14 @@ export class Stage {
     grid.onEnter(() => form.requestSubmit());
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      // 还空着、读不懂的格：就在这里说（每格下面的预览也写着为什么），不交、不算学生答错
+      // 还空着、读不懂的格：就在这里说（框下面的预览也写着为什么），不交、不算学生答错
       try { grid.read(); } catch (err) {
         msg.textContent = err.message;
         form.classList.remove('is-shake'); void form.offsetWidth; form.classList.add('is-shake');
         return;
       }
-      const cells = grid.values();
-      const act = this.judgeValue(w, cells, gridAnswerText(cells));
+      const given = one ? grid.partial() : grid.values();
+      const act = this.judgeValue(w, given, one ? given : gridAnswerText(given));
       hideFormulaPad();
       this.onAct?.(act);
       finish(act);
