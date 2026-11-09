@@ -63,6 +63,9 @@ function shiftObject(o, dx, dy) {
   o.origin = g;
 }
 const samePlace = (a, b) => !!a && !!b && Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((k) => a[k] === b[k]);
+/** 藏着的东西学生看不见、点不到：写下时报的话，现状里补的一句 */
+const hiddenError = (ids) => `${ids.join('、')} 藏着，学生看不见：先 show ${ids.join(' ')}`;
+const hiddenNote = (ids) => (ids.length ? `（${ids.join('、')} 藏着，学生点不到）` : '');
 /** 造东西时的 hide=：on 藏着（照样算、现状照样写，画面上不摆），off 摆出来；不写的新东西摆着，同名重造照旧（留在原处） */
 function hiddenOf(opts, old) {
   if (opts.hide == null) return !!old?.hidden;
@@ -180,6 +183,32 @@ export class Scene {
   allParts() { return [...this.objects.values()].flatMap((o) => typeOf(o).parts(o)); }
   /** 画面上摆着的东西（藏着的不算）：画、镜头、摆新东西、往下让都只看这几样；照摆上舞台的先后 */
   shownIds() { return [...this.objects.values()].filter((o) => !o.hidden).map((o) => o.id); }
+  /** 这几个写法（部件、整样东西）落在哪几样藏着的东西上 */
+  hiddenIn(refs) { return [...new Set(refs.map((r) => parseRef(r)?.obj).filter((id) => this.objects.get(id)?.hidden))]; }
+  /** 挑战的条件里提到的舞台上的东西（M、M.1,1、rank(M)、M same B） */
+  objectsIn(cond) {
+    const out = new Set();
+    for (const cl of cond) for (const w of [cl.l, cl.r, ...(cl.args || [])]) for (const n of String(w ?? '').match(/[A-Za-z_]\w*/g) || []) if (this.objects.has(n)) out.add(n);
+    return [...out];
+  }
+  /**
+   * 学生要动这几样东西才做得到（挑战的条件）：摆着的、不是跟着算的动得到；跟着算的看它跟着的东西（别的东西、拨数）。
+   * 一样都动不到、又是因为有东西藏着：交出藏着的那几样（写下时报、现状里说）；动得到、或者和藏着无关：[]。
+   * 藏着的参照（M same R，R 是藏着的答案）不碍事：学生动的是 M
+   */
+  blockedByHidden(ids) {
+    const hidden = new Set(), seen = new Set();
+    const reach = (id) => {
+      if (seen.has(id)) return false;
+      seen.add(id);
+      const o = this.objects.get(id);
+      if (!o) return !!this.vars.get(id)?.shown;
+      const nodes = this.nodesOf(o);
+      if (!nodes.length) { if (o.hidden) hidden.add(id); return !o.hidden; }
+      return nodes.some((n) => (n.deps || []).some((d) => reach(parseRef(d)?.obj ?? d)));
+    };
+    return ids.some(reach) ? [] : [...hidden];
+  }
   /** 各种东西挡着的地方（贴字时让开）：格子、序号、指针、树的边……（藏着的不挡） */
   obstacles() {
     return [...this.objects.values()].filter((o) => !o.hidden).flatMap((o) => {
@@ -556,7 +585,12 @@ export class Scene {
         const made = [];
         for (let i = 0; i + 1 < ends.length; i++) {
           const a = ends[i], b = ends[i + 1];
-          if (a.obj === b.obj && (a.key == null || b.key == null)) throw new Error(`link 的两头是同一样东西 ${a.obj}${a.key == null && b.key == null ? '' : ' 和它里面的部件'}（连 ${a.obj} 里面的两个部件写 ${a.obj}.…）`);
+          // 两头都是同一整样东西：连不出东西。新写的报，旧课（以前连成一串格）重放时跳过这一对，不挡这一行。
+          // 一格连到它自己那样东西（link a.1 a）照连：一道弧，旧课里这样写的照样演
+          if (a.obj === b.obj && a.key == null && b.key == null) {
+            if (c.lenient) continue;
+            throw new Error(`link 的两头是同一样东西 ${a.obj}（连 ${a.obj} 里面的两个部件写 ${a.obj}.…）`);
+          }
           made.push(this.addLink(a, b, color));
         }
         return { links: made.filter(Boolean) };
@@ -644,6 +678,9 @@ export class Scene {
         if (str) this.checkRich(str, c);
         const refs = refsIn(args.slice(1));
         refs.forEach((r) => this.parts(r));
+        // 要学生点、拖的东西藏着：学生看不见，永远等不来（重放旧课照收）
+        const veiled = this.hiddenIn([...refs, ...(opts.expect && this.isRef(opts.expect) ? [opts.expect] : [])]);
+        if (veiled.length && !c.lenient) throw new Error(hiddenError(veiled));
         if (kind === 'drag') {
           const ps = refs.flatMap((r) => this.parts(r));
           if (ps.length < 1) throw new Error('ask drag 要写能拖的东西');
@@ -671,6 +708,8 @@ export class Scene {
         if (!target || !this.isRef(target)) throw new Error(`要写成 open 舞台上的东西 动作（比如 open B edit range=-3..3）${target ? `：舞台上没有「${target}」` : ''}`);
         const r = parseRef(target);
         const o = this.objects.get(r.obj);
+        // 藏着的东西学生看不见、动不了：开放给学生也是白开（重放旧课照收）
+        if (o.hidden && !c.lenient) throw new Error(hiddenError([o.id]));
         const t = typeOf(o);
         const affords = affordsOf(t);
         // 手势表里的动作（open t rotate、open M rowop、open s mark）也认：学生的每一下页面先过裁判
@@ -731,6 +770,9 @@ export class Scene {
         this.checkRich(str, c);
         const cond = parseGoal(opts.when);
         checkPreds(this, cond, { run: !c.lenient });
+        // 要学生动的东西都藏着（跟着算的看它跟着谁）：学生做不到（重放旧课照收）
+        const blocked = c.lenient ? [] : this.blockedByHidden(this.objectsIn(cond));
+        if (blocked.length) throw new Error(hiddenError(blocked));
         // 老师当场写的挑战一写下就成立，多半是写错了，当场告诉老师；预写的行、重放的时候学生可能已经做到了：照收，下面马上算做到
         if (!this.trial && !c.lenient && evalGoal(this, cond)) throw new Error(`「${opts.when}」现在就已经成立了：挑战要学生动手以后才做得到`);
         this.goals.set(id, { id, text: str, when: opts.when, cond, met: false });
@@ -1042,14 +1084,15 @@ export class Scene {
     const dials = [...this.vars].filter(([, v]) => v.shown);
     if (dials.length) lines.push(`能拨的数：${dials.map(([n, v]) => `${n} = ${v.v}（${v.lo}～${v.hi}）`).join('，')}`);
     if (this.say) lines.push(`最后说的话：${this.say}`);
-    if (this.waiting) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案' }[this.waiting.kind]}${this.waiting.refs.length ? ` ${this.waiting.refs.join(' ')}` : ''}`);
-    if (this.opens.size) lines.push(`学生能直接动的：${[...this.opens.values()].map((e) => { const o = this.objects.get(e.obj); const what = (e.input ? null : affordsOf(typeOf(o))[e.action]) || gestureText(e.gesture); const pol = [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、'); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}${pol ? `；${pol}` : ''}）`; }).join('；')}`);
+    // 问的、开放的、挑战要动的东西后来藏起来了：照写，补一句学生点不到（不然老师等一个永远不来的回答）
+    if (this.waiting) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案' }[this.waiting.kind]}${this.waiting.refs.length ? ` ${this.waiting.refs.join(' ')}` : ''}${hiddenNote(this.hiddenIn([...this.waiting.refs, ...(this.waiting.expect && this.isRef(this.waiting.expect) ? [this.waiting.expect] : [])]))}`);
+    if (this.opens.size) lines.push(`学生能直接动的：${[...this.opens.values()].map((e) => { const o = this.objects.get(e.obj); const what = (e.input ? null : affordsOf(typeOf(o))[e.action]) || gestureText(e.gesture); const pol = [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、'); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}${pol ? `；${pol}` : ''}）${hiddenNote(this.hiddenIn([e.obj]))}`; }).join('；')}`);
     if (this.slips.size) lines.push(`淡淡圈着（学生走偏的那一下，照你写的 wrong=mark；那样东西再变就收掉）：${[...this.slips.values()].map((x) => `${x.refs.join(' ')}（${x.src}）`).join('；')}`);
     const pre = [...this.reactions].filter(([k, r]) => k.includes('.') && r.length).map(([k, r]) => { const [id, kind] = k.split('.'); return `${id} ${kind === 'done' ? '做完了' : '学生做对一步'}页面马上演你预写的 ${r.length} 行`; });
     if (pre.length) lines.push(`预写的：${pre.join('；')}`);
     for (const g of this.goals.values()) {
       const r = this.reactions.get(g.id);
-      lines.push(`挑战 ${g.id}「${g.text}」when="${g.when}"：${goalStatus(this, g)}${r?.length ? `；做到了页面马上演你预写的 ${r.length} 行` : ''}`);
+      lines.push(`挑战 ${g.id}「${g.text}」when="${g.when}"：${goalStatus(this, g)}${r?.length ? `；做到了页面马上演你预写的 ${r.length} 行` : ''}${g.met ? '' : hiddenNote(this.blockedByHidden(this.objectsIn(g.cond)))}`);
     }
     return lines.join('\n');
   }

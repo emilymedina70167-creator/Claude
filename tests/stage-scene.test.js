@@ -596,7 +596,7 @@ test('整张连线：两头是整样东西连一道弧；跟着算重新造以�
   run(s, 'unlink AB.1,1');
   assert.equal(s.links.size, 1);
   assert.match(dryRun(s, 'link AB AB')[0]?.error || '', /两头是同一样东西/);
-  assert.match(dryRun(s, 'link AB AB.1,1')[0]?.error || '', /两头是同一样东西 AB 和它里面的部件/);
+  assert.deepEqual(dryRun(s, 'link AB AB.1,1'), [], '一格连到它自己那张：照连（见下面 link a.1 a 那一条）');
   // 一头是部件、一头是整张（缺口单里的方块图：link f.l1 AA f.r1）：连到整张上，不把 AA 连成一串格；unlink f 收得干净
   const m = run(new Scene(), 'tex f = "(\\hl{l1}{A}+\\hl{l2}{B})(\\hl{r1}{A}+\\hl{r2}{B})"\nmatrix AA = 1 2 / 3 4\nlink f.l1 AA f.r1 g1');
   assert.equal(m.links.size, 2);
@@ -718,4 +718,48 @@ test('横屏另起一列：往下摆会缩得太小、右边有地方就摆右�
   const none = run(new Scene(), src);
   assert.ok(none.objectBox('G').y > none.objectBox('F').y);
   assert.ok(![...none.objects.values()].some((o) => o.colStart));
+});
+
+test('藏着的东西学生看不见：open、ask 点它、要学生动它的挑战写下就报；后来才藏的，现状里补一句学生点不到；旧课照收', () => {
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix R = 1 2 / 2 4 hide=on\nmatrix S = {A + A} hide=on');
+  const chk = (line) => s.check(parseScript(line)[0]);
+  for (const line of ['open R edit', 'open R.1,1 edit', 'ask tap R.1,1 "点一格"', 'ask drag R "拖"', 'ask tap A "点" expect=R.1,1', 'goal g1 "化成阶梯形" when="R stairs"', 'goal g1 "x" when="rank(R) = 1"']) {
+    assert.match(chk(line) || '', /R 藏着，学生看不见：先 show R/, line);
+  }
+  // 藏着的是参照（答案）、跟着看得见的东西算的：学生动的是看得见的那样，照收
+  assert.equal(chk('goal g1 "化成和 R 一样" when="A same R"'), null);
+  assert.equal(chk('goal g1 "让 S 全是 0" when="S = O"'), null);
+  assert.equal(chk('ask tap A "点"'), null);
+  // 预写里先 show 再 open 照收；只 open 报
+  run(s, 'goal g0 "改 A" when="A.1,1 = 9"');
+  assert.match(chk('@g0 open R edit') || '', /R 藏着/);
+  assert.equal(dryRun(s, '@g0 show R\n@g0 open R edit').length, 0);
+  // 旧课照 log 放回：照收
+  assert.doesNotThrow(() => s.apply({ ...parseScript('open R edit')[0], lenient: true }));
+  // show 以后照常
+  const t = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix R = 1 2 / 3 4 hide=on\nshow R\nopen R edit\ngoal g1 "化成阶梯形" when="R stairs"\nask tap R.1,1 "点一格"');
+  assert.doesNotMatch(t.stateText(), /学生点不到/);
+  // 开着、问着、挑战要动的时候藏起来：照写，补一句
+  run(t, 'hide R');
+  const st = t.stateText();
+  assert.match(st, /在等学生：点 R\.1,1（R 藏着，学生点不到）/);
+  assert.match(st, /学生能直接动的：R edit（[^\n]*）（R 藏着，学生点不到）/);
+  assert.match(st, /挑战 g1「化成阶梯形」[^\n]*（R 藏着，学生点不到）/);
+  run(t, 'show R');
+  assert.doesNotMatch(t.stateText(), /学生点不到/);
+});
+
+test('link 一格和它自己那样东西（link a.1 a）：照连一道弧，不报错（旧课照样演）；两头是同一整样东西：新写的报，旧课跳过', () => {
+  const s = run(new Scene(), 'array a = 1 2 3\nlink a.1 a');
+  assert.equal(s.links.size, 1);
+  const [l] = s.links.values();
+  assert.ok(l.whole);
+  assert.deepEqual([l.a, l.b].map((e) => e.key), [1, null]);
+  assert.match(s.stateText(), /连线：a#1–a 蓝/);
+  assert.equal(run(new Scene(), 'array a = 1 2 3\nlink a a.2').links.size, 1);
+  assert.match(dryRun(s, 'link a a')[0]?.error || '', /两头是同一样东西 a/);
+  const old = new Scene();
+  run(old, 'array a = 1 2 3\narray b = 4 5');
+  assert.doesNotThrow(() => old.apply({ ...parseScript('link a a b')[0], lenient: true }));
+  assert.equal(old.links.size, 1, '跳过 a–a 那一对，a–b 照连');
 });
