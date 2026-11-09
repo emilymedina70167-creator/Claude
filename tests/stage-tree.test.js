@@ -172,14 +172,44 @@ test('贴字让开长树枝：照中序排靠近根的树枝横跨好几列，�
   }
 });
 
-test('堆也按中序：完全二叉树的 x 等于中序名次 × 86（不左右对称）', () => {
-  const o = T(make('tree h = 1 2 3 4 5 6 7'), 'h');
-  const pos = layoutTree(o);
-  assert.deepEqual(inorder(o).map((k) => o.nodes.find((n) => n.key === k).value), ['4', '2', '5', '1', '6', '3', '7']);
-  inorder(o).forEach((k, i) => assert.equal(pos.get(k).x, i * 86));
-  const h = T(make('tree h = 10 20 30 40'), 'h');
-  assert.deepEqual(inorder(h).map((k) => layoutTree(h).get(k).x), [0, 86, 172, 258]);
-  assert.notEqual(layoutTree(h).get(h.root).x, 86 * 1.5, '根不在正中：照中序是第 3 列');
+test('排法照造的时候定：二叉排序树按中序，堆、表达式树这类照旧紧凑排；layout= 两种都能写，写错了报', () => {
+  // 堆（不是二叉排序树）：照旧紧凑排——根在 origin，两边对称，和改之前的 x 一样
+  const h = T(make('tree h = 1 2 3 4 5 6 7'), 'h');
+  assert.equal(h.layout, 'compact');
+  const rel = (o, v) => tree.partBox(o, at(o, v)).x + NODE / 2 - o.origin.x;
+  assert.equal(rel(h, 1), 0, '根在 origin');
+  assert.deepEqual(['4', '5', '6', '7'].map((v) => rel(h, v)), [-1.5, -0.5, 0.5, 1.5].map((v) => v * SEP), '完全二叉树对称、最下面一层隔 SEP（和改之前一样）');
+  assert.deepEqual(['2', '3'].map((v) => rel(h, v)), [-SEP, SEP]);
+  const h2 = T(make('tree h = 90 80 70 60 50'), 'h');
+  assert.equal(h2.layout, 'compact');
+  assert.equal(rel(h2, 90), 0);
+  // 二叉排序树（造的时候中序递增）、空树、一个结点：按中序
+  assert.equal(T(make('tree t = 50 30 70')).layout, 'inorder');
+  assert.equal(T(make('tree t = _')).layout, 'inorder');
+  // layout= 自己定：二叉排序树写 compact 就紧凑排，堆写 inorder 就按中序
+  const c = T(make('tree t = 50 30 70 20 40 layout=compact'));
+  assert.equal(c.layout, 'compact');
+  assert.equal(rel(c, 50), 0);
+  assert.equal(rel(c, 30), -rel(c, 70), '紧凑排：两个孩子对称');
+  const i = T(make('tree h = 1 2 3 4 5 6 7 layout=inorder'), 'h');
+  assert.equal(i.layout, 'inorder');
+  inorder(i).forEach((k, n) => assert.equal(layoutTree(i).get(k).x, n * 86));
+  assert.match(err(new Scene(), 'tree t = 1 2 3 layout=wide'), /layout= 只能写 inorder（.*）或 compact（.*），没有「wide」/);
+  // 造好以后不再换：二叉排序树换值换得不是二叉排序树了，照旧按中序；堆换得像二叉排序树了，照旧紧凑
+  const s1 = make('tree t = 50 30 70\nswap t.30 t.70');
+  assert.equal(T(s1).layout, 'inorder');
+  const s2 = make('tree h = 3 1 2\nswap h.3 h.2');
+  assert.equal(T(s2, 'h').layout, 'compact');
+  // 同名重造：不写 layout= 照旧（和 hide= 一样），写了照写的；跟着算的重新造也照旧
+  const s3 = make('tree h = 3 1 2\ntree h = 50 30 70');
+  assert.equal(T(s3, 'h').layout, 'compact');
+  run(s3, 'tree h = 50 30 70 layout=inorder');
+  assert.equal(T(s3, 'h').layout, 'inorder');
+  const s4 = make('dial d = 60 range=1..99\ntree t = {d} 30 70');
+  assert.equal(T(s4).layout, 'inorder');
+  run(s4, 'set d 20');
+  assert.equal(T(s4).nodes.find((n) => n.key === T(s4).root).value, '20', '跟着 d 重新造了');
+  assert.equal(T(s4).layout, 'inorder', '20 30 70 不是二叉排序树了，也不改排法');
 });
 
 test('角标分开：tag 左上、平衡因子右上、子树高右下、访问号正下方——一起开着也不叠、不压结点里的值', () => {

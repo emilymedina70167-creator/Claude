@@ -224,6 +224,15 @@ A = await treeBox('t', 40); B = await treeBox('t', 30);
 await drag({ x: A.cx, y: A.cy }, { x: B.cx, y: B.cy }, { steps: 8 });
 await settle();
 expect('只开 rotate：按下马上拖照样转', (await added(before)).replace(/ .*$/, ''), 'rotate');
+// 9b. 按中序排（一个结点一列）的 15 个结点的二叉排序树：竖屏镜头缩到约 0.6 倍，结点在屏幕上不到 44 像素；
+// 手指按在结点中心往右下偏 21 像素（44 见方的角上，朝着它的右孩子）照样拎起它（pointer.js 的 FINGER 按偏 30 以内、挑近的）
+await play('tree t = 8 4 12 2 6 10 14 1 3 5 7 9 11 13 15\nopen t rotate');
+before = await srcs();
+A = await treeBox('t', 6); B = await treeBox('t', 4);
+const nodePx = Math.round(A.w);
+await drag({ x: A.cx + 21, y: A.cy + 21 }, { x: B.cx, y: B.cy }, { steps: 8 });
+await settle();
+expect(`15 个结点的二叉排序树（竖屏，结点 ${nodePx} 像素）：按在中心偏 21 像素拖到父亲上照样转`, await added(before), 'rotate t#2 left');
 
 // 10. 学生拉的括号上的 ✕：点区至少 44×44，点了收掉（unmark）
 await play(`sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."

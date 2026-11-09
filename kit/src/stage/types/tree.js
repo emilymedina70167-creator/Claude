@@ -1,8 +1,10 @@
 // 舞台上的二叉树（遍历、二叉排序树、平衡二叉树、堆）：数据和指令，不碰 DOM（画法在 tree.view.js）。纯函数，有测试（tests/stage-tree.test.js）。
 // 结点是部件：key 是跟着它走的编号（造的时候层序第几个，后长出来的接着编），value 是显示的值，左右孩子记 key。
-// 排版（layoutTree）照中序名次：一个结点一列（和黑板 engines/treeview.js 一样），纵坐标照层——插入时只有新结点右边的往右让一列，
-// 旋转不改中序，结点只上下移，学生盯着的那几个不会左右乱跑。origin 是「第一列、根那一层」的中心，造的时候定下；树往右、往下长，
-// 放不下镜头往后退（stage.js 的 keepInView），不重排。堆也一样按中序（不左右对称）
+// 排版（layoutTree）两种，造的时候定下（o.layout，以后不换）：
+//   inorder（造的时候是二叉排序树）：照中序名次一个结点一列（和黑板 engines/treeview.js 一样），纵坐标照层——插入时只有新结点右边的
+//     往右让一列，旋转不改中序、结点只上下移，学生盯着的那几个不会左右乱跑。origin 是「第一列、根那一层」的中心，树往右、往下长；
+//   compact（堆、表达式树……中序没有意思的）：照旧按子树宽度紧凑排，左右对称，根在 origin。一个结点一列要宽一倍，大一点的堆竖屏放不下。
+// 老师可以写 layout=inorder / compact 自己定。放不下镜头往后退（stage.js 的 keepInView），不重排
 // 部件的写法：t.40（值是 40 的那个，值唯一时）、t#3（层序第 3 个，跟着结点走：堆里换值、值有重复时用）、t.40*（40 和它整棵子树）
 import { bbox } from '../layout.js';
 import { parseRef } from '../script.js';
@@ -121,15 +123,18 @@ export function depths(o) {
 }
 
 // —— 排版 ——
+export const LAYOUTS = ['inorder', 'compact'];
 const LAYOUT_CACHE = new Map();
 /**
- * 每个结点的中心（相对第一列、根那一层：第一列在 x = 0，根在 y = 0；y 往下一层 LEVEL）。struct 是 { root, nodes: [{ key, left, right }] }（树本身也行）。
- * 横坐标是中序名次 × COL：一个结点一列，不会重叠，二叉排序树从左到右正好从小到大；同一层的两个结点中间至少隔着一列
- * （中序挨着的两个总是一个是另一个的祖先，不在同一层），角标贴在两边碰不到邻居的。
- * 返回 Map(key → { x, y, depth, side, col })，side 是 'root' / 'left' / 'right'，col 是中序名次（从 0 数）
+ * 每个结点的中心（y 往下一层 LEVEL，根在 y = 0）。struct 是 { root, nodes: [{ key, left, right }] }（树本身也行：照它的 o.layout）；
+ * mode 是排法（结构快照没有 layout，要传树的）。返回 Map(key → { x, y, depth, side, col })，side 是 'root' / 'left' / 'right'，
+ * col 是中序名次（从 0 数）。
+ * inorder：x 是中序名次 × COL，第一列在 x = 0。一个结点一列，不会重叠，二叉排序树从左到右正好从小到大；同一层的两个结点中间至少隔着一列
+ *   （中序挨着的两个总是一个是另一个的祖先，不在同一层），角标贴在两边碰不到邻居。
+ * compact：根在 x = 0，左子树整个在 −SEP/2 往左、右子树整个在 +SEP/2 往右，两个孩子对称摆开，距离按两边子树要的宽度取大的（第一轮的排法）
  */
-export function layoutTree(struct) {
-  const sig = `${struct.root}|${struct.nodes.map((n) => `${n.key}:${n.left ?? ''},${n.right ?? ''}`).join(';')}`;
+export function layoutTree(struct, mode = struct.layout || 'inorder') {
+  const sig = `${mode}|${struct.root}|${struct.nodes.map((n) => `${n.key}:${n.left ?? ''},${n.right ?? ''}`).join(';')}`;
   const hit = LAYOUT_CACHE.get(sig);
   if (hit) return hit;
   const by = new Map(struct.nodes.map((n) => [n.key, n]));
@@ -145,10 +150,42 @@ export function layoutTree(struct) {
     if (n.right != null) walk(n.right, depth + 1, 'right');
   };
   if (struct.root != null) walk(struct.root, 0, 'root');
+  if (mode === 'compact' && pos.size) compactX(by, struct.root, pos);
   if (LAYOUT_CACHE.size > 400) LAYOUT_CACHE.clear();
   LAYOUT_CACHE.set(sig, pos);
   return pos;
 }
+// 紧凑排的横坐标（相对根）：先算每棵子树每一层的左右边，两个孩子按两边要的宽度对称摆开，再从根往下放
+function compactX(by, root, pos) {
+  const off = new Map();
+  const half = SEP / 2;
+  const shape = (k) => {
+    const n = by.get(k);
+    const L = n.left != null && by.has(n.left) ? shape(n.left) : null;
+    const R = n.right != null && by.has(n.right) ? shape(n.right) : null;
+    let d = half;
+    for (const c of L || []) d = Math.max(d, c.r + half);
+    for (const c of R || []) d = Math.max(d, half - c.l);
+    if (L) off.set(n.left, -d);
+    if (R) off.set(n.right, d);
+    const out = [{ l: 0, r: 0 }];
+    for (let i = 0; i < Math.max(L?.length || 0, R?.length || 0); i++) {
+      const a = L?.[i], b = R?.[i];
+      out.push({ l: Math.min(a ? a.l - d : Infinity, b ? b.l + d : Infinity), r: Math.max(a ? a.r - d : -Infinity, b ? b.r + d : -Infinity) });
+    }
+    return out;
+  };
+  shape(root);
+  const place = (k, x) => {
+    const n = by.get(k);
+    pos.get(k).x = x;
+    if (n.left != null && by.has(n.left)) place(n.left, x + off.get(n.left));
+    if (n.right != null && by.has(n.right)) place(n.right, x + off.get(n.right));
+  };
+  place(root, 0);
+}
+/** 这棵树照它自己的排法、某个结构（旋转的中间一步）排 */
+const posOf = (o, struct = o) => layoutTree(struct, o.layout || 'inorder');
 
 /**
  * 一次旋转里换了父亲的那棵子树的根（右旋 a：a 的左孩子 b 转上来，b 原来的右子树挂到 a 的左边——就是它）；
@@ -192,7 +229,7 @@ export function cornerRect(kind, w = 24) {
 
 /** 照某个结构（旋转的中间一步）每个结点的框；不传就是树现在的样子 */
 export function boxesFor(o, struct = o) {
-  const pos = layoutTree(struct);
+  const pos = posOf(o, struct);
   const out = new Map();
   for (const n of o.nodes) {
     const p = pos.get(n.key);
@@ -202,7 +239,7 @@ export function boxesFor(o, struct = o) {
   return out;
 }
 export function nodeBox(o, p) {
-  const pos = layoutTree(o).get(p.key) || { x: 0, y: 0 };
+  const pos = posOf(o).get(p.key) || { x: 0, y: 0 };
   return { x: o.origin.x + pos.x - NODE / 2, y: o.origin.y + pos.y - NODE / 2 - (p.lift ? 10 : 0), w: NODE, h: NODE };
 }
 /** 空树时根的位置（画一个虚圈，插进来就长在这里） */
@@ -215,13 +252,17 @@ const nodesArea = treeArea;
 export const TRAY_GAP = 20; // 托盘里两个数之间（能拖时外面一圈呼吸的光，挨太近就叠在一起）
 const TRAY_TOP = 22; // 托盘离树最下面一层多远
 const TRAY_PAD = 10; // 托盘的底板比里面的数宽出去多少
-/** 托盘（待插的数）画在哪：树下面一排圆，和结点一样大，正中对着树的正中（世界坐标；根不一定在正中了）。没有托盘是 [] */
+/**
+ * 托盘（待插的数）画在哪：树下面一排圆，和结点一样大（世界坐标）。按中序排的正中对着树的正中（根不在正中），紧凑排的照旧对着根。
+ * 没有托盘是 []
+ */
 export function trayBoxes(o) {
   const vals = o.tray || [];
   if (!vals.length) return [];
   const b = nodesArea(o);
   const w = vals.length * NODE + (vals.length - 1) * TRAY_GAP;
-  const x0 = b.x + b.w / 2 - w / 2, y = b.y + b.h + TRAY_TOP;
+  const mid = o.layout === 'compact' ? o.origin.x : b.x + b.w / 2;
+  const x0 = mid - w / 2, y = b.y + b.h + TRAY_TOP;
   return vals.map((value, i) => ({ value, x: x0 + i * (NODE + TRAY_GAP), y, w: NODE, h: NODE }));
 }
 /** 托盘的底板（包着那一排数）；没有托盘是 null */
@@ -233,19 +274,21 @@ export function trayArea(o) {
 }
 /**
  * 能放新结点的空位（open t place：学生把托盘的数拖到某个结点下面）：每个结点缺孩子的那一边、空树的根。
- * 照中序排，放进去的结点会落在它和中序的邻居中间：空位就画在半列的地方、下一层（左边空着是它左边半列，右边空着是右边半列）。
- * 那里上下挨着的两列都不在这一层（缺左孩子的，中序前一个是它的祖先），不会压着别的结点。再长会超过最多那几层（MAX_DEPTH）的不给。
+ * 按中序排：放进去的结点会落在它和中序的邻居中间，空位就画在半列的地方、下一层（左边空着是它左边半列，右边空着是右边半列）；
+ * 那里上下挨着的两列都不在这一层（缺左孩子的，中序前一个是它的祖先），不会压着别的结点。
+ * 紧凑排（照旧）：一个孩子都没有的，空位离它半个间距；另一边有孩子的，和那个孩子对称。再长会超过最多那几层（MAX_DEPTH）的不给。
  * 返回 [{ parent（结点的 key，空树是 null）, side, box（世界坐标）}]
  */
 export function slotSpots(o) {
   if (o.root == null) return [{ parent: null, side: null, box: rootSpot(o) }];
-  const pos = layoutTree(o), d = depths(o), out = [];
+  const pos = posOf(o), d = depths(o), out = [];
   for (const n of levelOrder(o)) {
     const p = pos.get(n.key);
     if (!p || (d.get(n.key) || 0) + 1 >= MAX_DEPTH) continue;
     for (const side of ['left', 'right']) {
       if (n[side] != null) continue;
-      const dx = side === 'left' ? -COL / 2 : COL / 2;
+      const sib = n[side === 'left' ? 'right' : 'left'];
+      const dx = o.layout === 'compact' && sib != null && pos.get(sib) ? p.x - pos.get(sib).x : side === 'left' ? -COL / 2 : COL / 2;
       out.push({ parent: n.key, side, box: { x: o.origin.x + p.x + dx - NODE / 2, y: o.origin.y + p.y + LEVEL - NODE / 2, w: NODE, h: NODE } });
     }
   }
@@ -451,12 +494,24 @@ export const tree = {
     if (Math.max(0, ...depths(o).values()) >= MAX_DEPTH) throw new Error(`树最多 ${MAX_DEPTH} 层`);
     if (h.opts.tray != null) o.tray = readTray(h.opts.tray, nodes);
     refreshDup(o);
-    if (old?.type === 'tree') o.origin = { ...old.origin };
-    else {
-      // 摆在已有的东西下面、居中；origin 是第一列、根那一层（定下了就不动：以后长宽了往右长，镜头往后退）
-      const hi = Math.max(0, ...[...layoutTree(o).values()].map((p) => p.x));
-      const s = scene.slotFor(hi + NODE + 2 * TAG_ROOM);
-      o.origin = { x: s.x + TAG_ROOM + NODE / 2, y: s.y + TAG_TOP + NODE / 2 };
+    // 排法造的时候定下，以后不换（换值、插、删、跟着算的重新造都不重排）：写了 layout= 照写的；同名重造不写照旧（和 hide= 一样）；
+    // 新造的照这一刻是不是二叉排序树（中序有意思才一个结点一列）
+    if (h.opts.layout != null) {
+      if (!LAYOUTS.includes(h.opts.layout)) throw new Error(`layout= 只能写 inorder（照中序一个结点一列）或 compact（紧凑、左右对称），没有「${h.opts.layout}」`);
+      o.layout = h.opts.layout;
+    } else o.layout = old?.type === 'tree' && old.layout ? old.layout : isBst(o) ? 'inorder' : 'compact';
+    if (old?.type === 'tree' && old.layout === o.layout) o.origin = { ...old.origin };
+    else if (old?.type === 'tree') {
+      // 同名重造换了排法：两种 origin 的意思不一样（第一列 / 根），照原来那一棵的左边对齐，还在原处
+      const was = treeArea(old);
+      o.origin = { x: 0, y: old.origin.y };
+      o.origin.x = was.x - treeArea(o).x;
+    } else {
+      // 摆在已有的东西下面、居中；按中序排的 origin 是第一列、紧凑排的是根，都在根那一层（定下了就不动：长宽了镜头往后退）
+      const xs = [0, ...[...posOf(o).values()].map((p) => p.x)];
+      const lo = Math.min(...xs), hi = Math.max(...xs);
+      const s = scene.slotFor(hi - lo + NODE + 2 * TAG_ROOM);
+      o.origin = { x: s.x + TAG_ROOM + NODE / 2 - lo, y: s.y + TAG_TOP + NODE / 2 };
     }
     return o;
   },
@@ -778,6 +833,7 @@ tag t.50 "h=3" / untag t          结点角上写个小字（最多 8 个字）
 bf t / unbf t                     每个结点标平衡因子（跟着树变；舞台现状里写出失衡的是谁、哪一型）
 ask drag t "把它往上换"             学生把一个结点的值拖到另一个结点上，两个换值（页面照做，再告诉你）
 tree t = 50 30 70 tray="20 40 80"   带托盘：待插的数按顺序摆在树下面，插进去一个拿掉一个
+tree h = 90 80 70 layout=compact    排法造的时候定：二叉排序树照中序一个结点一列（插入只挪右边、旋转只上下移），别的（堆……）紧凑排；layout=inorder 或 compact 自己定
 学生自己转、自己插（页面判每一下）：
 open t rotate wrong=mark undo=on    学生把一个结点拖到它的父亲上 = 在父亲那里转（左孩子拖上去 = rotate t#1 right）
 open t insert                       学生把托盘里的数拖进树 = insert t 47（页面从根比下去）

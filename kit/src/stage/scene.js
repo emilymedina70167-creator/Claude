@@ -163,9 +163,10 @@ export function sweepLine(name, { lo, hi }, id, list) {
 export const KEEP_MAX = 6;
 /**
  * 回去时照现在留着、不倒回的：位置、身份，和老师、画面当时挂出来的样子——藏着、另起的那一列、画面量出来的大小、
- * 开着的子树高 / 平衡因子 / 句尾的数。它们不是这样东西的数据：倒回去会把存档以后老师挂上的一起撤掉
+ * 开着的子树高 / 平衡因子 / 句尾的数、树的排法（和 origin 是一对：排法换了 origin 的意思就变了）。
+ * 它们不是这样东西的数据：倒回去会把存档以后老师挂上的一起撤掉
  */
-const AS_IS = ['origin', 'id', 'type', 'hidden', 'colStart', 'ext', 'heights', 'tally', 'bf'];
+const AS_IS = ['origin', 'id', 'type', 'hidden', 'colStart', 'ext', 'heights', 'tally', 'bf', 'layout'];
 /** 部件上照 key 留着现在的：学生点着的圈（ask pick）、走偏的那一下淡淡圈着的 */
 const PART_AS_IS = ['pick', 'slip'];
 /** 存下一样东西现在的样子（存档、学生每一下之前）：整份拷一份，位置不要（回去时照现在的位置） */

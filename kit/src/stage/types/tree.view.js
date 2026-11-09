@@ -279,9 +279,9 @@ export const treeView = {
       }
       await stage.sync({ pre, cmd: 'delete', fx });
     },
-    // 旋转：照中序排，转前转后横坐标不变，结点只上下移（转上来的往上、转下去的往下，挂着的子树跟着）；树枝换到新的父结点上。
-    // 换了父亲的那棵子树（右旋 a：b 原来的右子树挂到 a 的左边）先描一道橙色，新父亲转下来接住它时闪一下——只是画面，不改什么。
-    // 双旋是两下，每一下各描各的
+    // 旋转：按中序排的，转前转后横坐标不变，结点只上下移（转上来的往上、转下去的往下，挂着的子树跟着）；紧凑排的照旧沿弧转过去
+    // （右旋顺时针、左旋逆时针）。树枝换到新的父结点上。换了父亲的那棵子树（右旋 a：b 原来的右子树挂到 a 的左边）先描一道橙色，
+    // 滑到新父亲下面时闪一下（按中序排的它不挪，是新父亲转下来接住它）——只是画面，不改什么。双旋是两下，每一下各描各的
     async rotate(stage, c, fx) {
       if (stage.instant) return;
       const o = stage.scene.objects.get(fx.id);
@@ -290,15 +290,19 @@ export const treeView = {
         const na = stage.nodes.get(pidOf(o, st.a)), nb = stage.nodes.get(pidOf(o, st.b));
         if (!na || !nb) continue;
         na.classList.add('is-hot'); nb.classList.add('is-hot');
-        const moved = st.moved != null ? regraft(stage, o, st) : null;
+        const moved = st.moved != null ? regraft(stage, o, st, to) : null;
         await Promise.all([stage.pulse(nodeIn(o, st.a)), stage.pulse(nodeIn(o, st.b)), moved?.shown]);
         const jobs = [];
+        const arc = o.layout === 'compact';
+        const duration = arc ? 980 : 820;
         for (const p of o.nodes) {
           const n = stage.nodes.get(pidOf(o, p.key)), b = to.get(p.key);
           if (!n || !b || same(n.__box, b)) continue;
-          jobs.push(stage.moveNode(p, [{ transform: tr(n.__box.x, n.__box.y) }, { transform: tr(b.x, b.y) }], b, { duration: 820, easing: EASE.move }));
+          const frames = arc ? turnFrames(n.__box, b, st.dir === 'right') : [{ transform: tr(n.__box.x, n.__box.y) }, { transform: tr(b.x, b.y) }];
+          jobs.push(stage.moveNode(p, frames, b, { duration, easing: EASE.move }));
         }
-        syncEdges(stage, o, st.snap, { delay: 320, jobs });
+        syncEdges(stage, o, st.snap, { delay: arc ? 380 : 320, jobs });
+        if (moved) jobs.push(moved.slide(duration));
         moved?.relink();
         jobs.push(follow(stage, o.id));
         await Promise.all(jobs);
@@ -483,14 +487,31 @@ export const treeView = {
 `,
 };
 
-// 旋转里换了父亲的那棵子树（st.moved 是它的根）：外面描一道橙色的圈（子树占着连着的几列、下面几层，框里没有别的结点），
+// 紧凑排的旋转时一个结点从 a 走到 b：沿一道弧（右旋顺时针、左旋逆时针拱），像整棵转过去
+function turnFrames(a, b, cw) {
+  const p0 = centerOf(a), p1 = centerOf(b);
+  const dx = p1.x - p0.x, dy = p1.y - p0.y, d = Math.hypot(dx, dy) || 1;
+  const k = Math.min(64, d * 0.32);
+  // 屏幕坐标 y 朝下：顺时针转，弧往弦的「左手边」拱
+  const nx = cw ? dy / d : -dy / d, ny = cw ? -dx / d : dx / d;
+  const cx = (p0.x + p1.x) / 2 + nx * k, cy = (p0.y + p1.y) / 2 + ny * k;
+  return Array.from({ length: 17 }, (_, i) => {
+    const t = i / 16, u = 1 - t;
+    const x = u * u * p0.x + 2 * u * t * cx + t * t * p1.x, y = u * u * p0.y + 2 * u * t * cy + t * t * p1.y;
+    return { transform: tr(x - a.w / 2, y - a.h / 2), offset: t };
+  });
+}
+
+// 旋转里换了父亲的那棵子树（st.moved 是它的根）：外面描一道橙色的圈（按中序排时子树占着连着的几列、下面几层，框里没有别的结点；紧凑排的偶尔框进一点邻居），
 // 原来连着它的那根树枝也染橙；转完连到新父亲的那根染橙，整棵闪一下，再收掉。只是画面后果，场景里什么都不记
-function regraft(stage, o, st) {
+// to：这一步转完每个结点的框（紧凑排的这棵子树会挪，圈跟着滑过去）
+function regraft(stage, o, st, to) {
   const keys = levelOrder(st.snap, st.moved).map((n) => n.key);
   const boxes = keys.map((k) => stage.nodes.get(pidOf(o, k))?.__box).filter(Boolean);
   const area = bbox(boxes);
   if (!area) return null;
   const b = grow(area, 10); // 不出结点让出来的那一圈（treeArea），排版检查不报
+  const b1 = grow(bbox(keys.map((k) => to.get(k)).filter(Boolean)) || area, 10);
   // 记成这一样东西的 decor：中途清舞台、拿掉这棵树时跟着收掉，不会留下一个孤零零的橙框
   const ring = stage.decor(o.id, 'moved', () => {
     const n = el('div', 'tr-moved');
@@ -505,6 +526,13 @@ function regraft(stage, o, st) {
   edge(st.b)?.classList.add('is-moved');
   return {
     shown: stage.tween(ring, [{ opacity: 0, transform: `${tr(b.x, b.y)} scale(1.06)` }, { opacity: 1, transform: tr(b.x, b.y) }], { duration: 300, easing: EASE.out }),
+    // 跟着结点滑到转完的地方（按中序排的不挪：前后一样就不动）
+    slide(duration) {
+      if (same(b, b1)) return Promise.resolve();
+      ring.style.width = `${b1.w}px`;
+      ring.style.height = `${b1.h}px`;
+      return stage.tween(ring, [{ transform: tr(b.x, b.y) }, { transform: tr(b1.x, b1.y) }], { duration, easing: EASE.move });
+    },
     // 树枝换好了（syncEdges 刚画上新父亲那一根）
     relink() { edge(st.a)?.classList.add('is-moved'); },
     async arrive() {
