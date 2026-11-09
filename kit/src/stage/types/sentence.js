@@ -1139,6 +1139,7 @@ sentence s = "The man who lives next door is a doctor." key="[S The man [RC who 
 写法：s.3 现在第 3 个词；s.2-5 第 2 到 5 个；s.who 这个词（出现几次写 s.that:2）；s.who-door 从 who 到 door；s#3 一开始第 3 个的那个词（挪了、改写了跟着走）
 mark s.1-6 主语 / unmark s.1-6     词下面一道括号、下面写成分（套着的一层层往下排；颜色按成分，也能写 g1～g6）
 tag s.7 V / untag s.7             词上面的小标签（S、V、谓语1；最多 8 个字）
+tally s V / untally s             学生拉的每道括号上标出里面 key 的谓语几个，句尾标括号外的几个（V 换成别的成分就数那一种；只写整句）
 fold s.3-6 / unfold s.3           折成一个小方块只留主干（别的词滑过去补位；方块上写这一段的成分，也能 fold s.3-6 "从句"；套着折的 unfold 先展开外层）
 move s.3 after s.5                挪到别处讲倒装、还原语序（也能 before s.1、-> s.1），别的词让开
 cut s.6 / uncut s                 第 6 个词后面断开（意群的斜线）
@@ -1148,9 +1149,9 @@ ask drag s.7 "把 is 挪到句首"         学生按住一个词拖到别处（�
 学生自己拆（mark 页面照 key 判每一下）：
 open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的，交中文）= mark s.1-6 主语；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句；key 写 [Attr/NF …] 是两种都对；学生拉的括号上有 ✕，点了 = unmark s.1-6（不判）
 open s fold                         学生点一道括号或括号里的词 = fold s.3-6，点小方块 = unfold s.3（页面不判；里层折着也能折外层）
-open s move                         学生按住一道括号拖到两个词之间 = move s.3-6 after s.9（整段挪；按住一个词挪一个，挪到最前面 = move s.7 before s.1）
-open s.3 refer                      学生从 who 的钩上拉线，松在词、括号、句子外框上 = refer s.3 -> s.2 / s.1-2 / s（整句）；造句子时写 links="who -> s.1-2; !who -> door=连到了从句里的名词" 就照它判（! 是常见的错连）；学生连的线头上有 ✕，点了 = unrefer s.3
-判断式（when=）：s parsed（key 里每一段都拉对了，多拉的不管）、s exact（拉对了、也没多拉）、s main（主干拉对了）、s span s.2-5 = V（这一段现在挂着这个成分）、s linked（links= 每一条都连对了）；没写 key / links= 判不了，@s.done 也不收
+open s move                         学生按住一道括号拖到两个词之间 = move s.3-6 after s.9（整段挪；按住一个词挪一个，挪到最前面 = move s.7 before s.1）；mark、fold、move 三种能一起开
+open s.3 refer                      学生从 who 右上角的钩上拉线，松在词、括号、句子外框上 = refer s.3 -> s.2 / s.1-2 / s（整句）；造句子时写 links="who -> s.1-2; !who -> door=连到了从句里的名词" 就照它判（! 是常见的错连）；学生连的线头上有 ✕，点了 = unrefer s.3
+判断式（when=）：s parsed（key 里每一段都拉对了，多拉的不管）、s exact（拉对了、也没多拉）、s main（主干拉对了）、s span s.2-5 = V（这一段现在挂着这个成分）、s linked（links= 每一条都连对了）；没写 key / links= 判不了，@s.done 也不收；量：verbs(s.4-9) 这一段里 key 的谓语几个（verbs(s) 整句）、left(s) key 里还没拉对的几段
 句子里留空位让学生填词：现在没有写法（要填就 ask value … type=en）`,
   example: `sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."
 mark s.7 V

@@ -11,7 +11,7 @@
 import { Stage, stageLines } from './stage.js';
 import { QUIET_MS } from './events.js';
 import { createLoop } from './loop.js';
-import { buildStageSystem, turnMessage, firstMessage } from './doc.js';
+import { buildStageSystem, turnMessage, firstMessage, stageSubject } from './doc.js';
 import { getAI } from '../ai.js';
 import { createSink } from '../live/sync.js';
 import { sayEvidence, observationRecord } from '../memory/session.js';
@@ -20,7 +20,7 @@ import { callCost } from '../class/usage.js';
 import { closingPrompt } from '../class/prompt.js';
 import { reportText } from '../memory/report.js';
 import { slipsToFold, tidyDue, tidyText } from '../memory/memo.js';
-import { spaceOfId, subjectOf } from '../memory/space.js';
+import { spaceOfId } from '../memory/space.js';
 import { textbookForClass } from '../books/textbook.js';
 import { reportError } from '../errlog.js';
 import { choose } from '../dialog.js';
@@ -36,7 +36,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const pad = (n) => String(n).padStart(6, '0');
 
 /**
- * 开一节舞台课。desk：学习台给的（store 是这节课的数据库、sid、block、space、mem、books、prevRead、
+ * 开一节舞台课。desk：学习台给的（store 是这节课的数据库、sid、block、space、subject（这节课记着的科目）、mem、books、prevRead、
  * updateSession、onHome、writeReport、makeReport、memo { ops }、review、opening、readOnly）
  */
 export async function renderStageClass(root, meta = {}, desk) {
@@ -104,8 +104,10 @@ export async function renderStageClass(root, meta = {}, desk) {
     main.textbook = [main.textbook, tb.textbook].filter((x) => x && (typeof x !== 'string' || x.trim())).map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join('\n\n');
     return { ...pack, main };
   }
+  // 说明只带这门课用得上的那几种东西：块 → 资料包 → 这节课记着的科目 → 空间，推不出来（408 的课既没块也没记科目）发全带的那份
   function system() {
-    return buildStageSystem({ pack: packWithBooks(), memory: desk.mem ? { mem: desk.mem, block: desk.block, space: desk.space, session: sid } : null, title: meta.unit || '', subject: desk.block ? subjectOf(desk.block) : '' });
+    const subject = stageSubject({ block: desk.block, pack, session: { subject: desk.subject }, space: desk.space });
+    return buildStageSystem({ pack: packWithBooks(), memory: desk.mem ? { mem: desk.mem, block: desk.block, space: desk.space, session: sid } : null, title: meta.unit || '', subject });
   }
   function messages(extra = null, { next = null } = {}) {
     const live = history.filter((t) => !t.discarded && !t.pending && (t.role === 'claude' || t.role === 'student'));

@@ -39,8 +39,8 @@ test('说明里的例子照抄就能演：例子那一轮；共用的每一条�
     const e = dryRun(base, l);
     const e2 = e.length ? dryRun(cum, l) : [];
     if (e.length && e2.length) bad.push(`${l} → ${e[0].error}`);
-    // 拿掉东西的（remove、clear）不往下累：后面的写法还要用那一排格子
-    if ((!e.length || !e2.length) && !/^(remove|clear)\b/.test(l)) { try { for (const c of parseScript(l)) if (c.cmd !== 'ask') cum.apply(c); } catch { /* 只在 base 上能演 */ } }
+    // 拿掉东西的（remove、clear）、藏起来的（hide）不往下累：后面的写法还要用那一排格子（藏着的学生看不见，open 不了）
+    if ((!e.length || !e2.length) && !/^(remove|clear|hide)\b/.test(l)) { try { for (const c of parseScript(l)) if (c.cmd !== 'ask') cum.apply(c); } catch { /* 只在 base 上能演 */ } }
   }
   // 每一种东西：在它自己的例子演完的舞台上演（造它的那一行另外再演一遍也行）
   let n = 0;
@@ -76,7 +76,8 @@ test('说明里的例子照抄就能演：例子那一轮；共用的每一条�
 
 test('第一轮：教法、指令、这节课、资料都在；舞台是空的、要以 ask 结尾', () => {
   const m = firstMessage(TOPICS.bsearch);
-  assert.ok(m.includes(STAGE_TEACH) && m.includes(STAGE_DOC));
+  // 样子页的三节都是数据结构：带的是这门课的那一份（真发出去的），不是全带的那份
+  assert.ok(m.includes(STAGE_TEACH) && m.includes(stageDoc('数据结构')));
   assert.match(m, /## 这节课\n数据结构 · 折半查找/);
   assert.match(m, /## 资料/);
   assert.match(m, /舞台现在是空的/);
@@ -90,6 +91,42 @@ test('每一轮：学生做了什么、上一轮没演的行（第几行、原�
   assert.match(m, /\[舞台现在\]\n一排格子 a/);
   assert.match(m, /写下一轮。$/);
   assert.doesNotMatch(turnMessage({ act: 'x', state: 'y' }), /没演的行/);
+});
+
+test('样子页带科目：三节课都是数据结构，第一轮带树那一节、不带句子那一节；没写科目（自己写的题目）照旧全带', () => {
+  for (const [k, t] of Object.entries(TOPICS)) assert.equal(t.subject, '数据结构', k);
+  const m = firstMessage(TOPICS.shell);
+  assert.ok(m.includes(TYPES.tree.doc), '带树那一节');
+  assert.ok(!m.includes(TYPES.sentence.doc), '不带句子那一节');
+  assert.ok(stageSystem({ topic: 'x', subject: '英语' }).includes(TYPES.sentence.doc));
+  assert.ok(firstMessage({ topic: '自己写的题目' }).includes(STAGE_DOC), '推不出科目：全带');
+});
+
+// 第二轮（docs/superpowers/specs/2026-11-08-stage-base-2-design.md）加的写法：每门课真发出去的那一份里都找得到。
+// 查的字要别处没有（on= 在 button= 里就有、put 在 input= 里就有、compare / merge / move 这种光秃秃的词查了等于没查）
+test('这一轮的新写法都在说明里：共用的每门课都有，树的在数据结构、矩阵的在线代、句子的在英语', () => {
+  const doc = (s) => STAGE_TEACH + stageDoc(s);
+  const has = (d, w) => (w instanceof RegExp ? w.test(d) : d.includes(w));
+  const common = [/^ask pick /m, 'reveal=on', 'unpick', /^keep /m, /^back /m, 'after=', 'after=off', /^@ask\.right /m, 'collect=', /(?<![a-z])on="/, 'call=now',
+    'hide=on', /^hide \S+ \/ show /m, '按住再拖', /when="[^"\n]*\|[^"\n]*"/, '最多三层', '做到过；现在不成立'];
+  const own = {
+    数据结构: ['pluck', 'open t delete', /^heights t/m, 'count(', 'height(', 'tray(', /堆[^\n]*layout=compact/],
+    线代: ['open AB compare', 'put AB Sum', 'merge X Y', 'collect', 'coef(', 'rhs(', 'from=', 'vars=', 'rank(', 'rankA(', 'free(', 'det(m)', /= _ _/],
+    英语: ['links=', 'refer s.', 'exact', 'linked', 'Attr/NF', /^tally s/m, 'verbs(', 'left(', 'open s move'],
+  };
+  const miss = [];
+  for (const s of Object.keys(SUBJECT_TYPES)) for (const w of [...common, ...(own[s] || [])]) if (!has(doc(s), w)) miss.push(`${s}：${w}`);
+  assert.deepEqual(miss, []);
+});
+
+test('每种东西的量在它那一节里都有（写成 名字(…)）', async () => {
+  const { rulesOf } = await import('../kit/src/stage/rules.js');
+  const miss = [];
+  for (const t of Object.values(TYPES)) {
+    const ms = Object.keys(rulesOf({ type: t.type })?.measures || {});
+    for (const m of ms) if (!new RegExp(`\\b${m}\\(`).test(t.doc || '')) miss.push(`${t.label}：${m}(…)`);
+  }
+  assert.deepEqual(miss, []);
 });
 
 test('按科目只带用得上的东西：英语课不带一排格子（只列名字），例子换成那门课的', async () => {
@@ -170,6 +207,16 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
     ['dial k = 2 range=1..5', 'graph g = A-B:{k} B-C:4'], ['graph g = A-B:4\ntag g ∞\ntag g.A 0', 'relax g.A -> g.B'],
     [`${A}\nlabel x a.1 "字"`, 'unlabel x'], [T, 'goal g1 "x" when="t avl, t height=2"'],
     [M, 'goal g1 "x" when="m stairs, m rref, m rank=2, m rankA=2, m same A"'], [S, 'goal g1 "x" when="s parsed, s main, s span s.1-6 = S"'], [S, 'mark s.3-6 从句'],
+    // 第二轮：说明文字里写的几种写法
+    [A, 'goal g1 "x" when="a.1 < a.2 | a.9 < a.10" call=now'], [A, 'goal g1 "x" when="a sorted" on="就这样"'], [A, 'goal g1 "x" when="a.1 < a.2" collect=a n=3'],
+    [A, 'ask pick a#1 a#3 a#5 "哪几个？"'], [A, 'ask pick a "哪几格？" expect="a.2-3 a.6" reveal=on'], [A, 'unpick'],
+    [`${A}\nopen a`, 'keep a "换过以后" after=swap'], [`${A}\nopen a\nkeep a "换过以后" after=swap`, 'keep a "换过以后" after=off'], [A, 'array R = 1 2 3 hide=on'],
+    [M, 'matrix M = 1 2 | 3 / 2 4 | 7\nmatrix P = 1 / 1\nmatrix Q = {coef(M) P - rhs(M)}'],
+    [M, 'matrix m0 = 1 2 | 3 / 2 4 | 7\nmatrix m1 = _ _ | _ / _ _ | _ from=m0 vars="x y"'], ['dial l = 1 range=-3..3', 'matrix N = 1 {l - 1} / 0 {2 l}'],
+    [M, 'goal g1 "x" when="rank(m) = 1, rankA(m) = 1, free(m) = 1, det(m) = 3"'], [M, 'ask value "秩是几？" answer={rank(m)}'], [M, 'say "自由变量 {free(m)} 个"'],
+    [T, 'goal g1 "x" when="count(t) = 4, height(t) = 4, height(t.30) = 2"'], ['tree t = 50 30 tray="20"', 'label n t "还剩 {tray(t)} 个"'], [T, 'unheights t'], ['', 'tree h = 10 layout=compact'],
+    [S, 'goal g1 "x" when="verbs(s.1-6) = 1, verbs(s) = 2, left(s) = 3, s exact"'], [S, 'untally s'],
+    ['sentence s = "The man who lives next door is a doctor." links="who -> s.1-2"', 'goal g1 "x" when="s linked"'],
   ];
   const bad = [];
   for (const [setup, line] of plays) { const e = dryRun(run(setup), line); if (e.length) bad.push(`${line} → ${e[0].error}`); }
@@ -184,6 +231,11 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
     [`${M}\nmatrix S = {A + B}`, 'open S edit', /跟着算的/], [`${M}\nproduct C = A B`, 'open C rowop', /乘积/],
     ['graph g = A-B:4\ntag g ?\ntag g.A 0', 'relax g.A -> g.B', /不是数/], ['tree t = 50 30', 'tag t.50 "一二三四五六七八九"', /8 个字/],
     [S, 'tag s.7 "一二三四五六七八九"', /8 个字/], [`${A}\nlabel x a.1 "字"`, 'remove x', /舞台上没有/],
+    // 第二轮：说明里说「会报错」的
+    [A, '@ask.wrong say "x"', /不能预写/], [A, 'ask tap a "x" reveal=on', /reveal= 只用在 ask pick/], [`${M}\nmatrix X = {-2 A}`, 'open X merge undo=on', /撤不了/],
+    [`${M}\nmatrix S = {A + B}`, 'keep S "x"', /跟着算的/], [S, 'tally s.3-6 V', /整句|tally s V/],
+    [`${A}\ngoal g1 "x" when="a sorted"\n@g1 goal g2 "y" when="a sorted desc"\n@g2 goal g3 "z" when="a.1 = 9"\n@g3 goal g4 "w" when="a.1 = 8"`, '@g4 say "x"', /最多三层/],
+    [`${M}\ngoal g1 "x" when="m stairs"\ngoal g2 "y" when="m rref"`, '@g1 goal g2 "z" when="m rank=1"', /撞名/],
   ];
   for (const [setup, line, re] of fails) { const e = dryRun(run(setup), line); if (!e.length || !re.test(e[0].error)) bad.push(`${line} 应当报错（${re}），实际：${e[0]?.error || '照演了'}`); }
   assert.deepEqual(bad, []);

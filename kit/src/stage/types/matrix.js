@@ -861,9 +861,10 @@ export const matrix = {
   doc: `矩阵（线代：行变换、消元、秩、乘法）：
 matrix m = 1 2 3 / 4 5 6 / 7 8 10   造矩阵（/ 分行；数能写 -3、1/2；| 是增广矩阵的竖线；beside=p 放在 p 右边）
 写法：m.2,3 第 2 行第 3 列；m.r2 第 2 行；m.c3 第 3 列
+matrix M1 = _ _ | _ / _ _ | _ from=M0 vars="x y"   _ 是空格子（填满以前判断式、量都判不了）；from=M0：学生每写满一行（配 open M1 edit input=keypad），页面和 M0 比（像哪一步行变换、哪一格不对、同不同解；不判对错）；vars= 未知数的名字（增广矩阵每行在现状里读回成方程，不写是 x1 x2…）
 matrix N = 1 {k} / 0 1              格里的 {…} 写算成一个数的式子（{k}、{A.1,2}、{l - 1}），跟着它变；整张就算跟着算的，学生拨不了，只能 open compare / put / merge
-matrix S = {A + B}                  整个矩阵跟着算（{A B}、{2A}、{k A}、{A^-1}、{A'}）；跟着算的学生拨不了，只能 open compare / put / merge
-matrix Sum = collect                收集用的（collect - 是第一张减后面的）：空着是一个空格，学生把矩阵放进来就跟着算 {AA + AB}
+matrix S = {A + B}                  整个矩阵跟着算（{A B}、{2A}、{k A}、{A^-1}、{A'}；coef(M) 是增广矩阵竖线左边、rhs(M) 右边一列：{coef(M) P - rhs(M)}）；跟着算的学生拨不了，只能 open compare / put / merge
+matrix Sum = collect                收集用的（collect - 是第一张减后面的）：空着是一个空格，put AB Sum 放进一张（学生拖、你写都行）就跟着算 {AA + AB}
 rowop m r2 - 3r1                  行变换：r1 的副本乘 -3 飘到 r2 上加进去（也能写 r2 = r2 - 3r1、r3 + 1/2 r1；连着几步用逗号：r2 - 4r1, r3 - 7r1）
 rowop m r1 <-> r3                 交换两行（走弧线）
 rowop m 3r2                       一行乘倍数（-r1、r2 / 3）；列变换把 r 换成 c
@@ -876,17 +877,17 @@ open B edit range=-3..3           学生点 B 的一格用 ± 拨里面的数（
 open C explain                    学生点乘积的一格，页面当场演它怎么一行乘一列算出来（还空着的就当场算上）
 open AB compare                   学生把 AB 整张拖到另一张上 = compare AB BA（逐格比，两张都不变）
 open AB put                       学生把 AB 拖进收集用的 Sum = put AB Sum（大小不一样放不进去）
-open X merge                      学生把 X 拖到 Y 上并同类项 = merge X Y（只认 数 × 同一个矩阵：{-2 A} 并 {-A} 成 {-3 A}，X 拿下舞台，撤不了、不写 undo=on；并成 0 是 O）；三种都不判对错
+open X merge                      学生把 X 拖到 Y 上并同类项 = merge X Y（只认 数 × 同一个矩阵：{-2 A} 并 {-A} 成 {-3 A}，X 拿下舞台，撤不了、不写 undo=on；并成 0 是 O）；三种都不判对错，同一张只开一种；学生按整张哪儿都拎得起来（格上开着 edit 时按括号）
 学生自己消元（rowop 页面判每一下；乘积不能 open rowop）：
 open m rowop wrong=mark call=wrong    学生把一行左边的把手拖到另一行上 = 倍加（弹倍数框写 -3：rowop m r2 - 3r1）；拖到行号上 = 对调（rowop m r1 <-> r2）；点行号 = 倍乘（rowop m (-1/2)r1）
 open m edit input=keypad          学生点一格用数字键盘写（能写 -3/2；写了 range= 才限范围）= write m.2,3 -3/2（页面不判，告诉你的就是这一行）
-判断式（when=）：m stairs（阶梯形）、m rref（行最简形）、m rank=2（整张的秩，增广的是 r(A | b)）、m rankA=2（竖线左边的秩 r(A)）、m same B（和 B 行等价）
+判断式（when=）：m stairs（阶梯形）、m rref（行最简形）、m rank=2（整张的秩，增广的是 r(A | b)）、m rankA=2（竖线左边的秩 r(A)）、m same B（和 B 行等价）；量：rank(m)、rankA(m)、free(m)（自由变量几个）、det(m)（方阵）；现状里还写解的样子，跟着拨数的把每个能拨的值扫一遍
 做完了 = 成了阶梯形（@m.done 这时演）；往上化成行最简形页面不判对错，要的话写 goal … when="m rref"
 ask value "A² 是？" type=matrix answer={A^2} wrong="1 1 / 1 1=逐格平方了"     学生写一张矩阵（行用「 / 」或 ; 隔开，1/3 是一格分数），页面照 A 现算答案
-ask value "Aⁿ 是？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"     每格是含 n 的式子：学生一格一个式子框，页面逐格代 n 判，哪一格不对告诉你
+ask value "Aⁿ 是？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"     每格是含 n 的式子：学生一格一个式子框，页面逐格代 n 判，哪一格不对告诉你（学生只看到整张对不对）
 answer={A B}、{A^2}、{3 A}、{A^-1}、{A'} 时页面自己认乘反、逐格乘方、只乘一行或一格、逐格取倒数或没除以行列式、没转置，对上了告诉你（你写的 wrong= 先比）`,
-  // 测试用（tests/stage-doc.test.js）：说明里 stairs 那一行要一个已经是阶梯形的矩阵；整张拖的三行要 AB、BA、Sum、X、Y
-  docSetup: 'matrix m = 1 2 3 / 0 1 4 / 0 0 1\nmatrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix AB = {A B}\nmatrix BA = {B A}\nmatrix Sum = collect\nmatrix X = {-2 A}\nmatrix Y = {-A}',
+  // 测试用（tests/stage-doc.test.js）：说明里 stairs 那一行要一个已经是阶梯形的矩阵；from= 那一行要 M0；整张拖的三行要 AB、BA、Sum、X、Y
+  docSetup: 'matrix m = 1 2 3 / 0 1 4 / 0 0 1\nmatrix M0 = 1 2 | 3 / 2 4 | 7\nmatrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix AB = {A B}\nmatrix BA = {B A}\nmatrix Sum = collect\nmatrix X = {-2 A}\nmatrix Y = {-A}',
   example: `matrix A = 1 1 / -1 -1
 matrix B = 1 -1 / -1 1 beside=A
 product C = A B

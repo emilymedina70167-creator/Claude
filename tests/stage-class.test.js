@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stageLines, sameAnswer, actText } from '../kit/src/stage/stage.js';
-import { buildStageSystem, STAGE_MEMO_DOC, STAGE_SYSTEM_MAX } from '../kit/src/stage/doc.js';
+import { buildStageSystem, STAGE_MEMO_DOC, STAGE_SYSTEM_MAX, SUBJECT_TYPES, STAGE_DOC, stageDoc, stageSubject } from '../kit/src/stage/doc.js';
+import { memoryDigest } from '../kit/src/memory/digest.js';
 import { classForm, SESSION_KINDS, isTeach } from '../kit/src/memory/session.js';
 import { sampleMemory } from '../kit/src/memory/sample.js';
 import { Scene } from '../kit/src/stage/scene.js';
@@ -49,6 +50,65 @@ test('每一轮的整份说明：怎么教、舞台的写法、资料包、记�
   assert.doesNotMatch(STAGE_MEMO_DOC, /q-b5/);
   // 没有记忆（不在学习台里）：没有那一节
   assert.doesNotMatch(buildStageSystem({}), /你对学生的了解/);
+});
+
+// 最满的一份：记忆是 sample.js 加长到摘要用满 28 KiB，资料包的教材放 40 KiB 的字（设计第 13 节「整份 150 KiB」）
+const KiB = 1024;
+function fullMemory() {
+  const mem = sampleMemory('2026-11-05');
+  const long = (n) => '这是一条很长的规则，讲怎么讲课、怎么出题、怎么记录学生的作答，'.repeat(n);
+  mem.rules = [...(mem.rules || []), ...Array.from({ length: 80 }, (_, i) => ({ id: `rule-g-${i + 1}`, cat: '讲解', text: `第 ${i + 1} 条：${long(3)}`, since: '2026-10-01', source: '我', status: 'active' }))];
+  mem.profile = [...(mem.profile || []), ...Array.from({ length: 30 }, (_, i) => ({ id: `p-x${i}`, topic: '讲法', text: `关于学生 ${i}：${long(2)}` }))];
+  mem.lessons = [...(mem.lessons || []), ...Array.from({ length: 12 }, (_, i) => ({ id: `T-${i + 10}`, text: `守则 ${i}：${long(3)}`, since: '2026-10-01', status: 'active' }))];
+  return mem;
+}
+const sectionOf = (t, head, next) => t.slice(t.indexOf(head), next ? t.indexOf(next) : undefined);
+const fullest = (subject, block, space) => {
+  const mem = fullMemory();
+  const textbook = '教材原文：'.padEnd(40 * KiB / 3, '王');
+  return buildStageSystem({ pack: { main: { unit: '这一块', textbook }, problems: { items: [{ q: '一道题' }] } }, memory: { mem, block, space, session: 'c-20261108-1' }, title: '这一块', subject });
+};
+const BLOCK_OF = { 数据结构: ['DS-L2.1.1', 'cs'], 操作系统: ['OS-L3.2.1', 'cs'], 组成原理: ['CO-L1.1.1', 'cs'], 计网: ['CN-L1.1.1', 'cs'], 线代: ['L2.2.2', 'math'], 英语: ['EN-L1.1.1', 'en'] };
+
+test('六门课最满的一份不超：记忆 28 KiB、教材 40 KiB，整份 ≤ 150 KiB，「这节课」那一节（资料包）≥ 12 KiB', () => {
+  for (const subject of Object.keys(SUBJECT_TYPES)) {
+    const [block, space] = BLOCK_OF[subject];
+    // 记忆真的差不多用满了（不然量的不是最满的那一份）：摘要按条装，装不下一整条就停，到不了正好 28 KiB
+    const d = memoryDigest(fullMemory(), { block, space, session: 'c-20261108-1', tools: false, budget: 28 * KiB });
+    assert.ok(d.bytes > 26 * KiB, `${subject}：记忆摘要只有 ${d.bytes} 字节`);
+    const t = fullest(subject, block, space);
+    assert.ok(t.includes(stageDoc(subject)), `${subject}：带的是这门课的那一份`);
+    assert.ok(Buffer.byteLength(t) <= STAGE_SYSTEM_MAX, `${subject}：整份 ${Buffer.byteLength(t)} 字节`);
+    const pack = sectionOf(t, '# 三、这节课', '# 四、');
+    assert.ok(Buffer.byteLength(pack) >= 12 * KiB, `${subject}：资料包只有 ${Buffer.byteLength(pack)} 字节`);
+    assert.ok(t.includes(d.text.slice(0, 2000)), `${subject}：记忆那一节带的是这一份摘要`);
+  }
+});
+
+test('推不出科目时全带那份也放得下：记忆 28 KiB、教材 40 KiB，整份 ≤ 150 KiB，资料包 ≥ 12 KiB（全带的那份本身不再限 24 KiB）', () => {
+  const t = fullest('', 'DS-L2.1.1', 'cs');
+  assert.ok(t.includes(STAGE_DOC), '推不出科目：全带');
+  assert.ok(Buffer.byteLength(t) <= STAGE_SYSTEM_MAX, `整份 ${Buffer.byteLength(t)} 字节`);
+  assert.ok(Buffer.byteLength(sectionOf(t, '# 三、这节课', '# 四、')) >= 12 * KiB);
+});
+
+test('课堂推科目（说明只带这门课的那一份）：块 → 资料包写的科目或块 → 这节课记着的科目 → 空间；408 别的都没有时推不出来', () => {
+  assert.equal(stageSubject({ block: 'OS-L3.2.1', space: 'cs' }), '操作系统');
+  assert.equal(stageSubject({ block: 'L2.2.2' }), '线代');
+  // 没有块：资料包点名的块、写的科目
+  assert.equal(stageSubject({ pack: { main: { block: 'DS-L2.1.1' } }, space: 'cs' }), '数据结构');
+  assert.equal(stageSubject({ pack: { main: { subject: '计算机网络' } }, space: 'cs' }), '计网');
+  // 资料包也没写：这节课 / 单元记着的科目
+  assert.equal(stageSubject({ pack: { main: { unit: '秩' } }, session: { subject: '线代' }, space: 'cs' }), '线代');
+  assert.equal(stageSubject({ session: { subject: '组成原理' } }), '组成原理');
+  // 只知道空间：数学只有线代、英语只有英语
+  assert.equal(stageSubject({ space: 'math' }), '线代');
+  assert.equal(stageSubject({ space: 'en' }), '英语');
+  // 408 有四门课：推不出来，发全带的那份
+  assert.equal(stageSubject({ space: 'cs' }), '');
+  assert.equal(stageSubject({ pack: { main: { subject: '概率论' } }, session: { subject: '' }, space: 'cs' }), '', '认不出的科目不算');
+  assert.equal(stageSubject(), '');
+  assert.ok(buildStageSystem({ subject: stageSubject({ space: 'cs' }) }).includes(STAGE_DOC));
 });
 
 test('开新课一律是舞台；只有自动测试（?dev&form=）还能开出旧的两种；舞台课算讲课的课（报告、复盘、掌握照黑板课那样算）', () => {

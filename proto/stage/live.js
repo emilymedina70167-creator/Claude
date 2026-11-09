@@ -10,7 +10,7 @@ export const MODEL = 'claude-opus-5-5';
 const TEACH = { model: MODEL, effort: 'high', modelTier: 'complex' };
 
 /**
- * 上一节课。stage：舞台；topic：{ title, topic, material }；alive()：变成假就停；
+ * 上一节课。stage：舞台；topic：{ title, topic, material, subject }；alive()：变成假就停；
  * status(info)：每一轮的计时、模型、没演的行（样子页画在角上）
  */
 export async function liveLesson(stage, topic, { alive, status = () => {}, mock = false, thinking = () => {} } = {}) {
@@ -21,7 +21,8 @@ export async function liveLesson(stage, topic, { alive, status = () => {}, mock 
   const messages = ({ next } = {}) => {
     const msgs = [];
     const user = (content) => { if (msgs.at(-1)?.role === 'user') msgs.at(-1).content += `\n\n${content}`; else msgs.push({ role: 'user', content }); };
-    user(firstMessage(topic));
+    // 带上这节课的科目（样子页的三节都是数据结构）：只带这门课用得上的说明；自己写的题目没有科目，全带
+    user(firstMessage({ topic: topic.topic, material: topic.material, subject: topic.subject || '' }));
     for (const t of history) {
       if (t.discarded || t.pending) continue;
       if (t.role === 'claude') msgs.push({ role: 'assistant', content: t.text });

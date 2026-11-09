@@ -1531,7 +1531,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   // 舞台课（kind: stage，docs/stage-plan.md D 段）：整屏一块舞台，自己的控制器；记忆、教材、证据、报告照旧
   if (kind === 'stage') {
     return renderStageClass(root, { ...meta, unit: doc.title || meta.unit }, {
-      store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, mem, books, prevRead, readOnly,
+      store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, subject: doc.subject || '', mem, books, prevRead, readOnly,
       updateSession, onHome: () => goto(readOnly ? `classes/${sid}` : ''),
       recheck: readOnly ? {} : await within(db.doc('meta/workorder').get().then((s) => (s.exists ? s.data().recheck || {} : {})), 3000, {}).catch(() => ({})),
       writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),
