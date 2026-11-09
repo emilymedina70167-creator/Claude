@@ -878,7 +878,7 @@ export const sentence = {
     if (o.marks.length) {
       const lv = new Map(L.marks.map((m) => [m.mark, m.level]));
       lines.push(`  括号（词下面）：${o.marks.map((m) => `${spanText(o, m.keys)} ${m.label}${lv.get(m.id) > 1 ? `（第 ${lv.get(m.id)} 层${color(m.color)}）` : m.color ? `（${COLOR_NAMES[m.color]}）` : ''}`).join('；')}`);
-      // 学生拉的括号：里面 key 的谓语几个、多拉的、被挪开拆散的（页面照 key 数，sentence.rules.js）
+      // 学生拉的括号：里面 key 的谓语几个、多拉的、key 里没有的、被挪开拆散的（页面照 key 数，sentence.rules.js）
       for (const f of bracketFacts(o)) lines.push(`  ${f}`);
     }
     const ks = keyStatus(o);

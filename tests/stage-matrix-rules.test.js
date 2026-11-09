@@ -527,3 +527,68 @@ test('inferRowOp：对调、倍乘、倍加；只比两边都写满的行；猜�
   assert.match(fx.judged.after[0], /M0 现在是 2×3 的，和 M1 不一样大，页面比不了/);
   assert.match(fromFact(M(s, 'M1'), null), /舞台上已经没有 M0 了，页面比不了/);
 });
+
+test('from= 的不是方程组：说「行等价」不说「同解」；两列的矩阵改得不像一步初等行变换：看不出', () => {
+  const s = make('matrix A = 1 2 / 2 4\nmatrix B = 1 2 / _ _ from=A\nopen B edit input=keypad');
+  const stu = (line) => s.apply(parseScript(line)[0], { by: 'student', open: 'edit' });
+  stu('write B.2,1 0');
+  assert.equal(stu('write B.2,2 0').judged.after[0], 'B 第 2 行变了，像 r2 − 2r1；第 1 行没变；和 A 行等价：是');
+  // 0 1：一格凑得上 r2 − 2r1、一格凑得上 r2 − (3/2)r1，变了的两格只对得上一格，说不出是哪一步
+  assert.equal(stu('write B.2,2 1').judged.after[0], 'B 第 2 行变了，看不出是哪一种初等行变换；第 1 行没变；和 A 行等价：否');
+  // 还空着：是不是行等价说不了
+  const p = make('matrix A = 1 2 / 2 4\nmatrix B = _ _ / _ _ from=A\nopen B edit input=keypad');
+  for (const line of ['write B.1,1 1', 'write B.1,2 2']) p.apply(parseScript(line)[0], { by: 'student', open: 'edit' });
+  assert.match(fromFact(M(p, 'B'), M(p, 'A')), /还有空着的格，和 A 是不是行等价还说不了$/);
+  // 方程组照旧说同解
+  const q = make('matrix M0 = 1 1 | 2 / 1 -1 | 0\nmatrix M1 = 1 1 | 2 / _ _ | _ from=M0');
+  run(q, 'write M1.2,1 0\nwrite M1.2,2 -2\nwrite M1.2,3 -2');
+  assert.match(fromFact(M(q, 'M1'), M(q, 'M0')), /和 M0 同解：是$/);
+});
+
+test('inferRowOp：一格改了、变了的格只对上一半：看不出；变了的格大半对得上照说像哪一步', () => {
+  const g = (rows) => rows.map((r) => r.map((x) => (x == null ? null : toQ(x))));
+  // 只改了一格（不是初等行变换）：凑一个 k 对上那一格，别的格就对不上了
+  const one = inferRowOp(g([['1', '0', '0', '2'], ['3', '4', '5', '6']]), g([['1', '0', '0', '2'], ['3', '4', '5', '8']]));
+  assert.equal(one.guess, null);
+  // 两列的：变了的两格各凑得上一种倍加
+  assert.equal(inferRowOp(g([['1', '2'], ['3', '4']]), g([['1', '2'], ['0', '2']])).guess, null);
+  // 三列、r1 里有 0：消掉了第 1 格、第 3 格算错——变了的两格只对上一格，两种倍加一样像
+  assert.equal(inferRowOp(g([['1', '0', '2'], ['3', '5', '7']]), g([['1', '0', '2'], ['0', '5', '2']])).guess, null);
+  // 简报的那一张：变了的四格对上三格，照说像 r2 − r1
+  const b = inferRowOp(g([['1', '2', '0', '2'], ['2', '2', '-4', '2'], ['0', '0', '-2', '-2']]), g([['1', '2', '0', '2'], ['1', '0', '4', '0'], ['0', '0', '-2', '-2']]));
+  assert.equal(b.guess.text, 'r2 − r1');
+  assert.deepEqual(b.bad, [{ c: 3, want: '-4', got: '4' }]);
+});
+
+test('inferRowOp 随机：真的一步初等行变换（对调、倍乘、倍加，整数和分数倍）总认得出，照认出的那一步做出来就是写的', () => {
+  let seed = 20261109;
+  const rnd = (n) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+  const q = (n, d = 1) => new Q(BigInt(n), BigInt(d));
+  const apply = (G, gs) => {
+    const H = G.map((r) => r.slice());
+    const i = gs.i - 1;
+    if (gs.kind === 'swap') { const j = gs.j - 1; [H[i], H[j]] = [H[j], H[i]]; return H; }
+    const k = toQ(gs.k);
+    H[i] = gs.kind === 'scale' ? G[i].map((x) => x.mul(k)) : G[i].map((x, c) => x.add(k.mul(G[gs.j - 1][c])));
+    return H;
+  };
+  const same = (A, B) => A.every((r, i) => r.every((x, c) => x.sub(B[i][c]).zero));
+  let named = 0;
+  for (let n = 0; n < 2000; n++) {
+    const rows = 2 + rnd(3), cols = 2 + rnd(4);
+    const G0 = Array.from({ length: rows }, () => Array.from({ length: cols }, () => q(rnd(7) - 3)));
+    const i = rnd(rows);
+    let j = rnd(rows - 1); if (j >= i) j++;
+    const kind = ['swap', 'scale', 'add'][rnd(3)];
+    let k = q(rnd(7) - 3, 1 + rnd(3));
+    if (k.zero || (kind === 'scale' && k.sub(q(1)).zero)) k = q(2);
+    const G1 = apply(G0, { kind, i: i + 1, j: j + 1, k: String(k) });
+    if (same(G0, G1)) continue; // 这一步什么也没变（加了全是 0 的一行、两行本来一样）
+    const r = inferRowOp(G0, G1);
+    assert.ok(r.guess, `${kind} 没认出来：${JSON.stringify(G0.map((x) => x.map(String)))} → ${JSON.stringify(G1.map((x) => x.map(String)))}`);
+    assert.deepEqual(r.bad, []);
+    assert.ok(same(apply(G0, r.guess), G1), `认成 ${r.guess.text}，做出来和写的不一样`);
+    named++;
+  }
+  assert.ok(named > 1500, `真的一步变了的有 ${named} 组`);
+});

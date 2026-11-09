@@ -253,9 +253,11 @@ function check(o, act) {
 /**
  * 学生拉的括号（m.by 是 student）那几行（舞台现状每一轮写，拉了一道以后只写变了的）：
  *   学生的括号：s.3-6 定语从句（who lives next door）里有 key 的谓语 1 个；括号外有 key 的谓语 1 个
- *   多拉的：s.8-9 O（a doctor；key 里没有）
+ *   多拉的：s.1-2 S（The man；key 里没有这一段）       key 标了这种成分、没有这一段：真是多拉的
+ *   key 里没有的：s.8-9 O（a doctor）                  key 一道这种成分都没标：页面不知道对不对，只说 key 里没有
  *   拆散的：s.2 s.8-9 那道 O 被挪开拆散了，不算一段
- * 成分照括号上写的（学生点的是什么就写什么）。谓语照 key 数（整段落在括号里才算在里面）；没写 key、key 作废了只说拆散的
+ * 成分照括号上写的（学生点的是什么就写什么）。谓语照 key 数（整段落在括号里才算在里面），key 一个谓语都没标就不说谓语几个（key 说不了）；
+ * 没写 key、key 作废了只说拆散的
  */
 export function bracketFacts(o) {
   const mine = (o?.marks || []).filter((m) => m.by === 'student');
@@ -268,14 +270,20 @@ export function bracketFacts(o) {
   const ks = keySpans(o);
   if (ks && whole.length) {
     const verbs = ks.filter((k) => k.name === '谓语');
-    const inside = (b, k) => k.keys.every((x) => b.keys.has(x));
-    const touches = (k) => whole.some((b) => k.keys.some((x) => b.keys.has(x)));
-    const outer = verbs.filter((k) => !touches(k)).length;
-    const across = verbs.filter((k) => touches(k) && !whole.some((b) => inside(b, k))).length;
-    const each = whole.map((b) => `${at(o, b.from, b.to)} ${b.m.label}（${textOf(o, b.from, b.to)}）里有 key 的谓语 ${verbs.filter((k) => inside(b, k)).length} 个`);
-    out.push(`学生的括号：${[...each, `括号外有 key 的谓语 ${outer} 个`, ...(across ? [`跨着括号边的 ${across} 个`] : [])].join('；')}`);
+    if (verbs.length) {
+      const inside = (b, k) => k.keys.every((x) => b.keys.has(x));
+      const touches = (k) => whole.some((b) => k.keys.some((x) => b.keys.has(x)));
+      const outer = verbs.filter((k) => !touches(k)).length;
+      const across = verbs.filter((k) => touches(k) && !whole.some((b) => inside(b, k))).length;
+      const each = whole.map((b) => `${at(o, b.from, b.to)} ${b.m.label}（${textOf(o, b.from, b.to)}）里有 key 的谓语 ${verbs.filter((k) => inside(b, k)).length} 个`);
+      out.push(`学生的括号：${[...each, `括号外有 key 的谓语 ${outer} 个`, ...(across ? [`跨着括号边的 ${across} 个`] : [])].join('；')}`);
+    }
+    // key 里没有这一段的：key 标过这种成分（key 是全的那一种）才是多拉的；一道都没标的，页面不知道学生拉得对不对
     const extra = whole.filter((b) => !ks.some((k) => k.ok && k.from === b.from && k.to === b.to));
-    if (extra.length) out.push(`多拉的：${extra.map((b) => `${at(o, b.from, b.to)} ${b.m.label}（${textOf(o, b.from, b.to)}；key 里没有）`).join('、')}`);
+    const known = (b) => { const name = roleName(b.m.label); return !!name && ks.some((k) => fits(k.name, name)); };
+    const real = extra.filter(known), unknown = extra.filter((b) => !known(b));
+    if (real.length) out.push(`多拉的：${real.map((b) => `${at(o, b.from, b.to)} ${b.m.label}（${textOf(o, b.from, b.to)}；key 里没有这一段）`).join('、')}`);
+    if (unknown.length) out.push(`key 里没有的：${unknown.map((b) => `${at(o, b.from, b.to)} ${b.m.label}（${textOf(o, b.from, b.to)}）`).join('、')}`);
   }
   const split = mine.filter((m) => broken.has(m.id));
   if (split.length) out.push(`拆散的：${split.map((m) => `${spanText(o, m.keys)} 那道 ${m.label}`).join('、')} 被挪开拆散了，不算一段`);

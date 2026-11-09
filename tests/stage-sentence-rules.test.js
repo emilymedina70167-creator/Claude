@@ -532,10 +532,16 @@ test('学生括号里的谓语数：每道学生的括号里 key 的谓语几个
   assert.ok(bracketFacts(S(s)).includes('学生的括号：s.3-6 定语从句（who lives next door）里有 key 的谓语 1 个；括号外有 key 的谓语 1 个'), bracketFacts(S(s)).join('\n'));
   stuMark(s, 'mark s.8-9 O');
   const f = bracketFacts(S(s));
-  assert.ok(f.includes('多拉的：s.8-9 O（a doctor；key 里没有）'), f.join('\n'));
+  // key 里一个宾语都没标：页面不知道它对不对，不说「多拉的」
+  assert.ok(f.includes('key 里没有的：s.8-9 O（a doctor）'), f.join('\n'));
+  assert.ok(!f.some((x) => x.startsWith('多拉的')), f.join('\n'));
   assert.ok(f.includes('学生的括号：s.3-6 定语从句（who lives next door）里有 key 的谓语 1 个；s.8-9 O（a doctor）里有 key 的谓语 0 个；括号外有 key 的谓语 1 个'), f.join('\n'));
   // 现状里也写
-  assert.match(s.stateText(), /\n {2}多拉的：s\.8-9 O（a doctor；key 里没有）/);
+  assert.match(s.stateText(), /\n {2}key 里没有的：s\.8-9 O（a doctor）/);
+  // key 标了主语（s.1-6）、学生又拉了一道主语 s.1-2：这才是多拉的
+  stuMark(s, 'mark s.1-2 S');
+  assert.ok(bracketFacts(S(s)).includes('多拉的：s.1-2 S（The man；key 里没有这一段）'), bracketFacts(S(s)).join('\n'));
+  assert.ok(bracketFacts(S(s)).includes('key 里没有的：s.8-9 O（a doctor）'));
   // 拉了 s.7-9 O 以后 a 挪到句首：那道括号拆散了，不算一段
   const m = make(`${TWO_V}\nopen s mark`);
   stuMark(m, 'mark s.7-9 O');
@@ -553,15 +559,24 @@ test('学生括号的事实：拉了一道以后只写变了的那几行', () =>
   const s = make(`${TWO_V}\nopen s mark`);
   let fx = stuMark(s, 'mark s.3-6 定语从句');
   assert.ok(fx.judged.after.includes('学生的括号：s.3-6 定语从句（who lives next door）里有 key 的谓语 1 个；括号外有 key 的谓语 1 个'), fx.judged.after.join('\n'));
-  // 多拉一道：学生的括号那一行变了、多拉的那一行是新的
+  // 多拉一道：学生的括号那一行变了、key 里没有的那一行是新的
   fx = stuMark(s, 'mark s.8-9 O');
-  assert.ok(fx.judged.after.includes('多拉的：s.8-9 O（a doctor；key 里没有）'));
-  // 同一道再标一次成分：多拉的那一行没变，不写
+  assert.ok(fx.judged.after.includes('key 里没有的：s.8-9 O（a doctor）'));
+  // 同一道再标一次成分：key 里没有的那一行没变，不写
   fx = stuMark(s, 'mark s.3-6 RC');
-  assert.ok(!fx.judged.after.some((x) => x.startsWith('多拉的')), fx.judged.after.join('\n'));
+  assert.ok(!fx.judged.after.some((x) => x.startsWith('key 里没有的')), fx.judged.after.join('\n'));
   assert.ok(fx.judged.after.some((x) => x.startsWith('学生的括号：s.3-6 RC')), '成分改了，那一行变了');
   // 前后一样的行一概不进
   const before = bracketFacts(S(s));
   fx = stuMark(s, 'mark s.3-6 RC');
   assert.deepEqual(fx.judged.after.filter((x) => before.includes(x)), []);
+});
+
+test('学生括号：key 一个谓语都没标时不说谓语几个（key 说不了）；拆散的、key 里没有的照说', () => {
+  const s = make('sentence s = "The man next door is a doctor." key="[S The man next door] is a doctor."\nopen s mark');
+  stuMark(s, 'mark s.1-4 S');
+  assert.deepEqual(bracketFacts(S(s)), [], '拉对了主语，又没有谓语可数：什么都不写');
+  stuMark(s, 'mark s.6-7 O');
+  assert.deepEqual(bracketFacts(S(s)), ['key 里没有的：s.6-7 O（a doctor）']);
+  assert.doesNotMatch(s.stateText(), /谓语 0 个/);
 });

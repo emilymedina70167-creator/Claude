@@ -374,7 +374,8 @@ const KIND_ORDER = { add: 0, scale: 1, swap: 2 };
 const absQ = (q) => (q.n < 0n ? q.neg() : q);
 
 // 变了的一行（第 i 行，从 0 数）像哪一步：试「原来这一行 + k × 另一行」「乘 k」「和另一行对调」，挑对上格子最多的；
-// 一样多时倍加先于倍乘、倍乘先于对调，再挑另一行靠前、|k| 小的。对上不到一半：猜不出（guess 是 null）
+// 一样多时倍加先于倍乘、倍乘先于对调，再挑另一行靠前、|k| 小的。对上不到一半：猜不出（guess 是 null）。
+// 照猜的那一步对不上的格有这一行变了的格的一半多（列少、只改了一格时，凑一个 k 总能对上一格）：也算猜不出，不拿对不上的格硬说像哪一步
 function rowGuess(G0, G1, i) {
   const want = G1[i], src = G0[i];
   const cands = [];
@@ -402,10 +403,13 @@ function rowGuess(G0, G1, i) {
   for (const x of cands) x.score = x.cand.reduce((s, q, c) => s + (eqQ(q, want[c]) ? 1 : 0), 0);
   cands.sort((a, b) => b.score - a.score || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || (a.j ?? -1) - (b.j ?? -1) || (a.k && b.k ? absQ(a.k).cmp(absQ(b.k)) : 0));
   const best = cands[0];
-  if (!best || best.score < Math.ceil(want.length / 2)) return { i: i + 1, guess: null, bad: [] };
-  const guess = { kind: best.kind, i: i + 1, ...(best.j != null ? { j: best.j + 1 } : {}), ...(best.k ? { k: String(best.k) } : {}), text: guessText(best) };
+  const none = { i: i + 1, guess: null, bad: [] };
+  if (!best || best.score < Math.ceil(want.length / 2)) return none;
   const bad = [];
   best.cand.forEach((q, c) => { if (!eqQ(q, want[c])) bad.push({ c: c + 1, want: String(q), got: String(want[c]) }); });
+  const moved = want.filter((q, c) => !eqQ(q, src[c])).length;
+  if (bad.length * 2 >= moved) return none;
+  const guess = { kind: best.kind, i: i + 1, ...(best.j != null ? { j: best.j + 1 } : {}), ...(best.k ? { k: String(best.k) } : {}), text: guessText(best) };
   return { i: i + 1, guess, bad };
 }
 
@@ -448,7 +452,8 @@ const listOf = (ks) => ks.join('、');
 const badText = (b) => `第 ${b.c} 格该是 ${num(b.want)}，写的是 ${num(b.got)}`;
 /**
  * 造的时候写了 from=M0 的一张，学生写满一行时和 M0 比（不判对错）：
- * 「M1 第 2 行变了，像 r2 − r1；第 3 格该是 −4，写的是 4；第 1、3 行没变；和 M0 同解：否」；猜不出写「看不出是哪一种初等行变换」。
+ * 「M1 第 2 行变了，像 r2 − r1；第 3 格该是 −4，写的是 4；第 1、3 行没变；和 M0 同解：否」（不是方程组的说「和 A 行等价：否」）；
+ * 猜不出写「看不出是哪一种初等行变换」。
  * M0 不在了、换了尺寸：照说页面比不了
  */
 export function fromFact(o, M0) {
@@ -467,7 +472,10 @@ export function fromFact(o, M0) {
   }
   if (r.rows.length && r.kept.length) bits.push(`第 ${listOf(r.kept)} 行没变`);
   if (r.blank.length) bits.push(`第 ${listOf(r.blank)} 行还没写满`);
-  if (r.same == null) bits.push(`还有空着的格，和 ${name} 同不同解还说不了`);
+  // 两张都是方程组（竖线在同一处、右边一列）才说同不同解；别的矩阵说行等价不行等价（没有「解」这回事）
+  const system = isSystem(o) && isSystem(M0) && o.aug === M0.aug;
+  if (r.same == null) bits.push(`还有空着的格，和 ${name} ${system ? '同不同解' : '是不是行等价'}还说不了`);
+  else if (!system) bits.push(`和 ${name} 行等价：${r.same ? '是' : '否'}`);
   else if (r.same) bits.push(`和 ${name} 同解：是`);
   else {
     // 不是行等价的两个方程组也可能同解：两个都无解（解都是空的）。这时不说「同解：否」，免得说错
