@@ -18,7 +18,7 @@ import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder, termText } from './value.js';
 import { rulesOf, done as nextDone, checkMeasure, measureLine, changedKeys } from './rules.js';
 import { judge } from './referee.js';
-import { openGrabs, grabClash, placeOf, pressOf, PRESS_TEXT, ARMED_PRESS, armable } from './gestures.js';
+import { openGrabs, grabClash, placeOf, pressOf, PRESS_TEXT, ARMED_PRESS, armable, idleOf } from './gestures.js';
 
 export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 /** 扫一遍拨数：能拨到的值超过这么多就不扫（现状里只说一句太多，不让每一轮的现状变长、算得太久） */
@@ -1754,15 +1754,18 @@ export class Scene {
     const backText = (e) => `back（按钮「回到${e.name}」${this.keeps.get(e.obj)?.has(e.name) ? '' : '；还没存，按不了'}）`;
     const polText = (e) => [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、');
     const rangeText = (e) => (e.lo != null ? `，${e.lo}～${e.hi}` : '');
-    const openText = (e) => { if (e.action === 'back') return `${e.obj} ${backText(e)}`; const o = this.objects.get(e.obj); const what = (e.input ? null : affordsOf(typeOf(o))[e.action]) || gestureText(e.gesture); const pol = polText(e); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${rangeText(e)}${pol ? `；${pol}` : ''}）${hiddenNote(this.hiddenIn([e.obj]))}`; };
-    // 画面还挂不上的手势（句子的拉线，gestures.js 的 ARMED_GESTURES、ARMED_GRIPS）：不说学生能动，单独一句（开着、不默默吞掉）
+    // 画面挂得上、起点现在拿不到的（钩挂在折起来的词上，gestures.js 的 idleOf）：后面带一句为什么
+    const idleNote = (e) => { const x = idleOf(this, e); return x ? `（${x.text}）` : ''; };
+    const openText = (e) => { if (e.action === 'back') return `${e.obj} ${backText(e)}`; const o = this.objects.get(e.obj); const what = (e.input ? null : affordsOf(typeOf(o))[e.action]) || gestureText(e.gesture); const pol = polText(e); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${rangeText(e)}${pol ? `；${pol}` : ''}）${idleNote(e)}${hiddenNote(this.hiddenIn([e.obj]))}`; };
+    // 画面还挂不上的手势（gestures.js 的 ARMED_GESTURES、ARMED_GRIPS），和起点一个都拿不到的（idleOf 的 all）：不说学生能动，单独一句（开着、不默默吞掉）
     const opens = [...this.opens.values()];
-    const can = opens.filter((e) => armable(e.gesture)), cannot = opens.filter((e) => !armable(e.gesture));
+    const usable = (e) => armable(e.gesture) && !idleOf(this, e)?.all;
+    const can = opens.filter(usable), cannot = opens.filter((e) => !usable(e));
     // 一样东西同一处开着几种按法（mark 滑、fold 点、move 按住再拖）：这样东西开着的合成一行，每一项写怎么按（gestures.js 的 PRESS_TEXT）
     const grabsOf = (e) => openGrabs(e, affordsOf(typeOf(this.objects.get(e.obj))));
     const mixedOn = (id) => { const xs = can.filter((e) => e.obj === id); return xs.some((a, i) => xs.slice(i + 1).some((b) => grabClash(grabsOf(a), grabsOf(b), () => this.opensMeet(a, b)).mixed.length)); };
     const pressText = (e) => [...new Set([...grabsOf(e)].map(pressOf))].map((p) => PRESS_TEXT[p]).join(' / ');
-    const itemText = (e) => { if (e.action === 'back') return backText(e); const pol = polText(e); return `${e.refs.length ? `${e.refs.join(' ')} ` : ''}${e.action}（${pressText(e)}${rangeText(e)}${pol ? `；${pol}` : ''}）`; };
+    const itemText = (e) => { if (e.action === 'back') return backText(e); const pol = polText(e); return `${e.refs.length ? `${e.refs.join(' ')} ` : ''}${e.action}（${pressText(e)}${rangeText(e)}${pol ? `；${pol}` : ''}）${idleNote(e)}`; };
     // 画面分不清同一处的几种按法时（gestures.js 的 ARMED_PRESS.mixed 是 false；Task 11 起 pointer.js 照 choosePress 分，是 true）：同一处按下去
     // 只拿得到先挂的那一项，画面照 seq 先后挂（stage.js 的 syncOpens），所以照实写那一处现在按得出的是先开的哪一项
     const winners = (id) => {

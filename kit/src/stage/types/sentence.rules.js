@@ -11,7 +11,7 @@
 // key 的一段可以写几种成分（[Attr/NF …]）：哪一种都算对，给老师写成「定语或非谓语」。
 // 拉一条线（refer：that 指的是谁）照老师造句子时给的 links=（sentence.js 的 parseLinks）判，用 entext.js 的 judgeLinks；没写 links= 不判。
 import { judgeSpans, judgeLinks } from '../../entext.js';
-import { sentence, ordered, roleName, sameRole, phraseOf, restText, roleColor, spanText, brokenMarks, targetKey, outerFolds, foldClash, ROLE_NAMES, CLAUSE_ROLES } from './sentence.js';
+import { sentence, ordered, roleName, sameRole, phraseOf, restText, roleColor, spanText, brokenMarks, targetKey, outerFolds, foldClash, hookWords, ROLE_NAMES, CLAUSE_ROLES } from './sentence.js';
 
 export { roleName, roleAbbr, ROLE_NAMES } from './sentence.js';
 
@@ -700,8 +700,16 @@ const gestures = {
   move: { gesture: 'drop-at', from: ['bracket', 'word'], to: 'gap', toAct: moveAct },
   // open s.6 refer：从词上的钩拉一条线，松在词、括号、句子外框上：refer s.6 -> s.2 / s.4-5 / s（钩是单独的把手，和在词上拉括号不抢）；
   // 学生连的线头上的 ✕：unrefer s.6
-  refer: { gesture: 'line', from: 'hook', to: ['word', 'bracket', 'sentence'], toAct: referAct, close: { on: 'xrefer', toAct: unreferAct } },
+  refer: { gesture: 'line', from: 'hook', to: ['word', 'bracket', 'sentence'], toAct: referAct, close: { on: 'xrefer', toAct: unreferAct }, idle: referIdle },
 };
+
+// 钩挂在折起来的词上就没有钩（画面不画、学生拉不了）：舞台现状照实说（gestures.js 的 idleOf）。all：老师点了名的钩一个都挂不上
+function referIdle(o, e, scene) {
+  const { keys, folded } = hookWords(o, e, (r) => scene.parts(r));
+  if (!folded.length) return null;
+  const slot = new Map(o.words.map((w) => [w.key, w.slot]));
+  return { all: !keys.length, text: `${folded.map((k) => `${o.id}.${slot.get(k)}`).join(' ')} 折着，展开以后才能拉` };
+}
 
 // —— 挑战用的判断式（when="s parsed, s main, s span s.2-5 = V"）——
 

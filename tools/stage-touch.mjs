@@ -238,6 +238,23 @@ const xm = await decorBox('s', 'xm:');
 if (xm) await tapAt({ x: xm.cx, y: xm.cy });
 await settle();
 expect('点 ✕：多一行 unmark', await added(before), 'unmark s.7');
+// 两道学生拉的括号紧挨着（开着 mark、fold）：点右边那道的左端是折它，不收掉左边那道；点左边那道的 ✕ 正中才收掉
+await play(`sentence s = "The books on the shelf that I bought yesterday are new." key="[S The books on the shelf [RC that I [V bought] yesterday]] [V are] [P new]."
+open s mark
+open s fold`);
+await page.evaluate(async () => { for (const src of ['mark s.6-9 定语从句', 'mark s.10 谓语']) await window.LAStage.studentDo(src, { type: 'gesture', open: 'mark' }); });
+await page.waitForTimeout(800);
+before = await srcs();
+const rightBr = await decorBox('s', `br:${await markId('s', '10')}:`);
+if (rightBr) await tapAt({ x: rightBr.x + 3, y: rightBr.y + rightBr.h - 1 });
+await settle();
+expect('点右边那道括号的左端：折它（不收掉紧挨着的左边那道）', `${await added(before)} | ${await markId('s', '6 7 8 9') ? '左边那道还在' : '左边那道没了'}`, 'fold s.10 | 左边那道还在');
+await page.waitForTimeout(1900);
+before = await srcs();
+const leftX = await decorBox('s', `xm:${await markId('s', '6 7 8 9')}`);
+if (leftX) await tapAt({ x: leftX.cx, y: leftX.cy });
+await settle();
+expect('点左边那道的 ✕ 正中：收掉它', await added(before), 'unmark s.6-9');
 
 // 11. 从钩上拉线：open s.6 refer，钩只挂在 that 上；拉到 books 上松手
 await play(`sentence s = "The books on the shelf that I bought yesterday are new." key="[S The books on the shelf [RC that I [V bought] yesterday]] [V are] [P new]." links="that -> s.2"
@@ -274,6 +291,12 @@ const hk2 = await decorBox('s', 'hk:');
 if (hk2) await drag({ x: hk2.cx, y: hk2.cy }, frameAt, { steps: 14 });
 await settle();
 expect('从钩拉到句子外框：多一行 refer … -> s', await added(before), 'refer s.6 -> s');
+// 钩挂着的词折起来了：画面上没有钩，现状照实说学生现在拉不了
+await play(`sentence s = "The books on the shelf that I bought yesterday are new." key="[S The books on the shelf [RC that I [V bought] yesterday]] [V are] [P new]."
+mark s.6-9 RC
+fold s.6-9
+open s.6 refer`);
+expect('钩挂着的词折着：没有钩，现状写「s.6 折着，展开以后才能拉」', `${await page.evaluate(() => [...(window.LAStage.decors.get('s')?.keys() || [])].filter((k) => k.startsWith('hk:')).length)} | ${await page.evaluate(() => String(/页面还画不了的[^\n]*s\.6 refer[^\n]*s\.6 折着，展开以后才能拉/.test(window.LAStage.scene.stateText())))}`, '0 | true');
 
 // 12. 整张矩阵拖去比：按住 P 的括号拖到 Q 上，逐格比、两张都不变、不一样的格闪两下，P 弹回去
 await play('matrix P = 1 3 / -1 4\nmatrix Q = 1 5 / 1 4 beside=P\nopen P compare');

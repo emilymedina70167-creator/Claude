@@ -2,7 +2,7 @@
 // 折起来、展开、挪词、改写几个专门的动作；学生按住一个词拖到别处。
 // 位置全由 sentence.js 的 layout 算（这里只照着画、照着动），所以画面和给老师看的现状、贴字让开的地方一定对得上
 import { EASE, moveDuration, stagger, arcPoints } from '../motion.js';
-import { layout, setMeasure, FONTS, WORD_H, shownPunct } from './sentence.js';
+import { layout, setMeasure, FONTS, WORD_H, shownPunct, hookWords } from './sentence.js';
 import { openParts, atLeast, screenOf } from '../gesturedom.js';
 
 const tr = (x, y, s = 1) => `translate(${x}px, ${y}px)${s !== 1 ? ` scale(${s})` : ''}`;
@@ -113,27 +113,34 @@ function spanPreview(stage, o0) {
 
 // —— 学生手上的把手（第二轮 Task 11）：钩、✕、空隙、小方块、外框；位置都照 layout 算 ——
 
-// open s refer 的钩挂在哪几个词上：open 写了部件就那几个；没写看 links= 的起头（对的、列的错连都算）；再没有就每个词。折起来的词不挂
+// open s refer 的钩挂在哪几个词上（sentence.js 的 hookWords：open 写的、links= 的起头、再没有就每个词；折起来的不挂）
 function hookKeys(stage, o) {
   const e = stage.scene.opens.get(`${o.id}:refer`);
-  if (!e) return [];
-  let keys;
-  if (e.refs?.length) keys = openParts(stage, e, []).filter((p) => p.obj === o.id && p.key != null).map((p) => p.key);
-  else {
-    const from = new Set([...(o.links?.pairs || []), ...(o.links?.wrongs || [])].map((p) => String(p.from)));
-    keys = from.size ? o.words.filter((w) => from.has(String(w.key))).map((w) => w.key) : ordered(o).map((w) => w.key);
-  }
-  const folded = new Set((o.folds || []).flatMap((f) => f.keys));
-  return [...new Set(keys)].filter((k) => !folded.has(k));
+  return e ? hookWords(o, e, (r) => stage.scene.parts(r)).keys : [];
 }
 // 词的右上角：钩的那一小圈（世界坐标，18 见方）。在词框上沿外面一点：不压词，也不压词上面一排的小标签的字（标签在词正中上方）
-const HOOK = 18, X_SIZE = 20;
+const HOOK = 18, X_SIZE = 18;
 const hookBox = (b) => ({ x: b.x + b.w - HOOK + 7, y: b.y - HOOK + 5, w: HOOK, h: HOOK });
-// 学生拉的括号的 ✕：最后一截括号右下角那一道竖线的外边，在词的下沿和括号下的字中间（不压词、不压字、不压句尾的「括号外 N」）
+// 学生拉的括号的 ✕：最后一截括号右下角、竖线的里边（整个画在自己这道括号的左右之间：右边紧挨着的括号是别人的），
+// 在词的下沿和括号下的字中间（不压词、不压字、不压句尾的「括号外 N」）
 function markX(L, m) {
   const seg = L.brackets.filter((b) => b.mark === m.id).at(-1);
   if (!seg) return null;
-  return { x: seg.x + seg.w + 3 - X_SIZE / 2, y: seg.y + seg.h - 5 - X_SIZE / 2, w: X_SIZE, h: X_SIZE };
+  return { x: seg.x + seg.w - X_SIZE, y: seg.y + seg.h - 6 - X_SIZE / 2, w: X_SIZE, h: X_SIZE };
+}
+// 括号上 ✕ 的点区：44 见方，从画出来的那一小圈的上沿往下（少压上面的词），右边到自己这道括号的右端为止，
+// 不伸到右边别的括号按的那一条上（不然点右边那道的左端去折它，收掉的是左边这道）；宁可往左多盖一点自己这道括号的右端
+function markXRect(stage, id, markId, n) {
+  const v = stage.screenRect(n);
+  if (!v) return null;
+  const cx = v.x + v.w / 2;
+  let right = v.x + v.w + 2;
+  for (const [k, b] of stage.decors.get(id) || []) {
+    if (!k.startsWith('br:') || k.startsWith(`br:${markId}:`)) continue;
+    const r = bracketRect(stage, b);
+    if (r && r.x + r.w / 2 > cx && r.y < v.y + 44 && r.y + r.h > v.y) right = Math.min(right, Math.max(r.x, cx + 4));
+  }
+  return { x: right - 44, y: v.y, w: 44, h: 44 };
 }
 // 学生连的线的 ✕：拱起来的那道弧的最高处；画成「→ 整句」那种小标签的，贴在标签右边
 function referX(L, r) {
@@ -252,7 +259,7 @@ export const sentenceView = {
     sentence: (stage, o) => frameGrips(stage, o),
     xmark: (stage, o) => (o.marks || []).filter((m) => m.by === 'student').map((m) => {
       const n = () => stage.decor(o.id, `xm:${m.id}`);
-      return { key: `xm:${m.id}`, cls: '', part: () => ({ mark: m.id }), node: n, rect: () => atLeast(stage.screenRect(n())) };
+      return { key: `xm:${m.id}`, cls: '', part: () => ({ mark: m.id }), node: n, rect: () => markXRect(stage, o.id, m.id, n()) };
     }).filter((g) => g.node()),
     xrefer: (stage, o) => (o.refers || []).filter((r) => r.by === 'student').map((r) => {
       const n = () => stage.decor(o.id, `xr:${r.from}`);

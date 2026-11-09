@@ -523,6 +523,23 @@ export function outerFolds(o) {
   const fs = o?.folds || [];
   return fs.filter((f) => !fs.some((g) => g !== f && g.keys.length > f.keys.length && f.keys.every((k) => g.keys.includes(k))));
 }
+/**
+ * open s refer 的钩挂在哪几个词上（画面 sentence.view.js 照它画钩，舞台现状照它说学生能不能拉）：open 写了部件就那几个；
+ * 没写看 links= 的起头（对的、列的错连都算）；再没有就每个词。折起来的词上不挂钩（看不见）。
+ * 返回 { keys（挂得上钩的）, folded（老师点了名、现在折着的：open 写的或 links= 的起头）}。parts(ref) 是场景的 parts
+ */
+export function hookWords(o, e, parts) {
+  let keys, named = true;
+  if (e?.refs?.length) keys = e.refs.flatMap((r) => { try { return parts(r); } catch { return []; } }).filter((p) => p?.obj === o.id && p.key != null).map((p) => p.key);
+  else {
+    const from = new Set([...(o.links?.pairs || []), ...(o.links?.wrongs || [])].map((p) => String(p.from)));
+    named = from.size > 0;
+    keys = named ? o.words.filter((w) => from.has(String(w.key))).map((w) => w.key) : ordered(o).map((w) => w.key);
+  }
+  const all = new Set((o.folds || []).flatMap((f) => f.keys));
+  const uniq = [...new Set(keys)];
+  return { keys: uniq.filter((k) => !all.has(k)), folded: named ? uniq.filter((k) => all.has(k)) : [] };
+}
 /** 这个词在哪一段折起来的里面（套着的算最外层那一段：画面上它就在那个小方块里）；没折是 undefined */
 const foldOfKey = (o, k) => outerFolds(o).find((f) => f.keys.includes(k));
 /**

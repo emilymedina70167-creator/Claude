@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { gestureAct, askFor, undoLines, undoPlan, kindsOf, normValue, writeRange, UNDO_TOLD, UNDO_NO, ARMED_GESTURES, ARMED_GRIPS, ARMED_PRESS, armable, kindArmed, PRESS_OF, HOLD_MS, PRESS_TEXT, choosePress, gestureGrabs, openGrabs, AFFORD_PRESS, closeAct } from '../kit/src/stage/gestures.js';
+import { gestureAct, askFor, undoLines, undoPlan, kindsOf, normValue, writeRange, UNDO_TOLD, UNDO_NO, ARMED_GESTURES, ARMED_GRIPS, ARMED_PRESS, armable, kindArmed, PRESS_OF, HOLD_MS, PRESS_TEXT, choosePress, gestureGrabs, openGrabs, AFFORD_PRESS, closeAct, idleOf } from '../kit/src/stage/gestures.js';
 import { gestureOf } from '../kit/src/stage/rules.js';
 import { TYPES } from '../kit/src/stage/types/index.js';
 import { affordsOf } from '../kit/src/stage/scene.js';
@@ -176,6 +176,27 @@ test('拉线的手势画面挂得上（Task 11 做了钩、拉线）：写进「
   // 只有拉线的手势、没有钩也不行（钩是画法交的把手）
   ARMED_GRIPS.delete('hook');
   try { assert.equal(armable(open(s, 's:refer').gesture), false); } finally { ARMED_GRIPS.add('hook'); }
+});
+
+test('钩挂在折起来的词上：画面不挂钩，现状照实说——点了名的钩都折着时写进「页面还画不了的」、带「s.6 折着，展开以后才能拉」；折着一部分写在后面；展开以后照旧', () => {
+  const K = 'sentence s = "The books on the shelf that I bought yesterday are new." key="[S The books on the shelf [RC that I [V bought] yesterday]] [V are] [P new]."';
+  const s = run(`${K}\nmark s.6-9 RC\nopen s mark\nopen s.6 refer`);
+  assert.equal(idleOf(s, open(s, 's:refer')), null, '没折：照旧');
+  assert.match(s.stateText(), /学生能直接动的：s mark（拉一段）；s\.6 refer（拉一条线）(\n|$)/);
+  run('fold s.6-9', s);
+  assert.deepEqual(idleOf(s, open(s, 's:refer')), { all: true, text: 's.6 折着，展开以后才能拉' });
+  const t = s.stateText();
+  assert.match(t, /\n学生能直接动的：s mark（拉一段）(\n|$)/);
+  assert.match(t, /\n开着、页面还画不了的（学生现在动不了）：s\.6 refer（拉一条线）（s\.6 折着，展开以后才能拉）/);
+  assert.equal(s.clone().stateText(), t);
+  run('unfold s.6', s);
+  assert.match(s.stateText(), /学生能直接动的：s mark（拉一段）；s\.6 refer（拉一条线）(\n|$)/);
+  // links= 的起头一个折着、一个没折：照旧能拉（从没折的那个），后面带一句哪个折着
+  const l = run(`${K} links="that -> s.1-2; are -> s.1-2"\nmark s.6-9 RC\nfold s.6-9\nopen s refer`);
+  assert.deepEqual(idleOf(l, open(l, 's:refer')), { all: false, text: 's.6 折着，展开以后才能拉' });
+  assert.match(l.stateText(), /学生能直接动的：s refer（拉一条线）（s\.6 折着，展开以后才能拉）/);
+  // 没写部件、没写 links=：每个没折的词都有钩，折着的不说
+  assert.equal(idleOf(run(`${K}\nmark s.6-9 RC\nfold s.6-9\nopen s refer`), { obj: 's', action: 'refer', refs: [], gesture: gestureOf(s.objects.get('s'), 'refer') }), null);
 });
 
 test('写的值：键盘上的减号、全角斜线规整成指令里的写法', () => {

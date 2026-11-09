@@ -39,6 +39,16 @@ export function kindArmed(g, k) {
 }
 /** open 的这一项学生现在真动得了吗：不是手势表里的（拖、点开看）照旧动得了；手势表里的要有一种画面挂得上 */
 export const armable = (g) => !g || kindsOf(g).some((k) => kindArmed(g, k));
+/**
+ * 画面挂得上、可是这样东西现在的样子让学生拿不到起点的（句子的钩挂在折起来的词上）：手势表那一项写 idle(o, e, scene) →
+ * { all（一个起点都没有：学生现在动不了）, text（为什么，写给老师）} 或 null。没写、出错都当 null（照旧说学生能动）
+ */
+export function idleOf(scene, e) {
+  const g = e?.gesture;
+  const o = scene?.objects?.get(e?.obj);
+  if (typeof g?.idle !== 'function' || !o) return null;
+  try { return g.idle(o, e, scene) || null; } catch { return null; }
+}
 
 // —— 同一处的三种按法（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 2.1 节）——
 // 点一下就松（tap、write）、按下就滑（span、line：拉括号、拉线）、按住 0.35 秒托起来再拖（drop-on、drop-at：拖到上面、拖到空处）。
