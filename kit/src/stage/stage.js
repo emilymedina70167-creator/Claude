@@ -806,8 +806,10 @@ export class Stage {
     // 同一项再开一次（哪怕只换了 wrong= / call= / undo=）是新的一项：照它重挂。以前只看部件、范围、input= 变没变，
     // 还挂着旧的那一项——键盘、成分那一排按「确定」时发现那一项已经不是开着的了（gesturedom.js），悄悄收起、什么都没交
     for (const [k, a] of this.armedOpens) if (want.get(k) !== a.e) { a.off(); this.armedOpens.delete(k); }
-    // 还挂着的通用手势照东西现在的样子补挂（托盘少了一个、长出新结点、多了一道括号）
-    for (const [k, e] of want) { const a = this.armedOpens.get(k); if (!a) this.armedOpens.set(k, { off: this.armOpen(e), e }); else a.off.refresh?.(); }
+    // 还挂着的通用手势照东西现在的样子补挂（托盘少了一个、长出新结点、多了一道括号）。照开的先后（e.seq）挂：同一处挂了几种按法、
+    // 画面还分不清时（gestures.js 的 ARMED_PRESS），手指拿到的是先挂的那一项，舞台现状照这个写「先开的 …」（重挂、补挂都照它，不会变）
+    const order = [...want].sort((x, y) => (x[1].seq || 0) - (y[1].seq || 0));
+    for (const [k, e] of order) { const a = this.armedOpens.get(k); if (!a) this.armedOpens.set(k, { off: this.armOpen(e), e }); else a.off.refresh?.(); }
     this.syncUndo();
   }
   resetOpens() { this.armedOpens?.forEach((a) => a.off()); this.armedOpens = new Map(); }

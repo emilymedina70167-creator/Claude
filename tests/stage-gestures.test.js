@@ -455,8 +455,19 @@ test('✕ 收线：别的线也指着这个词时写成 unrefer s.4 -> s.1，只
   // unrefer s.4 照旧收掉两头有 s.4 的每一条（老师写的旧写法意思不变）
   const t = run(`${S}\nrefer s.6 -> s.1-5\nrefer s.4 -> s.1\nunrefer s.4`);
   assert.deepEqual(t.objects.get('s').refers, []);
-  // 写错的：这一条不在
-  assert.match(dryRun(t, 'unrefer s.4 -> s.2')[0]?.error || '', /没有/);
+  // 没有正好这一条的：照以前的意思（箭头两边写的词都算，收掉两头有这些词的每一条），不报错
+  const u = run(`${S}\nrefer s.6 -> s.1-5\nrefer s.4 -> s.1\nunrefer s.4 -> s.2`);
+  assert.deepEqual(u.objects.get('s').refers, [], 's.6 那一条指的一段里有 s.4、s.2，s.4 那一条从 s.4 起：都收掉');
+  // 两边的词都没有线：照以前报「没有箭头」
+  assert.match(dryRun(run(`${S}\nrefer s.6 -> s.1-5`), 'unrefer s.8 -> s.9')[0]?.error || '', /没有箭头/);
+  // 旧课照 log 放回（lenient）：一样照以前的意思
+  const w = run(`${S}\nrefer s.6 -> s.1-5\nrefer s.4 -> s.1`);
+  // 收的不只这一条时，不说「收掉了…」（规则的 check 不给这一句）
+  assert.equal(w.judgeLine(parseScript('unrefer s.4 -> s.3')[0], { by: 'student', open: 'refer' })?.verdict?.why ?? null, null);
+  assert.equal(w.judgeLine(parseScript('unrefer s.4')[0], { by: 'student', open: 'refer' })?.verdict?.why ?? null, null);
+  assert.match(w.judgeLine(parseScript('unrefer s.4 -> s.1')[0], { by: 'student', open: 'refer' })?.verdict?.why || '', /收掉了老师连的 s\.4 → s\.1/);
+  w.apply({ ...parseScript('unrefer s.4 -> s.3')[0], lenient: true });
+  assert.deepEqual(w.objects.get('s').refers, []);
 });
 
 test('画面还交不出的把手（空隙、小方块、✕、钩）和同一处分按法（Task 11 做）：现状不说学生能动；做好了（ARMED_GRIPS、ARMED_PRESS）照写', () => {

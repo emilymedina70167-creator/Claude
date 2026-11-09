@@ -540,6 +540,20 @@ export function foldClash(o, keys) {
   }
   return null;
 }
+/** unrefer a -> b 正好指着的那一条线：{ o, r }；写法不是「一个词 -> 一个词 / 一段 / 整句」、或者没有正好这一条，是 null */
+function exactRefer(h) {
+  let a, b;
+  try {
+    a = target({ ...h, refsIn: () => h.refsIn(h.args.slice(0, h.arrow)) }, 'unrefer');
+    b = target({ ...h, refsIn: () => h.refsIn(h.args.slice(h.arrow + 1)) }, 'unrefer');
+  } catch { return null; }
+  if (a.o !== b.o || a.whole || a.parts.length !== 1) return null;
+  const from = a.parts[0].key;
+  const whole = !!b.whole && b.refs.every((r) => r === b.o.id);
+  const to = b.parts.map((p) => p.key);
+  const r = a.o.refers.find((x) => x.from === from && (whole ? x.whole : !x.whole && sameKeys(x.toKeys || [x.to], to)));
+  return r ? { o: a.o, r } : null;
+}
 /** 一组词按现在的位置写成 s.2-5、s.3 s.7 */
 export function spanText(o, keys) {
   const slots = keys.map((k) => o.words.find((w) => w.key === k)?.slot).filter((v) => v != null).sort((a, b) => a - b);
@@ -987,20 +1001,13 @@ export const sentence = {
       o.refers.push({ from, to, toKeys: span, whole, color, by });
       return { id: o.id, from, to, ...(span ? { toKeys: span } : {}), ...(whole ? { whole: true } : {}) };
     },
-    // unrefer s.4 -> s.1：只收从 s.4 连到 s.1 的那一条（学生点线头上的 ✕ 时，别的线也指着 s.4，页面写成这样，不连带收掉别的）
+    // unrefer s.4 -> s.1：正好有从 s.4 连到 s.1 的那一条，就只收它（学生点线头上的 ✕ 时，别的线也指着 s.4，页面写成这样，不连带收掉别的）；
+    // 没有正好这一条的照以前的意思：箭头两边写的词都算，收掉两头有这些词的每一条（旧课照 log 放回一样）
     unrefer(scene, c, h) {
-      if (h.arrow >= 0) {
-        const a = target({ ...h, refsIn: () => h.refsIn(h.args.slice(0, h.arrow)) }, 'unrefer');
-        const b = target({ ...h, refsIn: () => h.refsIn(h.args.slice(h.arrow + 1)) }, 'unrefer');
-        if (a.o !== b.o || a.whole || a.parts.length !== 1) throw new Error(`要写成 unrefer ${a.o.id}.3 -> ${a.o.id}.2（只收从 s.3 连到 s.2 的那一条），或者 unrefer ${a.o.id}.3（收掉两头有 s.3 的每一条）`);
-        const from = a.parts[0].key;
-        const wantWhole = !!b.whole && b.refs.every((r) => r === b.o.id);
-        const to = new Set(b.parts.map((p) => p.key));
-        const same = (r) => r.from === from && (wantWhole ? r.whole : !r.whole && sameKeys(r.toKeys || [r.to], [...to]));
-        const gone = a.o.refers.filter(same);
-        if (!gone.length) throw new Error(`${a.o.id} 上没有从 ${a.refs.join(' ')} 连到 ${b.refs.join(' ')} 的箭头`);
-        a.o.refers = a.o.refers.filter((r) => !gone.includes(r));
-        return { id: a.o.id };
+      const one = h.arrow >= 0 ? exactRefer(h) : null;
+      if (one) {
+        one.o.refers = one.o.refers.filter((r) => r !== one.r);
+        return { id: one.o.id };
       }
       const { o, parts, whole } = target(h, 'unrefer');
       const keys = new Set(parts.map((p) => p.key));

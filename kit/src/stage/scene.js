@@ -1138,7 +1138,9 @@ export class Scene {
         if (o.live || (r.mark && this.parts(target).some((p) => p.live))) throw new Error(`${o.live ? o.id : target} 是跟着算的，学生动不了`);
         t.canOpen?.(this, o, action, h);
         const policy = policyIn(opts, rules, { label: t.label, id: o.id, action });
-        const e = { obj: o.id, action, refs: r.mark ? [target] : [], lo: null, hi: null, policy, gesture: gestures[action] || null };
+        // seq：第几个开的（同一项再开一次算新开的）。画面照它的先后挂手指（stage.js 的 syncOpens），同一处按法分不清时先开的那一项按得出
+        const seq = 1 + Math.max(0, ...[...this.opens.values()].map((x) => x.seq || 0));
+        const e = { obj: o.id, action, refs: r.mark ? [target] : [], lo: null, hi: null, policy, gesture: gestures[action] || null, seq };
         // input=keypad：写一个值的手势用数字键盘（open M edit input=keypad）；不写照旧（矩阵的 edit 是 ± 拨数器）
         if (opts.input != null) {
           if (opts.input !== 'keypad') throw new Error(`input= 只能写 keypad（数字键盘，能写分数、负数），没有「${opts.input}」`);
@@ -1751,15 +1753,29 @@ export class Scene {
     const mixedOn = (id) => { const xs = can.filter((e) => e.obj === id); return xs.some((a, i) => xs.slice(i + 1).some((b) => grabClash(grabsOf(a), grabsOf(b), () => this.opensMeet(a, b)).mixed.length)); };
     const pressText = (e) => [...new Set([...grabsOf(e)].map(pressOf))].map((p) => PRESS_TEXT[p]).join(' / ');
     const itemText = (e) => { if (e.action === 'back') return backText(e); const pol = polText(e); return `${e.refs.length ? `${e.refs.join(' ')} ` : ''}${e.action}（${pressText(e)}${rangeText(e)}${pol ? `；${pol}` : ''}）`; };
-    // 画面还分不清同一处的几种按法（Task 11 以前）：照实说学生在同一处只按得出一种
-    const mixNote = ARMED_PRESS.mixed ? '' : '（页面还分不清同一处的几种按法：学生在同一处只按得出其中一种）';
-    const canItems = [];
+    // 画面还分不清同一处的几种按法（Task 11 以前）：同一处按下去只拿得到先挂的那一项，画面照 seq 先后挂（stage.js 的 syncOpens），
+    // 所以照实写那一处现在按得出的是先开的哪一项
+    const winners = (id) => {
+      const xs = can.filter((e) => e.obj === id);
+      const out = [];
+      for (const gr of new Set(xs.flatMap((e) => [...grabsOf(e)]))) {
+        const at = xs.filter((e) => [...grabsOf(e)].some((g) => placeOf(g) === placeOf(gr)));
+        if (new Set(at.flatMap((e) => [...grabsOf(e)].filter((g) => placeOf(g) === placeOf(gr)).map(pressOf))).size < 2) continue;
+        const first = at.reduce((a, b) => ((b.seq || 0) < (a.seq || 0) ? b : a));
+        if (!out.includes(first)) out.push(first);
+      }
+      return out;
+    };
+    const mixNote = (id) => (ARMED_PRESS.mixed ? '' : `；页面还分不清同一处的几种按法，那一处现在只按得出先开的 ${winners(id).map((e) => e.action).join('、')}`);
+    const canItems = [], merged = [];
     for (const e of can) {
       if (!mixedOn(e.obj)) { canItems.push(openText(e)); continue; }
-      if (can.find((x) => x.obj === e.obj) !== e) continue; // 合成的那一行放在这样东西第一项的位置
-      canItems.push(`${e.obj} 开着：${can.filter((x) => x.obj === e.obj).map(itemText).join('、')}${mixNote}${hiddenNote(this.hiddenIn([e.obj]))}`);
+      if (can.find((x) => x.obj === e.obj) !== e) continue;
+      // 合成的那一行自己一行（「s 开着：…」，开着就是学生能直接动的），跟在「学生能直接动的」后面
+      merged.push(`${e.obj} 开着：${can.filter((x) => x.obj === e.obj).map(itemText).join('、')}${mixNote(e.obj)}${hiddenNote(this.hiddenIn([e.obj]))}`);
     }
     if (canItems.length) lines.push(`学生能直接动的：${canItems.join('；')}`);
+    lines.push(...merged);
     if (cannot.length) lines.push(`开着、页面还画不了的（学生现在动不了）：${cannot.map(openText).join('；')}`);
     // 存档点：每样东西存着哪几个名字（back t "名字" 回去）、页面以后替老师存的
     for (const id of this.objects.keys()) {

@@ -317,6 +317,14 @@ function unreferCheck(o, act) {
   const w = ws[Number(act.from) - 1];
   const r = w && (o.refers || []).find((x) => x.from === w.key);
   if (!r) return { legal: true, right: null };
+  // 这一行收的不只这一条（unrefer s.4 还收指着 s.4 的线；unrefer s.4 -> s.2 没有正好这一条，照旧收两头的每一条）：不说「收掉了…」这一句
+  const hits = (x) => x.from === w.key || x.to === w.key || (x.toKeys || []).includes(w.key);
+  if (!act.to && (o.refers || []).some((x) => x !== r && hits(x))) return { legal: true, right: null };
+  if (act.to) {
+    const want = act.to.whole ? null : ws.slice(act.to.from - 1, act.to.to).map((x) => x.key);
+    const same = act.to.whole ? r.whole : !r.whole && sameSet(r.toKeys || [r.to], want);
+    if (!same) return { legal: true, right: null };
+  }
   const toKeys = r.whole ? null : r.toKeys || [r.to];
   const end = r.whole ? `${o.id}（整句）` : spanText(o, toKeys);
   const L = o.links;
