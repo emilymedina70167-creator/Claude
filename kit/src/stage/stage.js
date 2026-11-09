@@ -1674,6 +1674,8 @@ export function actText(act) {
       const now = act.summary ? `（${act.summary}）` : '';
       return act.name != null ? `学生点了「回到${act.name}」：${act.obj} 回到了${act.name}的样子${now}` : `学生让 ${act.obj} 回到了上一下之前的样子${now}`;
     }
+    // 学生点 ✕ 收掉自己拉的括号、连的线：裁判（规则的 check）交的那一句就是整句话（「学生收掉了自己拉的 s.3 V（…）」），不再写指令
+    if ((act.type === 'unmark' || act.type === 'unrefer') && act.verdict?.why) return `学生${act.verdict.why}`;
     // 过了裁判的一下（rotate、rowop、mark……）：学生那一行指令，后面是这一下做了什么（裁判的结论 events.js 接着写）
     if (act.src && act.verdict) return `学生 ${act.src}${act.verdict.why && act.verdict.legal !== false ? `（${act.verdict.why}）` : ''}`;
     // 通用手势做的、页面不判的一下（键盘写一格、折起一段）：照那一行写

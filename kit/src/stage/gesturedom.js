@@ -8,7 +8,7 @@
 import { EASE } from './motion.js';
 import { pickTarget } from './layout.js';
 import { parseScript } from './script.js';
-import { gestureAct, askFor, kindsOf, writeRange } from './gestures.js';
+import { gestureAct, askFor, kindsOf, kindArmed, writeRange } from './gestures.js';
 import { openKeypad, openChoices } from './keypad.js';
 import { reportError } from '../errlog.js';
 
@@ -82,7 +82,8 @@ function placeAbove(stage, n, a) {
 export function armGesture(stage, e, view, done) {
   const g = e.gesture;
   if (!g || !view?.grips) return Object.assign(() => {}, { refresh() {} });
-  const kinds = kindsOf(g);
+  // 画法还交不出把手的那一种不挂（gestures.js 的 ARMED_GRIPS：句子挪一段要的空隙还没画，挂上了拎得起来放不下，还抢拉括号的手指）
+  const kinds = kindsOf(g).filter((k) => kindArmed(g, k));
   const obj = () => stage.scene.objects.get(e.obj);
   // 画法交的把手出错：这一种手势就没了，记进出错记录（不默默吞掉）
   const gripsOf = (name) => {

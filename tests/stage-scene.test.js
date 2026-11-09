@@ -1563,3 +1563,52 @@ test('撞名两头都报：先直接写 goal g2 再预写 goal g2；先预写 go
   const r2 = run(new Scene(), `${K312}\n@g1 goal g2 "预写的 g2" when="k sorted desc"`);
   assert.doesNotThrow(() => r2.apply({ ...one('goal g2 "老师的 g2" when="k.1 = 2"'), lenient: true, replay: true }));
 });
+
+// —— 同一处的三种按法（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 2.1 节）——
+test('三种按法能一起开：同一句上 mark（滑）、fold（点）、move（按住再拖）都开得了；现状里这样东西合成一行写怎么按', async () => {
+  const { ARMED_GRIPS, ARMED_PRESS } = await import('../kit/src/stage/gestures.js');
+  const s = run(new Scene(), 'sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."');
+  for (const l of ['open s mark', 'open s fold', 'open s move']) assert.deepEqual(dryRun(s, l), [], l);
+  run(s, 'open s mark\nopen s fold\nopen s move');
+  assert.deepEqual([...s.opens.keys()], ['s:mark', 's:fold', 's:move']);
+  // 画面做好了（Task 11：空隙能放、同一处分得清按法）：一行写全
+  ARMED_GRIPS.add('gap');
+  ARMED_PRESS.mixed = true;
+  try {
+    assert.match(s.stateText(), /\n学生能直接动的：s 开着：mark（滑）、fold（点）、move（按住再拖）(\n|$)/);
+  } finally { ARMED_GRIPS.delete('gap'); ARMED_PRESS.mixed = false; }
+  // 画面还没做好：不说学生能拖一段、说清楚同一处只按得出一种（不说假话）
+  const t = s.stateText();
+  assert.match(t, /\n学生能直接动的：s 开着：mark（滑）、fold（点）（页面还分不清同一处的几种按法：学生在同一处只按得出其中一种）\n/);
+  assert.match(t, /\n开着、页面还画不了的（学生现在动不了）：s move（拖到空处）/);
+  // 写了 wrong= / undo= 的照旧写在后面；写了部件的写部件
+  run(s, 'open s mark wrong=mark undo=on');
+  ARMED_GRIPS.add('gap');
+  ARMED_PRESS.mixed = true;
+  try { assert.match(s.stateText(), /s 开着：mark（滑；wrong=mark、undo=on）、fold（点）、move（按住再拖）/); } finally { ARMED_GRIPS.delete('gap'); ARMED_PRESS.mixed = false; }
+  // 树：拖（按住再拖）和摘叶子（点）
+  const tr = run(new Scene(), 'tree t = 50 30 60 20 40\nopen t\nopen t pluck');
+  ARMED_PRESS.mixed = true;
+  try { assert.match(tr.stateText(), /学生能直接动的：t 开着：drag（按住再拖）、pluck（点）/); } finally { ARMED_PRESS.mixed = false; }
+  // 只开一种、同一处没有别的按法：照旧一项一项写（旧课的现状一字不变）
+  assert.match(run(new Scene(), 'tree t = 50 30 70 tray="47"\nopen t rotate\nopen t insert').stateText(), /学生能直接动的：t rotate（拖到上面）；t insert（拖到空处）/);
+  assert.match(run(new Scene(), 'tree t = 50 30\nopen t pluck').stateText(), /学生能直接动的：t pluck（点）/);
+  // 克隆出来的现状一样
+  assert.equal(s.clone().stateText(), s.stateText());
+});
+
+test('按法一样的照旧报：两项都是点、都是按住再拖；按法不一样的不报（拖结点和摘叶子以前算抢同一个部件）', () => {
+  const T = 'tree t = 50 30 60 20 40';
+  assert.match(dryRun(run(new Scene(), `${T}\nopen t pluck`), 'open t delete')[0]?.error || '', /都是点/);
+  assert.deepEqual(dryRun(run(new Scene(), `${T}\nopen t rotate`), 'open t pluck'), []);
+  assert.match(dryRun(run(new Scene(), `${T}\nopen t`), 'open t rotate')[0]?.error || '', /都是按住再拖/);
+  assert.deepEqual(dryRun(run(new Scene(), `${T}\nopen t`), 'open t pluck'), []);
+  // 写的部件不重叠的：照旧不抢
+  assert.deepEqual(dryRun(run(new Scene(), `${T}\nopen t.20 pluck`), 'open t.30 delete'), []);
+  // 同一项再开一次是换掉它
+  assert.deepEqual(dryRun(run(new Scene(), `${T}\nopen t pluck`), 'open t pluck'), []);
+  // 句子：mark 和拖词、move 和拖词
+  const S = 'sentence s = "The man is a doctor."';
+  assert.deepEqual(dryRun(run(new Scene(), `${S}\nopen s`), 'open s mark'), []);
+  assert.match(dryRun(run(new Scene(), `${S}\nopen s`), 'open s move')[0]?.error || '', /都是按住再拖/);
+});

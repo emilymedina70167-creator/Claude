@@ -358,7 +358,14 @@ test('手势表：从一个词拉到另一个词再点成分 → mark；点一�
   assert.ok(f.toAct(S(s), { to: word(8) }).error, '这个词不在括号里');
   run(s, 'fold s.3-6');
   assert.equal(S(s).folds.length, 1);
-  assert.ok(f.toAct(S(s), { to: { mark: m.id } }).error, '已经折起来了');
+  // 点括号折、里层折着也行（套着折，第二轮）：外面那道主语括号照样折得起来
+  run(s, 'mark s.1-6 S');
+  const outer = S(s).marks.find((x) => x.label === 'S');
+  assert.deepEqual(f.toAct(S(s), { to: { mark: outer.id } }), { act: { type: 'fold', from: 1, to: 6 }, src: 'fold s.1-6' });
+  // 折起来的那一道本身（小方块就是它）再折一次：没意思，说一声
+  assert.match(f.toAct(S(s), { to: { mark: m.id } }).error, /已经折起来了/);
+  // 点小方块是展开：unfold 这一段的第一个词
+  assert.deepEqual(f.toAct(S(s), { from: { pill: S(s).folds[0].id } }), { act: { type: 'unfold', at: 3 }, src: 'unfold s.3' });
 });
 
 test('key 的状态：收下了 / rewrite 以后作废 / move 拆散了一段，老师在「舞台现在」和下一步里看得到', () => {
@@ -846,4 +853,58 @@ test('changed：挪了的词（ask pick 交了以后和真变了的比）——�
   // 拉一道括号：词没挪，不算
   const mk = at('mark s.1-2 S');
   assert.deepEqual(R.changed(mk.before, mk.o, mk.fx), []);
+});
+
+// —— 学生做的自己收掉（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 2.4 节）——
+test('收掉自己拉的：点 ✕ 那一下写给老师「学生收掉了自己拉的 s.3 V（…；这一道 key 里没有 / 有，是 …）」，页面不判', async () => {
+  const { closeAct } = await import('../kit/src/stage/gestures.js');
+  const { actText } = await import('../kit/src/stage/stage.js');
+  const KIDS = 'sentence s = "Kids love language-acquisition games." key="[S Kids] [V love] [O language-acquisition games]."';
+  const s = make(`${KIDS}\nopen s mark`);
+  const e = s.opens.get('s:mark');
+  // ✕ 那一下照真页面走：closeAct 翻成一行、过裁判（stage.js 的 judgedAct 挂 src 和结论）、actText 写给老师
+  const told = (sc, id) => {
+    const r = closeAct(sc, e, { from: { mark: id } });
+    const j = sc.judgeLine(parseScript(r.src)[0], { by: 'student', open: 'mark' });
+    return { r, j, text: actText({ ...r.act, open: 'mark', src: j.src, verdict: j.verdict }) };
+  };
+  stuMark(s, 'mark s.3 V');
+  const a = told(s, S(s).marks[0].id);
+  assert.equal(a.r.src, 'unmark s.3');
+  assert.equal(a.j.verdict.right, null, '不判');
+  assert.equal(a.j.apply, true);
+  assert.equal(a.text, '学生收掉了自己拉的 s.3 V（language-acquisition；这一道 key 里没有）');
+  // key 里有这一段：说 key 里是什么
+  const s2 = make(`${KIDS}\nopen s mark`);
+  stuMark(s2, 'mark s.3-4 宾语');
+  assert.equal(told(s2, S(s2).marks[0].id).text, '学生收掉了自己拉的 s.3-4 宾语（language-acquisition games；这一道 key 里有，是 O）');
+  stuMark(s2, 'mark s.2 主语');
+  assert.equal(told(s2, S(s2).marks.find((m) => m.label === '主语').id).text, '学生收掉了自己拉的 s.2 主语（love；这一道 key 里有，是 V）');
+  // 没写 key：括号里只写那几个词
+  const s3 = make('sentence s = "Kids love language-acquisition games."\nopen s mark');
+  stuMark(s3, 'mark s.3-4 宾语');
+  assert.equal(told(s3, S(s3).marks[0].id).text, '学生收掉了自己拉的 s.3-4 宾语（language-acquisition games）');
+  // 照演：括号没了，写了 undo=on 照样能撤（是从 mark 那一项来的一下）
+  const fx = s.apply(parseScript('unmark s.3')[0], { by: 'student', open: 'mark' });
+  assert.ok(!fx.blocked);
+  assert.equal(S(s).marks.length, 0);
+  // 老师写的 unmark 照演、不说什么
+  const t = make(`${KIDS}\nmark s.2 V`);
+  assert.equal(t.judgeLine(parseScript('unmark s.2')[0], { by: 'teacher' })?.facts?.length || 0, 0);
+});
+
+test('收掉自己连的线：点 ✕ 那一下写给老师「学生收掉了自己连的 …」，照 links= 说这一条对不对得上', async () => {
+  const { closeAct } = await import('../kit/src/stage/gestures.js');
+  const { actText } = await import('../kit/src/stage/stage.js');
+  const s = make('sentence s = "The books on the shelf that I bought yesterday are new." links="that -> books; !that -> shelf=就近连了名词"\nopen s.6 refer');
+  const e = s.opens.get('s:refer');
+  const told = (src) => {
+    s.apply(parseScript(src)[0], { by: 'student', open: 'refer' });
+    const r = closeAct(s, e, { from: { refer: 6 } });
+    const j = s.judgeLine(parseScript(r.src)[0], { by: 'student', open: 'refer' });
+    return actText({ ...r.act, open: 'refer', src: j.src, verdict: j.verdict });
+  };
+  assert.equal(told('refer s.6 -> s.5'), '学生收掉了自己连的 s.6 → s.5（that → shelf；是你在 links= 里列的错连）');
+  assert.equal(told('refer s.6 -> s.2'), '学生收掉了自己连的 s.6 → s.2（that → books；links= 里有这一条）');
+  assert.equal(told('refer s.6 -> s.8'), '学生收掉了自己连的 s.6 → s.8（that → bought；links= 里没有这一条）');
 });

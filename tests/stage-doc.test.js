@@ -177,7 +177,7 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
   const fails = [
     [A, 'goal g1 "x" when="a.1 = ago"', /不是舞台上的东西/], [`${T}\nopen t rotate`, '@t.wrong say "x"', /不能预写/],
     [`${M}\ngoal g1 "x" when="m stairs"`, '@g1 stairs m', /阶梯形/], ['sentence s = "The man is a doctor."\nopen s mark', '@s.done say "x"', /key/],
-    ['tree t = 50 30 70\nopen t', 'open t rotate', /一次开一种/], [M, 'open m edit wrong=mark', /判不了对错/],
+    ['tree t = 50 30 70\nopen t', 'open t rotate', /都是按住再拖/], ['tree t = 50 30 70\nopen t pluck', 'open t delete', /都是点/], ['tree t = 50 30 70 tray="47"\nopen t insert', 'open t place', /都是按住再拖/], [M, 'open m edit wrong=mark', /判不了对错/],
     [M, 'rowop m r2 + k r1', /看不懂/], [P, 'transform p = 1 {k} / 0 1', /2×2 矩阵/],
     [P, 'vec p w = A v', /vec p w = \{A v\}/], [A, 'ask value "?" type=en', /没写 answer=/], [M, 'matrix N = 1 {k / 0 1', /没有收尾/],
     [`${M}\nmatrix N = 1 {k} / 0 1`, 'open N edit', /跟着算的/], [M, 'matrix X = 1 {2 A}', /算出来是矩阵/],
@@ -205,6 +205,25 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
   said('sentence', gestureAct(s, s.opens.get('s:mark'), { from: s.parts('s.1')[0], to: s.parts('s.6')[0], role: subj.value }).src);
   s = run('sentence s = "The man who lives next door is a doctor."\nmark s.3-6 RC\nopen s fold');
   said('sentence', gestureAct(s, s.opens.get('s:fold'), { to: s.parts('s.4')[0] }).src);
+  // 点小方块展开；同一句上拉、折、挪能一起开（说明里写的按法）
+  s = run('sentence s = "The man who lives next door is a doctor."\nfold s.3-6\nopen s fold');
+  said('sentence', gestureAct(s, s.opens.get('s:fold'), { from: { pill: s.objects.get('s').folds[0].id } }).src);
+  assert.deepEqual(dryRun(run('sentence s = "The man who lives next door is a doctor."\nopen s mark\nopen s fold'), 'open s move'), []);
+  s = run('sentence s = "The man who lives next door is a doctor."\nmark s.3-6 RC\nopen s move');
+  said('sentence', gestureAct(s, s.opens.get('s:move'), { from: { mark: s.objects.get('s').marks[0].id }, to: { gap: { after: 9 } } }).src);
+  said('sentence', gestureAct(s, s.opens.get('s:move'), { from: s.parts('s.7')[0], to: { gap: { after: 0 } } }).src);
+  // ✕：学生拉的括号点了收掉
+  s = run('sentence s = "The man who lives next door is a doctor."\nopen s mark');
+  s.apply(parseScript('mark s.1-6 主语')[0], { by: 'student', open: 'mark' });
+  const { closeAct } = await import('../kit/src/stage/gestures.js');
+  said('sentence', closeAct(s, s.opens.get('s:mark'), { from: { mark: s.objects.get('s').marks[0].id } }).src);
+  // 树：摘叶子、删
+  s = run('tree t = 50 30 70 20 40 _ 80\nopen t pluck');
+  said('tree', gestureAct(s, s.opens.get('t:pluck'), { from: s.parts('t.20')[0] }).src);
+  assert.match(gestureAct(s, s.opens.get('t:pluck'), { from: s.parts('t.30')[0] }).error, /只能摘叶子/);
+  assert.match(TYPES.tree.doc, /^open t pluck[^\n]*只能摘叶子/m);
+  s = run('tree t = 50 30 70 20 40 _ 80\nopen t delete');
+  said('tree', gestureAct(s, s.opens.get('t:delete'), { from: s.parts('t.30')[0] }).src);
   // 说明的例句里 s.3 是 who（指 The man）：从它的钩拉到 man、拉到 The man 那一段，页面交出的两行都写在说明里
   s = run('sentence s = "The man who lives next door is a doctor."\nopen s.3 refer\nmark s.1-2 主语');
   said('sentence', gestureAct(s, s.opens.get('s:refer'), { from: s.parts('s.3')[0], to: s.parts('s.2')[0] }).src);
@@ -229,6 +248,11 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
 
 test('说明里写的两条开法：同一项再开一次是换掉它（照新写的 wrong= / range= / undo=）；预写的行照写的先后排着', () => {
   assert.match(STAGE_COMMON, /同一项再开一次是换掉它：再写一遍 open，照新写的 wrong=、range=、undo= 办/);
+  // 第二轮：同一处按法不一样的能一起开（以前「一次开一种」），按法一样的第二项照旧当场报
+  assert.match(STAGE_COMMON, /同一处按法不一样的（点、滑、按住再拖）能一起开[^\n]*按法一样的[^\n]*第二项当场报错，先 close 前一项/);
+  assert.doesNotMatch(STAGE_COMMON, /一次开一种/);
+  assert.doesNotMatch(TYPES.sentence.doc, /一次开一种/, '句子的 fold 能和 mark、move 一起开');
+  assert.match(TYPES.tree.doc, /open t place[^\n]*和 insert 一次开一种/, '放托盘和插托盘都是按住托盘拖：照旧一次开一种');
   assert.match(STAGE_COMMON, /预写的行照先后演，say 要等读完：换 open、出新 goal 写在 say 前面/);
   const run = (src) => { const s = new Scene(); for (const c of parseScript(src)) s.apply(c); return s; };
   // 再写一遍：不报「一次开一种」，换成新的办法

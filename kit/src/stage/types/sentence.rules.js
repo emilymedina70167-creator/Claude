@@ -6,12 +6,12 @@
 // 只有「谓语只圈了一半」挑说法时看一眼 be / have 后面是不是分词）。认不出就不说，宁可 misread 是 null，也不给老师写错的事实。
 // 一段 = 现在连着的几个词（从第几个到第几个）。拉对一段：舞台上有一道括号正好是 key 里的这一段、成分一样
 // （成分名照 sentence.js 的 roleName / sameRole 对：V 和「谓语」是一个，分词、to do 是非谓语，只写「从句」对得上任何一种从句）。
-// 拉错了的括号留着也不碍事（舞台上没有让学生收括号的手势），只看 key 里的每一段有没有拉对。
+// 拉错了的括号留着也不碍事（学生也能点 ✕ 收掉自己拉的，不判），只看 key 里的每一段有没有拉对。
 // key 可以不全（老师只拉了要讲的几段）：学生拉了 key 没拉、也不和 key 冲突的一段，页面不判（right 是 null），不说「不对」。
 // key 的一段可以写几种成分（[Attr/NF …]）：哪一种都算对，给老师写成「定语或非谓语」。
 // 拉一条线（refer：that 指的是谁）照老师造句子时给的 links=（sentence.js 的 parseLinks）判，用 entext.js 的 judgeLinks；没写 links= 不判。
 import { judgeSpans, judgeLinks } from '../../entext.js';
-import { sentence, ordered, roleName, sameRole, phraseOf, restText, roleColor, spanText, brokenMarks, targetKey, ROLE_NAMES, CLAUSE_ROLES } from './sentence.js';
+import { sentence, ordered, roleName, sameRole, phraseOf, restText, roleColor, spanText, brokenMarks, targetKey, outerFolds, foldClash, ROLE_NAMES, CLAUSE_ROLES } from './sentence.js';
 
 export { roleName, roleAbbr, ROLE_NAMES } from './sentence.js';
 
@@ -274,6 +274,8 @@ function conflictOf(o, ks, a, b, name) {
 // mark { from, to, role }：from / to 是现在第几个词（和 mark s.2-5 V 一样），role 是括号下写的成分；refer 见 referCheck
 function check(o, act) {
   if (act?.type === 'refer') return referCheck(o, act);
+  if (act?.type === 'unmark') return unmarkCheck(o, act);
+  if (act?.type === 'unrefer') return unreferCheck(o, act);
   if (act?.type !== 'mark') return { legal: true, right: null }; // 折起来、挪词这些不判
   const n = o.words.length;
   const ks = keySpans(o);
@@ -294,6 +296,38 @@ function check(o, act) {
   // 认得出的四种错法都落在和 key 重叠的段上；别的段和 key 不冲突就不判（key 没拉的，页面不知道对不对）
   if (!misread && !conflictOf(o, ks, a, b, name)) return { legal: true, right: null, misread: null, why, next: null };
   return { legal: true, right: false, misread, why, next: nowRight(o, ks, rel) };
+}
+
+// —— 收掉（unmark / unrefer：学生点 ✕）：不判，交一句「收掉了…」给老师（stage.js 的 actText 照它写「学生收掉了自己拉的 …」）——
+
+const sameSet = (a, b) => a.length === b.length && a.every((k) => b.includes(k));
+const wordsOf = (o, keys) => phraseOf(ordered(o).filter((w) => keys.includes(w.key)));
+// 收掉了自己拉的 s.21 V（language-acquisition；这一道 key 里没有 / 这一道 key 里有，是 V）：照括号上写的写；没写 key 括号里只写那几个词
+function unmarkCheck(o, act) {
+  const keys = act.keys || [];
+  const m = (o.marks || []).find((mk) => sameSet(mk.keys, keys));
+  if (!m) return { legal: true, right: null }; // 没有正好这几个词的一道（unmark 自己会收里面的或报错）：不说什么
+  const sp = o.key && !o.key.void ? o.key.spans.find((x) => sameSet(x.keys, m.keys)) : null;
+  const note = o.key && !o.key.void ? (sp ? `；这一道 key 里有，是 ${(sp.roles || [sp.role]).join('/')}` : '；这一道 key 里没有') : '';
+  return { legal: true, right: null, misread: null, why: `收掉了${m.by === 'student' ? '自己' : '老师'}拉的 ${spanText(o, m.keys)} ${m.label}（${wordsOf(o, m.keys)}${note}）`, next: null };
+}
+// 收掉了自己连的 s.6 → s.5（that → shelf；links= 里有这一条 / 是你在 links= 里列的错连 / links= 里没有这一条）；没写 links= 只写两头
+function unreferCheck(o, act) {
+  const ws = ordered(o);
+  const w = ws[Number(act.from) - 1];
+  const r = w && (o.refers || []).find((x) => x.from === w.key);
+  if (!r) return { legal: true, right: null };
+  const toKeys = r.whole ? null : r.toKeys || [r.to];
+  const end = r.whole ? `${o.id}（整句）` : spanText(o, toKeys);
+  const L = o.links;
+  let note = '';
+  if (L && !L.void) {
+    const key = referKey(r);
+    if (L.pairs.some((p) => p.from === r.from && targetKey(p.to) === key)) note = '；links= 里有这一条';
+    else if (L.wrongs.some((x) => x.from === r.from && targetKey(x.to) === key)) note = '；是你在 links= 里列的错连';
+    else note = '；links= 里没有这一条';
+  }
+  return { legal: true, right: null, misread: null, why: `收掉了${r.by === 'student' ? '自己' : '老师'}连的 ${o.id}.${w.slot} → ${end}（${w.value} → ${r.whole ? '整句' : wordsOf(o, toKeys)}${note}）`, next: null };
 }
 
 // —— 拉一条线（refer：that 指的是谁）——
@@ -443,14 +477,25 @@ const labelSrc = (label) => (/[\s="]/.test(label) ? (label.includes('"') ? `「$
 export function actSrc(o, act) {
   if (act.type === 'mark') return `mark ${at(o, act.from, act.to)} ${labelSrc(act.role)}`;
   if (act.type === 'fold') return `fold ${at(o, act.from, act.to)}`;
+  if (act.type === 'unfold') return `unfold ${o.id}.${act.at}`;
   if (act.type === 'refer') return `refer ${at(o, act.from, act.from)} -> ${act.to?.whole ? o.id : at(o, act.to.from, act.to.to)}`;
+  // 挪到两个词之间：after 是挪到第几个词后面（照挪之前的位置），0 是挪到第一个词前面
+  if (act.type === 'move') return `move ${at(o, act.from, act.to)} ${act.after === 0 ? `before ${o.id}.1` : `after ${o.id}.${act.after}`}`;
+  if (act.type === 'unmark') return `unmark ${spanText(o, act.keys)}`;
+  // 收一条线：只写起头的词（unrefer s.23）；别的线也指着这个词时写到它连的那头，只收这一条（unrefer s.4 -> s.1）
+  if (act.type === 'unrefer') return `unrefer ${o.id}.${act.from}${act.to ? ` -> ${act.to.whole ? o.id : at(o, act.to.from, act.to.to)}` : ''}`;
   throw new Error(`句子没有「${act.type}」这个动作`);
 }
 const made = (o, act) => ({ act, src: actSrc(o, act) });
 
-/** 一行镜头指令 → check 认的动作（actSrc 倒过来）：mark s.2-4 V（连着的一段）、refer s.6 -> s.2 / s.1-2 / s。折起来、挪词这些不判，给 null */
+/**
+ * 一行镜头指令 → check 认的动作（actSrc 倒过来）：mark s.2-4 V（连着的一段）、refer s.6 -> s.2 / s.1-2 / s；
+ * unmark s.2-5、unrefer s.23（学生点 ✕ 收掉自己拉的：不判，check 交一句「收掉了…」）。折起来、挪词这些不判，给 null
+ */
 function lineAct(o, c, h) {
   if (c.cmd === 'refer') return referLineAct(o, h);
+  if (c.cmd === 'unmark') return unmarkLineAct(o, h);
+  if (c.cmd === 'unrefer') return unreferLineAct(o, h);
   if (c.cmd !== 'mark') return null;
   const refs = h.refsIn().filter((w) => String(w).match(/^[A-Za-z_]\w*/)?.[0] === o.id);
   if (!refs.length || refs.includes(o.id)) return null;
@@ -473,6 +518,26 @@ function referLineAct(o, h) {
   return { type: 'refer', from, to: { from: slots[0], to: slots.at(-1) } };
 }
 
+const ownRefs = (o, h, args) => h.refsIn(args).filter((w) => String(w).match(/^[A-Za-z_]\w*/)?.[0] === o.id);
+// unmark s.2-5：收掉正好这几个词的那一道（整句、按成分收的 unmark s 主语 不是 ✕ 那种一道，给 null）
+function unmarkLineAct(o, h) {
+  const refs = ownRefs(o, h);
+  if (!refs.length || refs.includes(o.id) || restText(h, refs).trim()) return null;
+  const keys = [...new Set(refs.flatMap((r) => h.scene.parts(r)).map((p) => p.key))];
+  return keys.length ? { type: 'unmark', keys } : null;
+}
+// unrefer s.23 / unrefer s.4 -> s.1：从一个词起头的那条线（写了好几个词、整句的不是 ✕ 那种一条，给 null）
+function unreferLineAct(o, h) {
+  const arrow = h.arrow ?? -1;
+  const left = ownRefs(o, h, arrow >= 0 ? h.args.slice(0, arrow) : undefined);
+  if (left.length !== 1 || left[0] === o.id) return null;
+  const ps = h.scene.parts(left[0]);
+  if (ps.length !== 1) return null;
+  if (arrow < 0) return { type: 'unrefer', from: ps[0].slot };
+  const r = referLineAct(o, h);
+  return r ? { type: 'unrefer', from: r.from, to: r.to } : null;
+}
+
 // 手势里的一个词：部件（句子的词，带 key、slot）或者 { slot: 第几个 }；返回现在第几个
 function slotOf(o, x) {
   if (x == null) return null;
@@ -490,9 +555,17 @@ function markAct(o, { from, to, value, role } = {}) {
   return made(o, { type: 'mark', from: p, to: q, role: label });
 }
 
-// 点一道括号（{ mark: 括号的 id }）或者括号里的一个词（折起含这个词的最里层那一段）
+// 点一道括号（{ mark: 括号的 id }）或者括号里的一个词（折起含这个词的最里层那一段）；点小方块（{ pill: 折的 id }）是展开：
+// unfold 这一段的第一个词（看得见的小方块都是最外层的那一段，unfold 照它展开，里层照旧折着）
 function foldAct(o, { from, to } = {}) {
   const x = to ?? from;
+  if (x?.pill != null) {
+    const f = (o.folds || []).find((fd) => fd.id === x.pill);
+    if (!f) return { error: `${o.id} 上没有这个小方块` };
+    if (!outerFolds(o).includes(f)) return { error: '这个小方块折在外面那一段里：先展开外面的' };
+    const slot = slotMap(o);
+    return made(o, { type: 'unfold', at: Math.min(...f.keys.map((k) => slot.get(k))) });
+  }
   let m;
   if (x?.mark != null) {
     m = (o.marks || []).find((mk) => mk.id === x.mark);
@@ -508,8 +581,63 @@ function foldAct(o, { from, to } = {}) {
   const p = Math.min(...slots), q = Math.max(...slots);
   if (q - p + 1 !== m.keys.length) return { error: '这道括号的词不连着，折不起来' };
   if (m.keys.length >= o.words.length) return { error: '整句都折起来就什么都看不见了：只折修饰的那一段' };
-  if ((o.folds || []).some((f) => f.keys.some((k) => m.keys.includes(k)))) return { error: '这一段里有已经折起来的词' };
+  // 套着折：里层折着也能折外层（里层留在外层的小方块里）；正好是折起来的那一段、和折起来的交叉的，和 fold 指令一样说
+  const clash = foldClash(o, m.keys);
+  if (clash) return { error: clash };
   return made(o, { type: 'fold', from: p, to: q });
+}
+
+// 按住一道括号（{ mark: 括号的 id }，整段挪）或一个词（挪一个）拖到两个词之间（{ gap: { after: 第几个词 } }，0 是第一个词前面）：
+// move s.1-6 after s.11 / move s.3 before s.1（sentence.js 的 move 本来就能挪一段）
+function moveAct(o, { from, to } = {}) {
+  let p, q;
+  if (from?.mark != null) {
+    const m = (o.marks || []).find((mk) => mk.id === from.mark);
+    if (!m) return { error: `${o.id} 上没有这道括号` };
+    const slot = slotMap(o);
+    const xs = m.keys.map((k) => slot.get(k)).filter((v) => v != null);
+    p = Math.min(...xs); q = Math.max(...xs);
+    if (q - p + 1 !== m.keys.length) return { error: '这道括号的词不连着，整段挪不了' };
+  } else {
+    const a = slotOf(o, from);
+    if (a == null) return { error: '按住一道括号或一个词，拖到两个词之间' };
+    p = q = a;
+  }
+  const ws = ordered(o);
+  const inFold = (w) => w && outerFolds(o).find((f) => f.keys.includes(w.key));
+  if (ws.slice(p - 1, q).some(inFold)) return { error: '折起来的词不能挪：先展开' };
+  const k = to?.gap?.after;
+  if (!Number.isInteger(k) || k < 0 || k > ws.length) return { error: '拖到两个词之间' };
+  if (k >= p && k < q) return { error: '落点在要挪的那一段里面' };
+  if (k === p - 1 || k === q) return { error: '还在原处：拖到别的两个词之间' };
+  const f = inFold(ws[k - 1]);
+  if (f && f === inFold(ws[k])) return { error: '不能挪进折起来的那一段：先展开' };
+  return made(o, { type: 'move', from: p, to: q, after: k });
+}
+
+// —— 学生做的自己收掉（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 2.4 节）：学生拉的括号、连的线头上的 ✕ ——
+// 老师画的不带 ✕，收不了；开着 mark 才收得了括号、开着 refer 才收得了线（gestures.js 的 closeAct 照 open 的那一项找 close）
+
+// 点括号上的 ✕（{ mark: 括号的 id }）：unmark 这道括号的词（拆散了的照样写得出：unmark s.2 s.8-9）
+function unmarkAct(o, { from } = {}) {
+  const m = from?.mark != null ? (o.marks || []).find((mk) => mk.id === from.mark) : null;
+  if (!m) return { error: `${o.id} 上没有这道括号` };
+  if (m.by !== 'student') return { error: '老师画的括号收不了' };
+  return made(o, { type: 'unmark', keys: [...m.keys] });
+}
+// 点线头上的 ✕（{ refer: 线的 from 的 key }）：unrefer 起头的那个词；别的线也指着这个词（unrefer s.4 会连带收掉）时写到它连的那头
+function unreferAct(o, { from } = {}) {
+  const r = from?.refer != null ? (o.refers || []).find((x) => x.from === from.refer) : null;
+  if (!r) return { error: `${o.id} 上这个词没有连出去的线` };
+  if (r.by !== 'student') return { error: '老师画的线收不了' };
+  const slot = slotMap(o);
+  const a = slot.get(r.from);
+  if (a == null) return { error: `${o.id} 上这个词没有连出去的线` };
+  const others = (o.refers || []).some((x) => x !== r && (x.from === r.from || x.to === r.from || (x.toKeys || []).includes(r.from)));
+  if (!others) return made(o, { type: 'unrefer', from: a });
+  const xs = (r.whole ? [] : r.toKeys || [r.to]).map((k) => slot.get(k));
+  if (xs.some((v) => v == null)) return { error: '这条线连的那头不在了' };
+  return made(o, { type: 'unrefer', from: a, to: r.whole ? { whole: true } : { from: Math.min(...xs), to: Math.max(...xs) } });
 }
 
 // 从钩上拉一条线（from 是钩挂着的那个词）松在：一个词、一道括号（{ mark: 括号的 id }）、句子外框（{ whole: true }）→ refer s.6 -> s.5 / s.4-5 / s
@@ -554,13 +682,17 @@ function spanChoices(o) {
   return out;
 }
 
+// 同一句上这几项能一起开：拉括号是在词上滑、折是点、挪是按住再拖（gestures.js 的 PRESS_OF），一下只认成一种
 const gestures = {
-  // 从一个词拉到另一个词，再点成分标签（value 是点的那个成分）：mark s.2-5 V
-  mark: { gesture: 'span', from: 'word', to: 'word', pick: 'role', choices: spanChoices, toAct: markAct },
-  // open s fold：点一段（括号或括号里的词）折起来：fold s.3-6
-  fold: { gesture: 'tap', on: ['bracket', 'word'], toAct: foldAct },
-  // open s.6 refer：从词上的钩拉一条线，松在词、括号、句子外框上：refer s.6 -> s.2 / s.4-5 / s（钩是单独的把手，和在词上拉括号不抢）
-  refer: { gesture: 'line', from: 'hook', to: ['word', 'bracket', 'sentence'], toAct: referAct },
+  // 从一个词拉到另一个词，再点成分标签（value 是点的那个成分）：mark s.2-5 V；学生拉的括号上的 ✕：unmark s.2-5
+  mark: { gesture: 'span', from: 'word', to: 'word', pick: 'role', choices: spanChoices, toAct: markAct, close: { on: 'xmark', toAct: unmarkAct } },
+  // open s fold：点一段（括号或括号里的词）折起来：fold s.3-6；点小方块展开：unfold s.3
+  fold: { gesture: 'tap', on: ['bracket', 'word', 'pill'], toAct: foldAct },
+  // open s move：按住一道括号或一个词拖到两个词之间：move s.1-6 after s.11
+  move: { gesture: 'drop-at', from: ['bracket', 'word'], to: 'gap', toAct: moveAct },
+  // open s.6 refer：从词上的钩拉一条线，松在词、括号、句子外框上：refer s.6 -> s.2 / s.4-5 / s（钩是单独的把手，和在词上拉括号不抢）；
+  // 学生连的线头上的 ✕：unrefer s.6
+  refer: { gesture: 'line', from: 'hook', to: ['word', 'bracket', 'sentence'], toAct: referAct, close: { on: 'xrefer', toAct: unreferAct } },
 };
 
 // —— 挑战用的判断式（when="s parsed, s main, s span s.2-5 = V"）——

@@ -411,6 +411,27 @@ const gestures = {
       return v == null ? { error: '要拖一个数进树' } : made(o, { type: 'insert', value: v });
     },
   },
+  // 点一片叶子摘下来（open t pluck）：只摘叶子是这个动作本身的意思，点里面的结点晃一下（要删里面的，老师开 delete）。
+  // 写 t#k：跟着结点走（值重复也指得准）
+  pluck: {
+    gesture: 'tap', on: 'node',
+    toAct(o, { from } = {}) {
+      const n = from?.key != null ? nodeAt(o, from.key) : null;
+      if (!n) return { error: '点一片叶子，把它摘下来' };
+      if (n.left != null || n.right != null) return { error: `只能摘叶子（${nameOf(o, n.key)} 下面还有结点）` };
+      return { act: { type: 'delete', at: n.key }, src: `delete ${o.id}#${n.key}` };
+    },
+  },
+  // 点哪个删哪个（open t delete）：二叉排序树的删法（tree.js 的 delete：叶子拿掉、一个孩子顶上、两个孩子用中序后继顶上）。
+  // 写法和老师写的一样（delete t.30；值重复的写 t#k）
+  delete: {
+    gesture: 'tap', on: 'node',
+    toAct(o, { from } = {}) {
+      const n = from?.key != null ? nodeAt(o, from.key) : null;
+      if (!n) return { error: '点一个结点，把它删掉' };
+      return { act: { type: 'delete', at: n.key }, src: `delete ${n.dup ? `${o.id}#${n.key}` : `${o.id}.${n.value}`}` };
+    },
+  },
   // 托盘的数拖到某个空位（open t place）：学生自己摆
   place: {
     gesture: 'drop-at', from: 'tray', to: 'slot',

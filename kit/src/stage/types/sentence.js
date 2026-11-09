@@ -171,8 +171,9 @@ export function layout(o) {
 function place(o) {
   const ox = o.origin?.x ?? 0, oy = o.origin?.y ?? 0;
   const words = [...o.words].sort((a, b) => a.slot - b.slot);
+  // 套着折的：词在最外层的那个小方块里（里层的小方块等外层展开了才画）
   const foldOf = new Map();
-  for (const f of o.folds || []) for (const k of f.keys) foldOf.set(k, f);
+  for (const f of outerFolds(o)) for (const k of f.keys) foldOf.set(k, f);
   // 1. 一个个排的东西：词，或者折起来的一段
   const items = [];
   const itemOf = new Map();
@@ -514,7 +515,31 @@ function target(h, cmd, { need = true } = {}) {
 export const restText = (h, refs) => h.str ?? h.words.filter((w) => !refs.includes(w) && !isColor(w)).join(' ');
 const contiguous = (parts) => parts.every((p, i) => !i || p.slot === parts[i - 1].slot + 1);
 const sameKeys = (a, b) => a.length === b.length && a.every((k) => b.includes(k));
-const foldOfKey = (o, k) => o.folds.find((f) => f.keys.includes(k));
+/**
+ * 看得见的那几段折起来的（套着折时只算最外层：里层留在外层的小方块里，展开外层才露出来）。
+ * 折起来的段要么套着、要么不沾边（fold 不收交叉的），最外层的就是没被别的段整个包住的
+ */
+export function outerFolds(o) {
+  const fs = o?.folds || [];
+  return fs.filter((f) => !fs.some((g) => g !== f && g.keys.length > f.keys.length && f.keys.every((k) => g.keys.includes(k))));
+}
+/** 这个词在哪一段折起来的里面（套着的算最外层那一段：画面上它就在那个小方块里）；没折是 undefined */
+const foldOfKey = (o, k) => outerFolds(o).find((f) => f.keys.includes(k));
+/**
+ * 要折的这几个词和已经折起来的冲不冲突（fold 指令和点括号折的手势共用，sentence.rules.js）：正好是折起来的那一段——已经折起来了；
+ * 和一段交叉（一头在里面一头在外面）——小方块排不出来。套着的（里层折着折外层、外层折着折里层）都行。不冲突是 null
+ */
+export function foldClash(o, keys) {
+  const set = new Set(keys);
+  for (const f of o?.folds || []) {
+    const inside = f.keys.filter((k) => set.has(k)).length;
+    if (!inside) continue;
+    if (inside === f.keys.length && inside === set.size) return `${spanText(o, keys)} 已经折起来了`;
+    // 先展开哪一段：看得见的那一段写它的第一个词；套在里层的（unfold 一个词先展开外层）写 unfold 整句
+    if (inside < f.keys.length && inside < set.size) return `${spanText(o, keys)} 和折起来的 ${spanText(o, f.keys)} 交叉：先 unfold ${outerFolds(o).includes(f) ? spanText(o, f.keys).split(/[-\s]/)[0] : o.id}`;
+  }
+  return null;
+}
 /** 一组词按现在的位置写成 s.2-5、s.3 s.7 */
 export function spanText(o, keys) {
   const slots = keys.map((k) => o.words.find((w) => w.key === k)?.slot).filter((v) => v != null).sort((a, b) => a - b);
@@ -851,23 +876,29 @@ export const sentence = {
       if (whole) throw new Error('fold 要写折哪一段，比如 fold s.3-6');
       if (!contiguous(parts)) throw new Error('fold 的词要连成一段');
       if (parts.length === o.words.length) throw new Error('整句都折起来就什么都看不见了：只折修饰的那一段');
-      if (parts.some((p) => foldOfKey(o, p.key))) throw new Error(`${refs.join(' ')} 里有已经折起来的词：先 unfold`);
       const keys = parts.map((p) => p.key);
+      // 套着折（第二轮）：里层折着也能折外层，外层折着也能折里层（里层留在外层的小方块里）；正好是折起来的那一段、交叉的不收
+      const clash = foldClash(o, keys);
+      if (clash) throw new Error(clash);
       const label = restText(h, refs).trim() || o.marks.find((m) => sameKeys(m.keys, keys))?.label || '';
       if (label.length > 12) throw new Error('小方块上的字要短（12 个字以内）');
       const color = o.marks.find((m) => sameKeys(m.keys, keys))?.color ?? roleColor(label);
+      // 缩进小方块的词（画面的动画用）：已经折在里层的那几个本来就看不见，不再缩一次
+      const shown = keys.filter((k) => !foldOfKey(o, k));
       const f = { id: `f${o.seq++}`, keys, label, color };
       o.folds.push(f);
-      return { id: o.id, fold: f.id, keys };
+      return { id: o.id, fold: f.id, keys: shown };
     },
-    // unfold s.3：展开含这个词的那一段；unfold s：全展开
+    // unfold s.3：展开含这个词的那一段（套着的先展开看得见的外层，里层照旧折着）；unfold s：全展开
     unfold(scene, c, h) {
       const { o, parts, whole } = target(h, 'unfold');
       const keys = new Set(parts.map((p) => p.key));
-      const gone = whole ? o.folds : o.folds.filter((f) => f.keys.some((k) => keys.has(k)));
+      const gone = whole ? o.folds : outerFolds(o).filter((f) => f.keys.some((k) => keys.has(k)));
       if (!gone.length) throw new Error(`${o.id} 上${whole ? '' : '这几个词'}没有折起来的`);
       o.folds = o.folds.filter((f) => !gone.includes(f));
-      return { id: o.id, keys: gone.flatMap((f) => f.keys), pills: gone.map((f) => f.id) };
+      // 露出来的词（画面的动画用）：展开的那几段里、还折在里层的不算
+      const still = new Set(o.folds.flatMap((f) => f.keys));
+      return { id: o.id, keys: [...new Set(gone.flatMap((f) => f.keys))].filter((k) => !still.has(k)), pills: gone.map((f) => f.id) };
     },
     // move s.3 after s.5 / move s.3-4 before s.1 / move s.6 -> s.1（挪到第 1 个）：别的词让开
     move(scene, c, h) {
@@ -956,7 +987,21 @@ export const sentence = {
       o.refers.push({ from, to, toKeys: span, whole, color, by });
       return { id: o.id, from, to, ...(span ? { toKeys: span } : {}), ...(whole ? { whole: true } : {}) };
     },
+    // unrefer s.4 -> s.1：只收从 s.4 连到 s.1 的那一条（学生点线头上的 ✕ 时，别的线也指着 s.4，页面写成这样，不连带收掉别的）
     unrefer(scene, c, h) {
+      if (h.arrow >= 0) {
+        const a = target({ ...h, refsIn: () => h.refsIn(h.args.slice(0, h.arrow)) }, 'unrefer');
+        const b = target({ ...h, refsIn: () => h.refsIn(h.args.slice(h.arrow + 1)) }, 'unrefer');
+        if (a.o !== b.o || a.whole || a.parts.length !== 1) throw new Error(`要写成 unrefer ${a.o.id}.3 -> ${a.o.id}.2（只收从 s.3 连到 s.2 的那一条），或者 unrefer ${a.o.id}.3（收掉两头有 s.3 的每一条）`);
+        const from = a.parts[0].key;
+        const wantWhole = !!b.whole && b.refs.every((r) => r === b.o.id);
+        const to = new Set(b.parts.map((p) => p.key));
+        const same = (r) => r.from === from && (wantWhole ? r.whole : !r.whole && sameKeys(r.toKeys || [r.to], [...to]));
+        const gone = a.o.refers.filter(same);
+        if (!gone.length) throw new Error(`${a.o.id} 上没有从 ${a.refs.join(' ')} 连到 ${b.refs.join(' ')} 的箭头`);
+        a.o.refers = a.o.refers.filter((r) => !gone.includes(r));
+        return { id: a.o.id };
+      }
       const { o, parts, whole } = target(h, 'unrefer');
       const keys = new Set(parts.map((p) => p.key));
       const gone = whole ? o.refers : o.refers.filter((r) => keys.has(r.from) || keys.has(r.to) || (r.toKeys || []).some((k) => keys.has(k)));
@@ -1049,7 +1094,12 @@ export const sentence = {
     if (o.links) lines.push(`  links=：${o.links.void ? '作废了（rewrite 换了句子；要判就重新造这句、带上新的 links=）' : `收下了（${o.links.pairs.length} 条${o.links.wrongs.length ? `，常见的错连 ${o.links.wrongs.length} 条` : ''}）`}`);
     if (ks) lines.push(`  key：${ks.void ? '作废了（rewrite 换了句子；要判就重新造这句、带上新的 key=）' : ks.split.length ? ks.split.map((x) => `第 ${x.n} 段 [${x.role} ${x.text}] 被 move 拆散了，那一段不能再拉对`).join('；') : `收下了（${ks.n} 段）`}`);
     if (o.tags.length) lines.push(`  标签（词上面）：${o.tags.map((t) => `${spanText(o, t.keys)} ${t.label}`).join('；')}`);
-    if (o.folds.length) lines.push(`  折起来的：${o.folds.map((f) => `${spanText(o, f.keys)} →「${f.label || '……'}」`).join('；')}`);
+    // 套着折的里层写一声在哪一段里面（画面上看不见，展开外层才露出来）
+    if (o.folds.length) {
+      const outer = new Set(outerFolds(o));
+      const host = (f) => o.folds.find((g) => outer.has(g) && g !== f && f.keys.every((k) => g.keys.includes(k)));
+      lines.push(`  折起来的：${o.folds.map((f) => `${spanText(o, f.keys)} →「${f.label || '……'}」${outer.has(f) ? '' : `（在 ${spanText(o, host(f)?.keys || [])} 里面）`}`).join('；')}`);
+    }
     if (o.cuts.length) lines.push(`  断开：${[...o.cuts].map((k) => o.words.find((w) => w.key === k)).sort((a, b) => a.slot - b.slot).map((w) => `${o.id}.${w.slot} ${w.value} 后面`).join('，')}`);
     if (o.refers.length) {
       const at = (k) => { const w = o.words.find((x) => x.key === k); return `${o.id}.${w.slot} ${w.value}`; };
@@ -1063,16 +1113,17 @@ sentence s = "The man who lives next door is a doctor." key="[S The man [RC who 
 写法：s.3 现在第 3 个词；s.2-5 第 2 到 5 个；s.who 这个词（出现几次写 s.that:2）；s.who-door 从 who 到 door；s#3 一开始第 3 个的那个词（挪了、改写了跟着走）
 mark s.1-6 主语 / unmark s.1-6     词下面一道括号、下面写成分（套着的一层层往下排；颜色按成分，也能写 g1～g6）
 tag s.7 V / untag s.7             词上面的小标签（S、V、谓语1；最多 8 个字）
-fold s.3-6 / unfold s.3           折成一个小方块只留主干（别的词滑过去补位；方块上写这一段的成分，也能 fold s.3-6 "从句"）
+fold s.3-6 / unfold s.3           折成一个小方块只留主干（别的词滑过去补位；方块上写这一段的成分，也能 fold s.3-6 "从句"；套着折的 unfold 先展开外层）
 move s.3 after s.5                挪到别处讲倒装、还原语序（也能 before s.1、-> s.1），别的词让开
 cut s.6 / uncut s                 第 6 个词后面断开（意群的斜线）
 refer s.3 -> s.2 / unrefer s.3    箭头：which、it 指的是谁（指一段写 s.1-2，指整句写 s）
 rewrite s "The man living next door is a doctor."    改写整句：同样的词滑到新位置，新的淡进来
 ask drag s.7 "把 is 挪到句首"         学生按住一个词拖到别处（页面照做，再告诉你）
 学生自己拆（mark 页面照 key 判每一下）：
-open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的，交中文）= mark s.1-6 主语；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句；key 写 [Attr/NF …] 是两种都对
-open s fold                         学生点一道括号或括号里的词 = fold s.3-6（页面不判；和 mark 一次开一种）
-open s.3 refer                      学生从 who 的钩上拉线，松在词、括号、句子外框上 = refer s.3 -> s.2 / s.1-2 / s（整句）；造句子时写 links="who -> s.1-2; !who -> door=连到了从句里的名词" 就照它判（! 是常见的错连）
+open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的，交中文）= mark s.1-6 主语；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句；key 写 [Attr/NF …] 是两种都对；学生拉的括号上有 ✕，点了 = unmark s.1-6（不判）
+open s fold                         学生点一道括号或括号里的词 = fold s.3-6，点小方块 = unfold s.3（页面不判；里层折着也能折外层）
+open s move                         学生按住一道括号拖到两个词之间 = move s.3-6 after s.9（整段挪；按住一个词挪一个，挪到最前面 = move s.7 before s.1）
+open s.3 refer                      学生从 who 的钩上拉线，松在词、括号、句子外框上 = refer s.3 -> s.2 / s.1-2 / s（整句）；造句子时写 links="who -> s.1-2; !who -> door=连到了从句里的名词" 就照它判（! 是常见的错连）；学生连的线头上有 ✕，点了 = unrefer s.3
 判断式（when=）：s parsed（key 里每一段都拉对了，多拉的不管）、s exact（拉对了、也没多拉）、s main（主干拉对了）、s span s.2-5 = V（这一段现在挂着这个成分）、s linked（links= 每一条都连对了）；没写 key / links= 判不了，@s.done 也不收
 句子里留空位让学生填词：现在没有写法（要填就 ask value … type=en）`,
   example: `sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."

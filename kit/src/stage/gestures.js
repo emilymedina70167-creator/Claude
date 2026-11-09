@@ -2,7 +2,8 @@
 // 这里只管「按下的部件、松手处的部件或空位、写的值 → 一行学生指令」和「撤一步」。纯函数，有测试（tests/stage-gestures.test.js）。
 //
 // 六种手势所有东西共用：tap 点一个部件、drop-on 拖到另一个部件上、drop-at 拖到空处（托盘里的拖进来）、span 从一个部件拉到另一个、
-// line 从一个钩拉出一条线松在别处（句子的 refer）、write 往一个部件里写一个值。每种东西在规则文件里交一张手势表（rules.js 的 gestures）：这几种手势在它这里是什么动作、翻成哪一行指令
+// line 从一个钩拉出一条线松在别处（句子的 refer）、write 往一个部件里写一个值。按法分三种（点、滑、按住再拖，PRESS_OF），
+// 同一处按法不一样的能一起开，一下只认成一种（choosePress）；学生做的东西头上的 ✕ 照手势表的 close 翻（closeAct）。每种东西在规则文件里交一张手势表（rules.js 的 gestures）：这几种手势在它这里是什么动作、翻成哪一行指令
 // （toAct），要不要先问一个值（ask：倍数框；pick + choices：成分标签）。这里不认识任何具体的东西。
 import { gestureOf } from './rules.js';
 
@@ -15,8 +16,65 @@ export const kindsOf = (g) => [].concat(g?.gesture || []);
  * Task 11 做好拉线以后把 'line' 加进来
  */
 export const ARMED_GESTURES = new Set(['tap', 'drop-on', 'drop-at', 'span', 'write']);
+/**
+ * 画法（各种东西的 view.grips）现在交得出的把手，名字和手势表里 from / on / tap / to 写的一样。手势表里写了、画法还没交的
+ * （句子的钩 hook、两个词之间的空隙 gap、小方块 pill、✕ 的 xmark / xrefer、句子外框 sentence，第二轮 Task 11 做）：
+ * 起点没有就拿不起来，落点没有就放不下——那一种手势算挂不上，和 ARMED_GESTURES 一样不对老师说学生能动。Task 10、11 交了以后加进来
+ */
+export const ARMED_GRIPS = new Set(['node', 'parent', 'tray', 'tree', 'slot', 'row', 'label', 'cell', 'word', 'bracket']);
+/**
+ * 画面分不分得清同一处的几种按法（choosePress，第二轮 Task 11 接进 pointer.js 以后改成 true）。分不清时同一处开了几种按法，
+ * 手指按下去只拿得到其中一种：舞台现状照实说（scene.js 的 stateText），不说几种都按得出
+ */
+export const ARMED_PRESS = { mixed: false };
+const armedAny = (names) => names == null || [].concat(names).some((n) => ARMED_GRIPS.has(n));
+/**
+ * 一种手势在这一项上画面挂不挂得上：手势本身画面会做，起点（拖、拉的 from，点、写的 tap / on）、落点（to）画法都交得出。
+ * 挂不上的那一种 gesturedom.js 就不挂（不然拎得起来放不下，还抢了同一处别的手势的手指）
+ */
+export function kindArmed(g, k) {
+  if (!ARMED_GESTURES.has(k)) return false;
+  if (k === 'tap') return armedAny(g.tap || g.on);
+  if (k === 'write') return armedAny(g.on);
+  return armedAny(g.from) && armedAny(g.to);
+}
 /** open 的这一项学生现在真动得了吗：不是手势表里的（拖、点开看）照旧动得了；手势表里的要有一种画面挂得上 */
-export const armable = (g) => !g || kindsOf(g).some((k) => ARMED_GESTURES.has(k));
+export const armable = (g) => !g || kindsOf(g).some((k) => kindArmed(g, k));
+
+// —— 同一处的三种按法（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 2.1 节）——
+// 点一下就松（tap、write）、按下就滑（span、line：拉括号、拉线）、按住 0.35 秒托起来再拖（drop-on、drop-at：拖到上面、拖到空处）。
+// 同一样东西的同一处按法不一样的能一起开（句子上又拉括号又折又挪），按法一样的抢同一下手指，第二项当场报（scene.js 的 open）
+export const PRESS_OF = { tap: 'tap', write: 'tap', span: 'slide', line: 'slide', 'drop-on': 'hold', 'drop-at': 'hold' };
+/** 按住多久算托起来（iOS 拖东西的手感） */
+export const HOLD_MS = 350;
+/** 给老师看的按法（舞台现状、open 冲突的报错） */
+export const PRESS_TEXT = { tap: '点', slide: '滑', hold: '按住再拖' };
+/** 不走手势表的几种（affords：拖、矩阵的拨格子、点乘积看怎么算）的按法：拖要按住再拖，拨、点开看是点 */
+export const AFFORD_PRESS = { drag: 'hold', edit: 'tap', explain: 'tap' };
+
+/**
+ * 这一下按的是哪一种：presses 是这一处开着的几种按法（tap / slide / hold；写手势的名字 span、drop-at 也认），
+ * moved 是挪过了（过了点的那几个像素）、ms 是从按下到这一刻（挪了的那一刻、到了 HOLD_MS 的那一刻、松手的那一刻）、up 是松手了。
+ * 返回 'tap' | 'slide' | 'hold'，'none' 是作罢（这一下什么都不交、不留半截的拖），null 只表示还在等。定下以后不再变：
+ * 画面在第一个定得下的时刻（挪了、到了 HOLD_MS、松手）问一次，拿到不是 null 就不再问。
+ *   只有一种：点要松手前没挪（挪了是作罢）；滑、按住再拖照第一轮按下就是它（拉括号点一下松手是拉一个词）。
+ *   好几种：没挪、不到 HOLD_MS 就松手——有点就是点；不到 HOLD_MS 就挪了——有滑就是滑；到了 HOLD_MS 还没挪——有按住再拖就是它，
+ *   之后挪就拖它；没有就等松手，照点算（挪了是作罢）
+ */
+export function choosePress(presses = [], { moved = false, ms = 0, up = false } = {}) {
+  const ks = new Set([].concat(presses || []).map((k) => PRESS_OF[k] || k).filter((k) => PRESS_TEXT[k]));
+  if (!ks.size) return 'none';
+  if (ks.size === 1) {
+    const [k] = ks;
+    if (k !== 'tap') return k;
+    return moved ? 'none' : up ? 'tap' : null;
+  }
+  const held = ms >= HOLD_MS;
+  if (moved) return held ? (ks.has('hold') ? 'hold' : 'none') : ks.has('slide') ? 'slide' : 'none';
+  if (held && ks.has('hold')) return 'hold';
+  if (up) return ks.has('tap') ? 'tap' : 'none';
+  return null;
+}
 
 /** 写的值规整成指令里的写法：键盘上的减号（−）、全角斜线 */
 export function normValue(v) {
@@ -80,17 +138,65 @@ export const undoLines = (lines = [], opts = {}) => [...undoPlan(lines, opts).li
 // 一项 open 用手指抓哪几种地方：部件（树的结点、句子的词、矩阵的格）统一叫 part，别的照手势表的名字（托盘、行把手、行号、括号）
 const PART_GRIPS = new Set(['part', 'node', 'word', 'cell']);
 /**
- * 手势表那一项要抓的：拖、拉的起点（from），点、写的地方（tap / on）。拖到哪儿（to）不算：落点不抢手指。
- * 两项 open 抓同一种地方，同一处按下去只拿得到先挂的那一个，后开的那一项就没声没息地用不了——场景当场报（scene.js 的 open）
+ * 手势表那一项要抓的「地方|按法」（'part|slide'、'bracket|hold'）：拖、拉的起点（from），点、写的地方（tap / on），按法照 PRESS_OF。
+ * 拖到哪儿（to）不算：落点不抢手指；✕（close）是自己的把手，也不算。
+ * 两项 open 抓同一种地方、按法又一样，同一处按下去只拿得到先挂的那一个，后开的那一项就没声没息地用不了——场景当场报（scene.js 的 open）；
+ * 按法不一样的画面照 choosePress 分开
  */
 export function gestureGrabs(g) {
   const out = new Set();
-  const add = (n) => { for (const x of [].concat(n || [])) out.add(PART_GRIPS.has(x) ? 'part' : x); };
-  const ks = kindsOf(g);
-  if (ks.some((k) => k === 'drop-on' || k === 'drop-at' || k === 'span' || k === 'line')) add(g.from);
-  if (ks.includes('tap')) add(g.tap || g.on);
-  if (ks.includes('write')) add(g.on);
+  const add = (n, press) => { for (const x of [].concat(n || [])) out.add(`${PART_GRIPS.has(x) ? 'part' : x}|${press}`); };
+  for (const k of kindsOf(g)) {
+    const press = PRESS_OF[k];
+    if (!press) continue;
+    if (k === 'tap') add(g.tap || g.on, press);
+    else if (k === 'write') add(g.on, press);
+    else add(g.from, press);
+  }
   return out;
+}
+/**
+ * open 的一项抓的「地方|按法」：手势表里的照 gestureGrabs；不走手势表的（affords 里的拖、拨格子、点开看，写了 input=keypad 的
+ * edit 走手势表的 write）抓部件，按法照 AFFORD_PRESS。affords 是那种东西能开的（scene.js 的 affordsOf）；「回到……」按钮不抓舞台上的东西
+ */
+export function openGrabs(e, affords = {}) {
+  if (!e) return new Set();
+  if (e.action === 'drag' || (affords[e.action] && !e.input)) return new Set([`part|${AFFORD_PRESS[e.action] || 'hold'}`]);
+  return gestureGrabs(e.gesture);
+}
+/** 「地方|按法」拆开 */
+export const placeOf = (grab) => String(grab).slice(0, String(grab).lastIndexOf('|'));
+export const pressOf = (grab) => String(grab).slice(String(grab).lastIndexOf('|') + 1);
+/**
+ * 两项 open（抓的「地方|按法」A、B）碰在哪：same 是同一处、同一种按法（抢同一下手指，第二项当场报），mixed 是同一处、按法不一样
+ * （能一起开，画面照 choosePress 分，现状合成一行）。meet() 说两项写的部件重不重叠：只对部件问（写的部件不重叠就碰不到）
+ */
+export function grabClash(A, B, meet = () => true) {
+  const same = new Set(), mixed = new Set();
+  for (const a of A) {
+    for (const b of B) {
+      if (placeOf(a) !== placeOf(b) || (placeOf(a) === 'part' && !meet())) continue;
+      (pressOf(a) === pressOf(b) ? same : mixed).add(a);
+    }
+  }
+  return { same: [...same], mixed: [...mixed] };
+}
+
+/**
+ * 点学生做的东西头上的 ✕（学生拉的括号、连的线）→ 一行学生指令：{ act, src } | { error }。照手势表那一项的 close.toAct 翻
+ * （句子的 mark 收括号 = unmark s.2-5，refer 收线 = unrefer s.23）。e 是 open 的那一项：开着 mark 才收得了括号、开着 refer 才收得了线；
+ * from 是 ✕ 交的（{ mark: 括号 id }、{ refer: 线的 from 的 key }）。老师画的收不了（toAct 说）
+ */
+export function closeAct(scene, e, { from } = {}) {
+  const o = scene?.objects?.get(e?.obj);
+  if (!o) return { error: `舞台上没有「${e?.obj ?? ''}」` };
+  const g = e.gesture || gestureOf(o, e.action);
+  if (typeof g?.close?.toAct !== 'function') return { error: `${o.id} 的 ${e.action} 没有 ✕（学生拉出来的括号、连的线才收得掉）` };
+  let r;
+  try { r = g.close.toAct(o, { from }); } catch (err) { return { error: err?.message || String(err) }; }
+  if (r?.error) return { error: r.error };
+  if (!r?.src) return { error: '这一下翻不成一行指令' };
+  return { act: r.act, src: r.src };
 }
 
 // 写的值是几（3、-2、3/2、0.5）：比 range 用；读不懂是 null（toAct 自己会说）

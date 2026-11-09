@@ -170,7 +170,10 @@ test('fold / unfold：一段折成小方块（字用这一段括号下的），�
   assert.ok(L.boxes.get(7).x < isX - 50, 'is 往前补位');
   assert.equal(L.brackets.filter((b) => b.mark === o.marks[1].id).length, 0, '整段折起来的括号不画（小方块就是它）');
   assert.match(sentenceText(o, { folds: true }), /The man ［定语从句］ is a doctor\./);
-  assert.match(err(s, 'fold s.4-5'), /已经折起来的词/);
+  // 套着折（第二轮）：折起来的那一段里面再折一段照演，里层留在外层的小方块里
+  assert.equal(err(s, 'fold s.4-5'), undefined);
+  assert.match(err(s, 'fold s.3-6'), /已经折起来了/);
+  assert.match(err(s, 'fold s.2-4'), /交叉/);
   assert.match(err(s, 'fold s.1 s.8'), /要连成一段/);
   assert.match(err(s, 'fold s'), /fold 要写折哪一段/);
   assert.match(err(s, 'move s.4 after s.8'), /折起来的词不能挪/);
@@ -182,6 +185,49 @@ test('fold / unfold：一段折成小方块（字用这一段括号下的），�
   run(s, 'fold s.8-9 "表语"');
   assert.equal(o.folds[0].label, '表语');
   assert.match(err(run(new Scene(), 'sentence x = "Go now."'), 'fold x.1-2'), /整句都折起来/);
+});
+
+test('套着折：里层折着也能折外层；展开外层时里层照旧折着；点外层的小方块 = unfold 外层的第一个词', async () => {
+  const { gestureAct } = await import('../kit/src/stage/gestures.js');
+  // s.5-19 是宾语从句（that habits … grown adults），里面套着定语从句 s.7-10（which children form early）
+  const s = run(new Scene(), 'sentence s = "Many experts now agree that habits which children form early can shape the way they think as grown adults, for better or worse."\nopen s fold');
+  const o = s.objects.get('s');
+  run(s, 'mark s.7-10 定语从句\nmark s.5-19 宾语从句');
+  run(s, 'fold s.7-10');
+  assert.equal(err(s, 'fold s.5-19'), undefined, '里层折着也能折外层');
+  run(s, 'fold s.5-19');
+  assert.equal(o.folds.length, 2);
+  const [inner, outer] = o.folds;
+  let L = layout(o);
+  assert.ok(L.pills.has(outer.id) && !L.pills.has(inner.id), '只看得见外层的小方块');
+  assert.deepEqual(L.boxes.get(8), L.pills.get(outer.id), '里层的词也在外层的小方块里');
+  assert.equal(sentenceText(o, { folds: true }), 'Many experts now agree ［宾语从句］ for better or worse.');
+  const folded = sentence.describe(o).find((l) => l.includes('折起来的：'));
+  assert.match(folded, /s\.7-10 →「定语从句」（在 s\.5-19 里面）/);
+  assert.match(folded, /s\.5-19 →「宾语从句」(；|$)/);
+  // 点外层的小方块：unfold s.5（外层的第一个词）；里层的小方块看不见，点不到
+  const e = s.opens.get('s:fold');
+  assert.equal(gestureAct(s, e, { from: { pill: outer.id } }).src, 'unfold s.5');
+  assert.ok(gestureAct(s, e, { from: { pill: inner.id } }).error, '里层的小方块在外层里面');
+  assert.ok(gestureAct(s, e, { from: { pill: 'f99' } }).error);
+  const fx = s.apply(parseScript('unfold s.5')[0]);
+  assert.deepEqual(o.folds.map((f) => f.id), [inner.id], '展开外层，里层照旧折着');
+  assert.deepEqual(fx.keys, [5, 6, 11, 12, 13, 14, 15, 16, 17, 18, 19], '露出来的是外层里、不在里层的词');
+  L = layout(o);
+  assert.ok(L.pills.has(inner.id), '里层的小方块露出来了');
+  // 点里层的小方块：unfold s.7
+  assert.equal(gestureAct(s, e, { from: { pill: inner.id } }).src, 'unfold s.7');
+  // unfold s 全展开（里层一起）
+  run(s, 'fold s.5-19\nunfold s');
+  assert.equal(o.folds.length, 0);
+  // 和里层交叉的：先全展开（unfold 一个词先展开的是外层）
+  run(s, 'fold s.7-10\nfold s.5-19');
+  assert.match(err(s, 'fold s.9-12'), /和折起来的 s\.7-10 交叉：先 unfold s$/);
+  assert.match(err(s, 'fold s.3-6'), /和折起来的 s\.5-19 交叉：先 unfold s\.5$/);
+  run(s, 'unfold s');
+  // 先折外层、再折里层也照演（里层在外层的小方块里，展开外层才看见）
+  run(s, 'fold s.5-19\nfold s.7-10\nunfold s.8');
+  assert.deepEqual(o.folds.map((f) => spanText(o, f.keys)), ['s.7-10'], 'unfold 先展开看得见的外层');
 });
 
 test('move：after / before / -> 第几个；挪的那一段保持原来的先后，别的词让开', () => {

@@ -2,9 +2,12 @@
 // 画面那一半（gesturedom.js、keypad.js 的画面、三个样板的画法）靠浏览器里真的触摸检查，这里只测纯函数
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Scene } from '../kit/src/stage/scene.js';
+import { Scene, dryRun } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
-import { gestureAct, askFor, undoLines, undoPlan, kindsOf, normValue, writeRange, UNDO_TOLD, UNDO_NO, ARMED_GESTURES, armable } from '../kit/src/stage/gestures.js';
+import { gestureAct, askFor, undoLines, undoPlan, kindsOf, normValue, writeRange, UNDO_TOLD, UNDO_NO, ARMED_GESTURES, ARMED_GRIPS, ARMED_PRESS, armable, kindArmed, PRESS_OF, HOLD_MS, PRESS_TEXT, choosePress, gestureGrabs, openGrabs, AFFORD_PRESS, closeAct } from '../kit/src/stage/gestures.js';
+import { gestureOf } from '../kit/src/stage/rules.js';
+import { TYPES } from '../kit/src/stage/types/index.js';
+import { affordsOf } from '../kit/src/stage/scene.js';
 import { eventOf, tryCount } from '../kit/src/stage/events.js';
 import { padKey } from '../kit/src/stage/keypad.js';
 import { trayBoxes, slotSpots, tree as treeType, NODE } from '../kit/src/stage/types/tree.js';
@@ -162,9 +165,13 @@ test('画面还挂不上的手势（拉线，Task 11 才做）：现状不说学
   assert.match(t, /\n开着、页面还画不了的（学生现在动不了）：s\.6 refer（拉一条线；wrong=mark）/);
   // 只开了拉线：没有「学生能直接动的」那一行
   assert.doesNotMatch(run('sentence s = "The books are new."\nopen s.1 refer').stateText(), /学生能直接动的/);
-  // Task 11 做好以后把 line 加进 ARMED_GESTURES：照旧写进「学生能直接动的」
+  // 只有拉线的手势、没有钩也不行（钩是画法交的把手）
   ARMED_GESTURES.add('line');
-  try { assert.match(s.stateText(), /学生能直接动的：s mark（拉一段）；s\.6 refer（拉一条线；wrong=mark）/); } finally { ARMED_GESTURES.delete('line'); }
+  try { assert.equal(armable(open(s, 's:refer').gesture), false); } finally { ARMED_GESTURES.delete('line'); }
+  // Task 11 做好以后把 line 加进 ARMED_GESTURES、hook 加进 ARMED_GRIPS：照旧写进「学生能直接动的」
+  ARMED_GESTURES.add('line');
+  ARMED_GRIPS.add('hook');
+  try { assert.match(s.stateText(), /学生能直接动的：s mark（拉一段）；s\.6 refer（拉一条线；wrong=mark）/); } finally { ARMED_GESTURES.delete('line'); ARMED_GRIPS.delete('hook'); }
 });
 
 test('写的值：键盘上的减号、全角斜线规整成指令里的写法', () => {
@@ -255,16 +262,22 @@ test('撤一步：引出过预写、做到挑战、做完了的那一下撤不�
   assert.deepEqual(undoPlan(base), { lines: base, gone: null, why: null, index: -1 });
 });
 
-test('同一样东西开两项会抢同一处手指的：第二项当场报，说先 close 哪一项', () => {
+test('同一样东西开两项、同一处按法也一样的：第二项当场报，说两项都是哪种按法、先 close 哪一项', () => {
   const tree = 'tree t = 50 30 70 tray="47 10"';
-  assert.throws(() => run(`${tree}\nopen t\nopen t rotate`), /t 已经开着 drag[\s\S]*close t drag/);
-  assert.throws(() => run(`${tree}\nopen t insert\nopen t place`), /close t insert/);
-  assert.throws(() => run('sentence s = "The man is a doctor."\nopen s mark\nopen s fold'), /close s mark/);
-  assert.throws(() => run('sentence s = "The man is a doctor."\nopen s\nopen s mark'), /close s drag/);
+  assert.throws(() => run(`${tree}\nopen t\nopen t rotate`), /t 已经开着 drag[\s\S]*都是按住再拖[\s\S]*close t drag/);
+  assert.throws(() => run(`${tree}\nopen t insert\nopen t place`), /都是按住再拖[\s\S]*close t insert/);
+  assert.throws(() => run(`${tree}\nopen t pluck\nopen t delete`), /都是点[\s\S]*close t pluck/);
+  assert.throws(() => run('sentence s = "The man is a doctor."\nopen s\nopen s move'), /都是按住再拖[\s\S]*close s drag/);
+  // 报错不再说「一次开一种」（按法不一样的能一起开）
+  assert.throws(() => run(`${tree}\nopen t\nopen t rotate`), (err) => !/一次开一种/.test(err.message));
 });
 
 test('抢不到同一处的可以一起开：树的转和插、矩阵的行变换和拨格子；同一项再开一次是换掉它；部件不重的也行', () => {
   assert.doesNotThrow(() => run('tree t = 50 30 70 tray="47"\nopen t rotate\nopen t insert'));
+  // 同一处按法不一样（点、滑、按住再拖）的也能一起开（以前算抢同一个部件，报「一次开一种」）
+  assert.doesNotThrow(() => run('sentence s = "The man is a doctor."\nopen s mark\nopen s fold'));
+  assert.doesNotThrow(() => run('sentence s = "The man is a doctor."\nopen s\nopen s mark'), '拖词是按住再拖、拉括号是滑');
+  assert.doesNotThrow(() => run('tree t = 50 30 70\nopen t\nopen t pluck'), '拖是按住再拖、摘叶子是点');
   assert.doesNotThrow(() => run('matrix M = 1 2 / 3 4\nopen M rowop\nopen M edit'));
   assert.doesNotThrow(() => run('matrix M = 1 2 / 3 4\nopen M edit\nopen M edit input=keypad'));
   assert.doesNotThrow(() => run('tree t = 50 30 70\nopen t rotate\nclose t rotate\nopen t'));
@@ -290,4 +303,176 @@ test('撤一步不算「试」的次数（不会撤几下就凑出「试了好�
   const ev = [eventOf({ type: 'undo', src: 'rotate t#1 right', open: 'rotate' }), eventOf({ type: 'rowop', src: 'rowop M r2 - r1', open: 'rowop' })];
   assert.equal(ev[0].kind, 'try');
   assert.equal(tryCount(ev), 1);
+});
+
+// —— 同一处的三种按法、✕、摘叶子 / 删、拖一段（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 2.1、2.4、2.6 节）——
+
+test('每一下只认成一种：同一处开着几种按法时照 choosePress 定（null 是还在等，none 是作罢）；只有一种照旧按下就拖', () => {
+  assert.deepEqual(PRESS_OF, { tap: 'tap', write: 'tap', span: 'slide', line: 'slide', 'drop-on': 'hold', 'drop-at': 'hold' });
+  assert.equal(HOLD_MS, 350);
+  assert.deepEqual(PRESS_TEXT, { tap: '点', slide: '滑', hold: '按住再拖' });
+  const all = ['tap', 'slide', 'hold'];
+  assert.equal(choosePress(all, { up: true, moved: false, ms: 100 }), 'tap', '没挪、不到 0.35 秒就松手：点');
+  assert.equal(choosePress(all, { moved: true, ms: 120 }), 'slide', '不到 0.35 秒就挪了：滑');
+  assert.equal(choosePress(all, { moved: false, ms: 360 }), 'hold', '按住 0.35 秒没挪：托起来');
+  assert.equal(choosePress(all, { moved: false, ms: 100 }), null, '还没松手、没挪、不到 0.35 秒：接着等');
+  assert.equal(choosePress(['hold'], { moved: true, ms: 10 }), 'hold', '只有一种：照第一轮，按下就拖');
+  assert.equal(choosePress(['hold'], { moved: false, ms: 0 }), 'hold');
+  assert.equal(choosePress(['slide'], { moved: false, ms: 0 }), 'slide', '只开了拉括号：按下就开始拉（点一下松手是拉一个词）');
+  assert.equal(choosePress(['tap'], { moved: true, ms: 50 }), 'none', '只有点：挪了就作罢');
+  assert.equal(choosePress(['tap'], { moved: false, ms: 900 }), null, '点要等松手');
+  assert.equal(choosePress(['tap'], { up: true, moved: false, ms: 900 }), 'tap');
+  assert.equal(choosePress(['tap', 'hold'], { moved: true, ms: 100 }), 'none', '没有滑：不到 0.35 秒挪了是作罢（不留半截的拖）');
+  assert.equal(choosePress(['tap', 'hold'], { moved: false, ms: 100 }), null);
+  assert.equal(choosePress(['tap', 'hold'], { moved: true, ms: 400 }), 'hold', '按够了再挪：拖它');
+  assert.equal(choosePress(['tap', 'slide'], { moved: false, ms: 500 }), null, '没有按住再拖：到了 0.35 秒照旧等松手');
+  assert.equal(choosePress(['tap', 'slide'], { moved: false, ms: 500, up: true }), 'tap', '照点算');
+  assert.equal(choosePress(['tap', 'slide'], { moved: true, ms: 500 }), 'none', '照点算：挪了就作罢');
+  assert.equal(choosePress(['slide', 'hold'], { up: true, moved: false, ms: 100 }), 'none', '没有点：没挪就松手是作罢');
+  // 手势的名字也认（规则文件写的 tap / span / drop-at）
+  assert.equal(choosePress(['span', 'drop-at', 'tap'], { moved: true, ms: 50 }), 'slide');
+  assert.equal(choosePress([], { up: true }), 'none');
+});
+
+test('gestureGrabs 带按法：每一项是「地方|按法」，词、结点、格照旧都叫 part；不走手势表的拖是按住再拖、拨格子和点开看是点', () => {
+  const s = run('sentence s = "The man is a doctor."\nopen s mark\nopen s fold\nopen s move');
+  assert.deepEqual(gestureGrabs(open(s, 's:mark').gesture), new Set(['part|slide']));
+  const fold = gestureGrabs(open(s, 's:fold').gesture);
+  assert.ok(fold.has('part|tap') && fold.has('bracket|tap') && fold.has('pill|tap'), [...fold].join(' '));
+  const move = gestureGrabs(open(s, 's:move').gesture);
+  assert.ok(move.has('part|hold') && move.has('bracket|hold'), [...move].join(' '));
+  assert.deepEqual(gestureGrabs(gestureOf(s.objects.get('s'), 'refer')), new Set(['hook|slide']), '钩上拉线：滑');
+  const t = run('tree t = 50 30 70 tray="47"\nopen t rotate\nopen t insert');
+  assert.deepEqual(gestureGrabs(open(t, 't:rotate').gesture), new Set(['part|hold']));
+  assert.deepEqual(gestureGrabs(open(t, 't:insert').gesture), new Set(['tray|hold']));
+  assert.deepEqual(gestureGrabs(gestureOf(t.objects.get('t'), 'pluck')), new Set(['part|tap']));
+  const m = run('matrix M = 1 2 / 3 4\nopen M rowop');
+  assert.deepEqual(gestureGrabs(open(m, 'M:rowop').gesture), new Set(['row|hold', 'label|tap']));
+  assert.deepEqual(gestureGrabs(null), new Set());
+  // 不走手势表的（affords）：拖、拨格子、点开看
+  assert.deepEqual(openGrabs({ action: 'drag' }, affordsOf(TYPES.tree)), new Set(['part|hold']));
+  const mx = affordsOf(TYPES.matrix);
+  assert.deepEqual(openGrabs({ action: 'edit' }, mx), new Set(['part|tap']));
+  assert.deepEqual(openGrabs({ action: 'explain' }, mx), new Set(['part|tap']));
+  assert.deepEqual(openGrabs(open(run('matrix M = 1 2 / 3 4\nopen M edit input=keypad'), 'M:edit'), mx), new Set(['part|tap']), '键盘写一格走手势表的 write：点');
+  assert.deepEqual(openGrabs({ action: 'back', name: '插入后' }, {}), new Set(), '「回到……」按钮不抓舞台上的东西');
+  // 每种东西能开的、不走手势表的动作都定了按法
+  for (const ty of Object.values(TYPES)) for (const a of Object.keys(affordsOf(ty))) assert.ok(AFFORD_PRESS[a], `${ty.label}的 ${a} 要定按法`);
+});
+
+test('树：open t pluck 点一片叶子 = delete t#4（点里面的结点：只能摘叶子）；open t delete 点哪个删哪个 = delete t.30', () => {
+  const s = run('tree t = 50 30 60 20 40\nopen t pluck');
+  const e = open(s, 't:pluck');
+  assert.deepEqual(kindsOf(e.gesture), ['tap']);
+  assert.equal(e.gesture.on, 'node');
+  const r = gestureAct(s, e, { from: part(s, 't.20') });
+  assert.equal(r.src, 'delete t#4');
+  assert.match(gestureAct(s, e, { from: part(s, 't.30') }).error, /只能摘叶子/);
+  assert.ok(gestureAct(s, e, {}).error, '没点到结点');
+  // 翻出来的那一行照演：20 摘掉了
+  run(r.src, s);
+  assert.deepEqual(s.parts('t').map((n) => n.value), ['50', '30', '60', '40']);
+  const d = run('tree t = 50 30 60 20 40\nopen t delete');
+  const de = open(d, 't:delete');
+  assert.deepEqual(kindsOf(de.gesture), ['tap']);
+  assert.equal(gestureAct(d, de, { from: part(d, 't.30') }).src, 'delete t.30');
+  assert.equal(gestureAct(d, de, { from: part(d, 't.20') }).src, 'delete t.20');
+  run('delete t.30', d);
+  assert.deepEqual(d.parts('t').map((n) => n.value), ['50', '40', '60', '20'], '两个孩子：中序后继 40 顶上来');
+  // 值重复的结点写 #k（和 t#3 这种写法一样跟着结点走）
+  const dup = run('tree t = 50 30 30\nopen t delete');
+  assert.match(gestureAct(dup, open(dup, 't:delete'), { from: part(dup, 't#3') }).src, /^delete t#3$/);
+  // 不判对错：wrong= 写不上
+  assert.throws(() => run('tree t = 50 30\nopen t pluck wrong=mark'), /判不了对错/);
+});
+
+test('句子：open s move 按住一道括号拖到两个词之间 = move s.1-6 after s.11（按住一个词挪一个；挪到第一个词前面写 before s.1）', () => {
+  const s = run('sentence s = "The man who lives next door to my parents is a very good doctor."\nmark s.1-6 主语\nopen s move');
+  const e = open(s, 's:move');
+  assert.deepEqual(kindsOf(e.gesture), ['drop-at']);
+  assert.deepEqual(e.gesture.from, ['bracket', 'word']);
+  assert.equal(e.gesture.to, 'gap');
+  const m = s.objects.get('s').marks[0];
+  assert.equal(gestureAct(s, e, { from: { mark: m.id }, to: { gap: { after: 11 } } }).src, 'move s.1-6 after s.11');
+  assert.equal(gestureAct(s, e, { from: part(s, 's.3'), to: { gap: { after: 11 } } }).src, 'move s.3 after s.11');
+  assert.equal(gestureAct(s, e, { from: part(s, 's.3'), to: { gap: { after: 0 } } }).src, 'move s.3 before s.1');
+  assert.equal(gestureAct(s, e, { from: part(s, 's.10'), to: { gap: { after: 1 } } }).src, 'move s.10 after s.1');
+  // 落回原处、落在要挪的那一段里面、没落在空隙上：说为什么
+  assert.match(gestureAct(s, e, { from: part(s, 's.3'), to: { gap: { after: 2 } } }).error, /原处/);
+  assert.match(gestureAct(s, e, { from: part(s, 's.3'), to: { gap: { after: 3 } } }).error, /原处/);
+  assert.match(gestureAct(s, e, { from: { mark: m.id }, to: { gap: { after: 3 } } }).error, /里面/);
+  assert.ok(gestureAct(s, e, { from: part(s, 's.3') }).error);
+  assert.ok(gestureAct(s, e, { from: { mark: 'm99' }, to: { gap: { after: 11 } } }).error);
+  // 翻出来的那一行照演：整段挪到 a 后面，括号跟着那几个词
+  run(gestureAct(s, e, { from: { mark: m.id }, to: { gap: { after: 11 } } }).src, s);
+  const ws = [...s.objects.get('s').words].sort((a, b) => a.slot - b.slot).map((w) => w.value);
+  assert.deepEqual(ws, ['to', 'my', 'parents', 'is', 'a', 'The', 'man', 'who', 'lives', 'next', 'door', 'very', 'good', 'doctor']);
+  // 折起来的词不能挪、不能挪进折起来的那一段
+  const f = run('sentence s = "The man who lives next door is a doctor."\nfold s.3-6\nopen s move');
+  assert.match(gestureAct(f, open(f, 's:move'), { from: part(f, 's.7'), to: { gap: { after: 4 } } }).error, /折起来/);
+});
+
+test('✕：学生拉的括号点 ✕ = unmark s.2-5，学生连的线点 ✕ = unrefer s.23；老师画的收不了', () => {
+  // s.2-5 是主语 many child language researchers；s.23 是 this（指前面说的 children learn grammar by listening）；s.16 them 指 s.2-5
+  const S = 'sentence s = "Today, many child language researchers believe that children learn grammar by listening, but few of them agree on the evidence that supports this view."';
+  const s = run(`${S}\nopen s mark\nopen s refer\nmark s.20 宾语`);
+  s.apply(parseScript('mark s.2-5 主语')[0], { by: 'student', open: 'mark' });
+  const o = s.objects.get('s');
+  const mine = o.marks.find((x) => x.by === 'student'), theirs = o.marks.find((x) => x.by === 'teacher');
+  const em = open(s, 's:mark');
+  assert.equal(em.gesture.close.on, 'xmark');
+  const r = closeAct(s, em, { from: { mark: mine.id } });
+  assert.equal(r.src, 'unmark s.2-5');
+  assert.equal(r.act.type, 'unmark');
+  assert.match(closeAct(s, em, { from: { mark: theirs.id } }).error, /老师画的括号收不了/);
+  assert.ok(closeAct(s, em, { from: { mark: 'm99' } }).error);
+  // 线
+  s.apply(parseScript('refer s.23 -> s.8-12')[0], { by: 'student', open: 'refer' });
+  run('refer s.16 -> s.2-5', s);
+  const er = open(s, 's:refer');
+  assert.equal(er.gesture.close.on, 'xrefer');
+  assert.equal(closeAct(s, er, { from: { refer: 23 } }).src, 'unrefer s.23');
+  assert.match(closeAct(s, er, { from: { refer: 16 } }).error, /老师画的线收不了/);
+  assert.ok(closeAct(s, er, { from: { refer: 9 } }).error, '这个词上没有线');
+  // 别的项（折、挪）没有 ✕
+  run('open s fold', s);
+  assert.ok(closeAct(s, open(s, 's:fold'), { from: { mark: mine.id } }).error);
+  // 翻出来的那一行照演：只收学生那一道 / 那一条
+  run('unmark s.2-5\nunrefer s.23', s);
+  assert.deepEqual(o.marks.map((x) => x.id), [theirs.id]);
+  assert.deepEqual(o.refers.map((x) => x.from), [16]);
+});
+
+test('✕ 收线：别的线也指着这个词时写成 unrefer s.4 -> s.1，只收这一条', () => {
+  // which（s.6）指前面整句话 s.1-5，里面有 they（s.4）；学生把 they 连到 Kids
+  const S = 'sentence s = "Kids imitate what they hear, which explains why accents spread."';
+  const s = run(`${S}\nopen s refer\nrefer s.6 -> s.1-5`);
+  s.apply(parseScript('refer s.4 -> s.1')[0], { by: 'student', open: 'refer' });
+  const r = closeAct(s, open(s, 's:refer'), { from: { refer: 4 } });
+  assert.equal(r.src, 'unrefer s.4 -> s.1');
+  run(r.src, s);
+  assert.deepEqual(s.objects.get('s').refers.map((x) => x.from), [6], '老师那一条（指到的一段里有 s.4）还在');
+  // unrefer s.4 照旧收掉两头有 s.4 的每一条（老师写的旧写法意思不变）
+  const t = run(`${S}\nrefer s.6 -> s.1-5\nrefer s.4 -> s.1\nunrefer s.4`);
+  assert.deepEqual(t.objects.get('s').refers, []);
+  // 写错的：这一条不在
+  assert.match(dryRun(t, 'unrefer s.4 -> s.2')[0]?.error || '', /没有/);
+});
+
+test('画面还交不出的把手（空隙、小方块、✕、钩）和同一处分按法（Task 11 做）：现状不说学生能动；做好了（ARMED_GRIPS、ARMED_PRESS）照写', () => {
+  for (const g of ['gap', 'pill', 'xmark', 'xrefer', 'hook', 'sentence']) assert.equal(ARMED_GRIPS.has(g), false, `画面还没交 ${g}`);
+  for (const g of ['node', 'parent', 'tray', 'tree', 'slot', 'row', 'label', 'cell', 'word', 'bracket']) assert.ok(ARMED_GRIPS.has(g), g);
+  assert.equal(ARMED_PRESS.mixed, false);
+  const s = run('sentence s = "The man who lives next door is a doctor."\nopen s move');
+  assert.equal(armable(open(s, 's:move').gesture), false, '没有空隙可放');
+  assert.match(s.stateText(), /\n开着、页面还画不了的（学生现在动不了）：s move（拖到空处）/);
+  assert.doesNotMatch(s.stateText(), /学生能直接动的/);
+  // 折：点括号、点词画面挂得上（点小方块还不行），算动得了
+  assert.equal(armable(gestureOf(s.objects.get('s'), 'fold')), true);
+  // gesturedom.js 照 kindArmed 挂：挪一段的拖不挂（拎得起来放不下，还抢拉括号的手指）；矩阵行变换的两种都挂
+  assert.equal(kindArmed(open(s, 's:move').gesture, 'drop-at'), false);
+  const rg = open(run('matrix M = 1 2 / 3 4\nopen M rowop'), 'M:rowop').gesture;
+  assert.deepEqual(kindsOf(rg).filter((k) => kindArmed(rg, k)), ['drop-on', 'tap']);
+  ARMED_GRIPS.add('gap');
+  try { assert.match(s.stateText(), /\n学生能直接动的：s move（拖到空处）/); } finally { ARMED_GRIPS.delete('gap'); }
 });

@@ -59,7 +59,7 @@ unlabel dial:d                     收起拨数
 让学生自己动、给挑战（每动一下页面当场算、当场判，学生做的每一下下一次都告诉你）：
 open a                              交给学生直接动（这里是拖着两格换位置；每种东西能 open 的动作、学生怎么动、翻成哪一行，见各自一节）
 close a                             收回来（close a 动作：只收那一种）
-一样东西一次开一种会抢同一个部件的手势（open t 和 open t rotate 都拖结点）：第二项当场报错，先 close 前一项
+同一处按法不一样的（点、滑、按住再拖）能一起开；按法一样的第二项当场报错，先 close 前一项
 同一项再开一次是换掉它：再写一遍 open，照新写的 wrong=、range=、undo= 办
 页面判对错的动作（树的 rotate insert place、矩阵的 rowop、句子的 mark refer）在 open 那一行写你事先定的，页面只照它办：
   wrong=quiet 照做、只记下（默认，不写就是它）/ wrong=mark 照做、那一处淡淡圈一下 / wrong=block 不让做、弹回去

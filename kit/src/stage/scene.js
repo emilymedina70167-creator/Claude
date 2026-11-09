@@ -18,7 +18,7 @@ import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder } from './value.js';
 import { rulesOf, done as nextDone, checkMeasure, measureLine, changedKeys } from './rules.js';
 import { judge } from './referee.js';
-import { gestureGrabs, armable } from './gestures.js';
+import { openGrabs, grabClash, placeOf, pressOf, PRESS_TEXT, ARMED_PRESS, armable } from './gestures.js';
 
 export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 /** 扫一遍拨数：能拨到的值超过这么多就不扫（现状里只说一句太多，不让每一轮的现状变长、算得太久） */
@@ -625,6 +625,12 @@ export class Scene {
     return es.some((x) => x?.policy?.undo);
   }
 
+  /** 两项 open 写的部件重不重叠（open s.1-3 fold 和 open s.5-9 mark 碰不到）：有一项没写部件（整样东西）、部件找不到了都算重叠 */
+  opensMeet(a, b) {
+    const keysOf = (x) => { if (!x?.refs?.length) return null; try { return new Set(x.refs.flatMap((rf) => this.parts(rf)).map((p) => p.key)); } catch { return null; } };
+    const A = keysOf(a), B = keysOf(b);
+    return !A || !B || [...A].some((k) => B.has(k));
+  }
   /**
    * 一行在有规则的东西上做的动作，过裁判（referee.js 的 judge）：{ obj, act, src, by, policy, verdict, apply, call, facts, mark, failed? }
    * （apply 以后学生的那一下还多 after：规则交的「这一下以后」的事实）；
@@ -1145,17 +1151,17 @@ export class Scene {
           if (!(lo <= hi)) throw new Error('range 要写成 小..大，比如 range=-3..3');
           e.lo = lo; e.hi = hi;
         }
-        // 同一样东西上另一项开着的、要用手指抓同一处的（open t 和 open t rotate 都拖结点、open t insert 和 place 都拖托盘、
-        // open s mark 和 fold 都按词）：同一处按下去只拿得到先挂的那一个，后开的这一项学生永远用不上——当场报，不默默收下
-        const grabs = (x) => (x.action === 'drag' || (affords[x.action] && !x.input) ? new Set(['part']) : gestureGrabs(x.gesture));
-        const keysOf = (x) => { if (!x.refs.length) return null; try { return new Set(x.refs.flatMap((rf) => this.parts(rf)).map((p) => p.key)); } catch { return null; } };
-        const meet = (a, b) => { const A = keysOf(a), B = keysOf(b); return !A || !B || [...A].some((k) => B.has(k)); };
+        // 同一样东西上另一项开着的、在同一处用同一种按法抓的（open t 和 open t rotate 都按住结点拖、open t insert 和 place 都按住托盘拖、
+        // open t pluck 和 delete 都点结点）：同一处按下去只拿得到先挂的那一个，后开的这一项学生永远用不上——当场报，不默默收下。
+        // 按法不一样的（点、滑、按住再拖：open s mark、fold、move）能一起开，一下只认成一种（gestures.js 的 choosePress）
         for (const [k, x] of this.opens) {
           if (x.obj !== o.id || k === `${o.id}:${action}`) continue;
-          const shared = [...grabs(e)].filter((gr) => grabs(x).has(gr) && (gr !== 'part' || meet(e, x)));
-          if (!shared.length) continue;
+          const { same } = grabClash(openGrabs(e, affords), openGrabs(x, affords), () => this.opensMeet(e, x));
+          if (!same.length) continue;
+          const press = PRESS_TEXT[pressOf(same[0])];
+          const where = same.some((gr) => placeOf(gr) === 'part') ? '同样的部件' : '同一处';
           const xwhat = (x.input ? null : affords[x.action]) || gestureText(x.gesture);
-          throw new Error(`${o.id} 已经开着 ${x.action}（${xwhat}），${action} 也要用手指抓${shared.includes('part') ? '同样的部件' : '同一处'}，学生只做得了先开的那一种：一次开一种，先 close ${o.id} ${x.action} 再 open ${o.id} ${action}`);
+          throw new Error(`${o.id} 已经开着 ${x.action}（${xwhat}），${action} 也要在${where}上${press}：两项都是${press}，学生只做得了先开的那一种；先 close ${o.id} ${x.action} 再 open ${o.id} ${action}（同一处按法不一样的才能一起开：点、滑、按住再拖）`);
         }
         this.opens.set(`${o.id}:${action}`, e);
         return { open: e };
@@ -1733,11 +1739,27 @@ export class Scene {
     const w = this.waiting;
     const asked = w ? [...w.refs, ...(Array.isArray(w.expect) ? w.expect : w.expect && this.isRef(w.expect) ? [w.expect] : [])] : [];
     if (w) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案', pick: '点几样' }[w.kind]}${w.refs.length ? ` ${w.refs.join(' ')}` : ''}${hiddenNote(this.hiddenIn(asked))}`);
-    const openText = (e) => { if (e.action === 'back') return `${e.obj} back（按钮「回到${e.name}」${this.keeps.get(e.obj)?.has(e.name) ? '' : '；还没存，按不了'}）`; const o = this.objects.get(e.obj); const what = (e.input ? null : affordsOf(typeOf(o))[e.action]) || gestureText(e.gesture); const pol = [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、'); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${e.lo != null ? `，${e.lo}～${e.hi}` : ''}${pol ? `；${pol}` : ''}）${hiddenNote(this.hiddenIn([e.obj]))}`; };
-    // 画面还挂不上的手势（句子的拉线，gestures.js 的 ARMED_GESTURES）：不说学生能动，单独一句（开着、不默默吞掉）
+    const backText = (e) => `back（按钮「回到${e.name}」${this.keeps.get(e.obj)?.has(e.name) ? '' : '；还没存，按不了'}）`;
+    const polText = (e) => [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、');
+    const rangeText = (e) => (e.lo != null ? `，${e.lo}～${e.hi}` : '');
+    const openText = (e) => { if (e.action === 'back') return `${e.obj} ${backText(e)}`; const o = this.objects.get(e.obj); const what = (e.input ? null : affordsOf(typeOf(o))[e.action]) || gestureText(e.gesture); const pol = polText(e); return `${e.refs.length ? e.refs.join(' ') : e.obj} ${e.action}（${what}${rangeText(e)}${pol ? `；${pol}` : ''}）${hiddenNote(this.hiddenIn([e.obj]))}`; };
+    // 画面还挂不上的手势（句子的拉线，gestures.js 的 ARMED_GESTURES、ARMED_GRIPS）：不说学生能动，单独一句（开着、不默默吞掉）
     const opens = [...this.opens.values()];
     const can = opens.filter((e) => armable(e.gesture)), cannot = opens.filter((e) => !armable(e.gesture));
-    if (can.length) lines.push(`学生能直接动的：${can.map(openText).join('；')}`);
+    // 一样东西同一处开着几种按法（mark 滑、fold 点、move 按住再拖）：这样东西开着的合成一行，每一项写怎么按（gestures.js 的 PRESS_TEXT）
+    const grabsOf = (e) => openGrabs(e, affordsOf(typeOf(this.objects.get(e.obj))));
+    const mixedOn = (id) => { const xs = can.filter((e) => e.obj === id); return xs.some((a, i) => xs.slice(i + 1).some((b) => grabClash(grabsOf(a), grabsOf(b), () => this.opensMeet(a, b)).mixed.length)); };
+    const pressText = (e) => [...new Set([...grabsOf(e)].map(pressOf))].map((p) => PRESS_TEXT[p]).join(' / ');
+    const itemText = (e) => { if (e.action === 'back') return backText(e); const pol = polText(e); return `${e.refs.length ? `${e.refs.join(' ')} ` : ''}${e.action}（${pressText(e)}${rangeText(e)}${pol ? `；${pol}` : ''}）`; };
+    // 画面还分不清同一处的几种按法（Task 11 以前）：照实说学生在同一处只按得出一种
+    const mixNote = ARMED_PRESS.mixed ? '' : '（页面还分不清同一处的几种按法：学生在同一处只按得出其中一种）';
+    const canItems = [];
+    for (const e of can) {
+      if (!mixedOn(e.obj)) { canItems.push(openText(e)); continue; }
+      if (can.find((x) => x.obj === e.obj) !== e) continue; // 合成的那一行放在这样东西第一项的位置
+      canItems.push(`${e.obj} 开着：${can.filter((x) => x.obj === e.obj).map(itemText).join('、')}${mixNote}${hiddenNote(this.hiddenIn([e.obj]))}`);
+    }
+    if (canItems.length) lines.push(`学生能直接动的：${canItems.join('；')}`);
     if (cannot.length) lines.push(`开着、页面还画不了的（学生现在动不了）：${cannot.map(openText).join('；')}`);
     // 存档点：每样东西存着哪几个名字（back t "名字" 回去）、页面以后替老师存的
     for (const id of this.objects.keys()) {
