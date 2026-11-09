@@ -6,3 +6,4 @@ tools/.tmp/
 # 缺口尺子试演的截图：只把报告引用到的强制加进来（git add -f），别的重跑 try 文件就有
 evals/stage-gaps/try/*/shots/
 evals/stage-gaps/try2/*/shots/
+evals/stage-gaps/try3/*/shots/
