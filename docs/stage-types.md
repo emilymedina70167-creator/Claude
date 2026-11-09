@@ -101,14 +101,14 @@ SVG 节点也可以当部件节点：`flagPart` 照样加 class，`pulse` 和翻
 | `check(o, act, scene)` | 判一下 `{ legal, right, misread, why, next }`：`legal: false` 是这个世界做不到（永远不演、弹回去）；`right: null` 是不判；`why` 写「这一下做了什么」（「50 右旋」），`next` 写「现在正确的是什么」；`misread` 是像哪种错，认不准就给 `null`，别给老师写错的事实 |
 | `predicates` | 挑战用的判断式 `{ 名字: (o, args, scene) → true / false / null }`。老师写 `when="M rank=2"`，`goal.js` 拆成名字 `rank`、参数 `['2']`；参数写错抛错（话给老师看），还判不了给 `null` |
 | `facts(before, after, act)` | 学生这一下以后写给老师的几行事实（谁转上来了、哪一行变成什么） |
-| `gestures` | 手势表 `{ 动作: { gesture, from, to, tap, on, toAct, ask?, pick?, choices? } }`。`gesture` 是 `tap` / `drop-on` / `drop-at` / `span` / `write` 之一或几种；`from`、`to`、`tap`、`on` 是画法里把手的名字；`toAct(o, { from, to, value, role }) → { act, src } \| { error }` 把手指的一下翻成一行学生指令；`ask(o, ctx)` 放下以后先问一个值（倍数框 `{ input: 'keypad', prompt, hint }`），`pick` + `choices(o)` 是拉好一段以后点的那一排；`close: { on, toAct }` 是学生做的东西头上的 ✕（句子收括号、收线，`gestures.js` 的 `closeAct`）。按法照手势分三种（`PRESS_OF`：点、滑、按住再拖），同一处按法不一样的两项能一起开，一样的 `open` 当场报 |
+| `gestures` | 手势表 `{ 动作: { gesture, from, to, tap, on, toAct, ask?, pick?, choices? } }`。`gesture` 是 `tap` / `drop-on` / `drop-at` / `span` / `line` / `write` 之一或几种；`from`、`to`、`tap`、`on` 是画法里把手的名字；`toAct(o, { from, to, value, role }) → { act, src } \| { error }` 把手指的一下翻成一行学生指令；`ask(o, ctx)` 放下以后先问一个值（倍数框 `{ input: 'keypad', prompt, hint }`），`pick` + `choices(o)` 是拉好一段以后点的那一排；`close: { on, toAct }` 是学生做的东西头上的 ✕（句子收括号、收线，`gestures.js` 的 `closeAct`）。按法照手势分三种（`PRESS_OF`：点、滑、按住再拖），同一处按法不一样的两项能一起开，一样的 `open` 当场报 |
 | `actOf(o, c, h)` | 一行镜头指令 → `check` 认的动作，不判的指令给 `null`。学生、老师的每一行都照它过裁判（老师的照演不拦，错了下一轮告诉老师） |
 | `judges` | 页面判对错的动作名：只有它们收 `wrong=` / `call=` / `@名字.right`，写在别的动作上当场报错 |
 | `doneBy` | open 了这几个动作，`next` 走到 `null` 才算「学生做完了」 |
 | `slipRefs(o, act)`（可选） | `wrong=mark` 时那一行没写部件（`rowop M r3 - 2r1`），淡淡圈哪儿 |
 | `standard(o)`（可选） | 借 `kit/src/engines/` 的引擎跑出整段标准过程和常见错法，测试拿来和 `next` 对拍 |
 
-画法那一半交 `grips: { 名字: (stage, o, e) → [把手] }`（名字和手势表里的 `from` / `to` / `tap` / `on` 对上），每个把手 `{ key, part(), node(), box(), area?, light?, show?, lift?, cls?, consumed? }`：`part()` 是交给 `toAct` 的那一样（部件，或者 `{ row: 3 }`、`{ slot: { parent, side } }` 这种自己认的写法）。可选 `gestureHint(stage, o, e, r)`（悬在落点上先说会怎样）、`spanPreview(stage, o, e)`（拉一段时画什么）。接手指、跟着手动、弹回去、键盘都在 `gesturedom.js`，画法不挂监听。`open` 的分派：`drag` 走 `dragSpec`；`affords` 里有、没写 `input=` 的走画法自己的；别的走手势表。
+画法那一半交 `grips: { 名字: (stage, o, e, { role }) → [把手] }`（名字和手势表里的 `from` / `to` / `tap` / `on` / `close.on` 对上；`role` 是 `'from'`（拿起来、点的地方）或 `'to'`（落点：落点不跟着 `open` 写的部件走，矩阵整张拖的落点是舞台上别的矩阵）），每个把手 `{ key, part(), node(), box(), rect?, area?, light?, show?, lift?, land?, cls?, consumed? }`：`part()` 是交给 `toAct` 的那一样（部件，或者 `{ row: 3 }`、`{ slot: { parent, side } }`、`{ gap: { after } }` 这种自己认的写法）；`rect()` 是按的屏幕框（小的把手用 `atLeast(…, 44)`），`land(L, r, 落点)` 是放下以后拎着的那一份怎么走（弹回去、飞进去）。可选 `gestureHint(stage, o, e, r)`（悬在落点上先说会怎样）、`spanPreview(stage, o, e)`（拉一段时画什么）。接手指、跟着手动、弹回去、键盘、从钩拉线、✕ 都在 `gesturedom.js`，画法不挂监听；同一处几种按法（点、滑、按住 0.35 秒再拖）由 `pointer.js` 照 `choosePress` 分，画法不用管。要学生看得见的把手（句子的钩、✕）在 `sync` 里照 `stage.scene.opens` 画成 `decor`（和矩阵行变换的把手一样）。`open` 的分派：`drag` 走 `dragSpec`；`affords` 里有、没写 `input=` 的走画法自己的；别的走手势表。
 
 说明（`doc`）里每个手势动作写一行 `open 名字 动作 …  学生怎么动 = 翻成哪一行`，判断式写一行 `判断式（when=）：…`：`tests/stage-doc.test.js` 照规则查，漏了就红。
 ## 拖和点、排版（2026-11-06 以后的约定）

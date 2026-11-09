@@ -3,7 +3,7 @@
 // 位置全由 sentence.js 的 layout 算（这里只照着画、照着动），所以画面和给老师看的现状、贴字让开的地方一定对得上
 import { EASE, moveDuration, stagger, arcPoints } from '../motion.js';
 import { layout, setMeasure, FONTS, WORD_H, shownPunct } from './sentence.js';
-import { openParts } from '../gesturedom.js';
+import { openParts, atLeast, screenOf } from '../gesturedom.js';
 
 const tr = (x, y, s = 1) => `translate(${x}px, ${y}px)${s !== 1 ? ` scale(${s})` : ''}`;
 const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
@@ -111,13 +111,153 @@ function spanPreview(stage, o0) {
   };
 }
 
+// —— 学生手上的把手（第二轮 Task 11）：钩、✕、空隙、小方块、外框；位置都照 layout 算 ——
+
+// open s refer 的钩挂在哪几个词上：open 写了部件就那几个；没写看 links= 的起头（对的、列的错连都算）；再没有就每个词。折起来的词不挂
+function hookKeys(stage, o) {
+  const e = stage.scene.opens.get(`${o.id}:refer`);
+  if (!e) return [];
+  let keys;
+  if (e.refs?.length) keys = openParts(stage, e, []).filter((p) => p.obj === o.id && p.key != null).map((p) => p.key);
+  else {
+    const from = new Set([...(o.links?.pairs || []), ...(o.links?.wrongs || [])].map((p) => String(p.from)));
+    keys = from.size ? o.words.filter((w) => from.has(String(w.key))).map((w) => w.key) : ordered(o).map((w) => w.key);
+  }
+  const folded = new Set((o.folds || []).flatMap((f) => f.keys));
+  return [...new Set(keys)].filter((k) => !folded.has(k));
+}
+// 词的右上角：钩的那一小圈（世界坐标，18 见方）。在词框上沿外面一点：不压词，也不压词上面一排的小标签的字（标签在词正中上方）
+const HOOK = 18, X_SIZE = 20;
+const hookBox = (b) => ({ x: b.x + b.w - HOOK + 7, y: b.y - HOOK + 5, w: HOOK, h: HOOK });
+// 学生拉的括号的 ✕：最后一截括号右下角那一道竖线的外边，在词的下沿和括号下的字中间（不压词、不压字、不压句尾的「括号外 N」）
+function markX(L, m) {
+  const seg = L.brackets.filter((b) => b.mark === m.id).at(-1);
+  if (!seg) return null;
+  return { x: seg.x + seg.w + 3 - X_SIZE / 2, y: seg.y + seg.h - 5 - X_SIZE / 2, w: X_SIZE, h: X_SIZE };
+}
+// 学生连的线的 ✕：拱起来的那道弧的最高处；画成「→ 整句」那种小标签的，贴在标签右边
+function referX(L, r) {
+  const a = L.refers.find((x) => x.from === r.from);
+  if (a) {
+    const n = (a.d.match(/-?\d+(?:\.\d+)?/g) || []).map(Number); // M px py C px top qx top qx qy
+    if (n.length >= 8) { const [px, py, , top, , , qx, qy] = n; return { x: (px + qx) / 2 - X_SIZE / 2, y: 0.75 * top + 0.125 * (py + qy) - X_SIZE / 2, w: X_SIZE, h: X_SIZE }; }
+  }
+  const t = L.tags.find((x) => x.id === `ref:${r.from}`);
+  return t ? { x: t.x + t.w + 3, y: t.y + t.h / 2 - X_SIZE / 2, w: X_SIZE, h: X_SIZE } : null;
+}
+// 只在拖的时候画出来的东西（两个词之间的空隙、句子外框）：不带 data-obj，排版不算它
+function dragMark(stage, cls, b) {
+  const n = el('div', cls, stage.layer);
+  n.style.transform = tr(b.x, b.y);
+  n.style.width = `${b.w}px`;
+  n.style.height = `${b.h}px`;
+  return n;
+}
+// 两个词之间的一个空隙（open s move 的落点）：after 是前面有几个词（挪之前的次序），0 是第一个词前面
+function gapGrip(stage, key, after, x, y) {
+  let n = null;
+  const box = { x: x - 16, y, w: 32, h: WORD_H };
+  return {
+    key, part: () => ({ gap: { after } }), node: () => n, box: () => box, area: () => screenOf(stage, box),
+    show(on) { if (on && !n) n = dragMark(stage, 'sn-gap', { x: x - 1.5, y: y + 4, w: 3, h: WORD_H - 8 }); else if (!on && n) { n.remove(); n = null; } },
+  };
+}
+// 按住一道括号拖（open s move）：这一段的词连着括号一起托起来跟着手，原来的淡下去
+function spanLift(stage, id, markId) {
+  const o = stage.scene.objects.get(id);
+  const m = o?.marks?.find((x) => x.id === markId);
+  if (!m) return null;
+  const ns = ordered(o).filter((w) => m.keys.includes(w.key)).map((w) => stage.nodeOf(w)).filter((n) => n?.__box && !n.classList.contains('is-folded'));
+  if (!ns.length) return null;
+  const bs = ns.map((n) => n.__box);
+  const x0 = Math.min(...bs.map((b) => b.x)), y0 = Math.min(...bs.map((b) => b.y));
+  const box = { x: x0 - 6, y: y0 - 4, w: Math.max(...bs.map((b) => b.x + b.w)) - x0 + 12, h: Math.max(...bs.map((b) => b.y + b.h)) - y0 + 8 };
+  const g = el('div', 'st-g-ghost sn-liftghost', stage.layer);
+  g.style.width = `${box.w}px`;
+  g.style.height = `${box.h}px`;
+  for (const n of ns) {
+    const c = n.cloneNode(true);
+    c.removeAttribute('data-obj');
+    c.className = 'sn-word';
+    if (n.dataset.paint) c.dataset.paint = n.dataset.paint;
+    c.style.transform = tr(n.__box.x - box.x, n.__box.y - box.y);
+    c.style.opacity = '';
+    g.appendChild(c);
+  }
+  g.style.transform = tr(box.x, box.y);
+  const own = [...(stage.decors.get(id) || [])].filter(([k]) => k.startsWith(`br:${m.id}:`) || k.startsWith(`mk:${m.id}:`) || k === `xm:${m.id}`).map(([, n]) => n);
+  [...ns, ...own].forEach((n) => n.classList.add('is-lifted'));
+  return { el: g, box, restore: () => [...ns, ...own].forEach((n) => n.classList.remove('is-lifted')) };
+}
+// 句子外框（线松在这儿 = 整句）：框画在句子外面一圈；落点是框外面的四条（不和词、括号抢：手指在句子里面时拿到的总是词或括号）
+function frameGrips(stage, o) {
+  const id = o.id;
+  let n = null;
+  const boxOf = () => { const s = stage.scene.objects.get(id); return s ? layout(s).box : null; };
+  const show = (on) => {
+    if (on && !n) { const b = boxOf(); if (b) n = dragMark(stage, 'sn-frame', { x: b.x - 14, y: b.y - 14, w: b.w + 28, h: b.h + 28 }); } else if (!on && n) { n.remove(); n = null; }
+  };
+  const OFF = 14, TH = 44;
+  const band = (side) => () => {
+    const b = screenOf(stage, boxOf());
+    if (!b) return null;
+    const X = b.x - OFF - TH, W = b.w + 2 * (OFF + TH);
+    if (side === 't') return { x: X, y: b.y - OFF - TH, w: W, h: TH };
+    if (side === 'b') return { x: X, y: b.y + b.h + OFF, w: W, h: TH };
+    return { x: side === 'l' ? X : b.x + b.w + OFF, y: b.y - OFF, w: TH, h: b.h + 2 * OFF };
+  };
+  return ['t', 'b', 'l', 'r'].map((side) => ({ key: `frame:${side}`, part: () => ({ whole: true }), node: () => n, box: boxOf, rect: band(side), area: band(side), show, light: (cls, on) => n?.classList.toggle(cls, on) }));
+}
+// 括号能按的那一条：括号那道线上下、连着下面的成分字（只有几像素高的线手指按不准）；至少 44px
+function bracketRect(stage, n) {
+  const r = stage.screenRect(n);
+  if (!r) return null;
+  const s = stage.liveCam().s, line = r.y + r.h;
+  return atLeast({ x: r.x, y: line - 12 * s, w: r.w, h: 32 * s });
+}
+
 export const sentenceView = {
-  // 通用手势（gesturedom.js）抓哪儿：一个词（拉一段从它起、到它止；折起一段点它），一道括号（点它折起来）
+  // 通用手势（gesturedom.js）抓哪儿：一个词（拉一段从它起、到它止；折起一段点它；按住挪它），一道括号（点它折起来；按住整段挪），
+  // 钩（从它拉线）、两个词之间的空隙（挪到这里）、小方块（点它展开）、句子外框（线松在这儿是整句）、学生拉的括号和线上的 ✕
   grips: {
     word: (stage, o, e) => openParts(stage, e, ordered(o))
       .filter((w) => !stage.nodeOf(w)?.classList.contains('is-folded'))
       .map((w) => ({ key: `w:${w.key}`, part: () => stage.scene.partOf(o.id, w.key), node: () => stage.nodes.get(`${o.id}:${w.key}`) })),
-    bracket: (stage, o) => layout(o).brackets.map((g) => ({ key: `br:${g.id}`, part: () => ({ mark: g.mark }), node: () => stage.decor(o.id, `br:${g.id}`) })),
+    bracket: (stage, o) => layout(o).brackets.map((g) => ({
+      key: `br:${g.id}`, part: () => ({ mark: g.mark }), node: () => stage.decor(o.id, `br:${g.id}`),
+      rect: () => bracketRect(stage, stage.decor(o.id, `br:${g.id}`)),
+      lift: () => spanLift(stage, o.id, g.mark),
+    })),
+    hook: (stage, o) => hookKeys(stage, o).map((k) => {
+      const n = () => stage.decor(o.id, `hk:${k}`);
+      return { key: `hk:${k}`, cls: '', part: () => stage.scene.partOf(o.id, k), node: n, box: () => n()?.__g || null, rect: () => atLeast(stage.screenRect(n())) };
+    }).filter((g) => g.node()),
+    gap: (stage, o) => {
+      const L = layout(o), oy = o.origin?.y ?? 0;
+      const out = [];
+      let count = 0;
+      L.items.forEach((it, i) => {
+        const y = oy + L.lines[it.line].wordY;
+        const prev = L.items[i - 1], left = it.box.x - it.leadW;
+        out.push(gapGrip(stage, `gap:${i}`, count, prev && prev.line === it.line ? (prev.box.x + prev.box.w + prev.punctW + left) / 2 : left - 6, y));
+        count += it.keys.length;
+        if (!L.items[i + 1] || L.items[i + 1].line !== it.line) out.push(gapGrip(stage, `gap:${i}e`, count, it.box.x + it.box.w + it.punctW + 6, y));
+      });
+      return out;
+    },
+    pill: (stage, o) => [...layout(o).pills.keys()].map((id) => {
+      const n = () => stage.decor(o.id, `fold:${id}`);
+      return { key: `pill:${id}`, part: () => ({ pill: id }), node: n, rect: () => atLeast(stage.screenRect(n())) };
+    }),
+    sentence: (stage, o) => frameGrips(stage, o),
+    xmark: (stage, o) => (o.marks || []).filter((m) => m.by === 'student').map((m) => {
+      const n = () => stage.decor(o.id, `xm:${m.id}`);
+      return { key: `xm:${m.id}`, cls: '', part: () => ({ mark: m.id }), node: n, rect: () => atLeast(stage.screenRect(n())) };
+    }).filter((g) => g.node()),
+    xrefer: (stage, o) => (o.refers || []).filter((r) => r.by === 'student').map((r) => {
+      const n = () => stage.decor(o.id, `xr:${r.from}`);
+      return { key: `xr:${r.from}`, cls: '', part: () => ({ refer: r.from }), node: n, rect: () => atLeast(stage.screenRect(n())) };
+    }).filter((g) => g.node()),
   },
   spanPreview,
   sync(stage, o, ctx) {
@@ -266,6 +406,25 @@ export const sentenceView = {
           cap.setAttribute('d', r.cap || '');
           await stage.tween(g, [{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: 380 });
         })());
+      }
+    }
+    // 学生手上的把手（开着才画，只读的舞台、重放的老课没有）：open s refer 的钩；open s mark / refer 时学生自己拉的括号、连的线上的 ✕
+    const opens = stage.withInput ? sc.opens : null;
+    const ring = (n) => stage.tween(n, [{ opacity: 0, transform: `${tr(n.__g.x, n.__g.y)} scale(0.5)` }, { opacity: 1, transform: tr(n.__g.x, n.__g.y) }], { duration: 300, delay: 260, easing: EASE.spring });
+    if (opens?.has(`${o.id}:refer`)) {
+      for (const k of hookKeys(stage, o)) {
+        const b = L.boxes.get(k);
+        if (b) placeDecor(stage, o, ctx, live, `hk:${k}`, hookBox(b), () => { const n = el('div', 'sn-hook', stage.layer); n.setAttribute('aria-label', '从这里拉一条线'); return n; }, ring);
+      }
+      for (const r of o.refers || []) {
+        const at = r.by === 'student' && referX(L, r);
+        if (at) placeDecor(stage, o, ctx, live, `xr:${r.from}`, at, () => { const n = el('div', 'sn-x', stage.layer); n.setAttribute('aria-label', '收掉这条线'); return n; }, ring);
+      }
+    }
+    if (opens?.has(`${o.id}:mark`)) {
+      for (const m of o.marks || []) {
+        const at = m.by === 'student' && markX(L, m);
+        if (at) placeDecor(stage, o, ctx, live, `xm:${m.id}`, at, () => { const n = el('div', 'sn-x', stage.layer); n.setAttribute('aria-label', '收掉这道括号'); return n; }, ring);
       }
     }
     stage.dropDecor(o.id, (key) => !live.has(key));
@@ -475,7 +634,32 @@ export const sentenceView = {
 @media (prefers-reduced-motion: reduce) { .sn-word.is-tap::after, .sn-word.is-drag::after { animation: none; opacity: .45; } }
 .sn-word.is-span { background: color-mix(in srgb, var(--st-brand) 11%, transparent); }
 .sn-span { position: absolute; left: 0; top: 0; height: 9px; box-sizing: border-box; border: 2.5px solid var(--st-brand); border-top: 0; border-radius: 0 0 8px 8px; pointer-events: none; z-index: 4; }
-.sn-br.is-tap { opacity: 1; border-width: 2.5px; }
+.sn-br.is-tap, .sn-br.is-drag { opacity: 1; border-width: 2.5px; }
+/* 拖着找落点（gesturedom.js）：线悬在词、括号上；挪一段时两个词之间的空隙；线松在外框上是整句 */
+.sn-word.is-over { background: color-mix(in srgb, var(--st-brand) 11%, transparent); box-shadow: 0 0 0 2px var(--st-brand); }
+.sn-br.is-over { opacity: 1; border-color: var(--st-brand); border-width: 3px; }
+.sn-br.is-nodrop { border-color: color-mix(in srgb, var(--st-red) 60%, transparent); }
+.sn-gap { position: absolute; left: 0; top: 0; border-radius: 2px; background: var(--st-brand); opacity: 0; pointer-events: none; transition: opacity .15s, scale .15s; }
+.sn-gap.is-drop { opacity: .22; }
+.sn-gap.is-over { opacity: 1; scale: 1.7 1; }
+.sn-gap.is-nodrop { opacity: .45; background: var(--st-red); }
+.sn-frame { position: absolute; left: 0; top: 0; box-sizing: border-box; border-radius: 18px; border: 2px dashed color-mix(in srgb, var(--st-brand) 28%, transparent); pointer-events: none; transition: background-color .2s, border-color .2s; }
+.sn-frame.is-over { border-color: var(--st-brand); background: color-mix(in srgb, var(--st-brand) 6%, transparent); }
+.sn-liftghost { background: var(--st-card); border-radius: 12px; }
+.sn-liftghost > .sn-word { position: absolute; }
+/* 钩：词右上角一个小圈（从这里拉线），轻轻呼吸；拉着的时候放大一点 */
+.sn-hook { position: absolute; left: 0; top: 0; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--st-brand); background: var(--st-card); pointer-events: none; z-index: 2; transition: scale .15s; }
+.sn-hook::after { content: ""; position: absolute; inset: 3.5px; border-radius: 50%; background: var(--st-brand); animation: sn-hookbreathe 1.8s ease-in-out infinite; }
+@keyframes sn-hookbreathe { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+@media (prefers-reduced-motion: reduce) { .sn-hook::after { animation: none; } }
+.sn-hook.is-press, .sn-hook.is-hold { scale: 1.25; }
+/* ✕：学生拉的括号、连的线上，点了收掉（点区 44px，画出来小一点不压字） */
+.sn-x { position: absolute; left: 0; top: 0; box-sizing: border-box; border-radius: 50%; background: var(--st-card); pointer-events: none; z-index: 2;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--st-muted) 40%, transparent), 0 3px 8px -4px rgb(var(--shade-rgb, 25 45 40) / 0.45); transition: scale .12s; }
+.sn-x::before, .sn-x::after { content: ""; position: absolute; left: 50%; top: 50%; width: 10px; height: 1.8px; margin: -0.9px 0 0 -5px; border-radius: 1px; background: var(--st-muted); rotate: 45deg; }
+.sn-x::after { rotate: -45deg; }
+.sn-x.is-press { scale: .86; }
+.sn-x.is-lifted { opacity: 0; }
 .sn-caret { position: absolute; left: 0; top: 0; width: 3px; height: ${WORD_H - 8}px; border-radius: 2px; background: var(--st-brand); transition: opacity .15s; pointer-events: none; }
 
 /* 括号：词下面一道，两头翘上来贴着词；套在外面的那道竖线长一点，把里面的围住；跨到下一行的那头淡掉 */

@@ -436,9 +436,12 @@ export class Stage {
 
   // —— 拖的时候：镜头不挪（手指下面的东西不能被挪走）、老师写的下一行等手指松开 ——
   beginDrag() {
-    // 镜头正走到一半：停在现在的样子，坐标照它算（不然东西跳离手指）
+    // 镜头正走到一半：停在现在的样子，坐标照它算（不然东西跳离手指）；松手以后再照现在的样子框一次
+    // （同一处几种按法时按下去就先停住镜头，最后可能只是点一下，不能让镜头停在半路）
     const live = this.liveCam();
-    this.world.getAnimations?.().forEach((a) => a.cancel());
+    const moving = this.world.getAnimations?.() || [];
+    if (moving.length) this.camLater = true;
+    moving.forEach((a) => a.cancel());
     this.world.style.transform = tr(live.tx, live.ty, live.s);
     this.cam = live;
     this.dragging = true;
@@ -997,13 +1000,16 @@ export class Stage {
   async do_wait(c, fx) { await this.wait(fx.ms); }
   async do_ask() { const w = this.scene.waiting; if (w?.prompt) await this.say(w.prompt, { ask: true }); }
 
-  // 比较：两个亮一下，中间冒出「65 > 49′」，停一会儿再收起。整张比（compare P Q）：两张里不一样的格各闪两下
+  // 比较：两个亮一下，中间冒出「65 > 49′」，停一会儿再收起。整张比（compare P Q）：两张里不一样的格各闪两下（is-flash，两张都不变）
   async do_compare(c, fx) {
     if (fx.compare) {
       const k = fx.compare;
-      const parts = [];
-      for (const d of k.diff || []) for (const id of [k.a, k.b]) { try { parts.push(...this.scene.parts(`${id}.${d.r},${d.c}`)); } catch { /* 那一张不在了 */ } }
-      for (let i = 0; i < 2; i++) await Promise.all(parts.map((p, j) => this.pulse(p, stagger(j, { step: 30 }))));
+      const nodes = [];
+      for (const d of k.diff || []) for (const id of [k.a, k.b]) { try { nodes.push(...this.scene.parts(`${id}.${d.r},${d.c}`).map((p) => this.nodeOf(p)).filter(Boolean)); } catch { /* 那一张不在了 */ } }
+      if (this.instant || !nodes.length) return;
+      nodes.forEach((n) => { n.classList.remove('is-flash'); void n.getBoundingClientRect(); n.classList.add('is-flash'); });
+      await this.wait(960);
+      nodes.forEach((n) => n.classList.remove('is-flash'));
       return;
     }
     const { a, b, sign } = fx;

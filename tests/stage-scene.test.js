@@ -1573,30 +1573,30 @@ test('三种按法能一起开：同一句上 mark（滑）、fold（点）、mo
   assert.deepEqual([...s.opens.keys()], ['s:mark', 's:fold', 's:move']);
   assert.deepEqual([...s.opens.values()].map((e) => e.seq), [1, 2, 3], '第几个开的');
   // 画面做好了（Task 11：空隙能放、同一处分得清按法）：自己一行写全（开着就是学生能直接动的），没有两个冒号
-  ARMED_GRIPS.add('gap');
-  ARMED_PRESS.mixed = true;
-  try {
-    const t = s.stateText();
-    assert.match(t, /\ns 开着：mark（滑）、fold（点）、move（按住再拖）(\n|$)/);
-    assert.doesNotMatch(t, /学生能直接动的/, '别的东西没开');
-  } finally { ARMED_GRIPS.delete('gap'); ARMED_PRESS.mixed = false; }
-  // 画面还没做好：不说学生能拖一段；同一处只按得出先开的那一项，点名是哪一项（不说假话）
+  assert.ok(ARMED_GRIPS.has('gap') && ARMED_PRESS.mixed, 'Task 11 交了空隙、接上了 choosePress');
   const t = s.stateText();
-  assert.match(t, /\ns 开着：mark（滑）、fold（点）；页面还分不清同一处的几种按法，那一处现在只按得出先开的 mark\n/);
-  assert.match(t, /\n开着、页面还画不了的（学生现在动不了）：s move（拖到空处）/);
-  // 写了 wrong= / undo= 的照旧写在后面；写了部件的写部件。再开一次的 mark 算后开的（画面重挂、挂在后面）：先开的变成 fold
+  assert.match(t, /\ns 开着：mark（滑）、fold（点）、move（按住再拖）(\n|$)/);
+  assert.doesNotMatch(t, /学生能直接动的/, '别的东西没开');
+  assert.doesNotMatch(t, /页面还分不清|页面还画不了/);
+  // 画面没做好的那一种（以后再加手势时）：不说学生能拖一段；同一处只按得出先开的那一项，点名是哪一项（不说假话）
+  ARMED_GRIPS.delete('gap');
+  ARMED_PRESS.mixed = false;
+  try {
+    const t0 = s.stateText();
+    assert.match(t0, /\ns 开着：mark（滑）、fold（点）；页面还分不清同一处的几种按法，那一处现在只按得出先开的 mark\n/);
+    assert.match(t0, /\n开着、页面还画不了的（学生现在动不了）：s move（拖到空处）/);
+  } finally { ARMED_GRIPS.add('gap'); ARMED_PRESS.mixed = true; }
+  // 写了 wrong= / undo= 的照旧写在后面；写了部件的写部件。再开一次的 mark 算后开的（画面重挂、挂在后面）
   run(s, 'open s mark wrong=mark undo=on');
   assert.deepEqual([...s.opens.values()].map((e) => e.seq), [4, 2, 3]);
-  assert.match(s.stateText(), /\ns 开着：mark（滑；wrong=mark、undo=on）、fold（点）；[^\n]*只按得出先开的 fold\n/);
-  ARMED_GRIPS.add('gap');
-  ARMED_PRESS.mixed = true;
-  try { assert.match(s.stateText(), /\ns 开着：mark（滑；wrong=mark、undo=on）、fold（点）、move（按住再拖）(\n|$)/); } finally { ARMED_GRIPS.delete('gap'); ARMED_PRESS.mixed = false; }
+  assert.match(s.stateText(), /\ns 开着：mark（滑；wrong=mark、undo=on）、fold（点）、move（按住再拖）(\n|$)/);
+  ARMED_PRESS.mixed = false;
+  try { assert.match(s.stateText(), /\ns 开着：mark（滑；wrong=mark、undo=on）、fold（点）、move（按住再拖）；[^\n]*只按得出先开的 fold(\n|$)/); } finally { ARMED_PRESS.mixed = true; }
   // 树：拖（按住再拖）和摘叶子（点）；别的东西照旧写在「学生能直接动的」那一行，合成的那一行跟在后面
   const tr = run(new Scene(), 'tree t = 50 30 60 20 40\narray a = 3 1 2\nopen a\nopen t\nopen t pluck');
-  const tt = tr.stateText();
-  assert.match(tt, /\n学生能直接动的：a drag（拖）\nt 开着：drag（按住再拖）、pluck（点）；页面还分不清同一处的几种按法，那一处现在只按得出先开的 drag(\n|$)/);
-  ARMED_PRESS.mixed = true;
-  try { assert.match(tr.stateText(), /\nt 开着：drag（按住再拖）、pluck（点）(\n|$)/); } finally { ARMED_PRESS.mixed = false; }
+  assert.match(tr.stateText(), /\n学生能直接动的：a drag（拖）\nt 开着：drag（按住再拖）、pluck（点）(\n|$)/);
+  ARMED_PRESS.mixed = false;
+  try { assert.match(tr.stateText(), /\nt 开着：drag（按住再拖）、pluck（点）；页面还分不清同一处的几种按法，那一处现在只按得出先开的 drag(\n|$)/); } finally { ARMED_PRESS.mixed = true; }
   // 只开一种、同一处没有别的按法：照旧一项一项写（旧课的现状一字不变）
   assert.match(run(new Scene(), 'tree t = 50 30 70 tray="47"\nopen t rotate\nopen t insert').stateText(), /学生能直接动的：t rotate（拖到上面）；t insert（拖到空处）/);
   assert.match(run(new Scene(), 'tree t = 50 30\nopen t pluck').stateText(), /学生能直接动的：t pluck（点）/);

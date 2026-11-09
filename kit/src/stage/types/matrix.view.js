@@ -4,7 +4,7 @@
 import { EASE, moveDuration, stagger, arcPoints } from '../motion.js';
 import { MX, layout, stairsPoints, zeroRows, toQ, eqWidth, rowCells, emptyCollect } from './matrix.js';
 import { Q } from '../../exact.js';
-import { openParts, atLeast } from '../gesturedom.js';
+import { openParts, atLeast, screenOf } from '../gesturedom.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const tr = (x, y, s = 1) => `translate(${x}px, ${y}px)${s !== 1 ? ` scale(${s})` : ''}`;
@@ -412,6 +412,98 @@ function rowLift(stage, id, r) {
 const ROW_CLS = { 'is-drop': 'is-rowdrop', 'is-over': 'is-rowover', 'is-nodrop': 'is-rownodrop' };
 const union = (rs) => { const l = rs.filter(Boolean); if (!l.length) return null; const x = Math.min(...l.map((r) => r.x)), y = Math.min(...l.map((r) => r.y)); return { x, y, w: Math.max(...l.map((r) => r.x + r.w)) - x, h: Math.max(...l.map((r) => r.y + r.h)) - y }; };
 
+// —— 整张矩阵当把手（open AB compare / put / merge，第二轮 Task 11）：按住括号那一圈把整张拖到另一张上 ——
+const grow = (b, d) => b && { x: b.x - d, y: b.y - d, w: b.w + 2 * d, h: b.h + 2 * d };
+// 起点：左右两道括号各管半张（括号外面那一条也算，至少 44 宽）：学生按整张哪儿都拎得起来；格上开着别的（拨数、点开看）照旧是格的——
+// 格的框更小，pointer.js 挑小的
+function wholeGrip(stage, id, side) {
+  const brks = () => ['bl', 'br'].map((k) => stage.decor(id, k)).filter(Boolean);
+  return {
+    key: `whole:${side}`, cls: 'is-drag',
+    part: () => ({ obj: id, whole: true }),
+    node: () => stage.decor(id, side),
+    box: () => { const m = stage.scene.objects.get(id); return m ? layout(m).box : null; },
+    rect: () => {
+      const m = stage.scene.objects.get(id);
+      const r = stage.screenRect(stage.decor(id, side)), b = m && screenOf(stage, layout(m).box);
+      if (!r || !b) return null;
+      const s = atLeast({ x: r.x, y: b.y, w: r.w, h: b.h }), mid = b.x + b.w / 2;
+      return side === 'bl' ? { x: s.x, y: s.y, w: Math.max(s.w, mid - s.x), h: s.h } : { x: Math.min(s.x, mid), y: s.y, w: s.x + s.w - Math.min(s.x, mid), h: s.h };
+    },
+    light(cls, on) { brks().forEach((n) => n.classList.toggle(cls, on)); },
+    lift: () => wholeLift(stage, id),
+    land: (L, r, to) => wholeLand(stage, L, r, to),
+  };
+}
+// 落点：舞台上别的矩阵，整张都算（画一圈虚框标出来能放）
+function wholeZone(stage, id) {
+  let n = null;
+  const box = () => { const m = stage.scene.objects.get(id); return m ? grow(layout(m).box, 8) : null; };
+  return {
+    key: `zone:${id}`, part: () => ({ obj: id, whole: true }), node: () => n, box, area: () => screenOf(stage, box()),
+    show(on) {
+      if (on && !n) {
+        const b = box();
+        if (!b) return;
+        n = el('div', 'mx-zone', stage.layer);
+        n.style.transform = tr(b.x, b.y);
+        n.style.width = `${b.w}px`;
+        n.style.height = `${b.h}px`;
+      } else if (!on && n) { n.remove(); n = null; }
+    },
+  };
+}
+// 拎起来的样子：整张（数、括号）复制一份跟着手走，原来那一张淡下去
+function wholeLift(stage, id) {
+  const o = stage.scene.objects.get(id);
+  if (!o) return null;
+  const L = layout(o), B = L.box;
+  const g = el('div', 'st-g-ghost mx-wholeghost', stage.layer);
+  g.style.width = `${B.w}px`;
+  g.style.height = `${B.h}px`;
+  for (const x of o.cells) {
+    const v = el('span', 'mx-v', g);
+    v.style.left = `${L.colX[x.c] - B.x}px`;
+    v.style.top = `${L.rowY(x.r) - B.y}px`;
+    v.style.width = `${L.cw[x.c]}px`;
+    setNum(v, x.value);
+  }
+  const sv = document.createElementNS(SVGNS, 'svg');
+  sv.setAttribute('width', B.w);
+  sv.setAttribute('height', B.h);
+  sv.setAttribute('class', 'mx-wholebrk');
+  for (const [side, x] of [['l', 4], ['r', B.w - 15]]) {
+    const p = document.createElementNS(SVGNS, 'path');
+    p.setAttribute('class', 'mx-brk');
+    p.setAttribute('d', bracketPath(B.h, side));
+    p.setAttribute('transform', `translate(${x} 0)`);
+    sv.appendChild(p);
+  }
+  g.appendChild(sv);
+  const box = { x: B.x, y: B.y, w: B.w, h: B.h };
+  g.style.transform = tr(box.x, box.y);
+  const ns = [...o.cells.map((x) => stage.nodeOf(x)), ...['bl', 'br', 'bar', 'eq'].map((k) => stage.decor(id, k))].filter(Boolean);
+  ns.forEach((n) => n.classList.add('is-lifted'));
+  return { el: g, box, restore: () => ns.forEach((n) => n.classList.remove('is-lifted')) };
+}
+// 放下以后拎着的那一份怎么走：拖去比是弹回原处（两张都不变）；放进合计是飞进去、缩没；并同类项是滑到那一张上叠住、淡掉（这一张拿下了舞台）
+function wholeLand(stage, L, r, to) {
+  if (!L?.el) return;
+  const kind = r?.act?.type;
+  const from = L.el.style.transform;
+  const end = (p) => p.then(() => L.el.remove());
+  // 拖去比：两张都不变，弹回去落下的那一刻原来那一张就恢复（不等闪完）
+  if (kind === 'compare') { end(stage.tween(L.el, [{ transform: from }, { transform: tr(L.box.x, L.box.y) }], { duration: 380, easing: EASE.spring })).then(() => L.restore()); return; }
+  const t = to?.box?.();
+  if (!t) { L.el.remove(); return; }
+  if (kind === 'put') {
+    const x = t.x + t.w / 2 - L.box.w / 2, y = t.y + t.h / 2 - L.box.h / 2;
+    end(stage.tween(L.el, [{ transform: from, opacity: 1 }, { transform: tr(x, y, 0.3), opacity: 0 }], { duration: 420, easing: EASE.in }));
+    return;
+  }
+  end(stage.tween(L.el, [{ transform: from, opacity: 1 }, { transform: tr(t.x + 8, t.y + 8), opacity: 0.9, offset: 0.7 }, { transform: tr(t.x + 8, t.y + 8), opacity: 0 }], { duration: 520, easing: EASE.move }));
+}
+
 export const matrixView = {
   affords: { edit: editAfford, explain: explainAfford },
   // 通用手势（gesturedom.js）抓哪儿：一行（把手；当落点时是整行）、行号、一格（open M edit input=keypad 点一格写数）
@@ -442,6 +534,10 @@ export const matrixView = {
       part: () => stage.scene.partOf(o.id, x.key),
       node: () => stage.nodes.get(`${o.id}:${x.key}`),
     })),
+    // 整张：开着的那一张按住括号拎起来（role from）；落点是舞台上别的矩阵（role to，藏着的不算）
+    whole: (stage, o, e, { role } = {}) => (role === 'to'
+      ? stage.scene.shownIds().filter((id) => id !== o.id && stage.scene.objects.get(id)?.type === 'matrix').map((id) => wholeZone(stage, id))
+      : ['bl', 'br'].map((side) => wholeGrip(stage, o.id, side))),
   },
   // 拖着悬在行号上：先说是对调（倍加、倍乘的样子是手势表 ask 给的 hint）
   gestureHint(stage, o, e, r) {
@@ -605,6 +701,21 @@ export const matrixView = {
 .mx-rowghost { display: block; }
 .mx-rowghost > .mx-v { position: absolute; top: 0; height: 100%; display: inline-flex; justify-content: center; }
 .mx-brk { fill: var(--st-ink); stroke: var(--st-ink); stroke-width: .4; stroke-linejoin: round; }
+/* 整张能拖（open AB compare / put / merge）：括号换成主色、轻轻呼吸；拎起来的那一份是一张小白卡；能放的矩阵一圈虚框 */
+.mx-brk.is-drag { fill: var(--st-brand); stroke: var(--st-brand); animation: mx-breathe 1.8s ease-in-out infinite; }
+.mx-brk.is-press { opacity: .6; }
+@keyframes mx-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+.mx-wholeghost { position: absolute; left: 0; top: 0; border-radius: 14px; background: var(--st-card); }
+.mx-wholeghost > .mx-v { position: absolute; height: ${MX.CH}px; display: inline-flex; justify-content: center; }
+.mx-wholebrk { position: absolute; left: 0; top: 0; overflow: visible; }
+.mx-zone { position: absolute; left: 0; top: 0; box-sizing: border-box; border-radius: 16px; border: 2px dashed color-mix(in srgb, var(--st-brand) 0%, transparent); pointer-events: none; transition: background-color .2s, border-color .2s; }
+.mx-zone.is-drop { border-color: color-mix(in srgb, var(--st-brand) 32%, transparent); }
+.mx-zone.is-over { border-color: var(--st-brand); background: color-mix(in srgb, var(--st-brand) 7%, transparent); }
+.mx-zone.is-nodrop { border-color: color-mix(in srgb, var(--st-red) 45%, transparent); }
+/* 整张拖去比：不一样的格闪两下 */
+.mx-cell.is-flash { animation: mx-flash .46s ease-in-out 2; }
+@keyframes mx-flash { 0%, 100% { background: transparent; } 50% { background: color-mix(in srgb, var(--st-gold) 26%, transparent); box-shadow: 0 0 0 2.5px var(--st-gold); } }
+@media (prefers-reduced-motion: reduce) { .mx-brk.is-drag { animation: none; } }
 .mx-bar { position: absolute; left: 0; top: 0; width: 0; border-left: 1.6px solid rgb(var(--chalk-rgb, 27 34 32) / 0.5); pointer-events: none; }
 .mx-eq { position: absolute; left: 0; top: 0; width: 56px; height: 44px; display: grid; place-items: center; font: 400 32px/1 var(--sans, sans-serif); color: var(--st-ink); pointer-events: none; }
 .mx-eq.is-named { width: 104px; justify-items: end; padding-right: 12px; box-sizing: border-box; font-size: 28px; font-style: italic; font-family: "Latin Modern Math", "Cambria Math", "Times New Roman", serif; }

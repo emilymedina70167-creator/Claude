@@ -153,25 +153,29 @@ test('句子：从 that 的钩拉一条线，松在词、括号、句子外框�
   assert.equal(actText({ type: 'refer', src: 'refer s.6 -> s.5', verdict: { legal: true, right: false, why: 'that 连到 shelf' } }), '学生 refer s.6 -> s.5（that 连到 shelf）');
 });
 
-test('画面还挂不上的手势（拉线，Task 11 才做）：现状不说学生能动，单独写一句；画面做好了（ARMED_GESTURES 加上 line）才写进「学生能直接动的」', () => {
+test('拉线的手势画面挂得上（Task 11 做了钩、拉线）：写进「学生能直接动的」；手势或钩任一样画面还没有时照实写「页面还画不了」', () => {
   const s = run('sentence s = "The books on the shelf that I bought yesterday are new." links="that -> books"\nopen s mark\nopen s.6 refer wrong=mark');
-  assert.equal(ARMED_GESTURES.has('line'), false, '画面还没做拉线');
-  assert.equal(armable(open(s, 's:refer').gesture), false);
+  assert.ok(ARMED_GESTURES.has('line') && ARMED_GRIPS.has('hook'), '画面做了拉线、交了钩');
+  assert.equal(armable(open(s, 's:refer').gesture), true);
   assert.equal(armable(open(s, 's:mark').gesture), true);
   assert.equal(armable(null), true, '拖、点开看（不是手势表里的）照旧动得了');
   const t = s.stateText();
-  assert.match(t, /\n学生能直接动的：s mark（拉一段）\n/);
-  assert.doesNotMatch(t, /学生能直接动的：[^\n]*refer/);
-  assert.match(t, /\n开着、页面还画不了的（学生现在动不了）：s\.6 refer（拉一条线；wrong=mark）/);
-  // 只开了拉线：没有「学生能直接动的」那一行
-  assert.doesNotMatch(run('sentence s = "The books are new."\nopen s.1 refer').stateText(), /学生能直接动的/);
+  assert.match(t, /学生能直接动的：s mark（拉一段）；s\.6 refer（拉一条线；wrong=mark）/);
+  assert.doesNotMatch(t, /页面还画不了/);
+  // 画面没有这种手势时（以后再加的手势照这个办）：现状不说学生能动，单独写一句
+  ARMED_GESTURES.delete('line');
+  try {
+    assert.equal(armable(open(s, 's:refer').gesture), false);
+    const t0 = s.stateText();
+    assert.match(t0, /\n学生能直接动的：s mark（拉一段）\n/);
+    assert.doesNotMatch(t0, /学生能直接动的：[^\n]*refer/);
+    assert.match(t0, /\n开着、页面还画不了的（学生现在动不了）：s\.6 refer（拉一条线；wrong=mark）/);
+    // 只开了拉线：没有「学生能直接动的」那一行
+    assert.doesNotMatch(run('sentence s = "The books are new."\nopen s.1 refer').stateText(), /学生能直接动的/);
+  } finally { ARMED_GESTURES.add('line'); }
   // 只有拉线的手势、没有钩也不行（钩是画法交的把手）
-  ARMED_GESTURES.add('line');
-  try { assert.equal(armable(open(s, 's:refer').gesture), false); } finally { ARMED_GESTURES.delete('line'); }
-  // Task 11 做好以后把 line 加进 ARMED_GESTURES、hook 加进 ARMED_GRIPS：照旧写进「学生能直接动的」
-  ARMED_GESTURES.add('line');
-  ARMED_GRIPS.add('hook');
-  try { assert.match(s.stateText(), /学生能直接动的：s mark（拉一段）；s\.6 refer（拉一条线；wrong=mark）/); } finally { ARMED_GESTURES.delete('line'); ARMED_GRIPS.delete('hook'); }
+  ARMED_GRIPS.delete('hook');
+  try { assert.equal(armable(open(s, 's:refer').gesture), false); } finally { ARMED_GRIPS.add('hook'); }
 });
 
 test('写的值：键盘上的减号、全角斜线规整成指令里的写法', () => {
@@ -470,22 +474,26 @@ test('✕ 收线：别的线也指着这个词时写成 unrefer s.4 -> s.1，只
   assert.deepEqual(w.objects.get('s').refers, []);
 });
 
-test('画面还交不出的把手（空隙、小方块、✕、钩、整张矩阵）和同一处分按法（Task 11 做）：现状不说学生能动；做好了（ARMED_GRIPS、ARMED_PRESS）照写', () => {
-  for (const g of ['gap', 'pill', 'xmark', 'xrefer', 'hook', 'sentence', 'whole']) assert.equal(ARMED_GRIPS.has(g), false, `画面还没交 ${g}`);
-  for (const g of ['node', 'parent', 'tray', 'tree', 'slot', 'row', 'label', 'cell', 'word', 'bracket']) assert.ok(ARMED_GRIPS.has(g), g);
-  assert.equal(ARMED_PRESS.mixed, false);
+test('画面交得出的把手（Task 11 交了空隙、小方块、✕、钩、句子外框、整张矩阵）、同一处分得清按法：现状照写学生能动；哪一样画法交不出时照实写「页面还画不了」', () => {
+  for (const g of ['gap', 'pill', 'xmark', 'xrefer', 'hook', 'sentence', 'whole', 'node', 'parent', 'tray', 'tree', 'slot', 'row', 'label', 'cell', 'word', 'bracket']) assert.ok(ARMED_GRIPS.has(g), g);
+  assert.equal(ARMED_PRESS.mixed, true);
   const s = run('sentence s = "The man who lives next door is a doctor."\nopen s move');
-  assert.equal(armable(open(s, 's:move').gesture), false, '没有空隙可放');
-  assert.match(s.stateText(), /\n开着、页面还画不了的（学生现在动不了）：s move（拖到空处）/);
-  assert.doesNotMatch(s.stateText(), /学生能直接动的/);
-  // 折：点括号、点词画面挂得上（点小方块还不行），算动得了
+  assert.equal(armable(open(s, 's:move').gesture), true, '空隙能放');
+  assert.match(s.stateText(), /\n学生能直接动的：s move（拖到空处）/);
+  assert.doesNotMatch(s.stateText(), /页面还画不了/);
   assert.equal(armable(gestureOf(s.objects.get('s'), 'fold')), true);
-  // gesturedom.js 照 kindArmed 挂：挪一段的拖不挂（拎得起来放不下，还抢拉括号的手指）；矩阵行变换的两种都挂
-  assert.equal(kindArmed(open(s, 's:move').gesture, 'drop-at'), false);
+  // gesturedom.js 照 kindArmed 挂：挪一段的拖挂得上；矩阵行变换的两种都挂
+  assert.equal(kindArmed(open(s, 's:move').gesture, 'drop-at'), true);
   const rg = open(run('matrix M = 1 2 / 3 4\nopen M rowop'), 'M:rowop').gesture;
   assert.deepEqual(kindsOf(rg).filter((k) => kindArmed(rg, k)), ['drop-on', 'tap']);
-  ARMED_GRIPS.add('gap');
-  try { assert.match(s.stateText(), /\n学生能直接动的：s move（拖到空处）/); } finally { ARMED_GRIPS.delete('gap'); }
+  // 落点画法交不出（以后再加的把手照这个办）：拎得起来放不下，不挂、现状不说学生能动
+  ARMED_GRIPS.delete('gap');
+  try {
+    assert.equal(armable(open(s, 's:move').gesture), false, '没有空隙可放');
+    assert.equal(kindArmed(open(s, 's:move').gesture, 'drop-at'), false);
+    assert.match(s.stateText(), /\n开着、页面还画不了的（学生现在动不了）：s move（拖到空处）/);
+    assert.doesNotMatch(s.stateText(), /学生能直接动的/);
+  } finally { ARMED_GRIPS.add('gap'); }
 });
 
 test('整张的手势：open AB compare / put、open X merge 按住整张拖到另一张上；落点都是 { obj, whole: true }', () => {
@@ -506,11 +514,14 @@ test('整张的手势：open AB compare / put、open X merge 按住整张拖到�
   assert.equal(gestureAct(s, open(s, 'X:merge'), { from: W('X'), to: W('Y') }).src, 'merge X Y');
   // 同一张开两种整张拖：同一处、同一种按法，当场报
   assert.match(s.check(parseScript('open AB compare')[0]), /都是按住再拖/);
-  // 整张的把手画面还交不出（Task 11 做）：现状不说学生能动；交了以后照写
-  assert.equal(armable(put.gesture), false);
-  assert.match(s.stateText(), /开着、页面还画不了的（学生现在动不了）：X merge（拖到上面）；AB put（拖到上面）/);
-  ARMED_GRIPS.add('whole');
-  try { assert.match(s.stateText(), /\n学生能直接动的：X merge（拖到上面）；AB put（拖到上面）/); } finally { ARMED_GRIPS.delete('whole'); }
+  // 整张的把手画面交得出（Task 11 做了）：现状写学生能动；画法交不出时照实写「页面还画不了」
+  assert.equal(armable(put.gesture), true);
+  assert.match(s.stateText(), /\n学生能直接动的：X merge（拖到上面）；AB put（拖到上面）/);
+  ARMED_GRIPS.delete('whole');
+  try {
+    assert.equal(armable(put.gesture), false);
+    assert.match(s.stateText(), /开着、页面还画不了的（学生现在动不了）：X merge（拖到上面）；AB put（拖到上面）/);
+  } finally { ARMED_GRIPS.add('whole'); }
   // 学生这一下写给老师：那一行，后面接页面算的事实
   const fx = s.apply(parseScript('put AB Sum')[0], { by: 'student', open: 'put' });
   assert.equal(actText({ type: 'put', into: 'Sum', open: 'put', src: 'put AB Sum', verdict: { legal: true, right: null } }), '学生 put AB Sum');
@@ -528,14 +539,12 @@ test('现状里跟着算的那一行：开着整张拖（compare / put / merge�
   // 开着 AB compare：AB 另起一行，BA 照旧
   run('open AB compare', s);
   assert.ok(s.stateText().includes(`${HEAD}BA = {B A}\n${DRAG}AB = {A B}`), s.stateText());
-  // 画面交得出整张的把手以后（Task 11）：照旧这样写，学生能直接动的里有 AB compare
-  ARMED_GRIPS.add('whole');
-  try {
-    const t = s.stateText();
-    assert.ok(t.includes(`${DRAG}AB = {A B}`));
-    assert.match(t, /\n学生能直接动的：AB compare（拖到上面）/);
-    assert.doesNotMatch(t, /学生动不了）：[^\n]*AB = \{A B\}/);
-  } finally { ARMED_GRIPS.delete('whole'); }
+  // 画面交得出整张的把手（Task 11）：照旧这样写，学生能直接动的里有 AB compare
+  assert.ok(ARMED_GRIPS.has('whole'));
+  const t = s.stateText();
+  assert.ok(t.includes(`${DRAG}AB = {A B}`));
+  assert.match(t, /\n学生能直接动的：AB compare（拖到上面）/);
+  assert.doesNotMatch(t, /学生动不了）：[^\n]*AB = \{A B\}/);
   // 都开着：只剩拖的那一行；收起来又回到原样
   run('open BA put', s);
   assert.ok(s.stateText().includes(`${DRAG}AB = {A B}；BA = {B A}`));

@@ -11,22 +11,21 @@ import { gestureOf } from './rules.js';
 export const kindsOf = (g) => [].concat(g?.gesture || []);
 
 /**
- * 画面（gesturedom.js）现在真挂得上的手势。句子的 line（从钩上拉线）手势表里有了、画面还没做（第二轮 Task 11 做）：
- * 开着这种手势的那一项，舞台现状不写进「学生能直接动的」（不能对老师说学生能拉线），单独写一句页面还画不了。
- * Task 11 做好拉线以后把 'line' 加进来
+ * 画面（gesturedom.js）现在真挂得上的手势（第二轮 Task 11 起六种都有：line 是从钩上拉线）。以后手势表里加了画面还没做的一种，
+ * 先不放进来：开着这种手势的那一项，舞台现状不写进「学生能直接动的」（不能对老师说学生能动），单独写一句页面还画不了
  */
-export const ARMED_GESTURES = new Set(['tap', 'drop-on', 'drop-at', 'span', 'write']);
+export const ARMED_GESTURES = new Set(['tap', 'drop-on', 'drop-at', 'span', 'write', 'line']);
 /**
- * 画法（各种东西的 view.grips）现在交得出的把手，名字和手势表里 from / on / tap / to 写的一样。手势表里写了、画法还没交的
- * （句子的钩 hook、两个词之间的空隙 gap、小方块 pill、✕ 的 xmark / xrefer、句子外框 sentence、矩阵整张的 whole，第二轮 Task 11 做）：
- * 起点没有就拿不起来，落点没有就放不下——那一种手势算挂不上，和 ARMED_GESTURES 一样不对老师说学生能动。Task 11 交了以后加进来
+ * 画法（各种东西的 view.grips）现在交得出的把手，名字和手势表里 from / on / tap / to / close.on 写的一样（第二轮 Task 11 交了
+ * 句子的钩 hook、空隙 gap、小方块 pill、✕ 的 xmark / xrefer、句子外框 sentence、矩阵整张的 whole）。手势表里写了、画法还没交的：
+ * 起点没有就拿不起来，落点没有就放不下——那一种手势算挂不上，和 ARMED_GESTURES 一样不对老师说学生能动
  */
-export const ARMED_GRIPS = new Set(['node', 'parent', 'tray', 'tree', 'slot', 'row', 'label', 'cell', 'word', 'bracket']);
+export const ARMED_GRIPS = new Set(['node', 'parent', 'tray', 'tree', 'slot', 'row', 'label', 'cell', 'word', 'bracket', 'hook', 'gap', 'pill', 'xmark', 'xrefer', 'sentence', 'whole']);
 /**
- * 画面分不分得清同一处的几种按法（choosePress，第二轮 Task 11 接进 pointer.js 以后改成 true）。分不清时同一处开了几种按法，
+ * 画面分不分得清同一处的几种按法：pointer.js 照 choosePress 分（第二轮 Task 11 接上，true）。分不清时（false）同一处开了几种按法，
  * 手指按下去只拿得到其中一种：舞台现状照实说（scene.js 的 stateText），不说几种都按得出
  */
-export const ARMED_PRESS = { mixed: false };
+export const ARMED_PRESS = { mixed: true };
 const armedAny = (names) => names == null || [].concat(names).some((n) => ARMED_GRIPS.has(n));
 /**
  * 一种手势在这一项上画面挂不挂得上：手势本身画面会做，起点（拖、拉的 from，点、写的 tap / on）、落点（to）画法都交得出。

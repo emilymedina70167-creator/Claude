@@ -185,6 +185,15 @@
 .st-g-ghost { z-index: 8; pointer-events: none; opacity: .96; box-shadow: 0 0 0 2px var(--st-brand), 0 18px 30px -14px rgb(var(--shade-rgb, 25 45 40) / 0.55) !important; }
 .st-g-ghost::after { display: none; }
 .st-stage .is-lifted { opacity: .32; }
+/* 按住等满 0.35 秒才托起来的（同一处还能点、滑）：拎起来的那一份弹一下，手指还没挪就看得出托起来了 */
+.st-g-ghost.is-pop { animation: st-pop .2s ease-out; }
+@keyframes st-pop { from { scale: .9; } to { scale: 1; } }
+/* 点错了的那一处晃一下（摘里面的结点……），和浮出来的那句话一起 */
+.st-stage .is-shake { animation: st-shake .32s ease-in-out; }
+/* 从钩上拉出来、跟着手的那道弧：还没悬在能松的地方时是虚线，悬上了变实线 */
+.st-g-line { fill: none; stroke: var(--st-brand); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 5 6; opacity: .7; }
+.st-g-line.is-on { stroke-dasharray: none; opacity: 1; }
+.st-g-linedot { fill: var(--st-brand); }
 .st-stage .st-cell.is-drop { outline: 2px dashed color-mix(in srgb, var(--st-brand) 55%, transparent); outline-offset: 5px; }
 .st-stage .st-cell.is-nodrop, .st-stage .sn-word.is-nodrop { outline: 2px dashed color-mix(in srgb, var(--st-red) 50%, transparent); outline-offset: 5px; }
 .st-g-note { position: absolute; left: 0; top: 0; z-index: 21; max-width: min(86vw, 420px); padding: 8px 14px; border-radius: 12px; pointer-events: none;

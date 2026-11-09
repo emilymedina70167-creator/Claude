@@ -1763,8 +1763,8 @@ export class Scene {
     const mixedOn = (id) => { const xs = can.filter((e) => e.obj === id); return xs.some((a, i) => xs.slice(i + 1).some((b) => grabClash(grabsOf(a), grabsOf(b), () => this.opensMeet(a, b)).mixed.length)); };
     const pressText = (e) => [...new Set([...grabsOf(e)].map(pressOf))].map((p) => PRESS_TEXT[p]).join(' / ');
     const itemText = (e) => { if (e.action === 'back') return backText(e); const pol = polText(e); return `${e.refs.length ? `${e.refs.join(' ')} ` : ''}${e.action}（${pressText(e)}${rangeText(e)}${pol ? `；${pol}` : ''}）`; };
-    // 画面还分不清同一处的几种按法（Task 11 以前）：同一处按下去只拿得到先挂的那一项，画面照 seq 先后挂（stage.js 的 syncOpens），
-    // 所以照实写那一处现在按得出的是先开的哪一项
+    // 画面分不清同一处的几种按法时（gestures.js 的 ARMED_PRESS.mixed 是 false；Task 11 起 pointer.js 照 choosePress 分，是 true）：同一处按下去
+    // 只拿得到先挂的那一项，画面照 seq 先后挂（stage.js 的 syncOpens），所以照实写那一处现在按得出的是先开的哪一项
     const winners = (id) => {
       const xs = can.filter((e) => e.obj === id);
       const out = [];
