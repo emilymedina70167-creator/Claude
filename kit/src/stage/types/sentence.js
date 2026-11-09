@@ -791,6 +791,8 @@ export const sentence = {
     return o;
   },
   parts(o) { return ordered(o); },
+  /** 扣着的词画成小块写它现在是第几个词（scene.js 的 coverText：不写词本身） */
+  coverName: (p) => `第 ${p.slot} 个词`,
   pick(o, mark, sel, word) {
     if (mark === '#') {
       const m = /^(\d+)(?:-(\d+))?$/.exec(sel);

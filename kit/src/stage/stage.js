@@ -8,7 +8,7 @@
 import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHold } from './motion.js';
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
-import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, pickText, unplayedNotes, compareFact, mergeFact } from './scene.js';
+import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, pickText, unplayedNotes, compareFact, mergeFact, chipTextOf, tapValueOf } from './scene.js';
 import { measureShown } from './rules.js';
 import { judgeAnswer, sameAnswer, answerInput, gridAnswerText } from './answer.js';
 import { formulaInput, formulaGrid, hideFormulaPad } from '../formulainput.js';
@@ -215,7 +215,7 @@ export class Stage {
       if (ch.textContent !== t) ch.textContent = t;
     });
   }
-  chipText(p) { return chipTextOf(p); }
+  chipText(p) { return chipTextOf(p, this.scene.objects.get(p.obj)); }
 
   // —— 演一段（整段写好的） ——
   async play(src, { by = 'teacher', auto = false, unpick = true } = {}) {
@@ -1795,19 +1795,8 @@ export const pathGoesOn = (end, a) => end == null || a.from == null || String(a.
 /** 跟着变的（scene.js 的 fx.derived）存得下的样子：不带部件本身 */
 const slimDerived = (list) => list.map((d) => ({ id: d.id, changed: (d.changed || []).map((x) => ({ ref: x.ref, ...(x.expr != null ? { expr: x.expr } : {}), from: x.from, to: x.to })), ...(d.error ? { error: d.error } : {}) }));
 
-// 扣着的部件画成小块写什么：写位置、不写值。自己交了 coverLabel 的写它（题卡的一行「第 3 行」）；
-// 一排格子（coverSlot）写现在在第几格（换了位置跟着变）；别的没交的是 null（照旧写值）
-const coverText = (p) => (p.coverLabel != null ? p.coverLabel : p.coverSlot && p.slot != null ? `第 ${p.slot} 格` : null);
-/**
- * 一个部件画成小块（话里的 {q.3}、贴的字、比大小的牌子）写什么：label，没有就 value、key。
- * 扣着的写它的位置（coverText：「第 3 行」「第 3 格」）：扣着的字不能从小块里漏给学生
- */
-export const chipTextOf = (p) => String((p.covered ? coverText(p) : null) ?? p.label ?? p.value ?? p.key);
-/**
- * 学生点了一个部件，写给老师的那个字：写它的字；题卡扣着的一行写「第 3 行，扣着」（「学生点了 q.3（第 3 行，扣着）」）。
- * 一排格子扣着的一格照旧写值：写给老师的，老师知道里面是几
- */
-export const tapValueOf = (p) => (p.covered && p.coverLabel != null ? `${p.coverLabel}，扣着` : String(p.label ?? p.value ?? p.key));
+// 一个部件画成小块写什么、写给老师写什么（扣着的不漏值）：在 scene.js（pickDiff 写给老师也用），这里照旧导出
+export { chipTextOf, tapValueOf };
 
 /** 学生这一下做了什么，写给老师看（和舞台现状一起发） */
 export function actText(act) {

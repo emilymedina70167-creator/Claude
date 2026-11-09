@@ -492,6 +492,8 @@ export const graph = {
     return o;
   },
   parts(o) { return [...o.nodes, ...liveEdges(o)]; },
+  /** 扣着的边画成小块写两头（A–B，不写权）；扣着的结点不写名字（scene.js 的 coverText） */
+  coverName: (p, o) => (p.kind === 'edge' ? p.label : `${o.id} 里扣着的一个结点`),
   pick(o, mark, sel, word) {
     const how = `图的部件写 ${o.id}.A（结点）或 ${o.id}.A~B（边）`;
     if (mark === '#') throw new Error(`「${word}」：${how}`);

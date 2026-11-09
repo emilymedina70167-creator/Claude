@@ -89,11 +89,12 @@ export const array = {
     if (vals.length > MAX_CELLS) throw new Error(`一排最多 ${MAX_CELLS} 格（写了 ${vals.length} 格）`);
     const id = h.words[0];
     // 新的一排放在已有的东西下面，和它们居中对齐（一格的「要找的数」放在正下方，不缩在左边）
-    // coverSlot：扣着的一格，话里的小块写「第 3 格」不写值（stage.js 的 chipTextOf；扣着的常常就是要学生猜的数）
     const origin = old ? { ...old.origin } : scene.slotFor(vals.length * (CELL + GAP) - GAP);
-    return { origin, groupD: null, ptrs: new Map(), cells: vals.map((v, i) => ({ obj: id, key: i + 1, slot: i + 1, value: v, row: 0, paint: null, glow: false, lift: false, dim: false, covered: false, coverSlot: true })) };
+    return { origin, groupD: null, ptrs: new Map(), cells: vals.map((v, i) => ({ obj: id, key: i + 1, slot: i + 1, value: v, row: 0, paint: null, glow: false, lift: false, dim: false, covered: false })) };
   },
   parts(o) { return [...o.cells].sort((a, b) => a.slot - b.slot); },
+  /** 扣着的一格画成小块写现在在第几格（scene.js 的 coverText：不写值，换了位置跟着变） */
+  coverName: (p) => `第 ${p.slot} 格`,
   /** 挑战拿来判的：按现在的先后（a sorted、a = b） */
   measure(o) { return { kind: 'list', values: [...o.cells].sort((a, b) => a.slot - b.slot).map((x) => x.value) }; },
   pick(o, mark, sel, word) {

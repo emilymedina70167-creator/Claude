@@ -192,12 +192,12 @@ export function armGesture(stage, e, view, done) {
       stage.tween(L.el, [{ transform: L.el.style.transform }, { transform: tr(L.box.x, L.box.y) }], { duration: 340, easing: EASE.spring }).then(() => { L.el.remove(); if (!keep) L.restore(); });
     };
     const drop = (L) => { L?.el?.remove(); L?.restore(); };
-    // 悬上一个落点时拿舞台现在的样子再问一遍（拖起来以后前一下还在演、预写在演，舞台变了）：能不能放、先说会怎样、会不会被拦。
-    // 拖起来那一刻问的只用来淡淡标出能放的地方；松手以后照旧以裁判为准
+    // 悬上一个落点时拿舞台现在的样子再问一遍（拖起来以后前一下还在演、预写在演，舞台变了）：能不能放、先说会怎样、这个世界做不做得到。
+    // 老师写的 wrong=block 会拦的悬上去照常（不先说对错），放下以后才弹回去；拖起来那一刻问的只用来淡淡标出能放的地方；松手以后照旧以裁判为准
     const fresh = (x) => {
       let v;
       try { v = dropVerdict(stage.scene, e, { from: st.from, to: x.t.part(), value: st.value }, kind); } catch { return; } // 落点没了：照拖起来时的
-      x.ok = !!v.ask || (!v.r?.error && !v.blocked);
+      x.ok = !!v.ask || (!v.r?.error && !v.impossible);
       x.hint = v.ask ? v.ask.hint || v.ask.prompt : (view.gestureHint?.(stage, obj(), e, v.r) || '');
       x.why = v.why;
       light(x.t, 'is-drop', x.ok);
@@ -339,7 +339,7 @@ export function armGesture(stage, e, view, done) {
         // 和拖到上面一样：悬上去时拿舞台现在的样子再问一遍（拉起来以后舞台可能变了）
         try {
           const v = dropVerdict(stage.scene, e, { from: st.from, to: x.t.part() }, 'line');
-          x.ok = !v.r?.error && !v.blocked;
+          x.ok = !v.r?.error && !v.impossible;
           x.why = v.why;
           light(x.t, 'is-drop', x.ok);
         } catch { /* 落点没了：照拉起来时的 */ }

@@ -38,7 +38,7 @@ export function lineLabel(text, key = null) {
   const chars = [...plain];
   return chars.length > LABEL_MAX ? `${chars.slice(0, LABEL_MAX).join('')}…` : plain;
 }
-// coverLabel：扣着的时候小块写什么（stage.js 的 chipTextOf）——扣着的一行常常是答案、提示，小块写了它的字就提前给学生看了
+// coverLabel：扣着的时候小块写什么（scene.js 的 coverText）——扣着的一行常常是答案、提示，小块写了它的字就提前给学生看了
 const mkLine = (obj, key, text) => ({ obj, key, text, value: lineLabel(text, key), label: lineLabel(text, key), coverLabel: `第 ${key} 行`, paint: null, glow: false, lift: false, dim: false, covered: false });
 
 export const card = {

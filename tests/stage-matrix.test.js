@@ -462,3 +462,14 @@ test('跟着算的也能开 compare / put / merge（数照旧由式子定）；�
   // 三种都不判对错：写 wrong= 当场报
   assert.match(err(s, 'open AB compare wrong=mark'), /判不了对错/);
 });
+
+test('扣着的一格：学生看的小块写「M 第 2 行第 1 列」，不写值；写给老师的写值、说一声扣着', async () => {
+  const { chipTextOf, tapValueOf } = await import('../kit/src/stage/scene.js');
+  const s = run(new Scene(), 'matrix M = 1 2 / 37 4\ncover M.2,1');
+  const M = s.objects.get('M');
+  const [p] = s.parts('M.2,1');
+  assert.equal(chipTextOf(p, M), 'M 第 2 行第 1 列');
+  assert.doesNotMatch(chipTextOf(p, M), /37/);
+  assert.equal(tapValueOf(p), '37，扣着');
+  assert.equal(chipTextOf(s.parts('M.1,2')[0], M), '2', '没扣着的照旧写值');
+});

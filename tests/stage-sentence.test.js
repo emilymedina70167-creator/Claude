@@ -469,3 +469,13 @@ test('tally s V：每道学生的括号上标里面 key 的谓语几个，剩下
   assert.deepEqual(layout(o).tallies, []);
   assert.ok(layout(o).marks.every((m) => m.tally == null));
 });
+
+test('扣着的词：学生看的小块写「第 k 个词」，不写词本身；挪了跟着变；写给老师的写词、说一声扣着', async () => {
+  const { chipTextOf, tapValueOf } = await import('../kit/src/stage/scene.js');
+  const s = run(new Scene(), `${S1}\ncover s.7`);
+  const o = s.objects.get('s');
+  const [p] = s.parts('s.7');
+  assert.equal(chipTextOf(p, o), '第 7 个词');
+  assert.doesNotMatch(chipTextOf(p, o), /is/);
+  assert.equal(tapValueOf(p), 'is，扣着');
+});

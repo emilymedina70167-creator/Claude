@@ -266,3 +266,14 @@ test('说明里的例子照抄能演：一行不错', () => {
   assert.equal(s.waiting.kind, 'drag');
   assert.doesNotMatch(plane.doc + plane.hint, /[他她]/);
 });
+
+test('扣着的向量：学生看的小块写它的名字，不写坐标；写给老师的说一声扣着', async () => {
+  const { chipTextOf, tapValueOf } = await import('../kit/src/stage/scene.js');
+  const s = run(base(), 'cover p.u');
+  const o = s.objects.get('p');
+  const [u] = s.parts('p.u');
+  assert.equal(u.covered, true);
+  assert.equal(chipTextOf(u, o), 'u');
+  assert.doesNotMatch(chipTextOf(u, o), /2/);
+  assert.equal(tapValueOf(u), 'u，扣着');
+});

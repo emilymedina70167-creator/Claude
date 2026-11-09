@@ -223,3 +223,15 @@ test('说明里的例子照抄就能演（一行不错）；说明里每一条�
   assert.deepEqual(bad, []);
   assert.doesNotMatch(graph.doc + graph.hint + graph.example, /[他她]/);
 });
+
+test('扣着的边：学生看的小块写两头（A–B），不写权；扣着的结点不写名字；写给老师的说一声扣着', async () => {
+  const { chipTextOf, tapValueOf } = await import('../kit/src/stage/scene.js');
+  const s = run(new Scene(), `${BASE}\ncover g.A-B\ncover g.C`);
+  const g = s.objects.get('g');
+  const edge = g.edges.find((e) => e.key === 'A~B');
+  assert.equal(edge.covered, true);
+  assert.equal(chipTextOf(edge, g), 'A–B');
+  assert.equal(tapValueOf(edge), 'A–B，扣着');
+  const c = g.nodes.find((n) => n.key === 'C');
+  assert.equal(chipTextOf(c, g), 'g 里扣着的一个结点');
+});

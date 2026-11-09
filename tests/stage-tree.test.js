@@ -529,3 +529,14 @@ test('isBst 钉住重复值和带撇的值：中序不减就算（一样大的�
   assert.equal(T(make('tree t = 49 13 49′')).layout, 'inorder');
   assert.equal(T(make('tree t = 49′ 50 13')).layout, 'compact');
 });
+
+test('扣着的结点：学生看的小块不写值（t.40 名字里就是值，写「t 里扣着的一个结点」）；写给老师的写值、说一声扣着', async () => {
+  const { chipTextOf, tapValueOf } = await import('../kit/src/stage/scene.js');
+  const s = make('tree t = 40 20 60\ncover t.20');
+  const [p] = s.parts('t.20');
+  assert.equal(chipTextOf(p, T(s)), 't 里扣着的一个结点');
+  assert.doesNotMatch(chipTextOf(p, T(s)), /20/);
+  assert.equal(tapValueOf(p), '20，扣着');
+  run(s, 'uncover t.20');
+  assert.equal(chipTextOf(s.parts('t.20')[0], T(s)), '20');
+});

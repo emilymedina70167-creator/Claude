@@ -1,6 +1,6 @@
 // 手势放下以后先问一个值时浮出来的一块（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 3 节）：数字键盘（倍数框、写一格），
 // 一排选项（拉一段括号以后点成分）。画在舞台的屏幕那一层（stage.view，不跟着镜头缩小：按钮一直够 44px），点别处收起。
-// 不用系统的输入框：iPad 上弹系统键盘会把舞台顶上去、聚焦还会放大；这块自己画的键盘能写负数和分数就够了。
+// 不用系统的输入框：iPad 上弹系统键盘会把舞台顶上去、聚焦还会放大；这块自己画的键盘能写负数、分数、小数就够了。
 // 开着时也收外接键盘的键（keyOf）。padKey、keyOf 是纯函数（tests/stage-gestures.test.js）；别的碰 DOM，靠浏览器里真的点检查。
 import { EASE } from './motion.js';
 
@@ -36,8 +36,9 @@ export function keyOf(e) {
   return null;
 }
 
-const KEYS = [['7', '8', '9', '⌫'], ['4', '5', '6', '/'], ['1', '2', '3', '−'], ['0', 'ok']];
-const NAMES = { '⌫': '退格', '/': '分数线', '−': '负号', ok: '确定' };
+// 最后一行 0、小数点、确定（确定占两格）：分数写 1/2，小数写 0.5 也行（矩阵记成精确的分数）
+export const PAD_KEYS = [['7', '8', '9', '⌫'], ['4', '5', '6', '/'], ['1', '2', '3', '−'], ['0', '.', 'ok']];
+const NAMES = { '⌫': '退格', '/': '分数线', '−': '负号', '.': '小数点', ok: '确定' };
 const shown = (t) => String(t ?? '').replace('-', '−');
 
 /**
@@ -135,8 +136,8 @@ export function openKeypad(stage, { anchor = null, prompt = '', value = '', onOk
     const err = onOk?.(text);
     if (err) complain(pop, msg, err); else P.close();
   };
-  for (const row of KEYS) for (const k of row) {
-    const b = el('button', `st-kp-k${k === 'ok' ? ' is-ok' : /\d/.test(k) ? '' : ' is-fn'}`, grid);
+  for (const row of PAD_KEYS) for (const k of row) {
+    const b = el('button', `st-kp-k${k === 'ok' ? ' is-ok' : /^[\d.]$/.test(k) ? '' : ' is-fn'}`, grid);
     b.type = 'button';
     b.textContent = k === 'ok' ? '确定' : k;
     if (NAMES[k]) b.setAttribute('aria-label', NAMES[k]);

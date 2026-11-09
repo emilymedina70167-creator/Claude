@@ -166,3 +166,13 @@ test('说明里的例子照抄能演（一行不错），每一条指令写法�
   assert.deepEqual(bad, []);
   assert.doesNotMatch(tex.doc + tex.hint + tex.example, /[他她]/);
 });
+
+test('扣着的一项：学生看的小块不写它的内容；写给老师的写内容、说一声扣着', async () => {
+  const { chipTextOf, tapValueOf } = await import('../kit/src/stage/scene.js');
+  const s = run(new Scene(), `${F}\ncover f.c`);
+  const o = s.objects.get('f');
+  const [c] = s.parts('f.c');
+  assert.equal(chipTextOf(c, o), 'f 里扣着的一项');
+  assert.equal(tapValueOf(c), '1，扣着');
+  assert.equal(chipTextOf(s.parts('f.b')[0], o), '2x', '没扣着的照旧写它的字');
+});

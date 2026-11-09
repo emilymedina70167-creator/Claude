@@ -560,6 +560,8 @@ export const matrix = {
     return o;
   },
   parts(o) { return [...o.cells].sort(sortRC); },
+  /** 扣着的一格画成小块写它在第几行第几列（scene.js 的 coverText：不写值） */
+  coverName: (p, o) => `${o.id} 第 ${p.r} 行第 ${p.c} 列`,
   pick(o, mark, sel, word) {
     const bad = () => new Error(`「${word}」：矩阵写 ${o.id}.2,3（第 2 行第 3 列）、${o.id}.r2（第 2 行）或 ${o.id}.c3（第 3 列）`);
     if (mark !== '.') throw bad();

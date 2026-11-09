@@ -180,6 +180,8 @@ export const tex = {
     return { origin, rev: 1, seq: 1, lines: [{ id: 1, ...line }], terms: makeTerms(id, line), zoom: null, geo: null, anchor: null, last: null };
   },
   parts(o) { return o.terms; },
+  /** 扣着的一项画成小块不写它的内容（scene.js 的 coverText） */
+  coverName: (p, o) => `${o.id} 里扣着的一项`,
   pick(o, mark, sel, word) {
     const names = o.terms.map((t) => t.key);
     if (mark === '#') throw new Error(`「${word}」：式子的项写 ${o.id}.名字（${names.length ? `有的是：${names.map((n) => `${o.id}.${n}`).join('、')}` : '这个式子里还没有起名字的项，用 \\hl{名字}{…} 起'}）`);

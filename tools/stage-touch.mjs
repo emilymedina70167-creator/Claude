@@ -474,26 +474,42 @@ expect('外接键盘：数字键盘上写着 −3/2', await page.evaluate(() => 
 await page.keyboard.press('Enter');
 await page.waitForTimeout(900);
 expect('外接键盘：回车交上去、键盘收起', `${await lastAct()}｜${!!(await page.$('.st-keypad'))}`, 'write M.1,1 -3/2｜false');
-// 平衡的 50-30：30 拖到 50 上会被 wrong=block 拦下；挪开、老师插了 20（LL 型）再悬上去，照现在的舞台说
+// 屏幕上的小数点键：每个键至少 44 见方、确定占两格；点 0 . 5 确定，矩阵记成精确的 1/2
+await tapAt({ x: B.cx, y: B.cy });
+await page.waitForTimeout(400);
+expect('数字键盘：每个键至少 44 见方、最后一行 0 . 确定', await page.evaluate(() => { const ks = [...document.querySelectorAll('.st-keypad .st-kp-k')]; const small = ks.filter((k) => { const r = k.getBoundingClientRect(); return r.width < 44 || r.height < 44; }).length; return `${small} ${ks.slice(-3).map((k) => k.textContent).join(' ')}`; }), '0 0 . 确定');
+for (const k of ['0', '.', '5']) { await tapAt(await keyAt(k)); await page.waitForTimeout(60); }
+expect('数字键盘：点出 0.5', await page.evaluate(() => document.querySelector('.st-keypad .st-kp-v')?.textContent), '0.5');
+await tapAt(await keyAt('确定'));
+await page.waitForTimeout(900);
+expect('数字键盘：0.5 交上去、记成 1/2', `${await lastAct()}｜${await page.evaluate(() => window.LAStage.scene.parts('M.1,1')[0].value)}`, 'write M.1,1 1/2｜1/2');
+// 平衡的 50-30：30 拖到 50 上会被 wrong=block 拦下——悬上去照常说会怎样（不先说对错），放下以后才弹回去、照样交给课堂
 await play('tree t = 50 30\nopen t rotate wrong=block');
 const tnode = (v) => page.evaluate((v) => { const st = window.LAStage; const n = st.scene.objects.get('t').nodes.find((x) => x.value === String(v)); return `t:${n.key}`; }, v);
-const hoverOf = (pid) => page.evaluate((pid) => { const el = window.LAStage.nodes.get(pid); const h = document.querySelector('.st-g-note.is-hint'); return `${el.classList.contains('is-over') ? 'over' : ''}${el.classList.contains('is-nodrop') ? 'nodrop' : ''}｜${h?.textContent || ''}`; }, pid);
+const hoverOf = (el) => page.evaluate((k) => { const st = window.LAStage; const el = k.startsWith('.') ? document.querySelector(k) : st.nodes.get(k); const h = document.querySelector('.st-g-note.is-hint'); return `${el?.classList.contains('is-over') ? 'over' : ''}${el?.classList.contains('is-nodrop') ? 'nodrop' : ''}｜${h?.textContent || ''}`; }, el);
 const p50 = await tnode(50);
 A = await box(await tnode(30)); B = await box(p50);
-const away = { x: B.cx + 200, y: B.cy + 200 };
 const slide = async (a, b) => { for (let i = 1; i <= 10; i++) { await touch('touchMove', a.x + (b.x - a.x) * i / 10, a.y + (b.y - a.y) * i / 10); await page.waitForTimeout(16); } };
 await touch('touchStart', A.cx, A.cy);
 await slide({ x: A.cx, y: A.cy }, { x: B.cx, y: B.cy });
 await page.waitForTimeout(100);
-expect('悬在会被拦的落点上：标成不能放、说一句中性的', await hoverOf(p50), 'nodrop｜这一下不让做');
-await slide({ x: B.cx, y: B.cy }, away);
-await page.evaluate(() => window.LAStage.scene.apply(window.LAStageDev.parseScript('insert t 20')[0]));
-await slide(away, { x: B.cx, y: B.cy });
-await page.waitForTimeout(100);
-expect('拖着的时候舞台变了，再悬上去照现在的说', await hoverOf(p50), 'over｜在 50 右旋');
+expect('悬在 wrong=block 会拦的落点上：照常说会怎样，不先说对错', await hoverOf(p50), 'over｜在 50 右旋');
 await touch('touchEnd');
 await page.waitForTimeout(1200);
-expect('松手照裁判演了', await page.evaluate(() => window.LAStage.log.at(-1)?.src), 'rotate t#1 right');
+expect('放下以后裁判拦下、弹回去，照样交给课堂', `${await lastAct()}｜${await page.evaluate(() => window.LAStage.log.some((r) => /^rotate/.test(r.src)))}`, 'rotate t#1 right 没让做｜false');
+// 这个世界做不到的（一条 7 层的链，托盘里的 90 拖起来；拖着的时候老师插了 80，再插就 9 层，放不下）：悬上去照现在的舞台说为什么
+await play('tree t = 10 tray="90"\ninsert t 20\ninsert t 30\ninsert t 40\ninsert t 50\ninsert t 60\ninsert t 70\nopen t insert');
+const trayAt = await decorBox('t', 'tray:90');
+const zone = await page.evaluate(() => { const st = window.LAStage; const n = st.scene.objects.get('t').nodes.find((x) => x.value === '40'); const r = st.nodes.get(`t:${n.key}`).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+await touch('touchStart', trayAt.cx, trayAt.cy);
+await slide({ x: trayAt.cx, y: trayAt.cy }, { x: trayAt.cx + 120, y: trayAt.cy + 40 });
+await page.evaluate(() => window.LAStage.scene.apply(window.LAStageDev.parseScript('insert t 80')[0]));
+await slide({ x: trayAt.cx + 120, y: trayAt.cy + 40 }, zone);
+await page.waitForTimeout(100);
+expect('拖着的时候舞台变了：悬上去照现在的说做不到', await hoverOf('.tr-zone'), 'nodrop｜树最多 8 层，再长就放不下了');
+await touch('touchEnd');
+await page.waitForTimeout(1200);
+expect('松手照裁判：没插进去', await page.evaluate(() => String(window.LAStage.scene.objects.get('t').nodes.some((n) => n.value === '90'))), 'false');
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

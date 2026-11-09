@@ -516,6 +516,8 @@ export const tree = {
     return o;
   },
   parts(o) { return levelOrder(o); },
+  /** 扣着的结点画成小块不写值（scene.js 的 coverText）：树的结点没有不带值的位置写法（t.40 名字里就是值） */
+  coverName: (p, o) => `${o.id} 里扣着的一个结点`,
   pick(o, mark, sel, word) {
     const how = `树的结点写 ${o.id}.40（值是 40 的那个）、${o.id}#3（层序第 3 个）或 ${o.id}.40*（40 和它整棵子树）`;
     const sub = sel.endsWith('*');

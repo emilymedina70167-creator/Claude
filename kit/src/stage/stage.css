@@ -258,7 +258,7 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-kp-keys { display: grid; grid-template-columns: repeat(4, 52px); gap: 8px; }
 .st-kp-k { height: 50px; border: 0; border-radius: 14px; background: color-mix(in srgb, var(--st-ink) 6%, transparent); color: var(--st-ink); font: 500 22px/1 var(--sans, sans-serif); cursor: pointer; }
 .st-kp-k.is-fn { color: var(--st-brand); background: color-mix(in srgb, var(--st-brand) 8%, transparent); }
-.st-kp-k.is-ok { grid-column: span 3; background: var(--st-brand); color: var(--st-brand-ink); font-size: 18px; font-weight: 600; }
+.st-kp-k.is-ok { grid-column: span 2; background: var(--st-brand); color: var(--st-brand-ink); font-size: 18px; font-weight: 600; }
 .st-kp-k:disabled { opacity: .35; cursor: default; }
 .st-kp-k:active { scale: .94; }
 .st-kp-k:focus-visible, .st-choice:focus-visible, .st-undo:focus-visible, .st-back:focus-visible { outline: 2px solid var(--st-brand); outline-offset: 2px; }

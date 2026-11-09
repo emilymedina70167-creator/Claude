@@ -317,6 +317,8 @@ export const plane = {
     return o;
   },
   parts(o) { return [...o.items]; },
+  /** 扣着的向量、点画成小块写它的名字（u），不写坐标（scene.js 的 coverText） */
+  coverName: (p) => p.label,
   pick(o, mark, sel, word) {
     const it = mark === '.' && o.items.find((i) => i.name === sel);
     if (!it) throw new Error(`「${word}」：平面写 ${o.id}.u（向量 u）、${o.id}.P（点 P）${o.items.length ? `，${o.id} 上有的是：${o.items.map((i) => i.name).join('、')}` : `，${o.id} 上还没有（先 vec ${o.id} u = 2 1）`}`);

@@ -122,30 +122,36 @@ export function askFor(g, o, kind, ctx = {}) {
   return own || null;
 }
 
-/** 悬在一个会被裁判拦下的落点上时那一句（中性：不说对错、不说像哪种错，和数字键盘的「这一下没让做」一样） */
-export const BLOCK_HINT = '这一下不让做';
-/** 照这一行学生指令，裁判会不会拦下（wrong=block 又走偏了、这个世界做不到）：拿 scene 现在的样子问；问不成算不拦（松手以后照旧以裁判为准） */
-export function wouldBlock(scene, e, src) {
+/**
+ * 照这一行学生指令，裁判会不会拦下，拿 scene 现在的样子问：null 是不拦；{ impossible, why }：impossible 是这个世界做不到
+ * （legal: false，why 是规则说的为什么），不然是老师写的 wrong=block 拦下（走偏了；为什么不说）。问不成算不拦（松手以后照旧以裁判为准）
+ */
+export function blockOf(scene, e, src) {
   try {
     const [c] = parseScript(src);
     const j = scene?.judgeLine?.(c, { by: 'student', open: e?.action });
-    return !!j && !j.apply;
-  } catch { return false; }
+    if (!j || j.apply) return null;
+    const impossible = j.verdict?.legal === false;
+    return { impossible, why: impossible ? j.verdict.why || '这一下做不到' : '' };
+  } catch { return null; }
 }
+/** 裁判会不会拦下（不管为什么）：放下的那一刻定拎着的那一份飞不飞回去 */
+export const wouldBlock = (scene, e, src) => !!blockOf(scene, e, src);
 /**
  * 拖着的这一下放在一个落点上会怎样，拿现在的舞台问（拖起来以后舞台还会变：前一下还在演、预写在演、老师插了一个数）：
- * { ask, r, why, blocked }。ask 是放下以后先问一个值（倍数框：这时还判不了，照旧能放）；r 是 gestureAct 翻成的那一行或 { error }；
- * why 是放不下的那一句（翻不成指令的照手势说，会被拦下的是 BLOCK_HINT）；blocked 是裁判会拦下。
- * 只给画面用（悬上去标能不能放、拎着的飞不飞回去）；松手以后照旧以裁判为准
+ * { ask, r, why, blocked, impossible }。ask 是放下以后先问一个值（倍数框：这时还判不了，照旧能放）；r 是 gestureAct 翻成的那一行或 { error }；
+ * blocked 是裁判会拦下，impossible 是其中这个世界做不到的（legal: false）；why 是放不下的那一句（翻不成指令的照手势说，做不到的照规则说）。
+ * 悬停只标翻不成、做不到的：老师写的 wrong=block 拦下的悬上去照常（不然学生悬一遍就知道哪一下是对的，是页面替老师做了教学决定），
+ * 放下以后才弹回去。只给画面用；松手以后照旧以裁判为准
  */
 export function dropVerdict(scene, e, ctx = {}, kind) {
   const o = scene?.objects?.get(e?.obj);
   const ask = askFor(e?.gesture || gestureOf(o, e?.action), o, kind, ctx);
-  if (ask) return { ask, r: null, why: '', blocked: false };
+  if (ask) return { ask, r: null, why: '', blocked: false, impossible: false };
   const r = gestureAct(scene, e, ctx);
-  if (r.error) return { ask: null, r, why: r.error, blocked: false };
-  const blocked = wouldBlock(scene, e, r.src);
-  return { ask: null, r, why: blocked ? BLOCK_HINT : '', blocked };
+  if (r.error) return { ask: null, r, why: r.error, blocked: false, impossible: false };
+  const b = blockOf(scene, e, r.src);
+  return { ask: null, r, why: b?.impossible ? b.why : '', blocked: !!b, impossible: !!b?.impossible };
 }
 
 /** 撤不了时按钮下面那一句（中性：不说对错） */

@@ -62,6 +62,29 @@ export function compareValues(a, b) {
   return s < t ? -1 : s > t ? 1 : 0;
 }
 
+/**
+ * 扣着的部件（cover）写成它在哪，不写值：学生看的小块（话里的 {a.3}、贴的字、比大小的牌子）照它写，扣着的常常就是要学生猜的。
+ * 题卡的一行自己交 coverLabel（「第 3 行」）；别的照那种东西交的 coverName（一排格子「第 3 格」、矩阵「M 第 2 行第 3 列」、
+ * 句子「第 3 个词」、树「t 里扣着的一个结点」……）；没交的、不知道是哪样东西的写「名字 里扣着的一个」。o 是部件所在的那样东西
+ */
+export function coverText(p, o = null) {
+  if (p.coverLabel != null) return p.coverLabel;
+  let name = null;
+  try { name = o ? typeOf(o).coverName?.(p, o) : null; } catch { name = null; }
+  return name || `${p.obj} 里扣着的一个`;
+}
+/** 一个部件画成学生看的小块写什么：label，没有就 value、key；扣着的写它在哪（coverText），不写值 */
+export const chipTextOf = (p, o = null) => String(p.covered ? coverText(p, o) : p.label ?? p.value ?? p.key);
+/**
+ * 写给老师的那个字（学生点了哪一个、点过的几样变没变）：它的字；扣着的后面说一声「，扣着」（老师知道里面是几）。
+ * 题卡扣着的一行照旧写「第 3 行，扣着」（一行常常是一整句答案，写给老师也不整句抄）
+ */
+export const tapValueOf = (p) => {
+  const v = String(p.label ?? p.value ?? p.key);
+  if (!p.covered) return v;
+  return `${p.coverLabel != null ? p.coverLabel : v}，扣着`;
+};
+
 /** 一个部件在场景里的编号（画面用它找节点、话里的小块用它找部件）：'a:3'、't:A' */
 export const pidOf = (p) => `${p.obj}:${p.key}`;
 
@@ -1917,10 +1940,10 @@ export function pickText(a) {
   return `${head}——你预期的是 ${a.expected}：${diff}`;
 }
 /**
- * 变过以后写一个部件：tapRef；有位置的（一排格子、句子的词）后面带上它现在的字（s.5（three））——挪过以后位置变了，
- * 光写 s.3 会被读成学生交的时候点的那个 s.3。扣着的写它的牌子（和 stage.js 的 chipTextOf 一样，不漏字）
+ * 变过以后写一个部件（写给老师）：tapRef；有位置的（一排格子、句子的词）后面带上它现在的字（s.5（three））——挪过以后位置变了，
+ * 光写 s.3 会被读成学生交的时候点的那个 s.3。扣着的照 tapValueOf 说一声扣着
  */
-const partName = (scene, p) => (p.slot != null ? `${scene.tapRef(p)}（${p.covered && p.coverLabel != null ? p.coverLabel : p.label ?? p.value ?? p.key}）` : scene.tapRef(p));
+const partName = (scene, p) => (p.slot != null ? `${scene.tapRef(p)}（${tapValueOf(p)}）` : scene.tapRef(p));
 // 点着的每一个现在叫什么：还在的照 partName；这一下没了的，照交的那一行写的（一个部件一个写法时对得上），后面说没了
 function pickedNames(scene, picked) {
   const o = scene.objects.get(picked.obj);
