@@ -108,7 +108,9 @@ test('这一轮的新写法都在说明里：共用的每门课都有，树的�
   const doc = (s) => STAGE_TEACH + stageDoc(s);
   const has = (d, w) => (w instanceof RegExp ? w.test(d) : d.includes(w));
   const common = [/^ask pick /m, 'reveal=on', 'unpick', /^keep /m, /^back /m, 'after=', 'after=off', /^@ask\.right /m, 'collect=', /(?<![a-z])on="/, 'call=now',
-    'hide=on', /^hide \S+ \/ show /m, '按住再拖', /when="[^"\n]*\|[^"\n]*"/, '最多三层', '做到过；现在不成立'];
+    'hide=on', /^hide \S+ \/ show /m, '按住再拖', /when="[^"\n]*\|[^"\n]*"/, '最多三层', '做到过；现在不成立',
+    // 量那一行带一个话里写 rank 的例子（引号里的 rank、det 也是量，复核时改的）
+    /^量：[^\n]*say "[^"\n]*\{rank\(/m];
   const own = {
     数据结构: ['pluck', 'open t delete', /^heights t/m, 'count(', 'height(', 'tray(', /堆[^\n]*layout=compact/],
     线代: ['open AB compare', 'put AB Sum', 'merge X Y', 'collect', 'coef(', 'rhs(', 'from=', 'vars=', 'rank(', 'rankA(', 'free(', 'det(m)', /= _ _/],
@@ -210,16 +212,20 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
     // 第二轮：说明文字里写的几种写法
     [A, 'goal g1 "x" when="a.1 < a.2 | a.9 < a.10" call=now'], [A, 'goal g1 "x" when="a sorted" on="就这样"'], [A, 'goal g1 "x" when="a.1 < a.2" collect=a n=3'],
     [A, 'ask pick a#1 a#3 a#5 "哪几个？"'], [A, 'ask pick a "哪几格？" expect="a.2-3 a.6" reveal=on'], [A, 'unpick'],
-    [`${A}\nopen a`, 'keep a "换过以后" after=swap'], [`${A}\nopen a\nkeep a "换过以后" after=swap`, 'keep a "换过以后" after=off'], [A, 'array R = 1 2 3 hide=on'],
+    [`${A}\nopen a`, 'keep a "换过" after=swap'], [`${A}\nopen a\nkeep a "换过" after=swap`, 'keep a "换过" after=off'], [A, 'array R = 1 2 3 hide=on'],
     [M, 'matrix M = 1 2 | 3 / 2 4 | 7\nmatrix P = 1 / 1\nmatrix Q = {coef(M) P - rhs(M)}'],
     [M, 'matrix m0 = 1 2 | 3 / 2 4 | 7\nmatrix m1 = _ _ | _ / _ _ | _ from=m0 vars="x y"'], ['dial l = 1 range=-3..3', 'matrix N = 1 {l - 1} / 0 {2 l}'],
-    [M, 'goal g1 "x" when="rank(m) = 1, rankA(m) = 1, free(m) = 1, det(m) = 3"'], [M, 'ask value "秩是几？" answer={rank(m)}'], [M, 'say "自由变量 {free(m)} 个"'],
+    [M, 'goal g1 "x" when="rank(m) = 1, rankA(m) = 1, free(m) = 1, det(m) = 3"'], [M, 'ask value "秩是几？" answer={rank(m)}'], [M, 'say "自由变量 {free(m)} 个"'], [M, 'say "秩是 {rank(m)}"'],
     [T, 'goal g1 "x" when="count(t) = 4, height(t) = 4, height(t.30) = 2"'], ['tree t = 50 30 tray="20"', 'label n t "还剩 {tray(t)} 个"'], [T, 'unheights t'], ['', 'tree h = 10 layout=compact'],
     [S, 'goal g1 "x" when="verbs(s.1-6) = 1, verbs(s) = 2, left(s) = 3, s exact"'], [S, 'untally s'],
     ['sentence s = "The man who lives next door is a doctor." links="who -> s.1-2"', 'goal g1 "x" when="s linked"'],
   ];
   const bad = [];
   for (const [setup, line] of plays) { const e = dryRun(run(setup), line); if (e.length) bad.push(`${line} → ${e[0].error}`); }
+  // 话里的 {rank(m)} 是量（画成现在的数），不是拨数的名字：说明不再写「在话里照原样写出来」
+  const { parseRich } = await import('../kit/src/stage/script.js');
+  assert.ok(parseRich('秩是 {rank(m)}').some((p) => p.k === 'measure'));
+  assert.doesNotMatch(STAGE_COMMON, /照原样写出来/);
   // 说明里说「会报错」「不能写」「写不进去」的
   const fails = [
     [A, 'goal g1 "x" when="a.1 = ago"', /不是舞台上的东西/], [`${T}\nopen t rotate`, '@t.wrong say "x"', /不能预写/],

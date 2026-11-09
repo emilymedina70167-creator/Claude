@@ -129,6 +129,11 @@ export function parseRef(word) {
  * {count(t)} 是页面数的量（画成现在的数，跟着变；数不了画「?」）、$d$ 是式子里的字母、[不稳定] 是能飞到图上去的词。
  * 返回 [{ k: 'text' | 'ref' | 'var' | 'measure' | 'math' | 'word', v }]
  */
+// 引号里的字（话、贴的字、挑战、问题、题卡）里也当量的 exact.js 函数名：量名里撞上 exact.js 函数的就这两个（tests/stage-value.test.js 守着）。
+// 引号外面（answer=、格里、when=）照旧：value.js 的 evalLive 把 {det(A)}、{rank(M)} 交给 exact.js（写满时两边算的一样）。
+// 有意的不同（Task 15 复核，控制者裁定）：旧课引号里写过 {det(A)} 的，重放时画成数，以前照原样写「det(A)」
+export const RICH_MEASURES = new Set(['rank', 'det']);
+
 export function parseRich(text) {
   const out = [];
   const s = String(text ?? '');
@@ -139,11 +144,12 @@ export function parseRich(text) {
     if (m[1] != null) {
       const inner = m[1].trim();
       const r = parseRef(inner);
-      // 量和 value.js 的 evalLive 同一条规矩：名字(东西或部件)，名字不是 exact.js 本来就有的函数（{det(A)}、{rank(M)} 照旧是式子）。
+      // 量：名字(东西或部件)。名字是 exact.js 本来就有的函数的不算（{inv(A)} 照旧是式子），只有 rank、det 例外（RICH_MEASURES）：
+      // 引号里没有 exact.js 现算，以前它们落成拨数的名字，学生看到的是「rank(M)」几个字母。
       // 这里看不到舞台：括号里的东西在不在、名字是不是它的量，场景写下这一行时查（scene.js 的 checkRich）
       const ms = !r && parseMeasure(inner);
       // v 照原样（连空格）：不是量的（旧课的 {f(x)}）画回原来的字
-      if (ms && !isExactFunc(ms.name) && parseRef(ms.arg)) out.push({ k: 'measure', v: inner });
+      if (ms && (!isExactFunc(ms.name) || RICH_MEASURES.has(ms.name)) && parseRef(ms.arg)) out.push({ k: 'measure', v: inner });
       else out.push(r && r.kind !== 'all' ? { k: 'ref', v: inner } : { k: 'var', v: inner });
     }
     else if (m[2] != null) out.push({ k: 'math', v: m[2] });

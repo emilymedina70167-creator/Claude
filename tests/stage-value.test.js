@@ -324,7 +324,7 @@ test('复核 学生（ask drag）换了跟着算的一排：舞台现状写「�
   assert.match(t.stateText(), /你动过它的结构/);
 });
 
-test('{量(…)}：rankA、count 这些换成页面数的；det、rank 照旧交给 exact.js；数不了报「页面数不了」', () => {
+test('{量(…)}：rankA、count 这些换成页面数的；引号外面的 det、rank 照旧交给 exact.js；数不了报「页面数不了」', () => {
   const sc = run(new Scene(), 'matrix M = 1 2 | 1 / 2 4 | -1\nmatrix A = 1 2 / 3 4\ntree t = 34 23 107 15 28 98 115\nsentence s2 = "The man is a doctor."');
   const r = evalLive('{rank(M)}', sc);
   assert.equal(r.value.toString(), '2', 'rank 走 exact.js：整张（增广的是 r(A | b)），和量一样');
@@ -338,14 +338,49 @@ test('{量(…)}：rankA、count 这些换成页面数的；det、rank 照旧交
   assert.equal(evalLive('{2 height(t.107)}', sc).value.toString(), '4', '量和省略的乘号');
   assert.throws(() => evalLive('{verbs(s2)}', sc), /页面数不了：s2 没写 key/);
   assert.throws(() => evalLive('{size(t)}', sc), /没有量「size」/);
-  assert.equal(evalLive('{det(A)}', sc).value.toString(), '-2');
-  assert.ok(!parseRich('{det(A)}').some((p) => p.k === 'measure'), 'det(A) 照旧是式子');
-  assert.ok(!parseRich('{rank(M)}').some((p) => p.k === 'measure'));
+  assert.equal(evalLive('{det(A)}', sc).value.toString(), '-2', '引号外面（answer=、格里）照旧是式子');
   // 跟着量算：树长了，一排格子跟着变
   run(sc, 'array a = {count(t)} 0');
   assert.equal(sc.objects.get('a').cells.find((x) => x.slot === 1).value, '7');
   run(sc, 'insert t 120');
   assert.equal(sc.objects.get('a').cells.find((x) => x.slot === 1).value, '8');
+});
+
+// 复核（Task 15，控制者裁定 A）：引号里的字（话、贴的字、挑战、问题、题卡）里 rank、det 也是量——以前落成拨数的名字，
+// 学生看到的是「rank(M)」几个字母，新写的也不报（静默失败）
+test('引号里的 {rank(M)}、{det(A)} 是量：画成现在的数、跟着变；新写的名字、东西不对当场报；旧课重放照收、也画成数', async () => {
+  const { RICH_MEASURES } = await import('../kit/src/stage/script.js');
+  const { measureShown, rulesOf } = await import('../kit/src/stage/rules.js');
+  const { TYPES } = await import('../kit/src/stage/types/index.js');
+  const { isExactFunc } = await import('../kit/src/exact.js');
+  // 量名里同时是 exact.js 函数的就是这几个（以后哪种东西加了量、名字撞上 exact.js 的函数，这里会红）
+  const clash = new Set(Object.values(TYPES).flatMap((t) => Object.keys(rulesOf({ type: t.type })?.measures || {})).filter((n) => isExactFunc(n)));
+  assert.deepEqual([...RICH_MEASURES].sort(), [...clash].sort());
+  assert.ok(parseRich('秩是 {rank(M)}').some((p) => p.k === 'measure' && p.v === 'rank(M)'));
+  assert.ok(parseRich('{det(A)}').some((p) => p.k === 'measure' && p.v === 'det(A)'));
+  assert.ok(parseRich('{inv(A)}').every((p) => p.k !== 'measure'), '别的 exact.js 函数照旧不是量');
+  const sc = run(new Scene(), 'matrix M = 1 2 / 2 4\nmatrix A = 1 2 / 3 4\nopen M edit input=keypad');
+  assert.equal(err(sc, 'say "秩是 {rank(M)}"'), null);
+  one(sc, 'say "秩是 {rank(M)}，det 是 {det(M)}"');
+  assert.equal(measureShown(sc, 'rank(M)'), '1');
+  assert.equal(measureShown(sc, 'det(M)'), '0');
+  // 跟着变：学生改了一格，秩、行列式跟着换
+  sc.apply(parseScript('write M.2,2 5')[0], { by: 'student', open: 'edit' });
+  assert.equal(measureShown(sc, 'rank(M)'), '2');
+  assert.equal(measureShown(sc, 'det(M)'), '1');
+  // 新写的行：东西不在、名字不对、以后也数不了的当场报
+  assert.match(err(sc, 'say "秩是 {rank(zz)}"'), /舞台上没有/);
+  assert.match(err(sc, 'label n M "det = {det(zz)}"'), /舞台上没有/);
+  run(sc, 'matrix B = 1 2 | 3 / 4 5 | 6\ntree t = 50 30');
+  assert.match(err(sc, 'say "{det(B)}"'), /以后也数不了/);
+  assert.match(err(sc, 'goal g1 "让秩是 {rank(t)}" when="count(t) = 3"'), /没有量「rank」/);
+  // 旧课重放（lenient）：照收不查；舞台上有就画成数（有意的不同：以前照原样写「det(A)」），没有的照原样写字
+  const old = new Scene();
+  run(old, 'matrix A = 1 2 / 3 4');
+  old.apply({ ...parseScript('say "行列式是 {det(A)}，{det(q)} 呢"')[0], lenient: true });
+  assert.equal(old.say, '行列式是 {det(A)}，{det(q)} 呢');
+  assert.equal(measureShown(old, 'det(A)'), '-2');
+  assert.equal(measureShown(old, 'det(q)'), 'det(q)');
 });
 
 test('格里的式子：算成一个数就收，跟着拨数变；算出来是矩阵、名字不认得照实说', () => {
