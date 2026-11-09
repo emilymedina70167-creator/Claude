@@ -1321,7 +1321,7 @@ export class Scene {
         }
         for (const id of words) {
           const o = this.objects.get(id);
-          if (cmd === 'hide') { o.hidden = true; continue; }
+          if (cmd === 'hide') { if (!o.hidden) { o.hidden = true; this.closeGap(o); } continue; }
           if (!o.hidden) continue;
           delete o.hidden;
           // 藏着的时候没人给它让地方，它也没跟着别人往下让：原来的地方压着画面上的东西，或者在所有东西下面（hide=on 造的
@@ -1416,6 +1416,25 @@ export class Scene {
     if (!t.commands?.[cmd]) throw new Error(`${t.label}没有「${cmd}」（${owners.map((x) => x.label).join('、')}才有）`);
     void h;
     return t.commands[cmd];
+  }
+
+  /**
+   * 藏起来的东西不占地方（hide）：它那一行（同一列里和它高度上有重叠的）没别的东西了，这一列里摆在它下面的整体往上收到它原来的上沿，
+   * 和它不在时一样（以前空着一大块，竖屏中间一大块空）；那一行还有别的（beside= 摆在旁边的）就不收。一列是另起一列（colStart）的那一样
+   * 和它后面摆的。只在藏的这一下往上收一次，别的时候照旧只往下推（reflow）。show 时原来的地方被占了，照摆新东西的规矩摆（placeFresh）
+   */
+  closeGap(o) {
+    if (!o.origin) return;
+    const all = [...this.objects.values()];
+    const colOf = (x) => { let c = 0; for (const y of all) { if (y.colStart) c++; if (y === x) return c; } return c; };
+    const c = colOf(o);
+    const me = this.objectBox(o.id);
+    const mates = all.filter((x) => x !== o && !x.hidden && x.origin && colOf(x) === c).map((x) => ({ x, b: this.objectBox(x.id) }));
+    if (mates.some(({ b }) => b.y < me.y + me.h && me.y < b.y + b.h)) return;
+    const below = mates.filter(({ b }) => b.y >= me.y + me.h);
+    if (!below.length) return;
+    const d = Math.min(...below.map(({ b }) => b.y)) - me.y;
+    if (d > 0) for (const { x } of below) shiftObject(x, 0, -d);
   }
 
   /**

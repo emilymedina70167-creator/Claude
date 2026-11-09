@@ -534,6 +534,31 @@ expect('拖着的时候舞台变了：悬上去照现在的说做不到', await 
 await touch('touchEnd');
 await page.waitForTimeout(1200);
 expect('松手照裁判：没插进去', await page.evaluate(() => String(window.LAStage.scene.objects.get('t').nodes.some((n) => n.value === '90'))), 'false');
+
+// 20. 正在等的 ask pick 不抢整张矩阵的把手（试演时找到的）：ask pick 等着 M 的格、又开着 open M compare——
+// 以前格子是 prio 2 的点，手指 30 像素以内独吞，按 M 的括号拎不起来。现在点一下是点格子，按住 0.35 秒再拖是整张拖去比
+await play('matrix M = 1 3 / -1 4\nmatrix N = 1 5 / 1 4 beside=M\nopen M compare\nask pick M "哪几格和 N 不一样？" button="点好了" expect="M.1,2 M.2,1"');
+before = await srcs();
+const mbl = await decorBox('M', 'bl');
+B = await box('N:1.2');
+if (mbl) await holdDrag({ x: mbl.cx, y: mbl.cy }, { x: B.cx, y: B.cy });
+await settle();
+expect('ask pick 等着：按住 M 的括号拖到 N 上，多一行 compare', await added(before), 'compare M N');
+expect('拖完那一问还等着、一格也没圈上', await page.evaluate(() => `${window.LAStage.scene.waiting?.kind}｜${document.querySelectorAll('.is-picking').length}`), 'pick｜0');
+// 按在格子上按住再拖：也是整张（手指在整张的框里）
+before = await srcs();
+A = await box('M:2.2'); B = await box('N:2.2');
+await holdDrag({ x: A.cx, y: A.cy }, { x: B.cx, y: B.cy });
+await settle();
+expect('按住 M 的一格再拖到 N 上：照样 compare（不圈格子）', `${await added(before)}｜${await page.evaluate(() => document.querySelectorAll('.is-picking').length)}`, 'compare M N｜0');
+// 点一下格子：圈上那一格（那一问），不拖
+before = await srcs();
+for (const k of ['M:1.2', 'M:2.1']) { A = await box(k); await tapAt({ x: A.cx, y: A.cy }); await page.waitForTimeout(150); }
+expect('点 M.1,2、M.2,1：两格圈上了、没多一行', `${await page.evaluate(() => document.querySelectorAll('.is-picking').length)}｜${await added(before)}`, '2｜没有');
+const pickGo = await page.evaluate(() => { const b = document.querySelector('.st-pick-go'); if (!b || b.disabled) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+if (pickGo) await tapAt(pickGo);
+await settle();
+expect('点「点好了」：交上去、和预期的一样', await page.evaluate(() => { const a = window.LAStageDev.acts.at(-1); return a?.type === 'pick' ? `${a.refs.join(' ')}｜${a.same}` : '没交'; }), 'M.1,2 M.2,1｜true');
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

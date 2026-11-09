@@ -174,3 +174,31 @@ export function pickTarget(pt, cands, { radius = 30 } = {}) {
   }
   return best ? best.c : null;
 }
+
+/** 一个能按的东西是哪种按法（pointer.js 挂上的）：自己写了 how 的照它；点的是 tap，拖的（stage.js 的 armDrag：拖格子、拖词）照旧要按住拖 */
+export const howOf = (t) => t?.how || (t?.kind === 'tap' ? 'tap' : 'hold');
+const sameRect = (a, b) => a && b && Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && Math.abs(a.w - b.w) < 1 && Math.abs(a.h - b.h) < 1;
+const inside = (pt, r) => pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h;
+/**
+ * 手指按下去这一处有哪几种按法（pointer.js 的 down 照它分，choosePress 定是哪一种）：{ hit, by: Map(按法 → 挂着的那一个) } | null。
+ * hit 是 pickTarget 挑的那一个；同一档 prio、同一个框的几种按法各取先挂的（句子的一个词上又拉、又折、又挪）。
+ * 正在等的那一问的点（prio 高，ask tap / pick 点格子、点结点）挑中了：手指按在低一档的「拖」的框里时，按法不一样的那几种也并进来——
+ * 点一下是那一问，按住再拖、滑是拖的那一个（以前那一问的点手指 30 像素以内独吞，ask pick 等着时整张矩阵的括号拎不起来）。
+ * 低一档的点不并（同一种按法，那一问先）；那一问是拖（ask drag）时照旧独吞（第一轮按下就拖的手感）
+ */
+export function pressGroup(pt, cands, { radius = 30 } = {}) {
+  const hit = pickTarget(pt, cands, { radius });
+  if (!hit) return null;
+  const by = new Map();
+  for (const c of cands) if ((c.prio || 0) === (hit.prio || 0) && sameRect(c.rect, hit.rect) && !by.has(howOf(c.t))) by.set(howOf(c.t), c);
+  if (!by.has(howOf(hit.t))) by.set(howOf(hit.t), hit);
+  if (hit.t?.kind === 'tap') {
+    for (const how of ['slide', 'hold']) {
+      if (by.has(how)) continue;
+      const low = cands.filter((c) => (c.prio || 0) < (hit.prio || 0) && c.t?.kind === 'drag' && howOf(c.t) === how && c.rect && inside(pt, c.rect));
+      const best = pickTarget(pt, low, { radius: 0 });
+      if (best) by.set(how, best);
+    }
+  }
+  return { hit, by };
+}

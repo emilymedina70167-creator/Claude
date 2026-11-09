@@ -479,3 +479,24 @@ test('扣着的词：学生看的小块写「第 k 个词」，不写词本身�
   assert.doesNotMatch(chipTextOf(p, o), /is/);
   assert.equal(tapValueOf(p), 'is，扣着');
 });
+
+test('move 挪一段不带走旁边的标点：这一段和后面隔着的逗号留在原处（交给原来紧挨在前面的词，句首就不要了），段里面的标点、引号跟着走', () => {
+  const text = (s) => sentenceText(s.objects.get('s'));
+  // 句首的状语从句挪到句尾：以前是「…play When the rain stopped,.」
+  const a = run(new Scene(), 'sentence s = "When the rain stopped, the children who had waited inside ran out to play."\nmove s.1-4 after s.14');
+  assert.equal(text(a), 'the children who had waited inside ran out to play When the rain stopped.');
+  // 夹在中间的一段：后面的逗号交给前面的词（它本来没标点）；挪到的那一处前面的词照旧带着自己的逗号
+  const b = run(new Scene(), 'sentence s = "The boss called yesterday at noon, and then left."\nmove s.4-6 before s.1');
+  assert.equal(text(b), 'yesterday at noon The boss called, and then left.');
+  // 前面的词已经有逗号：不重复成「,,」
+  const c = run(new Scene(), 'sentence s = "Apples, pears, plums are cheap."\nmove s.2 after s.4');
+  assert.equal(text(c), 'Apples, plums are pears cheap.');
+  // 段里面的逗号、段尾的右引号跟着走（右引号和段头的左引号是一对）；句末的点留在最后
+  const d = run(new Scene(), 'sentence s = "He said “wait, please” and left."\nmove s.3-4 after s.6');
+  assert.equal(text(d), 'He said and left “wait, please”.');
+  // 一个词挪也一样：However 后面的逗号留在句首（前面没有词），不要了
+  const e = run(new Scene(), 'sentence s = "However, the plan failed."\nmove s.1 after s.4');
+  assert.equal(text(e), 'the plan failed However.');
+  // 挪回原处也照这一条（以前的逗号不会自己回来）：要原样回去用撤一步、back
+  assert.equal(words(a).join(' '), 'the children who had waited inside ran out to play When the rain stopped');
+});

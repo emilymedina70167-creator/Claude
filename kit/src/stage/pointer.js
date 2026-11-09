@@ -12,17 +12,15 @@
 // 同一处的几种按法（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 第 2.1 节）：同一个框、同一档 prio 上挂着的几个
 // （句子的一个词上又能拉括号、又能点着折、又能按住挪）各带一种按法 how（点 tap、滑 slide、按住再拖 hold），按下去先不定，
 // 照 gestures.js 的 choosePress 在第一个定得下的时刻（挪过 TAP_SLOP、按满 HOLD_MS、松手）定一种，一下只交那一种；定成 'none'
-// 是作罢（什么都不交、不留半截的拖，说一句怎么按）。只有一种按法时照旧：点等松手，滑、按住再拖按下就开始（和第一轮一样）
-import { pickTarget } from './layout.js';
+// 是作罢（什么都不交、不留半截的拖，说一句怎么按）。只有一种按法时照旧：点等松手，滑、按住再拖按下就开始（和第一轮一样）。
+// 正在等的那一问（prio 2 的点）和低一档的拖不在同一个框里也分按法：点是那一问，按住再拖是拖（ask pick 等着时照样拎得起整张矩阵）
+import { pressGroup } from './layout.js';
 import { choosePress, HOLD_MS } from './gestures.js';
 import { noteAt } from './gesturedom.js';
 
 const TAP_SLOP = 12; // 按下到松开挪了多少像素以内还算「点」
 const FINGER = 30; // 手指按偏多远以内还算按到（屏幕像素）；鼠标、笔准一些
 const PEN = 14;
-/** 一个能按的东西是哪种按法：自己写了 how 的照它；点的是 tap，拖的（stage.js 的 armDrag：拖格子、拖词）照旧要按住拖 */
-const howOf = (t) => t.how || (t.kind === 'tap' ? 'tap' : 'hold');
-const sameRect = (a, b) => a && b && Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && Math.abs(a.w - b.w) < 1 && Math.abs(a.h - b.h) < 1;
 // 作罢时说一句这一处有哪几种按法（中性的，不说对错）
 const PRESS_SAY = { tap: '点一下', slide: '按下就滑', hold: '按住一会儿再拖' };
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -62,12 +60,11 @@ export class PointerRouter {
     const pt = this.local(e);
     const cands = [];
     for (const [id, t] of this.targets) { let rect = null; try { rect = t.rect(); } catch { rect = null; } if (rect) cands.push({ id, t, prio: t.prio || 0, rect }); }
-    const hit = pickTarget(pt, cands, { radius: e.pointerType === 'touch' ? FINGER : PEN });
-    if (!hit) return;
-    // 同一处（同一个框、同一档 prio）挂着的几种按法，每种取先挂的那一个（和以前 pickTarget 一样谁先挂谁先）
-    const by = new Map();
-    for (const c of cands) if (c.prio === hit.prio && sameRect(c.rect, hit.rect) && !by.has(howOf(c.t))) by.set(howOf(c.t), c);
-    if (!by.has(howOf(hit.t))) by.set(howOf(hit.t), hit);
+    // 同一处（同一个框、同一档 prio）挂着的几种按法，每种取先挂的那一个（和以前 pickTarget 一样谁先挂谁先）；
+    // 正在等的那一问的点挑中了、手指又按在低一档的拖的框里：拖也算这一处的一种按法（layout.js 的 pressGroup）
+    const g = pressGroup(pt, cands, { radius: e.pointerType === 'touch' ? FINGER : PEN });
+    if (!g) return;
+    const { hit, by } = g;
     e.preventDefault();
     try { this.stage.view.setPointerCapture(e.pointerId); } catch { /* 旧浏览器：照样靠 view 收到 move */ }
     const s = this.s = {

@@ -967,6 +967,18 @@ export const sentence = {
       const f = foldOfKey(o, rest[i - 1]?.key);
       if (f && f === foldOfKey(o, rest[i]?.key)) throw new Error('不能挪进折起来的那一段：先 unfold');
       const next = [...rest.slice(0, i), ...block, ...rest.slice(i)];
+      // 这一段最后一个词贴着的分隔标点（「stopped,」的逗号）是这一段和后面那个词之间的，不是这一段的：留在原处——交给原来紧挨在
+      // 这一段前面的那个词（它自己已经有标点就不重复），这一段在句首就不要了（以前跟着走，挪到句尾成了「stopped,.」）。
+      // 段里面的标点、段尾的右引号右括号（和段头的左引号是一对）跟着走；段外面的词贴着的标点不动
+      if (next.some((w, k) => w !== order[k])) {
+        const tail = block[block.length - 1];
+        const [, keep, sep] = String(tail.punct || '').match(/^(.*?)([,;:，；：—–\s]*)$/s);
+        if (sep.trim()) {
+          tail.punct = keep;
+          const prev = order[order.indexOf(block[0]) - 1];
+          if (prev && !prev.punct) prev.punct = sep;
+        }
+      }
       const before = new Map(order.map((w) => [w.key, w.slot]));
       next.forEach((w, k) => { w.slot = k + 1; });
       return { id: o.id, moved: block.map((w) => w.key), others: next.filter((w) => !moving.has(w.key) && w.slot !== before.get(w.key)).map((w) => w.key) };

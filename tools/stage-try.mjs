@@ -431,7 +431,8 @@ function setup(segments) {
   T.state = () => st.scene.stateText();
 
   // —— 真的手指（第二轮的写法，stage-try-lib.js 的 HANDS 和按格的 value）：这里只找手指按哪儿、松在哪儿，外面照 CDP 的触摸按、滑、按住再拖 ——
-  // 按的那一点照 pointer.js 挑把手的办法核一遍（pickTarget：prio 高的先、落在里面最小的那个；按在按钮、输入框、底下那一条上 pointer.js 不收），
+  // 按的那一点照 pointer.js 挑把手的办法核一遍（layout.js 的 pressGroup：prio 高的先、落在里面最小的那个，这一处每种按法各是哪一个；
+  // 按在按钮、输入框、底下那一条上 pointer.js 不收），
   // 松的那一点照 gesturedom.js 找落点的办法核（离手指 28 像素以内、落在里面最小的那个）：真的手指按不到（被别的盖住、被正在等的那一问抢走）
   // 就说按不到，不替手指另找一条路。按完以后学生这一下交没交、交成哪一行，照舞台交给课堂循环的那几下（onAct）说
   T.acts = [];
@@ -453,8 +454,8 @@ function setup(segments) {
     for (const fy of [0.5, 0.3, 0.7, 0.15, 0.85]) for (const fx of [0.5, 0.3, 0.7, 0.15, 0.85, 0.05, 0.95]) out.push({ x: r.x + r.w * fx, y: r.y + r.h * fy });
     return out;
   };
-  // 框 r 里手指按下去 pointer.js 挑中的是 mine 认的那一个的一点（屏幕坐标）；哪儿都不是就 null
-  const reach = (r, mine) => {
+  // 框 r 里手指照 how（tap 点、slide 滑、hold 按住再拖）按下去，pointer.js 交给的是 mine 认的那一个的一点（屏幕坐标）；哪儿都不是就 null
+  const reach = (r, mine, how) => {
     if (!r || !(r.w > 0) || !(r.h > 0)) return null;
     const cands = [];
     for (const [id, t] of st.pointer.targets) { let rect = null; try { rect = t.rect(); } catch { rect = null; } if (rect) cands.push({ id, t, prio: t.prio || 0, rect }); }
@@ -462,13 +463,13 @@ function setup(segments) {
       const c = toClient(p);
       const under = document.elementFromPoint(c.x, c.y);
       if (!under || !st.view.contains(under) || under.closest?.(NOPE)) continue;
-      const hit = D.pickTarget(p, cands, { radius: 30 });
-      if (hit && mine(hit)) return c;
+      const c2 = D.pressGroup(p, cands, { radius: 30 })?.by.get(how);
+      if (c2 && mine(c2)) return c;
     }
     return null;
   };
-  // 画法交的一个把手（gripsOf）：手指按得到它的一点；inside 是只在这一块里找（整张矩阵按括号那一条）
-  const pressGrip = (g, inside = null) => { const r = gRect(g); return reach(inside || r, (hit) => hit.t.name === g.key && sameR(hit.rect, r)); };
+  // 画法交的一个把手（gripsOf）：手指照 how 按得到它的一点；inside 是只在这一块里找（整张矩阵按括号那一条）
+  const pressGrip = (g, how, inside = null) => { const r = gRect(g); return reach(inside || r, (hit) => hit.t.name === g.key && sameR(hit.rect, r), how); };
   // 拖着、拉着松在 want 上：照 gesturedom.js 在这一组落点里挑（targets 和它拖起来那一刻挂的一样）
   const dropAt = (targets, want) => {
     const r = gArea(want);
@@ -534,7 +535,7 @@ function setup(segments) {
         if (one.error) return one;
         const pid = `${one.p.obj}:${one.p.key}`;
         if (allowed && !allowed.has(pid)) return { error: `${ref} 不在这一问能点的里面` };
-        T.locs[`p${i}`] = () => { const r = st.screenRect(st.nodes.get(pid)); return reach(r, (hit) => (hit.prio || 0) >= 2 && sameR(hit.rect, r)); };
+        T.locs[`p${i}`] = () => { const r = st.screenRect(st.nodes.get(pid)); return reach(r, (hit) => (hit.prio || 0) >= 2 && sameR(hit.rect, r), 'tap'); };
         if (!T.loc(`p${i}`)) return { error: `手指点不到 ${ref}（被别的盖住了）` };
         moves.push({ how: 'tap', a: `p${i}` });
       }
@@ -563,7 +564,7 @@ function setup(segments) {
       if (g.action === 'unrefer') {
         const x = gr(e, 'xrefer').find((t) => partOf(t)?.refer === a.p.key);
         if (!x) return { error: `${say(a.p)}连出去的线上没有 ✕：学生自己连的线才有` };
-        T.locs.a = () => pressGrip(x);
+        T.locs.a = () => pressGrip(x, 'tap');
         if (ready(['a'])) return { error: `${say(a.p)}线上的 ✕ 手指点不到（被别的盖住了）` };
         return { what: `点 ${say(a.p)}连出去那条线上的 ✕`, expect: 'unrefer', moves: [{ how: 'tap', a: 'a' }] };
       }
@@ -582,7 +583,7 @@ function setup(segments) {
         }
       }
       if (!want) return { error: `${g.to} 不是线能松的地方` };
-      T.locs.a = () => pressGrip(hook);
+      T.locs.a = () => pressGrip(hook, 'slide');
       T.locs.b = () => dropAt(targets, want);
       const miss = ready(['a', 'b']);
       if (miss) return { error: miss === 'a' ? `${say(a.p)}的钩手指按不到（被别的盖住了）` : `${where}手指松不到（离别的落点太近）` };
@@ -597,7 +598,7 @@ function setup(segments) {
       if (!m) return { error: `${g.span} 上没有学生拉的括号（✕ 只在学生自己拉的括号上）` };
       const x = gr(e, 'xmark').find((t) => partOf(t)?.mark === m.id);
       if (!x) return { error: `${g.span} 那道括号上没有 ✕` };
-      T.locs.a = () => pressGrip(x);
+      T.locs.a = () => pressGrip(x, 'tap');
       if (ready(['a'])) return { error: `${g.span} 那道括号上的 ✕ 手指点不到（被别的盖住了）` };
       return { what: `点 ${g.span} 那道括号上的 ✕`, expect: 'unmark', moves: [{ how: 'tap', a: 'a' }] };
     }
@@ -620,7 +621,7 @@ function setup(segments) {
       const gaps = gr(e, 'gap', 'to');
       const want = gaps.find((t) => partOf(t)?.gap?.after === after);
       if (!want) return { error: `${say(at.p)}${g.where === 'after' ? '后面' : '前面'}没有空隙（折起来的那一段里面放不下）` };
-      T.locs.a = () => from.map((t) => pressGrip(t)).find(Boolean) || null;
+      T.locs.a = () => from.map((t) => pressGrip(t, 'hold')).find(Boolean) || null;
       T.locs.b = () => dropAt(gaps, want);
       const miss = ready(['a', 'b']);
       if (miss) return { error: miss === 'a' ? `${ps.length > 1 ? `${g.span} 的括号` : say(ps[0])}手指按不到（被别的盖住了）` : `${say(at.p)}${g.where === 'after' ? '后面' : '前面'}的空隙手指松不到` };
@@ -634,7 +635,7 @@ function setup(segments) {
       p = one.p;
       const pill = gr(e, 'pill').find((t) => { const id = partOf(t)?.pill; const f = id != null && (o.folds || []).find((x) => x.id === id); return f && f.keys.includes(p.key); });
       if (!pill) return { error: `${say(p)}没有折起来：没有小方块可点` };
-      T.locs.a = () => pressGrip(pill);
+      T.locs.a = () => pressGrip(pill, 'tap');
       if (ready(['a'])) return { error: `${say(p)}所在的小方块手指点不到（被别的盖住了）` };
       return { what: `点 ${say(p)}所在的小方块`, expect: 'unfold', moves: [{ how: 'tap', a: 'a' }] };
     }
@@ -646,7 +647,7 @@ function setup(segments) {
       p = one.p;
       const n = gr(e, 'node').find((t) => partOf(t)?.key === p.key);
       if (!n) return { error: `${say(p)}没有交给学生（open 只交了 ${e.refs.join(' ')}）` };
-      T.locs.a = () => pressGrip(n);
+      T.locs.a = () => pressGrip(n, 'tap');
       if (ready(['a'])) return { error: `${say(p)}手指点不到（被别的盖住了）` };
       return { what: `点 ${say(p)}`, expect: 'delete', moves: [{ how: 'tap', a: 'a' }] };
     }
@@ -658,7 +659,7 @@ function setup(segments) {
       const zones = gr(e, 'whole', 'to');
       const want = zones.find((t) => partOf(t)?.obj === g.to);
       if (!want) return { error: `「${g.to}」不是舞台上能放的矩阵（藏着的、不是矩阵的放不上去）` };
-      T.locs.a = () => from.map((t) => pressGrip(t, st.screenRect(st.decor(o.id, t.key.split(':')[1]))) || pressGrip(t)).find(Boolean) || null;
+      T.locs.a = () => from.map((t) => pressGrip(t, 'hold', st.screenRect(st.decor(o.id, t.key.split(':')[1]))) || pressGrip(t, 'hold')).find(Boolean) || null;
       T.locs.b = () => dropAt(zones, want);
       const miss = ready(['a', 'b']);
       if (miss) return { error: miss === 'a' ? `${o.id} 的括号手指按不到（被别的盖住了，或者被正在等的那一问抢走）` : `${g.to} 上手指松不到` };

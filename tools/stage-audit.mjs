@@ -127,6 +127,21 @@ label t1 C "零矩阵 O（zero matrix）：每格都是 0 的一张表，不是�
 label t2 A B "都 ≠ O" side=above tone=note
 say "数的乘法里 ab=0 必有一个是 0，这里两个都不是。"
 ask next "换个顺序乘成 BA，结果还会是 O 吗？先自己猜，想好了点下面看" button="算 BA"` });
+  // 藏起来的东西不占地方（hide 那一行没别的了，下面的收上来）；show 照摆新东西的规矩摆回最下面；那一行还有别的就不收
+  out.push({ name: '藏起来、摆回来', src: `matrix A = 1 2 / 3 4
+label la A "A" side=above tone=key
+matrix B = 1 0 / 0 1 / 1 1
+label lb B "B" side=above tone=key
+matrix C = 5 6 / 7 8
+label lc C "C" side=above tone=key
+matrix D = 1 1 / 2 2 beside=C
+label ld D "D" side=above tone=key
+matrix E = 0 1 / 1 0
+hide B
+hide D
+show B
+hide A
+say "藏起来的不占地方，摆回来的排到最下面。"` });
   return out.filter((x) => x.src);
 }
 

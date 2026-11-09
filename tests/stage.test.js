@@ -179,3 +179,29 @@ test('连到整样东西的弧：上下摆着的从上面那一样的下沿连�
   const C = { x: 300, y: 20, w: 100, h: 100 };
   assert.deepEqual(wholeLinkGeom(A, C), linkGeom(A, C));
 });
+
+test('按下去这一处有哪几种按法（pressGroup）：正在等的那一问的点（prio 高）不吃掉低一档的拖——点是那一问，按住再拖、滑是拖的那一个', async () => {
+  const { pressGroup } = await import('../kit/src/stage/layout.js');
+  const R = (x, y, w, h) => ({ x, y, w, h });
+  // 矩阵 M：一格（ask pick 的点，prio 2）、整张的把手（左半张连括号，prio 1，按住再拖）
+  const cell = { id: 'cell', prio: 2, rect: R(40, 0, 50, 40), t: { kind: 'tap' } };
+  const whole = { id: 'whole', prio: 1, rect: R(0, 0, 100, 100), t: { kind: 'drag', how: 'hold' } };
+  const howIds = (g) => [...g.by.entries()].map(([k, c]) => `${k}:${c.id}`).sort().join(' ');
+  // 按在括号上（整张的框里，离格子不到 30 像素）：以前那一问的点独吞，现在点是那一格、按住再拖是整张
+  assert.equal(howIds(pressGroup({ x: 10, y: 20 }, [cell, whole])), 'hold:whole tap:cell');
+  // 按在格子上：点是那一格，按住再拖还是整张（手指按在整张的框里）
+  assert.equal(howIds(pressGroup({ x: 60, y: 20 }, [cell, whole])), 'hold:whole tap:cell');
+  // 手指不在整张的框里（只是离得近）：照旧只有那一问的点
+  assert.equal(howIds(pressGroup({ x: 60, y: -20 }, [cell, whole])), 'tap:cell');
+  // 那一问是拖（ask drag，prio 2）、底下是点：照旧那一问独吞（第一轮的手感：按下就拖）
+  const dragAsk = { id: 'ask', prio: 2, rect: R(40, 0, 50, 40), t: { kind: 'drag' } };
+  const tapLow = { id: 'edit', prio: 1, rect: R(0, 0, 100, 100), t: { kind: 'tap' } };
+  assert.equal(howIds(pressGroup({ x: 60, y: 20 }, [dragAsk, tapLow])), 'hold:ask');
+  // 同一档、同一个框的几种按法照旧并在一起（句子上又拉又折又挪）
+  const w = R(0, 0, 60, 30);
+  const g = pressGroup({ x: 20, y: 10 }, [{ id: 's', prio: 1, rect: w, t: { kind: 'drag', how: 'slide' } }, { id: 'f', prio: 1, rect: w, t: { kind: 'tap' } }, { id: 'm', prio: 1, rect: w, t: { kind: 'drag', how: 'hold' } }]);
+  assert.equal(howIds(g), 'hold:m slide:s tap:f');
+  // 低一档、同一种按法的（也是点）不并进来：那一问的点照旧先
+  assert.equal(howIds(pressGroup({ x: 60, y: 20 }, [cell, { id: 'pluck', prio: 1, rect: R(0, 0, 100, 100), t: { kind: 'tap' } }])), 'tap:cell');
+  assert.equal(pressGroup({ x: 500, y: 500 }, [cell, whole]), null);
+});

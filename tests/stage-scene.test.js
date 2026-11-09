@@ -650,11 +650,13 @@ test('藏起来：hide=on 造的、hide 的东西照样算、现状照样写，�
   run(t, 'show H');
   assert.deepEqual([...t.objects.keys()], ['A', 'B', 'H']);
   assert.ok(t.objectBox('H').y > bb.y + bb.h, `H 摆到 B 下面（原来在 ${hb.y}）`);
-  // 摆过又藏起来、夹在中间没压着东西的：留在原处，先后也不变
+  // 摆过又藏起来的：不占地方（下面的往上收），show 照摆新东西的规矩摆回来（原来的地方被占了：摆到下面、排到最后）
   const a1 = { ...t.objects.get('A').origin };
-  run(t, 'hide A\nshow A');
-  assert.deepEqual(t.objects.get('A').origin, a1, '没压着东西：留在原处');
-  assert.deepEqual([...t.objects.keys()], ['A', 'B', 'H']);
+  run(t, 'hide A');
+  assert.equal(t.objectBox('B').y, ab.y, 'A 藏起来：B 收到 A 原来的地方');
+  run(t, 'show A');
+  assert.ok(t.objectBox('A').y > t.objectBox('H').y, `A 摆到最下面（原来在 ${a1.y}）`);
+  assert.deepEqual([...t.objects.keys()], ['B', 'H', 'A']);
   // 同名重造照旧藏着（留在原处）；hide=off 摆出来
   run(t, 'matrix R = 1 2 hide=on\nmatrix R = 3 4');
   assert.ok(t.objects.get('R').hidden);
@@ -665,6 +667,39 @@ test('藏起来：hide=on 造的、hide 的东西照样算、现状照样写，�
   assert.match(dryRun(t, 'hide A.1,1')[0]?.error || '', /整样东西/);
   assert.match(dryRun(t, 'matrix Q = 1 hide=yes')[0]?.error || '', /hide= 只能写 on/);
   assert.match(dryRun(t, 'hide')[0]?.error || '', /hide 后面写/);
+});
+
+test('藏起来的东西不占地方：它那一行没别的了，这一列下面的整体往上收；那一行还有别的（beside）不收；show 照摆新东西的规矩摆回来', () => {
+  const box = (s, id) => s.objectBox(id);
+  // 一列往下摆的三张：藏中间那张，下面的收上来，和它不在时一样
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix B = 1 0 / 0 1 / 1 1\nmatrix C = 5 6 / 7 8\nmatrix D = 1 1 / 2 2');
+  const want = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix C = 5 6 / 7 8\nmatrix D = 1 1 / 2 2');
+  const [b0, c0] = [box(s, 'B'), box(s, 'C')];
+  run(s, 'hide B');
+  assert.equal(box(s, 'C').y, b0.y, 'C 收到 B 原来的上沿');
+  assert.equal(box(s, 'C').y, box(want, 'C').y, '和 B 不在时摆的一样');
+  assert.equal(box(s, 'D').y - box(s, 'C').y, box(want, 'D').y - box(want, 'C').y, '下面的整体一起收、间距不变');
+  assert.ok(box(s, 'C').y < c0.y);
+  // show：原来的地方被占了，摆到最下面、排到最后
+  run(s, 'show B');
+  assert.ok(box(s, 'B').y > box(s, 'D').y + box(s, 'D').h - 1, 'B 摆回最下面');
+  assert.deepEqual([...s.objects.keys()], ['A', 'C', 'D', 'B']);
+  // 藏的是最下面那张：没有要收的，show 回来留在原处
+  const t = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix B = 1 0 / 0 1');
+  const tb = { ...t.objects.get('B').origin };
+  run(t, 'hide B\nshow B');
+  assert.deepEqual(t.objects.get('B').origin, tb);
+  // 那一行还有别的（Q 摆在 P 旁边）：藏 Q 不收，下面的 R 不动
+  const u = run(new Scene(), 'matrix P = 1 2 / 3 4\nmatrix Q = 1 0 / 0 1 beside=P\nmatrix R = 5 6 / 7 8');
+  const r0 = box(u, 'R').y;
+  run(u, 'hide Q');
+  assert.equal(box(u, 'R').y, r0, 'P 还在那一行：R 不动');
+  // 那一行两张都藏了：R 收上去
+  run(u, 'hide P');
+  assert.equal(box(u, 'R').y, box(run(new Scene(), 'matrix P = 1 2 / 3 4'), 'P').y, 'P、Q 都藏了：R 收到那一行的上沿');
+  // 照 log 重放一样（撤一步、刷新）：同样几行，同样的位置
+  const again = run(new Scene(), 'matrix P = 1 2 / 3 4\nmatrix Q = 1 0 / 0 1 beside=P\nmatrix R = 5 6 / 7 8\nhide Q\nhide P');
+  assert.deepEqual(again.objects.get('R').origin, u.objects.get('R').origin);
 });
 
 test('clone 带着这一轮的新状态（检查、试演、抢跑都在副本上跑）', () => {

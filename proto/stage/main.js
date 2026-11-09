@@ -11,7 +11,7 @@ import { dryRun } from '../../kit/src/stage/scene.js';
 import { parseScript } from '../../kit/src/stage/script.js';
 import { gestureAct, askFor, writeRange } from '../../kit/src/stage/gestures.js';
 import { roleName } from '../../kit/src/stage/types/sentence.js';
-import { pickTarget } from '../../kit/src/stage/layout.js';
+import { pickTarget, pressGroup } from '../../kit/src/stage/layout.js';
 import { formulaRows } from '../../kit/src/stage/answer.js';
 import css from '../../kit/src/stage/stage.css';
 import { viewCss, VIEWS } from '../../kit/src/stage/types/views.js';
@@ -35,8 +35,8 @@ const MOCK = q.has('mock');
 let stage = null;
 let run = 0;
 // ?dev：检查脚本用（tools/stage-try.mjs 拿 createLoop 照学习台的课堂循环演一幕；学生的手势照画法的把手、手势表、裁判走；
-// 真的手指那几种拿 pickTarget 核手指按得到、formulaRows 把按格的答案切成一格一格）
-if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, gridsOf, createLoop, eventsText, goalStatus, HELP, dryRun, parseScript, gestureAct, askFor, writeRange, VIEWS, roleName, pickTarget, formulaRows };
+// 真的手指那几种拿 pressGroup 核手指按得到、formulaRows 把按格的答案切成一格一格）
+if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, gridsOf, createLoop, eventsText, goalStatus, HELP, dryRun, parseScript, gestureAct, askFor, writeRange, VIEWS, roleName, pickTarget, pressGroup, formulaRows };
 
 function fresh({ input, onAct = null }) {
   stage?.destroy();

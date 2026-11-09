@@ -1228,7 +1228,8 @@ export class Stage {
     const sc = this.scene;
     const out = [...sc.obstacles()];
     for (const l of sc.links.values()) { if (!this.linkShown(l)) continue; const g = this.linkGeo(l); if (g.box) out.push(g.box); }
-    for (const [id, l] of this.labelNodes) if (id !== exceptId && l.box && sc.labels.has(id)) out.push(l.box);
+    // 贴在藏着的东西上的字不画、也不占地方（syncLabels 这一遍最后才把它收掉，这之前别的字摆的时候不躲它）
+    for (const [id, l] of this.labelNodes) if (id !== exceptId && l.box && sc.labels.has(id) && this.labelShown(sc.labels.get(id))) out.push(l.box);
     return out;
   }
   anchorOf(l) {
