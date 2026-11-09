@@ -1,0 +1,28 @@
+# E2 第 2 幕：从连接词开门、拉到哪结束，每段只能有一盏灯。学生自己点亮谓语、从门拉从句的括号（open s mark，key 标了三个谓语、两段从句和 to turn 那段非谓语）；
+# tally s V：学生的每道括号上标里面 key 的谓语几个，句尾标括号外的几个（「剩下的部分」）；拉错了点 ✕ 收掉再拉；
+# 三段各一盏灯时预写的一句（goal 用 span 判断式）。工具盘按学生用的门亮卡、三段掉进槽页面不会
+sentence s = "The hardest task that television asks of anyone is to turn the power off after he has turned it on." key="The hardest task [Cl that television [V asks] of anyone] [V is] [NF to turn the power off] [Cl after he [V has turned] it on]."
+card tools = "并列连词 and / but / or" "从属连词 because / if / after / while…" "关系词 that / who / what / how / which…"
+dim tools
+tally s V
+say "连接词是门，门后就是一件事。先点亮谓语，再从门拉到这件事结束。"
+open s mark undo=on
+goal g1 "每段只有一盏灯" when="s span s.6 = V, s span s.9 = V, s span s.17-18 = V, s span s.4-8 = 从句, s span s.15-20 = 从句"
+@g1 undim tools.2-3
+@g1 say "三件事各一盏灯——断开了。"
+@g1 ask say "为什么 {s.4} 那件事不拉到 {s.15} 前面？"
+学生: mark s.6 V
+学生: mark s.9 V
+学生: mark s.17-18 V
+学生: mark s.10-11 V
+学生: unmark s.10
+学生: mark s.4-14 从句
+学生: unmark s.4
+学生: mark s.4-9 从句
+# 第 8 下页面叫老师（试了好多下）：照理想「一直停在 2 盏」那一支，让 is 那盏灯闪一下，指着问
+pulse s.9
+say "{s.9} 这盏灯是谁的事？"
+学生: unmark s.4
+学生: mark s.4-8 从句
+学生: mark s.15-20 从句
+学生: say 再往后就是第二个谓语 is 了

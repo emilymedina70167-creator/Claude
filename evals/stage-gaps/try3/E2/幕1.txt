@@ -1,0 +1,19 @@
+# E2 第 1 幕：把谓语全点亮。学生自己拉括号（open s mark，key 只标三个谓语）：点一个词 = 在这个词上拉、点「谓语」，焊 should benefit = 从 should 拉到 benefit；
+# 灭灯 = 点学生自己拉的那道括号上的 ✕（unmark）。三盏正好对（多拉的也收掉了）= s exact，预写染金 + 一句。
+# 计数牌：页面不数学生拉了几道，只能是老师贴的字；tally s V 数的是「key 的谓语」，开着就等于把对错告诉学生，这一幕不开
+sentence s = "The great question is who should benefit from the analysis of all the data that our lives now generate." key="The great question [V is] who [V should benefit] from the analysis of all the data that our lives now [V generate]."
+label cnt s "灯 ? 盏 · 事 ? 件" side=above tone=key
+say "一件事只有一个谓语。把谓语全点亮——亮几盏灯，就是几件事。"
+open s mark undo=on
+goal g1 "三盏灯正好点对" when="s exact"
+@g1 paint s.4 s.6-7 s.19 g4
+@g1 say "三盏灯：{s.4}、{s.6-7}、{s.19}——三件事。"
+ask next "点完了按下面" button="就这些"
+学生: mark s.4 V
+学生: mark s.10 V
+学生: mark s.7 V
+学生: unmark s.10
+学生: unmark s.7
+学生: mark s.6-7 V
+学生: mark s.19 V
+学生: next

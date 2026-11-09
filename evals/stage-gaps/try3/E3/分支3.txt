@@ -1,0 +1,15 @@
+# E3 分支 3：按「挨着谁」判非谓语修饰谁。学生从 Passing 的钩上拉线（open b.1 refer call=wrong），links= 写了「就近挂到 cafe」的错连，松在句子外框上是整句；
+# 代入句、逗号和隔着的词、句子主语、By 1830 两种挂法的直译：页面不给，老师写题卡；上面一句 a passing plane 也给一个钩对比
+sentence b = "Passing the cafe, I saw a friend." key="[A Passing the cafe], [S I] [V saw] [O a friend]." links="b.1 -> b; !b.1 -> b.3=就近挂到了 cafe"
+sentence a = "I saw a passing plane." links="a.4 -> a.5"
+open b.1 refer call=wrong
+open a.4 refer
+say "两个 passing，各修饰谁？从钩上拉线。"
+goal g1 "两根线都连对" when="b linked, a linked"
+@g1 say "对：挨着名词、没有逗号的修饰名词；隔着逗号的修饰整句。"
+学生: refer a.4 -> a.5
+学生: refer b.1 -> b.3
+card sub = "the cafe passes the cafe（咖啡馆经过咖啡馆）"
+say "把你连的放进去读：{sub.1}"
+学生: unrefer b.1
+学生: refer b.1 -> b

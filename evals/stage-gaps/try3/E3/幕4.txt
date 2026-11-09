@@ -1,0 +1,37 @@
+# E3 第 4 幕：to do 作主语挪到句尾、句首用 It 占位。主语括号是老师拉的；学生按住括号整块拖（open s move：按住一道括号拖一整段）；
+# 句首冒出 It 只能是挑战做到以后预写的 rewrite（页面不会自己冒 It）；第二句学生自己框出 to do 块（open j mark）再整块拖回句首（mark、move 一起开）；
+# 判别句：学生拖 concerning "values" 去换 It（先框成一段才能整块拖），页面照做、不判 It 收不收
+sentence s = "To anticipate every imaginable driving situation is a difficult programming problem."
+mark s.1-6 主语
+open s move
+say "主语这么长，头重脚轻。把它整块挪到句尾，看看句首会怎样。"
+goal g1 "把主语整块挪到句尾" when="s.11 = s#6"
+@g1 rewrite s "It is a difficult programming problem to anticipate every imaginable driving situation."
+@g1 refer s.1 -> s.7-12
+@g1 say "整块挪过去，句首空了，冒出 {s.1}。"
+@g1 ask say "这个 It 指谁？"
+学生: move s.1-6 after s.11
+学生: say 指后面那个 to anticipate
+remove s
+sentence j = "It is painful to read these roundabout accounts today." key="[S It] [V is] [P painful] [S to read these roundabout accounts today]."
+open j mark undo=on
+open j move
+say "反过来：先把真正的主语框出来。从 {j.4} 拉到它结束，再整块挪回句首。"
+goal g2 "框出真正的主语" when="j span j.4-9 = S"
+@g2 goal g3 "把它挪回句首" when="j.1 = j#4"
+@g3 say "挪回去了。读一读：要去理解这些拐弯抹角的解释是令人痛苦的。"
+@g3 ask next "读完点下面" button="读通了"
+学生: mark j.4-8 S
+学生: unmark j.4
+学生: mark j.4-9 S
+学生: move j.4-9 before j.1
+学生: next
+remove j
+sentence k = 「It also raises questions concerning "values."」 key=「[S It] also [V raises] [O questions [Attr/NF concerning "values."]]」
+open k mark undo=on
+open k move
+say "这一句也找一块「真正的主语」去换 {k.1}：先框，再拖。"
+ask next "换好了点下面" button="换好了"
+学生: mark k.5-6 主语
+学生: move k.5-6 before k.1
+学生: next

@@ -1,0 +1,24 @@
+# E3 第 8 幕：自己拆 8 月拆错的句子。学生自己拉谓语、框非谓语块、贴「定语」（open s mark，key 里 designed … 写 [Attr/NF …] 两种都对、to help … 是非谓语），页面照 key 判；
+# 拉线到 Policies：designed 上的钩（open s.2 refer，links= 照它判）；折起来：点括号（open s fold，和 mark 一起开：点是折、滑是拉）。
+# call=done：不写的话第 8 下就「试了好多下」叫老师（学生自己在改）。主干行自动写、旧答案并排（没有「折成什么样」的判断式）、卡片挂到树上没有
+sentence s = "Policies designed to help small businesses often fail." key="[S Policies [Attr/NF designed [NF to help small businesses]]] often [V fail]." links="s.2 -> s.1; !s.2 -> s.6=挂到了紧挨着的 businesses"
+say "这句你 8 月拆过。用今天的办法自己拆：先找谓语。"
+open s mark undo=on call=done
+open s fold
+open s.2 refer
+goal g1 "先找谓语" when="s span s.8 = V"
+@g1 say "对，{s.8}。再把多出来的那一块框出来、点它当什么，从 {s.2} 拉线到它修饰的词。"
+@g1 goal g2 "框出修饰的那一块、连到它修饰的词" when="s span s.2-6 = Attr, s linked"
+@g2 say "把它折起来，只看剩下的。"
+@g2 ask say "主干是什么？翻译写下来。"
+学生: mark s.4 V
+学生: unmark s.4
+学生: mark s.8 V
+学生: mark s.2-5 定语
+学生: unmark s.2
+学生: mark s.2-6 定语
+学生: refer s.2 -> s.6
+学生: unrefer s.2
+学生: refer s.2 -> s.1
+学生: fold s.2-6
+学生: say Policies fail 旨在帮助小企业的政策往往会失败

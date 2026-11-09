@@ -1,0 +1,20 @@
+# E3 分支 2：框非谓语词组从名词前那串修饰词中间断开。学生自己拉（open … mark），页面照 key 说「断早了，结尾还差 …」；
+# 第 6 幕那句把 concerning 单独框成定语（key 写 [Attr/NF …]）；第 8 幕那句断在 small；
+# 名词词组里谁修饰谁的箭头、被切断的变红、及物动词缺宾语的插口、按学生括号的直译、以前同一模式的错题：页面不给
+sentence t = "To anticipate every imaginable driving situation is a difficult programming problem." key="[S To anticipate every imaginable driving situation] [V is] [P a difficult programming problem]."
+sentence c = "The computer is the 21st century's culture machine." key="[S The computer] [V is] [P the 21st century's culture machine]."
+sentence k = 「It also raises questions concerning "values."」 key=「[S It] also [V raises] [O questions [Attr/NF concerning "values."]]」
+sentence p = "Policies designed to help small businesses often fail." key="[S Policies [Attr/NF designed [NF to help small businesses]]] often [V fail]."
+say "框出 {t} 的主语、{c} 的表语、{k} 和 {p} 里修饰名词的那一块。"
+open t mark undo=on
+open c mark undo=on
+open k mark undo=on
+open p mark undo=on
+ask next "框好了点下面" button="框好了"
+学生: mark t.1-2 S
+学生: unmark t.1
+学生: mark t.1-4 S
+学生: mark c.4-6 P
+学生: mark k.5 定语
+学生: mark p.2-5 定语
+学生: next

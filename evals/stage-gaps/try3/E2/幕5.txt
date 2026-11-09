@@ -1,0 +1,28 @@
+# E2 第 5 幕：没有门也能断。隐形门 = 句尾多放一个「(that)」，学生按住它拖进一条缝（open s move，和 mark、fold 一起开：滑是拉括号、点是折、按住再拖是挪）；
+# key 把「(that)」算进 they 那一层（句尾的 that 正好挨着 productivity），插对以后学生从门拉括号页面照样判；
+# 插对、套对两层预写（@g1 → @g2 两层），学生一路不停；tally s V 标每道学生括号里 key 的谓语几个
+sentence s = "It hoped they would learn how shop-floor lighting affected workers' productivity. (that)" key="It [V hoped] [Cl they [V would learn] [Cl how shop-floor lighting [V affected] workers' productivity]. (that)]."
+tally s V
+say "先点亮谓语，再从 {s.6} 拉到这件事结束。"
+open s mark undo=on
+ask next "拉好了点下面" button="拉好了"
+学生: mark s.2 V
+学生: mark s.4-5 V
+学生: mark s.9 V
+学生: mark s.6-11 从句
+学生: next
+open s fold
+open s move
+say "剩下的还有两盏灯，可门没了。把 {s.12} 插进门藏着的那条缝。"
+goal g1 "把 (that) 插进门藏着的那条缝" when="s.3 = s#12"
+@g1 say "两个主语、两个谓语排着——哪一半是从句？从门拉到它结束。"
+@g1 goal g2 "从门拉到这件事结束" when="s span s.3-12 = 从句"
+@g2 say "门被省掉了——主谓主谓，后面的是从句。拎起 {s.4} 那一层，再单拎 {s.7} 那一层。"
+@g2 ask say "两次各剩下了什么？"
+学生: move s.12 after s.3
+学生: move s.4 after s.2
+学生: mark s.3-12 从句
+学生: fold s.3-12
+学生: unfold s.3
+学生: fold s.7-12
+学生: say It hoped 后面空了；they would learn 后面空了

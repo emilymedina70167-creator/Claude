@@ -1,0 +1,32 @@
+# E2 第 3 幕：who、that 两层。学生自己拉两道从句的括号（open s mark）；钩子 = that 上的钩（open s.15 refer），links= 照 data 判，挂到 analysis 是写好的常见错连；
+# 「拎起来」= 点括号折起来（open s fold，和 mark 一起开：点一下是折、滑一下是拉）；放下 = 点小方块（unfold）；拉长 who = 再拉一道 s.5-19、点 ✕ 收掉旧的
+sentence s = "The great question is who should benefit from the analysis of all the data that our lives now generate." key="The great question [V is] [Cl who [V should benefit] from the analysis of all the data [Cl that our lives now [V generate]]]." links="that -> data; !that -> analysis=挂到了 analysis 上; !that -> question=挂到了 question 上"
+mark s.4 V
+mark s.6-7 V
+mark s.19 V
+say "给 {s.5} 和 {s.15} 这两件事各拉一道括号。"
+open s mark undo=on
+open s fold
+ask next "拉好了点下面" button="拉好了"
+学生: mark s.5-14 从句
+学生: mark s.15-19 从句
+学生: next
+open s.15 refer
+say "that our lives now generate——生成的是什么？把钩子挂上去。"
+goal g1 "把 that 的钩子挂上去" when="s linked"
+@g1 say "拎走 {s.5} 这件事，看看 {s.15} 那件事怎么了。"
+@g1 ask next "拎完点下面" button="看好了"
+学生: refer s.15 -> s.10
+学生: unrefer s.15
+学生: refer s.15 -> s.14
+学生: fold s.5-14
+学生: next
+say "绳子被拽着：{s.15} 那件事还挂在 {s.14} 上。"
+goal g2 "让 who 那件事把 that 那件事装进去" when="s span s.5-19 = 从句"
+@g2 say "再拎一次。"
+@g2 ask say "拎完说说：这回剩下了什么？"
+学生: unfold s.5
+学生: mark s.5-19 从句
+学生: unmark s.5-14
+学生: fold s.5-19
+学生: say 只剩 The great question is 了，that 跟着走了

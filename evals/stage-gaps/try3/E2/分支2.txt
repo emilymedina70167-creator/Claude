@@ -1,0 +1,23 @@
+# E2 分支 2：见 that、and 就开门。灯是老师点好的（老师的括号 tally 不数），学生自己从 that kind 开门、给 and 开门、为了凑灯往前扩（open s mark）；
+# tally s V：学生的每道括号上标里面 key 的谓语几个（空门是 0），句尾标括号外的几个；拉错了点 ✕ 收掉。
+# and 的「两只手」：一个词只连一条线（links= 一个词只能写一条），连不出两只手；that 换成 this 只能老师整句 rewrite
+sentence s = "If we are serious about ensuring that our science is both meaningful and reproducible, we must ensure that our institutions incentivise that kind of science." key="[Cl If we [V are] serious about [NF ensuring [Cl that our science [V is] both meaningful and reproducible]]], we [V must ensure] [Cl that our institutions [V incentivise] that kind of science]."
+mark s.3 V
+mark s.10 V
+mark s.16-17 V
+mark s.21 V
+tally s V
+say "灯都点好了。连接词是门：从门拉到这件事结束。"
+open s mark undo=on
+ask next "拉完了点下面" button="就这些"
+学生: mark s.22-25 从句
+学生: mark s.13-14 从句
+学生: mark s.18-20 从句
+学生: unmark s.22
+学生: mark s.21-25 从句
+学生: next
+rewrite s "If we are serious about ensuring that our science is both meaningful and reproducible, we must ensure that our institutions incentivise this kind of science."
+pulse s.22
+say "换成 {s.22}，句子照样成立。"
+ask say "这个 that 是门吗？"
+学生: say 不是，是那种

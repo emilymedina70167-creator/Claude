@@ -1,0 +1,32 @@
+# E2 第 6 幕：自己拆一句四层的长难句。学生自己点灯、焊被动、拉三层从句的括号（open s mark），从 who、两个 that 的钩上拉线挂到它说的东西上（open s refer，links= 照它判）；
+# 拉错了点 ✕ 收掉；折（open s fold）一起开着。挑战「就这样」才判（on="就这样"）：key 拉对、没多拉、线都连对（s exact, s linked）；
+# call=done：不写的话第 8 下就「试了好多下」叫老师；写了是 key 一拉完就叫老师（钩子还没挂、「就这样」还没按），这时老师只把「就这样」再挂上。套娃图、中文四格页面不会
+sentence s = "The most famous of these efforts was initiated by Noam Chomsky, who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar." key="The most famous of these efforts [V was initiated] by Noam Chomsky, [Cl who [V suggested] [Cl that humans [V are born] with an innate language-acquisition capacity [Cl that [V dictates] a universal grammar]]]." links="s.12 -> s.11; s.14 -> s.13; s.23 -> s.22; !s.23 -> s.15=就近挂到了 humans; !s.23 -> s.11=挂到了 Chomsky，这一层被拍平了"
+say "这一句你自己来，拆好了按『就这样』。"
+open s mark undo=on call=done
+open s fold
+open s refer
+goal g1 "拆成几件事、谁套着谁" when="s exact, s linked" on="就这样"
+@g1 say "四层，一层套一层——拆开了。"
+ask next "拆好了点下面" button="就这样"
+学生: mark s.8 V
+学生: unmark s.8
+学生: mark s.7-8 V
+学生: mark s.13 V
+学生: mark s.16-17 V
+学生: mark s.21 V
+学生: unmark s.21
+学生: mark s.24 V
+学生: mark s.12-27 从句
+学生: mark s.14-22 从句
+学生: mark s.23-27 从句
+学生: unmark s.14-22
+学生: mark s.14-27 从句
+# key 拉完那一下页面叫了老师（call=done）：理想里老师这时不说话，只把「就这样」再挂上
+ask next "拆好了点下面" button="就这样"
+学生: refer s.12 -> s.11
+学生: refer s.14 -> s.13
+学生: refer s.23 -> s.15
+学生: unrefer s.23
+学生: refer s.23 -> s.22
+学生: next

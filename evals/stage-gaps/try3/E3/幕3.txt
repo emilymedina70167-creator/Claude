@@ -1,0 +1,32 @@
+# E3 第 3 幕：doing / to do 连着宾语整块当主语，谓语用单数。is / are 拨轮换成一张两行的题卡（学生点一行，页面告诉老师那一行的字）；
+# 框主语：学生自己拉括号（open … mark，key 标了主语），页面照 key 说断早断晚；拉错了点 ✕ 收掉再拉；框对时预写；
+# 第一句框对以后预写的一问「一件事用 is 还是 are」带预期，答对预写一句（@ask.right）。右把手一块一块扩、插口、骨架格子没有
+sentence s = "Making friends be extremely important to teenagers." key="[S Making friends] [V be] extremely important to teenagers."
+card c = "is" "are"
+say "先拨：{s.3} 换成 is 还是 are？"
+ask tap c "谓语用哪个？"
+学生: tap c.2
+say "先不管对不对：把主语框出来。"
+open s mark undo=on
+goal g1 "把主语框出来" when="s span s.1-2 = S"
+@g1 label one s.1-2 "一件事" side=above tone=key
+@ask.right say "对，一件事用 is。"
+@g1 ask tap c "一件事用 is 还是 are？" expect=c.1
+学生: mark s.2 S
+学生: unmark s.2
+学生: mark s.1-2 S
+学生: tap c.1
+remove c
+rewrite s "Making friends is extremely important to teenagers."
+sentence t = "To anticipate every imaginable driving situation is a difficult programming problem." key="[S To anticipate every imaginable driving situation] [V is] [P a difficult programming problem]."
+open t mark undo=on
+say "这个主语从哪到哪？从 {t.1} 拉到它结束。"
+goal g2 "框出 to anticipate 这个主语" when="t span t.1-6 = S"
+@g2 label zh t "预见每种可能的驾驶情况是个困难的编程问题" side=below tone=soft
+@g2 ask say "什么样的东西能当主语？写一句"
+学生: mark t.1-2 S
+学生: unmark t.1
+学生: mark t.1-4 S
+学生: unmark t.1
+学生: mark t.1-6 S
+学生: say doing 和 to do 连着后面一串当名词

@@ -1,0 +1,29 @@
+# E2 分支 3：从句挂错主人。学生从 that 的钩上拉线（open s.23 refer call=wrong），links= 写了两条常见错连，挂到 humans 页面说「就近挂到了 humans」并叫老师；
+# 「代回去」的句子、单三和复数撞没撞、穿墙页面都不会：老师另造一句摆在下面。习题 7：which 挂到整句（松在句子外框上）
+sentence s = "The most famous of these efforts was initiated by Noam Chomsky, who suggested that humans are born with an innate language-acquisition capacity that dictates a universal grammar." key="The most famous of these efforts [V was initiated] by Noam Chomsky, [Cl who [V suggested] [Cl that humans [V are born] with an innate language-acquisition capacity [Cl that [V dictates] a universal grammar]]]." links="s.23 -> s.22; !s.23 -> s.15=就近挂到了 humans; !s.23 -> s.11=挂到了 Chomsky，这一层被拍平了"
+mark s.12-27 从句
+mark s.14-27 从句
+mark s.23-27 从句
+open s.23 refer call=wrong
+say "最后那个 {s.23} 说的是谁？从它的钩上拉线挂上去。"
+goal g1 "把 that 的钩子挂对" when="s linked"
+@g1 say "对，代回去：capacity dictates a universal grammar——读得通。"
+学生: refer s.23 -> s.15
+sentence back = "humans dictates a universal grammar."
+glow back.1 back.2
+say "代回去读：{back.1} {back.2}——撞了。"
+学生: unrefer s.23
+学生: refer s.23 -> s.22
+remove back
+remove s
+sentence w = 「There exists a social and cultural disconnect between journalists and their readers, which helps explain why the "standard templates" of the newsroom seem alien to many readers.」 links="w.13 -> w; !w.13 -> w.12=就近挂到了 readers"
+open w.13 refer call=wrong
+say "{w.13} 说的是谁？从钩上拉线挂上去。"
+goal g2 "把 which 的钩子挂对" when="w linked"
+@g2 say "对，挂在整件事上：这种脱节帮着解释……"
+学生: refer w.13 -> w.12
+sentence back = "their readers helps explain why …"
+glow back.2 back.3
+say "代回去：{back.2} {back.3}——又撞了。"
+学生: unrefer w.13
+学生: refer w.13 -> w
