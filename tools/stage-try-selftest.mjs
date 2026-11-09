@@ -149,6 +149,17 @@ expect('学生: put AB Sum 放进合计', /学生把 AB 放进了 Sum/.test(said
 expect('学生: merge X Y 并同类项', /并成了 −3A/.test(said(stepOf(h, 'merge X Y'))));
 const gv = stepOf(h, 'value 1 n n(n-1)/2 / 0 1 n / 0 0 1');
 expect('学生: value 1 n n(n-1)/2 / 0 1 n / 0 0 1 一格一格填：判成对', /^一格一格写 /.test(did(gv)) && /填对了/.test(said(gv)));
+// 回归（第二轮重放旧课找到的）：式子框底下也能说一句；预写出的 ask next 要学生按；第 8 下做到挑战、键盘写满一张都不是「试了好多下」
+const sy = stepOf(h, 'say 写在哪？');
+expect('写式子的那一问底下也能说一句：交上去是「学生说」', !errs(sy) && /学生说：「写在哪？」/.test(sy?.called?.msg || ''));
+const ga = stepOf(h, 'swap a.1 a.2');
+expect('做到挑战、预写出了 ask next：不叫老师，按钮留着，写明「看到了」还没按', !ga?.called && /做到了挑战 g1/.test(said(ga)) && /你预写的「看到了」还没按，没叫你/.test(said(ga)) && /在等学生：点按钮/.test(ga?.state || ''));
+expect('学生按了「看到了」才叫老师', /学生点了「看到了」/.test(stepsOf(h, 'next').at(-1)?.called?.msg || ''));
+const k8 = stepOf(h, 'swap q.1 q.4');
+expect('第 8 下做到 k1（k2 还没做到）：攒着，不说「试了 8 下还没做到」', !k8?.called && /做到了挑战 k1/.test(said(k8)) && !/试了 8 下/.test(said(k8)));
+const m8 = stepOf(h, 'write M.3,2 8'), m9 = stepOf(h, 'write M.3,3 9');
+expect('键盘一格一格写到第 8 格：不叫老师', !m8?.called && !/试了/.test(said(m8)));
+expect('写满第 9 格做到 h1：叫老师，不说「试了好多下」', /做到了挑战/.test(m9?.called?.why || '') && !/试了 8 下/.test(m9?.called?.msg || ''));
 
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');
 process.exit(bad.length ? 1 : 0);

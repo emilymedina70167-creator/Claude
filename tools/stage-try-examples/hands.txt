@@ -64,3 +64,46 @@ remove Y
 matrix N = 1 1 0 / 0 1 1 / 0 0 1
 ask value "Nⁿ 是？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"
 学生: value 1 n n(n-1)/2 / 0 1 n / 0 0 1
+# 写式子的时候不写、直接说一句（回归：以前式子框底下没有对老师说的那一行，学生想说什么都没处说）
+ask value "Nⁿ 右上角那一格 = ？" type=formula free=n answer="n*(n-1)/2"
+学生: say 写在哪？
+# 做到挑战以后预写里出了 ask next：学生要按的那一下，攒着，按了才叫老师（回归：以前一做到就收起按钮、叫老师）
+remove N
+array a = 2 1 3
+open a
+goal g1 "排好" when="a sorted"
+@g1 say "排好了。"
+@g1 ask next "看好了点下面" button="看到了"
+学生: swap a.1 a.2
+学生: next
+# 第 8 下做到 k1、k2 还没做到：攒着，不说「试了 8 下还没做到」（回归）
+remove a
+array q = 2 3 4 1
+open q
+goal k1 "让 1 排到最前面" when="q.1 = 1"
+goal k2 "排好" when="q sorted"
+学生: swap q.2 q.3
+学生: swap q.2 q.3
+学生: swap q.2 q.3
+学生: swap q.2 q.3
+学生: swap q.2 q.3
+学生: swap q.2 q.3
+学生: swap q.2 q.3
+学生: swap q.1 q.4
+# 键盘一格一格写满一张 3×3：在填，不是「试了好多下」（回归：以前写到第 8 格就叫老师「试了 8 下还没做到」）
+ungoal k1
+ungoal k2
+remove q
+matrix A = 1 2 3 / 4 5 6 / 7 8 9
+matrix M = _ _ _ / _ _ _ / _ _ _ beside=A
+open M edit input=keypad
+goal h1 "抄一遍" when="M = A"
+学生: write M.1,1 1
+学生: write M.1,2 2
+学生: write M.1,3 3
+学生: write M.2,1 4
+学生: write M.2,2 5
+学生: write M.2,3 6
+学生: write M.3,1 7
+学生: write M.3,2 8
+学生: write M.3,3 9

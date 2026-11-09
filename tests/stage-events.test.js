@@ -80,6 +80,23 @@ test('学生按「回到……」（open … back=）：攒着写给老师，和
   assert.equal(eventsText([e]), '学生点了「回到插入后」：t 回到了插入后的样子（层序 30 20 40）');
 });
 
+test('复核：键盘一格一格写满一张矩阵是在填，不算「试」（同一格再写一次才算一下）；做到挑战、收了一张、做完了的那一下和之前试的不再算', () => {
+  const w = (ref, v) => eventOf({ type: 'write', r: 1, c: 1, value: String(v), gesture: 'write', open: 'edit', src: `write ${ref} ${v}`, line: `write ${ref} ${v}` });
+  // 3×4 的一张从空格子写满：12 下都是在填，不是试了 12 下没做到（以前写到第 8 格就叫老师「试了 8 下还没做到」）
+  const fill = ['1,1', '1,2', '1,3', '1,4', '2,1', '2,2', '2,3', '2,4', '3,1', '3,2', '3,3', '3,4'].map((rc, i) => w(`M.${rc}`, i + 1));
+  assert.equal(tryCount(fill), 0);
+  assert.equal(tryCount([...fill, w('M.2,3', 9), w('M.2,3', 7)]), 2, '同一格改了两次：算两下');
+  assert.equal(tryCount([w('M.1,1', 1), w('N.1,1', 1)]), 0, '两张矩阵的同一格是两格');
+  // 做到挑战（收集型收了一张、做完了）的那一下：之前试的几下不再算「还没做到」，它自己也不算
+  const drag = (extra = {}) => eventOf({ type: 'drag', open: 'drag', src: 'swap q.1 q.2', ...extra });
+  const seven = Array.from({ length: 7 }, () => drag());
+  assert.equal(tryCount([...seven, drag()]), 8);
+  assert.equal(tryCount([...seven, drag({ reached: ['g1'] })]), 0);
+  assert.equal(tryCount([...seven, drag({ reached: ['g1'] }), drag(), drag()]), 2);
+  // 填过的格做到挑战以后从头算：下一个挑战再填它是在填
+  assert.equal(tryCount([w('M.1,1', 1), drag({ reached: ['g1'] }), w('M.1,1', 2)]), 0);
+});
+
 test('长度上限：试了 30 下，[学生] 一块不超过 3 KB；没有错法的并成「之前又试了 N 下」，同一种错法并成「像是… ×N」', () => {
   const MIS = '型从下往上读了：从 50 往下看是 LR 型（先在 30 左旋，再在 50 右旋），像是读成了 RL';
   const ev = Array.from({ length: 30 }, (_, i) => rot(i + 1, { legal: true, right: i % 3 === 0, misread: i % 3 ? MIS : null, why: `第 ${i + 1} 个结点 右旋`, next: i % 3 ? '先在 30 左旋（最小不平衡子树的根是 50，LR 型）' : null }));
@@ -387,6 +404,16 @@ test('hasWork：还挂着要答的一问、没做到的挑战、交给了学生�
   assert.deepEqual(hasWork(at('sentence s = "He is running."\nopen s mark')), []);
   assert.deepEqual(hasWork(at('tree t = 20 10 30\nopen t rotate')), [], '已经做完了');
   assert.deepEqual(hasWork(new Scene()), []);
+  // 复核：学生做不了的不算（不然页面一直攒着、学生干等）：平衡了、托盘还有数，可只开了 rotate（插不进去）；藏起来的东西
+  assert.deepEqual(hasWork(at('tree t = 20 10 30 tray="40"\nopen t rotate')), []);
+  assert.deepEqual(hasWork(at('tree t = 20 10 30 tray="40"\nopen t insert')), ['t 还没做完']);
+  assert.deepEqual(hasWork(at('tree t = 20 10 30 tray="40"\nopen t place')), ['t 还没做完'], 'place 拖到空位上就是插');
+  assert.deepEqual(hasWork(at('tree t = 30 20 _ 10\nopen t rotate\nhide t')), []);
+  // 挑战：学生手上什么都动不了（没有 open、没有拨数）就不算；开着别的、有拨数、等着按的按钮在都算
+  assert.deepEqual(hasWork(at('array a = 3 1 2\ngoal g2 "排好" when="a sorted"')), []);
+  assert.deepEqual(hasWork(at('array a = 3 1 2\ndial k = 1 range=1..3\ngoal g2 "排好" when="a sorted"')), ['挑战 g2「排好」还没做到']);
+  assert.deepEqual(hasWork(at('array a = 3 1 2\narray b = 1 2\nopen b\nhide b\ngoal g2 "排好" when="a sorted"')), [], '开着的只有藏起来的 b');
+  assert.deepEqual(hasWork(at('array a = 1 2 3\ngoal g2 "排好" when="a sorted" on="就这样"\nask next "好了点下面" button="就这样"')), ['挑战 g2「排好」还没做到']);
 });
 
 test('攒着没叫老师的那一句：做完、做到挑战、答对一问后面写「那时 …，没叫你」；收齐了写收了哪几张', async () => {

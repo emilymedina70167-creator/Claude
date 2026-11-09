@@ -31,31 +31,45 @@ export const triggers = (e) => !e.quiet && (!!e.now || ['answer', 'goal', 'done'
 /**
  * 学生手上还有什么事（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.2）：做到挑战、做完、答对一问以后，有事就攒着，
  * 没事了才叫老师。空的就是没事了。有事是：
- *   - 还挂着要学生答的一问（tap / pick / drag / value / say）；ask next（连页面挂的「给个提示」）不算：点它就是叫老师；
- *   - 还没做到的挑战；
- *   - 交给了学生（open 了规则 doneBy 里的动作）、还没做完的东西——规则算得出下一步才算（页面判不了的，比如没写 key 的句子，
- *     永远等不到它做完，不能拿它挡着不叫老师）
+ *   - 还挂着要学生答的一问（tap / pick / drag / value / say）；ask next（连「给个提示」）不算：点它就是叫老师
+ *     （预写刚挂出来的 ask next 是学生要按的那一下，算不算由课堂循环看它是不是刚挂的：loop.js 的 settle）；
+ *   - 还没做到的挑战——学生手上动得了东西才算（开着、看得见的东西，或者拨数；按了按钮才判的挑战，那个按钮挂着也算）：
+ *     什么都动不了的挑战学生做不到，攒着就是让学生干等；
+ *   - 交给了学生（open 了规则 doneBy 里的动作）、还没做完的东西——规则算得出下一步、下一步学生做得了才算（页面判不了的，
+ *     比如没写 key 的句子，永远等不到它做完；平衡了、托盘还有数，可只开了 rotate，插不进去），不能拿它挡着不叫老师
  */
 export function hasWork(scene) {
   const out = [];
   const w = scene?.waiting;
   if (w && w.kind !== 'next') out.push(`还有一问没答（ask ${w.kind}）`);
-  for (const g of scene?.goals?.values() || []) if (!g.met) out.push(`挑战 ${g.id}「${g.text}」还没做到`);
+  const moves = canMove(scene);
+  for (const g of scene?.goals?.values() || []) if (!g.met && (moves || (g.on && w?.kind === 'next' && (w.button || '接着') === g.on))) out.push(`挑战 ${g.id}「${g.text}」还没做到`);
   const undone = undoneOf(scene);
   if (undone.length) out.push(`${undone.join('、')} 还没做完`);
   return out;
 }
-/** 交给了学生、规则算得出下一步、还没做完的东西（hasWork 的第三种；课堂循环拿它兜底「很久没动」） */
+/** 学生手上有没有动得了的：开着的、看得见的东西（按「回到……」也算），或者拨数 */
+function canMove(scene) {
+  for (const e of scene?.opens?.values() || []) if (scene.objects?.get(e.obj) && !scene.objects.get(e.obj).hidden) return true;
+  for (const v of scene?.vars?.values() || []) if (v?.shown !== false) return true;
+  return false;
+}
+/**
+ * 交给了学生、规则算得出下一步、下一步学生做得了、还没做完的东西（hasWork 的第三种；课堂循环拿它兜底「很久没动」）。
+ * 做得了：东西看得见，下一步的动作学生开着（手势表里 makes 写了它交的是哪种动作的照它：树的 place 拖到空位上交的是 insert）
+ */
 export function undoneOf(scene) {
   const undone = [];
   for (const e of scene?.opens?.values() || []) {
     if (undone.includes(e.obj) || !scene.doneOpen?.(e.obj)) continue;
     const o = scene.objects.get(e.obj);
     const r = rulesOf(o);
-    if (!r?.hasNext) continue;
+    if (!r?.hasNext || o.hidden) continue;
     let nx = null;
     try { nx = r.next(o, scene); } catch { nx = null; }
-    if (nx?.acts?.length) undone.push(e.obj);
+    if (!nx?.acts?.length) continue;
+    const can = new Set([...scene.opens.values()].filter((x) => x.obj === e.obj).map((x) => r.gestures?.[x.action]?.makes || x.action));
+    if (nx.acts.some((a) => can.has(a.type))) undone.push(e.obj);
   }
   return undone;
 }
@@ -321,5 +335,25 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
   return [...(tries.length ? capTries(tryLines(tries), rest) : []), ...rest].filter(Boolean).join('\n');
 }
 
-/** 自从上一次叫老师，学生试了几下（拨、拖、点开看都算；老师写了 call=done 的东西上试的、撤一步不算） */
-export const tryCount = (events) => events.filter((e) => e.kind === 'try' && !e.patient).length;
+/** 往一格里写一个值（open M edit input=keypad 的那一下）：写的是哪一格；别的 null */
+const fillOf = (a) => (a?.type === 'write' ? String(a.line || a.src || '').match(/^write\s+(\S+)/)?.[1] || null : null);
+/**
+ * 自从上一次叫老师，学生试了几下（拨、拖、点开看都算）。不算的：
+ *   - 老师写了 call=done 的东西上试的、撤一步、按「回到……」（patient）；
+ *   - 往一格里写第一个值：键盘一格一格写满一张矩阵是在填，不是试了没做到（以前写到第 8 格就叫老师「试了 8 下还没做到」）；
+ *     同一格再写一次才算一下；
+ *   - 做到挑战、收集型收了一张、做完了的那一下（act.reached，stage.js 记的）：往前走了一步，它和它之前试的都不再算「还没做到」，从头数
+ */
+export function tryCount(events) {
+  let n = 0;
+  const filled = new Set();
+  for (const e of events) {
+    if (e.kind !== 'try') continue;
+    if (e.act?.reached?.length) { n = 0; filled.clear(); continue; }
+    if (e.patient) continue;
+    const cell = fillOf(e.act);
+    if (cell && !filled.has(cell)) { filled.add(cell); continue; }
+    n++;
+  }
+  return n;
+}

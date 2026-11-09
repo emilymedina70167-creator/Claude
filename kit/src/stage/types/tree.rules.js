@@ -432,9 +432,9 @@ const gestures = {
       return { act: { type: 'delete', at: n.key }, src: `delete ${n.dup ? `${o.id}#${n.key}` : `${o.id}.${n.value}`}` };
     },
   },
-  // 托盘的数拖到某个空位（open t place）：学生自己摆
+  // 托盘的数拖到某个空位（open t place）：学生自己摆。交的是 insert（makes：学生手上还有没有事看下一步做不做得了，events.js 的 undoneOf）
   place: {
-    gesture: 'drop-at', from: 'tray', to: 'slot',
+    gesture: 'drop-at', from: 'tray', to: 'slot', makes: 'insert',
     toAct(o, { value, to } = {}) {
       const v = trayValue(value);
       if (v == null) return { error: '要拖一个数到空位上' };

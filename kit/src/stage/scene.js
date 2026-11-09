@@ -223,7 +223,7 @@ export class Scene {
     this.focus = null; // null = 全部；或者部件的写法
     this.say = '';
     this.words = []; // 这一句话里能飞走的 [词]
-    this.waiting = null; // { kind, refs, prompt, button, expect, answer }
+    this.waiting = null; // { kind, refs, prompt, button, expect, answer, pre（预写的行挂的：课堂循环看学生手上还有没有事用） }
     // —— 活的舞台（E 段）：学生随时能直接动的、挑战、挑战做到了马上演的 ——
     this.opens = new Map(); // 'B:edit' → { obj, action, refs, lo, hi }：开放给学生直接动的
     this.goals = new Map(); // id → { id, text, when, alts, cond（各组摊平）, met, call, on, collect }
@@ -1128,7 +1128,7 @@ export class Scene {
           rightKey = `ask.right#${++this.askSeq}`;
           for (const a of this.ahead.values()) if (a.from === 'ask.right') a.from = rightKey;
         } else if (!c.prewrite) this.dropAhead('ask.right');
-        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}) };
+        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}), ...(c.prewrite ? { pre: true } : {}) };
         if (opts.expect && kind !== 'pick') this.parts(opts.expect);
         return { kind };
       }

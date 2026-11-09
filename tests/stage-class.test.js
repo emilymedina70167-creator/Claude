@@ -615,6 +615,118 @@ test('复核：只因为东西没做完攒着（没有挑战）：照样很久�
   } finally { for (const l of loops) l.close(); }
 });
 
+test('复核（回归）：做到挑战后预写里出了 ask next（学生要按的按钮）：攒着，按了才叫老师；早就挂着的 ask next 照旧当学生按了、叫老师', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  // 预写的行（舞台演的，带 prewrite）在 reacting 里挂出一问：和真的舞台一样，onGoal 那一刻还没演
+  const preAsk = (fc, line) => { const [c] = parseScript(line); fc.stage.reacting = Promise.resolve().then(() => fc.scene.apply({ ...c, lenient: true, prewrite: true })); };
+  const a = fakeClass('array k = 2 1 3\nopen k\ngoal g1 "排好" when="k sorted"');
+  const la = createLoop(a.host);
+  stuLine(a.scene, 'swap k.1 k.2');
+  preAsk(a, 'ask next "看好了点下面" button="看到了"');
+  a.stage.onGoal(['g1'], { by: 'student', reacted: 2 });
+  await wait();
+  // 学生只能按「看到了」：页面趁学生读的时候先把下一轮要来（抢跑，calls 里算一次），这一段不发出去
+  assert.equal(sentRows(a.rows).length, 0, '学生还没按「看到了」');
+  assert.equal(a.stage.cancelled, 0, '预写的那一问不收起');
+  const e = la.pending.events.find((x) => x.kind === 'goal');
+  assert.equal(e.quiet, true);
+  assert.deepEqual(e.held, ['你预写的「看到了」还没按']);
+  a.scene.waiting = null;
+  a.stage.onAnswer({ type: 'next', button: '看到了' });
+  await wait();
+  assert.equal(sentRows(a.rows).length, 1);
+  assert.match(sentRows(a.rows)[0].msg, /学生做到了挑战 g1「排好」（页面已经演了你预写的 2 行）；那时 你预写的「看到了」还没按，没叫你\n学生点了「看到了」/);
+  la.close();
+  // @ask.right 里的 ask next 也一样
+  const b = fakeClass('array a = 3 1 2');
+  const lb = createLoop(b.host);
+  preAsk(b, 'ask next "接着" button="好"');
+  b.stage.onAnswer({ type: 'tap', ref: 'a.1', value: '3', key: 1, slot: 1, expected: 'a.1', right: true, reacted: 2 }, null, { reacts: [{ ask: true, src: 'say "对"' }, { ask: true, src: 'ask next "接着" button="好"' }] });
+  await wait();
+  assert.equal(sentRows(b.rows).length, 0);
+  lb.close();
+  // 预写之前就挂着的 ask next（老师这一轮写的「拼好点下面」）：学生做到了就当按了它，收起、叫老师（设计 6.2）
+  const c = fakeClass('array k = 2 1 3\nopen k\ngoal g1 "排好" when="k sorted"\nask next "拼好点下面" button="拼好了"');
+  const lc = createLoop(c.host);
+  stuLine(c.scene, 'swap k.1 k.2');
+  c.stage.reacting = Promise.resolve();
+  c.stage.onGoal(['g1'], { by: 'student', reacted: 1 });
+  await wait();
+  assert.equal(c.calls(), 1);
+  assert.equal(c.stage.cancelled, 1);
+  lc.close();
+});
+
+test('复核（回归）：做到挑战、收了一张的那一下不说「试了 8 下还没做到」，之前试的从头算；键盘一格一格写满一张不是「试了好多下」', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const loops = [];
+  try {
+    // 两个挑战：第 8 下做到 g1（g2 还没做到）——攒着，不叫「试了 8 下」
+    const a = fakeClass('array k = 2 1 3\nopen k\ngoal g1 "排好" when="k sorted"\narray q = 1 2\nopen q\ngoal g2 "倒过来" when="q sorted desc"');
+    const la = createLoop(a.host);
+    loops.push(la);
+    const drag = (extra = {}) => la.onAct({ type: 'drag', open: 'drag', src: 'swap k.1 k.2', ...extra });
+    for (let i = 0; i < 7; i++) drag();
+    drag({ reached: ['g1'] });
+    a.stage.onGoal(['g1'], { by: 'student', reacted: 0 });
+    await wait();
+    assert.equal(a.calls(), 0);
+    assert.ok(!la.pending.events.some((e) => e.kind === 'tries'), '做到的那一下不是「还没做到」');
+    for (let i = 0; i < 7; i++) drag();
+    await wait();
+    assert.equal(a.calls(), 0, '做到以后从头算：又试了 7 下');
+    drag();
+    await wait();
+    assert.equal(a.calls(), 1);
+    assert.match(sentRows(a.rows)[0].msg, /学生试了 8 下还没做到/);
+    // 收集型：每收一张从头算
+    const b = fakeClass('matrix A = 1 1 / 0 1\nmatrix B = 0 0 / 1 0\nopen B edit range=-3..3\nmatrix D = {A B - B A}\ngoal g1 "再找一张 B" when="D = O" collect=B n=3');
+    const lb = createLoop(b.host);
+    loops.push(lb);
+    const tick = (extra = {}) => lb.onAct({ type: 'drag', open: 'drag', src: 'x', ...extra });
+    for (let i = 0; i < 7; i++) tick();
+    tick({ reached: ['g1'] });
+    for (let i = 0; i < 7; i++) tick();
+    await wait();
+    assert.equal(b.calls(), 0, '收了一张以后又试了 7 下');
+    // 键盘一格一格写满一张 3×4（挑战还没做到）：在填，不叫老师
+    const c = fakeClass('matrix A = 1 2 3 4 / 5 6 7 8 / 9 10 11 12\nmatrix M = _ _ _ _ / _ _ _ _ / _ _ _ _\nopen M edit input=keypad\ngoal g1 "抄一遍" when="M = A"');
+    const lc = createLoop(c.host);
+    loops.push(lc);
+    let v = 0;
+    for (let r = 1; r <= 3; r++) for (let k = 1; k <= 4; k++) { const src = `write M.${r},${k} ${++v}`; lc.onAct({ type: 'write', r, c: k, value: String(v), gesture: 'write', open: 'edit', src, line: src }); }
+    await wait();
+    assert.equal(c.calls(), 0, '写满 12 格不是试了 12 下');
+  } finally { for (const l of loops) l.close(); }
+});
+
+test('复核（回归）：@ask.right 演完，剩下的学生做不了（只开了 rotate、托盘还有数，插不进去）：马上叫老师；做得了的攒着，45 秒没动照样叫', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const loops = [];
+  const pickRight = (st) => st.onAnswer({ type: 'pick', refs: ['t.30'], expected: 't.30', same: true, extra: [], missing: [], reacted: 1 }, null, { reacts: [{ ask: true, src: 'say "对"' }] });
+  try {
+    const a = fakeClass('tree t = 20 10 30 tray="40"\nopen t rotate');
+    const la = createLoop(a.host);
+    loops.push(la);
+    pickRight(a.stage);
+    await wait();
+    assert.equal(a.calls(), 1, '学生手上其实没事');
+    // 做得了（开着 insert）：攒着；页面替它挂的「给个提示」和真的舞台一样挂到场景上，45 秒兜底照样起作用
+    const b = fakeClass('tree t = 20 10 30 tray="40"\nopen t insert');
+    b.stage.holdAsk = function () { this.holds++; b.scene.apply(parseScript('ask next button="给个提示"')[0]); };
+    b.host.quietMs = 40;
+    const lb = createLoop(b.host);
+    loops.push(lb);
+    pickRight(b.stage);
+    await wait(20);
+    assert.equal(b.calls(), 0, '先攒着');
+    assert.equal(b.stage.holds, 1);
+    await wait(80);
+    assert.equal(b.calls(), 1);
+    assert.match(sentRows(b.rows)[0].msg, /学生 0 秒没动；那时 t 还没做完/);
+  } finally { for (const l of loops) l.close(); }
+});
+
 test('复核：预写出的挑战一出来就成立，写给老师的那一句照实说', () => {
   assert.equal(eventsText([{ kind: 'goal-by-teacher', ids: ['g2'], fresh: ['g2'] }], { goals: new Map([['g2', { text: '第二格是 2' }]]) }), '预写出的挑战 g2「第二格是 2」一出来就已经成立了（不是学生做到的）');
   assert.equal(eventsText([{ kind: 'goal-by-teacher', ids: ['g2'], pre: true }], { goals: new Map([['g2', { text: '第二格是 2' }]]) }), '你预写的行让挑战 g2「第二格是 2」成立了（不是学生做到的）');

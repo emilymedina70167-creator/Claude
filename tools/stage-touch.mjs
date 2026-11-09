@@ -441,6 +441,27 @@ for (const [i, v] of ['1', 'n', '0', '1'].entries()) await cells[i].fill(v);
 await tapAt(await centerOf('.st-fgrid .st-say-go'));
 await page.waitForTimeout(500);
 expect('type=matrix free=n：交上去页面判对', await lastRight(), '1 n / 0 1 true');
+// 写式子的两种底下也有对老师说的一行（回归：以前只给式子框，学生想说「写在哪？」「我不会」都没处说）；
+// 小键盘开着时点那一行：小键盘收起、字写得进去（那一行一直在，不跟着小键盘出没：按「对吗」的那一下小键盘先收起，版面一跳手指就按空了）
+const sayRow = () => page.evaluate(() => {
+  const i = document.querySelector('.st-dock > .st-say:not(.st-fgrid) #st-say-input');
+  if (!i) return '没有';
+  const r = i.getBoundingClientRect();
+  return `${i.getAttribute('aria-label')}${parseFloat(getComputedStyle(i).fontSize) >= 16 ? '' : ' 字小'}${r.height >= 44 ? '' : ' 矮'}`;
+});
+for (const [what, src, cell] of [['type=matrix free=n', 'ask value "Aⁿ = ？" type=matrix free=n answer="1 n / 0 1"', '.st-fgrid .fi-text'], ['type=formula', 'ask value "第 n 项是？" type=formula free=n answer=2n', '.st-fone .fi-text']]) {
+  await play(src);
+  expect(`${what}：底下还有对老师说的一行`, await sayRow(), '对老师说');
+  await tapAt(await centerOf(cell));
+  await page.waitForTimeout(300);
+  await tapAt(await centerOf('#st-say-input'));
+  await page.waitForTimeout(800); // 底下那一条等小键盘收起 0.4 秒以后才落回去（armFormula 的 lift），落定了再按
+  expect(`${what}：小键盘开着时点那一行：小键盘收起`, await page.evaluate(() => String(!document.querySelector('.keypad.kp-formula.show'))), 'true');
+  await page.fill('#st-say-input', '写在哪？');
+  await tapAt(await centerOf('.st-dock > .st-say:not(.st-fgrid) .st-say-go'));
+  await page.waitForTimeout(400);
+  expect(`${what}：说一句交上去是「学生说」、不判`, await page.evaluate(() => { const a = window.LAStageDev.acts.at(-1); return a ? `${a.type} ${a.text}${a.right != null ? ' 判了' : ''}` : '没交'; }), 'say 写在哪？');
+}
 // 19. 第一轮留下的（Task 14）：撤一步留住打了一半的字（输入框、按格的每一格）；外接键盘写进数字键盘；拖着悬上去拿现在的舞台问
 await play('array a = 3 1 2\nopen a undo=on\nask say "为什么这样换？"');
 await page.evaluate(async () => { await window.LAStage.studentDo('swap a.1 a.2', { type: 'drag', open: 'drag' }); });

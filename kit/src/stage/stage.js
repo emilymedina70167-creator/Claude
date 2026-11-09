@@ -557,6 +557,9 @@ export class Stage {
       if (fx?.back) act.summary = fx.back.summary; // 按「回到……」：回到以后的样子（actText 写给老师）
       if (fx?.hidden) act.hidden = fx.hidden; // 点开看怎么算碰到扣着的格：学生那边演成 ?，写给老师照实说是几（hiddenText）
       if (fx?.onGoals) act.onGoals = fx.onGoals.map(({ id, met, status }) => ({ id, met, status })); // 按了按钮才判的挑战
+      // 学生这一下做到了挑战、收集型收了一张、做完了：往前走了一步，课堂循环数「试了好多下」从这一下以后重数（events.js 的 tryCount）。
+      // 课堂循环收到这一下（told）时 onGoal 还没来，不记在这一下上，第 8 下正好做到的也会被说成「试了 8 下还没做到」
+      if (by === 'student') { const got = [...(fx?.goalsMet || []), ...(fx?.collected || []), ...(fx?.done || [])]; if (got.length) act.reached = got; }
     }
     // 老师的行（连预写的行）让挑战成立、让东西做完了：预写的行拿掉没演（只在学生的一下演），跟着下一条告诉老师
     if (!this.instant) for (const t of unplayedNotes(fx)) this.onNote?.(t, { turn });
@@ -1627,17 +1630,20 @@ export class Stage {
       // ask value 照 type 换写法（answer.js 的 answerInput）：type=matrix free=n 一格一个式子框、type=formula 一个式子框（都配符号小键盘），
       // 别的是输入框：全是数的数字键盘，要打字母、括号、= 的普通键盘
       const how = w.kind === 'value' ? answerInput(w, sc) : null;
-      if (how?.kind === 'grid' || how?.kind === 'formula') offs.push(this.armFormula(w, how, finish));
-      // 打字：一直在（学生可以不点格子，直接说「我不懂」）；ask say / ask value 时把它放到最前面
-      else if (this.withInput || w.kind === 'value' || w.kind === 'say') {
+      const formula = how?.kind === 'grid' || how?.kind === 'formula';
+      if (formula) offs.push(this.armFormula(w, how, finish));
+      // 打字：一直在（学生可以不点格子、不写式子，直接说「我不懂」「写在哪？」）；ask say / 一个输入框的 ask value 时把它放到最前面，那时它就是答案框。
+      // 写式子的那几种（按格、一个式子框）以前不给这一行：学生对着一格格式子框，想说句话都没处说
+      const asAnswer = w.kind === 'value' && !formula;
+      if (this.withInput || asAnswer || w.kind === 'say') {
         const form = el('form', 'st-say', this.dock);
         const input = el('input', '', form);
         input.type = 'text';
         input.id = 'st-say-input';
-        input.placeholder = w.kind === 'value' ? '写答案' : w.kind === 'say' ? '写下你的想法…' : '想说点什么也可以直接写';
-        input.setAttribute('aria-label', w.kind === 'value' ? '答案' : '对老师说');
+        input.placeholder = asAnswer ? '写答案' : w.kind === 'say' ? '写下你的想法…' : '想说点什么也可以直接写';
+        input.setAttribute('aria-label', asAnswer ? '答案' : '对老师说');
         input.enterKeyHint = 'send';
-        if (w.kind === 'value') {
+        if (asAnswer) {
           input.inputMode = how.kind === 'decimal' ? 'decimal' : 'text';
           // 答案照写的比：iPad 不许替学生改大小写、改拼写（had started 被自动改成 Had started、联想成别的词）
           input.autocomplete = 'off';
@@ -1647,20 +1653,20 @@ export class Stage {
         }
         const go = el('button', 'st-say-go', form);
         go.type = 'submit';
-        go.textContent = w.kind === 'value' ? '对吗' : '说';
+        go.textContent = asAnswer ? '对吗' : '说';
         form.addEventListener('submit', (e) => {
           e.preventDefault();
           const text = input.value.trim();
           if (!text) return;
           let act = { type: 'say', text };
-          if (w.kind === 'value') {
+          if (asAnswer) {
             act = this.judgeValue(w, text, text);
             if (act.right === false) { form.classList.remove('is-bad'); void form.offsetWidth; form.classList.add('is-bad'); }
           }
           this.onAct?.(act);
           finish(act);
         });
-        if (w.kind === 'say' || w.kind === 'value') form.classList.add('is-main');
+        if (w.kind === 'say' || asAnswer) form.classList.add('is-main');
       }
       this.keepInView();
     });

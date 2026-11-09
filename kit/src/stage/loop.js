@@ -220,6 +220,8 @@ export function createLoop(host) {
    * 跟着下一条告诉老师「没叫你」），舞台手上没有一问时替它挂「给个提示」（学生还能打字）；没事了：挂着的 ask next 先收起，叫老师
    */
   function settle(e, { now = false, reacts = null } = {}) {
+    // 预写演之前等着的那一问：演完换成了预写挂的 ask next，是学生要按的那一下（freshNext）
+    const w0 = stage.scene.waiting;
     Promise.resolve(stage.reacting).then(() => {
       if (S.ended || host.readOnly) return;
       // 预写的行真演了几行（演不上的舞台记了 missed，也另告诉了老师）：照实写，不说「演了 N 行」的假话
@@ -227,7 +229,7 @@ export function createLoop(host) {
         const n = reacts.filter((r) => !r.missed).length;
         if (n !== e.reacted) { e.reacted = n; e.missed = reacts.length - n; savePending(true); }
       }
-      const held = now ? [] : hasWork(stage.scene);
+      const held = now ? [] : [...hasWork(stage.scene), ...freshNext(w0)];
       if (held.length) {
         e.quiet = true;
         e.held = held;
@@ -241,6 +243,15 @@ export function createLoop(host) {
       flush();
     });
   }
+  /**
+   * 预写刚挂出来的 ask next（@g1 ask next "看好了点下面" button="看到了"）：老师要学生读完那一句、自己按一下再接着讲，是学生手上的一件事
+   * （以前一做到挑战就当学生按了它、收起来叫老师：那一句还没读完按钮就没了，老师的下一轮紧跟着盖上来）。
+   * 早就挂着的 ask next（老师这一轮写的「拼好点下面」、以前预写挂的）照旧不算：学生做到了就当按了它（设计 6.2）
+   */
+  const freshNext = (w0) => {
+    const w = stage.scene.waiting;
+    return w && w !== w0 && w.pre && w.kind === 'next' ? [`你预写的「${w.button || '接着'}」还没按`] : [];
+  };
   const callNow = (ids) => ids.some((id) => stage.scene.goals.get(id)?.call === 'now');
   function onAnswer(act, w, { reacts = null } = {}) {
     if (S.ended || RETRY.has(act.button)) return;
