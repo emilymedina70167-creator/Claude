@@ -1537,3 +1537,29 @@ test('on= 写的按钮这一轮没有：一轮演完报一句；有这个按钮�
   assert.deepEqual(run(new Scene(), 'array a = 2 1 3\nopen a\ngoal g1 "x" when="a sorted" on="接着"\nask next "排好了点接着"').onProblems(), [], 'ask next 不写 button 就是「接着」');
   assert.equal(run(new Scene(), 'array a = 2 1 3\nopen a\ngoal g1 "x" when="a sorted" on="就这样"').onProblems().length, 1, '没有一问');
 });
+
+test('撞名两头都报：先直接写 goal g2 再预写 goal g2；先预写 goal g2（没套 @g2）再直接写；预写出的挑战照旧能在收集型里跳过；旧课照收', async () => {
+  // 先直接写，再在 @g1 里预写同名的
+  const a = run(new Scene(), `${K312}\ngoal g2 "老师的 g2" when="k sorted desc"`);
+  assert.equal(a.check(one('@g1 goal g2 "预写同名" when="k.1 = 2"')), 'g2 是你直接写的挑战（已经在舞台上），预写里再写会和它撞名：换一个名字');
+  assert.match(a.check(one('@t.done goal g2 "x" when="k.1 = 2"')) || '', /./);
+  assert.match(run(new Scene(), 'array a = 3 1 2\ngoal g2 "x" when="a.1 = 9"').check(one('@ask.right goal g2 "预写同名" when="a.1 = 1"')), /^g2 是你直接写的挑战/);
+  // 先预写（没套 @g2，所以 ahead 里没有），再直接写
+  const b = run(new Scene(), `${K312}\n@g1 goal g2 "预写的 g2" when="k sorted desc"`);
+  assert.equal(b.ahead.size, 0);
+  assert.equal(b.check(one('goal g2 "老师的 g2" when="k.1 = 2"')), 'g2 是你预写的挑战（g1 做到时才出），直接写会和它撞名：换一个名字');
+  // 预写出的挑战（舞台演预写的行造的）：收集型每收一张照旧跳过它，写下时也不算撞名
+  const c = run(new Scene(), 'matrix A = 1 1 / 0 1\nmatrix B = 1 0 / 1 0\nopen B edit range=-3..3\nmatrix Dd = {A B - B A}\narray k = 2 1\nopen k\ngoal g1 "x" when="Dd = O" collect=B n=3\n@g1 goal g2 "排" when="k sorted"\n@g2 say "排好了"');
+  stu(c, 'write B.2,1 0', 'edit');
+  await reactOn(c, stu(c, 'write B.2,2 1', 'edit').reactions);
+  assert.equal(c.goals.get('g2').pre, true);
+  assert.equal(c.check(one('@g1 say "又一张"')), null, '再写 @g1 的行：里面的 goal g2 是预写出的，不算撞名');
+  for (const l of ['write B.1,1 2', 'write B.1,2 1']) stu(c, l, 'edit');
+  await reactOn(c, stu(c, 'write B.2,2 2', 'edit').reactions);
+  assert.deepEqual(c.reactions.get('g2'), ['say "排好了"']);
+  // 重放旧课（lenient）：两种顺序都照收
+  const r = run(new Scene(), `${K312}\ngoal g2 "老师的 g2" when="k sorted desc"`);
+  assert.doesNotThrow(() => r.apply({ ...one('@g1 goal g2 "预写同名" when="k.1 = 2"'), lenient: true, replay: true }));
+  const r2 = run(new Scene(), `${K312}\n@g1 goal g2 "预写的 g2" when="k sorted desc"`);
+  assert.doesNotThrow(() => r2.apply({ ...one('goal g2 "老师的 g2" when="k.1 = 2"'), lenient: true, replay: true }));
+});

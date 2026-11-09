@@ -1195,16 +1195,20 @@ export class Scene {
         if (collect && on != null) { if (!c.lenient) throw new Error('collect= 和 on= 不能写在一个挑战上：收集型每做到一次就收一张，不等按钮'); collect = null; }
         // 老师当场写的挑战一写下就成立，多半是写错了，当场告诉老师；预写的行、重放的时候学生可能已经做到了：照收，下面马上算做到。
         // 每一组都判一遍（哪一组写错了照样当场报）；按了按钮才判的不查成不成立（学生按的时候才算，现在成立也要学生自己说「就这样」）
-        // 预写里写出、还没出来的挑战（ahead）：老师当场直接写同名的会和它撞（它在前一层做到时才出），当场报
-        if (!this.trial && !c.lenient && !c.prewrite && this.ahead.has(id)) {
-          const from = this.ahead.get(id).from;
-          throw new Error(`${id} 是你预写的挑战（${groupText(from)}时才出），直接写会和它撞名：换一个名字`);
+        // 撞名两头都当场报（不然一个悄悄换掉另一个：条件换了、预写的行没了，收集型里那一行悄悄跳过）：
+        // 预写里写出、还没出来的挑战（套了 @g2 的在 ahead，没套的只在那一组预写的行里），老师当场直接写同名的；
+        // 老师直接写的挑战已经在舞台上，预写里（写下时的试演）又写同名的。预写出的挑战（pre）不算：收集型每收一张照旧跳过它
+        if (!this.trial && !c.lenient && !c.prewrite) {
+          const from = this.ahead.get(id)?.from || (!this.goals.has(id) && this.aheadFrom(id));
+          if (from) throw new Error(`${id} 是你预写的挑战（${groupText(from)}时才出），直接写会和它撞名：换一个名字`);
         }
+        if (this.trial && !c.lenient && this.goals.has(id) && !this.goals.get(id).pre) throw new Error(`${id} 是你直接写的挑战（已经在舞台上），预写里再写会和它撞名：换一个名字`);
         if (!this.trial && !c.lenient) {
           const now = alts.map((x) => evalGoal(this, x));
           if (on == null && now.some(Boolean)) throw new Error(`「${opts.when}」现在就已经成立了：挑战要学生动手以后才做得到`);
         }
-        this.goals.set(id, { id, text: str, when: opts.when, alts, cond, met: false, call, on, collect });
+        // pre：预写的行造的（舞台演预写的行、写下时的试演），撞名时和老师直接写的分开
+        this.goals.set(id, { id, text: str, when: opts.when, alts, cond, met: false, call, on, collect, ...(c.prewrite || this.trial ? { pre: true } : {}) });
         // 套着的预写（@g1 里写出 goal g2，@g2 的行先记在 ahead）：演出 goal g2 的那一刻（舞台演预写的行带 prewrite；写下时试演在克隆上）
         // 那几行挪过来。老师当场直接写的同名挑战不捡（那是另一个挑战，旧的预写不能在它做到时演）；重写一个挑战照旧清掉它的预写
         if ((c.prewrite || this.trial) && this.ahead.has(id)) {
