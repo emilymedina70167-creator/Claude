@@ -20,6 +20,8 @@
 | `report/{科目}.md` | 每一幕每一项打的标：✅ / ⚠️ / ❌，后两种带证据 |
 | `try2/{块}/*.txt` | 底座做完以后重新量时写的镜头指令（D2、L1、L2、E2、E3 里和三个样板相关的几幕）；截图在各自的 `shots/`，不进仓库 |
 | `report2/{科目}.md` | 重新量的打标：只有量了的块和幕，每节最后「和上次比」；和 `report/` 同一批项的对比、还没接住的缺口写在 `docs/stage-gaps.md` 末尾 |
+| `try3/{块}/*.txt` | 第三次量的镜头指令（同 `try2/`）；截图在各自的 `shots/`，不进仓库 |
+| `report3/{科目}.md` | 第三次量的打标（同 `report2/`，只有量了的块和幕）；`node tools/stage-gaps-check.mjs report3` 查 |
 
 十块：
 - 线代：`L1` 块 4（可交换、方阵的幂、f(A)）、`L2` 线性方程组、`L3` 特征值和相似对角化
@@ -42,7 +44,7 @@ node tools/stage-try.mjs evals/stage-gaps/try/L1/幕1.txt --shots /tmp/shots
 node tools/stage-gaps-check.mjs report
 ```
 
-只重新量了几块几幕的，写进 `report2/`，用 `node tools/stage-gaps-check.mjs report2` 查（只查报告里有的块、打了标的幕）。
+只重新量了几块几幕的，写进 `report2/`，用 `node tools/stage-gaps-check.mjs report2`（第三次是 `report3`，任何 `reportN` 都行）查（只查报告里有的块、打了标的幕）。
 
 `stage-doc.txt` 要按新的说明重新生成：
 
