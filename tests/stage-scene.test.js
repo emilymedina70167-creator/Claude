@@ -925,6 +925,22 @@ test('reveal=on 才画虚实：变了的 changed、没变的 same；不写 revea
   assert.match(dryRun(run(new Scene(), AVL), 'pick')[0].error, /pick 后面写/);
 });
 
+test('句子上点几样：挪了的词才算变了（给它让位的不算）；reveal=on 只有挪了的画实线；名字后面带上那个词（挪过以后位置变了）', () => {
+  const s = run(new Scene(), 'sentence s = "one two three four five six"\nask pick s "把 three 挪到 five 后面，哪几个词挪了？" reveal=on');
+  assert.equal(pickText(pickAnswer(s, ['s#3', 's#4'], null)), '学生点了 2 个：s.3、s.4');
+  run(s, 'pick s#3 s#4 reveal=on');
+  const fx = s.apply(parseScript('move s.3 after s.5')[0], { by: 'student' });
+  // three 挪到第 5 个、four 让到第 3 个：写现在的位置，带上词，不会把「没变的 s.3」读成学生点的那个 three
+  assert.equal(fx.pickDiff, '学生先点的 2 个里，这一下以后变了的：s.5（three）；没变的：s.3（four）；变了却没点的：没有');
+  const pickOfWord = (v) => s.objects.get('s').words.find((w) => w.value === v).pick;
+  assert.deepEqual(['three', 'four', 'five'].map(pickOfWord), ['changed', 'same', undefined]);
+  assert.match(s.stateText(), /reveal=on：变了的实线 s\.5（three），没变的虚线 s\.3（four）/);
+  // 只点了 four：它只是让位，算没变；挪了的 three 是「变了却没点的」
+  const t = run(new Scene(), 'sentence s = "one two three four five six"\npick s#4 reveal=on');
+  assert.equal(t.apply(parseScript('move s.3 after s.5')[0]).pickDiff, '学生先点的 1 个里，这一下以后变了的：没有；没变的：s.3（four）；变了却没点的：s.5（three）');
+  assert.equal(t.objects.get('s').words.find((w) => w.value === 'four').pick, 'same');
+});
+
 test('刷新照放：ask 不重放、行带 lenient，pick 那一行自己带着 reveal，虚实和当场演的一样', () => {
   const log = [
     { src: AVL, by: 'teacher' },

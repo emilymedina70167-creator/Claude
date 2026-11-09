@@ -816,20 +816,34 @@ test('中文的括号字：学生点「定语」交出 mark s.2-6 定语；现�
   assert.equal(roleAbbr('插入语'), null);
 });
 
-test('changed：挪了的词（ask pick 交了以后和真变了的比）——第几个变了的：挪的那一段和给它让位的都算', () => {
-  const s = new Scene();
-  for (const c of parseScript('sentence s = "one two three four five six"')) s.apply(c);
-  const before = structuredClone(s.objects.get('s'));
-  for (const c of parseScript('move s.3 after s.5')) s.apply(c);
-  const o = s.objects.get('s');
-  // three 挪到 five 后面：four、five 往前让一格，one、two、six 不动（前后两份看不出哪一段是挪的那一段，照位置算）
-  const words = (keys) => keys.map((k) => o.words.find((w) => w.key === k).value).sort();
-  assert.deepEqual(words(R.changed(before, o)), ['five', 'four', 'three']);
-  assert.deepEqual(words(changedKeys(o, before, o)), ['five', 'four', 'three']);
+test('changed：挪了的词（ask pick 交了以后和真变了的比）——这一行真挪了的（fx.moved），给它让位的不算；字变了的也算', () => {
+  const S = 'sentence s = "one two three four five six"';
+  const at = (src) => {
+    const s = new Scene();
+    for (const c of parseScript(S)) s.apply(c);
+    const before = structuredClone(s.objects.get('s'));
+    let fx;
+    for (const c of parseScript(src)) fx = s.apply(c);
+    const o = s.objects.get('s');
+    const words = (keys) => keys.map((k) => o.words.find((w) => w.key === k).value);
+    return { o, before, fx, words };
+  };
+  // 挪一个词：只有它（four、five 往前让一格，不算）
+  const one = at('move s.3 after s.5');
+  assert.deepEqual(one.words(R.changed(one.before, one.o, one.fx)), ['three']);
+  assert.deepEqual(one.words(changedKeys(one.o, one.before, one.o, undefined, one.fx)), ['three']);
+  // 挪一段：那一段的词
+  const span = at('move s.1-2 after s.4');
+  assert.deepEqual(span.words(R.changed(span.before, span.o, span.fx)), ['one', 'two']);
+  // 挪了却落回原处：不算
+  const stay = at('move s.3 after s.2');
+  assert.deepEqual(R.changed(stay.before, stay.o, stay.fx), []);
+  // 只有前后两份（没有这一行的 fx）：分不出挪的是哪一段，位置不算，只算字变了的
+  assert.deepEqual(R.changed(one.before, one.o), []);
+  // 改写：字换了的、挪了的（rewrite 也交 moved）算
+  const re = at('rewrite s "one two THREE five four six"');
+  assert.deepEqual(re.words(R.changed(re.before, re.o, re.fx)), ['THREE', 'four']);
   // 拉一道括号：词没挪，不算
-  const t = new Scene();
-  for (const c of parseScript('sentence s = "one two three"')) t.apply(c);
-  const b2 = structuredClone(t.objects.get('s'));
-  for (const c of parseScript('mark s.1-2 S')) t.apply(c);
-  assert.deepEqual(R.changed(b2, t.objects.get('s')), []);
+  const mk = at('mark s.1-2 S');
+  assert.deepEqual(R.changed(mk.before, mk.o, mk.fx), []);
 });

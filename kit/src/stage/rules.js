@@ -23,9 +23,10 @@
 //                                               blank（null 的时候说什么，「还有空着的格」）、none（undefined 的时候括号里补一句为什么）
 //   brief(o) → 一句话 | null（可选）             这样东西现在的要点（矩阵：唯一解 / 无穷多解（1 个自由变量）/ r = 2）：
 //                                               跟着拨数算的东西，舞台现状里把每个能拨到的值都算一遍（scene.js 的 sweep），说不出是 null
-//   changed(before, after) → [key]（可选）        这一下改了哪些部件（ask pick 交了以后和真变了的比，scene.js 的 pickDiff）：
+//   changed(before, after, fx) → [key]（可选）    这一下改了哪些部件（ask pick 交了以后和真变了的比，scene.js 的 pickDiff）：
 //                                               树是平衡因子、父亲、哪一边、第几层变了的结点，矩阵是数变了的格，句子是挪了的词；
-//                                               前后都在的才算（新长出来的不算）。没交的照 changedKeys 比部件的值
+//                                               前后都在的才算（新长出来的不算）。fx 是这一行指令交的要点（句子的 move 交 moved：
+//                                               只有前后两份分不出哪一段是挪的那一段），用不上的不看。没交的照 changedKeys 比部件的值
 
 const REGISTRY = new Map();
 
@@ -80,13 +81,13 @@ export function done(scene, objId) {
 }
 
 /**
- * 这一下改了哪些部件（key，照 after 的部件顺序）：规则交了 changed 就照它；没交就比部件的值（有位置的也比位置 slot：
- * 一排格子换了位置，值跟着格子走，只比值就永远说「没变」）。前后都在的部件才算。
+ * 这一下改了哪些部件（key，照 after 的部件顺序）：规则交了 changed 就照它（fx 是这一行指令交的要点，一起给它）；
+ * 没交就比部件的值（有位置的也比位置 slot：一排格子换了位置，值跟着格子走，只比值就永远说「没变」）。前后都在的部件才算。
  * parts 是这种东西怎么列部件（scene.js 传 types/ 的 parts；这里不 import types/，那边 import 这里，会绕成圈）
  */
-export function changedKeys(o, before, after, parts = () => []) {
+export function changedKeys(o, before, after, parts = () => [], fx = null) {
   const fn = rulesOf(o)?.changed;
-  if (typeof fn === 'function') return fn(before, after) || [];
+  if (typeof fn === 'function') return fn(before, after, fx) || [];
   const was = new Map(parts(before).map((p) => [p.key, p]));
   return parts(after).filter((p) => { const q = was.get(p.key); return q && (String(q.value) !== String(p.value) || q.slot !== p.slot); }).map((p) => p.key);
 }

@@ -651,13 +651,18 @@ export function tallyOf(o) {
 
 // 拉括号、拉线的每一下都判（折起来不判）；做完了（key 里每一段都拉对了）只对交给了学生拉括号的句子算（线连完了要判写 when="s linked"）
 /**
- * 这一下挪了的词（ask pick 交了以后和真变了的比，rules.js 的 changedKeys）：前后都在、第几个（或字）变了的，照现在的先后。
- * 前后两份看不出哪一段是「挪的那一段」（move s.1-5 after s.6 和 move s.6 before s.1 挪完一模一样），所以挪的和给它让位的都算，
- * 和树「第几层变了」一个口径
+ * 这一下挪了的词（ask pick 交了以后和真变了的比，rules.js 的 changedKeys）：前后都在、字变了的，和这一行真挪了的，照现在的先后。
+ * 挪了的照这一行指令交的 fx.moved（move、rewrite 都交）：只有前后两份分不出哪一段是挪的那一段（move s.1-5 after s.6 和
+ * move s.6 before s.1 挪完一模一样），给它让位、往前往后错了一格的词不算「变了」——学生只点了挪的那个词，不该看到让位的词是
+ * 「变了却没点的」。挪了却落回原处的（move s.3 after s.2）也不算
  */
-function changed(before, after) {
+function changed(before, after, fx) {
   const was = new Map((before?.words || []).map((w) => [w.key, w]));
-  return ordered(after || { words: [] }).filter((w) => { const m = was.get(w.key); return !!m && (m.slot !== w.slot || m.value !== w.value); }).map((w) => w.key);
+  const moved = new Set(fx && fx.id === after?.id && Array.isArray(fx.moved) ? fx.moved : []);
+  return ordered(after || { words: [] }).filter((w) => {
+    const m = was.get(w.key);
+    return !!m && (m.value !== w.value || (moved.has(w.key) && m.slot !== w.slot));
+  }).map((w) => w.key);
 }
 
 export const sentenceRules = { next, check, predicates, measures, facts, changed, gestures, actOf: lineAct, judges: ['mark', 'refer'], doneBy: ['mark'] };

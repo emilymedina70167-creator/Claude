@@ -384,7 +384,7 @@ export class Scene {
       const now = this.objects.get(pk.obj);
       const partsOf = (x) => typeOf(x).parts(x);
       let keys = [];
-      try { keys = changedKeys(now, pkBefore, now, partsOf); } catch (err) { ruleErrors.push(`${typeOf(now).label}的规则算这一下变了哪些时出错：${err?.message || err}`); }
+      try { keys = changedKeys(now, pkBefore, now, partsOf, fx); } catch (err) { ruleErrors.push(`${typeOf(now).label}的规则算这一下变了哪些时出错：${err?.message || err}`); }
       const have = new Set(partsOf(now).map((p) => p.key));
       const gone = pk.keys.filter((k) => !have.has(k));
       if (keys.length || gone.length) {
@@ -1356,12 +1356,17 @@ export function pickText(a) {
       : [a.extra?.length ? `多点了 ${a.extra.join('、')}` : '', a.missing?.length ? `漏了 ${a.missing.join('、')}` : ''].filter(Boolean).join('，');
   return `${head}——你预期的是 ${a.expected}：${diff}`;
 }
-// 点着的每一个现在叫什么：还在的照 tapRef；这一下没了的，照交的那一行写的（一个部件一个写法时对得上），后面说没了
+/**
+ * 变过以后写一个部件：tapRef；有位置的（一排格子、句子的词）后面带上它现在的字（s.5（three））——挪过以后位置变了，
+ * 光写 s.3 会被读成学生交的时候点的那个 s.3。扣着的写它的牌子（和 stage.js 的 chipTextOf 一样，不漏字）
+ */
+const partName = (scene, p) => (p.slot != null ? `${scene.tapRef(p)}（${p.covered && p.coverLabel != null ? p.coverLabel : p.label ?? p.value ?? p.key}）` : scene.tapRef(p));
+// 点着的每一个现在叫什么：还在的照 partName；这一下没了的，照交的那一行写的（一个部件一个写法时对得上），后面说没了
 function pickedNames(scene, picked) {
   const o = scene.objects.get(picked.obj);
   const byKey = new Map((o ? typeOf(o).parts(o) : []).map((p) => [p.key, p]));
   const aligned = picked.refs.length === picked.keys.length;
-  return picked.keys.map((k, i) => ({ k, t: byKey.has(k) ? scene.tapRef(byKey.get(k)) : `${aligned ? picked.refs[i] : `${picked.obj} 里点过的一个`}（没了）` }));
+  return picked.keys.map((k, i) => ({ k, t: byKey.has(k) ? partName(scene, byKey.get(k)) : `${aligned ? picked.refs[i] : `${picked.obj} 里点过的一个`}（没了）` }));
 }
 const listOr = (xs) => (xs.length ? xs.join('、') : '没有');
 /**
@@ -1372,7 +1377,7 @@ export function pickDiffText(scene, picked, keys) {
   const ch = new Set(keys);
   const mine = pickedNames(scene, picked);
   const o = scene.objects.get(picked.obj);
-  const missed = (o ? typeOf(o).parts(o) : []).filter((p) => ch.has(p.key) && !picked.keys.includes(p.key)).map((p) => scene.tapRef(p));
+  const missed = (o ? typeOf(o).parts(o) : []).filter((p) => ch.has(p.key) && !picked.keys.includes(p.key)).map((p) => partName(scene, p));
   return `学生先点的 ${picked.keys.length} 个里，这一下以后变了的：${listOr(mine.filter((x) => ch.has(x.k)).map((x) => x.t))}；没变的：${listOr(mine.filter((x) => !ch.has(x.k)).map((x) => x.t))}；变了却没点的：${listOr(missed)}`;
 }
 // 舞台现状里点着的那一行
