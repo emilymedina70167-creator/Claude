@@ -7,6 +7,7 @@ label lo out "拿走的" side=left tone=note
 write t#1 空
 keep t "根空了"
 say "87 拿走了。根空了，谁来补？把它拖进空位。"
+open t
 open t back="根空了"
 open t pluck
 goal g1 "补好根、摘掉空位，再调成大根堆" when="count(t) = 7, t#1 >= t#2, t#1 >= t#3, t#2 >= t#4, t#2 >= t#5, t#3 >= t#6, t#3 >= t#7"

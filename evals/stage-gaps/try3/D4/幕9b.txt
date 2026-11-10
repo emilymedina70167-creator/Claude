@@ -1,0 +1,14 @@
+# D4 第 9 幕（补）：63 放对位置（32 的右边 = 第 9 个）的那一遍；放进去的那一刻下面那一排重造成 9 格（@t.done）
+tree t = 87 45 78 32 17 65 53 09 layout=compact tray="63"
+array a = {t#1} {t#2} {t#3} {t#4} {t#5} {t#6} {t#7} {t#8}
+say "63 进来了，它只能先坐在哪？把它拖过去，再让它往上走。"
+open t place
+open t
+@t.done array a = {t#1} {t#2} {t#3} {t#4} {t#5} {t#6} {t#7} {t#8} {t#9}
+goal g1 "63 坐到最后一个位置，再往上走到站住" when="count(t) = 9, t#4 >= t#9, t#2 >= t#4, t#1 >= t#2"
+@g1 say "站住了。"
+@g1 ask value "往上走一共比了几次？" answer=3 wrong="2=只数了对调的两次，没数和 87 比的那次"
+学生: insert t.32 right 63
+学生: swap t#9 t#4
+学生: swap t#4 t#2
+学生: value 3
