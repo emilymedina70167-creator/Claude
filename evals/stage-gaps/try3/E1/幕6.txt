@@ -1,0 +1,45 @@
+# E1 第 6 幕（第一张卡）：圈谓语 → 挑出夹在中间的副词 → 放进图鉴的一格 → 排中文积木。
+# 圈 = 学生拉括号点「谓语」（open s mark，默认照画不判）；圈对了预写下一步（挑战比这一段挂没挂着谓语：s span s.3-5 = V）。
+# 挑副词 = 按住一个词拖走（open s move）：哪个词都拖得动，been 也一样（学生第 4 下）；往上挑、胶囊合拢没有，只能拖到胶囊外面。
+# 图鉴 = 一张题卡，学生点一行（胶囊拖不进别的东西）；点对了预写一句（@ask.right）。三层预写用完，后面老师接。
+# 中文积木 = 一句用空格隔开的中文，学生按住一块拖到两块之间（别的让开）；排好以后老师连英文块和中文块
+sentence s = "Scientific publishing has long been a licence to print money." key="Scientific publishing [V has long been] a licence to print money."
+card k = "时态图鉴：放进哪一格？" "一般现在" "一般过去" "现在进行" "现在完成" "过去完成" "现在完成进行"
+say "先圈这一句的谓语，按你想的圈。"
+open s mark undo=on
+goal g1 "圈出这一句的谓语" when="s span s.3-5 = V"
+@g1 open s move undo=on
+@g1 goal g2 "把不长动词样子的词挑到胶囊外面" when="s.5 = s#4"
+@g1 say "胶囊里有不长动词样子的词吗？按住它，拖到 {s.5} 后面去。"
+@g2 say "放进图鉴哪一格？"
+@ask.right glow k.5
+@ask.right say "has been = have + done，现在完成。"
+@g2 ask tap k "has been 放进哪一格？点那一行。" expect=k.5
+学生: mark s.3-4 谓语
+学生: unmark s.3
+学生: mark s.3-5 谓语
+学生: move s.5 after s.10
+学生: undo
+学生: move s.4 after s.5
+学生: tap k.3
+say "放进了 {k.3}。{s.3} 后面那个词是 be 的哪种形式？再放一次。"
+@ask.right glow k.5
+@ask.right say "has been = have + done，现在完成。"
+ask tap k "has been 放进哪一格？" expect=k.5
+学生: tap k.5
+remove k
+sentence c = "一本万利 科学出版业 一直是 长期以来"
+open c move
+say "排中文：哪块先说？排好了点下面。"
+ask next "排好了点下面" button="排好了"
+学生: move c.2 before c.1
+学生: move c.4 after c.1
+学生: move c.3 after c.4
+学生: next
+link s.1-2 c.1 g1
+link s.5 c.2 g2
+link s.3-4 c.3 g3
+link s.6-10 c.4 g4
+say "英文和中文连起来看：{c.2} 在 {c.3} 前面。"
+ask next "下一张" button="下一张"
+学生: next

@@ -1,0 +1,32 @@
+# E1 第 3 幕（后半）：By 1830 那句，学生自己摆小人、拉出「成为独立国家」的事件条。
+# 时间轴：一排年份格子。小人：学生点一格（ask tap，点对了预写把指针放过去）。事件条没有能拉的东西：让学生把这件事占的几格点出来（ask pick，页面说多点、漏点的）。
+# 灯、条在灯里 / 灯外的画面后果没有；条在 1830 之前（对）只能预写在「正好点了 1800–1820 三格」上，点了其中两格页面也算不一样
+sentence b = "By 1830 the former Spanish and Portuguese colonies had become independent nations." key="By 1830 the former Spanish and Portuguese colonies [V had become] independent nations."
+mark b.9-10 谓语
+array yr = 1800 1810 1820 1830 1840 1850 2026
+label now yr.7 "现在" side=above tone=note
+say "小人该站哪儿？『变成独立国家』这件事在哪一段？你来摆。"
+@ask.right ptr 小人 yr.4
+ask tap yr "小人该站在哪一年？点那一格。" expect=yr.4
+学生: tap yr.7
+ptr 小人 yr.7
+say "站在 {yr.7}，句子里该是 has become。原句是 {b.9}——再摆一次。"
+@ask.right ptr 小人 yr.4
+ask tap yr "小人该站在哪一年？" expect=yr.4
+学生: tap yr.4
+@ask.right paint yr.1-3 g1
+@ask.right glow b.9-10
+@ask.right say "对，站在 1830 回头看。"
+ask pick yr "『成为独立国家』这件事占哪几格？都点出来" button="摆好了" expect="yr.1-3"
+学生: pick yr.4 yr.5 yr.6
+paint yr.4-6 g2
+dim b.9-10
+say "你摆的这一段在小人前面：站在 {yr.4} 回头看，看得见它吗？"
+@ask.right unpaint yr.4-6
+@ask.right paint yr.1-3 g1
+@ask.right undim b.9-10
+@ask.right say "对，站在 1830 回头看。"
+ask pick yr "再摆一次：这件事占哪几格？" button="摆好了" expect="yr.1-3"
+学生: pick yr.2 yr.3
+ask tap b "点一下 become：它是哪种形式？" expect=b.10
+学生: tap b.10

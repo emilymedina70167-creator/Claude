@@ -1,0 +1,51 @@
+# E1 第 4 幕（后半）：He has left 那句，把 two hours ago 拖进去 has 掉下来；response 两句各拉一条事件条。
+# 时间牌：句子里的词只能在本句里挪，所以 two hours ago 先放在句尾、拉成一段，学生按住这一段的括号整块拖（open h move）；
+# 「句里有 ago 谓语就换成一般过去」写不成一直生效的规则：一个挑战（比位置：h.4 = h#10）+ 预写 rewrite，拖出来再套一层。
+# so I cannot find him now 拖不出句子，只能让学生点括号折起来（open h fold）；折没折没有判断式，气泡（贴的字）跟不了。
+# response 两句：两个平面加两句竖屏放不下（平面压着句子、掉出屏幕），改成一个平面、一句接一句：has been 那条右头到「现在」预写亮一下、换成 was 那句；was 那条页面只照画
+sentence h = "He has left, so I cannot find him now. two hours ago"
+mark h.2-3 谓语
+mark h.4-9 结果
+mark h.10-12 时间
+label bub h.4-9 "小人脚下：现在找不到人" side=below tone=soft
+open h move
+open h fold
+say "He has left，事情做完了吧？为什么还用完成时——看 {h.4-9}。"
+say "把 {h.10-12} 放到 {h.3} 后面试试。"
+goal g1 "把 two hours ago 放到 left 后面" when="h.4 = h#10"
+@g1 unmark h.2-3
+@g1 rewrite h "He left two hours ago, so I cannot find him now."
+@g1 mark h.2 谓语
+@g1 unlabel bub
+@g1 goal g2 "再把它拖回句尾" when="h.11 = h#12"
+@g2 unmark h.2
+@g2 rewrite h "He has left, so I cannot find him now. two hours ago"
+@g2 mark h.2-3 谓语
+@g2 label bub h.4-9 "小人脚下：现在找不到人" side=below tone=soft
+学生: fold h.4-9
+学生: unfold h.4
+学生: move h.10-12 after h.3
+学生: move h.3-5 after h.11
+# 两层用完，页面叫老师
+remove h
+sentence a = "The response has been favorable."
+mark a.3-4 谓语
+plane r range=-1..4
+point r N = 3 0
+label rn r.N "现在" side=above tone=key
+vec r x = 1 0 color=g1
+open r.x drag
+say "给这一句拉一条：{r.x} 的右头拉到哪儿？"
+goal g3 "has been 这一句的条" when="r.x = r.N"
+@g3 glow a.3-4
+@g3 say "对：has been 那条连到现在。换一句，再拉一次。"
+@g3 unglow a.3-4
+@g3 unmark a.3-4
+@g3 rewrite a "The response was favorable."
+@g3 mark a.3 谓语
+@g3 vec r x = 1 0 color=g2
+@g3 ask next "was 这一句的条拉好了点下面" button="拉好了"
+学生: vec r x = 2 0
+学生: vec r x = 3 0
+学生: vec r x = 3 0
+学生: next

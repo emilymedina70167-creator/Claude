@@ -1,0 +1,49 @@
+# E1 第 3 幕（前半）：完成 = 站在一个时间点回头看之前。时间轴没有这种东西，拿坐标平面的 x 轴凑：sent、现在、将来是三个点，小人是一根能拖的向量（从原点出发，原点只好当「现在」）。
+# 小人一动 have 跟着换：挑战里不能写坐标，拿小人和点比（p.me = p.N）；一处一个挑战、做到时预写 rewrite + 重拉括号 + 在那一点下面贴一个「印子」。
+# 拖回 sent 的那个挑战写下时已经成立、不收，只能写在 @g1 里（拖到现在以后才出现）。每个挑战只演一次：三处都拖过以后再拖，句子不跟了（学生第 5 下）。
+# 灯光扇形、「gambled？0 次」虚线框没有能写的指令（虚线框拿一张贴的字凑）
+plane p range=-4..4
+point p S = -2 0
+point p N = 0 0
+point p F = 3 0
+label ls p.S "sent" side=above tone=key
+label ln p.N "现在" side=above tone=note
+label lf p.F "将来" side=above tone=note
+label lg p.S "← gambled？0 次" side=below tone=soft
+vec p me = -2 0 color=g4
+sentence s = "He had never gambled before the casino sent him a coupon."
+mark s.2-4 谓语
+say "拖 {p.me}（小人），盯住 {s.2-4}——哪个词跟着它变？"
+open p.me drag
+goal g1 "把小人拖到「现在」" when="p.me = p.N"
+@g1 unmark s.1-5
+@g1 rewrite s "He has never gambled before the casino sent him a coupon."
+@g1 mark s.2-4 谓语
+@g1 dim s.before-coupon
+@g1 label y1 p.N "has gambled" side=below tone=note
+@g1 goal g3 "再拖回 sent" when="p.me = p.S"
+@g3 unmark s.1-5
+@g3 rewrite s "He had never gambled before the casino sent him a coupon."
+@g3 mark s.2-4 谓语
+@g3 undim s
+@g3 label y0 p.S "had gambled" side=below tone=note
+goal g2 "把小人拖到「将来」" when="p.me = p.F"
+@g2 unmark s.1-5
+@g2 rewrite s "He will have never gambled before the casino sent him a coupon."
+@g2 mark s.2-5 谓语
+@g2 dim s.before-coupon
+@g2 label y2 p.F "will have gambled" side=below tone=note
+学生: vec p me = 0 0
+学生: vec p me = 3 0
+学生: vec p me = -2 0
+# 三处都拖过了，页面叫老师（做到了挑战）
+say "三个印子对着三个位置看：{s.2} 跟着小人站在哪儿变。"
+ask say "那 had 在说什么？写一句。"
+# 学生没马上答，又拖了两下：挑战都用完了，句子不再跟（小人在「现在」，句子还是 had）
+学生: vec p me = -3 0
+学生: vec p me = 0 0
+学生: say 站在过去那个点，说它之前的事
+say "[过去完成时] = 站在过去回头看：had + done。"
+fly say.1 -> name s.2-4
+ask next "看明白了点下面" button="明白了"
+学生: next

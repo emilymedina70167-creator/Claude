@@ -1,0 +1,32 @@
+# E1 第 5 幕（后半）：对着中文意思拨「强调结果 / 强调过程」的开关，句子在 have done ↔ have been doing 之间换。
+# 开关 = 1～2 的拨数 + 图例；中文意思卡 = 贴在句子下面的字。拨数连不到句子：一层套一层的挑战预写 rewrite（每句最多三层：拨过去 → 拨回来 → 再拨过去），第四次起不跟。
+# 时间轴上的结果印章 / 流动的波浪没有。两个开关最后停在哪：按「拨好了」时「舞台现在」里有拨数的值
+sentence a = "We have not won the match."
+label ca a "我们没赢下这场比赛" side=below tone=note
+dial ea = 1 range=1-2 at=a
+label la dial:ea "1 强调结果 ◉ · 2 强调过程 〰" side=right
+sentence b = "We have been working hard for several months."
+label cb b "我们努力了好几个月" side=below tone=note
+dial eb = 2 range=1-2 at=b
+label lb dial:eb "1 强调结果 ◉ · 2 强调过程 〰" side=right
+say "对着中文拨这两个开关——哪句在说『一直在做』？"
+goal a2 "第一句拨到过程" when="ea = 2"
+@a2 rewrite a "We have not been winning the match."
+@a2 goal a1 "第一句拨回结果" when="ea = 1"
+@a1 rewrite a "We have not won the match."
+goal b1 "第二句拨到结果" when="eb = 1"
+@b1 rewrite b "We have worked hard for several months."
+@b1 goal b2 "第二句拨回过程" when="eb = 2"
+@b2 rewrite b "We have been working hard for several months."
+@b2 goal b3 "第二句再拨到结果" when="eb = 1"
+@b3 rewrite b "We have worked hard for several months."
+ask next "两个开关都拨好了点下面" button="拨好了"
+学生: dial ea 2
+学生: dial ea 1
+学生: dial eb 1
+学生: dial eb 2
+学生: dial eb 1
+# 五个挑战都做到了，页面叫老师（「拨好了」还没按也叫）：老师只把按钮再挂上
+ask next "两个开关都拨好了点下面" button="拨好了"
+学生: dial eb 2
+学生: next

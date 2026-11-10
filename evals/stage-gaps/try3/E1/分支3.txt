@@ -1,0 +1,32 @@
+# E1 分支 3：翻译时时间、地点状语留在句末，没调到中文语序。
+# 中文积木 = 一句用空格隔开的中文（学生按住一块拖到两块之间，别的让开）；英文块和中文块之间 link 连线，积木挪了线跟着走。
+# 中文句写不了 key（第 6 行报错：页面的 key 只认英文的词），所以每块中文是什么成分页面不知道；挑战只能比位置（c.1 = c#4 | c.2 = c#4）。
+# 「半个多世纪以来」变成时间轴上那条条的标签：没有；手写的译文：学生打字，页面不找状语在哪
+sentence e = "The question of GDP and its usefulness has annoyed policymakers for over half a century." key="[S The question of GDP and its usefulness] [V has annoyed] [O policymakers] [A for over half a century]."
+sentence c = "GDP及其有效性的问题 一直困扰着 政策制定者 半个多世纪以来" key="[S GDP及其有效性的问题] [V 一直困扰着] [O 政策制定者] [A 半个多世纪以来]"
+sentence c = "GDP及其有效性的问题 一直困扰着 政策制定者 半个多世纪以来"
+mark e.11-15 时间状语
+link e.2 c.1 g1
+link e.9 c.2 g2
+link e.10 c.3 g3
+link e.14 c.4 g4
+open c move
+say "读一读你排的中文：线是平行的，中文照着英文的顺序。{c.4} 放哪儿顺？拖过去。"
+goal g1 "把时间状语挪到它顺的地方" when="c.1 = c#4 | c.2 = c#4"
+@g1 say "线交叉了：中文的顺序和英文不一样了。再来一句。"
+@g1 remove e
+@g1 remove c
+@g1 sentence h = "Home prices are holding steady in most regions."
+@g1 sentence d = "房价 保持稳定 在大多数地区"
+@g1 link h.2 d.1 g1
+@g1 link h.4 d.2 g2
+@g1 link h.8 d.3 g4
+@g1 open d move
+@g1 goal g2 "这一句的地点放哪儿？" when="d.1 = d#3 | d.2 = d#3"
+@g2 ask say "中文里时间、地点放在哪儿？"
+学生: move c.4 before c.1
+学生: move d.3 after d.1
+学生: say 放在谓语前面
+sentence t = "This tendency in the natural sciences has long been evident in the social sciences too."
+ask say "这一句不给积木：直接写译文。"
+学生: say 这种趋势在自然科学中早已明显在社会科学中也是

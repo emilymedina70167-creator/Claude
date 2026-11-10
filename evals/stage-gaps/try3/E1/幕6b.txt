@@ -1,0 +1,35 @@
+# E1 第 6 幕（后面几张卡）：理想里后面几张老师只在学生停住时才说话。一张卡的三步（圈 → 挑副词 → 放格子）正好用完三层预写；
+# 放对格子以后「翻下一张」也写进预写（@ask.right 里 remove 旧句、造新句、再 open）——新句的挑战写不进第四层，所以每张卡开头还是要老师一轮。
+# 最后一张不给积木、不给图鉴：Pencil 手写没有，学生打字（ask say），页面只把原文交给老师
+sentence n = "Americans' life expectancy has nearly doubled over the past century." key="Americans' life expectancy [V has nearly doubled] over the past century."
+card k = "时态图鉴：放进哪一格？" "一般现在" "一般过去" "现在进行" "现在完成" "过去完成" "现在完成进行"
+open n mark undo=on
+say "下一张，照刚才的做：圈谓语、挑副词、放格子。"
+goal h1 "圈出谓语" when="n span n.4-6 = V"
+@h1 open n move undo=on
+@h1 goal h2 "把副词挑到胶囊外面" when="n.6 = n#5"
+@ask.right say "has doubled = have + done，现在完成。下一张。"
+@ask.right remove n
+@ask.right sentence n = "A good innovational thinker is always exploring the many other possibilities." key="A good innovational thinker [V is always exploring] the many other possibilities."
+@ask.right open n mark undo=on
+@h2 ask tap k "放进哪一格？" expect=k.5
+学生: mark n.4 谓语
+学生: unmark n.4
+学生: mark n.4-6 谓语
+学生: move n.5 after n.6
+学生: tap k.5
+# 第三张卡是预写翻出来的，没有老师的话：学生照着圈，圈对了页面才叫老师（做完了）
+学生: mark n.5-7 谓语
+open n move undo=on
+say "圈对了。副词挑出去，再放格子。"
+goal j2 "把副词挑到胶囊外面" when="n.7 = n#6"
+@ask.right say "is exploring = be + doing，现在进行。"
+@j2 ask tap k "放进哪一格？" expect=k.4
+学生: move n.6 after n.7
+学生: tap k.4
+remove n
+remove k
+sentence q = "The question of GDP and its usefulness has annoyed policymakers for over half a century."
+say "最后一张，不带图鉴、不带积木。"
+ask say "写出这一句的：谓语 + 时态 + 译文。"
+学生: say has annoyed，现在完成时，GDP 及其有效性的问题一直困扰着政策制定者半个多世纪以来

@@ -1,0 +1,18 @@
+# E1 第 2 幕的排版毛病的最小重现（不是理想里的一幕）：句子 + 谓语括号 + 一排格子（时间轴）+ 指针 + 贴的字 + 两个带图例的拨数，
+# 学生点一下按钮以后排版就报「画到了自己的地方外面：obj:tl」；再 rewrite 成长句、加一句，整个画面缩小、东西掉出屏幕。这几样拿掉任何一样都不报
+sentence s = "Home prices are holding steady in most regions."
+mark s.3-4 谓语
+array tl = 过去 现在 将来
+ptr 小人 tl.2
+label wave tl.2 "〰〰 正在进行" side=above tone=soft
+dial t = 2 range=1-3 at=tl
+label tn dial:t "时间：1 过去 · 2 现在 · 3 将来" side=right
+dial m = 1 range=1-2 at=s
+label mn dial:m "主语：1 Home prices · 2 I" side=right
+ask next "看" button="好"
+学生: next
+rewrite s "The price of these homes be holding steady in most regions."
+ask next "看" button="好"
+学生: next
+sentence c = "is are"
+ask tap c "挑一块放进去。" expect=c.1

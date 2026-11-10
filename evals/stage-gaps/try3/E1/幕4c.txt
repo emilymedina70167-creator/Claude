@@ -1,0 +1,24 @@
+# E1 第 4 幕（最后的小挑战单独演）：幕4b.txt 里 remove h 以后再造的平面画到了屏幕外面（竖屏、横屏都是），这里从空舞台摆起，看 response 两句各拉一条的画面。
+# 先造句子再造平面，平面会画到屏幕外面（幕4b.txt 第 30–36 行就是），所以这里先造平面
+# 一个平面、一句接一句：has been 那条右头到「现在」预写亮一下、换成 was 那句；was 那条页面只照画，不评判
+plane r range=-1..4
+point r N = 3 0
+label rn r.N "现在" side=above tone=key
+vec r x = 1 0 color=g1
+sentence a = "The response has been favorable."
+mark a.3-4 谓语
+open r.x drag
+say "给这一句拉一条：{r.x} 的右头拉到哪儿？"
+goal g3 "has been 这一句的条" when="r.x = r.N"
+@g3 glow a.3-4
+@g3 say "对：has been 那条连到现在。换一句，再拉一次。"
+@g3 unglow a.3-4
+@g3 unmark a.3-4
+@g3 rewrite a "The response was favorable."
+@g3 mark a.3 谓语
+@g3 vec r x = 1 0 color=g2
+@g3 ask next "was 这一句的条拉好了点下面" button="拉好了"
+学生: vec r x = 2 0
+学生: vec r x = 3 0
+学生: vec r x = 3 0
+学生: next

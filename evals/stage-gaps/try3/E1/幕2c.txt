@@ -1,0 +1,28 @@
+# E1 第 2 幕（中间那一段单独演）：幕2.txt 里排版坏了以后两块牌掉出屏幕、学生点不到，这里不摆时间轴和拨数，只量「be 掏空 → 学生挑 is / are → 页面的反应」。
+# 空格拿原形 be 占位、上面标「?」；两块牌是另一句里的两个词，学生点一块；挑对了预写 rewrite + 主语线连到 price + of these homes 压暗（@ask.right）；
+# 挑了 are 是走偏，不能预写：页面叫老师，老师照样放进去、线连到 homes、of 闪一下，再把 of these homes 拉成一段让学生自己折起来
+sentence s = "The price of these homes be holding steady in most regions."
+mark s.6-7 谓语
+tag s.6 ?
+sentence c = "is are"
+say "这时候用哪个？先自己放。"
+@ask.right rewrite s "The price of these homes is holding steady in most regions."
+@ask.right refer s.6 -> s.2
+@ask.right dim s.3-5
+ask tap c "挑一块放进 {s.6} 那一格。" expect=c.1
+学生: tap c.2
+rewrite s "The price of these homes are holding steady in most regions."
+refer s.6 -> s.5
+pulse s.3
+mark s.3-5 修饰
+open s fold
+say "{s.6} 连到了 {s.5}。把 {s.3-5} 收起来，看主语剩下谁。"
+@ask.right rewrite s "The price of these homes is holding steady in most regions."
+@ask.right refer s.6 -> s.2
+@ask.right dim s.3-5
+ask tap c "现在挑哪一块？" expect=c.1
+学生: fold s.3-5
+学生: tap c.1
+say "进行 = be + doing：{s.6} 管时间和人称，{s.7} 管『正在』。"
+ask next "看明白了点下面" button="明白了"
+学生: next

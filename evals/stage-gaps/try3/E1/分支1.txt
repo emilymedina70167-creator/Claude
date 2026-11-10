@@ -1,0 +1,41 @@
+# E1 分支 1：谓语没圈全（只圈 has，丢了 been），或者把 to print 当谓语。
+# 学生圈 = 拉括号点「谓语」；key 里写了谓语和非谓语，call=wrong 一走偏页面马上叫老师、说像哪种错。
+# 「按学生圈的读」（has 当实义动词重排、been 悬空）页面不会：悬空、问号、直译都是老师看了事实自己写的。
+# 「把 has 和 been 放进 have + done 两格」跨不了东西拖：改成在句子上点出两个词（ask pick），点对了预写把括号补全。
+# 「长得像动词的词有几个」= ask pick；「to print 拖进胶囊弹回」= open s mark wrong=block，学生把 print 标成谓语页面不让做
+sentence s = "Scientific publishing has long been a licence to print money." key="Scientific publishing [V has long been] a licence [NF to print money]."
+say "先圈这一句的谓语，按你想的圈。"
+open s mark call=wrong
+goal g1 "圈出这一句的谓语" when="s span s.3-5 = V"
+学生: mark s.3 谓语
+# 不收回的话学生手上一直「还有事」（挑战没做到、key 没拉完），后面几问答对了页面也不叫老师：先把挑战拿掉、句子收回来
+ungoal g1
+close s
+lift s.5
+label hang s.5 "这个词归谁？" side=above tone=key
+label read s "照你圈的读：科学出版业长期『拥有』……一本万利？" side=below tone=note
+card k = "be 的形式" "原形：be" "过去式：was / were" "done：been" hide=on
+tex f = "\hl{h}{have} + \hl{d}{done}" 
+say "照你圈的，{s.3} 成了『拥有』，{s.5} 没处放。"
+@ask.right show k
+@ask.right glow k.4
+ask tap s "点一下悬着的那个词，看它是什么形式。" expect=s.5
+学生: tap s.5
+drop s.5
+say "{f.h} + {f.d} 两格：句子里哪两个词放得进去？"
+@ask.right unmark s.3
+@ask.right mark s.3-5 谓语
+@ask.right unlabel hang
+@ask.right unlabel read
+@ask.right say "正好填满：{s.3-5} 是一整块。"
+ask pick s "点出放进 have、done 两格的两个词" button="放好了" expect="s.3 s.5"
+学生: pick s.3 s.5
+remove k
+remove f
+ask pick s "这句里长得像动词的词有几个？都点出来" button="点好了" expect="s.3 s.5 s.9"
+学生: pick s.3 s.5 s.7 s.9
+open s mark wrong=block
+say "{s.3} {s.5} 进了谓语。{s.9} 去哪儿：谓语，还是非谓语？自己拉。"
+@s.done say "一句只有一个谓语；前面有 to 的进不去。"
+学生: mark s.9 谓语
+学生: mark s.8-10 非谓语

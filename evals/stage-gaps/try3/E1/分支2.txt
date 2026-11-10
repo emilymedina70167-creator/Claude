@@ -1,0 +1,37 @@
+# E1 分支 2：完成时判成一般过去时（had become 放进了「一般 · 过去」）。老师想把学生的判断照样演出来，和原句的画面上下并排。
+# 页面不会按时态换句子、画时间轴：一般过去那句（became in 1830）是老师自己写的；两幅「时间轴」是两排年份格子，原句那幅指针站在 1830、身后三格染色，另一幅只染 1830 一格。
+# 「哪一幅是原句」= 题卡上点一行；become 的形式卡是老师写的题卡；两句中文配上下两幅 = 两块中文排成一句，学生拖着换先后（上一块配上面那幅）
+array y1 = 1800 1810 1820 1830 1840
+ptr 小人 y1.4
+paint y1.1-3 g1
+array y2 = 1800 1810 1820 1830 1840
+paint y2.4 g2
+sentence o = "By 1830 the former Spanish and Portuguese colonies had become independent nations."
+mark o.9-10 谓语
+sentence w = "The colonies became independent nations in 1830."
+mark w.3 谓语
+card q = "哪一幅是原句 By 1830 … had become …？" "上面那排：站在 1830，回头看一整段" "下面那排：1830 那一个点"
+say "你说是一般过去——那就是 {w.3} 这一句，画出来是 {y2.4} 一个点。原句是哪一幅？"
+@ask.right glow o.9-10
+@ask.right say "对：原句是站在 1830 回头看一整段。"
+ask tap q "哪一幅是原句？点一行。" expect=q.2
+学生: tap q.3
+remove q
+card f = "become 的三种形式" "原形：become" "过去式：became" "done：become"
+say "原句里 {o.9} 后面是 {o.10}，不是 became。它是哪一格？"
+@ask.right glow f.4
+@ask.right say "had + done：站在过去回头看，过去完成。"
+ask tap f "had 后面的 become 是哪一行？" expect=f.4
+学生: tap f.2
+say "{f.2} 和 {f.4} 长得一样。前面有 {o.9} 的是哪一个？"
+@ask.right glow f.4
+@ask.right say "had + done：站在过去回头看，过去完成。"
+ask tap f "再点一次。" expect=f.4
+学生: tap f.4
+remove f
+sentence zh = "「1830年，开始变成独立的区域」 「截止到1830年，已经成为独立的国家」"
+open zh move
+say "两句中文，前一句配上面那排、后一句配下面那排。排对它。"
+goal g1 "两句中文各配一幅" when="zh.1 = zh#2"
+@g1 say "对：『截止到……已经成为』是回头看一整段。"
+学生: move zh.2 before zh.1

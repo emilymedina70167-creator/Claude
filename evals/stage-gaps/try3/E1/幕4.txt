@@ -1,0 +1,49 @@
+# E1 第 4 幕（前半）：现在完成时和一般过去时差在那件事连不连到「现在」。事件条 = 坐标平面上一根从原点出发的向量（原点只好当「15 年前」），「现在」是 x 轴上的一个点，学生拖向量的末端当右把手。
+# 右头离开「现在」have 淡出、拉回来 have 长回来：挑战比向量和点（p.bar != p.N），一层套一层预写（最多三层：离开 → 拉回 → 再离开），第四次起句子不跟（学生第 4 下）。
+# 小牌「现在还在学吗？」是贴在句子旁边的字，预写里 retext 改；越过「现在」往前流的波浪没有。「完成 = 做完了吗」是一张题卡，学生点一行
+plane p range=-1..5
+point p A = 0 0
+point p N = 3 0
+label la p.A "15 年前" side=below tone=note
+label ln p.N "现在" side=above tone=key
+vec p bar = 3 0 color=g1
+sentence s = "We have learned English for 15 years."
+mark s.2-3 谓语
+label q s "现在还在学吗？——还在学" side=right tone=key
+say "拉 {p.bar} 的右头，看句子什么时候少了 have。"
+open p.bar drag
+goal g1 "把右头拉离「现在」" when="p.bar != p.N"
+@g1 unmark s.1-5
+@g1 rewrite s "We learned English for 15 years."
+@g1 mark s.2 谓语
+@g1 retext q "现在还在学吗？——现在不学了"
+@g1 goal g2 "再拉回「现在」" when="p.bar = p.N"
+@g2 unmark s.1-5
+@g2 rewrite s "We have learned English for 15 years."
+@g2 mark s.2-3 谓语
+@g2 retext q "现在还在学吗？——还在学"
+@g2 goal g3 "再拉开一次" when="p.bar != p.N"
+@g3 unmark s.1-5
+@g3 rewrite s "We learned English for 15 years."
+@g3 mark s.2 谓语
+@g3 retext q "现在还在学吗？——现在不学了"
+学生: vec p bar = 1 0
+学生: vec p bar = 3 0
+学生: vec p bar = 2 0
+# 三层用完，页面叫老师（做到了挑战）
+vec p bar = 3 0
+unmark s.1-5
+rewrite s "We have learned English for 15 years."
+mark s.2-3 谓语
+retext q "现在还在学吗？——还在学"
+card c = "「完成」= 做完了吗？" "是" "不一定"
+say "有 have 的时候，这件事和「现在」是什么关系？这条还没学完，也能说 have learned？"
+@ask.right say "对：做完没做完都行，要跟现在连着。"
+ask tap c "「完成」= 做完了吗？点一行。" expect=c.3
+学生: vec p bar = 1 0
+学生: tap c.2
+vec p bar = 4 0
+say "看 {p.bar} 越过「现在」的这一截：学完了吗？"
+@ask.right say "对：做完没做完都行，要跟现在连着。"
+ask tap c "再点一次：「完成」= 做完了吗？" expect=c.3
+学生: tap c.3

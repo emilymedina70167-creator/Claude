@@ -1,0 +1,50 @@
+# E1 第 5 幕（前半）：完成进行 = have + been + doing。两块拼图 = 一句四个词「be doing have done」上的两道括号（进行、完成），学生按住括号整块拖（open z move）把「完成」挪到「进行」前面；
+# 咬合时 be 变 been 只能是挑战做到以后预写的 rewrite（done 和 be 淡出、been 淡进来，不是两格重叠）；点 been 弹形式卡 = 预写 show 一张先藏着的题卡（@ask.right）。
+# 空槽：句子里没有空位，谓语的位置放原形 go on、上面标「?」，学生把整个谓语打出来（ask value … type=en），拖不进去
+sentence z = "be doing have done"
+mark z.1-2 进行
+mark z.3-4 完成
+card k = "be 的形式" "原形：be" "过去式：was / were" "done：been" "doing：being" hide=on
+open z move
+say "这两块能拼起来：把 {z.3-4} 整块拖到 {z.1-2} 前面，试试。"
+goal g1 "把两块拼到一起" when="z.1 = z#3, z.3 = z#1"
+@g1 unmark z.1-4
+@g1 rewrite z "have been doing"
+@g1 mark z.1-2 完成
+@g1 mark z.2-3 进行
+@g1 say "咬上了：done 和 be 叠成了一个词。"
+@ask.right show k
+@ask.right glow k.4
+@g1 ask tap z "中间那个词归哪一块？点出两块共用的那个词。" expect=z.2
+学生: move z.1-2 after z.4
+学生: tap z.2
+say "{z.2} 是 be 的哪种形式？"
+@ask.right say "对：been 是 be 的 done，所以它也算在『完成』里。"
+ask tap k "been 在哪一行？" expect=k.4
+学生: tap k.3
+unglow k.4
+say "看 {k.3}：was / were 前面能放 have 吗？"
+@ask.right say "对：been 是 be 的 done，所以它也算在『完成』里。"
+ask tap k "再点一次：been 在哪一行？" expect=k.4
+学生: tap k.4
+remove k
+sentence s = "That kind of electronic spying go on for decades."
+mark s.6-7 谓语
+tag s.6 ?
+say "把拼好的 {z} 套到 {s.6-7} 上。"
+@ask.right rewrite s "That kind of electronic spying has been going on for decades."
+@ask.right refer s.6 -> s.2
+@ask.right dim s.3-5
+ask value "把谓语写出来（have + been + doing，套上 go on）" answer="has been going on" type=en wrong="have been going on=have / has 跟错了：核心词是 kind，不是 spying"
+学生: value have been going on
+mark s.3-5 修饰
+fold s.3-5
+say "主语拆开看：剩下的核心词是 {s.2}。再写一次。"
+@ask.right unfold s.3
+@ask.right rewrite s "That kind of electronic spying has been going on for decades."
+@ask.right refer s.6 -> s.2
+@ask.right dim s.3-5
+ask value "谓语是？" answer="has been going on" type=en wrong="have been going on=have / has 跟错了：核心词是 kind，不是 spying"
+学生: value has been going on
+ask tap s "哪一块牌告诉你这句在强调过程？点它。" expect=s.for-decades
+学生: tap s.decades
