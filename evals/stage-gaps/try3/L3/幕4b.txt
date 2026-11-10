@@ -1,0 +1,4 @@
+# L3 第 4 幕补试：行列式照 KaTeX 写（列之间用 &）——画出来三列粘在一起（「λ − 2 − 22」），不报错
+tex f = "|\lambda E - A| = \begin{vmatrix}\lambda-2&-2&2\\-2&\lambda-5&4\\2&4&\lambda-5\end{vmatrix}"
+say "看这个行列式。"
+ask next "看一眼" button="好"

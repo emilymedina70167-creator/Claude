@@ -1,0 +1,80 @@
+# E1 第 2 幕（前半）：进行 = be + doing。拨时间、换主语，看 holding 一直不动；be 那格掏空让学生从 is / are 里挑。
+# 时间轴：一排三格 + 格子下的指针当小人 + 一张贴的字当波浪（没有时间轴这种东西）。主语卷轴：一个数字拨数 + 图例。
+# 拨数连不到句子，照第 1 幕的办法一种组合一个挑战（这里 4 种：过去、将来、I、I + 过去），每个只演一次。
+# 空格：句子里没有空位的写法（＿＿ 会粘在前一个词上），拿原形 be 占着位置、上面标「?」；is / are 两块牌是另一句里的两个词，学生点一块（拖不进别的句子）。
+sentence s = "Home prices are holding steady in most regions." key="Home prices [V are holding] steady in most regions."
+mark s.3-4 谓语
+array tl = 过去 现在 将来
+ptr 小人 tl.2
+label wave tl.2 "〰〰 正在进行" side=above tone=soft
+dial t = 2 range=1-3 at=s
+label tn dial:t "时间：1 过去 · 2 现在 · 3 将来" side=right
+dial m = 1 range=1-2 at=s
+label mn dial:m "主语：1 Home prices · 2 I" side=right
+say "只拨时间、只换主语，看 {s.3-4} 里哪个词一直没动？"
+goal p1 "时间拨到过去" when="t = 1, m = 1"
+@p1 unmark s.1-5
+@p1 rewrite s "Home prices were holding steady in most regions."
+@p1 mark s.3-4 谓语
+@p1 ptr 小人 tl.1
+@p1 label wave tl.1 "〰〰 正在进行" side=above tone=soft
+goal p3 "时间拨到将来" when="t = 3, m = 1"
+@p3 unmark s.1-5
+@p3 rewrite s "Home prices will be holding steady in most regions."
+@p3 mark s.3-5 谓语
+@p3 ptr 小人 tl.3
+@p3 label wave tl.3 "〰〰 正在进行" side=above tone=soft
+goal m2 "主语换成 I" when="t = 2, m = 2"
+@m2 unmark s.1-5
+@m2 rewrite s "I am holding steady in most regions."
+@m2 mark s.2-3 谓语
+@m2 refer s.2 -> s.1
+goal m1 "I + 过去" when="t = 1, m = 2"
+@m1 unmark s.1-5
+@m1 rewrite s "I was holding steady in most regions."
+@m1 mark s.2-3 谓语
+@m1 refer s.2 -> s.1
+@ask.right paint s.holding g4
+ask tap s "哪个词一直没动？点它。" expect=s.holding
+学生: dial t 1
+学生: dial t 3
+学生: dial t 2
+学生: dial m 2
+学生: dial t 1
+学生: tap s.3
+# 第二轮：老师把主语卷到 The price of these homes，be 掏空（原形 be 占位），两块牌让学生挑
+unmark s.1-5
+unrefer s.2
+rewrite s "The price of these homes be holding steady in most regions."
+mark s.6-7 谓语
+tag s.6 ?
+sentence c = "is are"
+say "那前面那个词在管什么？这时候用哪个？先自己放。"
+@ask.right rewrite s "The price of these homes is holding steady in most regions."
+@ask.right refer s.6 -> s.2
+@ask.right dim s.3-5
+ask tap c "挑一块放进 {s.6} 那一格。" expect=c.1
+学生: tap c.2
+# 第三轮：学生挑了 are——照样放进去，线连到 homes、of 闪一下；of these homes 拉成一段让学生自己折起来看主语剩什么
+rewrite s "The price of these homes are holding steady in most regions."
+refer s.6 -> s.5
+pulse s.3
+mark s.3-5 修饰
+open s fold
+say "{s.6} 连到了 {s.5}。把 {s.3-5} 收起来，看主语剩下谁。"
+@ask.right rewrite s "The price of these homes is holding steady in most regions."
+@ask.right refer s.6 -> s.2
+ask tap c "现在挑哪一块？" expect=c.1
+学生: fold s.3-5
+学生: tap c.1
+# 上面这一下点不到：句子 rewrite 变长以后下面那排格子（时间轴）画到了别处，整个画面缩小，两块牌掉出了屏幕。学生只能打字说；老师把时间轴拿掉再问一遍
+学生: say 那两块牌看不见了
+remove tl
+unlabel wave
+@ask.right rewrite s "The price of these homes is holding steady in most regions."
+@ask.right refer s.6 -> s.2
+ask tap c "现在挑哪一块？" expect=c.1
+学生: tap c.1
+say "进行 = be + doing：be 管时间和人称，doing 管『正在』。"
+ask next "看明白了点下面" button="明白了"
+学生: next

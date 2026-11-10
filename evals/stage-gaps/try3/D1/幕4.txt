@@ -1,0 +1,78 @@
+# D1 第 4 幕：两个 49 的先后翻了
+# 时间轴没有能写的东西：老师先把三趟走完，每趟后 keep 存一张（最多 6 张），再拿 back 回放；学生那边只有一个「回到……」按钮
+array a = 49 38 65 97 76 13 27 49′ 55 04
+label xa a#1 "先" side=above tone=key
+label xb a#8 "后" side=above tone=key
+card q = "对一下" "输入：___ 在前" "输出：___ 在前"
+keep a "初始"
+group a stride=5
+swap a#1 a#6
+swap a#2 a#7
+swap a#3 a#8
+swap a#4 a#9
+swap a#5 a#10
+keep a "d=5 后"
+say "希尔三趟：5、3、1。我先走一遍，你盯着 {a#1} 和 {a#8}。"
+ask next "d=5 走完了" button="走下一趟"
+学生: next
+group a stride=3
+swap a.4 a.7
+swap a.2 a.5
+keep a "d=3 后"
+group a stride=1
+move a#10 -> a.1
+move a#2 -> a.3
+move a#7 -> a.3
+move a#5 -> a.9
+keep a "d=1 后"
+card t = "初始" "d=5 后" "d=3 后" "d=1 后"
+open a back="初始"
+say "希尔稳不稳？先别说结论，把小表填了。"
+ask value "输入谁在前？输出谁在前？写两个，空格隔开"
+# 学生想看开头：只有这一个按钮；回去以后想再看 d=1 后，自己回不来
+学生: back a "初始"
+学生: value 49 49′
+rewrite q.2 "输入：49 在前"
+rewrite q.3 "输出：49′ 在前"
+back a "d=1 后"
+say "在哪一下翻过来的？自己找。"
+@ask.right back a "d=5 后"
+@ask.right glow a#1 a#8
+ask tap t "哪一趟之后，先后翻了？点时间牌" expect=t.2
+学生: tap t.3
+# 点错了：老师替学生把那一刻放回来给学生看（学生自己拖不了时间轴）
+back a "d=3 后"
+say "这一刻 {a#8} 已经在 {a#1} 前面了。再往前找。"
+@ask.right back a "d=5 后"
+@ask.right glow a#1 a#8
+ask tap t "哪一趟之后，先后翻了？" expect=t.2
+学生: tap t.2
+# 点一张 49、那一刻它所在的组整组亮：只能问「和谁一组」，答对了预写亮出来
+@ask.right paint a#1 a#6 g1
+@ask.right paint a#8 a#3 g3
+ask pick a "d=5 这一趟，{a#1} 和谁一组？{a#8} 呢？都点出来" button="点好了" expect="a#6 a#3"
+学生: pick a#6 a#3
+say "这一下，{a#1} 和 {a#8} 比过吗？"
+ask say "它们俩比过吗？各在哪一组？"
+学生: say 没比过，49在第1组，49′在第3组
+# 沙盘：4 个空格 + 托盘没有；只能给一排摆好的让学生换着摆。页面不会跑 d=2,1，摆出「翻了」也没法预写
+array s = 1 2 2′ 3
+label st s "沙盘：增量 2, 1" side=above tone=note
+open s undo=on
+say "自己造一个翻的：摆成你要的一排，点「摆好了」。"
+ask next "摆好了点下面" button="摆好了"
+学生: swap s#1 s#4
+学生: next
+# 老师替页面跑 d=2,1：照学生摆的另造一排，一格一格走
+array r = 3 2 2′ 1
+label rt r "跑 d=2,1" side=left tone=soft
+group r stride=2
+swap r.1 r.3
+swap r.2 r.4
+group r stride=1
+move r.2 -> r.1
+move r.4 -> r.3
+say "翻了！{r#3} 跑到 {r#2} 前面了。再摆一个没翻的。"
+ask next "摆好了点下面" button="摆好了"
+学生: swap s#4 s#1
+学生: next

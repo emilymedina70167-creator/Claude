@@ -1,0 +1,62 @@
+# D1 第 1 幕：两排直接插入，比挪了几格
+# 画面：上下两排、两块计数牌、一行板书；「手」格（A[0]）说明里没有能写的东西
+array a = 49 38 65 97 76 13 27 49′ 55 04
+array b = 13 04 49′ 38 27 49 55 65 97 76
+label ca a "挪了 0 格" side=right tone=key
+label cb b "挪了 0 格" side=right tone=key
+label rule b "直接插入：拿起一张，比它大的往右让一格，放进空位" side=above tone=note
+say "先猜：两排都用直接插入，哪排挪得多？各写一个数。"
+# 只收猜的数、不判：ask value 不写 answer（这一轮说明里写了「只收不判」）；两个数想一问收齐
+ask value "上排、下排各要挪几格？写两个数，空格隔开"
+学生: value 20 8
+# 猜的数亮在计数牌旁边（老师贴）；学生手动做上排前三趟：open a（拖两格互换）+ 撤一步；先放错一次看记下什么
+label ga a "你猜 20" side=left tone=soft
+label gb b "你猜 8" side=left tone=soft
+say "上排你先做前三趟：拿 {a.2} 往前插，比它大的往右让。"
+open a undo=on
+goal g1 "上排前三趟：前四张排好" when="a.1 <= a.2, a.2 <= a.3, a.3 <= a.4"
+@g1 retext ca "挪了 1 格"
+@g1 close a
+@g1 say "{a#3}、{a#4} 不用动。后面的页面不会自己走，我来走。"
+@g1 ask next "看我一趟一趟走" button="走下一趟"
+学生: swap a#2 a#3
+学生: undo
+学生: swap a#2 a#1
+学生: next
+# 页面不会照直接插入自动走：老师一趟一行 move，自己改计数；尾迹拿 hop 凑（小点一格一格跳、留一道弧）
+array m = 1 0 0
+label mt m "上排每一趟挪了几格（第 2 张起）" side=above tone=note
+move a#5 -> a.4
+& retext ca "挪了 2 格"
+& array m = 1 0 0 1
+move a#6 -> a.1
+& retext ca "挪了 7 格"
+& array m = 1 0 0 1 5
+move a#7 -> a.2
+& retext ca "挪了 12 格"
+& array m = 1 0 0 1 5 5
+move a#8 -> a.5
+& retext ca "挪了 15 格"
+move a#9 -> a.6
+& retext ca "挪了 18 格"
+& array m = 1 0 0 1 5 5 3 3
+ask next "还剩最后一张 {a.10}" button="走下一趟"
+学生: next
+hop a.10 -> a.1 color=g2 label="让 9 格"
+move a#10 -> a.1
+& retext ca "挪了 27 格"
+& array m = 1 0 0 1 5 5 3 3 9
+# 下排：四张要动
+move b#2 -> b.1
+move b#4 -> b.3
+move b#5 -> b.3
+move b#10 -> b.9
+& retext cb "挪了 5 格"
+retext ga "你猜 20 · 真数 27"
+retext gb "你猜 8 · 真数 5"
+@ask.right glow a#10
+@ask.right say "{a#10} 想回第 1 格，前面九张只能一张一张给它让。"
+ask tap m "27 对 5。最贵的是哪一趟？点那一格" expect=m.9
+学生: tap m.9
+ask say "下排为什么便宜？用一句话写。"
+学生: say 下排本来就差不多排好了，每张只挪一点点

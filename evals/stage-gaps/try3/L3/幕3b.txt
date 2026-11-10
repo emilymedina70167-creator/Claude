@@ -1,0 +1,28 @@
+# L3 第 3 幕补试：不摆第二块平面（幕3.txt 里一摆 q 整块舞台就缩成一小块），看正方形的像跟着 λ 变的样子；
+# 最后一问留着第一次写的 answer="1,4"（页面把老师这样写的答案读成「1 且 4」，学生写一样的也判错）
+plane p range=-4..4
+vec p e1 = 1 0 color=g1
+vec p e2 = 0 1 color=g3
+matrix A = 3 1 / 2 2
+cover A
+dial lam = 0 range=-2..6 at=p
+matrix M = {lam - 3} -1 / -2 {lam - 2}
+label lm M "λE − A" side=above tone=note
+vec p a = {M e1} color=g6
+vec p b = {M e2} color=g6
+sum p c = a + b
+label ar p.c "面积 {det(M)}" side=right tone=key
+say "拨 λ，看正方形变成什么。什么时候有一根不是零的向量被压回原点？"
+goal g1 "找出让它压成一条线的 λ（不止一个）" when="det(M) = 0" collect=M n=2
+@g1 say "压扁了：面积是 0。"
+学生: dial lam 1
+学生: dial lam 3
+学生: dial lam 4
+# 被压回原点的那根：老师看见做到了才画得出（λ = 4 时是 (1, 1)），页面自己不会求
+vec p n = 1 1 color=g2
+vec p mn = {M n} color=g2
+pulse p.n
+say "λ = 4 时 {p.n} 被 {M} 压回了原点。"
+ask value "两个 λ 都写出来" type=set answer="1,4"
+学生: value 1,4
+say "嗯。"

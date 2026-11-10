@@ -1,0 +1,39 @@
+# L3 分支 3（第三次量）：只看特征值（迹、行列式、秩）一样就判相似——B 和 C（三维里并排作用在立方体上、画特征子空间：要三维，没有）
+matrix B = 2 1 0 / 0 2 0 / 0 0 1
+matrix C = 1 0 0 / 0 2 0 / 0 0 2 beside=B
+label lb B "B" side=above tone=key
+label lc C "C" side=above tone=key
+matrix E = 1 0 0 / 0 1 0 / 0 0 1 hide=on
+matrix NB = {2 E - B} hide=on
+matrix NC = {2 E - C} hide=on
+# 给 B 拼一个 P：空格子用键盘写；每一列是不是特征向量 = [这一列 | B 乘这一列] 的秩是不是 1
+matrix P = _ _ _ / _ _ _ / _ _ _
+label lp P "给 B 拼一个 P（三列都得是 B 的特征向量）" side=above tone=note
+matrix BP = {B P} hide=on
+matrix K1 = {P.1,1} {BP.1,1} / {P.2,1} {BP.2,1} / {P.3,1} {BP.3,1} hide=on
+matrix K2 = {P.1,2} {BP.1,2} / {P.2,2} {BP.2,2} / {P.3,2} {BP.3,2} hide=on
+matrix K3 = {P.1,3} {BP.1,3} / {P.2,3} {BP.2,3} / {P.3,3} {BP.3,3} hide=on
+matrix PBP = {P^-1 B P} hide=on
+open P edit input=keypad
+say "你说 {B} 和 {C} 相似。那给 {B} 拼一个 P：三列都是它的特征向量，还要可逆。"
+goal g1 "三列都是 B 的特征向量，P 还可逆" when="rank(K1) = 1, rank(K2) = 1, rank(K3) = 1, det(P) != 0" on="就这样"
+ask next "拼好了，或者觉得拼不出来，点下面" button="就这样"
+学生: write P.1,1 1
+学生: write P.2,1 0
+学生: write P.3,1 0
+学生: write P.1,2 0
+学生: write P.2,2 0
+学生: write P.3,2 1
+学生: write P.1,3 0
+学生: write P.2,3 1
+学生: write P.3,3 0
+学生: write P.1,3 2
+学生: write P.2,3 0
+学生: next
+# 回到对照表，加一行 r(2E − ·)：让页面算
+matrix T = {rank(NB)} {rank(NC)}
+label lt T "r(2E − B)、r(2E − C)" side=above tone=key
+say "三列都是特征向量时 det P = {det(P)}：压扁了。表里再加一行 {T}。"
+ask say "B 和 C 相似吗？为什么？"
+学生: say 不相似，B 的 λ=2 只有一条
+say "嗯。"

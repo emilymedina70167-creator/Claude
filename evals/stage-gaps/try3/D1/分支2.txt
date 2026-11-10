@@ -1,0 +1,30 @@
+# D1 分支 2：「隔 5」读成「连续 5 个一段」。页面要提供：按学生自己的分法分组、排、落回；学生那排接着做 d=1 要挪几格；认出是哪种错法
+array a = 49 38 65 97 76 13 27 49′ 55 04
+say "点 {a.1}，它能跟谁比？"
+ask pick a "和 {a.1} 一组的都点出来" button="点好了" expect="a.6"
+学生: pick a.2 a.3 a.4 a.5
+# 学生连成一段一组：页面只能按 stride 分组；老师照学生点的手画（染色、连线），下泳道 split 看它认不认手画的组
+paint a.1-5 g1
+paint a.6-10 g2
+link a.1 a.2 a.3 a.4 a.5 g1
+link a.6 a.7 a.8 a.9 a.10 g2
+split a
+open a undo=on
+ask next "按你分的组排好，点下面" button="排好了"
+学生: swap a#1 a#2
+学生: swap a#4 a#5
+学生: swap a#10 a#9
+学生: swap a#10 a#8
+学生: swap a#10 a#7
+学生: swap a#10 a#6
+学生: next
+# 两排并排、各接着只做 d=1、两个计数器同时跑：页面不会跑、不会数；认不认得出是哪种错法：只能把错法的结果藏成一排、写成挑战（勾会打给学生看）
+close a
+array c = 13 27 49′ 55 04 49 38 65 97 76
+label lc c "隔 5 分组排完" side=left tone=soft
+label la a "你排的" side=left tone=soft
+label fa a#10 "从第 10 格来" side=below tone=note
+label fc c.5 "从第 10 格来" side=below tone=note
+say "两排都接着只做 d=1：{a#10} 往前走了多少？"
+ask value "你那排的 04 往前走了几格？隔 5 那排的呢？写两个数"
+学生: value 4 5

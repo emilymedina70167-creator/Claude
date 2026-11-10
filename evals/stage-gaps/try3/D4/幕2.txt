@@ -1,0 +1,68 @@
+# D4 第 2 幕：挖坑划分。49 提到座位、第 1 格成坑；j 从右找小的填坑、i 从左找大的填坑；碰头时 49 落坑
+# 坑：write a.1 _（一张写着 _ 的卡）；座位：另一排一格；指针学生拖不了：j 第一步用拨数代替，后面用「点它停在哪」
+array a = 49 38 65 97 76 13 27 49′
+paint a#8 g1
+array pv = 49
+paint pv.1 g4
+label lpv pv.1 "枢轴" side=left tone=note
+write a.1 _
+ptr i a.1
+ptr j a.8
+label rule a "卡只能放进坑里" side=above tone=key
+card log = "记录（一步一行）"
+say "49 先拿出来，第 1 格空了。左边该放什么样的数？从哪头找一张来填？"
+dial j = 8 range=1-8 at=a
+goal g1 "让 j 停在该停的那一格" when="j = 7" on="就这样"
+ask next "往左拨 $j$，停在第一张能填坑的卡上" button="就这样"
+学生: dial j 7
+学生: next
+# 老师接：j 停在 27；把它交给学生填坑。后面两步预写（答对、做到了才演）
+ptr j a.7
+unlabel dial:j
+say "{a.7} 比 49 小。把它填进坑里。"
+open a undo=on
+goal g2 "把 27 填进坑里" when="a.1 = a#7, a.7 = a#1"
+@g2 addline log "j 走到 7：27<49 → 27 填第 1 格，坑到第 7 格"
+@g2 say "坑跑到第 7 格了。右边该放什么样的？轮到谁去找？"
+@ask.right ptr i a.3
+@ask.right paint a.1-2 g3
+@ask.right goal g3 "把 65 填进坑里" when="a.7 = a#3, a.3 = a#1"
+@g2 ask tap a "i 从左往右找，停在哪一张？" expect=a.3
+@g3 addline log "i 走到 3：65≥49 → 65 填第 7 格，坑到第 3 格"
+@g3 ask tap a "j 接着往左：停在哪？" expect=a.6
+学生: swap a#7 a#1
+学生: tap a.3
+# 学生没用坑：直接把 65 和 13 对调，再把 65 换进坑（坑到了第 6 格）；然后撤两步，照规矩填
+学生: swap a#3 a#6
+学生: swap a#3 a#1
+学生: undo
+学生: undo
+学生: swap a#3 a#1
+# j 该停在 13（第 6 格），学生点了 76（第 5 格）
+学生: tap a.5
+# 老师接
+say "{a.5} 比 49 小吗？j 要找的是比 49 小的。"
+ptr j a.6
+goal g4 "把 13 填进坑里" when="a.3 = a#6, a.6 = a#1"
+@g4 addline log "j 走到 6：13<49 → 13 填第 3 格，坑到第 6 格"
+@g4 ptr i a.4
+@g4 goal g5 "i 找到了 97：把它填进坑里" when="a.6 = a#4, a.4 = a#1"
+@g5 addline log "i 走到 4：97≥49 → 97 填第 6 格，坑到第 4 格"
+@g5 ptr j a.4
+@g5 say "i 和 j 碰到一起了。"
+@ask.right write a.4 49
+@ask.right paint a.4 g4
+@ask.right remove pv
+@ask.right label lb a.1-3 "｛27 38 13｝" side=below tone=note
+@ask.right label rb a.5-8 "｛76 97 65 49′｝" side=below tone=note
+@ask.right label ok a.4 "站定" side=above tone=key
+@ask.right say "一趟划分完了。"
+@g5 ask tap a "49 放哪一格？" expect=a.4
+学生: swap a#6 a#1
+学生: swap a#4 a#1
+学生: tap a.4
+# 老师接：把第 1 幕的灯亮出来（这时条件已经成立）
+goal lamp "49 左边全比它小、右边全不比它小" when="a.1-3 < a.4, a.5-8 >= a.4"
+say "和第 1 幕的灯对一下。"
+ask next "看好了点下面" button="好"
+学生: next

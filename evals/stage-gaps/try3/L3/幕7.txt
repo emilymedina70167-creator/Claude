@@ -1,0 +1,49 @@
+# L3 第 7 幕（第三次量）：特征值一样也不一定能对角化——2E 和剪切 J = (2 1; 0 2)。这一份量第一屏的两块平面并排、两边找特征方向
+plane p range=-3..3
+plane q range=-3..3
+matrix E2 = 2 0 / 0 2
+matrix J = 2 1 / 0 2 beside=E2
+label le E2 "2E" side=above tone=key
+label lj J "J" side=above tone=key
+vec p e1 = 1 0 color=g2
+vec p e2 = 0 1 color=g3
+sum p s = e1 + e2
+vec q f1 = 1 0 color=g2
+vec q f2 = 0 1 color=g3
+sum q t = f1 + f2
+transform p E2
+transform q J
+say "左边 {E2}，右边 {J}，同时作用在正方形上。"
+ask next "看清楚了点下面" button="看清了"
+学生: next
+# 第二轮：两边各一根能拖的蓝箭头和跟着的橙箭头；J 那边照第 1 幕的办法收集特征线（只会收到一条）
+untransform p
+untransform q
+vec p v = 1 0 color=g1
+vec p w = {E2 v} color=g6
+vec q a = 0 1 color=g1
+vec q b = {J a} color=g6
+matrix Va = {q.a} hide=on
+matrix Wa = {J Va} hide=on
+matrix Ka = {Va.1,1} {Wa.1,1} / {Va.2,1} {Wa.2,1} hide=on
+matrix Dg = {Va.1,1} 0 / 0 {Va.1,1} hide=on
+matrix R = {Dg^-1 Wa} hide=on
+open p.v
+open q.a
+say "两边各把特征方向找全：橙箭头落回蓝箭头那条线上的都算。"
+goal g1 "右边 J：找出两条不一样的特征线" when="det(Ka) = 0" collect=R n=2
+@g1 span q a stay
+学生: vec p v = 1 2
+学生: vec p v = -2 1
+学生: vec q a = 1 0
+学生: vec q a = 2 0
+学生: vec q a = 1 1
+学生: vec q a = -1 2
+学生: vec q a = 2 1
+学生: vec q a = -3 0
+学生: vec q a = 1 -1
+学生: vec q a = 0 2
+say "找了这么多下：{J} 这边钉住了几条？"
+ask value "J 有几条特征线？" answer=1
+学生: value 1
+say "嗯。"

@@ -1,0 +1,99 @@
+# D3 第 6 幕：Dijkstra 全程（图 6.17）——每轮锁住没锁里最近的那个，再用它去改别人；表 6.2 一列一列长出来
+# 画面：有向图；1 涂实；2～5 的牌子写 dist；前驱画成金色的边；右边一张空表；表下面一排候场小卡片先藏着
+graph g = 1>2:10 1>5:5 2>3:1 2>5:2 3>4:4 4>1:7 4>3:6 5>2:3 5>3:9 5>4:2
+paint g.1 g4
+tag g ∞
+tag g.1 0
+relax g.1 -> g.2
+relax g.1 -> g.5
+paint g.1~2 g.1~5 g4
+# 表 6.2：试有没有表；没有就拿四排格子凑（一排一个顶点、一格一轮；集合 S 贴一行字）
+table tb = rows="2 3 4 5 S" cols="1 2 3 4"
+array v2 = 10 · · ·
+array v3 = ∞ · · ·
+array v4 = ∞ · · ·
+array v5 = 5 · · ·
+label l2 v2 "顶点 2" side=left tone=note
+label l3 v3 "顶点 3" side=left tone=note
+label l4 v4 "顶点 4" side=left tone=note
+label l5 v5 "顶点 5" side=left tone=note
+label hc v2 "第 1 轮　第 2 轮　第 3 轮　第 4 轮" side=above tone=note
+label ls v5 "集合 S：1" side=below tone=note
+array q = 5 2 3 4 hide=on
+# 试：答案让页面照牌子现算（5 的牌子 + 5→2 的权）。写法不认的 ask 会退成「打字回答」、后面的行都不演，所以单放一轮
+ask value "（试）{g.5} 锁了以后 {g.2} 的牌子改成几？" answer={g.5 + g.5~2}
+学生: say 8
+say "跟刚才三个点一样，你来：先锁谁？"
+# 学生点一个点锁上；点对了预写：涂实、它的箭头亮、问箭头那头的牌子（牌子上写不了，三个数一次填在底下的框里；「不改」就是照抄）
+@ask.right paint g.5 g4
+@ask.right glow v5.1
+@ask.right glow g.5~2 g.5~3 g.5~4
+@ask.right say "{g.5} 锁了，它的箭头指到谁，谁就可能要改。"
+@ask.right ask value "{g.2}、{g.3}、{g.4} 的牌子依次写几？（不改就照抄）" type=seq answer="8 14 7" wrong="3 9 2=三个都写成了边权（像 Prim）;8 9 7=3 只写了边权;10 14 7=2 没改;8 14 2=4 只写了边权"
+ask tap g.nodes "点一个没锁的点锁上" expect=g.5
+学生: tap g.5
+学生: value 8 14 7
+# 老师接（第 1 轮全对）：牌子、前驱、表的这一列、列头的勾、候场——都是老师这一轮写；relax 是页面自己算、自己演
+unglow g.5~2 g.5~3 g.5~4
+relax g.5 -> g.2
+relax g.5 -> g.3
+relax g.5 -> g.4
+unpaint g.1~2
+paint g.5~2 g.5~3 g.5~4 g4
+write v2.2 8
+write v3.2 14
+write v4.2 7
+dim v5.2-4
+retext ls "集合 S：1, 5"
+label ok1 v2.1 "✓" side=above tone=soft
+@ask.right paint g.4 g4
+@ask.right glow v4.2
+@ask.right glow g.4~1 g.4~3
+@ask.right ask value "{g.4} 指到的 {g.3}：牌子写几？" answer=13 type=num wrong="6=写成了边权 4→3;14=没改;20=和旧值加在一起了"
+ask tap g.nodes "第 2 轮：锁谁？" expect=g.4
+学生: tap g.4
+学生: value 13
+# 老师接（第 2 轮对）：4 还指着锁了的 1——relax 到锁了的点页面拦不拦
+unglow g.4~1 g.4~3
+relax g.4 -> g.1
+relax g.4 -> g.3
+unpaint g.5~3
+paint g.4~3 g4
+write v3.3 13
+write v2.3 8
+dim v4.3-4
+retext ls "集合 S：1, 5, 4"
+ask tap g.nodes "第 3 轮：锁谁？" expect=g.2
+# 学生锁了 3（13）：刚锁的 4 指到的，不是全体没锁里最小的 2（8）——页面说得出多少
+学生: tap g.3
+# 老师接：打开候场队伍（老师自己照牌子排好的一排）
+show q
+move q#2 -> q.1
+write q.1 2:8
+write q.2 3:13
+dim q.3-4
+label lq q "还没锁的，按牌子从小到大" side=above tone=note
+say "看这一排：没锁的里谁最小？"
+ask tap g.nodes "第 3 轮：锁谁？" expect=g.2
+学生: tap g.2
+# 老师接：第 3、4 轮老师直接演完（省几轮），留下 4 根实的前驱箭头
+hide q
+unlabel lq
+paint g.2 g4
+relax g.2 -> g.3
+unpaint g.4~3
+paint g.2~3 g4
+paint g.3 g4
+write v3.4 9
+dim v2.4
+retext ls "集合 S：1, 5, 4, 2, 3"
+dim g.edges
+undim g.1~5 g.5~4 g.5~2 g.2~3
+say "沿着金色箭头，把 {g.1} 到 {g.3} 的最短路径倒着读出来。"
+# 学生倒着划回 1：没有划的手势，照先后点经过的点；沿路的里程 5 → 8 → 9 页面不加
+ask pick g.nodes "从 3 沿金色箭头倒着点回 1" button="点好了" expect="g.3 g.2 g.5 g.1"
+学生: pick g.3 g.2 g.5 g.1
+walk g.1 g.5 g.2 g.3
+label mile g.3 "5 → 8 → 9" side=below tone=key
+ask value "锁的顺序是？（从 1 起）" type=seq answer="1 5 4 2 3" wrong="1 5 4 3 2=顺着刚锁的点的箭头往下走"
+学生: value 1 5 4 2 3

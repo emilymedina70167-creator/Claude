@@ -1,0 +1,38 @@
+# D4 第 5 幕：快慢看划分树的形状。理想：学生改了那一排，树、每层的横条、三个数当场重算重画
+# 现在：页面不会从一排数算出划分树；树是老师照课本那组手摆的，学生拖了卡要老师下一轮自己重算、重造
+array a = 49 38 65 97 76 13 27 49′
+tree t = 49 27 76 13 38 49′ 97 _ _ _ _ _ 65 layout=compact
+label cnt t "一共比 22 次 · 树高 {height(t)} · 栈最深 {height(t)} 格" side=below tone=note
+card pre = "课本的" "排好的 1–8" "倒着的 8–1"
+say "课本这组：树 {height(t)} 层，一共比 22 次。能不能把树弄得更高？"
+open a undo=on
+goal g1 "让树变成一条链（8 层）" when="a sorted | a sorted desc"
+@g1 say "做到了：一条链，8 层。"
+ask next "排好一组想看它的树，就点" button="看这组的树"
+# 学生拖了两下：13 27 65 97 76 49 38 49′。树、三个数跟不跟着变？
+学生: swap a#1 a#6
+学生: swap a#2 a#7
+学生: next
+# 老师接：自己算这一排的划分树（13 → 27 → 65 → {49′: 38, 49}、{76: 97}，5 层），同名重造
+tree t = 13 _ 27 _ 65 49′ 76 38 49 _ 97 layout=compact
+retext cnt "一共比 ? 次 · 树高 {height(t)} · 栈最深 {height(t)} 格"
+say "这组的树有 {height(t)} 层。再试：让它变成一条链。"
+ask next "排好一组想看它的树，就点" button="看这组的树"
+# 学生点预设「排好的」：点题卡的一行是答一问，这一轮等的是按钮，点不上；学生只好自己拖成排好的（5 下）
+学生: tap pre.2
+学生: swap a.3 a.7
+学生: swap a.4 a.6
+学生: swap a.5 a.8
+学生: swap a.6 a.7
+学生: swap a.7 a.8
+# 上面拖完应该是 13 27 38 49 49′ 65 76 97：挑战 g1 做到，演预写的话；树还是上一棵
+学生: next
+# 老师接：手造一条链；四问一问一轮，式子用 type=formula 判
+tree t = 13 _ 27 _ 38 _ 49 _ 49′ _ 65 _ 76 _ 97 layout=compact
+say "这一排长什么样？每一层比了几次？"
+ask value "最坏时一共比较几次？写成含 n 的式子" type=formula free=n answer="n(n-1)/2"
+学生: value n^2
+ask value "最坏的时间复杂度？" type=formula free=n answer="n^2"
+学生: value O(n^2)
+ask say "栈最深几格，和什么一样？"
+学生: say 8格，和树高一样

@@ -1,0 +1,56 @@
+# D3 第 7 幕：同一张图并排跑 Prim 和 Dijkstra——牌子上差一格，跑出两棵不同的树
+graph p = A-D:1 A-B:3 A-C:4 B-C:2 pos="A=0,0 B=1,0 C=1,1 D=0,1"
+# 试：第二张摆在第一张右边（beside= 是矩阵那一节的写法）
+graph d = A-D:1 A-B:3 A-C:4 B-C:2 pos="A=0,0 B=1,0 C=1,1 D=0,1" beside=p
+graph d = A-D:1 A-B:3 A-C:4 B-C:2 pos="A=0,0 B=1,0 C=1,1 D=0,1"
+label tp p "Prim，从 A 长：牌子 = 离树最近的那条路" side=above tone=key
+label td d "Dijkstra，从 A 出发：牌子 = 离 A 多远" side=above tone=key
+tag p.B 3
+tag p.C 4
+tag p.D 1
+tag d ∞
+tag d.A 0
+relax d.A -> d.B
+relax d.A -> d.C
+relax d.A -> d.D
+paint p.A d.A g4
+say "同一张图、同一个起点，两种做法一起来：一边一步。"
+@ask.right paint p.D p.A~D g4
+@ask.right ask tap d.nodes "Dijkstra 这边先锁谁？" expect=d.D
+ask tap p.nodes "Prim 这边先锁谁？" expect=p.D
+学生: tap p.D
+学生: tap d.D
+paint d.D d.A~D g1
+@ask.right paint p.B p.A~B g4
+@ask.right ask tap d.nodes "Dijkstra 这边呢？" expect=d.B
+ask tap p.nodes "Prim 这边再锁谁？" expect=p.B
+学生: tap p.B
+学生: tap d.B
+# 老师接：两边都锁了 B；两边 C 的牌子一次问（一左一右两个数），常见的几种写法事先列出来
+paint d.B d.A~B g1
+glow p.B~C d.B~C
+say "两边都锁了 {p.B}。看 {p.C} 和 {d.C} 的牌子。"
+ask value "C 的牌子：先写 Prim 那张，再写 Dijkstra 那张" type=seq answer="2 4" wrong="2 2=右边也当 Prim 做了;4 4=左边当 Dijkstra 做了;5 5=两边都只加不比;2 5=右边没和旧值 4 取小;4 2=两边写反了"
+学生: value 2 2
+# 老师接：页面认出「右边也当 Prim 做了」（老师列的）。把两边做完；Dijkstra 这边 3+2=5 不比 4 小，relax 不改
+unglow p.B~C d.B~C
+tag p.C 2
+relax d.B -> d.C
+paint p.C p.B~C g4
+paint d.C d.A~C g1
+label wp p "这棵树的总权 6" side=below tone=note
+label wd d "这棵树的总权 8" side=below tone=note
+# 两棵树滑到中间叠成一张：试 overlay；没有就在 Prim 那张上把 Dijkstra 独有的 A–C 染成蓝的凑
+overlay p d
+paint p.A~C g1
+say "叠在一起：金色是 Prim 的树，蓝色的 {p.A~C} 只在 Dijkstra 的树里。"
+# 学生沿金色的路从 A 走到 C：没有划的手势，照先后点村子；脚下的里程页面不加
+ask pick p.nodes "沿金色的路从 A 走到 C：照先后点经过的村子" button="走完了" expect="p.A p.B p.C"
+学生: pick p.A p.B p.C
+walk p.A p.B p.C
+ask value "沿金色走，A 到 C 脚下多远？" answer=5 type=num wrong="4=写的是图里最近的，不是沿树走的"
+学生: value 5
+walk d.A d.C
+label km p.C "金色 3 → 5 · 蓝色 4" side=right tone=key
+ask say "两种做法差在哪？"
+学生: say Prim 的牌子是一条边，Dijkstra 的牌子是从起点一路走来的总长

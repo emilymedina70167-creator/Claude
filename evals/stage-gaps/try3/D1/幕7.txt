@@ -1,0 +1,57 @@
+# D1 第 7 幕：希尔代码、A[0] 不是哨兵、性能
+# 题卡里的 [ ] 会被吃掉（探针.txt 第 11 行），代码改用式子（tex）一行一个，空用 \hl 起名字再 cover；两段代码并排放不下，只放希尔这一段
+tex c1 = "\texttt{for(dk=n/2; dk>=1; dk=dk/2)}"
+tex c2 = "\texttt{for(i=}\hl{b1}{\texttt{dk+1}}\texttt{; i<=n; ++i)}"
+tex c3 = "\texttt{if(A[i]<A[i-dk])\{ A[0]=A[i];}"
+tex c4 = "\texttt{for(j=i-dk; j>0 \&\& A[0]<A[j]; j-=}\hl{b3}{\texttt{dk}}\texttt{)}"
+tex c5 = "\texttt{A[}\hl{b2}{\texttt{j+dk}}\texttt{]=A[j];}"
+tex c6 = "\texttt{A[j+dk]=A[0]; \}}"
+cover c2.b1
+cover c4.b3
+cover c5.b2
+# A[0]：单独一格的一排（下标 1–10 才对得上）
+array z = 暂存
+array a = 49 38 65 97 76 13 27 49′ 55 04
+dial dk = 5 range=1-5 at=a
+group a stride=dk
+say "对着直接插入，希尔改了哪几处？把空填上。"
+ask value "第 2 行 i=____ 填什么？" type=formula free=dk answer="dk+1"
+学生: value dk+1
+uncover c2.b1
+@ask.right uncover c5.b2
+ask value "第 5 行 A[____]=A[j]，方括号里填什么？" type=en answer="j+dk" wrong="j-dk=方向反了;j=以为是 A[j]=A[j+dk]，左右写反"
+学生: value j
+# 空填什么就照什么跑：页面不执行代码。老师照学生填的手演一步（dk=5、i=6：A[0]=13，然后 A[j]=A[j+dk]）
+glow c3
+write z.1 13
+ptr i a.6
+ptr j a.1
+glow c5
+write a.1 13
+say "照你填的走了一步。{a.1} 和 {a.6} 一样了，49 没了：这一行是谁复制给谁？"
+@ask.right uncover c5.b2
+ask value "再填：A[____]=A[j]" type=en answer="j+dk"
+学生: value j+dk
+write a.1 49
+write a.6 49
+say "{a.1} 往后让到了第 6 格。j 再减 dk。"
+ask value "j 下一步是几？" answer={1 - dk} wrong="0=以为会停在 A[0];1=没减"
+学生: value -4
+# j=−4：指针只能指在格子上，画不出「A[−4]？」那一格，只能贴一行字
+unptr j
+label oj a.1 "j = −4：A[−4]？" side=left tone=key
+write a.1 13
+say "代码是一组排完再排下一组吗？把 $dk$ 拨到 2，看 i 从 3 走到 10 颜色怎么换。"
+ptr i a.3
+ask say "颜色怎么换的？"
+学生: dial dk 2
+学生: say 蓝粉蓝粉轮着来，不是一组排完再排下一组
+# 链表：拿有向图凑一条链；学生「拖着走」没有，只能点出要经过的结点
+graph L = 1>2 2>3 3>4 4>5 5>6 6>7 pos="1=0,0 2=1,0 3=2,0 4=3,0 5=4,0 6=5,0 7=6,0"
+say "换成链表：站在第 7 个，要比的是第 4 个。只能顺着箭头走。"
+ask pick L "要到第 4 个，得经过哪些结点？按走的先后点" button="走到了" expect="L.1 L.2 L.3 L.4"
+学生: pick L.7 L.6 L.5 L.4
+walk L.1 L.2 L.3 L.4
+say "往回没有箭头：只能从头走 3 步。「量一量」页面没有。最后写性能四条。"
+ask say "空间、时间、稳定性、适用的存储结构，各一句。"
+学生: say 空间O(1)；时间不好算约O(n^1.3)最坏O(n²)；不稳定；只能顺序存储

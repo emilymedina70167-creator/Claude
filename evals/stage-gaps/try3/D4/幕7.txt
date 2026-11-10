@@ -1,0 +1,61 @@
+# D4 第 7 幕：建堆。第一段只许爸爸和孩子对调（页面拦不住别的）；第二段「筛」是老师预写 / 下一轮写的 compare + swap；第三段 2018 真题
+# 下面那一排跟着树算（array a = {t#1} …），树上换了它跟着换
+tree t = 53 17 78 09 45 65 87 32 layout=compact
+array a = {t#1} {t#2} {t#3} {t#4} {t#5} {t#6} {t#7} {t#8}
+card log = "记录"
+say "只许爸爸和孩子对调，把它变成每个爸爸都不比孩子小的样子。"
+open t undo=on
+goal g1 "每个爸爸都不比孩子小" when="t#1 >= t#2, t#1 >= t#3, t#2 >= t#4, t#2 >= t#5, t#3 >= t#6, t#3 >= t#7, t#4 >= t#8"
+@g1 say "是大根堆了。"
+@g1 ask value "你一共换了几次？"
+# 学生从根往下、每个结点只处理一遍：停下时根 78 < 孩子 87
+学生: swap t#3 t#1
+学生: swap t#5 t#2
+学生: swap t#7 t#3
+学生: swap t#8 t#4
+# 不是父子（根和孙子）：页面拦不拦
+学生: swap t#7 t#1
+学生: undo
+# 再把 87 换上根
+学生: swap t#3 t#1
+学生: value 5
+# 老师接：换回原来那一排，这回「筛」。从哪个结点开始？答对了演预写的比较 + 对调
+tree t = 53 17 78 09 45 65 87 32 layout=compact
+close t
+say "这回页面替你筛：点一个结点，它一路往下换到底。从哪个开始？"
+@ask.right compare t#4 t#8
+@ask.right swap t#4 t#8
+@ask.right addline log "筛第 4 个：比 1 次、换 1 次"
+ask tap t "点你要先筛的那个结点" expect=t#4
+# 学生从根开始
+学生: tap t#1
+# 老师接：不讲，再问一次
+say "根底下的 {t#7} 一趟能升几层？先从最后一个有孩子的开始。"
+@ask.right compare t#4 t#8
+@ask.right swap t#4 t#8
+@ask.right addline log "筛第 4 个：比 1 次、换 1 次"
+ask tap t "最后一个有孩子的是谁？点它" expect=t#4
+学生: tap t#4
+# 老师接：筛第 3 个——两个孩子先比、大的再和它比、换（老师自己写出来）
+compare t#6 t#7
+compare t#3 t#7
+swap t#3 t#7
+addline log "筛第 3 个：比 2 次、换 1 次"
+ask next "看好了点下面" button="接着筛"
+学生: next
+# 第三段：2018 真题 6 1 5 9 8 4 7，学生自己对调着建，再对选项（选项的四串是照理想里 A 那一串凑的）
+remove t
+remove a
+remove log
+tree h = 6 1 5 9 8 4 7 layout=compact
+array b = {h#1} {h#2} {h#3} {h#4} {h#5} {h#6} {h#7}
+card opt = "A  6 1 7 9 8 4 5 → 6 9 7 1 8 4 5 → 9 6 7 1 8 4 5 → 9 8 7 1 6 4 5" "B  6 9 5 1 8 4 7 → 9 6 5 1 8 4 7 → 9 8 5 1 6 4 7 → 9 8 7 1 6 4 5" "C  9 1 5 6 8 4 7 → 9 8 5 6 1 4 7 → 9 8 7 6 1 4 5" "D  6 1 7 9 8 4 5 → 7 1 6 9 8 4 5 → 7 9 6 1 8 4 5 → 9 8 6 1 7 4 5"
+say "自己建一遍，再看哪个选项是你这一串。"
+open h undo=on
+goal g2 "建成大根堆" when="h#1 >= h#2, h#1 >= h#3, h#2 >= h#4, h#2 >= h#5, h#3 >= h#6, h#3 >= h#7"
+@g2 ask tap opt "哪个选项是你这一串？" expect=opt.1
+学生: swap h#7 h#3
+学生: swap h#4 h#2
+学生: swap h#2 h#1
+学生: swap h#5 h#2
+学生: tap opt.4

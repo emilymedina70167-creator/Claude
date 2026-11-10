@@ -1,0 +1,29 @@
+# L3 第 6 幕（第三次量）：换成特征向量当坐标轴，A 只是沿两根轴各拉几倍：P⁻¹AP = Λ
+plane p range=-5..5
+matrix A = 3 1 / 2 2
+matrix P = 1 1 / 1 -2 hide=on
+# 斜网格：整块平面照 P 变过去（格线就是 kξ1 + mξ2）；两行读数拿两张跟着算的列凑：V = v 的标准坐标，Cc = P⁻¹v 特征坐标
+transform p P
+vec p v = 3 0 color=g1
+matrix V = {p.v}
+label lv V "标准坐标 (x, y)" side=above tone=note
+matrix Cc = {P^-1 V} beside=V
+label lc Cc "特征坐标 (c1, c2)" side=above tone=note
+say "这是沿 ξ1 = (1, 1)、ξ2 = (1, −2) 的斜网格。拖 {p.v}，看两行读数。"
+open p.v
+ask next "把 v 放到 (2, −1)，再按「作用 A」" button="作用 A"
+学生: vec p v = 1 1
+学生: vec p v = 2 -1
+学生: next
+# 第二轮：作用 A（接着变）；学生在 Λ 的两个空格里写数
+transform p A
+say "{p.v} 变成了 Av。看 {Cc}：在斜网格里，A 干了什么？"
+matrix L = _ 0 / 0 _
+label ll L "Λ：用斜网格当坐标，A 写成的矩阵" side=above tone=key
+matrix PAP = {P^-1 A P} hide=on
+open L edit input=keypad
+goal g1 "写出 Λ 对角线上的两个数" when="L = PAP"
+@g1 say "对：这边 ×4，那边 ×1。"
+学生: write L.1,1 4
+学生: write L.2,2 1
+say "嗯。"

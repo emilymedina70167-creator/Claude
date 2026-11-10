@@ -1,0 +1,29 @@
+# L3 第 5 幕后半（第三次量）：三根待判的向量，先自己乘、再勾是不是、写 λ（三维里 Av 拐出去、吸到平面上、找公共点要三维：没有）
+matrix A = 2 2 -2 / 2 5 -4 / -2 -4 5
+matrix X = 1 / 2 / -1 beside=A
+product W = A X
+mul W
+cover W
+matrix Y = _ / _ / _
+label ly Y "你算的 A 乘它" side=left tone=note
+# Av 和 v 共不共线：两列拼成 3×2，看秩（只给老师看）
+matrix Kx = {X.1,1} {W.1,1} / {X.2,1} {W.2,1} / {X.3,1} {W.3,1} hide=on
+card c = "是特征向量" "不是特征向量"
+open Y edit input=keypad
+say "这一根是不是特征向量？先自己乘：{A} 乘 {X}，写进 {Y}。"
+goal g1 "写对 A 乘它" when="Y = W"
+@g1 uncover W
+@g1 ask tap c "它是特征向量吗？"
+学生: write Y.1,1 8
+学生: write Y.2,1 16
+学生: write Y.3,1 -15
+学生: tap c.1
+say "是的话，λ 是几？"
+ask value "λ = ？"
+学生: value 8
+# 换下一根 (4, −2, 0)：X 换掉，W 跟着重算
+matrix X = 4 / -2 / 0 beside=A
+say "嗯。再看这一根 {X}。"
+ask tap c "它是特征向量吗？"
+学生: tap c.1
+say "嗯。"

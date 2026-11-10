@@ -1,0 +1,51 @@
+# D4 第 10 幕：两条跑道（快排 / 堆排）同一组输入各跑一遍，比比较次数和辅助空间；账；反例台
+# 页面不会跑排序、不会数比较：两个计数只能老师写死；堆排那一排跟着快排那一排算（共用输入）
+array qs = 49 38 65 97 76 13 27 49′
+array hs = {qs.1} {qs.2} {qs.3} {qs.4} {qs.5} {qs.6} {qs.7} {qs.8}
+label lq qs "快速排序：比较 22 次 · 栈最高 4 格" side=above tone=note
+label lh hs "堆排序：比较 ? 次 · 辅助 1 格" side=above tone=note
+card pre = "排好的" "倒着的" "课本的" "随机"
+dial n = 8 range=8-64 at=qs
+say "同一组数，两种都跑一下。换成排好的再跑。"
+ask tap pre "点一个预设"
+学生: tap pre.1
+# 老师接：换成排好的——同名重造；两个计数老师自己知道才写得出（28、27）
+array qs = 1 2 3 4 5 6 7 8
+retext lq "快速排序：比较 28 次 · 栈最高 8 格"
+retext lh "堆排序：比较 27 次 · 辅助 1 格"
+say "$n$ 往大拨。谁对输入敏感？"
+ask next "拨着看，看好了点下面" button="看好了"
+学生: dial n 16
+学生: next
+# 老师接：拨到 16 两排没变、计数没变。账：一格一格只收不判
+say "把账填上。"
+ask value "快排：最好 / 最坏 / 平均的时间，空间，稳不稳定（写成一行）"
+学生: value O(nlogn) / O(n^2) / O(nlogn)，栈 O(logn)~O(n)，不稳定
+ask value "堆排：最好 / 最坏 / 平均的时间，空间，稳不稳定（写成一行）"
+学生: value 都是 O(n)，O(1)，稳定
+# 老师接：反例台——三个空格子让学生自己写数（带空格子的矩阵 + 数字键盘）
+remove qs
+remove hs
+remove pre
+unlabel dial:n
+matrix r = _ _ _
+label lr r "输入：自己写三个数" side=left tone=note
+open r edit input=keypad
+say "造三个数，让快排把两个相等的数的先后换掉。"
+ask next "写好了点「排」" button="排"
+学生: write r.1,1 3
+学生: write r.1,2 2
+学生: write r.1,3 2
+学生: next
+# 老师接：页面不会排。老师自己算快排的输出（2̄ 2 3），自己分红蓝、连线
+paint r.1,2 g2
+paint r.1,3 g1
+matrix o = 2 2 3
+label lo o "快排的输出" side=left tone=note
+paint o.1,1 g1
+paint o.1,2 g2
+link r.1,2 o.1,2 g2
+link r.1,3 o.1,1 g1
+say "粉的 {r.1,2} 和蓝的 {r.1,3}：输入里谁在前，输出里谁在前？"
+ask say "写那一句：输入里谁在前，输出里谁在前"
+学生: say 输入里粉的在前，输出里蓝的在前，换了

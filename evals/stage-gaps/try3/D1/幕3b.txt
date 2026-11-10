@@ -1,0 +1,43 @@
+# D1 第 3 幕（第二种摆法）：幕3.txt 里泳道一下来就把下排、趟数记录挤出屏幕、整块舞台缩成一小块。
+# 这里把要下泳道的那一排最后造（落在最下面），看泳道还挤不挤；别的照幕3.txt
+array b = 13 04 49′ 38 27 49 55 65 97 76
+label lb b "第 1 幕的下排" side=left tone=soft
+dim b
+card q = "趟数记录（d｜这一趟后｜挪几格｜累计）" "5｜13 27 49′ 55 04 49 38 65 97 76｜5｜5"
+array a = 13 27 49′ 55 04 49 38 65 97 76
+dial d = 5 range=1-9 at=a
+label dl dial:d "d = {d}" side=right
+group a stride=d
+say "再来一趟，这回隔 3。"
+goal g0 "把 $d$ 拨到 3" when="d = 3"
+@g0 split a
+@g0 open a undo=on
+@g0 goal g1 "三组各自排好" when="a.1 <= a.4, a.4 <= a.7, a.7 <= a.10, a.2 <= a.5, a.5 <= a.8, a.3 <= a.6, a.6 <= a.9"
+@g1 close a
+@g1 merge a
+@g1 ask say "认得这一排吗？还差什么才算排好？"
+# 学生先拨过头（5 → 2），再拨回 3：不递减的拨法页面照分
+学生: dial d 2
+学生: dial d 3
+学生: swap a#7 a#4
+学生: swap a#5 a#2
+学生: say 跟第一幕的下排一样，还要d=1再走一遍
+undim b
+addline q "3｜13 04 49′ 38 27 49 55 65 97 76｜2｜7"
+say "和 {b} 一模一样。"
+goal g3 "这一排排好了" when="a sorted" on="排好了"
+ask next "觉得排好了就点；没排好就接着拨 $d$" button="排好了"
+学生: next
+# 按了才判的挑战判完就拿掉（幕3.txt 里没拿，之后每一轮都报「第 0 行没演上」）
+ungoal g3
+say "还没排好。哪一趟能保证全排好？拨拨看。"
+goal g4 "把 $d$ 拨到那一趟" when="d = 1"
+@g4 say "全排一组：这就是直接插入。看我走。"
+学生: dial d 1
+move a#5 -> a.1
+move a#7 -> a.3
+move a#2 -> a.3
+move a#10 -> a.9
+addline q "1｜04 13 27 38 49′ 49 55 65 76 97｜5｜12"
+ask value "三趟一共挪了几格？" answer=12 wrong="27=那是直接插入的"
+学生: value 27

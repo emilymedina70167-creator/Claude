@@ -1,0 +1,47 @@
+# D4 第 9 幕：插入 63（先放到最后、再往上换）；从一大串数里留最大的 3 个（大小为 3 的小根堆）
+# 第 9 个位置的虚线空位没有：托盘里的 63 让学生自己拖到一个空位（open t place，页面按二叉排序树判，这里用不上）
+tree t = 87 45 78 32 17 65 53 09 layout=compact tray="63"
+array a = {t#1} {t#2} {t#3} {t#4} {t#5} {t#6} {t#7} {t#8}
+say "63 进来了，它只能先坐在哪？把它拖过去，再让它往上走。"
+open t place undo=on
+open t
+goal g1 "63 坐到最后一个位置，再往上走到站住" when="count(t) = 9, t#4 >= t#9, t#2 >= t#4, t#1 >= t#2"
+@g1 say "站住了。"
+@g1 ask value "往上走一共比了几次？" answer=3 wrong="2=只数了对调的两次，没数和 87 比的那次"
+# 学生先把 63 放到了 17 的左边（第 10 个位置），撤掉，再放到 32 的右边（第 9 个）
+学生: insert t.17 left 63
+学生: undo
+学生: insert t.32 right 63
+学生: swap t#9 t#4
+学生: swap t#4 t#2
+学生: value 2
+# 老师接：第二段。数据带一张张翻开；三个位置的小堆；先让学生选大根 / 小根（不写 expect：选哪个都照做）
+remove t
+remove a
+array s = 31 72 15 88 46 93 27 64 81 12 57 99
+cover s
+uncover s.1-3
+tree k = 15 31 72 layout=compact
+card sw = "大根堆" "小根堆"
+say "从这一串里留下最大的 3 个，手里只有 3 个位置。先选："
+ask tap sw "手里这三个排成大根堆还是小根堆？"
+学生: tap sw.1
+# 老师接：学生选了大根堆，照做（72 31 15）。下一张 88 来了：顶掉堆顶还是扔掉（两个「按钮」只能做成题卡的两行）
+tree k = 72 31 15 layout=compact
+remove sw
+uncover s.4
+card act = "顶掉堆顶" "扔掉"
+say "{s.4} 来了：顶掉堆顶，还是扔掉？"
+@ask.right write k#1 88
+@ask.right dim s.4
+@ask.right uncover s.5
+@ask.right ask tap act "{s.5} 来了：顶掉堆顶，还是扔掉？" expect=act.2
+ask tap act "{s.4} 来了" expect=act.1
+学生: tap act.1
+学生: tap act.1
+# 老师接：46 比手里的都小、该扔，学生却顶掉了堆顶 88（大根堆顶是手里最大的）。倒回 88 进来那一刻：数据带没有「倒回」，老师自己摆
+write k#1 46
+compare k#1 k#2
+say "顶掉的 {s.4} 是手里最大的。手里三个里该扔谁？它在堆的哪里？"
+ask tap k "点出该扔的那一个" expect=k#3
+学生: tap k#3

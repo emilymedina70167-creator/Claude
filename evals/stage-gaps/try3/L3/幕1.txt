@@ -1,0 +1,42 @@
+# L3 第 1 幕（第三次量）：矩阵把大多数方向拧歪，只有个别几条过原点的线上的向量只被拉长
+plane p range=-5..5
+matrix D = 2 0 / 0 1
+label ld D "diag(2, 1)" side=above tone=note
+vec p e1 = 1 0 color=g2
+vec p e2 = 0 1 color=g3
+sum p s = e1 + e2
+transform p D
+say "红的 {p.e1} 只变长，绿的 {p.e2} 没动——这两个方向特殊。"
+wait 600
+untransform p
+remove D
+matrix A = 3 1 / 2 2
+transform p A
+say "换成 {A}，两根都拐了。"
+ask next "看清楚了点下面" button="看清了"
+学生: next
+# 第二轮：蓝箭头 v、跟着的橙箭头 Av、沿 v 的线；共线拿藏着的 K = [v | Av] 的行列式判；
+# 「同一条线只算一次」拿 Av 除以 v 的第一个分量（Dg^-1 W）当收集的东西
+untransform p
+vec p v = 1 0 color=g1
+vec p w = {A v} color=g6
+span p v
+matrix V = {p.v} hide=on
+matrix W = {A V} hide=on
+matrix K = {V.1,1} {W.1,1} / {V.2,1} {W.2,1} hide=on
+matrix Dg = {V.1,1} 0 / 0 {V.1,1} hide=on
+matrix R = {Dg^-1 W} hide=on
+label lk p.w "偏了 {det(K)}" side=right tone=note
+say "还有没有只变长、不拐弯的方向？拖 {p.v} 找，让 {p.w} 落在 {p.v} 那条线上。找全。"
+open p.v
+goal g1 "找全：橙箭头落在蓝箭头那条线上的方向" when="det(K) = 0" collect=R n=2
+@g1 span p v stay
+@g1 say "这条算一条。"
+学生: vec p v = 0 1
+学生: vec p v = 1 1
+学生: vec p v = 2 2
+学生: vec p v = -1 -1
+学生: vec p v = 2 -3
+学生: vec p v = 1 -2
+say "两条都找到了：{p.v} 这条上 Av = v。"
+ask say "这两条线上的箭头，A 把它们怎么了？"

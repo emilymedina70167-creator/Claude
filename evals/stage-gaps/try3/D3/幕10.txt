@@ -1,0 +1,60 @@
+# D3 第 10 幕：真题自己做——2020 Kruskal 的加边次序、2016 Dijkstra 的目标顶点次序
+# 2020：图上按自己的顺序点边（加粗、标 ①②③、能撤回最后一条），点满 5 条选项才能点
+graph g = a-b:20 a-e:9 a-c:12 b-e:11 b-d:6 b-f:5 e-c:10 e-d:14 c-d:18 d-f:7
+card q = "2020 统考：用 Kruskal 求最小生成树，依次选出的边是？" "A. (b,f) (b,d) (a,e) (c,e) (b,e)" "B. (b,f) (b,d) (b,e) (a,e) (c,e)" "C. (a,e) (b,e) (c,e) (b,d) (b,f)" "D. (a,e) (c,e) (b,e) (b,f) (b,d)"
+dim q.2-5
+say "这两道自己来，我不插嘴。图上点边的顺序就是你的答案。"
+# 点满 5 条才放开选项：只有点的正好是那 5 条时预写的才演（页面不数点了几条、也不比先后）
+@ask.right undim q.2-5
+@ask.right ask tap q.2-5 "选一个选项" expect=q.2
+ask pick g.edges "按你认为的顺序点边（点错了再点一次撤掉），点满 5 条按下面" button="点满 5 条了" expect="g.b~f g.b~d g.a~e g.e~c g.b~e"
+# 学生：bf、bd，点了 df 又撤掉，ae、ce、be
+学生: pick g.b~f g.b~d g.d~f g.d~f g.a~e g.e~c g.b~e
+学生: tap q.2
+# 老师接：只说对不对；选项旁打勾是老师这一轮贴的。换 2016
+label ok q.2 "✓" side=right tone=key
+say "对。下一道。"
+ask next "看好了点下面" button="下一道"
+学生: next
+unlabel
+remove g
+remove q
+graph h = 1>2:5 1>5:4 2>3:2 2>4:9 4>1:2 5>2:6 3>5:6 6>3:2 5>6:5 5>4:7
+card u = "2016 统考：用 Dijkstra 求顶点 1 到其余各顶点的最短路径，依次得到的目标顶点是？" "A. 5,2,3,4,6" "B. 5,2,3,6,4" "C. 5,2,4,3,6" "D. 5,2,6,3,4"
+dim u.2-5
+# 空表：行是顶点 2～6、列是第 1～5 轮；拿有空格子的矩阵凑，学生用数字键盘一格一格写（页面不判）
+matrix T = _ _ _ _ _ / _ _ _ _ _ / _ _ _ _ _ / _ _ _ _ _ / _ _ _ _ _
+label r2 T.r1 "顶点 2" side=left tone=note
+label r3 T.r2 "顶点 3" side=left tone=note
+label r4 T.r3 "顶点 4" side=left tone=note
+label r5 T.r4 "顶点 5" side=left tone=note
+label r6 T.r5 "顶点 6" side=left tone=note
+label hc T "第 1 轮 … 第 5 轮（一列一轮）" side=above tone=note
+open T edit input=keypad
+say "把表填满：一格一格写 dist，锁了的后面空着。"
+ask next "填完了点下面" button="填完了"
+# 学生：第 1 轮 2:5、3:∞（写不进）、5:4；第 2 轮 2:5、4 写成 7（5→4 的权，对的是 11）、6 写成 5（5→6 的权，对的是 9）；第 3 轮 3:7
+学生: write T.1,1 5
+学生: write T.2,1 ∞
+学生: write T.4,1 4
+学生: write T.1,2 5
+学生: write T.3,2 7
+学生: write T.5,2 5
+学生: write T.2,3 7
+学生: next
+# 老师接：整张表交上来了（每一格写了什么都在），错格不标；再问集合 S 的顺序、选项
+close T
+ask value "集合 S：依次锁的顶点（从 1 起）" type=seq answer="1 5 2 3 6 4" wrong="1 5 2 3 4 6=最后两个反了（选项 A）;1 5 2 4 3 6=选项 C;1 5 2 6 3 4=选项 D"
+学生: value 1 5 2 6 3 4
+undim u.2-5
+ask tap u.2-5 "选一个选项" expect=u.3
+学生: tap u.5
+# —— 试：同一张表，想让页面说出哪几格不对——把对的数写成挑战，学生按「填完了」才判（on="就这样"）
+matrix T = _ _ _ _ _ / _ _ _ _ _ / _ _ _ _ _ / _ _ _ _ _ / _ _ _ _ _
+open T edit input=keypad
+goal gt "第 2 轮这一列" when="T.1,2 = 5, T.3,2 = 11, T.5,2 = 9" on="就这样"
+ask next "把第 2 轮这一列填上，填完了点下面" button="就这样"
+学生: write T.1,2 5
+学生: write T.3,2 7
+学生: write T.5,2 5
+学生: next

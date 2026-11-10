@@ -1,0 +1,22 @@
+# L3 分支 1（第三次量）：提出公因子 (λ − 1) 以后丢掉了，只剩 λ² − 11λ + 10，以为只有 1 和 10
+matrix A = 2 2 -2 / 2 5 -4 / -2 -4 5
+matrix E = 1 0 0 / 0 1 0 / 0 0 1 hide=on
+matrix EA = {E - A} hide=on
+tex f = "|\lambda E - A| = \begin{vmatrix}\lambda-2&-2&0\\-4&\lambda-9&0\\2&4&\lambda-1\end{vmatrix}"
+card k = "tr A = 12"
+cover k.1
+ask value "按第 3 列展开，写成 λ 的式子" type=formula free=λ answer="(λ-1)^2(λ-10)"
+学生: value λ^2-11λ+10
+# 页面只说不对的话，老师再问一遍、这回把「丢了因子」写进 wrong=，看换了写法的同一个错认不认
+ask value "它的根（重根写两次，空格隔开）" type=seq answer="1 1 10" wrong="1 10=少了一重"
+学生: value 1 10
+uncover k.1
+ask value "你的根加起来是几？"
+学生: value 11
+say "差 1。回头看展开那一行。"
+ask value "再写一遍展开的式子" type=formula free=λ answer="(λ-1)^2(λ-10)" wrong="λ^2-11λ+10=丢了因子 (λ−1)"
+学生: value (λ-1)(λ-10)
+say "{EA} 的秩是 {rank(EA)}，自由未知量 {free(EA)} 个：λ = 1 有两根无关的特征向量。"
+ask say "单根至多一条，这里怎么有两条？"
+学生: say 所以 1 是两重
+say "嗯。"

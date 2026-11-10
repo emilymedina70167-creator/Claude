@@ -1,0 +1,30 @@
+# L3 第 9 幕（第三次量）：自己判四个矩阵能不能相似对角化（B14-16.2）。这一份量分卡、配理由、排步骤
+matrix A = 0 0 1 / 0 1 0 / 1 0 0
+matrix B = 1 1 1 / 0 2 2 / 0 0 3 beside=A
+matrix C = 1 -2 1 / 2 -4 2 / 1 -2 1
+matrix D = 2 -1 2 / 5 -3 3 / -1 0 -2 beside=C
+label la A "A" side=above tone=key
+label lb B "B" side=above tone=key
+label lc C "C" side=above tone=key
+label ld D "D" side=above tone=key
+# 没有「能」「不能」两个框：拿一排四格（写着名字）让学生把「能」的都点出来
+array box = A B C D
+card r = "实对称" "n 个不同的特征值" "重根的无关特征向量够数" "重根的不够数"
+say "四张卡分成「能」「不能」两堆，每张配一个理由。"
+ask pick box "能相似对角化的都点出来" button="分好了" expect="box.1 box.2 box.3"
+学生: pick box.1 box.2 box.4
+say "{D} 你放进了「能」。它配哪条理由？"
+ask tap r "D 配哪一条？"
+学生: tap r.3
+say "{C} 不用解方程，看它三行长什么样。配哪条？"
+ask tap r "C 配哪一条？"
+学生: tap r.4
+# 最后排判的顺序：三张步骤卡
+array s = 看特征值是不是都是单根 重根数n−r够不够 看是不是实对称
+open s
+say "最后把判的顺序排一下：先看什么、再看什么。"
+ask next "排好了点下面" button="排好了"
+学生: swap s#1 s#3
+学生: swap s#2 s#3
+学生: next
+say "嗯。"

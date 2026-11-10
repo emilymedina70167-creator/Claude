@@ -1,0 +1,50 @@
+# D4 分支 2：稳定性。学生自己写 2 2 3、3 2 2 跑快排；1 2 2 跑堆排慢放。页面不跑排序：输出、红蓝、连线都是老师摆的
+matrix r = _ _ _
+label lr r "输入" side=left tone=note
+open r edit input=keypad
+say "先跑 2 2 3：写进去，点「排」。"
+ask next "写好了点「排」" button="快排"
+学生: write r.1,1 2
+学生: write r.1,2 2
+学生: write r.1,3 3
+学生: next
+# 老师接：输出不变，两条线不交叉
+paint r.1,1 g2
+paint r.1,2 g1
+matrix o = 2 2 3
+label lo o "输出" side=left tone=note
+paint o.1,1 g2
+paint o.1,2 g1
+link r.1,1 o.1,1 g2
+link r.1,2 o.1,2 g1
+say "没换。只改一个数的位置，再跑一次。"
+ask next "改好了点「排」" button="快排"
+学生: write r.1,1 3
+学生: write r.1,3 2
+学生: next
+# 老师接：学生改成了 3 2 2。老师重摆输出（2̄ 2 3）和线：粉的是输入里前一个 2
+unlink r
+unpaint r.1,1
+paint r.1,2 g2
+paint r.1,3 g1
+paint o.1,1 g1
+paint o.1,2 g2
+unpaint o.1,3
+link r.1,2 o.1,2 g2
+link r.1,3 o.1,1 g1
+say "两次都是快排，一次换了一次没换——它稳定吗？"
+ask say "写那一句：输入里谁在前，输出里谁在前；所以稳不稳定"
+学生: say 输入粉2在前，输出蓝2在前；这次换了但上次没换，所以不一定
+# 老师接：堆排 1 2 2 慢放——老师自己写每一次比较和对调
+remove r
+remove o
+tree h = 1 2 2′ layout=compact
+array hh = {h#1} {h#2} {h#3}
+paint h#2 g2
+paint h#3 g1
+compare h#2 h#3
+compare h#1 h#2
+swap h#1 h#2
+say "两个孩子一样大，取了左边的 {h#1}。它是和谁比了才上去的？"
+ask tap h "点出它刚才和谁对调了" expect=h#2
+学生: tap h#3

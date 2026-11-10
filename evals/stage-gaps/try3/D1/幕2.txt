@@ -1,0 +1,57 @@
+# D1 第 2 幕：隔 5 格分组、组内插入
+array a = 49 38 65 97 76 13 27 49′ 55 04
+label ca a "挪了 0 格" side=right tone=key
+label rule a "新规矩：每张牌只跟隔 5 格的牌比，一跳就跳 5 格" side=above tone=note
+say "点 {a.1}，它能跟谁比？"
+ask pick a "和 {a.1} 一组的都点出来" button="点好了" expect="a.6"
+学生: pick a.6
+# 学生自己从一张划到另一张连弧：一排格子没有学生连线的动作。只能一组一问（ask pick），答对了页面替老师连（预写）
+link a.1 a.6 g1
+paint a.1 a.6 g1
+say "对，隔 5 格。下一组你来连。"
+@ask.right link a.2 a.7 g2
+@ask.right paint a.2 a.7 g2
+ask pick a "{a.2} 和谁一组？点出来" button="点好了" expect="a.7"
+学生: pick a.7
+say "全连上：一共几组、每组几张？"
+ask say "一共几组、每组几张？"
+学生: say 第1和第6、第2和第7……一共5组，每组2张
+# 分组只能老师按 stride 分，不能按学生连的线分
+group a stride=5
+ask next "五组都连上了。分开看" button="分开看"
+学生: next
+split a
+open a undo=on
+goal g1 "第 1 条泳道排好" when="a.1 <= a.6"
+@g1 label k1 a.6 "✓" side=right tone=key
+goal g2 "第 2 条" when="a.2 <= a.7"
+@g2 label k2 a.7 "✓" side=right tone=key
+goal g3 "第 3 条" when="a.3 <= a.8"
+@g3 label k3 a.8 "✓" side=right tone=key
+goal g4 "第 4 条" when="a.4 <= a.9"
+@g4 label k4 a.9 "✓" side=right tone=key
+goal g5 "第 5 条" when="a.5 <= a.10"
+@g5 label k5 a.10 "✓" side=right tone=key
+goal g6 "五条都排成从小到大" when="a.1 <= a.6, a.2 <= a.7, a.3 <= a.8, a.4 <= a.9, a.5 <= a.10"
+@g6 close a
+@g6 merge a
+# 先拖错一下（跨了泳道：13 拖到 38 那一格），想撤（撤不了：这一下正好让 g2 成立了），只好自己拖回去，再一条一条排
+学生: swap a#6 a#2
+学生: undo
+学生: swap a#6 a#2
+学生: swap a#6 a#1
+学生: swap a#7 a#2
+学生: swap a#8 a#3
+学生: swap a#9 a#4
+学生: swap a#10 a#5
+# 学生自己把牌一张张拖回一排：没有，只有预写的 merge；挪了几格、接着 d=1 还要几格都要老师自己算
+unlabel k1
+unlabel k2
+unlabel k3
+unlabel k4
+unlabel k5
+retext ca "挪了 5 格"
+label more a "接着只做 d=1 还要挪 9 格" side=below tone=note
+say "看 {a#10}。"
+ask tap a "这一趟跳得最远的是哪张？" expect=a#10
+学生: tap a#10

@@ -1,0 +1,36 @@
+# L3 第 5 幕（第三次量）：λ = 1 的特征向量铺满一张平面，λ = 10 的只在一条线上（三维空间、平面、线、拖 v 都要三维：没有；这里量不靠三维的那一半）
+matrix A = 2 2 -2 / 2 5 -4 / -2 -4 5
+matrix E = 1 0 0 / 0 1 0 / 0 0 1 hide=on
+matrix EA = {E - A}
+label l1 EA "E − A（λ = 1）" side=above tone=note
+matrix TA = {10 E - A} beside=EA
+label l2 TA "10E − A（λ = 10）" side=above tone=note
+say "{EA} 三行什么关系？"
+ask value "E − A 的自由未知量几个？" answer={free(EA)} wrong="1=把秩当成了自由未知量的个数"
+学生: value 2
+# 学生在空格子里写基础解系；是不是解（EA 乘它 = O）、无不无关（两列拼成的 3×2 的秩）都拿藏着的矩阵算
+matrix X1 = _ / _ / _
+matrix X2 = _ / _ / _ beside=X1
+label lx X1 "λ = 1 的两根解" side=left tone=note
+matrix Z1 = {EA X1} hide=on
+matrix Z2 = {EA X2} hide=on
+matrix Kb = {X1.1,1} {X2.1,1} / {X1.2,1} {X2.2,1} / {X1.3,1} {X2.3,1} hide=on
+open X1 edit input=keypad
+open X2 edit input=keypad
+say "两个自由未知量：写出两根解 {X1}、{X2}。"
+goal g1 "两根都是解，还不共线" when="Z1 = O, Z2 = O, rank(Kb) = 2"
+@g1 say "对：这两根张成一整张平面，上面全是 λ = 1 的特征向量。"
+学生: write X1.1,1 -2
+学生: write X1.2,1 1
+学生: write X1.3,1 0
+学生: write X2.1,1 4
+学生: write X2.2,1 -2
+学生: write X2.3,1 0
+学生: write X2.1,1 2
+学生: write X2.2,1 0
+学生: write X2.3,1 1
+# λ = 10 的那一根：按通解写（solve=on）
+say "{TA} 的解呢？写成 k 倍的样子。"
+ask value "10E − A 的解" type=matrix free=k solve=on answer="k / 2k / -2k"
+学生: value -k / -2k / 2k
+say "嗯。"

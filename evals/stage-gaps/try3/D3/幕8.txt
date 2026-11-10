@@ -1,0 +1,56 @@
+# D3 第 8 幕：边带负权时 Dijkstra 会锁错；有负权回路时谁也求不出最短路径
+# 画面：0→1 7、1→2 −5（这条的权是拨盘 −6～+3）、上面一条弧 0→2 5；右下小框两行
+# 拨盘照理想挂在 1→2 那条边上（说明里 at= 的例子是一样东西）
+dial w = -5 range=-6..3 at=g.1~2
+graph g = 0>1:7 1>2:{w} 0>2:5 pos="0=0,1 1=1,0 2=2,1"
+paint g.0 g4
+tag g ∞
+tag g.0 0
+relax g.0 -> g.1
+relax g.0 -> g.2
+say "同样的玩法，这张你再锁一遍。"
+@ask.right paint g.2 g4
+@ask.right ask tap g.1 "再锁 {g.1}" expect=g.1
+ask tap g.1 g.2 "先锁哪一个？" expect=g.2
+学生: tap g.2
+学生: tap g.1
+# 老师接：1→2 亮，7+(−5) = 2 比 5 小，可 2 已经锁了——relax 照改不照改、裂不裂
+paint g.1 g4
+glow g.1~2
+relax g.1 -> g.2
+label crack g.2 "0→1→2 = 2 < 5" side=below tone=key
+ask say "第 5 幕你说 3 敢锁，凭的是哪句话？这里哪句不成立了？"
+学生: say 后面再走只会更长这句不成立，负的边让它变短了
+# 老师接：小框两行——页面不会跑 Dijkstra、也没有取小；拿一行两格跟着算的矩阵凑：左格 5（锁出来的，老师写死）、右格 7 + w（绕 1 走）
+unlabel crack
+unglow g.1~2
+tag g.2 5
+set w 3
+matrix R = 5 {7 + w}
+label lr1 R.1,1 "Dijkstra 锁出来的到 2" side=above tone=note
+label lr2 R.1,2 "绕 1 走到 2" side=below tone=note
+# 试：「真的最短」= 两条路里小的那个
+matrix Q = {min(5, 7 + w)}
+say "把 {g.1~2} 的权从 +3 往下拨。拨到多少它开始锁错？"
+goal g1 "拨到 Dijkstra 开始锁错的那一格" when="R.1,2 < R.1,1"
+@g1 paint R.1,1 R.1,2 g2
+@g1 ask value "权小于几就会锁错？" answer=-2 type=num wrong="-3=写的是第一个出错的权，不是界;2=符号丢了"
+学生: dial w 0
+学生: dial w -2
+学生: dial w -3
+学生: value -3
+# 老师接：换成图 6.18(b)——负权回路。学生用手指绕圈、里程每圈少 1：没有绕的手势，拿「绕了几圈」的拨数和一格跟着算的里程凑
+unlabel
+unlabel dial:w
+remove g
+remove R
+ungoal g1
+dial n = 0 range=0-9 at=h
+graph h = 0>1:1 1>2:1 1>0:-2 pos="0=0,1 1=1,0 2=2,1"
+walk h.0 h.1 h.0 h.1 h.0
+matrix M = {n} {0 - n}
+label lm M "绕了几圈 · 脚下的里程" side=above tone=note
+say "绕着 0→1→0 这一圈走，0 到 0 最短是多少？"
+ask say "绕几圈看看，再说最短是多少"
+学生: dial n 3
+学生: say 每绕一圈少 1，没有最短

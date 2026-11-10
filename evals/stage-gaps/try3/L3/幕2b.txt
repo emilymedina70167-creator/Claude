@@ -1,0 +1,32 @@
+# L3 第 2 幕补试：右边那块平面摆不出来（幕2.txt 第 22 行以后 q 不见了），把 C 那一半挪到一块自己的平面上单独演；
+# 最前面两行顺带再试一次「两块平面不写 beside」
+plane p range=-3..3
+plane q range=-6..6
+say "两块平面。"
+ask next "看一眼" button="好"
+学生: next
+remove p
+matrix C = 1 2 / 3 0
+vec q a = 1 0 color=g1
+vec q b = {C a} color=g6
+span q a
+matrix V2 = {q.a} hide=on
+matrix W2 = {C V2} hide=on
+matrix K2 = {V2.1,1} {W2.1,1} / {V2.2,1} {W2.2,1} hide=on
+matrix Dg = {V2.1,1} 0 / 0 {V2.1,1} hide=on
+matrix R2 = {Dg^-1 W2} hide=on
+say "这个 {C}，把特征方向找全。"
+open q.a
+goal g1 "把 C 的特征方向找全" when="det(K2) = 0" collect=R2 n=2
+@g1 span q a stay
+@g1 ask value "这条线上 Cv = □·v，□ = ？" answer={R2.1,1}
+学生: vec q a = 1 1
+学生: value 3
+say "对，3 倍。还有吗？"
+学生: vec q a = 2 -2
+学生: vec q a = -2 3
+学生: value 2
+say "念一下 {q.a} 和 {q.b} 的坐标：是几倍？"
+ask value "Cv = □·v，□ = ？" answer={R2.1,1}
+学生: value -2
+say "嗯。"

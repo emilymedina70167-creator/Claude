@@ -1,0 +1,24 @@
+# L3 第 7 幕第二屏（第三次量）：教材三阶题 B14-28.4，判 A、B 和 C 相不相似（点卡在三维里看特征子空间：要三维，没有）
+matrix A = 2 0 0 / 0 2 1 / 0 0 1
+matrix B = 2 1 0 / 0 2 0 / 0 0 1 beside=A
+matrix C = 1 0 0 / 0 2 0 / 0 0 2 beside=B
+label la A "A" side=above tone=key
+label lb B "B" side=above tone=key
+label lc C "C" side=above tone=key
+matrix E = 1 0 0 / 0 1 0 / 0 0 1 hide=on
+matrix NA = {2 E - A} hide=on
+matrix NB = {2 E - B} hide=on
+card o = "(A) A、B 都和 C 相似" "(B) A 和 C 相似，B 和 C 不相似" "(C) A 和 C 不相似，B 和 C 相似" "(D) A、B 都不和 C 相似"
+say "再看这道三阶的题：{A}、{B} 和 {C} 相不相似？每个先写 3 − r(2E − ·)。"
+ask value "3 − r(2E − A) = ？" answer={free(NA)}
+学生: value 2
+@ask.right ask tap o "选哪一项？" expect=o.2
+ask value "3 − r(2E − B) = ？" answer={free(NB)} wrong="2=把 B 的 λ = 2 也当成两条"
+学生: value 2
+say "把 {NB} 摆出来数一数非零行。"
+show NB
+ask value "再写：3 − r(2E − B) = ？" answer={free(NB)}
+学生: value 1
+ask tap o "选哪一项？" expect=o.2
+学生: tap o.2
+say "嗯。"

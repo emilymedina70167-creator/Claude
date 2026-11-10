@@ -1,0 +1,23 @@
+# E1 第 2 幕（后半）：换成 Every cat 那句，学生圈谓语。Pencil 一笔圈 = 学生从一个词拉到另一个词、点「谓语」（open e mark）；
+# 默认 wrong=quiet：页面照画、不判不变色。「这个词归谁？」的小牌走偏了才出，不能预写：按了「圈好了」页面叫老师，老师下一轮自己贴。
+sentence e = "Every cat with an owner, for instance, is running a small-scale study in operant conditioning." key="Every cat with an owner, for instance, [V is running] a small-scale study in operant conditioning."
+array tl = 过去 现在 将来
+ptr 小人 tl.2
+label wave tl.2 "〰〰 正在进行" side=above tone=soft
+say "圈出这一句的谓语，按你想的圈。"
+open e mark undo=on
+goal g1 "圈出这一句的谓语" when="e exact" on="圈好了"
+@g1 say "对：{e.8-9} 两个词合起来才是谓语。"
+ask next "圈好了点下面" button="圈好了"
+学生: mark e.8 谓语
+学生: next
+label q e.9 "这个词归谁？" side=below tone=note
+ask next "再看看，圈好了点下面" button="圈好了"
+学生: unmark e.8
+学生: mark e.8-12 谓语
+学生: next
+say "{e.12} 长得像动词的哪种形式？"
+ask next "改好了点下面" button="圈好了"
+学生: unmark e.8
+学生: mark e.8-9 谓语
+学生: next

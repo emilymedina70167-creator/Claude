@@ -1,0 +1,47 @@
+# D3 第 4 幕：最便宜的树可能不止一棵，但总价只有一个；价钱都不一样时只有一棵
+# 画面：第 3 幕修好的树留着（实线）、总价；B–D、C–D、D–E 三条路的价钱各是一个拨盘；右上角「最便宜的树：□ 棵 · 总价 □」先蒙着
+# 拨盘照理想各挂在自己那条路上（说明里 at= 的例子是一样东西）
+dial bd = 5 range=1-10 at=g.B~D
+dial cd = 5 range=1-10 at=g.C~D
+dial de = 2 range=1-10 at=g.D~E
+graph g = A-B:4 A-C:2 B-C:1 B-D:{bd} C-D:{cd} C-E:9 D-E:{de} D-F:6 E-F:3 pos="A=0,0 B=1,0 D=2,0 C=0,1 E=1,1 F=2,1"
+dim g.edges
+undim g.B~C g.A~C g.B~D g.D~E g.E~F
+paint g.B~C g.A~C g.B~D g.D~E g.E~F g4
+# 状态栏的总价：页面不会数这棵树；拿一格跟着算的矩阵凑（式子是老师照现在这棵树写死的：1 + 2 + B–D + D–E + 3）
+matrix S = {6 + bd + de}
+matrix S = 13 {6 + bd + de}
+label ls S "最便宜是 13 · 这棵树现在的总价" side=above tone=note
+# 右上角的小框：试页面数不数「最便宜的树几棵、总价多少」
+label box g "最便宜的树：{trees(g)} 棵 · 总价 {mst(g)}" side=above tone=note
+label box g "最便宜的树：? 棵 · 总价 ?" side=above tone=note
+say "不拆光重来，只换一条路，还能修出一棵 13 的吗？"
+# 学生拆一条、修一条：一次点两条（ask pick）；换对了当场说预写的一句
+@ask.right say "又一棵，还是 13。"
+ask pick g.edges "点一条要拆的，再点一条要修的" button="换好了" expect="g.B~D g.C~D"
+学生: pick g.B~D g.C~D
+# 老师接：照学生换的画（拆 B–D、修 C–D），总价那一格的式子也要重写
+dim g.B~D
+unpaint g.B~D
+undim g.C~D
+paint g.C~D g4
+matrix S = 13 {6 + cd + de}
+say "两棵都是 13。把 C–D 拨成 6 呢？拨成 4 呢？"
+# 拨盘一动小框跟着变：页面不认生成树，只能把老师事先算好的三种情况一条条预写成挑战（做到过就不回头，拨回 5 小框不会改回去）
+goal g1 "把 C–D 拨成 6" when="cd = 6"
+@g1 retext box "C–D = 6：最便宜的树 1 棵 · 总价 13（用 B–D）"
+goal g2 "把 C–D 拨成 4" when="cd = 4"
+@g2 retext box "C–D = 4：最便宜的树 1 棵 · 总价 12（用 C–D）"
+ask next "拨 C–D、D–E 的价钱，看右上角；看好了点下面" button="看好了"
+学生: dial cd 6
+学生: dial cd 5
+学生: dial cd 4
+# 老师接（两个挑战都做到了页面才叫老师）
+say "再拨拨 D–E：拨到 9，树的棵数变不变？"
+ask next "拨好了点下面" button="看好了"
+学生: dial de 9
+学生: dial de 2
+学生: next
+say "{g.A~C} 和 {g.D~E} 也一样价钱，怎么没多出一棵？"
+ask say "什么时候一定只有一棵？"
+学生: say 有同价的就一定不止一棵

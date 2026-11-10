@@ -1,0 +1,46 @@
+# L3 第 3 幕（第三次量）：λ 是特征值 ⇔ λE − A 把某个非零向量压回原点 ⇔ |λE − A| = 0；和是迹、积是行列式
+plane p range=-4..4
+vec p e1 = 1 0 color=g1
+vec p e2 = 0 1 color=g3
+matrix A = 3 1 / 2 2
+cover A
+tex f = "\hl{a}{A\xi} = \hl{l}{\lambda}\hl{x}{\xi}"
+next f "\hl{a}{A\xi} = \hl{l}{\lambda}\hl{e}{E}\hl{x}{\xi}"
+label le f.e "数减不了矩阵，先写成 λE" side=right tone=note
+next f "\hl{l}{\lambda}\hl{e}{E}\hl{x}{\xi} - \hl{a}{A\xi} = 0"
+next f "(\hl{l}{\lambda}\hl{e}{E} - \hl{a}{A})\hl{x}{\xi} = 0"
+say "挪一下：(λE − A)ξ = 0。"
+ask next "看清楚了点下面" button="看清了"
+学生: next
+# 第二轮：λ 是拨数；M = λE − A 的格里写式子跟着 λ；正方形的像拿 M e1、M e2 两根跟着算的箭头再 sum 拼出来；
+# 面积贴 {det(M)}；函数图没有，拿第二块平面上一个点 (λ, det M) 凑
+dial lam = 0 range=-2..6 at=p
+matrix M = {lam - 3} -1 / -2 {lam - 2}
+label lm M "λE − A" side=above tone=note
+vec p a = {M e1} color=g6
+vec p b = {M e2} color=g6
+sum p c = a + b
+label ar p.c "面积 {det(M)}" side=right tone=key
+matrix FV = {lam} / {det(M)} hide=on
+plane q range=-6..6
+point q F = {FV}
+say "拨 λ，看正方形变成什么。什么时候有一根不是零的向量被压回原点？"
+goal g1 "找出让它压成一条线的 λ（不止一个）" when="det(M) = 0" collect=M n=2
+@g1 say "压扁了：面积是 0。"
+学生: dial lam -1
+学生: dial lam 2
+学生: dial lam 5
+# 第三轮：写多项式、根，揭开 A
+say "两个都找到了。"
+ask value "把 |λE − A| 展开成 λ 的多项式" type=formula free=λ answer="λ^2-5λ+4"
+学生: value λ^2-5λ+6
+say "代 λ = 0 看看两边。"
+ask value "再写一遍 |λE − A|" type=formula free=λ answer="λ^2-5λ+4"
+学生: value λ^2-5λ+4
+@ask.right uncover A
+@ask.right say "1 和 4，跟 {A} 里的数有什么关系？"
+ask value "它的根（两个都写）" type=set answer="{1, 4}"
+学生: value 1,4
+ask say "1 和 4，跟 A 里的数有什么关系？"
+学生: say 1+4=3+2，1×4=3×2−1×2
+say "嗯。"

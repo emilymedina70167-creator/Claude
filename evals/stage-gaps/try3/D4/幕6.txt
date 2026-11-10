@@ -1,0 +1,53 @@
+# D4 第 6 幕：堆 = 一排数按层排成完全二叉树。树跟着那一排算（tree t = {a.1} …）；孩子、叶子一次点几个（ask pick）；
+# n 的拨杆驱动不了树；「n | 层数」的表用带空格子的矩阵让学生填
+array a = 87 45 78 32 17 65 53 09
+card q = "这 8 个数按层排成一棵完全二叉树，有几层？" "4 层的完全二叉树最少几个结点、最多几个？"
+say "先不看图，写：几层？4 层最少、最多几个？"
+ask value "依次写三个数：几层、4 层最少几个、最多几个" type=seq answer="4 8 15" wrong="3 7 15=拿 2^h-1 当成最少; 4 7 15=用了平衡树的 n_h; 4 15 15=最少最多写成一样"
+学生: value 3 7 15
+# 老师接（真上课这里进分支 1）：树从这一排长出来——跟着这一排算
+tree t = {a.1} {a.2} {a.3} {a.4} {a.5} {a.6} {a.7} {a.8} layout=compact
+say "不看树，在下面那一排上点出第 3 个的两个孩子。"
+@ask.right glow a.6 a.7 t#6 t#7
+ask pick a "点出第 3 个的两个孩子" button="点好了" expect="a.6 a.7"
+# 学生点成 2i-1、2i
+学生: pick a.5 a.6
+# 老师接：学生点的两格在树上是谁，老师自己亮
+glow a.5 a.6 t#5 t#6
+say "树上亮的这两个，是同一个爸爸的吗？"
+@ask.right unglow a.5 a.6 t#5 t#6
+@ask.right glow a.6 a.7 t#6 t#7
+ask pick a "再点一次：第 3 个的两个孩子" button="点好了" expect="a.6 a.7"
+学生: pick a.6 a.7
+# 老师接：叶子
+unglow a.6 a.7 t#6 t#7
+ask pick a "哪几个没有孩子？都点出来" button="点好了" expect="a.5-8"
+学生: pick a.4 a.5 a.6 a.7 a.8
+# 老师接：拨 n 看树长；表让学生填
+remove a
+remove t
+remove q
+tree c = 1 2 3 4 5 6 7 layout=compact
+dial n = 7 range=1-20 at=c
+label lc c "{count(c)} 个结点，{height(c)} 层" side=right tone=note
+matrix T = 1 2 3 4 7 8 15 16 / _ _ _ _ _ _ _ _
+label lt T "上一行 n，下一行填层数" side=above tone=note
+open T edit input=keypad
+say "拨 $n$ 看树长：n 到几的时候层数往上跳？把表填上。"
+ask next "填完了点下面" button="填好了"
+学生: dial n 8
+学生: write T.2,1 1
+学生: write T.2,2 2
+学生: write T.2,3 2
+学生: write T.2,4 3
+学生: write T.2,5 3
+学生: write T.2,6 3
+学生: write T.2,7 4
+学生: write T.2,8 4
+学生: next
+# 老师接：拨到 8 树没长，老师自己接一个；层数的式子
+append c 8
+set n 8
+say "第 8 个只能另起一层：现在 {height(c)} 层。"
+ask value "n 个结点有几层？写成含 n 的式子" type=formula free=n answer="floor(log2(n))+1"
+学生: value log2(n)+1

@@ -1,0 +1,55 @@
+# D4 第 4 幕（前半）：一趟只定一个枢轴，两边各自再划——代码窗填框、调用栈、划分树
+# 盒子（还没划的段）只能写成树上的一个结点；「点盒子页面快放这一段的划分」没有，老师下一轮自己演
+array a = 27 38 13 49 76 97 65 49′
+paint a.4 g4
+label st a.4 "站定" side=above tone=key
+card code = "pivotpos = Partition(A, low, high);   // 回来的是 4" "QuickSort(A, □, □);" "QuickSort(A, □, □);"
+card stk = "调用栈" "QuickSort(1,8)"
+tree t = 49 [27·38·13] [76·97·65·49′] layout=compact
+say "Partition 回来的是 4。下面两行该调用谁？把框填上。"
+@ask.right rewrite code.2 "QuickSort(A, 1, 3);"
+ask value "第一个 QuickSort(A, □, □)：两个框依次填什么？" type=seq answer="1 3"
+学生: value 1 3
+# 老师接：第二个框。学生把枢轴那一格也算进去了（4 8）
+@ask.right rewrite code.3 "QuickSort(A, 5, 8);"
+ask value "第二个 QuickSort(A, □, □)：两个框依次填什么？" type=seq answer="5 8" wrong="4 8=把站定的第 4 格又算进去了"
+学生: value 4 8
+# 老师接：填错的不会照填进代码窗，老师自己改；再让学生点盒子
+rewrite code.3 "QuickSort(A, 5, 8);"
+say "{a.4} 已经站定了，不用再进去。点盒子，让它们各自再划。"
+ask tap t "点一个盒子"
+学生: tap t#2
+# 老师接：左边那个盒子划开——页面不会划，老师照 27 38 13 自己算、自己演（指针、对调、盖章、树长一层、栈压一格）
+addline stk "QuickSort(1,3)"
+camera a.1-3
+ptr i a.1
+ptr j a.3
+swap a.1 a.3
+swap a.2 a.3
+unptr i
+unptr j
+paint a.2 g4
+label st2 a.2 "站定" side=above tone=key
+write t#2 27
+insert t#2 left 13
+insert t#2 right 38
+camera all
+ask tap t "再点一个盒子"
+学生: tap t#3
+# 老师接：右边的盒子（76 97 65 49′ → 49′ 65 76 97）；栈弹一格只能把那一行涂灰；「第 2 趟后」的快照只能另造一排
+dim stk.3
+addline stk "QuickSort(5,8)"
+swap a.5 a.8
+swap a.6 a.8
+swap a.6 a.7
+paint a.7 g4
+label st3 a.7 "站定" side=above tone=key
+write t#3 76
+insert t#3 left [49′·65]
+insert t#3 right 97
+array p2 = 13 27 38 49 49′ 65 76 97
+label lp2 p2 "第 2 趟后" side=left tone=note
+paint p2.2 p2.4 p2.7 g4
+say "每一趟以后多定下了几个？"
+ask value "第 2 趟新定下了几个？" answer=2
+学生: value 2

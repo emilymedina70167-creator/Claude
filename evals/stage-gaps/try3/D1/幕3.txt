@@ -1,0 +1,50 @@
+# D1 第 3 幕：d 缩小到 1，叫出名字；试验台
+array a = 13 27 49′ 55 04 49 38 65 97 76
+array b = 13 04 49′ 38 27 49 55 65 97 76
+label lb b "第 1 幕的下排" side=left tone=soft
+dim b
+dial d = 5 range=1-9 at=a
+label dl dial:d "d = {d}" side=right
+group a stride=d
+card q = "趟数记录（d｜这一趟后｜挪几格｜累计）" "5｜13 27 49′ 55 04 49 38 65 97 76｜5｜5"
+say "再来一趟，这回隔 3。"
+# 学生自己拨 d（这一次工具能真拨）；拨到 3 页面替老师分泳道、交出去；相等的两张 49 用 <= 写
+goal g0 "把 $d$ 拨到 3" when="d = 3"
+@g0 split a
+@g0 open a undo=on
+@g0 goal g1 "三组各自排好" when="a.1 <= a.4, a.4 <= a.7, a.7 <= a.10, a.2 <= a.5, a.5 <= a.8, a.3 <= a.6, a.6 <= a.9"
+@g1 close a
+@g1 merge a
+@g1 ask say "认得这一排吗？还差什么才算排好？"
+学生: dial d 3
+学生: swap a#7 a#4
+学生: swap a#5 a#2
+学生: say 跟第一幕的下排一样，还要d=1再走一遍
+# 学生把整排拖到下排上叠着比：一排格子没有整排拖的动作。老师写 compare 试试；「排好了」按钮配 on= 的挑战
+undim b
+compare a b
+addline q "3｜13 04 49′ 38 27 49 55 65 97 76｜2｜7"
+say "和 {b} 一模一样。"
+goal g3 "这一排排好了" when="a sorted" on="排好了"
+ask next "觉得排好了就点；没排好就接着拨 $d$" button="排好了"
+学生: next
+say "还没排好。哪一趟能保证全排好？拨拨看。"
+goal g4 "把 $d$ 拨到那一趟" when="d = 1"
+学生: dial d 1
+# d=1：页面不会照直接插入自动走，老师一张张 move，挪几格自己数
+move a#5 -> a.1
+move a#7 -> a.3
+move a#2 -> a.3
+move a#10 -> a.9
+addline q "1｜04 13 27 38 49′ 49 55 65 76 97｜5｜12"
+ask value "三趟一共挪了几格？" answer=12 wrong="27=那是直接插入的"
+学生: value 12
+say "这就叫[希尔排序]，也叫缩小增量排序。"
+fly say.1 -> nm a
+say "找一串三趟以内、比 5,3,1 还省的。"
+# 试验台：输入一串增量自动跑，说明里没有能写的东西。只能收学生写的一串（只收不判），老师自己算了加一行
+ask value "写一串增量，逗号隔开"
+学生: value 7,2,1
+addline q "7,2,1｜04 13 27 38 49′ 49 55 65 76 97｜9（老师自己算的）"
+ask say "这几趟一共干了什么？用自己的话写。"
+学生: say 先隔5分组各自插入排序，再隔3，最后隔1就是直接插入

@@ -1,0 +1,37 @@
+# L3 分支 2（第三次量）：只核了前两个分量就说成比例，把 (1,2,−1) 当成 λ = 8 的特征向量（三维里转到最能看出分开的视角：要三维，没有）
+matrix A = 2 2 -2 / 2 5 -4 / -2 -4 5
+matrix X = 1 / 2 / -1 beside=A
+product W = A X
+mul W
+# 一格一格的比：拿 diag(v) 的逆乘 Av 让页面算，扣着，学生点一格翻一格
+matrix DX = {X.1,1} 0 0 / 0 {X.2,1} 0 / 0 0 {X.3,1} hide=on
+matrix Rt = {DX^-1 W}
+label lr Rt "Av 的每个分量 ÷ v 的同一个分量" side=above tone=note
+cover Rt
+matrix E = 1 0 0 / 0 1 0 / 0 0 1 hide=on
+matrix F8 = {8 E - A} hide=on
+matrix Df = {W - 8 X} hide=on
+say "你说 λ = 8。三个分量的比，一格一格点开。"
+ask tap Rt "点开一格"
+学生: tap Rt.1,1
+uncover Rt.1,1
+ask tap Rt "再点一格"
+学生: tap Rt.2,1
+uncover Rt.2,1
+ask tap Rt "还有一格"
+学生: tap Rt.3,1
+uncover Rt.3,1
+say "第三格是 {Rt.3,1}。那 8 是特征值吗？代进 (λ − 1)²(λ − 10)。"
+ask value "(8 − 1)²(8 − 10) = ？" answer={det(F8)}
+学生: value -98
+# 真的特征向量放在旁边对照
+matrix X3 = 1 / 2 / -2
+label l3 X3 "ξ3" side=above tone=key
+matrix W3 = {A X3} beside=X3
+label lw W3 "A ξ3" side=above tone=note
+show Df
+label ldf Df "Av − 8v" side=above tone=note
+say "{X3} 乘出来 {W3}，三格都是 10 倍；你那根差在 {Df}。"
+ask say "两根向量只差哪一个分量？"
+学生: say 第三个
+say "嗯。"

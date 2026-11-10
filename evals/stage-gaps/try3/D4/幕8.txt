@@ -1,0 +1,74 @@
+# D4 第 8 幕：删堆顶（拿走根 → 空位 → 最后一个补上 → 往下筛）、堆排序（根和最后一个对调，排好区越排越长）、2015 真题
+# 空位：树的结点不能写成 _（「值不能是 _」），只能写一个「空」字当空位；学生拖孩子上来它就往下走；最后一个补上以后学生点那片「空」叶子摘掉
+tree t = 87 45 78 32 17 65 53 09 layout=compact
+array a = {t#1} {t#2} {t#3} {t#4} {t#5} {t#6} {t#7} {t#8}
+array out = 87
+label lo out "拿走的" side=left tone=note
+write t#1 空
+keep t "根空了"
+say "87 拿走了。根空了，谁来补？把它拖进空位。"
+open t back="根空了"
+open t pluck
+goal g1 "补好根、摘掉空位，再调成大根堆" when="count(t) = 7, t#1 >= t#2, t#1 >= t#3, t#2 >= t#4, t#2 >= t#5, t#3 >= t#6, t#3 >= t#7"
+@g1 say "又是大根堆了。"
+@g1 ask value "09 往下筛，一共比较了几次？" answer=4 wrong="2=只数了对调的两次"
+# 学生先拖大的孩子上来：78 上根、65 再上去，空位停在第 6 个；把它摘掉——树缺了一口（第 6 个没了，第 7、8 个还在）
+学生: swap t#3 t#1
+学生: swap t#6 t#3
+学生: delete t#6
+# 回到「根空了」，这回用最后一个补：09 拖进根，空位到了第 8 个，摘掉它；再往下筛
+学生: back t "根空了"
+学生: swap t#8 t#1
+学生: delete t#8
+学生: swap t#3 t#1
+学生: swap t#6 t#3
+学生: value 2
+# 老师接：堆排序。87 不扔，和最后一个对调；排好区 = 预写的染色 + 灰掉
+ungoal g1
+tree t = 87 45 78 32 17 65 53 09 layout=compact
+remove out
+say "这回 {t#1} 别扔：和最后一个换，看它去了哪。再把前面的调回大根堆。"
+open t undo=on
+goal g2 "第 1 轮：87 换到最后，前 7 个调回大根堆" when="t#8 = 87, t#1 >= t#2, t#1 >= t#3, t#2 >= t#4, t#2 >= t#5, t#3 >= t#6, t#3 >= t#7"
+@g2 paint t#8 a.8 g3
+@g2 dim t#8
+@g2 goal g3 "第 2 轮：78 换到第 7 个，前 6 个调回大根堆" when="t#7 = 78, t#1 >= t#2, t#1 >= t#3, t#2 >= t#4, t#2 >= t#5, t#3 >= t#6"
+@g3 paint t#7 a.7 g3
+@g3 dim t#7
+@g3 ask next "两轮了。剩下的页面接着排" button="接着排"
+学生: swap t#8 t#1
+学生: swap t#3 t#1
+学生: swap t#6 t#3
+学生: swap t#7 t#1
+学生: swap t#3 t#1
+学生: next
+# 老师接：「接着排」——页面不会排，老师把剩下 5 轮的对调一下一下写出来
+swap t#6 t#1
+swap t#3 t#1
+swap t#5 t#1
+swap t#2 t#1
+swap t#4 t#2
+swap t#4 t#1
+swap t#2 t#1
+swap t#3 t#1
+swap t#2 t#1
+swap t#2 t#1
+paint a g3
+say "排好了：{a.1} 到 {a.8} 从小到大。"
+ask value "先猜：小根堆 8 15 10 21 34 16 12 删掉 8 再调好，一共比较几次？"
+学生: value 4
+# 老师接：2015。12 补到根上、8 拿走（老师做），学生往下筛，自己数比较
+remove t
+remove a
+ungoal g2
+ungoal g3
+tree m = 8 15 10 21 34 16 12 layout=compact
+swap m#7 m#1
+delete m#7
+array b = {m#1} {m#2} {m#3} {m#4} {m#5} {m#6}
+say "12 补到了根上。往下调成小根堆，数着比了几次。"
+open m undo=on
+goal g4 "调成小根堆" when="m#1 <= m#2, m#1 <= m#3, m#2 <= m#4, m#2 <= m#5, m#3 <= m#6"
+@g4 ask value "你数出来比较了几次？" answer=3 wrong="4=以为 12 到了第 3 个还要和不存在的右孩子比; 2=只数了和孩子比、没数两个孩子先比的那次"
+学生: swap m#3 m#1
+学生: value 4

@@ -1,0 +1,93 @@
+# D4 第 3 幕：真题 04 自己划一趟。先猜落点（只收不判）；指针「点一下自己走」做成：学生点该谁走，点对了页面演预写的 hop + ptr；
+# 选项做成四张 1×6 的矩阵，学生把一张拖到自己那一排上逐格比
+array a = 46 79 56 38 40 84
+paint a.1 g4
+matrix A = 38 40 46 56 79 84 hide=on
+matrix B = 40 38 46 79 56 84 hide=on
+matrix C = 40 38 46 56 79 84 hide=on
+matrix D = 40 38 46 84 56 79 hide=on
+say "先别动手：{a.1} 最后会在第几格？"
+ask tap a "点你猜的那一格"
+学生: tap a.3
+# 老师接：猜的记下不判；46 提到座位，第 1 格成坑
+label guess a.3 "你猜的" side=above tone=soft
+array pv = 46
+paint pv.1 g4
+label lpv pv.1 "枢轴" side=left tone=note
+write a.1 _
+unpaint a.1
+ptr i a.1
+ptr j a.6
+card ctl = "让 j 往左走" "让 i 往右走"
+card log = "记录"
+say "做一遍看看。指针点一下它自己走；该谁走、找到的往哪放，你来定。"
+open a undo=on
+goal g1 "把 j 找到的填进坑里" when="a.1 = a#5, a.5 = a#1"
+@g1 unlink a
+@g1 addline log "j 停在 5：40 填第 1 格，坑到第 5 格"
+@g1 goal g2 "把 i 找到的填进坑里" when="a.5 = a#2, a.2 = a#1"
+@ask.right hop a.1 -> a.2 color=g3
+@ask.right ptr i a.2
+@g1 ask tap ctl "下一步该谁走？" expect=ctl.2
+@g2 unlink a
+@g2 addline log "i 停在 2：79 填第 5 格，坑到第 2 格"
+@g2 goal g3 "再把 j 找到的填进坑里" when="a.2 = a#4, a.4 = a#1"
+@ask.right hop a.5 -> a.4 color=g5
+@ask.right ptr j a.4
+@g2 ask tap ctl "下一步该谁走？" expect=ctl.1
+@g3 unlink a
+@g3 addline log "j 停在 4：38 填第 2 格，坑到第 4 格"
+@g3 ask tap ctl "下一步该谁走？" expect=ctl.2
+@ask.right hop a.6 -> a.5 color=g5
+@ask.right ptr j a.5
+ask tap ctl "该谁走？" expect=ctl.1
+学生: tap ctl.1
+学生: swap a#5 a#1
+学生: tap ctl.2
+学生: swap a#2 a#1
+学生: tap ctl.1
+学生: swap a#4 a#1
+# 坑在第 4 格（右边），该 i 走；学生又点了 j
+学生: tap ctl.1
+# 老师接
+say "坑在第 4 格，它右边要放比 46 大的：谁去找？这回我替你点 i。"
+hop a.2 -> a.3 color=g3
+ptr i a.3
+goal g4 "把 i 找到的填进坑里" when="a.4 = a#3, a.3 = a#1"
+@g4 unlink a
+@g4 addline log "i 停在 3：56 填第 4 格，坑到第 3 格"
+@g4 hop a.4 -> a.3 color=g5
+@g4 ptr j a.3
+@g4 say "i、j 碰头了。"
+@ask.right write a.3 46
+@ask.right paint a.3 g4
+@ask.right remove pv
+@ask.right unlink a
+@ask.right retext guess "你猜的 ✓"
+@ask.right label lb a.1-2 "｛40 38｝" side=below tone=note
+@ask.right label rb a.4-6 "｛56 79 84｝" side=below tone=note
+@g4 ask tap a "46 落在哪一格？" expect=a.3
+学生: swap a#3 a#1
+学生: tap a.3
+# 老师接：翻开四个选项；学生把选项拖到自己那一排上逐格比
+remove ctl
+remove log
+matrix R = {a.1} {a.2} {a.3} {a.4} {a.5} {a.6}
+label lr R "你做出来的" side=left tone=note
+show A
+show B
+show C
+show D
+label la A "A" side=left tone=note
+label lb2 B "B" side=left tone=note
+label lc C "C" side=left tone=note
+label ld D "D" side=left tone=note
+open A compare
+open B compare
+open C compare
+open D compare
+say "四个里哪个是你这一排？拖一个到你那一排上比一比。"
+ask value "哪个选项？写字母" type=en answer=C
+学生: compare D R
+学生: compare C R
+学生: value C

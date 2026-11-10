@@ -1,0 +1,28 @@
+# D1 的几样东西说明里找不到写法，写出来看页面怎么回（每行各试一样，不算一幕）
+array h = _ 49 38
+array a = 49 38 65 97
+label c a "前大后小 {inv(a)} 对" side=right
+label c2 a "挪了 {moves(a)} 格" side=below
+goal gx "没有前大后小" when="inv(a) = 0"
+matrix R = _ _ _ _ / _ _ _ _
+matrix K = 38 49 65 97 / 1 2 3 4 hide=on
+goal g1 "第一行" when="R.r1 = K.r1"
+goal g2 "整张" when="R = K"
+card c3 = "A[j+dk]=A[j];" "if(A[i]<A[i-dk])"
+tex f = "\texttt{for(i=}\hl{b1}{\texttt{dk+1}}\texttt{; i<=n; ++i)}"
+cover f.b1
+next f "\texttt{A[}\hl{b2}{\texttt{j+dk}}\texttt{]=A[j];}"
+open R edit input=keypad
+ask next "x" button="好"
+学生: write R.1,1 38
+学生: write R.1,2 49
+学生: write R.1,3 65
+学生: write R.1,4 90
+学生: next
+graph L = 1>2 2>3 3>4 4>5 5>6 6>7 pos="1=0,0 2=1,0 3=2,0 4=3,0 5=4,0 6=5,0 7=6,0"
+walk L.7 L.6
+walk L.7 L.4
+walk L.1 L.2 L.3 L.4
+compare R K
+ask pick L "从头走到第 4 个，经过的都点出来" button="点好了" expect="L.1 L.2 L.3 L.4"
+学生: pick L.7 L.4

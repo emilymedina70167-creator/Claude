@@ -1,0 +1,91 @@
+# D3 第 3 幕：Prim——从一个村子长出来，每次接篱笆上最便宜的一条；随手切一刀，刀口上最便宜的一定在树里
+graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:5 C-E:9 D-E:2 D-F:6 E-F:3 pos="A=0,0 B=1,0 D=2,0 C=0,1 E=1,1 F=2,1"
+dim g.edges
+say "换个修法：先点一个村子当起点，只许接在已经修好的这一块上。"
+ask tap g.nodes "点一个村子当起点"
+学生: tap g.A
+# 老师接：A 圈进篱笆（没有篱笆的指令：试 group / fence，再拿涂金凑）、过篱笆的路亮金色、篱笆外的村子挂牌子
+fence g.A
+group g.A
+paint g.A g4
+undim g.A~B g.A~C
+paint g.A~B g.A~C g4
+tag g.B "离树最近：4（经 A）"
+tag g.B "4（经 A）"
+tag g.C "2（经 A）"
+tag g.D —
+tag g.E —
+tag g.F —
+# 答对的预写（C 进来）：篱笆撑大、金色的路换一批、牌子改数——每一样都是老师事先算好写死的
+@ask.right paint g.C g4
+@ask.right paint g.A~C g3
+@ask.right undim g.B~C g.C~D g.C~E
+@ask.right paint g.B~C g.C~D g.C~E g4
+@ask.right untag g.C
+@ask.right tag g.B "1（经 C）"
+@ask.right tag g.D "5（经 C）"
+@ask.right tag g.E "9（经 C）"
+@ask.right say "{g.C} 进来，{g.B} 的牌子为什么变了？"
+@ask.right ask tap g.edges "接着点一条金色的路" expect=g.B~C
+ask tap g.edges "点一条金色的路" expect=g.A~C
+学生: tap g.A~C
+# 学生去点不挨篱笆的便宜路 D–E（像 Kruskal 那样跳到别处）
+学生: tap g.D~E
+# 老师接：理想里这条照样修上、自成一块另一种颜色——老师照着画
+undim g.D~E
+paint g.D~E g.D g.E g1
+say "{g.D~E} 修上了，可它没接在金色这一块上。"
+ask tap g.edges "回到金色的路：点最便宜的一条" expect=g.B~C
+学生: tap g.B~C
+# 老师接：B 进来；下一步 BD5、CD5 并列——预期能不能写两条
+unpaint g.D~E g.D g.E
+dim g.D~E
+paint g.B g4
+paint g.B~C g3
+dim g.A~B
+undim g.B~D
+paint g.B~D g4
+untag g.B
+# 试：预期写两条（哪条都算对）。不认，页面把这一问退成「打字回答」
+ask tap g.edges "接着点：两条 5 随你挑" expect="g.B~D g.C~D"
+学生: say 点不了
+# 老师接：只能不写预期（页面不判这一下）
+ask tap g.edges "接着点：两条 5 随你挑"
+学生: tap g.C~D
+# 老师接：后面两步跳过，直接摆成修完的样子；两种修法排成两行小条（老师自己摆、自己染）
+paint g.D g.E g.F g4
+untag g
+unpaint g.edges
+dim g.edges
+undim g.A~C g.B~C g.C~D g.D~E g.E~F
+paint g.A~C g.B~C g.C~D g.D~E g.E~F g3
+array kr = BC1 AC2 DE2 EF3 CD5
+array pr = AC2 BC1 CD5 DE2 EF3
+paint kr.1 pr.2 g1
+paint kr.2 pr.1 g2
+paint kr.3 pr.4 g5
+paint kr.4 pr.5 g6
+paint kr.5 pr.3 g4
+label lk kr "Kruskal" side=left tone=note
+label lp pr "Prim" side=left tone=note
+say "6 个都进来了，5 条。和 Kruskal 修出来的比一比。"
+ask say "边一样，顺序为什么不一样？"
+学生: say Prim 只能挑挨着篱笆的，所以 5 排在 2、3 前面
+# 老师接：「拿手指随便圈几个村子」——没有画圈的手势；拿「点几个村子、按圈好了」凑
+say "随便圈几个村子：点它们，圈好了按下面。"
+ask pick g.nodes "点几个村子圈起来" button="圈好了"
+学生: pick g.A g.B
+# 老师接：过圈的路、最便宜的那条、在不在树里——全要老师自己算、自己画
+glow g.A~C g.B~C g.B~D
+lift g.B~C
+label cut g.B~C "过圈最便宜：1 ✓ 在树里" side=above tone=key
+ask pick g.nodes "再圈一次：换几个村子" button="圈好了"
+学生: pick g.D
+unglow g.A~C g.B~C g.B~D
+drop g.B~C
+glow g.B~D g.C~D g.D~E g.D~F
+unlabel cut
+lift g.D~E
+label cut2 g.D~E "过圈最便宜：2 ✓ 在树里" side=above tone=key
+ask say "怎么切一刀，过刀口最便宜的那条都怎么样？"
+学生: say 都在最便宜的树里

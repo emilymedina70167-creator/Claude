@@ -1,0 +1,66 @@
+# E1 第 1 幕：两个拨盘（时间、状态）拨谓语；拨出 4 个词的谓语；点块里、块外的词。
+# 拨盘只能是数字拨数（刻度的名字另贴一行图例）；拨数连不到句子里的词（{式子} 只算数），只能一种组合写一个挑战、做到时预写 rewrite + 重拉括号 + 改图鉴那一行：
+# 这里写了 6 种（理想要 13 种合法的加 3 个 ×），每个只演一次——学生拨回去句子不跟着回去（学生第 3、6、8 下）；
+# 预写里不知道上一道括号在哪几个词上，先 unmark s.1-5 把前五个词里的都收掉再重拉。图鉴是一张题卡（矩阵的格子只收数）
+sentence s = "Railroads combine with each other." key="Railroads [V combine] with each other."
+mark s.2 谓语
+dial t = 2 range=1-4 at=s
+label tn dial:t "时间：1 过去 · 2 现在 · 3 将来 · 4 过去将来" side=right
+dial z = 1 range=1-4 at=s
+label zn dial:z "状态：1 一般 · 2 进行 · 3 完成 · 4 完成进行" side=right
+card k = "时态图鉴（列：过去 ｜ 现在 ｜ 将来 ｜ 过去将来）" "一般：＿ ｜ combine ｜ ＿ ｜ ＿" "进行：＿ ｜ ＿ ｜ ＿ ｜ ＿" "完成：＿ ｜ ＿ ｜ ＿ ｜ ＿" "完成进行：＿ ｜ ＿ ｜ ＿ ｜ ＿"
+array tl = 过去 现在 将来
+dim tl
+say "两个钮随便拨，盯住句子——哪儿在变？"
+goal a1 "现在 · 进行" when="t = 2, z = 2"
+@a1 unmark s.1-5
+@a1 rewrite s "Railroads are combining with each other."
+@a1 mark s.2-3 谓语
+@a1 rewrite k.3 "进行：＿ ｜ are combining ｜ ＿ ｜ ＿"
+goal a2 "过去 · 进行" when="t = 1, z = 2"
+@a2 unmark s.1-5
+@a2 rewrite s "Railroads were combining with each other."
+@a2 mark s.2-3 谓语
+@a2 rewrite k.3 "进行：were combining ｜ are combining ｜ ＿ ｜ ＿"
+goal a3 "现在 · 完成" when="t = 2, z = 3"
+@a3 unmark s.1-5
+@a3 rewrite s "Railroads have combined with each other."
+@a3 mark s.2-3 谓语
+@a3 rewrite k.4 "完成：＿ ｜ have combined ｜ ＿ ｜ ＿"
+goal a4 "现在 · 完成进行" when="t = 2, z = 4"
+@a4 unmark s.1-5
+@a4 rewrite s "Railroads have been combining with each other."
+@a4 mark s.2-4 谓语
+@a4 rewrite k.5 "完成进行：＿ ｜ have been combining ｜ ＿ ｜ ＿"
+goal a5 "过去 · 一般" when="t = 1, z = 1"
+@a5 unmark s.1-5
+@a5 rewrite s "Railroads combined with each other."
+@a5 mark s.2 谓语
+@a5 rewrite k.2 "一般：combined ｜ combine ｜ ＿ ｜ ＿"
+goal g1 "拨出一个四个词的谓语" when="t = 3, z = 4"
+@g1 unmark s.1-5
+@g1 rewrite s "Railroads will have been combining with each other."
+@g1 mark s.2-5 谓语
+@g1 say "四个词，还是一个谓语。"
+@ask.right glow s.2-5
+@ask.right label one s.2-5 "一整块" side=above tone=key
+@g1 ask tap s "点这一块里随便哪个词。" expect=s.2-5
+学生: dial z 2
+学生: dial t 1
+学生: dial t 2
+学生: dial z 3
+学生: dial z 4
+学生: dial z 1
+学生: dial t 1
+学生: dial t 3
+学生: dial z 4
+学生: tap s.4
+unglow s.2-5
+ask tap s "再点一个块外面的词。"
+学生: tap s.1
+glow s.1
+say "点 {s.4} 亮的是整块 {s.2-5}，点 {s.1} 只亮它自己。"
+say "[时态] = 时间 × 状态，变化全在谓语这一块里。"
+fly say.1 -> name s.2-5
+ask say "一般那一行和别的行，拨时间的时候有什么不一样？"
+学生: say 别的行只换第一个词

@@ -1,0 +1,59 @@
+# D3 第 1 幕：村子地图，学生自己修出一棵生成树；n−1 条边，多一条成圈、少一条断开
+# 画面：6 个村子照位置摆、9 条路带价钱全灰（没修）、6 种颜色 = 6 块、底下一条状态栏
+graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:5 C-E:9 D-E:2 D-F:6 E-F:3 pos="A=0,0 B=1,0 D=2,0 C=0,1 E=1,1 F=2,1"
+dim g.edges
+paint g.A g1
+paint g.B g2
+paint g.C g3
+paint g.D g4
+paint g.E g5
+paint g.F g6
+label st g.E "修了 0 条 · 花了 0 · 分成 6 块" side=below tone=note
+say "6 个村子要通网线，路上的数是修这条要花的钱。"
+say "修哪几条？都连上就行，越便宜越好。"
+# 试：图能不能交给学生直接点（说明的图一节没有 open）、连通能不能写成挑战、状态栏能不能跟着页面数的数
+open g
+goal g1 "把 6 个村子都连上" when="g connected"
+label st2 g.B "分成 {parts(g)} 块" side=above tone=note
+# 能写的：一次点几条（ask pick，点了画圈、再点一次取消），学生一路点完再交；预期只能写死一棵树
+@ask.right say "13——没法再便宜了。"
+ask pick g.edges "点一条路就是修上它，再点一次拆掉；都连上了按下面" button="都连上了" expect="g.B~C g.A~C g.D~E g.E~F g.B~D"
+# 学生：BC1、AC2、AB4（成圈 A–B–C）、DE2、EF3、CD5，一共 6 条、花 17
+学生: pick g.B~C g.A~C g.A~B g.D~E g.E~F g.C~D
+# 老师接：照学生点的把路修成实线、合色、改状态栏、描出那一圈（全是老师自己算、自己写）
+undim g.B~C g.A~C g.A~B g.D~E g.E~F g.C~D
+paint g.A g.B g.C g.D g.E g.F g3
+paint g.B~C g.A~C g.D~E g.E~F g.C~D g3
+paint g.A~B g.A~C g.B~C g2
+pulse g.A~B g.A~C g.B~C
+retext st "修了 6 条 · 花了 17 · 分成 1 块"
+say "都连通了。数数修了几条。{g.A~B} 这条多连上了谁？"
+ask tap g.edges "拆掉一条看看：点它"
+学生: tap g.A~B
+dim g.A~B
+unpaint g.A~B
+paint g.A~C g.B~C g3
+retext st "修了 5 条 · 花了 13 · 分成 1 块"
+say "5 条，还连着。再拆一条呢？"
+ask tap g.edges "再拆一条：点它"
+学生: tap g.C~D
+# 拆 C–D：地图分成两块 {A,B,C} 和 {D,E,F}——哪两块要老师自己算
+dim g.C~D
+unpaint g.C~D
+paint g.D g.E g.F g4
+paint g.D~E g.E~F g4
+retext st "修了 4 条 · 花了 8 · 分成 2 块"
+ask next "看好了点下面" button="看好了"
+学生: next
+# —— 试：学生点出另一棵也是 13 的树（用 C–D 不用 B–D），预期写死的是 B–D 那棵
+graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:5 C-E:9 D-E:2 D-F:6 E-F:3 pos="A=0,0 B=1,0 D=2,0 C=0,1 E=1,1 F=2,1"
+dim g.edges
+say "再来一遍。"
+@ask.right say "13——没法再便宜了。"
+ask pick g.edges "点路修；都连上了按下面" button="都连上了" expect="g.B~C g.A~C g.D~E g.E~F g.B~D"
+学生: pick g.B~C g.A~C g.D~E g.E~F g.C~D
+# —— 试：学生点了 A–B 又点一次拆掉（改主意），最后正好是预期那一棵：预写的一句当场演；拆过哪条页面说不说
+say "换一棵。"
+@ask.right say "13——没法再便宜了。"
+ask pick g.edges "点路修；都连上了按下面" button="都连上了" expect="g.B~C g.A~C g.D~E g.E~F g.B~D"
+学生: pick g.A~C g.A~B g.B~C g.A~B g.B~D g.D~E g.E~F

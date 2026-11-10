@@ -1,0 +1,63 @@
+# D3 分支 3：Kruskal 和 Prim 的加边次序混了（2020 真题选 B 或 D），或者 Kruskal 把成圈的边也加上
+graph g = a-b:20 a-e:9 a-c:12 b-e:11 b-d:6 b-f:5 e-c:10 e-d:14 c-d:18 d-f:7
+array k = bf5 bd6 df7 ae9 ce10 be11 ac12 de14 cd18 ab20 hide=on
+say "按 Kruskal 的顺序点 5 条边。"
+@ask.right say "5 条都对。"
+ask pick g.edges "按你的顺序点 5 条边" button="点满 5 条了" expect="g.b~f g.b~d g.a~e g.e~c g.b~e"
+# 学生点成从 b 起的 Prim（选项 B）：5 条边一样，先后不一样
+学生: pick g.b~f g.b~d g.b~e g.a~e g.e~c
+# 老师接：页面只比了是哪几条（「一样」，还演了预写的「5 条都对」）；先后要老师自己拿去和四个选项、每个顶点起的 Prim 比
+# 试：让页面比先后——只能叫学生把顺序打一遍字，错法老师事先列出来
+ask value "把你点的顺序打出来（bf bd …）" type=seq answer="bf bd ae ce be" wrong="bf bd be ae ce=和从 b 起的 Prim 一样（选项 B）;ae ce be bf bd=和从 a 起的 Prim 一样（选项 D）"
+学生: value bf bd be ae ce
+# 老师接：照学生的顺序重播，配颜色合并和价目单（能快能慢能停：没有；老师一条条染、中间 wait）
+show k
+replay g
+paint g.b~f g.b g.f g1
+paint k.1 g1
+wait 600
+paint g.b~d g.d g1
+paint k.2 g1
+wait 600
+paint g.b~e g.e g1
+paint k.6 g1
+glow k.4 k.5
+say "重播到第 3 条 {k.6}：比 11 便宜、也不成圈的，还有谁？"
+ask pick k "点出来" button="就这几张" expect="k.4 k.5"
+# 学生把成圈的 df7 也点上了
+学生: pick k.3 k.4 k.5
+# 老师接：旁边并排放一个「从 b 起的 Prim」同步重播（两张图并排不了；& 让两边同一拍染）
+unglow k.4 k.5
+unpaint g.b~f g.b~d g.b~e g.b g.f g.d g.e
+graph m = a-b:20 a-e:9 a-c:12 b-e:11 b-d:6 b-f:5 e-c:10 e-d:14 c-d:18 d-f:7
+label tg g "你点的顺序" side=above tone=key
+label tm m "从 b 起的 Prim" side=above tone=key
+paint g.b~f g4
+& paint m.b~f g4
+wait 600
+paint g.b~d g4
+& paint m.b~d g4
+wait 600
+paint g.b~e g4
+& paint m.b~e g4
+wait 600
+paint g.a~e g4
+& paint m.a~e g4
+wait 600
+paint g.e~c g4
+& paint m.e~c g4
+ask say "两边一步步完全一样。你做的是哪一种？"
+学生: say 我做的是 Prim
+# 老师接：成圈的那一种——按价钱排了，却把 7 的 (d,f) 也点上
+remove m
+unlabel
+unpaint g.edges
+ask pick g.edges "再来一遍：按 Kruskal 点 5 条边" button="点满 5 条了" expect="g.b~f g.b~d g.a~e g.e~c g.b~e"
+学生: pick g.b~f g.b~d g.d~f g.a~e g.e~c
+# 老师接：页面说多点了 d–f、漏了 b–e；是哪一圈、两头当时是不是同一块要老师自己说、自己描
+paint g.b g.f g.d g1
+paint g.b~f g.b~d g.d~f g2
+pulse g.b~f g.b~d g.d~f
+say "{g.d~f} 一上去，{g.d}、{g.f} 两头本来就同色。"
+ask say "多花了 7，多连上了谁？"
+学生: say 谁也没多连上

@@ -1,0 +1,73 @@
+# D1 第 5 幕：学生自己从头排一遍（综合题 02）。一排格子不能是空的、学生也写不进去：
+# 三行空格子拿 3×10 的空矩阵凑（open … edit input=keypad 一格一格写），答案藏成一张矩阵 K，一行一个「按了才判」的挑战
+array k = 50 26 38 80 70 90 8 30 40 20
+array w = 50 26 38 80 70 90 8 30 40 20
+open w undo=on
+matrix R = _ _ _ _ _ _ _ _ _ _ / _ _ _ _ _ _ _ _ _ _ / _ _ _ _ _ _ _ _ _ _
+label l1 R.r1 "d=5 后" side=left tone=soft
+label l2 R.r2 "d=3 后" side=left tone=soft
+label l3 R.r3 "d=1 后" side=left tone=soft
+matrix K = 50 8 30 40 20 90 26 38 80 70 / 26 8 30 40 20 80 50 38 90 70 / 8 20 26 30 38 40 50 70 80 90 hide=on
+open R edit input=keypad
+say "这回全是你自己的。增量 5、3、1，每趟写出结果。写之前先数有几个数。"
+goal g1 "d=5 这一趟" when="R.r1 = K.r1" on="交这一趟"
+@g1 label ok1 R.r1 "✓" side=right tone=key
+@g1 glow R.r2
+@g1 goal g2 "d=3 这一趟" when="R.r2 = K.r2" on="交这一趟"
+@g1 ask next "接着写 d=3 那一行，写完再交" button="交这一趟"
+ask next "中间那排是草稿，随便拖。第一行写完点「交这一趟」" button="交这一趟"
+# 学生在草稿上拖了一下，第一行写成「连续 5 个一段」那种错
+学生: swap w#1 w#2
+学生: write R.1,1 26
+学生: write R.1,2 38
+学生: write R.1,3 50
+学生: write R.1,4 70
+学生: write R.1,5 80
+学生: write R.1,6 8
+学生: write R.1,7 20
+学生: write R.1,8 30
+学生: write R.1,9 40
+学生: write R.1,10 90
+学生: next
+# 错了不标红、不出提示，停着等老师：页面叫老师，这一条里有没有「哪几格不同」「像哪种错法」
+say "先别改。第 1 条泳道是第几个和第几个？在草稿上找出来。"
+ask next "改好第一行再交" button="交这一趟"
+学生: write R.1,1 50
+学生: write R.1,2 8
+学生: write R.1,3 30
+学生: write R.1,4 40
+学生: write R.1,5 20
+学生: write R.1,6 90
+学生: write R.1,7 26
+学生: write R.1,8 38
+学生: write R.1,9 80
+学生: write R.1,10 70
+学生: next
+# 第一行对了：预写的勾、下一行亮、下一个挑战和按钮都由页面当场演。第二行学生写对
+学生: write R.2,1 26
+学生: write R.2,2 8
+学生: write R.2,3 30
+学生: write R.2,4 40
+学生: write R.2,5 20
+学生: write R.2,6 80
+学生: write R.2,7 50
+学生: write R.2,8 38
+学生: write R.2,9 90
+学生: write R.2,10 70
+学生: next
+label ok2 R.r2 "✓" side=right tone=key
+glow R.r3
+goal g3 "d=1 这一趟" when="R.r3 = K.r3" on="交这一趟"
+ask next "最后一趟" button="交这一趟"
+# 第三行写重了一个数（80 写了两次、少了 90）
+学生: write R.3,1 8
+学生: write R.3,2 20
+学生: write R.3,3 26
+学生: write R.3,4 30
+学生: write R.3,5 38
+学生: write R.3,6 40
+学生: write R.3,7 50
+学生: write R.3,8 70
+学生: write R.3,9 80
+学生: write R.3,10 80
+学生: next

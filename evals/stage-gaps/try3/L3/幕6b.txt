@@ -1,0 +1,55 @@
+# L3 第 6 幕后半（第三次量）：P 的两列配 Λ 的两个数、三张卡排成 A、Aᵏ
+plane p range=-5..5
+matrix A = 3 1 / 2 2
+matrix L = 4 0 / 0 1 beside=A
+label ll L "Λ" side=above tone=key
+vec p x1 = 1 1 color=g2
+vec p x2 = 1 -2 color=g3
+# P 的两个列槽：没有「把箭头拖进列槽」，拿一张空格子让学生用键盘写；逐列核 A·(第 i 列) = λi·(第 i 列) 拿 AP、PΛ 两张藏着的比
+matrix Ps = _ _ / _ _
+label lp Ps "P = [□ □]" side=above tone=key
+matrix AP = {A Ps} hide=on
+matrix PL = {Ps L} hide=on
+open Ps edit input=keypad
+say "{p.x1}、{p.x2} 放进 {Ps} 的两列，顺序自己定，要配得上 {L}。"
+goal g1 "P 的两列配上 Λ 的两个数" when="AP.c1 = PL.c1, AP.c2 = PL.c2, det(Ps) != 0"
+@g1 say "配上了：第 i 列配 Λ 的第 i 个数。"
+学生: write Ps.1,1 1
+学生: write Ps.2,1 -2
+学生: write Ps.1,2 1
+学生: write Ps.2,2 1
+# 学生把 ξ2 放在了第 1 列（配的是 4）：老师把两张摆出来比
+show AP
+show PL
+compare AP PL
+say "{AP} 和 {PL} 哪一列对不上？换一下。"
+学生: write Ps.2,1 1
+学生: write Ps.2,2 -2
+# 三张卡排成 A
+matrix Pi = {Ps^-1} hide=on
+array t = P⁻¹ Λ P
+open t
+say "把三张卡排成「□ □ □ = A」。"
+ask next "排好了点下面" button="排好了"
+学生: next
+# 学生没动，排的是 P⁻¹ΛP：照这个顺序从右往左播三段（先 P、再 Λ、再 P⁻¹），再把乘积算出来和 A 比
+transform p Ps
+transform p L
+transform p Pi
+matrix R = {Pi L Ps} beside=L
+label lr R "你排的 P⁻¹ΛP" side=above tone=note
+compare R A
+say "照你排的播了一遍：{R} 和 {A} 不一样。最先作用的是哪一张？"
+ask next "重新排，排好了点下面" button="排好了"
+学生: swap t#1 t#3
+学生: next
+untransform p
+matrix R = {Ps L Pi} beside=L
+dial k = 1 range=1-6
+matrix Ak = {Ps L^k Pi}
+label lk Ak "Aᵏ（拨 k）" side=above tone=note
+say "这回对上了。拨 {k}，看 {Ak}。"
+ask value "写出 Aᵏ 的一般式（含 k）" type=matrix free=k answer="(2*4^k+1)/3 (4^k-1)/3 / (2*4^k-2)/3 (4^k+2)/3"
+学生: dial k 3
+学生: value (2*4^k+1)/3 (4^k-1)/3 / (2*4^k-2)/3 (4^k-2)/3
+say "嗯。"

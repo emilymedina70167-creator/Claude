@@ -1,0 +1,25 @@
+# D4 分支 1：树高公式搞反。n 拨到 7、8、15、16 看层数跳；夹子 2^(h-1) ≤ n ≤ 2^h-1；最瘦的 4 层平衡树按层排进数组出现空格
+tree c = 1 2 3 4 5 6 7 layout=compact
+dial n = 7 range=1-20 at=c
+label lc c "{count(c)} 个结点 · {height(c)} 层" side=right tone=note
+say "把 $n$ 拨到 8：第 8 个结点坐哪？"
+ask next "拨到 8 点下面" button="拨好了"
+学生: dial n 8
+学生: next
+# 老师接：拨数不会让树长，老师自己接一个结点；层数页面数（{height(c)}）
+append c 8
+pulse c#8
+say "第 8 个只能另起第 4 层。到几个结点第 4 层才坐满？"
+ask value "4 层最多几个结点？" answer=15 wrong="16=把 2^4 当成最多"
+学生: value 16
+# 老师接：夹子两边让学生写成含 h 的式子，页面代 h 判
+ask value "h 层的完全二叉树最少几个结点？写成含 h 的式子" type=formula free=h answer="2^(h-1)" wrong="2^h-1=最少最多写反了"
+学生: value 2^h-1
+ask value "最多几个？" type=formula free=h answer="2^h-1"
+学生: value 2^h-1
+# 老师接：最瘦的 4 层平衡二叉树（7 个结点），按层排进一排——那一排跟着树算，空的位置页面画不画得出空格
+tree b = 5 3 7 2 4 _ 8 1
+array lay = {b#1} {b#2} {b#3} {b#4} {b#5} {b#6} {b#7} {b#8}
+say "把它也按层排进一排：有没有空着的格子？"
+ask pick lay "点出空着的格子" button="点好了" expect="lay.6"
+学生: pick lay.6

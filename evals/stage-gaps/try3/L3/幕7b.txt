@@ -1,0 +1,50 @@
+# L3 第 7 幕中段（第三次量）：对照表、给 J 拼一个 P、r(2E − J)（只留 J 一块平面：两块平面加矩阵排不下，见 幕7.txt）
+plane q range=-3..3
+matrix E2 = 2 0 / 0 2 hide=on
+matrix J = 2 1 / 0 2
+label lj J "J" side=above tone=key
+# 对照表：三行（tr、行列式、秩）两列（2E、J）的空格子，学生用键盘填；对的那张藏着、格里写式子让页面算
+matrix T = _ _ / _ _ / _ _
+label t0 T "对照表：左 2E，右 J；三行是 tr、行列式、秩" side=above tone=note
+matrix Tt = {E2.1,1 + E2.2,2} {J.1,1 + J.2,2} / {det(E2)} {det(J)} / {rank(E2)} {rank(J)} hide=on
+open T edit input=keypad
+say "表里先填。"
+goal g1 "对照表填对" when="T = Tt"
+@g1 say "这几样全一样。"
+@g1 ask value "J 的特征多项式 |λE − J| = ？" type=formula free=λ answer="(λ-2)^2"
+学生: write T.1,1 4
+学生: write T.1,2 4
+学生: write T.2,1 4
+学生: write T.2,2 4
+学生: write T.3,1 2
+学生: write T.3,2 1
+学生: write T.3,2 2
+学生: value λ^2-4λ+4
+# 给 J 拼一个 P：p1、p2 两根能拖的箭头，P 的两列跟着它们，P⁻¹JP 一直摆着
+vec q p1 = 1 0 color=g4
+vec q p2 = 0 1 color=g5
+matrix V1 = {q.p1} hide=on
+matrix V2 = {q.p2} hide=on
+matrix Pm = {V1.1,1} {V2.1,1} / {V1.2,1} {V2.2,1}
+label lp Pm "P = [p1 p2]，det P = {det(Pm)}" side=above tone=note
+matrix R = {Pm^-1 J Pm} beside=Pm
+label lr R "P⁻¹JP" side=above tone=key
+open q.p1
+open q.p2
+say "给 {J} 拼一个 P：拖 {q.p1}、{q.p2}，让 {R} 变成对角的。"
+goal g2 "让 P⁻¹JP 右上角变成 0" when="R.1,2 = 0"
+学生: vec q p2 = 1 1
+学生: vec q p2 = 0 2
+学生: vec q p2 = 2 1
+学生: vec q p2 = 3 1
+学生: vec q p2 = 2 0
+学生: vec q p1 = 0 1
+学生: vec q p1 = 1 -1
+学生: vec q p2 = -1 2
+学生: vec q p1 = 2 0
+# 页面叫老师（试了好多下）以后：问 r(2E − J)
+matrix N = {E2 - J} hide=on
+say "拼不出来，为什么？先算一个数。"
+ask value "r(2E − J) = ？" answer={rank(N)}
+学生: value 1
+say "嗯。"

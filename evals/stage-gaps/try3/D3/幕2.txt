@@ -1,0 +1,88 @@
+# D3 第 2 幕：Kruskal——照价目单从小到大一张张看，两头已经同色就跳过
+# 画面：同一张地图（路全没修、6 种颜色）；价目单 9 张卡；「连通分量：6」
+graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:5 C-E:9 D-E:2 D-F:6 E-F:3 pos="A=0,0 B=1,0 D=2,0 C=0,1 E=1,1 F=2,1"
+dim g.edges
+paint g.A g1
+paint g.B g2
+paint g.C g3
+paint g.D g4
+paint g.E g5
+paint g.F g6
+array k = BC1 AC2 DE2 EF3 AB4 BD5 CD5 DF6 CE9
+label cc g "连通分量：6" side=above tone=key
+card c = "修" "不修"
+glow k.1
+say "刚才你先挑便宜的。这回照价目单，从上往下一张一张来。"
+# 试：把卡拖到地图上 = 修（一排格子的卡只能在同一排里换位置）。这一行不认，页面把它退成「打字回答」，后面的行都不演，所以单放一轮
+ask drag k.1 g.B~C "把 {k.1} 拖到地图上就是修"
+学生: say 拖不过去
+# 能写的：「修 / 不修」另放一张题卡点；答对的那一张预写合色、减数、亮下一张、问下一张（预写只能套这一层）
+@ask.right undim g.B~C
+@ask.right paint g.B~C g.B g3
+@ask.right paint k.1 g3
+@ask.right unglow k.1
+@ask.right glow k.2
+@ask.right retext cc "连通分量：5"
+@ask.right ask tap c "{k.2}：要，还是不要？" expect=c.1
+ask tap c "{k.1}：要，还是不要？" expect=c.1
+学生: tap c.1
+学生: tap c.1
+# 老师接（AC2 答对了，这一张的合色要老师这一轮写）；DE2、EF3 再预写一层
+undim g.A~C
+paint g.A~C g.A g3
+paint k.2 g3
+unglow k.2
+glow k.3
+retext cc "连通分量：4"
+@ask.right undim g.D~E
+@ask.right paint g.D~E g.E g4
+@ask.right paint k.3 g4
+@ask.right unglow k.3
+@ask.right glow k.4
+@ask.right retext cc "连通分量：3"
+@ask.right ask tap c "{k.4}：要，还是不要？" expect=c.1
+ask tap c "{k.3}：要，还是不要？" expect=c.1
+学生: tap c.1
+学生: tap c.1
+# 老师接：EF3 合色；轮到 AB4（该不修）。答对的预写：卡变灰、路上打个叉（没有画叉的指令，贴一个「✕」）、亮下一张
+undim g.E~F
+paint g.E~F g.F g4
+paint k.4 g4
+unglow k.4
+glow k.5
+retext cc "连通分量：2"
+@ask.right dim k.5
+@ask.right label x1 g.A~B "✕" side=above tone=soft
+@ask.right unglow k.5
+@ask.right glow k.6 k.7
+@ask.right ask tap k.6-7 "两张都是 5：挑一张修"
+ask tap c "{k.5}：要，还是不要？" expect=c.2
+# 学生把 AB4 也修了（理想里要接的那一种）：页面只知道点的不是预期那一行
+学生: tap c.1
+# 老师接：成圈提示这一幕先关着——只指 A、B 两头的颜色；学生还看不出来再描圈（描圈是老师自己画）
+glow g.A g.B
+ask say "修了这条，多连上了哪个村子？"
+学生: say 好像没有多连上谁，A 和 B 本来就一个颜色
+unglow g.A g.B
+dim k.5
+label x1 g.A~B "✕" side=above tone=soft
+unglow k.5
+glow k.6 k.7
+say "对：两头已经同色，这张不要。"
+ask tap k.6-7 "两张都是 5：挑一张修"
+学生: tap k.7
+# 老师接：学生挑了 CD5；另一张 BD5 现在两头同色了——要老师自己看
+undim g.C~D
+paint g.C~D g.D g.E g.F g.D~E g.E~F g3
+paint k.7 g3
+dim k.6
+unglow k.6 k.7
+retext cc "连通分量：1"
+dim k.8-9
+label done k "5 条，连成一块了" side=below tone=key
+ask value "连通分量那个数到几就可以停了？" answer=1
+学生: value 1
+# —— 试：整张价目单一次交（ask pick 一排卡）：学生从上往下点要修的，页面给先后、和预期比多点漏点
+unlabel done
+ask pick k "从上往下，把要修的卡都点出来" button="就这几张" expect="k.1 k.2 k.3 k.4 k.6"
+学生: pick k.1 k.2 k.3 k.4 k.5 k.7

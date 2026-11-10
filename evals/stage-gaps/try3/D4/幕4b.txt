@@ -1,0 +1,41 @@
+# D4 第 4 幕（后半）：试验台（换一组、划两趟、造一组两趟只定 2 个的）和检查台（四排里哪个不可能是第二趟的结果）
+array b = 5 3 9 2 7 4 6
+label lb b "试验台：拖着改成你要的一组" side=above tone=note
+say "两趟以后，最少定下几个？造一组两趟只定 2 个的。"
+open b undo=on
+ask next "排好一组，点下面看两趟以后" button="划两趟"
+# 学生把 2 换到最前面：2 3 9 5 7 4 6
+学生: swap b.1 b.4
+学生: next
+# 老师接：页面不会划。老师自己算两趟（第一刀 2 落在头上，第二刀 3 又落在头上），另造一排写结果
+array r = 2 3 9 5 7 4 6
+label lr r "两趟后：定了 2 个" side=above tone=note
+paint r.1 r.2 g4
+say "做到了：第一刀落在了头上。"
+ask next "再试一组，或者去检查台" button="去检查台"
+学生: next
+# 检查台：四排。先试一问里跨四排一起点（四个 array）——页面说 ask pick 一次只点一样东西里的；
+# 所以四排改成一张 4×7 的矩阵（一行一个选项），一问里点全
+remove b
+remove r
+array A = 2 3 5 4 6 7 9
+array B = 2 7 5 6 4 3 9
+ask pick A B "每一排上点出已经站定的数" button="点好了" expect="A.1 A.2 A.5 A.6 A.7 B.1 B.7"
+学生: pick A.1 A.2 A.5 A.6 A.7 B.1 B.7
+# 老师接：改用一张矩阵
+remove A
+remove B
+matrix M = 2 3 5 4 6 7 9 / 2 7 5 6 4 3 9 / 3 2 5 4 7 6 9 / 4 2 3 5 7 6 9
+label la M.r1 "A" side=left tone=note
+label lb2 M.r2 "B" side=left tone=note
+label lc M.r3 "C" side=left tone=note
+label ld M.r4 "D" side=left tone=note
+say "这四个里哪个不可能是第二趟的结果？先在每一排上点出你觉得已经站定的数。"
+ask pick M "每一排上点出已经站定的数" button="点好了" expect="M.1,1 M.1,2 M.1,5 M.1,6 M.1,7 M.2,1 M.2,7 M.3,7 M.4,4 M.4,7"
+# 学生：A 点对了；B 多点了 5；C 点了 5 和 9；D 点对了
+学生: pick M.1,1 M.1,2 M.1,5 M.1,6 M.1,7 M.2,1 M.2,3 M.2,7 M.3,3 M.3,7 M.4,4 M.4,7
+# 老师接：C 里的 5 左边最大、右边最小是谁——页面不标，老师自己贴
+label c5 M.3,3 "左边最大 3 · 右边最小 4" side=below tone=note
+say "{M.3,3} 右边有比它小的 {M.3,4}，它站定了吗？"
+ask value "哪一排不可能？写字母" type=en answer=C
+学生: value D

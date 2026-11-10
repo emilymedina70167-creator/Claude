@@ -1,0 +1,53 @@
+# D1 分支 1：稳定性按日常意思判。页面要提供：相等元素每一趟谁在前、各在哪组、翻在哪一趟、直接比过几次；
+# 只留两张 49 的显示；同一输入两串增量并排回放
+array a = 49 38 65 97 76 13 27 49′ 55 04
+array b = 49 38 65 97 76 13 27 49′ 55 04
+label la a "增量 5,3,1" side=left tone=soft
+label lb b "增量 5,2,1" side=left tone=soft
+dim a.2-7 a.9-10
+dim b.2-7 b.9-10
+keep a "初始"
+keep b "初始"
+say "只留两张 49。先填小表：输入谁在前？"
+ask value "输入：___ 在前（只写牌）"
+学生: value 49 从第 1 格到了第 6 格
+# 两排都只能老师一格格走；d=5 两排一样
+group a stride=5
+swap a.1 a.6
+swap a.2 a.7
+swap a.3 a.8
+swap a.4 a.9
+swap a.5 a.10
+group b stride=5
+swap b.1 b.6
+swap b.2 b.7
+swap b.3 b.8
+swap b.4 b.9
+swap b.5 b.10
+say "d=5 这一下，{a#1} 和 {a#8} 在同一组里比过吗？"
+ask pick a "点出和 {a#1} 一组的、和 {a#8} 一组的" button="点好了" expect="a#6 a#3"
+学生: pick a#6 a#3
+# 上排接着 3，下排接着 2（各自组内只能一下下 swap）
+group a stride=3
+swap a.4 a.7
+swap a.2 a.5
+group b stride=2
+swap b.3 b.5
+swap b.1 b.3
+swap b.5 b.7
+swap b.4 b.6
+ask next "上排隔 3、下排隔 2 走完了" button="走最后一趟"
+学生: next
+group a stride=1
+move a.2 -> a.1
+move a.4 -> a.3
+move a.5 -> a.3
+move a.10 -> a.9
+group b stride=1
+move b.3 -> b.2
+move b.5 -> b.4
+move b.7 -> b.6
+move b.10 -> b.9
+say "同一个算法、同一排数：上排 {a#8} 在前，下排 {b#1} 在前。"
+ask say "稳定是说这一次，还是说所有输入？"
+学生: say 这次没翻就是稳定的

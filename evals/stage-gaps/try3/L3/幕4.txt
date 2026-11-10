@@ -1,0 +1,29 @@
+# L3 第 4 幕（第三次量）：3 阶的 A 自己算 |λE − A| = (λ − 1)²(λ − 10)：根算重数，和、积对得上迹和行列式
+matrix A = 2 2 -2 / 2 5 -4 / -2 -4 5
+# 行列式的列不能用 & 隔（幕4b.txt：三列粘在一起），每行拿 \quad 隔开凑
+tex f = "|\lambda E - A| = \begin{vmatrix}\lambda-2\quad -2\quad 2\\-2\quad \lambda-5\quad 4\\2\quad 4\quad \lambda-5\end{vmatrix}"
+card k = "tr A = 12" "|A| = 10"
+cover k.1
+cover k.2
+say "一行一行写，能凑公因子就先凑，别急着展开。"
+ask value "下一行：化简一步以后的行列式（一格写一个式子）" type=matrix free=λ answer="λ-2 -2 0 / -2 λ-5 λ-1 / 2 4 λ-1"
+# 学生走的是另一条对的路（第 3 行加到第 2 行），看页面怎么判
+学生: value λ-2 -2 2 / 0 λ-1 λ-1 / 2 4 λ-5
+say "你做的是哪一步？我先照第 2 列加到第 3 列写。"
+next f "= \begin{vmatrix}\lambda-2\quad -2\quad 0\\-2\quad \lambda-5\quad \lambda-1\\2\quad 4\quad \lambda-1\end{vmatrix}"
+ask value "接着化：写成因式的乘积" type=formula free=λ answer="(λ-1)^2(λ-10)" wrong="λ^2-11λ+10=丢了因子 (λ−1)"
+学生: value (λ-1)(λ^2-11λ+10)
+next f "= (\lambda-1)(\lambda^2-11\lambda+10)"
+ask value "三个根（重根写两次，空格隔开）" type=seq answer="1 1 10"
+学生: value 1 1 10
+say "把三个根加起来，和 {A} 的对角线比一比。翻一张小卡。"
+ask tap k "翻开哪一张？"
+学生: tap k.1
+uncover k.1
+@ask.right uncover k.2
+@ask.right say "乘起来呢？和 {k.2} 比。"
+ask value "三个根加起来是几？" answer=12
+学生: value 12
+ask value "三个根乘起来是几？" answer={det(A)}
+学生: value 10
+say "嗯。"

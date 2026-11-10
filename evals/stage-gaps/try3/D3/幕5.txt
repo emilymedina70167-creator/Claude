@@ -1,0 +1,58 @@
+# D3 第 5 幕：Dijkstra 的种子——先记暂时的距离，最近的敢锁死，锁了它再去改它指到的点
+# 画面：0→1 3、1→2 1、上面一条弧 0→2 7；0 涂实；1、2 的牌子「离 0：?」、旁边一把开着的锁
+graph g = 0>1:3 1>2:1 0>2:7 pos="0=0,1 1=1,0 2=2,1"
+paint g.0 g4
+tag g.1 "离 0：?"
+tag g.2 "离 0：?"
+# 试：锁（说明里没有锁；试 lock、试挑战里写牌子）
+lock g.1
+goal g0 "把 2 的牌子改对" when="g.2 = 4"
+ungoal g0
+say "从 {g.0} 出发到 {g.1}、到 {g.2} 各多远？现在只知道 0 直接能到的。"
+# 初值：0 发出去的两根箭头一闪，3、7 落进牌子（relax 只认数：牌子上写着「离 0：?」落不进去，先改成 ∞）
+glow g.0~1 g.0~2
+tag g.0 0
+relax g.0 -> g.1
+tag g ∞
+tag g.0 0
+relax g.0 -> g.1
+relax g.0 -> g.2
+unglow g.0~1 g.0~2
+# 学生点一把锁；点对了（1）预写：1 涂实、1→2 亮、问 2 的牌子（牌子上写不了数，只能在底下的框里填）
+@ask.right paint g.1 g4
+@ask.right glow g.1~2
+@ask.right say "{g.1} 锁了，谁的牌子可能要改？"
+@ask.right ask value "{g.2} 的牌子现在该写几？" answer=4 type=num wrong="1=只写了边权，没加上 1 自己的 3;7=没改"
+ask tap g.1 g.2 "两个牌子，你敢先锁死哪一个？点它" expect=g.1
+学生: tap g.1
+学生: value 1
+# 老师接（页面认出「只写了边权」，是老师事先写在 wrong= 里的）
+say "{g.1} 自己离 {g.0} 是几？再加上这一段呢？"
+ask value "{g.2} 的牌子该写几？" answer=4 type=num
+学生: value 4
+# 老师接：把新数写上牌子（旧的 7 直接换掉，没有划掉的画法）
+relax g.1 -> g.2
+paint g.2 g4
+ask say "凭什么 3 敢锁？有没有更近的路去 1？"
+学生: say 别的路都得先到 2，已经 7 了
+# —— 学生先锁了 2 的那一种：再锁 1、1→2 亮起来，锁死的 7 被 4 打败——页面有没有锁、裂不裂
+graph g = 0>1:3 1>2:1 0>2:7 pos="0=0,1 1=1,0 2=2,1"
+paint g.0 g4
+tag g ∞
+tag g.0 0
+relax g.0 -> g.1
+relax g.0 -> g.2
+say "再来一遍。"
+ask tap g.1 g.2 "你敢先锁死哪一个？" expect=g.1
+学生: tap g.2
+paint g.2 g4
+say "好，{g.2} 锁在 7。再锁 {g.1}。"
+ask tap g.1 "点 1 锁上" expect=g.1
+学生: tap g.1
+paint g.1 g4
+glow g.1~2
+relax g.1 -> g.2
+# 裂缝和小字只能老师自己贴
+label crack g.2 "0→1→2 = 4 < 7" side=below tone=key
+ask say "锁死的 7 怎么了？"
+学生: say 被 4 打败了，不该先锁 2

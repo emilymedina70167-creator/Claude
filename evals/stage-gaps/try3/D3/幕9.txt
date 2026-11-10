@@ -1,0 +1,43 @@
+# D3 第 9 幕：谁快——Prim 只跟点数有关、Kruskal 只跟边数有关；Dijkstra 慢在每轮「挑最小」
+# 画面：一张能变的图（拨点数、边数，图当场长边收边）、三个计步器、邻接矩阵 / 邻接表开关、两个按钮、一张小坐标
+dial v = 8 range=4-16
+dial e = 7 range=7-28
+# 试：图的点数、边数跟着拨数（说明里只有边权能写 {式子}）
+graph g = random n={v} m={e}
+graph g = A-B:3 B-C:5 C-D:2 D-E:7 E-F:4 F-G:6 G-H:{e}
+graph g = A-B:3 B-C:5 C-D:2 D-E:7 E-F:4 F-G:6 G-H:1
+label lv dial:v "点数 |V| = {v}" side=right
+label le dial:e "边数 |E| = {e}" side=right
+# 计步器：页面不会真跑三个算法；拿跟着算的格子凑——式子是老师写的「大约多少步」，不是真的执行步数
+matrix P = {v} {v v}
+label lp P "点数 · Prim 约走几步（|V|²）" side=left tone=note
+# Kruskal 约 |E|·log₂|E|：试式子里有没有 log
+matrix K = {e} {e log(e)}
+matrix K = {e} {3 e}
+label lk K "边数 · Kruskal 约走几步（log₂|E| 写不出，拿 3 顶着）" side=left tone=note
+matrix D = {v v} {v v}
+label ld D "Dijkstra：挑最小 · 改 dist（邻接矩阵）" side=left tone=note
+# 小坐标：试平面上的点跟着拨数走
+plane c range=0..30
+point c X = {e} {v}
+say "拨边数，看哪个表在动。再拨点数。"
+ask next "拨一拨，看好了点下面" button="看好了"
+学生: dial e 16
+学生: dial e 28
+学生: dial v 10
+学生: next
+# 老师接：开关和两个按钮——拿一张题卡当按钮，点了以后老师这一轮改式子
+card sw = "邻接矩阵" "邻接表" "只要到某一个点" "每个点当起点各跑一遍"
+say "切成邻接表，Dijkstra 快了多少？"
+ask tap sw "点一个试试"
+学生: tap sw.2
+matrix D = {v v} {e}
+glow sw.2
+retext ld "Dijkstra：挑最小 · 改 dist（邻接表）"
+ask tap sw "再点一个"
+学生: tap sw.4
+matrix D = {v v v} {v e}
+glow sw.4
+retext ld "每个点当起点：挑最小 · 改 dist（各乘 |V|）"
+ask say "边多（稠密）用谁、边少点多（稀疏）用谁？"
+学生: say 稠密用 Kruskal

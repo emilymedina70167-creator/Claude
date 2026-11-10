@@ -1,0 +1,43 @@
+# D3 分支 1：Dijkstra 更新时写成边权——把 Dijkstra 做成了 Prim
+# 第 6 幕锁了 5 以后：2 写 3、3 写 9、4 写 2（都是 5 出去的边权）
+graph g = 1>2:10 1>5:5 2>3:1 2>5:2 3>4:4 4>1:7 4>3:6 5>2:3 5>3:9 5>4:2
+paint g.1 g.5 g4
+tag g ∞
+tag g.1 0
+tag g.5 5
+tag g.2 10
+paint g.1~5 g4
+glow g.5~2 g.5~3 g.5~4
+# 认出这一种：只能老师事先把错法一条条列进 wrong=（页面照字对；牌子对不对、和 Prim 规则一不一致页面自己不算）
+ask value "{g.2}、{g.3}、{g.4} 的牌子依次写几？" type=seq answer="8 14 7" wrong="3 9 2=三个牌子全等于 5 出去的边权（和 Prim 的牌子规则全一致）;3 14 7=只有 2 写成了边权;8 9 7=只有 3 写成了边权;8 14 2=只有 4 写成了边权"
+学生: value 3 9 2
+# 老师接：先不说错。照学生的写法把整张图跑完（学生后面会锁 4（2）、3 写 6，锁 2（3）、3 写 1）——页面不跑，老师自己推、自己摆
+# 试：让页面照「牌子 = 边权」的规则跑、沿前驱走出里程
+run g prim from=1
+unglow g.5~2 g.5~3 g.5~4
+tag g.2 3
+tag g.4 2
+tag g.3 1
+paint g.5 g.4 g.2 g.3 g4
+paint g.5~2 g.5~4 g.2~3 g4
+say "先不说对错。从 {g.1} 沿你画的金色箭头走到 {g.3}。"
+ask pick g.nodes "照先后点经过的点" button="走完了" expect="g.1 g.5 g.2 g.3"
+学生: pick g.1 g.5 g.2 g.3
+# 老师接：圈沿着走一遍（walk 没有里程）；脚下的里程只能再问一个数、再贴一行字
+walk g.1 g.5 g.2 g.3
+walk g.1 g.5 g.2 g.3 sum=on
+ask value "脚下一段段加，走到 {g.3} 一共多远？" answer=9 type=num wrong="1=照抄了牌子;14=走的是 1→5→3"
+学生: value 9
+label mile g.3 "脚下 5 → 8 → 9，牌子却写 1" side=below tone=key
+card r = "Prim 的牌子：离树最近的那一条边" "Dijkstra 的牌子：从起点一路走来的总长"
+ask tap r "你刚才写的是哪一种？" expect=r.1
+学生: tap r.1
+# 老师接：把第 1 轮重写一遍
+unlabel mile
+tag g.2 10
+tag g.3 ∞
+tag g.4 ∞
+unpaint g.4 g.2 g.3 g.5~2 g.5~4 g.2~3
+glow g.5~2 g.5~3 g.5~4
+ask value "重写第 1 轮：{g.2}、{g.3}、{g.4} 的牌子依次写几？" type=seq answer="8 14 7"
+学生: value 8 14 7

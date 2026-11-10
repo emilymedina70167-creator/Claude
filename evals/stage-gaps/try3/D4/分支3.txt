@@ -1,0 +1,22 @@
+# D4 分支 3：复杂度几个量搅在一起。堆排每一次筛画成一根竖条、建堆和排序两堆分开；拨 n 看哪一堆长得快；把学生的式子代进 n
+# 竖条没有：只能写成两排数；次数是老师算好的；拨 n 两排不会变（跟着算只会 + - ×，筛的次数写不成 n 的式子）
+array bh = 1 2 2 4
+array bs = 4 3 2 3 2 1 0
+label lbh bh "建堆：4 次筛，每次比几次" side=left tone=note
+label lbs bs "排序：7 次筛，每次比几次" side=left tone=note
+dial n = 8 range=8-64 at=bh
+array tot = {bh.1 + bh.2 + bh.3 + bh.4} {bs.1 + bs.2 + bs.3 + bs.4 + bs.5 + bs.6 + bs.7}
+label lt tot "两堆各加起来" side=left tone=note
+say "这是 $n$ = 8 时每一次筛比较了几次。同一堆里的条，加还是乘？两堆之间呢？"
+ask value "两堆合起来一共比较几次？" answer={tot.1 + tot.2} wrong="135=把两堆乘起来了"
+学生: value 135
+# 老师接：n 拨大——两排不会跟着变
+say "把 $n$ 拨到 16，看哪一堆长得快。"
+ask next "拨好了点下面" button="看好了"
+学生: dial n 16
+学生: next
+# 老师接：把学生四问里的式子代进 n（快排最坏：7+6+…+1）
+ask value "快排最坏时一共比较几次？写成含 n 的式子" type=formula free=n answer="n(n-1)/2"
+学生: value n(n-1)(n-1)
+ask value "化成 O(·)：括号里写什么？" type=formula free=n answer="n^2"
+学生: value n

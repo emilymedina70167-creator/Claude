@@ -1,0 +1,60 @@
+# D4 第 1 幕：拖卡对调，让 49 左边全比它小、右边全不比它小；「灯」= 左上角的挑战
+# 「49 左右」不按格子写死：49 在第 k 格的 8 种情况用 | 隔开（部件比部件）
+array a = 49 38 65 97 76 13 27 49′
+paint a#1 g4
+paint a#8 g1
+array s = 13 27 38 49 49′ 65 76 97 hide=on
+label goal a "49 左边全比 49 小，右边全不比 49 小" side=above tone=key
+say "挪一挪，让 {a#1} 左边全比它小、右边全不比它小。别的不用排好。"
+open a undo=on
+goal g1 "49 左边全比它小、右边全不比它小" when="a.1 = a#1, a.2-8 >= a#1 | a.1 < a#1, a.2 = a#1, a.3-8 >= a#1 | a.1-2 < a#1, a.3 = a#1, a.4-8 >= a#1 | a.1-3 < a#1, a.4 = a#1, a.5-8 >= a#1 | a.1-4 < a#1, a.5 = a#1, a.6-8 >= a#1 | a.1-5 < a#1, a.6 = a#1, a.7-8 >= a#1 | a.1-6 < a#1, a.7 = a#1, a.8 >= a#1 | a.1-7 < a#1, a.8 = a#1"
+@g1 keep a "站定时"
+@g1 label ok a#1 "站定" side=below tone=key
+@g1 lift a#1
+@g1 say "对，49 站住了。"
+@g1 ask value "你排的和别人的可能不一样。{a#1} 站在第几格？" answer=4
+# 学生：两下以后把 49′ 换到第 4 格（49 在第 7 格，左边有 49′、76、65：不该亮），撤一步，再把 49 换到第 4 格
+学生: swap a#1 a#7
+学生: swap a#3 a#6
+学生: swap a#4 a#8
+学生: undo
+学生: swap a#4 a#1
+学生: value 4
+# 老师接：第 5 格插旗，灯永远不绿
+label flag a.5 "49 站这里" side=above tone=key
+say "让它站第 5 格，还要灯绿，试试。"
+goal g2 "49 站第 5 格，灯还要绿" when="a.1-4 < a#1, a.5 = a#1, a.6-8 >= a#1"
+# 学生试 8 下（页面试到第 8 下才叫老师）
+学生: swap a#1 a#5
+学生: swap a#3 a#5
+学生: swap a#7 a#5
+学生: swap a#2 a#5
+学生: swap a#8 a#5
+学生: swap a#8 a#6
+学生: swap a#4 a#6
+学生: swap a#3 a#4
+# 老师接：回到站定的那一刻，排好的那一排升上来，49 那一列连线；写理由
+ungoal g2
+unlabel flag
+back a "站定时"
+show s
+link a#1 s.4 g4
+say "这是全部排好的样子。为什么 {a#1} 总是第 4 格？"
+ask say "写一句为什么"
+学生: say 因为比49小的只有3个
+say "这一下叫一次[划分]，{a#1} 叫[枢轴]。"
+fly say.2 -> k a#1
+ask next "看好了点下面" button="好"
+学生: next
+# —— 试：上次误判的那种写法（按格子写死、和数比）：49′ 换到第 4 格、49 在第 6 格，还会不会算做到；顺带试同名重造一排
+array a = 49 38 65 97 76 13 27 49′
+paint a#1 g4
+paint a#8 g1
+goal g3 "旧写法：第 4 格是 49" when="a.1-3 < 49, a.4 = 49, a.5-8 >= 49"
+@g3 say "对，49 站住了。"
+ask next "试完了点下面" button="试完了"
+学生: swap a#1 a#2
+学生: swap a#1 a#6
+学生: swap a#3 a#7
+学生: swap a#4 a#8
+学生: next
