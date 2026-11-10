@@ -527,3 +527,67 @@ test('changed：这一下改了哪些结点（ask pick 交了以后和真变了�
   run(p, 'paint t.20 g2');
   assert.deepEqual(R.changed(b3, T(p)), []);
 });
+
+test('复核（第三次量）：学生往空位上摆（open w place）不按托盘的先后判——摆对了（还是二叉排序树）就对，不圈；摆错了位置才错', () => {
+  const s = make('tree w = _ tray="15 23 28 34 98 115"\nopen w place wrong=mark undo=on');
+  const W = () => s.objects.get('w');
+  const key = (v) => keyOf(W(), v);
+  const put = (line) => s.apply(parseScript(line)[0], { by: 'student', open: 'place' });
+  // 34 当根：托盘第一个是 15，以前判「托盘里的数按顺序插：该先插 15」、淡淡圈了 34
+  let fx = put('insert w 34');
+  assert.equal(fx.judged.verdict.right, true, fx.judged.facts.join('；'));
+  assert.ok(!fx.judged.mark && !s.slips.has('w'), '摆对的不圈');
+  assert.ok(!fx.judged.facts.some((f) => /按顺序/.test(f)), fx.judged.facts.join('；'));
+  fx = put(`insert w#${key(34)} right 98`);
+  assert.equal(fx.judged.verdict.right, true);
+  // 28 摆到 98 的左边：不是二叉排序树了，照旧错、圈一下
+  fx = put(`insert w#${key(98)} left 28`);
+  assert.equal(fx.judged.verdict.right, false);
+  assert.match(fx.judged.verdict.misread, /该在 34 的左边/);
+  assert.ok(fx.judged.mark);
+  // 开着 rotate 的课上摆：也只看是不是二叉排序树，不说「还没转平就插」
+  const a = make('tree t = 10 _ 20 _ 30 tray="40 5"\nopen t place\nopen t rotate');
+  const at30 = { type: 'insert', value: '40', parent: keyOf(T(a), 30), side: 'right' };
+  assert.equal(R.check(T(a), at30, a, { open: 'place' }).right, true);
+  assert.match(R.check(T(a), at30, a).misread || '', /还没转平/, '不是从 place 来的：照旧');
+  // 拖进树（open t insert）照旧按托盘的先后（第一轮的规矩）
+  const i = make('tree t = 50 30 70 tray="20 80"\nopen t insert');
+  const v = i.apply(parseScript('insert t 80')[0], { by: 'student', open: 'insert' });
+  assert.equal(v.judged.verdict.right, false);
+  assert.match(v.judged.verdict.misread, /按顺序/);
+});
+
+test('复核（第三次量）：学生摘叶子、删结点写给老师删了哪个、删完的样子（几个结点、几层、失衡没有），不再是光秃秃的「学生 delete s#7」', async () => {
+  const { actText } = await import('../kit/src/stage/stage.js');
+  const say = (fx) => actText({ type: 'delete', src: fx.judged.src, verdict: { legal: true, right: null, misread: null, why: fx.judged.verdict.why, next: null } });
+  // 摘叶子（open t pluck）
+  const s = make('tree t = 20 10 30 5 15 _ 40\nopen t pluck');
+  let fx = s.apply(parseScript('delete t.5')[0], { by: 'student', open: 'pluck' });
+  assert.ok(fx.judged, '摘叶子也过裁判（不判对错，只写做了什么）');
+  assert.equal(fx.judged.verdict.right, null);
+  assert.equal(say(fx), '学生摘了叶子 5');
+  assert.deepEqual(fx.judged.after, ['现在 5 个结点、3 层']);
+  // 删完失衡：写最小不平衡子树的根
+  fx = s.apply(parseScript('delete t.40')[0], { by: 'student', open: 'pluck' });
+  fx = s.apply(parseScript('delete t.30')[0], { by: 'student', open: 'pluck' });
+  assert.equal(say(fx), '学生摘了叶子 30');
+  assert.ok(fx.judged.after.some((f) => /^删完失衡：最小不平衡子树的根是 20（\+2），L[LR] 型$/.test(f)), fx.judged.after.join('；'));
+  assert.ok(fx.judged.after.includes('现在 3 个结点、3 层'));
+  // 只看形状的树（值都是 ·）：写编号
+  const d = make('tree s = · · · · · · ·\nopen s pluck');
+  const k = d.objects.get('s').nodes.find((n) => n.left == null && n.right == null).key;
+  fx = d.apply(parseScript(`delete s#${k}`)[0], { by: 'student', open: 'pluck' });
+  assert.equal(say(fx), `学生摘了叶子 ·（#${k}）`);
+  assert.ok(fx.judged.after.includes('现在 6 个结点、3 层'));
+  // 点哪个删哪个（open t delete）：一个孩子的顶上来、两个孩子的中序后继顶上来
+  const t = make('tree t = 20 10 30 5 15 _ 40\nopen t delete');
+  fx = t.apply(parseScript('delete t.30')[0], { by: 'student', open: 'delete' });
+  assert.equal(say(fx), '学生删了 30（只有一个孩子：40 顶上来）');
+  fx = t.apply(parseScript('delete t.20')[0], { by: 'student', open: 'delete' });
+  assert.equal(say(fx), '学生删了 20（两个孩子：中序后继 40 的值顶上来）');
+  assert.ok(fx.judged.after.includes('现在 4 个结点、3 层'));
+  // 老师自己删：不写事实（老师的一下只在走偏时核）
+  const u = make('tree t = 20 10 30');
+  fx = u.apply(parseScript('delete t.10')[0], { by: 'teacher' });
+  assert.deepEqual(fx.judged?.facts || [], []);
+});

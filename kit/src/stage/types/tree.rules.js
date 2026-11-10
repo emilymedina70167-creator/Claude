@@ -251,12 +251,15 @@ function misreadOf(o, p, at, dir, kind) {
 }
 
 // insert { value, parent?, side? }：没给位置时页面从根比下去落；给了位置（学生自己摆）和二叉排序树该落的地方比。
-// 「还没转平就插」只在平衡二叉树的课上算错（这棵树 open 了 rotate）；二叉排序树的插入课上树本来就可以不平衡
-function checkInsert(o, act, scene) {
+// 「还没转平就插」只在平衡二叉树的课上算错（这棵树 open 了 rotate）；二叉排序树的插入课上树本来就可以不平衡。
+// 学生往空位上摆（open t place，ctx.open）只看摆完还是不是二叉排序树：不按托盘的先后、不管转没转平（第三次量 D2 第 5 幕：
+// 摆调完的树时 34 当根是对的，以前照托盘的先后说「该先插 15」、淡淡圈了 34）。挑战（w avl）照老师写的判；托盘的先后只管拖进树（insert）
+function checkInsert(o, act, scene, ctx = {}) {
+  const placing = ctx?.open === 'place';
   const v = act.value == null ? '' : String(act.value);
   const at = act.parent != null;
   const why = at ? `${v} 放在 ${nameOf(o, act.parent)} 的${ZH[act.side] || ''}边` : `插入 ${v}`;
-  const pl = scene?.opens?.has(`${o.id}:rotate`) ? plan(o) : null;
+  const pl = !placing && scene?.opens?.has(`${o.id}:rotate`) ? plan(o) : null;
   // 现在正确的是：平衡二叉树的课上还失衡就是转；不然是插托盘里下一个（没有托盘就是这个数）落在哪
   const now = () => {
     if (pl) return nowRight(o, pl);
@@ -281,14 +284,30 @@ function checkInsert(o, act, scene) {
   if (at && (d.parent !== act.parent || d.side !== act.side)) {
     return wrong(`这里不是二叉排序树里 ${v} 该在的位置（${d.parent == null ? '树是空的，该当根' : `该在 ${nameOf(o, d.parent)} 的${ZH[d.side]}边`}）`);
   }
-  const first = nextTray(o);
+  const first = placing ? null : nextTray(o);
   if (first != null && first !== v && o.tray.includes(v)) return wrong(`托盘里的数按顺序插：该先插 ${first}`);
   return { legal: true, right: true, misread: null, why, next: null };
 }
 
-function check(o, act, scene) {
+// delete { at, by? }：摘叶子（open t pluck）、点哪个删哪个（open t delete）不判对错，只说删了哪个、谁顶上来（第三次量 D2 第 6 幕、
+// 分支 3：以前叫老师那一条里只有光秃秃的「学生 delete s#7」）。删完的样子在 facts 里写
+function checkDelete(o, act, ctx = {}) {
+  const n = nodeAt(o, act.at);
+  if (!n) return { legal: true, right: null }; // 没有这个结点：树自己的指令会把错说清楚
+  const name = nameOf(o, n.key);
+  if (n.left == null && n.right == null) return { legal: true, right: null, misread: null, why: `${ctx?.open === 'pluck' ? '摘了叶子' : '删了叶子'} ${name}`, next: null };
+  if (n.left == null || n.right == null) return { legal: true, right: null, misread: null, why: `删了 ${name}（只有一个孩子：${nameOf(o, n.left ?? n.right)} 顶上来）`, next: null };
+  // 两个孩子：中序后继（by=pred 是前驱）的值顶上来，和 tree.js 的 delete 一样走
+  const pred = act.by === 'pred';
+  let k = pred ? n.left : n.right;
+  for (let m = nodeAt(o, k); m && (pred ? m.right : m.left) != null; m = nodeAt(o, k)) k = pred ? m.right : m.left;
+  return { legal: true, right: null, misread: null, why: `删了 ${name}（两个孩子：中序${pred ? '前驱' : '后继'} ${nameOf(o, k)} 的值顶上来）`, next: null };
+}
+
+function check(o, act, scene, ctx) {
   if (act?.type === 'rotate') return checkRotate(o, act);
-  if (act?.type === 'insert') return checkInsert(o, act, scene);
+  if (act?.type === 'insert') return checkInsert(o, act, scene, ctx);
+  if (act?.type === 'delete') return checkDelete(o, act, ctx);
   return { legal: true, right: null }; // 别的动作（换值、删……）不判
 }
 
@@ -331,10 +350,21 @@ function insertFacts(before, after, act) {
   return out;
 }
 
+// 删完的样子：失衡了写最小不平衡子树的根和型（摘叶子摘到根红了，老师要知道），再写几个结点、几层
+function deleteFacts(before, after) {
+  if (after.nodes.length >= before.nodes.length) return [];
+  const out = [];
+  const bad = imbalance(after);
+  if (bad) out.push(`删完失衡：最小不平衡子树的根是 ${nameOf(after, bad.key)}（${bfText(bad.bf)}），${bad.kind} 型`);
+  out.push(sizeFact(after));
+  return out;
+}
+
 function facts(before, after, act) {
   if (!before || !after) return [];
   if (act?.type === 'rotate') return rotateFacts(before, after, act);
   if (act?.type === 'insert') return insertFacts(before, after, act);
+  if (act?.type === 'delete') return deleteFacts(before, after);
   return [];
 }
 
@@ -386,6 +416,13 @@ function lineAct(o, c, h) {
     const ps = h.scene.parts(refs[0]);
     if (ps.length !== 1 || !side) return null;
     return { type: 'insert', value: String(value), parent: ps[0].key, side: SIDES[side] };
+  }
+  // delete t.30 / delete t#7（by=pred 用前驱）：不判对错，只写删了哪个（checkDelete）
+  if (c.cmd === 'delete') {
+    if (refs.length !== 1 || refs[0] === o.id) return null;
+    const ps = h.scene.parts(refs[0]);
+    if (ps.length !== 1) return null;
+    return { type: 'delete', at: ps[0].key, ...(h.opts.by === 'pred' ? { by: 'pred' } : {}) };
   }
   return null;
 }

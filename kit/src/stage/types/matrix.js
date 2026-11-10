@@ -495,8 +495,9 @@ const mergedSrc = (t) => (t.k.zero ? `0 ${t.base}` : t.k.n === 1n && t.k.d === 1
 /** 并同类项并成了 0、格也真的全是 0（老师后来改了一格就不算） */
 const cancelledNow = (o) => !!o.cancelled && o.cells.every((x) => x.value !== '' && toQ(x.value).zero);
 
-// product C = A B：A、B 排成一行（A 留在原处、B 挪到 A 右边），后面「= C」，三个上下居中；C 的格先空着
-function makeProduct(scene, c, h) {
+// product C = A B：A、B 排成一行（A 留在原处、B 挪到 A 右边），后面「= C」，三个上下居中；C 的格先空着。
+// old：同名重造（product P = B A 把 AB 翻成 BA）时原来那一个乘积
+function makeProduct(scene, c, h, old) {
   if (!h.args.some((a) => a.t === 'eq')) throw new Error('要写成 product C = A B');
   const [id, an, bn, ...more] = h.words;
   if (more.length || !an || !bn) throw new Error('要写成 product C = A B（两个舞台上的矩阵）');
@@ -523,8 +524,13 @@ function makeProduct(scene, c, h) {
   }
   const ba = layout(A).box;
   const total = sa.w + MX.AB + sb.w + MX.EQ + sc.w;
-  const cx = ba.x + sa.w / 2, cy = ba.y + Math.max(sa.h, sb.h) / 2;
-  const left = Math.round(cx - total / 2);
+  const cx = ba.x + sa.w / 2;
+  let cy = ba.y + Math.max(sa.h, sb.h) / 2, left = Math.round(cx - total / 2);
+  // 同名重造一个排成一排的乘积（product P = B A 把 AB 翻成 BA）：翻在原来那一排上——从原来那一排的左边起、上下照原来那一排居中，
+  // 两个因子换槽、乘积留在原处（scene.js 照 sameRow 留着它在 objects 里的先后）。以前照新的第一个因子重新居中，整排往右挪了半排，
+  // 乘积又排到最后，reflow 把「= P」推到后造的东西下面，那一排散了（第三次量 L1 第 1 幕）
+  const row = old?.product && !old.prefix && old.band ? { left: old.origin.x + old.band.dx, cy: old.origin.y + sizeOf(old).h / 2 } : null;
+  if (row) { left = Math.round(row.left); cy = row.cy; o.sameRow = true; }
   A.origin = { x: left, y: Math.round(cy - sa.h / 2) };
   B.origin = { x: left + sa.w + MX.AB, y: Math.round(cy - sb.h / 2) };
   o.origin = { x: B.origin.x + sb.w + MX.EQ, y: Math.round(cy - sc.h / 2) };
@@ -554,7 +560,7 @@ export const matrix = {
   make(scene, c, h, old) {
     if (c.cmd === 'product') {
       if (h.words.some((w) => /[{}]/.test(w))) throw new Error('product 里不写 {…}：要跟着算就写 matrix C = {A B}');
-      return makeProduct(scene, c, h);
+      return makeProduct(scene, c, h, old);
     }
     if (!h.args.some((a) => a.t === 'eq')) throw new Error('要写成 matrix 名字 = 1 2 / 3 4（/ 分行）');
     const id = h.words[0];
@@ -883,7 +889,7 @@ rowop m 3r2                       一行乘倍数（-r1、r2 / 3）；列变换�
 write m.2,3 5                     改一个数
 pivot m.1,1 / unpivot m           主元框起来
 stairs m / unstairs m             画阶梯线（已经是阶梯形才行），全零行淡下去
-product C = A B                   A、B 排成一行，后面「= C」（C 先空着）
+product C = A B                   A、B 排成一行，后面「= C」（C 先空着；再写 product C = B A 就在原处换槽翻成 BA）
 mul C.1,2                         A 的第 1 行、B 的第 2 列一起亮，逐对相乘再相加，写进 C.1,2（mul C 一格格全算）；算出来的格以后跟着 A、B 自动重算
 open B edit range=-3..3           学生点 B 的一格用 ± 拨里面的数（AB、BA 当场跟着变）
 open C explain                    学生点乘积的一格，页面当场演它怎么一行乘一列算出来（还空着的就当场算上）

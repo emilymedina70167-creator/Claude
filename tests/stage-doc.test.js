@@ -321,6 +321,9 @@ test('说明里写的两条开法：同一项再开一次是换掉它（照新�
   assert.doesNotMatch(STAGE_COMMON, /一次开一种/);
   assert.doesNotMatch(TYPES.sentence.doc, /一次开一种/, '句子的 fold 能和 mark、move 一起开');
   assert.match(TYPES.tree.doc, /open t place[^\n]*和 insert 一次开一种/, '放托盘和插托盘都是按住托盘拖：照旧一次开一种');
+  // 第三次量 B 批：摆不按托盘先后判；同名重造乘积在原处换槽
+  assert.match(TYPES.tree.doc, /open t place[^\n]*不管托盘先后：摆完还是二叉排序树就对/);
+  assert.match(TYPES.matrix.doc, /product C = A B[^\n]*再写 product C = B A 就在原处换槽翻成 BA/);
   assert.match(STAGE_COMMON, /预写的行照先后演，say 要等读完：换 open、出新 goal 写在 say 前面/);
   const run = (src) => { const s = new Scene(); for (const c of parseScript(src)) s.apply(c); return s; };
   // 再写一遍：不报「一次开一种」，换成新的办法

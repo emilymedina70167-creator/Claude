@@ -172,6 +172,73 @@ function pathRow(p) {
 }
 
 /**
+ * 轮流拨的几条路并成一条（第三次量 L1 第 3、4 幕：B 的四格各一行、t 和 s 各一行，哪一停时别的格是几拼不出来）：
+ * 同一张矩阵的几格、几个拨数，一条路还没拨完另一条就插进来了（先后交错），这几条按先后并成一行（kind 'multi'，
+ * 一段一段写，multiRow）；一格拨完再拨另一格的照旧一格一行（以前的样子）。并成的那一行占最早那一条的位置
+ */
+function interleaved(rows) {
+  const group = (p) => (p.moves[0].type === 'dial' ? 'dial' : `edit:${objOf(p.moves[0].ref)}`);
+  const byGroup = new Map();
+  for (const r of rows) if (r.kind === 'path') { const g = group(r); if (!byGroup.has(g)) byGroup.set(g, []); byGroup.get(g).push(r); }
+  const merged = new Map(); // 并进去的那一条 → 并成的那一行（最早的那一条换成它，别的拿掉）
+  for (const list of byGroup.values()) {
+    let comp = null;
+    const close = () => { if (comp?.parts.length > 1) { const m = { kind: 'multi', parts: comp.parts }; for (const p of comp.parts) merged.set(p, m); } };
+    // 按第一下的先后扫：这一条的第一下在前面几条的最后一下之前，就是交错着拨的
+    for (const p of [...list].sort((a, b) => a.at[0] - b.at[0])) {
+      if (comp && p.at[0] < comp.end) { comp.parts.push(p); comp.end = Math.max(comp.end, p.last); continue; }
+      close();
+      comp = { parts: [p], end: p.last };
+    }
+    close();
+  }
+  if (!merged.size) return rows;
+  const out = [];
+  for (const r of rows) {
+    const m = merged.get(r);
+    if (!m) out.push(r);
+    else if (!out.includes(m)) out.push(m); // 第一次碰到的那一条（最早开始的）就是并成的那一行的位置
+  }
+  return out;
+}
+/**
+ * 并成的一行：学生拨了 B 的几格：B.1,1 1 → 2 → 3，B.1,2 0 → 1，B.1,1 3 → 2（拨到 B.1,1 = 2 时做到了 g1；Df = O：✗ ✗ ✗ ✗ ✓）。
+ * 一段是同一条路上连着的几下；✓ ✗ 照先后一停一个（第一下之前一个）；拨数写「停在 t = 1、s = 0」。事实照 pathRow：最后一下的
+ */
+function multiRow(r) {
+  const all = r.parts.flatMap((p) => p.moves.map((m, j) => ({ m, p, i: p.at[j] }))).sort((a, b) => a.i - b.i);
+  const dial = all[0].m.type === 'dial';
+  const name = (m) => (dial ? m.name : m.ref);
+  const to = (m) => (dial ? m.value : m.to);
+  const from = (m) => (dial ? m.from : m.from === '' ? '空' : m.from);
+  const segs = [];
+  for (const x of all) {
+    const last = segs.at(-1);
+    if (last && last.p === x.p) { last.vals.push(to(x.m)); continue; }
+    const f = from(x.m);
+    segs.push({ p: x.p, name: name(x.m), vals: [...(f == null ? [] : [f]), to(x.m)] });
+  }
+  const names = [...new Set(all.map((x) => name(x.m)))];
+  const bits = [];
+  if (dial) bits.push(`停在 ${names.map((n) => `${n} = ${minus(to(all.filter((x) => name(x.m) === n).at(-1).m))}`).join('、')}`);
+  for (const { m } of all) for (const id of m.met || []) bits.push(`拨到 ${name(m)} = ${minus(to(m))} 时做到了 ${id}`);
+  const a0 = all[0].m;
+  const m0 = Array.isArray(a0.marks0) ? a0.marks0 : [];
+  const multi = new Set(m0.map((x) => x.goal)).size > 1;
+  for (const c of m0) {
+    const same = (x) => x.goal === c.goal && x.clause === c.clause;
+    const seq = [...(from(a0) == null ? [] : [c.ok]), ...all.map(({ m }) => (m.marks || []).find(same)?.ok ?? null)];
+    bits.push(`${multi ? `${c.goal} ` : ''}${c.clause}：${seq.map(SYM).join(' ')}`);
+  }
+  const head = `学生拨了 ${dial ? names.join('、') : `${objOf(a0.ref)} 的几格`}：${segs.map((g) => `${g.name} ${g.vals.map(minus).join(' → ')}`).join('，')}${bits.length ? `（${bits.join('；')}）` : ''}`;
+  const once = all.slice(0, -1).map((x) => x.m.pickDiff).filter(Boolean);
+  const facts = [...once, ...(all.at(-1).m.facts || [])].filter(Boolean);
+  const tail = facts.length ? `。${facts.join('；')}` : '';
+  const obj = dial ? `dial:${names.join('、')}` : objOf(a0.ref);
+  return { kind: 'path', obj, refs: names.join(' '), src: '', right: 0, wrong: 0, misread: null, moves: all.map((x) => x.m), last: all.at(-1).i, full: head + tail, short: head, tail, n: all.length };
+}
+
+/**
  * 试的几下 → 一行一行（每一行 { full 原样, short 去掉「正确的是」和事实, tail 去掉的那一截, obj, refs, src, n 是几下,
  * right / wrong 其中判对、判错几下, misread 像哪种错, last 最后一下是第几件 }）：同一格、同一个拨数连着拨的几下并成一条路；
  * 点开看的几格并成一句；过了裁判的一下后面跟结论和这一下以后的事实
@@ -188,8 +255,9 @@ function tryLines(tries) {
       // 中间这个数、这一格被别的动过（判了对错的那一下、行变换……）：从几拨起对不上就另起一条，不然路上的数是假的
       // （舞台那边照同一条规矩另起，新的一条路开头那一下带着 marks0，✓ ✗ 照样写得出：stage.js 的 studentDo）
       if (p && !pathGoesOn(pathEnd(p.moves.at(-1)), a)) p = null;
-      if (!p) { p = { kind: 'path', moves: [], ...whereOf(a), src: '', right: 0, wrong: 0, misread: null }; paths.set(key, p); rows.push(p); }
+      if (!p) { p = { kind: 'path', moves: [], at: [], ...whereOf(a), src: '', right: 0, wrong: 0, misread: null }; paths.set(key, p); rows.push(p); }
       p.moves.push(a);
+      p.at.push(i);
       p.last = i;
       return;
     }
@@ -218,7 +286,8 @@ function tryLines(tries) {
       how: v.how, // 照老师写的 wrong=block 没让做 / wrong=mark 圈了一下：和错法一样不并进「之前又试了」
     });
   });
-  return rows.map((r) => {
+  return interleaved(rows).map((r) => {
+    if (r.kind === 'multi') return multiRow(r);
     if (r.kind === 'path') return pathRow(r);
     if (r.kind === 'explain') { const t = `学生点开看了 ${r.refs.join('、')} 怎么算出来${hiddenText(r.hidden)}`; return { ...r, full: t, short: t }; }
     return r;

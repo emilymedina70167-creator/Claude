@@ -728,7 +728,7 @@ export class Scene {
     const policy = by === 'student' ? this.policyOf(id, open, c.cmd) : {};
     const base = { obj: id, act, src: lineOf(c), by, policy };
     try {
-      return { ...base, ...judge(this, id, act, policy, { by }) };
+      return { ...base, ...judge(this, id, act, policy, { by, open }) };
     } catch (err) {
       return { ...base, verdict: { legal: true, right: null, misread: null, why: null, next: null }, apply: true, call: null, facts: [], mark: false, failed: err?.message || String(err) };
     }
@@ -984,8 +984,10 @@ export class Scene {
       // 跟着算的不能转着圈（X 跟着 Y、Y 又跟着 X）：先查，写错了舞台上已有的东西不动
       this.liveCheck(this.nodesOf(o), id);
       // 同名重造留在原处：各种东西的 make 照 old 留着位置时，在 objects 里的先后也不变——先后变了 reflow 会把它推到最底下。
-      // 换了地方的（写了 beside=、乘积照 A、B 重新排、换了一种东西）照旧排到最后，像新造的一样摆
-      const kept = !!old && samePlace(old.origin, o.origin);
+      // 乘积翻在原来那一排上（sameRow：product P = B A 翻 AB）也算留在原处，因子大小不一样、乘积挪了一点也不排到最后。
+      // 换了地方的（写了 beside=、乘积另起一行、换了一种东西）照旧排到最后，像新造的一样摆
+      const kept = !!old && (samePlace(old.origin, o.origin) || !!o.sameRow);
+      delete o.sameRow;
       // 同名重造不清存档（老师重造一样东西，还能回到以前存的那一刻）；换了一种东西才清（树的样子放不回一排格子上）
       if (old) this.dropObject(id, { keepLabels: true, keepPlace: kept, keepSaves: old.type === t.type });
       if (kept) {

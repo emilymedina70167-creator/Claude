@@ -595,12 +595,33 @@ function shortPhrase(o, keys) {
   const ws = o.words.filter((w) => keys.includes(w.key)).sort((a, b) => a.slot - b.slot);
   return ws.length > 3 ? `${phraseOf(ws.slice(0, 2))} …` : phraseOf(ws);
 }
-/** 一段词照原句写出来（中间的标点、所有格的撇号照原句：workers' productivity）；头上的开引号、尾巴上的逗号句号不带 */
+const BRACKETS = [['(', ')'], ['[', ']'], ['{', '}']];
+const countOf = (s, ch) => s.split(ch).length - 1;
+/**
+ * 一段词照原句写出来（中间的标点、所有格的撇号照原句：workers' productivity）；头上的开引号、尾巴上的逗号句号不带。
+ * 括号要配成对：段头的开括号、段尾的关括号，段里有和它配对的（或者头尾正好一对，一个词「(that)」）就带上——
+ * 以前一律不带，「(that) they would learn …」引成了「that) they would learn …」（第三次量 E2 第 5 幕）
+ */
 export function phraseOf(words) {
-  return words.map((w, i) => {
-    const tail = i < words.length - 1 ? shownPunct(w.punct) : (String(w.punct ?? '').match(/^['’]+/)?.[0] ?? '');
+  const n = words.length;
+  const text = words.map((w, i) => {
+    const tail = i < n - 1 ? shownPunct(w.punct) : (String(w.punct ?? '').match(/^['’]+/)?.[0] ?? '');
     return `${i ? w.lead || '' : ''}${w.value}${tail}`;
   }).join(' ');
+  if (!n) return text;
+  const lead = String(words[0].lead ?? ''), last = String(words[n - 1].punct ?? '');
+  let pre = '', post = '';
+  for (const [a, b] of BRACKETS) {
+    const open = countOf(text, a), close = countOf(text, b);
+    let pa = Math.min(Math.max(0, close - open), countOf(lead, a));
+    let pb = Math.min(Math.max(0, open + pa - close), countOf(last, b));
+    // 头上、尾巴上各剩一个能配成一对的（整段就是括号里的话）：一起带上
+    const pair = Math.min(countOf(lead, a) - pa, countOf(last, b) - pb);
+    pa += pair; pb += pair;
+    pre += a.repeat(pa);
+    post += b.repeat(pb);
+  }
+  return `${pre}${text}${post}`;
 }
 
 // —— 改写：新句子里的词和原来的词配对（同一个词，不管大小写；同样的词按先后配；剩下的前几个字母一样的也算同一个，比如 realize → realized）——

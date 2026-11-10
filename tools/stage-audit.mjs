@@ -95,6 +95,20 @@ label t3 C D "这一组：AB = O，BA ≠ O，两者不相等" side=below tone=n
 say "数有 ab=ba；矩阵换了左右，算的是另一批行和列。"
 card q = "根据这类例子，矩阵乘法该怎么说？" "AB 和 BA 一定不相等" "AB 和 BA 不一定相等"
 ask tap q.2 q.3 "哪一句说得对？" expect=q.3` });
+  // 第三次量 L1 第 1 幕：同名重造乘积，AB 翻成 BA（以前「= P」被推到后造的 AC、AD、题卡下面，那一排散了）
+  out.push({ name: '同名重造乘积:AB 翻成 BA', src: `matrix A = 1 2 / 2 4
+matrix B = 2 2 / -1 -1 beside=A
+matrix C = 1 0 / 2 1 beside=B
+label tb B "你上次造的" side=above tone=note
+product P = A B
+mul P
+matrix D = 0 0 / 0 0
+matrix AC = {A C}
+matrix AD = {A D} beside=AC
+card q = "BA 也是 O" "BA 不是 O" "说不准"
+product P = B A
+mul P
+say "换了顺序，{P} 不是 O 了。"` });
   // 扮老师的助手照真的说明写的一轮（活的舞台）
   out.push({ name: '扮老师:活的一轮', src: `matrix A = 1 1 / 2 2
 matrix B = 1 1 / 1 -1

@@ -841,7 +841,7 @@ tree h = 90 80 70 layout=compact    排法造的时候定：二叉排序树照�
 学生自己转、自己插（页面判每一下）：
 open t rotate wrong=mark undo=on    学生把一个结点拖到它的父亲上 = 在父亲那里转（左孩子拖上去 = rotate t#1 right）
 open t insert                       学生把托盘里的数拖进树 = insert t 47（页面从根比下去）
-open t place                        学生把托盘里的数拖到一个空位 = insert t#2 right 47（摆在 #2 的右边：学生自己摆；和 insert 一次开一种）
+open t place                        学生把托盘里的数拖到一个空位 = insert t#2 right 47（学生自己摆，不管托盘先后：摆完还是二叉排序树就对；和 insert 一次开一种）
 open t pluck                        学生点一片叶子 = delete t#4（点里面的结点：只能摘叶子）
 open t delete                       学生点哪个删哪个 = delete t.30（照上面 delete 的删法）
 @t.done say "插完了，也平了。"         t 做完了马上演（做完 = 平衡了、托盘插完了；只开 insert / place 的是托盘插完了）

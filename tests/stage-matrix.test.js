@@ -519,3 +519,42 @@ test('点开看怎么算碰到扣着的格：mul 交出参与的扣着的格（�
   const [g] = parseScript('mul C.1,1').map((c) => t.apply(c, { by: 'student' }));
   assert.equal(g.hidden, undefined);
 });
+
+test('复核（第三次量，排版）：同名重造乘积 product P = B A 翻在原来那一排上——两个因子换槽、乘积留在原处，不被推到后造的东西下面', () => {
+  const s = run(new Scene(), `matrix A = 1 2 / 2 4
+matrix B = 2 2 / -1 -1 beside=A
+matrix C = 1 0 / 2 1 beside=B
+product P = A B
+mul P
+matrix D = 0 0 / 0 0
+matrix AC = {A C}
+matrix AD = {A D} beside=AC
+card q = "BA 也是 O" "BA 不是 O" "说不准"`);
+  const order = [...s.objects.keys()];
+  const at = (id) => ({ ...s.objects.get(id).origin });
+  const a0 = at('A'), b0 = at('B'), p0 = at('P'), q0 = at('q');
+  run(s, 'product P = B A\nmul P');
+  // 以前：乘积照 B 原来的地方重新排、排到 objects 最后，reflow 把「= P」推到 AC、AD、题卡下面，那一排散了
+  assert.deepEqual([...s.objects.keys()], order, 'P 在 objects 里的先后不变');
+  assert.deepEqual(at('P'), p0, '乘积留在原处');
+  assert.equal(at('B').x, a0.x, 'B 换到 A 原来的槽');
+  assert.equal(at('A').x, b0.x, 'A 换到 B 原来的槽');
+  assert.equal(at('B').y, a0.y);
+  assert.equal(at('A').y, b0.y);
+  assert.deepEqual(at('q'), q0, '后造的东西不动');
+  assert.deepEqual(rows(s, 'P'), [['6', '12'], ['-3', '-6']]);
+  // 大小不一样（2×3 乘 3×2 翻成 3×2 乘 2×3）：照旧排在原来那一排的左边起、上下居中，P 不掉到后造的东西下面，后造的往下让
+  const t = run(new Scene(), `matrix A = 1 2 3 / 4 5 6
+matrix B = 1 0 / 0 1 / 1 1 beside=A
+product P = A B
+matrix D = 7 8 / 9 10`);
+  const left = t.objectBox('A').x;
+  run(t, 'product P = B A');
+  assert.deepEqual([...t.objects.keys()], ['A', 'B', 'P', 'D']);
+  assert.equal(t.objectBox('B').x, left, '从原来那一排的左边起');
+  const rowOf = (id) => { const o = t.objects.get(id); const b = layout(o).box; return b.y + b.h / 2; };
+  assert.ok(Math.abs(rowOf('B') - rowOf('A')) <= 1 && Math.abs(rowOf('A') - rowOf('P')) <= 1, '三个上下居中，在一排上');
+  assert.ok(t.objectBox('A').x > t.objectBox('B').x && layout(t.objects.get('P')).box.x > t.objectBox('A').x, 'B、A、P 从左往右');
+  const p = t.objectBox('P'), d = t.objectBox('D');
+  assert.ok(d.y >= p.y + p.h, 'P 长高了，D 往下让');
+});

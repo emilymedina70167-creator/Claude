@@ -1016,6 +1016,8 @@ export class Stage {
   choreoOf(c, fx) {
     if (fx?.created) {
       const o = this.scene.objects.get(fx.id);
+      // 藏着造的（hide=on）：不画、不出场（以前照样走 enter，句子找不到画好的词，报「reading '__box'」：第三次量 E2 第 1 幕）
+      if (o?.hidden) return null;
       return async () => {
         // 新的东西摆进来：镜头先（快快地）让出它的地方，再画它、让它出场——不然它先画在镜头外面，镜头追过去那一会儿露出一半
         // （每种东西「出场前藏不藏」各不一样，舞台这里统一先挪镜头）
@@ -1858,7 +1860,8 @@ export function actText(act) {
       return act.name != null ? `学生点了「回到${act.name}」：${act.obj} 回到了${act.name}的样子${now}` : `学生让 ${act.obj} 回到了上一下之前的样子${now}`;
     }
     // 学生点 ✕ 收掉自己拉的括号、连的线：裁判（规则的 check）交的那一句就是整句话（「学生收掉了自己拉的 s.3 V（…）」），不再写指令
-    if ((act.type === 'unmark' || act.type === 'unrefer') && act.verdict?.why) return `学生${act.verdict.why}`;
+    // 摘叶子、删结点同样：「学生摘了叶子 12」，删完的样子是事实（tree.rules.js 的 checkDelete、deleteFacts）
+    if ((act.type === 'unmark' || act.type === 'unrefer' || act.type === 'delete') && act.verdict?.why) return `学生${act.verdict.why}`;
     // 过了裁判的一下（rotate、rowop、mark……）：学生那一行指令，后面是这一下做了什么（裁判的结论 events.js 接着写）
     if (act.src && act.verdict) return `学生 ${act.src}${act.verdict.why && act.verdict.legal !== false ? `（${act.verdict.why}）` : ''}`;
     // 通用手势做的、页面不判的一下（键盘写一格、折起一段）：照那一行写

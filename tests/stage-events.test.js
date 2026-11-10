@@ -509,3 +509,42 @@ test('复核（第三次量）：键盘填空格子（open M edit input=keypad�
   // 写给老师：写满了，不说「页面算出来没有下一步了」
   assert.equal(eventsText([{ kind: 'done', ids: ['M'], filled: ['M'], reacted: 0 }]), '学生把 M 的空格子都写满了（页面不判写得对不对）');
 });
+
+test('复核（第三次量）：同一张矩阵的几格轮流拨、几个拨数轮流拨，写成一条照先后的路（哪一停是哪张 B 拼得出来）', () => {
+  const m = (ok) => [{ goal: 'g1', clause: 'Df = O', ok }];
+  const ev = [
+    eventOf({ type: 'edit', ref: 'B.1,1', from: '1', to: '2', open: 'edit', marks0: m(false), marks: m(false) }),
+    eventOf({ type: 'edit', ref: 'B.1,1', from: '2', to: '3', open: 'edit', marks: m(false) }),
+    eventOf({ type: 'edit', ref: 'B.1,2', from: '0', to: '1', open: 'edit', marks0: m(false), marks: m(false) }),
+    eventOf({ type: 'explain', ref: 'C.1,1', open: 'explain' }),
+    eventOf({ type: 'edit', ref: 'B.1,1', from: '3', to: '2', open: 'edit', marks0: m(false), marks: m(true), met: ['g1'], facts: ['Df = O'] }),
+  ];
+  // 以前：B.1,1 一行（1 → 2 → 3 → 2）、B.1,2 一行，哪一停时 B.1,2 是几拼不出来
+  assert.equal(eventsText(ev), '学生拨了 B 的几格：B.1,1 1 → 2 → 3，B.1,2 0 → 1，B.1,1 3 → 2（拨到 B.1,1 = 2 时做到了 g1；Df = O：✗ ✗ ✗ ✗ ✓）。Df = O\n学生点开看了 C.1,1 怎么算出来');
+  // 两个拨数轮流拨（第 3 幕的 t、s）：一条路，停在哪各写一个
+  const k = (ok) => [{ goal: 'g1', clause: 'Bld = Dir', ok }];
+  const d = [
+    eventOf({ type: 'dial', name: 't', value: 0, from: 1, marks0: k(false), marks: k(false) }),
+    eventOf({ type: 'dial', name: 't', value: -1, from: 0, marks: k(false) }),
+    eventOf({ type: 'dial', name: 's', value: 0, from: 1, marks0: k(false), marks: k(false) }),
+    eventOf({ type: 'dial', name: 't', value: 0, from: -1, marks0: k(false), marks: k(true), met: ['g1'] }),
+  ];
+  assert.equal(eventsText(d), '学生拨了 t、s：t 1 → 0 → −1，s 1 → 0，t −1 → 0（停在 t = 0、s = 0；拨到 t = 0 时做到了 g1；Bld = Dir：✗ ✗ ✗ ✗ ✓）');
+  // 不是轮流拨的（一格拨完再拨另一格）照旧一格一行；不同的两张矩阵不并
+  const one = [
+    eventOf({ type: 'edit', ref: 'B.1,1', from: '1', to: '2', open: 'edit' }),
+    eventOf({ type: 'edit', ref: 'B.2,2', from: '1', to: '0', open: 'edit' }),
+    eventOf({ type: 'edit', ref: 'C.1,1', from: '5', to: '6', open: 'edit' }),
+    eventOf({ type: 'edit', ref: 'B.2,2', from: '0', to: '-1', open: 'edit' }),
+  ];
+  assert.equal(eventsText(one), '学生拨了 B.1,1：1 → 2\n学生拨了 B.2,2：1 → 0 → −1\n学生拨了 C.1,1：5 → 6');
+  // 中间被别的动过、另起的一段（from 接不上）在一条里也另起一段，从它真正的起点写；交错以前就拨完的那一段照旧单独一行
+  const brk = eventsText([
+    eventOf({ type: 'edit', ref: 'B.1,1', from: '1', to: '2', open: 'edit' }),
+    eventOf({ type: 'edit', ref: 'B.1,2', from: '0', to: '1', open: 'edit' }),
+    eventOf({ type: 'edit', ref: 'B.1,1', from: '7', to: '8', open: 'edit' }),
+    eventOf({ type: 'edit', ref: 'B.1,2', from: '1', to: '2', open: 'edit' }),
+  ]);
+  assert.equal(brk, '学生拨了 B.1,1：1 → 2\n学生拨了 B 的几格：B.1,2 0 → 1，B.1,1 7 → 8，B.1,2 1 → 2');
+  assert.equal(tryCount(ev), 4, '数「试」照旧（一格连着拨的一段算一下）');
+});

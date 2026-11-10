@@ -173,5 +173,20 @@ expect('@ask.right 跟着 @g7 里的一问：这一轮演完不报「@ask.right 
 expect('做到 g7：预写的那一问挂上了（攒着不叫）', !r7?.called && /做到了挑战 g7/.test(said(r7)));
 expect('学生点对 r.3：演了 @ask.right 预写的那一行', /学生答对了（页面已经演了你预写的 1 行）/.test(said(t7)) && /对，最大的是 3/.test(t7?.state || ''));
 
+// 第三次量找到的 B 批（measure3.txt）
+const m3 = run('measure3.txt');
+const m3v = m3.out?.[0]?.views || [];
+expect(`measure3.txt：退出码 0${m3.code ? `（${why(m3)}）` : ''}`, m3.code === 0);
+expect('藏着造的句子（sentence u … hide=on）：竖屏、横屏都不报「画面没演好」', m3v.length === 2 && m3v.every((v) => !(v.steps[0]?.errors || []).length));
+expect('藏着的句子不占地方：排版没问题', m3v.every((v) => !(v.steps[0]?.issues || []).length));
+const p34 = stepOf(m3, 'insert w 34');
+expect('往空位上摆：34 当根（托盘第一个是 15）判成正确的下一步，不圈、不说「按顺序」', !errs(p34) && /是正确的下一步/.test(said(p34)) && !/按顺序|淡淡圈/.test(said(p34)));
+const pk5 = stepOf(m3, 'delete t.5');
+expect('摘叶子：写「学生摘了叶子 5」和删完几个结点、几层', !errs(pk5) && /学生摘了叶子 5。现在 5 个结点、3 层/.test(said(pk5)));
+const b3 = stepOf(m3, 'write B.1,1 3');
+expect('轮流拨 B 的两格：写成一条照先后的路', /学生拨了 B 的几格：B\.1,1 1 → 2，B\.1,2 0 → 1，B\.1,1 2 → 3/.test(said(b3)));
+const th = stepOf(m3, 'mark p.3-10 从句');
+expect('带括号的词：事实里引成「(that) they …」，括号配成对', /p\.3-10 从句（\(that\) they would learn/.test(said(th)) && !/（that\)/.test(said(th)));
+
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');
 process.exit(bad.length ? 1 : 0);

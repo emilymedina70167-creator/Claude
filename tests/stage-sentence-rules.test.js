@@ -908,3 +908,29 @@ test('收掉自己连的线：点 ✕ 那一下写给老师「学生收掉了自
   assert.equal(told('refer s.6 -> s.2'), '学生收掉了自己连的 s.6 → s.2（that → books；links= 里有这一条）');
   assert.equal(told('refer s.6 -> s.8'), '学生收掉了自己连的 s.6 → s.8（that → bought；links= 里没有这一条）');
 });
+
+test('复核（第三次量）：带括号的词「(that)」引在事实里括号配成对——段头的开括号、段尾的关括号，段里有配对的就带上', async () => {
+  const { phraseOf } = await import('../kit/src/stage/types/sentence.js');
+  const SRC = 'sentence s = "It hoped they would learn how shop-floor lighting affected workers\' productivity. (that)" key="It [V hoped] [Cl they [V would learn] [Cl how shop-floor lighting [V affected] workers\' productivity]. (that)]."';
+  const s = make(`${SRC}\ntally s V\nopen s mark\nopen s move`);
+  const ws = (a, b) => S(s).words.filter((w) => w.slot >= a && w.slot <= b).sort((x, y) => x.slot - y.slot);
+  // 「(that)」挪到 they 前面：段头是「(that)」
+  run(s, 'move s.12 after s.2');
+  assert.equal(phraseOf(ws(3, 12)), "(that) they would learn how shop-floor lighting affected workers' productivity");
+  stuMark(s, 'mark s.3-12 从句');
+  const f = bracketFacts(S(s)).join('\n');
+  assert.match(f, /s\.3-12 从句（\(that\) they would learn/, f);
+  assert.doesNotMatch(f, /（that\)/, '以前引成「that)」');
+  // 段尾是「(that)」、段头不是：关括号带上
+  const t = make(SRC);
+  const wt = (a, b) => S(t).words.filter((w) => w.slot >= a && w.slot <= b).sort((x, y) => x.slot - y.slot);
+  assert.equal(phraseOf(wt(11, 12)), 'productivity. (that)');
+  // 一个词就是「(that)」：整个带着括号；别的头尾标点照旧不带（开引号、逗号、句号）
+  assert.equal(phraseOf(wt(12, 12)), '(that)');
+  assert.equal(phraseOf(wt(10, 11)), "workers' productivity");
+  const q = make('sentence s = "He said, “Stop (now), please.”"');
+  const wq = (a, b) => S(q).words.filter((w) => w.slot >= a && w.slot <= b).sort((x, y) => x.slot - y.slot);
+  assert.equal(phraseOf(wq(3, 4)), 'Stop (now)');
+  assert.equal(phraseOf(wq(4, 5)), '(now), please');
+  assert.equal(phraseOf(wq(3, 3)), 'Stop');
+});

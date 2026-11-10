@@ -76,6 +76,19 @@ export function measure(visual = false) {
   for (const it of items) for (const r of it.rects) {
     if (r.x < -2 || r.y < -2 || r.x + r.w > vw + 2 || r.y + r.h > vh + 2) { issues.push({ what: '出了屏幕', a: `${it.kind}:${it.id}`, b: '', area: 0, r: [r.x, r.y, r.w, r.h].map(Math.round) }); break; }
   }
+  // 乘积那一排散了：product P = A B 排成一排的（不是另起一行「BA =」的），A、B、「= P」要在一排上、从左往右
+  // （第三次量：同名重造 product P = B A 以后「= P」被推到后造的东西下面，压不着谁，前面几项都量不出来）
+  for (const [id, o] of st.scene.objects) {
+    if (o.hidden || !o.product || o.prefix || o.product.a === o.product.b) continue;
+    const fa = st.scene.objects.get(o.product.a), fb = st.scene.objects.get(o.product.b);
+    if (!fa || !fb || fa.hidden || fb.hidden) continue;
+    // 乘积的框连着「=」和整排下面那一条算式，比的是它自己的左上角（origin）；因子比它们的框（因子也是乘积时框里带着它的算式，只比右沿、上沿）
+    const A = st.scene.objectBox(fa.id), B = st.scene.objectBox(fb.id), P = o.origin;
+    const top = Math.max(fa.origin.y, fb.origin.y), btm = Math.min(A.y + A.h, B.y + B.h);
+    const inRow = top < btm && P.y < btm && P.y + 20 > Math.min(fa.origin.y, fb.origin.y);
+    const inOrder = A.x + A.w <= fb.origin.x + 2 && B.x + B.w <= P.x + 2;
+    if (!inRow || !inOrder) issues.push({ what: '乘积那一排散了', a: `obj:${o.product.a} ${o.product.b}`, b: `obj:${id}`, area: 0 });
+  }
   // 画到了自己的地方外面：objectBox 报小了（别的东西会被摆上来压着）
   for (const it of items) if (!visual && it.kind === 'obj' && it.union) {
     const u = it.union, b = it.box, s = st.cam.s;
