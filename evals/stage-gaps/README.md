@@ -46,6 +46,19 @@ node tools/stage-gaps-check.mjs report
 
 只重新量了几块几幕的，写进 `report2/`，用 `node tools/stage-gaps-check.mjs report2`（第三次是 `report3`，任何 `reportN` 都行）查（只查报告里有的块、打了标的幕）。
 
+重新量以后还要查两样：
+- 设计里写了「必须出现」的事实，真在发给老师的那一条里（连最后一步攒着没发的）：
+
+  ```bash
+  node tools/stage-must.mjs evals/stage-gaps/try3
+  ```
+
+- 旧的试演文件照 log 放回一样：动工前和现在各跑一份 `--json`，再比：
+
+  ```bash
+  node tools/stage-try-diff.mjs 基线.json 现在.json
+  ```
+
 `stage-doc.txt` 要按新的说明重新生成：
 
 ```bash
