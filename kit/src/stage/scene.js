@@ -796,7 +796,10 @@ export class Scene {
       if (!rule && !fill) continue;
       seen.add(e.obj);
       const blank = this.blankLeft(e.obj);
-      // 键盘填的空格子写满了：一件。同时交了规则的（开着 rowop），写满记在「id#fill」上，和规则判的做完分开记
+      // 键盘填的空格子写满了：一件。同时交了规则的（开着 rowop），写满记在「id#fill」上，和规则判的做完分开记。
+      // 这里交出的 done / filled 只认学生那一下的（课堂循环 by !== 'student' 的不理、不演预写）：老师自己的行也会让它「刚写满」——
+      // rowop 和键盘都开着、写满了不是阶梯形，老师 close M1 rowop，写满的记录从「M1#fill」挪回「M1」，那里是规则留下的 false，
+      // 这一行就算刚写满。现在没人看老师那一行的 fx.done；以后要照它做别的，先分清是谁的一下（复审 N10）
       if (fill) {
         const k = rule ? `${e.obj}#fill` : e.obj;
         seen.add(k);
@@ -985,6 +988,27 @@ export class Scene {
   }
 
   /**
+   * 这一行的指令认得哪些选项：{ label（报错里怎么叫它：matrix、ask pick）, names（名字、正则；'*' 是它自己查） }。
+   * 各种东西自己的指令按写的那一样东西认；认不出是哪一样、ask 后面写错了种是 null（那条指令自己报）。
+   * 测试照它一条指令一条指令核「代码里读的选项都在这条指令自己的表里」（复审 N9）
+   */
+  optionNames(c) {
+    const { cmd } = c;
+    if (CREATE[cmd]) return { label: cmd, names: [...(CREATE[cmd].options?.[cmd] || []), 'hide'] };
+    const owners = Object.values(TYPES).filter((t) => t.commands?.[cmd]);
+    if (owners.length) {
+      const ref = (c.args || []).map((a) => (a.t === 'word' ? parseRef(a.v) : null)).find((r) => r && this.objects.has(r.obj));
+      const t = ref ? typeOf(this.objects.get(ref.obj)) : owners.length === 1 ? owners[0] : null;
+      return t?.commands?.[cmd] ? { label: cmd, names: t.options?.[cmd] || [] } : null;
+    }
+    if (cmd === 'ask') {
+      const kind = (c.args || []).find((a) => a.t === 'word')?.v;
+      return OPTIONS.ask[kind] ? { label: `ask ${kind}`, names: OPTIONS.ask[kind] } : null;
+    }
+    return { label: cmd, names: OPTIONS[cmd] || [] };
+  }
+
+  /**
    * 这一行写的选项（名字=值）都是这条指令认得的（最后一审 I4）：不认得的当场报，话里给最像的那个（「hid=on」是不是 hide=on？）。
    * 以前默默当没写：matrix R = … hid=on 把要藏的答案摆给学生看、keep … afer=insert 不替老师存。各种东西自己的指令按写的那一样东西认；
    * 找不到是哪一样的不查（那条指令自己报「舞台上没有……」）
@@ -993,23 +1017,25 @@ export class Scene {
     const keys = Object.keys(c.opts || {});
     if (!keys.length) return;
     const { cmd } = c;
-    let label = cmd, names;
-    if (CREATE[cmd]) names = [...(CREATE[cmd].options?.[cmd] || []), 'hide'];
-    else if (Object.values(TYPES).some((t) => t.commands?.[cmd])) {
-      const owners = Object.values(TYPES).filter((t) => t.commands?.[cmd]);
-      const ref = (c.args || []).map((a) => (a.t === 'word' ? parseRef(a.v) : null)).find((r) => r && this.objects.has(r.obj));
-      const t = ref ? typeOf(this.objects.get(ref.obj)) : owners.length === 1 ? owners[0] : null;
-      if (!t?.commands?.[cmd]) return;
-      names = t.options?.[cmd] || [];
-    } else if (cmd === 'ask') {
-      const kind = (c.args || []).find((a) => a.t === 'word')?.v;
-      names = OPTIONS.ask[kind];
-      if (!names) return; // ask 后面写错了种：ask 自己报
-      label = `ask ${kind}`;
-    } else names = OPTIONS[cmd] || [];
-    if (names === '*') return;
+    const table = this.optionNames(c);
+    if (!table || table.names === '*') return;
+    const { label, names } = table;
     const bad = keys.find((k) => !names.some((n) => (n instanceof RegExp ? n.test(k) : n === k)));
     if (bad == null) return;
+    // 等号两边没空格（matrix A=1 2 / 3 4、dial d=5、set d=3）：紧跟指令的名字被读成了选项。照那条指令原来的话说怎么写
+    // （以前各条指令自己报「要写成 matrix 名字 = …」；查选项名抢在前面以后成了「A=1 不是 matrix 认的写法」，不告诉老师怎么改：复审 N5）。
+    // 不让给指令自己报：matrix A=B C = 1 2 那样的会造出 C、把 A=B 默默丢掉
+    if (c.lead === bad) {
+      const glued = `（= 两边要空格：「${bad}=${c.opts[bad]}」连着写，页面读成了 名字=值）`;
+      if (CREATE[cmd]) throw new Error(`要写成 ${cmd} 名字 = …${glued}`);
+      if (cmd === 'dial') throw new Error(`要写成 dial 名字 = 值 range=1-9${glued}`);
+      if (cmd === 'set') throw new Error('要写成 set 名字 值（中间是空格，不写 =）');
+    }
+    // 树、图的 tag t.50 h=3：小字里带 =，没写引号（它们的 tag 不认选项；写了引号还多出一个 名字=值 的照旧报不认得）
+    if (cmd === 'tag' && !names.length && !(c.args || []).some((a) => a.t === 'str')) {
+      const at = (c.args || []).find((a) => a.t === 'word')?.v;
+      throw new Error(`「${bad}=${c.opts[bad]}」不是 tag 认的写法：小字里带 = 要写在引号里（tag ${at || 't.50'} "${bad}=${c.opts[bad]}"）`);
+    }
     // 别的那几种 ask 认的（ask tap 写了 answer=）：说用在哪几种上。reveal=、solve= 由 ask 自己报（说明里写着那一句）
     if (cmd === 'ask') {
       const kinds = Object.entries(OPTIONS.ask).filter(([, ns]) => ns.includes(bad)).map(([k]) => `ask ${k}`);
@@ -1021,7 +1047,8 @@ export class Scene {
 
   applyOne(c) {
     if (!c.cmd) throw new Error(c.error || '看不懂这一行');
-    if (!c.lenient) this.checkOptions(c);
+    // anyOpts：刷新以后重新挂 log 里的最后一问（loop.js 的 resume）——旧课当时收下的选项照样收下，别的检查照旧
+    if (!c.lenient && !c.anyOpts) this.checkOptions(c);
     const h = this.helpers(c);
     const { cmd } = c;
     const { args, opts, words, str, arrow, refsIn, partsIn, strayRefs } = h;

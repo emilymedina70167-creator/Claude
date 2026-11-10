@@ -390,8 +390,10 @@ export function createLoop(host) {
    */
   async function resume({ lastClaude = 0, pendingRow = null, askLine = 'ask next' } = {}) {
     S.lastClaude = lastClaude;
-    // 只是把最后那一问重新挂上，不是老师的一轮：学生点着的几样（ask pick 的圈）留着，等老师下一轮演完再收
-    const t = stage.begin({ unpick: false });
+    // 只是把最后那一问重新挂上，不是老师的一轮：学生点着的几样（ask pick 的圈）留着，等老师下一轮演完再收。
+    // 这一问是 log 里的（当时收下了）：不查选项名——升级以前写的 hint=on 这类当时默默收下，现在查的话这一问挂不上，
+    // 页面替它挂「用话答」的一问，expect= 不判了（复审 N6）。别的检查照旧（这一问要重新判答案，不借 lenient 的照字面比）
+    const t = stage.begin({ unpick: false, anyOpts: true });
     t.end(askLine);
     await t.armed;
     S.logFrom = stage.log.length;

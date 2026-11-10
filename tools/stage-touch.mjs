@@ -634,6 +634,29 @@ const m4 = await page.evaluate(async () => {
 });
 expect('再看一遍以后：拼错的 {kk} 照样告诉老师（一条）', m4, 1);
 
+// 24. 复审 N6：升级时正上着的旧课，最后一问带着现在不认得的选项（hint=on，当时默默收下了）：刷新以后课堂循环重新挂这一问（resume）
+// 照收——不查选项名。以前那一问挂不上，页面替它挂「用话答」的一问，expect= 不判了
+const n6 = await page.evaluate(async () => {
+  const st = window.LAStage;
+  const ASK = 'ask tap a "点最大的" expect=a.1 hint=on';
+  st.cancelWait?.(); st.clearAll(); st.log = [];
+  await st.replay([{ src: 'array a = 3 1 2', by: 'teacher', turn: 1 }, { src: ASK, by: 'teacher', turn: 1 }]);
+  const host = {
+    stage: st, model: 'claude-opus-5-5', teach: {}, mock: false, quietMs: 1e9,
+    messages: () => [{ role: 'user', content: 'TURN' }], call: () => new Promise(() => {}),
+    addTurn: (row) => row, putTurn: () => {}, thinking: () => {}, note: () => {}, cost: (c) => c, report: () => {},
+  };
+  const loop = window.LAStageDev.createLoop(host);
+  await loop.resume({ askLine: ASK });
+  const w = st.scene.waiting;
+  loop.close();
+  // 新写的行照旧查：同一行老师这一轮写出来是报错
+  let fresh = null;
+  try { st.scene.clone().apply(window.LAStageDev.parseScript(ASK)[0]); } catch (e) { fresh = /不是 ask tap 认的写法/.test(e.message); }
+  return `${w?.kind}｜${w?.expect}｜${st.errors.length}｜${fresh}`;
+});
+expect('刷新以后重新挂旧课的最后一问（带不认得的 hint=on）：挂上了、expect= 还在、没报错；新写的同一行照旧报', n6, 'tap｜a.1｜0｜true');
+
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

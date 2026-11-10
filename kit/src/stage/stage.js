@@ -226,9 +226,10 @@ export class Stage {
   /**
    * 开一轮：老师边写边演。push(到现在为止写出来的全部文字) 每写完一行就演一行；end() 等这一轮演完、等到学生回答。
    * 返回 { push, end, abort }；end() 的结果是 { act, errors, lines }。
-   * unpick：这一轮演完收掉学生上一次点的几样（ask pick 的圈）；不是老师的一轮（刷新以后重新挂那一问、连不上时那一问）写 false
+   * unpick：这一轮演完收掉学生上一次点的几样（ask pick 的圈）；不是老师的一轮（刷新以后重新挂那一问、连不上时那一问）写 false。
+   * anyOpts：这一轮的行不查选项名（刷新以后重新挂 log 里的那一问：旧课当时收下的，照样收下）
    */
-  begin({ by = 'teacher', auto = true, unpick = true } = {}) {
+  begin({ by = 'teacher', auto = true, unpick = true, anyOpts = false } = {}) {
     const turn = ++this.turnNo;
     const mark = this.log.length;
     // 学生点的几样（ask pick）reveal=on、这一轮开始时还没揭晓：这一轮演完不收（end 里看）。在开始这一刻定——这一轮里老师自己演出变化
@@ -293,7 +294,7 @@ export class Stage {
       if (!fresh.length) return;
       const cmds = parseScript(fresh.map((l) => (l == null || !l.trim() ? '#' : l)).join('\n'));
       const base = taken - fresh.length;
-      for (const c of cmds) enqueue({ ...c, line: c.line + base, src: c.src ?? fresh[c.line - 1] });
+      for (const c of cmds) enqueue({ ...c, line: c.line + base, src: c.src ?? fresh[c.line - 1], ...(anyOpts ? { anyOpts: true } : {}) });
     };
     let last = '';
     const end = async (text) => {

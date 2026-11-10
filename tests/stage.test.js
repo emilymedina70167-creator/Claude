@@ -205,3 +205,20 @@ test('按下去这一处有哪几种按法（pressGroup）：正在等的那一�
   assert.equal(howIds(pressGroup({ x: 60, y: 20 }, [cell, { id: 'pluck', prio: 1, rect: R(0, 0, 100, 100), t: { kind: 'tap' } }])), 'tap:cell');
   assert.equal(pressGroup({ x: 500, y: 500 }, [cell, whole]), null);
 });
+
+test('复审 N1：{…} 里带等号的式子（>= <= == !=）是一个值，不在花括号里的 = 处切成选项；选项照旧在花括号外面第一个 = 处切', () => {
+  const words = (l) => tokenize(l).map((t) => (t.t === 'opt' ? `${t.k}=${t.v}` : t.v ?? t.t));
+  // 以前切成 opt「{k >」=「 1}」：array 造的那一行被当成写了不认得的选项，matrix 默默丢一格
+  assert.deepEqual(tokenize('array vis = {k >= 1} {k == 2} 0').slice(3), [{ t: 'word', v: '{k >= 1}' }, { t: 'word', v: '{k == 2}' }, { t: 'word', v: '0' }]);
+  assert.deepEqual(words('matrix R = {k <= 1} {k != 2} / 0 1'), ['matrix', 'R', 'eq', '{k <= 1}', '{k != 2}', '/', '0', '1']);
+  assert.deepEqual(words('graph g = A-B:{k == 1} B-C:4'), ['graph', 'g', 'eq', 'A-B:{k == 1}', 'B-C:4']);
+  // 选项的值里带等号的式子：名字是花括号外面第一个 = 前面的，值整个留着
+  assert.deepEqual(tokenize('ask value "对吗？" answer={k >= 1}').at(-1), { t: 'opt', k: 'answer', v: '{k >= 1}' });
+  assert.deepEqual(tokenize('goal g1 "到了" when={rank(A) == 2}').at(-1), { t: 'opt', k: 'when', v: '{rank(A) == 2}' });
+  // 花括号外面的照旧：r2=r2-3r1、a=b=c（第一个 = 处切）、单独一个 =
+  assert.deepEqual(words('rowop A r2=r2-3r1'), ['rowop', 'A', 'r2=r2-3r1']);
+  assert.deepEqual(tokenize('label n a.1 x=b=c').at(-1), { t: 'opt', k: 'x', v: 'b=c' });
+  assert.deepEqual(words('dial k = 2'), ['dial', 'k', 'eq', '2']);
+  // {…} 后面紧跟着 =（少见）：还是选项，名字是那一对花括号
+  assert.deepEqual(tokenize('set {k}=3').at(-1), { t: 'opt', k: '{k}', v: '3' });
+});

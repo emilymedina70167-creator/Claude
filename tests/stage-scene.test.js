@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Scene, dryRun, compareValues, SWEEP_MAX, sweepLine, expectHit, pickAnswer, pickText, pickDiffText, KEEP_MAX, snapOf, restoreSnap } from '../kit/src/stage/scene.js';
-import { parseScript, parseRich } from '../kit/src/stage/script.js';
+import { parseScript, parseRich, OPTIONS } from '../kit/src/stage/script.js';
 import { serialize } from '../kit/src/stage/types/tree.js';
 import { undoPlan } from '../kit/src/stage/gestures.js';
 import { actText } from '../kit/src/stage/stage.js';
@@ -1888,25 +1888,172 @@ test('最后一审 I4：写错的选项名当场报、话里给最像的那个�
   assert.equal(optionNear('zzz', ['hide', 'tray']), null);
 });
 
-test('最后一审 I4：认得的选项表是全的——代码里读的每一个 opts.xxx 都在表里（不然老师照说明写的会被当成写错）', async () => {
+// 复审 N9：以前只比全局的并集（range 在 dial 的表里，就管不到 plane 的；给 fly 加 tone= 忘了加表也不红）。现在按指令核，两种办法：
+// 读源码（一条指令的那一块里读的 opts.xxx 要在它自己的表里）、真的演一遍（记下每条指令读了哪些选项，连它调用的帮手函数里读的）
+const flatNames = (o) => Object.values(o || {}).flatMap((v) => (Array.isArray(v) ? v : typeof v === 'object' ? flatNames(v) : [])).filter((n) => typeof n === 'string');
+const ASK_ALL = [...new Set(Object.values(OPTIONS.ask).flat())];
+
+test('最后一审 I4、复审 N9：认得的选项表按指令是全的（读源码）——每条指令那一块里读的 opts.xxx 都在它自己的表里（不然老师照说明写的会被当成写错）', async () => {
   const { readFileSync } = await import('node:fs');
-  const { OPTIONS } = await import('../kit/src/stage/script.js');
-  const { TYPES } = await import('../kit/src/stage/types/index.js');
+  const { TYPES, CREATE } = await import('../kit/src/stage/types/index.js');
   const read = (f) => readFileSync(new URL(`../kit/src/stage/${f}`, import.meta.url), 'utf8');
-  const used = (src) => [...new Set([...src.matchAll(/\bopts\.([A-Za-z_]\w*)/g)].map((m) => m[1]))];
-  const flat = (o) => Object.values(o || {}).flatMap((v) => (Array.isArray(v) ? v : typeof v === 'object' ? flat(v) : [])).filter((n) => typeof n === 'string');
+  const optsIn = (line, re = /\bopts\.([A-Za-z_]\w*)/g) => [...line.matchAll(re)].map((m) => m[1]);
   const miss = [];
+  let blocks = 0;
+  // scene.js：applyOne 里 case 'x': 那一块读的要在 OPTIONS[x] 里（ask 的几种共用一块，照几种的并集）；别处（造东西的 hide= / beside=、
+  // open 和 goal 的帮手函数）照全部的表
+  const everything = new Set([...flatNames(OPTIONS), 'hide', ...Object.values(TYPES).flatMap((t) => flatNames(t.options))]);
+  let cur = null;
+  for (const line of read('scene.js').split('\n')) {
+    const m = line.match(/^ {6}case '(\w+)'/);
+    if (m) { cur = m[1]; blocks++; } else if (/^ {0,4}\S/.test(line) && !/^ {4}switch/.test(line)) cur = null;
+    for (const n of optsIn(line)) {
+      const names = cur == null ? [...everything] : cur === 'ask' ? ASK_ALL : OPTIONS[cur] || [];
+      if (!names.includes(n)) miss.push(`scene.js${cur ? ` 的 case '${cur}'` : ''}：${n}`);
+    }
+  }
+  assert.ok(blocks > 20, '找到了 applyOne 的那些 case（源码的缩进变了的话这条测试要跟着改）');
+  // types/：commands 里一条指令的那一块读的要在这种东西 options[那条指令] 里；make 里读的在造它的那几条指令的表里（连 hide=）；
+  // 帮手函数里读的（分不出是哪条指令）照这种东西全部的表和共用的表（另一条测试真的演一遍，按指令核它们）
+  blocks = 0;
   for (const t of Object.values(TYPES)) {
-    const have = new Set([...flat(t.options), 'hide']);
+    const creates = Object.keys(CREATE).filter((k) => CREATE[k] === t);
+    const makeNames = [...creates.flatMap((k) => t.options?.[k] || []), 'hide'];
+    const loose = new Set([...flatNames(t.options), 'hide', ...flatNames(OPTIONS)]);
     for (const f of [`types/${t.type}.js`, `types/${t.type}.rules.js`]) {
       let src;
       try { src = read(f); } catch { continue; }
       // 手势、画法传进来的 opts（不是一行指令的选项）不算：rules 里只看 h.opts
-      const names = f.endsWith('.rules.js') ? [...new Set([...src.matchAll(/\bh\.opts\.([A-Za-z_]\w*)/g)].map((m) => m[1]))] : used(src);
-      for (const n of names) if (!have.has(n) && !flat(OPTIONS).includes(n)) miss.push(`${f}：${n}`);
+      const re = f.endsWith('.rules.js') ? /\bh\.opts\.([A-Za-z_]\w*)/g : undefined;
+      let at = null;
+      for (const line of src.split('\n')) {
+        const m = line.match(/^ {4}(\w+)\(scene, c, h\b/);
+        if (m) { at = m[1]; blocks++; } else if (/^ {2}make\(/.test(line)) at = 'make';
+        else if (/^ {0,2}\S/.test(line)) at = null;
+        for (const n of optsIn(line, re)) {
+          const names = at == null ? [...loose] : at === 'make' ? makeNames : t.options?.[at] || [];
+          if (names !== '*' && !names.some((x) => (x instanceof RegExp ? x.test(n) : x === n))) miss.push(`${f}${at ? ` 的 ${at}` : ''}：${n}`);
+        }
+      }
     }
   }
-  const all = new Set([...flat(OPTIONS), 'hide', ...Object.values(TYPES).flatMap((t) => flat(t.options))]);
-  for (const n of used(read('scene.js'))) if (!all.has(n)) miss.push(`scene.js：${n}`);
+  assert.ok(blocks > 60, '找到了各种东西自己的指令（源码的缩进变了的话这条测试要跟着改）');
   assert.deepEqual(miss, []);
+});
+
+test('复审 N9：认得的选项表按指令是全的（真的演一遍）——例子、说明里每条写法演的时候读了哪些选项，都在那条指令自己的表里；有表的指令每条都演到了', async () => {
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const { TYPES, CREATE } = await import('../kit/src/stage/types/index.js');
+  const { STAGE_DOC } = await import('../kit/src/stage/doc.js');
+  const reads = new Map(); // 指令（ask 分几种）→ 演的时候读过的选项名
+  const ran = new Set();
+  const tables = new Map();
+  const feed = (sc, src) => {
+    for (const c0 of parseScript(src)) {
+      if (!c0.cmd) continue;
+      const table = sc.optionNames(c0);
+      if (!table) continue;
+      tables.set(table.label, table.names);
+      const seen = reads.get(table.label) || reads.set(table.label, new Set()).get(table.label);
+      const opts = new Proxy(c0.opts, { get: (o, k) => { if (typeof k === 'string') seen.add(k); return o[k]; } });
+      // lenient：只看读了什么，不让新的检查挡在读选项之前
+      try { sc.apply({ ...c0, opts, lenient: true }); ran.add(table.label); } catch { /* 这一行在这个舞台上演不了 */ }
+    }
+  };
+  const dir = new URL('../tools/stage-try-examples/', import.meta.url);
+  for (const f of readdirSync(dir).filter((x) => x.endsWith('.txt'))) {
+    const sc = new Scene();
+    for (const l of readFileSync(new URL(f, dir), 'utf8').split('\n')) feed(sc, l.replace(/^学生:\s*/, ''));
+  }
+  // 说明里的写法：每种东西在它的例子演完的舞台上、共用的在一排格子上，一条一条试（演不了的不算）
+  const firstOf = (l) => l.split(/\s{2,}/)[0];
+  for (const t of Object.values(TYPES)) {
+    if (!t.example) continue;
+    const sc = new Scene();
+    for (const l of [...t.example.split('\n'), ...(t.docSetup || '').split('\n'), ...(t.doc || '').split('\n').map(firstOf)]) feed(sc, l);
+  }
+  const base = run(new Scene(), 'array a = 49 38 65 97 76\ndial d = 5 range=1-5 at=a\nsay "看 [不稳定]"');
+  for (const l of STAGE_DOC.split('\n').map(firstOf)) feed(base, l);
+  // 上面没演到的、有表的指令：这里补（新加一条带选项的指令，例子和说明里都没有的话加在这里）
+  feed(base, 'array b = 1 2 3\nfly say.1 -> n1 b.1 side=top\nlabel n2 b.2 "字" side=left tone=note\nkeep b "一开始" after=swap\npick b.1 b.2 reveal=on');
+  const miss = [];
+  for (const [label, seen] of reads) {
+    const names = tables.get(label);
+    if (names === '*') continue;
+    // ask 的几种共用一块代码（都读一遍 expect= answer= …，用不上的那几种另有检查报）；造东西共用的那一段读 beside= 定摆不摆（不认 beside= 的那几种写了会先报）
+    const ok = label.startsWith('ask ') ? ASK_ALL : CREATE[label] ? [...names, 'beside'] : names;
+    for (const n of seen) if (!ok.some((x) => (x instanceof RegExp ? x.test(n) : x === n))) miss.push(`${label} 读了 ${n}=`);
+  }
+  assert.deepEqual(miss, []);
+  // 有表的指令都演到了（不然上面等于没查它）
+  const want = [...Object.keys(OPTIONS).filter((k) => k !== 'ask'), ...Object.keys(OPTIONS.ask).map((k) => `ask ${k}`),
+    ...Object.values(TYPES).flatMap((t) => Object.entries(t.options || {}).filter(([, v]) => v !== '*').map(([k]) => k))];
+  assert.deepEqual([...new Set(want)].filter((k) => !ran.has(k)), []);
+});
+
+test('复审 N1：{k >= 1}、{k == 2} 写在 array / tree / matrix 造的那一行里照收、跟着拨数变（以前 array、tree 报「不是认的写法」，matrix 默默丢一格）', () => {
+  const s = run(new Scene(), 'dial k = 2 range=0..5');
+  assert.equal(s.check(one('array vis = {k >= 1} {k >= 2} {k >= 3} 0')), null);
+  run(s, 'array vis = {k >= 1} {k >= 2} {k >= 3} 0');
+  assert.deepEqual(values(s, 'vis'), ['1', '1', '0', '0']);
+  run(s, 'set k 1');
+  assert.deepEqual(values(s, 'vis'), ['1', '0', '0', '0']);
+  // 树
+  assert.equal(s.check(one('tree t = 5 {k == 1} 9')), null);
+  run(s, 'tree t = 5 {k == 1} 9');
+  assert.match(s.stateText(), /树 t（3 个结点，2 层）：层序 5 1 9/);
+  // 矩阵：那一格不再丢（1×2，不是 1×1），拨了跟着变
+  run(s, 'matrix R = {k >= 1} 2');
+  const R = () => s.objects.get('R').cells.map((x) => x.value).join(' ');
+  assert.equal(R(), '1 2');
+  run(s, 'set k 0');
+  assert.equal(R(), '0 2');
+  // 重放旧课（lenient）读法一样：以前 matrix 丢的那一格现在有了（有意的不同）
+  const old = run(new Scene(), 'dial k = 2 range=0..5');
+  old.apply({ ...one('matrix R = {k >= 1} 2'), lenient: true });
+  assert.equal(old.objects.get('R').cols, 2);
+  // 写错的选项名照旧报（N1 只动花括号里的 =）
+  assert.match(s.check(one('array b = 1 2 hid=on')), /是不是 hide=on？/);
+});
+
+test('复审 N5：等号两边没空格（matrix A=1 2、dial d=5、set d=3、tag t.50 h=3）——照那条指令原来的话说怎么写，不说「A=1 不是认的写法」', () => {
+  const s = run(new Scene(), 'tree t = 50 30\ngraph g = A-B:4\ndial d = 5 range=1-5\nsentence w = "He runs."');
+  const err = (line) => s.check(one(line));
+  // 造东西：紧跟指令的那个词连着写了 =，页面读成了 名字=值
+  assert.equal(err('matrix A=1 2 / 3 4'), '要写成 matrix 名字 = …（= 两边要空格：「A=1」连着写，页面读成了 名字=值）');
+  assert.match(err('tree u=50 30'), /^要写成 tree 名字 = …（= 两边要空格/);
+  assert.match(err('array a=1 2 3'), /^要写成 array 名字 = …（= 两边要空格/);
+  assert.match(err('matrix B=1 2 hide=on'), /^要写成 matrix 名字 = …（= 两边要空格/);
+  // dial / set
+  assert.equal(err('dial e=5 range=1-5'), '要写成 dial 名字 = 值 range=1-9（= 两边要空格：「e=5」连着写，页面读成了 名字=值）');
+  assert.equal(err('set d=3'), '要写成 set 名字 值（中间是空格，不写 =）');
+  // tag（树、图）：小字里带 = 要写在引号里
+  assert.equal(err('tag t.50 h=3'), '「h=3」不是 tag 认的写法：小字里带 = 要写在引号里（tag t.50 "h=3"）');
+  assert.match(err('tag g.B d=7'), /小字里带 = 要写在引号里（tag g\.B "d=7"）/);
+  assert.equal(err('tag t.50 "h=3"'), null);
+  // 写了引号的 tag 后面又带一个不认得的：照旧报不认得（不能默默丢掉）
+  assert.match(err('tag t.50 "根" h=3'), /^「h=3」不是 tag 认的写法（tag 不写 名字=值）$/);
+  // 句子的 tag 认 color=：拼错的照旧给最像的
+  assert.match(err('tag w.1 S colr=g2'), /是不是 color=g2？/);
+  // 不是紧跟指令的、紧跟指令却是认得的选项：照旧
+  assert.match(err('matrix R = 1 2 hid=on'), /^「hid=on」不是 matrix 认的写法：是不是 hide=on？/);
+  assert.match(err('matrix hide=on'), /^要写成 matrix 名字 = …（名字用英文字母开头）$/);
+  // 等号两边有空格的照收
+  for (const l of ['matrix A = 1 2 / 3 4', 'dial e = 5 range=1-5', 'set d 3']) assert.equal(err(l), null, l);
+  // 重放旧课（lenient）不查，照以前那条指令自己的话
+  assert.throws(() => s.clone().apply({ ...one('matrix A=1 2 / 3 4'), lenient: true }), /要写成 matrix 名字 = …（名字用英文字母开头）/);
+});
+
+test('复审 N6：刷新以后重新挂 log 里的最后一问（anyOpts）不查选项名，别的检查照旧', () => {
+  const s = run(new Scene(), 'array a = 3 1 2');
+  const old = one('ask tap a "点最大的" expect=a.1 hint=on');
+  // 新写的行照旧报；重新挂的那一问照收，expect= 还在（以前挂不上，页面替它挂「用话答」的一问，expect= 不判了）
+  assert.match(s.check(old), /「hint=on」不是 ask tap 认的写法/);
+  const t = s.clone();
+  assert.doesNotThrow(() => t.apply({ ...old, anyOpts: true }));
+  assert.equal(t.waiting.kind, 'tap');
+  assert.equal(t.waiting.expect, 'a.1');
+  // 不是重放旧课（lenient）：这一问照现在的规矩判，别的写错照旧报
+  assert.equal(t.waiting.lenient, undefined);
+  assert.throws(() => s.clone().apply({ ...one('ask value "几个？" type=nope answer=3 hint=on'), anyOpts: true }), /nope/);
 });

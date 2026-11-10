@@ -541,3 +541,20 @@ test('复核（第三次量，倒退）：矩阵答案的 wrong= 能列一个数
   // 别的写错的矩阵错答照旧当场报（; 把一条切成了两条）
   assert.throws(() => checkSpec({ type: 'matrix', answer: '1 2 / 3 4', wrongs: '1 2; 3 5=抄错了' }), /2×2|1×2/);
 });
+
+test('复审 N7：solve=on 配 wrong=，错答不是一次式（k^2 / 1 / k）照收——错答逐格比，不带 solve 造判法', () => {
+  const L = { type: 'matrix', free: 'k', solve: 'on', answer: '-2+4k / 1-k / k', wrongs: 'k^2 / 1 / k=平方了; 4k / -k / k=漏了特解; -2 / 1 / 0=只写了特解' };
+  // 以前报「wrong= 的「k^2 / 1 / k」照 type=matrix 读不成：solve=on 只用在一列（或一行）……通解上」——话不对题（solve=on 写在答案上，答案是通解）
+  assert.doesNotThrow(() => checkSpec(L, null, { strict: true }));
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4');
+  assert.equal(s.check(parseScript('ask value "通解？" type=matrix free=k solve=on answer="-2+4k / 1-k / k" wrong="k^2 / 1 / k=平方了"')[0]), null);
+  // 学生照错答写：对上那一条（逐格比）
+  assert.equal(judgeAnswer([['k^2'], ['1'], ['k']], L).misread, '平方了');
+  assert.equal(judgeAnswer([['4k'], ['-k'], ['k']], L).misread, '漏了特解');
+  assert.equal(judgeAnswer([['-2'], ['1'], ['0']], L).misread, '只写了特解');
+  // 答案照旧按集合判：换了参数、特解的同一条线判对；不在线上、没对上错答的说方向
+  assert.equal(judgeAnswer([['2-4k'], ['k'], ['1-k']], L).ok, true);
+  assert.match(judgeAnswer([['2-4k'], ['-k'], ['1-k']], L).misread, /方向/);
+  // 答案自己不是一次式的通解：照旧当场报（solve=on 用错了地方）
+  assert.throws(() => checkSpec({ ...L, answer: 'k^2 / 1 / k', wrongs: null }, null, { strict: true }), /solve=on 只用在一列/);
+});

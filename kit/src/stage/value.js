@@ -177,6 +177,9 @@ export function evalLive(src, scene, { plane, fill = null } = {}) {
     if (isExactFunc(name) || !obj || !scene.objects.has(obj)) return m;
     let r;
     try { r = evalMeasure(scene, `${name}(${arg})`); } catch (e) { throw new Error(`${shown}里的「${m}」：${e.message}`); }
+    // 量以后也数不了（句子没写 key：never）：当场报，不当空格子——不然默默收下画「?」，现状说「填上了跟着算出来」，
+    // 可没有空格子、也永远算不出来（复审 N2）。试算时（fill）也照报
+    if (r.value == null && r.never) throw new Error(`${shown}里的「${m}」页面数不了：${r.why}`);
     // 量现在数不了（矩阵还空着）是之后数得了：和空格子一样（blank，evalHoles 照空格子办）。试算时（fill）先拿一个数顶上，
     // 量不是多项式，试算出来的那一格整个当跟着空格子变（polyOnly）
     if (r.value == null && !fill) throw Object.assign(new Error(`${shown}里的「${m}」页面数不了：${r.why}`), { blank: true });
@@ -226,8 +229,10 @@ const BLANK_TRIALS = 3;
 const isBlankErr = (e) => !!e?.blank || /还空着/.test(String(e?.message ?? e));
 // 试算（空格子换成一般位置的数）只对多项式那样的式子有效：加减乘、数乘、乘方（非负整数次）、取格、det、迹、转置、除以一个数。
 // 秩、求逆、化简（rref）、rankA / free 这类量、abs、除以跟着变的数，一般位置的数算出来的是假话（D 全空时 {rank(D)} 写成 2、
-// {D D^-1} 写成单位阵，D 填成 1 2 / 2 4 以后秩是 1、D⁻¹ 不存在：最后一审 M1），碰到空格子整个当跟着变（画「?」）
+// {D D^-1} 写成单位阵，D 填成 1 2 / 2 4 以后秩是 1、D⁻¹ 不存在：最后一审 M1），碰到空格子整个当跟着变（画「?」）。
+// 比较（< > <= >= == !=）也是：试算的几组数都是正的，{D.1,1 > 0} 三组都是 1，写成确定的 1，D.1,1 填 −3 以后才变 0（复审 N3）
 const POLY_FUNCS = new Set(['det', 'tr', 'T', 'transpose', 'row', 'col', 'el', 'dot', 'cross', 'mat', 'diag', 'sum', 'cumsum', 'lerp', 'I', 'E', 'coef', 'rhs', 'factor', 'expand']);
+const COMPARES = new Set(['<', '>', '<=', '>=', '==', '!=']);
 function polyOnly(raw, scene) {
   let text = String(raw).replace(/[−–]/g, '-');
   for (const [re, to] of SUPS) text = text.replace(re, to);
@@ -246,6 +251,7 @@ function polyOnly(raw, scene) {
     const t = toks[i];
     if (t.k === 'id' && toks[i + 1]?.v === '(' && !isVal(t.v) && !POLY_FUNCS.has(t.v)) return false;
     if (t.k === 'op' && (t.v === '^' || t.v === '**') && intAt(i + 1) < 0) return false;
+    if (t.k === 'op' && COMPARES.has(t.v)) return false;
     // 除以一个数、一个拨数（拨数不是空格子）照旧；除以别的（一格、式子）不是多项式
     if (t.k === 'op' && t.v === '/') {
       const d = toks[i + 1];

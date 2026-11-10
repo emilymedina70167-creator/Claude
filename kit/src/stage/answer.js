@@ -487,13 +487,16 @@ function buildJudge(type, spec, scene, { strict = false, lenient = false } = {})
     if (literal) check = makeCheck('plain', ans, spec);
     else throw isLive(raw) && liveIn(raw, t) ? at(`answer=${raw}`, ans, e) : e;
   }
+  // 错答不带 solve 造判法（逐格比）：solve=on 说的是答案按集合判；错答常常不是一次式（「k^2 / 1 / k=平方了」），带着 solve 造
+  // 会报「solve=on 只用在…通解上」，话不对题（复审 N7）。学生照错答的字写才对上；换了参数的错答由答案那边按集合判出来的话说
+  const plain = { ...spec, solve: undefined };
   const make = (text) => {
     const v = resolveAnswer(text, scene, { type: t, lenient });
     // 一个数的错答（矩阵答案的「0=写成数字 0」、方程的「3=只写了数」）：学生写的就是这一个数时对上（第一轮能写；Task 13 加了矩阵错答
     // 要和答案一样大，把它也挡掉了）。照矩阵、方程的读法造不出来、或者大小对不上时才走这里，别的错答照旧
     const single = () => (['matrix', 'equation'].includes(t) && !liveIn(text, t) ? numberWrong(v) : null);
     let c;
-    try { c = makeCheck(t, v, spec); } catch (e) { const n = single(); if (n) return n; throw liveIn(text, t) ? at(`wrong= 的「${text}」`, v, e) : e; }
+    try { c = makeCheck(t, v, plain); } catch (e) { const n = single(); if (n) return n; throw liveIn(text, t) ? at(`wrong= 的「${text}」`, v, e) : e; }
     if (check.shape && c.shape && (c.shape[0] !== check.shape[0] || c.shape[1] !== check.shape[1])) {
       const n = single();
       if (n) return n;
@@ -513,7 +516,7 @@ function buildJudge(type, spec, scene, { strict = false, lenient = false } = {})
     wrongs.push({ ...w, check: c });
   }
   // 页面现算的常见错答：判错了、老师的 wrong= 都没对上才算（不和格数比：没转置的那张大小可能就不一样）
-  const autos = () => (literal ? [] : autoWrongs(raw, scene).flatMap((w) => { try { return [{ ...w, check: makeCheck(t, w.text, spec) }]; } catch { return []; } }));
+  const autos = () => (literal ? [] : autoWrongs(raw, scene).flatMap((w) => { try { return [{ ...w, check: makeCheck(t, w.text, plain) }]; } catch { return []; } }));
   return { ans, check, wrongs, autos };
 }
 

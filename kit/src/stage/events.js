@@ -392,11 +392,12 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
       const rest = (e.ids || []).filter((id) => !fill.includes(id) || e.ruled?.includes(id));
       const parts = [];
       if (fill.length) parts.push(`学生把 ${fill.join('、')} 的空格子都写满了（页面不判写得对不对）`);
-      // 这一次没有预写可演：以前写过的（上一次做完时演过、你那一轮让它做完时拿掉了）照实说，不说「你没预写」（最后一审 M2）
+      // 这一次没有预写可演：以前写过的（上一次做完时拿出来用了、你那一轮让它做完时拿掉了）照实说，不说「你没预写」（最后一审 M2）。
+      // 不说「演过了」：拿出来的行当时可能没演上（指着的部件没了，那一次已经告诉老师「都没演上」：复审 N8）
       const spent = rest.map((id) => e.before?.[id]);
       // 几样一起做完、各有各的来历（极少）：不说预写的事，免得对其中一样说错
       const all = (k) => spent.every((x) => x === k);
-      const none = all('played') ? '（你预写的行上一次做完时已经演过了）' : all('dropped') ? '（你预写的行在你那一轮让它做完时拿掉了，没演）' : all(undefined) ? '（你没预写做完以后的行）' : '';
+      const none = all('played') ? '（你预写的行上一次做完时已经拿出来用过了：一组只用一次）' : all('dropped') ? '（你预写的行在你那一轮让它做完时拿掉了，没演）' : all(undefined) ? '（你没预写做完以后的行）' : '';
       if (rest.length) parts.push(`学生把 ${rest.join('、')} 做完了${e.reacted ? `（页面已经演了你预写的 ${e.reacted} 行）` : e.missed ? '（页面算出来没有下一步了）（你预写的行都没演上）' : `（页面算出来没有下一步了）${none}`}`);
       lines.push(`${parts.join('；')}${heldText(e)}`);
     }
@@ -428,15 +429,17 @@ const fillOf = (a) => (a?.type === 'write' ? String(a.line || a.src || '').match
  *     同一格再写一次才算一下；
  *   - 做到挑战、收集型收了一张、做完了的那一下（act.reached，stage.js 记的）：往前走了一步，它和它之前试的都不再算「还没做到」，从头数；
  *   - 同一个拨数、同一格连着 ± 拨的几下（中间没动过别的，路接得上：和写给老师的「一条路」同一套 pathKey / pathGoesOn）、
- *     一直往一个方向拨到没到过的值，只算一下：拨数 0 拨到 8 要按 8 下 ›，是一次「试」（以前一下算一下，拨到 8 就叫老师
- *     「试了 8 下还没做到」，第三次量 L3/幕6 那种）。换了方向、拨回这条路上停过的值（连一开始的值）是又试了一下：
- *     不然来回拨永远只算一下，学生一直在拨也一直没人管（「很久没动」按最后一下计时，拨着就不算没动；最后一审 I3）
+ *     一直往一个方向拨，只算一下：拨数 0 拨到 8 要按 8 下 ›，是一次「试」（以前一下算一下，拨到 8 就叫老师
+ *     「试了 8 下还没做到」，第三次量 L3/幕6 那种）。换了方向（这一下和这条路上一下方向相反）是又试了一下：
+ *     不然来回拨永远只算一下，学生一直在拨也一直没人管（「很久没动」按最后一下计时，拨着就不算没动；最后一审 I3）。
+ *     只按换方向数：拨回这条路上停过的值不另算（以前另算，0 → 8 → 0 扫一趟是 9 下，学生只是上去下来看了一遍就叫老师
+ *     「试了好多下」；现在是 2 下：复审 N11）
  */
 const numOfStop = (x) => { const m = String(x ?? '').trim().replace(/^[−–]/, '-').match(/^(-?\d+(?:\.\d+)?)(?:\/(\d+))?$/); return m ? Number(m[1]) / (m[2] ? Number(m[2]) : 1) : null; };
 export function tryCount(events) {
   let n = 0;
   const filled = new Set();
-  // 上一下是哪条路上的：{ key, end, dir（上一下往哪拨：1 / -1，看不出是 0）, seen（这条路上停过的值）}；
+  // 上一下是哪条路上的：{ key, end, dir（上一下往哪拨：1 / -1，看不出是 0）}；
   // 中间有别的一下（连撤一步、按「回到……」）就断了
   let run = null;
   for (const e of events) {
@@ -448,12 +451,8 @@ export function tryCount(events) {
     const on = !!(key && run && run.key === key && pathGoesOn(run.end, a));
     const x = numOfStop(a.from ?? run?.end), y = numOfStop(end);
     const dir = x != null && y != null ? Math.sign(y - x) : 0;
-    const goesOn = on && !(dir && run.dir && dir !== run.dir) && !run.seen.has(end);
-    if (key) {
-      const seen = on ? run.seen : new Set(a.from != null ? [String(a.from)] : []);
-      seen.add(end);
-      run = { key, end, dir: dir || (on ? run.dir : 0), seen };
-    } else run = null;
+    const goesOn = on && !(dir && run.dir && dir !== run.dir);
+    run = key ? { key, end, dir: dir || (on ? run.dir : 0) } : null;
     if (a.reached?.length) { n = 0; filled.clear(); run = null; continue; }
     if (e.patient) continue;
     if (goesOn) continue;

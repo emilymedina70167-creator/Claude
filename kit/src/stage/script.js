@@ -92,12 +92,16 @@ export function tokenize(line) {
     }
     if (s.startsWith('->', i) || ch === '→') { out.push({ t: 'arrow' }); i += ch === '→' ? 1 : 2; continue; }
     let j = i;
+    // 花括号外面的第一个 =：选项只在这里切。{k >= 1}、{k == 2} 里的 = 是式子的一部分（以前照整个词里第一个 = 切，
+    // array vis = {k >= 1} … 的那一格成了名字是「{k >」的选项：matrix 默默丢一格，查选项名以后 array、tree 报「不是认的写法」，复审 N1）
+    let eqAt = -1;
     while (j < s.length && !/\s/.test(s[j]) && s[j] !== '"' && s[j] !== '「' && s[j] !== '“' && !s.startsWith('->', j) && s[j] !== '→') {
       // key="带空格的字"：等号后面紧跟引号时整个吃进来
       if (s[j] === '=' && j > i && (s[j + 1] === '"' || s[j + 1] === '「')) break;
       // {式子}（value.js）：配对的一对 {} 整个留在这个词里，里面能带空格（answer={A + B}、vec p w = {A v}、A-B:{k + 1}）
       if (s[j] === '{') { j = braceEnd(s, j); continue; }
       if (s[j] === '}') throw new Error(`多了一个 }：「${s.slice(i, j + 1)}」（式子写在一对 {} 里）`);
+      if (s[j] === '=' && eqAt < 0) eqAt = j - i;
       j++;
     }
     const word = s.slice(i, j);
@@ -109,7 +113,7 @@ export function tokenize(line) {
       i = k + 1;
       continue;
     }
-    const eq = word.indexOf('=');
+    const eq = eqAt;
     if (eq > 0 && eq < word.length - 1) out.push({ t: 'opt', k: word.slice(0, eq), v: word.slice(eq + 1) });
     else if (word === '=') out.push({ t: 'eq' });
     else out.push({ t: 'word', v: word });
@@ -143,7 +147,10 @@ export function parseScript(src) {
       const opts = {};
       const args = [];
       for (const t of toks) if (t.t === 'opt') opts[t.k] = t.v; else args.push(t);
-      out.push({ cmd, args, opts, par, line: k + 1, src: raw, ...(on ? { on, body } : {}) });
+      // lead：紧跟指令的那个词是 名字=值（matrix A=1 2 的「A=1」）。等号两边没空格时页面把名字读成了选项，
+      // 查选项名的地方（scene.js 的 checkOptions）照它说「= 两边要空格」（复审 N5）
+      const lead = toks[0]?.t === 'opt' ? toks[0].k : null;
+      out.push({ cmd, args, opts, par, line: k + 1, src: raw, ...(on ? { on, body } : {}), ...(lead != null ? { lead } : {}) });
     } catch (err) {
       out.push({ cmd: null, error: err.message, line: k + 1, src: raw });
     }

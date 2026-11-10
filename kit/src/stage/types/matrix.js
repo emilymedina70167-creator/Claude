@@ -345,9 +345,12 @@ export function zeroRows(o) {
 
 // —— 跟着算的（{…}，value.js）——
 const unionDeps = (list) => [...new Set(list.flatMap((k) => k.deps))];
-/** 算出来的值 → 每一行的数（字符串）：矩阵照写，向量是一列；一个数不行 */
-function rowsOfValue(v, src) {
-  if (isQ(v)) throw new Error(`「{${src}}」算出来是数 ${v}，不是矩阵（要一格跟着算，写 matrix M = 1 {k} / 0 1）`);
+/**
+ * 算出来的值 → 每一行的数（字符串）：矩阵照写，向量是一列；一个数不行。trial：用到了空格子，v 是试算时页面顶上的数——
+ * 报错里不写它（「{rankA(D)} 算出来是数 0」的 0 是页面顶上的，D 填满以后不一定是 0：复审 N4）
+ */
+function rowsOfValue(v, src, { trial = false } = {}) {
+  if (isQ(v)) throw new Error(`「{${src}}」算出来是${trial ? '一个数' : `数 ${v}`}，不是矩阵（要一格跟着算，写 matrix M = 1 {k} / 0 1）`);
   const rows = isQMat(v) ? v.map((r) => r.map(String)) : isQVec(v) ? v.map((x) => [String(x)]) : null;
   if (!rows) throw new Error(`「{${src}}」算出来的不是矩阵`);
   if (rows.length > MAX_ROWS || rows[0].length > MAX_COLS) throw new Error(`「{${src}}」算出来是 ${rows.length}×${rows[0].length}，舞台上的矩阵最多 ${MAX_ROWS} 行 ${MAX_COLS} 列`);
@@ -366,7 +369,7 @@ function cellLive(h, src) {
 /** 整张跟着算的那几行：跟着空格子变的格空着 */
 function wholeRows(scene, src) {
   const { value, deps, holes } = evalHoles(src, scene);
-  const rows = rowsOfValue(value, src);
+  const rows = rowsOfValue(value, src, { trial: !!holes });
   if (holes) {
     const hole = isQMat(value) ? (i, j) => holes[i][j] : (i) => holes[i];
     rows.forEach((r, i) => r.forEach((_, j) => { if (hole(i, j)) r[j] = ''; }));

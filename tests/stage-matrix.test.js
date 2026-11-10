@@ -591,3 +591,41 @@ matrix D = 7 8 / 9 10`);
   const p = t.objectBox('P'), d = t.objectBox('D');
   assert.ok(d.y >= p.y + p.h, 'P 长高了，D 往下让');
 });
+
+test('复审 N2：以后也数不了的量（句子没写 key）写进矩阵的格——当场报原来的那一句，不当空格子收下画「?」', () => {
+  const s = run(new Scene(), 'sentence w = "He runs fast."\nmatrix D = _ _ / _ _');
+  // 以前（M1 修完）默默收下，现状说「用到的还有空格子，填上了跟着算出来」——没有空格子，也永远算不出来
+  assert.match(err(s, 'matrix R = {verbs(w)} 1'), /「verbs\(w\)」页面数不了：w 没写 key/);
+  assert.equal(s.objects.has('R'), false);
+  // 和真的空格子写在一个式子里也一样报（试算时也不拿数顶上）
+  assert.match(err(s, 'matrix R = {D.1,1 + verbs(w)} 1'), /页面数不了：w 没写 key/);
+  assert.match(err(s, 'matrix R = {verbs(w) D}'), /页面数不了：w 没写 key/);
+  // 现在数不了、之后数得了的（矩阵还空着）照 M1：挂上、画「?」
+  assert.equal(err(s, 'matrix R = {rankA(D)} 1'), null);
+});
+
+test('复审 N3：比较运算（< > <= >= == !=）碰到空格子算不出——画「?」，不写试算出来的 0 / 1', async () => {
+  const { evalHoles } = await import('../kit/src/stage/value.js');
+  const s = run(new Scene(), 'matrix D = _ _ / _ _\ndial k = 2 range=0..3');
+  // 试算的三组数都是正的：和常数比永远一样，以前 {D.1,1 > 0} 写成确定的 1（D.1,1 填 −3 以后变 0）
+  for (const e of ['D.1,1 > 0', 'D.1,1 < 0', 'D.1,1 >= 0', 'D.1,1 <= 0', 'D.1,1 == 0', 'D.1,1 != 0', 'det(D) != 0', 'k >= D.1,1']) assert.equal(JSON.stringify(evalHoles(e, s).holes), 'true', e);
+  // 用不到空格子的比较照算
+  assert.equal(evalHoles('k >= 1', s).holes, null);
+  assert.equal(String(evalHoles('k >= 1', s).value), '1');
+  run(s, 'matrix R = {D.1,1 > 0} 5');
+  assert.deepEqual(rows(s, 'R'), [['', '5']]);
+  assert.match(s.stateText(), /还空着：R\.1,1（跟着算的：用到的还有空格子/);
+  run(s, 'write D.1,1 -3');
+  assert.deepEqual(rows(s, 'R'), [['0', '5']]);
+});
+
+test('复审 N4：整张一个 {} 的矩阵算出来是数——用到空格子试算时这句话不带数（那个数是页面顶上的，不是真的）', () => {
+  const s = run(new Scene(), 'matrix D = _ _ / _ _\nmatrix A = 1 2 / 3 4');
+  for (const e of ['rankA(D)', 'det(D)', 'rank(D)', 'D.1,1 + 1']) {
+    const m = err(s, `matrix R2 = {${e}}`);
+    assert.match(m, /算出来是一个数，不是矩阵（要一格跟着算，写 matrix M = 1 \{k\} \/ 0 1）/, e);
+    assert.doesNotMatch(m, /是数 /, e);
+  }
+  // 用到的都写满了：数是真的，照旧写出来
+  assert.match(err(s, 'matrix R2 = {det(A)}'), /「\{det\(A\)\}」算出来是数 -2，不是矩阵/);
+});
