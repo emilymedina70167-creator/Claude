@@ -1,0 +1,22 @@
+# D1 第 5 幕（第一版，没演上）：三行空格子想拿 3×10 的空矩阵凑。页面报「舞台上的矩阵最多 6 行 8 列」（说明里没写这个上限），后面全落空
+# 留着当证据；改过的一版是 幕5.txt
+array k = 50 26 38 80 70 90 8 30 40 20
+array w = 50 26 38 80 70 90 8 30 40 20
+open w undo=on
+matrix R = _ _ _ _ _ _ _ _ _ _ / _ _ _ _ _ _ _ _ _ _ / _ _ _ _ _ _ _ _ _ _
+label l1 R.r1 "d=5 后" side=left tone=soft
+label l2 R.r2 "d=3 后" side=left tone=soft
+label l3 R.r3 "d=1 后" side=left tone=soft
+matrix K = 50 8 30 40 20 90 26 38 80 70 / 26 8 30 40 20 80 50 38 90 70 / 8 20 26 30 38 40 50 70 80 90 hide=on
+open R edit input=keypad
+say "这回全是你自己的。增量 5、3、1，每趟写出结果。写之前先数有几个数。"
+goal g1 "d=5 这一趟" when="R.r1 = K.r1" on="交这一趟"
+@g1 label ok1 R.r1 "✓" side=right tone=key
+@g1 glow R.r2
+@g1 goal g2 "d=3 这一趟" when="R.r2 = K.r2" on="交这一趟"
+@g1 ask next "接着写 d=3 那一行，写完再交" button="交这一趟"
+ask next "中间那排是草稿，随便拖。第一行写完点「交这一趟」" button="交这一趟"
+# 学生在草稿上拖了一下，第一行写成「连续 5 个一段」那种错
+学生: swap w#1 w#2
+学生: write R.1,1 26
+学生: write R.1,2 38
