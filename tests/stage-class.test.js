@@ -789,3 +789,27 @@ test('复核（第三次量）：键盘填空格子写满了算做完了——�
     assert.deepEqual(lb.pending.events.find((e) => e.kind === 'done').held, ['还有一问没答（ask value）']);
   } finally { for (const l of loops) l.close(); }
 });
+
+test('最后一审 M3：有空格子的矩阵开着 rowop（call=done）又开着键盘——写满了还没消完不算「做完」，不马上叫；学生手上还有事攒着；消完才叫', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const a = fakeClass('matrix M1 = 1 2 3 / _ _ _ / _ _ _\nopen M1 rowop call=done\nopen M1 edit input=keypad');
+  const la = createLoop(a.host);
+  // 真的舞台那样：学生这一下场景照做，场景报做完了才交 onDone（带 filled、ruled）
+  const act = (src, open) => {
+    const fx = a.scene.apply(parseScript(src)[0], { by: 'student', open });
+    la.onAct({ type: open === 'edit' ? 'write' : 'rowop', open, src, line: src, ...(fx.done ? { reached: fx.done } : {}) });
+    if (fx.done) a.stage.onDone(fx.done, { by: 'student', reacted: 0, filled: fx.filled || [], ruled: fx.ruled || [] });
+    return fx;
+  };
+  try {
+    for (const [k, v] of [['2,1', 2], ['2,2', 4], ['2,3', 7], ['3,1', 0], ['3,2', 0], ['3,3', 0]]) act(`write M1.${k} ${v}`, 'edit');
+    await wait();
+    assert.equal(a.calls(), 0, '写满了、还要消：call=done 不算做完');
+    assert.deepEqual(la.pending.events.find((e) => e.kind === 'done').held, ['M1 还没做完']);
+    act('rowop M1 r2 - 2r1', 'rowop');
+    await wait();
+    assert.equal(a.calls(), 1, '消完了：call=done 马上叫');
+    assert.match(sentRows(a.rows)[0].msg, /学生把 M1 的空格子都写满了（页面不判写得对不对）/);
+    assert.match(sentRows(a.rows)[0].msg, /学生把 M1 做完了/);
+  } finally { la.close(); }
+});

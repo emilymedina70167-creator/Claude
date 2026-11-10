@@ -792,6 +792,8 @@ export const sentence = {
   type: 'sentence',
   label: '句子',
   create: ['sentence'],
+  // 认得的选项（名字=值，scene.js 的 checkOptions；造它的那一行另外都认 hide=）：写了不认得的当场报，不默默当没写
+  options: { sentence: ['key', 'links'], mark: ['color'], tag: ['color'] },
   drag: true,
   hint: '（句子：名字.3 现在第 3 个词，名字.2-5 第 2 到 5 个，名字.who 这个词（出现几次写 名字.who:2），名字.who-door 从 who 到 door；括号里的 #k 是「一开始第 k 个的那个词」，写 名字#k 跟着它走）',
   make(scene, c, h, old) {

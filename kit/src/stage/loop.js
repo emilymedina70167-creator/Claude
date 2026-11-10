@@ -267,12 +267,14 @@ export function createLoop(host) {
   // 交给学生做的东西（open t rotate、open M rowop……）做完了（规则说没有下一步了）：学生手上没事了才叫老师（预写了 @t.done 的演完再看）。
   // 老师做完的不叫（预写的行也不演，舞台告诉老师「@t.done 的行没演」）
   // 键盘填的空格子写满了（filled，scene.js 的 fillOpen）也是这一件：写给老师「空格子都写满了」
-  function onDone(ids, { by = 'student', instant, reacted = 0, reacts = null, filled = [] } = {}) {
+  // before：这一次没有预写可演、上一次做完时演过（或老师那一轮做完时拿掉了）的（scene.js 的 doneBefore）：写给老师照实说
+  function onDone(ids, { by = 'student', instant, reacted = 0, reacts = null, filled = [], ruled = [], before = null } = {}) {
     if (instant || S.ended || host.readOnly || by !== 'student') return;
-    const e = { kind: 'done', ids, reacted, at: Date.now(), ...(filled?.length ? { filled } : {}) };
+    const e = { kind: 'done', ids, reacted, at: Date.now(), ...(filled?.length ? { filled } : {}), ...(ruled?.length ? { ruled } : {}), ...(before ? { before } : {}) };
     addEvent(e);
-    // 老师在 open 那一行写了 call=done（做完叫你）：明写的盖过「手上没事了才叫」，马上叫
-    const told = ids.some((id) => [...stage.scene.opens.values()].some((x) => x.obj === id && x.policy?.call === 'done'));
+    // 老师在 open 那一行写了 call=done（做完叫你）：明写的盖过「手上没事了才叫」，马上叫。开着 rowop 又开着键盘的矩阵只是写满了
+    // （filled、规则还没判做完）不算「做完」（最后一审 M3）
+    const told = ids.filter((id) => !filled?.includes(id) || ruled?.includes(id)).some((id) => [...stage.scene.opens.values()].some((x) => x.obj === id && x.policy?.call === 'done'));
     settle(e, { reacts, now: told });
   }
   function onGoal(ids, { by = 'student', instant, reacted = 0, reacts = null, pressed = false, prewrite = false, fresh = null } = {}) {

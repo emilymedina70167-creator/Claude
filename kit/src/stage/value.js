@@ -177,7 +177,10 @@ export function evalLive(src, scene, { plane, fill = null } = {}) {
     if (isExactFunc(name) || !obj || !scene.objects.has(obj)) return m;
     let r;
     try { r = evalMeasure(scene, `${name}(${arg})`); } catch (e) { throw new Error(`${shown}里的「${m}」：${e.message}`); }
-    if (r.value == null) throw new Error(`${shown}里的「${m}」页面数不了：${r.why}`);
+    // 量现在数不了（矩阵还空着）是之后数得了：和空格子一样（blank，evalHoles 照空格子办）。试算时（fill）先拿一个数顶上，
+    // 量不是多项式，试算出来的那一格整个当跟着空格子变（polyOnly）
+    if (r.value == null && !fill) throw Object.assign(new Error(`${shown}里的「${m}」页面数不了：${r.why}`), { blank: true });
+    if (r.value == null) r = { value: 0 };
     const k = `_m${ms.size}_`;
     ms.set(k, obj);
     Object.defineProperty(vars, k, { value: Q.from(r.value), enumerable: true });
@@ -220,7 +223,39 @@ export function evalLive(src, scene, { plane, fill = null } = {}) {
 // 以前一算就报「D.1,1 还空着」，整行不演，老师只好把 D 写成 0。现在先挂上：空格子换成几组不一样的数各算一遍，
 // 几组都一样的格（不跟着空格子变）照写，跟着空格子变的格空着；D 填上一格，跟着重算
 const BLANK_TRIALS = 3;
-const isBlankErr = (e) => /还空着/.test(String(e?.message ?? e));
+const isBlankErr = (e) => !!e?.blank || /还空着/.test(String(e?.message ?? e));
+// 试算（空格子换成一般位置的数）只对多项式那样的式子有效：加减乘、数乘、乘方（非负整数次）、取格、det、迹、转置、除以一个数。
+// 秩、求逆、化简（rref）、rankA / free 这类量、abs、除以跟着变的数，一般位置的数算出来的是假话（D 全空时 {rank(D)} 写成 2、
+// {D D^-1} 写成单位阵，D 填成 1 2 / 2 4 以后秩是 1、D⁻¹ 不存在：最后一审 M1），碰到空格子整个当跟着变（画「?」）
+const POLY_FUNCS = new Set(['det', 'tr', 'T', 'transpose', 'row', 'col', 'el', 'dot', 'cross', 'mat', 'diag', 'sum', 'cumsum', 'lerp', 'I', 'E', 'coef', 'rhs', 'factor', 'expand']);
+function polyOnly(raw, scene) {
+  let text = String(raw).replace(/[−–]/g, '-');
+  for (const [re, to] of SUPS) text = text.replace(re, to);
+  const toks = [];
+  for (let pos = 0; pos < text.length;) {
+    TOK.lastIndex = pos;
+    if (/^\s*$/.test(text.slice(pos))) break;
+    const m = TOK.exec(text);
+    if (!m) return false;
+    pos = TOK.lastIndex;
+    toks.push(m[1] != null ? { k: 'num', v: m[1] } : m[2] != null ? { k: 'id', v: m[2] } : { k: 'op', v: m[3] });
+  }
+  const isVal = (v) => scene.objects.has(v) || scene.vars.has(v);
+  const intAt = (i) => (toks[i]?.k === 'num' && /^\d+$/.test(toks[i].v) ? i + 1 : toks[i]?.v === '(' && toks[i + 1]?.k === 'num' && /^\d+$/.test(toks[i + 1].v) && toks[i + 2]?.v === ')' ? i + 3 : -1);
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    if (t.k === 'id' && toks[i + 1]?.v === '(' && !isVal(t.v) && !POLY_FUNCS.has(t.v)) return false;
+    if (t.k === 'op' && (t.v === '^' || t.v === '**') && intAt(i + 1) < 0) return false;
+    // 除以一个数、一个拨数（拨数不是空格子）照旧；除以别的（一格、式子）不是多项式
+    if (t.k === 'op' && t.v === '/') {
+      const d = toks[i + 1];
+      const ok = intAt(i + 1) > 0 || d?.k === 'num' || (d?.k === 'id' && scene.vars.has(d.v) && !scene.objects.has(d.v) && toks[i + 2]?.v !== '.' && toks[i + 2]?.v !== '(');
+      if (!ok) return false;
+    }
+  }
+  return true;
+}
+const allHoles = (v) => (isQ(v) ? true : v.map(allHoles));
 // 第 t 组里第 i 个空格子顶上的数：几组、几格各不一样（都一样容易凑出不可逆、相减成 0）
 const trialQ = (t, i) => Q.int(1009 + 7919 * i + 104729 * t).div(Q.int(97 + 13 * t + 31 * i));
 const sameVal = (a, b) => (isQ(a) && isQ(b) ? a.cmp(b) === 0 : Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => sameVal(x, b[i])));
@@ -243,7 +278,7 @@ export function evalHoles(src, scene, ctx = {}) {
     const vals = runs.map((r) => r.value);
     const shape = (v) => (isQ(v) ? 'q' : isQMat(v) ? `m${v.length}x${v[0].length}` : isQVec(v) ? `v${v.length}` : '?');
     if (vals.some((v) => shape(v) !== shape(vals[0]))) throw err;
-    return { value: vals[0], deps: runs[0].deps, holes: holesOf(vals) };
+    return { value: vals[0], deps: runs[0].deps, holes: polyOnly(src, scene) ? holesOf(vals) : allHoles(vals[0]) };
   }
 }
 

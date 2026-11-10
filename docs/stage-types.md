@@ -25,6 +25,7 @@
 | `objectBox(o)` | 整样东西占的框（镜头对准它、新东西摆在它下面） |
 | `obstacles(o)` | 贴字要让开的框（默认是每个部件的框） |
 | `commands` | 自己的指令 `{ 名字: (scene, c, h) => 要点 }`。<br>改 `scene.objects.get(id)` 里的数据，返回画面要用的要点（比如 `{ a, b }`）；写错就抛错。<br>一行的第一个部件是哪种东西，`scene.js` 就交给哪种东西；只有一种东西有这个指令时，没写部件也交给它 |
+| `options` | 认得的选项（`名字=值`）`{ 造它的指令或自己的指令: ['名字', /正则/] }`，没列的指令不带选项；造它的那一行另外都认 `hide=`；`'*'` 是那条指令自己查（`tex` 的 `retex … a2=a`）。<br>`scene.js` 的 `checkOptions` 照它查，不认得的当场报、给最像的那个（「hid=on」是不是 hide=on？）；重放旧课（`lenient`）不查。共用的指令在 `script.js` 的 `OPTIONS`。用了新的 `h.opts.xxx` 要在这里加上 |
 | `onVar(scene, o, bind, v)` | 跟着拨数变的（`scene.binds` 里 `{ kind, obj, v }`），可选 |
 | `describe(o, scene)` | 给老师看的现状（几行字）：值、颜色、亮没亮、扣没扣……要让老师照着它写下一轮 |
 | `hint` | 部件写法的一句提示（舞台上有这种东西时给老师看一次） |

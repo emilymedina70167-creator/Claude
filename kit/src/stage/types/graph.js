@@ -386,6 +386,8 @@ export const graph = {
   type: 'graph',
   label: '图',
   create: ['graph'],
+  // 认得的选项（名字=值，scene.js 的 checkOptions；造它的那一行另外都认 hide=）；边权写成 A-B=4 的照收，交给 make 报「用冒号」
+  options: { graph: ['pos', /[-~>]/] },
   remake: true, // 造它的那一行里能写 {式子}（value.js）：依赖一变，场景照新的数把这一行重新造一遍
   /**
    * 重新造（scene.js 的 remake：拨了一条边的权）：老师这几轮做的按结点名、边带到新造的那一份——旁边的数（tag、relax 改的）、

@@ -555,6 +555,8 @@ export const matrix = {
   type: 'matrix',
   label: '矩阵',
   create: ['matrix', 'product'],
+  // 认得的选项（名字=值，scene.js 的 checkOptions；造它的那一行另外都认 hide=）；rowop M r2=r2-3r1 连着写被读成了选项，照收
+  options: { matrix: ['beside', 'vars', 'from'], rowop: [/^[rRcC]\d+$/] },
   drag: false,
   hint: '（矩阵：名字.2,3 是第 2 行第 3 列，名字.r2 是第 2 行，名字.c3 是第 3 列；交换两行时数跟着走，名字.2,3 指的总是现在的第 2 行第 3 列）',
   make(scene, c, h, old) {
@@ -864,8 +866,9 @@ export const matrix = {
     for (let r = 1; r <= o.rows; r++) lines.push(`  第 ${r} 行：${rowCells(o, r).map(tag).join('  ')}${zero.has(r) ? '（全为 0）' : ''}`);
     if (o.stairs) lines.push(`  画着阶梯线：非零行 ${o.rows - zero.size} 行`);
     const blank = o.cells.filter((x) => x.value === '').sort(sortRC);
-    // 跟着算的空着的格：是用到的东西还有空格子（{A D}、D 还空着），填上了跟着算出来
-    if (blank.length && !empty) lines.push(`  还空着：${blank.map((x) => `${o.id}.${x.r},${x.c}`).join(' ')}${o.live ? '（跟着算的：用到的还有空格子，填上了跟着算出来）' : ''}`);
+    // 跟着算的空着的格：是用到的东西还有空格子（{A D}、D 还空着），填上了跟着算出来；填上以后算不出来（D 不可逆）的照实说
+    const why = o.live?.error ? '（跟着算的：现在算不出来，见下面「跟着算的」那一行）' : '（跟着算的：用到的还有空格子，填上了跟着算出来）';
+    if (blank.length && !empty) lines.push(`  还空着：${blank.map((x) => `${o.id}.${x.r},${x.c}`).join(' ')}${o.live ? why : ''}`);
     if (o.collect && !empty) lines.push(`  收集用的（${SIGN_TEXT[o.collect.sign]}）：${o.id} = ${collectSrc(o.collect.sign, o.collect.terms)}；学生只能往里放`);
     // 并同类项并成了 0：整张都是 0 才这样写（老师之后改了一格就不是了）
     if (cancelledNow(o)) lines.push(`  ${o.id} = O（抵消了）`);
@@ -902,7 +905,7 @@ open m edit input=keypad          学生点一格用数字键盘写（能写 -3/
 判断式（when=）：m stairs（阶梯形）、m rref（行最简形）、m rank=2（整张的秩，增广的是 r(A | b)）、m rankA=2（竖线左边的秩 r(A)）、m same B（和 B 行等价）；量：rank(m)、rankA(m)、free(m)（自由变量几个）、det(m)（方阵）；现状里还写解的样子，跟着拨数的把每个能拨的值扫一遍
 做完了 = 成了阶梯形（@m.done 这时演）；往上化成行最简形页面不判对错，要的话写 goal … when="m rref"
 ask value "A² 是？" type=matrix answer={A^2} wrong="1 1 / 1 1=逐格平方了"     学生写一张矩阵（行用「 / 」或 ; 隔开，1/3 是一格分数），页面照 A 现算答案
-ask value "Aⁿ 是？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"     每格是含 n 的式子：学生一格一个式子框，页面逐格代 n 判，哪一格不对告诉你（学生只看到整张对不对）；一列（一行）、每格是 free= 变量一次式的（通解 free=k answer="-2+4k / 1-k / k"）按集合判：换了参数、特解的同一条线也对
+ask value "Aⁿ 是？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"     每格是含 n 的式子：学生一格一个式子框，页面逐格代 n 判，哪一格不对告诉你（学生只看到整张对不对）；一列（一行）的通解加 solve=on（free=k solve=on answer="-2+4k / 1-k / k"）按集合判：换了参数、特解的同一条线也对
 answer={A B}、{A^2}、{3 A}、{A^-1}、{A'} 时页面自己认乘反、逐格乘方、只乘一行或一格、逐格取倒数或没除以行列式、没转置，对上了告诉你（你写的 wrong= 先比）`,
   // 测试用（tests/stage-doc.test.js）：说明里 stairs 那一行要一个已经是阶梯形的矩阵；from= 那一行要 M0；整张拖的三行要 AB、BA、Sum、X、Y
   docSetup: 'matrix m = 1 2 3 / 0 1 4 / 0 0 1\nmatrix M0 = 1 2 | 3 / 2 4 | 7\nmatrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix AB = {A B}\nmatrix BA = {B A}\nmatrix Sum = collect\nmatrix X = {-2 A}\nmatrix Y = {-A}',

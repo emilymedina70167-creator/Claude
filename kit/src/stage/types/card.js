@@ -45,6 +45,8 @@ export const card = {
   type: 'card',
   label: '题卡',
   create: ['card'],
+  // 认得的选项（名字=值，scene.js 的 checkOptions；造它的那一行另外都认 hide=）：写了不认得的当场报，不默默当没写
+  options: { addline: ['covered'] },
   hint: '（题卡：名字.2 是第 2 行，扣着的行学生看不见，uncover 翻开）',
   make(scene, c, h, old) {
     const id = h.words[0];

@@ -170,6 +170,8 @@ export const tex = {
   type: 'tex',
   label: '式子',
   create: ['tex'],
+  // 认得的选项（名字=值，scene.js 的 checkOptions；造它的那一行另外都认 hide=）；retex / next 的 a2=a 是项从哪来，自己查
+  options: { retex: '*', next: '*' },
   hint: '（式子：名字.a 是用 \\hl{a}{…} 起了名字的那一项；只有最下面那一行（现在的式子）的项能指）',
   make(scene, c, h, old) {
     if (!h.args.some((a) => a.t === 'eq') || h.str == null) throw new Error('要写成 tex 名字 = "公式"（给一项起名字：\\hl{a}{x^2}，部件写 名字.a）');

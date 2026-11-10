@@ -10,7 +10,7 @@
 // 舞台上的东西分几种（一排格子、树、图、矩阵、平面、句子、式子……），每一种是 types/ 下的一个模块：
 // 怎么造、部件怎么写（a.3 / t.A / m.2,3）、部件在哪、自己的指令（swap / insert / rowop……）、给老师看的现状。
 // 这里只管各种东西共用的：点亮、染色、连线、贴字、拨数、镜头、说话、等学生。
-import { parseScript, parseRef, parseRich, addCommands } from './script.js';
+import { parseScript, parseRef, parseRich, addCommands, OPTIONS, optionError } from './script.js';
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
 // numOf：数（整数、小数、分数 -3/4，′ 和真的减号也认），比大小用；和挑战判数是同一个
@@ -255,6 +255,9 @@ export class Scene {
     this.lastBefore = new Map(); // 东西 id → 学生最后那一下之前它的样子（snapOf）：back t 回到那里，隔着老师的一轮也行
     // —— 拨数要挂在还没造的东西上（dial k … at=M 写在 matrix M = … {k} 之前）——
     this.dialAt = new Map(); // 拨数的名字 → 要挂上的东西 id：先记着，那样东西第一次造出来时挂上（同名重造不再挂）
+    // 东西做完时的预写（@t.done）一组只演一次：演过了（played）、老师那一轮让它做完时拿掉了（dropped）记在这里。
+    // 学生按「回到……」再做完一次时照实告诉老师，不说「你没预写做完以后的行」（最后一审 M2）
+    this.spentDone = new Map(); // 东西 id → 'played' | 'dropped'
   }
 
   clone() {
@@ -290,6 +293,7 @@ export class Scene {
     for (const [k, m] of this.autoKeep) s.autoKeep.set(k, new Map(m));
     for (const [k, v] of this.lastBefore) s.lastBefore.set(k, structuredClone(v));
     s.dialAt = new Map(this.dialAt);
+    s.spentDone = new Map(this.spentDone);
     return s;
   }
 
@@ -534,9 +538,14 @@ export class Scene {
     // （当时演了的行本来就在 log 里），不说
     const unplayed = [];
     const fire = (key, tag) => {
-      if (student) return this.pull(key, tag);
+      const done = tag.done;
+      if (student) {
+        const out = this.pull(key, tag);
+        if (done && out.length) this.spentDone.set(done, 'played');
+        return out;
+      }
       const lines = this.take(key);
-      if (lines.length) { this.dropAhead(key); if (!c.replay) unplayed.push(key); }
+      if (lines.length) { this.dropAhead(key); if (!c.replay) unplayed.push(key); if (done) this.spentDone.set(done, 'dropped'); }
       return [];
     };
     const got = { collected: [] };
@@ -555,13 +564,19 @@ export class Scene {
       reactions.push(...more.flatMap((id) => this.pull(id, { goal: id, collect: true, keepGoals: true }, { peek: true })));
     }
     // 学生（或老师）这一行把交给学生做的东西做完了：@t.done 的行交出来，课堂按 by 决定叫不叫老师
-    const filled = [];
-    const fin = this.checkDone(ruleErrors, filled);
+    const filled = [], ruled = [];
+    const fin = this.checkDone(ruleErrors, filled, ruled);
     if (ruleErrors.length) fx.ruleErrors = ruleErrors;
     if (fin.length) {
       fx.done = fin;
       if (filled.length) fx.filled = filled;
-      reactions.push(...fin.flatMap((id) => fire(`${id}.done`, { done: id })));
+      if (filled.some((id) => ruled.includes(id))) fx.ruled = ruled;
+      // @M.done 只在规则判做完时演：开着 rowop 的矩阵只是写满了、还没消完，不演
+      const fin2 = fin.filter((id) => ruled.includes(id) || !filled.includes(id));
+      // 这一次没有预写可演、以前演过（拿掉过）的：交出来，课堂写给老师时照实说（fire 之前看：这一次演了的会记成 played）
+      const before = Object.fromEntries(fin2.filter((id) => !this.reactions.get(`${id}.done`)?.length && this.spentDone.has(id)).map((id) => [id, this.spentDone.get(id)]));
+      if (Object.keys(before).length) fx.doneBefore = before;
+      reactions.push(...fin2.flatMap((id) => fire(`${id}.done`, { done: id })));
     }
     if (reactions.length || met.length || more.length) fx.reactions = reactions;
     if (unplayed.length) { fx.unplayed = unplayed; if (c.prewrite) fx.unplayedBy = 'prewrite'; }
@@ -770,21 +785,32 @@ export class Scene {
    * 交给了学生做的东西（open 了规则 doneBy 里的动作）里，这一行从没做完变成做完了的；刚交给学生时已经做完的不算。
    * 交给学生用键盘填的空格子（fillOpen）也一样：最后一格填上算做完了，记进 filled（写给老师「空格子都写满了」，不是规则算出来没有下一步）
    */
-  checkDone(errors = [], filled = []) {
+  // ruled：规则判做完了的（开着 rowop 又开着键盘的矩阵，写满和消完是两件：两件都在这一行做到时两个都有）
+  checkDone(errors = [], filled = [], ruled = []) {
     const out = [];
     const seen = new Set();
     for (const e of this.opens.values()) {
       if (seen.has(e.obj)) continue;
       const rule = this.doneOpen(e.obj);
-      const fill = !rule && this.fillOpen(e.obj);
+      const fill = this.fillOpen(e.obj);
       if (!rule && !fill) continue;
       seen.add(e.obj);
+      const blank = this.blankLeft(e.obj);
+      // 键盘填的空格子写满了：一件。同时交了规则的（开着 rowop），写满记在「id#fill」上，和规则判的做完分开记
+      if (fill) {
+        const k = rule ? `${e.obj}#fill` : e.obj;
+        seen.add(k);
+        const was = this.doneState.get(k);
+        this.doneState.set(k, !blank);
+        if (!blank && was === false) { out.push(e.obj); filled.push(e.obj); }
+      }
+      if (!rule) continue;
+      // 还空着的不是做完了（最后一审 M3）
       let now = false;
-      if (fill) now = !this.blankLeft(e.obj);
-      else try { now = nextDone(this, e.obj); } catch (err) { now = false; errors.push(`${e.obj} 的规则算下一步时出错：${err?.message || err}`); }
+      if (!blank) try { now = nextDone(this, e.obj); } catch (err) { now = false; errors.push(`${e.obj} 的规则算下一步时出错：${err?.message || err}`); }
       const was = this.doneState.get(e.obj);
       this.doneState.set(e.obj, now);
-      if (now && was === false) { out.push(e.obj); if (fill) filled.push(e.obj); }
+      if (now && was === false) { if (!out.includes(e.obj)) out.push(e.obj); ruled.push(e.obj); }
     }
     for (const id of [...this.doneState.keys()]) if (!seen.has(id)) this.doneState.delete(id);
     return out;
@@ -917,7 +943,8 @@ export class Scene {
       try { nx = rules.next(o, this); } catch (err) { throw new Error(`页面算不出 ${name} 的下一步（${err.message}），@${name}.${kind} 的行不会演`); }
       // 现在就做完了：学生开着的动作还能把它改回没做完（删一个结点再修平：第三次量 D2/分支 3），再做完时照样演，收下；改不回去的报
       if (nx === null && !(kind === 'done' && this.reopenable(name))) throw new Error(`${name} 现在就已经做完了（没有下一步），学生不用再动手，@${name}.${kind} 的行不会演`);
-      if (nx !== null && !nx?.acts?.length) throw new Error(`页面判不了 ${name}：${nx?.why || '算不出下一步'}，@${name}.${kind} 的行不会演`);
+      // 还有空着的格（blank）：现在算不了，填满了照算，收下（最后一审 M3）
+      if (nx !== null && !nx?.acts?.length && !nx?.blank) throw new Error(`页面判不了 ${name}：${nx?.why || '算不出下一步'}，@${name}.${kind} 的行不会演`);
     }
     const key = `${name}.${kind}`;
     const list = this.reactions.get(key) || [];
@@ -957,8 +984,44 @@ export class Scene {
     return err ? `预写的这一行没演上：「${String(c.src ?? lineOf(c)).trim()}」——${err}` : null;
   }
 
+  /**
+   * 这一行写的选项（名字=值）都是这条指令认得的（最后一审 I4）：不认得的当场报，话里给最像的那个（「hid=on」是不是 hide=on？）。
+   * 以前默默当没写：matrix R = … hid=on 把要藏的答案摆给学生看、keep … afer=insert 不替老师存。各种东西自己的指令按写的那一样东西认；
+   * 找不到是哪一样的不查（那条指令自己报「舞台上没有……」）
+   */
+  checkOptions(c) {
+    const keys = Object.keys(c.opts || {});
+    if (!keys.length) return;
+    const { cmd } = c;
+    let label = cmd, names;
+    if (CREATE[cmd]) names = [...(CREATE[cmd].options?.[cmd] || []), 'hide'];
+    else if (Object.values(TYPES).some((t) => t.commands?.[cmd])) {
+      const owners = Object.values(TYPES).filter((t) => t.commands?.[cmd]);
+      const ref = (c.args || []).map((a) => (a.t === 'word' ? parseRef(a.v) : null)).find((r) => r && this.objects.has(r.obj));
+      const t = ref ? typeOf(this.objects.get(ref.obj)) : owners.length === 1 ? owners[0] : null;
+      if (!t?.commands?.[cmd]) return;
+      names = t.options?.[cmd] || [];
+    } else if (cmd === 'ask') {
+      const kind = (c.args || []).find((a) => a.t === 'word')?.v;
+      names = OPTIONS.ask[kind];
+      if (!names) return; // ask 后面写错了种：ask 自己报
+      label = `ask ${kind}`;
+    } else names = OPTIONS[cmd] || [];
+    if (names === '*') return;
+    const bad = keys.find((k) => !names.some((n) => (n instanceof RegExp ? n.test(k) : n === k)));
+    if (bad == null) return;
+    // 别的那几种 ask 认的（ask tap 写了 answer=）：说用在哪几种上。reveal=、solve= 由 ask 自己报（说明里写着那一句）
+    if (cmd === 'ask') {
+      const kinds = Object.entries(OPTIONS.ask).filter(([, ns]) => ns.includes(bad)).map(([k]) => `ask ${k}`);
+      if (kinds.length && (bad === 'reveal' || bad === 'solve')) return;
+      if (kinds.length) throw new Error(`「${bad}=${c.opts[bad]}」不是 ${label} 认的写法：${bad}= 只用在 ${kinds.join(' / ')} 上（${label} 能写的：${names.map((n) => `${n}=`).join(' ')}）`);
+    }
+    throw new Error(optionError(label, bad, c.opts[bad], names));
+  }
+
   applyOne(c) {
     if (!c.cmd) throw new Error(c.error || '看不懂这一行');
+    if (!c.lenient) this.checkOptions(c);
     const h = this.helpers(c);
     const { cmd } = c;
     const { args, opts, words, str, arrow, refsIn, partsIn, strayRefs } = h;
@@ -1195,7 +1258,8 @@ export class Scene {
         // 重放旧课的这一问记着 lenient：{…} 算不出来（第一轮以前字面写的 answer={…}）照字面比。预写的行也带 lenient，
         // 可它写下时照新规矩验过了：判的时候算不出来是学生把舞台拨成了算不了的样子，照旧「页面没判成」，不照字面比（不然对的也判错）
         const oldAsk = !!c.lenient && !c.prewrite;
-        const spec = kind === 'value' ? { type: opts.type, answer: opts.answer, wrongs: opts.wrong, free: opts.free, ...(oldAsk ? { lenient: true } : {}) } : null;
+        if (opts.solve != null && kind !== 'value' && !c.lenient) throw new Error('solve= 只用在 ask value 上（type=matrix free=… 的一列通解按集合判）');
+        const spec = kind === 'value' ? { type: opts.type, answer: opts.answer, wrongs: opts.wrong, free: opts.free, ...(opts.solve != null ? { solve: opts.solve } : {}), ...(oldAsk ? { lenient: true } : {}) } : null;
         if (spec) checkSpec(spec, this, { strict: !c.lenient, lenient: oldAsk });
         if (str != null) { this.say = str; this.words = parseRich(str).filter((p) => p.k === 'word').map((p) => p.v); }
         // 这一轮写在前面的 @ask.right 跟着这一问走（学生答对它时页面马上演，只演一次）。预写里的 ask（舞台演 @g1 的行时带 prewrite）不拿：
@@ -1211,7 +1275,7 @@ export class Scene {
           rightKey = `ask.right#${++this.askSeq}`;
           for (const a of this.ahead.values()) if (a.from === 'ask.right') a.from = rightKey;
         } else if (!c.prewrite) this.dropAhead('ask.right');
-        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}), ...(c.prewrite ? { pre: true } : {}) };
+        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.solve != null ? { solve: spec.solve } : {}), ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}), ...(c.prewrite ? { pre: true } : {}) };
         if (opts.expect && kind !== 'pick') this.parts(opts.expect);
         return { kind };
       }
@@ -1579,6 +1643,7 @@ export class Scene {
     this.doneState.delete(id);
     this.reactions.delete(`${id}.done`);
     this.reactions.delete(`${id}.right`);
+    this.spentDone.delete(id);
     this.dropAhead(`${id}.done`);
     this.dropAhead(`${id}.right`);
     if (this.picked?.obj === id) this.picked = null; // 学生点的是上一样的部件：不算了

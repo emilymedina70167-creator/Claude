@@ -62,8 +62,9 @@ export function undoneOf(scene) {
   const undone = [];
   for (const e of scene?.opens?.values() || []) {
     if (undone.includes(e.obj)) continue;
-    // 交给学生用键盘填的空格子还没填满：学生做得了（键盘开着、看得见）
-    if (!scene.doneOpen?.(e.obj) && scene.fillOpen?.(e.obj)) { if (scene.blankLeft(e.obj) && !scene.objects.get(e.obj).hidden) undone.push(e.obj); continue; }
+    // 交给学生用键盘填的空格子还没填满：学生做得了（键盘开着、看得见）；开着 rowop 的矩阵也是（还空着就不是做完了：最后一审 M3）
+    if (scene.fillOpen?.(e.obj) && scene.blankLeft(e.obj)) { if (!scene.objects.get(e.obj).hidden) undone.push(e.obj); continue; }
+    if (!scene.doneOpen?.(e.obj) && scene.fillOpen?.(e.obj)) continue;
     if (!scene.doneOpen?.(e.obj)) continue;
     const o = scene.objects.get(e.obj);
     const r = rulesOf(o);
@@ -386,11 +387,17 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
     }
     else if (e.kind === 'done') {
       // 键盘填的空格子写满了（filled）：页面不判写得对不对，不说「算出来没有下一步了」，也没有预写（@M.done 只给规则判得了做完的动作）
+      // 开着 rowop 又开着键盘的矩阵，写满正好就是消完了（ruled）：两件都说
       const fill = (e.ids || []).filter((id) => e.filled?.includes(id));
-      const rest = (e.ids || []).filter((id) => !fill.includes(id));
+      const rest = (e.ids || []).filter((id) => !fill.includes(id) || e.ruled?.includes(id));
       const parts = [];
       if (fill.length) parts.push(`学生把 ${fill.join('、')} 的空格子都写满了（页面不判写得对不对）`);
-      if (rest.length) parts.push(`学生把 ${rest.join('、')} 做完了${e.reacted ? `（页面已经演了你预写的 ${e.reacted} 行）` : e.missed ? '（页面算出来没有下一步了）（你预写的行都没演上）' : '（页面算出来没有下一步了）（你没预写做完以后的行）'}`);
+      // 这一次没有预写可演：以前写过的（上一次做完时演过、你那一轮让它做完时拿掉了）照实说，不说「你没预写」（最后一审 M2）
+      const spent = rest.map((id) => e.before?.[id]);
+      // 几样一起做完、各有各的来历（极少）：不说预写的事，免得对其中一样说错
+      const all = (k) => spent.every((x) => x === k);
+      const none = all('played') ? '（你预写的行上一次做完时已经演过了）' : all('dropped') ? '（你预写的行在你那一轮让它做完时拿掉了，没演）' : all(undefined) ? '（你没预写做完以后的行）' : '';
+      if (rest.length) parts.push(`学生把 ${rest.join('、')} 做完了${e.reacted ? `（页面已经演了你预写的 ${e.reacted} 行）` : e.missed ? '（页面算出来没有下一步了）（你预写的行都没演上）' : `（页面算出来没有下一步了）${none}`}`);
       lines.push(`${parts.join('；')}${heldText(e)}`);
     }
     else if (e.kind === 'help') lines.push(`学生点了「${e.act.button}」`);
@@ -420,20 +427,33 @@ const fillOf = (a) => (a?.type === 'write' ? String(a.line || a.src || '').match
  *   - 往一格里写第一个值：键盘一格一格写满一张矩阵是在填，不是试了没做到（以前写到第 8 格就叫老师「试了 8 下还没做到」）；
  *     同一格再写一次才算一下；
  *   - 做到挑战、收集型收了一张、做完了的那一下（act.reached，stage.js 记的）：往前走了一步，它和它之前试的都不再算「还没做到」，从头数；
- *   - 同一个拨数、同一格连着 ± 拨的几下（中间没动过别的，路接得上：和写给老师的「一条路」同一套 pathKey / pathGoesOn）只算一下：
- *     拨数 0 拨到 8 要按 8 下 ›，是一次「试」（以前一下算一下，拨到 8 就叫老师「试了 8 下还没做到」，第三次量 L3/幕6 那种）
+ *   - 同一个拨数、同一格连着 ± 拨的几下（中间没动过别的，路接得上：和写给老师的「一条路」同一套 pathKey / pathGoesOn）、
+ *     一直往一个方向拨到没到过的值，只算一下：拨数 0 拨到 8 要按 8 下 ›，是一次「试」（以前一下算一下，拨到 8 就叫老师
+ *     「试了 8 下还没做到」，第三次量 L3/幕6 那种）。换了方向、拨回这条路上停过的值（连一开始的值）是又试了一下：
+ *     不然来回拨永远只算一下，学生一直在拨也一直没人管（「很久没动」按最后一下计时，拨着就不算没动；最后一审 I3）
  */
+const numOfStop = (x) => { const m = String(x ?? '').trim().replace(/^[−–]/, '-').match(/^(-?\d+(?:\.\d+)?)(?:\/(\d+))?$/); return m ? Number(m[1]) / (m[2] ? Number(m[2]) : 1) : null; };
 export function tryCount(events) {
   let n = 0;
   const filled = new Set();
-  let run = null; // 上一下是哪条路上的：{ key, end }；中间有别的一下（连撤一步、按「回到……」）就断了
+  // 上一下是哪条路上的：{ key, end, dir（上一下往哪拨：1 / -1，看不出是 0）, seen（这条路上停过的值）}；
+  // 中间有别的一下（连撤一步、按「回到……」）就断了
+  let run = null;
   for (const e of events) {
     // 中间夹着学生别的事（答了一问、做到挑战……）也断了这一条路；页面记下的一句（note）不是学生做的，不断
     if (e.kind !== 'try') { if (e.kind !== 'note') run = null; continue; }
     const a = e.act || {};
     const key = pathKey(a);
-    const goesOn = !!(key && run && run.key === key && pathGoesOn(run.end, a));
-    run = key ? { key, end: pathEnd(a) } : null;
+    const end = key ? pathEnd(a) : null;
+    const on = !!(key && run && run.key === key && pathGoesOn(run.end, a));
+    const x = numOfStop(a.from ?? run?.end), y = numOfStop(end);
+    const dir = x != null && y != null ? Math.sign(y - x) : 0;
+    const goesOn = on && !(dir && run.dir && dir !== run.dir) && !run.seen.has(end);
+    if (key) {
+      const seen = on ? run.seen : new Set(a.from != null ? [String(a.from)] : []);
+      seen.add(end);
+      run = { key, end, dir: dir || (on ? run.dir : 0), seen };
+    } else run = null;
     if (a.reached?.length) { n = 0; filled.clear(); run = null; continue; }
     if (e.patient) continue;
     if (goesOn) continue;

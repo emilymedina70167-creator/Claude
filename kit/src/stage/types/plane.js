@@ -305,6 +305,8 @@ export const plane = {
   type: 'plane',
   label: '平面',
   create: ['plane'],
+  // 认得的选项（名字=值，scene.js 的 checkOptions；造它的那一行另外都认 hide=）：写了不认得的当场报，不默默当没写
+  options: { plane: ['range', 'x', 'y', 'beside'], vec: ['color'], point: ['color'], sum: ['color'], span: ['color'] },
   drag: true,
   hint: '（平面：名字.u 是向量 u（从原点出发的箭头），名字.P 是点 P；坐标是数学里的 (x, y)，y 朝上）',
   make(scene, c, h) {

@@ -113,7 +113,7 @@ test('这一轮的新写法都在说明里：共用的每门课都有，树的�
     /^量：[^\n]*say "[^"\n]*\{rank\(/m];
   const own = {
     数据结构: ['pluck', 'open t delete', /^heights t/m, 'count(', 'height(', 'tray(', /堆[^\n]*layout=compact/],
-    线代: ['open AB compare', 'put AB Sum', 'merge X Y', 'collect', 'coef(', 'rhs(', 'from=', 'vars=', 'rank(', 'rankA(', 'free(', 'det(m)', /= _ _/],
+    线代: ['open AB compare', 'put AB Sum', 'merge X Y', 'collect', 'coef(', 'rhs(', 'from=', 'vars=', 'rank(', 'rankA(', 'free(', 'det(m)', /= _ _/, 'solve=on'],
     英语: ['links=', 'refer s.', 'exact', 'linked', 'Attr/NF', /^tally s/m, 'verbs(', 'left(', 'open s move'],
   };
   const miss = [];

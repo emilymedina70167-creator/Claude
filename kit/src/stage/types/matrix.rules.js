@@ -206,7 +206,9 @@ function nowRight(md) {
 
 function next(o) {
   const md = modelOf(o);
-  if (hasBlank(md.G)) return null; // 乘积还没算完：没有消元这回事
+  // 还有空着的格（乘积还没算完、键盘还没填满）：不是做完了，只是现在算不了下一步（blank：@M.done 照收，填满了再算；
+  // 以前是 null，页面当它「已经做完了」，报「M1 现在就已经做完了」、填满了也不算做完：最后一审 M3）
+  if (hasBlank(md.G)) return { acts: [], why: '还有空着的格，页面算不了下一步', blank: true };
   const pl = plan(md);
   return pl ? { acts: actsOf(md, pl).map(toAct), why: planWhy(md, pl) } : null;
 }

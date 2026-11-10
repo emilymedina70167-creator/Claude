@@ -601,6 +601,39 @@ expect('学生插进 47：揭晓——变了的 45、50、20 实线，没变的 
 await teacher('say "看：10 没变。"\nask next "好" button="好"');
 expect('揭晓以后老师下一轮演完：收掉', await rings(), '0｜0｜没圈');
 
+// 22. 最后一审 I1：老师那一轮自己演出变化（insert）揭晓了 reveal=on 的圈：这一轮演完圈还在（学生要看虚实），再下一轮演完才收
+await play('tree t = 20 10 40 5 15 30 50 _ _ _ _ 25 35 45 tray="47"\nbf t\nopen t insert\nask pick t "点出会变的结点" button="猜好了" expect="t.45 t.50 t.40 t.20" reveal=on');
+for (const v of [45, 50, 20, 10]) { const b = await treeBox('t', v); await tapAt({ x: b.cx, y: b.cy }); await page.waitForTimeout(120); }
+const goBtn2 = await page.evaluate(() => { const b = document.querySelector('.st-pick-go'); if (!b || b.disabled) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+if (goBtn2) await tapAt(goBtn2);
+await settle();
+await teacher('insert t 47\nsay "你看圈：实线的是变了的。"\nask next "看到了" button="看到了"');
+expect('老师那一轮里插进 47 揭晓：演完圈还在（log 里没有 unpick）', `${await rings()}｜${await page.evaluate(() => window.LAStage.log.some((r) => r.src === 'unpick'))}`, '4｜1｜圈着｜false');
+await page.evaluate(async () => { const st = window.LAStage; await st.replay(st.log.slice()); await new Promise((r) => setTimeout(r, 300)); });
+expect('刷新（照 log 重放）：圈照样在', await rings(), '4｜1｜圈着');
+await teacher('say "10 没变。"\nask next "好" button="好"');
+expect('再下一轮演完：收掉', await rings(), '0｜0｜没圈');
+
+// 23. 最后一审 M4：一轮分三段、第一段话里拼错了 {kk}，学生在第二段演完点「↺ 再看一遍」（重演第二段：第一段照 log 瞬间放回）：
+// 这一轮演完照样告诉老师 kk 拼错了（以前瞬间放回不记，第一段的那一条丢了）
+const m4 = await page.evaluate(async () => {
+  const st = window.LAStage;
+  const until = async (sel) => { for (let i = 0; i < 200 && !document.querySelector(sel); i++) await new Promise((r) => setTimeout(r, 50)); return document.querySelector(sel); };
+  const gone = async (sel) => { for (let i = 0; i < 200 && document.querySelector(sel); i++) await new Promise((r) => setTimeout(r, 50)); };
+  st.cancelWait?.(); st.clearAll(); st.log = []; st.setPace('tap');
+  const t = st.begin();
+  t.end('array a = 1 2\nsay "看 {kk}"\nsay "再看这里"\nsay "第三段"\nask next "好" button="好"');
+  (await until('.st-beat-go'))?.click();
+  await gone('.st-beat');
+  (await until('.st-beat-again'))?.click();
+  await gone('.st-beat');
+  (await until('.st-beat-go'))?.click();
+  await t.armed;
+  st.setPace('flow');
+  return st.errors.filter((e) => /kk/.test(e.error)).length;
+});
+expect('再看一遍以后：拼错的 {kk} 照样告诉老师（一条）', m4, 1);
+
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

@@ -295,6 +295,33 @@ test('@t.wrong 报错；@名字. 后面只认 done / right；@名字.done 要先
   assert.match(s.stateText(), /t 做完了页面马上演你预写的 1 行/);
 });
 
+test('最后一审 M2：回到存档点以后再做完一次，fx.doneBefore 写预写的行上一次演过了（不说「你没预写」）；老师那一轮做完拿掉的写 dropped', () => {
+  const src = 'tree t = 30 20 _ 10\nopen t rotate\nkeep t "转之前"\nopen t back="转之前"\n@t.done say "平了。"';
+  const s = run(new Scene(), src);
+  let fx = stu(s, 'rotate t.30 right', 'rotate');
+  assert.deepEqual(fx.done, ['t']);
+  assert.equal(fx.reactions.length, 1);
+  assert.equal(fx.doneBefore, undefined, '第一次做完演了预写的行，不带');
+  stu(s, 'back t "转之前"', 'back');
+  // 副本上一样（检查、试演都在克隆上跑）
+  const c = s.clone();
+  fx = stu(s, 'rotate t.30 right', 'rotate');
+  assert.deepEqual(fx.done, ['t']);
+  assert.equal(fx.reactions?.length || 0, 0);
+  assert.deepEqual(fx.doneBefore, { t: 'played' });
+  assert.deepEqual(stu(c, 'rotate t.30 right', 'rotate').doneBefore, { t: 'played' });
+  // 老师自己的行让它做完（预写拿掉、告诉老师没演），学生回去再做完：照实写拿掉了
+  const d = run(new Scene(), src);
+  run(d, 'rotate t.30 right');
+  run(d, 'back t "转之前"');
+  assert.deepEqual(stu(d, 'rotate t.30 right', 'rotate').doneBefore, { t: 'dropped' });
+  // 同名重造：以前的不算
+  const e = run(new Scene(), src);
+  stu(e, 'rotate t.30 right', 'rotate');
+  run(e, 'tree t = 30 20 _ 10\nopen t rotate');
+  assert.equal(stu(e, 'rotate t.30 right', 'rotate').doneBefore, undefined);
+});
+
 test('@t.done：插完、转平以后交出预写的行；没 open 的树、本来就平衡的树不算学生做完', () => {
   const s = run(new Scene(), 'tree t = 30 20 tray="10"\nopen t insert\nopen t rotate\n@t.done say "平了。"');
   let fx = stu(s, 'insert t 10', 'insert');
@@ -786,6 +813,14 @@ test('clone 带着这一轮的新状态（检查、试演、抢跑都在副本�
   lc.loose[0].name = 'y';
   assert.deepEqual(l.loose.map((x) => x.name), ['Xi']);
   assert.deepEqual(new Scene().clone().loose, []);
+  // 最后一审 M2：做完时的预写演过 / 拿掉过（spentDone）。改克隆的不动原来的
+  const sd = run(new Scene(), 'tree t = 30 20 _ 10\nopen t rotate\n@t.done say "平了。"');
+  stu(sd, 'rotate t.30 right', 'rotate');
+  const sdc = sd.clone();
+  assert.deepEqual([...sdc.spentDone], [['t', 'played']]);
+  sdc.spentDone.clear();
+  assert.equal(sd.spentDone.get('t'), 'played');
+  assert.equal(new Scene().clone().spentDone.size, 0);
 });
 
 test('看不全：画面写回的 clipped 写进现状（藏着的、已经拿下舞台的不写）', () => {
@@ -1813,4 +1848,65 @@ test('复核（第三次量）：@ask.right 跟着还没出的 @g2 里的一问�
   // @ask.right 里写出 goal g3（第 3 层），跟到第 2 层的 g2 里：g3 成了第 4 层，当场报
   const t = run(new Scene(), `${base}\n@ask.right goal g3 "第一格是 2" when="k.1 = 2"\n@g3 say "y"`);
   assert.throws(() => run(t, '@g2 ask tap k "最大的是哪个？" expect=k.1'), /最多三层/);
+});
+
+test('最后一审 I4：写错的选项名当场报、话里给最像的那个；认得的照收；重放旧课（lenient）照收不报', async () => {
+  const { optionNear } = await import('../kit/src/stage/script.js');
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4\ntree t = 50 30 70 20 40 tray="45"\nopen t insert\nsentence w = "He runs."\nplane p range=-3..3');
+  const err = (line) => s.check(one(line));
+  // 审查报告里的七行：以前都默默照收（要藏的答案矩阵直接摆给学生看）
+  assert.equal(err('matrix R = 1 2 / 3 4 hid=on'), '「hid=on」不是 matrix 认的写法：是不是 hide=on？（matrix 能写的：beside= vars= from= hide=）');
+  assert.match(err('ask pick t "哪几个会变？" reveel=on'), /^「reveel=on」不是 ask pick 认的写法：是不是 reveal=on？/);
+  assert.match(err('keep t "插入后" afer=insert'), /^「afer=insert」不是 keep 认的写法：是不是 after=insert？/);
+  assert.match(err('goal g1 "插满" when="count(t) = 7" cal=now'), /是不是 call=now？/);
+  assert.match(err('tree u = 50 30 lay=compact'), /^「lay=compact」不是 tree 认的写法：是不是 layout=compact？/);
+  assert.match(err('ask value "几个？" tpye=num answer=3'), /是不是 type=num？/);
+  assert.match(err('open t insert wrng=block'), /是不是 wrong=block？/);
+  // 不像哪一个的：不猜，列出能写的；不带选项的指令照实说
+  assert.equal(err('label n t.50 "根" color=g1'), '「color=g1」不是 label 认的写法（label 能写的：side= tone=）');
+  assert.equal(err('say "好" x=1'), '「x=1」不是 say 认的写法（say 不写 名字=值）');
+  // ask 按第几种分：ask tap 写了 answer= 也是没用上
+  assert.match(err('ask tap t "点根" answer=t.50'), /^「answer=t\.50」不是 ask tap 认的写法/);
+  // 各种东西自己的指令（按写的那一样东西认）、造的那一行（hide= 哪种都认）
+  assert.match(err('insert t 45 at=left'), /不是 insert 认的写法/);
+  assert.match(err('mark w.1 S colr=g2'), /是不是 color=g2？/);
+  assert.match(err('vec p u = 1 2 colour=g1'), /是不是 color=g1？/);
+  // 认得的照收
+  for (const l of ['matrix R = 1 2 / 3 4 hide=on beside=A', 'rowop A r2=r2-3r1', 'tree u = 50 30 layout=compact hide=on', 'ask value "几个？" type=num answer=3 wrong="4=多数了一个"',
+    'ask pick t "哪几个？" button="猜好了" expect="t.50" reveal=on', 'goal g1 "插满" when="count(t) = 7" call=now', 'open t insert wrong=mark undo=on',
+    'mark w.1 S color=g2', 'vec p u = 1 2 color=g1', 'label n t.50 "根" side=left tone=note', 'dial k = 1 range=0..3 at=A', 'keep t "插入后" after=insert']) assert.equal(err(l), null, l);
+  // 图的边权写成 A-B=4：照旧是图自己那一句（用冒号）
+  assert.match(new Scene().check(one('graph g = A-B=4')), /用冒号/);
+  // 预写的行写下时就查（舞台演它的时候带 lenient，不再查）
+  assert.match(err('@t.done say "插完了" colr=g1'), /「colr=g1」不是 say 认的写法/);
+  // 重放旧课：照收不报
+  for (const l of ['matrix R = 1 2 / 3 4 hid=on', 'keep t "插入后" afer=insert', 'say "好" x=1']) assert.doesNotThrow(() => s.clone().apply({ ...one(l), lenient: true }), l);
+  // 最像的那个：差一两个字母、少打几个字（前缀）、大小写
+  assert.equal(optionNear('hid', ['beside', 'hide']), 'hide');
+  assert.equal(optionNear('Hide', ['hide']), 'hide');
+  assert.equal(optionNear('lay', ['tray', 'layout']), 'layout');
+  assert.equal(optionNear('zzz', ['hide', 'tray']), null);
+});
+
+test('最后一审 I4：认得的选项表是全的——代码里读的每一个 opts.xxx 都在表里（不然老师照说明写的会被当成写错）', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { OPTIONS } = await import('../kit/src/stage/script.js');
+  const { TYPES } = await import('../kit/src/stage/types/index.js');
+  const read = (f) => readFileSync(new URL(`../kit/src/stage/${f}`, import.meta.url), 'utf8');
+  const used = (src) => [...new Set([...src.matchAll(/\bopts\.([A-Za-z_]\w*)/g)].map((m) => m[1]))];
+  const flat = (o) => Object.values(o || {}).flatMap((v) => (Array.isArray(v) ? v : typeof v === 'object' ? flat(v) : [])).filter((n) => typeof n === 'string');
+  const miss = [];
+  for (const t of Object.values(TYPES)) {
+    const have = new Set([...flat(t.options), 'hide']);
+    for (const f of [`types/${t.type}.js`, `types/${t.type}.rules.js`]) {
+      let src;
+      try { src = read(f); } catch { continue; }
+      // 手势、画法传进来的 opts（不是一行指令的选项）不算：rules 里只看 h.opts
+      const names = f.endsWith('.rules.js') ? [...new Set([...src.matchAll(/\bh\.opts\.([A-Za-z_]\w*)/g)].map((m) => m[1]))] : used(src);
+      for (const n of names) if (!have.has(n) && !flat(OPTIONS).includes(n)) miss.push(`${f}：${n}`);
+    }
+  }
+  const all = new Set([...flat(OPTIONS), 'hide', ...Object.values(TYPES).flatMap((t) => flat(t.options))]);
+  for (const n of used(read('scene.js'))) if (!all.has(n)) miss.push(`scene.js：${n}`);
+  assert.deepEqual(miss, []);
 });

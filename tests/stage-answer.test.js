@@ -430,10 +430,10 @@ test('页面替老师挂的那一问（helpLine）：不带 ""，不动最后说
   assert.equal(s.waiting.button, '给个提示');
 });
 
-// —— 第三次量（L2 第 6 幕）：按格写的通解（一列、是 free= 变量的一次式）按集合判，不逐格比式子 ——
-const LINE = { type: 'matrix', free: 'k=-3..3', answer: '-2+4k / 1-k / k' };
+// —— 第三次量（L2 第 6 幕）：按格写的通解（一列、是 free= 变量的一次式）按集合判，不逐格比式子；最后一审 I2 以后要老师写 solve=on ——
+const LINE = { type: 'matrix', free: 'k=-3..3', answer: '-2+4k / 1-k / k', solve: 'on' };
 
-test('复核（第三次量）：按格写的通解换了参数、换了特解的同一条线判对；不在线上的判错并说为什么；页面判不了的不判错', () => {
+test('复核（第三次量）：solve=on 时按格写的通解换了参数、换了特解的同一条线判对；不在线上的判错并说为什么；页面判不了的不判错', () => {
   // 照答案写：对
   assert.equal(judgeAnswer([['-2+4k'], ['1-k'], ['k']], LINE).ok, true);
   // 报告里理想的那一种：(2, 0, 1) + k(−4, 1, −1)——同一条线，特解换成 x3 = 1 那一点、方向反过来
@@ -460,12 +460,49 @@ test('复核（第三次量）：按格写的通解换了参数、换了特解�
   assert.equal(sq.ok, null, JSON.stringify(sq));
   assert.match(sq.failed, /页面判不了/);
   // 两个参数的平面：换了基、换了点也对
-  const PLANE = { type: 'matrix', free: 'a, b', answer: 'a / b / a+b' };
+  const PLANE = { type: 'matrix', free: 'a, b', answer: 'a / b / a+b', solve: 'on' };
   assert.equal(judgeAnswer([['a+b'], ['a-b'], ['2a']], PLANE).ok, true);
   assert.equal(judgeAnswer([['a'], ['b'], ['a-b']], PLANE).ok, false);
   assert.match(judgeAnswer([['a'], ['a'], ['2a']], PLANE).misread, /1 维|一条线|维/);
   // 一行的（行向量）也一样
-  assert.equal(judgeAnswer([['2-4k', 'k', '1-k']], { type: 'matrix', free: 'k', answer: '-2+4k 1-k k' }).ok, true);
+  assert.equal(judgeAnswer([['2-4k', 'k', '1-k']], { type: 'matrix', free: 'k', answer: '-2+4k 1-k k', solve: 'on' }).ok, true);
+});
+
+test('最后一审 I2：不写 solve=on 照旧逐格判——一列的 Aⁿv 写 (2n, 1) 不判对；和答案是同一条线（只是参数、特解换了）的不判对也不判错，告诉老师写 solve=on', () => {
+  const AV = { type: 'matrix', free: 'n', answer: 'n / 1' };
+  assert.equal(judgeAnswer([['n'], ['1']], AV).ok, true);
+  // 以前（A 批）按集合判：2n、2n+7、-n 都判对，是假话
+  for (const g of ['2n', '2n+7', '-n']) {
+    const r = judgeAnswer([[g], ['1']], AV);
+    assert.equal(r.ok, null, `${g}：${JSON.stringify(r)}`);
+    assert.equal(r.failed, '页面判不了：学生写的和答案是同一条线，只是参数或特解换了（要按集合判，在 ask 那一行写 solve=on）');
+    assert.equal(r.undecided, true, '不是页面出错');
+  }
+  // 不在那条线上：逐格判错，说哪一格不对
+  const off = judgeAnswer([['n'], ['2']], AV);
+  assert.equal(off.ok, false);
+  assert.match(off.misread, /第 2 行第 1 格不对/);
+  // 每个 n 都错一位（n / n-1 对 n+1 / n）：同一条线，不判对
+  assert.equal(judgeAnswer([['n'], ['n-1']], { type: 'matrix', free: 'n', answer: 'n+1 / n' }).ok, null);
+  // 通解不写 solve=on：换了参数名、特解的同一条线也是「判不了」，不判错（逐格对不上不说成错）
+  const L = { type: 'matrix', free: 'k', answer: '-2+4k / 1-k / k' };
+  assert.equal(judgeAnswer([['-2+4k'], ['1-k'], ['k']], L).ok, true);
+  assert.equal(judgeAnswer([['2-4k'], ['k'], ['1-k']], L).ok, null);
+  assert.equal(judgeAnswer([['2-4t'], ['t'], ['1-t']], L).ok, null);
+  // 不在线上的、不是一次式的：照旧逐格判错
+  assert.match(judgeAnswer([['2-4k'], ['-k'], ['1-k']], L).misread, /第 1 行第 1 格不对/);
+  assert.equal(judgeAnswer([['-2+4k^2'], ['1-k^2'], ['k^2']], L).ok, false);
+  // 重放旧课（lenient）：照字面逐格判（A 批以前没有集合判）
+  assert.equal(judgeAnswer([['2-4k'], ['k'], ['1-k']], { ...L, lenient: true }).ok, false);
+  // solve= 写错、用错地方：当场报
+  assert.throws(() => checkSpec({ ...L, solve: 'yes' }), /solve= 只能写 on/);
+  assert.throws(() => checkSpec({ type: 'matrix', free: 'n', answer: '1 n / 0 1', solve: 'on' }), /solve=on 只用在一列/);
+  assert.throws(() => checkSpec({ type: 'num', answer: '3', solve: 'on' }), /solve=on 只用在/);
+  assert.doesNotThrow(() => checkSpec({ ...L, solve: 'on' }));
+  // 舞台上写的那一行
+  const sc = run(new Scene(), 'matrix A = 1 1 / 0 1');
+  assert.equal(sc.check(parseScript('ask value "通解？" type=matrix free=k solve=on answer="-2+4k / 1-k / k"')[0]), null);
+  assert.match(sc.check(parseScript('ask value "Aⁿ？" type=matrix free=n solve=on answer="1 n / 0 1"')[0]), /solve=on 只用在一列/);
 });
 
 test('复核（第三次量）：Aⁿ 这种方阵、不是一次式的列照旧逐格比（n 是有意思的，不是随便取的参数）', () => {
@@ -483,6 +520,7 @@ test('复核（第三次量）：页面判不了的答案，写给老师「页�
   const act = { type: 'value', text: '-2+4k^2 / 1-k^2 / k^2', answer: '-2+4k / 1-k / k', right: null, failed: '页面判不了：x' };
   assert.match(actText(act), /页面判不了：x（不知道对不对，你看着判）/);
   assert.equal(judgeAnswer([['-2+4k^2'], ['1-k^2'], ['k^2']], LINE).undecided, true);
+  assert.equal(LINE.solve, 'on');
 });
 
 test('复核（第三次量，倒退）：矩阵答案的 wrong= 能列一个数的错答（「0=写成数字 0」，第一轮能写）；学生写 0 对上它', () => {

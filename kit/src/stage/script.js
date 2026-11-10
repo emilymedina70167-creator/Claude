@@ -19,6 +19,51 @@ export const COMMANDS = new Set([
 ]);
 export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
 
+/**
+ * 每条共用的指令认得的选项（名字=值）：写了不认得的当场报（最后一审 I4：hid=on、reveel=on、afer=insert 以前默默当没写，
+ * 要藏的答案矩阵直接摆给学生看）。ask 按第几种分（ask tap 写 answer= 也是没用上）。各种东西自己的指令、造它的那一行
+ * 在 types/ 的 options 里（造东西都认 hide=）。重放旧课（lenient）照收不报。改了指令认的选项，这里（或 types/ 的 options）跟着改
+ */
+export const OPTIONS = {
+  label: ['side', 'tone'], fly: ['side'], dial: ['range', 'at'], pick: ['reveal'], keep: ['after'],
+  open: ['back', 'wrong', 'call', 'undo', 'input', 'range'],
+  goal: ['when', 'call', 'on', 'collect', 'n'],
+  ask: {
+    tap: ['expect', 'button'], drag: ['expect', 'button'], pick: ['expect', 'reveal', 'button'], next: ['button'], say: ['button'],
+    value: ['answer', 'type', 'wrong', 'free', 'solve', 'button'],
+  },
+};
+// 两个名字差几个字母（交换挨着的两个字母算一下）
+function editDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
+}
+/** 写错的选项名最像认得的哪一个（hid → hide、lay → layout、tpye → type）：少打了后半截的、差一两个字母的；都不像是 null */
+export function optionNear(name, names) {
+  const w = String(name).toLowerCase();
+  const plain = names.filter((n) => typeof n === 'string');
+  const pre = plain.find((n) => w.length >= 2 && n.startsWith(w));
+  if (pre) return pre;
+  let best = null, bestD = Infinity;
+  for (const n of plain) {
+    const dd = editDistance(w, n);
+    if (dd < bestD && dd <= (n.length >= 4 ? 2 : 1)) { best = n; bestD = dd; }
+  }
+  return best;
+}
+/** 一行里不认得的选项写给老师的话：「hid=on」不是 matrix 认的写法：是不是 hide=on？（matrix 能写的：beside= vars= from= hide=） */
+export function optionError(label, key, value, names) {
+  const near = optionNear(key, names);
+  const plain = names.filter((n) => typeof n === 'string');
+  const can = plain.length ? `（${label} 能写的：${plain.map((n) => `${n}=`).join(' ')}）` : `（${label} 不写 名字=值）`;
+  return `「${key}=${value}」不是 ${label} 认的写法${near ? `：是不是 ${near}=${value}？` : ''}${can}`;
+}
+
 /** s[at] 是 {：和它配对的 } 后面那一格（套着的也数着配）；没收尾就抛错，话直接给老师看 */
 function braceEnd(s, at) {
   let depth = 0;

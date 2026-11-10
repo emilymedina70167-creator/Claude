@@ -33,6 +33,14 @@ test('写给老师：同一格连着拨的并成一条路，点开看的并成�
   assert.doesNotMatch(eventsText([eventOf({ type: 'say', text: 'x' })], { secs: 2 }), /过了/);
 });
 
+test('最后一审 M2：做完了、预写的行上一次做完时演过 / 老师那一轮拿掉了：照实写，不说「你没预写做完以后的行」', () => {
+  const t = eventsText([{ kind: 'done', ids: ['t'], reacted: 0, before: { t: 'played' } }]);
+  assert.match(t, /学生把 t 做完了（页面算出来没有下一步了）（你预写的行上一次做完时已经演过了）/);
+  assert.doesNotMatch(t, /没预写/);
+  assert.match(eventsText([{ kind: 'done', ids: ['t'], reacted: 0, before: { t: 'dropped' } }]), /（你预写的行在你那一轮让它做完时拿掉了，没演）/);
+  assert.match(eventsText([{ kind: 'done', ids: ['t'], reacted: 0 }]), /你没预写做完以后的行/);
+});
+
 test('老师做到的挑战：不叫老师，写给老师「不是学生做到的」', () => {
   assert.equal(triggers({ kind: 'goal-by-teacher', ids: ['g1'] }), false);
   const t = eventsText([{ kind: 'goal-by-teacher', ids: ['g1'] }], { goals: new Map([['g1', { text: '让 AB 是 O' }]]) });
@@ -120,6 +128,28 @@ test('复核（第三次量）：同一个拨数、同一格连着 ± 拨的几�
   assert.equal(tryCount([dial(0, 1), dial(1, 2), edit('B.1,1', 0, 1), edit('B.1,1', 1, 2)]), 2);
   // 做到挑战的那一下以后从头数：接着拨同一个数是新的一下
   assert.equal(tryCount([dial(0, 1), eventOf({ type: 'dial', name: 'k', value: 2, from: 1, reached: ['g1'] }), dial(2, 3), dial(3, 4)]), 1);
+});
+
+test('最后一审 I3：来回拨同一个拨数、同一格，换方向、拨回这一段停过的值算新的一下（一直来回拨会数到「试了好多下」）；单调拨过去照旧一下', () => {
+  const dial = (from, to, name = 'k') => eventOf({ type: 'dial', name, value: to, from });
+  const edit = (ref, from, to) => eventOf({ type: 'edit', ref, from: String(from), to: String(to), open: 'edit' });
+  // 0 拨到 8：一下（A 批的裁定照旧）
+  assert.equal(tryCount(Array.from({ length: 8 }, (_, i) => dial(i, i + 1))), 1);
+  // 1 → 2 → 3 → 2 → 1 → 0：3 → 2 换了方向（一下），2 → 1 拨回停过的 1（一下），1 → 0 是没到过的、方向没换（接着）
+  assert.equal(tryCount([dial(1, 2), dial(2, 3), dial(3, 2), dial(2, 1), dial(1, 0)]), 3);
+  // 来回扫（0 → 3 → 0 → 3）：往回扫的每一下都拨回停过的值
+  const sweep = [];
+  let v = 0;
+  for (const to of [3, 0, 3]) while (v !== to) { const n = v + Math.sign(to - v); sweep.push(dial(v, n)); v = n; }
+  assert.equal(tryCount(sweep), 7);
+  // 1 和 2 之间来回拨 8 下：到 TRY_MAX（以前永远是 1，学生一直拨就一直没人管）
+  const flip = Array.from({ length: TRY_MAX }, (_, i) => (i % 2 ? dial(2, 1) : dial(1, 2)));
+  assert.equal(tryCount(flip), TRY_MAX);
+  // 拨格子一样：± 来回是新的一下；跳着写回停过的值也是
+  assert.equal(tryCount([edit('B.1,1', 0, 1), edit('B.1,1', 1, 2), edit('B.1,1', 2, 1)]), 2);
+  assert.equal(tryCount([edit('B.1,1', 0, 2), edit('B.1,1', 2, 5), edit('B.1,1', 5, 2)]), 2);
+  // 拨回这条路一开始的值也算（0 → 1 → 0）
+  assert.equal(tryCount([dial(0, 1), dial(1, 0)]), 2);
 });
 
 test('长度上限：试了 30 下，[学生] 一块不超过 3 KB；没有错法的并成「之前又试了 N 下」，同一种错法并成「像是… ×N」', () => {

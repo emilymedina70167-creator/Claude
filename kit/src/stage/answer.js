@@ -280,11 +280,16 @@ function affineJudge(aff, cells, free) {
   return yes;
 }
 
+// 按集合判出来是同一个集合（只是参数、特解换了）时写给老师的那一句（不写 solve=on 时不判对：最后一审 I2）
+const sameSetWord = (k) => (k === 0 ? '同一个点' : k === 1 ? '同一条线' : k === 2 ? '同一个平面' : `同一个 ${k} 维的集合`);
 /**
  * 按格写的式子的判法：answer 是 [[…]] 或「1 n n(n-1)/2 / 0 1 n / 0 0 1」，free 是 free= 的原文（[[…]] 不写 free= 时格里只有数）。
- * 每一格照学生的读法（normalizeFormula）读懂，造的时候每格代一遍、算不出来当场报；判的时候逐格代值比（compareCells）
+ * 每一格照学生的读法（normalizeFormula）读懂，造的时候每格代一遍、算不出来当场报；判的时候逐格代值比（compareCells）。
+ * solve（老师写了 solve=on）：一列（一行）的通解按集合判（affineJudge）。不写时照旧逐格判——Aⁿv = (n, 1) 这种一列的「函数」答案，
+ * 按集合判会把 (2n, 1) 判对（最后一审 I2）；逐格对不上、按集合是同一个集合的，不判对也不判错（ok: null），告诉老师写 solve=on。
+ * lenient（重放旧课）：照字面逐格判（A 批以前没有集合判）
  */
-function cellsCheck(ans, free) {
+function cellsCheck(ans, free, { solve = false, lenient = false } = {}) {
   let fr;
   try { fr = parseFree(String(free ?? '').trim() ? free : '-'); } catch (e) { throw new Error(stageWords(e.message)); }
   const names = fr.map((f) => f.name);
@@ -293,29 +298,35 @@ function cellsCheck(ans, free) {
   for (let i = 0; i < want.length; i++) for (let j = 0; j < want[i].length; j++) {
     try { compareFormula(want[i][j], want[i][j], { free: fr, scope: {} }); } catch (e) { throw new Error(`第 ${i + 1} 行第 ${j + 1} 格「${rows[i][j]}」代不进去：${stageWords(e.message)}`); }
   }
-  // 一列（或一行）、每格是 free= 变量的一次式：通解，按集合判（affineJudge）。方阵（Aⁿ）、不是一次式的照旧逐格比：那里 n 是有意思的
+  // 一列（或一行）、每格是 free= 变量的一次式：通解，写了 solve=on 按集合判（affineJudge）。方阵（Aⁿ）、不是一次式的只能逐格比：那里 n 是有意思的
   const vec = names.length && (want.length === 1 || want[0].length === 1) && want.flat().length >= 2;
-  const aff = vec ? affineOf(want.flat(), names) : null;
+  const aff = vec && !lenient ? affineOf(want.flat(), names) : null;
+  if (solve && !aff && !lenient) throw new Error('solve=on 只用在一列（或一行）、每格是 free= 变量一次式的通解上（比如 free=k solve=on answer="-2+4k / 1-k / k"）');
   const check = (g) => {
     let mine;
     try { mine = cellGrid(g); } catch (e) { return unread(e); }
     if (mine.length !== want.length || mine[0].length !== want[0].length) return no(`学生写的是 ${shapeText(mine)} 的，答案是 ${shapeText(want)} 的`);
     const read = [];
-    let other = false; // 有一格照 free= 的名字读不懂（学生换了参数名，通解里也是对的）
+    let other = null; // 第一格照 free= 的名字读不懂的（学生换了参数名，通解里也是对的）：逐格判时照它说
     for (let i = 0; i < mine.length; i++) {
       read.push([]);
       for (let j = 0; j < mine[i].length; j++) {
         if (!mine[i][j] || mine[i][j] === '_') return no(`第 ${i + 1} 行第 ${j + 1} 格还空着`);
-        try { read[i].push(normalizeFormula(mine[i][j], { names })); } catch (e) { if (aff) { other = true; continue; } return no(`第 ${i + 1} 行第 ${j + 1} 格页面读不懂（${e.message}）`); }
+        const unread = (e) => `第 ${i + 1} 行第 ${j + 1} 格页面读不懂（${e.message}）`;
+        try { read[i].push(normalizeFormula(mine[i][j], { names })); } catch (e) { if (aff) { other ||= unread(e); continue; } return no(unread(e)); }
       }
     }
     // 标准答案写下时代过了：这里再抛（某一格所有取值都算不出来）是页面没判成，交给 judgeAnswer 记 ok: null
+    let res = null;
     if (!other) {
-      const res = compareCells(want, read, { free: fr, scope: {} });
+      res = compareCells(want, read, { free: fr, scope: {} });
       if (res.ok) return yes;
       if (!aff) return no(cellNote(res.first, mine[res.first.r][res.first.c]));
     }
-    return affineJudge(aff, mine, names);
+    if (solve) return affineJudge(aff, mine, names);
+    // 不写 solve=on：照旧逐格判错；只有按集合是同一个集合时不说错（换了参数、特解的通解是对的，Aⁿv 换了参数是错的，页面分不清）
+    if (affineJudge(aff, mine, names).ok === true) return cannot(`学生写的和答案是${sameSetWord(rankOf(aff.d, aff.p.length))}，只是参数或特解换了（要按集合判，在 ask 那一行写 solve=on）`);
+    return no(other || cellNote(res.first, mine[res.first.r][res.first.c]));
   };
   check.shape = [want.length, want[0].length];
   check.cells = true; // 收 string[][]（按格的式子框交的）
@@ -326,7 +337,7 @@ function cellsCheck(ans, free) {
  * 按 type 造一个 check(写的) → { ok, note }。造的时候就查 answer 写得对不对（写错抛中文原因）。
  * ans 已经是文字（{式子} 算过了）；free 是 formula / matrix 的自变量写法
  */
-function makeCheck(type, ans, { free } = {}) {
+function makeCheck(type, ans, { free, solve, lenient } = {}) {
   const bool = (fn) => (g) => (fn(g) ? yes : no());
   switch (type) {
     case 'plain': return bool((g) => sameAnswer(g, ans));
@@ -353,7 +364,7 @@ function makeCheck(type, ans, { free } = {}) {
     }
     case 'matrix': {
       // 按格写的式子：[[2^n, n 2^(n-1)], [0, 2^n]]，或者写了 free= 的「1 n n(n-1)/2 / 0 1 n / 0 0 1」
-      if (matrixCells(ans) || String(free ?? '').trim()) return cellsCheck(ans, free);
+      if (matrixCells(ans) || String(free ?? '').trim()) return cellsCheck(ans, free, { solve: solve === 'on', lenient: !!lenient });
       const want = gridOf(ans);
       const check = (g) => {
         let mine;
@@ -581,6 +592,11 @@ export function answerInput(spec = {}, scene = null) {
  */
 export function checkSpec(spec = {}, scene = null, { strict = true, lenient = false } = {}) {
   const type = checkType(spec.type);
+  // solve=on：一列（一行）的通解按集合判（最后一审 I2：不写时逐格判）。写错、用错地方当场报，不默默照逐格判
+  if (spec.solve != null && !lenient) {
+    if (spec.solve !== 'on' && spec.solve !== 'off') throw new Error(`solve= 只能写 on（一列的通解按集合判：换了参数、特解的同一条线也对）或 off，没有「${spec.solve}」`);
+    if (spec.solve === 'on' && (type !== 'matrix' || !String(spec.free ?? '').trim())) throw new Error('solve=on 只用在 type=matrix free=… 的一列（或一行）通解上（比如 free=k solve=on answer="-2+4k / 1-k / k"）');
+  }
   const raw = spec.answer;
   if (raw == null || String(raw).trim() === '') {
     const wrongs = typeof spec.wrongs === 'string' ? parseWrongs(spec.wrongs) : spec.wrongs || [];

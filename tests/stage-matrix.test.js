@@ -320,6 +320,39 @@ test('复核（第三次量）：空格子上能挂跟着算的——{A D}、{co
   assert.match(err(s, 'matrix X = {A Zz}') || '', /Zz/);
 });
 
+test('最后一审 M1：空格子试算只对多项式那样的式子有效——秩、求逆、化简、rankA / free 碰到空格子画「?」，不写一般位置算出来的数', async () => {
+  const { evalHoles } = await import('../kit/src/stage/value.js');
+  const s = run(new Scene(), 'matrix D = _ _ / _ _\nmatrix A = 1 2 / 3 4\ndial k = 2 range=0..3');
+  const hole = (e) => { const r = evalHoles(e, s); return JSON.stringify(r.holes); };
+  // 不是多项式的：整个跟着空格子变（D 填成 1 2 / 2 4 时秩是 1、D⁻¹ 不存在，试算的 2、单位阵是假话）
+  for (const e of ['rank(D)', 'det(D D^-1)', 'rankA(D)', 'free(D)', 'abs(D.1,1)', '1/D.1,1']) assert.equal(hole(e), 'true', e);
+  for (const e of ['D D^-1', 'D^-1', 'inv(D)', 'rref(D)', 'D^k', 'D⁻¹']) assert.equal(hole(e), '[[true,true],[true,true]]', e);
+  // 多项式的照旧：加减乘、数乘、乘方、取格、det、迹、转置、除以一个数
+  assert.equal(hole('A D'), '[[true,true],[true,true]]');
+  assert.equal(hole('0 D'), '[[false,false],[false,false]]', '0 乘它不跟着变');
+  assert.equal(hole('D.1,1 - D.1,1'), 'false');
+  assert.equal(hole('det(D) - det(D)'), 'false');
+  assert.equal(hole('tr(D)'), 'true');
+  assert.equal(hole("D'"), '[[true,true],[true,true]]');
+  assert.equal(hole('D.1,1 / 2 - D.1,1 / 2'), 'false');
+  assert.equal(hole('D.1,1 / k - D.1,1 / k'), 'false', '除以拨数（不是空格子）照旧');
+  // 用不到空格子的不受影响
+  assert.equal(evalHoles('rank(A)', s).holes, null);
+  // 舞台上：R、P 都写「还空着」、画「?」，不写 2、单位阵
+  run(s, 'matrix R = {rank(D)} {det(D D^-1)}\nmatrix P = {D D^-1}\nmatrix K = {rank(D)} 0');
+  assert.deepEqual(rows(s, 'R'), [['', '']]);
+  assert.deepEqual(rows(s, 'P'), [['', ''], ['', '']]);
+  assert.match(s.stateText(), /还空着：R\.1,1 R\.1,2（跟着算的：用到的还有空格子/);
+  assert.match(s.stateText(), /还空着：P\.1,1 P\.1,2 P\.2,1 P\.2,2（跟着算的：用到的还有空格子/);
+  // 填成不可逆的：秩是 1；P 算不出来（D 不可逆），照实说现在算不出来（不说还有空格子）
+  run(s, 'write D.1,1 1\nwrite D.1,2 2\nwrite D.2,1 2');
+  assert.deepEqual(rows(s, 'K'), [['', '0']]);
+  run(s, 'write D.2,2 4');
+  assert.deepEqual(rows(s, 'K'), [['1', '0']]);
+  assert.deepEqual(rows(s, 'P'), [['', ''], ['', '']]);
+  assert.match(s.stateText(), /还空着：P\.1,1 P\.1,2 P\.2,1 P\.2,2（跟着算的：现在算不出来/);
+});
+
 test('空格子：_ 是空着的一格，填满以前量、判断式都判不了；学生写进去以后是数', async () => {
   const { evalMeasure, predicateOf } = await import('../kit/src/stage/rules.js');
   const s = run(new Scene(), 'matrix D = _ _ / _ _');

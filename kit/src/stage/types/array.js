@@ -66,6 +66,8 @@ export const array = {
   type: 'array',
   label: '一排格子',
   create: ['array'],
+  // 认得的选项（名字=值，scene.js 的 checkOptions；造它的那一行另外都认 hide=）：写了不认得的当场报，不默默当没写
+  options: { hop: ['color', 'label'], group: ['stride'] },
   remake: true, // 造它的那一行里能写 {式子}（value.js）：依赖一变，场景照新的数把这一行重新造一遍
   // 跟着算的一排上做了这几样（换位置、改值）就不再跟着算（scene.js 的 unlive）：照那一行重新造会把它们冲掉
   reshape: ['swap', 'move', 'write'],

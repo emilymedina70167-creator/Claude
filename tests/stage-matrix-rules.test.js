@@ -201,9 +201,10 @@ test('倍乘 0、同一行换同一行、行号不对、还空着的格都是 le
   assert.equal(R.check(o, { type: 'rowop', op: 'r2 - r1' }).right, true, '写成一行字也认');
   assert.equal(R.check(o, op(o, 'c1 <-> c2')).right, null, '列变换不判');
   assert.equal(R.check(o, { type: 'write', r: 1, c: 1, value: '3' }).right, null, '改一格不判');
-  // 乘积里还空着的格：动不了那一行，也没有下一步
+  // 乘积里还空着的格：动不了那一行，现在算不了下一步（不是「做完了」：最后一审 M3 以前是 null）
   const s = make('matrix A = 1 2 / 3 4\nmatrix B = 1 0 / 0 1 beside=A\nproduct C = A B');
-  assert.equal(R.next(M(s, 'C')), null);
+  assert.deepEqual(R.next(M(s, 'C')), { acts: [], why: '还有空着的格，页面算不了下一步', blank: true });
+  assert.equal(done(s, 'C'), false);
   assert.equal(R.check(M(s, 'C'), op(M(s, 'C'), 'r2 - r1')).legal, false);
   assert.equal(R.predicates.stairs(M(s, 'C')), null, '还空着，判不了');
 });
@@ -631,4 +632,42 @@ test('并同类项认不出、不同类：这个世界做不到（legal: false�
   assert.deepEqual(R.actOf(M(s, 'Z'), parseScript('put Z Sum')[0], s.helpers(parseScript('put Z Sum')[0])), { type: 'put', into: 'Sum' });
   // 收集用的不是 Sum：put 也做不到
   assert.equal(R.check(M(s, 'Z'), { type: 'put', into: 'Y' }, s).why, 'Y 不是收集用的矩阵（写 matrix Y = collect）');
+});
+
+test('最后一审 M3：有空格子的矩阵开着 rowop——还空着不是做完了：@M1.done 照收（不说「现在就已经做完了」）、还空着算学生手上的事、键盘填满算一件，消完才演 @M1.done', async () => {
+  const { hasWork, eventsText } = await import('../kit/src/stage/events.js');
+  const src = 'matrix M1 = 1 2 3 / _ _ _ / _ _ _\nopen M1 rowop\nopen M1 edit input=keypad';
+  const s = make(src);
+  const nx = R.next(M(s, 'M1'));
+  assert.notEqual(nx, null, '还空着：不是「没有下一步」');
+  assert.deepEqual(nx.acts, []);
+  assert.match(nx.why, /空着/);
+  assert.equal(done(s, 'M1'), false);
+  assert.deepEqual(dryRun(s, '@M1.done say "消完了"'), [], '照收，不报「M1 现在就已经做完了」');
+  run(s, '@M1.done say "消完了"');
+  assert.doesNotMatch(s.stateText(), /现在就是做完的样子/);
+  assert.deepEqual(hasWork(s), ['M1 还没做完']);
+  const stu = (sc, line, open = 'edit') => sc.apply(parseScript(line)[0], { by: 'student', open });
+  // 写满了、不是阶梯形：写满了算一件（filled），还没做完，预写不演；规则算得出下一步了，学生手上还有事
+  const t = make(src);
+  run(t, '@M1.done say "消完了"');
+  for (const [k, v] of [['2,1', 2], ['2,2', 4], ['2,3', 7], ['3,1', 0], ['3,2', 0]]) assert.equal(stu(t, `write M1.${k} ${v}`).done, undefined);
+  let fx = stu(t, 'write M1.3,3 0');
+  assert.deepEqual(fx.done, ['M1']);
+  assert.deepEqual(fx.filled, ['M1']);
+  assert.equal(fx.reactions, undefined, '还没消完：@M1.done 不演');
+  assert.deepEqual(hasWork(t), ['M1 还没做完']);
+  // 消完：做完了，演 @M1.done（不再算一次写满）
+  fx = stu(t, 'rowop M1 r2 - 2r1', 'rowop');
+  assert.deepEqual(fx.done, ['M1']);
+  assert.equal(fx.filled, undefined);
+  assert.deepEqual(fx.reactions, [{ done: 'M1', src: 'say "消完了"' }]);
+  // 写满正好就是阶梯形：写满了、做完了，演 @M1.done；写给老师两件都说
+  for (const [k, v] of [['2,1', 0], ['2,2', 1], ['2,3', 2], ['3,1', 0], ['3,2', 0]]) stu(s, `write M1.${k} ${v}`);
+  fx = stu(s, 'write M1.3,3 5');
+  assert.deepEqual(fx.done, ['M1']);
+  assert.deepEqual(fx.filled, ['M1']);
+  assert.deepEqual(fx.ruled, ['M1']);
+  assert.deepEqual(fx.reactions, [{ done: 'M1', src: 'say "消完了"' }]);
+  assert.equal(eventsText([{ kind: 'done', ids: ['M1'], filled: ['M1'], ruled: ['M1'], reacted: 1 }]), '学生把 M1 的空格子都写满了（页面不判写得对不对）；学生把 M1 做完了（页面已经演了你预写的 1 行）');
 });

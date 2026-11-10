@@ -463,6 +463,8 @@ export const tree = {
   type: 'tree',
   label: '树',
   create: ['tree'],
+  // 认得的选项（名字=值，scene.js 的 checkOptions；造它的那一行另外都认 hide=）：写了不认得的当场报，不默默当没写
+  options: { tree: ['tray', 'layout'], delete: ['by'], traverse: ['upto'] },
   remake: true, // 造它的那一行里能写 {式子}（value.js）：依赖一变，场景照新的数把这一行重新造一遍
   // 跟着算的树上做了这几样（插、删、换值、改值、转）就不再跟着算（scene.js 的 unlive）：照那一行重新造会把它们冲掉
   reshape: ['insert', 'append', 'delete', 'swap', 'write', 'rotate'],

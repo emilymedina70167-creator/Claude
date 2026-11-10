@@ -231,6 +231,9 @@ export class Stage {
   begin({ by = 'teacher', auto = true, unpick = true } = {}) {
     const turn = ++this.turnNo;
     const mark = this.log.length;
+    // 学生点的几样（ask pick）reveal=on、这一轮开始时还没揭晓：这一轮演完不收（end 里看）。在开始这一刻定——这一轮里老师自己演出变化
+    // 揭晓了（insert t 47、say "你看圈"），这一轮演完学生才开始看虚实，留到下一轮演完再收（最后一审 I1）
+    const unrevealedAtBegin = !!(this.scene.picked?.reveal && !this.scene.picked.diffDone);
     this.errors = [];
     this.scene.loose = []; // 话里还没着落的名字只算这一轮的（上一轮作废了留下的不算）
     // 叫老师之前那一段学生做的事刚发出去：拨数、拨格子的路从头数（和课堂循环攒的那一段对齐）
@@ -309,8 +312,9 @@ export class Stage {
       }
       // 学生上一次点的几样（ask pick）圈到老师这一轮演完：照一行 unpick 收掉，记进这一轮的 log（刷新照它放回）。
       // 这一轮里才交的不收（上一问还挂着时学生交的，老师还没看到）。reveal=on 还没揭晓的不收（第三次量 D2/幕1：猜错了叫老师，
-      // 老师这一轮演完圈就没了，学生插进去以后看不到哪几个变了）：留到之后第一下改了它们、揭晓了，再下一轮演完才收；不收就没有这一行，刷新照样留着
-      const unrevealed = this.scene.picked?.reveal && !this.scene.picked.diffDone;
+      // 老师这一轮演完圈就没了，学生插进去以后看不到哪几个变了）：留到之后第一下改了它们、揭晓了，再下一轮演完才收；
+      // 这一轮开始时还没揭晓、这一轮里才揭晓的（学生的一下、老师的行）也算这一种。不收就没有这一行，刷新照样留着
+      const unrevealed = unrevealedAtBegin || (this.scene.picked?.reveal && !this.scene.picked.diffDone);
       if (!dead && unpick && this.scene.picked && !unrevealed && !this.log.slice(mark).some((r) => /^pick\b/.test(r.src))) {
         const [c] = parseScript('unpick');
         await this.exec({ ...c, line: 0, src: 'unpick' }, { by: 'teacher', turn });
@@ -384,7 +388,11 @@ export class Stage {
   }
   /** 把刚演完的一段倒回去再演一遍：先瞬间退回这一段开演之前，再照原来的先后（& 的照样一起）演 */
   async rewatch(beat, { by, turn }) {
+    // 这一轮前几段话里没着落的名字（拼错的 {kk}）：瞬间放回（lenient）不记，存一份并回去，这一轮演完照样告诉老师（最后一审 M4）；
+    // 重演的这一段再记一遍，looseProblems 按行去重
+    const loose = this.scene.loose;
     await this.replay(this.log.slice(0, beat.start));
+    this.scene.loose = [...loose];
     let jobs = [];
     for (const { c, ok } of beat.cmds) {
       if (!ok) continue;
@@ -603,7 +611,7 @@ export class Stage {
       const forGoal = reacts.filter((r) => r.goal && !r.collect), forDone = reacts.filter((r) => r.done);
       // 不是学生做到的：是舞台演预写的行时成立的（prewrite）、这一行刚写出的挑战一出来就成立（fresh），写给老师照实说
       if (fx?.goalsMet?.length) this.onGoal?.(fx.goalsMet, { by, instant: false, reacted: forGoal.length, reacts: forGoal, pressed: !!fx.pressed, prewrite: !!c.prewrite, fresh: fx.goal || null });
-      if (fx?.done?.length) this.onDone?.(fx.done, { by, instant: false, reacted: forDone.length, reacts: forDone, filled: fx.filled || [] });
+      if (fx?.done?.length) this.onDone?.(fx.done, { by, instant: false, reacted: forDone.length, reacts: forDone, filled: fx.filled || [], ruled: fx.ruled || [], before: fx.doneBefore || null });
     }
     return fx;
   }
@@ -1684,7 +1692,7 @@ export class Stage {
    */
   judgeValue(w, given, text) {
     let j;
-    try { j = judgeAnswer(given, { type: w.type, answer: w.answer, wrongs: w.wrongs, free: w.free, lenient: w.lenient }, this.scene); } catch (err) { j = { ok: null, misread: null, shown: String(w.answer ?? ''), failed: `页面没判成：${err?.message || err}` }; }
+    try { j = judgeAnswer(given, { type: w.type, answer: w.answer, wrongs: w.wrongs, free: w.free, solve: w.solve, lenient: w.lenient }, this.scene); } catch (err) { j = { ok: null, misread: null, shown: String(w.answer ?? ''), failed: `页面没判成：${err?.message || err}` }; }
     // 页面判不了（undecided：按集合判的通解学生写的不是一次式）不是页面出错，不记进出错记录
     if (j.failed && !j.undecided) reportError(new Error(j.failed), { what: `舞台的 ask value 判答案：${w.prompt || ''}（answer=${w.answer}）` });
     return { type: 'value', text, answer: j.shown, right: j.ok, misread: j.misread, ...(j.failed ? { failed: j.failed } : {}) };
