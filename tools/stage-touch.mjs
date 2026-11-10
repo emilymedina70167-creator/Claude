@@ -580,6 +580,27 @@ const pickGo = await page.evaluate(() => { const b = document.querySelector('.st
 if (pickGo) await tapAt(pickGo);
 await settle();
 expect('点「点好了」：交上去、和预期的一样', await page.evaluate(() => { const a = window.LAStageDev.acts.at(-1); return a?.type === 'pick' ? `${a.refs.join(' ')}｜${a.same}` : '没交'; }), 'M.1,2 M.2,1｜true');
+// 21. ask pick … reveal=on 猜错了（第三次量 D2/幕1）：猜错叫老师照旧，可老师那一轮演完页面不再自己 unpick——还没揭晓（学生插进去之前），
+// 圈留着；刷新（照 log 重放）也留着；学生插进去揭晓了（变了的实线、没变的虚线），老师下一轮演完才收
+const teacher = (src) => page.evaluate(async (src) => { const st = window.LAStage; st.cancelWait?.(); const t = st.begin(); t.end(src); await t.armed; await new Promise((r) => setTimeout(r, 300)); }, src);
+const rings = () => page.evaluate(() => `${document.querySelectorAll('.is-pick').length}｜${document.querySelectorAll('.is-pick-same').length}｜${window.LAStage.scene.picked ? '圈着' : '没圈'}`);
+await play('tree t = 20 10 40 5 15 30 50 _ _ _ _ 25 35 45 tray="47"\nbf t\nopen t insert\nask pick t "点出会变的结点" button="猜好了" expect="t.45 t.50 t.40 t.20" reveal=on');
+for (const v of [45, 50, 20, 10]) { const b = await treeBox('t', v); await tapAt({ x: b.cx, y: b.cy }); await page.waitForTimeout(120); }
+const goBtn = await page.evaluate(() => { const b = document.querySelector('.st-pick-go'); if (!b || b.disabled) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+if (goBtn) await tapAt(goBtn);
+await settle();
+expect('reveal=on 猜错（漏了 40、多了 10）：交上去', await page.evaluate(() => { const a = window.LAStageDev.acts.at(-1); return a?.type === 'pick' ? String(a.same) : '没交'; }), 'false');
+await teacher('say "把 47 拖进去，看看谁真的变了。"\nask next "插好了点下面" button="插好了"');
+expect('老师那一轮演完：还没揭晓，圈留着（log 里没有 unpick）', `${await rings()}｜${await page.evaluate(() => window.LAStage.log.some((r) => r.src === 'unpick'))}`, '4｜0｜圈着｜false');
+const stBefore = await page.evaluate(() => window.LAStage.scene.stateText().split('\n').find((l) => l.startsWith('圈着学生点的')) || '');
+await page.evaluate(async () => { const st = window.LAStage; await st.replay(st.log.slice()); await new Promise((r) => setTimeout(r, 300)); });
+expect('刷新（照 log 重放）：圈照样留着、现状那一行一字不差', `${await rings()}｜${await page.evaluate((b) => (window.LAStage.scene.stateText().split('\n').find((l) => l.startsWith('圈着学生点的')) || '') === b, stBefore)}`, '4｜0｜圈着｜true');
+await page.evaluate(async () => { const st = window.LAStage; await st.studentDo('insert t 47', { type: 'gesture', open: 'insert' }); });
+await settle();
+expect('学生插进 47：揭晓——变了的 45、50、20 实线，没变的 10 虚线', await rings(), '4｜1｜圈着');
+await teacher('say "看：10 没变。"\nask next "好" button="好"');
+expect('揭晓以后老师下一轮演完：收掉', await rings(), '0｜0｜没圈');
+
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

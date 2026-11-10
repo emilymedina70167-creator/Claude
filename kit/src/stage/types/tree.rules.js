@@ -496,4 +496,14 @@ function standard(o) {
 }
 
 // 转、插的每一下都判；做完了（平衡了、托盘也插完了；只交了插入的课是托盘插完了）只对交给了学生转、插的树算
-export const treeRules = { next, check, predicates, measures, facts, changed, gestures, standard, actOf: lineAct, judges: ['rotate', 'insert', 'place'], doneBy: ['rotate', 'insert', 'place'] };
+/**
+ * 平了的树，学生开着的动作还能不能把它改回没平（@t.done 写在平了的树上，删完再修平时演：第三次量 D2/分支 3）：
+ * 开着删、摘（delete / pluck），或者开着插（insert / place）、托盘里还有没插的数
+ */
+function reopen(o, scene) {
+  const on = (a) => !!scene?.opens?.has(`${o.id}:${a}`);
+  if (on('delete') || on('pluck')) return true;
+  return (on('insert') || on('place')) && (o.tray || []).some((v) => descend(o, v).found == null);
+}
+
+export const treeRules = { next, check, predicates, measures, facts, changed, gestures, standard, reopen, actOf: lineAct, judges: ['rotate', 'insert', 'place'], doneBy: ['rotate', 'insert', 'place'] };

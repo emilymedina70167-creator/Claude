@@ -26,7 +26,7 @@ test('写给老师：同一格连着拨的并成一条路，点开看的并成�
   ];
   const t = eventsText(ev, { goals: new Map([['g1', { text: '让 AB 不再是 O' }]]), secs: 32 });
   assert.equal(t, ['学生拨了 B.1,1：1 → 2 → 3', '学生点开看了 C.1,1、C.2,1 怎么算出来', '学生拨了 B.2,2：1 → 0', '学生做到了挑战 g1「让 AB 不再是 O」（页面已经演了你预写的 2 行）', '（离你上一轮演完过了 32 秒）'].join('\n'));
-  assert.equal(tryCount(ev), 5);
+  assert.equal(tryCount(ev), 4, 'B.1,1 连着拨的两下是一下（第三次量以后）');
   assert.match(eventsText([{ kind: 'tries' }]), new RegExp(`试了 ${TRY_MAX} 下`));
   assert.match(eventsText([{ kind: 'goal', ids: ['g2'], reacted: 0 }]), /你没预写做到以后的行/);
   assert.match(eventsText([eventOf({ type: 'say', text: '为什么换了顺序就不一样' })]), /学生说：「为什么换了顺序就不一样」/);
@@ -95,6 +95,31 @@ test('复核：键盘一格一格写满一张矩阵是在填，不算「试」�
   assert.equal(tryCount([...seven, drag({ reached: ['g1'] }), drag(), drag()]), 2);
   // 填过的格做到挑战以后从头算：下一个挑战再填它是在填
   assert.equal(tryCount([w('M.1,1', 1), drag({ reached: ['g1'] }), w('M.1,1', 2)]), 0);
+});
+
+test('复核（第三次量）：同一个拨数、同一格连着 ± 拨的几下算一下「试」（拨 0→8 不是「试了 8 下」）；中间动过别的、换了一格另算', () => {
+  const dial = (from, to, name = 'k') => eventOf({ type: 'dial', name, value: to, from });
+  const edit = (ref, from, to) => eventOf({ type: 'edit', ref, from: String(from), to: String(to), open: 'edit' });
+  assert.equal(tryCount(Array.from({ length: 8 }, (_, i) => dial(i, i + 1))), 1, '拨数 0 → 8 是一下');
+  assert.equal(tryCount([edit('B.1,1', 0, 1), edit('B.1,1', 1, 2), edit('B.1,1', 2, 3)]), 1, '同一格 ± 拨三下是一下');
+  // 两格交替：每换一格另起一下
+  assert.equal(tryCount([edit('B.1,1', 0, 1), edit('B.2,2', 0, 1), edit('B.1,1', 1, 2)]), 3);
+  // 中间动过别的（拖一下、点开看一格、撤一步）：另算
+  const drag = eventOf({ type: 'drag', open: 'drag', src: 'swap q.1 q.2' });
+  assert.equal(tryCount([dial(0, 1), dial(1, 2), drag, dial(2, 3)]), 3);
+  assert.equal(tryCount([dial(0, 1), eventOf({ type: 'undo', src: 'set k 1', open: 'edit' }), dial(0, 1)]), 2);
+  // 从几拨起对不上（中间这个数被别的动过）：另起
+  assert.equal(tryCount([dial(0, 1), dial(5, 6)]), 2);
+  // 页面判了对错的一下不并进路（错法单独写），也单算一下
+  const judged = eventOf({ type: 'edit', ref: 'B.1,1', from: '1', to: '2', open: 'edit', verdict: { legal: true, right: false } });
+  assert.equal(tryCount([edit('B.1,1', 0, 1), judged, edit('B.1,1', 2, 3)]), 3);
+  // 中间夹着学生答了一问（攒着没叫老师的）：断了；页面记下的一句不断
+  assert.equal(tryCount([dial(0, 1), { kind: 'answer', quiet: true, act: { type: 'tap' } }, dial(1, 2)]), 2);
+  assert.equal(tryCount([dial(0, 1), { kind: 'note', text: 'x' }, dial(1, 2)]), 1);
+  // 拨数和拨格子各拨一条：两下
+  assert.equal(tryCount([dial(0, 1), dial(1, 2), edit('B.1,1', 0, 1), edit('B.1,1', 1, 2)]), 2);
+  // 做到挑战的那一下以后从头数：接着拨同一个数是新的一下
+  assert.equal(tryCount([dial(0, 1), eventOf({ type: 'dial', name: 'k', value: 2, from: 1, reached: ['g1'] }), dial(2, 3), dial(3, 4)]), 1);
 });
 
 test('长度上限：试了 30 下，[学生] 一块不超过 3 KB；没有错法的并成「之前又试了 N 下」，同一种错法并成「像是… ×N」', () => {
@@ -459,4 +484,28 @@ test('点开看怎么算碰到扣着的格：写给老师照实说是几、扣�
   assert.equal(t, '学生点开看了 C.1,1、C.1,2 怎么算出来（扣着的演成了 ?：C.1,1（19，扣着）、A.1,2（2，扣着））');
   // 一下的写法（actText）也一样
   assert.match(eventsText([{ kind: 'answer', act: { type: 'explain', ref: 'C.1,1', hidden: [{ ref: 'C.1,1', value: '-3/2' }] } }]), /C\.1,1（-3\/2，扣着）/);
+});
+
+test('复核（第三次量）：键盘填空格子（open M edit input=keypad，M 里有 _）——最后一格填上算做完了；还有空格子算学生手上的事；本来就没有空格子的不算', async () => {
+  const { hasWork } = await import('../kit/src/stage/events.js');
+  const { Scene } = await import('../kit/src/stage/scene.js');
+  const { parseScript } = await import('../kit/src/stage/script.js');
+  const at = (src) => { const s = new Scene(); for (const c of parseScript(src)) s.apply(c); return s; };
+  const stu = (s, line) => s.apply(parseScript(line)[0], { by: 'student', open: 'edit' });
+  const s = at('matrix M = _ _ / _ 4\nopen M edit input=keypad');
+  assert.deepEqual(hasWork(s), ['M 还没做完']);
+  assert.equal(stu(s, 'write M.1,1 1').done, undefined);
+  assert.equal(stu(s, 'write M.1,2 2').done, undefined);
+  const fx = stu(s, 'write M.2,1 3');
+  assert.deepEqual(fx.done, ['M']);
+  assert.deepEqual(fx.filled, ['M'], '是空格子写满了，不是规则算出来没有下一步');
+  assert.deepEqual(hasWork(s), []);
+  // 写满以后再改一格：不再算一次做完
+  assert.equal(stu(s, 'write M.2,1 5').done, undefined);
+  // 本来就写满的、± 拨数器（不是键盘）的、藏起来的：不算
+  assert.deepEqual(hasWork(at('matrix M = 1 2 / 3 4\nopen M edit input=keypad')), []);
+  assert.deepEqual(hasWork(at('matrix M = _ _ / _ _\nopen M edit')), []);
+  assert.deepEqual(hasWork(at('matrix M = _ _ / _ _\nopen M edit input=keypad\nhide M')), []);
+  // 写给老师：写满了，不说「页面算出来没有下一步了」
+  assert.equal(eventsText([{ kind: 'done', ids: ['M'], filled: ['M'], reacted: 0 }]), '学生把 M 的空格子都写满了（页面不判写得对不对）');
 });

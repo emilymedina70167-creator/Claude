@@ -731,3 +731,61 @@ test('复核：预写出的挑战一出来就成立，写给老师的那一句�
   assert.equal(eventsText([{ kind: 'goal-by-teacher', ids: ['g2'], fresh: ['g2'] }], { goals: new Map([['g2', { text: '第二格是 2' }]]) }), '预写出的挑战 g2「第二格是 2」一出来就已经成立了（不是学生做到的）');
   assert.equal(eventsText([{ kind: 'goal-by-teacher', ids: ['g2'], pre: true }], { goals: new Map([['g2', { text: '第二格是 2' }]]) }), '你预写的行让挑战 g2「第二格是 2」成立了（不是学生做到的）');
 });
+
+test('复核（第三次量）：拨数从 0 拨到 8（连着按 8 下 ›）是一下「试」，不叫老师「试了 8 下还没做到」；拨几个不同的数照样数', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const loops = [];
+  try {
+    const a = fakeClass('dial k = 0 range=0-9\nmatrix A = {k} 0 / 0 1\ngoal g1 "让 A 是单位阵" when="A = I"');
+    const la = createLoop(a.host);
+    loops.push(la);
+    for (let v = 1; v <= 8; v++) la.onAct({ type: 'dial', name: 'k', value: v, from: v - 1 });
+    await wait();
+    assert.equal(a.calls(), 0, '拨 0 → 8 是一条路');
+    assert.ok(!la.pending.events.some((e) => e.kind === 'tries'));
+    // 拨一个数、拖一下、再拨：一下一下数，第 8 下叫老师
+    const b = fakeClass('dial k = 0 range=0-9\nmatrix A = {k} 0 / 0 1\narray q = 2 1\nopen q\ngoal g1 "左上是 9" when="A.1,1 = 9"');
+    const lb = createLoop(b.host);
+    loops.push(lb);
+    for (let i = 0; i < 4; i++) {
+      lb.onAct({ type: 'dial', name: 'k', value: i + 1, from: i });
+      lb.onAct({ type: 'drag', open: 'drag', src: 'swap q.1 q.2' });
+    }
+    await wait();
+    assert.equal(b.calls(), 1);
+    assert.match(sentRows(b.rows)[0].msg, /学生试了 8 下还没做到/);
+  } finally { for (const l of loops) l.close(); }
+});
+
+test('复核（第三次量）：键盘填空格子写满了算做完了——挂着的「写好了点下面」当按了、叫老师；还挂着一问就攒着；写到一半不叫', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const loops = [];
+  // 真的舞台那样：学生写一格（场景照做），场景报做完了才交 onDone
+  const write = (fc, lp, ref, v) => {
+    const src = `write ${ref} ${v}`;
+    const fx = fc.scene.apply(parseScript(src)[0], { by: 'student', open: 'edit' });
+    lp.onAct({ type: 'write', value: String(v), gesture: 'write', open: 'edit', src, line: src, ...(fx.done ? { reached: fx.done } : {}) });
+    if (fx.done) fc.stage.onDone(fx.done, { by: 'student', reacted: 0, filled: fx.filled || [] });
+  };
+  try {
+    const a = fakeClass('matrix M1 = _ _ / _ _\nopen M1 edit input=keypad\nask next "写好了点下面" button="写好了"');
+    const la = createLoop(a.host);
+    loops.push(la);
+    write(a, la, 'M1.1,1', 1); write(a, la, 'M1.1,2', 2); write(a, la, 'M1.2,1', 0);
+    await wait();
+    assert.equal(a.calls(), 0, '写到一半');
+    write(a, la, 'M1.2,2', 3);
+    await wait();
+    assert.equal(a.calls(), 1, '最后一格填上：当按了「写好了」，叫老师（不等 45 秒）');
+    assert.equal(a.stage.cancelled, 1);
+    assert.match(sentRows(a.rows)[0].msg, /学生把 M1 的空格子都写满了（页面不判写得对不对）/);
+    // 还挂着一问（这一步做了什么）：攒着，答了才叫
+    const b = fakeClass('matrix M1 = _ _ / _ _\nopen M1 edit input=keypad\nask value "这一步做了什么？"');
+    const lb = createLoop(b.host);
+    loops.push(lb);
+    for (const [r, v] of [['1,1', 1], ['1,2', 2], ['2,1', 0], ['2,2', 3]]) write(b, lb, `M1.${r}`, v);
+    await wait();
+    assert.equal(b.calls(), 0);
+    assert.deepEqual(lb.pending.events.find((e) => e.kind === 'done').held, ['还有一问没答（ask value）']);
+  } finally { for (const l of loops) l.close(); }
+});

@@ -729,6 +729,12 @@ test('clone 带着这一轮的新状态（检查、试演、抢跑都在副本�
   assert.deepEqual(p.waiting.refs, ['t']);
   assert.deepEqual(p.waiting.expect, ['t.45', 't.40']);
   assert.equal(new Scene().clone().picked, null);
+  // 第三次量：跟着预写里那一问的 @ask.right（preRight）：副本上一样，改副本的不动原来的
+  const pr = run(new Scene(), 'array k = 3 1 2\nopen k\ngoal g1 "排好" when="k sorted"\n@ask.right say "对"\n@g1 ask tap k "最大的是哪个？" expect=k.3');
+  const prc = pr.clone();
+  assert.deepEqual([...prc.preRight], [...pr.preRight]);
+  prc.preRight.get('g1').lines.push('say "x"');
+  assert.equal(pr.preRight.get('g1').lines.length, 1);
   // Task 7：存档（keeps）、页面替老师存的（autoKeep）、学生每一下之前的样子（lastBefore）。学生按的 back 先过 check（在克隆上试）：
   // 克隆上没有存档就报「没存过」
   const k = run(new Scene(), 'tree t = 30 20 40 10 25 _ 45 tray="47"\nopen t insert\nkeep t "开始"\nkeep t "插入后" after=insert');
@@ -1315,7 +1321,7 @@ test('back 以后挑战照实写：做到过的现在不成立写「做到过；
 // —— 预写和挑战（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.1）——
 const K312 = 'array k = 3 1 2\nopen k\ngoal g1 "排好" when="k sorted"';
 // 舞台演预写的行：照老师的行（带 lenient，prewrite：不算学生的一下）
-const playPre = (s, fx) => { for (const r of fx.reactions || []) for (const c of parseScript(r.src)) s.apply({ ...c, lenient: true, prewrite: true }, { by: 'teacher' }); };
+const playPre = (s, fx) => { for (const r of fx.reactions || []) for (const c of parseScript(r.src)) s.apply({ ...c, lenient: true, prewrite: true, ...(r.preRight ? { preRight: r.preRight, preRightKey: r.preRightKey } : {}) }, { by: 'teacher' }); };
 
 test('预写能套三层：@g1 里写出的 goal g2 接着写 @g2、@g3；第四层报', async () => {
   const { PREWRITE_DEPTH } = await import('../kit/src/stage/scene.js');
@@ -1732,4 +1738,79 @@ test('比大小（compareValues）和挑战判数用同一个 numOf：分数、�
   assert.equal(compareValues('9', '10'), -1, '按数比，不按字');
   assert.equal(compareValues('b', 'a'), 1, '不是数的按字');
   assert.deepEqual(['1/2', '0.5', '−3', '49′', 'x', '', null, '3/0'].map(numOf), [0.5, 0.5, -3, 49, null, null, null, null]);
+});
+
+test('复核（第三次量）：@ask.right 跟着写在 @g1 里的那一问——g1 做到、那一问出来时拿走，答对才演；三层照数；那一问出不来整组拿掉', async () => {
+  const { ASK_RIGHT_ERROR } = await import('../kit/src/stage/scene.js');
+  const ASK = '@g1 ask tap k "最大的是哪个？" expect=k.3';
+  const s = run(new Scene(), `${K312}\n@g1 say "排好了"\n@ask.right say "对，最大的是 3"\n${ASK}`);
+  assert.equal(s.askRightProblem(), null, '有着落了（以前这一轮演完报「@ask.right 要跟着一个页面判得了对错的 ask」）');
+  assert.equal(s.askRight, null);
+  assert.match(s.stateText(), /g1 做到时出的那一问，学生答对时页面马上演你预写的 1 行/);
+  assert.equal(s.clone().stateText(), s.stateText(), 'clone 带着');
+  stu(s, 'swap k.1 k.2', 'drag'); // 1 3 2
+  const fx = stu(s, 'swap k.2 k.3', 'drag'); // 1 2 3
+  assert.deepEqual(fx.goalsMet, ['g1']);
+  const item = fx.reactions.find((r) => /^ask /.test(r.src));
+  assert.deepEqual(item.preRight, ['say "对，最大的是 3"']);
+  playPre(s, fx);
+  assert.deepEqual(s.waiting.right, ['say "对，最大的是 3"'], '预写的那一问出来时拿走');
+  assert.match(s.waiting.rightKey, /^ask\.right#\d+$/);
+  assert.doesNotMatch(s.stateText(), /g1 做到时出的那一问/);
+  // 套着的：@ask.right 里写出 goal g2，@g2 是第 3 层（g1 → 答对那一问 → g2）；再往下一层报
+  const t = run(new Scene(), `${K312}\n@ask.right goal g2 "倒过来" when="k sorted desc"\n${ASK}\n@g2 say "倒好了"`);
+  assert.equal(t.ahead.get('g2').depth, 3);
+  assert.match(t.stateText(), /挑战 g2 还没出（学生答对那一问时才出）[^；\n]*第 3 层/);
+  run(t, '@g2 goal g3 "第一格是 2" when="k.1 = 2"');
+  assert.throws(() => run(t, '@g3 say "x"'), /最多三层/);
+  // 先写了两层（@ask.right 里的 g2、@g2 里的 g3），再跟到 @g1 的一问上：@g3 成了第 4 层，当场报
+  const u = run(new Scene(), `${K312}\n@ask.right goal g2 "倒过来" when="k sorted desc"\n@g2 goal g3 "第一格是 2" when="k.1 = 2"\n@g3 say "y"`);
+  assert.throws(() => run(u, ASK), /最多三层/);
+  assert.match(u.check(one(ASK)), /最多三层/);
+  // 判不了对错的那一问（ask next）不拿：照旧报
+  assert.equal(run(new Scene(), `${K312}\n@ask.right say "对"\n@g1 ask next "看一眼"`).askRightProblem(), ASK_RIGHT_ERROR);
+  // 整组拿掉：g1 拿掉了；老师的行让 g1 成立（预写的行不演）
+  const w = run(new Scene(), `${K312}\n@ask.right goal g2 "倒过来" when="k sorted desc"\n${ASK}\n@g2 say "倒好了"`);
+  run(w, 'ungoal g1');
+  assert.equal(w.ahead.size, 0);
+  assert.doesNotMatch(w.stateText(), /还没出|那一问，学生答对时/);
+  const x = run(new Scene(), `${K312}\n@ask.right goal g2 "倒过来" when="k sorted desc"\n${ASK}\n@g2 say "倒好了"`);
+  run(x, 'swap k.1 k.2\nswap k.2 k.3');
+  assert.equal(x.ahead.size, 0);
+  assert.doesNotMatch(x.stateText(), /那一问，学生答对时/);
+  // 刷新重放（照 log 放回：lenient、replay）：一样跟着那一问
+  const src = `${K312}\n@g1 say "排好了"\n@ask.right say "对，最大的是 3"\n${ASK}`;
+  const y = run(new Scene(), src);
+  const z = new Scene();
+  for (const c of parseScript(src)) z.apply({ ...c, lenient: true, replay: true });
+  assert.equal(z.stateText(), y.stateText());
+});
+
+test('复核（第三次量）：@t.done 写在现在已经平了的树上——学生开着的动作还能把它改回没做完（删、摘、托盘里还有没插的数）就收下，再做完时演；改不回去的照旧报', () => {
+  // D2 分支 3：平的树，学生删一个、再修平
+  const s = run(new Scene(), 'tree t = 8 5 11 3 7 10 12 2 4 6 _ 9 _ _ _ 1\nopen t delete\nopen t rotate wrong=quiet undo=on');
+  assert.equal(s.check(one('@t.done glow t')), null);
+  run(s, '@t.done say "平了。"');
+  assert.match(s.stateText(), /t 做完了页面马上演你预写的 1 行（现在就是做完的样子：学生动了它、又做完时才演）/);
+  assert.equal(stu(s, 'delete t.12', 'delete').done, undefined, '删完失衡了：没做完');
+  stu(s, 'rotate t.11 right', 'rotate');
+  const fx = stu(s, 'rotate t.8 right', 'rotate');
+  assert.deepEqual(fx.done, ['t']);
+  assert.deepEqual(fx.reactions, [{ done: 't', src: 'say "平了。"' }]);
+  // 摘叶子也改得回去
+  assert.equal(run(new Scene(), 'tree t = 20 10 30\nopen t rotate\nopen t pluck').check(one('@t.done say "x"')), null);
+  // 改不回去的（只开了转，平衡的树、托盘空着）：照旧报
+  assert.match(run(new Scene(), 'tree t = 20 10 30\nopen t rotate').check(one('@t.done say "x"')), /现在就已经做完了/);
+  // 已经是阶梯形的矩阵（没有别的动作）：照旧报
+  assert.match(run(new Scene(), 'matrix M = 1 2 / 0 1\nopen M rowop').check(one('@M.done say "x"')), /现在就已经做完了/);
+});
+
+test('复核（第三次量）：@ask.right 跟着还没出的 @g2 里的一问：照 g2 那一层往下数（第 2 层的 g2 里跟过去是第 3 层，再套就报）', () => {
+  const base = `${K312}\n@g1 goal g2 "倒过来" when="k sorted desc"`;
+  const s = run(new Scene(), `${base}\n@ask.right say "对"\n@g2 ask tap k "最大的是哪个？" expect=k.1`);
+  assert.equal(s.askRightProblem(), null);
+  assert.match(s.stateText(), /g2 做到时出的那一问，学生答对时页面马上演你预写的 1 行/);
+  // @ask.right 里写出 goal g3（第 3 层），跟到第 2 层的 g2 里：g3 成了第 4 层，当场报
+  const t = run(new Scene(), `${base}\n@ask.right goal g3 "第一格是 2" when="k.1 = 2"\n@g3 say "y"`);
+  assert.throws(() => run(t, '@g2 ask tap k "最大的是哪个？" expect=k.1'), /最多三层/);
 });

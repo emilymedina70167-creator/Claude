@@ -285,6 +285,41 @@ test('说明里的例子照抄能演：一行不错', () => {
   assert.doesNotMatch(matrix.doc + matrix.hint, /[他她]/);
 });
 
+test('复核（第三次量）：空格子上能挂跟着算的——{A D}、{coef(M) Eta - rhs(M)}、格里的 {D.1,1 + 1}：先挂上，跟着空格子变的格空着、量判不了；填上了跟着算', async () => {
+  const { evalMeasure } = await import('../kit/src/stage/rules.js');
+  const { goalStatus } = await import('../kit/src/stage/goal.js');
+  const s = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix D = _ _ / _ _');
+  assert.equal(err(s, 'matrix AD = {A D}'), null, '能挂上（以前报「D.1,1 还空着」整行不演）');
+  run(s, 'matrix AD = {A D}');
+  assert.deepEqual(rows(s, 'AD'), [['', ''], ['', '']]);
+  assert.equal(evalMeasure(s, 'rank(AD)').value, null, '量判不了');
+  run(s, 'goal g1 "AD = O" when="AD = O"');
+  assert.notEqual(goalStatus(s, s.goals.get('g1')), '做到了');
+  assert.match(s.stateText(), /还空着：AD\.1,1 AD\.1,2 AD\.2,1 AD\.2,2（跟着算的：用到的还有空格子/);
+  // 填上 D 的第 1 列：AD 的第 1 列跟着算出来，第 2 列还空着
+  one(s, 'write D.1,1 1');
+  assert.deepEqual(rows(s, 'AD'), [['', ''], ['', '']], 'D.2,1 还空着：AD 的第 1 列还跟着它变');
+  run(s, 'write D.2,1 0');
+  assert.deepEqual(rows(s, 'AD'), [['1', ''], ['3', '']]);
+  run(s, 'write D.1,2 0\nwrite D.2,2 1');
+  assert.deepEqual(rows(s, 'AD'), [['1', '2'], ['3', '4']]);
+  assert.equal(evalMeasure(s, 'rank(AD)').value, 2);
+  // L2 第 6 幕：代回去的残差，第 3 行不跟着空格子变（0·η − 0 = 0）照写
+  run(s, 'matrix M = 1 2 -2 | 0 / 0 -2 -2 | -2 / 0 0 0 | 0\nmatrix Eta = _ / _ / 0\nmatrix R1 = {coef(M) Eta - rhs(M)} hide=on');
+  assert.deepEqual(rows(s, 'R1'), [[''], [''], ['0']]);
+  run(s, 'write Eta.1,1 -2\nwrite Eta.2,1 1');
+  assert.deepEqual(rows(s, 'R1'), [['0'], ['0'], ['0']]);
+  // 格里的 {D.1,1 + 1}：D.1,1 还空着时这一格空着
+  run(s, 'matrix P = _ 0 / 0 1\nmatrix N = {P.1,1 + 1} 0 / 0 1');
+  assert.deepEqual(rows(s, 'N'), [['', '0'], ['0', '1']]);
+  run(s, 'write P.1,1 4');
+  assert.deepEqual(rows(s, 'N'), [['5', '0'], ['0', '1']]);
+  // 不是因为空格子算不出来的照旧当场报：维数对不上、没有这样东西
+  run(s, 'matrix T = _ _ _ / _ _ _ / _ _ _');
+  assert.match(err(s, 'matrix X = {A T}') || '', /算不出来|维数|对不上|乘/);
+  assert.match(err(s, 'matrix X = {A Zz}') || '', /Zz/);
+});
+
 test('空格子：_ 是空着的一格，填满以前量、判断式都判不了；学生写进去以后是数', async () => {
   const { evalMeasure, predicateOf } = await import('../kit/src/stage/rules.js');
   const s = run(new Scene(), 'matrix D = _ _ / _ _');

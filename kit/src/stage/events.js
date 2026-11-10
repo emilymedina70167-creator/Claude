@@ -61,7 +61,10 @@ function canMove(scene) {
 export function undoneOf(scene) {
   const undone = [];
   for (const e of scene?.opens?.values() || []) {
-    if (undone.includes(e.obj) || !scene.doneOpen?.(e.obj)) continue;
+    if (undone.includes(e.obj)) continue;
+    // 交给学生用键盘填的空格子还没填满：学生做得了（键盘开着、看得见）
+    if (!scene.doneOpen?.(e.obj) && scene.fillOpen?.(e.obj)) { if (scene.blankLeft(e.obj) && !scene.objects.get(e.obj).hidden) undone.push(e.obj); continue; }
+    if (!scene.doneOpen?.(e.obj)) continue;
     const o = scene.objects.get(e.obj);
     const r = rulesOf(o);
     if (!r?.hasNext || o.hidden) continue;
@@ -313,8 +316,13 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
       lines.push(e.fresh?.includes(id) ? `预写出的${name}一出来就已经成立了（不是学生做到的）` : `${e.pre ? '你预写的行让' : '你这一轮让'}${name}成立了（不是学生做到的）`);
     }
     else if (e.kind === 'done') {
-      const ids = (e.ids || []).join('、');
-      lines.push(`学生把 ${ids} 做完了${e.reacted ? `（页面已经演了你预写的 ${e.reacted} 行）` : e.missed ? '（页面算出来没有下一步了）（你预写的行都没演上）' : '（页面算出来没有下一步了）（你没预写做完以后的行）'}${heldText(e)}`);
+      // 键盘填的空格子写满了（filled）：页面不判写得对不对，不说「算出来没有下一步了」，也没有预写（@M.done 只给规则判得了做完的动作）
+      const fill = (e.ids || []).filter((id) => e.filled?.includes(id));
+      const rest = (e.ids || []).filter((id) => !fill.includes(id));
+      const parts = [];
+      if (fill.length) parts.push(`学生把 ${fill.join('、')} 的空格子都写满了（页面不判写得对不对）`);
+      if (rest.length) parts.push(`学生把 ${rest.join('、')} 做完了${e.reacted ? `（页面已经演了你预写的 ${e.reacted} 行）` : e.missed ? '（页面算出来没有下一步了）（你预写的行都没演上）' : '（页面算出来没有下一步了）（你没预写做完以后的行）'}`);
+      lines.push(`${parts.join('；')}${heldText(e)}`);
     }
     else if (e.kind === 'help') lines.push(`学生点了「${e.act.button}」`);
     else if (e.kind === 'stuck') lines.push(e.text || `学生 ${Math.round(QUIET_MS / 1000)} 秒没动，挑战还没做到`);
@@ -342,16 +350,25 @@ const fillOf = (a) => (a?.type === 'write' ? String(a.line || a.src || '').match
  *   - 老师写了 call=done 的东西上试的、撤一步、按「回到……」（patient）；
  *   - 往一格里写第一个值：键盘一格一格写满一张矩阵是在填，不是试了没做到（以前写到第 8 格就叫老师「试了 8 下还没做到」）；
  *     同一格再写一次才算一下；
- *   - 做到挑战、收集型收了一张、做完了的那一下（act.reached，stage.js 记的）：往前走了一步，它和它之前试的都不再算「还没做到」，从头数
+ *   - 做到挑战、收集型收了一张、做完了的那一下（act.reached，stage.js 记的）：往前走了一步，它和它之前试的都不再算「还没做到」，从头数；
+ *   - 同一个拨数、同一格连着 ± 拨的几下（中间没动过别的，路接得上：和写给老师的「一条路」同一套 pathKey / pathGoesOn）只算一下：
+ *     拨数 0 拨到 8 要按 8 下 ›，是一次「试」（以前一下算一下，拨到 8 就叫老师「试了 8 下还没做到」，第三次量 L3/幕6 那种）
  */
 export function tryCount(events) {
   let n = 0;
   const filled = new Set();
+  let run = null; // 上一下是哪条路上的：{ key, end }；中间有别的一下（连撤一步、按「回到……」）就断了
   for (const e of events) {
-    if (e.kind !== 'try') continue;
-    if (e.act?.reached?.length) { n = 0; filled.clear(); continue; }
+    // 中间夹着学生别的事（答了一问、做到挑战……）也断了这一条路；页面记下的一句（note）不是学生做的，不断
+    if (e.kind !== 'try') { if (e.kind !== 'note') run = null; continue; }
+    const a = e.act || {};
+    const key = pathKey(a);
+    const goesOn = !!(key && run && run.key === key && pathGoesOn(run.end, a));
+    run = key ? { key, end: pathEnd(a) } : null;
+    if (a.reached?.length) { n = 0; filled.clear(); run = null; continue; }
     if (e.patient) continue;
-    const cell = fillOf(e.act);
+    if (goesOn) continue;
+    const cell = fillOf(a);
     if (cell && !filled.has(cell)) { filled.add(cell); continue; }
     n++;
   }

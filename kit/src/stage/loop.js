@@ -266,9 +266,10 @@ export function createLoop(host) {
   }
   // 交给学生做的东西（open t rotate、open M rowop……）做完了（规则说没有下一步了）：学生手上没事了才叫老师（预写了 @t.done 的演完再看）。
   // 老师做完的不叫（预写的行也不演，舞台告诉老师「@t.done 的行没演」）
-  function onDone(ids, { by = 'student', instant, reacted = 0, reacts = null } = {}) {
+  // 键盘填的空格子写满了（filled，scene.js 的 fillOpen）也是这一件：写给老师「空格子都写满了」
+  function onDone(ids, { by = 'student', instant, reacted = 0, reacts = null, filled = [] } = {}) {
     if (instant || S.ended || host.readOnly || by !== 'student') return;
-    const e = { kind: 'done', ids, reacted, at: Date.now() };
+    const e = { kind: 'done', ids, reacted, at: Date.now(), ...(filled?.length ? { filled } : {}) };
     addEvent(e);
     // 老师在 open 那一行写了 call=done（做完叫你）：明写的盖过「手上没事了才叫」，马上叫
     const told = ids.some((id) => [...stage.scene.opens.values()].some((x) => x.obj === id && x.policy?.call === 'done'));

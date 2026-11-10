@@ -11,7 +11,7 @@ import { Q, isQ, isQVec, isQMat } from '../../exact.js';
 // 规则那边算的读回方程、解的样子（舞台现状里写）。两个模块互相 import：都只在函数里用对方的东西，加载的先后不碍事
 import { readBack, solutionText } from './matrix.rules.js';
 // 整张写成一句、同类项（value.js 也 import 这里：同样只在函数里用）
-import { gridText, termOf, mergeTerms } from '../value.js';
+import { gridText, termOf, mergeTerms, evalHoles } from '../value.js';
 
 export const MAX_ROWS = 6, MAX_COLS = 8;
 const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
@@ -356,10 +356,22 @@ function rowsOfValue(v, src) {
 // 格里的 {…} 写算成一个数的式子（{k}、{A.1,2}、{l - 1}、{2 k}、{det(A)}）：一格里是一个数；算出来是矩阵、向量照实说
 // （第一轮只认拨数的名字或一格；放宽以后旧写法一个不少，旧课照样放回）
 const notNumber = (v) => (isQMat(v) ? '矩阵' : isQVec(v) ? '向量' : '别的');
+// 用到的有空格子（{A D}、D 还是 _ _ / _ _；格里的 {D.1,1 + 1}）：先挂上，跟着空格子变的格空着（''，画成「?」），
+// 空格子填上了跟着重算（value.js 的 evalHoles；以前一算就报「还空着」，整行不演）
 function cellLive(h, src) {
-  const { value, deps } = h.liveValue(src);
+  const { value, deps, holes } = evalHoles(src, h.scene);
   if (!isQ(value)) throw new Error(`「{${src}}」算出来是${notNumber(value)}，格里要一个数`);
-  return { value: value.toString(), deps };
+  return { value: holes ? '' : value.toString(), deps };
+}
+/** 整张跟着算的那几行：跟着空格子变的格空着 */
+function wholeRows(scene, src) {
+  const { value, deps, holes } = evalHoles(src, scene);
+  const rows = rowsOfValue(value, src);
+  if (holes) {
+    const hole = isQMat(value) ? (i, j) => holes[i][j] : (i) => holes[i];
+    rows.forEach((r, i) => r.forEach((_, j) => { if (hole(i, j)) r[j] = ''; }));
+  }
+  return { rows, deps };
 }
 /**
  * 写了 {…} 的矩阵：整个 = {A + B} 是 { rows, live: { whole, deps } }；格里的 {k} 是 { rows, aug, live: { cells: [{ key, expr, deps }], deps } }
@@ -369,8 +381,8 @@ function liveRows(h, text) {
   const exprs = parts.filter((p) => p.k === 'expr');
   if (exprs.length === 1 && parts.every((p) => p.k === 'expr' || !p.v.trim())) {
     const src = exprs[0].v;
-    const { value, deps } = h.liveValue(src);
-    return { rows: rowsOfValue(value, src), aug: null, live: { line: h.line, whole: src, deps } };
+    const { rows, deps } = wholeRows(h.scene, src);
+    return { rows, aug: null, live: { line: h.line, whole: src, deps } };
   }
   // 每个 {…} 换成一个占位的词，照原来的写法读行列，读到占位时算那一格
   const slots = [];
@@ -775,8 +787,7 @@ export const matrix = {
       parts.push(x);
     };
     if (L.whole) {
-      const { value, deps } = scene.liveValue(L.whole);
-      const rows = rowsOfValue(value, L.whole);
+      const { rows, deps } = wholeRows(scene, L.whole);
       L.deps = deps;
       if (rows.length !== o.rows || rows[0].length !== o.cols) {
         const was = new Map(o.cells.map((x) => [`${x.r}.${x.c}`, x.value]));
@@ -793,10 +804,10 @@ export const matrix = {
       }
     } else {
       const next = L.cells.map((k) => {
-        const r = scene.liveValue(k.expr);
+        const r = evalHoles(k.expr, scene);
         if (!isQ(r.value)) throw new Error(`「{${k.expr}}」算出来是${notNumber(r.value)}，格里要一个数`);
         k.deps = r.deps;
-        return [o.cells.find((y) => y.key === k.key), r.value.toString()];
+        return [o.cells.find((y) => y.key === k.key), r.holes ? '' : r.value.toString()];
       });
       L.deps = unionDeps(L.cells);
       for (const [x, v] of next) if (x) put(x, v);
@@ -847,7 +858,8 @@ export const matrix = {
     for (let r = 1; r <= o.rows; r++) lines.push(`  第 ${r} 行：${rowCells(o, r).map(tag).join('  ')}${zero.has(r) ? '（全为 0）' : ''}`);
     if (o.stairs) lines.push(`  画着阶梯线：非零行 ${o.rows - zero.size} 行`);
     const blank = o.cells.filter((x) => x.value === '').sort(sortRC);
-    if (blank.length && !empty) lines.push(`  还空着：${blank.map((x) => `${o.id}.${x.r},${x.c}`).join(' ')}`);
+    // 跟着算的空着的格：是用到的东西还有空格子（{A D}、D 还空着），填上了跟着算出来
+    if (blank.length && !empty) lines.push(`  还空着：${blank.map((x) => `${o.id}.${x.r},${x.c}`).join(' ')}${o.live ? '（跟着算的：用到的还有空格子，填上了跟着算出来）' : ''}`);
     if (o.collect && !empty) lines.push(`  收集用的（${SIGN_TEXT[o.collect.sign]}）：${o.id} = ${collectSrc(o.collect.sign, o.collect.terms)}；学生只能往里放`);
     // 并同类项并成了 0：整张都是 0 才这样写（老师之后改了一格就不是了）
     if (cancelledNow(o)) lines.push(`  ${o.id} = O（抵消了）`);
@@ -861,7 +873,7 @@ export const matrix = {
   doc: `矩阵（线代：行变换、消元、秩、乘法）：
 matrix m = 1 2 3 / 4 5 6 / 7 8 10   造矩阵（/ 分行；数能写 -3、1/2；| 是增广矩阵的竖线；beside=p 放在 p 右边）
 写法：m.2,3 第 2 行第 3 列；m.r2 第 2 行；m.c3 第 3 列
-matrix M1 = _ _ | _ / _ _ | _ from=M0 vars="x y"   _ 是空格子（填满以前判断式、量都判不了）；from=M0：学生每写满一行（配 open M1 edit input=keypad），页面和 M0 比（像哪一步行变换、哪一格不对、同不同解；不判对错）；vars= 未知数的名字（增广矩阵每行在现状里读回成方程，不写是 x1 x2…）
+matrix M1 = _ _ | _ / _ _ | _ from=M0 vars="x y"   _ 是空格子（填满以前判断式、量都判不了；跟着它算的 {A M1} 照样挂得上，跟着空格子变的格空着、填上了跟着算）；from=M0：学生每写满一行（配 open M1 edit input=keypad），页面和 M0 比（像哪一步行变换、哪一格不对、同不同解；不判对错）；vars= 未知数的名字（增广矩阵每行在现状里读回成方程，不写是 x1 x2…）
 matrix N = 1 {k} / 0 1              格里的 {…} 写算成一个数的式子（{k}、{A.1,2}、{l - 1}），跟着它变；整张就算跟着算的，学生拨不了，只能 open compare / put / merge
 matrix S = {A + B}                  整个矩阵跟着算（{A B}、{2A}、{k A}、{A^-1}、{A'}；coef(M) 是增广矩阵竖线左边、rhs(M) 右边一列：{coef(M) P - rhs(M)}）；跟着算的学生拨不了，只能 open compare / put / merge
 matrix Sum = collect                收集用的（collect - 是第一张减后面的）：空着是一个空格，put AB Sum 放进一张（学生拖、你写都行）就跟着算 {AA + AB}
@@ -880,11 +892,11 @@ open AB put                       学生把 AB 拖进收集用的 Sum = put AB S
 open X merge                      学生把 X 拖到 Y 上并同类项 = merge X Y（只认 数 × 同一个矩阵：{-2 A} 并 {-A} 成 {-3 A}，X 拿下舞台，撤不了、不写 undo=on；并成 0 是 O）；三种都不判对错，同一张只开一种；学生按整张哪儿都拎得起来（格上开着 edit 时按括号）
 学生自己消元（rowop 页面判每一下；乘积不能 open rowop）：
 open m rowop wrong=mark call=wrong    学生把一行左边的把手拖到另一行上 = 倍加（弹倍数框写 -3：rowop m r2 - 3r1）；拖到行号上 = 对调（rowop m r1 <-> r2）；点行号 = 倍乘（rowop m (-1/2)r1）
-open m edit input=keypad          学生点一格用数字键盘写（能写 -3/2；写了 range= 才限范围）= write m.2,3 -3/2（页面不判，告诉你的就是这一行）
+open m edit input=keypad          学生点一格用数字键盘写（能写 -3/2；写了 range= 才限范围）= write m.2,3 -3/2（页面不判，告诉你的就是这一行；空格子 _ 都写满了算做完，学生手上没事了就叫你）
 判断式（when=）：m stairs（阶梯形）、m rref（行最简形）、m rank=2（整张的秩，增广的是 r(A | b)）、m rankA=2（竖线左边的秩 r(A)）、m same B（和 B 行等价）；量：rank(m)、rankA(m)、free(m)（自由变量几个）、det(m)（方阵）；现状里还写解的样子，跟着拨数的把每个能拨的值扫一遍
 做完了 = 成了阶梯形（@m.done 这时演）；往上化成行最简形页面不判对错，要的话写 goal … when="m rref"
 ask value "A² 是？" type=matrix answer={A^2} wrong="1 1 / 1 1=逐格平方了"     学生写一张矩阵（行用「 / 」或 ; 隔开，1/3 是一格分数），页面照 A 现算答案
-ask value "Aⁿ 是？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"     每格是含 n 的式子：学生一格一个式子框，页面逐格代 n 判，哪一格不对告诉你（学生只看到整张对不对）
+ask value "Aⁿ 是？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"     每格是含 n 的式子：学生一格一个式子框，页面逐格代 n 判，哪一格不对告诉你（学生只看到整张对不对）；一列（一行）、每格是 free= 变量一次式的（通解 free=k answer="-2+4k / 1-k / k"）按集合判：换了参数、特解的同一条线也对
 answer={A B}、{A^2}、{3 A}、{A^-1}、{A'} 时页面自己认乘反、逐格乘方、只乘一行或一格、逐格取倒数或没除以行列式、没转置，对上了告诉你（你写的 wrong= 先比）`,
   // 测试用（tests/stage-doc.test.js）：说明里 stairs 那一行要一个已经是阶梯形的矩阵；from= 那一行要 M0；整张拖的三行要 AB、BA、Sum、X、Y
   docSetup: 'matrix m = 1 2 3 / 0 1 4 / 0 0 1\nmatrix M0 = 1 2 | 3 / 2 4 | 7\nmatrix A = 1 2 / 3 4\nmatrix B = 0 1 / 1 0\nmatrix AB = {A B}\nmatrix BA = {B A}\nmatrix Sum = collect\nmatrix X = {-2 A}\nmatrix Y = {-A}',

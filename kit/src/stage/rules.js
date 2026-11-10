@@ -16,6 +16,8 @@
 //                                               不判的指令是 null。学生、老师的每一行都照它过裁判（场景里，所以重放出来一样）
 //   judges [动作名]                              open 了这几个动作，学生做的每一下页面判对错：wrong= / call= / @名字.right 只对它们起作用
 //                                               （矩阵的 edit、句子的 fold 也在手势表里，可页面不判对错，写了 wrong= 当场报）
+//   reopen(o, scene) → boolean（可选）            现在就做完了的东西，学生开着的动作还能不能把它改回没做完（树开着删、摘）：
+//                                               能的话 @名字.done 照收（再做完时演），不能的照旧报「现在就已经做完了」
 //   doneBy [动作名]                              open 了这几个动作的东西，next 走到 null 才算「学生做完了」（@名字.done、叫老师）：
 //                                               树的平衡、矩阵的阶梯形只对交给了学生做的东西有意义（一棵本来就平衡、没 open 的树不是学生做完的）
 //   measures { 名字: (o, parts, scene) → 数 | null | undefined }（可选，docs/superpowers/specs/2026-11-08-stage-base-2-design.md 3.1）

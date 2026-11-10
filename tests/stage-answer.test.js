@@ -429,3 +429,77 @@ test('页面替老师挂的那一问（helpLine）：不带 ""，不动最后说
   assert.equal(s.say, '先看左边');
   assert.equal(s.waiting.button, '给个提示');
 });
+
+// —— 第三次量（L2 第 6 幕）：按格写的通解（一列、是 free= 变量的一次式）按集合判，不逐格比式子 ——
+const LINE = { type: 'matrix', free: 'k=-3..3', answer: '-2+4k / 1-k / k' };
+
+test('复核（第三次量）：按格写的通解换了参数、换了特解的同一条线判对；不在线上的判错并说为什么；页面判不了的不判错', () => {
+  // 照答案写：对
+  assert.equal(judgeAnswer([['-2+4k'], ['1-k'], ['k']], LINE).ok, true);
+  // 报告里理想的那一种：(2, 0, 1) + k(−4, 1, −1)——同一条线，特解换成 x3 = 1 那一点、方向反过来
+  const same = judgeAnswer([['2-4k'], ['k'], ['1-k']], LINE);
+  assert.equal(same.ok, true, JSON.stringify(same));
+  assert.equal(same.misread, null);
+  // 方向乘 2、特解换一个点、参数换个名字（t）：都是同一条线
+  for (const g of [[['-2+8k'], ['1-2k'], ['2k']], [['6+4k'], ['-1-k'], ['2+k']], [['2-4t'], ['t'], ['1-t']]]) assert.equal(judgeAnswer(g, LINE).ok, true, JSON.stringify(g));
+  // 试演里学生打的「2-4k / -k / 1-k」：方向 (−4, −1, −1) 不和 (4, −1, 1) 平行，不在 L 上，判错，告诉老师为什么（不再说「第 1 格代 k = 2 不对」）
+  const off = judgeAnswer([['2-4k'], ['-k'], ['1-k']], LINE);
+  assert.equal(off.ok, false);
+  assert.match(off.misread, /方向/);
+  assert.doesNotMatch(off.misread, /第 1 行第 1 格/);
+  // 方向对、点不在线上
+  const shifted = judgeAnswer([['4k'], ['1-k'], ['k']], LINE);
+  assert.equal(shifted.ok, false);
+  assert.match(shifted.misread, /方向对/);
+  // 只写了一个点（不含参数）：不是整条线
+  const pt = judgeAnswer([['2'], ['0'], ['1']], LINE);
+  assert.equal(pt.ok, false);
+  assert.match(pt.misread, /一个点|不含参数/);
+  // 学生写的不是一次式（k²）：页面判不了，不判错（ok 是 null，告诉老师判不了）
+  const sq = judgeAnswer([['-2+4k^2'], ['1-k^2'], ['k^2']], LINE);
+  assert.equal(sq.ok, null, JSON.stringify(sq));
+  assert.match(sq.failed, /页面判不了/);
+  // 两个参数的平面：换了基、换了点也对
+  const PLANE = { type: 'matrix', free: 'a, b', answer: 'a / b / a+b' };
+  assert.equal(judgeAnswer([['a+b'], ['a-b'], ['2a']], PLANE).ok, true);
+  assert.equal(judgeAnswer([['a'], ['b'], ['a-b']], PLANE).ok, false);
+  assert.match(judgeAnswer([['a'], ['a'], ['2a']], PLANE).misread, /1 维|一条线|维/);
+  // 一行的（行向量）也一样
+  assert.equal(judgeAnswer([['2-4k', 'k', '1-k']], { type: 'matrix', free: 'k', answer: '-2+4k 1-k k' }).ok, true);
+});
+
+test('复核（第三次量）：Aⁿ 这种方阵、不是一次式的列照旧逐格比（n 是有意思的，不是随便取的参数）', () => {
+  // 方阵里每格是 n 的一次式（剪切矩阵的 n 次方）：换了参数就是错的
+  const SHEAR = { type: 'matrix', free: 'n', answer: '1 n / 0 1' };
+  assert.equal(judgeAnswer([['1', '2n'], ['0', '1']], SHEAR).ok, false);
+  // 一列、不是一次式（2^n）：照旧逐格比
+  const POW = { type: 'matrix', free: 'n', answer: '2^n / n' };
+  const r = judgeAnswer([['2^(n+1)'], ['n+1']], POW);
+  assert.equal(r.ok, false);
+  assert.match(r.misread, /第 1 行第 1 格不对/);
+});
+
+test('复核（第三次量）：页面判不了的答案，写给老师「页面判不了」，不进出错记录（不是页面出错）', () => {
+  const act = { type: 'value', text: '-2+4k^2 / 1-k^2 / k^2', answer: '-2+4k / 1-k / k', right: null, failed: '页面判不了：x' };
+  assert.match(actText(act), /页面判不了：x（不知道对不对，你看着判）/);
+  assert.equal(judgeAnswer([['-2+4k^2'], ['1-k^2'], ['k^2']], LINE).undecided, true);
+});
+
+test('复核（第三次量，倒退）：矩阵答案的 wrong= 能列一个数的错答（「0=写成数字 0」，第一轮能写）；学生写 0 对上它', () => {
+  const sc = run(new Scene(), 'matrix A = 1 2 / 3 4\nmatrix E = 1 0 / 0 1');
+  const spec = { type: 'matrix', answer: '{A^2 - 5 A + 3 E}', wrongs: '0 3 / 3 0=每格加了 3（常数当成数）; 0=写成数字 0' };
+  assert.doesNotThrow(() => checkSpec(spec, sc));
+  assert.equal(sc.check(parseScript('ask value "f(A) = ？" type=matrix answer={A^2 - 5 A + 3 E} wrong="0=写成数字 0"')[0]), null);
+  const r = judgeAnswer('0', spec, sc);
+  assert.equal(r.ok, false);
+  assert.equal(r.misread, '写成数字 0');
+  // 写死的矩阵答案、按格的答案也能列
+  assert.doesNotThrow(() => checkSpec({ type: 'matrix', answer: '1 2 / 3 4', wrongs: '0=写成数字 0' }));
+  assert.doesNotThrow(() => checkSpec({ type: 'matrix', free: 'n', answer: '1 n / 0 1', wrongs: '0=写成数字 0; 1=当成 1' }));
+  assert.equal(judgeAnswer('0', { type: 'matrix', answer: '1 2 / 3 4', wrongs: '0=写成数字 0' }).misread, '写成数字 0');
+  // 方程组的答案：学生只写了一个数（x = 3 写成 3）也能列
+  assert.doesNotThrow(() => checkSpec({ type: 'equation', answer: 'x = 3', wrongs: '3=只写了数' }));
+  assert.equal(judgeAnswer('3', { type: 'equation', answer: 'x = 3', wrongs: '3=只写了数' }).misread, '只写了数');
+  // 别的写错的矩阵错答照旧当场报（; 把一条切成了两条）
+  assert.throws(() => checkSpec({ type: 'matrix', answer: '1 2 / 3 4', wrongs: '1 2; 3 5=抄错了' }), /2×2|1×2/);
+});

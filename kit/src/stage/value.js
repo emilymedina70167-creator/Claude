@@ -51,12 +51,15 @@ export function parseLive(text) {
 }
 
 // —— 舞台上的东西 → 式子里的值 ——
-/** 矩阵 → Q 的二维数组（按现在的行列）；还空着的格用到才报 */
-function matrixValue(o) {
+/**
+ * 矩阵 → Q 的二维数组（按现在的行列）；还空着的格用到才报。
+ * fill(东西的名字, 格)：给了就拿它的数顶上空格子（evalBlank 试算用：空格子上挂的跟着算的，先挂上、空着的那几格空着）
+ */
+function matrixValue(o, fill = null) {
   const out = [];
   for (let r = 1; r <= o.rows; r++) {
     out.push(o.cells.filter((x) => x.r === r).sort((a, b) => a.c - b.c).map((x) => {
-      if (x.value === '') throw new Error(`${o.id}.${x.r},${x.c} 还空着`);
+      if (x.value === '') { if (fill) return fill(o.id, x); throw new Error(`${o.id}.${x.r},${x.c} 还空着`); }
       return toQ(x.value);
     }));
   }
@@ -64,29 +67,30 @@ function matrixValue(o) {
 }
 const isPoint = (p) => (p.kind === 'vec' || p.kind === 'pt') && p.x != null && p.y != null;
 // 一个部件的值：平面上的向量、点是列向量；别的（一格、结点、边权）是数（49′ 当 49）
-function partQ(p, ref) {
+function partQ(p, ref, fill = null) {
   if (isPoint(p)) return [toQ(p.x), toQ(p.y)];
+  if ((p.value === '' || p.value == null) && fill && p.r != null) return fill(p.obj, p);
   if (p.value === '' || p.value == null) throw new Error(`${ref} 还空着`);
   const q = toQ(String(p.value).replace(/[′']/g, ''));
   if (!q) throw new Error(`${ref} 是「${p.value}」，不是数`);
   return q;
 }
 /** 部件写法的值（B.1,2 是数、p.u 是向量、A.r1 是一串数） */
-export function partValue(scene, ref) {
+export function partValue(scene, ref, fill = null) {
   const ps = scene.parts(ref);
-  if (ps.length === 1) return partQ(ps[0], ref);
-  return ps.map((p) => { const v = partQ(p, ref); if (!isQ(v)) throw new Error(`${ref} 里有向量，式子里一个一个写`); return v; });
+  if (ps.length === 1) return partQ(ps[0], ref, fill);
+  return ps.map((p) => { const v = partQ(p, ref, fill); if (!isQ(v)) throw new Error(`${ref} 里有向量，式子里一个一个写`); return v; });
 }
 
 /**
  * 式子里的名字 → 值（exact.js 的 vars）：拨数是数；舞台上的矩阵是 Q 的二维数组；给了平面（vec p w = {A v}）时，
  * 这个平面上的向量、点直接写名字（列向量）。同名时平面上的 > 舞台上的东西 > 拨数。都是用到才算（乘积还空着也不碍事）
  */
-export function scopeOf(scene, { plane } = {}) {
+export function scopeOf(scene, { plane, fill = null } = {}) {
   const vars = {};
   const put = (k, get) => Object.defineProperty(vars, k, { get, enumerable: true, configurable: true });
   for (const [k, v] of scene.vars) put(k, () => Q.from(v.v));
-  for (const o of scene.objects.values()) if (o.type === 'matrix') put(o.id, () => matrixValue(o));
+  for (const o of scene.objects.values()) if (o.type === 'matrix') put(o.id, () => matrixValue(o, fill));
   const p = plane && scene.objects.get(plane);
   if (p?.items) for (const it of p.items) put(it.name, () => [toQ(it.x), toQ(it.y)]);
   return vars;
@@ -103,7 +107,7 @@ const SLICE_RE = /(?<![\w.#])(coef|rhs)\(\s*([A-Za-z_]\w*)\s*\)/g;
  * 增广矩阵的一半：coef 是 Q 的二维数组（竖线左边）；rhs 是竖线右边，照舞台上一列的矩阵（matrix P = 1 / 2）的样子
  * 也是二维数组（n×1），和 coef(M) P 算出来的一样，能直接相减（exact.js 里 n×1 的矩阵和向量不能相加）
  */
-function sliceOf(scene, fn, id) {
+function sliceOf(scene, fn, id, fill = null) {
   const o = scene.objects.get(id);
   if (!o) throw new Error(`舞台上没有「${id}」`);
   if (o.type !== 'matrix') throw new Error(`「${id}」是${scene.type(o).label}，${fn}(…) 写增广矩阵`);
@@ -113,7 +117,7 @@ function sliceOf(scene, fn, id) {
   const rows = [];
   for (let r = 1; r <= o.rows; r++) {
     rows.push(o.cells.filter((x) => x.r === r && want(x)).sort((a, b) => a.c - b.c).map((x) => {
-      if (x.value === '') throw new Error(`${o.id}.${x.r},${x.c} 还空着`);
+      if (x.value === '') { if (fill) return fill(o.id, x); throw new Error(`${o.id}.${x.r},${x.c} 还空着`); }
       return toQ(x.value);
     }));
   }
@@ -147,11 +151,11 @@ const BUILTIN = new Set(['I', 'E', 'pi', 'e']);
  * 算一个 {式子}：{ value（Q / 向量 / 矩阵）, deps（用到的名字：拨数名、东西的名字、部件写法；平面上的向量写成 p.v） }。
  * ctx.plane：写在哪个平面上（那个平面的向量直接写名字）。写错了、算不出来（不可逆、维数对不上、还空着）抛错，错误里有原式子
  */
-export function evalLive(src, scene, { plane } = {}) {
+export function evalLive(src, scene, { plane, fill = null } = {}) {
   const raw = String(src ?? '').trim().replace(/^\{([^{}]*)\}$/, '$1').trim();
   if (!raw) throw new Error('{} 里要写式子（比如 {k}、{A + B}、{P^-1}）');
   const shown = `「{${raw}}」`;
-  const vars = scopeOf(scene, { plane });
+  const vars = scopeOf(scene, { plane, fill });
   const local = new Set(plane ? (scene.objects.get(plane)?.items || []).map((i) => i.name) : []);
   const refs = new Map(); // 占位的名字 → 部件写法
   const ms = new Map(); // 占位的名字 → 量算的是哪样东西（依赖）
@@ -160,7 +164,7 @@ export function evalLive(src, scene, { plane } = {}) {
   // coef(M)、rhs(M) 先换成拆出来的那一半（在量前面：不然被当成矩阵的量，报「没有量 coef」）；依赖是 M
   text = text.replace(SLICE_RE, (m, fn, id) => {
     let v;
-    try { v = sliceOf(scene, fn, id); } catch (e) { throw new Error(`${shown}里的「${m}」：${e.message}`); }
+    try { v = sliceOf(scene, fn, id, fill); } catch (e) { throw new Error(`${shown}里的「${m}」：${e.message}`); }
     const k = `_s${ms.size}_`;
     ms.set(k, id);
     Object.defineProperty(vars, k, { value: v, enumerable: true });
@@ -182,7 +186,7 @@ export function evalLive(src, scene, { plane } = {}) {
   text = text.replace(REF_RE, (m, obj) => {
     if (!scene.objects.has(obj)) throw new Error(`${shown}里的「${m}」：舞台上没有「${obj}」`);
     let v;
-    try { v = partValue(scene, m); } catch (e) { throw new Error(`${shown}里的「${m}」：${e.message}`); }
+    try { v = partValue(scene, m, fill); } catch (e) { throw new Error(`${shown}里的「${m}」：${e.message}`); }
     const k = `_r${refs.size}_`;
     refs.set(k, m);
     Object.defineProperty(vars, k, { value: v, enumerable: true });
@@ -210,6 +214,37 @@ export function evalLive(src, scene, { plane } = {}) {
     else if (scene.objects.has(n) || scene.vars.has(n)) add(n);
   }
   return { value, deps };
+}
+
+// —— 空格子上挂跟着算的（第三次量 L1 第 1 幕、L2 第 6 幕）：matrix AD = {A D}、D 还是 _ _ / _ _ ——
+// 以前一算就报「D.1,1 还空着」，整行不演，老师只好把 D 写成 0。现在先挂上：空格子换成几组不一样的数各算一遍，
+// 几组都一样的格（不跟着空格子变）照写，跟着空格子变的格空着；D 填上一格，跟着重算
+const BLANK_TRIALS = 3;
+const isBlankErr = (e) => /还空着/.test(String(e?.message ?? e));
+// 第 t 组里第 i 个空格子顶上的数：几组、几格各不一样（都一样容易凑出不可逆、相减成 0）
+const trialQ = (t, i) => Q.int(1009 + 7919 * i + 104729 * t).div(Q.int(97 + 13 * t + 31 * i));
+const sameVal = (a, b) => (isQ(a) && isQ(b) ? a.cmp(b) === 0 : Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => sameVal(x, b[i])));
+// 几组算出来的值 → 和值一样形状的「这一格跟着空格子变」（true）
+const holesOf = (vals) => (isQ(vals[0]) ? !vals.every((v) => sameVal(v, vals[0])) : vals[0].map((_, i) => holesOf(vals.map((v) => v[i]))));
+/**
+ * 算一个 {式子}，用到的有空格子（_）也先算出来：{ value, deps, holes }。holes 和 value 一样形状，true 的那一格跟着空格子变
+ * （现在还空着），value 那一格是试算的数、不能拿去用；用到的都写满了 holes 是 null（和 evalLive 一样）。
+ * 不是因为空格子算不出来（写错了、不可逆、维数对不上）：照 evalLive 抛原来的错
+ */
+export function evalHoles(src, scene, ctx = {}) {
+  try { return { ...evalLive(src, scene, ctx), holes: null }; } catch (err) {
+    if (!isBlankErr(err)) throw err;
+    const runs = [];
+    for (let t = 0; t < BLANK_TRIALS; t++) {
+      const seen = new Map();
+      const fill = (id, x) => { const k = `${id}:${x.key ?? `${x.r}.${x.c}`}`; if (!seen.has(k)) seen.set(k, seen.size); return trialQ(t, seen.get(k)); };
+      try { runs.push(evalLive(src, scene, { ...ctx, fill })); } catch { throw err; }
+    }
+    const vals = runs.map((r) => r.value);
+    const shape = (v) => (isQ(v) ? 'q' : isQMat(v) ? `m${v.length}x${v[0].length}` : isQVec(v) ? `v${v.length}` : '?');
+    if (vals.some((v) => shape(v) !== shape(vals[0]))) throw err;
+    return { value: vals[0], deps: runs[0].deps, holes: holesOf(vals) };
+  }
 }
 
 /** 算出来的数写成字：整数、有限小数照写（图的边权、格子里的数要这样），别的写分数 */

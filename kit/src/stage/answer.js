@@ -4,7 +4,7 @@
 // answer 是 {A B}、{A^2}、{3 A}、{A^-1}、{A'} 这五种时，页面自己照固定的改法现算几条常见错答（autoWrongs），也只告诉老师。
 // type=matrix 写了 free=n：每格是含 n 的式子，学生那边一格一个式子框，逐格代 n 判（formulaRows、gridAnswerText）。
 // 纯函数，不碰 DOM，有测试（tests/stage-answer.test.js）。判法本身都是黑板上已有的，这里只接线。
-import { calcValue, exactText, isQ, isQVec, isQMat, Q, mul, det, inv } from '../exact.js';
+import { calcValue, exactText, isQ, isQVec, isQMat, Q, mul, det, inv, rrefOf } from '../exact.js';
 import { parseFree, formulaSpec, compareFormula, normalizeFormula, matrixCells, compareCells, FORMULA_FUNCS } from '../formula.js';
 import { intervalSpec, equationSpec } from '../anstypes.js';
 import { parseSeqAnswer, checkSeq } from '../textcheck.js';
@@ -199,10 +199,86 @@ function numOf(text) {
   return v;
 }
 
-// 判一下的结果：ok，note 是写给老师的事实（学生写的页面读不懂、读成了别的样子）
+// 判一下的结果：ok，note 是写给老师的事实（学生写的页面读不懂、读成了别的样子）；ok 是 null：页面判不了（不当学生答错）
 const yes = { ok: true, note: null };
 const no = (note = null) => ({ ok: false, note });
 const unread = (e) => no(`页面读不懂这个写法（${e.message}）`);
+const cannot = (note) => ({ ok: null, note: `页面判不了：${note}` });
+
+// —— 按格写的通解（第三次量 L2 第 6 幕）：一列（或一行）、每格是 free= 变量的一次式 = 一个仿射集合（点 + 几个方向张成的），
+// 换了参数、换了特解、方向乘了倍数都是同一条线 / 同一个平面。逐格比式子把它们判成错（对的判成错，是假话），所以这种答案按集合判 ——
+// 学生用的参数名不一定是 free= 写的（写 t 也是同一条线）：读不懂时再照这些单个字母读一遍（e、i 留着不认）
+const PARAM_NAMES = 'abcdfghjklmnopqrstuvwxyz'.split('');
+const QV = (x) => (typeof x === 'number' ? Q.int(x) : x);
+// 一次式验算用的几个点（0、1 拿来取点和方向；别的拿来核是不是一次式：避开小整数，免得高次式凑巧对上）
+const PROBES = [2, -3, 7, 13, -11].map(Q.int).concat([Q.int(7).div(Q.int(2)), Q.int(-5).div(Q.int(3))]);
+/**
+ * 每格的表达式（normalizeFormula 之后的）→ { p（点，Q[]）, d（方向，Q[][]，一个参数一个）} ；不是这些名字的一次式（k²、1/k、abs）、
+ * 算出来不是数：null
+ */
+function affineOf(exprs, names) {
+  const at = (vals) => {
+    const out = [];
+    for (const e of exprs) {
+      let v;
+      try { v = calcValue(e, Object.fromEntries(names.map((n, i) => [n, vals[i]]))).value; } catch { return null; }
+      if (!isQ(v)) return null;
+      out.push(v);
+    }
+    return out;
+  };
+  const zero = names.map(() => Q.int(0));
+  const p = at(zero);
+  if (!p) return null;
+  const d = [];
+  for (let i = 0; i < names.length; i++) {
+    const v = at(zero.map((z, j) => (j === i ? Q.int(1) : z)));
+    if (!v) return null;
+    d.push(v.map((x, r) => x.sub(p[r])));
+  }
+  // 核一下真是一次式：几组值（每个参数轮着取 PROBES 里的数）都等于 p + Σ x_i d_i
+  for (let t = 0; t < PROBES.length; t++) {
+    const xs = names.map((_, i) => QV(PROBES[(t + i * 3) % PROBES.length]));
+    const v = at(xs);
+    if (!v) return null;
+    const lin = p.map((x, r) => xs.reduce((acc, xi, i) => acc.add(xi.mul(d[i][r])), x));
+    if (v.some((x, r) => x.cmp(lin[r]) !== 0)) return null;
+  }
+  return { p, d };
+}
+// 几个向量（Q[]，一样长）张成的维数
+const rankOf = (vecs, n) => (vecs.length ? rrefOf(Array.from({ length: n }, (_, r) => vecs.map((v) => v[r]))).rank : 0);
+// 式子里用到的名字（函数名不算）
+const namesIn = (e) => [...new Set(String(e).match(/[A-Za-z_]\w*/g) || [])].filter((w) => !FORMULA_FUNCS.includes(w));
+const dimWord = (k) => (k === 0 ? '一个点（不含参数）' : k === 1 ? '一条线（1 个方向）' : k === 2 ? '一个平面（2 个方向）' : `${k} 维的（${k} 个方向）`);
+const vecWord = (v) => `(${v.map((x) => numText(x).replace(/^-/, '−')).join(', ')})`;
+/**
+ * 学生按格写的 cells（string[][]，一列或一行）和答案的仿射集合 aff 比：同一个集合 → yes；不是 → no（说为什么：维数不一样、方向不对、
+ * 方向对点不在上面）；学生写的读不懂、不是一次式 → 页面判不了（cannot）
+ */
+function affineJudge(aff, cells, free) {
+  const flat = cells.flat();
+  const read = [];
+  for (let i = 0; i < flat.length; i++) {
+    let e = null;
+    try { e = normalizeFormula(flat[i], { names: free }); } catch { try { e = normalizeFormula(flat[i], { names: [...new Set([...free, ...PARAM_NAMES])] }); } catch (err) { return cannot(`第 ${i + 1} 格读不懂（${err.message}）`); } }
+    read.push(e);
+  }
+  const names = [...new Set(read.flatMap(namesIn))];
+  const mine = affineOf(read, names);
+  if (!mine) return cannot(`学生写的不是参数的一次式（${flat.map(prettyFormula).join('，')}），页面比不了是不是同一个集合`);
+  const n = aff.p.length;
+  const ra = rankOf(aff.d, n), rs = rankOf(mine.d, n);
+  if (rs !== ra) return no(`学生写的是${dimWord(rs)}，答案是${dimWord(ra)}`);
+  if (rankOf([...aff.d, ...mine.d], n) !== ra) {
+    const bad = mine.d.find((v) => rankOf([...aff.d, v], n) !== ra);
+    const line = aff.d.find((v) => v.some((x) => !x.zero));
+    return no(`方向不对：学生的方向 ${vecWord(bad)} 不在答案的方向${ra > 1 ? '张成的平面' : ` ${vecWord(line)} 那条线`}里`);
+  }
+  const gap = mine.p.map((x, r) => x.sub(aff.p[r]));
+  if (rankOf([...aff.d, gap], n) !== ra) return no(ra ? `方向对，可学生写的点 ${vecWord(mine.p)}（参数都取 0 时）不在答案上` : `学生写的点 ${vecWord(mine.p)} 不是答案的 ${vecWord(aff.p)}`);
+  return yes;
+}
 
 /**
  * 按格写的式子的判法：answer 是 [[…]] 或「1 n n(n-1)/2 / 0 1 n / 0 0 1」，free 是 free= 的原文（[[…]] 不写 free= 时格里只有数）。
@@ -217,21 +293,29 @@ function cellsCheck(ans, free) {
   for (let i = 0; i < want.length; i++) for (let j = 0; j < want[i].length; j++) {
     try { compareFormula(want[i][j], want[i][j], { free: fr, scope: {} }); } catch (e) { throw new Error(`第 ${i + 1} 行第 ${j + 1} 格「${rows[i][j]}」代不进去：${stageWords(e.message)}`); }
   }
+  // 一列（或一行）、每格是 free= 变量的一次式：通解，按集合判（affineJudge）。方阵（Aⁿ）、不是一次式的照旧逐格比：那里 n 是有意思的
+  const vec = names.length && (want.length === 1 || want[0].length === 1) && want.flat().length >= 2;
+  const aff = vec ? affineOf(want.flat(), names) : null;
   const check = (g) => {
     let mine;
     try { mine = cellGrid(g); } catch (e) { return unread(e); }
     if (mine.length !== want.length || mine[0].length !== want[0].length) return no(`学生写的是 ${shapeText(mine)} 的，答案是 ${shapeText(want)} 的`);
     const read = [];
+    let other = false; // 有一格照 free= 的名字读不懂（学生换了参数名，通解里也是对的）
     for (let i = 0; i < mine.length; i++) {
       read.push([]);
       for (let j = 0; j < mine[i].length; j++) {
         if (!mine[i][j] || mine[i][j] === '_') return no(`第 ${i + 1} 行第 ${j + 1} 格还空着`);
-        try { read[i].push(normalizeFormula(mine[i][j], { names })); } catch (e) { return no(`第 ${i + 1} 行第 ${j + 1} 格页面读不懂（${e.message}）`); }
+        try { read[i].push(normalizeFormula(mine[i][j], { names })); } catch (e) { if (aff) { other = true; continue; } return no(`第 ${i + 1} 行第 ${j + 1} 格页面读不懂（${e.message}）`); }
       }
     }
     // 标准答案写下时代过了：这里再抛（某一格所有取值都算不出来）是页面没判成，交给 judgeAnswer 记 ok: null
-    const res = compareCells(want, read, { free: fr, scope: {} });
-    return res.ok ? yes : no(cellNote(res.first, mine[res.first.r][res.first.c]));
+    if (!other) {
+      const res = compareCells(want, read, { free: fr, scope: {} });
+      if (res.ok) return yes;
+      if (!aff) return no(cellNote(res.first, mine[res.first.r][res.first.c]));
+    }
+    return affineJudge(aff, mine, names);
   };
   check.shape = [want.length, want[0].length];
   check.cells = true; // 收 string[][]（按格的式子框交的）
@@ -362,6 +446,18 @@ export function autoWrongs(raw, scene) {
   return out;
 }
 
+/** 一个数的错答：学生写的（一行字；按格交的写成一行字）就是这一个数才对上。text 不是一个数：null */
+function numberWrong(text) {
+  let want;
+  try { want = numOf(text); } catch { return null; }
+  if (!/^\s*[-−+]?[\d.]+(\/\d+)?\s*$/.test(String(text))) return null; // 2^3 这种算式不算「一个数」的错答
+  return (g) => {
+    let q;
+    try { q = numOf(Array.isArray(g) ? gridAnswerText(g) : g); } catch { return no(); }
+    return q.cmp(want) === 0 ? yes : no();
+  };
+}
+
 /**
  * 照 spec 把判法造好：{ ans（正确答案写成字）, check, wrongs: [{ text, why, check }], autos() }。
  * {式子} 现算出来再照 type 造一遍（算出来的和 type 对不上就抛）；wrong= 每一条也照 type 造（矩阵的错答格数要和答案一样：
@@ -382,9 +478,14 @@ function buildJudge(type, spec, scene, { strict = false, lenient = false } = {})
   }
   const make = (text) => {
     const v = resolveAnswer(text, scene, { type: t, lenient });
+    // 一个数的错答（矩阵答案的「0=写成数字 0」、方程的「3=只写了数」）：学生写的就是这一个数时对上（第一轮能写；Task 13 加了矩阵错答
+    // 要和答案一样大，把它也挡掉了）。照矩阵、方程的读法造不出来、或者大小对不上时才走这里，别的错答照旧
+    const single = () => (['matrix', 'equation'].includes(t) && !liveIn(text, t) ? numberWrong(v) : null);
     let c;
-    try { c = makeCheck(t, v, spec); } catch (e) { throw liveIn(text, t) ? at(`wrong= 的「${text}」`, v, e) : e; }
+    try { c = makeCheck(t, v, spec); } catch (e) { const n = single(); if (n) return n; throw liveIn(text, t) ? at(`wrong= 的「${text}」`, v, e) : e; }
     if (check.shape && c.shape && (c.shape[0] !== check.shape[0] || c.shape[1] !== check.shape[1])) {
+      const n = single();
+      if (n) return n;
       throw new Error(`wrong= 的「${text}」是 ${c.shape.join('×')} 的，答案是 ${check.shape.join('×')}：错答里矩阵的行用「 / 」隔开（「;」是隔开几条错答的）`);
     }
     return c;
@@ -424,11 +525,14 @@ export function judgeAnswer(given, spec = {}, scene = null) {
     const flat = (c) => (Array.isArray(given) && !c.cells ? gridAnswerText(given) : given);
     g = flat(j.check);
     r = j.check(g);
-    const hit = (x) => { try { return x.check(flat(x.check)).ok; } catch { return false; } };
+    const hit = (x) => { try { return x.check(flat(x.check)).ok === true; } catch { return false; } };
     if (r.ok) return { ok: true, misread: null, shown: j.ans };
     // 老师的 wrong= 先比，再比页面现算的
     const w = j.wrongs.find(hit) || j.autos().find(hit);
-    return { ok: false, misread: w ? w.why || `像是常见错答「${w.text}」` : r.note, shown: j.ans };
+    if (w) return { ok: false, misread: w.why || `像是常见错答「${w.text}」`, shown: j.ans };
+    // 页面判不了（按集合判的通解，学生写的不是一次式）：不当学生答错，照实告诉老师；不是页面出错（undecided，不进出错记录）
+    if (r.ok === null) return { ok: null, misread: null, shown: j.ans, failed: r.note, undecided: true };
+    return { ok: false, misread: r.note, shown: j.ans };
   } catch (e) {
     return { ok: null, misread: null, shown: j?.ans ?? String(raw).trim(), failed: `页面没判成：${e.message}` };
   }

@@ -161,5 +161,17 @@ const m8 = stepOf(h, 'write M.3,2 8'), m9 = stepOf(h, 'write M.3,3 9');
 expect('键盘一格一格写到第 8 格：不叫老师', !m8?.called && !/试了/.test(said(m8)));
 expect('写满第 9 格做到 h1：叫老师，不说「试了好多下」', /做到了挑战/.test(m9?.called?.why || '') && !/试了 8 下/.test(m9?.called?.msg || ''));
 
+// 第三次量找到的：拨数 0 → 8 是一下「试」；键盘填的空格子写满了算做完了
+const d8 = stepOf(h, 'dial k 8');
+expect('拨数从 0 拨到 8：不叫老师，不说「试了 8 下」', !errs(d8) && !d8?.called && /学生拨了 k：0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8/.test(said(d8)) && !/试了/.test(said(d8)));
+const p3 = stepOf(h, 'write P.2,1 3'), p4 = stepOf(h, 'write P.2,2 4');
+expect('键盘填空格子：写到一半不叫老师', !p3?.called);
+expect('键盘填空格子：最后一格填上叫老师，写明「空格子都写满了」', /学生把 P 的空格子都写满了/.test(p4?.called?.msg || ''));
+
+const r7 = stepOf(h, 'swap r.2 r.3'), t7 = stepOf(h, 'tap r.3');
+expect('@ask.right 跟着 @g7 里的一问：这一轮演完不报「@ask.right 要跟着」', !(h.out?.[0]?.views || []).some((v) => v.steps.some((x) => (x.errors || []).some((e) => /@ask\.right 要跟着/.test(e.error)))));
+expect('做到 g7：预写的那一问挂上了（攒着不叫）', !r7?.called && /做到了挑战 g7/.test(said(r7)));
+expect('学生点对 r.3：演了 @ask.right 预写的那一行', /学生答对了（页面已经演了你预写的 1 行）/.test(said(t7)) && /对，最大的是 3/.test(t7?.state || ''));
+
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');
 process.exit(bad.length ? 1 : 0);

@@ -235,6 +235,9 @@ export class Scene {
     // 拿走 @ask.right 的那一问记一个编号（waiting.rightKey = ask.right#N）：它里面套着的预写（ahead 的 from）跟着这一问，
     // 这一问没答对就收尾、整组拿掉，不和下一问的 @ask.right 混在一起
     this.askSeq = 0;
+    // @ask.right 跟着写在预写里的那一问（@ask.right say "对"、@g1 ask tap c … expect=c.1：第三次量 E3/幕3）：
+    // 一组预写（g1、t.done、t.right）→ { lines, key（ask.right#N）, at（那一问是这一组的第几行）}；那一组演出来、那一问挂上时拿走
+    this.preRight = new Map();
     // 话里光秃秃的一个名字现在还不是拨数、也不是舞台上的东西（{Xi} 写在造 Xi 之前，或者拼错了的 {kk}）：这一轮演完再看（looseProblems）
     this.loose = []; // [{ name, line, src }]
     this.labelRects = []; // 贴的字画在哪（stage.js 量了写回）：[{ x, y, w, h, objs }]，摆东西时后造的东西让开（reflow）
@@ -273,6 +276,7 @@ export class Scene {
     for (const [k, a] of this.ahead) s.ahead.set(k, { ...a, lines: [...a.lines] });
     s.askRight = this.askRight ? [...this.askRight] : null;
     s.askSeq = this.askSeq;
+    for (const [k, p] of this.preRight) s.preRight.set(k, { ...p, lines: [...p.lines] });
     s.loose = this.loose.map((x) => ({ ...x }));
     s.labelRects = this.labelRects.map((r) => ({ ...r, objs: [...r.objs] }));
     for (const [k, v] of this.slips) s.slips.set(k, { ...v, refs: [...v.refs] });
@@ -507,7 +511,7 @@ export class Scene {
       if (before && o) { try { j.after = rulesOf(o)?.facts(before, o, j.act, this) || []; } catch (err) { j.after = []; ruleErrors.push(`${typeOf(o).label}的规则写事实时出错：${err?.message || err}`); } }
       if (j.mark && o) this.slip(j.obj, c, j.act);
       // 学生做对一步：老师预写的确认、下一小问（@t.right，只演一次）
-      if (j.by === 'student' && j.verdict?.right === true) reactions.push(...this.take(`${j.obj}.right`).map((src) => ({ right: j.obj, src })));
+      if (j.by === 'student' && j.verdict?.right === true) reactions.push(...this.pull(`${j.obj}.right`, { right: j.obj }));
     }
     // 点了以后第一次改了那样东西（谁改的都算，跟着拨数重算的也算）：哪几个真变了，和学生先点的比（fx.pickDiff：学生的一下写进事实，
     // 老师的一下画面交给课堂记一句）。规则交的 changed 说变了哪些；点过的部件这一下没了也算变了
@@ -530,8 +534,8 @@ export class Scene {
     // （当时演了的行本来就在 log 里），不说
     const unplayed = [];
     const fire = (key, tag) => {
+      if (student) return this.pull(key, tag);
       const lines = this.take(key);
-      if (student) return lines.map((src) => ({ ...tag, src }));
       if (lines.length) { this.dropAhead(key); if (!c.replay) unplayed.push(key); }
       return [];
     };
@@ -548,13 +552,15 @@ export class Scene {
     const more = got.collected.filter((id) => !met.includes(id));
     if (more.length) {
       fx.collected = more;
-      reactions.push(...more.flatMap((id) => (this.reactions.get(id) || []).map((src) => ({ goal: id, src, collect: true, keepGoals: true }))));
+      reactions.push(...more.flatMap((id) => this.pull(id, { goal: id, collect: true, keepGoals: true }, { peek: true })));
     }
     // 学生（或老师）这一行把交给学生做的东西做完了：@t.done 的行交出来，课堂按 by 决定叫不叫老师
-    const fin = this.checkDone(ruleErrors);
+    const filled = [];
+    const fin = this.checkDone(ruleErrors, filled);
     if (ruleErrors.length) fx.ruleErrors = ruleErrors;
     if (fin.length) {
       fx.done = fin;
+      if (filled.length) fx.filled = filled;
       reactions.push(...fin.flatMap((id) => fire(`${id}.done`, { done: id })));
     }
     if (reactions.length || met.length || more.length) fx.reactions = reactions;
@@ -563,16 +569,35 @@ export class Scene {
   }
   /** 预写的行拿出来（演一次就没了） */
   take(key) { const r = this.reactions.get(key) || []; this.reactions.delete(key); return r; }
-  /** 一组预写拿掉不演了：它里面写出的挑战（goal g2）的套着的预写也不会再有用，一层层拿掉 */
+  /**
+   * 一组预写的行 → 交给舞台演的几项（tag 是每一项都带的：goal / done / right）；这一组里跟着 @ask.right 的那一问带上
+   * preRight（那几行）、preRightKey（stage.js 演它时交给 ask）。peek：收集型每收一张都演（只看不拿）
+   */
+  pull(key, tag, { peek = false } = {}) {
+    const lines = peek ? this.reactions.get(key) || [] : this.take(key);
+    const pr = this.preRight.get(key);
+    if (pr && !peek) this.preRight.delete(key);
+    return lines.map((src, i) => ({ ...tag, src, ...(pr && i === pr.at ? { preRight: [...pr.lines], preRightKey: pr.key } : {}) }));
+  }
+  /** 一组预写拿掉不演了：它里面写出的挑战（goal g2）的套着的预写也不会再有用，一层层拿掉（跟着这一组里那一问的 @ask.right 也是） */
   dropAhead(from) {
     for (const [id, a] of [...this.ahead]) if (a.from === from) { this.ahead.delete(id); this.dropAhead(id); }
+    const pr = this.preRight.get(from);
+    if (pr) { this.preRight.delete(from); this.dropAhead(pr.key); }
   }
-  /** 一组预写的行是第几层：挑战、东西上的、@ask.right 是第 1 层；还没有的挑战（ahead 里的）照写出它的那一组往下数 */
+  /** 跟着预写里那一问的 @ask.right（ask.right#N）是哪一组预写里的；不是是 null */
+  rightParent(key) { for (const [k, p] of this.preRight) if (p.key === key) return k; return null; }
+  /**
+   * 一组预写的行是第几层：挑战、东西上的、@ask.right 是第 1 层；还没有的挑战（ahead 里的）照写出它的那一组往下数；
+   * 跟着预写里那一问的 @ask.right 比那一组深一层
+   */
   levelOf(key, seen = new Set()) {
-    const a = this.ahead.get(key);
-    if (!a || seen.has(key)) return 1;
+    if (seen.has(key)) return 1;
     seen.add(key);
-    return this.levelOf(a.from, seen) + 1;
+    const a = this.ahead.get(key);
+    if (a) return this.levelOf(a.from, seen) + 1;
+    const up = this.rightParent(key);
+    return up ? this.levelOf(up, seen) + 1 : 1;
   }
   /** 套着的预写挪了一层（g2 真有了）：每一项照写出它的那一组重算第几层 */
   relevel() { for (const [k, a] of this.ahead) a.depth = this.levelOf(k); }
@@ -583,6 +608,7 @@ export class Scene {
     for (const [k, a] of this.ahead) if (k !== id && has(a.lines)) return k;
     if (has(this.askRight)) return 'ask.right';
     if (has(this.waiting?.right)) return this.waiting.rightKey || 'ask.right';
+    for (const p of this.preRight.values()) if (has(p.lines)) return p.key;
     return null;
   }
   /** 这一组预写（from）下面套着的全部（一层层往下）：[[挑战 id, 那一项]] */
@@ -740,27 +766,49 @@ export class Scene {
     const o = this.objects.get(id);
     if (o) for (const p of typeOf(o).parts(o)) delete p.slip;
   }
-  /** 交给了学生做的东西（open 了规则 doneBy 里的动作）里，这一行从没做完变成做完了的；刚交给学生时已经做完的不算 */
-  checkDone(errors = []) {
+  /**
+   * 交给了学生做的东西（open 了规则 doneBy 里的动作）里，这一行从没做完变成做完了的；刚交给学生时已经做完的不算。
+   * 交给学生用键盘填的空格子（fillOpen）也一样：最后一格填上算做完了，记进 filled（写给老师「空格子都写满了」，不是规则算出来没有下一步）
+   */
+  checkDone(errors = [], filled = []) {
     const out = [];
     const seen = new Set();
     for (const e of this.opens.values()) {
-      if (seen.has(e.obj) || !this.doneOpen(e.obj)) continue;
+      if (seen.has(e.obj)) continue;
+      const rule = this.doneOpen(e.obj);
+      const fill = !rule && this.fillOpen(e.obj);
+      if (!rule && !fill) continue;
       seen.add(e.obj);
       let now = false;
-      try { now = nextDone(this, e.obj); } catch (err) { now = false; errors.push(`${e.obj} 的规则算下一步时出错：${err?.message || err}`); }
+      if (fill) now = !this.blankLeft(e.obj);
+      else try { now = nextDone(this, e.obj); } catch (err) { now = false; errors.push(`${e.obj} 的规则算下一步时出错：${err?.message || err}`); }
       const was = this.doneState.get(e.obj);
       this.doneState.set(e.obj, now);
-      if (now && was === false) out.push(e.obj);
+      if (now && was === false) { out.push(e.obj); if (fill) filled.push(e.obj); }
     }
     for (const id of [...this.doneState.keys()]) if (!seen.has(id)) this.doneState.delete(id);
     return out;
+  }
+  /** 做完了的这样东西，学生开着的动作还能不能把它改回没做完（规则的 reopen：树开着删、摘，托盘里还有没插的数）；没交 reopen 的不能 */
+  reopenable(id) {
+    const o = this.objects.get(id);
+    try { return !!rulesOf(o)?.reopen?.(o, this); } catch { return false; }
   }
   /** 这样东西交给学生做了没有（open 了它的规则说「做完」要看的动作） */
   doneOpen(id) {
     const by = rulesOf(this.objects.get(id))?.doneBy || [];
     return [...this.opens.values()].some((e) => e.obj === id && by.includes(e.action));
   }
+  /**
+   * 交给学生用键盘填的空格子（open M1 edit input=keypad，M1 里有 _）：填满了就是学生做完了这一件（第三次量：以前写满了页面不知道，
+   * 只能等 45 秒没动再叫老师）。open 那一刻就没有空格子的，checkDone 照「刚交给学生时已经做完的不算」不报
+   */
+  fillOpen(id) {
+    const o = this.objects.get(id);
+    return !!o?.cells && !o.collect && !o.live && [...this.opens.values()].some((e) => e.obj === id && e.input === 'keypad');
+  }
+  /** 还有没有空着的格（_） */
+  blankLeft(id) { return !!this.objects.get(id)?.cells?.some((x) => x.value === ''); }
 
   // @g1 开头的行：先记着，g1 做到了再演。在现在的舞台上把这一挑战记着的行连着试一遍，写错了当场告诉老师。
   // 能套三层（PREWRITE_DEPTH）：@g1 里写出的 goal g2，接着写 @g2 …（g2 还没有，记进 ahead，g1 做到、演出 goal g2 时挪过去）
@@ -778,10 +826,38 @@ export class Scene {
       entry = this.ahead.get(id) || { lines: [], depth, from };
     }
     const list = g ? this.reactions.get(id) || [] : entry.lines;
+    const bind = this.bindPlan(id, c.body, list.length, entry ? entry.depth : this.levelOf(id));
     this.tryPrewrite(id, [...list, c.body], c, entry?.from);
     if (g) this.reactions.set(id, [...list, c.body]);
     else this.ahead.set(id, { ...entry, lines: [...list, c.body] });
+    this.bindRight(bind);
     return { stashed: id };
+  }
+  /**
+   * 预写的这一行是一问、前面写着还没着落的 @ask.right（第三次量 E3/幕3：@ask.right say "对"、@g1 ask tap c … expect=c.1）：
+   * @ask.right 跟着这一问（预写那一组演出来、这一问挂上时拿走）。这一问页面判不了对错（ask next、没写 expect=）不跟，照旧这一轮演完报。
+   * 跟着以后 @ask.right 比那一组深一层，里面套着的跟着深一层：超过三层当场报（还没改任何东西）。返回要做的（bindRight 照它改）或 null
+   */
+  bindPlan(group, body, at, level = this.levelOf(group)) {
+    if (!this.askRight?.length) return null;
+    const [x] = parseScript(body);
+    if (x?.cmd !== 'ask') return null;
+    const { opts, words } = this.helpers(x);
+    const kind = words[0];
+    const exp = kind === 'pick' && opts.expect ? String(opts.expect).trim().split(/\s+/).filter(Boolean) : opts.expect;
+    if (!judgeable({ kind, expect: exp, answer: opts.answer })) return null;
+    // 那一组是第 level 层（还没出的 @g2 照它在 ahead 里记的）：@ask.right 跟过去就是第 level + 1 层，里面套着的跟着往下挪
+    const deepest = Math.max(1, ...this.aheadUnder('ask.right').map(([, a]) => a.depth)) + level;
+    if (deepest > PREWRITE_DEPTH) throw new Error(`预写最多三层：@ask.right 跟着 @${group} 里的那一问，里面套着的成了第 ${deepest} 层（再往下要等你看着学生写）`);
+    return { group, at };
+  }
+  bindRight(plan) {
+    if (!plan) return;
+    const key = `ask.right#${++this.askSeq}`;
+    for (const a of this.ahead.values()) if (a.from === 'ask.right') a.from = key;
+    this.preRight.set(plan.group, { lines: this.askRight, key, at: plan.at });
+    this.askRight = null;
+    this.relevel();
   }
   /**
    * 预写的行写下时在今天的舞台上照先后试一遍（克隆）：套着的从最外一层起，g1 算做到、演 g1 的行，g2 算做到、演 @g2 的行……
@@ -791,7 +867,7 @@ export class Scene {
   tryPrewrite(key, lines, c, from = this.ahead.get(key)?.from) {
     // 从最外一层（真有的挑战、东西上的、@ask.right）排到这一组
     const chain = [key];
-    for (let k = from, n = 0; k && n < 8; k = this.ahead.get(k)?.from, n++) chain.unshift(k);
+    for (let k = from, n = 0; k && n < 8; k = this.ahead.get(k)?.from ?? this.rightParent(k), n++) chain.unshift(k);
     const trial = this.clone();
     trial.trial = true; // 这是在今天的舞台上试：真演的时候学生已经动过了
     const run = (list, check) => {
@@ -804,7 +880,7 @@ export class Scene {
       }
     };
     const linesOf = (k) => (k === 'ask.right' ? trial.askRight || []
-      : k.startsWith('ask.right#') ? (trial.waiting?.rightKey === k ? trial.waiting.right || [] : [])
+      : k.startsWith('ask.right#') ? (trial.waiting?.rightKey === k ? trial.waiting.right || [] : [...trial.preRight.values()].find((p) => p.key === k)?.lines || [])
         : trial.reactions.get(k) || []);
     for (const k of chain.slice(0, -1)) {
       if (trial.goals.has(k)) trial.goals.get(k).met = true;
@@ -839,13 +915,16 @@ export class Scene {
     if (!c.lenient) {
       let nx;
       try { nx = rules.next(o, this); } catch (err) { throw new Error(`页面算不出 ${name} 的下一步（${err.message}），@${name}.${kind} 的行不会演`); }
-      if (nx === null) throw new Error(`${name} 现在就已经做完了（没有下一步），学生不用再动手，@${name}.${kind} 的行不会演`);
-      if (!nx?.acts?.length) throw new Error(`页面判不了 ${name}：${nx?.why || '算不出下一步'}，@${name}.${kind} 的行不会演`);
+      // 现在就做完了：学生开着的动作还能把它改回没做完（删一个结点再修平：第三次量 D2/分支 3），再做完时照样演，收下；改不回去的报
+      if (nx === null && !(kind === 'done' && this.reopenable(name))) throw new Error(`${name} 现在就已经做完了（没有下一步），学生不用再动手，@${name}.${kind} 的行不会演`);
+      if (nx !== null && !nx?.acts?.length) throw new Error(`页面判不了 ${name}：${nx?.why || '算不出下一步'}，@${name}.${kind} 的行不会演`);
     }
     const key = `${name}.${kind}`;
     const list = this.reactions.get(key) || [];
+    const bind = this.bindPlan(key, c.body, list.length);
     this.tryPrewrite(key, [...list, c.body], c);
     this.reactions.set(key, [...list, c.body]);
+    this.bindRight(bind);
     return { stashed: key };
   }
   /**
@@ -1119,12 +1198,14 @@ export class Scene {
         if (str != null) { this.say = str; this.words = parseRich(str).filter((p) => p.k === 'word').map((p) => p.v); }
         // 这一轮写在前面的 @ask.right 跟着这一问走（学生答对它时页面马上演，只演一次）。预写里的 ask（舞台演 @g1 的行时带 prewrite）不拿：
         // 那几行可能插在老师这一轮中间演，@ask.right 是写给这一轮最后那一问的
-        const right = !c.prewrite && this.askRight?.length ? this.askRight : null;
+        // 预写里的那一问跟着的 @ask.right（写在它前面、跟到这一组里的：bindRight）由舞台演这一行时交来（preRight）
+        const right = c.preRight?.length ? c.preRight : !c.prewrite && this.askRight?.length ? this.askRight : null;
         if (!c.prewrite) this.askRight = null;
         // 换掉的那一问还没答：它的 @ask.right（连同套着的）不会再演了
         if (this.waiting) this.endAsk(this.waiting);
         let rightKey = null;
-        if (right) {
+        if (c.preRight?.length) rightKey = c.preRightKey || `ask.right#${++this.askSeq}`;
+        else if (right) {
           rightKey = `ask.right#${++this.askSeq}`;
           for (const a of this.ahead.values()) if (a.from === 'ask.right') a.from = rightKey;
         } else if (!c.prewrite) this.dropAhead('ask.right');
@@ -1883,10 +1964,13 @@ export class Scene {
       if (names.length || auto.length) lines.push(`${id} 存着：${names.join('、') || '没有'}${auto.map(([n, a]) => `；学生每做完一次 ${a} 页面存成「${n}」`).join('')}`);
     }
     if (this.slips.size) lines.push(`淡淡圈着（学生走偏的那一下，照你写的 wrong=mark；那样东西再变就收掉）：${[...this.slips.values()].map((x) => `${x.refs.join(' ')}（${x.src}）`).join('；')}`);
-    const pre = [...this.reactions].filter(([k, r]) => k.includes('.') && r.length).map(([k, r]) => { const [id, kind] = k.split('.'); return `${id} ${kind === 'done' ? '做完了' : '学生做对一步'}页面马上演你预写的 ${r.length} 行`; });
+    // 现在就是做完的样子（写在平了的树上、学生删了再修：reopenable）：照实说什么时候才演
+    const now = (id) => (this.doneState.get(id) ? '（现在就是做完的样子：学生动了它、又做完时才演）' : '');
+    const pre = [...this.reactions].filter(([k, r]) => k.includes('.') && r.length).map(([k, r]) => { const [id, kind] = k.split('.'); return `${id} ${kind === 'done' ? '做完了' : '学生做对一步'}页面马上演你预写的 ${r.length} 行${kind === 'done' ? now(id) : ''}`; });
     // @ask.right：跟着这一问（等着的那一问拿走了）、还没被拿走（下一问）
     if (this.waiting?.right?.length) pre.push(`学生答对这一问时页面马上演你预写的 ${this.waiting.right.length} 行`);
     if (this.askRight?.length) pre.push(`下一问学生答对时页面马上演你预写的 ${this.askRight.length} 行`);
+    for (const [k, p] of this.preRight) pre.push(`${groupText(k)}时出的那一问，学生答对时页面马上演你预写的 ${p.lines.length} 行`);
     // 套着的预写：挑战还没出（前一层演出 goal 那一刻才出），做到了演的行先记着
     for (const [id, a] of this.ahead) if (a.lines.length) pre.push(`挑战 ${id} 还没出（${groupText(a.from)}时才出），做到了页面马上演你预写的 ${a.lines.length} 行（第 ${a.depth} 层）`);
     if (pre.length) lines.push(`预写的：${pre.join('；')}`);
@@ -2018,9 +2102,9 @@ export function pickDiffText(scene, picked, keys) {
 function pickedLine(scene, picked) {
   const mine = pickedNames(scene, picked);
   const ch = new Set(picked.changed || []);
-  const how = !picked.reveal ? ''
-    : picked.diffDone ? `；reveal=on：变了的实线 ${listOr(mine.filter((x) => ch.has(x.k)).map((x) => x.t))}，没变的虚线 ${listOr(mine.filter((x) => !ch.has(x.k)).map((x) => x.t))}`
-      : '；reveal=on：之后第一下改了它们，变了的画实线、没变的画虚线';
+  // reveal=on 还没揭晓：老师这一轮演完页面不收（stage.js 的 end），等之后第一下改了它们
+  if (picked.reveal && !picked.diffDone) return `圈着学生点的：${mine.map((x) => x.t).join('、')}（reveal=on：之后第一下改了它们，变了的画实线、没变的画虚线；揭晓以前页面不收，不要了写 unpick ${picked.obj}）`;
+  const how = picked.reveal ? `；reveal=on：变了的实线 ${listOr(mine.filter((x) => ch.has(x.k)).map((x) => x.t))}，没变的虚线 ${listOr(mine.filter((x) => !ch.has(x.k)).map((x) => x.t))}` : '';
   return `圈着学生点的：${mine.map((x) => x.t).join('、')}（你这一轮演完页面收掉${how}）`;
 }
 

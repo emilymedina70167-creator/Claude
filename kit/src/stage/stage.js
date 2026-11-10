@@ -308,8 +308,10 @@ export class Stage {
         }
       }
       // 学生上一次点的几样（ask pick）圈到老师这一轮演完：照一行 unpick 收掉，记进这一轮的 log（刷新照它放回）。
-      // 这一轮里才交的不收（上一问还挂着时学生交的，老师还没看到）
-      if (!dead && unpick && this.scene.picked && !this.log.slice(mark).some((r) => /^pick\b/.test(r.src))) {
+      // 这一轮里才交的不收（上一问还挂着时学生交的，老师还没看到）。reveal=on 还没揭晓的不收（第三次量 D2/幕1：猜错了叫老师，
+      // 老师这一轮演完圈就没了，学生插进去以后看不到哪几个变了）：留到之后第一下改了它们、揭晓了，再下一轮演完才收；不收就没有这一行，刷新照样留着
+      const unrevealed = this.scene.picked?.reveal && !this.scene.picked.diffDone;
+      if (!dead && unpick && this.scene.picked && !unrevealed && !this.log.slice(mark).some((r) => /^pick\b/.test(r.src))) {
         const [c] = parseScript('unpick');
         await this.exec({ ...c, line: 0, src: 'unpick' }, { by: 'teacher', turn });
       }
@@ -601,7 +603,7 @@ export class Stage {
       const forGoal = reacts.filter((r) => r.goal && !r.collect), forDone = reacts.filter((r) => r.done);
       // 不是学生做到的：是舞台演预写的行时成立的（prewrite）、这一行刚写出的挑战一出来就成立（fresh），写给老师照实说
       if (fx?.goalsMet?.length) this.onGoal?.(fx.goalsMet, { by, instant: false, reacted: forGoal.length, reacts: forGoal, pressed: !!fx.pressed, prewrite: !!c.prewrite, fresh: fx.goal || null });
-      if (fx?.done?.length) this.onDone?.(fx.done, { by, instant: false, reacted: forDone.length, reacts: forDone });
+      if (fx?.done?.length) this.onDone?.(fx.done, { by, instant: false, reacted: forDone.length, reacts: forDone, filled: fx.filled || [] });
     }
     return fx;
   }
@@ -788,8 +790,10 @@ export class Stage {
           // 收集型的 @g1 每收一张都演：里面写出的挑战已经有了就跳过（不重写它、不清掉 @g2 的行）
           if (r.keepGoals && c.cmd === 'goal') { const id = (c.args || []).find((a) => a.t === 'word')?.v; if (id && this.scene.goals.has(id)) continue; }
           const miss = this.scene.missedPrewrite({ ...c, lenient: true, prewrite: true });
-          if (miss) { r.missed = true; this.onNote?.(miss, { turn }); continue; }
-          await this.exec({ ...c, lenient: true, prewrite: true }, { by: 'teacher', turn });
+          // 演不上的那一问带着跟它的 @ask.right：那一问出不来，@ask.right 连同里面套着的拿掉（不然现状一直写「还没出」）
+          if (miss) { r.missed = true; this.onNote?.(miss, { turn }); if (r.preRightKey) this.scene.dropAhead(r.preRightKey); continue; }
+          // 跟着这一问的 @ask.right（scene.js 的 bindRight）交给它
+          await this.exec({ ...c, lenient: true, prewrite: true, ...(r.preRight ? { preRight: r.preRight, preRightKey: r.preRightKey } : {}) }, { by: 'teacher', turn });
         }
       }
       // 预写里有新的一问：换掉正在等的那一问。别的（收起「给个提示」、叫不叫老师）课堂循环看学生手上还有没有事再定（loop.js）
@@ -1679,7 +1683,8 @@ export class Stage {
   judgeValue(w, given, text) {
     let j;
     try { j = judgeAnswer(given, { type: w.type, answer: w.answer, wrongs: w.wrongs, free: w.free, lenient: w.lenient }, this.scene); } catch (err) { j = { ok: null, misread: null, shown: String(w.answer ?? ''), failed: `页面没判成：${err?.message || err}` }; }
-    if (j.failed) reportError(new Error(j.failed), { what: `舞台的 ask value 判答案：${w.prompt || ''}（answer=${w.answer}）` });
+    // 页面判不了（undecided：按集合判的通解学生写的不是一次式）不是页面出错，不记进出错记录
+    if (j.failed && !j.undecided) reportError(new Error(j.failed), { what: `舞台的 ask value 判答案：${w.prompt || ''}（answer=${w.answer}）` });
     return { type: 'value', text, answer: j.shown, right: j.ok, misread: j.misread, ...(j.failed ? { failed: j.failed } : {}) };
   }
 
