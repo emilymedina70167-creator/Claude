@@ -32,7 +32,7 @@ label lr R "P⁻¹JP" side=above tone=key
 open q.p1
 open q.p2
 say "给 {J} 拼一个 P：拖 {q.p1}、{q.p2}，让 {R} 变成对角的。"
-goal g2 "让 P⁻¹JP 右上角变成 0" when="R.1,2 = 0"
+goal g2 "让 P⁻¹JP 变成对角的（右上、左下都是 0）" when="R.1,2 = 0, R.2,1 = 0"
 学生: vec q p2 = 1 1
 学生: vec q p2 = 0 2
 学生: vec q p2 = 2 1

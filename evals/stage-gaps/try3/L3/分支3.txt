@@ -31,6 +31,7 @@ ask next "拼好了，或者觉得拼不出来，点下面" button="就这样"
 学生: write P.2,3 0
 学生: next
 # 回到对照表，加一行 r(2E − ·)：让页面算
+ungoal g1
 matrix T = {rank(NB)} {rank(NC)}
 label lt T "r(2E − B)、r(2E − C)" side=above tone=key
 say "三列都是特征向量时 det P = {det(P)}：压扁了。表里再加一行 {T}。"

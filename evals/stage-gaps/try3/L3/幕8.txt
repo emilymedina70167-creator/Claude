@@ -6,7 +6,8 @@ plane p range=-4..4
 matrix Dc = {(M.1,1 - M.2,2)(M.1,1 - M.2,2) + 4 M.1,2 M.2,1} 0 hide=on
 keep M "一开始"
 keep M "改过" after=edit
-open M edit input=keypad back="一开始"
+open M edit input=keypad
+open M back="一开始"
 say "改 {M} 的数，让两条特征线垂直。"
 goal g1 "让两条特征线垂直" when="M.1,2 = M.2,1"
 @g1 say "垂直了，看看现在的 M。"

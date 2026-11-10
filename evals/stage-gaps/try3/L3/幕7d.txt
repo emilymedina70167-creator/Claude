@@ -1,0 +1,29 @@
+# L3 第 7 幕补试：只留 J 一块平面，照第 1 幕的办法找特征线（两块平面的 幕7.txt 里这个挑战页面不收，画面也排不下）
+plane q range=-3..3
+matrix J = 2 1 / 0 2
+label lj J "J" side=above tone=key
+vec q a = 1 1 color=g1
+vec q b = {J a} color=g6
+span q a
+matrix Va = {q.a} hide=on
+matrix Wa = {J Va} hide=on
+matrix Ka = {Va.1,1} {Wa.1,1} / {Va.2,1} {Wa.2,1} hide=on
+matrix Dg = {Va.1,1} 0 / 0 {Va.1,1} hide=on
+matrix R = {Dg^-1 Wa} hide=on
+open q.a
+say "{J} 的特征方向找全：橙箭头落回蓝箭头那条线上的都算。"
+goal g1 "找出两条不一样的特征线" when="det(Ka) = 0" collect=R n=2
+@g1 span q a stay
+学生: vec q a = 1 0
+学生: vec q a = 2 0
+学生: vec q a = -1 2
+学生: vec q a = 2 1
+学生: vec q a = -3 0
+学生: vec q a = 1 -1
+学生: vec q a = 0 2
+学生: vec q a = 3 1
+学生: vec q a = -2 0
+say "试了这么多下，钉住了几条？"
+ask value "J 有几条特征线？" answer=1
+学生: value 1
+say "嗯。"

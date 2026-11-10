@@ -1,0 +1,9 @@
+# L3 第 7 幕补试（最小的一例）：两块空平面排得下（第一轮）；第二块平面上一加箭头（第二轮），整块舞台缩成一小块、q 出了屏幕
+plane p range=-3..3
+plane q range=-3..3
+say "两块空平面。"
+ask next "看一眼" button="好"
+学生: next
+vec q f1 = 1 0 color=g2
+say "右边加了一根箭头。"
+ask next "再看一眼" button="好"
