@@ -1,0 +1,10 @@
+# D3 分支 2 补：边权挂着拨盘的图（第 4、8 幕那种）能不能存一个存档点、倒回去
+dial w = -5 range=-6..3 at=g
+graph g = 0>1:7 1>2:{w} 0>2:5 pos="0=0,1 1=1,0 2=2,1"
+tag g ∞
+tag g.0 0
+keep g "开头"
+relax g.0 -> g.1
+back g "开头"
+ask next "看好了点下面" button="好"
+学生: next

@@ -29,8 +29,10 @@ set w 3
 matrix R = 5 {7 + w}
 label lr1 R.1,1 "Dijkstra 锁出来的到 2" side=above tone=note
 label lr2 R.1,2 "绕 1 走到 2" side=below tone=note
-# 试：「真的最短」= 两条路里小的那个
+# 试：「真的最短」= 两条路里小的那个（说明里的式子没写 min；一格的矩阵不收，凑成两格）
 matrix Q = {min(5, 7 + w)}
+matrix Q = 5 {min(5, 7 + w)}
+label lq2 Q.1,2 "（试）真的最短到 2" side=right tone=note
 say "把 {g.1~2} 的权从 +3 往下拨。拨到多少它开始锁错？"
 goal g1 "拨到 Dijkstra 开始锁错的那一格" when="R.1,2 < R.1,1"
 @g1 paint R.1,1 R.1,2 g2
@@ -44,6 +46,7 @@ unlabel
 unlabel dial:w
 remove g
 remove R
+remove Q
 ungoal g1
 dial n = 0 range=0-9 at=h
 graph h = 0>1:1 1>2:1 1>0:-2 pos="0=0,1 1=1,0 2=2,1"

@@ -52,24 +52,45 @@ ask tap g.edges "接着点：两条 5 随你挑" expect="g.B~D g.C~D"
 # 老师接：只能不写预期（页面不判这一下）
 ask tap g.edges "接着点：两条 5 随你挑"
 学生: tap g.C~D
-# 老师接：后面两步跳过，直接摆成修完的样子；两种修法排成两行小条（老师自己摆、自己染）
-paint g.D g.E g.F g4
-untag g
-unpaint g.edges
-dim g.edges
-undim g.A~C g.B~C g.C~D g.D~E g.E~F
-paint g.A~C g.B~C g.C~D g.D~E g.E~F g3
-array kr = BC1 AC2 DE2 EF3 CD5
-array pr = AC2 BC1 CD5 DE2 EF3
-paint kr.1 pr.2 g1
-paint kr.2 pr.1 g2
-paint kr.3 pr.4 g5
-paint kr.4 pr.5 g6
-paint kr.5 pr.3 g4
-label lk kr "Kruskal" side=left tone=note
-label lp pr "Prim" side=left tone=note
-say "6 个都进来了，5 条。和 Kruskal 修出来的比一比。"
-ask say "边一样，顺序为什么不一样？"
+# 老师接：D 进来（学生挑的是 C–D）；B–D 两头都在里面了，灰掉
+paint g.D g4
+paint g.C~D g3
+unpaint g.B~D
+dim g.B~D
+undim g.D~E g.D~F
+paint g.D~E g.D~F g4
+untag g.D
+tag g.E "2（经 D）"
+tag g.F "6（经 D）"
+ask tap g.edges "接着点一条金色的路" expect=g.D~E
+学生: tap g.D~E
+# 老师接：E 进来。最后一步预写：F 进来、「6 个都进来了，5 条」、两种修法排成两行小条（顺序到这时已经定了，老师排好、染好写死）、下一问
+paint g.E g4
+paint g.D~E g3
+unpaint g.C~E
+dim g.C~E
+undim g.E~F
+paint g.E~F g4
+untag g.E
+tag g.F "3（经 E）"
+@ask.right paint g.F g4
+@ask.right paint g.E~F g3
+@ask.right unpaint g.D~F
+@ask.right dim g.D~F
+@ask.right untag g
+@ask.right array kr = BC1 AC2 DE2 EF3 CD5
+@ask.right array pr = AC2 BC1 CD5 DE2 EF3
+@ask.right paint kr.1 pr.2 g1
+@ask.right paint kr.2 pr.1 g2
+@ask.right paint kr.3 pr.4 g5
+@ask.right paint kr.4 pr.5 g6
+@ask.right paint kr.5 pr.3 g4
+@ask.right label lk kr "Kruskal" side=left tone=note
+@ask.right label lp pr "Prim" side=left tone=note
+@ask.right say "6 个都进来了，5 条。和 Kruskal 修出来的比一比。"
+@ask.right ask say "边一样，顺序为什么不一样？"
+ask tap g.edges "最后一条" expect=g.E~F
+学生: tap g.E~F
 学生: say Prim 只能挑挨着篱笆的，所以 5 排在 2、3 前面
 # 老师接：「拿手指随便圈几个村子」——没有画圈的手势；拿「点几个村子、按圈好了」凑
 say "随便圈几个村子：点它们，圈好了按下面。"
