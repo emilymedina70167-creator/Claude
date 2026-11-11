@@ -13,6 +13,9 @@ const dist = (t) => { const x = String(t ?? '').trim(); if (x === '' || /^(∞|i
 const input = (g, f) => ({
   edges: edgesOf(g).map((e) => `${e.a}${g.directed ? '->' : '-'}${e.b}${e.w != null ? ` ${e.w}` : ''}`).join(', '),
   run: `${kindOf(f)}${f.from != null ? ` ${f.from}` : ''}`,
+  // 顶点全交给引擎（孤立的顶点不在边里，不交的话引擎的顶点表比图少，dist 会错位）
+  nodes: g.nodes.map((n) => n.key).sort(natural).join(' '),
+  ...(f.order != null ? { order: f.order } : {}),
 });
 // 引擎的一步 → 舞台上该有的样子（和 cellsOf 同一种写法）
 function cellsAt(kind, view, names) {
@@ -27,7 +30,8 @@ registerFollow('net', {
   types: ['graph', 'table'],
   subjects: ['数据结构'],
   head: 'run',
-  word: '个顶点',
+  known: ['from', 'order', 'on'], // on：接在表上时图是哪一张
+  word: (f) => (kindOf(f) === 'dijkstra' ? '个顶点' : '处'),
   drillOpen: (f) => ({ dijkstra: 'tag', prim: 'choose', kruskal: 'choose' }[kindOf(f)] || 'visit'),
   unit: '轮',
   title: (f) => `${NAMES[kindOf(f)] || kindOf(f)}${f.from != null ? `（从 ${f.from} 出发）` : ''}`,
@@ -65,7 +69,7 @@ registerFollow('net', {
   // 接在表上：一行一个顶点、一列一轮，引擎每一轮的 dist 当答案（照第三轮表的做法逐格比，不走路）
   toKey(T, f, scene) {
     const g = scene.objects.get(f.on);
-    if (!g || g.type !== 'graph') throw new Error('接在表上要写图是哪一张：follow T net dijkstra on=g from=1');
+    if (!g || g.type !== 'graph') throw new Error('接在表上要写图是哪一张（on=）：follow T net dijkstra on=g from=1');
     if (kindOf(f) !== 'dijkstra') throw new Error('接在表上的只有 dijkstra（每一轮的 dist 填一列）');
     const run = netEngine.run(netEngine.parse(input(g, f)));
     const hist = run.steps.at(-1).view.hist;

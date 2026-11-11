@@ -84,7 +84,7 @@ test('到了引擎认得的错法的检查点：right false、说像哪种；默
   const s = make('array a = 3 1 2\nfollow a fake\nopen a move');
   const fx = stu(s, 'swap a#2 a#3'); // → 3 2 1：错法的第 1 趟
   assert.equal(fx.judged.verdict.right, false);
-  assert.match(fx.judged.verdict.misread, /像是换了最后两个/);
+  assert.match(fx.judged.verdict.misread, /^换了最后两个/); // 开头的「像是」去掉了：叫老师的那一句自己会加
   assert.equal(whereOf(obj(s), s).like, '像是换了最后两个');
   assert.match(s.stateText(), /a 照 fake 走：像是换了最后两个（和这种错法做完第 1 趟的样子一样）/);
   const b = make('array a = 3 1 2\nfollow a fake\nopen a move wrong=block');

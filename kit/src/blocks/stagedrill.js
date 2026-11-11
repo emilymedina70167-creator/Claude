@@ -46,6 +46,7 @@ export function stage(el, src) {
     $('.sd-note').textContent = text;
   };
   function check() {
+    ready();
     if (closed || !tracks) return;
     let all = true, slips = 0;
     for (const o of followed()) {
@@ -88,5 +89,6 @@ export function stage(el, src) {
     $('.sd-lead').textContent = `照 ${i.title} 走一遍：自己动手，每做完一${i.unit}页面会看对不对。`;
   };
   // 指令是一行一行演的（带动画）：等照着走的东西出来
-  const timer = setInterval(() => { ready(); if (tracks || !el.isConnected) clearInterval(timer); }, 120);
+  // 换下一题时这道题被移出页面：舞台清掉（不然 ResizeObserver、键盘的监听一直留着）
+  const timer = setInterval(() => { ready(); if (!el.isConnected) { clearInterval(timer); st.destroy(); } }, 300);
 }

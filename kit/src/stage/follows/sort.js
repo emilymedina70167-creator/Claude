@@ -5,7 +5,10 @@ import { sortEngine, ALGOS } from '../../engines/sort.js';
 
 // 49′ 和 49' 是同一个写法
 const norm = (t) => String(t ?? '').replace(/['’]/g, '′').trim();
-const row = (o) => [...o.cells].sort((a, b) => a.slot - b.slot).map((c) => norm(c.value));
+const raw = (o) => [...o.cells].sort((a, b) => a.slot - b.slot).map((c) => norm(c.value));
+// 和引擎比的写法：数照数写（09 → 9：引擎读成数再写出来没有前面的零），撇留着
+const canon = (t) => { const m = /^(-?\d+(?:\.\d+)?)(′*)$/.exec(t); return m ? `${Number(m[1])}${m[2]}` : t; };
+const row = (o) => raw(o).map(canon);
 const textOf = (x) => `${x.v}${'′'.repeat(x.mark || 0)}`;
 const plain = (t) => t.replace(/′/g, '');
 const join = (cells) => cells.join(' ');
@@ -15,7 +18,11 @@ registerFollow('sort', {
   types: ['array'],
   subjects: ['数据结构'],
   head: 'algo',
+  known: ['gaps'],
   word: '格',
+  // 写 follow 那一刻牌上的字：引擎的 5 给人看时写回 05
+  snap: (o) => Object.fromEntries(raw(o).map((t) => [canon(t), t])),
+  label: (cell, snap) => snap?.[cell] ?? cell,
   drillOpen: () => 'move', // 自己练的时候开哪种手（课上老师没 open 过时）
   unit: (f) => (/^(quick|快)/.test(String(f.algo || '')) ? '次划分' : '趟'),
   title(f) {
@@ -24,7 +31,7 @@ registerFollow('sort', {
     return `${ALGOS[algo] || algo}${f.gaps ? `（增量 ${f.gaps}）` : ''}`;
   },
   fields(o, opts) {
-    const cells = row(o);
+    const cells = raw(o);
     if (cells.some((t) => t === '')) throw new Error('这一排还有空着的格：填满了才照得下去');
     return { ...opts, array: join(cells) };
   },

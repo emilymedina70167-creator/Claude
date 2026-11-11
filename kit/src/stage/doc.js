@@ -109,7 +109,7 @@ export const SUBJECT_TYPES = {
 };
 
 // 照引擎走的那一小节末尾共用的两句（每类算法自己的一行在对应关系的 doc 里）
-const FOLLOW_DOC = '照着走的东西：现状里写着每一趟（轮）做完该是什么样，不用自己算；学生做到一趟页面当场知道对不对、像哪种错法（只告诉你，一趟中间不判）。量 pass(a)，判断式 a pass=2、a done；@a.right 到一趟演一次，@a.done 走完演；follow a off 不照了';
+const FOLLOW_DOC = '照着走的东西：现状里写着每一趟（轮）做完该是什么样，不用自己算；学生做到一趟页面当场知道对不对、像哪种错法（只告诉你，一趟中间不判）。量 pass(a)，判断式 a pass=2、a done；@a.right 第一次到一趟时演（只演一次），@a.done 走完演；follow a off 不照了';
 
 /** 整份指令说明：共用的 + 舞台上能放的东西（subject：这节课是哪门课，只带用得上的那几种） */
 export function stageDoc(subject = '') {

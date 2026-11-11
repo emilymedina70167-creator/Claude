@@ -73,7 +73,8 @@ export function undoneOf(scene) {
     let nx = null;
     try { nx = r.next(o, scene); } catch { nx = null; }
     if (!nx?.acts?.length) continue;
-    const can = new Set([...scene.opens.values()].filter((x) => x.obj === e.obj).map((x) => r.gestures?.[x.action]?.makes || x.action));
+    // makes 可以是好几种（一排格子的拖交 swap / move）：摊开了比，再加上动作自己的名字（照引擎走的东西 next 交的是动作名）
+    const can = new Set([...scene.opens.values()].filter((x) => x.obj === e.obj).flatMap((x) => [x.action, ...[].concat(r.gestures?.[x.action]?.makes || [])]));
     if (nx.acts.some((a) => can.has(a.type))) undone.push(e.obj);
   }
   return undone;

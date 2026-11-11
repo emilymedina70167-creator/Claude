@@ -189,7 +189,8 @@ export const KEEP_MAX = 6;
  * 开着的子树高 / 平衡因子 / 句尾的数、树的排法（和 origin 是一对：排法换了 origin 的意思就变了）。
  * 它们不是这样东西的数据：倒回去会把存档以后老师挂上的一起撤掉
  */
-const AS_IS = ['origin', 'id', 'type', 'hidden', 'colStart', 'ext', 'heights', 'tally', 'bf', 'layout'];
+// follow（照引擎走）也是老师挂上去的：回去以后照旧照着走（每一行之后 refreshFollow 照现在的样子重新看到了哪）
+const AS_IS = ['origin', 'id', 'type', 'hidden', 'colStart', 'ext', 'heights', 'tally', 'bf', 'layout', 'follow'];
 /** 部件上照 key 留着现在的：学生点着的圈（ask pick）、走偏的那一下淡淡圈着的 */
 const PART_AS_IS = ['pick', 'slip'];
 /** 存下一样东西现在的样子（存档、学生每一下之前）：整份拷一份，位置不要（回去时照现在的位置） */
@@ -1143,6 +1144,8 @@ export class Scene {
         if ((onParts.length || acts.length) && !c.replay && !this.trial) this.notices.push({ line: c.line ?? 0, src: String(c.src ?? '').trim(), kept: true, remade: { id, labels: onParts, acts: [...new Set(acts)] } });
       }
       if (old) this.dropObject(id, { keepLabels: true, keepPlace: kept, keepSaves: old.type === t.type });
+      // 照引擎走的东西同名重造：照法带过去，从新的样子重新跑（每一行之后的 refreshFollow 看到数据变了会重跑；跑不了现状写「照不下去了」）
+      if (old?.follow && old.type === t.type) o.follow = { name: old.follow.name, fields: { ...old.follow.fields }, data: null };
       if (kept) {
         if (old.colStart) o.colStart = true;
         this.replaceObject(id, o);
@@ -1555,6 +1558,10 @@ export class Scene {
         if (!a) throw new Error(`没有「${name || ''}」这种照法（有：${followNames().join('、') || '还没有'}）`);
         if (!a.types.includes(o.type)) throw new Error(`${name} 接不到${typeOf(o).label}上（能接：${a.types.map((k) => TYPES[k]?.label || k).join('、')}）`);
         const fields = { ...opts, ...(head != null && a.head ? { [a.head]: head } : {}) };
+        // 引擎没有的字段当场报（引擎自己不报多写的：少写一个 s 就照默认值悄悄跑出另一条路）
+        const known = [a.head, ...(a.known || [])].filter(Boolean);
+        const stray = Object.keys(opts).find((k) => !known.includes(k));
+        if (stray && !c.lenient) throw new Error(`${name} 没有「${stray}」这个字段（能写：${(a.known || []).join('、') || '没有别的字段'}）`);
         // 字段里的 {式子} 不跟着算：拨盘变了页面不会重跑，当场说清
         const live = Object.entries(fields).find(([, v]) => /\{[^{}]*\}/.test(String(v)));
         if (live && !c.lenient) throw new Error(`follow 的字段写死的数（${live[0]}="${live[1]}" 里的 {…} 不会跟着变）：拨盘变了页面不会重跑`);

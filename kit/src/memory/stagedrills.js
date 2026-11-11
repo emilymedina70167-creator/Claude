@@ -6,6 +6,7 @@ import { parseScript } from '../stage/script.js';
 import '../stage/types/index.js';
 import { followOf, followInfo } from '../stage/follow.js';
 import { spaceOfId } from './space.js';
+import { parseStageDrill, drawStageDrill } from '../stagedrillspec.js';
 
 const safe = (s) => String(s).replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 const numOf = (v) => { const t = String(v ?? '').replace(/[′'’]/g, ''); return /^-?\d+$/.test(t) ? Number(t) : null; };
@@ -40,7 +41,8 @@ export function stageDrillsOf({ session = {}, turns = [], existing = [], now = D
       const src = String(c.src || '').trim();
       if (fx?.created && fx.id) { made.set(fx.id, src); extra.delete(fx.id); }
       const target = (c.args || []).find((a) => a.t === 'word')?.v?.match(/^[A-Za-z_]\w*/)?.[0];
-      if (c.cmd === 'group' && target && s.objects.get(target)?.follow) extra.set(target, [...(extra.get(target) || []), src]);
+      // follow 以后老师接着摆的分组：只留最后一次（课上隔 5、隔 3、隔 1 分了三次，题一开始照最后那一次摆）
+      if (c.cmd === 'group' && target && s.objects.get(target)?.follow) extra.set(target, [src]);
       if (c.cmd === 'open' && target) { const act = (c.args || []).filter((a) => a.t === 'word')[1]?.v; if (act) opens.set(target, new Set([...(opens.get(target) || []), act])); }
       if (c.cmd === 'follow' && fx?.follow && s.objects.get(fx.id)?.follow) {
         const o = s.objects.get(fx.id);
@@ -71,11 +73,16 @@ export function stageDrillsOf({ session = {}, turns = [], existing = [], now = D
     if (!create) continue;
     const acts = [...(opens.get(f.id) || [])].filter((x) => !/=/.test(x));
     if (!acts.length) acts.push(a.drillOpen ? a.drillOpen(fields) : 'move');
-    const lines = [create, followLine, ...(extra.get(f.id) || []), ...acts.map((x) => `open ${f.id} ${x}`)].join('\n');
+    // 抄之前先试一遍（取数、在不画的场景里演）：出不了的题不抄——同一块同一种只有一个编号，抄了一道坏的这一种就再也没有了。
+    // 带着分组那一行不成（课上写的是拨盘名，题里没有拨盘）就去掉它再试
+    const body = (more) => `id: ${id}\n${pick}---\n${[create, followLine, ...more, ...acts.map((x) => `open ${f.id} ${x}`)].join('\n')}`;
+    const works = (text) => { try { return !drawStageDrill(parseStageDrill(text)).error; } catch { return false; } };
+    const text = [body(extra.get(f.id) || []), body([])].find(works);
+    if (!text) continue;
     out.push({
       id,
       doc: {
-        block, kind: 'stage', md: `\`\`\`stage\nid: ${id}\n${pick}---\n${lines}\n\`\`\``, q: `照 ${followInfo(o).title} 走一遍`, title: followInfo(o).title,
+        block, kind: 'stage', md: `\`\`\`stage\n${text}\n\`\`\``, q: `照 ${followInfo(o).title} 走一遍`, title: followInfo(o).title,
         src: 'stage', random, from: { session: sid }, fromSession: sid, ...(block ? { space: session.space || spaceOfId(block) } : {}), status: 'active', at: now,
       },
     });

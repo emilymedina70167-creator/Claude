@@ -197,8 +197,8 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 
 | 对应关系 | 行数 | 接上了什么 |
 |---|---|---|
-| `follows/sort.js` | 54 | 七种排序，接在一排格子上 |
-| `follows/net.js` | 72 | Dijkstra（图、表）、Prim、Kruskal、广度优先、深度优先 |
+| `follows/sort.js` | 59 | 七种排序，接在一排格子上 |
+| `follows/net.js` | 75 | Dijkstra（图、表）、Prim、Kruskal、广度优先、深度优先 |
 
 上限定的是 150 行。**「每类算法只要一小段」成立**：以前手写一类规则是 500～800 行。怎么再接一类见 `docs/stage-types.md`「接一类算法」。
 
@@ -215,7 +215,7 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 
 验收：`evals/stage-gaps/new4/` + 表 `NEW4`（`--table new4`，和 `fix1` `new2` `new3` 一起，改了舞台合并前跑）；e2e 多一段 `stagedrill`（练一练里真的按住拖完一道舞台题；走到一半就走记放弃；下了课的舞台课里的 follow 抄进题库）。
 
-收尾量出来的：单元测试 1646 项、整条流程的自动测试 24 段、舞台整套检查（排版、真手指、自测 282 项）、示例页检查都过；`fix1` `new2` `new3` `new4` 四张表都 ✓；282 份旧课照 log 放回，和基线 0 处不同。整套检查、重放、只读助手的审查各只做了一次，都在最后。说明书版本 2026-11-12。
+收尾量出来的：单元测试 1653 项、整条流程的自动测试 24 段、舞台整套检查（排版、真手指、自测 282 项）、示例页检查都过；`fix1` `new2` `new3` `new4` 四张表都 ✓；282 份旧课照 log 放回，和基线 0 处不同。整套检查、重放、只读助手的审查各只做了一次，都在最后：审查没有严重的，5 条要紧的全修了，一条一个测试（`tests/stage-mainline4-review.test.js`），没修的小条目记在 rulings。说明书版本 2026-11-12。
 
 ## ③ ④ 建议的顺序
 
