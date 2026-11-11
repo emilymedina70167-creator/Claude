@@ -838,8 +838,9 @@ test('D1-2：课堂循环里同一下做到两条挑战，发给老师的那一�
   const { createLoop } = await import('../kit/src/stage/loop.js');
   const tick = () => new Promise((r) => setTimeout(r, 0));
   const scene = new Scene();
-  scene.goals.set('g5', { id: 'g5', text: '第 5 条', met: true });
-  scene.goals.set('g6', { id: 'g6', text: '第 6 条', met: true });
+  for (const c of parseScript('array a = 2 1\nopen a\ngoal g5 "第 5 条" when="a sorted"\ngoal g6 "第 6 条" when="a.1 = 1"')) scene.apply(c);
+  scene.apply(parseScript('swap a.1 a.2')[0], { by: 'student', open: 'drag' });
+  assert.ok(scene.goals.get('g5').met && scene.goals.get('g6').met);
   const stage = { log: [], scene, teacherAudit: [], reacting: null, studentChain: null, pendingGoals: () => [] };
   const rows = [];
   createLoop({ stage, addTurn: (r) => { const x = { ...r, seq: rows.length + 1 }; rows.push(x); return x; }, putTurn: () => {}, note: () => {} });
