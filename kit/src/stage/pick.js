@@ -137,6 +137,21 @@ const SLOTS = ['原形', '时间', '状态', '主语', '被动', '否定'];
 const shownOf = (p) => p.raw ?? `{${p.name}: ${p.alts.join(' | ')}}`;
 // 一格里写的是拨词的拨盘的名字：取它现在的词；不是就当词用。情态动词（can must…）、主语（he it…）和拨盘重名时拨盘优先
 const slotText = (a, vars) => (NAME.test(a) && vars.get(a)?.options ? varText(vars.get(a)) : a);
+export const UNSAYABLE = '不这样说'; // 拨到一般不说的组合时句子里写的（中文：切词时是一个词，学生一眼看出这里没有英文）
+const isTime = (w) => { try { readTime(w); return true; } catch { return false; } };
+/**
+ * 时间那一格：拨盘是时间轴上的把手（小人、条的一头）、停靠点不是「过去 / 现在 / 将来」这样的词（年份）时，照它在 now= 之前、
+ * 正好、之后分成过去 / 现在 / 将来。返回 { text, from? }（from：照位置分的，写给老师看是从哪来的）
+ */
+function timeSlot(a, vars) {
+  const x = NAME.test(a) ? vars.get(a) : null;
+  if (!x?.options) return { text: a };
+  const w = varText(x);
+  if (isTime(w)) return { text: w };
+  if (!x.owner) return { text: w };
+  if (!x.nowAt) throw new Error(`拨盘 ${a} 是时间轴 ${x.owner} 上的，停在「${w}」分不出过去还是将来：时间轴写上 now=（哪个停靠点是现在）`);
+  return x.v < x.nowAt ? { text: '过去', from: `${a} 在 ${w}，「${x.options[x.nowAt - 1]}」之前` } : x.v === x.nowAt ? { text: '现在' } : { text: '将来', from: `${a} 在 ${w}，「${x.options[x.nowAt - 1]}」之后` };
+}
 /** 一个 {verb: …} 现在拼出来是什么：{ text, base, time, aspect, subject（'I' 'you' '3s' 'pl'）, passive, negative, regular }；拼不了抛错 */
 export function verbNow(p, vars) {
   const a = p.alts;
@@ -144,7 +159,8 @@ export function verbNow(p, vars) {
   for (const x of a) if (/[{}]/.test(x)) throw new Error(`「${shownOf(p)}」：格子里写词或者拨盘的名字，不能再套一层 {…}（主语要跟着拨盘走，就写那个拨盘的名字）`);
   for (const x of a.slice(1)) if (NAME.test(x) && vars.has(x) && !vars.get(x).options) throw new Error(`「${shownOf(p)}」：${wordDialError(x, vars.get(x))}`.replace('这里要一个拨数的（dial k = 1 range=1..5）', '这里要一个拨词的（dial t = 现在 options="过去 现在 将来"）').replace('是拨词的拨盘', '是拨数的拨盘'));
   const f = formsOf(a[0]);
-  const opt = { time: slotText(a[1] || '', vars), aspect: slotText(a[2] || '', vars), subject: slotText(a[3] || '', vars), passive: false, negative: false };
+  const ts = timeSlot(a[1] || '', vars);
+  const opt = { time: ts.text, aspect: slotText(a[2] || '', vars), subject: slotText(a[3] || '', vars), passive: false, negative: false };
   for (const x of a.slice(4)) {
     const w = slotText(x, vars);
     const hit = VOICE[w] || VOICE[w.toLowerCase()];
@@ -155,7 +171,9 @@ export function verbNow(p, vars) {
   const early = VOICE[opt.subject];
   if (early) { opt[early[0]] = early[1]; opt.subject = ''; }
   const T = readTime(opt.time), A = readAspect(opt.aspect), who = readSubject(opt.subject);
-  return { text: conjugate(a[0], opt), base: f.base, time: T.modal || T.time, aspect: A, subject: who, passive: opt.passive, negative: opt.negative, regular: f.regular };
+  const out = { base: f.base, time: T.modal || T.time, ...(ts.from ? { timeFrom: ts.from } : {}), aspect: A, subject: who, passive: opt.passive, negative: opt.negative, regular: f.regular };
+  // 词都认得、只是一般不这样说（完成进行的被动）：不抛错，交「不这样说」和为什么（写下时不拦：学生拨到那儿自己看到没有这种说法）
+  try { return { ...out, text: conjugate(a[0], opt) }; } catch (err) { if (!err.unsayable) throw err; return { ...out, text: UNSAYABLE, unsayable: err.message }; }
 }
 /** 写下时查：用到的拨盘能拨到的每一种组合都拼一遍，哪一种拼不了当场报（话里带是拨到哪时） */
 function checkVerb(p, vars) {
@@ -175,5 +193,7 @@ export function verbFact(p, vars) {
   let v;
   try { v = verbNow(p, vars); } catch { return ''; }
   const who = { I: '主语 I', you: '主语 you', '3s': '主语单数', pl: '主语复数' }[v.subject];
-  return `${v.base}，${v.time} × ${v.aspect}，${who}${v.passive ? '，被动' : ''}${v.negative ? '，否定' : ''} → ${v.text}${v.regular ? '（照规则变的：不规则就写成 原形/过去式/过去分词）' : ''}`;
+  const head = `${v.base}，${v.time}${v.timeFrom ? `（${v.timeFrom}）` : ' '}× ${v.aspect}，${who}${v.passive ? '，被动' : ''}${v.negative ? '，否定' : ''} → `;
+  if (v.unsayable) return `${head}拼不出来，画面上写的是「${UNSAYABLE}」（${v.unsayable}）`;
+  return `${head}${v.text}${v.regular ? '（照规则变）' : ''}`;
 }

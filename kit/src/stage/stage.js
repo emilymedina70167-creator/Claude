@@ -839,7 +839,7 @@ export class Stage {
       }
       // 预写里有新的一问：换掉正在等的那一问。别的（收起「给个提示」、叫不叫老师）课堂循环看学生手上还有没有事再定（loop.js）
       const w = this.scene.waiting;
-      if (w && w !== this.armedFor) { this.cancelWait?.(); this.armWait(); }
+      if (w && w !== this.armedFor) { this.cancelWait?.(); this.armWait(); } else this.resyncWait?.();
     }).catch((e) => { this.errors.push({ line: 0, src: '', error: `预写的行没演好：${e.message}` }); });
     return this.reacting;
   }
@@ -1349,6 +1349,9 @@ export class Stage {
     const jobs = [];
     // 拨数先摆（别的字可能贴着它）
     const order = [...sc.labels.values()].sort((a, b) => (b.dial ? 1 : 0) - (a.dial ? 1 : 0));
+    // 同一样东西旁边的几个拨盘：前面的一个要重摆，后面的跟着重摆（照造的先后排）。不然一个变宽了单独重摆，
+    // 会绕到另一个的另一边去——学生眼里两个拨盘上下换了位置（主线第五轮首课走查）
+    const redo = new Set();
     for (const l of order) {
       let cur = this.labelNodes.get(l.id);
       // 贴在藏着的东西上的字不画（下面照「没了的」淡掉，show 以后再贴上来）
@@ -1370,7 +1373,18 @@ export class Stage {
       const obs = this.obstacles(l.id);
       // 东西变矮了（泳道 merge 回一排）也要重摆：以前只看左上角和宽，贴在它下面的字、拨盘留在老地方（D1-11）
       const stale = !cur.box || !cur.anchor || Math.abs(cur.anchor.x - anchor.x) > 1 || Math.abs(cur.anchor.y - anchor.y) > 1 || Math.abs(cur.anchor.w - anchor.w) > 1 || Math.abs((cur.anchor.h ?? anchor.h) - anchor.h) > 1 || cur.box.w !== size.w || obs.some((o) => overlaps(grow(cur.box, 1), o));
-      if (!stale) continue;
+      if (!stale && !redo.has(l.id)) continue;
+      if (l.dial) {
+        const key = l.refs.join(' ');
+        let after = false;
+        for (const m of order) {
+          if (m === l) { after = true; continue; }
+          if (!after || !m.dial || m.refs.join(' ') !== key) continue;
+          redo.add(m.id);
+          const cm = this.labelNodes.get(m.id);
+          if (cm) cm.box = null; // 它的老位置不挡着前面这一个
+        }
+      }
       const prefer = l.side ? [l.side, 'above', 'below', 'right', 'left'] : ['above', 'below', 'right', 'left'];
       let p = placeLabel(anchor, size, obs, { prefer, gap: l.dial ? 18 : 12 });
       // 老师写了 side=above / below，那一边只是被别的东西占着：照写的那一边摆（只躲别的字），东西会让开——
@@ -1425,7 +1439,16 @@ export class Stage {
       // {t: 甲 | 乙 | 丙}：写现在那一段；still（话）不跟着变
       if (p.k === 'pick') { const s = el('span', 'st-pick', node); s.textContent = pickNow({ name: p.name, alts: p.alts, raw: p.v }, this.scene.vars); if (!still) s.__pick = { name: p.name, alts: p.alts, raw: p.v }; glyphs?.push(s); continue; }
       if (p.k === 'text') {
-        if (glyphs) for (const ch of p.v) { const s = el('span', 'st-ch', node); s.textContent = ch; glyphs.push(s); }
+        if (glyphs) {
+          // 一个字一个字出来；连着的英文字母、数字（will、1830）包在一个不折行的壳里——不然一个字一个 inline-block，
+          // 行尾会把 1830 折成「1」和「830」（主线第五轮首课走查）
+          let box = null;
+          for (const ch of p.v) {
+            const wordy = /[A-Za-z0-9'’]/.test(ch);
+            if (wordy && !box) box = el('span', 'st-nb', node); else if (!wordy) box = null;
+            const s = el('span', 'st-ch', box || node); s.textContent = ch; glyphs.push(s);
+          }
+        }
         else node.appendChild(document.createTextNode(p.v));
       } else if (p.k === 'ref') { const chip = this.chip(p.v); node.appendChild(chip); glyphs?.push(chip); }
       else if (p.k === 'var') {
@@ -1493,19 +1516,35 @@ export class Stage {
     const dec = el('button', 'st-dial-b', node); dec.type = 'button'; dec.textContent = '‹'; dec.setAttribute('aria-label', `${name} 小一点`);
     const lab = el('span', 'st-dial-v', node);
     const inc = el('button', 'st-dial-b', node); inc.type = 'button'; inc.textContent = '›'; inc.setAttribute('aria-label', `${name} 大一点`);
-    const paint = () => { const v = this.scene.vars.get(name); if (!v) return; lab.innerHTML = '<i class="st-math"></i> = <b></b>'; lab.firstChild.textContent = name; lab.lastChild.textContent = varText(v); dec.disabled = v.v <= v.lo; inc.disabled = v.v >= v.hi; };
+    const paint = () => {
+      const v = this.scene.vars.get(name); if (!v) return;
+      // 拨词的拨盘只写那个词（「t = 现在」里的 t 是老师起的代号，对学生是多出来的字；两个拨盘照里面的词分得开）。拨数的照旧写「d = 5」
+      // 宽度照最长的那个词定：换词的时候 ‹ › 不挪（学生连着点同一个地方）
+      if (v.options) { lab.innerHTML = '<b></b>'; node.classList.add('is-words'); lab.style.minWidth = `${(Math.max(...v.options.map((w) => [...w].reduce((n, ch) => n + (ch.charCodeAt(0) > 255 ? 1 : 0.6), 0))) * 1.1 + 0.6).toFixed(1)}em`; } else { lab.innerHTML = '<i class="st-math"></i> = <b></b>'; lab.firstChild.textContent = name; }
+      lab.lastChild.textContent = varText(v); dec.disabled = v.v <= v.lo; inc.disabled = v.v >= v.hi; };
     node.__paint = paint;
     paint();
+    // want：已经点了、还排着没演到的那个值。连着点 › › ›（上一下的句子还在重排）要从它接着数——以前从场景里还没改的旧值数，
+    // 第二下和第一下拨到同一个值，等于被吞了（主线第五轮首课走查：真手指连点三下只走两格）
+    let want = null, last = null;
+    const at = () => want ?? this.scene.vars.get(name).v;
     const set = (v) => {
       const cur = this.scene.vars.get(name);
       const nv = Math.max(cur.lo, Math.min(cur.hi, v));
-      if (nv === cur.v) return;
+      const from = at();
+      if (nv === from) return;
       // 拨词的拨盘（options=）：交出去的是词（set t 将来；课堂写「学生拨了 t：现在 → 将来」）
       const w = (k) => (cur.options ? cur.options[k - 1] : k);
-      this.studentDo(`set ${name} ${w(nv)}`, { type: 'dial', name, value: w(nv), from: w(cur.v) });
+      want = nv;
+      // 排着还没开始演的上一下不演了，直接拨到最后点到的那个值（连点三下演一次，不是排着队演三次动画）
+      if (last && !last.started) last.cancelled = true;
+      const job = last = { started: false, cancelled: false };
+      const act = { type: 'dial', name, value: w(nv), from: w(from) };
+      Promise.resolve(this.studentDo(`set ${name} ${w(nv)}`, act, { cancelled: () => job.cancelled, onStart: () => { job.started = true; act.from = w(this.scene.vars.get(name).v); } }))
+        .finally(() => { if (want === nv) want = null; paint(); });
     };
-    dec.addEventListener('click', () => set(this.scene.vars.get(name).v - 1));
-    inc.addEventListener('click', () => set(this.scene.vars.get(name).v + 1));
+    dec.addEventListener('click', () => set(at() - 1));
+    inc.addEventListener('click', () => set(at() + 1));
     // 按住数字左右拖也能拨（一格 36px）
     let sx = null, sv = 0;
     lab.addEventListener('pointerdown', (e) => { sx = e.clientX; sv = this.scene.vars.get(name).v; lab.setPointerCapture?.(e.pointerId); });
@@ -1522,7 +1561,7 @@ export class Stage {
   // 拨数、拨格子（± 拨数器）的每一下还挂上挑战每一句那时成不成立，events.js 照它把一条路写成「Dd = O：✗ ✗ ✗ ✓」：
   // 一条路的第一下记下那时还没做到的挑战（ids），marks0 是这一下之前；每一下都拿这一组 ids 判（做到了的那一停照样标得出 ✓），
   // marks 是这一下之后，met 是这一下做到的挑战
-  studentDo(src, act) {
+  studentDo(src, act, { cancelled = null, onStart = null } = {}) {
     const [c] = parseScript(src);
     const runKey = act.type === 'dial' ? `dial:${act.name}` : act.type === 'edit' ? `edit:${act.ref}` : null;
     let run = null;
@@ -1542,6 +1581,9 @@ export class Stage {
     };
     this.studentChain = (this.studentChain || Promise.resolve())
       .then(() => {
+        // 排着的时候被后一下顶掉了（拨盘连着点）：不演、不告诉课堂
+        if (cancelled?.()) { sent = true; return null; }
+        onStart?.();
         // 照这一下真演的时候判（前一下可能还在演）
         if (runKey) {
           let r = this.dialRuns.get(runKey);
@@ -1554,6 +1596,7 @@ export class Stage {
         return this.exec({ ...c, dragged: act.type === 'drag' }, { by: 'student', act, told });
       })
       .catch(() => {})
+      .then(() => { this.resyncWait?.(); })
       .then(told);
     return this.studentChain;
   }
@@ -1701,9 +1744,20 @@ export class Stage {
       this.cancelWait = () => finish({ type: 'cancel' });
       const sc = this.scene;
       const partsOf = (refs) => (refs.length ? refs.flatMap((r) => sc.parts(r)) : sc.allParts());
+      // 能点的那几个照现在的舞台挂：等着的时候句子重排了（学生拨了拨盘、拖了小人，新换上来的词是新的节点），
+      // 新的补挂上、没了的收掉（resyncWait，学生每做完一下、预写演完都叫一次）。以前只在问的那一刻挂一次：新词没有下划线、点不了
+      const armed = new Map(); // pid → 收掉它
+      const syncTaps = (arm) => {
+        let ps = [];
+        try { ps = partsOf(w.refs); } catch { return; }
+        const now = new Set(ps.map(pidOf));
+        for (const [pid, off] of armed) if (!now.has(pid) || !this.nodes.get(pid)?.classList.contains('is-tap')) { off(); armed.delete(pid); }
+        for (const x of ps) if (!armed.has(pidOf(x)) && this.nodes.get(pidOf(x))) armed.set(pidOf(x), arm(x));
+      };
+      const tapsOn = (arm) => { syncTaps(arm); this.resyncWait = () => { if (!over) syncTaps(arm); }; offs.push(() => { this.resyncWait = null; for (const off of armed.values()) off(); armed.clear(); }); };
       if (w.kind === 'tap') {
-        for (const x of partsOf(w.refs)) offs.push(this.armTap(x, () => {
-          const act = tapAnswer(sc, x, w.expect);
+        tapsOn((x) => this.armTap(x, () => {
+          const act = tapAnswer(sc, sc.partOf(x.obj, x.key) || x, w.expect);
           this.onAct?.(act);
           finish(act);
         }));
@@ -1718,15 +1772,15 @@ export class Stage {
         btn.textContent = `${w.button || '点好了'} →`;
         btn.disabled = true;
         this.tween(btn, [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 360, easing: EASE.out });
-        for (const x of partsOf(w.refs)) {
+        tapsOn((x) => {
           const pid = pidOf(x);
-          offs.push(this.armTap(x, () => {
+          return this.armTap(x, () => {
             if (over) return;
             if (chosen.has(pid)) chosen.delete(pid); else chosen.set(pid, x);
             this.nodes.get(pid)?.classList.toggle('is-picking', chosen.has(pid));
             btn.disabled = !chosen.size;
-          }));
-        }
+          });
+        });
         offs.push(() => { for (const pid of chosen.keys()) this.nodes.get(pid)?.classList.remove('is-picking'); });
         btn.addEventListener('click', async () => {
           if (over || btn.disabled) return;

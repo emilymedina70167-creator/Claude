@@ -552,6 +552,24 @@ export const FIRST = [
     nots: [C(/引擎走的那条路/, '一趟中间不说在不在路上'), C(/你在 open 那一行写了 call=wrong/, '到一趟叫老师不说成 call=wrong')],
     noAudit: [C(/压着/), C(/出了屏幕/)],
   },
+  {
+    id: '时态', files: ['tense.txt'],
+    checks: [
+      C(/谓语是页面拼的：combine，将来 × 完成进行，主语复数 → will have been combining/, '两个拨盘拨出四个词的谓语'),
+      C(/谓语是页面拼的：hold，过去 × 进行，主语复数 → were holding/, '小人拖到过去：句子跟着变'),
+      C(/谓语是页面拼的：become，过去（me 在 1830，「现在」之前）× 完成，主语复数 → had become/, '停靠点是年份：照在现在之前算过去'),
+      C(/事件条 ind：1800 → 1830「变成独立国家」，右端正好到 me/, '时间轴写条和小人的先后'),
+      C(/拼不出来，画面上写的是「不这样说」/, '拨到一般不说的组合：不拦，照实说'),
+    ],
+    called: [
+      C(/漏点了 s\.3、s\.4|漏了[^\n]*s\.3/, '点谓语漏了两个词'),
+      C(/学生点了 h\.\d（holding[^）]*）——你预期的是 h\.holding，点对了/, '点出一直没变的词'),
+      C(/拨到 1830 时做到了 g2/, '小人站到 1830 做到挑战'),
+      C(/学生填了「has been work」——正确答案是 has been working，填错了（页面看出来：be 后面要 doing）/, '页面拼的标准答案和老师写的常见错答'),
+      C(/学生填了「has been working」——正确答案是 has been working，填对了/, '填对了'),
+    ],
+    noAudit: [C(/压着/), C(/出了屏幕/)],
+  },
 ];
 
 // 主线第五轮新做的（动词形式、引擎的过程表、散列表、堆）：node tools/stage-must.mjs evals/stage-gaps/new5 --table new5

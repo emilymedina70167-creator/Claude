@@ -78,3 +78,30 @@ test('自己练点「做不出来」：剩下的每一趟该是什么样都写�
   for (const x of ['swap a.4 a.7', 'swap a.2 a.5', 'move a.2 -> a.1', 'move a.4 -> a.3', 'move a.5 -> a.3', 'move a.10 -> a.9']) stu(s, x);
   assert.equal(restText(s.objects.get('a'), s), '');
 });
+
+test('跟着拨盘变的句子：占的地方照最宽最高的那种拨法算——学生拨的时候句子的框不变，拨盘、镜头不在手指下面跑', () => {
+  const s = make('dial t = 现在 options="过去 现在 将来"\ndial z = 一般 options="一般 进行 完成 完成进行"\nsentence s = "Railroads {verb: combine | t | z | 复} with each other."');
+  const box = () => s.objectBox('s');
+  const b0 = box();
+  for (const src of ['set z 完成进行', 'set t 将来', 'set z 一般', 'set t 过去']) {
+    s.apply(parseScript(src)[0], { by: 'student' });
+    assert.deepEqual(box(), b0, src);
+  }
+  // 不跟着拨盘的句子照旧（框就是它自己的大小）
+  const p = make('sentence a = "It works."\nsentence b = "It has been working for years."');
+  assert.ok(p.objectBox('a').w < p.objectBox('b').w);
+  // rewrite 以后不再跟着拨盘：框回到它自己的大小
+  run(s, 'rewrite s "It works."');
+  assert.ok(box().w < b0.w);
+});
+
+test('时间轴的停靠点少的时候摆开一点：三个停靠点的轴不至于比一句话窄一大截（字和小人太小）', async () => {
+  const { stepOf } = await import('../kit/src/stage/types/timeline.js');
+  const w = (src) => make(src).objectBox('tl').w;
+  assert.equal(stepOf({ stops: new Array(3) }), 220);
+  assert.equal(stepOf({ stops: new Array(5) }), 150);
+  assert.equal(stepOf({ stops: new Array(8) }), 108);
+  assert.equal(stepOf({ stops: new Array(10) }), 108);
+  assert.ok(w('timeline tl = 过去 现在 将来 now=现在') >= 540);
+  assert.equal(w('timeline tl = 1 2 3 4 5 6 7 8 9 10'), 2 * 54 + 9 * 108); // 十个停靠点照旧
+});

@@ -1,7 +1,7 @@
 // 时间轴的画法（types/timeline.js 的画面那一半）：一条横轴、等距的停靠点（now 那一个一道竖线），
 // 上面一层层的事件条、事件点，下面的小人。小人、条能动的那一头是把手：学生按住拖到一个停靠点上（通用手势 gesturedom.js）。
 import { EASE } from '../motion.js';
-import { TL, stopX, rowsY } from './timeline.js';
+import { TL, stopX, stepOf, rowsY } from './timeline.js';
 import { openParts, screenOf } from '../gesturedom.js';
 
 const tr = (x, y) => `translate(${x}px, ${y}px)`;
@@ -30,9 +30,9 @@ export const timelineView = {
       fix(stage, d, box, ctx, entering);
       return d;
     };
-    mk('axis', 'tl-axis', { x: stopX(o, 1) - 18, y: R.axis - 1.5, w: (n - 1) * TL.STEP + 36, h: 3 });
+    mk('axis', 'tl-axis', { x: stopX(o, 1) - 18, y: R.axis - 1.5, w: (n - 1) * stepOf(o) + 36, h: 3 });
     o.stops.forEach((name, i) => {
-      const d = mk(`tick:${i + 1}`, 'tl-tick', { x: stopX(o, i + 1) - TL.STEP / 2, y: R.axis - 7, w: TL.STEP, h: TL.AXIS + 10 }, (x) => { el('i', '', x); el('span', '', x); });
+      const d = mk(`tick:${i + 1}`, 'tl-tick', { x: stopX(o, i + 1) - stepOf(o) / 2, y: R.axis - 7, w: stepOf(o), h: TL.AXIS + 10 }, (x) => { el('i', '', x); el('span', '', x); });
       if (d.lastChild.textContent !== name) d.lastChild.textContent = name;
       d.classList.toggle('is-now', name === o.now);
     });
@@ -94,7 +94,7 @@ export const timelineView = {
     }))),
     // 落点：每个停靠点一竖条（从最上面一层到小人脚下）；拖着的时候那一个刻度亮起来
     stop: (stage, o) => o.stops.map((name, i) => {
-      const box = () => { const R = rowsY(o); return { x: stopX(o, i + 1) - TL.STEP / 2, y: o.origin.y - 10, w: TL.STEP, h: R.bottom - o.origin.y + 20 }; };
+      const box = () => { const R = rowsY(o); return { x: stopX(o, i + 1) - stepOf(o) / 2, y: o.origin.y - 10, w: stepOf(o), h: R.bottom - o.origin.y + 20 }; };
       return {
         key: `stop:${i + 1}`,
         part: () => ({ stop: i + 1 }),

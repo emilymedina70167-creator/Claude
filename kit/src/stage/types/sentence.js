@@ -851,6 +851,23 @@ export function brokenMarks(o) {
  * 跟着拨盘变的句子写得对不对（写下新的一行时查）：每个 {…} 照 pick.js 查；拨盘的每一种拨法都切得成词、不超过词数上限；
  * 写了 key=、links= 的，每一种拨法都要对得上（对不上的说是哪一种拨法：key 里也照样写 {t: … | …}）
  */
+/**
+ * 跟着拨盘变的句子要占多大的地方：拨盘的每一种拨法都排一遍，取最宽、最高的（主线第五轮首课走查）。
+ * 句子的框照它算（objectBox）：学生拨的时候句子变长变短，框不变——挂在它旁边的拨盘、镜头都不动。
+ * 以前框跟着现在这一句变，拨一下拨盘就挪一下，学生接着点同一个地方点不到（点到了另一个拨盘上）。拨法太多（> 64 种）、排不了是 null
+ */
+function templateRoom(scene, o, tpl) {
+  let w = 0, h = 0;
+  try {
+    for (const st of dialStates(pickDeps(tpl), scene.vars)) {
+      const T = templateWords(tpl, st.vars);
+      const probe = { origin: { x: 0, y: 0 }, width: o.width, end: T.end, marks: [], tags: [], folds: [], cuts: [], refers: [], words: T.words.map((x, i) => ({ obj: o.id || 's', key: i + 1, slot: i + 1, value: x.value, lead: x.lead, punct: x.punct })) };
+      const b = place(probe).box;
+      w = Math.max(w, b.w); h = Math.max(h, b.h);
+    }
+  } catch { return null; }
+  return w ? { w, h } : null;
+}
 function checkTemplate(scene, id, tpl, opts) {
   for (const p of splitPicks(tpl)) if (p.k === 'pick') checkPick(p, scene.vars);
   for (const src of [opts.key, opts.links]) if (src != null) for (const p of splitPicks(src)) if (p.k === 'pick') checkPick(p, scene.vars);
@@ -954,12 +971,13 @@ export const sentence = {
       words: words.map((w, i) => ({ obj: id, key: i + 1, slot: i + 1, value: w.value, lead: w.lead, punct: w.punct, paint: null, glow: false, lift: false, dim: false, covered: false, ...(T ? { seg: T.segs[i] } : {}) })),
     };
     if (T) o.picks = { src: tpl, deps: pickDeps(tpl), now: T.now, ...(keyTpl ? { key: keyTpl } : {}), ...(linksTpl ? { links: linksTpl } : {}) };
+    if (T) { const room = templateRoom(scene, { ...o, id }, tpl); if (room) o.picks.room = room; }
     const fill = (src) => (T ? fillPicks(src, scene.vars) : src);
     // 正确拆法（老师给的，页面拿它逐词比学生拉的括号；sentence.rules.js）
     if (h.opts.key != null) o.key = parseKey(o.words, fill(h.opts.key));
     // 指代的答案（老师给的，学生从钩上拉线时页面照它判；sentence.rules.js）
     if (h.opts.links != null) o.links = parseLinks({ ...o, id }, fill(h.opts.links));
-    o.origin = old ? { ...old.origin } : scene.slotFor(layout({ ...o, origin: { x: 0, y: 0 } }).box.w);
+    o.origin = old ? { ...old.origin } : scene.slotFor(Math.max(layout({ ...o, origin: { x: 0, y: 0 } }).box.w, o.picks?.room?.w || 0));
     return o;
   },
   parts(o) { return ordered(o); },
@@ -987,7 +1005,12 @@ export const sentence = {
     if (!b) return { x: o.origin.x, y: o.origin.y, w: 1, h: 1 };
     return p.lift && !foldOfKey(o, p.key) ? { ...b, y: b.y - LIFT } : { ...b };
   },
-  objectBox(o) { return layout(o).box; },
+  objectBox(o) {
+    const b = layout(o).box;
+    // 跟着拨盘变的句子：框照最宽最高的那种拨法（templateRoom），拨的时候不变
+    const r = o.picks && !o.picks.off ? o.picks.room : null;
+    return r ? { x: b.x, y: b.y, w: Math.max(b.w, r.w), h: Math.max(b.h, r.h) } : b;
+  },
   obstacles(o) {
     const L = layout(o);
     return [
@@ -1359,7 +1382,7 @@ cut s.6 / uncut s                 第 6 个词后面断开（意群的斜线）
 refer s.3 -> s.2 / unrefer s.3    箭头：which、it 指的是谁（指一段写 s.1-2，指整句写 s）
 rewrite s "The man living next door is a doctor."    改写整句：同样的词滑到新位置，新的淡进来
 sentence s = "I {t: was holding | am holding | will be holding} it."  句子跟着拨盘 t 变（先 dial t … options=）：一拨就照 rewrite 重排，别的词编号不变、圈着那一整段的括号跟着走；key= 里那一段也写 {t: … | …}；rewrite / move 以后不再跟
-sentence v = "It {verb: go on | t | 完成 | 单} for years."  页面拼谓语：{verb: 原形 | 时间 | 状态 | 主语 | 被动 | 否定}，后面的格可以不写（现在、一般、单、主动、肯定）。每格写词，或者一个拨词的拨盘的名字（跟着拨）：时间 过去 现在 将来 过去将来（也能写情态 must can should…），状态 一般 进行 完成 完成进行，主语 I you he she it we they 或 单 / 复。话、贴的字、题卡、answer="{verb: …}" 里也能写。页面只管拼得对（现状写拼的是什么）；该用哪种时态是你教。表里没有的不规则动词照规则变（现状会说），自己给：{verb: 原形/过去式/过去分词 | …}。疑问句的倒装不拼
+sentence v = "It {verb: go on | t | 完成 | 单} for years."  页面拼谓语：{verb: 原形 | 时间 | 状态 | 主语 | 被动 | 否定}，后面的格可以不写（现在、一般、单、主动、肯定）。每格写词，或者一个拨词的拨盘的名字（跟着拨）：时间 过去 现在 将来 过去将来（也能写情态 must can should…；写时间轴上小人的拨盘，停靠点是年份也行：照在 now= 之前、之后分过去、将来），状态 一般 进行 完成 完成进行，主语 I you he she it we they 或 单 / 复。话、贴的字、题卡、answer="{verb: …}" 里也能写。页面只管拼得对（现状写拼的是什么）；该用哪种时态是你教。拨到一般不说的（完成进行的被动）那一段写成「不这样说」。表里没有的不规则动词照规则变（现状会说），自己给：{verb: 原形/过去式/过去分词 | …}。疑问句的倒装不拼
 ask drag s.7 "把 is 挪到句首"         学生按住一个词拖到别处（页面照做，再告诉你）
 学生自己拆（mark 页面照 key 判每一下）：
 open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的，交中文）= mark s.1-6 主语；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句；key 写 [Attr/NF …] 是两种都对；学生拉的括号上有 ✕，点了 = unmark s.1-6（不判）

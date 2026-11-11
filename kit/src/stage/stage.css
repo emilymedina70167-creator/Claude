@@ -113,6 +113,8 @@
 .st-dial-b:active { scale: .88; }
 .st-dial-v { min-width: 4.2em; text-align: center; font: 500 19px/1 var(--sans, sans-serif); cursor: ew-resize; touch-action: none; font-variant-numeric: tabular-nums; }
 .st-dial-v b { color: var(--st-brand); font-size: 1.1em; }
+.st-dial-v { white-space: nowrap; }
+.st-dial.is-words .st-dial-v { min-width: 3.2em; padding: 0 6px; }
 
 /* 底下的按钮（「接着」） */
 .st-dock { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; gap: 12px; padding: 0 16px max(24px, env(safe-area-inset-bottom, 0px)); pointer-events: none; }
@@ -299,3 +301,6 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-back::before { content: '↺'; margin-right: 6px; }
 .st-undo:disabled, .st-back:disabled { opacity: .4; cursor: default; }
 .st-undo:active:not(:disabled), .st-back:active:not(:disabled) { scale: .96; }
+
+/* 话里连着的英文字母、数字不在中间折行（stage.js 的 richInto） */
+.st-nb { display: inline-block; white-space: nowrap; }

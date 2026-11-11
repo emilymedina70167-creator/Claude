@@ -103,6 +103,60 @@ SECTIONS.shell = async () => {
   }
 };
 
+// —— 时态（EN-L1.2.1）：两个拨词的拨盘 + 页面拼谓语的句子；时间轴上的小人 ——
+SECTIONS.tense = async () => {
+  for (const [tag, view] of [['竖屏', { width: 820, height: 1180 }], ['横屏', { width: 1180, height: 820 }]]) {
+    const T = await open(view);
+    const words = (id) => T.page.evaluate((id) => [...window.LAStage.scene.objects.get(id).words].sort((a, b) => a.slot - b.slot).map((w) => w.value).join(' '), id);
+    const dial = (name) => T.page.evaluate((name) => { const n = window.LAStage.labelNodes.get(`dial:${name}`)?.node; if (!n) return null; const r = n.getBoundingClientRect(); const bs = [...n.querySelectorAll('.st-dial-b')].map((b) => { const q = b.getBoundingClientRect(); return { cx: q.x + q.width / 2, cy: q.y + q.height / 2, w: q.width, h: q.height }; }); return { x: r.x, y: r.y, w: r.width, h: r.height, dec: bs[0], inc: bs[1], text: n.querySelector('.st-dial-v').textContent }; }, name);
+    await T.play('dial t = 现在 options="过去 现在 将来" at=s\ndial z = 一般 options="一般 进行 完成 完成进行" at=s\nsentence s = "Railroads {verb: combine | t | z | 复} with each other."\nsay "两个拨盘随便拨。"');
+    let dt = await dial('t'), dz = await dial('z');
+    expect(`${tag}：拨词的拨盘只写词，不写「t =」`, `${dt.text}｜${dz.text}`, '现在｜一般');
+    expect(`${tag}：拨盘的 ‹ › 手指按得到（≥ 44）`, String(Math.min(dt.inc.w, dt.inc.h, dz.dec.w, dz.dec.h) >= 44), 'true');
+    // 连着点同一个地方三下（不重新量位置）：拨盘不能在手指下面跑
+    dz = await dial('z'); const spot = { x: dz.inc.cx, y: dz.inc.cy };
+    for (let i = 0; i < 3; i++) { await T.tap(spot); await T.wait(350); }
+    const tspot = { x: dt.inc.cx, y: dt.inc.cy }; // 一开始量的 t 的 ›：拨了 z 以后还在原处
+    await T.tap(tspot); await T.wait(2600);
+    expect(`${tag}：点 › 拨到将来、完成进行，句子跟着变`, await words('s'), 'Railroads will have been combining with each other');
+    dt = await dial('t'); dz = await dial('z');
+    expect(`${tag}：「完成进行」不折成两行（两个拨盘一样高）`, String(Math.abs(dz.h - dt.h) < 2), 'true');
+    expect(`${tag}：两个拨盘还是照造的先后排（t 在 z 上面），没有上下换位置`, String(dt.y < dz.y), 'true');
+    // 句子里的词点得到（ask pick 要点四个词）
+    const w3 = await T.box('s:3');
+    expect(`${tag}：句子里的一个词手指按得到（高 ≥ 40）`, String(w3.h >= 40), 'true');
+    // 时间轴：按住小人拖到「过去」那个停靠点
+    await T.play('timeline tl = 过去 现在 将来 now=现在\nstand tl me = 现在\nsentence h = "Home prices {verb: hold | me | 进行 | 复} steady."\nopen tl.me move');
+    const tick = (k) => T.page.evaluate((k) => { const r = window.LAStage.decors.get('tl').get(`tick:${k}`).getBoundingClientRect(); return { cx: r.x + r.width / 2, cy: r.y + r.height / 2 }; }, k);
+    let me = await T.box('tl:me');
+    expect(`${tag}：小人手指按得到（≥ 44）`, String(Math.min(me.w, me.h) >= 44), 'true');
+    let before = await T.srcs();
+    const past = await tick(1);
+    await T.drag({ x: me.cx, y: me.cy }, { x: past.cx, y: me.cy });
+    await T.wait(1200);
+    expect(`${tag}：小人拖到「过去」，句子跟着变`, `${await T.added(before)}｜${await words('h')}`, 'set me 过去｜Home prices were holding steady');
+    // 等着学生点词的时候句子重排了：新换上来的词（were）也点得了
+    await T.play('timeline tl = 过去 现在 将来 now=现在\nstand tl me = 现在\nsentence h = "Home prices {verb: hold | me | 进行 | 复} steady."\nopen tl.me move\nask tap h "哪个词管时间？点它"');
+    me = await T.box('tl:me');
+    await T.drag({ x: me.cx, y: me.cy }, { x: (await tick(1)).cx, y: me.cy });
+    await T.wait(1300);
+    const tappable = await T.page.evaluate(() => { const st = window.LAStage; return [...st.scene.objects.get('h').words].sort((a, b) => a.slot - b.slot).map((w) => `${w.value}:${st.nodes.get(`h:${w.key}`)?.classList.contains('is-tap') ? '能点' : '不能点'}`).join(' '); });
+    expect(`${tag}：等着点词时拖了小人，新换上来的 were 也能点`, tappable, 'Home:能点 prices:能点 were:能点 holding:能点 steady:能点');
+    before = await T.srcs();
+    const were = await T.box(await T.page.evaluate(() => { const o = window.LAStage.scene.objects.get('h'); return `h:${o.words.find((w) => w.value === 'were').key}`; }));
+    await T.tap({ x: were.cx, y: were.cy }); await T.wait(600);
+    expect(`${tag}：点 were：这一问收下了`, String(await T.page.evaluate(() => window.LAStage.scene.waiting == null)), 'true');
+    await T.play('timeline tl = 过去 现在 将来 now=现在\nstand tl me = 过去\nsentence h = "Home prices {verb: hold | me | 进行 | 复} steady."\nopen tl.me move');
+    // 松在两个停靠点中间偏将来一点：吸到将来
+    me = await T.box('tl:me'); before = await T.srcs();
+    const now = await tick(2), fut = await tick(3);
+    await T.drag({ x: me.cx, y: me.cy }, { x: now.cx + (fut.cx - now.cx) * 0.62, y: me.cy });
+    await T.wait(1200);
+    expect(`${tag}：松在「现在」「将来」中间偏将来，吸到将来`, `${await T.added(before)}｜${await words('h')}`, 'set me 将来｜Home prices will be holding steady');
+    await T.ctx.close();
+  }
+};
+
 for (const [name, fn] of Object.entries(SECTIONS)) {
   if (only && !only.includes(name)) continue;
   console.log(`\n—— ${name} ——`);

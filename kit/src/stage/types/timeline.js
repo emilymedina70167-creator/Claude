@@ -35,7 +35,9 @@ export function barLanes(o) {
   }
   return { of: out, n: lanes.length };
 }
-export const stopX = (o, i) => o.origin.x + TL.PAD + (i - 1) * TL.STEP;
+// 两个停靠点隔多远：停靠点少就摆开一点（整条轴约 600 宽），不然三个停靠点的轴只有一句话的一半宽，字和小人都太小；多了照旧 108
+export const stepOf = (o) => Math.max(TL.STEP, Math.min(220, Math.round(600 / Math.max(1, (o.stops?.length || 2) - 1))));
+export const stopX = (o, i) => o.origin.x + TL.PAD + (i - 1) * stepOf(o);
 /** 各层的 y：条（从下往上一层层）→ 事件点那一行 → 轴 → 刻度的字 → 小人 */
 export function rowsY(o) {
   const n = barLanes(o).n;
@@ -46,7 +48,7 @@ export function rowsY(o) {
 }
 function sizeOf(o) {
   const r = rowsY(o);
-  return { w: 2 * TL.PAD + (o.stops.length - 1) * TL.STEP, h: r.bottom - o.origin.y };
+  return { w: 2 * TL.PAD + (o.stops.length - 1) * stepOf(o), h: r.bottom - o.origin.y };
 }
 function objectBox(o) { return { x: o.origin.x, y: o.origin.y, ...sizeOf(o) }; }
 // 部件的框要现在的位置：拨盘在场景里，画法、场景都从 o.at（场景每一行之后写回的那一份）读
@@ -77,7 +79,8 @@ function stopOf(o, word) {
   return i;
 }
 // 一个把手 = 一个拨词的拨盘：能拨到的就是这些停靠点；不另画 ‹ ›（shown: false），owner 记着是哪条轴的
-const mkDial = (scene, o, name, v) => scene.ownDial(name, { v, lo: 1, hi: o.stops.length, at: null, shown: false, options: [...o.stops], owner: o.id });
+// nowAt：now= 那个停靠点是第几个（{verb: … | 小人的拨盘} 拿它分过去 / 现在 / 将来：停靠点写年份也行，pick.js）
+const mkDial = (scene, o, name, v) => scene.ownDial(name, { v, lo: 1, hi: o.stops.length, at: null, shown: false, options: [...o.stops], owner: o.id, ...(o.now != null ? { nowAt: o.stops.indexOf(o.now) + 1 } : {}) });
 // 每一行之后把各样东西现在的位置抄到 o.at（partBox 是纯函数、拿不到场景里的拨盘）
 export function syncAt(scene, o) {
   const at = {};

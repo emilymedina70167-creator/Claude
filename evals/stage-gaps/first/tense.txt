@@ -1,0 +1,60 @@
+# 首课走查 · 时态（EN-L1.2.1）：老师只照说明写的一整节；学生自己拨、拖小人、点词、写谓语，有做对的、漏点的、写错的
+dial t = 现在 options="过去 现在 将来" at=s
+dial z = 一般 options="一般 进行 完成 完成进行" at=s
+sentence s = "Railroads {verb: combine | t | z | 复} with each other."
+say "上面两个拨盘随便拨，盯住句子：哪儿在变，哪儿一动不动？"
+goal g1 "拨出一个四个词的谓语" when="t = 将来, z = 完成进行"
+@g1 say "四个词，还是一个谓语。"
+@g1 ask pick s "谓语是哪几个词？都点出来" button="点好了" expect="s.2-5"
+学生: dial z 进行
+学生: dial t 过去
+学生: dial z 完成进行
+学生: dial t 将来
+学生: pick s.2 s.5
+mark s.2-5 V
+say "{s.3} 和 {s.4} 也在里面：will have been combining 四个词合起来才是谓语，一句只有这一个。"
+ask next "再拨几下，看括号怎么跟着变" button="看好了"
+学生: dial z 一般
+学生: next
+remove s
+unlabel dial:t
+unlabel dial:z
+timeline tl = 过去 现在 将来 now=现在
+stand tl me = 现在
+sentence h = "Home prices {verb: hold | me | 进行 | 复} steady in most regions."
+open tl.me move
+say "换一句真题。这回时间交给小人：按住小人，拖到过去、将来各站一站。"
+ask tap h "哪个词一直没变？点它" expect=h.holding
+学生: move tl.me -> tl.过去
+学生: move tl.me -> tl.将来
+学生: tap h.holding
+remove h
+timeline tl = 1800 1830 现在 now=现在
+stand tl me = 现在
+bar tl ind = 1800..1830 "变成独立国家"
+sentence c = "By 1830 the colonies {verb: become | me | 完成 | 复} independent nations."
+open tl.me move
+say "对，holding 管「正在」，前面的 be 管时间。再看完成：句子说的是「到 1830 年已经变成」。"
+goal g2 "把小人放到能回头看见整条「变成独立国家」的最早的地方" when="me = 1830"
+@g2 say "站在 1830 回头看：had become。have 跟着站的地方变。"
+学生: move tl.me -> tl.1800
+学生: move tl.me -> tl.1830
+say "have 那个词管「站在哪」，become 管「回头看见的那件事」。现在你自己写一个。"
+ask value "He ___ (work) here since 2010. 现在还在这儿上班：谓语怎么写？" answer="{verb: work | 现在 | 完成进行 | he}" type=en wrong="has worked=写成了完成，没写进行; have been working=主语是 he; has been work=be 后面要 doing"
+学生: value has been work
+say "been 后面的词管「一直在做」，要用哪种形式？"
+ask value "再写一次：He ___ here since 2010." answer="{verb: work | 现在 | 完成进行 | he}" type=en
+学生: value has been working
+remove c
+remove tl
+dial v = 主动 options="主动 被动" at=p
+dial n = 肯定 options="肯定 否定" at=p
+dial z2 = 一般 options="一般 进行 完成 完成进行" at=p
+sentence p = "The bridge {verb: build | 过去 | z2 | 单 | v | n} by the army."
+say "对了。最后一样：被动和否定也都在谓语这一块里。三个拨盘你拨着看。"
+ask next "拨到「完成进行」的被动会怎样？试了点这里" button="试过了"
+学生: dial v 被动
+学生: dial n 否定
+学生: dial z2 完成
+学生: dial z2 完成进行
+学生: next

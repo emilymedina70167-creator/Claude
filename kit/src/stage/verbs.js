@@ -143,7 +143,8 @@ export function conjugate(base, { time = '现在', aspect = '一般', subject = 
   if (passive && isBe) throw new Error('be 没有被动');
   const perfect = A === '完成' || A === '完成进行', prog = A === '进行' || A === '完成进行';
   const lead = T.modal || (T.time === '将来' ? 'will' : T.time === '过去将来' ? 'would' : null);
-  if (passive && prog && (perfect || lead)) throw new Error(`「${T.modal || T.time}${A}」的被动一般不用（will be being done、has been being done）：换成一般、完成，或者过去 / 现在的进行`);
+  // unsayable：词都认得，只是这种说法一般不用——舞台上不拦着写，拨到那儿时写「不这样说」（pick.js）
+  if (passive && prog && (perfect || lead)) throw Object.assign(new Error(`「${T.modal || T.time}${A}」的被动一般不用（will be being done、has been being done）：换成一般、完成，或者过去 / 现在的进行`), { unsayable: true });
   const past = T.time === '过去';
   // 一串动词：每一个决定后面那个用什么形式（have 后面过去分词，进行的 be 后面 ing，被动的 be 后面过去分词）
   const chain = [...(perfect ? [{ v: 'have', next: 'part' }] : []), ...(prog ? [{ v: 'be', next: 'ing' }] : []), ...(passive ? [{ v: 'be', next: 'part' }] : []), { v: 'main' }];

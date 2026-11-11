@@ -9,7 +9,7 @@ import { parseFree, formulaSpec, compareFormula, normalizeFormula, matrixCells, 
 import { intervalSpec, equationSpec } from '../anstypes.js';
 import { parseSeqAnswer, checkSeq } from '../textcheck.js';
 import { parseAnswer, matchText } from '../entext.js';
-import { splitPicks, fillPicks, checkPick, VERB } from './pick.js';
+import { splitPicks, fillPicks, checkPick, verbNow, VERB } from './pick.js';
 import { toQ, parseRows } from './types/matrix.js';
 import { evalLive, numText } from './value.js';
 
@@ -616,7 +616,7 @@ export function checkSpec(spec = {}, scene = null, { strict = true, lenient = fa
     return;
   }
   // {verb: …} 先拼成字（写下时每一种拨法都拼一遍，拼不了当场报）
-  if (hasVerb(String(raw)) && strict) for (const p of splitPicks(String(raw))) if (p.k === 'pick' && p.name === VERB) checkPick(p, scene?.vars || new Map());
+  if (hasVerb(String(raw)) && strict) for (const p of splitPicks(String(raw))) if (p.k === 'pick' && p.name === VERB) { checkPick(p, scene?.vars || new Map()); const v = verbNow(p, scene?.vars || new Map()); if (v.unsayable) throw new Error(`answer 里的 ${p.raw}：${v.unsayable}`); }
   const s = verbFilled(String(raw).trim(), scene);
   const setLit = type === 'set' && SET_BRACES.test(s);
   const live = (/\{/.test(s) && !setLit) || /\{/.test(String(spec.wrongs ?? ''));
