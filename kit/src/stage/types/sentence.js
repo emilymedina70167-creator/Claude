@@ -346,6 +346,21 @@ function place(o) {
     const outer = brackets.filter((b) => b.line === l.line && b.depth > l.depth && b.x <= l.seg.x + 0.5 && b.x + b.w >= l.seg.x + l.seg.w - 0.5).sort((p, q) => p.depth - q.depth)[0];
     if (outer && outer.w - 12 >= l.w) l.x = Math.max(outer.x + 6, Math.min(outer.x + outer.w - 6 - l.w, l.x));
   }
+  // 两道括号交叠（不是一道套一道：「完成」罩 have been、「进行」罩 been doing）：深一层那道的竖线正好从浅一层的字上穿过去。
+  // 字在自己那道括号下面左右让一让，挑离正中最近、又不骑在竖线上的位置；让不开的照旧
+  for (const l of markLabels) {
+    const xs = [];
+    for (const b of brackets) {
+      if (b.line !== l.line || b.depth <= l.depth || b.mark === l.mark) continue;
+      if (!b.openL) xs.push(b.x);
+      if (!b.openR) xs.push(b.x + b.w);
+    }
+    const hit = (x) => xs.some((v) => v > x - 3 && v < x + l.w + 3);
+    if (!xs.length || !hit(l.x)) continue;
+    const lo = l.seg.x, hi = l.seg.x + l.seg.w - l.w;
+    const spots = xs.flatMap((v) => [v + 5, v - 5 - l.w]).filter((x) => x >= lo - 0.5 && x <= hi + 0.5 && !hit(x));
+    if (spots.length) l.x = spots.sort((p, q) => Math.abs(p - l.x) - Math.abs(q - l.x))[0];
+  }
   spread(markLabels, (l) => `${l.line}:${l.depth}`);
   // 8. 词上面的小标签：贴在那一段第一截的正上方
   const tags = [];

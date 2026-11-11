@@ -1,0 +1,5 @@
+# 排版留下的 E1-7：两道括号交叠在 been 上，「进行」那道的竖线以前从「完成」两个字上穿过去
+sentence z = "have been doing"
+mark z.1-2 完成
+mark z.2-3 进行
+say "两道括号都罩着 {z.2}。"

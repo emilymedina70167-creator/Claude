@@ -1,0 +1,16 @@
+# 排版留下的 D1-11：隔 5 个分组的弧以前拱进上面的题卡里、被盖住；merge 回一排以后拨盘以前留在泳道下面的老地方
+card q = "趟数记录（d｜这一趟后｜挪几格｜累计）" "5｜13 27 49′ 55 04 49 38 65 97 76｜5｜5"
+array a = 13 27 49′ 55 04 49 38 65 97 76
+dial d = 5 range=1-9 at=a
+group a stride=d
+say "再来一趟，这回隔 3。"
+goal g0 "把 $d$ 拨到 3" when="d = 3"
+@g0 split a
+@g0 open a undo=on
+@g0 goal g1 "三组各自排好" when="a.1 <= a.4, a.4 <= a.7, a.7 <= a.10, a.2 <= a.5, a.5 <= a.8, a.3 <= a.6, a.6 <= a.9"
+@g1 close a
+@g1 merge a
+@g1 ask say "认得这一排吗？"
+学生: dial d 3
+学生: swap a#7 a#4
+学生: swap a#5 a#2

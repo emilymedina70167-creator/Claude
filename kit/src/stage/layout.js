@@ -31,16 +31,17 @@ export const tooSmall = (scale) => Number.isFinite(scale) && scale < TINY_SCALE 
 
 /**
  * 镜头对准一块：box 放进屏幕上能用的那一块（去掉顶上字幕、底下按钮占的地方），留 pad，放大不超过 maxScale。
- * view：{ w, h }（屏幕大小）；top / bottom：屏幕上方、下方留给别的东西的高度。返回 { s, tx, ty }
+ * view：{ w, h }（屏幕大小）；top / bottom：屏幕上方、下方留给别的东西的高度；left：左边留的宽。返回 { s, tx, ty }
  */
-export function fitCamera(box, view, { pad = 36, maxScale = 1.6, minScale = 0.35, top = 0, bottom = 0, lift = 0.3 } = {}) {
-  const aw = Math.max(1, view.w - 2 * pad), ah = Math.max(1, view.h - top - bottom - 2 * pad);
+export function fitCamera(box, view, { pad = 36, maxScale = 1.6, minScale = 0.35, top = 0, bottom = 0, left = 0, lift = 0.3 } = {}) {
+  // left：屏幕左边留给别的东西的宽（横屏时挑战那一列）：画面放在它右边那一块的正中
+  const aw = Math.max(1, view.w - left - 2 * pad), ah = Math.max(1, view.h - top - bottom - 2 * pad);
   const s = Math.max(minScale, Math.min(maxScale, aw / Math.max(1, box.w), ah / Math.max(1, box.h)));
   const c = center(box);
   // 竖着放不满时不放正中间：往上提（空出来的地方上面留 lift、下面留其余），话贴在图上方，眼睛不用来回跑
   const slack = Math.max(0, ah - box.h * s);
   const y0 = top + pad + slack * lift;
-  return { s, tx: view.w / 2 - c.x * s, ty: y0 - box.y * s };
+  return { s, tx: left + (view.w - left) / 2 - c.x * s, ty: y0 - box.y * s };
 }
 
 /**

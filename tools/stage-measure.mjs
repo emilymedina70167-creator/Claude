@@ -123,6 +123,38 @@ export function measure(visual = false) {
     const l = st.scene.labels.get(id);
     if (l && l.asked && l.side && !l.dial && cur.side && cur.side !== l.side && vis(cur.node)) issues.push({ what: '贴的字没在写的那一边', a: `label:${id}（写的是 ${l.side}，画在 ${cur.side}）`, b: '', area: 0 });
   }
+  // 弧拱进了别的东西里：一样东西自己格子之间的弧（分组的连线、hop 的弧）压到别的东西上、被盖住
+  // （和 footprintBoxes 分开量一遍：弧不算进那样东西自己占的地方时，上面的「压着」量不出来）
+  for (const l of st.scene.links.values()) {
+    if (l.whole || l.a.obj !== l.b.obj || !st.linkShown(l)) continue;
+    const g = st.linkGeo(l);
+    if (!g.box || g.rail) continue;
+    const c = st.cam, r = { x: g.box.x * c.s + c.tx, y: g.box.y * c.s + c.ty, w: g.box.w * c.s, h: g.box.h * c.s };
+    const hit = items.find((it) => it.kind === 'obj' && it.id !== l.a.obj && it.rects.some((q) => hitArea(r, q) > 24));
+    if (hit && !issues.some((x) => x.what === '弧拱进了别的东西里' && x.a === `obj:${l.a.obj}` && x.b === `obj:${hit.id}`)) issues.push({ what: '弧拱进了别的东西里', a: `obj:${l.a.obj}`, b: `obj:${hit.id}`, area: 0 });
+  }
+  // 拨盘没跟着它的东西：dial … at=a 的拨盘离 a 隔了一大截（a 变矮以后拨盘留在老地方）
+  for (const [id, cur] of st.labelNodes) {
+    const l = st.scene.labels.get(id);
+    if (!l?.dial || !cur.box || !cur.anchor || !vis(cur.node)) continue;
+    const a = cur.anchor, b = cur.box;
+    const gap = Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w), a.y - (b.y + b.h), b.y - (a.y + a.h));
+    const now = st.anchorOf?.(l);
+    const far = now ? Math.max(now.x - (b.x + b.w), b.x - (now.x + now.w), now.y - (b.y + b.h), b.y - (now.y + now.h)) : gap;
+    if (far > 120) issues.push({ what: '拨盘没跟着它的东西', a: `拨盘 ${l.dial}（隔了 ${Math.round(far)}）`, b: '', area: 0 });
+  }
+  // 括号的线穿过了字：句子上两道括号交叠时，一道的竖线从另一道括号下面的字上穿过去（两样都是同一句的，压不压着量不出来）
+  {
+    const brs = [...st.root.querySelectorAll('.sn-br')].filter(vis).map((n) => ({ n, r: rect(n) }));
+    for (const m of [...st.root.querySelectorAll('.sn-mk')].filter(vis)) {
+      const t = m.querySelector('.sn-mk-t') || m, r = textRect(t, vr);
+      for (const b of brs) {
+        const xs = [b.n.classList.contains('is-openl') ? null : b.r.x, b.n.classList.contains('is-openr') ? null : b.r.x + b.r.w].filter((x) => x != null);
+        const through = b.r.y < r.y + r.h - 2 && b.r.y + b.r.h > r.y + 2 && xs.some((x) => x > r.x + 1.5 && x < r.x + r.w - 1.5);
+        if (through) { issues.push({ what: '括号的线穿过了字', a: `括号下的字「${t.textContent.trim()}」`, b: '', area: 0 }); break; }
+      }
+    }
+  }
   // 缩得太小：整台缩到字难认（舞台自己记在 scene.tiny，和现状里那一行同一个判断）
   if (st.scene.tiny != null) issues.push({ what: '缩得太小', a: `整台缩到了 ${st.scene.tiny} 成`, b: '', area: 0 });
   return { issues, cam: st.cam };

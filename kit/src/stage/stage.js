@@ -785,6 +785,13 @@ export class Stage {
       if (!t || !n.offsetWidth || !n.offsetHeight) continue;
       boxes.push({ x: t.x, y: t.y, w: n.offsetWidth, h: n.offsetHeight });
     }
+    // 它自己的格子之间拱起来的弧（分组的连线、hop 留下的弧）也是它画的：以前不算，弧拱到上面那样东西里去、被盖住，
+    // 排版检查也量不出来（主线第一轮留下的 D1-11：隔 5 个分组的弧被上面的题卡盖住）。连到别的东西的线不算（不是哪一样自己的）
+    for (const l of this.scene.links.values()) {
+      if (l.whole || l.a.obj !== id || l.b.obj !== id || !this.linkShown(l)) continue;
+      const g = this.linkGeo(l);
+      if (g.box && !g.rail) boxes.push(g.box);
+    }
     return boxes;
   }
   /** 屏幕上（相对 view）被占着的地方：别的东西、贴的字、话、挑战、底下一条（浮出来的东西——拨数器——用它躲开）。except：自己那一样 */
@@ -1357,7 +1364,8 @@ export class Stage {
       const anchor = this.anchorOf(l) || bbox(sc.shownIds().map((id) => sc.objectBox(id))) || { x: 0, y: 0, w: 1, h: 1 };
       const size = { w: cur.node.offsetWidth || 80, h: cur.node.offsetHeight || 32 };
       const obs = this.obstacles(l.id);
-      const stale = !cur.box || !cur.anchor || Math.abs(cur.anchor.x - anchor.x) > 1 || Math.abs(cur.anchor.y - anchor.y) > 1 || Math.abs(cur.anchor.w - anchor.w) > 1 || cur.box.w !== size.w || obs.some((o) => overlaps(grow(cur.box, 1), o));
+      // 东西变矮了（泳道 merge 回一排）也要重摆：以前只看左上角和宽，贴在它下面的字、拨盘留在老地方（D1-11）
+      const stale = !cur.box || !cur.anchor || Math.abs(cur.anchor.x - anchor.x) > 1 || Math.abs(cur.anchor.y - anchor.y) > 1 || Math.abs(cur.anchor.w - anchor.w) > 1 || Math.abs((cur.anchor.h ?? anchor.h) - anchor.h) > 1 || cur.box.w !== size.w || obs.some((o) => overlaps(grow(cur.box, 1), o));
       if (!stale) continue;
       const prefer = l.side ? [l.side, 'above', 'below', 'right', 'left'] : ['above', 'below', 'right', 'left'];
       let p = placeLabel(anchor, size, obs, { prefer, gap: l.dial ? 18 : 12 });
@@ -1555,6 +1563,31 @@ export class Stage {
     const dh = this.dock.childElementCount ? this.dock.offsetHeight + 16 : 40;
     return { top: ch + 18 + gh, bottom: Math.max(40, dh) };
   }
+  /**
+   * 镜头把 box 放在哪。挑战那几条一直摞在左上角：竖屏时它们下面才是话和画面（上面让出它们的高）；
+   * 横屏时屏幕宽、不高，挑战有四五条、话有三行，上面一让画面只剩半屏，整台缩到四成（主线第一轮留下的那一条）。
+   * 横屏时再算一种：挑战那一列留在左边，话和画面放在它右边——画面明显大（大一成以上）就用这一种，话跟着让到右边
+   */
+  fitView(box) {
+    const view = this.viewSize();
+    const cap = this.caption.style;
+    if (cap.paddingLeft) cap.paddingLeft = ''; // 先照「上面让」量话有多高
+    const { top, bottom } = this.reserve();
+    const opts = { bottom, pad: CAMERA_ROOM.pad, maxScale: 1.5, lift: 0.4 };
+    const a = fitCamera(box, view, { ...opts, top });
+    const kids = this.goalsEl?.childElementCount ? [...this.goalsEl.children].filter((n) => n.offsetWidth) : [];
+    if (!kids.length || view.w <= view.h) { this.camSide = false; return a; }
+    const left = Math.round(this.goalsEl.offsetLeft + Math.max(...kids.map((n) => n.offsetLeft + n.offsetWidth)) + 8);
+    if (left > view.w * 0.4) { this.camSide = false; return a; }
+    cap.paddingLeft = `${left}px`; // 话让到右边（窄了可能多折一行：照让过以后的高算）
+    const ch = Math.max(84, (this.caption.offsetHeight || 0) + 34);
+    const b = fitCamera(box, view, { ...opts, top: ch + 18, left });
+    // 已经在右边那一种时，差一点也不换回去（来回换画面会左右跳）
+    if (b.s >= a.s * (this.camSide ? 1.02 : 1.1)) { this.camSide = true; return b; }
+    this.camSide = false;
+    cap.paddingLeft = '';
+    return a;
+  }
   focusBox() {
     const sc = this.scene;
     const boxes = [];
@@ -1573,8 +1606,7 @@ export class Stage {
   async camera(box, animate = true, { fast = false } = {}) {
     if (!box) return;
     if (this.dragging) { this.camLater = true; return; }
-    const { top, bottom } = this.reserve();
-    const next = fitCamera(box, this.viewSize(), { top, bottom, pad: CAMERA_ROOM.pad, maxScale: 1.5, lift: 0.4 });
+    const next = this.fitView(box);
     const from = `translate(${this.cam.tx}px, ${this.cam.ty}px) scale(${this.cam.s})`;
     const to = `translate(${next.tx}px, ${next.ty}px) scale(${next.s})`;
     this.cam = next;
@@ -1596,8 +1628,7 @@ export class Stage {
     const box = box0 && extra && !this.scene.focus ? bbox([box0, extra]) : box0;
     if (!box) return;
     if (this.scene.focus && !this.scene.focus.some((r) => this.scene.objects.has(r))) { this.placeCaption(box, true); return; }
-    const { top, bottom } = this.reserve();
-    const next = fitCamera(box, this.viewSize(), { top, bottom, pad: CAMERA_ROOM.pad, maxScale: 1.5, lift: 0.4 });
+    const next = this.fitView(box);
     if (Math.abs(next.s - this.cam.s) / this.cam.s > 0.03 || Math.abs(next.tx - this.cam.tx) > 14 || Math.abs(next.ty - this.cam.ty) > 14) await this.camera(box, true, { fast });
     else { this.noteClipped(); this.placeCaption(box, true); }
   }
