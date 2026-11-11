@@ -32,6 +32,8 @@
 //                                               前后都在的才算（新长出来的不算）。fx 是这一行指令交的要点（句子的 move 交 moved：
 //                                               只有前后两份分不出哪一段是挪的那一段），用不上的不看。没交的照 changedKeys 比部件的值
 
+import { followRules } from './follow.js';
+
 const REGISTRY = new Map();
 
 const DEFAULTS = {
@@ -62,7 +64,9 @@ export function registerRules(type, rules = {}) {
 
 /** 一样东西的规则；没交规则的是 null */
 export function rulesOf(o) {
-  return (o && REGISTRY.get(o.type)) || null;
+  const r = (o && REGISTRY.get(o.type)) || null;
+  // 照引擎走的东西（follow.js）：下一步、判一下、事实、做完照引擎的路，盖在它自己的规则上面
+  return r && o.follow ? followRules(r, o) : r;
 }
 
 /** 挑战用的判断式：(args) => true | false | null；这样东西没有这个判断式时是 null */

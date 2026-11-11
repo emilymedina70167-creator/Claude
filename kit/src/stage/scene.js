@@ -19,6 +19,7 @@ import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPred
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder, termText } from './value.js';
 import { rulesOf, done as nextDone, checkMeasure, measureLine, changedKeys, parseMeasure } from './rules.js';
+import { followOf, followNames, startFollow, refreshFollow, followLine } from './follow.js';
 import { judge } from './referee.js';
 import { openGrabs, grabClash, placeOf, pressOf, PRESS_TEXT, ARMED_PRESS, armable, idleOf } from './gestures.js';
 
@@ -526,7 +527,7 @@ export class Scene {
     let fx;
     try { fx = this.applyOne(c) || {}; } finally { this.actor = null; }
     // 每一行之后：要跟着场景抄一份的东西抄一份（时间轴：拨盘在场景里，各样东西现在的位置抄到它身上，框是纯函数）
-    for (const o of this.objects.values()) typeOf(o).afterLine?.(this, o);
+    for (const o of this.objects.values()) { typeOf(o).afterLine?.(this, o); if (o.follow) refreshFollow(o, this); }
     // 老师动过的那样东西：那种东西自己记一笔老师摆出来的样子（树：这棵是不是排序树——学生之后摆错了不改这个结论，tree.js 的 afterTeacher）
     if (!student) { const touched = this.objects.get(fx.created ? fx.id : target); if (touched) typeOf(touched).afterTeacher?.(touched); }
     this.reflow();
@@ -1049,6 +1050,8 @@ export class Scene {
       const t = ref ? typeOf(this.objects.get(ref.obj)) : owners.length === 1 ? owners[0] : null;
       return t?.commands?.[cmd] ? { label: cmd, names: t.options?.[cmd] || [] } : null;
     }
+    // follow 的字段是引擎的（gaps、pivot、from……）：不查，引擎自己报写错的
+    if (cmd === 'follow') return { label: cmd, names: '*' };
     if (cmd === 'ask') {
       const kind = (c.args || []).find((a) => a.t === 'word')?.v;
       return OPTIONS.ask[kind] ? { label: `ask ${kind}`, names: OPTIONS.ask[kind] } : null;
@@ -1541,6 +1544,23 @@ export class Scene {
         }
         this.opens.set(`${o.id}:${action}`, e);
         return { open: e };
+      }
+      case 'follow': {
+        // follow a sort shell gaps="5 3 1"：照引擎走（follow.js）。第 2 个词是哪类算法的对应关系，第 3 个是它不写名字的那个字段，别的 字段=值 原样给引擎
+        const [target, name, head] = words;
+        const o = target && this.objects.get(target);
+        if (!o) throw new Error(`要写成 follow 舞台上的东西 照法 …（比如 follow a sort shell gaps="5 3 1"）${target ? `：舞台上没有「${target}」` : ''}`);
+        if (name === 'off') { delete o.follow; return { follow: null, id: o.id }; }
+        const a = followOf(name);
+        if (!a) throw new Error(`没有「${name || ''}」这种照法（有：${followNames().join('、') || '还没有'}）`);
+        if (!a.types.includes(o.type)) throw new Error(`${name} 接不到${typeOf(o).label}上（能接：${a.types.map((k) => TYPES[k]?.label || k).join('、')}）`);
+        const fields = { ...opts, ...(head != null && a.head ? { [a.head]: head } : {}) };
+        // 字段里的 {式子} 不跟着算：拨盘变了页面不会重跑，当场说清
+        const live = Object.entries(fields).find(([, v]) => /\{[^{}]*\}/.test(String(v)));
+        if (live && !c.lenient) throw new Error(`follow 的字段写死的数（${live[0]}="${live[1]}" 里的 {…} 不会跟着变）：拨盘变了页面不会重跑`);
+        if (a.toKey) return a.toKey.call(a, o, fields, this) || { follow: name, id: o.id };
+        try { startFollow(o, name, fields, this); } catch (err) { if (!c.lenient) throw err; }
+        return { follow: name, id: o.id };
       }
       case 'close': {
         // close B / close B edit / close（全收起）
@@ -2185,6 +2205,9 @@ export class Scene {
       // 页面数得出的量（rules.js 的 measures）和那种东西自己交的几句（树的 avl / bst），老师不用自己数
       const ml = measureLine(this, o, t.pageBits?.(o, this) || []);
       if (ml) lines.push(`  ${ml}`);
+      // 照引擎走的（follow）：到了第几趟、下一趟做完该是什么样——老师不用自己算
+      const fl = followLine(o, this);
+      if (fl) lines.push(`  ${fl}`);
     }
     const lives = this.liveNodes().filter((n) => n.live);
     // 错误前面的「{式子}」和前面写的重了，去掉

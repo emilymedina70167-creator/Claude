@@ -11,7 +11,7 @@ export const MAKERS = new Set(['array', 'tree', 'graph', 'matrix', 'product', 'p
 const IN_PLANE = new Set(['vec', 'point', 'sum']);
 
 const TALK = ['say', 'ask'];
-const HAND = ['open', 'close', 'goal', 'watch', 'keep', 'back', 'pick', 'unpick', 'press'];
+const HAND = ['open', 'close', 'goal', 'watch', 'follow', 'keep', 'back', 'pick', 'unpick', 'press'];
 const TIDY = ['remove', 'clear', 'ungoal', 'hide'];
 const SHOW = [
   'glow', 'lift', 'drop', 'paint', 'link', 'pulse', 'label', 'retext', 'camera', 'wait', 'fly', 'dim', 'cover', 'uncover', 'show', 'compare', 'dial', 'set',
