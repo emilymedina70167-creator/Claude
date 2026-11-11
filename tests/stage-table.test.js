@@ -113,7 +113,7 @@ test('学生点一格写：键盘（有 ∞）/ 输入框 / 一排选项；给�
   const p = make(`${D}\nopen T edit choices="能 不能"`);
   const ask = askFor(gestureOf(p.objects.get('T'), 'edit'), p.objects.get('T'), 'write', { to: cell(p, 1, 3) }, p.opens.get('T:edit'));
   assert.deepEqual([ask.pick, ask.choices.map((x) => x.value)], [true, ['能', '不能']]);
-  assert.equal(gestureOf(p.objects.get('T'), 'edit').toAct(p.objects.get('T'), { to: cell(p, 1, 3), role: '不能', open: p.opens.get('T:edit') }).src, 'write T.1,3 不能');
+  assert.equal(gestureOf(p.objects.get('T'), 'edit').toAct(p.objects.get('T'), { to: cell(p, 1, 3), role: '不能', open: p.opens.get('T:edit') }).src, 'write T.1,3 "不能"');
   assert.match(dryRun(make(D), 'open T edit choices="能"')[0].error, /至少两个/);
   assert.match(dryRun(make(D), 'open T edit input=text choices="a b"')[0].error, /只能写一个/);
   // 只开一列

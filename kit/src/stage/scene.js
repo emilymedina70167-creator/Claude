@@ -721,6 +721,8 @@ export class Scene {
     if (r?.mark && this.objects.has(r.obj)) throw new Error(`${cmd} 写整样东西的名字（${r.obj}）：存的、回去的是一整样`);
     const o = this.objects.get(id);
     if (!o) throw new Error(`舞台上没有「${id}」`);
+    // 存不了档的东西（时间轴：它的小人、条的一头是场景里的拨盘，存档只存东西自己，回去以后两边对不上）
+    if (typeOf(o).noKeep) throw new Error(typeOf(o).noKeep);
     // 跟着算的：用了 {…} 的（矩阵格里有 {k} 的也算）、乘积（整样跟着 A、B）
     if (this.nodesOf(o).some((n) => n.id === o.id)) throw new Error(cmd === 'back' ? `${id} 是跟着算的，回不去（数照式子算）` : `${id} 是跟着算的，不能存`);
     return o;
@@ -876,7 +878,12 @@ export class Scene {
     return !!o?.cells && !o.collect && !o.live && [...this.opens.values()].some((e) => e.obj === id && typed(e));
   }
   /** 还有没有空着的格（_） */
-  blankLeft(id) { return !!this.objects.get(id)?.cells?.some((x) => x.value === ''); }
+  blankLeft(id) {
+    const o = this.objects.get(id);
+    // 那种东西自己说（表：只看交给学生的那几格，只开一列时写满这一列就没有了）
+    if (o && typeOf(o).blankLeft) return typeOf(o).blankLeft(this, o);
+    return !!o?.cells?.some((x) => x.value === '');
+  }
 
   // @g1 开头的行：先记着，g1 做到了再演。在现在的舞台上把这一挑战记着的行连着试一遍，写错了当场告诉老师。
   // 能套三层（PREWRITE_DEPTH）：@g1 里写出的 goal g2，接着写 @g2 …（g2 还没有，记进 ahead，g1 做到、演出 goal g2 时挪过去）
@@ -1805,7 +1812,12 @@ export class Scene {
     if (!keepLabels) for (const [k, l] of this.labels) if (l.refs.some((r) => parseRef(r)?.obj === id)) this.labels.delete(k);
     this.binds = this.binds.filter((b) => b.obj !== id);
     // 这样东西自己的拨盘（时间轴上的小人、条能动的一头）跟着没了
-    for (const [k, v] of this.vars) if (v.owner === id) this.vars.delete(k);
+    for (const [k, v] of this.vars) {
+      if (v.owner !== id) continue;
+      this.vars.delete(k);
+      // 跟着这个拨盘变的字（句子）：拨盘没了，不再跟（不然下一次重排会把模板原文写进句子），现状里写明
+      for (const o of this.objects.values()) if (o.picks?.deps?.includes(k) && !o.picks.off) o.picks.off = 'gone';
+    }
     for (const [k, e] of this.opens) if (e.obj === id) this.opens.delete(k);
     // 换了一样新的：上一样淡淡圈着的、做没做完、预写的做完 / 做对一步都不算了
     this.slips.delete(id);
@@ -2104,6 +2116,20 @@ export class Scene {
       if (r) out.push(r);
     }
     return out;
+  }
+  /**
+   * 一样东西给自己造了一个拨盘（时间轴上的小人、条的一头）：和老师写 dial 一样先查用它的字段数对不对得上（对不上抛错），
+   * 造好以后拨盘没了的句子（picks.off === 'gone'）要是又对得上了就接着跟，跟着它的句子照新的值重排
+   */
+  ownDial(name, x) {
+    this.checkPickUsers(name, x);
+    this.vars.set(name, x);
+    for (const o of this.objects.values()) {
+      if (o.picks?.off !== 'gone' || !o.picks.deps.every((d) => this.vars.has(d))) continue;
+      try { for (const p of splitPicks(o.picks.src)) if (p.k === 'pick') checkPick(p, this.vars); } catch { continue; } // 段数对不上：照旧不跟
+      delete o.picks.off;
+    }
+    this.repick(name);
   }
   /** 拨盘 name 要换成 x：用了 {name: … | …} 的句子、贴的字、挑战的字，段数还对不对得上；对不上抛错（说是谁） */
   checkPickUsers(name, x) {

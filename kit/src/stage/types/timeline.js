@@ -77,7 +77,7 @@ function stopOf(o, word) {
   return i;
 }
 // 一个把手 = 一个拨词的拨盘：能拨到的就是这些停靠点；不另画 ‹ ›（shown: false），owner 记着是哪条轴的
-const mkDial = (scene, o, name, v) => scene.vars.set(name, { v, lo: 1, hi: o.stops.length, at: null, shown: false, options: [...o.stops], owner: o.id });
+const mkDial = (scene, o, name, v) => scene.ownDial(name, { v, lo: 1, hi: o.stops.length, at: null, shown: false, options: [...o.stops], owner: o.id });
 // 每一行之后把各样东西现在的位置抄到 o.at（partBox 是纯函数、拿不到场景里的拨盘）
 export function syncAt(scene, o) {
   const at = {};
@@ -99,6 +99,8 @@ export const timeline = {
   label: '时间轴',
   create: ['timeline'],
   options: { timeline: ['now'], bar: ['start', 'end'] },
+  // 存不了档（scene.js 的 keptObject 照这句报）
+  noKeep: '时间轴存不了档（keep / back）：它上面的小人、条的一头是拨盘，存档存不进去。要回到某一处就 set 小人的名字 停靠点',
   hint: '（时间轴：名字.me 是上面叫 me 的那一样东西（小人、事件条、事件点）；小人、条能动的那一头是拨词的拨盘，set me 现在 就走过去）',
   make(scene, c, h, old) {
     const id = h.words[0];
@@ -159,8 +161,10 @@ export const timeline = {
       const o = axisIn(scene, h, eg);
       const name = h.words[1];
       freshName(scene, o, name, eg);
+      if (h.str != null) throw new Error(`小人不带字（要写字就贴一个：label n ${o.id}.${name} "…"）`);
+      if (h.words.length > 3) throw new Error(`小人站在一个停靠点上：stand ${o.id} ${name} = ${h.words[2]}（多写了「${h.words.slice(3).join(' ')}」）`);
       const at = stopOf(o, h.words[2] ?? o.stops[0]);
-      o.items.push({ obj: o.id, key: name, name, kind: 'stand', at, value: name, label: h.str ?? '', ...flags() });
+      o.items.push({ obj: o.id, key: name, name, kind: 'stand', at, value: name, label: '', ...flags() });
       mkDial(scene, o, name, at);
       return { id: o.id, added: name };
     },

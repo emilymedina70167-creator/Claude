@@ -3,13 +3,14 @@
 // 学生点一格写（open T edit：数字键盘、输入框或一排选项）。页面不判对错（right 永远是 null，不当场给学生标）：
 // 老师给了答案（key=）的，每写一格在话里说「和答案一样 / 不一样（答案是几）」，写满时说一共几格不一样——只告诉老师。
 // 写满算做完（@T.done）。只做「做不做得到」：给定的格（造的时候就有值的、老师写进去的）学生写不了。
-import { cellName, keyed, answerOf, sameValue, wrongCells } from './table.js';
+import { cellName, keyed, answerOf, sameValue, wrongCells, openCells, valueAfter } from './table.js';
 
 const cellOf = (o, x) => (x?.r != null ? o.cells.find((c) => c.r === x.r && c.c === x.c) || null : x?.key != null ? o.cells.find((c) => c.key === x.key) || null : null);
 const blanks = (o) => o.cells.filter((c) => c.value === '');
 const isNum = (v) => v === '∞' || /^-?\d+(\.\d+)?(\/\d+(\.\d+)?)?$/.test(v);
-// 学生那一行指令里的值：一个词照写；有空格、引号、等号的写在引号里
-const quoted = (v) => (/^[^\s"“”=]+$/.test(v) ? v : `"${v.replace(/["“”]/g, '')}"`);
+// 学生那一行指令里的值：纯数、∞ 照写；别的一律写在引号里（箭头、花括号、和舞台上东西同名的字，不加引号会被读成别的；
+// 里面的直引号、弯引号去掉——引号套不了引号）
+const quoted = (v) => (/^(-?\d+(\.\d+)?(\/\d+)?|∞)$/.test(v) ? v : `"${v.replace(/["“”]/g, '')}"`);
 // 这一项是怎么开的：一排选项 / 输入框 / 数字键盘
 const modeOf = (e) => (e?.choices ? 'pick' : e?.input === 'text' ? 'text' : 'keypad');
 
@@ -47,7 +48,8 @@ function actOf(o, c, h, { by = null, open = null } = {}) {
   let ps;
   try { ps = h.partsIn(); } catch { return null; }
   if (ps.length !== 1 || ps[0].obj !== o.id) return null;
-  const v = h.str != null ? h.str : h.words.filter((w) => !h.scene?.isRef?.(w)).at(-1);
+  let v;
+  try { v = valueAfter(h, h.refsIn()[0]); } catch { return null; }
   if (v == null) return null;
   const t = String(v).trim();
   return { type: 'write', key: ps[0].key, value: t === '_' ? '' : t };
@@ -70,21 +72,28 @@ function check(o, act) {
   return ok(`${cellName(o, x)} 写了 ${act.value}${x.value !== '' && x.value !== act.value ? `（原来是 ${x.value}）` : ''}${versus(o, x, act.value)}`);
 }
 /** 学生这一下以后写给老师的事实：刚写满时说一共几格和答案不一样 */
-function facts(before, after) {
-  if (!blanks(before).length || blanks(after).length) return [];
-  if (!after.key) return ['写满了'];
-  const n = after.cells.filter((x) => keyed(after, x)).length;
-  const bad = wrongCells(after);
-  return [bad.length ? `写满了：比的 ${n} 格里 ${bad.length} 格和答案不一样：${bad.map((x) => `${cellName(after, x)}（写了 ${x.value}，答案是 ${answerOf(after, x)}）`).join('、')}` : `写满了：比的 ${n} 格都和答案一样`];
+function facts(before, after, act, scene) {
+  // 写满没写满看交给学生的那几格（只开一列时是这一列）
+  const mine = (o) => (openCells(scene, o) || o.cells);
+  const left = (o) => mine(o).some((c) => c.value === '');
+  if (!left(before) || left(after)) return [];
+  const all = !blanks(after).length;
+  const head = all ? '写满了' : '开着的格写满了';
+  if (!after.key) return [head];
+  const scope = new Set((all ? after.cells : mine(after)).map((c) => c.key));
+  const n = after.cells.filter((x) => scope.has(x.key) && keyed(after, x)).length;
+  if (!n) return [`${head}（这几格答案里没有要比的）`];
+  const bad = wrongCells(after).filter((x) => scope.has(x.key));
+  return [bad.length ? `${head}：比的 ${n} 格里 ${bad.length} 格和答案不一样：${bad.map((x) => `${cellName(after, x)}（写了 ${x.value}，答案是 ${answerOf(after, x)}）`).join('、')}` : `${head}：比的 ${n} 格都和答案一样`];
 }
 // 下一步：还有空格就是「写一格」（哪一格不说：页面不替老师定先填哪格）；写满了是 null（做完了）
-function next(o) { return blanks(o).length ? { acts: [{ type: 'write' }], blank: true } : null; }
+function next(o, scene) { return (openCells(scene, o) || o.cells).some((c) => c.value === '') ? { acts: [{ type: 'write' }], blank: true } : null; }
 
 const measures = {
   // 还空着几格
   blank: Object.assign((o, parts) => (parts || o.cells).filter((c) => c.value === '').length, { listed: (o) => o.cells.some((c) => c.value === '') }),
   // 和答案不一样几格（填了的才算）；没写 key= 的表没有这个量
-  wrong: Object.assign((o) => (o.key ? wrongCells(o).length : undefined), { none: '没写 key=', listed: (o) => !!o.key }),
+  wrong: Object.assign((o, parts) => { if (!o.key) return undefined; const ks = parts ? new Set(parts.map((p) => p.key)) : null; return wrongCells(o).filter((x) => !ks || ks.has(x.key)).length; }, { none: '没写 key=', listed: (o) => !!o.key }),
 };
 const predicates = {
   // 都填了

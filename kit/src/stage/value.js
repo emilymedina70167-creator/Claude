@@ -212,7 +212,7 @@ export function evalLive(src, scene, { plane, fill = null } = {}) {
     if (n in vars || BUILTIN.has(n)) continue;
     const o = scene.objects.get(n);
     // 平面上的向量：写在别的东西里要带上平面的名字
-    const on = !o && [...scene.objects.values()].find((x) => x.items?.some((i) => i.name === n));
+    const on = !o && [...scene.objects.values()].find((x) => x.type === 'plane' && x.items?.some((i) => i.name === n));
     throw new Error(`${shown}里的「${n}」${o ? `是${scene.type(o).label}，式子里写它的部件（比如 ${n}.…）` : on ? `是平面 ${on.id} 上的，写成 ${on.id}.${n}` : '不是拨数，也不是舞台上的东西'}`);
   }
   let value;

@@ -789,7 +789,7 @@ const opt2 = await page.evaluate(() => { const b = [...document.querySelectorAll
 expect('表：choices= 出一排选项，至少 44 高', String(!!opt2 && opt2.h >= 44), 'true');
 if (opt2) await tapAt(opt2);
 await page.waitForTimeout(900);
-expect('表：点一个选项交上去', `${await added(before2)}｜${await tv('Q')}`, 'write Q.2,2 不能｜Seeing □ To see 不能');
+expect('表：点一个选项交上去', `${await added(before2)}｜${await tv('Q')}`, 'write Q.2,2 "不能"｜Seeing □ To see 不能');
 
 // —— 主线第三轮 B：时间轴 open tl.me move（按住小人拖到一个停靠点）、open tl.learn stretch（拖事件条能动的那一头）——
 await play('timeline tl = 1800 1830 1900 现在 将来 now=现在\nstand tl me = 现在\nbar tl learn = 1830..1900 "学" end=e\nsentence s = "It {me: will be | was | was | is | will be} done."\nopen tl.me move\nopen tl.learn stretch');

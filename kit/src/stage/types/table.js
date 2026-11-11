@@ -22,11 +22,15 @@ export const namesOf = (v) => (String(v).includes('|') ? String(v).split('|').ma
 // 一格里写的字规整一下：_ 是空着；别的照原样（去掉两头的空格）
 const cellValue = (v) => { const t = String(v ?? '').trim(); return t === '_' ? '' : t; };
 /** 两格里的字是不是一样（和答案比）：数按数比；字不管两头和中间多余的空格、大小写、全角半角、两种减号 */
+const SUP = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', 'ⁿ': 'n', '⁻': '-', '⁺': '+' };
 export function sameValue(a, b) {
-  const norm = (v) => String(v ?? '').normalize('NFKC').replace(/[−–]/g, '-').replace(/\s+/g, ' ').trim().toLowerCase();
+  // 上标先写成 ^…（不然 NFKC 把 n² 压成 n2、2ⁿ 压成 2n，和不带上标的判成一样）；弯撇号、几种横线两边一起规整
+  const norm = (v) => String(v ?? '').replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ⁻⁺]+/g, (m) => `^${[...m].map((ch) => SUP[ch]).join('')}`)
+    .normalize('NFKC').replace(/[−–—]/g, '-').replace(/[’‘]/g, "'").replace(/\s+/g, ' ').trim().toLowerCase();
   const x = norm(a), y = norm(b);
   if (x === y) return true;
-  const num = (t) => { const m = t.match(/^(-?\d+(?:\.\d+)?)(?:\/(\d+(?:\.\d+)?))?$/); return m && !(m[2] != null && Number(m[2]) === 0) ? Number(m[1]) / (m[2] != null ? Number(m[2]) : 1) : null; };
+  // 按数比只认规范的数：有前导 0 的（0011、02：二进制、编号）照字比
+  const num = (t) => { const m = t.match(/^(-?(?:0|[1-9]\d*)(?:\.\d+)?)(?:\/([1-9]\d*))?$/); return m ? Number(m[1]) / (m[2] != null ? Number(m[2]) : 1) : null; };
   const p = num(x), q = num(y);
   return p != null && q != null && Math.abs(p - q) < 1e-9;
 }
@@ -36,6 +40,7 @@ function gridOf(args) {
   const rows = [[]];
   for (const a of args) {
     if (a.t === 'word' && a.v === '/') { rows.push([]); continue; }
+    if ((a.t === 'word' || a.t === 'str') && /[{}]/.test(a.v)) throw new Error(`表的格不跟着算，不能写 {式子}（「${a.v}」）：要跟着算的数放进矩阵，或者你算好了 write 进去`);
     if (a.t === 'word' || a.t === 'str') rows.at(-1).push(cellValue(a.v));
     else throw new Error('表的格里写数、∞、一个词、引号里的短语，或者 _（空着等填）；「 / 」分行');
   }
@@ -47,6 +52,7 @@ export function parseTableKey(src, o) {
   const rows = String(src ?? '').split(/\s+\/\s+|^\/\s+|\s+\/$/).map((r) => (r.includes('|') ? r.split('|').map((x) => cellValue(x)) : r.trim().split(/\s+/).filter(Boolean).map(cellValue)));
   if (rows.length !== o.rows) throw new Error(`key= 有 ${rows.length} 行，表有 ${o.rows} 行（key 和表一样的形状，「 / 」分行，不比的格写 _）`);
   rows.forEach((r, i) => { if (r.length !== o.cols) throw new Error(`key= 第 ${i + 1} 行有 ${r.length} 格，表有 ${o.cols} 列（不比的格写 _；答案是短语时这一行用 | 隔开）`); });
+  for (const v of rows.flat()) if (/[{}]/.test(v)) throw new Error(`key= 里不能写 {式子}（「${v}」）：表的格不跟着算，答案直接写出来`);
   for (const v of rows.flat()) if ([...v].length > VALUE_MAX) throw new Error(`key= 里「${v}」太长了（一格最多 ${VALUE_MAX} 个字）`);
   return rows;
 }
@@ -63,6 +69,18 @@ export function cellName(o, x) {
 /** 这一格比不比（有答案、答案这一格不是空的、不是造的时候就给定的） */
 export const keyed = (o, x) => !!o.key && o.key[x.r - 1]?.[x.c - 1] !== '' && o.key[x.r - 1]?.[x.c - 1] != null && !x.fixed;
 export const answerOf = (o, x) => o.key?.[x.r - 1]?.[x.c - 1] ?? '';
+/**
+ * 交给学生写的格（open T edit / open T.c1 edit：开着的那几格里不是给定的）；没交给学生是 null。
+ * 写满没写满只看这几格：只开一列时，写满这一列学生手上就没事了（scene.js 的 blankLeft、规则的 next 都照它）
+ */
+export function openCells(scene, o) {
+  const es = [...(scene?.opens?.values?.() || [])].filter((e) => e.obj === o.id && e.action === 'edit');
+  if (!es.length) return null;
+  if (es.some((e) => !e.refs?.length)) return o.cells.filter((x) => !x.given);
+  const keys = new Set();
+  for (const e of es) for (const r of e.refs) { try { for (const p of scene.parts(r)) keys.add(p.key); } catch { /* 那几格不在了 */ } }
+  return o.cells.filter((x) => keys.has(x.key) && !x.given);
+}
 /** 和答案不一样的格（填了的才算；空着的不算不一样） */
 export const wrongCells = (o) => (o.key ? o.cells.filter((x) => keyed(o, x) && x.value !== '' && !sameValue(x.value, answerOf(o, x))).sort(sortRC) : []);
 
@@ -99,8 +117,15 @@ function targetOf(scene, h, cmd, eg) {
   const m = r.mark ? String(r.sel).match(/^([rc])(\d+)$/) : null;
   return { o, ref, whole: !r.mark, row: m?.[1] === 'r' ? Number(m[2]) : null, col: m?.[1] === 'c' ? Number(m[2]) : null, cells: r.mark ? scene.parts(ref) : [], cmd };
 }
-// 老师写的值：引号里的短语，或者最后一个不是部件的词
-const valueIn = (scene, h) => (h.str != null ? h.str : h.words.filter((w) => !scene.isRef(w)).at(-1));
+// 一行 write 里写的值：那一格后面的那一个词或那一对引号（照位置取：值可以和舞台上的东西同名，write T.2,2 T）。
+// 后面多了词、有箭头（A→B 被切成三截）：抛错——短语要写在引号里，不然只收到最后一截
+export function valueAfter(h, ref) {
+  const i = h.args.findIndex((a) => a.t === 'word' && a.v === ref);
+  const rest = h.args.slice(i + 1);
+  if (!rest.length) return null;
+  if (rest.length !== 1 || (rest[0].t !== 'word' && rest[0].t !== 'str')) throw new Error(`短语写在引号里：write ${ref} "${rest.filter((a) => a.v != null).map((a) => a.v).join(' ')}"（一格后面只写一个词，或者一对引号）`);
+  return String(rest[0].v);
+}
 
 export const table = {
   type: 'table',
@@ -162,6 +187,8 @@ export const table = {
   partBox: cellBox,
   objectBox,
   obstacles(o) { return [objectBox(o)]; },
+  // 还有没有空着等学生填的格（scene.js 的 blankLeft）：交给学生的那几格里的；没交给学生看整张
+  blankLeft(scene, o) { return (openCells(scene, o) || o.cells).some((x) => x.value === ''); },
   // 挑战拿来整个比的（T = U）：照矩阵的样子交
   measure(o) { const rows = []; for (let r = 1; r <= o.rows; r++) rows.push(o.cells.filter((x) => x.r === r).sort(sortRC).map((x) => x.value)); return { kind: 'matrix', rows }; },
   commands: {
@@ -169,8 +196,9 @@ export const table = {
     write(scene, c, h) {
       const t = targetOf(scene, h, 'write', 'write T.2,3 7（写一格；短语写在引号里，_ 是空出来）');
       if (t.cells.length !== 1) throw new Error(`write 一次写一格：write ${t.o.id}.2,3 7`);
-      const v = valueIn(scene, h);
+      const v = valueAfter(h, t.ref);
       if (v == null) throw new Error(`要写成 write ${t.ref} 7（短语写在引号里，_ 是空出来）`);
+      if (/[{}]/.test(v) && scene.actor !== 'student') throw new Error('表的格不跟着算，不能写 {式子}：你算好了再 write 进去');
       const val = cellValue(v);
       if ([...val].length > VALUE_MAX) throw new Error(`「${val}」太长了：一格最多 ${VALUE_MAX} 个字`);
       const x = t.cells[0];
@@ -180,6 +208,8 @@ export const table = {
       const student = scene.actor === 'student';
       x.by = val === '' ? null : student ? 'student' : null;
       x.given = val !== '' && !student;
+      // 造的时候有值、老师又空出来等学生填的：照答案比（不再是「给定的」）
+      if (val === '' && !student) delete x.fixed;
       return { id: t.o.id, part: x, before };
     },
     // tick T.c2（一列、一行或一格打勾）、cross T.1,4（打叉：这一格不合法 / 这一列不对）、untick T（都收掉）
@@ -258,6 +288,9 @@ function markCmd(scene, h, kind) {
   const t = targetOf(scene, h, kind, eg);
   const { o } = t;
   if (t.whole) throw new Error(`${kind} 写哪一格、哪一行、哪一列：${eg}`);
+  // 行、列的记号画在行名、列名后面：没有名字的没处画，当场报
+  if (t.row && !o.rowNames.length) throw new Error(`${o.id} 没有行名，一整行的${kind === 'tick' ? '勾' : '叉'}没处画：打在格上（${kind} ${o.id}.${t.row},1），或者造表时写 rows="…"`);
+  if (t.col && !o.colNames.length) throw new Error(`${o.id} 没有列名，一整列的${kind === 'tick' ? '勾' : '叉'}没处画：打在格上（${kind} ${o.id}.1,${t.col}），或者造表时写 cols="…"`);
   if (t.row) o.marks.rows[t.row] = kind; else if (t.col) o.marks.cols[t.col] = kind; else for (const x of t.cells) x.tick = kind;
   return { id: o.id, parts: t.cells };
 }

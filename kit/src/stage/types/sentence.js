@@ -1234,6 +1234,8 @@ export const sentence = {
   onPick(scene, o) {
     const P = o.picks;
     if (!P || P.off) return null;
+    // 用到的拨盘有一个不在了（时间轴拿掉了）：不再跟（照模板重排会把 {…} 原文写进句子）
+    if (!P.deps.every((d) => scene.vars.has(d))) { P.off = 'gone'; return null; }
     let T;
     try { T = templateWords(P.src, scene.vars); } catch { return null; }
     const old = ordered(o);
@@ -1278,7 +1280,7 @@ export const sentence = {
     };
     const lines = [`句子 ${o.id}（${o.words.length} 个词${L.lines.length > 1 ? `，排成 ${L.lines.length} 行` : ''}）：${sentenceText(o, { folds: true })}`];
     lines.push(`  词：${ordered(o).map(tag).join('  ')}`);
-    if (o.picks) lines.push(o.picks.off ? `  不再跟着拨盘 ${o.picks.deps.join('、')} 变（${o.picks.off === 'rewrite' ? 'rewrite 换了整句' : 'move 挪过词'}；要再跟就重新造这句）` : `  跟着拨盘变：${(o.picks.now || []).map((x) => `${x.raw} 现在是「${x.text}」`).join('；')}`);
+    if (o.picks) lines.push(o.picks.off ? `  不再跟着拨盘 ${o.picks.deps.join('、')} 变（${o.picks.off === 'rewrite' ? 'rewrite 换了整句' : o.picks.off === 'gone' ? '拨盘没了：重新造出同样个数的就接着跟' : 'move 挪过词'}；要再跟就重新造这句）` : `  跟着拨盘变：${(o.picks.now || []).map((x) => `${x.raw} 现在是「${x.text}」`).join('；')}`);
     if (o.marks.length) {
       const lv = new Map(L.marks.map((m) => [m.mark, m.level]));
       // 成分写两种名字（定语（Attr）、谓语（V））：学生点的是中文、老师写的多半是缩写，两边都认得出（事实里照括号上写的，一个名字）

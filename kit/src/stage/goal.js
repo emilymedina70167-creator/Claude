@@ -223,10 +223,13 @@ function wordDial(scene, cl) {
   const o2 = dialOf(other);
   const want = o2 ? o2.options[o2.v - 1] : String(other).trim();
   // 两个拨盘比：要能拨到的是同一串词（同一条时间轴上的小人和条的一头；两个 options 一样的拨盘）
-  if (o2 && (o2.options.length !== x.options.length || o2.options.some((w, k) => w !== x.options[k]))) throw new Error(`「${cl.l} ${cl.op} ${cl.r}」：${cl.l} 和 ${cl.r} 不是同一条轴上的（能拨到的词不一样），比不了`);
+  const order = cl.op !== '=' && cl.op !== '!=';
+  if (order && o2 && (o2.options.length !== x.options.length || o2.options.some((w, k) => w !== x.options[k]))) throw new Error(`「${cl.l} ${cl.op} ${cl.r}」：${cl.l} 和 ${cl.r} 不是同一条轴上的（能拨到的词不一样），比不了`);
   if (!o2 && !x.options.includes(want)) throw new Error(`「${cl.l} ${cl.op} ${cl.r}」：${name} 拨不到「${want}」（能拨到：${x.options.join('、')}）`);
   // 比先后照词的先后（时间轴的停靠点从早到晚；主线第三轮 B）。写成「词 < 拨盘」的两边换回来
   const a = x.v, b = o2 ? o2.v : x.options.indexOf(want) + 1;
+  // = / != 照词比（两个词表不一样的拨盘也能比：旧课就是这样）
+  if (!order) return { now: x.options[x.v - 1], want, cmp: x.options[x.v - 1] === want ? 0 : 1 };
   return { now: x.options[x.v - 1], want, cmp: flip ? b - a : a - b };
 }
 // 拨词的拨盘这一句成不成立
