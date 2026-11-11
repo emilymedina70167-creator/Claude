@@ -246,7 +246,8 @@ export class Stage {
     // 先等学生刚才那一下、做到挑战时预写的行演完，老师新写的才接着演（不叠在一起）
     let chain = Promise.all([this.studentChain, this.reacting]).catch(() => {});
     let running = null;
-    let asked = null;
+    let asked = null; // 这一轮演上了的那一问（一轮以它结尾：它后面的行不演）
+    let askedBad = null; // 这一轮第一条没演上的 ask（写错了）：后面的行照演，后面有演上的问就挂那一问（主线第一轮 D3-3、D4-5）
     let lines = 0;
     let dead = false; // 这一轮作废了（不是指定的模型）：后面的行不演
     let said = false; // 这一轮已经开口说过：再有一句 say 就是新的一段，开演之前停下来
@@ -258,22 +259,29 @@ export class Stage {
     const run = (c) => {
       const rec = { c, ok: true };
       if (by === 'teacher') (beat ||= { start: this.log.length, cmds: [] }).cmds.push(rec);
-      return this.exec(c, { by, turn }).then((r) => { if (r === null) rec.ok = false; return r; });
+      return this.exec(c, { by, turn }).then((r) => {
+        if (r === null) rec.ok = false;
+        // 一轮以演上了的那一问结尾。以前 ask 一进队就算问过了：写错的 ask 把后面的行全吞掉，学生点什么都没反应
+        if (c.cmd === 'ask' && !c.on) { if (r === null) askedBad ||= c; else asked = c; }
+        return r;
+      });
     };
+    const afterAsk = (c) => { this.errors.push({ line: c.line, src: c.src?.trim(), error: 'ask 之后的行不演（一轮以 ask 结尾）' }); };
     const enqueue = (c) => {
       if (dead) return;
-      if (asked) { this.errors.push({ line: c.line, src: c.src?.trim(), error: 'ask 之后的行不演（一轮以 ask 结尾）' }); return; }
-      // @g1 的行只是记着（做到挑战时才演）：不算这一轮的那一问、那一句话
-      if (c.cmd === 'ask' && !c.on) asked = c;
+      if (asked) { afterAsk(c); return; }
       if (c.on === 'ask.right' && !askRightAt) askRightAt = { line: c.line, src: c.src?.trim() };
       if (c.cmd === 'goal' && !c.on) { const id = (c.args || []).find((a) => a.t === 'word')?.v; if (id) goalAt.set(id, { line: c.line, src: c.src?.trim() }); }
       lines++;
-      if (c.par && running) { running.jobs.push(run(c)); return; }
+      // & 接在正在演的那一问上：照旧不演（那一问演没演上还不知道，不能和它一起演）
+      if (c.par && running) { if (running.ask) afterAsk(c); else running.jobs.push(run(c)); return; }
       const pause = by === 'teacher' && c.cmd === 'say' && !c.on && said;
       if (c.cmd === 'say' && !c.on) said = true;
-      const batch = { jobs: [] };
+      const batch = { jobs: [], ask: c.cmd === 'ask' && !c.on };
       chain = chain.then(async () => {
         if (dead) return;
+        // 前面那一问演上了（演完才知道）：这一行不演
+        if (asked) { afterAsk(c); return; }
         if (pause) {
           await this.beat(beat, { by, turn, alive: () => !dead });
           beat = null;
@@ -323,15 +331,19 @@ export class Stage {
       // 撤一步只撤这以后学生做的（老师看过、照它讲了的不撤；和课堂循环这一段从 log 的哪里开始是同一处）
       if (!dead) { this.undoFloor = this.log.length; this.syncUndo(); }
       let act = null;
-      if (!this.instant && !dead && (asked || auto)) {
+      // 这一轮写了问、可一条都没演上：学生手上没有老师要的那一问（课堂循环看这个马上再叫老师，loop.js）
+      this.askMissed = !dead && !asked && !!askedBad;
+      if (!this.instant && !dead && (asked || askedBad || auto)) {
         if (!this.scene.waiting) {
           // 一轮没有 ask，或者 ask 那一行写错了没演上：页面替它等，不让课停在半空。
           // 写错的那一问照样把问题留在画面上，学生用话答（第一节真课 `ask tap q#2 q#3 "哪一句说得对？"` 写错了，问题没了、也没有按钮，课就停住了）；
           // 挑战还没做到：学生在画面上试，旁边一个「给个提示」（helpLine：不带话，最后说的那一句还在）
-          const q = asked ? (asked.args || []).find((a) => a.t === 'str')?.v : '';
+          const q = askedBad ? (askedBad.args || []).find((a) => a.t === 'str')?.v : '';
           const src = helpLine(q, this.pendingGoals().length > 0);
           const [c] = parseScript(src);
           await this.exec({ ...c, line: 0, src }, { by: 'page', turn });
+          // 现状里照实写：这一问是页面替老师挂的，不是老师问的
+          if (askedBad && this.scene.waiting) this.scene.waiting.standin = true;
         }
         // on= 写的按钮学生手上没有：这个挑战判不了，告诉老师（报在写它的那一行上，这一轮没写就报那个挑战）
         for (const msg of this.scene.onProblems()) {

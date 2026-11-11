@@ -1,0 +1,10 @@
+# D3-3：写错的 ask（图不能拖）以前把这一轮后面的行全吞掉、自己被换成「打字回答」。现在后面的行照演，后面演上的那一问挂给学生
+graph g = A-B:4 A-C:2 B-C:1 pos="A=0,0 B=1,0 C=0,1"
+array k = BC1 AC2 AB4
+card c = "修" "不修"
+ask drag k.1 g.B~C "把 {k.1} 拖到地图上就是修"
+glow k.1
+ask tap c "这一张修不修？"
+学生: tap c.1
+say "修。"
+ask next "接着看下一张" button="下一张"

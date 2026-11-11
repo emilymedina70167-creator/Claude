@@ -2015,7 +2015,7 @@ export class Scene {
     // 问的、开放的、挑战要动的东西后来藏起来了：照写，补一句学生点不到（不然老师等一个永远不来的回答）
     const w = this.waiting;
     const asked = w ? [...w.refs, ...(Array.isArray(w.expect) ? w.expect : w.expect && this.isRef(w.expect) ? [w.expect] : [])] : [];
-    if (w) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案', pick: '点几样' }[w.kind]}${w.refs.length ? ` ${w.refs.join(' ')}` : ''}${hiddenNote(this.hiddenIn(asked))}`);
+    if (w) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案', pick: '点几样' }[w.kind]}${w.refs.length ? ` ${w.refs.join(' ')}` : ''}${w.standin ? '（这一轮的提问没演上，这是页面替你挂的）' : ''}${hiddenNote(this.hiddenIn(asked))}`);
     const backText = (e) => `back（按钮「回到${e.name}」${this.keeps.get(e.obj)?.has(e.name) ? '' : '；还没存，按不了'}）`;
     const polText = (e) => [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、');
     const rangeText = (e) => (e.lo != null ? `，${e.lo}～${e.hi}` : '');
