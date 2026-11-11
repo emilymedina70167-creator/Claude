@@ -43,7 +43,10 @@ function tryOnce(script) {
     try { s.apply(c); } catch (err) { return { error: `第 ${c.line} 行「${String(c.src || '').trim()}」：${err.message}`, retry: c.cmd === 'follow' }; }
   }
   const followed = [...s.objects.values()].filter((o) => o.follow);
-  if (!followed.length) return { error: '这道题里没有照引擎走的东西：要有一行 follow（页面靠它判）', retry: false };
+  // 引擎造的表（table T engine=…）：页面照引擎的答案逐格比，不用 follow
+  const tables = [...s.objects.values()].filter((o) => o.engine);
+  if (!followed.length && tables.length) return { scene: s };
+  if (!followed.length) return { error: '这道题里没有照引擎走的东西：要有一行 follow，或者一张 table … engine=（页面靠它判）', retry: false };
   const ws = followed.map((o) => whereOf(o, s));
   const bad = ws.find((w) => w.error);
   if (bad) return { error: bad.error, retry: true };
@@ -101,5 +104,26 @@ export function trackDrill(w0) {
       return [{ k: passed + 1, ok: false, giveup: true }];
     },
     get slips() { return slipped.size; },
+  };
+}
+
+/**
+ * 一道填表的舞台题（table T engine=…）做的过程 → 要记的作答。now：{ blank（还等着填几格）, wrong（和答案不一样几格）, first（第一处不一样的，写给记录） }。
+ * 填满了才判：全对记一次对、做完；有错记一次错（只记一次），学生接着改，改对了算做完（报告里是「改对了」）。没做完就走、点「做不出来」记放弃。
+ * 返回 { records, done, judged（这一下是不是填满了、判了） }
+ */
+export function trackTableDrill() {
+  let over = false, slipped = false;
+  return {
+    after({ blank = 0, wrong = 0, first = '' } = {}) {
+      if (over) return { records: [], done: true, judged: false };
+      if (blank > 0) return { records: [], done: false, judged: false };
+      if (!wrong) { over = true; return { records: [{ ok: true, final: true }], done: true, judged: true }; }
+      const records = slipped ? [] : [{ ok: false, wrong: first }];
+      slipped = true;
+      return { records, done: false, judged: true };
+    },
+    giveup() { if (over) return []; over = true; return [{ ok: false, giveup: true }]; },
+    get slips() { return slipped ? 1 : 0; },
   };
 }

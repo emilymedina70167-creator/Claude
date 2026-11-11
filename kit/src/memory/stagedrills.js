@@ -32,6 +32,7 @@ export function stageDrillsOf({ session = {}, turns = [], existing = [], now = D
   const extra = new Map(); // 东西 id → follow 以后老师接着摆的几行（分组）
   const opens = new Map(); // 东西 id → 老师开过的动作
   const found = new Map(); // 题的编号 → 那一刻记下的 { o（副本）, id }
+  const tables = new Map(); // 题的编号 → 引擎造的表 { o（副本）, id }
   const rows = (turns || []).filter((t) => t && t.role === 'claude' && !t.discarded && t.text).sort((a, b) => (a.seq || 0) - (b.seq || 0));
   for (const t of rows) {
     for (const c of parseScript(String(t.text))) {
@@ -44,6 +45,12 @@ export function stageDrillsOf({ session = {}, turns = [], existing = [], now = D
       // follow 以后老师接着摆的分组：只留最后一次（课上隔 5、隔 3、隔 1 分了三次，题一开始照最后那一次摆）
       if (c.cmd === 'group' && target && s.objects.get(target)?.follow) extra.set(target, [src]);
       if (c.cmd === 'open' && target) { const act = (c.args || []).filter((a) => a.t === 'word')[1]?.v; if (act) opens.set(target, new Set([...(opens.get(target) || []), act])); }
+      // 引擎造的表（table T engine=sort algo=shell …）：同一块同一种（引擎 + 值里没有数的那几个字段：algo=fifo）只留最后一张
+      if (c.cmd === 'table' && fx?.created && s.objects.get(fx.id)?.engine) {
+        const o = s.objects.get(fx.id);
+        const kind = Object.fromEntries(Object.entries(o.engine.fields).filter(([, v]) => !/\d/.test(String(v))));
+        tables.set(stageDrillId(block, `table_${o.engine.name}`, kind), { o: structuredClone(o), id: fx.id });
+      }
       if (c.cmd === 'follow' && fx?.follow && s.objects.get(fx.id)?.follow) {
         const o = s.objects.get(fx.id);
         found.set(stageDrillId(block, o.follow.name, o.follow.fields), { o: structuredClone(o), id: fx.id, at: found.size });
@@ -83,6 +90,38 @@ export function stageDrillsOf({ session = {}, turns = [], existing = [], now = D
       id,
       doc: {
         block, kind: 'stage', md: `\`\`\`stage\n${text}\n\`\`\``, q: `照 ${followInfo(o).title} 走一遍`, title: followInfo(o).title,
+        src: 'stage', random, from: { session: sid }, fromSession: sid, ...(block ? { space: session.space || spaceOfId(block) } : {}), status: 'active', at: now,
+      },
+    });
+  }
+  // 引擎造的表：数据是一长串整数的那个字段（访问串、关键字、待排的数）换数——个数、范围照课上那一串，课上不重复的才要求不重复；
+  // 取出来引擎不收（或者表放不下）就照课上的原样
+  for (const [id, f] of tables) {
+    if (have.has(id)) continue;
+    const e = f.o.engine;
+    const q = (v) => (/[\s"{}]/.test(String(v)) ? `"${String(v).replace(/"/g, '')}"` : String(v)); // {a} 换成一串数以后有空格：一定加引号
+    const line = (fields) => `table ${f.id} engine=${e.name} ${Object.entries(fields).map(([k, v]) => `${k}=${q(v)}`).join(' ')}`;
+    const lists = Object.entries(e.fields).map(([k, v]) => [k, String(v).trim().split(/[\s,，]+/)]).filter(([, xs]) => xs.length >= 4 && xs.every((x) => /^\d+$/.test(x))).sort((a, b) => b[1].length - a[1].length);
+    const fixed = `id: ${id}\n---\n${line(e.fields)}\nopen ${f.id} edit`;
+    let text = fixed, random = false;
+    if (lists.length) {
+      const [k, xs] = lists[0];
+      const ns = xs.map(Number);
+      const distinct = new Set(ns).size === ns.length;
+      let lo = Math.min(...ns), hi = Math.max(...ns);
+      if (distinct && hi - lo + 1 < ns.length * 2) { lo = 1; hi = 99; }
+      const cand = `id: ${id}\npick a = seq(${ns.length}, ${lo}, ${hi})${distinct ? ' distinct' : ''}\n---\n${line({ ...e.fields, [k]: '{a}' })}\nopen ${f.id} edit`;
+      let ok = false;
+      try { ok = !drawStageDrill(parseStageDrill(cand)).error; } catch { ok = false; }
+      if (ok) { text = cand; random = true; }
+    }
+    let ok = false;
+    try { ok = !drawStageDrill(parseStageDrill(text)).error; } catch { ok = false; }
+    if (!ok) continue;
+    out.push({
+      id,
+      doc: {
+        block, kind: 'stage', md: `\`\`\`stage\n${text}\n\`\`\``, q: `填 ${e.title} 的过程表`, title: e.title,
         src: 'stage', random, from: { session: sid }, fromSession: sid, ...(block ? { space: session.space || spaceOfId(block) } : {}), status: 'active', at: now,
       },
     });

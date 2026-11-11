@@ -34,4 +34,16 @@ array a = {a}
 follow a sort insert
 open a move
 ```
+
+## 页面置换（填表）
+
+引擎的过程表：访问串每次换一组，一列一列填，都填上页面就判。
+
+```stage
+id: sd-paging
+pick a = seq(8, 1, 5)
+---
+table T engine=paging algo=fifo frames=3 refs="{a}"
+open T edit
+```
 </script>

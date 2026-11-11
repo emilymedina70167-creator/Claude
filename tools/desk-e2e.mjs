@@ -704,6 +704,9 @@ const SUITES = {
       const id = await t.inClass();
       await t.waitFor(() => t.page.evaluate(() => !!document.querySelector('.block-stagedrill')?.__stage?.scene.objects.get('a')?.follow), { timeout: 15000, what: '舞台题演出来、照着引擎走' });
       await sleep(900);
+      // 牌都在那块舞台的框里（主线第五轮：框改矮以后镜头照原来的高摆，带分组弧线的一排牌被裁到框外面）
+      const cut = await t.page.evaluate(() => { const e = document.querySelector('.block-stagedrill'); const b = e.querySelector('.sd-stage').getBoundingClientRect(); const st = e.__stage; return st.scene.objects.get('a').cells.filter((c) => { const r = st.nodes.get(`a:${c.key}`).getBoundingClientRect(); return r.top < b.top - 1 || r.bottom > b.bottom + 1 || r.left < b.left - 1 || r.right > b.right + 1; }).length; });
+      check(cut === 0, `舞台题里有 ${cut} 张牌在框外面（被裁掉了）`);
       return id;
     };
     // 按住一张牌 0.45 秒，拖到另一张上（对调）。牌按现在在第几格找
@@ -718,7 +721,7 @@ const SUITES = {
     };
     const r0 = (await t.docs('reviews')).find((r) => r.id === 'R3');
     // 第一节：两张牌、每次换数（取出来一定是前大后小），拖一下就走完
-    await plant('```stage\nid: d-stage-e2e\npick a = seq(2, 1, 9) distinct\n---\narray a = {a}\nfollow a sort insert\nopen a move\n```');
+    await plant('```stage\nid: d-stage-e2e\npick a = seq(2, 1, 9) distinct\n---\narray a = {a}\nfollow a sort insert\ngroup a stride=1\nopen a move\n```');
     const did = await start();
     // 题目一行大字、下面一句手怎么动（主线第五轮首课走查：以前是一行小灰字，没写怎么动）
     check(/照 直接插入排序 走一遍/.test(await t.text('.sd-q') || '') && /按住一张拖/.test(await t.text('.sd-lead') || ''), `舞台题的题目、手怎么动没写出来：${await t.text('.sd-q')}｜${await t.text('.sd-lead')}`);

@@ -94,7 +94,9 @@ export function helpLine(q, hasGoals, hasWork = false) {
 export { COLOR_NAMES };
 
 export class Stage {
-  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null } = {}) {
+  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false } = {}) {
+    // bare：嵌在别处的一小块舞台（自己练），没有上面的话、底下的输入条——镜头不给它们留地方
+    this.bare = !!bare;
     this.host = host;
     this.onAct = onAct;
     this.onLine = onLine; // 每演完老师的一行（量「第一个镜头多久出来」、收起「老师在想」）
@@ -1604,6 +1606,7 @@ export class Stage {
   // —— 镜头 ——
   viewSize() { return { w: this.view.clientWidth || 800, h: this.view.clientHeight || 600 }; }
   reserve() {
+    if (this.bare) return { top: 6, bottom: 6 };
     const ch = Math.max(84, (this.caption.offsetHeight || 0) + 34);
     const gh = this.goalsEl?.childElementCount ? this.goalsEl.offsetHeight + 14 : 0;
     // 底下那一条按量出来的高（按钮折到第二行、ask say 时输入框是主角都会更高；以前写死 104，高了就压着画面）

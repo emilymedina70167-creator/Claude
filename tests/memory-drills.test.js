@@ -175,3 +175,28 @@ test('挑题：一次练习里舞台题最多 2 道（一道舞台题比一道�
   assert.equal(kinds.filter((k) => k === 'stage').length, 2);
   assert.equal(kinds.filter((k) => k === 'quiz').length, 3);
 });
+
+test('舞台课里老师用引擎造过的表（table … engine=）也抄成一道舞台题：同一块同一种只有一道，数据是一长串数的换数', async () => {
+  const { parseStageDrill: parse, drawStageDrill: draw } = await import('../kit/src/stagedrillspec.js');
+  const turns = [
+    { seq: 1, role: 'claude', text: 'table T engine=paging algo=fifo frames=3 refs="7 0 1 2 0 3 0 4"\nopen T edit\nsay "填表"' },
+    { seq: 2, role: 'claude', text: 'table T engine=paging algo=fifo frames=3 refs="1 2 3 4 1 2 5 1 2 3"\nopen T edit' }, // 同一种又造了一张：只留最后一张
+    { seq: 3, role: 'claude', text: 'table U engine=paging algo=lru frames=3 refs="1 2 3 4 1 2 5 1"' }, // 另一种（algo 不一样）
+  ];
+  const out = harvestDrills({ session: STAGE_SESSION, turns, report: null, existing: [] });
+  assert.equal(out.length, 2);
+  const fifo = out.find((d) => /fifo/.test(d.id)), lru = out.find((d) => /lru/.test(d.id));
+  assert.ok(fifo && lru);
+  assert.match(fifo.id, /^d-stage-[\w-]+-table_paging-algo_fifo$/);
+  assert.equal(fifo.doc.kind, 'stage');
+  assert.match(fifo.doc.q, /填 页面置换 的过程表/);
+  // 只留最后一张（10 次访问的那张）；访问串换数（个数一样、不要求不重复）
+  assert.match(fifo.doc.md, /pick a = seq\(10, 1, 5\)\n---\ntable T engine=paging algo=fifo frames=3 refs="\{a\}"\nopen T edit/);
+  assert.equal(fifo.doc.random, true);
+  const sp = parse(fifo.doc.md.replace(/^```stage\n|\n```$/g, ''));
+  const d = draw(sp);
+  assert.ok(!d.error, d.error);
+  assert.match(d.script, /refs="\d( \d){9}"/);
+  // 再抄一遍不重复
+  assert.deepEqual(harvestDrills({ session: STAGE_SESSION, turns, report: null, existing: out.map((x) => ({ id: x.id })) }), []);
+});

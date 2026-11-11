@@ -81,3 +81,22 @@ test('记结果：一道题 = 走完一遍——走完记一次对；到过错�
   v.after(w({ at: 3, passed: 1 }));
   assert.deepEqual(v.giveup(), [{ k: 2, ok: false, giveup: true }]);
 });
+
+test('表的题：有引擎造的表就能出（不用 follow）；记什么——填满全对记一次对；填满有错记一次错、能接着改，改对了算做完；做不出来记放弃', async () => {
+  const { trackTableDrill } = await import('../kit/src/stagedrillspec.js');
+  const sp = parseStageDrill('id: d-t\n---\ntable T engine=paging algo=fifo frames=3 refs="7 0 1 2"\nopen T edit');
+  assert.ok(!drawStageDrill(sp).error);
+  assert.match(drawStageDrill(parseStageDrill('id: d-x\n---\ntable T = 1 2 rows="a" cols="x y"')).error, /没有照引擎走的东西/);
+  let t = trackTableDrill();
+  assert.deepEqual(t.after({ blank: 3, wrong: 1 }), { records: [], done: false, judged: false });
+  assert.deepEqual(t.after({ blank: 0, wrong: 0 }), { records: [{ ok: true, final: true }], done: true, judged: true });
+  assert.deepEqual(t.after({ blank: 0, wrong: 0 }).records, [], '做完以后不再记');
+  t = trackTableDrill();
+  assert.deepEqual(t.after({ blank: 0, wrong: 2, first: '块 1×7 写了 5' }), { records: [{ ok: false, wrong: '块 1×7 写了 5' }], done: false, judged: true });
+  assert.deepEqual(t.after({ blank: 0, wrong: 1, first: '块 2×0 写了 9' }).records, [], '错只记一次');
+  assert.deepEqual(t.after({ blank: 0, wrong: 0 }), { records: [{ ok: true, final: true }], done: true, judged: true });
+  assert.equal(t.slips, 1);
+  t = trackTableDrill();
+  assert.deepEqual(t.giveup(), [{ ok: false, giveup: true }]);
+  assert.deepEqual(t.giveup(), []);
+});
