@@ -12,7 +12,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MUST, FIX1, NEW2, NEW3, NEW4, mustHits, mustNotHits, seenHits, auditHits, screenHits, goalsMetWhere } from './stage-try-lib.js';
+import { MUST, FIX1, NEW2, NEW3, NEW4, FIRST, mustHits, mustNotHits, seenHits, auditHits, screenHits, goalsMetWhere } from './stage-try-lib.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -28,8 +28,8 @@ if (!opt.dir) { console.error('用法：node tools/stage-must.mjs 目录 [--from
 
 const fileOf = (f) => join(opt.dir, ...f.split('/'));
 // fix1（主线第一轮修好的页面毛病）、new2（主线第二轮新做的四件事）是同一种表：一行一条，每个视口都要过
-const ROWS = { fix1: FIX1, new2: NEW2, new3: NEW3, new4: NEW4 };
-if (!['must', 'fix1', 'new2', 'new3', 'new4'].includes(opt.table)) { console.error('--table 只有 must（默认）、fix1、new2、new3 和 new4'); process.exit(2); }
+const ROWS = { fix1: FIX1, new2: NEW2, new3: NEW3, new4: NEW4, first: FIRST };
+if (opt.table !== 'must' && !ROWS[opt.table]) { console.error(`--table 只有 must（默认）、${Object.keys(ROWS).join('、')}`); process.exit(2); }
 const TABLE = ROWS[opt.table] || MUST;
 const names = [...new Set(TABLE.flatMap((m) => m.files))];
 const have = names.filter((f) => existsSync(fileOf(f)));

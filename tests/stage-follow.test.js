@@ -71,9 +71,9 @@ test('不在路上：页面不判（right null），事实里说离这一趟差�
   assert.equal(fx.judged.verdict.right, null);
   assert.match(said(fx), /和第 1 趟做完该有的样子差 3 格：第 1 格（现在 3，该是 1）、第 2 格（现在 2，该是 3）、第 3 格（现在 1，该是 2）/);
   assert.deepEqual(pick(whereOf(obj(s), s)), { at: null, passed: 0, total: 2, done: false, like: null, off: true });
-  assert.match(s.stateText(), /a 照 fake 走：不在引擎走的那条路上；离第 1 趟做完差 3 格/);
+  assert.match(s.stateText(), /a 照 fake 走：还没做完第 1 趟（共 2 趟）；和第 1 趟做完该有的样子差 3 格：第 1 格（现在 3，该是 1）/); // 不说「不在路上」（主线第五轮）
   fx = stu(s, 'swap a#4 a#6'); // 再乱一点：差 5 格，超过一半
-  assert.match(said(fx), /和第 1 趟做完该有的样子差 5 格$/m);
+  assert.match(said(fx), /离第 1 趟做完差 5 格$/m);
   // 学生自己走回路上：照样认
   stu(s, 'swap a#4 a#6'); stu(s, 'swap a#2 a#3');
   fx = stu(s, 'swap a#1 a#2');

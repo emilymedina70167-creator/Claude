@@ -26,6 +26,7 @@ import { reportError } from '../errlog.js';
 import { choose } from '../dialog.js';
 import { stageMock } from './devteacher.js';
 import { VERSION } from '../version.js';
+import { supRuns, escapeHtml } from '../render.js';
 
 export const MODEL = 'claude-opus-5-5';
 const TEACH = { model: MODEL, effort: 'high', modelTier: 'complex' };
@@ -56,7 +57,9 @@ export async function renderStageClass(root, meta = {}, desk) {
     <div class="sc-stage"></div>
     <section class="sc-closing" hidden></section>`;
   const $ = (s) => root.querySelector(s);
-  $('.sc-title').textContent = meta.unit || desk.title || '舞台课';
+  // 课名里的 Unicode 上标（Aⁿ、ⁿ⁻¹）换成 <sup>：原样写会落到别的字体上，粗细对不上（和学习台主角卡同一个办法）
+  const titleHtml = supRuns(escapeHtml(meta.unit || desk.title || '舞台课'));
+  $('.sc-title').innerHTML = titleHtml;
   $('.sc-home').addEventListener('click', () => desk.onHome?.());
   const think = $('.sc-think');
 
@@ -235,6 +238,26 @@ export async function renderStageClass(root, meta = {}, desk) {
   let thinkTimer = null;
   function thinking(on, label = '') {
     clearInterval(thinkTimer);
+    // 第一轮还没来、舞台是空的：中间一张开场卡（课名、「正在准备第一幕」），不让学生对着一块白屏等（主线第五轮首课走查）。
+    // 第一行一演（loop.js 在 stage.onLine 里关掉 thinking）就收起
+    const empty = on && !label && !stage.scene.objects.size && !stage.log.length;
+    let card = $('.sc-opening');
+    if (empty && !card) {
+      card = document.createElement('div');
+      card.className = 'sc-opening';
+      card.innerHTML = '<div class="sc-opening-badge">课</div><div class="sc-opening-title"></div><div class="sc-opening-sub">正在准备第一幕<span class="sc-dots"><i></i><i></i><i></i></span></div>';
+      card.querySelector('.sc-opening-title').innerHTML = titleHtml;
+      $('.sc-stage').appendChild(card);
+    } else if (!empty && card) card.remove();
+    // 不是第一轮：学生刚答完、刚做完，眼睛在画面下半（刚才的输入框那里）——那里也放三个点，右上角那一小条容易看不见
+    let wait = $('.sc-wait');
+    if (on && !empty && !label && !wait) {
+      wait = document.createElement('div');
+      wait.className = 'sc-wait';
+      wait.innerHTML = '<span class="sc-dots"><i></i><i></i><i></i></span>';
+      wait.setAttribute('aria-label', '老师在想');
+      $('.sc-stage').appendChild(wait);
+    } else if ((!on || empty || label) && wait) wait.remove();
     if (!on) { think.hidden = true; return; }
     const t0 = performance.now();
     think.hidden = false;

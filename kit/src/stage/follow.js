@@ -145,7 +145,8 @@ export function whereOf(o, scene) {
   };
   if (at >= 0) {
     const passed = topMark(t.path, at);
-    return { at, passed, total: t.total, done: at === t.path.length - 1, like: null, likeMark: null, off: false, next: nextAfter(passed), error: null };
+    // mid：不在检查点上（一趟做到一半）。现状里多说一句离下一趟做完差哪几处
+    return { at, passed, total: t.total, done: at === t.path.length - 1, like: null, likeMark: null, off: false, mid: !t.path[at].marks.length && at > 0, next: nextAfter(passed), error: null };
   }
   // 还在起点（at: -1）：在路上，只是一步还没走
   if (state === f.start) return { at: -1, passed: 0, total: t.total, done: false, like: null, likeMark: null, off: false, next: nextAfter(0), error: null };
@@ -156,7 +157,7 @@ export function whereOf(o, scene) {
     if (fr) { like = v.label; likeMark = Math.min(...fr.marks); break; }
   }
   const passed = f.passed || 0;
-  return { at: null, passed, total: t.total, done: false, like, likeMark, off: true, next: nextAfter(passed), error: null };
+  return { at: null, passed, total: t.total, done: false, like, likeMark, off: true, mid: true, next: nextAfter(passed), error: null };
 }
 
 // —— 写给老师的话 ——
@@ -182,7 +183,7 @@ function gapText(a, o, scene, w, { brief = false } = {}) {
   const word = wordOf(a, f); // 一排格子说「格」，Dijkstra 说「个顶点」
   if (brief) return `离${head}差 ${g.list.length} ${word}`;
   // 差得多（超过一半）只说差几处：一条条列出来老师也不会看
-  if (!g.list.length || g.list.length * 2 > g.n) return `和${head}该有的样子差 ${g.list.length} ${word}`;
+  if (!g.list.length || g.list.length * 2 > g.n) return `离${head}差 ${g.list.length} ${word}`;
   const name = (i) => (a.nameOf ? a.nameOf(i, f.snap) : `第 ${i + 1} 处`);
   return `和${head}该有的样子差 ${g.list.length} ${word}：${g.list.map((x) => `${name(x.i)}（现在 ${x.now === '' ? '空着' : labelOf(a, f, x.now)}，该是 ${labelOf(a, f, x.want)}）`).join('、')}`;
 }
@@ -197,6 +198,22 @@ export function nextText(o, scene) {
   const f = o?.follow, a = f && followOf(f.name);
   const w = a && whereOf(o, scene);
   return w?.next ? `${nth(a, f, w.next.mark, w.next.upto)}做完该是：${shown(a, f, w.next)}` : '';
+}
+
+/** 还没做的每一个检查点该是什么样（自己练点「做不出来」以后给学生看完整的答案）；都做完了是空的 */
+export function restText(o, scene) {
+  const f = o?.follow, a = f && followOf(f.name);
+  const w = a && whereOf(o, scene);
+  if (!w || w.error || w.done) return '';
+  const out = [];
+  let passed = w.passed;
+  for (const fr of traceOf(o).path) {
+    const ks = fr.marks.filter((k) => k > passed);
+    if (!ks.length) continue;
+    out.push(`${nth(a, f, Math.min(...ks), Math.max(...ks))}做完该是：${shown(a, f, { cells: fr.cells, lead: fr.lead || '' })}`);
+    passed = Math.max(...ks);
+  }
+  return out.join('；');
 }
 
 const GONE = '走完以后又动了，现在不是做完的样子';
@@ -214,9 +231,11 @@ export function followLine(o, scene) {
   const want = w.next ? `${nth(a, f, w.next.mark, w.next.upto)}做完该是：${shown(a, f, w.next)}` : '';
   if (w.like) return `${head}${w.like}（和这种错法做完第 ${w.likeMark} ${u}的样子一样）${want ? `。${want}` : ''}`;
   if (w.off && !w.next) return `${head}${GONE}`;
-  if (w.off) return `${head}不在引擎走的那条路上；${gapText(a, o, scene, w, { brief: true })}${want ? `。${want}` : ''}`;
+  // 一趟做到一半：只说离这一趟做完差哪几处。不说「在不在引擎走的那条路上」——引擎一组、一趟只留一步，
+  // 学生一张一张插、先理哪一组都是对的做法，说「不在路上」是假话（主线第五轮首课走查）
   const at = w.passed ? `做完了第 ${w.passed} ${u}` : `还没做完第 ${w.next?.mark ?? 1} ${u}`;
-  return `${head}${at}（共 ${w.total} ${u}）${want ? `。${want}` : ''}`;
+  const gap = w.mid && w.next ? `；${gapText(a, o, scene, w)}` : '';
+  return `${head}${at}（共 ${w.total} ${u}）${gap}${want ? `。${want}` : ''}`;
 }
 
 // —— 盖在那种东西自己的规则上面 ——
@@ -265,7 +284,12 @@ export function followRules(base, o) {
       if (!w1 || w1.error) return out;
       const was = w0.at != null ? w0.passed : obj.follow.passed || 0;
       // 只在到了检查点时说对（@a.right 也是这时候演）：一趟中间正好走在引擎的路上的那几下不判，只在事实里说一声
-      if (w1.at != null && w1.passed > was) out.right = true;
+      if (w1.at != null && w1.passed > was) {
+        out.right = true;
+        // 到了一趟、还没走完：这一下要老师接（学生照老师说的做完了这一趟，接下来隔几个、看什么是老师的事）。走完了走 done 的老规矩。
+        // 老师写了 follow … call=done 就不叫（学生自己一口气走完）
+        if (!w1.done && obj.follow.call !== 'done') out.call = 'now';
+      }
       // 引擎的错法自己以「像是」开头，叫老师的那一句前面还会加一个「像是」（events.js）：这里去掉
       else if (w1.like && w1.like !== w0.like) { out.right = false; out.misread = w1.like.replace(/^像是/, ''); }
       if (w1.next) out.next = `${nth(a, obj.follow, w1.next.mark, w1.next.upto)}做完该是：${shown(a, obj.follow, w1.next)}`;
@@ -281,8 +305,9 @@ export function followRules(base, o) {
       const u = unitOf(a, after.follow.fields);
       if (w.at != null && w.passed > was) return [...mine, `到了第 ${w.passed} ${u}做完的样子（和引擎算的一样）`];
       if (w.like) return [...mine, `${w.like}（和这种错法做完第 ${w.likeMark} ${u}的样子一样）`];
-      if (w.at != null && wb && wb.at != null && w.at > wb.at && w.next) return [...mine, `在引擎走的那条路上；${gapText(a, after, scene, w, { brief: true })}`];
-      if (w.off) return [...mine, w.next ? gapText(a, after, scene, w) : GONE].filter(Boolean);
+      if (w.off && !w.next) return [...mine, GONE];
+      // 一趟中间的一下：只说离这一趟做完差哪几处（不说在不在引擎的路上，见 followLine）
+      if (w.next && (w.off || !wb || w.at !== wb.at)) return [...mine, gapText(a, after, scene, w)].filter(Boolean);
       return mine;
     },
     measures: {

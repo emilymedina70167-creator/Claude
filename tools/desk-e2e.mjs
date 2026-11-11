@@ -720,6 +720,8 @@ const SUITES = {
     // 第一节：两张牌、每次换数（取出来一定是前大后小），拖一下就走完
     await plant('```stage\nid: d-stage-e2e\npick a = seq(2, 1, 9) distinct\n---\narray a = {a}\nfollow a sort insert\nopen a move\n```');
     const did = await start();
+    // 题目一行大字、下面一句手怎么动（主线第五轮首课走查：以前是一行小灰字，没写怎么动）
+    check(/照 直接插入排序 走一遍/.test(await t.text('.sd-q') || '') && /按住一张拖/.test(await t.text('.sd-lead') || ''), `舞台题的题目、手怎么动没写出来：${await t.text('.sd-q')}｜${await t.text('.sd-lead')}`);
     await swap(1, 2);
     await t.waitFor(() => t.page.evaluate(() => /走完了/.test(document.querySelector('.sd-note')?.textContent || '')), { timeout: 8000, what: '拖完页面说走完了' });
     await t.page.click('.dr-next');

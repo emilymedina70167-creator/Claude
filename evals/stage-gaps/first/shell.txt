@@ -1,0 +1,68 @@
+# 首课走查 · 希尔排序（DS-L8.2.3）：老师只照说明写的一整节；学生有做对的、做错的、撤回的、说一句话的
+array a = 49 38 65 97 76 13 27 49′ 55 04
+glow a.10
+say "上节课的直接插入：{a.10} 要回最前面，前面的牌得一张一张给它让位。"
+ask value "{a.10} 插到第 1 格，一共有几张牌要各往右让一格？" answer=9 wrong="10=把它自己也算上了"
+学生: value 10
+say "让位的是它前面的牌，它自己不算。再数一次。"
+ask value "几张？" answer=9
+学生: value 9
+unglow a.10
+hop a.10 -> a.5 color=g1 label="隔 5 个"
+paint a.5 a.10 g1
+say "9 张各让一格，太慢。换个办法：{a.10} 一步跨 5 格，只和隔 5 个的 {a.5} 比。这两张算一组。"
+@ask.right say "对，隔 5 个的才是一组。"
+ask tap a "照这个规矩，{a.1} 和谁一组？点它" expect=a.6
+学生: tap a.2
+hop a.1 -> a.6 color=g2 label="隔 5 个"
+say "{a.2} 是挨着的。从 {a.1} 往后数 5 格，落在 {a.6}。"
+group a stride=5
+follow a sort shell gaps="5 3 1"
+open a move undo=on
+@a.right say "第一趟做完了：每一组里都是小的在前。"
+say "五种颜色五组。每组里把小的拖到前面，大的换到后面。"
+学生: swap a#1 a#6
+学生: swap a#2 a#7
+学生: swap a#3 a#4
+学生: undo
+学生: swap a#3 a#8
+学生: swap a#4 a#9
+学生: swap a#5 a#10
+group a stride=3
+@a.right say "第二趟也对。"
+say "{a.5} 从第 10 格一步到了第 5 格。接着把间隔缩成 3：现在三种颜色三组，每组里照样排好。"
+学生: swap a.4 a.7
+学生: swap a.2 a.5
+group a stride=1
+@a.done say "排好了，三趟一共只挪了十来格。"
+say "最后一趟间隔缩成 1：所有牌是一组。"
+学生: say 隔 1 个那不就是直接插入吗
+say "对，就是直接插入。但现在每张牌离家都很近：按住一张，拖到它该插的地方。"
+学生: move a.2 -> a.1
+学生: move a.4 -> a.3
+学生: move a.5 -> a.3
+学生: move a.10 -> a.8
+学生: move a.8 -> a.9
+label k a#1 a#8 "一开始 49 在 49′ 前面" side=below
+say "排好了。再看这两张一样大的。"
+ask tap a "现在哪一张在前面？点它" expect=a#8
+学生: tap a#8
+say "先后换了。相等的两张，排完先后变了，这叫 [不稳定]。"
+fly say.1 -> k2 a#8 a#1
+ask say "它们俩直接比过吗？为什么先后会换？"
+学生: say 没比过，第一趟它们不在一组，各自跳了
+unlabel
+array a = 50 26 38 80 70 90 8 30 40 20
+follow a sort shell gaps="5 3 1"
+group a stride=5
+open a move undo=on
+@a.right say "这一趟对了。"
+say "说得对：不同组的各跳各的。换一排，这回你自己从头做，先做隔 5 的这一趟。"
+学生: swap a.2 a.7
+学生: swap a.3 a.8
+学生: swap a.4 a.9
+学生: say 第一趟做完了
+say "数一数做了几组：一共 5 组。"
+学生: swap a.5 a.10
+group a stride=3
+say "这回五组都对了。接着你自己把间隔缩成 3 做下去。"

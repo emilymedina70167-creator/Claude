@@ -48,7 +48,7 @@ function setup(segments) {
   const st = window.LAStage;
   const { createLoop, eventsText, goalStatus } = window.LAStageDev;
   const T = window.__try = { queue: segments.map((src, i) => ({ src, i })), played: new Map(), called: null, turns: [], seq: 0 };
-  const WHY = { answer: '答了', goal: '做到了挑战', done: '做完了', help: '点了提示', stuck: '很久没动', tries: '试了好多下', now: '走偏了（call=wrong）' };
+  const WHY = { answer: '答了', goal: '做到了挑战', done: '做完了', help: '点了提示', stuck: '很久没动', tries: '试了好多下', now: '走偏了（call=wrong）', reached: '到了一趟' };
   const never = new Promise(() => {});
   const host = {
     stage: st, model: 'claude-opus-5-5', teach: {}, mock: false, quietMs: 1e9,
@@ -72,7 +72,7 @@ function setup(segments) {
       }
       if (row.role === 'student' && !row.pending) {
         // 叫老师的那几件事（做到挑战和做完了常常是同一下）：都写上
-        const whys = [...new Set((row.events || []).filter((e) => !e.quiet && (e.now || WHY[e.kind])).map((e) => (e.now ? WHY.now : WHY[e.kind])))];
+        const whys = [...new Set((row.events || []).filter((e) => !e.quiet && (e.now || WHY[e.kind])).map((e) => (e.now ? (e.act?.reached ? WHY.reached : WHY.now) : WHY[e.kind])))];
         T.called = { why: whys.join('、') || '（没认出来）', msg: row.msg, state: st.scene.stateText(), goals: T.goals() };
       }
     },

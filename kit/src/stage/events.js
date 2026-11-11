@@ -437,7 +437,7 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
   }
   at = Infinity; // 最后的两句说明
   // 老师写了 call=wrong、学生走偏了才叫的：说一声为什么这时候叫
-  if (events.some((e) => e.now)) lines.push('（你在 open 那一行写了 call=wrong：学生走偏了，页面马上叫你）');
+  if (events.some((e) => e.now && !e.act?.reached)) lines.push('（你在 open 那一行写了 call=wrong：学生走偏了，页面马上叫你）');
   if (secs != null && secs >= 5) lines.push(`（离你上一轮演完过了 ${secs} 秒）`);
   const rest = placed.filter((x) => x.text);
   // 照发生的先后排（以前试的几下一律在最前面：学生先做到挑战、点对一问，再试的几下，写出来先后是反的）。

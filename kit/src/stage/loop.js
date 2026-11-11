@@ -14,7 +14,7 @@
 //   report?(err, info)             出错记一笔
 //   evidence?.goal(id, goal, seq) / evidence?.act(a, seq)   记成证据（学习台）
 //   mock、model、teach（叫老师的参数）、quietMs、readOnly
-import { HELP } from './stage.js';
+import { HELP, DONE_BTN } from './stage.js';
 import { turnMessage, gridsOf } from './doc.js';
 import { eventOf, triggers, eventsText, tryCount, hasWork, undoneOf, TRY_MAX, QUIET_MS } from './events.js';
 import { shapeText } from './goal.js';
@@ -258,7 +258,7 @@ export function createLoop(host) {
       // 老师挂的按钮（「拨好了点下面」）学生还没按，页面照设计当它按了、马上叫老师：在那一条里说一声（主线第一轮 E1-6：
       // 以前不说，老师不知道学生是被打断的）。页面替挂的「给个提示」不说
       const w = stage.scene.waiting;
-      if (e.kind === 'goal' && w?.kind === 'next' && w.button && w.button !== HELP && !w.standin) { e.unpressed = w.button; savePending(true); }
+      if (e.kind === 'goal' && w?.kind === 'next' && w.button && w.button !== HELP && w.button !== DONE_BTN && !w.standin) { e.unpressed = w.button; savePending(true); }
       if (stage.scene.waiting?.kind === 'next') stage.cancelWait?.();
       flush();
     });
@@ -273,6 +273,17 @@ export function createLoop(host) {
     return w && w !== w0 && w.pre && w.kind === 'next' ? [`你预写的「${w.button || '接着'}」还没按`] : [];
   };
   const callNow = (ids) => ids.some((id) => stage.scene.goals.get(id)?.call === 'now');
+  function settleReached(e) {
+    const w0 = stage.scene.waiting;
+    Promise.resolve(stage.reacting).then(() => {
+      if (S.ended || host.readOnly) return;
+      const w = stage.scene.waiting;
+      const held = [...(w && w.kind !== 'next' && w !== w0 ? [`你预写的那一问还没答（ask ${w.kind}）`] : []), ...freshNext(w0)];
+      if (held.length) { e.quiet = true; e.held = held; savePending(true); armIdle(); return; }
+      if (stage.scene.waiting?.kind === 'next') stage.cancelWait?.();
+      flush();
+    });
+  }
   function onAnswer(act, w, { reacts = null } = {}) {
     if (S.ended || RETRY.has(act.button)) return;
     const e = eventOf(act, { help: HELP, at: Date.now() });
@@ -358,7 +369,7 @@ export function createLoop(host) {
   function maybeSpec() {
     if (!host.call || S.ended || host.readOnly || S.spec || S.flight || S.pending?.events.some((x) => !x.quiet)) return;
     const w = stage.scene.waiting;
-    if (!w || w.kind !== 'next' || w.button === HELP || RETRY.has(w.button) || stage.pendingGoals().length) return;
+    if (!w || w.kind !== 'next' || w.button === HELP || w.button === DONE_BTN || RETRY.has(w.button) || stage.pendingGoals().length) return;
     // 按了这个按钮才判的挑战（on=）：点了会判、会记一行，提前想的那一份一定对不上
     if (stage.scene.hasOn?.(w.button || '接着')) return;
     const act = { type: 'next', button: w.button || '接着' };
@@ -400,6 +411,8 @@ export function createLoop(host) {
     if (a.open || a.type === 'dial') {
       const e = eventOf(a, { help: HELP, at: Date.now() });
       addEvent(e);
+      // 照引擎走的东西到了一趟（reached）：等预写的 @a.right 演完再看——预写挂了一问（学生手上有要答的），这一下先攒着、跟着那一问的回答一起发
+      if (e.now && a.reached) { settleReached(e); return; }
       if (triggers(e)) { flush(); return; }
       onTry();
     }

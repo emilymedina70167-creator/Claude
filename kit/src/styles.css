@@ -2565,7 +2565,10 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .sv-fill-t td.sv-fill-later { opacity: 0.4; }
 
 /* 舞台上自己练（blocks/stagedrill.js）：嵌一块没有老师的舞台。舞台自己的那一条（打字、给个提示）这里不要 */
-.block-stagedrill .sd-lead { margin: 0 0 8px; color: var(--muted); font: 15px/1.5 var(--sans); }
+.block-stagedrill .sd-q { margin: 0 0 4px; font: 600 19px/1.4 var(--display, var(--sans)); color: rgb(var(--chalk-rgb) / 0.95); }
+.block-stagedrill .sd-lead { margin: 0 0 10px; color: var(--muted); font: 15px/1.5 var(--sans); }
+.block-stagedrill.is-row .sd-stage { height: clamp(220px, 32vh, 300px); min-height: 0; }
+.block-stagedrill .sd-note { white-space: pre-line; }
 .block-stagedrill .sd-stage { position: relative; height: min(70vh, 620px); min-height: 380px; border-radius: 16px; overflow: hidden; background: rgb(var(--chalk-rgb) / 0.04); }
 .block-stagedrill .sd-stage .st-dock, .block-stagedrill .sd-stage .st-caption { display: none; }
 .block-stagedrill .sd-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }

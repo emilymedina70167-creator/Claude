@@ -73,7 +73,7 @@ test('给老师的字：走完以后又动了、挪开以后不说「一上来�
   assert.doesNotMatch(stu(v, 'swap a#5 a#6').judged.verdict.misread, /^像是/);
   const p = make('graph g = 1-2:10 1-5:5 5-2:3 2-3:1\nfollow g net prim from=1\nopen g choose');
   assert.doesNotMatch(said(stu(p, 'choose g.2~3', 'choose')), /个顶点/);
-  assert.match(stageDoc('数据结构'), /@a\.right 第一次到一趟时演（只演一次）/);
+  assert.match(stageDoc('数据结构'), /@a\.right 到一趟时演（只演一次，下一趟再写）/);
 });
 
 test('抄进题库的题先试一遍：课上 group 写的是拨盘名（题里没有拨盘）——去掉那一行照抄，不抄一道出不了的题', async () => {

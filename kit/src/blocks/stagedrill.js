@@ -2,7 +2,8 @@
 // 是黑板组件，所以「练一练」的挑题、证据、掌握都不用改；取数、拼指令、记什么在 stagedrillspec.js（纯函数，有测试）。
 import { parseStageDrill, drawStageDrill, trackDrill } from '../stagedrillspec.js';
 import { Stage } from '../stage/stage.js';
-import { whereOf, followInfo, nextText } from '../stage/follow.js';
+import { whereOf, followInfo, nextText, restText } from '../stage/follow.js';
+import { rulesOf } from '../stage/rules.js';
 import { session } from '../session.js';
 
 const escapeHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -18,6 +19,7 @@ export function stage(el, src) {
     return;
   }
   el.innerHTML = `
+    <div class="sd-q"></div>
     <div class="sd-lead"></div>
     <div class="sd-stage"></div>
     <div class="sd-bar">
@@ -54,7 +56,7 @@ export function stage(el, src) {
       if (!t) continue;
       const { records, done, step } = t.after(whereOf(o, st.scene));
       for (const r of records) emit(o, r);
-      if (step && !done) $('.sd-note').textContent = `第 ${step} ${followInfo(o).unit}做完了，和引擎算的一样。接着做。`;
+      if (step && !done) $('.sd-note').textContent = `第 ${step} ${followInfo(o).unit}做完了，对的。接着做第 ${step + 1} ${followInfo(o).unit}。`;
       if (!done) all = false;
       slips += t.slips;
     }
@@ -74,8 +76,9 @@ export function stage(el, src) {
     if (closed) return;
     for (const o of followed()) for (const r of tracks?.get(o.id)?.giveup() || []) emit(o, r);
     session.event('giveup', el, { why: '点了做不出来' });
-    const lines = followed().map((o) => nextText(o, st.scene)).filter(Boolean);
-    finish(`先放一放。${lines.join('；')}`);
+    // 完整的答案：还没做的每一趟该是什么样，一趟一行
+    const lines = followed().map((o) => restText(o, st.scene)).filter(Boolean).join('；').split('；');
+    finish(['先放一放。', ...lines].join('\n'));
   });
 
   // 演镜头指令（没有老师：不等回答；演完才开始记）
@@ -86,7 +89,12 @@ export function stage(el, src) {
     if (!objs.length) return;
     tracks = new Map(objs.map((o) => [o.id, trackDrill(whereOf(o, st.scene))]));
     const i = followInfo(objs[0]);
-    $('.sd-lead').textContent = `照 ${i.title} 走一遍：自己动手，每做完一${i.unit}页面会看对不对。`;
+    $('.sd-q').textContent = `照 ${i.title} 走一遍`;
+    // 手怎么动：照这样东西开着的那几种动作各自的一句（规则文件的 gestures[动作].brief），不另写
+    const how = [...st.scene.opens.values()].filter((e) => e.obj === objs[0].id).map((e) => rulesOf(objs[0])?.gestures?.[e.action]?.brief).filter(Boolean);
+    $('.sd-lead').textContent = `${how.length ? `${how.join('；')}。` : ''}每做完一${i.unit}页面会看对不对。`;
+    // 一排格子用不着那么高（一块空着的灰底）；图、表照旧
+    if (objs.every((o) => o.type === 'array')) el.classList.add('is-row');
   };
   // 指令是一行一行演的（带动画）：等照着走的东西出来
   // 换下一题时这道题被移出页面：舞台清掉（不然 ResizeObserver、键盘的监听一直留着）

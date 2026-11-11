@@ -20,7 +20,26 @@ body.is-stage-class .ink-fab, body.is-stage-class .la-tray { display: none !impo
 .sc-note { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 64px); translate: -50% 0; z-index: 6; max-width: calc(100% - 32px); padding: 10px 16px; border-radius: 14px; background: var(--card-solid, #fff); box-shadow: var(--lift, 0 10px 24px -14px rgb(0 0 0 / 0.4)); font: 15px/1.5 var(--sans); }
 .sc-closing { position: absolute; inset: 56px 0 0; z-index: 5; display: grid; place-items: center; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); background: color-mix(in srgb, var(--card-solid, #fff) 55%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .sc-card { width: min(100%, 560px); max-height: 100%; overflow: auto; padding: 22px; border-radius: 20px; background: var(--card-solid, #fff); box-shadow: var(--lift, 0 14px 34px -20px rgb(0 0 0 / 0.4)); }
-.sc-card h2 { margin: 0 0 10px; font: 600 22px/1.3 var(--display, var(--sans)); }
+.sc-card h2 { margin: 0 0 10px; padding-top: 0; display: block; font: 600 22px/1.3 var(--display, var(--sans)); }
+.sc-card h2::before { content: none; } /* 黑板课标题上面那道虚线（.la-lesson h2）不要落到小结卡上 */
 .sc-sum p { margin: 0 0 8px; font: 16px/1.7 var(--sans); }
 .sc-foot { margin: 10px 0 14px; font: 13px/1.5 var(--sans); color: var(--muted); }
 .sc-back { min-height: 48px; padding: 0 22px; border: 0; border-radius: 999px; background: var(--brand, #333); color: var(--brand-ink, #fff); font: 600 16px var(--sans); cursor: pointer; }
+
+/* 等第一幕时的开场卡（舞台还是空的）：课名和三个点，第一行一演就收起 */
+.sc-opening { position: absolute; inset: 0; z-index: 4; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 24px; text-align: center; pointer-events: none; animation: sc-opening-in .5s ease-out both; }
+.sc-opening-badge { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 16px; background: var(--brand, #4a1d52); color: var(--brand-ink, #fff); font: 600 26px/1 var(--display, var(--sans)); box-shadow: var(--lift, 0 10px 24px -14px rgb(0 0 0 / 0.4)); }
+.sc-opening-title { max-width: 18em; font: 600 28px/1.35 var(--display, var(--sans)); color: rgb(var(--chalk-rgb) / 0.95); }
+.sc-opening-sub { font: 15px/1.5 var(--sans); color: var(--muted); }
+.sc-dots { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: 2px; }
+.sc-dots i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .3; animation: sc-dot 1.2s ease-in-out infinite; }
+.sc-dots i:nth-child(2) { animation-delay: .2s; }
+.sc-dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes sc-dot { 40% { opacity: 1; transform: translateY(-2px); } }
+@keyframes sc-opening-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .sc-opening, .sc-dots i { animation: none; } }
+/* 等老师回话（不是第一轮）：画面底下中间三个点，像对面在打字 */
+.sc-wait { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 92px); translate: -50% 0; z-index: 4; padding: 12px 16px; border-radius: 999px; background: var(--panel, rgb(var(--chalk-rgb) / 0.06)); box-shadow: var(--lift, none); color: rgb(var(--chalk-rgb) / 0.7); pointer-events: none; animation: sc-opening-in .3s ease-out both; }
+.sc-wait .sc-dots { margin: 0; vertical-align: 0; }
+.sc-wait .sc-dots i { width: 8px; height: 8px; }
+.sc-title .dk-sup, .sc-opening-title .dk-sup { font-size: 0.58em; vertical-align: 0.85em; line-height: 0; margin-left: 0.04em; font-weight: 600; }

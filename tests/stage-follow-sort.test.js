@@ -84,12 +84,12 @@ test('老师写了一格（数据变了）：从新的一排重跑', () => {
   assert.match(s.stateText(), /第 1 趟做完该是：1 3 0/);
 });
 
-test('一趟中间正好走在引擎的路上：不说对（@a.right 不演），事实里说在路上、还差几格；到了一趟才说对', () => {
+test('一趟中间正好走在引擎的路上：不说对（@a.right 不演），事实里只说还差哪几格；到了一趟才说对', () => {
   const s = make(`${WD}\nfollow a sort shell gaps="5 3 1"\nopen a move\n@a.right say "这一趟对了"`);
   let fx = stu(s, 'swap a#1 a#6'); // 引擎自己也是先动这两张
   assert.equal(fx.judged.verdict.right, null);
   assert.deepEqual(fx.reactions || [], []);
-  assert.match(said(fx), /在引擎走的那条路上；离第 1 趟做完差 4 格/);
+  assert.match(said(fx), /和第 1 趟做完该有的样子差 4 格：/);
   stu(s, 'swap a#2 a#7');
   fx = stu(s, 'swap a#3 a#8');
   assert.equal(fx.judged.verdict.right, true);

@@ -19,6 +19,7 @@ import { VIEWS } from './types/views.js';
 import { PointerRouter } from './pointer.js';
 import { armGesture, noteAt } from './gesturedom.js';
 import { undoPlan } from './gestures.js';
+import { undoneOf } from './events.js';
 import { reportError } from '../errlog.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -60,6 +61,7 @@ function svgBox(n, depth = 0) {
 // 节点行内的 translate（最后摆的地方；动画走的是 WAAPI，不改行内）
 const transOf = (n) => { const m = String(n.style?.transform || '').match(/translate\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px\)/); return m ? { x: Number(m[1]), y: Number(m[2]) } : null; };
 const CAPTION_MAX = 3; // 话最多留几句在画面上（这一轮说过的，旧的淡一点）
+export const DONE_BTN = '做好了'; // 没有挑战、学生手上有没做完的东西时，页面替老师挂的那个按钮（helpLine）
 export const HELP = '给个提示'; // 挑战还没做到时，页面替老师挂的那一问的按钮
 
 /**
@@ -83,9 +85,10 @@ export function quoteText(t) {
  * 没有话、还有没做到的挑战时一个「给个提示」；都没有是「接着」。不带 ""：不动最后说的那一句（ask 带 "" 会把它清掉，
  * 老师看的现状里「最后说的话」就没了，撤一步重放以后又回来）
  */
-export function helpLine(q, hasGoals) {
+export function helpLine(q, hasGoals, hasWork = false) {
   if (q) return `ask say ${quoteText(q)}`;
-  return hasGoals ? `ask next button="${HELP}"` : 'ask next';
+  // 没有挑战、可学生手上有交给自己做的东西还没做完（照着走的一排、开着的树）：按钮写「做好了」——「接着」像是让学生跳过去
+  return hasGoals ? `ask next button="${HELP}"` : hasWork ? `ask next button="${DONE_BTN}"` : 'ask next';
 }
 
 export { COLOR_NAMES };
@@ -341,7 +344,7 @@ export class Stage {
           // 写错的那一问照样把问题留在画面上，学生用话答（第一节真课 `ask tap q#2 q#3 "哪一句说得对？"` 写错了，问题没了、也没有按钮，课就停住了）；
           // 挑战还没做到：学生在画面上试，旁边一个「给个提示」（helpLine：不带话，最后说的那一句还在）
           const q = askedBad ? (askedBad.args || []).find((a) => a.t === 'str')?.v : '';
-          const src = helpLine(q, this.pendingGoals().length > 0);
+          const src = helpLine(q, this.pendingGoals().length > 0, undoneOf(this.scene).length > 0);
           const [c] = parseScript(src);
           await this.exec({ ...c, line: 0, src }, { by: 'page', turn });
           // 现状里照实写：这一问是页面替老师挂的，不是老师问的
@@ -1915,6 +1918,7 @@ function judgedAct(act, j) {
   act.src = j.src;
   act.verdict = { legal: v.legal !== false, right: v.right ?? null, misread: v.misread ?? null, why: v.why ?? null, next: nextText(v.next) };
   if (j.call === 'now') act.call = 'now';
+  if (j.reached) act.reached = true;
   if (j.mark) act.marked = true;
   if (j.failed) act.failed = true;
   if (j.policy?.call === 'done') act.patient = true; // 老师写了做完才叫：试的这几下不算进「试了好多下」

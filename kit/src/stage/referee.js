@@ -42,6 +42,8 @@ export function judge(scene, objId, act, policy = {}, { by = 'student', open = n
     out.facts.push(verdict.why || '这一下做不到');
     return out;
   }
+  // 规则说这一下做对了、要老师接（照引擎走的东西到了一趟：follow.js）：马上叫，记成 reached（不是老师写的 call=wrong）
+  if (verdict.right === true && v.call === 'now') { out.call = 'now'; out.reached = true; }
   if (wrong) {
     out.mark = wrongPolicy === 'mark';
     out.apply = wrongPolicy !== 'block';

@@ -55,7 +55,9 @@ export function stageMock({ pace = 60 } = {}) {
     const last = String(messages.at(-1)?.content || '');
     const k = messages.filter((m) => m.role === 'assistant').length;
     const text = /舞台课：小结写成几行字/.test(last) ? CLOSING : TURNS[Math.min(k, TURNS.length - 1)](last);
-    await new Promise((r) => setTimeout(r, 300));
+    // ?dev&think=4：模拟老师先想 4 秒再写（真课出第一个字前要等十几秒：看等的那一阵画面上是什么）
+    const lag = typeof location !== 'undefined' && /[?&]think=(\d+)/.test(location.search) ? Number(location.search.match(/[?&]think=(\d+)/)[1]) * 1000 : 300;
+    await new Promise((r) => setTimeout(r, lag));
     let out = '';
     for (const line of text.split('\n')) {
       out += `${line}\n`;
