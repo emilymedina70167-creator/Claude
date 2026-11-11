@@ -1173,6 +1173,8 @@ export class Scene {
         const ws = refs.length === 2 && refs.every((w) => !parseRef(w).mark) ? refs.map((w) => this.objects.get(w)) : null;
         if (ws && ws[0].type === ws[1].type && typeOf(ws[0]).compareWhole) return { compare: typeOf(ws[0]).compareWhole(ws[0], ws[1]) };
         const parts = partsIn();
+        // 写的是两样整样的东西、可这种东西不会整张比（一排格子）：说清楚能比什么（主线第一轮 D1-14）
+        if (ws && parts.length !== 2) throw new Error(`compare 比的是两个部件（compare a.3 a.8）或者两张矩阵（compare A B）：${typeOf(ws[0]).label}不能整${ws[0].type === 'array' ? '排' : '样'}比，一格一格写`);
         if (parts.length !== 2) throw new Error('compare 要正好两个（比如 compare a.3 a.8）');
         return { a: parts[0], b: parts[1], sign: compareValues(parts[0].value, parts[1].value) };
       }

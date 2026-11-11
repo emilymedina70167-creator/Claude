@@ -382,3 +382,13 @@ test('gridsOf、gridText：舞台上每张矩阵现在的数；空格子写 _，
   assert.deepEqual(g.get('A'), [['1', '2'], ['3', '-4']]);
   assert.equal(gridText(g.get('B')), '(1 _; _ 2)');
 });
+
+// —— 舞台主线第一轮 D1-14：说明没写的两处 ——
+test('D1-14：说明写了矩阵最多几行几列；compare 写了整排格子时报错说清楚能比什么', async () => {
+  assert.match(stageDoc('线代'), /最多 6 行 8 列/);
+  const { Scene, dryRun } = await import('../kit/src/stage/scene.js');
+  const { parseScript } = await import('../kit/src/stage/script.js');
+  const s = new Scene();
+  for (const c of parseScript('array a = 1 2 3\narray b = 1 2 3')) s.apply(c);
+  assert.match(dryRun(s, 'compare a b')[0].error, /compare 比的是两个部件（compare a\.3 a\.8）或者两张矩阵（compare A B）.*一排格子不能整排比/);
+});
