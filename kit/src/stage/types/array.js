@@ -276,10 +276,10 @@ ptr mid a.5 / unptr mid           格子下面的指针（同名的再写就挪�
 group a stride=5                  按「隔 5 个」分组：每组染色、连起来（stride 可以写拨的数的名字，学生一拨就重新分）
 split a / merge a                 每组下到自己的一排 / 合回一排
 ask drag a#1 a#6 "把小的拖到前面"   学生按住一格拖到同一排另一格上，两格交换（页面照做，再告诉你）
-array h = _ 49 38                 _ 是空格子（write h.2 _ 空出来）
-open a move                       学生按住一张拖：放到另一张上 = swap a#6 a#1，两张之间 = move a#6 -> a.2（插进去），空格子上是挪进去
-open a edit                       学生点一格用键盘写数 = write a.3 26（只开几格：open a.1-2 edit）
-量：inversions(a) 前大后小的有几对（inversions(a.2-5) 只数这一段）、blank(a) 空着几格。这两项页面不判对错，只告诉你学生做了什么、几对变成几对`,
+array h = _ 49 38  _ 是空格子（write h.2 _ 空出来）
+open a move  学生按住一张拖：到另一张上 = swap a#6 a#1，两张之间 = move a#6 -> a.2（插进去）
+open a edit  学生点一格键盘写数 = write a.3 26（只开几格 open a.1-2 edit）
+量：inversions(a) 前大后小几对（a.2-5 只数这段）、blank(a) 空几格；这两项页面不判对错，只告诉你做了什么、几对变几对`,
   example: `array a = 49 38 65 97 76 13 27 49′ 55 04
 hop a.1 -> a.6 color=g1
 paint a.1 a.6 g1

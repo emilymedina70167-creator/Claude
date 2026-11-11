@@ -9,6 +9,7 @@
 // 部件的写法：a（整个）、a.3（第 3 格，按现在的位置）、a.2-5（第 2 到 5 格）、a#8（一开始在第 8 格的那一个，跟着它走）
 import { parseMeasure } from './rules.js';
 import { isExactFunc } from '../exact.js';
+import { splitPicks } from './pick.js';
 
 /** 认得的指令（写错了页面报出来，不默默忽略）。这里是各种东西共用的；每种东西自己的指令（swap、insert、rowop……）由 types/ 注册进来 */
 export const COMMANDS = new Set([
@@ -25,7 +26,7 @@ export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
  * 在 types/ 的 options 里（造东西都认 hide=）。重放旧课（lenient）照收不报。改了指令认的选项，这里（或 types/ 的 options）跟着改
  */
 export const OPTIONS = {
-  label: ['side', 'tone'], fly: ['side'], dial: ['range', 'at'], pick: ['reveal'], keep: ['after'],
+  label: ['side', 'tone'], fly: ['side'], dial: ['range', 'at', 'options'], pick: ['reveal'], keep: ['after'],
   open: ['back', 'wrong', 'call', 'undo', 'input', 'range'],
   goal: ['when', 'call', 'on', 'collect', 'n'],
   ask: {
@@ -186,7 +187,13 @@ export const RICH_MEASURES = new Set(['rank', 'det']);
  * {count(t)} 是页面数的量（画成现在的数，跟着变；数不了画「?」）、$d$ 是式子里的字母、[不稳定] 是能飞到图上去的词。
  * 返回 [{ k: 'text' | 'ref' | 'var' | 'measure' | 'math' | 'word', v }]
  */
-export function parseRich(text, { old = false } = {}) {
+export function parseRich(text, opts = {}) {
+  // {t: 甲 | 乙 | 丙}（照拨盘挑一个，pick.js；能套一层，所以先拆它）：交 { k: 'pick', v: 原文, name, alts }，别的照旧一段段读
+  const segs = splitPicks(text);
+  if (!segs.some((p) => p.k === 'pick')) return richPlain(text, opts);
+  return segs.flatMap((p) => (p.k === 'pick' ? [{ k: 'pick', v: p.raw, name: p.name, alts: p.alts }] : richPlain(p.v, opts)));
+}
+function richPlain(text, { old = false } = {}) {
   const out = [];
   const s = String(text ?? '');
   const re = /\{([^{}]+)\}|\$([^$]+)\$|\[([^\]]+)\]/g;

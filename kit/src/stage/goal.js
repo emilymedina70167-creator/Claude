@@ -211,6 +211,21 @@ export function checkPreds(scene, cond, { run = false } = {}) {
 /** 一句条件规范化成一个键（去掉空格），看两个挑战的条件有没有一样的句子 */
 export const clauseKey = (cl) => (cl.sorted ? `${cl.l}sorted${cl.sorted}` : cl.pred ? `${cl.l}:${cl.pred}:${cl.args.join(',')}` : `${cl.l}${cl.op}${cl.r}`).replace(/\s+/g, '');
 
+/**
+ * 这一句是不是在比拨词的拨盘（t = 将来、将来 != t）：{ now（现在的词）, want（要比的词） }；不是是 null。
+ * 比大小、要比的词拨不到：抛错（写下挑战时当场报）
+ */
+function wordDial(scene, cl) {
+  if (cl.pred || cl.sorted) return null;
+  const dialOf = (w) => { const x = scene.vars?.get(String(w).trim()); return x?.options ? x : null; };
+  const [x, other, name] = dialOf(cl.l) ? [dialOf(cl.l), cl.r, cl.l] : dialOf(cl.r) ? [dialOf(cl.r), cl.l, cl.r] : [null];
+  if (!x) return null;
+  if (cl.op !== '=' && cl.op !== '!=') throw new Error(`「${cl.l} ${cl.op} ${cl.r}」：${name} 是拨词的拨盘，只能比一样不一样（= / !=）`);
+  const o2 = dialOf(other);
+  const want = o2 ? o2.options[o2.v - 1] : String(other).trim();
+  if (!o2 && !x.options.includes(want)) throw new Error(`「${cl.l} ${cl.op} ${cl.r}」：${name} 拨不到「${want}」（能拨到：${x.options.join('、')}）`);
+  return { now: x.options[x.v - 1], want };
+}
 /** 一句条件成不成立（还空着的算不成立）；两边对不上（矩阵和数比）抛错 */
 export function evalClause(scene, cl) {
   if (cl.pred) {
@@ -218,6 +233,9 @@ export function evalClause(scene, cl) {
     if (!fn) throw new Error(predMissing(scene, cl));
     return fn(cl.args) === true; // 判不了（null）算没成立
   }
+  // 拨词的拨盘（dial t = 现在 options="…"）：另一边照字面是它的一个词，只能比一样不一样
+  const wd = wordDial(scene, cl);
+  if (wd) return (wd.now === wd.want) === (cl.op === '=');
   const L = operand(scene, cl.l);
   if (cl.sorted) {
     if (L.k === 'null') return false;

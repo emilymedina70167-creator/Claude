@@ -89,7 +89,8 @@ export function partValue(scene, ref, fill = null) {
 export function scopeOf(scene, { plane, fill = null } = {}) {
   const vars = {};
   const put = (k, get) => Object.defineProperty(vars, k, { get, enumerable: true, configurable: true });
-  for (const [k, v] of scene.vars) put(k, () => Q.from(v.v));
+  // 拨词的拨盘（options=）不是数，进不了式子：用到才报
+  for (const [k, v] of scene.vars) put(k, () => { if (v.options) throw new Error(`${k} 是拨词的拨盘（${v.options.join(' / ')}），不是数，进不了式子`); return Q.from(v.v); });
   for (const o of scene.objects.values()) if (o.type === 'matrix') put(o.id, () => matrixValue(o, fill));
   const p = plane && scene.objects.get(plane);
   if (p?.items) for (const it of p.items) put(it.name, () => [toQ(it.x), toQ(it.y)]);

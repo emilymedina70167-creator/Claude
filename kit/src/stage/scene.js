@@ -14,6 +14,7 @@ import { parseScript, parseRef, parseRich, addCommands, OPTIONS, optionError } f
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
 // numOf：数（整数、小数、分数 -3/4，′ 和真的减号也认），比大小用；和挑战判数是同一个
+import { splitPicks, checkPick, varText, pickDeps } from './pick.js';
 import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure, numOf, isExpr, exprMeasure } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder, termText } from './value.js';
@@ -118,6 +119,8 @@ export function affordsOf(t) {
 
 // 手势表里的动作（rules.js 的 gestures：rotate、rowop、mark……）给老师看的一句：按五种通用手势说
 const GESTURE_TEXT = { tap: '点', 'drop-on': '拖到上面', 'drop-at': '拖到空处', span: '拉一段', line: '拉一条线', write: '写一个值' };
+// 拨词的拨盘（dial t = 现在 options="…"）用在只认数的地方：当场报，不默默当成第几个
+export const wordDialError = (name, x) => `${name} 是拨词的拨盘（${x.options.join(' / ')}），不是数：这里要一个拨数的（dial k = 1 range=1..5）`;
 // 手势表自己写了 brief 的照它说（一排格子的 move：「拖到空处」说不清是对调还是插进去）
 const gestureText = (g) => g?.brief || [].concat(g?.gesture || []).map((k) => GESTURE_TEXT[k] || k).join(' / ');
 /** open 那一行老师事先定的：走偏了怎么办（wrong）、什么时候叫老师（call）、学生能不能撤一步（undo）。默认照做、只记下 */
@@ -388,6 +391,7 @@ export class Scene {
     if (/^-?\d+(\.\d+)?$/.test(String(v))) return Number(v);
     const x = this.vars.get(v);
     if (!x) throw new Error(`没有叫「${v}」的数（先用 dial 造一个）`);
+    if (x.options) throw new Error(wordDialError(v, x));
     return x.v;
   }
   /** 新的一样东西放哪：画面上摆着的东西的下面，和它们居中对齐（横屏放不下另起一列由 placeFresh 再看一眼） */
@@ -455,6 +459,8 @@ export class Scene {
   checkRich(text, c, { replayRefs = true } = {}) {
     for (const p of parseRich(text)) {
       if (p.k === 'ref') { if (replayRefs || !c?.lenient) this.parts(p.v); }
+      // {t: 甲 | 乙 | 丙}：名字要是拨盘、段数要和它能拨到的个数一样（pick.js）；重放旧课不查
+      else if (p.k === 'pick') { if (!c?.lenient) checkPick(p, this.vars); }
       else if (p.k === 'measure' && !c?.lenient) checkMeasure(this, p.v, { run: true });
       // 光秃秃的一个名字（{kk}）现在既不是拨数、也不是舞台上的东西：同一轮后面造出来的（say 写在 matrix Xi 前面）是对的，
       // 到这一轮演完还不是的多半是拼错了，学生看到的是「kk」两个字母（复核修正，控制者裁定）。这一行照演，记下来，一轮演完舞台问 looseProblems。
@@ -1264,9 +1270,20 @@ export class Scene {
         // dial d = 5 range=1-5 at=a
         const [name, val] = words;
         if (!name || !/^[A-Za-z_]\w*$/.test(name)) throw new Error('要写成 dial 名字 = 值 range=1-9');
-        const [lo, hi] = parseRange(opts.range || '1-9');
+        // options="过去 现在 将来"：拨词的拨盘（主线第二轮 C）。里面存的是第几个词（1 起），拨、存、重放和拨数的一样；写出来、比较是那个词
+        let list = null;
+        if (opts.options != null && !(c.lenient && opts.range != null)) {
+          if (opts.range != null) throw new Error('range= 和 options= 只能写一个（options= 是拨词的拨盘，range= 是拨数的）');
+          list = String(opts.options).trim().split(/\s+/).filter(Boolean);
+          if (list.length < 2) throw new Error(`options= 里至少两个词，用空格隔开（dial ${name} = 现在 options="过去 现在 将来"）`);
+          if (list.length > 8) throw new Error(`options= 最多 8 个词（写了 ${list.length} 个）`);
+          const dup = list.find((w, i) => list.indexOf(w) !== i);
+          if (dup) throw new Error(`options= 里「${dup}」重了`);
+          if (val != null && !list.includes(val)) throw new Error(`「${val}」不在 options= 里（${list.join('、')}）`);
+        }
+        const [lo, hi] = list ? [1, list.length] : parseRange(opts.range || '1-9');
         if (!(lo <= hi)) throw new Error('range 要写成 小..大，比如 range=1..5、range=-3..3（1-5 也认）');
-        const v = Number(val ?? lo);
+        const v = list ? (val == null ? 1 : list.indexOf(val) + 1) : Number(val ?? lo);
         const at = opts.at || [...this.objects.keys()][0] || null;
         // at= 写成已有东西的部件（一条边 g.1~2、一格 a.3）：挂在那个部件旁边（主线第一轮 D3-2：以前当成「还没造」记着，
         // 拨盘一直浮着，现状每一轮写一句「g.1~2 还没造」）。那样东西在、部件写错了：照部件的错报
@@ -1274,7 +1291,7 @@ export class Scene {
         const atPartRaw = !!at && !this.objects.has(at) && this.objects.has(atObj) && /[.#]/.test(at);
         let atPart = atPartRaw;
         if (atPart) { try { this.parts(at); } catch (err) { if (!c.lenient) throw err; atPart = false; } }
-        this.vars.set(name, { v: Math.max(lo, Math.min(hi, v)), lo, hi, at, shown: true });
+        this.vars.set(name, { v: Math.max(lo, Math.min(hi, v)), lo, hi, at, shown: true, ...(list ? { options: list } : {}) });
         this.labels.set(`dial:${name}`, { id: `dial:${name}`, refs: at && (this.objects.has(at) || atPart) ? [at] : [], text: '', side: 'below', tone: 'dial', link: null, dial: name });
         // at= 写的东西还没造（dial 写在 matrix M = … {k} 之前，造 M 要先有 k）：先记着，M 造出来时挂上（以前就一直浮着、不挂）
         if (at && !this.objects.has(at) && !atPart) this.dialAt.set(name, at); else this.dialAt.delete(name);
@@ -1283,7 +1300,9 @@ export class Scene {
       case 'set': {
         const x = this.vars.get(words[0]);
         if (!x) throw new Error(`没有叫「${words[0]}」的数`);
-        const v = Number(words[1]);
+        // 拨词的拨盘：写那个词（set t 将来）
+        if (x.options && !x.options.includes(words[1])) throw new Error(`${words[0]} 只能拨到：${x.options.join('、')}（写成 set ${words[0]} ${x.options[0]}）`);
+        const v = x.options ? x.options.indexOf(words[1]) + 1 : Number(words[1]);
         if (!Number.isFinite(v)) throw new Error('要写成 set 名字 值');
         x.v = Math.max(x.lo, Math.min(x.hi, v));
         return this.onVar(words[0]);
@@ -2048,6 +2067,12 @@ export class Scene {
       const r = t.onVar?.(this, o, b, this.vars.get(name).v);
       if (r) { out.binds.push(r); if (b.kind === 'group') out.regroup.push(r); }
     }
+    // 字里写了 {名字: … | …} 的东西（句子）：照现在那一段重排（那种东西自己的 onPick；交的那一份画面照 choreo 演）
+    for (const o of this.objects.values()) {
+      if (!o.picks?.deps?.includes(name) || o.picks.off) continue;
+      const r = typeOf(o).onPick?.(this, o);
+      if (r) out.binds.push(r);
+    }
     // 写了 {k} 的（格里的 {k}、{k A}……）当场跟着重算：变了的交给 apply 一起写进 fx.derived
     const derived = this.derive();
     if (derived.length) out.derived = derived;
@@ -2096,7 +2121,7 @@ export class Scene {
     const moved = (l) => (l.asked && l.side && l.placed && l.placed !== l.side ? `；写的是${SIDE[l.side] || l.side}，放不下，在${SIDE[l.placed] || l.placed}` : '');
     if (labels.length) lines.push(`贴着的字：${labels.map((l) => `${l.id}「${l.text}」${l.refs.length ? `（贴在 ${l.refs.join(' ')}${moved(l)}）` : ''}`).join('；')}`);
     const dials = [...this.vars].filter(([, v]) => v.shown);
-    if (dials.length) lines.push(`能拨的数：${dials.map(([n, v]) => `${n} = ${v.v}（${v.lo}～${v.hi}）`).join('，')}`);
+    if (dials.length) lines.push(`能拨的数：${dials.map(([n, v]) => (v.options ? `${n} = ${varText(v)}（${v.options.join(' / ')}）` : `${n} = ${v.v}（${v.lo}～${v.hi}）`)).join('，')}`);
     const waitAt = [...this.dialAt].filter(([n]) => this.labels.has(`dial:${n}`));
     if (waitAt.length) lines.push(`${waitAt.map(([n, at]) => `${n} 要挂在 ${at} 上，${at} 还没造`).join('；')}（造出来就挂上去）`);
     // 扫一遍拨数：跟着拨数算的东西，每个能拨到的值的要点（页面不真拨），老师不用自己一个个试；全都说不出的不写

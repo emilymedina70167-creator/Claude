@@ -34,7 +34,7 @@ export const STUDENT_FORMS = [
   'insert t 47（托盘里的 47 拖进树）', 'insert t.45 right 47（拖到 45 右边的空位）',
   'rowop M r3 - 2r1（r1 的把手拖到 r3 上、倍数框写 -2）', 'rowop M r1 <-> r3（拖到行号上）', 'rowop M 3r2（点行号、写 3）',
   'mark s.2-4 V（从 s.2 拉到 s.4、点成分）', 'fold s.3-6（点这一段的括号）',
-  'undo（撤一步）', 'dial k 3（拨数器拨到 3）',
+  'undo（撤一步）', 'dial k 3（拨数器拨到 3；拨词的写 dial t 将来）',
   'refer s.23 -> s.15（从 s.23 的钩拉线松在 s.15 上；-> s.1-2 松在那道括号上，-> s 松在句子外框上）', 'unrefer s.23（点 s.23 连出去那条线上的 ✕）',
   'unmark s.21（点学生拉的那道括号上的 ✕）', 'move s.1-6 after s.11（open s move：按住这一段的括号 0.35 秒再拖到 s.11 后面；一个词就按住这个词；before s.1 是最前面）',
   'unfold s.5（点 s.5 所在的小方块）', 'delete t.7（open t pluck / delete：点 t.7）',
@@ -107,7 +107,10 @@ export function studentGesture(cmd, args = '') {
   if (cmd === 'undo') return a ? bad('undo 后面不写东西：学生点的是右上角「撤一步」') : { undo: true };
   if (cmd === 'dial') {
     const m = a.match(/^([A-Za-z_]\w*)\s*(?:=\s*)?(-?\d+(?:\.\d+)?)$/);
-    return m ? { dial: m[1], value: Number(m[2]) } : bad('要写成 dial k 3（把拨数器 k 拨到 3）');
+    if (m) return { dial: m[1], value: Number(m[2]) };
+    // 拨词的拨盘（dial t = 现在 options="过去 现在 将来"）：写那个词
+    const w = a.match(/^([A-Za-z_]\w*)\s*(?:=\s*)?(\S+)$/);
+    return w ? { dial: w[1], value: w[2] } : bad('要写成 dial k 3（把拨数器 k 拨到 3；拨词的写 dial t 将来）');
   }
   if (cmd === 'rotate') {
     if (!w.length || !isPart(w[0])) return bad('rotate 要写在哪个结点转：rotate t.30 left（在 30 往左转 = 把 30 的右孩子拖到 30 上）');
@@ -366,6 +369,22 @@ export const NEW2 = [
     checks: [C(/\{A B - B A\} = O ✗，现在是 \(/, '现状里写式子现在的值'), C(/挑战 g2[^\n]*\{det\(A - k I\)\} = 0/, '数的式子')],
     called: [C(/拨到 1 时做到了 g1；\{A B - B A\} = O：✗ ✗ ✗ ✓/, '学生拨的路上每一停照式子判'), C(/学生做到了挑战 g1/, '改成可交换：当场做到'), C(/学生做到了挑战 g2/, '拨到不可逆：当场做到')],
     nots: [C(/判不了/), C(/看不懂/)],
+    noAudit: [C(/压着/), C(/出了屏幕/)],
+  },
+  {
+    id: 'C 字跟着拨盘变', files: ['C.txt'],
+    checks: [
+      C(/能拨的数：t = 现在（过去 \/ 现在 \/ 将来）/, '拨词的拨盘：现状写词'),
+      C(/句子 s（5 个词）：I was holding it steady\./, '拨到过去：句子跟着换'),
+      C(/句子 s（6 个词）：I will be holding it steady\./, '拨到将来：句子跟着换'),
+      C(/跟着拨盘变：\{t: was holding \| am holding \| will be holding\} 现在是「am holding」/, '现状里写它跟着谁、现在是哪一段'),
+      C(/学生的括号：s\.2-4 谓语（will be holding）里有 key 的谓语 1 个/, '学生圈着那一整段的括号跟着走，key 跟着换'),
+      C(/学生拨了 t：现在 → 过去/, '学生拨的路写的是词'),
+      C(/拨到 过去 时做到了 g1/, '挑战里比拨盘的词'),
+    ],
+    screen: [C(/\nam\n/, '拨回现在：句子变回来'), C(/时间：现在。谓语是现在进行时/, '贴的字跟着拨盘换')],
+    noScreen: [C(/\n(was|will)\n/, '拨回现在：屏幕上没有别的时间留下的词')],
+    nots: [C(/作废/), C(/不再跟着/)],
     noAudit: [C(/压着/), C(/出了屏幕/)],
   },
 ];

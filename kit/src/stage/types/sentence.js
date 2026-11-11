@@ -17,6 +17,7 @@ import { bbox } from '../layout.js';
 import { parseBrackets, tokenizeSentence, ROLES } from '../../entext.js';
 // 规则那边照 key 数的学生括号（舞台现状里写）。两个模块互相 import：都只在函数里用对方的东西，加载的先后不碍事
 import { bracketFacts, tallyOf } from './sentence.rules.js';
+import { splitPicks, hasPick, checkPick, fillPicks, pickDeps, pickNow, dialSteps, varText } from '../pick.js';
 
 export const MAX_WORDS = 60;
 export const WRAP = 800; // 一行最宽（世界坐标的像素；镜头再缩放到屏幕上）
@@ -623,6 +624,44 @@ export function phraseOf(words) {
   }
   return `${pre}${text}${post}`;
 }
+// —— 跟着拨盘变的句子（主线第二轮 C）：sentence s = "I {t: was holding | am holding | will be holding} it steady." ——
+// 句子的原文（模板）留在 o.picks.src；拨盘一变（scene.js 的 onVar → onPick），照现在那一段重排：模板里一段一段对着认
+//（原文的那几段词一个对一个；{…} 那一段里一样的词留着、别的换掉），所以没变的词编号不变、学生拉的括号照 rewrite 的规矩留。
+// rewrite 换了整句、move 改了先后以后不再跟（再照模板重排会把它们冲掉），现状里写明。
+
+/**
+ * 模板照现在的拨盘写成一句、切成词，每个词记着它是模板的第几段（seg）：{ words, end, segs, now（每个 {…} 现在写出来的字）}。
+ * {…} 贴着别的字写（walk{t: ed | s}）切出来的词数对不上：抛错（要和别的词用空格隔开）
+ */
+export function templateWords(src, vars) {
+  const parts = splitPicks(src);
+  const texts = parts.map((p) => (p.k === 'pick' ? pickNow(p, vars) : p.v));
+  const { words, end } = splitSentence(texts.join(''));
+  const counts = texts.map((t) => splitSentence(t).words.length);
+  if (counts.reduce((a, b) => a + b, 0) !== words.length) throw new Error('{名字: … | …} 要和别的词用空格隔开，一段里写整个词（I {t: walked | walk} home，不是 walk{t: ed | s}）');
+  const segs = counts.flatMap((n, i) => new Array(n).fill(i));
+  return { words, end, segs, now: parts.map((p, i) => (p.k === 'pick' ? { raw: p.raw, text: texts[i].trim() } : null)).filter(Boolean) };
+}
+// 两串词里最长的一串先后一样的（{…} 那一段换了以后，一样的词留着）：新的第 j 个 → 原来的第几个（null 是新的）
+function lcsPairs(a, b) {
+  const n = a.length, m = b.length;
+  const L = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = norm(a[i]) === norm(b[j]) ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const pairs = new Array(m).fill(null);
+  for (let i = 0, j = 0; i < n && j < m;) {
+    if (norm(a[i]) === norm(b[j])) { pairs[j] = i; i++; j++; } else if (L[i + 1][j] >= L[i][j + 1]) i++; else j++;
+  }
+  return pairs;
+}
+// 拨盘的每一种拨法（几个拨盘一起）：[{ vars（照这种拨法的拨盘表）, text（「t 拨到「过去」」） }]；太多（> 64）只给现在这一种
+function dialStates(names, vars) {
+  const xs = names.map((n) => [n, vars.get(n)]).filter(([, x]) => x && dialSteps(x));
+  const total = xs.reduce((k, [, x]) => k * dialSteps(x).n, 1);
+  if (!xs.length || total > 64) return [{ vars, text: '' }];
+  let out = [new Map(vars)];
+  for (const [n, x] of xs) out = out.flatMap((m) => Array.from({ length: dialSteps(x).n }, (_, i) => new Map(m).set(n, { ...x, v: x.lo + i })));
+  return out.map((m) => ({ vars: m, text: xs.map(([n]) => `${n} 拨到「${varText(m.get(n))}」`).join('、') }));
+}
 
 // —— 改写：新句子里的词和原来的词配对（同一个词，不管大小写；同样的词按先后配；剩下的前几个字母一样的也算同一个，比如 realize → realized）——
 export function matchWords(oldWords, newWords) {
@@ -760,6 +799,9 @@ export function parseLinks(o, src) {
   return { src: String(src), pairs, wrongs };
 }
 
+/** key、links 是被什么作废的（写给老师）：rewrite 换了整句；拨盘换了词、原来的 key 对不上（key 里没写同样的 {t: … | …}） */
+export const voidBy = (k) => (k?.void === 'dial' ? '拨盘换词' : 'rewrite');
+
 /**
  * key 现在怎么样（没写 key 是 null）：{ n（几段）, void（被 rewrite 作废了）, split: [{ n（第几段）, role, text }]（被 move 拆散、拉不成一段的）}。
  * 「舞台现在」（describe）用它，老师看得到 key 收下了没有、为什么判不了（判法里的同一件事在 sentence.rules.js 的 keySpans）
@@ -790,6 +832,76 @@ export function brokenMarks(o) {
   }).map((m) => m.id);
 }
 
+/**
+ * 跟着拨盘变的句子写得对不对（写下新的一行时查）：每个 {…} 照 pick.js 查；拨盘的每一种拨法都切得成词、不超过词数上限；
+ * 写了 key=、links= 的，每一种拨法都要对得上（对不上的说是哪一种拨法：key 里也照样写 {t: … | …}）
+ */
+function checkTemplate(scene, id, tpl, opts) {
+  for (const p of splitPicks(tpl)) if (p.k === 'pick') checkPick(p, scene.vars);
+  for (const src of [opts.key, opts.links]) if (src != null) for (const p of splitPicks(src)) if (p.k === 'pick') checkPick(p, scene.vars);
+  for (const st of dialStates(pickDeps(tpl), scene.vars)) {
+    const T = templateWords(tpl, st.vars);
+    const when = st.text ? `${st.text}时` : '';
+    if (!T.words.length) throw new Error(`${when}句子里一个词也没有`);
+    if (T.words.length > MAX_WORDS) throw new Error(`${when}句子有 ${T.words.length} 个词，一句最多 ${MAX_WORDS} 个`);
+    const ws = T.words.map((w, i) => ({ obj: id, key: i + 1, slot: i + 1, value: w.value, lead: w.lead, punct: w.punct }));
+    if (opts.key != null) { try { parseKey(ws, fillPicks(opts.key, st.vars)); } catch (err) { throw new Error(`${when} key= 对不上：${err.message}${hasPick(opts.key) ? '' : `（句子跟着拨盘变，key= 里那一段也照样写 {${pickDeps(tpl)[0]}: … | …}）`}`); } }
+    if (opts.links != null) { try { parseLinks({ words: ws, id, marks: [], end: T.end }, fillPicks(opts.links, st.vars)); } catch (err) { throw new Error(`${when} links= 对不上：${err.message}`); } }
+  }
+}
+
+/**
+ * 整句换成 words（rewrite、跟着拨盘重排共用）：pairs 是新的第 j 个词 → 原来的第几个（null 是新的）。同一个词留着它的编号和样子；
+ * 括号、标签、折起来的、断开、箭头照下面的规矩留。返回画面要的 { id, removed, added, moved, changed }。
+ * segs（跟着拨盘重排）：每个词是模板的第几段
+ */
+function rewriteWords(o, words, end, pairs, { segs = null } = {}) {
+  const old = ordered(o);
+  const next = words.map((w, j) => {
+    const was = pairs[j] != null ? old[pairs[j]] : null;
+    const base = was || { obj: o.id, key: o.nextKey++, paint: null, glow: false, lift: false, dim: false, covered: false };
+    return { ...base, slot: j + 1, value: w.value, lead: w.lead, punct: w.punct, changed: !!was && was.value !== w.value, ...(segs ? { seg: segs[j] } : {}) };
+  });
+  const alive = new Set(next.map((w) => w.key));
+  const removed = old.filter((w) => !alive.has(w.key)).map((w) => w.key);
+  const kept = next.filter((w) => pairs[next.indexOf(w)] != null);
+  const stay = keepOrder(kept.map((w) => old.findIndex((x) => x.key === w.key)));
+  const moved = kept.filter((_, i) => !stay.has(i)).map((w) => w.key);
+  const changed = next.filter((w) => w.changed).map((w) => w.key);
+  next.forEach((w) => { delete w.changed; });
+  o.words = next;
+  o.end = end;
+  // 括号、标签、折起来的：头尾两个词都还在、先后没反，就照新句子里头尾之间的词留着（中间换了的词也算进去）；
+  // 断开、箭头：两头的词还在就留着
+  const oldPos = new Map(old.map((w) => [w.key, w.slot]));
+  const pos = new Map(next.map((w) => [w.key, w.slot]));
+  // 跟着拨盘重排（segs）：括号的头正好是 {…} 那一段的第一个词、尾正好是那一段的最后一个词，这个词换掉了就接到新那一段的头、尾上
+  //（学生把「am holding」拉成谓语，拨到将来还是那一段「will be holding」；只圈了半段的照旧收掉）
+  const headTo = new Map(), tailTo = new Map();
+  if (segs) for (const g of new Set(segs)) {
+    const a = old.filter((w) => w.seg === g), b = next.filter((w) => w.seg === g);
+    if (!a.length || !b.length) continue;
+    if (!alive.has(a[0].key)) headTo.set(a[0].key, b[0].key);
+    if (!alive.has(a[a.length - 1].key)) tailTo.set(a[a.length - 1].key, b[b.length - 1].key);
+  }
+  const respan = (keys) => {
+    const ks = [...keys].sort((a, b) => oldPos.get(a) - oldPos.get(b));
+    const a = pos.get(ks[0]) ?? pos.get(headTo.get(ks[0])), b = pos.get(ks[ks.length - 1]) ?? pos.get(tailTo.get(ks[ks.length - 1]));
+    if (a == null || b == null || a > b) return null;
+    return next.filter((w) => w.slot >= a && w.slot <= b).map((w) => w.key);
+  };
+  const keep = (list) => list.map((x) => { const keys = respan(x.keys); return keys ? { ...x, keys } : null; }).filter(Boolean);
+  o.marks = keep(o.marks);
+  o.tags = keep(o.tags);
+  o.folds = keep(o.folds);
+  o.cuts = o.cuts.filter((k) => alive.has(k) && pos.get(k) !== next.length);
+  o.refers = o.refers.filter((r) => alive.has(r.from) && (r.whole || (r.toKeys ? r.toKeys.every((k) => alive.has(k)) : alive.has(r.to))));
+  // 原来的正确拆法是那一句的：改写以后对不上了，作废（不拿旧的去判新句子）；记着作废了，老师在「舞台现在」和下一步里看得到
+  if (o.key) o.key = { src: o.key.src, spans: [], void: 'rewrite' };
+  if (o.links) o.links = { src: o.links.src, pairs: [], wrongs: [], void: 'rewrite' };
+  return { id: o.id, removed, added: next.filter((w) => !old.some((x) => x.key === w.key)).map((w) => w.key), moved, changed };
+}
+
 export const sentence = {
   type: 'sentence',
   label: '句子',
@@ -800,18 +912,27 @@ export const sentence = {
   hint: '（句子：名字.3 现在第 3 个词，名字.2-5 第 2 到 5 个，名字.who 这个词（出现几次写 名字.who:2），名字.who-door 从 who 到 door；括号里的 #k 是「一开始第 k 个的那个词」，写 名字#k 跟着它走）',
   make(scene, c, h, old) {
     if (!h.args.some((a) => a.t === 'eq') || h.str == null) throw new Error('要写成 sentence 名字 = "英文句子"');
-    const { words, end } = splitSentence(h.str);
+    const id = h.words[0];
+    // 句子里写了 {t: … | …}（跟着拨盘变，主线第二轮 C）：照现在那一段造；key=、links= 里写了同样的 {…} 的跟着换
+    const tpl = hasPick(h.str) ? h.str : null;
+    const keyTpl = tpl && h.opts.key != null && hasPick(h.opts.key) ? h.opts.key : null;
+    const linksTpl = tpl && h.opts.links != null && hasPick(h.opts.links) ? h.opts.links : null;
+    if (tpl && !c.lenient) checkTemplate(scene, id, tpl, h.opts);
+    let T = null;
+    if (tpl) { try { T = templateWords(tpl, scene.vars); } catch (err) { if (!c.lenient) throw err; } }
+    const { words, end } = T || splitSentence(h.str);
     if (!words.length) throw new Error('sentence 的引号里要有英文词');
     if (words.length > MAX_WORDS) throw new Error(`一句最多 ${MAX_WORDS} 个词（写了 ${words.length} 个）；太长就拆成两句`);
-    const id = h.words[0];
     const o = {
       width: WRAP, end, marks: [], tags: [], folds: [], cuts: [], refers: [], seq: 1, nextKey: words.length + 1,
-      words: words.map((w, i) => ({ obj: id, key: i + 1, slot: i + 1, value: w.value, lead: w.lead, punct: w.punct, paint: null, glow: false, lift: false, dim: false, covered: false })),
+      words: words.map((w, i) => ({ obj: id, key: i + 1, slot: i + 1, value: w.value, lead: w.lead, punct: w.punct, paint: null, glow: false, lift: false, dim: false, covered: false, ...(T ? { seg: T.segs[i] } : {}) })),
     };
+    if (T) o.picks = { src: tpl, deps: pickDeps(tpl), now: T.now, ...(keyTpl ? { key: keyTpl } : {}), ...(linksTpl ? { links: linksTpl } : {}) };
+    const fill = (src) => (T ? fillPicks(src, scene.vars) : src);
     // 正确拆法（老师给的，页面拿它逐词比学生拉的括号；sentence.rules.js）
-    if (h.opts.key != null) o.key = parseKey(o.words, h.opts.key);
+    if (h.opts.key != null) o.key = parseKey(o.words, fill(h.opts.key));
     // 指代的答案（老师给的，学生从钩上拉线时页面照它判；sentence.rules.js）
-    if (h.opts.links != null) o.links = parseLinks({ ...o, id }, h.opts.links);
+    if (h.opts.links != null) o.links = parseLinks({ ...o, id }, fill(h.opts.links));
     o.origin = old ? { ...old.origin } : scene.slotFor(layout({ ...o, origin: { x: 0, y: 0 } }).box.w);
     return o;
   },
@@ -895,7 +1016,7 @@ export const sentence = {
       const label = restText(h, refs).trim();
       if (!label) throw new Error(`tally 后面要写成分，比如 tally ${o.id} V（数每道学生括号里 key 的谓语几个）`);
       if (!roleName(label)) throw new Error(`tally 的成分「${label}」认不出（写 V、谓语、S、主语、O……）`);
-      if (!c.lenient && (!o.key || o.key.void)) throw new Error(o.key?.void ? `${o.id} 的 key 跟着 rewrite 作废了，页面数不了，tally 标不出来` : `${o.id} 没写 key=（正确拆法），页面数不了，tally 标不出来`);
+      if (!c.lenient && (!o.key || o.key.void)) throw new Error(o.key?.void ? `${o.id} 的 key 跟着 ${voidBy(o.key)} 作废了，页面数不了，tally 标不出来` : `${o.id} 没写 key=（正确拆法），页面数不了，tally 标不出来`);
       o.tally = label;
       return { id: o.id };
     },
@@ -992,6 +1113,8 @@ export const sentence = {
       const f = foldOfKey(o, rest[i - 1]?.key);
       if (f && f === foldOfKey(o, rest[i]?.key)) throw new Error('不能挪进折起来的那一段：先 unfold');
       const next = [...rest.slice(0, i), ...block, ...rest.slice(i)];
+      // 跟着拨盘变的句子（{t: … | …}）：先后改了，不再跟（再照模板重排会把挪好的冲掉）；现状里写明
+      if (o.picks && !o.picks.off && next.some((w, k) => w !== order[k])) o.picks.off = 'move';
       // 这一段最后一个词贴着的分隔标点（「stopped,」的逗号）是这一段和后面那个词之间的，不是这一段的：留在原处——交给原来紧挨在
       // 这一段前面的那个词（它自己已经有标点就不重复），这一段在句首就不要了（以前跟着走，挪到句尾成了「stopped,.」）。
       // 段里面的标点、段尾的右引号右括号（和段头的左引号是一对）跟着走；段外面的词贴着的标点不动
@@ -1080,43 +1203,45 @@ export const sentence = {
       const { words, end } = splitSentence(h.str);
       if (!words.length) throw new Error('rewrite 的引号里要有英文词');
       if (words.length > MAX_WORDS) throw new Error(`一句最多 ${MAX_WORDS} 个词`);
-      const old = ordered(o);
-      const pairs = matchWords(old, words);
-      const next = words.map((w, j) => {
-        const was = pairs[j] != null ? old[pairs[j]] : null;
-        const base = was || { obj: o.id, key: o.nextKey++, paint: null, glow: false, lift: false, dim: false, covered: false };
-        return { ...base, slot: j + 1, value: w.value, lead: w.lead, punct: w.punct, changed: !!was && was.value !== w.value };
-      });
-      const alive = new Set(next.map((w) => w.key));
-      const removed = old.filter((w) => !alive.has(w.key)).map((w) => w.key);
-      const kept = next.filter((w) => pairs[next.indexOf(w)] != null);
-      const stay = keepOrder(kept.map((w) => old.findIndex((x) => x.key === w.key)));
-      const moved = kept.filter((_, i) => !stay.has(i)).map((w) => w.key);
-      const changed = next.filter((w) => w.changed).map((w) => w.key);
-      next.forEach((w) => { delete w.changed; });
-      o.words = next;
-      o.end = end;
-      // 括号、标签、折起来的：头尾两个词都还在、先后没反，就照新句子里头尾之间的词留着（中间换了的词也算进去）；
-      // 断开、箭头：两头的词还在就留着
-      const oldPos = new Map(old.map((w) => [w.key, w.slot]));
-      const pos = new Map(next.map((w) => [w.key, w.slot]));
-      const respan = (keys) => {
-        const ks = [...keys].sort((a, b) => oldPos.get(a) - oldPos.get(b));
-        const a = pos.get(ks[0]), b = pos.get(ks[ks.length - 1]);
-        if (a == null || b == null || a > b) return null;
-        return next.filter((w) => w.slot >= a && w.slot <= b).map((w) => w.key);
-      };
-      const keep = (list) => list.map((x) => { const keys = respan(x.keys); return keys ? { ...x, keys } : null; }).filter(Boolean);
-      o.marks = keep(o.marks);
-      o.tags = keep(o.tags);
-      o.folds = keep(o.folds);
-      o.cuts = o.cuts.filter((k) => alive.has(k) && pos.get(k) !== next.length);
-      o.refers = o.refers.filter((r) => alive.has(r.from) && (r.whole || (r.toKeys ? r.toKeys.every((k) => alive.has(k)) : alive.has(r.to))));
-      // 原来的正确拆法是那一句的：改写以后对不上了，作废（不拿旧的去判新句子）；记着作废了，老师在「舞台现在」和下一步里看得到
-      if (o.key) o.key = { src: o.key.src, spans: [], void: 'rewrite' };
-      if (o.links) o.links = { src: o.links.src, pairs: [], wrongs: [], void: 'rewrite' };
-      return { id: o.id, removed, added: next.filter((w) => !old.some((x) => x.key === w.key)).map((w) => w.key), moved, changed };
+      // 跟着拨盘变的句子（{t: … | …}）：整句换了，不再跟（再照模板重排会把这一句冲掉）；现状里写明
+      if (o.picks && !o.picks.off) o.picks.off = 'rewrite';
+      return rewriteWords(o, words, end, matchWords(ordered(o), words));
     },
+  },
+  /**
+   * 拨盘变了（scene.js 的 onVar）：照模板现在那一段重排，画面照 rewrite 演（choreo: 'rewrite'）。没变是 null。
+   * 模板里一段一段对着认：原文的那几段词一个对一个，{…} 那一段里一样的词留着（lcsPairs）；key=、links= 照同样的拨法重读
+   */
+  onPick(scene, o) {
+    const P = o.picks;
+    if (!P || P.off) return null;
+    let T;
+    try { T = templateWords(P.src, scene.vars); } catch { return null; }
+    const old = ordered(o);
+    P.now = T.now;
+    const pairs = new Array(T.words.length).fill(null);
+    const segIds = [...new Set(T.segs)];
+    for (const g of segIds) {
+      const was = old.map((w, i) => ({ w, i })).filter((x) => x.w.seg === g);
+      const js = T.segs.map((sg, j) => (sg === g ? j : -1)).filter((j) => j >= 0);
+      const m = lcsPairs(was.map((x) => x.w.value), js.map((j) => T.words[j].value));
+      js.forEach((j, k) => { if (m[k] != null) pairs[j] = was[m[k]].i; });
+    }
+    const same = old.length === T.words.length && T.words.every((w, j) => pairs[j] === j && old[j].value === w.value && old[j].punct === w.punct && old[j].lead === w.lead) && o.end === T.end;
+    if (same) return null;
+    const keyWas = o.key, linksWas = o.links;
+    const fx = rewriteWords(o, T.words, T.end, pairs, { segs: T.segs });
+    // 正确拆法、指代的答案照现在的拨法重读（里面写了同样的 {…} 的跟着换）；对不上了（重放旧课才会）作废，记着是拨盘换的
+    const redo = (was, tpl, parse) => {
+      if (!was) return undefined;
+      const src = tpl ? fillPicks(tpl, scene.vars) : was.src;
+      try { return parse(src); } catch { return { ...parse.blank(src), void: 'dial' }; }
+    };
+    const pk = (src) => parseKey(o.words, src); pk.blank = (src) => ({ src, spans: [] });
+    const pl = (src) => parseLinks(o, src); pl.blank = (src) => ({ src, pairs: [], wrongs: [] });
+    if (keyWas) o.key = redo(keyWas, P.key, pk);
+    if (linksWas) o.links = redo(linksWas, P.links, pl);
+    return { ...fx, choreo: 'rewrite' };
   },
   // 一句话写现在的样子（存档点 back 以后告诉老师，scene.js 的 summaryOf）：那一句（折起来的写成［…］，和现状一样）
   summary(o) { return sentenceText(o, { folds: true }); },
@@ -1134,6 +1259,7 @@ export const sentence = {
     };
     const lines = [`句子 ${o.id}（${o.words.length} 个词${L.lines.length > 1 ? `，排成 ${L.lines.length} 行` : ''}）：${sentenceText(o, { folds: true })}`];
     lines.push(`  词：${ordered(o).map(tag).join('  ')}`);
+    if (o.picks) lines.push(o.picks.off ? `  不再跟着拨盘 ${o.picks.deps.join('、')} 变（${o.picks.off === 'rewrite' ? 'rewrite 换了整句' : 'move 挪过词'}；要再跟就重新造这句）` : `  跟着拨盘变：${(o.picks.now || []).map((x) => `${x.raw} 现在是「${x.text}」`).join('；')}`);
     if (o.marks.length) {
       const lv = new Map(L.marks.map((m) => [m.mark, m.level]));
       // 成分写两种名字（定语（Attr）、谓语（V））：学生点的是中文、老师写的多半是缩写，两边都认得出（事实里照括号上写的，一个名字）
@@ -1146,7 +1272,7 @@ export const sentence = {
     if (o.tally) {
       const t = tallyOf(o);
       const head = `  标着的数（tally ${o.tally}${t ? `，key 的${roleName(o.tally)}` : ''}）：`;
-      if (!t) lines.push(`${head}页面数不了（${o.key?.void ? `${o.id} 的 key 跟着 rewrite 作废了` : `${o.id} 没写 key`}），画面上没标`);
+      if (!t) lines.push(`${head}页面数不了（${o.key?.void ? `${o.id} 的 key 跟着 ${voidBy(o.key)} 作废了` : `${o.id} 没写 key`}），画面上没标`);
       else {
         const each = o.marks.filter((m) => t.each.has(m.id)).map((m) => `${spanText(o, m.keys)} ${m.label} ${t.each.get(m.id)} 个`);
         lines.push(`${head}${[...each, `括号外 ${t.rest} 个`].join('；')}`);
@@ -1154,8 +1280,8 @@ export const sentence = {
     }
     const ks = keyStatus(o);
     // 指代的答案收下了没有（和 key 一样，老师看得到 refer 判不判、为什么判不了）
-    if (o.links) lines.push(`  links=：${o.links.void ? '作废了（rewrite 换了句子；要判就重新造这句、带上新的 links=）' : `收下了（${o.links.pairs.length} 条${o.links.wrongs.length ? `，常见的错连 ${o.links.wrongs.length} 条` : ''}）`}`);
-    if (ks) lines.push(`  key：${ks.void ? '作废了（rewrite 换了句子；要判就重新造这句、带上新的 key=）' : ks.split.length ? ks.split.map((x) => `第 ${x.n} 段 [${x.role} ${x.text}] 被 move 拆散了，那一段不能再拉对`).join('；') : `收下了（${ks.n} 段）`}`);
+    if (o.links) lines.push(`  links=：${o.links.void ? `作废了（${voidBy(o.links)} 换了句子；要判就重新造这句、带上新的 links=）` : `收下了（${o.links.pairs.length} 条${o.links.wrongs.length ? `，常见的错连 ${o.links.wrongs.length} 条` : ''}）`}`);
+    if (ks) lines.push(`  key：${ks.void ? `作废了（${voidBy(o.key)} 换了句子；要判就重新造这句、带上新的 key=）` : ks.split.length ? ks.split.map((x) => `第 ${x.n} 段 [${x.role} ${x.text}] 被 move 拆散了，那一段不能再拉对`).join('；') : `收下了（${ks.n} 段）`}`);
     if (o.tags.length) lines.push(`  标签（词上面）：${o.tags.map((t) => `${spanText(o, t.keys)} ${t.label}`).join('；')}`);
     // 套着折的里层写一声在哪一段里面（画面上看不见，展开外层才露出来）
     if (o.folds.length) {
@@ -1182,6 +1308,7 @@ move s.3 after s.5                挪到别处讲倒装、还原语序（也能 
 cut s.6 / uncut s                 第 6 个词后面断开（意群的斜线）
 refer s.3 -> s.2 / unrefer s.3    箭头：which、it 指的是谁（指一段写 s.1-2，指整句写 s）
 rewrite s "The man living next door is a doctor."    改写整句：同样的词滑到新位置，新的淡进来
+sentence s = "I {t: was holding | am holding | will be holding} it."  句子跟着拨盘 t 变（先 dial t … options=）：一拨就照 rewrite 重排，别的词编号不变、圈着那一整段的括号跟着走；key= 里那一段也写 {t: … | …}；rewrite / move 以后不再跟
 ask drag s.7 "把 is 挪到句首"         学生按住一个词拖到别处（页面照做，再告诉你）
 学生自己拆（mark 页面照 key 判每一下）：
 open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的，交中文）= mark s.1-6 主语；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句；key 写 [Attr/NF …] 是两种都对；学生拉的括号上有 ✕，点了 = unmark s.1-6（不判）
@@ -1190,6 +1317,8 @@ open s move                         学生按住一道括号拖到两个词之�
 open s.3 refer                      学生从 who 右上角的钩上拉线，松在词、括号、句子外框上 = refer s.3 -> s.2 / s.1-2 / s（整句）；造句子时写 links="who -> s.1-2; !who -> door=连到了从句里的名词" 就照它判（! 是常见的错连）；学生连的线头上有 ✕，点了 = unrefer s.3
 判断式（when=）：s parsed（key 里每一段都拉对了，多拉的不管）、s exact（拉对了、也没多拉）、s main（主干拉对了）、s span s.2-5 = V（这一段现在挂着这个成分）、s linked（links= 每一条都连对了）；没写 key / links= 判不了，@s.done 也不收；量：verbs(s.4-9) 这一段里 key 的谓语几个（verbs(s) 整句）、left(s) key 里还没拉对的几段
 句子里留空位让学生填词：现在没有写法（要填就 ask value … type=en）`,
+  // 说明里要先有拨盘的那一条（句子跟着拨盘变）在这个舞台上演（tests/stage-doc.test.js）
+  docSetup: 'dial t = 现在 options="过去 现在 将来"',
   example: `sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."
 mark s.7 V
 mark s.8-9 P

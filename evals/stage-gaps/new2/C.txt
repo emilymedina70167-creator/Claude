@@ -1,0 +1,12 @@
+# 主线第二轮 C：字跟着拨盘变。拨词的拨盘、句子里的 {t: … | …} 照 rewrite 重排、贴的字跟着换、拨回去变回来
+dial t = 现在 options="过去 现在 将来"
+sentence s = "I {t: was holding | am holding | will be holding} it steady." key="[S I] [V {t: was holding | am holding | will be holding}] [O it] steady."
+label n s "时间：{t}。谓语是{t: 过去进行时 | 现在进行时 | 将来进行时}"
+open s mark
+goal g1 "把时间拨到过去，再把谓语拉出来" when="t = 过去"
+say "拨一拨时间，看谓语怎么跟着变。"
+学生: dial t 过去
+学生: mark s.2-3 V
+学生: dial t 将来
+学生: dial t 现在
+say "三种时间，变的只有谓语这一段。"

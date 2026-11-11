@@ -11,7 +11,7 @@
 // key 的一段可以写几种成分（[Attr/NF …]）：哪一种都算对，给老师写成「定语或非谓语」。
 // 拉一条线（refer：that 指的是谁）照老师造句子时给的 links=（sentence.js 的 parseLinks）判，用 entext.js 的 judgeLinks；没写 links= 不判。
 import { judgeSpans, judgeLinks } from '../../entext.js';
-import { sentence, ordered, roleName, sameRole, phraseOf, restText, roleColor, spanText, brokenMarks, targetKey, outerFolds, foldClash, hookWords, ROLE_NAMES, CLAUSE_ROLES } from './sentence.js';
+import { sentence, ordered, voidBy, roleName, sameRole, phraseOf, restText, roleColor, spanText, brokenMarks, targetKey, outerFolds, foldClash, hookWords, ROLE_NAMES, CLAUSE_ROLES } from './sentence.js';
 
 export { roleName, roleAbbr, ROLE_NAMES } from './sentence.js';
 
@@ -65,7 +65,7 @@ function peersOf(ks, a, b) {
   return { clause: c, peer: (k) => k.ok && clauseOf(ks, k.from, k.to) === c };
 }
 /** 判不了的时候怎么说：没写 key，还是写了但被 rewrite 作废了 */
-const noKeyWhy = (o) => (o?.key?.void ? `${o.id} 的 key 跟着 rewrite 作废了，要判就重写 key（重新造这句、带上新的 key=）` : `${o.id} 没写 key=（正确拆法），页面不判`);
+const noKeyWhy = (o) => (o?.key?.void ? `${o.id} 的 key 跟着 ${voidBy(o.key)} 作废了，要判就重写 key（重新造这句、带上新的 key=）` : `${o.id} 没写 key=（正确拆法），页面不判`);
 
 /**
  * 舞台上现在的括号（连着的才算一段）：[{ role（成分）, from, to }]。
@@ -366,7 +366,7 @@ function pairAct(o, p) {
   const lo = Math.min(...xs), hi = Math.max(...xs);
   return hi - lo + 1 === xs.length ? { type: 'refer', from: a, to: { from: lo, to: hi } } : null;
 }
-const linkVoid = (o) => `${o.id} 的 links= 跟着 rewrite 作废了`;
+const linkVoid = (o) => `${o.id} 的 links= 跟着 ${voidBy(o.links)} 作废了`;
 
 // refer { from（第几个词）, to: { from, to }（第几个到第几个）| { whole: true } }：照 links= 判（没写不判）。
 // 对上正确的那一条是对的；对上 ! 那一条说像哪种错（老师写在 links= 里的，说明是老师的话）；别的连错页面说不出像什么。
@@ -714,7 +714,7 @@ function referIdle(o, e, scene) {
 // —— 挑战用的判断式（when="s parsed, s main, s span s.2-5 = V"）——
 
 // 没写 key、key 作废了：这句话本身永远判不了（不是「还没做到」），抛错——写下挑战时当场报，舞台现状里写「判不了」和原因
-const cannot = (o, what) => new Error(o?.key?.void ? `${o.id} 的 key 跟着 rewrite 作废了，页面判不了 ${what}（要判就重新造这句、带上新的 key=）` : `${o.id} 没写 key=（正确拆法），页面判不了 ${what}`);
+const cannot = (o, what) => new Error(o?.key?.void ? `${o.id} 的 key 跟着 ${voidBy(o.key)} 作废了，页面判不了 ${what}（要判就重新造这句、带上新的 key=）` : `${o.id} 没写 key=（正确拆法），页面判不了 ${what}`);
 const predicates = {
   // key 里的每一段都拉对了
   parsed: (o) => {
@@ -766,7 +766,7 @@ const predicates = {
 
 // —— 量（verbs(s)、verbs(s.4-14)、left(s)；rules.js 的 measures）——
 // 照 key 数（页面不自己分析英语）：写一段时，key 的段整个落在这一段里才算。没写 key、key 作废了这句话本身数不了，抛错
-const noKey = (o) => new Error(o?.key?.void ? `${o.id} 的 key 跟着 rewrite 作废了` : `${o.id} 没写 key`);
+const noKey = (o) => new Error(o?.key?.void ? `${o.id} 的 key 跟着 ${voidBy(o.key)} 作废了` : `${o.id} 没写 key`);
 function spansIn(o, parts) {
   const ks = keySpans(o);
   if (!ks) throw noKey(o);

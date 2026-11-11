@@ -402,7 +402,8 @@ test('说明里的例子照抄能演（一行不错），每一条指令写法�
   assert.equal(s.waiting.kind, 'tap');
   assert.match(s.stateText(), /折起来的：s\.3-6/);
   // 说明里每一行「指令 …」的第一段，在刚造好的句子上都能演
-  const ready = run(new Scene(), sentence.example.split('\n')[0]);
+  // 要先有拨盘的那一条（句子跟着拨盘变）：照那种东西给测试备的舞台（docSetup）先造好
+  const ready = run(run(new Scene(), sentence.docSetup), sentence.example.split('\n')[0]);
   const lines = sentence.doc.split('\n').map((l) => l.split(/\s{2,}|\s\/\s/)[0].trim()).filter((l) => /^[a-z]+ /.test(l));
   assert.ok(lines.length >= 9, `说明里的指令 ${lines.length} 条`);
   const bad = [];

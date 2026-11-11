@@ -13,6 +13,7 @@ import { goalMark } from './goal.js';
 import { measureShown } from './rules.js';
 import { judgeAnswer, sameAnswer, answerInput, gridAnswerText } from './answer.js';
 import { formulaInput, formulaGrid, hideFormulaPad } from '../formulainput.js';
+import { varText, pickNow } from './pick.js';
 export { sameAnswer };
 import { VIEWS } from './types/views.js';
 import { PointerRouter } from './pointer.js';
@@ -1061,6 +1062,15 @@ export class Stage {
     const mine = this[`do_${c.cmd}`];
     return mine ? (cc, f, pre) => mine.call(this, cc, f, pre) : null;
   }
+  // 拨盘变了，跟着它重排的东西（句子里的 {t: … | …}）：照那种东西自己的画法演（场景交的 choreo 是哪一个）
+  async do_set(c, fx, pre) {
+    for (const r of fx?.binds || []) {
+      if (!r?.choreo) continue;
+      const o = this.scene.objects.get(r.id);
+      const fn = o && VIEWS[o.type]?.choreo?.[r.choreo];
+      if (fn) await fn(this, c, r, pre);
+    }
+  }
   targetOf(c) {
     for (const a of c.args || []) if (a.t === 'word') { const r = this.scene.isRef(a.v) && a.v.match(/^[A-Za-z_]\w*/)[0]; if (r) return this.scene.objects.get(r); }
     return null;
@@ -1320,7 +1330,7 @@ export class Stage {
         cur = { node, box: null, sig, anchor: null };
         this.labelNodes.set(l.id, cur);
       } else if (!l.dial) {
-        cur.node.querySelectorAll('.st-var').forEach((s) => { const v = String(sc.vars.get(s.dataset.var)?.v ?? s.dataset.var); if (s.textContent !== v) s.textContent = v; });
+        cur.node.querySelectorAll('.st-var').forEach((s) => { const x = sc.vars.get(s.dataset.var); const v = x ? varText(x) : s.dataset.var; if (s.textContent !== v) s.textContent = v; });
       }
       if (l.dial) cur.node.__paint?.();
       const anchor = this.anchorOf(l) || bbox(sc.shownIds().map((id) => sc.objectBox(id))) || { x: 0, y: 0, w: 1, h: 1 };
@@ -1371,12 +1381,16 @@ export class Stage {
   syncMeasures() {
     for (const s of this.root.querySelectorAll('.st-measure')) { const v = measureShown(this.scene, s.dataset.measure); if (s.textContent !== v) s.textContent = v; }
     // 话里的 {k2} 写在 dial k2 之前：拨数有了就换成它那时的数（只换这一次，和别的话里的拨数一样说完就不跟着变）
-    for (const s of this.root.querySelectorAll('.st-var[data-pending]')) { const x = this.scene.vars.get(s.dataset.var); if (x) { s.textContent = String(x.v); delete s.dataset.pending; } }
+    for (const s of this.root.querySelectorAll('.st-var[data-pending]')) { const x = this.scene.vars.get(s.dataset.var); if (x) { s.textContent = varText(x); delete s.dataset.pending; } }
+    // 贴的字、题卡、挑战里的 {t: 甲 | 乙 | 丙}：拨盘变了跟着换成现在那一段（话里的没有 __pick：说的那一刻是什么就是什么）
+    for (const s of this.root.querySelectorAll('.st-pick')) { if (!s.__pick) continue; const v = pickNow(s.__pick, this.scene.vars); if (s.textContent !== v) s.textContent = v; }
   }
 
   // 话、字里的写法画出来：{a.2} 是同色同数的小块，{d} 是拨的数，{count(t)} 是页面数的量，$d$ 是字母，[词] 能飞走
-  richInto(node, text, { glyphs = null, words = null } = {}) {
+  richInto(node, text, { glyphs = null, words = null, still = false } = {}) {
     for (const p of parseRich(text)) {
+      // {t: 甲 | 乙 | 丙}：写现在那一段；still（话）不跟着变
+      if (p.k === 'pick') { const s = el('span', 'st-pick', node); s.textContent = pickNow({ name: p.name, alts: p.alts, raw: p.v }, this.scene.vars); if (!still) s.__pick = { name: p.name, alts: p.alts, raw: p.v }; glyphs?.push(s); continue; }
       if (p.k === 'text') {
         if (glyphs) for (const ch of p.v) { const s = el('span', 'st-ch', node); s.textContent = ch; glyphs.push(s); }
         else node.appendChild(document.createTextNode(p.v));
@@ -1385,7 +1399,7 @@ export class Stage {
         const s = el('span', 'st-var', node);
         s.dataset.var = p.v;
         const x = this.scene.vars.get(p.v);
-        s.textContent = String(x?.v ?? p.v);
+        s.textContent = x ? varText(x) : p.v;
         // 写的时候还没有这个拨数（同一轮后面才写 dial）：先写名字，有了以后 syncMeasures 换成数
         if (!x) s.dataset.pending = '1';
         glyphs?.push(s);
@@ -1431,7 +1445,7 @@ export class Stage {
     line.__text = text;
     line.dataset.kind = ask ? 'ask' : 'say';
     const glyphs = [];
-    this.richInto(line, text, { glyphs, words: [] });
+    this.richInto(line, text, { glyphs, words: [], still: true });
     if (this.instant) return;
     const delays = revealDelays(glyphs.length);
     glyphs.forEach((g, i) => { g.style.opacity = '0'; this.tween(g, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 320, delay: delays[i], easing: EASE.out }); });
@@ -1446,14 +1460,16 @@ export class Stage {
     const dec = el('button', 'st-dial-b', node); dec.type = 'button'; dec.textContent = '‹'; dec.setAttribute('aria-label', `${name} 小一点`);
     const lab = el('span', 'st-dial-v', node);
     const inc = el('button', 'st-dial-b', node); inc.type = 'button'; inc.textContent = '›'; inc.setAttribute('aria-label', `${name} 大一点`);
-    const paint = () => { const v = this.scene.vars.get(name); if (!v) return; lab.innerHTML = '<i class="st-math"></i> = <b></b>'; lab.firstChild.textContent = name; lab.lastChild.textContent = String(v.v); dec.disabled = v.v <= v.lo; inc.disabled = v.v >= v.hi; };
+    const paint = () => { const v = this.scene.vars.get(name); if (!v) return; lab.innerHTML = '<i class="st-math"></i> = <b></b>'; lab.firstChild.textContent = name; lab.lastChild.textContent = varText(v); dec.disabled = v.v <= v.lo; inc.disabled = v.v >= v.hi; };
     node.__paint = paint;
     paint();
     const set = (v) => {
       const cur = this.scene.vars.get(name);
       const nv = Math.max(cur.lo, Math.min(cur.hi, v));
       if (nv === cur.v) return;
-      this.studentDo(`set ${name} ${nv}`, { type: 'dial', name, value: nv, from: cur.v });
+      // 拨词的拨盘（options=）：交出去的是词（set t 将来；课堂写「学生拨了 t：现在 → 将来」）
+      const w = (k) => (cur.options ? cur.options[k - 1] : k);
+      this.studentDo(`set ${name} ${w(nv)}`, { type: 'dial', name, value: w(nv), from: w(cur.v) });
     };
     dec.addEventListener('click', () => set(this.scene.vars.get(name).v - 1));
     inc.addEventListener('click', () => set(this.scene.vars.get(name).v + 1));

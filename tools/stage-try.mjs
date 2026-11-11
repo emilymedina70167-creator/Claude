@@ -191,16 +191,23 @@ function setup(segments) {
     const v = st.scene.vars.get(name);
     if (!v) return { error: `舞台上没有能拨的数「${name}」` };
     if (!v.shown || !st.scene.labels.has(`dial:${name}`)) return { error: `${name} 的拨数器收起来了，学生拨不了` };
+    // 拨词的拨盘（options=）：学生: dial t 将来。里面是第几个词，照 ‹ › 一下一格拨过去，交出去的是词
+    const W = (k) => (v.options ? v.options[k - 1] : k);
+    if (v.options) {
+      const k = v.options.indexOf(String(target));
+      if (k < 0) return { error: `拨不到「${target}」：${name} 只能拨到 ${v.options.join('、')}` };
+      target = k + 1;
+    } else if (typeof target !== 'number') return { error: `拨不到「${target}」：${name} 是拨数的（${v.lo}～${v.hi}）` };
     if (target < v.lo || target > v.hi) return { error: `拨不到 ${target}：${name} 只能在 ${v.lo}～${v.hi} 里拨（拨到头按钮就按不动了）` };
     const diff = target - v.v;
-    if (diff === 0) return { error: `${name} 已经是 ${target}，没有拨` };
+    if (diff === 0) return { error: `${name} 已经是 ${W(target)}，没有拨` };
     if (!Number.isInteger(diff)) return { error: `拨不到 ${target}：拨数器一下 ±1，${name} 现在是 ${v.v}` };
-    const path = [v.v];
+    const path = [W(v.v)];
     for (let i = 0; i < Math.abs(diff); i++) {
       const cur = st.scene.vars.get(name);
       const nv = Math.max(cur.lo, Math.min(cur.hi, cur.v + Math.sign(diff)));
-      await st.studentDo(`set ${name} ${nv}`, { type: 'dial', name, value: nv, from: cur.v });
-      path.push(nv);
+      await st.studentDo(`set ${name} ${W(nv)}`, { type: 'dial', name, value: W(nv), from: W(cur.v) });
+      path.push(W(nv));
     }
     return { did: `拨数器 ${name}：${path.join(' → ')}（按了 ${Math.abs(diff)} 下）` };
   };

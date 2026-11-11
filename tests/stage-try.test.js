@@ -85,13 +85,15 @@ test('翻不成一下手势的写法：说清楚为什么（不抛错，试演�
     ['mark s.2-4', /成分/],
     ['fold s', /fold s\.3-6/],
     ['dial k', /dial k 3/],
-    ['dial k 2.5x', /dial k 3/],
   ]) {
     const r = g(line);
     assert.ok(r.error, `${line}：{ error }`);
     assert.match(r.error, re, line);
   }
   assert.match(studentGesture('undo', 'B.1,1').error, /undo 后面不写/);
+  // 拨词的拨盘（主线第二轮 C）：dial t 将来 交那个词；是不是拨得到，页面那一半照舞台上的拨盘说
+  assert.deepEqual(g('dial t 将来'), { dial: 't', value: '将来' });
+  assert.deepEqual(g('dial k 3'), { dial: 'k', value: 3 });
 });
 
 test('学生的一行写错了不让整个文件读不下去：错放在那一步上', () => {
