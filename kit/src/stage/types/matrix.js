@@ -350,7 +350,7 @@ const unionDeps = (list) => [...new Set(list.flatMap((k) => k.deps))];
  * 报错里不写它（「{rankA(D)} 算出来是数 0」的 0 是页面顶上的，D 填满以后不一定是 0：复审 N4）
  */
 function rowsOfValue(v, src, { trial = false } = {}) {
-  if (isQ(v)) throw new Error(`「{${src}}」算出来是${trial ? '一个数' : `数 ${v}`}，不是矩阵（要一格跟着算，写 matrix M = 1 {k} / 0 1）`);
+  if (isQ(v)) throw new Error(`「{${src}}」算出来是${trial ? '一个数' : `数 ${v}`}，不是矩阵。要一个跟着算的数，贴一行字就行：label n 东西 "… {${src}}"（数跟着变）；要矩阵里的一格跟着算，写 matrix M = 1 {k} / 0 1`);
   const rows = isQMat(v) ? v.map((r) => r.map(String)) : isQVec(v) ? v.map((x) => [String(x)]) : null;
   if (!rows) throw new Error(`「{${src}}」算出来的不是矩阵`);
   if (rows.length > MAX_ROWS || rows[0].length > MAX_COLS) throw new Error(`「{${src}}」算出来是 ${rows.length}×${rows[0].length}，舞台上的矩阵最多 ${MAX_ROWS} 行 ${MAX_COLS} 列`);

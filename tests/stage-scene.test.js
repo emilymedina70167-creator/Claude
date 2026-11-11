@@ -2251,3 +2251,16 @@ test('D1-6：一排格子里写 _（空格子）当场报；话里 {inv(a)} 这�
   // 认得的量、拨数、东西照旧
   assert.equal(dryRun(base, 'say "秩是 {rank(A)}，第一格 {a.1}"').length, 0);
 });
+
+test('D3-7、E1-4：三句照着改不对的报错，说清楚该怎么写', () => {
+  const g = run(new Scene(), 'graph g = 1-2:3 2-5:4\ntag g.5 5');
+  // 边上的权进不了式子
+  assert.match(dryRun(g, 'ask value "到 2 是几？" answer={g.5 + g.5~2}')[0].error, /边上的权（g\.5~2）进不了式子.*结点的牌子（g\.5）可以/);
+  // 要一个跟着算的数，不是矩阵
+  assert.match(dryRun(g, 'matrix S = {6 + 1}')[0].error, /要一个跟着算的数.*label \S+ \S+ "… \{6 \+ 1\}"/);
+  // key= 只认英文的词
+  assert.match(dryRun(new Scene(), 'sentence d = "问题 一直 困扰" key="[S 问题] [V 一直]"')[0].error, /key= 只认英文的词/);
+  assert.match(dryRun(new Scene(), 'sentence c = "GDP及其有效性的问题 一直困扰着 政策制定者" key="[S GDP及其有效性的问题] [V 一直困扰着]"')[0].error, /key= 只认英文的词/);
+  // 英文的照旧
+  assert.equal(dryRun(new Scene(), 'sentence e = "The cat sat" key="[S The cat] [V sat]"').length, 0);
+});

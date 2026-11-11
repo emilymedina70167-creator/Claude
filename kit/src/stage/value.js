@@ -200,7 +200,12 @@ export function evalLive(src, scene, { plane, fill = null } = {}) {
   });
   text = withTimes(text, (n) => n in vars);
   let used;
-  try { used = names(text); } catch (e) { throw new Error(`${shown}写错了：${e.message}`); }
+  try { used = names(text); } catch (e) {
+    // 图上边的权（g.5~2）进不了式子（主线第一轮 D3-7：以前只说「无法识别：~ 2」，照着改不出来）
+    const edge = String(shown).match(/[A-Za-z_]\w*[.#]\w+~\w+/)?.[0];
+    if (edge) throw new Error(`${shown}写错了：图上边上的权（${edge}）进不了式子；结点的牌子（${edge.split('~')[0]}）可以。边权要进式子，把那个数另写成一个拨数（dial w = 3），边写 A-B:{w}、式子里写 w`);
+    throw new Error(`${shown}写错了：${e.message}`);
+  }
   for (const n of used) {
     if (n in vars || BUILTIN.has(n)) continue;
     const o = scene.objects.get(n);

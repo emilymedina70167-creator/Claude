@@ -670,6 +670,8 @@ export function parseKey(words, src) {
   const s = String(src ?? '').trim();
   if (!s.includes('[')) throw new Error('key= 要用 [成分 词…] 标出正确拆法，比如 key="[S The man] [V is] [P a doctor]."（成分写缩写：S、V、O、RC……）');
   if (/\[(?![A-Za-z])/.test(s)) throw new Error('key= 的括号里先写成分的英文缩写（S、V、O、P、RC、NF……），再写词，比如 [S The man]');
+  // key 照英文的词对句子（主线第一轮 E1-4：中文的句子以前报「[V …] 里面没有词」，词明明在，照着改不出来）
+  if (/\[[A-Za-z][\w/]*\s+[^\][]*[\u4e00-\u9fff]/.test(s)) throw new Error('key= 只认英文的词：中文的句子页面拆不了成分、判不了。中文的句子不写 key=（学生拉的括号页面照收，对不对你来看）');
   // 一段几种成分（[Attr/NF designed …]：定语、非谓语都对）：parseBrackets 的成分只认一个词，先换成一个记号，读完再拆开
   const OR = '_or_';
   if (/\[[A-Za-z]\w*(?:\/[A-Za-z]\w*)*\/(?![A-Za-z])/.test(s)) throw new Error('key= 里一段几种成分写成 [Attr/NF 词…]：/ 两边都写成分的缩写');
