@@ -323,22 +323,32 @@ function rawPart(expr, scene) {
   const v = ps[0].value;
   return v == null || v === '' ? null : String(v);
 }
-export function fillLine(line, scene) {
+export function fillLine(line, scene, { loose = null } = {}) {
   const { parts } = parseLive(line);
   if (!parts.some((p) => p.k === 'expr')) return null;
-  const exprs = [], vals = [], deps = [];
+  const exprs = [], vals = [], deps = [], errors = [];
   let text = '';
   for (const p of parts) {
     if (p.k === 'text') { text += p.v; continue; }
-    const r = evalLive(p.v, scene);
-    if (!isQ(r.value)) throw new Error(`「{${p.v}}」算出来是 ${valueText(r.value)}，这里要一个数`);
-    const v = rawPart(p.v, scene) ?? numText(r.value);
+    let v;
+    try {
+      const r = evalLive(p.v, scene);
+      if (!isQ(r.value)) throw new Error(`「{${p.v}}」算出来是 ${valueText(r.value)}，这里要一个数`);
+      v = rawPart(p.v, scene) ?? numText(r.value);
+      for (const d of r.deps) if (!deps.includes(d)) deps.push(d);
+    } catch (err) {
+      // loose（重算时，scene.js 的 remake）：这一格算不出来了（它跟着的结点摘掉了）就写「?」，别的格照算——以前整行不动、
+      // 停在旧数，学生看不出哪一格已经不对了（主线第一轮 D4-2）。loose 是上一次的依赖：算不出来的那一格照旧记着它跟着谁
+      if (!loose) throw err;
+      v = '?';
+      errors.push(err.message);
+      for (const d of loose) if (!deps.includes(d)) deps.push(d);
+    }
     exprs.push(p.v);
     vals.push(v);
     text += v;
-    for (const d of r.deps) if (!deps.includes(d)) deps.push(d);
   }
-  return { text, exprs, vals, deps };
+  return { text, exprs, vals, deps, ...(errors.length ? { error: errors[0] } : {}) };
 }
 
 /**

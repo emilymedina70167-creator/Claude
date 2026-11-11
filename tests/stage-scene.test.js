@@ -2199,3 +2199,22 @@ test('D4-3：跟着算的格子原样取一个部件时，照那个部件写的�
   run(b, 'write b.2 07');
   assert.deepEqual(values(b, 'c'), ['49′', '49', '07']);
 });
+
+test('D4-2：跟着算的一排，有一格算不出来了（树上那个结点摘掉了）：那一格画「?」，别的格照新的数，现状说哪一格为什么算不出', () => {
+  const s = run(new Scene(), 'tree t = 87 45 78 32 17 65 53\narray hs = {t#1} {t#2} {t#3} {t#7}');
+  assert.deepEqual(values(s, 'hs'), ['87', '45', '78', '53']);
+  // 根和左孩子对调、摘掉 #7：以前整排停在旧数（87 45 78 53），学生看不出
+  run(s, 'swap t#1 t#2\ndelete t#7');
+  assert.deepEqual(values(s, 'hs'), ['45', '87', '78', '?']);
+  const st = s.stateText();
+  assert.match(st, /现在算不出来/);
+  assert.match(st, /算不出来的那一格画的是「\?」/);
+  assert.doesNotMatch(st, /停在上一次算出来的数/);
+  // 算得出来了就回到数
+  const b = run(new Scene(), 'array b = 5 3\narray c = {b.1 + 1} {b.2 + 1}');
+  run(b, 'write b.2 空');
+  assert.deepEqual(values(b, 'c'), ['6', '?']);
+  run(b, 'write b.2 7');
+  assert.deepEqual(values(b, 'c'), ['6', '8']);
+  assert.doesNotMatch(b.stateText(), /现在算不出来/);
+});

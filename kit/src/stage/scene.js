@@ -1761,7 +1761,9 @@ export class Scene {
       n.rec.error = err.message;
       return { id: o.id, changed: [], error: err.message };
     }
-    delete n.rec.error;
+    // 有的格算不出来、画成了「?」（remake）：原因照旧记在 rec.error（现状写给老师、拿它说要点的地方知道它不全）
+    if (r.error) { const rec = this.nodesOf(this.objects.get(n.obj)).find((x) => x.live)?.rec || n.rec; rec.error = r.error; rec.marked = true; }
+    else { delete n.rec.error; delete n.rec.marked; }
     return r.changed.length ? { id: o.id, changed: r.changed, parts: r.parts || [] } : null;
   }
   /**
@@ -1780,13 +1782,20 @@ export class Scene {
    */
   remake(o) {
     const L = o.live;
-    const f = fillLine(L.line, this);
+    // 有的格算不出来了：那一格写「?」、别的照算（fillLine 的 loose）；那种东西收不下「?」（图的边权）就照旧整行不动、报错
+    let f = fillLine(L.line, this, { loose: L.deps || [] });
     if (!f) return { changed: [] };
-    if (f.vals.every((v, i) => v === L.vals[i])) return { changed: [] };
-    const c = parseScript(f.text)[0];
-    if (!c?.cmd) throw new Error(c?.error || '看不懂这一行');
+    if (f.vals.every((v, i) => v === L.vals[i])) return { changed: [], ...(f.error ? { error: f.error } : {}) };
     const t = typeOf(o);
-    const o2 = t.make(this, c, this.helpers(c), o);
+    let c, o2;
+    try {
+      c = parseScript(f.text)[0];
+      if (!c?.cmd) throw new Error(c?.error || '看不懂这一行');
+      o2 = t.make(this, c, this.helpers(c), o);
+    } catch (err) {
+      if (!f.error) throw err;
+      f = fillLine(L.line, this); // 照旧：抛出算不出来的原因
+    }
     Object.assign(o2, { type: o.type, id: o.id, live: { line: L.line, exprs: f.exprs, vals: f.vals, deps: f.deps } });
     // 画面上的样子照旧：藏着的还藏着，另起的那一列还是那一列
     if (o.hidden) o2.hidden = true;
@@ -1797,7 +1806,7 @@ export class Scene {
     const lost = (e) => e.obj === o.id && e.key != null && !this.partOf(o.id, e.key);
     for (const [k, l] of this.links) if (lost(l.a) || lost(l.b)) this.links.delete(k);
     const changed = f.vals.map((v, i) => (v === L.vals[i] ? null : { ref: o.id, expr: f.exprs[i], from: L.vals[i], to: v })).filter(Boolean);
-    return { changed, parts: t.parts(o2).slice(0, 12) };
+    return { changed, parts: t.parts(o2).slice(0, 12), ...(f.error ? { error: f.error, marked: true } : {}) };
   }
 
   /**
@@ -2003,7 +2012,7 @@ export class Scene {
     const lives = this.liveNodes().filter((n) => n.live);
     // 错误前面的「{式子}」和前面写的重了，去掉
     const why = (e) => e.replace(/^「\{[^{}]*\}」(算不出来：|里的)?/, '');
-    const liveItem = (n) => `${n.text}${n.rec.error ? `（现在算不出来：${why(n.rec.error)}；停在上一次算出来的数）` : ''}`;
+    const liveItem = (n) => `${n.text}${n.rec.error ? `（现在算不出来：${why(n.rec.error)}；${n.rec.marked ? '算不出来的那一格画的是「?」' : '停在上一次算出来的数'}）` : ''}`;
     // 开着整张拖（手势表写了 live 的：矩阵的 compare / put / merge）的那几样学生拖得动，另起一行照实说；别的、旧课照旧一行
     const dragged = new Set([...this.opens.values()].filter((e) => e.gesture?.live).map((e) => e.obj));
     const still = lives.filter((n) => !dragged.has(n.obj)), drag = lives.filter((n) => dragged.has(n.obj));
