@@ -56,7 +56,7 @@ function moveAct(o, { from, to } = {}) {
   const i = line.findIndex((c) => c.key === x.key);
   const t = g.before == null ? line.length : line.filter((c) => c.slot < g.before).length;
   const j = t > i ? t - 1 : t;
-  if (j === i) return { error: '还在原处：拖到别的两张之间' };
+  if (j === i) return { error: '还在原处：拖到别的两张之间', quiet: true };
   // 泳道里的牌隔得一样远才插得了（move 是整排上中间的各让一格；泳道上隔着别的牌，插不成）
   if (split && line.some((c, k) => k && c.slot - line[k - 1].slot !== 1)) return { error: '分开排着的时候插不了（拖到另一张上对调；要插进去先 merge 合回一排）' };
   return made(o, { type: 'move', key: x.key, to: line[j].slot });

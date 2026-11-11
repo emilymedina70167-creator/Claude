@@ -106,9 +106,32 @@ export function gestureAct(scene, e, { from, to, value, role } = {}) {
   // scene 也交给它：整张拖到另一张上（矩阵的 put）要看落的那一张是不是收集用的
   // open：这一项是怎么开的（表的 edit：键盘、输入框还是一排选项，写的值照它查）
   try { r = g.toAct(o, { from, to, value: normValue(value), role, scene, open: e }); } catch (err) { return { error: err?.message || String(err) }; }
-  if (r?.error) return { error: r.error };
+  // quiet：不算一次尝试（放回原处、没点到东西），不用告诉老师
+  if (r?.error) return { error: r.error, ...(r.quiet ? { quiet: true } : {}) };
   if (!r?.src) return { error: '这一下翻不成一行指令' };
   return { act: r.act, src: r.src };
+}
+
+/**
+ * 手势层当场弹回的那一下（翻不成一行指令：这个世界做不到——没有右孩子转不了、空格子拖不动、跨泳道）写成一句给老师
+ * （底座第二轮留下的第 2 条：以前只在学生那边浮一句，叫老师时没有这一下，老师不知道学生想过这么做）。
+ * 不算尝试的（r.quiet：放回原处）是 null。舞台交给课堂的 onNote：跟着下一条走，不单独叫老师
+ */
+export function bounceText(scene, e, ctx = {}, r = {}) {
+  if (!r?.error || r.quiet) return null;
+  const o = scene?.objects?.get(e?.obj);
+  if (!o) return null;
+  const name = (p) => {
+    if (!p || p.obj == null || p.key == null) return '';
+    let ref = '';
+    try { const q = scene.partOf(p.obj, p.key); ref = q ? scene.tapRef(q) : ''; } catch { ref = ''; }
+    if (!ref) return '';
+    const v = p.value === '' ? '空格子' : p.value;
+    return `${ref}${v != null && String(v) !== '' ? `（${v}）` : ''}`;
+  };
+  const a = name(ctx.from), b = name(ctx.to);
+  const how = a && b ? `按住 ${a} 放到 ${b}` : a ? `在 ${a} 上` : b ? `在 ${b} 上` : '';
+  return `学生想在 ${o.id} 上 ${e.action}${how ? `（${how}）` : ''}：页面没让做——${r.error}`;
 }
 
 /**

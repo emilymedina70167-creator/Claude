@@ -10,7 +10,7 @@
 // 碰 DOM，靠浏览器里真的触摸检查（tools/stage-touch.mjs）；不碰 DOM 的部分在 gestures.js（有测试）。
 import { EASE } from './motion.js';
 import { pickTarget } from './layout.js';
-import { gestureAct, askFor, kindsOf, kindArmed, writeRange, closeAct, dropVerdict, wouldBlock, ARMED_GRIPS, PRESS_OF } from './gestures.js';
+import { gestureAct, askFor, kindsOf, kindArmed, writeRange, closeAct, dropVerdict, wouldBlock, ARMED_GRIPS, PRESS_OF, bounceText } from './gestures.js';
 import { openKeypad, openChoices, openText } from './keypad.js';
 import { reportError } from '../errlog.js';
 
@@ -125,6 +125,8 @@ export function armGesture(stage, e, view, done) {
   const send = (r, kind) => Promise.resolve(done(actOf(r, kind), r.src));
   // 放下的那一刻先问裁判这一下会不会被拦（wrong=block、这个世界做不到）：会拦就让拎着的东西飞回去，不用等演。拿舞台现在的样子问
   const blocked = (src) => wouldBlock(stage.scene, e, src);
+  // 当场弹回的那一下（翻不成一行指令：这个世界做不到）记一句给老师，跟着下一条走（不叫老师；同一句不重复记）
+  const told = (ctx, r) => { const t = bounceText(stage.scene, e, ctx, r); if (t) stage.onNote?.(t, {}); };
   // 一下手势要先问一个值：数字键盘、一排选项；问到了再翻成指令（翻不成就在那块上说为什么，不收）。
   // 浮出来的那一块不比手势活得久：这一项收起了（off）一起收；按「确定」时这一项已经不是开着的那一项、东西重造过了，悄悄收起、不交
   let popup = null;
@@ -162,7 +164,7 @@ export function armGesture(stage, e, view, done) {
         return;
       }
       const r = gestureAct(stage.scene, e, ctx);
-      if (r.error) { shake(grip); noteAt(stage, r.error, anchor); } else send(r, kind);
+      if (r.error) { shake(grip); noteAt(stage, r.error, anchor); told(ctx, r); } else send(r, kind);
     },
   });
 
@@ -259,7 +261,7 @@ export function armGesture(stage, e, view, done) {
         // 先问倍数：键盘开着时这一行、那一行一直标着（看得出「r₂ + k·r₁」说的是哪两行），收起时一起恢复
         if (ask) { back(L, { keep: true }); light(x.t, 'is-over', true); asking(ask, anchor, ctx, kind, () => { L?.restore(); light(x.t, 'is-over', false); }); return null; }
         const r = gestureAct(stage.scene, e, ctx);
-        if (r.error) { back(L); noteAt(stage, r.error, anchor); return null; }
+        if (r.error) { back(L); noteAt(stage, r.error, anchor); told(ctx, r); return null; }
         if (blocked(r.src)) back(L);
         // 画法自己定拎着的那一份怎么走（整张矩阵拖去比是弹回去，放进合计是飞进去）；原来那一样演完再恢复（并掉的那一张那时已经拿下了）
         else if (grip.land) {

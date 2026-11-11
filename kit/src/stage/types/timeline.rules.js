@@ -10,7 +10,7 @@ function setTo(o, scene, dial, stop, why) {
   const x = scene?.vars?.get(dial);
   if (!x) return { error: `${dial} 不在了` };
   if (!stop || stop < 1 || stop > o.stops.length) return { error: '拖到一个停靠点上' };
-  if (x.v === stop) return { error: '还在原处：拖到别的停靠点上' };
+  if (x.v === stop) return { error: '还在原处：拖到别的停靠点上', quiet: true };
   if (why) return { error: why };
   return { act: { type: 'dial', name: dial, value: nameAt(o, stop), from: nameAt(o, x.v) }, src: `set ${dial} ${nameAt(o, stop)}` };
 }

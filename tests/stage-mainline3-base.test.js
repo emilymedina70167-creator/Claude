@@ -34,3 +34,30 @@ test('第 7 条：watch——只叫老师、不打勾、不给学生看的条件
   run(s, 'ungoal w1');
   assert.equal(s.goals.has('w1'), false);
 });
+
+test('第 2 条：手势层当场弹回的那一下（这个世界做不到、翻不成一行指令）也写成一句给老师；放回原处那种不算', async () => {
+  const { gestureAct, bounceText } = await import('../kit/src/stage/gestures.js');
+  const s = make('tree t = 30 20 40 10\nopen t rotate');
+  const o = s.objects.get('t');
+  const e = s.opens.get('t:rotate');
+  const node = (v) => o.nodes.find((n) => String(n.value) === String(v));
+  // 把 40（没有孩子）拖到 30 上想转：转不了
+  const ctx = { from: node(10), to: node(30) };
+  const r = gestureAct(s, e, ctx);
+  assert.ok(r.error);
+  const text = bounceText(s, e, ctx, r);
+  assert.match(text, /^学生想在 t 上 rotate（按住 t\.\S+（10） 放到 t\.\S+（30））：页面没让做——/);
+  assert.ok(text.includes(r.error));
+  // 一排格子：拖回原处不是一次尝试，不说
+  const a = make('array a = 3 1 2\nopen a move');
+  const cell = (k) => a.objects.get('a').cells.find((c) => c.key === k);
+  const back = gestureAct(a, a.opens.get('a:move'), { from: cell(1), to: { gap: { row: 0, before: 1 } } });
+  assert.equal(back.quiet, true);
+  assert.equal(bounceText(a, a.opens.get('a:move'), { from: cell(1), to: { gap: { row: 0, before: 1 } } }, back), null);
+  // 空格子拖不动：是一次尝试，说
+  const b = make('array h = _ 5\nopen h move');
+  const hc = (k) => b.objects.get('h').cells.find((c) => c.key === k);
+  const rb = gestureAct(b, b.opens.get('h:move'), { from: hc(1), to: hc(2) });
+  assert.match(bounceText(b, b.opens.get('h:move'), { from: hc(1), to: hc(2) }, rb), /学生想在 h 上 move（按住 h\.1（空格子） 放到 h\.2（5））：页面没让做——空格子拖不动/);
+  assert.doesNotMatch(text, /[他她]/);
+});
