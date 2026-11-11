@@ -240,6 +240,7 @@ export class Scene {
     this.preRight = new Map();
     // 话里光秃秃的一个名字现在还不是拨数、也不是舞台上的东西（{Xi} 写在造 Xi 之前，或者拼错了的 {kk}）：这一轮演完再看（looseProblems）
     this.loose = []; // [{ name, line, src }]
+    this.notices = []; // 照演了、可要告诉老师一声的（[{ line, src, error, kept: true }]）：一轮演完和 loose 一起交（looseProblems）
     this.labelRects = []; // 贴的字画在哪（stage.js 量了写回）：[{ x, y, w, h, objs }]，摆东西时后造的东西让开（reflow）
     // —— 裁判（referee.js）接进来以后 ——
     this.slips = new Map(); // 东西 id → { refs, src }：学生走偏的那一下淡淡圈着（open … wrong=mark），那样东西下一次变了就收掉
@@ -281,6 +282,7 @@ export class Scene {
     s.askSeq = this.askSeq;
     for (const [k, p] of this.preRight) s.preRight.set(k, { ...p, lines: [...p.lines] });
     s.loose = this.loose.map((x) => ({ ...x }));
+    s.notices = this.notices.map((x) => ({ ...x }));
     s.labelRects = this.labelRects.map((r) => ({ ...r, objs: [...r.objs] }));
     for (const [k, v] of this.slips) s.slips.set(k, { ...v, refs: [...v.refs] });
     s.doneState = new Map(this.doneState);
@@ -479,6 +481,9 @@ export class Scene {
       out.push({ line: x.line, src: x.src, error: this.looseText(x.name), kept: true });
     }
     this.loose = [];
+    // 照演了、要告诉老师一声的（同名重造收掉了字和 open）
+    out.push(...this.notices);
+    this.notices = [];
     return out;
   }
 
@@ -1091,6 +1096,15 @@ export class Scene {
       const kept = !!old && (samePlace(old.origin, o.origin) || !!o.sameRow);
       delete o.sameRow;
       // 同名重造不清存档（老师重造一样东西，还能回到以前存的那一刻）；换了一种东西才清（树的样子放不回一排格子上）
+      // 重造以前：贴在旧部件上的字（「站定」贴在旧的 49 上）、交给学生的动作是说旧的那一份的——字收掉（贴在整样东西上的留着），
+      // 动作收了要告诉老师（主线第一轮 D4-10：以前字留着贴到了新的第 1 格上，open 没了也不说）。重放旧课照旧
+      if (old && !c.lenient) {
+        const onParts = [...this.labels].filter(([, l]) => !l.dial && (l.refs || []).some((r) => { const p = parseRef(r); return p?.obj === id && /[.#]/.test(r); })).map(([k]) => k);
+        for (const k of onParts) this.labels.delete(k);
+        const acts = [...this.opens.values()].filter((e) => e.obj === id).map((e) => `open ${id}${e.action && e.action !== 'drag' ? ` ${e.action}` : ''}`);
+        const bits = [onParts.length ? `贴在旧部件上的字（${onParts.join('、')}）` : '', acts.length ? `交给学生的动作（${[...new Set(acts)].join('、')}）` : ''].filter(Boolean);
+        if (bits.length) this.notices.push({ line: c.line ?? 0, src: String(c.src ?? '').trim(), error: `重造了 ${id}：${bits.join('、')}都收了${acts.length ? '。要学生接着动，再写一次 open' : ''}`, kept: true });
+      }
       if (old) this.dropObject(id, { keepLabels: true, keepPlace: kept, keepSaves: old.type === t.type });
       if (kept) {
         if (old.colStart) o.colStart = true;

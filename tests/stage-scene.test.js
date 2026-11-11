@@ -2303,3 +2303,25 @@ test('D1-12：hop 留下的弧钉在画的时候那两个格位上：牌挪走�
   run(s, 'move a#10 -> a.1');
   assert.deepEqual(ends(), ['a.1', 'a.10'], '弧的两头还是第 1 格、第 10 格');
 });
+
+test('D4-10：同名重造一样东西——贴在旧部件上的字收掉（贴在整样东西上的留着），交给学生的动作收了要告诉老师', () => {
+  const s = run(new Scene(), 'array a = 49 38 65\nlabel s a.1 "站定"\nlabel n a "换了 0 次"\nkeep a "站定时"\nopen a');
+  s.loose = [];
+  run(s, 'array a = 38 49 65');
+  assert.equal(s.labels.has('s'), false, '贴在旧的第 1 格上的「站定」收了（以前留着，贴到了新的第 1 格上）');
+  assert.equal(s.labels.has('n'), true, '贴在整排上的字留着');
+  assert.equal([...s.opens.values()].some((e) => e.obj === 'a'), false);
+  const told = s.looseProblems();
+  assert.equal(told.length, 1);
+  assert.equal(told[0].kept, true);
+  assert.match(told[0].error, /重造了 a：贴在旧部件上的字（s）、交给学生的动作（open a）都收了.*要学生接着动，再写一次 open/);
+  // 存档照留（底座定的：重造以后还回得到以前存的那一刻）
+  assert.ok(s.keeps.get('a')?.size || s.keeps.get('a')?.length);
+  // 没东西可收的重造不说
+  run(s, 'array a = 1 2 3');
+  assert.deepEqual(s.looseProblems(), []);
+  // 重放旧课照旧（字留着、不说）
+  const old = run(new Scene(), 'array a = 49 38 65\nlabel s a.1 "站定"\nopen a');
+  old.apply({ ...parseScript('array a = 38 49 65')[0], lenient: true });
+  assert.equal(old.labels.has('s'), true);
+});
