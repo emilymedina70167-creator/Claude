@@ -45,7 +45,7 @@ Claude-Session: https://claude.ai/code/session_014f77bBNhfQR7uQEB9NdAJp
 
 ---
 
-### 任务 0：准备和基线
+### Task 0：准备和基线
 
 **文件：**
 - 建：`$BASE/try-4cc083f.json`（不进 git）
@@ -78,7 +78,7 @@ node tools/stage-try-diff.mjs $BASE/try-4cc083f.json $BASE/try-4cc083f.json
 
 ---
 
-### 任务 1：静态尺子
+### Task 1：静态尺子
 
 **文件：**
 - 建：`tools/stage-cost-lib.js`、`tools/stage-cost.mjs`、`tests/stage-cost.test.js`
@@ -179,7 +179,7 @@ node tools/stage-cost.mjs evals/stage-gaps/try3 > /tmp/cost-try3.txt && head -40
 
 ---
 
-### 任务 2：读真课
+### Task 2：读真课
 
 **文件：**
 - 改：`tools/stage-cost-lib.js`、`tests/stage-cost.test.js`
@@ -250,7 +250,7 @@ node tools/stage-lesson.mjs $BASE/desk > $BASE/lessons-before.txt && node tools/
 
 ---
 
-### 任务 3：`fix1` 的架子
+### Task 3：`fix1` 的架子
 
 **文件：**
 - 改：`tools/stage-try-lib.js`（`MUST` 旁边加 `FIX1`、查法加「不许出现」）、`tools/stage-must.mjs`（`--table fix1`）、`tests/stage-try.test.js`
@@ -303,7 +303,7 @@ test('fix1 的表：每行有编号、文件，checks / nots / audit / noAudit �
 
 ---
 
-### 任务 4：判答案、判对错
+### Task 4：判答案、判对错
 
 | 条 | 在哪 | 测试 | 改成 |
 |---|---|---|---|
@@ -318,7 +318,7 @@ test('fix1 的表：每行有编号、文件，checks / nots / audit / noAudit �
 
 ---
 
-### 任务 5：提问的那一轮
+### Task 5：提问的那一轮
 
 | 条 | 在哪 | 测试 | 改成 |
 |---|---|---|---|
@@ -333,7 +333,7 @@ test('fix1 的表：每行有编号、文件，checks / nots / audit / noAudit �
 
 ---
 
-### 任务 6：挑战和叫老师
+### Task 6：挑战和叫老师
 
 | 条 | 在哪 | 测试 | 改成 |
 |---|---|---|---|
@@ -349,7 +349,7 @@ test('fix1 的表：每行有编号、文件，checks / nots / audit / noAudit �
 
 ---
 
-### 任务 7：写出来的字、跟着算的数
+### Task 7：写出来的字、跟着算的数
 
 | 条 | 在哪 | 测试 | 改成 |
 |---|---|---|---|
@@ -369,7 +369,7 @@ test('fix1 的表：每行有编号、文件，checks / nots / audit / noAudit �
 
 ---
 
-### 任务 8：一排格子、图、平面、同名重造、说明
+### Task 8：一排格子、图、平面、同名重造、说明
 
 | 条 | 在哪 | 测试 | 改成 |
 |---|---|---|---|
@@ -386,7 +386,7 @@ test('fix1 的表：每行有编号、文件，checks / nots / audit / noAudit �
 
 ---
 
-### 任务 9：排版检查说真话
+### Task 9：排版检查说真话
 
 **文件：**
 - 改：`tools/stage-measure.mjs`（`measure`）、`tools/stage-audit.mjs`、`kit/src/stage/stage.js`（贴字那一段 1293 行：记下实际在哪边；「画面上看不全」那一行）、`kit/src/stage/scene.js`（`stateText`）
@@ -411,7 +411,7 @@ test('fix1 的表：每行有编号、文件，checks / nots / audit / noAudit �
 
 ---
 
-### 任务 10：排版的根子
+### Task 10：排版的根子
 
 **文件：** `kit/src/stage/layout.js`、`kit/src/stage/stage.js`（摆东西、贴字、整台缩放的那几段）、`kit/src/stage/types/array.view.js`、`types/plane.view.js`；测：fix1、`npm run check:stage`
 
@@ -435,7 +435,7 @@ test('fix1 的表：每行有编号、文件，checks / nots / audit / noAudit �
 
 ---
 
-### 任务 11：文档
+### Task 11：文档
 
 **文件：**
 - 建：`docs/stage-mainline.md`
@@ -454,7 +454,7 @@ test('fix1 的表：每行有编号、文件，checks / nots / audit / noAudit �
 
 ---
 
-### 任务 12：收尾、合并、发布
+### Task 12：收尾、合并、发布
 
 - [ ] **步骤 1：旧课重放**（别的都停下，4 核全给它）
 
