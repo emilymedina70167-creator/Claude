@@ -1,0 +1,12 @@
+# 主线第五轮：页面拼谓语。老师只写哪个词、什么时间、什么状态；学生拨拨盘，句子自己变；标准答案也由页面拼
+dial t = 现在 options="过去 现在 将来" at=s
+dial z = 一般 options="一般 进行 完成 完成进行" at=s
+sentence s = "That kind of spying {verb: go on | t | z} for decades."
+say "拨一拨两个拨盘，看谓语怎么变。"
+ask value "现在完成进行时，谓语是哪几个词？" answer="{verb: go on | 现在 | 完成进行}" type=en
+学生: dial t 过去
+学生: dial z 完成
+学生: value have been going on
+say "主语 That kind 是单数。再写一次。"
+ask value "谓语？" answer="{verb: go on | 现在 | 完成进行}" type=en
+学生: value has been going on

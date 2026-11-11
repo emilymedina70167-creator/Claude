@@ -17,7 +17,7 @@ import { bbox } from '../layout.js';
 import { parseBrackets, tokenizeSentence, ROLES } from '../../entext.js';
 // 规则那边照 key 数的学生括号（舞台现状里写）。两个模块互相 import：都只在函数里用对方的东西，加载的先后不碍事
 import { bracketFacts, tallyOf } from './sentence.rules.js';
-import { splitPicks, hasPick, checkPick, fillPicks, pickDeps, pickNow, dialSteps, varText } from '../pick.js';
+import { splitPicks, hasPick, checkPick, fillPicks, pickDeps, pickNow, dialSteps, varText, VERB, verbFact } from '../pick.js';
 
 export const MAX_WORDS = 60;
 export const WRAP = 800; // 一行最宽（世界坐标的像素；镜头再缩放到屏幕上）
@@ -1286,7 +1286,7 @@ export const sentence = {
   },
   // 一句话写现在的样子（存档点 back 以后告诉老师，scene.js 的 summaryOf）：那一句（折起来的写成［…］，和现状一样）
   summary(o) { return sentenceText(o, { folds: true }); },
-  describe(o) {
+  describe(o, scene) {
     const L = layout(o);
     const tag = (w) => {
       const bits = [];
@@ -1300,7 +1300,14 @@ export const sentence = {
     };
     const lines = [`句子 ${o.id}（${o.words.length} 个词${L.lines.length > 1 ? `，排成 ${L.lines.length} 行` : ''}）：${sentenceText(o, { folds: true })}`];
     lines.push(`  词：${ordered(o).map(tag).join('  ')}`);
-    if (o.picks) lines.push(o.picks.off ? `  不再跟着拨盘 ${o.picks.deps.join('、')} 变（${o.picks.off === 'rewrite' ? 'rewrite 换了整句' : o.picks.off === 'gone' ? '拨盘没了：重新造出同样个数的就接着跟' : 'move 挪过词'}；要再跟就重新造这句）` : `  跟着拨盘变：${(o.picks.now || []).map((x) => `${x.raw} 现在是「${x.text}」`).join('；')}`);
+    if (o.picks?.off) lines.push(`  不再跟着拨盘 ${o.picks.deps.join('、')} 变（${o.picks.off === 'rewrite' ? 'rewrite 换了整句' : o.picks.off === 'gone' ? '拨盘没了：重新造出同样个数的就接着跟' : 'move 挪过词'}；要再跟就重新造这句）`);
+    else if (o.picks) {
+      // {verb: …}（页面拼的谓语）另起一行说清拼的是什么；别的照旧说「跟着拨盘变」
+      const ps = splitPicks(o.picks.src).filter((p) => p.k === 'pick');
+      const dial = (o.picks.now || []).filter((x, k) => ps[k]?.name !== VERB);
+      if (dial.length) lines.push(`  跟着拨盘变：${dial.map((x) => `${x.raw} 现在是「${x.text}」`).join('；')}`);
+      for (const p of ps) if (p.name === VERB) { const f = verbFact(p, scene?.vars || new Map()); if (f) lines.push(`  谓语是页面拼的：${f}`); }
+    }
     if (o.marks.length) {
       const lv = new Map(L.marks.map((m) => [m.mark, m.level]));
       // 成分写两种名字（定语（Attr）、谓语（V））：学生点的是中文、老师写的多半是缩写，两边都认得出（事实里照括号上写的，一个名字）
@@ -1352,6 +1359,7 @@ cut s.6 / uncut s                 第 6 个词后面断开（意群的斜线）
 refer s.3 -> s.2 / unrefer s.3    箭头：which、it 指的是谁（指一段写 s.1-2，指整句写 s）
 rewrite s "The man living next door is a doctor."    改写整句：同样的词滑到新位置，新的淡进来
 sentence s = "I {t: was holding | am holding | will be holding} it."  句子跟着拨盘 t 变（先 dial t … options=）：一拨就照 rewrite 重排，别的词编号不变、圈着那一整段的括号跟着走；key= 里那一段也写 {t: … | …}；rewrite / move 以后不再跟
+sentence v = "It {verb: go on | t | 完成 | 单} for years."  页面拼谓语：{verb: 原形 | 时间 | 状态 | 主语 | 被动 | 否定}，后面的格可以不写（现在、一般、单、主动、肯定）。每格写词，或者一个拨词的拨盘的名字（跟着拨）：时间 过去 现在 将来 过去将来（也能写情态 must can should…），状态 一般 进行 完成 完成进行，主语 I you he she it we they 或 单 / 复。话、贴的字、题卡、answer="{verb: …}" 里也能写。页面只管拼得对（现状写拼的是什么）；该用哪种时态是你教。表里没有的不规则动词照规则变（现状会说），自己给：{verb: 原形/过去式/过去分词 | …}。疑问句的倒装不拼
 ask drag s.7 "把 is 挪到句首"         学生按住一个词拖到别处（页面照做，再告诉你）
 学生自己拆（mark 页面照 key 判每一下）：
 open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的，交中文）= mark s.1-6 主语；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句；key 写 [Attr/NF …] 是两种都对；学生拉的括号上有 ✕，点了 = unmark s.1-6（不判）

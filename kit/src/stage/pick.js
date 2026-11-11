@@ -5,7 +5,11 @@
 // 拨盘两种：拨数的（dial k = 1 range=1..3：从 range 的头一个数起）、拨词的（dial t = 现在 options="过去 现在 将来"：
 // 里面存的是第几个，1 起；写出来、比较都是那个词）。段数要和拨盘能拨到的个数一样。能套一层（段里再写 {z: … | …}）。
 
+import { conjugate, formsOf, readTime, readAspect, readSubject } from './verbs.js';
+
 const HEAD = /^\s*([A-Za-z_]\w*)\s*[:：]/;
+/** {verb: 原形 | 时间 | 状态 | 主语 | 被动 | 否定}：名字是 verb 的那一种「挑」——不是照拨盘挑一段，是页面拼谓语（verbs.js）。verb 这个名字留给它 */
+export const VERB = 'verb';
 
 /** 从 s[i]（是 {）起找配对的 }（能套）：返回 } 的位置，没有是 -1 */
 export function closeOf(s, i) {
@@ -37,7 +41,8 @@ export function parsePick(inner) {
   if (!m) return null;
   const body = String(inner).slice(m[0].length);
   const alts = splitAlts(body);
-  return alts.length >= 2 ? { name: m[1], alts } : null;
+  // {verb: go} 只写原形也是（别的格都有默认）
+  return alts.length >= 2 || m[1] === VERB ? { name: m[1], alts } : null;
 }
 /**
  * 一段字拆成：[{ k: 'text', v } | { k: 'pick', name, alts, raw }]（只拆最外一层；别的 {…} 留在 text 里照旧）。
@@ -81,6 +86,7 @@ const names = (x) => (x.options ? x.options.join(' / ') : `${x.lo}～${x.hi}`);
  * vars 是场景的拨盘表（Map：名字 → { v, lo, hi, options? }）。错了抛错，话给老师看
  */
 export function checkPick(p, vars, depth = 0) {
+  if (p.name === VERB) { checkVerb(p, vars); return; }
   const x = vars.get(p.name);
   const shown = `{${p.name}: ${p.alts.join(' | ')}}`;
   if (!x) throw new Error(`「${shown}」：没有叫「${p.name}」的拨盘（先写 dial ${p.name} = … options="…"；有的是：${[...vars.keys()].join('、') || '还没有'}）`);
@@ -100,6 +106,7 @@ export function checkPick(p, vars, depth = 0) {
 }
 /** 一个「照拨盘挑一个」现在写出来是什么（套着的一起解开）；拨盘不在、挑不了时照原文 */
 export function pickNow(p, vars) {
+  if (p.name === VERB) { try { return verbNow(p, vars).text; } catch { return p.raw ?? `{${p.name}: ${p.alts.join(' | ')}}`; } }
   const st = dialSteps(vars.get(p.name));
   if (!st || st.i < 0 || st.i >= p.alts.length) return p.raw ?? `{${p.name}: ${p.alts.join(' | ')}}`;
   return fillPicks(p.alts[st.i], vars);
@@ -111,7 +118,62 @@ export function fillPicks(text, vars) {
 /** 用到了哪几个拨盘（连套着的） */
 export function pickDeps(text) {
   const out = new Set();
-  const walk = (t) => { for (const p of splitPicks(t)) if (p.k === 'pick') { out.add(p.name); p.alts.forEach(walk); } };
+  const walk = (t) => {
+    for (const p of splitPicks(t)) {
+      if (p.k !== 'pick') continue;
+      // {verb: …}：跟着的是格子里写的那几个拨盘的名字（看起来像名字的都算；不是拨盘的 checkVerb 会当词读）
+      if (p.name === VERB) { for (const a of p.alts.slice(1)) if (NAME.test(a)) out.add(a); continue; }
+      out.add(p.name); p.alts.forEach(walk);
+    }
+  };
   walk(text);
   return [...out];
+}
+
+// —— {verb: 原形 | 时间 | 状态 | 主语 | 被动 | 否定} ——
+const NAME = /^[A-Za-z_]\w*$/;
+const VOICE = { 被动: ['passive', true], passive: ['passive', true], 主动: ['passive', false], active: ['passive', false], 否定: ['negative', true], not: ['negative', true], negative: ['negative', true], 肯定: ['negative', false] };
+const SLOTS = ['原形', '时间', '状态', '主语', '被动', '否定'];
+const shownOf = (p) => p.raw ?? `{${p.name}: ${p.alts.join(' | ')}}`;
+// 一格里写的是拨词的拨盘的名字：取它现在的词；不是就当词用。情态动词（can must…）、主语（he it…）和拨盘重名时拨盘优先
+const slotText = (a, vars) => (NAME.test(a) && vars.get(a)?.options ? varText(vars.get(a)) : a);
+/** 一个 {verb: …} 现在拼出来是什么：{ text, base, time, aspect, subject（'I' 'you' '3s' 'pl'）, passive, negative, regular }；拼不了抛错 */
+export function verbNow(p, vars) {
+  const a = p.alts;
+  if (a.length > SLOTS.length) throw new Error(`「${shownOf(p)}」最多 6 格：${SLOTS.join(' | ')}`);
+  for (const x of a) if (/[{}]/.test(x)) throw new Error(`「${shownOf(p)}」：格子里写词或者拨盘的名字，不能再套一层 {…}（主语要跟着拨盘走，就写那个拨盘的名字）`);
+  for (const x of a.slice(1)) if (NAME.test(x) && vars.has(x) && !vars.get(x).options) throw new Error(`「${shownOf(p)}」：${wordDialError(x, vars.get(x))}`.replace('这里要一个拨数的（dial k = 1 range=1..5）', '这里要一个拨词的（dial t = 现在 options="过去 现在 将来"）').replace('是拨词的拨盘', '是拨数的拨盘'));
+  const f = formsOf(a[0]);
+  const opt = { time: slotText(a[1] || '', vars), aspect: slotText(a[2] || '', vars), subject: slotText(a[3] || '', vars), passive: false, negative: false };
+  for (const x of a.slice(4)) {
+    const w = slotText(x, vars);
+    const hit = VOICE[w] || VOICE[w.toLowerCase()];
+    if (!hit) { if (w === '') continue; throw new Error(`「${shownOf(p)}」：第 5、6 格写 被动 / 主动、否定 / 肯定，没有「${w}」`); }
+    opt[hit[0]] = hit[1];
+  }
+  // 第 4 格直接写了「被动」「否定」（主语没写）：也认
+  const early = VOICE[opt.subject];
+  if (early) { opt[early[0]] = early[1]; opt.subject = ''; }
+  const T = readTime(opt.time), A = readAspect(opt.aspect), who = readSubject(opt.subject);
+  return { text: conjugate(a[0], opt), base: f.base, time: T.modal || T.time, aspect: A, subject: who, passive: opt.passive, negative: opt.negative, regular: f.regular };
+}
+/** 写下时查：用到的拨盘能拨到的每一种组合都拼一遍，哪一种拼不了当场报（话里带是拨到哪时） */
+function checkVerb(p, vars) {
+  const deps = [...new Set(p.alts.slice(1).filter((a) => NAME.test(a) && vars.get(a)?.options))];
+  const go = (i, cur, where) => {
+    if (i === deps.length) {
+      try { verbNow(p, cur); } catch (err) { throw new Error(where.length ? `${where.join('、')}时，${err.message}` : err.message); }
+      return;
+    }
+    const x = vars.get(deps[i]);
+    x.options.forEach((w, k) => go(i + 1, new Map(cur).set(deps[i], { ...x, v: k + 1 }), [...where, `拨盘 ${deps[i]} 拨到「${w}」`]));
+  };
+  go(0, vars, []);
+}
+/** 给老师看的一句：谓语是页面拼的（表里没有、照规则变的说一声） */
+export function verbFact(p, vars) {
+  let v;
+  try { v = verbNow(p, vars); } catch { return ''; }
+  const who = { I: '主语 I', you: '主语 you', '3s': '主语单数', pl: '主语复数' }[v.subject];
+  return `${v.base}，${v.time} × ${v.aspect}，${who}${v.passive ? '，被动' : ''}${v.negative ? '，否定' : ''} → ${v.text}${v.regular ? '（照规则变的：不规则就写成 原形/过去式/过去分词）' : ''}`;
 }

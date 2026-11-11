@@ -14,7 +14,7 @@ import { parseScript, parseRef, parseRich, addCommands, OPTIONS, optionError } f
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
 // numOf：数（整数、小数、分数 -3/4，′ 和真的减号也认），比大小用；和挑战判数是同一个
-import { splitPicks, checkPick, varText, pickDeps, wordDialError } from './pick.js';
+import { splitPicks, checkPick, varText, pickDeps, wordDialError, VERB } from './pick.js';
 import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure, numOf, isExpr, exprMeasure } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder, termText } from './value.js';
@@ -1288,6 +1288,7 @@ export class Scene {
         // dial d = 5 range=1-5 at=a
         const [name, val] = words;
         if (!name || !/^[A-Za-z_]\w*$/.test(name)) throw new Error('要写成 dial 名字 = 值 range=1-9');
+        if (name === VERB && !c.lenient) throw new Error('verb 这个名字留给 {verb: …}（页面拼谓语），拨盘换一个名字');
         if (this.vars.get(name)?.owner && !c.lenient) throw new Error(`${name} 是${typeOf(this.objects.get(this.vars.get(name).owner)).label} ${this.vars.get(name).owner} 上的（它的把手就是这个拨盘），不能另造一个同名的拨盘：换一个名字`);
         // options="过去 现在 将来"：拨词的拨盘（主线第二轮 C）。里面存的是第几个词（1 起），拨、存、重放和拨数的一样；写出来、比较是那个词
         let list = null;

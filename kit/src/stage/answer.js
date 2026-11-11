@@ -9,6 +9,7 @@ import { parseFree, formulaSpec, compareFormula, normalizeFormula, matrixCells, 
 import { intervalSpec, equationSpec } from '../anstypes.js';
 import { parseSeqAnswer, checkSeq } from '../textcheck.js';
 import { parseAnswer, matchText } from '../entext.js';
+import { splitPicks, fillPicks, checkPick, VERB } from './pick.js';
 import { toQ, parseRows } from './types/matrix.js';
 import { evalLive, numText } from './value.js';
 
@@ -69,6 +70,9 @@ function valueText(v) {
   return exactText(v);
 }
 
+// answer 里的 {verb: go on | 现在 | 完成进行}：页面拼出谓语当标准答案（pick.js、verbs.js），不是要现算的式子
+const hasVerb = (s) => splitPicks(s).some((p) => p.k === 'pick' && p.name === VERB);
+const verbFilled = (s, scene) => (hasVerb(s) ? fillPicks(s, scene?.vars || new Map()) : s);
 const isLive = (s) => /^\{[^{}]*\}$/.test(String(s ?? '').trim());
 // type=set 的 {1, 5}：大括号里只有数、逗号、空格，是数集的写法（几个值），不是要页面现算的式子（第一轮这样写会报一句看不懂的错）
 const SET_BRACES = /^\{[\s\d.,，、/+\-−]*\}$/;
@@ -78,7 +82,7 @@ const liveIn = (s, type) => isLive(s) && !(type === 'set' && SET_BRACES.test(Str
  * lenient（重放旧课）：算不出来就照字面——第一轮以前的课里 answer={…} 可能就是字面写的，不是式子
  */
 function resolveAnswer(answer, scene, { type = null, lenient = false } = {}) {
-  const s = String(answer ?? '').trim();
+  const s = verbFilled(String(answer ?? '').trim(), scene);
   if (!liveIn(s, type)) return s;
   if (!scene) {
     if (lenient) return s;
@@ -611,7 +615,9 @@ export function checkSpec(spec = {}, scene = null, { strict = true, lenient = fa
     if (type || wrongs.length) throw new Error('ask value 写了 type= / wrong= 却没写 answer=：要判对错就写 answer=，只收不判就都不写');
     return;
   }
-  const s = String(raw).trim();
+  // {verb: …} 先拼成字（写下时每一种拨法都拼一遍，拼不了当场报）
+  if (hasVerb(String(raw)) && strict) for (const p of splitPicks(String(raw))) if (p.k === 'pick' && p.name === VERB) checkPick(p, scene?.vars || new Map());
+  const s = verbFilled(String(raw).trim(), scene);
   const setLit = type === 'set' && SET_BRACES.test(s);
   const live = (/\{/.test(s) && !setLit) || /\{/.test(String(spec.wrongs ?? ''));
   if (!strict) {

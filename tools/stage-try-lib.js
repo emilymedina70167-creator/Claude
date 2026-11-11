@@ -553,3 +553,16 @@ export const FIRST = [
     noAudit: [C(/压着/), C(/出了屏幕/)],
   },
 ];
+
+// 主线第五轮新做的（动词形式、引擎的过程表、散列表、堆）：node tools/stage-must.mjs evals/stage-gaps/new5 --table new5
+export const NEW5 = [
+  {
+    id: '页面拼谓语', files: ['verb.txt'],
+    checks: [
+      C(/谓语是页面拼的：go on，现在 × 一般，主语单数 → goes on/, '现状里写页面拼的是什么'),
+      C(/谓语是页面拼的：go on，过去 × 完成，主语单数 → had gone on/, '学生拨了两下：谓语重拼'),
+    ],
+    called: [C(/学生填了「have been going on」——正确答案是 has been going on，填错了/, '标准答案是页面拼的'), C(/学生填了「has been going on」——正确答案是 has been going on，填对了/, '填对了')],
+    noAudit: [C(/压着/), C(/出了屏幕/)],
+  },
+];
