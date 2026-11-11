@@ -43,7 +43,8 @@ export function hasWork(scene) {
   const w = scene?.waiting;
   if (w && w.kind !== 'next') out.push(`还有一问没答（ask ${w.kind}）`);
   const moves = canMove(scene);
-  for (const g of scene?.goals?.values() || []) if (!g.met && (moves || (g.on && w?.kind === 'next' && (w.button || '接着') === g.on))) out.push(`挑战 ${g.id}「${g.text}」还没做到`);
+  // watch（只叫老师的条件）学生不知道有它：不算学生手上的事
+  for (const g of scene?.goals?.values() || []) if (!g.met && !g.watch && (moves || (g.on && w?.kind === 'next' && (w.button || '接着') === g.on))) out.push(`挑战 ${g.id}「${g.text}」还没做到`);
   const undone = undoneOf(scene);
   if (undone.length) out.push(`${undone.join('、')} 还没做完`);
   return out;
@@ -380,6 +381,8 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
     if (e.kind === 'try') continue;
     if (e.kind === 'goal') for (const id of e.ids || []) {
       const g = goals.get(id);
+      // watch：只叫老师的条件成立了（不是挑战：学生那边什么也没有）
+      if (g?.watch) { lines.push(`你盯着的 ${id} 成立了（${g.when}）${heldText(e)}`); continue; }
       const c = e.collected?.[id] || g?.collect;
       // 一下做到几条挑战：各写各的预写行数（per；旧存档没有，照合起来的数）
       const n = e.per ? e.per[id] || 0 : e.reacted;
@@ -392,7 +395,7 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
     }
     else if (e.kind === 'goal-by-teacher') for (const id of e.ids || []) {
       const g = goals.get(id);
-      const name = `挑战 ${id}${g ? `「${g.text}」` : ''}`;
+      const name = g?.watch ? `你盯着的 ${id}（${g.when}）` : `挑战 ${id}${g ? `「${g.text}」` : ''}`;
       // 舞台演你预写的行时成立的、预写出的挑战一出来就成立的：照实说，不说「你这一轮让它成立了」
       lines.push(e.fresh?.includes(id) ? `预写出的${name}一出来就已经成立了（不是学生做到的）` : `${e.pre ? '你预写的行让' : '你这一轮让'}${name}成立了（不是学生做到的）`);
     }

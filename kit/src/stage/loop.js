@@ -299,7 +299,8 @@ export function createLoop(host) {
     // 老师（或页面替老师补的行）让挑战成立了：不是学生做到的，不叫老师，攒着跟下一条发。舞台演预写的行时成立的（pre）、
     // 预写出的挑战一出来就成立的（fresh）照实写，不说「你这一轮让它成立了」
     if (by !== 'student') { addEvent({ kind: 'goal-by-teacher', ids, at: Date.now(), ...(prewrite ? { pre: true } : {}), ...(prewrite && fresh && ids.includes(fresh) ? { fresh: [fresh] } : {}) }); return; }
-    for (const id of ids) host.evidence?.goal?.(id, stage.scene.goals.get(id), S.lastClaude);
+    // watch（只叫老师的条件）不是学生做到的挑战：不记成证据
+    for (const id of ids) if (!stage.scene.goals.get(id)?.watch) host.evidence?.goal?.(id, stage.scene.goals.get(id), S.lastClaude);
     const e = { kind: 'goal', ids, reacted, at: Date.now() };
     // 收集型：收齐的那几张照那一刻的样子记下（发出去时写「学生收齐了 g1 的 3 张：B = …」）
     const col = {};

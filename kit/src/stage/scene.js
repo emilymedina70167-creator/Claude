@@ -884,6 +884,7 @@ export class Scene {
     if (String(c.on).includes('.')) return this.stashOn(c);
     const id = c.on;
     const g = this.goals.get(id);
+    if (g?.watch) throw new Error(`watch 成立时页面只叫你，不演预写的行：${id} 成立以后要演什么，等叫你的时候写；要当场演就用 goal`);
     if (g?.met) throw new Error(`挑战 ${id} 已经做到了，@${id} 的行不会再演`);
     let entry = null;
     if (!g) {
@@ -1541,14 +1542,22 @@ export class Scene {
         ids.forEach((k) => this.opens.delete(k));
         return { closed: ids };
       }
+      case 'watch':
       case 'goal': {
         // goal g1 "改 B 里的一个数，让 AB 还是 O" when="C = O"：给学生的挑战；页面每一下都判，做到了马上告诉老师
+        // watch w1 when="count(t) = 3"（主线第三轮：底座留下的第 7 条）：只叫老师、不打勾、不给学生看的条件——老师想在某一刻停下来看看，
+        // 以前只能拿挑战凑，学生看到的是左上角一个勾（成了「做到了」）。数据上是一条 watch: true 的挑战（成立时马上叫老师一次、没有预写）
+        const watch = cmd === 'watch';
+        if (watch) {
+          if (str != null) throw new Error(`watch 不写给学生看的字（学生看不到它）：watch ${words[0] || 'w1'} when="…"`);
+          if (!opts.when) throw new Error(`watch ${words[0] || 'w1'} 要写 when="什么成立时叫你"（比如 when="count(t) = 3"）`);
+        }
         const id = words[0];
         if (!id || !/^[A-Za-z_]\w*$/.test(id)) throw new Error('要写成 goal 名字 "给学生看的挑战" when="C = O, D != O"');
         if (this.objects.has(id)) throw new Error(`「${id}」是舞台上一样东西的名字，挑战换一个名字（g1、g2……）`);
-        if (str == null) throw new Error(`要写成 goal ${id} "给学生看的挑战" when="…"（挑战的话写在引号里）`);
+        if (str == null && !watch) throw new Error(`要写成 goal ${id} "给学生看的挑战" when="…"（挑战的话写在引号里）`);
         if (!opts.when) throw new Error(`goal ${id} 要写 when="做到什么算做到"（比如 when="C = O, D != O"），页面照它判`);
-        this.checkRich(str, c);
+        if (!watch) this.checkRich(str, c);
         // when= 用 | 隔开几组（「或」）：有一组都成立就算做到；cond 是各组摊平的（还要比条件的字的旧代码用）。
         // 重放旧课：以前 | 不是写法，读不成几组就照以前的读法（当时收下的照样收下）
         let alts;
@@ -1561,11 +1570,12 @@ export class Scene {
         // 这一轮新加的几个选项（call=、on=、collect= n=）：写错当场报；重放旧课（lenient）以前不认它们，当没写（当时收下的照样收下）
         const fresh = (fn) => { try { return fn(); } catch (err) { if (c.lenient) return null; throw err; } };
         // call=now：做到那一刻马上叫老师（不管学生手上还有没有事）；不写照默认（学生手上没事了才叫）。页面不替老师开
-        const call = fresh(() => { if (opts.call != null && opts.call !== 'now') throw new Error(`goal 的 call= 只能写 now（做到那一刻马上叫你，不管学生手上还有没有事），没有「${opts.call}」`); return opts.call === 'now' ? 'now' : null; });
+        // watch 只认 when=（别的选项写了，选项表那一关已经报了）：不读 call= / on= / collect=
+        const call = watch ? 'now' : fresh(() => { if (opts.call != null && opts.call !== 'now') throw new Error(`goal 的 call= 只能写 now（做到那一刻马上叫你，不管学生手上还有没有事），没有「${opts.call}」`); return opts.call === 'now' ? 'now' : null; });
         // on="就这样"：只在学生按这一轮那个按钮时判
-        const on = fresh(() => { const v = opts.on == null ? null : String(opts.on).trim(); if (v === '') throw new Error(`on= 写按钮上的字（goal ${id} "…" when="…" on="就这样"，学生按「就这样」时才判）`); return v; });
-        let collect = fresh(() => (opts.collect == null ? null : this.collectSpec(opts, id)));
-        fresh(() => { if (opts.collect == null && opts.n != null) throw new Error(`n= 跟着 collect= 写（goal ${id} "…" when="…" collect=B n=3：收齐 3 张不一样的 B 才算做到）`); });
+        const on = watch ? null : fresh(() => { const v = opts.on == null ? null : String(opts.on).trim(); if (v === '') throw new Error(`on= 写按钮上的字（goal ${id} "…" when="…" on="就这样"，学生按「就这样」时才判）`); return v; });
+        let collect = watch ? null : fresh(() => (opts.collect == null ? null : this.collectSpec(opts, id)));
+        if (!watch) fresh(() => { if (opts.collect == null && opts.n != null) throw new Error(`n= 跟着 collect= 写（goal ${id} "…" when="…" collect=B n=3：收齐 3 张不一样的 B 才算做到）`); });
         if (collect && on != null) { if (!c.lenient) throw new Error('collect= 和 on= 不能写在一个挑战上：收集型每做到一次就收一张，不等按钮'); collect = null; }
         // 老师当场写的挑战一写下就成立，多半是写错了，当场告诉老师；预写的行、重放的时候学生可能已经做到了：照收，下面马上算做到。
         // 每一组都判一遍（哪一组写错了照样当场报）；按了按钮才判的不查成不成立（学生按的时候才算，现在成立也要学生自己说「就这样」）
@@ -1582,7 +1592,7 @@ export class Scene {
           if (on == null && now.some(Boolean)) throw new Error(`「${opts.when}」现在就已经成立了：挑战要学生动手以后才做得到`);
         }
         // pre：预写的行造的（舞台演预写的行、写下时的试演），撞名时和老师直接写的分开
-        this.goals.set(id, { id, text: str, when: opts.when, alts, cond, met: false, call, on, collect, ...(c.prewrite || this.trial ? { pre: true } : {}) });
+        this.goals.set(id, { id, text: str ?? '', when: opts.when, alts, cond, met: false, call: watch ? 'now' : call, on, collect, ...(watch ? { watch: true } : {}), ...(c.prewrite || this.trial ? { pre: true } : {}) });
         // 套着的预写（@g1 里写出 goal g2，@g2 的行先记在 ahead）：演出 goal g2 的那一刻（舞台演预写的行带 prewrite；写下时试演在克隆上）
         // 那几行挪过来。老师当场直接写的同名挑战不捡（那是另一个挑战，旧的预写不能在它做到时演）；重写一个挑战照旧清掉它的预写
         if ((c.prewrite || this.trial) && this.ahead.has(id)) {
@@ -2246,6 +2256,8 @@ export class Scene {
     for (const [id, a] of this.ahead) if (a.lines.length) pre.push(`挑战 ${id} 还没出（${groupText(a.from)}时才出），做到了页面马上演你预写的 ${a.lines.length} 行（第 ${a.depth} 层）`);
     if (pre.length) lines.push(`预写的：${pre.join('；')}`);
     for (const g of this.goals.values()) {
+      // watch：只叫老师的条件（学生看不到）
+      if (g.watch) { const st = goalStatus(this, g); lines.push(`盯着 ${g.id} when="${g.when}"：${g.met ? `成立过${st === '做到了' ? '' : `；${st.replace(/^做到过；/, '')}`}` : `${st.replace('还没做到', '还没成立')}（学生看不到；成立时马上叫你一次）`}`); continue; }
       const r = this.reactions.get(g.id);
       // 怎么判、什么时候叫你：做到了以后就不用再说
       const how = g.met ? '' : [g.on != null ? `学生按「${g.on}」时才判` : '', g.call === 'now' ? 'call=now：做到那一刻马上叫你' : ''].filter(Boolean).map((x) => `；${x}`).join('');

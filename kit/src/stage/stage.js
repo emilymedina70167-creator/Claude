@@ -803,7 +803,7 @@ export class Stage {
 
   // —— 活的舞台（docs/stage-plan.md E 段）——
   /** 还没做到的挑战 */
-  pendingGoals() { return [...this.scene.goals.values()].filter((g) => !g.met); }
+  pendingGoals() { return [...this.scene.goals.values()].filter((g) => !g.met && !g.watch); } // watch 学生不知道，不算
   /**
    * 挑战做到了：马上演老师预写的行（一句确认、揭开下一小问——答案固定的，见硬性规定），不等老师；
    * 预写里有 ask 就换掉正在等的那一问；什么都没写、挑战也都做完了，收起「给个提示」，等老师接着讲
@@ -1018,6 +1018,7 @@ export class Stage {
     const host = this.goalsEl;
     const have = new Map([...host.children].filter((n) => !n.classList.contains('is-out')).map((n) => [n.dataset.id, n]));
     for (const g of this.scene.goals.values()) {
+      if (g.watch) continue; // 只叫老师的条件：不给学生看
       let n = have.get(g.id);
       have.delete(g.id);
       if (!n) {

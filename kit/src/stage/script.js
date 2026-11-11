@@ -16,7 +16,7 @@ export const COMMANDS = new Set([
   'say', 'glow', 'unglow', 'lift', 'drop', 'paint', 'unpaint', 'link', 'unlink', 'pulse', 'compare',
   'label', 'retext', 'unlabel', 'dial', 'set', 'camera', 'wait', 'ask', 'clear', 'fly', 'remove',
   'dim', 'undim', 'cover', 'uncover',
-  'open', 'close', 'goal', 'ungoal', 'hide', 'show', 'pick', 'unpick', 'keep', 'back', 'press',
+  'open', 'close', 'goal', 'ungoal', 'watch', 'hide', 'show', 'pick', 'unpick', 'keep', 'back', 'press',
 ]);
 export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
 
@@ -28,7 +28,7 @@ export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
 export const OPTIONS = {
   label: ['side', 'tone'], fly: ['side'], dial: ['range', 'at', 'options'], pick: ['reveal'], keep: ['after'],
   open: ['back', 'wrong', 'call', 'undo', 'input', 'range', 'choices'],
-  goal: ['when', 'call', 'on', 'collect', 'n'],
+  goal: ['when', 'call', 'on', 'collect', 'n'], watch: ['when'],
   ask: {
     tap: ['expect', 'button'], drag: ['expect', 'button'], pick: ['expect', 'reveal', 'order', 'button'], next: ['button'], say: ['button'],
     value: ['answer', 'type', 'wrong', 'free', 'solve', 'button'],
