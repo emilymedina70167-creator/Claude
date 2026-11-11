@@ -13,7 +13,8 @@
 //   dataOf(o, scene)  这样东西的「数据」写成一串（不管摆成什么样）：变了就是老师（或学生）改了数据，页面从新的样子重跑
 //   stateOf(o, scene, snap) → 现在的样子写成能比的一串；cellsOf(o, scene, snap) → 现在每一处显示的字；nameOf(i) → 第 i 处叫什么；word：一处叫「格」还是别的
 //   frames(run, spec) → [{ state, cells, mark? }]   引擎的每一步写成同样的一串；mark 是「第几趟做完」（数）
-//   toKey(run, o, scene)（可选）接在表上：引擎的结果直接当表的答案，不走路
+//   loose(state)（可选）和错法的样子比的时候两边都先过它（排序的错法只有数、不带撇）
+//   toKey(o, fields, scene)（可选）接在表上：引擎的结果直接当表的答案，不走路
 //
 // 页面当场判得准的是检查点：对（和引擎一样）、还是像哪种错法。检查点之间学生的每一下只说在不在路上、离这一趟差哪几处，不说对错——
 // 一趟里先理哪条链、先写哪个顶点，本来就没有唯一的先后。
@@ -37,7 +38,7 @@ function pathOf(frames) {
   const path = [];
   for (const f of frames || []) {
     const last = path[path.length - 1];
-    const marks = f.mark != null ? [Number(f.mark)] : [];
+    const marks = f.mark == null ? [] : [].concat(f.mark).map(Number); // 一步可以同时是好几趟的检查点（那几趟没有要动的）
     if (last && last.state === f.state) { last.marks.push(...marks); continue; }
     path.push({ state: f.state, cells: f.cells || [], marks });
   }
@@ -50,11 +51,19 @@ function build(a, input) {
   const run = a.engine.run(spec);
   const path = pathOf(a.frames(run, spec));
   if (!path.length) throw new Error('引擎没有交出任何一步');
+  const looseOf = (st) => (a.loose ? a.loose(st) : st);
+  const onPath = new Set(path.map((p) => looseOf(p.state)));
   const total = topMark(path, path.length - 1);
   const variants = [];
   for (const v of a.engine.variants?.(spec) || []) {
     // 错法跑不了、交不出路的，不认它（不影响正确的那条路）
-    try { const p = pathOf(a.frames(a.engine.run(v.input), v.input)); if (p.length) variants.push({ label: v.label, path: p }); } catch { /* 这种错法在这份数据上跑不了 */ }
+    try {
+      const p = pathOf(a.frames(a.engine.run(v.input), v.input));
+      // loose：错法的样子比得松一点（排序的错法只有数、不带撇）
+      // 错法的检查点里，样子和正确的路上某一步（松着比）一样的不算：到了那里分不出是对是错，不能说「像这种错法」
+      for (const fr of p) { fr.loose = looseOf(fr.state); if (onPath.has(fr.loose)) fr.marks = []; }
+      if (p.some((fr) => fr.marks.length)) variants.push({ label: v.label, path: p });
+    } catch { /* 这种错法在这份数据上跑不了 */ }
   }
   return { path, total, variants };
 }
@@ -133,8 +142,9 @@ export function whereOf(o, scene) {
     return { at, passed, total: t.total, done: at === t.path.length - 1, like: null, likeMark: null, off: false, next: nextAfter(passed), error: null };
   }
   let like = null, likeMark = null;
+  const loose = a.loose ? a.loose(state) : state;
   for (const v of t.variants) {
-    const fr = v.path.find((p) => p.marks.length && p.state === state);
+    const fr = v.path.find((p) => p.marks.length && p.loose === loose);
     if (fr) { like = v.label; likeMark = Math.min(...fr.marks); break; }
   }
   const passed = f.passed || 0;

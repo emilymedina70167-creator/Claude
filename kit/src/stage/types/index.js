@@ -18,6 +18,7 @@ import { arrayRules } from './array.rules.js';
 import { graphRules } from './graph.rules.js';
 import { tableRules } from './table.rules.js';
 import { timelineRules } from './timeline.rules.js';
+import '../follows/index.js'; // 照引擎走的对应关系（follow.js）：跟着东西的种类一起登记
 
 export const TYPES = { array, tree, graph, matrix, plane, sentence, tex, card, table, timeline };
 
