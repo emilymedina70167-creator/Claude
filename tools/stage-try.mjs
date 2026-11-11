@@ -365,6 +365,9 @@ function setup(segments) {
         const [ra, rb] = rest.split(/\s+/);
         const a = one(ra), b = one(rb);
         if (!mine(a) || !mine(b)) return { untouched: `${ra} ${rb} 没有都交给学生，学生动不了` };
+        // 一排格子照真的手指（array.view.js 的 dragSpec）：空格子拿不起来；分开排着的时候只吸得到自己那一排的格
+        if (o.type === 'array' && a.value === '') return { error: `${ra} 是空格子，手指拿不起来` };
+        if (o.type === 'array' && (a.row || 0) !== (b.row || 0)) return { error: `${ra} 和 ${rb} 不在一条泳道上：分开排着的时候手指只能在自己那一排里拖，放不到别的泳道` };
         const act = o.type === 'tree'
           ? { type: 'drag', text: `学生把 ${a.value}（${sc.refOf(a)}）拖到 ${b.value}（${sc.refOf(b)}）上，两个结点换了值（舞台已经照做了）`, from: sc.refOf(a), to: sc.refOf(b) }
           : { type: 'drag', a: { key: a.key, value: a.value, slot: a.slot }, b: { key: b.key, value: b.value, slot: b.slot } };
@@ -602,6 +605,47 @@ function setup(segments) {
       if (ready(['a'])) return { error: `${g.span} 那道括号上的 ✕ 手指点不到（被别的盖住了）` };
       return { what: `点 ${g.span} 那道括号上的 ✕`, expect: 'unmark', moves: [{ how: 'tap', a: 'a' }] };
     }
+    // 一排格子开着 open a move：按住一张拖到另一张上（swap）、拖到两张之间（move）。落点和 gesturedom.js 拖起来那一刻挂的一样：别的格、空隙
+    if (o.type === 'array' && (g.action === 'swap' || g.action === 'move')) {
+      const e = open('move');
+      if (!e) return g.action === 'swap' ? { fallback: true } : notOpen(o, 'move');
+      const a = onePart(g.action === 'swap' ? g.a : g.span);
+      if (a.error) return a;
+      // 空格子没有字：写「（空格子）」
+      const say = (p) => `${sc.tapRef(p)}（${p.value === '' ? '空格子' : p.value}）`;
+      const from = gr(e, 'cell').find((t) => partOf(t)?.key === a.p.key);
+      if (!from) return { error: `${say(a.p)}手指拿不起来（空格子，或者 open 没交这一格）` };
+      const cells = gr(e, 'cell', 'to').filter((t) => t.key !== from.key), gaps = gr(e, 'gap', 'to');
+      const targets = [...cells, ...gaps];
+      let want, where, expect;
+      if (g.action === 'swap') {
+        const b = onePart(g.b);
+        if (b.error) return b;
+        want = cells.find((t) => partOf(t)?.key === b.p.key);
+        where = ` ${say(b.p)}上`;
+        expect = 'swap';
+      } else {
+        const at = onePart(g.at);
+        if (at.error) return at;
+        // -> a.5：落在第 5 格（哪个空隙放下去翻成 move … -> a.5 就是哪个）；before a.5 / after a.4：那一格前面 / 后面的空隙
+        const lands = (t) => { const r = D.gestureAct(sc, e, { from: partOf(from), to: partOf(t) }); return r.act?.type === 'move' ? r.act.to : null; };
+        const line = gaps.filter((t) => partOf(t).gap.row === (at.p.row || 0)).sort((x, y) => (partOf(x).gap.before ?? Infinity) - (partOf(y).gap.before ?? Infinity));
+        // 好几个空隙都落在那一格时（沿链挪：链上两张之间的空隙都算），挑紧挨着那一格的
+        const landing = g.where === 'to' ? gaps.filter((t) => lands(t) === at.p.slot) : [];
+        want = g.where === 'to' ? landing.find((t) => partOf(t).gap.before === at.p.slot) || landing.find((t) => partOf(t).gap.before === at.p.slot + 1) || landing[0]
+          : g.where === 'before' ? line.find((t) => partOf(t).gap.before === at.p.slot) : line.find((t) => (partOf(t).gap.before ?? Infinity) > at.p.slot);
+        where = g.where === 'to' ? `两张之间，落在第 ${at.p.slot} 格` : ` ${say(at.p)}${g.where === 'after' ? '后面' : '前面'}`;
+        expect = 'move';
+        if (!want) return { error: `${say(a.p)}拖不到${where.trim()}：${g.where === 'to' ? '没有哪个空隙放下去是落在那一格（不在它那条链 / 泳道上，或者就在原处）' : '那里没有空隙'}` };
+      }
+      if (!want) return { error: `${where.trim()}不是能放的地方` };
+      T.locs.a = () => pressGrip(from, 'hold');
+      T.locs.b = () => dropAt(targets, want);
+      const miss = ready(['a', 'b']);
+      if (miss) return { error: miss === 'a' ? `${say(a.p)}手指按不到（被别的盖住了，或者被正在等的那一问抢走）` : `${where.trim()}手指松不到（离别的落点太近）` };
+      return { what: `按住 ${say(a.p)} 0.4 秒，拖到${where}`, expect, moves: [{ how: 'hold', a: 'a', b: 'b', ms: 400 }] };
+    }
+    if (g.action === 'swap') return { fallback: true }; // 别的东西的 swap（树换值）照第一轮的画法
     if (g.action === 'move') {
       const e = open('move');
       if (!e) return { fallback: true }; // 只开了 open s（拖一个词）：照第一轮的画法

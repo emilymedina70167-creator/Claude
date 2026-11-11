@@ -287,7 +287,10 @@ test('@t.wrong 报错；@名字. 后面只认 done / right；@名字.done 要先
   assert.match(s.check(one('@t.maybe say "x"')), /done.*right/);
   assert.match(s.check(one('@zz.done say "x"')), /舞台上没有/);
   assert.match(run(new Scene(), 'tree t = 30 20 _ 10').check(one('@t.done say "x"')), /open t rotate/);
-  assert.match(run(new Scene(), 'array a = 1 2').check(one('@a.done say "x"')), /判不了/);
+  // 没有规则的东西（图）页面判不了；一排格子有规则：没交给学生说先 open，交了、没写明在做哪种排序说先 sort
+  assert.match(run(new Scene(), 'graph g = A-B').check(one('@g.done say "x"')), /判不了/);
+  assert.match(run(new Scene(), 'array a = 2 1').check(one('@a.done say "x"')), /open a drag/);
+  assert.match(run(new Scene(), 'array a = 2 1\nopen a').check(one('@a.done say "x"')), /判不了 a：没写 a 在做哪种排序/);
   // 预写的行写错了当场说
   assert.match(s.check(one('@t.done swap t.30')), /swap/);
   run(s, '@t.done say "平了。"\n@t.right say "对。"');
@@ -550,7 +553,10 @@ test('现状里页面算的：每样东西 describe 后面一行；数不了的�
   const s = run(new Scene(), 'sentence s2 = "The man is a doctor."');
   assert.ok(s.stateText().includes('页面数不了：s2 没写 key'));
   // 没交量的东西没有这一行
-  assert.doesNotMatch(run(new Scene(), 'array a = 3 1 2').stateText(), /页面算的|页面数不了/);
+  assert.doesNotMatch(run(new Scene(), 'card q = "一行字"').stateText(), /页面算的|页面数不了/);
+  // 一排数：前大后小几对；不全是数的一排没有这个量，不写这一行
+  assert.ok(run(new Scene(), 'array a = 3 1 2').stateText().includes('页面算的：inv(a) = 2'));
+  assert.doesNotMatch(run(new Scene(), 'array a = A B C').stateText(), /页面算的|页面数不了/);
 });
 
 test('题卡里的量：和话里一样写下时查、画成现在的数', () => {
@@ -923,7 +929,7 @@ test('扫一遍拨数：跟着拨数算的矩阵，每个能拨到的值算一�
   assert.equal(s.vars.get('l').v, 0);
   assert.equal(JSON.stringify(s.objects.get('M').cells), before, 'M 的格一个没变');
   // sweep 交每个值的要点；只取跟着它算的、交了 brief 的
-  run(s, 'matrix A = 1 2 / 3 4\narray a = 1 {l} 3');
+  run(s, 'matrix A = 1 2 / 3 4\ngraph g = A-B:{l}');
   const sw = s.sweep('l');
   assert.deepEqual(sw.map((x) => x.id), ['M']);
   assert.deepEqual(sw[0].list.map((x) => x.v), [-3, -2, -1, 0, 1, 2, 3]);
@@ -1953,7 +1959,9 @@ test('复审 N9：认得的选项表按指令是全的（真的演一遍）—�
       if (!c0.cmd) continue;
       const table = sc.optionNames(c0);
       if (!table) continue;
-      tables.set(table.label, table.names);
+      // 几种东西有同名的指令（一排格子、句子都有 move），各有各的表：合起来看
+      const had = tables.get(table.label);
+      tables.set(table.label, had && had !== '*' && table.names !== '*' ? [...new Set([...had, ...table.names])] : table.names);
       const seen = reads.get(table.label) || reads.set(table.label, new Set()).get(table.label);
       const opts = new Proxy(c0.opts, { get: (o, k) => { if (typeof k === 'string') seen.add(k); return o[k]; } });
       // lenient：只看读了什么，不让新的检查挡在读选项之前

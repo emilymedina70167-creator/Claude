@@ -358,7 +358,9 @@ test('引号里的 {rank(M)}、{det(A)} 是量：画成现在的数、跟着变�
   assert.deepEqual([...RICH_MEASURES].sort(), [...clash].sort());
   assert.ok(parseRich('秩是 {rank(M)}').some((p) => p.k === 'measure' && p.v === 'rank(M)'));
   assert.ok(parseRich('{det(A)}').some((p) => p.k === 'measure' && p.v === 'det(A)'));
-  assert.ok(parseRich('{inv(A)}').every((p) => p.k !== 'measure'), '别的 exact.js 函数照旧不是量');
+  assert.ok(parseRich('{tr(A)}').every((p) => p.k !== 'measure'), '别的 exact.js 函数照旧不是量');
+  // inv 是一排格子的量：引号里是量；矩阵没有这个量，新写的当场报、旧课重放照旧画成字；引号外面 {inv(A)} 照旧是逆矩阵、{inv(a)} 是一排格子的量
+  assert.ok(parseRich('前大后小 {inv(a)} 对').some((p) => p.k === 'measure' && p.v === 'inv(a)'));
   const sc = run(new Scene(), 'matrix M = 1 2 / 2 4\nmatrix A = 1 2 / 3 4\nopen M edit input=keypad');
   assert.equal(err(sc, 'say "秩是 {rank(M)}"'), null);
   one(sc, 'say "秩是 {rank(M)}，det 是 {det(M)}"');

@@ -1,0 +1,39 @@
+# 一排格子懂排序：老师写明在做希尔的一趟（d = 5），学生按住牌拖——做对几下、换错一下（淡淡圈着）、撤回、做完这一趟；
+# 预写接着出隔 3 的一趟（每组下到自己的一排）：拖到别的泳道放不上去，拖到同一排两张之间是沿这一组插进去。
+# 再一段：空格子用键盘写（open h edit）、把牌拖进空格子（open k move）
+array a = 49 38 65 97 76 13 27 49′ 55 04
+group a stride=5
+sort a shell d=5
+label n a "让了 {moves(a)} 格，还有 {inv(a)} 对前大后小" side=below tone=note
+say "同色的是一组（隔 5 格）。每组里小的在前：按住一张牌，拖到同组的另一张上。"
+open a move wrong=mark undo=on
+@a.right say "对。接着排别的组。"
+goal g1 "隔 5 的每一组都排好" when="a chains=5"
+@g1 group a stride=3
+@g1 sort a shell d=3
+@g1 split a
+@g1 goal g2 "隔 3 的每一组都排好" when="a chains=3"
+@g1 say "再来一趟，隔 3。拖到同一排的两张之间就是插进去。"
+学生: swap a#6 a#1
+学生: swap a#2 a#3
+学生: undo
+学生: swap a#7 a#2
+学生: move a#8 -> a.3
+学生: swap a#9 a#4
+学生: swap a#10 a#5
+学生: swap a#2 a#10
+学生: move a#2 -> a.4
+学生: move a#10 before a#7
+merge a
+group a stride=1
+sort a off
+array h = _ _ _
+array k = _ 49 38
+say "A[0] 只是暂存的地方：把最小的三张照先后写进空格子，再把 {k.3} 拖进空着的那一格。"
+open h edit
+open k move
+ask next "写好了点这里" button="写好了"
+学生: write h.1 04
+学生: write h.2 13
+学生: swap k#3 k#1
+学生: write h.3 27

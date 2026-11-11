@@ -186,14 +186,20 @@ function mergeOddPass(A, segs) {
 
 // 希尔排序的错法：按连续的段分组。n 个元素尽量平均切成 d 段（前面的段多一个），每段各自排好；d = 1 就是整个排一遍
 function blockPass(A, d) {
-  const n = A.length, q = Math.floor(n / d), r = n % d;
+  for (const [s, len] of shellBlocks(A.length, d)) A.splice(s, len, ...A.slice(s, s + len).sort((x, y) => x - y));
+  return A;
+}
+/** 那种错法切出来的几段：[[从第几个起（从 0 数）, 几个]]。舞台上判学生的一下「像不像把相邻的当成一组」也用它（stage/types/array.sort.js），只有这一份 */
+export function shellBlocks(n, d) {
+  const q = Math.floor(n / d), r = n % d;
+  const out = [];
   let s = 0;
   for (let g = 0; g < d; g++) {
     const len = q + (g < r ? 1 : 0);
-    A.splice(s, len, ...A.slice(s, s + len).sort((x, y) => x - y));
+    out.push([s, len]);
     s += len;
   }
-  return A;
+  return out;
 }
 
 // 基数排序的一趟：按第 k 位（0 是个位）分配到 0～9 号队列再收集；lifo：同一个队列里后放进去的先收（错法）

@@ -176,10 +176,11 @@ export function parseRef(word) {
   return out;
 }
 
-// 引号里的字（话、贴的字、挑战、问题、题卡）里也当量的 exact.js 函数名：量名里撞上 exact.js 函数的就这两个（tests/stage-value.test.js 守着）。
+// 引号里的字（话、贴的字、挑战、问题、题卡）里也当量的 exact.js 函数名：量名里撞上 exact.js 函数的就这几个（tests/stage-value.test.js 守着）。
+// inv 是一排格子的量（前大后小几对）；矩阵没有这个量，引号里写 {inv(A)} 新写的当场报（以前照原样画成「inv(A)」几个字母），旧课重放照旧画成字。
 // 引号外面（answer=、格里、when=）照旧：value.js 的 evalLive 把 {det(A)}、{rank(M)} 交给 exact.js（写满时两边算的一样）。
 // 有意的不同（Task 15 复核，控制者裁定）：旧课引号里写过 {det(A)} 的，重放时画成数，以前照原样写「det(A)」
-export const RICH_MEASURES = new Set(['rank', 'det']);
+export const RICH_MEASURES = new Set(['rank', 'det', 'inv']);
 
 /**
  * 话里的写法拆成一段段：{a.2} 是舞台上的东西（画成和它一样颜色的小块，点了图上那个闪一下）、{d} 是拨的数、
@@ -192,11 +193,13 @@ export function parseRich(text) {
   const re = /\{([^{}]+)\}|\$([^$]+)\$|\[([^\]]+)\]/g;
   let last = 0, m;
   while ((m = re.exec(s))) {
+    // 代码里的方括号不是能飞的词，照原样画（以前都当成 [词]：A[j+dk]=A[j]; 画成「Aj+dk=Aj;」）
+    if (m[3] != null && codeBracket(s, m.index, m[3])) continue;
     if (m.index > last) out.push({ k: 'text', v: s.slice(last, m.index) });
     if (m[1] != null) {
       const inner = m[1].trim();
       const r = parseRef(inner);
-      // 量：名字(东西或部件)。名字是 exact.js 本来就有的函数的不算（{inv(A)} 照旧是式子），只有 rank、det 例外（RICH_MEASURES）：
+      // 量：名字(东西或部件)。名字是 exact.js 本来就有的函数的不算（{tr(A)} 照旧是式子），只有 rank、det、inv 例外（RICH_MEASURES）：
       // 引号里没有 exact.js 现算，以前它们落成拨数的名字，学生看到的是「rank(M)」几个字母。
       // 这里看不到舞台：括号里的东西在不在、名字是不是它的量，场景写下这一行时查（scene.js 的 checkRich）
       const ms = !r && parseMeasure(inner);
@@ -210,6 +213,16 @@ export function parseRich(text) {
   }
   if (last < s.length) out.push({ k: 'text', v: s.slice(last) });
   return out;
+}
+
+/**
+ * 这一对方括号是代码里的下标、空（A[j+dk]、A[0]、A[____]、A[i][j]），不是能飞的 [词]：紧跟在字母、数字、下划线、另一对方括号后面的，
+ * 或者里面一个字（字母、汉字）都没有的。[不稳定]、[relative clause] 这样前面不贴着字母数字、里面有字的照旧是词。
+ * 重放旧课也照这个读（读法不能看是不是重放：刷新以后放回来的要和当场的一样），所以旧课里话里既有 A[i] 又有 [词]、
+ * fly 写的是第 2 个以后的，重放时数到的词和以前不一样（docs/superpowers/specs/2026-11-10-stage-rollout-rulings.md）
+ */
+function codeBracket(s, at, inner) {
+  return /[A-Za-z0-9_\]]/.test(s[at - 1] || '') || !/\p{L}/u.test(inner);
 }
 
 /** 话里一共几个字（出字动画、留多久给人读按它算） */

@@ -300,7 +300,7 @@ test('说明文字里写的写法也成立：行内的写法照抄能演、说�
   // 说明里 links= 的例子照抄到例句上能演（指的是 The man）
   assert.deepEqual(dryRun(new Scene(), 'sentence s = "The man who lives next door is a doctor." links="who -> s.1-2; !who -> door=连到了从句里的名词"'), []);
   // 共用里「页面判对错的动作」把句子的 refer 也列上（refer 能写 wrong=）
-  assert.match(STAGE_COMMON, /页面判对错的动作（[^）]*句子的 mark refer）/);
+  assert.match(STAGE_COMMON, /页面判对错的动作（[^）]*句子的 mark refer[^）]*）/);
   // 说法：默认 wrong=quiet 照做只记下；乘 0、没有孩子能转上来永远不演；@t.right 只演一次；贴的部件没了字跟着消失
   s = run(`${T}\nopen t rotate\n@t.right say "对。"`);
   const quiet = s.apply(parseScript('rotate t.30 right')[0], { by: 'student', open: 'rotate' });

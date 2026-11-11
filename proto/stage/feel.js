@@ -103,6 +103,32 @@ open AB compare
 @g2 say "2A − 3A 并成了 −A：同一个矩阵的倍数才能并。"
 ask pick BA "比完以后：BA 里哪几格和 AB 不一样？都点出来" button="点好了" expect="BA.1,1 BA.2,2"`,
   },
+  // —— 三科铺开（一排格子懂排序，docs/superpowers/specs/2026-11-10-stage-rollout-rulings.md）：学生自己做希尔的三趟 ——
+  // 老师写明在做哪种排序（sort a shell d=5），学生按住一张拖（open a move）：每一下页面照王道的代码判，换到别的组的那一下淡淡圈着。
+  // 一趟做完（隔 d 的每条链都递增）出下一趟：隔 3 时每组下到自己的一排，在一排里拖到两张之间是沿这一组插进去；最后一趟隔 1 就是直接插入。
+  // 贴的字里的 {moves(a)}、{inv(a)} 是页面数的量，学生每动一下跟着变
+  shell: {
+    title: '希尔排序：自己做三趟',
+    how: '按住一张牌拖：放到另一张上 = 两张对调；放到两张之间 = 插进去（同组里中间的各让一格）',
+    script: `array a = 49 38 65 97 76 13 27 49′ 55 04
+group a stride=5
+sort a shell d=5
+label n a "让了 {moves(a)} 格，还有 {inv(a)} 对前大后小" side=below tone=note
+say "同色的是一组（隔 5 格）。每组里小的要在前面：按住一张牌，拖到同组的另一张上。"
+open a move wrong=mark undo=on
+goal g1 "隔 5 的每一组都排好" when="a chains=5"
+@g1 group a stride=3
+@g1 sort a shell d=3
+@g1 split a
+@g1 goal g2 "隔 3 的每一组都排好" when="a chains=3"
+@g1 say "再来一趟，隔 3：每组下到自己的一排。按住一张拖到同一排的两张之间，就是插进去。"
+@g2 merge a
+@g2 group a stride=1
+@g2 sort a shell d=1
+@g2 goal g3 "最后一趟：整排排好" when="a sorted"
+@g2 say "最后一趟隔 1，就是直接插入：把不在位的牌拖到它该在的两张之间。"
+@g3 say "排好了。三趟一共让了 {moves(a)} 格（直接插入要让 27 格）。"`,
+  },
   // 句子：同一句上开着 mark、fold、move（拉括号是在词上滑、折是点、挪是按住 0.35 秒再拖，每一下只认成一种）；拉错了点括号上的 ✕ 收掉。
   // 定语从句被隔开了（who 离它修饰的 man 很远）：拆对了出 who 右上角的钩（open s.7 refer，照 links= 判），连对了按住从句的括号拖回 man 后面
   // （s span … = RC 判挪到了没有），再点括号折起来看主干

@@ -9,7 +9,7 @@ import { evaluateExact, exactText, isQ, isQVec, isQMat, Q, isExactFunc } from '.
 import { names } from '../expr.js';
 import { parseRef } from './script.js';
 import { toQ } from './types/matrix.js';
-import { evalMeasure } from './rules.js';
+import { evalMeasure, rulesOf } from './rules.js';
 
 const QUOTES = { '"': '"', '「': '」', '“': '”' };
 
@@ -174,7 +174,10 @@ export function evalLive(src, scene, { plane, fill = null } = {}) {
   // det(A)、rank(M) 照旧交给 exact.js（写满时两边算的一样，旧课的 {det(A)} 一字不变）；名字不是这样东西的量当场报（size(t)）
   text = text.replace(MEASURE_RE, (m, name, arg) => {
     const obj = parseRef(arg)?.obj;
-    if (isExactFunc(name) || !obj || !scene.objects.has(obj)) return m;
+    if (!obj || !scene.objects.has(obj)) return m;
+    // 名字撞上 exact.js 的函数：矩阵照旧交给 exact.js（inv(A) 是逆矩阵）；别的东西自己有这个量就是量（一排格子的 inv(a)：前大后小几对）
+    const own = scene.objects.get(obj);
+    if (isExactFunc(name) && (own.type === 'matrix' || typeof rulesOf(own)?.measures?.[name] !== 'function')) return m;
     let r;
     try { r = evalMeasure(scene, `${name}(${arg})`); } catch (e) { throw new Error(`${shown}里的「${m}」：${e.message}`); }
     // 量以后也数不了（句子没写 key：never）：当场报，不当空格子——不然默默收下画「?」，现状说「填上了跟着算出来」，

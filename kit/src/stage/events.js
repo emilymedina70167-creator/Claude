@@ -72,7 +72,8 @@ export function undoneOf(scene) {
     let nx = null;
     try { nx = r.next(o, scene); } catch { nx = null; }
     if (!nx?.acts?.length) continue;
-    const can = new Set([...scene.opens.values()].filter((x) => x.obj === e.obj).map((x) => r.gestures?.[x.action]?.makes || x.action));
+    // makes 能写几种（一排格子的 open a move 交 swap 或 move）；不走手势表的那几项照规则的 makes 表（open a 的拖交的是 swap）
+    const can = new Set([...scene.opens.values()].filter((x) => x.obj === e.obj).flatMap((x) => [].concat(r.makes?.[x.action] ?? r.gestures?.[x.action]?.makes ?? x.action)));
     if (nx.acts.some((a) => can.has(a.type))) undone.push(e.obj);
   }
   return undone;

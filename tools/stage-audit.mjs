@@ -156,6 +156,20 @@ hide D
 show B
 hide A
 say "藏起来的不占地方，摆回来的排到最下面。"` });
+  // 上面的一排分开排成几条泳道，下面的一排、题卡被推下去：虚框和序号要跟着整排走（以前留在原地，画面量出来那一排「占」到了原来那里，
+  // 又被往下推，一遍遍推出屏幕、整块舞台缩成一小块：第三次量 D1 第 3 幕）；带空格子的一排、写明了排序贴着页面数的量
+  out.push({ name: '一排格子:分开排、下面还有东西', src: `array a = 13 27 49′ 55 04 49 38 65 97 76
+array b = 13 04 49′ 38 27 49 55 65 97 76
+label lb b "另一排" side=left tone=soft
+card q = "趟数记录" "5｜13 27 49′ 55 04 49 38 65 97 76"
+group a stride=3
+sort a shell d=3
+split a
+label n a "让了 {moves(a)} 格，还有 {inv(a)} 对前大后小" side=right tone=note
+array h = _ 49 _
+open a move
+open h edit
+say "三组各下到自己的一排；A[0] 那样的空格子照原样画。"` });
   return out.filter((x) => x.src);
 }
 

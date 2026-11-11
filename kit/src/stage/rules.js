@@ -1,7 +1,9 @@
 // 规则接口：每种东西（o.type）交一份规则，页面通用的裁判（referee.js）只通过这里问，不认识任何具体的东西。
 // 纯函数，有测试（tests/stage-rules.test.js）。没交规则的东西照旧能用，只是不判。
 // 形状见 docs/superpowers/specs/2026-11-06-stage-base-design.md 第 1 节：
-//   next(o, scene) → { acts, why, blank? } | null  null 是做完了；acts 空着是现在算不了（blank：还有空着的格，不是做完了）
+//   next(o, scene) → { acts, why, blank? } | null  null 是做完了；acts 空着是现在算不了（blank：还有空着的格，不是做完了）；
+//                                               动作带 free: true 是学生做得了、可页面不判对错的（一排格子做快排、归并、基数：只判到一趟）——
+//                                               只有这种动作时 @名字.right 写了当场报（scene.js 的 stashOn）
 //   check(o, act, scene, { by, open }) → { legal, right, misread, why, next }（open：学生这一下从哪一项 open 来的，可能是 null）
 //   predicates { 名字: (o, args, scene) → true | false | null }  null 是现在判不了（之后会有：乘积还空着）；
 //                                               这样东西本身永远判不了（句子没写 key）就抛错，写下挑战时当场报
@@ -9,7 +11,9 @@
 //   gestures { 动作: { gesture, from, to, toAct, ask?, pick?, choices?, live?, makes? } }   通用手势（六种）在它这里是什么（gestures.js 照它翻成一行指令；
 //                                               toAct(o, { from, to, value, role, scene })；ask 说放下以后要不要先问一个值（倍数框），
 //                                               pick + choices 是拉好一段以后点的那一排；live 是跟着算的也能开（矩阵整张拖：数照旧由式子定）；
-//                                               makes 是交的动作和名字不一样时交的是哪种（树的 place 交 insert：next 给的 insert 学生开着 place 也做得了）
+//                                               makes 是交的动作和名字不一样时交的是哪种（树的 place 交 insert：next 给的 insert 学生开着 place 也做得了），
+//                                               能写几种（一排格子的 move 交 swap 或 move）；text 是舞台现状里「学生能直接动的」那一句怎么说（不写就照手势说）
+//   makes { 动作: [交的是哪几种] }（可选）        不走手势表的那几项 open（affords：一排格子的 open a 拖着对调）交的是哪种动作（events.js 的 undoneOf）
 //   slipRefs(o, act) → [部件的写法] | null（可选）  学生走偏的那一下淡淡圈哪儿，那一行没写部件时（rowop M r3 - 2r1 圈第 3 行）
 //   standard(o) → { steps, variants }（可选）
 //   actOf(o, c, h) → 动作 | null                一行镜头指令（rotate t#3 right、rowop M r2 - 2r1、mark s.2-4 V）→ check 认的动作；

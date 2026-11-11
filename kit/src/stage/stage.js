@@ -1668,7 +1668,8 @@ export class Stage {
         }
         const go = el('button', 'st-say-go', form);
         go.type = 'submit';
-        go.textContent = asAnswer ? '对吗' : '说';
+        // 只收不判的那一问（没写 answer=）不写「对吗」：页面不判，按钮上不能暗示会判
+        go.textContent = !asAnswer ? '说' : w.answer == null || w.answer === '' ? '写好了' : '对吗';
         form.addEventListener('submit', (e) => {
           e.preventDefault();
           const text = input.value.trim();
@@ -1850,7 +1851,9 @@ export function actText(act) {
     if (act.error) return `学生 ${act.src || act.line || act.type}——没演上：${act.error}（舞台没动）`;
     if (act.type === 'tap') return `学生点了 ${act.ref}（${act.value}${act.slot != null && act.key !== act.slot ? `，#${act.key}` : ''}）${act.expected ? `——你预期的是 ${act.expected}，${act.right === true ? '点对了' : act.right === false ? '点的不是它' : '页面比不了（预期的那个现在不在舞台上）'}` : ''}`;
     if (act.type === 'pick') return pickText(act);
-    if (act.type === 'drag' && act.a && act.b) return `学生把 ${act.a.value}（#${act.a.key}）拖到 ${act.b.value}（#${act.b.key}）那一格，两格换了位置（舞台已经照做了）`;
+    // 没让做的那一下（写明了排序的一排、老师写了 wrong=block；分开排着时拖到别的泳道）：不说「舞台已经照做了」
+    if (act.type === 'drag' && act.a && act.b && act.blocked) return `学生想把 ${act.a.value}（#${act.a.key}）拖到 ${act.b.value === '' ? '空格子' : act.b.value}（#${act.b.key}）那一格、两格对调`;
+    if (act.type === 'drag' && act.a && act.b) return `学生把 ${act.a.value}（#${act.a.key}）拖到 ${act.b.value === '' ? '空格子' : act.b.value}（#${act.b.key}）那一格，两格换了位置（舞台已经照做了）`;
     if (act.type === 'drag') return act.text || '学生拖了一下';
     if (act.type === 'next') return `学生点了「${act.button}」${act.onGoals?.length ? `（按了才判的：${act.onGoals.map((x) => `挑战 ${x.id}：${x.met ? '做到了' : x.status}`).join('；')}）` : ''}`;
     if (act.type === 'say') return `学生说：「${act.text}」`;

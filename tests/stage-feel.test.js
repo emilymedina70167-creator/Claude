@@ -241,3 +241,42 @@ test('同一句上（第二轮）：mark、fold、move 一起开；拉错了点 
   assert.match(mv.said.join(''), /^从句回到 man 后面/);
   assert.equal(student(s, 'fold', { from: { mark: rc.id } }).src, 'fold s.3-8');
 });
+
+// —— 三科铺开：一排格子懂排序（希尔的三趟，学生自己做）——
+test('希尔排序：换到别的组的那一下淡淡圈着、说像哪种错；三趟照裁判给的下一步做到底，挑战一层套一层出、每一下都判对，量跟着变', async () => {
+  const { arrayRules } = await import('../kit/src/stage/types/array.rules.js');
+  const { measureShown } = await import('../kit/src/stage/rules.js');
+  const s = setUp('shell');
+  const rowText = () => [...s.objects.get('a').cells].sort((x, y) => x.slot - y.slot).map((c) => c.value).join(' ');
+  // 49 和旁边的 38 对调（不是一组）：照做、淡淡圈着
+  const wrong = student(s, 'move', { from: part(s, 'a.2'), to: part(s, 'a.1') });
+  assert.equal(wrong.src, 'swap a#2 a#1');
+  assert.equal(wrong.judged.verdict.right, false);
+  assert.equal(wrong.judged.mark, true);
+  const e = refereeEntry(actOf(wrong));
+  assert.match(e.lines.find(([k]) => k === '像是')[1], /相邻的元素分成了一组/);
+  assert.match(e.lines.find(([k]) => k === '之后')[1], /出了自己那条链/);
+  student(s, 'move', { from: part(s, 'a#2'), to: part(s, 'a#1') }); // 换回来
+  assert.equal(rowText(), '49 38 65 97 76 13 27 49′ 55 04');
+  // 照裁判给的下一步一路做：每一下都判对，三个挑战依次做到
+  const said = [];
+  const met = [];
+  for (let i = 0; i < 60 && !s.goals.get('g3')?.met; i++) {
+    const o = s.objects.get('a');
+    const nx = arrayRules.next(o, s);
+    assert.ok(nx?.acts.length, `第 ${i} 下算得出下一步`);
+    const act = nx.acts[0];
+    const x = part(s, `a#${act.key}`);
+    // 插进去：落在该到的那一格前面的空隙（分开排着时是它那条泳道里的空隙）
+    const r = student(s, 'move', { from: x, to: { gap: { row: x.row || 0, before: act.to } } });
+    assert.equal(r.judged.verdict.right, true, r.src);
+    said.push(...r.said);
+    met.push(...(r.fx.goalsMet || []));
+  }
+  assert.deepEqual(met, ['g1', 'g2', 'g3']);
+  assert.equal(rowText(), '04 13 27 38 49′ 49 55 65 76 97');
+  assert.match(said.join('|'), /再来一趟，隔 3.*最后一趟隔 1.*排好了/);
+  // 三趟一共让了 12 格（5 + 2 + 5），加上一开始换错又换回来的 2 格
+  assert.equal(measureShown(s, 'moves(a)'), '14');
+  assert.equal(measureShown(s, 'inv(a)'), '0');
+});

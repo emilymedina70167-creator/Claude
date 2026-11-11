@@ -188,5 +188,34 @@ expect('轮流拨 B 的两格：写成一条照先后的路', /学生拨了 B �
 const th = stepOf(m3, 'mark p.3-10 从句');
 expect('带括号的词：事实里引成「(that) they …」，括号配成对', /p\.3-10 从句（\(that\) they would learn/.test(said(th)) && !/（that\)/.test(said(th)));
 
+// 一排格子懂排序（sort.txt）：老师写明希尔的一趟，学生真的按住牌拖——对调、拖到两张之间、换错、撤回、做完；泳道里插进去；空格子
+const so = run('sort.txt');
+const sov = so.out?.[0]?.views || [];
+expect(`sort.txt：退出码 0${so.code ? `（${why(so)}）` : ''}`, so.code === 0);
+expect('sort.txt：竖屏、横屏都跑完了，排版没压着、没出屏幕', sov.length === 2 && sov.every((v) => !v.stopped && v.steps.every((x) => !(x.issues || []).length)));
+const so1 = stepOf(so, 'swap a#6 a#1');
+expect('按住 13 拖到同组的 49 上：交 swap a#6 a#1，判成正确的下一步，演了 @a.right 那一句', /^按住 a\.6（13） 0\.4 秒，拖到 a\.1（49）上 → swap a#6 a#1$/.test(did(so1)) && /13 和 49 对调，第 6 格 ↔ 第 1 格）——是正确的下一步/.test(said(so1)) && /最后说的话：对。接着排别的组。/.test(so1?.state || ''));
+expect('贴的字里的量跟着变：现状里 inv(a)、moves(a) 是页面数的', /inv\(a\) = 24，bad\(a\) = 4，chains\(a\) = 1，moves\(a\) = 1/.test(so1?.state || ''));
+const so2 = stepOf(so, 'swap a#2 a#3');
+expect('换到别的组上：照做、淡淡圈着，那一下后面写「不在隔 5 的同一条链上」', !so2?.blocked && /38 和 65 对调，第 2 格 ↔ 第 3 格，不在隔 5 的同一条链上）——不是正确的下一步/.test(said(so2)) && /淡淡圈/.test(said(so2)) && /淡淡圈着[^\n]*a#2 a#3/.test(so2?.state || ''));
+const sou = stepOf(so, 'undo');
+expect('撤一步：那一下没了', /swap a#2 a#3/.test(sou?.undone || '') && shape(sou?.state) === shape(before(so, so2)?.state));
+const so3 = stepOf(so, 'move a#8 -> a.3');
+expect('拖到两张之间：写明了希尔，沿自己那条链挪（move a#8 -> a.3 d=5），判对', /拖到两张之间，落在第 3 格 → move a#8 -> a\.3 d=5$/.test(did(so3)) && /49′ 从第 8 格挪到第 3 格，65 往后跳 5 格）——是正确的下一步/.test(said(so3)));
+const so5 = stepOf(so, 'swap a#10 a#5');
+expect('这一趟做完：做到 g1，预写接着出隔 3 的一趟（每组下到自己的一排），没叫老师', !so5?.called && /做到了挑战 g1/.test(said(so5)) && /按隔 3 个分了 3 组，每组下到自己的一排/.test(so5?.state || '') && /在做希尔排序 d = 3，从 13 27 49′ 55 04 49 38 65 97 76 起/.test(so5?.state || ''));
+const sox = stepOf(so, 'swap a#2 a#10');
+expect('分开排着时拖到别的泳道：手指放不上去，页面什么都没交，舞台没动', /只能在自己那一排里拖/.test(errs(sox)) && shape(sox?.state) === shape(so5?.state));
+const so6 = stepOf(so, 'move a#2 -> a.4');
+expect('泳道里拖到两张之间：沿这一组插进去（move a#2 -> a.4 d=3）', /→ move a#2 -> a\.4 d=3$/.test(did(so6)) && !errs(so6));
+const so7 = stepOf(so, 'move a#10 before a#7');
+expect('隔 3 的一趟做完：叫老师，那一条里有「这一趟做完了」和照王道的代码比较、后移几次', /做到了挑战/.test(so7?.called?.why || '') && /隔 3 的 3 条链都递增；这一趟做完了（和照王道的代码做一趟的结果一样：那样做比较 10 次、后移 2 次）/.test(so7?.called?.msg || ''));
+const sow = stepOf(so, 'write h.2 13');
+expect('空格子用键盘写：不限 −9～9，交 write h.2 13', /「h 第 2 格写成几？」写 13 → write h\.2 13/.test(did(sow)) && !errs(sow) && /第 1～3 格：04 13 □/.test(sow?.state || ''));
+const sok = stepOf(so, 'swap k#3 k#1');
+expect('把牌拖进空格子：交 swap k#3 k#1，写「挪进第 1 格的空格子」', /拖到 k\.1（空格子）上 → swap k#3 k#1/.test(did(sok)) && /第 1～3 格：38（#3） 49 □（#1）/.test(sok?.state || ''));
+const sof = stepOf(so, 'write h.3 27');
+expect('空格子写满了：叫老师，写明「空格子都写满了」', /学生把 h 的空格子都写满了/.test(sof?.called?.msg || '') && /38 从第 3 格挪进第 1 格的空格子/.test(sof?.called?.msg || ''));
+
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');
 process.exit(bad.length ? 1 : 0);

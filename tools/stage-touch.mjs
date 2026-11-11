@@ -657,6 +657,48 @@ const n6 = await page.evaluate(async () => {
 });
 expect('刷新以后重新挂旧课的最后一问（带不认得的 hint=on）：挂上了、expect= 还在、没报错；新写的同一行照旧报', n6, 'tap｜a.1｜0｜true');
 
+// 25. 三科铺开第 1 轮（一排格子懂排序）：按住一张拖到两张之间是插入、拖到另一张上是对调；空格子点了出键盘、牌拖得进去；
+// 整排被推下去时虚框和序号跟着走；话里代码的方括号照原样；只收不判的那一问按钮不写「对吗」
+const rowOfA = (id) => page.evaluate((k) => window.LAStage.scene.objects.get(k).cells.sort((x, y) => x.slot - y.slot).map((x) => x.value || '□').join(' '), id);
+await play('array a = 49 38 65 97 76 13\nopen a move');
+let ca = await box('a:6'), cb = await box('a:1'), cc = await box('a:2');
+// 13 拖到 49 和 38 之间（两格中间那一道）：插到第 2 格，中间的各让一格
+await holdDrag({ x: ca.cx, y: ca.cy }, { x: (cb.x + cb.w + cc.x) / 2, y: cb.cy });
+await page.waitForTimeout(900);
+expect('open a move：拖到两张之间是插入，中间的各让一格', `${await rowOfA('a')}｜${await lastAct()}`, '49 13 38 65 97 76｜move a#6 -> a.2');
+ca = await box('a:6'); cb = await box('a:1');
+await holdDrag({ x: ca.cx, y: ca.cy }, { x: cb.cx, y: cb.cy });
+await page.waitForTimeout(900);
+expect('open a move：拖到另一张正中是对调', `${await rowOfA('a')}｜${await lastAct()}`, '13 49 38 65 97 76｜swap a#6 a#1');
+expect('拖完以后每张牌都在它该在的格上（没有停在手放开的地方）', await page.evaluate(() => { const st = window.LAStage; return String(st.scene.objects.get('a').cells.every((x) => { const n = st.nodes.get(`a:${x.key}`), b = st.scene.partBox(x); return n.style.transform === `translate(${b.x}px, ${b.y}px)` && !n.classList.contains('is-lifted'); })); }), 'true');
+// 空格子：点了出数字键盘，外接键盘写 38、回车；另一排把牌拖进空格子
+await play('array h = _ 49 38\nopen h edit\narray k = _ 49 38\nopen k move');
+expect('空格子画成空位（没有字），够 44px', await page.evaluate(() => { const n = window.LAStage.nodes.get('h:1'), r = n.getBoundingClientRect(); return `${n.classList.contains('is-blank')}｜${n.textContent}｜${r.width >= 44 && r.height >= 44}`; }), 'true｜｜true');
+ca = await box('h:1');
+await tapAt({ x: ca.cx, y: ca.cy });
+await page.waitForTimeout(350);
+expect('点空格子：数字键盘出来了，问「h 第 1 格写成几？」', await page.evaluate(() => document.querySelector('.st-keypad .st-kp-q')?.textContent || '没有'), 'h 第 1 格写成几？');
+await page.keyboard.type('38');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(700);
+expect('键盘写进空格子', `${await rowOfA('h')}｜${await lastAct()}`, '38 49 38｜write h.1 38');
+ca = await box('k:3'); cb = await box('k:1');
+await holdDrag({ x: ca.cx, y: ca.cy }, { x: cb.cx, y: cb.cy });
+await page.waitForTimeout(900);
+expect('把牌拖进空格子（和空格子对调）', `${await rowOfA('k')}｜${await lastAct()}`, '38 49 □｜swap k#3 k#1');
+// 整排被推下去（上面那一排分开排成几条泳道）：下面那一排的虚框、序号跟着牌走，不留在原地（以前留在原地，一遍遍被往下推）
+await play('array a = 4 3 2 1 6 5\narray b = 1 2 3\ngroup a stride=3\nsplit a');
+await page.waitForTimeout(700);
+expect('上面的一排分开排以后：下面那一排的虚框和牌还在同一处', await page.evaluate(() => { const st = window.LAStage; const g = st.decor('b', 'slot1').getBoundingClientRect(), n = st.nodes.get('b:1').getBoundingClientRect(); return String(Math.abs(g.top - n.top) < 2 && Math.abs(g.left - n.left) < 2); }), 'true');
+expect('上面的一排分开排以后：整块没缩到最小（下面那一排在屏幕里）', await page.evaluate(() => { const st = window.LAStage; const r = st.nodes.get('b:1').getBoundingClientRect(); return String(st.liveCam().s > 0.6 && r.bottom < window.innerHeight - 60); }), 'true');
+// 话、题卡里代码的方括号照原样；只收不判的那一问按钮不写「对吗」
+await play('card c3 = "A[j+dk]=A[j];"\nask value "再填：A[____]=A[j]，方括号里写什么？"');
+expect('题卡里的 A[j+dk]=A[j]; 照原样画', await page.evaluate(() => document.querySelector('.st-cline')?.textContent || ''), 'A[j+dk]=A[j];');
+expect('问的那句里的 A[____] 照原样画', await page.evaluate(() => /A\[____\]=A\[j\]/.test(document.querySelector('.st-caption')?.textContent || '')), true);
+expect('只收不判的 ask value：按钮写「写好了」', await page.evaluate(() => document.querySelector('.st-say-go')?.textContent || ''), '写好了');
+await play('array a = 3 1 2\nask value "几对前大后小？" answer={inv(a)}');
+expect('页面判的 ask value：按钮照旧写「对吗」', await page.evaluate(() => document.querySelector('.st-say-go')?.textContent || ''), '对吗');
+
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

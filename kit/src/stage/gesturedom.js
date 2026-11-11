@@ -1,7 +1,7 @@
 // 通用手势的画面那一半（docs/superpowers/specs/2026-11-06-stage-base-design.md 第 3 节）：手势层在底座里写一次——
 // 接住手指（pointer.js）、跟着手动、放下以后变成一行学生指令（gestures.js 照规则文件里的手势表翻）、交给舞台过裁判、演、记进 log。
 // 每种东西的画法只交「手能抓哪儿」：view.grips 按手势表里的名字（树的 node / parent / tray / tree / slot，矩阵的 row / label / cell / whole，
-// 句子的 word / bracket / hook / gap / pill / sentence / xmark / xrefer）给一组把手：grips[名字](stage, o, e, { role })，role 是 'from'
+// 句子的 word / bracket / hook / gap / pill / sentence / xmark / xrefer，一排格子的 cell / gap）给一组把手：grips[名字](stage, o, e, { role })，role 是 'from'
 // （拿起来、点的地方，o 是开着的那一样）或 'to'（落点：矩阵整张拖要交舞台上别的矩阵）。每个把手 { key, part()（交给 toAct 的那一样）,
 // node()（画出来的节点）, box()（世界坐标），可选 rect()（按的屏幕框，不写就是节点的框）、area()（当落点时的屏幕框）、light(cls, on)、
 // show(on)（只在拖的时候画出来的空位、外框）、lift()（拎起来的样子）、land(L, r, 落点)（放下以后拎着的那一份怎么走：弹回去、飞进去）、cls、consumed }。

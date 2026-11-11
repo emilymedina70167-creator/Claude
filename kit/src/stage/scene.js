@@ -117,7 +117,8 @@ export function affordsOf(t) {
 
 // 手势表里的动作（rules.js 的 gestures：rotate、rowop、mark……）给老师看的一句：按五种通用手势说
 const GESTURE_TEXT = { tap: '点', 'drop-on': '拖到上面', 'drop-at': '拖到空处', span: '拉一段', line: '拉一条线', write: '写一个值' };
-const gestureText = (g) => [].concat(g?.gesture || []).map((k) => GESTURE_TEXT[k] || k).join(' / ');
+// 手势表那一项自己写了 text 的照它（一排格子的 move：落在另一张上是对调、落在两张之间是插入，「拖到空处」说不清）
+const gestureText = (g) => g?.text || [].concat(g?.gesture || []).map((k) => GESTURE_TEXT[k] || k).join(' / ');
 /** open 那一行老师事先定的：走偏了怎么办（wrong）、什么时候叫老师（call）、学生能不能撤一步（undo）。默认照做、只记下 */
 const POLICY = {
   wrong: { quiet: '照做、只记下', mark: '照做、淡淡圈一下', block: '不让做、弹回去' },
@@ -834,7 +835,9 @@ export class Scene {
    */
   fillOpen(id) {
     const o = this.objects.get(id);
-    return !!o?.cells && !o.collect && !o.live && [...this.opens.values()].some((e) => e.obj === id && e.input === 'keypad');
+    // 一排格子的 edit 只有键盘这一种写法（没有拨数器），不写 input=keypad 也算
+    const keyed = (e) => e.input === 'keypad' || (e.action === 'edit' && !!e.gesture && !typeOf(o).affords?.edit);
+    return !!o?.cells && !o.collect && !o.live && [...this.opens.values()].some((e) => e.obj === id && keyed(e));
   }
   /** 还有没有空着的格（_） */
   blankLeft(id) { return !!this.objects.get(id)?.cells?.some((x) => x.value === ''); }
@@ -948,6 +951,8 @@ export class Scene {
       if (nx === null && !(kind === 'done' && this.reopenable(name))) throw new Error(`${name} 现在就已经做完了（没有下一步），学生不用再动手，@${name}.${kind} 的行不会演`);
       // 还有空着的格（blank）：现在算不了，填满了照算，收下（最后一审 M3）
       if (nx !== null && !nx?.acts?.length && !nx?.blank) throw new Error(`页面判不了 ${name}：${nx?.why || '算不出下一步'}，@${name}.${kind} 的行不会演`);
+      // 学生的每一下页面都不判对错（free：快排、归并、基数只判到一趟）：「做对一步」永远等不来
+      if (kind === 'right' && nx?.acts?.length && nx.acts.every((a) => a.free)) throw new Error(`${name} 上学生的每一下页面不判对错（${nx.why}），@${name}.right 的行不会演（做完了演的写 @${name}.done）`);
     }
     const key = `${name}.${kind}`;
     const list = this.reactions.get(key) || [];
@@ -1391,8 +1396,9 @@ export class Scene {
           if (!(gestures[action] && [].concat(gestures[action].gesture).includes('write'))) throw new Error(`input=keypad 只用在写一个值的动作上（${Object.entries(gestures).filter(([, g]) => [].concat(g.gesture).includes('write')).map(([k]) => `open ${o.id} ${k}`).join(' / ') || `${t.label}没有`}），${action} 用不上`);
           e.input = 'keypad';
         }
-        // 拨数器默认 -9～9；键盘写的值不写 range= 就不限（写了照它收，gestures.js 的 writeRange）
-        if (action === 'edit' && !(e.input && opts.range == null)) {
+        // 拨数器默认 -9～9；键盘写的值不写 range= 就不限（写了照它收，gestures.js 的 writeRange）。
+        // 没有拨数器的东西（一排格子：edit 只有键盘这一种写法）不写 input=keypad 也是键盘
+        if (action === 'edit' && !((e.input || !affords.edit) && opts.range == null)) {
           const [lo, hi] = parseRange(opts.range || '-9..9');
           if (!(lo <= hi)) throw new Error('range 要写成 小..大，比如 range=-3..3');
           e.lo = lo; e.hi = hi;

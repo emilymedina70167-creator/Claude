@@ -21,14 +21,16 @@ const ANSWER = ['tap', 'drag', 'value', 'pick', 'say', 'next'];
 const GESTURE = new Set(['rotate', 'insert', 'rowop', 'mark', 'fold', 'undo', 'dial']);
 /**
  * 第二轮的写法：真的手指（tools/stage-try.mjs 照 CDP 的触摸点、滑、按住再拖），parseTry 也给它们带上 gesture（翻好的手势输入）。
- * move 两条路都有：开着 open s move 的照真的手指按住括号或词拖到两个词之间，只开了 open s（拖词）的照第一轮的画法
+ * move 两条路都有：开着 open s move 的照真的手指按住括号或词拖到两个词之间，只开了 open s（拖词）的照第一轮的画法。
+ * 一排格子开着 open a move 时 swap、move 也是真的手指（按住一张拖到另一张上 / 两张之间）；只开了 open a 的 swap 照第一轮的画法
  */
-export const HANDS = new Set(['pick', 'refer', 'unrefer', 'unmark', 'move', 'unfold', 'delete', 'compare', 'put', 'merge', 'back']);
+export const HANDS = new Set(['pick', 'refer', 'unrefer', 'unmark', 'move', 'unfold', 'delete', 'compare', 'put', 'merge', 'back', 'swap']);
 
 /** 学生能写的（文件写错时报这一份；报告、说明里也照它） */
 export const STUDENT_FORMS = [
   'write B.1,1 2（拨数器一格一格拨；open … input=keypad 时用键盘写）',
-  'swap a#1 a#2', 'move s.7 after s.1', 'vec p u = 3 1', 'mul C.1,2',
+  'swap a#1 a#2（open a move 时是按住 a#1 拖到 a#2 上）', 'move a#10 -> a.5（open a move：按住这一张拖到两张之间，落在第 5 格；也能写 before a.5 / after a.4）',
+  'write h.1 38（open h edit：点这一格、键盘写 38）', 'move s.7 after s.1', 'vec p u = 3 1', 'mul C.1,2',
   'rotate t.30 left（在 30 往左转 = 把 30 的右孩子拖到 30 上）',
   'insert t 47（托盘里的 47 拖进树）', 'insert t.45 right 47（拖到 45 右边的空位）',
   'rowop M r3 - 2r1（r1 的把手拖到 r3 上、倍数框写 -2）', 'rowop M r1 <-> r3（拖到行号上）', 'rowop M 3r2（点行号、写 3）',
@@ -168,6 +170,10 @@ function handsGesture(cmd, raw, a, w) {
     const m = a.match(/^(\S+)\s+(?:(after|before)\s+(\S+)|(?:->|→)\s*(\S+))$/);
     if (!m || !isPart(m[1]) || !isPart(m[3] || m[4])) return bad('要写成 move s.1-6 after s.11（按住这一段的括号拖到 s.11 后面；before s.1 是最前面）');
     return { obj: objOf(m[1]), action: 'move', span: m[1], where: m[2] || 'to', at: m[3] || m[4] };
+  }
+  if (cmd === 'swap') {
+    if (w.length !== 2 || !w.every(isPart) || objOf(w[0]) !== objOf(w[1])) return bad('要写成 swap a#1 a#2（把 a#1 拖到 a#2 上，两格对调）');
+    return { obj: objOf(w[0]), action: 'swap', a: w[0], b: w[1] };
   }
   if (cmd === 'compare' || cmd === 'put' || cmd === 'merge') {
     const eg = { compare: 'compare AB BA（按住 AB 的括号拖到 BA 上逐格比）', put: 'put AB Sum（按住 AB 的括号拖进收集用的 Sum）', merge: 'merge X Y（按住 X 的括号拖到 Y 上并同类项）' }[cmd];
