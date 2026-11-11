@@ -169,7 +169,7 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 
 验收：`evals/stage-gaps/new3/` + 表 `NEW3`，`node tools/stage-must.mjs evals/stage-gaps/new3 --table new3`（和 `fix1`、`new2` 一起，改了舞台合并前跑）；真手指在 `tools/stage-touch.mjs` 里表、时间轴各加了一段。
 
-收尾量出来的：单元测试 1616 项、整条流程的自动测试 23 段、舞台整套检查（排版、真手指、自测 282 项）、示例页检查都过；`fix1`、`new2`、`new3` 三张表都 ✓；282 份旧课照 log 放回，和基线 0 处不同。审了两次（各一个只读的助手）：表和时间轴那一次 3 条严重、6 条要紧，后半那一次没有严重的、3 条要紧，都修了，一条一个测试（`tests/stage-mainline3-review.test.js`、`…-review2.test.js`）。说明书版本 2026-11-11c。
+收尾量出来的：单元测试 1616 项、整条流程的自动测试 23 段、舞台整套检查（排版、真手指、自测 282 项）、示例页检查都过；`fix1`、`new2`、`new3` 三张表都 ✓；282 份旧课照 log 放回，和基线 0 处不同。审了两次（各一个只读的助手）：表和时间轴那一次 3 条严重、6 条要紧，后半那一次没有严重的、3 条要紧，都修了，一条一个测试（`tests/stage-mainline3-review.test.js`、`…-review2.test.js`）。发布：学习台 Version 96、舞台试课 Version 11，说明书版本 2026-11-11c。
 
 这一轮新的通用件：
 
