@@ -12,7 +12,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MUST, FIX1, mustHits, mustNotHits, seenHits, auditHits, goalsMetWhere } from './stage-try-lib.js';
+import { MUST, FIX1, mustHits, mustNotHits, seenHits, auditHits, screenHits, goalsMetWhere } from './stage-try-lib.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -81,6 +81,8 @@ for (const m of opt.table === 'fix1' ? FIX1 : []) {
   each(m.called, '发给老师的那条里必须有 ', (steps, re) => { const h = mustHits(steps, re); return { ok: h.length > 0, text: h.length ? where(h[0]) : '没有' }; });
   each(m.nots, '不许有 ', (steps, re) => { const h = mustNotHits(steps, re); return { ok: !h.length, text: h.length ? `${stepsText([...new Set(h.map((x) => x.step))])}有（${h[0].where}）` : '没有' }; });
   each(m.audit, '排版必须报 ', (steps, re) => { const h = auditHits(steps, re); return { ok: h.length > 0, text: h.length ? stepsText(h) : '没报' }; });
+  each(m.screen, '屏幕上必须有 ', (steps, re) => { const h = screenHits(steps, re, { last: true }); return { ok: h.length > 0, text: h.length ? '有' : '没有' }; });
+  each(m.noScreen, '屏幕上不许有 ', (steps, re) => { const h = screenHits(steps, re, { last: true }); return { ok: !h.length, text: h.length ? '有' : '没有' }; });
   each(m.noAudit, '排版不许报 ', (steps, re) => { const h = auditHits(steps, re); return { ok: !h.length, text: h.length ? `${stepsText(h)}报了` : '没报' }; });
 }
 for (const m of opt.table === 'must' ? MUST : []) {

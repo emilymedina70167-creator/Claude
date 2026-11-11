@@ -798,6 +798,8 @@ for (const file of opt.files) {
       await page.waitForTimeout(SETTLE);
       // events：那一刻还没发出去的那一段事件（存得下的样子，和课堂循环存进学生轮的一样），给测试取样（tests/fixtures/stage-tries-*.json）
       const snap = await page.evaluate(() => { const T = window.__try; return { called: T.called, state: T.state(), goals: T.goals(), pending: T.pending(), idle: T.idle(), events: JSON.parse(JSON.stringify(T.loop.pending?.events || [])) }; });
+      // 学生屏幕上看得到的字（fix1 查「画的和说的对得上」：边上的权、算不出来的「?」、按钮上的字）
+      out.screen = await page.evaluate(() => (document.body.innerText || '').replace(/\n{2,}/g, '\n').slice(0, 4000));
       if (snap.called) out.called = { why: snap.called.why, msg: snap.called.msg };
       out.state = snap.called?.state || snap.state;
       out.goals = snap.called?.goals || snap.goals;

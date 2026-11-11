@@ -284,6 +284,14 @@ test('fix1 的表：每行有编号、文件，checks / nots / called / audit / 
   for (const r of FIX1) {
     assert.match(r.id, /^(D1|D3|D4|L3|E1)-\d+|^side-\d$/);
     assert.ok(r.files.length);
-    assert.ok(['checks', 'nots', 'called', 'audit', 'noAudit'].some((k) => r[k]?.length), r.id);
+    assert.ok(['checks', 'nots', 'called', 'audit', 'noAudit', 'screen', 'noScreen'].some((k) => r[k]?.length), r.id);
   }
+});
+
+test('fix1 的查法：学生屏幕上的字（只看最后一步）', async () => {
+  const { screenHits } = await import('../tools/stage-try-lib.js');
+  const steps = [{ screen: '边 57' }, { screen: '边 43\n拨数 43' }];
+  assert.deepEqual(screenHits(steps, /43/, { last: true }), [1]);
+  assert.deepEqual(screenHits(steps, /57/, { last: true }), []);
+  assert.deepEqual(screenHits(steps, /57/), [0]);
 });

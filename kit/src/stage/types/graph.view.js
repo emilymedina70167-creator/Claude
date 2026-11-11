@@ -32,9 +32,22 @@ function styleEdge(g, e) {
   g.classList.toggle('is-dim', !!e.dim);
 }
 // 边的部件节点：有权就是写着权的小牌子，没权就是一块看不见、点得到的地方（点着问「选哪条边」时用）
+// 牌子上的字照现在的权写（主线第一轮 D3-1：以前只在第一次画的时候写一次，权挂着拨数、同名把图重造以后，
+// 画面还是旧数，舞台现状写的却是新数——学生拨了看不到路上的数变）
+function syncWeight(n, e) {
+  const w = e.w != null ? String(e.w) : null;
+  if (n.__w === w) return;
+  n.__w = w;
+  n.className = n.className.replace(/\bgr-(w|hit)\b/, w != null ? 'gr-w' : 'gr-hit');
+  let span = n.querySelector('.gr-wv');
+  if (w == null) { span?.remove(); n.style.width = ''; return; }
+  if (!span) span = el('span', 'gr-wv', n);
+  span.textContent = w;
+  n.style.width = `${weightWidth(e.w)}px`;
+}
 function weightEl(stage, e, b, hidden) {
   const n = el('div', e.w != null ? 'gr-w' : 'gr-hit', stage.layer);
-  if (e.w != null) { el('span', 'gr-wv', n).textContent = e.w; n.style.width = `${weightWidth(e.w)}px`; }
+  syncWeight(n, e);
   n.style.transform = tr(b.x, b.y);
   n.__box = b;
   if (hidden) n.style.opacity = '0';
@@ -87,6 +100,7 @@ export const graphView = {
       styleEdge(g, e);
       const b = sc.partBox(e);
       const w = stage.partNode(e, () => weightEl(stage, e, b, entering));
+      syncWeight(w, e);
       stage.flagPart(w, e, ctx);
       if (!same(w.__box, b)) { w.__box = b; w.style.transform = tr(b.x, b.y); }
     }
