@@ -591,3 +591,30 @@ test('复核（第三次量）：学生摘叶子、删结点写给老师删了�
   fx = u.apply(parseScript('delete t.10')[0], { by: 'teacher' });
   assert.deepEqual(fx.judged?.facts || [], []);
 });
+
+// —— 舞台主线第一轮 D4-1：堆里放新结点，以前照二叉排序树判，放对了说「不是正确的下一步」——
+test('D4-1：这棵树现在不是二叉排序树（堆）时，放结点不照排序树判：只说放在了哪、写明页面没判', async () => {
+  const s = make('tree t = 87 45 78 32 17 65 53 09 tray="63"\nopen t place wrong=mark');
+  const o = T(s);
+  const v = R.check(o, { type: 'insert', value: '63', parent: keyOf(o, 32), side: 'right' }, s, { open: 'place' });
+  assert.equal(v.legal, true);
+  assert.equal(v.right, null);
+  assert.match(v.why, /63 放在 32 的右边/);
+  assert.match(v.why, /不是二叉排序树，页面没判这一下对不对/);
+  // 发给老师的那一行里写着（不是光秃秃的一行指令）
+  const { actText } = await import('../kit/src/stage/stage.js');
+  assert.equal(actText({ type: 'insert', src: 'insert t#4 right 63', verdict: v }), '学生 insert t#4 right 63（63 放在 32 的右边；这棵不是二叉排序树，页面没判这一下对不对）');
+  // 做不到的照旧挡（那边已经有结点了）
+  assert.equal(R.check(o, { type: 'insert', value: '63', parent: keyOf(o, 87), side: 'left' }, s, { open: 'place' }).legal, false);
+  // 堆里可以有一样的值：不拿「已经在树里了（二叉排序树里不放一样的值）」挡
+  assert.equal(R.check(o, { type: 'insert', value: '45', parent: keyOf(o, 32), side: 'right' }, s, { open: 'place' }).legal, true);
+});
+test('D4-1（盯 5）：还是二叉排序树的照旧判——普通的、只有根的、根加左孩子的（既像堆也是排序树）', () => {
+  for (const src of ['tree t = 50 30 70 tray="60"', 'tree t = 50 tray="60"', 'tree t = 50 30 tray="60"']) {
+    const s = make(`${src}\nopen t place`);
+    const o = T(s);
+    const bad = R.check(o, { type: 'insert', value: '60', parent: keyOf(o, o.nodes.length > 1 ? 30 : 50), side: o.nodes.length > 1 ? 'right' : 'left' }, s, { open: 'place' });
+    assert.equal(bad.right, false, src);
+    assert.match(bad.misread, /不是二叉排序树里 60 该在的位置/);
+  }
+});

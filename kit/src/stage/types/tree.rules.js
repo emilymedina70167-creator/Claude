@@ -268,8 +268,12 @@ function checkInsert(o, act, scene, ctx = {}) {
   };
   const no = (w) => ({ legal: false, right: false, misread: null, why: w, next: now() });
   if (!v || v === '_') return no('插入要写一个数');
+  // 这棵树现在不是二叉排序树（堆、随手摆的二叉树）时，学生往空位上放没有「排序树里该在的位置」可比：不判对错，只说放在了哪
+  // （主线第一轮 D4-1：堆里把 63 放到第 9 个位置是对的，以前照排序树说「不是正确的下一步」、wrong=mark 还把它圈出来）。
+  // 只有根、根加左孩子的树还是排序树，照旧判
+  const loose = at && !isBst(o);
   const d = descend(o, v);
-  if (d.found != null) return no(`${v} 已经在树里了（二叉排序树里不放一样的值）`);
+  if (!loose && d.found != null) return no(`${v} 已经在树里了（二叉排序树里不放一样的值）`);
   if (o.nodes.length >= MAX_NODES) return no(`一棵树最多 ${MAX_NODES} 个结点`);
   if (at) {
     const p = nodeAt(o, act.parent);
@@ -278,6 +282,7 @@ function checkInsert(o, act, scene, ctx = {}) {
     if (p[act.side] != null) return no(`${nameOf(o, p.key)} 的${ZH[act.side]}边已经有 ${nameOf(o, p[act.side])} 了`);
     if (depths(o).get(p.key) + 1 >= MAX_DEPTH) return no(`树最多 ${MAX_DEPTH} 层，再长就放不下了`);
   } else if (d.path.length >= MAX_DEPTH) return no(`树最多 ${MAX_DEPTH} 层，再长就放不下了`);
+  if (loose) return { legal: true, right: null, misread: null, why: `${why}；这棵不是二叉排序树，页面没判这一下对不对`, next: null };
   const wrong = (misread) => ({ legal: true, right: false, misread, why, next: now() });
   // 平衡二叉树的课上正确的下一步是转（还失衡）时插数不对；托盘按顺序插（插的先后不同，长出来的树不同）
   if (pl) return wrong(`还没转平就插了下一个数：${planWhy(o, pl)}`);
