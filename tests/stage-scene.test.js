@@ -1855,7 +1855,7 @@ test('最后一审 I4：写错的选项名当场报、话里给最像的那个�
   const s = run(new Scene(), 'matrix A = 1 2 / 3 4\ntree t = 50 30 70 20 40 tray="45"\nopen t insert\nsentence w = "He runs."\nplane p range=-3..3');
   const err = (line) => s.check(one(line));
   // 审查报告里的七行：以前都默默照收（要藏的答案矩阵直接摆给学生看）
-  assert.equal(err('matrix R = 1 2 / 3 4 hid=on'), '「hid=on」不是 matrix 认的写法：是不是 hide=on？（matrix 能写的：beside= vars= from= hide=）');
+  assert.equal(err('matrix R = 1 2 / 3 4 hid=on'), '「hid=on」不是 matrix 认的写法：是不是 hide=on？（matrix 能写的：beside= vars= from= name= hide=）');
   assert.match(err('ask pick t "哪几个会变？" reveel=on'), /^「reveel=on」不是 ask pick 认的写法：是不是 reveal=on？/);
   assert.match(err('keep t "插入后" afer=insert'), /^「afer=insert」不是 keep 认的写法：是不是 after=insert？/);
   assert.match(err('goal g1 "插满" when="count(t) = 7" cal=now'), /是不是 call=now？/);

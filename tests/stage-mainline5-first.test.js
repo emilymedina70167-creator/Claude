@@ -1,7 +1,8 @@
 // 主线第五轮 · 首课走查里修的（docs/superpowers/specs/2026-11-12-stage-mainline-5-design.md 第 1 节）：一条一个测试
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Scene } from '../kit/src/stage/scene.js';
+import { Scene, dryRun } from '../kit/src/stage/scene.js';
+const dryRunErr = (s, src) => dryRun(s, src)[0]?.error || '';
 import { parseScript } from '../kit/src/stage/script.js';
 import '../kit/src/stage/types/index.js';
 import { judge } from '../kit/src/stage/referee.js';
@@ -104,4 +105,28 @@ test('时间轴的停靠点少的时候摆开一点：三个停靠点的轴不�
   assert.equal(stepOf({ stops: new Array(10) }), 108);
   assert.ok(w('timeline tl = 过去 现在 将来 now=现在') >= 540);
   assert.equal(w('timeline tl = 1 2 3 4 5 6 7 8 9 10'), 2 * 54 + 9 * 108); // 十个停靠点照旧
+});
+
+test('矩阵有名字：左上角写着它叫什么（跟着算的写式子），不然四张摆在一起学生分不清；name= 能改、能关', async () => {
+  const { matrixName } = await import('../kit/src/stage/types/matrix.js');
+  const s = make('matrix J = 1 1 / 0 1\nmatrix X = 1 0 / 2 3 beside=J\nmatrix JX = {J X}\nmatrix P = {J^2 - 2 J + 3 I}\ndial k = 2 range=1-5\nmatrix Jk = {J^k}\nmatrix T = {J\'}\nmatrix V = {J^-1}\nmatrix N = 1 {k} / 0 1\nmatrix Q = 1 2 name="α"\nmatrix H = 1 2 name=off');
+  const name = (id) => matrixName(s.objects.get(id));
+  assert.equal(name('J'), 'J');
+  assert.equal(name('X'), 'X');
+  assert.equal(name('JX'), 'JX'); // {J X}
+  assert.equal(name('P'), 'P = J² − 2J + 3E'); // 老师另起了名字：两样都写
+  assert.equal(name('Jk'), 'Jᵏ');
+  assert.equal(name('T'), 'T = Jᵀ');
+  assert.equal(name('V'), 'V = J⁻¹');
+  assert.equal(name('N'), 'N'); // 只有几格跟着算：还是它自己的名字
+  assert.equal(name('Q'), 'α');
+  assert.equal(name('H'), '');
+  // 名字占的地方算在这张矩阵的框里（上面多出一条），关了就没有
+  const top = (id) => s.objectBox(id).y - s.objects.get(id).origin.y;
+  assert.ok(top('J') <= -18);
+  assert.equal(top('H'), 0);
+  // 现状里不用另说（老师本来就知道名字）；重造带着
+  run(s, 'matrix Q = 3 4');
+  assert.equal(name('Q'), 'α');
+  assert.match(dryRunErr(s, 'matrix Z = 1 2 name=""'), /name=/);
 });

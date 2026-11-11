@@ -243,7 +243,7 @@ test('按格的 Aⁿ：写下时就查（每行一样多、只用 free= 的变�
   sc.apply(parseScript('ask value "Aⁿ = ？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"')[0]);
   assert.equal(sc.waiting.free, 'n');
   assert.deepEqual(gridShape(sc.waiting, sc), { rows: 3, cols: 3, names: ['n'] });
-  assert.equal(gridShape({ type: 'matrix', answer: '1 2 / 3 4' }, sc), null, '没写 free= 照旧一个输入框');
+  assert.deepEqual(gridShape({ type: 'matrix', answer: '1 2 / 3 4' }, sc), { rows: 2, cols: 2, names: [] }, '没写 free=（全是数）也按格写（主线第五轮）');
 });
 
 test('两种 /：两边空着的分行，贴着的是一格分数（不写 free= 照旧按数比）', () => {
@@ -409,7 +409,11 @@ test('学生那边用什么写：全是数的数字键盘，要打字母、括�
   const sc = run(new Scene(), 'matrix A = 1 2 / 3 4\narray a = 49 38 65');
   const kind = (spec) => answerInput(spec, sc).kind;
   assert.equal(kind({ type: 'num', answer: '3/4' }), 'decimal');
-  assert.equal(kind({ type: 'matrix', answer: '{A^2}' }), 'decimal');
+  assert.equal(kind({ type: 'matrix', answer: '{A^2}' }), 'grid'); // 舞台上算得出形状：按格写（主线第五轮；算不出来、太大才是一个输入框）
+  // 全是数的矩阵、形状算得出来（不超过 4×4）：按格写（主线第五轮首课走查：以前是一个输入框，要学生自己打「2 0 / 0 2」，没人告诉过格式）
+  assert.deepEqual(answerInput({ type: 'matrix', answer: '2 0 / 0 2' }), { kind: 'grid', rows: 2, cols: 2, names: [] });
+  assert.deepEqual(answerInput({ type: 'matrix', answer: '1 2 3' }), { kind: 'grid', rows: 1, cols: 3, names: [] });
+  assert.equal(kind({ type: 'matrix', answer: '1 2 3 4 5 / 1 2 3 4 5' }), 'decimal', '太大的照旧一个输入框');
   assert.equal(kind({ answer: '4' }), 'decimal', '不写 type、答案是一个数：数按数比');
   assert.equal(kind({ answer: '{a.3-a.1}' }), 'decimal');
   for (const spec of [{ type: 'en', answer: 'had started' }, { type: 'seq', answer: 'A C B' }, { type: 'equation', answer: 'x + y = 3' }, { type: 'set', answer: '{1, 5}' }, { answer: 'x + 1' }, {}, { type: 'matrix', free: 'n', answer: '1 n 1 1 1 / 0 1 1 1 1 / 0 0 1 1 1 / 0 0 0 1 1 / 0 0 0 0 1' }]) assert.equal(kind(spec), 'text', JSON.stringify(spec));

@@ -2,7 +2,7 @@
 // 专门的动作：行变换（副本乘上系数飘到目标行上面再加进去、交换两行走弧线、一行乘倍数）、改一个数、
 // 乘法的一格（A 的一行和 B 的一列一起亮，逐对相乘排成一条算式，加出来的数飞进那一格）。
 import { EASE, moveDuration, stagger, arcPoints } from '../motion.js';
-import { MX, layout, stairsPoints, zeroRows, toQ, eqWidth, rowCells, emptyCollect } from './matrix.js';
+import { MX, layout, stairsPoints, zeroRows, toQ, eqWidth, rowCells, emptyCollect, matrixName, NAME_H } from './matrix.js';
 import { Q } from '../../exact.js';
 import { openParts, atLeast, screenOf, noteAt } from '../gesturedom.js';
 
@@ -325,9 +325,13 @@ function editAfford(stage, o, e, done) {
     pop.querySelector('.mx-step-inc').disabled = !!q && q.toNumber() >= e.hi;
     place();
   };
+  // pend：上一下还在演的时候又点的几下，攒着，演完一次拨到位。以前演着的时候再点不理：连点两下 − 只走一格
+  // （主线第五轮首课走查，真手指量出来的；和拨盘连点是同一个毛病）
+  let pend = 0;
   const step = async (d) => {
     const x = cur != null && live(cur);
-    if (!x || busy) return;
+    if (!x) return;
+    if (busy) { pend += d; return; }
     const q = toQ(x.value) || new Q(0n);
     let nv = q.add(Q.from(d));
     if (nv.toNumber() < e.lo) nv = Q.from(e.lo);
@@ -337,6 +341,7 @@ function editAfford(stage, o, e, done) {
     busy = true;
     try { await done({ type: 'edit', ref, from: x.value, to: nv.toString() }, `write ${ref} ${nv.toString()}`); } finally { busy = false; }
     paint();
+    if (pend) { const k = pend; pend = 0; step(k); }
   };
   const openFor = (k) => {
     if (cur === k) return;
@@ -349,8 +354,12 @@ function editAfford(stage, o, e, done) {
     const dec = el('button', 'mx-step-b mx-step-dec', pop); dec.type = 'button'; dec.textContent = '−'; dec.setAttribute('aria-label', '小一点');
     el('span', 'mx-step-v', pop);
     const inc = el('button', 'mx-step-b mx-step-inc', pop); inc.type = 'button'; inc.textContent = '+'; inc.setAttribute('aria-label', '大一点');
-    dec.addEventListener('click', () => step(-1));
-    inc.addEventListener('click', () => step(1));
+    // 拨数器可能正好弹在手指下面：打开它的那一下抬手时落在 + / − 上，数自己变了 1（主线第五轮首课走查，真手指量出来的）。
+    // 刚弹出来的 0.4 秒里的点击不算
+    const born = performance.now();
+    const fresh = () => performance.now() - born < 400;
+    dec.addEventListener('click', () => { if (!fresh()) step(-1); });
+    inc.addEventListener('click', () => { if (!fresh()) step(1); });
     paint();
     stage.tween(pop, [{ opacity: 0, scale: '.85' }, { opacity: 1, scale: '1' }], { duration: 240, easing: EASE.spring });
   };
@@ -491,7 +500,7 @@ function wholeLift(stage, id) {
   g.appendChild(sv);
   const box = { x: B.x, y: B.y, w: B.w, h: B.h };
   g.style.transform = tr(box.x, box.y);
-  const ns = [...o.cells.map((x) => stage.nodeOf(x)), ...['bl', 'br', 'bar', 'eq'].map((k) => stage.decor(id, k))].filter(Boolean);
+  const ns = [...o.cells.map((x) => stage.nodeOf(x)), ...['bl', 'br', 'bar', 'eq', 'name'].map((k) => stage.decor(id, k))].filter(Boolean);
   ns.forEach((n) => n.classList.add('is-lifted'));
   return { el: g, box, restore: () => ns.forEach((n) => n.classList.remove('is-lifted')) };
 }
@@ -588,6 +597,13 @@ export const matrixView = {
     put(stage, stage.decor(o.id, 'bl', () => bracket(stage, 'l')), { x: box.x + 4, y: box.y, h: box.h }, ctx, entering);
     put(stage, stage.decor(o.id, 'br', () => bracket(stage, 'r')), { x: box.x + box.w - 15, y: box.y, h: box.h }, ctx, entering);
     if (o.aug) put(stage, stage.decor(o.id, 'bar', () => el('div', 'mx-bar', stage.layer)), { x: L.barX, y: box.y + 8, h: box.h - 16 }, ctx, entering);
+    // 名字：左上角一小条（跟着算的写式子 JX、Jᵏ）。四张矩阵摆在一起，没有名字学生分不清老师说的 X 是哪张
+    const nm = matrixName(o);
+    if (nm) {
+      const tag = stage.decor(o.id, 'name', () => el('div', 'mx-name', stage.layer));
+      if (tag.textContent !== nm) tag.textContent = nm;
+      put(stage, tag, { x: box.x + 6, y: box.y - NAME_H }, ctx, entering);
+    }
     if (o.product) {
       const eq = stage.decor(o.id, 'eq', () => { const n = el('div', 'mx-eq', stage.layer); n.textContent = '='; return n; });
       // 另起一行的乘积（A、B 已经排在别的乘积里）：前面写上是谁乘谁
@@ -608,14 +624,14 @@ export const matrixView = {
         ctx.jobs.push(stage.tween(p, [{ strokeDashoffset: `${len}` }, { strokeDashoffset: '0' }], { duration: 700, easing: EASE.out }).then(() => { p.style.strokeDasharray = ''; p.style.strokeDashoffset = ''; }));
       }
     }
-    stage.dropDecor(o.id, (k) => (k === 'stairs' && !pts) || (k === 'bar' && !o.aug) || (k === 'eq' && !o.product));
+    stage.dropDecor(o.id, (k) => (k === 'stairs' && !pts) || (k === 'bar' && !o.aug) || (k === 'eq' && !o.product) || (k === 'name' && !nm));
     syncHandles(stage, o, ctx);
     return moves;
   },
 
   // 括号先淡进来，数一个个落下（从左上往右下）
   async enter(stage, o) {
-    const ds = ['bl', 'br', 'bar', 'eq', ...Array.from({ length: o.rows }, (_, i) => [`lab:${i + 1}`, `grip:${i + 1}`]).flat()].map((k) => stage.decor(o.id, k)).filter(Boolean);
+    const ds = ['bl', 'br', 'bar', 'eq', 'name', ...Array.from({ length: o.rows }, (_, i) => [`lab:${i + 1}`, `grip:${i + 1}`]).flat()].map((k) => stage.decor(o.id, k)).filter(Boolean);
     ds.forEach((d, i) => stage.tween(d, [{ opacity: 0 }, { opacity: 1 }], { duration: 380, delay: i * 50, easing: EASE.out }));
     await Promise.all(o.cells.map((x) => {
       const n = stage.nodeOf(x), b = n?.__box;
@@ -726,6 +742,8 @@ export const matrixView = {
 @keyframes mx-flash { 0%, 100% { background: transparent; } 50% { background: color-mix(in srgb, var(--st-gold) 26%, transparent); box-shadow: 0 0 0 2.5px var(--st-gold); } }
 @media (prefers-reduced-motion: reduce) { .mx-brk.is-drag { animation: none; } }
 .mx-bar { position: absolute; left: 0; top: 0; width: 0; border-left: 1.6px solid rgb(var(--chalk-rgb, 27 34 32) / 0.5); pointer-events: none; }
+.mx-name { position: absolute; left: 0; top: 0; height: 22px; padding: 0 2px; font: italic 500 17px/22px var(--serif, 'Times New Roman', serif); color: var(--st-muted); white-space: nowrap; pointer-events: none; }
+.mx-name.is-lifted { opacity: .35; }
 .mx-eq { position: absolute; left: 0; top: 0; width: 56px; height: 44px; display: grid; place-items: center; font: 400 32px/1 var(--sans, sans-serif); color: var(--st-ink); pointer-events: none; }
 .mx-eq.is-named { width: 104px; justify-items: end; padding-right: 12px; box-sizing: border-box; font-size: 28px; font-style: italic; font-family: "Latin Modern Math", "Cambria Math", "Times New Roman", serif; }
 .mx-stairs { fill: none; stroke: var(--st-brand); stroke-width: 2; stroke-linejoin: round; opacity: .75; }

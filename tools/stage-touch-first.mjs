@@ -157,6 +157,52 @@ SECTIONS.tense = async () => {
   }
 };
 
+// —— 可交换、方阵的幂、f(A)（线代第 2 讲块 4）：整张拖去比、点一格拨数、按格写一张矩阵 ——
+SECTIONS.power = async () => {
+  for (const [tag, view] of [['竖屏', { width: 820, height: 1180 }], ['横屏', { width: 1180, height: 820 }]]) {
+    const T = await open(view);
+    const cellsOf = (id) => T.page.evaluate((id) => { const o = window.LAStage.scene.objects.get(id); return Array.from({ length: o.rows }, (_, r) => Array.from({ length: o.cols }, (_, c) => o.cells.find((x) => x.r === r + 1 && x.c === c + 1).value).join(' ')).join(' / '); }, id);
+    const decor = (id, key) => T.page.evaluate(([id, key]) => { const n = window.LAStage.decors.get(id)?.get(key); if (!n) return null; const r = n.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, cx: r.x + r.width / 2, cy: r.y + r.height / 2, text: n.textContent }; }, [id, key]);
+    // 1. 名字画出来了；按住 AB 的括号 0.4 秒，整张拖到 BA 上：逐格比
+    await T.play('matrix A = 1 2 / 2 4\nmatrix B = 2 2 / -1 -1 beside=A\nmatrix AB = {A B}\nmatrix BA = {B A} beside=AB\nopen AB compare\nsay "把 AB 整张拖到 BA 上比一比。"');
+    const names = await Promise.all(['A', 'B', 'AB', 'BA'].map(async (id) => (await decor(id, 'name'))?.text || '没有'));
+    expect(`${tag}：四张矩阵左上角都写着名字`, names.join(' '), 'A B AB BA');
+    let before = await T.srcs();
+    const grip = await decor('AB', 'bl'), to = await decor('BA', 'bl');
+    const toBox = await T.box('BA:1.1');
+    await T.holdDrag({ x: grip.cx, y: grip.cy }, { x: toBox.cx + 20, y: to.cy });
+    await T.wait(1500);
+    expect(`${tag}：按住 AB 的括号拖到 BA 上`, await T.added(before), 'compare AB BA');
+    // 2. 点 X 的一格出拨数器：点两下 −，JX、XJ 跟着算
+    await T.play('matrix J = 1 1 / 0 1\nmatrix X = 1 0 / 2 3 beside=J\nmatrix JX = {J X}\nmatrix XJ = {X J} beside=JX\nopen X edit range=-3..3\nsay "改 X。"');
+    const c21 = await T.box('X:2.1');
+    expect(`${tag}：矩阵的一格手指按得到（≥ 44）`, String(Math.min(c21.w, c21.h) >= 44), 'true');
+    await T.tap({ x: c21.cx, y: c21.cy }); await T.wait(600);
+    expect(`${tag}：点一格只是打开拨数器，数没有自己变`, await cellsOf('X'), '1 0 / 2 3');
+    const minus = await T.sel('.mx-step-dec');
+    if (minus) { minus.x = minus.cx; minus.y = minus.cy; }
+    expect(`${tag}：点一格出来的拨数器，− 手指按得到（≥ 44）`, String(!!minus && Math.min(minus.w, minus.h) >= 44), 'true');
+    if (minus) { await T.tap(minus); await T.wait(450); await T.tap(minus); await T.wait(1100); }
+    expect(`${tag}：点两下 −，X 的那一格 2 → 0，JX 跟着算`, `${await cellsOf('X')}｜${await cellsOf('JX')}`, '1 0 / 0 3｜1 3 / 0 3');
+    // 3. 写一张矩阵：按格写（2×2 四个框），不用自己打「2 0 / 0 2」
+    await T.play('matrix J = 1 1 / 0 1\nask value "f(J) = J² − 2J + 3E 是？" type=matrix answer={J^2 - 2 J + 3 I}');
+    const boxes = await T.page.evaluate(() => [...document.querySelectorAll('.st-fgrid .fi-text')].map((i) => { const r = i.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width, h: r.height }; }));
+    expect(`${tag}：写矩阵是 2×2 四个框`, String(boxes.length), '4');
+    expect(`${tag}：每个框手指按得到（高 ≥ 44）`, String(boxes.every((b) => b.h >= 44)), 'true');
+    const boxAt = (i) => T.page.evaluate((i) => { const r = document.querySelectorAll('.st-fgrid .fi-text')[i].getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, i);
+    for (const [i, k] of [[0, '2'], [1, '0'], [2, '0'], [3, '2']]) {
+      // 小键盘出来以后这一条会让上去：每次点之前重新量
+      await T.tap(await boxAt(i)); await T.wait(450);
+      const key = await T.sel(`.keypad.show [data-k="${k}"]`);
+      if (key) { await T.tap({ x: key.cx, y: key.cy }); await T.wait(120); }
+    }
+    const go = await T.sel('.st-fgrid .st-say-go');
+    if (go) { await T.tap({ x: go.cx, y: go.cy }); await T.wait(700); }
+    expect(`${tag}：四格写 2 0 / 0 2 交上去：对`, await T.page.evaluate(() => { const a = window.LAStageDev.acts.at(-1); return a?.type === 'value' ? `${a.text} ${a.right}` : '没交'; }), '2 0 / 0 2 true');
+    await T.ctx.close();
+  }
+};
+
 for (const [name, fn] of Object.entries(SECTIONS)) {
   if (only && !only.includes(name)) continue;
   console.log(`\n—— ${name} ——`);

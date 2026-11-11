@@ -566,9 +566,10 @@ export function judgeAnswer(given, spec = {}, scene = null) {
  * 太大的（超过 4×4）也是 null：一格一个框在 iPad 上摆不下，照旧一行字写
  */
 export function gridShape(spec = {}, scene = null) {
-  if (String(spec.type ?? '').trim().toLowerCase() !== 'matrix' || !String(spec.free ?? '').trim()) return null;
+  if (String(spec.type ?? '').trim().toLowerCase() !== 'matrix') return null;
   try {
-    const names = parseFree(spec.free).map((f) => f.name);
+    // 没写 free=（全是数）也按格写：格子里写数、分数，没有字母键。形状算不出来（舞台上现在算不了）、太大：回到一个输入框
+    const names = String(spec.free ?? '').trim() ? parseFree(spec.free).map((f) => f.name) : [];
     const rows = cellGrid(resolveAnswer(spec.answer, scene, { type: 'matrix', lenient: !!spec.lenient }));
     if (rows.length > 4 || rows[0].length > 4) return null;
     return { rows: rows.length, cols: rows[0].length, names };

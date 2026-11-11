@@ -128,7 +128,36 @@ export function bandOf(o) {
 }
 /** 乘积前面那一块多宽：「=」，另起一行的写「BA =」 */
 export const eqWidth = (o) => (o.prefix ? 104 : MX.EQ);
-function objectBox(o) {
+// —— 名字：每张矩阵左上角写着它叫什么（主线第五轮首课走查：四张摆在一起，学生分不清哪张是 X、哪张是 JX）——
+export const NAME_H = 22; // 名字那一条多高（算在这张矩阵占的地方里，在括号上面）
+const SUP = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', '-': '⁻', '+': '⁺', n: 'ⁿ', k: 'ᵏ', m: 'ᵐ', i: 'ⁱ', j: 'ʲ', t: 'ᵗ' };
+/** 跟着算的式子写成给人看的样子：{J X} → JX，{J^k} → Jᵏ，{A'} → Aᵀ，{J^2 - 2 J + 3 I} → J² − 2J + 3E（单位矩阵教材写 E） */
+export function prettyExpr(src) {
+  let t = String(src ?? '').trim().replace(/^\{|\}$/g, '').trim();
+  if (!t || /[(),\[\]]/.test(t)) return ''; // 带函数、括号的（coef(M) P - rhs(M)）不硬写：用它自己的名字
+  t = t.replace(/\^\s*(-?\w+)/g, (m, e) => ([...e].every((c) => SUP[c]) ? [...e].map((c) => SUP[c]).join('') : m));
+  t = t.replace(/'/g, 'ᵀ').replace(/\*/g, ' ').replace(/\bI\b/g, 'E');
+  t = t.replace(/\s*([+-])\s*/g, ' $1 ').replace(/-/g, '−').replace(/^ − /, '−');
+  // 挨着的因子之间不留空（2 J → 2J，J X → JX）；加减号两边留着
+  return t.replace(/([^\s+−]) +(?=[^\s+−])/g, '$1').replace(/\s+/g, ' ').trim();
+}
+/** 这张矩阵画面上叫什么：name="…" 写的 → 整张跟着算的写式子（短的）→ 它自己的名字；name=off 是 ''（不写） */
+export function matrixName(o) {
+  if (o.name === false) return '';
+  if (typeof o.name === 'string') return o.name;
+  const id = o.id || '';
+  if (o.live?.whole && !o.live.fixed?.length) {
+    const p = prettyExpr(o.live.whole);
+    if (p && [...p].length <= 16) {
+      // 名字就是式子的另一种写法（JX、Jk ↔ Jᵏ、R2 ↔ R²）：只写式子；老师另起了名字（R = {a b}）：两样都写「R = ab」
+      const plain = (t) => [...String(t)].map((c) => Object.keys(SUP).find((k) => SUP[k] === c) ?? c).join('').replace(/[^A-Za-z0-9]/g, '').replace(/E/g, 'I').toLowerCase();
+      return !id || plain(p) === plain(id) ? p : `${id} = ${p}`;
+    }
+  }
+  return id;
+}
+/** 不带名字那一条的框（挨着摆、上下对齐看它） */
+export function coreBox(o) {
   const b = layout(o).box;
   if (!o.product) return b;
   // 乘积：前面的「=」和整排下面那条算式也算它的地方（镜头要把算式框进来）
@@ -137,6 +166,10 @@ function objectBox(o) {
   if (!band) return { ...eq, h: b.h + MX.BAND };
   const x = Math.min(eq.x, band.x), y = Math.min(eq.y, band.y);
   return { x, y, w: Math.max(eq.x + eq.w, band.x + band.w) - x, h: Math.max(eq.y + eq.h, band.y + band.h) - y };
+}
+function objectBox(o) {
+  const b = coreBox(o);
+  return matrixName(o) ? { x: b.x, y: b.y - NAME_H, w: b.w, h: b.h + NAME_H } : b;
 }
 /** 括号、竖线、「=」占的地方（贴字时让开） */
 export function decorBoxes(o) {
@@ -180,14 +213,18 @@ function matrixOf(scene, id, cmd) {
 }
 
 /** 新的一样东西放在 beside= 那样东西的右边（上下居中）；没写就照舞台的规矩放在已有东西下面 */
-export function placeFor(scene, size, opts) {
+export function placeFor(scene, size, opts, { named = false } = {}) {
   if (opts?.beside) {
     const t = scene.objects.get(opts.beside);
     if (!t) throw new Error(`beside=${opts.beside}：舞台上没有「${opts.beside}」`);
-    const b = scene.objectBox(opts.beside);
+    let b = scene.objectBox(opts.beside);
+    // 挨着的是带名字的矩阵：上下照括号对齐，不算它上面名字那一条
+    if (t.type === 'matrix' && matrixName(t)) b = { ...b, y: b.y + NAME_H, h: b.h - NAME_H };
     return { x: Math.round(b.x + b.w + MX.BESIDE), y: Math.round(b.y + b.h / 2 - size.h / 2) };
   }
-  return scene.slotFor(size.w);
+  // 往下摆：名字那一条在括号上面，算在这张矩阵占的地方里——括号从名字下面开始（named：这张有没有名字）
+  const p = scene.slotFor(size.w);
+  return named ? { x: p.x, y: p.y + NAME_H } : p;
 }
 
 // —— 行变换 ——
@@ -406,6 +443,13 @@ function liveRows(h, text) {
  * 化过来的（学生写满一行就和 M0 比，猜是哪一种行变换）。写下时查得出来的错当场报
  */
 function readExtras(scene, o, id, opts) {
+  // name="α" 画面上写的名字；name=off 不写（不写 name= 是它自己的名字，整张跟着算的写式子）
+  if (opts.name != null) {
+    const nm = String(opts.name).trim();
+    if (!nm) throw new Error(`name= 写画面上给这张矩阵标的名字（name="α"），不要名字写 name=off`);
+    if ([...nm].length > 16) throw new Error(`name="${nm}" 太长了（最多 16 个字）`);
+    o.name = nm === 'off' ? false : nm;
+  }
   if (opts.vars != null) {
     const names = String(opts.vars).split(/[\s,，]+/).filter(Boolean);
     const want = o.aug ?? o.cols;
@@ -435,7 +479,7 @@ function makeCollect(scene, id, rest, opts, old) {
   if (!sign) throw new Error('收集用的矩阵写成 matrix Sum = collect（放进来的加起来）或 matrix Dd = collect -（第一张减后面的）');
   for (const k of ['vars', 'from']) if (opts[k] != null) throw new Error(`收集用的矩阵不写 ${k}=（数照放进来的那几张算）`);
   const o = { origin: { x: 0, y: 0 }, rows: 1, cols: 1, aug: null, cells: [newCell(id, 1, 1, '')], stairs: false, product: null, collect: { sign, terms: [] } };
-  o.origin = old && !opts.beside ? { ...old.origin } : placeFor(scene, sizeOf(o), opts);
+  o.origin = old && !opts.beside ? { ...old.origin } : placeFor(scene, sizeOf(o), opts, { named: !!matrixName({ ...o, id }) });
   return o;
 }
 
@@ -559,7 +603,7 @@ export const matrix = {
   label: '矩阵',
   create: ['matrix', 'product'],
   // 认得的选项（名字=值，scene.js 的 checkOptions；造它的那一行另外都认 hide=）；rowop M r2=r2-3r1 连着写被读成了选项，照收
-  options: { matrix: ['beside', 'vars', 'from'], rowop: [/^[rRcC]\d+$/] },
+  options: { matrix: ['beside', 'vars', 'from', 'name'], rowop: [/^[rRcC]\d+$/] },
   drag: false,
   hint: '（矩阵：名字.2,3 是第 2 行第 3 列，名字.r2 是第 2 行，名字.c3 是第 3 列；交换两行时数跟着走，名字.2,3 指的总是现在的第 2 行第 3 列）',
   make(scene, c, h, old) {
@@ -577,6 +621,7 @@ export const matrix = {
     rows.forEach((row, i) => row.forEach((v, k) => cells.push(newCell(id, i + 1, k + 1, v))));
     const o = { origin: { x: 0, y: 0 }, rows: rows.length, cols: rows[0].length, aug, cells, stairs: false, product: null };
     readExtras(scene, o, id, h.opts);
+    if (h.opts.name == null && old && old.name !== undefined) o.name = old.name; // 同名重造：名字带着
     // 式子里没用到舞台上的东西（{[[1, 2], [3, 4]]}）就只是一次算好的数
     if (live?.live.deps.length) o.live = live.live;
     // 同名重造、beside= 写的还是原来挨着的那一样、大小也没变：留在原处（主线第一轮 L3-6：以前照 beside 重新摆一遍，
@@ -591,7 +636,7 @@ export const matrix = {
       return ob.x >= ab.x + ab.w - 2 && overlap > Math.min(ab.h, ob.h) / 2;
     };
     const stays = old && (!h.opts.beside || (old.beside === h.opts.beside && old.rows === o.rows && old.cols === o.cols && stillBeside()));
-    o.origin = stays ? { ...old.origin } : placeFor(scene, sizeOf(o), h.opts);
+    o.origin = stays ? { ...old.origin } : placeFor(scene, sizeOf(o), h.opts, { named: !!matrixName({ ...o, id }) });
     if (h.opts.beside) o.beside = h.opts.beside;
     return o;
   },
@@ -898,6 +943,7 @@ export const matrix = {
   doc: `矩阵（线代：行变换、消元、秩、乘法）：
 matrix m = 1 2 3 / 4 5 6 / 7 8 10   造矩阵（/ 分行，最多 6 行 8 列；数能写 -3、1/2；| 是增广矩阵的竖线；beside=p 放在 p 右边）
 写法：m.2,3 第 2 行第 3 列；m.r2 第 2 行；m.c3 第 3 列
+每张矩阵左上角画着它的名字（跟着算的写式子：JX、Jᵏ、R = ab），话里说的 X 学生找得到；name="α" 换一个，name=off 不画
 matrix M1 = _ _ | _ / _ _ | _ from=M0 vars="x y"   _ 是空格子（填满以前判断式、量都判不了；跟着它算的 {A M1} 照样挂得上，跟着空格子变的格空着、填上了跟着算）；from=M0：学生每写满一行（配 open M1 edit input=keypad），页面和 M0 比（像哪一步行变换、哪一格不对、同不同解；不判对错）；vars= 未知数的名字（增广矩阵每行在现状里读回成方程，不写是 x1 x2…）
 matrix N = 1 {k} / 0 1              格里的 {…} 写算成一个数的式子（{k}、{A.1,2}、{l - 1}），跟着它变；整张就算跟着算的，学生拨不了，只能 open compare / put / merge
 matrix S = {A + B}                  整个矩阵跟着算（{A B}、{2A}、{k A}、{A^-1}、{A'}；coef(M) 是增广矩阵竖线左边、rhs(M) 右边一列：{coef(M) P - rhs(M)}）；跟着算的学生拨不了，只能 open compare / put / merge

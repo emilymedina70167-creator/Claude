@@ -404,7 +404,7 @@ const field = () => page.evaluate(() => {
 });
 const KEYS = [
   ['type=num', 'type=num answer=3/4', '0.75', 'decimal'],
-  ['type=matrix（全是数）', 'type=matrix answer={A^2}', '7 10 / 15 22', 'decimal'],
+  // type=matrix（全是数）现在按格写（主线第五轮）：真手指在 tools/stage-touch-first.mjs 的 power 一段
   ['不写 type、答案是数', 'answer={a.3-a.1}', '16', 'decimal'],
   ['type=en', 'type=en answer="had started"', 'had started', 'text'],
   ['type=seq', 'type=seq answer="A C B"', 'A C B', 'text'],

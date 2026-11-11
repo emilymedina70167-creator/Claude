@@ -1,0 +1,58 @@
+# 首课走查 · 可交换、方阵的幂、f(A)（线代第 2 讲块 4）：老师只照说明写的一整节；学生猜、整张拖去比、改格子、拨、写矩阵，有猜错的、写错的
+matrix A = 1 2 / 2 4
+matrix B = 2 2 / -1 -1 beside=A
+product C = A B
+mul C
+say "上次你造的 B 让 AB = O。现在把 A、B 换个位置乘。"
+ask value "先别算，猜：BA 是什么？写出来" type=matrix answer={B A} wrong="0 0 / 0 0=以为 AB = O 则 BA 也是 O"
+学生: value 0 0 / 0 0
+remove C
+matrix AB = {A B}
+matrix BA = {B A} beside=AB
+open AB compare
+say "不猜了，算出来看。按住 AB 整张，拖到 BA 上比一比。"
+学生: compare AB BA
+remove AB
+remove BA
+remove A
+remove B
+matrix J = 1 1 / 0 1
+matrix X = 1 0 / 2 3 beside=J
+matrix JX = {J X}
+matrix XJ = {X J} beside=JX
+open X edit range=-3..3
+say "顺序一换，结果就可能变。那什么时候不变？J 不动，你改 X。"
+goal g1 "改 X 的格子，让 JX 和 XJ 一样（X 不能是 O）" when="{J X - X J} = O, X != O"
+@g1 say "这时 JX = XJ：X 和 J 可交换。"
+学生: write X.2,1 0
+学生: write X.2,2 1
+remove X
+remove JX
+remove XJ
+ungoal g1
+dial k = 1 range=1-5 at=Jk
+matrix Jk = {J^k} beside=J
+say "你找到的是 E：单位矩阵和谁都可交换。J 自己和自己当然也可交换，所以 J 的幂有意义。拨 k 看 J 的 k 次方。"
+ask value "看出规律了吗？Jⁿ 是？" type=matrix free=n answer="1 n / 0 1"
+学生: dial k 2
+学生: dial k 3
+学生: value 1 n / 0 1
+remove Jk
+unlabel dial:k
+matrix a = 1 / 2
+matrix b = 1 1 beside=a
+matrix R = {a b}
+matrix R2 = {R^2} beside=R
+say "对。再看一种特别好算的：一列乘一行，R = αβᵀ，每一行都成比例。"
+ask value "R² 是 R 的几倍？" answer=3 wrong="2=看成了每格乘 2; 9=把倍数又平方了"
+学生: value 3
+remove a
+remove b
+remove R
+remove R2
+say "3 正好是 βᵀα = 1×1 + 1×2，也是 R 对角线上的和。所以 Rⁿ = 3ⁿ⁻¹R。最后把多项式用到矩阵上。"
+ask value "f(x) = x² − 2x + 3，f(J) 是？" type=matrix answer={J^2 - 2 J + 3 I} wrong="2 3 / 3 2=常数 3 没乘 E，每格都加了 3"
+学生: value 2 3 / 3 2
+say "常数项 3 在矩阵里是 3E，只加在对角线上。再写一次。"
+ask value "f(J) = J² − 2J + 3E 是？" type=matrix answer={J^2 - 2 J + 3 I}
+学生: value 2 0 / 0 2
