@@ -69,7 +69,8 @@ const isPoint = (p) => (p.kind === 'vec' || p.kind === 'pt') && p.x != null && p
 // 一个部件的值：平面上的向量、点是列向量；别的（一格、结点、边权）是数（49′ 当 49）
 function partQ(p, ref, fill = null) {
   if (isPoint(p)) return [toQ(p.x), toQ(p.y)];
-  if ((p.value === '' || p.value == null) && fill && p.r != null) return fill(p.obj, p);
+  // 空格子试算时拿一个数顶上：矩阵的格，一排格子的空格子（array h = _ 49：主线第二轮）也一样——跟着它的那一格先空着，填上了跟着算出来
+  if ((p.value === '' || p.value == null) && fill && (p.r != null || p.slot != null)) return fill(p.obj, p);
   if (p.value === '' || p.value == null) throw new Error(`${ref} 还空着`);
   const q = toQ(String(p.value).replace(/[′']/g, ''));
   if (!q) throw new Error(`${ref} 是「${p.value}」，不是数`);

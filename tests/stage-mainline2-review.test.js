@@ -98,3 +98,11 @@ test('小：公式 $…$ 里的 {x: … | …} 不当「挑一段」；拨盘同
   assert.match(dryRun(g, 'open g.A~B tag')[0].error, /tag 点的是结点/);
   assert.equal(dryRun(g, 'open g.A~B choose').length, 0);
 });
+
+test('旧课重放量出来的：矩阵的格跟着一排格子里的空格子（挖坑：write a.1 _）先空着、填上了跟着算出来，不整行报错', () => {
+  const s = make('array a = 46 79 56\nwrite a.1 _\nmatrix R = {a.1} {a.2} {a.3}');
+  assert.match(s.stateText(), /第 1 行：□ +79 +56/);
+  assert.match(s.stateText(), /还空着：R\.1,1（跟着算的/);
+  run(s, 'write a.1 38');
+  assert.match(s.stateText(), /第 1 行：38 +79 +56/);
+});
