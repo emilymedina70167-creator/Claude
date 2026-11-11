@@ -27,7 +27,8 @@ import { parseTry, formatReport, HANDS } from './stage-try-lib.js';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PAGE = join(ROOT, 'proto/stage/dist/local.html');
 const EXAMPLES = join(ROOT, 'tools/stage-try-examples');
-const VIEWS = [{ w: 820, h: 1180, tag: '竖屏' }, { w: 1180, h: 820, tag: '横屏' }];
+// STAGE_TRY_VIEWS=竖屏：只演一种朝向（模拟课 tools/stage-sim.mjs 用：学生只有一块屏）
+const VIEWS = [{ w: 820, h: 1180, tag: '竖屏' }, { w: 1180, h: 820, tag: '横屏' }].filter((v) => !process.env.STAGE_TRY_VIEWS || process.env.STAGE_TRY_VIEWS.split(',').includes(v.tag));
 const SETTLE = 900; // 动画走完再量、再截图
 const IDLE_MAX = 30000; // 等课堂循环停下来最多多久
 
