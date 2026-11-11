@@ -96,9 +96,11 @@ test('每一轮：学生做了什么、上一轮没演的行（第几行、原�
 test('样子页带科目：三节课都是数据结构，第一轮带树那一节、不带句子那一节；没写科目（自己写的题目）照旧全带', () => {
   for (const [k, t] of Object.entries(TOPICS)) assert.equal(t.subject, '数据结构', k);
   const m = firstMessage(TOPICS.shell);
-  assert.ok(m.includes(TYPES.tree.doc), '带树那一节');
-  assert.ok(!m.includes(TYPES.sentence.doc), '不带句子那一节');
-  assert.ok(stageSystem({ topic: 'x', subject: '英语' }).includes(TYPES.sentence.doc));
+  // 发出去的那一份压了对齐的空格（主线第三轮）：照压过的样子找
+  const sq = (d) => d.replace(/ {3,}/g, '  ');
+  assert.ok(m.includes(sq(TYPES.tree.doc)), '带树那一节');
+  assert.ok(!m.includes(sq(TYPES.sentence.doc)), '不带句子那一节');
+  assert.ok(stageSystem({ topic: 'x', subject: '英语' }).includes(sq(TYPES.sentence.doc)));
   assert.ok(firstMessage({ topic: '自己写的题目' }).includes(STAGE_DOC), '推不出科目：全带');
 });
 
@@ -391,4 +393,17 @@ test('D1-14：说明写了矩阵最多几行几列；compare 写了整排格子�
   const s = new Scene();
   for (const c of parseScript('array a = 1 2 3\narray b = 1 2 3')) s.apply(c);
   assert.match(dryRun(s, 'compare a b')[0].error, /compare 比的是两个部件（compare a\.3 a\.8）或者两张矩阵（compare A B）.*一排格子不能整排比/);
+});
+
+test('主线第三轮 0：拼出来的说明把对齐用的连续空格压成两个（内容一个字不少），引号里的不动；每门课还在上限里', () => {
+  for (const s of ['', ...Object.keys(SUBJECT_TYPES)]) {
+    const d = stageDoc(s);
+    assert.doesNotMatch(d, / {3,}/, `${s || '全带的'}里没有三个以上连着的空格`);
+  }
+  // 压的只是空格：去掉所有空格以后和没压的一样
+  const raw = [STAGE_COMMON, ...Object.values(TYPES).filter((t) => t.doc && t.create.length).map((t) => t.doc)].join('').replace(/ /g, '');
+  for (const piece of [STAGE_COMMON, TYPES.matrix.doc, TYPES.tree.doc]) assert.ok(stageDoc().replace(/ /g, '').includes(piece.replace(/ /g, '')));
+  assert.ok(raw.length > 0);
+  // 源码里引号里没有这样的空格（有的话压了会改掉老师要照抄的字）
+  for (const t of [STAGE_COMMON, ...Object.values(TYPES).map((x) => `${x.doc || ''}\n${x.example || ''}`)]) for (const m of t.matchAll(/"[^"\n]*"|「[^」\n]*」/g)) assert.doesNotMatch(m[0], / {3,}/);
 });

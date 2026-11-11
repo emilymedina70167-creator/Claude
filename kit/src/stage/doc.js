@@ -119,7 +119,9 @@ export function stageDoc(subject = '') {
   if (skipped.length) parts.push(`（这门课一般用不上、说明没带的：${skipped.join('、')}）`);
   const exType = want && !want.includes('array') ? TYPES[want.find((k) => TYPES[k]?.example)] : TYPES.array;
   parts.push(`例子（一轮）：\n${(exType || TYPES.array).example}`);
-  return parts.join('\n\n');
+  // 源码里写法和说明之间用一串空格对齐着（好读）；发给老师的那一份压成两个——每门课省约 1 KiB，内容一个字不少
+  //（引号里没有这样的空格：tests/stage-doc.test.js 守着）
+  return parts.join('\n\n').replace(/ {3,}/g, '  ');
 }
 export const STAGE_DOC = stageDoc();
 

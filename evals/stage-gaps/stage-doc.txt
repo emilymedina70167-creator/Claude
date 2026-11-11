@@ -19,123 +19,123 @@
 量：页面数的数，写成 名字(东西或部件)（每种东西有哪几个见它那一节）。舞台现在里都写出来；能写进 when=、answer={…}，话和贴的字里写 say "秩是 {rank(m)}" 画成现在的数、跟着变；数不了（没写 key、有空格）时挑战写「判不了」、答案「页面没判成」、字画「?」
 
 说话（旁白，在画面上方一个字一个字写出来）：
-say "从 {a.1} 往后数 5 个，落在 {a.6}。"    {a.1} 画成那个部件的小块（扣着的不露值）；{d} 是拨的数的值；$d$ 是斜体字母（不排公式）；[不稳定] 是能飞到图上的词
+say "从 {a.1} 往后数 5 个，落在 {a.6}。"  {a.1} 画成那个部件的小块（扣着的不露值）；{d} 是拨的数的值；$d$ 是斜体字母（不排公式）；[不稳定] 是能飞到图上的词
 
 对任何部件都能做：
-glow a.1 a.8 / unglow a.1 a.8      点亮（提醒注意）
-lift a.2 / drop a.2               抬起 / 放下（「这一个要动了」）
-pulse a.3                         闪一下
-paint a.1 a.6 g1 / unpaint a.1    染色
-dim a.1-5 / undim a.1-5           灰掉（排除在外的部分）
-cover a / uncover a.6             扣过去看不见值 / 翻开一个（查找、比较时「只能翻开看」就这样演）
-link a.1 a.6 g1 / unlink a        连一道弧（写好几个就依次连；写整样东西就连到它身上）/ 收掉连着 a 和它部件的线
-compare a.3 a.8                   两个比大小（中间冒出「65 > 49」）；两张矩阵整张逐格比
-remove a                          把一样东西拿下舞台
-hide a / show a                   藏起来（照样算、现状照写，学生看不见）/ 摆出来；造的时候写 hide=on 就先藏着（同名重造不写 hide= 照旧）
+glow a.1 a.8 / unglow a.1 a.8  点亮（提醒注意）
+lift a.2 / drop a.2  抬起 / 放下（「这一个要动了」）
+pulse a.3  闪一下
+paint a.1 a.6 g1 / unpaint a.1  染色
+dim a.1-5 / undim a.1-5  灰掉（排除在外的部分）
+cover a / uncover a.6  扣过去看不见值 / 翻开一个（查找、比较时「只能翻开看」就这样演）
+link a.1 a.6 g1 / unlink a  连一道弧（写好几个就依次连；写整样东西就连到它身上）/ 收掉连着 a 和它部件的线
+compare a.3 a.8  两个比大小（中间冒出「65 > 49」）；两张矩阵整张逐格比
+remove a  把一样东西拿下舞台
+hide a / show a  藏起来（照样算、现状照写，学生看不见）/ 摆出来；造的时候写 hide=on 就先藏着（同名重造不写 hide= 照旧）
 
 贴在图上的字（舞台上的东西，能改、能拿掉）：
-label t a#1 a#8 "一样大，先后却换了" side=below tone=note     贴在这几个旁边（side：above / below / left / right；tone：note 小字、key 重点、soft 淡）
-retext t "新的字" / unlabel t / unlabel（全拿掉）     改字 / 拿掉（拿字用 unlabel，remove 只拿东西）；贴的部件没了，字跟着消失，不用再拿
-fly say.1 -> k a#8 a#1           上一句话里第 1 个 [词] 飞到这几个旁边，变成贴着的字（给概念起名字时用）
+label t a#1 a#8 "一样大，先后却换了" side=below tone=note  贴在这几个旁边（side：above / below / left / right；tone：note 小字、key 重点、soft 淡）
+retext t "新的字" / unlabel t / unlabel（全拿掉）  改字 / 拿掉（拿字用 unlabel，remove 只拿东西）；贴的部件没了，字跟着消失，不用再拿
+fly say.1 -> k a#8 a#1  上一句话里第 1 个 [词] 飞到这几个旁边，变成贴着的字（给概念起名字时用）
 
 能拨的数：
-dial d = 5 range=1-5 at=a         一个能拨的数，学生拨它；能写进 {式子} 里驱动任何量（格里的 {d}、整个矩阵 {d A}、array a = {d} 3 5），一拨就跟着变；at= 的还没造也行（造出来就挂上）；rowop、transform 这类动作只照写下时的数做一次，里面不能写拨数
+dial d = 5 range=1-5 at=a  一个能拨的数，学生拨它；能写进 {式子} 里驱动任何量（格里的 {d}、整个矩阵 {d A}、array a = {d} 3 5），一拨就跟着变；at= 的还没造也行（造出来就挂上）；rowop、transform 这类动作只照写下时的数做一次，里面不能写拨数
 dial t = 现在 options="过去 现在 将来"  拨词的拨盘：{t} 写现在的词，when="t = 将来"，set t 将来（不是数，进不了式子）
 {t: 做过了 | 正在做 | 还没做}  照拨盘挑一段（段数 = 拨盘能拨到的个数；能套一层）：贴的字、题卡、挑战的字跟着变，话是说的那一刻
-label n dial:d "{d} 组" side=right   字可以贴在拨数旁边
-set d 5                            你来拨
-unlabel dial:d                     收起拨数
+label n dial:d "{d} 组" side=right  字可以贴在拨数旁边
+set d 5  你来拨
+unlabel dial:d  收起拨数
 
 镜头：camera a.1-7（凑近这几个）/ camera all（看全部）；wait 600（停一下，毫秒）
 
 让学生自己动、给挑战（每动一下页面当场算、当场判，学生做的每一下下一次都告诉你）：
-open a                              交给学生直接动（这里是拖着两格换位置；每种东西能 open 的动作、学生怎么动、翻成哪一行，见各自一节）
-close a                             收回来（close a 动作：只收那一种）
+open a  交给学生直接动（这里是拖着两格换位置；每种东西能 open 的动作、学生怎么动、翻成哪一行，见各自一节）
+close a  收回来（close a 动作：只收那一种）
 同一处按法不一样的（点、滑、按住再拖）能一起开；按法一样的第二项当场报错，先 close 前一项
 同一项再开一次是换掉它：再写一遍 open，照新写的 wrong=、range=、undo= 办
 页面判对错的动作（树的 rotate insert place、矩阵的 rowop、句子的 mark refer）在 open 那一行写你事先定的：wrong=quiet 照做、只记下（默认）/ wrong=mark 照做、淡淡圈一下 / wrong=block 不让做、弹回去；call=wrong 一走偏就叫你 / call=done 做完马上叫你（不算试了好几下）。这个世界做不到的（一行乘 0）永远弹回去
 undo=on（哪种 open 都能写）：右上角「撤一步」，学生撤回自己这一回合的上一下；拨数、做到挑战、做完了、引出过预写的那一下撤不了
-keep a "换之前"                     存下 a 现在的样子（最多 6 个，同名的换掉）；keep a "换过" after=swap：以后学生每做完一次 swap 页面替你存成「换过」（after=off 停）
-back a "换之前" / back a             回到存着的那一刻 / 回到学生最后那一下之前（隔着你的一轮也行，你后来改的也一起回去；学生按过「回到……」再写是回到按之前）；只回这样东西的数据，挑战照回去的样子重判
-open a back="换之前"                 学生那边多一个「回到换之前」按钮 = back a "换之前"（不叫你）
-goal g1 "把 {a} 拖成从小到大" when="a sorted"     挑战（左上角一条）；写下就已经成立的不收；做到过就一直算（之后不成立了，现状写「做到过；现在不成立」）
+keep a "换之前"  存下 a 现在的样子（最多 6 个，同名的换掉）；keep a "换过" after=swap：以后学生每做完一次 swap 页面替你存成「换过」（after=off 停）
+back a "换之前" / back a  回到存着的那一刻 / 回到学生最后那一下之前（隔着你的一轮也行，你后来改的也一起回去；学生按过「回到……」再写是回到按之前）；只回这样东西的数据，挑战照回去的样子重判
+open a back="换之前"  学生那边多一个「回到换之前」按钮 = back a "换之前"（不叫你）
+goal g1 "把 {a} 拖成从小到大" when="a sorted"  挑战（左上角一条）；写下就已经成立的不收；做到过就一直算（之后不成立了，现状写「做到过；现在不成立」）
 when= 两边写数、部件、东西的名字、拨数、量、O（零矩阵）、I（单位矩阵），部件比部件也行（a.1 < a#6）；比较 = != < <= > >=；a sorted（desc 是从大到小）；每种东西自己的判断式写「名字 判断式 [参数]」（t avl、m rank=2、s parsed，见各节）；逗号连着的都要成立，| 隔开的几组有一组成立就算（when="a.1 < a.2 | a.9 < a.10"）；不能写坐标，也不能写字（要比字就比部件）
 挑战后面还能写：call=now 做到就马上叫你（不写是学生手上还有事就攒着）；on="就这样" 学生按这一轮 ask next 的「就这样」才判（没做到也叫你）；collect=a n=3 每做到一次、a 和收过的都不一样就收一张、演 @g1，收齐了叫你
 when= 两边、collect= 能直接写 {式子}（不用先藏辅助矩阵）：when="{A B - B A} = O"、"{det(A - k I)} = 0"、collect={A B}；现状写它现在的值
-@g1 say "排好了！"                  学生做到 g1 的那一刻马上演（不等你；你自己的行让它成立的不演，下一条告诉你）：一句确认、下一个挑战、一个 ask 都行；写过的一直留着到做到为止，下一轮不用再写；@g1 里出的 goal g2 能接着写 @g2，最多三层
+@g1 say "排好了！"  学生做到 g1 的那一刻马上演（不等你；你自己的行让它成立的不演，下一条告诉你）：一句确认、下一个挑战、一个 ask 都行；写过的一直留着到做到为止，下一轮不用再写；@g1 里出的 goal g2 能接着写 @g2，最多三层
 @t.done / @t.right 开头的：t 做完了（页面算出没有下一步；学生手上没事了才叫你）/ 学生在 t 上做对一步时马上演（只演一次）；写在 open 页面判对错的动作之后、现在还有下一步时（平了的树开着删、摘也行：删完再修平时演）
-@ask.right say "对。"                写在这一轮最后那个 ask 前面：学生答对它时马上演；那一问要页面判得了对错（tap、pick 有预期的，value 有答案），判不了当场报
+@ask.right say "对。"  写在这一轮最后那个 ask 前面：学生答对它时马上演；那一问要页面判得了对错（tap、pick 有预期的，value 有答案），判不了当场报
 预写只收确认和揭开下一小问；走偏不能预写（@t.wrong、@ask.wrong 会报错），学生走偏以后怎么讲等你看着写。@ 的行写下时就在今天的舞台上试一遍：今天演不了的（学生消成阶梯形以后才画得了的 stairs m）写不进去；指着还没有的部件只查写法（演时还没有就不演，告诉你）
 预写的行照先后演，say 要等读完：换 open、出新 goal 写在 say 前面，不然学生在这句话演着时做的一下还照旧的办
-ungoal g1                           拿掉挑战
+ungoal g1  拿掉挑战
 
 等学生（每一轮最后一行，一轮只有一个；一轮也可以不写 ask，以一个还没做到的挑战结尾）：
-ask tap a "那 {a.2} 和谁一组？"            学生点一个（写 a 是哪一个都能点；写 a#1 a#8 是只能点这几个）
-ask tap a "…" expect=a.7                   你预期的那一个（写整样东西或一段，点到里面哪一个都算）：页面告诉你学生点没点对
-ask pick a "哪几格会动？都点出来" button="猜好了" expect="a.2 a.6"     学生点几个、按按钮交，页面告诉你多点、漏点的（写一段是里面每个都要点；order=on 连先后一起比）；圈留到你下一轮写完（unpick 收）；reveal=on：之后变了的圈变实线、没变的变虚线（给不给学生看由你定；揭晓以前圈一直留着）
-ask drag a#1 a#6 "把小的拖到前面"          学生拖（能拖的东西才行，见各节）
-ask next "拨一下 $d$，看出规律点下面" button="看出来了"     学生看完 / 拨完点按钮
-ask say "你觉得为什么？"                    学生写一句话
-ask value "一共比较了几次？" answer=4      学生填一个答案，页面当场判（不写 type= 时数按数比，3/4 = 0.75）；answer= 可以不写（只收不判，这时 type=、wrong= 也不写）
-ask value "{a.3} 比 {a.6} 大多少？" answer={a.3-a.6} type=num wrong="-52=减反了"     type= 选判法：num 数、formula 含 n 的式子（加 free=n）、matrix 矩阵（1 2 / 0 1）、set 数集、equation 方程、seq 序列、en 英文（学生的键盘跟着换）；式子里乘号能省（2n）；answer={式子} 页面照舞台现算；wrong="错答=说明了什么"（几条用 ; 隔开）只告诉你，学生只看到对不对
+ask tap a "那 {a.2} 和谁一组？"  学生点一个（写 a 是哪一个都能点；写 a#1 a#8 是只能点这几个）
+ask tap a "…" expect=a.7  你预期的那一个（写整样东西或一段，点到里面哪一个都算）：页面告诉你学生点没点对
+ask pick a "哪几格会动？都点出来" button="猜好了" expect="a.2 a.6"  学生点几个、按按钮交，页面告诉你多点、漏点的（写一段是里面每个都要点；order=on 连先后一起比）；圈留到你下一轮写完（unpick 收）；reveal=on：之后变了的圈变实线、没变的变虚线（给不给学生看由你定；揭晓以前圈一直留着）
+ask drag a#1 a#6 "把小的拖到前面"  学生拖（能拖的东西才行，见各节）
+ask next "拨一下 $d$，看出规律点下面" button="看出来了"  学生看完 / 拨完点按钮
+ask say "你觉得为什么？"  学生写一句话
+ask value "一共比较了几次？" answer=4  学生填一个答案，页面当场判（不写 type= 时数按数比，3/4 = 0.75）；answer= 可以不写（只收不判，这时 type=、wrong= 也不写）
+ask value "{a.3} 比 {a.6} 大多少？" answer={a.3-a.6} type=num wrong="-52=减反了"  type= 选判法：num 数、formula 含 n 的式子（加 free=n）、matrix 矩阵（1 2 / 0 1）、set 数集、equation 方程、seq 序列、en 英文（学生的键盘跟着换）；式子里乘号能省（2n）；answer={式子} 页面照舞台现算；wrong="错答=说明了什么"（几条用 ; 隔开）只告诉你，学生只看到对不对
 
 ## 舞台上能放的东西
 
 一排格子（排序、查找、哈希）：
-array a = 49 38 65 97 76 13 27 49′ 55 04      造一排格子（最多 16 格；同一名字再造就换掉）
+array a = 49 38 65 97 76 13 27 49′ 55 04  造一排格子（最多 16 格；同一名字再造就换掉）
 写法：a 整排；a.3 现在第 3 格；a.2-5 第 2 到 5 格；a#8 一开始在第 8 格的那一个（交换、插入以后跟着它走）
-hop a.1 -> a.6 color=g1 label="隔 5 个"     小点一格一格跳过去、数着跳了几下，留一道弧
-swap a.1 a.6                      交换（走弧线）
-move a#6 -> a.2                   插入：挪到第 2 格，中间的各让一格
-write a.3 99                      改一格的值
-ptr mid a.5 / unptr mid           格子下面的指针（同名的再写就挪过去）
-group a stride=5                  按「隔 5 个」分组：每组染色、连起来（stride 可以写拨的数的名字，学生一拨就重新分）
-split a / merge a                 每组下到自己的一排 / 合回一排
-ask drag a#1 a#6 "把小的拖到前面"   学生按住一格拖到同一排另一格上，两格交换（页面照做，再告诉你）
+hop a.1 -> a.6 color=g1 label="隔 5 个"  小点一格一格跳过去、数着跳了几下，留一道弧
+swap a.1 a.6  交换（走弧线）
+move a#6 -> a.2  插入：挪到第 2 格，中间的各让一格
+write a.3 99  改一格的值
+ptr mid a.5 / unptr mid  格子下面的指针（同名的再写就挪过去）
+group a stride=5  按「隔 5 个」分组：每组染色、连起来（stride 可以写拨的数的名字，学生一拨就重新分）
+split a / merge a  每组下到自己的一排 / 合回一排
+ask drag a#1 a#6 "把小的拖到前面"  学生按住一格拖到同一排另一格上，两格交换（页面照做，再告诉你）
 array h = _ 49 38  _ 是空格子（write h.2 _ 空出来）
 open a move  学生按住一张拖：到另一张上 = swap a#6 a#1，两张之间 = move a#6 -> a.2（插进去）
 open a edit  学生点一格键盘写数 = write a.3 26（只开几格 open a.1-2 edit）
 量：inversions(a) 前大后小几对（a.2-5 只数这段）、blank(a) 空几格；这两项页面不判对错，只告诉你做了什么、几对变几对
 
 树（二叉树遍历、二叉排序树、平衡二叉树、堆）：
-tree t = 50 30 70 20 40 _ 80      按层序造（_ 是空，空的下面不用再写；最多 31 个结点）
+tree t = 50 30 70 20 40 _ 80  按层序造（_ 是空，空的下面不用再写；最多 31 个结点）
 写法：t.40 值是 40 的结点；t#3 层序第 3 个（跟着结点走：值重复、换过值以后用）；t.30* 30 和它整棵子树
-insert t 35                       二叉排序树插入：从根一路比下去，在空位长出来
-insert t.80 left 75               直接长在 80 的左边（right 右边）
-append t 15                       接在层序最后（堆的插入）
-delete t.30                       删掉（叶子直接拿掉；一个孩子就顶上来；两个孩子用中序后继顶上，by=pred 用前驱）
-search t 40                       二叉排序树查找：从根比下去，找到亮一下，找不到落在空位
-swap t.20 t.40                    两个结点换值（堆的调整）；write t.20 25 改值
-rotate t.50 right                 右旋（left 左旋）；也能写 LL / RR / LR / RL（t.50 是最小不平衡子树的根）
-walk t.50 t.30 t.40               一个圈沿着树枝走过这几个（查找路径）
-visit t.50 t.30 / unvisit t       按顺序编访问号（遍历一步一步来）
-traverse t in upto=3              整趟遍历：pre / in / post / level，upto 走到第几个停（不写走完）
-tag t.50 "h=3" / untag t          结点左上角写个小字（最多 8 个字）
-bf t / unbf t                     每个结点右上角标平衡因子（跟着树变；舞台现状里写出失衡的是谁、哪一型）
-heights t / unheights t           每个结点右下角标子树高（跟着树变；和 tag、bf 一起开着不挡）
-ask drag t "把它往上换"             学生把一个结点的值拖到另一个结点上，两个换值（页面照做，再告诉你）
-tree t = 50 30 70 tray="20 40 80"   带托盘：待插的数按顺序摆在树下面，插进去一个拿掉一个
-tree h = 90 80 70 layout=compact    排法造的时候定：二叉排序树照中序一个结点一列（插入只挪右边、旋转只上下移），别的（堆……）紧凑排；layout=inorder 或 compact 自己定；堆从一两个结点长起来（那时也算二叉排序树）写 layout=compact
+insert t 35  二叉排序树插入：从根一路比下去，在空位长出来
+insert t.80 left 75  直接长在 80 的左边（right 右边）
+append t 15  接在层序最后（堆的插入）
+delete t.30  删掉（叶子直接拿掉；一个孩子就顶上来；两个孩子用中序后继顶上，by=pred 用前驱）
+search t 40  二叉排序树查找：从根比下去，找到亮一下，找不到落在空位
+swap t.20 t.40  两个结点换值（堆的调整）；write t.20 25 改值
+rotate t.50 right  右旋（left 左旋）；也能写 LL / RR / LR / RL（t.50 是最小不平衡子树的根）
+walk t.50 t.30 t.40  一个圈沿着树枝走过这几个（查找路径）
+visit t.50 t.30 / unvisit t  按顺序编访问号（遍历一步一步来）
+traverse t in upto=3  整趟遍历：pre / in / post / level，upto 走到第几个停（不写走完）
+tag t.50 "h=3" / untag t  结点左上角写个小字（最多 8 个字）
+bf t / unbf t  每个结点右上角标平衡因子（跟着树变；舞台现状里写出失衡的是谁、哪一型）
+heights t / unheights t  每个结点右下角标子树高（跟着树变；和 tag、bf 一起开着不挡）
+ask drag t "把它往上换"  学生把一个结点的值拖到另一个结点上，两个换值（页面照做，再告诉你）
+tree t = 50 30 70 tray="20 40 80"  带托盘：待插的数按顺序摆在树下面，插进去一个拿掉一个
+tree h = 90 80 70 layout=compact  排法造的时候定：二叉排序树照中序一个结点一列（插入只挪右边、旋转只上下移），别的（堆……）紧凑排；layout=inorder 或 compact 自己定；堆从一两个结点长起来（那时也算二叉排序树）写 layout=compact
 扣着的结点（cover t.40）话里的小块分不出是哪一个：要学生指着它，用 ask pick 或者说位置
 学生自己转、自己插（页面判每一下）：
-open t rotate wrong=mark undo=on    学生把一个结点拖到它的父亲上 = 在父亲那里转（左孩子拖上去 = rotate t#1 right）
-open t insert                       学生把托盘里的数拖进树 = insert t 47（页面从根比下去）
-open t place                        学生把托盘里的数拖到一个空位 = insert t#2 right 47（学生自己摆，不管托盘先后：摆完还是二叉排序树就对；和 insert 一次开一种）
-open t pluck                        学生点一片叶子 = delete t#4（点里面的结点：只能摘叶子）
-open t delete                       学生点哪个删哪个 = delete t.30（照上面 delete 的删法）
-@t.done say "插完了，也平了。"         t 做完了马上演（做完 = 平衡了、托盘插完了；只开 insert / place 的是托盘插完了）
+open t rotate wrong=mark undo=on  学生把一个结点拖到它的父亲上 = 在父亲那里转（左孩子拖上去 = rotate t#1 right）
+open t insert  学生把托盘里的数拖进树 = insert t 47（页面从根比下去）
+open t place  学生把托盘里的数拖到一个空位 = insert t#2 right 47（学生自己摆，不管托盘先后：摆完还是二叉排序树就对；和 insert 一次开一种）
+open t pluck  学生点一片叶子 = delete t#4（点里面的结点：只能摘叶子）
+open t delete  学生点哪个删哪个 = delete t.30（照上面 delete 的删法）
+@t.done say "插完了，也平了。"  t 做完了马上演（做完 = 平衡了、托盘插完了；只开 insert / place 的是托盘插完了）
 判断式（goal 的 when=）：t avl（平衡了）、t bst（还是二叉排序树）、t height=4（有几层）；量：count(t) 结点数、height(t) 层数（写 t.50 是以它为根的那棵子树）、tray(t) 托盘还剩几个
 
 图（BFS / DFS、最小生成树、最短路、拓扑排序）：
-graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:8 D-E:3    造一张无向图（:4 是权，可以不写，也能写 {式子}：A-B:{k}；有向写 A>B；单独的结点写 E；最多 16 个；自动排好）
-graph h = A-B B-C A-C pos="A=0,0 B=2,0 C=1,1"     自己给坐标（每个结点都给，一个单位约一条边长，y 往下）
+graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:8 D-E:3  造一张无向图（:4 是权，可以不写，也能写 {式子}：A-B:{k}；有向写 A>B；单独的结点写 E；最多 16 个；自动排好）
+graph h = A-B B-C A-C pos="A=0,0 B=2,0 C=1,1"  自己给坐标（每个结点都给，一个单位约一条边长，y 往下）
 写法：g.A 结点；g.A~B 边（paint、glow、dim 对边也行：Kruskal 选进来的染色、成环的灰掉）；g.nodes 全部结点；g.edges 全部边
-tag g.A 0 / tag g ∞ / untag g     结点旁边写个数（dist、lowcost……，最多 8 个字），改了会换一下
-relax g.A -> g.B                  松弛：A 的数 + 边权 比 B 的小就改成它（小点带着数沿边过去）；只认数，先 tag g ∞ 再 tag g.A 0（写 ? 会报不是数）
-visit g.A g.C / unvisit g         编访问号（和上一个访问的有边，圈就沿边走过去）
-walk g.A g.B g.D                  一个圈沿着边走过这几个（要相邻）
-take g.A                          拓扑排序：拿掉 A 和它的边，A 排到下面的序列里
-deg g / undeg g                   每个结点旁边标入度（无向图是度），拿掉结点跟着变
+tag g.A 0 / tag g ∞ / untag g  结点旁边写个数（dist、lowcost……，最多 8 个字），改了会换一下
+relax g.A -> g.B  松弛：A 的数 + 边权 比 B 的小就改成它（小点带着数沿边过去）；只认数，先 tag g ∞ 再 tag g.A 0（写 ? 会报不是数）
+visit g.A g.C / unvisit g  编访问号（和上一个访问的有边，圈就沿边走过去）
+walk g.A g.B g.D  一个圈沿着边走过这几个（要相邻）
+take g.A  拓扑排序：拿掉 A 和它的边，A 排到下面的序列里
+deg g / undeg g  每个结点旁边标入度（无向图是度），拿掉结点跟着变
 choose g.A~B / unchoose g.A~B / unchoose g  把边选进来（粗金线）/ 拿掉 / 全拿掉
 open g choose  学生点一条边 = choose g.A~B（选着的再点 = unchoose g.A~B）；不判对错，每一下告诉你选了几条、总权、连成几块、成没成圈
 open g visit  学生点结点 = visit g.A
@@ -143,85 +143,85 @@ open g tag  学生点结点键盘写数 = tag g.A 5（有 ∞ 键）；visit、t
 判断式（when=）：g tree（选的边正好是生成树）、g cyclic（有圈）、g connected（连成一块；有向图都不看箭头）；量：chosen(g) 选了几条、weight(g) 总权、pieces(g) 几块、visited(g) 访问了几个
 
 矩阵（线代：行变换、消元、秩、乘法）：
-matrix m = 1 2 3 / 4 5 6 / 7 8 10   造矩阵（/ 分行，最多 6 行 8 列；数能写 -3、1/2；| 是增广矩阵的竖线；beside=p 放在 p 右边）
+matrix m = 1 2 3 / 4 5 6 / 7 8 10  造矩阵（/ 分行，最多 6 行 8 列；数能写 -3、1/2；| 是增广矩阵的竖线；beside=p 放在 p 右边）
 写法：m.2,3 第 2 行第 3 列；m.r2 第 2 行；m.c3 第 3 列
-matrix M1 = _ _ | _ / _ _ | _ from=M0 vars="x y"   _ 是空格子（填满以前判断式、量都判不了；跟着它算的 {A M1} 照样挂得上，跟着空格子变的格空着、填上了跟着算）；from=M0：学生每写满一行（配 open M1 edit input=keypad），页面和 M0 比（像哪一步行变换、哪一格不对、同不同解；不判对错）；vars= 未知数的名字（增广矩阵每行在现状里读回成方程，不写是 x1 x2…）
-matrix N = 1 {k} / 0 1              格里的 {…} 写算成一个数的式子（{k}、{A.1,2}、{l - 1}），跟着它变；整张就算跟着算的，学生拨不了，只能 open compare / put / merge
-matrix S = {A + B}                  整个矩阵跟着算（{A B}、{2A}、{k A}、{A^-1}、{A'}；coef(M) 是增广矩阵竖线左边、rhs(M) 右边一列：{coef(M) P - rhs(M)}）；跟着算的学生拨不了，只能 open compare / put / merge
-matrix Sum = collect                收集用的（collect - 是第一张减后面的）：空着是一个空格，put AB Sum 放进一张（学生拖、你写都行）就跟着算 {AA + AB}
-rowop m r2 - 3r1                  行变换：r1 的副本乘 -3 飘到 r2 上加进去（也能写 r2 = r2 - 3r1、r3 + 1/2 r1；连着几步用逗号：r2 - 4r1, r3 - 7r1）
-rowop m r1 <-> r3                 交换两行（走弧线）
-rowop m 3r2                       一行乘倍数（-r1、r2 / 3）；列变换把 r 换成 c
-write m.2,3 5                     改一个数
-pivot m.1,1 / unpivot m           主元框起来
-stairs m / unstairs m             画阶梯线（已经是阶梯形才行），全零行淡下去
-product C = A B                   A、B 排成一行，后面「= C」（C 先空着；再写 product C = B A 就在原处换槽翻成 BA）
-mul C.1,2                         A 的第 1 行、B 的第 2 列一起亮，逐对相乘再相加，写进 C.1,2（mul C 一格格全算）；算出来的格以后跟着 A、B 自动重算
-open B edit range=-3..3           学生点 B 的一格用 ± 拨里面的数（AB、BA 当场跟着变）
-open C explain                    学生点乘积的一格，页面当场演它怎么一行乘一列算出来（还空着的就当场算上）
-open AB compare                   学生把 AB 整张拖到另一张上 = compare AB BA（逐格比，两张都不变）
-open AB put                       学生把 AB 拖进收集用的 Sum = put AB Sum（大小不一样放不进去）
-open X merge                      学生把 X 拖到 Y 上并同类项 = merge X Y（只认 数 × 同一个矩阵：{-2 A} 并 {-A} 成 {-3 A}，X 拿下舞台，撤不了、不写 undo=on；并成 0 是 O）；三种都不判对错，同一张只开一种；学生按整张哪儿都拎得起来（格上开着 edit 时按括号）
+matrix M1 = _ _ | _ / _ _ | _ from=M0 vars="x y"  _ 是空格子（填满以前判断式、量都判不了；跟着它算的 {A M1} 照样挂得上，跟着空格子变的格空着、填上了跟着算）；from=M0：学生每写满一行（配 open M1 edit input=keypad），页面和 M0 比（像哪一步行变换、哪一格不对、同不同解；不判对错）；vars= 未知数的名字（增广矩阵每行在现状里读回成方程，不写是 x1 x2…）
+matrix N = 1 {k} / 0 1  格里的 {…} 写算成一个数的式子（{k}、{A.1,2}、{l - 1}），跟着它变；整张就算跟着算的，学生拨不了，只能 open compare / put / merge
+matrix S = {A + B}  整个矩阵跟着算（{A B}、{2A}、{k A}、{A^-1}、{A'}；coef(M) 是增广矩阵竖线左边、rhs(M) 右边一列：{coef(M) P - rhs(M)}）；跟着算的学生拨不了，只能 open compare / put / merge
+matrix Sum = collect  收集用的（collect - 是第一张减后面的）：空着是一个空格，put AB Sum 放进一张（学生拖、你写都行）就跟着算 {AA + AB}
+rowop m r2 - 3r1  行变换：r1 的副本乘 -3 飘到 r2 上加进去（也能写 r2 = r2 - 3r1、r3 + 1/2 r1；连着几步用逗号：r2 - 4r1, r3 - 7r1）
+rowop m r1 <-> r3  交换两行（走弧线）
+rowop m 3r2  一行乘倍数（-r1、r2 / 3）；列变换把 r 换成 c
+write m.2,3 5  改一个数
+pivot m.1,1 / unpivot m  主元框起来
+stairs m / unstairs m  画阶梯线（已经是阶梯形才行），全零行淡下去
+product C = A B  A、B 排成一行，后面「= C」（C 先空着；再写 product C = B A 就在原处换槽翻成 BA）
+mul C.1,2  A 的第 1 行、B 的第 2 列一起亮，逐对相乘再相加，写进 C.1,2（mul C 一格格全算）；算出来的格以后跟着 A、B 自动重算
+open B edit range=-3..3  学生点 B 的一格用 ± 拨里面的数（AB、BA 当场跟着变）
+open C explain  学生点乘积的一格，页面当场演它怎么一行乘一列算出来（还空着的就当场算上）
+open AB compare  学生把 AB 整张拖到另一张上 = compare AB BA（逐格比，两张都不变）
+open AB put  学生把 AB 拖进收集用的 Sum = put AB Sum（大小不一样放不进去）
+open X merge  学生把 X 拖到 Y 上并同类项 = merge X Y（只认 数 × 同一个矩阵：{-2 A} 并 {-A} 成 {-3 A}，X 拿下舞台，撤不了、不写 undo=on；并成 0 是 O）；三种都不判对错，同一张只开一种；学生按整张哪儿都拎得起来（格上开着 edit 时按括号）
 学生自己消元（rowop 页面判每一下；乘积不能 open rowop）：
-open m rowop wrong=mark call=wrong    学生把一行左边的把手拖到另一行上 = 倍加（弹倍数框写 -3：rowop m r2 - 3r1）；拖到行号上 = 对调（rowop m r1 <-> r2）；点行号 = 倍乘（rowop m (-1/2)r1）
-open m edit input=keypad          学生点一格用数字键盘写（能写 -3/2；写了 range= 才限范围）= write m.2,3 -3/2（页面不判，告诉你的就是这一行；空格子 _ 都写满了算做完，学生手上没事了就叫你）
+open m rowop wrong=mark call=wrong  学生把一行左边的把手拖到另一行上 = 倍加（弹倍数框写 -3：rowop m r2 - 3r1）；拖到行号上 = 对调（rowop m r1 <-> r2）；点行号 = 倍乘（rowop m (-1/2)r1）
+open m edit input=keypad  学生点一格用数字键盘写（能写 -3/2；写了 range= 才限范围）= write m.2,3 -3/2（页面不判，告诉你的就是这一行；空格子 _ 都写满了算做完，学生手上没事了就叫你）
 判断式（when=）：m stairs（阶梯形）、m rref（行最简形）、m rank=2（整张的秩，增广的是 r(A | b)）、m rankA=2（竖线左边的秩 r(A)）、m same B（和 B 行等价）；量：rank(m)、rankA(m)、free(m)（自由变量几个）、det(m)（方阵）；现状里还写解的样子，跟着拨数的把每个能拨的值扫一遍
 做完了 = 成了阶梯形（@m.done 这时演）；往上化成行最简形页面不判对错，要的话写 goal … when="m rref"
-ask value "A² 是？" type=matrix answer={A^2} wrong="1 1 / 1 1=逐格平方了"     学生写一张矩阵（行用「 / 」或 ; 隔开，1/3 是一格分数），页面照 A 现算答案
-ask value "Aⁿ 是？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"     每格是含 n 的式子：学生一格一个式子框，页面逐格代 n 判，哪一格不对告诉你（学生只看到整张对不对）；一列（一行）的通解加 solve=on（free=k solve=on answer="-2+4k / 1-k / k"）按集合判：换了参数、特解的同一条线也对
+ask value "A² 是？" type=matrix answer={A^2} wrong="1 1 / 1 1=逐格平方了"  学生写一张矩阵（行用「 / 」或 ; 隔开，1/3 是一格分数），页面照 A 现算答案
+ask value "Aⁿ 是？" type=matrix free=n answer="1 n n(n-1)/2 / 0 1 n / 0 0 1"  每格是含 n 的式子：学生一格一个式子框，页面逐格代 n 判，哪一格不对告诉你（学生只看到整张对不对）；一列（一行）的通解加 solve=on（free=k solve=on answer="-2+4k / 1-k / k"）按集合判：换了参数、特解的同一条线也对
 answer={A B}、{A^2}、{3 A}、{A^-1}、{A'} 时页面自己认乘反、逐格乘方、只乘一行或一格、逐格取倒数或没除以行列式、没转置，对上了告诉你（你写的 wrong= 先比）
 
 平面（向量、线性组合、张成、线性变换、特征向量）：
-plane p range=-4..4               造坐标平面（网格、坐标轴，y 朝上）
+plane p range=-4..4  造坐标平面（网格、坐标轴，y 朝上）
 写法：p.u 向量 u（从原点出发的箭头）；p.P 点 P
-vec p u = 2 1 color=g1            加向量；再写一次就滑到新坐标
-vec p w = 2u - v                  线性组合（u、v 变了它跟着变；系数能写拨的数：vec p w = k u）
-vec p w = {A v}                   跟着算：矩阵 A 乘 v（A、v 一变 w 跟着变；学生拖不动 w）
-point p P = 2 3                   加一个点
-sum p w = u + v                   首尾相接画出和（平行四边形法则）
+vec p u = 2 1 color=g1  加向量；再写一次就滑到新坐标
+vec p w = 2u - v  线性组合（u、v 变了它跟着变；系数能写拨的数：vec p w = k u）
+vec p w = {A v}  跟着算：矩阵 A 乘 v（A、v 一变 w 跟着变；学生拖不动 w）
+point p P = 2 3  加一个点
+sum p w = u + v  首尾相接画出和（平行四边形法则）
 span p u / span p u v / unspan p  淡淡涂上张成的直线或整个平面（写 stay 就钉住这时的样子，能钉几条）
-transform p A                     线性变换：网格和向量一起平滑地变过去（A 是舞台上的 2×2 矩阵，也能直接写 transform p = 1 1 / 0 1；再写是接着变）
-untransform p                     退回原样
-unvec p u                         拿掉向量或点
-ask drag p.u "…"                  学生拖向量末端（落在格点上），页面照做，告诉你新坐标
+transform p A  线性变换：网格和向量一起平滑地变过去（A 是舞台上的 2×2 矩阵，也能直接写 transform p = 1 1 / 0 1；再写是接着变）
+untransform p  退回原样
+unvec p u  拿掉向量或点
+ask drag p.u "…"  学生拖向量末端（落在格点上），页面照做，告诉你新坐标
 
 句子（英语长难句：先找谓语，再分主干、从句、非谓语、插入语，按意群断开）：
-sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."      造一句（标点贴着前一个词，长了自动折行；句子里有 " 就用「」括起来）；key= 是正确拆法：照抄句子，加 [成分 词…]（成分写缩写 S V O P A Attr RC NF……），学生拉的括号页面照它判（key 没拉的段不判），不写不判
+sentence s = "The man who lives next door is a doctor." key="[S The man [RC who lives next door]] [V is] [P a doctor]."  造一句（标点贴着前一个词，长了自动折行；句子里有 " 就用「」括起来）；key= 是正确拆法：照抄句子，加 [成分 词…]（成分写缩写 S V O P A Attr RC NF……），学生拉的括号页面照它判（key 没拉的段不判），不写不判
 写法：s.3 现在第 3 个词；s.2-5 第 2 到 5 个；s.who 这个词（出现几次写 s.that:2）；s.who-door 从 who 到 door；s#3 一开始第 3 个的那个词（挪了、改写了跟着走）
-mark s.1-6 主语 / unmark s.1-6     词下面一道括号、下面写成分（套着的一层层往下排；颜色按成分，也能写 g1～g6）
-tag s.7 V / untag s.7             词上面的小标签（S、V、谓语1；最多 8 个字）
-tally s V / untally s             学生拉的每道括号上标出里面 key 的谓语几个，句尾标括号外的几个（V 换成别的成分就数那一种；只写整句）
-fold s.3-6 / unfold s.3           折成一个小方块只留主干（别的词滑过去补位；方块上写这一段的成分，也能 fold s.3-6 "从句"；套着折的 unfold 先展开外层）
-move s.3 after s.5                挪到别处讲倒装、还原语序（也能 before s.1、-> s.1），别的词让开
-cut s.6 / uncut s                 第 6 个词后面断开（意群的斜线）
-refer s.3 -> s.2 / unrefer s.3    箭头：which、it 指的是谁（指一段写 s.1-2，指整句写 s）
-rewrite s "The man living next door is a doctor."    改写整句：同样的词滑到新位置，新的淡进来
+mark s.1-6 主语 / unmark s.1-6  词下面一道括号、下面写成分（套着的一层层往下排；颜色按成分，也能写 g1～g6）
+tag s.7 V / untag s.7  词上面的小标签（S、V、谓语1；最多 8 个字）
+tally s V / untally s  学生拉的每道括号上标出里面 key 的谓语几个，句尾标括号外的几个（V 换成别的成分就数那一种；只写整句）
+fold s.3-6 / unfold s.3  折成一个小方块只留主干（别的词滑过去补位；方块上写这一段的成分，也能 fold s.3-6 "从句"；套着折的 unfold 先展开外层）
+move s.3 after s.5  挪到别处讲倒装、还原语序（也能 before s.1、-> s.1），别的词让开
+cut s.6 / uncut s  第 6 个词后面断开（意群的斜线）
+refer s.3 -> s.2 / unrefer s.3  箭头：which、it 指的是谁（指一段写 s.1-2，指整句写 s）
+rewrite s "The man living next door is a doctor."  改写整句：同样的词滑到新位置，新的淡进来
 sentence s = "I {t: was holding | am holding | will be holding} it."  句子跟着拨盘 t 变（先 dial t … options=）：一拨就照 rewrite 重排，别的词编号不变、圈着那一整段的括号跟着走；key= 里那一段也写 {t: … | …}；rewrite / move 以后不再跟
-ask drag s.7 "把 is 挪到句首"         学生按住一个词拖到别处（页面照做，再告诉你）
+ask drag s.7 "把 is 挪到句首"  学生按住一个词拖到别处（页面照做，再告诉你）
 学生自己拆（mark 页面照 key 判每一下）：
-open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的，交中文）= mark s.1-6 主语；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句；key 写 [Attr/NF …] 是两种都对；学生拉的括号上有 ✕，点了 = unmark s.1-6（不判）
-open s fold                         学生点一道括号或括号里的词 = fold s.3-6，点小方块 = unfold s.3（页面不判；里层折着也能折外层）
-open s move                         学生按住一道括号拖到两个词之间 = move s.3-6 after s.9（整段挪；按住一个词挪一个，挪到最前面 = move s.7 before s.1）；mark、fold、move 三种能一起开
-open s.3 refer                      学生从 who 右上角的钩上拉线，松在词、括号、句子外框上 = refer s.3 -> s.2 / s.1-2 / s（整句）；造句子时写 links="who -> s.1-2; !who -> door=连到了从句里的名词" 就照它判（! 是常见的错连）；学生连的线头上有 ✕，点了 = unrefer s.3
+open s mark wrong=mark  学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的，交中文）= mark s.1-6 主语；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句；key 写 [Attr/NF …] 是两种都对；学生拉的括号上有 ✕，点了 = unmark s.1-6（不判）
+open s fold  学生点一道括号或括号里的词 = fold s.3-6，点小方块 = unfold s.3（页面不判；里层折着也能折外层）
+open s move  学生按住一道括号拖到两个词之间 = move s.3-6 after s.9（整段挪；按住一个词挪一个，挪到最前面 = move s.7 before s.1）；mark、fold、move 三种能一起开
+open s.3 refer  学生从 who 右上角的钩上拉线，松在词、括号、句子外框上 = refer s.3 -> s.2 / s.1-2 / s（整句）；造句子时写 links="who -> s.1-2; !who -> door=连到了从句里的名词" 就照它判（! 是常见的错连）；学生连的线头上有 ✕，点了 = unrefer s.3
 判断式（when=）：s parsed（key 里每一段都拉对了，多拉的不管）、s exact（拉对了、也没多拉）、s main（主干拉对了）、s span s.2-5 = V（这一段现在挂着这个成分）、s linked（links= 每一条都连对了）；没写 key / links= 判不了，@s.done 也不收；量：verbs(s.4-9) 这一段里 key 的谓语几个（verbs(s) 整句）、left(s) key 里还没拉对的几段
 句子里留空位让学生填词：现在没有写法（要填就 ask value … type=en）
 
 式子（推导一步一步变形）：
-tex f = "\hl{a}{x^2} + \hl{b}{2x} + 1"     造一个式子（KaTeX 的写法；\hl{名字}{…} 给一项起名字，部件写 f.a）
-retex f "\hl{b}{2x} + \hl{a}{x^2} + 1"     换掉最后一行（原来那一行就没了，要留着就用 next）：同名的项滑到新位置（带着颜色），别的淡出淡进
-next f "= \hl{a}{x^2} + \hl{b}{2x}"        往下写一行：上一行变淡留着，同名的项从上一行滑下来；等号自动对齐（也能写 & 指定对齐的地方）
-retex f "\hl{a}{x}+\hl{a2}{x}" a2=a      新的项 a2 也从 a 那里分出来（一项拆成几项）
-magnify f.a / unmagnify f             这一项单独放大（写在式子下面）
-strike f.b / unstrike f               划掉一项（约掉、抵消）
+tex f = "\hl{a}{x^2} + \hl{b}{2x} + 1"  造一个式子（KaTeX 的写法；\hl{名字}{…} 给一项起名字，部件写 f.a）
+retex f "\hl{b}{2x} + \hl{a}{x^2} + 1"  换掉最后一行（原来那一行就没了，要留着就用 next）：同名的项滑到新位置（带着颜色），别的淡出淡进
+next f "= \hl{a}{x^2} + \hl{b}{2x}"  往下写一行：上一行变淡留着，同名的项从上一行滑下来；等号自动对齐（也能写 & 指定对齐的地方）
+retex f "\hl{a}{x}+\hl{a2}{x}" a2=a  新的项 a2 也从 a 那里分出来（一项拆成几项）
+magnify f.a / unmagnify f  这一项单独放大（写在式子下面）
+strike f.b / unstrike f  划掉一项（约掉、抵消）
 paint、glow、dim、cover（挖空让学生填）、pulse、ask tap f 对项都有用
 
 题卡（把题拿上舞台：题面、已知、一步步的提示）：
 card q = "有序表 7 10 13 16 19 29 32 33 37 41 43，折半查找 33。" "第一次比较的是哪个数？" "提示：mid = ⌊(low + high) / 2⌋"
 写法：q.2 第 2 行；q.2-3 第 2 到 3 行（一行一对引号，最多 12 行；话里的 {a.3} 照样能写；$x$ 只是斜体字母、不排公式，矩阵（pmatrix）、分式写不了：矩阵就造 matrix，公式用 tex）
-cover q.3 / uncover q.3          提示先扣着，到时候翻开（共用的点亮、灰掉对每一行都有用）
-addline q "第二次比较的是哪个数？"    下面再加一行（covered=on 加一行扣着的提示）
-rewrite q.2 "……"                  改一行的字
-ask value "第一次比较的是哪个数？" answer=29     学生填答案，页面当场判
+cover q.3 / uncover q.3  提示先扣着，到时候翻开（共用的点亮、灰掉对每一行都有用）
+addline q "第二次比较的是哪个数？"  下面再加一行（covered=on 加一行扣着的提示）
+rewrite q.2 "……"  改一行的字
+ask value "第一次比较的是哪个数？" answer=29  学生填答案，页面当场判
 
 例子（一轮）：
 array a = 49 38 65 97 76 13 27 49′ 55 04
