@@ -106,14 +106,14 @@ registerFollow('sort', {
 
 ```stage
 id: d-stage-DS-L8.2.3-sort-shell
-pick: array a = ints(8, 1, 99)
+pick a = seq(8, 1, 99) distinct
 ---
 array a = {a}
 follow a sort shell gaps="5 3 1"
 open a move
 ```
 
-- `---` 上面是随机取数（照 `practicespec.js` 现成的 `pick`：`int` `choice` `seq`…；加一个 `ints(n, lo, hi)` 取 n 个不重复的整数），下面是镜头指令，`{名字}` 换成取到的数。每次打开重新取。取出来的数先让引擎跑一遍：跑不了、或者一上来就已经做完的，换一组（最多 12 次，照 `usespec.js` 的 `drawUse`）。
+- `---` 上面是随机取数（照 `practicespec.js` 现成的 `pick`：`int`、`choice`、`seq(个数, 最小, 最大) distinct` 不重复的一串……，不加新的），下面是镜头指令，`{名字}` 换成取到的数。每次打开重新取。取出来的数先让引擎跑一遍：跑不了、或者一上来就已经做完的，换一组（最多 12 次，照 `usespec.js` 的 `drawUse`）。
 - 画面：组件里嵌一块舞台（`new Stage(host)`，固定高，照屏幕大小），没有老师、没有课堂循环。预写的行（`@a.right`、`@a.done`）照演。底下两个按钮：「看下一趟该是什么样」（用了记 `revealed`）、「做不出来」（`giveup`）。
 - 结果（照黑板组件的规矩 `session.event` 交，`block` 是组件 id）：
   - 每到一个检查点记一步：第一次到就对 = `ok: true`；先到过错法的检查点、或者看了答案 = 记一次错再记对。
