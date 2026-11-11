@@ -197,7 +197,8 @@ test('张成：一个向量是一条线，两个不共线是整个平面，共�
   one(s, 'span p v');
   one(s, 'vec p u = 0 3');
   one(s, 'vec p v = 1 0');
-  assert.deepEqual(spanOf(o, o.spans.find((x) => x.id === 'u')).dir, ['2', '1']);
+  assert.deepEqual(spanOf(o, o.spans.find((x) => x.of.join() === 'u' && x.at)).dir, ['2', '1']);
+  assert.equal(o.spans.filter((x) => x.of.join() === 'u').length, 1, '跟着走的那一条换成了钉着的');
   assert.deepEqual(spanOf(o, o.spans.find((x) => x.id === 'v')).dir, ['1', '0']);
   assert.equal(spanOf(o, o.spans.find((x) => x.id === 'u+v')).kind, 'plane');
   assert.match(s.stateText(), /张成：v 张成一条过原点的直线（方向 \(1, 0\)），粉色涂着/);
@@ -276,4 +277,33 @@ test('扣着的向量：学生看的小块写它的名字，不写坐标；写�
   assert.equal(chipTextOf(u, o), 'u');
   assert.doesNotMatch(chipTextOf(u, o), /2/);
   assert.equal(tapValueOf(u), 'u，扣着');
+});
+
+// —— 舞台主线第一轮 L3-5：span … stay 以前一块平面只留一条，第二次写把第一条钉着的线换掉 ——
+test('L3-5：span … stay 能钉几条（收集两条特征线要的）；不带 stay 的照旧只有一条跟着的；最多 6 条', () => {
+  const s = new Scene();
+  const go = (src) => { for (const c of parseScript(src)) s.apply(c); };
+  go('plane p range=-3..3\nvec p v = 1 0');
+  go('span p v stay');
+  go('vec p v = 1 2');
+  go('span p v stay');
+  const o = s.objects.get('p');
+  assert.equal(o.spans.length, 2);
+  assert.deepEqual(o.spans.map((x) => x.at[0].map(Number)), [[1, 0], [1, 2]]);
+  assert.equal(new Set(o.spans.map((x) => x.id)).size, 2, '两条各有各的名字（画面按名字认）');
+  // 同一个地方再钉一次不多一条
+  go('span p v stay');
+  assert.equal(o.spans.length, 2);
+  // 不带 stay 的：一条跟着走的，再写还是一条；钉着的不动
+  go('span p v');
+  go('span p v');
+  assert.equal(s.objects.get('p').spans.length, 3);
+  // 存档、撤一步用的克隆带着
+  assert.equal(s.clone().objects.get('p').spans.length, 3);
+  // unspan p v 全收
+  go('unspan p v');
+  assert.equal(s.objects.get('p').spans.length, 0);
+  // 最多 6 条
+  for (let i = 1; i <= 6; i++) go(`vec p v = ${i} 1\nspan p v stay`);
+  assert.throws(() => go('vec p v = 0 1\nspan p v stay'), /最多钉 6 条/);
 });

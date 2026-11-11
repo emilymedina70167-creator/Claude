@@ -14,6 +14,8 @@ export const MAX_RANGE = 10;
 /** 网格外面留给刻度、x / y 的地方 */
 export const MARGIN = { l: 28, r: 24, t: 24, b: 24 };
 const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
+/** 一块平面最多钉几条 span … stay（多了画面认不清哪条是哪条） */
+const STAY_MAX = 6;
 const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
 const ZERO = new Q(0n);
 export const I2 = [['1', '0'], ['0', '1']];
@@ -405,9 +407,27 @@ export const plane = {
       const its = names.map((n) => vecOf(o, n));
       const color = h.opts.color ?? its[0].paint ?? 'g1';
       if (!COLORS.includes(color)) throw new Error('颜色只有 g1～g6');
-      const id = names.join('+');
-      o.spans = o.spans.filter((s) => s.id !== id);
-      o.spans.push({ id, of: names, color, at: stay ? its.map((i) => [i.x, i.y]) : null });
+      const base = names.join('+');
+      if (!stay) {
+        // 跟着走的：同一组向量只有一条，再写就换掉（钉着的不动）
+        o.spans = o.spans.filter((s) => s.id !== base);
+        o.spans.push({ id: base, of: names, color, at: null });
+        return { id: o.id, span: base };
+      }
+      // 钉着的能留几条（主线第一轮 L3-5：以前第二次写把第一条换掉，收集两条特征线只剩一条，也不报）。
+      // 同一个地方再钉一次不多一条；一块平面最多钉 STAY_MAX 条
+      const at = its.map((i) => [i.x, i.y]);
+      const sameAt = (s) => s.at && s.of.join('+') === base && JSON.stringify(s.at.map((p) => p.map(String))) === JSON.stringify(at.map((p) => p.map(String)));
+      const had = o.spans.find(sameAt);
+      if (had) { had.color = color; return { id: o.id, span: had.id }; }
+      const pinned = o.spans.filter((s) => s.at);
+      if (pinned.length >= STAY_MAX) throw new Error(`一块平面最多钉 ${STAY_MAX} 条（span … stay）：先 unspan ${o.id} 收掉几条`);
+      // 跟着走的那一条换成钉着的（照旧：同一组向量先 span 再 span … stay，是把它钉住）
+      o.spans = o.spans.filter((s) => s.id !== base);
+      let n = 1;
+      while (o.spans.some((s) => s.id === `${base}@${n}`)) n++;
+      const id = `${base}@${n}`;
+      o.spans.push({ id, of: names, color, at });
       return { id: o.id, span: id };
     },
     unspan(scene, c, h) {
@@ -475,7 +495,7 @@ vec p w = 2u - v                  线性组合（u、v 变了它跟着变；系�
 vec p w = {A v}                   跟着算：矩阵 A 乘 v（A、v 一变 w 跟着变；学生拖不动 w）
 point p P = 2 3                   加一个点
 sum p w = u + v                   首尾相接画出和（平行四边形法则）
-span p u / span p u v / unspan p  淡淡涂上张成的直线或整个平面（写 stay 就停在这时的样子）
+span p u / span p u v / unspan p  淡淡涂上张成的直线或整个平面（写 stay 就钉住这时的样子，能钉几条）
 transform p A                     线性变换：网格和向量一起平滑地变过去（A 是舞台上的 2×2 矩阵，也能直接写 transform p = 1 1 / 0 1；再写是接着变）
 untransform p                     退回原样
 unvec p u                         拿掉向量或点
