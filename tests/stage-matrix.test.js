@@ -623,7 +623,7 @@ test('复审 N4：整张一个 {} 的矩阵算出来是数——用到空格子�
   const s = run(new Scene(), 'matrix D = _ _ / _ _\nmatrix A = 1 2 / 3 4');
   for (const e of ['rankA(D)', 'det(D)', 'rank(D)', 'D.1,1 + 1']) {
     const m = err(s, `matrix R2 = {${e}}`);
-    assert.match(m, /算出来是一个数，不是矩阵。要一个跟着算的数，贴一行字就行：label .*要矩阵里的一格跟着算，写 matrix M = 1 \{k\} \/ 0 1/, e);
+    assert.match(m, /算出来是一个数，不是矩阵：要矩阵里的一格跟着算，写 matrix M = 1 \{k\} \/ 0 1/, e);
     assert.doesNotMatch(m, /是数 /, e);
   }
   // 用到的都写满了：数是真的，照旧写出来

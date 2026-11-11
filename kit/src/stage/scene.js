@@ -362,7 +362,8 @@ export class Scene {
       if (!nodes.length) { if (o.hidden) hidden.add(id); return !o.hidden; }
       // 摆着的东西里只有几个部件是跟着算的（平面上 b = {J a}，a 是学生拖的）：别的部件学生动得到
       // （主线第一轮 L3-4：以前只顺着跟着算的那几个往上找，找到藏着的 J 就说「先 show J」）
-      if (!o.live && !o.hidden && typeOf(o).parts(o).length > nodes.length) return true;
+      // 乘积不算：它每一格都是跟着两个因子算的（它只有一个依赖结、却有好几格）
+      if (!o.live && !o.product && !o.hidden && typeOf(o).parts(o).length > nodes.length) return true;
       return nodes.some((n) => (n.deps || []).some((d) => reach(parseRef(d)?.obj ?? d)));
     };
     return ids.some(reach) ? [] : [...hidden];
@@ -513,6 +514,8 @@ export class Scene {
     this.actor = student ? 'student' : 'teacher';
     let fx;
     try { fx = this.applyOne(c) || {}; } finally { this.actor = null; }
+    // 老师动过的那样东西：那种东西自己记一笔老师摆出来的样子（树：这棵是不是排序树——学生之后摆错了不改这个结论，tree.js 的 afterTeacher）
+    if (!student) { const touched = this.objects.get(fx.created ? fx.id : target); if (touched) typeOf(touched).afterTeacher?.(touched); }
     this.reflow();
     const derived = [...(fx.derived || []), ...this.derive()];
     if (derived.length) fx.derived = derived;
@@ -1081,13 +1084,16 @@ export class Scene {
       const old = this.objects.get(id);
       // 一排格子、图这类：造它的那一行里的 {…} 先算成数再造（依赖一变照新的数重新造，见 remake）；
       // 矩阵、平面自己拆 {…}（格子在原地改）；别的东西（题卡、句子、式子）的 {…} 写在引号里，是话里的小块
-      const filled = t.remake ? fillLine(h.line, this) : null;
-      const cc = filled ? parseScript(filled.text)[0] : c;
+      // raw：原样取一个部件时照它写的字（09、49′）——只给新写的一排格子（图的边权、树的结点值要的是数；重放旧课照当时画的数）
+      const raw = t.type === 'array' && !c.lenient;
+      const filled = t.remake ? fillLine(h.line, this, { raw }) : null;
+      // 重新读出来的那一行带着这一行的 lenient / replay（重放旧课时那种东西的 make 里新加的检查才拦得住）
+      const cc = filled ? { ...parseScript(filled.text)[0], ...(c.lenient ? { lenient: true } : {}), ...(c.replay ? { replay: true } : {}) } : c;
       if (!cc?.cmd) throw new Error(cc?.error || '看不懂这一行');
       const hidden = hiddenOf(opts, old);
       const o = t.make(this, cc, filled ? this.helpers(cc) : h, old);
       // 式子里没用到舞台上的东西（{2^3}）就只是一个数，不算跟着算的
-      if (filled?.deps.length) o.live = { line: h.line, exprs: filled.exprs, vals: filled.vals, deps: filled.deps };
+      if (filled?.deps.length) o.live = { line: h.line, exprs: filled.exprs, vals: filled.vals, deps: filled.deps, ...(raw ? { raw: true } : {}) };
       o.type = t.type;
       o.id = id;
       if (hidden) o.hidden = true;
@@ -1100,13 +1106,13 @@ export class Scene {
       delete o.sameRow;
       // 同名重造不清存档（老师重造一样东西，还能回到以前存的那一刻）；换了一种东西才清（树的样子放不回一排格子上）
       // 重造以前：贴在旧部件上的字（「站定」贴在旧的 49 上）、交给学生的动作是说旧的那一份的——字收掉（贴在整样东西上的留着），
-      // 动作收了要告诉老师（主线第一轮 D4-10：以前字留着贴到了新的第 1 格上，open 没了也不说）。重放旧课照旧
-      if (old && !c.lenient) {
+      // 动作收了要告诉老师（主线第一轮 D4-10：以前字留着贴到了新的第 1 格上，open 没了也不说）。重放时一样收（刷新前后要一样），只是不再说一遍
+      if (old) {
         const onParts = [...this.labels].filter(([, l]) => !l.dial && (l.refs || []).some((r) => { const p = parseRef(r); return p?.obj === id && /[.#]/.test(r); })).map(([k]) => k);
         for (const k of onParts) this.labels.delete(k);
         const acts = [...this.opens.values()].filter((e) => e.obj === id).map((e) => `open ${id}${e.action && e.action !== 'drag' ? ` ${e.action}` : ''}`);
         const bits = [onParts.length ? `贴在旧部件上的字（${onParts.join('、')}）` : '', acts.length ? `交给学生的动作（${[...new Set(acts)].join('、')}）` : ''].filter(Boolean);
-        if (bits.length) this.notices.push({ line: c.line ?? 0, src: String(c.src ?? '').trim(), error: `重造了 ${id}：${bits.join('、')}都收了${acts.length ? '。要学生接着动，再写一次 open' : ''}`, kept: true });
+        if (bits.length && !c.replay && !this.trial) this.notices.push({ line: c.line ?? 0, src: String(c.src ?? '').trim(), error: `重造了 ${id}：${bits.join('、')}都收了${acts.length ? '。要学生接着动，再写一次 open' : ''}`, kept: true });
       }
       if (old) this.dropObject(id, { keepLabels: true, keepPlace: kept, keepSaves: old.type === t.type });
       if (kept) {
@@ -1141,7 +1147,7 @@ export class Scene {
         const text = str ?? '';
         this.checkRich(text, c); // 话里指着的东西要真有
         this.say = text;
-        this.words = parseRich(text, { old: !!c.lenient && !c.prewrite }).filter((p) => p.k === 'word').map((p) => p.v);
+        this.words = parseRich(text).filter((p) => p.k === 'word').map((p) => p.v);
         return {};
       }
       case 'glow': case 'unglow': case 'lift': case 'drop': case 'dim': case 'undim': case 'cover': case 'uncover': {
@@ -1177,7 +1183,7 @@ export class Scene {
         if (ws && ws[0].type === ws[1].type && typeOf(ws[0]).compareWhole) return { compare: typeOf(ws[0]).compareWhole(ws[0], ws[1]) };
         const parts = partsIn();
         // 写的是两样整样的东西、可这种东西不会整张比（一排格子）：说清楚能比什么（主线第一轮 D1-14）
-        if (ws && parts.length !== 2) throw new Error(`compare 比的是两个部件（compare a.3 a.8）或者两张矩阵（compare A B）：${typeOf(ws[0]).label}不能整${ws[0].type === 'array' ? '排' : '样'}比，一格一格写`);
+        if (ws && parts.length !== 2) throw new Error(`compare 比的是两个部件（compare a.3 a.8）或者两张矩阵（compare A B）${ws[0].type === ws[1].type ? `：${typeOf(ws[0]).label}不能整${ws[0].type === 'array' ? '排' : '样'}比，一格一格写` : `：${ws[0].id} 和 ${ws[1].id} 不是同一种东西`}`);
         if (parts.length !== 2) throw new Error('compare 要正好两个（比如 compare a.3 a.8）');
         return { a: parts[0], b: parts[1], sign: compareValues(parts[0].value, parts[1].value) };
       }
@@ -1223,7 +1229,8 @@ export class Scene {
         for (const r of refs) if (!this.labels.has(r)) this.parts(r);
         if (str == null) throw new Error('label 要有字（写在引号里）');
         this.checkRich(str, c);
-        this.labels.set(id, { id, refs, text: str, side: opts.side || null, tone: opts.tone || null, link: null });
+        // asked：这一边是老师写的 side=（页面自己定边的字——hop、rowop 的——没有）：照它摆、摆不成在现状里说
+        this.labels.set(id, { id, refs, text: str, side: opts.side || null, tone: opts.tone || null, link: null, ...(opts.side ? { asked: true } : {}) });
         return { id };
       }
       case 'retext': {
@@ -1237,9 +1244,10 @@ export class Scene {
         const ids = words.length ? words : [...this.labels.keys()].filter((k) => !k.startsWith('dial:'));
         for (const k of ids) { this.labels.delete(k); if (k.startsWith('dial:') && this.vars.get(k.slice(5))) this.vars.get(k.slice(5)).shown = false; if (k.startsWith('dial:')) this.dialAt.delete(k.slice(5)); }
         // 贴在收掉的那几样（拨数、别的字）上面的字一起收（主线第一轮 D1-5：以前留在原地，画面上挂到了别的东西旁边）
+        const gone = new Set(ids);
         for (let more = true; more;) {
           more = false;
-          for (const [k, l] of this.labels) if ((l.refs || []).some((r) => (r.startsWith('dial:') || r.startsWith('label:')) && !this.labels.has(r.replace(/^label:/, '')))) { this.labels.delete(k); ids.push(k); more = true; }
+          for (const [k, l] of this.labels) if ((l.refs || []).some((r) => gone.has(r))) { this.labels.delete(k); ids.push(k); gone.add(k); more = true; }
         }
         return { ids };
       }
@@ -1254,8 +1262,9 @@ export class Scene {
         // at= 写成已有东西的部件（一条边 g.1~2、一格 a.3）：挂在那个部件旁边（主线第一轮 D3-2：以前当成「还没造」记着，
         // 拨盘一直浮着，现状每一轮写一句「g.1~2 还没造」）。那样东西在、部件写错了：照部件的错报
         const atObj = at && String(at).match(/^[A-Za-z_]\w*/)?.[0];
-        const atPart = !!at && !this.objects.has(at) && this.objects.has(atObj) && /[.#]/.test(at);
-        if (atPart) this.parts(at);
+        const atPartRaw = !!at && !this.objects.has(at) && this.objects.has(atObj) && /[.#]/.test(at);
+        let atPart = atPartRaw;
+        if (atPart) { try { this.parts(at); } catch (err) { if (!c.lenient) throw err; atPart = false; } }
         this.vars.set(name, { v: Math.max(lo, Math.min(hi, v)), lo, hi, at, shown: true });
         this.labels.set(`dial:${name}`, { id: `dial:${name}`, refs: at && (this.objects.has(at) || atPart) ? [at] : [], text: '', side: 'below', tone: 'dial', link: null, dial: name });
         // at= 写的东西还没造（dial 写在 matrix M = … {k} 之前，造 M 要先有 k）：先记着，M 造出来时挂上（以前就一直浮着、不挂）
@@ -1283,12 +1292,15 @@ export class Scene {
       }
       case 'fly': {
         const n = Number(String(args[0]?.v || '').split('.')[1]) || 1;
+        // 重放时照新读法数不到这个词：这一行是方括号换读法以前记下的（那时 A[i] 的 [i] 也算一个词），照旧读法找（最后一审 Y2：
+        // 不能凡是重放都照旧读法——今天写的课一刷新、一撤一步，飞的就成了另一个词）
+        if (!this.words[n - 1] && c.lenient) { const olds = parseRich(this.say, { old: true }).filter((p) => p.k === 'word').map((p) => p.v); if (olds[n - 1]) this.words = olds; }
         if (!this.words[n - 1]) throw new Error(`上一句话里没有第 ${n} 个 [词]`);
         const id = args[arrow + 1]?.v;
         if (arrow < 0 || !id) throw new Error('要写成 fly say.1 -> 名字 贴在哪');
         const refs = refsIn(args.slice(arrow + 2));
         refs.forEach((r) => this.parts(r));
-        this.labels.set(id, { id, refs, text: this.words[n - 1], side: opts.side || null, tone: 'key', link: null });
+        this.labels.set(id, { id, refs, text: this.words[n - 1], side: opts.side || null, tone: 'key', link: null, ...(opts.side ? { asked: true } : {}) });
         return { id, word: n - 1 };
       }
       case 'ask': {
@@ -1341,7 +1353,7 @@ export class Scene {
         if (opts.solve != null && kind !== 'value' && !c.lenient) throw new Error('solve= 只用在 ask value 上（type=matrix free=… 的一列通解按集合判）');
         const spec = kind === 'value' ? { type: opts.type, answer: opts.answer, wrongs: opts.wrong, free: opts.free, ...(opts.solve != null ? { solve: opts.solve } : {}), ...(oldAsk ? { lenient: true } : {}) } : null;
         if (spec) checkSpec(spec, this, { strict: !c.lenient, lenient: oldAsk });
-        if (str != null) { this.say = str; this.words = parseRich(str, { old: oldAsk }).filter((p) => p.k === 'word').map((p) => p.v); }
+        if (str != null) { this.say = str; this.words = parseRich(str).filter((p) => p.k === 'word').map((p) => p.v); }
         // 这一轮写在前面的 @ask.right 跟着这一问走（学生答对它时页面马上演，只演一次）。预写里的 ask（舞台演 @g1 的行时带 prewrite）不拿：
         // 那几行可能插在老师这一轮中间演，@ask.right 是写给这一轮最后那一问的
         // 预写里的那一问跟着的 @ask.right（写在它前面、跟到这一组里的：bindRight）由舞台演这一行时交来（preRight）
@@ -1821,20 +1833,21 @@ export class Scene {
   remake(o) {
     const L = o.live;
     // 有的格算不出来了：那一格写「?」、别的照算（fillLine 的 loose）；那种东西收不下「?」（图的边权）就照旧整行不动、报错
-    let f = fillLine(L.line, this, { loose: L.deps || [] });
+    let f = fillLine(L.line, this, { loose: L.deps || [], raw: !!L.raw });
     if (!f) return { changed: [] };
     if (f.vals.every((v, i) => v === L.vals[i])) return { changed: [], ...(f.error ? { error: f.error } : {}) };
     const t = typeOf(o);
     let c, o2;
     try {
-      c = parseScript(f.text)[0];
+      // 照新的数重新造的是当时已经收下的一行：那种东西的 make 里后来加的检查不拦它（带 lenient）
+      c = { ...parseScript(f.text)[0], lenient: true };
       if (!c?.cmd) throw new Error(c?.error || '看不懂这一行');
       o2 = t.make(this, c, this.helpers(c), o);
     } catch (err) {
       if (!f.error) throw err;
-      f = fillLine(L.line, this); // 照旧：抛出算不出来的原因
+      f = fillLine(L.line, this, { raw: !!L.raw }); // 照旧：抛出算不出来的原因
     }
-    Object.assign(o2, { type: o.type, id: o.id, live: { line: L.line, exprs: f.exprs, vals: f.vals, deps: f.deps } });
+    Object.assign(o2, { type: o.type, id: o.id, live: { line: L.line, exprs: f.exprs, vals: f.vals, deps: f.deps, ...(L.raw ? { raw: true } : {}) } });
     // 画面上的样子照旧：藏着的还藏着，另起的那一列还是那一列
     if (o.hidden) o2.hidden = true;
     if (o.colStart) o2.colStart = true;
@@ -2065,7 +2078,7 @@ export class Scene {
     const labels = [...this.labels.values()].filter((l) => !l.dial);
     // 写了 side=、那一边放不下、画面换到了另一边的：照实写（主线第一轮：以前只写「贴在 b」，老师不知道字不在写的那一边）
     const SIDE = { above: '上面', below: '下面', left: '左边', right: '右边' };
-    const moved = (l) => (l.side && l.placed && l.placed !== l.side ? `；写的是${SIDE[l.side] || l.side}，放不下，在${SIDE[l.placed] || l.placed}` : '');
+    const moved = (l) => (l.asked && l.side && l.placed && l.placed !== l.side ? `；写的是${SIDE[l.side] || l.side}，放不下，在${SIDE[l.placed] || l.placed}` : '');
     if (labels.length) lines.push(`贴着的字：${labels.map((l) => `${l.id}「${l.text}」${l.refs.length ? `（贴在 ${l.refs.join(' ')}${moved(l)}）` : ''}`).join('；')}`);
     const dials = [...this.vars].filter(([, v]) => v.shown);
     if (dials.length) lines.push(`能拨的数：${dials.map(([n, v]) => `${n} = ${v.v}（${v.lo}～${v.hi}）`).join('，')}`);

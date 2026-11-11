@@ -2180,14 +2180,13 @@ test('D1-4、L3-8：话里的方括号——代码的下标、空着的框、里
   assert.deepEqual(kinds('这叫[不稳定]。'), ['text:这叫', 'word:不稳定', 'text:。']);
   assert.deepEqual(kinds('A[i] 这一格叫 [哨兵]'), ['text:A[i] 这一格叫 ', 'word:哨兵']);
 });
-test('D1-4（盯 4）：重放旧课数「第几个 [词]」照旧的读法（fly say.2 指的还是原来那个）', () => {
-  // 新写的：A[i] 不算词，[词] 是第 1 个
+test('D1-4（盯 4）：话里的词一律照新读法数；重放时 fly 数不到的那个词照旧读法找（见 tests/stage-mainline-review.test.js 的 Y2）', () => {
   const now = run(new Scene(), 'array a = 1 2\nsay "A[i] 和 [哨兵]"');
   assert.deepEqual(now.words, ['哨兵']);
-  // 旧课（lenient）：以前 [i] 也算一个词
-  const old = new Scene();
-  for (const c of parseScript('array a = 1 2\nsay "A[i] 和 [哨兵]"')) old.apply({ ...c, lenient: true });
-  assert.deepEqual(old.words, ['i', '哨兵']);
+  // 重放（刷新、撤一步）不换读法：今天写的课重放以后词还是那几个
+  const again = new Scene();
+  for (const c of parseScript('array a = 1 2\nsay "A[i] 和 [哨兵]"')) again.apply({ ...c, lenient: true, replay: true });
+  assert.deepEqual(again.words, ['哨兵']);
 });
 
 test('D4-3：跟着算的格子原样取一个部件时，照那个部件写的字（09、49′），不按数重写；算过的才按数写', () => {
@@ -2257,7 +2256,7 @@ test('D3-7、E1-4：三句照着改不对的报错，说清楚该怎么写', () 
   // 边上的权进不了式子
   assert.match(dryRun(g, 'ask value "到 2 是几？" answer={g.5 + g.5~2}')[0].error, /边上的权（g\.5~2）进不了式子.*结点的牌子（g\.5）可以/);
   // 要一个跟着算的数，不是矩阵
-  assert.match(dryRun(g, 'matrix S = {6 + 1}')[0].error, /要一个跟着算的数.*label \S+ \S+ "… \{6 \+ 1\}"/);
+  assert.match(dryRun(g, 'matrix S = {6 + 1}')[0].error, /一个跟着算的数现在只能这样放在一格里/);
   // key= 只认英文的词
   assert.match(dryRun(new Scene(), 'sentence d = "问题 一直 困扰" key="[S 问题] [V 一直]"')[0].error, /key= 只认英文的词/);
   assert.match(dryRun(new Scene(), 'sentence c = "GDP及其有效性的问题 一直困扰着 政策制定者" key="[S GDP及其有效性的问题] [V 一直困扰着]"')[0].error, /key= 只认英文的词/);
@@ -2320,10 +2319,12 @@ test('D4-10：同名重造一样东西——贴在旧部件上的字收掉（贴
   // 没东西可收的重造不说
   run(s, 'array a = 1 2 3');
   assert.deepEqual(s.looseProblems(), []);
-  // 重放旧课照旧（字留着、不说）
+  // 重放时一样收（刷新前后要一样），只是不再告诉老师一遍
   const old = run(new Scene(), 'array a = 49 38 65\nlabel s a.1 "站定"\nopen a');
-  old.apply({ ...parseScript('array a = 38 49 65')[0], lenient: true });
-  assert.equal(old.labels.has('s'), true);
+  old.loose = []; old.notices = [];
+  old.apply({ ...parseScript('array a = 38 49 65')[0], lenient: true, replay: true });
+  assert.equal(old.labels.has('s'), false);
+  assert.deepEqual(old.looseProblems(), []);
 });
 
 // —— 舞台主线第一轮：贴的字照写的那一边摆 ——

@@ -328,7 +328,7 @@ function rawPart(expr, scene) {
   const v = ps[0].value;
   return v == null || v === '' ? null : String(v);
 }
-export function fillLine(line, scene, { loose = null } = {}) {
+export function fillLine(line, scene, { loose = null, raw = false } = {}) {
   const { parts } = parseLive(line);
   if (!parts.some((p) => p.k === 'expr')) return null;
   const exprs = [], vals = [], deps = [], errors = [];
@@ -339,7 +339,7 @@ export function fillLine(line, scene, { loose = null } = {}) {
     try {
       const r = evalLive(p.v, scene);
       if (!isQ(r.value)) throw new Error(`「{${p.v}}」算出来是 ${valueText(r.value)}，这里要一个数`);
-      v = rawPart(p.v, scene) ?? numText(r.value);
+      v = (raw ? rawPart(p.v, scene) : null) ?? numText(r.value);
       for (const d of r.deps) if (!deps.includes(d)) deps.push(d);
     } catch (err) {
       // loose（重算时，scene.js 的 remake）：这一格算不出来了（它跟着的结点摘掉了）就写「?」，别的格照算——以前整行不动、

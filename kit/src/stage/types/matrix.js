@@ -350,7 +350,7 @@ const unionDeps = (list) => [...new Set(list.flatMap((k) => k.deps))];
  * 报错里不写它（「{rankA(D)} 算出来是数 0」的 0 是页面顶上的，D 填满以后不一定是 0：复审 N4）
  */
 function rowsOfValue(v, src, { trial = false } = {}) {
-  if (isQ(v)) throw new Error(`「{${src}}」算出来是${trial ? '一个数' : `数 ${v}`}，不是矩阵。要一个跟着算的数，贴一行字就行：label n 东西 "… {${src}}"（数跟着变）；要矩阵里的一格跟着算，写 matrix M = 1 {k} / 0 1`);
+  if (isQ(v)) throw new Error(`「{${src}}」算出来是${trial ? '一个数' : `数 ${v}`}，不是矩阵：要矩阵里的一格跟着算，写 matrix M = 1 {k} / 0 1（一个跟着算的数现在只能这样放在一格里；话和贴的字里的 {…} 只认拨数、部件和量，比如 {det(A)}，不算带运算的式子）`);
   const rows = isQMat(v) ? v.map((r) => r.map(String)) : isQVec(v) ? v.map((x) => [String(x)]) : null;
   if (!rows) throw new Error(`「{${src}}」算出来的不是矩阵`);
   if (rows.length > MAX_ROWS || rows[0].length > MAX_COLS) throw new Error(`「{${src}}」算出来是 ${rows.length}×${rows[0].length}，舞台上的矩阵最多 ${MAX_ROWS} 行 ${MAX_COLS} 列`);
@@ -581,7 +581,16 @@ export const matrix = {
     if (live?.live.deps.length) o.live = live.live;
     // 同名重造、beside= 写的还是原来挨着的那一样、大小也没变：留在原处（主线第一轮 L3-6：以前照 beside 重新摆一遍，
     // 那样东西旁边多了乘积的那一排，算出来的地方和原来不一样，新的这张被当成新造的排到了最下面，乘积那一排散开）
-    const stays = old && (!h.opts.beside || (old.beside === h.opts.beside && old.rows === o.rows && old.cols === o.cols));
+    // 它现在也得还挨着那样东西（在它右边、上下对着）：那样东西拿掉重造、挪走了、变宽压过来了，就照它现在的地方重新摆（最后一审 Y5）。
+    // 比的是那样东西自己的大小（不带它旁边乘积的那一排）：乘积把两个因子排成一排以后，因子还是挨着的
+    const stillBeside = () => {
+      const a = scene.objects.get(h.opts.beside);
+      if (!a?.origin || !old?.origin) return false;
+      const ab = scene.type(a).objectBox(a), ob = layout(old).box;
+      const overlap = Math.min(ab.y + ab.h, ob.y + ob.h) - Math.max(ab.y, ob.y);
+      return ob.x >= ab.x + ab.w - 2 && overlap > Math.min(ab.h, ob.h) / 2;
+    };
+    const stays = old && (!h.opts.beside || (old.beside === h.opts.beside && old.rows === o.rows && old.cols === o.cols && stillBeside()));
     o.origin = stays ? { ...old.origin } : placeFor(scene, sizeOf(o), h.opts);
     if (h.opts.beside) o.beside = h.opts.beside;
     return o;

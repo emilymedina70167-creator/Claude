@@ -270,8 +270,10 @@ function checkInsert(o, act, scene, ctx = {}) {
   if (!v || v === '_') return no('插入要写一个数');
   // 这棵树现在不是二叉排序树（堆、随手摆的二叉树）时，学生往空位上放没有「排序树里该在的位置」可比：不判对错，只说放在了哪
   // （主线第一轮 D4-1：堆里把 63 放到第 9 个位置是对的，以前照排序树说「不是正确的下一步」、wrong=mark 还把它圈出来）。
+  // 看的是老师摆出来的那棵（o.notBst，tree.js 的 afterTeacher 在老师每动一下以后记）：学生自己摆错了一个、把排序树摆坏了，
+  // 不能从此不判（最后一审 Y4：以前看的是「这一下之前是不是排序树」，摆错一个以后每一下都不判了）。
   // 只有根、根加左孩子的树还是排序树，照旧判
-  const loose = at && !isBst(o);
+  const loose = at && !!o.notBst;
   const d = descend(o, v);
   if (!loose && d.found != null) return no(`${v} 已经在树里了（二叉排序树里不放一样的值）`);
   if (o.nodes.length >= MAX_NODES) return no(`一棵树最多 ${MAX_NODES} 个结点`);

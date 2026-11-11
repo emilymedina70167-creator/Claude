@@ -517,6 +517,8 @@ export const tree = {
     }
     return o;
   },
+  /** 老师每动一下以后记：老师摆出来的这棵是不是二叉排序树。不是的（堆、随手摆的二叉树）学生往空位上放结点不照排序树判（tree.rules.js 的 checkInsert） */
+  afterTeacher(o) { if (isBst(o)) delete o.notBst; else o.notBst = true; },
   parts(o) { return levelOrder(o); },
   /** 扣着的结点画成小块不写值（scene.js 的 coverText）：树的结点没有不带值的位置写法（t.40 名字里就是值） */
   coverName: (p, o) => `${o.id} 里扣着的一个结点`,

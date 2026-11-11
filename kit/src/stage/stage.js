@@ -333,7 +333,7 @@ export class Stage {
       if (!dead) { this.undoFloor = this.log.length; this.syncUndo(); }
       let act = null;
       // 这一轮写了问、可一条都没演上：学生手上没有老师要的那一问（课堂循环看这个马上再叫老师，loop.js）
-      this.askMissed = !dead && !asked && !!askedBad;
+      this.askMissed = false;
       if (!this.instant && !dead && (asked || askedBad || auto)) {
         if (!this.scene.waiting) {
           // 一轮没有 ask，或者 ask 那一行写错了没演上：页面替它等，不让课停在半空。
@@ -344,7 +344,8 @@ export class Stage {
           const [c] = parseScript(src);
           await this.exec({ ...c, line: 0, src }, { by: 'page', turn });
           // 现状里照实写：这一问是页面替老师挂的，不是老师问的
-          if (askedBad && this.scene.waiting) this.scene.waiting.standin = true;
+          // 真替老师挂了那一问才算「提问没演上、学生手上只有页面替挂的框」（上一问还挂着时不算：学生手上有那一问）
+          if (askedBad && this.scene.waiting) { this.scene.waiting.standin = true; this.askMissed = true; }
         }
         // on= 写的按钮学生手上没有：这个挑战判不了，告诉老师（报在写它的那一行上，这一轮没写就报那个挑战）
         for (const msg of this.scene.onProblems({ once: true })) {
@@ -709,7 +710,7 @@ export class Stage {
       if (!lab || lab.dial || !l.box || !this.labelShown(lab)) continue;
       const objs = [...new Set(lab.refs.filter((r) => !this.scene.labels.has(r)).map((r) => String(r).match(/^[A-Za-z_]\w*/)?.[0]).filter((id) => id && this.scene.objects.has(id)))];
       // want：老师写的 side=（reflow 照它给写了 side=above 的字让出地方）
-      rects.push({ x: Math.round(l.box.x), y: Math.round(l.box.y), w: Math.round(l.box.w), h: Math.round(l.box.h), objs, want: lab.side || null });
+      rects.push({ x: Math.round(l.box.x), y: Math.round(l.box.y), w: Math.round(l.box.w), h: Math.round(l.box.h), objs, want: (lab.asked && lab.side) || null });
     }
     const key = (rs) => rs.map((r) => `${r.x},${r.y},${r.w},${r.h},${r.objs.join('+')},${r.want || ''}`).join('|');
     if (key(rects) !== key(this.scene.labelRects || [])) { this.scene.labelRects = rects; changed = true; }
@@ -1277,6 +1278,17 @@ export class Stage {
     const o = id && sc.objects.get(id);
     return !!o && !o.hidden && !!o.origin;
   }
+  /** 这行字摆在这里，会不会压着它贴的那样东西自己的部件（锚着的那几个不算） */
+  ownPartsHit(l, box) {
+    const sc = this.scene;
+    const id = String(l.refs[0]).match(/^[A-Za-z_]\w*/)?.[0];
+    const o = id && sc.objects.get(id);
+    if (!o) return false;
+    let mine = [];
+    try { mine = sc.objects.has(l.refs[0]) ? [] : sc.parts(l.refs[0]).map((p) => p.key); } catch { mine = []; }
+    const t = sc.type(o);
+    return t.parts(o).some((p) => !mine.includes(p.key) && overlaps(grow(box, 2), t.partBox(o, p)));
+  }
   anchorOf(l) {
     const sc = this.scene;
     if (l.link) { const k = sc.links.get(l.link); const g = k && this.linkGeo(k); if (g?.box) return g.box; }
@@ -1321,9 +1333,11 @@ export class Stage {
       // 老师写了 side=above / below，那一边只是被别的东西占着：照写的那一边摆（只躲别的字），东西会让开——
       // 下面后造的东西照 labelRects 往下让，side=above 的那样东西自己往下让（scene.js 的 reflow）。
       // 以前换到别的一边、也不说，side= 等于没写（主线第一轮 D1-7、D3-4、E1-5）。左右两边没有东西能让，照旧换边、现状里说
-      if (!l.dial && (l.side === 'above' || l.side === 'below') && p.side !== l.side && this.roomCanBeMade(l)) {
+      if (!l.dial && l.asked && (l.side === 'above' || l.side === 'below') && p.side !== l.side && this.roomCanBeMade(l)) {
         const others = [...this.labelNodes].filter(([id, n]) => id !== l.id && n.box && sc.labels.has(id) && this.labelShown(sc.labels.get(id))).map(([, n]) => n.box);
-        p = placeLabel(anchor, size, others, { prefer: [l.side], gap: 12, tries: 3 });
+        const q = placeLabel(anchor, size, others, { prefer: [l.side], gap: 12, tries: 3 });
+        // 那一边挡着的是它自己那样东西的别的部件（贴在矩阵中间一格、树中间一个结点上）：自己让不开，照旧换到空的一边
+        if (!this.ownPartsHit(l, { ...q, ...size })) p = q;
       }
       const from = cur.box;
       const sideWas = cur.side;

@@ -130,7 +130,7 @@ export function createLoop(host) {
       donePlay();
       // 这一轮的提问没演上、学生手上只有页面替挂的打字框：不等学生，马上带着没演的行再叫一次老师（主线第一轮 D3-3、D4-5）。
       // 连着两轮都这样就不再自动叫（免得来回空转），等学生
-      if (stage.askMissed && !S.askRetried) { S.askRetried = true; addEvent({ kind: 'askfail', at: Date.now() }); }
+      if (stage.askMissed && !S.askRetried && !S.ended && !host.readOnly) { S.askRetried = true; addEvent({ kind: 'askfail', at: Date.now() }); }
       else if (!stage.askMissed) S.askRetried = false;
       if (S.pending?.events.some(triggers)) { flush(); return claude; }
       armIdle();

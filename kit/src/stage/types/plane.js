@@ -421,7 +421,9 @@ export const plane = {
       const had = o.spans.find(sameAt);
       if (had) { had.color = color; return { id: o.id, span: had.id }; }
       const pinned = o.spans.filter((s) => s.at);
-      if (pinned.length >= STAY_MAX) throw new Error(`一块平面最多钉 ${STAY_MAX} 条（span … stay）：先 unspan ${o.id} 收掉几条`);
+      // 重放旧课（那时每次换掉上一条，钉多少次都行）：不报，换掉最早钉的那一条
+      if (pinned.length >= STAY_MAX && c.lenient) o.spans = o.spans.filter((s) => s !== pinned[0]);
+      else if (pinned.length >= STAY_MAX) throw new Error(`一块平面最多钉 ${STAY_MAX} 条（span … stay）：先 unspan ${o.id} 收掉几条`);
       // 跟着走的那一条换成钉着的（照旧：同一组向量先 span 再 span … stay，是把它钉住）
       o.spans = o.spans.filter((s) => s.id !== base);
       let n = 1;

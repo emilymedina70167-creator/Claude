@@ -191,11 +191,17 @@ export function parseRich(text, { old = false } = {}) {
   const s = String(text ?? '');
   const re = /\{([^{}]+)\}|\$([^$]+)\$|\[([^\]]+)\]/g;
   let last = 0, m;
+  let rawEnd = -1; // 上一对照原样画的方括号结束在哪
   while ((m = re.exec(s))) {
     // 方括号不都是能飞的词（主线第一轮 D1-4、L3-8：A[j+dk] 画成了 Aj+dk）：紧跟在字母、数字、下划线、右括号后面的是代码的下标，
     // 里面没有字的（[____]、[ ]）是空着的框，里面有空格的（[p1 p2]）是一个式子——都照原样画。能飞的词没有带空格的。
     // old：重放旧课数「第几个词」照以前的读法（每一对方括号都算），fly say.2 指的还是原来那个
-    if (m[3] != null && !old && (/[A-Za-z0-9_)\]]/.test(s[m.index - 1] || '') || !/[^\s_□]/.test(m[3]) || /\s/.test(m[3].trim()))) continue;
+    // 贴着前面的字写的要像代码才算下标（里面只有字母、数字、运算的记号）：「步骤1[分组]」「O(n)[线性]」里的中文词照旧能飞；
+    // 前面是 ] 的，接着上一对原样的方括号才算（a[1][2]），两个词挨着写（[稳定][不稳定]）都是词
+    const prev = s[m.index - 1] || '';
+    const codey = m[3] != null && /^[\w\s+\-*/%.,<>=!&|^~−′']*$/.test(m[3]);
+    const glued = prev === ']' ? rawEnd === m.index : /[A-Za-z0-9_)]/.test(prev);
+    if (m[3] != null && !old && ((glued && codey) || !/[^\s_□]/.test(m[3]) || /\s/.test(m[3].trim()))) { rawEnd = re.lastIndex; continue; }
     if (m.index > last) out.push({ k: 'text', v: s.slice(last, m.index) });
     if (m[1] != null) {
       const inner = m[1].trim();

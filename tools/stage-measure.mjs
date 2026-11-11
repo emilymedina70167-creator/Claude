@@ -121,7 +121,7 @@ export function measure(visual = false) {
   // 贴的字没在写的那一边：写了 side=，画面摆到了别的一边
   for (const [id, cur] of st.labelNodes) {
     const l = st.scene.labels.get(id);
-    if (l && l.side && !l.dial && cur.side && cur.side !== l.side && vis(cur.node)) issues.push({ what: '贴的字没在写的那一边', a: `label:${id}（写的是 ${l.side}，画在 ${cur.side}）`, b: '', area: 0 });
+    if (l && l.asked && l.side && !l.dial && cur.side && cur.side !== l.side && vis(cur.node)) issues.push({ what: '贴的字没在写的那一边', a: `label:${id}（写的是 ${l.side}，画在 ${cur.side}）`, b: '', area: 0 });
   }
   // 缩得太小：整台缩到字难认（舞台自己记在 scene.tiny，和现状里那一行同一个判断）
   if (st.scene.tiny != null) issues.push({ what: '缩得太小', a: `整台缩到了 ${st.scene.tiny} 成`, b: '', area: 0 });
