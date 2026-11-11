@@ -29,6 +29,7 @@ export const HANDS = new Set(['pick', 'refer', 'unrefer', 'unmark', 'move', 'unf
 export const STUDENT_FORMS = [
   'write B.1,1 2（拨数器一格一格拨；open … input=keypad 时用键盘写）',
   'swap a#1 a#2', 'move s.7 after s.1', 'vec p u = 3 1', 'mul C.1,2',
+  'move a#10 -> a.5（open a move：按住这一张 0.35 秒拖到两张之间，插到第 5 格；也能写 before a.5 / after a.4）', 'write h.1 38（open h edit：点一格键盘写）',
   'rotate t.30 left（在 30 往左转 = 把 30 的右孩子拖到 30 上）',
   'insert t 47（托盘里的 47 拖进树）', 'insert t.45 right 47（拖到 45 右边的空位）',
   'rowop M r3 - 2r1（r1 的把手拖到 r3 上、倍数框写 -2）', 'rowop M r1 <-> r3（拖到行号上）', 'rowop M 3r2（点行号、写 3）',
@@ -346,6 +347,27 @@ export const FIX1 = [
   { id: 'side-2', files: ['side-2.txt'], noAudit: [C(/贴的字没在写的那一边/), C(/压着/), C(/出了屏幕/)] },
   { id: 'E1-8', files: ['E1-8.txt'], views: ['竖屏'], audit: [C(/缩得太小/)], checks: [C(/字难认：整台缩到了/)] },
   { id: 'D4-5', files: ['D4-5.txt'], called: [C(/你上一轮的提问没演上/, '页面马上叫了老师：你上一轮的提问没演上'), C(/学生点了 2 个：A\.1、A\.2/, '学生点的是重写以后的那一问')] },
+];
+
+/**
+ * new2 的表（主线第二轮：老师以前做不成的四件事，evals/stage-gaps/new2/，一个文件一件）。行的写法和 FIX1 一样
+ */
+export const NEW2 = [
+  {
+    id: 'A 一排格子', files: ['A.txt'],
+    called: [C(/学生 move a#6 -> a\.1（13 从第 6 格插到第 1 格，中间 5 张各让一格）。前大后小的从 12 对变成 7 对/, '学生插进去的那一下：做了什么、几对变成几对'), C(/学生做到了挑战 g1/, '挑战当场做到')],
+    checks: [C(/学生 swap a#1 a#2（49 和 38 对调/, '放到另一张上是对调'), C(/学生 write h\.1 13（第 1 格写成 13）。还空着 2 格/, '点空格子写数'), C(/第 1～3 格：13 □ □/, '现状里空格子写 □'), C(/「abc」不是数/, '写的不是数：不收'), C(/页面算的：inversions\(a\) = 7/, '现状里页面数的逆序对')],
+    screen: [C(/前大后小的还剩 7 对/, '话里的 {inversions(a)} 画成现在的数')],
+    nots: [C(/页面数不了/), C(/判错|走偏/)],
+    noAudit: [C(/压着/), C(/出了屏幕/)],
+  },
+  {
+    id: 'B 挑战里直接写式子', files: ['B.txt'],
+    checks: [C(/\{A B - B A\} = O ✗，现在是 \(/, '现状里写式子现在的值'), C(/挑战 g2[^\n]*\{det\(A - k I\)\} = 0/, '数的式子')],
+    called: [C(/拨到 1 时做到了 g1；\{A B - B A\} = O：✗ ✗ ✗ ✓/, '学生拨的路上每一停照式子判'), C(/学生做到了挑战 g1/, '改成可交换：当场做到'), C(/学生做到了挑战 g2/, '拨到不可逆：当场做到')],
+    nots: [C(/判不了/), C(/看不懂/)],
+    noAudit: [C(/压着/), C(/出了屏幕/)],
+  },
 ];
 
 // —— 和基线比（tools/stage-try-diff.mjs）：原来演得上的，现在还演不演得上 ——

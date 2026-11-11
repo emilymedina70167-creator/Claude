@@ -320,6 +320,18 @@ function setup(segments) {
     const o = sc.objects.get(obj);
     if (!o) return { error: `舞台上没有「${obj}」` };
     const need = NEED[cmd];
+    // 一排格子开的是 open a move（按住拖：放到另一张上对调）：对调走通用手势
+    if (cmd === 'swap' && o.type === 'array' && !sc.opens.has(`${obj}:drag`) && sc.opens.has(`${obj}:move`)) {
+      const e = sc.opens.get(`${obj}:move`);
+      const [ra, rb] = rest.split(/\s+/);
+      let a, b;
+      try { a = sc.parts(ra)[0]; b = sc.parts(rb)[0]; } catch (err) { return { error: err.message }; }
+      if (!a || !b) return { error: '要写成 学生: swap a#6 a#1' };
+      const from = find(o, e, 'cell', (p) => p.key === a.key);
+      const to = gripsOf(o, { ...e, refs: [] }, 'cell', 'to').find((t) => partOf(t)?.key === b.key);
+      if (!from || !to) return { untouched: `${!from ? ra : rb} 拿不起来（空格子，或者 open 没交这一格），学生动不了` };
+      return await T.gestureRun(o, e, 'drop-at', { from, to, what: `按住 ${ra}（${a.value}）拖到 ${rb}（${b.value === '' ? '空格子' : b.value}）上` });
+    }
     const e = [...sc.opens.values()].find((x) => x.obj === obj && x.action === need);
     if (!e) return { untouched: `${obj} 没有交给学生 ${need}，学生动不了` };
     let one;
@@ -601,6 +613,30 @@ function setup(segments) {
       T.locs.a = () => pressGrip(x, 'tap');
       if (ready(['a'])) return { error: `${g.span} 那道括号上的 ✕ 手指点不到（被别的盖住了）` };
       return { what: `点 ${g.span} 那道括号上的 ✕`, expect: 'unmark', moves: [{ how: 'tap', a: 'a' }] };
+    }
+    if (g.action === 'move' && o.type === 'array') {
+      // 一排格子（主线第二轮 A）：open a move 按住一张 0.4 秒，拖到两张之间（插进去）。-> a.5 是插到第 5 格；before a.5 / after a.4 是那个空隙
+      const e = open('move');
+      if (!e) return { error: `老师没有 open ${o.id} move（按住一张拖到两张之间）：只开了 open ${o.id} 的话学生只能两格对调（学生: swap ${o.id}#1 ${o.id}#6）` };
+      const a = onePart(g.span);
+      if (a.error) return a;
+      const at = onePart(g.at);
+      if (at.error) return at;
+      const line = [...o.cells].filter((c) => (c.row || 0) === (a.p.row || 0)).sort((x, y) => x.slot - y.slot);
+      // 落在哪个空隙：空隙后面那一格现在是第几格（这条线的最后是 null）
+      const nextOf = (slot) => line.find((c) => c.slot > slot)?.slot ?? null;
+      const before = g.where === 'before' ? at.p.slot : g.where === 'after' ? nextOf(at.p.slot) : at.p.slot > a.p.slot ? nextOf(at.p.slot) : at.p.slot;
+      const from = gr(e, 'cell').find((t) => partOf(t)?.key === a.p.key);
+      if (!from) return { error: `${say(a.p)}手指拿不起来（空格子，或者 open 没交这一格）` };
+      const targets = [...gr(e, 'cell', 'to').filter((t) => partOf(t)?.key !== a.p.key), ...gr(e, 'gap', 'to')];
+      const want = targets.find((t) => { const q = partOf(t)?.gap; return q && (q.row || 0) === (a.p.row || 0) && q.before === before; });
+      if (!want) return { error: `${say(at.p)}那里没有空隙` };
+      T.locs.a = () => pressGrip(from, 'hold');
+      T.locs.b = () => dropAt(targets, want);
+      const miss = ready(['a', 'b']);
+      const where = before == null ? '最后面' : `第 ${before} 格前面的空隙`;
+      if (miss) return { error: miss === 'a' ? `${say(a.p)}手指按不到（被别的盖住了）` : `${where}手指松不到（离别的落点太近）` };
+      return { what: `按住 ${say(a.p)} 0.4 秒，拖到${where}`, expect: 'move', moves: [{ how: 'hold', a: 'a', b: 'b', ms: 400 }] };
     }
     if (g.action === 'move') {
       const e = open('move');

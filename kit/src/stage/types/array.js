@@ -99,12 +99,10 @@ export const array = {
     if (!h.args.some((a) => a.t === 'eq')) throw new Error('要写成 array 名字 = 一个个值');
     if (!vals.length) throw new Error('array 后面要有值');
     if (vals.length > MAX_CELLS) throw new Error(`一排最多 ${MAX_CELLS} 格（写了 ${vals.length} 格）`);
-    // 一排格子还不会空着（矩阵里 _ 是空格子）：以前不报，画成写着「_」的一格（主线第一轮 D1-6）。重放旧课照旧画
-    if (vals.includes('_') && !c.lenient) throw new Error('一排格子里不能有空格子（_）：每一格都要有值。要一排能空着、能让学生填的格子，写一行的矩阵：matrix h = _ 49 38');
     const id = h.words[0];
     // 新的一排放在已有的东西下面，和它们居中对齐（一格的「要找的数」放在正下方，不缩在左边）
     const origin = old ? { ...old.origin } : scene.slotFor(vals.length * (CELL + GAP) - GAP);
-    return { origin, groupD: null, ptrs: new Map(), cells: vals.map((v, i) => ({ obj: id, key: i + 1, slot: i + 1, value: v, row: 0, paint: null, glow: false, lift: false, dim: false, covered: false })) };
+    return { origin, groupD: null, ptrs: new Map(), cells: vals.map((v, i) => ({ obj: id, key: i + 1, slot: i + 1, value: v === '_' ? '' : v, row: 0, paint: null, glow: false, lift: false, dim: false, covered: false })) };
   },
   parts(o) { return [...o.cells].sort((a, b) => a.slot - b.slot); },
   /** 扣着的一格画成小块写现在在第几格（scene.js 的 coverText：不写值，换了位置跟着变） */
@@ -192,7 +190,7 @@ export const array = {
       const val = h.words.filter((w) => !scene.isRef(w)).at(-1) ?? h.str;
       if (val == null) throw new Error('要写成 write a.3 新的值');
       const before = x.value;
-      x.value = String(val);
+      x.value = val === '_' ? '' : String(val); // write a.3 _：把这一格空出来
       return { cell: x, before };
     },
     // ptr low a.1：格子下面一个小箭头，同名的再写就挪过去
@@ -238,7 +236,7 @@ export const array = {
     },
   },
   // 一句话写现在的样子（存档点 back 以后告诉老师，scene.js 的 summaryOf）：那一排数
-  summary(o) { return [...o.cells].sort((a, b) => a.slot - b.slot).map((c) => c.value).join(' '); },
+  summary(o) { return [...o.cells].sort((a, b) => a.slot - b.slot).map((c) => (c.value === '' ? '□' : c.value)).join(' '); },
   describe(o) {
     const tag = (c) => {
       const bits = [];
@@ -248,7 +246,7 @@ export const array = {
       if (c.lift) bits.push('抬起');
       if (c.dim) bits.push('灰');
       if (c.covered) bits.push('扣着');
-      return `${c.value}${bits.length ? `（${bits.join('、')}）` : ''}`;
+      return `${c.value === '' ? '□' : c.value}${bits.length ? `（${bits.join('、')}）` : ''}`;
     };
     const split = o.cells.some((c) => c.row);
     // 分开排着：照实写（主线第一轮 D1-8）。没分过组的是整排下了一排；泳道里的牌已经不是那几组了（老师跨泳道换过、
@@ -277,7 +275,11 @@ write a.3 99                      改一格的值
 ptr mid a.5 / unptr mid           格子下面的指针（同名的再写就挪过去）
 group a stride=5                  按「隔 5 个」分组：每组染色、连起来（stride 可以写拨的数的名字，学生一拨就重新分）
 split a / merge a                 每组下到自己的一排 / 合回一排
-ask drag a#1 a#6 "把小的拖到前面"   学生按住一格拖到同一排另一格上，两格交换（页面照做，再告诉你）`,
+ask drag a#1 a#6 "把小的拖到前面"   学生按住一格拖到同一排另一格上，两格交换（页面照做，再告诉你）
+array h = _ 49 38                 _ 是空格子（write h.2 _ 空出来）
+open a move                       学生按住一张拖：放到另一张上 = swap a#6 a#1，两张之间 = move a#6 -> a.2（插进去），空格子上是挪进去
+open a edit                       学生点一格用键盘写数 = write a.3 26（只开几格：open a.1-2 edit）
+量：inversions(a) 前大后小的有几对（inversions(a.2-5) 只数这一段）、blank(a) 空着几格。这两项页面不判对错，只告诉你学生做了什么、几对变成几对`,
   example: `array a = 49 38 65 97 76 13 27 49′ 55 04
 hop a.1 -> a.6 color=g1
 paint a.1 a.6 g1

@@ -1,0 +1,13 @@
+# 主线第二轮 A：一排格子能空着、插入式地拖、点一格写数。页面不判对错，只说做了什么、几对变成几对
+array a = 49 38 65 97 76 13 27
+array h = _ _ _
+open a move
+open h edit
+goal g1 "把最小的那张插到最前面" when="a.1 = 13"
+say "按住一张拖到两张之间，它就插进去，中间的各让一格。"
+学生: move a#6 -> a.1
+学生: swap a#1 a#2
+学生: write h.1 13
+学生: write h.2 abc
+学生: move a#3 -> a.3
+say "前大后小的还剩 {inversions(a)} 对。"

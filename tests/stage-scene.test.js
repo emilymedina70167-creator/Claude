@@ -2238,12 +2238,12 @@ test('D1-5：收掉拨数，贴在它上面的字一起收（以前「3 条链�
   assert.doesNotMatch(s.stateText(), /条链/);
 });
 
-test('D1-6：一排格子里写 _（空格子）当场报；话里 {inv(a)} 这种页面数不了的量当场报（以前画成几个字母）', () => {
-  assert.match(dryRun(new Scene(), 'array h = _ 49 38')[0].error, /一排格子里不能有空格子/);
-  // 盯 1：重放旧课照旧画
+test('D1-6：一排格子里写 _ 是空格子（主线第二轮 A；第一轮是当场报）；话里 {inv(a)} 这种页面数不了的量当场报（以前画成几个字母）', () => {
+  assert.equal(dryRun(new Scene(), 'array h = _ 49 38').length, 0);
+  // 重放不等于旧课：旧课里写的 _ 重放出来也是空格子（以前画成写着「_」的一格）
   const old = new Scene();
   old.apply({ ...parseScript('array h = _ 49 38')[0], lenient: true });
-  assert.deepEqual(values(old, 'h'), ['_', '49', '38']);
+  assert.deepEqual(values(old, 'h'), ['', '49', '38']);
   const base = run(new Scene(), 'array a = 3 1 2\nmatrix A = 1 2 / 3 4');
   assert.match(dryRun(base, 'label c a "前大后小 {inv(a)} 对"')[0].error, /没有量/);
   assert.match(dryRun(base, 'say "逆是 {inv(A)}"')[0].error, /没有量「inv」/);

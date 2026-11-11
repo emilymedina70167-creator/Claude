@@ -1,0 +1,13 @@
+# 主线第二轮 B：挑战里直接写式子（以前要先藏一张 matrix D = {A B - B A} hide=on 再比 D = O）
+matrix A = 1 1 / 0 1
+matrix B = 1 2 / 3 4 beside=A
+open B edit
+goal g1 "改 B，让 AB = BA" when="{A B - B A} = O"
+say "改 B 里的数，让它和 A 乘起来不分先后。"
+学生: write B.2,1 2
+学生: write B.2,1 0
+学生: write B.2,2 1
+dial k = 0 range=-3..3
+goal g2 "拨 k，让 A − kI 不可逆" when="{det(A - k I)} = 0"
+say "再拨 k。"
+学生: dial k 1

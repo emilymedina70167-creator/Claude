@@ -14,7 +14,7 @@ import { parseScript, parseRef, parseRich, addCommands, OPTIONS, optionError } f
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
 // numOf：数（整数、小数、分数 -3/4，′ 和真的减号也认），比大小用；和挑战判数是同一个
-import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure, numOf } from './goal.js';
+import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure, numOf, isExpr, exprMeasure } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder, termText } from './value.js';
 import { rulesOf, done as nextDone, checkMeasure, measureLine, changedKeys, parseMeasure } from './rules.js';
@@ -118,7 +118,8 @@ export function affordsOf(t) {
 
 // 手势表里的动作（rules.js 的 gestures：rotate、rowop、mark……）给老师看的一句：按五种通用手势说
 const GESTURE_TEXT = { tap: '点', 'drop-on': '拖到上面', 'drop-at': '拖到空处', span: '拉一段', line: '拉一条线', write: '写一个值' };
-const gestureText = (g) => [].concat(g?.gesture || []).map((k) => GESTURE_TEXT[k] || k).join(' / ');
+// 手势表自己写了 brief 的照它说（一排格子的 move：「拖到空处」说不清是对调还是插进去）
+const gestureText = (g) => g?.brief || [].concat(g?.gesture || []).map((k) => GESTURE_TEXT[k] || k).join(' / ');
 /** open 那一行老师事先定的：走偏了怎么办（wrong）、什么时候叫老师（call）、学生能不能撤一步（undo）。默认照做、只记下 */
 const POLICY = {
   wrong: { quiet: '照做、只记下', mark: '照做、淡淡圈一下', block: '不让做、弹回去' },
@@ -767,7 +768,8 @@ export class Scene {
     const rules = rulesOf(o);
     if (!rules) return null;
     let act = null;
-    try { act = rules.actOf(o, c, this.helpers(c)); } catch { act = null; } // 写得读不懂的：交给那种东西自己的指令报错
+    // 第四个参数：这一下是谁做的、学生从哪一项 open 做的（一排格子只让 open a move / edit 来的那一下过裁判，老写法 open a 照旧不过）
+    try { act = rules.actOf(o, c, this.helpers(c), { by, open }); } catch { act = null; } // 写得读不懂的：交给那种东西自己的指令报错
     if (!act) return null;
     const policy = by === 'student' ? this.policyOf(id, open, c.cmd) : {};
     const base = { obj: id, act, src: lineOf(c), by, policy };
@@ -965,7 +967,8 @@ export class Scene {
     const o = this.objects.get(name);
     if (!o) throw new Error(this.goals.has(name) ? `${name} 是挑战：做到了演的行写 @${name}，@名字.${kind} 写在舞台上的东西上` : `舞台上没有「${name}」`);
     const rules = rulesOf(o);
-    if (!rules) throw new Error(`${typeOf(o).label}页面判不了对错（没有规则），@${name}.${kind} 的行不会演`);
+    // 交了规则但只有手势和量、不判对错的（一排格子、图）也一样
+    if (!rules || !(rules.judges.length || rules.doneBy.length)) throw new Error(`${typeOf(o).label}页面判不了对错（没有规则），@${name}.${kind} 的行不会演`);
     // 先查写下去能不能起作用：要交给学生的是页面判对错（.right）、能做完（.done）的动作；规则现在算得出下一步。起不了作用的当场说为什么
     const need = kind === 'done' ? rules.doneBy : rules.judges;
     const given = [...this.opens.values()].some((e) => e.obj === name && need.includes(e.action));
@@ -1465,7 +1468,8 @@ export class Scene {
           e.input = 'keypad';
         }
         // 拨数器默认 -9～9；键盘写的值不写 range= 就不限（写了照它收，gestures.js 的 writeRange）
-        if (action === 'edit' && !(e.input && opts.range == null)) {
+        // 没有自己的拨数器的（一排格子的 edit 只有键盘）也一样：不写 range= 不限
+        if (action === 'edit' && !((e.input || !affords.edit) && opts.range == null)) {
           const [lo, hi] = parseRange(opts.range || '-9..9');
           if (!(lo <= hi)) throw new Error('range 要写成 小..大，比如 range=-3..3');
           e.lo = lo; e.hi = hi;
@@ -1993,7 +1997,8 @@ export class Scene {
   collectOne(g, student) {
     const c = g.collect;
     const o = this.objects.get(c.obj);
-    const m = o && typeOf(o).measure ? typeOf(o).measure(o) : null;
+    let m = null;
+    if (c.expr) { try { m = exprMeasure(this, c.obj); } catch { m = null; } } else m = o && typeOf(o).measure ? typeOf(o).measure(o) : null;
     if (!m) return false;
     if (c.last && sameMeasure(c.last, m) === true) return false;
     c.last = structuredClone(m);
@@ -2020,6 +2025,10 @@ export class Scene {
   /** goal … collect=B n=3：收哪样东西（要能整个拿来比）、收几张 */
   collectSpec(opts, id) {
     const obj = String(opts.collect).trim();
+    const n0 = Number(opts.n);
+    const needN = () => { if (opts.n == null || !Number.isInteger(n0) || n0 < 1 || n0 > 12) throw new Error(`collect= 要跟着 n= 写收几张（1～12 的整数），比如 goal ${id} "…" when="…" collect=${obj} n=3`); };
+    // collect={A v}（主线第二轮 B）：收的是那一刻算出来的值（不用先藏一张跟着算的矩阵）。写错了当场报；还空着的照收（填上以后算得出）
+    if (isExpr(obj)) { exprMeasure(this, obj); needN(); return { obj, expr: true, n: n0, got: [], dup: 0, last: null }; }
     const o = this.objects.get(obj);
     if (!o) throw new Error(`collect= 写舞台上一样东西的名字（goal ${id} "…" when="…" collect=B n=3）：舞台上没有「${obj}」`);
     if (!typeOf(o).measure) throw new Error(`${typeOf(o).label}「${obj}」还不能整个拿来比，收不了（collect= 写矩阵、一排格子这种能整个比的）`);

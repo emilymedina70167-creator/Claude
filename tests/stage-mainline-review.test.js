@@ -19,14 +19,16 @@ test('S1：重放旧课，dial … at= 写的部件不在：照旧收下（当�
   assert.equal(run(new Scene(), 'array a = 1 2 3\ndial d = 1 range=1..5 at=a.9').length, 1);
 });
 
-test('S2：重放旧课，一排格子里同时有 _ 和 {…}：照旧造出来；之后跟着拨数重算也不报', () => {
+test('S2：一排格子里同时有 _（空格子，主线第二轮 A）和 {…}：造得出来；之后跟着拨数重算也不报；重放一样', () => {
   const s = new Scene();
   assert.deepEqual(run(s, 'dial k = 1 range=1..5\narray h = _ {k} 38', REPLAY), []);
-  assert.deepEqual(values(s, 'h'), ['_', '1', '38']);
+  assert.deepEqual(values(s, 'h'), ['', '1', '38']);
   assert.deepEqual(run(s, 'set k 4', REPLAY), []);
-  assert.deepEqual(values(s, 'h'), ['_', '4', '38']);
-  // 新写的照旧报
-  assert.match(run(new Scene(), 'dial k = 1 range=1..5\narray h = _ {k} 38')[0], /不能有空格子/);
+  assert.deepEqual(values(s, 'h'), ['', '4', '38']);
+  // 新写的一样
+  const n = new Scene();
+  assert.deepEqual(run(n, 'dial k = 1 range=1..5\narray h = _ {k} 38\nset k 4'), []);
+  assert.deepEqual(values(n, 'h'), ['', '4', '38']);
 });
 
 test('Y1：原样取部件的字只用在一排格子上——图的边权、树的结点照旧按数写（1/2 → 0.5、49′ → 49、09 → 9）', () => {

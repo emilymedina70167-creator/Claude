@@ -657,6 +657,59 @@ const n6 = await page.evaluate(async () => {
 });
 expect('刷新以后重新挂旧课的最后一问（带不认得的 hint=on）：挂上了、expect= 还在、没报错；新写的同一行照旧报', n6, 'tap｜a.1｜0｜true');
 
+// —— 主线第二轮 A：一排格子 open a move（按住一张拖：两张之间插进去、另一张上对调、空格子上挪进去）、open h edit（点一格键盘写数）——
+await play('array a = 49 38 65 97 76 13 27\narray h = _ _ 5\nopen a move\nopen h edit\nopen h move');
+const valsOf = (id) => page.evaluate((id) => [...window.LAStage.scene.objects.get(id).cells].sort((x, y) => x.slot - y.slot).map((c) => (c.value === '' ? '□' : c.value)).join(' '), id);
+let before2 = await srcs();
+A = await box('a:6'); B = await box('a:1');
+// 第 1 格前面的空隙：第 1 格左边一点
+await holdDrag({ x: A.cx, y: A.cy }, { x: B.x - 8, y: B.cy });
+await page.waitForTimeout(1300);
+expect('一排格子：按住 13 拖到第 1 格前面，插进去、中间的各让一格', `${await added(before2)}｜${await valsOf('a')}`, 'move a#6 -> a.1｜13 49 38 65 97 76 27');
+before2 = await srcs();
+A = await box('a:1'); B = await box('a:2');
+await holdDrag({ x: A.cx, y: A.cy }, { x: B.cx, y: B.cy });
+await page.waitForTimeout(1300);
+expect('一排格子：按住 49 拖到 38 上，两张对调', `${await added(before2)}｜${await valsOf('a')}`, 'swap a#1 a#2｜13 38 49 65 97 76 27');
+before2 = await srcs();
+// 拖到两张之间的正中（49 和 65 之间）：插进去
+A = await box('a:7'); B = await box('a:1'); const C2 = await box('a:3');
+await holdDrag({ x: A.cx, y: A.cy }, { x: (B.x + B.w + C2.x) / 2, y: B.cy });
+await page.waitForTimeout(1300);
+expect('一排格子：按住 27 拖到 49 和 65 之间，插到第 4 格', `${await added(before2)}｜${await valsOf('a')}`, 'move a#7 -> a.4｜13 38 49 27 65 97 76');
+before2 = await srcs();
+// a 上只开了 move 这一项：同一处没有别的按法，按下就挪也算拖（h 上还开着 edit，要按住 0.35 秒才托得起来）
+A = await box('a:4'); B = await box('a:6');
+await drag({ x: A.cx, y: A.cy }, { x: B.cx, y: B.cy });
+await page.waitForTimeout(1300);
+expect('一排格子：只开了 move 时按下就挪也算拖', `${await added(before2)}｜${await valsOf('a')}`, 'swap a#4 a#6｜97 38 49 27 65 13 76');
+before2 = await srcs();
+A = await box('h:3'); B = await box('h:2');
+await drag({ x: A.cx, y: A.cy }, { x: B.cx, y: B.cy });
+await page.waitForTimeout(600);
+expect('一排格子：h 上还开着 edit，没按住就挪不算拖', `${await added(before2)}｜${await valsOf('h')}`, '没有｜_ _ 5'.replace(/_/g, '□'));
+// 点空格子：出数字键盘，写 38
+before2 = await srcs();
+A = await box('h:1');
+await tapAt({ x: A.cx, y: A.cy });
+await page.waitForTimeout(350);
+expect('一排格子：点空格子出数字键盘、每个键至少 44', await page.evaluate(() => { const ks = [...document.querySelectorAll('.st-keypad .st-kp-k')]; return ks.length ? String(ks.every((k) => { const r = k.getBoundingClientRect(); return r.width >= 44 && r.height >= 44; })) : '没有键盘'; }), 'true');
+for (const k of ['3', '8', '确定']) { const p = await keyAt(k); if (p) await tapAt(p); await page.waitForTimeout(90); }
+await page.waitForTimeout(900);
+expect('一排格子：键盘写 38，空格子有数了', `${await added(before2)}｜${await valsOf('h')}`, 'write h.1 38｜38 □ 5');
+// 空格子拿不起来；有数的拖到空格子上是挪进去
+before2 = await srcs();
+A = await box('h:2'); B = await box('h:3');
+await holdDrag({ x: A.cx, y: A.cy }, { x: B.cx, y: B.cy });
+await page.waitForTimeout(700);
+expect('一排格子：空格子按住拖不起来', `${await added(before2)}｜${await valsOf('h')}`, '没有｜38 □ 5');
+before2 = await srcs();
+A = await box('h:3'); B = await box('h:2');
+await holdDrag({ x: A.cx, y: A.cy }, { x: B.cx, y: B.cy });
+await page.waitForTimeout(1300);
+expect('一排格子：5 拖到空格子上，挪进去', `${await added(before2)}｜${await valsOf('h')}`, 'swap h#3 h#2｜38 5 □');
+expect('一排格子：发给老师的那一下写了做了什么', await page.evaluate(() => window.LAStageDev.actText(window.LAStageDev.acts.at(-1))), '学生 swap h#3 h#2（5 从第 3 格挪进空着的第 2 格）');
+
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

@@ -15,13 +15,33 @@
 // 这一句不成立、写「判不了」，不写 ✗（学生也许已经做对了，是页面数不了）；量名写错写下挑战时当场报。
 
 import { predicateOf, rulesOf, parseMeasure, checkMeasure, evalMeasure } from './rules.js';
-import { gridText } from './value.js';
+import { gridText, evalLive, evalHoles, numText } from './value.js';
+import { isQ, isQMat, isQVec } from '../exact.js';
 
 const OPS = ['!=', '≠', '==', '<=', '>=', '≤', '≥', '=', '<', '>'];
 const OP_RE = /^(.+?)\s*(!=|≠|==|<=|>=|≤|≥|=|<|>)\s*(.+)$/;
 
+// —— {式子}（主线第二轮 B）：一句的一边整个是一个式子（when="{A B - B A} = O"），照 value.js 现算 ——
+// 拆句子之前先把 {…} 换成一个占位的词（里面的空格、逗号、比较号、| 都不是这一句的）：⟦0⟧、⟦1⟧……，拆完换回来
+const HOLE_RE = /⟦(\d+)⟧/g;
+function shield(text) {
+  const holes = [];
+  const src = String(text ?? '');
+  const s = src.replace(/\{[^{}]*\}/g, (m) => { holes.push(m); return `⟦${holes.length - 1}⟧`; });
+  const at = s.search(/[{}]/);
+  if (at >= 0) throw new Error(s[at] === '{' ? `「${src.slice(src.indexOf('{'), src.indexOf('{') + 16)}」的 { 没有收尾（式子写在一对 {} 里）` : '多了一个 }（式子写在一对 {} 里，不能套）');
+  const back = (w) => (typeof w === 'string' ? w.replace(HOLE_RE, (_, i) => holes[Number(i)]) : w);
+  return { s, back: (cl) => ({ ...cl, ...(cl.l != null ? { l: back(cl.l) } : {}), ...(cl.r != null ? { r: back(cl.r) } : {}), ...(cl.args ? { args: cl.args.map(back) } : {}) }) };
+}
+/** 这一边是不是 {式子} */
+export const isExpr = (w) => /^\{[^{}]*\}$/.test(String(w ?? '').trim());
+
 /** 条件的写法 → [{ l, op, r } | { l, sorted: 'asc' | 'desc' }]；写错了抛错（错误的话直接给老师看） */
 export function parseGoal(text) {
+  const sh = shield(text);
+  return parseClauses(sh.s).map(sh.back);
+}
+function parseClauses(text) {
   // 量的括号里的空格去掉（height( t.50 )）：不然下面按空格认判断式时会把它拆开
   const s = String(text ?? '').trim().replace(/([A-Za-z_]\w*)\(\s*([^()\s]+)\s*\)/g, '$1($2)');
   if (!s) throw new Error('when= 要写条件，比如 when="C = O, D != O"');
@@ -49,11 +69,12 @@ export function parseGoal(text) {
  * 写错了抛错（哪一组空着也报）
  */
 export function parseWhen(text) {
-  const s = String(text ?? '').trim();
+  const sh = shield(String(text ?? '').trim());
+  const s = sh.s;
   if (!s) throw new Error('when= 要写条件，比如 when="C = O, D != O"');
   const groups = s.split(/\s*\|\|?\s*/);
-  if (groups.length > 1 && groups.some((g) => !g.trim())) throw new Error(`「${s}」：| 两边都要写条件（有一组都成立就算做到），比如 when="k.1 = 3 | k.1 = 4"`);
-  return groups.map((g) => parseGoal(g));
+  if (groups.length > 1 && groups.some((g) => !g.trim())) throw new Error(`「${String(text).trim()}」：| 两边都要写条件（有一组都成立就算做到），比如 when="k.1 = 3 | k.1 = 4"`);
+  return groups.map((g) => parseClauses(g).map(sh.back));
 }
 
 // —— 数：整数、小数、分数（-3/4），′ 和真的减号也认 ——
@@ -74,6 +95,7 @@ const PRIMED = /^[-+]?\d+(\.\d+)?'+$/;
 const primeOf = (x) => String(x).trim().replace(/'/g, '′');
 export function operand(scene, w) {
   const word = String(w).trim();
+  if (isExpr(word)) return exprOperand(scene, word);
   if (word.includes('′') || PRIMED.test(word)) return { k: 'num', v: primeOf(word) }; // 49′ 不是 49
   if (numOf(word) != null) return { k: 'num', v: numOf(word) };
   if (parseMeasure(word)) {
@@ -91,6 +113,35 @@ export function operand(scene, w) {
   if (scene.vars?.has(word)) return { k: 'num', v: scene.vars.get(word).v };
   if (scene.isRef(word)) return { k: 'parts', parts: scene.parts(word) };
   throw new Error(`「${word}」不是舞台上的东西（能写东西的名字、部件、数、O、I、量 count(t)）`);
+}
+
+/**
+ * {式子} 这一边现在是什么：数是 { k: 'num' }；矩阵、向量（当一列）是 { k: 'obj', expr, m }，和一张矩阵一样整个比。
+ * 用到的格还空着（evalLive 报「还空着」、别处写对了）是 { k: 'null', why }：现在判不了，填上以后判得了。写错了、维数对不上照原样抛
+ */
+function exprOperand(scene, word) {
+  let v;
+  try { v = evalLive(word, scene).value; } catch (err) {
+    let holes = null;
+    try { holes = evalHoles(word, scene).holes; } catch { holes = null; }
+    if (!holes) throw err;
+    return { k: 'null', why: `${word} 用到的格还空着` };
+  }
+  if (isQ(v)) return { k: 'num', v: numText(v) };
+  const rows = isQMat(v) ? v.map((r) => r.map(numText)) : isQVec(v) ? v.map((x) => [numText(x)]) : null;
+  if (!rows) throw new Error(`「${word}」算出来的不是数、向量或矩阵`);
+  return { k: 'obj', o: { id: word }, expr: true, m: { kind: 'matrix', rows } };
+}
+/** 一个 {式子} 现在的值当一份 measure（收集型挑战 collect={A v} 拿它比收过的几张）：数当一格的一排；还空着是 null；写错了抛错 */
+export function exprMeasure(scene, word) {
+  const x = exprOperand(scene, word);
+  return x.k === 'num' ? { kind: 'list', values: [String(x.v)] } : x.k === 'obj' ? x.m : null;
+}
+/** 一个 {式子} 现在的值写成字（现状里那一句后面）：数照写、矩阵写 (1 2; 3 4)；算不出来是 null */
+export function exprShown(scene, word) {
+  let x;
+  try { x = exprOperand(scene, word); } catch { return null; }
+  return x.k === 'num' ? String(x.v).replace(/^-/, '−') : x.k === 'obj' ? gridText(x.m.rows) : null;
 }
 
 // 一个 measure 里的数全填上了没有；矩阵 { kind: 'matrix', rows: [[值]] }，一排 { kind: 'list', values }
@@ -137,7 +188,9 @@ function predMissing(scene, cl) {
   return names.length ? `${scene.type(o).label}「${cl.l}」没有判断式「${cl.pred}」，能写：${names.join('、')}` : `${scene.type(o).label}「${cl.l}」还没有判断式可写（能比的有 =、!=、sorted）`;
 }
 // 一句比较里写的量（两边）
-const measuresIn = (cl) => (cl.pred ? [] : cl.sorted ? [cl.l] : [cl.l, cl.r]).filter((w) => parseMeasure(w));
+const measuresIn = (cl) => (cl.pred ? [] : cl.sorted ? [cl.l] : [cl.l, cl.r]).filter((w) => !isExpr(w) && parseMeasure(w));
+// 这一句里现算的两边：量、{式子}（现在数不了、还空着时这一句是「判不了」）
+const liveSides = (cl) => (cl.pred ? [] : cl.sorted ? [cl.l] : [cl.l, cl.r]).filter((w) => isExpr(w) || parseMeasure(w));
 
 /**
  * 写下挑战时就查：判断式名对不对；run 时再把每个判断式跑一遍（不看现在成不成立）——参数写错（t height=abc）、
@@ -182,7 +235,7 @@ export function evalClause(scene, cl) {
     if (!(op === '=' || op === '!=')) throw new Error(`整个东西只能比一样不一样（= / !=），「${cl.l} ${op} ${cl.r}」不行`);
     const [a, b] = L.k === 'obj' ? [L, R] : [R, L];
     if (a.k !== 'obj') throw new Error(`「${cl.l} ${op} ${cl.r}」：两边至少要有一样是舞台上的东西`);
-    if (b.k !== 'obj' && b.k !== 'zero' && b.k !== 'id') throw new Error(`「${cl.l} ${op} ${cl.r}」：整个东西不能和一个数比（要比一格就写 ${a.o.id}.1,1 这样的部件）`);
+    if (b.k !== 'obj' && b.k !== 'zero' && b.k !== 'id') throw new Error(a.expr ? `「${cl.l} ${op} ${cl.r}」：${a.o.id} 算出来是矩阵，不能和一个数比（和 O、I、另一张矩阵比；要一个数就写 {det(…)}、{…}里取一格）` : `「${cl.l} ${op} ${cl.r}」：整个东西不能和一个数比（要比一格就写 ${a.o.id}.1,1 这样的部件）`);
     if (b.k === 'id' && a.m.kind !== 'matrix') throw new Error('I 是单位矩阵，只能和矩阵比');
     const eq = b.k === 'zero' ? isZero(a.m) : b.k === 'id' ? isIdentity(a.m) : sameMeasure(a.m, b.m);
     if (eq == null) return false; // 还没填满
@@ -221,7 +274,9 @@ export function shapeText(m) {
 
 /** 这一句里数不了的那个量：{ k: 'null', why }；没有是 null */
 function nullSide(scene, cl) {
-  for (const w of measuresIn(cl)) { const x = operand(scene, w); if (x.k === 'null') return x; }
+  for (const w of liveSides(cl)) { const x = operand(scene, w); if (x.k === 'null') return x; }
+  // a sorted：一排里还有空着的格（学生还没写完），排没排好现在判不了，不是「没排好」
+  if (cl.sorted) { let x = null; try { x = operand(scene, cl.l); } catch { return null; } if (x.k === 'obj' && x.m.kind === 'list' && !filled(x.m)) return { k: 'null', why: `${cl.l} 还有空着的格` }; }
   return null;
 }
 
@@ -259,6 +314,8 @@ function goalNow(scene, g) {
       ok = clauseState(scene, cl);
       const why = ok == null ? nullSide(scene, cl)?.why : null;
       m = ok == null ? ` 判不了${why ? `：${why}` : ''}` : ok ? ' ✓' : ' ✗';
+      // {式子} 现在算出来是什么（不成立时写：老师不用自己再算一遍；成立了就是另一边那个值）
+      if (ok === false) { const vs = [cl.l, cl.r].filter(isExpr).map((w) => exprShown(scene, w)).filter(Boolean); if (vs.length) m += `，现在是 ${vs.join(' 和 ')}`; }
     } catch (err) {
       ok = null; m = ` 判不了：${err?.message || err}`;
       const name = String(err?.message || '').match(/^「([A-Za-z_]\w*)[^」]*」不是舞台上的东西/)?.[1];

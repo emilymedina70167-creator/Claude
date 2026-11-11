@@ -183,13 +183,16 @@ export function measureText(v) {
 /**
  * 舞台现状里每样东西多的一行：「页面算的：count(t) = 6，height(t) = 4；avl 否（…），bst 是；页面数不了：…」。
  * 只算写整样东西的量；extra 是那种东西自己交的几句（types/ 的 pageBits：树的 avl / bst）。数不了的写在最后；
- * 这样东西本来就没有的量（增广矩阵的 det）不列，也不算数不了——不然每一轮都多一句没用的。没交量的东西是 null
+ * 这样东西本来就没有的量（增广矩阵的 det）不列，也不算数不了——不然每一轮都多一句没用的。没交量的东西是 null。
+ * 量自己写了 listed(o, scene) 的，它说不列就不列（一排格子的 inversions 只在交给学生拖、写的时候列：查找、哈希的课每一轮多一句没用）
  */
 export function measureLine(scene, o, extra = []) {
-  const names = Object.keys(rulesOf(o)?.measures || {});
+  const ms = rulesOf(o)?.measures || {};
+  const names = Object.keys(ms);
   if (!names.length) return null;
   const vals = [], miss = [];
   for (const name of names) {
+    if (ms[name].listed && !ms[name].listed(o, scene)) continue;
     const w = `${name}(${o.id})`;
     let r;
     try { r = runMeasure(scene, w); } catch (err) { r = { value: null, why: String(err?.message || err), none: false }; }

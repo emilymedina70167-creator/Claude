@@ -335,3 +335,74 @@ test('D4-4：挑战里的东西拿掉了，现状合成一行「判不了：t �
   assert.notEqual(goalMark(s, s.goals.get('g1')), 'met');
   assert.ok(before);
 });
+
+// —— 主线第二轮 B：when= 的两边直接写 {式子}（以前要先藏一张辅助矩阵 matrix D = {A B - B A} hide=on 再比 D = O）——
+test('B：条件里的 {式子} 整个当一边：花括号里的空格、逗号、比较号、| 都不拆', async () => {
+  const { parseWhen } = await import('../kit/src/stage/goal.js');
+  assert.deepEqual(parseGoal('{A B - B A} = O, {det(A)} != 0'), [{ l: '{A B - B A}', op: '=', r: 'O' }, { l: '{det(A)}', op: '!=', r: '0' }]);
+  assert.deepEqual(parseGoal('{A B} = {B A}'), [{ l: '{A B}', op: '=', r: '{B A}' }]);
+  assert.deepEqual(parseGoal('{A.1,2 + 1}>0'), [{ l: '{A.1,2 + 1}', op: '>', r: '0' }]);
+  assert.deepEqual(parseWhen('{A.1,2 + 1} > 0 | {A B} = I'), [[{ l: '{A.1,2 + 1}', op: '>', r: '0' }], [{ l: '{A B}', op: '=', r: 'I' }]]);
+  assert.throws(() => parseGoal('{A B = O'), /没有收尾/);
+});
+
+test('B：when="{A B - B A} = O" 写下时不成立照收，学生改成可交换以后做到；现状里写式子现在的值', () => {
+  const sc = new Scene();
+  run(sc, 'matrix A = 1 1 / 0 1\nmatrix B = 1 2 / 3 4 beside=A\nopen B edit');
+  assert.equal(dryRun(sc, 'goal g1 "改 B，让 AB = BA" when="{A B - B A} = O"').length, 0);
+  run(sc, 'goal g1 "改 B，让 AB = BA" when="{A B - B A} = O"');
+  // AB − BA = [3 3; 0 −3]
+  assert.match(sc.stateText(), /挑战 g1[^\n]*还没做到（\{A B - B A\} = O ✗，现在是 \(3 3; 0 −3\)）/);
+  sc.apply(parseScript('write B.2,1 0')[0], { by: 'student', open: 'edit' });
+  assert.equal(sc.goals.get('g1').met, false);
+  const fx = sc.apply(parseScript('write B.2,2 1')[0], { by: 'student', open: 'edit' });
+  assert.deepEqual(fx.goalsMet, ['g1']);
+  // 写下就成立的照旧不收
+  assert.match(dryRun(sc, 'goal g2 "x" when="{A B} = {B A}"')[0].error, /现在就已经成立/);
+});
+
+test('B：数的式子、两边都是式子、和量混着写；算不出来是「判不了」不是「不成立」', () => {
+  const sc = new Scene();
+  run(sc, 'matrix A = 2 1 / 1 2\ndial k = 0 range=-3..3\nmatrix M = _ 2 / 3 4\nopen M edit\nopen A edit');
+  run(sc, 'goal g1 "拨 k，让 A − kE 不可逆" when="{det(A - k I)} = 0"\ngoal g2 "填满" when="{det(M)} != 0"');
+  // 两边都是式子、和量混着写：A² = 4A − 3I 对这张 A 成立（特征值 1、3），写下就成立照旧不收
+  assert.match(dryRun(sc, 'goal g3 "x" when="{A A} = {4 A - 3 I}, {tr(A)} > rank(A)"')[0].error, /现在就已经成立/);
+  assert.equal(dryRun(sc, 'goal g3 "x" when="{A A} = {4 A - 2 I}, {tr(A)} > rank(A)"').length, 0);
+  assert.match(sc.stateText(), /g1[^\n]*\{det\(A - k I\)\} = 0 ✗，现在是 3/);
+  // 还有空格子：判不了（学生也许没填完），不写 ✗
+  assert.match(sc.stateText(), /g2[^\n]*\{det\(M\)\} != 0 判不了：[^\n]*空着/);
+  assert.doesNotMatch(sc.stateText(), /\{det\(M\)\} != 0 ✗/);
+  const fx = sc.apply(parseScript('set k 1')[0], { by: 'student' });
+  assert.deepEqual(fx.goalsMet, ['g1']);
+  const f2 = sc.apply(parseScript('write M.1,1 5')[0], { by: 'student', open: 'edit' });
+  assert.deepEqual(f2.goalsMet, ['g2']);
+});
+
+test('B：式子写错当场报；用到的东西全藏着、学生动不到照旧拦；矩阵和数比当场报', () => {
+  const sc = new Scene();
+  run(sc, 'matrix A = 1 1 / 0 1\nmatrix B = 1 2 / 3 4 beside=A\nmatrix H = 1 0 / 0 1 hide=on\nopen B edit');
+  assert.match(dryRun(sc, 'goal g1 "x" when="{A Z} = O"')[0].error, /Z/);
+  assert.match(dryRun(sc, 'goal g1 "x" when="{A B} = 3"')[0].error, /不能和一个数比|矩阵/);
+  assert.match(dryRun(sc, 'goal g1 "x" when="{H H} = O"')[0].error, /藏着/);
+  // 重放旧课：照收不报
+  const old = new Scene();
+  run(old, 'matrix A = 1 1 / 0 1');
+  assert.doesNotThrow(() => old.apply({ ...parseScript('goal g1 "x" when="{A Z} = O"')[0], lenient: true }));
+  assert.match(old.stateText(), /g1[^\n]*判不了/);
+});
+
+test('B：collect={式子}：收的是那一刻算出来的值，一样的不重复收', () => {
+  const sc = new Scene();
+  run(sc, 'matrix A = 1 1 / 0 1\nmatrix B = 0 0 / 0 0 beside=A\nopen B edit\ngoal g1 "找 2 个不一样的 AB，都要第一行相等" when="{A B} != O" collect={A B} n=2');
+  assert.match(dryRun(sc, 'goal g9 "x" when="B != O" collect={A Z} n=2')[0].error, /Z/);
+  const w = (ref, v) => sc.apply(parseScript(`write ${ref} ${v}`)[0], { by: 'student', open: 'edit' });
+  // B = (0 0; 1 0)：AB = (1 0; 1 0)，收一张
+  w('B.2,1', 1);
+  assert.equal(sc.goals.get('g1').collect.got.length, 1);
+  // B = (1 0; 0 0)：AB = (1 0; 0 0)，不一样，第二张
+  w('B.2,1', 0);
+  assert.equal(sc.goals.get('g1').collect.got.length, 1, '拨回零矩阵：条件不成立，不收');
+  const fx = w('B.1,1', 1);
+  assert.deepEqual(fx.goalsMet, ['g1']);
+  assert.match(sc.stateText(), /g1[^\n]*做到了/);
+});
