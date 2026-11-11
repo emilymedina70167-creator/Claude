@@ -1,0 +1,14 @@
+# 主线第四轮：照引擎走（最短路）。图上比牌子上的 dist；表上引擎每一轮的 dist 当答案
+graph g = 1>2:10 1>5:5 2>3:1 5>2:3 5>3:9
+table T = _ _ _ _ / _ _ _ _ / _ _ _ _ rows="2 3 5" cols="第1轮 第2轮 第3轮 第4轮"
+follow g net dijkstra from=1
+follow T net dijkstra on=g from=1
+open g tag
+open T edit
+say "先在图上把第 1 轮的 dist 写出来，再填表的第 1 列。"
+学生: tag g.1 0
+学生: tag g.2 10
+学生: tag g.5 5
+学生: write T.1,1 10
+学生: write T.2,1 5
+学生: say 第一轮好了

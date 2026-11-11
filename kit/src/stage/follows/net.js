@@ -76,5 +76,5 @@ registerFollow('net', {
     T.key = rows.map((k) => Array.from({ length: T.cols }, (_, c) => dist(hist[c].dist[k])));
     return { id: T.id, keyed: true };
   },
-  doc: 'follow g net dijkstra from=1   照图的引擎走（dijkstra：牌子写 dist、点结点是确定；prim / kruskal 选边；bfs / dfs 点结点）。表：follow T net dijkstra on=g from=1 把每一轮的 dist 当答案',
+  doc: 'follow g net dijkstra from=1   图：dijkstra 比牌子上的 dist（open g tag），prim / kruskal 比选的边，bfs / dfs 比访问的先后；表 follow T net dijkstra on=g from=1：每一轮的 dist 当答案（一行一个顶点、一列一轮）',
 });

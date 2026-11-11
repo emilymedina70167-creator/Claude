@@ -1,0 +1,16 @@
+# 主线第四轮：照引擎走（排序）。老师一行 follow，现状里就有每一趟做完该是什么样；学生到了一趟页面当场知道对不对
+array a = 49 38 65 97 76 13 27 49′
+follow a sort shell gaps="5 3 1"
+group a stride=5
+open a move
+@a.right say "这一趟对了，和书上的一样。"
+@a.done say "三趟都做完了。"
+say "隔 5 个一组，每组里排好。"
+学生: swap a#1 a#6
+学生: swap a#2 a#7
+学生: swap a#3 a#8
+学生: swap a#4 a#5
+学生: say 第二趟我不确定
+group a stride=3
+say "看隔 3 的三条链：先把刚才那一下换回来。"
+ask next "换回来了点这里" button="好了"

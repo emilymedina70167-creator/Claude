@@ -245,6 +245,11 @@ open tl.me move  学生按住小人拖到一个停靠点 = set me 现在
 open tl.war stretch  学生拖条能动的那一头 = set e 现在
 比先后（when=）：e < me、me >= 1830（同一条轴上的拨盘，或者和一个停靠点比）；现状里写每条在小人之前 / 之后 / 小人在中间
 
+## 照引擎走
+follow a sort shell gaps="5 3 1"  页面让排序引擎在 a 现在的数上跑一遍（insert / shell / bubble / select / quick / merge / radix）
+follow g net dijkstra from=1  图：dijkstra 比牌子上的 dist（open g tag），prim / kruskal 比选的边，bfs / dfs 比访问的先后；表 follow T net dijkstra on=g from=1：每一轮的 dist 当答案（一行一个顶点、一列一轮）
+照着走的东西：现状里写着每一趟（轮）做完该是什么样，不用自己算；学生做到一趟页面当场知道对不对、像哪种错法（只告诉你，一趟中间不判）。量 pass(a)，判断式 a pass=2、a done；@a.right 到一趟演一次，@a.done 走完演；follow a off 不照了
+
 例子（一轮）：
 array a = 49 38 65 97 76 13 27 49′ 55 04
 hop a.1 -> a.6 color=g1

@@ -1,6 +1,7 @@
 // 舞台上的课：发给老师（Opus 5.5）的说明和每一轮的内容（docs/stage-plan.md B 段）。纯函数，有测试（tests/stage-doc.test.js）。
 // 说明分两块：怎么教（STAGE_TEACH：像一个会停下来等学生的科普视频——画面是主力，先做后说）和镜头指令（STAGE_DOC）。
 // 提到学生不用「他」「她」（tests 守着）
+import { followOf, followNames } from './follow.js';
 import { TYPES } from './types/index.js';
 import { MEMO_DOC, packText, PACK_BUDGET } from '../class/prompt.js';
 import { memoryDigest } from '../memory/digest.js';
@@ -107,6 +108,9 @@ export const SUBJECT_TYPES = {
   英语: ['sentence', 'card', 'table', 'timeline'],
 };
 
+// 照引擎走的那一小节末尾共用的两句（每类算法自己的一行在对应关系的 doc 里）
+const FOLLOW_DOC = '照着走的东西：现状里写着每一趟（轮）做完该是什么样，不用自己算；学生做到一趟页面当场知道对不对、像哪种错法（只告诉你，一趟中间不判）。量 pass(a)，判断式 a pass=2、a done；@a.right 到一趟演一次，@a.done 走完演；follow a off 不照了';
+
 /** 整份指令说明：共用的 + 舞台上能放的东西（subject：这节课是哪门课，只带用得上的那几种） */
 export function stageDoc(subject = '') {
   const want = SUBJECT_TYPES[subject] || null;
@@ -118,6 +122,9 @@ export function stageDoc(subject = '') {
     parts.push(t.doc);
   }
   if (skipped.length) parts.push(`（这门课一般用不上、说明没带的：${skipped.join('、')}）`);
+  // 照引擎走（follow.js）：只带这门课接上了的那几类算法（对应关系的 subjects）；全带的那一份都带
+  const follows = followNames().map(followOf).filter((a) => a.doc && (!subject || a.subjects.includes(subject)));
+  if (follows.length) parts.push(`## 照引擎走\n${follows.map((a) => a.doc).join('\n')}\n${FOLLOW_DOC}`);
   const exType = want && !want.includes('array') ? TYPES[want.find((k) => TYPES[k]?.example)] : TYPES.array;
   parts.push(`例子（一轮）：\n${(exType || TYPES.array).example}`);
   // 源码里写法和说明之间用一串空格对齐着（好读）；发给老师的那一份压成两个——每门课省约 1 KiB，内容一个字不少

@@ -407,3 +407,21 @@ test('主线第三轮 0：拼出来的说明把对齐用的连续空格压成两
   // 源码里引号里没有这样的空格（有的话压了会改掉老师要照抄的字）
   for (const t of [STAGE_COMMON, ...Object.values(TYPES).map((x) => `${x.doc || ''}\n${x.example || ''}`)]) for (const m of t.matchAll(/"[^"\n]*"|「[^」\n]*」/g)) assert.doesNotMatch(m[0], / {3,}/);
 });
+
+test('主线第四轮：照引擎走（follow）的说明只按科目带——数据结构有，操作系统没有（只剩 70 字节）；每门课还在上限里', async () => {
+  const { STAGE_TEACH } = await import('../kit/src/stage/doc.js');
+  const ds = stageDoc('数据结构');
+  assert.match(ds, /## 照引擎走/);
+  assert.match(ds, /follow a sort shell gaps="5 3 1"/);
+  assert.match(ds, /follow g net dijkstra from=1/);
+  assert.match(ds, /pass\(a\)/);
+  for (const s of ['操作系统', '组成原理', '计网', '线代', '英语']) assert.doesNotMatch(stageDoc(s), /follow/, s);
+  assert.match(stageDoc(), /## 照引擎走/); // 全带的那一份也有
+  const bytes = (t) => new TextEncoder().encode(t).length;
+  for (const s of Object.keys(SUBJECT_TYPES)) assert.ok(bytes(`${STAGE_TEACH}\n\n${stageDoc(s)}`) <= 24576, `${s}：${bytes(`${STAGE_TEACH}\n\n${stageDoc(s)}`)}`);
+  // 说明里的例子照抄就能演
+  const { Scene } = await import('../kit/src/stage/scene.js');
+  const { parseScript } = await import('../kit/src/stage/script.js');
+  const sc = new Scene();
+  for (const c of parseScript('array a = 49 38 65 97 76 13 27 49\ngraph g = 1>2:10 1>5:5 5>2:3\ntable T = _ _ / _ _ rows="2 5" cols="第1轮 第2轮"\nfollow a sort shell gaps="5 3 1"\nfollow g net dijkstra from=1\nfollow T net dijkstra on=g from=1\nfollow a off')) sc.apply(c);
+});

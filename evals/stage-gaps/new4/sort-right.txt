@@ -1,0 +1,7 @@
+# 主线第四轮：照着走时到了一趟，页面马上演老师预写的那一句（@a.right）
+array a = 3 1 2
+follow a sort insert
+open a move
+@a.right say "这一趟对了。"
+say "把 1 插到它该在的地方。"
+学生: move a#2 -> a.1

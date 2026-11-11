@@ -61,5 +61,5 @@ registerFollow('sort', {
     });
     return out;
   },
-  doc: 'follow a sort shell gaps="5 3 1"   照排序引擎走（insert / shell / bubble / select / quick / merge / radix）',
+  doc: 'follow a sort shell gaps="5 3 1"   页面让排序引擎在 a 现在的数上跑一遍（insert / shell / bubble / select / quick / merge / radix）',
 });

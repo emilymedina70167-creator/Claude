@@ -258,7 +258,8 @@ export function followRules(base, o) {
       const w1 = o2 && whereOf(o2, s2);
       if (!w1 || w1.error) return out;
       const was = w0.at != null ? w0.passed : obj.follow.passed || 0;
-      if (w1.at != null && (w1.passed > was || (w0.at != null && w1.at > w0.at))) out.right = true;
+      // 只在到了检查点时说对（@a.right 也是这时候演）：一趟中间正好走在引擎的路上的那几下不判，只在事实里说一声
+      if (w1.at != null && w1.passed > was) out.right = true;
       else if (w1.like && w1.like !== w0.like) { out.right = false; out.misread = w1.like; }
       if (w1.next) out.next = `${nth(a, obj.follow, w1.next.mark, w1.next.upto)}做完该是：${shown(a, obj.follow, w1.next)}`;
       return out;
@@ -273,6 +274,7 @@ export function followRules(base, o) {
       const u = unitOf(a, after.follow.fields);
       if (w.at != null && w.passed > was) return [...mine, `到了第 ${w.passed} ${u}做完的样子（和引擎算的一样）`];
       if (w.like) return [...mine, `${w.like}（和这种错法做完第 ${w.likeMark} ${u}的样子一样）`];
+      if (w.at != null && wb && wb.at != null && w.at > wb.at && w.next) return [...mine, `在引擎走的那条路上；${gapText(a, after, scene, w, { brief: true })}`];
       if (w.off) return [...mine, gapText(a, after, scene, w)].filter(Boolean);
       return mine;
     },
