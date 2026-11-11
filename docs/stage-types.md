@@ -128,3 +128,28 @@ SVG 节点也可以当部件节点：`flagPart` 照样加 class，`pulse` 和翻
 - **大小**：`objectBox` 尽量算准，算不准的舞台会量（每个节点 `data-obj` 由 `partNode` / `decor` 自动打上，`measure` 量出来多出去的写回 `o.ext`）。能量的就量了写回场景（题卡 `l.mh`），调 `stage.relayout()`。**存在东西上的位置都要相对它自己的 origin**（乘积的 `band` 就因为存了绝对位置，挪了以后占的地方被拉长）。
 - **装饰跟着东西走**：底卡、括号这类 `decor` 的位置每次 `sync` 都要按现在的框重摆，不能只在造出来时摆一次。
 - 改完跑 `npm run check:stage`（排版检查 + 手指检查）。
+
+## 接一类算法（照引擎走，主线第四轮，`kit/src/stage/follow.js`）
+
+页面不懂算法，算法的知识全在黑板的引擎里（`kit/src/engines/`）。老师写 `follow a sort shell gaps="5 3 1"`，页面让引擎跑一遍，拿「正确的那条路」和「每种错法的路」去对学生做出来的样子。**每接一类算法只写一份对应关系**，不写规则文件、不加指令、不造新东西。三步：
+
+1. 写 `kit/src/stage/follows/名字.js`，`registerFollow('名字', { … })`（照 `follows/sort.js`，53 行；图是 `follows/net.js`，71 行。**上限 150 行**，超了说明这类算法在舞台上还没有合适的东西，先别接）：
+
+| 项 | 做什么 |
+|---|---|
+| `engine` | 引擎本身（`{ parse, run, variants }`），直接 import 那一个引擎，不要 import `registry.js` |
+| `types` / `subjects` / `head` | 能接在哪几种东西上；说明里哪几门课带它；`follow a sort shell` 里不写名字的那个字段 |
+| `fields(o, opts, scene)` | 引擎的字段：从这样东西现在的样子拼（一排格子的数、图的边），加上老师写的 |
+| `dataOf(o)` | 这样东西的「数据」写成一串（不管摆成什么样）：变了页面从新的样子重跑 |
+| `stateOf(o, scene, snap)` | 现在的样子写成能比的一串 |
+| `frames(run, spec)` | 引擎的每一步写成同样的一串：`[{ state, cells, mark? }]`；`mark` 是第几趟（轮）做完，一步可以是好几趟的检查点（`[2, 3]`） |
+| `cellsOf` / `nameOf` / `word` / `show` | 现在每一处显示的字、第 i 处叫什么、一处叫「格」还是「个顶点」、一个检查点怎么写给老师看：说得出「差哪几处」「下一趟该是什么样」 |
+| `snap` / `loose` / `drillOpen` / `toKey`（可选） | 写 follow 那一刻要记下的；和错法比得松一点；自己练的时候开哪种手；接在表上时把引擎的结果当表的答案 |
+| `title` / `unit` / `doc` | 给老师看的名字、一步叫「趟」还是「轮」、说明里的一行 |
+
+2. 在 `follows/index.js` 里 import 它。
+3. 加一幕试演到 `evals/stage-gaps/new4/` 和表 `NEW4`（`tools/stage-try-lib.js`），`node tools/stage-must.mjs evals/stage-gaps/new4 --table new4`。
+
+接上以后自动有的：现状里每一趟做完该是什么样；学生到了一趟页面知道对不对、像哪种错法；量 `pass(a)`、判断式 `a pass=2` / `a done` / `a onpath`；`@a.right` / `@a.done`；这节课下课把它抄成一道「舞台上自己练」的题（`memory/stagedrills.js`、黑板组件 `stage`）。
+
+页面只在检查点判（一趟、一轮）：一趟中间学生先动哪张不判，只说离做完差哪几处。
