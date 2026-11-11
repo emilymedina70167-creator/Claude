@@ -140,14 +140,12 @@ test('课堂：没把握的动作告诉课堂 Claude；答对了却没把握马�
   assert.match(actionText({ ...a, sure: true, ok: false }), /有把握.*误解/);
 });
 
-test('换数的舞台题（d-stage-…、题库里 random）每次都是新题；不换数的（图）只有第一次是', async () => {
+test('舞台题（d-stage-…）换了数也是原题换数：不算新题（不升掌握、不算复现通过）；教研室的题照旧只有第一次算新题', async () => {
   const { markFresh, isOriginal } = await import('../kit/src/memory/mastery.js');
-  const drills = [{ id: 'd-stage-a', random: true }, { id: 'd-stage-g', random: false }];
   const items = [
     { comp: 'd-stage-a', session: 'c-1', first: 1 }, { comp: 'd-stage-a', session: 'c-2', first: 2 },
-    { comp: 'd-stage-g', session: 'c-1', first: 1 }, { comp: 'd-stage-g', session: 'c-2', first: 2 },
-    { comp: 'd-20261027-1-q3', session: 'c-1', first: 1 },
+    { comp: 'd-lab-x', session: 'c-1', first: 1 }, { comp: 'd-lab-x', session: 'c-2', first: 2 },
   ];
-  markFresh(items, drills);
-  assert.deepEqual(items.map((it) => isOriginal(it)), [false, false, false, true, true]);
+  markFresh(items);
+  assert.deepEqual(items.map((it) => isOriginal(it)), [true, true, false, true]);
 });

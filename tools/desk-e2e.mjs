@@ -685,6 +685,81 @@ const SUITES = {
     return t;
   },
 
+  // 舞台上自己练（主线第四轮）：题库里放一道舞台题（黑板组件 stage）。练一练里它嵌一块没有老师的舞台，按住一张牌拖过去，
+  // 页面照引擎判；走完算做对一道题（是原题换数：复现组档位不动）。第二节走到一半就回学习台、直接下课：记放弃，复现组记没过
+  async stagedrill(browser) {
+    const t = await seeded(browser);
+    const plant = async (md) => t.page.evaluate((md) => {
+      const k = [...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).find((x) => x.startsWith('la-devdb:'));
+      const all = JSON.parse(localStorage.getItem(k));
+      for (const p of Object.keys(all)) if (p.startsWith('drills/')) delete all[p];
+      all['drills/d-stage-e2e'] = { block: 'L2.2.2', kind: 'stage', md, q: '照 直接插入排序 走一遍', title: '直接插入排序', src: 'stage', random: true, review: 'R3', fromSession: 'c-20261020-1', space: 'math', status: 'active', orig: 'wrong', at: Date.parse('2026-10-20T10:00:00+08:00') };
+      localStorage.setItem(k, JSON.stringify(all));
+    }, md);
+    const start = async () => {
+      await t.open(); await sleep(1500);
+      await t.waitFor(() => t.page.$('.dk-trow[data-row="drill"]'), { what: '首页出现「练一练」' });
+      await t.page.click('.dk-trow[data-row="drill"]'); await sleep(800);
+      await t.page.click('.fl-panel .dk-drill-go');
+      const id = await t.inClass();
+      await t.waitFor(() => t.page.evaluate(() => !!document.querySelector('.block-stagedrill')?.__stage?.scene.objects.get('a')?.follow), { timeout: 15000, what: '舞台题演出来、照着引擎走' });
+      await sleep(900);
+      return id;
+    };
+    // 按住一张牌 0.45 秒，拖到另一张上（对调）。牌按现在在第几格找
+    const swap = async (from, to) => {
+      const at = (slot) => t.page.evaluate((slot) => { const st = document.querySelector('.block-stagedrill').__stage; const c = st.scene.objects.get('a').cells.find((x) => x.slot === slot); const r = st.nodes.get(`a:${c.key}`).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, slot);
+      await t.page.evaluate(() => document.querySelector('.block-stagedrill .sd-stage').scrollIntoView({ block: 'center' }));
+      await sleep(300);
+      const a = await at(from), b = await at(to);
+      await t.page.mouse.move(a.x, a.y); await t.page.mouse.down(); await sleep(450);
+      for (let i = 1; i <= 12; i++) { await t.page.mouse.move(a.x + (b.x - a.x) * i / 12, a.y + (b.y - a.y) * i / 12); await sleep(16); }
+      await sleep(80); await t.page.mouse.up(); await sleep(1200);
+    };
+    const r0 = (await t.docs('reviews')).find((r) => r.id === 'R3');
+    // 第一节：两张牌、每次换数（取出来一定是前大后小），拖一下就走完
+    await plant('```stage\nid: d-stage-e2e\npick a = seq(2, 1, 9) distinct\n---\narray a = {a}\nfollow a sort insert\nopen a move\n```');
+    const did = await start();
+    await swap(1, 2);
+    await t.waitFor(() => t.page.evaluate(() => /走完了/.test(document.querySelector('.sd-note')?.textContent || '')), { timeout: 8000, what: '拖完页面说走完了' });
+    await t.page.click('.dr-next');
+    const d = await t.waitFor(async () => (await t.docs('sessions')).find((x) => x.id === did && x.status === 'closed' && x.drill), { timeout: 25000, what: '练一练做完写进 sessions' });
+    check(d.drill.n === 1 && d.drill.clean === 1, `舞台题走完、一次做对，结果记成 ${JSON.stringify(d.drill)}`);
+    const ev = (await t.docs('evidence')).filter((e) => e.session === did && e.comp === 'd-stage-e2e');
+    check(ev.some((e) => e.kind === 'stage' && e.ok === true), `证据里没有舞台题做对的那一条：${JSON.stringify(ev).slice(0, 300)}`);
+    const r1 = (await t.docs('reviews')).find((r) => r.id === 'R3');
+    check(r1.tier === r0.tier, `舞台题是原题换数，都做对档位不该动（${r0.tier} → ${r1.tier}）`);
+    // 第二节：三张牌、两趟。只做第一趟就回学习台、直接下课：记放弃
+    await t.page.evaluate(() => { const k = [...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).find((x) => x.startsWith('la-devdb:')); const all = JSON.parse(localStorage.getItem(k)); for (const p of Object.keys(all)) if (p.startsWith('evidence/')) delete all[p]; localStorage.setItem(k, JSON.stringify(all)); });
+    await plant('```stage\nid: d-stage-e2e\n---\narray a = 3 1 2\nfollow a sort insert\nopen a move\n```');
+    const did2 = await start();
+    await swap(1, 2); // 3 1 2 → 1 3 2：第 1 趟做完，还差一趟
+    await t.waitFor(() => t.page.evaluate(() => /第 1 趟做完了/.test(document.querySelector('.sd-note')?.textContent || '')), { timeout: 8000, what: '第 1 趟做完页面说一声' });
+    await t.page.click('.dr-home');
+    await t.waitFor(() => t.page.evaluate(() => !location.hash && !!document.querySelector('.dk-class')), { timeout: 15000, what: '从练习回到学习台' });
+    await t.page.waitForSelector('.dk-open .dk-close', { state: 'attached', timeout: 15000 });
+    await t.page.evaluate((x) => document.querySelector(`.dk-open .dk-close[data-sid="${x}"]`)?.click(), did2);
+    await t.answer('直接下课');
+    const d2 = await t.waitFor(async () => (await t.docs('sessions')).find((x) => x.id === did2 && x.status === 'closed'), { timeout: 20000, what: '练一练直接下课' });
+    check(d2.drill, '练一练直接下课以后没有算结果');
+    const ev2 = (await t.docs('evidence')).filter((e) => e.session === did2);
+    check(ev2.some((e) => e.kind === 'giveup' || e.giveup), `舞台题走到一半就走，没有记放弃：${JSON.stringify(ev2).slice(0, 300)}`);
+    const r2 = (await t.docs('reviews')).find((r) => r.id === 'R3');
+    check(r2.result !== r1.result || r2.last !== r1.last, `舞台题没走完，复现组 R3 没变（${JSON.stringify({ before: r1.result, after: r2.result })}）`);
+    // 舞台课 → 题库：一节下了课的舞台课里老师写过 follow，首页打开时把它抄成一道舞台题（同一种只有一道）
+    await t.page.evaluate(() => {
+      const k = [...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).find((x) => x.startsWith('la-devdb:'));
+      const all = JSON.parse(localStorage.getItem(k));
+      all['sessions/c-20261101-9'] = { kind: 'stage', status: 'closed', block: 'DS-L8.2.3', space: 'cs', subject: '数据结构', date: '2026-11-01', startedAt: Date.parse('2026-11-01T10:00:00+08:00'), endedAt: Date.parse('2026-11-01T10:40:00+08:00'), report: { v: 99, items: 0, activeMs: 1000 } };
+      all['sessions/c-20261101-9/class_turns/0001'] = { seq: 1, role: 'claude', session: 'c-20261101-9', at: Date.parse('2026-11-01T10:01:00+08:00'), text: 'array a = 49 38 65 97 76 13 27 49\nfollow a sort shell gaps="5 3 1"\nopen a move\nsay "隔 5 个一组"' };
+      localStorage.setItem(k, JSON.stringify(all));
+    });
+    await t.open();
+    const got = await t.waitFor(async () => (await t.docs('drills')).find((d) => d.id === 'd-stage-DS-L8_2_3-sort-algo_shell_gaps_5_3_1'), { timeout: 20000, what: '下了课的舞台课里的 follow 抄进题库' });
+    check(got.kind === 'stage' && got.space === 'cs' && /pick a = seq\(8, 13, 97\) distinct/.test(got.md), `抄出来的舞台题不对：${JSON.stringify(got).slice(0, 300)}`);
+    return t;
+  },
+
   // 复现课：「复现」那一行点开，「复现这 N 组」开一节复现课，这节课记着复现哪几组；连点两下只开一节
   async review(browser) {
     const t = await seeded(browser);

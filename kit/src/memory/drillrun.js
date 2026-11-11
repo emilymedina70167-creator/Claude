@@ -30,9 +30,8 @@ export async function closeDrill(db, sid, { doc, drills = null, curriculum = nul
   const mem = { reviews: rows(await db.collection('reviews').get().catch(() => null)), errors: rows(await db.collection('errors').get().catch(() => null)), curriculum };
   // 教研室出的新题（src: lab）：以前别的课里没做过，这一次才算新题（复现组能升档）；做过的就是原题了
   const fresh = new Set();
-  // 舞台题（src: stage）：换数的每次都是新题；不换数的（图）和教研室的题一样，只有第一次算
-  for (const d of drills.filter((x) => x.src === 'stage' && x.random)) fresh.add(d.id);
-  for (const d of drills.filter((x) => x.src === 'lab' || (x.src === 'stage' && !x.random))) {
+  // 舞台题（src: stage）不算新题：换了数也是「原题换数」（我的规则 rule-rev-2），都做对档位不动，做错照样记没过
+  for (const d of drills.filter((x) => x.src === 'lab')) {
     const before = rows(await db.collection('evidence').where('comp', '==', d.id).get().catch(() => null));
     if (!before.some((e) => e.session && e.session !== sid)) fresh.add(d.id);
   }
