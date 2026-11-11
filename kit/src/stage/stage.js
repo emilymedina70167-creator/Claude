@@ -708,9 +708,10 @@ export class Stage {
       const lab = this.scene.labels.get(lid);
       if (!lab || lab.dial || !l.box || !this.labelShown(lab)) continue;
       const objs = [...new Set(lab.refs.filter((r) => !this.scene.labels.has(r)).map((r) => String(r).match(/^[A-Za-z_]\w*/)?.[0]).filter((id) => id && this.scene.objects.has(id)))];
-      rects.push({ x: Math.round(l.box.x), y: Math.round(l.box.y), w: Math.round(l.box.w), h: Math.round(l.box.h), objs });
+      // want：老师写的 side=（reflow 照它给写了 side=above 的字让出地方）
+      rects.push({ x: Math.round(l.box.x), y: Math.round(l.box.y), w: Math.round(l.box.w), h: Math.round(l.box.h), objs, want: lab.side || null });
     }
-    const key = (rs) => rs.map((r) => `${r.x},${r.y},${r.w},${r.h},${r.objs.join('+')}`).join('|');
+    const key = (rs) => rs.map((r) => `${r.x},${r.y},${r.w},${r.h},${r.objs.join('+')},${r.want || ''}`).join('|');
     if (key(rects) !== key(this.scene.labelRects || [])) { this.scene.labelRects = rects; changed = true; }
     if (this.layoutDirty) { this.layoutDirty = false; changed = true; }
     return changed;
@@ -1268,6 +1269,14 @@ export class Stage {
     for (const [id, l] of this.labelNodes) if (id !== exceptId && l.box && sc.labels.has(id) && this.labelShown(sc.labels.get(id))) out.push(l.box);
     return out;
   }
+  /** 这行字贴着的是一样摆着的东西（或它的部件）：那一边被占着时东西能让开（贴在两样东西上、贴在别的字上、贴在连线上的不行） */
+  roomCanBeMade(l) {
+    const sc = this.scene;
+    if (l.link || l.refs.length !== 1 || sc.labels.has(l.refs[0])) return false;
+    const id = String(l.refs[0]).match(/^[A-Za-z_]\w*/)?.[0];
+    const o = id && sc.objects.get(id);
+    return !!o && !o.hidden && !!o.origin;
+  }
   anchorOf(l) {
     const sc = this.scene;
     if (l.link) { const k = sc.links.get(l.link); const g = k && this.linkGeo(k); if (g?.box) return g.box; }
@@ -1308,7 +1317,14 @@ export class Stage {
       const stale = !cur.box || !cur.anchor || Math.abs(cur.anchor.x - anchor.x) > 1 || Math.abs(cur.anchor.y - anchor.y) > 1 || Math.abs(cur.anchor.w - anchor.w) > 1 || cur.box.w !== size.w || obs.some((o) => overlaps(grow(cur.box, 1), o));
       if (!stale) continue;
       const prefer = l.side ? [l.side, 'above', 'below', 'right', 'left'] : ['above', 'below', 'right', 'left'];
-      const p = placeLabel(anchor, size, obs, { prefer, gap: l.dial ? 18 : 12 });
+      let p = placeLabel(anchor, size, obs, { prefer, gap: l.dial ? 18 : 12 });
+      // 老师写了 side=above / below，那一边只是被别的东西占着：照写的那一边摆（只躲别的字），东西会让开——
+      // 下面后造的东西照 labelRects 往下让，side=above 的那样东西自己往下让（scene.js 的 reflow）。
+      // 以前换到别的一边、也不说，side= 等于没写（主线第一轮 D1-7、D3-4、E1-5）。左右两边没有东西能让，照旧换边、现状里说
+      if (!l.dial && (l.side === 'above' || l.side === 'below') && p.side !== l.side && this.roomCanBeMade(l)) {
+        const others = [...this.labelNodes].filter(([id, n]) => id !== l.id && n.box && sc.labels.has(id) && this.labelShown(sc.labels.get(id))).map(([, n]) => n.box);
+        p = placeLabel(anchor, size, others, { prefer: [l.side], gap: 12, tries: 3 });
+      }
       const from = cur.box;
       const sideWas = cur.side;
       cur.box = { x: p.x, y: p.y, ...size };

@@ -2325,3 +2325,23 @@ test('D4-10：同名重造一样东西——贴在旧部件上的字收掉（贴
   old.apply({ ...parseScript('array a = 38 49 65')[0], lenient: true });
   assert.equal(old.labels.has('s'), true);
 });
+
+// —— 舞台主线第一轮：贴的字照写的那一边摆 ——
+test('side=above 的字贴在后造的东西上：那样东西往下让出放字的地方（以前字换到别的一边）；让过了不再接着让', () => {
+  const s = run(new Scene(), 'array a = 1 2 3\narray b = 4 5 6');
+  const A = s.objectBox('a');
+  const y0 = s.objectBox('b').y;
+  // 画面量了写回的：贴在 b 上面、56 高的一行字（现在和 a 的下沿挤在一起）
+  s.labelRects = [{ x: 0, y: y0 - 70, w: 200, h: 56, objs: ['b'], want: 'above' }];
+  s.reflow();
+  const y1 = s.objectBox('b').y;
+  assert.ok(y1 - (A.y + A.h) >= 56 + 24, `b 和 a 之间要放得下那一行字：${y1 - (A.y + A.h)}`);
+  s.reflow();
+  assert.equal(s.objectBox('b').y, y1, '再排一遍不接着往下推');
+  // 没写 side=above 的字（want 是 null）、贴在两样东西上的字：不为它让
+  const t = run(new Scene(), 'array a = 1 2 3\narray b = 4 5 6');
+  const yb = t.objectBox('b').y;
+  t.labelRects = [{ x: 600, y: yb - 70, w: 200, h: 56, objs: ['b'], want: null }, { x: 600, y: yb - 70, w: 200, h: 56, objs: ['a', 'b'], want: 'above' }];
+  t.reflow();
+  assert.equal(t.objectBox('b').y, yb);
+});

@@ -26,6 +26,7 @@ export const COLORS = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 export const SWEEP_MAX = 25;
 export const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
 export const OBJECT_GAP = 70; // 两样东西上下摆开隔多远
+const LABEL_ROOM = 30; // 一行贴在东西上面的字，除了它自己的高还要留多少（离上面的东西、离它贴的东西各一段）
 /**
  * 预写最多套几层（@g1 是第 1 层，@g1 里写出的 goal g2 的 @g2 是第 2 层……）：再多就是事先排好的一整段课，
  * 要等老师看着学生写（硬性规定：教学不预制，docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.1）
@@ -1688,6 +1689,12 @@ export class Scene {
       for (const r of this.labelRects) {
         if (!r.objs.length || r.objs.some((id) => !order.has(id) || order.get(id) >= i)) continue;
         if (r.x < me.x + me.w && me.x < r.x + r.w && r.y < me.y + me.h) need = Math.max(need, r.y + r.h + OBJECT_GAP / 3);
+      }
+      // 老师写了 side=above 贴在这样东西上的字：上面那样东西和它之间要放得下这一行字，放不下它往下让
+      // （主线第一轮：以前字找不到地方就换到别的一边，side= 等于没写）。只管贴在它一样东西上的；让多少只看字多高，让过了不再让
+      if (need > -Infinity) {
+        const above = need - OBJECT_GAP / 2;
+        for (const r of this.labelRects) if (r.want === 'above' && r.objs.length === 1 && r.objs[0] === o.id) need = Math.max(need, above + r.h + LABEL_ROOM);
       }
       if (me.y < need && o.origin) o.origin = { ...o.origin, y: o.origin.y + (need - me.y) };
     }

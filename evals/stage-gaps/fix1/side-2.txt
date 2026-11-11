@@ -1,0 +1,7 @@
+# 贴的字写了 side=above / below：那一边被别的东西占着时，东西让开，字照写的那一边摆（以前换到别的一边、不说）
+array a = 49 38 65 97 76 13 27 49′ 55 04
+label under a "这一排还没动" side=below tone=note
+array b = 13 04 49′ 38 27 49 55 65 97 76
+label rule b "直接插入：拿起一张，比它大的往右让一格，放进空位" side=above tone=note
+say "先猜：两排都用直接插入，哪排挪得多？"
+ask next "看好了点下面" button="看好了"
