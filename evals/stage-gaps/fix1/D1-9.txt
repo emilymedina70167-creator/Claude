@@ -1,0 +1,3 @@
+# D1-9：只收不判的 ask value（没写 answer=）按钮以前也写「对吗」
+array a = 49 38 65
+ask value "数一数前大后小的有几对，写下来"
