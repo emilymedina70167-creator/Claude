@@ -8,6 +8,7 @@
 import { Q, isQVec, isQMat } from '../../exact.js';
 import { bbox } from '../layout.js';
 import { toQ, parseRows, placeFor } from './matrix.js';
+import { wordDialError } from '../pick.js';
 
 export const UNIT = 56; // 一格多少像素（iPad 上看得清：镜头还会放大一点）
 export const MAX_RANGE = 10;
@@ -132,6 +133,7 @@ export function parseCombo(text, o, scene, self) {
     let k = null, dial = null, neg = sg < 0;
     if (coef === '' || coef === '-') { k = coef === '-' ? (neg ? '1' : '-1') : neg ? '-1' : '1'; neg = false; } else if (toQ(coef)) { k = (neg ? toQ(coef).neg() : toQ(coef)).toString(); neg = false; } else if (scene.vars.has(coef.replace(/^-/, ''))) {
       dial = coef.replace(/^-/, '');
+      if (scene.vars.get(dial).options) throw new Error(wordDialError(dial, scene.vars.get(dial)));
       if (coef.startsWith('-')) neg = !neg;
     } else if (scene.objects.has(coef)) {
       // vec p w = A v：照字面写的矩阵乘向量。系数只收数和拨数，要算式子写在 {} 里（跟着算，value.js）

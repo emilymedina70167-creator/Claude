@@ -1063,6 +1063,8 @@ export class Stage {
     return mine ? (cc, f, pre) => mine.call(this, cc, f, pre) : null;
   }
   // 拨盘变了，跟着它重排的东西（句子里的 {t: … | …}）：照那种东西自己的画法演（场景交的 choreo 是哪一个）
+  // 同名重造一个拨盘也一样（跟着它的句子照新的值重排）
+  do_dial(c, fx, pre) { return this.do_set(c, fx, pre); }
   async do_set(c, fx, pre) {
     for (const r of fx?.binds || []) {
       if (!r?.choreo) continue;

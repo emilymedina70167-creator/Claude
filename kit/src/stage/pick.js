@@ -48,6 +48,8 @@ export function splitPicks(text) {
   const out = [];
   let buf = '';
   for (let i = 0; i < s.length; i++) {
+    // 公式 $…$ 里的花括号是公式自己的（$\{x: Ax = 0 | x \ne 0\}$ 是集合，不是挑一段）：整段照原样过去
+    if (s[i] === '$') { const j = s.indexOf('$', i + 1); if (j > i + 1) { buf += s.slice(i, j + 1); i = j; continue; } }
     if (s[i] === '{') {
       const j = closeOf(s, i);
       const p = j > 0 ? parsePick(s.slice(i + 1, j)) : null;
@@ -61,6 +63,8 @@ export function splitPicks(text) {
 /** 有没有「照拨盘挑一个」 */
 export const hasPick = (text) => splitPicks(text).some((p) => p.k === 'pick');
 
+/** 拨词的拨盘（dial t = 现在 options="…"）用在只认数的地方：当场报，不默默当成第几个 */
+export const wordDialError = (name, x) => `${name} 是拨词的拨盘（${x.options.join(' / ')}），不是数：这里要一个拨数的（dial k = 1 range=1..5）`;
 /** 拨盘现在写出来是什么：拨词的是那个词，拨数的是数 */
 export const varText = (x) => (x?.options ? x.options[x.v - 1] ?? String(x.v) : String(x?.v ?? ''));
 /** 拨盘能拨到几个、现在是第几个（0 起）；拨数的拨盘不是整数格的（没有）是 null */

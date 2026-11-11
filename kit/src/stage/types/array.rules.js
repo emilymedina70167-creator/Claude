@@ -15,7 +15,7 @@ export function numOf(v) {
   const s = String(v ?? '').trim();
   if (s === '') return '';
   const m = s.replace(/[′']+$/, '').replace(/^[−–]/, '-').match(/^(-?\d+(?:\.\d+)?)(?:\/(\d+))?$/);
-  return m ? Number(m[1]) / (m[2] ? Number(m[2]) : 1) : null;
+  return m && !(m[2] && Number(m[2]) === 0) ? Number(m[1]) / (m[2] ? Number(m[2]) : 1) : null; // 分母是 0 的不是数
 }
 /** 前大后小的有几对（逆序对）；一样大的不算 */
 export function inversions(ns) {

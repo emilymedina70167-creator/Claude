@@ -895,7 +895,15 @@ function rewriteWords(o, words, end, pairs, { segs = null } = {}) {
   o.tags = keep(o.tags);
   o.folds = keep(o.folds);
   o.cuts = o.cuts.filter((k) => alive.has(k) && pos.get(k) !== next.length);
-  o.refers = o.refers.filter((r) => alive.has(r.from) && (r.whole || (r.toKeys ? r.toKeys.every((k) => alive.has(k)) : alive.has(r.to))));
+  // 跟着拨盘重排（segs）：指着 {…} 那一整段的箭头和括号一样接到新那一段上（学生从钩上拉到谓语那道括号的线，一拨不丢）
+  o.refers = o.refers.map((r) => {
+    if (!alive.has(r.from)) return null;
+    if (r.whole) return r;
+    if (!r.toKeys) return alive.has(r.to) ? r : null;
+    if (r.toKeys.every((k) => alive.has(k)) && !segs) return r;
+    const keys = segs ? respan(r.toKeys) : null;
+    return keys && !keys.includes(r.from) ? { ...r, toKeys: keys, to: keys[keys.length - 1] } : null;
+  }).filter(Boolean);
   // 原来的正确拆法是那一句的：改写以后对不上了，作废（不拿旧的去判新句子）；记着作废了，老师在「舞台现在」和下一步里看得到
   if (o.key) o.key = { src: o.key.src, spans: [], void: 'rewrite' };
   if (o.links) o.links = { src: o.links.src, pairs: [], wrongs: [], void: 'rewrite' };

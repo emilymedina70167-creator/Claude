@@ -171,3 +171,18 @@ test('句子里 {t: …} 的写法查：要和别的词用空格隔开；每个�
   assert.match(dryRun(new Scene(), 'dial t options="a b"\nsentence s = "I walk{t: ed | s} home."')[0].error, /用空格隔开/);
   assert.match(dryRun(new Scene(), 'sentence s = "I {t: was | am} here."')[0].error, /没有叫「t」的拨盘/);
 });
+
+test('拨盘同名重造：跟着它的句子照新的那一个词重排；段数对不上了当场报（不留一句读不成的）', () => {
+  const s = make('dial t = 现在 options="过去 现在 将来"\nsentence s = "I {t: was | am | will be} here."\nlabel n s "{t: 昨天 | 今天 | 明天}"');
+  // 换了起头的词：句子跟着换
+  const fx = s.apply(parseScript('dial t = 将来 options="过去 现在 将来"')[0]);
+  assert.equal(wordsOf(s, 's'), 'I will be here');
+  assert.ok((fx.binds || []).some((b) => b.id === 's'));
+  // 个数变了：句子、贴的字里的段数对不上，当场报是谁
+  const bad = dryRun(s, 'dial t = 现在 options="过去 现在"');
+  assert.match(bad[0].error, /句子 s[^\n]*写了 3 段，拨盘 t 能拨到 2 个/);
+  const s2 = make('dial t = 现在 options="过去 现在 将来"\narray a = 1 2\nlabel n a "{t: 昨天 | 今天 | 明天}"');
+  assert.match(dryRun(s2, 'dial t = 1 range=1..2')[0].error, /贴的字 n[^\n]*写了 3 段，拨盘 t 能拨到 2 个/);
+  // 换成一样多格的拨数拨盘：照收（从 range 头一个起）
+  assert.equal(dryRun(s2, 'dial t = 2 range=1..3').length, 0);
+});

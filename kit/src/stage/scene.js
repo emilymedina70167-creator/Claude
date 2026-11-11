@@ -14,7 +14,7 @@ import { parseScript, parseRef, parseRich, addCommands, OPTIONS, optionError } f
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
 // numOf：数（整数、小数、分数 -3/4，′ 和真的减号也认），比大小用；和挑战判数是同一个
-import { splitPicks, checkPick, varText, pickDeps } from './pick.js';
+import { splitPicks, checkPick, varText, pickDeps, wordDialError } from './pick.js';
 import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure, numOf, isExpr, exprMeasure } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder, termText } from './value.js';
@@ -119,8 +119,6 @@ export function affordsOf(t) {
 
 // 手势表里的动作（rules.js 的 gestures：rotate、rowop、mark……）给老师看的一句：按五种通用手势说
 const GESTURE_TEXT = { tap: '点', 'drop-on': '拖到上面', 'drop-at': '拖到空处', span: '拉一段', line: '拉一条线', write: '写一个值' };
-// 拨词的拨盘（dial t = 现在 options="…"）用在只认数的地方：当场报，不默默当成第几个
-export const wordDialError = (name, x) => `${name} 是拨词的拨盘（${x.options.join(' / ')}），不是数：这里要一个拨数的（dial k = 1 range=1..5）`;
 // 手势表自己写了 brief 的照它说（一排格子的 move：「拖到空处」说不清是对调还是插进去）
 const gestureText = (g) => g?.brief || [].concat(g?.gesture || []).map((k) => GESTURE_TEXT[k] || k).join(' / ');
 /** open 那一行老师事先定的：走偏了怎么办（wrong）、什么时候叫老师（call）、学生能不能撤一步（undo）。默认照做、只记下 */
@@ -871,7 +869,9 @@ export class Scene {
    */
   fillOpen(id) {
     const o = this.objects.get(id);
-    return !!o?.cells && !o.collect && !o.live && [...this.opens.values()].some((e) => e.obj === id && e.input === 'keypad');
+    // 键盘写的才有「写满」：写了 input=keypad 的，或者这种东西的 edit 本来就只有键盘（一排格子：没有自己的拨数器）
+    const typed = (e) => e.input === 'keypad' || (e.action === 'edit' && !affordsOf(typeOf(o)).edit && [].concat(e.gesture?.gesture || []).includes('write'));
+    return !!o?.cells && !o.collect && !o.live && [...this.opens.values()].some((e) => e.obj === id && typed(e));
   }
   /** 还有没有空着的格（_） */
   blankLeft(id) { return !!this.objects.get(id)?.cells?.some((x) => x.value === ''); }
@@ -1200,6 +1200,8 @@ export class Scene {
         // 写的是两样整样的东西、可这种东西不会整张比（一排格子）：说清楚能比什么（主线第一轮 D1-14）
         if (ws && parts.length !== 2) throw new Error(`compare 比的是两个部件（compare a.3 a.8）或者两张矩阵（compare A B）${ws[0].type === ws[1].type ? `：${typeOf(ws[0]).label}不能整${ws[0].type === 'array' ? '排' : '样'}比，一格一格写` : `：${ws[0].id} 和 ${ws[1].id} 不是同一种东西`}`);
         if (parts.length !== 2) throw new Error('compare 要正好两个（比如 compare a.3 a.8）');
+        // 空格子没有数可比（以前照字符串比，画成「3 > 空」）：当场报；重放旧课照旧
+        if (!c.lenient) { const blank = parts.find((p) => p.value === ''); if (blank) throw new Error(`${this.tapRef(blank)} 还空着，比不了（先填上，或者比别的两格）`); }
         return { a: parts[0], b: parts[1], sign: compareValues(parts[0].value, parts[1].value) };
       }
       case 'link': {
@@ -1279,6 +1281,8 @@ export class Scene {
           if (list.length > 8) throw new Error(`options= 最多 8 个词（写了 ${list.length} 个）`);
           const dup = list.find((w, i) => list.indexOf(w) !== i);
           if (dup) throw new Error(`options= 里「${dup}」重了`);
+          const odd = list.find((w) => /[="「」“”{}|]/.test(w));
+          if (odd) throw new Error(`options= 的词里不能有 = 、引号、花括号（「${odd}」）：学生一拨交的是 set ${name} ${odd}，读不成。换个写法（k是1、k取1）`);
           if (val != null && !list.includes(val)) throw new Error(`「${val}」不在 options= 里（${list.join('、')}）`);
         }
         const [lo, hi] = list ? [1, list.length] : parseRange(opts.range || '1-9');
@@ -1291,11 +1295,17 @@ export class Scene {
         const atPartRaw = !!at && !this.objects.has(at) && this.objects.has(atObj) && /[.#]/.test(at);
         let atPart = atPartRaw;
         if (atPart) { try { this.parts(at); } catch (err) { if (!c.lenient) throw err; atPart = false; } }
-        this.vars.set(name, { v: Math.max(lo, Math.min(hi, v)), lo, hi, at, shown: true, ...(list ? { options: list } : {}) });
+        const fresh = { v: Math.max(lo, Math.min(hi, v)), lo, hi, at, shown: true, ...(list ? { options: list } : {}) };
+        // 同名重造一个拨盘：字里写了 {名字: … | …} 的（句子、贴的字、挑战）段数要还对得上，对不上当场报是谁（不留一句读不成的）
+        const again = this.vars.has(name);
+        if (again && !c.lenient) this.checkPickUsers(name, fresh);
+        this.vars.set(name, fresh);
         this.labels.set(`dial:${name}`, { id: `dial:${name}`, refs: at && (this.objects.has(at) || atPart) ? [at] : [], text: '', side: 'below', tone: 'dial', link: null, dial: name });
         // at= 写的东西还没造（dial 写在 matrix M = … {k} 之前，造 M 要先有 k）：先记着，M 造出来时挂上（以前就一直浮着、不挂）
         if (at && !this.objects.has(at) && !atPart) this.dialAt.set(name, at); else this.dialAt.delete(name);
-        return { name };
+        // 重造的：跟着它的句子照新的值重排（画面照 set 演）
+        const binds = again ? this.repick(name) : [];
+        return { name, ...(binds.length ? { binds } : {}) };
       }
       case 'set': {
         const x = this.vars.get(words[0]);
@@ -1647,12 +1657,14 @@ export class Scene {
         // 同名重造成了另一种东西：存的样子放不回去（同名重造不清存档，换了种类才清，这里再挡一下）
         if (snap.type !== o.type) throw new Error(`${id} 现在是${typeOf(o).label}，存的是以前的样子，回不去`);
         restoreSnap(o, snap);
+        // 跟着拨盘变的句子：存的是那时拨盘的样子，回去以后照现在的拨盘重排（不然句子和拨盘对不上，现状还说它跟着）
+        const repicked = o.picks && !o.picks.off ? typeOf(o).onPick?.(this, o) : null;
         // 回去以后没了的部件：连到它的线剪掉，跟着那道弧的字一起（和删掉结点、照新的数重新造一样）
         const lost = (e) => e.obj === id && e.key != null && !this.partOf(id, e.key);
         const cut = [];
         for (const [k, l] of this.links) if (lost(l.a) || lost(l.b)) { this.links.delete(k); cut.push(k); }
         for (const [k, l] of this.labels) if (l.link && cut.includes(l.link)) this.labels.delete(k);
-        return { id, back: { id, name: str ?? null, summary: this.summaryOf(o) } };
+        return { id, back: { id, name: str ?? null, summary: this.summaryOf(o) }, ...(repicked ? { binds: [repicked] } : {}) };
       }
       case 'remove': {
         // remove a：把一样东西拿下舞台
@@ -2055,6 +2067,30 @@ export class Scene {
     if (opts.n == null || !Number.isInteger(n) || n < 1 || n > 12) throw new Error(`collect= 要跟着 n= 写收几张（1～12 的整数），比如 goal ${id} "…" when="…" collect=${obj} n=3`);
     return { obj, n, got: [], dup: 0, last: null };
   }
+  /** 字里写了 {name: … | …} 的东西（句子）照拨盘现在的值重排（那种东西自己的 onPick）：交给画面的那几份（照各自的 choreo 演） */
+  repick(name) {
+    const out = [];
+    for (const o of this.objects.values()) {
+      if (!o.picks?.deps?.includes(name) || o.picks.off) continue;
+      const r = typeOf(o).onPick?.(this, o);
+      if (r) out.push(r);
+    }
+    return out;
+  }
+  /** 拨盘 name 要换成 x：用了 {name: … | …} 的句子、贴的字、挑战的字，段数还对不对得上；对不上抛错（说是谁） */
+  checkPickUsers(name, x) {
+    const vars = new Map(this.vars).set(name, x);
+    const chk = (text, who) => {
+      for (const p of splitPicks(text)) {
+        if (p.k !== 'pick' || !pickDeps(p.raw).includes(name)) continue;
+        try { checkPick(p, vars); } catch (err) { throw new Error(`${who}里的${err.message}（先改那一处，或者拨盘照原来的个数造）`); }
+      }
+    };
+    for (const o of this.objects.values()) if (o.picks && !o.picks.off) chk(o.picks.src, `${typeOf(o).label} ${o.id} `);
+    for (const o of this.objects.values()) if (o.type === 'card') for (const ln of o.lines || []) chk(ln.text, `题卡 ${o.id} `);
+    for (const l of this.labels.values()) if (!l.dial && l.text) chk(l.text, `贴的字 ${l.id} `);
+    for (const g of this.goals.values()) chk(g.text, `挑战 ${g.id} `);
+  }
   /** 有没有按这个按钮才判的挑战（舞台照它决定按钮要不要记一行 press） */
   hasOn(button) { return [...this.goals.values()].some((g) => !g.met && g.on === button); }
   // 拨的数变了：跟着它的东西（分组、平面上的变换……）重新算
@@ -2067,12 +2103,8 @@ export class Scene {
       const r = t.onVar?.(this, o, b, this.vars.get(name).v);
       if (r) { out.binds.push(r); if (b.kind === 'group') out.regroup.push(r); }
     }
-    // 字里写了 {名字: … | …} 的东西（句子）：照现在那一段重排（那种东西自己的 onPick；交的那一份画面照 choreo 演）
-    for (const o of this.objects.values()) {
-      if (!o.picks?.deps?.includes(name) || o.picks.off) continue;
-      const r = typeOf(o).onPick?.(this, o);
-      if (r) out.binds.push(r);
-    }
+    // 字里写了 {名字: … | …} 的东西（句子）：照现在那一段重排
+    out.binds.push(...this.repick(name));
     // 写了 {k} 的（格里的 {k}、{k A}……）当场跟着重算：变了的交给 apply 一起写进 fx.derived
     const derived = this.derive();
     if (derived.length) out.derived = derived;

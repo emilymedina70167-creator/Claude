@@ -495,6 +495,13 @@ export const graph = {
     return o;
   },
   parts(o) { return [...o.nodes, ...liveEdges(o)]; },
+  // 只开几个部件（open g.A~B choose）：部件的种类要和动作对得上（choose 点边，visit / tag 点结点），对不上学生没处点
+  canOpen(scene, o, action, h) {
+    const need = { choose: 'edge', visit: 'node', tag: 'node' }[action];
+    const ref = h.words[0];
+    if (!need || !parseRef(ref)?.mark) return;
+    if (scene.parts(ref).some((p) => p.kind !== need)) throw new Error(`${action} 点的是${need === 'edge' ? `边（open ${o.id}.A~B ${action}，或者整张 open ${o.id} ${action}）` : `结点（open ${o.id}.A ${action}，或者整张 open ${o.id} ${action}）`}`);
+  },
   /** 扣着的边画成小块写两头（A–B，不写权）；扣着的结点不写名字（scene.js 的 coverText） */
   coverName: (p, o) => (p.kind === 'edge' ? p.label : `${o.id} 里扣着的一个结点`),
   pick(o, mark, sel, word) {
@@ -689,7 +696,7 @@ choose g.A~B / unchoose g.A~B / unchoose g  把边选进来（粗金线）/ 拿�
 open g choose  学生点一条边 = choose g.A~B（选着的再点 = unchoose g.A~B）；不判对错，每一下告诉你选了几条、总权、连成几块、成没成圈
 open g visit  学生点结点 = visit g.A
 open g tag  学生点结点键盘写数 = tag g.A 5（有 ∞ 键）；visit、tag 一次开一项
-判断式（when=）：g tree（选的边正好是生成树）、g cyclic（有圈）、g connected（连成一块）；量：chosen(g) 选了几条、weight(g) 总权、pieces(g) 几块、visited(g) 访问了几个`,
+判断式（when=）：g tree（选的边正好是生成树）、g cyclic（有圈）、g connected（连成一块；有向图都不看箭头）；量：chosen(g) 选了几条、weight(g) 总权、pieces(g) 几块、visited(g) 访问了几个`,
   example: `graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:8 D-E:3
 tag g ∞
 tag g.A 0

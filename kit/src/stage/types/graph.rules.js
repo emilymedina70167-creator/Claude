@@ -6,7 +6,8 @@
 //   - 事实：学生每选一条边以后「现在选了几条、总权几、连成几块」，这一条让选的边成了圈就写出那个圈；
 //   - 量：chosen(g) 选了几条、weight(g) 选的边权加起来、pieces(g) 选的边把结点连成几块、visited(g) 访问了几个；
 //   - 判断式：g tree（选的边正好是一棵生成树）、g cyclic（选的边里有圈）、g connected（连成一块）。
-// 连通、成圈都照无向的算（有向图上选的边不看箭头）；有向图的 g tree 当场报
+// 连通、成圈都照无向的算（有向图上选的边不看箭头，事实里写明）；有向图的 g tree 当场报。
+// 三项手势都写了 live：边权跟着拨数算的图（A-B:{w}）也能交给学生——选边、访问号、旁边的数都不改式子定的数
 import { parseRef } from '../script.js';
 
 const live = (o) => o.edges.filter((e) => !e.gone);
@@ -51,7 +52,7 @@ const refOf = (o, e) => `${o.id}.${e.a}~${e.b}`;
 const gestures = {
   // 点一条边：没选的选进，选着的拿掉
   choose: {
-    gesture: 'tap', on: 'edge', makes: ['choose', 'unchoose'], brief: '点一条边选进，再点一下拿掉',
+    gesture: 'tap', on: 'edge', live: true, makes: ['choose', 'unchoose'], brief: '点一条边选进，再点一下拿掉',
     toAct(o, { from } = {}) {
       const e = edgeAt(o, from);
       if (!e) return { error: '点一条边（边上的数、边的中间），把它选进来' };
@@ -60,7 +61,7 @@ const gestures = {
   },
   // 点一个结点：编上访问号（第几个访问的）。访问的先后是事实，再点不取消（要撤走「撤一步」）
   visit: {
-    gesture: 'tap', on: 'node', brief: '点一个结点，编上访问号',
+    gesture: 'tap', on: 'node', live: true, brief: '点一个结点，编上访问号',
     toAct(o, { from } = {}) {
       const n = nodeAt(o, from);
       if (!n) return { error: '点一个结点，把它记成访问过' };
@@ -71,7 +72,7 @@ const gestures = {
   },
   // 点一个结点，键盘写它旁边的数（dist、lowcost；键盘上多一个 ∞）
   tag: {
-    gesture: 'write', on: 'node', brief: '点一个结点，键盘写它旁边的数',
+    gesture: 'write', on: 'node', live: true, brief: '点一个结点，键盘写它旁边的数',
     ask: (o, { to, from } = {}) => { const n = nodeAt(o, to || from); return { input: 'keypad', prompt: n ? `${n.key} 旁边写几？` : '写一个数', extra: '∞' }; },
     toAct(o, { to, from, value } = {}) {
       const n = nodeAt(o, to || from);
@@ -130,10 +131,11 @@ function facts(before, after, act) {
   if (act.type === 'choose') {
     const e = after.edges.find((x) => x.key === act.key);
     const path = e ? pathIn(after, e.b, e.a, e) : null;
-    if (path) out.push(`成圈了：${[e.a, ...path].join(after.directed ? '、' : '–')}`);
+    // 有向图：连通、成圈照无向的算，写明是不看箭头（A→B、A→C、B→C 不看箭头是个圈，照箭头不是）
+    if (path) out.push(`${after.directed ? '不看箭头的话' : ''}成圈了：${[e.a, ...path].join('–')}`);
   }
   const n = chosenOf(after).length;
-  out.push(`现在选了 ${n} 条${after.weighted ? `、总权 ${round(sumW(after))}` : ''}、连成 ${piecesOf(after)} 块${n && !hasCycle(after) && piecesOf(after) === 1 ? '（是一棵生成树）' : ''}`);
+  out.push(`现在选了 ${n} 条${after.weighted ? `、总权 ${round(sumW(after))}` : ''}、连成 ${piecesOf(after)} 块${after.directed ? '（不看箭头）' : n && !hasCycle(after) && piecesOf(after) === 1 ? '（是一棵生成树）' : ''}`);
   return out;
 }
 
