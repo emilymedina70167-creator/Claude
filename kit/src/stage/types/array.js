@@ -89,6 +89,8 @@ export const array = {
     if (!h.args.some((a) => a.t === 'eq')) throw new Error('要写成 array 名字 = 一个个值');
     if (!vals.length) throw new Error('array 后面要有值');
     if (vals.length > MAX_CELLS) throw new Error(`一排最多 ${MAX_CELLS} 格（写了 ${vals.length} 格）`);
+    // 一排格子还不会空着（矩阵里 _ 是空格子）：以前不报，画成写着「_」的一格（主线第一轮 D1-6）。重放旧课照旧画
+    if (vals.includes('_') && !c.lenient) throw new Error('一排格子里不能有空格子（_）：每一格都要有值。要一排能空着、能让学生填的格子，写一行的矩阵：matrix h = _ 49 38');
     const id = h.words[0];
     // 新的一排放在已有的东西下面，和它们居中对齐（一格的「要找的数」放在正下方，不缩在左边）
     const origin = old ? { ...old.origin } : scene.slotFor(vals.length * (CELL + GAP) - GAP);

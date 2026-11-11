@@ -2218,3 +2218,36 @@ test('D4-2：跟着算的一排，有一格算不出来了（树上那个结点�
   assert.deepEqual(values(b, 'c'), ['6', '8']);
   assert.doesNotMatch(b.stateText(), /现在算不出来/);
 });
+
+test('D3-2：dial … at= 写成已有东西的部件（一条边），拨盘挂在那个部件旁边；名字真不存在才记着等它造出来', () => {
+  const s = run(new Scene(), 'graph g = 1-2:3 2-3:4\ndial w = 3 range=-6..3 at=g.1~2');
+  assert.deepEqual(s.labels.get('dial:w').refs, ['g.1~2']);
+  assert.equal(s.dialAt.has('w'), false);
+  assert.doesNotMatch(s.stateText(), /还没造/);
+  // 还没造的名字照旧记着
+  const t = run(new Scene(), 'array a = 1 2\ndial k = 2 at=M');
+  assert.equal(t.dialAt.get('k'), 'M');
+  // 部件写错了（那样东西在、没有这个部件）：当场报，不是「还没造」
+  assert.match(dryRun(run(new Scene(), 'graph g = 1-2:3'), 'dial w = 3 at=g.7~8')[0].error, /g/);
+});
+test('D1-5：收掉拨数，贴在它上面的字一起收（以前「3 条链」留在原地，挂到别的东西旁边）', () => {
+  const s = run(new Scene(), 'array a = 1 2 3\ndial d = 3 range=1-5 at=a\nlabel dl dial:d "{d} 条链" side=right tone=note\nlabel other a "别的字"');
+  assert.ok(s.labels.has('dl'));
+  run(s, 'unlabel dial:d');
+  assert.equal(s.labels.has('dl'), false);
+  assert.ok(s.labels.has('other'), '贴在别处的字不动');
+  assert.doesNotMatch(s.stateText(), /条链/);
+});
+
+test('D1-6：一排格子里写 _（空格子）当场报；话里 {inv(a)} 这种页面数不了的量当场报（以前画成几个字母）', () => {
+  assert.match(dryRun(new Scene(), 'array h = _ 49 38')[0].error, /一排格子里不能有空格子/);
+  // 盯 1：重放旧课照旧画
+  const old = new Scene();
+  old.apply({ ...parseScript('array h = _ 49 38')[0], lenient: true });
+  assert.deepEqual(values(old, 'h'), ['_', '49', '38']);
+  const base = run(new Scene(), 'array a = 3 1 2\nmatrix A = 1 2 / 3 4');
+  assert.match(dryRun(base, 'label c a "前大后小 {inv(a)} 对"')[0].error, /没有量/);
+  assert.match(dryRun(base, 'say "逆是 {inv(A)}"')[0].error, /没有量「inv」/);
+  // 认得的量、拨数、东西照旧
+  assert.equal(dryRun(base, 'say "秩是 {rank(A)}，第一格 {a.1}"').length, 0);
+});

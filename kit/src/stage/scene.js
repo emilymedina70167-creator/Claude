@@ -17,7 +17,7 @@ import { bbox, columnSlot, cameraRoom } from './layout.js';
 import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure, numOf } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder, termText } from './value.js';
-import { rulesOf, done as nextDone, checkMeasure, measureLine, changedKeys } from './rules.js';
+import { rulesOf, done as nextDone, checkMeasure, measureLine, changedKeys, parseMeasure } from './rules.js';
 import { judge } from './referee.js';
 import { openGrabs, grabClash, placeOf, pressOf, PRESS_TEXT, ARMED_PRESS, armable, idleOf } from './gestures.js';
 
@@ -452,6 +452,9 @@ export class Scene {
       // 光秃秃的一个名字（{kk}）现在既不是拨数、也不是舞台上的东西：同一轮后面造出来的（say 写在 matrix Xi 前面）是对的，
       // 到这一轮演完还不是的多半是拼错了，学生看到的是「kk」两个字母（复核修正，控制者裁定）。这一行照演，记下来，一轮演完舞台问 looseProblems。
       // 预写的试演（trial）照旧当场报：它写下时就在今天的舞台上试。只管新写的行、只管一个名字；带运算的（{k + 1}）、重放旧课照旧
+      // 写成 名字(东西) 可又不是量（{inv(a)}：inv 是式子里的函数，话里不现算）：学生看到的是「inv(a)」几个字母。照量的规矩当场报
+      // （主线第一轮 D1-6：以前不报）
+      else if (p.k === 'var' && !c?.lenient && parseMeasure(p.v) && this.objects.has(parseRef(parseMeasure(p.v).arg)?.obj)) checkMeasure(this, p.v, { run: true });
       else if (p.k === 'var' && !c?.lenient && BARE_NAME.test(p.v) && !this.vars.has(p.v) && !this.objects.has(p.v)) {
         if (this.trial) throw new Error(this.looseText(p.v));
         this.loose.push({ name: p.v, line: c?.line ?? 0, src: String(c?.src ?? '').trim() });
@@ -1214,6 +1217,11 @@ export class Scene {
       case 'unlabel': {
         const ids = words.length ? words : [...this.labels.keys()].filter((k) => !k.startsWith('dial:'));
         for (const k of ids) { this.labels.delete(k); if (k.startsWith('dial:') && this.vars.get(k.slice(5))) this.vars.get(k.slice(5)).shown = false; if (k.startsWith('dial:')) this.dialAt.delete(k.slice(5)); }
+        // 贴在收掉的那几样（拨数、别的字）上面的字一起收（主线第一轮 D1-5：以前留在原地，画面上挂到了别的东西旁边）
+        for (let more = true; more;) {
+          more = false;
+          for (const [k, l] of this.labels) if ((l.refs || []).some((r) => (r.startsWith('dial:') || r.startsWith('label:')) && !this.labels.has(r.replace(/^label:/, '')))) { this.labels.delete(k); ids.push(k); more = true; }
+        }
         return { ids };
       }
       case 'dial': {
@@ -1224,10 +1232,15 @@ export class Scene {
         if (!(lo <= hi)) throw new Error('range 要写成 小..大，比如 range=1..5、range=-3..3（1-5 也认）');
         const v = Number(val ?? lo);
         const at = opts.at || [...this.objects.keys()][0] || null;
+        // at= 写成已有东西的部件（一条边 g.1~2、一格 a.3）：挂在那个部件旁边（主线第一轮 D3-2：以前当成「还没造」记着，
+        // 拨盘一直浮着，现状每一轮写一句「g.1~2 还没造」）。那样东西在、部件写错了：照部件的错报
+        const atObj = at && String(at).match(/^[A-Za-z_]\w*/)?.[0];
+        const atPart = !!at && !this.objects.has(at) && this.objects.has(atObj) && /[.#]/.test(at);
+        if (atPart) this.parts(at);
         this.vars.set(name, { v: Math.max(lo, Math.min(hi, v)), lo, hi, at, shown: true });
-        this.labels.set(`dial:${name}`, { id: `dial:${name}`, refs: at && this.objects.has(at) ? [at] : [], text: '', side: 'below', tone: 'dial', link: null, dial: name });
+        this.labels.set(`dial:${name}`, { id: `dial:${name}`, refs: at && (this.objects.has(at) || atPart) ? [at] : [], text: '', side: 'below', tone: 'dial', link: null, dial: name });
         // at= 写的东西还没造（dial 写在 matrix M = … {k} 之前，造 M 要先有 k）：先记着，M 造出来时挂上（以前就一直浮着、不挂）
-        if (at && !this.objects.has(at)) this.dialAt.set(name, at); else this.dialAt.delete(name);
+        if (at && !this.objects.has(at) && !atPart) this.dialAt.set(name, at); else this.dialAt.delete(name);
         return { name };
       }
       case 'set': {
