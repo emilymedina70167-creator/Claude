@@ -23,6 +23,13 @@ export const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.
 export const center = (b) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
 
 /**
+ * 整台缩到这个比例以下，字就小到难认了（主线第一轮 E1-8：以前排版检查不报、老师也不知道）。
+ * 舞台现状里写「字难认」，排版检查报「缩得太小」。和 columnSlot 往旁边另起一列的那条线是同一个数
+ */
+export const TINY_SCALE = 0.6;
+export const tooSmall = (scale) => Number.isFinite(scale) && scale < TINY_SCALE - 1e-6;
+
+/**
  * 镜头对准一块：box 放进屏幕上能用的那一块（去掉顶上字幕、底下按钮占的地方），留 pad，放大不超过 maxScale。
  * view：{ w, h }（屏幕大小）；top / bottom：屏幕上方、下方留给别的东西的高度。返回 { s, tx, ty }
  */

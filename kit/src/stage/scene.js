@@ -248,6 +248,7 @@ export class Scene {
     // —— 画面写回的（stage.js 量了写回，和 labelRects 一样）——
     this.view = null; // 屏幕多大 { w, h }：摆新东西时看往下摆会不会缩得太小、要不要另起一列（不知道就照旧往下摆）
     this.clipped = []; // 镜头摆好以后还出了屏幕的东西（id）：舞台现状里告诉老师「画面上看不全」
+    this.tiny = null; // 整台缩得太小、字难认时：缩到了几成（stage.js 的 noteClipped 写回；layout.js 的 TINY_SCALE）
     // —— 一次点几样（ask pick 交的那一下，pick 那一行）——
     this.picked = null; // { obj, keys, refs, reveal, diffDone, changed? }：学生点着的几样（圈着，老师下一轮演完收掉）；changed 是之后第一次变时变了的 key
     // —— 存档点（keep / back）：只管一样东西的数据，都是 log 里的行引出来的，重放照样回来 ——
@@ -289,6 +290,7 @@ export class Scene {
     // 这一轮新加的场景状态都要带上：检查、试演、抢跑都在副本上跑，少带一项就在缺东西的副本上判
     s.view = this.view ? { ...this.view } : null;
     s.clipped = [...this.clipped];
+    s.tiny = this.tiny;
     s.picked = this.picked ? { ...this.picked, keys: [...this.picked.keys], refs: [...this.picked.refs], ...(this.picked.changed ? { changed: [...this.picked.changed] } : {}) } : null;
     // 存档：学生按的 back 先过 check（在副本上试），副本上没有就报「没存过」
     for (const [k, m] of this.keeps) s.keeps.set(k, new Map([...m].map(([n, v]) => [n, structuredClone(v)])));
@@ -2049,11 +2051,15 @@ export class Scene {
     if (drag.length) lines.push(`跟着算的（依赖一变，页面当场重算；学生拨不了，只能拖整张（compare / put / merge））：${drag.map(liveItem).join('；')}`);
     const clipped = this.clipped.filter((id) => this.objects.has(id) && !this.objects.get(id).hidden);
     if (clipped.length) lines.push(`画面上看不全：${clipped.join('、')}`);
+    if (this.tiny != null) lines.push(`字难认：整台缩到了 ${this.tiny} 成才放得下（东西太多或者太宽：拿掉几样、话写短一点，或者 camera 对准要看的那一处）`);
     for (const o of this.objects.values()) if (o.unlived) lines.push(`${o.id} 已经不跟着 ${o.unlived.exprs.map((e) => `{${e}}`).join('、')} 变了：${o.unlived.by === 'student' ? '学生' : '你'}动过它的结构（${o.unlived.src}），现在照现在的样子留着`);
     const ls = [...this.links.values()];
     if (ls.length) lines.push(`连线：${ls.map((l) => `${this.refOfKey(l.a)}–${this.refOfKey(l.b)}${l.color ? ` ${COLOR_NAMES[l.color]}` : ''}`).join('，')}`);
     const labels = [...this.labels.values()].filter((l) => !l.dial);
-    if (labels.length) lines.push(`贴着的字：${labels.map((l) => `${l.id}「${l.text}」${l.refs.length ? `（贴在 ${l.refs.join(' ')}）` : ''}`).join('；')}`);
+    // 写了 side=、那一边放不下、画面换到了另一边的：照实写（主线第一轮：以前只写「贴在 b」，老师不知道字不在写的那一边）
+    const SIDE = { above: '上面', below: '下面', left: '左边', right: '右边' };
+    const moved = (l) => (l.side && l.placed && l.placed !== l.side ? `；写的是${SIDE[l.side] || l.side}，放不下，在${SIDE[l.placed] || l.placed}` : '');
+    if (labels.length) lines.push(`贴着的字：${labels.map((l) => `${l.id}「${l.text}」${l.refs.length ? `（贴在 ${l.refs.join(' ')}${moved(l)}）` : ''}`).join('；')}`);
     const dials = [...this.vars].filter(([, v]) => v.shown);
     if (dials.length) lines.push(`能拨的数：${dials.map(([n, v]) => `${n} = ${v.v}（${v.lo}～${v.hi}）`).join('，')}`);
     const waitAt = [...this.dialAt].filter(([n]) => this.labels.has(`dial:${n}`));

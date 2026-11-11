@@ -232,3 +232,33 @@ test('D1-9：答题框的按钮：要判的写「对吗」，只收不判的（�
   assert.equal(askButtonText({ kind: 'say' }), '说');
   assert.equal(askButtonText(null), '说');
 });
+
+// —— 舞台主线第一轮：排版检查说真话 ——
+test('E1-8：整台缩到 TINY_SCALE 以下算字难认；舞台现状里写出来', async () => {
+  const { TINY_SCALE, tooSmall } = await import('../kit/src/stage/layout.js');
+  assert.equal(TINY_SCALE, 0.6);
+  assert.equal(tooSmall(0.59), true);
+  assert.equal(tooSmall(0.6), false);
+  assert.equal(tooSmall(1), false);
+  const { Scene } = await import('../kit/src/stage/scene.js');
+  const { parseScript } = await import('../kit/src/stage/script.js');
+  const s = new Scene();
+  for (const c of parseScript('array a = 1 2 3')) s.apply(c);
+  assert.doesNotMatch(s.stateText(), /字难认/);
+  s.tiny = 4;
+  assert.match(s.stateText(), /字难认：整台缩到了 4 成才放得下/);
+  assert.equal(s.clone().tiny, 4);
+});
+test('贴的字写了 side=、画面换到了另一边：舞台现状照实写；在写的那一边的照旧', async () => {
+  const { Scene } = await import('../kit/src/stage/scene.js');
+  const { parseScript } = await import('../kit/src/stage/script.js');
+  const s = new Scene();
+  for (const c of parseScript('array b = 1 2 3\nlabel rule b "直接插入" side=above\nlabel n b "计数"')) s.apply(c);
+  assert.match(s.stateText(), /rule「直接插入」（贴在 b）/);
+  s.labels.get('rule').placed = 'below';
+  s.labels.get('n').placed = 'right';
+  assert.match(s.stateText(), /rule「直接插入」（贴在 b；写的是上面，放不下，在下面）/);
+  assert.match(s.stateText(), /n「计数」（贴在 b）/, '没写 side= 的不说');
+  s.labels.get('rule').placed = 'above';
+  assert.match(s.stateText(), /rule「直接插入」（贴在 b）/);
+});

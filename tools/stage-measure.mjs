@@ -95,5 +95,31 @@ export function measure(visual = false) {
     const out = Math.max(b.x - u.x, b.y - u.y, u.x + u.w - (b.x + b.w), u.y + u.h - (b.y + b.h));
     if (out > 6 * s) issues.push({ what: '画到了自己的地方外面', a: `obj:${it.id}`, b: '', area: Math.round(out / s) });
   }
+  // —— 以前量不出来的四种（舞台主线第一轮：这几种排版检查都说「没压着、没出屏幕」）——
+  // 字比格子宽：部件（格子、结点）里的字横着溢出了它自己的框
+  for (const [pid, n] of st.nodes || []) {
+    if (!(n instanceof HTMLElement) || !vis(n)) continue;
+    const texts = [];
+    const walk = document.createTreeWalker(n, NodeFilter.SHOW_TEXT);
+    for (let t = walk.nextNode(); t; t = walk.nextNode()) { if (!t.nodeValue.trim() || !vis(t.parentElement)) continue; const r = document.createRange(); r.selectNodeContents(t); texts.push(...r.getClientRects()); }
+    if (!texts.length) continue;
+    const box = n.getBoundingClientRect();
+    const left = Math.min(...texts.map((q) => q.left)), right = Math.max(...texts.map((q) => q.right));
+    const over = Math.max(box.left - left, right - box.right);
+    if (over > 3) issues.push({ what: '字比格子宽', a: `part:${pid}`, b: '', area: Math.round(over) });
+  }
+  // 边上的数叠在一起：图上两条边的权的牌子盖住了一大半
+  const ws = [...st.root.querySelectorAll('.gr-w')].filter(vis).map((n) => ({ n, r: rect(n) }));
+  for (let i = 0; i < ws.length; i++) for (let j = i + 1; j < ws.length; j++) {
+    const a = ws[i].r, b = ws[j].r, hit = hitArea(a, b);
+    if (hit > 0.35 * Math.min(a.w * a.h, b.w * b.h)) issues.push({ what: '边上的数叠在一起', a: `边权「${ws[i].n.textContent.trim()}」`, b: `边权「${ws[j].n.textContent.trim()}」`, area: Math.round(hit) });
+  }
+  // 贴的字没在写的那一边：写了 side=，画面摆到了别的一边
+  for (const [id, cur] of st.labelNodes) {
+    const l = st.scene.labels.get(id);
+    if (l && l.side && !l.dial && cur.side && cur.side !== l.side && vis(cur.node)) issues.push({ what: '贴的字没在写的那一边', a: `label:${id}（写的是 ${l.side}，画在 ${cur.side}）`, b: '', area: 0 });
+  }
+  // 缩得太小：整台缩到字难认（舞台自己记在 scene.tiny，和现状里那一行同一个判断）
+  if (st.scene.tiny != null) issues.push({ what: '缩得太小', a: `整台缩到了 ${st.scene.tiny} 成`, b: '', area: 0 });
   return { issues, cam: st.cam };
 }

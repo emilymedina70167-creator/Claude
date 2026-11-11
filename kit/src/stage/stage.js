@@ -6,7 +6,7 @@
 // （每种东西的 view.sync 造 / 改自己的节点，挪动、连线、贴字、拨数这里统一演）。
 // 演过的每一行记进 log（学生拖、拨造成的变化也记成一行），刷新或作废一轮时照 log 瞬间重放（replay）。
 import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHold } from './motion.js';
-import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM } from './layout.js';
+import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM, tooSmall } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, tapAnswer, pickText, unplayedNotes, compareFact, mergeFact, chipTextOf, tapValueOf } from './scene.js';
 import { goalMark } from './goal.js';
@@ -675,6 +675,9 @@ export class Stage {
       });
     }
     if (out.join('\u0000') !== sc.clipped.join('\u0000')) sc.clipped = out;
+    // 整台缩得太小、字难认（老师用 camera 对准一处时不算）：缩到了几成
+    const tiny = !sc.focus && tooSmall(this.cam.s) ? Math.round(this.cam.s * 10) : null;
+    if (tiny !== sc.tiny) sc.tiny = tiny;
   }
 
   // —— 量画出来的样子（排版的根：每种东西自己估的大小不一定对，画出来才知道）——
@@ -1322,6 +1325,8 @@ export class Stage {
         jobs.push(this.tween(node, [{ transform: tr(from.x, from.y) }, { transform: tr(p.x, p.y) }], { duration: 480 }));
       }
       cur.side = p.side;
+      // 画在了哪一边写回场景：和写的 side= 不一样时舞台现状照实说
+      if (!l.dial && l.placed !== p.side) l.placed = p.side;
     }
     for (const [id, l] of this.labelNodes) if (!sc.labels.has(id) || !this.labelShown(sc.labels.get(id))) { this.labelNodes.delete(id); jobs.push(this.tween(l.node, [{ opacity: 1 }, { opacity: 0 }], { duration: 220 }).then(() => l.node.remove())); }
     // 字摆好了、还没淡进来：镜头先让出地方（不然贴在上面的字淡进来时和话压在一起，镜头挪完才分开）
