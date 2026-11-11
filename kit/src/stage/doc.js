@@ -103,7 +103,7 @@ export const SUBJECT_TYPES = {
   组成原理: ['array', 'card', 'tex', 'matrix', 'table'],
   计网: ['array', 'graph', 'card', 'tex', 'table'],
   线代: ['matrix', 'plane', 'tex', 'card', 'array', 'table'],
-  英语: ['sentence', 'card', 'table'],
+  英语: ['sentence', 'card', 'table', 'timeline'],
 };
 
 /** 整份指令说明：共用的 + 舞台上能放的东西（subject：这节课是哪门课，只带用得上的那几种） */

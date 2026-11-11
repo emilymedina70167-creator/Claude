@@ -525,6 +525,8 @@ export class Scene {
     this.actor = student ? 'student' : 'teacher';
     let fx;
     try { fx = this.applyOne(c) || {}; } finally { this.actor = null; }
+    // 每一行之后：要跟着场景抄一份的东西抄一份（时间轴：拨盘在场景里，各样东西现在的位置抄到它身上，框是纯函数）
+    for (const o of this.objects.values()) typeOf(o).afterLine?.(this, o);
     // 老师动过的那样东西：那种东西自己记一笔老师摆出来的样子（树：这棵是不是排序树——学生之后摆错了不改这个结论，tree.js 的 afterTeacher）
     if (!student) { const touched = this.objects.get(fx.created ? fx.id : target); if (touched) typeOf(touched).afterTeacher?.(touched); }
     this.reflow();
@@ -1272,6 +1274,7 @@ export class Scene {
         // dial d = 5 range=1-5 at=a
         const [name, val] = words;
         if (!name || !/^[A-Za-z_]\w*$/.test(name)) throw new Error('要写成 dial 名字 = 值 range=1-9');
+        if (this.vars.get(name)?.owner && !c.lenient) throw new Error(`${name} 是${typeOf(this.objects.get(this.vars.get(name).owner)).label} ${this.vars.get(name).owner} 上的（它的把手就是这个拨盘），不能另造一个同名的拨盘：换一个名字`);
         // options="过去 现在 将来"：拨词的拨盘（主线第二轮 C）。里面存的是第几个词（1 起），拨、存、重放和拨数的一样；写出来、比较是那个词
         let list = null;
         if (opts.options != null && !(c.lenient && opts.range != null)) {
@@ -1314,6 +1317,8 @@ export class Scene {
         if (x.options && !x.options.includes(words[1])) throw new Error(`${words[0]} 只能拨到：${x.options.join('、')}（写成 set ${words[0]} ${x.options[0]}）`);
         const v = x.options ? x.options.indexOf(words[1]) + 1 : Number(words[1]);
         if (!Number.isFinite(v)) throw new Error('要写成 set 名字 值');
+        // 这个拨盘是一样东西的把手（时间轴上的小人、条的一头）：那样东西先看一眼拨不拨得到（条的右端不能跑到左端前面）
+        if (x.owner && this.objects.has(x.owner)) typeOf(this.objects.get(x.owner)).checkVar?.(this, this.objects.get(x.owner), words[0], Math.max(x.lo, Math.min(x.hi, v)));
         x.v = Math.max(x.lo, Math.min(x.hi, v));
         return this.onVar(words[0]);
       }
@@ -1789,6 +1794,8 @@ export class Scene {
     for (const [k, l] of this.links) if (l.a.obj === id || l.b.obj === id) this.links.delete(k);
     if (!keepLabels) for (const [k, l] of this.labels) if (l.refs.some((r) => parseRef(r)?.obj === id)) this.labels.delete(k);
     this.binds = this.binds.filter((b) => b.obj !== id);
+    // 这样东西自己的拨盘（时间轴上的小人、条能动的一头）跟着没了
+    for (const [k, v] of this.vars) if (v.owner === id) this.vars.delete(k);
     for (const [k, e] of this.opens) if (e.obj === id) this.opens.delete(k);
     // 换了一样新的：上一样淡淡圈着的、做没做完、预写的做完 / 做对一步都不算了
     this.slips.delete(id);

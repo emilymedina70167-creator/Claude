@@ -6,7 +6,7 @@
 const bytes = (s) => Buffer.byteLength(String(s ?? ''), 'utf8');
 
 /** 造东西的指令：看得见的是「例子」，带 hide=on 的是「藏着的辅助」，重造已有的名字是「同名重造」 */
-export const MAKERS = new Set(['array', 'tree', 'graph', 'matrix', 'product', 'plane', 'sentence', 'tex', 'card', 'table', 'vec', 'point', 'sum']);
+export const MAKERS = new Set(['array', 'tree', 'graph', 'matrix', 'product', 'plane', 'sentence', 'tex', 'card', 'table', 'timeline', 'stand', 'bar', 'event', 'vec', 'point', 'sum']);
 // 平面里的箭头、点、和：名字是「平面.名字」（vec p v = 1 0）
 const IN_PLANE = new Set(['vec', 'point', 'sum']);
 

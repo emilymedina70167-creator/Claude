@@ -218,13 +218,21 @@ export const clauseKey = (cl) => (cl.sorted ? `${cl.l}sorted${cl.sorted}` : cl.p
 function wordDial(scene, cl) {
   if (cl.pred || cl.sorted) return null;
   const dialOf = (w) => { const x = scene.vars?.get(String(w).trim()); return x?.options ? x : null; };
-  const [x, other, name] = dialOf(cl.l) ? [dialOf(cl.l), cl.r, cl.l] : dialOf(cl.r) ? [dialOf(cl.r), cl.l, cl.r] : [null];
+  const [x, other, name, flip] = dialOf(cl.l) ? [dialOf(cl.l), cl.r, cl.l, false] : dialOf(cl.r) ? [dialOf(cl.r), cl.l, cl.r, true] : [null];
   if (!x) return null;
-  if (cl.op !== '=' && cl.op !== '!=') throw new Error(`「${cl.l} ${cl.op} ${cl.r}」：${name} 是拨词的拨盘，只能比一样不一样（= / !=）`);
   const o2 = dialOf(other);
   const want = o2 ? o2.options[o2.v - 1] : String(other).trim();
+  // 两个拨盘比：要能拨到的是同一串词（同一条时间轴上的小人和条的一头；两个 options 一样的拨盘）
+  if (o2 && (o2.options.length !== x.options.length || o2.options.some((w, k) => w !== x.options[k]))) throw new Error(`「${cl.l} ${cl.op} ${cl.r}」：${cl.l} 和 ${cl.r} 不是同一条轴上的（能拨到的词不一样），比不了`);
   if (!o2 && !x.options.includes(want)) throw new Error(`「${cl.l} ${cl.op} ${cl.r}」：${name} 拨不到「${want}」（能拨到：${x.options.join('、')}）`);
-  return { now: x.options[x.v - 1], want };
+  // 比先后照词的先后（时间轴的停靠点从早到晚；主线第三轮 B）。写成「词 < 拨盘」的两边换回来
+  const a = x.v, b = o2 ? o2.v : x.options.indexOf(want) + 1;
+  return { now: x.options[x.v - 1], want, cmp: flip ? b - a : a - b };
+}
+// 拨词的拨盘这一句成不成立
+function wordHolds(wd, op) {
+  const d = wd.cmp;
+  return op === '=' ? d === 0 : op === '!=' ? d !== 0 : op === '<' ? d < 0 : op === '<=' ? d <= 0 : op === '>' ? d > 0 : d >= 0;
 }
 /** 一句条件成不成立（还空着的算不成立）；两边对不上（矩阵和数比）抛错 */
 export function evalClause(scene, cl) {
@@ -235,7 +243,7 @@ export function evalClause(scene, cl) {
   }
   // 拨词的拨盘（dial t = 现在 options="…"）：另一边照字面是它的一个词，只能比一样不一样
   const wd = wordDial(scene, cl);
-  if (wd) return (wd.now === wd.want) === (cl.op === '=');
+  if (wd) return wordHolds(wd, cl.op);
   const L = operand(scene, cl.l);
   if (cl.sorted) {
     if (L.k === 'null') return false;

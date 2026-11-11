@@ -87,10 +87,12 @@ test('审查盯 4：能拨字的拨盘在只认数的地方当场报，不默默
   assert.match(dryRun(s, 'goal g "x" when="{t + 1} = 3"')[0].error, /拨词的拨盘/);
 });
 
-test('挑战里比拨盘的词：when="t = 将来"；只能比一样不一样，词要是拨得到的', () => {
+test('挑战里比拨盘的词：when="t = 将来"；能比先后（照词的先后）；词要是拨得到的', () => {
   const s = make('dial t = 现在 options="过去 现在 将来"');
   assert.match(dryRun(s, 'goal g "x" when="t = 未来"')[0].error, /拨不到「未来」/);
-  assert.match(dryRun(s, 'goal g "x" when="t > 现在"')[0].error, /只能比一样不一样/);
+  // 比先后照词的先后（主线第三轮 B：时间轴的停靠点从早到晚）
+  assert.equal(dryRun(s, 'goal g "x" when="t > 现在"').length, 0);
+  assert.match(dryRun(s, 'goal g "x" when="t >= 现在"')[0].error, /现在就已经成立/);
   assert.match(dryRun(s, 'goal g "x" when="t = 现在"')[0].error, /现在就已经成立/);
   run(s, 'goal g1 "拨到将来" when="t = 将来"\ngoal g2 "离开现在" when="t != 现在"');
   assert.match(s.stateText(), /g1[^\n]*还没做到（t = 将来 ✗）/);
