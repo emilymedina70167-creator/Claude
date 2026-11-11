@@ -1263,6 +1263,10 @@ export class Scene {
         if (veiled.length && !c.lenient) throw new Error(hiddenError(veiled));
         if (opts.reveal != null && kind !== 'pick') throw new Error('reveal= 只用在 ask pick 上（之后哪一下改了学生点的几样，圈画成实线、虚线）');
         const reveal = kind === 'pick' ? revealOf(opts.reveal) : false;
+        // order=on：顺序题（按 Kruskal 的先后点边）连先后一起比。没写的只比点了哪几个（主线第一轮 D3-8：以前先后错了也「一样」、当场演 @ask.right）
+        if (opts.order != null && opts.order !== 'on') throw new Error('order= 只能写 on（ask pick 连先后一起比）');
+        if (opts.order === 'on' && !expects?.length) throw new Error('order=on 要写 expect=（照 expect 里写的先后比）');
+        const order = kind === 'pick' && opts.order === 'on';
         if (kind === 'pick') {
           // 一次点几样：只写东西名是哪个都能点，写部件是只能点这几个；交的那一行、圈都按一样东西记
           if (!refs.length) throw new Error(`ask pick 后面写能点的东西：ask pick t "…" 是 t 里哪个都能点，ask pick t#1 t#3 "…" 是只能点这几个`);
@@ -1302,7 +1306,7 @@ export class Scene {
           rightKey = `ask.right#${++this.askSeq}`;
           for (const a of this.ahead.values()) if (a.from === 'ask.right') a.from = rightKey;
         } else if (!c.prewrite) this.dropAhead('ask.right');
-        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.solve != null ? { solve: spec.solve } : {}), ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}), ...(c.prewrite ? { pre: true } : {}) };
+        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, ...(order ? { order: true } : {}), answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.solve != null ? { solve: spec.solve } : {}), ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}), ...(c.prewrite ? { pre: true } : {}) };
         if (opts.expect && kind !== 'pick') this.parts(opts.expect);
         return { kind };
       }
@@ -2146,7 +2150,7 @@ const uniqParts = (ps) => { const seen = new Set(); return ps.filter((p) => { co
  * 交的那一刻在舞台上比（那时等着的那一问还在）；expect 里写一段、写整样东西是里面每一个都要点到。名字照 tapRef（点的先后照学生点的）。
  * 没写 expect：expected 是 null、same 是 null；预期的部件这一刻不在舞台上了：same 是 null，why 说为什么（不当学生点错）
  */
-export function pickAnswer(scene, refs, expect) {
+export function pickAnswer(scene, refs, expect, { order = false } = {}) {
   const mine = uniqParts(refs.flatMap((r) => scene.parts(r)));
   const out = { type: 'pick', refs: mine.map((p) => scene.tapRef(p)), expected: expect?.length ? expect.join(' ') : null, same: null, extra: [], missing: [] };
   if (!out.expected) return out;
@@ -2156,6 +2160,11 @@ export function pickAnswer(scene, refs, expect) {
   out.extra = mine.filter((p) => !W.has(pidOf(p))).map((p) => scene.tapRef(p));
   out.missing = want.filter((p) => !P.has(pidOf(p))).map((p) => scene.tapRef(p));
   out.same = !out.extra.length && !out.missing.length;
+  // order=on：点的是这几个，再照 expect 写的先后比（学生点的先后就是 mine 的先后）
+  if (order) {
+    out.order = true;
+    if (out.same && mine.some((p, i) => pidOf(p) !== pidOf(want[i]))) { out.same = false; out.misordered = true; }
+  }
   return out;
 }
 /** ask pick 的回答写给老师：学生点了 4 个：t.45、t.50、t.40、t.20——你预期的是 t.50 t.45 t.40 t.20：一样（多点了 t.30，漏了 t.20） */
@@ -2163,10 +2172,11 @@ export function pickText(a) {
   const refs = a?.refs || [];
   const head = `学生点了 ${refs.length} 个：${refs.join('、')}`;
   if (a?.expected == null) return head;
-  const diff = a.same === true ? '一样'
+  const diff = a.same === true ? (a.order ? '一样，先后也对' : '一样')
+    : a.misordered ? '是这几个，先后不对'
     : a.same == null ? `页面比不了${a.why ? `（${a.why}）` : ''}`
       : [a.extra?.length ? `多点了 ${a.extra.join('、')}` : '', a.missing?.length ? `漏了 ${a.missing.join('、')}` : ''].filter(Boolean).join('，');
-  return `${head}——你预期的是 ${a.expected}：${diff}`;
+  return `${head}——你预期的是 ${a.expected}${a.order ? '（order=on）' : ''}：${diff}`;
 }
 /**
  * 变过以后写一个部件（写给老师）：tapRef；有位置的（一排格子、句子的词）后面带上它现在的字（s.5（three））——挪过以后位置变了，

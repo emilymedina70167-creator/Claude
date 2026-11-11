@@ -29,7 +29,7 @@ export const OPTIONS = {
   open: ['back', 'wrong', 'call', 'undo', 'input', 'range'],
   goal: ['when', 'call', 'on', 'collect', 'n'],
   ask: {
-    tap: ['expect', 'button'], drag: ['expect', 'button'], pick: ['expect', 'reveal', 'button'], next: ['button'], say: ['button'],
+    tap: ['expect', 'button'], drag: ['expect', 'button'], pick: ['expect', 'reveal', 'order', 'button'], next: ['button'], say: ['button'],
     value: ['answer', 'type', 'wrong', 'free', 'solve', 'button'],
   },
 };

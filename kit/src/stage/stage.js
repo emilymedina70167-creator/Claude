@@ -1613,7 +1613,7 @@ export class Stage {
           btn.disabled = true;
           const refs = ps.map((p) => sc.refOf(p));
           let act;
-          try { act = pickAnswer(sc, refs, w.expect); } catch (err) {
+          try { act = pickAnswer(sc, refs, w.expect, { order: !!w.order }); } catch (err) {
             act = { type: 'pick', refs: ps.map((p) => sc.tapRef(p)), expected: w.expect?.join(' ') ?? null, same: null, extra: [], missing: [], why: `页面没比成：${err?.message || err}` };
             reportError(err, { what: `舞台的 ask pick 和 expect 比：${w.prompt || ''}` });
           }

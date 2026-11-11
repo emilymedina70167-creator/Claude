@@ -2057,3 +2057,37 @@ test('复审 N6：刷新以后重新挂 log 里的最后一问（anyOpts）不�
   assert.equal(t.waiting.lenient, undefined);
   assert.throws(() => s.clone().apply({ ...one('ask value "几个？" type=nope answer=3 hint=on'), anyOpts: true }), /nope/);
 });
+
+// —— 舞台主线第一轮 D3-8：顺序题用 ask pick，先后点错了以前也写「一样」、当场演 @ask.right ——
+test('D3-8：ask pick … order=on 连先后一起比；没写的和以前逐字一样', () => {
+  const G = 'array a = 5 3 8 1';
+  const s = run(new Scene(), `${G}\nask pick a "从小到大点" expect="a.4 a.2 a.1 a.3" order=on`);
+  assert.equal(s.waiting.order, true);
+  const off = pickAnswer(s, ['a.2', 'a.4', 'a.1', 'a.3'], s.waiting.expect, { order: s.waiting.order });
+  assert.equal(off.same, false);
+  assert.deepEqual(off.extra, []);
+  assert.deepEqual(off.missing, []);
+  assert.equal(off.misordered, true);
+  assert.equal(pickText(off), '学生点了 4 个：a.2、a.4、a.1、a.3——你预期的是 a.4 a.2 a.1 a.3（order=on）：是这几个，先后不对');
+  const ok = pickAnswer(s, ['a.4', 'a.2', 'a.1', 'a.3'], s.waiting.expect, { order: true });
+  assert.equal(ok.same, true);
+  assert.equal(pickText(ok), '学生点了 4 个：a.4、a.2、a.1、a.3——你预期的是 a.4 a.2 a.1 a.3（order=on）：一样，先后也对');
+  // 多点漏点时照旧说多点漏点（先后不提）
+  const miss = pickAnswer(s, ['a.4', 'a.2'], s.waiting.expect, { order: true });
+  assert.equal(miss.same, false);
+  assert.equal(miss.misordered, undefined);
+  assert.match(pickText(miss), /：漏了 a\.1、a\.3$/);
+  // 盯 2：没写 order=on 的，回答和话跟以前逐字一样（先后不比）
+  const t = run(new Scene(), `${G}\nask pick a "从小到大点" expect="a.4 a.2 a.1 a.3"`);
+  assert.equal(t.waiting.order, undefined);
+  const old = pickAnswer(t, ['a.2', 'a.4', 'a.1', 'a.3'], t.waiting.expect);
+  assert.deepEqual({ ...old }, { type: 'pick', refs: ['a.2', 'a.4', 'a.1', 'a.3'], expected: 'a.4 a.2 a.1 a.3', same: true, extra: [], missing: [] });
+  assert.equal(pickText(old), '学生点了 4 个：a.2、a.4、a.1、a.3——你预期的是 a.4 a.2 a.1 a.3：一样');
+});
+test('D3-8：order= 只能写 on、要有 expect、只用在 ask pick 上', () => {
+  const base = run(new Scene(), 'array a = 5 3 8 1');
+  assert.match(dryRun(base, 'ask pick a "…" expect="a.4 a.2" order=yes')[0].error, /order= 只能写 on/);
+  assert.match(dryRun(base, 'ask pick a "…" order=on')[0].error, /order=on 要写 expect=/);
+  assert.match(dryRun(base, 'ask tap a "…" expect="a.4" order=on')[0].error, /order/);
+  assert.equal(dryRun(base, 'ask pick a "…" expect="a.4 a.2" order=on').length, 0);
+});
