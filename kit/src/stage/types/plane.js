@@ -208,8 +208,12 @@ function liveItem(scene, h, o, cmd, name, text, guide) {
   if (guide) throw new Error(`sum 不写 {…}：要跟着算写 vec ${o.id} ${name} = {…}`);
   const { parts } = h.parseLive(text);
   const exprs = parts.filter((p) => p.k === 'expr');
-  if (exprs.length !== 1 || parts.some((p) => p.k === 'text' && p.v.trim())) throw new Error(`要写成 ${cmd} ${o.id} ${name} = {A v}（整个式子写在一对 {} 里）`);
-  const src = exprs[0].v;
+  const eg = `要写成 ${cmd} ${o.id} ${name} = {A v}（整个式子写在一对 {} 里），或者两个坐标各写各的：${cmd} ${o.id} ${name} = {l} {m}（一个式子一个数也行：{l} 2）`;
+  // 两个坐标各写一个式子（底座第二轮留下的第 9 条：以前要另藏一列 V = {l} / {m}）：拼成一个向量的式子 [(…), (…)]，别的照旧
+  const terms = parts.flatMap((p) => (p.k === 'expr' ? [`(${p.v})`] : p.v.trim().split(/\s+/).filter(Boolean)));
+  const two = terms.length === 2 && terms.every((t) => /^\(.*\)$/.test(t) || /^-?\d+(\.\d+)?(\/\d+)?$/.test(t)) && exprs.length >= 1 && !(exprs.length === 1 && terms.length === 1);
+  if (!two && (exprs.length !== 1 || parts.some((p) => p.k === 'text' && p.v.trim()))) throw new Error(eg);
+  const src = two ? `[${terms.join(', ')}]` : exprs[0].v;
   const { value, deps } = h.liveValue(src, { plane: o.id });
   const coords = coordsOfValue(value, src);
   // 依赖成环（w 跟着 z、z 又跟着 w）：先查
@@ -497,6 +501,7 @@ plane p range=-4..4               造坐标平面（网格、坐标轴，y 朝�
 vec p u = 2 1 color=g1            加向量；再写一次就滑到新坐标
 vec p w = 2u - v                  线性组合（u、v 变了它跟着变；系数能写拨的数：vec p w = k u）
 vec p w = {A v}                   跟着算：矩阵 A 乘 v（A、v 一变 w 跟着变；学生拖不动 w）
+point p Q = {d} {k}               两个坐标各写一个式子（拨数一拨点跟着走）
 point p P = 2 3                   加一个点
 sum p w = u + v                   首尾相接画出和（平行四边形法则）
 span p u / span p u v / unspan p  淡淡涂上张成的直线或整个平面（写 stay 就钉住这时的样子，能钉几条）

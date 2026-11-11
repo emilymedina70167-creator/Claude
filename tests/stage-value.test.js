@@ -131,7 +131,9 @@ test('{A v}', () => {
   assert.match(sc.stateText(), /跟着算的.*p\.w = \{A v\}/);
   // 写错的
   assert.match(err(sc, 'vec p q = {A}'), /平面上的向量要两个数/);
-  assert.match(err(sc, 'vec p q = 2 {k}'), /整个式子写在一对 \{\} 里/);
+  // 两个坐标各写各的（一个数、一个式子）现在能写（主线第三轮：底座留下的第 9 条）；三段、夹着字的照旧报
+  assert.match(err(sc, 'vec p q = 2 {k} 3'), /整个式子写在一对 \{\} 里/);
+  assert.match(err(sc, 'vec p q = 到 {k}'), /整个式子写在一对 \{\} 里/);
   assert.match(err(sc, 'sum p q = {A v}'), /sum 不写 \{…\}/);
   // 再写成坐标：不跟着算了
   one(sc, 'vec p w = 1 1');

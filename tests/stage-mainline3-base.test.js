@@ -89,3 +89,15 @@ test('第 4 条：键盘照上一张写下一步（from=）写满时，事实里
   const f3 = u.apply(parseScript('write B.1,2 0')[0], { by: 'student', open: 'edit' });
   assert.doesNotMatch((f3.judged?.after || []).join('；'), /阶梯形/);
 });
+
+test('第 9 条：平面上点、向量的两个坐标各写一个式子（point p Q = {l} {m}）；一个式子一个数也行；拨了跟着走', () => {
+  const s = make('dial l = 2 range=-3..3\ndial m = 1 range=-3..3\nplane p range=-4..4\npoint p Q = {l} {m}\nvec p v = {l + 1} 2');
+  const it = (n) => s.objects.get('p').items.find((x) => x.name === n);
+  assert.deepEqual([String(it('Q').x), String(it('Q').y), String(it('v').x), String(it('v').y)], ['2', '1', '3', '2']);
+  run(s, 'set l -1');
+  assert.deepEqual([String(it('Q').x), String(it('v').x)], ['-1', '0']);
+  // 写了三个、夹着别的字照旧报，报的话里有两个坐标的写法
+  assert.match(dryRun(s, 'point p R = {l} {m} {l}')[0].error, /\{l\} \{m\}/);
+  // 整个一个式子照旧
+  assert.equal(dryRun(s, 'point p R = {[l, m]}').length, 0);
+});
