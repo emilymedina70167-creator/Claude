@@ -6,7 +6,9 @@
 // 老师给了答案（key=）的，页面逐格比，比出来的不当场给学生标，只告诉老师。
 import { parseRef } from '../script.js';
 
-export const MAX_TROWS = 8, MAX_TCOLS = 10;
+import { engineTable, variantsOf as engineVariants, ETABLE_MAX, SKIP } from '../enginetable.js';
+import { cellOk, normCell } from '../../stepperspec.js';
+export const MAX_TROWS = ETABLE_MAX.rows, MAX_TCOLS = ETABLE_MAX.cols; // 10 行 13 列（主线第五轮：引擎的过程表常见的大小）
 export const TB = { CH: 46, GAP: 6, HEAD: 32, MINW: 58, MAXW: 230, PADX: 26 };
 const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
 const VALUE_MAX = 24; // 一格最多几个字（再长排不下；长的话写在题卡、贴的字里）
@@ -62,13 +64,17 @@ const sortRC = (a, b) => a.r - b.r || a.c - b.c;
 export const cellAt = (o, r, c) => o.cells.find((x) => x.r === r && x.c === c) || null;
 /** 一格叫什么（写给老师）：行名×列名；没写名字的写 T.2,3 */
 export function cellName(o, x) {
-  const rn = o.rowNames[x.r - 1], cn = o.colNames[x.c - 1];
+  let rn = o.rowNames[x.r - 1], cn = o.colNames[x.c - 1];
+  // 名字有重的（页面置换的列名是访问串 7 0 1 2 0 …）：带上第几列 / 行，不然分不清是哪一个
+  if (rn != null && o.rowNames.filter((n) => n === rn).length > 1) rn = `第 ${x.r} 行（${rn}）`;
+  if (cn != null && o.colNames.filter((n) => n === cn).length > 1) cn = `第 ${x.c} 列（${cn}）`;
   if (rn != null && cn != null) return `${rn}×${cn}`;
   return `${o.id}.${x.r},${x.c}`;
 }
 /** 这一格比不比（有答案、答案这一格不是空的、不是造的时候就给定的） */
-export const keyed = (o, x) => !!o.key && o.key[x.r - 1]?.[x.c - 1] !== '' && o.key[x.r - 1]?.[x.c - 1] != null && !x.fixed;
-export const answerOf = (o, x) => o.key?.[x.r - 1]?.[x.c - 1] ?? '';
+// 引擎的表里答案是「空着」的格、一组里的格也比（填了不该填的算不一样）
+export const keyed = (o, x) => !!o.key && ((o.key[x.r - 1]?.[x.c - 1] !== '' && o.key[x.r - 1]?.[x.c - 1] != null) || !!o.engine?.empties?.includes(x.key)) && !x.fixed;
+export const answerOf = (o, x) => (o.engine?.empties?.includes(x.key) ? '空着' : o.key?.[x.r - 1]?.[x.c - 1] ?? '');
 /**
  * 交给学生写的格（open T edit / open T.c1 edit：开着的那几格里不是给定的）；没交给学生是 null。
  * 写满没写满只看这几格：只开一列时，写满这一列学生手上就没事了（scene.js 的 blankLeft、规则的 next 都照它）
@@ -81,8 +87,78 @@ export function openCells(scene, o) {
   for (const e of es) for (const r of e.refs) { try { for (const p of scene.parts(r)) keys.add(p.key); } catch { /* 那几格不在了 */ } }
   return o.cells.filter((x) => keys.has(x.key) && !x.given);
 }
-/** 和答案不一样的格（填了的才算；空着的不算不一样） */
-export const wrongCells = (o) => (o.key ? o.cells.filter((x) => keyed(o, x) && x.value !== '' && !sameValue(x.value, answerOf(o, x))).sort(sortRC) : []);
+// 引擎的表里先后不论的一组（页面置换同一次访问的几个物理块）：这一格在哪一组；一组要填几格（答案里不空的）、已经填了几格
+const groupOf = (o, x) => o.engine?.groups.find((ks) => ks.includes(x.key)) || null;
+function groupState(o, g, x = null, value = null) {
+  const cs = g.map((k) => o.cells.find((c) => c.key === k));
+  const vals = cs.map((c) => (c === x ? value : c.value));
+  const want = cs.map((c) => o.key?.[c.r - 1]?.[c.c - 1] ?? '');
+  return { cs, vals, want, need: want.filter((v) => v !== '').length, have: vals.filter((v) => v !== '').length };
+}
+/** 这一格答案是空着的（引擎的表：没有换出谁的那一次）：学生不填才对，不算「还空着」。一组里的照整组看，不在这里 */
+export const emptyKey = (o, x) => !!o.engine?.empties?.includes(x.key) && !groupOf(o, x);
+/** 这一格还等着学生填：空着，而且答案不是「空着」；一组先后不论的，这一组还没填够才算 */
+export function isBlank(o, x) {
+  if (x.value !== '') return false;
+  const g = groupOf(o, x);
+  if (g) { const st = groupState(o, g); return st.have < st.need; }
+  return !emptyKey(o, x);
+}
+/**
+ * 这一格（写成 value 的话）和答案一不一样：true / false；null 是还定不了（它那一组先后不论的几格还没填够）。
+ * 引擎造的表（o.engine）照引擎那边判一格的办法（几种写法都对、数按数比、向量、打勾）；一组先后不论的照整组比
+ */
+export function cellRight(o, x, value = x.value) {
+  const e = o.engine;
+  if (!e) return sameValue(value, answerOf(o, x));
+  const g = groupOf(o, x);
+  if (g) {
+    const st = groupState(o, g, x, value);
+    if (st.have < st.need) return null;
+    const bag = (xs) => xs.map(normCell).sort().join('|');
+    return bag(st.vals) === bag(st.want);
+  }
+  if (emptyKey(o, x)) return value === '';
+  const cell = e.cells[x.key];
+  return cell ? cellOk({ ...cell, given: false }, value) : sameValue(value, answerOf(o, x));
+}
+/** 和答案不一样的格（填了的才算；空着的、一组还没填完的不算不一样） */
+export const wrongCells = (o) => (o.key ? o.cells.filter((x) => keyed(o, x) && x.value !== '' && cellRight(o, x) === false).sort(sortRC) : []);
+
+// —— 引擎造的表（table T engine=sort algo=shell array="…"）——
+const VCACHE = new Map();
+/** 引擎认得的常见错法各算出来的表：[{ label, key }]（用到才算、记着） */
+export function variantsOf(o) {
+  if (!o.engine) return [];
+  const k = `${o.engine.name}\n${JSON.stringify(o.engine.fields)}`;
+  if (!VCACHE.has(k)) {
+    let vs = [];
+    try { vs = engineVariants(o.engine.name, engineTable(o.engine.name, o.engine.fields)); } catch { /* 算不了：没有错法可比 */ }
+    if (VCACHE.size > 40) VCACHE.clear();
+    VCACHE.set(k, vs);
+  }
+  return VCACHE.get(k);
+}
+/**
+ * 学生填完的哪几行（引擎的一行；竖着排的表是一列）像哪种错法：[{ name（这一行 / 列叫什么）, label }]。
+ * 填完了、有格和答案不一样、每一格都和这种错法算出来的一样才算
+ */
+export function misreadLines(o) {
+  if (!o.engine) return [];
+  const out = [];
+  const at = (k) => o.cells.find((c) => c.key === k);
+  for (const ks of o.engine.lines) {
+    const cs = ks.map(at);
+    if (cs.some((x) => !x || isBlank(o, x)) || !cs.some((x) => cellRight(o, x) === false)) continue;
+    const v = variantsOf(o).find((vr) => cs.every((x) => normCell(x.value) === normCell(vr.key[x.r - 1]?.[x.c - 1] ?? '')));
+    if (!v) continue;
+    const row = cs.every((x) => x.r === cs[0].r);
+    const uniq = (names, n) => n != null && names.filter((t) => t === n).length === 1;
+    const rn = o.rowNames[cs[0].r - 1], cn = o.colNames[cs[0].c - 1];
+    out.push({ name: row ? (uniq(o.rowNames, rn) ? `${rn}这一行` : `第 ${cs[0].r} 行${rn != null ? `（${rn}）` : ''}`) : (uniq(o.colNames, cn) ? `${cn}这一列` : `第 ${cs[0].c} 列${cn != null ? `（${cn}）` : ''}`), label: v.label.replace(/^像是/, ''), keys: ks });
+  }
+  return out;
+}
 
 // —— 排版 ——
 /** 每一列多宽：这一列最长的字（格里的、答案的、列名）；画面量过的（o.mw）优先 */
@@ -131,7 +207,8 @@ export const table = {
   type: 'table',
   label: '表',
   create: ['table'],
-  options: { table: ['rows', 'cols', 'key'] },
+  options: { table: ['rows', 'cols', 'key', 'engine'] },
+  variantsOf,
   hint: '（表：名字.2,3 是第 2 行第 3 列的格，名字.r2 是第 2 行，名字.c3 是第 3 列；现状里一格写成 行名×列名）',
   make(scene, c, h, old) {
     const id = h.words[0];
@@ -140,7 +217,18 @@ export const table = {
     const rowNames = h.opts.rows != null ? namesOf(h.opts.rows) : [];
     const colNames = h.opts.cols != null ? namesOf(h.opts.cols) : [];
     let grid;
-    if (eq >= 0) {
+    let E = null;
+    if (h.opts.engine != null) {
+      // table T engine=sort algo=shell array="…"：引擎的过程表（enginetable.js）。别的 名字=值 原样交给引擎（和黑板组件的字段一样）
+      if (eq >= 0) throw new Error('engine= 的表不写格子：格子、行名列名、答案都从引擎来（table T engine=sort algo=shell array="49 38 65" gaps="2 1"）');
+      for (const k of ['rows', 'cols', 'key']) if (h.opts[k] != null) throw new Error(`engine= 的表行名、列名、答案都从引擎来，不写 ${k}=`);
+      const fields = {};
+      for (const [k, v] of Object.entries(h.opts)) if (!['engine', 'hide'].includes(k)) fields[k] = String(v);
+      E = engineTable(String(h.opts.engine).trim(), fields);
+      grid = E.grid.map((r) => [...r]);
+      rowNames.push(...E.rowNames);
+      colNames.push(...E.colNames);
+    } else if (eq >= 0) {
       grid = gridOf(h.args.slice(eq + 1));
       if (!grid[0].length) throw new Error(`表要有格：写成 ${eg}`);
       grid.forEach((r, i) => { if (r.length !== grid[0].length) throw new Error(`第 ${i + 1} 行有 ${r.length} 格，第 1 行有 ${grid[0].length} 格（每行要一样多；空着的格写 _，短语写在引号里）`); });
@@ -157,6 +245,15 @@ export const table = {
     // 造的时候就有值的格：给定的，答案不比它（fixed 一直不变；老师后来写进去的格是 given、照旧比）
     for (const x of o.cells) if (x.given) x.fixed = true;
     if (h.opts.key != null) o.key = parseTableKey(h.opts.key, o);
+    if (E) {
+      const kk = (r, c) => `${r + 1}.${c + 1}`;
+      o.key = E.key.map((r) => [...r]);
+      const cells = {};
+      E.cells.forEach((row, r) => row.forEach((cell, c) => { if (!E.isGiven(cell)) cells[kk(r, c)] = { v: [].concat(cell.v ?? '').map((a) => (cell.mark ? (normCell(a) ? '√' : '×') : String(a ?? ''))), ...(cell.num ? { num: true } : {}), ...(cell.vec ? { vec: true } : {}) }; }));
+      const fields = {};
+      for (const [k, v] of Object.entries(h.opts)) if (!['engine', 'hide'].includes(k)) fields[k] = String(v);
+      o.engine = { name: E.name, title: E.title, fields, cells, groups: E.groups.map((g) => g.map(([r, c]) => kk(r, c))), marks: E.marks.map(([r, c]) => kk(r, c)), lines: E.lines.map((g) => g.map(([r, c]) => kk(r, c))), empties: E.empties.map(([r, c]) => kk(r, c)), extra: E.extra };
+    }
     const { w } = sizeOf(o);
     o.origin = old?.type === 'table' ? { ...old.origin } : scene.slotFor(w);
     delete o.id;
@@ -188,7 +285,7 @@ export const table = {
   objectBox,
   obstacles(o) { return [objectBox(o)]; },
   // 还有没有空着等学生填的格（scene.js 的 blankLeft）：交给学生的那几格里的；没交给学生看整张
-  blankLeft(scene, o) { return (openCells(scene, o) || o.cells).some((x) => x.value === ''); },
+  blankLeft(scene, o) { return (openCells(scene, o) || o.cells).some((x) => isBlank(o, x)); },
   // 挑战拿来整个比的（T = U）：照矩阵的样子交
   measure(o) { const rows = []; for (let r = 1; r <= o.rows; r++) rows.push(o.cells.filter((x) => x.r === r).sort(sortRC).map((x) => x.value)); return { kind: 'matrix', rows }; },
   commands: {
@@ -245,7 +342,7 @@ export const table = {
     const lines = [`表 ${o.id}（${o.rows} 行 ${o.cols} 列）：`];
     if (o.colNames.length) lines.push(`  列：${o.colNames.join('｜')}`);
     for (let r = 1; r <= o.rows; r++) lines.push(`  ${o.rowNames[r - 1] ?? `第 ${r} 行`}：${o.cells.filter((x) => x.r === r).sort(sortRC).map((x) => sh(x.value)).join('｜')}`);
-    const blank = o.cells.filter((x) => x.value === '').sort(sortRC);
+    const blank = o.cells.filter((x) => isBlank(o, x)).sort(sortRC);
     if (blank.length) lines.push(`  还空着：${blank.length > 12 ? `${blank.length} 格` : blank.map((x) => cellName(o, x)).join('、')}`);
     const ticks = [...Object.entries(o.marks.cols).filter(([, v]) => v === 'tick').map(([k]) => `${o.colNames[k - 1] ?? `第 ${k} 列`}（列）`), ...Object.entries(o.marks.rows).filter(([, v]) => v === 'tick').map(([k]) => `${o.rowNames[k - 1] ?? `第 ${k} 行`}（行）`), ...o.cells.filter((x) => x.tick === 'tick').map((x) => cellName(o, x))];
     const crosses = [...Object.entries(o.marks.cols).filter(([, v]) => v === 'cross').map(([k]) => `${o.colNames[k - 1] ?? `第 ${k} 列`}（列）`), ...Object.entries(o.marks.rows).filter(([, v]) => v === 'cross').map(([k]) => `${o.rowNames[k - 1] ?? `第 ${k} 行`}（行）`), ...o.cells.filter((x) => x.tick === 'cross').map((x) => cellName(o, x))];
@@ -259,9 +356,12 @@ export const table = {
       if (x.covered) put('扣着', cellName(o, x));
     }
     if (groups.size) lines.push(`  样子：${[...groups].map(([k, v]) => `${k} ${v.join(' ')}`).join('；')}`);
+    if (o.engine) lines[0] = `表 ${o.id}（${o.rows} 行 ${o.cols} 列）：照 ${o.engine.name} 的过程表（${Object.entries(o.engine.fields).map(([k, v]) => `${k}=${v}`).join(' ')}）`;
+    if (o.engine?.extra.length) lines.push(`  表外的答案（学生看不到）：${o.engine.extra.map((x) => `${x.label} = ${x.v}`).join('；')}`);
     if (o.key) {
       const n = o.cells.filter((x) => keyed(o, x)).length;
       lines.push(`  答案：收下了（比 ${n} 格；学生看不到，比出来的不当场标）`);
+      for (const m of misreadLines(o)) lines.push(`  ${m.name}像是：${m.label}`);
       const bad = wrongCells(o);
       if (bad.length) lines.push(`  和答案不一样：${bad.map((x) => `${cellName(o, x)}（写了 ${x.value}，答案是 ${answerOf(o, x)}）`).join('、')}`);
     }
@@ -269,7 +369,7 @@ export const table = {
   },
   summary(o) { const rows = []; for (let r = 1; r <= o.rows; r++) rows.push(o.cells.filter((x) => x.r === r).sort(sortRC).map((x) => (x.value === '' ? '□' : x.value)).join(' ')); return rows.join(' / '); },
   doc: `表（行名列名，格里放数、∞、字、短语，能空着等填）：
-table T = 10 ∞ _ / _ 7 _ rows="顶点2 顶点3" cols="第1轮 第2轮 第3轮"  「 / 」分行，_ 空着，短语写引号里；最多 8 行 10 列
+table T = 10 ∞ _ / _ 7 _ rows="顶点2 顶点3" cols="第1轮 第2轮 第3轮"  「 / 」分行，_ 空着，短语写引号里；最多 10 行 13 列
 table E rows="最少 最多" cols="1 2 3" key="1 2 4 / 1 3 7"  只写 rows= cols= 是全空的；key= 是答案（同形，不比的写 _）：页面逐格比，只告诉你、不给学生标
 写法：T.2,3 一格；T.r2 一行；T.c3 一列
 write T.2,3 7 / write T.2,3 "不稳定" / write T.2,3 _  写一格（你写的学生改不了）/ 空出来

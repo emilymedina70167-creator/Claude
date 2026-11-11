@@ -32,7 +32,7 @@ test('造：数、∞、词、引号里的短语、空着；行名列名；只�
   assert.match(dryRun(new Scene(), 'table T = 1 2 / 3 4 rows="a b c"')[0].error, /rows= 写了 3 个名字，表有 2 行/);
   assert.match(dryRun(new Scene(), 'table T = 1 2 cols="x"')[0].error, /cols= 写了 1 个名字，表有 2 列/);
   assert.match(dryRun(new Scene(), 'table T rows="a"')[0].error, /rows= 和 cols= 都要写/);
-  assert.match(dryRun(new Scene(), `table T rows="${Array.from({ length: 9 }, (_, i) => `r${i}`).join(' ')}" cols="a"`)[0].error, /最多 8 行 10 列/);
+  assert.match(dryRun(new Scene(), `table T rows="${Array.from({ length: 11 }, (_, i) => `r${i}`).join(' ')}" cols="a"`)[0].error, /最多 10 行 13 列/);
 });
 
 test('部件：T.2,3 一格、T.r2 一行、T.c3 一列；现状照行名列名写一张', () => {

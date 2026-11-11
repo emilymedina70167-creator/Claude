@@ -597,4 +597,17 @@ export const NEW5 = [
     called: [C(/学生填了「have been going on」——正确答案是 has been going on，填错了/, '标准答案是页面拼的'), C(/学生填了「has been going on」——正确答案是 has been going on，填对了/, '填对了')],
     noAudit: [C(/压着/), C(/出了屏幕/)],
   },
+  {
+    id: '引擎的过程表', files: ['etable.txt'],
+    checks: [
+      C(/表 T（5 行 12 列）：照 paging 的过程表（algo=fifo frames=3 refs=7 0 1 2 0 3 0 4 2 3 0 3）/, '现状里写是照哪个引擎的'),
+      C(/答案：收下了（比 \d+ 格；学生看不到/, '答案是引擎算的'),
+    ],
+    called: [
+      C(/块 2×第 2 列（0） 写了 7，和答案一样/, '同一次访问的几个物理块先后不论；列名有重的带上第几列'),
+      C(/缺页×7 写了 √，和答案一样/, '打勾的格'),
+      C(/学生点了「填好了」/, '学生说填好了'),
+    ],
+    noAudit: [C(/压着/), C(/出了屏幕/), C(/缩得太小/)],
+  },
 ];

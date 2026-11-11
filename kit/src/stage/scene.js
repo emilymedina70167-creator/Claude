@@ -1044,6 +1044,8 @@ export class Scene {
    */
   optionNames(c) {
     const { cmd } = c;
+    // table T engine=sort algo=shell …：别的 名字=值 是引擎的字段，引擎自己报写错的（enginetable.js）
+    if (cmd === 'table' && c.opts?.engine != null) return { label: cmd, names: '*' };
     if (CREATE[cmd]) return { label: cmd, names: [...(CREATE[cmd].options?.[cmd] || []), 'hide'] };
     const owners = Object.values(TYPES).filter((t) => t.commands?.[cmd]);
     if (owners.length) {
