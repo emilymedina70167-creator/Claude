@@ -295,6 +295,35 @@ export const MUST = [
   { files: ['E3/幕1.txt'], checks: [C(/学生点了 \w+\.\d+（(laughs|laughing)/, '题卡那一行写的是 laughs 还是 laughing')] },
 ];
 
+// —— fix1：一条页面毛病一份最小的试演（evals/stage-gaps/fix1/，舞台主线第一轮设计第 3 节）——
+// 修好的毛病不许再回来：老师看得到的四处（叫老师的那一条、最后攒着的、舞台现状、没演上的行的报错）里必须有 / 不许有什么，
+// 排版那一栏必须报 / 不许报什么。跑法：node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1
+
+const errorsText = (s) => (s?.errors || []).map((e) => `${e.src || ''}：${e.error}`).join('\n');
+const SEEN = [['called', (s) => s?.called?.msg], ['pending', (s) => s?.pending], ['state', (s) => s?.state], ['errors', errorsText]];
+/** 不许出现的话在哪几处出现了：[{ step, where: 'called' | 'pending' | 'state' | 'errors' }]（每一步的四处都查） */
+export function mustNotHits(steps = [], re) {
+  const r = plainRe(re);
+  const out = [];
+  steps.forEach((s, i) => { for (const [where, get] of SEEN) { const t = get(s); if (t && r.test(t)) out.push({ step: i, where }); } });
+  return out;
+}
+/** 必须出现的话在哪几步出现了（四处有一处有就算这一步有） */
+export function seenHits(steps = [], re) {
+  return [...new Set(mustNotHits(steps, re).map((h) => h.step))];
+}
+/** 排版那一栏（每一步的 issues 写成「压着：obj:a 和 obj:b」）对得上 re 的是哪几步 */
+export function auditHits(steps = [], re) {
+  const r = plainRe(re);
+  return steps.flatMap((s, i) => ((s?.issues || []).some((p) => r.test(`${p.what}：${p.a}${p.b ? ` 和 ${p.b}` : ''}`)) ? [i] : []));
+}
+/**
+ * fix1 的表。一行 { id: 'L3-3'（report3 里那张单子的编号）, files: ['L3-3.txt'], checks, nots, called, audit, noAudit }：
+ *   checks  老师看得到的四处里必须有（每个视口至少一步）；nots  四处里每一步都不许有；
+ *   called  真发给老师的那一条里（或最后攒着的）必须有（mustHits）；audit / noAudit  排版那一栏必须报 / 不许报
+ */
+export const FIX1 = [];
+
 // —— 和基线比（tools/stage-try-diff.mjs）：原来演得上的，现在还演不演得上 ——
 
 // 一条报错认哪一行：写了行号的认那一行（同一行换了说法不算新的错），页面报错、工具的话认整句

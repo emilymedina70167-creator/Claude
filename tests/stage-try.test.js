@@ -261,3 +261,29 @@ test('stage-try-diff：基线里没错的、现在报错的；演上的行少了
   assert.match(diffText(d), /3 处不同/);
   assert.match(diffText([]), /没有不同/);
 });
+
+// —— fix1：一条页面毛病一份最小的试演，查「必须出现 / 不许出现」（舞台主线第一轮）——
+import { FIX1, mustNotHits, seenHits, auditHits } from '../tools/stage-try-lib.js';
+
+test('fix1 的查法：不许出现的在叫老师的那条、攒着的、现状、报错里都查', () => {
+  const steps = [{ called: { msg: '学生填了「1,4」——填错了' }, state: '在等学生：打字回答', errors: [{ line: 2, src: 'ask drag k', error: '图不能拖' }] }, { pending: '做到了', state: '好' }];
+  assert.deepEqual(mustNotHits(steps, /填错了/), [{ step: 0, where: 'called' }]);
+  assert.deepEqual(mustNotHits(steps, /打字回答/), [{ step: 0, where: 'state' }]);
+  assert.deepEqual(mustNotHits(steps, /图不能拖/), [{ step: 0, where: 'errors' }]);
+  assert.deepEqual(mustNotHits(steps, /做到了/), [{ step: 1, where: 'pending' }]);
+  assert.deepEqual(mustNotHits(steps, /没有的话/), []);
+  assert.deepEqual(seenHits(steps, /图不能拖|做到了/), [0, 1]);
+});
+test('fix1 的查法：排版那一栏', () => {
+  const steps = [{ issues: [] }, { issues: [{ what: '压着', a: 'obj:a', b: 'obj:b' }, { what: '出了屏幕', a: 'obj:q', b: '' }] }];
+  assert.deepEqual(auditHits(steps, /压着：obj:a 和 obj:b/), [1]);
+  assert.deepEqual(auditHits(steps, /出了屏幕：obj:q/), [1]);
+  assert.deepEqual(auditHits(steps, /缩得太小/), []);
+});
+test('fix1 的表：每行有编号、文件，checks / nots / called / audit / noAudit 至少一样', () => {
+  for (const r of FIX1) {
+    assert.match(r.id, /^(D1|D3|D4|L3|E1)-\d+|^side-\d$/);
+    assert.ok(r.files.length);
+    assert.ok(['checks', 'nots', 'called', 'audit', 'noAudit'].some((k) => r[k]?.length), r.id);
+  }
+});
