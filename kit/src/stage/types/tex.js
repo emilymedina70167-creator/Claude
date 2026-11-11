@@ -53,7 +53,10 @@ export function scanTerms(src) {
 export function prepTex(src) {
   let s = String(src ?? '');
   let seen = false;
-  s = s.replace(/(^|[^\\])&/g, (m, pre) => { if (seen) return pre; seen = true; return `${pre}\\htmlData{anchor=1}{}`; });
+  // \begin{…} 到 \end{…} 里面的 & 是那个环境自己的列（矩阵、行列式、cases）：不动
+  // （主线第一轮 L3-2：以前当成对齐点吃掉，行列式三列粘成「λ − 2 − 22」）。环境外面的照旧：第一个是对齐点，别的去掉
+  const align = (part) => part.replace(/(^|[^\\])&/g, (m, pre) => { if (seen) return pre; seen = true; return `${pre}\\htmlData{anchor=1}{}`; });
+  s = s.split(/(\\begin\{[^}]*\}[\s\S]*?\\end\{[^}]*\})/).map((part, i) => (i % 2 ? part : align(part))).join('');
   return `${PREFIX}${s}`;
 }
 const PREFIX = '\\displaystyle ';

@@ -176,3 +176,14 @@ test('扣着的一项：学生看的小块不写它的内容；写给老师的�
   assert.equal(tapValueOf(c), '1，扣着');
   assert.equal(chipTextOf(s.parts('f.b')[0], o), '2x', '没扣着的照旧写它的字');
 });
+
+// —— 舞台主线第一轮 L3-2：矩阵环境里的 & 以前被当成对齐点吃掉，行列式三列粘在一起 ——
+test('L3-2：矩阵环境里的 & 留着；环境外面的第一个 & 照旧是对齐点、别的去掉', () => {
+  const det = '|\\lambda E - A| = \\begin{vmatrix}\\lambda-2&-2&2\\\\-2&\\lambda+1&4\\end{vmatrix}';
+  assert.equal(prepTex(det), `\\displaystyle ${det}`);
+  assert.equal(prepTex('x &= \\begin{pmatrix}1&2\\\\3&4\\end{pmatrix} & y'), '\\displaystyle x \\htmlData{anchor=1}{}= \\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}  y');
+  assert.equal(prepTex('f(x) = \\begin{cases}1 & x>0\\\\0 & x\\le 0\\end{cases}'), '\\displaystyle f(x) = \\begin{cases}1 & x>0\\\\0 & x\\le 0\\end{cases}');
+  // 照旧的两条
+  assert.equal(prepTex('x &= 1 & 2'), '\\displaystyle x \\htmlData{anchor=1}{}= 1  2');
+  assert.equal(prepTex('a \\& b'), '\\displaystyle a \\& b');
+});
