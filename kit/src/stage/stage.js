@@ -8,7 +8,7 @@
 import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHold } from './motion.js';
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
-import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, pickText, unplayedNotes, compareFact, mergeFact, chipTextOf, tapValueOf } from './scene.js';
+import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, tapAnswer, pickText, unplayedNotes, compareFact, mergeFact, chipTextOf, tapValueOf } from './scene.js';
 import { measureShown } from './rules.js';
 import { judgeAnswer, sameAnswer, answerInput, gridAnswerText } from './answer.js';
 import { formulaInput, formulaGrid, hideFormulaPad } from '../formulainput.js';
@@ -587,7 +587,7 @@ export class Stage {
     // 老师的行（连预写的行）让挑战成立、让东西做完了：预写的行拿掉没演（只在学生的一下演），跟着下一条告诉老师
     if (!this.instant) for (const t of unplayedNotes(fx)) this.onNote?.(t, { turn });
     // 老师（连预写的行）这一下改了学生先点的几样：写成一句交给课堂，跟着下一条告诉老师（不叫老师，loop.js 的 onNote）
-    if (fx?.pickDiff && by !== 'student' && !this.instant) this.onNote?.(`${fx.pickDiff}（你演的 ${c.src?.trim() || c.cmd}）`, { turn });
+    if (fx?.pickDiff && fx.pickTell && by !== 'student' && !this.instant) this.onNote?.(`${fx.pickDiff}（你演的 ${c.src?.trim() || c.cmd}）`, { turn });
     told?.();
     try {
       const choreo = c.on ? null : this.choreoOf(c, fx); // @g1 的行只是记着，不演
@@ -1590,9 +1590,7 @@ export class Stage {
       const partsOf = (refs) => (refs.length ? refs.flatMap((r) => sc.parts(r)) : sc.allParts());
       if (w.kind === 'tap') {
         for (const x of partsOf(w.refs)) offs.push(this.armTap(x, () => {
-          const act = { type: 'tap', ref: sc.tapRef(x), pid: pidOf(x), key: x.key, slot: x.slot, value: tapValueOf(x) };
-          // expect 写整样东西或一段：点到里面哪一个都算（以前只认写的第一个部件）；比不了（预期的那几个不在了）是 null
-          if (w.expect) { act.expected = w.expect; act.right = expectHit(sc, w.expect, x); }
+          const act = tapAnswer(sc, x, w.expect);
           this.onAct?.(act);
           finish(act);
         }));

@@ -2091,3 +2091,48 @@ test('D3-8：order= 只能写 on、要有 expect、只用在 ask pick 上', () =
   assert.match(dryRun(base, 'ask tap a "…" expect="a.4" order=on')[0].error, /order/);
   assert.equal(dryRun(base, 'ask pick a "…" expect="a.4 a.2" order=on').length, 0);
 });
+
+// —— 舞台主线第一轮：提问的那一轮 ——
+test('D4-6：ask pick / tap / drag 后面写了舞台上没有的名字，说「舞台上没有 lay」，不是讲一遍 ask pick 的写法', () => {
+  const base = run(new Scene(), 'array a = 1 2 3');
+  assert.match(dryRun(base, 'ask pick lay "点出空着的格子" expect="lay.6"')[0].error, /舞台上没有 lay/);
+  assert.match(dryRun(base, 'ask tap lay.2 "点它"')[0].error, /舞台上没有 lay/);
+  // 什么都没写的照旧讲写法；写对的照旧收
+  assert.match(dryRun(base, 'ask pick "…"')[0].error, /ask pick 后面写/);
+  assert.equal(dryRun(base, 'ask pick a "…" expect="a.2"').length, 0);
+});
+test('D3-7：ask tap 的 expect= 写了两个，说「只能写一个，要点几个用 ask pick」', () => {
+  const base = run(new Scene(), 'array a = 1 2 3');
+  assert.match(dryRun(base, 'ask tap a "点最小的" expect="a.1 a.2"')[0].error, /expect= 只能写一个.*ask pick/);
+  assert.equal(dryRun(base, 'ask tap a "点最小的" expect="a.1"').length, 0);
+  assert.equal(dryRun(base, 'ask tap a "点前两个里的" expect="a.1-2"').length, 0);
+});
+test('D1-15：ask pick 写了 expect=、没写 reveal=on：交的时候比过了，老师之后自己演的那一下不用再告诉老师「变了却没点的」', () => {
+  const judged = run(new Scene(), 'array a = 3 1 2 5\nask pick a "点出和 3 一组的" expect="a.1 a.2"');
+  judged.apply(parseScript('pick a.1 a.2')[0], { by: 'student' });
+  const fx = judged.apply(parseScript('swap a.3 a.4')[0]);
+  assert.ok(fx.pickDiff, '变了哪几个照旧算（学生自己接着动时照旧写进事实）');
+  assert.equal(fx.pickTell, false);
+  // 让学生先猜哪几个会变（没写 expect=）：照旧告诉老师；写了 reveal=on 的也照旧
+  const guess = run(new Scene(), 'array a = 3 1 2 5\nask pick a "哪几格会动？"');
+  guess.apply(parseScript('pick a.1 a.2')[0], { by: 'student' });
+  assert.equal(guess.apply(parseScript('swap a.3 a.4')[0]).pickTell, true);
+  const shown = run(new Scene(), 'array a = 3 1 2 5\nask pick a "点出和 3 一组的" expect="a.1 a.2" reveal=on');
+  shown.apply(parseScript('pick a.1 a.2 reveal=on')[0], { by: 'student' });
+  assert.equal(shown.apply(parseScript('swap a.3 a.4')[0]).pickTell, true);
+});
+test('E1-3：提问以后句子被换过，学生点的词照点的那一刻的句子报（以前报成提问那一刻的位置）', async () => {
+  const { tapAnswer } = await import('../kit/src/stage/scene.js');
+  const s = run(new Scene(), 'sentence s = "I hold it steady"\nask tap s "哪个词一直没动？" expect=s.steady');
+  const stale = s.parts('s').find((p) => p.slot === 4); // 提问那一刻的第 4 个词 steady
+  run(s, 'rewrite s "I was holding it very steady"');
+  const act = tapAnswer(s, stale, s.waiting.expect);
+  assert.equal(act.ref, 's.6');
+  assert.equal(act.slot, 6);
+  assert.equal(act.value, 'steady');
+  assert.equal(act.right, true);
+  // 没换过的照旧；点的那个部件已经不在了（词被换掉）：照当时的写，不判
+  const t = run(new Scene(), 'sentence s = "I hold it steady"\nask tap s "…" expect=s.hold');
+  const hold = t.parts('s').find((p) => p.slot === 2);
+  assert.deepEqual({ ...tapAnswer(t, hold, t.waiting.expect) }, { type: 'tap', ref: 's.2', pid: `s:${hold.key}`, key: hold.key, slot: 2, value: 'hold', expected: 's.hold', right: true });
+});
