@@ -587,3 +587,32 @@ test('D3-3：这一轮的提问没演上是一件马上叫老师的事，写给�
   assert.equal(triggers(e), true);
   assert.equal(eventsText([e]), '你上一轮的提问没演上（看下面没演的行）：学生手上只有页面替你挂的打字框，还什么都没做。把那一问重写一遍');
 });
+
+// —— 舞台主线第一轮 D4-11：叫老师的那一条里，试的几下以前一律排在最前面，先后乱了 ——
+test('D4-11：写给老师照发生的先后——中间做到的挑战、点对的一问不再排到后来试的几下后面', () => {
+  const ev = [
+    { kind: 'try', act: { type: 'edit', ref: 'B.1,1', from: '1', to: '2', open: 'edit', line: 'write B.1,1 2' } },
+    { kind: 'goal', ids: ['g2'], reacted: 1, quiet: true },
+    { kind: 'answer', act: { type: 'tap', ref: 'a.3', value: '65' }, held: ['挑战 g3 还没做到'], quiet: true },
+    { kind: 'try', act: { type: 'edit', ref: 'B.2,2', from: '0', to: '5', open: 'edit', line: 'write B.2,2 5' } },
+    { kind: 'answer', act: { type: 'say', text: '好了' } },
+  ];
+  assert.equal(eventsText(ev, { goals: new Map([['g2', { text: '第 2 条' }]]) }), [
+    '学生拨了 B.1,1：1 → 2',
+    '学生做到了挑战 g2「第 2 条」（页面已经演了你预写的 1 行）',
+    '学生点了 a.3（65）',
+    '（挑战 g3 还没做到，没叫你）',
+    '学生拨了 B.2,2：0 → 5',
+    '学生说：「好了」',
+  ].join('\n'));
+});
+test('D4-11：同一格连着拨的还是并成一条路，放在这条路开头的地方；最后那两句说明照旧在最后', () => {
+  const dial = (from, value) => ({ kind: 'try', act: { type: 'dial', name: 'k', from, value } });
+  const ev = [dial(1, 2), { kind: 'note', text: '页面记下的一句', quiet: true }, dial(2, 3), { kind: 'answer', act: { type: 'say', text: '嗯' } }];
+  const lines = eventsText(ev, { secs: 9 }).split('\n');
+  assert.equal(lines.length, 4);
+  assert.match(lines[0], /^学生拨了 k：1 → 2 → 3/);
+  assert.equal(lines[1], '页面记下的一句');
+  assert.equal(lines[2], '学生说：「嗯」');
+  assert.equal(lines[3], '（离你上一轮演完过了 9 秒）');
+});
