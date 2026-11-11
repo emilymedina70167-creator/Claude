@@ -2264,3 +2264,42 @@ test('D3-7、E1-4：三句照着改不对的报错，说清楚该怎么写', () 
   // 英文的照旧
   assert.equal(dryRun(new Scene(), 'sentence e = "The cat sat" key="[S The cat] [V sat]"').length, 0);
 });
+
+// —— 舞台主线第一轮：一排格子 ——
+const TEN = 'array a = 49 38 65 97 76 13 27 49′ 55 04';
+test('D1-1：分开排着（split）时学生换不了不在同一条泳道的两张（以前换了，页面还记做到了挑战）；同一条里的照旧', () => {
+  const s = run(new Scene(), `${TEN}\ngroup a stride=5\nsplit a\nopen a`);
+  const before = values(s);
+  assert.throws(() => s.apply(parseScript('swap a.1 a.2')[0], { by: 'student', open: 'drag' }), /不在同一条泳道/);
+  assert.deepEqual(values(s), before, '舞台不动');
+  s.apply(parseScript('swap a.1 a.6')[0], { by: 'student', open: 'drag' });
+  assert.equal(values(s)[0], '13');
+  // 老师自己换照旧能换（现状照实写，见 D1-8）；没分开排着时学生哪两张都能换
+  s.apply(parseScript('swap a.1 a.2')[0]);
+  const t = run(new Scene(), `${TEN}\ngroup a stride=5\nopen a`);
+  t.apply(parseScript('swap a.1 a.2')[0], { by: 'student', open: 'drag' });
+  assert.equal(values(t)[0], '38');
+});
+test('D1-8：没分过组就 split 当场报（重放旧课照旧演、现状照实写）；泳道里的牌不是那几组了，现状写每条泳道现在是哪几格', () => {
+  assert.match(dryRun(run(new Scene(), TEN), 'split a')[0].error, /先分组.*group a stride=/);
+  // 盯 1：重放旧课照旧演，现状不说「每组下到自己的一排」
+  const old = run(new Scene(), TEN);
+  old.apply({ ...parseScript('split a')[0], lenient: true });
+  assert.match(old.stateText(), /整排下到了下面一排（没分过组）/);
+  assert.doesNotMatch(old.stateText(), /每组下到自己的一排/);
+  // 分过组、照组排着：照旧
+  const s = run(new Scene(), `${TEN}\ngroup a stride=5\nsplit a`);
+  assert.match(s.stateText(), /按隔 5 个分了 5 组，每组下到自己的一排/);
+  // 老师跨泳道换过：不再说「按隔 5 个分了 5 组」那句，写每条泳道现在是哪几格
+  run(s, 'swap a.1 a.2');
+  const st = s.stateText();
+  assert.doesNotMatch(st, /每组下到自己的一排/);
+  assert.match(st, /分开排着，可泳道里的牌已经不是隔 5 的那几组了：第 1 条是第 2、6 格；第 2 条是第 1、7 格/);
+});
+test('D1-12：hop 留下的弧钉在画的时候那两个格位上：牌挪走了弧不跟着缩（字还写「让 9 格」）', () => {
+  const s = run(new Scene(), `${TEN}\nhop a.10 -> a.1 color=g1 label="让 9 格"`);
+  const ends = () => { const l = [...s.links.values()].find((x) => x.hop); return [l.a, l.b].map((e) => s.tapRef(s.partOf(e.obj, e.key))).sort(); };
+  assert.deepEqual(ends(), ['a.1', 'a.10']);
+  run(s, 'move a#10 -> a.1');
+  assert.deepEqual(ends(), ['a.1', 'a.10'], '弧的两头还是第 1 格、第 10 格');
+});

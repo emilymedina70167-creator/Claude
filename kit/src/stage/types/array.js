@@ -53,6 +53,16 @@ export function regroup(scene, o, d) {
   return { id: o.id, groups: groups.length, gone, made };
 }
 
+/** hop 留下的弧钉在格位上：牌挪过以后，两头换成现在在那两格上的牌（主线第一轮 D1-12：以前弧跟着牌缩到两格之间，字还写「让 9 格」） */
+function repinHops(scene, o) {
+  for (const l of scene.links.values()) {
+    if (!l.hop || l.a.obj !== o.id) continue;
+    const at = (slot) => o.cells.find((x) => x.slot === slot);
+    const [x, y] = [at(l.hop[0]), at(l.hop[1])];
+    if (x && y) { l.a = { obj: o.id, key: x.key }; l.b = { obj: o.id, key: y.key }; }
+  }
+}
+
 const FLAGS = ['paint', 'glow', 'lift', 'dim', 'covered'];
 
 const one = (h, list, what) => {
@@ -132,6 +142,9 @@ export const array = {
       const color = opts.color || words.find(h.isColor) || 'g1';
       if (!h.isColor(color)) throw new Error('颜色只有 g1～g6');
       const link = scene.addLink(from, to, color) || scene.linkKey(from, to);
+      // 这道弧说的是「从这一格到那一格」（让 9 格）：记着两个格位，牌之后挪走了弧还钉在这两格上（repinHops）
+      const L = scene.links.get(link);
+      if (L) L.hop = [from.slot, to.slot];
       const id = `hop:${from.obj}${from.key}`;
       if (opts.label) scene.labels.set(id, { id, refs: [scene.refOf(from), scene.refOf(to)], text: opts.label, side: 'above', tone: 'soft', link });
       return { from, to, color, link, label: opts.label ? id : null };
@@ -143,7 +156,12 @@ export const array = {
       const [a, b] = cells;
       sameArray(a, b, 'swap ');
       if (a === b) throw new Error('swap 的两格是同一格');
+      const o = scene.objects.get(a.obj);
+      // 分开排着时学生只在自己那条泳道里换（主线第一轮 D1-1：以前换得了，牌到了别的泳道，页面还记「做到了挑战」）。
+      // 老师自己换照旧（现状照实写每条泳道现在是哪几格）
+      if (scene.actor === 'student' && a.row !== b.row) throw new Error('这两张不在同一条泳道里：分开排着时只能在自己那一组里换');
       [a.slot, b.slot] = [b.slot, a.slot];
+      repinHops(scene, o);
       return { a, b };
     },
     // move a#6 -> a.2：把这一格挪到第 2 格，中间的格子各让一格（插入）
@@ -165,6 +183,7 @@ export const array = {
         if (from > to && c2.slot >= to && c2.slot < from) { c2.slot++; moved.push(c2); }
       }
       x.slot = to;
+      repinHops(scene, o);
       return { cell: x, moved };
     },
     // write a.3 99：这一格换成别的值
@@ -204,6 +223,8 @@ export const array = {
     split(scene, c, h) {
       const o = scene.objects.get(h.words[0]);
       if (!o || o.type !== 'array') throw new Error(`舞台上没有叫「${h.words[0]}」的一排格子`);
+      // 没分过组：整排是一组，split 只是把整排往下挪一排（主线第一轮 D1-8：以前照演，现状还写「每组下到自己的一排」）。重放旧课照旧演
+      if (!o.groupD && !c.lenient) throw new Error(`${o.id} 还没分组，split 分不出几排：先分组（group ${o.id} stride=5），再 split ${o.id}`);
       const rowOf = new Map();
       strideGroups(o.cells.length, o.groupD || 1).forEach((g, gi) => g.forEach((s) => rowOf.set(s, gi + 1)));
       o.cells.forEach((x) => { x.row = rowOf.get(x.slot); });
@@ -230,7 +251,18 @@ export const array = {
       return `${c.value}${bits.length ? `（${bits.join('、')}）` : ''}`;
     };
     const split = o.cells.some((c) => c.row);
-    const lines = [`一排格子 ${o.id}（${o.cells.length} 格${o.groupD ? `，按隔 ${o.groupD} 个分了 ${strideGroups(o.cells.length, o.groupD).length} 组` : ''}${split ? '，每组下到自己的一排' : ''}）：`];
+    // 分开排着：照实写（主线第一轮 D1-8）。没分过组的是整排下了一排；泳道里的牌已经不是那几组了（老师跨泳道换过、
+    // 分开以后又重新分了组）写每条泳道现在是哪几格，不再说「每组下到自己的一排」
+    const groups = strideGroups(o.cells.length, o.groupD || 1);
+    const lanes = new Map();
+    for (const x of [...o.cells].sort((a, b) => a.slot - b.slot)) { if (!lanes.has(x.row)) lanes.set(x.row, []); lanes.get(x.row).push(x.slot); }
+    const asGroups = groups.every((g, gi) => (lanes.get(gi + 1) || []).join() === g.join());
+    const laneText = () => [...lanes].sort((a, b) => a[0] - b[0]).map(([r, ss]) => `第 ${r} 条是第 ${ss.join('、')} 格`).join('；');
+    const head = !split ? (o.groupD ? `，按隔 ${o.groupD} 个分了 ${groups.length} 组` : '')
+      : !o.groupD ? '，整排下到了下面一排（没分过组）'
+        : asGroups ? `，按隔 ${o.groupD} 个分了 ${groups.length} 组，每组下到自己的一排`
+          : `，分开排着，可泳道里的牌已经不是隔 ${o.groupD} 的那几组了：${laneText()}`;
+    const lines = [`一排格子 ${o.id}（${o.cells.length} 格${head}）：`];
     lines.push(`  ${o.cells.length > 1 ? `第 1～${o.cells.length} 格` : '第 1 格'}：${[...o.cells].sort((a, b) => a.slot - b.slot).map(tag).join(' ')}`);
     if (o.ptrs.size) lines.push(`  指针：${[...o.ptrs].map(([n, s]) => `${n} → 第 ${s} 格`).join('，')}`);
     return lines;
