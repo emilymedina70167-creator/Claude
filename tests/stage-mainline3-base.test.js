@@ -72,3 +72,20 @@ test('第 3 条：老师自己写的 compare 的结果写成一句（以前只�
   assert.match(compareNote(s, fx('compare A B')), /^你比了 A 和 B：.*不一样/);
   assert.equal(compareNote(s, {}), null);
 });
+
+test('第 4 条：键盘照上一张写下一步（from=）写满时，事实里说是不是阶梯形（和用把手消的那条路一样）', () => {
+  const s = make('matrix M0 = 1 2 / 1 0\nmatrix M1 = _ _ / _ _ from=M0 beside=M0\nopen M1 edit input=keypad');
+  const w = (ref, v) => s.apply(parseScript(`write ${ref} ${v}`)[0], { by: 'student', open: 'edit' });
+  w('M1.1,1', 1); w('M1.1,2', 2); w('M1.2,1', 0);
+  const fx = w('M1.2,2', -2);
+  assert.match(fx.judged.after.join('；'), /现在是阶梯形了：非零行 2 行/);
+  // 写满了还不是阶梯形：照实说还差什么
+  const t = make('matrix M0 = 1 2 / 1 0\nmatrix M1 = 1 2 / 1 _ from=M0 beside=M0\nopen M1 edit input=keypad');
+  const f2 = t.apply(parseScript('write M1.2,2 0')[0], { by: 'student', open: 'edit' });
+  assert.match(f2.judged.after.join('；'), /还不是阶梯形/);
+  // 没写满不说；不是照上一张写的（没有 from=）不说
+  const u = make('matrix B = _ _ / 0 1\nopen B edit input=keypad');
+  u.apply(parseScript('write B.1,1 1')[0], { by: 'student', open: 'edit' });
+  const f3 = u.apply(parseScript('write B.1,2 0')[0], { by: 'student', open: 'edit' });
+  assert.doesNotMatch((f3.judged?.after || []).join('；'), /阶梯形/);
+});

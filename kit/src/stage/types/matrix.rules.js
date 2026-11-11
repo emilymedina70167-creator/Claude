@@ -499,7 +499,10 @@ function writeFacts(after, act, scene) {
   if (!after.from || !scene?.objects) return [];
   const row = after.cells.filter((x) => x.r === Number(act.r));
   if (!row.length || row.some((x) => x.value === '')) return [];
-  return [fromFact(after, scene.objects.get(after.from) ?? null)];
+  const out = [fromFact(after, scene.objects.get(after.from) ?? null)];
+  // 整张写满了：说一声现在是不是阶梯形（底座第二轮留下的第 4 条：用把手消的那条路说，键盘写的以前不说）
+  if (!after.cells.some((x) => x.value === '')) { try { const md = modelOf(after); out.push(statusFact(after, md, plan(md))); } catch { /* 算不了就不说 */ } }
+  return out;
 }
 
 function facts(before, after, act, scene) {
