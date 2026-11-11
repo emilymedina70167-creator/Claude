@@ -2149,3 +2149,19 @@ test('D1-3：on= 的按钮学生手上没有，只报一次（以前每一轮都
   run(s, 'goal g1 "x" when="a sorted" on="交了"');
   assert.equal(s.onProblems({ once: true }).length, 1);
 });
+
+test('L3-4：挑战跟着藏着的矩阵算，可学生动的那根箭头开着——不拦（以前报「J 藏着：先 show J」，照它改两块平面更排不下）', () => {
+  const src = `matrix J = 2 1 / 0 2 hide=on
+plane q range=-3..3
+vec q a = 1 1 color=g1
+vec q b = {J a} color=g6
+matrix Va = {q.a} hide=on
+matrix Wa = {J Va} hide=on
+matrix Ka = {Va.1,1} {Wa.1,1} / {Va.2,1} {Wa.2,1} hide=on
+open q.a`;
+  const base = run(new Scene(), src);
+  assert.deepEqual(dryRun(base, 'goal g1 "找出一条特征线" when="det(Ka) = 0"'), []);
+  // 学生什么都动不了的照旧拦：全是藏着的、没有一样开着的东西连得到它
+  const dead = run(new Scene(), 'matrix J = 2 1 / 0 2 hide=on\nmatrix K = {J J} hide=on');
+  assert.match(dryRun(dead, 'goal g1 "…" when="det(K) = 1"')[0].error, /藏着，学生看不见/);
+});

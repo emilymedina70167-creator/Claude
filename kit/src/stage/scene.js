@@ -355,6 +355,9 @@ export class Scene {
       if (!o) return !!this.vars.get(id)?.shown;
       const nodes = this.nodesOf(o);
       if (!nodes.length) { if (o.hidden) hidden.add(id); return !o.hidden; }
+      // 摆着的东西里只有几个部件是跟着算的（平面上 b = {J a}，a 是学生拖的）：别的部件学生动得到
+      // （主线第一轮 L3-4：以前只顺着跟着算的那几个往上找，找到藏着的 J 就说「先 show J」）
+      if (!o.live && !o.hidden && typeOf(o).parts(o).length > nodes.length) return true;
       return nodes.some((n) => (n.deps || []).some((d) => reach(parseRef(d)?.obj ?? d)));
     };
     return ids.some(reach) ? [] : [...hidden];
