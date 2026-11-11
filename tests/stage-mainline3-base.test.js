@@ -122,3 +122,24 @@ test('第 8 条：整块挪到句首 / 从句首挪走，大小写跟着变（�
   t.apply(parseScript('move s#5 -> s.1')[0], { by: 'student', open: 'move' });
   assert.equal(text(t), 'Today the man is here');
 });
+
+test('第 1 条：tally 数的是 key 的谓语；学生自己点的谓语（灯）不当成装东西的括号，另外数（括号里几处、括号外几处）', async () => {
+  const { tallyOf } = await import('../kit/src/stage/types/sentence.rules.js');
+  const s = make('sentence s = "The man who lives here is a doctor." key="[S The man [RC who [V lives] here]] [V is] a doctor."\nopen s mark\ntally s V');
+  const stu = (src) => s.apply(parseScript(src)[0], { by: 'student', open: 'mark' });
+  const o = () => s.objects.get('s');
+  // 学生先点一盏灯（把 lives 标成谓语）：它不是装东西的括号，「括号外」照旧是 key 的 2 个，不是 0
+  stu('mark s.4 V');
+  let t = tallyOf(o());
+  assert.deepEqual([t.each.size, t.rest, t.lamps, t.restMine], [0, 2, 1, 1]);
+  // 再拉一道从句的括号（who lives here）：这道括号里有 key 的谓语 1 个、学生点的 1 处；括号外 key 1 个、学生点的 0 处
+  stu('mark s.3-5 RC');
+  t = tallyOf(o());
+  const rc = o().marks.find((m) => m.keys.length === 3);
+  assert.deepEqual([t.each.get(rc.id), t.eachMine.get(rc.id), t.rest, t.restMine], [1, 1, 1, 0]);
+  assert.match(s.stateText(), /标着的数（tally V，key 的谓语）：s\.3-5 [^；]* 1 个；括号外 1 个；学生自己标的谓语 1 处（s\.3-5 里 1 处，括号外 0 处）/);
+  // 学生把不是谓语的词标成谓语（a doctor）：照样只是一盏灯，画面上不给它写 0（不当场告诉学生错了）
+  stu('mark s.7-8 V');
+  t = tallyOf(o());
+  assert.deepEqual([t.lamps, t.restMine, t.each.size], [2, 1, 1]);
+});

@@ -793,8 +793,13 @@ export function tallyOf(o) {
   const broken = new Set(brokenMarks(o));
   const mine = (o.marks || []).filter((m) => m.by === 'student' && !broken.has(m.id));
   const inside = (m, k) => k.keys.every((x) => m.keys.includes(x));
-  const each = new Map(mine.map((m) => [m.id, want.filter((k) => inside(m, k)).length]));
-  return { name, each, rest: want.filter((k) => !mine.some((m) => inside(m, k))).length };
+  // 学生自己标成这个成分的（「一件事一盏灯」的灯）不是装东西的括号：不给它写数（写了 0 等于当场告诉学生标错了），
+  // 也不算进「括号外」——以前学生一点灯，「括号外」就一直是 0（底座第二轮留下的第 1 条）。灯另外数：每道括号里几处、括号外几处
+  const lamp = (m) => roleName(m.label) === name;
+  const lamps = mine.filter(lamp), boxes = mine.filter((m) => !lamp(m));
+  const each = new Map(boxes.map((m) => [m.id, want.filter((k) => inside(m, k)).length]));
+  const eachMine = new Map(boxes.map((m) => [m.id, lamps.filter((l) => inside(m, l)).length]));
+  return { name, each, eachMine, rest: want.filter((k) => !boxes.some((m) => inside(m, k))).length, lamps: lamps.length, restMine: lamps.filter((l) => !boxes.some((m) => inside(m, l))).length };
 }
 
 // 拉括号、拉线的每一下都判（折起来不判）；做完了（key 里每一段都拉对了）只对交给了学生拉括号的句子算（线连完了要判写 when="s linked"）

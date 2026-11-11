@@ -1294,7 +1294,9 @@ export const sentence = {
       if (!t) lines.push(`${head}页面数不了（${o.key?.void ? `${o.id} 的 key 跟着 ${voidBy(o.key)} 作废了` : `${o.id} 没写 key`}），画面上没标`);
       else {
         const each = o.marks.filter((m) => t.each.has(m.id)).map((m) => `${spanText(o, m.keys)} ${m.label} ${t.each.get(m.id)} 个`);
-        lines.push(`${head}${[...each, `括号外 ${t.rest} 个`].join('；')}`);
+        const boxes = o.marks.filter((m) => t.each.has(m.id));
+        const mine = t.lamps ? `；学生自己标的${t.name} ${t.lamps} 处（${[...boxes.map((m) => `${spanText(o, m.keys)} 里 ${t.eachMine.get(m.id)} 处`), `括号外 ${t.restMine} 处`].join('，')}）` : '';
+        lines.push(`${head}${[...each, `括号外 ${t.rest} 个`].join('；')}${mine}`);
       }
     }
     const ks = keyStatus(o);
