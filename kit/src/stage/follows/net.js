@@ -28,6 +28,7 @@ registerFollow('net', {
   subjects: ['数据结构'],
   head: 'run',
   word: '个顶点',
+  drillOpen: (f) => ({ dijkstra: 'tag', prim: 'choose', kruskal: 'choose' }[kindOf(f)] || 'visit'),
   unit: '轮',
   title: (f) => `${NAMES[kindOf(f)] || kindOf(f)}${f.from != null ? `（从 ${f.from} 出发）` : ''}`,
   fields: (g, f) => input(g, f),

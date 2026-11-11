@@ -13,6 +13,7 @@
 //   dataOf(o, scene)  这样东西的「数据」写成一串（不管摆成什么样）：变了就是老师（或学生）改了数据，页面从新的样子重跑
 //   stateOf(o, scene, snap) → 现在的样子写成能比的一串；cellsOf(o, scene, snap) → 现在每一处显示的字；nameOf(i) → 第 i 处叫什么；word：一处叫「格」还是别的
 //   frames(run, spec) → [{ state, cells, mark? }]   引擎的每一步写成同样的一串；mark 是「第几趟做完」（数）
+//   drillOpen(fields)（可选）抄进题库自己练的时候开哪种手（课上老师没 open 过时）
 //   loose(state)（可选）和错法的样子比的时候两边都先过它（排序的错法只有数、不带撇）
 //   toKey(o, fields, scene)（可选）接在表上：引擎的结果直接当表的答案，不走路
 //

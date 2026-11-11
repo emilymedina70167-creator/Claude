@@ -1653,12 +1653,15 @@ export async function harvestSession(db, sid, { doc, report = null, steps = null
     report ? report : scoped.doc('report/main').get().then((x) => (x.exists ? x.data() : null), () => null),
     steps ? steps : scoped.collection('steps').get().then(rows, () => []),
     db.collection('errors').get().then(rows, () => []),
-    db.collection('drills').where('fromSession', '==', sid).get().then(rows, () => []),
+    // 舞台题同一块同一种只有一道（别的课抄过的也算已经有了）：按来源取
+    (kindOf(doc) === 'stage' ? db.collection('drills').where('src', '==', 'stage') : db.collection('drills').where('fromSession', '==', sid)).get().then(rows, () => []),
   ]);
-  const out = harvestDrills({ session: { ...doc, id: sid }, steps: st, report: r, mem: { errors }, existing });
+  // 舞台课：抄的是老师照引擎走过的每一种，要读这节课的每一轮
+  const turns = kindOf(doc) === 'stage' ? await scoped.collection('class_turns').get().then(rows, () => []) : [];
+  const out = harvestDrills({ session: { ...doc, id: sid, kind: kindOf(doc) }, steps: st, turns, report: r, mem: { errors }, existing });
   assertWrite('page', 'drills');
   for (const d of out) await db.doc(`drills/${d.id}`).set(d.doc);
-  await update({ drills: out.length + existing.length });
+  await update({ drills: out.length + existing.filter((d) => d.fromSession === sid).length });
   return out.length;
 }
 

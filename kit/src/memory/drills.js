@@ -11,12 +11,14 @@ import { toDate, addDays, dueList, nextTier, REVIEW_TIERS } from './schema.js';
 import { itemsOf } from './report.js';
 import { voidedIds, resolvedErrors } from './memo.js';
 import { filterSpace, spaceOfId } from './space.js';
+import { stageDrillsOf } from './stagedrills.js';
 
 const cut = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 const list = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v === '' ? [] : [v]).map(String);
 const blockOf = (id) => String(id || '').split('#')[0];
 export const DRILL_MAX = 12 * 1024; // 一道题的原文最多多大（课上写的大段组件不抄）
 export const DRILL_N = 8; // 一次练几道
+export const STAGE_DRILL_MAX = 2; // 其中舞台题最多几道
 
 /* ---------------- 读黑板段的组件 ---------------- */
 
@@ -53,8 +55,10 @@ const SKIP = new Set(['let', 'scene', 'graph', 'space', 'plot', 'sketch', 'image
  * 一节课 → 抄进题库的题。session：sessions 文档（带 id）；steps：这节课黑板的段（id、md、point）；report：这节课的报告（report.js）；
  * mem：记忆库（挂错题用）。返回 [{ id, doc }]，已经在题库里的（existing 里有）不重复抄。
  */
-export function harvestDrills({ session = {}, steps = [], report = null, mem = {}, existing = [], now = Date.now() } = {}) {
+export function harvestDrills({ session = {}, steps = [], turns = [], report = null, mem = {}, existing = [], now = Date.now() } = {}) {
   const sid = String(session.id || '');
+  // 舞台课没有黑板的组件：抄的是老师照引擎走过的每一种（stagedrills.js），报告里一道题都没有也照抄
+  if (sid && session.kind === 'stage') return stageDrillsOf({ session, turns, existing, now });
   if (!sid || !report?.items?.length) return [];
   if (session.kind === 'drill') return []; // 练习本身的题本来就在题库里
   const have = new Set((existing || []).map((d) => String(d.id)));
@@ -152,15 +156,17 @@ export function pickDrills(mem = {}, { space = 'math', today = toDate(Date.now()
     if (CLEAN(h)) s -= 10;
     // 教研室出的、还没做过的新题：复现要的就是没见过的题（原题做对不算复现通过），探弱点的题是专门测那个毛病的
     if (d.src === 'lab' && !h) { s += d.weakness ? 45 : 30; why.push(d.weakness ? `探弱点 ${d.weakness}` : '新题'); }
-    scored.push({ id: d.id, block: String(d.block || ''), score: s, why: why.join('；') || '复习', at: Number(d.at) || 0 });
+    scored.push({ id: d.id, block: String(d.block || ''), kind: String(d.kind || ''), score: s, why: why.join('；') || '复习', at: Number(d.at) || 0 });
   }
   scored.sort((a, b) => b.score - a.score || b.at - a.at || a.id.localeCompare(b.id));
   // 混练：每块最多 3 道；按分数轮着从各块拿，挨着的两道尽量不同块
   const per = new Map();
   const pool = [];
+  let stageN = 0; // 舞台题（走完一遍一个算法）比填空长：一次最多 2 道
   for (const x of scored) {
     const k = per.get(x.block) || 0;
     if (k >= 3) continue;
+    if (x.kind === 'stage' && ++stageN > STAGE_DRILL_MAX) continue;
     per.set(x.block, k + 1);
     pool.push(x);
     if (pool.length >= n * 2) break;

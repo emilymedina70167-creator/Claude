@@ -55,21 +55,29 @@ test('指令写错：说是第几行；没有照引擎走的东西：说要有�
   assert.match(none.error, /要有一行 follow/);
 });
 
-test('记结果：每到一个检查点记一步；这一趟里到过错法、看过下一趟的先记一次错再记对；没做完就走记放弃', async () => {
+test('记结果：一道题 = 走完一遍——走完记一次对；到过错法、看过答案的当时记一次错（一趟只记一次）；没做完就走记放弃', async () => {
   const { trackDrill } = await import('../kit/src/stagedrillspec.js');
   const w = (o) => ({ at: 0, passed: 0, total: 3, done: false, like: null, off: false, ...o });
+  // 一遍都对：只在走完时记一条对
   const t = trackDrill(w({}));
-  assert.deepEqual(t.after(w({ at: null, off: true })), { records: [], done: false }); // 中间不在路上：不记
-  assert.deepEqual(t.after(w({ at: 3, passed: 1 })), { records: [{ k: 1, ok: true }], done: false });
-  // 第 2 趟：先做成了错法的样子，再改对
-  assert.deepEqual(t.after(w({ at: null, off: true, like: '像是相邻分组', passed: 1 })).records, []);
-  assert.deepEqual(t.after(w({ at: 5, passed: 2 })).records, [{ k: 2, ok: false, wrong: '像是相邻分组' }, { k: 2, ok: true }]);
-  // 第 3 趟：看了下一趟该是什么样
-  t.peek();
-  assert.deepEqual(t.after(w({ at: 7, passed: 3, done: true })), { records: [{ k: 3, ok: false, wrong: '看了这一趟该是什么样' }, { k: 3, ok: true }], done: true });
+  assert.deepEqual(t.after(w({ at: null, off: true })), { records: [], done: false, step: 0 }); // 中间不在路上：不记
+  assert.deepEqual(t.after(w({ at: 3, passed: 1 })), { records: [], done: false, step: 1 });
+  assert.deepEqual(t.after(w({ at: 5, passed: 2 })).records, []);
+  assert.deepEqual(t.after(w({ at: 7, passed: 3, done: true })), { records: [{ k: 3, ok: true, final: true }], done: true, step: 3 });
+  assert.equal(t.slips, 0);
   assert.deepEqual(t.giveup(), []); // 做完了再点没有东西可记
-  // 一下跨过两个检查点（连着两趟没有要动的并在一起时不会，这里是防着）：各记一步
+  // 第 2 趟做成了错法的样子（来回两次只记一次），第 3 趟看了答案，最后走完：两次错、一次对
   const u = trackDrill(w({}));
-  assert.deepEqual(u.after(w({ at: 4, passed: 2 })).records, [{ k: 1, ok: true }, { k: 2, ok: true }]);
-  assert.deepEqual(u.giveup(), [{ k: 3, ok: false, giveup: true }]);
+  u.after(w({ at: 3, passed: 1 }));
+  assert.deepEqual(u.after(w({ at: null, off: true, like: '像是相邻分组', passed: 1 })).records, [{ k: 2, ok: false, wrong: '像是相邻分组' }]);
+  assert.deepEqual(u.after(w({ at: null, off: true, like: '像是相邻分组', passed: 1 })).records, []);
+  u.after(w({ at: 5, passed: 2 }));
+  assert.deepEqual(u.peek(), [{ k: 3, ok: false, wrong: '看了这一趟该是什么样' }]);
+  assert.deepEqual(u.peek(), []);
+  assert.deepEqual(u.after(w({ at: 7, passed: 3, done: true })).records, [{ k: 3, ok: true, final: true }]);
+  assert.equal(u.slips, 2);
+  // 没做完就走
+  const v = trackDrill(w({}));
+  v.after(w({ at: 3, passed: 1 }));
+  assert.deepEqual(v.giveup(), [{ k: 2, ok: false, giveup: true }]);
 });

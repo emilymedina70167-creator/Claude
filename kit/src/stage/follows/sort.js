@@ -16,6 +16,7 @@ registerFollow('sort', {
   subjects: ['数据结构'],
   head: 'algo',
   word: '格',
+  drillOpen: () => 'move', // 自己练的时候开哪种手（课上老师没 open 过时）
   unit: (f) => (/^(quick|快)/.test(String(f.algo || '')) ? '次划分' : '趟'),
   title(f) {
     let algo = String(f.algo || '');

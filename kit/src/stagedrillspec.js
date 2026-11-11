@@ -73,36 +73,33 @@ export function drawStageDrill(spec, { rand = Math.random, tries = 12 } = {}) {
 
 /**
  * 一道舞台题做的过程 → 要记的作答（组件照它 session.record）。w 是 follow.js 的 whereOf。
- * 每到一个检查点（一趟、一轮）记一步：第一次到就对记 ok；这一趟里先到过错法的样子、或者看过「这一趟该是什么样」，先记一次错再记对
- * （报告里就是「改对了」，不算一次做对）。没做完就走：还没到的那一趟记一次放弃。
+ * 一道题 = 从头走完一遍（不是一趟一道：一遍希尔三趟都对，算做对一道题，不算三道）。
+ * 走完记一次对；中间到过错法的样子、看过「这一趟该是什么样」，当时记一次错（一趟只记一次）——报告里这道题就是「改对了」，不算一次做对。
+ * 没做完就走：记一次放弃。返回的每条 { ok, k（第几趟的事）, wrong?, final?, giveup? }；step（到了新的一趟）只给画面说一声，不记
  */
 export function trackDrill(w0) {
   let passed = w0?.passed || 0;
-  let dirty = null; // 这一趟为什么不算一次做对
   let over = !!w0?.done;
   let total = w0?.total || 0;
+  const slipped = new Set(); // 哪几趟已经记过一次错
+  const slip = (k, wrong) => { if (slipped.has(k)) return []; slipped.add(k); return [{ k, ok: false, wrong }]; };
   return {
-    peek() { dirty ||= '看了这一趟该是什么样'; },
+    peek() { return over ? [] : slip(passed + 1, '看了这一趟该是什么样'); },
     after(w) {
       const records = [];
-      if (!w || w.error || over) return { records, done: over };
+      let step = 0;
+      if (!w || w.error || over) return { records, done: over, step };
       total = w.total || total;
-      if (w.like) dirty ||= w.like;
-      if (w.at != null && w.passed > passed) {
-        for (let k = passed + 1; k <= w.passed; k++) {
-          if (dirty) records.push({ k, ok: false, wrong: dirty });
-          records.push({ k, ok: true });
-          dirty = null;
-        }
-        passed = w.passed;
-      }
-      if (w.done) over = true;
-      return { records, done: over };
+      if (w.like) records.push(...slip(passed + 1, w.like));
+      if (w.at != null && w.passed > passed) { passed = w.passed; step = passed; }
+      if (w.done) { over = true; records.push({ k: passed, ok: true, final: true }); }
+      return { records, done: over, step };
     },
     giveup() {
-      if (over || passed >= total) return [];
+      if (over) return [];
       over = true;
       return [{ k: passed + 1, ok: false, giveup: true }];
     },
+    get slips() { return slipped.size; },
   };
 }

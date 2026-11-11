@@ -131,17 +131,24 @@ function startOf(doc, pending = []) {
  * mem：整个记忆库（evidence、mastery、pending、curriculum、sessions）。
  * 只提块（课程地图里有的）和块里的知识点（证据的 tags 写了的）。
  */
-/** 教研室出的题（d-lab-…）第一次做的那节课的几步标上 fresh（isOriginal 不把它当原题） */
-export function markFresh(items = []) {
+/**
+ * 新题标上 fresh（isOriginal 不把它当原题）：教研室出的题（d-lab-…）、不换数的舞台题（图）只有第一次做的那节课算；
+ * 换数的舞台题（d-stage-…，题库里 random：每次打开换一组数）每次都算。drills：题库（认哪几道是换数的）
+ */
+export function markFresh(items = [], drills = []) {
+  const random = new Set((drills || []).filter((d) => d && d.random).map((d) => String(d.id)));
   const first = new Map();
   for (const it of items) {
     const c = String(it?.comp || '');
-    if (!/^d-lab-/.test(c) || !it.session) continue;
+    if (!/^d-(lab|stage)-/.test(c) || !it.session) continue;
     const t = Number(it.first) || Number(it.end) || 0;
     const cur = first.get(c);
     if (!cur || t < cur.t) first.set(c, { t, session: it.session });
   }
-  for (const it of items) if (first.get(String(it?.comp || ''))?.session === it.session) it.fresh = true;
+  for (const it of items) {
+    const c = String(it?.comp || '');
+    if (random.has(c) || first.get(c)?.session === it.session) it.fresh = true;
+  }
   return items;
 }
 
@@ -154,7 +161,7 @@ export function masteryProposals(mem = {}, { rule = MASTERY_RULE } = {}) {
   const evs = retagEvidence((mem.evidence || []).filter((e) => e && (e.src === 'record' || e.src === 'event')), mem.sessions || []);
   const catalog = pointCatalog(mem.sessions || [], mastery);
   const items = itemsOf(evs, new Map(), { bySession: true });
-  markFresh(items);
+  markFresh(items, mem.drills || []);
   const byTarget = new Map();
   for (const it of items) {
     for (const t of it.tags || []) {

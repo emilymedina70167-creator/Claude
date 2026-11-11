@@ -30,7 +30,9 @@ export async function closeDrill(db, sid, { doc, drills = null, curriculum = nul
   const mem = { reviews: rows(await db.collection('reviews').get().catch(() => null)), errors: rows(await db.collection('errors').get().catch(() => null)), curriculum };
   // 教研室出的新题（src: lab）：以前别的课里没做过，这一次才算新题（复现组能升档）；做过的就是原题了
   const fresh = new Set();
-  for (const d of drills.filter((x) => x.src === 'lab')) {
+  // 舞台题（src: stage）：换数的每次都是新题；不换数的（图）和教研室的题一样，只有第一次算
+  for (const d of drills.filter((x) => x.src === 'stage' && x.random)) fresh.add(d.id);
+  for (const d of drills.filter((x) => x.src === 'lab' || (x.src === 'stage' && !x.random))) {
     const before = rows(await db.collection('evidence').where('comp', '==', d.id).get().catch(() => null));
     if (!before.some((e) => e.session && e.session !== sid)) fresh.add(d.id);
   }
@@ -143,7 +145,10 @@ export async function enterDrill(root, meta, { db, store, sid, doc, readOnly = f
     const d = drills[at];
     if (!d || readOnly || judged.has(d.id)) return;
     const host = box.querySelector('.dr-host');
-    if (!host?.querySelector('.is-wrong, .is-bad')) return;
+    // 舞台题（blocks/stagedrill.js）：没走完（还挂着 data-sd-open）、动过手才算；没动过就是跳过
+    const sd = host?.querySelector('[data-sd-open]');
+    if (sd && !sd.dataset.sdTouched) return;
+    if (!sd && !host?.querySelector('.is-wrong, .is-bad')) return;
     judged.add(d.id);
     session.event('giveup', host.querySelector('[data-bid]') || host, { why: '做错了没做完就走了' });
   }
