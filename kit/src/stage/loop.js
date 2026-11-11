@@ -243,6 +243,10 @@ export function createLoop(host) {
         maybeSpec();
         return;
       }
+      // 老师挂的按钮（「拨好了点下面」）学生还没按，页面照设计当它按了、马上叫老师：在那一条里说一声（主线第一轮 E1-6：
+      // 以前不说，老师不知道学生是被打断的）。页面替挂的「给个提示」不说
+      const w = stage.scene.waiting;
+      if (e.kind === 'goal' && w?.kind === 'next' && w.button && w.button !== HELP && !w.standin) { e.unpressed = w.button; savePending(true); }
       if (stage.scene.waiting?.kind === 'next') stage.cancelWait?.();
       flush();
     });

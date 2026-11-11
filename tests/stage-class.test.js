@@ -813,3 +813,23 @@ test('最后一审 M3：有空格子的矩阵开着 rowop（call=done）又开�
     assert.match(sentRows(a.rows)[0].msg, /学生把 M1 做完了/);
   } finally { la.close(); }
 });
+
+// —— 舞台主线第一轮 E1-6：老师挂的「拨好了」还没按，学生做到挑战页面就叫了老师——照设计（做到了马上接），但要告诉老师 ——
+test('E1-6：做到挑战时老师挂的按钮还没按：照旧马上叫老师，那一条里写明「还没按」和怎么写才等学生按（on=）', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  const run = (s, src) => { for (const c of parseScript(src)) s.apply(c); return s; };
+  const scene = run(new Scene(), 'array a = 2 1\nopen a\ngoal g1 "排好" when="a sorted"\nask next "排好了点下面" button="排好了"');
+  scene.apply(parseScript('swap a.1 a.2')[0], { by: 'student', open: 'drag' });
+  assert.equal(scene.goals.get('g1').met, true);
+  const stage = { log: [], scene, teacherAudit: [], reacting: null, studentChain: null, pendingGoals: () => [] };
+  const rows = [];
+  createLoop({ stage, addTurn: (r) => { const x = { ...r, seq: rows.length + 1 }; rows.push(x); return x; }, putTurn: () => {}, note: () => {} });
+  stage.onGoal(['g1'], { by: 'student', reacted: 0 });
+  await tick(); await tick();
+  const m = rows.find((r) => r.role === 'student' && !r.pending)?.msg || '';
+  assert.match(m, /学生做到了挑战 g1「排好」/);
+  assert.match(m, /你挂的「排好了」学生还没按：做到了页面就叫你了。要等学生自己按了再叫，挑战写 on="排好了"/);
+  // 页面替挂的「给个提示」不说这一句
+  assert.doesNotMatch(eventsText([{ kind: 'goal', ids: ['g1'], reacted: 0 }], { goals: scene.goals }), /还没按/);
+});

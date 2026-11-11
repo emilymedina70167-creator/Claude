@@ -384,6 +384,8 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
       const pre = e.reacted ? `（页面已经演了你预写的 ${e.reacted} 行）` : e.missed ? '（你预写的行都没演上）' : '（你没预写做到以后的行）';
       // 收集型：收齐了写收了哪几张（每收一张页面都演了预写的行）
       lines.push(c ? `${collectText(id, c)}${e.reacted ? `；页面每收一张都演了你预写的行` : ''}${heldText(e)}` : `学生做到了挑战 ${id}${g ? `「${g.text}」` : ''}${pre}${heldText(e)}`);
+      // 你挂的按钮学生还没按，页面当它按了（loop.js 的 settle）
+      if (e.unpressed && id === e.ids.at(-1)) lines.push(`（你挂的「${e.unpressed}」学生还没按：做到了页面就叫你了。要等学生自己按了再叫，挑战写 on="${e.unpressed}"）`);
     }
     else if (e.kind === 'goal-by-teacher') for (const id of e.ids || []) {
       const g = goals.get(id);
