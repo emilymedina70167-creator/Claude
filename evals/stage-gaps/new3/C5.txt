@@ -1,0 +1,8 @@
+# 主线第三轮 C（底座留下的第 5 条）：收集型挑战收下的几张学生看得见（列在挑战那一条下面）
+matrix A = 1 1 / 0 1
+matrix B = 0 0 / 0 0 beside=A
+open B edit
+goal g1 "找 3 张不一样的 B，让 AB 不是零矩阵" when="{A B} != O" collect=B n=3
+say "改 B，每找到一张就收下。"
+学生: write B.1,1 1
+学生: write B.2,2 1

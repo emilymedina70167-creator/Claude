@@ -9,7 +9,7 @@ import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHo
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM, tooSmall } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, tapAnswer, pickText, unplayedNotes, compareFact, compareNote, mergeFact, chipTextOf, tapValueOf } from './scene.js';
-import { goalMark } from './goal.js';
+import { goalMark, shapeText } from './goal.js';
 import { measureShown } from './rules.js';
 import { judgeAnswer, sameAnswer, answerInput, gridAnswerText } from './answer.js';
 import { formulaInput, formulaGrid, hideFormulaPad } from '../formulainput.js';
@@ -1032,7 +1032,23 @@ export class Stage {
       }
       // 收集型：后面带收了几张（学生看得到还差几张）
       const count = g.collect ? `（${g.collect.got.length} / ${g.collect.n}）` : '';
-      if (n.__text !== g.text + count) { const t = n.lastChild; t.replaceChildren(); this.richInto(t, g.text); if (count) t.append(count); n.__text = g.text + count; }
+      if (n.__text !== g.text + count) { const t = n.querySelector('.st-goal-t'); t.replaceChildren(); this.richInto(t, g.text); if (count) t.append(count); n.__text = g.text + count; }
+      // 收集型：收下的几张列在下面（底座第二轮留下的第 5 条：以前只有「收了 2 / 4」，老师说「看看收下的这几张」画面上一张也没有）
+      if (g.collect) {
+        const sig = g.collect.got.map(shapeText).join('|');
+        if (n.__got !== sig) {
+          n.__got = sig;
+          let box = n.querySelector('.st-goal-got');
+          if (!box && g.collect.got.length) box = el('div', 'st-goal-got', n);
+          if (box) {
+            const had = box.children.length;
+            box.replaceChildren(...g.collect.got.map((m0) => { const c = document.createElement('span'); c.className = 'st-got'; c.textContent = shapeText(m0); return c; }));
+            // 新收的那一张弹一下
+            if (!this.instant && box.children.length > had) this.tween(box.lastChild, [{ opacity: 0, scale: '.6' }, { opacity: 1, scale: '1' }], { duration: 360, easing: EASE.spring });
+            if (!g.collect.got.length) box.remove();
+          }
+        }
+      }
       if (g.met && !n.classList.contains('is-met')) {
         n.classList.add('is-met');
         if (!this.instant) this.tween(n.firstChild, [{ transform: 'scale(.4)' }, { transform: 'scale(1.25)', offset: 0.6 }, { transform: 'scale(1)' }], { duration: 520, easing: EASE.spring });
