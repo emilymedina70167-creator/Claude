@@ -1,0 +1,13 @@
+# E1-8：句子变长以后整台缩小、图例的字小到难认，排版检查以前说「没压着、没出屏幕」
+sentence s = "Railroads combine with each other." key="Railroads [V combine] with each other."
+mark s.2 谓语
+dial t = 2 range=1-4 at=s
+label tn dial:t "时间：1 过去 · 2 现在 · 3 将来 · 4 过去将来" side=right
+dial z = 1 range=1-4 at=s
+label zn dial:z "状态：1 一般 · 2 进行 · 3 完成 · 4 完成进行" side=right
+card k = "时态图鉴（列：过去 ｜ 现在 ｜ 将来 ｜ 过去将来）" "一般：＿ ｜ combine ｜ ＿ ｜ ＿" "进行：＿ ｜ ＿ ｜ ＿ ｜ ＿" "完成：＿ ｜ ＿ ｜ ＿ ｜ ＿" "完成进行：＿ ｜ ＿ ｜ ＿ ｜ ＿"
+array tl = 过去 现在 将来
+say "两个钮随便拨，盯住句子。"
+rewrite s "Railroads will have been combining with each other."
+mark s.2-5 谓语
+ask next "看好了点下面" button="看好了"

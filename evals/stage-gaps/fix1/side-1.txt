@@ -1,0 +1,8 @@
+# D1-7、D3-4、E1-5：贴的字写了 side=，画到了别的一边，以前不报
+array a = 49 38 65 97 76 13 27 49′ 55 04
+array b = 13 04 49′ 38 27 49 55 65 97 76
+label ca a "挪了 0 格" side=right tone=key
+label cb b "挪了 0 格" side=right tone=key
+label rule b "直接插入：拿起一张，比它大的往右让一格，放进空位" side=above tone=note
+say "先猜：两排都用直接插入，哪排挪得多？"
+ask next "看好了点下面" button="看好了"
