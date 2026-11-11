@@ -8,8 +8,9 @@ import { planeView } from './plane.view.js';
 import { sentenceView } from './sentence.view.js';
 import { texView } from './tex.view.js';
 import { tableView } from './table.view.js';
+import { timelineView } from './timeline.view.js';
 
-export const VIEWS = { array: arrayView, tree: treeView, graph: graphView, matrix: matrixView, plane: planeView, sentence: sentenceView, tex: texView, table: tableView, card: cardView };
+export const VIEWS = { array: arrayView, tree: treeView, graph: graphView, matrix: matrixView, plane: planeView, sentence: sentenceView, tex: texView, table: tableView, timeline: timelineView, card: cardView };
 
 /** 各种东西自己的样式（舞台的 stage.css 之外的） */
 export const viewCss = () => Object.values(VIEWS).map((v) => v.css || '').filter(Boolean).join('\n');

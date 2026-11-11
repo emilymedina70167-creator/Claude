@@ -791,6 +791,32 @@ if (opt2) await tapAt(opt2);
 await page.waitForTimeout(900);
 expect('表：点一个选项交上去', `${await added(before2)}｜${await tv('Q')}`, 'write Q.2,2 不能｜Seeing □ To see 不能');
 
+// —— 主线第三轮 B：时间轴 open tl.me move（按住小人拖到一个停靠点）、open tl.learn stretch（拖事件条能动的那一头）——
+await play('timeline tl = 1800 1830 1900 现在 将来 now=现在\nstand tl me = 现在\nbar tl learn = 1830..1900 "学" end=e\nsentence s = "It {me: will be | was | was | is | will be} done."\nopen tl.me move\nopen tl.learn stretch');
+const tickX = (i) => page.evaluate((i) => { const r = window.LAStage.decors.get('tl').get(`tick:${i}`).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 6 }; }, i);
+const sent = () => page.evaluate(() => [...window.LAStage.scene.objects.get('s').words].sort((a, b) => a.slot - b.slot).map((w) => w.value).join(' '));
+before2 = await srcs();
+A = await box('tl:me');
+expect('时间轴：小人至少 44 宽', String(A.w >= 44 && A.h >= 44), 'true');
+let P2 = await tickX(2);
+await holdDrag({ x: A.cx, y: A.cy }, { x: P2.x, y: A.cy });
+await page.waitForTimeout(1300);
+expect('时间轴：按住小人拖到 1830，句子跟着变', `${await added(before2)}｜${await sent()}`, 'set me 1830｜It was done');
+expect('时间轴：交给课堂的那一下是拨拨盘', await page.evaluate(() => { const a = window.LAStageDev.acts.at(-1); return `${a.type} ${a.name} ${a.from} → ${a.value}`; }), 'dial me 现在 → 1830');
+before2 = await srcs();
+const endH = await page.evaluate(() => { const r = window.LAStage.nodes.get('tl:learn').querySelector('.tl-end[data-side="to"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+P2 = await tickX(5);
+await holdDrag(endH, { x: P2.x, y: endH.y });
+await page.waitForTimeout(1300);
+expect('时间轴：拖事件条的右端到「将来」', `${await added(before2)}｜${await page.evaluate(() => window.LAStage.scene.vars.get('e').v)}`, 'set e 将来｜5');
+before2 = await srcs();
+// 右端拖到左端前面：做不到，弹回去
+const endH2 = await page.evaluate(() => { const r = window.LAStage.nodes.get('tl:learn').querySelector('.tl-end[data-side="to"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+P2 = await tickX(1);
+await holdDrag(endH2, { x: P2.x, y: endH2.y });
+await page.waitForTimeout(900);
+expect('时间轴：右端拖不到左端前面', `${await added(before2)}｜${await page.evaluate(() => window.LAStage.scene.vars.get('e').v)}`, '没有｜5');
+
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

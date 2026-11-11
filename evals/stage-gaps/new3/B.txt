@@ -1,0 +1,18 @@
+# 主线第三轮 B：时间轴。小人是拨词的拨盘：学生拖它，句子跟着变；事件条能动的那一头也是；挑战里比先后；页面说的是停靠点的名字
+timeline tl = 1800 1830 1900 现在 将来 now=现在
+stand tl me = 现在
+bar tl war = 1800..1830 "成为独立国家"
+event tl sent = 1830 "独立"
+sentence s = "Belgium {me: will become | became | had become | has become | will have become} independent."
+say "把小人拖到 1900 年，回头看这件事。"
+open tl.me move
+goal g1 "站到 1900" when="me = 1900"
+学生: move tl.me -> tl.1900
+bar tl learn = 1900..1900 "学英语" end=e
+open tl.learn stretch
+goal g2 "把这件事拉到现在" when="e = 现在"
+goal g3 "条的右端到小人后面去" when="e > me"
+say "再把「学英语」这一条拉到现在。"
+学生: stretch tl.learn -> tl.现在
+say "现在站到将来去，回头看。"
+学生: move tl.me -> tl.将来

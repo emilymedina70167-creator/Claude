@@ -326,6 +326,22 @@ function setup(segments) {
     const obj = first.split(/[.#]/)[0];
     const o = sc.objects.get(obj);
     if (!o) return { error: `舞台上没有「${obj}」` };
+    // 时间轴（主线第三轮 B）：拖事件条能动的那一头。学生: stretch tl.war -> tl.将来（两头都能动时 stretch tl.war start -> tl.1800）
+    if (cmd === 'stretch') {
+      const m = rest.match(/^(\S+)\s+(?:(start|end)\s+)?(?:->|→)\s*(\S+)$/);
+      if (!m) return { error: '要写成 学生: stretch tl.war -> tl.将来' };
+      const e = sc.opens.get(`${obj}:stretch`);
+      if (!e) return { untouched: `${obj} 没有交给学生 stretch（open ${m[1]} stretch），学生动不了` };
+      let it;
+      try { [it] = sc.parts(m[1]); } catch (err) { return { error: err.message }; }
+      const side = m[2] === 'start' ? 'from' : m[2] === 'end' ? 'to' : it.endDial ? 'to' : 'from';
+      const stop = o.stops.indexOf(m[3].split('.').slice(1).join('.')) + 1;
+      if (!stop) return { error: `${obj} 上没有「${m[3]}」这个停靠点` };
+      const from = find(o, e, 'end', (p) => p.end === it.name && p.side === side);
+      const to = gripsOf(o, { ...e, refs: [] }, 'stop', 'to').find((t) => partOf(t)?.stop === stop);
+      if (!from || !to) return { untouched: `${m[1]} 的那一头拖不了（不是能动的一头，或者 open 没交这一条），学生动不了` };
+      return await T.gestureRun(o, e, 'drop-at', { from, to, what: `按住 ${it.name} 的${side === 'to' ? '右' : '左'}端拖到「${o.stops[stop - 1]}」` });
+    }
     // 图（主线第二轮 D）：点一条边选进 / 拿掉、点一个结点编访问号、点一个结点键盘写数，走通用手势
     if (['choose', 'unchoose', 'visit', 'tag'].includes(cmd)) {
       const action = cmd === 'unchoose' ? 'choose' : cmd;
@@ -638,6 +654,24 @@ function setup(segments) {
       T.locs.a = () => pressGrip(x, 'tap');
       if (ready(['a'])) return { error: `${g.span} 那道括号上的 ✕ 手指点不到（被别的盖住了）` };
       return { what: `点 ${g.span} 那道括号上的 ✕`, expect: 'unmark', moves: [{ how: 'tap', a: 'a' }] };
+    }
+    if (g.action === 'move' && o.type === 'timeline') {
+      // 时间轴（主线第三轮 B）：open tl.me move 按住小人拖到一个停靠点上。学生: move tl.me -> tl.现在
+      const e = open('move');
+      if (!e) return notOpen(o, 'move');
+      const a = onePart(g.span);
+      if (a.error) return a;
+      const stop = o.stops.indexOf(String(g.at).split('.').slice(1).join('.')) + 1;
+      if (!stop) return { error: `${o.id} 上没有「${String(g.at).split('.').slice(1).join('.')}」这个停靠点（学生: move ${g.span} -> ${o.id}.${o.stops[0]}）` };
+      const from = gr(e, 'stand').find((t) => partOf(t)?.stand === a.p.name);
+      if (!from) return { error: `${g.span} 不是能拖的小人（open 没交它）` };
+      const targets = gr(e, 'stop', 'to');
+      const want = targets.find((t) => partOf(t)?.stop === stop);
+      T.locs.a = () => pressGrip(from, 'hold');
+      T.locs.b = () => dropAt(targets, want);
+      const miss = ready(['a', 'b']);
+      if (miss) return { error: miss === 'a' ? `小人 ${a.p.name} 手指按不到（被别的盖住了）` : `「${o.stops[stop - 1]}」那个停靠点手指松不到` };
+      return { what: `按住小人 ${a.p.name} 0.4 秒，拖到「${o.stops[stop - 1]}」`, expect: 'set', moves: [{ how: 'hold', a: 'a', b: 'b', ms: 400 }] };
     }
     if (g.action === 'move' && o.type === 'array') {
       // 一排格子（主线第二轮 A）：open a move 按住一张 0.4 秒，拖到两张之间（插进去）。-> a.5 是插到第 5 格；before a.5 / after a.4 是那个空隙

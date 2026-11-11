@@ -14,7 +14,7 @@
 // 同一处开着几种按法时手指怎么按才认成哪一种（点、滑、按住 0.35 秒再拖），只有 CDP 的触摸走得到 pointer.js 的 choosePress；
 // 页面那一半只找手指按哪儿、松在哪儿（照 pointer.js 挑把手的办法核过手指真按得到），按、滑、按住、松手由外面照触摸做。
 
-const DO = ['write', 'swap', 'move', 'vec', 'mul', 'rotate', 'insert', 'rowop', 'mark', 'fold', 'undo', 'dial', 'choose', 'unchoose', 'visit', 'tag',
+const DO = ['write', 'swap', 'move', 'vec', 'mul', 'rotate', 'insert', 'rowop', 'mark', 'fold', 'undo', 'dial', 'choose', 'unchoose', 'visit', 'tag', 'stretch',
   'refer', 'unrefer', 'unmark', 'unfold', 'delete', 'compare', 'put', 'merge', 'back'];
 const ANSWER = ['tap', 'drag', 'value', 'pick', 'say', 'next'];
 /** 走通用手势（或撤一步、拨数器）的那几种：parseTry 给它们带上 gesture */
@@ -29,6 +29,7 @@ export const HANDS = new Set(['pick', 'refer', 'unrefer', 'unmark', 'move', 'unf
 export const STUDENT_FORMS = [
   'write B.1,1 2（拨数器一格一格拨；open … input=keypad 时用键盘写）',
   'swap a#1 a#2', 'move s.7 after s.1', 'vec p u = 3 1', 'mul C.1,2',
+  'move tl.me -> tl.现在（open tl.me move：按住小人拖到「现在」那个停靠点）', 'stretch tl.war -> tl.将来（open tl.war stretch：拖条能动的那一头；两头都能动时写 stretch tl.war start -> tl.1800）',
   'choose g.A~B（open g choose：点这条边选进；unchoose g.A~B 是再点一下拿掉）', 'visit g.A（open g visit：点这个结点）', 'tag g.A 5（open g tag：点结点键盘写数，∞ 也行）',
   'move a#10 -> a.5（open a move：按住这一张 0.35 秒拖到两张之间，插到第 5 格；也能写 before a.5 / after a.4）', 'write h.1 38（open h edit：点一格键盘写）',
   'rotate t.30 left（在 30 往左转 = 把 30 的右孩子拖到 30 上）',
@@ -421,6 +422,20 @@ export const NEW3 = [
     screen: [C(/填完了，我们一格一格对/, '写满了演预写的 @T.done')],
     nots: [C(/不是正确的下一步|走偏/)],
     noAudit: [C(/压着/), C(/出了屏幕/), C(/字溢出了格子/)],
+  },
+  {
+    id: 'B 时间轴', files: ['B.txt'],
+    checks: [
+      C(/时间轴 tl：1800 · 1830 · 1900 · 现在（now） · 将来/, '现状里写停靠点的名字'),
+      C(/小人 me 在 1900/, '小人在哪：说的是停靠点，不是坐标'),
+      C(/事件条 war：1800 → 1830「成为独立国家」，整条在 me 之前/, '事件条和小人的关系'),
+      C(/句子 s（4 个词）：Belgium had become independent\./, '学生拖小人：句子跟着变'),
+      C(/事件条 learn：1900 → 现在「学英语」（右端是拨盘 e）/, '学生拖条的右端'),
+      C(/句子 s（5 个词）：Belgium will have become independent\./, '再拖到将来：句子再变'),
+    ],
+    called: [C(/学生拨了 me：现在 → 1900（停在 1900；拨到 1900 时做到了 g1/, '拖小人的那一下照拨拨盘写给老师'), C(/g3 e > me：✗ ✓/, '挑战里比先后')],
+    nots: [C(/坐标|\(\d, 0\)/), C(/作废/)],
+    noAudit: [C(/压着/), C(/出了屏幕/)],
   },
 ];
 

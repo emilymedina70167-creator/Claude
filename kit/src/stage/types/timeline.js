@@ -207,7 +207,7 @@ export const timeline = {
     const look = (it) => { const b = [it.paint && COLOR_NAMES[it.paint], it.glow && '亮', it.dim && '灰', it.covered && '扣着'].filter(Boolean); return b.length ? `（${b.join('、')}）` : ''; };
     for (const it of o.items) {
       const p = pos(it);
-      if (it.kind === 'stand') lines.push(`  小人 ${it.name} 在 ${stopName(o, p.at)}（拨词的拨盘：set ${it.name} ${o.stops[0]}；{${it.name}} 写它在哪）${look(it)}`);
+      if (it.kind === 'stand') lines.push(`  小人 ${it.name} 在 ${stopName(o, p.at)}（拨盘 ${it.name}）${look(it)}`);
       else if (it.kind === 'point') lines.push(`  事件点 ${it.name} 在 ${stopName(o, p.at)}${it.label ? `「${it.label}」` : ''}${look(it)}`);
       else {
         const ends = [it.startDial && `左端是拨盘 ${it.startDial}`, it.endDial && `右端是拨盘 ${it.endDial}`].filter(Boolean).join('、');
