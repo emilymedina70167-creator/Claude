@@ -356,6 +356,10 @@ function makeCheck(type, ans, { free, solve, lenient } = {}) {
       try { src = teacherFormula(ans, names, 'answer='); } catch (e) { err = e; }
       let spec;
       try { spec = formulaSpec(src ?? ans, free, {}); } catch (e) { throw err || new Error(stageWords(e.message)); }
+      // 老师的答案学生的式子框也得写得出：答案里有式子框不认的函数（floor、log2）时，学生怎么填都判不对
+      // （主线第一轮 D4-7：以前照黑板的读法收下，学生填 log2(n)+1 交不上去）。重放旧课照旧收
+      const alien = String(err?.message || '').match(/读不懂：不认识「([^」]+)」/)?.[1];
+      if (alien && !lenient) throw new Error(`answer= 里的 ${alien} 学生写不出：式子框不认 ${alien}（认 ${names.join('、')} 和 ${FORMULA_FUNCS.filter((f) => f !== 'T').slice(0, 5).join('、')} 这些函数），学生怎么填都判不对。换一种问法（比如 type=num 问一个具体的 n），或者不写 type= 只收不判`);
       return (g) => {
         let mine;
         try { mine = normalizeFormula(g, { names: spec.names }); } catch (e) { return unread(e); }

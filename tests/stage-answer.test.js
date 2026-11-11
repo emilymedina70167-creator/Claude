@@ -573,3 +573,13 @@ test('L3-3：type=set 老师写 answer="1,4"，学生填一模一样的是对的
   assert.equal(judgeAnswer('(1,4)', { type: 'set', answer: '(1,4)' }).ok, true);
   assert.equal(judgeAnswer('2', { type: 'set', answer: '(1,4)' }).ok, false);
 });
+
+test('D4-7：type=formula 的答案里有学生的式子框写不出的函数，出题那一刻当场报（以前照收，学生怎么填都错）', () => {
+  assert.throws(() => checkSpec({ type: 'formula', free: 'n', answer: 'floor(log2(n))+1' }), /式子框不认 floor/);
+  assert.throws(() => checkSpec({ type: 'formula', free: 'n', answer: 'log2(n)+1' }), /式子框不认 log2/);
+  // 学生写得出的照旧收
+  checkSpec({ type: 'formula', free: 'n', answer: 'n(n-1)/2' });
+  checkSpec({ type: 'formula', free: 'n', answer: 'sqrt(n)+2^n' });
+  // 盯 1：重放旧课（lenient）照旧收下，不报
+  checkSpec({ type: 'formula', free: 'n', answer: 'floor(log2(n))+1', lenient: true }, null, { strict: false, lenient: true });
+});
