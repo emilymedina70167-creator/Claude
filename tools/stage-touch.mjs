@@ -744,6 +744,53 @@ if (inf) await tapAt(inf);
 await page.waitForTimeout(900);
 expect('图：按 ∞ 就交上去，结点旁边写上了', `${await added(before2)}｜${await page.evaluate(() => window.LAStage.scene.objects.get('g').nodes.find((n) => n.key === 'D').tag)}`, 'tag g.D ∞｜∞');
 
+// —— 主线第三轮 A：表 open T edit（点空格出数字键盘、有 ∞；给定的格点不动）、input=text（输入框写字）、choices=（点一个选项）——
+await play('table T = 10 _ / _ 7 rows="顶点2 顶点3" cols="第1轮 第2轮"\nopen T edit');
+const tv = (id) => page.evaluate((id) => window.LAStage.scene.objects.get(id).cells.map((c) => (c.value === '' ? '□' : c.value)).join(' '), id);
+before2 = await srcs();
+A = await box('T:1.1');
+await tapAt({ x: A.cx, y: A.cy });
+await page.waitForTimeout(350);
+expect('表：给定的格点了没反应', `${!!(await page.$('.st-keypad'))}`, 'false');
+A = await box('T:1.2');
+expect('表：一格至少 44 高', String(A.h >= 44 && A.w >= 44), 'true');
+await tapAt({ x: A.cx, y: A.cy });
+await page.waitForTimeout(350);
+const inf2 = await page.evaluate(() => { const b = document.querySelector('.st-keypad .st-kp-k.is-extra'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+expect('表：点空格出数字键盘，有 ∞ 键', String(!!inf2), 'true');
+if (inf2) await tapAt(inf2);
+await page.waitForTimeout(900);
+expect('表：按 ∞ 交上去', `${await added(before2)}｜${await tv('T')}`, 'write T.1,2 ∞｜10 ∞ □ 7');
+// 学生自己写过的能再点、再改
+before2 = await srcs();
+A = await box('T:1.2');
+await tapAt({ x: A.cx, y: A.cy });
+await page.waitForTimeout(350);
+for (const k of ['9', '确定']) { const p = await keyAt(k); if (p) await tapAt(p); await page.waitForTimeout(90); }
+await page.waitForTimeout(900);
+expect('表：学生写过的格能再改', `${await added(before2)}｜${await tv('T')}`, 'write T.1,2 9｜10 9 □ 7');
+await play('table W = "一般" _ / "进行" _ rows="过去 现在" cols="状态 谓语"\nopen W edit input=text');
+before2 = await srcs();
+A = await box('W:1.2');
+await tapAt({ x: A.cx, y: A.cy });
+await page.waitForTimeout(400);
+const tin = await page.evaluate(() => { const i = document.querySelector('.st-textpop .st-tp-in'); if (!i) return null; const r = i.getBoundingClientRect(); return { h: r.height, fs: getComputedStyle(i).fontSize, focused: document.activeElement === i }; });
+expect('表：input=text 出一个输入框（16px、至少 44 高、已经聚焦）', JSON.stringify(tin), '{"h":46,"fs":"16px","focused":true}');
+await page.keyboard.type('was holding', { delay: 15 });
+await page.keyboard.press('Enter');
+await page.waitForTimeout(900);
+expect('表：输入框写一段字、回车交上去', `${await added(before2)}｜${await tv('W')}`, 'write W.1,2 "was holding"｜一般 was holding 进行 □');
+await play('table Q = "Seeing" _ / "To see" _ rows="1 2" cols="词组 能不能" \nopen Q edit choices="能 不能"');
+before2 = await srcs();
+A = await box('Q:2.2');
+await tapAt({ x: A.cx, y: A.cy });
+await page.waitForTimeout(400);
+const opt2 = await page.evaluate(() => { const b = [...document.querySelectorAll('.st-choices .st-choice')].find((x) => x.textContent.trim() === '不能'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, h: r.height }; });
+expect('表：choices= 出一排选项，至少 44 高', String(!!opt2 && opt2.h >= 44), 'true');
+if (opt2) await tapAt(opt2);
+await page.waitForTimeout(900);
+expect('表：点一个选项交上去', `${await added(before2)}｜${await tv('Q')}`, 'write Q.2,2 不能｜Seeing □ To see 不能');
+
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

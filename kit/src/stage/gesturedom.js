@@ -11,7 +11,7 @@
 import { EASE } from './motion.js';
 import { pickTarget } from './layout.js';
 import { gestureAct, askFor, kindsOf, kindArmed, writeRange, closeAct, dropVerdict, wouldBlock, ARMED_GRIPS, PRESS_OF } from './gestures.js';
-import { openKeypad, openChoices } from './keypad.js';
+import { openKeypad, openChoices, openText } from './keypad.js';
 import { reportError } from '../errlog.js';
 
 const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
@@ -143,7 +143,7 @@ export function armGesture(stage, e, view, done) {
     };
     const closed = () => { popup = null; after?.(); };
     const opts = { anchor, prompt: ask.prompt || '', onClose: closed };
-    popup = ask.pick ? openChoices(stage, { ...opts, choices: ask.choices, onPick: (v) => go({ role: v }) }) : openKeypad(stage, { ...opts, extra: ask.extra || null, onOk: (text) => go({ value: text }) });
+    popup = ask.pick ? openChoices(stage, { ...opts, choices: ask.choices, onPick: (v) => go({ role: v }) }) : ask.input === 'text' ? openText(stage, { ...opts, onOk: (text) => go({ value: text }) }) : openKeypad(stage, { ...opts, extra: ask.extra || null, onOk: (text) => go({ value: text }) });
     return popup;
   };
   // 挂到 pointer.js 上的一个：name 是把手的 key（检查脚本找 ✕、钩的点区用），how 是按法（同一处几种时 pointer.js 照它分）

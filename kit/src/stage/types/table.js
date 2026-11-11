@@ -217,8 +217,6 @@ export const table = {
     for (let r = 1; r <= o.rows; r++) lines.push(`  ${o.rowNames[r - 1] ?? `第 ${r} 行`}：${o.cells.filter((x) => x.r === r).sort(sortRC).map((x) => sh(x.value)).join('｜')}`);
     const blank = o.cells.filter((x) => x.value === '').sort(sortRC);
     if (blank.length) lines.push(`  还空着：${blank.length > 12 ? `${blank.length} 格` : blank.map((x) => cellName(o, x)).join('、')}`);
-    const mine = o.cells.filter((x) => x.by === 'student').sort(sortRC);
-    if (mine.length) lines.push(`  学生写的：${mine.map((x) => `${cellName(o, x)} ${x.value}`).join('、')}`);
     const ticks = [...Object.entries(o.marks.cols).filter(([, v]) => v === 'tick').map(([k]) => `${o.colNames[k - 1] ?? `第 ${k} 列`}（列）`), ...Object.entries(o.marks.rows).filter(([, v]) => v === 'tick').map(([k]) => `${o.rowNames[k - 1] ?? `第 ${k} 行`}（行）`), ...o.cells.filter((x) => x.tick === 'tick').map((x) => cellName(o, x))];
     const crosses = [...Object.entries(o.marks.cols).filter(([, v]) => v === 'cross').map(([k]) => `${o.colNames[k - 1] ?? `第 ${k} 列`}（列）`), ...Object.entries(o.marks.rows).filter(([, v]) => v === 'cross').map(([k]) => `${o.rowNames[k - 1] ?? `第 ${k} 行`}（行）`), ...o.cells.filter((x) => x.tick === 'cross').map((x) => cellName(o, x))];
     if (ticks.length || crosses.length) lines.push(`  ${[ticks.length ? `打勾：${ticks.join('、')}` : '', crosses.length ? `打叉：${crosses.join('、')}` : ''].filter(Boolean).join('；')}`);

@@ -262,6 +262,12 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-kp-msg { min-height: 0; padding: 0 4px; font: 500 14px/1.35 var(--sans, sans-serif); color: var(--st-red); }
 .st-kp-msg:not(:empty) { padding-bottom: 8px; }
 .st-kp-keys { display: grid; grid-template-columns: repeat(4, 52px); gap: 8px; }
+/* 写一段字的浮框（表的一格 input=text）：输入框 16px（iPad 聚焦不放大），确定至少 44 高 */
+.st-textpop { width: min(88vw, 340px); }
+.st-tp-row { display: flex; gap: 8px; }
+.st-tp-in { flex: 1; min-width: 0; height: 46px; padding: 0 14px; border: 0; border-radius: 12px; background: color-mix(in srgb, var(--st-ink) 7%, transparent); color: var(--st-ink); font: 16px var(--sans, sans-serif); }
+.st-tp-in:focus { outline: 2px solid var(--st-brand); }
+.st-tp-ok { min-width: 68px; height: 46px; border: 0; border-radius: 12px; background: var(--st-brand); color: var(--st-brand-ink, #fff); font: 600 16px var(--sans, sans-serif); cursor: pointer; }
 /* 多出来的一个键（图上写旁边的数：∞）：占最下面一整行 */
 .st-kp-k.is-extra { grid-column: 1 / -1; }
 .st-kp-k { height: 50px; border: 0; border-radius: 14px; background: color-mix(in srgb, var(--st-ink) 6%, transparent); color: var(--st-ink); font: 500 22px/1 var(--sans, sans-serif); cursor: pointer; }

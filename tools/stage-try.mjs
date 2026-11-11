@@ -366,14 +366,16 @@ function setup(segments) {
     const go = async (act, src) => { const r = await T.send(e, act, src); return r.error || r.blocked ? r : null; };
     try {
       if (cmd === 'write') {
-        const [ref, to] = rest.split(/\s+/);
+        const [ref] = rest.split(/\s+/);
+        // 写的值：一个词，或者引号里的一段字（表的一格：学生: write T.2,3 "will have"）
+        const to = rest.slice(ref.length).trim().replace(/^["「“](.*)["」”]$/, '$1') || undefined;
         const x = one(ref);
         if (!mine(x)) return { untouched: `${ref} 没有交给学生 edit（只交了 ${e.refs.join(' ')}），学生动不了` };
         // open … input=keypad（或者那种东西没有自己的拨数器）：点一格、键盘上一下写成，走通用手势
         if (e.input || !D.VIEWS[o.type]?.affords?.[e.action]) {
           const gr = find(o, e, e.gesture?.on, (p) => p.key === x.key);
           if (!gr) return { untouched: `${ref} 点不到（不是能写的格），学生动不了` };
-          return await T.gestureRun(o, e, 'write', { from: gr, value: to, what: `点 ${ref}` });
+          return await T.gestureRun(o, e, 'write', { from: gr, value: to, role: to, what: `点 ${ref}` });
         }
         const from = frac(x.value === '' ? '0' : x.value), t = frac(to);
         if (!from || !t) return { error: `拨不到「${to}」：拨数器只能一格一格 ±1 地拨` };

@@ -82,7 +82,7 @@ function next(o) { return blanks(o).length ? { acts: [{ type: 'write' }], blank:
 
 const measures = {
   // 还空着几格
-  blank: (o, parts) => (parts || o.cells).filter((c) => c.value === '').length,
+  blank: Object.assign((o, parts) => (parts || o.cells).filter((c) => c.value === '').length, { listed: (o) => o.cells.some((c) => c.value === '') }),
   // 和答案不一样几格（填了的才算）；没写 key= 的表没有这个量
   wrong: Object.assign((o) => (o.key ? wrongCells(o).length : undefined), { none: '没写 key=', listed: (o) => !!o.key }),
 };

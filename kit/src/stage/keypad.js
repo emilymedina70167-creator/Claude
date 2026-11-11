@@ -158,6 +158,44 @@ export function openKeypad(stage, { anchor = null, prompt = '', value = '', extr
 }
 
 /**
+ * 写一段字（表的一格：open T edit input=text）：一个输入框（16px，iPad 聚焦不放大；系统键盘、随手写都行）加「确定」。
+ * onOk(写的字) 返回一句错（照它说、不收）或 null（收起）。返回 { close }
+ */
+export function openText(stage, { anchor = null, prompt = '', value = '', onOk, onClose = null } = {}) {
+  const P = popup(stage, 'st-textpop', anchor, onClose);
+  const { pop } = P;
+  pop.setAttribute('role', 'dialog');
+  pop.setAttribute('aria-label', prompt || '写一段字');
+  if (prompt) el('div', 'st-ch-q', pop).textContent = prompt;
+  const msg = el('div', 'st-kp-msg', pop);
+  msg.setAttribute('aria-live', 'polite');
+  const form = el('form', 'st-tp-row', pop);
+  const input = el('input', 'st-tp-in', form);
+  input.type = 'text';
+  input.value = String(value ?? '');
+  input.maxLength = 40;
+  input.autocomplete = 'off';
+  input.setAttribute('autocapitalize', 'off');
+  input.setAttribute('autocorrect', 'off');
+  input.spellcheck = false;
+  input.enterKeyHint = 'done';
+  input.setAttribute('aria-label', prompt || '写一段字');
+  const ok = el('button', 'st-tp-ok', form);
+  ok.type = 'submit';
+  ok.textContent = '确定';
+  input.addEventListener('input', () => { msg.textContent = ''; });
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const err = onOk?.(input.value);
+    if (err) complain(pop, msg, err); else P.close();
+  });
+  P.show();
+  // 放好了再聚焦（先聚焦的话 iPad 的键盘弹出来会把还没放好的框顶走）
+  setTimeout(() => { try { input.focus({ preventScroll: true }); } catch { /* 浮框已经收了 */ } }, 60);
+  return { close: P.close };
+}
+
+/**
  * 一排选项（拉一段括号以后点成分）：choices = [{ value, text, paint? }]，onPick(value) 返回一句错或 null（收起）。返回 { close }
  */
 export function openChoices(stage, { anchor = null, prompt = '', choices = [], onPick, onClose = null } = {}) {
