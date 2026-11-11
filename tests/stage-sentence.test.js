@@ -63,9 +63,10 @@ test('部件的写法：s.3、s.2-5、s.who、s.that:2、s.who-door、带连字�
   assert.throws(() => s.parts('s#x'), /# 后面写数/);
   assert.throws(() => s.parts('s#40'), /没有#40/);
   // s#3 跟着它走：挪了以后 s.3 是别的词，s#3 还是 that
+  // 挪到句首：页面替它换成大写（主线第三轮：底座留下的第 8 条）
   run(s, 'move s.3 -> s.1');
-  assert.deepEqual(at('s.1'), ['that']);
-  assert.deepEqual(at('s#3'), ['that']);
+  assert.deepEqual(at('s.1'), ['That']);
+  assert.deepEqual(at('s#3'), ['That']);
   assert.equal(sentence.ref(s.parts('s#3')[0]), 's#3');
 });
 
@@ -237,7 +238,7 @@ test('move：after / before / -> 第几个；挪的那一段保持原来的先�
   assert.deepEqual(fx.moved, [3]);
   assert.deepEqual(fx.others, [4], '只有 I 让了一格');
   run(s, 'move s.1-2 after s.truth');
-  assert.deepEqual(words(s), ['I', 'did', 'realize', 'the', 'truth', 'Only', 'then']);
+  assert.deepEqual(words(s), ['I', 'did', 'realize', 'the', 'truth', 'only', 'then']);
   run(s, 'move s.Only-then before s.I');
   assert.deepEqual(words(s), ['Only', 'then', 'I', 'did', 'realize', 'the', 'truth']);
   run(s, 'move s#3 -> s.3');
@@ -485,10 +486,10 @@ test('move 挪一段不带走旁边的标点：这一段和后面隔着的逗号
   const text = (s) => sentenceText(s.objects.get('s'));
   // 句首的状语从句挪到句尾：以前是「…play When the rain stopped,.」
   const a = run(new Scene(), 'sentence s = "When the rain stopped, the children who had waited inside ran out to play."\nmove s.1-4 after s.14');
-  assert.equal(text(a), 'the children who had waited inside ran out to play When the rain stopped.');
+  assert.equal(text(a), 'The children who had waited inside ran out to play when the rain stopped.');
   // 夹在中间的一段：后面的逗号交给前面的词（它本来没标点）；挪到的那一处前面的词照旧带着自己的逗号
   const b = run(new Scene(), 'sentence s = "The boss called yesterday at noon, and then left."\nmove s.4-6 before s.1');
-  assert.equal(text(b), 'yesterday at noon The boss called, and then left.');
+  assert.equal(text(b), 'Yesterday at noon the boss called, and then left.');
   // 前面的词已经有逗号：不重复成「,,」
   const c = run(new Scene(), 'sentence s = "Apples, pears, plums are cheap."\nmove s.2 after s.4');
   assert.equal(text(c), 'Apples, plums are pears cheap.');
@@ -497,7 +498,7 @@ test('move 挪一段不带走旁边的标点：这一段和后面隔着的逗号
   assert.equal(text(d), 'He said and left “wait, please”.');
   // 一个词挪也一样：However 后面的逗号留在句首（前面没有词），不要了
   const e = run(new Scene(), 'sentence s = "However, the plan failed."\nmove s.1 after s.4');
-  assert.equal(text(e), 'the plan failed However.');
+  assert.equal(text(e), 'The plan failed however.');
   // 挪回原处也照这一条（以前的逗号不会自己回来）：要原样回去用撤一步、back
-  assert.equal(words(a).join(' '), 'the children who had waited inside ran out to play When the rain stopped');
+  assert.equal(words(a).join(' '), 'The children who had waited inside ran out to play when the rain stopped');
 });

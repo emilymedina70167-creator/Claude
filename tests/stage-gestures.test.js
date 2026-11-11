@@ -431,7 +431,7 @@ test('句子：open s move 按住一道括号拖到两个词之间 = move s.1-6 
   // 翻出来的那一行照演：整段挪到 a 后面，括号跟着那几个词
   run(gestureAct(s, e, { from: { mark: m.id }, to: { gap: { after: 11 } } }).src, s);
   const ws = [...s.objects.get('s').words].sort((a, b) => a.slot - b.slot).map((w) => w.value);
-  assert.deepEqual(ws, ['to', 'my', 'parents', 'is', 'a', 'The', 'man', 'who', 'lives', 'next', 'door', 'very', 'good', 'doctor']);
+  assert.deepEqual(ws, ['To', 'my', 'parents', 'is', 'a', 'the', 'man', 'who', 'lives', 'next', 'door', 'very', 'good', 'doctor']);
   // 折起来的词不能挪、不能挪进折起来的那一段
   const f = run('sentence s = "The man who lives next door is a doctor."\nfold s.3-6\nopen s move');
   assert.match(gestureAct(f, open(f, 's:move'), { from: part(f, 's.7'), to: { gap: { after: 4 } } }).error, /折起来/);

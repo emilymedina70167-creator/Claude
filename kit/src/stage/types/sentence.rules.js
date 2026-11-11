@@ -809,7 +809,9 @@ function changed(before, after, fx) {
   const moved = new Set(fx && fx.id === after?.id && Array.isArray(fx.moved) ? fx.moved : []);
   return ordered(after || { words: [] }).filter((w) => {
     const m = was.get(w.key);
-    return !!m && (m.value !== w.value || (moved.has(w.key) && m.slot !== w.slot));
+    // 只换了大小写的不算字变了（挪到句首 / 从句首挪走，页面替它换的大小写）
+    const recased = m && (m.slot === 1 || w.slot === 1) && m.value !== w.value && m.value.toLowerCase() === w.value.toLowerCase();
+    return !!m && ((m.value !== w.value && !recased) || (moved.has(w.key) && m.slot !== w.slot));
   }).map((w) => w.key);
 }
 

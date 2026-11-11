@@ -910,6 +910,9 @@ function rewriteWords(o, words, end, pairs, { segs = null } = {}) {
   return { id: o.id, removed, added: next.filter((w) => !old.some((x) => x.key === w.key)).map((w) => w.key), moved, changed };
 }
 
+// 常见的句首词（挪走以后改回小写用；专名不在里面，认不出的不动）
+const STARTERS = new Set(('the a an this that these those it its he she they we you there here what when where why how who which whose if as so but and or because although though while since after before until unless once then now today yesterday tomorrow in on at by for with from to of about into over under during without within between among through against despite not no never only even also still just all some any many most each every both either neither one two my your his her our their such few little much more less than whether however therefore thus hence meanwhile moreover instead otherwise perhaps maybe sometimes often always usually finally first second next last is are was were do does did have has had can could will would shall should may might must').split(' '));
+
 export const sentence = {
   type: 'sentence',
   label: '句子',
@@ -1134,6 +1137,14 @@ export const sentence = {
           const prev = order[order.indexOf(block[0]) - 1];
           if (prev && !prev.punct) prev.punct = sep;
         }
+      }
+      // 句首换了人：大小写跟着变（底座第二轮留下的第 8 条：以前「to read … today It is painful.」）。新的句首大写；
+      // 原来句首的那个词，是常用的句首词（It、The、When……）或者句子里别处有它小写的样子才改小写——I、认不出的专名不动
+      if (next[0] !== order[0]) {
+        const was = order[0], now = next[0];
+        if (/^[a-z]/.test(now.value)) now.value = now.value[0].toUpperCase() + now.value.slice(1);
+        const low = was.value.toLowerCase();
+        if (/^[A-Z][a-z'’]*$/.test(was.value) && was.value !== 'I' && !/^I['’]/.test(was.value) && (STARTERS.has(low) || order.some((w) => w !== was && w.value === low))) was.value = low;
       }
       const before = new Map(order.map((w) => [w.key, w.slot]));
       next.forEach((w, k) => { w.slot = k + 1; });

@@ -101,3 +101,24 @@ test('第 9 条：平面上点、向量的两个坐标各写一个式子（point
   // 整个一个式子照旧
   assert.equal(dryRun(s, 'point p R = {[l, m]}').length, 0);
 });
+
+test('第 8 条：整块挪到句首 / 从句首挪走，大小写跟着变（新的句首大写；原来句首的常用词小写，I 和认不出的专名不动）', () => {
+  const text = (s) => [...s.objects.get('s').words].sort((a, b) => a.slot - b.slot).map((w) => w.value).join(' ');
+  const s = make('sentence s = "It is painful to read these accounts today."');
+  run(s, 'move s.4-8 before s.1');
+  assert.equal(text(s), 'To read these accounts today it is painful');
+  // 挪回去：变回来
+  run(s, 'move s.1-5 after s.8');
+  assert.equal(text(s), 'It is painful to read these accounts today');
+  // I 不动；专名（不在常用词里、句中也没有小写的同一个词）不动
+  const i = make('sentence s = "I saw Tom yesterday."');
+  run(i, 'move s.4 before s.1');
+  assert.equal(text(i), 'Yesterday I saw Tom');
+  const b = make('sentence s = "Belgium became independent then."');
+  run(b, 'move s.4 before s.1');
+  assert.equal(text(b), 'Then Belgium became independent');
+  // 学生拖的也一样
+  const t = make('sentence s = "The man is here today."\nopen s move');
+  t.apply(parseScript('move s#5 -> s.1')[0], { by: 'student', open: 'move' });
+  assert.equal(text(t), 'Today the man is here');
+});
