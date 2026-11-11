@@ -381,7 +381,10 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
     if (e.kind === 'goal') for (const id of e.ids || []) {
       const g = goals.get(id);
       const c = e.collected?.[id] || g?.collect;
-      const pre = e.reacted ? `（页面已经演了你预写的 ${e.reacted} 行）` : e.missed ? '（你预写的行都没演上）' : '（你没预写做到以后的行）';
+      // 一下做到几条挑战：各写各的预写行数（per；旧存档没有，照合起来的数）
+      const n = e.per ? e.per[id] || 0 : e.reacted;
+      const lost = e.per ? e.perMissed?.[id] || 0 : e.missed;
+      const pre = n ? `（页面已经演了你预写的 ${n} 行）` : lost ? '（你预写的行都没演上）' : '（你没预写做到以后的行）';
       // 收集型：收齐了写收了哪几张（每收一张页面都演了预写的行）
       lines.push(c ? `${collectText(id, c)}${e.reacted ? `；页面每收一张都演了你预写的行` : ''}${heldText(e)}` : `学生做到了挑战 ${id}${g ? `「${g.text}」` : ''}${pre}${heldText(e)}`);
       // 你挂的按钮学生还没按，页面当它按了（loop.js 的 settle）

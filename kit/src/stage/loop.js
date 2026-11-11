@@ -223,16 +223,25 @@ export function createLoop(host) {
    * 等预写的行演完再看（events.js 的 hasWork）：挑战写了 call=now 就马上叫；还有事：这件事 quiet、记下那时有什么事（held，
    * 跟着下一条告诉老师「没叫你」），舞台手上没有一问时替它挂「给个提示」（学生还能打字）；没事了：挂着的 ask next 先收起，叫老师
    */
+  // 预写的行真演了几行，照实数（演不上的舞台记了 missed）。一下做到几条挑战时各数各的（per / perMissed：
+  // 主线第一轮 D1-2，以前两条都写合起来的数）。数变了才存
+  function recount(e, reacts) {
+    if (!reacts?.length) return;
+    const n = reacts.filter((r) => !r.missed).length;
+    const per = {}, perMissed = {};
+    if (e.kind === 'goal') for (const r of reacts) if (r.goal) { const m = r.missed ? perMissed : per; m[r.goal] = (m[r.goal] || 0) + 1; }
+    const same = n === e.reacted && JSON.stringify(per) === JSON.stringify(e.per || {});
+    if (same) return;
+    Object.assign(e, { reacted: n, missed: reacts.length - n }, e.kind === 'goal' ? { per, perMissed } : {});
+    savePending(true);
+  }
   function settle(e, { now = false, reacts = null } = {}) {
     // 预写演之前等着的那一问：演完换成了预写挂的 ask next，是学生要按的那一下（freshNext）
     const w0 = stage.scene.waiting;
     Promise.resolve(stage.reacting).then(() => {
       if (S.ended || host.readOnly) return;
       // 预写的行真演了几行（演不上的舞台记了 missed，也另告诉了老师）：照实写，不说「演了 N 行」的假话
-      if (reacts?.length) {
-        const n = reacts.filter((r) => !r.missed).length;
-        if (n !== e.reacted) { e.reacted = n; e.missed = reacts.length - n; savePending(true); }
-      }
+      recount(e, reacts);
       const held = now ? [] : [...hasWork(stage.scene), ...freshNext(w0)];
       if (held.length) {
         e.quiet = true;
@@ -301,7 +310,7 @@ export function createLoop(host) {
       e.quiet = true;
       addEvent(e);
       // 演不上的预写照实数（叫不叫老师由回答那一件事定）
-      if (reacts?.length) Promise.resolve(stage.reacting).then(() => { const n = reacts.filter((r) => !r.missed).length; if (n !== e.reacted) { e.reacted = n; e.missed = reacts.length - n; savePending(true); } });
+      if (reacts?.length) Promise.resolve(stage.reacting).then(() => recount(e, reacts));
       return;
     }
     addEvent(e);

@@ -833,3 +833,19 @@ test('E1-6：做到挑战时老师挂的按钮还没按：照旧马上叫老师�
   // 页面替挂的「给个提示」不说这一句
   assert.doesNotMatch(eventsText([{ kind: 'goal', ids: ['g1'], reacted: 0 }], { goals: scene.goals }), /还没按/);
 });
+
+test('D1-2：课堂循环里同一下做到两条挑战，发给老师的那一条各写各的预写行数', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  const scene = new Scene();
+  scene.goals.set('g5', { id: 'g5', text: '第 5 条', met: true });
+  scene.goals.set('g6', { id: 'g6', text: '第 6 条', met: true });
+  const stage = { log: [], scene, teacherAudit: [], reacting: null, studentChain: null, pendingGoals: () => [] };
+  const rows = [];
+  createLoop({ stage, addTurn: (r) => { const x = { ...r, seq: rows.length + 1 }; rows.push(x); return x; }, putTurn: () => {}, note: () => {} });
+  stage.onGoal(['g5', 'g6'], { by: 'student', reacted: 3, reacts: [{ goal: 'g5', src: 'say "一"' }, { goal: 'g6', src: 'say "二"' }, { goal: 'g6', src: 'glow a' }] });
+  await tick(); await tick();
+  const m = rows.find((r) => r.role === 'student' && !r.pending)?.msg || '';
+  assert.match(m, /g5「第 5 条」（页面已经演了你预写的 1 行）/);
+  assert.match(m, /g6「第 6 条」（页面已经演了你预写的 2 行）/);
+});

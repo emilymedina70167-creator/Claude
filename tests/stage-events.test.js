@@ -616,3 +616,14 @@ test('D4-11：同一格连着拨的还是并成一条路，放在这条路开头
   assert.equal(lines[2], '学生说：「嗯」');
   assert.equal(lines[3], '（离你上一轮演完过了 9 秒）');
 });
+
+// —— 舞台主线第一轮 D1-2：两条挑战同一下做到，「演了你预写的 N 行」以前两条都写合起来的数 ——
+test('D1-2：同一下做到两条挑战，各写各的预写行数', () => {
+  const goals = new Map([['g5', { text: '第 5 条' }], ['g6', { text: '第 6 条' }]]);
+  const e = { kind: 'goal', ids: ['g5', 'g6'], reacted: 3, per: { g5: 1, g6: 2 } };
+  assert.equal(eventsText([e], { goals }), '学生做到了挑战 g5「第 5 条」（页面已经演了你预写的 1 行）\n学生做到了挑战 g6「第 6 条」（页面已经演了你预写的 2 行）');
+  // 其中一条没预写：照实说
+  assert.match(eventsText([{ kind: 'goal', ids: ['g5', 'g6'], reacted: 2, per: { g6: 2 } }], { goals }), /g5「第 5 条」（你没预写做到以后的行）\n学生做到了挑战 g6「第 6 条」（页面已经演了你预写的 2 行）/);
+  // 旧存档没有 per：照旧
+  assert.match(eventsText([{ kind: 'goal', ids: ['g5'], reacted: 2 }], { goals }), /演了你预写的 2 行/);
+});
