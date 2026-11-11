@@ -2136,3 +2136,16 @@ test('E1-3：提问以后句子被换过，学生点的词照点的那一刻的�
   const hold = t.parts('s').find((p) => p.slot === 2);
   assert.deepEqual({ ...tapAnswer(t, hold, t.waiting.expect) }, { type: 'tap', ref: 's.2', pid: `s:${hold.key}`, key: hold.key, slot: 2, value: 'hold', expected: 's.hold', right: true });
 });
+
+// —— 舞台主线第一轮：挑战 ——
+test('D1-3：on= 的按钮学生手上没有，只报一次（以前每一轮都报同一句）', () => {
+  const s = run(new Scene(), 'array a = 2 1 3\nopen a\ngoal g1 "x" when="a sorted" on="排好了"\nask next "别的" button="看好了"');
+  assert.equal(s.onProblems({ once: true }).length, 1);
+  assert.deepEqual(s.onProblems({ once: true }), [], '说过一次就不再说');
+  assert.equal(s.onProblems().length, 1, '不带 once 的照旧每次都算得出（现状、测试用）');
+  // 存档、撤一步重放以后也记着说过了
+  assert.deepEqual(s.clone().onProblems({ once: true }), []);
+  // 重写这条挑战是新的一条：再有问题再报
+  run(s, 'goal g1 "x" when="a sorted" on="交了"');
+  assert.equal(s.onProblems({ once: true }).length, 1);
+});

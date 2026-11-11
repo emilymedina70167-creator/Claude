@@ -346,7 +346,7 @@ export class Stage {
           if (askedBad && this.scene.waiting) this.scene.waiting.standin = true;
         }
         // on= 写的按钮学生手上没有：这个挑战判不了，告诉老师（报在写它的那一行上，这一轮没写就报那个挑战）
-        for (const msg of this.scene.onProblems()) {
+        for (const msg of this.scene.onProblems({ once: true })) {
           const id = msg.match(/^挑战 (\S+)/)?.[1];
           const at = goalAt.get(id);
           this.errors.push({ line: at?.line ?? 0, src: at?.src || `goal ${id} …`, error: msg });

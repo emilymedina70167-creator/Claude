@@ -659,10 +659,13 @@ export class Scene {
    * 一轮演完时问：没做到的 on= 挑战，学生手上的这一问有没有那个按钮（ask next 不写 button 是「接着」；ask pick 的按钮是交点的几样，不算）。
    * 没有就是学生按不到、挑战永远判不了：[一句话]
    */
-  onProblems() {
+  onProblems({ once = false } = {}) {
     const w = this.waiting;
     const btn = !w || w.kind === 'pick' ? null : w.button || (w.kind === 'next' ? '接着' : null);
-    return [...this.goals.values()].filter((g) => !g.met && g.on != null && g.on !== btn)
+    // once：告诉老师用的，一条挑战只说一次（记在挑战上 onTold；主线第一轮 D1-3：以前学生按过、老师换了下一问以后每一轮都报同一句）
+    const bad = [...this.goals.values()].filter((g) => !g.met && g.on != null && g.on !== btn && !(once && g.onTold));
+    if (once) for (const g of bad) g.onTold = true;
+    return bad
       .map((g) => `挑战 ${g.id} 写了 on="${g.on}"，可学生手上的这一问没有「${g.on}」这个按钮：学生按不到，这个挑战判不了（ask next 写 button="${g.on}"）`);
   }
 
