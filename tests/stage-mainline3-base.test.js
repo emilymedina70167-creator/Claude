@@ -61,3 +61,14 @@ test('第 2 条：手势层当场弹回的那一下（这个世界做不到、�
   assert.match(bounceText(b, b.opens.get('h:move'), { from: hc(1), to: hc(2) }, rb), /学生想在 h 上 move（按住 h\.1（空格子） 放到 h\.2（5））：页面没让做——空格子拖不动/);
   assert.doesNotMatch(text, /[他她]/);
 });
+
+test('第 3 条：老师自己写的 compare 的结果写成一句（以前只是动画，老师要自己再比一遍）', async () => {
+  const { compareNote } = await import('../kit/src/stage/scene.js');
+  const s = make('array a = 49 38 65 97\nmatrix A = 1 2 / 3 4\nmatrix B = 1 2 / 3 5');
+  const fx = (src) => s.apply(parseScript(src)[0]);
+  assert.equal(compareNote(s, fx('compare a.2 a.4')), '你比了 a.2 和 a.4：38 < 97');
+  assert.equal(compareNote(s, fx('compare a.4 a.1')), '你比了 a.4 和 a.1：97 > 49');
+  assert.equal(compareNote(s, fx('compare a.1 a.1')), null);
+  assert.match(compareNote(s, fx('compare A B')), /^你比了 A 和 B：.*不一样/);
+  assert.equal(compareNote(s, {}), null);
+});

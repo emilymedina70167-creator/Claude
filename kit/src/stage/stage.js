@@ -8,7 +8,7 @@
 import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHold } from './motion.js';
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM, tooSmall } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
-import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, tapAnswer, pickText, unplayedNotes, compareFact, mergeFact, chipTextOf, tapValueOf } from './scene.js';
+import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, tapAnswer, pickText, unplayedNotes, compareFact, compareNote, mergeFact, chipTextOf, tapValueOf } from './scene.js';
 import { goalMark } from './goal.js';
 import { measureShown } from './rules.js';
 import { judgeAnswer, sameAnswer, answerInput, gridAnswerText } from './answer.js';
@@ -590,6 +590,8 @@ export class Stage {
     // 老师的行（连预写的行）让挑战成立、让东西做完了：预写的行拿掉没演（只在学生的一下演），跟着下一条告诉老师
     if (!this.instant) for (const t of unplayedNotes(fx)) this.onNote?.(t, { turn });
     // 老师（连预写的行）这一下改了学生先点的几样：写成一句交给课堂，跟着下一条告诉老师（不叫老师，loop.js 的 onNote）
+    // 老师自己写的 compare：比出来的结果写成一句，跟着下一条告诉老师（以前只是动画）
+    if (c.cmd === 'compare' && by !== 'student' && !this.instant) { const t = compareNote(this.scene, fx); if (t) this.onNote?.(t, { turn }); }
     if (fx?.pickDiff && fx.pickTell && by !== 'student' && !this.instant) this.onNote?.(`${fx.pickDiff}（你演的 ${c.src?.trim() || c.cmd}）`, { turn });
     told?.();
     try {

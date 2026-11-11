@@ -2291,6 +2291,16 @@ export function compareFact(x) {
   return `${head}${c.total} 格里 ${c.diff.length} 格不一样——${list}${more}（两张都没变）`;
 }
 /**
+ * 老师自己写的 compare 的结果写成一句（底座第二轮留下的第 3 条：以前只是动画，现状和发给老师的话里都没有结果，老师要自己再比）：
+ * 两个部件「你比了 a.2 和 a.4：38 < 97」，两张矩阵照学生拖去比的那一句（换成「你比了」）。一样的两格、不是 compare 是 null
+ */
+export function compareNote(scene, fx) {
+  if (fx?.compare?.whole) return compareFact(fx).replace(/^学生把 (\S+) 拖到 (\S+) 上比：/, '你比了 $1 和 $2：').replace('（两张都没变）', '');
+  if (!fx?.a || !fx?.b || fx.sign == null || fx.a === fx.b) return null;
+  const name = (p) => { try { return scene.tapRef(p); } catch { return '?'; } };
+  return `你比了 ${name(fx.a)} 和 ${name(fx.b)}：${cellText(fx.a.value)} ${fx.sign < 0 ? '<' : fx.sign > 0 ? '>' : '='} ${cellText(fx.b.value)}`;
+}
+/**
  * 学生把 X 拖到 Y 上并同类项（fx.merge = { x, y, from, into, to }）写给老师的一句：「学生把 X（−2A）拖到 Y（−A）上：并成了 −3A」；
  * 并成 0 写「并成了 O（抵消了）」。X 已经不在舞台上，裁判那样东西拿不到，所以照 fx 交（stage.js 的 factsOf）
  */
