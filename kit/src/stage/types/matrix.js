@@ -579,7 +579,11 @@ export const matrix = {
     readExtras(scene, o, id, h.opts);
     // 式子里没用到舞台上的东西（{[[1, 2], [3, 4]]}）就只是一次算好的数
     if (live?.live.deps.length) o.live = live.live;
-    o.origin = old && !h.opts.beside ? { ...old.origin } : placeFor(scene, sizeOf(o), h.opts);
+    // 同名重造、beside= 写的还是原来挨着的那一样、大小也没变：留在原处（主线第一轮 L3-6：以前照 beside 重新摆一遍，
+    // 那样东西旁边多了乘积的那一排，算出来的地方和原来不一样，新的这张被当成新造的排到了最下面，乘积那一排散开）
+    const stays = old && (!h.opts.beside || (old.beside === h.opts.beside && old.rows === o.rows && old.cols === o.cols));
+    o.origin = stays ? { ...old.origin } : placeFor(scene, sizeOf(o), h.opts);
+    if (h.opts.beside) o.beside = h.opts.beside;
     return o;
   },
   parts(o) { return [...o.cells].sort(sortRC); },

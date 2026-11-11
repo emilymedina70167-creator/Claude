@@ -629,3 +629,16 @@ test('复审 N4：整张一个 {} 的矩阵算出来是数——用到空格子�
   // 用到的都写满了：数是真的，照旧写出来
   assert.match(err(s, 'matrix R2 = {det(A)}'), /「\{det\(A\)\}」算出来是数 -2，不是矩阵/);
 });
+
+// —— 舞台主线第一轮 L3-6：乘积的一个因子同名重造（又写了一遍 beside=A），乘积那一排散开、新的 X 掉到最下面 ——
+test('L3-6：同名重造时 beside= 写的还是原来那一样东西：留在原处、在舞台上的先后不变（乘积那一排不散）', () => {
+  const s = run(new Scene(), 'matrix A = 2 0 0 / 0 3 4 / 0 4 9\nmatrix X = 0 / 1 / 2 beside=A\nproduct W = A X\narray c = 是 不是');
+  const at = { ...s.objects.get('X').origin };
+  const order = [...s.objects.keys()].join(' ');
+  run(s, 'matrix X = 4 / -2 / 0 beside=A');
+  assert.deepEqual(s.objects.get('X').origin, at);
+  assert.equal([...s.objects.keys()].join(' '), order);
+  // 换了一样东西挨着（beside=c）：照新写的摆，像新造的一样
+  run(s, 'matrix X = 1 / 1 / 1 beside=c');
+  assert.notDeepEqual(s.objects.get('X').origin, at);
+});

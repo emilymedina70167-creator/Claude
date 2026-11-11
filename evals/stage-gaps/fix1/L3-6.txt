@@ -1,0 +1,11 @@
+# L3-6：乘积的一个因子同名重造（又写了一遍 beside=A），乘积那一排散开、新的 X 掉到最下面
+matrix A = 2 0 0 / 0 3 4 / 0 4 9
+matrix X = 0 / 1 / 2 beside=A
+product W = A X
+card c = "是" "不是"
+say "先看这一根。"
+ask tap c "它是特征向量吗？"
+学生: tap c.2
+matrix X = 4 / -2 / 0 beside=A
+say "再看这一根 {X}。"
+ask tap c "它是特征向量吗？"
