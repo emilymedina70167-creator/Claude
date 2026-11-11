@@ -1121,7 +1121,7 @@ export class Scene {
         const text = str ?? '';
         this.checkRich(text, c); // 话里指着的东西要真有
         this.say = text;
-        this.words = parseRich(text).filter((p) => p.k === 'word').map((p) => p.v);
+        this.words = parseRich(text, { old: !!c.lenient && !c.prewrite }).filter((p) => p.k === 'word').map((p) => p.v);
         return {};
       }
       case 'glow': case 'unglow': case 'lift': case 'drop': case 'dim': case 'undim': case 'cover': case 'uncover': {
@@ -1309,7 +1309,7 @@ export class Scene {
         if (opts.solve != null && kind !== 'value' && !c.lenient) throw new Error('solve= 只用在 ask value 上（type=matrix free=… 的一列通解按集合判）');
         const spec = kind === 'value' ? { type: opts.type, answer: opts.answer, wrongs: opts.wrong, free: opts.free, ...(opts.solve != null ? { solve: opts.solve } : {}), ...(oldAsk ? { lenient: true } : {}) } : null;
         if (spec) checkSpec(spec, this, { strict: !c.lenient, lenient: oldAsk });
-        if (str != null) { this.say = str; this.words = parseRich(str).filter((p) => p.k === 'word').map((p) => p.v); }
+        if (str != null) { this.say = str; this.words = parseRich(str, { old: oldAsk }).filter((p) => p.k === 'word').map((p) => p.v); }
         // 这一轮写在前面的 @ask.right 跟着这一问走（学生答对它时页面马上演，只演一次）。预写里的 ask（舞台演 @g1 的行时带 prewrite）不拿：
         // 那几行可能插在老师这一轮中间演，@ask.right 是写给这一轮最后那一问的
         // 预写里的那一问跟着的 @ask.right（写在它前面、跟到这一组里的：bindRight）由舞台演这一行时交来（preRight）

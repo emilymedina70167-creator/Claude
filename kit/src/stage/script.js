@@ -186,12 +186,16 @@ export const RICH_MEASURES = new Set(['rank', 'det']);
  * {count(t)} 是页面数的量（画成现在的数，跟着变；数不了画「?」）、$d$ 是式子里的字母、[不稳定] 是能飞到图上去的词。
  * 返回 [{ k: 'text' | 'ref' | 'var' | 'measure' | 'math' | 'word', v }]
  */
-export function parseRich(text) {
+export function parseRich(text, { old = false } = {}) {
   const out = [];
   const s = String(text ?? '');
   const re = /\{([^{}]+)\}|\$([^$]+)\$|\[([^\]]+)\]/g;
   let last = 0, m;
   while ((m = re.exec(s))) {
+    // 方括号不都是能飞的词（主线第一轮 D1-4、L3-8：A[j+dk] 画成了 Aj+dk）：紧跟在字母、数字、下划线、右括号后面的是代码的下标，
+    // 里面没有字的（[____]、[ ]）是空着的框，里面有空格的（[p1 p2]）是一个式子——都照原样画。能飞的词没有带空格的。
+    // old：重放旧课数「第几个词」照以前的读法（每一对方括号都算），fly say.2 指的还是原来那个
+    if (m[3] != null && !old && (/[A-Za-z0-9_)\]]/.test(s[m.index - 1] || '') || !/[^\s_□]/.test(m[3]) || /\s/.test(m[3].trim()))) continue;
     if (m.index > last) out.push({ k: 'text', v: s.slice(last, m.index) });
     if (m[1] != null) {
       const inner = m[1].trim();

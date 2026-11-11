@@ -2165,3 +2165,27 @@ open q.a`;
   const dead = run(new Scene(), 'matrix J = 2 1 / 0 2 hide=on\nmatrix K = {J J} hide=on');
   assert.match(dryRun(dead, 'goal g1 "…" when="det(K) = 1"')[0].error, /藏着，学生看不见/);
 });
+
+// —— 舞台主线第一轮：写出来的字 ——
+test('D1-4、L3-8：话里的方括号——代码的下标、空着的框、里面有空格的照原样画；别的照旧是能飞的 [词]', () => {
+  const kinds = (t) => parseRich(t).map((p) => `${p.k}:${p.v}`);
+  assert.deepEqual(kinds('A[j+dk]=A[j];'), ['text:A[j+dk]=A[j];']);
+  assert.deepEqual(kinds('再填：A[____]=A[j]'), ['text:再填：A[____]=A[j]']);
+  assert.deepEqual(kinds('j = −4：A[−4]？'), ['text:j = −4：A[−4]？']);
+  assert.deepEqual(kinds('f(x)[0] 和 a[1][2]'), ['text:f(x)[0] 和 a[1][2]']);
+  assert.deepEqual(kinds('P = [p1 p2]，det P = {det(Pm)}'), ['text:P = [p1 p2]，det P = ', 'measure:det(Pm)']);
+  assert.deepEqual(kinds('填 [____] 和 [ ]'), ['text:填 [____] 和 [ ]']);
+  // 能飞的词照旧
+  assert.deepEqual(kinds('把 [枢轴] 放好'), ['text:把 ', 'word:枢轴', 'text: 放好']);
+  assert.deepEqual(kinds('这叫[不稳定]。'), ['text:这叫', 'word:不稳定', 'text:。']);
+  assert.deepEqual(kinds('A[i] 这一格叫 [哨兵]'), ['text:A[i] 这一格叫 ', 'word:哨兵']);
+});
+test('D1-4（盯 4）：重放旧课数「第几个 [词]」照旧的读法（fly say.2 指的还是原来那个）', () => {
+  // 新写的：A[i] 不算词，[词] 是第 1 个
+  const now = run(new Scene(), 'array a = 1 2\nsay "A[i] 和 [哨兵]"');
+  assert.deepEqual(now.words, ['哨兵']);
+  // 旧课（lenient）：以前 [i] 也算一个词
+  const old = new Scene();
+  for (const c of parseScript('array a = 1 2\nsay "A[i] 和 [哨兵]"')) old.apply({ ...c, lenient: true });
+  assert.deepEqual(old.words, ['i', '哨兵']);
+});
