@@ -2324,7 +2324,10 @@ export function compareNote(scene, fx) {
   if (fx?.compare?.whole) return compareFact(fx).replace(/^学生把 (\S+) 拖到 (\S+) 上比：/, '你比了 $1 和 $2：').replace('（两张都没变）', '');
   if (!fx?.a || !fx?.b || fx.sign == null || fx.a === fx.b) return null;
   const name = (p) => { try { return scene.tapRef(p); } catch { return '?'; } };
-  return `你比了 ${name(fx.a)} 和 ${name(fx.b)}：${cellText(fx.a.value)} ${fx.sign < 0 ? '<' : fx.sign > 0 ? '>' : '='} ${cellText(fx.b.value)}`;
+  // 两边不都是数（2a 和 10a、The 和 cat）：照字比出来的先后不是大小，只说一样不一样
+  const num = (v) => /^[-−+]?\d+(\.\d+)?(\/\d+)?$/.test(String(v ?? '').trim());
+  const sign = num(fx.a.value) && num(fx.b.value) ? (fx.sign < 0 ? '<' : fx.sign > 0 ? '>' : '=') : (fx.sign === 0 ? '=' : '≠');
+  return `你比了 ${name(fx.a)} 和 ${name(fx.b)}：${cellText(fx.a.value)} ${sign} ${cellText(fx.b.value)}`;
 }
 /**
  * 学生把 X 拖到 Y 上并同类项（fx.merge = { x, y, from, into, to }）写给老师的一句：「学生把 X（−2A）拖到 Y（−A）上：并成了 −3A」；

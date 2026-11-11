@@ -130,7 +130,7 @@ const blockOf = (st, head) => (String(st || '').split('\n').reduce((acc, l) => {
 }, { on: false, out: [] }).out.join('\n'));
 const mv = stepOf(h, 'move s.1-6 after s.11');
 expect('同一句上开着 mark、fold、move：那一步之前三种都开着', /s 开着：mark（滑）、fold（点）、move（按住再拖）/.test(before(h, mv)?.state || ''));
-expect('学生: move s.1-6 after s.11：按住括号 0.4 秒再拖，只交了一行 move、演上了', !errs(mv) && /^按住 s\.1-6 的括号 0\.4 秒，拖到 s\.11（doctor,?）后面 → move s\.1-6 after s\.11$/.test(did(mv)) && /句子 s[^\n]*：is a famous heart doctor, The man who lives next door and/.test(mv?.state || ''));
+expect('学生: move s.1-6 after s.11：按住括号 0.4 秒再拖，只交了一行 move、演上了', !errs(mv) && /^按住 s\.1-6 的括号 0\.4 秒，拖到 s\.11（doctor,?）后面 → move s\.1-6 after s\.11$/.test(did(mv)) && /句子 s[^\n]*：Is a famous heart doctor, the man who lives next door and/.test(mv?.state || ''));
 const um = stepOf(h, 'unmark s.21');
 expect('学生: unmark s.21 点 ✕：攒着里有「收掉了自己拉的」', !errs(um) && /点 s\.21 那道括号上的 ✕ → unmark s\.21/.test(did(um)) && /收掉了自己拉的 s\.21/.test(said(um)));
 const rf = stepOf(h, 'refer s.13 -> s.2');

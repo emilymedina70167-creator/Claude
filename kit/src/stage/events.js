@@ -382,7 +382,12 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
     if (e.kind === 'goal') for (const id of e.ids || []) {
       const g = goals.get(id);
       // watch：只叫老师的条件成立了（不是挑战：学生那边什么也没有）
-      if (g?.watch) { lines.push(`你盯着的 ${id} 成立了（${g.when}）${heldText(e)}`); continue; }
+      if (g?.watch) {
+        lines.push(`你盯着的 ${id} 成立了（${g.when}）${heldText(e)}`);
+        // 你挂的按钮学生还没按，页面收了（和挑战一样；「挑战写 on=」对 watch 说不通，不提）
+        if (e.unpressed && id === e.ids.at(-1)) lines.push(`（你挂的「${e.unpressed}」学生还没按：盯着的条件成立，页面就叫你了，按钮收起来了）`);
+        continue;
+      }
       const c = e.collected?.[id] || g?.collect;
       // 一下做到几条挑战：各写各的预写行数（per；旧存档没有，照合起来的数）
       const n = e.per ? e.per[id] || 0 : e.reacted;
@@ -421,7 +426,7 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
     // 老师上一轮的提问没演上（写错了）：学生手上没事可做，页面马上叫老师重写（loop.js；主线第一轮 D3-3、D4-5）
     else if (e.kind === 'askfail') lines.push('你上一轮的提问没演上（看下面没演的行）：学生手上只有页面替你挂的打字框，还什么都没做。把那一问重写一遍');
     // 页面记下的一句（老师演的那一下改了学生先点的几样：stage.js 的 onNote）：不叫老师、不算「试」，照写
-    else if (e.kind === 'note') lines.push(e.text || '');
+    else if (e.kind === 'note') lines.push(`${e.text || ''}${e.n > 1 ? `（这样试了 ${e.n} 次）` : ''}`);
     else if (e.act) {
       lines.push(actText(dialed ? { ...e.act, tries: undefined } : e.act));
       // 答对了这一问、页面演了 @ask.right 预写的行（学生手上还有事就攒着，写那时有什么事）

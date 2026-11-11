@@ -84,7 +84,7 @@
 .st-caption { position: absolute; left: 0; right: 0; top: auto; bottom: 70%; padding: 0 max(24px, env(safe-area-inset-right, 0px)) 0 max(24px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 2px; pointer-events: none; }
 .st-line { margin: 0; width: min(100%, 748px); font: 500 22px/1.65 var(--sans, sans-serif); letter-spacing: .01em; text-wrap: pretty; transition: font-size .35s, color .35s; }
 .st-line.is-past { font-size: 17px; line-height: 1.6; color: var(--st-muted); }
-.st-line.is-out { position: absolute; left: 0; right: 0; bottom: 0; margin: 0 auto; }
+.st-line.is-out { position: absolute; left: var(--cap-left, 0px); right: 0; bottom: 0; margin: 0 auto; }
 .st-line > * { display: inline-block; }
 .st-line .st-ch { white-space: pre; }
 .st-caption .st-chip, .st-caption .st-word { pointer-events: auto; }

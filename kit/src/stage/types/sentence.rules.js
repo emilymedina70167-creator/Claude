@@ -616,8 +616,8 @@ function moveAct(o, { from, to } = {}) {
   if (ws.slice(p - 1, q).some(inFold)) return { error: '折起来的词不能挪：先展开' };
   const k = to?.gap?.after;
   if (!Number.isInteger(k) || k < 0 || k > ws.length) return { error: '拖到两个词之间' };
-  if (k >= p && k < q) return { error: '落点在要挪的那一段里面' };
-  if (k === p - 1 || k === q) return { error: '还在原处：拖到别的两个词之间' };
+  if (k >= p && k < q) return { error: '落点在要挪的那一段里面', quiet: true };
+  if (k === p - 1 || k === q) return { error: '还在原处：拖到别的两个词之间', quiet: true };
   const f = inFold(ws[k - 1]);
   if (f && f === inFold(ws[k])) return { error: '不能挪进折起来的那一段：先展开' };
   return made(o, { type: 'move', from: p, to: q, after: k });

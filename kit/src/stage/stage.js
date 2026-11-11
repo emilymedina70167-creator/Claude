@@ -468,6 +468,7 @@ export class Stage {
     this.paths.forEach((p) => p.remove()); this.paths.clear();
     this.labelNodes.forEach((l) => l.node.remove()); this.labelNodes.clear();
     this.caption.replaceChildren();
+    this.caption.style.paddingLeft = ''; this.caption.style.removeProperty('--cap-left'); this.camSide = false; // 横屏「挑战留在左边」的摆法跟着清
     this.captionTurn = null;
     this.goalsEl.replaceChildren();
     this.resetOpens();
@@ -825,7 +826,7 @@ export class Stage {
           // 预写的行照老师的行演（带 lenient：写下时查过了；prewrite：不算学生的一下，又让别的挑战成立也不再触发预写，里面的 ask 不拿 @ask.right）。
           // 演不上的（写下时指着还没有的部件，现在还是没有）不演，记在那一项上（missed），跟着下一条告诉老师
           // 收集型的 @g1 每收一张都演：里面写出的挑战已经有了就跳过（不重写它、不清掉 @g2 的行）
-          if (r.keepGoals && c.cmd === 'goal') { const id = (c.args || []).find((a) => a.t === 'word')?.v; if (id && this.scene.goals.has(id)) continue; }
+          if (r.keepGoals && (c.cmd === 'goal' || c.cmd === 'watch')) { const id = (c.args || []).find((a) => a.t === 'word')?.v; if (id && this.scene.goals.has(id)) continue; }
           const miss = this.scene.missedPrewrite({ ...c, lenient: true, prewrite: true });
           // 演不上的那一问带着跟它的 @ask.right：那一问出不来，@ask.right 连同里面套着的拿掉（不然现状一直写「还没出」）
           if (miss) { r.missed = true; this.onNote?.(miss, { turn }); if (r.preRightKey) this.scene.dropAhead(r.preRightKey); continue; }
@@ -854,7 +855,7 @@ export class Stage {
   celebrate(ids) {
     for (const id of ids) {
       const g = this.scene.goals.get(id);
-      if (!g) continue;
+      if (!g || g.watch) continue; // watch：只叫老师，学生那边什么也没有
       const objs = new Set(g.cond.flatMap((cl) => [cl.l, cl.r]).filter((w) => w && this.scene.objects.has(w)));
       let i = 0;
       for (const ob of objs) for (const p of this.scene.parts(ob).slice(0, 12)) this.pulse(p, stagger(i++, { step: 35 }));
@@ -1055,7 +1056,7 @@ export class Stage {
             if (!g.collect.got.length) box.remove();
           }
         }
-      }
+      } else if (n.__got != null) { n.querySelector('.st-goal-got')?.remove(); n.__got = null; } // 同名重写成不收集的：以前收的那一排小牌拿掉
       if (g.met && !n.classList.contains('is-met')) {
         n.classList.add('is-met');
         if (!this.instant) this.tween(n.firstChild, [{ transform: 'scale(.4)' }, { transform: 'scale(1.25)', offset: 0.6 }, { transform: 'scale(1)' }], { duration: 520, easing: EASE.spring });
@@ -1571,7 +1572,8 @@ export class Stage {
   fitView(box) {
     const view = this.viewSize();
     const cap = this.caption.style;
-    if (cap.paddingLeft) cap.paddingLeft = ''; // 先照「上面让」量话有多高
+    const capLeft = (px) => { cap.paddingLeft = px ? `${px}px` : ''; if (px) cap.setProperty('--cap-left', `${px}px`); else cap.removeProperty('--cap-left'); }; // 淡出的旧话是绝对定位的，照 --cap-left 让
+    if (cap.paddingLeft) capLeft(0); // 先照「上面让」量话有多高
     const { top, bottom } = this.reserve();
     const opts = { bottom, pad: CAMERA_ROOM.pad, maxScale: 1.5, lift: 0.4 };
     const a = fitCamera(box, view, { ...opts, top });
@@ -1579,13 +1581,13 @@ export class Stage {
     if (!kids.length || view.w <= view.h) { this.camSide = false; return a; }
     const left = Math.round(this.goalsEl.offsetLeft + Math.max(...kids.map((n) => n.offsetLeft + n.offsetWidth)) + 8);
     if (left > view.w * 0.4) { this.camSide = false; return a; }
-    cap.paddingLeft = `${left}px`; // 话让到右边（窄了可能多折一行：照让过以后的高算）
+    capLeft(left); // 话让到右边（窄了可能多折一行：照让过以后的高算）
     const ch = Math.max(84, (this.caption.offsetHeight || 0) + 34);
     const b = fitCamera(box, view, { ...opts, top: ch + 18, left });
     // 已经在右边那一种时，差一点也不换回去（来回换画面会左右跳）
     if (b.s >= a.s * (this.camSide ? 1.02 : 1.1)) { this.camSide = true; return b; }
     this.camSide = false;
-    cap.paddingLeft = '';
+    capLeft(0);
     return a;
   }
   focusBox() {

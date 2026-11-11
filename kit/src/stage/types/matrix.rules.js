@@ -598,7 +598,7 @@ function rowopAct(o, { from, to, value } = {}) {
     const lab = labelOf(to);
     if (lab != null) {
       if (!ok(lab)) return { error: `${o.id} 只有 ${o.rows} 行` };
-      if (lab === src) return { error: '拖到另一行的行号上，两行对调' };
+      if (lab === src) return { error: '拖到另一行的行号上，两行对调', quiet: true };
       return made(o, mkSwap(src - 1, lab - 1));
     }
     const tgt = rowOf(to);

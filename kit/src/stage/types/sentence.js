@@ -1155,11 +1155,16 @@ export const sentence = {
       }
       // 句首换了人：大小写跟着变（底座第二轮留下的第 8 条：以前「to read … today It is painful.」）。新的句首大写；
       // 原来句首的那个词，是常用的句首词（It、The、When……）或者句子里别处有它小写的样子才改小写——I、认不出的专名不动
-      if (next[0] !== order[0]) {
+      // 页面替它大写的词记一笔（upped）：离开句首照这一笔改回，不靠词表猜（学生拖到句首看看再拖回去，以前句中留一个大写的 Painful）。
+      // 原来的句首本来就是小写的（一个片段「have been doing」）：这一句不讲大小写，两头都不动；词里面有大写的（iPhone）不动
+      // 这一句讲不讲大小写，第一次换句首时看一眼原来的句首、记在句子上（之后 iPhone 这样的词到了句首，不能再照当时的句首看）
+      if (next[0] !== order[0] && o.capital == null) o.capital = /^[A-Z]/.test(order[0].value);
+      if (next[0] !== order[0] && o.capital) {
         const was = order[0], now = next[0];
-        if (/^[a-z]/.test(now.value)) now.value = now.value[0].toUpperCase() + now.value.slice(1);
+        if (/^[a-z]/.test(now.value) && !/[A-Z]/.test(now.value.slice(1))) { now.value = now.value[0].toUpperCase() + now.value.slice(1); now.upped = true; }
         const low = was.value.toLowerCase();
-        if (/^[A-Z][a-z'’]*$/.test(was.value) && was.value !== 'I' && !/^I['’]/.test(was.value) && (STARTERS.has(low) || order.some((w) => w !== was && w.value === low))) was.value = low;
+        if (was.upped) { was.value = was.value[0].toLowerCase() + was.value.slice(1); delete was.upped; }
+        else if (/^[A-Z][a-z'’]*$/.test(was.value) && was.value !== 'I' && !/^I['’]/.test(was.value) && (STARTERS.has(low) || order.some((w) => w !== was && w.value === low))) was.value = low;
       }
       const before = new Map(order.map((w) => [w.key, w.slot]));
       next.forEach((w, k) => { w.slot = k + 1; });

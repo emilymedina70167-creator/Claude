@@ -141,9 +141,12 @@ export function createLoop(host) {
 
   // —— 页面记下的一句（老师演的那一下改了学生先点的几样，stage.js 的 onNote）：不叫老师、不算「试」，跟着下一条发 ——
   // quiet：攒着它不挡提前想（发出去的整条照样带着它，对得上）。「再看一遍」重演同一行又来一句一样的：不重复记
-  function onNote(text, { turn } = {}) {
+  // tried：学生想做、页面没让做的那一下（手势弹回去了）。学生是动了的：「很久没动」重新数；同样的又试一次不另记一句，数次数
+  function onNote(text, { turn, tried } = {}) {
     if (S.ended || host.readOnly || !text) return;
-    if (S.pending?.events.some((e) => e.kind === 'note' && e.text === text && e.turn === turn)) return;
+    const had = S.pending?.events.find((e) => e.kind === 'note' && e.text === text && e.turn === turn);
+    if (tried) armIdle();
+    if (had) { if (tried) had.n = (had.n || 1) + 1; return; }
     addEvent({ kind: 'note', text, at: Date.now(), quiet: true, ...(turn != null ? { turn } : {}) });
   }
   // 作废的那一轮演过的行退回去了：它演的时候记下的几句也不算（不然告诉老师一个已经退回去的变化）

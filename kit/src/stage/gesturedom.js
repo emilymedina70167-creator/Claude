@@ -126,7 +126,7 @@ export function armGesture(stage, e, view, done) {
   // 放下的那一刻先问裁判这一下会不会被拦（wrong=block、这个世界做不到）：会拦就让拎着的东西飞回去，不用等演。拿舞台现在的样子问
   const blocked = (src) => wouldBlock(stage.scene, e, src);
   // 当场弹回的那一下（翻不成一行指令：这个世界做不到）记一句给老师，跟着下一条走（不叫老师；同一句不重复记）
-  const told = (ctx, r) => { const t = bounceText(stage.scene, e, ctx, r); if (t) stage.onNote?.(t, {}); };
+  const told = (ctx, r) => { const t = bounceText(stage.scene, e, ctx, r); if (t) stage.onNote?.(t, { tried: true }); };
   // 一下手势要先问一个值：数字键盘、一排选项；问到了再翻成指令（翻不成就在那块上说为什么，不收）。
   // 浮出来的那一块不比手势活得久：这一项收起了（off）一起收；按「确定」时这一项已经不是开着的那一项、东西重造过了，悄悄收起、不交
   let popup = null;
