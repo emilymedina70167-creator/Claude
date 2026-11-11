@@ -14,7 +14,7 @@
 // 同一处开着几种按法时手指怎么按才认成哪一种（点、滑、按住 0.35 秒再拖），只有 CDP 的触摸走得到 pointer.js 的 choosePress；
 // 页面那一半只找手指按哪儿、松在哪儿（照 pointer.js 挑把手的办法核过手指真按得到），按、滑、按住、松手由外面照触摸做。
 
-const DO = ['write', 'swap', 'move', 'vec', 'mul', 'rotate', 'insert', 'rowop', 'mark', 'fold', 'undo', 'dial',
+const DO = ['write', 'swap', 'move', 'vec', 'mul', 'rotate', 'insert', 'rowop', 'mark', 'fold', 'undo', 'dial', 'choose', 'unchoose', 'visit', 'tag',
   'refer', 'unrefer', 'unmark', 'unfold', 'delete', 'compare', 'put', 'merge', 'back'];
 const ANSWER = ['tap', 'drag', 'value', 'pick', 'say', 'next'];
 /** 走通用手势（或撤一步、拨数器）的那几种：parseTry 给它们带上 gesture */
@@ -29,6 +29,7 @@ export const HANDS = new Set(['pick', 'refer', 'unrefer', 'unmark', 'move', 'unf
 export const STUDENT_FORMS = [
   'write B.1,1 2（拨数器一格一格拨；open … input=keypad 时用键盘写）',
   'swap a#1 a#2', 'move s.7 after s.1', 'vec p u = 3 1', 'mul C.1,2',
+  'choose g.A~B（open g choose：点这条边选进；unchoose g.A~B 是再点一下拿掉）', 'visit g.A（open g visit：点这个结点）', 'tag g.A 5（open g tag：点结点键盘写数，∞ 也行）',
   'move a#10 -> a.5（open a move：按住这一张 0.35 秒拖到两张之间，插到第 5 格；也能写 before a.5 / after a.4）', 'write h.1 38（open h edit：点一格键盘写）',
   'rotate t.30 left（在 30 往左转 = 把 30 的右孩子拖到 30 上）',
   'insert t 47（托盘里的 47 拖进树）', 'insert t.45 right 47（拖到 45 右边的空位）',
@@ -385,6 +386,19 @@ export const NEW2 = [
     screen: [C(/\nam\n/, '拨回现在：句子变回来'), C(/时间：现在。谓语是现在进行时/, '贴的字跟着拨盘换')],
     noScreen: [C(/\n(was|will)\n/, '拨回现在：屏幕上没有别的时间留下的词')],
     nots: [C(/作废/), C(/不再跟着/)],
+    noAudit: [C(/压着/), C(/出了屏幕/)],
+  },
+  {
+    id: 'D 图交给学生动手', files: ['D.txt'],
+    checks: [
+      C(/学生 choose g\.A~B（选了 A–B（权 4））。成圈了：A–B–C–A；现在选了 3 条、总权 7、连成 3 块/, '选成了圈：写出那个圈'),
+      C(/学生 unchoose g\.A~B（拿掉了 A–B（权 4））。现在选了 2 条、总权 3、连成 3 块/, '再点一下拿掉'),
+      C(/选了的边：A–C 2、B–C 1、C–D 5、D–E 3/, '现状里列选了的边'),
+      C(/页面算的：chosen\(g\) = 4，weight\(g\) = 11，pieces\(g\) = 1/, '现状里页面数的量'),
+      C(/学生 tag g\.B ∞（B 旁边写了 ∞）/, '点结点键盘写数，∞ 也行'),
+    ],
+    called: [C(/学生 choose g\.D~E（选了 D–E（权 3））。现在选了 4 条、总权 11、连成 1 块（是一棵生成树）/, '选成一棵生成树：事实里写明'), C(/学生做到了挑战 g1/, 'g tree：当场做到')],
+    nots: [C(/走偏|判错/)],
     noAudit: [C(/压着/), C(/出了屏幕/)],
   },
 ];

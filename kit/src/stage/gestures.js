@@ -18,10 +18,10 @@ export const kindsOf = (g) => [].concat(g?.gesture || []);
 export const ARMED_GESTURES = new Set(['tap', 'drop-on', 'drop-at', 'span', 'write', 'line']);
 /**
  * 画法（各种东西的 view.grips）现在交得出的把手，名字和手势表里 from / on / tap / to / close.on 写的一样（第二轮 Task 11 交了
- * 句子的钩 hook、空隙 gap、小方块 pill、✕ 的 xmark / xrefer、句子外框 sentence、矩阵整张的 whole）。手势表里写了、画法还没交的：
+ * 句子的钩 hook、空隙 gap、小方块 pill、✕ 的 xmark / xrefer、句子外框 sentence、矩阵整张的 whole、图的边 edge）。手势表里写了、画法还没交的：
  * 起点没有就拿不起来，落点没有就放不下——那一种手势算挂不上，和 ARMED_GESTURES 一样不对老师说学生能动
  */
-export const ARMED_GRIPS = new Set(['node', 'parent', 'tray', 'tree', 'slot', 'row', 'label', 'cell', 'word', 'bracket', 'hook', 'gap', 'pill', 'xmark', 'xrefer', 'sentence', 'whole']);
+export const ARMED_GRIPS = new Set(['node', 'parent', 'tray', 'tree', 'slot', 'row', 'label', 'cell', 'word', 'bracket', 'hook', 'gap', 'pill', 'xmark', 'xrefer', 'sentence', 'whole', 'edge']);
 /**
  * 画面分不分得清同一处的几种按法：pointer.js 照 choosePress 分（第二轮 Task 11 接上，true）。分不清时（false）同一处开了几种按法，
  * 手指按下去只拿得到其中一种：舞台现状照实说（scene.js 的 stateText），不说几种都按得出

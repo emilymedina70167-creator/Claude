@@ -262,6 +262,8 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-kp-msg { min-height: 0; padding: 0 4px; font: 500 14px/1.35 var(--sans, sans-serif); color: var(--st-red); }
 .st-kp-msg:not(:empty) { padding-bottom: 8px; }
 .st-kp-keys { display: grid; grid-template-columns: repeat(4, 52px); gap: 8px; }
+/* 多出来的一个键（图上写旁边的数：∞）：占最下面一整行 */
+.st-kp-k.is-extra { grid-column: 1 / -1; }
 .st-kp-k { height: 50px; border: 0; border-radius: 14px; background: color-mix(in srgb, var(--st-ink) 6%, transparent); color: var(--st-ink); font: 500 22px/1 var(--sans, sans-serif); cursor: pointer; }
 .st-kp-k.is-fn { color: var(--st-brand); background: color-mix(in srgb, var(--st-brand) 8%, transparent); }
 .st-kp-k.is-ok { grid-column: span 2; background: var(--st-brand); color: var(--st-brand-ink); font-size: 18px; font-weight: 600; }

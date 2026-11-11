@@ -407,6 +407,7 @@ export const graph = {
       if (!m) continue;
       for (const f of FLAGS) e[f] = m[f];
       e.gone = m.gone;
+      e.chosen = !!m.chosen; // 选进的边（choose）跟着带过去
     }
     const has = (k) => o.nodes.some((n) => n.key === k);
     o.taken = old.taken.filter(has);
@@ -482,7 +483,7 @@ export const graph = {
     const o = {
       origin: { x: 0, y: 0 }, directed, weighted, pos, taken: [], visits: 0, last: null, deg: false,
       nodes: names.map((k) => ({ obj: id, key: k, kind: 'node', label: k, value: k, tag: null, order: null, ...flags() })),
-      edges: edges.map((e) => ({ obj: id, key: `${e.a}~${e.b}`, kind: 'edge', a: e.a, b: e.b, w: e.w, label: `${e.a}${directed ? '→' : '–'}${e.b}`, value: e.w ?? `${e.a}${directed ? '→' : '–'}${e.b}`, gone: false, ...flags() })),
+      edges: edges.map((e) => ({ obj: id, key: `${e.a}~${e.b}`, kind: 'edge', a: e.a, b: e.b, w: e.w, label: `${e.a}${directed ? '→' : '–'}${e.b}`, value: e.w ?? `${e.a}${directed ? '→' : '–'}${e.b}`, gone: false, chosen: false, ...flags() })),
     };
     if (old?.type === 'graph') o.origin = { ...old.origin };
     else {
@@ -619,6 +620,29 @@ export const graph = {
       for (const [key, l] of scene.links) if ([l.a, l.b].some((x) => x.obj === o.id && gone.some((e) => e.key === x.key))) scene.links.delete(key);
       return { id: o.id, key: k, edges: gone.map((e) => e.key), indeg: before };
     },
+    // choose g.A~B g.B~C：把这几条边选进来（画成粗的金线；学生点边选的也是它）；unchoose g.A~B 拿掉、unchoose g 全拿掉
+    choose(scene, c, h) {
+      h.strayRefs();
+      const { o } = graphIn(scene, h, 'choose');
+      const ps = h.partsIn();
+      if (!ps.length || ps.some((p) => p.kind !== 'edge')) throw new Error(`choose 写边：choose ${o.id}.A~B（好几条就接着写；结点用 visit）`);
+      const seen = new Set();
+      for (const e of ps) {
+        if (e.chosen || seen.has(e.key)) throw new Error(`${shownEdge(o, e)} 已经选了（拿掉写 unchoose ${o.id}.${e.a}~${e.b}）`);
+        seen.add(e.key);
+      }
+      for (const e of ps) e.chosen = true;
+      return { id: o.id, parts: ps };
+    },
+    unchoose(scene, c, h) {
+      h.strayRefs();
+      const { o, whole } = graphIn(scene, h, 'unchoose');
+      const ps = whole ? o.edges.filter((e) => e.chosen) : h.partsIn();
+      if (!whole && (!ps.length || ps.some((p) => p.kind !== 'edge'))) throw new Error(`unchoose 写边：unchoose ${o.id}.A~B（全拿掉写 unchoose ${o.id}）`);
+      if (!whole) for (const e of ps) if (!e.chosen) throw new Error(`${shownEdge(o, e)} 没有选`);
+      for (const e of ps) e.chosen = false;
+      return { id: o.id, parts: ps };
+    },
     // deg g：每个结点旁边标入度（无向图标度），拿掉结点跟着变；undeg g 收起
     deg(scene, c, h) { const { o } = graphIn(scene, h, 'deg'); o.deg = true; return { id: o.id }; },
     undeg(scene, c, h) { const { o } = graphIn(scene, h, 'undeg'); o.deg = false; return { id: o.id }; },
@@ -627,6 +651,8 @@ export const graph = {
     const es = liveEdges(o);
     const lines = [`图 ${o.id}（${o.directed ? '有向' : '无向'}${o.weighted ? '、带权' : ''}，${o.nodes.length} 个结点、${es.length} 条边）：`];
     lines.push(`  边：${es.length ? es.map((e) => `${shownEdge(o, e)}${e.w != null ? ` ${e.w}` : ''}`).join('、') : '没有了'}`);
+    const picked = es.filter((e) => e.chosen);
+    if (picked.length) lines.push(`  选了的边：${picked.map((e) => `${shownEdge(o, e)}${e.w != null ? ` ${e.w}` : ''}`).join('、')}`);
     const groups = new Map();
     const put = (k, s) => { if (!groups.has(k)) groups.set(k, []); groups.get(k).push(s); };
     for (const p of [...o.nodes, ...es]) {
@@ -658,7 +684,12 @@ relax g.A -> g.B                  松弛：A 的数 + 边权 比 B 的小就改�
 visit g.A g.C / unvisit g         编访问号（和上一个访问的有边，圈就沿边走过去）
 walk g.A g.B g.D                  一个圈沿着边走过这几个（要相邻）
 take g.A                          拓扑排序：拿掉 A 和它的边，A 排到下面的序列里
-deg g / undeg g                   每个结点旁边标入度（无向图是度），拿掉结点跟着变`,
+deg g / undeg g                   每个结点旁边标入度（无向图是度），拿掉结点跟着变
+choose g.A~B / unchoose g.A~B / unchoose g  把边选进来（粗金线）/ 拿掉 / 全拿掉
+open g choose  学生点一条边 = choose g.A~B（选着的再点 = unchoose g.A~B）；不判对错，每一下告诉你选了几条、总权、连成几块、成没成圈
+open g visit  学生点结点 = visit g.A
+open g tag  学生点结点键盘写数 = tag g.A 5（有 ∞ 键）；visit、tag 一次开一项
+判断式（when=）：g tree（选的边正好是生成树）、g cyclic（有圈）、g connected（连成一块）；量：chosen(g) 选了几条、weight(g) 总权、pieces(g) 几块、visited(g) 访问了几个`,
   example: `graph g = A-B:4 A-C:2 B-C:1 B-D:5 C-D:8 D-E:3
 tag g ∞
 tag g.A 0

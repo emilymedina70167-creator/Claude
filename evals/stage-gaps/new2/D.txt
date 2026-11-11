@@ -1,0 +1,16 @@
+# 主线第二轮 D：图交给学生动手。学生点边选进 / 拿掉，页面不判对错，只说选了几条、总权、连成几块、成没成圈；选成一棵生成树时挑战做到
+graph g = A-B:4 A-C:2 B-C:1 C-D:5 D-E:3
+open g choose
+goal g1 "选几条边，把五个点连成一棵树" when="g tree"
+say "点一条边就选进来，再点一下拿掉。"
+学生: choose g.B~C
+学生: choose g.A~C
+学生: choose g.A~B
+学生: unchoose g.A~B
+学生: choose g.C~D
+学生: choose g.D~E
+close g choose
+open g tag
+say "再把 E 到 A 有多远写在 E 旁边。"
+学生: tag g.E 10
+学生: tag g.B ∞

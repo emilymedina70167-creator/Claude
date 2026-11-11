@@ -13,6 +13,7 @@ import { treeRules } from './tree.rules.js';
 import { matrixRules } from './matrix.rules.js';
 import { sentenceRules } from './sentence.rules.js';
 import { arrayRules } from './array.rules.js';
+import { graphRules } from './graph.rules.js';
 
 export const TYPES = { array, tree, graph, matrix, plane, sentence, tex, card };
 
@@ -21,6 +22,7 @@ registerRules('tree', treeRules);
 registerRules('matrix', matrixRules);
 registerRules('sentence', sentenceRules);
 registerRules('array', arrayRules);
+registerRules('graph', graphRules);
 
 /** 造东西的指令 → 那种东西（array → 一排格子、tree → 树……） */
 export const CREATE = {};

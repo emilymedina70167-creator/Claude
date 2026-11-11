@@ -103,7 +103,7 @@ function complain(pop, msg, text) {
  * 数字键盘：prompt 是问什么（「r₃ + k·r₁：k = ?」），onOk(写的字) 返回一句错（照它说、键盘不收）或 null（收起）。
  * 返回 { close }
  */
-export function openKeypad(stage, { anchor = null, prompt = '', value = '', onOk, onClose = null } = {}) {
+export function openKeypad(stage, { anchor = null, prompt = '', value = '', extra = null, onOk, onClose = null } = {}) {
   // 外接键盘也能写：数字、- / .、退格、回车（keyOf）；收了的键不再给页面别处（退格不让浏览器后退、回车不交别的表单）
   const onKey = (ev) => {
     const k = typing(ev.target) ? null : keyOf(ev);
@@ -144,6 +144,13 @@ export function openKeypad(stage, { anchor = null, prompt = '', value = '', onOk
     if (NAMES[k]) b.setAttribute('aria-label', NAMES[k]);
     b.addEventListener('click', () => press(k));
     if (k === 'ok') ok = b;
+  }
+  // extra：多一个一按就交的键（图上写旁边的数：∞）。占最下面一整行
+  if (extra) {
+    const b = el('button', 'st-kp-k is-fn is-extra', grid);
+    b.type = 'button';
+    b.textContent = extra;
+    b.addEventListener('click', () => { const err = onOk?.(extra); if (err) complain(pop, msg, err); else P.close(); });
   }
   paint();
   P.show();

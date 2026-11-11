@@ -326,6 +326,22 @@ function setup(segments) {
     const obj = first.split(/[.#]/)[0];
     const o = sc.objects.get(obj);
     if (!o) return { error: `舞台上没有「${obj}」` };
+    // 图（主线第二轮 D）：点一条边选进 / 拿掉、点一个结点编访问号、点一个结点键盘写数，走通用手势
+    if (['choose', 'unchoose', 'visit', 'tag'].includes(cmd)) {
+      const action = cmd === 'unchoose' ? 'choose' : cmd;
+      const e = sc.opens.get(`${obj}:${action}`);
+      if (!e) return { untouched: `${obj} 没有交给学生 ${action}（open ${obj} ${action}），学生动不了` };
+      let p;
+      try { [p] = sc.parts(first); } catch (err) { return { error: err.message }; }
+      const kind = action === 'choose' ? 'edge' : 'node';
+      if (!p || p.kind !== kind) return { error: `学生: ${cmd} 后面写${kind === 'edge' ? `一条边（${obj}.A~B）` : `一个结点（${obj}.A）`}` };
+      const gr = find(o, e, kind, (q) => q.kind === kind && q.key === p.key);
+      if (!gr) return { untouched: `${first} 点不到（open 没交这个部件，或者拿掉了），学生动不了` };
+      if (cmd === 'choose' && p.chosen) return { error: `${first} 已经选着了：再点一下是拿掉（学生: unchoose ${first}）` };
+      if (cmd === 'unchoose' && !p.chosen) return { error: `${first} 没有选：点一下是选进（学生: choose ${first}）` };
+      if (cmd === 'tag') return await T.gestureRun(o, e, 'write', { from: gr, value: rest.split(/\s+/)[1] ?? null, what: `点 ${first}` });
+      return await T.gestureRun(o, e, 'tap', { from: gr, what: `点 ${first}` });
+    }
     const need = NEED[cmd];
     // 一排格子开的是 open a move（按住拖：放到另一张上对调）：对调走通用手势
     if (cmd === 'swap' && o.type === 'array' && !sc.opens.has(`${obj}:drag`) && sc.opens.has(`${obj}:move`)) {

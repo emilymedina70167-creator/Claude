@@ -4,6 +4,7 @@
 import { EASE, stagger } from '../motion.js';
 import { GNODE, nodeCenter, edgeGeom, edgePoints, partBox, spots, weightWidth } from './graph.js';
 import { el, svg, tr, same, centerOf, ensureCss, Ring, setOrder, setTag, sizeValue, arc, NODE_CSS } from './node.view.js';
+import { openParts, screenOf } from '../gesturedom.js';
 
 const R = GNODE / 2;
 const nodeIn = (o, k) => o.nodes.find((n) => n.key === k);
@@ -30,6 +31,7 @@ function styleEdge(g, e) {
   if (e.paint) g.dataset.paint = e.paint; else delete g.dataset.paint;
   g.classList.toggle('is-glow', !!e.glow);
   g.classList.toggle('is-dim', !!e.dim);
+  g.classList.toggle('is-chosen', !!e.chosen); // 选进来的边（choose）：粗的金线
 }
 // 边的部件节点：有权就是写着权的小牌子，没权就是一块看不见、点得到的地方（点着问「选哪条边」时用）
 // 牌子上的字照现在的权写（主线第一轮 D3-1：以前只在第一次画的时候写一次，权挂着拨数、同名把图重造以后，
@@ -101,6 +103,7 @@ export const graphView = {
       const b = sc.partBox(e);
       const w = stage.partNode(e, () => weightEl(stage, e, b, entering));
       syncWeight(w, e);
+      w.classList.toggle('is-chosen', !!e.chosen);
       stage.flagPart(w, e, ctx);
       if (!same(w.__box, b)) { w.__box = b; w.style.transform = tr(b.x, b.y); }
     }
@@ -262,6 +265,22 @@ export const graphView = {
     },
   },
 
+  // 通用手势抓哪儿（规则文件 graph.rules.js 的手势表）：一条边（它中间的小牌子、没权的是中间那一块；点它选进 / 拿掉）、
+  // 一个结点（点它编访问号、写旁边的数）。边的点区比小牌子大一圈（牌子只有 26 高，手指点不准）
+  grips: {
+    edge: (stage, o, e) => openParts(stage, e, o.edges.filter((x) => !x.gone)).filter((x) => x.kind === 'edge').map((x) => ({
+      key: `edge:${x.key}`,
+      part: () => stage.scene.partOf(o.id, x.key),
+      node: () => stage.nodes.get(`${o.id}:${x.key}`),
+      rect: () => { const p = stage.scene.partOf(o.id, x.key); if (!p) return null; const b = stage.scene.partBox(p); return screenOf(stage, { x: b.x - 10, y: b.y - 10, w: b.w + 20, h: b.h + 20 }); },
+    })),
+    node: (stage, o, e) => openParts(stage, e, o.nodes).filter((x) => x.kind === 'node' && !o.taken.includes(x.key)).map((x) => ({
+      key: `node:${x.key}`,
+      part: () => stage.scene.partOf(o.id, x.key),
+      node: () => stage.nodes.get(`${o.id}:${x.key}`),
+    })),
+  },
+
   css: `${NODE_CSS}
 .st-cell.gr-node { width: ${GNODE}px; height: ${GNODE}px; border-radius: 50%; }
 .st-cell.gr-node.is-tap::after, .st-cell.gr-node.is-drag::after { border-radius: 50%; }
@@ -272,6 +291,11 @@ export const graphView = {
 .gr-e[data-paint] .gr-line { stroke: var(--c); stroke-width: 5; }
 .gr-e[data-paint] .gr-arrow { fill: var(--c); }
 .gr-e.is-glow .gr-halo { opacity: .32; }
+/* 选进来的边（choose，学生点边选的也是它）：粗的金线，权的小牌子描一圈金；染了色的照染的颜色、只加粗 */
+.gr-e.is-chosen .gr-line { stroke: var(--st-gold); stroke-width: 6; }
+.gr-e.is-chosen[data-paint] .gr-line { stroke: var(--c); stroke-width: 7; }
+.gr-e.is-chosen .gr-arrow { fill: var(--st-gold); }
+.gr-w.is-chosen { box-shadow: 0 0 0 2px var(--st-gold); font-weight: 700; }
 .gr-e.is-hot .gr-halo { opacity: .45; stroke: var(--st-brand); }
 .gr-e.is-dim { opacity: .22; transition: opacity .35s; }
 .gr-e { transition: opacity .35s; }

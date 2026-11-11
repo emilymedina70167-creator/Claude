@@ -40,6 +40,8 @@ fly say.1 -> k a#8 a#1           上一句话里第 1 个 [词] 飞到这几个�
 
 能拨的数：
 dial d = 5 range=1-5 at=a         一个能拨的数，学生拨它；能写进 {式子} 里驱动任何量（格里的 {d}、整个矩阵 {d A}、array a = {d} 3 5），一拨就跟着变；at= 的还没造也行（造出来就挂上）；rowop、transform 这类动作只照写下时的数做一次，里面不能写拨数
+dial t = 现在 options="过去 现在 将来"  拨词的拨盘：{t} 写现在的词，when="t = 将来"，set t 将来（不是数，进不了式子）
+{t: 做过了 | 正在做 | 还没做}  照拨盘挑一段（段数 = 拨盘能拨到的个数；能套一层）：贴的字、题卡、挑战的字跟着变，话是说的那一刻
 label n dial:d "{d} 组" side=right   字可以贴在拨数旁边
 set d 5                            你来拨
 unlabel dial:d                     收起拨数
@@ -59,6 +61,7 @@ open a back="换之前"                 学生那边多一个「回到换之前�
 goal g1 "把 {a} 拖成从小到大" when="a sorted"     挑战（左上角一条）；写下就已经成立的不收；做到过就一直算（之后不成立了，现状写「做到过；现在不成立」）
 when= 两边写数、部件、东西的名字、拨数、量、O（零矩阵）、I（单位矩阵），部件比部件也行（a.1 < a#6）；比较 = != < <= > >=；a sorted（desc 是从大到小）；每种东西自己的判断式写「名字 判断式 [参数]」（t avl、m rank=2、s parsed，见各节）；逗号连着的都要成立，| 隔开的几组有一组成立就算（when="a.1 < a.2 | a.9 < a.10"）；不能写坐标，也不能写字（要比字就比部件）
 挑战后面还能写：call=now 做到就马上叫你（不写是学生手上还有事就攒着）；on="就这样" 学生按这一轮 ask next 的「就这样」才判（没做到也叫你）；collect=a n=3 每做到一次、a 和收过的都不一样就收一张、演 @g1，收齐了叫你
+when= 两边、collect= 能直接写 {式子}（不用先藏辅助矩阵）：when="{A B - B A} = O"、"{det(A - k I)} = 0"、collect={A B}；现状写它现在的值
 @g1 say "排好了！"                  学生做到 g1 的那一刻马上演（不等你；你自己的行让它成立的不演，下一条告诉你）：一句确认、下一个挑战、一个 ask 都行；写过的一直留着到做到为止，下一轮不用再写；@g1 里出的 goal g2 能接着写 @g2，最多三层
 @t.done / @t.right 开头的：t 做完了（页面算出没有下一步；学生手上没事了才叫你）/ 学生在 t 上做对一步时马上演（只演一次）；写在 open 页面判对错的动作之后、现在还有下一步时（平了的树开着删、摘也行：删完再修平时演）
 @ask.right say "对。"                写在这一轮最后那个 ask 前面：学生答对它时马上演；那一问要页面判得了对错（tap、pick 有预期的，value 有答案），判不了当场报
@@ -89,6 +92,10 @@ ptr mid a.5 / unptr mid           格子下面的指针（同名的再写就挪�
 group a stride=5                  按「隔 5 个」分组：每组染色、连起来（stride 可以写拨的数的名字，学生一拨就重新分）
 split a / merge a                 每组下到自己的一排 / 合回一排
 ask drag a#1 a#6 "把小的拖到前面"   学生按住一格拖到同一排另一格上，两格交换（页面照做，再告诉你）
+array h = _ 49 38  _ 是空格子（write h.2 _ 空出来）
+open a move  学生按住一张拖：到另一张上 = swap a#6 a#1，两张之间 = move a#6 -> a.2（插进去）
+open a edit  学生点一格键盘写数 = write a.3 26（只开几格 open a.1-2 edit）
+量：inversions(a) 前大后小几对（a.2-5 只数这段）、blank(a) 空几格；这两项页面不判对错，只告诉你做了什么、几对变几对
 
 树（二叉树遍历、二叉排序树、平衡二叉树、堆）：
 tree t = 50 30 70 20 40 _ 80      按层序造（_ 是空，空的下面不用再写；最多 31 个结点）
@@ -129,6 +136,11 @@ visit g.A g.C / unvisit g         编访问号（和上一个访问的有边，�
 walk g.A g.B g.D                  一个圈沿着边走过这几个（要相邻）
 take g.A                          拓扑排序：拿掉 A 和它的边，A 排到下面的序列里
 deg g / undeg g                   每个结点旁边标入度（无向图是度），拿掉结点跟着变
+choose g.A~B / unchoose g.A~B / unchoose g  把边选进来（粗金线）/ 拿掉 / 全拿掉
+open g choose  学生点一条边 = choose g.A~B（选着的再点 = unchoose g.A~B）；不判对错，每一下告诉你选了几条、总权、连成几块、成没成圈
+open g visit  学生点结点 = visit g.A
+open g tag  学生点结点键盘写数 = tag g.A 5（有 ∞ 键）；visit、tag 一次开一项
+判断式（when=）：g tree（选的边正好是生成树）、g cyclic（有圈）、g connected（连成一块）；量：chosen(g) 选了几条、weight(g) 总权、pieces(g) 几块、visited(g) 访问了几个
 
 矩阵（线代：行变换、消元、秩、乘法）：
 matrix m = 1 2 3 / 4 5 6 / 7 8 10   造矩阵（/ 分行，最多 6 行 8 列；数能写 -3、1/2；| 是增广矩阵的竖线；beside=p 放在 p 右边）
@@ -184,6 +196,7 @@ move s.3 after s.5                挪到别处讲倒装、还原语序（也能 
 cut s.6 / uncut s                 第 6 个词后面断开（意群的斜线）
 refer s.3 -> s.2 / unrefer s.3    箭头：which、it 指的是谁（指一段写 s.1-2，指整句写 s）
 rewrite s "The man living next door is a doctor."    改写整句：同样的词滑到新位置，新的淡进来
+sentence s = "I {t: was holding | am holding | will be holding} it."  句子跟着拨盘 t 变（先 dial t … options=）：一拨就照 rewrite 重排，别的词编号不变、圈着那一整段的括号跟着走；key= 里那一段也写 {t: … | …}；rewrite / move 以后不再跟
 ask drag s.7 "把 is 挪到句首"         学生按住一个词拖到别处（页面照做，再告诉你）
 学生自己拆（mark 页面照 key 判每一下）：
 open s mark wrong=mark              学生从一个词拉到另一个词，再点成分（常用的 8 个加 key 里有的，交中文）= mark s.1-6 主语；「从句」对得上 key 里任何一种从句，「定语」对得上定语从句；key 写 [Attr/NF …] 是两种都对；学生拉的括号上有 ✕，点了 = unmark s.1-6（不判）

@@ -710,6 +710,40 @@ await page.waitForTimeout(1300);
 expect('一排格子：5 拖到空格子上，挪进去', `${await added(before2)}｜${await valsOf('h')}`, 'swap h#3 h#2｜38 5 □');
 expect('一排格子：发给老师的那一下写了做了什么', await page.evaluate(() => window.LAStageDev.actText(window.LAStageDev.acts.at(-1))), '学生 swap h#3 h#2（5 从第 3 格挪进空着的第 2 格）');
 
+// —— 主线第二轮 D：图 open g choose（点一条边选进、再点拿掉）、open g tag（点一个结点，键盘写数，有 ∞ 键）——
+await play('graph g = A-B:4 A-C:2 B-C:1 C-D:5\nopen g choose');
+const chosenNow = () => page.evaluate(() => window.LAStage.scene.objects.get('g').edges.filter((e) => e.chosen).map((e) => e.key).join(' ') || '没有');
+before2 = await srcs();
+A = await box('g:B~C');
+expect('图：边的小牌子点区（连外面一圈）至少 44', String(Math.min(A.w, A.h) + 20 >= 44), 'true');
+await tapAt({ x: A.cx, y: A.cy });
+await page.waitForTimeout(900);
+expect('图：点一条边选进', `${await added(before2)}｜${await chosenNow()}`, 'choose g.B~C｜B~C');
+expect('图：选进的边画成粗线', await page.evaluate(() => String(!!document.querySelector('.gr-e.is-chosen'))), 'true');
+// 点在小牌子外面一圈（偏 16px）也算点到这条边
+before2 = await srcs();
+A = await box('g:A~C');
+await tapAt({ x: A.cx + A.w / 2 + 6, y: A.cy });
+await page.waitForTimeout(900);
+expect('图：点在边的小牌子外面一圈也点得到', `${await added(before2)}｜${await chosenNow()}`, 'choose g.A~C｜A~C B~C');
+before2 = await srcs();
+A = await box('g:B~C');
+await tapAt({ x: A.cx, y: A.cy });
+await page.waitForTimeout(900);
+expect('图：选着的边再点一下拿掉', `${await added(before2)}｜${await chosenNow()}`, 'unchoose g.B~C｜A~C');
+// 做了什么在这一下自己的话里；选了几条、连成几块是事实，课堂循环接在后面（试演 new2/D.txt 查发给老师的整条）
+expect('图：交给课堂的那一下写了做了什么', await page.evaluate(() => window.LAStageDev.actText(window.LAStageDev.acts.at(-1))), '学生 unchoose g.B~C（拿掉了 B–C（权 1））');
+await more('close g choose\nopen g tag');
+before2 = await srcs();
+A = await box('g:D');
+await tapAt({ x: A.cx, y: A.cy });
+await page.waitForTimeout(350);
+const inf = await page.evaluate(() => { const b = document.querySelector('.st-keypad .st-kp-k.is-extra'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, h: r.height, t: b.textContent }; });
+expect('图：点结点出数字键盘，多一个 ∞ 键、至少 44 高', JSON.stringify(inf && { t: inf.t, ok: inf.h >= 44 }), '{"t":"∞","ok":true}');
+if (inf) await tapAt(inf);
+await page.waitForTimeout(900);
+expect('图：按 ∞ 就交上去，结点旁边写上了', `${await added(before2)}｜${await page.evaluate(() => window.LAStage.scene.objects.get('g').nodes.find((n) => n.key === 'D').tag)}`, 'tag g.D ∞｜∞');
+
 expect('页面报错', errs.join(' / ') || '没有', '没有');
 await browser.close();
 console.log(bad.length ? `\n${bad.length} 项没过` : '\n都过了');

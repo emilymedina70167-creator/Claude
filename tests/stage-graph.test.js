@@ -216,7 +216,8 @@ test('说明里的例子照抄就能演（一行不错）；说明里每一条�
   assert.ok(lines.length >= 12, `说明里的写法 ${lines.length} 条`);
   const bad = [];
   for (const l of lines) {
-    const base = make(`${BASE}\ntag g.A 0`);
+    // unchoose 要先有选着的边（没选的拿掉当场报）：这一条在先选了 A–B 的舞台上演
+    const base = make(`${BASE}\ntag g.A 0${/^unchoose /.test(l) ? '\nchoose g.A~B' : ''}`);
     const e = dryRun(base, l);
     if (e.length) bad.push(`${l} → ${e[0].error}`);
   }

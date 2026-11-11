@@ -15,7 +15,7 @@ const HAND = ['open', 'close', 'goal', 'keep', 'back', 'pick', 'unpick', 'press'
 const TIDY = ['remove', 'clear', 'ungoal', 'hide'];
 const SHOW = [
   'glow', 'lift', 'drop', 'paint', 'link', 'pulse', 'label', 'retext', 'camera', 'wait', 'fly', 'dim', 'cover', 'uncover', 'show', 'compare', 'dial', 'set',
-  'hop', 'ptr', 'group', 'pivot', 'stairs', 'tag', 'bf', 'heights', 'deg', 'mark', 'tally', 'magnify', 'strike', 'span', 'visit', 'search',
+  'hop', 'ptr', 'group', 'pivot', 'stairs', 'tag', 'bf', 'heights', 'deg', 'mark', 'tally', 'magnify', 'strike', 'span', 'visit', 'choose', 'search',
 ];
 const ACT = [
   'swap', 'move', 'write', 'split', 'merge', 'insert', 'append', 'delete', 'rotate', 'walk', 'traverse', 'relax', 'take',
@@ -23,7 +23,7 @@ const ACT = [
 ];
 // un 开头的都是收拾，除了上面点了名的（uncover 是揭开、unfold 是展开、untransform 是变回去：都是演给学生看的）
 const UNDO = [
-  'unglow', 'unpaint', 'unlink', 'unlabel', 'undim', 'unptr', 'unpivot', 'unstairs', 'untag', 'unbf', 'unheights', 'undeg', 'unvisit',
+  'unglow', 'unpaint', 'unlink', 'unlabel', 'undim', 'unptr', 'unpivot', 'unstairs', 'untag', 'unbf', 'unheights', 'undeg', 'unvisit', 'unchoose',
   'unmark', 'untally', 'uncut', 'unrefer', 'unsum', 'unvec', 'unspan', 'unmagnify', 'unstrike',
 ];
 /** 指令 → 类。kit/src/stage 认得的每一条都要在（tests/stage-cost.test.js 守着） */

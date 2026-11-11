@@ -143,7 +143,7 @@ export function armGesture(stage, e, view, done) {
     };
     const closed = () => { popup = null; after?.(); };
     const opts = { anchor, prompt: ask.prompt || '', onClose: closed };
-    popup = ask.pick ? openChoices(stage, { ...opts, choices: ask.choices, onPick: (v) => go({ role: v }) }) : openKeypad(stage, { ...opts, onOk: (text) => go({ value: text }) });
+    popup = ask.pick ? openChoices(stage, { ...opts, choices: ask.choices, onPick: (v) => go({ role: v }) }) : openKeypad(stage, { ...opts, extra: ask.extra || null, onOk: (text) => go({ value: text }) });
     return popup;
   };
   // 挂到 pointer.js 上的一个：name 是把手的 key（检查脚本找 ✕、钩的点区用），how 是按法（同一处几种时 pointer.js 照它分）
