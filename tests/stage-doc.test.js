@@ -425,3 +425,21 @@ test('主线第四轮：照引擎走（follow）的说明只按科目带——�
   const sc = new Scene();
   for (const c of parseScript('array a = 49 38 65 97 76 13 27 49\ngraph g = 1>2:10 1>5:5 5>2:3\ntable T = _ _ / _ _ rows="2 5" cols="第1轮 第2轮"\nfollow a sort shell gaps="5 3 1"\nfollow g net dijkstra from=1\nfollow T net dijkstra on=g from=1\nfollow a off')) sc.apply(c);
 });
+
+test('主线第五轮腾地方：只有个别科目带的行真认得到；别的科目不带、在「说明没带的」里说了；操作系统的矩阵只带摆数的那一段', async () => {
+  const { ONLY_LINES, stageDoc } = await import('../kit/src/stage/doc.js');
+  const lines = STAGE_COMMON.split('\n');
+  for (const x of ONLY_LINES) assert.ok(lines.some((l) => x.test(l)), `共用那一段里找不到「${x.name}」的行（改了措辞？）`);
+  const en = stageDoc('英语'), ds = stageDoc('数据结构'), la = stageDoc('线代'), os = stageDoc('操作系统');
+  assert.match(en, /^dial t = 现在 options=/m);
+  assert.doesNotMatch(ds, /^dial t = 现在 options=/m);
+  assert.match(ds, /说明没带的：[^\n]*拨词的拨盘和 \{t: 甲 \| 乙\}/);
+  assert.match(la, /^when= 两边、collect= 能直接写/m);
+  assert.doesNotMatch(os, /^when= 两边、collect= 能直接写/m);
+  assert.match(os, /^matrix m = /m);
+  assert.doesNotMatch(os, /open m rowop/);
+  assert.match(os, /说明没带的：[^\n]*矩阵的 open（rowop \/ edit：要学生填数用表）/);
+  assert.match(la, /open m rowop/);
+  // 全带的那一份一行不少
+  for (const x of ONLY_LINES) assert.ok(stageDoc('').split('\n').some((l) => x.test(l)));
+});

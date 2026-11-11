@@ -50,11 +50,11 @@ hide a / show a                   藏起来（照样算、现状照写，学生�
 
 贴在图上的字（舞台上的东西，能改、能拿掉）：
 label t a#1 a#8 "一样大，先后却换了" side=below tone=note     贴在这几个旁边（side：above / below / left / right；tone：note 小字、key 重点、soft 淡）
-retext t "新的字" / unlabel t / unlabel（全拿掉）     改字 / 拿掉（拿字用 unlabel，remove 只拿东西）；贴的部件没了，字跟着消失，不用再拿
+retext t "新的字" / unlabel t / unlabel（全拿掉）     改字 / 拿掉（拿字用 unlabel，remove 只拿东西）；贴的部件没了，字跟着消失
 fly say.1 -> k a#8 a#1           上一句话里第 1 个 [词] 飞到这几个旁边，变成贴着的字（给概念起名字时用）
 
 能拨的数：
-dial d = 5 range=1-5 at=a         一个能拨的数，学生拨它；能写进 {式子} 里驱动任何量（格里的 {d}、整个矩阵 {d A}、array a = {d} 3 5），一拨就跟着变；at= 的还没造也行（造出来就挂上）；rowop、transform 这类动作只照写下时的数做一次，里面不能写拨数
+dial d = 5 range=1-5 at=a         一个能拨的数，学生拨它；能写进 {式子} 里驱动任何量（格里的 {d}、整个矩阵 {d A}、array a = {d} 3 5），一拨就跟着变；rowop、transform 这类动作只照写下时的数做一次，里面不能写拨数
 dial t = 现在 options="过去 现在 将来"  拨词的拨盘：{t} 写现在的词，when="t = 将来"，set t 将来（不是数，进不了式子）
 {t: 做过了 | 正在做 | 还没做}  照拨盘挑一段（段数 = 拨盘能拨到的个数；能套一层）：贴的字、题卡、挑战的字跟着变，话是说的那一刻
 label n dial:d "{d} 组" side=right   字可以贴在拨数旁边
@@ -68,10 +68,10 @@ open a                              交给学生直接动（这里是拖着两�
 close a                             收回来（close a 动作：只收那一种）
 同一处按法不一样的（点、滑、按住再拖）能一起开；按法一样的第二项当场报错，先 close 前一项
 同一项再开一次是换掉它：再写一遍 open，照新写的 wrong=、range=、undo= 办
-页面判对错的动作（树的 rotate insert place、矩阵的 rowop、句子的 mark refer）在 open 那一行写你事先定的：wrong=quiet 照做、只记下（默认）/ wrong=mark 照做、淡淡圈一下 / wrong=block 不让做、弹回去；call=wrong 一走偏就叫你 / call=done 做完马上叫你（不算试了好几下）。这个世界做不到的（一行乘 0）永远弹回去
+页面判对错的动作（树的 rotate insert place、矩阵的 rowop、句子的 mark refer）在 open 那一行写你事先定的：wrong=quiet 照做、只记下（默认）/ wrong=mark 照做、淡淡圈一下 / wrong=block 不让做、弹回去；call=wrong 一走偏就叫你 / call=done 做完马上叫你。这个世界做不到的（一行乘 0）永远弹回去
 undo=on（哪种 open 都能写）：右上角「撤一步」，学生撤回自己这一回合的上一下；拨数、做到挑战、做完了、引出过预写的那一下撤不了
 keep a "换之前"                     存下 a 现在的样子（最多 6 个，同名的换掉）；keep a "换过" after=swap：以后学生每做完一次 swap 页面替你存成「换过」（after=off 停）
-back a "换之前" / back a             回到存着的那一刻 / 回到学生最后那一下之前（隔着你的一轮也行，你后来改的也一起回去；学生按过「回到……」再写是回到按之前）；只回这样东西的数据，挑战照回去的样子重判
+back a "换之前" / back a             回到存着的那一刻 / 回到学生最后那一下之前（隔着你的一轮也行，你后来改的也一起回去）；只回这样东西的数据，挑战照回去的样子重判
 open a back="换之前"                 学生那边多一个「回到换之前」按钮 = back a "换之前"（不叫你）
 goal g1 "把 {a} 拖成从小到大" when="a sorted"     挑战（左上角一条）；写下就已经成立的不收；做到过就一直算（之后不成立了，现状写「做到过；现在不成立」）
 when= 两边写数、部件、东西的名字、拨数、量、O（零矩阵）、I（单位矩阵），部件比部件也行（a.1 < a#6）；比较 = != < <= > >=；a sorted（desc 是从大到小）；每种东西自己的判断式写「名字 判断式 [参数]」（t avl、m rank=2、s parsed，见各节）；逗号连着的都要成立，| 隔开的几组有一组成立就算（when="a.1 < a.2 | a.9 < a.10"）；不能写坐标，也不能写字（要比字就比部件）
@@ -81,14 +81,14 @@ when= 两边、collect= 能直接写 {式子}（不用先藏辅助矩阵）：wh
 @g1 say "排好了！"                  学生做到 g1 的那一刻马上演（不等你；你自己的行让它成立的不演，下一条告诉你）：一句确认、下一个挑战、一个 ask 都行；写过的一直留着到做到为止，下一轮不用再写；@g1 里出的 goal g2 能接着写 @g2，最多三层
 @t.done / @t.right 开头的：t 做完了（页面算出没有下一步；学生手上没事了才叫你）/ 学生在 t 上做对一步时马上演（只演一次）；写在 open 页面判对错的动作之后、现在还有下一步时（平了的树开着删、摘也行：删完再修平时演）
 @ask.right say "对。"                写在这一轮最后那个 ask 前面：学生答对它时马上演；那一问要页面判得了对错（tap、pick 有预期的，value 有答案），判不了当场报
-预写只收确认和揭开下一小问；走偏不能预写（@t.wrong、@ask.wrong 会报错），学生走偏以后怎么讲等你看着写。@ 的行写下时就在今天的舞台上试一遍：今天演不了的（学生消成阶梯形以后才画得了的 stairs m）写不进去；指着还没有的部件只查写法（演时还没有就不演，告诉你）
+预写只收确认和揭开下一小问；走偏不能预写（@t.wrong、@ask.wrong 会报错），怎么讲等你看着写。@ 的行写下时就在今天的舞台上试一遍：今天演不了的写不进去；指着还没有的部件只查写法（演时没有就不演，告诉你）
 预写的行照先后演，say 要等读完：换 open、出新 goal 写在 say 前面，不然学生在这句话演着时做的一下还照旧的办
 ungoal g1                           拿掉挑战
 
 等学生（每一轮最后一行，一轮只有一个；一轮也可以不写 ask，以一个还没做到的挑战结尾）：
 ask tap a "那 {a.2} 和谁一组？"            学生点一个（写 a 是哪一个都能点；写 a#1 a#8 是只能点这几个）
 ask tap a "…" expect=a.7                   你预期的那一个（写整样东西或一段，点到里面哪一个都算）：页面告诉你学生点没点对
-ask pick a "哪几格会动？都点出来" button="猜好了" expect="a.2 a.6"     学生点几个、按按钮交，页面告诉你多点、漏点的（写一段是里面每个都要点；order=on 连先后一起比）；圈留到你下一轮写完（unpick 收）；reveal=on：之后变了的圈变实线、没变的变虚线（给不给学生看由你定；揭晓以前圈一直留着）
+ask pick a "哪几格会动？都点出来" button="猜好了" expect="a.2 a.6"     学生点几个、按按钮交，页面告诉你多点、漏点的（写一段是里面每个都要点；order=on 连先后一起比）；圈留到你下一轮写完（unpick 收）；reveal=on：之后变了的圈变实线、没变的变虚线
 ask drag a#1 a#6 "把小的拖到前面"          学生拖（能拖的东西才行，见各节）
 ask next "拨一下 $d$，看出规律点下面" button="看出来了"     学生看完 / 拨完点按钮
 ask say "你觉得为什么？"                    学生写一句话
@@ -111,16 +111,33 @@ export const SUBJECT_TYPES = {
 // 照引擎走的那一小节末尾共用的两句（每类算法自己的一行在对应关系的 doc 里）
 const FOLLOW_DOC = '照着走的东西：现状里写着每一趟（轮）做完该是什么样，不用自己算；学生做到一趟页面当场知道对不对、像哪种错法（只告诉你，一趟中间不判）。量 pass(a)，判断式 a pass=2、a done；每到一趟页面就叫你（follow … call=done：走完才叫）；@a.right 到一趟时演（只演一次，下一趟再写），@a.done 走完演；follow a off 不照了';
 
+/**
+ * 共用的那一段里只有个别科目用得上的行（主线第五轮腾地方）：别的科目不带，在「说明没带的」里说一声。
+ * test 认的是 STAGE_COMMON 里那一行的开头（tests/stage-doc.test.js 守着每条都认得到行：改了措辞不会悄悄漏带）
+ */
+export const ONLY_LINES = [
+  { subjects: ['英语'], name: '拨词的拨盘和 {t: 甲 | 乙}', test: (l) => /^dial t = 现在 options=|^\{t: 做过了/.test(l) },
+  { subjects: ['线代'], name: 'when= 里写 {式子}', test: (l) => /^when= 两边、collect= 能直接写/.test(l) },
+];
+// 这门课只带这种东西说明的第一段（矩阵的第二段是学生自己消元、键盘写格、判矩阵答案：操作系统、组成原理摆矩阵只是摆数）
+const MATRIX_LITE = { cut: /\n学生自己消元[\s\S]*$/, name: '矩阵的 open（rowop / edit：要学生填数用表）' };
+const LITE_TYPES = { 操作系统: { matrix: MATRIX_LITE }, 组成原理: { matrix: MATRIX_LITE } };
+
 /** 整份指令说明：共用的 + 舞台上能放的东西（subject：这节课是哪门课，只带用得上的那几种） */
 export function stageDoc(subject = '') {
   const want = SUBJECT_TYPES[subject] || null;
-  const parts = [STAGE_COMMON, '## 舞台上能放的东西'];
   const skipped = [];
+  const gone = want ? ONLY_LINES.filter((x) => !x.subjects.includes(subject)) : [];
+  const common = gone.length ? STAGE_COMMON.split('\n').filter((l) => !gone.some((x) => x.test(l))).join('\n') : STAGE_COMMON;
+  const parts = [common, '## 舞台上能放的东西'];
+  const lite = LITE_TYPES[subject] || {};
   for (const t of Object.values(TYPES)) {
     if (!t.doc || !t.create.length) continue;
     if (want && !want.includes(t.type)) { skipped.push(`${t.label}（${t.create.join(' / ')}）`); continue; }
+    if (lite[t.type]) { parts.push(t.doc.replace(lite[t.type].cut, '')); skipped.push(lite[t.type].name); continue; }
     parts.push(t.doc);
   }
+  skipped.push(...gone.map((x) => x.name));
   if (skipped.length) parts.push(`（这门课一般用不上、说明没带的：${skipped.join('、')}）`);
   // 照引擎走（follow.js）：只带这门课接上了的那几类算法（对应关系的 subjects）；全带的那一份都带
   const follows = followNames().map(followOf).filter((a) => a.doc && (!subject || a.subjects.includes(subject)));

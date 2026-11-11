@@ -62,13 +62,13 @@
 - Modify: `tools/stage-try-lib.js`（表 `FIRST`）、走查里要修的文件
 - Log: `.superpowers/sdd/mainline5/first-shell.md`
 
-- [ ] **Step 1：写这一节课。** 读 `evals/stage-gaps/ideal/D1.md`（希尔排序那一份）和 `stageDoc('数据结构')`，只照说明写（不看源码里说明没写的写法）。5～7 幕：① 摆一排数、问「直接插入排序这一排要挪几次」（`ask value`，接上次课）② 引出隔 5 个一组，学生点出第一组的两个（`ask pick`）③ `follow a sort shell gaps="5 3 1"`，学生按住拖做第一趟：一次做对的、组间拖错的（把别的组的数拖进来）、拖一半放回去的 ④ 第二趟、第三趟，带 `@a.right` 预写 ⑤ 走完以后问稳定性（两个 49 的先后，`ask pick`）⑥ 换一组 gaps 再走一趟的开头（重造）。写的时候哪里绕、哪里第一遍写错，记进 log 的「写法」。
-- [ ] **Step 2：演。** `node tools/stage-try.mjs evals/stage-gaps/first/shell.txt --shots .superpowers/first/shell`（竖屏横屏都演）。
-- [ ] **Step 3：一张张看截图、一条条读发给老师的。** 每一步照设计第 1 节的五样（画面、手、节奏、老师拿到的、写法）看，问题记进 log：`第几幕第几步 ｜ 哪一样 ｜ 问题 ｜ 怎么办`。
-- [ ] **Step 4：真手指。** 第一趟里「按住 0.35 秒拖到另一格」「拖一半放回去」「组间拖错」三下，照 `tools/stage-touch.mjs` 的写法在 `tools/stage-touch.mjs` 里加一段 `first-shell`，只跑这一段（`tools/stage-touch.mjs` 现在没有 `--only`：先加上，再 `node tools/stage-touch.mjs --only first-shell`）。
-- [ ] **Step 5：修。** 每个问题：小的直接修，配一条测试（放 `tests/stage-mainline5-first.test.js`）；属于 B～E 的记到那边的任务里；要大动的记进 rulings 说清楚不做的原因。
-- [ ] **Step 6：重演一遍，log 里每条都有着落。** 把这一幕里「必须出现的事实」写进 `FIRST` 表（每幕 2～4 条：到一趟说对、错法说像哪种、走完叫老师、预写的那一句演了），`node tools/stage-must.mjs evals/stage-gaps/first --table first` 过。
-- [ ] **Step 7：提交。**
+- [x] **Step 1：写这一节课。** 读 `evals/stage-gaps/ideal/D1.md`（希尔排序那一份）和 `stageDoc('数据结构')`，只照说明写（不看源码里说明没写的写法）。5～7 幕：① 摆一排数、问「直接插入排序这一排要挪几次」（`ask value`，接上次课）② 引出隔 5 个一组，学生点出第一组的两个（`ask pick`）③ `follow a sort shell gaps="5 3 1"`，学生按住拖做第一趟：一次做对的、组间拖错的（把别的组的数拖进来）、拖一半放回去的 ④ 第二趟、第三趟，带 `@a.right` 预写 ⑤ 走完以后问稳定性（两个 49 的先后，`ask pick`）⑥ 换一组 gaps 再走一趟的开头（重造）。写的时候哪里绕、哪里第一遍写错，记进 log 的「写法」。
+- [x] **Step 2：演。** `node tools/stage-try.mjs evals/stage-gaps/first/shell.txt --shots .superpowers/first/shell`（竖屏横屏都演）。
+- [x] **Step 3：一张张看截图、一条条读发给老师的。** 每一步照设计第 1 节的五样（画面、手、节奏、老师拿到的、写法）看，问题记进 log：`第几幕第几步 ｜ 哪一样 ｜ 问题 ｜ 怎么办`。
+- [x] **Step 4：真手指。** 第一趟里「按住 0.35 秒拖到另一格」「拖一半放回去」「组间拖错」三下，照 `tools/stage-touch.mjs` 的写法在 `tools/stage-touch.mjs` 里加一段 `first-shell`，只跑这一段（`tools/stage-touch.mjs` 现在没有 `--only`：先加上，再 `node tools/stage-touch.mjs --only first-shell`）。
+- [x] **Step 5：修。** 每个问题：小的直接修，配一条测试（放 `tests/stage-mainline5-first.test.js`）；属于 B～E 的记到那边的任务里；要大动的记进 rulings 说清楚不做的原因。
+- [x] **Step 6：重演一遍，log 里每条都有着落。** 把这一幕里「必须出现的事实」写进 `FIRST` 表（每幕 2～4 条：到一趟说对、错法说像哪种、走完叫老师、预写的那一句演了），`node tools/stage-must.mjs evals/stage-gaps/first --table first` 过。
+- [x] **Step 7：提交。**
 
 ### Task 2: 课的前后走一遍（开课 → 下课 → 报告 → 练一练的舞台题）
 
