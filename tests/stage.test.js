@@ -222,3 +222,13 @@ test('复审 N1：{…} 里带等号的式子（>= <= == !=）是一个值，不
   // {…} 后面紧跟着 =（少见）：还是选项，名字是那一对花括号
   assert.deepEqual(tokenize('set {k}=3').at(-1), { t: 'opt', k: '{k}', v: '3' });
 });
+
+// —— 舞台主线第一轮 D1-9：只收不判的 ask value，按钮以前也写「对吗」（页面并不判）——
+test('D1-9：答题框的按钮：要判的写「对吗」，只收不判的（没写 answer=）写「写好了」，随口说的写「说」', async () => {
+  const { askButtonText } = await import('../kit/src/stage/stage.js');
+  assert.equal(askButtonText({ kind: 'value', answer: '5' }), '对吗');
+  assert.equal(askButtonText({ kind: 'value', answer: null }), '写好了');
+  assert.equal(askButtonText({ kind: 'value' }), '写好了');
+  assert.equal(askButtonText({ kind: 'say' }), '说');
+  assert.equal(askButtonText(null), '说');
+});

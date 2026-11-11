@@ -1668,7 +1668,7 @@ export class Stage {
         }
         const go = el('button', 'st-say-go', form);
         go.type = 'submit';
-        go.textContent = asAnswer ? '对吗' : '说';
+        go.textContent = asAnswer ? askButtonText(w) : '说';
         form.addEventListener('submit', (e) => {
           e.preventDefault();
           const text = input.value.trim();
@@ -1717,7 +1717,7 @@ export class Stage {
     msg.setAttribute('aria-live', 'polite');
     const go = el('button', 'st-say-go', foot);
     go.type = 'submit';
-    go.textContent = '对吗';
+    go.textContent = askButtonText(w);
     let timer = null;
     const lift = () => {
       const kp = document.querySelector('.keypad.show');
@@ -1737,7 +1737,8 @@ export class Stage {
       e.preventDefault();
       // 还空着、读不懂的格：就在这里说（框下面的预览也写着为什么），不交、不算学生答错
       try { grid.read(); } catch (err) {
-        msg.textContent = err.message;
+        // 读不懂的那一格，框下面的预览已经写着为什么：这里不把同一句再写一遍（主线第一轮 D4-7）
+        msg.textContent = form.querySelector('.fi-preview.is-bad') ? '有一处页面读不懂（看框下面那一行）' : err.message;
         form.classList.remove('is-shake'); void form.offsetWidth; form.classList.add('is-shake');
         return;
       }
@@ -1838,6 +1839,12 @@ export { chipTextOf, tapValueOf };
 /** 点开看怎么算碰到的扣着的格（matrix.js 的 mul 交的 hidden）：写给老师照实说是几、扣着；学生那边演成「?」 */
 export function hiddenText(list) {
   return list?.length ? `（扣着的演成了 ?：${list.map((h) => `${h.ref}（${h.value === '' ? '空' : h.value}，扣着）`).join('、')}）` : '';
+}
+
+/** 答题框右边那个按钮上的字：要判的问「对吗」；只收不判的（ask value 没写 answer=）页面并不判，写「写好了」；别的是随口说一句 */
+export function askButtonText(w) {
+  if (w?.kind !== 'value') return '说';
+  return w.answer == null || w.answer === '' ? '写好了' : '对吗';
 }
 
 /** 学生这一下做了什么，写给老师看（和舞台现状一起发） */
