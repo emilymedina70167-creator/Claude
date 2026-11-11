@@ -1310,23 +1310,25 @@ export class Stage {
       const prefer = l.side ? [l.side, 'above', 'below', 'right', 'left'] : ['above', 'below', 'right', 'left'];
       const p = placeLabel(anchor, size, obs, { prefer, gap: l.dial ? 18 : 12 });
       const from = cur.box;
+      const sideWas = cur.side;
       cur.box = { x: p.x, y: p.y, ...size };
       cur.anchor = anchor;
+      // 画在了哪一边：马上记下、写回场景（和写的 side= 不一样时舞台现状照实说，排版检查也报）。
+      // 以前只在下面最后才记，新贴的字（先藏着摆好的那一支）走不到那里，一直不知道自己换了边
+      cur.side = p.side;
+      if (!l.dial && l.placed !== p.side) l.placed = p.side;
       const node = cur.node;
       if (hide.includes(l.id)) { node.style.transform = tr(p.x, p.y); node.style.opacity = '0'; continue; }
       if (fresh || !from) {
         node.style.transform = tr(p.x, p.y);
         if (hold && !this.instant) { node.style.opacity = '0'; (this.heldLabels ||= new Set()).add(l.id); continue; }
         jobs.push(this.tween(node, [{ opacity: 0, transform: tr(p.x, p.y + 8) }, { opacity: 1, transform: tr(p.x, p.y) }], { duration: 380, easing: EASE.out }));
-      } else if (Math.hypot(p.x - from.x, p.y - from.y) > 90 || (cur.side && p.side !== cur.side)) {
+      } else if (Math.hypot(p.x - from.x, p.y - from.y) > 90 || (sideWas && p.side !== sideWas)) {
         // 挪得远、换到另一边：先淡出、在新地方淡进（滑过去会从别的东西上面压过去）
         jobs.push(this.tween(node, [{ opacity: 1 }, { opacity: 0 }], { duration: 160 }).then(() => { node.style.transform = tr(p.x, p.y); return this.tween(node, [{ opacity: 0, transform: tr(p.x, p.y + 6) }, { opacity: 1, transform: tr(p.x, p.y) }], { duration: 260, easing: EASE.out }); }));
       } else {
         jobs.push(this.tween(node, [{ transform: tr(from.x, from.y) }, { transform: tr(p.x, p.y) }], { duration: 480 }));
       }
-      cur.side = p.side;
-      // 画在了哪一边写回场景：和写的 side= 不一样时舞台现状照实说
-      if (!l.dial && l.placed !== p.side) l.placed = p.side;
     }
     for (const [id, l] of this.labelNodes) if (!sc.labels.has(id) || !this.labelShown(sc.labels.get(id))) { this.labelNodes.delete(id); jobs.push(this.tween(l.node, [{ opacity: 1 }, { opacity: 0 }], { duration: 220 }).then(() => l.node.remove())); }
     // 字摆好了、还没淡进来：镜头先让出地方（不然贴在上面的字淡进来时和话压在一起，镜头挪完才分开）

@@ -96,7 +96,7 @@ export function measure(visual = false) {
     if (out > 6 * s) issues.push({ what: '画到了自己的地方外面', a: `obj:${it.id}`, b: '', area: Math.round(out / s) });
   }
   // —— 以前量不出来的四种（舞台主线第一轮：这几种排版检查都说「没压着、没出屏幕」）——
-  // 字比格子宽：部件（格子、结点）里的字横着溢出了它自己的框
+  // 字溢出了格子：部件（格子、结点）里的字比它自己的框大
   for (const [pid, n] of st.nodes || []) {
     if (!(n instanceof HTMLElement) || !vis(n)) continue;
     const texts = [];
@@ -104,9 +104,11 @@ export function measure(visual = false) {
     for (let t = walk.nextNode(); t; t = walk.nextNode()) { if (!t.nodeValue.trim() || !vis(t.parentElement)) continue; const r = document.createRange(); r.selectNodeContents(t); texts.push(...r.getClientRects()); }
     if (!texts.length) continue;
     const box = n.getBoundingClientRect();
+    // 横着溢出去，或者折成好几行、从下面溢出去（三个长词的一排格子，字叠到了下面）
     const left = Math.min(...texts.map((q) => q.left)), right = Math.max(...texts.map((q) => q.right));
-    const over = Math.max(box.left - left, right - box.right);
-    if (over > 3) issues.push({ what: '字比格子宽', a: `part:${pid}`, b: '', area: Math.round(over) });
+    const top = Math.min(...texts.map((q) => q.top)), bottom = Math.max(...texts.map((q) => q.bottom));
+    const over = Math.max(box.left - left, right - box.right, box.top - top, bottom - box.bottom);
+    if (over > 4) issues.push({ what: '字溢出了格子', a: `part:${pid}`, b: '', area: Math.round(over) });
   }
   // 边上的数叠在一起：图上两条边的权的牌子盖住了一大半
   const ws = [...st.root.querySelectorAll('.gr-w')].filter(vis).map((n) => ({ n, r: rect(n) }));

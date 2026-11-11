@@ -74,8 +74,9 @@ const hitText = (per) => per.map((p) => (p.hits.length ? `${p.tag}${where(p.hits
 const stepsText = (list) => `第 ${list.map((i) => i + 1).join('、')} 步`;
 for (const m of opt.table === 'fix1' ? FIX1 : []) {
   out.push('', `## ${m.id}（${m.files.join('、')}）`);
-  const views = m.files.flatMap((f) => viewsOf(f) || [null]);
+  let views = m.files.flatMap((f) => viewsOf(f) || [null]);
   if (views.some((v) => !v)) continue;
+  if (m.views) views = views.filter((v) => m.views.includes(v.tag));
   const each = (list, name, fn) => { for (const c of list || []) { const per = views.map((v) => ({ tag: v.tag, r: fn(v.steps, c.re) })); line(per.every((p) => p.r.ok), `${name}${c.what}：${per.map((p) => `${p.tag}${p.r.text}`).join('；')}`); } };
   each(m.checks, '必须有 ', (steps, re) => { const h = seenHits(steps, re); return { ok: h.length > 0, text: h.length ? stepsText(h) : '没有' }; });
   each(m.called, '发给老师的那条里必须有 ', (steps, re) => { const h = mustHits(steps, re); return { ok: h.length > 0, text: h.length ? where(h[0]) : '没有' }; });

@@ -327,17 +327,18 @@ export function screenHits(steps = [], re, { last = false } = {}) {
  *   checks  老师看得到的四处里必须有（每个视口至少一步）；nots  四处里每一步都不许有；
  *   called  真发给老师的那一条里（或最后攒着的）必须有（mustHits）；audit / noAudit  排版那一栏必须报 / 不许报
  *   screen / noScreen  最后一步学生屏幕上的字必须有 / 不许有
+ *   views  只查这几种朝向（['竖屏']：只在竖屏才出的毛病）；不写两种都查
  */
 export const FIX1 = [
   { id: 'D3-3', files: ['D3-3.txt'], checks: [C(/不能拖/, '写错的那一问照实报（图不能拖）')], called: [C(/学生点了 c\.1/, '后面那一问挂上了：学生点了 c.1')], nots: [C(/ask 之后的行不演/)] },
   { id: 'D3-1', files: ['D3-1.txt'], screen: [C(/43/, '边上写的是拨过以后的 43')], noScreen: [C(/57/, '边上不再是第一次造的 57')], checks: [C(/A–B 43|A-B:43|43/, '现状里是 43')] },
   { id: 'D1-9', files: ['D1-9.txt'], screen: [C(/写好了/, '按钮写「写好了」')], noScreen: [C(/对吗/, '按钮不写「对吗」')] },
   { id: 'D4-4', files: ['D4-4.txt'], checks: [C(/做到过；现在不成立/)] },
-  { id: 'L3-7', files: ['L3-7.txt'], audit: [C(/字比格子宽/)] },
-  { id: 'D4-9', files: ['D4-9.txt'], audit: [C(/字比格子宽/)] },
+  { id: 'L3-7', files: ['L3-7.txt'], audit: [C(/字溢出了格子/)] },
+  { id: 'D4-9', files: ['D4-9.txt'], audit: [C(/字溢出了格子/)] },
   { id: 'D3-5', files: ['D3-5.txt'], audit: [C(/边上的数叠在一起/)] },
   { id: 'side-1', files: ['side-1.txt'], audit: [C(/贴的字没在写的那一边/)] },
-  { id: 'E1-8', files: ['E1-8.txt'], audit: [C(/缩得太小/)], checks: [C(/字难认：整台缩到了/)] },
+  { id: 'E1-8', files: ['E1-8.txt'], views: ['竖屏'], audit: [C(/缩得太小/)], checks: [C(/字难认：整台缩到了/)] },
   { id: 'D4-5', files: ['D4-5.txt'], called: [C(/你上一轮的提问没演上/, '页面马上叫了老师：你上一轮的提问没演上'), C(/学生点了 2 个：A\.1、A\.2/, '学生点的是重写以后的那一问')] },
 ];
 
