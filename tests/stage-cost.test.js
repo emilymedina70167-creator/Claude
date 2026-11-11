@@ -49,3 +49,51 @@ test('试演文件：学生的行切开一轮一轮，注释不算；排行榜�
   assert.equal(rank[0].examples[0].line, 3);
   assert.equal(rank[0].examples[0].file, 'x.txt');
 });
+
+// —— 读一节真课（class_turns）——
+import { lessonCost, featureUse, FEATURES, VALUE_TYPES } from '../tools/stage-cost-lib.js';
+import { ANSWER_TYPES } from '../kit/src/stage/answer.js';
+
+test('写法的清单：每条指令一项，ask value 的每种 type 一项（和 answer.js 同一份）', () => {
+  assert.deepEqual(VALUE_TYPES, ANSWER_TYPES);
+  const names = FEATURES.map((f) => f.name);
+  assert.equal(new Set(names).size, names.length);
+  for (const n of ['swap', 'open', '@ask.right', '@名字.done', '{式子}', 'ask pick', 'ask value type=set', 'rank(', 'goal collect=']) assert.ok(names.includes(n), n);
+});
+
+test('一节真课：没演上的行、每轮等几秒、学生手上有没有事、一次没碰的写法', () => {
+  const turns = [
+    { seq: 1, role: 'claude', text: 'array a = 3 1 2\nsay "看这一排"\nask next "看清了点下面"', log: [], cost: { bytes: 9000, ms: 8000, first: 2000 } },
+    { seq: 2, role: 'student', text: '学生点了「接着」', msg: '[学生] 点了「接着」\n\n[舞台现在]\n一排格子 a：3 1 2' },
+    { seq: 3, role: 'claude', text: 'open a\ngoal g1 "排好" when="a sorted"\nlable x a "错字"\n\n```board memo\nnote 学生很快\n```', log: [], cost: { bytes: 9500, ms: 6000, first: 1500 } },
+    { seq: 4, role: 'student', text: '学生做到了', msg: '[学生] 做到了 g1\n\n[上一轮没演的行]（写错了，页面跳过了，别的行照演）\n- 第 3 行「lable x a "错字"」：不认得 lable\n\n[舞台现在]\n…' },
+    { seq: 5, role: 'system', kind: 'stale', discarded: true, text: '…', cost: { bytes: 1, ms: 99999 } },
+    { seq: 6, role: 'claude', discarded: true, text: 'say "作废的一轮"', cost: { bytes: 1, ms: 99999 } },
+  ];
+  const r = lessonCost(turns);
+  assert.equal(r.turns.length, 2);
+  assert.deepEqual(r.turns.map((t) => t.lines), [3, 3]);
+  assert.deepEqual(r.turns.map((t) => t.hands), [false, true]);
+  assert.equal(r.turns[1].missed[0].src, 'lable x a "错字"');
+  assert.match(r.turns[1].missed[0].error, /不认得 lable/);
+  assert.equal(r.turns[1].played, 2);
+  assert.equal(r.total.missed, 1);
+  assert.equal(r.total.ms, 14000);
+  assert.equal(r.total.first, 3500);
+  assert.equal(r.talkRuns, 1);
+  assert.equal(r.features.used.open, 1);
+  assert.ok(r.features.unused.includes('@ask.right') && r.features.unused.includes('ask pick'));
+  assert.ok(!r.features.unused.includes('ask next'));
+});
+
+test('写法用了几次：预写、跟着算的、量', () => {
+  const { used, unused } = featureUse(['matrix A = 1 {k} / 0 1\n@g1 say "好"\n@A.done say "做完了"\n@ask.right say "对"\nlabel n A "秩 {rank(A)}"\n& glow A']);
+  assert.equal(used['{式子}'], 2); // {k} 和 {rank(A)}
+  assert.equal(used['@挑战'], 1);
+  assert.equal(used['@名字.done'], 1);
+  assert.equal(used['@ask.right'], 1);
+  assert.equal(used['rank('], 1);
+  assert.equal(used['& 一起演'], 1);
+  assert.equal(used.say, 3);
+  assert.ok(unused.includes('@名字.right'));
+});

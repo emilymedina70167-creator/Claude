@@ -127,3 +127,84 @@ export function rankBuild(files = []) {
   }
   return [...map.values()].sort((a, b) => b.bytes - a.bytes || b.n - a.n);
 }
+
+// —— 读一节真课（tools/stage-lesson.mjs）：学习台里舞台课每一轮存着的 class_turns ——
+// 老师的一轮 { role: 'claude', text（原样）, cost: { bytes, ms, first } }，学生的一轮 { role: 'student', msg（发给老师的整条） }
+// （kit/src/stage/classroom.js 开头）。老师没演上的行在下一条学生的 msg 里「[上一轮没演的行]」那一段。
+
+/** ask value 的 type（和 kit/src/stage/answer.js 的 ANSWER_TYPES 同一份，测试守着） */
+export const VALUE_TYPES = ['num', 'formula', 'matrix', 'set', 'equation', 'seq', 'en'];
+const MEASURES = ['count', 'height', 'tray', 'rank', 'rankA', 'free', 'det', 'verbs', 'left'];
+const lineOf = (cmd) => new RegExp(`^[ \\t]*(?:&[ \\t]*)?(?:@\\S+[ \\t]+)?${cmd}\\b`, 'gm');
+/** 说明里的每一种写法：[{ name, re }]（re 带 g，数次数用） */
+export const FEATURES = [
+  ...[...new Set([...Object.keys(CLASS_OF), ...MAKERS])].map((c) => ({ name: c, re: lineOf(c) })),
+  ...['tap', 'drag', 'pick', 'next', 'say', 'value'].map((k) => ({ name: `ask ${k}`, re: lineOf(`ask[ \\t]+${k}`) })),
+  ...VALUE_TYPES.map((t) => ({ name: `ask value type=${t}`, re: new RegExp(`\\bask[ \\t]+value\\b.*\\btype=${t}\\b`, 'g') })),
+  ...['wrong', 'call', 'undo'].map((k) => ({ name: `open ${k}=`, re: new RegExp(`\\bopen\\b.*\\b${k}=`, 'g') })),
+  { name: 'goal collect=', re: /\bgoal\b.*\bcollect=/g },
+  { name: '@挑战', re: /^[ \t]*(?:&[ \t]*)?@[A-Za-z_]\w*[ \t]/gm },
+  { name: '@名字.done', re: /^[ \t]*(?:&[ \t]*)?@[A-Za-z_]\w*\.done\b/gm },
+  { name: '@名字.right', re: /^[ \t]*(?:&[ \t]*)?@(?!ask\.)[A-Za-z_]\w*\.right\b/gm },
+  { name: '@ask.right', re: /^[ \t]*(?:&[ \t]*)?@ask\.right\b/gm },
+  { name: '{式子}', re: /\{[^{}\n]+\}/g },
+  { name: 'hide=on', re: /\bhide=on\b/g },
+  { name: '& 一起演', re: /^[ \t]*&/gm },
+  ...MEASURES.map((m) => ({ name: `${m}(`, re: new RegExp(`\\b${m}\\(`, 'g') })),
+];
+
+/** 老师每一轮的原文 → { used: { 写法: 次数 }, unused: [一次没碰的写法] } */
+export function featureUse(texts = []) {
+  const all = texts.join('\n');
+  const used = {};
+  const unused = [];
+  for (const f of FEATURES) { const n = (all.match(f.re) || []).length; if (n) used[f.name] = n; else unused.push(f.name); }
+  return { used, unused };
+}
+
+// 老师一轮的原文里是镜头指令的行（```board memo``` 这样的块是记给学习台的，不算）
+function stageLinesOf(text) {
+  const out = [];
+  let fence = false;
+  String(text ?? '').split('\n').forEach((raw, i) => {
+    const s = raw.trim();
+    if (s.startsWith('```')) { fence = !fence; return; }
+    if (fence || !s) return;
+    out.push({ line: i + 1, src: s });
+  });
+  return out;
+}
+// 学生那一条里「[上一轮没演的行]」一段 → [{ src, error }]
+function missedOf(msg) {
+  const m = String(msg ?? '').match(/\[上一轮没演的行\][^\n]*\n((?:- .*\n?)+)/);
+  if (!m) return [];
+  return m[1].split('\n').filter(Boolean).map((l) => { const x = l.match(/^- 第 \d+ 行「(.*)」：(.*)$/); return x ? { src: x[1], error: x[2] } : { src: '', error: l.replace(/^- /, '') }; });
+}
+const HANDS_RE = /^[ \t]*(?:&[ \t]*)?(?:open|goal|ask[ \t]+(?:tap|drag|pick|value))\b/m;
+
+/**
+ * 一节课的 class_turns（照 seq 排好）→
+ *   { turns: [{ seq, lines, played, missed: [{ src, error }], bytes, build（搭的字节）, ms, first, hands }],
+ *     total: sumCost 的合计 + { missed, ms, first }, features: featureUse 的结果, talkRuns: 最长连着几轮学生手上没事 }
+ * 作废的轮（discarded）、不是老师的轮不算。hands：这一轮老师交了事给学生（open、goal、要点要拖要填的问）；只有话和「接着」是 false
+ */
+export function lessonCost(turns = []) {
+  const names = new Set();
+  const out = [];
+  const rounds = [];
+  let last = null;
+  for (const t of turns) {
+    if (t.role === 'student') { if (last) { last.missed = missedOf(t.msg || t.text); last.played = last.lines - last.missed.length; last = null; } continue; }
+    if (t.role !== 'claude' || t.discarded) continue;
+    const rows = classifyRound(stageLinesOf(t.text), names);
+    rounds.push(rows);
+    const s = sumCost([rows]);
+    last = { seq: t.seq, lines: rows.length, played: rows.length, missed: [], bytes: s.bytes, build: s.build.bytes, ms: t.cost?.ms ?? null, first: t.cost?.first ?? null, hands: HANDS_RE.test(String(t.text ?? '')) };
+    out.push(last);
+  }
+  const add = (k) => out.reduce((n, t) => n + (t[k] || 0), 0);
+  let run = 0;
+  let talkRuns = 0;
+  for (const t of out) { run = t.hands ? 0 : run + 1; talkRuns = Math.max(talkRuns, run); }
+  return { turns: out, total: { ...sumCost(rounds), missed: out.reduce((n, t) => n + t.missed.length, 0), ms: add('ms'), first: add('first') }, features: featureUse(turns.filter((t) => t.role === 'claude' && !t.discarded).map((t) => t.text || '')), talkRuns };
+}
