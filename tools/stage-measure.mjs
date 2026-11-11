@@ -101,7 +101,9 @@ export function measure(visual = false) {
     if (!(n instanceof HTMLElement) || !vis(n)) continue;
     const texts = [];
     const walk = document.createTreeWalker(n, NodeFilter.SHOW_TEXT);
-    for (let t = walk.nextNode(); t; t = walk.nextNode()) { if (!t.nodeValue.trim() || !vis(t.parentElement)) continue; const r = document.createRange(); r.selectNodeContents(t); texts.push(...r.getClientRects()); }
+    // 只量部件自己的字：特意挂在外面的小牌子（平衡因子、访问号、成分的标签：绝对定位的）不算
+    const hung = (e) => { for (let p = e; p && p !== n; p = p.parentElement) if (['absolute', 'fixed'].includes(getComputedStyle(p).position)) return true; return false; };
+    for (let t = walk.nextNode(); t; t = walk.nextNode()) { if (!t.nodeValue.trim() || !vis(t.parentElement) || hung(t.parentElement)) continue; const r = document.createRange(); r.selectNodeContents(t); texts.push(...r.getClientRects()); }
     if (!texts.length) continue;
     const box = n.getBoundingClientRect();
     // 横着溢出去，或者折成好几行、从下面溢出去（三个长词的一排格子，字叠到了下面）
