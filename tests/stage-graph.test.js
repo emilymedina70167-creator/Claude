@@ -235,3 +235,18 @@ test('扣着的边：学生看的小块写两头（A–B），不写权；扣着
   const c = g.nodes.find((n) => n.key === 'C');
   assert.equal(chipTextOf(c, g), 'g 里扣着的一个结点');
 });
+
+// —— 舞台主线第一轮 D1-13：有向图上逆着箭头 walk 以前照演 ——
+test('D1-13：有向图上 walk 照箭头的方向走，逆着的当场报；无向图两个方向都行；重放旧课照旧演', async () => {
+  const { Scene, dryRun } = await import('../kit/src/stage/scene.js');
+  const { parseScript } = await import('../kit/src/stage/script.js');
+  const mk = (src) => { const s = new Scene(); for (const c of parseScript(src)) s.apply(c); return s; };
+  const d = mk('graph L = 6>7 7>8');
+  assert.match(dryRun(d, 'walk L.7 L.6')[0].error, /7 到 6 没有这个方向的边.*6→7/);
+  assert.equal(dryRun(d, 'walk L.6 L.7 L.8').length, 0);
+  const u = mk('graph g = A-B B-C');
+  assert.equal(dryRun(u, 'walk g.B g.A').length, 0);
+  assert.equal(dryRun(u, 'walk g.A g.B g.C').length, 0);
+  // 盯 1：重放旧课
+  d.apply({ ...parseScript('walk L.7 L.6')[0], lenient: true });
+});

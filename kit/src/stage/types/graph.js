@@ -597,6 +597,11 @@ export const graph = {
       const ps = nodesIn(h, 'walk', 'walk g.A g.B g.D');
       for (const p of ps) if (rowIndex(o, p.key) >= 0) throw new Error(`${p.key} 已经拿掉了`);
       for (let i = 1; i < ps.length; i++) if (!adjacent(o, ps[i - 1].key, ps[i].key)) throw new Error(`${ps[i - 1].key} 和 ${ps[i].key} 之间没有边（walk 要沿着边走）`);
+      // 有向图照箭头走（主线第一轮 D1-13：以前逆着箭头也照演）。重放旧课照旧
+      if (o.directed && !c.lenient) for (let i = 1; i < ps.length; i++) {
+        const [a, b] = [ps[i - 1].key, ps[i].key];
+        if (!liveEdges(o).some((e) => e.a === a && e.b === b)) throw new Error(`${a} 到 ${b} 没有这个方向的边（这是有向图，边是 ${b}→${a}）：walk 照箭头的方向走`);
+      }
       return { id: o.id, path: ps.map((p) => p.key) };
     },
     // take g.A：拓扑排序的一步——拿掉 A 和它连着的边，A 排到下面的序列里
