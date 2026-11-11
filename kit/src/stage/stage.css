@@ -220,6 +220,10 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-goal.is-met { color: var(--st-muted); background: color-mix(in srgb, var(--st-g3) 10%, var(--st-card)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--st-g3) 35%, transparent); }
 .st-goal.is-met .st-goal-mark { background: var(--st-g3); box-shadow: none; }
 .st-goal.is-met .st-goal-mark::after { content: ""; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.4px 2.4px 0; transform: rotate(45deg); }
+/* 做到过、现在不成立（学生拨走了）：空心的勾。现状写「做到过；现在不成立」，画面不再是实心的绿勾 */
+.st-goal.is-met.is-was { background: var(--st-card); box-shadow: 0 0 0 1px color-mix(in srgb, var(--st-muted) 35%, transparent); }
+.st-goal.is-met.is-was .st-goal-mark { background: transparent; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--st-g3) 70%, transparent); }
+.st-goal.is-met.is-was .st-goal-mark::after { border-color: var(--st-g3); }
 @media (max-width: 600px) { .st-goal { font-size: 15px; } }
 
 /* 有能拖的东西时：整块舞台不让浏览器拿去滚动、缩放（手势插进来会把拖到一半的东西取消掉）；舞台本来就不滚动 */

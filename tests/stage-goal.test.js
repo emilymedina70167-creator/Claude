@@ -307,3 +307,31 @@ test('复核：重放旧课（lenient）时挑战那一行新加的检查不报�
     assert.match(s.check(parseScript(line)[0]) || '', /./, `新写的照样报：${line}`);
   }
 });
+
+// —— 舞台主线第一轮 D4-4：做到过的挑战画面上一直打实心的勾；东西拿掉以后现状里每一句各报一遍 ——
+test('D4-4：挑战的勾画成什么——还没做到 open、做到了而且现在成立 met、做到过现在不成立或判不了 was', async () => {
+  const { goalMark } = await import('../kit/src/stage/goal.js');
+  const s = new Scene();
+  for (const c of parseScript('array a = 2 1 3\nopen a\ngoal g1 "排好" when="a sorted"')) s.apply(c);
+  const g = () => s.goals.get('g1');
+  assert.equal(goalMark(s, g()), 'open');
+  s.apply(parseScript('swap a.1 a.2')[0], { by: 'student', open: 'drag' });
+  assert.equal(goalMark(s, g()), 'met');
+  s.apply(parseScript('swap a.1 a.2')[0], { by: 'student', open: 'drag' });
+  assert.equal(g().met, true, '做到过就一直算做到过');
+  assert.equal(goalMark(s, g()), 'was');
+  assert.match(goalStatus(s, g()), /^做到过；现在不成立/);
+});
+test('D4-4：挑战里的东西拿掉了，现状合成一行「判不了：t 拿掉了」，不是每一句各报一遍', async () => {
+  const { goalMark } = await import('../kit/src/stage/goal.js');
+  const s = new Scene();
+  for (const c of parseScript('array t = 5 9 8\nopen t\ngoal g1 "大的在前" when="t.1 >= t.2, t.1 >= t.3, t.2 >= 1"')) s.apply(c);
+  const before = goalStatus(s, s.goals.get('g1'));
+  s.apply(parseScript('remove t')[0]);
+  const st = goalStatus(s, s.goals.get('g1'));
+  assert.match(st, /判不了：t 拿掉了/);
+  assert.equal((st.match(/不是舞台上的东西/g) || []).length, 0, st);
+  assert.ok(st.length < 60, st);
+  assert.notEqual(goalMark(s, s.goals.get('g1')), 'met');
+  assert.ok(before);
+});

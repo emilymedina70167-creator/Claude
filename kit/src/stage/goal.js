@@ -250,29 +250,50 @@ export function clauseMarks(scene, g) {
   });
 }
 
+// 挑战的条件现在成不成立：{ now: true / false / null（判不了）, bits: 每一句写成字 }
+function goalNow(scene, g) {
+  const gone = new Set(); // 判不了是因为东西不在舞台上了（老师 remove 了）：是哪几样
+  const mark = (cl) => {
+    let ok, m, lost = false;
+    try {
+      ok = clauseState(scene, cl);
+      const why = ok == null ? nullSide(scene, cl)?.why : null;
+      m = ok == null ? ` 判不了${why ? `：${why}` : ''}` : ok ? ' ✓' : ' ✗';
+    } catch (err) {
+      ok = null; m = ` 判不了：${err?.message || err}`;
+      const name = String(err?.message || '').match(/^「([A-Za-z_]\w*)[^」]*」不是舞台上的东西/)?.[1];
+      if (name && !scene.objects?.has(name)) { gone.add(name); lost = true; }
+    }
+    return { ok, lost, text: `${clauseText(cl)}${m}` };
+  };
+  // 一组一组写（| 隔开）：一组都成立就是成立，有一句不成立就是不成立，别的是判不了；几组里有一组成立就算成立
+  const all = [];
+  const groups = altsOf(g).map((cond) => {
+    const ms = cond.map(mark);
+    all.push(...ms);
+    const ok = ms.some((x) => x.ok === false) ? false : ms.some((x) => x.ok == null) ? null : true;
+    return { ok, text: ms.map((x) => x.text).join('，') };
+  });
+  const now = groups.some((x) => x.ok === true) ? true : groups.every((x) => x.ok === false) ? false : null;
+  // 判不了的那几句都是因为东西拿掉了：合成一行（主线第一轮 D4-4：以前 7 句各报一遍「「t#1」不是舞台上的东西（…）」）
+  const lostAll = now == null && gone.size && all.every((x) => x.ok != null || x.lost);
+  return { now, bits: lostAll ? `判不了：${[...gone].join('、')} 拿掉了` : groups.map((x) => x.text).join(' | ') };
+}
+/**
+ * 挑战那一条的勾画成什么（主线第一轮 D4-4：以前做到过就一直是实心的勾，学生拨走了、现状已经写「现在不成立」，画面还是绿勾）：
+ * open 还没做到；met 做到了、现在也成立；was 做到过、现在不成立或判不了（空心的勾）
+ */
+export function goalMark(scene, g) {
+  if (!g?.met) return 'open';
+  return goalNow(scene, g).now === true ? 'met' : 'was';
+}
 /**
  * 写给老师看的一句：条件现在哪一句成立、哪一句还没有、哪一句页面判不了（不写成 ✗：那是假话，学生也许已经做对了）。
  * 做到过的挑战一直算做到（预写的行已经演了、也已经告诉了老师，撤不回来），可现在不成立了（学生按「回到……」、
  * 接着拨走了）照实写「做到过；现在不成立」——不然老师读到「做到了」、看到的却是没做到的样子
  */
 export function goalStatus(scene, g) {
-  const mark = (cl) => {
-    let ok, m;
-    try {
-      ok = clauseState(scene, cl);
-      const why = ok == null ? nullSide(scene, cl)?.why : null;
-      m = ok == null ? ` 判不了${why ? `：${why}` : ''}` : ok ? ' ✓' : ' ✗';
-    } catch (err) { ok = null; m = ` 判不了：${err?.message || err}`; }
-    return { ok, text: `${clauseText(cl)}${m}` };
-  };
-  // 一组一组写（| 隔开）：一组都成立就是成立，有一句不成立就是不成立，别的是判不了；几组里有一组成立就算成立
-  const groups = altsOf(g).map((cond) => {
-    const ms = cond.map(mark);
-    const ok = ms.some((x) => x.ok === false) ? false : ms.some((x) => x.ok == null) ? null : true;
-    return { ok, text: ms.map((x) => x.text).join('，') };
-  });
-  const now = groups.some((x) => x.ok === true) ? true : groups.every((x) => x.ok === false) ? false : null;
-  const bits = groups.map((x) => x.text).join(' | ');
+  const { now, bits } = goalNow(scene, g);
   const c = g.collect;
   // 收集型：没收齐时写收了几张（条件现在成不成立照写）
   if (!g.met) return `还没做到（${c ? `收了 ${c.got.length} / ${c.n}；` : ''}${bits}）`;

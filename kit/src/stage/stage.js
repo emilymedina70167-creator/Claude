@@ -9,6 +9,7 @@ import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHo
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, tapAnswer, pickText, unplayedNotes, compareFact, mergeFact, chipTextOf, tapValueOf } from './scene.js';
+import { goalMark } from './goal.js';
 import { measureShown } from './rules.js';
 import { judgeAnswer, sameAnswer, answerInput, gridAnswerText } from './answer.js';
 import { formulaInput, formulaGrid, hideFormulaPad } from '../formulainput.js';
@@ -1027,6 +1028,8 @@ export class Stage {
         n.classList.add('is-met');
         if (!this.instant) this.tween(n.firstChild, [{ transform: 'scale(.4)' }, { transform: 'scale(1.25)', offset: 0.6 }, { transform: 'scale(1)' }], { duration: 520, easing: EASE.spring });
       }
+      // 做到过、现在不成立（学生拨走了、按了「回到……」）：空心的勾。现状写的是「做到过；现在不成立」，画面不能还是实心的绿勾
+      n.classList.toggle('is-was', !!g.met && goalMark(this.scene, g) === 'was');
     }
     for (const n of have.values()) {
       n.classList.add('is-out');
