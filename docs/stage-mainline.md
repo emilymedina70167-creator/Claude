@@ -119,6 +119,8 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 
 验收：`evals/stage-gaps/new2/`（一个文件一件）+ 表 `NEW2`，`node tools/stage-must.mjs evals/stage-gaps/new2 --table new2`；真手指在 `tools/stage-touch.mjs` 里各加了一段（按住拖进两张之间、点空格子写数、点边、键盘上的 ∞）。改了舞台合并前和 `fix1` 一起跑。
 
+收尾量出来的：单元测试 1578 项、整条流程的自动测试 23 段、舞台整套检查（真手指）、示例页检查都过；`fix1` 的 16 条没有回来的；282 份旧课照 log 放回，只有一份不同（旧课的挖坑法 `write a.1 _`，修了），修完都和基线一样。最后一审（一个只读的助手）抓到 3 条严重、5 条要紧，都修了，一条一个测试（`tests/stage-mainline2-review.test.js`）；小的修了 4 条、记着 4 条。发布：学习台 Version 95、舞台试课 Version 10，说明书版本 2026-11-11b。
+
 这一轮新的通用件（下一轮接着用）：
 
 - 规则文件可以只交手势、量、判断式、事实，不交判对错（`array.rules.js`、`graph.rules.js`）。`actOf` 多收 `{ by, open }`。
