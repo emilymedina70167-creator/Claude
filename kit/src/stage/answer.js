@@ -379,9 +379,10 @@ function makeCheck(type, ans, { free, solve, lenient } = {}) {
     case 'set': {
       // 「、」和逗号一样（数集的写法里都是「且」；大括号里只认逗号隔开几个值）
       const comma = (x) => String(x ?? '').replace(/、/g, ',');
-      const sp = intervalSpec(comma(ans));
-      // 学生只写了几个数、用逗号隔开（1, 5）：就是这几个值。数集的写法里逗号是「且」，1, 5 读成「是 1 又是 5」，对的也判错
+      // 只写了几个数、用逗号隔开（1, 5）：就是这几个值。数集的写法里逗号是「且」，1, 5 读成「是 1 又是 5」，对的也判错。
+      // 老师的 answer= 也这样读（主线第一轮 L3-3：以前只补学生那边，老师写 answer="1,4"、学生填一模一样的也判错）
       const bare = (g) => (/^\s*[-−+]?[\d.]+(\/\d+)?(\s*[,，]\s*[-−+]?[\d.]+(\/\d+)?)+\s*$/.test(g) ? `{${g}}` : g);
+      const sp = intervalSpec(bare(comma(ans)));
       return bool((g) => sp.check(bare(comma(g))).ok);
     }
     case 'equation': { const sp = equationSpec(ans); return bool((g) => sp.check(g).ok); }

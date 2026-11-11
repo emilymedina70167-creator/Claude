@@ -558,3 +558,18 @@ test('复审 N7：solve=on 配 wrong=，错答不是一次式（k^2 / 1 / k）�
   // 答案自己不是一次式的通解：照旧当场报（solve=on 用错了地方）
   assert.throws(() => checkSpec({ ...L, answer: 'k^2 / 1 / k', wrongs: null }, null, { strict: true }), /solve=on 只用在一列/);
 });
+
+// —— 舞台主线第一轮（docs/superpowers/specs/2026-11-11-stage-mainline-1-design.md 第 3 节）——
+test('L3-3：type=set 老师写 answer="1,4"，学生填一模一样的是对的（老师这边也读成几个值）', () => {
+  const spec = { type: 'set', answer: '1,4' };
+  assert.equal(judgeAnswer('1,4', spec).ok, true);
+  assert.equal(judgeAnswer('4, 1', spec).ok, true);
+  assert.equal(judgeAnswer('{1, 4}', spec).ok, true);
+  assert.equal(judgeAnswer('1', spec).ok, false);
+  assert.equal(judgeAnswer('1,4,5', spec).ok, false);
+  // 老师写「、」隔开的也一样；写成大括号、区间的照旧
+  assert.equal(judgeAnswer('1,4', { type: 'set', answer: '1、4' }).ok, true);
+  assert.equal(judgeAnswer('1,4', { type: 'set', answer: '{1, 4}' }).ok, true);
+  assert.equal(judgeAnswer('(1,4)', { type: 'set', answer: '(1,4)' }).ok, true);
+  assert.equal(judgeAnswer('2', { type: 'set', answer: '(1,4)' }).ok, false);
+});
