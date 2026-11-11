@@ -1558,7 +1558,8 @@ export class Scene {
         // 字段里的 {式子} 不跟着算：拨盘变了页面不会重跑，当场说清
         const live = Object.entries(fields).find(([, v]) => /\{[^{}]*\}/.test(String(v)));
         if (live && !c.lenient) throw new Error(`follow 的字段写死的数（${live[0]}="${live[1]}" 里的 {…} 不会跟着变）：拨盘变了页面不会重跑`);
-        if (a.toKey) return a.toKey.call(a, o, fields, this) || { follow: name, id: o.id };
+        // 接在表上：引擎的结果直接当表的答案（照表的做法逐格比），不走路
+        if (o.type === 'table') { if (!a.toKey) throw new Error(`${name} 接不到表上`); return a.toKey(o, fields, this); }
         try { startFollow(o, name, fields, this); } catch (err) { if (!c.lenient) throw err; }
         return { follow: name, id: o.id };
       }

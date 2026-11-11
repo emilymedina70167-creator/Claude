@@ -40,7 +40,7 @@ function pathOf(frames) {
     const last = path[path.length - 1];
     const marks = f.mark == null ? [] : [].concat(f.mark).map(Number); // 一步可以同时是好几趟的检查点（那几趟没有要动的）
     if (last && last.state === f.state) { last.marks.push(...marks); continue; }
-    path.push({ state: f.state, cells: f.cells || [], marks });
+    path.push({ state: f.state, cells: f.cells || [], marks, lead: f.lead || '' });
   }
   return path;
 }
@@ -92,11 +92,15 @@ function restart(o, scene) {
   f.passed = 0;
   delete f.error;
   delete f.startDone;
+  delete f.start;
   try {
     f.input = a.fields(o, f.fields || {}, scene);
     const t = build(a, f.input);
-    f.passed = topMark(t.path, 0);
-    if (t.path.length === 1) f.startDone = true;
+    // 起点：这一刻的样子。引擎的路可能从「第一步做完」才开始（图：一上来牌子都还没写），起点不在路上也不算走偏
+    f.start = a.stateOf(o, scene, f.snap);
+    const at0 = t.path.findIndex((p) => p.state === f.start);
+    f.passed = at0 >= 0 ? topMark(t.path, at0) : 0;
+    if (at0 === t.path.length - 1) f.startDone = true;
   } catch (err) {
     f.input = null;
     f.error = err?.message || String(err);
@@ -120,7 +124,7 @@ export function refreshFollow(o, scene) {
 }
 
 /**
- * 现在在哪：{ at（正确的路上第几个；不在路上是 null）, passed（过了几个检查点）, total, done, like（像哪种错法）, likeMark, off（不在正确的路上）,
+ * 现在在哪：{ at（正确的路上第几个；还在起点、起点不在路上是 -1；不在路上是 null）, passed（过了几个检查点）, total, done, like（像哪种错法）, likeMark, off（不在正确的路上）,
  *   next（下一个检查点 { mark, upto, cells }；没有是 null）, error }
  */
 export function whereOf(o, scene) {
@@ -135,12 +139,14 @@ export function whereOf(o, scene) {
     const fr = t.path.find((p) => p.marks.some((k) => k > passed));
     if (!fr) return null;
     const ks = fr.marks.filter((k) => k > passed);
-    return { mark: Math.min(...ks), upto: Math.max(...ks), cells: fr.cells };
+    return { mark: Math.min(...ks), upto: Math.max(...ks), cells: fr.cells, lead: fr.lead || '' };
   };
   if (at >= 0) {
     const passed = topMark(t.path, at);
     return { at, passed, total: t.total, done: at === t.path.length - 1, like: null, likeMark: null, off: false, next: nextAfter(passed), error: null };
   }
+  // 还在起点（at: -1）：在路上，只是一步还没走
+  if (state === f.start) return { at: -1, passed: 0, total: t.total, done: false, like: null, likeMark: null, off: false, next: nextAfter(0), error: null };
   let like = null, likeMark = null;
   const loose = a.loose ? a.loose(state) : state;
   for (const v of t.variants) {
@@ -152,6 +158,8 @@ export function whereOf(o, scene) {
 }
 
 // —— 写给老师的话 ——
+/** 一个检查点该是什么样，写给老师看（对应关系可以自己排：图写成 1=0（确定） 2=10） */
+const shown = (a, f, nx) => `${nx.lead || ''}${a.show ? a.show(nx.cells, f.snap, f.fields || {}) : nx.cells.join(' ')}`; // lead：这一步引擎自己的一句（Dijkstra：确定 5；）
 const nth = (a, f, k, upto = k) => `第 ${k} ${unitOf(a, f.fields)}${upto > k ? `（第 ${k + 1}${upto > k + 1 ? `～${upto}` : ''} ${unitOf(a, f.fields)}没有要动的，做完是同一个样子）` : ''}`;
 
 /** 离下一个检查点差哪几处：[{ i, now, want }] */
@@ -171,7 +179,7 @@ function gapText(a, o, scene, w, { brief = false } = {}) {
   if (brief) return `离${head}差 ${g.list.length} ${word}`;
   // 差得多（超过一半）只说差几处：一条条列出来老师也不会看
   if (!g.list.length || g.list.length * 2 > g.n) return `和${head}该有的样子差 ${g.list.length} ${word}`;
-  const name = (i) => (a.nameOf ? a.nameOf(i) : `第 ${i + 1} 处`);
+  const name = (i) => (a.nameOf ? a.nameOf(i, f.snap) : `第 ${i + 1} 处`);
   return `和${head}该有的样子差 ${g.list.length} ${word}：${g.list.map((x) => `${name(x.i)}（现在 ${x.now === '' ? '空着' : x.now}，该是 ${x.want}）`).join('、')}`;
 }
 
@@ -185,7 +193,7 @@ export function followLine(o, scene) {
   if (w.error) return `${head}照不下去了（${w.error}）`;
   if (f.startDone) return `${head}一上来就已经是做完的样子`;
   if (w.done) return `${head}${w.total} ${u}都做完了`;
-  const want = w.next ? `${nth(a, f, w.next.mark, w.next.upto)}做完该是：${w.next.cells.join(' ')}` : '';
+  const want = w.next ? `${nth(a, f, w.next.mark, w.next.upto)}做完该是：${shown(a, f, w.next)}` : '';
   if (w.like) return `${head}${w.like}（和这种错法做完第 ${w.likeMark} ${u}的样子一样）${want ? `。${want}` : ''}`;
   if (w.off) return `${head}不在引擎走的那条路上；${gapText(a, o, scene, w, { brief: true })}${want ? `。${want}` : ''}`;
   const at = w.passed ? `做完了第 ${w.passed} ${u}` : `还没做完第 ${w.next?.mark ?? 1} ${u}`;
@@ -222,7 +230,7 @@ export function followRules(base, o) {
       if (!w || w.error) return { acts: [], why: `照不下去了（${w?.error || ''}）` };
       if (w.done) return null;
       // acts：页面不知道具体哪一下，只知道还没做完——交「这样东西上能做的几种动作」，学生开着其中一种就算手上还有事（events.js 的 hasWork）
-      return { acts: acts.map((type) => ({ type })), why: w.next ? `${nth(a, obj.follow, w.next.mark, w.next.upto)}做完该是：${w.next.cells.join(' ')}` : '' };
+      return { acts: acts.map((type) => ({ type })), why: w.next ? `${nth(a, obj.follow, w.next.mark, w.next.upto)}做完该是：${shown(a, obj.follow, w.next)}` : '' };
     },
     check(obj, act, scene, ctx = {}) {
       const mine = act.made ? { legal: true } : base.check(obj, act, scene, ctx) || {};
@@ -239,7 +247,7 @@ export function followRules(base, o) {
       const was = w0.at != null ? w0.passed : obj.follow.passed || 0;
       if (w1.at != null && (w1.passed > was || (w0.at != null && w1.at > w0.at))) out.right = true;
       else if (w1.like && w1.like !== w0.like) { out.right = false; out.misread = w1.like; }
-      if (w1.next) out.next = `${nth(a, obj.follow, w1.next.mark, w1.next.upto)}做完该是：${w1.next.cells.join(' ')}`;
+      if (w1.next) out.next = `${nth(a, obj.follow, w1.next.mark, w1.next.upto)}做完该是：${shown(a, obj.follow, w1.next)}`;
       return out;
     },
     facts(before, after, act, scene) {
