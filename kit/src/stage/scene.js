@@ -284,7 +284,7 @@ export class Scene {
     s.askSeq = this.askSeq;
     for (const [k, p] of this.preRight) s.preRight.set(k, { ...p, lines: [...p.lines] });
     s.loose = this.loose.map((x) => ({ ...x }));
-    s.notices = this.notices.map((x) => ({ ...x }));
+    s.notices = structuredClone(this.notices);
     s.labelRects = this.labelRects.map((r) => ({ ...r, objs: [...r.objs] }));
     for (const [k, v] of this.slips) s.slips.set(k, { ...v, refs: [...v.refs] });
     s.doneState = new Map(this.doneState);
@@ -486,7 +486,13 @@ export class Scene {
     }
     this.loose = [];
     // 照演了、要告诉老师一声的（同名重造收掉了字和 open）
-    out.push(...this.notices);
+    for (const n of this.notices) {
+      if (!n.remade) { out.push(n); continue; }
+      const { id, labels, acts } = n.remade;
+      const reopened = [...this.opens.values()].some((e) => e.obj === id);
+      const bits = [labels.length ? `贴在旧部件上的字（${labels.join('、')}）` : '', acts.length && !reopened ? `交给学生的动作（${acts.join('、')}）` : ''].filter(Boolean);
+      if (bits.length) out.push({ line: n.line, src: n.src, kept: true, error: `重造了 ${id}：${bits.join('、')}都收了${acts.length && !reopened ? '。要学生接着动，再写一次 open' : ''}` });
+    }
     this.notices = [];
     return out;
   }
@@ -1111,8 +1117,8 @@ export class Scene {
         const onParts = [...this.labels].filter(([, l]) => !l.dial && (l.refs || []).some((r) => { const p = parseRef(r); return p?.obj === id && /[.#]/.test(r); })).map(([k]) => k);
         for (const k of onParts) this.labels.delete(k);
         const acts = [...this.opens.values()].filter((e) => e.obj === id).map((e) => `open ${id}${e.action && e.action !== 'drag' ? ` ${e.action}` : ''}`);
-        const bits = [onParts.length ? `贴在旧部件上的字（${onParts.join('、')}）` : '', acts.length ? `交给学生的动作（${[...new Set(acts)].join('、')}）` : ''].filter(Boolean);
-        if (bits.length && !c.replay && !this.trial) this.notices.push({ line: c.line ?? 0, src: String(c.src ?? '').trim(), error: `重造了 ${id}：${bits.join('、')}都收了${acts.length ? '。要学生接着动，再写一次 open' : ''}`, kept: true });
+        // 这一句一轮演完才写成字（looseProblems）：同一轮里老师又 open 了它，就不说「交给学生的动作收了」
+        if ((onParts.length || acts.length) && !c.replay && !this.trial) this.notices.push({ line: c.line ?? 0, src: String(c.src ?? '').trim(), kept: true, remade: { id, labels: onParts, acts: [...new Set(acts)] } });
       }
       if (old) this.dropObject(id, { keepLabels: true, keepPlace: kept, keepSaves: old.type === t.type });
       if (kept) {

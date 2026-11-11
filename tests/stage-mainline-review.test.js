@@ -148,3 +148,20 @@ test('页面自己定边的字（hop 的字）换了边，不说成「写的是�
   assert.match(st, /r「规则」（贴在 a；写的是上面，放不下，在下面）/);
   assert.doesNotMatch(st, /隔 5 个」（[^）]*写的是/);
 });
+
+test('同名重造以后同一轮里又 open 了：不再说「交给学生的动作收了」（只说收了的字；都没有就不说）', () => {
+  const s = new Scene();
+  run(s, 'tree t = 50 30 70 tray="60"\nopen t insert\nlabel q t.30 "这个"');
+  s.looseProblems();
+  run(s, 'tree t = 23 15 34 tray="98"\nopen t insert wrong=block');
+  const told = s.looseProblems();
+  assert.equal(told.length, 1);
+  assert.match(told[0].error, /重造了 t：贴在旧部件上的字（q）都收了/);
+  assert.doesNotMatch(told[0].error, /交给学生的动作|再写一次 open/);
+  // 没有字、又重新 open 了：什么都不说
+  run(s, 'tree t = 1 2 3\nopen t insert');
+  assert.deepEqual(s.looseProblems(), []);
+  // 没重新 open 的照旧说
+  run(s, 'tree t = 4 5 6');
+  assert.match(s.looseProblems()[0].error, /交给学生的动作（open t insert）都收了。要学生接着动，再写一次 open/);
+});
