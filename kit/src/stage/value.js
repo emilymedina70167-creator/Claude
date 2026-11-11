@@ -312,6 +312,17 @@ export const valueText = (v) => { try { return exactText(v); } catch { return '�
  * 造东西的那一行里的 {…} 都算成数，换回一行（一排格子、图这类照新的数重新造）：
  * { text（换好的一行）, exprs（原来的式子）, vals（算出来的字）, deps }；这一行里没有 {…} 给 null
  */
+// 式子只是原样取一个部件（{t#8}、{a.8}）：那个部件写的字（09、49′）。带着运算的、取不到的是 null
+// （主线第一轮 D4-3：以前一律按数重写，09 成了 9、49′ 成了 49——带撇的那一个正是课上要盯着看的）
+function rawPart(expr, scene) {
+  const w = String(expr).trim();
+  if (!/^[A-Za-z_]\w*[.#]\S+$/.test(w) || /[-+*/^()]/.test(w.replace(/^[A-Za-z_]\w*[.#]/, '').replace(/^-/, ''))) return null;
+  let ps;
+  try { ps = scene.parts(w); } catch { return null; }
+  if (ps.length !== 1 || isPoint(ps[0])) return null;
+  const v = ps[0].value;
+  return v == null || v === '' ? null : String(v);
+}
 export function fillLine(line, scene) {
   const { parts } = parseLive(line);
   if (!parts.some((p) => p.k === 'expr')) return null;
@@ -321,7 +332,7 @@ export function fillLine(line, scene) {
     if (p.k === 'text') { text += p.v; continue; }
     const r = evalLive(p.v, scene);
     if (!isQ(r.value)) throw new Error(`「{${p.v}}」算出来是 ${valueText(r.value)}，这里要一个数`);
-    const v = numText(r.value);
+    const v = rawPart(p.v, scene) ?? numText(r.value);
     exprs.push(p.v);
     vals.push(v);
     text += v;

@@ -2189,3 +2189,13 @@ test('D1-4（盯 4）：重放旧课数「第几个 [词]」照旧的读法（fl
   for (const c of parseScript('array a = 1 2\nsay "A[i] 和 [哨兵]"')) old.apply({ ...c, lenient: true });
   assert.deepEqual(old.words, ['i', '哨兵']);
 });
+
+test('D4-3：跟着算的格子原样取一个部件时，照那个部件写的字（09、49′），不按数重写；算过的才按数写', () => {
+  const s = run(new Scene(), 'tree t = 87 45 78 32 17 65 53 09\narray hs = {t#1} {t#8} {t#8 + 1}');
+  assert.deepEqual(values(s, 'hs'), ['87', '09', '10']);
+  const b = run(new Scene(), 'array b = 49′ 38\narray c = {b.1} {b.1 + 0} {b.2}');
+  assert.deepEqual(values(b, 'c'), ['49′', '49', '38']);
+  // 源头变了跟着变，还是照它写的字
+  run(b, 'write b.2 07');
+  assert.deepEqual(values(b, 'c'), ['49′', '49', '07']);
+});
