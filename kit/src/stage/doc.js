@@ -98,12 +98,12 @@ ask value "{a.3} 比 {a.6} 大多少？" answer={a.3-a.6} type=num wrong="-52=�
  * 没写科目（样子页）就全带
  */
 export const SUBJECT_TYPES = {
-  数据结构: ['array', 'tree', 'graph', 'card', 'tex'],
-  操作系统: ['array', 'graph', 'card', 'tex', 'matrix'],
-  组成原理: ['array', 'card', 'tex', 'matrix'],
-  计网: ['array', 'graph', 'card', 'tex'],
-  线代: ['matrix', 'plane', 'tex', 'card', 'array'],
-  英语: ['sentence', 'card'],
+  数据结构: ['array', 'tree', 'graph', 'card', 'tex', 'table'],
+  操作系统: ['array', 'graph', 'card', 'tex', 'matrix', 'table'],
+  组成原理: ['array', 'card', 'tex', 'matrix', 'table'],
+  计网: ['array', 'graph', 'card', 'tex', 'table'],
+  线代: ['matrix', 'plane', 'tex', 'card', 'array', 'table'],
+  英语: ['sentence', 'card', 'table'],
 };
 
 /** 整份指令说明：共用的 + 舞台上能放的东西（subject：这节课是哪门课，只带用得上的那几种） */

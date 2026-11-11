@@ -155,7 +155,7 @@ export function armGesture(stage, e, view, done) {
     press: (on) => light(grip, 'is-press', on),
     onTap: () => {
       const ctx = kind === 'write' ? { to: grip.part() } : { from: grip.part() };
-      const ask = askFor(g, obj(), kind, ctx);
+      const ask = askFor(g, obj(), kind, ctx, e);
       const anchor = areaOf(stage, grip);
       if (ask) {
         if (kind === 'write') { light(grip, 'is-editing', true); asking(ask, anchor, ctx, kind, () => light(grip, 'is-editing', false)); } else asking(ask, anchor, ctx, kind);
@@ -224,7 +224,7 @@ export function armGesture(stage, e, view, done) {
           if (t.key === grip.key) continue;
           t.show?.(true);
           const ctx = { from, to: t.part(), value: st.value };
-          const ask = askFor(g, obj(), kind, ctx);
+          const ask = askFor(g, obj(), kind, ctx, e);
           const r = ask ? null : gestureAct(stage.scene, e, ctx);
           const x = { t, ok: !!ask || !r.error, hint: ask ? ask.hint || ask.prompt : (view.gestureHint?.(stage, obj(), e, r) || ''), why: r?.error || '' };
           st.targets.push(x);
@@ -255,7 +255,7 @@ export function armGesture(stage, e, view, done) {
         if (!x) { back(L); return null; }
         const anchor = areaOf(stage, x.t);
         const ctx = { from, to: x.t.part(), value };
-        const ask = askFor(g, obj(), kind, ctx);
+        const ask = askFor(g, obj(), kind, ctx, e);
         // 先问倍数：键盘开着时这一行、那一行一直标着（看得出「r₂ + k·r₁」说的是哪两行），收起时一起恢复
         if (ask) { back(L, { keep: true }); light(x.t, 'is-over', true); asking(ask, anchor, ctx, kind, () => { L?.restore(); light(x.t, 'is-over', false); }); return null; }
         const r = gestureAct(stage.scene, e, ctx);
@@ -306,7 +306,7 @@ export function armGesture(stage, e, view, done) {
         st = null;
         const ctx = { from, to };
         const anchor = prev?.rect?.() || rectOf(stage, grip);
-        const ask = askFor(g, obj(), 'span', ctx);
+        const ask = askFor(g, obj(), 'span', ctx, e);
         if (ask) { asking(ask, anchor, ctx, 'span', () => prev?.remove()); return null; }
         prev?.remove();
         const r = gestureAct(stage.scene, e, ctx);

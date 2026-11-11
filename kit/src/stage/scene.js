@@ -1492,9 +1492,20 @@ export class Scene {
         const e = { obj: o.id, action, refs: r.mark ? [target] : [], lo: null, hi: null, policy, gesture: gestures[action] || null, seq };
         // input=keypad：写一个值的手势用数字键盘（open M edit input=keypad）；不写照旧（矩阵的 edit 是 ± 拨数器）
         if (opts.input != null) {
-          if (opts.input !== 'keypad') throw new Error(`input= 只能写 keypad（数字键盘，能写分数、负数），没有「${opts.input}」`);
+          // 那种东西的手势自己说还认哪几种（表的 edit：input=text 是一个输入框，系统键盘写字）
+          const more = [].concat(gestures[action]?.inputs || []);
+          if (opts.input !== 'keypad' && !more.includes(opts.input)) throw new Error(`input= 只能写 keypad（数字键盘，能写分数、负数）${more.length ? `、${more.join('、')}` : ''}，没有「${opts.input}」`);
           if (!(gestures[action] && [].concat(gestures[action].gesture).includes('write'))) throw new Error(`input=keypad 只用在写一个值的动作上（${Object.entries(gestures).filter(([, g]) => [].concat(g.gesture).includes('write')).map(([k]) => `open ${o.id} ${k}`).join(' / ') || `${t.label}没有`}），${action} 用不上`);
-          e.input = 'keypad';
+          e.input = opts.input;
+        }
+        // choices="能 不能"：点一格出一排选项点一个（那种东西的手势说了能这样问的才收：表的 edit）
+        if (opts.choices != null) {
+          if (!gestures[action]?.choices) throw new Error(`choices= 只用在能点一个选项的动作上（表：open T edit choices="能 不能"），${t.label}的 ${action} 用不上`);
+          if (opts.input != null) throw new Error('input= 和 choices= 只能写一个（键盘写，或者点一个选项）');
+          const list = String(opts.choices).includes('|') ? String(opts.choices).split('|').map((x) => x.trim()).filter(Boolean) : String(opts.choices).trim().split(/\s+/).filter(Boolean);
+          if (list.length < 2) throw new Error('choices= 里至少两个选项，用空格隔开（有空格的选项用 | 隔）');
+          if (list.length > 8) throw new Error(`choices= 最多 8 个选项（写了 ${list.length} 个）`);
+          e.choices = list;
         }
         // 拨数器默认 -9～9；键盘写的值不写 range= 就不限（写了照它收，gestures.js 的 writeRange）
         // 没有自己的拨数器的（一排格子的 edit 只有键盘）也一样：不写 range= 不限

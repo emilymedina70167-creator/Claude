@@ -156,7 +156,7 @@ function setup(segments) {
     const g = e.gesture;
     if (![].concat(g?.gesture || []).includes(kind)) return { error: `${o.id} 的 ${e.action} 没有这种手势` };
     const ctx = kind === 'write' ? { to: partOf(from) } : kind === 'tap' ? { from: partOf(from) } : kind === 'span' ? { from: partOf(from), to: partOf(to) } : { from: partOf(from), to: partOf(to), value: from.value ?? null };
-    const ask = D.askFor(g, o, kind, ctx);
+    const ask = D.askFor(g, o, kind, ctx, e);
     let extra = {};
     let shown = what;
     if (ask?.pick) {

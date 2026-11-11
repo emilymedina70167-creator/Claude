@@ -27,7 +27,7 @@ export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
  */
 export const OPTIONS = {
   label: ['side', 'tone'], fly: ['side'], dial: ['range', 'at', 'options'], pick: ['reveal'], keep: ['after'],
-  open: ['back', 'wrong', 'call', 'undo', 'input', 'range'],
+  open: ['back', 'wrong', 'call', 'undo', 'input', 'range', 'choices'],
   goal: ['when', 'call', 'on', 'collect', 'n'],
   ask: {
     tap: ['expect', 'button'], drag: ['expect', 'button'], pick: ['expect', 'reveal', 'order', 'button'], next: ['button'], say: ['button'],

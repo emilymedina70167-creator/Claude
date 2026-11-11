@@ -6,7 +6,7 @@
 const bytes = (s) => Buffer.byteLength(String(s ?? ''), 'utf8');
 
 /** 造东西的指令：看得见的是「例子」，带 hide=on 的是「藏着的辅助」，重造已有的名字是「同名重造」 */
-export const MAKERS = new Set(['array', 'tree', 'graph', 'matrix', 'product', 'plane', 'sentence', 'tex', 'card', 'vec', 'point', 'sum']);
+export const MAKERS = new Set(['array', 'tree', 'graph', 'matrix', 'product', 'plane', 'sentence', 'tex', 'card', 'table', 'vec', 'point', 'sum']);
 // 平面里的箭头、点、和：名字是「平面.名字」（vec p v = 1 0）
 const IN_PLANE = new Set(['vec', 'point', 'sum']);
 
@@ -15,15 +15,15 @@ const HAND = ['open', 'close', 'goal', 'keep', 'back', 'pick', 'unpick', 'press'
 const TIDY = ['remove', 'clear', 'ungoal', 'hide'];
 const SHOW = [
   'glow', 'lift', 'drop', 'paint', 'link', 'pulse', 'label', 'retext', 'camera', 'wait', 'fly', 'dim', 'cover', 'uncover', 'show', 'compare', 'dial', 'set',
-  'hop', 'ptr', 'group', 'pivot', 'stairs', 'tag', 'bf', 'heights', 'deg', 'mark', 'tally', 'magnify', 'strike', 'span', 'visit', 'choose', 'search',
+  'hop', 'ptr', 'group', 'pivot', 'stairs', 'tag', 'bf', 'heights', 'deg', 'mark', 'tally', 'magnify', 'strike', 'span', 'visit', 'choose', 'search', 'tick', 'cross',
 ];
 const ACT = [
   'swap', 'move', 'write', 'split', 'merge', 'insert', 'append', 'delete', 'rotate', 'walk', 'traverse', 'relax', 'take',
-  'rowop', 'mul', 'put', 'transform', 'untransform', 'fold', 'unfold', 'cut', 'refer', 'rewrite', 'retex', 'next', 'addline',
+  'rowop', 'mul', 'put', 'transform', 'untransform', 'fold', 'unfold', 'cut', 'refer', 'rewrite', 'retex', 'next', 'addline', 'addrow',
 ];
 // un 开头的都是收拾，除了上面点了名的（uncover 是揭开、unfold 是展开、untransform 是变回去：都是演给学生看的）
 const UNDO = [
-  'unglow', 'unpaint', 'unlink', 'unlabel', 'undim', 'unptr', 'unpivot', 'unstairs', 'untag', 'unbf', 'unheights', 'undeg', 'unvisit', 'unchoose',
+  'unglow', 'unpaint', 'unlink', 'unlabel', 'undim', 'unptr', 'unpivot', 'unstairs', 'untag', 'unbf', 'unheights', 'undeg', 'unvisit', 'unchoose', 'untick',
   'unmark', 'untally', 'uncut', 'unrefer', 'unsum', 'unvec', 'unspan', 'unmagnify', 'unstrike',
 ];
 /** 指令 → 类。kit/src/stage 认得的每一条都要在（tests/stage-cost.test.js 守着） */

@@ -104,7 +104,8 @@ export function gestureAct(scene, e, { from, to, value, role } = {}) {
   if (typeof g?.toAct !== 'function') return { error: `${o.id} 的 ${e.action} 不是通用手势` };
   let r;
   // scene 也交给它：整张拖到另一张上（矩阵的 put）要看落的那一张是不是收集用的
-  try { r = g.toAct(o, { from, to, value: normValue(value), role, scene }); } catch (err) { return { error: err?.message || String(err) }; }
+  // open：这一项是怎么开的（表的 edit：键盘、输入框还是一排选项，写的值照它查）
+  try { r = g.toAct(o, { from, to, value: normValue(value), role, scene, open: e }); } catch (err) { return { error: err?.message || String(err) }; }
   if (r?.error) return { error: r.error };
   if (!r?.src) return { error: '这一下翻不成一行指令' };
   return { act: r.act, src: r.src };
@@ -114,9 +115,10 @@ export function gestureAct(scene, e, { from, to, value, role } = {}) {
  * 这一下放下以后要不要先问一个值：{ input: 'keypad', prompt, hint? }（数字键盘）、{ pick, choices: [{ value, text, paint? }] }（点一个）或 null。
  * write 总是要写一个值；span 的手势表写了 pick 就要点一个（句子的成分）；别的看手势表的 ask（矩阵：倍加、倍乘要倍数，对调不用）
  */
-export function askFor(g, o, kind, ctx = {}) {
+export function askFor(g, o, kind, ctx = {}, e = null) {
   if (!g) return null;
-  const own = typeof g.ask === 'function' ? g.ask(o, { kind, ...ctx }) : null;
+  // e：这一项是怎么开的（open T edit input=text / choices="…"：问法跟着它）
+  const own = typeof g.ask === 'function' ? g.ask(o, { kind, ...ctx, open: e }) : null;
   if (kind === 'write') return own || { input: 'keypad', prompt: '写一个数' };
   if (kind === 'span' && g.pick) return { pick: g.pick, choices: typeof g.choices === 'function' ? g.choices(o, ctx) : [] };
   return own || null;
@@ -146,7 +148,7 @@ export const wouldBlock = (scene, e, src) => !!blockOf(scene, e, src);
  */
 export function dropVerdict(scene, e, ctx = {}, kind) {
   const o = scene?.objects?.get(e?.obj);
-  const ask = askFor(e?.gesture || gestureOf(o, e?.action), o, kind, ctx);
+  const ask = askFor(e?.gesture || gestureOf(o, e?.action), o, kind, ctx, e);
   if (ask) return { ask, r: null, why: '', blocked: false, impossible: false };
   const r = gestureAct(scene, e, ctx);
   if (r.error) return { ask: null, r, why: r.error, blocked: false, impossible: false };
