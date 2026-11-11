@@ -16,14 +16,23 @@ export const arrayView = {
     const sc = stage.scene;
     // 虚框和序号（格子挪走了它还在，看得出「原来在第几位」）
     for (let i = 1; i <= o.cells.length; i++) {
-      stage.decor(o.id, `slot${i}`, () => {
+      const s = slotBox(o, i);
+      const g = stage.decor(o.id, `slot${i}`, () => {
         const g = el('div', 'st-slot', stage.layer);
-        const s = slotBox(o, i);
         g.style.transform = tr(s.x, s.y);
+        g.__box = s;
         if (ctx.entering === o.id) g.style.opacity = '0';
         el('span', 'st-idx', g).textContent = String(i);
         return g;
       });
+      // 整排被推走了（下面的东西让地方、上面贴了一行字），虚框和序号跟着走。以前只在造出来时摆一次：牌下去了它们留在原地，
+      // 画面量出来这一排「占」到了原来那里，又被往下推，一遍遍推出屏幕（主线第一轮 D1-10：split 以后整台缩成一小块也是它）
+      if (!same(g.__box, s)) {
+        const from = g.__box;
+        g.__box = s;
+        g.style.transform = tr(s.x, s.y);
+        if (from && !stage.instant) stage.tween(g, [{ transform: tr(from.x, from.y) }, { transform: tr(s.x, s.y) }], { duration: 480 });
+      }
     }
     const moves = [];
     for (const x of o.cells) {
