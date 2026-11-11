@@ -339,6 +339,8 @@ export const FIX1 = [
   { id: 'D3-5', files: ['D3-5.txt'], audit: [C(/边上的数叠在一起/)] },
   { id: 'side-1', files: ['side-1.txt'], noAudit: [C(/贴的字没在写的那一边/), C(/压着/), C(/出了屏幕/)], nots: [C(/写的是上面，放不下/)] },
   { id: 'D1-10', files: ['D1-10.txt'], noAudit: [C(/出了屏幕/), C(/压着/), C(/缩得太小/)] },
+  { id: 'L3-1', files: ['L3-1.txt'], noAudit: [C(/出了屏幕/), C(/缩得太小/), C(/压着/)], nots: [C(/画面上看不全/)] },
+  { id: 'E1-2', files: ['E1-2.txt'], noAudit: [C(/出了屏幕/), C(/画到了自己的地方外面/), C(/压着/)], nots: [C(/画面上看不全/)] },
   { id: 'side-2', files: ['side-2.txt'], noAudit: [C(/贴的字没在写的那一边/), C(/压着/), C(/出了屏幕/)] },
   { id: 'E1-8', files: ['E1-8.txt'], views: ['竖屏'], audit: [C(/缩得太小/)], checks: [C(/字难认：整台缩到了/)] },
   { id: 'D4-5', files: ['D4-5.txt'], called: [C(/你上一轮的提问没演上/, '页面马上叫了老师：你上一轮的提问没演上'), C(/学生点了 2 个：A\.1、A\.2/, '学生点的是重写以后的那一问')] },

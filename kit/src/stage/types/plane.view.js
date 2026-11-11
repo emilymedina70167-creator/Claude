@@ -507,11 +507,13 @@ export const planeView = {
 .is-tap > .pl-ring, .is-drag > .pl-ring { animation: pl-breathe 1.8s ease-in-out infinite; }
 .is-hold > .pl-ring { animation: none; opacity: .9; }
 @keyframes pl-breathe { 0%, 100% { opacity: 0; } 50% { opacity: .6; } }
-.pl-snap { fill: none; stroke: var(--st-brand); stroke-width: 2; stroke-dasharray: 3 3; opacity: 0; pointer-events: none; }
-.is-hold > .pl-snap { opacity: .85; }
-.pl-coord { font: 600 16px var(--sans, sans-serif); fill: var(--st-brand); font-variant-numeric: tabular-nums; opacity: 0; pointer-events: none;
+/* 不拖的时候不占地方（display: none）：它平时停在世界原点，量这块平面占多大时会把它算进去——第二块平面被它「撑」到第一块那里，
+   页面就一遍遍把第二块往下推，整台缩成一小块（主线第一轮 L3-1）。拖着的时候（is-hold）才出来，那时已经摆到了箭头尖上 */
+.pl-snap { fill: none; stroke: var(--st-brand); stroke-width: 2; stroke-dasharray: 3 3; display: none; pointer-events: none; }
+.is-hold > .pl-snap { display: inline; opacity: .85; }
+.pl-coord { font: 600 16px var(--sans, sans-serif); fill: var(--st-brand); font-variant-numeric: tabular-nums; display: none; pointer-events: none;
   paint-order: stroke; stroke: color-mix(in srgb, var(--st-card) 90%, transparent); stroke-width: 5px; stroke-linejoin: round; }
-.is-hold > .pl-coord { opacity: 1; }
+.is-hold > .pl-coord { display: inline; opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .is-tap > .pl-ring, .is-drag > .pl-ring { animation: none; opacity: .5; } }
 /* 一次点几样（ask pick）：点了的、交了的那一圈常亮（平面上是 SVG，stage.css 的 outline 画不出来）；reveal=on 以后没变的虚线淡掉 */
 .pl-items .is-picking > .pl-ring, .pl-items .is-pick > .pl-ring { animation: none; opacity: 1; stroke-width: 3; }

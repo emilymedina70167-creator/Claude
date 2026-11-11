@@ -1,0 +1,9 @@
+# E1-2：先造句子再造平面，平面画到屏幕外面、压着句子（先造平面再造句子就好）
+sentence a = "The response has been favorable."
+mark a.3-4 谓语
+plane r range=-1..4
+point r N = 3 0
+label rn r.N "现在" side=above tone=key
+vec r x = 1 0 color=g1
+open r.x drag
+say "把箭头拖到「现在」。"
