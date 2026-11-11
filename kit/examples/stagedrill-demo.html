@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>舞台上自己练</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+mode: guided
+unit: 舞台上自己练（stage 组件）
+subject: 数据结构
+theme: ink
+---
+
+## 希尔排序
+
+页面换一组数，自己拖；每做完一趟页面照引擎看对不对。
+
+```stage
+id: sd-shell
+pick a = seq(8, 1, 99) distinct
+---
+array a = {a}
+follow a sort shell gaps="5 3 1"
+group a stride=5
+open a move
+```
+
+## 直接插入
+
+```stage
+id: sd-insert
+pick a = seq(6, 1, 60) distinct
+---
+array a = {a}
+follow a sort insert
+open a move
+```
+</script>

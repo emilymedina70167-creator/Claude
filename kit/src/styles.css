@@ -2563,3 +2563,11 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 /* mode: fill 的 by: row：做完的行淡一点、还没轮到的行更淡（输入框是 disabled） */
 .sv-fill-t td.sv-fill-locked { opacity: 0.75; }
 .sv-fill-t td.sv-fill-later { opacity: 0.4; }
+
+/* 舞台上自己练（blocks/stagedrill.js）：嵌一块没有老师的舞台。舞台自己的那一条（打字、给个提示）这里不要 */
+.block-stagedrill .sd-lead { margin: 0 0 8px; color: var(--muted); font: 15px/1.5 var(--sans); }
+.block-stagedrill .sd-stage { position: relative; height: min(70vh, 620px); min-height: 380px; border-radius: 16px; overflow: hidden; background: rgb(var(--chalk-rgb) / 0.04); }
+.block-stagedrill .sd-stage .st-dock, .block-stagedrill .sd-stage .st-caption { display: none; }
+.block-stagedrill .sd-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.block-stagedrill .sd-bar .btn { min-height: 44px; font: 15px var(--sans); }
+.block-stagedrill .sd-note { margin-top: 8px; min-height: 1.5em; color: rgb(var(--chalk-rgb) / 0.85); font: 15px/1.6 var(--sans); }

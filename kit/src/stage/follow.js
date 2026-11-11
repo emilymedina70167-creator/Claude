@@ -183,6 +183,18 @@ function gapText(a, o, scene, w, { brief = false } = {}) {
   return `和${head}该有的样子差 ${g.list.length} ${word}：${g.list.map((x) => `${name(x.i)}（现在 ${x.now === '' ? '空着' : x.now}，该是 ${x.want}）`).join('、')}`;
 }
 
+/** 照什么走、一步叫什么（自己练的组件写题面用） */
+export function followInfo(o) {
+  const f = o?.follow, a = f && followOf(f.name);
+  return a ? { title: titleOf(a, f.name, f.fields), unit: unitOf(a, f.fields) } : null;
+}
+/** 下一个检查点该是什么样，写给人看（自己练的「看这一趟该是什么样」） */
+export function nextText(o, scene) {
+  const f = o?.follow, a = f && followOf(f.name);
+  const w = a && whereOf(o, scene);
+  return w?.next ? `${nth(a, f, w.next.mark, w.next.upto)}做完该是：${shown(a, f, w.next)}` : '';
+}
+
 /** 舞台现状里的那一行（没在照着走是 null） */
 export function followLine(o, scene) {
   const f = o?.follow, a = f && followOf(f.name);
