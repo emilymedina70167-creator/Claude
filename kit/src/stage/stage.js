@@ -5,7 +5,7 @@
 // （每种东西自己的在 types/xxx.view.js 的 choreo，共用的说话、比较、飞字在这里）→ sync 把画面对齐到场景
 // （每种东西的 view.sync 造 / 改自己的节点，挪动、连线、贴字、拨数这里统一演）。
 // 演过的每一行记进 log（学生拖、拨造成的变化也记成一行），刷新或作废一轮时照 log 瞬间重放（replay）。
-import { sceneSpans, sceneLine, swappedLine, circled } from './scenes.js';
+import { sceneSpans, sceneLine, swappedLine, circled, sceneOf } from './scenes.js';
 import { createLookback } from './lookback.js';
 const SIDE_PAD = 20; // 解析栏左右的留白（和 stage.css 的 .st-side 一样）
 const SIDE_KEY = 'la-stage-side'; // 解析栏点开还是收着（这台设备记着）
@@ -99,7 +99,8 @@ export function helpLine(q, hasGoals, hasWork = false) {
 export { COLOR_NAMES };
 
 export class Stage {
-  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false, scenesHost = null } = {}) {
+  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false, scenesHost = null, side = null } = {}) {
+    this.sideForce = side; // 'open'：栏一直开着、没有把手（回看用）
     this.scenesHost = scenesHost; // 幕条放哪（课堂给顶上那一条里留的位置；不给放在舞台自己顶上）
     // bare：嵌在别处的一小块舞台（自己练），没有上面的话、底下的输入条——镜头不给它们留地方
     this.bare = !!bare;
@@ -156,7 +157,7 @@ export class Stage {
     this.sideW = 0;
     this.sideDirty = true;
     // 解析栏收放（2026-11-12 我说的：做成收放，需要的时候点开）：默认收着，画面用满整屏；左边一个把手点开，这台设备记着
-    this.sideWant = storedSide();
+    this.sideWant = this.sideForce === 'open' ? true : storedSide();
     this.sceneTalk = []; // 这一幕说过的话 { text, ask, turn }：收着的时候也记，点开栏时照它放回
     this.sideToggle = el('button', 'st-side-toggle', this.view);
     this.sideToggle.type = 'button';
@@ -376,7 +377,7 @@ export class Stage {
         }
       }
       if (!dead && idsAtBegin && !this.instant) this.showHow(openSeq0);
-      if (!dead && idsAtBegin) this.scene.swapNote = swappedLine(idsAtBegin, [...this.scene.objects.keys()], this.log.slice(mark).some((r) => /^scene\b/.test(r.src)));
+      if (!dead && idsAtBegin) this.scene.swapNote = swappedLine(idsAtBegin, [...this.scene.objects.keys()], this.log.slice(mark).some((r) => sceneOf(r.src)));
       // 学生上一次点的几样（ask pick）圈到老师这一轮演完：照一行 unpick 收掉，记进这一轮的 log（刷新照它放回）。
       // 这一轮里才交的不收（上一问还挂着时学生交的，老师还没看到）。reveal=on 还没揭晓的不收（第三次量 D2/幕1：猜错了叫老师，
       // 老师这一轮演完圈就没了，学生插进去以后看不到哪几个变了）：留到之后第一下改了它们、揭晓了，再下一轮演完才收；
@@ -553,7 +554,8 @@ export class Stage {
     const spans = sceneSpans(this.log, { title: this.lessonTitle || '开头' });
     const sp = spans.find((x) => x.n === n);
     if (!sp || sp === spans.at(-1)) return null;
-    this.lookback ||= createLookback(this.root, {
+    // 回看那一层挂在 host 上（和舞台的 root 平级）：放在 root 里面的话，主舞台改字（量、拨盘、按格染色都是 root.querySelectorAll）会改到回看里的字
+    this.lookback ||= createLookback(this.host, {
       onOpen: (c) => { this.looking = { ...c, since: Date.now(), logAt: this.log.length }; },
       onClose: (r) => {
         const saw = this.looking;
@@ -571,6 +573,7 @@ export class Stage {
   }
   /** 照记录瞬间重放（刷新后放回、作废一轮后退回）：画面直接到最后的样子，不演动画、不等学生 */
   async replay(log) {
+    this.lookback?.reset();
     this.instant = true;
     this.clearAll();
     this.log = [];
@@ -812,7 +815,8 @@ export class Stage {
     const w = this.view?.clientWidth, h = this.view?.clientHeight;
     if (!(w > 0 && h > 0)) return;
     this.setSide(w > h && !this.bare && this.sideWant);
-    this.sideToggle.hidden = !(w > h && !this.bare);
+    this.sideToggle.hidden = !(w > h && !this.bare) || !!this.sideForce;
+    this.root.classList.toggle('is-land', w > h && !this.bare);
     this.sideToggle.textContent = this.sideOn ? '‹' : '说过的 ›';
     this.sideToggle.setAttribute('aria-label', this.sideOn ? '收起说过的话' : '点开这一幕说过的话');
     // 横屏：场景拿右边那一块摆东西、算「缩到几成」（2.8：摆新东西要不要另起一列、现状里的「字难认」都按它）
@@ -858,7 +862,7 @@ export class Stage {
     const all = this.sceneTalk || [];
     const lastTurn = all.at(-1)?.turn;
     const rows = this.sideOn ? all : all.filter((x) => x.turn === lastTurn).slice(-CAPTION_MAX);
-    this.caption.querySelectorAll('.st-line').forEach((n) => n.remove());
+    this.caption.querySelectorAll('.st-line, .st-how').forEach((n) => n.remove());
     for (const x of rows) {
       const line = el('p', 'st-line', this.caption);
       line.__text = x.text;
@@ -903,6 +907,7 @@ export class Stage {
     if (!tooWide && !tooSmall) return;
     this.wideDock.hidden = false;
     this.wideDock.appendChild(this.dock);
+    if (!this.instant) this.keepInView(); // 画面底部让出它的高
   }
   /**
    * 手怎么动（主线第六轮 2.10）：老师这一轮新交给学生的手（open），在解析栏这一问下面用小字写一句怎么动——规则文件里现成的那一句
@@ -910,7 +915,7 @@ export class Stage {
    * 不提示怎么解题；发给老师的东西里不多写
    */
   showHow(seq0) {
-    if (!this.sideOn) return;
+    if (!this.root.classList.contains('is-land')) return; // 竖屏不写（竖屏不动）
     this.howSaid ||= new Set();
     const lines = [];
     for (const e of this.scene.opens.values()) {

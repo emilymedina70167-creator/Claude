@@ -362,6 +362,19 @@ export class Scene {
   /** 这几个写法（部件、整样东西）落在哪几样藏着的东西上 */
   hiddenIn(refs) { return [...new Set(refs.map((r) => parseRef(r)?.obj).filter((id) => this.objects.get(id)?.hidden))]; }
   /** 挑战的条件里提到的舞台上的东西（M、M.1,1、rank(M)、M same B） */
+  /** 拿掉几条挑战（ungoal 和 scene 共用）：连同它们的预写 */
+  ungoalIds(ids) { ids.forEach((k) => { this.goals.delete(k); this.reactions.delete(k); this.dropAhead(k); }); }
+  /** 收掉几张贴的字（unlabel 和 scene 共用）：拨盘的字收了拨盘就不显示；贴在收掉的那几样（拨数、别的字）上面的字一起收（主线第一轮 D1-5） */
+  unlabelIds(ids) {
+    const out = [...ids];
+    for (const k of ids) { this.labels.delete(k); if (k.startsWith('dial:') && this.vars.get(k.slice(5))) this.vars.get(k.slice(5)).shown = false; if (k.startsWith('dial:')) this.dialAt.delete(k.slice(5)); }
+    const gone = new Set(out);
+    for (let more = true; more;) {
+      more = false;
+      for (const [k, l] of this.labels) if ((l.refs || []).some((r) => gone.has(r))) { this.labels.delete(k); out.push(k); gone.add(k); more = true; }
+    }
+    return out;
+  }
   /**
    * 挑战做到过、它的条件里提到的东西都不在台上了（东西拿掉了，拨盘跟着它的东西一起没了）：画面上收起（主线第六轮 3.8）。
    * 只看名字：东西、拨盘都不在了才算；一个名字都没提到（写的全是数）、写的是 {式子} 的，不算（照旧挂着）。场景里的记录不动，现状照旧写「做到过」
@@ -1312,14 +1325,7 @@ export class Scene {
       }
       case 'unlabel': {
         const ids = words.length ? words : [...this.labels.keys()].filter((k) => !k.startsWith('dial:'));
-        for (const k of ids) { this.labels.delete(k); if (k.startsWith('dial:') && this.vars.get(k.slice(5))) this.vars.get(k.slice(5)).shown = false; if (k.startsWith('dial:')) this.dialAt.delete(k.slice(5)); }
-        // 贴在收掉的那几样（拨数、别的字）上面的字一起收（主线第一轮 D1-5：以前留在原地，画面上挂到了别的东西旁边）
-        const gone = new Set(ids);
-        for (let more = true; more;) {
-          more = false;
-          for (const [k, l] of this.labels) if ((l.refs || []).some((r) => gone.has(r))) { this.labels.delete(k); ids.push(k); gone.add(k); more = true; }
-        }
-        return { ids };
+        return { ids: this.unlabelIds(ids) };
       }
       case 'dial': {
         // dial d = 5 range=1-5 at=a
@@ -1705,7 +1711,7 @@ export class Scene {
       case 'ungoal': {
         const ids = words.length ? words : [...this.goals.keys()];
         for (const k of ids) if (!this.goals.has(k)) throw new Error(`没有叫「${k}」的挑战`);
-        ids.forEach((k) => { this.goals.delete(k); this.reactions.delete(k); this.dropAhead(k); });
+        this.ungoalIds(ids);
         return { ungoal: ids };
       }
       case 'press': {
@@ -1802,19 +1808,15 @@ export class Scene {
         }
         const kept = new Set(keep);
         const dropped = [...this.objects.keys()].filter((id) => !kept.has(id));
+        // 贴的字先记下哪些贴在要收的东西上（dropObject 会顺手删掉它们，unlabel 的级联要拿这一份往外找）
+        const gone = new Set(dropped);
+        const onDropped = [...this.labels].filter(([, l]) => (l.refs || []).some((r) => gone.has(parseRef(r)?.obj))).map(([k]) => k);
         for (const id of dropped) this.dropObject(id);
         const goals = [...this.goals.keys()];
-        goals.forEach((k) => { this.goals.delete(k); this.reactions.delete(k); this.dropAhead(k); });
-        // 贴的字：贴在带过去的东西（或它的拨盘）上的留着，别的收（拨盘的字收了拨盘就不显示，和 unlabel dial:t 一样）
-        const ownedBy = (name) => { const v = this.vars.get(name); return v?.owner && kept.has(v.owner); };
-        const stays = (l) => (l.refs || []).some((r) => kept.has(parseRef(r)?.obj) || (String(r).startsWith('dial:') && ownedBy(String(r).slice(5))));
-        const labs = [...this.labels].filter(([k, l]) => !(k.startsWith('dial:') ? ownedBy(k.slice(5)) || stays(l) : stays(l))).map(([k]) => k);
-        for (const k of labs) { this.labels.delete(k); if (k.startsWith('dial:') && this.vars.get(k.slice(5))) this.vars.get(k.slice(5)).shown = false; if (k.startsWith('dial:')) this.dialAt.delete(k.slice(5)); }
-        for (let more = true; more;) {
-          more = false;
-          const gone = new Set(labs);
-          for (const [k, l] of this.labels) if ((l.refs || []).some((r) => gone.has(r))) { this.labels.delete(k); labs.push(k); more = true; }
-        }
+        this.ungoalIds(goals);
+        // 剩下要收的字：不贴在任何东西上的拨盘（不在 keep 里）、连线没了的；贴在别的字上的跟着 unlabel 的级联走（贴着的那张还在就留着）
+        const free = [...this.labels].filter(([k, l]) => (k.startsWith('dial:') ? !this.vars.get(k.slice(5))?.owner || !kept.has(this.vars.get(k.slice(5)).owner) : l.link ? !this.links.has(l.link) : false)).map(([k]) => k);
+        const labs = this.unlabelIds([...onDropped, ...free]);
         if (this.waiting) this.endAsk(this.waiting);
         this.waiting = null;
         this.skipAsk();
@@ -1931,6 +1933,8 @@ export class Scene {
   // keepSaves：同名重造留着存档（keep / back，lastBefore 不留）；拿下舞台（remove，以后 merge 拿掉的那一张）连存档一起清
   dropObject(id, { keepLabels = false, keepPlace = false, keepSaves = false } = {}) {
     if (!keepPlace) this.objects.delete(id);
+    // 镜头对准的里有它（camera a.2 以后 remove a / scene）：去掉，不然镜头一直对着一样没了的东西、新造的不框（审查第 4 条）
+    if (!keepPlace && this.focus) { this.focus = this.focus.filter((r) => r !== id && parseRef(r)?.obj !== id); if (!this.focus.length) this.focus = null; }
     for (const [k, l] of this.links) if (l.a.obj === id || l.b.obj === id) this.links.delete(k);
     if (!keepLabels) for (const [k, l] of this.labels) if (l.refs.some((r) => parseRef(r)?.obj === id)) this.labels.delete(k);
     this.binds = this.binds.filter((b) => b.obj !== id);

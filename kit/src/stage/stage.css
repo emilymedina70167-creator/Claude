@@ -331,7 +331,7 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-stage.is-side .st-dock-wide:not([hidden]) { position: absolute; left: var(--side-w, 360px); right: 0; bottom: 0; z-index: 4; display: flex; justify-content: center; padding: 0 16px max(18px, env(safe-area-inset-bottom, 0px)); pointer-events: none; }
 .st-stage.is-side .st-dock-wide .st-dock { position: static; padding: 0; }
 .st-how { display: none; }
-.st-stage.is-side .st-how { display: block; margin: 2px 0 0; font: 500 15px/1.5 var(--sans, sans-serif); color: var(--st-muted); }
+.st-stage.is-land .st-how { display: block; margin: 2px 0 0; font: 500 15px/1.5 var(--sans, sans-serif); color: var(--st-muted); }
 
 /* 幕条（主线第六轮 3.4）：这节课的几幕，一幕一个胶囊。课堂里放在顶上那一条（.sc-scenes-slot），样子页放在舞台顶上 */
 .st-scenes { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }

@@ -133,3 +133,24 @@ test('舞台课分了两幕：报告里有两幕的标题和重点卡；一幕�
   assert.equal(buildReport({ session: { id: 'c-1' }, turns: [{ seq: 1, role: 'claude', text: '```board\nnew\n```' }] }).scenes, undefined);
   assert.equal(r.v, REPORT_VERSION); // 版本号没为它加（旧课不重算）
 });
+
+test('scene 的写法和舞台演的时候一样认（「」“”、开头的 &）；写成 & scene 也算写了 scene', () => {
+  assert.equal(sceneOf('scene 「过去完成时」').title, '过去完成时');
+  assert.equal(sceneOf('scene “x” keep=a').keep[0], 'a');
+  assert.equal(sceneOf('& scene "x"').title, 'x');
+  assert.equal(sceneSpans([T('sentence s = "A b."'), T('scene 「二」'), T('sentence d = "C."')]).length, 2);
+});
+
+test('scene keep=：贴在留下的字上的字留着（和一串 remove 一样）', () => {
+  const s = run(new Scene(), 'array a = 1 2 3\narray b = 4 5\nlabel k1 a.2 "hi"\nlabel k2 k1 "chain"\nlabel k3 b.1 "走"');
+  run(s, 'scene "x" keep=a');
+  assert.deepEqual([...s.labels.keys()].sort(), ['k1', 'k2']);
+});
+
+test('remove / scene 以后镜头不再对着没了的东西', () => {
+  const s = run(new Scene(), 'array a = 1 2 3\ncamera a.2');
+  run(s, 'scene "y"');
+  assert.equal(s.focus, null);
+  const t = run(new Scene(), 'array a = 1 2 3\narray b = 4\ncamera a.2 b.1\nremove a');
+  assert.deepEqual(t.focus, ['b.1']);
+});

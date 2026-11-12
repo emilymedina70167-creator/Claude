@@ -5,18 +5,19 @@
 // 页面替老师分会把幕条切碎，分段又是教学判断，所以页面只在舞台现状里说一句事实（swappedLine）。
 import { parseScript } from './script.js';
 
-const SCENE = /^scene\s+"([^"]*)"(.*)$/;
 // 这几种行不造东西、不改台上的东西：一幕里只有它们（老师连写两个 scene），这一幕是空的
 const BARE = new Set(['scene', 'say', 'ask', 'wait', 'camera']);
 
-/** 一行是不是 scene：{ title, keep: [] }；不是返回 null */
+/** 一行是不是 scene：{ title, keep: [] }；不是返回 null。照 parseScript 读（「」“” 的引号、开头的 & 和舞台演的时候一样认） */
 export function sceneOf(src) {
-  const m = String(src || '').trim().match(SCENE);
-  if (!m) return null;
-  // keep=tl 带一样；带几样写 keep="tl s"（和别的选项一样：几个词的值写在引号里）
-  const k = m[2].match(/(?:^|\s)keep=(?:"([^"]*)"|(\S+))/);
-  const keep = (k ? k[1] ?? k[2] : '').split(/[\s,，]+/).filter(Boolean);
-  return { title: m[1].trim(), keep };
+  if (!/scene/.test(String(src || ''))) return null;
+  let c;
+  try { [c] = parseScript(String(src)); } catch { return null; }
+  if (c?.cmd !== 'scene') return null;
+  const title = (c.args || []).find((a) => a.t === 'str')?.v;
+  if (title == null) return null;
+  const keep = String(c.opts?.keep || '').split(/[\s,，]+/).filter(Boolean);
+  return { title: String(title).trim(), keep };
 }
 
 const headOf = (src) => String(src || '').trim().replace(/^&\s*/, '').split(/\s+/)[0];
