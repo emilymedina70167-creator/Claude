@@ -31,7 +31,7 @@ export const OPTIONS = {
   goal: ['when', 'call', 'on', 'collect', 'n'], watch: ['when'],
   ask: {
     tap: ['expect', 'button'], drag: ['expect', 'button'], pick: ['expect', 'reveal', 'order', 'button'], next: ['button'], say: ['button'],
-    value: ['answer', 'type', 'wrong', 'free', 'solve', 'button'],
+    value: ['answer', 'type', 'wrong', 'free', 'solve', 'grid', 'button'],
   },
 };
 // 两个名字差几个字母（交换挨着的两个字母算一下）

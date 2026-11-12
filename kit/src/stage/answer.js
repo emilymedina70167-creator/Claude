@@ -567,6 +567,7 @@ export function judgeAnswer(given, spec = {}, scene = null) {
  */
 export function gridShape(spec = {}, scene = null) {
   if (String(spec.type ?? '').trim().toLowerCase() !== 'matrix') return null;
+  if (String(spec.grid ?? '') === 'off') return null; // 老师关了格子（想看学生自己写成什么形状）
   try {
     // 没写 free=（全是数）也按格写：格子里写数、分数，没有字母键。形状算不出来（舞台上现在算不了）、太大：回到一个输入框
     const names = String(spec.free ?? '').trim() ? parseFree(spec.free).map((f) => f.name) : [];

@@ -117,3 +117,13 @@ test('引擎的表里的小数格：分数和两位小数都算对，一位小�
     assert.match(extra, /表外的答案（学生看不到）/);
   }
 });
+
+test('ask value type=matrix grid=off：不给格子，学生自己写（老师想看学生会不会把零矩阵写成数字 0）；别处写 grid= 当场报', async () => {
+  const { answerInput } = await import('../kit/src/stage/answer.js');
+  const s = make('matrix A = 1 2 / 3 4\nask value "A - A = ？" type=matrix answer={A - A}');
+  assert.equal(answerInput(s.waiting, s).kind, 'grid');
+  const s2 = make('matrix A = 1 2 / 3 4\nask value "A - A = ？" type=matrix answer={A - A} grid=off wrong="0=写成数字 0"');
+  assert.notEqual(answerInput(s2.waiting, s2).kind, 'grid');
+  assert.throws(() => make('matrix A = 1 2 / 3 4\nask value "？" type=matrix answer={A} grid=no'), /grid= 只能写 off/);
+  assert.throws(() => make('ask value "？" type=num answer=3 grid=off'), /grid=off 只用在 type=matrix/);
+});

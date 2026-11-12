@@ -315,8 +315,8 @@ engineTable(name, rawFields) → {
 
 ### Task 18: 整套检查、审查、文档、发布（三）
 
-- [ ] **整套检查各一次：** `npm test`；`npm run check:stage`（慢，耐心等，不要误杀）；`npm run e2e`；`npm run check:pages`；六张表 `fix1 new2 new3 new4 new5 first`；旧课重放 282 份（`.superpowers/wt.sh`、`.superpowers/replay.sh run7`、`node .superpowers/cmp3.mjs`——表的上限、`known` 换了以后预期 0 处不同，有不同逐条看是不是该变的）；`node .superpowers/size.mjs`。
-- [ ] **只读助手审一次**（一个 `general-purpose` 助手，不改文件）：给它设计、计划、rulings、`git diff 71fd73a..HEAD -- kit/src tools tests`，问三件事：发给老师的话里有没有假话或者会静默失效的；有没有哪里页面替老师做了教学决定；Review Focus 六条各自的测试是不是真的测到了。要紧的修，一条一个测试；不修的记进 rulings。
-- [ ] **文档：** `docs/stage-mainline.md` 加「第五轮」；`docs/stage-types.md`（`{verb}`、`engine=`、树上对调）；`CLAUDE.md` 接一句；rulings 写全；计划里的勾打完。
-- [ ] **发布：** 版本 `2026-11-12d`（跨了天就用当天的日期）；build 两处；提交、推、快进 `main`；发布学习台和舞台试课。
-- [ ] **告诉我：** 三节课各走查出几条、修了几条、哪几条没修为什么；跳过的（堆要是跳了）；上课时请我留意的两三处。
+- [x] **整套检查各一次：** `npm test`；`npm run check:stage`（慢，耐心等，不要误杀）；`npm run e2e`；`npm run check:pages`；六张表 `fix1 new2 new3 new4 new5 first`；旧课重放 282 份（`.superpowers/wt.sh`、`.superpowers/replay.sh run7`、`node .superpowers/cmp3.mjs`——表的上限、`known` 换了以后预期 0 处不同，有不同逐条看是不是该变的）；`node .superpowers/size.mjs`。
+- [x] **只读助手审一次**（一个 `general-purpose` 助手，不改文件）：给它设计、计划、rulings、`git diff 71fd73a..HEAD -- kit/src tools tests`，问三件事：发给老师的话里有没有假话或者会静默失效的；有没有哪里页面替老师做了教学决定；Review Focus 六条各自的测试是不是真的测到了。要紧的修，一条一个测试；不修的记进 rulings。
+- [x] **文档：** `docs/stage-mainline.md` 加「第五轮」；`docs/stage-types.md`（`{verb}`、`engine=`、树上对调）；`CLAUDE.md` 接一句；rulings 写全；计划里的勾打完。
+- [x] **发布：** 版本 `2026-11-12d`（跨了天就用当天的日期）；build 两处；提交、推、快进 `main`；发布学习台和舞台试课。
+- [x] **告诉我：** 三节课各走查出几条、修了几条、哪几条没修为什么；跳过的（堆要是跳了）；上课时请我留意的两三处。

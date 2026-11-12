@@ -797,9 +797,10 @@ const tickX = (i) => page.evaluate((i) => { const r = window.LAStage.decors.get(
 const sent = () => page.evaluate(() => [...window.LAStage.scene.objects.get('s').words].sort((a, b) => a.slot - b.slot).map((w) => w.value).join(' '));
 before2 = await srcs();
 A = await box('tl:me');
-expect('时间轴：小人至少 44 宽', String(A.w >= 44 && A.h >= 44), 'true');
+// 轴宽了整台会缩小，小人画出来可能不到 44：点区照旧至少 44 见方——按在离中心 21 的地方也拖得动
+expect('时间轴：小人画出来至少 36 宽', String(A.w >= 36 && A.h >= 36), 'true');
 let P2 = await tickX(2);
-await holdDrag({ x: A.cx, y: A.cy }, { x: P2.x, y: A.cy });
+await holdDrag({ x: A.cx + 21, y: A.cy }, { x: P2.x, y: A.cy });
 await page.waitForTimeout(1300);
 expect('时间轴：按住小人拖到 1830，句子跟着变', `${await added(before2)}｜${await sent()}`, 'set me 1830｜It was done');
 expect('时间轴：交给课堂的那一下是拨拨盘', await page.evaluate(() => { const a = window.LAStageDev.acts.at(-1); return `${a.type} ${a.name} ${a.from} → ${a.value}`; }), 'dial me 现在 → 1830');

@@ -1411,7 +1411,12 @@ export class Scene {
         // 可它写下时照新规矩验过了：判的时候算不出来是学生把舞台拨成了算不了的样子，照旧「页面没判成」，不照字面比（不然对的也判错）
         const oldAsk = !!c.lenient && !c.prewrite;
         if (opts.solve != null && kind !== 'value' && !c.lenient) throw new Error('solve= 只用在 ask value 上（type=matrix free=… 的一列通解按集合判）');
-        const spec = kind === 'value' ? { type: opts.type, answer: opts.answer, wrongs: opts.wrong, free: opts.free, ...(opts.solve != null ? { solve: opts.solve } : {}), ...(oldAsk ? { lenient: true } : {}) } : null;
+        // grid=off：矩阵的答案不给格子，学生自己写「0 0 / 0 0」——格子的个数会把答案的形状告诉学生，老师想看学生会不会写成一个数时关掉
+        if (opts.grid != null && !c.lenient) {
+          if (String(opts.grid) !== 'off') throw new Error(`grid= 只能写 off（矩阵的答案不给格子，学生自己写），没有「${opts.grid}」`);
+          if (String(opts.type ?? '').trim().toLowerCase() !== 'matrix') throw new Error('grid=off 只用在 type=matrix 上（别的答案本来就是一个输入框）');
+        }
+        const spec = kind === 'value' ? { type: opts.type, answer: opts.answer, wrongs: opts.wrong, free: opts.free, ...(opts.solve != null ? { solve: opts.solve } : {}), ...(opts.grid != null ? { grid: String(opts.grid) } : {}), ...(oldAsk ? { lenient: true } : {}) } : null;
         if (spec) checkSpec(spec, this, { strict: !c.lenient, lenient: oldAsk });
         if (str != null) { this.say = str; this.words = parseRich(str).filter((p) => p.k === 'word').map((p) => p.v); }
         // 这一轮写在前面的 @ask.right 跟着这一问走（学生答对它时页面马上演，只演一次）。预写里的 ask（舞台演 @g1 的行时带 prewrite）不拿：
@@ -1427,7 +1432,7 @@ export class Scene {
           rightKey = `ask.right#${++this.askSeq}`;
           for (const a of this.ahead.values()) if (a.from === 'ask.right') a.from = rightKey;
         } else if (!c.prewrite) this.dropAhead('ask.right');
-        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, ...(order ? { order: true } : {}), answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.solve != null ? { solve: spec.solve } : {}), ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}), ...(c.prewrite ? { pre: true } : {}) };
+        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, ...(order ? { order: true } : {}), answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.grid ? { grid: spec.grid } : {}), ...(spec?.solve != null ? { solve: spec.solve } : {}), ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}), ...(c.prewrite ? { pre: true } : {}) };
         if (opts.expect && kind !== 'pick') this.parts(opts.expect);
         return { kind };
       }

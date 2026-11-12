@@ -84,6 +84,8 @@ export const timelineView = {
       key: `stand:${x.name}`,
       part: () => ({ stand: x.name }),
       node: () => stage.nodes.get(`${o.id}:${x.name}`),
+      // 停靠点多、整台缩小了，小人画出来不到 44：手指的点区照旧至少 44 见方
+      rect: () => { const n = stage.nodes.get(`${o.id}:${x.name}`); const r = n && stage.screenRect(n); if (!r) return null; const w = Math.max(44, r.w), h = Math.max(44, r.h); return { x: r.x + r.w / 2 - w / 2, y: r.y + r.h / 2 - h / 2, w, h }; },
     })),
     end: (stage, o, e) => openParts(stage, e, o.items).filter((x) => x.kind === 'bar').flatMap((x) => [x.startDial && 'from', x.endDial && 'to'].filter(Boolean).map((side) => ({
       key: `end:${x.name}:${side}`,
