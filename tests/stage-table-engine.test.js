@@ -160,3 +160,25 @@ test('列名有重的（访问串 7 0 1 2 0 …）：告诉老师哪一格时带
   const t = make('table U = 1 2 / 3 4 rows="a a" cols="x y"').objects.get('U');
   assert.equal(cellName(t, t.cells.find((x) => x.r === 2 && x.c === 1)), '第 2 行（a）×x');
 });
+
+test('散列表走过程表（列名是地址 0～12）：照线性探测填对——都对、不算还空着；照平方探测放一个——那一列像是按平方探测探的', () => {
+  const src = 'table H engine=hash hash="19 14 23 01 68 20 84 27" p=13\nopen H edit';
+  const s = make(src);
+  const o = s.objects.get('H');
+  assert.deepEqual(o.colNames.slice(0, 3), ['0', '1', '2']);
+  assert.equal(o.rowNames.length, 2);
+  const put = (sc, r, c, v) => sc.apply(parseScript(`write H.${r},${c} ${v}`)[0], { by: 'student', open: 'edit' });
+  for (const x of o.cells) if (o.key[x.r - 1][x.c - 1] !== '' && x.value === '') put(s, x.r, x.c, o.key[x.r - 1][x.c - 1]);
+  assert.equal(evalMeasure(s, 'blank(H)').value, 0);
+  assert.equal(evalMeasure(s, 'wrong(H)').value, 0);
+  // 错法：照平方探测算出来的表，找一列和对的不一样、两格都有数的，照它填
+  const s2 = make(src);
+  const o2 = s2.objects.get('H');
+  const v = s2.type(o2).variantsOf(o2).find((x) => /平方探测/.test(x.label));
+  assert.ok(v, '有「按平方探测探的」这种错法');
+  const col = o2.colNames.findIndex((_, c) => v.key[0][c] !== o2.key[0][c] && v.key[0][c] !== '' && v.key[1][c] !== '');
+  assert.ok(col >= 0);
+  put(s2, 1, col + 1, v.key[0][col]);
+  const fx = put(s2, 2, col + 1, v.key[1][col]);
+  assert.match([...(fx.judged?.facts || []), ...(fx.judged?.after || [])].join('\n'), /像是：按平方探测探的/);
+});

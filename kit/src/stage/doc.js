@@ -123,6 +123,24 @@ export const ONLY_LINES = [
 const MATRIX_LITE = { cut: /\n学生自己消元[\s\S]*$/, name: '矩阵的 open（rowop / edit：要学生填数用表）' };
 const LITE_TYPES = { 操作系统: { matrix: MATRIX_LITE }, 组成原理: { matrix: MATRIX_LITE } };
 
+/**
+ * 引擎的过程表（table T engine=…，enginetable.js）：每门课说明里列哪几个引擎。每条是「引擎 字段=值 …」，照抄能造出表
+ * （tests/stage-doc.test.js 守着）；说明里第一条写全当例子，别的只写「名字(字段…)」——字段和黑板组件一样，写错了页面当场说是哪个
+ */
+export const ENGINE_TABLES = {
+  数据结构: ['sort algo=shell array="49 38 65 97 76 13 27 49" gaps="5 3 1"', 'hash hash="19 14 23 01 68 20" p=13', 'kmp pattern=abaabc show=nextval', 'net edges="A->B 10, A->C 5, C->B 3" run="dijkstra from A"', 'tree nodes="A(B(D, E), C(, F))" walk=inorder'],
+  操作系统: ['paging refs="7 0 1 2 0 3 0 4" frames=3 algo=fifo', 'sched algo="rr q=2" procs="P1 0 5, P2 2 4, P3 4 1"', 'banker avail="3 3 2" max="P0 7 5 3; P1 3 2 2" alloc="P0 0 1 0; P1 2 0 0"', 'disk requests="98 183 37 122 14" head=53 algo=scan', 'alloc memory=640K algo=first ops="alloc 1 130K, alloc 2 60K, free 1"', 'pagetable vbits=32 page=4KB pte=4B vaddr=0x12345678'],
+  组成原理: ['cache lines=8 ways=2 block=16B addr=16 refs="0x0010, 0x0124, 0x0010"', 'bits num=-5', 'mul x=-0.1101 y=0.1011 algo=booth', 'div x=-0.1011 y=-0.1101 algo=orig', 'pipe instrs="add r1, r2, r3; sub r4, r1, r5"', 'hamming data=1010', 'crc data=101001 gen="x^3 + x^2 + 1"', 'memexp chip=2K×4 target=8K×8 addr=16 base=6000H'],
+  计网: ['subnet split=192.168.1.0/24 hosts="60, 30, 10"', 'encode bits=10110010 code="manchester, diffman"', 'frag total=4000 mtu="1500, 576"', 'tcp send="70 100" last=180 lost=1', 'window proto=gbn frames=6 window=4 lost=2', 'crc data=101001 gen="x^3 + x^2 + 1"'],
+};
+const ETABLE_DOC = '引擎的过程表：行名列名、哪些格等填、答案都由页面的引擎算（你不用算、不用写 key=）；学生点一格写（open T edit），页面逐格比、认得常见错法，只告诉你。先后不论的几格（同一次访问的物理块）怎么填都对；该空着的格学生留空';
+function engineTablesDoc(subject) {
+  const list = subject ? ENGINE_TABLES[subject] : Object.values(ENGINE_TABLES).flat();
+  if (!list?.length) return '';
+  const keys = (eg) => `${eg.split(' ')[0]}(${[...eg.matchAll(/(\w+)=/g)].map((m) => m[1]).join(' ')})`;
+  return `${ETABLE_DOC}\ntable T engine=${list[0]}  别的 名字=值 是引擎的字段（和黑板组件一样；写错了页面说是哪个）\n这门课还有：${[...new Set(list.slice(1).map(keys))].join(' ')}`;
+}
+
 /** 整份指令说明：共用的 + 舞台上能放的东西（subject：这节课是哪门课，只带用得上的那几种） */
 export function stageDoc(subject = '') {
   const want = SUBJECT_TYPES[subject] || null;
@@ -139,6 +157,9 @@ export function stageDoc(subject = '') {
   }
   skipped.push(...gone.map((x) => x.name));
   if (skipped.length) parts.push(`（这门课一般用不上、说明没带的：${skipped.join('、')}）`);
+  // 引擎的过程表：这门课列了引擎、也带着表的才写
+  const et = (!want || want.includes('table')) ? engineTablesDoc(subject) : '';
+  if (et) parts.push(et);
   // 照引擎走（follow.js）：只带这门课接上了的那几类算法（对应关系的 subjects）；全带的那一份都带
   const follows = followNames().map(followOf).filter((a) => a.doc && (!subject || a.subjects.includes(subject)));
   if (follows.length) parts.push(`## 照引擎走\n${follows.map((a) => a.doc).join('\n')}\n${FOLLOW_DOC}`);

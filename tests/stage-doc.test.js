@@ -443,3 +443,28 @@ test('主线第五轮腾地方：只有个别科目带的行真认得到；别�
   // 全带的那一份一行不少
   for (const x of ONLY_LINES) assert.ok(stageDoc('').split('\n').some((l) => x.test(l)));
 });
+
+test('引擎的过程表：每门课说明里列的每一个引擎，照例子的字段真造得出舞台的表；写法那一行照抄能演；每门课都不超', async () => {
+  const { ENGINE_TABLES, stageDoc } = await import('../kit/src/stage/doc.js');
+  const { engineTable } = await import('../kit/src/stage/enginetable.js');
+  const { Scene, dryRun } = await import('../kit/src/stage/scene.js');
+  const { parseScript } = await import('../kit/src/stage/script.js');
+  for (const [subject, list] of Object.entries(ENGINE_TABLES)) {
+    assert.ok(list.length >= 3 && list.length <= 12, subject);
+    for (const eg of list) {
+      const c = parseScript(`table T engine=${eg}`)[0];
+      const { engine, ...fields } = c.opts;
+      assert.doesNotThrow(() => engineTable(engine, fields), `${subject}：${eg}`);
+    }
+    const doc = stageDoc(subject);
+    assert.match(doc, /引擎的过程表/);
+    const line = doc.split('\n').find((l) => /^table T engine=/.test(l));
+    assert.ok(line, `${subject} 的说明里有一行照抄能演的例子`);
+    assert.deepEqual(dryRun(new Scene(), line.split('  ')[0]), []);
+    // 别的引擎写成 名字(字段…)
+    for (const eg of list.slice(1)) assert.ok(doc.includes(`${eg.split(' ')[0]}(`), `${subject}：${eg.split(' ')[0]}`);
+    assert.ok(Buffer.byteLength(STAGE_TEACH + doc) <= 24576, `${subject} 超了：${Buffer.byteLength(STAGE_TEACH + doc)}`);
+  }
+  assert.doesNotMatch(stageDoc('英语'), /引擎的过程表/);
+  assert.doesNotMatch(stageDoc('线代'), /引擎的过程表/);
+});
