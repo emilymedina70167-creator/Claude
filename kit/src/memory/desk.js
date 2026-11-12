@@ -69,6 +69,7 @@ import { scrubBooks, readReserve, reserveYears } from '../exam/reserve.js';
 import { createExamInbox } from '../exam/examdesk.js';
 import { loadExamCourse, courseOfBlock } from '../exam/load.js';
 import { examIndexOf } from '../exam/fields.js';
+import { blockQuestions } from '../exam/block.js';
 import { createExamCard } from '../exam/examview.js';
 import { createExamPage } from '../exam/exampage.js';
 import { renderStageClass } from '../stage/classroom.js';
@@ -1195,7 +1196,15 @@ export async function renderDesk(root, meta) {
         const md = rep?.exists ? sheetMd(rep.data().sheet, { max: 3000 }) : '';
         if (md) sheets.push({ date: x.date || '', title: x.title || '', md });
       }
-      const use = reviewPack(data, rids, { packs, sheets: sheets.slice(rids.length > 1 ? -3 : -2) });
+      // 这几块能用、没做过的真题（考情第 4 批：复现要的正是没见过的题）：按门课读，5 秒读不到就不带
+      const years = reserveYears(targetOf(data), toDate(Date.now()));
+      const exam = [];
+      for (const c of [...new Set(blocks.map(courseOfBlock))]) {
+        const ex = await Promise.race([loadExamCourse(db, c), new Promise((r) => setTimeout(() => r(null), 5000))]).catch(() => null);
+        if (ex) exam.push(...blockQuestions(ex, blocks, years));
+      }
+      const done = new Set([...data.evidence.map((e) => e.exam), ...data.exam_bar.flatMap((x) => (x.done || []).map((d) => d.id))].filter(Boolean));
+      const use = reviewPack(data, rids, { packs, sheets: sheets.slice(rids.length > 1 ? -3 : -2), exam, done });
       await newClass(use.main.block, use);
     } catch (err) {
       toast(`没开成：${err?.message || err}`);

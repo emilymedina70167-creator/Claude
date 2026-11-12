@@ -60,3 +60,14 @@ export function examForBlock({ block, exam, years = [], evidence = [], n = 3 } =
     reserved: mineQs.length - ok.length, span,
   };
 }
+
+/** 这几块能用的真题（复现课的资料包用）：每道带上它挂在哪一块（block），新的在前 */
+export function blockQuestions(exam, blocks = [], years = []) {
+  const out = [];
+  for (const b of blocks) {
+    const ids = new Set(syllabusOfBlock(b, exam?.syllabus || []).map((x) => x.id));
+    if (!ids.size) continue;
+    for (const q of (exam?.questions || []).filter((x) => x.tags?.syl?.some((s) => ids.has(s)) && usable(x, years)).sort(newer)) if (!out.some((y) => y.id === q.id)) out.push({ ...q, block: b });
+  }
+  return out;
+}

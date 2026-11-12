@@ -252,7 +252,9 @@ export const reviewIdsOf = (v) => (Array.isArray(v) ? v : v ? [v] : []).map((x) 
  * 返回 { main, problems }（和外部写的资料包一样的字段，main 多一个 review：复现组编号的数组）
  * sheets：以前这几块的课下课时整理的「这节课的一页」[{ date, title, md }]（memory/sheet.js），复现课从它开始
  */
-export function reviewPack(mem = {}, rids, { packs = [], sheets = [], today = toDate(Date.now()) } = {}) {
+// exam：这几块能用的真题（首页按门课读的，[{ id, stem, answer, block, … }]，留作模考的调用的地方已经去掉了）；done：做过的题号。
+// 复现要的正是没见过的题：这几块没做过的真题放进题里（最多两道，排在最前）
+export function reviewPack(mem = {}, rids, { packs = [], sheets = [], today = toDate(Date.now()), exam = [], done = new Set() } = {}) {
   const ids = reviewIdsOf(rids);
   const all = live(mem, 'reviews');
   const groups = ids.map((rid) => { const r = all.find((x) => String(x.id) === rid); if (!r) throw new Error(`复现组里没有 ${rid}`); return r; });
@@ -273,6 +275,10 @@ export function reviewPack(mem = {}, rids, { packs = [], sheets = [], today = to
   const cur = live(mem, 'curriculum').filter((c) => blocksAll.includes(String(c.id)));
   const items = [];
   const seen = new Set();
+  for (const q of (exam || []).filter((x) => blocksAll.includes(String(x.block || '')) && !done.has(x.id)).slice(0, 2)) {
+    seen.add(String(q.stem || ''));
+    items.push({ q: String(q.stem || ''), answer: String(q.answer || ''), ...(q.options ? { options: q.options } : {}), exam: q.id, source: `真题 ${q.year || ''} 年第 ${q.n || ''} 题（没做过；那一问写 exam=${q.id}）`.replace(/\s+/g, ' ') });
+  }
   for (const p of packs) {
     if (!p || !blocksAll.includes(String(p.block || ''))) continue;
     for (const it of Array.isArray(p.items) ? p.items : []) {

@@ -127,7 +127,8 @@ export function openTodos(mem = {}, space = '', done = []) {
     .sort((a, b) => (a.at || 0) - (b.at || 0));
 }
 
-export function prepPrompt({ block, material = [], books = [], memoryText = '', rulesText = '', components = [], subject = '', recent = '', due = '', lessons = '', todos = [] }) {
+// exam：这一块的考情（exam/context.js 拼的，备课用 8 KiB 的预算）；有的话教案多一个 examBar：这节课结束时学生要能做的那道真题
+export function prepPrompt({ block, material = [], books = [], memoryText = '', rulesText = '', components = [], subject = '', recent = '', due = '', lessons = '', todos = [], exam = '' }) {
   const b = block || {};
   return [
     '你是这个学生的老师，现在给下一节课备课。备好的教案交给课堂里的 Claude（也是 Opus 5.5）在学习台里照着上：它每一轮都会带着教案、学生的记忆和组件说明，现场写黑板、出题、判断学生懂没懂。它上课时来不及把整节的材料从头读一遍，所以**要讲的规则、讲的顺序、每道题用到什么，都在这里想好**：课上现编，就会出现「题目用到了没讲过的规则、学生撞墙后才补」。',
@@ -143,6 +144,7 @@ export function prepPrompt({ block, material = [], books = [], memoryText = '', 
     material.length ? material.map((c) => chunkText(c, books.find((x) => x.id === c.book))).join('\n\n') : '（这一块还没挂资料。只能按范围和要点备，教材原文要讲到时课堂里的 Claude 用 textbook_search 找。）',
     b.transcript ? `\n### 这一块的文稿原文（课程地图里存的）\n${String(b.transcript).slice(0, 20000)}` : '',
     '',
+    exam ? `## 这一块在考试里（页面从入库的真题算的：考情的数字只用这里的）\n${exam}\n` : '',
     '## 学生的规则（全部，包括备课和资料包的规矩）',
     rulesText || '（没有）',
     lessons ? `\n## 教学守则（以前上课的失误归纳出来的，备课时就要照着做）\n${lessons}` : '',
@@ -169,7 +171,8 @@ export function prepPrompt({ block, material = [], books = [], memoryText = '', 
     '  "components": ["这节课会用到的组件名（从上面挑，三到八个；answer、quiz、steps、scene、predict 这几个常用的一直带着，不用列。要用 practice、matrix、derive、sketch、image、演示组件的一定列上：没列的课堂里只有标题，用的时候要多跑一轮去查写法）"],',
     '  "plan": "补充说明：上面没写到的推进细节、什么情况下换讲法（可以空）",',
     '  "student": "这节课特别要注意的学生情况（记忆里已经有的不用抄，只写对这节课最要紧的一两句）",',
-    '  "todos": ["这节课补上的待办编号（上面「待办」里的；没有就空数组）"]',
+    '  "todos": ["这节课补上的待办编号（上面「待办」里的；没有就空数组）"],',
+    ...(exam ? ['  "examBar": {"id": "这节课结束时学生要能做的那道真题的题号（从上面「这一块在考试里」的代表题、目录里挑）", "why": "为什么挑它（一句话：考法、难度和这节课的目标对得上）"}'] : []),
     '}',
     '',
     '写之前照这几条自己核一遍：',
@@ -210,7 +213,8 @@ export function checkPrep(main = {}, problems = {}) {
 }
 
 /** 读备课结果：字段清理、编号只留挂着的、组件只留认得的、页面核一遍依赖；返回 { main, problems, warnings } */
-export function parsePrep(raw, { block, chunkIds = [], components = [], today = '', reviewIds = null, todos = [] } = {}) {
+// examIds：这一块能用的真题题号（Set）；给了就核 examBar
+export function parsePrep(raw, { block, chunkIds = [], components = [], today = '', reviewIds = null, todos = [], examIds = null } = {}) {
   const o = jsonOf(raw);
   const text = (v, n = 8000) => String(v ?? '').trim().slice(0, n);
   const okComp = new Set(components);
@@ -231,7 +235,11 @@ export function parsePrep(raw, { block, chunkIds = [], components = [], today = 
   };
   const problems = { items: (Array.isArray(o.problems) ? o.problems : []).filter((p) => p && p.q).slice(0, 20).map((p) => ({ q: text(p.q, 2000), answer: text(p.answer, 2000), point: text(p.point, 200), ...(list(p.needs).length ? { needs: list(p.needs).slice(0, 8) } : {}), ...(Number(p.after) ? { after: Number(p.after) } : {}), ...(p.traps ? { traps: text(p.traps, 400) } : {}), source: text(p.source, 200) })) };
   if (!main.goal && !main.plan && !sequence.length) throw new Error('备课结果里没有目标和讲解顺序');
-  const warnings = checkPrep(main, problems);
+  // examBar：这节课结束时学生要能做的真题（考情第 4 批）；不是这一块能用的真题不收、写进备课检查
+  const bar = o.examBar && typeof o.examBar === 'object' ? { id: text(o.examBar.id, 30), why: text(o.examBar.why, 300) } : null;
+  const barBad = bar?.id && examIds && !examIds.has(bar.id);
+  if (bar?.id && !barBad) main.examBar = bar;
+  const warnings = [...checkPrep(main, problems), ...(barBad ? [`examBar 写的 ${bar.id} 不是这一块能用的真题（留作模考的、别的块的、库里没有的都不行）`] : [])];
   if (warnings.length) main.prepCheck = warnings.slice(0, 12);
   return { main, problems, warnings };
 }
@@ -247,6 +255,7 @@ export function lessonPlanText(main = {}) {
     : main.review.map((r) => (r && typeof r === 'object' ? `- ${r.id}：${r.how}` : `- ${r}`)).join('\n');
   if (Array.isArray(main.prepCheck) && main.prepCheck.length) out.prepCheck = main.prepCheck.map((w) => `- ${w}`).join('\n');
   if (Array.isArray(main.todos) && main.todos.length) out.todos = main.todos.map((t) => `- ${t.text}`).join('\n');
+  if (main.examBar?.id) out.examBar = `${main.examBar.id}${main.examBar.why ? `：${main.examBar.why}` : ''}（讲完这一块让学生做它，那一问写 exam=${main.examBar.id}）`;
   // 课前预演（rehearse.js）：按这个学生的记录把教案走了一遍，哪一步会卡、拿什么题探
   if (main.rehearsal && typeof main.rehearsal === 'object') { const t = rehearsalText(main.rehearsal); if (t) out.rehearsal = t; }
   return out;

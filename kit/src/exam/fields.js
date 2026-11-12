@@ -1,7 +1,7 @@
 // 组件写 exam: / like:（docs/exam-plan.md 4.1）：这道题是哪一道真题（exam=），或者对标哪一道真题出的（like=）。
 // 渲染时（render.js）拿掉这两行、挂在组件外面（data-exam / data-like），组件不用一个个改；作答记录（session.record）从那一层取。
 // 字段名不叫 q：q 已经是题面（证据、组件、题库、记忆点里都是）。纯函数，有测试（tests/exam-fields.test.js）。
-const LINE = /^\s*(exam|like)\s*[:：]\s*(\S+)\s*$/;
+const LINE = /^\s*(exam|like|harder)\s*[:：]\s*(\S+)\s*$/;
 const QID = /^Q-(?:101|201|301|408)-\d{4}-\d{1,2}$/;
 
 /** 组件的原文 → { exam, like, body（拿掉这两行的）}；不像题号的不收（那一行照样拿掉） */

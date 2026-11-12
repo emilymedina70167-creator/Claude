@@ -156,6 +156,7 @@ export function pickDrills(mem = {}, { space = 'math', today = toDate(Date.now()
     if (CLEAN(h)) s -= 10;
     // 教研室出的、还没做过的新题：复现要的就是没见过的题（原题做对不算复现通过），探弱点的题是专门测那个毛病的
     if (d.src === 'lab' && !h) { s += d.weakness ? 45 : 30; why.push(d.weakness ? `探弱点 ${d.weakness}` : '新题'); }
+    if (d.src === 'exam' && !h) { s += 35; why.push('没做过的真题'); }
     scored.push({ id: d.id, block: String(d.block || ''), kind: String(d.kind || ''), score: s, why: why.join('；') || '复习', at: Number(d.at) || 0 });
   }
   scored.sort((a, b) => b.score - a.score || b.at - a.at || a.id.localeCompare(b.id));

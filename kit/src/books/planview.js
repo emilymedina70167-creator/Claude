@@ -18,6 +18,10 @@ import { COMPONENT_DOCS } from '../class/docs.js';
 import { allNames } from '../subject.js';
 import { CORE_COMPONENTS } from '../class/prompt.js';
 import { scrubBooks, reserveYears } from '../exam/reserve.js';
+import { loadExamCourse, courseOfBlock } from '../exam/load.js';
+import { examForBlock } from '../exam/block.js';
+import { examForClass } from '../exam/context.js';
+import { targetOf } from '../exam/target.js';
 
 const esc = escapeHtml;
 const docsOf = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -123,14 +127,20 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     const todoSnap = await db.doc('meta/todos').get().catch(() => null);
     const doneTodos = todoSnap?.exists ? (todoSnap.data().done || []) : [];
     const todos = openTodos(data, sp, doneTodos).slice(-20);
-    const prompt = prepPrompt({ block, material, books, memoryText: mem.text, rulesText: rules, components, subject, recent, due: dueText, lessons, todos });
-    return { prompt, ctx: { block: blockId, sp, subject, today, range, chunkIds: material.map((c) => c.id), components, reviewIds: due.map((d) => d.id), todos, memoryText: mem.text } };
+    // 这一块的考情（考情第 4 批）：按门课读这门课的考试资料（6 秒读不到就不带），拼一份 8 KiB 的；能用的真题题号交给读回核 examBar
+    const years = reserveYears(target, today);
+    const ex = await Promise.race([loadExamCourse(db, courseOfBlock(blockId)), new Promise((r) => setTimeout(() => r(null), 6000))]).catch(() => null);
+    const info = ex ? examForBlock({ block: blockId, exam: ex, years }) : null;
+    const exam = info ? examForClass({ target: targetOf(data), info, bar: (data.exam_bar || []).find((b) => b.id === blockId) || null, today, budget: 8 * 1024 }) : '';
+    const examIds = info ? [...info.reps, ...info.rest].map((q) => q.id) : null;
+    const prompt = prepPrompt({ block, material, books, memoryText: mem.text, rulesText: rules, components, subject, recent, due: dueText, lessons, todos, exam });
+    return { prompt, ctx: { block: blockId, sp, subject, today, range, chunkIds: material.map((c) => c.id), components, reviewIds: due.map((d) => d.id), todos, memoryText: mem.text, ...(examIds ? { examIds } : {}) } };
   }
 
   /** 读备课的回答、写进这一科的资料包；by：谁备的（lab 是云端教研室），之后后台预演一遍 */
   async function prepFinish(text, ctx, { bytes = 0, model: m = '', by = '' } = {}) {
     const block = getData().curriculum.find((b) => b.id === ctx.block) || { id: ctx.block };
-    const { main, problems } = parsePrep(text, { block, chunkIds: ctx.chunkIds, components: ctx.components, today: toDate(Date.now()), reviewIds: ctx.reviewIds, todos: ctx.todos });
+    const { main, problems } = parsePrep(text, { block, chunkIds: ctx.chunkIds, components: ctx.components, today: toDate(Date.now()), reviewIds: ctx.reviewIds, todos: ctx.todos, examIds: Array.isArray(ctx.examIds) ? new Set(ctx.examIds) : null });
     if (ctx.range) main.pages = `${ctx.range[0]}-${ctx.range[1]}`;
     main.cost = { bytes, model: m };
     if (by) main.by = by;

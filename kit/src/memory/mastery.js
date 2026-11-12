@@ -140,7 +140,8 @@ export function markFresh(items = []) {
   const first = new Map();
   for (const it of items) {
     const c = String(it?.comp || '');
-    if (!/^d-lab-/.test(c) || !it.session) continue;
+    // 教研室出的（d-lab-）和真题做的（d-q-，考情第 4 批）：第一次做的那节课是新题
+    if (!/^d-(?:lab|q)-/.test(c) || !it.session) continue;
     const t = Number(it.first) || Number(it.end) || 0;
     const cur = first.get(c);
     if (!cur || t < cur.t) first.set(c, { t, session: it.session });

@@ -193,9 +193,20 @@ export function parseProblems(text, { brief = '', block = null, target = {}, at 
 // 页面核题之前先看的（不碰 DOM）：数学的 answer 手写了数字却没有 let / \calc，页面没法再算一遍，不收。
 // 408 的答案常常本来就是一串（先序序列、散列表、调度顺序，type: seq 之类），算不成式子：不管，靠教研室自己在命令行里算过；英语的答案是字
 const COMPUTED = /\\calc\{|^\s*```+\s*let\b|^\s*let\s+\w+\s*=|type\s*:\s*custom|^\s*use\s*:/m;
-export function problemLint(item, { subject = '' } = {}) {
+// exam：{ ids（能用的真题）, reserved（留作模考的）, blockOf: { 题号: 块 }, block（这张单子的块）}（考情第 4 批）：给了就要求
+// 新题写 like: 题号（对标哪一道真题）和 harder: 易 / 相当 / 难，对标的要真有、能用、同一块
+export function problemLint(item, { subject = '', exam = null } = {}) {
   const md = String(item?.doc?.md || '');
   const errs = [];
+  if (exam) {
+    const like = md.match(/^\s*like\s*[:：]\s*(\S+)\s*$/m)?.[1] || '';
+    const harder = md.match(/^\s*harder\s*[:：]\s*(\S+)\s*$/m)?.[1] || '';
+    if (!like) errs.push('要写 like: 题号（这道新题对标哪一道真题，从单子里「这一块的真题」挑）');
+    else if (exam.reserved?.has(like)) errs.push(`对标的 ${like} 是留作模考的卷，不能用`);
+    else if (!exam.ids?.has(like)) errs.push(`对标的 ${like} 库里没有`);
+    else if (exam.block && exam.blockOf?.[like] && exam.blockOf[like] !== exam.block) errs.push(`对标的 ${like} 是别的块（${exam.blockOf[like]}）的题`);
+    if (like && !['易', '相当', '难'].includes(harder)) errs.push('要写 harder: 易 / 相当 / 难（和对标的那道真题比）');
+  }
   if (bytesOf(md) > 12 * 1024) errs.push('太长了（一道题不超过 12 KB）');
   if (!isCS(subject) && !isEN(subject) && !/^\s*type\s*:/m.test(md) && item.kind === 'answer' && /^\s*answer\s*[:：]\s*[-\d.\s/,;()[\]]+$/m.test(md) && !COMPUTED.test(md)) errs.push('答案是手写的数字，页面没法再算一遍：用 let 块和 \\calc 写');
   return errs;
