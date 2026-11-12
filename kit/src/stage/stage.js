@@ -1828,8 +1828,18 @@ export class Stage {
           offs.push(this.armDrag(v, x, peers, async (act, src) => { if (src) await this.studentDo(src, act); else this.onAct?.(act); finish(act); }, { prio: 2 }));
         }
       }
+      // ask end（老师递过来的「下课吗？」，主线第七轮）：学习台里弹出顶上「下课」同一个确认框（课堂给 onEndAsk）；样子页里是一个按钮
+      if (w.kind === 'end') {
+        if (this.onEndAsk) Promise.resolve(this.onEndAsk(w)).then((yes) => finish(yes ? { type: 'end' } : { type: 'next', button: '接着上' }));
+        else {
+          const b = el('button', 'st-next', this.dock);
+          b.type = 'button';
+          b.textContent = w.button || '下课';
+          b.addEventListener('click', () => finish({ type: 'end' }), { once: true });
+        }
+      }
       // ask pick 的按钮是交点了的几样（上面挂过了），不是「接着」
-      if ((w.kind === 'next' || w.button) && w.kind !== 'pick') {
+      if ((w.kind === 'next' || w.button) && w.kind !== 'pick' && w.kind !== 'end') {
         const b = el('button', 'st-next', this.dock);
         b.type = 'button';
         b.textContent = `${w.button || '接着'} →`;
@@ -2065,6 +2075,7 @@ export function actText(act) {
     if (act.type === 'pick') return pickText(act);
     if (act.type === 'drag' && act.a && act.b) return `学生把 ${act.a.value}（#${act.a.key}）拖到 ${act.b.value}（#${act.b.key}）那一格，两格换了位置（舞台已经照做了）`;
     if (act.type === 'drag') return act.text || '学生拖了一下';
+    if (act.type === 'end') return '学生点了「下课」';
     if (act.type === 'next') return `学生点了「${act.button}」${act.onGoals?.length ? `（按了才判的：${act.onGoals.map((x) => `挑战 ${x.id}：${x.met ? '做到了' : x.status}`).join('；')}）` : ''}`;
     if (act.type === 'say') return `学生说：「${act.text}」`;
     if (act.type === 'value') {

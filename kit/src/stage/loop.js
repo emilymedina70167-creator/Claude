@@ -323,6 +323,8 @@ export function createLoop(host) {
   }
   function onAnswer(act, w, { reacts = null } = {}) {
     if (S.ended || RETRY.has(act.button)) return;
+    // 学生在老师递的「下课吗？」上点了下课：课堂在下课（写小结），不叫老师
+    if (act.type === 'end') return;
     const e = eventOf(act, { help: HELP, at: Date.now() });
     addEvent(e);
     // 按了按钮才判的挑战（on=）做到了：和别的挑战一样看学生手上还有没有事；没做到照常叫老师（这一下本身是回答）

@@ -589,8 +589,17 @@ const SUITES = {
     check(/学生答对了（页面已经演了你预写的 1 行）；那时 t 还没做完，没叫你/.test(sent5.msg || ''), `发给老师的没写答对了、那时为什么没叫老师：${sent5.msg}`);
     // 第六轮（和第四轮一样）
     await t.waitFor(() => t.page.evaluate(() => /模拟老师讲完了/.test(document.querySelector('.st-caption')?.textContent || '') && [...document.querySelectorAll('.st-next')].some((b) => /^好/.test(b.textContent.trim()))), { timeout: 30000, what: '第六轮' });
-    // 下课：小结、整理单（position 写进记忆）、报告里有 S… 的题
-    await t.page.click('.sc-end');
+    // 老师把「下课吗？」递给学生（ask end，主线第七轮）：弹出和顶上「下课」同一个确认框；点「接着上」课还在、老师收到那一句
+    const said = async (txt) => { await t.page.fill('#st-say-input', txt); await t.page.click('.st-say-go'); };
+    await said('测试:下课');
+    await t.waitFor(() => t.page.evaluate(() => /下课吗/.test(document.body.innerText)), { timeout: 20000, what: '老师递的「下课吗？」弹出来' });
+    await t.answer('接着上');
+    const goOn = await t.waitFor(async () => (await turns()).find((x) => x.role === 'student' && !x.pending && /学生点了「接着上」/.test(x.msg || '')), { timeout: 20000, what: '点了「接着上」发给老师' });
+    check(goOn && (await t.docs('sessions')).find((d) => d.id === sid)?.status !== 'closed', '点了「接着上」课却结束了');
+    // 下课：老师再递一次，这回点「下课」——小结、整理单（position 写进记忆）、报告里有 S… 的题
+    await t.waitFor(() => t.page.$('#st-say-input'), { timeout: 20000, what: '接着上以后能打字' });
+    await said('测试:下课');
+    await t.waitFor(() => t.page.evaluate(() => /下课吗/.test(document.body.innerText)), { timeout: 20000, what: '老师又递了「下课吗？」' });
     await t.answer('下课');
     await t.waitFor(() => t.page.$('.sc-closing:not([hidden]) .sc-sum'), { timeout: 30000, what: '下课小结画出来' });
     const s = await t.waitFor(async () => { const x = (await t.docs('sessions')).find((d) => d.id === sid); return x?.status === 'closed' && x.report?.at ? x : null; }, { timeout: 20000, what: '下课以后报告写好' });
@@ -602,7 +611,7 @@ const SUITES = {
     await t.waitFor(() => t.page.$('.sc-root .st-cell'), { timeout: 20000, what: '只读的舞台画出来' });
     await sleep(1200);
     check(!(await t.page.$('.sc-end')), '只读的舞台课还能点「下课」');
-    check(/模拟老师讲完了/.test(await t.page.$eval('.st-caption', (n) => n.textContent)), '只读的舞台课上面没有最后说的那句话');
+    check(/那今天就到这里/.test(await t.page.$eval('.st-caption', (n) => n.textContent)), '只读的舞台课上面没有最后说的那句话');
     return t;
   },
 

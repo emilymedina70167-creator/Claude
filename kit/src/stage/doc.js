@@ -92,6 +92,7 @@ ask pick a "哪几格会动？都点出来" button="猜好了" expect="a.2 a.6" 
 ask drag a#1 a#6 "把小的拖到前面"          学生拖（能拖的东西才行，见各节）
 ask next "拨一下 $d$，看出规律点下面" button="看出来了"     学生看完 / 拨完点按钮
 ask say "你觉得为什么？"                    学生写一句话
+ask end "今天先到这里？"   学生说要下课时写：页面弹出下课的确认，学生点了才下课（你自己下不了课）
 ask value "一共比较了几次？" answer=4      学生填一个答案，页面当场判（不写 type= 时数按数比，3/4 = 0.75）；answer= 可以不写（只收不判，这时 type=、wrong= 也不写）
 ask value "{a.3} 比 {a.6} 大多少？" answer={a.3-a.6} type=num wrong="-52=减反了"     type= 选判法：num 数、formula 含 n 的式子（加 free=n）、matrix 矩阵（1 2 / 0 1）、set 数集、equation 方程、seq 序列、en 英文（学生的键盘跟着换）；式子里乘号能省（2n）；answer={式子} 页面照舞台现算；wrong="错答=说明了什么"（几条用 ; 隔开）只告诉你，学生只看到对不对`;
 

@@ -43,6 +43,9 @@ ask pick t "把 47 插进去以后，哪几个结点的平衡因子会变？点�
   DONE,
 ];
 
+const END = `say "那今天就到这里。"
+ask end "今天先到这里？"`;
+
 const CLOSING = `这节课学了折半查找：每次只翻剩下这一段的正中间，比一次就排除一半。
 第一次就能说出往哪边找；数剩下几格时还要再练。
 
@@ -54,7 +57,8 @@ export function stageMock({ pace = 60 } = {}) {
   return async (messages, opts = {}) => {
     const last = String(messages.at(-1)?.content || '');
     const k = messages.filter((m) => m.role === 'assistant').length;
-    const text = /舞台课：小结写成几行字/.test(last) ? CLOSING : TURNS[Math.min(k, TURNS.length - 1)](last);
+    // 学生说「测试:下课」：模拟老师照说明把「下课吗？」递给学生（ask end，e2e 的 stage 段）
+    const text = /舞台课：小结写成几行字/.test(last) ? CLOSING : /学生说：「测试:下课」/.test(last) ? END : TURNS[Math.min(k, TURNS.length - 1)](last);
     // ?dev&think=4：模拟老师先想 4 秒再写（真课出第一个字前要等十几秒：看等的那一阵画面上是什么）
     const lag = typeof location !== 'undefined' && /[?&]think=(\d+)/.test(location.search) ? Number(location.search.match(/[?&]think=(\d+)/)[1]) * 1000 : 300;
     await new Promise((r) => setTimeout(r, lag));

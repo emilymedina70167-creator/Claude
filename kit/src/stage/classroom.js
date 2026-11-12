@@ -176,12 +176,15 @@ export async function renderStageClass(root, meta = {}, desk) {
   }
 
   // —— 下课：课后报告放进输入，小结和整理单同一次写；不是 Opus 5.5 就不算 ——
-  async function endClass() {
-    if (busy || loop.busy || loop.flight) { showNote('等 Claude 写完这一轮再下课'); return; }
-    if (ended) return;
+  // asked：老师写的 ask end 递过来的（主线第七轮）——这一问是老师这一轮演完才挂的，不看「老师还在写」；
+  // answered(下没下课)：点了确认框马上告诉舞台（下课要写小结，整个走完要一两分钟）
+  async function endClass({ asked = false, answered = null } = {}) {
+    if (!asked && (busy || loop.busy || loop.flight)) { showNote('等 Claude 写完这一轮再下课'); return; }
+    if (ended) { answered?.(true); return; }
     const said = history.filter((t) => !t.discarded && t.role === 'claude');
-    if (!said.length) { desk.onHome?.(); return; }
+    if (!said.length) { answered?.(true); desk.onHome?.(); return; }
     const v = await choose('下课吗？Claude 会写这节课的小结、整理记忆。', [{ label: '接着上', value: 'no' }, { label: '下课', value: 'yes', primary: true }]);
+    answered?.(v === 'yes');
     if (v !== 'yes') return;
     busy = true;
     loop.close();
@@ -281,7 +284,9 @@ export async function renderStageClass(root, meta = {}, desk) {
     box.querySelector('.sc-back').addEventListener('click', () => desk.onHome?.());
     $('.sc-end')?.remove();
   }
-  $('.sc-end')?.addEventListener('click', endClass);
+  $('.sc-end')?.addEventListener('click', () => endClass());
+  // 老师写了 ask end：弹出和顶上「下课」同一个确认框，学生点了才下课
+  if (!readOnly) stage.onEndAsk = () => new Promise((res) => { endClass({ asked: true, answered: res }); });
 
   // —— 开课 / 刷新后放回 ——
   const live = history.filter((t) => !t.discarded);

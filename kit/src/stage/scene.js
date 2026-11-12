@@ -1365,7 +1365,7 @@ export class Scene {
       }
       case 'ask': {
         const kind = words[0];
-        if (!['tap', 'drag', 'next', 'say', 'value', 'pick'].includes(kind)) throw new Error(`ask 后面写 tap / drag / next / say / value / pick，没有「${kind}」`);
+        if (!['tap', 'drag', 'next', 'say', 'value', 'pick', 'end'].includes(kind)) throw new Error(`ask 后面写 tap / drag / next / say / value / pick / end，没有「${kind}」`);
         if (str) this.checkRich(str, c);
         const refs = refsIn(args.slice(1));
         refs.forEach((r) => this.parts(r));

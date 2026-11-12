@@ -238,3 +238,26 @@ test('课堂循环：handMissed 时马上叫一次；连着两轮都这样不再
   assert.equal(calls, 2, '第二轮还是这样：不再自动叫');
   loop.close();
 });
+
+// —— 第 4 节：ask end ——
+import { STAGE_TEACH, stageDoc } from '../kit/src/stage/doc.js';
+
+test('ask end 写得进去；带不认得的选项报错', () => {
+  const s = mk('say "那今天就到这里。"\nask end "今天先到这里？"');
+  assert.equal(s.waiting.kind, 'end');
+  assert.throws(() => mk('array a = 1\nask end "x" expect=a.1'), /expect=/);
+});
+
+test('说明里每门课有 ask end 那一行、都不超字节', () => {
+  for (const sub of ['线代', '英语', '数据结构', '操作系统', '组成原理', '计网']) {
+    const doc = STAGE_TEACH + stageDoc(sub);
+    assert.match(doc, /ask end "今天先到这里？"/, sub);
+    assert.ok(Buffer.byteLength(doc) <= 24576, `${sub} ${Buffer.byteLength(doc)}`);
+  }
+});
+
+test('写给老师：点了「接着上」、点了「下课」；下课不叫老师', () => {
+  assert.match(eventsText([{ kind: 'answer', act: { type: 'next', button: '接着上' }, at: 1 }]), /学生点了「接着上」/);
+  const e = { kind: 'answer', act: { type: 'end' }, at: 1 };
+  assert.match(eventsText([e]), /学生点了「下课」/);
+});
