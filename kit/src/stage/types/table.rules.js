@@ -3,7 +3,7 @@
 // 学生点一格写（open T edit：数字键盘、输入框或一排选项）。页面不判对错（right 永远是 null，不当场给学生标）：
 // 老师给了答案（key=）的，每写一格在话里说「和答案一样 / 不一样（答案是几）」，写满时说一共几格不一样——只告诉老师。
 // 写满算做完（@T.done）。只做「做不做得到」：给定的格（造的时候就有值的、老师写进去的）学生写不了。
-import { cellName, keyed, answerOf, wrongCells, openCells, valueAfter, cellRight, misreadLines, isBlank } from './table.js';
+import { cellName, keyed, answerOf, wantText, wrongCells, openCells, valueAfter, cellRight, misreadLines, isBlank } from './table.js';
 
 const cellOf = (o, x) => (x?.r != null ? o.cells.find((c) => c.r === x.r && c.c === x.c) || null : x?.key != null ? o.cells.find((c) => c.key === x.key) || null : null);
 const blanks = (o) => o.cells.filter((c) => isBlank(o, c));
@@ -65,7 +65,7 @@ function versus(o, x, value) {
   if (!keyed(o, x) || value === '') return '';
   const r = cellRight(o, x, value);
   if (r == null) return ''; // 它那一组（先后不论的几格）还没填完：填完那一下再说
-  return r ? '，和答案一样' : `，和答案不一样（${answerOf(o, x) === '空着' ? '这一格该空着' : `答案是 ${answerOf(o, x)}`}）`;
+  return r ? '，和答案一样' : `，和答案不一样（${wantText(o, x)}）`;
 }
 // 只判这个世界做不做得到，不判对错。why 写这一下做了什么、和答案比的结果
 function check(o, act) {
@@ -99,7 +99,7 @@ function fillFacts(before, after, act, scene) {
   const n = after.cells.filter((x) => scope.has(x.key) && keyed(after, x)).length;
   if (!n) return [`${head}（这几格答案里没有要比的）`];
   const bad = wrongCells(after).filter((x) => scope.has(x.key));
-  return [bad.length ? `${head}：比的 ${n} 格里 ${bad.length} 格和答案不一样：${bad.map((x) => `${cellName(after, x)}（写了 ${x.value}，答案是 ${answerOf(after, x)}）`).join('、')}` : `${head}：比的 ${n} 格都和答案一样`];
+  return [bad.length ? `${head}：比的 ${n} 格里 ${bad.length} 格和答案不一样：${bad.map((x) => `${cellName(after, x)}（写了 ${x.value}，${wantText(after, x)}）`).join('、')}` : `${head}：比的 ${n} 格都和答案一样`];
 }
 // 下一步：还有空格就是「写一格」（哪一格不说：页面不替老师定先填哪格）；写满了是 null（做完了）
 function next(o, scene) { return (openCells(scene, o) || o.cells).some((c) => isBlank(o, c)) ? { acts: [{ type: 'write' }], blank: true } : null; }

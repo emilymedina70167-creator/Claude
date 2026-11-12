@@ -4,7 +4,7 @@ import { parseStageDrill, drawStageDrill, trackDrill, trackTableDrill } from '..
 import { Stage } from '../stage/stage.js';
 import { whereOf, followInfo, nextText, restText } from '../stage/follow.js';
 import { rulesOf } from '../stage/rules.js';
-import { wrongCells, isBlank, cellName, answerOf } from '../stage/types/table.js';
+import { wrongCells, isBlank, cellName, answerOf, wantText, groupKeys } from '../stage/types/table.js';
 import { session } from '../session.js';
 
 const escapeHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -60,7 +60,7 @@ export function stage(el, src) {
       const t = tracks.get(o.id);
       if (!t) continue;
       const bad = wrongCells(o);
-      const first = bad[0] ? `${cellName(o, bad[0])} 写了 ${bad[0].value}（${answerOf(o, bad[0]) === '空着' ? '这一格该空着' : `答案是 ${answerOf(o, bad[0])}`}）` : '';
+      const first = bad[0] ? `${cellName(o, bad[0])} 写了 ${bad[0].value}（${wantText(o, bad[0])}）` : '';
       const r = t.after({ blank: o.cells.filter((x) => isBlank(o, x)).length, wrong: bad.length, first });
       for (const rec of r.records) temit(o, rec);
       if (r.judged && !r.done) note = `填满了，有 ${bad.length} 格不对。先看这一格：${cellName(o, bad[0])}。`;
@@ -105,7 +105,10 @@ export function stage(el, src) {
       for (const o of tablesOf()) {
         for (const r of tracks?.get(o.id)?.giveup() || []) { temit(o, r); gave += 1; }
         const bad = new Set(wrongCells(o).map((x) => x.key));
-        for (const x of o.cells) if (!x.fixed && (isBlank(o, x) || bad.has(x.key))) { const a = answerOf(o, x); lines.push(`write ${o.id}.${x.r},${x.c} ${a === '空着' ? '_' : /^(-?\d+(\.\d+)?(\/\d+)?|∞)$/.test(a) ? a : `"${a}"`}`); }
+        // 一组先后不论的：有一格不对或者还空着，整组照答案的先后重写（只改那一格的话可能和组里别的格重了）
+        const redo = (x) => isBlank(o, x) || bad.has(x.key);
+        const need = (x) => { const g = groupKeys(o, x); return g ? g.some((k) => redo(o.cells.find((c) => c.key === k))) && x.value !== answerOf(o, x) : redo(x); };
+        for (const x of o.cells) if (!x.fixed && need(x)) { const a = answerOf(o, x); lines.push(`write ${o.id}.${x.r},${x.c} ${a === '空着' || a === '' ? '_' : /^(-?\d+(\.\d+)?(\/\d+)?|∞)$/.test(a) ? a : `"${a}"`}`); }
       }
       if (!gave) session.event('giveup', el, { why: '点了做不出来' });
       // 不演动画，一下子写完（一格一格演，二三十格要等十来秒）

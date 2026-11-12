@@ -115,13 +115,34 @@ export function cellRight(o, x, value = x.value) {
   if (g) {
     const st = groupState(o, g, x, value);
     if (st.have < st.need) return null;
-    const bag = (xs) => xs.map(normCell).sort().join('|');
-    return bag(st.vals) === bag(st.want);
+    // 一格一格判：照格的先后把写的值和答案里还没被对上的一个个对，对不上的（多出来的）那一格才算不一样——
+    // 该是 {7,0,1} 写成 2 7 0，只有那个 2 不一样，不是三格都错
+    const left = st.want.filter((v) => v !== '').map(normCell);
+    let mine = true;
+    for (let i = 0; i < st.cs.length; i++) {
+      const v = st.vals[i];
+      if (v === '') continue;
+      const at = left.indexOf(normCell(v));
+      if (at >= 0) left.splice(at, 1);
+      if (st.cs[i] === x) { mine = at >= 0; break; }
+    }
+    return mine;
   }
   if (emptyKey(o, x)) return value === '';
   const cell = e.cells[x.key];
+  // 答案和写的都是一串数字（散列表的关键字 01）：按数比，写 1 也对
+  const INT = /^-?\d+$/;
+  if (INT.test(answerOf(o, x)) && INT.test(String(value).trim())) return Number(answerOf(o, x)) === Number(value);
   return cell ? cellOk({ ...cell, given: false }, value) : sameValue(value, answerOf(o, x));
 }
+/** 这一格不对时写给老师（自己练里写给学生）的那半句：答案是什么。一组先后不论的不按位置说，说这一组该有哪几个 */
+export function wantText(o, x) {
+  const g = groupOf(o, x);
+  if (g) return `这一组该是 ${groupState(o, g).want.filter((v) => v !== '').join(' ')}，先后不论`;
+  return answerOf(o, x) === '空着' ? '这一格该空着' : `答案是 ${answerOf(o, x)}`;
+}
+/** 这一格所在的先后不论的一组（格的 key）；不在组里是 null */
+export const groupKeys = (o, x) => groupOf(o, x);
 /** 和答案不一样的格（填了的才算；空着的、一组还没填完的不算不一样） */
 export const wrongCells = (o) => (o.key ? o.cells.filter((x) => keyed(o, x) && x.value !== '' && cellRight(o, x) === false).sort(sortRC) : []);
 
@@ -140,22 +161,45 @@ export function variantsOf(o) {
   return VCACHE.get(k);
 }
 /**
- * 学生填完的哪几行（引擎的一行；竖着排的表是一列）像哪种错法：[{ name（这一行 / 列叫什么）, label }]。
- * 填完了、有格和答案不一样、每一格都和这种错法算出来的一样才算
+ * 学生填完的哪几行、哪几列像哪种错法：[{ name（这一行 / 列叫什么）, label, keys }]。引擎的一行（竖着排的表是一列）和舞台上
+ * 另一个方向的一整行都比（KMP 的表一步一列，学生是一整行 next 照错法填的）。
+ * 填完了、有格和答案不一样、每一格都和这种错法算出来的一样才算；一组先后不论的照集合比。
+ * 几种错法都对得上就都列出来（只说第一种是替老师挑了一个）
  */
 export function misreadLines(o) {
   if (!o.engine) return [];
   const out = [];
   const at = (k) => o.cells.find((c) => c.key === k);
-  for (const ks of o.engine.lines) {
+  const bag = (xs) => xs.filter((v) => v !== '' && v != null).map(normCell).sort().join('|');
+  const fits = (cs, vr) => {
+    const seen = new Set();
+    return cs.every((x) => {
+      const g = groupOf(o, x);
+      if (!g) return normCell(x.value) === normCell(vr.key[x.r - 1]?.[x.c - 1] ?? '');
+      if (seen.has(g)) return true;
+      seen.add(g);
+      const gs = g.map(at);
+      return bag(gs.map((c) => c.value)) === bag(gs.map((c) => vr.key[c.r - 1]?.[c.c - 1] ?? ''));
+    });
+  };
+  // 另一个方向的整行 / 整列：学生要填的格不少于 2 个才比（一格对上一种错法说明不了什么）
+  const engineRows = o.engine.lines.every((ks) => { const cs = ks.map(at).filter(Boolean); return cs.every((x) => x.r === cs[0]?.r); });
+  const cross = [];
+  const n = engineRows ? o.cols : o.rows;
+  for (let i = 1; i <= n; i++) { const ks = o.cells.filter((x) => (engineRows ? x.c : x.r) === i && !x.fixed).map((x) => x.key); if (ks.length >= 2) cross.push(ks); }
+  const have = new Set();
+  for (const ks of [...o.engine.lines, ...cross]) {
     const cs = ks.map(at);
     if (cs.some((x) => !x || isBlank(o, x)) || !cs.some((x) => cellRight(o, x) === false)) continue;
-    const v = variantsOf(o).find((vr) => cs.every((x) => normCell(x.value) === normCell(vr.key[x.r - 1]?.[x.c - 1] ?? '')));
-    if (!v) continue;
+    const vs = variantsOf(o).filter((vr) => fits(cs, vr));
+    if (!vs.length) continue;
     const row = cs.every((x) => x.r === cs[0].r);
-    const uniq = (names, n) => n != null && names.filter((t) => t === n).length === 1;
+    const uniq = (names, nm) => nm != null && names.filter((t) => t === nm).length === 1;
     const rn = o.rowNames[cs[0].r - 1], cn = o.colNames[cs[0].c - 1];
-    out.push({ name: row ? (uniq(o.rowNames, rn) ? `${rn}这一行` : `第 ${cs[0].r} 行${rn != null ? `（${rn}）` : ''}`) : (uniq(o.colNames, cn) ? `${cn}这一列` : `第 ${cs[0].c} 列${cn != null ? `（${cn}）` : ''}`), label: v.label.replace(/^像是/, ''), keys: ks });
+    const name = row ? (uniq(o.rowNames, rn) ? `${rn}这一行` : `第 ${cs[0].r} 行${rn != null ? `（${rn}）` : ''}`) : (uniq(o.colNames, cn) ? `${cn}这一列` : `第 ${cs[0].c} 列${cn != null ? `（${cn}）` : ''}`);
+    if (have.has(name)) continue;
+    have.add(name);
+    out.push({ name, label: [...new Set(vs.map((v) => v.label.replace(/^像是/, '')))].join('，或者'), keys: ks });
   }
   return out;
 }
@@ -363,7 +407,7 @@ export const table = {
       lines.push(`  答案：收下了（比 ${n} 格；学生看不到，比出来的不当场标）`);
       for (const m of misreadLines(o)) lines.push(`  ${m.name}像是：${m.label}`);
       const bad = wrongCells(o);
-      if (bad.length) lines.push(`  和答案不一样：${bad.map((x) => `${cellName(o, x)}（写了 ${x.value}，答案是 ${answerOf(o, x)}）`).join('、')}`);
+      if (bad.length) lines.push(`  和答案不一样：${bad.map((x) => `${cellName(o, x)}（写了 ${x.value}，${wantText(o, x)}）`).join('、')}`);
     }
     return lines;
   },

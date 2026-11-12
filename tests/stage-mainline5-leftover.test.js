@@ -20,7 +20,7 @@ test('照着走的一排同时开着 edit：学生把数直接写成有序的—
   assert.equal(wh.done, false);
   assert.deepEqual(fx.done || [], []);
   assert.deepEqual(fx.reactions || [], []);
-  assert.match(s.stateText(), /a 照 直接插入排序 走：照不下去了（学生把数改写了/);
+  assert.match(s.stateText(), /a 照 直接插入排序 走：照不下去了（学生把数直接改写成了做完的样子，不算照着走完的/);
   // 老师重新 follow：从现在的样子接着照
   run(s, 'write a.1 3\nfollow a sort insert');
   assert.match(s.stateText(), /a 照 直接插入排序 走：还没做完第 1 趟/);
@@ -62,4 +62,21 @@ test('舞台题点「做不出来」：放弃记在那道题的记录上，报�
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../kit/src/blocks/stagedrill.js', import.meta.url), 'utf8');
   assert.equal((src.match(/session\.event\('giveup'/g) || []).length, (src.match(/if \(!gave\) session\.event\('giveup'/g) || []).length);
+});
+
+test('学生改写了、中间还挪过、再把数改回原来那一组：从现在的排法接着照（审查：以前只认排法回到改写以前，卡死）', () => {
+  const s = make('array a = 3 1 2 5 4\nfollow a sort bubble\nopen a edit\nopen a');
+  const w = (src, open) => s.apply(parseScript(src)[0], { by: 'student', open });
+  w('write a.1 9', 'edit');
+  assert.match(s.stateText(), /照不下去了（学生把数改写了/);
+  w('swap a.2 a.3', 'drag');
+  w('write a.1 3', 'edit');
+  assert.doesNotMatch(s.stateText(), /照不下去了/);
+  assert.match(s.stateText(), /a 照 冒泡排序 走：/);
+  // 改写出来的正好是第 1 趟做完的样子：也不卡住（从这里重新照）
+  const s2 = make('array a = 3 1 2\nfollow a sort insert\nopen a edit');
+  const w2 = (src) => s2.apply(parseScript(src)[0], { by: 'student', open: 'edit' });
+  w2('write a.1 1'); w2('write a.2 3');
+  assert.doesNotMatch(s2.stateText(), /照不下去了/);
+  assert.equal(whereOf(s2.objects.get('a'), s2).done, false);
 });

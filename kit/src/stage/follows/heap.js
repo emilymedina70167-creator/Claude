@@ -66,7 +66,6 @@ registerFollow('heap', {
       if (sorting && passes < run.passes.length && join(cells) === join(run.passes[passes])) { passes += 1; out[out.length - 1].mark = [passes]; }
     }
     close();
-    // 堆排序的一趟里先和 run.passes 一样的可能是调整的中间一步：检查点挪到这一趟最后一个一样的地方
     return out;
   },
   doc: 'follow h heap build   树照引擎建堆（type=min 小根堆）；follow h heap sort 堆排序（先要已经是堆）。学生的手：open h（按住一个结点拖到另一个上，两个换值）',

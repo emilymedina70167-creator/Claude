@@ -126,18 +126,29 @@ export function startFollow(o, name, fields, scene) {
 
 /** 学生把照着走的数改写了（同时开着 edit）：引擎照的是原来那一份，不重跑（重跑的话写成有序的就成了「走完了」） */
 const REWRITTEN = '学生把数改写了，引擎照的是原来的那一份：要接着照就重新写 follow';
+const REWRITTEN_DONE = '学生把数直接改写成了做完的样子，不算照着走完的：要接着照就重新写 follow';
 /**
- * 每一行之后（scene.js）：数据变了——老师改的（write、同名重造）从新的样子重跑；学生改的不重跑，记「照不下去了」，
- * 学生自己改回原样（写回去、撤一步）就接着照。在路上就把「过了几个检查点」记下来
+ * 每一行之后（scene.js）：数据变了——老师改的（write、同名重造）从新的样子重跑；学生改的不重跑，记「照不下去了」。
+ * 学生把数改回原来那一组：排法和改写以前一样就接着照；不一样（改写中间还挪过）从现在的排法重新照——
+ * 只是直接写成了做完的样子不算走完。在路上就把「过了几个检查点」记下来
  */
 export function refreshFollow(o, scene, { student = false } = {}) {
   const f = o?.follow, a = f && followOf(f.name);
   if (!a) return;
+  const data = a.dataOf ? a.dataOf(o, scene) : '';
   if (f.back != null) {
-    // 学生改写过：改回了改写以前的样子就接着照；老师动了数据照老办法重跑
-    if (a.stateOf(o, scene, f.snap) === f.back) { delete f.error; delete f.back; } else if (!student && a.dataOf(o, scene) !== f.held) { delete f.back; restart(o, scene); return; } else { f.held = a.dataOf(o, scene); return; }
-  } else if (a.dataOf && a.dataOf(o, scene) !== f.data) {
-    if (student && f.input && !f.error) { f.error = REWRITTEN; f.back = f.last ?? f.start; f.held = a.dataOf(o, scene); return; }
+    if (data === f.data) {
+      const same = a.stateOf(o, scene, f.snap) === f.back;
+      delete f.error; delete f.back; delete f.held;
+      if (!same) {
+        restart(o, scene);
+        if (f.startDone) { f.error = REWRITTEN_DONE; f.back = ''; f.held = data; return; }
+        f.last = f.start;
+        return;
+      }
+    } else if (!student && data !== f.held) { restart(o, scene); f.last = f.start; return; } else { f.held = data; return; }
+  } else if (a.dataOf && data !== f.data) {
+    if (student && f.input && !f.error) { f.error = REWRITTEN; f.back = f.last ?? f.start; f.held = data; return; }
     restart(o, scene);
     f.last = f.start;
     return;

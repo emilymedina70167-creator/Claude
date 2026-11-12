@@ -7,7 +7,7 @@
 const RAW = `
 arise arose arisen|awake awoke awoken|be was been|bear bore borne|beat beat beaten|become became become|befall befell befallen|begin began begun|
 behold beheld beheld|bend bent bent|beset beset beset|bet bet bet|bid bid bid|bind bound bound|bite bit bitten|bleed bled bled|blow blew blown|
-break broke broken|breed bred bred|bring brought brought|build built built|burst burst burst|buy bought bought|cast cast cast|catch caught caught|
+break broke broken|broadcast broadcast broadcast|breed bred bred|bring brought brought|build built built|burst burst burst|buy bought bought|cast cast cast|catch caught caught|
 choose chose chosen|cling clung clung|come came come|cost cost cost|creep crept crept|cut cut cut|deal dealt dealt|dig dug dug|do did done|
 draw drew drawn|drink drank drunk|drive drove driven|dwell dwelt dwelt|eat ate eaten|fall fell fallen|feed fed fed|feel felt felt|fight fought fought|
 find found found|flee fled fled|fling flung flung|fly flew flown|forbid forbade forbidden|forecast forecast forecast|forego forewent foregone|
@@ -32,14 +32,23 @@ weave wove woven|weep wept wept|win won won|wind wound wound|withdraw withdrew w
 withstand withstood withstood|wring wrung wrung|write wrote written`;
 export const IRREGULAR = Object.fromEntries(RAW.split('|').map((x) => x.trim().split(/\s+/)).map(([b, p, pp]) => [b, [p, pp]]));
 
+// 不是原形的形式 → 原形（went → go）。自己也是一个动词原形的不算：表里的原形（come、read、lay），
+// 和另有其词的规则动词（found 建立、saw 锯、wound 弄伤、ground 搁浅、fell 砍倒、bore 使厌烦、bound 跳）
+const ALSO_BASE = new Set(['found', 'saw', 'wound', 'ground', 'fell', 'bore', 'bound', 'lay', 'shed', 'left']);
+const NOT_BASE = { is: 'be', am: 'be', are: 'be', was: 'be', were: 'be', been: 'be', has: 'have', had: 'have', does: 'do', did: 'do', done: 'do' };
+for (const [b, forms] of Object.entries(IRREGULAR)) for (const x of forms) if (!IRREGULAR[x] && !ALSO_BASE.has(x) && !NOT_BASE[x]) NOT_BASE[x] = b;
+
 // 带前缀的（re- over- under- out- mis- fore- with- un- up-）去了前缀在表里：照表变（overcome → overcame）
 const PREFIXES = ['under', 'over', 'fore', 'with', 'out', 'mis', 're', 'un', 'up'];
 // 多音节、重音在最后一个音节的：加 ed / ing 双写末尾的辅音字母（单音节的看字形就知道，不用列）
-const STRESS_LAST = new Set('prefer refer infer confer defer deter occur incur recur admit commit permit submit omit emit transmit regret begin forget forbid control patrol compel expel propel excel rebel equip transfer upset format program acquit'.split(' '));
+const STRESS_LAST = new Set('prefer refer infer confer defer deter occur incur recur admit commit permit submit omit emit transmit regret begin forget forbid control patrol compel expel propel excel rebel equip transfer upset format program acquit unplug unpin unzip unclog unwrap unsnap rewrap replan remap recap overlap overstep outwit outstrip underpin kidnap worship handicap'.split(' '));
 
 const VOWEL = /[aeiou]/;
+// 看着像「前缀 + 表里的词」其实不是的：relay（转播）是规则动词，不是 re + lay
+const NOT_PREFIXED = new Set(['relay']);
 function irregularOf(w) {
   if (IRREGULAR[w]) return IRREGULAR[w];
+  if (NOT_PREFIXED.has(w)) return null;
   for (const p of PREFIXES) {
     const rest = w.slice(p.length);
     if (w.startsWith(p) && rest.length >= 2 && IRREGULAR[rest] && rest !== 'be') return IRREGULAR[rest].map((x) => p + x);
@@ -52,10 +61,13 @@ function doubles(w) {
   if (STRESS_LAST.has(w)) return true;
   // 单音节：整个词只有一段元音字母（stop plan run；visit open 有两段）
   if ((w.match(/[aeiouy]+/g) || []).length === 1) return true;
-  // 前缀 + 单音节（reset outrun unplug）
-  return PREFIXES.some((p) => w.startsWith(p) && w.length - p.length >= 3 && (w.slice(p.length).match(/[aeiouy]+/g) || []).length === 1 && doubles(w.slice(p.length)));
+  // 前缀 + 表里一个要双写的单音节词（reset offset beset input outrun overrun：照词根双写；visit 不是 vi + sit）；别的多音节词不猜
+  // （以前「前缀 + 单音节」都双写：render 被当成 re + nder，成了 renderred）。规则动词里要双写的列在 STRESS_LAST
+  for (const p of [...PREFIXES, 'off', 'be', 'in']) { const root = w.slice(p.length); if (w.startsWith(p) && IRREGULAR[root] && (root.match(/[aeiouy]+/g) || []).length === 1) return doubles(root); }
+  return false;
 }
-const sOf = (w) => (w === 'have' ? 'has' : /(s|x|z|ch|sh|o)$/.test(w) ? `${w}es` : /[^aeiou]y$/.test(w) ? `${w.slice(0, -1)}ies` : `${w}s`);
+// 元音字母 + o 只加 s（radio → radios）；一个元音字母 + z 双写（quiz → quizzes）
+const sOf = (w) => (w === 'have' ? 'has' : /[aeiou]o$/.test(w) ? `${w}s` : /[^aeiou][aeiou]z$/.test(w) || /qu[aeiou]z$/.test(w) ? `${w}zes` : /(s|x|z|ch|sh|o)$/.test(w) ? `${w}es` : /[^aeiou]y$/.test(w) ? `${w.slice(0, -1)}ies` : `${w}s`);
 function ingOf(w) {
   if (w === 'be') return 'being';
   if (/ie$/.test(w)) return `${w.slice(0, -2)}ying`;
@@ -89,9 +101,11 @@ export function formsOf(base) {
     own = three.slice(1);
   }
   if (!/^[a-z]+$/.test(w)) throw new Error(`「${base}」不像一个动词原形（只写英文字母，短语动词用空格隔开：look at）`);
+  // 第一格写的不是原形（went、is、has）：照规则变会拼出 wented。当场报，说原形是什么；自己给了三种形式的不查
+  if (!own && NOT_BASE[w]) throw new Error(`「${w}」是 ${NOT_BASE[w]} 的变化形式：{verb: …} 的第一格写原形 ${NOT_BASE[w]}`);
   const irr = own || irregularOf(w);
   const [past, part] = irr || [edOf(w), edOf(w)];
-  return { base: `${w}${rest}`, s: `${w === 'be' ? 'is' : sOf(w)}${rest}`, ing: `${ingOf(w)}${rest}`, past: `${past}${rest}`, part: `${part}${rest}`, regular: !irr };
+  return { head: w, rest, base: `${w}${rest}`, s: `${w === 'be' ? 'is' : sOf(w)}${rest}`, ing: `${ingOf(w)}${rest}`, past: `${past}${rest}`, part: `${part}${rest}`, regular: !irr };
 }
 
 // —— 拼谓语 ——
@@ -139,17 +153,20 @@ const BE = { past: { I: 'was', '3s': 'was', you: 'were', pl: 'were' }, now: { I:
 export function conjugate(base, { time = '现在', aspect = '一般', subject = '单', passive = false, negative = false } = {}) {
   const f = formsOf(base);
   const T = readTime(time), A = readAspect(aspect), who = readSubject(subject);
-  const isBe = f.base === 'be';
+  const isBe = f.head === 'be'; // be able to、be going to：照 be 变，后面的词原样接上
   if (passive && isBe) throw new Error('be 没有被动');
   const perfect = A === '完成' || A === '完成进行', prog = A === '进行' || A === '完成进行';
   const lead = T.modal || (T.time === '将来' ? 'will' : T.time === '过去将来' ? 'would' : null);
-  // unsayable：词都认得，只是这种说法一般不用——舞台上不拦着写，拨到那儿时写「不这样说」（pick.js）
+  // unsayable：词都认得，只是这种说法一般不用——舞台上不拦着写，拨到那儿时写「一般不这么说」（pick.js）
   if (passive && prog && (perfect || lead)) throw Object.assign(new Error(`「${T.modal || T.time}${A}」的被动一般不用（will be being done、has been being done）：换成一般、完成，或者过去 / 现在的进行`), { unsayable: true });
   const past = T.time === '过去';
   // 一串动词：每一个决定后面那个用什么形式（have 后面过去分词，进行的 be 后面 ing，被动的 be 后面过去分词）
   const chain = [...(perfect ? [{ v: 'have', next: 'part' }] : []), ...(prog ? [{ v: 'be', next: 'ing' }] : []), ...(passive ? [{ v: 'be', next: 'part' }] : []), { v: 'main' }];
   const form = (v, need) => {
-    if (v === 'be' || (v === 'main' && isBe)) return need === 'base' ? 'be' : need === 'part' ? 'been' : need === 'ing' ? 'being' : BE[past ? 'past' : 'now'][who];
+    if (v === 'be' || (v === 'main' && isBe)) {
+      const be = need === 'base' ? 'be' : need === 'part' ? 'been' : need === 'ing' ? 'being' : BE[past ? 'past' : 'now'][who];
+      return v === 'main' ? `${be}${f.rest}` : be;
+    }
     if (v === 'have') return need === 'base' ? 'have' : need === 'part' ? 'had' : need === 'ing' ? 'having' : past ? 'had' : who === '3s' ? 'has' : 'have';
     return need === 'base' ? f.base : need === 'part' ? f.part : need === 'ing' ? f.ing : past ? f.past : who === '3s' ? f.s : f.base;
   };
@@ -163,6 +180,7 @@ export function conjugate(base, { time = '现在', aspect = '一般', subject = 
       words.splice(0, 1, past ? 'did' : who === '3s' ? 'does' : 'do', 'not', f.base);
     } else if (words[0] === 'can') words[0] = 'cannot';
     else if (words[0] === 'ought to') words[0] = 'ought not to';
+    else if (words.length === 1) words[0] = words[0].replace(/^(\S+)/, '$1 not'); // 只有 be 自己（is able to → is not able to）
     else words.splice(1, 0, 'not');
   }
   return words.join(' ');

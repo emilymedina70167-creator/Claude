@@ -57,10 +57,10 @@ test('短语动词只变第一个词；带前缀的先去前缀查表；老师�
   assert.equal(F('undergo'), 'undergoes undergoing underwent undergone');
   assert.equal(F('misunderstand'), 'misunderstands misunderstanding misunderstood misunderstood');
   assert.equal(formsOf('overcome').regular, false);
-  const b = formsOf('broadcast/broadcast/broadcast');
-  assert.equal(`${b.base} ${b.s} ${b.ing} ${b.past} ${b.part} ${b.regular}`, 'broadcast broadcasts broadcasting broadcast broadcast false');
-  assert.equal(formsOf('broadcast').past, 'broadcasted'); // 不在表里照规则变（regular: true，现状里要说一声）
-  assert.equal(formsOf('broadcast').regular, true);
+  const b = formsOf('proofread/proofread/proofread');
+  assert.equal(`${b.base} ${b.s} ${b.ing} ${b.past} ${b.part} ${b.regular}`, 'proofread proofreads proofreading proofread proofread false');
+  assert.equal(formsOf('proofread').past, 'proofreaded'); // 不在表里照规则变（regular: true，现状里要说一声）
+  assert.equal(formsOf('proofread').regular, true);
   assert.throws(() => formsOf(''), /原形/);
   assert.throws(() => formsOf('go/went'), /三种形式/);
 });

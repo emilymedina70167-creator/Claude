@@ -26,10 +26,21 @@ export function engineTable(name, rawFields = {}) {
   const e = ENGINES[name];
   if (!e) throw new Error(`没有「${name}」这个引擎（有：${Object.keys(ENGINES).filter((k) => ENGINES[k].table).join(' ')}）`);
   if (!e.table) throw new Error(`${name} 没有能填的表`);
+  // 黑板组件外壳的字段（标题、题面、滑块…）在舞台的表上不起作用：当场报（引擎那边把它们当成认得的，不会报）
+  const shell = ['title', 'q', 'note', 'vary', 'id', 'link'].filter((k) => k in rawFields);
+  if (shell.length) throw new Error(`「${shell[0]}=」是黑板组件的字段，舞台的表上不起作用：去掉它（要说的话写 say，要问写 ask）`);
   const tracked = trackFields({ ...rawFields });
-  const input = e.parse(tracked.fields, '');
-  const run = e.run(input);
-  const t = e.table(input, run, tracked.fields);
+  let input, run, t;
+  // 引擎自己的报错是黑板的写法（「要写 frames:」）：舞台上字段写成 frames=
+  try {
+    input = e.parse(tracked.fields, '');
+    run = e.run(input);
+    t = e.table(input, run, tracked.fields);
+  } catch (err) {
+    // 开头的「hash:」是引擎的名字，留着；后面的才是字段
+    const msg = String(err?.message || err), head = /^[a-z][A-Za-z0-9_]*[:：]\s*/.exec(msg)?.[0] || '';
+    throw new Error(`${head.replace(/[:：]\s*$/, '：')}${msg.slice(head.length).replace(/(^|[^A-Za-z0-9_])([a-z][A-Za-z0-9_]*)[:：](?!\/)/g, '$1$2=')}`);
+  }
   if (!t?.rows?.length) throw new Error(`${name} 照这样写没有能填的表`);
   // 引擎没用上的字段（少写一个 s 就照默认值悄悄算出另一张表）：当场报。黑板那边的话里写的是「字段:」，这里是「字段=」
   const stray = tracked.unknown();

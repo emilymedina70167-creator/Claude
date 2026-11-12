@@ -14,7 +14,7 @@ import { parseScript, parseRef, parseRich, addCommands, OPTIONS, optionError } f
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
 // numOf：数（整数、小数、分数 -3/4，′ 和真的减号也认），比大小用；和挑战判数是同一个
-import { splitPicks, checkPick, varText, pickDeps, wordDialError, VERB } from './pick.js';
+import { splitPicks, checkPick, varText, pickDeps, wordDialError, VERB, verbFact } from './pick.js';
 import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure, numOf, isExpr, exprMeasure } from './goal.js';
 import { checkSpec } from './answer.js';
 import { parseLive, evalLive, fillLine, liveOrder, termText } from './value.js';
@@ -1572,7 +1572,12 @@ export class Scene {
         const live = Object.entries(fields).find(([, v]) => /\{[^{}]*\}/.test(String(v)));
         if (live && !c.lenient) throw new Error(`follow 的字段写死的数（${live[0]}="${live[1]}" 里的 {…} 不会跟着变）：拨盘变了页面不会重跑`);
         // 接在表上：引擎的结果直接当表的答案（照表的做法逐格比），不走路
-        if (o.type === 'table') { if (!a.toKey) throw new Error(`${name} 接不到表上`); return a.toKey(o, fields, this); }
+        if (o.type === 'table') {
+          if (!a.toKey) throw new Error(`${name} 接不到表上`);
+          // 接在表上只是给表一份答案，没有「到一趟」：call= 写了不起作用，当场说（不悄悄丢掉）
+          if (call != null && !c.lenient) throw new Error('follow 接在表上只是把引擎的结果当表的答案（逐格比），没有「到一趟叫你」：去掉 call=');
+          return a.toKey(o, fields, this);
+        }
         try { startFollow(o, name, fields, this); if (call === 'done' && o.follow) o.follow.call = 'done'; } catch (err) { if (!c.lenient) throw err; }
         return { follow: name, id: o.id };
       }
@@ -2262,6 +2267,16 @@ export class Scene {
     const w = this.waiting;
     const asked = w ? [...w.refs, ...(Array.isArray(w.expect) ? w.expect : w.expect && this.isRef(w.expect) ? [w.expect] : [])] : [];
     if (w) lines.push(`在等学生：${{ tap: '点', drag: '拖', next: '点按钮', say: '打字回答', value: '填一个答案', pick: '点几样' }[w.kind]}${w.refs.length ? ` ${w.refs.join(' ')}` : ''}${w.standin ? '（这一轮的提问没演上，这是页面替你挂的）' : ''}${hiddenNote(this.hiddenIn(asked))}`);
+    // 话、贴的字、题卡、挑战、标准答案里的 {verb: …}：老师写的是原形，拼成了什么要看得到（句子里的写在那个句子下面）。
+    // 照规则变的（表里没有）标出来：标准答案拼错了，学生写对的会被判错
+    const vf = [];
+    const verbsIn = (text, where) => { if (!/\{\s*verb\s*:/.test(String(text ?? ''))) return; for (const p of splitPicks(String(text))) if (p.k === 'pick' && p.name === VERB) { const f = verbFact(p, this.vars); if (f && !vf.some((x) => x.endsWith(f))) vf.push(`${where}：${f}`); } };
+    verbsIn(this.say, '话里');
+    if (w) { verbsIn(w.prompt, '问的那一句里'); verbsIn(w.answer, '标准答案里'); }
+    for (const l of this.labels.values()) if (!l.dial && l.text) verbsIn(l.text, `贴的字 ${l.id} 里`);
+    for (const o of this.objects.values()) if (o.type === 'card') for (const ln of o.lines || []) verbsIn(ln.text, `题卡 ${o.id} 里`);
+    for (const g of this.goals.values()) verbsIn(g.text, `挑战 ${g.id} 里`);
+    if (vf.length) lines.push('页面拼的谓语：', ...vf.slice(0, 8).map((x) => `  ${x}`));
     const backText = (e) => `back（按钮「回到${e.name}」${this.keeps.get(e.obj)?.has(e.name) ? '' : '；还没存，按不了'}）`;
     const polText = (e) => [policyText(e.policy), e.input ? `input=${e.input}` : ''].filter(Boolean).join('、');
     const rangeText = (e) => (e.lo != null ? `，${e.lo}～${e.hi}` : '');

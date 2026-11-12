@@ -77,7 +77,12 @@ test('存档点回去、同名重造：引擎的那一套跟着（答案、组�
   run(s, 'back T "k1"');
   assert.equal(o().engine.name, 'sort');
   assert.equal(o().cells.find((x) => x.key === b[1].key).value, '');
-  assert.ok(wrong(s) >= 0);
+  // 回去以后引擎的那一套还在、照旧判得出不一样：那一格写的 1 不是答案（审查：以前这里的断言恒真）
+  assert.equal(Object.keys(o().engine.cells).length > 0, true);
+  const w0 = wrong(s);
+  assert.equal(w0, o().key[b[0].r - 1][b[0].c - 1] === '1' ? 0 : 1);
+  stu(s, `write T.${b[1].r},${b[1].c} ${o().key[b[1].r - 1][b[1].c - 1]}`);
+  assert.equal(wrong(s), w0, '回去以后写对一格：不一样的格数不变');
   const last0 = o().key.at(-1).join(' ');
   run(s, 'table T engine=sort algo=shell array="9 8 7 6 5 4 3 2" gaps="5 3 1"');
   assert.notEqual(o().key.at(-1).join(' '), last0);

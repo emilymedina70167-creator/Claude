@@ -56,11 +56,11 @@ test('写错的当场报、列出能写的：不认得的时间、主语；拨�
 });
 
 test('表里没有的不规则动词：现状里说「照规则变的」；老师给了三种形式就照老师的', () => {
-  const s = make('sentence s = "It {verb: broadcast | 过去}."');
-  assert.equal(wordsOf(s, 's'), 'It broadcasted');
-  assert.match(s.stateText(), /谓语是页面拼的：broadcast，过去 × 一般，主语单数 → broadcasted（照规则变）/);
-  const s2 = make('sentence s = "It {verb: broadcast/broadcast/broadcast | 过去}."');
-  assert.equal(wordsOf(s2, 's'), 'It broadcast');
+  const s = make('sentence s = "It {verb: proofread | 过去}."');
+  assert.equal(wordsOf(s, 's'), 'It proofreaded');
+  assert.match(s.stateText(), /谓语是页面拼的：proofread，过去 × 一般，主语单数 → proofreaded（照规则变）/);
+  const s2 = make('sentence s = "It {verb: proofread/proofread/proofread | 过去}."');
+  assert.equal(wordsOf(s2, 's'), 'It proofread');
   assert.doesNotMatch(s2.stateText(), /照规则变/);
   assert.equal(verbNow(splitPicks('{verb: go | 过去}')[0], new Map()).regular, false);
 });
@@ -89,14 +89,14 @@ test('时间轴上的小人一拖，写了 {verb: … | 小人的拨盘} 的句�
   assert.equal(wordsOf(s, 's'), 'She wrote a letter');
 });
 
-test('拨到一般不说的组合（完成进行的被动）：不拦着写——句子里那一段写成「不这样说」，现状里说为什么；标准答案不许是这种', () => {
+test('拨到一般不说的组合（完成进行的被动）：不拦着写——句子里那一段写成「一般不这么说」，现状里说为什么；标准答案不许是这种', () => {
   const s = make('dial z = 一般 options="一般 完成进行"\ndial v = 主动 options="主动 被动"\nsentence q = "The bridge {verb: build | 现在 | z | 单 | v} by them."');
   assert.equal(wordsOf(s, 'q'), 'The bridge builds by them');
   stu(s, 'set v 被动');
   assert.equal(wordsOf(s, 'q'), 'The bridge is built by them');
   stu(s, 'set z 完成进行');
-  assert.equal(wordsOf(s, 'q'), 'The bridge 不这样说 by them');
-  assert.match(s.stateText(), /谓语是页面拼的：build，现在 × 完成进行，主语单数，被动 → 拼不出来，画面上写的是「不这样说」（[^\n]*被动一般不用/);
+  assert.equal(wordsOf(s, 'q'), 'The bridge 一般不这么说 by them');
+  assert.match(s.stateText(), /谓语是页面拼的：build，现在 × 完成进行，主语单数，被动 → 拼不出来，画面上写的是「一般不这么说」（[^\n]*被动一般不用/);
   stu(s, 'set z 一般');
   assert.equal(wordsOf(s, 'q'), 'The bridge is built by them');
   assert.match(dryRun(s, 'ask value "？" answer="{verb: build | 现在 | 完成进行 | 单 | 被动}" type=en')[0].error, /被动一般不用/);
