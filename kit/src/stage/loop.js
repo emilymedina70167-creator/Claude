@@ -14,7 +14,7 @@
 //   report?(err, info)             出错记一笔
 //   evidence?.goal(id, goal, seq) / evidence?.act(a, seq)   记成证据（学习台）
 //   mock、model、teach（叫老师的参数）、quietMs、readOnly
-import { HELP, DONE_BTN } from './stage.js';
+import { HELP, DONE_BTN, stageLines } from './stage.js';
 import { turnMessage, gridsOf } from './doc.js';
 import { eventOf, triggers, eventsText, tryCount, hasWork, undoneOf, TRY_MAX, QUIET_MS } from './events.js';
 import { shapeText } from './goal.js';
@@ -48,6 +48,25 @@ export function createLoop(host) {
     flushing: false,
   };
   const inBytes = (input) => input.reduce((n, m) => n + bytes(m.content), 0);
+  // 这一段里叫老师的事（triggers）全是带挑战编号的「很久没动 / 试了好多下」：那几条挑战的编号；有别的理由（答了、打了字、做到了）就是 null
+  const whyOf = (events) => {
+    const ts = (events || []).filter(triggers);
+    if (!ts.length || !ts.every((e) => (e.kind === 'stuck' || e.kind === 'tries') && e.goals?.length)) return null;
+    return new Set(ts.flatMap((e) => e.goals));
+  };
+  // 老师这一轮写的行里，第一行没演上的（演了的照先后一行行对掉）：{ line, src }
+  const firstUnplayed = (text, log) => {
+    const played = (log || []).filter((r) => r.by === 'teacher').map((r) => String(r.src || '').trim());
+    const lines = stageLines(text);
+    for (let k = 0; k < lines.length; k++) {
+      const l = lines[k] == null ? '' : String(lines[k]).trim();
+      if (!l || l.startsWith('#')) continue;
+      const at = played.indexOf(l);
+      if (at >= 0) { played.splice(at, 1); continue; }
+      return { line: k + 1, src: l };
+    }
+    return { line: 0, src: '后面的行' };
+  };
 
   // —— 叫老师写一轮：边写边演 → 核验 → 记忆块 → 演完存好。学生答了什么不在这里等：事件来了 flush 再叫 ——
   // pre：提前想好的那一轮（spec）接上来，写过的先演、接着流式演
@@ -64,7 +83,9 @@ export function createLoop(host) {
       const mark = turn.mark;
       const t0 = pre?.t0 ?? performance.now();
       let first = null;
-      const f = S.flight = { stale: false, playing: false };
+      // why：这一次叫老师的理由要是全是「某几条挑战很久没做到 / 试了好多下」，记下是哪几条（onGoal 看：学生做到了就停演）
+      const f = S.flight = { stale: false, playing: false, why: S.nextWhy, turn, cut: null };
+      S.nextWhy = null;
       host.thinking?.(true);
       stage.onLine = () => { host.thinking?.(false); f.playing = true; };
       const onText = ({ text }) => {
@@ -124,6 +145,8 @@ export function createLoop(host) {
       S.busy = false;
       await Promise.race([turn.armed, ended0]);
       claude.log = stage.log.slice(mark);
+      // 叫老师的理由没了停下的：没演的第一行告诉老师（跟着下一条的「[上一轮没演的行]」）
+      if (f.cut) stage.errors.push({ ...firstUnplayed(text, claude.log), error: `学生在那之前做到了 ${f.cut}，这一行起没演（你这一轮是因为它很久没做到才被叫来的）` });
       host.putTurn(claude);
       S.logFrom = stage.log.length;
       if (S.pending) { S.pending.base = []; savePending(true); }
@@ -226,6 +249,7 @@ export function createLoop(host) {
       // 等的时候那件事可能已经攒起来了（预写演完，学生手上又有事：settle 把它记成 quiet）：没有要老师接的就不叫
       if (S.ended || !S.pending || S.flight || S.busy || !S.pending.events.some(triggers)) return;
       const row = finalize();
+      S.nextWhy = whyOf(row.events);
       // 提前想好的那一轮：学生真的只点了「接着」、发出去的一字不差，接上
       if (S.spec && !S.spec.dead && S.spec.msg === row.msg) pre = adopt(S.spec);
       dropSpec();
@@ -321,6 +345,13 @@ export function createLoop(host) {
   }
   function onGoal(ids, { by = 'student', instant, reacted = 0, reacts = null, pressed = false, prewrite = false, fresh = null } = {}) {
     if (instant || S.ended || host.readOnly) return;
+    // 老师这一轮是因为这条挑战很久没做到才被叫来的、已经演到一半：学生做到了，叫老师的理由没了——还没演的行不演（演上的留着）。
+    // 第一节真课：挑战打了勾，底下还在演「操作：按住粉色小人…」「提示：…」。做到挑战照常叫老师（下面那几行），老师接着看
+    const fl = S.flight;
+    if (by === 'student' && fl?.playing && fl.why && !fl.cut) {
+      const hit = ids.find((id) => fl.why.has(id));
+      if (hit) { fl.cut = hit; fl.turn.drop(); }
+    }
     // 老师（或页面替老师补的行）让挑战成立了：不是学生做到的，不叫老师，攒着跟下一条发。舞台演预写的行时成立的（pre）、
     // 预写出的挑战一出来就成立的（fresh）照实写，不说「你这一轮让它成立了」
     if (by !== 'student') { addEvent({ kind: 'goal-by-teacher', ids, at: Date.now(), ...(prewrite ? { pre: true } : {}), ...(prewrite && fresh && ids.includes(fresh) ? { fresh: [fresh] } : {}) }); return; }
@@ -363,7 +394,7 @@ export function createLoop(host) {
       const why = idleWhy();
       if (S.ended || S.flight || !why || S.pending?.stuck) return;
       const secs = Math.round(quietMs / 1000);
-      addEvent({ kind: 'stuck', text: why.goals ? `学生 ${secs} 秒没动，挑战 ${why.goals.map((g) => g.id).join('、')} 还没做到` : `学生 ${secs} 秒没动；那时 ${why.left.join('、')} 还没做完`, at: Date.now() });
+      addEvent({ kind: 'stuck', text: why.goals ? `学生 ${secs} 秒没动，挑战 ${why.goals.map((g) => g.id).join('、')} 还没做到` : `学生 ${secs} 秒没动；那时 ${why.left.join('、')} 还没做完`, at: Date.now(), ...(why.goals ? { goals: why.goals.map((g) => g.id) } : {}) });
       S.pending.stuck = true;
       flush();
     }, quietMs);
@@ -373,7 +404,7 @@ export function createLoop(host) {
     const p = S.pending;
     const why = idleWhy();
     if (!p || p.triedOut || !why) return;
-    if (tryCount(p.events) >= TRY_MAX) { p.triedOut = true; addEvent({ kind: 'tries', ...(why.goals ? {} : { text: `学生试了 ${TRY_MAX} 下；那时 ${why.left.join('、')} 还没做完` }), at: Date.now() }); flush(); }
+    if (tryCount(p.events) >= TRY_MAX) { p.triedOut = true; addEvent({ kind: 'tries', ...(why.goals ? { goals: why.goals.map((g) => g.id) } : { text: `学生试了 ${TRY_MAX} 下；那时 ${why.left.join('、')} 还没做完` }), at: Date.now() }); flush(); }
   }
 
   // —— 提前想：这一轮以「接着」结尾、学生只能点它，就趁学生看的时候先把下一轮要来（发出去的和真点了以后一字不差才接上）——

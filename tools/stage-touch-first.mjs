@@ -247,6 +247,44 @@ SECTIONS.stream = async () => {
   await T.ctx.close();
 };
 
+// —— 晚到的提示（主线第七轮第 1 节）：叫老师的理由是 g1 很久没做到，老师的行一行一行到，演到第一行时学生做到了 g1：
+// 剩下的「操作：…」「提示：…」不演，预写的「对。」照演（真课：挑战打了勾，底下还在教怎么拖）——
+SECTIONS.late = async () => {
+  const T = await open();
+  const r = await T.page.evaluate(async () => {
+    const st = window.LAStage, D = window.LAStageDev;
+    st.cancelWait?.(); st.clearAll(); st.log = [];
+    const t0 = st.begin(); t0.end('array k = 2 1\nopen k\ngoal g1 "排好" when="k sorted"\n@g1 say "对。"'); await t0.armed;
+    const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+    let n = 0, calls = 0;
+    const lines = ['paint k.1 g1', 'say "操作：按住一张牌拖过去。"', 'say "提示：小的放前面。"', 'ask next'];
+    const loop = D.createLoop({
+      stage: st, mock: true, model: 'm', teach: {}, quietMs: 200, putTurn() {}, cost: (c) => c, thinking() {},
+      messages: () => [{ role: 'user', content: 'x' }],
+      addTurn: (row) => ({ ...row, seq: ++n }),
+      call: async (input, { onText }) => {
+        calls++;
+        if (calls > 1) return { text: 'say "好。"\nask next', modelApplied: 'm' };
+        let text = '';
+        for (const [i, l] of lines.entries()) {
+          text += `${l}\n`; onText({ text });
+          await sleep(120);
+          if (i === 0) await st.studentDo('swap k.1 k.2', { type: 'try', open: 'drag', line: 'swap k.1 k.2' });
+        }
+        return { text, modelApplied: 'm' };
+      },
+    });
+    await loop.resume({ lastClaude: 1 });
+    await sleep(2500);
+    // 照演过的行看（话一轮一收，屏幕上只剩最新那一轮的）
+    const said = st.log.map((x) => x.src).join('｜');
+    loop.close();
+    return `${/操作：按住/.test(said) || /提示：小的/.test(said) ? '演了晚到的提示' : '没演晚到的提示'}｜${/对。/.test(said) ? '预写的演了' : '预写的没演'}`;
+  });
+  expect('晚到的提示：学生做到了那条很久没做到的挑战，老师那一轮剩下的不演', r, '没演晚到的提示｜预写的演了');
+  await T.ctx.close();
+};
+
 for (const [name, fn] of Object.entries(SECTIONS)) {
   if (only && !only.includes(name)) continue;
   console.log(`\n—— ${name} ——`);

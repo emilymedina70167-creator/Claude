@@ -59,3 +59,104 @@ test('fitHistory：第一节真课 101 条，说明 138306 字节、上限 200 K
   assert.equal(r.msgs.length, n);
   assert.ok(total(r.msgs, 138306) <= 200 * 1024);
 });
+
+// —— 第 1 节：叫老师的理由没了，那一轮剩下的不演 ——
+import { Scene } from '../kit/src/stage/scene.js';
+import { parseScript } from '../kit/src/stage/script.js';
+import '../kit/src/stage/types/index.js';
+import { createLoop } from '../kit/src/stage/loop.js';
+
+const wait = (ms = 10) => new Promise((r) => setTimeout(r, ms));
+// 假的舞台（真的场景）：老师那一轮的字一到就「开演」，drop 记次数；errors 照真舞台那样每轮开头清空
+function lateClass(src) {
+  const scene = new Scene();
+  for (const c of parseScript(src)) scene.apply(c);
+  const stage = {
+    log: [], errors: [], scene, teacherAudit: [], reacting: Promise.resolve(), studentChain: Promise.resolve(),
+    pendingGoals: () => [...scene.goals.values()].filter((g) => !g.met),
+    drops: 0, pushed: [],
+    begin() {
+      this.errors = [];
+      let armedR; const armed = new Promise((r) => { armedR = r; });
+      const me = this;
+      return {
+        mark: this.log.length, turn: 1, armed,
+        push(text) { me.pushed.push(text); me.onLine?.(); },
+        end(text) { const lines = text.split('\n').filter(Boolean); for (const src of lines.slice(0, me.dropAt ?? lines.length)) me.log.push({ src, by: 'teacher' }); armedR(); return new Promise(() => {}); },
+        drop() { me.drops++; me.dropAt = me.pushed.at(-1)?.split('\n').filter(Boolean).length ?? 0; armedR(); },
+        abort: async () => {},
+      };
+    },
+    play: async () => ({}), holdAsk() {}, cancelWait() { scene.waiting = null; },
+  };
+  const sent = [];
+  let script = null;
+  const host = {
+    stage, mock: true, model: 'm', teach: {}, quietMs: 5, putTurn() {}, cost: (c) => c, thinking() {},
+    messages: ({ next } = {}) => [{ role: 'user', content: next || 'x' }],
+    addTurn: (r) => { const x = { ...r, seq: sent.length + 1 }; sent.push(x); return x; },
+    call: async (input, { onText }) => { const s = script ?? (async () => ({ text: 'say "好"', modelApplied: 'm' })); script = null; return s(onText, input); },
+  };
+  return { stage, scene, sent, host, setScript: (f) => { script = f; } };
+}
+const studentRows = (rows) => rows.filter((r) => r.role === 'student' && !r.pending);
+
+test('叫老师的理由是 g1 很久没做到、老师演到一半学生做到了 g1：剩下的不演，下一轮告诉老师', async () => {
+  const a = lateClass('array k = 2 1\nopen k\ngoal g1 "排好" when="k sorted"');
+  const loop = createLoop(a.host);
+  let second = null;
+  a.setScript(async (onText) => {
+    onText({ text: 'paint k.1 g1\nsay "操作：按住一张牌拖过去。"\n' });
+    await wait(5);
+    a.scene.apply(parseScript('swap k.1 k.2')[0], { by: 'student', open: 'drag' });
+    a.stage.onGoal(['g1'], { by: 'student' });
+    await wait(5);
+    return { text: 'paint k.1 g1\nsay "操作：按住一张牌拖过去。"\nsay "提示：小的放前面。"\nask next', modelApplied: 'm' };
+  });
+  await loop.resume({ lastClaude: 1 });
+  await wait(60);
+  assert.equal(a.stage.drops, 1, '老师那一轮停了');
+  const rows = studentRows(a.sent);
+  const last = rows.at(-1);
+  assert.match(last.msg, /做到了挑战 g1/);
+  assert.match(last.msg, /学生在那之前做到了 g1，这一行起没演（你这一轮是因为它很久没做到才被叫来的）/);
+  loop.close();
+});
+
+test('理由是 g1 很久没做到、学生做到的是另一条 g2：照旧全演', async () => {
+  const a = lateClass('array k = 2 1\narray q = 1 2\nopen k\nopen q\ngoal g1 "排好" when="k sorted"\ngoal g2 "倒过来" when="q sorted desc"');
+  const loop = createLoop(a.host);
+  a.setScript(async (onText) => {
+    onText({ text: 'paint k.1 g1\n' });
+    await wait(5);
+    a.scene.goals.get('g2').met = false; // 叫老师那一刻 g2 不在理由里（先当它做到过）
+    a.scene.apply(parseScript('swap q.1 q.2')[0], { by: 'student', open: 'drag' });
+    a.stage.onGoal(['g2'], { by: 'student' });
+    await wait(5);
+    return { text: 'paint k.1 g1\nsay "提示"\nask next', modelApplied: 'm' };
+  });
+  // 理由只有 g1：叫老师那一刻 g2 先当它做到过（不在「还没做到」里）
+  a.scene.goals.get('g2').met = true;
+  await loop.resume({ lastClaude: 1 });
+  await wait(60);
+  assert.equal(a.stage.drops, 0);
+  loop.close();
+});
+
+test('理由里还有学生打的字：照旧全演', async () => {
+  const a = lateClass('array k = 2 1\nopen k\ngoal g1 "排好" when="k sorted"');
+  const loop = createLoop(a.host);
+  a.setScript(async (onText) => {
+    onText({ text: 'say "嗯"\n' });
+    await wait(5);
+    a.scene.apply(parseScript('swap k.1 k.2')[0], { by: 'student', open: 'drag' });
+    a.stage.onGoal(['g1'], { by: 'student' });
+    await wait(5);
+    return { text: 'say "嗯"\nsay "提示"\nask next', modelApplied: 'm' };
+  });
+  await loop.resume({ lastClaude: 1 });
+  a.stage.onAnswer({ type: 'say', text: '我不会拖' });
+  await wait(60);
+  assert.equal(a.stage.drops, 0);
+  loop.close();
+});
