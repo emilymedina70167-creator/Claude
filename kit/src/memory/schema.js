@@ -16,6 +16,8 @@ export const ROLE_TEXT = { chat: '开发那边（以前的对话里的 Claude）
 // 写进去以后多久之内还能撤销（docs/desk-plan.md 4.3；我还没定，先和自检提醒保留的天数一样）
 export const UNDO_DAYS = 7;
 
+import { EXAM_COLLECTIONS, canWriteExam } from '../exam/schema.js';
+
 // 日期一律写成 YYYY-MM-DD（按我这边的本地日期）
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export const isDate = (s) => typeof s === 'string' && DATE_RE.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && toDate(s) === s;
@@ -182,6 +184,23 @@ export const COLLECTIONS = {
     refs: { session: 'sessions' },
     tracked: ['status'],
   },
+  // 考试档案（docs/exam-plan.md 1.2）：目标院校、专业、考哪几门、目标分、考试日期、留作模考的年份。只有一条 target。
+  // 页面第一次打开时写一份默认（exam/target.js），我在「管理 → 考试」改；开发那边修数据也能写
+  exam: {
+    label: '考试档案', kind: 'state', writers: ['chat', 'me', 'page'],
+    id: { re: /^target$/, eg: 'target（只有这一条）' },
+    required: ['school'],
+    enums: { degree: ['学硕', '专硕', ''] },
+    dates: ['date'],
+    tracked: ['school', 'dept', 'major', 'majorCode', 'degree', 'date', 'goal', 'split', 'reserve'],
+  },
+  // 真题级（docs/exam-plan.md 第五节）：每块一条，页面按证据算的缓存（做过哪几道真题、对没对、过没过、踩过哪些坑）
+  exam_bar: {
+    label: '真题级', kind: 'state', writers: ['page'],
+    id: { re: /^(?:[A-Z]{2}-)?L\d+(?:\.\d+){0,2}$/, eg: '课程地图里块的编号：L2.2.1、DS-L6.4.1' },
+    required: ['at'],
+    tracked: [],
+  },
 };
 
 export const MEMORY_COLLECTIONS = Object.keys(COLLECTIONS);
@@ -190,14 +209,14 @@ export const MEMORY_COLLECTIONS = Object.keys(COLLECTIONS);
 export function canWrite(role, coll) {
   if (coll === 'meta') return role === 'page';
   const c = COLLECTIONS[coll];
-  if (!c) return true;
+  if (!c) { const e = canWriteExam(role, coll); return e === null ? true : e; }
   return c.writers.includes(role);
 }
 
 /** 写之前拦一道：不许写时抛出中文原因（课堂里的 Claude 想改弱点、宣布掌握之类，代码层面就拦住） */
 export function assertWrite(role, coll) {
   if (canWrite(role, coll)) return;
-  const c = COLLECTIONS[coll];
+  const c = COLLECTIONS[coll] || EXAM_COLLECTIONS[coll];
   const who = ROLE_TEXT[role] || role;
   const owners = (c?.writers || []).map((r) => ROLE_TEXT[r]).join('、');
   throw new Error(`${who}不能写 ${coll}（${c?.label || coll}）：这一类只有${owners}能写${role === 'class' ? '。规则要学生确认才写，掌握由页面按证据算' : ''}`);

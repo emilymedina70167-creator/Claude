@@ -10,6 +10,7 @@
 // 课堂讲课那一边不包（classroom.js 拿的是自己那份数据库，写证据走 sync.js 的 sink，本来就会重试）：不碰回话的速度。
 import { COLLECTIONS, isDate } from './schema.js';
 import { reportError } from '../errlog.js';
+import { validateExam } from '../exam/schema.js';
 
 // 这几种失败重试也没用
 const PERMANENT = new Set(['invalid_argument', 'permission_denied', 'not_granted', 'revoked', 'quota_exceeded', 'not_found', 'failed_precondition']);
@@ -24,7 +25,9 @@ export function validateWrite(path, data) {
   if (parts.length !== 2) return [];
   const [coll, id] = parts;
   const c = COLLECTIONS[coll];
-  if (!c || !data || typeof data !== 'object') return [];
+  // 不在记忆库的：考试的资料照它自己的规矩查（exam/schema.js），别的照旧不管
+  if (!c) return validateExam(coll, id, data);
+  if (!data || typeof data !== 'object') return [];
   const out = [];
   if (c.id?.re && !c.id.re.test(id)) out.push(`编号「${id}」不对（${c.label}的编号像 ${c.id.eg}）`);
   for (const f of c.required || []) if (data[f] === undefined || data[f] === null || data[f] === '') out.push(`缺了必填的 ${f}`);
