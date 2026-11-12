@@ -99,8 +99,8 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
       const r = parseProfile(d.text, { node, qids: new Set(qs.map((q) => q.id)) });
       if (!r.how) return receipt({ inbox: d, brief, result: 'rejected', rejected: r.problems.map((x) => ({ error: x })) });
       assertWrite('page', 'exam_profiles');
-      await db.doc(`exam_profiles/${node.id}`).set({ course: node.course, space: node.space || '', how: r.how, traps: r.traps, src: profileSrc(node.id, ex.questions.filter((q) => !q.reserve)), by: 'lab', at: now });
-      await refreshStats(db, { curriculum: getData().curriculum }).catch(() => {});
+      await db.doc(`exam_profiles/${node.id}`).set({ course: node.course, space: node.space || '', how: r.how, traps: r.traps, src: profileSrc(node.id, ex.questions, years(getData())), by: 'lab', at: now });
+      examDirty = true; // 这一批收件箱收完再重算一次考情缓存（refreshStats 读九门课，一张一算太慢）
       return receipt({ inbox: d, brief, result: r.problems.length ? 'partial' : 'ok', took: { profile: 1, traps: r.traps.length }, rejected: r.problems.map((x) => ({ error: x })) });
     }
     if (brief.kind === 'map') {
@@ -116,7 +116,7 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
         if (!next[id] && !(blocks.length && n.mapSig !== sig)) continue;
         await db.doc(`syllabus/${id}`).set({ ...rest, blocks, mapSig: sig, mapAt: now, mapBy: 'lab' });
       }
-      await refreshStats(db, { curriculum: getData().curriculum }).catch(() => {});
+      examDirty = true; // 这一批收件箱收完再重算一次考情缓存（refreshStats 读九门课，一张一算太慢）
       return receipt({ inbox: d, brief, result: r.problems.length ? 'partial' : 'ok', took: { blocks: Object.keys(r.map).length }, rejected: r.problems.map((x) => ({ error: x })) });
     }
     // 考情动态：同一个数两次独立抓到（另一晚）才算核过；核过的复试线并进考试档案的 lines
@@ -205,6 +205,7 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
 
   let inboxBusy = false;
   let inboxNext = null;
+  let examDirty = false;
   const done = new Set();
   db.collection('lab_inbox').onSnapshot((s) => take(docsOf(s)), () => firstInbox());
   async function take(docs) {
@@ -224,6 +225,7 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
         await bump(r);
       }
     } finally {
+      if (examDirty) { examDirty = false; refreshStats(db, { curriculum: getData().curriculum }).catch(() => {}); }
       inboxBusy = false;
       firstInbox();
       if (docs.length) pruneLogs().then(loadLogs, loadLogs); else loadLogs();

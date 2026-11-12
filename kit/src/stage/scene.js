@@ -346,7 +346,6 @@ export class Scene {
   allParts() { return [...this.objects.values()].flatMap((o) => typeOf(o).parts(o)); }
   /** 画面上摆着的东西（藏着的不算）：画、镜头、摆新东西、往下让都只看这几样；照摆上舞台的先后 */
   shownIds() { return [...this.objects.values()].filter((o) => !o.hidden).map((o) => o.id); }
-  /** 这几个写法（部件、整样东西）落在哪几样藏着的东西上 */
   /** ask / goal 的 exam= / like=：写的得是题号；课堂挂了 examCheck 时库里没有、留作模考的当场报（重放旧课不查） */
   examOpts(opts, c = {}) {
     const out = {};
@@ -360,6 +359,7 @@ export class Scene {
     }
     return out;
   }
+  /** 这几个写法（部件、整样东西）落在哪几样藏着的东西上 */
   hiddenIn(refs) { return [...new Set(refs.map((r) => parseRef(r)?.obj).filter((id) => this.objects.get(id)?.hidden))]; }
   /** 挑战的条件里提到的舞台上的东西（M、M.1,1、rank(M)、M same B） */
   objectsIn(cond) {
@@ -1668,7 +1668,9 @@ export class Scene {
           if (on == null && now.some(Boolean)) throw new Error(`「${opts.when}」现在就已经成立了：挑战要学生动手以后才做得到`);
         }
         // pre：预写的行造的（舞台演预写的行、写下时的试演），撞名时和老师直接写的分开
-        const ex = watch ? {} : this.examOpts(opts, c);
+        // 挑战上不收 exam=：挑战只在做到时记一次作答（中间试错不记），「第一次碰到就一次做对」对它永远成立；对标的 like= 照收
+        if (!watch && opts.exam != null && !c.lenient) throw new Error(`挑战上不写 exam=（挑战只记做到的那一下，算不了真题级）：真题原题用 ask value / tap / pick 问，写 exam=；挑战照着真题出的写 like=`);
+        const ex = watch ? {} : this.examOpts({ ...opts, exam: null }, c);
         this.goals.set(id, { ...ex, id, text: str ?? '', when: opts.when, alts, cond, met: false, call: watch ? 'now' : call, on, collect, ...(watch ? { watch: true } : {}), ...(c.prewrite || this.trial ? { pre: true } : {}) });
         // 套着的预写（@g1 里写出 goal g2，@g2 的行先记在 ahead）：演出 goal g2 的那一刻（舞台演预写的行带 prewrite；写下时试演在克隆上）
         // 那几行挪过来。老师当场直接写的同名挑战不捡（那是另一个挑战，旧的预写不能在它做到时演）；重写一个挑战照旧清掉它的预写

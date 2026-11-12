@@ -1,6 +1,7 @@
 // 考情的统计（docs/exam-plan.md 第三节）：从带标签的真题里**算出来**，不让 Claude 凭记忆说、不让它在一大堆文字里数。
 // 一道题的分：主考点算全分，次考点各算一半。留作模考的卷也算进统计（只是题面不出现）。纯函数，有测试（tests/exam-stats.test.js）。
 import { blockSyllabus, mapHoles } from './mapping.js';
+import { usable } from './reserve.js';
 
 const yearOf = (q) => Number(q?.year) || Number(String(q?.id || '').match(/^Q-\d{3}-(\d{4})-/)?.[1]) || 0;
 const inc = (o, k, n = 1) => { if (k) o[k] = (o[k] || 0) + n; };
@@ -69,14 +70,21 @@ export function courseHeat(questions = [], syllabus = [], { years = spanOf(quest
  * 首页存进 meta/exam 的一门课的缓存（410 分的权重、考情页、体检用；首页不为它订阅整类）：
  * { heat（前 12）, blockPerYear: { 块: 平均每年几分 }, holes: { blocks, nodes }, untagged, n, span }
  */
-export function statsCache({ course, questions = [], syllabus = [], curriculum = [] }) {
-  const years = spanOf(questions);
+// years：留作模考的年份：blockUsable 数每块能用的题（410 分只给有能用的题的块封顶：只在留着的几年考过的块课上做不到真题级）
+export function statsCache({ course, questions = [], syllabus = [], curriculum = [], years = [] }) {
+  const reserve = years;
+  const span = spanOf(questions);
   const tagged = questions.filter((q) => q.tags?.syl?.length);
   const map = blockSyllabus(syllabus.filter((n) => n.course === course));
   const blockPerYear = {};
-  for (const [b, ids] of map) blockPerYear[b] = blockStats(ids, tagged, { years }).perYear;
+  const blockUsable = {};
+  for (const [b, ids] of map) {
+    blockPerYear[b] = blockStats(ids, tagged, { years: span }).perYear;
+    const set = new Set(ids);
+    blockUsable[b] = tagged.filter((q) => q.tags.syl.some((x) => set.has(x)) && usable(q, reserve)).length;
+  }
   return {
-    heat: courseHeat(tagged, syllabus, { years }).slice(0, 12), blockPerYear, holes: mapHoles({ syllabus, curriculum, course }),
-    untagged: questions.length - tagged.length, n: questions.length, span: years,
+    heat: courseHeat(tagged, syllabus, { years: span }).slice(0, 12), blockPerYear, blockUsable, holes: mapHoles({ syllabus, curriculum, course }),
+    untagged: questions.length - tagged.length, n: questions.length, span,
   };
 }

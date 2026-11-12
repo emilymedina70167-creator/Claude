@@ -4,6 +4,8 @@
 // 不写进掌握的五种状态，结果存进 exam_bar（每块一条，页面算的缓存）；asOf 退回某一天以前（410 分的「这 7 天」要用）。
 // 纯函数，有测试（tests/exam-bar.test.js）。
 import { structureOf } from './structure.js';
+import { usable } from './reserve.js';
+import { HELP } from '../stage/stage.js';
 
 const subjectOf = (q) => String(q.subject || String(q.id || '').match(/^Q-(\d{3})-/)?.[1] || '408');
 const yearOf = (q) => Number(q.year) || Number(String(q.id || '').match(/^Q-\d{3}-(\d{4})-/)?.[1]) || 0;
@@ -20,25 +22,30 @@ export function suggestMs(q) {
  * questions：这一块的真题（能用的、留着的都给：留着的本来就不会有作答）；evidence：证据（带 exam / like 的那些）；
  * prev：上一次算的（坑由复盘对上的写进来，这里留着）；asOf：只看这个时刻以前的证据
  */
-export function barOf({ block, questions = [], evidence = [], prev = null, asOf = null, now = Date.now() } = {}) {
+// years：留作模考的年份（like= 指着留着的卷的不算）
+export function barOf({ block, questions = [], evidence = [], prev = null, asOf = null, now = Date.now(), years = [] } = {}) {
   const byId = new Map(questions.map((q) => [q.id, q]));
   const evs = evidence.filter((e) => e && (asOf == null || Number(e.at) <= asOf)).sort((a, b) => (a.at || 0) - (b.at || 0));
   // 一次作答算哪一道真题：exam= 的原题；like= 只认教研室出的题（d-lab-）
-  const keyOf = (e) => (e.exam && byId.has(e.exam) ? e.exam : e.like && byId.has(e.like) && /^d-lab-/.test(String(e.comp || '')) ? `${e.like}~${e.comp}` : '');
+  const keyOf = (e) => (e.exam && byId.has(e.exam) ? e.exam : e.like && byId.has(e.like) && usable(byId.get(e.like), years) && /^d-lab-/.test(String(e.comp || '')) ? `${e.like}~${e.comp}` : '');
+  // 舞台上的「给个提示」（页面替老师挂的那个按钮，记成 stage-next 动作）：这一问亮出来以后点过的，这一次就不算没看提示
+  const helps = evs.filter((h) => h.kind === 'stage-next' && h.detail?.button === HELP);
   const firstSession = new Map();
   const done = [];
   let passed = false, timed = false, passedAt = null;
   for (const e of evs) {
     if (e.kind === 'hint' || e.kind === 'sure' || BLOCKERS.has(e.kind)) continue;
     const k = keyOf(e);
-    if (!k || e.ok === undefined) continue;
+    // 页面没判的（只收不判、预期不在舞台上：ok 是 null）不算一次作答，不占「第一次」
+    if (!k || e.ok == null) continue;
     if (!firstSession.has(k)) firstSession.set(k, e.session || '');
     if (done.some((d) => d.key === k)) continue; // 只看第一次作答
     const qid = k.split('~')[0];
     const clean = !!e.ok && Number(e.attempts || 1) <= 1 && e.sure !== false && (e.session || '') === firstSession.get(k)
       && !evs.some((h) => BLOCKERS.has(h.kind) && h.session === e.session && h.comp && h.comp === e.comp && (h.at || 0) <= (e.at || 0))
       // 「有把握吗」点了没把握（confidence.js 另记一条 sure 动作）
-      && !evs.some((h) => h.kind === 'sure' && h.detail?.sure === false && h.session === e.session && h.comp && h.comp === e.comp);
+      && !evs.some((h) => h.kind === 'sure' && h.detail?.sure === false && h.session === e.session && h.comp && h.comp === e.comp)
+      && !helps.some((h) => h.session === e.session && (h.at || 0) <= (e.at || 0) && (h.at || 0) >= (e.at || 0) - (Number.isFinite(e.ms) ? e.ms : Infinity));
     const ms = Number.isFinite(e.ms) ? e.ms : null;
     done.push({ key: k, id: qid, at: e.at, ok: !!e.ok, first: Number(e.attempts || 1) <= 1, ms, session: e.session || '' });
     if (clean) { passed = true; passedAt ??= e.at ?? null; if (ms != null && ms <= suggestMs(byId.get(qid))) timed = true; }

@@ -7,6 +7,8 @@
 //   练习里的作答 comp 就是题库编号，按它对回题库、块和知识点。
 // - 挑题 pickDrills：到期的复现组挂的块和错题、掉了的块、该复现的块、最近错过的，分高的先；混练：挨着的两道尽量不同块。
 // - 做完 drillOutcome：每道题的结果；复现组没过的直接记（原题都对了不算复现通过，档位不动）；错了的几道拼成开课用的资料包。
+import { reserveYears, usable } from '../exam/reserve.js';
+import { targetOf } from '../exam/target.js';
 import { toDate, addDays, dueList, nextTier, REVIEW_TIERS } from './schema.js';
 import { itemsOf } from './report.js';
 import { voidedIds, resolvedErrors } from './memo.js';
@@ -120,7 +122,9 @@ const CLEAN = (h) => h && h.outcome === 'first' && h.sure !== false;
 export function pickDrills(mem = {}, { space = 'math', today = toDate(Date.now()), n = DRILL_N } = {}) {
   const m = filterSpace(mem, space);
   const gone = voidedIds(m);
-  const drills = (m.drills || []).filter((d) => d && d.status !== 'void' && !d.broken && d.md && (!d.space || d.space === space));
+  // 真题做的题（src: exam）：留作模考那几年的不挑（档案里改了留的年份，以前进了题库的也拦住）
+  const reserve = reserveYears(targetOf(mem), today);
+  const drills = (m.drills || []).filter((d) => d && d.status !== 'void' && !d.broken && d.md && (!d.space || d.space === space) && !(d.exam && !usable({ id: d.exam }, reserve)));
   if (!drills.length) return { items: [], reviews: [] };
   const hist = drillHistory(mem.evidence || []);
   const solved = resolvedErrors(m);

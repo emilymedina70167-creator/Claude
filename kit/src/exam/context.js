@@ -34,20 +34,26 @@ function statsText(info) {
 }
 function profileText(info, cut = 0) {
   const lines = [];
+  // 画像里引的题号只留能用的（留着的卷、库里改了年份的不出现在课堂里）
+  const ok = new Set([...info.reps, ...info.rest].map((q) => q.id));
+  const clean = (s) => String(s || '').replace(/Q-\d{3}-\d{4}-\d{1,2}/g, (id) => (ok.has(id) ? id : '某道真题'));
   for (const p of info.profiles) {
-    if (p.how) lines.push(`- ${flat(p.how, cut || 600)}`);
-    for (const t of p.traps || []) lines.push(`- 坑 ${t.id}：${flat(t.text, 200)}${t.qs?.length ? `（${t.qs.join('、')}）` : ''}`);
+    if (p.how) lines.push(`- ${flat(clean(p.how), cut || 600)}`);
+    for (const t of p.traps || []) { const qs = (t.qs || []).filter((x) => ok.has(x)); lines.push(`- 坑 ${t.id}：${flat(clean(t.text), cut ? 80 : 200)}${qs.length ? `（${qs.join('、')}）` : ''}`); }
   }
   return lines.length ? `## 怎么考、典型的坑（教研室归纳的，引的是题号）\n${lines.join('\n')}` : '';
 }
 function repText(q, info, cut) {
   const how = HOW[info.course]?.[q.tags?.how] || '';
-  const opts = q.options ? Object.entries(q.options).map(([k, v]) => `${k}. ${flat(v, 300)}`).join('\n') : '';
+  const opts = q.options ? Object.entries(q.options).map(([k, v]) => `${k}. ${flat(v, cut ? 120 : 300)}`).join('\n') : '';
   const ana = q.analysis ? (cut ? flat(q.analysis, cut) : String(q.analysis).trim()) : '';
+  // 放不下时题面、答案也截（408 的大题题面上千字）：截过的写明，要全文老师照题号用 exam= 再问
   // 英语的题挂着篇章：篇章原文放在题前面（截到 1500 字，题问的那一段多半在前面）
   const pa = q.passage && info.passages?.[q.passage];
   const passage = pa ? `篇章 ${pa.id}：${flat(pa.text, cut ? 600 : 1500)}` : '';
-  return [`### ${q.id}（${q.year} 年第 ${q.n} 题，${TYPES[q.type] || q.type}，${q.points} 分${how ? `，${how}` : ''}）`, passage, String(q.stem || '').trim(), opts, q.answer ? `答案：${q.answer}` : '', ana ? `解析：${ana}` : ''].filter(Boolean).join('\n');
+  const stem = cut ? flat(q.stem, cut * 4) : String(q.stem || '').trim();
+  const answer = q.answer ? (cut ? flat(q.answer, cut * 2) : q.answer) : '';
+  return [`### ${q.id}（${q.year} 年第 ${q.n} 题，${TYPES[q.type] || q.type}，${q.points} 分${how ? `，${how}` : ''}）`, passage, stem, opts, answer ? `答案：${answer}` : '', ana ? `解析：${ana}` : ''].filter(Boolean).join('\n');
 }
 function mineText(info, bar) {
   const done = bar?.done?.length ? bar.done : info.mine;
@@ -76,8 +82,7 @@ export function examForClass({ target, info: info0, bar = null, today, budget = 
   const used = bytes(must.join('\n\n'));
   let room = budget - used - 64;
   const pick = (text) => { if (!text || bytes(text) + 2 > room) return ''; room -= bytes(text) + 2; return text; };
-  let prof = pick(profileText(info)) || pick(profileText(info, 160));
-  // 代表题：先放全文；放不下把解析截到 200 字；还不下就少放一道
+  // 代表题排在画像前面装：讲到能做出代表题那样的题是这一节的下限（先全文，放不下截解析、再截题面，最后少放几道）
   let reps = '';
   for (const cut of [0, 200, 60]) {
     const t = info.reps.length ? `## 代表题（题面原文；照这个难度讲）\n${info.reps.map((q) => repText(q, info, cut)).join('\n\n')}` : '';
@@ -85,10 +90,11 @@ export function examForClass({ target, info: info0, bar = null, today, budget = 
   }
   if (!reps && info.reps.length) {
     for (let k = info.reps.length - 1; k >= 1 && !reps; k--) {
-      const t = `## 代表题（题面原文；照这个难度讲）\n${info.reps.slice(0, k).map((q) => repText(q, info, 60)).join('\n\n')}`;
+      const t = `## 代表题（题面原文，长的截了；照这个难度讲）\n${info.reps.slice(0, k).map((q) => repText(q, info, 60)).join('\n\n')}`;
       if (bytes(t) + 2 <= room) { reps = t; room -= bytes(t) + 2; }
     }
   }
+  const prof = pick(profileText(info)) || pick(profileText(info, 160));
   const how = HOW[info.course] || {};
   const restLines = [];
   for (const q of info.rest) {

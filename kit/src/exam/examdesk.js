@@ -7,6 +7,7 @@ import { planInbox, touches, countsAfter } from './inbox.js';
 import { assertWrite } from '../memory/schema.js';
 import { loadExamCourse } from './load.js';
 import { statsCache } from './stats.js';
+import { readReserve } from './reserve.js';
 import { EXAM_COURSES } from './schema.js';
 import { barOf, barsChanged } from './bar.js';
 import { blockSyllabus } from './mapping.js';
@@ -17,9 +18,12 @@ import { staleProfiles, staleMaps, profileSrc } from './fresh.js';
  * （不订阅、不读整类），算 statsCache。计数也照读到的重算（收件箱照回执加的会在写到一半出错、两台设备、从备份恢复时偏）。
  * 只在收件箱并进了东西、或者 meta/exam 比上次算的新时算（examdesk 管）
  */
-export async function refreshStats(db, { curriculum = [], now = Date.now() } = {}) {
+export async function refreshStats(db, { curriculum = [], now = Date.now(), years = null } = {}) {
+  // 留作模考的年份：读档案（3 秒读不到用默认）
+  const reserve = years || await readReserve(db, new Date(now).toISOString().slice(0, 10));
   const stats = {};
   const blockPerYear = {};
+  const blockUsable = {};
   const papers = new Set();
   let questions = 0, syllabus = 0;
   for (const c of EXAM_COURSES) {
@@ -28,19 +32,20 @@ export async function refreshStats(db, { curriculum = [], now = Date.now() } = {
     for (const p of d.papers) papers.add(p.id);
     if (!d.questions.length) continue;
     questions += d.questions.length;
-    stats[c] = statsCache({ course: c, questions: d.questions, syllabus: d.syllabus, curriculum });
+    stats[c] = statsCache({ course: c, questions: d.questions, syllabus: d.syllabus, curriculum, years: reserve });
     // 后方的工作单要的（教研室重写画像、重挂映射）：过时的画像按热度排，映射过时的，题的标题和上游指纹
     const heatRank = new Map(stats[c].heat.map((h, i) => [h.id, i]));
-    const sp = staleProfiles(d.profiles, d.questions.filter((q) => !q.reserve), d.syllabus).sort((a, b) => (heatRank.get(a) ?? 99) - (heatRank.get(b) ?? 99));
+    const sp = staleProfiles(d.profiles, d.questions, d.syllabus, reserve).sort((a, b) => (heatRank.get(a) ?? 99) - (heatRank.get(b) ?? 99));
     stats[c].stale = { profiles: sp.slice(0, 20), maps: staleMaps(d.syllabus, curriculum).slice(0, 40) };
     stats[c].titles = Object.fromEntries(d.syllabus.filter((n) => sp.includes(n.id)).map((n) => [n.id, n.title]));
-    stats[c].srcs = Object.fromEntries(sp.slice(0, 20).map((id) => [id, profileSrc(id, d.questions.filter((q) => !q.reserve))]));
+    stats[c].srcs = Object.fromEntries(sp.slice(0, 20).map((id) => [id, profileSrc(id, d.questions, reserve)]));
     // 体检要的：答案没核过的（verified.how 是 none）、画像过时的个数
     stats[c].unverified = d.questions.filter((q) => q.verified?.how === 'none').length;
     Object.assign(blockPerYear, stats[c].blockPerYear);
+    Object.assign(blockUsable, stats[c].blockUsable);
   }
   const meta = await db.doc('meta/exam').get().then((x) => (x?.exists ? x.data() : {})).catch(() => ({}));
-  const next = { ...meta, counts: { ...(meta.counts || {}), papers: papers.size, questions, syllabus }, stats, blockPerYear, statsAt: now };
+  const next = { ...meta, counts: { ...(meta.counts || {}), papers: papers.size, questions, syllabus }, stats, blockPerYear, blockUsable, statsAt: now };
   await db.doc('meta/exam').set(next);
   return next;
 }
@@ -124,7 +129,8 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curricul
     if (rec.kind === 'syllabus' && rec.course) for (const x of docsOf(await retry(() => db.collection('syllabus').where('course', '==', rec.course).get()))) { const { id: xid, ...d } = x; if (!have.has(`syllabus/${xid}`)) have.set(`syllabus/${xid}`, d); }
     const syllabusIds = rec.kind === 'tags' ? await syllabusIdsFor(have, rec) : null;
     const at = Date.now();
-    const { writes, log } = planInbox(rec, { have, at, syllabusIds });
+    const years = rec.kind === 'drills' ? await readReserve(db, new Date(at).toISOString().slice(0, 10)) : [];
+    const { writes, log } = planInbox(rec, { have, at, syllabusIds, years });
     for (let i = 0; i < writes.length; i += PARALLEL) await Promise.all(writes.slice(i, i + PARALLEL).map((w) => write(w.path, w.data)));
     await write(`exam_inbox_log/${id}`, { ...log, src: id });
     if (log.ok) {

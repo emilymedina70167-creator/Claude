@@ -201,7 +201,7 @@ export async function renderDesk(root, meta) {
   // 首页的考情缓存（meta/exam：计数、每门课的热度、每块平均每年几分）：410 分的权重、考情页读它，首页不读考试资料的整类
   let examMeta = null;
   const examInbox = createExamInbox({ db, curriculum: () => data.curriculum });
-  const examPage = createExamPage($('.dk-exampage'), { db, getData: () => data, getMeta: () => examMeta, getBoard: () => scoreBoard(data, { today: toDate(Date.now()), exam: examMeta?.blockPerYear }), space: () => space });
+  const examPage = createExamPage($('.dk-exampage'), { db, getData: () => data, getMeta: () => examMeta, getBoard: () => scoreBoard(data, { today: toDate(Date.now()), exam: examMeta?.blockPerYear, usable: examMeta?.blockUsable }), space: () => space });
   db.doc('meta/exam').onSnapshot((s) => { examMeta = s.exists ? s.data() : null; paintScore(); if (!$('.dk-exampage').hidden) examPage.refresh(); }, () => {});
   const examCard = createExamCard($('.dk-exam .dk-body'), { db, getData: () => data });
 
@@ -1249,7 +1249,7 @@ export async function renderDesk(root, meta) {
   const rowCounts = {};
   // 下一步学什么（exam/priority.js）：每块还能攒多少分、前置先排、到期和踩过坑的加权；不调用 Claude
   function nextPlan(today = toDate(Date.now())) {
-    const b = scoreBoard(data, { today, exam: examMeta?.blockPerYear });
+    const b = scoreBoard(data, { today, exam: examMeta?.blockPerYear, usable: examMeta?.blockUsable });
     const dueBlocks = new Set(dueList(data.reviews, today).filter((d) => d.days <= 0).flatMap((d) => (data.reviews.find((r) => r.id === d.id)?.blocks || []).map(String)));
     const traps = Object.fromEntries((data.exam_bar || []).filter((x) => x.traps?.length).map((x) => [x.id, x.traps]));
     return priority({ blocks: b.blocks, curriculum: data.curriculum, mastery: data.mastery, dueBlocks, traps, sessions: data.sessions, today });
@@ -1341,7 +1341,7 @@ export async function renderDesk(root, meta) {
   function paintScore(today = toDate(Date.now())) {
     const box = $('.dk-score');
     if (!box || !loaded.has('mastery') || !loaded.has('curriculum')) return;
-    const b = scoreBoard(data, { today, exam: examMeta?.blockPerYear });
+    const b = scoreBoard(data, { today, exam: examMeta?.blockPerYear, usable: examMeta?.blockUsable });
     box.hidden = false;
     box.setAttribute('aria-label', `${b.goal} 分的进度`);
     box.innerHTML = `<button type="button" class="dk-score-btn" data-open="score">
@@ -1352,7 +1352,7 @@ export async function renderDesk(root, meta) {
       <span class="dk-score-l muted">${escapeHtml(scoreLine(b))}</span><span class="dk-chev" aria-hidden="true"></span></button>`;
     if (scoreBody?.isConnected) fillScore(scoreBody, b);
   }
-  function fillScore(body, b = scoreBoard(data, { today: toDate(Date.now()), exam: examMeta?.blockPerYear })) {
+  function fillScore(body, b = scoreBoard(data, { today: toDate(Date.now()), exam: examMeta?.blockPerYear, usable: examMeta?.blockUsable })) {
     const move = (x) => `<li><span>${escapeHtml(plainTitle(x.title) || x.id)}</span><small class="muted">${escapeHtml(x.from)} → ${escapeHtml(x.to)}</small><b class="${x.delta > 0 ? 'is-up' : 'is-down'}">${signed(x.delta)}</b></li>`;
     const moves = [...b.week.ups, ...b.week.downs];
     const part = (p) => `<div class="dk-sc-part${p.inDesk ? '' : ' is-out'}"><div class="dk-sc-row"><span>${escapeHtml(p.label)}</span><span class="dk-sc-pbar"><i style="width:${Math.min(100, (p.got / p.points) * 100).toFixed(2)}%"></i></span><b>${fmtScore(p.got)}<small> / ${fmtScore(p.points)}</small></b></div>

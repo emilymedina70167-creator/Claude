@@ -171,13 +171,16 @@ export function parseIntel(text) {
  * 返回 { id, doc, isNew }
  */
 export function mergeIntel(existing = [], item, { at = Date.now(), seq = 1 } = {}) {
-  const same = existing.find((x) => x.kind === item.kind && (item.value != null ? x.value === item.value : flat(x.text, 80) === flat(item.text, 80)));
+  // 哪一年的（复试线每年一条：两年的数一样也是两条）：摘录里的年份，没有就网页上写的日期
+  const yearOf = (x) => Number(String(x.text || '').match(/(20\d{2})/)?.[1]) || Number(String(x.date || '').slice(0, 4)) || 0;
+  const same = existing.find((x) => x.kind === item.kind && yearOf(x) === yearOf(item) && (item.value != null ? x.value === item.value : flat(x.text, 80) === flat(item.text, 80)));
   if (same) {
     // 另一晚又抓到同样的数算一次独立核对；同一晚重复交的不算
     const day = (t) => new Date(Number(t) || 0).toISOString().slice(0, 10);
     const again = day(at) !== day(same.lastAt || same.at);
     const urls = [...new Set([...(same.urls || [same.url]), item.url])];
-    return { id: same.id, doc: { ...same, urls, checks: (same.checks || 1) + (again ? 1 : 0), lastAt: at }, isNew: false };
+    const { id: _, ...rest } = same;
+    return { id: same.id, doc: { ...rest, urls, checks: (same.checks || 1) + (again ? 1 : 0), lastAt: at }, isNew: false };
   }
   const id = `ix-${new Date(at).toISOString().slice(0, 10).replace(/-/g, '')}-${seq}`;
   return { id, doc: { ...item, urls: [item.url], checks: 1, at, by: 'lab' }, isNew: true };

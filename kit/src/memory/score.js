@@ -174,12 +174,13 @@ function gotAt(mem, map, date = null, examBlocks = null) {
  * { goal, total, subjects: [{ key, label, target, full, got, rgb, parts: [{ key, label, basis, points, got, inDesk, chapters: [{ id, title, points, got, blocks, done }] }] }],
  *   week: { delta, ups: [{ id, title, from, to, delta }], downs: […] }, pace: { left, weeks, perWeek } }
  */
-export function scoreBoard(mem = {}, { today = toDate(Date.now()), days = 7, exam = null } = {}) {
+// usable：{ 块: 能用的真题几道 }（首页缓存的 blockUsable）：给了的话只有能用的题 > 0 的块封顶
+export function scoreBoard(mem = {}, { today = toDate(Date.now()), days = 7, exam = null, usable = null } = {}) {
   // 目标、四科分配、考试日期读考试档案（没有档案时和以前写死的一样）
   const target = targetOf(mem);
   const { goal, split } = goalOf(target);
   const map = scoreMap(mem.curriculum, split, { weights: exam });
-  const examBlocks = exam ? new Set(Object.entries(exam).filter(([, v]) => Number(v) > 0).map(([k]) => k)) : null;
+  const examBlocks = usable ? new Set(Object.entries(usable).filter(([, v]) => Number(v) > 0).map(([k]) => k)) : exam ? new Set(Object.entries(exam).filter(([, v]) => Number(v) > 0).map(([k]) => k)) : null;
   const now = gotAt(mem, map, null, examBlocks);
   const then = gotAt(mem, map, addDays(today, -days), examBlocks);
   const sumOf = (ids, g) => ids.reduce((n, id) => n + (g[id]?.got || 0), 0);

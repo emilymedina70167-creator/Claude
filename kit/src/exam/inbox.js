@@ -7,6 +7,7 @@ import { validateExam } from './schema.js';
 import { checkPaper } from './structure.js';
 import { checkTags } from './taxonomy.js';
 import { validateWrite } from '../memory/writer.js';
+import { usable } from './reserve.js';
 
 const STRONG = ['engine', 'exact', 'double'];
 /** 题自带的标签照主考点算门课（G-LA-2.1 → LA） */
@@ -36,7 +37,8 @@ function withTags(cur, tags, { at, by }) {
  * syllabusIds：标签记录要核的考点编号（不给就不核考点）。
  * log：{ kind, at, ok, counts（每类写几条）, added（每类新加几条）, problems, rejected: [{ id, error }], notes }
  */
-export function planInbox(rec = {}, { have = new Map(), at = Date.now(), syllabusIds = null } = {}) {
+// years：留作模考的年份（档案里现在的）：那几年的真题做成的练习不收（改了档案、开发那边没带 --reserve 都拦得住）
+export function planInbox(rec = {}, { have = new Map(), at = Date.now(), syllabusIds = null, years = [] } = {}) {
   const by = String(rec.by || 'dev');
   const log = { kind: String(rec.kind || ''), at, ok: false, counts: {}, added: {}, problems: [], rejected: [], notes: [] };
   const writes = [];
@@ -106,7 +108,7 @@ export function planInbox(rec = {}, { have = new Map(), at = Date.now(), syllabu
   } else if (rec.kind === 'drills') {
     // 真题做成的练习（drillgen.js）：题库是记忆库的一类，照记忆库的规矩查
     const ds = rec.drills || [];
-    for (const d of ds) log.problems.push(...validateWrite(`drills/${d.id}`, strip(d)), ...(d.src === 'exam' && d.exam ? [] : [`${d.id}：不是真题做的练习（要 src: exam、exam: 题号）`]));
+    for (const d of ds) log.problems.push(...validateWrite(`drills/${d.id}`, strip(d)), ...(d.src === 'exam' && d.exam ? [] : [`${d.id}：不是真题做的练习（要 src: exam、exam: 题号）`]), ...(d.exam && !usable({ id: d.exam }, years) ? [`${d.id}：${d.exam} 是留作模考的卷，不做成练习`] : []));
     if (!ds.length) log.problems.push('没有题');
     if (log.problems.length) return { writes: [], log };
     for (const d of ds) {
