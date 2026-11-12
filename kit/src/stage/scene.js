@@ -1487,7 +1487,14 @@ export class Scene {
         // 不然下面会把动作默认成手势表的第一个（拖）。一个名字一项，能开好几个
         if (opts.back != null) {
           if (r.mark) throw new Error(`open … back= 写整样东西的名字（open ${r.obj} back="${opts.back}"）：回去的是一整样`);
-          if (words[1]) throw new Error(`back= 自己是一项（学生那边一个「回到${opts.back}」按钮），不和 ${words[1]} 写在一行：分成两行 open`);
+          // 写法容错：back= 和动作写在一行（第一节真课 open r move undo=on back="原句"：整行被跳过，学生拖不了）。
+          // 拆成两行照演：先 back 那一行（存过的名字照常查），再动作那一行；动作那一行出错就把 back 那一项收回，照常报那一行的错
+          if (words[1]) {
+            const { back, ...rest } = opts;
+            const backFx = this.applyOne({ ...c, args: args.slice(0, 1), opts: { back } });
+            try { this.applyOne({ ...c, opts: rest }); } catch (err) { this.opens.delete(`${o.id}:back:${back}`); throw err; }
+            return { ...backFx, forgiven: 'open-back' };
+          }
           const extra = Object.keys(opts).filter((k) => k !== 'back');
           if (extra.length) throw new Error(`open … back= 只写名字（学生那边一个「回到${opts.back}」按钮，点了撤得了），${extra.map((k) => `${k}=`).join(' ')} 用不上`);
           this.keptObject(o.id, 'back');

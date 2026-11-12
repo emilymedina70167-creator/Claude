@@ -127,6 +127,14 @@ export function tokenize(line) {
  * 一段镜头指令 → 一条条指令 { cmd, args, opts, par, line }。args 里是记号（字符串、词、箭头），opts 是 key=value。
  * 空行和 # 开头的行跳过。读不懂的行不抛错，记成 { cmd: null, error }，让页面报给老师
  */
+const CJK = /[\u3000-\u303f\u3400-\u9fff\uf900-\ufaff\uff00-\uffef]/g; // 中文字和全角标点
+function speechLine(line) {
+  if (/["=]/.test(line)) return false;
+  const head = line.split(/\s+/)[0] || '';
+  if (COMMANDS.has(head.toLowerCase())) return false;
+  const chars = line.replace(/\s+/g, '');
+  return chars.length > 0 && (chars.match(CJK) || []).length * 2 >= chars.length;
+}
 export function parseScript(src) {
   const out = [];
   String(src ?? '').split('\n').forEach((raw, k) => {
@@ -139,6 +147,9 @@ export function parseScript(src) {
     if (at) { on = at[1]; line = body; } else if (line.startsWith('@')) { out.push({ cmd: null, error: '要写成 @挑战的名字 一行指令（比如 @g1 say "对！"），或 @东西.done / @东西.right 一行指令', line: k + 1, src: raw }); return; }
     let par = false;
     if (line.startsWith('&')) { par = true; line = line.slice(1).trim(); }
+    // 写法容错：老师把一整句话写成一行、忘了写 say（第一节真课：「would 选对了：搬家在说话之后……」整句被跳过，学生没看到这句纠正）。
+    // 只认开头不是指令、整行没有引号和 =、一半以上是中文的：拼错的指令（lable a.1 "x"）照旧报错，不猜
+    if (speechLine(line)) { out.push({ cmd: 'say', args: [{ t: 'str', v: line }], opts: {}, par, line: k + 1, src: raw, forgiven: 'say', ...(on ? { on, body } : {}) }); return; }
     try {
       const toks = tokenize(line);
       const head = toks.shift();

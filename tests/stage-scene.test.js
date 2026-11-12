@@ -1333,7 +1333,8 @@ test('open 的 back=：学生那边一个「回到……」按钮（不是默认
   assert.equal([...s.opens.keys()].length, 0);
   assert.match(dryRun(run(new Scene(), T47), 'open t back="插入后"')[0].error, /^t 没存过「插入后」（存着：没有）/);
   assert.equal(dryRun(run(new Scene(), `${T47}\nkeep t "插入后" after=insert`), 'open t back="插入后"').length, 0, '页面以后替老师存的照收');
-  assert.match(dryRun(s, 'open t rotate back="插入后"')[0].error, /back=/);
+  // 动作和 back= 写在一行：以前报错，主线第七轮起拆成两行照演（写法容错，tests/stage-mainline7.test.js）
+  assert.equal(dryRun(s, 'open t rotate back="插入后"').length, 0);
   assert.match(dryRun(s, 'open t.30 back="插入后"')[0].error, /整样东西/);
   assert.match(dryRun(s, 'open t back="插入后" undo=on')[0].error, /back=/);
 });
@@ -1975,7 +1976,8 @@ test('复审 N9：认得的选项表按指令是全的（真的演一遍）—�
   const base = run(new Scene(), 'array a = 49 38 65 97 76\ndial d = 5 range=1-5 at=a\nsay "看 [不稳定]"');
   for (const l of STAGE_DOC.split('\n').map(firstOf)) feed(base, l);
   // 上面没演到的、有表的指令：这里补（新加一条带选项的指令，例子和说明里都没有的话加在这里）
-  feed(base, 'array b = 1 2 3\nfly say.1 -> n1 b.1 side=top\nlabel n2 b.2 "字" side=left tone=note\nkeep b "一开始" after=swap\npick b.1 b.2 reveal=on');
+  // 说明里的一整行中文现在当成话照演（主线第七轮的写法容错），话换掉了：fly 之前把要指的那句话再说一遍
+  feed(base, 'array b = 1 2 3\nsay "看 [不稳定]"\nfly say.1 -> n1 b.1 side=top\nlabel n2 b.2 "字" side=left tone=note\nkeep b "一开始" after=swap\npick b.1 b.2 reveal=on');
   const miss = [];
   for (const [label, seen] of reads) {
     const names = tables.get(label);

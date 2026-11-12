@@ -584,6 +584,9 @@ export class Stage {
     // 学生这一下引出了预写的行、做到了挑战、做完了：记在这一行上，撤一步撤不了它（预写只演一次，「做到了」也已经告诉课堂）
     const reacted = by === 'student' && !!(fx?.goalsMet?.length || fx?.done?.length || fx?.reactions?.length);
     this.log.push({ src: c.src?.trim() || '', by, turn, ...(by === 'student' && open ? { open } : {}), ...(reacted ? { reacted: true } : {}), ...(c.prewrite ? { pre: true } : {}) });
+    // 写法容错照演了的（第一节真课碰到的两种，script.js / scene.js）：告诉老师下次怎么写，学生那边照常
+    const forgiven = c.forgiven || fx?.forgiven;
+    if (forgiven && by === 'teacher' && !this.instant) this.errors.push({ line: c.line, src: c.src?.trim(), kept: true, error: FORGIVEN[forgiven] });
     if (by === 'teacher' && !this.instant) {
       this.onLine?.(c);
       // 老师的这一步不是正确的下一步：照演（可能是故意演错），下一条发给老师时说一声
@@ -1967,6 +1970,11 @@ export class Stage {
  * 老师这一轮写的字 → 要演的行（行号不变，不演的行是 null）：代码块记号那几行不演；
  * ````board memo / plan 块里的是记进记忆、写给自己的，不是镜头（课堂那边照旧读它们）
  */
+// 写法容错照演了时告诉老师的话（[上一轮照演了、可写错了的行]）
+const FORGIVEN = {
+  say: '这一行没写 say：页面当成话照演了（下次写 say "…"）',
+  'open-back': 'back= 自己是一项：页面拆成两行 open 照演了（下次分开写：open 名字 动作 一行，open 名字 back="…" 一行）',
+};
 export function stageLines(text) {
   let inBoard = false;
   return String(text ?? '').split('\n').map((l) => {

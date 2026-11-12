@@ -160,3 +160,35 @@ test('理由里还有学生打的字：照旧全演', async () => {
   assert.equal(a.stage.drops, 0);
   loop.close();
 });
+
+// —— 第 3 节 ①：两种写法容错 ——
+const mk = (src) => { const s = new Scene(); for (const c of parseScript(src)) s.apply(c); return s; };
+
+test('一整句中文没写 say：当成话照演', () => {
+  const [c] = parseScript('would 选对了：搬家在说话之后。但 would 后面要用原形 move，不能写 moved。');
+  assert.equal(c.cmd, 'say');
+  assert.equal(c.forgiven, 'say');
+  const s = new Scene();
+  s.apply(c);
+  assert.equal(s.say, 'would 选对了：搬家在说话之后。但 would 后面要用原形 move，不能写 moved。');
+});
+
+test('拼错的指令照旧报错，不当成话', () => {
+  assert.equal(parseScript('lable a.1 "主语"')[0].cmd, null);
+  assert.equal(parseScript('pnt s.2 g1')[0].cmd, null);
+  assert.equal(parseScript('labl k a "重点：过去完成时"')[0].cmd, null);
+});
+
+test('open … back= 写在一行：拆成两行照演', () => {
+  const s = mk('array a = 3 1 2\nkeep a "原样"');
+  const fx = s.apply(parseScript('open a move undo=on back="原样"')[0]);
+  assert.equal(fx.forgiven, 'open-back');
+  assert.ok(s.opens.has('a:move'));
+  assert.equal(s.opens.get('a:move').policy?.undo, true);
+  assert.ok(s.opens.has('a:back:原样'));
+});
+
+test('open … back= 拆出来的一行错了照报', () => {
+  const s = mk('array a = 3 1 2');
+  assert.throws(() => s.apply(parseScript('open a move back="没存过"')[0]), (e) => /没存过/.test(e.message) && !/自己是一项/.test(e.message));
+});
