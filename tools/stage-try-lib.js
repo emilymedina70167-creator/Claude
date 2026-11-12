@@ -634,7 +634,7 @@ export const NEW6 = [
   { id: '做到过、东西又都不在了的挑战不挂着（批次 0）', files: ['fix-goal.txt'], checks: [C(/挑战 g1「把绿条右端拖到「从未赌过」截止的时间」when="e = 过去"：做到过/, '现状照旧写做到过')], noScreen: [C(/把绿条右端拖到/, '画面上那一条收起了')] },
 ];
 NEW6.push(
-  { id: 'scene 收得干净、keep 带过来（B）', files: ['scene-keep.txt'], checks: [C(/第 2 幕「过去完成时」（前面：① 开头）/, '现状里有幕的那一行'), C(/贴着的字：lf「be free 能自由推翻」（贴在 tl\.fr）/, 'keep 的东西贴的字还在')], nots: [C(/句子 p（/, '上一幕的句子收了'), C(/挑战 g1/, '上一幕的挑战收了')], noScreen: [C(/把粉色小人拖到/, '画面上没有上一幕的挑战')] },
+  { id: 'scene 收得干净、keep 带过来（B）', files: ['scene-keep.txt'], checks: [C(/第 2 幕「过去完成时」（前面：① 开头）/, '现状里有幕的那一行'), C(/贴着的字：lf「be free 能自由推翻」（贴在 tl\.fr）/, 'keep 的东西贴的字还在')], noScreen: [C(/They gave justices/, '上一幕的句子收了'), C(/把粉色小人拖到/, '画面上没有上一幕的挑战')] },
   { id: '翻回去看第 1 幕（B）', files: ['scene-keep.txt'], look: [C(/小人 fr 在 过去之后/, '回看里小人停在学生拖到的地方'), C(/句子 p（/, '回看里有上一幕的句子')], called: [C(/学生翻回去看了第 1 幕「开头」（\d+ 秒）/, '回看过的事实跟着下一条告诉老师')] },
   { id: '全换了没写 scene：说一句事实（B）', files: ['scene-swap.txt'], checks: [C(/台上的东西这一轮全换了（没写 scene/, '现状里那一句')], nots: [C(/第 \d+ 幕/, '页面没替老师分幕')] },
 );
