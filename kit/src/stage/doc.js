@@ -353,13 +353,17 @@ ${STAGE_MEMO_DOC}
  * 舞台课每一轮的整份说明（学习台里）：怎么教 → 舞台的写法 → 资料包（含教材原文）→ 你对学生的了解。
  * memory：{ mem, block, space, session }；pack：{ main, problems }（main.textbook 里可以已经放好了教材原文）
  */
-export function buildStageSystem({ pack = null, memory = null, rules = '', title = '', subject = '' } = {}) {
+// exam：「这一块在考试里」那一节（exam/context.js 的 examForClass 拼好的；空的就没有这一节）。放在资料包后面、记忆前面，
+// 算资料包的预算时它已经在（资料包自己让出来）；资料包里的教材原文至少留 TEXTBOOK_FLOOR
+export const TEXTBOOK_FLOOR = 32 * 1024;
+export function buildStageSystem({ pack = null, memory = null, rules = '', title = '', subject = '', exam = '' } = {}) {
   const parts = (packBody, mem) => {
     const custom = [rules, mem?.rules].filter((x) => String(x || '').trim()).join('\n\n');
     const sections = [
       `怎么教\n\n${STAGE_TEACH}${custom ? `\n\n学习台里的规则（学生定下的，照做；和上面冲突时以这里为准）：\n${custom}` : ''}`,
       `舞台的写法\n\n${stageDoc(subject)}`,
       `这节课${title ? `：${title}` : ''}\n\n课前备好的资料包（教材原文、推进建议、备好的题）。照这里的口径讲，例子可以自己换。\n\n${packBody}`,
+      ...(exam ? [`这一块在考试里（页面从入库的真题和考试大纲算的）\n\n${exam}`] : []),
       ...(memory ? [`你对学生的了解（学习台的记忆库）\n\n${mem?.text || ''}\n\n${DESK_STAGE}`] : []),
     ];
     const NUM = ['一', '二', '三', '四', '五'];
@@ -375,7 +379,7 @@ export function buildStageSystem({ pack = null, memory = null, rules = '', title
     mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools: false, budget: Math.max(4 * 1024, Math.min(28 * 1024, room)) });
   }
   const rest = bytes(parts('', mem));
-  const { text: packBody } = packText(pack || { main: null, problems: null }, Math.max(12 * 1024, Math.min(PACK_BUDGET, STAGE_SYSTEM_MAX - rest - 2 * 1024)), { talk: true });
+  const { text: packBody } = packText(pack || { main: null, problems: null }, Math.max(12 * 1024, Math.min(PACK_BUDGET, STAGE_SYSTEM_MAX - rest - 2 * 1024)), { talk: true, floors: { textbook: TEXTBOOK_FLOOR } });
   return parts(packBody || '（这节课没有备好的资料包：按课程地图的这一块讲。）', mem);
 }
 

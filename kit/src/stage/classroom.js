@@ -14,6 +14,10 @@ import { createLoop } from './loop.js';
 import { buildStageSystem, turnMessage, firstMessage, stageSubject } from './doc.js';
 import { actEvidence, makeSigger, goalSig } from './evidence.js';
 import { examCheckOf } from '../exam/fields.js';
+import { toDate } from '../memory/schema.js';
+import { examForBlock } from '../exam/block.js';
+import { examForClass } from '../exam/context.js';
+import { targetOf } from '../exam/target.js';
 import { fitHistory } from './history.js';
 import { getAI } from '../ai.js';
 import { createSink } from '../live/sync.js';
@@ -120,7 +124,20 @@ export async function renderStageClass(root, meta = {}, desk) {
   // 说明只带这门课用得上的那几种东西：块 → 资料包 → 这节课记着的科目 → 空间，推不出来（408 的课既没块也没记科目）发全带的那份
   function system() {
     const subject = stageSubject({ block: desk.block, pack, session: { subject: desk.subject }, space: desk.space });
-    return buildStageSystem({ pack: packWithBooks(), memory: desk.mem ? { mem: desk.mem, block: desk.block, space: desk.space, session: sid } : null, title: meta.unit || '', subject });
+    return buildStageSystem({ pack: packWithBooks(), memory: desk.mem ? { mem: desk.mem, block: desk.block, space: desk.space, session: sid } : null, title: meta.unit || '', subject, exam: examSection() });
+  }
+  // 「这一块在考试里」（exam/context.js）：这门课的考试资料读到了、这一块挂了考点才有；学生的真题情况读记忆库里页面算的 exam_bar。
+  // 老师这节课用 exam= / like= 写过的题号挪进代表题（下一轮有全文）
+  const examAsked = new Set();
+  function examSection() {
+    const ex = desk.examData;
+    if (!ex || !desk.block) return '';
+    const w = stage.scene.waiting;
+    for (const x of [w?.exam, w?.like, ...[...stage.scene.goals.values()].flatMap((g) => [g.exam, g.like])]) if (x) examAsked.add(x);
+    const years = typeof desk.reserve === 'function' ? desk.reserve() : desk.reserve || [];
+    const info = examForBlock({ block: desk.block, exam: ex, years });
+    const bar = (desk.mem?.exam_bar || []).find((b) => b.id === desk.block) || null;
+    return examForClass({ target: targetOf(desk.mem || {}), info, bar, today: toDate(Date.now()), asked: [...examAsked] });
   }
   function messages(extra = null, { next = null } = {}) {
     const live = history.filter((t) => !t.discarded && !t.pending && (t.role === 'claude' || t.role === 'student'));

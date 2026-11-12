@@ -474,7 +474,8 @@ const PACK_SKIP = /^(rules|updatedAt|createdAt|id|model|modelTier|effort|compone
 
 // 一问一答（talk）：讲解顺序不是「一步一块板」，是一问一问往前推
 const TALK_LABELS = { sequence: '推进顺序（一个点一个点往前推：每个点先让学生动手、猜，结论从学生手里出来；讲完一个点再问考它的题）' };
-export function packText(pack, budget = PACK_BUDGET, { talk = false } = {}) {
+// floors：{ 字段: 至少留几个字节 }（舞台课给教材原文留 32 KiB：资料包放不下时 fairShares 先截最大的字段，被截的多半是教材原文）
+export function packText(pack, budget = PACK_BUDGET, { talk = false, floors = null } = {}) {
   const main0 = pack?.main && typeof pack.main === 'object' ? pack.main : {};
   // 学习台备课写的教案（规则清单、讲解顺序、复现、备课检查）是结构化的，写成好读的文字
   const main = { ...main0, ...lessonPlanText(main0) };
@@ -483,7 +484,7 @@ export function packText(pack, budget = PACK_BUDGET, { talk = false } = {}) {
   for (const [k, label0] of PACK_FIELDS) {
     const label = (talk && TALK_LABELS[k]) || label0;
     const t = asText(main[k]);
-    if (t) parts.push({ label, body: t });
+    if (t) parts.push({ key: k, label, body: t });
   }
   // 讲义原图：只列名字和说明（图本身要看用 view_image，贴上黑板用 image 组件）
   const imgs = Array.isArray(main.images) ? main.images.filter((x) => x && x.name) : [];
@@ -504,7 +505,16 @@ export function packText(pack, budget = PACK_BUDGET, { talk = false } = {}) {
   // 题目按整道题截（截半道题的 JSON 没用），其余字段按字节截
   const probBody = problems.length ? `[\n${problems.join(',\n')}\n]` : '';
   const sizes = [...parts.map((p) => bytes(p.body)), ...(probBody ? [bytes(probBody)] : [])];
-  const limits = fairShares(sizes, budget);
+  let limits = fairShares(sizes, budget);
+  // 留底的字段：分到的不够底线（和它自己的大小取小的）时先给它，别的在剩下的里面分
+  for (const [k, floor] of Object.entries(floors || {})) {
+    const i = parts.findIndex((p) => p.key === k);
+    if (i < 0) continue;
+    const want = Math.min(sizes[i], floor, budget);
+    if (limits[i] >= want) continue;
+    const others = sizes.map((x, j) => (j === i ? 0 : x));
+    limits = fairShares(others, budget - want).map((x, j) => (j === i ? want : x));
+  }
   let truncated = false;
   const noteBytes = bytes('\n' + CUT_NOTE);
   const out = parts.map((p, i) => {
