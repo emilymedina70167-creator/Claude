@@ -68,6 +68,7 @@ import { normalizeBooks, readHistory } from '../books/textbook.js';
 import { scrubBooks, readReserve, reserveYears } from '../exam/reserve.js';
 import { createExamInbox } from '../exam/examdesk.js';
 import { loadExamCourse, courseOfBlock } from '../exam/load.js';
+import { examIndexOf } from '../exam/fields.js';
 import { createExamCard } from '../exam/examview.js';
 import { createExamPage } from '../exam/exampage.js';
 import { renderStageClass } from '../stage/classroom.js';
@@ -1505,7 +1506,9 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   step('读这节课的资料包');
   const main = await within(scopeDb(db, sid).doc('pack/main').get().then((s) => (s.exists ? s.data() : null)), 10000, null);
   // 改记忆（memo 块、整理单、确认 / 撤销）：用没 scopeDb 过的数据库，记忆库在根上
-  const ops = createMemOps({ db, mem: () => mem });
+  // 这一门课的考试资料（舞台课才读）：守卫认题号、课堂的「这一块在考试里」用；先占个位，下面读
+  let examIdx = null;
+  const ops = createMemOps({ db, mem: () => mem, exam: () => examIdx });
   const block = String(doc.block || main?.block || '');
   // 分科：课堂按这一块的门课带组件说明和教法（学习台页面开头的 subject: 管不了每节课）
   // 块优先（课上换过门课 doc.subject 也跟着改了）；没块按这节课记的科：数学是线代，408、英语给那一科的第一门课
@@ -1565,12 +1568,15 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   const fillPrev = async () => { if (wantPrev && books.chunks.length) prevRead.push(...await within(priorReads(db, mem.sessions || [], { sid, block, books }), 5000, [])); };
   if (books.loading) books.ready.then(fillPrev).catch(() => {}); else await fillPrev();
   step('画黑板');
+  const examYears = () => books.reserve || reserveYears(targetOf(mem), toDate(Date.now()));
+  const examLoad = kind === 'stage' && block && !readOnly ? loadExamCourse(db, courseOfBlock(block)).catch(() => null) : null;
+  examLoad?.then((ex) => { if (ex) examIdx = examIndexOf(ex, examYears()); });
   // 舞台课（kind: stage，docs/stage-plan.md D 段）：整屏一块舞台，自己的控制器；记忆、教材、证据、报告照旧
   if (kind === 'stage') {
     return renderStageClass(root, { ...meta, unit: doc.title || meta.unit }, {
       store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, subject: doc.subject || '', mem, books, prevRead, readOnly,
       // 这一门课的考试资料（exam/load.js，按门课读、不读整类）：不等它，课堂读到了再用（「这一块在考试里」、exam= 当场核）
-      exam: block && !readOnly ? loadExamCourse(db, courseOfBlock(block)).catch(() => null) : null, reserve: () => books.reserve || reserveYears(targetOf(mem), toDate(Date.now())),
+      exam: examLoad, reserve: examYears,
       updateSession, onHome: () => goto(readOnly ? `classes/${sid}` : ''),
       recheck: readOnly ? {} : await within(db.doc('meta/workorder').get().then((s) => (s.exists ? s.data().recheck || {} : {})), 3000, {}).catch(() => ({})),
       writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),

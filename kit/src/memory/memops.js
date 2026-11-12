@@ -13,7 +13,8 @@ const LAB_FRESH = ['errors', 'weaknesses', 'reviews', 'recall', 'lessons', 'obse
 /**
  * db：学习台的数据库（没有 scopeDb 过的）；mem()：页面手上的记忆库（各类的数组，一直在订阅）。
  */
-export function createMemOps({ db, mem }) {
+// exam：() => { ids, reserved }（这节课这门课的真题、考点、坑的编号，exam/fields.js 的 examIndexOf；守卫认题号、拒留作模考的）
+export function createMemOps({ db, mem, exam = () => null }) {
   const rows = (snap) => (snap ? snap.docs.map((d) => ({ id: d.id, ...d.data() })) : []);
 
   async function write(writes) {
@@ -89,7 +90,7 @@ export function createMemOps({ db, mem }) {
         const { id: _o, ...before } = old || {};
         // 课堂手上的记忆不一定带证据：这节课的证据（上面刚读的）一起给守卫，不然真有的依据会被当成找不到
         const seen = new Set((local.evidence || []).map((x) => String(x.id)));
-        const g = guardCandidate({ coll: ch.coll, id: w.id, doc: w.doc, before: old ? before : null, author, session, basis: pd.basis, missingBasis: ch.missingBasis }, { mem: { ...local, evidence: [...(local.evidence || []), ...evidence.filter((x) => !seen.has(String(x.id)))] }, corpus });
+        const g = guardCandidate({ coll: ch.coll, id: w.id, doc: w.doc, before: old ? before : null, author, session, basis: pd.basis, missingBasis: ch.missingBasis }, { mem: { ...local, evidence: [...(local.evidence || []), ...evidence.filter((x) => !seen.has(String(x.id)))] }, corpus, exam: exam?.() || null });
         if (g.verdict !== 'accept') logs.push(guardLog(g, { coll: ch.coll, id: w.id, session, author, line: e.line, closing }));
         if (g.verdict === 'reject') { rejected.push({ line: e.line, error: guardReason(g), guard: true }); undoLocal(local, ch); continue; }
         if (g.verdict === 'hold') {

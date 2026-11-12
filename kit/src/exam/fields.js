@@ -38,3 +38,14 @@ export function examCheckOf(exam, years = []) {
   };
 }
 export const QID_RE = QID;
+
+/** 守卫要的编号（memory/guard.js 的 ctx.exam）：这门课能用的真题、考点、坑的编号；留作模考的题号另一组 */
+export function examIndexOf(exam, years = []) {
+  const ids = new Set();
+  const reserved = new Set();
+  const yearOf = (id) => Number(String(id).match(/^Q-\d{3}-(\d{4})-/)?.[1]) || 0;
+  for (const q of exam?.questions || []) (q.reserve || years.includes(yearOf(q.id)) ? reserved : ids).add(q.id);
+  for (const n of exam?.syllabus || []) ids.add(n.id);
+  for (const p of exam?.profiles || []) for (const t of p.traps || []) if (t?.id) ids.add(t.id);
+  return { ids, reserved };
+}

@@ -158,6 +158,10 @@ export function guardCandidate(cand, ctx = {}) {
   // 2. 证据
   const allIds = new Set();
   for (const c of ['evidence', 'errors', 'weaknesses', 'observations', 'reviews', 'mastery', 'slips', 'lessons', 'recall', 'sessions', 'drills']) for (const d of get(c)) if (d?.id) allIds.add(String(d.id));
+  // 考情（第 4 批）：真题、考点、坑的编号（ctx.exam.ids，这门课能用的）也是认得的依据；引了留作模考的卷（ctx.exam.reserved）拒掉
+  const examIds = ctx.exam?.ids || new Set();
+  const reservedIds = ctx.exam?.reserved || new Set();
+  for (const x of examIds) allIds.add(String(x));
   // 依据里像编号的（没有空格、不长）必须找得到；写成一段话的（以前对话里记的「旧记录：……」、复盘里「#43 学生原话……」）
   // 不是编号，按文字核（里面的原话、轮次在下面查）
   const tokens = [...new Set([...(cand.basis || []), ...list(doc.basis), ...list(doc.evidence)].map(String))];
@@ -175,6 +179,8 @@ export function guardCandidate(cand, ctx = {}) {
     if (later.length) add('evidence', 'warn', 'basis-later', `依据 ${later.map((e) => e.id).slice(0, 3).join('、')} 是这节课以后别的课的作答`);
   }
   const text = textOf(coll, doc);
+  const reservedHit = [...new Set([...basis, ...(String(text || '').match(/Q-\d{3}-\d{4}-\d{1,2}/g) || [])])].filter((x) => reservedIds.has(x));
+  if (reservedHit.length) add('evidence', 'fail', 'exam-reserved', `引了留作模考的卷 ${reservedHit.slice(0, 3).join('、')}：那几年的题课上不能用、记忆里也不写`);
   // 只有存着这节课每一轮的记录时才核原话、轮次、板上编号（只有证据没有轮次的课，老师的话核不了，不冤枉它）
   if (corpus && corpus.turns && session) {
     // 建议、开场题是写给下一节老师照着做的（「问『它 + 什么？』」是叫老师这么问），里面的引号不是引原话：只核挨着轮次的
