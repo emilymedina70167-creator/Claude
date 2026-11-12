@@ -192,3 +192,49 @@ test('open … back= 拆出来的一行错了照报', () => {
   const s = mk('array a = 3 1 2');
   assert.throws(() => s.apply(parseScript('open a move back="没存过"')[0]), (e) => /没存过/.test(e.message) && !/自己是一项/.test(e.message));
 });
+
+// —— 第 3 节 ②：交给学生的手没演上，学生手上没东西可动：马上叫老师 ——
+import { handMissed, triggers, eventsText } from '../kit/src/stage/events.js';
+// 照舞台那样一行行演，没演上的记进 errors（kept 的不算没演上）
+const playErr = (src) => {
+  const s = new Scene(); const errors = [];
+  for (const c of parseScript(src)) { if (!c.cmd) { errors.push({ src: c.src, error: c.error }); continue; } try { s.apply(c); } catch (e) { errors.push({ src: c.src, error: e.message }); } }
+  return { s, errors };
+};
+
+test('课上那一下：open 没演上、手上只剩一个按钮：要马上叫老师', () => {
+  const { s, errors } = playErr('sentence r = "Each year researchers publish papers."\nkeep r "原句"\nopen r move undo=on back="原句" wrong=zz\nask next "拖好点下面" button="就这样"');
+  assert.equal(errors.length, 1);
+  assert.equal(handMissed(errors, s), true);
+});
+
+test('学生手上还有一问可答、或者这一轮没写 open：不叫', () => {
+  let r = playErr('array a = 1 2\nopen zz move\nask tap a "点大的" expect=a.2');
+  assert.equal(handMissed(r.errors, r.s), false);
+  r = playErr('array a = 1 2\nsay "看一看"\nask next "看清了"');
+  assert.equal(handMissed(r.errors, r.s), false);
+  // 别的手开着
+  r = playErr('array a = 1 2\nopen a\nopen zz move\nask next');
+  assert.equal(handMissed(r.errors, r.s), false);
+});
+
+test('handfail：要马上叫老师，写给老师的那一句', () => {
+  assert.equal(triggers({ kind: 'handfail' }), true);
+  assert.match(eventsText([{ kind: 'handfail', at: 1 }]), /你这一轮交给学生的手（open）没演上，学生手上没有能动的：页面马上叫了你，重写那几行/);
+});
+
+test('课堂循环：handMissed 时马上叫一次；连着两轮都这样不再自动叫', async () => {
+  const a = lateClass('array k = 1 2');
+  a.stage.handMissed = true;
+  const loop = createLoop(a.host);
+  let calls = 0;
+  const call0 = a.host.call;
+  a.host.call = async (...x) => { calls++; return call0(...x); };
+  await loop.teach('turn');
+  await wait(30);
+  assert.equal(calls, 2, '演完那一轮马上又叫了一次');
+  assert.match(studentRows(a.sent).at(-1).msg, /交给学生的手（open）没演上/);
+  await wait(30);
+  assert.equal(calls, 2, '第二轮还是这样：不再自动叫');
+  loop.close();
+});

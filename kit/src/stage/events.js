@@ -26,7 +26,20 @@ const text = (x) => (typeof x === 'string' ? x : x?.why || '');
  * 先不叫（叫了老师的新一轮会盖掉学生正在做的），跟着学生下一次要老师接的事一起发。
  * 试的一下本来攒着；老师在 open 那一行写了 call=wrong、学生这一下走偏了（now）：马上叫
  */
-export const triggers = (e) => !e.quiet && (!!e.now || ['answer', 'goal', 'done', 'help', 'stuck', 'tries', 'askfail'].includes(e.kind));
+export const triggers = (e) => !e.quiet && (!!e.now || ['answer', 'goal', 'done', 'help', 'stuck', 'tries', 'askfail', 'handfail'].includes(e.kind));
+
+/**
+ * 老师这一轮交给学生的手（open）没演上、学生手上没东西可动：要马上叫老师重写（主线第七轮）。
+ * errors 是这一轮没演上的行（kept 的照演了，不算）；演完以后学生开着的手只剩「回到…」按钮或者一个都没有，
+ * 手上也没有一问可答（等着的只是「接着 / 就这样」这种按钮，或者什么都没等）。老师写了 open 就是要交给学生一只手，不猜话的意思
+ */
+export function handMissed(errors, scene) {
+  const missed = (errors || []).some((e) => !e.kept && /^\s*&?\s*open\b/.test(String(e.src || '')));
+  if (!missed) return false;
+  if ([...scene.opens.values()].some((x) => x.action !== 'back')) return false;
+  const w = scene.waiting;
+  return !w || w.kind === 'next';
+}
 
 /**
  * 学生手上还有什么事（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.2）：做到挑战、做完、答对一问以后，有事就攒着，
@@ -425,6 +438,7 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
     else if (e.kind === 'stuck') lines.push(e.text || `学生 ${Math.round(QUIET_MS / 1000)} 秒没动，挑战还没做到`);
     else if (e.kind === 'tries') lines.push(e.text || `学生试了 ${TRY_MAX} 下还没做到`);
     // 老师上一轮的提问没演上（写错了）：学生手上没事可做，页面马上叫老师重写（loop.js；主线第一轮 D3-3、D4-5）
+    else if (e.kind === 'handfail') lines.push('你这一轮交给学生的手（open）没演上，学生手上没有能动的：页面马上叫了你，重写那几行（看下面没演的行）');
     else if (e.kind === 'askfail') lines.push('你上一轮的提问没演上（看下面没演的行）：学生手上只有页面替你挂的打字框，还什么都没做。把那一问重写一遍');
     // 页面记下的一句（老师演的那一下改了学生先点的几样：stage.js 的 onNote）：不叫老师、不算「试」，照写
     else if (e.kind === 'note') lines.push(`${e.text || ''}${e.n > 1 ? `（这样试了 ${e.n} 次）` : ''}`);

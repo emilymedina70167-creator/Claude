@@ -155,8 +155,10 @@ export function createLoop(host) {
       donePlay();
       // 这一轮的提问没演上、学生手上只有页面替挂的打字框：不等学生，马上带着没演的行再叫一次老师（主线第一轮 D3-3、D4-5）。
       // 连着两轮都这样就不再自动叫（免得来回空转），等学生
-      if (stage.askMissed && !S.askRetried && !S.ended && !host.readOnly) { S.askRetried = true; addEvent({ kind: 'askfail', at: Date.now() }); }
-      else if (!stage.askMissed) S.askRetried = false;
+      // 交给学生的手（open）没演上、学生手上没东西可动（stage.handMissed，events.js 的 handMissed）：同一个规矩，马上叫老师重写（主线第七轮）
+      const missed = stage.askMissed ? 'askfail' : stage.handMissed ? 'handfail' : null;
+      if (missed && !S.askRetried && !S.ended && !host.readOnly) { S.askRetried = true; addEvent({ kind: missed, at: Date.now() }); }
+      else if (!missed) S.askRetried = false;
       if (S.pending?.events.some(triggers)) { flush(); return claude; }
       armIdle();
       maybeSpec();

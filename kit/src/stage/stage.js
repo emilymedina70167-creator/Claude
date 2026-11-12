@@ -19,7 +19,7 @@ import { VIEWS } from './types/views.js';
 import { PointerRouter } from './pointer.js';
 import { armGesture, noteAt } from './gesturedom.js';
 import { undoPlan } from './gestures.js';
-import { undoneOf } from './events.js';
+import { undoneOf, handMissed } from './events.js';
 import { reportError } from '../errlog.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -352,6 +352,7 @@ export class Stage {
       let act = null;
       // 这一轮写了问、可一条都没演上：学生手上没有老师要的那一问（课堂循环看这个马上再叫老师，loop.js）
       this.askMissed = false;
+      this.handMissed = false;
       if (!this.instant && !dead && (asked || askedBad || auto)) {
         if (!this.scene.waiting) {
           // 一轮没有 ask，或者 ask 那一行写错了没演上：页面替它等，不让课停在半空。
@@ -365,6 +366,8 @@ export class Stage {
           // 真替老师挂了那一问才算「提问没演上、学生手上只有页面替挂的框」（上一问还挂着时不算：学生手上有那一问）
           if (askedBad && this.scene.waiting) { this.scene.waiting.standin = true; this.askMissed = true; }
         }
+        // 交给学生的手没演上、学生手上没东西可动（主线第七轮）：课堂循环看这个马上叫老师重写
+        this.handMissed = by === 'teacher' && handMissed(this.errors, this.scene);
         // on= 写的按钮学生手上没有：这个挑战判不了，告诉老师（报在写它的那一行上，这一轮没写就报那个挑战）
         for (const msg of this.scene.onProblems({ once: true })) {
           const id = msg.match(/^挑战 (\S+)/)?.[1];
