@@ -358,3 +358,12 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-look-stage { position: absolute; inset: 0; }
 .st-look-stage[hidden] { display: none; }
 .st-stage.is-side .st-goal { font-size: 17px; }
+/* 解析栏的把手（收放）：收着时贴在左边的一个小标签「说过的 ›」，开着时在栏的右边沿上一个「‹」 */
+.st-side-toggle { position: absolute; z-index: 6; top: 50%; left: max(6px, env(safe-area-inset-left, 0px)); translate: 0 -50%; min-width: 44px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 999px;
+  background: color-mix(in srgb, var(--st-card) 90%, transparent); color: var(--st-brand); font: 600 15px/1 var(--sans, sans-serif); white-space: nowrap; cursor: pointer;
+  box-shadow: 0 0 0 0.5px var(--st-line), 0 8px 18px -12px rgb(var(--shade-rgb, 25 45 40) / 0.45); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.st-side-toggle[hidden] { display: none; }
+.st-side-toggle:active { scale: .94; }
+.st-stage.is-side .st-side-toggle { left: calc(var(--side-w, 360px) - 22px); padding: 0; width: 44px; font-size: 20px; }
+/* 收着的时候：老师对准一部分（camera），台上别的东西摆在话的位置上——话垫一块毛玻璃，字不叠在别的字上（时态课截图第 1 条） */
+.st-caption.is-backed .st-line:not(.is-out) { padding: 4px 14px; border-radius: 14px; background: color-mix(in srgb, var(--st-card) 88%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 0 0 0.5px var(--st-line); }

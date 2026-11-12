@@ -18,7 +18,7 @@ const DO = ['write', 'swap', 'move', 'vec', 'mul', 'rotate', 'insert', 'rowop', 
   'refer', 'unrefer', 'unmark', 'unfold', 'delete', 'compare', 'put', 'merge', 'back'];
 const ANSWER = ['tap', 'drag', 'value', 'pick', 'say', 'next'];
 /** 翻回去看一幕（主线第六轮）：look 2 点幕条上的第 2 幕，unlook 点「回到现在」——真的手指点，不交给课堂循环（回看交的事实由舞台交） */
-const VIEW = ['look', 'unlook'];
+const VIEW = ['look', 'unlook', 'side'];
 /** 走通用手势（或撤一步、拨数器）的那几种：parseTry 给它们带上 gesture */
 const GESTURE = new Set(['rotate', 'insert', 'rowop', 'mark', 'fold', 'undo', 'dial']);
 /**
@@ -44,7 +44,7 @@ export const STUDENT_FORMS = [
   'unfold s.5（点 s.5 所在的小方块）', 'delete t.7（open t pluck / delete：点 t.7）',
   'compare AB BA（按住 AB 的括号拖到 BA 上）', 'put AB Sum（拖进收集用的 Sum）', 'merge X Y（拖到 Y 上并同类项）', 'back t "插入后"（点「回到插入后」）',
   'tap a.7', 'drag a#1 a#6', 'value 4', 'value 1 n n(n-1)/2 / 0 1 n / 0 0 1（按格的那一问一格一格填，「 / 」分行）',
-  'pick t.45 t.50（ask pick：照先后点这几个，再点「点好了」）', 'say 我不懂', 'next', 'look 2（点幕条上的第 2 幕，翻回去看）', 'unlook（点「回到现在」）',
+  'pick t.45 t.50（ask pick：照先后点这几个，再点「点好了」）', 'say 我不懂', 'next', 'look 2（点幕条上的第 2 幕，翻回去看）', 'unlook（点「回到现在」）', 'side（横屏：点左边的把手，点开 / 收起解析栏）',
 ].join('、');
 
 /** 一幕的文件 → 一步步：{ kind: 'teacher', src, line } | { kind: 'student', how, cmd, args, src, line, gesture? } */
@@ -637,4 +637,8 @@ NEW6.push(
   { id: 'scene 收得干净、keep 带过来（B）', files: ['scene-keep.txt'], checks: [C(/第 2 幕「过去完成时」（前面：① 开头）/, '现状里有幕的那一行'), C(/贴着的字：lf「be free 能自由推翻」（贴在 tl\.fr/, 'keep 的东西贴的字还在')], noScreen: [C(/They gave justices/, '上一幕的句子收了'), C(/把粉色小人拖到/, '画面上没有上一幕的挑战')] },
   { id: '翻回去看第 1 幕（B）', files: ['scene-keep.txt'], look: [C(/小人 fr 在 过去之后/, '回看里小人停在学生拖到的地方'), C(/句子 p（/, '回看里有上一幕的句子')], called: [C(/学生翻回去看了第 1 幕「开头」（\d+ 秒）/, '回看过的事实跟着下一条告诉老师')] },
   { id: '全换了没写 scene：说一句事实（B）', files: ['scene-swap.txt'], checks: [C(/台上的东西这一轮全换了（没写 scene/, '现状里那一句')], nots: [C(/第 \d+ 幕/, '页面没替老师分幕')] },
+);
+NEW6.push(
+  { id: '解析栏收放：点开以后这一幕说过的都在（A）', files: ['side-open.txt'], views: ['横屏'], screen: [C(/先读一遍这句/, '收着时说的那一句点开栏以后还在'), C(/never 夹在中间/, '最近一句也在')], noAudit: [C(/压着/), C(/栏里的字太小/), C(/这一问看不见/)] },
+  { id: '解析栏开着：宽输入挪到画面底部（A）', files: ['side-wide.txt'], views: ['横屏'], noAudit: [C(/宽输入压着东西/), C(/解析栏压着画面/), C(/压着/)] },
 );
