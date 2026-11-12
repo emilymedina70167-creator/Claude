@@ -147,13 +147,24 @@ export function scoreMap(curriculum = [], split = null, { weights = null } = {})
 }
 
 /** 按某一天（不给就是现在）的掌握，每一块攒了几分：{ 块编号: { got, state, tier } } */
-function gotAt(mem, map, date = null) {
+// 有真题的块，真题级（exam/bar.js）没过最多攒到七成：只会教材题、不会真题的块，在考场上不算稳拿（docs/exam-plan.md 第五节）
+export const EXAM_CAP = 0.7;
+// examBlocks：有真题入库的块（首页缓存的 blockPerYear 里 > 0 的）；真题级过没过、哪天过的读 mem.exam_bar
+function gotAt(mem, map, date = null, examBlocks = null) {
   const gone = voidedIds(mem);
   const docs = new Map(list(mem.mastery).filter((m) => m?.id && !gone.has(`mastery/${m.id}`)).map((m) => [String(m.id), m]));
+  const bars = new Map(list(mem.exam_bar).filter((b) => b?.id).map((b) => [String(b.id), b]));
+  const until = date ? Date.parse(`${date}T23:59:59`) : Infinity;
   const out = {};
   for (const [id, b] of Object.entries(map.blocks)) {
     const st = stateAt(docs.get(id), date);
-    out[id] = { ...st, got: b.points * creditOf(st.state, st.tier) };
+    let credit = creditOf(st.state, st.tier);
+    if (examBlocks?.has(id)) {
+      const bar = bars.get(id);
+      const passed = !!bar?.passed && (bar.passedAt == null ? date == null : Number(bar.passedAt) <= until);
+      if (!passed) credit = Math.min(credit, EXAM_CAP);
+    }
+    out[id] = { ...st, got: b.points * credit };
   }
   return out;
 }
@@ -168,8 +179,9 @@ export function scoreBoard(mem = {}, { today = toDate(Date.now()), days = 7, exa
   const target = targetOf(mem);
   const { goal, split } = goalOf(target);
   const map = scoreMap(mem.curriculum, split, { weights: exam });
-  const now = gotAt(mem, map);
-  const then = gotAt(mem, map, addDays(today, -days));
+  const examBlocks = exam ? new Set(Object.entries(exam).filter(([, v]) => Number(v) > 0).map(([k]) => k)) : null;
+  const now = gotAt(mem, map, null, examBlocks);
+  const then = gotAt(mem, map, addDays(today, -days), examBlocks);
   const sumOf = (ids, g) => ids.reduce((n, id) => n + (g[id]?.got || 0), 0);
   const subjects = SUBJECTS.map((s) => {
     const parts = map.parts.filter((p) => p.subject === s.key).map((p) => {
@@ -185,6 +197,8 @@ export function scoreBoard(mem = {}, { today = toDate(Date.now()), days = 7, exa
   const weeks = Math.max(1, Math.ceil(Math.max(0, daysLeft(today, examDateOf(target))) / 7));
   return {
     goal, total, subjects,
+    // 每块值几分、攒了几分（exam/priority.js 的「下一步学什么」用）
+    blocks: Object.fromEntries(Object.entries(map.blocks).map(([id, b]) => [id, { points: b.points, got: now[id].got, title: b.title, subject: b.subject }])),
     week: { days, delta, ups: moves.filter((x) => x.delta > 0).sort((a, b) => b.delta - a.delta), downs: moves.filter((x) => x.delta < 0).sort((a, b) => a.delta - b.delta) },
     pace: { left, weeks, perWeek: left / weeks },
   };

@@ -66,12 +66,13 @@ import { createDevAI } from '../books/devmock.js';
 import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
 import { scrubBooks, readReserve, reserveYears } from '../exam/reserve.js';
-import { createExamInbox } from '../exam/examdesk.js';
+import { createExamInbox, refreshBars } from '../exam/examdesk.js';
 import { loadExamCourse, courseOfBlock } from '../exam/load.js';
 import { examIndexOf } from '../exam/fields.js';
 import { blockQuestions } from '../exam/block.js';
 import { createExamCard } from '../exam/examview.js';
 import { createExamPage } from '../exam/exampage.js';
+import { priority } from '../exam/priority.js';
 import { renderStageClass } from '../stage/classroom.js';
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
@@ -137,6 +138,7 @@ export async function renderDesk(root, meta) {
     <section class="dk-group" aria-label="今天"><h2 class="dk-grp-h">今天</h2><div class="dk-card dk-rows"></div></section>
     <div class="dk-drawer" hidden>
     <div class="dk-part dk-today" hidden><h2 class="dk-h">复现</h2><div class="dk-body"></div></div>
+    <div class="dk-part dk-next" hidden><h2 class="dk-h">下一步学什么</h2><p class="dk-sub muted">按 410 分里每一块还能攒多少分排，页面算的。</p><div class="dk-body"></div></div>
     <div class="dk-part dk-recall" hidden><h2 class="dk-h">要记的</h2><p class="dk-sub muted">先写出来，再看答案。隔 1、3、7、14、30 天各想一遍。</p><div class="dk-body"></div><details class="dk-fold dk-radd"><summary><span class="muted">自己加一条</span></summary><div class="dk-radd-f"></div></details></div>
     <div class="dk-part dk-drill" hidden><h2 class="dk-h">练一练</h2><p class="dk-sub muted">页面从以前课上的题里挑几道，不同块混着做，页面判分，不调用 Claude。</p><div class="dk-body"></div></div>
     <div class="dk-part dk-manual" hidden><details class="dk-fold"><summary><h2 class="dk-h">补记</h2><span class="muted">在学习台外面做的题，写一句或贴张图</span></summary><div class="dk-body"></div><div class="dk-mlist"></div></details></div>
@@ -223,6 +225,15 @@ export async function renderDesk(root, meta) {
   // 已经用过的课号：还在的课，加上删掉的课留下来的错题、观察、失误、证据上记着的课号（删课时挂着弱点的错题会留下）。
   // 不然同一天再开的课拿到同一个号，那几条就算到新课头上
   const takenIds = () => [...new Set([...data.sessions.map((x) => x.id), ...['errors', 'observations', 'slips', 'evidence'].flatMap((c) => (data[c] || []).map((d) => d.session).filter(Boolean))])];
+  // 真题级的缓存（exam_bar）：证据里带真题题号的作答变了才按那几门课重算（exam/examdesk.js 的 refreshBars，变了才写）
+  let barSig = '';
+  function syncBars() {
+    const ev = data.evidence.filter((e) => e.exam || e.like);
+    const sig = ev.map((e) => `${e.id}:${e.ok}`).join('|');
+    if (!ev.length || sig === barSig) return;
+    barSig = sig;
+    refreshBars(db, { evidence: data.evidence, bars: data.exam_bar }).catch((err) => { barSig = ''; reportError(err, { what: '算真题级' }); });
+  }
   // 考试日期读考试档案（exam/target.js；没有档案时是默认的 2027-12-21）
   const examDate = () => examDateOf(targetOf(data));
   // 第一次读到记忆库里没有考试档案（读到了、是空的，不是读失败）：以 page 写一份默认，只写一次。我在「管理 → 考试」改
@@ -327,7 +338,7 @@ export async function renderDesk(root, meta) {
     for (const c of failed) res.problems.unshift({ coll: c, id: '', msg: `读不到 ${c}（${COLLECTIONS[c].label}），这一次的自检不全` });
     paint(res, today);
     writeBriefs(today);
-    if (!failed.size) { flushOpen(); proposeMastery(); runHealth(today); runSentry(today); }
+    if (!failed.size) { flushOpen(); proposeMastery(); runHealth(today); runSentry(today); syncBars(); }
     const rec = memcheckRecord(res, { kit: VERSION, today });
     const json = JSON.stringify(rec);
     if (json !== lastCheck) {
@@ -1220,8 +1231,32 @@ export async function renderDesk(root, meta) {
     recall: { title: '要想起来的', ic: 'is-recall' },
     drill: { title: '练一练', ic: 'is-drill' },
     manual: { title: '补记', ic: 'is-plus' },
+    next: { title: '下一步学什么', ic: 'is-review' },
   };
   const rowCounts = {};
+  // 下一步学什么（exam/priority.js）：每块还能攒多少分、前置先排、到期和踩过坑的加权；不调用 Claude
+  function nextPlan(today = toDate(Date.now())) {
+    const b = scoreBoard(data, { today, exam: examMeta?.blockPerYear });
+    const dueBlocks = new Set(dueList(data.reviews, today).filter((d) => d.days <= 0).flatMap((d) => (data.reviews.find((r) => r.id === d.id)?.blocks || []).map(String)));
+    const traps = Object.fromEntries((data.exam_bar || []).filter((x) => x.traps?.length).map((x) => [x.id, x.traps]));
+    return priority({ blocks: b.blocks, curriculum: data.curriculum, mastery: data.mastery, dueBlocks, traps, sessions: data.sessions, today });
+  }
+  function nextLine() {
+    const first = nextPlan().top[space]?.[0];
+    return first ? `${plainTitle(first.title) || first.title}：${first.why.split('；')[0]}` : '这一科还没有能攒分的块';
+  }
+  function paintNext() {
+    const box = $('.dk-next .dk-body');
+    if (!box) return;
+    const p = nextPlan();
+    const LABEL = { math: '数学', cs: '408', en: '英语' };
+    const rows = (p.top[space] || []).map((x) => `<li><span>${escapeHtml(plainTitle(x.title) || x.title)}</span><small class="muted">${escapeHtml(x.why)}</small></li>`).join('');
+    box.innerHTML = `${rows ? `<ol class="ex-list">${rows}</ol>` : '<p class="muted">这一科还没有能攒分的块。</p>'}
+      <h3 class="dk-sc-h">这一周的时间怎么分</h3>
+      <p class="dk-sub muted">${Object.entries(p.split).map(([k, v]) => `${LABEL[k]} ${Math.round(v * 100)}%`).join('、')}（按每科还能攒多少分，每科至少一成）</p>
+      ${p.lag.length ? `<p class="dk-sub">${p.lag.map((x) => `${LABEL[x.space]}这 7 天学了 ${x.actual} 分钟，按分配该有 ${x.should} 分钟`).join('；')}。</p>` : ''}
+      <p class="muted">「还能攒」= 这一块在 410 里值多少分 ×（1 − 现在攒到几成）。前置的块没过基础题排在前面，复现到期、复盘对上过真题的坑的加一点。</p>`;
+  }
   function paintRows(today = toDate(Date.now())) {
     const box = $('.dk-rows');
     if (!box) return;
@@ -1234,8 +1269,9 @@ export async function renderDesk(root, meta) {
       recall: rc.total ? `${spaceCounts(rc.bySpace)}。先写出来，再看答案` : '今天没有要想的',
       drill: dpick ? (dpick.items.length ? `挑好了 ${dpick.items.length} 道，不同块混着做` : '题库里的题最近都做对过') : '',
       manual: '在学习台外面做的题，写一句或贴张图',
+      next: nextLine(),
     };
-    const n = { today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null };
+    const n = { today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null, next: null };
     const keys = Object.keys(ROWS).filter((k) => k !== 'drill' || dpick);
     box.innerHTML = keys.map((k) => `<button type="button" class="dk-trow" data-row="${k}" data-menu="${k}"><span class="dk-ic ${ROWS[k].ic}${n[k] === 0 ? ' is-zero' : ''}"${n[k] === null ? '' : ' data-count'}>${n[k] === null ? '+' : rowCounts[k] ?? n[k]}</span><b>${ROWS[k].title}</b><small>${escapeHtml(sub[k])}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('');
     // 数字变了：往上滚过去（第一次画不滚）
@@ -1255,7 +1291,7 @@ export async function renderDesk(root, meta) {
     panels.open(row, {
       title: ROWS[k].title,
       find: () => $(`.dk-trow[data-row="${k}"]`),
-      mount: (body) => { sec.hidden = false; sec.querySelector('details.dk-fold:not(.dk-radd)')?.setAttribute('open', ''); body.append(sec); then?.(sec); },
+      mount: (body) => { if (k === 'next') paintNext(); sec.hidden = false; sec.querySelector('details.dk-fold:not(.dk-radd)')?.setAttribute('open', ''); body.append(sec); then?.(sec); },
       unmount: () => { drawer.append(sec); },
       onClose: () => paintRows(),
     });
@@ -1319,6 +1355,7 @@ export async function renderDesk(root, meta) {
         <p>不猜考多少分，只数已经攒下的分。${b.goal} 分给四科：${b.subjects.map((s) => `${escapeHtml(s.label)} ${s.target}`).join('、')}。每一科按考试大纲的分值分到各部分，一部分的分平分到课程地图里的各章，一章再平分到这一章的块。</p>
         <p>一块攒到几成，看这一块的掌握（页面按你的作答算的，不是 Claude 说的）：</p>
         <ul class="dk-sc-ladder">${LADDER.map((x) => `<li><span>${escapeHtml(x.text)}</span><b>${Math.round(x.credit * 100)}%</b></li>`).join('')}<li><span>以前过了、后来又错了（掉了）</span><b>10%</b></li></ul>
+        <p>有真题入库的块，要「真题级」过了（这一块的真题第一次碰到就一次做对、没看提示）才攒得满；没过最多七成。一章里的块分分数时，三成平分、七成按这一块真题平均每年考几分。</p>
         <p class="muted">考场在几个月以后：只会当场做的题，考场上常常丢；隔了 30 天还能一次做对，才算稳拿。学习台里还没有的部分（高数、概率、组成原理、操作系统、计网、阅读、写作、政治）分照样占着、攒到的是 0，缺口在哪一眼看得到。</p>
         <ul class="dk-sc-basis">${b.subjects.flatMap((s) => s.parts.map((p) => `<li><span>${escapeHtml(s.label)} · ${escapeHtml(p.label)}</span><small class="muted">${escapeHtml(p.basis)}</small></li>`)).join('')}</ul>
       </details>`;

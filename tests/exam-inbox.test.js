@@ -202,3 +202,21 @@ test('首页的考情缓存：按门课读一遍，写进 meta/exam 的 stats；
   assert.equal(m.blockPerYear['OS-L3.2.1'], 2 / 5);
   assert.equal(m.counts.questions, 2);
 });
+
+test('真题级的缓存：证据里有真题作答时，按那几门课算受影响的块，变了才写 exam_bar', async () => {
+  const { refreshBars } = await import('../kit/src/exam/examdesk.js');
+  const db = fakeDb({
+    'syllabus/G-OS-3.2': { course: 'OS', title: '页面置换', blocks: ['OS-L3.2.1'] },
+    'questions/Q-408-2019-26': { course: 'OS', year: 2019, points: 2, tags: { syl: ['G-OS-3.2'] } },
+  });
+  const evidence = [{ id: 'ev-1', kind: 'answer', exam: 'Q-408-2019-26', ok: true, attempts: 1, ms: 1000, session: 'c-1', at: 5 }];
+  const r = await refreshBars(db, { evidence, bars: [], now: 9 });
+  assert.deepEqual(r.wrote, ['OS-L3.2.1']);
+  const bar = db.all()['exam_bar/OS-L3.2.1'];
+  assert.equal(bar.passed, true);
+  const n = db.writes.length;
+  const r2 = await refreshBars(db, { evidence, bars: [{ id: 'OS-L3.2.1', ...bar }], now: 20 });
+  assert.deepEqual(r2.wrote, []);
+  assert.equal(db.writes.length, n, '没变不写');
+  assert.deepEqual((await refreshBars(db, { evidence: [{ kind: 'answer', ok: true }], bars: [] })).wrote, [], '没有真题作答不读');
+});

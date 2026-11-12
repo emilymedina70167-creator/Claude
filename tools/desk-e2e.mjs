@@ -1067,6 +1067,14 @@ const SUITES = {
     await t.page.click('.ex-q[data-q="Q-408-2019-1"]');
     await t.waitFor(async () => (await t.text('.ex-detail'))?.includes('假题 1'), { what: '点开一道看到题面' });
     await t.home();
+    // 真题级：一次带真题题号的作答（第一次就做对）→ 首页按门课算出这一块真题级过了，写进 exam_bar；「下一步」那一行点得开
+    await plantLive(t, { 'evidence/ev-exam-1': { kind: 'answer', src: 'answer', type: 'quiz', exam: 'Q-408-2019-1', ok: true, attempts: 1, ms: 30000, session: 'c-exam', block: 'DS-L1.1.1', tags: ['DS-L1.1.1'], at: Date.now() } });
+    const bar = await t.waitFor(async () => { const b = (await t.db())['exam_bar/DS-L1.1.1']; return b?.passed ? b : null; }, { timeout: 20000, what: '真题级写进 exam_bar' });
+    check(bar.timed === true && bar.done[0].id === 'Q-408-2019-1', `真题级不对：${JSON.stringify(bar)}`);
+    await t.page.click('.dk-trow[data-row="next"]');
+    await t.waitFor(async () => (await t.text('.fl-panel'))?.includes('这一周的时间怎么分'), { what: '「下一步学什么」的面板' });
+    await t.page.keyboard.press('Escape').catch(() => {});
+    await t.open();
     // 首页不订阅、不整类读考试的资料（收件箱除外）
     const reads = await t.page.evaluate(() => [...(window.LAKitDev?.reads || [])]);
     for (const c of ['questions', 'syllabus', 'papers', 'passages', 'exam_profiles']) check(!reads.includes(c), `首页整类读了 ${c}`);

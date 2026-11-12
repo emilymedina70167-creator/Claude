@@ -121,3 +121,19 @@ test('考试档案改了目标：scoreBoard 的 goal、四科 target、每块的
   const early = scoreBoard({ curriculum, exam: [{ id: 'target', school: '南京大学', date: '2027-01-21' }] }, { today: '2026-11-12' });
   assert.ok(early.pace.weeks < base.pace.weeks);
 });
+
+test('真题级没过的块最多攒七成；过了照旧；没真题的块照旧；这 7 天里过的算进这 7 天', () => {
+  const cur = [{ id: 'OS-L3', level: 'lecture', title: '第3章' }, { id: 'OS-L3.1', level: 'section', title: '§1' }, { id: 'OS-L3.1.1', level: 'block', title: 'a' }, { id: 'OS-L3.1.2', level: 'block', title: 'b' }];
+  const mastery = [{ id: 'OS-L3.1.1', state: '复现通过', tier: 30, log: [] }, { id: 'OS-L3.1.2', state: '复现通过', tier: 30, log: [] }];
+  const exam = { 'OS-L3.1.1': 1, 'OS-L3.1.2': 1 };
+  const now = Date.parse('2026-11-12T12:00:00Z');
+  const got = (b, id) => b.subjects.find((s) => s.key === 'cs').parts.find((p) => p.key === 'OS').chapters[0].got;
+  const none = scoreBoard({ curriculum: cur, mastery }, { today: '2026-11-12', exam });
+  const half = scoreBoard({ curriculum: cur, mastery, exam_bar: [{ id: 'OS-L3.1.1', passed: true, passedAt: now - 2 * 86400000 }] }, { today: '2026-11-12', exam });
+  const pts = scoreMap(cur, null, { weights: exam }).blocks;
+  assert.ok(Math.abs(got(none) - 0.7 * (pts['OS-L3.1.1'].points + pts['OS-L3.1.2'].points)) < 1e-9);
+  assert.ok(Math.abs(got(half) - (pts['OS-L3.1.1'].points + 0.7 * pts['OS-L3.1.2'].points)) < 1e-9);
+  assert.ok(half.week.ups.some((x) => x.id === 'OS-L3.1.1'), '这 7 天里过的');
+  const free = scoreBoard({ curriculum: cur, mastery }, { today: '2026-11-12' });
+  assert.ok(got(free) > got(none), '没有真题入库时不封顶');
+});

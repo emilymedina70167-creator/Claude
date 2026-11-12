@@ -8,6 +8,8 @@ import { assertWrite } from '../memory/schema.js';
 import { loadExamCourse } from './load.js';
 import { statsCache } from './stats.js';
 import { EXAM_COURSES } from './schema.js';
+import { barOf, barsChanged } from './bar.js';
+import { blockSyllabus } from './mapping.js';
 
 /**
  * 首页的考情缓存（meta/exam 的 stats / blockPerYear，410 分的权重、考情页、体检、后方的工作单都读它）：一门课一门课按门课读
@@ -37,6 +39,36 @@ export async function refreshStats(db, { curriculum = [], now = Date.now() } = {
 export const LOG_KEEP = 40;
 const PARALLEL = 20;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const SUBJECT_COURSES = { 408: ['DS', 'CO', 'OS', 'CN'], 301: ['LA', 'HM', 'PS'], 201: ['EN'], 101: ['PO'] };
+/**
+ * 真题级的缓存（exam_bar，每块一条）：证据里有带 exam= / like= 的作答时，读那几门课的考试资料（按门课），
+ * 每块挂着的真题照 bar.js 算一遍，和现在存着的比，变了才写。返回 { wrote: [块] }
+ */
+export async function refreshBars(db, { evidence = [], bars = [], now = Date.now() } = {}) {
+  const ids = [...new Set(evidence.flatMap((e) => [e?.exam, e?.like]).filter(Boolean))];
+  if (!ids.length) return { wrote: [] };
+  const courses = [...new Set(ids.flatMap((id) => SUBJECT_COURSES[String(id).match(/^Q-(\d{3})-/)?.[1]] || []))];
+  const have = new Map(bars.map((b) => [b.id, b]));
+  const wrote = [];
+  for (const c of courses) {
+    const d = await loadExamCourse(db, c);
+    for (const [block, syl] of blockSyllabus(d.syllabus)) {
+      const set = new Set(syl);
+      const questions = d.questions.filter((q) => (q.tags?.syl || []).some((s) => set.has(s)));
+      if (!questions.length) continue;
+      const prev = have.get(block) || null;
+      const next = barOf({ block, questions, evidence, prev, now });
+      if (!next.done.length && !prev) continue;
+      const { id: _, ...old } = prev || {};
+      if (!barsChanged(prev ? old : null, next)) continue;
+      assertWrite('page', 'exam_bar');
+      await db.doc(`exam_bar/${block}`).set(next);
+      wrote.push(block);
+    }
+  }
+  return { wrote };
+}
 
 export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curriculum = () => [] } = {}) {
   let busy = false;
