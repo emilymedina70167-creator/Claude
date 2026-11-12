@@ -299,7 +299,7 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 | 报告「17 题一次对 14」：重问一次算新的一道；答案框里的问话算一道错题 | 每次作答记这一问的指纹（`value` 照判法和答案；点的照预期和那样东西的字；挑战照编号、字、条件），报告按它分题：先错后对是「改对了」。答案框里打的问话（`?` 结尾，或有中文而答案里没有）不判、不算作答，记成说的话 | `stage/evidence.js` 的 `askSig`、`answer.js` 的 `asksBack`、`report.js` 的 `itemKey` |
 | 错题本里一条记串了，3 条被拒收 | 开发这边照课堂同一套函数补写（一次 batch）：记串的改成翻译那一问；补 would moved、has nearly（挂 W40）、natural sciences has been social sciences（挂 W43） | 数据，不在代码里 |
 
-收尾量出来的：TAIL7
+收尾量出来的：单元测试 1758 条全过；六张验收表（fix1 new2 new3 new4 new5 first）都过；真手指首课走查都对（多两段 `stream`、`late`）；示例页 0 处错；学习台整条流程 24 段全过；282 个旧试演放回去和改之前比不同 0 处。审查查出的 5 条改了，留下 6 条小毛病写在 rulings。学习台、舞台试课按版本 2026-11-12i 重新发布。
 
 ## ③ ④ 建议的顺序
 
