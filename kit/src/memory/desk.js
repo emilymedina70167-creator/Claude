@@ -66,6 +66,7 @@ import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
 import { scrubBooks, readReserve } from '../exam/reserve.js';
 import { createExamInbox } from '../exam/examdesk.js';
+import { loadExamCourse, courseOfBlock } from '../exam/load.js';
 import { renderStageClass } from '../stage/classroom.js';
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
@@ -1538,6 +1539,8 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   if (kind === 'stage') {
     return renderStageClass(root, { ...meta, unit: doc.title || meta.unit }, {
       store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, subject: doc.subject || '', mem, books, prevRead, readOnly,
+      // 这一门课的考试资料（exam/load.js，按门课读、不读整类）：不等它，Promise 交给课堂（第 4 批「这一块在考试里」才用）
+      exam: block && !readOnly ? loadExamCourse(db, courseOfBlock(block)).catch(() => null) : null,
       updateSession, onHome: () => goto(readOnly ? `classes/${sid}` : ''),
       recheck: readOnly ? {} : await within(db.doc('meta/workorder').get().then((s) => (s.exists ? s.data().recheck || {} : {})), 3000, {}).catch(() => ({})),
       writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),
