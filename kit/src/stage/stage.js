@@ -1615,14 +1615,14 @@ export class Stage {
     try { mine = sc.objects.has(l.refs[0]) ? [] : sc.parts(l.refs[0]).map((p) => p.key); } catch { mine = []; }
     const t = sc.type(o);
     if (t.parts(o).some((p) => !mine.includes(p.key) && overlaps(grow(box, 2), t.partBox(o, p)))) return true;
-    // 贴在一个部件上：那样东西自己画的别的东西（时间轴的轴、刻度的字）也是让不开的——小人在轴下面、字写 side=above，
+    // 贴在一个部件上：那样东西自己的轴（时间轴的轴、刻度的字，nearObstacles）也是让不开的——小人在轴下面、字写 side=above，
     // 以前只比部件，字照样压在轴和「过去之后」上（主线第六轮，时态课截图）
     if (!mine.length) return false;
     const own = sc.parts(l.refs[0]).map((p) => t.partBox(o, p));
     // 那种东西自己报的「别的字要躲」的框（时间轴的轴和刻度那一条），锚着的那几个部件不算
     const same = (a, b) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.h - b.h) < 0.5;
-    if ((t.nearObstacles?.(o) || []).some((f) => !own.some((a) => same(a, f)) && overlaps(grow(box, 2), f))) return true;
-    return this.footprintBoxes(id).some((f) => !own.some((a) => overlaps(f, grow(a, -1))) && overlaps(grow(box, 2), f));
+    // 只看那种东西报的（不看画出来的全部：一排格子上面的弧也是画出来的，算进来的话写 side=above 的字一律换到下面——旧课放回量出来的）
+    return (t.nearObstacles?.(o) || []).some((f) => !own.some((a) => same(a, f)) && overlaps(grow(box, 2), f));
   }
   anchorOf(l) {
     const sc = this.scene;
