@@ -35,7 +35,8 @@ export function snapTier(t) {
  * mem：记忆库各类的数组（和首页的 data 一样）；返回 { fixes: [{ coll, id, doc, what }], notes: [{ coll, id, msg }] }。
  * fixes 里的 doc 是改好的整份（去掉 id），照着写回去就行；状态类里要记 log 的字段（tracked）已经用 applyChange 记好。
  */
-export function healthCheck(mem = {}, { today = toDate(Date.now()), now = Date.now() } = {}) {
+// exam：首页缓存的 meta/exam（考情第 6 批）：没打标签的真题、没挂考点的块、过时的画像、没核过的答案、一年没核的分数线，只记不改
+export function healthCheck(mem = {}, { today = toDate(Date.now()), now = Date.now(), exam = null } = {}) {
   const fixes = [], notes = [];
   const get = (c) => (Array.isArray(mem[c]) ? mem[c] : []);
   const fix = (coll, d, patch, what) => {
@@ -107,6 +108,19 @@ export function healthCheck(mem = {}, { today = toDate(Date.now()), now = Date.n
   const have = new Set(sessions.map((s) => String(s.id)));
   const orphan = evidence.filter((e) => e?.session && !have.has(String(e.session)));
   if (orphan.length) note('evidence', '', `${orphan.length} 条证据指着已经没有的课（${[...new Set(orphan.map((e) => e.session))].slice(0, 3).join('、')}）：报告、掌握算不到它们`);
+
+  // —— 考情（只记不改：标签、映射、画像、答案的核对由开发那边和教研室补）——
+  const NAME = { LA: '线代', HM: '高数', PS: '概率', DS: '数据结构', CO: '组成原理', OS: '操作系统', CN: '计网', EN: '英语', PO: '政治' };
+  for (const [c, st] of Object.entries(exam?.stats || {})) {
+    if (st.untagged) note('exam', c, `${NAME[c] || c}：${st.untagged} 道真题还没打标签（统计、考情一节算不到它们）`);
+    if (st.holes?.blocks?.length) note('exam', c, `${NAME[c] || c}：${st.holes.blocks.length} 块没挂考点（上这几块课时没有考情）`);
+    if (st.stale?.profiles?.length && exam.statsAt && now - exam.statsAt > 7 * 86400000) note('exam', c, `${NAME[c] || c}：${st.stale.profiles.length} 个考点的画像过时一周以上（教研室还没重写）`);
+    else if (st.stale?.profiles?.length) note('exam', c, `${NAME[c] || c}：${st.stale.profiles.length} 个考点的画像过时（等教研室重写）`);
+    if (st.unverified) note('exam', c, `${NAME[c] || c}：${st.unverified} 道真题的答案没核过（验算的式子算不出来）`);
+  }
+  const target = (Array.isArray(mem.exam) ? mem.exam : []).find((x) => x?.id === 'target');
+  const oldLines = (target?.lines || []).filter((l) => !l?.src?.at || now - Number(l.src.at) > 365 * 86400000);
+  if (oldLines.length) note('exam', 'target', `考试档案里 ${oldLines.length} 条分数线一年多没核了（${oldLines.map((l) => `${l.year} ${l.kind}`).slice(0, 3).join('、')}）`);
 
   return { fixes, notes };
 }

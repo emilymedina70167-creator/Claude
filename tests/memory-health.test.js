@@ -88,3 +88,14 @@ test('sameDoc：字段先后不一样、带不带 id 都算同一份；值不一
   assert.ok(!sameDoc({ a: 1, b: 2 }, { a: 1, b: 3 }));
   assert.ok(!sameDoc({ a: [1, 2] }, { a: [2, 1] }), '数组的先后算数');
 });
+
+test('考情的几条（只记不改）：没打标签的真题、没挂考点的块、过时的画像、没核过的答案、一年没核的分数线；缓存是空的不报', async () => {
+  const { healthCheck } = await import('../kit/src/memory/health.js');
+  const exam = { stats: { OS: { untagged: 3, holes: { blocks: ['OS-L9.1.1'], nodes: [] }, stale: { profiles: ['G-OS-3.2'], maps: [] }, unverified: 2 } }, statsAt: Date.parse('2026-11-01') };
+  const mem = { exam: [{ id: 'target', school: '南京大学', lines: [{ year: 2025, kind: '复试线', value: 330, src: { at: Date.parse('2025-03-01') } }] }] };
+  const r = healthCheck(mem, { today: '2026-11-12', now: Date.parse('2026-11-12'), exam });
+  const t = r.notes.map((n) => n.msg).join('\n');
+  for (const s of ['3 道真题还没打标签', '1 块没挂考点', '1 个考点的画像过时', '2 道真题的答案没核过', '一年多没核']) assert.ok(t.includes(s), s);
+  assert.equal(r.fixes.length, 0);
+  assert.equal(healthCheck({}, { today: '2026-11-12', exam: null }).notes.filter((n) => n.coll === 'exam').length, 0);
+});

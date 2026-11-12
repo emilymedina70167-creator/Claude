@@ -11,6 +11,15 @@ import { pendingRecord } from './memo.js';
 import { guardCandidate, buildCorpus, guardMark, guardReason, guardLog } from './guard.js';
 import { LAB_CAPS, briefId, bytesOf, BRIEF_MAX, LAB_VERSION, srcOf, backfillMaterial, problemsMaterial, briefDoc, parseBackfill, parseProblems, problemLint, twinOf, prepBrief, checkReply, receipt } from './lab.js';
 import { reportError } from '../errlog.js';
+import { loadExamCourse } from '../exam/load.js';
+import { profileBrief, parseProfile, profileQuestions, mapBrief, parseMap, applyMap, intelBrief, parseIntel, mergeIntel } from '../exam/lab.js';
+import { profileSrc } from '../exam/fresh.js';
+import { mapSig, blockSyllabus } from '../exam/mapping.js';
+import { reserveYears } from '../exam/reserve.js';
+import { targetOf } from '../exam/target.js';
+import { refreshStats } from '../exam/examdesk.js';
+import { applyChange, toDate } from './schema.js';
+import { LAB_HEAD_REF } from './lab.js';
 
 const docsOf = (snap) => (snap ? snap.docs.map((d) => ({ id: d.id, ...d.data() })) : []);
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -48,7 +57,99 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
       const block = data.curriculum.find((b) => b.id === item.ref);
       return { prompt: prepBrief({ prompt, block: item.ref, title: block?.title || item.title }), ctx };
     }
+    if (item.kind === 'profile' || item.kind === 'map' || item.kind === 'intel') return buildExam(item, data);
     return null;
+  }
+
+  // —— 考情的三种单子（exam/lab.js）：画像、映射、考情动态。材料按门课读（不读整类） ——
+  const courseOfSyl = (id) => String(id).match(/^G-([A-Z]{2})-/)?.[1] || '';
+  const years = (data) => reserveYears(targetOf(data), toDate(Date.now()));
+  async function buildExam(item, data) {
+    const head = LAB_HEAD_REF();
+    if (item.kind === 'profile') {
+      const ex = await loadExamCourse(db, courseOfSyl(item.ref));
+      const node = ex.syllabus.find((n) => n.id === item.ref);
+      if (!node) return null;
+      const qs = profileQuestions(node, ex.questions, years(data));
+      if (!qs.length) return null;
+      return { prompt: profileBrief({ node, questions: qs, old: ex.profiles.find((p) => p.id === node.id) || null, head }), ctx: { node: node.id, course: node.course, qids: qs.map((q) => q.id) } };
+    }
+    if (item.kind === 'map') {
+      const ex = await loadExamCourse(db, item.ref);
+      const pre = item.ref === 'LA' ? /^L\d/ : new RegExp(`^${item.ref}-L`);
+      const mapped = blockSyllabus(ex.syllabus);
+      const sig = mapSig(data.curriculum, item.ref);
+      const staleBlocks = new Set(ex.syllabus.filter((n) => (n.blocks || []).length && n.mapSig !== sig).flatMap((n) => n.blocks));
+      const blocks = data.curriculum.filter((b) => b.level === 'block' && b.status !== 'void' && pre.test(String(b.id)) && (!mapped.has(b.id) || staleBlocks.has(b.id))).slice(0, 60);
+      if (!blocks.length || !ex.syllabus.length) return null;
+      return { prompt: mapBrief({ course: item.ref, nodes: ex.syllabus.filter((n) => n.status !== 'void'), blocks, head }), ctx: { course: item.ref, blocks: blocks.map((b) => b.id) } };
+    }
+    const recent = docsOf(await db.collection('exam_intel').get().catch(() => null)).sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 20);
+    return { prompt: intelBrief({ target: targetOf(data), recent, today: toDate(Date.now()), head }), ctx: { today: toDate(Date.now()) } };
+  }
+
+  async function takeExam(d, brief) {
+    const ctx = brief.ctx || {};
+    const now = Date.now();
+    if (brief.kind === 'profile') {
+      const ex = await loadExamCourse(db, ctx.course);
+      const node = ex.syllabus.find((n) => n.id === ctx.node);
+      if (!node) return receipt({ inbox: d, brief, result: 'stale', notes: ['考点没了'] });
+      const qs = profileQuestions(node, ex.questions, years(getData()));
+      const r = parseProfile(d.text, { node, qids: new Set(qs.map((q) => q.id)) });
+      if (!r.how) return receipt({ inbox: d, brief, result: 'rejected', rejected: r.problems.map((x) => ({ error: x })) });
+      assertWrite('page', 'exam_profiles');
+      await db.doc(`exam_profiles/${node.id}`).set({ course: node.course, space: node.space || '', how: r.how, traps: r.traps, src: profileSrc(node.id, ex.questions.filter((q) => !q.reserve)), by: 'lab', at: now });
+      await refreshStats(db, { curriculum: getData().curriculum }).catch(() => {});
+      return receipt({ inbox: d, brief, result: r.problems.length ? 'partial' : 'ok', took: { profile: 1, traps: r.traps.length }, rejected: r.problems.map((x) => ({ error: x })) });
+    }
+    if (brief.kind === 'map') {
+      const ex = await loadExamCourse(db, ctx.course);
+      const r = parseMap(d.text, { blockIds: new Set(ctx.blocks || []), sylIds: new Set(ex.syllabus.map((n) => n.id)) });
+      const next = applyMap(ex.syllabus, r.map);
+      const sig = mapSig(getData().curriculum, ctx.course);
+      assertWrite('page', 'syllabus');
+      // 挂的块变了的、挂着块但映射的指纹是旧的（这一次重挂过了）：写上新的块和课程地图现在的指纹
+      for (const n of ex.syllabus) {
+        const { id, ...rest } = n;
+        const blocks = next[id] ?? n.blocks ?? [];
+        if (!next[id] && !(blocks.length && n.mapSig !== sig)) continue;
+        await db.doc(`syllabus/${id}`).set({ ...rest, blocks, mapSig: sig, mapAt: now, mapBy: 'lab' });
+      }
+      await refreshStats(db, { curriculum: getData().curriculum }).catch(() => {});
+      return receipt({ inbox: d, brief, result: r.problems.length ? 'partial' : 'ok', took: { blocks: Object.keys(r.map).length }, rejected: r.problems.map((x) => ({ error: x })) });
+    }
+    // 考情动态：同一个数两次独立抓到（另一晚）才算核过；核过的复试线并进考试档案的 lines
+    const r = parseIntel(d.text);
+    const existing = docsOf(await db.collection('exam_intel').get().catch(() => null));
+    assertWrite('page', 'exam_intel');
+    let k = 0;
+    const verified = [];
+    for (const it of r.items) {
+      const m = mergeIntel(existing, it, { at: now, seq: ++k });
+      await db.doc(`exam_intel/${m.id}`).set(m.doc);
+      if (m.isNew) existing.push({ id: m.id, ...m.doc });
+      if (m.doc.kind === 'line' && m.doc.checks >= 2 && m.doc.value != null) verified.push(m.doc);
+    }
+    if (verified.length) {
+      const ref = db.doc('exam/target');
+      const cur = await ref.get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
+      if (cur) {
+        const year = (v) => Number(String(v.text).match(/(20\d{2})/)?.[1]) || Number(String(v.date).slice(0, 4)) || 0;
+        const lines = [...(cur.lines || [])];
+        for (const v of verified) {
+          const y = year(v);
+          const i = lines.findIndex((l) => l.year === y && l.kind === '复试线');
+          const row = { year: y, kind: '复试线', value: v.value, src: { url: v.url, at: now, checks: v.checks } };
+          if (i >= 0) lines[i] = row; else lines.push(row);
+        }
+        assertWrite('page', 'exam');
+        await ref.set(applyChange(cur, { lines }, { by: 'page', note: '教研室两次独立抓到的复试线' }));
+      }
+    }
+    const meta = await db.doc('meta/exam').get().then((x) => (x.exists ? x.data() : {})).catch(() => ({}));
+    await db.doc('meta/exam').set({ ...meta, intelAt: now });
+    return receipt({ inbox: d, brief, result: r.problems.length && !r.items.length ? 'rejected' : 'ok', took: { intel: r.items.length }, rejected: r.problems.map((x) => ({ error: x })) });
   }
 
   async function buildBackfill(item, data) {
@@ -150,6 +251,7 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
     if (brief.kind === 'backfill') r = await takeBackfill(d, brief, meta);
     else if (brief.kind === 'newproblems' || brief.kind === 'probe') r = await takeProblems(d, brief, meta);
     else if (brief.kind === 'prep') r = await takePrep(d, brief, meta);
+    else if (brief.kind === 'profile' || brief.kind === 'map' || brief.kind === 'intel') r = await takeExam(d, brief);
     else return receipt({ inbox: d, brief, result: 'error', notes: [`不认识的单子 ${brief.kind}`] });
     // 做完了的单子撤掉（下一次自检，工作单里它也就没了）；没收成的留着，教研室看了回执重做
     if (r.result === 'ok' || r.result === 'partial') await db.doc(`lab_brief/${brief.id}`).delete().catch(() => {});

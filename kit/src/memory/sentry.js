@@ -3,6 +3,7 @@
 //   错题后来连着一次做对、可能已经会了的，也标出来。判断交给下一次本来就有的下课整理（closingPrompt 带几行），不单独调用。
 // - workOrder：后方今天该做什么（没收尾的课、待重判的结论、到期却只有原题的复现组、好久没测的弱点、该备的课），
 //   按价值排好，写明大概花多少。首页「管理 → 自检」能看；以后的云端教研室照它干活，不自己挑。
+import { examWork } from '../exam/lab.js';
 import { toDate, daysBetween, dueList } from './schema.js';
 import { spaceOfId } from './space.js';
 import { similarity, voidedIds, resolvedErrors } from './memo.js';
@@ -78,7 +79,8 @@ export function recheckText(res, space, { max = 5 } = {}) {
  * 后方的工作单。packs：{ math: { main }, cs: …, en: … }（每科的资料包，看有没有备好的课）。
  * 返回 [{ kind, space, ref, title, why, value, cost }]，价值高的在前
  */
-export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now(), packs = {}, re = null } = {}) {
+// exam：首页缓存的 meta/exam（考情第 6 批：过时的画像、没挂考点的块、考情动态多久查一次，exam/lab.js 的 examWork）
+export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now(), packs = {}, re = null, exam = null } = {}) {
   const get = (c) => (Array.isArray(mem[c]) ? mem[c] : []);
   const gone = voidedIds(mem);
   const items = [];
@@ -134,5 +136,6 @@ export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now
     if (!pos.block || (main && !main.usedBy)) continue;
     items.push({ kind: 'prep', space: sp, ref: String(pos.block), title: pos.next ? String(pos.next).slice(0, 60) : String(pos.block), why: '下一节从哪接写着，还没有备好的教案', value: 50, cost: '一次 Opus 5.5（备课 + 课前预演）' });
   }
+  if (exam) items.push(...examWork(exam, { today, now }));
   return items.sort((a, b) => b.value - a.value);
 }

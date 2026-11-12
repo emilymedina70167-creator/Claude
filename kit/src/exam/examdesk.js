@@ -10,6 +10,7 @@ import { statsCache } from './stats.js';
 import { EXAM_COURSES } from './schema.js';
 import { barOf, barsChanged } from './bar.js';
 import { blockSyllabus } from './mapping.js';
+import { staleProfiles, staleMaps, profileSrc } from './fresh.js';
 
 /**
  * 首页的考情缓存（meta/exam 的 stats / blockPerYear，410 分的权重、考情页、体检、后方的工作单都读它）：一门课一门课按门课读
@@ -28,6 +29,14 @@ export async function refreshStats(db, { curriculum = [], now = Date.now() } = {
     if (!d.questions.length) continue;
     questions += d.questions.length;
     stats[c] = statsCache({ course: c, questions: d.questions, syllabus: d.syllabus, curriculum });
+    // 后方的工作单要的（教研室重写画像、重挂映射）：过时的画像按热度排，映射过时的，题的标题和上游指纹
+    const heatRank = new Map(stats[c].heat.map((h, i) => [h.id, i]));
+    const sp = staleProfiles(d.profiles, d.questions.filter((q) => !q.reserve), d.syllabus).sort((a, b) => (heatRank.get(a) ?? 99) - (heatRank.get(b) ?? 99));
+    stats[c].stale = { profiles: sp.slice(0, 20), maps: staleMaps(d.syllabus, curriculum).slice(0, 40) };
+    stats[c].titles = Object.fromEntries(d.syllabus.filter((n) => sp.includes(n.id)).map((n) => [n.id, n.title]));
+    stats[c].srcs = Object.fromEntries(sp.slice(0, 20).map((id) => [id, profileSrc(id, d.questions.filter((q) => !q.reserve))]));
+    // 体检要的：答案没核过的（verified.how 是 none）、画像过时的个数
+    stats[c].unverified = d.questions.filter((q) => q.verified?.how === 'none').length;
     Object.assign(blockPerYear, stats[c].blockPerYear);
   }
   const meta = await db.doc('meta/exam').get().then((x) => (x?.exists ? x.data() : {})).catch(() => ({}));

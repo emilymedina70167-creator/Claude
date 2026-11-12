@@ -17,9 +17,10 @@ import { reportText } from './report.js';
 import { closingPrompt, MEMO_DOC } from '../class/prompt.js';
 import { componentDoc, isCS, isEN } from '../subject.js';
 
-export const LAB_VERSION = 3; // 单子的写法变了就加一：学习台打开时照新写法重拼（收件箱先按旧单子收完）
+export const LAB_VERSION = 4; // 单子的写法变了就加一：学习台打开时照新写法重拼（收件箱先按旧单子收完）
 // 一晚最多做几张（价值高的先）：补收尾的课最值，出新题其次，备课一科一张
-export const LAB_CAPS = { backfill: 2, newproblems: 3, probe: 2, prep: 3 };
+// profile / map / intel：考情第 6 批（exam/lab.js）
+export const LAB_CAPS = { backfill: 2, newproblems: 3, probe: 2, prep: 3, profile: 8, map: 4, intel: 1 };
 export const BRIEF_MAX = 480 * 1024; // 一张工作单子最多多大（数据库一条文档放得下；备课带的教材最大）
 const PROBLEMS_N = 3;
 
@@ -41,6 +42,7 @@ export function hashOf(s) {
 
 /* ---------------- 单子里共用的话 ---------------- */
 
+export const LAB_HEAD_REF = () => HEAD;
 const HEAD = `你是学习台的教研室：课外、事后替学生的学习台做活的 Claude。学生在 iPad 上的学习台里由「课堂里的 Claude」上课；你不上课，只把课后该补的补上。
 你写的东西学习台会照原样存进学生的记忆库（一个字都不改），所以每一句都要有这节课记录里的依据；写之前学习台的守卫会逐字核你引的原话、轮次、板上编号、证据编号，对不上的先暂存、不进学生的记忆。
 提到学生时写「学生」，不用「他」「她」。不要客套，不要解释你在做什么，只按最后「回答的格式」写。`;
@@ -246,6 +248,8 @@ export function srcOf(item, mem = {}, packs = {}) {
   if (item.kind === 'backfill') { const s = find('sessions', item.ref); return [s.id, s.status, s.endedAt, s.report?.items, s.report?.activeMs].join('|'); }
   if (item.kind === 'newproblems') { const r = find('reviews', item.ref); return [r.id, r.last, r.tier, list(r.blocks).join(','), list(r.errors).join(',')].join('|'); }
   if (item.kind === 'probe') { const w = find('weaknesses', item.ref); return [w.id, w.level, w.status, list(w.blocks).join(','), list(w.errors).join(',')].join('|'); }
+  // 考情的几种：工作单上算好了上游的指纹（考点下的题和标签、没挂的块、今天）
+  if (item.kind === 'profile' || item.kind === 'map' || item.kind === 'intel') return String(item.key || '');
   if (item.kind === 'prep') { const p = (mem.position || []).find((x) => String(x.block) === String(item.ref)) || {}; return [item.ref, p.next, item.space, packs[item.space]?.main?.at || ''].join('|'); }
   return '';
 }

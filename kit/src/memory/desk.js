@@ -364,7 +364,7 @@ export async function renderDesk(root, meta) {
   lab = createLabDesk({ db, getData: () => data, packs, planner, ops, onChange: () => paintWork() });
   function runSentry(today) {
     const re = sentryRecheck(data);
-    const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: packs[k].main }])), re });
+    const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: packs[k].main }])), re, exam: examMeta });
     const doc = { v: 1, items, recheck: Object.fromEntries(SPACE_KEYS.map((k) => [k, recheckText(re, k)])), stale: re.stale.length, maybeSolved: re.maybeSolved.length };
     const key = JSON.stringify(doc);
     if (key === lastWork) return;
@@ -440,7 +440,7 @@ export async function renderDesk(root, meta) {
     if (healthBusy) return;
     healthBusy = true;
     try {
-      const res = healthCheck(data, { today });
+      const res = healthCheck(data, { today, exam: examMeta });
       const done = [];
       for (const f of res.fixes) {
         try {

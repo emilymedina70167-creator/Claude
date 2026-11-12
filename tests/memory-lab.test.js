@@ -9,7 +9,7 @@ test('briefId / hashOf：单子编号能当文档编号，指纹跟着材料变'
   assert.equal(briefId({ kind: 'prep', ref: 'L2.2.3' }), 'prep-L2_2_3');
   assert.equal(briefId({ kind: 'recheck', ref: 'weaknesses/W1' }), 'recheck-weaknesses_W1');
   assert.notEqual(hashOf('a|1'), hashOf('a|2'));
-  assert.deepEqual(Object.keys(LAB_CAPS).sort(), ['backfill', 'newproblems', 'prep', 'probe']);
+  assert.deepEqual(Object.keys(LAB_CAPS).sort(), ['backfill', 'intel', 'map', 'newproblems', 'prep', 'probe', 'profile']);
 });
 
 test('补收尾的单子：带着整节课的记录和课堂下课时那份要求；说明里不用他 / 她', () => {
