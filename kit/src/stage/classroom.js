@@ -13,6 +13,7 @@ import { QUIET_MS } from './events.js';
 import { createLoop } from './loop.js';
 import { buildStageSystem, turnMessage, firstMessage, stageSubject } from './doc.js';
 import { actEvidence } from './evidence.js';
+import { fitHistory } from './history.js';
 import { getAI } from '../ai.js';
 import { createSink } from '../live/sync.js';
 import { sayEvidence, observationRecord } from '../memory/session.js';
@@ -125,11 +126,11 @@ export async function renderStageClass(root, meta = {}, desk) {
     if (!msgs.length) user(OPENING);
     if (next) user(next);
     if (extra) user(extra);
-    // 第一条带上整份说明；太长就丢最早的几轮（成对丢，保持一问一答交替）
+    // 第一条带上整份说明；放不下时先省最早几轮的舞台样子，还不够才丢最早的几轮（history.js）
     const sys = system();
-    while (msgs.length > 3 && bytes(sys) + msgs.reduce((n, m) => n + bytes(m.content), 0) > HISTORY_MAX) msgs.splice(1, 2);
-    msgs[0] = { ...msgs[0], content: `${sys}\n\n${msgs[0].content}` };
-    return msgs;
+    const fit = fitHistory(msgs, { max: HISTORY_MAX, sysBytes: bytes(sys) }).msgs;
+    fit[0] = { ...fit[0], content: `${sys}\n\n${fit[0].content}` };
+    return fit;
   }
 
   const loop = createLoop({
