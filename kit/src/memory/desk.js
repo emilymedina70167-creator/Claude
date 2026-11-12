@@ -64,6 +64,7 @@ import { createPlanner } from '../books/planview.js';
 import { createDevAI } from '../books/devmock.js';
 import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
+import { scrubBooks, readReserve } from '../exam/reserve.js';
 import { renderStageClass } from '../stage/classroom.js';
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
@@ -1511,8 +1512,10 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   // （2026-11-05：英语书分 35 段存，一本接一本读超了 8 秒，老师说「资料包里没有书页」，要学生再传）。
   // normalizeBooks：分段存的拼回一本、认出书页，课程地图写「书页 010–025」的块就能找到原文
   const books = { books: [], chunks: [], loading: true };
-  books.ready = loadBooks(db, space).then((r) => {
-    Object.assign(books, normalizeBooks(r), { loading: false, failed: r.failed || [] });
+  // 留作模考的那几年（exam/reserve.js）：教材里带着它们统考标记的条目整条剔掉，textbookForClass、textbook_search、
+  // textbook_read、目录拿到的都是剔过的。年份和教材一起读（档案 3 秒读不到用默认的最近三年）
+  books.ready = Promise.all([loadBooks(db, space), readReserve(db, toDate(Date.now()))]).then(([r, years]) => {
+    Object.assign(books, scrubBooks(normalizeBooks(r), years), { loading: false, failed: r.failed || [] });
     if (r.failed?.length) reportError(new Error(`有 ${r.failed.length} 本教材没读到`), { what: '读教材', path: r.failed.join(',') });
   }, (err) => {
     Object.assign(books, { loading: false, failed: ['*'] });

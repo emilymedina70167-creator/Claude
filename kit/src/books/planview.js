@@ -17,6 +17,7 @@ import { reviewRank, plainTitle } from '../memory/views.js';
 import { COMPONENT_DOCS } from '../class/docs.js';
 import { allNames } from '../subject.js';
 import { CORE_COMPONENTS } from '../class/prompt.js';
+import { scrubBooks, reserveYears } from '../exam/reserve.js';
 
 const esc = escapeHtml;
 const docsOf = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -96,7 +97,9 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     const block = data.curriculum.find((b) => b.id === blockId);
     if (!block) throw new Error(`课程地图里没有 ${blockId}`);
     // 分段存的书拼回一本、认出书页（和课堂同一套）：课程地图写了书页的块不挂条目也找得到
-    const { books, chunks } = normalizeBooks(await loadBooks(db, sp));
+    // 留作模考的那几年：教材里带着它们统考标记的条目不进备课（exam/reserve.js）
+    const target = (data.exam || []).find((d) => d.id === 'target') || null;
+    const { books, chunks } = scrubBooks(normalizeBooks(await loadBooks(db, sp)), reserveYears(target, toDate(Date.now())));
     // 这一块挂着的条目，加上我写的教材页范围里的（课程地图还没挂好、或者想按书页备的时候）：认得出书页的按书页，认不出的按这份文件的页
     const range = parsePages(pages);
     const printed = range ? chunksByPages([range], chunks) : [];
