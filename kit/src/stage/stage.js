@@ -1536,7 +1536,10 @@ export class Stage {
   // —— 贴着的字和拨数：新的淡进来、字变了的换字、锚挪了的跟过去、没了的淡掉 ——
   obstacles(exceptId) {
     const sc = this.scene;
-    const out = [...sc.obstacles()];
+    // 贴在一样东西的部件上的字：那样东西换成它细一点的那一份（时间轴：只躲部件和轴，不躲整条，nearObstacles）
+    const l = exceptId != null ? sc.labels.get(exceptId) : null;
+    const nearId = l && !l.dial && l.refs?.length === 1 && !sc.objects.has(l.refs[0]) ? String(l.refs[0]).match(/^[A-Za-z_]\w*/)?.[0] : null;
+    const out = [...sc.obstacles({ near: nearId })];
     for (const l of sc.links.values()) { if (!this.linkShown(l)) continue; const g = this.linkGeo(l); if (g.box) out.push(g.box); }
     // 贴在藏着的东西上的字不画、也不占地方（syncLabels 这一遍最后才把它收掉，这之前别的字摆的时候不躲它）
     for (const [id, l] of this.labelNodes) if (id !== exceptId && l.box && sc.labels.has(id) && this.labelShown(sc.labels.get(id))) out.push(l.box);
@@ -1549,6 +1552,13 @@ export class Stage {
     const id = String(l.refs[0]).match(/^[A-Za-z_]\w*/)?.[0];
     const o = id && sc.objects.get(id);
     return !!o && !o.hidden && !!o.origin;
+  }
+  /** 贴在一样东西的部件上：那样东西自己的「墙」（obstacles 里 wall 的那几条，时间轴的轴），字不隔着它贴 */
+  wallsOf(l) {
+    if (l.dial || l.link || !l.refs?.length) return [];
+    const id = String(l.refs[0]).match(/^[A-Za-z_]\w*/)?.[0];
+    const o = id && !this.scene.objects.has(l.refs[0]) ? this.scene.objects.get(id) : null;
+    return o ? (this.scene.type(o).nearObstacles?.(o) || []).filter((b) => b.wall) : [];
   }
   /** 这行字摆在这里，会不会压着它贴的那样东西自己的部件（锚着的那几个不算） */
   ownPartsHit(l, box) {
@@ -1566,7 +1576,7 @@ export class Stage {
     const own = sc.parts(l.refs[0]).map((p) => t.partBox(o, p));
     // 那种东西自己报的「别的字要躲」的框（时间轴的轴和刻度那一条），锚着的那几个部件不算
     const same = (a, b) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.h - b.h) < 0.5;
-    if ((t.obstacles?.(o) || []).some((f) => !own.some((a) => same(a, f)) && overlaps(grow(box, 2), f))) return true;
+    if ((t.nearObstacles?.(o) || []).some((f) => !own.some((a) => same(a, f)) && overlaps(grow(box, 2), f))) return true;
     return this.footprintBoxes(id).some((f) => !own.some((a) => overlaps(f, grow(a, -1))) && overlaps(grow(box, 2), f));
   }
   anchorOf(l) {
@@ -1624,15 +1634,15 @@ export class Stage {
         }
       }
       const prefer = l.side ? [l.side, 'above', 'below', 'right', 'left'] : ['above', 'below', 'right', 'left'];
-      let p = placeLabel(anchor, size, obs, { prefer, gap: l.dial ? 18 : 12 });
+      let p = placeLabel(anchor, size, obs, { prefer, gap: l.dial ? 18 : 12, asked: !l.dial && !!l.asked && !!l.side, walls: this.wallsOf(l) });
       // 老师写了 side=above / below，那一边只是被别的东西占着：照写的那一边摆（只躲别的字），东西会让开——
       // 下面后造的东西照 labelRects 往下让，side=above 的那样东西自己往下让（scene.js 的 reflow）。
       // 以前换到别的一边、也不说，side= 等于没写（主线第一轮 D1-7、D3-4、E1-5）。左右两边没有东西能让，照旧换边、现状里说
       if (!l.dial && l.asked && (l.side === 'above' || l.side === 'below') && p.side !== l.side && this.roomCanBeMade(l)) {
         const others = [...this.labelNodes].filter(([id, n]) => id !== l.id && n.box && sc.labels.has(id) && this.labelShown(sc.labels.get(id))).map(([, n]) => n.box);
-        const q = placeLabel(anchor, size, others, { prefer: [l.side], gap: 12, tries: 3 });
+        const q = placeLabel(anchor, size, others, { prefer: [l.side], gap: 12, tries: 3, walls: this.wallsOf(l) });
         // 那一边挡着的是它自己那样东西的别的部件（贴在矩阵中间一格、树中间一个结点上）：自己让不开，照旧换到空的一边
-        if (!this.ownPartsHit(l, { ...q, ...size })) p = q;
+        if (!q.none && !this.ownPartsHit(l, { ...q, ...size })) p = q; // 隔着墙（时间轴的轴）摆不了的：placeLabel 找不到那一边，照旧换边
       }
       const from = cur.box;
       const sideWas = cur.side;

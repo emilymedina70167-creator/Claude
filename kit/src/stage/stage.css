@@ -357,3 +357,4 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-look-body { position: relative; flex: 1; min-height: 0; }
 .st-look-stage { position: absolute; inset: 0; }
 .st-look-stage[hidden] { display: none; }
+.st-stage.is-side .st-goal { font-size: 17px; }

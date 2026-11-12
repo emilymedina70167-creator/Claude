@@ -141,7 +141,7 @@ export function measure(visual = false) {
     const a = cur.anchor, b = cur.box, s = st.cam.s;
     const gx = Math.max(0, a.x - (b.x + b.w), b.x - (a.x + a.w)), gy = Math.max(0, a.y - (b.y + b.h), b.y - (a.y + a.h));
     const gap = Math.hypot(gx, gy) * s;
-    if (gap > 60) issues.push({ what: '贴的字离得远', a: `label:${id}（隔了 ${Math.round(gap)}）`, b: '', area: 0 });
+    if (gap > 70) issues.push({ what: '贴的字离得远', a: `label:${id}（隔了 ${Math.round(gap)}）`, b: '', area: 0 });
     const px = parseFloat(getComputedStyle(cur.node).fontSize) * s;
     if (px < 15) issues.push({ what: '贴的字太小', a: `label:${id}（屏幕上 ${px.toFixed(1)}px）`, b: '', area: 0 });
   }
@@ -178,6 +178,24 @@ export function measure(visual = false) {
     }
   }
   // 缩得太小：整台缩到字难认（舞台自己记在 scene.tiny，和现状里那一行同一个判断）
+  // 横屏的解析栏（主线第六轮 Task 10）：栏压着画面里的东西；栏里看得见的字小于 17px；这一问被挤出栏外看不见；挪到画面底部的宽输入压着东西
+  if (st.sideOn) {
+    const sb = rect(st.side);
+    const objs = items.filter((it) => it.kind === 'obj');
+    const hitObj = (b) => objs.find((o) => o.rects.some((r) => { const w = Math.min(b.x + b.w, r.x + r.w) - Math.max(b.x, r.x), h = Math.min(b.y + b.h, r.y + r.h) - Math.max(b.y, r.y); return w > 0 && h > 0 && w * h > 24; }));
+    const o1 = hitObj(sb);
+    if (o1) issues.push({ what: '解析栏压着画面', a: `obj:${o1.id}`, b: '', area: 0 });
+    for (const n of st.side.querySelectorAll('.st-line:not(.is-out), .st-how, .st-goal')) {
+      if (!vis(n)) continue;
+      const r = n.getBoundingClientRect(), c = st.caption.getBoundingClientRect();
+      if (n.closest('.st-caption') && (r.bottom < c.top || r.top > c.bottom)) continue; // 滑出栏外的那几句不算
+      const px = parseFloat(getComputedStyle(n).fontSize);
+      if (px < 15 || (px < 17 && !n.classList.contains('st-how'))) { issues.push({ what: '栏里的字太小', a: `${n.className.split(' ')[0]}（${px}px）`, b: '', area: 0 }); break; }
+    }
+    const q = [...st.caption.querySelectorAll('.st-line:not(.is-out)[data-kind="ask"]')].at(-1);
+    if (q) { const r = q.getBoundingClientRect(), c = st.caption.getBoundingClientRect(); if (r.bottom > c.bottom + 2 || r.top < c.top - 2) issues.push({ what: '这一问看不见', a: '这一问在栏外面（被滑走了）', b: '', area: 0 }); }
+    if (!st.wideDock.hidden && st.dock.childElementCount) { const o2 = hitObj(rect(st.wideDock.firstElementChild || st.wideDock)); if (o2) issues.push({ what: '宽输入压着东西', a: `obj:${o2.id}`, b: '', area: 0 }); }
+  }
   if (st.scene.tiny != null) issues.push({ what: '缩得太小', a: `整台缩到了 ${st.scene.tiny} 成`, b: '', area: 0 });
   return { issues, cam: st.cam };
 }

@@ -406,9 +406,11 @@ export class Scene {
     return ids.some(reach) ? [] : [...hidden];
   }
   /** 各种东西挡着的地方（贴字时让开）：格子、序号、指针、树的边……（藏着的不挡） */
-  obstacles() {
+  // near：贴在这样东西自己部件上的字（它有 nearObstacles 时换成那一份，见 timeline.js）
+  obstacles({ near = null } = {}) {
     return [...this.objects.values()].filter((o) => !o.hidden).flatMap((o) => {
-      const own = typeOf(o).obstacles ? typeOf(o).obstacles(o) : typeOf(o).parts(o).map((p) => typeOf(o).partBox(o, p));
+      const t = typeOf(o);
+      const own = o.id === near && t.nearObstacles ? t.nearObstacles(o) : t.obstacles ? t.obstacles(o) : t.parts(o).map((p) => t.partBox(o, p));
       // 量出来多出去的那几条（估的框外面还画着东西）也挡着
       const e = o.ext, b = typeOf(o).objectBox(o);
       if (!e) return own;

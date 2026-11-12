@@ -70,3 +70,17 @@ test('做到过的挑战：写的是数、式子的不收', () => {
   run(s, 'remove d'.replace('remove d', 'unlabel dial:d'));
   assert.equal(s.goalGone(s.goals.get('g1')), false); // 拨盘还在（只是不显示）
 });
+
+test('贴的字不隔着它那样东西的墙贴（时间轴的轴）：写了 side=above 也换到下面', () => {
+  const anchor = { x: 100, y: 130, w: 44, h: 54 };
+  const wall = { x: 0, y: 90, w: 400, h: 36, wall: true };
+  const p = placeLabel(anchor, { w: 120, h: 32 }, [wall], { prefer: ['above', 'below', 'right', 'left'], gap: 12, asked: true, walls: [wall] });
+  assert.equal(p.side, 'below');
+});
+
+test('写了 side= 的那一边只是被别的东西挡着：照那一边往外让（不换边）', () => {
+  const anchor = { x: 100, y: 100, w: 200, h: 64 };
+  const ptrs = { x: 100, y: 170, w: 200, h: 60 };
+  const p = placeLabel(anchor, { w: 80, h: 24 }, [ptrs], { prefer: ['below', 'above', 'right', 'left'], gap: 12, asked: true });
+  assert.equal(p.side, 'below');
+});

@@ -127,10 +127,11 @@ export const timeline = {
     return o;
   },
   parts(o) { return o.items; },
-  // 别的字摆的时候要躲的：每样部件，加上轴和刻度的字那一条（以前只有部件，贴在小人上的字写 side=above 就压在轴和「过去之后」上：主线第六轮）
-  obstacles(o) {
+  // 贴在它自己部件上的字要躲的（主线第六轮）：别的字躲的是整条轴（下面的 obstacles），贴在小人、事件点上的字只躲这些——
+  // 每样部件，加上轴和刻度的字那一条（wall：字不隔着它贴，小人在轴下面、字不跑到轴上面去）
+  nearObstacles(o) {
     const r = rowsY(o), w = sizeOf(o).w;
-    return [...o.items.map((it) => partBox(o, it)), { x: o.origin.x, y: r.axis - 6, w, h: r.labels + 22 - (r.axis - 6) }];
+    return [...o.items.map((it) => partBox(o, it)), { x: o.origin.x, y: r.axis - 6, w, h: r.labels + 22 - (r.axis - 6), wall: true }];
   },
   pick(o, mark, sel, word) {
     const it = mark === '.' ? o.items.find((x) => x.name === sel) : null;

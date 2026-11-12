@@ -116,7 +116,7 @@ export const NEAR_TRIES = 5;
  * 字贴在一个东西旁边放哪：按 prefer 的顺序试上、下、右、左，挑第一个不压着别的东西的；都压着就挑压得最少的。
  * anchor：要贴着的框；size：{ w, h }；obstacles：别的东西的框。返回 { x, y, side }（左上角）
  */
-export function placeLabel(anchor, size, obstacles = [], { prefer = ['above', 'below', 'right', 'left'], gap = 10, step = 14, tries = 7 } = {}) {
+export function placeLabel(anchor, size, obstacles = [], { prefer = ['above', 'below', 'right', 'left'], gap = 10, step = 14, tries = 7, asked = false, walls = [] } = {}) {
   const c = center(anchor);
   // 每一边先贴着放，压着东西就再往外让一点（最多让 tries 次）：弧线、序号在旁边时，字落在它们外面，而不是换到另一边去
   const at = (side, k) => {
@@ -131,13 +131,17 @@ export function placeLabel(anchor, size, obstacles = [], { prefer = ['above', 'b
   // 两趟：先每一边都只在近处找（不超过 near 步，约 66px 以内），都不行再往远处让。
   // 以前一边让到底（最多 7 步，近 100px）才换下一边：时间轴上小人在轴下面、字写 side=above，上面是轴和刻度，
   // 字一直让到轴的上面去，看着像贴在别的东西上（主线第六轮，时态课截图）。近处有空的一边，就贴在那一边
+  // asked：老师写了 side=（prefer 的第一个）——那一边先整条找到底（照写的那一边摆，主线第一轮 D1-7：以前换到别的一边、也不说，side= 等于没写），
+  // 再在别的几边近处、远处找
   const near = Math.min(tries, NEAR_TRIES);
-  const passes = [[0, near], [near, tries]];
-  for (const [k0, k1] of passes) for (const side of prefer) {
+  const passes = asked ? [[[prefer[0]], 0, tries], [prefer.slice(1), 0, near], [prefer.slice(1), near, tries]] : [[prefer, 0, near], [prefer, near, tries]];
+  for (const [sides, k0, k1] of passes) for (const side of sides) {
     for (let k = k0; k < k1; k++) {
       const p = at(side, k);
       if (!p) break;
       const box = { ...p, ...size };
+      // walls：它贴的那样东西自己的「墙」（时间轴的轴和刻度那一条）：字不隔着墙贴——小人在轴下面，字到了轴上面就像贴在别的东西上
+      if (walls.length && walls.some((w) => overlaps(corridor(anchor, box, side), w))) break;
       const hit = obstacles.reduce((n, o) => n + (overlaps(grow(box, 3), o) ? overlapArea(grow(box, 3), o) + 1 : 0), 0);
       if (!hit) return { ...p, side };
       // 让得越远越不好：同样压着，挑近的
@@ -145,8 +149,17 @@ export function placeLabel(anchor, size, obstacles = [], { prefer = ['above', 'b
       if (!best || cost < best.cost) best = { ...p, side, cost };
     }
   }
-  const { cost, ...rest } = best || { ...at('above', 0), side: 'above' };
+  // 一个能摆的地方都没有（每一边都隔着墙）：贴着第一边摆，none 告诉调用的一方
+  const { cost, ...rest } = best || { ...at(prefer[0] || 'above', 0), side: prefer[0] || 'above', none: true };
   return rest;
+}
+
+// 东西和字之间夹着的那一条（字贴在哪一边就是那一边）
+function corridor(a, b, side) {
+  if (side === 'above') return { x: Math.max(a.x, b.x), y: b.y + b.h, w: Math.max(1, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)), h: Math.max(1, a.y - (b.y + b.h)) };
+  if (side === 'below') return { x: Math.max(a.x, b.x), y: a.y + a.h, w: Math.max(1, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)), h: Math.max(1, b.y - (a.y + a.h)) };
+  if (side === 'right') return { x: a.x + a.w, y: Math.max(a.y, b.y), w: Math.max(1, b.x - (a.x + a.w)), h: Math.max(1, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)) };
+  return { x: b.x + b.w, y: Math.max(a.y, b.y), w: Math.max(1, a.x - (b.x + b.w)), h: Math.max(1, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)) };
 }
 
 function overlapArea(a, b) {
