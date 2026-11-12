@@ -362,6 +362,22 @@ export class Scene {
   /** 这几个写法（部件、整样东西）落在哪几样藏着的东西上 */
   hiddenIn(refs) { return [...new Set(refs.map((r) => parseRef(r)?.obj).filter((id) => this.objects.get(id)?.hidden))]; }
   /** 挑战的条件里提到的舞台上的东西（M、M.1,1、rank(M)、M same B） */
+  /**
+   * 挑战做到过、它的条件里提到的东西都不在台上了（东西拿掉了，拨盘跟着它的东西一起没了）：画面上收起（主线第六轮 3.8）。
+   * 只看名字：东西、拨盘都不在了才算；一个名字都没提到（写的全是数）、写的是 {式子} 的，不算（照旧挂着）。场景里的记录不动，现状照旧写「做到过」
+   */
+  goalGone(g) {
+    if (!g?.met || !g.cond?.length) return false;
+    const names = new Set();
+    for (const cl of g.cond) for (const w of [cl.l, cl.r, ...(cl.args || [])]) {
+      const t = String(w ?? '');
+      if (t.includes('{')) return false;
+      // count(t) 里的 count 是量的名字，不是东西；O、I 是零矩阵、单位阵
+      for (const m of t.matchAll(/[A-Za-z_]\w*(?!\w|\s*\()/g)) if (m[0] !== 'O' && m[0] !== 'I') names.add(m[0]);
+    }
+    if (!names.size) return false;
+    return [...names].every((n) => !this.objects.has(n) && !this.vars.has(n));
+  }
   objectsIn(cond) {
     const out = new Set();
     for (const cl of cond) for (const w of [cl.l, cl.r, ...(cl.args || [])]) for (const n of String(w ?? '').match(/[A-Za-z_]\w*/g) || []) if (this.objects.has(n)) out.add(n);
@@ -1771,6 +1787,39 @@ export class Scene {
         for (const [k, l] of this.labels) if (l.link && cut.includes(l.link)) this.labels.delete(k);
         return { id, back: { id, name: str ?? null, summary: this.summaryOf(o) }, ...(repicked ? { binds: [repicked] } : {}) };
       }
+      case 'scene': {
+        // scene "过去完成时" [keep=tl]：开新的一幕（主线第六轮 3.2）。不在 keep 里的全部拿下，做法和老师一样一样拿的一样：
+        // 东西走 remove 的 dropObject（它的贴的字、拨盘、学生开着的手、预写的 .done / .right、存档点、照引擎走跟着收），挑战走 ungoal 的，
+        // 贴的字走 unlabel 的（贴在收掉的东西上的跟着收），等着的一问走换问时收旧问的 endAsk。不另写一套清表的
+        if (str == null || !str.trim()) throw new Error('要写成 scene "这一幕叫什么"（比如 scene "过去完成时"；要带着东西进下一幕写 keep=tl）');
+        const keep = String(opts.keep || '').split(/[\s,，]+/).filter(Boolean);
+        for (const k of keep) {
+          if (this.objects.has(k)) continue;
+          if (this.labels.has(k) || this.vars.has(k)) throw new Error(`keep 只能写舞台上的东西（「${k}」是${this.labels.has(k) ? '贴的字' : '拨盘'}：跟着它贴着的那样东西一起带过去）`);
+          throw new Error(`舞台上没有「${k}」（keep= 写要带进下一幕的东西的名字）`);
+        }
+        const kept = new Set(keep);
+        const dropped = [...this.objects.keys()].filter((id) => !kept.has(id));
+        for (const id of dropped) this.dropObject(id);
+        const goals = [...this.goals.keys()];
+        goals.forEach((k) => { this.goals.delete(k); this.reactions.delete(k); this.dropAhead(k); });
+        // 贴的字：贴在带过去的东西（或它的拨盘）上的留着，别的收（拨盘的字收了拨盘就不显示，和 unlabel dial:t 一样）
+        const ownedBy = (name) => { const v = this.vars.get(name); return v?.owner && kept.has(v.owner); };
+        const stays = (l) => (l.refs || []).some((r) => kept.has(parseRef(r)?.obj) || (String(r).startsWith('dial:') && ownedBy(String(r).slice(5))));
+        const labs = [...this.labels].filter(([k, l]) => !(k.startsWith('dial:') ? ownedBy(k.slice(5)) || stays(l) : stays(l))).map(([k]) => k);
+        for (const k of labs) { this.labels.delete(k); if (k.startsWith('dial:') && this.vars.get(k.slice(5))) this.vars.get(k.slice(5)).shown = false; if (k.startsWith('dial:')) this.dialAt.delete(k.slice(5)); }
+        for (let more = true; more;) {
+          more = false;
+          const gone = new Set(labs);
+          for (const [k, l] of this.labels) if ((l.refs || []).some((r) => gone.has(r))) { this.labels.delete(k); labs.push(k); more = true; }
+        }
+        if (this.waiting) this.endAsk(this.waiting);
+        this.waiting = null;
+        this.skipAsk();
+        this.say = '';
+        this.words = [];
+        return { scene: str.trim(), keep, dropped, ungoal: goals, unlabeled: labs, removed: dropped.length > 0 };
+      }
       case 'remove': {
         // remove a：把一样东西拿下舞台
         const id = words[0];
@@ -2245,6 +2294,9 @@ export class Scene {
   /** 给老师看的「舞台上现在有什么」：和画面一定对得上（照场景写） */
   stateText() {
     const lines = [];
+    // 第几幕、前面有哪几幕（舞台照 log 推好写在 sceneNote 上）；这一轮台上全换了又没写 scene 的那一句（swapNote）
+    if (this.sceneNote) lines.push(this.sceneNote);
+    if (this.swapNote) lines.push(this.swapNote);
     if (!this.objects.size) lines.push('舞台上还是空的。');
     const hints = new Set();
     for (const o of this.objects.values()) { const t = typeOf(o); if (t.hint) hints.add(t.hint); }

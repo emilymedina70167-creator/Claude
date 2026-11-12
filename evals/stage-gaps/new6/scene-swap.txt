@@ -1,0 +1,9 @@
+# 主线第六轮 B · 老师把台上全换了又没写 scene：现状里一句事实，台上的东西不动
+sentence p = "They gave justices permanent positions."
+say "先看这一句。"
+ask next
+学生: next
+remove p
+sentence s = "He had never gambled before."
+say "换一句。"
+ask next

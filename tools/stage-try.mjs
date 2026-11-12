@@ -483,6 +483,8 @@ function setup(segments) {
     return { touch: pts };
   };
   T.state = () => st.scene.stateText();
+  // 回看开着：回看那个只读舞台的现状（NEW6 查「回看的就是那一幕最后一刻」）
+  T.look = () => (st.looking ? st.lookback?.stageOf(st.looking.n)?.scene.stateText() || '' : null);
 
   // —— 真的手指（第二轮的写法，stage-try-lib.js 的 HANDS 和按格的 value）：这里只找手指按哪儿、松在哪儿，外面照 CDP 的触摸按、滑、按住再拖 ——
   // 按的那一点照 pointer.js 挑把手的办法核一遍（layout.js 的 pressGroup：prio 高的先、落在里面最小的那个，这一处每种按法各是哪一个；
@@ -787,6 +789,18 @@ function setup(segments) {
 
 // 真的手指（第二轮的写法）：照 T.plan 一下一下按（点、滑、按住再拖、键盘写一格），按完等课堂循环停下来，再看交了什么。
 // 走第一轮画法的（fallback）给 null
+// 翻回去看（look n / unlook）：照手指点幕条上的胶囊、「回到现在」，等回看放好
+async function viewAct(page, touch, step) {
+  const sel = step.cmd === 'look' ? `.st-scenes .st-scene:nth-child(${Number(step.args) || 0})` : '.st-look:not([hidden]) .st-look-back';
+  const r = await page.evaluate((q) => { const n = document.querySelector(q); if (!n || n.closest('[hidden]')) return null; const b = n.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }; }, sel);
+  if (!r) return { error: step.cmd === 'look' ? `幕条上没有第 ${step.args} 幕（只有一幕时没有幕条）` : '没有开着的回看' };
+  if (r.w < 44 || r.h < 44) return { error: `${step.cmd === 'look' ? '幕条的胶囊' : '「回到现在」'}只有 ${Math.round(r.w)}×${Math.round(r.h)}，手指点不准` };
+  await touch('touchStart', r.x, r.y);
+  await touch('touchEnd');
+  await page.waitForTimeout(400);
+  return {};
+}
+
 async function hands(page, touch, step) {
   const g = step.cmd === 'value' ? { action: 'value', text: step.args } : step.gesture;
   const m = await page.evaluate(() => window.__try.mark());
@@ -870,7 +884,7 @@ for (const file of opt.files) {
       } else {
         // 手势的那几种：写法本身就翻不成手势的（parseTry 已经说了为什么）不用开页面；第二轮的写法照真的手指按（hands），
         // 只开了 open s 的拖词、只有一个输入框的 value 照第一轮的画法
-        let res = step.gesture?.error ? { error: step.gesture.error } : HANDS.has(step.cmd) || step.cmd === 'value' ? await hands(page, touch, step) : null;
+        let res = step.how === 'view' ? await viewAct(page, touch, step) : step.gesture?.error ? { error: step.gesture.error } : HANDS.has(step.cmd) || step.cmd === 'value' ? await hands(page, touch, step) : null;
         if (!res) {
           res = step.how !== 'do' ? await page.evaluate(([c, a]) => window.__try.answer(c, a), [step.cmd, step.args])
             : step.gesture && !HANDS.has(step.cmd) ? await page.evaluate((g) => window.__try.gesture(g), step.gesture)
@@ -903,6 +917,8 @@ for (const file of opt.files) {
       out.events = snap.events;
       if (out.note) out.state = `（${out.note}）\n${out.state}`;
       out.issues = (await page.evaluate(() => window.__measure()))?.issues || [];
+      const lk = await page.evaluate(() => window.__try.look());
+      if (lk != null) out.look = lk;
       if (opt.shots) { out.shot = join(opt.shots, `${basename(file, '.txt')}-${v.tag}-${k + 1}.png`); await page.screenshot({ path: out.shot }); }
       for (const e of errs.splice(0)) { out.errors.push({ line: 0, src: '', error: `页面报错：${e}` }); crashed = true; }
       view.steps.push(out);

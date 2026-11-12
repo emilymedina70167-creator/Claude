@@ -1,0 +1,16 @@
+# 主线第六轮批次 0 · 贴的字离得远：贴在小人上的字写 side=above，小人在轴下面（时态课第 23 轮）
+sentence p = "They gave justices permanent positions so they would be free to upset those in power."
+paint p.gave g1
+& paint p.8-9 g2
+label tr p "他们给了法官永久职位，因此法官就能自由地推翻当权者。" side=below tone=note
+timeline tl2 = 过去 过去之后 现在 将来 now=现在
+event tl2 gv = 过去 "gave 给职位"
+paint tl2.gv g1
+stand tl2 fr = 现在
+paint tl2.fr g2
+label lf tl2.fr "be free 能自由推翻" side=above tone=note
+camera all
+say "{p.gave} 是过去给的职位。法官「能自由推翻」发生在什么时候？"
+open tl2.fr move
+goal g1 "把粉色小人拖到「能自由推翻」发生的时间" when="fr = 过去之后"
+学生: move tl2.fr -> tl2.过去之后

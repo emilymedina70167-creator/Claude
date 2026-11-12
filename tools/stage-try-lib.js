@@ -17,6 +17,8 @@
 const DO = ['write', 'swap', 'move', 'vec', 'mul', 'rotate', 'insert', 'rowop', 'mark', 'fold', 'undo', 'dial', 'choose', 'unchoose', 'visit', 'tag', 'stretch',
   'refer', 'unrefer', 'unmark', 'unfold', 'delete', 'compare', 'put', 'merge', 'back'];
 const ANSWER = ['tap', 'drag', 'value', 'pick', 'say', 'next'];
+/** 翻回去看一幕（主线第六轮）：look 2 点幕条上的第 2 幕，unlook 点「回到现在」——真的手指点，不交给课堂循环（回看交的事实由舞台交） */
+const VIEW = ['look', 'unlook'];
 /** 走通用手势（或撤一步、拨数器）的那几种：parseTry 给它们带上 gesture */
 const GESTURE = new Set(['rotate', 'insert', 'rowop', 'mark', 'fold', 'undo', 'dial']);
 /**
@@ -42,7 +44,7 @@ export const STUDENT_FORMS = [
   'unfold s.5（点 s.5 所在的小方块）', 'delete t.7（open t pluck / delete：点 t.7）',
   'compare AB BA（按住 AB 的括号拖到 BA 上）', 'put AB Sum（拖进收集用的 Sum）', 'merge X Y（拖到 Y 上并同类项）', 'back t "插入后"（点「回到插入后」）',
   'tap a.7', 'drag a#1 a#6', 'value 4', 'value 1 n n(n-1)/2 / 0 1 n / 0 0 1（按格的那一问一格一格填，「 / 」分行）',
-  'pick t.45 t.50（ask pick：照先后点这几个，再点「点好了」）', 'say 我不懂', 'next',
+  'pick t.45 t.50（ask pick：照先后点这几个，再点「点好了」）', 'say 我不懂', 'next', 'look 2（点幕条上的第 2 幕，翻回去看）', 'unlook（点「回到现在」）',
 ].join('、');
 
 /** 一幕的文件 → 一步步：{ kind: 'teacher', src, line } | { kind: 'student', how, cmd, args, src, line, gesture? } */
@@ -59,7 +61,7 @@ export function parseTry(text) {
     }
     cur = null;
     const cmd = m[1];
-    const how = DO.includes(cmd) ? 'do' : ANSWER.includes(cmd) ? 'answer' : null;
+    const how = DO.includes(cmd) ? 'do' : ANSWER.includes(cmd) ? 'answer' : VIEW.includes(cmd) ? 'view' : null;
     if (!how) throw new Error(`第 ${i + 1} 行「${line}」：学生能写的：${STUDENT_FORMS}`);
     const args = m[2].trim();
     // 翻不成手势的写法不让整个文件读不下去：错放在这一步上，试演到这一步报「没演上」
@@ -263,7 +265,7 @@ export function formatReport(r) {
 // 页面算出来的事实要真的到老师手上：查每一步叫老师时发过去的整条（called.msg），再查最后一步还攒着没发出去的那一段（pending）——
 // 幕末尾学生最后几下没叫老师时，事实只在那里。前面某一步攒着过、后来没发出去又不在最后的，老师从没看到，不算
 
-const plainRe = (re) => new RegExp(re.source, re.flags.replace(/[gy]/g, ''));
+export const plainRe = (re) => new RegExp(re.source, re.flags.replace(/[gy]/g, ''));
 /** 一个视口的每一步里，哪几处有 re：[{ step（第几步，从 0 数）, where: 'called' | 'pending' }] */
 export function mustHits(steps = [], re) {
   const r = plainRe(re);
@@ -622,3 +624,17 @@ export const NEW5 = [
     noAudit: [C(/压着/), C(/出了屏幕/)],
   },
 ];
+
+// 主线第六轮（横屏解析栏、一段一幕、批次 0 的显示毛病）：node tools/stage-must.mjs evals/stage-gaps/new6 --table new6
+export const NEW6 = [
+  { id: '句子行距（批次 0）', files: ['fix-rows.txt'], checks: [C(/句子 s（16 个词，排成 2 行）/, '两行的句子')], noAudit: [C(/压着/), C(/出了屏幕/)] },
+  { id: '贴的字离得远、事件点的字（批次 0）', files: ['fix-label.txt', 'fix-note.txt'], noAudit: [C(/贴的字离得远/), C(/字溢出了格子/), C(/压着/)] },
+  { id: '小人底下不写老师起的名字（批次 0）', files: ['fix-label.txt'], noScreen: [C(/(^|\n)fr(\n|$)/, '小人底下的 fr')] },
+  { id: '生词注的字不小（批次 0）', files: ['fix-note.txt'], noAudit: [C(/贴的字太小/)] },
+  { id: '做到过、东西又都不在了的挑战不挂着（批次 0）', files: ['fix-goal.txt'], checks: [C(/挑战 g1「把绿条右端拖到「从未赌过」截止的时间」when="e = 过去"：做到过/, '现状照旧写做到过')], noScreen: [C(/把绿条右端拖到/, '画面上那一条收起了')] },
+];
+NEW6.push(
+  { id: 'scene 收得干净、keep 带过来（B）', files: ['scene-keep.txt'], checks: [C(/第 2 幕「过去完成时」（前面：① 开头）/, '现状里有幕的那一行'), C(/贴着的字：lf「be free 能自由推翻」（贴在 tl\.fr）/, 'keep 的东西贴的字还在')], nots: [C(/句子 p（/, '上一幕的句子收了'), C(/挑战 g1/, '上一幕的挑战收了')], noScreen: [C(/把粉色小人拖到/, '画面上没有上一幕的挑战')] },
+  { id: '翻回去看第 1 幕（B）', files: ['scene-keep.txt'], look: [C(/小人 fr 在 过去之后/, '回看里小人停在学生拖到的地方'), C(/句子 p（/, '回看里有上一幕的句子')], called: [C(/学生翻回去看了第 1 幕「开头」（\d+ 秒）/, '回看过的事实跟着下一条告诉老师')] },
+  { id: '全换了没写 scene：说一句事实（B）', files: ['scene-swap.txt'], checks: [C(/台上的东西这一轮全换了（没写 scene/, '现状里那一句')], nots: [C(/第 \d+ 幕/, '页面没替老师分幕')] },
+);

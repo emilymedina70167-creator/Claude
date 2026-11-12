@@ -75,8 +75,8 @@
   box-shadow: 0 0 0 1px var(--st-line), 0 8px 18px -12px rgb(var(--shade-rgb, 25 45 40) / 0.4);
 }
 .st-label.is-soft { background: transparent; box-shadow: none; padding: 2px 6px; font-size: 15px; color: var(--st-muted); }
-.st-label.is-key { font: 600 22px/1.25 var(--display, "Noto Serif SC", serif); color: var(--st-brand); background: color-mix(in srgb, var(--st-brand) 8%, var(--st-card)); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--st-brand) 45%, transparent); }
-.st-label.is-note { font-size: 16px; color: var(--st-muted); }
+.st-label.is-key { font: 600 20px/1.3 var(--sans, sans-serif); color: var(--st-brand); background: color-mix(in srgb, var(--st-brand) 8%, var(--st-card)); box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--st-brand) 45%, transparent); }
+.st-label.is-note { font-size: 17px; color: var(--st-muted); }
 
 /* 说的话：在屏幕上方，一个字一个字写出来 */
 /* 说的话的下沿贴着镜头里那块东西的上方（stage.js 的 placeCaption 写 bottom），往上长 */
@@ -304,3 +304,56 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 
 /* 话里连着的英文字母、数字不在中间折行（stage.js 的 richInto） */
 .st-nb { display: inline-block; white-space: nowrap; }
+
+/* —— 横屏：左边解析栏、右边画面（主线第六轮第 2 节）——
+   挑战、这一幕说过的话、这一问、底下那一条（按钮、输入框）搬进左边这一列（stage.js 的 setSide），镜头只用右边那一块（fitCamera 的 left）。
+   竖屏不走这一段（.is-side 只在横屏加） */
+.st-side { display: none; }
+.st-stage.is-side .st-side { position: absolute; left: 0; top: 0; bottom: 0; width: var(--side-w, 360px); z-index: 4; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;
+  padding: 14px 20px max(18px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+  box-shadow: inset -0.5px 0 0 var(--st-line); background: color-mix(in srgb, var(--st-card) 22%, transparent); }
+.st-stage.is-side .st-side-title { flex: none; font: 600 15px/1.3 var(--sans, sans-serif); letter-spacing: .04em; color: var(--st-muted); }
+.st-stage.is-side .st-goals { position: static; flex: none; padding: 0; }
+.st-stage.is-side .st-goal { max-width: 100%; }
+.st-stage.is-side .st-caption { position: static; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 2px 0 0; justify-content: flex-start; align-items: stretch; gap: 8px; pointer-events: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.st-stage.is-side .st-line { width: 100%; font-size: 21px; line-height: 1.6; }
+.st-stage.is-side .st-line.is-past { font-size: 17px; color: color-mix(in srgb, var(--st-ink) 70%, transparent); }
+.st-stage.is-side .st-line[data-kind="ask"]:not(.is-past) { font-weight: 600; }
+.st-stage.is-side .st-line.is-out { position: static; }
+.st-stage.is-side .st-measure-line { position: absolute; visibility: hidden; left: -9999px; top: 0; }
+.st-stage.is-side .st-dock { position: static; flex: none; flex-wrap: wrap; justify-content: flex-start; padding: 0; }
+.st-stage.is-side .st-dock .st-say { width: 100%; }
+.st-stage.is-side .sc-wait { position: static; translate: none; align-self: flex-start; flex: none; box-shadow: none; }
+.st-side-newest { align-self: center; flex: none; min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--st-card); color: var(--st-brand); font: 600 15px/1 var(--sans, sans-serif); box-shadow: 0 0 0 1px var(--st-line); cursor: pointer; }
+.st-side-newest[hidden], .st-side-title[hidden] { display: none; }
+/* 放不下栏的那一条：右边画面底部正中 */
+.st-dock-wide { display: none; }
+.st-stage.is-side .st-dock-wide:not([hidden]) { position: absolute; left: var(--side-w, 360px); right: 0; bottom: 0; z-index: 4; display: flex; justify-content: center; padding: 0 16px max(18px, env(safe-area-inset-bottom, 0px)); pointer-events: none; }
+.st-stage.is-side .st-dock-wide .st-dock { position: static; padding: 0; }
+.st-how { display: none; }
+.st-stage.is-side .st-how { display: block; margin: 2px 0 0; font: 500 15px/1.5 var(--sans, sans-serif); color: var(--st-muted); }
+
+/* 幕条（主线第六轮 3.4）：这节课的几幕，一幕一个胶囊。课堂里放在顶上那一条（.sc-scenes-slot），样子页放在舞台顶上 */
+.st-scenes { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.st-scenes::-webkit-scrollbar { display: none; }
+.st-scenes[hidden] { display: none; }
+.st-stage > .st-scenes { position: absolute; top: 8px; left: 50%; translate: -50% 0; z-index: 6; max-width: calc(100% - 140px); }
+.st-stage.is-side > .st-scenes { left: calc(var(--side-w, 360px) + (100% - var(--side-w, 360px)) / 2); max-width: calc(100% - var(--side-w, 360px) - 120px); }
+.st-scene { flex: none; min-height: 44px; max-width: 13em; padding: 0 14px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--st-card) 80%, transparent); color: var(--st-ink); font: 500 15px/1 var(--sans, sans-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 0 0 0.5px var(--st-line); cursor: pointer; -webkit-touch-callout: none; user-select: none; }
+.st-scene.is-now { background: var(--st-brand); color: var(--st-brand-ink); box-shadow: none; cursor: default; }
+.st-scene:active:not(.is-now) { scale: .96; }
+.st-scene-keys { position: absolute; z-index: 30; width: min(320px, calc(100% - 16px)); padding: 10px 14px; border-radius: 14px; background: var(--st-card); box-shadow: 0 0 0 0.5px var(--st-line), 0 14px 30px -18px rgb(var(--shade-rgb, 25 45 40) / 0.55); font: 500 15px/1.5 var(--sans, sans-serif); color: var(--st-ink); }
+.st-scene-keys p { margin: 0 0 4px; }
+/* 回看那一层（lookback.js）：盖住整块舞台，顶上一条「回看 · 第 n 幕」和「回到现在」 */
+.st-look { position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column; background: var(--page-bg, var(--st-card)); }
+.st-look[hidden] { display: none; }
+.st-look-bar { flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 16px; box-shadow: inset 0 -0.5px 0 var(--st-line); }
+.st-look-name { flex: 1; min-width: 0; font: 600 16px/1.3 var(--sans, sans-serif); color: var(--st-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-look-back { position: relative; flex: none; min-height: 44px; padding: 0 20px; border: 0; border-radius: 999px; background: var(--st-brand); color: var(--st-brand-ink); font: 600 16px/1 var(--sans, sans-serif); cursor: pointer; }
+.st-look-back.has-new::after { content: ""; position: absolute; top: 4px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--st-red); }
+.st-look-keys { flex: none; padding: 8px 20px 0; font: 500 16px/1.5 var(--sans, sans-serif); color: var(--st-brand); }
+.st-look-keys[hidden] { display: none; }
+.st-look-key { margin: 0 0 2px; }
+.st-look-body { position: relative; flex: 1; min-height: 0; }
+.st-look-stage { position: absolute; inset: 0; }
+.st-look-stage[hidden] { display: none; }

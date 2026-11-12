@@ -1,0 +1,11 @@
+# 主线第六轮批次 0 · 做到过的挑战不一直挂着：时间轴拿掉以后「把绿条右端拖到…」收起（时态课第 28→29 轮）
+sentence s = "He had never gambled before the casino sent him a coupon for $20 worth of gambling."
+timeline tl = 很久以前 过去 现在 now=现在
+bar tl gb = 很久以前..现在 "从未赌过" end=e
+open tl.gb stretch
+goal g1 "把绿条右端拖到「从未赌过」截止的时间" when="e = 过去"
+@g1 say "对：sent 是过去，「从未赌过」在它之前。"
+学生: stretch tl.gb -> tl.过去
+remove tl
+say "这句里没有 before。只看时态判先后。"
+ask next

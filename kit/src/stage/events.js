@@ -3,6 +3,7 @@
 // 学生在舞台上随时能动（拨格子、拖、点开看怎么算），这些是「试」：一下一下都告诉老师太碎、也太慢（每叫一次老师就是一整轮），
 // 所以攒着，等到有要老师接的事——答了老师问的、做到了挑战、打字、点「给个提示」、试了好多下还没做到、很久没动——
 // 一起写成一段发过去。老师照它看学生是怎么试的、卡在哪，再当场写下一步。
+import { lookText } from './scenes.js';
 import { actText, pathKey, pathEnd, pathGoesOn, hiddenText } from './stage.js';
 import { rulesOf } from './rules.js';
 import { shapeText } from './goal.js';
@@ -109,6 +110,8 @@ export function collectText(id, c) {
  * 试的一下：裁判说马上叫老师（act.call === 'now'）记 now；老师写了 call=done（做完才叫）的东西上试的记 patient，不算进「试了好多下」
  */
 export function eventOf(act, { help = '', at = 0 } = {}) {
+  // 学生翻回去看了一幕（主线第六轮 3.5）：事实，跟着下一条告诉老师，不叫老师（不在 triggers 里）
+  if (act.type === 'look') return { kind: 'look', act: slim(act), at };
   if (act.type === 'next' && help && act.button === help) return { kind: 'help', act: slim(act), at };
   // 撤一步、按「回到……」也是「试」（攒着写给老师），可不算进「试了好多下」：撤几下、回去几次不该凑出叫老师
   if (act.open || act.type === 'dial') return { kind: 'try', act: slim(act), at, ...(act.call === 'now' || act.verdict?.call === 'now' ? { now: true } : {}), ...(act.patient || act.type === 'undo' || act.type === 'back' ? { patient: true } : {}) };
@@ -390,9 +393,13 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
   const placed = []; // { at: 在整段里第几件, text }
   let at = 0;
   const lines = { push: (...xs) => { for (const text of xs) placed.push({ at, text }); } };
+  // 回看过的几幕合成一句（同一幕看几次合起来），放在第一次回看的地方
+  const looks = events.filter((e) => e.kind === 'look');
+  let lookSaid = false;
   for (const [i, e] of events.entries()) {
     at = i;
     if (e.kind === 'try') continue;
+    if (e.kind === 'look') { if (!lookSaid) { lookSaid = true; lines.push(lookText(looks.map((x) => x.act))); } continue; }
     if (e.kind === 'goal') for (const id of e.ids || []) {
       const g = goals.get(id);
       // watch：只叫老师的条件成立了（不是挑战：学生那边什么也没有）

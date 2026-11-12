@@ -49,7 +49,18 @@ export function measure(visual = false) {
     items.push({ kind: 'obj', id, rects: rs, box: screenBox, union: union(rs) });
   }
   for (const [id, l] of st.labelNodes) if (vis(l.node)) items.push({ kind: 'label', id, rects: [rect(l.node)] });
-  st.caption.querySelectorAll('.st-line:not(.is-out)').forEach((n, i) => { if (vis(n)) items.push({ kind: 'caption', id: `话${i + 1}`, rects: [textRect(n, vr)] }); });
+  // 横屏解析栏里的话能上下滑：滑出栏外的那几句看不见，不算（不然都算「出了屏幕」）；看得见的那一截照栏裁
+  const capBox = st.sideOn ? rect(st.caption) : null;
+  st.caption.querySelectorAll('.st-line:not(.is-out)').forEach((n, i) => {
+    if (!vis(n)) return;
+    let r = textRect(n, vr);
+    if (capBox) {
+      const x = Math.max(r.x, capBox.x), y = Math.max(r.y, capBox.y), x2 = Math.min(r.x + r.w, capBox.x + capBox.w), y2 = Math.min(r.y + r.h, capBox.y + capBox.h);
+      if (x2 - x < 1 || y2 - y < 1) return;
+      r = { x, y, w: x2 - x, h: y2 - y };
+    }
+    items.push({ kind: 'caption', id: `话${i + 1}`, rects: [r] });
+  });
   st.goalsEl.querySelectorAll('.st-goal:not(.is-out)').forEach((n, i) => { if (vis(n)) items.push({ kind: 'goal', id: n.dataset.id || `挑战${i + 1}`, rects: [rect(n)] }); });
   [...st.dock.children].forEach((n, i) => { if (vis(n)) items.push({ kind: 'dock', id: `底下${i + 1}`, rects: [rect(n)] }); });
   st.view.querySelectorAll('.mx-step').forEach((n) => { if (vis(n)) items.push({ kind: 'pop', id: '拨数器', rects: [rect(n)] }); });
@@ -122,6 +133,17 @@ export function measure(visual = false) {
   for (const [id, cur] of st.labelNodes) {
     const l = st.scene.labels.get(id);
     if (l && l.asked && l.side && !l.dial && cur.side && cur.side !== l.side && vis(cur.node)) issues.push({ what: '贴的字没在写的那一边', a: `label:${id}（写的是 ${l.side}，画在 ${cur.side}）`, b: '', area: 0 });
+  }
+  // 贴的字离它贴的东西远（主线第六轮：时态课截图里贴在小人上的字跑到轴的上面去）、贴的字在屏幕上太小（生词注只有十一二像素）
+  for (const [id, cur] of st.labelNodes) {
+    const l = st.scene.labels.get(id);
+    if (!l || l.dial || !cur.anchor || !cur.box || !vis(cur.node)) continue;
+    const a = cur.anchor, b = cur.box, s = st.cam.s;
+    const gx = Math.max(0, a.x - (b.x + b.w), b.x - (a.x + a.w)), gy = Math.max(0, a.y - (b.y + b.h), b.y - (a.y + a.h));
+    const gap = Math.hypot(gx, gy) * s;
+    if (gap > 60) issues.push({ what: '贴的字离得远', a: `label:${id}（隔了 ${Math.round(gap)}）`, b: '', area: 0 });
+    const px = parseFloat(getComputedStyle(cur.node).fontSize) * s;
+    if (px < 15) issues.push({ what: '贴的字太小', a: `label:${id}（屏幕上 ${px.toFixed(1)}px）`, b: '', area: 0 });
   }
   // 弧拱进了别的东西里：一样东西自己格子之间的弧（分组的连线、hop 的弧）压到别的东西上、被盖住
   // （和 footprintBoxes 分开量一遍：弧不算进那样东西自己占的地方时，上面的「压着」量不出来）

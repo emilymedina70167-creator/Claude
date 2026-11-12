@@ -1,0 +1,12 @@
+# 主线第六轮批次 0 · 事件点的字、生词注的字、重点卡的字体（时态课第 28、29 轮）
+sentence s = "He had never gambled before the casino sent him a coupon for $20 worth of gambling."
+label gl s "gamble 赌博；casino 赌场；coupon 优惠券；$20 worth of 价值 20 美元的" side=below tone=note
+timeline tl = 很久以前 过去 现在 now=现在
+event tl st = 过去 "sent 寄来优惠券"
+paint tl.st g1
+bar tl gb = 很久以前..现在 "从未赌过" end=e
+paint tl.gb g3
+label k s "重点：过去完成时 = had + done（过去分词），表示「过去的之前」" side=above tone=key
+camera all
+say "新的一段：发生在过去某件事之前的事，谓语怎么写？"
+ask next

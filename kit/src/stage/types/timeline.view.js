@@ -60,7 +60,8 @@ export const timelineView = {
         return d;
       });
       const text = node.querySelector('.tl-text, .tl-name');
-      const want = it.kind === 'stand' ? it.name : it.label;
+      // 小人底下不写名字：fr、me 是老师在指令里起的代号，对学生是多出来的字（时态课截图）。要写字老师贴一个 label
+      const want = it.kind === 'stand' ? '' : it.label;
       if (text && text.textContent !== want) text.textContent = want;
       stage.flagPart(node, it, ctx);
       if (made || same(node.__box, b)) continue;

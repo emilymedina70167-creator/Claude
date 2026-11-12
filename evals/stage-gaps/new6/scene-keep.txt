@@ -1,0 +1,19 @@
+# 主线第六轮 B · scene 收得干净、keep= 带过来：时态课第 23 → 28 轮那样，讲完过去将来时，带着时间轴进下一段
+sentence p = "They gave justices permanent positions so they would be free to upset those in power."
+label tr p "他们给了法官永久职位，因此法官就能自由地推翻当权者。" side=below tone=note
+timeline tl = 过去 过去之后 现在 将来 now=现在
+stand tl fr = 现在
+label lf tl.fr "be free 能自由推翻" side=above tone=note
+open tl.fr move
+goal g1 "把粉色小人拖到「能自由推翻」发生的时间" when="fr = 过去之后"
+@g1 say "对。站在过去往后看，用 would + 动词原形。"
+say "{p.gave} 是过去给的职位。法官「能自由推翻」发生在什么时候？"
+学生: move tl.fr -> tl.过去之后
+label k p "重点：过去将来时 = would + 动词原形" side=above tone=key
+scene "过去完成时" keep=tl
+sentence s = "He had never gambled before the casino sent him a coupon."
+say "新的一段：发生在过去某件事之前的事，谓语怎么写？"
+ask next "看好了点这里" button="看好了"
+学生: look 1
+学生: unlook
+学生: next

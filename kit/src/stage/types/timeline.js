@@ -5,8 +5,10 @@
 // 两种凑法里句子都跟不了轴。做法：**轴上能动的东西就是拨词的拨盘的把手**——小人 me 是拨盘 me（能拨到的就是这些停靠点），
 // 事件条能动的那一头是它自己的拨盘。句子跟着变（{me: had | has | will have}）、挑战里比词（when="me = 现在"、"e < me"）、
 // 学生拨的路写给老师，都照第二轮拨盘的规矩，不另做一遍。
+import { textWidth } from './sentence.js'; // 事件点的字多宽（node 里估、浏览器里换成真的量法）
 const MAX_STOPS = 10;
-export const TL = { STEP: 108, PAD: 54, BAR_H: 30, BAR_GAP: 6, DOT_ROW: 30, AXIS: 26, STAND: 58 };
+// DOT_ROW：事件点那一行（上面一行字、下面一个点）。30 时字顶着上面那一层条（时态课截图「sent 寄来优惠券」夹在条和轴中间），留 38
+export const TL = { STEP: 108, PAD: 54, BAR_H: 30, BAR_GAP: 6, DOT_ROW: 38, AXIS: 26, STAND: 58 };
 const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
 const NAME = /^[A-Za-z_]\w*$/;
 
@@ -56,7 +58,8 @@ function partBox(o, it) {
   const r = rowsY(o);
   const p = o.at?.[it.name] || (it.kind === 'bar' ? { from: it.from, to: it.to } : { at: it.at });
   if (it.kind === 'stand') return { x: stopX(o, p.at) - 22, y: r.stand, w: 44, h: TL.STAND - 4 };
-  if (it.kind === 'point') return { x: stopX(o, p.at) - 22, y: r.dots, w: 44, h: TL.DOT_ROW - 2 };
+  // 事件点的框连字一起算（字往两边伸，比点宽得多）：以前只算 44 宽，排版检查报「字溢出了格子」，贴的字、别的东西摆上来压着它
+  if (it.kind === 'point') { const w = Math.max(44, Math.ceil(textWidth(it.label || '', 'tag')) + 8); return { x: stopX(o, p.at) - w / 2, y: r.dots, w, h: TL.DOT_ROW - 2 }; }
   const lane = barLanes(o).of.get(it.name) || 0;
   const n = barLanes(o).n;
   return { x: stopX(o, p.from) - 10, y: r.bars + (n - 1 - lane) * (TL.BAR_H + TL.BAR_GAP), w: stopX(o, p.to) - stopX(o, p.from) + 20, h: TL.BAR_H };
@@ -124,6 +127,11 @@ export const timeline = {
     return o;
   },
   parts(o) { return o.items; },
+  // 别的字摆的时候要躲的：每样部件，加上轴和刻度的字那一条（以前只有部件，贴在小人上的字写 side=above 就压在轴和「过去之后」上：主线第六轮）
+  obstacles(o) {
+    const r = rowsY(o), w = sizeOf(o).w;
+    return [...o.items.map((it) => partBox(o, it)), { x: o.origin.x, y: r.axis - 6, w, h: r.labels + 22 - (r.axis - 6) }];
+  },
   pick(o, mark, sel, word) {
     const it = mark === '.' ? o.items.find((x) => x.name === sel) : null;
     if (!it) throw new Error(`「${word}」：时间轴 ${o.id} 上没有「${sel}」（有：${o.items.map((x) => x.name).join('、') || '还什么都没放'}；写成 ${o.id}.名字）`);

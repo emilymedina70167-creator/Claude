@@ -5,12 +5,15 @@
 // （每种东西自己的在 types/xxx.view.js 的 choreo，共用的说话、比较、飞字在这里）→ sync 把画面对齐到场景
 // （每种东西的 view.sync 造 / 改自己的节点，挪动、连线、贴字、拨数这里统一演）。
 // 演过的每一行记进 log（学生拖、拨造成的变化也记成一行），刷新或作废一轮时照 log 瞬间重放（replay）。
+import { sceneSpans, sceneLine, swappedLine, circled } from './scenes.js';
+import { createLookback } from './lookback.js';
+const SIDE_PAD = 20; // 解析栏左右的留白（和 stage.css 的 .st-side 一样）
 import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHold } from './motion.js';
-import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM, tooSmall } from './layout.js';
+import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM, tooSmall, pickSide } from './layout.js';
 import { parseScript, parseRich, richLength } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, tapAnswer, pickText, unplayedNotes, compareFact, compareNote, mergeFact, chipTextOf, tapValueOf } from './scene.js';
 import { goalMark, shapeText } from './goal.js';
-import { measureShown } from './rules.js';
+import { measureShown, rulesOf } from './rules.js';
 import { judgeAnswer, sameAnswer, answerInput, gridAnswerText, asksBack } from './answer.js';
 import { formulaInput, formulaGrid, hideFormulaPad } from '../formulainput.js';
 import { varText, pickNow } from './pick.js';
@@ -94,7 +97,8 @@ export function helpLine(q, hasGoals, hasWork = false) {
 export { COLOR_NAMES };
 
 export class Stage {
-  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false } = {}) {
+  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false, scenesHost = null } = {}) {
+    this.scenesHost = scenesHost; // 幕条放哪（课堂给顶上那一条里留的位置；不给放在舞台自己顶上）
     // bare：嵌在别处的一小块舞台（自己练），没有上面的话、底下的输入条——镜头不给它们留地方
     this.bare = !!bare;
     this.host = host;
@@ -134,12 +138,31 @@ export class Stage {
     this.goalsEl = el('div', 'st-goals', this.view);
     this.goalsEl.setAttribute('aria-live', 'polite');
     this.dock = el('div', 'st-dock', this.view);
+    // 横屏的解析栏（主线第六轮第 2 节）：挑战、这一幕说过的话、这一问、底下那一条搬进左边这一列；竖屏搬回 view（和以前一样）
+    this.side = el('div', 'st-side', this.view);
+    this.sideTitle = el('div', 'st-side-title', this.side);
+    this.sideTitle.hidden = true;
+    this.newest = el('button', 'st-side-newest', this.side);
+    this.newest.type = 'button';
+    this.newest.textContent = '回到最新 ↓';
+    this.newest.hidden = true;
+    this.newest.addEventListener('click', () => { this.caption.scrollTop = this.caption.scrollHeight; this.newest.hidden = true; });
+    this.caption.addEventListener('scroll', () => { if (this.sideOn && this.atBottom()) this.newest.hidden = true; });
+    // 这一问的输入在栏里放不下（按格写的矩阵答案、一排长选项）：底下那一条挪到右边画面底部正中（2.9）
+    this.wideDock = el('div', 'st-dock-wide', this.view);
+    this.sideOn = false;
+    this.sideW = 0;
+    this.sideDirty = true;
     this.flyLayer = el('div', 'st-fly', this.view);
+    // 幕条（主线第六轮 3.4）：这节课的几幕，一幕一个胶囊；点一个翻回去看（lookback.js）。只读的舞台（回看自己、只读翻看）不要
+    this.scenesEl = el('div', 'st-scenes', this.scenesHost || root);
+    this.scenesEl.hidden = true;
+    if (typeof MutationObserver === 'function') new MutationObserver(() => requestAnimationFrame(() => this.fitDock())).observe(this.dock, { childList: true, subtree: true });
     this.pointer = new PointerRouter(this); // 点、拖都走它（pointer.js）
-    this.ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => requestAnimationFrame(() => this.refocus(false))) : null;
+    this.ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => requestAnimationFrame(() => { this.noteView(); this.refocus(false); })) : null;
     this.ro?.observe(this.view);
   }
-  destroy() { this.ro?.disconnect(); this.resetOpens(); this.root.remove(); this.cancelWait?.(); this.cancelBeat?.(); }
+  destroy() { this.ro?.disconnect(); this.resetOpens(); this.root.remove(); this.scenesEl?.remove(); this.keysPop?.remove(); this.cancelWait?.(); this.cancelBeat?.(); }
   setPace(p) {
     if (!PACES[p]) return;
     this.pace = p;
@@ -244,6 +267,11 @@ export class Stage {
     // 揭晓了（insert t 47、say "你看圈"），这一轮演完学生才开始看虚实，留到下一轮演完再收（最后一审 I1）
     const unrevealedAtBegin = !!(this.scene.picked?.reveal && !this.scene.picked.diffDone);
     this.errors = [];
+    // 这一轮开头台上有哪几样（演完以后台上全换了、又没写 scene：现状里说一句，scenes.js 的 swappedLine）
+    const idsAtBegin = by === 'teacher' ? [...this.scene.objects.keys()] : null;
+    if (by === 'teacher') this.sideDirty = true; // 横屏栏宽在一轮开头重算一次
+    const openSeq0 = Math.max(0, ...[...this.scene.opens.values()].map((e) => e.seq || 0)); // 这一轮新开的手（showHow）
+    if (by === 'teacher') this.scene.swapNote = '';
     this.scene.loose = []; // 话里还没着落的名字只算这一轮的（上一轮作废了留下的不算）
     // 叫老师之前那一段学生做的事刚发出去：拨数、拨格子的路从头数（和课堂循环攒的那一段对齐）
     this.dialRuns = new Map();
@@ -339,6 +367,8 @@ export class Stage {
           this.scene.dropAskRight();
         }
       }
+      if (!dead && idsAtBegin && !this.instant) this.showHow(openSeq0);
+      if (!dead && idsAtBegin) this.scene.swapNote = swappedLine(idsAtBegin, [...this.scene.objects.keys()], this.log.slice(mark).some((r) => /^scene\b/.test(r.src)));
       // 学生上一次点的几样（ask pick）圈到老师这一轮演完：照一行 unpick 收掉，记进这一轮的 log（刷新照它放回）。
       // 这一轮里才交的不收（上一问还挂着时学生交的，老师还没看到）。reveal=on 还没揭晓的不收（第三次量 D2/幕1：猜错了叫老师，
       // 老师这一轮演完圈就没了，学生插进去以后看不到哪几个变了）：留到之后第一下改了它们、揭晓了，再下一轮演完才收；
@@ -448,6 +478,88 @@ export class Stage {
     await this.replay(this.log.slice(0, mark));
   }
 
+  /**
+   * 开了新的一幕（scene，主线第六轮 3.2）：场景已经把台上收干净了；画面这边收掉等着的那一问、话，舞台现状里写这是第几幕
+   */
+  afterScene() {
+    this.sideDirty = true;
+    this.howSaid = new Set(); // 新的一幕：手怎么动的那一句重新可以写
+    this.cancelWait?.();
+    this.say('');
+    this.noteScenes();
+  }
+  /** 舞台现状里「第几幕、前面有哪几幕」那一行（照 log 推，scenes.js）；幕条（第 3.4 节）也在这里跟着重画 */
+  noteScenes() {
+    const spans = sceneSpans(this.log, { title: this.lessonTitle || '开头' });
+    this.scene.sceneNote = sceneLine(spans);
+    this.paintScenes(spans);
+    // 横屏栏顶写这一幕叫什么（有两幕以上才写；一幕时就是这节课）
+    const cur = spans.length > 1 ? spans.at(-1) : null;
+    this.sideTitle.hidden = !cur;
+    if (cur) this.sideTitle.textContent = `第 ${cur.n} 幕 · ${cur.title}`;
+  }
+  /** 幕条：两幕以上才有；现在这一幕亮着；点前面的一幕翻回去看，长按看它的要点 */
+  paintScenes(spans) {
+    const host = this.scenesEl;
+    if (!this.withInput) { host.hidden = true; return; }
+    const sig = spans.map((x) => `${x.n}:${x.title}:${x.end}:${x.keys.join('|')}`).join('\u0000');
+    host.hidden = spans.length < 2;
+    if (host.__sig === sig) return;
+    host.__sig = sig;
+    host.replaceChildren();
+    for (const sp of spans) {
+      const b = el('button', `st-scene${sp === spans.at(-1) ? ' is-now' : ''}`, host);
+      b.type = 'button';
+      b.textContent = `${circled(sp.n)} ${sp.title}`;
+      b.title = sp.title;
+      if (sp === spans.at(-1)) { b.setAttribute('aria-current', 'step'); b.addEventListener('click', () => this.lookback?.close()); continue; } // 点现在这一幕：回到现在
+      let timer = null, held = false;
+      b.addEventListener('pointerdown', () => { held = false; timer = setTimeout(() => { held = true; this.sceneKeys(b, sp); }, 450); });
+      const stop = () => clearTimeout(timer);
+      b.addEventListener('pointerup', stop);
+      b.addEventListener('pointercancel', stop);
+      b.addEventListener('pointerleave', stop);
+      b.addEventListener('click', () => { if (held) { held = false; return; } this.look(sp.n); });
+    }
+    host.querySelector('.is-now')?.scrollIntoView?.({ inline: 'end', block: 'nearest' });
+  }
+  /** 长按一幕：弹出它的要点（只读的小框，点别处收起） */
+  sceneKeys(btn, sp) {
+    this.keysPop?.remove();
+    const pop = el('div', 'st-scene-keys', this.root);
+    pop.textContent = sp.keys.length ? '' : '这一幕没有贴重点卡';
+    for (const k of sp.keys) el('p', '', pop).textContent = k;
+    const r = btn.getBoundingClientRect(), R = this.root.getBoundingClientRect();
+    pop.style.left = `${Math.max(8, Math.min(r.left - R.left, R.width - 340))}px`;
+    pop.style.top = `${r.bottom - R.top + 8}px`;
+    this.keysPop = pop;
+    const off = () => { pop.remove(); document.removeEventListener('pointerdown', off, true); };
+    setTimeout(() => document.addEventListener('pointerdown', off, true), 0);
+  }
+  /**
+   * 翻回去看第 n 幕（3.5）：只读的一层盖上来。回看的时候课照样在下面进行；老师说了话「回到现在」上亮一个点。
+   * 回看时不算「很久没动」（loop.js 看 stage.looking）；关上时把看了哪一幕、多久交给课堂（act type: look，跟着下一条告诉老师，不叫老师）
+   */
+  async look(n) {
+    const spans = sceneSpans(this.log, { title: this.lessonTitle || '开头' });
+    const sp = spans.find((x) => x.n === n);
+    if (!sp || sp === spans.at(-1)) return null;
+    this.lookback ||= createLookback(this.root, {
+      onOpen: (c) => { this.looking = { ...c, since: Date.now(), logAt: this.log.length }; },
+      onClose: (r) => {
+        const saw = this.looking;
+        this.looking = null;
+        this.onAct?.({ type: 'look', n: r.n, title: r.title, ms: r.ms });
+        // 回看的时候老师说了话：左边栏里那几句亮一下（话都在栏里，学生回来就看得到）
+        if (saw && this.log.slice(saw.logAt).some((x) => x.by === 'teacher' && /^say\b/.test(x.src))) {
+          const lines = [...this.caption.querySelectorAll('.st-line:not(.is-out)')].slice(-3);
+          lines.forEach((ln, i) => this.tween(ln, [{ backgroundColor: 'color-mix(in srgb, var(--st-brand) 14%, transparent)' }, { backgroundColor: 'transparent' }], { duration: 1400, delay: i * 90 }));
+        }
+        this.lookDone?.();
+      },
+    });
+    return this.lookback.open(sp, this.log, { title: this.lessonTitle || '开头' });
+  }
   /** 照记录瞬间重放（刷新后放回、作废一轮后退回）：画面直接到最后的样子，不演动画、不等学生 */
   async replay(log) {
     this.instant = true;
@@ -471,6 +583,7 @@ export class Stage {
       }
     }
     if (asked) await this.say(asked, { ask: true });
+    this.noteScenes();
     this.instant = false;
     if (Number.isFinite(this.undoFloor)) this.undoFloor = Math.min(this.undoFloor, this.log.length); // 老师正演着的一轮里重放（作废、再看一遍）：照样不能撤
     this.scene.waiting = null;
@@ -592,8 +705,11 @@ export class Stage {
     // 写法容错照演了的（第一节真课碰到的两种，script.js / scene.js）：告诉老师下次怎么写，学生那边照常
     const forgiven = c.forgiven || fx?.forgiven;
     if (forgiven && by === 'teacher' && !this.instant) this.errors.push({ line: c.line, src: c.src?.trim(), kept: true, error: FORGIVEN[forgiven] });
+    if (c.cmd === 'scene' && fx?.scene != null) this.afterScene();
+    if (fx?.created) this.sideDirty = true; // 造了新东西：横屏栏宽重算一次
     if (by === 'teacher' && !this.instant) {
       this.onLine?.(c);
+      if (this.looking) this.lookback?.markNew();
       // 老师的这一步不是正确的下一步：照演（可能是故意演错），下一条发给老师时说一声
       for (const f of fx?.judged?.facts || []) if (this.teacherAudit.length < AUDIT_MAX && !this.teacherAudit.includes(f)) this.teacherAudit.push(f);
       if (fx?.judged?.failed) reportError(fx.judged.failed, { what: `舞台的规则核老师这一行时出错：${fx.judged.src}` });
@@ -685,8 +801,99 @@ export class Stage {
   noteView() {
     const w = this.view?.clientWidth, h = this.view?.clientHeight;
     if (!(w > 0 && h > 0)) return;
+    this.setSide(w > h && !this.bare);
+    // 横屏：场景拿右边那一块摆东西、算「缩到几成」（2.8：摆新东西要不要另起一列、现状里的「字难认」都按它）
+    const sw = this.sideOn ? this.sideW : 0;
     const v = this.scene.view;
-    if (!v || v.w !== w || v.h !== h) this.scene.view = { w, h };
+    if (!v || v.w !== w - sw || v.h !== h || (v.side || 0) !== sw) this.scene.view = sw ? { w: w - sw, h, side: sw } : { w, h };
+  }
+  /** 横屏 / 竖屏换了：挑战、话、底下那一条搬进解析栏或者搬回 view */
+  setSide(on) {
+    if (on === this.sideOn && this.root.classList.contains('is-side') === on) return;
+    this.sideOn = on;
+    this.root.classList.toggle('is-side', on);
+    if (on) {
+      this.side.insertBefore(this.goalsEl, this.newest);
+      this.side.insertBefore(this.sideTitle, this.goalsEl);
+      this.side.insertBefore(this.caption, this.newest);
+      this.side.insertBefore(this.dock, this.newest);
+      this.caption.style.bottom = '';
+      this.caption.style.paddingLeft = ''; this.caption.style.removeProperty('--cap-left'); this.camSide = false;
+      this.sideDirty = true;
+    } else {
+      this.view.insertBefore(this.caption, this.side);
+      this.view.insertBefore(this.goalsEl, this.side);
+      this.view.insertBefore(this.dock, this.side);
+      this.sideW = 0;
+      this.root.style.removeProperty('--side-w');
+    }
+    this.fitDock();
+  }
+  atBottom() { return this.caption.scrollHeight - this.caption.scrollTop - this.caption.clientHeight < 40; }
+  /** 这一问在栏宽 w 时折成几行（pickSide 量；没有这一问时 1 行） */
+  askLines(w) {
+    const q = [...this.caption.querySelectorAll('.st-line:not(.is-out)[data-kind="ask"]')].at(-1);
+    if (!q) return 1;
+    const m = this.measureLine ||= el('p', 'st-line st-measure-line', this.side);
+    m.textContent = q.textContent;
+    m.style.width = `${Math.max(1, w - 2 * SIDE_PAD)}px`;
+    const lh = parseFloat(getComputedStyle(m).lineHeight) || 30;
+    return Math.max(1, Math.round(m.offsetHeight / lh));
+  }
+  /** 栏宽换了：CSS、场景的屏幕一起换（已经摆好的东西不重摆） */
+  setSideW(w) {
+    if (w === this.sideW) return;
+    this.sideW = w;
+    this.root.style.setProperty('--side-w', `${w}px`);
+    this.noteView();
+  }
+  /**
+   * 底下那一条放得下栏吗（2.9）：这一问的输入照栏宽排一遍，比栏宽、或者有一格（输入框、按钮）小于 44px，就挪到右边画面底部正中。
+   * 下一问换回来（每次底下那一条变了都看一遍：MutationObserver）
+   */
+  fitDock() {
+    if (!this.sideOn) { if (this.dock.parentElement !== this.view) this.view.insertBefore(this.dock, this.side); this.wideDock.hidden = true; return; }
+    if (this.dock.parentElement !== this.side) this.side.insertBefore(this.dock, this.newest);
+    this.wideDock.hidden = true;
+    if (!this.dock.childElementCount) return;
+    const room = this.side.clientWidth - 2 * SIDE_PAD;
+    const cells = [...this.dock.querySelectorAll('input, button, .fi-text')].filter((n) => n.offsetWidth);
+    const tooWide = this.dock.scrollWidth > room + 1 || [...this.dock.children].some((n) => n.scrollWidth > room + 1);
+    const tooSmall = cells.some((n) => n.offsetWidth < 44 || n.offsetHeight < 44);
+    if (!tooWide && !tooSmall) return;
+    this.wideDock.hidden = false;
+    this.wideDock.appendChild(this.dock);
+  }
+  /**
+   * 手怎么动（主线第六轮 2.10）：老师这一轮新交给学生的手（open），在解析栏这一问下面用小字写一句怎么动——规则文件里现成的那一句
+   * （gestures[动作].how，没有就用 brief）。一种动作一句、最多两句；这一幕里写过的不再写。只是把现状里告诉老师的那一句也给学生看，
+   * 不提示怎么解题；发给老师的东西里不多写
+   */
+  showHow(seq0) {
+    if (!this.sideOn) return;
+    this.howSaid ||= new Set();
+    const lines = [];
+    for (const e of this.scene.opens.values()) {
+      if ((e.seq || 0) <= seq0 || e.action === 'back') continue;
+      const o = this.scene.objects.get(e.obj);
+      const g = o ? rulesOf(o)?.gestures?.[e.action] : null;
+      const t = g?.how || g?.brief;
+      const key = `${o?.type}:${e.action}`;
+      if (!t || this.howSaid.has(key) || lines.includes(t)) continue;
+      this.howSaid.add(key);
+      lines.push(t);
+    }
+    this.caption.querySelectorAll('.st-how').forEach((n) => n.remove());
+    if (!lines.length) return;
+    const n = el('p', 'st-how', this.caption);
+    n.textContent = lines.slice(0, 2).join('；');
+    this.caption.scrollTop = this.caption.scrollHeight;
+  }
+  /** 等回话的三个点放哪：横屏放进栏里这一问下面（classroom.js 问它）；竖屏返回 false，照旧放在画面下半 */
+  placeWait(node) {
+    if (!this.sideOn) return false;
+    this.side.insertBefore(node, this.dock.parentElement === this.side ? this.dock : this.newest);
+    return true;
   }
   /**
    * 镜头摆好以后，画着的东西里还有哪几样出了屏幕（缩到最小也放不下）：写回场景，舞台现状里写「画面上看不全」。
@@ -701,7 +908,7 @@ export class Stage {
       out = sc.shownIds().filter((id) => {
         const b = sc.objectBox(id);
         const x = b.x * c.s + c.tx, y = b.y * c.s + c.ty;
-        return x < -2 || y < -2 || x + b.w * c.s > w + 2 || y + b.h * c.s > h + 2;
+        return x < (this.sideOn ? this.sideW : 0) - 2 || y < -2 || x + b.w * c.s > w + 2 || y + b.h * c.s > h + 2;
       });
     }
     if (out.join('\u0000') !== sc.clipped.join('\u0000')) sc.clipped = out;
@@ -1054,6 +1261,7 @@ export class Stage {
     const have = new Map([...host.children].filter((n) => !n.classList.contains('is-out')).map((n) => [n.dataset.id, n]));
     for (const g of this.scene.goals.values()) {
       if (g.watch) continue; // 只叫老师的条件：不给学生看
+      if (this.scene.goalGone(g)) continue; // 做到过、它说的东西都不在台上了：收起（还挂着的那一条淡出去）
       let n = have.get(g.id);
       have.delete(g.id);
       if (!n) {
@@ -1351,7 +1559,15 @@ export class Stage {
     let mine = [];
     try { mine = sc.objects.has(l.refs[0]) ? [] : sc.parts(l.refs[0]).map((p) => p.key); } catch { mine = []; }
     const t = sc.type(o);
-    return t.parts(o).some((p) => !mine.includes(p.key) && overlaps(grow(box, 2), t.partBox(o, p)));
+    if (t.parts(o).some((p) => !mine.includes(p.key) && overlaps(grow(box, 2), t.partBox(o, p)))) return true;
+    // 贴在一个部件上：那样东西自己画的别的东西（时间轴的轴、刻度的字）也是让不开的——小人在轴下面、字写 side=above，
+    // 以前只比部件，字照样压在轴和「过去之后」上（主线第六轮，时态课截图）
+    if (!mine.length) return false;
+    const own = sc.parts(l.refs[0]).map((p) => t.partBox(o, p));
+    // 那种东西自己报的「别的字要躲」的框（时间轴的轴和刻度那一条），锚着的那几个部件不算
+    const same = (a, b) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.h - b.h) < 0.5;
+    if ((t.obstacles?.(o) || []).some((f) => !own.some((a) => same(a, f)) && overlaps(grow(box, 2), f))) return true;
+    return this.footprintBoxes(id).some((f) => !own.some((a) => overlaps(f, grow(a, -1))) && overlaps(grow(box, 2), f));
   }
   anchorOf(l) {
     const sc = this.scene;
@@ -1515,15 +1731,24 @@ export class Stage {
     };
     if (!text) { live.forEach(out); return; }
     if (ask && live.at(-1)?.__text === text) return; // 刷新以后重新等最后一问：这句已经在上面了
-    if (!ask && this.captionTurn !== this.execTurn) { live.forEach(out); live = []; }
+    const side = this.sideOn;
+    const stick = side && this.atBottom();
+    if (side) {
+      // 横屏：这一幕说过的话都留在栏里（开新的一幕时 scene 收），前几轮的淡一点、小一点（主线第六轮 2.2）
+      if (this.captionTurn !== this.execTurn) live.forEach((n) => n.classList.add('is-past'));
+    } else {
+      if (!ask && this.captionTurn !== this.execTurn) { live.forEach(out); live = []; }
+      live.forEach((n) => n.classList.add('is-past'));
+      live.slice(0, Math.max(0, live.length - (CAPTION_MAX - 1))).forEach(out);
+    }
     this.captionTurn = this.execTurn;
-    live.forEach((n) => n.classList.add('is-past'));
-    live.slice(0, Math.max(0, live.length - (CAPTION_MAX - 1))).forEach(out);
     const line = el('p', 'st-line', this.caption);
     line.__text = text;
     line.dataset.kind = ask ? 'ask' : 'say';
     const glyphs = [];
     this.richInto(line, text, { glyphs, words: [], still: true });
+    // 栏里来了新的一句：滚到底；学生往上翻着看前面时不抢着滚回来，底下出「回到最新」
+    if (side) { if (stick || this.instant) this.caption.scrollTop = this.caption.scrollHeight; else this.newest.hidden = false; }
     if (this.instant) return;
     const delays = revealDelays(glyphs.length);
     glyphs.forEach((g, i) => { g.style.opacity = '0'; this.tween(g, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 320, delay: delays[i], easing: EASE.out }); });
@@ -1627,6 +1852,8 @@ export class Stage {
   viewSize() { return { w: this.view.clientWidth || 800, h: this.view.clientHeight || 600 }; }
   reserve() {
     if (this.bare) return { top: 6, bottom: 6 };
+    // 横屏：话、挑战、底下那一条都在左边的栏里，画面上下不用让；底下那一条挪到画面底部时让出它的高
+    if (this.sideOn) return { top: 16, bottom: this.dock.parentElement === this.wideDock && this.dock.childElementCount ? this.dock.offsetHeight + 20 : 16 };
     const ch = Math.max(84, (this.caption.offsetHeight || 0) + 34);
     const gh = this.goalsEl?.childElementCount ? this.goalsEl.offsetHeight + 14 : 0;
     // 底下那一条按量出来的高（按钮折到第二行、ask say 时输入框是主角都会更高；以前写死 104，高了就压着画面）
@@ -1640,6 +1867,17 @@ export class Stage {
    */
   fitView(box) {
     const view = this.viewSize();
+    if (this.sideOn) {
+      const { top, bottom } = this.reserve();
+      const opts = { bottom, pad: CAMERA_ROOM.pad, maxScale: 1.5, lift: 0.4, top };
+      // 栏宽只在一轮开头、造了新东西、开新一幕、换了屏幕时重算（sideDirty），一轮中间不换；拖着的时候镜头本来就不动
+      if (this.sideDirty || !this.sideW) {
+        this.sideDirty = false;
+        this.setSideW(pickSide(box, view, { top, bottom, pad: CAMERA_ROOM.pad, lines: (w) => this.askLines(w), cur: this.sideW || null }).w);
+      }
+      this.camSide = false;
+      return fitCamera(box, view, { ...opts, left: this.sideW });
+    }
     const cap = this.caption.style;
     const capLeft = (px) => { cap.paddingLeft = px ? `${px}px` : ''; if (px) cap.setProperty('--cap-left', `${px}px`); else cap.removeProperty('--cap-left'); }; // 淡出的旧话是绝对定位的，照 --cap-left 让
     if (cap.paddingLeft) capLeft(0); // 先照「上面让」量话有多高
@@ -1706,6 +1944,7 @@ export class Stage {
   // 说的话的下沿贴着镜头里那块东西的上方，镜头挪了它跟着挪
   placeCaption(box, animate) {
     if (!box) return;
+    if (this.sideOn) { this.caption.style.bottom = ''; return; } // 横屏：话在栏里，不跟着画面
     const { h } = this.viewSize();
     const topScreen = box.y * this.cam.s + this.cam.ty;
     this.caption.style.transition = animate && !this.reduced && !this.instant ? `bottom ${this.dur(760)}ms ${EASE.move}` : 'none';

@@ -233,7 +233,7 @@ export function createLoop(host) {
     // 这一刻学生的屏幕：舞台那一块多大、整台缩到了几成。查「字难认」「摆不下」时要它——
     // 第一节真课页面报了 4 次「缩到 4～6 成」，照标准 iPad 尺寸重演却重现不了，因为不知道当时的屏幕多大
     let view = null;
-    try { const v = stage.viewSize?.(); if (v) view = { w: Math.round(v.w), h: Math.round(v.h), s: Math.round((stage.cam?.s ?? 1) * 100) / 100, ...(typeof window !== 'undefined' ? { win: [window.innerWidth, window.innerHeight] } : {}) }; } catch { /* 量不了就不记 */ }
+    try { const v = stage.viewSize?.(); if (v) view = { w: Math.round(v.w), h: Math.round(v.h), s: Math.round((stage.cam?.s ?? 1) * 100) / 100, side: stage.sideOn ? stage.sideW || 0 : 0, ...(typeof window !== 'undefined' ? { win: [window.innerWidth, window.innerHeight] } : {}) }; } catch { /* 量不了就不记 */ }
     Object.assign(p.row, { pending: false, text: said, msg, events, log: [...p.base, ...stage.log.slice(S.logFrom)], ...(say ? { say } : {}), ...(view ? { view } : {}) });
     host.putTurn(p.row);
     S.pending = null;
@@ -399,6 +399,7 @@ export function createLoop(host) {
     clearTimeout(S.idleTimer);
     if (S.ended || host.readOnly || S.flight || !idleWhy() || S.pending?.stuck) return;
     S.idleTimer = setTimeout(() => {
+      if (stage.looking) { armIdle(); return; } // 学生正翻回去看前面的一幕：不算没动（主线第六轮 3.5），关上回看再重新数
       const why = idleWhy();
       if (S.ended || S.flight || !why || S.pending?.stuck) return;
       const secs = Math.round(quietMs / 1000);
@@ -453,6 +454,8 @@ export function createLoop(host) {
   // 老师在 open 那一行写了 call=wrong、裁判说这一下走偏了（act.call === 'now'）：这一件事马上叫老师
   function onAct(a) {
     if (!a) return;
+    // 翻回去看了一幕：攒进这一段（下一条告诉老师），不叫老师、不进证据；「很久没动」从关上回看这一刻重新数
+    if (a.type === 'look') { if (!S.ended && !host.readOnly) { addEvent(eventOf(a, { help: HELP, at: Date.now() })); armIdle(); } return; }
     host.evidence?.act?.(a, S.lastClaude);
     if (S.ended || host.readOnly) return;
     // 撤一步：这一段里最后一件撤掉的那一行（src 对得上、还没撤过、真的演上了：没让做的、没演上的不在 log 里）记成撤回了，

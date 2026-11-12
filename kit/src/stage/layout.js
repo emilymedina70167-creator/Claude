@@ -45,12 +45,37 @@ export function fitCamera(box, view, { pad = 36, maxScale = 1.6, minScale = 0.35
 }
 
 /**
+ * 横屏时左边解析栏多宽（主线第六轮 2.4）：几档候选里挑右边画面放得最大、这一问在栏里不超过 SIDE_LINES 行的那一档。
+ * 又宽又矮的英语句子会挑窄的栏，又大又方的图、矩阵挑宽一点的。cur：现在那档的宽——新的一档不比它让画面大一成就不换（不来回跳）。
+ * lines(w)：栏宽 w 时这一问折成几行（调用方量；不给当 1 行）。top / bottom / pad 照 fitCamera。返回 { w, s }（s 是那一档的整台缩放）
+ */
+export const SIDE_SHARES = [0.30, 0.34, 0.38, 0.42];
+export const SIDE_MIN = 300, SIDE_MAX = 480, SIDE_LINES = 4;
+export function pickSide(box, view, { top = 0, bottom = 0, pad = 28, lines = () => 1, cur = null, maxScale = 1.5 } = {}) {
+  const widths = [...new Set(SIDE_SHARES.map((k) => Math.round(Math.min(SIDE_MAX, Math.max(SIDE_MIN, view.w * k)))))];
+  const scaleAt = (w) => fitCamera(box, view, { top, bottom, pad, left: w, maxScale }).s;
+  const fits = widths.filter((w) => lines(w) <= SIDE_LINES);
+  // 每一档这一问都超过 4 行：取最宽的那一档（字多，栏宽一点少折几行）
+  const pool = fits.length ? fits : [widths.at(-1)];
+  let best = pool[0];
+  for (const w of pool) if (scaleAt(w) > scaleAt(best) + 1e-9) best = w;
+  if (cur != null && pool.includes(cur) && scaleAt(best) < scaleAt(cur) * 1.1) best = cur;
+  return { w: best, s: scaleAt(best) };
+}
+
+/**
  * 镜头能用的那块屏幕：四边留白（stage.js 的 fitCamera 用的 pad）、顶上的话、底下一条按上课时常见的大小去掉
  * （话一两行时顶上约 102，底下有按钮、输入框时约 76）。摆新东西时拿它比（scene.js 的 placeFresh）：拿整块屏幕比，
  * 话和按钮占的地方没算进去，东西缩到一半了还觉得放得下
  */
 export const CAMERA_ROOM = { pad: 28, top: 102, bottom: 76 };
-export const cameraRoom = (view) => (view?.w > 0 && view?.h > 0 ? { w: Math.max(1, view.w - 2 * CAMERA_ROOM.pad), h: Math.max(1, view.h - CAMERA_ROOM.top - CAMERA_ROOM.bottom - 2 * CAMERA_ROOM.pad) } : null);
+// 横屏有解析栏时（view.side：栏宽，view.w 已经是去掉栏以后的右边那一块）：话和按钮都在栏里，上下只留一点（主线第六轮 2.8）
+export const SIDE_ROOM = { top: 16, bottom: 16 };
+export const cameraRoom = (view) => {
+  if (!(view?.w > 0 && view?.h > 0)) return null;
+  const r = view.side ? SIDE_ROOM : CAMERA_ROOM;
+  return { w: Math.max(1, view.w - 2 * CAMERA_ROOM.pad), h: Math.max(1, view.h - r.top - r.bottom - 2 * CAMERA_ROOM.pad) };
+};
 
 /**
  * 新的一样东西摆哪：照旧往下摆（已有东西的下面、居中）；横屏东西一多，往下摆以后整块放进屏幕要缩得比 minScale 还小，
@@ -83,6 +108,11 @@ export function columnSlot(boxes, size, view, { gap, minScale = 0.6, last = null
 export const toScreen = (b, cam) => ({ x: b.x * cam.s + cam.tx, y: b.y * cam.s + cam.ty, w: b.w * cam.s, h: b.h * cam.s });
 
 /**
+ * 贴的字先在每一边的近处找几步（gap + 4 × step ≈ 66px）：placeLabel 的第一趟。
+ * 5 步刚好够让过一排格子上面的一道弧（stage.test.js「上面压着弧线就往外让」）；时间轴上小人头上隔着轴和刻度，要让一百多，算远处
+ */
+export const NEAR_TRIES = 5;
+/**
  * 字贴在一个东西旁边放哪：按 prefer 的顺序试上、下、右、左，挑第一个不压着别的东西的；都压着就挑压得最少的。
  * anchor：要贴着的框；size：{ w, h }；obstacles：别的东西的框。返回 { x, y, side }（左上角）
  */
@@ -98,8 +128,13 @@ export function placeLabel(anchor, size, obstacles = [], { prefer = ['above', 'b
     return null;
   };
   let best = null;
-  for (const side of prefer) {
-    for (let k = 0; k < tries; k++) {
+  // 两趟：先每一边都只在近处找（不超过 near 步，约 66px 以内），都不行再往远处让。
+  // 以前一边让到底（最多 7 步，近 100px）才换下一边：时间轴上小人在轴下面、字写 side=above，上面是轴和刻度，
+  // 字一直让到轴的上面去，看着像贴在别的东西上（主线第六轮，时态课截图）。近处有空的一边，就贴在那一边
+  const near = Math.min(tries, NEAR_TRIES);
+  const passes = [[0, near], [near, tries]];
+  for (const [k0, k1] of passes) for (const side of prefer) {
+    for (let k = k0; k < k1; k++) {
       const p = at(side, k);
       if (!p) break;
       const box = { ...p, ...size };

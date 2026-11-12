@@ -12,7 +12,7 @@ const IN_PLANE = new Set(['vec', 'point', 'sum']);
 
 const TALK = ['say', 'ask'];
 const HAND = ['open', 'close', 'goal', 'watch', 'follow', 'keep', 'back', 'pick', 'unpick', 'press'];
-const TIDY = ['remove', 'clear', 'ungoal', 'hide'];
+const TIDY = ['remove', 'clear', 'ungoal', 'hide', 'scene'];
 const SHOW = [
   'glow', 'lift', 'drop', 'paint', 'link', 'pulse', 'label', 'retext', 'camera', 'wait', 'fly', 'dim', 'cover', 'uncover', 'show', 'compare', 'dial', 'set',
   'hop', 'ptr', 'group', 'pivot', 'stairs', 'tag', 'bf', 'heights', 'deg', 'mark', 'tally', 'magnify', 'strike', 'span', 'visit', 'choose', 'search', 'tick', 'cross',
