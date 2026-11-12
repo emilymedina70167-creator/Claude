@@ -4,6 +4,10 @@
 // 纯函数，有测试（tests/memory-report.test.js）。
 import { MEMORY_COLLECTIONS } from './schema.js';
 import { packIds } from './space.js';
+import { EXAM_COLLECTIONS } from '../exam/schema.js';
+
+// 考试的资料（exam/schema.js）：入库要花额度和人工核对，丢了重做不划算，备份带上。收件箱和回执是过路的，不带
+export const EXAM_BACKUP = Object.keys(EXAM_COLLECTIONS).filter((c) => !c.startsWith('exam_inbox'));
 
 export const BACKUP_FORMAT = 'la-desk-backup';
 export const BACKUP_VERSION = 1;
@@ -21,7 +25,8 @@ const strip = (d) => { const { id: _, ...rest } = d || {}; return rest; };
  * 返回要存成文件的对象：{ format, v, kit, at, today, include, counts, docs: [{ collection, doc_id, data }] }
  */
 // books：{ books, chunks }，教材板块（转写要花额度，丢了重转不划算，所以备份带上文字；原页图在 assets 里，不进备份）
-export function backupFile({ memory = {}, pack = {}, packs = null, sessions = {}, books = null, evidence = true, boards = false, kit = '', today = '', at = Date.now() } = {}) {
+// exam：{ 集合名: [{ id, ... }] }（真题、考点、篇章、画像、考情动态；原页图照旧在 assets 里）
+export function backupFile({ memory = {}, pack = {}, packs = null, sessions = {}, books = null, exam = null, evidence = true, boards = false, kit = '', today = '', at = Date.now() } = {}) {
   const docs = [];
   const counts = {};
   const add = (collection, d) => {
@@ -42,6 +47,7 @@ export function backupFile({ memory = {}, pack = {}, packs = null, sessions = {}
       for (const k of ['main', 'problems']) if (p?.[k]) add('pack', { ...p[k], id: ids[k] });
     }
   } else for (const k of ['main', 'problems']) if (pack?.[k]) add('pack', { ...pack[k], id: k });
+  for (const c of EXAM_BACKUP) for (const d of [...(exam?.[c] || [])].sort((a, b) => String(a.id).localeCompare(String(b.id)))) add(c, d);
   for (const b of books?.books || []) add('books', b);
   for (const c of books?.chunks || []) add(`books/${c.book}/chunks`, c);
   for (const sid of Object.keys(sessions || {}).sort()) {

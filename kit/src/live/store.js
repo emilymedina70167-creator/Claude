@@ -61,8 +61,11 @@ if (typeof window !== 'undefined') {
     faults,
     failWrites(n = 1, match = '', code = 'unavailable') { Object.assign(faults, { left: n, match, code }); },
     slowWrites(ms = 0) { faults.lag = ms; },
+    // 订阅过、整类读过哪些集合（e2e 查首页不读考试资料的整类）：'questions' 是整类，'questions?' 是带条件的
+    reads: new Set(),
   });
 }
+const noteRead = (path, filters) => { try { window.LAKitDev?.reads?.add(`${path}${filters.length ? '?' : ''}`); } catch { /* 不在浏览器里 */ } };
 async function faultGate(path) {
   faults.writes++;
   if (faults.lag) await new Promise((r) => setTimeout(r, faults.lag));
@@ -143,8 +146,9 @@ export function fakeDb(key) {
       where: (f, op, v) => query(path, [...filters, [f, op, v]], order, lim),
       orderBy: (f, dir = 'asc') => query(path, filters, [f, dir], lim),
       limit: (n) => query(path, filters, order, n),
-      async get() { return qs(run(), new Map()); },
+      async get() { noteRead(path, filters); return qs(run(), new Map()); },
       onSnapshot(next) {
+        noteRead(path, filters);
         let prev = new Map(), last = null;
         const f = () => {
           const docs = run();

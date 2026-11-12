@@ -25,7 +25,7 @@ import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toD
 import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, classForm } from './session.js';
 import { buildReport, reportLine, REPORT_VERSION, lastActivity, reportText } from './report.js';
 import { needsDebrief, transcriptText, debriefPrompt, parseDebrief, debriefText, debriefView, DEBRIEF_VERSION } from './debrief.js';
-import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA } from './backup.js';
+import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA, EXAM_BACKUP } from './backup.js';
 import { createManualForm } from './manual.js';
 import { createMemOps } from './memops.js';
 import { createMemoView } from './memoview.js';
@@ -67,6 +67,7 @@ import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
 import { scrubBooks, readReserve } from '../exam/reserve.js';
 import { createExamInbox } from '../exam/examdesk.js';
+import { createExamCard } from '../exam/examview.js';
 import { loadExamCourse, courseOfBlock } from '../exam/load.js';
 import { renderStageClass } from '../stage/classroom.js';
 import { suggestBlock } from '../books/plan.js';
@@ -144,6 +145,7 @@ export async function renderDesk(root, meta) {
     </div>
     <div class="dk-manage" hidden>
     <section class="dk-card dk-look"><h2 class="dk-h">样子</h2><p class="dk-sub muted">紫藤：学习台和课堂一起，跟着 iPad 的白天晚上换，也可以固定一种。这台设备记着。</p><div class="dk-body"></div></section>
+    <section class="dk-card dk-exam"><h2 class="dk-h">考试</h2><p class="dk-sub muted">考哪个学校哪个专业、目标多少分、哪天考。410 分的进度、距考研都照这里算。</p><div class="dk-body"></div></section>
     <section class="dk-card dk-recent"><h2 class="dk-h">最近记下的</h2><p class="dk-sub muted">课堂里的 Claude 和页面直接写进记忆的，不对就撤销（7 天内）。</p><div class="dk-pdone"></div></section>
     <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-backup" hidden><h2 class="dk-h">备份</h2><div class="dk-body"></div></section>
@@ -191,6 +193,7 @@ export async function renderDesk(root, meta) {
   const booksView = createBooksView($('.dk-bookpage'), { db, assets: store.assets, getAI: deskAI, space: () => space, model: MODEL, plan: { open: (host, id) => planner.openMap(host, id) } });
   // 考试资料的收件箱（exam/examdesk.js）：开发那边切好的真卷、考点树、标签，页面查过再并进去（只在首页挂，课堂里不挂）
   createExamInbox({ db });
+  const examCard = createExamCard($('.dk-exam .dk-body'), { db, getData: () => data });
 
   const packs = Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: null, problems: null }]));
   for (const k of SPACE_KEYS) {
@@ -267,7 +270,7 @@ export async function renderDesk(root, meta) {
       if (c === 'sessions' || c === 'position') paintClass();
       if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
-      if (c === 'exam') { ensureTarget(); paintScore(); }
+      if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
       if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) fixReports(); if (lastRes) paintWeek(toDate(Date.now())); }
       if (c === 'curriculum') { manualForm?.refreshBlocks(); const sel = $('.dk-radd-b'); if (sel) sel.dataset.space = ''; }
       if (['curriculum', 'weaknesses', 'observations', 'mastery'].includes(c)) { fixSkills(); fixDebriefs(); }
@@ -1094,7 +1097,9 @@ export async function renderDesk(root, meta) {
       }
       const today = toDate(Date.now());
       const books = await loadBooks(db).catch(() => null);
-      const file = backupFile({ memory: data, packs, sessions, books, evidence, boards, kit: VERSION, today });
+      // 考试的资料不订阅（不进记忆库），导出时现读一次
+      const exam = Object.fromEntries(await Promise.all(EXAM_BACKUP.map(async (c) => [c, await db.collection(c).get().then((x) => x.docs.map((d) => ({ id: d.id, ...d.data() })), () => [])])));
+      const file = backupFile({ memory: data, packs, sessions, books, exam, evidence, boards, kit: VERSION, today });
       const blob = new Blob([JSON.stringify(file, null, 1)], { type: 'application/json' });
       await dl.save({ filename: backupName(today), data: blob });
       note.textContent = `导出了 ${file.docs.length} 条（${mb(blob.size)}）。`;
@@ -1391,6 +1396,7 @@ export async function renderDesk(root, meta) {
     const books = page === 'books';
     $('.dk-home').hidden = !home;
     $('.dk-manage').hidden = !manage;
+    if (manage) examCard.paint();
     $('.dk-pages').hidden = home || books || manage;
     $('.dk-bookpage').hidden = !books;
     root.querySelectorAll('.dk-nav a').forEach((a) => a.setAttribute('aria-current', String(a.getAttribute('href') === `#${home ? '' : page}`)));

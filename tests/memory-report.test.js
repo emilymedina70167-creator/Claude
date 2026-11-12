@@ -240,3 +240,13 @@ test('reportText：下课时给课堂 Claude 的报告，一道题一行带组�
   assert.match(tb, /只列了最近的/);
   assert.match(tb, /q-399/);
 });
+
+test('备份带上考试的资料（真题、考点……），收件箱和回执不带', () => {
+  const b = backupFile({ memory: {}, exam: { questions: [{ id: 'Q-408-2019-1', stem: 's' }], syllabus: [{ id: 'G-DS-1', title: 't' }], exam_inbox: [{ id: 'x', kind: 'paper' }], exam_inbox_log: [{ id: 'y', at: 1 }] } });
+  const paths = b.docs.map((d) => `${d.collection}/${d.doc_id}`);
+  assert.ok(paths.includes('questions/Q-408-2019-1'));
+  assert.ok(paths.includes('syllabus/G-DS-1'));
+  assert.ok(!paths.some((p) => p.startsWith('exam_inbox')));
+  assert.equal(b.counts.questions, 1);
+  assert.deepEqual(b.docs.find((d) => d.doc_id === 'Q-408-2019-1').data, { stem: 's' });
+});

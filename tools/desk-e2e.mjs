@@ -15,6 +15,7 @@ import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildPaper } from '../kit/src/exam/ingest.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const KIT = join(ROOT, 'kit/dist/la-kit.js');
@@ -1032,6 +1033,43 @@ const SUITES = {
   },
 
   // 教材的收件箱（Claude Code 转好写进 book_inbox）：并进各页、删掉记录、拼成条目，书目从「等转写」变成「转好了」
+  // 考情第 1 批（docs/exam-plan.md）：默认的考试档案、收件箱并真卷（好的进库、坏的整卷不收）、「管理 → 考试」改目标、首页不读考试资料的整类
+  async exam(browser) {
+    const t = await seeded(browser);
+    const target = await t.waitFor(async () => { const x = (await t.db())['exam/target']; return x?.school ? x : null; }, { what: '页面写了一份默认的考试档案' });
+    check(target.dept === '智能科学与技术学院' && target.goal === 410 && target.by === 'page', `默认档案不对：${JSON.stringify(target).slice(0, 200)}`);
+    const fx = (f) => readFileSync(join(ROOT, 'tests/fixtures/exam', f), 'utf8');
+    const good = buildPaper({ subject: '408', year: 2019, paperText: fx('408-2019.paper.txt'), answersText: fx('408-2019.answers.txt'), source: 'e2e' });
+    const bad = buildPaper({ subject: '408', year: 2018, paperText: fx('408-2019.paper.txt'), answersText: fx('408-2019.answers.txt') });
+    bad.questions[3].type = 'mcq';
+    await plant(t, {
+      'exam_inbox/X-408-2019': { kind: 'paper', paper: good.paper, questions: good.questions, passages: good.passages, by: 'dev', at: 1 },
+      'exam_inbox/X-408-2018': { kind: 'paper', paper: bad.paper, questions: bad.questions, passages: [], by: 'dev', at: 1 },
+    });
+    await t.page.reload(); await sleep(1500);
+    const all = await t.waitFor(async () => { const x = await t.db(); return !x['exam_inbox/X-408-2019'] && !x['exam_inbox/X-408-2018'] ? x : null; }, { timeout: 30000, what: '收件箱的两条都处理完' });
+    check(all['exam_inbox_log/X-408-2019']?.ok === true, '好的那卷回执不是 ok');
+    check(all['exam_inbox_log/X-408-2018']?.ok === false && /Q-408-2018-4/.test(JSON.stringify(all['exam_inbox_log/X-408-2018'].problems)), '坏的那卷回执没写哪一题');
+    check(all['papers/X-408-2019'] && Object.keys(all).filter((k) => k.startsWith('questions/Q-408-2019-')).length === 47, '好的那卷没有整卷进库');
+    check(!all['papers/X-408-2018'] && !Object.keys(all).some((k) => k.startsWith('questions/Q-408-2018-')), '坏的那卷有题进了库');
+    check(all['meta/exam']?.counts?.questions === 47, `计数不对：${JSON.stringify(all['meta/exam'])}`);
+    // 首页不订阅、不整类读考试的资料（收件箱除外）
+    const reads = await t.page.evaluate(() => [...(window.LAKitDev?.reads || [])]);
+    for (const c of ['questions', 'syllabus', 'papers', 'passages', 'exam_profiles']) check(!reads.includes(c), `首页整类读了 ${c}`);
+    // 「管理 → 考试」：目标改成 400，存
+    await t.route('manage');
+    await t.waitFor(() => t.page.$('.dk-exam input[name=goal]'), { what: '管理页画出考试那张卡' });
+    check((await t.text('.dk-exam'))?.includes('47 道真题'), '考试卡没写库里有几道真题');
+    await t.page.fill('.dk-exam input[name=goal]', '400');
+    await t.page.fill('.dk-exam input[name="split.math"]', '120');
+    await t.page.click('.dk-exam .dk-exsave');
+    const saved = await t.waitFor(async () => { const x = (await t.db())['exam/target']; return x?.goal === 400 ? x : null; }, { what: '档案的目标改成 400' });
+    check(saved.split.math === 120 && saved.log.some((l) => l.by === 'me' && l.field === 'goal' && l.to === 400), `改档案没记 log：${JSON.stringify(saved.log)}`);
+    await t.home();
+    await t.waitFor(async () => (await t.text('.dk-score'))?.includes('目标 400 分'), { what: '首页 410 分那张卡换成目标 400 分' });
+    return t;
+  },
+
   async inbox(browser) {
     const t = await seeded(browser);
     const page = (n) => ({ n, img: '', imgs: [], layer: '', size: [1200, 1600], status: 'todo', at: 1 });
