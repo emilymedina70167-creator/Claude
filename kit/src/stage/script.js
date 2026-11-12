@@ -28,10 +28,11 @@ export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
 export const OPTIONS = {
   label: ['side', 'tone'], fly: ['side'], dial: ['range', 'at', 'options'], pick: ['reveal'], keep: ['after'],
   open: ['back', 'wrong', 'call', 'undo', 'input', 'range', 'choices'],
-  goal: ['when', 'call', 'on', 'collect', 'n'], watch: ['when'],
+  // exam= / like=：这一问、这条挑战是哪一道真题 / 对标哪一道真题（考情第 4 批；写法在「这一块在考试里」那一节里，不进 stageDoc）
+  goal: ['when', 'call', 'on', 'collect', 'n', 'exam', 'like'], watch: ['when'],
   ask: {
-    tap: ['expect', 'button'], drag: ['expect', 'button'], pick: ['expect', 'reveal', 'order', 'button'], next: ['button'], say: ['button'], end: ['button'],
-    value: ['answer', 'type', 'wrong', 'free', 'solve', 'grid', 'button'],
+    tap: ['expect', 'button', 'exam', 'like'], drag: ['expect', 'button', 'exam', 'like'], pick: ['expect', 'reveal', 'order', 'button', 'exam', 'like'], next: ['button', 'exam', 'like'], say: ['button', 'exam', 'like'], end: ['button'],
+    value: ['answer', 'type', 'wrong', 'free', 'solve', 'grid', 'button', 'exam', 'like'],
   },
 };
 // 两个名字差几个字母（交换挨着的两个字母算一下）

@@ -13,6 +13,7 @@ import { QUIET_MS } from './events.js';
 import { createLoop } from './loop.js';
 import { buildStageSystem, turnMessage, firstMessage, stageSubject } from './doc.js';
 import { actEvidence, makeSigger, goalSig } from './evidence.js';
+import { examCheckOf } from '../exam/fields.js';
 import { fitHistory } from './history.js';
 import { getAI } from '../ai.js';
 import { createSink } from '../live/sync.js';
@@ -68,6 +69,13 @@ export async function renderStageClass(root, meta = {}, desk) {
   const sink = readOnly ? null : createSink(store, { evidence: (rec) => ({ session: sid, block: desk.block, turn: rec?.turn }) });
   const stage = new Stage($('.sc-stage'), { input: !readOnly, onAct: (a) => onAct(a) });
   window.LAStage = stage;
+  // 这门课的考试资料（desk.js 按门课读，不等它）：读到了以后 exam= / like= 写了库里没有、留作模考的当场报
+  desk.exam?.then?.((ex) => {
+    if (!ex) return;
+    desk.examData = ex;
+    stage.examCheck = examCheckOf(ex, typeof desk.reserve === 'function' ? desk.reserve() : desk.reserve || []);
+    stage.scene.examCheck = stage.examCheck;
+  });
   if (store.dev) window.LAStageClass = { stage, history: () => history };
 
   // —— 谁来讲课：claude.ai 里是真的 Opus 5.5；本地 ?dev 用模拟老师（不花额度）——
@@ -146,12 +154,12 @@ export async function renderStageClass(root, meta = {}, desk) {
     report: (err, info) => reportError(err, info),
     // 学生的每个动作都是证据：有对错的（点了预期的那一个、填的答案、做到了挑战）记成作答，别的记成动作，打的字记成说的话
     evidence: sink ? {
-      goal: (id, g, at) => sink.record({ type: 'stage', block: `S${at}`, q: g?.text || id, value: 'goal', text: id, ok: true, turn: at, ...(goalSig(g) ? { sig: goalSig(g) } : {}) }),
+      goal: (id, g, at) => sink.record({ type: 'stage', block: `S${at}`, q: g?.text || id, value: 'goal', text: id, ok: true, turn: at, ...(goalSig(g) ? { sig: goalSig(g) } : {}), ...(g?.exam ? { exam: g.exam } : {}), ...(g?.like ? { like: g.like } : {}) }),
       act: (a, at) => {
         const comp = `S${at || seq}`; // 这一问的编号：页面在每一轮的 [学生] 后面告诉老师（记忆块的 basis 写它）
         const w = stage.scene.waiting;
         const q = w?.prompt || stage.scene.say || '';
-        const ev = actEvidence(a, { comp, q, goalText: (id) => stage.scene.goals.get(id)?.text || id, sig: sigOf(w, stage.scene, at || seq), goalSig: (id) => goalSig(stage.scene.goals.get(id)) });
+        const ev = actEvidence(a, { comp, q, goalText: (id) => stage.scene.goals.get(id)?.text || id, sig: sigOf(w, stage.scene, at || seq), goalSig: (id) => goalSig(stage.scene.goals.get(id)), wait: w });
         for (const r of ev.records) sink.record({ ...r, turn: at });
         if (ev.say != null) sink.put('evidence', sayEvidence(ev.say, { session: sid, block: desk.block, turn: at }));
         if (ev.event) sink.event({ type: `stage-${a.type}`, block: comp, detail: { ...a, tries: undefined }, turn: at });

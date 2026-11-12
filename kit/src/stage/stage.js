@@ -106,6 +106,7 @@ export class Stage {
     this.reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.instant = false; // 重放时：不演动画、不等学生
     this.scene = new Scene();
+    this.scene.examCheck = this.examCheck || null; // 考情：exam= / like= 当场核（课堂读到考试资料以后挂上）
     this.log = []; // 演过的每一行 { src, by: 'teacher' | 'student' | 'page', turn }
     this.errors = []; // 这一轮没演的行 { line, src, error }
     this.turnNo = 0;
@@ -482,6 +483,7 @@ export class Stage {
   }
   clearAll() {
     this.scene = new Scene();
+    this.scene.examCheck = this.examCheck || null; // 考情：exam= / like= 当场核（课堂读到考试资料以后挂上）
     this.noteView(); // 重放时照同一个屏幕摆（摆新东西要看屏幕多大：横屏东西多了另起一列）
     this.nodes.forEach((n) => n.remove()); this.nodes.clear();
     this.decors.forEach((m) => m.forEach((n) => n.remove())); this.decors.clear();

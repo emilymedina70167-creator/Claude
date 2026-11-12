@@ -23,3 +23,18 @@ export function examOfRecord(el) {
   const l = el.closest('[data-like]')?.dataset?.like;
   return { ...(e ? { exam: e } : {}), ...(l ? { like: l } : {}) };
 }
+
+/**
+ * 舞台的 exam= / like= 当场核（scene.js 的 examCheck）：这门课的考试资料读到以后，题号库里没有、是留作模考的卷就报。
+ * exam：load.js 的结果；years：留作模考的年份。返回 (id) → 出错的话 | ''
+ */
+export function examCheckOf(exam, years = []) {
+  const all = new Map((exam?.questions || []).map((q) => [q.id, q]));
+  const yearOf = (id) => Number(String(id).match(/^Q-\d{3}-(\d{4})-/)?.[1]) || 0;
+  return (id) => {
+    if (years.includes(yearOf(id)) || all.get(id)?.reserve) return `${id} 是留作模考的卷，课上不能用（换一道能用的，或者照它 like= 出一道）`;
+    if (!all.has(id)) return `库里没有这道真题 ${id}（写「这一块在考试里」那一节列着的题号）`;
+    return '';
+  };
+}
+export const QID_RE = QID;

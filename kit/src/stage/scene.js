@@ -10,6 +10,7 @@
 // 舞台上的东西分几种（一排格子、树、图、矩阵、平面、句子、式子……），每一种是 types/ 下的一个模块：
 // 怎么造、部件怎么写（a.3 / t.A / m.2,3）、部件在哪、自己的指令（swap / insert / rowop……）、给老师看的现状。
 // 这里只管各种东西共用的：点亮、染色、连线、贴字、拨数、镜头、说话、等学生。
+import { QID_RE } from '../exam/fields.js';
 import { parseScript, parseRef, parseRich, addCommands, OPTIONS, optionError } from './script.js';
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
@@ -228,7 +229,9 @@ export class Scene {
     this.focus = null; // null = 全部；或者部件的写法
     this.say = '';
     this.words = []; // 这一句话里能飞走的 [词]
-    this.waiting = null; // { kind, refs, prompt, button, expect, answer, pre（预写的行挂的：课堂循环看学生手上还有没有事用） }
+    this.waiting = null; // { kind, refs, prompt, button, expect, answer, pre（预写的行挂的：课堂循环看学生手上还有没有事用）, exam / like（真题题号）, shownAt }
+    // 考情第 4 批：课堂读到这门课的考试资料以后挂上（exam/fields.js 的 examCheckOf），exam= / like= 写了库里没有、留作模考的当场报
+    this.examCheck = null;
     // —— 活的舞台（E 段）：学生随时能直接动的、挑战、挑战做到了马上演的 ——
     this.opens = new Map(); // 'B:edit' → { obj, action, refs, lo, hi }：开放给学生直接动的
     this.goals = new Map(); // id → { id, text, when, alts, cond（各组摊平）, met, call, on, collect }
@@ -269,6 +272,7 @@ export class Scene {
 
   clone() {
     const s = new Scene();
+    s.examCheck = this.examCheck;
     for (const [k, o] of this.objects) s.objects.set(k, structuredClone(o));
     for (const [k, l] of this.links) s.links.set(k, { ...l, a: { ...l.a }, b: { ...l.b } });
     for (const [k, l] of this.labels) s.labels.set(k, { ...l, refs: [...l.refs] });
@@ -343,6 +347,19 @@ export class Scene {
   /** 画面上摆着的东西（藏着的不算）：画、镜头、摆新东西、往下让都只看这几样；照摆上舞台的先后 */
   shownIds() { return [...this.objects.values()].filter((o) => !o.hidden).map((o) => o.id); }
   /** 这几个写法（部件、整样东西）落在哪几样藏着的东西上 */
+  /** ask / goal 的 exam= / like=：写的得是题号；课堂挂了 examCheck 时库里没有、留作模考的当场报（重放旧课不查） */
+  examOpts(opts, c = {}) {
+    const out = {};
+    for (const k of ['exam', 'like']) {
+      if (opts[k] == null) continue;
+      const v = String(opts[k]).trim();
+      if (!QID_RE.test(v)) { if (c.lenient) continue; throw new Error(`${k}= 写真题的题号（像 Q-408-2019-23：「这一块在考试里」那一节列着），不是「${v}」`); }
+      const why = !c.lenient && this.examCheck ? this.examCheck(v) : '';
+      if (why) throw new Error(why);
+      out[k] = v;
+    }
+    return out;
+  }
   hiddenIn(refs) { return [...new Set(refs.map((r) => parseRef(r)?.obj).filter((id) => this.objects.get(id)?.hidden))]; }
   /** 挑战的条件里提到的舞台上的东西（M、M.1,1、rank(M)、M same B） */
   objectsIn(cond) {
@@ -1432,7 +1449,8 @@ export class Scene {
           rightKey = `ask.right#${++this.askSeq}`;
           for (const a of this.ahead.values()) if (a.from === 'ask.right') a.from = rightKey;
         } else if (!c.prewrite) this.dropAhead('ask.right');
-        this.waiting = { kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, ...(order ? { order: true } : {}), answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.grid ? { grid: spec.grid } : {}), ...(spec?.solve != null ? { solve: spec.solve } : {}), ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}), ...(c.prewrite ? { pre: true } : {}) };
+        const ex = this.examOpts(opts, c);
+        this.waiting = { ...ex, shownAt: Date.now(), kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, ...(order ? { order: true } : {}), answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.grid ? { grid: spec.grid } : {}), ...(spec?.solve != null ? { solve: spec.solve } : {}), ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}), ...(c.prewrite ? { pre: true } : {}) };
         if (opts.expect && kind !== 'pick') this.parts(opts.expect);
         return { kind };
       }
@@ -1650,7 +1668,8 @@ export class Scene {
           if (on == null && now.some(Boolean)) throw new Error(`「${opts.when}」现在就已经成立了：挑战要学生动手以后才做得到`);
         }
         // pre：预写的行造的（舞台演预写的行、写下时的试演），撞名时和老师直接写的分开
-        this.goals.set(id, { id, text: str ?? '', when: opts.when, alts, cond, met: false, call: watch ? 'now' : call, on, collect, ...(watch ? { watch: true } : {}), ...(c.prewrite || this.trial ? { pre: true } : {}) });
+        const ex = watch ? {} : this.examOpts(opts, c);
+        this.goals.set(id, { ...ex, id, text: str ?? '', when: opts.when, alts, cond, met: false, call: watch ? 'now' : call, on, collect, ...(watch ? { watch: true } : {}), ...(c.prewrite || this.trial ? { pre: true } : {}) });
         // 套着的预写（@g1 里写出 goal g2，@g2 的行先记在 ahead）：演出 goal g2 的那一刻（舞台演预写的行带 prewrite；写下时试演在克隆上）
         // 那几行挪过来。老师当场直接写的同名挑战不捡（那是另一个挑战，旧的预写不能在它做到时演）；重写一个挑战照旧清掉它的预写
         if ((c.prewrite || this.trial) && this.ahead.has(id)) {

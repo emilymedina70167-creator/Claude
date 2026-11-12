@@ -65,8 +65,9 @@ import { createPlanner } from '../books/planview.js';
 import { createDevAI } from '../books/devmock.js';
 import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
-import { scrubBooks, readReserve } from '../exam/reserve.js';
+import { scrubBooks, readReserve, reserveYears } from '../exam/reserve.js';
 import { createExamInbox } from '../exam/examdesk.js';
+import { loadExamCourse, courseOfBlock } from '../exam/load.js';
 import { createExamCard } from '../exam/examview.js';
 import { createExamPage } from '../exam/exampage.js';
 import { renderStageClass } from '../stage/classroom.js';
@@ -1548,7 +1549,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   // 留作模考的那几年（exam/reserve.js）：教材里带着它们统考标记的条目整条剔掉，textbookForClass、textbook_search、
   // textbook_read、目录拿到的都是剔过的。年份和教材一起读（档案 3 秒读不到用默认的最近三年）
   books.ready = Promise.all([loadBooks(db, space), readReserve(db, toDate(Date.now()))]).then(([r, years]) => {
-    Object.assign(books, scrubBooks(normalizeBooks(r), years), { loading: false, failed: r.failed || [] });
+    Object.assign(books, scrubBooks(normalizeBooks(r), years), { loading: false, failed: r.failed || [], reserve: years });
     if (r.failed?.length) reportError(new Error(`有 ${r.failed.length} 本教材没读到`), { what: '读教材', path: r.failed.join(',') });
   }, (err) => {
     Object.assign(books, { loading: false, failed: ['*'] });
@@ -1568,6 +1569,8 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   if (kind === 'stage') {
     return renderStageClass(root, { ...meta, unit: doc.title || meta.unit }, {
       store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, subject: doc.subject || '', mem, books, prevRead, readOnly,
+      // 这一门课的考试资料（exam/load.js，按门课读、不读整类）：不等它，课堂读到了再用（「这一块在考试里」、exam= 当场核）
+      exam: block && !readOnly ? loadExamCourse(db, courseOfBlock(block)).catch(() => null) : null, reserve: () => books.reserve || reserveYears(targetOf(mem), toDate(Date.now())),
       updateSession, onHome: () => goto(readOnly ? `classes/${sid}` : ''),
       recheck: readOnly ? {} : await within(db.doc('meta/workorder').get().then((s) => (s.exists ? s.data().recheck || {} : {})), 3000, {}).catch(() => ({})),
       writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),

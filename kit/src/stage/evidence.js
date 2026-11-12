@@ -9,8 +9,10 @@ const bool = (x) => (typeof x === 'boolean' ? x : null);
  * a：学生的一下（stage.js 交出来的）；comp：这一问的编号（S21）；q：这一问的题面；goalText(id)：挑战的字。
  * 返回 { records: [作答…], event: 要不要另记一条动作, say: 说的话 }
  */
-export function actEvidence(a, { comp, q = '', goalText = (id) => id, sig = null, goalSig = null } = {}) {
-  const rec = (x) => ({ type: 'stage', block: comp, ...(sig ? { sig } : {}), ...x });
+// wait：等着的那一问（scene.waiting）：带着 exam= / like=（真题题号）、shownAt（亮出来的时刻），证据记上题号和用时 ms；now 是现在（测试给）
+export function actEvidence(a, { comp, q = '', goalText = (id) => id, sig = null, goalSig = null, wait = null, now = Date.now() } = {}) {
+  const ex = { ...(wait?.exam ? { exam: wait.exam } : {}), ...(wait?.like ? { like: wait.like } : {}), ...(wait?.exam || wait?.like) && Number.isFinite(wait?.shownAt) ? { ms: Math.max(0, now - wait.shownAt) } : {} };
+  const rec = (x) => ({ type: 'stage', block: comp, ...(sig ? { sig } : {}), ...ex, ...x });
   if (!a) return { records: [], event: false };
   // 预期的那几个这一刻不在舞台上（right 是 null，页面比不了）：不记对错
   if (a.type === 'tap' && a.expected) return { records: [rec({ q, value: a.value, text: a.ref, ok: bool(a.right) })], event: false };
