@@ -1,7 +1,7 @@
 // 「管理 → 考试」那一张卡（docs/exam-plan.md 4.6）：填、改考试档案（目标院校、专业、科目、考试日期、目标分、留作模考的年份）。
 // 我点「存」才写，只写改了的字段（targetPatch），按 applyChange 记 log（by: me）。下面一行写库里有几套卷、几道题、几个考点
 // （读 meta/exam 的计数：收件箱每并一条照回执加，首页不为了计数去读整类）。
-import { targetOf, targetPatch, goalOf, examDateOf } from './target.js';
+import { targetOf, targetPatch, goalOf, examDateOf, reserveText, targetWarn } from './target.js';
 import { reserveYears } from './reserve.js';
 import { applyChange, assertWrite, toDate } from '../memory/schema.js';
 import { escapeHtml } from '../render.js';
@@ -28,7 +28,7 @@ export function createExamCard(host, { db, getData }) {
       ${field('date', '初试第一天', examDateOf(t), 'type="date"')}
       ${field('goal', '目标总分', goalOf(t).goal, 'inputmode="numeric"')}
       <div class="dk-exsplit">${SPLIT.map(([k, l]) => field(`split.${k}`, l, goalOf(t).split[k], 'inputmode="numeric"')).join('')}</div>
-      ${field('reserve', '留作模考的卷（年份）', Array.isArray(t.reserve) ? t.reserve.join(', ') : '', `placeholder="空着就是最近三年：${def.join('、')}"`)}
+      ${field('reserve', '留作模考的卷（年份）', reserveText(t), `placeholder="空着就是最近三年：${def.join('、')}；一张都不留写「不留」"`)}
       <p class="dk-exalt muted"></p>
       <div class="dk-mrow"><span class="dk-exmsg muted" role="status"></span><button type="submit" class="btn btn-primary dk-exsave">存</button></div>
       <p class="dk-exfoot muted"></p>
@@ -49,8 +49,10 @@ export function createExamCard(host, { db, getData }) {
   function paintMsg() {
     const el = host.querySelector('.dk-exmsg');
     if (!el) return;
-    const t = { ...targetOf(getData()), ...targetPatch(targetOf(getData()), readForm()) };
-    el.textContent = msg || goalOf(t).warn || (dirty ? '改了还没存' : '');
+    let t;
+    try { t = { ...targetOf(getData()), ...targetPatch(targetOf(getData()), readForm()) }; } catch (err) { el.textContent = msg || err.message; return; }
+    // 没改的时候提醒存着的那一份哪里不对（表单里显示的是照默认补过的样子，看不出来）
+    el.textContent = msg || (dirty ? targetWarn(t) || '改了还没存' : targetWarn(getData().exam?.find((d) => d.id === 'target') || {}));
   }
   function paintFoot() {
     const el = host.querySelector('.dk-exfoot');
@@ -61,7 +63,8 @@ export function createExamCard(host, { db, getData }) {
   async function save() {
     const cur = getData().exam?.find((d) => d.id === 'target') || null;
     const base = targetOf(getData());
-    const patch = targetPatch(base, readForm());
+    let patch;
+    try { patch = targetPatch(base, readForm()); } catch (err) { msg = err.message; paintMsg(); setTimeout(() => { msg = ''; paintMsg(); }, 4000); return; }
     if (!Object.keys(patch).length) { msg = '没有改动'; dirty = false; paintMsg(); return; }
     if (patch.date !== undefined && examDateOf({ date: patch.date }) !== patch.date) { msg = '日期要写成 年-月-日'; paintMsg(); return; }
     if (patch.goal !== undefined && !(patch.goal > 0)) { msg = '目标总分要写一个数'; paintMsg(); return; }

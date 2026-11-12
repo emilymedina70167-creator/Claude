@@ -54,3 +54,26 @@ test('readReserve：读档案；读不到、超时用默认', async () => {
   assert.deepEqual(await readReserve({ doc: () => ({ get: () => Promise.reject(new Error('x')) }) }, '2026-11-12'), [2024, 2025, 2026]);
   assert.deepEqual(await readReserve(db({ reserve: [2023] }, 200), '2026-11-12', { ms: 20 }), [2024, 2025, 2026]);
 });
+
+// —— 整支审查修的（考情第 1 批）——
+test('审查：数学书和别的常见标法也认（年份后面逗号、间隔号、全角数字、联考）', () => {
+  for (const s of ['（2024，数一）', '(2024,数学一,5分)', '【2025·统考真题】', '２０２５年统考真题', '【2023年计算机联考真题】', '（2025 年 数学一）']) assert.ok(markYears(s).length === 1, s);
+  assert.deepEqual(markYears('２０２５年统考真题'), [2025]);
+});
+test('审查：普通的话不算统考标记（大纲变化、复习书名、人数、一轮复习、政治局、多少分）', () => {
+  for (const s of ['2025 年考研大纲新增了…', '2026 考研数据结构复习指导', '2025 年考研人数达 388 万', '2025年数学一轮复习', '2025 年政治局会议', '2025 年政治经济学', '2025年408分以上']) assert.deepEqual(markYears(s), [], s);
+  assert.deepEqual(markYears('2025 年考研真题'), [2025]);
+  assert.deepEqual(markYears('2025 年政治真题'), [2025]);
+});
+test('审查：题面那条剔了，同一章「答案与解析」里同号的那条一起剔', () => {
+  const books = [{ id: 'B1', title: '王道操作系统', kind: 'textbook' }];
+  const chunks = [
+    { id: 'B1-1', book: 'B1', seq: 1, kind: '习题', chapter: '第3章 内存管理', section: '3.2 习题', title: '18.', text: '【2025 统考真题】页面置换 Q18' },
+    { id: 'B1-2', book: 'B1', seq: 2, kind: '习题', chapter: '第3章 内存管理', section: '3.2 习题', title: '19.', text: '普通题 Q19' },
+    { id: 'B1-3', book: 'B1', seq: 3, kind: '说明', chapter: '第3章 内存管理', section: '3.2 答案与解析', title: '18.【解析】', text: 'A。SECRET 解析 18' },
+    { id: 'B1-4', book: 'B1', seq: 4, kind: '说明', chapter: '第3章 内存管理', section: '3.2 答案与解析', title: '19.【解析】', text: '解析 19' },
+    { id: 'B1-5', book: 'B1', seq: 5, kind: '习题', chapter: '第4章 文件', section: '4.1 习题', title: '18.', text: '别的章的 18 题' },
+  ];
+  const ids = scrubChunks(chunks, [2025]).map((c) => c.id);
+  assert.deepEqual(ids, ['B1-2', 'B1-4', 'B1-5']);
+});

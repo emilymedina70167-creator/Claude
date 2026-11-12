@@ -42,7 +42,21 @@ export const needsDefault = ({ loaded, failed, docs }) => !!loaded && !failed &&
 export const schoolLine = (t = {}) => [t.school, t.dept, t.major].filter(Boolean).join(' ');
 
 const sameJson = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-const years = (s) => String(s).split(/[,，、\s]+/).map(Number).filter((y) => Number.isInteger(y) && y > 2000);
+// 留作模考的年份写法：空的是默认（最近三年，null）；「不留」是一张都不留（[]）；几个四位的年份。
+// 写了字却认不出一个四位年份（「25, 26」「二〇二五」、写错一个字）不许存：存成 [] 就等于悄悄不留了，那几年的真题会进课堂
+const NONE = /^(?:不留|一张都不留|无|没有|none)$/i;
+function parseReserve(v) {
+  if (Array.isArray(v)) return v.map(Number);
+  const t = String(v ?? '').trim();
+  if (!t) return null;
+  if (NONE.test(t)) return [];
+  const parts = t.split(/[,，、\s]+/).filter(Boolean);
+  const ys = parts.map(Number);
+  if (!parts.length || ys.some((y) => !Number.isInteger(y) || y < 2009 || y > 2099)) throw new Error(`留作模考的「${t}」认不出年份：写四位的年份（2025, 2026），一张都不留写「不留」，空着是最近三年`);
+  return [...new Set(ys)].sort((a, b) => a - b);
+}
+/** 表单里怎么写留作模考：默认是空的，一张都不留写「不留」 */
+export const reserveText = (t) => (Array.isArray(t?.reserve) ? (t.reserve.length ? t.reserve.join(', ') : '不留') : '');
 
 /**
  * 「管理 → 考试」表单 → 改了哪些字段（只交改了的，存的时候 applyChange 照它记 log）。
@@ -53,8 +67,27 @@ export function targetPatch(cur = {}, form = {}) {
   for (const [k, v] of Object.entries(form)) {
     if (k === 'goal') next.goal = num(v);
     else if (k === 'split') next.split = Object.fromEntries(SPLIT_KEYS.map((x) => [x, num(v?.[x] ?? cur.split?.[x])]));
-    else if (k === 'reserve') next.reserve = Array.isArray(v) ? v.map(Number) : String(v ?? '').trim() ? years(v) : null;
+    else if (k === 'reserve') next.reserve = parseReserve(v);
     else next[k] = typeof v === 'string' ? v.trim() : v;
   }
   return Object.fromEntries(Object.entries(next).filter(([k, v]) => !sameJson(cur[k], v)));
+}
+
+const SUBJECT_OF = { math: ['301', '数学一'], cs: ['408', '408'], en: ['201', '英语一'], pol: ['101', '政治'] };
+/**
+ * 存着的档案哪里不对（页面照旧用默认算，不崩；这一句给「管理 → 考试」那张卡提醒）：日期坏了、四科里有不是数 / 负数、
+ * 超过了那一门的满分、四科加起来不等于目标。都对返回 ''
+ */
+export function targetWarn(t = {}) {
+  const out = [];
+  if (t.date !== undefined && !isDate(t.date)) out.push(`存着的考试日期「${t.date}」不对，现在按 ${DEFAULT_TARGET.date} 算`);
+  for (const k of SPLIT_KEYS) {
+    const v = t.split?.[k];
+    const [code, label] = SUBJECT_OF[k];
+    if (v !== undefined && !okNum(v)) out.push(`${label}的分数「${v}」不对，现在按 ${DEFAULT_TARGET.split[k]} 算`);
+    else if (okNum(v) && num(v) > Number(t.full?.[code] ?? DEFAULT_TARGET.full[code])) out.push(`${label} ${num(v)} 分超过了满分 ${t.full?.[code] ?? DEFAULT_TARGET.full[code]}`);
+  }
+  const g = goalOf(t).warn;
+  if (g) out.push(g);
+  return out.join('；');
 }

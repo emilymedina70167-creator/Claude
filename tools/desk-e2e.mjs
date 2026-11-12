@@ -1032,7 +1032,6 @@ const SUITES = {
     return t;
   },
 
-  // 教材的收件箱（Claude Code 转好写进 book_inbox）：并进各页、删掉记录、拼成条目，书目从「等转写」变成「转好了」
   // 考情第 1 批（docs/exam-plan.md）：默认的考试档案、收件箱并真卷（好的进库、坏的整卷不收）、「管理 → 考试」改目标、首页不读考试资料的整类
   async exam(browser) {
     const t = await seeded(browser);
@@ -1070,6 +1069,7 @@ const SUITES = {
     return t;
   },
 
+  // 教材的收件箱（Claude Code 转好写进 book_inbox）：并进各页、删掉记录、拼成条目，书目从「等转写」变成「转好了」
   async inbox(browser) {
     const t = await seeded(browser);
     const page = (n) => ({ n, img: '', imgs: [], layer: '', size: [1200, 1600], status: 'todo', at: 1 });

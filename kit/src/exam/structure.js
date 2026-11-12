@@ -38,6 +38,9 @@ export const STRUCTURE = {
   }],
 };
 const ONE_COURSE = { 201: 'EN', 101: 'PO' };
+// 数学一一卷三门课，题号认不出门课：先写高数（分量最大），打了标签以后照主考点改（inbox.js 的 courseOfTags）。
+// 不先写的话门课是必填，整卷进不了库，标签又要题先在库里——两边互相等（整支审查第 4 条）
+const GUESS = { 301: 'HM' };
 
 /** 某一科某一年的结构（没有就是 null） */
 export function structureOf(subject, year) {
@@ -45,12 +48,12 @@ export function structureOf(subject, year) {
   return (STRUCTURE[String(subject)] || []).find((s) => y >= s.from && (s.to === undefined || y <= s.to)) || null;
 }
 
-/** 题号 → 门课的草稿：408 照表，英语、政治只有一门，数学一卷三门课认不出来（''） */
+/** 题号 → 门课的草稿：408 照表，英语、政治只有一门，数学一先猜高数 */
 export function courseHint(subject, year, n) {
   if (ONE_COURSE[subject]) return ONE_COURSE[subject];
   const s = structureOf(subject, year);
   const hit = (s?.courses || []).find(([a, b]) => n >= a && n <= b);
-  return hit ? hit[2] : '';
+  return hit ? hit[2] : GUESS[subject] || '';
 }
 
 const range = (a, b) => (a === b ? `第 ${a} 题` : `${a}～${b}`);

@@ -7,6 +7,9 @@ import { validateExam } from './schema.js';
 import { checkPaper } from './structure.js';
 import { checkTags } from './taxonomy.js';
 
+const STRONG = ['engine', 'exact', 'double'];
+/** 题自带的标签照主考点算门课（G-LA-2.1 → LA） */
+export const courseOfTags = (tags) => String(tags?.syl?.[0] || '').match(/^G-([A-Z]{2})-/)?.[1] || '';
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const strip = (d) => { const { id: _, ...rest } = d || {}; return rest; };
 
@@ -59,7 +62,11 @@ export function planInbox(rec = {}, { have = new Map(), at = Date.now(), syllabu
     for (const q of qs) {
       const cur = have.get(`questions/${q.id}`);
       const { tags, ...rest } = strip(q);
-      put('questions', { id: q.id, data: { ...rest, ...withTags(cur, tags, { at, by }), by, at } });
+      // 门课：题自带标签就照主考点；没带、库里那条打过标签的留着库里的（重切一遍不把打标签改过的门课退回题号猜的）
+      const course = courseOfTags(tags) || (cur?.tags ? cur.course : '') || rest.course;
+      // 验算：库里那条验过（引擎 / 精确 / 双人），这一份只照书，留着库里的
+      const verified = STRONG.includes(cur?.verified?.how) && (!rest.verified || rest.verified.how === 'book') ? cur.verified : rest.verified;
+      put('questions', { id: q.id, data: { ...rest, course, ...(verified ? { verified } : {}), ...withTags(cur, tags, { at, by }), by, at } });
     }
     for (const x of ps) put('passages', { id: x.id, data: { ...strip(x), by, at } });
   } else if (rec.kind === 'syllabus') {
@@ -68,19 +75,31 @@ export function planInbox(rec = {}, { have = new Map(), at = Date.now(), syllabu
     for (const n of nodes) if (n.course !== rec.course) log.problems.push(`${n.id}：门课是 ${n.course}，这一份是 ${rec.course} 的大纲`);
     if (!nodes.length) log.problems.push('考点树是空的');
     if (log.problems.length) return { writes: [], log };
+    const fresh = new Set(nodes.map((n) => n.id));
     for (const n of nodes) {
       const cur = have.get(`syllabus/${n.id}`);
-      // 挂到课程地图的哪几块是后来映射上的（教研室 / 页面），重新切大纲不抹掉
-      const keep = cur ? Object.fromEntries(['blocks', 'mapAt', 'mapSig', 'changed'].filter((k) => cur[k] !== undefined).map((k) => [k, cur[k]])) : {};
-      put('syllabus', { id: n.id, data: { ...strip(n), ...keep, by, at } });
+      // 挂到课程地图的哪几块是后来映射上的（教研室 / 页面），重新切大纲不抹掉——但编号是按出现顺序数的，
+      // 中间补了一节以后同一个编号可能是另一节：标题变了的不带走原来挂的块，回执里写一句（教研室会重新挂）
+      const moved = cur?.title && cur.title !== n.title;
+      if (moved && cur.blocks?.length) log.notes.push(`${n.id} 的标题变了（「${cur.title}」→「${n.title}」）：原来挂的块 ${cur.blocks.join('、')} 没带过来`);
+      const keep = cur && !moved ? Object.fromEntries(['blocks', 'mapAt', 'mapSig', 'changed'].filter((k) => cur[k] !== undefined).map((k) => [k, cur[k]])) : {};
+      put('syllabus', { id: n.id, data: { ...strip(n), ...keep, status: 'active', by, at } });
+    }
+    // 这一份大纲里没有了的旧考点：编号不删（以前的标签还指着它），标作废
+    for (const [path, cur] of have) {
+      const id = path.split('/')[1];
+      if (!path.startsWith('syllabus/') || fresh.has(id) || !id.startsWith(`G-${rec.course}-`) || cur?.status === 'void') continue;
+      put('syllabus', { id, data: { ...cur, status: 'void', by, at } });
+      log.notes.push(`${id}（${cur?.title || ''}）这一份大纲里没有了：标作废${cur?.blocks?.length ? `，原来挂着 ${cur.blocks.join('、')}` : ''}`);
     }
   } else if (rec.kind === 'tags') {
     for (const [id, tags] of Object.entries(rec.tags || {})) {
       const cur = have.get(`questions/${id}`);
       if (!cur) { log.rejected.push({ id, error: '库里没有这道题' }); continue; }
-      const why = syllabusIds ? checkTags(tags, { course: cur.course, syllabusIds }) : [];
+      const course = courseOfTags(tags) || cur.course;
+      const why = syllabusIds ? checkTags(tags, { course, syllabusIds }) : [];
       if (why.length) { log.rejected.push({ id, error: why.join('；') }); continue; }
-      put('questions', { id, data: { ...strip(cur), ...withTags(cur, tags, { at, by }), at } });
+      put('questions', { id, data: { ...strip(cur), course, ...withTags(cur, tags, { at, by }), at } });
     }
   } else {
     log.problems.push(`不认得的记录种类「${rec.kind}」（只认 paper / syllabus / tags）`);

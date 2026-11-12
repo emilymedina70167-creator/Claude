@@ -1,7 +1,7 @@
 // 考试档案（kit/src/exam/target.js）：默认的一份、读法、只交改了的；410 分和距考研读它
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_TARGET, targetOf, examDateOf, goalOf, needsDefault, targetPatch, schoolLine } from '../kit/src/exam/target.js';
+import { DEFAULT_TARGET, targetOf, examDateOf, goalOf, needsDefault, targetPatch, schoolLine, reserveText, targetWarn } from '../kit/src/exam/target.js';
 import { validateWrite } from '../kit/src/memory/writer.js';
 
 test('默认档案：南京大学智能科学与技术学院，11408，410 分，2027-12-21；守记忆库的规矩', () => {
@@ -46,4 +46,22 @@ test('targetPatch 只交改了的；数字、年份从表单的字转好', () =>
   assert.deepEqual(targetPatch(DEFAULT_TARGET, { reserve: '2025, 2026' }), { reserve: [2025, 2026] });
   assert.deepEqual(targetPatch({ ...DEFAULT_TARGET, reserve: [2025] }, { reserve: '' }), { reserve: null });
   assert.deepEqual(targetPatch(DEFAULT_TARGET, { date: '2027-12-21' }), {});
+});
+
+test('审查：留作模考写不出年份不许存；一张都不留和默认分开', () => {
+  assert.throws(() => targetPatch(DEFAULT_TARGET, { reserve: '25, 26' }), /认不出年份/);
+  assert.throws(() => targetPatch(DEFAULT_TARGET, { reserve: '二〇二五' }), /认不出年份/);
+  assert.deepEqual(targetPatch(DEFAULT_TARGET, { reserve: '不留' }), { reserve: [] });
+  assert.deepEqual(targetPatch(DEFAULT_TARGET, { reserve: '' }), {});
+  assert.equal(reserveText({ reserve: [] }), '不留');
+  assert.equal(reserveText({ reserve: null }), '');
+  assert.equal(reserveText({ reserve: [2025, 2026] }), '2025, 2026');
+  // 表单原样再交回去：一张都不留不会被悄悄改回默认
+  assert.deepEqual(targetPatch({ ...DEFAULT_TARGET, reserve: [] }, { reserve: reserveText({ reserve: [] }) }), {});
+});
+test('审查：存着的日期、分数不对时有一句提醒', () => {
+  assert.match(targetWarn({ ...DEFAULT_TARGET, date: '2027-13-40' }), /日期/);
+  assert.match(targetWarn({ ...DEFAULT_TARGET, split: { math: -3, cs: 135, en: 75, pol: 70 } }), /数学一/);
+  assert.match(targetWarn({ ...DEFAULT_TARGET, split: { math: 160, cs: 135, en: 75, pol: 40 } }), /超过了满分/);
+  assert.equal(targetWarn(DEFAULT_TARGET), '');
 });

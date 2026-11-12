@@ -33,7 +33,8 @@ export const EXAM_COLLECTIONS = {
     label: '考点（大纲）', writers: ['page', 'chat'],
     id: { re: new RegExp(`^G-${NODE}$`), eg: 'G-DS-6.4、G-LA-2.3、G-HM-3.2.1' },
     required: ['course', 'space', 'title', 'year'],
-    enums: { course: EXAM_COURSES, space: EXAM_SPACES, level: ['了解', '理解', '掌握', '会用', ''] },
+    // void：重新切大纲时这一份里没有了（编号不删：以前的标签还指着它）
+    enums: { course: EXAM_COURSES, space: EXAM_SPACES, level: ['了解', '理解', '掌握', '会用', ''], status: ['active', 'void', ''] },
   },
   papers: {
     label: '真题卷', writers: ['page', 'chat'],

@@ -127,7 +127,7 @@ export function buildPaper({ subject, year, paperText, answersText, source = '' 
     };
     return out;
   });
-  if (questions.some((q) => !q.course)) notes.push('有的题还不知道是哪门课（数学一一卷三门课）：打了标签以后按主考点填');
+  if (subj === '301') notes.push('数学一的门课是先猜的（都写高数）：打了标签以后照主考点改');
   const total = questions.reduce((n, q) => n + Number(q.points || 0), 0);
   const paper = { id: paperId, subject: subj, year: y, space, total, count: questions.length, ...(source ? { source } : {}) };
   const cp = checkPaper(paper, questions);

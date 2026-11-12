@@ -68,7 +68,6 @@ import { normalizeBooks, readHistory } from '../books/textbook.js';
 import { scrubBooks, readReserve } from '../exam/reserve.js';
 import { createExamInbox } from '../exam/examdesk.js';
 import { createExamCard } from '../exam/examview.js';
-import { loadExamCourse, courseOfBlock } from '../exam/load.js';
 import { renderStageClass } from '../stage/classroom.js';
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
@@ -222,7 +221,9 @@ export async function renderDesk(root, meta) {
   function ensureTarget() {
     if (wroteTarget || !needsDefault({ loaded: loaded.has('exam'), failed: failed.has('exam'), docs: data.exam })) return;
     wroteTarget = true;
-    put('exam', 'target', { ...DEFAULT_TARGET, by: 'page', at: Date.now(), log: [] }).catch(() => { wroteTarget = false; });
+    // 写之前再读一次：第一次回调给的可能是缓存里的空快照，整份 set 会盖掉我改过的档案
+    db.doc('exam/target').get().then((snap) => (snap.exists ? null : put('exam', 'target', { ...DEFAULT_TARGET, by: 'page', at: Date.now(), log: [] })))
+      .catch(() => { wroteTarget = false; });
   }
   // 首页的几个小工具：paintClass 在订阅回调里就会用到，放在前面
   const listOf = (v) => (Array.isArray(v) ? v : v ? [v] : []).filter(Boolean).map(String);
@@ -1557,8 +1558,6 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   if (kind === 'stage') {
     return renderStageClass(root, { ...meta, unit: doc.title || meta.unit }, {
       store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, subject: doc.subject || '', mem, books, prevRead, readOnly,
-      // 这一门课的考试资料（exam/load.js，按门课读、不读整类）：不等它，Promise 交给课堂（第 4 批「这一块在考试里」才用）
-      exam: block && !readOnly ? loadExamCourse(db, courseOfBlock(block)).catch(() => null) : null,
       updateSession, onHome: () => goto(readOnly ? `classes/${sid}` : ''),
       recheck: readOnly ? {} : await within(db.doc('meta/workorder').get().then((s) => (s.exists ? s.data().recheck || {} : {})), 3000, {}).catch(() => ({})),
       writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),

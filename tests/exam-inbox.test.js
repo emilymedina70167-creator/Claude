@@ -142,3 +142,43 @@ test('首页的收件箱：标签记录先读这几道题所在门课的考点�
   assert.deepEqual(db.all()['questions/Q-408-2019-23'].tags, { syl: ['G-OS-2.1'], how: 'calc' });
   inbox.stop();
 });
+
+// —— 整支审查修的 ——
+test('审查：数学一的卷先按题号猜成高数、照题自带的标签改门课，进得了库', () => {
+  const qs = [...Array(10)].map((_, i) => ({ n: i + 1, type: 'single', points: 5 })).concat([...Array(6)].map((_, i) => ({ n: 11 + i, type: 'fill', points: 5 }))).concat([...Array(6)].map((_, i) => ({ n: 17 + i, type: 'answer', points: i < 4 ? 12 : 11 })));
+  const text = qs.map((q) => `--- 题 ${q.n} | ${{ single: '单选', fill: '填空', answer: '解答' }[q.type]} | ${q.points}\n题 ${q.n}`).join('\n');
+  const ans = qs.map((q) => `--- 答 ${q.n}\n答案：1`).join('\n');
+  const b = buildPaper({ subject: '301', year: 2021, paperText: text, answersText: ans });
+  assert.deepEqual(b.problems, []);
+  assert.equal(b.questions[0].course, 'HM');
+  b.questions[2].tags = { syl: ['G-LA-2.1'], how: 'calc' };
+  const r = planInbox({ kind: 'paper', paper: b.paper, questions: b.questions, passages: [], by: 'dev', at: 1 }, { have: new Map(), at: 2 });
+  assert.equal(r.log.ok, true);
+  assert.equal(r.writes.find((w) => w.path === 'questions/Q-301-2021-3').data.course, 'LA');
+});
+test('审查：再来一遍同一卷，后来改过的门课和验算不被盖回去', () => {
+  const have = new Map([['questions/Q-408-2019-23', { course: 'CO', tags: { syl: ['G-CO-3.1'], how: 'calc' }, verified: { how: 'engine', ok: true } }]]);
+  const w = planInbox(rec(), { have, at: 9 }).writes.find((x) => x.path === 'questions/Q-408-2019-23').data;
+  assert.equal(w.course, 'CO');
+  assert.deepEqual(w.verified, { how: 'engine', ok: true });
+});
+test('审查：重新切大纲，标题变了的考点不带走原来挂的块；这次没有的旧考点标作废', () => {
+  const have = new Map([
+    ['syllabus/G-DS-1.2.1', { title: '顺序存储', blocks: ['DS-L2.1.1'], mapAt: 3 }],
+    ['syllabus/G-DS-1.3', { title: '另一个旧标题', blocks: ['DS-L2.3'], mapAt: 3 }],
+    ['syllabus/G-DS-9', { course: 'DS', space: 'cs', title: '旧大纲才有的', year: 2025, blocks: ['DS-L9.1'] }],
+  ]);
+  const r = planInbox(sylRec(), { have, at: 5 });
+  const w = Object.fromEntries(r.writes.map((x) => [x.path, x.data]));
+  assert.deepEqual(w['syllabus/G-DS-1.2.1'].blocks, ['DS-L2.1.1']);
+  assert.equal(w['syllabus/G-DS-1.3'].blocks, undefined);
+  assert.match(r.log.notes.join(), /G-DS-1\.3.*标题变了/);
+  assert.equal(w['syllabus/G-DS-9'].status, 'void');
+  assert.match(r.log.notes.join(), /G-DS-9.*这一份大纲里没有/);
+});
+test('审查：标签记录照主考点改门课，考点按标签的门课核', () => {
+  const have = new Map([['questions/Q-301-2021-3', { course: 'HM', stem: 's' }]]);
+  const r = planInbox({ kind: 'tags', tags: { 'Q-301-2021-3': { syl: ['G-LA-2.1'], how: 'rank' } }, by: 'dev', at: 1 }, { have, at: 3, syllabusIds: new Set(['G-LA-2.1']) });
+  assert.deepEqual(r.log.rejected, []);
+  assert.equal(r.writes[0].data.course, 'LA');
+});

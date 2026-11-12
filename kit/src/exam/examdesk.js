@@ -38,8 +38,10 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800] } = {}) {
     return have;
   }
   // 标签记录要核考点：读这几道题所在门课的考点树（按门课 where 读，不读整类）
-  async function syllabusIdsFor(have) {
-    const courses = [...new Set([...have.values()].map((q) => q.course).filter(Boolean))];
+  async function syllabusIdsFor(have, rec) {
+    // 题现在的门课，加上标签里考点的门课（数学一的题先猜成高数，标签挂的可能是线代）
+    const fromTags = Object.values(rec.tags || {}).flatMap((t) => (t?.syl || []).map((x) => String(x).match(/^G-([A-Z]{2})-/)?.[1]));
+    const courses = [...new Set([...[...have.values()].map((q) => q.course), ...fromTags].filter(Boolean))];
     const ids = new Set();
     for (const c of courses) for (const d of docsOf(await retry(() => db.collection('syllabus').where('course', '==', c).get()))) ids.add(d.id);
     return ids;
@@ -48,7 +50,9 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800] } = {}) {
   async function takeOne(d) {
     const { id, ...rec } = d;
     const have = await readHave(rec);
-    const syllabusIds = rec.kind === 'tags' ? await syllabusIdsFor(have) : null;
+    // 重切大纲：这门课库里已有的考点都读进来（找出这一份里没有了的，标作废）
+    if (rec.kind === 'syllabus' && rec.course) for (const x of docsOf(await retry(() => db.collection('syllabus').where('course', '==', rec.course).get()))) { const { id: xid, ...d } = x; if (!have.has(`syllabus/${xid}`)) have.set(`syllabus/${xid}`, d); }
+    const syllabusIds = rec.kind === 'tags' ? await syllabusIdsFor(have, rec) : null;
     const at = Date.now();
     const { writes, log } = planInbox(rec, { have, at, syllabusIds });
     for (let i = 0; i < writes.length; i += PARALLEL) await Promise.all(writes.slice(i, i + PARALLEL).map((w) => write(w.path, w.data)));

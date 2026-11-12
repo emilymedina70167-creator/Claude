@@ -50,7 +50,7 @@ test('courseHint：408 按题号认门课，别的科目一门课', () => {
   assert.equal(courseHint('408', 2019, 47), 'CN');
   assert.equal(courseHint('201', 2019, 46), 'EN');
   assert.equal(courseHint('101', 2019, 3), 'PO');
-  assert.equal(courseHint('301', 2019, 3), '');
+  assert.equal(courseHint('301', 2019, 3), 'HM'); // 先猜高数，打了标签照主考点改
 });
 
 test('题型词表和 schema 的一致；中文认得', () => {
