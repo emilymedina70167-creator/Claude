@@ -44,3 +44,18 @@ test('没有考情：空的；舞台说明和不传时一样；有的话在资�
   assert.ok(i > b.indexOf('这节课') && i < b.indexOf('你对学生的了解'));
   assert.ok(EXAM_BUDGET === 16 * 1024);
 });
+
+test('英语：代表题前面带它的篇章（截到 1500 字）；同一篇最多一道', () => {
+  const syl = [{ id: 'G-EN-2.1', course: 'EN', title: '推断题', blocks: ['EN-L3.1.1'] }];
+  const passage = { id: 'PA-201-2020-T1', paper: 'X-201-2020', text: 'The passage begins. '.repeat(200) + 'END-OF-PASSAGE', course: 'EN' };
+  const mk = (n, extra = {}) => ({ id: `Q-201-2020-${n}`, year: 2020, n, paper: 'X-201-2020', type: 'reading', points: 2, stem: `Question ${n}?`, options: { A: 'a', B: 'b', C: 'c', D: 'd' }, answer: 'A', course: 'EN', passage: 'PA-201-2020-T1', tags: { syl: ['G-EN-2.1'], how: ['infer', 'detail', 'main'][n % 3] }, ...extra });
+  const ex = { course: 'EN', syllabus: syl, questions: [mk(21), mk(22), mk(23)], passages: [passage], profiles: [] };
+  const info = examForBlock({ block: 'EN-L3.1.1', exam: ex, years: [] });
+  assert.equal(info.reps.length, 1, '同一篇最多一道');
+  const t = examForClass({ target: DEFAULT_TARGET, info, today: '2026-11-12' });
+  assert.match(t, /篇章 PA-201-2020-T1[\s\S]*The passage begins/);
+  assert.ok(!t.includes('END-OF-PASSAGE'), '截到 1500 字');
+});
+test('政治：只进档案和统计，不进课堂', () => {
+  assert.equal(examForClass({ target: DEFAULT_TARGET, info: { course: 'PO', syl: [], stats: { n: 1 }, reps: [], rest: [], mine: [], span: [2020, 2020], profiles: [] }, today: '2026-11-12' }), '');
+});

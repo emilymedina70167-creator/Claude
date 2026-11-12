@@ -44,7 +44,10 @@ function repText(q, info, cut) {
   const how = HOW[info.course]?.[q.tags?.how] || '';
   const opts = q.options ? Object.entries(q.options).map(([k, v]) => `${k}. ${flat(v, 300)}`).join('\n') : '';
   const ana = q.analysis ? (cut ? flat(q.analysis, cut) : String(q.analysis).trim()) : '';
-  return [`### ${q.id}（${q.year} 年第 ${q.n} 题，${TYPES[q.type] || q.type}，${q.points} 分${how ? `，${how}` : ''}）`, String(q.stem || '').trim(), opts, q.answer ? `答案：${q.answer}` : '', ana ? `解析：${ana}` : ''].filter(Boolean).join('\n');
+  // 英语的题挂着篇章：篇章原文放在题前面（截到 1500 字，题问的那一段多半在前面）
+  const pa = q.passage && info.passages?.[q.passage];
+  const passage = pa ? `篇章 ${pa.id}：${flat(pa.text, cut ? 600 : 1500)}` : '';
+  return [`### ${q.id}（${q.year} 年第 ${q.n} 题，${TYPES[q.type] || q.type}，${q.points} 分${how ? `，${how}` : ''}）`, passage, String(q.stem || '').trim(), opts, q.answer ? `答案：${q.answer}` : '', ana ? `解析：${ana}` : ''].filter(Boolean).join('\n');
 }
 function mineText(info, bar) {
   const done = bar?.done?.length ? bar.done : info.mine;

@@ -58,6 +58,8 @@ export function examForBlock({ block, exam, years = [], evidence = [], n = 3 } =
     block, course: exam.course, syl: syl.map((x) => ({ id: x.id, title: x.title, level: x.level || '', text: x.text || '' })),
     stats, rank, of: per.length, profiles, reps, rest: ok.filter((q) => !reps.includes(q)).sort(newer), mine,
     reserved: mineQs.length - ok.length, span,
+    // 英语：代表题用到的篇章（context.js 放在题前面）
+    passages: Object.fromEntries((exam.passages || []).filter((p) => reps.some((q) => q.passage === p.id)).map((p) => [p.id, p])),
   };
 }
 
