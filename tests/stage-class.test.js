@@ -875,4 +875,13 @@ test('提前想好下一轮：学生只能点按钮时才想；手上有东西�
   await wait();
   assert.equal(c.calls(), 0);
   lc.close();
+  // 前几轮就开着、这一轮没新开的手：照旧提前想（不然开过一次以后整节课都不想了）
+  const d = fakeClass('array k = 2 1 3\nopen k');
+  const ld = createLoop(d.host);
+  d.scene.apply(parseScript('ask next "看清了点下面" button="看清了"')[0]);
+  await ld.teach('next'); // 老师的一轮（假的舞台不演）：开演以前 k 已经开着
+  await wait();
+  const n0 = d.calls();
+  assert.equal(n0 >= 2, true, `老师那一轮以后又提前想了一次：${n0}`);
+  ld.close();
 });

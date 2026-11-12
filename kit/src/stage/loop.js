@@ -58,6 +58,8 @@ export function createLoop(host) {
     for (let tries = 0; ; tries++) {
       const input = pre?.input || host.messages({});
       const nb = inBytes(input);
+      // 老师这一轮开演以前学生手上已经开着的（提前想那里要分清：这一轮新交给学生的手才算「有东西可动」）
+      S.opensBefore = new Set(stage.scene?.opens?.keys?.() || []);
       const turn = stage.begin();
       const mark = turn.mark;
       const t0 = pre?.t0 ?? performance.now();
@@ -182,8 +184,9 @@ export function createLoop(host) {
     const go = () => { const p = S.pending; if (!p) return; Object.assign(p.row, { events: p.events, log: [...p.base, ...stage.log.slice(S.logFrom)] }); host.putTurn(p.row); };
     if (now) go(); else S.saveTimer = setTimeout(go, 800);
   }
-  // 学生现在有没有东西可动：老师开着的手，或者画面上有拨盘
-  const canPlay = (sc) => sc.opens.size > 0 || [...sc.vars.values()].some((x) => x.shown);
+  // 学生这一刻多半会先动一动再点按钮：画面上有拨盘，或者老师这一轮刚交给学生一只手（open）。
+  // 前几轮开着、一直没收的手不算——不然开过一次以后整节课都不提前想了。刷新以后不知道哪些是新开的：都算
+  const canPlay = (sc) => [...(sc.vars?.values?.() || [])].some((x) => x.shown) || [...(sc.opens?.keys?.() || [])].some((k) => !S.opensBefore?.has(k));
   // 这一问的编号（证据记在它名下，老师的记忆块 basis 写它）：学习台里上课才有（样子页不记证据）
   const askId = () => (host.evidence && S.lastClaude ? `S${S.lastClaude}` : null);
   /** 这一段做成一条学生轮（发给老师的整条在 msg 里） */
