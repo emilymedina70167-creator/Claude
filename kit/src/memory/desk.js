@@ -1646,7 +1646,7 @@ export async function createClass(db, { block = null, main = null, problems = nu
  * 一节课的题抄进题库（drills.js 的 harvestDrills）：页面判得了分的组件连同 let 块。下课写报告时抄；以前的课首页补抄。
  * sessions/{编号}.drills 记抄了几道（0 也记，免得每次打开都再抄一遍）
  */
-export async function harvestSession(db, sid, { doc, report = null, steps = null, update }) {
+export async function harvestSession(db, sid, { doc, report = null, steps = null, turns: given = null, update }) {
   const rows = (snap) => (snap ? snap.docs.map((d) => ({ id: d.id, ...d.data() })) : []);
   const scoped = scopeDb(db, sid);
   const [r, st, errors, existing] = await Promise.all([
@@ -1656,8 +1656,9 @@ export async function harvestSession(db, sid, { doc, report = null, steps = null
     // 舞台题同一块同一种只有一道（别的课抄过的也算已经有了）：按来源取
     (kindOf(doc) === 'stage' ? db.collection('drills').where('src', '==', 'stage') : db.collection('drills').where('fromSession', '==', sid)).get().then(rows, () => []),
   ]);
-  // 舞台课：抄的是老师照引擎走过的每一种，要读这节课的每一轮
-  const turns = kindOf(doc) === 'stage' ? await scoped.collection('class_turns').get().then(rows, () => []) : [];
+  // 舞台课：抄的是老师照引擎走过的每一种，要这节课的每一轮。下课时课堂手上那份直接给（最后一轮可能还在排队写进数据库，
+  // 重读会漏掉它里面的 follow）；首页补抄时没有，从数据库读
+  const turns = kindOf(doc) !== 'stage' ? [] : given?.length ? given : await scoped.collection('class_turns').get().then(rows, () => []);
   const out = harvestDrills({ session: { ...doc, id: sid, kind: kindOf(doc) }, steps: st, turns, report: r, mem: { errors }, existing });
   assertWrite('page', 'drills');
   for (const d of out) await db.doc(`drills/${d.id}`).set(d.doc);
@@ -1679,7 +1680,7 @@ export async function writeReport(db, sid, { doc, turns = null, steps = null, up
   // 课上点开看过意思的生词收进「要记的」（vocab.js，不调用 Claude）
   await harvestVocab(db, sid, { doc }).catch((e) => console.warn('生词没收进要记的', sid, e));
   // 课上判得了分的题抄进题库（练习用，不调用 Claude）
-  if (kindOf(doc) !== 'drill') await harvestSession(db, sid, { doc: { ...doc, ...patch }, report, steps, update: (p) => update({ ...patch, ...p }) }).catch((e) => console.warn('题没抄进题库', sid, e));
+  if (kindOf(doc) !== 'drill') await harvestSession(db, sid, { doc: { ...doc, ...patch }, report, steps, turns, update: (p) => update({ ...patch, ...p }) }).catch((e) => console.warn('题没抄进题库', sid, e));
   return report;
 }
 

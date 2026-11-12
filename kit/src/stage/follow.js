@@ -41,7 +41,12 @@ function pathOf(frames) {
   for (const f of frames || []) {
     const last = path[path.length - 1];
     const marks = f.mark == null ? [] : [].concat(f.mark).map(Number); // 一步可以同时是好几趟的检查点（那几趟没有要动的）
-    if (last && last.state === f.state) { last.marks.push(...marks); continue; }
+    if (last && last.state === f.state) {
+      last.marks.push(...marks);
+      // 并掉的那一步引擎自己的那一句接上去（Dijkstra 连着两轮 dist 不变：两轮各确定了谁都要写）
+      if (f.lead && !last.lead.includes(f.lead)) last.lead += f.lead;
+      continue;
+    }
     path.push({ state: f.state, cells: f.cells || [], marks, lead: f.lead || '' });
   }
   return path;
@@ -95,6 +100,9 @@ function restart(o, scene) {
   delete f.error;
   delete f.startDone;
   delete f.start;
+  delete f.back;
+  delete f.held;
+  delete f.last;
   try {
     f.input = a.fields(o, f.fields || {}, scene);
     const t = build(a, f.input);
@@ -116,13 +124,27 @@ export function startFollow(o, name, fields, scene) {
   if (o.follow.error) { const msg = o.follow.error; delete o.follow; throw new Error(msg); }
 }
 
-/** 每一行之后（scene.js）：数据变了（老师 write、学生写了一格）从新的样子重跑；在路上就把「过了几个检查点」记下来 */
-export function refreshFollow(o, scene) {
+/** 学生把照着走的数改写了（同时开着 edit）：引擎照的是原来那一份，不重跑（重跑的话写成有序的就成了「走完了」） */
+const REWRITTEN = '学生把数改写了，引擎照的是原来的那一份：要接着照就重新写 follow';
+/**
+ * 每一行之后（scene.js）：数据变了——老师改的（write、同名重造）从新的样子重跑；学生改的不重跑，记「照不下去了」，
+ * 学生自己改回原样（写回去、撤一步）就接着照。在路上就把「过了几个检查点」记下来
+ */
+export function refreshFollow(o, scene, { student = false } = {}) {
   const f = o?.follow, a = f && followOf(f.name);
   if (!a) return;
-  if (a.dataOf && a.dataOf(o, scene) !== f.data) { restart(o, scene); return; }
+  if (f.back != null) {
+    // 学生改写过：改回了改写以前的样子就接着照；老师动了数据照老办法重跑
+    if (a.stateOf(o, scene, f.snap) === f.back) { delete f.error; delete f.back; } else if (!student && a.dataOf(o, scene) !== f.held) { delete f.back; restart(o, scene); return; } else { f.held = a.dataOf(o, scene); return; }
+  } else if (a.dataOf && a.dataOf(o, scene) !== f.data) {
+    if (student && f.input && !f.error) { f.error = REWRITTEN; f.back = f.last ?? f.start; f.held = a.dataOf(o, scene); return; }
+    restart(o, scene);
+    f.last = f.start;
+    return;
+  }
   const w = whereOf(o, scene);
   if (w && w.at != null) f.passed = w.passed;
+  if (w && !w.error) f.last = a.stateOf(o, scene, f.snap);
 }
 
 /**

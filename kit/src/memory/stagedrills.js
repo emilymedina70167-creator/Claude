@@ -8,7 +8,8 @@ import { followOf, followInfo } from '../stage/follow.js';
 import { spaceOfId } from './space.js';
 import { parseStageDrill, drawStageDrill } from '../stagedrillspec.js';
 
-const safe = (s) => String(s).replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+// 题库的编号只许字母数字横线下划线：中文写成码点（希尔 → u5e0cu5c14），不去掉——去掉的话两种中文名撞成一个编号
+const safe = (s) => String(s).replace(/[^\x00-\x7F]/gu, (ch) => `u${ch.codePointAt(0).toString(16)}`).replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 const numOf = (v) => { const t = String(v ?? '').replace(/[′'’]/g, ''); return /^-?\d+$/.test(t) ? Number(t) : null; };
 
 /** 这一种的编号：d-stage-{块}-{哪类算法}-{字段的指纹} */

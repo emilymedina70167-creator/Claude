@@ -97,23 +97,25 @@ export function stage(el, src) {
   });
   $('.sd-giveup').addEventListener('click', () => {
     if (closed) return;
+    // 放弃记在那一道题的记录上（giveup: true）。另记一条动作的话，报告里它归不到同一道题、多算一道想不出来；没有记录时才记动作
+    let gave = 0;
     if (!followed().length && tablesOf().length) {
       // 填表的题：记放弃，把答案写进去给学生看（还空着的、写得不对的格）
       const lines = [];
       for (const o of tablesOf()) {
-        for (const r of tracks?.get(o.id)?.giveup() || []) temit(o, r);
+        for (const r of tracks?.get(o.id)?.giveup() || []) { temit(o, r); gave += 1; }
         const bad = new Set(wrongCells(o).map((x) => x.key));
         for (const x of o.cells) if (!x.fixed && (isBlank(o, x) || bad.has(x.key))) { const a = answerOf(o, x); lines.push(`write ${o.id}.${x.r},${x.c} ${a === '空着' ? '_' : /^(-?\d+(\.\d+)?(\/\d+)?|∞)$/.test(a) ? a : `"${a}"`}`); }
       }
-      session.event('giveup', el, { why: '点了做不出来' });
+      if (!gave) session.event('giveup', el, { why: '点了做不出来' });
       // 不演动画，一下子写完（一格一格演，二三十格要等十来秒）
       st.instant = true;
       st.play(lines.join('\n'), { by: 'teacher' }).catch(() => {}).finally(() => { st.instant = false; });
       finish('先放一放。答案写在表里了，对着看一遍。');
       return;
     }
-    for (const o of followed()) for (const r of tracks?.get(o.id)?.giveup() || []) emit(o, r);
-    session.event('giveup', el, { why: '点了做不出来' });
+    for (const o of followed()) for (const r of tracks?.get(o.id)?.giveup() || []) { emit(o, r); gave += 1; }
+    if (!gave) session.event('giveup', el, { why: '点了做不出来' });
     // 完整的答案：还没做的每一趟该是什么样，一趟一行
     const lines = followed().map((o) => restText(o, st.scene)).filter(Boolean).join('；').split('；');
     finish(['先放一放。', ...lines].join('\n'));

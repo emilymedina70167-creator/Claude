@@ -528,7 +528,7 @@ export class Scene {
     let fx;
     try { fx = this.applyOne(c) || {}; } finally { this.actor = null; }
     // 每一行之后：要跟着场景抄一份的东西抄一份（时间轴：拨盘在场景里，各样东西现在的位置抄到它身上，框是纯函数）
-    for (const o of this.objects.values()) { typeOf(o).afterLine?.(this, o); if (o.follow) refreshFollow(o, this); }
+    for (const o of this.objects.values()) { typeOf(o).afterLine?.(this, o); if (o.follow) refreshFollow(o, this, { student }); }
     // 老师动过的那样东西：那种东西自己记一笔老师摆出来的样子（树：这棵是不是排序树——学生之后摆错了不改这个结论，tree.js 的 afterTeacher）
     if (!student) { const touched = this.objects.get(fx.created ? fx.id : target); if (touched) typeOf(touched).afterTeacher?.(touched); }
     this.reflow();
