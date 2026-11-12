@@ -93,3 +93,17 @@ test('共用的几类也分科：写了 space，或者编号里带科目（p-cs-
   assert.ok(!d.text.includes('408 的讲法'));
   assert.match(d.text, /考研/);
 });
+
+test('门课补了高数、概率（HM-、PS-）：数学一科；410 分里高数那一部分认得课程地图的章', async () => {
+  const { courseOf, spaceOfId, subjectOf, SPACES } = await import('../kit/src/memory/space.js');
+  const { scoreMap } = await import('../kit/src/memory/score.js');
+  assert.equal(courseOf('HM-L1.1'), 'HM');
+  assert.equal(courseOf('PS-L2'), 'PS');
+  assert.equal(spaceOfId('PS-L2'), 'math');
+  assert.equal(subjectOf('HM-L1'), '高数');
+  assert.equal(subjectOf('PS-L1'), '概率');
+  assert.ok(SPACES.math.courses.includes('HM') && SPACES.math.courses[0] === 'LA');
+  const m = scoreMap([{ id: 'HM-L1', level: 'lecture', title: '第1章 函数与极限' }, { id: 'HM-L1.1', level: 'section', title: '§1' }, { id: 'HM-L1.1.1', level: 'block', title: '极限' }]);
+  assert.equal(m.parts.find((p) => p.key === 'HM').inDesk, true);
+  assert.equal(m.parts.find((p) => p.key === 'LA').inDesk, false);
+});
