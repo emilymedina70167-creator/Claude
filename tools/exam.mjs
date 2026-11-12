@@ -17,6 +17,11 @@
 //      → 每批 bNNN.prompt.txt（同一份交给两个互不知道的助手，各写 bNNN.a.txt、bNNN.b.txt）、bNNN.json（这批的题号）
 //   b. node tools/exam.mjs tagmerge 打标签目录 → 主考点一致率（≥ 90% 才合格）、merged.json、conflicts.prompt.txt（交第三个助手，写 conflicts.out.txt）
 //   c. node tools/exam.mjs tagapply 打标签目录 目录 → 定下来的标签写进每道题（门课照主考点改），再 check 一遍
+//   做成练习（打完标签以后，apply 之前）：
+//   d. node tools/exam.mjs drills 目录 [--reserve 2024,2025,2026] → 每卷 drills-X-….json；每道都在两种 iPad 尺寸下画一遍
+//      （tools/check-lesson.mjs，要先 npm run build），有写法错误的不收；apply 时一起写成 kind: drills 的收件箱记录
+//   抽查：node tools/exam.mjs sample 目录 [--n 20] → 随机 n 道，一行「题号｜主考点｜考法｜坑」（给我看，我说不对的改了以后整批同类再查）
+//   补章：node tools/exam.mjs skeleton 考点目录 --course CO --curriculum 课程地图.json → 课程地图缺的章（ArtifactData batch 的 writes，开发那边写）
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildPaper, parseSyllabus } from '../kit/src/exam/ingest.js';
@@ -24,6 +29,12 @@ import { validateExam } from '../kit/src/exam/schema.js';
 import { checkPaper } from '../kit/src/exam/structure.js';
 import { checkTags } from '../kit/src/exam/taxonomy.js';
 import { planInbox, courseOfTags } from '../kit/src/exam/inbox.js';
+import { drillOf } from '../kit/src/exam/drillgen.js';
+import { skeleton as skeletonOf } from '../kit/src/exam/skeleton.js';
+import { HOW } from '../kit/src/exam/taxonomy.js';
+import { reserveYears } from '../kit/src/exam/reserve.js';
+import { toDate } from '../kit/src/memory/schema.js';
+import { execFileSync } from 'node:child_process';
 import { tagPrompt, parseTags, mergeTags, settlePrompt, settle, AGREE_MIN } from '../kit/src/exam/tagging.js';
 import { restoreBatches, BACKUP_FORMAT, BACKUP_VERSION } from '../kit/src/memory/backup.js';
 
@@ -68,7 +79,7 @@ function checkDir(dir, extraNodes = []) {
   const sylIds = new Set([...list.filter((x) => x.j.nodes).flatMap((x) => x.j.nodes.map((n) => n.id)), ...extraNodes.map((n) => n.id)]);
   for (const { f, j } of list) {
     const name = path.basename(f);
-    if (j.paper) {
+    if (j.paper && Array.isArray(j.questions)) {
       const problems = [
         ...validateExam('papers', j.paper.id, strip(j.paper)),
         ...j.questions.flatMap((q) => validateExam('questions', q.id, strip(q))),
@@ -86,7 +97,14 @@ function checkDir(dir, extraNodes = []) {
       for (const p of problems) console.log(`  ✗ ${p}`);
       bad += problems.length;
       items.push({ file: name, rec: { kind: 'syllabus', course: j.course, year: j.year, nodes: j.nodes } });
-    } else console.log(`${name}：不认得（不是 split 或 syllabus 写的），跳过`);
+    } else if (j.drills) {
+      const pre = planInbox({ kind: 'drills', drills: j.drills, by: 'dev' }, { have: new Map() });
+      const problems = j.drills.length ? pre.log.problems : [];
+      console.log(`${j.paper || name}：${j.drills.length} 道练习`);
+      for (const p of problems) console.log(`  ✗ ${p}`);
+      bad += problems.length;
+      if (j.drills.length) items.push({ file: name, rec: { kind: 'drills', drills: j.drills } });
+    } else console.log(`${name}：不认得（不是 split、syllabus、drills 写的），跳过`);
   }
   return { bad, items };
 }
@@ -119,7 +137,7 @@ function apply() {
 }
 
 
-const papersIn = (dir) => files(dir).map((f) => ({ f, j: readJson(f) })).filter((x) => x.j.paper);
+const papersIn = (dir) => files(dir).map((f) => ({ f, j: readJson(f) })).filter((x) => x.j.paper && Array.isArray(x.j.questions));
 const nodesIn = (dir) => files(dir).map(readJson).filter((j) => j.nodes).flatMap((j) => j.nodes);
 
 function tagprep() {
@@ -197,6 +215,51 @@ function tagapply() {
   process.exit(bad ? 1 : 0);
 }
 
-const CMDS = { split, syllabus, check, apply, tagprep, tagmerge, tagapply };
+function drills() {
+  const dir = opt._[0] || need('dir');
+  const years = opt.reserve && opt.reserve !== true ? String(opt.reserve).split(/[,，\s]+/).map(Number) : reserveYears(null, toDate(Date.now()));
+  const tmp = path.join(dir, '.drills-check');
+  for (const { j } of papersIn(dir)) {
+    const passages = new Map((j.passages || []).map((p) => [p.id, p]));
+    let list = j.questions.map((q) => drillOf(q, { years, passage: passages.get(q.passage) })).filter(Boolean);
+    if (!opt['no-render'] && list.length) {
+      // 每道一个课件，check-lesson 一次画完（两种 iPad 尺寸）；有「✗」的那几道不收
+      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.mkdirSync(tmp, { recursive: true });
+      for (const d of list) fs.writeFileSync(path.join(tmp, `${d.id}.md`), `---\nmode: guided\nunit: ${d.title}\n---\n\n## ${d.title}\n\n${d.md}\n`);
+      let outText = '';
+      try { outText = execFileSync('node', [path.join(path.dirname(new URL(import.meta.url).pathname), 'check-lesson.mjs'), ...list.map((d) => path.join(tmp, `${d.id}.md`))], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); } catch (e) { outText = String(e.stdout || ''); }
+      const bad = new Set([...outText.matchAll(/^✗ \S*\/(d-q-[\w-]+)\.md/gm)].map((m) => m[1]));
+      for (const id of bad) console.log(`  ✗ ${id}：画出来有写法错误，不收（${outText.split('\n').find((l, i, a) => a[i - 1]?.includes(id) && /^\s+/.test(l))?.trim() || ''}）`);
+      list = list.filter((d) => !bad.has(d.id));
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+    writeJson(path.join(dir, `drills-${j.paper.id}.json`), { paper: j.paper.id, drills: list });
+    console.log(`${j.paper.id}：${list.length} 道能做成练习${years.includes(j.paper.year) ? '（留作模考的卷，一道都不做）' : ''}`);
+  }
+}
+
+function sample() {
+  const dir = opt._[0] || need('dir');
+  const n = Number(opt.n && opt.n !== true ? opt.n : 20);
+  const nodes = new Map(nodesIn(dir).map((x) => [x.id, x]));
+  const qs = papersIn(dir).flatMap((x) => x.j.questions).filter((q) => q.tags?.syl?.length);
+  // 不用随机数：照题号的哈希挑，同一批每次抽到的一样（我说不对的那几道改了以后还能对上）
+  const h = (s) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const pick = [...qs].sort((a, b) => h(a.id) - h(b.id)).slice(0, n);
+  for (const q of pick) console.log(`${q.id}｜${nodes.get(q.tags.syl[0])?.title || q.tags.syl[0]}｜${HOW[q.course]?.[q.tags.how] || q.tags.how}｜${(q.tags.traps || []).join('；') || '（没写坑）'}`);
+  console.log(`\n抽了 ${pick.length} 道（一共 ${qs.length} 道打了标签）。`);
+}
+
+function skeleton() {
+  const dir = opt._[0] || need('dir');
+  const course = need('course');
+  const curriculum = readJson(need('curriculum'));
+  const out = skeletonOf({ course, nodes: nodesIn(dir), curriculum });
+  console.log(`${course}：课程地图缺 ${out.length} 章${out.length ? '（下面是 ArtifactData batch 的 writes，collection 是 curriculum）' : ''}`);
+  console.log(JSON.stringify(out.map(({ id, ...data }) => ({ op: 'set', collection: 'curriculum', doc_id: id, data })), null, 1));
+}
+
+const CMDS = { split, syllabus, check, apply, tagprep, tagmerge, tagapply, drills, sample, skeleton };
 if (!CMDS[cmd]) { console.error('用法：node tools/exam.mjs split | syllabus | check | apply …（见文件开头）'); process.exit(2); }
 CMDS[cmd]();

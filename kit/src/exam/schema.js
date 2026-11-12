@@ -71,7 +71,7 @@ export const EXAM_COLLECTIONS = {
     label: '考试资料的收件箱', writers: ['chat', 'page'],
     id: { re: /^[A-Za-z0-9_.-]+$/, eg: 'X-408-2019、syllabus-DS-2026' },
     required: ['kind'],
-    enums: { kind: ['paper', 'syllabus', 'tags'] },
+    enums: { kind: ['paper', 'syllabus', 'tags', 'drills'] },
   },
   exam_inbox_log: {
     label: '收件箱的回执', writers: ['page'],

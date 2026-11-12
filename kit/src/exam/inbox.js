@@ -6,6 +6,7 @@
 import { validateExam } from './schema.js';
 import { checkPaper } from './structure.js';
 import { checkTags } from './taxonomy.js';
+import { validateWrite } from '../memory/writer.js';
 
 const STRONG = ['engine', 'exact', 'double'];
 /** 题自带的标签照主考点算门课（G-LA-2.1 → LA） */
@@ -18,6 +19,7 @@ export function touches(rec = {}) {
   if (rec.kind === 'paper') return [`papers/${rec.paper?.id}`, ...(rec.questions || []).map((q) => `questions/${q.id}`), ...(rec.passages || []).map((p) => `passages/${p.id}`)];
   if (rec.kind === 'syllabus') return (rec.nodes || []).map((n) => `syllabus/${n.id}`);
   if (rec.kind === 'tags') return Object.keys(rec.tags || {}).map((id) => `questions/${id}`);
+  if (rec.kind === 'drills') return (rec.drills || []).map((d) => `drills/${d.id}`);
   return [];
 }
 
@@ -101,8 +103,19 @@ export function planInbox(rec = {}, { have = new Map(), at = Date.now(), syllabu
       if (why.length) { log.rejected.push({ id, error: why.join('；') }); continue; }
       put('questions', { id, data: { ...strip(cur), course, ...withTags(cur, tags, { at, by }), at } });
     }
+  } else if (rec.kind === 'drills') {
+    // 真题做成的练习（drillgen.js）：题库是记忆库的一类，照记忆库的规矩查
+    const ds = rec.drills || [];
+    for (const d of ds) log.problems.push(...validateWrite(`drills/${d.id}`, strip(d)), ...(d.src === 'exam' && d.exam ? [] : [`${d.id}：不是真题做的练习（要 src: exam、exam: 题号）`]));
+    if (!ds.length) log.problems.push('没有题');
+    if (log.problems.length) return { writes: [], log };
+    for (const d of ds) {
+      const cur = have.get(`drills/${d.id}`);
+      // 我标了作废的不复活
+      put('drills', { id: d.id, data: { ...strip(d), status: cur?.status === 'void' ? 'void' : 'active', by, at } });
+    }
   } else {
-    log.problems.push(`不认得的记录种类「${rec.kind}」（只认 paper / syllabus / tags）`);
+    log.problems.push(`不认得的记录种类「${rec.kind}」（只认 paper / syllabus / tags / drills）`);
     return { writes: [], log };
   }
   log.ok = true;

@@ -1,4 +1,5 @@
 // 一节课的运行状态：关卡（必须完成的练习）、学习记录、图形注册表
+import { examOfRecord } from './exam/fields.js';
 const listeners = new Set();
 
 export const session = {
@@ -59,6 +60,8 @@ export const session = {
       rest.step ??= this.stepOf(el);
       const t0 = Number(el.closest?.('[data-t0]')?.dataset.t0);
       if (rest.ms === undefined && t0) rest.ms = Date.now() - t0;
+      // 这道题是哪道真题（组件写了 exam: / like:，render.js 挂在外面）：证据带上，页面按它算真题级
+      Object.assign(rest, { ...examOfRecord(el), ...rest });
     }
     const e = { ...rest, stage: rest.stage ?? null, at: Date.now() };
     if (!liveOnly) {

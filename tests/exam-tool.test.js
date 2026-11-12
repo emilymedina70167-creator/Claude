@@ -108,3 +108,42 @@ test('split 自动验算：题上写了 check 的算一遍，对不上的报出�
   assert.equal(r2.status, 1);
   assert.match(r2.stdout, /Q-408-2019-23.*算出来是 1024/);
 });
+
+test('drills：能做成练习的真题写成一份，apply 写成 drills 的收件箱记录（单元测试不开浏览器）', () => {
+  const out = mkdtempSync(join(tmpdir(), 'exam-'));
+  run('split', '--subject', '408', '--year', '2019', '--paper', join(FX, '408-2019.paper.txt'), '--answers', join(FX, '408-2019.answers.txt'), '--out', out);
+  const d = run('drills', out, '--no-render', '--reserve', '2024,2025,2026');
+  assert.equal(d.status, 0, d.stdout + d.stderr);
+  assert.match(d.stdout, /X-408-2019：40 道能做成练习/);
+  const j = JSON.parse(readFileSync(join(out, 'drills-X-408-2019.json'), 'utf8'));
+  assert.equal(j.drills.length, 40);
+  assert.equal(j.drills[0].src, 'exam');
+  const a = run('apply', out, '--out', join(out, 'inbox'));
+  assert.equal(a.status, 0, a.stdout + a.stderr);
+  const rec = JSON.parse(readFileSync(join(out, 'inbox', 'drills-X-408-2019.json'), 'utf8'));
+  assert.equal(rec.kind, 'drills');
+  assert.equal(planInbox(rec, { have: new Map() }).log.ok, true);
+  const r2 = run('drills', out, '--no-render', '--reserve', '2019');
+  assert.match(r2.stdout, /X-408-2019：0 道/);
+});
+
+test('skeleton 打印课程地图的 batch；sample 打印抽查的 n 行', () => {
+  const out = mkdtempSync(join(tmpdir(), 'exam-'));
+  run('syllabus', '--course', 'DS', '--year', '2026', '--text', join(FX, 'ds-2026.syllabus.txt'), '--out', out);
+  const cur = join(out, 'cur.json');
+  writeFileSync(cur, JSON.stringify([{ id: 'DS-L1', level: 'lecture', title: '第1章 线性表' }]));
+  const k = run('skeleton', out, '--course', 'DS', '--curriculum', cur);
+  assert.equal(k.status, 0, k.stdout + k.stderr);
+  const w = JSON.parse(k.stdout.slice(k.stdout.indexOf('[')));
+  assert.deepEqual(w.map((x) => [x.collection, x.doc_id, x.data.title]), [['curriculum', 'DS-L2', '第2章 栈、队列和数组']]);
+  run('split', '--subject', '408', '--year', '2019', '--paper', join(FX, '408-2019.paper.txt'), '--answers', join(FX, '408-2019.answers.txt'), '--out', out);
+  const f = join(out, 'X-408-2019.json');
+  const j = JSON.parse(readFileSync(f, 'utf8'));
+  for (const q of j.questions) q.tags = { syl: ['G-DS-1.2.1'], how: 'process', traps: ['坑' + q.n] };
+  writeFileSync(f, JSON.stringify(j));
+  const s = run('sample', out, '--n', '5');
+  assert.equal(s.status, 0, s.stdout + s.stderr);
+  const lines = s.stdout.trim().split('\n').filter((l) => l.startsWith('Q-'));
+  assert.equal(lines.length, 5);
+  assert.match(lines[0], /^Q-408-2019-\d+｜顺序存储｜手算过程｜坑\d+/);
+});

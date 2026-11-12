@@ -2,6 +2,7 @@
 import MarkdownIt from 'markdown-it';
 import katex from 'katex';
 import { blocks } from './blocks/index.js';
+import { takeExamFields } from './exam/fields.js';
 import { session } from './session.js';
 import { calcValue, expandCalc, parseLets, letValue } from './exact.js';
 import './algofuncs.js'; // 表达式里的算法函数（next、nextval、faults……）：exact.js 交给它
@@ -225,7 +226,12 @@ export function renderLesson(src, root) {
     if (m) h.innerHTML = `<span class="h-num">${m[1]}</span><span>${h.innerHTML.slice(m[0].length)}</span>`;
   });
   root.querySelectorAll('[data-block]').forEach((el) => {
-    const { name, src: body, near, wrong } = pending[+el.dataset.block];
+    const { name, src: raw, near, wrong } = pending[+el.dataset.block];
+    // exam: / like:（这道题是哪道真题、对标哪道真题，exam/fields.js）：挂在组件外面，组件不用认这两个字段
+    const ex = takeExamFields(raw);
+    const body = ex.exam || ex.like || ex.body !== raw ? ex.body : raw;
+    if (ex.exam) el.dataset.exam = ex.exam;
+    if (ex.like) el.dataset.like = ex.like;
     if (name === '_typo') {
       el.innerHTML = `<div class="block-error"><strong>没有「${escapeHtml(wrong)}」组件</strong>，是不是想写 <code>${near}</code>？<pre>${escapeHtml(body)}</pre></div>`;
       session.problem(el, wrong, `没有「${wrong}」组件，是不是想写 ${near}？`);

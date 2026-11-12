@@ -358,7 +358,8 @@ export function fillSpec(table, fields = {}) {
 // —— 字段名的拼写检查 ——
 // 组件读过的字段都记下来（读的时候没写也算：引擎会先看「有没有 b:」），源码里写了却从来没被读过的，
 // 就是写错了名字、或者这个组件 / 这种用法用不上它（比如没写 mode: fill 却写了 given:）。不报的话作者以为生效了。
-const SHELL_FIELDS = ['id', 'title', 'q', 'note', 'link', 'vary'];
+// exam / like：真题题号（render.js 一般已经拿掉了；练一练、舞台题直接交给外壳的也认）
+const SHELL_FIELDS = ['id', 'title', 'q', 'note', 'link', 'vary', 'exam', 'like'];
 export function trackFields(raw) {
   const seen = new Set(SHELL_FIELDS);
   const fields = new Proxy(raw, {
