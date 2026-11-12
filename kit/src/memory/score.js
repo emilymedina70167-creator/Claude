@@ -14,6 +14,7 @@ import { voidedIds } from './memo.js';
 import { courseOf } from './space.js';
 import { daysLeft } from './journey.js';
 import { targetOf, goalOf, examDateOf } from '../exam/target.js';
+import { blockWeights } from '../exam/weights.js';
 
 // 没有考试档案时的目标（exam/target.js 的 DEFAULT_TARGET 是同一个数）；有档案时 scoreBoard 读档案
 export const GOAL = 410;
@@ -117,7 +118,8 @@ export function stateAt(doc, date = null) {
  * 课程地图里的块按门课前缀（courseOf）归到部分；高数、概率现在还没有前缀（以后加了 HM- / PS- 就自己算进来）。
  */
 // split：四科各给多少（考试档案的 split）；不给就用 SUBJECTS 的 target
-export function scoreMap(curriculum = [], split = null) {
+// weights：{ 块: 真题平均每年几分 }（首页缓存的 meta/exam 里每门课的 blockPerYear 合起来）；章里的块照它分（exam/weights.js），没有就平分
+export function scoreMap(curriculum = [], split = null, { weights = null } = {}) {
   const all = list(curriculum).filter((b) => b?.id && b.status !== 'void');
   const blocks = {};
   const parts = [];
@@ -134,7 +136,8 @@ export function scoreMap(curriculum = [], split = null) {
         if (!w) continue;
         const cpts = wsum ? (pts * w) / wsum : 0;
         const bs = mine.filter((b) => isBlock(b) && String(b.id).startsWith(`${c.id}.`)).sort((a, b) => naturally(a.id, b.id));
-        for (const b of bs) blocks[b.id] = { points: cpts / bs.length, part: p.key, subject: s.key, chapter: c.id, title: b.title || '' };
+        const share = blockWeights({ blocks: bs.map((b) => b.id), expected: weights || {} });
+        for (const b of bs) blocks[b.id] = { points: cpts * share[b.id], part: p.key, subject: s.key, chapter: c.id, title: b.title || '' };
         chs.push({ id: c.id, title: c.title || c.id, points: cpts, blocks: bs.map((b) => b.id) });
       }
       parts.push({ subject: s.key, key: p.key, label: p.label, basis: p.basis, points: pts, inDesk: chs.length > 0, chapters: chs });
@@ -160,11 +163,11 @@ function gotAt(mem, map, date = null) {
  * { goal, total, subjects: [{ key, label, target, full, got, rgb, parts: [{ key, label, basis, points, got, inDesk, chapters: [{ id, title, points, got, blocks, done }] }] }],
  *   week: { delta, ups: [{ id, title, from, to, delta }], downs: […] }, pace: { left, weeks, perWeek } }
  */
-export function scoreBoard(mem = {}, { today = toDate(Date.now()), days = 7 } = {}) {
+export function scoreBoard(mem = {}, { today = toDate(Date.now()), days = 7, exam = null } = {}) {
   // 目标、四科分配、考试日期读考试档案（没有档案时和以前写死的一样）
   const target = targetOf(mem);
   const { goal, split } = goalOf(target);
-  const map = scoreMap(mem.curriculum, split);
+  const map = scoreMap(mem.curriculum, split, { weights: exam });
   const now = gotAt(mem, map);
   const then = gotAt(mem, map, addDays(today, -days));
   const sumOf = (ids, g) => ids.reduce((n, id) => n + (g[id]?.got || 0), 0);
