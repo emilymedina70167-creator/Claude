@@ -312,3 +312,83 @@ test('以前的证据（没有 sig）照旧按每一问分', () => {
   ];
   assert.equal(itemsOf(recs).length, 2);
 });
+
+// —— 收尾审查查出的 5 条（一条一个测试）——
+import { actText } from '../kit/src/stage/stage.js';
+import { makeSigger } from '../kit/src/stage/evidence.js';
+
+test('审查 1：答案框里的问话，写给老师的是「打了一句问话」，不是「只收不判」', () => {
+  assert.match(actText({ type: 'value', text: 'simply什么意思', asks: true, right: null }), /学生在答案框里打了一句问话：「simply什么意思」（不算一次作答）/);
+});
+
+test('审查 2：带中文的正常答案不当成问话（3次、x=1或x=2）', () => {
+  assert.equal(asksBack('3次', { answer: '3' }), false);
+  assert.equal(asksBack('x=1或x=2', { answer: '{1, 2}', type: 'set' }), false);
+  assert.equal(asksBack('simply什么意思', { answer: 'would happen' }), true);
+  assert.equal(asksBack('这个是过去式吗', { answer: 'would happen' }), true);
+});
+
+test('审查 3：答案一样的两道不同的题不并成一道；紧挨着重问同一个空才是一道', () => {
+  const sig = makeSigger();
+  const s = new Scene();
+  const a = sig({ kind: 'value', answer: '4' }, s, 10);
+  const b = sig({ kind: 'value', answer: '4' }, s, 12); // 紧挨着重问
+  assert.equal(a, b);
+  const c = sig({ kind: 'tap', expect: 'k.2' }, mk('array k = 1 2'), 14); // 中间问了别的
+  const d = sig({ kind: 'value', answer: '4' }, s, 16);
+  assert.notEqual(d, a);
+  assert.ok(c);
+});
+
+test('审查 4：停演那一句报的是真正没演的那一行（写错跳过的行不算没演到）', async () => {
+  const a = lateClass('array k = 2 1\nopen k\ngoal g1 "排好" when="k sorted"');
+  // 假舞台：第 1 行写错（进 errors、不进 log），第 2 行演了，停在第 3 行
+  a.stage.begin = function begin() {
+    this.errors = [];
+    let armedR; const armed = new Promise((r) => { armedR = r; });
+    const me = this;
+    return { mark: this.log.length, turn: 1, armed,
+      push() { me.onLine?.(); },
+      end() { me.errors.push({ line: 1, src: 'paint zz g1', error: '舞台上没有「zz」' }); me.log.push({ src: 'say "操作：按住一张牌拖过去。"', by: 'teacher' }); armedR(); return new Promise(() => {}); },
+      drop() { me.drops++; armedR(); }, abort: async () => {} };
+  };
+  const loop = createLoop(a.host);
+  a.setScript(async (onText) => {
+    onText({ text: 'paint zz g1\nsay "操作：按住一张牌拖过去。"\n' });
+    await wait(5);
+    a.scene.apply(parseScript('swap k.1 k.2')[0], { by: 'student', open: 'drag' });
+    a.stage.onGoal(['g1'], { by: 'student' });
+    return { text: 'paint zz g1\nsay "操作：按住一张牌拖过去。"\nsay "提示：小的放前面。"\nask next', modelApplied: 'm' };
+  });
+  await loop.resume({ lastClaude: 1 });
+  await wait(60);
+  const msg = studentRows(a.sent).at(-1).msg;
+  assert.match(msg, /第 3 行「say "提示：小的放前面。"」：学生在那之前做到了 g1/);
+  loop.close();
+});
+
+test('审查 5：老师写完了、舞台还在一行行演的时候学生做到了：剩下的照样不演', async () => {
+  const a = lateClass('array k = 2 1\nopen k\ngoal g1 "排好" when="k sorted"');
+  let armedR;
+  a.stage.begin = function begin() {
+    this.errors = [];
+    const armed = new Promise((r) => { armedR = r; });
+    const me = this;
+    return { mark: this.log.length, turn: 1, armed,
+      push() { me.onLine?.(); },
+      // 写完以后才开始一行行演：演第 1 行，等一会儿（学生这时做到 g1），没停就演完
+      end(text) { const ls = text.split('\n').filter(Boolean); me.log.push({ src: ls[0], by: 'teacher' }); setTimeout(() => { if (!me.dropped) for (const l of ls.slice(1)) me.log.push({ src: l, by: 'teacher' }); armedR(); }, 40); return new Promise(() => {}); },
+      drop() { me.drops++; me.dropped = true; armedR(); }, abort: async () => {} };
+  };
+  const loop = createLoop(a.host);
+  a.setScript(async (onText) => {
+    onText({ text: 'paint k.1 g1\n' });
+    setTimeout(() => { a.scene.apply(parseScript('swap k.1 k.2')[0], { by: 'student', open: 'drag' }); a.stage.onGoal(['g1'], { by: 'student' }); }, 15);
+    return { text: 'paint k.1 g1\nsay "操作：按住一张牌拖过去。"\nsay "提示：小的放前面。"\nask next', modelApplied: 'm' };
+  });
+  await loop.resume({ lastClaude: 1 });
+  await wait(120);
+  assert.equal(a.stage.drops, 1);
+  assert.ok(!a.stage.log.some((r) => /提示：小的/.test(r.src)));
+  loop.close();
+});

@@ -1902,10 +1902,10 @@ export class Stage {
    * 判的时候出了错（写下时验过了，可 {P^-1} 现在算不出来：学生把 P 拨成了不可逆）：页面没判成，不当学生答错、不晃红框，记进出错记录
    */
   judgeValue(w, given, text) {
-    // 答案框里打的是一句问话（answer.js 的 asksBack）：不判、不晃红框、不算一次作答，交给老师（主线第七轮）
-    if (typeof given === 'string' && asksBack(given, w)) return { type: 'value', text, asks: true, right: null, answer: String(w.answer ?? '') };
     let j;
     try { j = judgeAnswer(given, { type: w.type, answer: w.answer, wrongs: w.wrongs, free: w.free, solve: w.solve, lenient: w.lenient }, this.scene); } catch (err) { j = { ok: null, misread: null, shown: String(w.answer ?? ''), failed: `页面没判成：${err?.message || err}` }; }
+    // 判不对、又是一句问话（answer.js 的 asksBack）：不晃红框、不算一次作答，交给老师（主线第七轮）。先判：判对了的照常算对
+    if (j.ok !== true && typeof given === 'string' && asksBack(given, w)) return { type: 'value', text, asks: true, right: null, answer: j.shown ?? String(w.answer ?? '') };
     // 页面判不了（undecided：按集合判的通解学生写的不是一次式）不是页面出错，不记进出错记录
     if (j.failed && !j.undecided) reportError(new Error(j.failed), { what: `舞台的 ask value 判答案：${w.prompt || ''}（answer=${w.answer}）` });
     return { type: 'value', text, answer: j.shown, right: j.ok, misread: j.misread, ...(j.failed ? { failed: j.failed } : {}) };
@@ -2082,8 +2082,8 @@ export function actText(act) {
     if (act.type === 'say') return `学生说：「${act.text}」`;
     if (act.type === 'value') {
       if (act.failed) return `学生填了「${act.text}」——${typeof act.failed === 'string' ? act.failed : '页面这一下没判成'}（不知道对不对，你看着判）`;
-      if (act.right == null) return `学生填了「${act.text}」（这一问只收不判）`;
       if (act.asks) return `学生在答案框里打了一句问话：「${act.text}」（不算一次作答）`;
+      if (act.right == null) return `学生填了「${act.text}」（这一问只收不判）`;
       return `学生填了「${act.text}」——正确答案是 ${act.answer}，${act.right ? '填对了' : `填错了${act.misread ? `（页面看出来：${act.misread}）` : ''}`}`;
     }
     if (act.type === 'edit') return `学生把 ${act.ref} 从 ${act.from === '' ? '空' : act.from} 拨到 ${act.to}`;

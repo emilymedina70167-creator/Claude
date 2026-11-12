@@ -52,3 +52,17 @@ export function askSig(w, scene) {
 }
 /** 挑战的指纹：编号、字、条件（同一条挑战先没做到、后做到是一道） */
 export const goalSig = (g) => (g ? `goal|${g.id}|${g.text || ''}|${g.when || ''}` : null);
+/**
+ * 一节课用一个：同一个空**紧挨着**重问（中间没问别的题）才算同一道。只看判法和答案的话，两道不同的题答案都是 4 就并成一道了
+ * （收尾审查 3）。返回 (w, scene, at) → 指纹（at 是这一问在第几轮，接不上前一问时用它分开）
+ */
+export function makeSigger() {
+  let last = null;
+  return (w, scene, at = 0) => {
+    const base = askSig(w, scene);
+    if (!base) return null;
+    if (last && last.base === base) return last.id;
+    last = { base, id: `${base}@S${at}` };
+    return last.id;
+  };
+}

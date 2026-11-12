@@ -565,18 +565,6 @@ export function judgeAnswer(given, spec = {}, scene = null) {
  * 按格的式子框画多大：type=matrix 写了 free= 时 { rows, cols, names（式子里的变量） }，不然 null（一个输入框）。
  * 太大的（超过 4×4）也是 null：一格一个框在 iPad 上摆不下，照旧一行字写
  */
-/**
- * 学生在答案框里打的是一句问话（主线第七轮：第一节真课「simply什么意思」被判成一次填错，报告里多一道错题）：
- * 以 ? ？ 结尾，或者有中文而老师的答案里没有中文。是问话就不判、不算一次作答，记成学生说的话交给老师
- */
-const CJK_RE = /[\u3400-\u9fff\uf900-\ufaff]/;
-export function asksBack(text, spec = {}) {
-  const t = String(text ?? '').trim();
-  if (!t) return false;
-  if (/[?？]$/.test(t)) return true;
-  return CJK_RE.test(t) && !CJK_RE.test(String(spec.answer ?? ''));
-}
-
 export function gridShape(spec = {}, scene = null) {
   if (String(spec.type ?? '').trim().toLowerCase() !== 'matrix') return null;
   if (String(spec.grid ?? '') === 'off') return null; // 老师关了格子（想看学生自己写成什么形状）
@@ -587,6 +575,20 @@ export function gridShape(spec = {}, scene = null) {
     if (rows.length > 4 || rows[0].length > 4) return null;
     return { rows: rows.length, cols: rows[0].length, names };
   } catch { return null; }
+}
+
+/**
+ * 学生在答案框里打的是一句问话（主线第七轮：第一节真课「simply什么意思」被判成一次填错，报告里多一道错题）：
+ * 以 ? ？ 结尾，或者有问话的字（什么、吗、怎么、为什么、哪、啥、是不是）而老师的答案里没有中文。
+ * 只看问话的字、不看有没有中文：「3次」「x=1或x=2」是正常的答案。调用的地方先判，判对了的不算问话（stage.js 的 judgeValue）
+ */
+const CJK_RE = /[\u3400-\u9fff\uf900-\ufaff]/;
+const ASK_WORDS = /什么|吗|怎么|为什么|为啥|哪|啥|是不是|不懂|不会/;
+export function asksBack(text, spec = {}) {
+  const t = String(text ?? '').trim();
+  if (!t) return false;
+  if (/[?？]$/.test(t)) return true;
+  return ASK_WORDS.test(t) && !CJK_RE.test(String(spec.answer ?? ''));
 }
 
 /**

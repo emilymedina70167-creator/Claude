@@ -55,12 +55,13 @@ export function createLoop(host) {
     return new Set(ts.flatMap((e) => e.goals));
   };
   // 老师这一轮写的行里，第一行没演上的（演了的照先后一行行对掉）：{ line, src }
-  const firstUnplayed = (text, log) => {
+  // skip：写错跳过的行号（不进 log，可它们是「演过了」的那一边，不是没演到）
+  const firstUnplayed = (text, log, skip = new Set()) => {
     const played = (log || []).filter((r) => r.by === 'teacher').map((r) => String(r.src || '').trim());
     const lines = stageLines(text);
     for (let k = 0; k < lines.length; k++) {
       const l = lines[k] == null ? '' : String(lines[k]).trim();
-      if (!l || l.startsWith('#')) continue;
+      if (!l || l.startsWith('#') || skip.has(k + 1)) continue;
       const at = played.indexOf(l);
       if (at >= 0) { played.splice(at, 1); continue; }
       return { line: k + 1, src: l };
@@ -132,6 +133,8 @@ export function createLoop(host) {
         return null;
       }
       const text = res.text || '';
+      // 写完了、舞台还在一行行演：做到了那条挑战照样停得下（收尾审查 5），演完（armed）才清
+      S.acting = f;
       // 这一轮写完就先存下（演的时候刷新不能丢）；演完、挂好那一问，再补上演了的行（中间学生动的也在里面，先后照实）
       let donePlay;
       S.playing = new Promise((r) => { donePlay = r; });
@@ -144,9 +147,10 @@ export function createLoop(host) {
       host.thinking?.(false);
       S.busy = false;
       await Promise.race([turn.armed, ended0]);
+      if (S.acting === f) S.acting = null;
       claude.log = stage.log.slice(mark);
       // 叫老师的理由没了停下的：没演的第一行告诉老师（跟着下一条的「[上一轮没演的行]」）
-      if (f.cut) stage.errors.push({ ...firstUnplayed(text, claude.log), error: `学生在那之前做到了 ${f.cut}，这一行起没演（你这一轮是因为它很久没做到才被叫来的）` });
+      if (f.cut) stage.errors.push({ ...firstUnplayed(text, claude.log, new Set(stage.errors.filter((e) => !e.kept).map((e) => e.line))), error: `学生在那之前做到了 ${f.cut}，这一行起没演（你这一轮是因为它很久没做到才被叫来的）` });
       host.putTurn(claude);
       S.logFrom = stage.log.length;
       if (S.pending) { S.pending.base = []; savePending(true); }
@@ -351,7 +355,7 @@ export function createLoop(host) {
     if (instant || S.ended || host.readOnly) return;
     // 老师这一轮是因为这条挑战很久没做到才被叫来的、已经演到一半：学生做到了，叫老师的理由没了——还没演的行不演（演上的留着）。
     // 第一节真课：挑战打了勾，底下还在演「操作：按住粉色小人…」「提示：…」。做到挑战照常叫老师（下面那几行），老师接着看
-    const fl = S.flight;
+    const fl = S.flight?.playing ? S.flight : S.acting;
     if (by === 'student' && fl?.playing && fl.why && !fl.cut) {
       const hit = ids.find((id) => fl.why.has(id));
       if (hit) { fl.cut = hit; fl.turn.drop(); }
