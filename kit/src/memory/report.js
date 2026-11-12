@@ -4,6 +4,7 @@
 //
 // 输入：这节课的 sessions 文档、evidence（这节课的）、observations / slips（这节课的）、课堂轮次 class_turns、黑板的段 steps，
 // 以及上一节课下课以后的补记（src: manual，不属于哪节课，跟着下一份报告一起看）。
+import { sceneSpans } from '../stage/scenes.js';
 import { lessonSheet } from './sheet.js';
 import { usageOf } from '../class/usage.js';
 
@@ -241,9 +242,19 @@ export function buildReport({ session = {}, evidence = [], manual = [], observat
       .filter((d, i, all) => all.findIndex((x) => String(x.word).toLowerCase() === String(d.word).toLowerCase()) === i).slice(0, 60).map((d) => ({ word: cut(d.word, 60), gloss: cut(d.gloss, 80) })),
     // 这节课的一页：记号、重点框、做错又改对的、还没拿下的（页面自己拼，不调用 Claude）
     sheet: lessonSheet({ steps, items }),
+    // 舞台课分了几幕（老师写的 scene，主线第六轮 3.6）：一幕一个标题、它的重点卡。只有一幕（旧课、没写 scene）不写
+    ...scenesOf(turns, session),
     at: now,
   };
   return fitReport(report);
+}
+
+/** 舞台课的几幕：照课堂刷新时拼 log 的办法（stage/classroom.js：作废的轮不要，老师、学生的轮各自的 log 接起来）推出来 */
+function scenesOf(turns, session) {
+  const log = (turns || []).filter((t) => t && !t.discarded && (t.role === 'claude' || t.role === 'student')).flatMap((t) => (Array.isArray(t.log) ? t.log : []));
+  if (!log.length) return {};
+  const sp = sceneSpans(log, { title: session.title || '开头' });
+  return sp.length > 1 ? { scenes: sp.map((x) => ({ n: x.n, title: cut(x.title, 60), keys: x.keys.map((k) => cut(k, 120)).slice(0, 6) })) } : {};
 }
 
 /** 太大了（几百道题、说了很多话）：先缩短文字，再截掉最早的条目，在 more 里记截掉了几条 */

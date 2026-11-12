@@ -195,6 +195,7 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
         ${skillsHtml(r.skills)}
         ${sum ? `<div class="dk-memo-sub" role="heading" aria-level="3">下课小结</div><div class="dk-summary">${mdToHtml(sum.text || '')}</div>` : ''}
         ${rep && sheetMd(rep.sheet) ? `<div class="dk-memo-sub" role="heading" aria-level="3">这节课的一页</div><div class="dk-summary dk-sheet">${mdToHtml(sheetMd(rep.sheet))}</div>` : ''}
+        ${rep?.scenes?.length ? `<div class="dk-memo-sub" role="heading" aria-level="3">这节课的几幕</div><div class="dk-summary dk-scenes">${rep.scenes.map((x) => `<p><b>${esc(`${x.n}. ${x.title}`)}</b>${x.keys.map((k) => `<br>${esc(k)}`).join('')}</p>`).join('')}</div>` : ''}
         ${rep ? reportHtml(rep) : rep === false ? '<p class="muted">这节课还没有课后报告（下课以后才有；回首页会补写）。</p>' : '<p class="muted">正在读课后报告…</p>'}
         ${obs.filter((o) => o.kind !== 'summary').length ? `<details class="dk-soft"><summary>老师当堂的笔记（${obs.filter((o) => o.kind !== 'summary').length} 条）</summary><ul class="dk-log">${obs.filter((o) => o.kind !== 'summary').map((o) => `<li>${o.kind === 'proposal' ? '<b>提议</b> ' : ''}${inline(o.text)}</li>`).join('')}</ul></details>` : ''}
       </section>`;

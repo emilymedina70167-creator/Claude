@@ -116,3 +116,20 @@ test('scene 写错当场报', () => {
   assert.match(dryRun(s, 'scene')[0].error, /scene "这一幕叫什么"/);
   assert.match(dryRun(s, 'scene "x" keap=tl')[0].error, /keep/);
 });
+
+// —— 下课的报告里的几幕（memory/report.js，主线第六轮 3.6）——
+import { buildReport, REPORT_VERSION } from '../kit/src/memory/report.js';
+
+test('舞台课分了两幕：报告里有两幕的标题和重点卡；一幕的、黑板课的没有', () => {
+  const turns = [
+    { seq: 1, role: 'claude', log: [{ src: 'sentence s = "A b."', by: 'teacher' }, { src: 'label k s "重点：一" tone=key', by: 'teacher' }] },
+    { seq: 2, role: 'student', log: [{ src: 'tap s.1', by: 'student' }] },
+    { seq: 3, role: 'claude', log: [{ src: 'scene "进行时"', by: 'teacher' }, { src: 'sentence d = "C."', by: 'teacher' }, { src: 'label k2 d "重点：二" tone=key', by: 'teacher' }] },
+    { seq: 4, role: 'claude', discarded: true, log: [{ src: 'scene "作废的"', by: 'teacher' }, { src: 'sentence e = "D."', by: 'teacher' }] },
+  ];
+  const r = buildReport({ session: { id: 'c-1', title: '时态' }, turns });
+  assert.deepEqual(r.scenes, [{ n: 1, title: '时态', keys: ['重点：一'] }, { n: 2, title: '进行时', keys: ['重点：二'] }]);
+  assert.equal(buildReport({ session: { id: 'c-1' }, turns: turns.slice(0, 2) }).scenes, undefined);
+  assert.equal(buildReport({ session: { id: 'c-1' }, turns: [{ seq: 1, role: 'claude', text: '```board\nnew\n```' }] }).scenes, undefined);
+  assert.equal(r.v, REPORT_VERSION); // 版本号没为它加（旧课不重算）
+});
