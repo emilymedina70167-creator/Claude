@@ -248,7 +248,9 @@ export function followRules(base, o) {
   if (hit && hit.name === f.name) return hit.rules;
   const a = followOf(f.name);
   if (!a) return base;
-  const acts = Object.keys(base.gestures || {});
+  // 这样东西上学生能做的几种动作；老写法的 open a / open h（drag：拖着换）也算——堆就是拖着结点换值，
+  // 不算的话 @h.right 写不进去、走完了也不叫老师（主线第五轮）
+  const acts = [...new Set([...Object.keys(base.gestures || {}), 'drag'])];
   // 这一行是这样东西自己的指令，可它自己的规则不判（老写法 open a、不过裁判的指令）：照着走时也要看这一下以后到了哪
   const hidden = (act, key, value) => Object.defineProperty(act, key, { value, enumerable: false });
   const rules = {

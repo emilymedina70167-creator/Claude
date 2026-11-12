@@ -203,6 +203,28 @@ SECTIONS.power = async () => {
   }
 };
 
+// —— 堆（照引擎走，接在树上）：按住一个结点拖到另一个上，两个换值 ——
+SECTIONS.heap = async () => {
+  for (const [tag, view] of [['竖屏', { width: 820, height: 1180 }], ['横屏', { width: 1180, height: 820 }]]) {
+    const T = await open(view);
+    const level = () => T.page.evaluate(() => { const o = window.LAStage.scene.objects.get('h'); return o.nodes.slice().sort((a, b) => a.key - b.key).map((n) => n.value).join(' '); });
+    await T.play('tree h = 53 17 78 09 45 65 87 32 layout=compact\nfollow h heap build\nopen h\nsay "从最后一个非叶结点开始调。"');
+    const a = await T.box('h:4'), b = await T.box('h:8');
+    expect(`${tag}：树的结点手指按得到（≥ 44）`, String(Math.min(a.w, a.h) >= 44), 'true');
+    let before = await T.srcs();
+    await T.drag({ x: a.cx, y: a.cy }, { x: b.cx, y: b.cy });
+    await T.wait(1400);
+    expect(`${tag}：09 拖到它的孩子 32 上，两个换值`, `${await T.added(before)}｜${await level()}`, 'swap h#4 h#8｜53 17 78 32 45 65 87 09');
+    // 拖出去又放回原处：不变
+    before = await T.srcs();
+    const c = await T.box('h:3'), d = await T.box('h:7');
+    await T.dragBack({ x: c.cx, y: c.cy }, { x: (c.cx + d.cx) / 2, y: (c.cy + d.cy) / 2 });
+    await T.wait(900);
+    expect(`${tag}：拖一半放回原处`, `${await T.added(before)}｜${await level()}`, '没有｜53 17 78 32 45 65 87 09');
+    await T.ctx.close();
+  }
+};
+
 for (const [name, fn] of Object.entries(SECTIONS)) {
   if (only && !only.includes(name)) continue;
   console.log(`\n—— ${name} ——`);

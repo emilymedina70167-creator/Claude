@@ -1,0 +1,14 @@
+# 主线第五轮：堆接在树上（照引擎走）。老师一行 follow，现状里就有每一次调整做完该是什么样；学生拖着结点换值
+tree h = 53 17 78 09 45 65 87 32 layout=compact
+follow h heap build
+open h
+@h.right say "这棵子树调好了。"
+say "从最后一个非叶结点开始：它和孩子里大的那个比，小就换下去。"
+学生: swap h.09 h.32
+say "对。往前一个非叶结点是谁？接着调。"
+学生: swap h.78 h.87
+say "再往前。"
+学生: swap h.17 h.45
+say "最后是根。"
+学生: swap h.53 h.87
+学生: swap h.53 h.78
