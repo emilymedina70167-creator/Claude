@@ -1,0 +1,98 @@
+// 考试资料的收件箱（docs/exam-plan.md 1.2 的 exam_inbox）：开发那边用 tools/exam.mjs 切好、写进 exam_inbox，
+// 页面照规矩查过再并进 papers / questions / passages / syllabus（examdesk.js 挂在首页）。
+// 一条记录一种东西：一卷（paper）、一门课的考点树（syllabus）、一批标签（tags）。**整条要么全收、要么全不收**：
+// 一卷里有一题不对就整卷不收（半卷进库，统计就错了），回执写哪一题哪里不对。
+// 纯函数，有测试（tests/exam-inbox.test.js）。
+import { validateExam } from './schema.js';
+import { checkPaper } from './structure.js';
+import { checkTags } from './taxonomy.js';
+
+const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const strip = (d) => { const { id: _, ...rest } = d || {}; return rest; };
+
+/** 这条记录要碰哪几条（examdesk 先读它们现在的样子交给 planInbox 当 have） */
+export function touches(rec = {}) {
+  if (rec.kind === 'paper') return [`papers/${rec.paper?.id}`, ...(rec.questions || []).map((q) => `questions/${q.id}`), ...(rec.passages || []).map((p) => `passages/${p.id}`)];
+  if (rec.kind === 'syllabus') return (rec.nodes || []).map((n) => `syllabus/${n.id}`);
+  if (rec.kind === 'tags') return Object.keys(rec.tags || {}).map((id) => `questions/${id}`);
+  return [];
+}
+
+/** 标签变了：往这一条自己的 tagLog 里加一条（不走 meta/ledger：上千道题会撑爆一个文档） */
+function withTags(cur, tags, { at, by }) {
+  if (tags === undefined) return cur?.tags !== undefined ? { tags: cur.tags, ...(cur.tagLog ? { tagLog: cur.tagLog } : {}) } : {};
+  const log = Array.isArray(cur?.tagLog) ? [...cur.tagLog] : [];
+  if (!same(cur?.tags, tags)) log.push({ at, by, from: cur?.tags ?? null, to: tags });
+  return { tags, ...(log.length ? { tagLog: log } : {}) };
+}
+
+/**
+ * 一条收件箱记录 → { writes: [{ path, data }], log }。have：'集合/编号' → 现在那条（没有就是新的）；
+ * syllabusIds：标签记录要核的考点编号（不给就不核考点）。
+ * log：{ kind, at, ok, counts（每类写几条）, added（每类新加几条）, problems, rejected: [{ id, error }], notes }
+ */
+export function planInbox(rec = {}, { have = new Map(), at = Date.now(), syllabusIds = null } = {}) {
+  const by = String(rec.by || 'dev');
+  const log = { kind: String(rec.kind || ''), at, ok: false, counts: {}, added: {}, problems: [], rejected: [], notes: [] };
+  const writes = [];
+  const put = (coll, doc) => {
+    const path = `${coll}/${doc.id}`;
+    writes.push({ path, data: doc.data });
+    log.counts[coll] = (log.counts[coll] || 0) + 1;
+    if (!have.has(path)) log.added[coll] = (log.added[coll] || 0) + 1;
+  };
+  const bad = (coll, d) => validateExam(coll, d?.id, strip(d));
+
+  if (rec.kind === 'paper') {
+    const p = rec.paper || {};
+    const qs = rec.questions || [];
+    const ps = rec.passages || [];
+    log.problems.push(...bad('papers', p), ...qs.flatMap((q) => bad('questions', q)), ...ps.flatMap((x) => bad('passages', x)));
+    for (const q of qs) if (q.paper !== p.id) log.problems.push(`${q.id}：挂的卷是 ${q.paper}，不是 ${p.id}`);
+    const cp = checkPaper(p, qs);
+    log.problems.push(...cp.problems);
+    log.notes.push(...cp.notes);
+    if (log.problems.length) return { writes: [], log };
+    const curP = have.get(`papers/${p.id}`);
+    // 留不留作模考是我在页面上定的：收件箱再来同一卷不盖掉
+    put('papers', { id: p.id, data: { ...strip(p), ...(curP?.reserve !== undefined ? { reserve: curP.reserve } : {}), by, at } });
+    for (const q of qs) {
+      const cur = have.get(`questions/${q.id}`);
+      const { tags, ...rest } = strip(q);
+      put('questions', { id: q.id, data: { ...rest, ...withTags(cur, tags, { at, by }), by, at } });
+    }
+    for (const x of ps) put('passages', { id: x.id, data: { ...strip(x), by, at } });
+  } else if (rec.kind === 'syllabus') {
+    const nodes = rec.nodes || [];
+    log.problems.push(...nodes.flatMap((n) => bad('syllabus', n)));
+    for (const n of nodes) if (n.course !== rec.course) log.problems.push(`${n.id}：门课是 ${n.course}，这一份是 ${rec.course} 的大纲`);
+    if (!nodes.length) log.problems.push('考点树是空的');
+    if (log.problems.length) return { writes: [], log };
+    for (const n of nodes) {
+      const cur = have.get(`syllabus/${n.id}`);
+      // 挂到课程地图的哪几块是后来映射上的（教研室 / 页面），重新切大纲不抹掉
+      const keep = cur ? Object.fromEntries(['blocks', 'mapAt', 'mapSig', 'changed'].filter((k) => cur[k] !== undefined).map((k) => [k, cur[k]])) : {};
+      put('syllabus', { id: n.id, data: { ...strip(n), ...keep, by, at } });
+    }
+  } else if (rec.kind === 'tags') {
+    for (const [id, tags] of Object.entries(rec.tags || {})) {
+      const cur = have.get(`questions/${id}`);
+      if (!cur) { log.rejected.push({ id, error: '库里没有这道题' }); continue; }
+      const why = syllabusIds ? checkTags(tags, { course: cur.course, syllabusIds }) : [];
+      if (why.length) { log.rejected.push({ id, error: why.join('；') }); continue; }
+      put('questions', { id, data: { ...strip(cur), ...withTags(cur, tags, { at, by }), at } });
+    }
+  } else {
+    log.problems.push(`不认得的记录种类「${rec.kind}」（只认 paper / syllabus / tags）`);
+    return { writes: [], log };
+  }
+  log.ok = true;
+  return { writes, log };
+}
+
+/** meta/exam 的计数：照回执加新加的（首页不为了计数去读整类） */
+export function countsAfter(meta, log, at = Date.now()) {
+  const counts = { ...(meta?.counts || {}) };
+  if (log?.ok) for (const [c, n] of Object.entries(log.added || {})) counts[c] = (counts[c] || 0) + n;
+  return { ...(meta || {}), counts, at };
+}

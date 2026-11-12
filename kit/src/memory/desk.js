@@ -65,6 +65,7 @@ import { createDevAI } from '../books/devmock.js';
 import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
 import { scrubBooks, readReserve } from '../exam/reserve.js';
+import { createExamInbox } from '../exam/examdesk.js';
 import { renderStageClass } from '../stage/classroom.js';
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
@@ -186,6 +187,8 @@ export async function renderDesk(root, meta) {
   const deskAI = store.dev ? async () => (await getAI()) || createDevAI() : getAI;
   const planner = createPlanner({ db, getAI: deskAI, model: MODEL, getData: () => data, space: () => space });
   const booksView = createBooksView($('.dk-bookpage'), { db, assets: store.assets, getAI: deskAI, space: () => space, model: MODEL, plan: { open: (host, id) => planner.openMap(host, id) } });
+  // 考试资料的收件箱（exam/examdesk.js）：开发那边切好的真卷、考点树、标签，页面查过再并进去（只在首页挂，课堂里不挂）
+  createExamInbox({ db });
 
   const packs = Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: null, problems: null }]));
   for (const k of SPACE_KEYS) {
