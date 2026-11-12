@@ -22,6 +22,8 @@ const uniq = (xs) => [...new Set(xs.filter((x) => x !== undefined && x !== null 
 
 /** 一道题（一个作答组件里的一处）的键：组件 id + 「第几步」（steps、演示组件的每一步分开算），没有步就用题面 */
 export function itemKey(ev) {
+  // 舞台上的一问带着指纹（stage/evidence.js 的 askSig）：同一个空重问一次是同一道题（主线第七轮）
+  if (ev.type === 'stage' && ev.sig) return `${ev.sig}|舞台`;
   const comp = String(ev.comp ?? '');
   // 一问一答的活板（type: huoban）：编号 L12 / L12.2 / L12#2 就是一道题（第几行、第几个控件、重开第几次）。
   // 题面 q 里带着行里活的值（现在 t = 2……），同一个空前后两次作答之间学生拨了一下，q 就不一样了，不能拿它分题

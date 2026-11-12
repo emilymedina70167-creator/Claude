@@ -261,3 +261,54 @@ test('写给老师：点了「接着上」、点了「下课」；下课不叫�
   const e = { kind: 'answer', act: { type: 'end' }, at: 1 };
   assert.match(eventsText([e]), /学生点了「下课」/);
 });
+
+// —— 第 5 节：同一个空算一道题；答案框里的问话不算作答 ——
+import { asksBack } from '../kit/src/stage/answer.js';
+import { askSig, actEvidence } from '../kit/src/stage/evidence.js';
+import { itemsOf } from '../kit/src/memory/report.js';
+
+test('asksBack：答案框里打的是一句问话', () => {
+  assert.equal(asksBack('simply什么意思', { answer: 'would happen' }), true);
+  assert.equal(asksBack('would happen', { answer: 'would happen' }), false);
+  assert.equal(asksBack('过去', { answer: '过去' }), false);
+  assert.equal(asksBack('is it would?', { answer: 'would happen' }), true);
+  assert.equal(asksBack('  5  ', { answer: '5' }), false);
+});
+
+test('同一个空问两次、先错后对：报告里一道「改对了」', () => {
+  const sig = askSig({ kind: 'value', type: 'en', answer: 'would happen' }, new Scene());
+  const recs = [
+    { src: 'record', comp: 'S41', type: 'stage', q: '用 happen 的正确形式填空', value: 'will happen', ok: false, sig, at: 1 },
+    { src: 'record', comp: 'S43', type: 'stage', q: '再填一次：用 happen 的正确形式填空', value: 'would happen', ok: true, sig, at: 2 },
+  ];
+  const items = itemsOf(recs);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].outcome, 'ok');
+});
+
+test('同一个名字造成两句不同的句子：问的是两道题', () => {
+  const s = mk('sentence r = "Each year researchers publish papers."');
+  const a = askSig({ kind: 'tap', expect: ['r.4'] }, s);
+  s.apply(parseScript('sentence r = "Readers are migrating away from print."')[0]);
+  const b = askSig({ kind: 'tap', expect: ['r.4'] }, s);
+  assert.notEqual(a, b);
+  // 同一句问两次（再找一次）是同一道
+  const s2 = mk('sentence r = "Each year researchers publish papers."');
+  assert.equal(askSig({ kind: 'tap', expect: ['r.4'] }, s2), a);
+});
+
+test('问话记成说的话，不出作答；作答带上 sig', () => {
+  const ev = actEvidence({ type: 'value', text: 'simply什么意思', asks: true, right: null }, { comp: 'S39', q: '填空', sig: 'value||would happen' });
+  assert.deepEqual(ev.records, []);
+  assert.equal(ev.say, 'simply什么意思');
+  const ok = actEvidence({ type: 'value', text: 'would happen', right: true }, { comp: 'S43', q: '填空', sig: 'value||would happen' });
+  assert.equal(ok.records[0].sig, 'value||would happen');
+});
+
+test('以前的证据（没有 sig）照旧按每一问分', () => {
+  const recs = [
+    { src: 'record', comp: 'S41', type: 'stage', q: '用 happen 的正确形式填空', value: 'will happen', ok: false, at: 1 },
+    { src: 'record', comp: 'S43', type: 'stage', q: '再填一次：用 happen 的正确形式填空', value: 'would happen', ok: true, at: 2 },
+  ];
+  assert.equal(itemsOf(recs).length, 2);
+});

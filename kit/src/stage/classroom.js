@@ -12,7 +12,7 @@ import { Stage, stageLines } from './stage.js';
 import { QUIET_MS } from './events.js';
 import { createLoop } from './loop.js';
 import { buildStageSystem, turnMessage, firstMessage, stageSubject } from './doc.js';
-import { actEvidence } from './evidence.js';
+import { actEvidence, askSig, goalSig } from './evidence.js';
 import { fitHistory } from './history.js';
 import { getAI } from '../ai.js';
 import { createSink } from '../live/sync.js';
@@ -144,12 +144,12 @@ export async function renderStageClass(root, meta = {}, desk) {
     report: (err, info) => reportError(err, info),
     // 学生的每个动作都是证据：有对错的（点了预期的那一个、填的答案、做到了挑战）记成作答，别的记成动作，打的字记成说的话
     evidence: sink ? {
-      goal: (id, g, at) => sink.record({ type: 'stage', block: `S${at}`, q: g?.text || id, value: 'goal', text: id, ok: true, turn: at }),
+      goal: (id, g, at) => sink.record({ type: 'stage', block: `S${at}`, q: g?.text || id, value: 'goal', text: id, ok: true, turn: at, ...(goalSig(g) ? { sig: goalSig(g) } : {}) }),
       act: (a, at) => {
         const comp = `S${at || seq}`; // 这一问的编号：页面在每一轮的 [学生] 后面告诉老师（记忆块的 basis 写它）
         const w = stage.scene.waiting;
         const q = w?.prompt || stage.scene.say || '';
-        const ev = actEvidence(a, { comp, q, goalText: (id) => stage.scene.goals.get(id)?.text || id });
+        const ev = actEvidence(a, { comp, q, goalText: (id) => stage.scene.goals.get(id)?.text || id, sig: askSig(w, stage.scene), goalSig: (id) => goalSig(stage.scene.goals.get(id)) });
         for (const r of ev.records) sink.record({ ...r, turn: at });
         if (ev.say != null) sink.put('evidence', sayEvidence(ev.say, { session: sid, block: desk.block, turn: at }));
         if (ev.event) sink.event({ type: `stage-${a.type}`, block: comp, detail: { ...a, tries: undefined }, turn: at });

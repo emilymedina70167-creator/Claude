@@ -11,7 +11,7 @@ import { parseScript, parseRich, richLength } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, tapAnswer, pickText, unplayedNotes, compareFact, compareNote, mergeFact, chipTextOf, tapValueOf } from './scene.js';
 import { goalMark, shapeText } from './goal.js';
 import { measureShown } from './rules.js';
-import { judgeAnswer, sameAnswer, answerInput, gridAnswerText } from './answer.js';
+import { judgeAnswer, sameAnswer, answerInput, gridAnswerText, asksBack } from './answer.js';
 import { formulaInput, formulaGrid, hideFormulaPad } from '../formulainput.js';
 import { varText, pickNow } from './pick.js';
 export { sameAnswer };
@@ -1902,6 +1902,8 @@ export class Stage {
    * 判的时候出了错（写下时验过了，可 {P^-1} 现在算不出来：学生把 P 拨成了不可逆）：页面没判成，不当学生答错、不晃红框，记进出错记录
    */
   judgeValue(w, given, text) {
+    // 答案框里打的是一句问话（answer.js 的 asksBack）：不判、不晃红框、不算一次作答，交给老师（主线第七轮）
+    if (typeof given === 'string' && asksBack(given, w)) return { type: 'value', text, asks: true, right: null, answer: String(w.answer ?? '') };
     let j;
     try { j = judgeAnswer(given, { type: w.type, answer: w.answer, wrongs: w.wrongs, free: w.free, solve: w.solve, lenient: w.lenient }, this.scene); } catch (err) { j = { ok: null, misread: null, shown: String(w.answer ?? ''), failed: `页面没判成：${err?.message || err}` }; }
     // 页面判不了（undecided：按集合判的通解学生写的不是一次式）不是页面出错，不记进出错记录
@@ -2081,6 +2083,7 @@ export function actText(act) {
     if (act.type === 'value') {
       if (act.failed) return `学生填了「${act.text}」——${typeof act.failed === 'string' ? act.failed : '页面这一下没判成'}（不知道对不对，你看着判）`;
       if (act.right == null) return `学生填了「${act.text}」（这一问只收不判）`;
+      if (act.asks) return `学生在答案框里打了一句问话：「${act.text}」（不算一次作答）`;
       return `学生填了「${act.text}」——正确答案是 ${act.answer}，${act.right ? '填对了' : `填错了${act.misread ? `（页面看出来：${act.misread}）` : ''}`}`;
     }
     if (act.type === 'edit') return `学生把 ${act.ref} 从 ${act.from === '' ? '空' : act.from} 拨到 ${act.to}`;
