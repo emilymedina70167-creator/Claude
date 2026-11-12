@@ -5,15 +5,44 @@
 // 只挂在首页，课堂里不挂（不碰上课的速度）。
 import { planInbox, touches, countsAfter } from './inbox.js';
 import { assertWrite } from '../memory/schema.js';
+import { loadExamCourse } from './load.js';
+import { statsCache } from './stats.js';
+import { EXAM_COURSES } from './schema.js';
+
+/**
+ * 首页的考情缓存（meta/exam 的 stats / blockPerYear，410 分的权重、考情页、体检、后方的工作单都读它）：一门课一门课按门课读
+ * （不订阅、不读整类），算 statsCache。计数也照读到的重算（收件箱照回执加的会在写到一半出错、两台设备、从备份恢复时偏）。
+ * 只在收件箱并进了东西、或者 meta/exam 比上次算的新时算（examdesk 管）
+ */
+export async function refreshStats(db, { curriculum = [], now = Date.now() } = {}) {
+  const stats = {};
+  const blockPerYear = {};
+  const papers = new Set();
+  let questions = 0, syllabus = 0;
+  for (const c of EXAM_COURSES) {
+    const d = await loadExamCourse(db, c);
+    syllabus += d.syllabus.length;
+    for (const p of d.papers) papers.add(p.id);
+    if (!d.questions.length) continue;
+    questions += d.questions.length;
+    stats[c] = statsCache({ course: c, questions: d.questions, syllabus: d.syllabus, curriculum });
+    Object.assign(blockPerYear, stats[c].blockPerYear);
+  }
+  const meta = await db.doc('meta/exam').get().then((x) => (x?.exists ? x.data() : {})).catch(() => ({}));
+  const next = { ...meta, counts: { ...(meta.counts || {}), papers: papers.size, questions, syllabus }, stats, blockPerYear, statsAt: now };
+  await db.doc('meta/exam').set(next);
+  return next;
+}
 
 export const LOG_KEEP = 40;
 const PARALLEL = 20;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800] } = {}) {
+export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curriculum = () => [] } = {}) {
   let busy = false;
   let latest = null;
   let stopped = false;
+  let tookOk = false;
   const done = new Set();
   let lock = null;
   const awake = async () => { try { if (!lock && typeof document !== 'undefined' && document.visibilityState === 'visible') lock = await navigator.wakeLock?.request?.('screen'); } catch { lock = null; } };
@@ -63,6 +92,7 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800] } = {}) {
     }
     await retry(() => db.doc(`exam_inbox/${id}`).delete());
     done.add(id);
+    if (log.ok) tookOk = true;
   }
   // 回执只留最近 40 份
   async function trimLogs() {
@@ -90,6 +120,7 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800] } = {}) {
         latest = null;
       }
       await trimLogs();
+      if (tookOk) { tookOk = false; await refreshStats(db, { curriculum: curriculum() }).catch(() => {}); }
     } finally {
       busy = false;
       sleepOk();
@@ -98,5 +129,13 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800] } = {}) {
     }
   }
   const unsub = db.collection('exam_inbox').onSnapshot((s) => take(docsOf(s)), () => {});
-  return { stop() { stopped = true; try { unsub?.(); } catch { /* */ } } };
+  // 课程地图读到以后看一眼：缓存比上次并收件箱旧（别的设备并的、从备份恢复的）就重算一遍
+  let checked = false;
+  async function maybeRefresh() {
+    if (checked || stopped) return;
+    checked = true;
+    const m = await db.doc('meta/exam').get().then((x) => (x?.exists ? x.data() : null)).catch(() => null);
+    if (m && (!m.statsAt || (m.at || 0) > m.statsAt)) await refreshStats(db, { curriculum: curriculum() }).catch(() => {});
+  }
+  return { stop() { stopped = true; try { unsub?.(); } catch { /* */ } }, maybeRefresh, refresh: () => refreshStats(db, { curriculum: curriculum() }) };
 }

@@ -68,6 +68,7 @@ import { normalizeBooks, readHistory } from '../books/textbook.js';
 import { scrubBooks, readReserve } from '../exam/reserve.js';
 import { createExamInbox } from '../exam/examdesk.js';
 import { createExamCard } from '../exam/examview.js';
+import { createExamPage } from '../exam/exampage.js';
 import { renderStageClass } from '../stage/classroom.js';
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
@@ -96,7 +97,7 @@ const nameIn = (get) => (coll, id) => { const d = (get()?.[coll] || []).find((x)
 const todayLabel = (d = new Date()) => `${d.getMonth() + 1}月${d.getDate()}日 星期${'日一二三四五六'[d.getDay()]}`;
 
 // 首页以外的页面（pages.js），换页不刷新
-const PAGES = { map: '课程地图', books: '教材', weak: '弱点表', errors: '错题本', classes: '以前的课', stats: '统计' };
+const PAGES = { map: '课程地图', books: '教材', exam: '考情', weak: '弱点表', errors: '错题本', classes: '以前的课', stats: '统计' };
 // 进一节课（整页刷新）之前：开着的面板或者主角卡放大铺满，不像突然换了一页（feel.js 的 zoomInto）
 const goto = (hash) => {
   const go = () => { location.hash = hash; location.reload(); };
@@ -124,6 +125,7 @@ export async function renderDesk(root, meta) {
     <p class="dk-status muted">正在连接记忆库…</p>
     <div class="dk-pages" hidden></div>
     <div class="dk-bookpage" hidden></div>
+    <div class="dk-exampage" hidden></div>
     <div class="dk-home">
     <div class="dk-col">
     <section class="dk-card dk-class" hidden aria-label="上课" data-menu="hero"><div class="dk-body"></div></section>
@@ -191,7 +193,11 @@ export async function renderDesk(root, meta) {
   const planner = createPlanner({ db, getAI: deskAI, model: MODEL, getData: () => data, space: () => space });
   const booksView = createBooksView($('.dk-bookpage'), { db, assets: store.assets, getAI: deskAI, space: () => space, model: MODEL, plan: { open: (host, id) => planner.openMap(host, id) } });
   // 考试资料的收件箱（exam/examdesk.js）：开发那边切好的真卷、考点树、标签，页面查过再并进去（只在首页挂，课堂里不挂）
-  createExamInbox({ db });
+  // 首页的考情缓存（meta/exam：计数、每门课的热度、每块平均每年几分）：410 分的权重、考情页读它，首页不读考试资料的整类
+  let examMeta = null;
+  const examInbox = createExamInbox({ db, curriculum: () => data.curriculum });
+  const examPage = createExamPage($('.dk-exampage'), { db, getData: () => data, getMeta: () => examMeta, getBoard: () => scoreBoard(data, { today: toDate(Date.now()), exam: examMeta?.blockPerYear }), space: () => space });
+  db.doc('meta/exam').onSnapshot((s) => { examMeta = s.exists ? s.data() : null; paintScore(); if (!$('.dk-exampage').hidden) examPage.refresh(); }, () => {});
   const examCard = createExamCard($('.dk-exam .dk-body'), { db, getData: () => data });
 
   const packs = Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: null, problems: null }]));
@@ -256,6 +262,7 @@ export async function renderDesk(root, meta) {
     manualForm?.refreshBlocks();
     if (lastRes) paint(lastRes, toDate(Date.now()));
     if (!$('.dk-bookpage').hidden) booksView.refresh?.(); // 教材页开着：换成这一科的资料
+    if (!$('.dk-exampage').hidden) examPage.refresh();
   }
   root.querySelector('.dk-spaces').addEventListener('click', (e) => { const b = e.target.closest('.dk-space'); if (b) setSpace(b.dataset.space); });
   root.querySelectorAll('.dk-spaces[aria-label="科目"] .dk-space').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.space === space)));
@@ -273,7 +280,7 @@ export async function renderDesk(root, meta) {
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
       if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
       if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) fixReports(); if (lastRes) paintWeek(toDate(Date.now())); }
-      if (c === 'curriculum') { manualForm?.refreshBlocks(); const sel = $('.dk-radd-b'); if (sel) sel.dataset.space = ''; }
+      if (c === 'curriculum') { examInbox.maybeRefresh(); manualForm?.refreshBlocks(); const sel = $('.dk-radd-b'); if (sel) sel.dataset.space = ''; }
       if (['curriculum', 'weaknesses', 'observations', 'mastery'].includes(c)) { fixSkills(); fixDebriefs(); }
       schedule();
     }, () => { failed.add(c); loaded.add(c); schedule(); });
@@ -1274,7 +1281,7 @@ export async function renderDesk(root, meta) {
   function paintScore(today = toDate(Date.now())) {
     const box = $('.dk-score');
     if (!box || !loaded.has('mastery') || !loaded.has('curriculum')) return;
-    const b = scoreBoard(data, { today });
+    const b = scoreBoard(data, { today, exam: examMeta?.blockPerYear });
     box.hidden = false;
     box.setAttribute('aria-label', `${b.goal} 分的进度`);
     box.innerHTML = `<button type="button" class="dk-score-btn" data-open="score">
@@ -1285,7 +1292,7 @@ export async function renderDesk(root, meta) {
       <span class="dk-score-l muted">${escapeHtml(scoreLine(b))}</span><span class="dk-chev" aria-hidden="true"></span></button>`;
     if (scoreBody?.isConnected) fillScore(scoreBody, b);
   }
-  function fillScore(body, b = scoreBoard(data, { today: toDate(Date.now()) })) {
+  function fillScore(body, b = scoreBoard(data, { today: toDate(Date.now()), exam: examMeta?.blockPerYear })) {
     const move = (x) => `<li><span>${escapeHtml(plainTitle(x.title) || x.id)}</span><small class="muted">${escapeHtml(x.from)} → ${escapeHtml(x.to)}</small><b class="${x.delta > 0 ? 'is-up' : 'is-down'}">${signed(x.delta)}</b></li>`;
     const moves = [...b.week.ups, ...b.week.downs];
     const part = (p) => `<div class="dk-sc-part${p.inDesk ? '' : ' is-out'}"><div class="dk-sc-row"><span>${escapeHtml(p.label)}</span><span class="dk-sc-pbar"><i style="width:${Math.min(100, (p.got / p.points) * 100).toFixed(2)}%"></i></span><b>${fmtScore(p.got)}<small> / ${fmtScore(p.points)}</small></b></div>
@@ -1395,17 +1402,20 @@ export async function renderDesk(root, meta) {
     const manage = page === 'manage';
     const home = !PAGES[page] && !manage;
     const books = page === 'books';
+    const exam = page === 'exam';
     $('.dk-home').hidden = !home;
     $('.dk-manage').hidden = !manage;
     if (manage) examCard.paint();
-    $('.dk-pages').hidden = home || books || manage;
+    $('.dk-pages').hidden = home || books || manage || exam;
     $('.dk-bookpage').hidden = !books;
+    $('.dk-exampage').hidden = !exam;
     root.querySelectorAll('.dk-nav a').forEach((a) => a.setAttribute('aria-current', String(a.getAttribute('href') === `#${home ? '' : page}`)));
     if (books) booksView.show(h);
+    else if (exam) examPage.show();
     else if (!home) pagesView.show(h);
     syncNav();
     const at = Math.max(0, ORDER.indexOf(home ? '' : page));
-    if (lastAt >= 0 && at !== lastAt) pageIn(home ? $('.dk-home') : manage ? $('.dk-manage') : books ? $('.dk-bookpage') : $('.dk-pages'), Math.sign(at - lastAt));
+    if (lastAt >= 0 && at !== lastAt) pageIn(home ? $('.dk-home') : manage ? $('.dk-manage') : books ? $('.dk-bookpage') : exam ? $('.dk-exampage') : $('.dk-pages'), Math.sign(at - lastAt));
     lastAt = at;
   }
   window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });

@@ -182,3 +182,23 @@ test('审查：标签记录照主考点改门课，考点按标签的门课核',
   assert.deepEqual(r.log.rejected, []);
   assert.equal(r.writes[0].data.course, 'LA');
 });
+
+test('首页的考情缓存：按门课读一遍，写进 meta/exam 的 stats；没题的门课不写', async () => {
+  const { refreshStats } = await import('../kit/src/exam/examdesk.js');
+  const db = fakeDb({
+    'syllabus/G-OS-3.2': { course: 'OS', title: '页面置换', blocks: ['OS-L3.2.1'] },
+    'questions/Q-408-2019-26': { course: 'OS', year: 2019, points: 2, type: 'single', tags: { syl: ['G-OS-3.2'], how: 'calc' } },
+    'questions/Q-408-2023-26': { course: 'OS', year: 2023, points: 2, type: 'single' },
+    'meta/exam': { counts: { questions: 2 }, at: 5 },
+  });
+  await refreshStats(db, { curriculum: [{ id: 'OS-L3.2.1', level: 'block' }, { id: 'OS-L3.3.1', level: 'block' }], now: 9 });
+  const m = db.all()['meta/exam'];
+  assert.equal(m.statsAt, 9);
+  assert.equal(m.counts.questions, 2, '计数留着');
+  assert.equal(m.stats.OS.heat[0].id, 'G-OS-3.2');
+  assert.equal(m.stats.OS.untagged, 1);
+  assert.deepEqual(m.stats.OS.holes.blocks, ['OS-L3.3.1']);
+  assert.ok(!m.stats.DS);
+  assert.equal(m.blockPerYear['OS-L3.2.1'], 2 / 5);
+  assert.equal(m.counts.questions, 2);
+});

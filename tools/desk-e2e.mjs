@@ -1039,9 +1039,12 @@ const SUITES = {
     check(target.dept === '智能科学与技术学院' && target.goal === 410 && target.by === 'page', `默认档案不对：${JSON.stringify(target).slice(0, 200)}`);
     const fx = (f) => readFileSync(join(ROOT, 'tests/fixtures/exam', f), 'utf8');
     const good = buildPaper({ subject: '408', year: 2019, paperText: fx('408-2019.paper.txt'), answersText: fx('408-2019.answers.txt'), source: 'e2e' });
+    // 第 1 题打上标签、挂到一个考点上（考情页、410 分的权重要看得到）
+    good.questions[0].tags = { syl: ['G-DS-1.2.1'], how: 'process' };
     const bad = buildPaper({ subject: '408', year: 2018, paperText: fx('408-2019.paper.txt'), answersText: fx('408-2019.answers.txt') });
     bad.questions[3].type = 'mcq';
     await plant(t, {
+      'syllabus/G-DS-1.2.1': { course: 'DS', space: 'cs', title: '顺序存储', year: 2026, blocks: ['DS-L1.1.1'], status: 'active' },
       'exam_inbox/X-408-2019': { kind: 'paper', paper: good.paper, questions: good.questions, passages: good.passages, by: 'dev', at: 1 },
       'exam_inbox/X-408-2018': { kind: 'paper', paper: bad.paper, questions: bad.questions, passages: [], by: 'dev', at: 1 },
     });
@@ -1052,6 +1055,18 @@ const SUITES = {
     check(all['papers/X-408-2019'] && Object.keys(all).filter((k) => k.startsWith('questions/Q-408-2019-')).length === 47, '好的那卷没有整卷进库');
     check(!all['papers/X-408-2018'] && !Object.keys(all).some((k) => k.startsWith('questions/Q-408-2018-')), '坏的那卷有题进了库');
     check(all['meta/exam']?.counts?.questions === 47, `计数不对：${JSON.stringify(all['meta/exam'])}`);
+    // 并完以后首页重算考情缓存：每门课的热度、每块平均每年几分
+    const meta = await t.waitFor(async () => { const m = (await t.db())['meta/exam']; return m?.stats?.DS ? m : null; }, { what: '首页算好考情缓存' });
+    check(meta.stats.DS.heat[0]?.title === '顺序存储' && meta.blockPerYear['DS-L1.1.1'] > 0, `考情缓存不对：${JSON.stringify(meta.stats.DS).slice(0, 200)}`);
+    // 考情页：408 那一科看得到数据结构的热度，点「看真题」列出 2019 年的题、点开一道看题面
+    await t.page.click('.dk-spaces[aria-label="科目"] .dk-space[data-space="cs"]');
+    await t.route('exam');
+    await t.waitFor(async () => (await t.text('.dk-exampage'))?.includes('顺序存储'), { what: '考情页画出数据结构的考点热度' });
+    await t.page.click('.ex-heat .ex-bank[data-course="DS"]');
+    await t.waitFor(() => t.page.$('.ex-q[data-q="Q-408-2019-1"]'), { what: '真题库列出 2019 年的题' });
+    await t.page.click('.ex-q[data-q="Q-408-2019-1"]');
+    await t.waitFor(async () => (await t.text('.ex-detail'))?.includes('假题 1'), { what: '点开一道看到题面' });
+    await t.home();
     // 首页不订阅、不整类读考试的资料（收件箱除外）
     const reads = await t.page.evaluate(() => [...(window.LAKitDev?.reads || [])]);
     for (const c of ['questions', 'syllabus', 'papers', 'passages', 'exam_profiles']) check(!reads.includes(c), `首页整类读了 ${c}`);
