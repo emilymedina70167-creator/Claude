@@ -153,3 +153,17 @@ SVG 节点也可以当部件节点：`flagPart` 照样加 class，`pulse` 和翻
 接上以后自动有的：现状里每一趟做完该是什么样；学生到了一趟页面知道对不对、像哪种错法；量 `pass(a)`、判断式 `a pass=2` / `a done` / `a onpath`；`@a.right` / `@a.done`；这节课下课把它抄成一道「舞台上自己练」的题（`memory/stagedrills.js`、黑板组件 `stage`）。
 
 页面只在检查点判（一趟、一轮）：一趟中间学生先动哪张不判，只说离做完差哪几处。
+
+第五轮多的：学生到了一个检查点页面就叫老师（`follow … call=done` 走完才叫）；对应关系里 `known: ['type']` 列出老师能写的字段名（写了别的当场报）；学生把照着走的数据改写了（同时开着 `edit`）不重跑，现状写「照不下去了」，改回去接着照。第三类对应关系是 `follows/heap.js`（73 行）：堆接在树上，学生的手是树本来就有的 `open h`（拖一个结点到另一个上换值），试演在 `evals/stage-gaps/new5/heap.txt`。
+
+## 引擎的过程表（主线第五轮，`kit/src/stage/enginetable.js`）
+
+黑板的引擎大多自带一张「考试里的表」（`engine.table(输入, run)`）和常见错法（`variants`）。老师写 `table T engine=名字 字段…`（字段和黑板组件的一样），`engineTable(name, fields)` 把它转成舞台上的表：行名列名、给定的格（`fixed`）、答案（`key`）、一组先后不论的格（`groups`）、打勾的格（`marks`）、答案是空着的格（`empties`：留空才对）、表下面单独的答案（`extra`：只写给老师）。竖着排的（`dir: 'col'`）转过来。引擎没用上的字段当场报（`trackFields`）；超过 `ETABLE_MAX`（10 行 13 列）当场报。
+
+- 比法在 `types/table.js`：`cellRight`（组照整组比、空着的格留空才对）、`wrongCells`、`misreadLines`（学生填完一行 / 列，和每种错法的表比）。
+- **新加一个引擎不用在舞台这边写任何东西**：引擎有 `table` 就能用。要让老师知道它，在 `doc.js` 的 `ENGINE_TABLES` 里给这门课加一条例子（`tests/stage-doc.test.js` 守着每条照抄能造出表）。
+- 下课抄成填表的舞台题：`memory/stagedrills.js`（编号 `d-stage-{块}-table_{引擎}-{值里没数字的字段}`，最长的一串整数换数）、`stagedrillspec.js` 的 `trackTableDrill`。
+
+## 动词形式（主线第五轮，`kit/src/stage/verbs.js`）
+
+`{verb: 原形 | 时间 | 状态 | 主语 [| 被动] [| 否定]}` 写在句子、话、贴的字、题卡、答案里（`pick.js` 的 `VERB`）。`conjugate(base, { time, aspect, subject, passive, negative })` 拼谓语：不规则动词表 `IRREGULAR`（原形 → 过去式、过去分词），规则变化，be / have / do 单列，短语动词变第一个词，表里没有的照规则变（老师能写成 `原形/过去式/过去分词` 自己给）。一般不说的组合抛 `err.unsayable`：句子里写「一般不这么说」，答案里当场报。加不规则动词只动那张表，`tests/stage-verbs.test.js` 逐条查。

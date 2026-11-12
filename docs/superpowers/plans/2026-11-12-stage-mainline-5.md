@@ -1,6 +1,6 @@
 # 舞台主线第五轮 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task（我自己在这个会话里一件件做，最后一次只读审查）. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task（我自己在这个会话里一件件做，最后一次只读审查）. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 我第一次上希尔排序、时态、可交换和方阵的幂这三节舞台课时体验好；顺带把引擎的过程表、动词形式这两件通用件补上。
 
@@ -76,15 +76,15 @@
 - Scratch: `.superpowers/first/around.mjs`（Playwright 脚本，不进 git）
 - Modify: 走查里要修的（多半是 `kit/src/blocks/stagedrill.js`、`kit/src/styles.css`、`kit/src/class/ios.css`、`kit/src/stage/classroom.js`）
 
-- [ ] **Step 1：脚本。** `kit/examples/desk-demo.html?dev`，iPad 竖屏 820×1180、上海时区、`window.confirm = () => false`；填入示例记忆 → 数据结构 → 开课（舞台）→ dev 老师的第一轮（含一行 `follow`）→ 做一趟 → 下课 → 报告 → 回首页 → 练一练 → 做舞台题（鼠标按住拖）→ 做完。每一站截图，白天（`ink`）晚上（`inknight`）各一遍，横屏再截舞台题那一页。
-- [ ] **Step 2：看。** 等第一轮时屏幕上是什么；舞台题那一页的标题、按钮（「看这一趟该是什么样」「做不出来」）、做完的反馈像不像学习台别的页；晚上的颜色；横屏。问题记进 `.superpowers/sdd/mainline5/first-around.md`。
-- [ ] **Step 3：修，重截，每条有着落。** 改了流程的在 `tools/desk-e2e.mjs` 的 `stagedrill` 段里加断言。
-- [ ] **Step 4：`npm run e2e -- --only stagedrill,class`，提交。**
+- [x] **Step 1：脚本。** `kit/examples/desk-demo.html?dev`，iPad 竖屏 820×1180、上海时区、`window.confirm = () => false`；填入示例记忆 → 数据结构 → 开课（舞台）→ dev 老师的第一轮（含一行 `follow`）→ 做一趟 → 下课 → 报告 → 回首页 → 练一练 → 做舞台题（鼠标按住拖）→ 做完。每一站截图，白天（`ink`）晚上（`inknight`）各一遍，横屏再截舞台题那一页。
+- [x] **Step 2：看。** 等第一轮时屏幕上是什么；舞台题那一页的标题、按钮（「看这一趟该是什么样」「做不出来」）、做完的反馈像不像学习台别的页；晚上的颜色；横屏。问题记进 `.superpowers/sdd/mainline5/first-around.md`。
+- [x] **Step 3：修，重截，每条有着落。** 改了流程的在 `tools/desk-e2e.mjs` 的 `stagedrill` 段里加断言。
+- [x] **Step 4：`npm run e2e -- --only stagedrill,class`，提交。**
 
 ### Task 3: 发布（一）
 
-- [ ] `CLAUDE-PROJECT.md` 版本改 `2026-11-12b`；`npm run build`、`node proto/stage/build.mjs`；`npm test`；`node tools/stage-must.mjs` 跑 `fix1 new2 new3 new4 first` 五张表。
-- [ ] 提交、推分支、快进 `main`；发布学习台（`kit/desk.html` + `la-kit.js` + 瘦身说明 + `components/*.md`）和舞台试课；告诉我「数据结构可以上了」和这一批修了什么。
+- [x] `CLAUDE-PROJECT.md` 版本改 `2026-11-12b`；`npm run build`、`node proto/stage/build.mjs`；`npm test`；`node tools/stage-must.mjs` 跑 `fix1 new2 new3 new4 first` 五张表。
+- [x] 提交、推分支、快进 `main`；发布学习台（`kit/desk.html` + `la-kit.js` + 瘦身说明 + `components/*.md`）和舞台试课；告诉我「数据结构可以上了」和这一批修了什么。
 
 ---
 
@@ -94,9 +94,9 @@
 
 **Files:** Modify `kit/src/stage/doc.js`；Test `tests/stage-doc.test.js`
 
-- [ ] **Step 1：** `node .superpowers/size.mjs` 记下六门课现在的字节。目标（加新行之前）：操作系统 ≤ 23900、数据结构 ≤ 23200、线代 ≤ 23200。
-- [ ] **Step 2：** 先压所有科目都带的那几节里说了两遍的话、例子里可有可无的字（一处一处改，改一处量一次）；不够再把一门课最不常用的一两种写法从说明里拿掉，改成写错时的报错里带正确写法（那个报错要先有：`grep` 确认，没有就补）。不删任何「这个不能做」「这个会报」的提醒。
-- [ ] **Step 3：** `tests/stage-doc.test.js` 照旧过（每个写法的例子照抄能演）；`node tools/stage-must.mjs` 四张老表过（说明改了不影响它们，但确认没误删写法）。提交。
+- [x] **Step 1：** `node .superpowers/size.mjs` 记下六门课现在的字节。目标（加新行之前）：操作系统 ≤ 23900、数据结构 ≤ 23200、线代 ≤ 23200。
+- [x] **Step 2：** 先压所有科目都带的那几节里说了两遍的话、例子里可有可无的字（一处一处改，改一处量一次）；不够再把一门课最不常用的一两种写法从说明里拿掉，改成写错时的报错里带正确写法（那个报错要先有：`grep` 确认，没有就补）。不删任何「这个不能做」「这个会报」的提醒。
+- [x] **Step 3：** `tests/stage-doc.test.js` 照旧过（每个写法的例子照抄能演）；`node tools/stage-must.mjs` 四张老表过（说明改了不影响它们，但确认没误删写法）。提交。
 
 ### Task 5: 动词的各种形式
 
@@ -109,15 +109,15 @@
   - 不在表里先去前缀再查：`over under re out mis fore with un up` + 表里的词（`overcome → overcame`）
   - `be` 的 `s/past` 不在这里（任务 6 管人称）
 
-- [ ] **Step 1：写失败的测试。** 断言（逐条写成 `assert.deepEqual`）：
+- [x] **Step 1：写失败的测试。** 断言（逐条写成 `assert.deepEqual`）：
   - 规则：`walk → walks walking walked walked`；`study → studies studying studied`；`play → plays playing played`；`stop → stops stopping stopped`；`plan → planning planned`；`visit → visiting visited`（不双写）；`prefer → preferring preferred`；`occur → occurred`；`refer → referred`；`offer → offered`；`open → opened`；`live → lives living lived`；`lie → lies lying`（表里 `lay lain`）；`die → dying died`；`agree → agreeing agreed`；`watch → watches`；`fix → fixes fixing fixed`（x 不双写）；`go → goes`；`do → does`；`have → has`；`panic → panicking panicked`。
   - 不规则：`go → went gone`；`write → wrote written writing`；`become → became become`；`run → ran run running`；`begin → began begun beginning`；`put → put put putting`；`read → read read`；`take → took taken`；`get → got got getting`。
   - 短语和前缀：`go on → goes on / going on / went on / gone on`；`overcome → overcame overcome`；`rewrite → rewrote rewritten`；`give up → gave up`。
   - 三段式：`formsOf('broadcast/broadcast/broadcast').past === 'broadcast'`、`regular === false`。
   - 表本身：每条两种形式都非空、全小写、没有重复的键。
-- [ ] **Step 2：跑，看它失败。** `node --test tests/stage-verbs.test.js`
-- [ ] **Step 3：实现。** 双写的规矩：单音节「辅音 + 一个元音字母 + 一个辅音字母（不是 w x y）」双写；多音节的只认一张重读在末尾的小表（`prefer refer occur admit commit permit submit omit regret begin forget control compel expel equip transfer` 等）；`-ic` 加 k。
-- [ ] **Step 4：跑过，提交。**
+- [x] **Step 2：跑，看它失败。** `node --test tests/stage-verbs.test.js`
+- [x] **Step 3：实现。** 双写的规矩：单音节「辅音 + 一个元音字母 + 一个辅音字母（不是 w x y）」双写；多音节的只认一张重读在末尾的小表（`prefer refer occur admit commit permit submit omit regret begin forget control compel expel equip transfer` 等）；`-ic` 加 k。
+- [x] **Step 4：跑过，提交。**
 
 ### Task 6: 拼谓语
 
@@ -128,7 +128,7 @@
 - `conjugate(base, { time = '现在', aspect = '一般', subject = '单', passive = false, negative = false }) → string`（`time` 也可以是一个情态动词）
 - 拼不了的抛 `Error`（话给老师看）：不认得的时间 / 状态 / 主语（列出能写的）；完成进行的被动、将来进行和过去将来进行的被动（「这种说法一般不用：换成完成 / 进行」）
 
-- [ ] **Step 1：写失败的测试。** 一张 `write`（主语 `单`）的全表逐格断言，主动 16 格：
+- [x] **Step 1：写失败的测试。** 一张 `write`（主语 `单`）的全表逐格断言，主动 16 格：
   - 一般：`wrote / writes / will write / would write`；进行：`was writing / is writing / will be writing / would be writing`；完成：`had written / has written / will have written / would have written`；完成进行：`had been writing / has been writing / will have been writing / would have been writing`
   - 被动（一般、进行的过去和现在、完成）：`was written / is written / will be written / would be written / was being written / is being written / had been written / has been written / will have been written / would have been written`
   - 否定：`did not write / does not write / will not write / is not writing / has not written / had not been writing / is not written / was not being written / will not have been written`
@@ -138,9 +138,9 @@
   - 短语：`go on` 现在完成进行单 → `has been going on`；过去一般 → `went on`；将来完成 → `will have gone on`
   - 情态：`conjugate('go', { time: 'must', aspect: '完成' }) === 'must have gone'`；`should` 进行 → `should be going`；`can` 被动 `write` → `can be written`；否定 `must not go`、`can` 否定 → `cannot go`
   - 报错三种各一条（`assert.throws`，话里有能写的词）
-- [ ] **Step 2：跑，失败。**
-- [ ] **Step 3：实现。** 一条链：助动词链（will/would/情态 → have → be(进行) → be(被动)）+ 主要动词的形式；第一个助动词按时间和人称变；否定的 `not` 插在第一个助动词后面，没有助动词用 `do`。
-- [ ] **Step 4：跑过，提交。**
+- [x] **Step 2：跑，失败。**
+- [x] **Step 3：实现。** 一条链：助动词链（will/would/情态 → have → be(进行) → be(被动)）+ 主要动词的形式；第一个助动词按时间和人称变；否定的 `not` 插在第一个助动词后面，没有助动词用 `do`。
+- [x] **Step 4：跑过，提交。**
 
 ### Task 7: `{verb: …}` 接进舞台
 
@@ -158,7 +158,7 @@
 - 现状（句子、贴的字、题卡里有 `{verb: …}` 的）多一句：`谓语是页面拼的：go on，现在 × 完成进行，主语单数 → has been going on`；`regular` 且不在表里时后面加「（照规则变的）」。
 - `dial verb = …` 当场报「verb 这个名字留给 {verb: …}，换一个」。
 
-- [ ] **Step 1：写失败的测试。**
+- [x] **Step 1：写失败的测试。**
   - `fillPicks('It {verb: go on | 现在 | 完成进行} for years.', new Map()) === 'It has been going on for years.'`
   - 场景里 `dial t = 现在 options="过去 现在 将来"`、`dial z = 一般 options="一般 进行 完成"`、`sentence s = "She {verb: write | t | z} a letter."`：现在的词是 `She writes a letter .`；学生拨 `t` 到过去 → `wrote`；再拨 `z` 到完成 → `had written`，没变的词（She、a、letter）留着原来的编号（`rewrite` 的规矩）；现状里有「谓语是页面拼的：write，过去 × 完成，主语单数 → had written」。
   - 套在一层里：`{who: He | They}` 和 `{verb: write | t | 一般 | {who: 单 | 复}}` 不支持（格子里不再套）：写了当场报「格子里写词或者拨盘的名字」。主语跟着拨盘走的写法是给主语一个拨盘 `dial who = he options="he they"`，`{verb: write | t | 一般 | who}`：测 `he → writes`、`they → write`。
@@ -167,22 +167,22 @@
   - 答案：`ask value "写出谓语" answer="{verb: go on | 现在 | 完成进行}" type=en`，学生写 `has been going on` 算对、`have been going on` 算错（走现成的 `en` 比法）。
   - `dial verb = 1 range=1..3` 报错。
   - 时间轴：`timeline tl = 过去 现在 将来 now=现在` 上的小人 `stand`（带 `owner` 的拨词拨盘）拖到「过去」，写了 `{verb: write | 小人的拨盘名}` 的句子跟着变（走现成的 `onPick`）。
-- [ ] **Step 2：跑，失败。**
-- [ ] **Step 3：实现**（pick.js 里三处分支 + scene 的两处）。
-- [ ] **Step 4：说明。** `doc.js` 英语那一节加（先量字节）：写法一行、能写的词一行、「页面只管拼得对；该用哪种是你教」、三段式一行、不做的（疑问句倒装）一句。`tests/stage-doc.test.js` 的「例子照抄能演」跟着多一条。
-- [ ] **Step 5：试演。** `evals/stage-gaps/new5/verb.txt`（一句、两个拨盘、学生拨两下、一问），`NEW5` 表里写必须出现的三条事实；`node tools/stage-must.mjs evals/stage-gaps/new5 --table new5`。
-- [ ] **Step 6：跑过，build，提交。**
+- [x] **Step 2：跑，失败。**
+- [x] **Step 3：实现**（pick.js 里三处分支 + scene 的两处）。
+- [x] **Step 4：说明。** `doc.js` 英语那一节加（先量字节）：写法一行、能写的词一行、「页面只管拼得对；该用哪种是你教」、三段式一行、不做的（疑问句倒装）一句。`tests/stage-doc.test.js` 的「例子照抄能演」跟着多一条。
+- [x] **Step 5：试演。** `evals/stage-gaps/new5/verb.txt`（一句、两个拨盘、学生拨两下、一问），`NEW5` 表里写必须出现的三条事实；`node tools/stage-must.mjs evals/stage-gaps/new5 --table new5`。
+- [x] **Step 6：跑过，build，提交。**
 
 ### Task 8: 首课走查 · 时态
 
 **Files:** Create `evals/stage-gaps/first/tense.txt`；Log `.superpowers/sdd/mainline5/first-tense.md`
 
-- [ ] 照任务 1 的七步做。这一节的幕（读 `evals/stage-gaps/ideal/E1.md`）：① 一句真题里的句子，问谓语是哪几个词（`ask pick`）② 时间轴 + 小人，学生拖小人到「过去」，句子跟着变 ③ 状态的拨盘，学生自己拨出「过去完成」，问「哪件事先发生」（时间轴上两个事件点）④ 挑战：把句子拨成和时间轴上这根事件条对得上的样子（`goal`，`when=` 写拨盘）⑤ 一问：这个句子现在完成进行怎么写（`ask value … answer="{verb: …}"`，学生写对的、漏了 been 的）⑥ 被动和否定各拨一下。真手指那一段：拖小人、拨拨盘、点词。
-- [ ] `FIRST` 表加这一节的必须出现；提交。
+- [x] 照任务 1 的七步做。这一节的幕（读 `evals/stage-gaps/ideal/E1.md`）：① 一句真题里的句子，问谓语是哪几个词（`ask pick`）② 时间轴 + 小人，学生拖小人到「过去」，句子跟着变 ③ 状态的拨盘，学生自己拨出「过去完成」，问「哪件事先发生」（时间轴上两个事件点）④ 挑战：把句子拨成和时间轴上这根事件条对得上的样子（`goal`，`when=` 写拨盘）⑤ 一问：这个句子现在完成进行怎么写（`ask value … answer="{verb: …}"`，学生写对的、漏了 been 的）⑥ 被动和否定各拨一下。真手指那一段：拖小人、拨拨盘、点词。
+- [x] `FIRST` 表加这一节的必须出现；提交。
 
 ### Task 9: 发布（二）
 
-- [ ] 版本 `2026-11-12c`；同任务 3 的检查（表多 `new5`）；合并、发布；告诉我「英语可以上了」。
+- [x] 版本 `2026-11-12c`；同任务 3 的检查（表多 `new5`）；合并、发布；告诉我「英语可以上了」。
 
 ---
 
@@ -192,8 +192,8 @@
 
 **Files:** Create `evals/stage-gaps/first/power.txt`；Log `.superpowers/sdd/mainline5/first-power.md`
 
-- [ ] 照任务 1 的七步做。幕（读 `evals/stage-gaps/ideal/L1.md`）：① 两张 2×2，学生把 A 整张拖去和 B 乘（`whole` → `merge`），再反过来，`compare` 两个结果：不相等 ② 换一对可交换的（对角 / 数量矩阵），学生自己写一格使它们可交换（`open … edit`，`goal when={A*B} == {B*A}` 这一类）③ A 的幂：拨盘 k，`{A^k}` 跟着算，学生猜 Aⁿ 的一格（`ask value type=formula`）④ 秩 1 矩阵 αβᵀ 的幂 ⑤ f(A)：`ask value type=matrix`，学生写对的、把常数项漏了乘 E 的。真手指那一段：整张拖去乘、点一格写数、拨拨盘。
-- [ ] 发现的问题照规矩修；`FIRST` 表加这一节；提交（不单独发布，跟着下一次）。
+- [x] 照任务 1 的七步做。幕（读 `evals/stage-gaps/ideal/L1.md`）：① 两张 2×2，学生把 A 整张拖去和 B 乘（`whole` → `merge`），再反过来，`compare` 两个结果：不相等 ② 换一对可交换的（对角 / 数量矩阵），学生自己写一格使它们可交换（`open … edit`，`goal when={A*B} == {B*A}` 这一类）③ A 的幂：拨盘 k，`{A^k}` 跟着算，学生猜 Aⁿ 的一格（`ask value type=formula`）④ 秩 1 矩阵 αβᵀ 的幂 ⑤ f(A)：`ask value type=matrix`，学生写对的、把常数项漏了乘 E 的。真手指那一段：整张拖去乘、点一格写数、拨拨盘。
+- [x] 发现的问题照规矩修；`FIRST` 表加这一节；提交（不单独发布，跟着下一次）。
 
 ---
 
@@ -221,14 +221,14 @@ engineTable(name, rawFields) → {
 - 引擎 `dir: 'col'` 的表转置（引擎的 `head` 当行名、每行的 `label` 当列名）。
 - 抛错（话给老师）：没有这个引擎（列出这门课有的）；这个引擎没有表；引擎自己的 `parse` 报的错原样；`trackFields` 说没用上的字段（「sort 不认得 gap：是不是 gaps」照它现成的话）；转完超过 `MAX_TROWS × MAX_TCOLS`（「这张表有 N 行 M 列，舞台上放不下（最多 10 行 12 列）：把输入写短一点」）；一格超过 24 个字。
 
-- [ ] **Step 1：写失败的测试。**
+- [x] **Step 1：写失败的测试。**
   - `engineTable('sort', { algo: 'shell', array: '49 38 65 97 76 13 27 49', gaps: '5 3 1' })`：行数 = 趟数、列数 8，`key` 的最后一行是 `13 27 38 49 49 65 76 97`（撇照引擎的写法），`grid` 全空或只有引擎给定的格。
   - `engineTable('paging', { algo: 'fifo', frames: '3', refs: '7 0 1 2 0 3 0 4' })`：`dir: 'col'` 转过来，列名是访问串，`groups` 非空，缺页那一行在 `marks` 里。
   - `engineTable('net', { … dijkstra … })`：和第四轮 `toKey` 给同一张图的答案逐格一样（防两条路算出两个答案）。
   - `variants`：希尔那张至少一种错法，`label` 非空，`key` 和对的不全等。
   - 报错五种各一条。
   - 61 个引擎扫一遍（`engines/registry.js`，用每个引擎说明里的例子字段——`tests/engines-common.test.js` 里现成的取法）：有表的要么造得出、要么报的是「放不下」，不许抛别的错。
-- [ ] **Step 2：跑，失败。** **Step 3：实现。** **Step 4：跑过，提交。**
+- [x] **Step 2：跑，失败。** **Step 3：实现。** **Step 4：跑过，提交。**
 
 ### Task 12: `table T engine=…`
 
@@ -242,7 +242,7 @@ engineTable(name, rawFields) → {
 - 量 `T.wrong`、判断式 `T right` 照组、照 `cellRight`。
 - 现状里表下面多一行 `表外的答案（学生看不到）：ASL成功 = 1.67`（有 `extra` 时）。
 
-- [ ] **Step 1：写失败的测试。**
+- [x] **Step 1：写失败的测试。**
   - 造表：行名列名、空格数对；`open T edit` 以后学生填对一格 `wrong` 是 0。
   - 组：页面置换同一列的三个物理块先后调换着填，`T.wrong === 0`。
   - Review Focus 3：`engine=hash … ` 的 ASL 不在表里（在 `extra`），现状有「表外的答案」；表里是小数的格（找一个：`rtt` 或 `util`）写两位小数算对。
@@ -251,9 +251,9 @@ engineTable(name, rawFields) → {
   - 字段写错：`table T engine=sort algo=shell array="…" gap="5 3 1"` 当场报，话里有 `gaps`；`follow a sort shell gap="5 3 1"` 也报（`known` 换掉以后不退步）。
   - 放不下：13 个数的希尔报「放不下」。
   - 写了 `engine=` 又写 `key=` 报错。
-- [ ] **Step 2：跑，失败。** **Step 3：实现。**
-- [ ] **Step 4：试演和排版。** `evals/stage-gaps/new5/etable.txt`：10 行 12 列的一张（页面置换 12 次访问）加一张题卡和一句话，竖屏横屏。Review Focus 5：看截图字认不认得；`tools/stage-measure.mjs` 报「缩得太小」时把上限降回认得的大小（行数优先保 10，列数可以退到 11），记进 rulings。`NEW5` 表加三条。
-- [ ] **Step 5：跑过（含 `tests/stage-follow*.test.js`、`new3 new4` 两张表），build，提交。**
+- [x] **Step 2：跑，失败。** **Step 3：实现。**
+- [x] **Step 4：试演和排版。** `evals/stage-gaps/new5/etable.txt`：10 行 12 列的一张（页面置换 12 次访问）加一张题卡和一句话，竖屏横屏。Review Focus 5：看截图字认不认得；`tools/stage-measure.mjs` 报「缩得太小」时把上限降回认得的大小（行数优先保 10，列数可以退到 11），记进 rulings。`NEW5` 表加三条。
+- [x] **Step 5：跑过（含 `tests/stage-follow*.test.js`、`new3 new4` 两张表），build，提交。**
 
 ### Task 13: 引擎的表抄成舞台题
 
@@ -264,14 +264,14 @@ engineTable(name, rawFields) → {
 - `trackTableDrill(scene, id) → { after() → { records, done }, giveup() }`：填满才判；满了全对记一条 `ok: true`；满了有错记一次错（只记一次）、学生能接着改，改对了算做完；「看答案」把答案填进去、记放弃。
 - 舞台题的按钮：表的题只有「做不出来」（没有「看这一趟」）。
 
-- [ ] **Step 1：测试**（一节课两张 `engine=sort` 的表只抄最后一张；换数以后引擎造得出；填满全对一条 ok；填错一次再改对：一条 `ok: false` 带 `wrong`、`done`；`markFresh` 不把它当新题）。
-- [ ] **Step 2～4：失败、实现、跑过。** `kit/examples/stagedrill-demo.html` 加一道表的题，`node tools/check-lesson.mjs kit/examples/stagedrill-demo.html`。提交。
+- [x] **Step 1：测试**（一节课两张 `engine=sort` 的表只抄最后一张；换数以后引擎造得出；填满全对一条 ok；填错一次再改对：一条 `ok: false` 带 `wrong`、`done`；`markFresh` 不把它当新题）。
+- [x] **Step 2～4：失败、实现、跑过。** `kit/examples/stagedrill-demo.html` 加一道表的题，`node tools/check-lesson.mjs kit/examples/stagedrill-demo.html`。提交。
 
 ### Task 14: 过程表的说明
 
 **Files:** Modify `kit/src/stage/doc.js`；Test `tests/stage-doc.test.js`
 
-- [ ] 表那一节加一行通用形（所有计算机课带）；每门课一行「这门课能造表的：sort(algo array gaps) hash(hash p) …」——名字和必写的字段从 `registry.js` 和各引擎的 `head` 现取，不手抄；每门课最多列 12 个（按这门课引擎的先后），别的写「别的引擎写错了页面会告诉你字段」。量字节：六门课都 ≤ 24576。测试：每门课列出来的每一个，照说明里的字段加引擎例子的值能造出表或者报「放不下」。build，提交。
+- [x] 表那一节加一行通用形（所有计算机课带）；每门课一行「这门课能造表的：sort(algo array gaps) hash(hash p) …」——名字和必写的字段从 `registry.js` 和各引擎的 `head` 现取，不手抄；每门课最多列 12 个（按这门课引擎的先后），别的写「别的引擎写错了页面会告诉你字段」。量字节：六门课都 ≤ 24576。测试：每门课列出来的每一个，照说明里的字段加引擎例子的值能造出表或者报「放不下」。build，提交。
 
 ---
 
@@ -286,16 +286,16 @@ engineTable(name, rawFields) → {
 - 检查点：每放进一个关键字（引擎的每个 key 放定的那一步）。状态 = 槽里的数（空的 `_`）。错法从引擎的 `variants` 来。
 - 一排格子的格数 ≠ 引擎的表长：`fields` 把 `size` 设成格数；引擎不收就报引擎的话。
 
-- [ ] 测试（走对三个关键字到三个检查点；冲突时放回原位认成引擎的那种错法；格数不够当场报）→ 失败 → 实现 → 过 → 试演一幕、`NEW5` 加两条 → 说明里数据结构加一行（量字节）→ 提交。
+- [x] 测试（走对三个关键字到三个检查点；冲突时放回原位认成引擎的那种错法；格数不够当场报）→ 失败 → 实现 → 过 → 试演一幕、`NEW5` 加两条 → 说明里数据结构加一行（量字节）→ 提交。
 
 ### Task 16: 树上对调，堆接树
 
 **Files:** Modify `kit/src/stage/types/tree.js`（行 `swap t.a t.b`：两个结点的值对调，形状、编号不动）、`tree.rules.js`（手势 `swap`：按住一个结点拖到另一个结点上；`ARMED_GRIPS` 里登记；`check` 只查两个都在）、`tree.view.js`（值滑过去）、`kit/src/stage/gestures.js`；Create `kit/src/stage/follows/heap.js`（≤ 150 行）；Test `tests/stage-tree-swap.test.js`、`tests/stage-follow-heap.test.js`；`tools/stage-touch.mjs` 加一段真手指
 
-- [ ] **Step 0：先看能不能做。** 读 `tree.rules.js` 的 `gestures` 和 `referee.js`：树上「拖结点」现在是不是已经被 `rotate` / `place` 占了、同一处能不能再开一种拖。**要动 `referee.js` 的判法、或者和旋转的手分不开：这一类跳过**——记进 rulings（写清楚卡在哪），堆用任务 12 的过程表（确认 `table T engine=tree heap="…"` 造得出），直接到任务 17。
-- [ ] **Step 1：`swap` 的测试**（老师的行、学生的手势、对调以后 `count()` `height()` 不变、撤一步回得去、和 `open t rotate` 同时开着时拖到别的结点上是对调、拖到空位不是）→ 实现 → 真手指一段。
-- [ ] **Step 2：堆的对应关系。** `follow t heap ops="build"`（`ops` 照引擎：`build`、`insert 5`、`pop`、`sort`）、`open t swap`。状态 = 层序的值；检查点 = 引擎里每一次调整（一个结点下坠 / 上浮到位）做完；错法从引擎来。超 150 行：跳过（同 Step 0 的办法）。
-- [ ] **Step 3：** 测试、试演 `new5/heap.txt`、`NEW5` 两条、说明一行、build、提交。
+- [x] **Step 0：先看能不能做。** 读 `tree.rules.js` 的 `gestures` 和 `referee.js`：树上「拖结点」现在是不是已经被 `rotate` / `place` 占了、同一处能不能再开一种拖。**要动 `referee.js` 的判法、或者和旋转的手分不开：这一类跳过**——记进 rulings（写清楚卡在哪），堆用任务 12 的过程表（确认 `table T engine=tree heap="…"` 造得出），直接到任务 17。
+- [x] **Step 1：`swap` 的测试**（老师的行、学生的手势、对调以后 `count()` `height()` 不变、撤一步回得去、和 `open t rotate` 同时开着时拖到别的结点上是对调、拖到空位不是）→ 实现 → 真手指一段。
+- [x] **Step 2：堆的对应关系。** `follow t heap ops="build"`（`ops` 照引擎：`build`、`insert 5`、`pop`、`sort`）、`open t swap`。状态 = 层序的值；检查点 = 引擎里每一次调整（一个结点下坠 / 上浮到位）做完；错法从引擎来。超 150 行：跳过（同 Step 0 的办法）。
+- [x] **Step 3：** 测试、试演 `new5/heap.txt`、`NEW5` 两条、说明一行、build、提交。
 
 ---
 
@@ -307,11 +307,11 @@ engineTable(name, rawFields) → {
 
 每条一个先失败的测试，再修：
 
-- [ ] 同时 `open a edit` 和 `follow a sort …`：学生把数直接写成有序的，`whereOf(o).done` 是 false、现状写「数被改写了：不在引擎走的那条路上」，不演 `@a.done`。
-- [ ] 舞台题点「做不出来」：`session.record` 只多一条（`giveup: true`），报告里这道题是一道。
-- [ ] `stageDrillId('DS-L8.2.3', '希尔', …)` 和 `stageDrillId('DS-L8.2.3', '快排', …)` 不一样（中文名进指纹，不被去成空）。
-- [ ] Dijkstra 某一轮 dist 都没变：检查点还是并成一个，但 `lead` 写「确定 3、5；」（两轮确定的都写）。
-- [ ] 下课那一刻最后一轮才写的 `follow`：`harvestSession` 用课堂交过来的轮次（`desk.makeReport` 的参数里带 `turns`），没有再读数据库；测 `harvestDrills({ turns })` 含最后一轮时抄得到。
+- [x] 同时 `open a edit` 和 `follow a sort …`：学生把数直接写成有序的，`whereOf(o).done` 是 false、现状写「数被改写了：不在引擎走的那条路上」，不演 `@a.done`。
+- [x] 舞台题点「做不出来」：`session.record` 只多一条（`giveup: true`），报告里这道题是一道。
+- [x] `stageDrillId('DS-L8.2.3', '希尔', …)` 和 `stageDrillId('DS-L8.2.3', '快排', …)` 不一样（中文名进指纹，不被去成空）。
+- [x] Dijkstra 某一轮 dist 都没变：检查点还是并成一个，但 `lead` 写「确定 3、5；」（两轮确定的都写）。
+- [x] 下课那一刻最后一轮才写的 `follow`：`harvestSession` 用课堂交过来的轮次（`desk.makeReport` 的参数里带 `turns`），没有再读数据库；测 `harvestDrills({ turns })` 含最后一轮时抄得到。
 
 ### Task 18: 整套检查、审查、文档、发布（三）
 
