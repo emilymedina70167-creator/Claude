@@ -24,7 +24,7 @@ import { VERSION, KIT_URL } from '../version.js';
 import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toDate } from './schema.js';
 import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, classForm } from './session.js';
 import { buildReport, reportLine, REPORT_VERSION, lastActivity, reportText } from './report.js';
-import { needsDebrief, transcriptText, debriefPrompt, parseDebrief, debriefText, debriefView, DEBRIEF_VERSION } from './debrief.js';
+import { needsDebrief, transcriptText, debriefTraps, debriefPrompt, parseDebrief, debriefText, debriefView, DEBRIEF_VERSION } from './debrief.js';
 import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA, EXAM_BACKUP } from './backup.js';
 import { createManualForm } from './manual.js';
 import { createMemOps } from './memops.js';
@@ -950,7 +950,11 @@ export async function renderDesk(root, meta) {
       // 上一节（同一科、比这节早）的复盘：对照误解有没有又出现
       const prevS = data.sessions.filter((d) => d.id !== x.id && d.debrief && (spaceOfDoc('sessions', d, data) || space) === sp && (d.startedAt || 0) < (x.startedAt || 0))
         .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
-      const prompt = debriefPrompt({ session: x, transcript: transcriptText(turns), report: rep ? reportText(rep) : '', weaknesses: weak, prev: prevS ? debriefText(prevS.debrief) : '', subject: subjectOf(x.block || '') });
+      // 这一块真题的坑表（考情第 5 批：画像里教研室归纳的）：复盘把误解和坑对上，对上的记进 exam_bar（下一步学什么加权）
+      const ex = x.block ? await Promise.race([loadExamCourse(db, courseOfBlock(x.block)), new Promise((r) => setTimeout(() => r(null), 5000))]).catch(() => null) : null;
+      const sylIds = new Set((ex?.syllabus || []).filter((n) => (n.blocks || []).includes(x.block)).map((n) => n.id));
+      const traps = (ex?.profiles || []).filter((p) => sylIds.has(p.id)).flatMap((p) => p.traps || []);
+      const prompt = debriefPrompt({ session: x, transcript: transcriptText(turns), report: rep ? reportText(rep) : '', weaknesses: weak, prev: prevS ? debriefText(prevS.debrief) : '', subject: subjectOf(x.block || ''), traps });
       const res = await ai.call(prompt, { model: MODEL, effort: 'high', modelTier: 'complex', cache: false, lane: 'bg' });
       if (res?.modelApplied && res.modelApplied !== MODEL) return;
       const got = parseDebrief(res.text);
@@ -963,7 +967,16 @@ export async function renderDesk(root, meta) {
       const cur = await db.doc(`sessions/${x.id}`).get().then((r) => (r.exists ? r.data() : null));
       if (!cur) return;
       assertWrite('page', 'sessions');
+      // 复盘里写的坑只认坑表里真有的（编的去掉，先去掉再存）
+      const hit = debriefTraps(debrief, new Set(traps.map((t) => t.id)));
       await db.doc(`sessions/${x.id}`).set({ ...cur, debrief });
+      if (hit.length) {
+        // 记进这一块的 exam_bar（不写进弱点表：弱点表的写入方没有 page）；读最新的再并
+        const ref = db.doc(`exam_bar/${x.block}`);
+        const bar = await ref.get().then((r) => (r.exists ? r.data() : null)).catch(() => null);
+        assertWrite('page', 'exam_bar');
+        await ref.set({ ...(bar || { block: x.block, done: [], passed: false, timed: false }), traps: [...new Set([...(bar?.traps || []), ...hit])], at: Date.now() });
+      }
     } catch (err) {
       console.warn('复盘没做成', x.id, err?.message || err?.code || err);
     } finally {

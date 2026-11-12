@@ -76,7 +76,14 @@ export function transcriptText(turns = [], budget = DEBRIEF_BUDGET) {
  * 给 Opus 的提示词。session：sessions/{编号}；transcript：transcriptText；report：课后报告的文字（report.js 的 reportText）；
  * weaknesses：这一科还开着的弱点；prev：上一节（同一科）的复盘文字，看误解是不是又出现了
  */
-export function debriefPrompt({ session = {}, transcript = '', report = '', weaknesses = [], prev = '', subject = '' } = {}) {
+/** 这一块的坑表（考情：exam_profiles 里画像的 traps，[{ id, text, qs }]）写成复盘提示词里的几行 */
+export function trapsTable(traps = []) {
+  return list(traps).filter((t) => t?.id).slice(0, 20).map((t) => `- ${t.id}：${one(t.text || '', 120)}${t.qs?.length ? `（${t.qs.slice(0, 4).join('、')}）` : ''}`).join('\n');
+}
+
+// traps：这一块真题的典型坑（考情第 5 批）：学生的误解和其中一个是一回事时，误解那一行的依据后面写 坑=编号
+export function debriefPrompt({ session = {}, transcript = '', report = '', weaknesses = [], prev = '', subject = '', traps = [] } = {}) {
+  const trapLines = trapsTable(traps);
   const weak = list(weaknesses).slice(0, 20).map((w) => `- ${w.id}：${one(w.text || w.title || '', 160)}`).join('\n');
   return [
     `${DEBRIEF_HEAD}。你是教研员，刚把这节课从头到尾听完（下面是整段记录：学生的原话和作答、老师说的话和写的板书，板书原文截了开头）。`,
@@ -90,6 +97,7 @@ export function debriefPrompt({ session = {}, transcript = '', report = '', weak
     report ? `## 页面算的课后报告（每道题的作答序列和结果）\n${cut(report, 8000)}\n` : '',
     weak ? `## 学生还开着的弱点（这一科）\n${weak}\n` : '',
     prev ? `## 上一节的复盘（对照：上次说「还在」的误解这节怎么样了）\n${cut(prev, 3000)}\n` : '',
+    trapLines ? `## 这一块真题的典型坑（教研室从真题归纳的）\n${trapLines}\n学生的哪个误解和其中一个坑是一回事，就在那一行误解的依据最后写「坑=编号」（只写上面列着的编号；对不上就不写）。\n` : '',
     '## 怎么判',
     '- **误解消了**：要有学生**自己**在一道能把对的想法和错的想法分开的题上做对、或者说出了理由；老师讲完后学生只说「懂了」、只在按错的想法也能做对的题上做对，都不算消了。',
     '- **绕开了**：老师先把规则讲了或写上了黑板，学生没凭自己原来的想法做过一次，所以原来的误解根本没暴露过——看不出消没消。',
@@ -122,7 +130,11 @@ export function parseDebrief(text) {
     if (kind === '误解') {
       const state = STATES.find((s) => f[1]?.startsWith(s));
       if (!state || !f[2]) { out.problems.push(`看不懂：${one(line, 80)}`); continue; }
-      if (out.mis.length < CAPS.mis) out.mis.push({ state, text: one(f[2], 200), basis: one(f.slice(3).join('｜'), 300) });
+      // 依据最后的「坑=G-OS-3.2#t1」：这一条误解和真题的哪个坑是一回事（考情第 5 批），单独拆出来
+      let basis = f.slice(3).join('｜');
+      const tm = basis.match(/\s*坑\s*[=＝]\s*(G-[A-Z]{2}-[\d.]+#t\d+)\s*$/);
+      if (tm) basis = basis.slice(0, tm.index);
+      if (out.mis.length < CAPS.mis) out.mis.push({ state, text: one(f[2], 200), basis: one(basis, 300), ...(tm ? { trap: tm[1] } : {}) });
     } else if (kind === '节奏') {
       if (f[1] && out.pace.length < CAPS.pace) out.pace.push({ where: one(f[1], 120), how: one(f.slice(2).join('｜'), 240) });
     } else if (kind === '习惯') {
@@ -160,5 +172,15 @@ export function debriefView(d) {
   if (by('新冒出').length) out.push({ kind: 'bad', text: `新冒出：${by('新冒出').join('；')}` });
   if (list(d.habit).length) out.push({ kind: 'info', text: `习惯：${list(d.habit).map((h) => h.text).join('；')}` });
   if (d.opening) out.push({ kind: 'next', text: `下节先测：${d.opening.what}` });
+  return out;
+}
+
+/** 复盘里对上的坑：只认 known（这一块坑表里的编号）里有的，对不上的从复盘里去掉（改 d）。返回对上的编号 */
+export function debriefTraps(d, known = new Set()) {
+  const out = [];
+  for (const m of list(d?.mis)) {
+    if (!m.trap) continue;
+    if (known.has(m.trap)) { if (!out.includes(m.trap)) out.push(m.trap); } else delete m.trap;
+  }
   return out;
 }
