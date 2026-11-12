@@ -108,3 +108,16 @@ test('写法：一位小数、整数不带 .0、正负号；首页那行小字',
   assert.equal(scoreLine({ week: { delta: 1.2 }, pace: { left: 402.2, perWeek: 6.82 } }), '还差 403 分，每周要攒 6.8');
   assert.equal(scoreLine({ week: { delta: 0 }, pace: { left: 0, perWeek: 0 } }), '攒够 410 了');
 });
+
+test('考试档案改了目标：scoreBoard 的 goal、四科 target、每块的分都跟着变', () => {
+  const base = scoreBoard({ curriculum }, { today: '2026-11-12' });
+  const b = scoreBoard({ curriculum, exam: [{ id: 'target', school: '南京大学', goal: 400, split: { math: 120, cs: 135, en: 75, pol: 70 } }] }, { today: '2026-11-12' });
+  assert.equal(b.goal, 400);
+  assert.equal(b.subjects.find((s) => s.key === 'math').target, 120);
+  const pts = (x) => x.subjects.find((s) => s.key === 'math').parts.find((p) => p.key === 'LA').points;
+  assert.ok(Math.abs(pts(b) / pts(base) - 120 / 130) < 1e-9);
+  assert.match(scoreLine(b), /还差 400 分/);
+  // 考试日期也读档案：日期早了，剩下的周数少了
+  const early = scoreBoard({ curriculum, exam: [{ id: 'target', school: '南京大学', date: '2027-01-21' }] }, { today: '2026-11-12' });
+  assert.ok(early.pace.weeks < base.pace.weeks);
+});

@@ -13,7 +13,9 @@ import { addDays, toDate } from './schema.js';
 import { voidedIds } from './memo.js';
 import { courseOf } from './space.js';
 import { daysLeft } from './journey.js';
+import { targetOf, goalOf, examDateOf } from '../exam/target.js';
 
+// 没有考试档案时的目标（exam/target.js 的 DEFAULT_TARGET 是同一个数）；有档案时 scoreBoard 读档案
 export const GOAL = 410;
 
 /**
@@ -114,12 +116,13 @@ export function stateAt(doc, date = null) {
  * 每一块值几分：{ 块编号: { points, part, subject, chapter } }，加上每一部分、每一章的结构（给面板画）。
  * 课程地图里的块按门课前缀（courseOf）归到部分；高数、概率现在还没有前缀（以后加了 HM- / PS- 就自己算进来）。
  */
-export function scoreMap(curriculum = []) {
+// split：四科各给多少（考试档案的 split）；不给就用 SUBJECTS 的 target
+export function scoreMap(curriculum = [], split = null) {
   const all = list(curriculum).filter((b) => b?.id && b.status !== 'void');
   const blocks = {};
   const parts = [];
   for (const s of SUBJECTS) {
-    const scale = s.target / s.full;
+    const scale = (split?.[s.key] ?? s.target) / s.full;
     for (const p of s.parts) {
       const pts = p.points * scale;
       const mine = p.course ? all.filter((b) => courseOf(b.id) === p.course && !(p.course === 'LA' && /^[A-Z]{2}-/.test(b.id))) : [];
@@ -158,7 +161,10 @@ function gotAt(mem, map, date = null) {
  *   week: { delta, ups: [{ id, title, from, to, delta }], downs: […] }, pace: { left, weeks, perWeek } }
  */
 export function scoreBoard(mem = {}, { today = toDate(Date.now()), days = 7 } = {}) {
-  const map = scoreMap(mem.curriculum);
+  // 目标、四科分配、考试日期读考试档案（没有档案时和以前写死的一样）
+  const target = targetOf(mem);
+  const { goal, split } = goalOf(target);
+  const map = scoreMap(mem.curriculum, split);
   const now = gotAt(mem, map);
   const then = gotAt(mem, map, addDays(today, -days));
   const sumOf = (ids, g) => ids.reduce((n, id) => n + (g[id]?.got || 0), 0);
@@ -167,15 +173,15 @@ export function scoreBoard(mem = {}, { today = toDate(Date.now()), days = 7 } = 
       const chapters = p.chapters.map((c) => ({ ...c, got: sumOf(c.blocks, now), done: c.blocks.filter((id) => now[id].state !== '未学').length }));
       return { key: p.key, label: p.label, basis: p.basis, points: p.points, inDesk: p.inDesk, got: chapters.reduce((n, c) => n + c.got, 0), chapters };
     });
-    return { key: s.key, label: s.label, full: s.full, target: s.target, rgb: s.rgb, parts, got: parts.reduce((n, p) => n + p.got, 0) };
+    return { key: s.key, label: s.label, full: s.full, target: split[s.key], rgb: s.rgb, parts, got: parts.reduce((n, p) => n + p.got, 0) };
   });
   const total = subjects.reduce((n, s) => n + s.got, 0);
   const moves = Object.keys(map.blocks).map((id) => ({ id, title: map.blocks[id].title, subject: map.blocks[id].subject, from: stateText(then[id].state, then[id].tier), to: stateText(now[id].state, now[id].tier), delta: now[id].got - then[id].got })).filter((x) => Math.abs(x.delta) > 1e-9);
   const delta = moves.reduce((n, x) => n + x.delta, 0);
-  const left = Math.max(0, GOAL - total);
-  const weeks = Math.max(1, Math.ceil(Math.max(0, daysLeft(today)) / 7));
+  const left = Math.max(0, goal - total);
+  const weeks = Math.max(1, Math.ceil(Math.max(0, daysLeft(today, examDateOf(target))) / 7));
   return {
-    goal: GOAL, total, subjects,
+    goal, total, subjects,
     week: { days, delta, ups: moves.filter((x) => x.delta > 0).sort((a, b) => b.delta - a.delta), downs: moves.filter((x) => x.delta < 0).sort((a, b) => a.delta - b.delta) },
     pace: { left, weeks, perWeek: left / weeks },
   };
@@ -188,5 +194,5 @@ export const signed = (x) => (round1(x) > 0 ? `+${fmt(x)}` : round1(x) < 0 ? `�
 
 /** 首页那一张卡下面一行小字（这 7 天攒了几分在大数字旁边另有一枚）：还差 403 分，每周要攒 6.8 */
 export function scoreLine(b) {
-  return b.pace.left > 0 ? `还差 ${Math.ceil(b.pace.left)} 分，每周要攒 ${fmt(b.pace.perWeek)}` : `攒够 ${GOAL} 了`;
+  return b.pace.left > 0 ? `还差 ${Math.ceil(b.pace.left)} 分，每周要攒 ${fmt(b.pace.perWeek)}` : `攒够 ${b.goal ?? GOAL} 了`;
 }
