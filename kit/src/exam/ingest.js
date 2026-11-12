@@ -5,12 +5,25 @@
 import { typeKey } from './taxonomy.js';
 import { courseHint, checkPaper } from './structure.js';
 import { examSpaceOf } from './schema.js';
+import { applyVerify } from './verify.js';
 
 const PAGE = /^===\s*第\s*(\d+)\s*页\s*$/;
 const QHEAD = /^---\s*题\s*(\d{1,2})\s*\|\s*([^|]+?)\s*\|\s*([\d.]+)\s*(?:\|\s*篇\s*(\S+))?\s*$/;
 const PHEAD = /^---\s*篇\s*([A-Za-z0-9]+)\s*\|\s*([^|]+?)\s*$/;
 const AHEAD = /^---\s*答\s*(\d{1,2})\s*$/;
 const OPTION = /^([A-D])[.．、]\s*(.*)$/;
+const CHECK = /【\s*check\s*[:：]\s*([^|｜】]+?)\s*(?:[|｜]\s*([^】]+?))?\s*】/;
+// 「r = 7 0 1 2 ; p = 3」→ { r: [7, 0, 1, 2], p: 3 }
+function parseVars(s) {
+  const out = {};
+  for (const part of String(s).split(/[;；]/)) {
+    const m = part.match(/^\s*([A-Za-z]\w*)\s*=\s*(.+?)\s*$/);
+    if (!m) continue;
+    const xs = m[2].split(/[\s,，]+/).map(Number);
+    out[m[1]] = xs.length === 1 ? xs[0] : xs;
+  }
+  return out;
+}
 const trimLines = (ls) => ls.join('\n').replace(/^\s+|\s+$/g, '');
 
 /**
@@ -28,7 +41,13 @@ export function splitPaper(text) {
   const close = () => {
     if (!cur) return;
     if (cur.kind === 'p') cur.obj.text = trimLines(cur.lines);
-    else cur.obj.stem = trimLines(cur.lines);
+    else {
+      // 验算的式子写在题面里：【check: faults(r, 3, lru) | r = 7 0 1 2 0 3】（转写的时候照题面写，verify.js 算），从题面里拿掉
+      let stem = trimLines(cur.lines);
+      const cm = stem.match(CHECK);
+      if (cm) { cur.obj.check = { expr: cm[1].trim(), ...(cm[2] ? { vars: parseVars(cm[2]) } : {}) }; stem = stem.replace(CHECK, '').replace(/^\s+|\s+$/g, ''); }
+      cur.obj.stem = stem;
+    }
     cur = null;
   };
   const touch = () => { if (cur && page && !cur.obj.pages.includes(page)) cur.obj.pages.push(page); };
@@ -115,7 +134,7 @@ export function buildPaper({ subject, year, paperText, answersText, source = '' 
   const space = examSpaceOf({ id: paperId });
   const passages = sp.passages.map((p) => ({ id: `PA-${subj}-${y}-${p.key}`, paper: paperId, kind: p.kind, text: p.text, pages: p.pages, space, course: courseHint(subj, y, 0) || '', year: y }));
   const keys = new Set(sp.passages.map((p) => p.key));
-  const questions = sp.questions.sort((a, b) => a.n - b.n).map((q) => {
+  const questionsRaw = sp.questions.sort((a, b) => a.n - b.n).map((q) => {
     const a = sa.answers.get(q.n);
     if (!a) problems.push(`第 ${q.n} 题在解析册里没有答案`);
     if (q.passage && !keys.has(q.passage)) problems.push(`第 ${q.n} 题挂的篇 ${q.passage} 在卷子里没有`);
@@ -123,11 +142,17 @@ export function buildPaper({ subject, year, paperText, answersText, source = '' 
     const out = {
       id: `Q-${subj}-${y}-${q.n}`, paper: paperId, year: y, n: q.n, type: q.type, points: q.points, stem: q.stem,
       ...(q.options ? { options: q.options } : {}), answer: a?.answer || '', analysis: a?.analysis || '', pages: q.pages,
-      ...(q.passage ? { passage: `PA-${subj}-${y}-${q.passage}` } : {}), space, course, verified: { how: 'book' },
+      ...(q.passage ? { passage: `PA-${subj}-${y}-${q.passage}` } : {}), ...(q.check ? { check: q.check } : {}), space, course, verified: { how: 'book' },
     };
     return out;
   });
+  // 能算的再算一遍（verify.js）：对不上的不进库，列出来给我看
+  const ver = applyVerify(questionsRaw);
+  questionsRaw.splice(0, questionsRaw.length, ...ver.questions);
+  for (const m of ver.mismatched) problems.push(`${m.id}：答案是 ${m.answer}，算出来是 ${m.got}（对一下解析册和转写）`);
+  for (const q of questionsRaw) if (q.verified?.how === 'none') problems.push(`${q.id}：验算的式子算不出来：${q.verified.why}`);
   if (subj === '301') notes.push('数学一的门课是先猜的（都写高数）：打了标签以后照主考点改');
+  const questions = questionsRaw;
   const total = questions.reduce((n, q) => n + Number(q.points || 0), 0);
   const paper = { id: paperId, subject: subj, year: y, space, total, count: questions.length, ...(source ? { source } : {}) };
   const cp = checkPaper(paper, questions);
