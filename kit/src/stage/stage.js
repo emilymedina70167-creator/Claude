@@ -273,6 +273,7 @@ export class Stage {
         return r;
       });
     };
+    let lastBatch = null; // 上一行所在的那一批（& 的行跟着它）
     const afterAsk = (c) => { this.errors.push({ line: c.line, src: c.src?.trim(), error: 'ask 之后的行不演（一轮以 ask 结尾）' }); };
     const enqueue = (c) => {
       if (dead) return;
@@ -280,15 +281,23 @@ export class Stage {
       if (c.on === 'ask.right' && !askRightAt) askRightAt = { line: c.line, src: c.src?.trim() };
       if (c.cmd === 'goal' && !c.on) { const id = (c.args || []).find((a) => a.t === 'word')?.v; if (id) goalAt.set(id, { line: c.line, src: c.src?.trim() }); }
       lines++;
-      // & 接在正在演的那一问上：照旧不演（那一问演没演上还不知道，不能和它一起演）
-      if (c.par && running) { if (running.ask) afterAsk(c); else running.jobs.push(run(c)); return; }
+      // & 开头的行和它**上一行**同时演（lastBatch：上一行所在的那一批）。边写边演时上一行可能还排着没开演：
+      // 先记在那一批上，等它开演时一起演。以前是接到「正在演的那一批」上——那可能是好几行以前的一行，
+      // 这一行就抢在前面还没演的行之前执行了（真课：sentence p 还没造，& paint p.8-9 先演，报「不是舞台上的东西」）。
+      // 上一行已经演完了就自己成一批；接在一问上的照旧不演（那一问演没演上还不知道，不能和它一起演）
+      if (c.par && lastBatch && !lastBatch.done) {
+        if (lastBatch.ask) afterAsk(c);
+        else if (lastBatch === running) lastBatch.jobs.push(run(c));
+        else lastBatch.extra.push(c);
+        return;
+      }
       const pause = by === 'teacher' && c.cmd === 'say' && !c.on && said;
       if (c.cmd === 'say' && !c.on) said = true;
-      const batch = { jobs: [], ask: c.cmd === 'ask' && !c.on };
+      const batch = lastBatch = { jobs: [], extra: [], done: false, ask: c.cmd === 'ask' && !c.on };
       chain = chain.then(async () => {
         if (dead) return;
-        // 前面那一问演上了（演完才知道）：这一行不演
-        if (asked) { afterAsk(c); return; }
+        // 前面那一问演上了（演完才知道）：这一行不演（跟着它的 & 行也不演，都说一声）
+        if (asked) { afterAsk(c); for (const x of batch.extra.splice(0)) afterAsk(x); batch.done = true; return; }
         if (pause) {
           await this.beat(beat, { by, turn, alive: () => !dead });
           beat = null;
@@ -296,8 +305,11 @@ export class Stage {
         }
         running = batch;
         batch.jobs.push(run(c));
+        // 这一批还排着的时候写出来的 & 行：和它一起演
+        for (const x of batch.extra.splice(0)) batch.jobs.push(run(x));
         // & 开头的行可能在这一批开演以后才写出来：等到这一批的活都演完（期间新并进来的也等）
         for (let k = 0; k < batch.jobs.length; k++) await batch.jobs[k];
+        batch.done = true;
         running = null;
       });
     };
@@ -1797,6 +1809,8 @@ export class Stage {
             act = { type: 'pick', refs: ps.map((p) => sc.tapRef(p)), expected: w.expect?.join(' ') ?? null, same: null, extra: [], missing: [], why: `页面没比成：${err?.message || err}` };
             reportError(err, { what: `舞台的 ask pick 和 expect 比：${w.prompt || ''}` });
           }
+          // 点的那几样写成字（错题本里「我点的」要看得懂，不是 e.4 e.5）
+          act.words = ps.map((p) => String(p.value ?? p.text ?? '')).filter(Boolean).join(' ');
           await this.studentDo(`pick ${refs.join(' ')}${w.reveal ? ' reveal=on' : ''}`, act);
           finish(act);
         });

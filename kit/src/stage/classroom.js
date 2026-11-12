@@ -12,6 +12,7 @@ import { Stage, stageLines } from './stage.js';
 import { QUIET_MS } from './events.js';
 import { createLoop } from './loop.js';
 import { buildStageSystem, turnMessage, firstMessage, stageSubject } from './doc.js';
+import { actEvidence } from './evidence.js';
 import { getAI } from '../ai.js';
 import { createSink } from '../live/sync.js';
 import { sayEvidence, observationRecord } from '../memory/session.js';
@@ -144,15 +145,13 @@ export async function renderStageClass(root, meta = {}, desk) {
     evidence: sink ? {
       goal: (id, g, at) => sink.record({ type: 'stage', block: `S${at}`, q: g?.text || id, value: 'goal', text: id, ok: true, turn: at }),
       act: (a, at) => {
-        const comp = `S${at || seq}`; // 这一问：老师第几轮的（记忆块的 basis 写它）
+        const comp = `S${at || seq}`; // 这一问的编号：页面在每一轮的 [学生] 后面告诉老师（记忆块的 basis 写它）
         const w = stage.scene.waiting;
         const q = w?.prompt || stage.scene.say || '';
-        // 预期的那几个这一刻不在舞台上（right 是 null，页面比不了）：不记对错，和下面只收不判的一样
-        if (a.type === 'tap' && a.expected) sink.record({ type: 'stage', block: comp, q, value: a.value, text: a.ref, ok: typeof a.right === 'boolean' ? a.right : null, turn: at });
-        // 只收不判、页面没判成的（right 是 null）不记对错：记成 false 会被当成答错算进掌握
-        else if (a.type === 'value') sink.record({ type: 'stage', block: comp, q, value: a.text, text: a.text, ok: typeof a.right === 'boolean' ? a.right : null, turn: at });
-        else if (a.type === 'say') sink.put('evidence', sayEvidence(a.text, { session: sid, block: desk.block, turn: at }));
-        else sink.event({ type: `stage-${a.type}`, block: comp, detail: { ...a, tries: undefined }, turn: at });
+        const ev = actEvidence(a, { comp, q, goalText: (id) => stage.scene.goals.get(id)?.text || id });
+        for (const r of ev.records) sink.record({ ...r, turn: at });
+        if (ev.say != null) sink.put('evidence', sayEvidence(ev.say, { session: sid, block: desk.block, turn: at }));
+        if (ev.event) sink.event({ type: `stage-${a.type}`, block: comp, detail: { ...a, tries: undefined }, turn: at });
       },
     } : null,
   });

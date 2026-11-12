@@ -288,9 +288,12 @@ export function derivedLines(derived = [], { grids = null } = {}) {
  * 舞台现在是什么样（照场景写的，和画面一样）。
  * 后加的两块只在有内容时出现
  */
-export function turnMessage({ act = '', state = '', errors = [], audit = [], derived = [], grids = null } = {}) {
+export function turnMessage({ act = '', state = '', errors = [], audit = [], derived = [], grids = null, askId = null } = {}) {
   const parts = [];
-  parts.push(act ? `[学生]\n${act}` : '[学生] 没有动作');
+  // askId：这一问的编号（学习台里上课才有）。老师记错题、弱点的依据写它——以前说明里只说「S5 指第 5 轮」，
+  // 页面用的却是数据库里的轮号，老师数的对不上：真课上 4 条被拒收、1 条对到了别的题上
+  const head = askId ? `[学生]（这一问的编号 ${askId}）` : '[学生]';
+  parts.push(act ? `${head}\n${act}` : `${head} 没有动作`);
   const moved = derivedLines(derived, { grids });
   if (moved.length) parts.push(`[跟着变的]（学生动了以后页面当场重算的）\n${moved.map((l) => `- ${l}`).join('\n')}`);
   if (audit.length) parts.push(`[页面核过你上一轮的几步]（这几步不是正确的下一步；页面照演了、没拦你，是故意演错的就不用管）\n${audit.map((l) => `- ${l}`).join('\n')}`);
@@ -328,12 +331,12 @@ export const TOPICS = {
 // —— 在学习台里上的舞台课（D 段）：每一轮的整份说明 ——
 export const STAGE_SYSTEM_MAX = 150 * 1024;
 
-// 记忆的写法：照课堂那份，依据换成舞台上那一问的编号（S5 = 第 5 轮最后那个 ask）；不收「point=」（舞台上没有段）
+// 记忆的写法：照课堂那份，依据换成舞台上那一问的编号（S5：页面每一轮在 [学生] 后面写给老师的）；不收「point=」（舞台上没有段）
 export const STAGE_MEMO_DOC = MEMO_DOC
   .replace(/basis=q-b5,q-b7/g, 'basis=S5,S7')
   .replace(/basis=q-b9/g, 'basis=S9')
   .replace(/basis=q-b5/g, 'basis=S5')
-  .replace('黑板上的组件 id（`q-b5`，页面换成学生在那道题上的全部作答）、段 id（`b5`）', '舞台上那一问的编号（`S5` 指第 5 轮最后那个 ask，页面换成学生在那一问上的作答）')
+  .replace('黑板上的组件 id（`q-b5`，页面换成学生在那道题上的全部作答）、段 id（`b5`）', '舞台上那一问的编号（`S5`：页面在每一轮 [学生] 后面写着「这一问的编号 S5」，照抄它，不要自己数；页面换成学生在那一问上的作答）')
   .replace('again="b7 没讲划块就出了标主干的题"', 'again="没让学生先在画面上找谓语就问了主干"')
   .replace('和黑板指令一样用一个', '和镜头指令写在同一轮，另起一个')
   .replace('板放不下不用记：页面量得出来（黑板现状里有），稍长学生会上下滑。', '')

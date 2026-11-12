@@ -17,7 +17,19 @@ const readColl = (p) => (existsSync(p) && statSync(p).isDirectory() ? readdirSyn
 const sessions = readColl(join(dir, 'sessions')).filter((s) => s.kind === 'stage' && (!ids.length || ids.includes(s.id))).sort((a, b) => String(a.id).localeCompare(String(b.id)));
 const lessons = sessions.map((s) => {
   const turns = readColl(join(dir, 'sessions', s.id, 'class_turns')).sort((a, b) => (a.seq || 0) - (b.seq || 0));
-  return { id: s.id, date: s.date || s.start || '', subject: s.subject || s.space || '', block: s.block || '', title: s.title || '', turns: turns.length, ...lessonCost(turns), texts: turns.filter((t) => t.role === 'claude' && !t.discarded).map((t) => t.text || '') };
+  // 系统这一层的几个数（第一节真课以后加的）：提前想好的一轮用上几次、记忆块被拒收几条、对话放不下丢了几轮、屏幕多大缩到几成、学生多久没动
+  const spec = { hit: turns.filter((t) => t.cost?.spec === 'hit').length, miss: turns.filter((t) => t.kind === 'spec').length };
+  const refused = turns.filter((t) => t.kind === 'note').reduce((n, t) => n + Number(/memo 里有 (\d+) 条没记/.exec(t.text || '')?.[1] || 0), 0);
+  const stuck = turns.filter((t) => t.role === 'student' && !t.discarded && /^学生 \d+ 秒没动/.test(t.text || '')).length;
+  const tiny = turns.filter((t) => t.role === 'student' && /字难认：整台缩到了/.test(t.msg || '')).length;
+  const views = turns.map((t) => t.view).filter(Boolean);
+  const view = views.length ? { w: views.at(-1).w, h: views.at(-1).h, minScale: Math.min(...views.map((v) => v.s)) } : null;
+  const B = (x) => Buffer.byteLength(String(x || ''));
+  const live = turns.filter((t) => !t.discarded && !t.pending && (t.role === 'claude' || t.role === 'student'));
+  const hist = live.reduce((n, t) => n + B(t.role === 'claude' ? t.text : t.msg || t.text), 0);
+  const stateB = live.filter((t) => t.role === 'student').reduce((n, t) => { const m = String(t.msg || ''); const i = m.indexOf('[舞台现在]'); return n + (i >= 0 ? B(m.slice(i)) : 0); }, 0);
+  const sys = { spec, refused, stuck, tiny, view, hist, stateB, maxBytes: Math.max(0, ...turns.map((t) => t.cost?.bytes || 0)) };
+  return { id: s.id, date: s.date || s.start || '', subject: s.subject || s.space || '', block: s.block || '', title: s.title || '', sys, turns: turns.length, ...lessonCost(turns), texts: turns.filter((t) => t.role === 'claude' && !t.discarded).map((t) => t.text || '') };
 }).filter((l) => l.turns.length);
 
 const all = featureUse(lessons.flatMap((l) => l.texts));
@@ -33,6 +45,9 @@ for (const l of lessons) {
   console.log(`  老师 ${n} 轮，写了 ${t.lines} 行；没演上 ${t.missed} 行（${pct(t.lines ? t.missed / t.lines : 0)}）`);
   console.log(`  每轮平均 ${Math.round(t.bytes / n)} 字节，搭 ${pct(t.share)}，写死的数 ${t.suspects} 处；每轮等 ${sec(t.ms, n)} 秒，出第一个字 ${sec(t.first, n)} 秒`);
   console.log(`  学生手上有事的 ${l.turns.filter((x) => x.hands).length} 轮，只有话的 ${l.turns.filter((x) => !x.hands).length} 轮，最长连着 ${l.talkRuns} 轮只有话`);
+  const y = l.sys;
+  console.log(`  提前想好的一轮：接上 ${y.spec.hit} 次，白跑 ${y.spec.miss} 次；记忆块被拒收 ${y.refused} 条；学生很久没动叫老师 ${y.stuck} 次；报「字难认」${y.tiny} 轮`);
+  console.log(`  对话 ${Math.round(y.hist / 1024)} KiB（其中每轮一份的「舞台现在」${Math.round(y.stateB / 1024)} KiB），发出去最大的一次 ${Math.round(y.maxBytes / 1024)} KiB；屏幕${y.view ? ` ${y.view.w}×${y.view.h}，最小缩到 ${y.view.minScale}` : '没记（这节课是记屏幕以前上的）'}`);
   for (const x of l.turns) for (const m of x.missed) console.log(`    没演上（第 ${x.seq} 轮）：${m.src} —— ${m.error}`);
   console.log(`  用过的写法：${Object.entries(l.features.used).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}×${v}`).join('  ')}`);
 }

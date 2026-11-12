@@ -851,3 +851,28 @@ test('D1-2：课堂循环里同一下做到两条挑战，发给老师的那一�
   assert.match(m, /g5「第 5 条」（页面已经演了你预写的 1 行）/);
   assert.match(m, /g6「第 6 条」（页面已经演了你预写的 2 行）/);
 });
+
+test('提前想好下一轮：学生只能点按钮时才想；手上有东西可动（画面上有拨盘、老师开着的手）就不想——真课上 6 次只接上 1 次', async () => {
+  const { createLoop } = await import('../kit/src/stage/loop.js');
+  // 只有一个按钮：提前想
+  const a = fakeClass('array k = 1 2 3\nsay "看这一排。"\nask next "看清了点下面" button="看清了"');
+  const la = createLoop(a.host);
+  await la.resume({ lastClaude: 1 });
+  await wait();
+  assert.equal(a.calls(), 1);
+  la.close();
+  // 画面上有拨盘：学生多半先拨几下，不想
+  const b = fakeClass('dial t = 现在 options="过去 现在 将来"\nsentence v = "He {t: was | is | will be} here."\nask next "拨一拨，看清了点下面" button="看清了"');
+  const lb = createLoop(b.host);
+  await lb.resume({ lastClaude: 1 });
+  await wait();
+  assert.equal(b.calls(), 0);
+  lb.close();
+  // 老师开着的手：不想
+  const c = fakeClass('array k = 2 1 3\nopen k\nask next "换一换，看清了点下面" button="看清了"');
+  const lc = createLoop(c.host);
+  await lc.resume({ lastClaude: 1 });
+  await wait();
+  assert.equal(c.calls(), 0);
+  lc.close();
+});

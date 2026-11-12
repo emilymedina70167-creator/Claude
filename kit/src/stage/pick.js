@@ -121,8 +121,9 @@ export function pickDeps(text) {
   const walk = (t) => {
     for (const p of splitPicks(t)) {
       if (p.k !== 'pick') continue;
-      // {verb: …}：跟着的是格子里写的那几个拨盘的名字（看起来像名字的都算；不是拨盘的 checkVerb 会当词读）
-      if (p.name === VERB) { for (const a of p.alts.slice(1)) if (NAME.test(a)) out.add(a); continue; }
+      // {verb: …}：跟着的是格子里写的那几个拨盘的名字。格子里能直接写的英文词（主语 he we…、情态 must can…、past perfect…、passive not…）
+      // 不是拨盘：以前看起来像名字的都算，主语写 he 的句子在找一个叫 he 的拨盘，找不到就整句不再跟着变（真课上学生白拨了 26 下）
+      if (p.name === VERB) { for (const a of p.alts.slice(1)) if (NAME.test(a) && !verbWord(a)) out.add(a); continue; }
       out.add(p.name); p.alts.forEach(walk);
     }
   };
@@ -134,6 +135,12 @@ export function pickDeps(text) {
 const NAME = /^[A-Za-z_]\w*$/;
 const VOICE = { 被动: ['passive', true], passive: ['passive', true], 主动: ['passive', false], active: ['passive', false], 否定: ['negative', true], not: ['negative', true], negative: ['negative', true], 肯定: ['negative', false] };
 const SLOTS = ['原形', '时间', '状态', '主语', '被动', '否定'];
+// 格子里能直接写的英文词：主语、情态、时间和状态的英文说法、被动否定。它们不是拨盘的名字
+const verbWord = (a) => {
+  if (VOICE[a] || VOICE[a.toLowerCase()]) return true;
+  for (const read of [readSubject, readTime, readAspect]) { try { read(a); return true; } catch { /* 不是这一种 */ } }
+  return false;
+};
 const shownOf = (p) => p.raw ?? `{${p.name}: ${p.alts.join(' | ')}}`;
 // 一格里写的是拨词的拨盘的名字：取它现在的词；不是就当词用。情态动词（can must…）、主语（he it…）和拨盘重名时拨盘优先
 const slotText = (a, vars) => (NAME.test(a) && vars.get(a)?.options ? varText(vars.get(a)) : a);
@@ -157,7 +164,7 @@ export function verbNow(p, vars) {
   const a = p.alts;
   if (a.length > SLOTS.length) throw new Error(`「${shownOf(p)}」最多 6 格：${SLOTS.join(' | ')}`);
   for (const x of a) if (/[{}]/.test(x)) throw new Error(`「${shownOf(p)}」：格子里写词或者拨盘的名字，不能再套一层 {…}（主语要跟着拨盘走，就写那个拨盘的名字）`);
-  for (const x of a.slice(1)) if (NAME.test(x) && vars.has(x) && !vars.get(x).options) throw new Error(`「${shownOf(p)}」：${wordDialError(x, vars.get(x))}`.replace('这里要一个拨数的（dial k = 1 range=1..5）', '这里要一个拨词的（dial t = 现在 options="过去 现在 将来"）').replace('是拨词的拨盘', '是拨数的拨盘'));
+  for (const x of a.slice(1)) if (NAME.test(x) && vars.has(x) && !vars.get(x).options) throw new Error(`「${shownOf(p)}」：${x} 是拨数的拨盘，不是词：这里要一个拨词的（dial t = 现在 options="过去 现在 将来"）`);
   const f = formsOf(a[0]);
   const ts = timeSlot(a[1] || '', vars);
   const opt = { time: ts.text, aspect: slotText(a[2] || '', vars), subject: slotText(a[3] || '', vars), passive: false, negative: false };

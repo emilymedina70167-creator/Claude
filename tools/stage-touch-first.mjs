@@ -225,6 +225,28 @@ SECTIONS.heap = async () => {
   }
 };
 
+// —— 边写边演：老师的行一行一行到（真课上是这样，试演工具是一下子全给）。& 开头的行是「和上一行同时演」——
+// 以前它插到正在演的那一行里，抢在前面还没演的行之前执行（真课上两次报「p.8-9 不是舞台上的东西」）——
+SECTIONS.stream = async () => {
+  const T = await open();
+  const r = await T.page.evaluate(async () => {
+    const st = window.LAStage; st.cancelWait?.(); st.clearAll(); st.log = [];
+    const lines = ['array a = 1 2 3', 'say "先看这一排。"', 'sentence p = "They gave justices permanent positions so they would be free."', 'paint p.gave g1', '& paint p.8-9 g2', 'say "好。"', 'ask next'];
+    const t = st.begin();
+    let text = '';
+    // 一行一行到，隔 30 毫秒（前面的行还在演）
+    for (const l of lines) { text += `${l}\n`; t.push(text); await new Promise((res) => setTimeout(res, 30)); }
+    t.end(text);
+    await t.armed;
+    const out = { errors: st.errors };
+    const p = st.scene.objects.get('p');
+    const tone = (k) => p?.words.find((w) => w.slot === k)?.paint || '';
+    return `${(out.errors || []).map((e) => e.error).join('；') || '没有没演上的'}｜${tone(2)} ${tone(8)} ${tone(9)}`;
+  });
+  expect('边写边演：& 的行跟着它上一行（不抢到前面去）', r, '没有没演上的｜g1 g2 g2');
+  await T.ctx.close();
+};
+
 for (const [name, fn] of Object.entries(SECTIONS)) {
   if (only && !only.includes(name)) continue;
   console.log(`\n—— ${name} ——`);

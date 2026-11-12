@@ -182,6 +182,10 @@ export function createLoop(host) {
     const go = () => { const p = S.pending; if (!p) return; Object.assign(p.row, { events: p.events, log: [...p.base, ...stage.log.slice(S.logFrom)] }); host.putTurn(p.row); };
     if (now) go(); else S.saveTimer = setTimeout(go, 800);
   }
+  // 学生现在有没有东西可动：老师开着的手，或者画面上有拨盘
+  const canPlay = (sc) => sc.opens.size > 0 || [...sc.vars.values()].some((x) => x.shown);
+  // 这一问的编号（证据记在它名下，老师的记忆块 basis 写它）：学习台里上课才有（样子页不记证据）
+  const askId = () => (host.evidence && S.lastClaude ? `S${S.lastClaude}` : null);
   /** 这一段做成一条学生轮（发给老师的整条在 msg 里） */
   function finalize() {
     const p = S.pending;
@@ -190,11 +194,15 @@ export function createLoop(host) {
     const byNext = events.at(-1)?.act?.type === 'next';
     const said = eventsText(events, { goals: stage.scene.goals, secs: byNext || !S.armedAt ? null : Math.round((performance.now() - S.armedAt) / 1000) });
     // 页面核过老师上一轮的几步（不是正确的下一步的）、学生动了以后跟着变的：一起写进这一条，核过的说过就清掉
-    const msg = turnMessage({ act: said, state: stage.scene.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(events), grids: gridsOf(stage.scene) });
+    const msg = turnMessage({ act: said, state: stage.scene.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(events), grids: gridsOf(stage.scene), askId: askId() });
     stage.teacherAudit = [];
     const say = events.filter((e) => e.act?.type === 'say').map((e) => e.act.text).join('\n');
     clearTimeout(S.saveTimer);
-    Object.assign(p.row, { pending: false, text: said, msg, events, log: [...p.base, ...stage.log.slice(S.logFrom)], ...(say ? { say } : {}) });
+    // 这一刻学生的屏幕：舞台那一块多大、整台缩到了几成。查「字难认」「摆不下」时要它——
+    // 第一节真课页面报了 4 次「缩到 4～6 成」，照标准 iPad 尺寸重演却重现不了，因为不知道当时的屏幕多大
+    let view = null;
+    try { const v = stage.viewSize?.(); if (v) view = { w: Math.round(v.w), h: Math.round(v.h), s: Math.round((stage.cam?.s ?? 1) * 100) / 100, ...(typeof window !== 'undefined' ? { win: [window.innerWidth, window.innerHeight] } : {}) }; } catch { /* 量不了就不记 */ }
+    Object.assign(p.row, { pending: false, text: said, msg, events, log: [...p.base, ...stage.log.slice(S.logFrom)], ...(say ? { say } : {}), ...(view ? { view } : {}) });
     host.putTurn(p.row);
     S.pending = null;
     S.logFrom = stage.log.length;
@@ -372,11 +380,14 @@ export function createLoop(host) {
     if (!w || w.kind !== 'next' || w.button === HELP || w.button === DONE_BTN || RETRY.has(w.button) || stage.pendingGoals().length) return;
     // 按了这个按钮才判的挑战（on=）：点了会判、会记一行，提前想的那一份一定对不上
     if (stage.scene.hasOn?.(w.button || '接着')) return;
+    // 学生手上有东西可动（老师开着的手、画面上的拨盘）：学生多半先拨几下再点，一拨发出去的那一条就不一样了。
+    // 真课上 6 次提前想只接上 1 次，白跑 5 次整轮调用（最长一次 86 秒）
+    if (canPlay(stage.scene)) return;
     const act = { type: 'next', button: w.button || '接着' };
     const said = eventsText([...(S.pending?.events || []), eventOf(act, { help: HELP })], { goals: stage.scene.goals });
     const after = stage.scene.clone();
     after.waiting = null;
-    const msg = turnMessage({ act: said, state: after.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(S.pending?.events || []), grids: gridsOf(stage.scene) });
+    const msg = turnMessage({ act: said, state: after.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(S.pending?.events || []), grids: gridsOf(stage.scene), askId: askId() });
     const input = host.messages({ next: msg });
     const s = S.spec = { msg, input, text: '', res: null, err: null, listeners: [], t0: performance.now(), dead: false, done: false, adopted: false };
     s.record = () => host.addTurn({ role: 'system', kind: 'spec', discarded: true, text: '提前想好的下一轮没用上（学生做的和预想的不一样）', cost: host.cost({ bytes: inBytes(input), why: 'spec', ms: performance.now() - s.t0 }) });
