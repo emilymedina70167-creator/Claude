@@ -840,7 +840,7 @@ bf t / unbf t                     每个结点右上角标平衡因子（跟着�
 heights t / unheights t           每个结点右下角标子树高（跟着树变；和 tag、bf 一起开着不挡）
 ask drag t "把它往上换"             学生把一个结点的值拖到另一个结点上，两个换值（页面照做，再告诉你）
 tree t = 50 30 70 tray="20 40 80"   带托盘：待插的数按顺序摆在树下面，插进去一个拿掉一个
-tree h = 90 80 70 layout=compact    排法造的时候定：二叉排序树照中序一个结点一列，别的（堆……）紧凑排；layout=inorder 或 compact 自己定；堆从一两个结点长起来（那时也算二叉排序树）写 layout=compact
+tree h = 90 80 70 layout=compact    排法造的时候定：二叉排序树照中序一个结点一列，别的（堆……）紧凑排；layout=inorder / compact 自己定（堆从一两个结点长起来也写 layout=compact）
 扣着的结点（cover t.40）话里的小块分不出是哪一个：要学生指着它，用 ask pick 或者说位置
 学生自己转、自己插（页面判每一下）：
 open t rotate wrong=mark undo=on    学生把一个结点拖到它的父亲上 = 在父亲那里转（左孩子拖上去 = rotate t#1 right）
