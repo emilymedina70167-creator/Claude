@@ -41,8 +41,31 @@ export function pointCatalog(sessions = [], mastery = []) {
 /** 这节课要不要（重新）归类：有报告、报告里有题、还没归过或者报告后来重算过 */
 export function needsSkills(s) {
   if (!s || s.kind === 'drill' || !s.report || !(Number(s.report.items) > 0)) return false;
+  if (s.aide) return false; // 下课后的助手一次做完（aide/after.js）
   return !s.skills || (Number(s.skills.v) || 0) < SKILLS_VERSION || Number(s.skills.reportAt) !== Number(s.report.at);
 }
+
+/** 报告里的每道题写成一行（题号. ［块］「题面」：每次的对错 结果）：归类和下课后的助手共用 */
+export function skillItemLines(report) {
+  return list(report?.items).map((it, i) => {
+    const res = it.guess ? '把选项试遍了才对' : OUTCOME_TEXT[it.outcome] || it.outcome;
+    return `${i + 1}. ［${list(it.tags).filter((t) => !String(t).includes('#')).join(' ') || '没写块'}］${it.segTitle ? `（${cut(it.segTitle, 30)}）` : ''}「${cut(it.q, 90)}」：${it.seq || '·'} ${res}${it.last ? `；写的「${cut(it.last, 50)}」` : ''}${list(it.wrongs).length ? `；错过「${list(it.wrongs).slice(0, 2).map((w) => cut(w, 40)).join('」「')}」` : ''}`;
+  });
+}
+
+// 归类的要求和输出格式：下课后的助手（aide/after.js）照抄同一份
+export const SKILLS_RULES = [
+  '- 每道题归到**一个**知识点：这道题主要考的那一件能练、能测的事（例如「双宾和宾补的区分（加『是』检验）」「系动词先查表」「谓语圈全」），不是一整块，也不要一道题一个。一节课一般 3～8 个。',
+  '- 块按这道题实际考的内容从课程地图里挑（课上可能改讲了别的块，证据上记的块不一定对）。',
+  '- 知识点编号写成「块编号#短名」，短名只用小写英文字母、数字、连字符，2～24 个字符，例如 EN-L1.1.1#dobj-oc。已经用过的知识点说的是同一件事就用原来的编号；没有合适的才新起，新起的要先写一行 point。',
+  '- 学生这道题没有一次做对，而且错法正好是某个弱点说的那件事，后面写上弱点编号；做对的题、和弱点无关的错不写。',
+  '- 和学习内容无关的（问安排、试一下页面）写 skip。',
+  '',
+  '## 输出格式（每行一条，不要别的字）',
+  'point 编号 标题        ← 新起的知识点',
+  'item 题号 编号 [弱点编号]',
+  'skip 题号',
+];
 
 /**
  * 给 Claude 的提示词。report：sessions/{编号}/report/main；session：sessions/{编号}；curriculum：这一科的块；
@@ -50,11 +73,7 @@ export function needsSkills(s) {
  */
 export function skillsPrompt({ report, session = {}, curriculum = [], catalog = {}, weaknesses = [], summary = '', notes = [] } = {}) {
   const blocks = list(curriculum).filter((b) => b && /\.\d+\.\d+$/.test(String(b.id))).slice(0, 120);
-  const items = list(report?.items);
-  const lines = items.map((it, i) => {
-    const res = it.guess ? '把选项试遍了才对' : OUTCOME_TEXT[it.outcome] || it.outcome;
-    return `${i + 1}. ［${list(it.tags).filter((t) => !String(t).includes('#')).join(' ') || '没写块'}］${it.segTitle ? `（${cut(it.segTitle, 30)}）` : ''}「${cut(it.q, 90)}」：${it.seq || '·'} ${res}${it.last ? `；写的「${cut(it.last, 50)}」` : ''}${list(it.wrongs).length ? `；错过「${list(it.wrongs).slice(0, 2).map((w) => cut(w, 40)).join('」「')}」` : ''}`;
-  });
+  const lines = skillItemLines(report);
   const pts = Object.entries(catalog).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
   const why = summary ? cut(summary, 3000) : list(notes).map((n) => `- ${cut(n.text || n, 200)}`).join('\n').slice(0, 2500);
   return [
@@ -76,16 +95,7 @@ export function skillsPrompt({ report, session = {}, curriculum = [], catalog = 
     ...(why ? ['', `## ${summary ? '老师写的下课小结' : '老师当堂的笔记'}（看学生错在哪）`, why] : []),
     '',
     '## 要求',
-    '- 每道题归到**一个**知识点：这道题主要考的那一件能练、能测的事（例如「双宾和宾补的区分（加『是』检验）」「系动词先查表」「谓语圈全」），不是一整块，也不要一道题一个。一节课一般 3～8 个。',
-    '- 块按这道题实际考的内容从课程地图里挑（课上可能改讲了别的块，证据上记的块不一定对）。',
-    '- 知识点编号写成「块编号#短名」，短名只用小写英文字母、数字、连字符，2～24 个字符，例如 EN-L1.1.1#dobj-oc。已经用过的知识点说的是同一件事就用原来的编号；没有合适的才新起，新起的要先写一行 point。',
-    '- 学生这道题没有一次做对，而且错法正好是某个弱点说的那件事，后面写上弱点编号；做对的题、和弱点无关的错不写。',
-    '- 和学习内容无关的（问安排、试一下页面）写 skip。',
-    '',
-    '## 输出格式（每行一条，不要别的字）',
-    'point 编号 标题        ← 新起的知识点',
-    'item 题号 编号 [弱点编号]',
-    'skip 题号',
+    ...SKILLS_RULES,
   ].join('\n');
 }
 
