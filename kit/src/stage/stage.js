@@ -2291,6 +2291,14 @@ export class Stage {
     const unmet = [...res.unmet.filter((u) => !u.rel?.auto && !dirKey(u.rel)), ...kept.values()];
     this.layoutState.unmet = unmet;
     sc.layoutInfo = layoutLines({ boxes: res.boxes, grid, unmet, scale: res.scale });
+    // 写了 main 的那一样为了照办挨着它的关系让开了：照实说不在正中（r30：老师写「树在中间」，并排放不下时树往左让）
+    for (const r of relations) {
+      if (r.kind !== 'main' || r.auto || typeof r.a !== 'string') continue;
+      const B = res.boxes.get(r.a);
+      if (!B) continue;
+      const off = Math.round((B.x + B.w / 2 - cv.w / 2) / grid.cell);
+      if (Math.abs(off) >= 3) sc.layoutInfo.push(`${r.a} 不在正中：往${off < 0 ? '左' : '右'}让了 ${Math.abs(off)} 列（别的要求挨着它，正中放不下）`);
+    }
     // 放大放不下收回去的（这一轮里一直写着，老师下一轮看得到）
     for (const n of this.scaleNotes || []) sc.layoutInfo.push(n);
     if (nudged.size) sc.layoutInfo.push(`为了让学生点得到，挪了 ${[...nudged].join('、')}（它盖着、或者让学生要点的部件出了屏幕）`);

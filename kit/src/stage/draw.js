@@ -93,7 +93,11 @@ export function drawGeometry(spec, boxOf, { grid, s = 1 }) {
   const target = boxOf(spec.on || spec.under || spec.over);
   if (!target) return out;
   if (spec.kind === 'circle' || spec.kind === 'underline') {
-    const sh = shapeFor(spec.kind, { box: target }, seed);
+    // 圈一小格（矩阵的一格、格子里的一个数）：格子的框比里面的字大一圈，照框圈会和隔壁那格的圈叠在一起、压着括号（r24）：
+    // 圈中间那一块（字在那里），挨着的几格各圈各的
+    const cell = spec.kind === 'circle' && target.w <= 90 && target.h <= 90;
+    const t = cell ? (() => { const w = Math.max(24, target.w * 0.5), h = Math.max(24, target.h * 0.5); return { x: target.x + (target.w - w) / 2, y: target.y + (target.h - h) / 2, w, h }; })() : target;
+    const sh = shapeFor(spec.kind, cell ? { box: t, tight: true, room: { top: 6, bottom: 6, left: 6, right: 6 } } : { box: t }, seed);
     out.strokes.push(...sh.strokes);
     out.bbox = sh.bbox || target;
   } else if (spec.kind === 'box') {

@@ -60,3 +60,11 @@ test('最后不到一行的那一截也在画布里：落在那里不算出了�
   const out = layoutLines({ boxes: new Map([['AB', { x: 300, y: 520, w: 200, h: 185 }]]), grid });
   assert.ok(out.some((l) => l.startsWith('出了屏幕')));
 });
+
+import { drawGeometry } from '../kit/src/stage/draw.js';
+
+test('圈矩阵的一格：圈不比格子宽，挨着的两格各圈各的（r24）', () => {
+  const boxOf = () => ({ x: 100, y: 100, w: 56, h: 56 });
+  const g = drawGeometry({ name: 'd1', kind: 'circle', on: 'AB.1,1' }, boxOf, { s: 1 });
+  assert.ok(g.bbox.w <= 60 && g.bbox.h <= 60, JSON.stringify(g.bbox));
+});
