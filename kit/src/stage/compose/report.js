@@ -50,7 +50,8 @@ export function layoutLines({ boxes, grid, unmet = [], scale = 1 }) {
   const over = [];
   for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (hit(list[i][1], list[j][1])) over.push(`${list[i][0]} 和 ${list[j][0]}`);
   if (over.length) lines.push(`压着：${over.join('；')}`);
-  const out = list.filter(([, b]) => b.x < -1 || b.y < -1 || b.x + b.w > W + 1 || b.y + b.h > H + 1).map(([id]) => NAME[id] || id);
+  // 差两个像素以内算在里面（和求解器、出了屏幕就放开的那一处同一个余量：吸到半格时会差一点）
+  const out = list.filter(([, b]) => b.x < -2 || b.y < -2 || b.x + b.w > W + 2 || b.y + b.h > H + 2).map(([id]) => NAME[id] || id);
   if (out.length) lines.push(`出了屏幕：${out.join('、')}`);
   const free = freeRects(boxes, grid);
   if (free.length) lines.push(`空着：${free.map(cellText).join('；')}`);
