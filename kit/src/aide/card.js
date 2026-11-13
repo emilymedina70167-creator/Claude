@@ -59,16 +59,20 @@ export function cardIdsFor(block, curriculum = [], space = '') {
 
 /** 这一块相关的原始记录的指纹：卡引的就是这些，变了卡就过时（照 exam/fresh.js 的 profileSrc 的做法） */
 export function cardSrc(block, mem = {}) {
+  return hashOf(cardParts(block, mem).join('|'));
+}
+
+/** 这一块相关的原始记录，一条一个短串（cardSrc 拼它；fill.js 看一块有没有记录） */
+export function cardParts(block, mem = {}) {
   const b = String(block || '');
   const get = (c) => (Array.isArray(mem[c]) ? mem[c] : []);
-  const parts = [
+  return [
     ...get('errors').filter((e) => e.block === b).map((e) => `e:${e.id}:${e.date || ''}:${e.void ? 'v' : ''}${e.resolved ? 'r' : ''}`),
     ...get('weaknesses').filter((w) => list(w.blocks).includes(b)).map((w) => `w:${w.id}:${w.status || ''}:${w.last || ''}:${list(w.errors).length}`),
     ...get('mastery').filter((m) => m.id === b || String(m.id).startsWith(`${b}#`)).map((m) => `m:${m.id}:${m.state || ''}:${m.tier || ''}`),
     ...get('recall').filter((k) => k.block === b).map((k) => `k:${k.id}:${k.status || ''}:${k.lapses || 0}`),
-    ...get('sessions').filter((s) => s.block === b || list(s.blocks).includes(b)).map((s) => `s:${s.id}:${s.debrief?.at || ''}:${s.skills?.at || ''}:${s.after?.at || ''}`),
+    ...get('sessions').filter((s) => s.block === b || list(s.blocks).includes(b)).map((s) => `s:${s.id}`), // 只看有没有这节课：课后整理写的复盘、归类时间不算（卡就是那一次写的，算进去写完马上就过时）
   ].sort();
-  return hashOf(parts.join('|'));
 }
 
 /** 卡过时了没有：存着的指纹和现在算的不一样（跨块卡不按这个算，见 fill.js） */
