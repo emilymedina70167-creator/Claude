@@ -20,6 +20,7 @@ import { createSnapper } from './snap.js';
 import { applyLooks } from './look/apply.js';
 import { solveLayout } from './compose/solve.js';
 import { canvasOf, composeInput, posLine, SENTENCE_WIDTHS } from './compose/apply.js';
+import { CARD_WIDTHS } from './types/card.js';
 import { parseScript, parseRich, richLength, parseRef } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, tapAnswer, pickText, unplayedNotes, compareFact, compareNote, mergeFact, chipTextOf, tapValueOf } from './scene.js';
 import { goalMark, shapeText } from './goal.js';
@@ -75,6 +76,28 @@ function svgBox(n, depth = 0) {
 const transOf = (n) => { const m = String(n.style?.transform || '').match(/translate\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px\)/); return m ? { x: Number(m[1]), y: Number(m[2]) } : null; };
 const CAPTION_MAX = 3; // 话最多留几句在画面上（这一轮说过的，旧的淡一点）
 const DOCK_ROOM = 96; // 自由构图时底下那一条（输入框、按钮）一直留的高
+// 能折成几种宽的东西（求解器挑一种，见 altsOf）：句子、题卡
+const WIDTHS_OF = { sentence: SENTENCE_WIDTHS, card: CARD_WIDTHS };
+const DIRS = ['right-of', 'left-of', 'above', 'below'];
+// 排出来还有压着的、出了屏幕的（画布像素）
+function crowded(res, items, cv) {
+  const list = items.map((it) => res.boxes.get(it.id)).filter(Boolean);
+  for (let i = 0; i < list.length; i++) {
+    const A = list[i];
+    if (A.x < -2 || A.y < -2 || A.x + A.w > cv.w + 2 || A.y + A.h > cv.h + 2) return true;
+    for (let j = i + 1; j < list.length; j++) { const B = list[j]; if (A.x < B.x + B.w - 1 && B.x < A.x + A.w - 1 && A.y < B.y + B.h - 1 && B.y < A.y + A.h - 1) return true; }
+  }
+  return false;
+}
+// 挨着的方向是不是还没做到（框是画布像素）
+function dirOff(r, boxes, cell) {
+  const A = boxes.get(r.a), B = boxes.get(r.b), tol = cell * 0.3;
+  if (!A || !B) return false;
+  if (r.kind === 'right-of') return A.x < B.x + B.w - tol;
+  if (r.kind === 'left-of') return A.x + A.w > B.x + tol;
+  if (r.kind === 'below') return A.y < B.y + B.h - tol;
+  return A.y + A.h > B.y + tol;
+}
 export const DONE_BTN = '做好了'; // 没有挑战、学生手上有没做完的东西时，页面替老师挂的那个按钮（helpLine）
 export const HELP = '给个提示'; // 挑战还没做到时，页面替老师挂的那一问的按钮
 
@@ -760,6 +783,11 @@ export class Stage {
     const again = this.instant ? null : fx?.arrange || (fx?.place && by === 'teacher' ? fx.place.filter((n) => this.scene.objects.has(n)) : null);
     if (again) this.arrangeNext = again === 'all' || this.arrangeNext === 'all' ? 'all' : [...new Set([...(this.arrangeNext || []), ...again])];
     if (by && !this.instant) this.lastBy = by;
+    // 老师这一轮放大了哪几样（放不下时页面往回收一点，见 composeOnce 的 fitScaled）：换了一轮就重记
+    if (by === 'teacher' && !this.instant) {
+      if (this.scaleTurn !== turn) { this.scaleTurn = turn; this.scaledNow = new Map(); this.scaleNotes = []; }
+      if (fx?.scale) { const was = this.scaledNow.get(fx.scale)?.was ?? fx.was; this.scaledNow.set(fx.scale, { was, to: fx.k }); }
+    }
     // 一直用的样子（look … always）：交给课堂存进 meta/look（重放、回看不存：那是以前写过的）
     if (fx?.look?.always && by === 'teacher' && !this.instant) this.onLookAlways?.(fx.look);
     if (by === 'teacher' && !c.on && !['place', 'preview', 'pos', 'goal', 'watch', 'say', 'ask', 'scene', 'remove'].includes(c.cmd)) { const t = fx?.created ? fx.id : this.targetOf(c)?.id; if (t) this.lastTouched = t; }
@@ -2061,10 +2089,11 @@ export class Stage {
   /** 能折行的东西（句子）折成几种宽时的世界大小；不能折、折了一样大的给 null */
   altsOf(id) {
     const sc = this.scene, o = sc.objects.get(id);
-    if (o?.type !== 'sentence') return null;
+    const widths = WIDTHS_OF[o?.type];
+    if (!widths) return null;
     const t = sc.type(o), est = t.objectBox(o), u = this.unionBox(id);
     const out = [];
-    for (const width of SENTENCE_WIDTHS) {
+    for (const width of widths) {
       const b = t.objectBox({ ...o, width });
       const k = o.k || 1;
       const a = { w: (b.w + (u.w / k - est.w)) * k, h: (b.h + (u.h / k - est.h)) * k, width };
@@ -2144,23 +2173,63 @@ export class Stage {
     // 画在格子上的字、示意图：钉在那里的一块，别的东西绕开它
     for (const d of sc.drawings.values()) if (d.at) { const b = fromCells(d.at, grid); extras.push({ id: `draw:${d.name}`, w: b.w, h: b.h, fixed: b }); }
     const partBox = (ref) => { try { return bbox(sc.parts(ref).map((p) => sc.worldPartBox(p))); } catch { return null; } };
-    const { items, relations } = composeInput(sc, { ts, camS: baseS, grid, boxOf: (id) => this.unionBox(id), altsOf: (id) => this.altsOf(id), partBox, extras, lastTouched: this.lastTouched, tiedOf: (id) => { const o = sc.objects.get(id); return o ? sc.type(o).anchors?.(o) || [] : []; } });
-    if (!items.length) { this.layoutState = { boxes: new Map(), unmet: [], scale: 1, grid, canvas: cv }; sc.layoutInfo = null; return false; }
-    const arrange = this.arrangeNext === 'all' ? 'all' : this.arrangeNext ? new Set(this.arrangeNext) : null;
+    const arrangeBase = this.arrangeNext === 'all' ? 'all' : this.arrangeNext ? new Set(this.arrangeNext) : null;
     this.arrangeNext = null;
-    let res = solveLayout({ canvas: cv, grid, items, relations, arrange });
-    // 底线 1（第九轮）：学生要点的部件被钉住的东西盖着、或者出了屏幕：放开挡着的那一样（或者它自己）挪最少的距离，告诉老师
-    const nudged = this.floorNudge(res, items, cv, ts);
-    // 老师这一轮自己的改动（放大、画、换字号）让两样钉住的压在一起：这一轮里放开后摆的那一样挪最少（设计要求单 r23、r25、r08）；
-    // 学生动手时照旧不挪
-    if (this.lastBy === 'teacher') {
-      const pins = items.filter((it) => it.pinned && !it.rigid);
-      for (let i = 0; i < pins.length; i++) for (let j = i + 1; j < pins.length; j++) {
-        const A = res.boxes.get(pins[i].id), B = res.boxes.get(pins[j].id);
-        if (A && B && A.x < B.x + B.w - 1 && B.x < A.x + A.w - 1 && A.y < B.y + B.h - 1 && B.y < A.y + A.h - 1) nudged.add(pins[j].id);
+    const solveAll = () => {
+      const { items, relations } = composeInput(sc, { ts, camS: baseS, grid, boxOf: (id) => this.unionBox(id), altsOf: (id) => this.altsOf(id), partBox, extras, lastTouched: this.lastTouched, tiedOf: (id) => { const o = sc.objects.get(id); return o ? sc.type(o).anchors?.(o) || [] : []; } });
+      if (!items.length) return { items };
+      const arrange = arrangeBase instanceof Set ? new Set(arrangeBase) : arrangeBase;
+      let res = solveLayout({ canvas: cv, grid, items, relations, arrange });
+      // 老师这一轮要 q 挨着 s（right-of / left-of / above / below），s 钉着、挨着那一边放不下：s 也一起重排（老师要的是两样挨着，
+      // 不是 s 一动不动；设计要求单 r15、r16、r30）。只拉一层，不顺着关系一路拉下去
+      if (arrange && arrange !== 'all') {
+        const byId = new Map(items.map((it) => [it.id, it]));
+        const pull = res.unmet.map((u) => u.rel).filter((r) => r && !r.auto && typeof r.a === 'string' && typeof r.b === 'string' && arrange.has(r.a) && !arrange.has(r.b) && byId.get(r.b)?.pinned).map((r) => r.b);
+        if (pull.length) { for (const b of pull) arrange.add(b); res = solveLayout({ canvas: cv, grid, items, relations, arrange }); }
       }
+      // 底线 1（第九轮）：学生要点的部件被钉住的东西盖着、或者出了屏幕：放开挡着的那一样（或者它自己）挪最少的距离，告诉老师
+      const nudged = this.floorNudge(res, items, cv, ts);
+      // 老师这一轮自己的改动（放大、画、换字号）让两样钉住的压在一起：这一轮里放开后摆的那一样挪最少（设计要求单 r23、r25、r08）；
+      // 学生动手时照旧不挪
+      if (this.lastBy === 'teacher') {
+        const pins = items.filter((it) => it.pinned && !it.rigid);
+        for (let i = 0; i < pins.length; i++) for (let j = i + 1; j < pins.length; j++) {
+          const A = res.boxes.get(pins[i].id), B = res.boxes.get(pins[j].id);
+          if (A && B && A.x < B.x + B.w - 1 && B.x < A.x + A.w - 1 && A.y < B.y + B.h - 1 && B.y < A.y + A.h - 1) nudged.add(pins[j].id);
+        }
+      }
+      if (nudged.size) res = solveLayout({ canvas: cv, grid, items, relations, arrange, release: nudged });
+      return { items, relations, res, nudged };
+    };
+    let { items, relations, res, nudged } = solveAll();
+    if (!items.length) { this.layoutState = { boxes: new Map(), unmet: [], scale: 1, grid, canvas: cv }; sc.layoutInfo = null; return false; }
+    // 老师这一轮放大的东西放不下（压着、出了屏幕，台上有钉住的页面又不整台缩）：放大的那几样往回收一点，收到放得下为止，
+    // 照实告诉老师放到了多少（和「右边放不下，放在了下面」一样：页面尽量照办、说真话；设计要求单 r23）
+    const grown = this.lastBy === 'teacher' ? [...(this.scaledNow || [])].filter(([id, v]) => sc.objects.has(id) && v.to > v.was && (sc.objects.get(id).k || 1) === v.to) : [];
+    if (grown.length && crowded(res, items, cv)) {
+      let fit = null;
+      for (const f of [0.8, 0.6, 0.4, 0.2]) {
+        const ks = grown.map(([id, v]) => [id, Math.round((v.was + (v.to - v.was) * f) * 20) / 20]);
+        for (const [id, k] of ks) { const o = sc.objects.get(id); if (k === 1) delete o.k; else o.k = k; }
+        const tried = solveAll();
+        if (!crowded(tried.res, tried.items, cv)) { fit = ks; ({ items, relations, res, nudged } = tried); break; }
+      }
+      if (fit) {
+        for (const [id, k] of fit) {
+          const src = `scale ${id} ${k}`;
+          sc.objects.get(id).k = this.scaledNow.get(id).to; // 照写的那一行改，场景里的系数和 log 对得上
+          this.scene.apply({ ...parseScript(src)[0], lenient: true });
+          this.log.push({ src, by: 'page', turn: this.execTurn ?? this.turnNo });
+          this.scaledNow.set(id, { was: this.scaledNow.get(id).was, to: k });
+        }
+        const to = grown[0][1].to;
+        (this.scaleNotes ||= []).push(`${fit.map(([id]) => id).join('、')} 放大到 ${to} 放不下，放到了 ${[...new Set(fit.map(([, k]) => k))].join(' / ')}`);
+      } else {
+        for (const [id, v] of grown) sc.objects.get(id).k = v.to;
+        ({ items, relations, res, nudged } = solveAll());
+      }
+      this.applyScale();
     }
-    if (nudged.size) res = solveLayout({ canvas: cv, grid, items, relations, arrange, release: nudged });
     const s = ts * res.scale;
     // 东西挪到算出来的地方
     const moves = [];
@@ -2184,7 +2253,7 @@ export class Stage {
         const alts = this.altsOf(it.id) || [];
         const k = it.alts.reduce((bi, a, i) => (Math.abs(a.w * res.scale - B.w) < Math.abs(it.alts[bi].w * res.scale - B.w) ? i : bi), 0);
         width = alts[k]?.width || null;
-        if (width === (o.width || SENTENCE_WIDTHS[0])) width = null;
+        if (width === (o.width || WIDTHS_OF[o.type][0])) width = null;
       }
       const x = est.x + B.x / s - U.x, y = est.y + B.y / s - U.y;
       if (!o.placed || width || Math.abs(x - est.x) > 0.6 || Math.abs(y - est.y) > 0.6) moves.push({ id: it.id, x, y, width });
@@ -2210,7 +2279,18 @@ export class Stage {
     this.layoutState = { boxes: res.boxes, unmet: res.unmet, scale: res.scale, grid, canvas: cv };
     // 现状里的「版面」：每样占哪几格、没照办的
     // 页面自己加的默认关系（话贴着讲的那样）没照办不告诉老师：老师没写过
-    sc.layoutInfo = layoutLines({ boxes: res.boxes, grid, unmet: res.unmet.filter((u) => !u.rel?.auto), scale: res.scale });
+    // 没照办的方向（q 要在 s 右边，放在了下面）：下一次排的时候 q 已经钉住、这条关系不再算，求解器就不报了——
+    // 可它还是没照办，一直写着，直到老师换了写法或者真挨上了（设计要求单 r14～r16：老师看不到，以为做到了）
+    const dirKey = (r) => (r && !r.auto && DIRS.includes(r.kind) && typeof r.a === 'string' && typeof r.b === 'string' ? `${r.kind}|${r.a}|${r.b}` : null);
+    const kept = this.keptUnmet || (this.keptUnmet = new Map());
+    for (const u of res.unmet) { const k = dirKey(u.rel); if (k) kept.set(k, u); }
+    const live = new Set(relations.map(dirKey).filter(Boolean));
+    for (const [k, u] of kept) if (!live.has(k) || !dirOff(u.rel, res.boxes, grid.cell)) kept.delete(k);
+    const unmet = [...res.unmet.filter((u) => !u.rel?.auto && !dirKey(u.rel)), ...kept.values()];
+    this.layoutState.unmet = unmet;
+    sc.layoutInfo = layoutLines({ boxes: res.boxes, grid, unmet, scale: res.scale });
+    // 放大放不下收回去的（这一轮里一直写着，老师下一轮看得到）
+    for (const n of this.scaleNotes || []) sc.layoutInfo.push(n);
     if (nudged.size) sc.layoutInfo.push(`为了让学生点得到，挪了 ${[...nudged].join('、')}（它盖着、或者让学生要点的部件出了屏幕）`);
     if (!sc.focus) {
       const from = `translate(${this.cam.tx}px, ${this.cam.ty}px) scale(${this.cam.s})`;

@@ -1,6 +1,6 @@
 // 题卡的画法（types/card.js 的画面那一半）：一张白卡，一行一个部件；扣着的行是一条带「?」的横条，翻开时像翻牌
 import { EASE, stagger } from '../motion.js';
-import { CARD_W, lineH } from './card.js';
+import { cardW, lineH } from './card.js';
 
 const tr = (x, y) => `translate(${x}px, ${y}px)`;
 const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
@@ -12,11 +12,11 @@ export const cardView = {
     const box = sc.objectBox(o.id);
     const bg = stage.decor(o.id, 'card', () => {
       const n = el('div', 'st-card', stage.layer);
-      n.style.width = `${CARD_W}px`;
       n.style.transform = tr(box.x, box.y);
       if (ctx.entering === o.id) n.style.opacity = '0';
       return n;
     });
+    bg.style.width = `${box.w}px`; // 求解器给题卡挑了窄一点的宽（第九轮）：卡跟着变
     bg.style.height = `${box.h}px`;
     // 题卡整张挪了（下面的东西被推下去、上面的东西长高了）：底卡跟着走（以前只在造出来时摆一次，留在原地，压到别的东西上）
     if (!same(bg.__box, box)) {
@@ -37,10 +37,11 @@ export const cardView = {
         else if (!stage.instant) ctx.jobs.push(stage.tween(n, [{ opacity: 0, transform: tr(b.x, b.y + 8) }, { opacity: 1, transform: tr(b.x, b.y) }], { duration: 380, easing: EASE.out }));
         return n;
       });
+      if (n.__w !== b.w) { n.style.width = `${b.w}px`; n.__w = b.w; }
       if (n.__text !== l.text) { n.replaceChildren(); stage.richInto(n, l.text); n.__text = l.text; }
       // 量这一行画出来多高，写回场景（估的按字数，折行、公式、小块都会让它更高）：量的和用的差得多就再排一遍
       const real = n.offsetHeight;
-      if (real && Math.abs(real - lineH(l)) > 2) { l.mh = real; stage.relayout(); }
+      if (real && Math.abs(real - lineH(l, cardW(o))) > 2) { l.mh = real; l.mw = cardW(o); stage.relayout(); }
       stage.flagPart(n, l, ctx);
       if (!same(n.__box, b)) moves.push({ part: l, node: n, from: n.__box, to: b, order: l.key });
     }

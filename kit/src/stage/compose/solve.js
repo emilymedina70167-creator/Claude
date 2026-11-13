@@ -126,23 +126,29 @@ function attempt(work, rels, env) {
   // 方向上放不下的：换一边，写清楚为什么
   const swapped = [];
   const rels2 = rels.map(r => {
-    const s = swapFor(r, cur.boxes, env);
+    const s = swapFor(r, cur.boxes, env, work);
+    if (s?.boost) return s.rel;
     if (!s) return r;
     swapped.push({ rel: r, why: s.why });
     return s.rel;
   });
-  if (swapped.length) {
+  if (swapped.length || rels2.some((r, i) => r !== rels[i])) {
     const r = run(work, rels2, sizesOf(), env);
     cur = { ...r, unmet: [...swapped, ...r.unmet.filter(u => !swapped.some(s => s.rel === u.rel))] };
   }
   return cur;
 }
 
-function swapFor(r, boxes, { canvas, cell, gapF }) {
+function swapFor(r, boxes, { canvas, cell, gapF }, work = []) {
   if (!['right-of', 'left-of', 'above', 'below'].includes(r.kind)) return null;
   const A = boxes.get(r.a), B = boxes.get(r.b);
   if (!A || !B || !violated(r, boxes, cell, gapF)) return null;
   const g = GAPS[r.gap] * cell * gapF;
+  // 挨着的那一样挪得动（没钉住、没定在格子上），两样并排放得下：先不换边，把这条关系加重再解一次
+  // （它在正中间、右边不够时，往左让一让就行；设计要求单 r30：树在中间，数组要在右边）
+  const wb = work.find((w) => w.id === r.b);
+  const side = r.kind === 'right-of' || r.kind === 'left-of';
+  if (wb && !wb.pin && !wb.fixed && r.weight === 'medium' && (side ? A.w + B.w + g <= canvas.w : A.h + B.h + g <= canvas.h)) return { rel: { ...r, weight: 'strong' }, boost: true };
   const cols = px => Math.max(0, Math.floor(px / cell));
   if (r.kind === 'right-of' && canvas.w - (B.x + B.w) - g < A.w)
     return { rel: { ...r, kind: 'below', align: 'left' }, why: `${r.a} 要在 ${r.b} 右边，右边只剩 ${cols(canvas.w - B.x - B.w)} 列，放在了 ${r.b} 下面` };

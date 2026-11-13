@@ -4,27 +4,34 @@
 import { parseRich } from '../script.js';
 
 export const CARD_W = 560;
+// 能折成的几种宽（第九轮：老师要题卡挨着别的东西放、旁边的空不够 560 时，求解器挑窄一点的，字多折几行；compose 的 altsOf）
+export const CARD_WIDTHS = [560, 440, 360];
 const PER_ROW = 30; // 一行大约几个字（18px 的字，560 宽减去两边的留白）
 const ROW_H = 30, PAD = 14, GAP = 6;
+export const cardW = (o) => o.width || CARD_W;
 const COLOR_NAMES = { g1: '蓝', g2: '粉', g3: '绿', g4: '金', g5: '紫', g6: '橙' };
 
 /** 一行字大约占几行（中文一个字一份，英文、数字半份）；页面上量出来的会略有出入，镜头和贴字够用 */
-export function rowsOf(text) {
+export function rowsOf(text, w = CARD_W) {
+  const per = Math.max(8, Math.floor(PER_ROW * (w - 2 * PAD) / (CARD_W - 2 * PAD)));
   let n = 0;
   for (const p of parseRich(text)) n += p.k === 'ref' || p.k === 'measure' ? 2 : [...String(p.v)].reduce((k, ch) => k + (/[\u0000-\u00ff]/.test(ch) ? 0.5 : 1), 0);
-  return Math.max(1, Math.ceil(n / PER_ROW));
+  return Math.max(1, Math.ceil(n / per));
 }
-// 一行多高：画面量过的（l.mh，card.view.js 写回：字折了几行只有画出来才知道）就用量的，没量过按字数估
-export const lineH = (l) => l.mh ?? rowsOf(l.text) * ROW_H + 2 * 6;
+// 一行多高：画面量过的（l.mh，card.view.js 写回：字折了几行只有画出来才知道；l.mw 是量的时候卡多宽）就用量的，
+// 没量过、或者换了宽（求解器在比几种宽）按字数估
+export const lineH = (l, w = CARD_W) => (l.mh != null && (l.mw ?? CARD_W) === w ? l.mh : rowsOf(l.text, w) * ROW_H + 2 * 6);
 
 function lineBox(o, l) {
   let y = o.origin.y + PAD;
-  for (const x of o.lines) { if (x === l) break; y += lineH(x) + GAP; }
-  return { x: o.origin.x + PAD, y, w: CARD_W - 2 * PAD, h: lineH(l) };
+  const w = cardW(o);
+  for (const x of o.lines) { if (x === l) break; y += lineH(x, w) + GAP; }
+  return { x: o.origin.x + PAD, y, w: w - 2 * PAD, h: lineH(l, w) };
 }
 function objectBox(o) {
-  const h = o.lines.reduce((n, l) => n + lineH(l) + GAP, 0) - GAP + 2 * PAD;
-  return { x: o.origin.x, y: o.origin.y, w: CARD_W, h: Math.max(h, 2 * PAD + ROW_H) };
+  const w = cardW(o);
+  const h = o.lines.reduce((n, l) => n + lineH(l, w) + GAP, 0) - GAP + 2 * PAD;
+  return { x: o.origin.x, y: o.origin.y, w, h: Math.max(h, 2 * PAD + ROW_H) };
 }
 const LABEL_MAX = 20;
 /**

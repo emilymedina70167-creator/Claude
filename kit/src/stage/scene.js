@@ -1278,7 +1278,8 @@ export class Scene {
         this.checkRich(text, c); // 话里指着的东西要真有
         // 话贴着一处（near=s.had）或放在格子上（at=）；不写就照默认贴在这一轮讲的那样东西旁边
         if (opts.near != null || opts.at != null) this.layout.set('say', [this.placeRel('say', opts.at != null ? null : 'near', opts.near, { at: opts.at })]);
-        else this.layout.delete('say');
+        // place say … 摆过的话（第九轮，老师定的地方）：后面的话照样放那里，不回到默认的贴着讲的东西（设计要求单 r14）
+        else if (!this.layout.get('say')?.some((r) => r.keep)) this.layout.delete('say');
         this.say = text;
         this.words = parseRich(text).filter((p) => p.k === 'word').map((p) => p.v);
         return {};
@@ -1893,7 +1894,7 @@ export class Scene {
         const target = kind && kind !== 'main' && kind !== 'row' && kind !== 'col' ? ws[k + 1] : null;
         if (kind && kind !== 'main' && kind !== 'row' && kind !== 'col' && !target) throw new Error(`${kind} 后面写挨着哪一样（place ${names[0]} ${kind} s）`);
         const rel = this.placeRel(kind === 'row' || kind === 'col' ? names : names[0], opts.at != null ? null : kind, target, opts);
-        this.layout.set(names[0], [rel]);
+        this.layout.set(names[0], [names[0] === 'say' ? { ...rel, keep: true } : rel]);
         // 老师摆过的归老师（第九轮）：钉住，页面以后不挪它（arrange 才重排）
         for (const n of names) { const o = this.objects.get(n); if (o) o.pinned = true; }
         return { place: names };
@@ -1936,8 +1937,9 @@ export class Scene {
             if (side * k < floor) throw new Error(`scale ${id} ${k} 不照办：学生要点 ${id} 的部件，缩到这么小手指点不中（最多缩到 ${Math.ceil((floor / side) * 100) / 100}）`);
           }
         }
+        const was = o.k || 1;
         if (k === 1) delete o.k; else o.k = k;
-        return { scale: id, k };
+        return { scale: id, k, was };
       }
       case 'arrange': {
         // arrange / arrange s q：帮我重排——照所有关系把这几样（不写是全部）整个重排一遍，排完照样钉住（第九轮）
@@ -2132,7 +2134,7 @@ export class Scene {
   moveObject(id, x, y, width = null) {
     const o = this.objects.get(id);
     if (!o) return;
-    if (width && o.type === 'sentence') o.width = width;
+    if (width && (o.type === 'sentence' || o.type === 'card')) o.width = width; // 求解器挑的折行宽
     const b = this.type(o).objectBox(o);
     shiftObject(o, x - b.x, y - b.y);
     o.placed = true;
