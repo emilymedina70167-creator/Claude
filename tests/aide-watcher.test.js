@@ -11,7 +11,7 @@ test('能开时发一次；在跑时不发第二个；同一个样子不重发',
   let n = 0;
   let release;
   const call = () => { n++; return new Promise((r) => { release = () => r({ text: '以前｜x', modelApplied: 'claude-opus-5-5' }); }); };
-  const w = createWatcher({ call, material: () => 'p', check: (t) => ({ lines: [{ kind: '以前', text: t.slice(3) }], dropped: [] }), record: () => {} });
+  const w = createWatcher({ call, material: () => 'p', check: (t) => ({ lines: [{ kind: '以前', text: t.slice(3) }], dropped: [] }), record: () => {}, gapMs: 0 });
   w.kick(ok); w.kick(ok);
   assert.equal(n, 1);
   release(); await tick(); await tick();
@@ -34,7 +34,7 @@ test('回的不是 Opus、出错：note 还是旧的，记一条', async () => {
   const rows = [];
   let mode = 'sonnet';
   const call = () => (mode === 'throw' ? Promise.reject(new Error('断了')) : Promise.resolve({ text: '以前｜y', modelApplied: 'claude-sonnet-5-5' }));
-  const w = createWatcher({ call, material: () => 'p', check: () => ({ lines: [{ kind: '以前', text: 'y' }], dropped: [] }), record: (r) => rows.push(r) });
+  const w = createWatcher({ call, material: () => 'p', check: () => ({ lines: [{ kind: '以前', text: 'y' }], dropped: [] }), record: (r) => rows.push(r), gapMs: 0 });
   w.set({ upTo: 1, lines: [{ kind: '以前', text: '旧的' }] });
   w.kick(ok); await tick(); await tick();
   assert.equal(w.note().lines[0].text, '旧的');

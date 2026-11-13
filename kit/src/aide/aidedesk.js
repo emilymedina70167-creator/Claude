@@ -46,7 +46,7 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     if (!c) return null;
     // 挂住不回：过了 AIDE_TIMEOUT 算失败（不然这次打开首页再也不做、后台那一条道也一直堵着）
     let timer = null;
-    const late = new Promise((r) => { timer = setTimeout(() => r(null), AIDE_TIMEOUT); });
+    const late = new Promise((r) => { timer = setTimeout(() => r(null), AIDE_TIMEOUT); timer?.unref?.(); });
     const res = await Promise.race([c.call(prompt, opts(extra)), late]).finally(() => clearTimeout(timer));
     // 没写是哪个模型（旧接口）也当不是 Opus：只认平台核验过的
     return !res || res.modelApplied !== AIDE_MODEL ? null : res;

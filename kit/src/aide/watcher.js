@@ -33,7 +33,7 @@ export function createWatcher({ call, material, check, record = () => {}, effort
     let input;
     try { input = material(state); } catch (err) { inFlight = false; record({ error: `拼旁听的材料出错：${err?.message || err}`, upTo }); return; }
     let timer = null;
-    const late = new Promise((_, rej) => { timer = setTimeout(() => rej(new Error(`${Math.round(timeoutMs / 1000)} 秒没回`)), timeoutMs); });
+    const late = new Promise((_, rej) => { timer = setTimeout(() => rej(new Error(`${Math.round(timeoutMs / 1000)} 秒没回`)), timeoutMs); timer?.unref?.(); });
     Promise.race([Promise.resolve(call(input, { model: WATCH_MODEL, effort, modelTier: 'complex', cache: false, lane: 'bg' })), late])
       .then((res) => {
         if (res?.modelApplied !== WATCH_MODEL) { record({ error: `回的不是 Opus 5.5（${res?.modelApplied || '没写'}），不用`, upTo, ms: now() - t0 }); return; }
