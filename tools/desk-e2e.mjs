@@ -617,6 +617,12 @@ const SUITES = {
     await t.waitFor(async () => (await turns()).filter((x) => x.role === 'student').at(-1)?.events?.some((e) => e.kind === 'look'), { what: '回看攒进还没发出去的那一段' });
     await t.page.reload(); await t.page.waitForLoadState('load');
     await t.waitFor(() => t.page.evaluate(() => document.querySelectorAll('.sc-scenes-slot .st-scene').length === 2 && !window.LAStage.looking), { timeout: 20000, what: '刷新以后幕条还是两幕、回看关着' });
+    // 自由构图（第八轮）：老师写 preview，页面排好把字画的版面交回、马上再叫老师；舞台现状里有「版面」
+    await said('测试:预览');
+    await t.waitFor(async () => (await turns()).some((x) => x.role === 'claude' && x.cost?.why === 'preview'), { timeout: 40000, what: '写了 preview 以后页面马上再叫老师（花费记 why: preview）' });
+    check((await turns()).some((x) => x.role === 'student' && /\[预览\][\s\S]*版面（48 列/.test(x.msg || '')), '预览交回老师的那一条里没有版面');
+    check(await t.page.evaluate(() => /版面（48 列/.test(window.LAStage.scene.stateText())), '舞台现状里没有「版面」');
+    await t.waitFor(() => t.page.evaluate(() => window.LAStage?.scene.waiting?.button === '看好了'), { timeout: 30000, what: '预览以后的那一轮演完、等学生点「看好了」' });
     await said('测试:下课');
     await t.waitFor(() => t.page.evaluate(() => /下课吗/.test(document.body.innerText)), { timeout: 20000, what: '老师又递了「下课吗？」' });
     await t.answer('下课');

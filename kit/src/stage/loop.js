@@ -29,6 +29,9 @@ const derivedOf = (events) => events.flatMap((e) => (e.undone ? [] : e.act?.deri
 const bytes = (s) => (enc ? enc.encode(String(s)).length : String(s).length);
 export const RETRY = new Set(['再试一次', '再要一次']);
 
+// 一节课最多预览几次（老师写 preview：页面排好交回一张字画的版面，多等一轮）
+export const PREVIEW_MAX = 6;
+
 export function createLoop(host) {
   const { stage } = host;
   const quietMs = host.quietMs || QUIET_MS;
@@ -163,6 +166,12 @@ export function createLoop(host) {
       const missed = stage.askMissed ? 'askfail' : stage.handMissed ? 'handfail' : null;
       if (missed && !S.askRetried && !S.ended && !host.readOnly) { S.askRetried = true; addEvent({ kind: missed, at: Date.now() }); }
       else if (!missed) S.askRetried = false;
+      // 老师写了 preview（第八轮）：带着排好的版面马上再叫一次。一节课最多 PREVIEW_MAX 次，超了照常等学生（现状里说一句）
+      if (!missed && !S.ended && !host.readOnly && claude.log.some((r) => r.by === 'teacher' && /^preview\b/.test(r.src))) {
+        S.previews = (S.previews || 0) + 1;
+        if (S.previews <= PREVIEW_MAX && stage.previewText) addEvent({ kind: 'preview', text: stage.previewText(), at: Date.now() });
+        else stage.errors.push({ line: 0, src: 'preview', kept: true, error: `这节课的预览用完了（最多 ${PREVIEW_MAX} 次）：看现状里的「版面」` });
+      }
       if (S.pending?.events.some(triggers)) { flush(); return claude; }
       armIdle();
       maybeSpec();
@@ -256,11 +265,12 @@ export function createLoop(host) {
       if (S.ended || !S.pending || S.flight || S.busy || !S.pending.events.some(triggers)) return;
       const row = finalize();
       S.nextWhy = whyOf(row.events);
+      S.callWhy = row.events.some((e) => e.kind === 'preview') ? 'preview' : 'turn'; // 花费里记这一次为什么叫
       // 提前想好的那一轮：学生真的只点了「接着」、发出去的一字不差，接上
       if (S.spec && !S.spec.dead && S.spec.msg === row.msg) pre = adopt(S.spec);
       dropSpec();
     } finally { S.flushing = false; }
-    if (!S.ended && !S.flight && !S.busy) teach('turn', pre);
+    if (!S.ended && !S.flight && !S.busy) teach(S.callWhy || 'turn', pre);
   }
   /**
    * 做到挑战、做完、答对一问以后，学生手上还有事就攒着，没事了才叫老师（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.2）。

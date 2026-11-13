@@ -14,6 +14,7 @@ import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHo
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM, tooSmall, pickSide } from './layout.js';
 import { gridOf, typeScaleOf } from './compose/grid.js';
 import { layoutLines } from './compose/report.js';
+import { sketchText } from './compose/sketch.js';
 import { solveLayout } from './compose/solve.js';
 import { canvasOf, composeInput, posLine, SENTENCE_WIDTHS } from './compose/apply.js';
 import { parseScript, parseRich, richLength } from './script.js';
@@ -2085,6 +2086,12 @@ export class Stage {
       try { await this.sync({}); } finally { this.composeQuiet = false; }
     }
     return moves.length > 0;
+  }
+  /** 预览交回老师的：版面那几行 + 字画的图（compose/sketch.js） */
+  previewText() {
+    const st = this.layoutState;
+    if (!st?.boxes?.size) return '舞台上还是空的。';
+    return [...layoutLines({ boxes: st.boxes, grid: st.grid, unmet: st.unmet.filter((u) => !u.rel?.auto), scale: st.scale }), sketchText({ boxes: st.boxes, grid: st.grid })].join('\n');
   }
   /** 「说过的」：这一幕说过的话（前几轮的）列在一张浮层里 */
   toggleTalk(on = this.talkPop?.hidden) {

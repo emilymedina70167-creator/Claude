@@ -311,6 +311,17 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 
 收尾量出来的：单元测试 1758 条全过；六张验收表（fix1 new2 new3 new4 new5 first）都过；真手指首课走查都对（多两段 `stream`、`late`）；示例页 0 处错；学习台整条流程 24 段全过；282 个旧试演放回去和改之前比不同 0 处。审查查出的 5 条改了，留下 6 条小毛病写在 rulings。学习台、舞台试课按版本 2026-11-12i 重新发布。
 
+## 第八轮（2026-11-13 做完）：自由构图（老师定构图，页面用求解器排）
+
+设计 `docs/superpowers/specs/2026-11-13-stage-mainline-8-design.md`，计划 `docs/superpowers/plans/2026-11-13-stage-mainline-8.md`，自己定的事在同目录的 `…-8-rulings.md`。
+
+- 第六轮的横屏收放栏、左边中间的把手、整台每轮缩放不要了（课堂、试演、回看都走自由构图；嵌在练一练里的一小块舞台照旧）。
+- 老师写构图意图：`place s main`、`place g right-of s align=top gap=s weight=strong`、`place A B row`、`place k near s.had`、`place q at=6,4-30,12`、`say "…" near=s.2 / at=…`、`preview`（`script.js`、`scene.js` 的 `case 'place'`、`placeRel`，存在 `scene.layout`）。
+- 页面：`kit/src/stage/compose/`——`grid.js`（48 列细网格、字号档 `typeScaleOf`）、`solve.js`（kiwi.js 的 Cassowary：关系按轻重、不重叠照 WebCoLa 选分开方向、和上一次一样、新东西挨着前一样、句子挑折行宽、放不下先压间距再整台缩一档）、`apply.js`（拼输入、`pos` 那一行）、`report.js`（现状的「版面」：每样占哪几格、空着的几块、没照办的）、`sketch.js`（预览交回的字画版面）。`stage.js` 的 `compose()`：量 → 解 → 东西挪到算出来的地方（一行 `pos` 记进 log，刷新、回看、作废照它放回）→ 话、挑战两块照框摆 → 镜头固定一档。
+- 话是画布上的一块卡（默认贴着这一轮讲的那样东西），前几轮的话收进顶上「说过的」。
+- 预览：老师写 `preview`，演完页面把版面（几行 + 一格一个字的图）当一条交回、马上再叫老师（`why: preview`，一节课最多 6 次）。
+- 验收：`tests/stage-compose-*.test.js`；四个时刻的试演 `evals/stage-gaps/new8/m1–m4.txt`；e2e 的 stage 段多「测试:预览」。
+
 ## ③ ④ 建议的顺序
 
 量出来的两件事改了原来的想法：搭的字只占 6%，等的时间九成在出第一个字之前。所以接下来不按「哪种搭的字多」排，按「老师想教却教不成的」和「页面还在说不准的」排。

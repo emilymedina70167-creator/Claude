@@ -20,3 +20,13 @@ test('示意图有每样东西的名字、列号 0 和 47', () => {
 test('空的也画得出', () => {
   assert.match(sketchSvg({ boxes: new Map(), grid }), /<\/svg>$/);
 });
+
+import { sketchText } from '../kit/src/stage/compose/sketch.js';
+test('字画的预览：每样一个字母填满它的格子，话是 #', () => {
+  const g = gridOf({ w: 960, h: 400 });
+  const boxes = new Map([['s', fromCells({ c0: 2, r0: 1, c1: 10, r1: 3 }, g)], ['say', fromCells({ c0: 12, r0: 4, c1: 20, r1: 6 }, g)], ['tl', fromCells({ c0: 2, r0: 5, c1: 6, r1: 6 }, g)]]);
+  const t = sketchText({ boxes, grid: g }).split('\n');
+  assert.equal(t[2].slice(4, 4 + 12), '··ssssssss··');
+  assert.equal(t[5].slice(4 + 12, 4 + 20), '########');
+  assert.match(t.at(-1), /s s，# 话，A tl/);
+});

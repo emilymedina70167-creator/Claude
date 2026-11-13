@@ -47,3 +47,28 @@ export function sketchPng(svg) {
     img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   });
 }
+
+/**
+ * 预览交回老师的那张「图」（字画的）：一格一个字，每样东西用一个字母填满它占的格子，话是 #、挑战是 *，空着是 ·；
+ * 上面一行标列号（每 4 列），下面一行写哪个字母是哪样东西。课堂发给老师的都是文字，这样不多带图、也一定画得出
+ */
+export function sketchText({ boxes, grid }) {
+  const { cols, rows } = grid;
+  const map = Array.from({ length: rows }, () => new Array(cols).fill('·'));
+  const used = new Set();
+  const legend = [];
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  for (const [id, b] of boxes) {
+    let ch = id === 'say' ? '#' : id === 'goals' ? '*' : /^[A-Za-z]$/.test(id) && !used.has(id) ? id : [...letters].find((x) => !used.has(x)) || '?';
+    used.add(ch);
+    legend.push(`${ch} ${NAME[id] || id}`);
+    const c0 = Math.max(0, Math.floor(b.x / grid.cell + 1e-6)), c1 = Math.min(cols, Math.ceil((b.x + b.w) / grid.cell - 1e-6));
+    const r0 = Math.max(0, Math.floor(b.y / grid.cell + 1e-6)), r1 = Math.min(rows, Math.ceil((b.y + b.h) / grid.cell - 1e-6));
+    for (let r = r0; r < r1; r++) for (let c = c0; c < c1; c++) map[r][c] = ch;
+  }
+  const head = Array.from({ length: cols }, (_, c) => (c % 4 === 0 ? String(c % 10) : ' ')).join('');
+  const out = [`    ${head}`];
+  map.forEach((row, r) => out.push(`${String(r).padStart(3)} ${row.join('')}`));
+  out.push(`（${legend.join('，')}）`);
+  return out.join('\n');
+}

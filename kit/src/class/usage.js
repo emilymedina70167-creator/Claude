@@ -4,15 +4,16 @@
 // 每一次调用记在那一轮的 class_turns 上：cost = { bytes, why, tools }。
 // - why：turn（学生说话 / 作答引起的一轮，必须的）、closing（下课小结）、lint（组件写错了要它重写）、images（它要看原图，补发一轮）、
 //   stuck（停久了提醒老师）、compact（对话太长写摘要）、failed（出错或者平台换了模型，这一轮白花了）、
-//   spec（抢跑没用上：学生做了别的，那次调用白花了；spec.js）。抢跑接上了的那一轮照常是 turn，cost.spec = 'hit'
+//   spec（抢跑没用上：学生做了别的，那次调用白花了；spec.js）。抢跑接上了的那一轮照常是 turn，cost.spec = 'hit'；
+//   preview（舞台老师写了 preview，页面带着排好的版面马上再叫一次，第八轮）
 // - tools：这一次调用里它调了几次工具。每调一次工具，平台要再跑一整轮（整份说明再读一遍），按每次一轮估。
 
 // 中文为主的说明：实测大约每 2.8 个字节一个 token（60～160 KB ≈ 2～6 万 token）
 export const BYTES_PER_TOKEN = 2.8;
 export const approxTokens = (bytes) => Math.round((Number(bytes) || 0) / BYTES_PER_TOKEN);
 
-export const WHY = ['turn', 'closing', 'lint', 'images', 'stuck', 'compact', 'failed', 'spec'];
-export const WHY_TEXT = { lint: '重写', images: '看原图', tools: '工具', stuck: '停久提醒', compact: '摘要', failed: '出错作废', spec: '抢跑没用上' };
+export const WHY = ['turn', 'closing', 'lint', 'images', 'stuck', 'compact', 'failed', 'spec', 'preview'];
+export const WHY_TEXT = { lint: '重写', images: '看原图', tools: '工具', stuck: '停久提醒', compact: '摘要', failed: '出错作废', spec: '抢跑没用上', preview: '老师要看版面' };
 
 /** 一次调用的花费，记在 class_turns 那一轮上 */
 // ms：从发出到写完一共多久（学生等了多久）；first：从发出到黑板上出现第一个字（边写边显示时学生先看到东西的时候）

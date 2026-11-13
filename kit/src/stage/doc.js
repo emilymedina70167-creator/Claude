@@ -46,7 +46,7 @@ cover a / uncover a.6             扣过去看不见值 / 翻开一个（查找�
 link a.1 a.6 g1 / unlink a        连一道弧（写好几个就依次连；写整样东西就连到它身上）/ 收掉连着 a 和它部件的线
 compare a.3 a.8                   两个比大小（中间冒出「65 > 49」）；两张矩阵整张逐格比
 remove a                          把一样东西拿下舞台
-scene "过去完成时" keep=a         讲完一段、要换一批东西时写：上一幕整块收起（不用一样一样 remove；学生能翻回去看）；keep= 写带过来的，不写全收
+scene "过去完成时" keep=a         换一批东西：上一幕整块收起（学生能翻回去看）；keep= 带过来的
 hide a / show a                   藏起来（照样算、现状照写，学生看不见）/ 摆出来；造的时候写 hide=on 就先藏着（同名重造不写 hide= 照旧）
 
 贴在图上的字（舞台上的东西，能改、能拿掉）：
@@ -62,7 +62,9 @@ label n dial:d "{d} 组" side=right   字可以贴在拨数旁边
 set d 5                            你来拨
 unlabel dial:d                     收起拨数
 
-镜头：camera a.1-7（凑近这几个）/ camera all（看全部）；wait 600（停一下，毫秒）
+摆哪（不写页面挨着讲的那样摆）：place s main / place g right-of s align=top gap=s / place A B row；页面排、不重叠，现状「版面」写每样占哪几格（48 列）；精确 at=6,4-30,12；say "…" near=s.2
+preview                           先看一眼排成什么样（多等一轮）
+镜头：camera a.1-7（凑近）/ camera all；wait 600（毫秒）
 
 让学生自己动、给挑战（每动一下页面当场算、当场判，学生做的每一下下一次都告诉你）：
 open a                              交给学生直接动（这里是拖着两格换位置；每种东西能 open 的动作、学生怎么动、翻成哪一行，见各自一节）
