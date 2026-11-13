@@ -1345,7 +1345,10 @@ export class Scene {
             if (c.lenient) continue;
             throw new Error(`link 的两头是同一样东西 ${a.obj}（连 ${a.obj} 里面的两个部件写 ${a.obj}.…）`);
           }
-          made.push(this.addLink(a, b, color));
+          const k = this.addLink(a, b, color);
+          // 老师用 link 连两样东西（句子的词连到时间轴上）：画面从两样之间的空当连（stage.js 的 linkGeo）；页面比较时连的线照旧拱一道弧
+          if (a.obj !== b.obj) { const l = this.links.get(k || this.linkKey(a, b)); if (l) l.cross = true; }
+          made.push(k);
         }
         return { links: made.filter(Boolean) };
       }

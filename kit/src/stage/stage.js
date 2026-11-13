@@ -1449,6 +1449,15 @@ export class Stage {
       n.classList.add('is-out');
       this.tween(n, [{ opacity: 1 }, { opacity: 0 }], { duration: 260 }).then(() => n.remove());
     }
+    // 自由构图：挑战那一块长高、变矮了（做到一条、预写的下一条冒出来）而这一次排版已经排完：再排一遍，不压着东西（fix1 D1-10）
+    if (this.free && this.layoutState && !this.instant) {
+      const was = this.layoutState.boxes.get('goals');
+      const now = [...host.children].filter((n) => !n.classList.contains('is-out')).reduce((h, n) => h + n.offsetHeight, 0);
+      if (was && Math.abs(now - was.h) > 8 && !this.goalsRelayout) {
+        this.goalsRelayout = true;
+        requestAnimationFrame(() => { this.goalsRelayout = false; if (!this.composing) this.compose(); else this.composeAgain = true; });
+      }
+    }
   }
   // 这一行的专门动作：刚造出来的东西出场；那种东西自己的（swap、insert……）；共用的（说话、比较、飞字……）
   choreoOf(c, fx) {
@@ -1649,10 +1658,10 @@ export class Stage {
     const spanBox = (e, p) => (e.span ? bbox(e.span.map((k) => sc.partOf(e.obj, k)).filter(Boolean).map((q) => sc.worldPartBox(q))) : sc.worldPartBox(p));
     if (l.a.span || l.b.span) {
       const A = spanBox(l.a, a), B = spanBox(l.b, b);
-      return a.obj !== b.obj ? wholeLinkGeom(A, B, { tier: l.tier || 0 }) : linkGeom(A, B, { tier: l.tier || 0 });
+      return a.obj !== b.obj && l.cross ? wholeLinkGeom(A, B, { tier: l.tier || 0 }) : linkGeom(A, B, { tier: l.tier || 0 });
     }
     // 两样东西之间连（句子的词连到时间轴上的点）：上下摆着的从中间的空当连过去，不在上面拱一道横跨的大弧（第九轮：老师自己设计的连色）
-    if (a.obj !== b.obj) return wholeLinkGeom(sc.worldPartBox(a), sc.worldPartBox(b), { tier: l.tier || 0 });
+    if (a.obj !== b.obj && l.cross) return wholeLinkGeom(sc.worldPartBox(a), sc.worldPartBox(b), { tier: l.tier || 0 });
     const rail = !!(VIEWS[sc.objects.get(a.obj).type]?.rail?.(sc.objects.get(a.obj), a) || VIEWS[sc.objects.get(b.obj).type]?.rail?.(sc.objects.get(b.obj), b));
     return linkGeom(sc.worldPartBox(a), sc.worldPartBox(b), { tier: l.tier || 0, rail });
   }
@@ -1761,7 +1770,7 @@ export class Stage {
     const redo = new Set();
     // 自由构图时每张字、每个拨盘想贴的地方（和排版留的一样）
     const ideal = new Map();
-    if (this.free) for (const id of sc.shownIds()) for (const x of this.idealLabels(id)) ideal.set(x.id, x.box);
+    if (this.free) for (const id of sc.shownIds()) for (const x of this.idealLabels(id)) if (x.ideal) ideal.set(x.id, x.box);
     for (const l of order) {
       let cur = this.labelNodes.get(l.id);
       // 贴在藏着的东西上的字不画（下面照「没了的」淡掉，show 以后再贴上来）
@@ -1864,11 +1873,22 @@ export class Stage {
         if (glyphs) {
           // 一个字一个字出来；连着的英文字母、数字（will、1830）包在一个不折行的壳里——不然一个字一个 inline-block，
           // 行尾会把 1830 折成「1」和「830」（主线第五轮首课走查）
-          let box = null;
+          let box = null, prev = null;
           for (const ch of p.v) {
             const wordy = /[A-Za-z0-9'’]/.test(ch);
+            // 句读（，。？）跟前一个字包在一起：一个字一块时浏览器的「标点不落行首」管不到，「，猜一猜」会折到行首（自由排版试验）
+            if (/[，。、；：？！）」』”…,.;:?!)]/.test(ch) && prev) {
+              if (box) { const s = el('span', 'st-ch', box); s.textContent = ch; glyphs.push(s); prev = s; box = null; continue; } // make，：并进那个词的壳
+              const nb = el('span', 'st-nb', node);
+              node.insertBefore(nb, prev.parentNode === node ? prev : prev.parentNode);
+              nb.appendChild(prev.parentNode === node ? prev : prev.parentNode);
+              const s = el('span', 'st-ch', nb); s.textContent = ch; glyphs.push(s);
+              prev = s;
+              continue;
+            }
             if (wordy && !box) box = el('span', 'st-nb', node); else if (!wordy) box = null;
             const s = el('span', 'st-ch', box || node); s.textContent = ch; glyphs.push(s);
+            prev = s;
           }
         }
         else node.appendChild(document.createTextNode(p.v));
@@ -2056,12 +2076,32 @@ export class Stage {
   /** 贴在这样东西上的字、拨盘想摆的地方（世界坐标）：只躲它们彼此和这样东西自己的墙，不躲别的东西（别的东西由排版让开） */
   idealLabels(id) {
     const sc = this.scene;
-    const mine = [...this.labelNodes].filter(([lid, n]) => n.box && (n.owner || null) === id && sc.labels.has(lid) && this.labelShown(sc.labels.get(lid)))
+    const objsOf = (l) => new Set((l.refs || []).filter((r) => !sc.labels.has(r)).map((r) => String(r).match(/^[A-Za-z_]\w*/)?.[0]).filter(Boolean));
+    const mine = [...this.labelNodes].filter(([lid, n]) => n.box && sc.labels.has(lid) && this.labelShown(sc.labels.get(lid)) && ((n.owner || null) === id || objsOf(sc.labels.get(lid)).has(id)))
       .map(([lid, n]) => ({ l: sc.labels.get(lid), n }))
       .sort((a, b) => (b.l.dial ? 1 : 0) - (a.l.dial ? 1 : 0));
     const out = [];
     for (const { l, n } of mine) {
-      const anchor = this.anchorOf(l) || grow(sc.worldObjectBox(id), 4);
+      const objs = new Set((l.refs || []).filter((r) => !sc.labels.has(r)).map((r) => String(r).match(/^[A-Za-z_]\w*/)?.[0]).filter(Boolean));
+      // 跨的几样捆在一块里（乘积 C、D 和因子 A、B 一起摆）：整块一起挪，照常留；跨的是各自摆的几样：不归哪一样留、贴的时候照常找
+      if ((l.refs || []).some((r) => sc.labels.has(r))) continue;
+      let loose = false, edgeBox = null;
+      if (objs.size > 1) {
+        const g = this.tiedGroup(id);
+        if ([...objs].some((x) => !g.has(x))) {
+          // 跨的几样各自摆：在它要贴的那一边最靠外的那一样旁边留地方（写了 below 就在最低的那一样下面），贴的时候照常找、不硬贴
+          const side = l.side || 'above';
+          const bx = [...objs].filter((x) => sc.objects.has(x) && this.isShown(x)).map((x) => [x, sc.worldObjectBox(x)]);
+          const edge = bx.reduce((best, cur) => {
+            const v = (b) => (side === 'below' ? b.y + b.h : side === 'above' ? -b.y : side === 'right' ? b.x + b.w : -b.x);
+            return !best || v(cur[1]) > v(best[1]) ? cur : best;
+          }, null);
+          if (!edge || edge[0] !== id) continue;
+          loose = true;
+          edgeBox = grow(edge[1], 4);
+        }
+      } else if ((n.owner || null) !== id) continue;
+      const anchor = edgeBox || this.anchorOf(l) || grow(sc.worldObjectBox(id), 4);
       const size = { w: n.box.w, h: n.box.h };
       const prefer = l.side ? [l.side, 'above', 'below', 'right', 'left'] : ['above', 'below', 'right', 'left'];
       // 它贴的那样东西自己报的「字要躲」的地方（格子下面的序号、时间轴的刻度），锚着的那几个部件不算（自由排版试验：字压在序号上）
@@ -2075,11 +2115,25 @@ export class Stage {
         if (b.y + b.h > bot + 1) near.push({ x: b.x, y: bot, w: b.w, h: b.y + b.h - bot });
         if (b.y < top - 1) near.push({ x: b.x, y: b.y, w: b.w, h: top - b.y });
       }
-      const placed = out.map((x) => x.box);
+      const placed = out.filter((x) => x.ideal).map((x) => x.box);
       const p = placeLabel(anchor, size, [...placed, ...near], { prefer, gap: l.dial ? 18 : 12, asked: !l.dial && !!l.asked && !!l.side, walls: this.wallsOf(l) });
-      out.push({ id: l.id, box: p && !p.none ? { x: p.x, y: p.y, ...size } : n.box });
+      out.push({ id: l.id, box: p && !p.none ? { x: p.x, y: p.y, ...size } : n.box, ideal: !loose });
     }
     return out;
+  }
+  /** 和它捆成一块摆的几样（乘积和因子，compose/apply.js 的 tiedOf；老师 place 过的不捆） */
+  tiedGroup(id) {
+    const sc = this.scene, shown = new Set(sc.shownIds());
+    const ties = (x) => { const o = sc.objects.get(x); if (!o || sc.layout.has(x)) return []; return (sc.type(o).anchors?.(o) || []).filter((t) => shown.has(t) && !sc.layout.has(t)); };
+    const seen = new Set([id]);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const x of shown) {
+        if (seen.has(x)) { for (const t of ties(x)) if (!seen.has(t)) { seen.add(t); grew = true; } }
+        else if (ties(x).some((t) => seen.has(t))) { seen.add(x); grew = true; }
+      }
+    }
+    return seen;
   }
   /** 一张字、一个拨盘归哪样东西（排版时和它一起摆）：贴着的第一样；什么都没贴（拨盘没写 at=）归这一轮讲的那样 */
   labelOwner(l) {
@@ -2268,7 +2322,7 @@ export class Stage {
         if (g.bbox) keep.push([`keep:${d.name}`, g.bbox]);
       }
       for (const l of sc.links.values()) {
-        if (l.a.obj === l.b.obj || !this.linkShown(l)) continue;
+        if (!l.cross || l.a.obj === l.b.obj || !this.linkShown(l)) continue; // 只算老师 link 的；页面比较时连的线照旧
         const g = this.linkGeo(l);
         if (g.box && g.box.h > 4) keep.push([`keep:${l.key}`, g.box]);
       }
@@ -2282,8 +2336,15 @@ export class Stage {
     const solveAll = () => {
       const { items, relations } = composeInput(sc, { ts, camS: baseS, grid, boxOf: (id) => this.unionBox(id), altsOf: (id) => this.altsOf(id), partBox, extras, lastTouched: this.lastTouched, tiedOf: (id) => { const o = sc.objects.get(id); if (!o || sc.layout.has(id)) return []; return (sc.type(o).anchors?.(o) || []).filter((t) => !sc.layout.has(t)); } });
       if (!items.length) return { items };
-      const arrange = arrangeBase instanceof Set ? new Set(arrangeBase) : arrangeBase;
+      let arrange = arrangeBase instanceof Set ? new Set(arrangeBase) : arrangeBase;
       let res = solveLayout({ canvas: cv, grid, items, relations, arrange });
+      // 老师这一轮写了话、挑战放在哪（place say above t），挨着的那样钉着、那一边放不下：那样（连同挨着它摆的一串）也一起重排
+      // （自由排版试验：话要在树上面，树钉在上头，话被换到了旁边）
+      if (this.lastBy === 'teacher' && arrange !== 'all') {
+        const byId = new Map(items.map((it) => [it.id, it]));
+        const pull = res.unmet.map((u) => u.rel).filter((r) => r && !r.auto && (r.a === 'say' || r.a === 'goals') && typeof r.b === 'string' && byId.get(r.b)?.pinned).flatMap((r) => componentOf(r.b, relations));
+        if (pull.length) { arrange = new Set([...(arrange || []), ...pull]); res = solveLayout({ canvas: cv, grid, items, relations, arrange }); }
+      }
       // 老师这一轮要 q 挨着 s（right-of / left-of / above / below），s 钉着、挨着那一边放不下：s 也一起重排（老师要的是两样挨着，
       // 不是 s 一动不动；设计要求单 r15、r16、r30）。只拉一层，不顺着关系一路拉下去
       if (arrange && arrange !== 'all') {
