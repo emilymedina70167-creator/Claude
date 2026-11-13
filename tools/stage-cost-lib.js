@@ -13,6 +13,8 @@ const IN_PLANE = new Set(['vec', 'point', 'sum']);
 const TALK = ['say', 'ask'];
 const HAND = ['open', 'close', 'goal', 'watch', 'follow', 'keep', 'back', 'pick', 'unpick', 'press'];
 const TIDY = ['remove', 'clear', 'ungoal', 'hide', 'scene'];
+// 第八轮的构图：摆哪、先看一眼，都是搭
+const LAYOUT = ['place', 'preview'];
 const SHOW = [
   'glow', 'lift', 'drop', 'paint', 'link', 'pulse', 'label', 'retext', 'camera', 'wait', 'fly', 'dim', 'cover', 'uncover', 'show', 'compare', 'dial', 'set',
   'hop', 'ptr', 'group', 'pivot', 'stairs', 'tag', 'bf', 'heights', 'deg', 'mark', 'tally', 'magnify', 'strike', 'span', 'visit', 'choose', 'search', 'tick', 'cross',
@@ -30,9 +32,10 @@ const UNDO = [
 export const CLASS_OF = Object.fromEntries([
   ...TALK.map((c) => [c, '说问']), ...HAND.map((c) => [c, '交给学生']), ...SHOW.map((c) => [c, '指给学生看']),
   ...ACT.map((c) => [c, '老师演']), ...TIDY.map((c) => [c, '收拾']), ...UNDO.map((c) => [c, '收拾']),
+  ...LAYOUT.map((c) => [c, '摆']),
 ]);
 /** 算「搭」的类 */
-export const BUILD = new Set(['藏着的辅助', '收拾', '同名重造']);
+export const BUILD = new Set(['藏着的辅助', '收拾', '同名重造', '摆']);
 
 // 一行拆成：前面的 & 和 @名字、指令、后面的
 function headOf(src) {

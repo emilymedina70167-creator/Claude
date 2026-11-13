@@ -1865,7 +1865,7 @@ test('最后一审 I4：写错的选项名当场报、话里给最像的那个�
   assert.match(err('open t insert wrng=block'), /是不是 wrong=block？/);
   // 不像哪一个的：不猜，列出能写的；不带选项的指令照实说
   assert.equal(err('label n t.50 "根" color=g1'), '「color=g1」不是 label 认的写法（label 能写的：side= tone=）');
-  assert.equal(err('say "好" x=1'), '「x=1」不是 say 认的写法（say 不写 名字=值）');
+  assert.equal(err('say "好" x=1'), '「x=1」不是 say 认的写法（say 能写的：at= near=）');
   // ask 按第几种分：ask tap 写了 answer= 也是没用上
   assert.match(err('ask tap t "点根" answer=t.50'), /^「answer=t\.50」不是 ask tap 认的写法/);
   // 各种东西自己的指令（按写的那一样东西认）、造的那一行（hide= 哪种都认）
@@ -1977,7 +1977,7 @@ test('复审 N9：认得的选项表按指令是全的（真的演一遍）—�
   for (const l of STAGE_DOC.split('\n').map(firstOf)) feed(base, l);
   // 上面没演到的、有表的指令：这里补（新加一条带选项的指令，例子和说明里都没有的话加在这里）
   // 说明里的一整行中文现在当成话照演（主线第七轮的写法容错），话换掉了：fly 之前把要指的那句话再说一遍
-  feed(base, 'array b = 1 2 3\nsay "看 [不稳定]"\nfly say.1 -> n1 b.1 side=top\nlabel n2 b.2 "字" side=left tone=note\nkeep b "一开始" after=swap\npick b.1 b.2 reveal=on\nscene "二" keep=b');
+  feed(base, 'array b = 1 2 3\nsay "看 [不稳定]"\nfly say.1 -> n1 b.1 side=top\nlabel n2 b.2 "字" side=left tone=note\nkeep b "一开始" after=swap\npick b.1 b.2 reveal=on\nplace b right-of a gap=s align=top weight=weak\nplace b at=1,1-9,3\nsay "看" near=b.1\nsay "看" at=1,1-9,3\nscene "二" keep=b');
   const miss = [];
   for (const [label, seen] of reads) {
     const names = tables.get(label);

@@ -14,6 +14,7 @@ import { QID_RE } from '../exam/fields.js';
 import { parseScript, parseRef, parseRich, addCommands, OPTIONS, optionError } from './script.js';
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
+import { parseAt, COLS } from './compose/grid.js';
 // numOf：数（整数、小数、分数 -3/4，′ 和真的减号也认），比大小用；和挑战判数是同一个
 import { splitPicks, checkPick, varText, pickDeps, wordDialError, VERB, verbFact } from './pick.js';
 import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure, numOf, isExpr, exprMeasure } from './goal.js';
@@ -227,6 +228,8 @@ export class Scene {
     this.vars = new Map(); // name → { v, lo, hi, at, shown }
     this.binds = []; // { kind, obj, v }：跟着拨的数变的
     this.focus = null; // null = 全部；或者部件的写法
+    // 构图意图（第八轮）：老师写的 place / say near= 存成关系，id → [rel]（rel 的样子见 compose/solve.js）；'say' 是这一轮的话
+    this.layout = new Map();
     this.say = '';
     this.words = []; // 这一句话里能飞走的 [词]
     this.waiting = null; // { kind, refs, prompt, button, expect, answer, pre（预写的行挂的：课堂循环看学生手上还有没有事用）, exam / like（真题题号）, shownAt }
@@ -279,6 +282,7 @@ export class Scene {
     for (const [k, v] of this.vars) s.vars.set(k, { ...v });
     s.binds = this.binds.map((b) => ({ ...b }));
     s.focus = this.focus ? [...this.focus] : null;
+    s.layout = new Map([...this.layout].map(([k, rs]) => [k, rs.map((r) => ({ ...r, ...(Array.isArray(r.a) ? { a: [...r.a] } : {}) }))]));
     s.say = this.say;
     s.words = [...this.words];
     // ask pick 的 refs、expect 是数组：各拷一份（改副本的不动原来的）
@@ -1227,6 +1231,9 @@ export class Scene {
       case 'say': {
         const text = str ?? '';
         this.checkRich(text, c); // 话里指着的东西要真有
+        // 话贴着一处（near=s.had）或放在格子上（at=）；不写就照默认贴在这一轮讲的那样东西旁边
+        if (opts.near != null || opts.at != null) this.layout.set('say', [this.placeRel('say', opts.at != null ? null : 'near', opts.near, { at: opts.at })]);
+        else this.layout.delete('say');
         this.say = text;
         this.words = parseRich(text).filter((p) => p.k === 'word').map((p) => p.v);
         return {};
@@ -1822,7 +1829,31 @@ export class Scene {
         this.skipAsk();
         this.say = '';
         this.words = [];
+        this.layout.delete('say');
         return { scene: str.trim(), keep, dropped, ungoal: goals, unlabeled: labs, removed: dropped.length > 0 };
+      }
+      case 'place': {
+        // place s main / place gl right-of s align=top / place A B row / place k near s.had / place q at=6,4-30,12（第八轮）：
+        // 只存构图意图，页面的求解器（compose/）照它排；同一样东西再写一次换掉它的关系
+        const KINDS = ['main', 'right-of', 'left-of', 'above', 'below', 'near', 'row', 'col'];
+        const ws = args.filter((a) => a.t === 'word').map((a) => a.v);
+        const k = ws.findIndex((w) => KINDS.includes(w));
+        const names = k < 0 ? ws : ws.slice(0, k);
+        const kind = k < 0 ? null : ws[k];
+        if (!names.length) throw new Error('要写成 place 名字 main / right-of 别的 / row …（或 at=6,4-30,12）');
+        for (const n of names) if (!this.objects.has(n) && n !== 'say' && n !== 'goals') throw new Error(`place 写的「${n}」舞台上没有`);
+        if (!kind && opts.at == null) throw new Error(`place ${names.join(' ')} 后面写怎么放：main / right-of 别的 / left-of / above / below / near 一处 / row / col，或 at=6,4-30,12`);
+        if ((kind === 'row' || kind === 'col') && names.length < 2) throw new Error(`${kind} 前面写两样以上（place A B ${kind}）`);
+        if (kind && kind !== 'row' && kind !== 'col' && names.length > 1) throw new Error(`${kind} 前面写一样东西（place ${names[0]} ${kind} …）`);
+        const target = kind && kind !== 'main' && kind !== 'row' && kind !== 'col' ? ws[k + 1] : null;
+        if (kind && kind !== 'main' && kind !== 'row' && kind !== 'col' && !target) throw new Error(`${kind} 后面写挨着哪一样（place ${names[0]} ${kind} s）`);
+        const rel = this.placeRel(kind === 'row' || kind === 'col' ? names : names[0], opts.at != null ? null : kind, target, opts);
+        this.layout.set(names[0], [rel]);
+        return { place: names };
+      }
+      case 'preview': {
+        // preview：这一轮排好先给老师看一眼示意图（第八轮），画面上不演什么
+        return { preview: true };
       }
       case 'remove': {
         // remove a：把一样东西拿下舞台
@@ -1931,7 +1962,51 @@ export class Scene {
   replaceObject(id, o) { this.objects.set(id, o); }
   // keepPlace：同名重造，objects 里留着它的位子（replaceObject 换进去），只清连线、open 这些
   // keepSaves：同名重造留着存档（keep / back，lastBefore 不留）；拿下舞台（remove，以后 merge 拿掉的那一张）连存档一起清
+  /**
+   * 一条构图关系（place / say near=）：查写法、指着的东西，拼成 compose/solve.js 认的样子。kind 是 null 时是 at=（定死在格子上）。
+   * 名字写错、at= 写错、gap= / weight= / align= 写错当场报
+   */
+  placeRel(a, kind, target, opts) {
+    const rel = {};
+    if (kind == null) {
+      const at = parseAt(opts.at);
+      if (!at) throw new Error(`at= 写成 6,4-40,12：第几列第几行到第几列第几行（横 ${COLS} 列，从 0 数，后一个比前一个大）`);
+      return { kind: 'at', a, at };
+    }
+    rel.kind = kind;
+    rel.a = a;
+    if (target != null) {
+      const ref = parseRef(target);
+      if (!ref || !this.objects.has(ref.obj) && !(target === 'say' || target === 'goals')) throw new Error(`place 写的「${target}」舞台上没有`);
+      if (ref.mark && kind !== 'near') throw new Error(`${kind} 后面写一样东西的名字（${ref.obj}），贴着一个部件用 near ${target}`);
+      if (ref.mark) this.parts(target);
+      if (target === a) throw new Error(`${kind} 不能挨着自己`);
+      rel.b = target;
+    }
+    const pick = (name, list) => {
+      if (opts[name] == null) return;
+      if (!list.includes(opts[name])) throw new Error(`${name}= 只能写 ${list.join(' / ')}`);
+      rel[name] = opts[name];
+    };
+    pick('align', ['left', 'right', 'center', 'top', 'bottom']);
+    pick('gap', ['s', 'm', 'l']);
+    pick('weight', ['strong', 'medium', 'weak']);
+    return rel;
+  }
+
   dropObject(id, { keepLabels = false, keepPlace = false, keepSaves = false } = {}) {
+    // 构图里指着它的关系跟着没了（row / col 只剩一样就不算了）
+    if (!keepPlace && this.layout.size) {
+      const next = new Map();
+      for (const rs of this.layout.values()) for (const r0 of rs) {
+        const r = Array.isArray(r0.a) ? { ...r0, a: r0.a.filter((x) => x !== id) } : r0;
+        if (Array.isArray(r.a) ? r.a.length < 2 : r.a === id) continue;
+        if (r.b != null && parseRef(r.b)?.obj === id) continue;
+        const k = Array.isArray(r.a) ? r.a[0] : r.a;
+        next.set(k, [...(next.get(k) || []), r]);
+      }
+      this.layout = next;
+    }
     if (!keepPlace) this.objects.delete(id);
     // 镜头对准的里有它（camera a.2 以后 remove a / scene）：去掉，不然镜头一直对着一样没了的东西、新造的不框（审查第 4 条）
     if (!keepPlace && this.focus) { this.focus = this.focus.filter((r) => r !== id && parseRef(r)?.obj !== id); if (!this.focus.length) this.focus = null; }
