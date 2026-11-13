@@ -1,0 +1,16 @@
+# 第九轮：放大一样东西、自己画（箭头、圈、括号、字、示意图）
+sentence s = "The company must make a quick decision."
+place s main
+timeline tl = 过去 现在 将来 now=现在
+stand tl fr = 现在
+place tl below s gap=l
+scale s 1.3
+arrange
+draw d1 arrow from=s.3 to=tl.fr color=g2
+draw d2 circle on=s.3-4 color=brand
+draw d3 brace under=s.3-4 "谓语"
+draw d4 text at=2,2-16,4 "先看主干"
+draw d5 svg at=34,14-46,22 "<path d='M5 80 Q 50 0 95 80' class='arrow' />"
+look * frame=none
+say "must 进来以后，make 少了什么？"
+ask say "少了什么？"

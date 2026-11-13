@@ -58,3 +58,31 @@ test('场景：place 让主语钉住；arrange 交给画面', () => {
   assert.deepEqual(fx.arrange, ['b']);
   assert.match(sc.check(parseScript('arrange zz')[0]), /舞台上没有「zz」/);
 });
+
+test('两样挪不动的互相压着，不耽误别的东西排开', () => {
+  const fixed = { x: 400, y: 120, w: 300, h: 200 };
+  const r = solveLayout({ canvas, grid, items: [
+    it('a', 500, 200, { pinned: true, prev: { x: 300, y: 100 } }),
+    it('d', 300, 200, { fixed, order: 1 }),
+    it('say', 300, 80, { order: 2, rigid: true }),
+  ], relations: [] });
+  const say = r.boxes.get('say');
+  for (const k of ['a', 'd']) {
+    const b = r.boxes.get(k);
+    assert.ok(say.x >= b.x + b.w || say.x + say.w <= b.x || say.y >= b.y + b.h || say.y + say.h <= b.y, `话压着 ${k}`);
+  }
+});
+
+test('能挪的压着挪不动的：去四边里真有空地的那一边（不被推到另一样钉住的上面）', () => {
+  const c2 = { w: 1148, h: 692 }, g2 = gridOf(c2);
+  const r = solveLayout({ canvas: c2, grid: g2, items: [
+    it('s', 771, 112, { pinned: true, prev: { x: 191, y: 252 } }),
+    it('tl', 634, 98, { order: 1, pinned: true, prev: { x: 191, y: 371 } }),
+    it('say', 431, 39, { order: 2, rigid: true, prev: { x: 191, y: 371 } }),
+  ], relations: [] });
+  const say = r.boxes.get('say');
+  for (const k of ['s', 'tl']) {
+    const b = r.boxes.get(k);
+    assert.ok(say.x >= b.x + b.w || say.x + say.w <= b.x || say.y >= b.y + b.h || say.y + say.h <= b.y, `话压着 ${k}`);
+  }
+});

@@ -791,8 +791,9 @@ function setup(segments) {
 // 走第一轮画法的（fallback）给 null
 // 翻回去看（look n / unlook）：照手指点幕条上的胶囊、「回到现在」，等回看放好
 async function viewAct(page, touch, step) {
-  const sel = step.cmd === 'look' ? `.st-scenes .st-scene:nth-child(${Number(step.args) || 0})` : step.cmd === 'side' ? '.st-side-toggle' : '.st-look:not([hidden]) .st-look-back';
-  const r = await page.evaluate((q) => { const n = document.querySelector(q); if (!n || n.closest('[hidden]')) return null; const b = n.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }; }, sel);
+  // side：第六轮的收放栏；第八轮起自由构图没有栏，前几轮的话在顶上「说过的」里——点它（哪一个看得见点哪一个）
+  const sel = step.cmd === 'look' ? `.st-scenes .st-scene:nth-child(${Number(step.args) || 0})` : step.cmd === 'side' ? '.st-talk-btn, .st-side-toggle' : '.st-look:not([hidden]) .st-look-back';
+  const r = await page.evaluate((q) => { const n = [...document.querySelectorAll(q)].find((x) => !x.hidden && !x.closest('[hidden]') && x.offsetWidth); if (!n) return null; const b = n.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }; }, sel);
   if (!r) return { error: step.cmd === 'look' ? `幕条上没有第 ${step.args} 幕（只有一幕时没有幕条）` : step.cmd === 'side' ? '没有解析栏的把手（竖屏没有）' : '没有开着的回看' };
   if (r.w < 44 || r.h < 44) return { error: `${step.cmd === 'look' ? '幕条的胶囊' : step.cmd === 'side' ? '解析栏的把手' : '「回到现在」'}只有 ${Math.round(r.w)}×${Math.round(r.h)}，手指点不准` };
   await touch('touchStart', r.x, r.y);

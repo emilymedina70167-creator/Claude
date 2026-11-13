@@ -271,6 +271,30 @@ function run(work, rels, sizes, env) {
   }
   function separate(i, j, p) {
     const A = p[i], B = p[j];
+    // 一样挪不动（钉住的、定死在格子上的）、一样能挪：挪的那一样去它四边里最近、真有空地的那一边
+    // （以前照中心的相对位置选：钉住的上面正好是另一样钉住的，话被推上去又压着那一样，退不回来）
+    const still = (k) => !!(work[k].pin || work[k].fixed);
+    if (still(i) !== still(j)) {
+      const [s, m] = still(i) ? [i, j] : [j, i];
+      const S = p[s], M = p[m];
+      const walls = p.filter((_, k) => k !== m && still(k));
+      const sides = [
+        { side: 'below', box: { ...M, y: S.y + S.h + sepGap } },
+        { side: 'above', box: { ...M, y: S.y - M.h - sepGap } },
+        { side: 'right', box: { ...M, x: S.x + S.w + sepGap } },
+        { side: 'left', box: { ...M, x: S.x - M.w - sepGap } },
+      ].map((c) => ({ ...c, move: Math.abs(c.box.x - M.x) + Math.abs(c.box.y - M.y) }))
+        .filter((c) => inside(c.box, canvas) && !walls.some((w) => hits(w, c.box)))
+        .sort((x, y) => x.move - y.move);
+      if (sides.length) {
+        const { side } = sides[0];
+        if (side === 'below') add(Y[m], Ge, Y[s].plus(sizes[s].h + sepGap), W_SEP);
+        if (side === 'above') add(Y[m].plus(sizes[m].h + sepGap), Le, Y[s], W_SEP);
+        if (side === 'right') add(X[m], Ge, X[s].plus(sizes[s].w + sepGap), W_SEP);
+        if (side === 'left') add(X[m].plus(sizes[m].w + sepGap), Le, X[s], W_SEP);
+        return;
+      }
+    }
     // 有上一次的照上一次的相对位置分，没有的照现在的
     const ref = work[i].prev && work[j].prev
       ? [{ ...work[i].prev, w: A.w, h: A.h }, { ...work[j].prev, w: B.w, h: B.h }] : [A, B];
@@ -390,8 +414,9 @@ function score(boxes, work, rels, { canvas, cell, gapF }) {
   let bad = 0;
   // 钉住的东西自己出了屏幕、两样钉住的互相压着：页面不管（不挪老师摆的），只在版面里报告，不算这一次排得不好
   for (let i = 0; i < list.length; i++) {
+    const still = (k) => !!(work[k].pin || work[k].fixed); // 钉住的、定死在格子上的：页面挪不动它们
     if (!inside(list[i], canvas) && !work[i].pin) bad++;
-    for (let j = i + 1; j < list.length; j++) if (hits(list[i], list[j]) && !(work[i].pin && work[j].pin)) bad++;
+    for (let j = i + 1; j < list.length; j++) if (hits(list[i], list[j]) && !(still(i) && still(j))) bad++;
   }
   const unmet = [];
   let cost = bad * 1e9;

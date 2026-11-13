@@ -7,6 +7,22 @@ import { resolveLook, DEFAULT_LOOK, lookName } from './spec.js';
 import { lookStyle, COLOR_VAR } from './css.js';
 
 const SVG = (n) => typeof SVGElement !== 'undefined' && n instanceof SVGElement;
+/**
+ * 一个节点算哪一类（第一次见到时照它原来的样子定，记在节点上：之后写了行内样式也不变）：
+ * SVG 是线；有影子或圆角的是「有框的小件」（格子、结点、题卡的底）——frame / bg 只改这些；
+ * 别的（时间轴的轴、刻度、括号的横线这种用底色画的线、光秃秃的字）只收颜色、字体这类，不去掉它的底色
+ */
+function roleOf(n) {
+  if (SVG(n)) return 'line';
+  if (n.__lkRole) return n.__lkRole;
+  let role = 'text';
+  try {
+    const cs = getComputedStyle(n);
+    if ((cs.boxShadow && cs.boxShadow !== 'none') || parseFloat(cs.borderTopLeftRadius) >= 4 || (cs.borderTopStyle !== 'none' && parseFloat(cs.borderTopWidth) > 0)) role = 'box';
+  } catch { role = 'box'; }
+  n.__lkRole = role;
+  return role;
+}
 
 /** 写一个元素的行内样式：上一次写过、这一次没有的拿掉（不碰画法自己写的 transform、width……） */
 function put(node, style) {
@@ -118,7 +134,7 @@ export function applyLooks(stage) {
   }
   for (const [n, { name, props }] of byNode) {
     const p = needed.has(n) ? floor(name, props) : props;
-    write(n, lookStyle(p, SVG(n) ? 'line' : 'box'));
+    write(n, lookStyle(p, roleOf(n)));
   }
   return { changed, refused: [...new Set(refused)] };
 }
