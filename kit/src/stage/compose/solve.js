@@ -97,7 +97,8 @@ function attempt(work, rels, env) {
   const opts = work.map(it => {
     if (it.fixed) return [{ w: it.fixed.w, h: it.fixed.h }];
     const list = (it.alts && it.alts.length ? it.alts : [{ w: it.w, h: it.h }]).slice(0, 3);
-    return list.map(s => ({ w: s.w * scale, h: s.h * scale }));
+    // rigid：画面上的一块（话、挑战）不跟着整台缩，字号是定的
+    return list.map(s => (it.rigid ? { ...s } : { w: s.w * scale, h: s.h * scale }));
   });
   const pick = opts.map(() => 0);
   const sizesOf = () => pick.map((k, i) => opts[i][k]);
@@ -237,9 +238,10 @@ function run(work, rels, sizes, env) {
       const b = at.get(r.b);
       ex = X[b].plus(0); ey = Y[b].plus(0); bw = sizes[b].w; bh = sizes[b].h; est = estOf(b);
     } else if (r.b.of != null) {
-      const b = at.get(r.b.of);
-      ex = X[b].plus(r.b.x); ey = Y[b].plus(r.b.y); bw = r.b.w; bh = r.b.h;
-      const e = estOf(b); est = { x: e.x + r.b.x, y: e.y + r.b.y };
+      // 部件的框是照那样东西没缩时量的：跟着整台一起缩
+      const b = at.get(r.b.of), k = work[b].rigid ? 1 : env.scale;
+      ex = X[b].plus(r.b.x * k); ey = Y[b].plus(r.b.y * k); bw = r.b.w * k; bh = r.b.h * k;
+      const e = estOf(b); est = { x: e.x + r.b.x * k, y: e.y + r.b.y * k };
     } else {
       ex = r.b.x; ey = r.b.y; bw = r.b.w; bh = r.b.h; est = { x: r.b.x, y: r.b.y };
     }
@@ -293,10 +295,17 @@ function guessAll(work, sizes, { canvas, cell, gapF }) {
     const tries = last ? [[last.x, last.y + last.h + g], [last.x + last.w + g, last.y]] : [];
     let spot = tries.find(([x, y]) => free(x, y));
     if (!spot) {
-      const step = cell * 2;
-      outer: for (let y = 0; y + h <= canvas.h + 0.5; y += step)
-        for (let x = 0; x + w <= canvas.w + 0.5; x += step)
-          if (free(x, y)) { spot = [x, y]; break outer; }
+      // 照行找空地：越靠上越好，同一高度越靠画布正中越好（不全挤在左边）
+      const step = cell, mid = (canvas.w - w) / 2;
+      let best = Infinity;
+      for (let y = 0; y + h <= canvas.h + 0.5; y += step) {
+        if (y > best) break;
+        for (let x = 0; x + w <= canvas.w + 0.5; x += step) {
+          if (!free(x, y)) continue;
+          const cost = y + Math.abs(x - mid) * 0.5;
+          if (cost < best) { best = cost; spot = [x, y]; }
+        }
+      }
     }
     if (!spot) spot = [0, 0];
     out[i] = { x: spot[0], y: spot[1] };
@@ -354,7 +363,8 @@ function violated(r, boxes, cell, gapF) {
     else B = r.b;
     const dx = Math.max(0, B.x - (A.x + A.w), A.x - (B.x + B.w));
     const dy = Math.max(0, B.y - (A.y + A.h), A.y - (B.y + B.h));
-    return Math.hypot(dx, dy) > g + cell * 1.5;
+    // 贴着一样东西里的部件：得绕到那样东西外面去，离部件远一点也算贴着
+    return Math.hypot(dx, dy) > g + cell * (typeof r.b === 'string' ? 1.5 : 5);
   }
   const B = boxes.get(r.b);
   if (r.kind === 'right-of') return A.x < B.x + B.w - tol;

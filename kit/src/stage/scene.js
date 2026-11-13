@@ -282,6 +282,7 @@ export class Scene {
     for (const [k, v] of this.vars) s.vars.set(k, { ...v });
     s.binds = this.binds.map((b) => ({ ...b }));
     s.focus = this.focus ? [...this.focus] : null;
+    s.layoutInfo = this.layoutInfo ? [...this.layoutInfo] : null;
     s.layout = new Map([...this.layout].map(([k, rs]) => [k, rs.map((r) => ({ ...r, ...(Array.isArray(r.a) ? { a: [...r.a] } : {}) }))]));
     s.say = this.say;
     s.words = [...this.words];
@@ -1107,6 +1108,8 @@ export class Scene {
     }
     // follow 的字段是引擎的（gaps、pivot、from……）：不查，引擎自己报写错的
     if (cmd === 'follow') return { label: cmd, names: '*' };
+    // pos 是页面自己记的（名字=x,y）：名字就是东西的名字
+    if (cmd === 'pos') return { label: cmd, names: '*' };
     if (cmd === 'ask') {
       const kind = (c.args || []).find((a) => a.t === 'word')?.v;
       return OPTIONS.ask[kind] ? { label: `ask ${kind}`, names: OPTIONS.ask[kind] } : null;
@@ -1851,6 +1854,18 @@ export class Scene {
         this.layout.set(names[0], [rel]);
         return { place: names };
       }
+      case 'pos': {
+        // pos s=12.5,40 gl=30,4.5,600：页面的求解器摆好的地方（第八轮，compose/apply.js 的 posLine）。页面自己写进 log，
+        // 刷新、回看、作废照它放回，排出来和当时一样。没了的东西跳过（重放时那样东西可能已经收了）
+        const moved = [];
+        for (const [id, v] of Object.entries(opts)) {
+          const [x, y, w] = String(v).split(',').map(Number);
+          if (!this.objects.has(id) || !Number.isFinite(x) || !Number.isFinite(y)) continue;
+          this.moveObject(id, x, y, Number.isFinite(w) ? w : null);
+          moved.push(id);
+        }
+        return { moved };
+      }
       case 'preview': {
         // preview：这一轮排好先给老师看一眼示意图（第八轮），画面上不演什么
         return { preview: true };
@@ -1917,6 +1932,7 @@ export class Scene {
     const order = new Map(list.map((o, i) => [o.id, i]));
     for (let i = 1; i < list.length; i++) {
       const o = list[i];
+      if (o.placed) continue; // 页面的求解器摆过的（第八轮）：位置归它，这里不推
       const me = this.objectBox(o.id);
       const tied = new Set(typeOf(o).anchors?.(o) || []); // 和它排成一体的（乘积和它的两个因子）不比
       let need = -Infinity;
@@ -1992,6 +2008,16 @@ export class Scene {
     pick('gap', ['s', 'm', 'l']);
     pick('weight', ['strong', 'medium', 'weak']);
     return rel;
+  }
+
+  /** 把一样东西整个挪到 (x, y)（它自己算的框的左上角，世界坐标；不带量出来的 ext，重放时没量也一样）；句子顺带换折行的宽 */
+  moveObject(id, x, y, width = null) {
+    const o = this.objects.get(id);
+    if (!o) return;
+    if (width && o.type === 'sentence') o.width = width;
+    const b = this.type(o).objectBox(o);
+    shiftObject(o, x - b.x, y - b.y);
+    o.placed = true;
   }
 
   dropObject(id, { keepLabels = false, keepPlace = false, keepSaves = false } = {}) {
@@ -2379,6 +2405,8 @@ export class Scene {
     if (this.sceneNote) lines.push(this.sceneNote);
     if (this.swapNote) lines.push(this.swapNote);
     if (!this.objects.size) lines.push('舞台上还是空的。');
+    // 版面（第八轮）：页面的求解器摆成了什么样（舞台每次摆完写在 layoutInfo 上）
+    else if (this.layoutInfo?.length) lines.push(...this.layoutInfo);
     const hints = new Set();
     for (const o of this.objects.values()) { const t = typeOf(o); if (t.hint) hints.add(t.hint); }
     for (const h of hints) lines.push(h);

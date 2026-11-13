@@ -1,0 +1,8 @@
+# 第八轮 时刻 4：树 + 一排格子 + 话贴着结点
+tree t = 40 30 45 20 35 42 50
+array a = 20 30 35 40 42 45 50
+place t main
+place a below t gap=l
+goal g1 "把 47 插进去，让它还是平衡的" when="count(a) > 7"
+say "平衡因子看左右子树的高度差。" near=t.45
+say "47 会挂在 {t.45} 的哪一边？插完以后谁的平衡因子先变？" near=t.45

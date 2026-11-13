@@ -1,0 +1,9 @@
+# 第八轮 时刻 1：题卡 + 句子 + 话 + 挑战
+card q = "第 10 题" "...lots of working folks had already seen signs of the slowdown themselves." "2004 · Reading Part A · Text 3" "生词：folk 人们；slowdown（经济）放缓；themselves 他们自己"
+sentence s = "lots of working folks had already seen signs of the slowdown themselves."
+place s main
+place q above s align=left
+watch w1 when="count(s) > 99"
+goal g1 "在句子上拉出主干：主语、谓语、宾语" when="count(s) > 99"
+say "节末真题还剩 11 句：先做 10、1、13，剩下 8 句你挑着做。"
+say "先在句子上把主语、谓语、宾语拉出来。"

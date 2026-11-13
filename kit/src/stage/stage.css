@@ -367,3 +367,46 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-stage.is-side .st-side-toggle { left: calc(var(--side-w, 360px) - 22px); padding: 0; width: 44px; font-size: 20px; }
 /* 收着的时候：老师对准一部分（camera），台上别的东西摆在话的位置上——话垫一块毛玻璃，字不叠在别的字上（时态课截图第 1 条） */
 .st-caption.is-backed .st-line:not(.is-out) { padding: 4px 14px; border-radius: 14px; background: color-mix(in srgb, var(--st-card) 88%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 0 0 0.5px var(--st-line); }
+
+/* —— 自由构图（主线第八轮）：东西摆在哪由老师的构图 + 页面的求解器定；字号四档、间距三档，乘屏幕定下的一档 --ts ——
+   话、挑战是画布上的两块（求解器给 left / top / width），话卡、题卡、贴的字同一家：毛玻璃底、0.5px 细线、圆角 16 */
+.st-stage {
+  --st-fs-talk: calc(21px * var(--ts, 1));
+  --st-fs-body: calc(17px * var(--ts, 1));
+  --st-fs-word: calc(27px * var(--ts, 1));
+  --st-fs-title: calc(24px * var(--ts, 1));
+  --st-gap-s: calc(var(--cell, 28px) * .5);
+  --st-gap-m: var(--cell, 28px);
+  --st-gap-l: calc(var(--cell, 28px) * 2);
+}
+.st-card-family { padding: 12px 16px; border-radius: 16px; background: color-mix(in srgb, var(--st-card) 82%, transparent);
+  box-shadow: 0 0 0 .5px var(--st-line), 0 10px 26px -18px rgb(var(--shade-rgb, 25 45 40) / 0.45); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.st-stage.is-free .st-caption { right: auto; bottom: auto; box-sizing: border-box; padding: 12px 16px; border-radius: 16px; align-items: stretch; justify-content: flex-start; gap: 4px;
+  background: color-mix(in srgb, var(--st-card) 82%, transparent); box-shadow: 0 0 0 .5px var(--st-line), 0 10px 26px -18px rgb(var(--shade-rgb, 25 45 40) / 0.45);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); z-index: 3; }
+.st-stage.is-free .st-caption[hidden] { display: none; }
+.st-stage.is-free .st-line { width: auto; font-size: var(--st-fs-talk); line-height: 1.55; }
+.st-stage.is-free .st-line.is-past { font-size: var(--st-fs-body); color: var(--st-muted); }
+.st-stage.is-free .st-line[data-kind="ask"]:not(.is-past) { font-weight: 650; }
+.st-stage.is-free .st-line.is-out { left: 16px; right: 16px; bottom: 12px; }
+.st-stage.is-free .st-how { margin: 4px 0 0; font: 500 calc(15px * var(--ts, 1))/1.5 var(--sans, sans-serif); color: var(--st-muted); }
+.st-stage.is-free .st-goals { right: auto; box-sizing: border-box; }
+.st-stage.is-free .st-goal { font-size: var(--st-fs-body); }
+.st-stage.is-free.is-composed .st-caption, .st-stage.is-free.is-composed .st-goals { transition: left .52s cubic-bezier(.2, .7, .2, 1), top .52s cubic-bezier(.2, .7, .2, 1), width .52s cubic-bezier(.2, .7, .2, 1); }
+/* 「说过的」：顶上幕条旁边一颗胶囊，点开一张浮层 */
+.st-talk-btn { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--st-card) 70%, transparent);
+  color: var(--st-ink); font: 500 15px/1 var(--sans, sans-serif); box-shadow: 0 0 0 .5px var(--st-line); cursor: pointer; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.st-talk-btn[hidden] { display: none; }
+.st-talk-btn:active { scale: .95; }
+.st-stage > .st-talk-btn { position: absolute; top: 8px; right: 16px; z-index: 6; }
+.st-talk-pop { position: absolute; inset: 0; z-index: 8; display: flex; align-items: flex-start; justify-content: center; padding: 64px 16px 16px; background: rgb(var(--shade-rgb, 25 45 40) / 0.16); }
+.st-talk-pop[hidden] { display: none; }
+.st-talk-card { width: min(640px, 100%); max-height: 100%; display: flex; flex-direction: column; border-radius: 18px; background: var(--st-card); box-shadow: 0 0 0 .5px var(--st-line), 0 24px 60px -28px rgb(var(--shade-rgb, 25 45 40) / 0.6); overflow: hidden; }
+.st-talk-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 10px 20px; font: 600 16px/1.3 var(--sans, sans-serif); color: var(--st-muted); border-bottom: .5px solid var(--st-line); }
+.st-talk-close { min-height: 44px; padding: 0 14px; border: 0; background: none; color: var(--st-brand); font: 600 15px/1 var(--sans, sans-serif); cursor: pointer; }
+.st-talk-list { overflow-y: auto; padding: 8px 20px 18px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.st-talk-line { margin: 8px 0; font: 500 18px/1.6 var(--sans, sans-serif); }
+.st-talk-line > * { display: inline-block; }
+.st-talk-line .st-ch { white-space: pre; }
+.st-talk-line.is-ask { font-weight: 650; }
+.st-talk-sep { border: 0; border-top: .5px solid var(--st-line); margin: 10px 0; }

@@ -1,0 +1,10 @@
+# 第八轮 时刻 3：两张矩阵并排比较 + 乘积 + 话
+matrix A = 1 2 0 / 0 1 3 / 2 0 1
+matrix B = 1 0 0 / 0 2 0 / 0 0 3
+matrix AB = {A B}
+matrix BA = {B A}
+place A B AB row gap=l
+place BA below AB align=left
+goal g1 "改 B 里的一个数，让 AB = BA" when="det(B) = 0"
+say "先看 AB 和 BA 是不是一样。"
+say "右下角那一格差在哪？拨 B 的一格试试。"
