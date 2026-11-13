@@ -18,7 +18,7 @@ import { layoutLines } from './compose/report.js';
 import { sketchText } from './compose/sketch.js';
 import { createSnapper } from './snap.js';
 import { applyLooks } from './look/apply.js';
-import { solveLayout } from './compose/solve.js';
+import { solveLayout, componentOf } from './compose/solve.js';
 import { canvasOf, composeInput, posLine, SENTENCE_WIDTHS } from './compose/apply.js';
 import { CARD_WIDTHS } from './types/card.js';
 import { parseScript, parseRich, richLength, parseRef } from './script.js';
@@ -1056,7 +1056,7 @@ export class Stage {
     for (const o of this.scene.objects.values()) {
       if (o.hidden) continue; // 藏着的没画，量不到：留着上一次量的
       const est = this.scene.type(o).objectBox(o);
-      const ext = extOf(est, this.footprint(o.id));
+      const ext = extOf(est, this.footprint(o.id, { local: true })); // 和 est 一样是它自己的坐标（scale 过的不重复放大）
       if (!same(o.ext || null, ext)) { if (ext) o.ext = ext; else delete o.ext; changed = true; }
     }
     // 贴的字画在哪写回场景（reflow 让后造的东西给字让地方）
@@ -1124,17 +1124,28 @@ export class Stage {
   /** 一个 SVG 东西现在在世界里占的地方（排版检查用） */
   svgBoxOf(n) { return svgBox(n); }
   /** 一样东西的节点最后摆在哪（世界坐标）拼起来的框 */
-  footprint(id) { return bbox(this.footprintBoxes(id)); }
+  footprint(id, opts) { return bbox(this.footprintBoxes(id, opts)); }
   /** 一样东西的每个节点最后摆在哪（世界坐标）：排版检查（tools/stage-audit.mjs）也用它，和这里量的一样 */
   // 只算它自己画的：贴的字不算进来——字只躲东西，不推东西（试过把字算成它的一部分：一张贴在 A、B 两个上面的字把 A 撑宽，
   // 压到了 B，B 被推到 A 下面，整排都乱了）
-  footprintBoxes(id) {
-    const boxes = [];
+  // local：换成这样东西自己（没放大）的坐标。scale 过的东西（第九轮）有两种节点：跟着 CSS 的 scale 放大的（n.__k，量到的是它自己的坐标），
+  // 照放大后的位置画的（括号、行边的把手：量到的是世界坐标）——不换成同一种就混着算，占的地方多出一大截（自由排版试验：放大的矩阵被顶到屏幕最上面）
+  footprintBoxes(id, { local = false } = {}) {
+    const sc = this.scene, o = sc.objects.get(id), k = o?.k && o.k !== 1 ? o.k : null;
+    const pv = k ? sc.type(o).objectBox(o) : null;
+    const toW = (b) => ({ x: pv.x + (b.x - pv.x) * k, y: pv.y + (b.y - pv.y) * k, w: b.w * k, h: b.h * k });
+    const toL = (b) => ({ x: pv.x + (b.x - pv.x) / k, y: pv.y + (b.y - pv.y) / k, w: b.w / k, h: b.h / k });
+    const fix = (n, b) => (!k ? b : n?.__k ? (local ? b : toW(b)) : local ? toL(b) : b);
+    const raw = [];
+    const boxes = { push: (b) => raw.push([cur, b]) };
+    let cur = null;
     for (const n of this.root.querySelectorAll(`[data-obj="${CSS.escape(id)}"]`)) {
+      cur = n;
       if (n instanceof SVGElement) {
         if (n.ownerSVGElement === this.under || n.ownerSVGElement === this.ink) {
           if (n.parentElement?.closest?.('[data-obj]')?.dataset.obj === id && n.parentElement !== this.under && n.parentElement !== this.ink) continue; // 外面那一组已经算了
           const b = svgBox(n);
+          cur = null; // getCTM 量的，带着 CSS 的 scale：已经是世界坐标
           if (b) boxes.push({ x: b.x - 2, y: b.y - 2, w: b.w + 4, h: b.h + 4 });
           continue;
         }
@@ -1150,12 +1161,13 @@ export class Stage {
     }
     // 它自己的格子之间拱起来的弧（分组的连线、hop 留下的弧）也是它画的：以前不算，弧拱到上面那样东西里去、被盖住，
     // 排版检查也量不出来（主线第一轮留下的 D1-11：隔 5 个分组的弧被上面的题卡盖住）。连到别的东西的线不算（不是哪一样自己的）
+    cur = null; // 连线照世界坐标算
     for (const l of this.scene.links.values()) {
       if (l.whole || l.a.obj !== id || l.b.obj !== id || !this.linkShown(l)) continue;
       const g = this.linkGeo(l);
       if (g.box && !g.rail) boxes.push(g.box);
     }
-    return boxes;
+    return raw.map(([n, b]) => fix(n, b));
   }
   /** 屏幕上（相对 view）被占着的地方：别的东西、贴的字、话、挑战、底下一条（浮出来的东西——拨数器——用它躲开）。except：自己那一样 */
   screenBlocks(except = null) {
@@ -2052,7 +2064,19 @@ export class Stage {
       const anchor = this.anchorOf(l) || grow(sc.worldObjectBox(id), 4);
       const size = { w: n.box.w, h: n.box.h };
       const prefer = l.side ? [l.side, 'above', 'below', 'right', 'left'] : ['above', 'below', 'right', 'left'];
-      const p = placeLabel(anchor, size, out, { prefer, gap: l.dial ? 18 : 12, asked: !l.dial && !!l.asked && !!l.side, walls: this.wallsOf(l) });
+      // 它贴的那样东西自己报的「字要躲」的地方（格子下面的序号、时间轴的刻度），锚着的那几个部件不算（自由排版试验：字压在序号上）
+      const o = sc.objects.get(id);
+      // 和锚叠着的那几块只留伸出锚上下的那一截（贴在第 4、5 格下面的字照样躲开这两格下面的序号）
+      const near = [];
+      for (const b0 of sc.type(o).nearObstacles?.(o) || sc.type(o).obstacles?.(o) || []) {
+        const b = sc.scaled(o, b0);
+        if (!overlaps(b, anchor)) { near.push(b); continue; }
+        const top = anchor.y, bot = anchor.y + anchor.h;
+        if (b.y + b.h > bot + 1) near.push({ x: b.x, y: bot, w: b.w, h: b.y + b.h - bot });
+        if (b.y < top - 1) near.push({ x: b.x, y: b.y, w: b.w, h: top - b.y });
+      }
+      const placed = out.map((x) => x.box);
+      const p = placeLabel(anchor, size, [...placed, ...near], { prefer, gap: l.dial ? 18 : 12, asked: !l.dial && !!l.asked && !!l.side, walls: this.wallsOf(l) });
       out.push({ id: l.id, box: p && !p.none ? { x: p.x, y: p.y, ...size } : n.box });
     }
     return out;
@@ -2216,6 +2240,14 @@ export class Stage {
       const alts = this.measureBlock(this.caption, [18, 13, 24, 10].map((n) => n * grid.cell));
       if (alts.length) extras.push({ id: 'say', ...alts[0], alts, ...(prevBox('say') ? { prev: prevBox('say') } : {}) });
     }
+    // 画面右上角页面自己的按钮（说过的、撤一步、回到……）：东西、话都让开它（自由排版试验：原句顶到了「说过的」旁边）
+    for (const n of [this.talkBtn?.parentNode === this.root ? this.talkBtn : null, this.undoBox]) {
+      if (!n || n.hidden || !n.offsetWidth) continue;
+      const r = this.screenRect(n);
+      if (!r) continue;
+      const b = { x: r.x - cv.left - 6, y: Math.max(0, r.y - cv.top), w: r.w + 12, h: r.y - cv.top + r.h + 6 - Math.max(0, r.y - cv.top) };
+      if (b.x < cv.w && b.y + b.h > 0) extras.push({ id: `chrome:${n.className}`, w: b.w, h: b.h, fixed: { x: Math.max(0, b.x), y: b.y, w: Math.min(b.w, cv.w - Math.max(0, b.x)), h: b.h } });
+    }
     const goalsOn = !!this.goalsEl.childElementCount && [...this.goalsEl.children].some((n) => n.offsetWidth);
     if (goalsOn) {
       const gw = Math.min(24 * grid.cell, Math.max(...[...this.goalsEl.children].map((n) => n.scrollWidth + 2)));
@@ -2246,8 +2278,9 @@ export class Stage {
     const turnPlaced = this.lastBy === 'teacher' && this.placedNow?.size ? [...this.placedNow].filter((n) => sc.objects.has(n)) : [];
     const arrangeBase = this.arrangeNext === 'all' ? 'all' : this.arrangeNext || turnPlaced.length ? new Set([...(this.arrangeNext || []), ...turnPlaced]) : null;
     this.arrangeNext = null;
+    // 乘积和两个因子捆成一块摆（第八轮，乘积那一排不被拆散）；老师自己 place 过的不捆：照老师写的一张张摆（自由排版试验：A、B 叠了一列）
     const solveAll = () => {
-      const { items, relations } = composeInput(sc, { ts, camS: baseS, grid, boxOf: (id) => this.unionBox(id), altsOf: (id) => this.altsOf(id), partBox, extras, lastTouched: this.lastTouched, tiedOf: (id) => { const o = sc.objects.get(id); return o ? sc.type(o).anchors?.(o) || [] : []; } });
+      const { items, relations } = composeInput(sc, { ts, camS: baseS, grid, boxOf: (id) => this.unionBox(id), altsOf: (id) => this.altsOf(id), partBox, extras, lastTouched: this.lastTouched, tiedOf: (id) => { const o = sc.objects.get(id); if (!o || sc.layout.has(id)) return []; return (sc.type(o).anchors?.(o) || []).filter((t) => !sc.layout.has(t)); } });
       if (!items.length) return { items };
       const arrange = arrangeBase instanceof Set ? new Set(arrangeBase) : arrangeBase;
       let res = solveLayout({ canvas: cv, grid, items, relations, arrange });
@@ -2350,7 +2383,7 @@ export class Stage {
     // 镜头：固定这一档（老师 camera X 凑近时不动它，camera all 回来）
     this.baseCam = { s, tx: cv.left, ty: cv.top };
     // 话、挑战躲的那几块（keep:…）只在求解时用，版面、预览、检查里不算一样东西
-    for (const k of [...res.boxes.keys()]) if (String(k).startsWith('keep:')) res.boxes.delete(k);
+    for (const k of [...res.boxes.keys()]) if (String(k).startsWith('keep:') || String(k).startsWith('chrome:')) res.boxes.delete(k);
     this.layoutState = { boxes: res.boxes, unmet: res.unmet, scale: res.scale, grid, canvas: cv };
     // 现状里的「版面」：每样占哪几格、没照办的
     // 页面自己加的默认关系（话贴着讲的那样）没照办不告诉老师：老师没写过
@@ -2367,10 +2400,12 @@ export class Stage {
     // 写了 main 的那一样为了照办挨着它的关系让开了：照实说不在正中（r30：老师写「树在中间」，并排放不下时树往左让）
     for (const r of relations) {
       if (r.kind !== 'main' || r.auto || typeof r.a !== 'string') continue;
-      const B = res.boxes.get(r.a);
-      if (!B) continue;
+      // 主角那一组（挨着它摆的一串）一起居中：比这一组的中心
+      const grp = componentOf(r.a, relations).map((id) => res.boxes.get(id)).filter(Boolean);
+      if (!grp.length) continue;
+      const B = bbox(grp);
       const off = Math.round((B.x + B.w / 2 - cv.w / 2) / grid.cell);
-      if (Math.abs(off) >= 3) sc.layoutInfo.push(`${r.a} 不在正中：往${off < 0 ? '左' : '右'}让了 ${Math.abs(off)} 列（别的要求挨着它，正中放不下）`);
+      if (Math.abs(off) >= 3) sc.layoutInfo.push(`${grp.length > 1 ? `${r.a} 那一组` : r.a} 不在正中：往${off < 0 ? '左' : '右'}让了 ${Math.abs(off)} 列（别的要求挨着它，正中放不下）`);
     }
     // 放大放不下收回去的（这一轮里一直写着，老师下一轮看得到）
     for (const n of this.scaleNotes || []) sc.layoutInfo.push(n);

@@ -23,6 +23,24 @@ const DIR = { 'right-of': '右边', 'left-of': '左边', above: '上面', below:
 
 const { Le, Ge, Eq } = Operator;
 
+// 用「挨着谁」连在一起的一串（主角那一组）：沿 right-of left-of above below row col 走，话、贴着一处的不算
+export function componentOf(id, rels) {
+  const edges = [];
+  for (const r of rels) {
+    if (r.auto || !['right-of', 'left-of', 'above', 'below', 'row', 'col'].includes(r.kind)) continue;
+    const ids = Array.isArray(r.a) ? r.a : [r.a, r.b];
+    for (let k = 1; k < ids.length; k++) edges.push([ids[k - 1], ids[k]]);
+  }
+  const seen = new Set([id]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [a, b] of edges) {
+      if (seen.has(a) && !seen.has(b)) { seen.add(b); grew = true; }
+      if (seen.has(b) && !seen.has(a)) { seen.add(a); grew = true; }
+    }
+  }
+  return [...seen].filter((x) => x !== 'say' && x !== 'goals');
+}
 // 只让画面上那几块（话、挑战）躲的地方（ghost：老师横跨两样东西画的箭头、连线占的那一块）：东西本身照关系摆，不躲它
 function apart(a, b) { return (a.ghost && !b.rigid) || (b.ghost && !a.rigid) || (a.ghost && b.ghost); }
 function hits(a, b, pad = 0) {
@@ -250,9 +268,17 @@ function run(work, rels, sizes, env) {
   function relConstraints(r) {
     const s = rel(r), g = GAPS[r.gap] * cell * gapF;
     if (r.kind === 'main') {
-      const i = at.get(r.a), { w, h } = sizes[i];
-      add(X[i].plus(w / 2), Eq, canvas.w / 2, s);
-      add(Y[i].plus(h / 2), Eq, canvas.h * 0.42, s / 10);
+      // 主角和挨着它摆的（right-of / below / row … 一串连着的）当一组居中：A main、B 在 A 右边、AB BA 在下面一排，
+      // 要的是这一组在中间，不是 A 自己在中间、别的都挂在右边（自由排版试验）
+      const comp = componentOf(r.a, rels).map((id) => at.get(id)).filter((i) => i != null);
+      // 按大小加权（宽的、高的那样占的分量大）：并排、上下摆的一组，加权的中心就是整组框的中心
+      let ex = new Expression(0), ey = new Expression(0), sw = 0, sh = 0;
+      for (const i of comp) {
+        const { w, h } = sizes[i];
+        ex = ex.plus(X[i].plus(w / 2).multiply(w)); ey = ey.plus(Y[i].plus(h / 2).multiply(h)); sw += w; sh += h;
+      }
+      add(ex, Eq, sw * canvas.w / 2, s / Math.max(1, sw / comp.length));
+      add(ey, Eq, sh * canvas.h * 0.42, s / 10 / Math.max(1, sh / comp.length));
       return;
     }
     if (r.kind === 'row' || r.kind === 'col') {

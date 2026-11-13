@@ -384,7 +384,7 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 /* 话默认不带框：字直接写在画面上（2026-11-13 学生说字旁边都是框看着不舒服）；老师 look say frame=card 才是一张卡（look/apply.js 写行内样式） */
 .st-stage.is-free .st-caption { right: auto; bottom: auto; box-sizing: border-box; padding: 4px 2px; align-items: stretch; justify-content: flex-start; gap: 4px; z-index: 3; }
 /* 末一行不留孤零零一个字、一个「？」（设计要求单复评：问句折行时「？」单独掉到第二行）；量高、画都用这一条，量的和画的一样 */
-.st-stage.is-free .st-line { text-wrap: pretty; max-width: none; }
+.st-stage.is-free .st-line { text-wrap: pretty; max-width: none; line-break: strict; } /* 「，」「。」不落在行首 */
 .st-stage.is-free .st-caption[hidden] { display: none; }
 .st-stage.is-free .st-line { width: auto; font-size: var(--st-fs-talk); line-height: 1.55; }
 .st-stage.is-free .st-line.is-past { font-size: var(--st-fs-body); color: var(--st-muted); }

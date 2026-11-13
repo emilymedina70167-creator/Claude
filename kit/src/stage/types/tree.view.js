@@ -85,11 +85,16 @@ function syncTray(stage, o, ctx) {
     ctx.jobs.push(stage.tween(n, [f0, f1], { duration: 520, easing: EASE.move }));
   };
   const area = trayArea(o);
+  let idle = false;
   if (area) {
     want.add('tray');
     let made = false;
     const bg = stage.decor(o.id, 'tray', () => { made = true; return el('div', 'tr-tray', stage.layer); });
     put(bg, area, made);
+    // 插入没交给学生（老师 close 了、还没 open t insert）：托盘画淡，看着不像能拖（自由排版试验：「先收回插入」画面上看不出来）
+    const armed = [...(stage.scene.opens?.values?.() || [])].some((e) => e.obj === o.id && (e.action === 'insert' || e.action === 'move'));
+    bg.classList.toggle('is-idle', !armed);
+    idle = !armed;
   }
   for (const b of trayBoxes(o)) {
     const k = `tray:${b.value}`;
@@ -104,6 +109,7 @@ function syncTray(stage, o, ctx) {
       return n;
     });
     put(n, b, made);
+    n.classList.toggle('is-idle', idle);
   }
   stage.dropDecor(o.id, (k) => (k === 'tray' || k.startsWith('tray:')) && !want.has(k));
 }
@@ -476,6 +482,8 @@ export const treeView = {
 .tr-edge.is-dim { opacity: .28; }
 .tr-edge.is-moved { stroke: var(--st-g6); stroke-width: 3.5; }
 .tr-empty { position: absolute; left: 0; top: 0; width: ${NODE}px; height: ${NODE}px; box-sizing: border-box; border-radius: 50%; border: 1.5px dashed rgb(var(--chalk-rgb, 27 34 32) / 0.28); }
+.tr-tray.is-idle { opacity: .45; border-style: solid; }
+.tr-chip.is-idle { opacity: .55; }
 .tr-tray { position: absolute; left: 0; top: 0; box-sizing: border-box; border-radius: 40px; background: color-mix(in srgb, var(--st-brand) 5%, transparent); border: 1.5px dashed color-mix(in srgb, var(--st-brand) 26%, transparent); pointer-events: none; }
 .tr-chip { z-index: 2; }
 .tr-chip.is-drag::after { border-radius: 50%; }
