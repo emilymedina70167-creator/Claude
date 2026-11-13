@@ -10,6 +10,7 @@
 import { Solver, Variable, Constraint, Operator, Strength } from 'kiwi.js';
 import { GAPS } from './grid.js';
 
+const W_PIN = 1e9;              // 老师摆过的（钉住的）：一个像素都不挪（第九轮）
 const W_BOUND = 1e8;            // 在画布里、at= 定死的框
 const W_SEP = 1e7;              // 不重叠
 const WEIGHT = { strong: 1e6, medium: 1e4, weak: 1e2 };
@@ -53,7 +54,7 @@ function normRels(relations, ids) {
 
 const nameOf = b => typeof b === 'string' ? b : b?.name || b?.of || '那一处';
 
-export function solveLayout({ canvas, grid, items, relations = [] }) {
+export function solveLayout({ canvas, grid, items, relations = [], release = null, arrange = null }) {
   const cell = grid.cell;
   const ids = new Set(items.map(it => it.id));
   const rels = normRels(relations, ids);
@@ -61,14 +62,22 @@ export function solveLayout({ canvas, grid, items, relations = [] }) {
   const fixedOf = new Map();
   for (const it of items) if (it.fixed) fixedOf.set(it.id, it.fixed);
   for (const r of rels) if (r.kind === 'at' && r.box) fixedOf.set(r.a, r.box);
+  // 钉住的（老师摆过的，第九轮）：照上一次的位置定死，不缩、不吸格、不挪进画布。release 的这一次不当钉子（保留上一次的位置，挪最少）；
+  // arrange 的这一次不当钉子、也不管上一次的位置（照关系整个重排）
+  const arranged = (id) => arrange === 'all' || !!arrange?.has?.(id);
   const work = items.map((it, i) => {
     const f = fixedOf.get(it.id);
-    return { ...it, idx: i, order: it.order ?? i, fixed: f ? clampBox(f, canvas) : null };
+    const free = arranged(it.id) || !!release?.has?.(it.id);
+    const pin = it.pinned && it.prev && !free ? { x: it.prev.x, y: it.prev.y, w: it.w, h: it.h } : null;
+    return { ...it, idx: i, order: it.order ?? i, fixed: f && !pin ? clampBox(f, canvas) : null, pin, ...(arranged(it.id) ? { prev: undefined } : {}) };
   });
-  const live = rels.filter(r => r.kind !== 'at');
+  // 主语钉住了的关系：它当初照关系摆好、钉住了，这条关系不再拉它（别的东西照样能挨着它）
+  const pinned = new Set(work.filter((w) => w.pin).map((w) => w.id));
+  const live = rels.filter(r => r.kind !== 'at' && !(Array.isArray(r.a) ? r.a.every((x) => pinned.has(x)) : pinned.has(r.a)));
 
   let best = null;
-  for (const scale of SCALES) {
+  // 台上有钉住的东西：页面不整台缩（只有一个镜头，缩不了「只缩没钉住的」），放不下照实报告
+  for (const scale of pinned.size ? [1] : SCALES) {
     for (const gapF of [1, 0.5]) {
       const res = attempt(work, live, { canvas, cell, scale, gapF });
       if (!best || res.cost < best.cost) best = { ...res, scale };
@@ -95,6 +104,7 @@ function clampBox(b, cv) {
 function attempt(work, rels, env) {
   const { scale } = env;
   const opts = work.map(it => {
+    if (it.pin) return [{ w: it.pin.w, h: it.pin.h }];
     if (it.fixed) return [{ w: it.fixed.w, h: it.fixed.h }];
     const list = (it.alts && it.alts.length ? it.alts : [{ w: it.w, h: it.h }]).slice(0, 3);
     // rigid：画面上的一块（话、挑战）不跟着整台缩，字号是定的
@@ -158,6 +168,7 @@ function run(work, rels, sizes, env) {
 
   for (let i = 0; i < n; i++) {
     const it = work[i], { w, h } = sizes[i];
+    if (it.pin) { add(X[i], Eq, it.pin.x, W_PIN); add(Y[i], Eq, it.pin.y, W_PIN); continue; }
     add(X[i], Ge, 0, Strength.required);
     add(Y[i], Ge, 0, Strength.required);
     add(X[i].plus(w), Le, canvas.w, W_BOUND);
@@ -329,7 +340,7 @@ function snap(boxes, work, canvas, cell) {
   const half = cell / 2;
   const out = boxes.map(b => ({ ...b }));
   out.forEach((b, i) => {
-    if (work[i].fixed) return;
+    if (work[i].fixed || work[i].pin) return;
     const s = {
       ...b,
       x: Math.max(0, Math.min(Math.round(b.x / half) * half, Math.max(0, canvas.w - b.w))),
@@ -375,11 +386,12 @@ function violated(r, boxes, cell, gapF) {
 }
 
 function score(boxes, work, rels, { canvas, cell, gapF }) {
-  const list = [...boxes.values()];
+  const list = work.map((w) => boxes.get(w.id));
   let bad = 0;
+  // 钉住的东西自己出了屏幕、两样钉住的互相压着：页面不管（不挪老师摆的），只在版面里报告，不算这一次排得不好
   for (let i = 0; i < list.length; i++) {
-    if (!inside(list[i], canvas)) bad++;
-    for (let j = i + 1; j < list.length; j++) if (hits(list[i], list[j])) bad++;
+    if (!inside(list[i], canvas) && !work[i].pin) bad++;
+    for (let j = i + 1; j < list.length; j++) if (hits(list[i], list[j]) && !(work[i].pin && work[j].pin)) bad++;
   }
   const unmet = [];
   let cost = bad * 1e9;

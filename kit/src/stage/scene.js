@@ -1871,7 +1871,14 @@ export class Scene {
         if (kind && kind !== 'main' && kind !== 'row' && kind !== 'col' && !target) throw new Error(`${kind} 后面写挨着哪一样（place ${names[0]} ${kind} s）`);
         const rel = this.placeRel(kind === 'row' || kind === 'col' ? names : names[0], opts.at != null ? null : kind, target, opts);
         this.layout.set(names[0], [rel]);
+        // 老师摆过的归老师（第九轮）：钉住，页面以后不挪它（arrange 才重排）
+        for (const n of names) { const o = this.objects.get(n); if (o) o.pinned = true; }
         return { place: names };
+      }
+      case 'arrange': {
+        // arrange / arrange s q：帮我重排——照所有关系把这几样（不写是全部）整个重排一遍，排完照样钉住（第九轮）
+        for (const n of words) if (!this.objects.has(n)) throw new Error(`arrange 写的「${n}」：舞台上没有「${n}」`);
+        return { arrange: words.length ? [...words] : 'all' };
       }
       case 'pos': {
         // pos s=12.5,40 gl=30,4.5,600：页面的求解器摆好的地方（第八轮，compose/apply.js 的 posLine）。页面自己写进 log，

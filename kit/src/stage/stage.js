@@ -753,6 +753,7 @@ export class Stage {
     if (forgiven && by === 'teacher' && !this.instant) this.errors.push({ line: c.line, src: c.src?.trim(), kept: true, error: FORGIVEN[forgiven] });
     if (c.cmd === 'scene' && fx?.scene != null) this.afterScene();
     // 这一轮老师讲的那样东西（话默认贴着它）：摆位置、挑战、说话的行不算
+    if (fx?.arrange) this.arrangeNext = fx.arrange; // 帮我重排（第九轮）：下一次摆的时候这几样不当钉子
     if (by === 'teacher' && !c.on && !['place', 'preview', 'pos', 'goal', 'watch', 'say', 'ask', 'scene', 'remove'].includes(c.cmd)) { const t = fx?.created ? fx.id : this.targetOf(c)?.id; if (t) this.lastTouched = t; }
     if (fx?.created) this.sideDirty = true; // 造了新东西：横屏栏宽重算一次
     if (by === 'teacher' && !this.instant) {
@@ -2066,7 +2067,12 @@ export class Stage {
     const partBox = (ref) => { try { return bbox(sc.parts(ref).map((p) => sc.partBox(p))); } catch { return null; } };
     const { items, relations } = composeInput(sc, { ts, camS: baseS, grid, boxOf: (id) => this.unionBox(id), altsOf: (id) => this.altsOf(id), partBox, extras, lastTouched: this.lastTouched, tiedOf: (id) => { const o = sc.objects.get(id); return o ? sc.type(o).anchors?.(o) || [] : []; } });
     if (!items.length) { this.layoutState = { boxes: new Map(), unmet: [], scale: 1, grid, canvas: cv }; sc.layoutInfo = null; return false; }
-    const res = solveLayout({ canvas: cv, grid, items, relations });
+    const arrange = this.arrangeNext === 'all' ? 'all' : this.arrangeNext ? new Set(this.arrangeNext) : null;
+    this.arrangeNext = null;
+    let res = solveLayout({ canvas: cv, grid, items, relations, arrange });
+    // 底线 1（第九轮）：学生要点的部件被钉住的东西盖着、或者出了屏幕：放开挡着的那一样（或者它自己）挪最少的距离，告诉老师
+    const nudged = this.floorNudge(res, items, cv, ts);
+    if (nudged.size) res = solveLayout({ canvas: cv, grid, items, relations, arrange, release: nudged });
     const s = ts * res.scale;
     // 东西挪到算出来的地方
     const moves = [];
@@ -2117,6 +2123,7 @@ export class Stage {
     // 现状里的「版面」：每样占哪几格、没照办的
     // 页面自己加的默认关系（话贴着讲的那样）没照办不告诉老师：老师没写过
     sc.layoutInfo = layoutLines({ boxes: res.boxes, grid, unmet: res.unmet.filter((u) => !u.rel?.auto), scale: res.scale });
+    if (nudged.size) sc.layoutInfo.push(`为了让学生点得到，挪了 ${[...nudged].join('、')}（它盖着、或者让学生要点的部件出了屏幕）`);
     if (!sc.focus) {
       const from = `translate(${this.cam.tx}px, ${this.cam.ty}px) scale(${this.cam.s})`;
       const to = `translate(${this.baseCam.tx}px, ${this.baseCam.ty}px) scale(${this.baseCam.s})`;
@@ -2140,6 +2147,36 @@ export class Stage {
     const st = this.layoutState;
     if (!st?.boxes?.size) return '舞台上还是空的。';
     return [...layoutLines({ boxes: st.boxes, grid: st.grid, unmet: st.unmet.filter((u) => !u.rel?.auto), scale: st.scale }), sketchText({ boxes: st.boxes, grid: st.grid })].join('\n');
+  }
+  /**
+   * 底线 1 的挪（第九轮）：老师交给学生的部件（open 的、这一问点的）在排好的版面里被别的钉住的东西盖着，或者出了画布：
+   * 返回要放开的那几样（盖着的那一样；出了画布的是部件自己那一样）。没有就是空的
+   */
+  floorNudge(res, items, cv, ts) {
+    const sc = this.scene;
+    const out = new Set();
+    const itemOf = new Map();
+    for (const it of items) for (const m of it.members || [it.id]) itemOf.set(m, it);
+    const refs = [...(sc.opens?.values?.() || [])].flatMap((e) => e.refs || []);
+    for (const r of refs) {
+      let parts = [];
+      try { parts = sc.parts(r); } catch { parts = []; }
+      for (const p of parts) {
+        const own = itemOf.get(p.obj);
+        const B = own && res.boxes.get(own.id);
+        if (!B) continue;
+        const U = bbox((own.members || [own.id]).map((m) => this.unionBox(m)));
+        const pb = sc.partBox(p), k = ts * res.scale;
+        const box = { x: B.x + (pb.x - U.x) * k, y: B.y + (pb.y - U.y) * k, w: pb.w * k, h: pb.h * k };
+        if (box.x < -2 || box.y < -2 || box.x + box.w > cv.w + 2 || box.y + box.h > cv.h + 2) { if (own.pinned) out.add(own.id); continue; }
+        for (const it of items) {
+          if (it === own || !it.pinned) continue;
+          const o = res.boxes.get(it.id);
+          if (o && o.x < box.x + box.w && box.x < o.x + o.w && o.y < box.y + box.h && box.y < o.y + o.h) out.add(it.id);
+        }
+      }
+    }
+    return out;
   }
   /** 「说过的」：这一幕说过的话（前几轮的）列在一张浮层里 */
   toggleTalk(on = this.talkPop?.hidden) {

@@ -17,7 +17,7 @@ export const COMMANDS = new Set([
   'label', 'retext', 'unlabel', 'dial', 'set', 'camera', 'wait', 'ask', 'clear', 'fly', 'remove',
   'dim', 'undim', 'cover', 'uncover',
   'open', 'close', 'goal', 'ungoal', 'watch', 'follow', 'hide', 'show', 'pick', 'unpick', 'keep', 'back', 'press',
-  'scene', 'place', 'preview', 'pos', 'style', 'look',
+  'scene', 'place', 'preview', 'pos', 'style', 'look', 'arrange',
 ]);
 export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
 
