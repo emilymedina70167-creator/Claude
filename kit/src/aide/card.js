@@ -2,7 +2,7 @@
 // 卡是助手从原始记忆（错题、弱点、证据、以前的课）懂内容地合并出来的一层，老师开课时读它，不用再读几十条原始条目。
 // 卡整张重写、不追加（超了 CARD_MAX 说明该合并）；每行带出处，出处对不上的那一行页面直接删掉（不挂起等我放行）。
 // 纯函数，有测试（tests/aide-card.test.js）。
-import { nearBlocks } from '../memory/digest.js';
+import { nearBlocks, neutral } from '../memory/digest.js';
 import { hashOf } from '../memory/lab.js';
 import { findQuotes, turnRefs, containment, normText } from '../memory/guard.js';
 import { crossId } from './schema.js';
@@ -46,7 +46,7 @@ export function cardText(card = {}, { title = '', moves = '' } = {}) {
     if (sec === '讲法' && moves) ls.push(moves);
     return ls.length ? [`- ${sec}：${ls.join('；')}`] : [];
   });
-  return [head, ...body].join('\n');
+  return neutral([head, ...body].join('\n'));
 }
 
 /** 这一块开课要读哪几张卡：自己、前置（requires）、课程地图上挨着的、这一科的跨块卡（最后一张，一定在） */
@@ -121,9 +121,12 @@ export function checkCardLines(lines = [], { mem = {}, corpora = {}, extraIds = 
 /** 新卡收不收：超了 CARD_MAX 不收；把旧卡整张原样留着再往后加的不收（要整张重写，不累加） */
 export function acceptCard(next, old = '') {
   if (bytes(next) > CARD_MAX) return { ok: false, why: `卡有 ${bytes(next)} 字节，超过 ${CARD_MAX}：要合并，不要追加` };
-  const o = normText(old);
-  const n = normText(next);
-  if (o && n.length > o.length && n.includes(o)) return { ok: false, why: '把旧卡原样留着往后加了几行：要整张重写' };
-  if (!n) return { ok: false, why: '卡是空的' };
+  // 按行比：旧卡的每一行原样都在、还多了几行，就是在旧卡上累加（新行插在哪一段都算；整支审查：以前按整段字比，插在中间的看不出来）
+  const rows = (t) => String(t ?? '').split('\n').map(normText).filter(Boolean);
+  const o = rows(old);
+  const n = rows(next);
+  const have = new Set(n);
+  if (o.length && n.length > o.length && o.every((x) => have.has(x))) return { ok: false, why: '把旧卡原样留着加了几行：要整张重写' };
+  if (!n.length) return { ok: false, why: '卡是空的' };
   return { ok: true, why: '' };
 }

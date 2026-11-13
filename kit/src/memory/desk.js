@@ -370,6 +370,8 @@ export async function renderDesk(root, meta) {
   lab = createLabDesk({ db, getData: () => data, packs, planner, ops, aide: aideDesk, onChange: () => paintWork() });
   function runSentry(today) {
     aideDesk.tick();
+    // 学生卡还没读到：先读，读到了再拼工作单（不然按章合并的单子会被当成没了撤掉）
+    if (!aideDesk.cards()) { aideDesk.ensureCards().then(() => runSentry(today), () => {}); return; }
     const re = sentryRecheck(data);
     const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: packs[k].main }])), re, exam: examMeta, cards: aideDesk.cards() });
     const doc = { v: 1, items, recheck: Object.fromEntries(SPACE_KEYS.map((k) => [k, recheckText(re, k)])), stale: re.stale.length, maybeSolved: re.maybeSolved.length };

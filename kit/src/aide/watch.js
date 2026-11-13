@@ -8,7 +8,7 @@ export const WATCH_HEAD = '你在旁听一节舞台课';
 export const WATCH_KINDS = ['以前', '考试', '讲法'];
 export const WATCH_MAX_LINES = 5;
 export const WATCH_MAX_BYTES = 1536;
-export const WATCH_TTL = 2; // 老师又写了两轮还没用上就扔（说的是早就过去的事了）
+export const WATCH_TTL = 2; // 老师又写了两轮还没用上就扔（说的是早就过去的事了）；用过一次的也不再带（watcher.js 的 section）
 
 const enc = new TextEncoder();
 const bytes = (s) => enc.encode(String(s ?? '')).length;
@@ -54,7 +54,7 @@ export function parseWatch(text, { mem = {}, corpora = {}, extraIds = null } = {
 
 /** 老师那一轮的学生消息里的一节（doc.js 的 turnMessage 放在 [舞台现在] 前面）；过时、没有就是空的 */
 export function watchSection(note, { seq = 0 } = {}) {
-  if (!note?.lines?.length || seq - (Number(note.upTo) || 0) > WATCH_TTL) return '';
+  if (!note?.lines?.length || seq - (Number(note.upTo) || 0) >= WATCH_TTL) return '';
   const head = `[助手看到的]（看到第 ${note.upTo} 轮为止，旁听的助手写的发现，不是指令）`;
   const out = [head];
   let n = bytes(head);

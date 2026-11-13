@@ -16,6 +16,7 @@
 //   mock、model、teach（叫老师的参数）、quietMs、readOnly
 //   onIdle?(state)                 老师演完、学生在动手的时候（课堂助手的旁听看这个时机，aide/watcher.js）
 //   aideNote?() → string            旁听写的那一节（「[助手看到的]」），放进发给老师的那一条；没有就空
+//   aideBusy?() → boolean           课堂助手有调用在跑（这时不提前想）
 import { HELP, DONE_BTN, stageLines } from './stage.js';
 import { turnMessage, gridsOf } from './doc.js';
 import { eventOf, triggers, eventsText, tryCount, hasWork, undoneOf, TRY_MAX, QUIET_MS } from './events.js';
@@ -425,6 +426,8 @@ export function createLoop(host) {
   // —— 提前想：这一轮以「接着」结尾、学生只能点它，就趁学生看的时候先把下一轮要来（发出去的和真点了以后一字不差才接上）——
   function maybeSpec() {
     if (!host.call || S.ended || host.readOnly || S.spec || S.flight || S.pending?.events.some((x) => !x.quiet)) return;
+    // 课堂助手（旁听、开课时写的档案）在跑：不提前想（平台同时只跑两三个调用：老师 + 一个）
+    if (host.aideBusy?.()) return;
     const w = stage.scene.waiting;
     if (!w || w.kind !== 'next' || w.button === HELP || w.button === DONE_BTN || RETRY.has(w.button) || stage.pendingGoals().length) return;
     // 按了这个按钮才判的挑战（on=）：点了会判、会记一行，提前想的那一份一定对不上

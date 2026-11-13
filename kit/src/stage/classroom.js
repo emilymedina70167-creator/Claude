@@ -19,7 +19,7 @@ import { examForBlock } from '../exam/block.js';
 import { examForClass } from '../exam/context.js';
 import { aideForTurn } from '../aide/brief.js';
 import { createWatcher } from '../aide/watcher.js';
-import { watchPrompt, parseWatch, watchSection } from '../aide/watch.js';
+import { watchPrompt, parseWatch } from '../aide/watch.js';
 import { transcriptText } from '../memory/debrief.js';
 import { buildCorpus } from '../memory/guard.js';
 import { createDevAI } from '../books/devmock.js';
@@ -137,6 +137,7 @@ export async function renderStageClass(root, meta = {}, desk) {
   // 开课时档案不能用：和老师第一轮同时写一份（desk.aide.refresh），写好了从下一轮起带上；写不成就一直是代码挑的那一套
   let aideBrief = desk.aide?.brief || null;
   let aideAsked = false;
+  let aideBriefBusy = false; // 开课时写的那一份档案还在跑（这时不提前想：名额只有老师 + 一个）
   function aideSection() {
     const a = desk.aide;
     if (!a || !desk.block) return null;
@@ -144,7 +145,8 @@ export async function renderStageClass(root, meta = {}, desk) {
     const got = aideForTurn({ block: desk.block, cards: a.cards, brief: aideBrief, curriculum, space: a.space, mem: desk.mem });
     if (!got.brief && !aideAsked && !readOnly && a.cards?.length) {
       aideAsked = true;
-      a.refresh?.().then((b) => { if (b) aideBrief = b; }, () => {});
+      aideBriefBusy = true;
+      Promise.resolve(a.refresh?.()).then((b) => { if (b) aideBrief = b; }, () => {}).finally(() => { aideBriefBusy = false; });
     }
     return got.brief || got.cards.length ? got : null;
   }
@@ -203,7 +205,8 @@ export async function renderStageClass(root, meta = {}, desk) {
     stage, call, mock: !!mock, model: MODEL, teach: TEACH, quietMs, readOnly,
     messages: ({ next } = {}) => messages(null, { next }),
     onIdle: watcher ? (st) => watcher.kick({ ...st, upTo: teacherTurns() }) : null,
-    aideNote: watcher ? () => watchSection(watcher.note(), { seq: teacherTurns() }) : null,
+    aideNote: watcher ? () => watcher.section(teacherTurns()) : null,
+    aideBusy: () => !!watcher?.busy || aideBriefBusy,
     addTurn, putTurn,
     runMemo: (text, seq0) => runMemo(text, seq0),
     thinking: (on) => thinking(on),

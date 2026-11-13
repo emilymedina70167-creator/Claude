@@ -41,7 +41,8 @@ export function pointCatalog(sessions = [], mastery = []) {
 /** 这节课要不要（重新）归类：有报告、报告里有题、还没归过或者报告后来重算过 */
 export function needsSkills(s) {
   if (!s || s.kind === 'drill' || !s.report || !(Number(s.report.items) > 0)) return false;
-  if (s.aide) return false; // 下课后的助手一次做完（aide/after.js）
+  // 下课后的助手一次做完（aide/after.js）；做完以后报告又重算了（报告的写法升级）：只重做归类（整次重做会把事实再写一遍）
+  if (s.aide) return !!s.after?.at && (!s.skills || Number(s.skills.reportAt) !== Number(s.report.at));
   return !s.skills || (Number(s.skills.v) || 0) < SKILLS_VERSION || Number(s.skills.reportAt) !== Number(s.report.at);
 }
 

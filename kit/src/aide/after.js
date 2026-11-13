@@ -91,7 +91,9 @@ export function splitAfter(text) {
   const out = { debrief: '', skills: '', facts: '', cards: {}, moves: '' };
   let cur = null;
   for (const raw of String(text ?? '').split('\n')) {
-    const h = raw.trim().match(/^#{2,3}\s*(复盘|归类|事实|讲法|卡\s+(\S+))\s*$/);
+    // 节头：照抄了提示词里「### 卡 L2.2.2 现在是：」的也认；别的标题当这一节到头了（不把后面的行并进上一节）
+    const h = raw.trim().match(/^#{2,3}\s*(复盘|归类|事实|讲法|卡\s+((?:[A-Z]{2}-)?L[\d.]+|x-[a-z]+)(?:\s*现在是\s*[:：]?)?)(?:[（(].*)?\s*$/);
+    if (!h && /^#{1,3}\s/.test(raw.trim())) { cur = null; continue; }
     if (h) {
       if (h[2]) { cur = { card: h[2] }; out.cards[h[2]] = out.cards[h[2]] || ''; }
       else cur = { key: { 复盘: 'debrief', 归类: 'skills', 事实: 'facts', 讲法: 'moves' }[h[1]] };

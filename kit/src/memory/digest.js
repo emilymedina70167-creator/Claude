@@ -31,10 +31,11 @@ export const CATALOG_MAX = 7 * 1024;
 // 先给目录留多少（目录是一条一行，真数据里 3～4 KB；全文装完剩下的也都给目录）
 export const CATALOG_RESERVE = 5 * 1024;
 // 装的先后：这节课这一块的在前（CORE，合起来最多占全文预算的 CORE_SHARE），再是关于我（短、每轮都要）、规则、守则
-// 课前档案、学生卡（第九轮，aide/）：助手从全部记忆合并出来的，最先装；两节合起来最多 AIDE_SHARE
-export const AIDE_SHARE = 0.4;
+// 课前档案、学生卡（第九轮，aide/）：助手从全部记忆合并出来的，最先装；算在这一块的那一份（CORE_SHARE）里，
+// 两节合起来最多 AIDE_SHARE——不额外占地方，规则、守则、关于我照旧（整支审查：以前另外占，守则会被整段挤掉）
+export const AIDE_SHARE = 0.25;
 export const PACK_ORDER = ['aide-brief', 'aide-cards', 'position', 'curriculum', 'weaknesses', 'mastery', 'recall', 'sessions', 'errors', 'profile', 'rules', 'lessons', 'slips', 'pending', 'source'];
-const CORE = new Set(['position', 'curriculum', 'errors', 'weaknesses', 'mastery', 'recall', 'sessions']);
+const CORE = new Set(['aide-brief', 'aide-cards', 'position', 'curriculum', 'errors', 'weaknesses', 'mastery', 'recall', 'sessions']);
 export const CORE_SHARE = 0.45;
 
 /**

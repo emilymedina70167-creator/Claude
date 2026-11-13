@@ -17,7 +17,7 @@ import { assertWrite } from '../memory/schema.js';
 import { lessonPlanText } from '../books/plan.js';
 import { reportError } from '../errlog.js';
 import { AFTER_VERSION, needsAfter, afterPrompt, parseAfter } from './after.js';
-import { parseMoves } from './moves.js';
+import { parseMoves, moveOutcome } from './moves.js';
 import { parseCard, linesText, checkCardLines, acceptCard, cardSrc, cardIdsFor, cardText } from './card.js';
 import { fillQueue, cardPrompt, crossPrompt } from './fill.js';
 import { briefPrompt, parseBrief, briefSig, briefUsable, guessBlocks, BRIEF_MODEL } from './brief.js';
@@ -25,6 +25,7 @@ import { loadCards, loadAllCards, loadBrief, trapsFor, markTraps } from './load.
 import { AIDE_SPACES } from './schema.js';
 
 export const AIDE_MODEL = BRIEF_MODEL;
+export const AIDE_TIMEOUT = 6 * 60 * 1000; // 一次下课后整理读整节课，平时一两分钟
 const LIMITS = { after: 3, fill: 6 }; // 这次打开首页最多做几件（后台调用一次要一两分钟）
 const docsOf = (snap) => (snap?.docs || []).map((d) => ({ id: d.id, ...d.data() }));
 const bytesOf = (s) => new TextEncoder().encode(String(s ?? '')).length;
@@ -36,15 +37,18 @@ const cmpId = (a, b) => String(a).localeCompare(String(b), undefined, { numeric:
  */
 export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready = () => true }) {
   let busy = false;
-  let lastCards = []; // 最近读到的全部学生卡（工作单按章合并要用）
+  let lastCards = null; // 最近读到的全部学生卡（工作单按章合并要用）；还没读过是 null
   const tried = { after: new Set(), fill: new Set(), brief: new Set() };
   const opts = (extra = {}) => ({ model: AIDE_MODEL, effort: 'high', modelTier: 'complex', cache: false, lane: 'bg', ...extra });
 
   async function callOpus(prompt, extra) {
     const c = await ai();
     if (!c) return null;
-    const res = await c.call(prompt, opts(extra));
-    return res?.modelApplied && res.modelApplied !== AIDE_MODEL ? null : res;
+    // 挂住不回：过了 AIDE_TIMEOUT 算失败（不然这次打开首页再也不做、后台那一条道也一直堵着）
+    let timer = null;
+    const late = new Promise((r) => { timer = setTimeout(() => r(null), AIDE_TIMEOUT); });
+    const res = await Promise.race([c.call(prompt, opts(extra)), late]).finally(() => clearTimeout(timer));
+    return !res || (res.modelApplied && res.modelApplied !== AIDE_MODEL) ? null : res;
   }
   // 读最新的那条再写（课堂、对话里的 Claude、别的设备可能刚改过）
   async function patchSession(sid, patch) {
@@ -78,7 +82,7 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     if (!acc.ok) return { ok: false, dropped: dropped.length + 1, why: acc.why };
     const isCross = id.startsWith('x-');
     assertWrite('page', 'cards');
-    await db.doc(`cards/${id}`).set({ ...(isCross ? { space: space || id.slice(2) } : { block: id, space: spaceOfId(id) }), text, src: isCross ? '' : cardSrc(id, data), at: Date.now(), model, by: 'aide', ...(session ? { session } : {}), ...(labAt || old?.labAt ? { labAt: labAt || old.labAt } : {}) });
+    await db.doc(`cards/${id}`).set({ ...(isCross ? { space: space || id.slice(2) } : { block: id, space: spaceOfId(id) }), text, src: isCross ? '' : cardSrc(id, data), at: labAt || Date.now(), model, by: 'aide', ...(session ? { session } : {}), ...(labAt || old?.labAt ? { labAt: labAt || old.labAt } : {}) });
     return { ok: true, dropped: dropped.length };
   }
 
@@ -134,7 +138,7 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     }
     const took = { facts: mr.pds.length, cards: cardsOk };
     // 讲法（第 3 批）：只认老师那几轮的编号、词表里的词；有没有用页面按证据算（moves.js），这里只存标了什么
-    const moves = parseMoves(r.moves, { turns: new Set(turns.filter((t) => t.role === 'claude' && !t.discarded).map((t) => Number(t.seq))) });
+    const moves = parseMoves(r.moves, { turns: new Set(turns.filter((t) => t.role === 'claude' && !t.discarded).map((t) => Number(t.seq))) }).map((m) => ({ ...m, out: moveOutcome(m, evidence) }));
     await patchSession(sid, { debrief, ...(skills ? { skills } : {}), moves, after: { v: AFTER_VERSION, at: now, model, bytes: bytesOf(prompt), took, rejected: mr.rejected.length, dropped, problems: r.problems.slice(0, 10) } });
     await markTraps(db, s.block, hit).catch(() => {});
     await countDropped(dropped);
@@ -264,5 +268,7 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     try { did = await step(); } finally { busy = false; }
     if (did && !once) setTimeout(() => tick(), 500);
   }
-  return { tick, afterOne, afterInput, afterApply, saveCard, markMerged, fillOne, briefFor, cards: () => lastCards, cardsFor: (block, space) => loadCards(db, cardIdsFor(block, getData().curriculum || [], space)), cardText };
+  // 工作单要的全部卡：还没读过时先读一次（读到以前别拼工作单，不然 card 单子会被当成没了撤掉）
+  const ensureCards = async () => { if (!lastCards) lastCards = await loadAllCards(db); return lastCards; };
+  return { tick, afterOne, afterInput, afterApply, saveCard, markMerged, fillOne, briefFor, cards: () => lastCards, ensureCards, cardsFor: (block, space) => loadCards(db, cardIdsFor(block, getData().curriculum || [], space)), cardText };
 }

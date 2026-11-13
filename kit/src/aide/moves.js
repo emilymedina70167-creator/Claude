@@ -38,7 +38,8 @@ export function moveStats(sessions = [], evidence = [], block = '') {
     if (!list(s?.moves).length || !(s.block === block || list(s.blocks).includes(block))) continue;
     const evs = list(evidence).filter((e) => e?.session === s.id);
     for (const m of s.moves) {
-      const r = moveOutcome(m, evs);
+      // 下课时算好的（out）为准：课堂里拿不到证据（MEMORY_FOR_CLASS 不带 evidence），照证据现算只在没存的时候
+      const r = m.out !== undefined ? m.out : moveOutcome(m, evs);
       if (!r) continue;
       const x = (out[m.move] ||= { n: 0, ok: 0 });
       x.n++;

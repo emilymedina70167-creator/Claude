@@ -6,6 +6,7 @@
 import { hashOf } from '../memory/lab.js';
 import { todayReviews } from '../memory/views.js';
 import { positionId } from '../memory/space.js';
+import { neutral } from '../memory/digest.js';
 import { cardText, cardIdsFor } from './card.js';
 import { moveStats, movesText } from './moves.js';
 
@@ -80,7 +81,7 @@ export function briefText(brief) {
     out.push(line);
     n += bytes(line) + 1;
   }
-  return out.length > 1 ? out.join('\n') : '';
+  return out.length > 1 ? neutral(out.join('\n')) : '';
 }
 
 /** 首页猜下一节讲哪几块：这一科备好的教案 > 到期的复现组（这一科排第一的门课挑的那几组的块） > 这一科上一节停在哪 */
