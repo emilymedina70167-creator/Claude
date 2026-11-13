@@ -1329,7 +1329,12 @@ export class Scene {
         const refs = refsIn();
         // 写整样东西的那一头（link AB BA、link f.l1 AA f.r1）连到那样东西上：一道弧（以前把它的每一格连成一串，满屏弧线，
         // unlink f 也收不掉块里的那几道）。只写一样东西（link a）照旧把它的部件依次连起来
-        const ends = refs.length >= 2 ? refs.flatMap((w) => (parseRef(w).mark ? this.parts(w) : [{ obj: w, key: null }])) : partsIn();
+        // 两头各写一处（link s.8-10 tl.fr）：一头是一段（几个词、几格）就整段当一头，连一道线——不拆成 would→be→free→fr 一串
+        // （第九轮：老师自己设计的「句子的这一段对时间轴的这一处」画成了几道乱弧）。三处以上照旧依次连
+        const spanEnd = (w) => { const ps = this.parts(w); return ps.length > 1 && ps.every((p) => p.obj === ps[0].obj) ? [{ obj: ps[0].obj, key: ps[0].key, span: ps.map((p) => p.key) }] : ps; };
+        const ends = refs.length === 2 && refs.some((w) => parseRef(w).mark && this.parts(w).length > 1) && refs.every((w) => !parseRef(w).mark || this.parts(w).length >= 1)
+          ? refs.flatMap((w) => (parseRef(w).mark ? spanEnd(w) : [{ obj: w, key: null }]))
+          : refs.length >= 2 ? refs.flatMap((w) => (parseRef(w).mark ? this.parts(w) : [{ obj: w, key: null }])) : partsIn();
         if (ends.length < 2) throw new Error('link 要至少两个');
         const made = [];
         for (let i = 0; i + 1 < ends.length; i++) {
@@ -2088,7 +2093,8 @@ export class Scene {
     const key = this.linkKey(a, b);
     if (this.links.has(key)) { const l = this.links.get(key); l.color = color; return null; }
     const whole = a.key == null || b.key == null;
-    this.links.set(key, { key, a: { obj: a.obj, key: a.key }, b: { obj: b.obj, key: b.key }, color, tier, ...(whole ? { whole: true } : {}) });
+    const end = (e) => ({ obj: e.obj, key: e.key, ...(e.span ? { span: [...e.span] } : {}) });
+    this.links.set(key, { key, a: end(a), b: end(b), color, tier, ...(whole ? { whole: true } : {}) });
     return key;
   }
   /**

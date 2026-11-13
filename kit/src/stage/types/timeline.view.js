@@ -123,9 +123,9 @@ export const timelineView = {
 .tl-item { position: absolute; left: 0; top: 0; box-sizing: border-box; transition: width .4s; }
 /* 小人：一个圆头、一截身子，下面写名字 */
 .tl-stand { display: flex; flex-direction: column; align-items: center; }
-.tl-stand .tl-head { width: 16px; height: 16px; border-radius: 50%; background: var(--st-brand); }
-.tl-stand .tl-body { width: 22px; height: 18px; margin-top: 2px; border-radius: 10px 10px 4px 4px; background: var(--st-brand); }
-.tl-stand .tl-name { margin-top: 2px; font: 600 13px/1.1 var(--sans, sans-serif); color: var(--st-brand); }
+.tl-stand .tl-head { width: 16px; height: 16px; border-radius: 50%; background: var(--c, var(--st-brand)); } /* paint tl.me g2：小人照老师给的颜色（事件点、条本来就认 --c） */
+.tl-stand .tl-body { width: 22px; height: 18px; margin-top: 2px; border-radius: 10px 10px 4px 4px; background: var(--c, var(--st-brand)); }
+.tl-stand .tl-name { margin-top: 2px; font: 600 13px/1.1 var(--sans, sans-serif); color: var(--c, var(--st-brand)); }
 .tl-stand.is-drag, .tl-stand.is-hold { cursor: grab; touch-action: none; }
 .tl-stand.is-glow .tl-head, .tl-stand.is-glow .tl-body { box-shadow: 0 0 0 3px color-mix(in srgb, var(--st-gold) 60%, transparent); }
 .tl-stand.is-dim { opacity: .35; }

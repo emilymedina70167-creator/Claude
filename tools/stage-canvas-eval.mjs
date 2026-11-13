@@ -3,6 +3,8 @@
 //
 //   node tools/stage-canvas-eval.mjs prepare <目录>   每个起始画面横屏演一遍、截图；每条要求写一份给模拟老师的 prompt-<id>.md
 //   node tools/stage-canvas-eval.mjs apply <目录>     <目录>/<id>.lines.txt（模拟老师写的那一轮）接在起始画面后面演、截图，写 apply.json
+//   node tools/stage-canvas-eval.mjs freeprep <目录>  自由排版（free.json）：学生没提要求，老师自己设计画面；每个开场一份 prompt-<名字>.md
+//   node tools/stage-canvas-eval.mjs freeapply <目录> <目录>/<名字>.lines.txt 接在开场后面演、截图，写 free.json（老师的意图在 intent-<名字>.txt）
 //
 // 截图、现状都是横屏（学生只在横屏 iPad 上学）。模拟老师、评卷由开发那边派子代理做（这个脚本只当页面）
 import { execFileSync } from 'node:child_process';
@@ -13,7 +15,7 @@ import { STAGE_TEACH, stageDoc } from '../kit/src/stage/doc.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const [cmd, dirArg] = process.argv.slice(2);
-if (!['prepare', 'apply'].includes(cmd) || !dirArg) { console.error('用法：node tools/stage-canvas-eval.mjs prepare|apply <目录>'); process.exit(2); }
+if (!['prepare', 'apply', 'freeprep', 'freeapply'].includes(cmd) || !dirArg) { console.error('用法：node tools/stage-canvas-eval.mjs prepare|apply|freeprep|freeapply <目录>'); process.exit(2); }
 const dir = resolve(dirArg);
 mkdirSync(dir, { recursive: true });
 const spec = JSON.parse(readFileSync(join(ROOT, 'evals/stage-canvas/requests.json'), 'utf8'));
@@ -74,4 +76,37 @@ if (cmd === 'apply') {
   });
   writeFileSync(join(dir, 'apply.json'), JSON.stringify(out, null, 2));
   console.log(`演了 ${out.length} 条；没演上的行：${out.filter((o) => o.errors.length).map((o) => o.id).join('、') || '没有'}`);
+}
+
+// —— 自由排版：老师自己设计画面 ——
+if (cmd === 'freeprep' || cmd === 'freeapply') {
+  const free = JSON.parse(readFileSync(join(ROOT, 'evals/stage-canvas/free.json'), 'utf8'));
+  const names = Object.keys(free.starts);
+  if (cmd === 'freeprep') {
+    const files = names.map((k) => { const f = join(dir, `start-${k}.txt`); writeFileSync(f, `${free.starts[k].src}\n`); return f; });
+    const res = tryRun(files, join(dir, 'shots'));
+    const starts = {};
+    res.forEach((r, i) => { const st = lastStep(r); starts[names[i]] = { state: st.state || '', shot: st.shot || '', errors: st.errors || [] }; });
+    writeFileSync(join(dir, 'starts.json'), JSON.stringify(starts, null, 2));
+    for (const k of names) {
+      const s0 = starts[k];
+      const doc = `${STAGE_TEACH}\n\n${stageDoc(free.starts[k].subject)}`;
+      writeFileSync(join(dir, `prompt-${k}.md`), `# 你是舞台课的老师（模拟）\n\n下面是你每一轮都会收到的说明，然后是这一刻的舞台现状、画面图。照说明写这一轮（只写指令行）。\n\n## 说明\n\n${doc}\n\n## [学生]\n\n${free.ask}\n\n[画面] 附了一张这一刻的画面图（先看图再写）：${s0.shot}\n\n## [舞台现在]\n\n${s0.state}\n\n先在 intent-${k}.txt 里用两三句话写你想要的画面（什么在哪、长什么样、为什么这样好教），再写这一轮的指令行（${k}.lines.txt）。\n`);
+    }
+    const bad = names.filter((k) => starts[k].errors.length);
+    console.log(`准备好了 ${names.length} 份（${dir}）${bad.length ? `；开场有没演上的行：${bad.join('、')}` : ''}`);
+  } else {
+    const todo = names.filter((k) => existsSync(join(dir, `${k}.lines.txt`)));
+    const files = todo.map((k) => { const f = join(dir, `after-${k}.txt`); writeFileSync(f, `${free.starts[k].src}\n${free.starts[k].act}\n${readFileSync(join(dir, `${k}.lines.txt`), 'utf8').trim()}\n`); return f; });
+    const res = files.length ? tryRun(files, join(dir, 'shots')) : [];
+    const starts = JSON.parse(readFileSync(join(dir, 'starts.json'), 'utf8'));
+    const out = todo.map((k, i) => {
+      const steps = res[i]?.views?.[0]?.steps || [];
+      const st = steps.at(-1) || {};
+      const errors = steps.flatMap((x) => x.errors || []).filter((e) => !starts[k].errors.some((y) => y.src === e.src));
+      return { id: k, intent: existsSync(join(dir, `intent-${k}.txt`)) ? readFileSync(join(dir, `intent-${k}.txt`), 'utf8').trim() : '', before: starts[k].shot, after: st.shot || '', errors, state: st.state || '' };
+    });
+    writeFileSync(join(dir, 'free.json'), JSON.stringify(out, null, 2));
+    console.log(`演了 ${out.length} 个；没演上的行：${out.filter((o) => o.errors.length).map((o) => `${o.id}（${o.errors.length}）`).join('、') || '没有'}`);
+  }
 }

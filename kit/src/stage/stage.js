@@ -81,7 +81,7 @@ const WIDTHS_OF = { sentence: SENTENCE_WIDTHS, card: CARD_WIDTHS };
 const DIRS = ['right-of', 'left-of', 'above', 'below'];
 // 排出来还有压着的、出了屏幕的（画布像素）
 function crowded(res, items, cv) {
-  const list = items.map((it) => res.boxes.get(it.id)).filter(Boolean);
+  const list = items.filter((it) => !it.ghost).map((it) => res.boxes.get(it.id)).filter(Boolean);
   for (let i = 0; i < list.length; i++) {
     const A = list[i];
     if (A.x < -2 || A.y < -2 || A.x + A.w > cv.w + 2 || A.y + A.h > cv.h + 2) return true;
@@ -785,7 +785,10 @@ export class Stage {
     if (by && !this.instant) this.lastBy = by;
     // 老师这一轮放大了哪几样（放不下时页面往回收一点，见 composeOnce 的 fitScaled）：换了一轮就重记
     if (by === 'teacher' && !this.instant) {
-      if (this.scaleTurn !== turn) { this.scaleTurn = turn; this.scaledNow = new Map(); this.scaleNotes = []; }
+      if (this.scaleTurn !== turn) { this.scaleTurn = turn; this.scaledNow = new Map(); this.scaleNotes = []; this.placedNow = new Set(); }
+      // 这一轮老师摆过的（place）：整轮都照老师写的关系一起重排，演到哪一行都不钉在半路排出来的样子上（自由排版试验：
+      // 原句刚造出来时挑了窄的折行宽、被钉住，后面的东西就挤不下）；这一轮演完、学生动手时才算钉住
+      if (fx?.place) for (const n of fx.place) if (this.scene.objects.has(n)) this.placedNow.add(n);
       if (fx?.scale) { const was = this.scaledNow.get(fx.scale)?.was ?? fx.was; this.scaledNow.set(fx.scale, { was, to: fx.k }); }
     }
     // 一直用的样子（look … always）：交给课堂存进 meta/look（重放、回看不存：那是以前写过的）
@@ -1276,13 +1279,19 @@ export class Stage {
     const opens = live ? [...this.scene.opens.values()] : [];
     const on = opens.some((e) => e.policy?.undo);
     const backs = opens.filter((e) => e.action === 'back');
-    if (!on && !backs.length) { this.undoBox?.remove(); this.undoBox = this.undoRow = this.undoBtn = null; this.backBtns = new Map(); return; }
+    // 「说过的」没有幕条可放（样子页、试演）时和「撤一步」「回到……」排在同一行，不叠在它们上面（设计要求单之后的自由排版试验：压着「撤一步」）
+    const lone = this.talkBtn && !this.scenesHost;
+    if (!on && !backs.length) {
+      if (lone && this.talkBtn.parentNode !== this.root) this.root.appendChild(this.talkBtn);
+      this.undoBox?.remove(); this.undoBox = this.undoRow = this.undoBtn = null; this.backBtns = new Map(); return;
+    }
     if (!this.undoBox) {
       this.undoBox = el('div', 'st-undo-box', this.view);
       this.undoRow = el('div', 'st-undo-row', this.undoBox);
       el('span', 'st-undo-why', this.undoBox);
       this.backBtns = new Map();
     }
+    if (lone && this.talkBtn.parentNode !== this.undoRow) this.undoRow.prepend(this.talkBtn);
     // 「回到……」照开着的对齐：收掉的拿走，新开的排在「撤一步」前面
     const want = new Map(backs.map((e) => [`${e.obj}:${e.name}`, e]));
     for (const [k, b] of this.backBtns) if (!want.has(k)) { b.remove(); this.backBtns.delete(k); }
@@ -1624,6 +1633,14 @@ export class Stage {
     }
     const a = sc.partOf(l.a.obj, l.a.key), b = sc.partOf(l.b.obj, l.b.key);
     if (!a || !b) return { d: '', box: null, rail: false };
+    // 一头是一段（link s.8-10 tl.fr）：那一头的框是这一段合起来的框
+    const spanBox = (e, p) => (e.span ? bbox(e.span.map((k) => sc.partOf(e.obj, k)).filter(Boolean).map((q) => sc.worldPartBox(q))) : sc.worldPartBox(p));
+    if (l.a.span || l.b.span) {
+      const A = spanBox(l.a, a), B = spanBox(l.b, b);
+      return a.obj !== b.obj ? wholeLinkGeom(A, B, { tier: l.tier || 0 }) : linkGeom(A, B, { tier: l.tier || 0 });
+    }
+    // 两样东西之间连（句子的词连到时间轴上的点）：上下摆着的从中间的空当连过去，不在上面拱一道横跨的大弧（第九轮：老师自己设计的连色）
+    if (a.obj !== b.obj) return wholeLinkGeom(sc.worldPartBox(a), sc.worldPartBox(b), { tier: l.tier || 0 });
     const rail = !!(VIEWS[sc.objects.get(a.obj).type]?.rail?.(sc.objects.get(a.obj), a) || VIEWS[sc.objects.get(b.obj).type]?.rail?.(sc.objects.get(b.obj), b));
     return linkGeom(sc.worldPartBox(a), sc.worldPartBox(b), { tier: l.tier || 0, rail });
   }
@@ -1730,6 +1747,9 @@ export class Stage {
     // 同一样东西旁边的几个拨盘：前面的一个要重摆，后面的跟着重摆（照造的先后排）。不然一个变宽了单独重摆，
     // 会绕到另一个的另一边去——学生眼里两个拨盘上下换了位置（主线第五轮首课走查）
     const redo = new Set();
+    // 自由构图时每张字、每个拨盘想贴的地方（和排版留的一样）
+    const ideal = new Map();
+    if (this.free) for (const id of sc.shownIds()) for (const x of this.idealLabels(id)) ideal.set(x.id, x.box);
     for (const l of order) {
       let cur = this.labelNodes.get(l.id);
       // 贴在藏着的东西上的字不画（下面照「没了的」淡掉，show 以后再贴上来）
@@ -1753,7 +1773,8 @@ export class Stage {
       const obs = this.obstacles(l.id);
       // 东西变矮了（泳道 merge 回一排）也要重摆：以前只看左上角和宽，贴在它下面的字、拨盘留在老地方（D1-11）
       const stale = !cur.box || !cur.anchor || Math.abs(cur.anchor.x - anchor.x) > 1 || Math.abs(cur.anchor.y - anchor.y) > 1 || Math.abs(cur.anchor.w - anchor.w) > 1 || Math.abs((cur.anchor.h ?? anchor.h) - anchor.h) > 1 || cur.box.w !== size.w || obs.some((o) => overlaps(grow(cur.box, 1), o));
-      if (!stale && !redo.has(l.id)) continue;
+      const off = this.free && ideal.has(l.id) && cur.box && (Math.abs(ideal.get(l.id).x - cur.box.x) > 1 || Math.abs(ideal.get(l.id).y - cur.box.y) > 1);
+      if (!stale && !redo.has(l.id) && !off) continue;
       if (l.dial) {
         const key = l.refs.join(' ');
         let after = false;
@@ -1775,6 +1796,14 @@ export class Stage {
         const q = placeLabel(anchor, size, others, { prefer: [l.side], gap: 12, tries: 3, walls: this.wallsOf(l) });
         // 那一边挡着的是它自己那样东西的别的部件（贴在矩阵中间一格、树中间一个结点上）：自己让不开，照旧换到空的一边
         if (!q.none && !this.ownPartsHit(l, { ...q, ...size })) p = q; // 隔着墙（时间轴的轴）摆不了的：placeLabel 找不到那一边，照旧换边
+      }
+      // 自由构图：排版照「想贴在哪」给它留了地方（unionBox 的 idealLabels），就贴在那里——只要不压着别的东西
+      // （同一样东西上的别的字也照这样重摆，不拿它们的旧位置挡）
+      if (this.free && ideal.has(l.id)) {
+        const want = ideal.get(l.id);
+        const mates = new Set(ideal.keys());
+        const others = this.obstacles(l.id).filter((o) => ![...this.labelNodes].some(([k, n]) => mates.has(k) && n.box && Math.abs(n.box.x - o.x) < 0.5 && Math.abs(n.box.y - o.y) < 0.5));
+        if (!others.some((o) => overlaps(grow(want, 1), o))) p = { x: want.x, y: want.y, side: p.side };
       }
       const from = cur.box;
       const sideWas = cur.side;
@@ -2000,7 +2029,9 @@ export class Stage {
     const sc = this.scene;
     const b = sc.worldObjectBox(id);
     // 贴在它身上的字、拨盘（贴在几样上的算第一样的；什么都没贴的拨盘算这一轮讲的那样的，syncLabels 的 owner）：和它当一体摆，不然不进排版，压着别的、出屏幕
-    const own = [...this.labelNodes].filter(([lid, n]) => n.box && n.owner === id && sc.labels.has(lid) && this.labelShown(sc.labels.get(lid))).map(([, n]) => n.box);
+    // 按它们「想贴在哪」留地方（拨盘贴着它的词上面、字照写的那一边，几张互相让开），不按上一次被挤到哪里——
+    // 不然上一次挤到了底下，这一次就照底下留，原来那块地方被话占了，再也回不去（自由排版试验：拨盘跑到题卡下面）
+    const own = this.idealLabels(id).map((x) => x.box);
     // 画在它身上的（圈、括号、下划线：只指着它这一样的）也和它当一体摆
     if (this.layoutState) for (const d of sc.drawings.values()) {
       const objs = drawObjects(d);
@@ -2009,6 +2040,22 @@ export class Stage {
       if (geo.bbox) own.push(geo.bbox);
     }
     return bbox([b, ...own]);
+  }
+  /** 贴在这样东西上的字、拨盘想摆的地方（世界坐标）：只躲它们彼此和这样东西自己的墙，不躲别的东西（别的东西由排版让开） */
+  idealLabels(id) {
+    const sc = this.scene;
+    const mine = [...this.labelNodes].filter(([lid, n]) => n.box && (n.owner || null) === id && sc.labels.has(lid) && this.labelShown(sc.labels.get(lid)))
+      .map(([lid, n]) => ({ l: sc.labels.get(lid), n }))
+      .sort((a, b) => (b.l.dial ? 1 : 0) - (a.l.dial ? 1 : 0));
+    const out = [];
+    for (const { l, n } of mine) {
+      const anchor = this.anchorOf(l) || grow(sc.worldObjectBox(id), 4);
+      const size = { w: n.box.w, h: n.box.h };
+      const prefer = l.side ? [l.side, 'above', 'below', 'right', 'left'] : ['above', 'below', 'right', 'left'];
+      const p = placeLabel(anchor, size, out, { prefer, gap: l.dial ? 18 : 12, asked: !l.dial && !!l.asked && !!l.side, walls: this.wallsOf(l) });
+      out.push({ id: l.id, box: p && !p.none ? { x: p.x, y: p.y, ...size } : n.box });
+    }
+    return out;
   }
   /** 一张字、一个拨盘归哪样东西（排版时和它一起摆）：贴着的第一样；什么都没贴（拨盘没写 at=）归这一轮讲的那样 */
   labelOwner(l) {
@@ -2019,6 +2066,11 @@ export class Stage {
       if (id && sc.objects.has(id) && this.isShown(id)) return id;
     }
     const shown = sc.shownIds();
+    // 拨盘没写贴在哪：哪样东西的字跟着它变（句子里写了 {m: …}），就归那一样（以前归这一轮最后讲的那样，老师讲到题卡，拨盘就跟着题卡跑）
+    if (l.dial) {
+      const user = shown.find((id) => { const o = sc.objects.get(id); return o?.picks && !o.picks.off && (o.picks.deps || []).includes(l.dial); });
+      if (user) return user;
+    }
     return shown.includes(this.lastTouched) ? this.lastTouched : shown.at(-1) || null;
   }
   /**
@@ -2108,7 +2160,8 @@ export class Stage {
     for (const w of widths) {
       node.style.width = `${Math.round(w)}px`;
       const h = node.offsetHeight;
-      if (h > 0 && !out.some((x) => Math.abs(x.h - h) < 2)) out.push({ w: Math.round(w), h });
+      // 高一样、宽不一样的也留着：窄的那一种塞得进旁边的空当（以前只按高去重，窄的被扔了，话找不到地方只好压着别的）
+      if (h > 0 && !out.some((x) => Math.abs(x.h - h) < 2 && Math.abs(x.w - w) < 2)) out.push({ w: Math.round(w), h });
     }
     node.style.width = keep;
     return out;
@@ -2160,7 +2213,7 @@ export class Stage {
     this.caption.hidden = !capOn;
     if (capOn) {
       // 先试 18 格宽（读着最舒服），挤了再试窄的、宽的
-      const alts = this.measureBlock(this.caption, [18, 13, 24].map((n) => n * grid.cell));
+      const alts = this.measureBlock(this.caption, [18, 13, 24, 10].map((n) => n * grid.cell));
       if (alts.length) extras.push({ id: 'say', ...alts[0], alts, ...(prevBox('say') ? { prev: prevBox('say') } : {}) });
     }
     const goalsOn = !!this.goalsEl.childElementCount && [...this.goalsEl.children].some((n) => n.offsetWidth);
@@ -2172,8 +2225,26 @@ export class Stage {
     }
     // 画在格子上的字、示意图：钉在那里的一块，别的东西绕开它
     for (const d of sc.drawings.values()) if (d.at) { const b = fromCells(d.at, grid); extras.push({ id: `draw:${d.name}`, w: b.w, h: b.h, fixed: b }); }
+    // 老师横跨两样东西画的（箭头、括号）、两样东西之间的连线：话和挑战不放在它上面（自由排版试验：话塞进了 make→makes 的箭头里）。
+    // 照现在的位置算一块，只让话、挑战躲（ghost），东西照关系摆；东西挪了下一遍跟着重算
+    if (this.layoutState) {
+      const s0 = baseS, toCanvas = (b) => ({ x: b.x * s0, y: b.y * s0, w: b.w * s0, h: b.h * s0 });
+      const keep = [];
+      for (const d of sc.drawings.values()) {
+        if (d.at || drawObjects(d).length < 2) continue;
+        const g = drawGeometry(d, (ref) => this.refBox(ref), { grid: this.layoutState.grid, s: s0 });
+        if (g.bbox) keep.push([`keep:${d.name}`, g.bbox]);
+      }
+      for (const l of sc.links.values()) {
+        if (l.a.obj === l.b.obj || !this.linkShown(l)) continue;
+        const g = this.linkGeo(l);
+        if (g.box && g.box.h > 4) keep.push([`keep:${l.key}`, g.box]);
+      }
+      for (const [id, b] of keep) { const c = toCanvas(grow(b, 6)); extras.push({ id, w: c.w, h: c.h, fixed: c, ghost: true }); }
+    }
     const partBox = (ref) => { try { return bbox(sc.parts(ref).map((p) => sc.worldPartBox(p))); } catch { return null; } };
-    const arrangeBase = this.arrangeNext === 'all' ? 'all' : this.arrangeNext ? new Set(this.arrangeNext) : null;
+    const turnPlaced = this.lastBy === 'teacher' && this.placedNow?.size ? [...this.placedNow].filter((n) => sc.objects.has(n)) : [];
+    const arrangeBase = this.arrangeNext === 'all' ? 'all' : this.arrangeNext || turnPlaced.length ? new Set([...(this.arrangeNext || []), ...turnPlaced]) : null;
     this.arrangeNext = null;
     const solveAll = () => {
       const { items, relations } = composeInput(sc, { ts, camS: baseS, grid, boxOf: (id) => this.unionBox(id), altsOf: (id) => this.altsOf(id), partBox, extras, lastTouched: this.lastTouched, tiedOf: (id) => { const o = sc.objects.get(id); return o ? sc.type(o).anchors?.(o) || [] : []; } });
@@ -2278,6 +2349,8 @@ export class Stage {
     if (goalsOn) place(this.goalsEl, res.boxes.get('goals'));
     // 镜头：固定这一档（老师 camera X 凑近时不动它，camera all 回来）
     this.baseCam = { s, tx: cv.left, ty: cv.top };
+    // 话、挑战躲的那几块（keep:…）只在求解时用，版面、预览、检查里不算一样东西
+    for (const k of [...res.boxes.keys()]) if (String(k).startsWith('keep:')) res.boxes.delete(k);
     this.layoutState = { boxes: res.boxes, unmet: res.unmet, scale: res.scale, grid, canvas: cv };
     // 现状里的「版面」：每样占哪几格、没照办的
     // 页面自己加的默认关系（话贴着讲的那样）没照办不告诉老师：老师没写过

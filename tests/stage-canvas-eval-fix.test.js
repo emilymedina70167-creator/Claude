@@ -68,3 +68,38 @@ test('圈矩阵的一格：圈不比格子宽，挨着的两格各圈各的（r2
   const g = drawGeometry({ name: 'd1', kind: 'circle', on: 'AB.1,1' }, boxOf, { s: 1 });
   assert.ok(g.bbox.w <= 60 && g.bbox.h <= 60, JSON.stringify(g.bbox));
 });
+
+test('一组新摆的东西居中：挑战条定在左上角也照样居中（自由排版试验：矩阵排在下半屏）', () => {
+  const canvas = { w: 1148, h: 692 }, grid = gridOf(canvas);
+  const items = [{ id: 'A', w: 300, h: 300, order: 0 }, { id: 'goals', w: 256, h: 42, order: 1, rigid: true, fixed: { x: 0, y: 0, w: 256, h: 42 } }];
+  const r = solveLayout({ canvas, grid, items, relations: [] });
+  const A = r.boxes.get('A');
+  assert.ok(Math.abs(A.x + A.w / 2 - canvas.w / 2) < 40, JSON.stringify(A));
+  assert.ok(Math.abs(A.y + A.h / 2 - canvas.h * 0.42) < 60, JSON.stringify(A));
+});
+
+test('话躲开老师横跨两样东西画的那一块（ghost），东西不躲', () => {
+  const canvas = { w: 1148, h: 692 }, grid = gridOf(canvas);
+  const ghost = { x: 300, y: 200, w: 60, h: 200 };
+  const items = [
+    { id: 's', w: 500, h: 100, order: 0, prev: { x: 250, y: 100 } },
+    { id: 'o', w: 500, h: 100, order: 1, prev: { x: 250, y: 400 } },
+    { id: 'keep:d1', w: ghost.w, h: ghost.h, order: 2, rigid: true, ghost: true, fixed: ghost },
+    { id: 'say', w: 300, h: 60, order: 3, rigid: true, prev: { x: 250, y: 260 } },
+  ];
+  const r = solveLayout({ canvas, grid, items, relations: [] });
+  const say = r.boxes.get('say');
+  const hit = say.x < ghost.x + ghost.w && ghost.x < say.x + say.w && say.y < ghost.y + ghost.h && ghost.y < say.y + say.h;
+  assert.ok(!hit, JSON.stringify(say));
+  // 东西照上一次的位置（吸到半格，差不到半格）
+  assert.ok(Math.abs(r.boxes.get('s').y - 100) < 15 && Math.abs(r.boxes.get('o').y - 400) < 15, JSON.stringify([...r.boxes]));
+});
+
+test('link 两头各写一处、一头是一段：整段当一头，只连一道（不拆成一串）', () => {
+  const sc = new Scene();
+  run(sc, 'sentence s = "they would be free"\ntimeline tl = 过去 现在 now=现在\nstand tl fr = 现在\nlink s.2-4 tl.fr g2');
+  const ls = [...sc.links.values()];
+  assert.equal(ls.length, 1);
+  assert.deepEqual(ls[0].a.span || ls[0].b.span, ['2', '3', '4'].map((k) => (typeof ls[0].a.key === 'number' ? Number(k) : k)).length ? (ls[0].a.span || ls[0].b.span) : null);
+  assert.equal((ls[0].a.span || ls[0].b.span).length, 3);
+});

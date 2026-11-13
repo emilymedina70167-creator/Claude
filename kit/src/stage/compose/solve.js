@@ -7,7 +7,7 @@
 // 能折行的东西有几种「宽 → 高」，挑一个让整体最好的；还放不下先压间距、
 // 再整台缩一档（最低 8 成），照实写进 unmet 给老师看。
 
-import { Solver, Variable, Constraint, Operator, Strength } from 'kiwi.js';
+import { Solver, Variable, Constraint, Expression, Operator, Strength } from 'kiwi.js';
 import { GAPS } from './grid.js';
 
 const W_PIN = 1e9;              // 老师摆过的（钉住的）：一个像素都不挪（第九轮）
@@ -16,12 +16,15 @@ const W_SEP = 1e7;              // 不重叠
 const WEIGHT = { strong: 1e6, medium: 1e4, weak: 1e2 };
 const W_STAB = 1e3;             // 和上一次一样（比老师写的 weak 还硬：已经摆好的不被「能让就让」的拽来拽去）
 const W_GUESS = 3;              // 新东西的初始位置（挨着前一样）
+const W_CENTER = 50;            // 一整组新摆的东西居中（比初始位置硬、比老师写的 weak 还软）
 const SEP_ROUNDS = 6;
 const SCALES = [1, 0.9, 0.81, 0.8];
 const DIR = { 'right-of': '右边', 'left-of': '左边', above: '上面', below: '下面', near: '旁边', row: '排成一行', col: '排成一列', main: '中间' };
 
 const { Le, Ge, Eq } = Operator;
 
+// 只让画面上那几块（话、挑战）躲的地方（ghost：老师横跨两样东西画的箭头、连线占的那一块）：东西本身照关系摆，不躲它
+function apart(a, b) { return (a.ghost && !b.rigid) || (b.ghost && !a.rigid) || (a.ghost && b.ghost); }
 function hits(a, b, pad = 0) {
   return a.x < b.x + b.w + pad - 0.5 && b.x < a.x + a.w + pad - 0.5
     && a.y < b.y + b.h + pad - 0.5 && b.y < a.y + a.h + pad - 0.5;
@@ -194,6 +197,17 @@ function run(work, rels, sizes, env) {
   }
 
   for (const r of rels) relConstraints(r);
+  // 东西都是新摆的（这一轮老师整个重排了、没有主角）：东西这一组的中心拉到画布中间偏上（以前只要挑战条定在左上角就不居中，
+  // 一组矩阵排在下半屏、上面空一半——自由排版试验）。只拉东西，话和挑战照关系跟着；比老师写的关系弱
+  const things = work.map((it, i) => [it, i]).filter(([it]) => !it.rigid && !it.ghost);
+  // （台上只有东西、没有定住的话和挑战时，照旧解完整块挪到中间：centerAll）
+  if (things.length && !things.some(([it]) => it.prev || it.fixed || it.pin) && work.some(it => it.prev || it.fixed) && !rels.some(r => r.kind === 'main')) {
+    const n = things.length;
+    let ex = new Expression(0), ey = new Expression(0);
+    for (const [, i] of things) { ex = ex.plus(X[i].plus(sizes[i].w / 2)); ey = ey.plus(Y[i].plus(sizes[i].h / 2)); }
+    add(ex, Eq, n * canvas.w / 2, W_CENTER);
+    add(ey, Eq, n * canvas.h * 0.42, W_CENTER);
+  }
 
   solver.updateVariables();
   const pos = () => work.map((_, i) => ({ x: X[i].value(), y: Y[i].value(), w: sizes[i].w, h: sizes[i].h }));
@@ -203,7 +217,7 @@ function run(work, rels, sizes, env) {
     const p = pos();
     let added = 0;
     for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
-      if (seps.has(i + '|' + j) || !hits(p[i], p[j], sepGap)) continue;
+      if (seps.has(i + '|' + j) || apart(work[i], work[j]) || !hits(p[i], p[j], sepGap)) continue;
       seps.add(i + '|' + j);
       separate(i, j, p);
       added++;
@@ -431,7 +445,7 @@ function score(boxes, work, rels, { canvas, cell, gapF }) {
   for (let i = 0; i < list.length; i++) {
     const still = (k) => !!(work[k].pin || work[k].fixed); // 钉住的、定死在格子上的：页面挪不动它们
     if (!inside(list[i], canvas) && !work[i].pin) bad++;
-    for (let j = i + 1; j < list.length; j++) if (hits(list[i], list[j]) && !(still(i) && still(j))) bad++;
+    for (let j = i + 1; j < list.length; j++) if (!apart(work[i], work[j]) && hits(list[i], list[j]) && !(still(i) && still(j))) bad++;
   }
   const unmet = [];
   let cost = bad * 1e9;

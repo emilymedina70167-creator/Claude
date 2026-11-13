@@ -1,0 +1,46 @@
+{
+  "_说明": "舞台第九轮「画面归老师」：学生没提要求，老师自己设计这一轮的画面（先写意图再写指令），评卷看画面是不是老师想要的样子。tools/stage-canvas-eval.mjs freeprep|freeapply",
+  "ask": "学生这一轮没说话。这一轮的画面由你自己决定：按你认为最好教的样子设计版面、样子、要不要画东西，不要照现在页面摆的凑合，也不要因为没人要求就不动。",
+  "starts": {
+    "modal": {
+      "src": "dial m = must options=\"不加 must can should may\"\nsentence s = \"The company {m: makes | must make | can make | should make | may make} a quick decision.\"\nplace s main\nglow s.3-4\ncard q = \"这段要回答：谓语前面加上 must、can 这类词，谓语会怎么变？\" \"must 必须｜can 能够｜should 应该｜may 可能\"\nplace q below s\nlabel n s.3 \"情态动词\" side=above tone=key\ngoal g1 \"拨到 can，看 make 变不变\" when=\"m = can\"\nsay \"看亮着的两个词：must 进来以后，后面那个词和原来的 makes 比，哪里不一样了？\"\nask say \"make 和 makes 比，少了什么？\"",
+      "act": "学生: say 嗯",
+      "subject": "英语"
+    },
+    "tense": {
+      "src": "sentence s = \"They gave justices permanent positions so they would be free to upset those in power.\"\ntimeline tl = 过去 过去之后 现在 将来 now=现在\nevent tl gv = 过去 \"gave 给职位\"\nstand tl fr = 现在\npaint tl.fr g2\nlabel lf tl.fr \"be free 能自由推翻\" side=below tone=note\nplace s main\nplace tl below s gap=l\ngoal g1 \"把粉色小人拖到「能自由推翻」发生的时间\" when=\"fr = 过去之后\"\nopen tl.fr move\nsay \"gave 是过去给的职位。法官「能自由推翻」发生在什么时候？\"",
+      "act": "学生: say 嗯",
+      "subject": "英语"
+    },
+    "matrix": {
+      "src": "matrix A = 1 2 / 0 1\nmatrix B = 2 1 / 0 3\nmatrix AB = {A B}\nmatrix BA = {B A}\nopen B edit\ngoal g1 \"改 B 里的一个数，让 AB = BA\" when=\"AB = BA\"\nsay \"先看 AB 和 BA 是不是一样。\"\nask next \"看好了点这里\" button=\"看好了\"",
+      "act": "学生: next",
+      "subject": "线代"
+    },
+    "tree": {
+      "src": "tree t = 40 30 45 20 35 42 50 tray=\"47\"\narray a = 20 30 35 40 42 45 50\nplace t main\nplace a below t gap=l\ngoal g1 \"把 47 插进去，让它还是平衡的\" when=\"{tray(t)} = 0\"\nopen t insert\nsay \"平衡因子看左右子树的高度差。47 会挂在 {t.45} 的哪一边？\"",
+      "act": "学生: say 嗯",
+      "subject": "数据结构"
+    },
+    "graph": {
+      "subject": "数据结构",
+      "act": "学生: say 嗯",
+      "src": "graph g = 1>2:10 1>5:5 2>3:1 5>2:3 5>3:9\ntable T = _ _ _ _ / _ _ _ _ / _ _ _ _ rows=\"2 3 5\" cols=\"第1轮 第2轮 第3轮 第4轮\"\nfollow g net dijkstra from=1\nfollow T net dijkstra on=g from=1\nopen g tag\nopen T edit\nsay \"先在图上把第 1 轮的 dist 写出来，再填表的第 1 列。\""
+    },
+    "sort": {
+      "subject": "数据结构",
+      "act": "学生: say 嗯",
+      "src": "array a = 49 38 65 97 76 13 27 49′\nfollow a sort shell gaps=\"5 3 1\"\ngroup a stride=5\nopen a move\n@a.right say \"这一趟对了，和书上的一样。\"\nsay \"隔 5 个一组，每组里排好。\""
+    },
+    "elim": {
+      "subject": "线代",
+      "act": "学生: say 嗯",
+      "src": "matrix A = 0 1 2 / 1 2 1 / 2 5 4\nopen A rowop wrong=mark undo=on\ngoal g1 \"把 A 消成阶梯形\" when=\"A stairs\"\nsay \"第一列的主元是 0。你来消成阶梯形：拖一行左边的把手。\""
+    },
+    "parse": {
+      "subject": "英语",
+      "act": "学生: say 嗯",
+      "src": "sentence s = \"She has been reading the book that I lent her.\" key=\"[S She] [V has been reading] [O the book [RC that I lent her]].\"\nopen s mark wrong=mark undo=on\nsay \"先找谓语：从一个词拉到另一个词，再点它是什么成分。\""
+    }
+  }
+}

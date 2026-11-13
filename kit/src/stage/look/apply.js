@@ -141,6 +141,18 @@ export function applyLooks(stage) {
       if (cur) Object.assign(cur.props, l.props);
     }
   }
+  // 有一张底的东西（题卡的白卡）：整样东西的框、底色、影子、圆角、留白只落在那张底上，不落在里面每一行上
+  // （自由排版试验：look q frame=line 画成了每一行一个框）。部件自己的样子（look q.2 …）照旧落在那一行
+  const CONTAINER = '.st-card';
+  const BOXY = ['frame', 'bg', 'edge', 'shadow', 'radius', 'pad'];
+  const hasBase = new Set();
+  for (const [n, { name }] of byNode) if (n.matches?.(CONTAINER)) hasBase.add(name);
+  const partNodes = new Set();
+  for (const l of partLooks) { let ps = []; try { ps = sc.parts(l.target); } catch { ps = []; } for (const q of ps) { const n = stage.nodeOf?.(q); if (n) partNodes.add(n); } }
+  for (const [n, v] of byNode) {
+    if (!hasBase.has(v.name) || n.matches?.(CONTAINER) || partNodes.has(n)) continue;
+    for (const k of BOXY) delete v.props[k];
+  }
   for (const [n, { name, props }] of byNode) {
     const p = needed.has(n) ? floor(name, props) : props;
     write(n, lookStyle(p, roleOf(n)));
