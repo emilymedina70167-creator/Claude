@@ -14,6 +14,8 @@
 //   report?(err, info)             出错记一笔
 //   evidence?.goal(id, goal, seq) / evidence?.act(a, seq)   记成证据（学习台）
 //   mock、model、teach（叫老师的参数）、quietMs、readOnly
+//   onIdle?(state)                 老师演完、学生在动手的时候（课堂助手的旁听看这个时机，aide/watcher.js）
+//   aideNote?() → string            旁听写的那一节（「[助手看到的]」），放进发给老师的那一条；没有就空
 import { HELP, DONE_BTN, stageLines } from './stage.js';
 import { turnMessage, gridsOf } from './doc.js';
 import { eventOf, triggers, eventsText, tryCount, hasWork, undoneOf, TRY_MAX, QUIET_MS } from './events.js';
@@ -166,6 +168,7 @@ export function createLoop(host) {
       if (S.pending?.events.some(triggers)) { flush(); return claude; }
       armIdle();
       maybeSpec();
+      kickAide();
       return claude;
     }
   }
@@ -216,6 +219,8 @@ export function createLoop(host) {
   // 学生这一刻多半会先动一动再点按钮：画面上有拨盘，或者老师这一轮刚交给学生一只手（open）。
   // 前几轮开着、一直没收的手不算——不然开过一次以后整节课都不提前想了。刷新以后不知道哪些是新开的：都算
   const canPlay = (sc) => [...(sc.vars?.values?.() || [])].some((x) => x.shown) || [...(sc.opens?.keys?.() || [])].some((k) => !S.opensBefore?.has(k));
+  // 课堂助手的旁听（第九轮）：学生手上有东西可动、老师没在写、没在提前想的时候，host 照这个状态决定开不开（watchCanStart）
+  const kickAide = () => { if (host.onIdle && !S.ended && !host.readOnly) host.onIdle({ ended: S.ended, flight: S.flight, spec: S.spec, canPlay: canPlay(stage.scene), pending: S.pending?.events?.length ? eventsText(S.pending.events, { goals: stage.scene.goals }) : '' }); };
   // 这一问的编号（证据记在它名下，老师的记忆块 basis 写它）：学习台里上课才有（样子页不记证据）
   const askId = () => (host.evidence && S.lastClaude ? `S${S.lastClaude}` : null);
   /** 这一段做成一条学生轮（发给老师的整条在 msg 里） */
@@ -226,7 +231,7 @@ export function createLoop(host) {
     const byNext = events.at(-1)?.act?.type === 'next';
     const said = eventsText(events, { goals: stage.scene.goals, secs: byNext || !S.armedAt ? null : Math.round((performance.now() - S.armedAt) / 1000) });
     // 页面核过老师上一轮的几步（不是正确的下一步的）、学生动了以后跟着变的：一起写进这一条，核过的说过就清掉
-    const msg = turnMessage({ act: said, state: stage.scene.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(events), grids: gridsOf(stage.scene), askId: askId() });
+    const msg = turnMessage({ act: said, state: stage.scene.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(events), grids: gridsOf(stage.scene), askId: askId(), aide: host.aideNote?.() || '' });
     stage.teacherAudit = [];
     const say = events.filter((e) => e.act?.type === 'say').map((e) => e.act.text).join('\n');
     clearTimeout(S.saveTimer);
@@ -294,6 +299,7 @@ export function createLoop(host) {
         if (!S.flight && !S.busy) stage.holdAsk?.();
         armIdle();
         maybeSpec();
+        kickAide();
         return;
       }
       // 老师挂的按钮（「拨好了点下面」）学生还没按，页面照设计当它按了、马上叫老师：在那一条里说一声（主线第一轮 E1-6：
@@ -409,6 +415,7 @@ export function createLoop(host) {
   }
   function onTry() {
     armIdle();
+    kickAide();
     const p = S.pending;
     const why = idleWhy();
     if (!p || p.triedOut || !why) return;
@@ -429,7 +436,7 @@ export function createLoop(host) {
     const said = eventsText([...(S.pending?.events || []), eventOf(act, { help: HELP })], { goals: stage.scene.goals });
     const after = stage.scene.clone();
     after.waiting = null;
-    const msg = turnMessage({ act: said, state: after.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(S.pending?.events || []), grids: gridsOf(stage.scene), askId: askId() });
+    const msg = turnMessage({ act: said, state: after.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(S.pending?.events || []), grids: gridsOf(stage.scene), askId: askId(), aide: host.aideNote?.() || '' });
     const input = host.messages({ next: msg });
     const s = S.spec = { msg, input, text: '', res: null, err: null, listeners: [], t0: performance.now(), dead: false, done: false, adopted: false };
     s.record = () => host.addTurn({ role: 'system', kind: 'spec', discarded: true, text: '提前想好的下一轮没用上（学生做的和预想的不一样）', cost: host.cost({ bytes: inBytes(input), why: 'spec', ms: performance.now() - s.t0 }) });
@@ -487,7 +494,7 @@ export function createLoop(host) {
     if (pendingRow) S.pending = { row: pendingRow, events: pendingRow.events || [], base: pendingRow.log || [] };
     S.armedAt = performance.now();
     if (S.pending?.events.some(triggers)) flush();
-    else { armIdle(); maybeSpec(); }
+    else { armIdle(); maybeSpec(); kickAide(); }
   }
 
   /** 下课 / 离开：不再叫老师；还没发出去的那一段做成一条学生轮（小结看得到） */

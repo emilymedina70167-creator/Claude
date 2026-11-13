@@ -18,6 +18,11 @@ import { toDate } from '../memory/schema.js';
 import { examForBlock } from '../exam/block.js';
 import { examForClass } from '../exam/context.js';
 import { aideForTurn } from '../aide/brief.js';
+import { createWatcher } from '../aide/watcher.js';
+import { watchPrompt, parseWatch, watchSection } from '../aide/watch.js';
+import { transcriptText } from '../memory/debrief.js';
+import { buildCorpus } from '../memory/guard.js';
+import { createDevAI } from '../books/devmock.js';
 import { targetOf } from '../exam/target.js';
 import { fitHistory } from './history.js';
 import { getAI } from '../ai.js';
@@ -126,7 +131,7 @@ export async function renderStageClass(root, meta = {}, desk) {
   // 说明只带这门课用得上的那几种东西：块 → 资料包 → 这节课记着的科目 → 空间，推不出来（408 的课既没块也没记科目）发全带的那份
   function system() {
     const subject = stageSubject({ block: desk.block, pack, session: { subject: desk.subject }, space: desk.space });
-    return buildStageSystem({ pack: packWithBooks(), memory: desk.mem ? { mem: desk.mem, block: desk.block, space: desk.space, session: sid } : null, title: meta.unit || '', subject, exam: examSection(), aide: aideSection() });
+    return buildStageSystem({ pack: packWithBooks(), memory: desk.mem ? { mem: desk.mem, block: desk.block, space: desk.space, session: sid } : null, title: meta.unit || '', subject, exam: examSection(), aide: aideSection(), factsByAide: !!desk.aide });
   }
   // 课堂助手（aide/，第九轮）：这一块附近的学生卡、能用的课前档案，放进「你对学生的了解」那一节（总量不变）。
   // 开课时档案不能用：和老师第一轮同时写一份（desk.aide.refresh），写好了从下一轮起带上；写不成就一直是代码挑的那一套
@@ -175,11 +180,30 @@ export async function renderStageClass(root, meta = {}, desk) {
     return fit;
   }
 
+  // —— 课堂助手的旁听（aide/watcher.js，第九轮）：学生动手时另一个 Opus 看这一段，发现写进老师下一轮（不等它）——
+  // 只在带 aide 的课上开；本地 ?dev 用模拟的 Claude（books/devmock.js），不花额度
+  const teacherTurns = () => history.filter((t) => t.role === 'claude' && !t.discarded).length;
+  const aideCall = !desk.aide || readOnly ? null : mock ? (input, o) => createDevAI().call(input, o) : ai ? (input, o) => ai.call(input, o) : null;
+  const watcher = aideCall ? createWatcher({
+    call: aideCall,
+    material: (st) => {
+      const a = aideSection();
+      const recent = history.filter((t) => !t.discarded && (t.role === 'claude' || t.role === 'student')).slice(-8);
+      return watchPrompt({ recent: transcriptText(recent, 40 * 1024), pending: st.pending, brief: a?.brief || '', cards: a?.cards || [], exam: examSection(), upTo: st.upTo });
+    },
+    check: (text) => parseWatch(text, { mem: desk.mem || {}, corpora: { [sid]: buildCorpus({ turns: history }) } }),
+    record: (row) => addTurn({ role: 'system', kind: 'aide', discarded: true, ...row }),
+  }) : null;
+  // 刷新以后放回最后一次旁听的发现
+  { const last = history.filter((t) => t.kind === 'aide' && Array.isArray(t.lines) && t.lines.length).at(-1); if (last && watcher) watcher.set({ upTo: last.upTo, lines: last.lines, at: last.at }); }
+
   // 这一问的指纹（报告按它分题）：同一个空紧挨着重问是同一道（evidence.js 的 makeSigger）
   const sigOf = makeSigger();
   const loop = createLoop({
     stage, call, mock: !!mock, model: MODEL, teach: TEACH, quietMs, readOnly,
     messages: ({ next } = {}) => messages(null, { next }),
+    onIdle: watcher ? (st) => watcher.kick({ ...st, upTo: teacherTurns() }) : null,
+    aideNote: watcher ? () => watchSection(watcher.note(), { seq: teacherTurns() }) : null,
     addTurn, putTurn,
     runMemo: (text, seq0) => runMemo(text, seq0),
     thinking: (on) => thinking(on),
