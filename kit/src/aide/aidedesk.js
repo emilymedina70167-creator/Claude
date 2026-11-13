@@ -35,6 +35,7 @@ const cmpId = (a, b) => String(a).localeCompare(String(b), undefined, { numeric:
  */
 export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready = () => true }) {
   let busy = false;
+  let lastCards = []; // 最近读到的全部学生卡（工作单按章合并要用）
   const tried = { after: new Set(), fill: new Set(), brief: new Set() };
   const opts = (extra = {}) => ({ model: AIDE_MODEL, effort: 'high', modelTier: 'complex', cache: false, lane: 'bg', ...extra });
 
@@ -69,81 +70,109 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     return out;
   }
   // 一张卡：核出处、过上限，写进去。返回 { ok, dropped }
-  async function writeCard(id, parsed, { old = null, data, corpora, session = null, model = AIDE_MODEL, space = '' }) {
+  async function writeCard(id, parsed, { old = null, data, corpora, session = null, model = AIDE_MODEL, space = '', labAt = 0 }) {
     const { keep, dropped } = checkCardLines(parsed.lines, { mem: data, corpora });
     const text = linesText(keep);
     const acc = acceptCard(text, old?.text || '');
     if (!acc.ok) return { ok: false, dropped: dropped.length + 1, why: acc.why };
     const isCross = id.startsWith('x-');
     assertWrite('page', 'cards');
-    await db.doc(`cards/${id}`).set({ ...(isCross ? { space: space || id.slice(2) } : { block: id, space: spaceOfId(id) }), text, src: isCross ? '' : cardSrc(id, data), at: Date.now(), model, by: 'aide', ...(session ? { session } : {}) });
+    await db.doc(`cards/${id}`).set({ ...(isCross ? { space: space || id.slice(2) } : { block: id, space: spaceOfId(id) }), text, src: isCross ? '' : cardSrc(id, data), at: Date.now(), model, by: 'aide', ...(session ? { session } : {}), ...(labAt || old?.labAt ? { labAt: labAt || old.labAt } : {}) });
     return { ok: true, dropped: dropped.length };
   }
 
   /* ---------------- 1. 下课后的整理 ---------------- */
-  async function afterOne(sid) {
+  // 材料（首页自己做、每晚教研室做用同一份）：返回 { prompt, ... } 或 { why }
+  async function afterInput(sid) {
     const data = getData();
     const s = (data.sessions || []).find((x) => x.id === sid);
+    if (!s) return { why: '这节课没了' };
+    const sc = scopeDb(db, sid);
+    const [turns, rep] = await Promise.all([
+      sc.collection('class_turns').get().then((x) => x.docs.map((d) => d.data()), () => []),
+      sc.doc('report/main').get().then((r) => (r.exists ? r.data() : null), () => null),
+    ]);
+    if (!turns.length) return { why: '没有记录' };
+    const sp = spaceOfDoc('sessions', s, data) || s.space || spaceOfId(s.block || '');
+    const mine = filterSpace(data, sp);
+    const gone = voidedIds(data);
+    const weak = (mine.weaknesses || []).filter((w) => !['closed', 'merged', 'void'].includes(w.status) && !gone.has(`weaknesses/${w.id}`));
+    const prevS = (data.sessions || []).filter((d) => d.id !== sid && d.debrief && (spaceOfDoc('sessions', d, data) || '') === sp && (d.startedAt || 0) < (s.startedAt || 0)).sort((x, y) => (y.startedAt || 0) - (x.startedAt || 0))[0];
+    const traps = await trapsFor(db, s.block);
+    const blocks = (mine.curriculum || []).filter((x) => /\.\d+\.\d+$/.test(String(x.id))).sort((x, y) => cmpId(x.id, y.id));
+    const catalog = Object.fromEntries(Object.entries(pointCatalog((data.sessions || []).filter((d) => d.id !== sid), data.mastery)).filter(([id]) => spaceOfId(id) === sp));
+    const cardIds = [...new Set([s.block, ...(Array.isArray(s.blocks) ? s.blocks : [])].filter((x) => x && blocks.some((y) => y.id === x)))];
+    const cards = await loadCards(db, cardIds);
+    const notes = turns.filter((t) => t.kind === 'aide' && t.text).map((t) => ({ upTo: t.upTo, text: t.text }));
+    const items = rep?.items || [];
+    const prompt = afterPrompt({ session: s, transcript: transcriptText(turns), report: rep ? reportText(rep) : '', weaknesses: weak, prev: prevS ? debriefText(prevS.debrief) : '', subject: s.block ? subjectOf(s.block) : '', traps, items, curriculum: blocks, catalog, cards: cardIds.map((id) => ({ id, text: cards.find((c) => c.id === id)?.text || '' })), notes });
+    return { prompt, s, sp, turns, rep, items, weak, traps, blocks, catalog, cardIds, cards };
+  }
+  // 写回答：复盘、归类、事实、卡。返回 { ok, why?, took }
+  async function afterApply(sid, text, model, inp) {
+    const { s, sp, turns, rep, items, weak, traps, blocks, catalog, cardIds, cards, prompt } = inp;
+    const r = parseAfter(text, { items, blocks: blocks.map((b) => b.id), catalog, weaknesses: weak, cardIds: new Set(cardIds) });
+    if (r.problems.includes('回的不是课后整理')) return { ok: false, why: '回的不是课后整理' };
+    const now = Date.now();
+    const data = getData();
+    const evidence = await db.collection('evidence').where('session', '==', sid).get().then(docsOf, () => []);
+    const corpus = buildCorpus({ turns, evidence });
+    // 复盘：守卫照旧（对不上的挪进 held，下一节不带）；对上的坑记进 exam_bar
+    const raw = { v: DEBRIEF_VERSION, at: now, model, bytes: bytesOf(prompt), mis: r.debrief.mis, pace: r.debrief.pace, habit: r.debrief.habit, opening: r.debrief.opening, advice: r.debrief.advice };
+    const { debrief } = guardDebrief(raw, { session: sid, mem: data, corpus });
+    const hit = debriefTraps(debrief, new Set(traps.map((t) => t.id)));
+    const skills = items.length ? { v: SKILLS_VERSION, reportAt: Number(s.report?.at) || rep?.at || null, at: now, model, bytes: bytesOf(prompt), items: r.skills.items, points: r.skills.points, sum: skillSummary(rep, r.skills.items), problems: r.skills.problems.slice(0, 10) } : null;
+    // 事实：作者 aide，守卫对不上的直接不收
+    const mr = r.memo.length ? await ops.applyMemo(r.memo, { session: sid, block: s.block, space: sp, turns, author: 'aide' }) : { pds: [], rejected: [] };
+    let cardsOk = 0;
+    let dropped = 0;
+    for (const [id, parsed] of Object.entries(r.cards)) {
+      const w = await writeCard(id, parsed, { old: cards.find((c) => c.id === id), data: getData(), corpora: { [sid]: corpus }, session: sid, model });
+      dropped += w.dropped;
+      if (w.ok) cardsOk++;
+    }
+    const took = { facts: mr.pds.length, cards: cardsOk };
+    await patchSession(sid, { debrief, ...(skills ? { skills } : {}), after: { v: AFTER_VERSION, at: now, model, bytes: bytesOf(prompt), took, rejected: mr.rejected.length, dropped, problems: r.problems.slice(0, 10) } });
+    await markTraps(db, s.block, hit).catch(() => {});
+    await countDropped(dropped);
+    return { ok: true, took, rejected: mr.rejected.map((x) => ({ line: x.line, error: x.error })), dropped };
+  }
+  async function afterOne(sid) {
+    const s = (getData().sessions || []).find((x) => x.id === sid);
     if (!s) return false;
     tried.after.add(sid);
     const fail = (why) => { console.warn('下课后的整理没做成', sid, why); return patchSession(sid, { after: { v: AFTER_VERSION, fails: (Number(s.after?.fails) || 0) + 1, lastFail: Date.now(), why: String(why).slice(0, 200) } }).then(() => false); };
     try {
-      const sc = scopeDb(db, sid);
-      const [turns, rep] = await Promise.all([
-        sc.collection('class_turns').get().then((x) => x.docs.map((d) => d.data()), () => []),
-        sc.doc('report/main').get().then((r) => (r.exists ? r.data() : null), () => null),
-      ]);
-      if (!turns.length) return fail('没有记录');
-      const sp = spaceOfDoc('sessions', s, data) || s.space || spaceOfId(s.block || '');
-      const mine = filterSpace(data, sp);
-      const gone = voidedIds(data);
-      const weak = (mine.weaknesses || []).filter((w) => !['closed', 'merged', 'void'].includes(w.status) && !gone.has(`weaknesses/${w.id}`));
-      const prevS = (data.sessions || []).filter((d) => d.id !== sid && d.debrief && (spaceOfDoc('sessions', d, data) || '') === sp && (d.startedAt || 0) < (s.startedAt || 0)).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
-      const traps = await trapsFor(db, s.block);
-      const blocks = (mine.curriculum || []).filter((b) => /\.\d+\.\d+$/.test(String(b.id))).sort((a, b) => cmpId(a.id, b.id));
-      const catalog = Object.fromEntries(Object.entries(pointCatalog((data.sessions || []).filter((d) => d.id !== sid), data.mastery)).filter(([id]) => spaceOfId(id) === sp));
-      const cardIds = [...new Set([s.block, ...(Array.isArray(s.blocks) ? s.blocks : [])].filter((b) => b && blocks.some((x) => x.id === b)))];
-      const cards = await loadCards(db, cardIds);
-      const notes = turns.filter((t) => t.kind === 'aide' && t.text).map((t) => ({ upTo: t.upTo, text: t.text }));
-      const items = rep?.items || [];
-      const prompt = afterPrompt({ session: s, transcript: transcriptText(turns), report: rep ? reportText(rep) : '', weaknesses: weak, prev: prevS ? debriefText(prevS.debrief) : '', subject: s.block ? subjectOf(s.block) : '', traps, items, curriculum: blocks, catalog, cards: cardIds.map((id) => ({ id, text: cards.find((c) => c.id === id)?.text || '' })), notes });
-      const res = await callOpus(prompt);
+      const inp = await afterInput(sid);
+      if (!inp.prompt) return fail(inp.why);
+      const res = await callOpus(inp.prompt);
       if (!res) return fail('调用不了，或者回的不是 Opus 5.5');
-      const r = parseAfter(res.text, { items, blocks: blocks.map((b) => b.id), catalog, weaknesses: weak, cardIds: new Set(cardIds) });
-      if (r.problems.includes('回的不是课后整理')) return fail('回的不是课后整理');
-      const now = Date.now();
-      const evidence = await db.collection('evidence').where('session', '==', sid).get().then(docsOf, () => []);
-      const corpus = buildCorpus({ turns, evidence });
-      // 复盘：守卫照旧（对不上的挪进 held，下一节不带）；对上的坑记进 exam_bar
-      const raw = { v: DEBRIEF_VERSION, at: now, model: res.modelApplied || '', bytes: bytesOf(prompt), mis: r.debrief.mis, pace: r.debrief.pace, habit: r.debrief.habit, opening: r.debrief.opening, advice: r.debrief.advice };
-      const { debrief } = guardDebrief(raw, { session: sid, mem: data, corpus });
-      const hit = debriefTraps(debrief, new Set(traps.map((t) => t.id)));
-      const skills = items.length ? { v: SKILLS_VERSION, reportAt: Number(s.report?.at) || rep?.at || null, at: now, model: res.modelApplied || '', bytes: bytesOf(prompt), items: r.skills.items, points: r.skills.points, sum: skillSummary(rep, r.skills.items), problems: r.skills.problems.slice(0, 10) } : null;
-      // 事实：作者 aide，守卫对不上的直接不收
-      const mr = r.memo.length ? await ops.applyMemo(r.memo, { session: sid, block: s.block, space: sp, turns, author: 'aide' }) : { pds: [], rejected: [] };
-      // 卡
-      let cardsOk = 0;
-      let dropped = 0;
-      const after = getData();
-      for (const [id, parsed] of Object.entries(r.cards)) {
-        const w = await writeCard(id, parsed, { old: cards.find((c) => c.id === id), data: after, corpora: { [sid]: corpus }, session: sid, model: res.modelApplied || AIDE_MODEL });
-        dropped += w.dropped;
-        if (w.ok) cardsOk++;
-      }
-      await patchSession(sid, { debrief, ...(skills ? { skills } : {}), after: { v: AFTER_VERSION, at: now, model: res.modelApplied || '', bytes: bytesOf(prompt), took: { facts: mr.pds.length, cards: cardsOk }, rejected: mr.rejected.length, dropped, problems: r.problems.slice(0, 10) } });
-      await markTraps(db, s.block, hit).catch(() => {});
-      await countDropped(dropped);
-      return true;
+      const out = await afterApply(sid, res.text, res.modelApplied || AIDE_MODEL, inp);
+      return out.ok ? true : fail(out.why);
     } catch (err) {
       reportError(err, { what: '下课后的整理', path: `sessions/${sid}`, soft: true });
       return fail(err?.message || err?.code || err);
     }
   }
 
+  /** 教研室合并完的一张卡（labdesk.js）：照同样的核法写；这一章的卡都记上 labAt */
+  async function saveCard(id, parsed, { model = 'lab', labAt = Date.now() } = {}) {
+    const data = getData();
+    const all = await loadAllCards(db);
+    const sids = (data.sessions || []).filter((x) => x.block === id || (Array.isArray(x.blocks) && x.blocks.includes(id))).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0)).map((x) => x.id);
+    const w = await writeCard(id, parsed, { old: all.find((c) => c.id === id) || null, data, corpora: await corporaFor(sids), model, labAt });
+    await countDropped(w.dropped);
+    return w;
+  }
+  /** 一章合并过了：没改的卡也记上 labAt（下次不再为它们出单子） */
+  async function markMerged(ids, labAt = Date.now()) {
+    for (const c of await loadCards(db, ids)) { const { id, ...rest } = c; if ((rest.labAt || 0) < labAt) { assertWrite('page', 'cards'); await db.doc(`cards/${id}`).set({ ...rest, labAt }); } }
+  }
+
   /* ---------------- 2. 补学生卡 ---------------- */
   async function fillOne() {
     const data = getData();
-    const all = await loadAllCards(db);
+    const all = lastCards = await loadAllCards(db);
     for (const space of AIDE_SPACES) {
       const near = guessBlocks(data, space, packs());
       const id = fillQueue(data, all, { space, near }).find((x) => !tried.fill.has(x));
@@ -232,5 +261,5 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     try { did = await step(); } finally { busy = false; }
     if (did && !once) setTimeout(() => tick(), 500);
   }
-  return { tick, afterOne, fillOne, briefFor, cardsFor: (block, space) => loadCards(db, cardIdsFor(block, getData().curriculum || [], space)), cardText };
+  return { tick, afterOne, afterInput, afterApply, saveCard, markMerged, fillOne, briefFor, cards: () => lastCards, cardsFor: (block, space) => loadCards(db, cardIdsFor(block, getData().curriculum || [], space)), cardText };
 }

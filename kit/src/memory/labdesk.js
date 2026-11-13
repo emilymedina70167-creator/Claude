@@ -20,6 +20,9 @@ import { targetOf } from '../exam/target.js';
 import { refreshStats } from '../exam/examdesk.js';
 import { applyChange, toDate } from './schema.js';
 import { LAB_HEAD_REF } from './lab.js';
+import { memoryDigest } from './digest.js';
+import { loadCards } from '../aide/load.js';
+import { cardBrief, parseCardReply } from '../aide/fill.js';
 
 const docsOf = (snap) => (snap ? snap.docs.map((d) => ({ id: d.id, ...d.data() })) : []);
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -28,7 +31,8 @@ const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slic
  * db：学习台的数据库（guardDb 过的）；getData()：手上的记忆库；packs：各科的资料包（desk.js 订阅着）；
  * planner：planview.js（备课的材料和读回答）；ops：memops.js；onChange()：回执、单子变了（管理页重画）
  */
-export function createLabDesk({ db, getData, packs, planner, ops, onChange = () => {} }) {
+// aide：课堂助手（aide/aidedesk.js，第九轮）：after（下课后的整理，首页连着没做成的）、card（按章合并学生卡）两种单子的材料和写法都用它的
+export function createLabDesk({ db, getData, packs, planner, ops, aide = null, onChange = () => {} }) {
   let briefs = [];
   let logs = [];
   let syncing = false;
@@ -58,6 +62,16 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
       return { prompt: prepBrief({ prompt, block: item.ref, title: block?.title || item.title }), ctx };
     }
     if (item.kind === 'profile' || item.kind === 'map' || item.kind === 'intel') return buildExam(item, data);
+    if (item.kind === 'after' && aide) {
+      const inp = await aide.afterInput(item.ref);
+      return inp.prompt ? { prompt: `${LAB_HEAD_REF()}\n\n${inp.prompt}`, ctx: { session: item.ref } } : null;
+    }
+    if (item.kind === 'card' && aide) {
+      const ids = Array.isArray(item.blocks) ? item.blocks : [];
+      const cards = await loadCards(db, ids);
+      if (!cards.length) return null;
+      return { prompt: cardBrief({ head: LAB_HEAD_REF(), space: item.space, chapter: item.ref, cards: cards.map((c) => ({ id: c.id, text: c.text, raw: memoryDigest(data, { block: c.block, budget: 12 * 1024, tools: false }).text })) }), ctx: { ids: cards.map((c) => c.id) } };
+    }
     return null;
   }
 
@@ -254,10 +268,33 @@ export function createLabDesk({ db, getData, packs, planner, ops, onChange = () 
     else if (brief.kind === 'newproblems' || brief.kind === 'probe') r = await takeProblems(d, brief, meta);
     else if (brief.kind === 'prep') r = await takePrep(d, brief, meta);
     else if (brief.kind === 'profile' || brief.kind === 'map' || brief.kind === 'intel') r = await takeExam(d, brief);
+    else if ((brief.kind === 'after' || brief.kind === 'card') && aide) r = await takeAide(d, brief, meta);
     else return receipt({ inbox: d, brief, result: 'error', notes: [`不认识的单子 ${brief.kind}`] });
     // 做完了的单子撤掉（下一次自检，工作单里它也就没了）；没收成的留着，教研室看了回执重做
     if (r.result === 'ok' || r.result === 'partial') await db.doc(`lab_brief/${brief.id}`).delete().catch(() => {});
     return r;
+  }
+
+  // 课堂助手的两种（第九轮）：照首页那一份的读法和核法写（作者 aide，对不上的不收、不暂存）
+  async function takeAide(d, brief, meta) {
+    const ctx = brief.ctx || {};
+    if (brief.kind === 'after') {
+      const inp = await aide.afterInput(ctx.session);
+      if (!inp.prompt) return receipt({ inbox: d, brief, result: 'stale', notes: [inp.why] });
+      const out = await aide.afterApply(ctx.session, d.text, meta.model || 'lab', inp);
+      return out.ok ? receipt({ inbox: d, brief, result: out.rejected.length || out.dropped ? 'partial' : 'ok', took: out.took, rejected: out.rejected }) : receipt({ inbox: d, brief, result: 'rejected', notes: [out.why] });
+    }
+    const ids = new Set(ctx.ids || []);
+    const got = parseCardReply(d.text, { ids });
+    const at = Date.now();
+    let n = 0;
+    const rejected = got.problems.map((x) => ({ error: x }));
+    for (const [id, parsed] of Object.entries(got.cards)) {
+      const w = await aide.saveCard(id, parsed, { model: meta.model || 'lab', labAt: at });
+      if (w.ok) n++; else rejected.push({ error: `卡 ${id} 没收：${w.why}` });
+    }
+    await aide.markMerged([...ids], at);
+    return receipt({ inbox: d, brief, result: rejected.length ? 'partial' : 'ok', took: { cards: n }, rejected });
   }
 
   // 补收尾：小结（过守卫：引的原话要在记录里找得到；对不上先暂存）+ 整理单（memops.applyMemo，author: lab）

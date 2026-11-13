@@ -2,7 +2,8 @@
 // 补完为止；以后原始记录变了（新的错题、弱点又出现）卡就过时，也在这里重写。每晚的教研室按章做合并（memory/lab.js 的 card 单子）。
 // 纯函数，有测试（tests/aide-fill.test.js）。调用在 aide/aidedesk.js。
 import { spaceOfId } from '../memory/space.js';
-import { cardParts, cardStale, CARD_SECTIONS, CARD_MAX } from './card.js';
+import { cardParts, cardStale, parseCard, CARD_SECTIONS, CARD_MAX } from './card.js';
+import { splitAfter } from './after.js';
 import { crossId } from './schema.js';
 
 export const CARD_HEAD = '你在给学生的学习台写一张学生卡';
@@ -73,4 +74,57 @@ export function crossPrompt({ space = '', firsts = [], old = '', weaknesses = ''
     '## 要求',
     ...rules(),
   ].filter((x) => x !== '').join('\n');
+}
+
+/* ---------------- 每晚的教研室：按章合并学生卡（memory/lab.js 的 card 单子） ---------------- */
+
+/** 块所在的章：块编号去掉最后两段（DS-L8.2.1 → DS-L8，L2.1.4 → L2） */
+export const chapterOf = (block) => String(block || '').split('.')[0];
+const CHAPTER_MIN = 3; // 一章有这么多张卡才值得合并（同一个误解常常散在几块里）
+
+/**
+ * 工作单里的「card」项：一章有 CHAPTER_MIN 张卡、而且有一张在这一章上次合并（卡上的 labAt）以后又写过。
+ * key 是这一章每张卡的版本（at）拼起来：变了单子就重拼
+ */
+export function cardWork(cards = []) {
+  const by = new Map();
+  for (const c of list(cards)) if (c?.block) { const ch = chapterOf(c.block); if (!by.has(ch)) by.set(ch, []); by.get(ch).push(c); }
+  const items = [];
+  for (const [ch, cs] of by) {
+    if (cs.length < CHAPTER_MIN) continue;
+    const merged = Math.max(0, ...cs.map((c) => Number(c.labAt) || 0));
+    if (!cs.some((c) => (Number(c.at) || 0) > merged)) continue;
+    const space = spaceOfId(cs[0].block);
+    items.push({ kind: 'card', space, ref: `${space}-${ch}`, title: `${ch} 的 ${cs.length} 张学生卡`, why: '这一章的卡上次合并以后又写过', value: 35, cost: '一次 Opus 5.5（读这一章的卡和原始记录，合并说同一件事的）', key: cs.map((c) => `${c.id}:${c.at || 0}`).sort().join(','), blocks: cs.map((c) => c.block).sort(cmpId) });
+  }
+  return items;
+}
+
+/** 教研室的单子：这一章每张卡 + 它引的原始记录（memoryDigest 以那一块开的全文，页面拼好），整章一起重写 */
+export function cardBrief({ head = '', space = '', chapter = '', cards = [] } = {}) {
+  return [
+    head,
+    '',
+    `## 这一张单子：合并 ${chapter}（${space}）这一章的学生卡`,
+    `学生卡是学习台给以后上课的老师看的：每块一张，一张卡就知道学生在这一块懂了什么、怎么错的。下面是这一章的 ${list(cards).length} 张卡和每块的原始记录。`,
+    '要做的：同一个误解、同一个习惯散在好几张卡里的，留在最该在的那一块，别的卡写一句「见 某块」；写错的、过时的（后来做对了的）改掉；每张卡整张重写。',
+    '',
+    ...list(cards).flatMap((c) => [`### ${c.id} 现在的卡`, c.text || '（还没有）', `### ${c.id} 的原始记录`, c.raw || '（没有）', '']),
+    '## 要求',
+    ...rules(),
+    '',
+    '## 回答的格式',
+    '每张要改的卡一节：一行 `## 卡 块编号`，下面是这张卡的行。没改的卡不写。',
+  ].join('\n');
+}
+
+/** 读教研室的回答：{ cards: { 块: { lines, problems } }, problems }（只收单子里给了的卡） */
+export function parseCardReply(text, { ids = new Set() } = {}) {
+  const cards = {};
+  const problems = [];
+  for (const [id, t] of Object.entries(splitAfter(text).cards)) {
+    if (!ids.has(id)) { problems.push(`单子里没有卡 ${id}，不收`); continue; }
+    cards[id] = parseCard(t);
+  }
+  return { cards, problems };
 }

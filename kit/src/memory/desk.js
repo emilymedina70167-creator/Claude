@@ -365,13 +365,13 @@ export async function renderDesk(root, meta) {
   let lab = null;
   db.doc('meta/workorder').onSnapshot((s) => { workDoc = s.exists ? s.data() : null; paintWork(); }, () => {});
   // 云端教研室（labdesk.js、docs/lab-plan.md）：照工作单拼单子 lab_brief，收它的回答 lab_inbox（过守卫、写回执）
-  lab = createLabDesk({ db, getData: () => data, packs, planner, ops, onChange: () => paintWork() });
   // 课堂助手（aide/aidedesk.js，第九轮）：下课后整理、补学生卡、写课前档案；一次一件、走后台，记忆读齐了才动
   aideDesk = createAideDesk({ db, getData: () => data, ops, ai: deskAI, packs: () => packs, ready: () => ['sessions', 'curriculum', 'errors', 'weaknesses', 'mastery', 'observations', 'position', 'reviews'].every((c) => loaded.has(c)) });
+  lab = createLabDesk({ db, getData: () => data, packs, planner, ops, aide: aideDesk, onChange: () => paintWork() });
   function runSentry(today) {
     aideDesk.tick();
     const re = sentryRecheck(data);
-    const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: packs[k].main }])), re, exam: examMeta });
+    const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: packs[k].main }])), re, exam: examMeta, cards: aideDesk.cards() });
     const doc = { v: 1, items, recheck: Object.fromEntries(SPACE_KEYS.map((k) => [k, recheckText(re, k)])), stale: re.stale.length, maybeSolved: re.maybeSolved.length };
     const key = JSON.stringify(doc);
     if (key === lastWork) return;
@@ -388,7 +388,7 @@ export async function renderDesk(root, meta) {
     return `<p class="dk-lab"><b>云端教研室</b>　${bs.length ? `等它做的 ${bs.length} 张单子（${bs.slice(0, 4).map((b) => escapeHtml(WORK_KIND[b.kind] || b.kind)).join('、')}${bs.length > 4 ? '……' : ''}）` : '没有等它做的单子'}</p>
       ${ls.length ? `<details class="dk-soft"><summary>它最近交回来的 ${ls.length} 份</summary><ul class="dk-errlist">${ls.map((r) => `<li>${escapeHtml(receiptLine(r))}<span class="muted">　${escapeHtml(when(r.at))}${r.rejected?.length ? `　${escapeHtml(r.rejected.map((x) => x.error).join('；').slice(0, 160))}` : ''}</span></li>`).join('')}</ul></details>` : ''}`;
   }
-  const WORK_KIND = { backfill: '补收尾', recheck: '重判', resolve: '可能会了', newproblems: '缺新题', probe: '该测了', prep: '该备课' };
+  const WORK_KIND = { backfill: '补收尾', recheck: '重判', resolve: '可能会了', newproblems: '缺新题', probe: '该测了', prep: '该备课', after: '课后整理', card: '合并学生卡' };
   function paintWork() {
     const box = $('.dk-work');
     if (!box) return;
