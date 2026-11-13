@@ -1129,6 +1129,37 @@ const SUITES = {
     return t;
   },
 
+  // 课堂助手（第九轮，aide/）：下了课的舞台课首页后台整理（复盘、归类、事实、学生卡，模拟 Claude）；开新的舞台课记 aide、说明里带学生卡
+  async aide(browser) {
+    const t = await seeded(browser);
+    const sid = 'c-20261101-2';
+    const at = Date.parse('2026-11-01T10:00:00+08:00');
+    await plant(t, {
+      [`sessions/${sid}`]: { kind: 'stage', aide: 1, status: 'closed', date: '2026-11-01', block: 'L2.2.2', space: 'math', subject: '线性代数', title: 'Aⁿ', startedAt: at, endedAt: at + 1800000, summary: 'ob-e2e-aide', report: { at: at + 1800000, items: 1, activeMs: 900000, line: '一道题' } },
+      [`sessions/${sid}/class_turns/000001`]: { seq: 1, role: 'claude', text: 'say "βᵀα 是什么？"\nask text', modelApplied: 'claude-opus-5-5', at: at + 1000, session: sid },
+      [`sessions/${sid}/class_turns/000002`]: { seq: 2, role: 'student', text: '一个矩阵', msg: '[学生]\n写了「一个矩阵」', at: at + 2000, session: sid },
+      [`sessions/${sid}/report/main`]: { at: at + 1800000, session: sid, block: 'L2.2.2', totals: { items: 1, wrong: 1 }, items: [{ key: 'S1', comp: 'S1', q: 'βᵀα 是什么', seq: '×', outcome: 'wrong', tags: ['L2.2.2'], evidence: ['ev-e2e-aide1'] }] },
+      'observations/ob-e2e-aide': { kind: 'summary', session: sid, text: '小结：内积和外积还没分开', at: at + 1800000, block: 'L2.2.2' },
+      'evidence/ev-e2e-aide1': { kind: 'answer', session: sid, comp: 'S1', block: 'L2.2.2', ok: false, value: '一个矩阵', q: 'βᵀα 是什么', src: 'record', at: at + 3000, turn: 1 },
+    });
+    await t.open();
+    const s = await t.waitFor(async () => { const x = (await t.db())[`sessions/${sid}`]; return x?.after?.at ? x : null; }, { timeout: 30000, what: '首页后台做完这节课的下课后整理' });
+    check(s.debrief && s.skills?.items?.length === 1, `下课后整理没写复盘或归类：${JSON.stringify({ d: !!s.debrief, k: s.skills?.items?.length })}`);
+    check(!(await t.docs('pending')).some((p) => p.status === 'held'), '助手写的东西挂起等放行了（不该有要我确认的）');
+    const card = await t.waitFor(async () => (await t.db())['cards/L2.2.2'], { timeout: 10000, what: '这一块的学生卡写上' });
+    check(card.by === 'aide' && /概括｜/.test(card.text), `学生卡不对：${JSON.stringify(card)}`);
+    // 开一节新的舞台课：记 aide，说明里「你对学生的了解」带上学生卡
+    await t.page.click('.dk-class .dk-new');
+    await t.page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash), { timeout: 20000 });
+    await t.page.waitForLoadState('load');
+    await t.waitFor(() => t.page.$('.sc-root .st-stage'), { timeout: 20000, what: '舞台课画出来' });
+    const nid = decodeURIComponent(new URL(t.page.url()).hash.slice(1));
+    check((await t.docs('sessions')).find((d) => d.id === nid)?.aide === 1, '新开的舞台课没记 aide');
+    const sys = await t.waitFor(() => t.page.evaluate(() => window.LAStageClass?.system?.()), { timeout: 10000, what: '拿到这节课的说明' });
+    check(sys.includes('### 学生卡：L2.2.2'), '新开的舞台课说明里没带学生卡');
+    return t;
+  },
+
   async errors(browser) {
     const t = await seeded(browser);
     // 故意制造一个没接住的错误：应该被记进 meta/errors，管理页能看到

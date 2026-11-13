@@ -81,7 +81,8 @@ export async function renderStageClass(root, meta = {}, desk) {
     stage.examCheck = examCheckOf(ex, typeof desk.reserve === 'function' ? desk.reserve() : desk.reserve || []);
     stage.scene.examCheck = stage.examCheck;
   });
-  if (store.dev) window.LAStageClass = { stage, history: () => history };
+  // ?dev：自动测试看这节课每一轮发给老师的整份说明（课堂助手的学生卡、档案带上没有）
+  if (store.dev) window.LAStageClass = { stage, history: () => history, system: () => system() };
 
   // —— 谁来讲课：claude.ai 里是真的 Opus 5.5；本地 ?dev 用模拟老师（不花额度）——
   const ai = readOnly ? null : await getAI();
