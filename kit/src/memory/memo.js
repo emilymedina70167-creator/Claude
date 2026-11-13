@@ -638,7 +638,7 @@ export function pendingRecord(change, { session = null, turn = null, by = 'class
   };
 }
 
-const logMeta = (pd, date, note) => ({ date, by: ['me', 'page', 'chat', 'lab'].includes(pd.by) ? pd.by : 'class', basis: (pd.basis || []).filter(Boolean), note });
+const logMeta = (pd, date, note) => ({ date, by: ['me', 'page', 'chat', 'lab', 'aide'].includes(pd.by) ? pd.by : 'class', basis: (pd.basis || []).filter(Boolean), note });
 
 /**
  * 执行一张改动单（直接写的那档马上执行；我确认才写的，我点「确认」时执行）。
@@ -652,7 +652,7 @@ export function applyPending(pd, mem = {}, { date = toDate(Date.now()), edits = 
   assertWrite(role, pd.coll);
   const docs = Array.isArray(mem[pd.coll]) ? mem[pd.coll] : [];
   const old = docs.find((d) => String(d.id) === String(pd.target));
-  const note = pd.tier === 'confirm' ? `${pd.by === 'page' ? '页面按证据算的，' : pd.by === 'chat' ? '开发那边整理的，' : ''}我确认于 ${date}` : pd.tier === 'me' ? '我在学习台上改的' : pd.by === 'page' ? '页面按证据算的' : pd.by === 'lab' ? `教研室事后补 ${pd.session || ''}`.trim() : `课堂 ${pd.session || ''}`.trim();
+  const note = pd.tier === 'confirm' ? `${pd.by === 'page' ? '页面按证据算的，' : pd.by === 'chat' ? '开发那边整理的，' : ''}我确认于 ${date}` : pd.tier === 'me' ? '我在学习台上改的' : pd.by === 'page' ? '页面按证据算的' : pd.by === 'lab' ? `教研室事后补 ${pd.session || ''}`.trim() : pd.by === 'aide' ? `助手事后写 ${pd.session || ''}`.trim() : `课堂 ${pd.session || ''}`.trim();
   const isState = COLLECTIONS[pd.coll].kind === 'state';
   let doc, applied;
   if (pd.op === 'add') {
