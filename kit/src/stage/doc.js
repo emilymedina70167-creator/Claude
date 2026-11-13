@@ -356,7 +356,8 @@ ${STAGE_MEMO_DOC}
 // exam：「这一块在考试里」那一节（exam/context.js 的 examForClass 拼好的；空的就没有这一节）。放在资料包后面、记忆前面，
 // 算资料包的预算时它已经在（资料包自己让出来）；资料包里的教材原文至少留 TEXTBOOK_FLOOR
 export const TEXTBOOK_FLOOR = 32 * 1024;
-export function buildStageSystem({ pack = null, memory = null, rules = '', title = '', subject = '', exam = '' } = {}) {
+// aide：课堂助手的两节（{ brief, cards }，aide/brief.js 的 aideForTurn 算好的）；没有就是 null，记忆那一节和以前一样
+export function buildStageSystem({ pack = null, memory = null, rules = '', title = '', subject = '', exam = '', aide = null } = {}) {
   const parts = (packBody, mem) => {
     const custom = [rules, mem?.rules].filter((x) => String(x || '').trim()).join('\n\n');
     const sections = [
@@ -376,7 +377,7 @@ export function buildStageSystem({ pack = null, memory = null, rules = '', title
   let mem = null;
   if (memory) {
     const room = STAGE_SYSTEM_MAX - bytes(parts('', { rules: '', text: '' })) - 40 * 1024;
-    mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools: false, budget: Math.max(4 * 1024, Math.min(28 * 1024, room)) });
+    mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools: false, budget: Math.max(4 * 1024, Math.min(28 * 1024, room)), aide });
   }
   const rest = bytes(parts('', mem));
   const { text: packBody } = packText(pack || { main: null, problems: null }, Math.max(12 * 1024, Math.min(PACK_BUDGET, STAGE_SYSTEM_MAX - rest - 2 * 1024)), { talk: true, floors: { textbook: TEXTBOOK_FLOOR } });
