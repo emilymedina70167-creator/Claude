@@ -8,6 +8,7 @@ import { SKILLS_RULES, skillItemLines, parseSkills } from '../memory/skills.js';
 import { parseMemoLines } from '../memory/memo.js';
 import { MEMO_DOC } from '../class/prompt.js';
 import { parseCard, CARD_SECTIONS, CARD_MAX } from './card.js';
+import { MOVES } from './moves.js';
 
 export const AFTER_VERSION = 1;
 export const AFTER_HEAD = '你在给一节刚上完的舞台课做课后整理';
@@ -50,7 +51,7 @@ export function afterPrompt({ session = {}, transcript = '', report = '', weakne
     weak ? `## 学生还开着的弱点（这一科）\n${weak}\n` : '',
     prev ? `## 上一节的复盘（对照：上次说「还在」的误解这节怎么样了）\n${cut(prev, 3000)}\n` : '',
     trapLines ? `## 这一块真题的典型坑（教研室从真题归纳的）\n${trapLines}\n学生的哪个误解和其中一个坑是一回事，就在那一行误解的依据最后写「坑=编号」（只写上面列着的编号；对不上就不写）。\n` : '',
-    '# 输出分四节，节头照抄（一行 `## 复盘`、`## 归类`、`## 事实`、每张卡一行 `## 卡 块编号`），节和节之间空一行，不要别的文字',
+    '# 输出分五节，节头照抄（一行 `## 复盘`、`## 归类`、`## 事实`、每张卡一行 `## 卡 块编号`、`## 讲法`），节和节之间空一行，不要别的文字',
     '',
     '## 复盘（写法照下面）',
     ...DEBRIEF_JUDGE,
@@ -77,6 +78,9 @@ export function afterPrompt({ session = {}, transcript = '', report = '', weakne
     `- 每行「段名｜内容（出处）」，段名只能是 ${CARD_SECTIONS.filter((x) => x !== '讲法').join(' / ')}（讲法由页面按证据算，你不写）。第一行一定是「概括｜」一句话。`,
     '- 同一个误解只写一句，后面列出处；原话只留最要紧的一两句；这节课没碰到的内容照旧卡保留（改写得更准可以）。',
     ...list(cards).flatMap((c) => [`### 卡 ${c.id} 现在是：`, c.text ? String(c.text) : '（还没有卡：照这节课和记忆写第一版）']),
+    '',
+    '',
+    `## 讲法（老师每一轮主要用了哪种讲法：每行「讲法｜#轮｜词」，词只能是 ${MOVES.join(' / ')}；只标在教东西的那几轮，一轮最多两种。有没有用页面按学生之后的作答算，你不判）`,
     '',
     '提到学生就写「学生」。',
   ].filter((x) => x !== '').join('\n');

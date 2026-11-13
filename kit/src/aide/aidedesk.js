@@ -17,6 +17,7 @@ import { assertWrite } from '../memory/schema.js';
 import { lessonPlanText } from '../books/plan.js';
 import { reportError } from '../errlog.js';
 import { AFTER_VERSION, needsAfter, afterPrompt, parseAfter } from './after.js';
+import { parseMoves } from './moves.js';
 import { parseCard, linesText, checkCardLines, acceptCard, cardSrc, cardIdsFor, cardText } from './card.js';
 import { fillQueue, cardPrompt, crossPrompt } from './fill.js';
 import { briefPrompt, parseBrief, briefSig, briefUsable, guessBlocks, BRIEF_MODEL } from './brief.js';
@@ -132,7 +133,9 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
       if (w.ok) cardsOk++;
     }
     const took = { facts: mr.pds.length, cards: cardsOk };
-    await patchSession(sid, { debrief, ...(skills ? { skills } : {}), after: { v: AFTER_VERSION, at: now, model, bytes: bytesOf(prompt), took, rejected: mr.rejected.length, dropped, problems: r.problems.slice(0, 10) } });
+    // 讲法（第 3 批）：只认老师那几轮的编号、词表里的词；有没有用页面按证据算（moves.js），这里只存标了什么
+    const moves = parseMoves(r.moves, { turns: new Set(turns.filter((t) => t.role === 'claude' && !t.discarded).map((t) => Number(t.seq))) });
+    await patchSession(sid, { debrief, ...(skills ? { skills } : {}), moves, after: { v: AFTER_VERSION, at: now, model, bytes: bytesOf(prompt), took, rejected: mr.rejected.length, dropped, problems: r.problems.slice(0, 10) } });
     await markTraps(db, s.block, hit).catch(() => {});
     await countDropped(dropped);
     return { ok: true, took, rejected: mr.rejected.map((x) => ({ line: x.line, error: x.error })), dropped };

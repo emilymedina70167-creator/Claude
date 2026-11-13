@@ -141,7 +141,7 @@ export async function renderStageClass(root, meta = {}, desk) {
     const a = desk.aide;
     if (!a || !desk.block) return null;
     const curriculum = desk.mem?.curriculum || [];
-    const got = aideForTurn({ block: desk.block, cards: a.cards, brief: aideBrief, curriculum, space: a.space });
+    const got = aideForTurn({ block: desk.block, cards: a.cards, brief: aideBrief, curriculum, space: a.space, mem: desk.mem });
     if (!got.brief && !aideAsked && !readOnly && a.cards?.length) {
       aideAsked = true;
       a.refresh?.().then((b) => { if (b) aideBrief = b; }, () => {});
