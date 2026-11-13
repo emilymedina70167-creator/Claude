@@ -74,6 +74,7 @@ import { createExamCard } from '../exam/examview.js';
 import { createExamPage } from '../exam/exampage.js';
 import { priority } from '../exam/priority.js';
 import { renderStageClass } from '../stage/classroom.js';
+import { createAideDesk } from '../aide/aidedesk.js';
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
 import { renderGuided } from '../guided.js';
@@ -184,6 +185,7 @@ export async function renderDesk(root, meta) {
   const data = Object.fromEntries(MEMORY_COLLECTIONS.map((c) => [c, []]));
   // 改记忆（掌握直接写、我改记忆、撤销）：放在订阅前面，第一次自检算出掌握时就用得上
   const ops = createMemOps({ db, mem: () => data });
+  let aideDesk = null; // 课堂助手（下面建，订阅的回调先到时还没有）
   const loaded = new Set();
   const failed = new Set();
   let ledger = null;
@@ -290,7 +292,7 @@ export async function renderDesk(root, meta) {
       loaded.add(c);
       failed.delete(c);
       if (c === 'sessions' || c === 'position') paintClass();
-      if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
+      if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); aideDesk?.tick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
       if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
       if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) fixReports(); if (lastRes) paintWeek(toDate(Date.now())); }
@@ -362,7 +364,10 @@ export async function renderDesk(root, meta) {
   db.doc('meta/workorder').onSnapshot((s) => { workDoc = s.exists ? s.data() : null; paintWork(); }, () => {});
   // 云端教研室（labdesk.js、docs/lab-plan.md）：照工作单拼单子 lab_brief，收它的回答 lab_inbox（过守卫、写回执）
   lab = createLabDesk({ db, getData: () => data, packs, planner, ops, onChange: () => paintWork() });
+  // 课堂助手（aide/aidedesk.js，第九轮）：下课后整理、补学生卡、写课前档案；一次一件、走后台，记忆读齐了才动
+  aideDesk = createAideDesk({ db, getData: () => data, ops, ai: deskAI, packs: () => packs, ready: () => ['sessions', 'curriculum', 'errors', 'weaknesses', 'mastery', 'observations', 'position', 'reviews'].every((c) => loaded.has(c)) });
   function runSentry(today) {
+    aideDesk.tick();
     const re = sentryRecheck(data);
     const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: packs[k].main }])), re, exam: examMeta });
     const doc = { v: 1, items, recheck: Object.fromEntries(SPACE_KEYS.map((k) => [k, recheckText(re, k)])), stale: re.stale.length, maybeSolved: re.maybeSolved.length };
@@ -1730,6 +1735,8 @@ export async function createClass(db, { block = null, main = null, problems = nu
   await db.doc(`sessions/${sid}`).set({
     date: today, block: block || null, title: String(main?.unit || unit), status: 'open', startedAt: Date.now(), space: sp, ...(block ? { subject: subjectOf(block) } : {}),
     ...(kind === 'talk' || kind === 'stage' ? { kind } : {}),
+    // 第九轮以后开的舞台课：下课后由课堂助手一次写复盘、归类、事实、学生卡（aide/after.js）；旧课照旧
+    ...(kind === 'stage' ? { aide: 1 } : {}),
     pack: main ? { unit: main.unit || '', goal: main.goal || '', updatedAt: main.updatedAt || null } : null,
     // 复现课（views.js 的 reviewPack，reviewClass）记 review：这节课就是复现这几组；备课写的开头复现（[{ id, how }]）记 opening
     ...(main?.reviewClass && reviewIdsOf(main.review).length ? { review: reviewIdsOf(main.review) } : {}),

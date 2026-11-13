@@ -61,13 +61,29 @@ export function createDevAI() {
       '改｜模拟：第 1 步先让学生凭自己的理解做一次，再讲',
     ].join('\n');
   }
+  // 课堂助手（aide/）：下课后的整理、补学生卡、课前档案。都写最简单的、守卫核得过的（不引原话、不写编号）
+  function after(prompt) {
+    const block = prompt.match(/（块 ((?:[A-Z]{2}-)?L\d+(?:\.\d+){2})）/)?.[1] || '';
+    const n = [...prompt.matchAll(/^(\d+)\. ［/gm)].length;
+    const cards = [...prompt.matchAll(/^### 卡 (\S+) 现在是：/gm)].map((m) => m[1]);
+    return [
+      '## 复盘', '开场｜模拟：先测上一节的那一步｜模拟的题：换一组数再做一次', '',
+      '## 归类', ...(block && n ? [`point ${block}#mock 模拟的知识点`, ...Array.from({ length: n }, (_, i) => `item ${i + 1} ${block}#mock`)] : ['skip 0']), '',
+      '## 事实', '````board memo', 'note text="模拟：这节课学生先自己试了几下才答"', '````', '',
+      ...cards.flatMap((id) => [`## 卡 ${id}`, '概括｜模拟的学生卡：这一块上过课', '先测｜模拟：换一组数再测一次', '']),
+    ].join('\n');
+  }
+  const card = () => '概括｜模拟的学生卡\n先测｜模拟：换一组数再测一次';
+  const brief = () => '要点｜模拟：这节课开头先测上一节没过的那一步';
+  // 旁听（aide/watch.js，第 2 批）
+  const watch = () => '以前｜模拟：这一步以前也停过很久';
   return {
     tools: true,
     images: { maxCount: 4, maxInputBytes: 20000000, mediaTypes: ['image/png', 'image/jpeg'] },
     async call(prompt, opts = {}) {
       await new Promise((r) => setTimeout(r, 300));
       const p = String(prompt);
-      const text = p.startsWith('你在把一本教材的扫描页') ? transcribe(p) : p.startsWith('你在帮学生整理学习台的课程地图') ? map(p) : p.startsWith('你是这个学生的老师，现在给下一节课备课') ? prep(p) : p.startsWith('你在给学生的一节课的题归类') ? skills(p) : p.startsWith('你在给一节刚上完的课做复盘') ? debrief(p) : p.startsWith('你在课前预演一份教案') ? rehearse(p) : '{}';
+      const text = p.startsWith('你在把一本教材的扫描页') ? transcribe(p) : p.startsWith('你在帮学生整理学习台的课程地图') ? map(p) : p.startsWith('你是这个学生的老师，现在给下一节课备课') ? prep(p) : p.startsWith('你在给学生的一节课的题归类') ? skills(p) : p.startsWith('你在给一节刚上完的课做复盘') ? debrief(p) : p.startsWith('你在课前预演一份教案') ? rehearse(p) : p.startsWith('你在给一节刚上完的舞台课做课后整理') ? after(p) : p.startsWith('你在给学生的学习台写一张学生卡') ? card(p) : p.startsWith('你在给下一节课的老师准备这节课要知道的事') ? brief(p) : p.startsWith('你在旁听一节舞台课') ? watch(p) : '{}';
       opts.onText?.({ text, delta: text });
       return { text, truncated: false, modelApplied: opts.model || 'claude-opus-5-5', modelTierApplied: opts.modelTier || 'complex' };
     },
