@@ -48,7 +48,8 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     let timer = null;
     const late = new Promise((r) => { timer = setTimeout(() => r(null), AIDE_TIMEOUT); });
     const res = await Promise.race([c.call(prompt, opts(extra)), late]).finally(() => clearTimeout(timer));
-    return !res || (res.modelApplied && res.modelApplied !== AIDE_MODEL) ? null : res;
+    // 没写是哪个模型（旧接口）也当不是 Opus：只认平台核验过的
+    return !res || res.modelApplied !== AIDE_MODEL ? null : res;
   }
   // 读最新的那条再写（课堂、对话里的 Claude、别的设备可能刚改过）
   async function patchSession(sid, patch) {
@@ -127,8 +128,12 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     const { debrief } = guardDebrief(raw, { session: sid, mem: data, corpus });
     const hit = debriefTraps(debrief, new Set(traps.map((t) => t.id)));
     const skills = items.length ? { v: SKILLS_VERSION, reportAt: Number(s.report?.at) || rep?.at || null, at: now, model, bytes: bytesOf(prompt), items: r.skills.items, points: r.skills.points, sum: skillSummary(rep, r.skills.items), problems: r.skills.problems.slice(0, 10) } : null;
-    // 事实：作者 aide，守卫对不上的直接不收
-    const mr = r.memo.length ? await ops.applyMemo(r.memo, { session: sid, block: s.block, space: sp, turns, author: 'aide' }) : { pds: [], rejected: [] };
+    // 事实：作者 aide，守卫对不上的直接不收。写完先记一笔 factsAt：后面写卡、改这节课时出错整次重做，事实不再写一遍
+    const fresh = await db.doc(`sessions/${sid}`).get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
+    const done = !!fresh?.after?.factsAt;
+    const mr = r.memo.length && !done ? await ops.applyMemo(r.memo, { session: sid, block: s.block, space: sp, turns, author: 'aide' }) : { pds: [], rejected: [] };
+    const factsAt = fresh?.after?.factsAt || now;
+    if (!done) await patchSession(sid, { after: { ...(fresh?.after || {}), v: AFTER_VERSION, factsAt } });
     let cardsOk = 0;
     let dropped = 0;
     for (const [id, parsed] of Object.entries(r.cards)) {
@@ -139,7 +144,7 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     const took = { facts: mr.pds.length, cards: cardsOk };
     // 讲法（第 3 批）：只认老师那几轮的编号、词表里的词；有没有用页面按证据算（moves.js），这里只存标了什么
     const moves = parseMoves(r.moves, { turns: new Set(turns.filter((t) => t.role === 'claude' && !t.discarded).map((t) => Number(t.seq))) }).map((m) => ({ ...m, out: moveOutcome(m, evidence) }));
-    await patchSession(sid, { debrief, ...(skills ? { skills } : {}), moves, after: { v: AFTER_VERSION, at: now, model, bytes: bytesOf(prompt), took, rejected: mr.rejected.length, dropped, problems: r.problems.slice(0, 10) } });
+    await patchSession(sid, { debrief, ...(skills ? { skills } : {}), moves, after: { v: AFTER_VERSION, at: now, factsAt, model, bytes: bytesOf(prompt), took, rejected: mr.rejected.length, dropped, problems: r.problems.slice(0, 10) } });
     await markTraps(db, s.block, hit).catch(() => {});
     await countDropped(dropped);
     return { ok: true, took, rejected: mr.rejected.map((x) => ({ line: x.line, error: x.error })), dropped };
@@ -148,7 +153,14 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     const s = (getData().sessions || []).find((x) => x.id === sid);
     if (!s) return false;
     tried.after.add(sid);
-    const fail = (why) => { console.warn('下课后的整理没做成', sid, why); return patchSession(sid, { after: { v: AFTER_VERSION, fails: (Number(s.after?.fails) || 0) + 1, lastFail: Date.now(), why: String(why).slice(0, 200) } }).then(() => false); };
+    // 失败也留着 factsAt（事实已经写了的，重做时不再写）；次数从数据库里最新的那份往上加
+    const fail = async (why) => {
+      console.warn('下课后的整理没做成', sid, why);
+      const cur = await db.doc(`sessions/${sid}`).get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
+      const prev = cur?.after || s.after || {};
+      await patchSession(sid, { after: { v: AFTER_VERSION, fails: (Number(prev.fails) || 0) + 1, lastFail: Date.now(), why: String(why).slice(0, 200), ...(prev.factsAt ? { factsAt: prev.factsAt } : {}) } });
+      return false;
+    };
     try {
       const inp = await afterInput(sid);
       if (!inp.prompt) return fail(inp.why);
@@ -229,7 +241,9 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     const main = packs()?.[space]?.main;
     const plan = main && blocks.includes(main.block) ? lessonPlanText(main) : '';
     const rules = memoryDigest(data, { block: blocks[0], budget: 12 * 1024, tools: false }).rules;
-    const prompt = briefPrompt({ space, blocks, cards: mine, plan, position: pos, rules });
+    // 复现课（几块）：这几块挂着的复现组，档案要写「这几组以前错在哪」
+    const review = blocks.length > 1 ? (data.reviews || []).filter((r) => r.status !== 'void' && (r.blocks || []).some((b) => blocks.includes(String(b)))).slice(0, 6).map((r) => `- ${r.id} ${r.title || ''}（${r.result ? `上次${r.result}` : '还没复现过'}${(r.errors || []).length ? `，错题 ${r.errors.join('、')}` : ''}）`).join('\n') : '';
+    const prompt = briefPrompt({ space, blocks, cards: mine, plan, position: pos, rules, review });
     // now：开课那一刻和老师第一轮同时写（不排在讲课后面：排了就要等这一轮讲完）
     const res = await callOpus(prompt, now ? { lane: undefined } : {});
     if (!res) return null;

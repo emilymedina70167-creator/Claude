@@ -12,7 +12,11 @@ export const WATCH_MODEL = 'claude-opus-5-5';
  */
 // timeoutMs：一次旁听最多等这么久（挂住了不回：算失败，下一次还能开；不然这节课再也不旁听）
 export const WATCH_TIMEOUT = 180 * 1000;
-export function createWatcher({ call, material, check, record = () => {}, effort = 'high', now = () => Date.now(), timeoutMs = WATCH_TIMEOUT }) {
+// gapMs：两次旁听开头至少隔这么久——学生一直在拖、拨，每一下都是「新的样子」，不隔开就一个接一个地叫 Opus，
+// 一节课白跑几十次、还一直占着后台那一条道（复盘、摘要都排在它后面）
+export const WATCH_GAP = 20 * 1000;
+export function createWatcher({ call, material, check, record = () => {}, effort = 'high', now = () => Date.now(), timeoutMs = WATCH_TIMEOUT, gapMs = WATCH_GAP }) {
+  let lastStart = -Infinity;
   let note = null;
   let inFlight = false;
   let lastKey = '';
@@ -20,7 +24,9 @@ export function createWatcher({ call, material, check, record = () => {}, effort
     if (!call || !watchCanStart({ ...state, inFlight })) return;
     const key = `${state.upTo}|${state.pending || ''}`;
     if (key === lastKey) return; // 和上一次看的一样：没有新东西
+    if (now() - lastStart < gapMs) return; // 刚看过：隔一会儿再看（这一刻的样子不记，下一次照最新的看）
     lastKey = key;
+    lastStart = now();
     inFlight = true;
     const upTo = Number(state.upTo) || 0;
     const t0 = now();

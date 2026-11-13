@@ -78,8 +78,11 @@ export function cardParts(block, mem = {}) {
 /** 卡过时了没有：存着的指纹和现在算的不一样（跨块卡不按这个算，见 fill.js） */
 export const cardStale = (card, mem) => !card?.block || card.src !== cardSrc(card.block, mem);
 
-// 行里像记忆编号的：错题（DS-L8-T09、L2-07、EN-L3-03）、弱点 W19、复现组 R3、记忆点 K12、守则 T-4、课 c-20261102-1、失误 S-…
-const ID_RE = /(?<![A-Za-z0-9-])((?:[A-Z]{2}-)?L\d+-T?\d+|W\d+|R\d+|K\d+|T-\d+|c-\d{8}-\d+|S-[A-Za-z0-9-]+)(?![A-Za-z0-9.-])/g;
+// 行里像记忆编号的：错题（DS-L8-T09、L2-07、EN-L3-03）、弱点 W19、守则 T-4、课 c-20261102-1、失误 S-…（复现组、记忆点见 RK_RE）
+const ID_RE = /(?<![A-Za-z0-9-])((?:[A-Z]{2}-)?L\d+-T?\d+|W\d+|T-\d+|c-\d{8}-\d+|S-[A-Za-z0-9-]+)(?![A-Za-z0-9.-])/g;
+// 复现组 R3、记忆点 K12 和组成原理的寄存器 R1、R7 长得一样：只认括号里写的出处（「（R3）」），正文里的不当编号核
+const RK_RE = /(?<![A-Za-z0-9-])([RK]\d+)(?![A-Za-z0-9.-])/g;
+const inParens = (t) => [...String(t).matchAll(/[（(]([^）)]*)[）)]/g)].map((m) => m[1]).join(' ');
 const BLOCK_RE = /(?<![A-Za-z0-9-])((?:[A-Z]{2}-)?L\d+(?:\.\d+){1,3})(?![A-Za-z0-9-])/g;
 const MEM_IDS = ['errors', 'weaknesses', 'reviews', 'recall', 'lessons', 'sessions', 'slips', 'observations', 'mastery'];
 
@@ -100,6 +103,7 @@ export function checkCardLines(lines = [], { mem = {}, corpora = {}, extraIds = 
     const t = String(l.text || '');
     const why = (() => {
       for (const m of t.matchAll(ID_RE)) if (!ids.has(m[1]) && !extraIds?.has(m[1])) return `没有 ${m[1]} 这一条`;
+      for (const m of inParens(t).matchAll(RK_RE)) if (!ids.has(m[1]) && !extraIds?.has(m[1])) return `没有 ${m[1]} 这一条`;
       for (const m of t.matchAll(BLOCK_RE)) if (blocks.size && !blocks.has(m[1])) return `课程地图里没有块 ${m[1]}`;
       // 指了哪节课的哪一轮：c-…#12；只写 #12 的，在给了的哪节课里有就算
       for (const m of t.matchAll(/(c-\d{8}-\d+)\s*[#＃](\d{1,4})/g)) if (!corpora[m[1]]?.bySeq?.has(Number(m[2]))) return `${m[1]} 没有第 ${m[2]} 轮`;
