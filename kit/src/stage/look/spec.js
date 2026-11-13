@@ -27,10 +27,22 @@ export const PROPS = {
 // 页面自己的默认样子：话不带框（2026-11-13 学生说字旁边都是框看着不舒服）；别的不写＝各种东西原来的样子
 export const DEFAULT_LOOK = [{ target: 'say', rank: 2, props: { frame: 'none' }, hide: null, base: true }];
 
+// 老师顺手会写的别名（设计要求单里模拟老师写过的）：照意思收下，不报错
+const ALIAS = {
+  frame: { off: 'none', no: 'none', on: 'card', box: 'card', thin: 'line' },
+  shadow: { none: 'off', no: 'off', yes: 'on' },
+  bg: { white: 'card', transparent: 'none', off: 'none', clear: 'none' },
+  edge: { off: 'none', no: 'none' },
+  font: { song: 'serif', 宋体: 'serif', 黑体: 'sans', 手写: 'hand' },
+  weight: { 700: 'bold', 500: 'normal', regular: 'normal' },
+  color: { black: 'ink', grey: 'muted', gray: 'muted', purple: 'brand', blue: 'g1', pink: 'g2', green: 'g3', yellow: 'gold', orange: 'g6' },
+};
 /** 一个属性的值对不对；对了返回规整的字符串，不对抛中文 */
 export function checkValue(prop, v) {
   const spec = PROPS[prop];
-  const s = String(v ?? '').trim();
+  let s = String(v ?? '').trim();
+  if (ALIAS[prop]?.[s] != null) s = ALIAS[prop][s];
+  if ((prop === 'bg' || prop === 'edge') && ALIAS.color[s]) s = ALIAS.color[s];
   if (Array.isArray(spec)) {
     if (!spec.includes(s)) throw new Error(`${prop}= 只能写 ${spec.join(' / ')}`);
     return s;

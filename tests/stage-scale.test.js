@@ -40,3 +40,9 @@ test('scale 1 回到原样；clone 带着；现状写一句', () => {
   run('scale a 1', sc);
   assert.equal(sc.objects.get('a').k, undefined);
 });
+
+test('本来就小的部件（时间轴的小人）也能缩一点', () => {
+  const { sc } = run('timeline tl = 过去 现在 将来 now=现在\nstand tl fr = 现在\nopen tl.fr move');
+  assert.equal(err(sc, 'scale tl 0.75'), null);
+  assert.match(err(sc, 'scale tl 0.5'), /学生要点/);
+});

@@ -31,7 +31,7 @@ export const STAGE_COMMON = `## 舞台的指令（一行一个动作，页面一
 部件的写法：名字（整个）、名字.部件（每种东西自己的写法，见下面各节）
 颜色：g1 蓝、g2 粉、g3 绿、g4 金、g5 紫、g6 橙
 跟着算的 {式子}：引号外面的 {…} 由页面现算（格子里的数、矩阵、向量、边权、answer=）。能用拨数 k、矩阵 A、一格 A.1,2、平面上的 p.u，能写 + -、乘（A v、2A）、A^-1、A'、det(A)。依赖一变页面当场重算、告诉你从几变成几；学生动不了它；算不出来告诉你，停在上一次的数。引号里（say、label、题卡）的 {a.3}、{d} 照旧是话里的小块
-量：页面数的数，写成 名字(东西或部件)（每种东西有哪几个见它那一节）。舞台现在里都写出来；能写进 when=、answer={…}，话和贴的字里写 say "秩是 {rank(m)}" 画成现在的数、跟着变；数不了（没写 key、有空格）时挑战写「判不了」、答案「页面没判成」、字画「?」
+量：页面数的数，写成 名字(东西或部件)（每种东西有哪几个见它那一节）。舞台现在里都写出来；能写进 when=、answer={…}，话和贴的字里写 say "秩是 {rank(m)}" 画成现在的数、跟着变；数不了时挑战写「判不了」、答案「页面没判成」、字画「?」
 
 说话（旁白，在画面上方一个字一个字写出来）：
 say "从 {a.1} 往后数 5 个，落在 {a.6}。"    {a.1} 画成那个部件的小块（扣着的不露值）；{d} 是拨的数的值；$d$ 是斜体字母（不排公式）；[不稳定] 是能飞到图上的词
@@ -63,8 +63,8 @@ set d 5                            你来拨
 unlabel dial:d                     收起拨数
 
 画面（每轮附一张画面图，先看图再写）：
-place a main / place g right-of a align=top gap=s / place A B row / at=6,4-30,12；say "…" near=a.2  摆过的钉住不挪；arrange 重排；版面按 48 列
-look say frame=none text=24 color=brand / look card frame=none / look a.3 color=red weight=bold / look goals hide  能写 frame bg edge radius shadow text font weight color align opacity；目标 * 种类名 东西 部件 say goals dock；加 always 以后每节课都这样
+place a main / place g right-of a align=top gap=s / place A B row / place say at=1,8-16,16（right-of left-of above below near）；say "…" near=a.2  摆过的钉住不挪；arrange 重排；版面 48 列
+look say text=24 color=brand / look card frame=none / look a.3 color=red weight=bold / look goals hide：frame=none/line/card bg=none/soft/card/颜色 edge=none/thin/thick shadow=on/off font=sans/serif/hand/mono text=10～64 opacity=0.2～1；目标 * 种类名 东西 部件 贴的字 say goals dock bar；加 always 以后每节课都这样；底下那一条、交给学生的藏不了
 scale a 1.4  放大缩小（0.5～2.5）；draw d1 arrow from=a.3 to=b.2 color=g2 / circle on= / box on= / brace under= "字" / underline on= / text at=格 "字" / svg at=格 "<path…/>"；erase d1
 镜头：camera a.1-7（凑近）/ camera all；wait 600（毫秒）
 
@@ -73,7 +73,7 @@ open a                              交给学生直接动（这里是拖着两�
 close a                             收回来（close a 动作：只收那一种）
 同一处按法不一样的（点、滑、按住再拖）能一起开；按法一样的第二项当场报错，先 close 前一项
 同一项再开一次是换掉它：再写一遍 open，照新写的 wrong=、range=、undo= 办
-页面判对错的动作（树的 rotate insert place、矩阵的 rowop、句子的 mark refer）在 open 那一行写你事先定的：wrong=quiet 照做、只记下（默认）/ wrong=mark 照做、淡淡圈一下 / wrong=block 不让做、弹回去；call=wrong 一走偏就叫你 / call=done 做完马上叫你。这个世界做不到的（一行乘 0）永远弹回去
+页面判对错的动作（树的 rotate insert place、矩阵的 rowop、句子的 mark refer）在 open 那一行写你事先定的：wrong=quiet 照做、只记下（默认）/ wrong=mark 照做、淡淡圈一下 / wrong=block 不让做、弹回去；call=wrong 一走偏就叫你 / call=done 做完马上叫你
 undo=on（哪种 open 都能写）：右上角「撤一步」，学生撤回自己这一回合的上一下；拨数、做到挑战、做完了、引出过预写的那一下撤不了
 keep a "换之前"                     存下 a 现在的样子（最多 6 个，同名的换掉）；keep a "换过" after=swap：以后学生每做完一次 swap 页面替你存成「换过」（after=off 停）
 back a "换之前" / back a             回到存着的那一刻 / 回到学生最后那一下之前（隔着你的一轮也行，你后来改的也一起回去）；只回这样东西的数据，挑战照回去的样子重判
@@ -86,7 +86,7 @@ when= 两边、collect= 能直接写 {式子}（不用先藏辅助矩阵）：wh
 @g1 say "排好了！"                  学生做到 g1 的那一刻马上演（不等你；你自己的行让它成立的不演，下一条告诉你）：一句确认、下一个挑战、一个 ask 都行；写过的一直留着到做到为止，下一轮不用再写；@g1 里出的 goal g2 能接着写 @g2，最多三层
 @t.done / @t.right 开头的：t 做完了（页面算出没有下一步；学生手上没事了才叫你）/ 学生在 t 上做对一步时马上演（只演一次）；写在 open 页面判对错的动作之后、现在还有下一步时（平了的树开着删、摘也行：删完再修平时演）
 @ask.right say "对。"                写在这一轮最后那个 ask 前面：学生答对它时马上演；那一问要页面判得了对错（tap、pick 有预期的，value 有答案），判不了当场报
-预写只收确认和揭开下一小问；走偏不能预写（@t.wrong、@ask.wrong 会报错），怎么讲等你看着写。@ 的行写下时就在今天的舞台上试一遍：今天演不了的写不进去；指着还没有的部件只查写法（演时没有就不演）
+预写只收确认和揭开下一小问；走偏不能预写（@t.wrong、@ask.wrong 会报错），怎么讲等你看着写。@ 的行写下时就在今天的舞台上试一遍：今天演不了的写不进去
 预写的行照先后演，say 要等读完：换 open、出新 goal 写在 say 前面，不然学生在这句话演着时做的一下还照旧的办
 ungoal g1                           拿掉挑战
 

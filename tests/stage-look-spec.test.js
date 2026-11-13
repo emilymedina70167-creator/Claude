@@ -78,3 +78,10 @@ test('旧课的 log（place、pos、style）放回不报错', () => {
   for (const c of parseScript(BASE + '\nplace s main\npos s=10,20\nstyle q frame=off')) sc.apply({ ...c, lenient: true, replay: true });
   assert.ok(sc.objects.has('s'));
 });
+
+test('老师顺手写的别名照意思收下', () => {
+  const sc = new Scene();
+  for (const c of parseScript(BASE + '\nlook q shadow=none bg=white frame=off\nlook say color=blue font=宋体')) sc.apply(c);
+  assert.deepEqual(look(sc, 'q', 'card'), { shadow: 'off', bg: 'card', frame: 'none' });
+  assert.deepEqual(look(sc, 'say'), { frame: 'none', color: 'g1', font: 'serif' });
+});

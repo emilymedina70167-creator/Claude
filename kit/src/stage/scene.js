@@ -1931,8 +1931,9 @@ export class Scene {
           if (e.obj !== id) continue;
           // refs 空着是整样东西都交了出去
           for (const r of e.refs?.length ? e.refs : [id]) for (const p of (() => { try { return this.parts(r); } catch { return []; } })()) {
-            const b = typeOf(o).partBox(o, p);
-            if (Math.min(b.w, b.h) * k < 44) throw new Error(`scale ${id} ${k} 不照办：学生要点 ${id} 的部件，缩到这么小手指点不中（最小 44 像素；最多缩到 ${Math.ceil((44 / Math.min(b.w, b.h)) * 100) / 100}）`);
+            // 本来就比 44 小的部件（时间轴上的小人、事件点：画法自己给手指留了余量）照它原来的大小算，最多缩到四分之三
+            const b = typeOf(o).partBox(o, p), side = Math.min(b.w, b.h), floor = Math.min(44, side) * 0.75;
+            if (side * k < floor) throw new Error(`scale ${id} ${k} 不照办：学生要点 ${id} 的部件，缩到这么小手指点不中（最多缩到 ${Math.ceil((floor / side) * 100) / 100}）`);
           }
         }
         if (k === 1) delete o.k; else o.k = k;
