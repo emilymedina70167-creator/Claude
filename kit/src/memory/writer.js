@@ -11,6 +11,7 @@
 import { COLLECTIONS, isDate } from './schema.js';
 import { reportError } from '../errlog.js';
 import { validateExam } from '../exam/schema.js';
+import { validateAide, AIDE_COLLECTIONS } from '../aide/schema.js';
 
 // 这几种失败重试也没用
 const PERMANENT = new Set(['invalid_argument', 'permission_denied', 'not_granted', 'revoked', 'quota_exceeded', 'not_found', 'failed_precondition']);
@@ -26,7 +27,7 @@ export function validateWrite(path, data) {
   const [coll, id] = parts;
   const c = COLLECTIONS[coll];
   // 不在记忆库的：考试的资料照它自己的规矩查（exam/schema.js），别的照旧不管
-  if (!c) return validateExam(coll, id, data);
+  if (!c) return AIDE_COLLECTIONS[coll] ? validateAide(coll, id, data) : validateExam(coll, id, data);
   if (!data || typeof data !== 'object') return [];
   const out = [];
   if (c.id?.re && !c.id.re.test(id)) out.push(`编号「${id}」不对（${c.label}的编号像 ${c.id.eg}）`);

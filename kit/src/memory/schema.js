@@ -17,6 +17,7 @@ export const ROLE_TEXT = { chat: '开发那边（以前的对话里的 Claude）
 export const UNDO_DAYS = 7;
 
 import { EXAM_COLLECTIONS, canWriteExam } from '../exam/schema.js';
+import { AIDE_COLLECTIONS, canWriteAide } from '../aide/schema.js';
 
 // 日期一律写成 YYYY-MM-DD（按我这边的本地日期）
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -124,7 +125,7 @@ export const COLLECTIONS = {
     label: '教学失误', kind: 'history', writers: ['chat', 'class', 'me'],
     id: { re: /^S-[A-Za-z0-9_-]+$/, eg: 'S-1027-1' },
     required: ['by', 'date', 'text'],
-    enums: { by: ['chat', 'class', 'lab'], space: ['math', 'cs', 'en'] },
+    enums: { by: ['chat', 'class', 'lab', 'aide'], space: ['math', 'cs', 'en'] },
     dates: ['date'],
     refs: { session: 'sessions', corrects: 'slips' },
     tracked: [],
@@ -180,7 +181,7 @@ export const COLLECTIONS = {
     id: { re: /^pd-[A-Za-z0-9_-]+$/, eg: '页面自动编号' },
     required: ['kind', 'coll', 'op', 'status', 'at'],
     // by: page 是页面自己按证据算的提议（掌握、练习后的复现组结果），一样等我确认；by: chat 是开发那边整理数据时提的（比如一次整理规则），也等我确认
-    enums: { op: ['add', 'update'], status: ['open', 'done', 'rejected', 'undone', 'held'], tier: ['direct', 'confirm', 'me'], by: ['class', 'me', 'page', 'chat', 'lab'] },
+    enums: { op: ['add', 'update'], status: ['open', 'done', 'rejected', 'undone', 'held'], tier: ['direct', 'confirm', 'me'], by: ['class', 'me', 'page', 'chat', 'lab', 'aide'] },
     refs: { session: 'sessions' },
     tracked: ['status'],
   },
@@ -209,14 +210,14 @@ export const MEMORY_COLLECTIONS = Object.keys(COLLECTIONS);
 export function canWrite(role, coll) {
   if (coll === 'meta') return role === 'page';
   const c = COLLECTIONS[coll];
-  if (!c) { const e = canWriteExam(role, coll); return e === null ? true : e; }
+  if (!c) { const e = canWriteExam(role, coll); if (e !== null) return e; const a = canWriteAide(role, coll); return a === null ? true : a; }
   return c.writers.includes(role);
 }
 
 /** 写之前拦一道：不许写时抛出中文原因（课堂里的 Claude 想改弱点、宣布掌握之类，代码层面就拦住） */
 export function assertWrite(role, coll) {
   if (canWrite(role, coll)) return;
-  const c = COLLECTIONS[coll] || EXAM_COLLECTIONS[coll];
+  const c = COLLECTIONS[coll] || EXAM_COLLECTIONS[coll] || AIDE_COLLECTIONS[coll];
   const who = ROLE_TEXT[role] || role;
   const owners = (c?.writers || []).map((r) => ROLE_TEXT[r]).join('、');
   throw new Error(`${who}不能写 ${coll}（${c?.label || coll}）：这一类只有${owners}能写${role === 'class' ? '。规则要学生确认才写，掌握由页面按证据算' : ''}`);

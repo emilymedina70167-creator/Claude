@@ -25,7 +25,7 @@ import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toD
 import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, classForm } from './session.js';
 import { buildReport, reportLine, REPORT_VERSION, lastActivity, reportText } from './report.js';
 import { needsDebrief, transcriptText, debriefTraps, debriefPrompt, parseDebrief, debriefText, debriefView, DEBRIEF_VERSION } from './debrief.js';
-import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA, EXAM_BACKUP } from './backup.js';
+import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA, EXAM_BACKUP, AIDE_BACKUP } from './backup.js';
 import { createManualForm } from './manual.js';
 import { createMemOps } from './memops.js';
 import { createMemoView } from './memoview.js';
@@ -1134,7 +1134,8 @@ export async function renderDesk(root, meta) {
       const books = await loadBooks(db).catch(() => null);
       // 考试的资料不订阅（不进记忆库），导出时现读一次
       const exam = Object.fromEntries(await Promise.all(EXAM_BACKUP.map(async (c) => [c, await db.collection(c).get().then((x) => x.docs.map((d) => ({ id: d.id, ...d.data() })), () => [])])));
-      const file = backupFile({ memory: data, packs, sessions, books, exam, evidence, boards, kit: VERSION, today });
+      const aide = Object.fromEntries(await Promise.all(AIDE_BACKUP.map(async (c) => [c, await db.collection(c).get().then((x) => x.docs.map((d) => ({ id: d.id, ...d.data() })), () => [])])));
+      const file = backupFile({ memory: data, packs, sessions, books, exam, aide, evidence, boards, kit: VERSION, today });
       const blob = new Blob([JSON.stringify(file, null, 1)], { type: 'application/json' });
       await dl.save({ filename: backupName(today), data: blob });
       note.textContent = `导出了 ${file.docs.length} 条（${mb(blob.size)}）。`;
