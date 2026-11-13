@@ -18,6 +18,7 @@ import { toDate } from '../memory/schema.js';
 import { examForBlock } from '../exam/block.js';
 import { examForClass } from '../exam/context.js';
 import { aideForTurn } from '../aide/brief.js';
+import { cardIdsFor } from '../aide/card.js';
 import { createWatcher } from '../aide/watcher.js';
 import { watchPrompt, parseWatch } from '../aide/watch.js';
 import { transcriptText } from '../memory/debrief.js';
@@ -142,15 +143,29 @@ export async function renderStageClass(root, meta = {}, desk) {
   let aideBrief = desk.aide?.brief || null;
   let aideAsked = false;
   let aideBriefBusy = false; // 开课时写的那一份档案还在跑（这时不提前想：名额只有老师 + 一个）
+  const aideTried = new Set(desk.aide?.tried || []);
+  // 这节课讲哪几块：复现课是这几组挂的块（档案按它们写），别的就是这一块
+  const aideBlocks = () => {
+    const rs = desk.mem?.reviews || [];
+    const fromReview = (Array.isArray(desk.review) ? desk.review : []).flatMap((id) => rs.find((r) => String(r.id) === String(id))?.blocks || []).map(String);
+    return [...new Set([desk.block, ...fromReview].filter(Boolean))];
+  };
   function aideSection() {
     const a = desk.aide;
     if (!a || !desk.block) return null;
     const curriculum = desk.mem?.curriculum || [];
-    const got = aideForTurn({ block: desk.block, cards: a.cards, brief: aideBrief, curriculum, space: a.space, mem: desk.mem });
+    const blocks = aideBlocks();
+    // 开课那一刻课程地图可能还没读到（只读了这一块和跨块那两张）：照现在的课程地图补读缺的，读到了下一轮带上
+    const missing = [...new Set(blocks.flatMap((b) => cardIdsFor(b, curriculum, a.space)))].filter((id) => !aideTried.has(id));
+    if (missing.length && a.load) {
+      for (const id of missing) aideTried.add(id);
+      a.load(missing).then((cs) => { a.cards = [...(a.cards || []), ...cs.filter((c) => !(a.cards || []).some((x) => x.id === c.id))]; }, () => {});
+    }
+    const got = aideForTurn({ block: desk.block, blocks, cards: a.cards, brief: aideBrief, curriculum, space: a.space, mem: desk.mem });
     if (!got.brief && !aideAsked && !readOnly && a.cards?.length) {
       aideAsked = true;
       aideBriefBusy = true;
-      Promise.resolve(a.refresh?.()).then((b) => { if (b) aideBrief = b; }, () => {}).finally(() => { aideBriefBusy = false; });
+      Promise.resolve(a.refresh?.(blocks)).then((b) => { if (b) aideBrief = b; }, () => {}).finally(() => { aideBriefBusy = false; });
     }
     return got.brief || got.cards.length ? got : null;
   }

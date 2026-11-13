@@ -86,6 +86,9 @@ export function afterPrompt({ session = {}, transcript = '', report = '', weakne
   ].filter((x) => x !== '').join('\n');
 }
 
+/** 带 aide 的课：别人（补收尾的教研室）写的整理单只收判断，事实留给课后助手（9.1：不两个作者写同一件事） */
+export const judgmentsOnly = (entries = []) => entries.filter((e) => !FACT_KINDS.has(e.kind));
+
 /** 把回答按节头切开：{ debrief, skills, facts, cards: { 块: 字 }, moves } */
 export function splitAfter(text) {
   const out = { debrief: '', skills: '', facts: '', cards: {}, moves: '' };

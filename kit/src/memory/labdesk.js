@@ -23,6 +23,7 @@ import { LAB_HEAD_REF } from './lab.js';
 import { memoryDigest } from './digest.js';
 import { loadCards } from '../aide/load.js';
 import { cardBrief, parseCardReply } from '../aide/fill.js';
+import { judgmentsOnly } from '../aide/after.js';
 
 const docsOf = (snap) => (snap ? snap.docs.map((d) => ({ id: d.id, ...d.data() })) : []);
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -339,7 +340,8 @@ export function createLabDesk({ db, getData, packs, planner, ops, aide = null, o
     }
     let rejected = got.errors.map((e) => ({ line: '', error: e }));
     if (got.entries.length) {
-      const r = await ops.applyMemo(got.entries, { session: sid, block, space, turns, author: 'lab' });
+      // 带 aide 的课：事实由课后助手写，补收尾只收判断（不两个作者写同一件事）
+      const r = await ops.applyMemo(cur.aide ? judgmentsOnly(got.entries) : got.entries, { session: sid, block, space, turns, author: 'lab' });
       took.memo = r.pds.length;
       held += r.rejected.filter((x) => x.held).length;
       rejected = [...rejected, ...r.rejected.filter((x) => !x.held)];

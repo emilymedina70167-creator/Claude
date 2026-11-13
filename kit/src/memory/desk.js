@@ -1676,7 +1676,8 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     const aideAI = store.dev ? async () => (await getAI()) || createDevAI() : getAI;
     const aideHere = aideOn && !readOnly ? createAideDesk({ db, getData: () => mem, ops, ai: aideAI, packs: () => ({}) }) : null;
     return renderStageClass(root, { ...meta, unit: doc.title || meta.unit }, {
-      aide: aideOn ? { cards: aideCards, brief: aideBrief, space: asp, refresh: () => aideHere?.briefFor(asp, [block], { now: true }) || Promise.resolve(null) } : null,
+      // tried：开课时读过的卡（课程地图那时可能还没读到，课堂照现在的课程地图补读缺的那几张，load）；refresh 给几块写档案（复现课几块）
+      aide: aideOn ? { cards: aideCards, brief: aideBrief, space: asp, tried: cardIdsFor(block, mem.curriculum || [], asp), load: (ids) => loadCards(db, ids), refresh: (blocks = [block]) => aideHere?.briefFor(asp, blocks, { now: true }) || Promise.resolve(null) } : null,
       store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, subject: doc.subject || '', mem, books, prevRead, readOnly,
       // 这一门课的考试资料（exam/load.js，按门课读、不读整类）：不等它，课堂读到了再用（「这一块在考试里」、exam= 当场核）
       exam: examLoad, reserve: examYears,

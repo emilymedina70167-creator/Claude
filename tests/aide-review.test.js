@@ -110,7 +110,7 @@ test('卡和档案给 Claude 看的字里不出现「他」「她」', () => {
 test('旁听挂住不回：过了时限算失败，下一次还能开', async () => {
   let n = 0;
   const rows = [];
-  const w = createWatcher({ call: () => { n++; return new Promise(() => {}); }, material: () => 'p', check: () => ({ lines: [] }), record: (r) => rows.push(r), timeoutMs: 20 });
+  const w = createWatcher({ call: () => { n++; return new Promise(() => {}); }, material: () => 'p', check: () => ({ lines: [] }), record: (r) => rows.push(r), timeoutMs: 20, gapMs: 0 });
   w.kick({ canPlay: true, upTo: 1 });
   await wait(60);
   assert.equal(w.busy, false);
