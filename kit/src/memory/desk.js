@@ -25,7 +25,7 @@ import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toD
 import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, classForm } from './session.js';
 import { buildReport, reportLine, REPORT_VERSION, lastActivity, reportText } from './report.js';
 import { needsDebrief, transcriptText, debriefTraps, debriefPrompt, parseDebrief, debriefText, debriefView, DEBRIEF_VERSION } from './debrief.js';
-import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA, EXAM_BACKUP } from './backup.js';
+import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA, EXAM_BACKUP, AIDE_BACKUP } from './backup.js';
 import { createManualForm } from './manual.js';
 import { createMemOps } from './memops.js';
 import { createMemoView } from './memoview.js';
@@ -77,6 +77,9 @@ import { renderStageClass } from '../stage/classroom.js';
 import { lookName, lookWords } from '../stage/look/spec.js';
 // 种类名给我看的叫法（一直用的样子按种类存）
 const KIND_NAMES = { card: '题卡', sentence: '句子', array: '一排格子', matrix: '矩阵', tree: '树', graph: '图', table: '表', timeline: '时间轴', plane: '平面', tex: '式子', node: '结点', label: '贴的字', dial: '拨盘', draw: '画的' };
+import { createAideDesk } from '../aide/aidedesk.js';
+import { loadCards, loadBrief } from '../aide/load.js';
+import { cardIdsFor } from '../aide/card.js';
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
 import { renderGuided } from '../guided.js';
@@ -187,6 +190,7 @@ export async function renderDesk(root, meta) {
   const data = Object.fromEntries(MEMORY_COLLECTIONS.map((c) => [c, []]));
   // 改记忆（掌握直接写、我改记忆、撤销）：放在订阅前面，第一次自检算出掌握时就用得上
   const ops = createMemOps({ db, mem: () => data });
+  let aideDesk = null; // 课堂助手（下面建，订阅的回调先到时还没有）
   const loaded = new Set();
   const failed = new Set();
   let ledger = null;
@@ -293,7 +297,7 @@ export async function renderDesk(root, meta) {
       loaded.add(c);
       failed.delete(c);
       if (c === 'sessions' || c === 'position') paintClass();
-      if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
+      if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); aideDesk?.tick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
       if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
       if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) fixReports(); if (lastRes) paintWeek(toDate(Date.now())); }
@@ -364,10 +368,15 @@ export async function renderDesk(root, meta) {
   let lab = null;
   db.doc('meta/workorder').onSnapshot((s) => { workDoc = s.exists ? s.data() : null; paintWork(); }, () => {});
   // 云端教研室（labdesk.js、docs/lab-plan.md）：照工作单拼单子 lab_brief，收它的回答 lab_inbox（过守卫、写回执）
-  lab = createLabDesk({ db, getData: () => data, packs, planner, ops, onChange: () => paintWork() });
+  // 课堂助手（aide/aidedesk.js，第九轮）：下课后整理、补学生卡、写课前档案；一次一件、走后台，记忆读齐了才动
+  aideDesk = createAideDesk({ db, getData: () => data, ops, ai: deskAI, packs: () => packs, ready: () => ['sessions', 'curriculum', 'errors', 'weaknesses', 'mastery', 'observations', 'position', 'reviews'].every((c) => loaded.has(c)) });
+  lab = createLabDesk({ db, getData: () => data, packs, planner, ops, aide: aideDesk, onChange: () => paintWork() });
   function runSentry(today) {
+    aideDesk.tick();
+    // 学生卡还没读到：先读，读到了再拼工作单（不然按章合并的单子会被当成没了撤掉）
+    if (!aideDesk.cards()) { aideDesk.ensureCards().then(() => runSentry(today), () => {}); return; }
     const re = sentryRecheck(data);
-    const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: packs[k].main }])), re, exam: examMeta });
+    const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: packs[k].main }])), re, exam: examMeta, cards: aideDesk.cards() });
     const doc = { v: 1, items, recheck: Object.fromEntries(SPACE_KEYS.map((k) => [k, recheckText(re, k)])), stale: re.stale.length, maybeSolved: re.maybeSolved.length };
     const key = JSON.stringify(doc);
     if (key === lastWork) return;
@@ -384,7 +393,7 @@ export async function renderDesk(root, meta) {
     return `<p class="dk-lab"><b>云端教研室</b>　${bs.length ? `等它做的 ${bs.length} 张单子（${bs.slice(0, 4).map((b) => escapeHtml(WORK_KIND[b.kind] || b.kind)).join('、')}${bs.length > 4 ? '……' : ''}）` : '没有等它做的单子'}</p>
       ${ls.length ? `<details class="dk-soft"><summary>它最近交回来的 ${ls.length} 份</summary><ul class="dk-errlist">${ls.map((r) => `<li>${escapeHtml(receiptLine(r))}<span class="muted">　${escapeHtml(when(r.at))}${r.rejected?.length ? `　${escapeHtml(r.rejected.map((x) => x.error).join('；').slice(0, 160))}` : ''}</span></li>`).join('')}</ul></details>` : ''}`;
   }
-  const WORK_KIND = { backfill: '补收尾', recheck: '重判', resolve: '可能会了', newproblems: '缺新题', probe: '该测了', prep: '该备课' };
+  const WORK_KIND = { backfill: '补收尾', recheck: '重判', resolve: '可能会了', newproblems: '缺新题', probe: '该测了', prep: '该备课', after: '课后整理', card: '合并学生卡' };
   function paintWork() {
     const box = $('.dk-work');
     if (!box) return;
@@ -1137,7 +1146,8 @@ export async function renderDesk(root, meta) {
       const books = await loadBooks(db).catch(() => null);
       // 考试的资料不订阅（不进记忆库），导出时现读一次
       const exam = Object.fromEntries(await Promise.all(EXAM_BACKUP.map(async (c) => [c, await db.collection(c).get().then((x) => x.docs.map((d) => ({ id: d.id, ...d.data() })), () => [])])));
-      const file = backupFile({ memory: data, packs, sessions, books, exam, evidence, boards, kit: VERSION, today });
+      const aide = Object.fromEntries(await Promise.all(AIDE_BACKUP.map(async (c) => [c, await db.collection(c).get().then((x) => x.docs.map((d) => ({ id: d.id, ...d.data() })), () => [])])));
+      const file = backupFile({ memory: data, packs, sessions, books, exam, aide, evidence, boards, kit: VERSION, today });
       const blob = new Blob([JSON.stringify(file, null, 1)], { type: 'application/json' });
       await dl.save({ filename: backupName(today), data: blob });
       note.textContent = `导出了 ${file.docs.length} 条（${mb(blob.size)}）。`;
@@ -1658,7 +1668,15 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   examLoad?.then((ex) => { if (ex) examIdx = examIndexOf(ex, examYears()); });
   // 舞台课（kind: stage，docs/stage-plan.md D 段）：整屏一块舞台，自己的控制器；记忆、教材、证据、报告照旧
   if (kind === 'stage') {
+    // 课堂助手（aide/，第九轮）：这一块附近的学生卡、这一科的课前档案（各 3 秒读不到当没有，不等）；
+    // 档案不能用（给别的块写的、卡变了）时课堂在开课那一刻和老师第一轮同时写一份（refresh，不排在讲课后面）
+    const asp = block ? spaceOfId(block) : space;
+    const aideOn = !!doc.aide && !!block;
+    const [aideCards, aideBrief] = aideOn ? await Promise.all([within(loadCards(db, cardIdsFor(block, mem.curriculum || [], asp)), 3000, []), within(loadBrief(db, asp), 3000, null)]) : [[], null];
+    const aideAI = store.dev ? async () => (await getAI()) || createDevAI() : getAI;
+    const aideHere = aideOn && !readOnly ? createAideDesk({ db, getData: () => mem, ops, ai: aideAI, packs: () => ({}) }) : null;
     return renderStageClass(root, { ...meta, unit: doc.title || meta.unit }, {
+      aide: aideOn ? { cards: aideCards, brief: aideBrief, space: asp, refresh: () => aideHere?.briefFor(asp, [block], { now: true }) || Promise.resolve(null) } : null,
       store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, subject: doc.subject || '', mem, books, prevRead, readOnly,
       // 这一门课的考试资料（exam/load.js，按门课读、不读整类）：不等它，课堂读到了再用（「这一块在考试里」、exam= 当场核）
       exam: examLoad, reserve: examYears,
@@ -1760,6 +1778,8 @@ export async function createClass(db, { block = null, main = null, problems = nu
   await db.doc(`sessions/${sid}`).set({
     date: today, block: block || null, title: String(main?.unit || unit), status: 'open', startedAt: Date.now(), space: sp, ...(block ? { subject: subjectOf(block) } : {}),
     ...(kind === 'talk' || kind === 'stage' ? { kind } : {}),
+    // 第九轮以后开的舞台课：下课后由课堂助手一次写复盘、归类、事实、学生卡（aide/after.js）；旧课照旧
+    ...(kind === 'stage' ? { aide: 1 } : {}),
     pack: main ? { unit: main.unit || '', goal: main.goal || '', updatedAt: main.updatedAt || null } : null,
     // 复现课（views.js 的 reviewPack，reviewClass）记 review：这节课就是复现这几组；备课写的开头复现（[{ id, how }]）记 opening
     ...(main?.reviewClass && reviewIdsOf(main.review).length ? { review: reviewIdsOf(main.review) } : {}),

@@ -5,9 +5,13 @@
 import { MEMORY_COLLECTIONS } from './schema.js';
 import { packIds } from './space.js';
 import { EXAM_COLLECTIONS } from '../exam/schema.js';
+import { AIDE_COLLECTIONS } from '../aide/schema.js';
 
 // 考试的资料（exam/schema.js）：入库要花额度和人工核对，丢了重做不划算，备份带上。收件箱和回执是过路的，不带
 export const EXAM_BACKUP = Object.keys(EXAM_COLLECTIONS).filter((c) => !c.startsWith('exam_inbox'));
+
+// 学生卡、课前档案（aide/schema.js）：派生的，可重写要花额度，备份带上（恢复后不用重写）
+export const AIDE_BACKUP = Object.keys(AIDE_COLLECTIONS);
 
 export const BACKUP_FORMAT = 'la-desk-backup';
 export const BACKUP_VERSION = 1;
@@ -26,7 +30,7 @@ const strip = (d) => { const { id: _, ...rest } = d || {}; return rest; };
  */
 // books：{ books, chunks }，教材板块（转写要花额度，丢了重转不划算，所以备份带上文字；原页图在 assets 里，不进备份）
 // exam：{ 集合名: [{ id, ... }] }（真题、考点、篇章、画像、考情动态；原页图照旧在 assets 里）
-export function backupFile({ memory = {}, pack = {}, packs = null, sessions = {}, books = null, exam = null, evidence = true, boards = false, kit = '', today = '', at = Date.now() } = {}) {
+export function backupFile({ memory = {}, pack = {}, packs = null, sessions = {}, books = null, exam = null, aide = null, evidence = true, boards = false, kit = '', today = '', at = Date.now() } = {}) {
   const docs = [];
   const counts = {};
   const add = (collection, d) => {
@@ -48,6 +52,7 @@ export function backupFile({ memory = {}, pack = {}, packs = null, sessions = {}
     }
   } else for (const k of ['main', 'problems']) if (pack?.[k]) add('pack', { ...pack[k], id: k });
   for (const c of EXAM_BACKUP) for (const d of [...(exam?.[c] || [])].sort((a, b) => String(a.id).localeCompare(String(b.id)))) add(c, d);
+  for (const c of AIDE_BACKUP) for (const d of [...(aide?.[c] || [])].sort((a, b) => String(a.id).localeCompare(String(b.id)))) add(c, d);
   for (const b of books?.books || []) add('books', b);
   for (const c of books?.chunks || []) add(`books/${c.book}/chunks`, c);
   for (const sid of Object.keys(sessions || {}).sort()) {

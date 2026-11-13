@@ -3,6 +3,7 @@
 //   错题后来连着一次做对、可能已经会了的，也标出来。判断交给下一次本来就有的下课整理（closingPrompt 带几行），不单独调用。
 // - workOrder：后方今天该做什么（没收尾的课、待重判的结论、到期却只有原题的复现组、好久没测的弱点、该备的课），
 //   按价值排好，写明大概花多少。首页「管理 → 自检」能看；以后的云端教研室照它干活，不自己挑。
+import { cardWork } from '../aide/fill.js';
 import { examWork } from '../exam/lab.js';
 import { toDate, daysBetween, dueList } from './schema.js';
 import { spaceOfId } from './space.js';
@@ -80,7 +81,8 @@ export function recheckText(res, space, { max = 5 } = {}) {
  * 返回 [{ kind, space, ref, title, why, value, cost }]，价值高的在前
  */
 // exam：首页缓存的 meta/exam（考情第 6 批：过时的画像、没挂考点的块、考情动态多久查一次，exam/lab.js 的 examWork）
-export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now(), packs = {}, re = null, exam = null } = {}) {
+// cards：学生卡（aide/，首页读着的那份）：一章的卡要合并时出 card 项
+export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now(), packs = {}, re = null, exam = null, cards = [] } = {}) {
   const get = (c) => (Array.isArray(mem[c]) ? mem[c] : []);
   const gone = voidedIds(mem);
   const items = [];
@@ -94,6 +96,11 @@ export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now
     const real = (Number(s.report?.items) || 0) > 0 || (Number(s.report?.activeMs) || 0) > 5 * 60000;
     if (!quiet || !real) continue;
     items.push({ kind: 'backfill', space: s.space || spaceOfId(String(s.block || '')), ref: s.id, title: s.title || s.id, why: `${s.date || ''} 这节课${s.status === 'closed' ? '直接下课了' : '挂着没下课'}，没有小结、整理单`, value: 90, cost: '一次 Opus 5.5（读整节课的记录写小结和整理单，按事后补写走守卫）' });
+  }
+  // 1.5 课堂助手（第九轮）：首页连着三次没做成下课后整理的课（调用不了、回的不是 Opus、看不懂），交给教研室照同一份材料做
+  for (const s of get('sessions')) {
+    if (!s.aide || s.status !== 'closed' || s.after?.at || (Number(s.after?.fails) || 0) < 3 || !s.report || s.report.provisional) continue;
+    items.push({ kind: 'after', space: s.space || spaceOfId(String(s.block || '')), ref: s.id, title: s.title || s.id, why: `${s.date || ''} 这节课下课后的整理首页连着 ${s.after.fails} 次没做成`, value: 85, cost: '一次 Opus 5.5（读整节课的记录写复盘、归类、事实、学生卡）' });
   }
   // 2. 待重判：后来的证据不一样了
   const r = re || recheck(mem);
@@ -137,5 +144,6 @@ export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now
     items.push({ kind: 'prep', space: sp, ref: String(pos.block), title: pos.next ? String(pos.next).slice(0, 60) : String(pos.block), why: '下一节从哪接写着，还没有备好的教案', value: 50, cost: '一次 Opus 5.5（备课 + 课前预演）' });
   }
   if (exam) items.push(...examWork(exam, { today, now }));
+  items.push(...cardWork(cards));
   return items.sort((a, b) => b.value - a.value);
 }

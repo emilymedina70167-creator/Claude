@@ -322,7 +322,7 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 - 预览：老师写 `preview`，演完页面把版面（几行 + 一格一个字的图）当一条交回、马上再叫老师（`why: preview`，一节课最多 6 次）。
 - 验收：`tests/stage-compose-*.test.js`；四个时刻的试演 `evals/stage-gaps/new8/m1–m4.txt`；e2e 的 stage 段多「测试:预览」。
 
-## 第九轮（2026-11-13 第一批做完）：画面归老师
+## 第九轮（2026-11-13 第一、二批做完）：画面归老师（和 CLAUDE.md 里的「课堂助手」是两件事）
 
 设计 `docs/superpowers/specs/2026-11-13-stage-canvas-design.md`，计划 `docs/superpowers/plans/2026-11-13-stage-canvas.md`。起因：第八轮真课里话、题卡都带框，学生说不舒服，老师只能说「那是页面画的，我改不了」。
 

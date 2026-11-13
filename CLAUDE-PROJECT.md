@@ -1,6 +1,6 @@
 # 学习台 · 给 Claude 的教学说明
 
-> **版本：2026-11-13e**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-13f**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份说明的**最新版**一直放在**学习台** artifact 里（文件 `CLAUDE-PROJECT.md`）。每个新对话里，第一次做和学习有关的事（写黑板、备课、读课堂记录、改记忆）之前，先用 `Artifact` 工具读它：`action: "read"`，`url` 是上面的学习台地址，`path: "CLAUDE-PROJECT.md"`。
 > - 读到的版本比你手上这份新：以读到的为准，这份里和它不一样的地方全部作废。回复里顺便告诉我「项目指令里的说明是旧版（版本号），学习台里是新版（版本号）」。
@@ -2538,7 +2538,7 @@ count: 3
 { "position": { "id": "now", "block": "L2.2.1", "next": "先收 L2-07 的同类题，再推 Aⁿ", "debts": ["§2 的检验题第 3 题没做"], "first": ["L2-07 同类题"], "log": [] } }
 ```
 
-**`slips`**：编号 `S-` 开头（比如 `S-1027-1`；只关于一科的写 `space`，或者编号带科目：`S-0922-ds1`、`S-0828-en1`）。`by`：`chat`（你的）/ `class`（课堂里的 Claude 的）、`date`、`text` 失误、`lesson` 以后怎么做、`session`（哪节课，第 2 批起有）。
+**`slips`**：编号 `S-` 开头（比如 `S-1027-1`；只关于一科的写 `space`，或者编号带科目：`S-0922-ds1`、`S-0828-en1`）。`by`：`chat`（你的）/ `class`（课堂里的 Claude 的）/ `lab`（每晚的教研室事后补的）/ `aide`（课后助手对着整节课的记录写的）、`date`、`text` 失误、`lesson` 以后怎么做、`session`（哪节课，第 2 批起有）。
 
 ```json
 { "slips": { "id": "S-1027-1", "by": "chat", "date": "2026-10-27", "text": "一次写了五块板，没等我答就往下讲。", "lesson": "一块板一件事，等作答再写下一块。" } }

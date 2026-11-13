@@ -294,7 +294,8 @@ export function derivedLines(derived = [], { grids = null } = {}) {
  * 舞台现在是什么样（照场景写的，和画面一样）。
  * 后加的两块只在有内容时出现
  */
-export function turnMessage({ act = '', state = '', errors = [], audit = [], derived = [], grids = null, askId = null } = {}) {
+// aide：课堂助手旁听写的那一节（aide/watch.js 的 watchSection，「[助手看到的]」开头）；空的就没有这一节
+export function turnMessage({ act = '', state = '', errors = [], audit = [], derived = [], grids = null, askId = null, aide = '' } = {}) {
   const parts = [];
   // askId：这一问的编号（学习台里上课才有）。老师记错题、弱点的依据写它——以前说明里只说「S5 指第 5 轮」，
   // 页面用的却是数据库里的轮号，老师数的对不上：真课上 4 条被拒收、1 条对到了别的题上
@@ -307,6 +308,7 @@ export function turnMessage({ act = '', state = '', errors = [], audit = [], der
   if (skipped.length) parts.push(`[上一轮没演的行]（写错了，页面跳过了，别的行照演）\n${skipped.map((e) => `- 第 ${e.line} 行「${e.src}」：${e.error}`).join('\n')}`);
   // 照演了、可有写错的（话里拼错的 {kk}）：页面不替你改，下一轮你改过来
   if (kept.length) parts.push(`[上一轮照演了、可写错了的行]（页面照演了，学生看到的是原样的字）\n${kept.map((e) => `- 第 ${e.line} 行「${e.src}」：${e.error}`).join('\n')}`);
+  if (aide) parts.push(aide);
   parts.push(`[舞台现在]\n${state}`);
   parts.push('写下一轮。');
   return parts.join('\n\n');
@@ -348,7 +350,23 @@ export const STAGE_MEMO_DOC = MEMO_DOC
   .replace('板放不下不用记：页面量得出来（黑板现状里有），稍长学生会上下滑。', '')
   .replace(/上课时板上不显示记了什么（不打扰学生），下课小结那块板上有一行小字，学生点开能撤销。/, '上课时舞台上不显示记了什么（不打扰学生），学生事后在学习台里能看到、能撤销。');
 
-const DESK_STAGE = `### 在学习台里上课
+// 课堂助手接手记事实的课（第九轮，sessions 上 aide: 1）：老师只记判断。例子里去掉记事实的几行，要背的那一段换成一句交代；
+// 老师照旧写了事实那几种页面也照收（memops 不拦），只是说明里不再要它写——字节数比原来少（tests/aide-split.test.js 守着）
+export const STAGE_MEMO_JUDGE_DOC = STAGE_MEMO_DOC
+  .replace(/^ {2}slip text=.*\n/m, '')
+  .replace(/^ {2}note text=.*\n/m, '')
+  .replace(/^ {2}error step=.*\n/m, '')
+  .replace(/^ {2}recall q=.*\n/m, '')
+  .replace(/^ {2}- `recall` \*\*要背的一条\*\*.*\n/m, '  - **事实交给课后助手**：错题原文和错在哪、新弱点和又出现一次、过程观察、你自己讲错的地方、要背的记忆点，下课后另一个助手对着整节课的记录写，你不用记；你只记判断（守则又犯、待办、复现组结果、下一节从哪接、偏好、规则、弱点消没消）。\n');
+
+const deskStage = (memoDoc) => `### 在学习台里上课
+- 学生在舞台上的每个动作（点、拖、拨、按钮、填的答案、打的字），页面都自动记成证据，课后看证据判断。证据你不用写，也写不了。
+- 要记进记忆时，在这一轮的镜头指令后面另起一个 \`\`\`\`board memo 块（块里的行不会上舞台）：
+${memoDoc}
+- 不要宣布学生掌握了：掌握由页面按证据算。`;
+export const DESK_STAGE_JUDGE = deskStage(STAGE_MEMO_JUDGE_DOC);
+
+export const DESK_STAGE = `### 在学习台里上课
 - 学生在舞台上的每个动作（点、拖、拨、按钮、填的答案、打的字），页面都自动记成证据，课后看证据判断。证据你不用写，也写不了。
 - 要记进记忆时，在这一轮的镜头指令后面另起一个 \`\`\`\`board memo 块（块里的行不会上舞台）：
 ${STAGE_MEMO_DOC}
@@ -361,7 +379,9 @@ ${STAGE_MEMO_DOC}
 // exam：「这一块在考试里」那一节（exam/context.js 的 examForClass 拼好的；空的就没有这一节）。放在资料包后面、记忆前面，
 // 算资料包的预算时它已经在（资料包自己让出来）；资料包里的教材原文至少留 TEXTBOOK_FLOOR
 export const TEXTBOOK_FLOOR = 32 * 1024;
-export function buildStageSystem({ pack = null, memory = null, rules = '', title = '', subject = '', exam = '' } = {}) {
+// aide：课堂助手的两节（{ brief, cards }，aide/brief.js 的 aideForTurn 算好的）；没有就是 null，记忆那一节和以前一样
+// factsByAide：这节课的事实由课后助手记（aide: 1 的课），老师的记忆块说明只教判断（DESK_STAGE_JUDGE）
+export function buildStageSystem({ pack = null, memory = null, rules = '', title = '', subject = '', exam = '', aide = null, factsByAide = false } = {}) {
   const parts = (packBody, mem) => {
     const custom = [rules, mem?.rules].filter((x) => String(x || '').trim()).join('\n\n');
     const sections = [
@@ -369,7 +389,7 @@ export function buildStageSystem({ pack = null, memory = null, rules = '', title
       `舞台的写法\n\n${stageDoc(subject)}`,
       `这节课${title ? `：${title}` : ''}\n\n课前备好的资料包（教材原文、推进建议、备好的题）。照这里的口径讲，例子可以自己换。\n\n${packBody}`,
       ...(exam ? [`这一块在考试里（页面从入库的真题和考试大纲算的）\n\n${exam}`] : []),
-      ...(memory ? [`你对学生的了解（学习台的记忆库）\n\n${mem?.text || ''}\n\n${DESK_STAGE}`] : []),
+      ...(memory ? [`你对学生的了解（学习台的记忆库）\n\n${mem?.text || ''}\n\n${factsByAide ? DESK_STAGE_JUDGE : DESK_STAGE}`] : []),
     ];
     const NUM = ['一', '二', '三', '四', '五'];
     return [
@@ -381,7 +401,7 @@ export function buildStageSystem({ pack = null, memory = null, rules = '', title
   let mem = null;
   if (memory) {
     const room = STAGE_SYSTEM_MAX - bytes(parts('', { rules: '', text: '' })) - 40 * 1024;
-    mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools: false, budget: Math.max(4 * 1024, Math.min(28 * 1024, room)) });
+    mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools: false, budget: Math.max(4 * 1024, Math.min(28 * 1024, room)), aide });
   }
   const rest = bytes(parts('', mem));
   const { text: packBody } = packText(pack || { main: null, problems: null }, Math.max(12 * 1024, Math.min(PACK_BUDGET, STAGE_SYSTEM_MAX - rest - 2 * 1024)), { talk: true, floors: { textbook: TEXTBOOK_FLOOR } });

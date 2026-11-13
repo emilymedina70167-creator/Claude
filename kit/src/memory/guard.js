@@ -14,7 +14,8 @@ export const GUARD_VERSION = 1;
  * 谁写的：class 课堂里的 Claude（当场看着作答写，最准）；lab 云端教研室 / 首页后台事后写的；page 页面代码；chat 开发那边；me 我。
  * strict：对不上的先暂存（事后写的没有当场的上下文，更容易张冠李戴）
  */
-export const AUTHORS = { class: { strict: false }, lab: { strict: true }, page: { strict: false }, chat: { strict: false }, me: { strict: false } };
+// aide：课后、课上的助手（第九轮）。对不上的不暂存等我放行（我说过不要再加要我确认的东西）：证据那一道有提醒就直接不收
+export const AUTHORS = { class: { strict: false }, lab: { strict: true }, aide: { strict: 'drop' }, page: { strict: false }, chat: { strict: false }, me: { strict: false } };
 
 /** 每一类里是 Claude 写的话的字段（原话、轮次、组件就在这些字段里找） */
 // 会重复记的几类（掌握、位置是一块一条、一科一条，说法相近不算重复）
@@ -224,9 +225,9 @@ export function guardCandidate(cand, ctx = {}) {
   if (before) {
     const owner = authorOf(before);
     const changedText = normText(textOf(coll, before)) !== normText(textOf(coll, doc));
-    if (changedText && (owner === 'me' || owner === 'class') && (author === 'lab' || author === 'page')) add('owner', 'fail', 'not-yours', `这条是${owner === 'me' ? '我自己改过的' : '课堂里当场写的'}，${author === 'lab' ? '事后写的' : '页面'}不能改它的话（要改挂「有疑问」）`);
+    if (changedText && (owner === 'me' || owner === 'class') && (author === 'lab' || author === 'aide' || author === 'page')) add('owner', 'fail', 'not-yours', `这条是${owner === 'me' ? '我自己改过的' : '课堂里当场写的'}，${author === 'page' ? '页面' : '事后写的'}不能改它的话（要改挂「有疑问」）`);
   }
-  if (author === 'lab' && session && !doc.backfill && ['observations', 'slips', 'errors'].includes(coll) && !before) add('owner', 'warn', 'backfill', '事后替这节课写的，要标 backfill');
+  if ((author === 'lab' || author === 'aide') && session && !doc.backfill && ['observations', 'slips', 'errors'].includes(coll) && !before) add('owner', 'warn', 'backfill', '事后替这节课写的，要标 backfill');
 
   // 5. 一致：几乎一样的已经有了；和已有结论、证据矛盾
   if (!before && text && DEDUP.has(coll)) {
@@ -250,7 +251,8 @@ export function guardCandidate(cand, ctx = {}) {
 
   const fails = checks.filter((c) => c.level === 'fail');
   const warns = checks.filter((c) => c.level === 'warn'); // info 只记进审计，不影响收不收
-  const verdict = fails.length ? 'reject' : warns.length ? (AUTHORS[author]?.strict ? 'hold' : 'flag') : 'accept';
+  const strict = AUTHORS[author]?.strict;
+  const verdict = fails.length || (strict === 'drop' && warns.some((c) => c.gate === 'evidence')) ? 'reject' : warns.length ? (strict === true ? 'hold' : 'flag') : 'accept';
   return { verdict, checks };
 }
 

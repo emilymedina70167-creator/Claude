@@ -31,8 +31,11 @@ export const CATALOG_MAX = 7 * 1024;
 // 先给目录留多少（目录是一条一行，真数据里 3～4 KB；全文装完剩下的也都给目录）
 export const CATALOG_RESERVE = 5 * 1024;
 // 装的先后：这节课这一块的在前（CORE，合起来最多占全文预算的 CORE_SHARE），再是关于我（短、每轮都要）、规则、守则
-export const PACK_ORDER = ['position', 'curriculum', 'weaknesses', 'mastery', 'recall', 'sessions', 'errors', 'profile', 'rules', 'lessons', 'slips', 'pending', 'source'];
-const CORE = new Set(['position', 'curriculum', 'errors', 'weaknesses', 'mastery', 'recall', 'sessions']);
+// 课前档案、学生卡（第九轮，aide/）：助手从全部记忆合并出来的，最先装；算在这一块的那一份（CORE_SHARE）里，
+// 两节合起来最多 AIDE_SHARE——不额外占地方，规则、守则、关于我照旧（整支审查：以前另外占，守则会被整段挤掉）
+export const AIDE_SHARE = 0.25;
+export const PACK_ORDER = ['aide-brief', 'aide-cards', 'position', 'curriculum', 'weaknesses', 'mastery', 'recall', 'sessions', 'errors', 'profile', 'rules', 'lessons', 'slips', 'pending', 'source'];
+const CORE = new Set(['aide-brief', 'aide-cards', 'position', 'curriculum', 'errors', 'weaknesses', 'mastery', 'recall', 'sessions']);
 export const CORE_SHARE = 0.45;
 
 /**
@@ -101,7 +104,8 @@ const sessionLine = (s, obs, n = 80) => {
  * tools：这个查看方式能不能用 memory_read；today：算复现组到期用。
  * 返回 { rules（给「角色和红线」那一节的规则全文）, text（全文 + 目录）, cut: [{ coll, more, ids }]（没放全文、在目录里的）, bytes }
  */
-export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 1024, session = '', tools = true, today = toDate(Date.now()) } = {}) {
+// aide：{ brief（briefText 的字，可以空）, cards（cardText 的字的数组）}：课堂助手的两节（aide/brief.js、card.js 算好的），没有就是 null（和以前一字不差）
+export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 1024, session = '', tools = true, today = toDate(Date.now()), aide = null } = {}) {
   // space：没块开的课（新的一科还没选块）按这节课的科带，不落到数学
   const view = classView(mem0, { block, space: block ? '' : space });
   const { mem, get, solved, position, here } = view;
@@ -116,6 +120,10 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
   // 教学守则（以前的失误归纳出来的）紧跟规则：它们就是这位老师自己定下的做法。又犯得多的在前
   const lessons = get('lessons').filter((l) => (l.status || 'active') === 'active').sort((a, b) => (Number(b.hits) || 1) - (Number(a.hits) || 1) || byDate('last')(a, b));
   sections.push({ coll: 'lessons', share: LESSONS_SHARE, head: '## 教学守则（两个 Claude 以前的教学失误归纳出来的，每条都要做到；又犯得多的在前）', items: lessons.map((l) => ({ key: `lessons/${l.id}`, text: `- ${l.id} ${l.topic ? `［${one(l.topic, 10)}］` : ''}${one(l.text, 400)}${(Number(l.hits) || 1) > 1 ? `（犯过 ${l.hits} 次${l.last ? `，最近 ${l.last}` : ''}${Array.isArray(l.recent) && l.recent.length ? `：${one(l.recent.at(-1), 80)}` : ''}）` : ''}` })) });
+  // 助手的两节：紧跟规则、守则，在别的原始条目前面（档案每行一条，卡一张一条；放不下的那几行就不带）
+  const briefLines = String(aide?.brief || '').split('\n').filter((l) => l.trim());
+  sections.push({ coll: 'aide-brief', head: '## 这节课要知道的（课前助手读了全部学生卡写的，每行有出处）', items: briefLines.filter((l) => !/^#{1,3}\s/.test(l)).map((text) => ({ text })) });
+  sections.push({ coll: 'aide-cards', head: '## 学生卡（这一块和相关的块：助手从全部记忆合并的，每行有出处；细节在下面的原文和目录里）', items: (Array.isArray(aide?.cards) ? aide.cards : []).filter((c) => String(c || '').trim()).map((text) => ({ text: String(text).trim() })) });
   sections.push({ coll: 'profile', head: '## 学生（profile）', items: get('profile').map((p) => ({ key: `profile/${p.id}`, text: `- ${p.topic ? `${one(p.topic, 30)}：` : ''}${one(p.text, 600)}` })) });
   // 上一节停在哪：很短、每节课开头都要用
   if (position) {
@@ -220,6 +228,8 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
   let srcCut = 0;
   const coreCap = Math.floor(room * CORE_SHARE);
   let coreUsed = 0;
+  const aideCap = Math.floor(room * AIDE_SHARE);
+  let aideUsed = 0;
   const keptOf = new Map();
   const rank = (c) => { const i = PACK_ORDER.indexOf(c); return i < 0 ? PACK_ORDER.length : i; };
   for (const s of [...sections].sort((a, b) => rank(a.coll) - rank(b.coll))) {
@@ -233,10 +243,12 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
       if (s.limit && kept.length >= s.limit) break;
       // 规则单独放；别的节：第一条带上小标题，节和节之间空一行
       const add = utf8(it.text) + 1 + (kept.length || !s.head ? 0 : utf8(s.head) + 4);
-      if (own + add > cap || used + add > room || (core && coreUsed + add > coreCap)) break;
+      const isAide = s.coll.startsWith('aide-');
+      if (own + add > cap || used + add > room || (core && coreUsed + add > coreCap) || (isAide && aideUsed + add > aideCap)) break;
       used += add;
       own += add;
       if (core) coreUsed += add;
+      if (isAide) aideUsed += add;
       kept.push(it.text);
       if (it.key) shown.add(it.key);
     }

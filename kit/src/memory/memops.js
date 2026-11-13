@@ -8,6 +8,9 @@ import { spaceOfId } from './space.js';
 
 const NEXT = { errors: nextErrorId, weaknesses: nextWeaknessId, reviews: nextReviewId };
 export const MEMO_MAX = 12;
+// 课后助手（第九轮，作者 aide）只写事实：错题、弱点（新的、又出现一次）、过程观察、老师讲错的地方、记忆点。
+// 判断（守则又犯、待办、复现组结果、下一节、偏好、规则）留给课堂里的老师当场写
+export const AIDE_KINDS = new Set(['error', 'weakness', 'note', 'slip', 'recall']);
 const LAB_FRESH = ['errors', 'weaknesses', 'reviews', 'recall', 'lessons', 'observations', 'slips', 'profile', 'rules', 'position'];
 
 /**
@@ -51,7 +54,7 @@ export function createMemOps({ db, mem, exam = () => null }) {
     const local = { ...mem() };
     // 教研室的回答几份一起并进来（labdesk.js 一份接一份）：手上那份记忆可能还没跟上上一份刚写的，
     // 自动编号（K3、T-14、错题号）会撞、重复的看不出来。它不在上课那条路上，先从数据库把会写的几类读一遍新的
-    if (author === 'lab') {
+    if (author === 'lab' || author === 'aide') {
       for (const c of LAB_FRESH) {
         const r = rows(await db.collection(c).get().catch(() => null));
         if (r.length) local[c] = r;
@@ -65,17 +68,18 @@ export function createMemOps({ db, mem, exam = () => null }) {
     const free = (e) => e.kind === 'lesson' || e.kind === 'position' || ['merged', 'void', 'retired', 'closed', 'done'].includes(e.attrs?.status) || (e.kind === 'review' && e.attrs?.result);
     let n = 0;
     for (const e of entries || []) {
+      if (author === 'aide' && !AIDE_KINDS.has(e.kind)) { rejected.push({ line: e.line, error: '助手只写事实（错题、弱点、过程观察、讲错的地方、记忆点），这一条留给课上的老师' }); continue; }
       if (!free(e) && ++n > MEMO_MAX) { rejected.push({ line: e.line, error: `一次最多记 ${MEMO_MAX} 条（归纳守则不算），这条没记：挑要紧的` }); continue; }
       const ch = planEntry(e, { mem: local, evidence, session, block, space, date });
       if (ch.error) { rejected.push({ line: e.line, error: ch.error }); continue; }
       // 事后补写的不改「下一节从哪接」：之后可能又上过课，课堂里当场写的那条为准（单子里也说了）
-      if (author === 'lab' && ch.coll === 'position') { rejected.push({ line: e.line, error: '事后补写的不写 position（下一节怎么接写在小结里）' }); continue; }
+      if ((author === 'lab' || author === 'aide') && ch.coll === 'position') { rejected.push({ line: e.line, error: '事后补写的不写 position（下一节怎么接写在小结里）' }); continue; }
       // 教研室事后写的（lab.js）：新加的记成它写的、标「事后补写」（守卫按这个认，页面上也看得出不是课堂当场写的）
-      if (author === 'lab' && ch.op === 'add' && ch.data) ch.data = { ...ch.data, ...('by' in ch.data ? { by: 'lab' } : {}), ...(session && ['observations', 'slips', 'errors'].includes(ch.coll) ? { backfill: true } : {}) };
+      if ((author === 'lab' || author === 'aide') && ch.op === 'add' && ch.data) ch.data = { ...ch.data, ...('by' in ch.data ? { by: author } : {}), ...(session && ['observations', 'slips', 'errors'].includes(ch.coll) ? { backfill: true } : {}) };
       if (ch.op === 'add') local[ch.coll] = [...(local[ch.coll] || []), { id: ch.target, ...(ch.data || {}) }];
       // 同一块里对同一条改两次（守则又犯两次）：第二条要看到第一条改过的
       else if (ch.tier === 'direct') local[ch.coll] = (local[ch.coll] || []).map((d) => (String(d.id) === String(ch.target) ? { ...d, ...(ch.patch || {}) } : d));
-      let pd = pendingRecord(ch, { session, turn, by: author === 'lab' ? 'lab' : 'class', line: e.line });
+      let pd = pendingRecord(ch, { session, turn, by: author === 'lab' || author === 'aide' ? author : 'class', line: e.line });
       if (!e.attrs.id && NEXT[ch.coll]) pd.autoId = true;
       try {
         // 先算出写进去会是什么样（直接写的、要我确认的都算一遍），守卫看的是这一份；还没写
