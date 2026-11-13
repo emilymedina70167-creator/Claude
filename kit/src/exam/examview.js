@@ -5,10 +5,16 @@ import { targetOf, targetPatch, goalOf, examDateOf, reserveText, targetWarn } fr
 import { reserveYears } from './reserve.js';
 import { applyChange, assertWrite, toDate } from '../memory/schema.js';
 import { escapeHtml } from '../render.js';
+import { UPLOAD_KINDS, guessKind, uploadProblem, uploadDoc, waitingLine } from './uploads.js';
 
 const SPLIT = [['math', '数学一'], ['cs', '408'], ['en', '英语一'], ['pol', '政治']];
 
-export function createExamCard(host, { db, getData }) {
+// assets：学习台的 assets（传考试资料的 PDF 用）
+export function createExamCard(root, { db, getData, assets = null }) {
+  // 两块：上面是档案的表单（会整块重画），下面是传资料（一直在，不跟着表单重画）
+  root.innerHTML = '<div class="dk-exf"></div><div class="dk-exup"></div>';
+  const host = root.querySelector('.dk-exf');
+  const up = root.querySelector('.dk-exup');
   let counts = null;
   let dirty = false;
   let built = false;
@@ -93,5 +99,60 @@ export function createExamCard(host, { db, getData }) {
     paintMsg();
     paintFoot();
   }
+  // —— 传考试资料（exam/uploads.js）：PDF 存进 assets，记一条 exam_uploads 等开发那边入库 ——
+  let uploads = [];
+  let upMsg = '';
+  db.collection('exam_uploads').onSnapshot((s) => { uploads = s.docs.map((d) => ({ id: d.id, ...d.data() })); paintUploads(); }, () => {});
+  function paintUploads() {
+    const live = uploads.filter((d) => d.status !== 'void').sort((a, b) => (b.at || 0) - (a.at || 0));
+    const mb = (n) => `${(Number(n) / 1048576).toFixed(1)} MB`;
+    up.innerHTML = `<h3 class="dk-sc-h">放考试资料</h3>
+      <p class="dk-sub muted">真题卷、解析、考试大纲的 PDF 传到这里（每份 15 MB 以内，大的拆开传）。只存着等入库，不会当成教材带进课堂。${escapeHtml(waitingLine(live))}</p>
+      <div class="dk-mrow dk-exup-row">
+        <label class="mm-f"><span>是什么</span><select class="dk-exup-kind"><option value="">照文件名猜</option>${Object.entries(UPLOAD_KINDS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
+        <label class="mm-f"><span>补一句（科目、年份）</span><input class="dk-exup-note" placeholder="比如 408 2015–2024" autocomplete="off"></label>
+        <label class="btn btn-primary dk-exup-pick">选 PDF<input type="file" accept="application/pdf,.pdf" multiple hidden></label>
+      </div>
+      <p class="dk-exup-msg muted" role="status">${escapeHtml(upMsg)}</p>
+      ${live.length ? `<ul class="ex-list dk-exup-list">${live.slice(0, 12).map((d) => `<li><span>${escapeHtml(d.name)}</span><small class="muted">${UPLOAD_KINDS[d.kind] || ''} · ${mb(d.size)} · ${d.status === 'done' ? '入库了' : '等入库'}</small>${d.status === 'waiting' ? `<button type="button" class="btn btn-sm dk-exup-del" data-id="${escapeHtml(d.id)}">删掉</button>` : ''}</li>`).join('')}</ul>${live.length > 12 ? `<p class="muted">还有 ${live.length - 12} 份</p>` : ''}` : ''}`;
+    up.querySelector('input[type=file]').addEventListener('change', (e) => { const fs = [...(e.currentTarget.files || [])]; e.currentTarget.value = ''; if (fs.length) send(fs); });
+  }
+  up.addEventListener('click', async (e) => {
+    const b = e.target.closest('.dk-exup-del');
+    if (!b) return;
+    const d = uploads.find((x) => x.id === b.dataset.id);
+    if (!d) return;
+    b.disabled = true;
+    assertWrite('me', 'exam_uploads');
+    const { id, ...rest } = d;
+    await db.doc(`exam_uploads/${id}`).set({ ...rest, status: 'void' }).catch(() => { b.disabled = false; });
+  });
+  async function send(files) {
+    if (!assets) { upMsg = '这个页面拿不到 assets：传不了'; paintUploads(); return; }
+    const kindSel = up.querySelector('.dk-exup-kind').value;
+    const note = up.querySelector('.dk-exup-note').value.trim();
+    let ok = 0;
+    const bad = [];
+    for (const [i, f] of files.entries()) {
+      const why = uploadProblem(f);
+      if (why) { bad.push(why); continue; }
+      upMsg = `正在传 ${i + 1} / ${files.length}：${f.name}`;
+      paintUploads();
+      try {
+        const r = await assets.upload(f, { type: 'application/pdf' });
+        const d = uploadDoc({ name: f.name, size: f.size, asset: r.id, kind: kindSel || guessKind(f.name), note, now: Date.now(), seq: i + 1 });
+        const { id, ...rest } = d;
+        assertWrite('me', 'exam_uploads');
+        await db.doc(`exam_uploads/${id}`).set(rest);
+        ok++;
+      } catch (err) {
+        bad.push(`「${f.name}」没传上：${err?.message || err}`);
+      }
+    }
+    upMsg = [ok ? `传好了 ${ok} 份，等入库。` : '', ...bad].filter(Boolean).join(' ');
+    paintUploads();
+  }
+  paintUploads();
+
   return { paint };
 }

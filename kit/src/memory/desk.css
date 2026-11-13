@@ -953,3 +953,11 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 .ex-q[aria-expanded="true"] { box-shadow: inset 0 0 0 1.5px var(--yellow); }
 .ex-detail { margin-top: 12px; display: grid; gap: 8px; }
 .ex-img img { max-width: 100%; border-radius: 8px; }
+/* 「管理 → 考试」传考试资料 */
+.dk-exup { margin-top: 18px; padding-top: 14px; border-top: 0.5px solid rgb(var(--chalk-rgb) / 0.12); }
+.dk-exup-row { align-items: flex-end; }
+.dk-exup-row .mm-f { flex: 1; min-width: 9em; }
+.dk-exup-row select, .dk-exup-row input:not([type=file]) { min-height: 44px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--field); box-shadow: var(--field-edge); color: var(--chalk); font: 16px/1.3 var(--sans); width: 100%; box-sizing: border-box; }
+.dk-exup-pick { min-height: 44px; display: inline-flex; align-items: center; cursor: pointer; }
+.dk-exup-list li { align-items: center; }
+.dk-exform .mm-f:has(input[name="reserve"]) { grid-column: 1 / -1; }

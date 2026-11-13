@@ -203,7 +203,7 @@ export async function renderDesk(root, meta) {
   const examInbox = createExamInbox({ db, curriculum: () => data.curriculum });
   const examPage = createExamPage($('.dk-exampage'), { db, getData: () => data, getMeta: () => examMeta, getBoard: () => scoreBoard(data, { today: toDate(Date.now()), exam: examMeta?.blockPerYear, usable: examMeta?.blockUsable }), space: () => space });
   db.doc('meta/exam').onSnapshot((s) => { examMeta = s.exists ? s.data() : null; paintScore(); if (!$('.dk-exampage').hidden) examPage.refresh(); }, () => {});
-  const examCard = createExamCard($('.dk-exam .dk-body'), { db, getData: () => data });
+  const examCard = createExamCard($('.dk-exam .dk-body'), { db, getData: () => data, assets: store.assets });
 
   const packs = Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: null, problems: null }]));
   for (const k of SPACE_KEYS) {

@@ -55,7 +55,7 @@ test('考情动态：只收有链接、种类对的；同一个数另一晚又�
   assert.equal(same.doc.checks, 1, '同一晚重复交的不算');
   const next = mergeIntel([{ id: a.id, ...a.doc }], r.items[0], { at: d1 + 86400000 });
   assert.equal(next.doc.checks, 2);
-  assert.match(intelBrief({ target: { school: '南京大学', subjects: ['408'] }, today: '2026-11-12' }), /WebSearch/);
+  assert.match(intelBrief({ target: { school: '南京大学', subjects: ['408'] }, today: '2026-11-12' }), /WebSearch[\s\S]*WebFetch[\s\S]*yz\.nju\.edu\.cn/);
 });
 test('映射、考情动态的单子：不提他她', () => {
   assert.doesNotMatch(mapBrief({ course: 'OS', nodes: [node], blocks: [{ id: 'OS-L9.1.1', title: '新块' }] }), /[他她]/);

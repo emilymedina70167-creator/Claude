@@ -66,6 +66,13 @@ export const EXAM_COLLECTIONS = {
     required: ['kind', 'text', 'at'],
     enums: { kind: ['brochure', 'catalog', 'line', 'syllabus', 'ratio', 'other'] },
   },
+  // 我在「管理 → 考试」传的 PDF（exam/uploads.js）：文件在 assets，这里记一条等开发那边入库（入完标 done）
+  exam_uploads: {
+    label: '传上来的考试资料', writers: ['page', 'chat', 'me'],
+    id: { re: /^up-[A-Za-z0-9_-]+$/, eg: 'up-20261113-12345-1' },
+    required: ['name', 'kind', 'asset', 'at'],
+    enums: { kind: ['paper', 'answers', 'syllabus', 'other'], status: ['waiting', 'done', 'void'] },
+  },
   // 只给开发那边入库用：它写进来，页面照规矩查过再并进上面几类（examdesk.js），并完删掉、写一份回执
   exam_inbox: {
     label: '考试资料的收件箱', writers: ['chat', 'page'],

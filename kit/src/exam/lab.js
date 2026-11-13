@@ -135,6 +135,8 @@ export function applyMap(nodes = [], map = {}) {
 
 /* ---------------- 考情动态 ---------------- */
 
+// 环境里放行了的官网（2026-11-13 我批准的）：教研室查考情动态时能直接打开读原文
+export const OFFICIAL = ['yz.nju.edu.cn', 'gs.nju.edu.cn', 'is.nju.edu.cn', 'ai.nju.edu.cn', 'yz.chsi.com.cn'];
 export const INTEL_KINDS = { brochure: '招生简章', catalog: '专业目录', line: '复试线', syllabus: '大纲变化', ratio: '报录比', other: '别的' };
 
 /** 考情动态的单子：target 是考试档案；recent：最近存着的动态（exam_intel）。只能用网页搜索（打不开的官网写「打不开」，不猜） */
@@ -142,7 +144,7 @@ export function intelBrief({ target = {}, recent = [], today = '', head = '' }) 
   return [head,
     `## 这一张：查考情动态（今天 ${today}）`,
     `学生考 ${target.school || ''}${target.dept ? ` ${target.dept}` : ''}${target.alt?.length ? `（也在考虑 ${target.alt.join('、')}）` : ''}，${(target.subjects || []).join('、')}，初试 ${target.date || ''}。`,
-    '用网页搜索（WebSearch）查：这个学校研究生院和这几个学院的官网、研招网（yz.chsi.com.cn）上**新的**招生简章、专业目录、复试分数线、报录比、四门课考试大纲的变化。打不开的官网写「打不开」，**不猜、不凭印象写数**；每一条都要有链接和原文摘录。',
+    `用网页搜索（WebSearch）找，再用 WebFetch 打开原网页读：${OFFICIAL.join('、')} 这几个官网已经放行，能直接打开（南大研究生招生网、研究生院、智能科学与技术学院、人工智能学院、研招网）。查**新的**招生简章、专业目录、复试分数线、报录比、四门课考试大纲的变化。打不开的网页写「打不开」，**不猜、不凭印象写数**；每一条都要有链接和原文摘录（从原网页抄，不从搜索摘要抄）。`,
     recent.length ? `## 已经记着的（不用再报，除非这次查到的和它不一样）\n${recent.slice(0, 20).map((x) => `- ${INTEL_KINDS[x.kind] || x.kind}：${flat(x.text, 120)}${x.value != null ? `（${x.value}）` : ''}｜${x.url || ''}｜核过 ${x.checks || 1} 次`).join('\n')}` : '',
     '## 回答的格式（一条一行；什么新的都没有就写「没有新的」）',
     `动态｜种类（${Object.keys(INTEL_KINDS).join(' / ')}）｜原文摘录（照网页抄，不改写）｜数（复试线、报录比写数字，别的写「-」）｜链接｜网页上写的日期`,

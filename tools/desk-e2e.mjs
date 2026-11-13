@@ -1082,6 +1082,12 @@ const SUITES = {
     await t.route('manage');
     await t.waitFor(() => t.page.$('.dk-exam input[name=goal]'), { what: '管理页画出考试那张卡' });
     check((await t.text('.dk-exam'))?.includes('47 道真题'), '考试卡没写库里有几道真题');
+    // 放考试资料：传一份 PDF → exam_uploads 多一条等入库；不是 PDF 的不收
+    await t.page.setInputFiles('.dk-exup input[type=file]', [{ name: '2019年408真题.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 假的真题卷') }, { name: '笔记.docx', mimeType: 'application/msword', buffer: Buffer.from('x') }]);
+    const upl = await t.waitFor(async () => (await t.docs('exam_uploads')).find((d) => d.name === '2019年408真题.pdf'), { what: '传的 PDF 记进 exam_uploads' });
+    check(upl.kind === 'paper' && upl.subject === '408' && upl.year === 2019 && upl.status === 'waiting' && upl.asset, `传的资料记得不对：${JSON.stringify(upl)}`);
+    check((await t.docs('exam_uploads')).length === 1, '不是 PDF 的也收了');
+    await t.waitFor(async () => (await t.text('.dk-exup'))?.includes('1 份等入库'), { what: '卡上写几份等入库' });
     await t.page.fill('.dk-exam input[name=goal]', '400');
     await t.page.fill('.dk-exam input[name="split.math"]', '120');
     await t.page.click('.dk-exam .dk-exsave');

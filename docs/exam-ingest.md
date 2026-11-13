@@ -1,8 +1,12 @@
 # 真题入库手册（Claude Code 照这个做）
 
-总计划 `docs/exam-plan.md` 第二节；转写格式在 `docs/superpowers/specs/2026-11-12-exam-1-design.md` 2.5；工具 `tools/exam.mjs`（文件开头有每个子命令的用法）。我说「入库 408 的 2015–2026」时照下面一步步做。**真题、解析的 PDF 只放在我的私有仓库里**，不进这个开发仓库，也不存成学习台的书。
+总计划 `docs/exam-plan.md` 第二节；转写格式在 `docs/superpowers/specs/2026-11-12-exam-1-design.md` 2.5；工具 `tools/exam.mjs`（文件开头有每个子命令的用法）。我说「入库 408 的 2015–2026」时照下面一步步做。**真题、解析的 PDF 不进这个公开的开发仓库，也不存成学习台的书**（存成书会被当成教材带进课堂）：我在学习台「管理 → 考试」里传（见第 0 节）。
 
-## 0. 开工前
+## 0. 资料在哪
+
+我没有私有仓库，资料传在学习台里：「管理 → 考试 → 放考试资料」传的 PDF 存在学习台的 assets，每份记一条 `exam_uploads/{up-…}`（`name`、`kind`：paper 真题卷 / answers 解析 / syllabus 大纲 / other、`asset`、我补的一句 `note`、猜的 `subject` `year`、`status: waiting`）。取法：`ArtifactData list exam_uploads`，每条用 Artifact 的 `read`（`path` 写 `asset` 那个 id）把 PDF 存到本地（`.superpowers/exam/`，不进 git），再照下面画页、转写。入完的那条改成 `status: done`（`ArtifactData update`，开发那边是 `chat`，能写）。以后我要是有了私有仓库，PDF 也可以放那里，步骤一样。
+
+## 0.5 开工前
 
 - 读学习台的 `meta/errors`、`meta/health`（照 CLAUDE.md）。
 - `ArtifactData list` 存到本地（`.superpowers/exam/`，私人数据不进 git）：`curriculum`、`syllabus`、`exam/target`、`papers`（有的话）。
