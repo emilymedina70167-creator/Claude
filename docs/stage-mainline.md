@@ -331,7 +331,8 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 - **位置**：`place` 过的东西钉住（`o.pinned`），页面不挪；`arrange [名字…]` 才重排；钉住的压着、出了屏幕在「版面」里照实写；学生要点的部件被盖住时放开挡着的那一样挪最少（`stage.floorNudge`）。台上有钉住的东西时页面不整台缩。
 - 顺手修的第八轮毛病：乘积和两个因子当一块摆（`composeInput` 的 `tiedOf`）；已经摆好的不被「能让就让」拽来拽去（`W_STAB` 1e3）；按在没交出去的部件上不算成旁边的（`pointer.js`）。
 - 检查：`tests/stage-snap / stage-look-spec / stage-look-css / stage-compose-pin`，`tools/stage-look-check.mjs`（进 `npm run check:stage`），e2e 舞台段查老师每轮收到图。
-- 第二批（还没做）：`scale`、`draw`、一直用的样子存 `meta/look`、顶上那一条、删第六轮的收放栏；第三批：设计要求单 30 条。
+- 第二批（做完）：`scale`（每个节点 CSS 的 scale，场景的 `worldPartBox` / `worldObjectBox` / `toLocal`，拖的落点换回去）、`draw` / `erase`（`stage/draw.js`）、一直用的样子（`look … always` → `meta/look`，开课叠上，管理 → 样子里能删）、`look bar`。第六轮的收放栏代码留着（自由构图时开不起来）。修的：去框只去像框的（轴这种用底色画的线留着）；能挪的压着挪不动的去四边里有空地的那一边。
+- 第三批：设计要求单 30 条（`evals/stage-canvas/requests.json`，`tools/stage-canvas-eval.mjs prepare|apply`）。
 
 ## ③ ④ 建议的顺序
 
