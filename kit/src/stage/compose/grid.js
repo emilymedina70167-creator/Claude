@@ -8,7 +8,8 @@ export const GAPS = { s: 0.5, m: 1, l: 2 };
 
 export function gridOf({ w, h }) {
   const cell = w / COLS;
-  return { cols: COLS, rows: Math.max(1, Math.floor(h / cell)), cell };
+  // w / h：画布真的多大（行数取了整，最后不到一行的那一截也在画布里：「出了屏幕」照真的算）
+  return { cols: COLS, rows: Math.max(1, Math.floor(h / cell)), cell, w, h };
 }
 
 // 字号档：一节课里不变，照屏幕宽挑一档，让句子的字在 26～30 像素之间

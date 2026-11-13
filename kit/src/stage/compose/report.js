@@ -44,7 +44,7 @@ export function layoutLines({ boxes, grid, unmet = [], scale = 1 }) {
   const parts = [...boxes].map(([id, b]) => `${NAME[id] || id} ${cellText(toCells(b, grid))}`);
   lines.push(`版面（${grid.cols} 列 × ${grid.rows} 行）：${parts.join('；') || '空'}`);
   // 压着的、出了屏幕的（老师摆过的东西页面不挪：照实说，怎么改由老师定）
-  const W = grid.cols * grid.cell, H = grid.rows * grid.cell;
+  const W = grid.w ?? grid.cols * grid.cell, H = grid.h ?? grid.rows * grid.cell;
   const list = [...boxes].filter(([id]) => id !== 'say' && id !== 'goals');
   const hit = (a, b) => a.x < b.x + b.w - 1 && b.x < a.x + a.w - 1 && a.y < b.y + b.h - 1 && b.y < a.y + a.h - 1;
   const over = [];

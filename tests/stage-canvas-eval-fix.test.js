@@ -50,3 +50,13 @@ test('主角在正中、右边不够：挪得动就往左让，照办「在它�
   assert.ok(a.x >= t.x + t.w - 2, JSON.stringify([t, a]));
   assert.ok(!r.unmet.some((u) => u.rel?.kind === 'right-of'), JSON.stringify(r.unmet));
 });
+
+import { layoutLines } from '../kit/src/stage/compose/report.js';
+
+test('最后不到一行的那一截也在画布里：落在那里不算出了屏幕（r24、r25 的假报）', () => {
+  const grid = gridOf({ w: 1148, h: 690 }); // 28 行是 669 像素，画布还有 21 像素
+  const lines = layoutLines({ boxes: new Map([['AB', { x: 300, y: 500, w: 200, h: 185 }]]), grid });
+  assert.ok(!lines.some((l) => l.startsWith('出了屏幕')), lines.join('\n'));
+  const out = layoutLines({ boxes: new Map([['AB', { x: 300, y: 520, w: 200, h: 185 }]]), grid });
+  assert.ok(out.some((l) => l.startsWith('出了屏幕')));
+});

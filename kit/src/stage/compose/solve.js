@@ -123,19 +123,28 @@ function attempt(work, rels, env) {
       if (r.cost < cur.cost) cur = r; else pick[i] = keep;
     }
   }
-  // 方向上放不下的：换一边，写清楚为什么
-  const swapped = [];
-  const rels2 = rels.map(r => {
-    const s = swapFor(r, cur.boxes, env, work);
-    if (s?.boost) return s.rel;
-    if (!s) return r;
-    swapped.push({ rel: r, why: s.why });
-    return s.rel;
+  // 方向上放不下的：换一边，写清楚为什么。挨着的那样挪得动时先试「加重关系、让它让开」，和换边的都解一次，取排得好的
+  // （让开的那一样被别的钉住的东西牵着时，加重会把东西挤出屏幕：r24、r25）
+  const variants = [false, true].map((boostOk) => {
+    const swapped = [];
+    const rels2 = rels.map(r => {
+      const s = swapFor(r, cur.boxes, env, boostOk ? work : []);
+      if (!s) return r;
+      if (s.boost) return s.rel;
+      swapped.push({ rel: r, why: s.why });
+      return s.rel;
+    });
+    return { swapped, rels2 };
   });
-  if (swapped.length || rels2.some((r, i) => r !== rels[i])) {
+  let bestV = null;
+  for (const { swapped, rels2 } of variants) {
+    if (!swapped.length && rels2.every((r, i) => r === rels[i])) continue;
     const r = run(work, rels2, sizesOf(), env);
-    cur = { ...r, unmet: [...swapped, ...r.unmet.filter(u => !swapped.some(s => s.rel === u.rel))] };
+    // 换了边算没照办：和关系没做到一样记分（不然换边总是「最便宜」，挪得开也不让）
+    const cand = { ...r, cost: r.cost + swapped.reduce((n, x) => n + WEIGHT[x.rel.weight], 0), unmet: [...swapped, ...r.unmet.filter(u => !swapped.some(s => s.rel === u.rel))] };
+    if (!bestV || cand.cost < bestV.cost) bestV = cand;
   }
+  if (bestV) cur = bestV;
   return cur;
 }
 

@@ -2193,6 +2193,8 @@ export class Stage {
       // 学生动手时照旧不挪
       if (this.lastBy === 'teacher') {
         const pins = items.filter((it) => it.pinned && !it.rigid);
+        // 画上去的圈、括号、放大把钉住的那样撑出了屏幕：也放开它挪最少（r24、r25）
+        for (const it of pins) { const A = res.boxes.get(it.id); if (A && (A.x < -2 || A.y < -2 || A.x + A.w > cv.w + 2 || A.y + A.h > cv.h + 2)) nudged.add(it.id); }
         for (let i = 0; i < pins.length; i++) for (let j = i + 1; j < pins.length; j++) {
           const A = res.boxes.get(pins[i].id), B = res.boxes.get(pins[j].id);
           if (A && B && A.x < B.x + B.w - 1 && B.x < A.x + A.w - 1 && A.y < B.y + B.h - 1 && B.y < A.y + A.h - 1) nudged.add(pins[j].id);
