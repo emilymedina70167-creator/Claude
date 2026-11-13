@@ -64,6 +64,7 @@ export async function renderStageClass(root, meta = {}, desk) {
     <header class="sc-top">
       <button type="button" class="sc-home" aria-label="回学习台">← 学习台</button>
       <div class="sc-title" role="heading" aria-level="1"></div>
+      <div class="sc-scenes-slot"></div>
       <span class="sc-think" hidden></span>
       ${readOnly ? '<span class="sc-ro">只读</span>' : '<button type="button" class="sc-end">下课</button>'}
     </header>
@@ -77,7 +78,9 @@ export async function renderStageClass(root, meta = {}, desk) {
   const think = $('.sc-think');
 
   const sink = readOnly ? null : createSink(store, { evidence: (rec) => ({ session: sid, block: desk.block, turn: rec?.turn }) });
-  const stage = new Stage($('.sc-stage'), { input: !readOnly, onAct: (a) => onAct(a) });
+  // 幕条放在顶上那一条里（课名和「下课」之间，本来就空着；主线第六轮 3.4）
+  const stage = new Stage($('.sc-stage'), { input: !readOnly, onAct: (a) => onAct(a), scenesHost: $('.sc-scenes-slot') });
+  stage.lessonTitle = meta.unit || desk.title || '开头';
   window.LAStage = stage;
   // 这门课的考试资料（desk.js 按门课读，不等它）：读到了以后 exam= / like= 写了库里没有、留作模考的当场报
   desk.exam?.then?.((ex) => {
@@ -330,7 +333,8 @@ export async function renderStageClass(root, meta = {}, desk) {
       wait.className = 'sc-wait';
       wait.innerHTML = '<span class="sc-dots"><i></i><i></i><i></i></span>';
       wait.setAttribute('aria-label', '老师在想');
-      $('.sc-stage').appendChild(wait);
+      // 横屏放进左边的栏里这一问下面（主线第六轮 2.3）；竖屏照旧在画面下半
+      if (!stage.placeWait?.(wait)) $('.sc-stage').appendChild(wait);
     } else if ((!on || empty || label) && wait) wait.remove();
     if (!on) { think.hidden = true; return; }
     const t0 = performance.now();

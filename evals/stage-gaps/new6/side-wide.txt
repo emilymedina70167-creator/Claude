@@ -1,0 +1,6 @@
+# 主线第六轮 A · 解析栏开着时，放不下栏的宽输入（3×3 矩阵的答案）挪到画面底部，不压东西，每一格手指点得到
+matrix A = 1 2 0 / 0 1 3 / 2 0 1
+matrix B = 1 0 0 / 0 2 0 / 0 0 3
+say "先算 AB。"
+学生: side
+ask value "AB 是什么？" answer="{A B}" type=matrix

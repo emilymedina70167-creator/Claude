@@ -30,6 +30,7 @@ export const TAG_ROOM = 28; // 每一行上面留给小标签的
 export const BR_TOP = 9; // 第一层括号的横线离词多远
 export const LEVEL_H = 30; // 括号一层多高（横线 + 下面的字）
 export const LINE_GAP = 14; // 两行之间
+export const BARE_TOP = 4; // 整句没有小标签、箭头时，每一行上面留的
 export const CUT_W = 24; // 断开的斜线占多宽
 export const PILL_H = 36; // 折起来的小方块多高
 export const LIFT = 8;
@@ -291,10 +292,14 @@ function place(o) {
     const L = lines[items[A].line];
     L.arcRoom = Math.max(L.arcRoom, Math.max(lift(A), lift(B)) + h + 6);
   }
+  // 每一行上面留多少：整句有一处小标签（括号的名字以外：mark 的 V、指代的「→ …」）或者箭头，每一行都留 TAG_ROOM；一处都没有就只留一点。
+  // 以前不管有没有都留 28，两行的句子一行占 92（字的 3.4 倍），整台只好缩小（主线第六轮，时态课截图）。
+  // 不是「有标签的那一行才留」：那样老师给一个词贴标签时只那一行长高，下面的行和东西一起往下挪；整句一起留，贴第一个标签时整句长高一次
+  const roomy = tagged.size > 0 || arcs.length > 0;
   let y = 0;
   for (const L of lines) {
     L.top = y;
-    L.wordY = y + Math.max(TAG_ROOM, L.arcRoom);
+    L.wordY = y + Math.max(roomy ? TAG_ROOM : BARE_TOP, L.arcRoom);
     L.bottom = L.wordY + WORD_H + (L.levels ? BR_TOP + L.levels * LEVEL_H - 6 : 4);
     y = L.bottom + LINE_GAP;
   }

@@ -1,0 +1,10 @@
+# 主线第六轮 A · 解析栏收放：默认收着（画面用满），点左边的把手点开——这一幕说过的话全在栏里（收着时说的也在），再点收起
+sentence s = "He had never gambled before the casino sent him a coupon for $20 worth of gambling."
+label gl s "gamble 赌博；casino 赌场；coupon 优惠券" side=below tone=note
+say "先读一遍这句。"
+ask next "读好了" button="读好了"
+学生: next
+say "{s.had} 和 {s.gambled} 合起来是一个谓语。"
+say "never 夹在中间。"
+ask tap s "哪件事先发生？点它的谓语" expect=s.4
+学生: side

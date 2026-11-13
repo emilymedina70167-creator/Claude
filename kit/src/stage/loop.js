@@ -32,6 +32,9 @@ const derivedOf = (events) => events.flatMap((e) => (e.undone ? [] : e.act?.deri
 const bytes = (s) => (enc ? enc.encode(String(s)).length : String(s).length);
 export const RETRY = new Set(['再试一次', '再要一次']);
 
+// 一节课最多预览几次（老师写 preview：页面排好交回一张字画的版面，多等一轮）
+export const PREVIEW_MAX = 6;
+
 export function createLoop(host) {
   const { stage } = host;
   const quietMs = host.quietMs || QUIET_MS;
@@ -166,6 +169,12 @@ export function createLoop(host) {
       const missed = stage.askMissed ? 'askfail' : stage.handMissed ? 'handfail' : null;
       if (missed && !S.askRetried && !S.ended && !host.readOnly) { S.askRetried = true; addEvent({ kind: missed, at: Date.now() }); }
       else if (!missed) S.askRetried = false;
+      // 老师写了 preview（第八轮）：带着排好的版面马上再叫一次。一节课最多 PREVIEW_MAX 次，超了照常等学生（现状里说一句）
+      if (!missed && !S.ended && !host.readOnly && claude.log.some((r) => r.by === 'teacher' && /^preview\b/.test(r.src))) {
+        S.previews = (S.previews || 0) + 1;
+        if (S.previews <= PREVIEW_MAX && stage.previewText) addEvent({ kind: 'preview', text: stage.previewText(), at: Date.now() });
+        else stage.errors.push({ line: 0, src: 'preview', kept: true, error: `这节课的预览用完了（最多 ${PREVIEW_MAX} 次）：看现状里的「版面」` });
+      }
       if (S.pending?.events.some(triggers)) { flush(); return claude; }
       armIdle();
       maybeSpec();
@@ -239,7 +248,7 @@ export function createLoop(host) {
     // 这一刻学生的屏幕：舞台那一块多大、整台缩到了几成。查「字难认」「摆不下」时要它——
     // 第一节真课页面报了 4 次「缩到 4～6 成」，照标准 iPad 尺寸重演却重现不了，因为不知道当时的屏幕多大
     let view = null;
-    try { const v = stage.viewSize?.(); if (v) view = { w: Math.round(v.w), h: Math.round(v.h), s: Math.round((stage.cam?.s ?? 1) * 100) / 100, ...(typeof window !== 'undefined' ? { win: [window.innerWidth, window.innerHeight] } : {}) }; } catch { /* 量不了就不记 */ }
+    try { const v = stage.viewSize?.(); if (v) view = { w: Math.round(v.w), h: Math.round(v.h), s: Math.round((stage.cam?.s ?? 1) * 100) / 100, side: stage.sideOn ? stage.sideW || 0 : 0, ...(typeof window !== 'undefined' ? { win: [window.innerWidth, window.innerHeight] } : {}) }; } catch { /* 量不了就不记 */ }
     Object.assign(p.row, { pending: false, text: said, msg, events, log: [...p.base, ...stage.log.slice(S.logFrom)], ...(say ? { say } : {}), ...(view ? { view } : {}) });
     host.putTurn(p.row);
     S.pending = null;
@@ -262,11 +271,12 @@ export function createLoop(host) {
       if (S.ended || !S.pending || S.flight || S.busy || !S.pending.events.some(triggers)) return;
       const row = finalize();
       S.nextWhy = whyOf(row.events);
+      S.callWhy = row.events.some((e) => e.kind === 'preview') ? 'preview' : 'turn'; // 花费里记这一次为什么叫
       // 提前想好的那一轮：学生真的只点了「接着」、发出去的一字不差，接上
       if (S.spec && !S.spec.dead && S.spec.msg === row.msg) pre = adopt(S.spec);
       dropSpec();
     } finally { S.flushing = false; }
-    if (!S.ended && !S.flight && !S.busy) teach('turn', pre);
+    if (!S.ended && !S.flight && !S.busy) teach(S.callWhy || 'turn', pre);
   }
   /**
    * 做到挑战、做完、答对一问以后，学生手上还有事就攒着，没事了才叫老师（docs/superpowers/specs/2026-11-08-stage-base-2-design.md 6.2）。
@@ -406,6 +416,7 @@ export function createLoop(host) {
     clearTimeout(S.idleTimer);
     if (S.ended || host.readOnly || S.flight || !idleWhy() || S.pending?.stuck) return;
     S.idleTimer = setTimeout(() => {
+      if (stage.looking) { armIdle(); return; } // 学生正翻回去看前面的一幕：不算没动（主线第六轮 3.5），关上回看再重新数
       const why = idleWhy();
       if (S.ended || S.flight || !why || S.pending?.stuck) return;
       const secs = Math.round(quietMs / 1000);
@@ -463,6 +474,8 @@ export function createLoop(host) {
   // 老师在 open 那一行写了 call=wrong、裁判说这一下走偏了（act.call === 'now'）：这一件事马上叫老师
   function onAct(a) {
     if (!a) return;
+    // 翻回去看了一幕：攒进这一段（下一条告诉老师），不叫老师、不进证据；「很久没动」从关上回看这一刻重新数
+    if (a.type === 'look') { if (!S.ended && !host.readOnly) { addEvent(eventOf(a, { help: HELP, at: Date.now() })); armIdle(); } return; }
     host.evidence?.act?.(a, S.lastClaude);
     if (S.ended || host.readOnly) return;
     // 撤一步：这一段里最后一件撤掉的那一行（src 对得上、还没撤过、真的演上了：没让做的、没演上的不在 log 里）记成撤回了，

@@ -599,6 +599,30 @@ const SUITES = {
     check(goOn && (await t.docs('sessions')).find((d) => d.id === sid)?.status !== 'closed', '点了「接着上」课却结束了');
     // 下课：老师再递一次，这回点「下课」——小结、整理单（position 写进记忆）、报告里有 S… 的题
     await t.waitFor(() => t.page.$('#st-say-input'), { timeout: 20000, what: '接着上以后能打字' });
+    // 开新的一幕（scene，主线第六轮）：上一幕收干净、幕条两幕；点①翻回去看（只读、不叫老师），回到现在；刷新以后幕条还在
+    await said('测试:分幕');
+    await t.waitFor(() => t.page.evaluate(() => document.querySelectorAll('.sc-scenes-slot .st-scene').length === 2), { timeout: 30000, what: '开新的一幕以后顶上幕条有两幕' });
+    check(await t.page.evaluate(() => { const s = window.LAStage.scene; return [...s.objects.keys()].join(' ') === 't' && !s.goals.size; }), '开新的一幕以后上一幕的东西、挑战没收干净（keep=t 只该留下 t）');
+    await t.waitFor(() => t.page.evaluate(() => window.LAStage?.scene.waiting?.button === '看好了'), { timeout: 30000, what: '开新一幕的那一轮演完、等学生点「看好了」' });
+    await sleep(1200);
+    const c6 = await claudeTurns();
+    await t.page.click('.sc-scenes-slot .st-scene:not(.is-now)');
+    await t.waitFor(() => t.page.evaluate(() => !!window.LAStage.looking && !!document.querySelector('.st-look:not([hidden]) .st-look-stage:not([hidden]) .st-stage')), { timeout: 15000, what: '点①盖上只读的回看' });
+    check(await t.page.evaluate(() => { const s = window.LAStage.lookback.stageOf(1)?.scene; return !!s && s.objects.has('a'); }), '回看里不是第一幕最后的样子（没有第一幕的一排格子 a）');
+    await sleep(600);
+    await t.page.click('.st-look-back');
+    await t.waitFor(() => t.page.evaluate(() => !window.LAStage.looking), { timeout: 8000, what: '点「回到现在」关上回看' });
+    await sleep(800);
+    check(await claudeTurns() === c6, '翻回去看了一幕，页面却叫了老师');
+    await t.waitFor(async () => (await turns()).filter((x) => x.role === 'student').at(-1)?.events?.some((e) => e.kind === 'look'), { what: '回看攒进还没发出去的那一段' });
+    await t.page.reload(); await t.page.waitForLoadState('load');
+    await t.waitFor(() => t.page.evaluate(() => document.querySelectorAll('.sc-scenes-slot .st-scene').length === 2 && !window.LAStage.looking), { timeout: 20000, what: '刷新以后幕条还是两幕、回看关着' });
+    // 自由构图（第八轮）：老师写 preview，页面排好把字画的版面交回、马上再叫老师；舞台现状里有「版面」
+    await said('测试:预览');
+    await t.waitFor(async () => (await turns()).some((x) => x.role === 'claude' && x.cost?.why === 'preview'), { timeout: 40000, what: '写了 preview 以后页面马上再叫老师（花费记 why: preview）' });
+    check((await turns()).some((x) => x.role === 'student' && /\[预览\][\s\S]*版面（48 列/.test(x.msg || '')), '预览交回老师的那一条里没有版面');
+    check(await t.page.evaluate(() => /版面（48 列/.test(window.LAStage.scene.stateText())), '舞台现状里没有「版面」');
+    await t.waitFor(() => t.page.evaluate(() => window.LAStage?.scene.waiting?.button === '看好了'), { timeout: 30000, what: '预览以后的那一轮演完、等学生点「看好了」' });
     await said('测试:下课');
     await t.waitFor(() => t.page.evaluate(() => /下课吗/.test(document.body.innerText)), { timeout: 20000, what: '老师又递了「下课吗？」' });
     await t.answer('下课');
@@ -607,6 +631,7 @@ const SUITES = {
     check(s.verify?.turns >= 4, `下课时 verify 记得不对：${JSON.stringify(s.verify)}`);
     const rep = (await t.db())[`sessions/${sid}/report/main`];
     check((rep?.items || []).filter((it) => /^S\d/.test(it.comp || '')).length >= 2, `报告里没有舞台上的题：${JSON.stringify((rep?.items || []).map((x) => x.comp))}`);
+    check((rep?.scenes || []).length === 2 && rep.scenes[1].title === '第二段' && /从下往上看平衡因子/.test(rep.scenes[1].keys.join('')), `报告里这节课的几幕不对：${JSON.stringify(rep?.scenes)}`);
     // 翻看：照记录放回，只读、不调用
     await t.open(`view/${sid}`);
     await t.waitFor(() => t.page.$('.sc-root .st-cell'), { timeout: 20000, what: '只读的舞台画出来' });

@@ -14,6 +14,7 @@ import { QID_RE } from '../exam/fields.js';
 import { parseScript, parseRef, parseRich, addCommands, OPTIONS, optionError } from './script.js';
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
+import { parseAt, COLS } from './compose/grid.js';
 // numOf：数（整数、小数、分数 -3/4，′ 和真的减号也认），比大小用；和挑战判数是同一个
 import { splitPicks, checkPick, varText, pickDeps, wordDialError, VERB, verbFact } from './pick.js';
 import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure, numOf, isExpr, exprMeasure } from './goal.js';
@@ -227,6 +228,8 @@ export class Scene {
     this.vars = new Map(); // name → { v, lo, hi, at, shown }
     this.binds = []; // { kind, obj, v }：跟着拨的数变的
     this.focus = null; // null = 全部；或者部件的写法
+    // 构图意图（第八轮）：老师写的 place / say near= 存成关系，id → [rel]（rel 的样子见 compose/solve.js）；'say' 是这一轮的话
+    this.layout = new Map();
     this.say = '';
     this.words = []; // 这一句话里能飞走的 [词]
     this.waiting = null; // { kind, refs, prompt, button, expect, answer, pre（预写的行挂的：课堂循环看学生手上还有没有事用）, exam / like（真题题号）, shownAt }
@@ -279,6 +282,8 @@ export class Scene {
     for (const [k, v] of this.vars) s.vars.set(k, { ...v });
     s.binds = this.binds.map((b) => ({ ...b }));
     s.focus = this.focus ? [...this.focus] : null;
+    s.layoutInfo = this.layoutInfo ? [...this.layoutInfo] : null;
+    s.layout = new Map([...this.layout].map(([k, rs]) => [k, rs.map((r) => ({ ...r, ...(Array.isArray(r.a) ? { a: [...r.a] } : {}) }))]));
     s.say = this.say;
     s.words = [...this.words];
     // ask pick 的 refs、expect 是数组：各拷一份（改副本的不动原来的）
@@ -362,6 +367,35 @@ export class Scene {
   /** 这几个写法（部件、整样东西）落在哪几样藏着的东西上 */
   hiddenIn(refs) { return [...new Set(refs.map((r) => parseRef(r)?.obj).filter((id) => this.objects.get(id)?.hidden))]; }
   /** 挑战的条件里提到的舞台上的东西（M、M.1,1、rank(M)、M same B） */
+  /** 拿掉几条挑战（ungoal 和 scene 共用）：连同它们的预写 */
+  ungoalIds(ids) { ids.forEach((k) => { this.goals.delete(k); this.reactions.delete(k); this.dropAhead(k); }); }
+  /** 收掉几张贴的字（unlabel 和 scene 共用）：拨盘的字收了拨盘就不显示；贴在收掉的那几样（拨数、别的字）上面的字一起收（主线第一轮 D1-5） */
+  unlabelIds(ids) {
+    const out = [...ids];
+    for (const k of ids) { this.labels.delete(k); if (k.startsWith('dial:') && this.vars.get(k.slice(5))) this.vars.get(k.slice(5)).shown = false; if (k.startsWith('dial:')) this.dialAt.delete(k.slice(5)); }
+    const gone = new Set(out);
+    for (let more = true; more;) {
+      more = false;
+      for (const [k, l] of this.labels) if ((l.refs || []).some((r) => gone.has(r))) { this.labels.delete(k); out.push(k); gone.add(k); more = true; }
+    }
+    return out;
+  }
+  /**
+   * 挑战做到过、它的条件里提到的东西都不在台上了（东西拿掉了，拨盘跟着它的东西一起没了）：画面上收起（主线第六轮 3.8）。
+   * 只看名字：东西、拨盘都不在了才算；一个名字都没提到（写的全是数）、写的是 {式子} 的，不算（照旧挂着）。场景里的记录不动，现状照旧写「做到过」
+   */
+  goalGone(g) {
+    if (!g?.met || !g.cond?.length) return false;
+    const names = new Set();
+    for (const cl of g.cond) for (const w of [cl.l, cl.r, ...(cl.args || [])]) {
+      const t = String(w ?? '');
+      if (t.includes('{')) return false;
+      // count(t) 里的 count 是量的名字，不是东西；O、I 是零矩阵、单位阵
+      for (const m of t.matchAll(/[A-Za-z_]\w*(?!\w|\s*\()/g)) if (m[0] !== 'O' && m[0] !== 'I') names.add(m[0]);
+    }
+    if (!names.size) return false;
+    return [...names].every((n) => !this.objects.has(n) && !this.vars.has(n));
+  }
   objectsIn(cond) {
     const out = new Set();
     for (const cl of cond) for (const w of [cl.l, cl.r, ...(cl.args || [])]) for (const n of String(w ?? '').match(/[A-Za-z_]\w*/g) || []) if (this.objects.has(n)) out.add(n);
@@ -390,9 +424,11 @@ export class Scene {
     return ids.some(reach) ? [] : [...hidden];
   }
   /** 各种东西挡着的地方（贴字时让开）：格子、序号、指针、树的边……（藏着的不挡） */
-  obstacles() {
+  // near：贴在这样东西自己部件上的字（它有 nearObstacles 时换成那一份，见 timeline.js）
+  obstacles({ near = null } = {}) {
     return [...this.objects.values()].filter((o) => !o.hidden).flatMap((o) => {
-      const own = typeOf(o).obstacles ? typeOf(o).obstacles(o) : typeOf(o).parts(o).map((p) => typeOf(o).partBox(o, p));
+      const t = typeOf(o);
+      const own = o.id === near && t.nearObstacles ? t.nearObstacles(o) : t.obstacles ? t.obstacles(o) : t.parts(o).map((p) => t.partBox(o, p));
       // 量出来多出去的那几条（估的框外面还画着东西）也挡着
       const e = o.ext, b = typeOf(o).objectBox(o);
       if (!e) return own;
@@ -1072,6 +1108,8 @@ export class Scene {
     }
     // follow 的字段是引擎的（gaps、pivot、from……）：不查，引擎自己报写错的
     if (cmd === 'follow') return { label: cmd, names: '*' };
+    // pos 是页面自己记的（名字=x,y）：名字就是东西的名字
+    if (cmd === 'pos') return { label: cmd, names: '*' };
     if (cmd === 'ask') {
       const kind = (c.args || []).find((a) => a.t === 'word')?.v;
       return OPTIONS.ask[kind] ? { label: `ask ${kind}`, names: OPTIONS.ask[kind] } : null;
@@ -1196,6 +1234,9 @@ export class Scene {
       case 'say': {
         const text = str ?? '';
         this.checkRich(text, c); // 话里指着的东西要真有
+        // 话贴着一处（near=s.had）或放在格子上（at=）；不写就照默认贴在这一轮讲的那样东西旁边
+        if (opts.near != null || opts.at != null) this.layout.set('say', [this.placeRel('say', opts.at != null ? null : 'near', opts.near, { at: opts.at })]);
+        else this.layout.delete('say');
         this.say = text;
         this.words = parseRich(text).filter((p) => p.k === 'word').map((p) => p.v);
         return {};
@@ -1294,14 +1335,7 @@ export class Scene {
       }
       case 'unlabel': {
         const ids = words.length ? words : [...this.labels.keys()].filter((k) => !k.startsWith('dial:'));
-        for (const k of ids) { this.labels.delete(k); if (k.startsWith('dial:') && this.vars.get(k.slice(5))) this.vars.get(k.slice(5)).shown = false; if (k.startsWith('dial:')) this.dialAt.delete(k.slice(5)); }
-        // 贴在收掉的那几样（拨数、别的字）上面的字一起收（主线第一轮 D1-5：以前留在原地，画面上挂到了别的东西旁边）
-        const gone = new Set(ids);
-        for (let more = true; more;) {
-          more = false;
-          for (const [k, l] of this.labels) if ((l.refs || []).some((r) => gone.has(r))) { this.labels.delete(k); ids.push(k); gone.add(k); more = true; }
-        }
-        return { ids };
+        return { ids: this.unlabelIds(ids) };
       }
       case 'dial': {
         // dial d = 5 range=1-5 at=a
@@ -1687,7 +1721,7 @@ export class Scene {
       case 'ungoal': {
         const ids = words.length ? words : [...this.goals.keys()];
         for (const k of ids) if (!this.goals.has(k)) throw new Error(`没有叫「${k}」的挑战`);
-        ids.forEach((k) => { this.goals.delete(k); this.reactions.delete(k); this.dropAhead(k); });
+        this.ungoalIds(ids);
         return { ungoal: ids };
       }
       case 'press': {
@@ -1771,6 +1805,71 @@ export class Scene {
         for (const [k, l] of this.labels) if (l.link && cut.includes(l.link)) this.labels.delete(k);
         return { id, back: { id, name: str ?? null, summary: this.summaryOf(o) }, ...(repicked ? { binds: [repicked] } : {}) };
       }
+      case 'scene': {
+        // scene "过去完成时" [keep=tl]：开新的一幕（主线第六轮 3.2）。不在 keep 里的全部拿下，做法和老师一样一样拿的一样：
+        // 东西走 remove 的 dropObject（它的贴的字、拨盘、学生开着的手、预写的 .done / .right、存档点、照引擎走跟着收），挑战走 ungoal 的，
+        // 贴的字走 unlabel 的（贴在收掉的东西上的跟着收），等着的一问走换问时收旧问的 endAsk。不另写一套清表的
+        if (str == null || !str.trim()) throw new Error('要写成 scene "这一幕叫什么"（比如 scene "过去完成时"；要带着东西进下一幕写 keep=tl）');
+        const keep = String(opts.keep || '').split(/[\s,，]+/).filter(Boolean);
+        for (const k of keep) {
+          if (this.objects.has(k)) continue;
+          if (this.labels.has(k) || this.vars.has(k)) throw new Error(`keep 只能写舞台上的东西（「${k}」是${this.labels.has(k) ? '贴的字' : '拨盘'}：跟着它贴着的那样东西一起带过去）`);
+          throw new Error(`舞台上没有「${k}」（keep= 写要带进下一幕的东西的名字）`);
+        }
+        const kept = new Set(keep);
+        const dropped = [...this.objects.keys()].filter((id) => !kept.has(id));
+        // 贴的字先记下哪些贴在要收的东西上（dropObject 会顺手删掉它们，unlabel 的级联要拿这一份往外找）
+        const gone = new Set(dropped);
+        const onDropped = [...this.labels].filter(([, l]) => (l.refs || []).some((r) => gone.has(parseRef(r)?.obj))).map(([k]) => k);
+        for (const id of dropped) this.dropObject(id);
+        const goals = [...this.goals.keys()];
+        this.ungoalIds(goals);
+        // 剩下要收的字：不贴在任何东西上的拨盘（不在 keep 里）、连线没了的；贴在别的字上的跟着 unlabel 的级联走（贴着的那张还在就留着）
+        const free = [...this.labels].filter(([k, l]) => (k.startsWith('dial:') ? !this.vars.get(k.slice(5))?.owner || !kept.has(this.vars.get(k.slice(5)).owner) : l.link ? !this.links.has(l.link) : false)).map(([k]) => k);
+        const labs = this.unlabelIds([...onDropped, ...free]);
+        if (this.waiting) this.endAsk(this.waiting);
+        this.waiting = null;
+        this.skipAsk();
+        this.say = '';
+        this.words = [];
+        this.layout.delete('say');
+        return { scene: str.trim(), keep, dropped, ungoal: goals, unlabeled: labs, removed: dropped.length > 0 };
+      }
+      case 'place': {
+        // place s main / place gl right-of s align=top / place A B row / place k near s.had / place q at=6,4-30,12（第八轮）：
+        // 只存构图意图，页面的求解器（compose/）照它排；同一样东西再写一次换掉它的关系
+        const KINDS = ['main', 'right-of', 'left-of', 'above', 'below', 'near', 'row', 'col'];
+        const ws = args.filter((a) => a.t === 'word').map((a) => a.v);
+        const k = ws.findIndex((w) => KINDS.includes(w));
+        const names = k < 0 ? ws : ws.slice(0, k);
+        const kind = k < 0 ? null : ws[k];
+        if (!names.length) throw new Error('要写成 place 名字 main / right-of 别的 / row …（或 at=6,4-30,12）');
+        for (const n of names) if (!this.objects.has(n) && n !== 'say' && n !== 'goals') throw new Error(`place 写的「${n}」舞台上没有`);
+        if (!kind && opts.at == null) throw new Error(`place ${names.join(' ')} 后面写怎么放：main / right-of 别的 / left-of / above / below / near 一处 / row / col，或 at=6,4-30,12`);
+        if ((kind === 'row' || kind === 'col') && names.length < 2) throw new Error(`${kind} 前面写两样以上（place A B ${kind}）`);
+        if (kind && kind !== 'row' && kind !== 'col' && names.length > 1) throw new Error(`${kind} 前面写一样东西（place ${names[0]} ${kind} …）`);
+        const target = kind && kind !== 'main' && kind !== 'row' && kind !== 'col' ? ws[k + 1] : null;
+        if (kind && kind !== 'main' && kind !== 'row' && kind !== 'col' && !target) throw new Error(`${kind} 后面写挨着哪一样（place ${names[0]} ${kind} s）`);
+        const rel = this.placeRel(kind === 'row' || kind === 'col' ? names : names[0], opts.at != null ? null : kind, target, opts);
+        this.layout.set(names[0], [rel]);
+        return { place: names };
+      }
+      case 'pos': {
+        // pos s=12.5,40 gl=30,4.5,600：页面的求解器摆好的地方（第八轮，compose/apply.js 的 posLine）。页面自己写进 log，
+        // 刷新、回看、作废照它放回，排出来和当时一样。没了的东西跳过（重放时那样东西可能已经收了）
+        const moved = [];
+        for (const [id, v] of Object.entries(opts)) {
+          const [x, y, w] = String(v).split(',').map(Number);
+          if (!this.objects.has(id) || !Number.isFinite(x) || !Number.isFinite(y)) continue;
+          this.moveObject(id, x, y, Number.isFinite(w) ? w : null);
+          moved.push(id);
+        }
+        return { moved };
+      }
+      case 'preview': {
+        // preview：这一轮排好先给老师看一眼示意图（第八轮），画面上不演什么
+        return { preview: true };
+      }
       case 'remove': {
         // remove a：把一样东西拿下舞台
         const id = words[0];
@@ -1833,6 +1932,7 @@ export class Scene {
     const order = new Map(list.map((o, i) => [o.id, i]));
     for (let i = 1; i < list.length; i++) {
       const o = list[i];
+      if (o.placed) continue; // 页面的求解器摆过的（第八轮）：位置归它，这里不推
       const me = this.objectBox(o.id);
       const tied = new Set(typeOf(o).anchors?.(o) || []); // 和它排成一体的（乘积和它的两个因子）不比
       let need = -Infinity;
@@ -1878,8 +1978,64 @@ export class Scene {
   replaceObject(id, o) { this.objects.set(id, o); }
   // keepPlace：同名重造，objects 里留着它的位子（replaceObject 换进去），只清连线、open 这些
   // keepSaves：同名重造留着存档（keep / back，lastBefore 不留）；拿下舞台（remove，以后 merge 拿掉的那一张）连存档一起清
+  /**
+   * 一条构图关系（place / say near=）：查写法、指着的东西，拼成 compose/solve.js 认的样子。kind 是 null 时是 at=（定死在格子上）。
+   * 名字写错、at= 写错、gap= / weight= / align= 写错当场报
+   */
+  placeRel(a, kind, target, opts) {
+    const rel = {};
+    if (kind == null) {
+      const at = parseAt(opts.at);
+      if (!at) throw new Error(`at= 写成 6,4-40,12：第几列第几行到第几列第几行（横 ${COLS} 列，从 0 数，后一个比前一个大）`);
+      return { kind: 'at', a, at };
+    }
+    rel.kind = kind;
+    rel.a = a;
+    if (target != null) {
+      const ref = parseRef(target);
+      if (!ref || !this.objects.has(ref.obj) && !(target === 'say' || target === 'goals')) throw new Error(`place 写的「${target}」舞台上没有`);
+      if (ref.mark && kind !== 'near') throw new Error(`${kind} 后面写一样东西的名字（${ref.obj}），贴着一个部件用 near ${target}`);
+      if (ref.mark) this.parts(target);
+      if (target === a) throw new Error(`${kind} 不能挨着自己`);
+      rel.b = target;
+    }
+    const pick = (name, list) => {
+      if (opts[name] == null) return;
+      if (!list.includes(opts[name])) throw new Error(`${name}= 只能写 ${list.join(' / ')}`);
+      rel[name] = opts[name];
+    };
+    pick('align', ['left', 'right', 'center', 'top', 'bottom']);
+    pick('gap', ['s', 'm', 'l']);
+    pick('weight', ['strong', 'medium', 'weak']);
+    return rel;
+  }
+
+  /** 把一样东西整个挪到 (x, y)（它自己算的框的左上角，世界坐标；不带量出来的 ext，重放时没量也一样）；句子顺带换折行的宽 */
+  moveObject(id, x, y, width = null) {
+    const o = this.objects.get(id);
+    if (!o) return;
+    if (width && o.type === 'sentence') o.width = width;
+    const b = this.type(o).objectBox(o);
+    shiftObject(o, x - b.x, y - b.y);
+    o.placed = true;
+  }
+
   dropObject(id, { keepLabels = false, keepPlace = false, keepSaves = false } = {}) {
+    // 构图里指着它的关系跟着没了（row / col 只剩一样就不算了）
+    if (!keepPlace && this.layout.size) {
+      const next = new Map();
+      for (const rs of this.layout.values()) for (const r0 of rs) {
+        const r = Array.isArray(r0.a) ? { ...r0, a: r0.a.filter((x) => x !== id) } : r0;
+        if (Array.isArray(r.a) ? r.a.length < 2 : r.a === id) continue;
+        if (r.b != null && parseRef(r.b)?.obj === id) continue;
+        const k = Array.isArray(r.a) ? r.a[0] : r.a;
+        next.set(k, [...(next.get(k) || []), r]);
+      }
+      this.layout = next;
+    }
     if (!keepPlace) this.objects.delete(id);
+    // 镜头对准的里有它（camera a.2 以后 remove a / scene）：去掉，不然镜头一直对着一样没了的东西、新造的不框（审查第 4 条）
+    if (!keepPlace && this.focus) { this.focus = this.focus.filter((r) => r !== id && parseRef(r)?.obj !== id); if (!this.focus.length) this.focus = null; }
     for (const [k, l] of this.links) if (l.a.obj === id || l.b.obj === id) this.links.delete(k);
     if (!keepLabels) for (const [k, l] of this.labels) if (l.refs.some((r) => parseRef(r)?.obj === id)) this.labels.delete(k);
     this.binds = this.binds.filter((b) => b.obj !== id);
@@ -2245,7 +2401,12 @@ export class Scene {
   /** 给老师看的「舞台上现在有什么」：和画面一定对得上（照场景写） */
   stateText() {
     const lines = [];
+    // 第几幕、前面有哪几幕（舞台照 log 推好写在 sceneNote 上）；这一轮台上全换了又没写 scene 的那一句（swapNote）
+    if (this.sceneNote) lines.push(this.sceneNote);
+    if (this.swapNote) lines.push(this.swapNote);
     if (!this.objects.size) lines.push('舞台上还是空的。');
+    // 版面（第八轮）：页面的求解器摆成了什么样（舞台每次摆完写在 layoutInfo 上）
+    else if (this.layoutInfo?.length) lines.push(...this.layoutInfo);
     const hints = new Set();
     for (const o of this.objects.values()) { const t = typeOf(o); if (t.hint) hints.add(t.hint); }
     for (const h of hints) lines.push(h);

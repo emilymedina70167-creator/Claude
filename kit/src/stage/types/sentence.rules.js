@@ -693,14 +693,15 @@ function spanChoices(o) {
 // 同一句上这几项能一起开：拉括号是在词上滑、折是点、挪是按住再拖（gestures.js 的 PRESS_OF），一下只认成一种
 const gestures = {
   // 从一个词拉到另一个词，再点成分标签（value 是点的那个成分）：mark s.2-5 V；学生拉的括号上的 ✕：unmark s.2-5
-  mark: { gesture: 'span', from: 'word', to: 'word', pick: 'role', choices: spanChoices, toAct: markAct, close: { on: 'xmark', toAct: unmarkAct } },
+  // how：给学生看的「手怎么动」那一句（主线第六轮 2.10；解析栏这一问下面）。不写 brief：brief 也进老师的现状，旧课发给老师的字会变
+  mark: { how: '从一个词拉到另一个词，松手再点它是什么成分', gesture: 'span', from: 'word', to: 'word', pick: 'role', choices: spanChoices, toAct: markAct, close: { on: 'xmark', toAct: unmarkAct } },
   // open s fold：点一段（括号或括号里的词）折起来：fold s.3-6；点小方块展开：unfold s.3
-  fold: { gesture: 'tap', on: ['bracket', 'word', 'pill'], toAct: foldAct },
+  fold: { how: '点一段折起来，点小方块展开', gesture: 'tap', on: ['bracket', 'word', 'pill'], toAct: foldAct },
   // open s move：按住一道括号或一个词拖到两个词之间：move s.1-6 after s.11
-  move: { gesture: 'drop-at', from: ['bracket', 'word'], to: 'gap', toAct: moveAct },
+  move: { how: '按住一个词或一道括号，拖到两个词之间', gesture: 'drop-at', from: ['bracket', 'word'], to: 'gap', toAct: moveAct },
   // open s.6 refer：从词上的钩拉一条线，松在词、括号、句子外框上：refer s.6 -> s.2 / s.4-5 / s（钩是单独的把手，和在词上拉括号不抢）；
   // 学生连的线头上的 ✕：unrefer s.6
-  refer: { gesture: 'line', from: 'hook', to: ['word', 'bracket', 'sentence'], toAct: referAct, close: { on: 'xrefer', toAct: unreferAct }, idle: referIdle },
+  refer: { how: '从词上的小钩拉一条线，松在它指的词上', gesture: 'line', from: 'hook', to: ['word', 'bracket', 'sentence'], toAct: referAct, close: { on: 'xrefer', toAct: unreferAct }, idle: referIdle },
 };
 
 // 钩挂在折起来的词上就没有钩（画面不画、学生拉不了）：舞台现状照实说（gestures.js 的 idleOf）。all：老师点了名的钩一个都挂不上

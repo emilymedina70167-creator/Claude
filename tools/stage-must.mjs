@@ -12,7 +12,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MUST, FIX1, NEW2, NEW3, NEW4, NEW5, FIRST, mustHits, mustNotHits, seenHits, auditHits, screenHits, goalsMetWhere } from './stage-try-lib.js';
+import { MUST, FIX1, NEW2, NEW3, NEW4, NEW5, NEW6, FIRST, plainRe, mustHits, mustNotHits, seenHits, auditHits, screenHits, goalsMetWhere } from './stage-try-lib.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -28,7 +28,7 @@ if (!opt.dir) { console.error('用法：node tools/stage-must.mjs 目录 [--from
 
 const fileOf = (f) => join(opt.dir, ...f.split('/'));
 // fix1（主线第一轮修好的页面毛病）、new2（主线第二轮新做的四件事）是同一种表：一行一条，每个视口都要过
-const ROWS = { fix1: FIX1, new2: NEW2, new3: NEW3, new4: NEW4, new5: NEW5, first: FIRST };
+const ROWS = { fix1: FIX1, new2: NEW2, new3: NEW3, new4: NEW4, new5: NEW5, new6: NEW6, first: FIRST };
 if (opt.table !== 'must' && !ROWS[opt.table]) { console.error(`--table 只有 must（默认）、${Object.keys(ROWS).join('、')}`); process.exit(2); }
 const TABLE = ROWS[opt.table] || MUST;
 const names = [...new Set(TABLE.flatMap((m) => m.files))];
@@ -55,7 +55,7 @@ const byPath = new Map(results.map((r) => [norm(r.path), r]));
 // --from 的那一份可能是从别的目录跑的：照目录里的相对路径（L2/分支3.txt）认
 const find = (f) => byPath.get(norm(relative(ROOT, fileOf(f)))) || results.find((r) => norm(r.path).endsWith(`/${f}`));
 
-const out = [`# ${opt.table === 'fix1' ? '修好的页面毛病不许回来' : opt.table === 'new2' ? '第二轮新做的事真做得成' : opt.table === 'new4' ? '第四轮：照引擎走真走得成' : opt.table === 'new3' ? '第三轮新做的事真做得成' : '叫老师的那一条里必须有'}（${norm(relative(ROOT, opt.dir)) || opt.dir}）`];
+const out = [`# ${opt.table === 'fix1' ? '修好的页面毛病不许回来' : opt.table === 'new2' ? '第二轮新做的事真做得成' : opt.table === 'new4' ? '第四轮：照引擎走真走得成' : opt.table === 'new3' ? '第三轮新做的事真做得成' : opt.table === 'new6' ? '第六轮：横屏解析栏、一段一幕、截图的显示毛病' : '叫老师的那一条里必须有'}（${norm(relative(ROOT, opt.dir)) || opt.dir}）`];
 let bad = 0;
 const line = (ok, text) => { out.push(`${ok ? '✓' : '✗'} ${text}`); if (!ok) bad++; };
 const where = (h) => `第 ${h.step + 1} 步${h.where === 'called' ? '叫老师' : '还攒着'}`;
@@ -86,6 +86,7 @@ for (const m of ROWS[opt.table] || []) {
   each(m.audit, '排版必须报 ', (steps, re) => { const h = auditHits(steps, re); return { ok: h.length > 0, text: h.length ? stepsText(h) : '没报' }; });
   each(m.screen, '屏幕上必须有 ', (steps, re) => { const h = screenHits(steps, re, { last: true }); return { ok: h.length > 0, text: h.length ? '有' : '没有' }; });
   each(m.noScreen, '屏幕上不许有 ', (steps, re) => { const h = screenHits(steps, re, { last: true }); return { ok: !h.length, text: h.length ? '有' : '没有' }; });
+  each(m.look, '回看里必须有 ', (steps, re) => { const h = steps.flatMap((x, i) => (x.look != null && plainRe(re).test(x.look) ? [i] : [])); return { ok: h.length > 0, text: h.length ? stepsText(h) : '没有' }; });
   each(m.noAudit, '排版不许报 ', (steps, re) => { const h = auditHits(steps, re); return { ok: !h.length, text: h.length ? `${stepsText(h)}报了` : '没报' }; });
 }
 for (const m of opt.table === 'must' ? MUST : []) {

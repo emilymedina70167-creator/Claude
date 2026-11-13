@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>舞台 · 自由构图样稿</title>
+<!-- 主线第八轮 Task 1：自由构图的样稿。四个真课时刻照设计规范手摆在 48 列网格上（每样东西写的就是老师会写的 at= 框），
+     只看样子，不跑舞台。#m1 … #m4 切换；?dark 看晚上 -->
+<style>
+:root {
+  --chalk-rgb: 27 34 32; --muted: #5e6b66; --card: rgb(255 255 250 / 0.74); --card-solid: #fffffc; --line: rgb(27 34 32 / 0.12);
+  --brand: #4a1b52; --brand-ink: #fff; --gold: rgb(150 112 42); --g1: #3f6fb0; --g2: #b0507a; --g3: #3e8a64; --red: rgb(178 58 43);
+  --page-bg: radial-gradient(900px 640px at -8% -12%, rgb(150 205 182 / 0.5), transparent 62%), radial-gradient(820px 620px at 108% -4%, rgb(206 172 224 / 0.52), transparent 60%), radial-gradient(1100px 720px at 50% 115%, rgb(232 210 158 / 0.4), transparent 62%), #f0f2ec;
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+  --ts: 1.11; --fs-talk: calc(21px * var(--ts)); --fs-body: calc(17px * var(--ts)); --fs-word: calc(27px * var(--ts)); --fs-title: calc(24px * var(--ts));
+  --top: 64px; --dock: 88px;
+}
+:root.dark { --chalk-rgb: 238 242 238; --muted: #9daaa3; --card: rgb(44 54 50 / 0.62); --card-solid: #222927; --line: rgb(238 242 238 / 0.14); --brand: #e6d2ea; --brand-ink: #2a1530;
+  --page-bg: radial-gradient(900px 640px at -8% -12%, rgb(60 110 92 / 0.35), transparent 62%), radial-gradient(820px 620px at 108% -4%, rgb(110 70 130 / 0.35), transparent 60%), #151b19; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--page-bg); color: rgb(var(--chalk-rgb)); font-family: var(--sans); }
+.top { position: fixed; left: 0; right: 0; top: 0; height: var(--top); display: flex; align-items: center; gap: 14px; padding: 0 16px; }
+.pill { min-height: 44px; padding: 0 16px; border-radius: 999px; display: inline-flex; align-items: center; font: 500 15px var(--sans); background: rgb(var(--chalk-rgb) / 0.06); }
+.title { font: 600 17px var(--sans); }
+.scenes { display: flex; gap: 6px; margin-left: 12px; }
+.scene { min-height: 36px; padding: 0 14px; border-radius: 999px; display: inline-flex; align-items: center; font: 500 14px var(--sans); background: var(--card); box-shadow: 0 0 0 .5px var(--line); }
+.scene.now { background: var(--brand); color: var(--brand-ink); box-shadow: none; }
+.end { margin-left: auto; background: var(--brand); color: var(--brand-ink); font-weight: 600; }
+.canvas { position: fixed; left: 0; right: 0; top: var(--top); bottom: var(--dock); --cell: calc(100vw / 48); }
+.grid { position: absolute; inset: 0; pointer-events: none; display: none; background-image: linear-gradient(to right, rgb(var(--chalk-rgb) / .05) 1px, transparent 1px), linear-gradient(to bottom, rgb(var(--chalk-rgb) / .05) 1px, transparent 1px); background-size: var(--cell) var(--cell); }
+.showgrid .grid { display: block; }
+/* at=c0,r0-c1,r1：格子 → 位置 */
+.at { position: absolute; left: calc(var(--c0) * var(--cell)); top: calc(var(--r0) * var(--cell)); width: calc((var(--c1) - var(--c0)) * var(--cell)); }
+.h { height: calc((var(--r1) - var(--r0)) * var(--cell)); }
+/* 话、题卡、贴的字：同一家卡片 */
+.card { background: var(--card); -webkit-backdrop-filter: saturate(1.7) blur(26px); backdrop-filter: saturate(1.7) blur(26px); border-radius: 16px; box-shadow: 0 0 0 .5px var(--line), 0 10px 26px -18px rgb(25 45 40 / .3); padding: 12px 16px; }
+.talk { font: 500 var(--fs-talk)/1.6 var(--sans); }
+.talk p { margin: 0 0 6px; }
+.talk .past { font-size: var(--fs-body); color: rgb(var(--chalk-rgb) / .62); }
+.talk .ask { font-weight: 600; }
+.at > .card.talk, .at > .card.note { width: fit-content; max-width: 100%; }
+.sent.big { font-size: calc(32px * var(--ts)); }
+.qcard h3 { margin: 0 0 8px; font: 600 var(--fs-title)/1.35 var(--sans); }
+.qcard p, .note { margin: 0; font: 400 var(--fs-body)/1.6 var(--sans); }
+.qcard p + p { margin-top: 6px; color: var(--muted); }
+.key { border-left: 3px solid var(--brand); }
+.note { color: var(--muted); padding: 8px 14px; }
+.goal { display: inline-flex; align-items: center; gap: 10px; padding: 9px 16px 9px 12px; font: 500 var(--fs-body)/1.4 var(--sans); }
+.goal i { width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--brand) 55%, transparent); flex: none; }
+.chip { display: inline-block; padding: 0 .35em; border-radius: .4em; background: var(--card-solid); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+/* 句子 */
+.sent { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 500 var(--fs-word)/1.5 var(--sans); }
+.w { padding: 2px 6px; border-radius: 10px; border-bottom: 2px solid transparent; }
+.w.tap { border-bottom-color: color-mix(in srgb, var(--brand) 30%, transparent); }
+.w.g1 { background: color-mix(in srgb, var(--g1) 16%, transparent); color: var(--g1); }
+.w.g2 { background: color-mix(in srgb, var(--g2) 16%, transparent); color: var(--g2); }
+.w.g3 { background: color-mix(in srgb, var(--g3) 16%, transparent); color: var(--g3); }
+/* 时间轴 */
+.tl { position: relative; }
+.tl .axis { position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: rgb(var(--chalk-rgb) / .35); }
+.tl .stop { position: absolute; top: 50%; transform: translateX(-50%); text-align: center; font: 500 var(--fs-body) var(--sans); color: var(--muted); }
+.tl .stop::before { content: ""; display: block; width: 2px; height: 12px; margin: -6px auto 8px; background: rgb(var(--chalk-rgb) / .45); }
+.tl .stop.now { color: rgb(var(--chalk-rgb)); font-weight: 600; }
+.tl .ev { position: absolute; bottom: calc(50% + 10px); transform: translateX(-50%); text-align: center; font: 600 15px var(--sans); color: var(--g1); }
+.tl .ev::after { content: ""; display: block; width: 12px; height: 12px; margin: 6px auto 0; border-radius: 50%; background: var(--g1); }
+.tl .man { position: absolute; top: calc(50% + 40px); transform: translateX(-50%); }
+.tl .man i { display: block; width: 18px; height: 18px; margin: 0 auto 3px; border-radius: 50%; background: var(--g2); }
+.tl .man b { display: block; width: 26px; height: 20px; margin: 0 auto; border-radius: 12px 12px 4px 4px; background: var(--g2); }
+/* 矩阵 */
+.mx { display: inline-grid; grid-template-columns: repeat(3, 2.2em); gap: .3em 0; padding: .2em .5em; font: 500 calc(26px * var(--ts)) var(--sans); text-align: center; border-left: 2px solid rgb(var(--chalk-rgb)); border-right: 2px solid rgb(var(--chalk-rgb)); border-radius: 14px; }
+.mxname { font: italic 600 calc(22px * var(--ts)) "Times New Roman", serif; color: var(--muted); margin: 0 0 6px 6px; }
+.op { font: 500 calc(30px * var(--ts)) var(--sans); display: flex; align-items: center; justify-content: center; }
+.hl { background: color-mix(in srgb, var(--gold) 18%, transparent); border-radius: 8px; }
+/* 树、格子 */
+.node { position: absolute; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--card-solid); box-shadow: 0 0 0 1px var(--line), 0 6px 14px -10px rgb(25 45 40 / .4); font: 600 22px var(--sans); transform: translate(-50%, -50%); }
+.node.on { box-shadow: 0 0 0 2.5px var(--brand); }
+.cells { display: flex; gap: 10px; }
+.cell { width: 60px; height: 60px; border-radius: 12px; display: grid; place-items: center; background: var(--card-solid); box-shadow: 0 0 0 1px var(--line); font: 600 24px var(--sans); }
+.idx { display: flex; gap: 10px; font: 500 15px var(--sans); color: var(--muted); }
+.idx span { width: 60px; text-align: center; }
+/* 底下的输入条（不进构图，固定的界面） */
+.dock { position: fixed; left: 0; right: 0; bottom: 0; height: var(--dock); display: flex; gap: 12px; align-items: center; justify-content: center; padding: 0 16px 16px; }
+.btn { min-height: 50px; padding: 0 26px; border-radius: 999px; background: var(--brand); color: var(--brand-ink); font: 600 17px var(--sans); display: inline-flex; align-items: center; }
+.input { width: min(52vw, 640px); min-height: 50px; border-radius: 999px; background: var(--card-solid); box-shadow: 0 0 0 .5px var(--line); display: inline-flex; align-items: center; padding: 0 22px; color: var(--muted); font: 16px var(--sans); }
+.m { display: none; } .m.on { display: block; }
+</style></head>
+<body>
+<div class="top"><span class="pill">← 学习台</span><span class="title">时态</span>
+  <span class="scenes" id="scenes"><span class="scene">① 一般时</span><span class="scene">② 进行时</span><span class="scene now">③ 节末真题</span></span>
+  <span class="pill" style="margin-left:12px">说过的</span><span class="pill end">下课</span></div>
+
+<!-- 时刻 1：题卡 + 句子 + 话 + 挑战。老师写：place q at=2,1-20,9；place s main；say … near=s；goals 默认左上 -->
+<div class="canvas m" id="m1"><div class="grid"></div>
+  <div class="at" style="--c0:2;--r0:1;--c1:20"><div class="card goal"><i></i>在句子上拉出主干：主语、谓语、宾语</div></div>
+  <div class="at" style="--c0:2;--r0:4;--c1:19"><div class="card qcard key"><h3>第 10 题</h3><p>…lots of working folks had already seen signs of the slowdown themselves.</p><p>2004 · Reading Part A · Text 3</p><p>生词：folk 人们；slowdown（经济）放缓；themselves 他们自己</p></div></div>
+  <div class="at" style="--c0:21;--r0:4;--c1:42"><div class="card talk"><p class="past">节末真题还剩 11 句：先做 10、1、13，剩下 8 句你挑着做。</p><p class="ask">先在句子上把主语、谓语、宾语拉出来。</p></div></div>
+  <div class="at" style="--c0:4;--r0:15;--c1:46"><div class="sent big"><span class="w tap">lots</span><span class="w tap">of</span><span class="w tap">working</span><span class="w tap">folks</span><span class="w tap">had</span><span class="w tap">already</span><span class="w tap">seen</span><span class="w tap">signs</span><span class="w tap">of</span><span class="w tap">the</span><span class="w tap">slowdown</span><span class="w tap">themselves.</span></div></div>
+</div>
+
+<!-- 时刻 2：句子在上、时间轴在下、译文贴句子、be free 贴小人、话贴时间轴左边 -->
+<div class="canvas m" id="m2"><div class="grid"></div>
+  <div class="at" style="--c0:2;--r0:1;--c1:24"><div class="card goal"><i></i>把粉色小人拖到「能自由推翻」发生的时间</div></div>
+  <div class="at" style="--c0:4;--r0:5;--c1:44"><div class="sent"><span class="w">They</span><span class="w g1">gave</span><span class="w">justices</span><span class="w">permanent</span><span class="w">positions</span><span class="w">so</span><span class="w">they</span><span class="w g2">would</span><span class="w g2">be</span><span class="w">free</span><span class="w">to</span><span class="w">upset</span><span class="w">those</span><span class="w">in</span><span class="w">power.</span></div></div>
+  <div class="at" style="--c0:4;--r0:10;--c1:40"><div class="card note">他们给了法官永久职位，因此法官就能自由地推翻当权者。</div></div>
+  <div class="at" style="--c0:2;--r0:15;--c1:17"><div class="card talk"><p class="past">这段回答：过去某件事之后发生的事，谓语怎么写。</p><p class="ask"><span class="chip" style="color:var(--g1)">gave</span> 是过去给的职位。法官「能自由推翻」发生在什么时候？</p></div></div>
+  <div class="at h tl" style="--c0:19;--r0:15;--c1:46;--r1:24"><div class="axis"></div>
+    <div class="stop" style="left:6%">过去</div><div class="stop" style="left:35%">过去之后</div><div class="stop now" style="left:64%">现在</div><div class="stop" style="left:93%">将来</div>
+    <div class="ev" style="left:6%">gave 给职位</div>
+    <div class="man" style="left:64%"><i></i><b></b></div></div>
+  <div class="at" style="--c0:32;--r0:23;--c1:42"><div class="card note">be free 能自由推翻</div></div>
+</div>
+
+<!-- 时刻 3：两张矩阵并排比较 + 乘积；话在上面横跨 -->
+<div class="canvas m" id="m3"><div class="grid"></div>
+  <div class="at" style="--c0:2;--r0:1;--c1:22"><div class="card goal"><i></i>改 B 里的一个数，让 AB = BA</div></div>
+  <div class="at" style="--c0:24;--r0:1;--c1:46"><div class="card talk"><p class="past">先看 AB 和 BA 是不是一样。</p><p class="ask">右下角那一格差在哪？拨 B 的一格试试。</p></div></div>
+  <div class="at" style="--c0:4;--r0:9;--c1:16"><div class="mxname">A</div><div class="mx"><span>1</span><span>2</span><span>0</span><span>0</span><span>1</span><span>3</span><span>2</span><span>0</span><span>1</span></div></div>
+  <div class="at op" style="--c0:14;--r0:11;--c1:16">×</div><div class="at" style="--c0:16;--r0:9;--c1:28"><div class="mxname">B</div><div class="mx"><span>1</span><span>0</span><span>0</span><span>0</span><span>2</span><span>0</span><span>0</span><span>0</span><span>3</span></div></div>
+  <div class="at op" style="--c0:27;--r0:11;--c1:30">=</div><div class="at" style="--c0:30;--r0:9;--c1:44"><div class="mxname">AB</div><div class="mx"><span>1</span><span>4</span><span>0</span><span>0</span><span>2</span><span>9</span><span>2</span><span>0</span><span class="hl">3</span></div></div>
+  <div class="at op" style="--c0:24;--r0:21;--c1:30" >BA =</div><div class="at" style="--c0:30;--r0:19;--c1:44"><div class="mxname">BA</div><div class="mx"><span>1</span><span>2</span><span>0</span><span>0</span><span>2</span><span>6</span><span>6</span><span>0</span><span class="hl">3</span></div></div>
+  <div class="at" style="--c0:4;--r0:19;--c1:22"><div class="card note key">AB 和 BA 一般不一样：乘法不能随便交换。</div></div>
+</div>
+
+<!-- 时刻 4：树在右、格子在下、话贴着结点 -->
+<div class="canvas m" id="m4"><div class="grid"></div>
+  <div class="at" style="--c0:2;--r0:1;--c1:22"><div class="card goal"><i></i>把 47 插进去，让它还是平衡的</div></div>
+  <div class="at h" style="--c0:20;--r0:3;--c1:46;--r1:20">
+    <svg style="position:absolute;inset:0;width:100%;height:100%" preserveAspectRatio="none" viewBox="0 0 100 100"><g stroke="rgb(27 34 32 / .35)" stroke-width=".5" fill="none"><path d="M50 12 L28 45 M50 12 L72 45 M28 45 L16 78 M28 45 L40 78 M72 45 L62 78 M72 45 L84 78"/></g></svg>
+    <div class="node" style="left:50%;top:12%">40</div><div class="node" style="left:28%;top:45%">30</div><div class="node on" style="left:72%;top:45%">45</div>
+    <div class="node" style="left:16%;top:78%">20</div><div class="node" style="left:40%;top:78%">35</div><div class="node" style="left:62%;top:78%">42</div><div class="node" style="left:84%;top:78%">50</div></div>
+  <div class="at" style="--c0:2;--r0:6;--c1:18"><div class="card talk"><p class="past">平衡因子看左右子树的高度差。</p><p class="ask">47 会挂在 <span class="chip">45</span> 的哪一边？插完以后谁的平衡因子先变？</p></div></div>
+  <div class="at" style="--c0:22;--r0:22;--c1:46"><div class="cells"><div class="cell">20</div><div class="cell">30</div><div class="cell">35</div><div class="cell">40</div><div class="cell">42</div><div class="cell">45</div><div class="cell">50</div></div><div class="idx"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span></div></div>
+</div>
+
+<div class="dock"><span class="btn">给个提示 →</span><span class="input">想说点什么也可以直接写</span><span class="pill" style="min-width:50px;justify-content:center">说</span></div>
+<script>
+const q = new URLSearchParams(location.search);
+if (q.has('dark')) document.documentElement.classList.add('dark');
+if (q.has('grid')) document.body.classList.add('showgrid');
+const show = () => { const id = location.hash.slice(1) || 'm1'; document.querySelectorAll('.m').forEach((n) => n.classList.toggle('on', n.id === id)); };
+addEventListener('hashchange', show); show();
+</script>
+</body></html>

@@ -1,0 +1,9 @@
+# 主线第六轮批次 0 · 句子行距：两行的句子没有小标签时不再每行留 28（时态课第 29 轮）
+sentence s = "He had never gambled before the casino sent him a coupon for $20 worth of gambling."
+paint s.had s.gambled g3
+say "{s.had} 和 {s.gambled} 合起来是一个谓语，never 夹在中间。"
+ask next "看好了点这里" button="看好了"
+学生: next
+mark s.2-4 V
+say "贴了一个标签：整句长高一次。"
+ask next

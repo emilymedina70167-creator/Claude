@@ -286,6 +286,16 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 5. 字缩得太小：东西都是竖着往下摞，屏幕矮的时候只能整台缩。
 6. 课后报告的「一次对」：同一问重问一次算成新的一道；学生在答案框里打的一句问话算成一道错题。
 
+## 第六轮（2026-11-12 做完）：横屏解析栏（收放）、一段一幕能回看、截图的显示毛病
+
+设计 `docs/superpowers/specs/2026-11-12-stage-mainline-6-design.md`（审查 `…-6-review.md`、更改建议 `…-6-changes.md` 已并进去），自己定的事和量出来的数在 `…-6-rulings.md`。起因是我上完时态那一节说的：节奏没问题，可看不到前面学了什么；用完一样一样拿走总漏下一句；只用了屏幕中间。底座和技术路线一样没换。
+
+- **截图的显示毛病**：两行的句子没有小标签时不再每行留 28（3.4 倍字高 → 2.5 倍）；贴的字没写 side= 时先在每一边近处找，写了的那一边先找到底，字不隔着它那样东西的「墙」贴（时间轴的轴：`nearObstacles`）；事件点的框连字一起算；小人底下不写名字；注 17px、重点卡和别的卡同一种字体；做到过、东西又都不在了的挑战收起（`goalGone`）；老师 `camera` 对准一样东西时，镜头框只算贴在它上面的字（以前算进了台上所有的字，话正好压在句子上），话的地方压着别的东西就挪到上面或下面，都不行才垫毛玻璃。
+- **横屏解析栏，能收放**（默认收着、画面用满；左边的把手点开，这台设备记着）：栏里从上往下是这一幕的标题、挑战、这一幕说过的全部话（收着时说的也记着）、这一问、新交给学生的手怎么动的一句（规则文件的 `how` / `brief`）、底下那一条；放不下栏的宽输入挪到画面底部。栏宽照画面量（`layout.js` 的 `pickSide`），摆新东西、「字难认」都按右边那一块算，每轮记的 `view` 多 `side`。
+- **一段一幕**：老师写 `scene "标题" [keep=…]`，上一幕整块收起（走 `remove` / `ungoal` / `unlabel` 的拿法，不另写清表的代码）；页面不替老师分幕，台上全换了又没写 scene 时现状里说一句事实。幕从 log 推（`stage/scenes.js`），不另存。顶上的幕条点一幕，盖上只读的回看（`stage/lookback.js`：那一幕结束那一刻原样，不叫老师、不记证据）；回看时不算很久没动，看过哪几幕跟着下一条告诉老师。下课的报告里列出这节课的几幕（标题 + 重点卡），「以前的课」里看得到。说明只多 `scene` 一行。
+- 验收：`node tools/stage-must.mjs evals/stage-gaps/new6 --table new6`（和前六张一起，改了舞台合并前跑）；试演工具认学生的 `look 2` / `unlook` / `side`；e2e 的舞台课一段多走开新一幕、回看、刷新、报告里的几幕；排版检查横屏多量解析栏压着画面、栏里的字太小、这一问看不见、宽输入压着东西、贴的字离得远、贴的字太小。
+- 时态课整节照 log 放回（1000×620）：栏收着时整台缩放的中位数 1.10 → 1.14、最小 0.58 → 0.63，没有一轮变小；栏点开时英语长句的画面会小一些（中位数 0.83），所以默认收着。
+
 ## 第七轮（2026-11-12 做完）：第一节真课留下的课堂循环和数据
 
 设计 `docs/superpowers/specs/2026-11-12-stage-mainline-7-design.md`，计划 `docs/superpowers/plans/2026-11-12-stage-mainline-7.md`，自己定的事在 `…-7-rulings.md`。六件事每件给了三种做法，我都选了推荐的那种。和第六轮（另一个对话框：横屏解析栏、分幕）分开文件做。
@@ -300,6 +310,17 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 | 错题本里一条记串了，3 条被拒收 | 开发这边照课堂同一套函数补写（一次 batch）：记串的改成翻译那一问；补 would moved、has nearly（挂 W40）、natural sciences has been social sciences（挂 W43） | 数据，不在代码里 |
 
 收尾量出来的：单元测试 1758 条全过；六张验收表（fix1 new2 new3 new4 new5 first）都过；真手指首课走查都对（多两段 `stream`、`late`）；示例页 0 处错；学习台整条流程 24 段全过；282 个旧试演放回去和改之前比不同 0 处。审查查出的 5 条改了，留下 6 条小毛病写在 rulings。学习台、舞台试课按版本 2026-11-12i 重新发布。
+
+## 第八轮（2026-11-13 做完）：自由构图（老师定构图，页面用求解器排）
+
+设计 `docs/superpowers/specs/2026-11-13-stage-mainline-8-design.md`，计划 `docs/superpowers/plans/2026-11-13-stage-mainline-8.md`，自己定的事在同目录的 `…-8-rulings.md`。
+
+- 第六轮的横屏收放栏、左边中间的把手、整台每轮缩放不要了（课堂、试演、回看都走自由构图；嵌在练一练里的一小块舞台照旧）。
+- 老师写构图意图：`place s main`、`place g right-of s align=top gap=s weight=strong`、`place A B row`、`place k near s.had`、`place q at=6,4-30,12`、`say "…" near=s.2 / at=…`、`preview`（`script.js`、`scene.js` 的 `case 'place'`、`placeRel`，存在 `scene.layout`）。
+- 页面：`kit/src/stage/compose/`——`grid.js`（48 列细网格、字号档 `typeScaleOf`）、`solve.js`（kiwi.js 的 Cassowary：关系按轻重、不重叠照 WebCoLa 选分开方向、和上一次一样、新东西挨着前一样、句子挑折行宽、放不下先压间距再整台缩一档）、`apply.js`（拼输入、`pos` 那一行）、`report.js`（现状的「版面」：每样占哪几格、空着的几块、没照办的）、`sketch.js`（预览交回的字画版面）。`stage.js` 的 `compose()`：量 → 解 → 东西挪到算出来的地方（一行 `pos` 记进 log，刷新、回看、作废照它放回）→ 话、挑战两块照框摆 → 镜头固定一档。
+- 话是画布上的一块卡（默认贴着这一轮讲的那样东西），前几轮的话收进顶上「说过的」。
+- 预览：老师写 `preview`，演完页面把版面（几行 + 一格一个字的图）当一条交回、马上再叫老师（`why: preview`，一节课最多 6 次）。
+- 验收：`tests/stage-compose-*.test.js`；四个时刻的试演 `evals/stage-gaps/new8/m1–m4.txt`；e2e 的 stage 段多「测试:预览」。
 
 ## ③ ④ 建议的顺序
 
