@@ -13,7 +13,7 @@ import { GAPS } from './grid.js';
 const W_BOUND = 1e8;            // 在画布里、at= 定死的框
 const W_SEP = 1e7;              // 不重叠
 const WEIGHT = { strong: 1e6, medium: 1e4, weak: 1e2 };
-const W_STAB = 10;              // 和上一次一样
+const W_STAB = 1e3;             // 和上一次一样（比老师写的 weak 还硬：已经摆好的不被「能让就让」的拽来拽去）
 const W_GUESS = 3;              // 新东西的初始位置（挨着前一样）
 const SEP_ROUNDS = 6;
 const SCALES = [1, 0.9, 0.81, 0.8];

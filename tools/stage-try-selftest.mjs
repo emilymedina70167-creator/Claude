@@ -17,7 +17,8 @@ const stepOf = (r, cmdArgs, n = 0) => stepsOf(r, cmdArgs)[n];
 const before = (r, s) => { const all = r?.out?.[0]?.views?.[0]?.steps || []; return all[all.indexOf(s) - 1]; };
 // 舞台上的东西（比撤一步前后用）：「最后说的话」不比——有挑战时页面替老师挂的「给个提示」那一问把它清空了，
 // 撤一步重放时不重演页面的行，它又回来了（舞台那边的事，记在 task-11 的报告里）
-const shape = (st) => String(st || '').split('\n').filter((l) => !/^\s*最后说的话：/.test(l)).join('\n');
+// 「版面」那几行（第八轮起页面每次摆好写的格子坐标）也不比：撤一步以后页面重摆，差一格是页面的事
+const shape = (st) => String(st || '').split('\n').filter((l) => !/^\s*(最后说的话|版面|空着|压着|出了屏幕)/.test(l)).join('\n');
 const said = (s) => [s?.pending, s?.called?.msg].filter(Boolean).join('\n');
 const errs = (s) => (s?.errors || []).map((e) => e.error).join(' / ');
 
@@ -99,7 +100,7 @@ const half = stepOf(pa, 'mark s.2-2 V');
 // 成分那一排交的是中文：写 V 照 roleName 点「谓语」，交出去的是 mark s.2 谓语
 expect('学生: mark s.2-2 V：点的是「谓语」，有「只圈了一半」', /只圈了一半/.test(said(half)) && /点「谓语」 → mark s\.2 谓语/.test(half?.did || ''));
 const pu = stepOf(pa, 'undo');
-expect('撤一步：那道括号没了', /mark s\.2 谓语/.test(pu?.undone || '') && pu?.state === before(pa, half)?.state);
+expect('撤一步：那道括号没了', /mark s\.2 谓语/.test(pu?.undone || '') && shape(pu?.state) === shape(before(pa, half)?.state));
 expect('学生点的成分画中文：舞台现在里那道括号写两种名字', /s\.2-4 谓语（V）/.test(stepOf(pa, 'mark s.2-4 V')?.state || ''));
 expect('成分那一排没有「宾补」：点不了，记成没演上', /宾补/.test(errs(stepOf(pa, 'mark s.5-10 宾补'))));
 expect('拉完了：做完了，叫了老师', /做完|答了|做到/.test(stepOf(pa, 'mark s.5-10 宾语')?.called?.why || '') && /做完了/.test(stepOf(pa, 'mark s.5-10 宾语')?.called?.msg || ''));

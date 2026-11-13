@@ -16,6 +16,7 @@ import { gridOf, typeScaleOf } from './compose/grid.js';
 import { layoutLines } from './compose/report.js';
 import { sketchText } from './compose/sketch.js';
 import { createSnapper } from './snap.js';
+import { applyLooks } from './look/apply.js';
 import { solveLayout } from './compose/solve.js';
 import { canvasOf, composeInput, posLine, SENTENCE_WIDTHS } from './compose/apply.js';
 import { parseScript, parseRich, richLength } from './script.js';
@@ -106,7 +107,8 @@ export function helpLine(q, hasGoals, hasWork = false) {
 export { COLOR_NAMES };
 
 export class Stage {
-  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false, scenesHost = null, side = null } = {}) {
+  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false, scenesHost = null, side = null, eyes = false } = {}) {
+    this.eyes = eyes; // 每轮给老师看画面（第九轮）：只在真叫老师的地方开（课堂、样子页的 Opus 上课）；检查、试演工具不拍
     this.sideForce = side; // 'open'：栏一直开着、没有把手（回看用）
     this.scenesHost = scenesHost; // 幕条放哪（课堂给顶上那一条里留的位置；不给放在舞台自己顶上）
     // bare：嵌在别处的一小块舞台（自己练），没有上面的话、底下的输入条——镜头不给它们留地方
@@ -195,7 +197,7 @@ export class Stage {
     this.ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => requestAnimationFrame(() => { this.noteView(); this.refocus(false); })) : null;
     this.ro?.observe(this.view);
     // 老师的眼睛（第九轮）：画面一变记一笔，静下来以后后台拍一张（snap.js）；嵌在别处的一小块舞台（自己练）不拍
-    if (this.free && typeof MutationObserver === 'function' && typeof document !== 'undefined') {
+    if (this.free && this.eyes && typeof MutationObserver === 'function' && typeof document !== 'undefined') {
       this.snapper = createSnapper(this);
       new MutationObserver(() => { if (!this.instant) this.snapper.dirty(); }).observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
     }
@@ -1972,37 +1974,13 @@ export class Stage {
     const shown = sc.shownIds();
     return shown.includes(this.lastTouched) ? this.lastTouched : shown.at(-1) || null;
   }
-  /** 样子（老师的 style；all 垫底）：名字 → { frame, size, color, weight, align } */
-  styleOf(name) { return { ...(this.scene.styles?.get('all') || {}), ...(this.scene.styles?.get(name) || {}) }; }
-  /**
-   * 照老师写的 style 画：带不带框、多大、什么颜色、粗细、对齐（画面上的东西的样子都归老师定；默认话不带框，别的照原样带框）。
-   * 返回有没有变（变了大小要重量）
-   */
-  applyStyles() {
+  /** 照老师写的 look 画（look/apply.js）；没照办的（底线 1）写进现状。返回有没有变（变了大小要重量） */
+  applyLooks() {
     if (!this.free) return false;
-    let changed = false;
-    const put = (node, st, frameDefault) => {
-      if (!node) return;
-      const frame = st.frame || frameDefault;
-      const sig = `${frame}|${st.size || ''}|${st.color || ''}|${st.weight || ''}|${st.align || ''}`;
-      if (node.__look === sig) return;
-      node.__look = sig;
-      changed = true;
-      node.classList.toggle('st-noframe', frame === 'off');
-      node.classList.toggle('st-framed', frame === 'on');
-      for (const k of ['size', 'color', 'weight', 'align']) {
-        const key = `look${k[0].toUpperCase()}${k.slice(1)}`;
-        if (st[k]) node.dataset[key] = st[k]; else delete node.dataset[key];
-      }
-    };
-    put(this.caption, this.styleOf('say'), 'off');
-    put(this.goalsEl, this.styleOf('goals'), 'on');
-    for (const [id, cur] of this.labelNodes) if (!this.scene.labels.get(id)?.dial) put(cur.node, this.styleOf(id), 'on');
-    for (const id of this.scene.shownIds()) {
-      const st = this.styleOf(id);
-      for (const n of this.root.querySelectorAll(`[data-obj="${CSS.escape(id)}"]`)) if (n.parentElement === this.layer) put(n, st, 'on');
-    }
-    return changed;
+    const r = applyLooks(this);
+    const note = r.refused.length ? `没照办的样子：${r.refused.join('；')}` : '';
+    if (note !== (this.scene.lookNote || '')) this.scene.lookNote = note;
+    return r.changed;
   }
   /** 能折行的东西（句子）折成几种宽时的世界大小；不能折、折了一样大的给 null */
   altsOf(id) {
@@ -2056,7 +2034,7 @@ export class Stage {
   async composeOnce({ animate }) {
     const sc = this.scene;
     // 老师写的样子先画上（大小变了要先重量一遍再排）
-    if (this.applyStyles()) {
+    if (this.applyLooks()) {
       this.composeQuiet = true;
       try { await this.sync({}); this.measure(); } finally { this.composeQuiet = false; }
     }
@@ -2086,7 +2064,7 @@ export class Stage {
       if (g) extras.push({ id: 'goals', ...g, ...(sc.layout.has('goals') ? (prevBox('goals') ? { prev: prevBox('goals') } : {}) : { fixed: { x: 0, y: 0, w: g.w, h: g.h } }) });
     }
     const partBox = (ref) => { try { return bbox(sc.parts(ref).map((p) => sc.partBox(p))); } catch { return null; } };
-    const { items, relations } = composeInput(sc, { ts, camS: baseS, grid, boxOf: (id) => this.unionBox(id), altsOf: (id) => this.altsOf(id), partBox, extras, lastTouched: this.lastTouched });
+    const { items, relations } = composeInput(sc, { ts, camS: baseS, grid, boxOf: (id) => this.unionBox(id), altsOf: (id) => this.altsOf(id), partBox, extras, lastTouched: this.lastTouched, tiedOf: (id) => { const o = sc.objects.get(id); return o ? sc.type(o).anchors?.(o) || [] : []; } });
     if (!items.length) { this.layoutState = { boxes: new Map(), unmet: [], scale: 1, grid, canvas: cv }; sc.layoutInfo = null; return false; }
     const res = solveLayout({ canvas: cv, grid, items, relations });
     const s = ts * res.scale;
@@ -2096,6 +2074,16 @@ export class Stage {
       if (it.rigid) continue;
       const B = res.boxes.get(it.id), o = sc.objects.get(it.id);
       if (!B || !o) continue;
+      if (it.members) {
+        // 排成一体的一组：每一样挪一样的距离
+        const G = bbox(it.members.map((m) => this.unionBox(m)));
+        const dx = B.x / s - G.x, dy = B.y / s - G.y;
+        for (const m of it.members) {
+          const om = sc.objects.get(m), em = sc.type(om).objectBox(om);
+          if (!om.placed || Math.abs(dx) > 0.6 || Math.abs(dy) > 0.6) moves.push({ id: m, x: em.x + dx, y: em.y + dy, width: null });
+        }
+        continue;
+      }
       const U = this.unionBox(it.id), est = sc.type(o).objectBox(o);
       let width = null;
       if (it.alts) {

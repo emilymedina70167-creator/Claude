@@ -119,7 +119,8 @@ await page.waitForTimeout(1200);
 expect('撤一步撤的是按「回到插入后」那一下：回到转完的样子', await levelT(), '30 20 45 10 25 40 47');
 
 // —— 第二轮的手势层画面（Task 11）：同一处三种按法分开（点、滑、按住 0.35 秒再拖）、从钩拉线、整张矩阵拖、✕ 收掉、摘叶子、拖一段 ——
-const srcs = () => page.evaluate(() => window.LAStage.log.map((r) => r.src));
+// 页面自己记的摆放（pos，第八轮）不算学生、老师的行
+const srcs = () => page.evaluate(() => window.LAStage.log.filter((r) => !/^pos /.test(r.src)).map((r) => r.src));
 const added = async (before) => (await srcs()).slice(before.length).join(' | ') || '没有';
 // 一样东西画在旁边的（括号 br:m2…、钩 hk:6、✕ xm:m3…、小方块 fold:…）：第一个键以 pre 开头的那一个在屏幕上的框
 const decorBox = (obj, pre) => page.evaluate(([obj, pre]) => {

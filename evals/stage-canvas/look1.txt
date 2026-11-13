@@ -1,0 +1,16 @@
+# 第九轮：老师改样子（不要框、话放大、一个词标色），学生拖错一下看反馈还在
+dial m = must options="不加 must can should may"
+sentence s = "The company {m: makes | must make | can make | should make | may make} a quick decision."
+place s main
+glow s.3-4
+card q = "这段要回答：谓语前面加上 must、can 这类词，谓语会怎么变？" "must 必须｜can 能够｜should 应该｜may 可能"
+place q below s
+array a = 5 3 8 1
+open a
+label n s.3 "情态动词" side=above tone=key
+goal g1 "拨到 can，看 make 变不变" when="m = can"
+look * frame=none
+look say text=28 color=brand
+look s.4 color=red weight=bold
+say "看亮着的两个词：must 进来以后，后面那个词和原来的 makes 比，哪里不一样了？"
+ask say "make 和 makes 比，少了什么？"

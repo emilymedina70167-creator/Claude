@@ -15,13 +15,14 @@ import { pickTarget, pressGroup } from '../../kit/src/stage/layout.js';
 import { formulaRows } from '../../kit/src/stage/answer.js';
 import css from '../../kit/src/stage/stage.css';
 import { viewCss, VIEWS } from '../../kit/src/stage/types/views.js';
+import { stageStyles } from '../../kit/src/stage/look/css.js';
 import katexCss from 'virtual:katex-css';
 import { scriptedLesson } from './scripted.js';
 import { liveLesson } from './live.js';
 import { FEELS, feelLesson, createPanel, refereeEntry } from './feel.js';
 
 const style = document.createElement('style');
-style.textContent = `${css}\n${viewCss()}`;
+style.textContent = stageStyles(`${css}\n${viewCss()}`);
 document.head.appendChild(style);
 // 式子（types/tex）用的 KaTeX 样式和字体
 const katexStyle = document.createElement('style');
@@ -38,10 +39,10 @@ let run = 0;
 // 真的手指那几种拿 pressGroup 核手指按得到、formulaRows 把按格的答案切成一格一格）
 if (q.has('dev')) window.LAStageDev = { acts: [], Stage, actText, turnMessage, gridsOf, createLoop, eventsText, goalStatus, HELP, dryRun, parseScript, gestureAct, askFor, writeRange, VIEWS, roleName, pickTarget, pressGroup, formulaRows };
 
-function fresh({ input, onAct = null }) {
+function fresh({ input, onAct = null, eyes = false }) {
   stage?.destroy();
   host.querySelectorAll('.st-error').forEach((n) => n.remove());
-  stage = new Stage(host, { input, onAct: (a) => { window.LAStageDev?.acts.push(a); onAct?.(a); } });
+  stage = new Stage(host, { input, eyes, onAct: (a) => { window.LAStageDev?.acts.push(a); onAct?.(a); } });
   window.LAStage = stage;
   return stage;
 }
@@ -65,11 +66,12 @@ async function startScripted() {
 }
 
 async function startLive(topic) {
+  // Opus 上课（样子页）：老师每轮看画面
   const my = ++run;
   hideMenu();
   feelOff();
   hud({ title: topic.title });
-  const st = fresh({ input: true });
+  const st = fresh({ input: true, eyes: true });
   try {
     await liveLesson(st, topic, { alive: () => my === run, mock: MOCK, status: (s) => my === run && hud({ title: topic.title, ...s }), thinking: (on, round) => my === run && think(on, round) });
   } catch (err) { think(false); showError(err); }

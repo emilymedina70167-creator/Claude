@@ -15,6 +15,7 @@ import { parseScript, parseRef, parseRich, addCommands, OPTIONS, optionError } f
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
 import { parseAt, COLS } from './compose/grid.js';
+import { parseLook, lookWords, lookName, FIXED } from './look/spec.js';
 // numOf：数（整数、小数、分数 -3/4，′ 和真的减号也认），比大小用；和挑战判数是同一个
 import { splitPicks, checkPick, varText, pickDeps, wordDialError, VERB, verbFact } from './pick.js';
 import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure, numOf, isExpr, exprMeasure } from './goal.js';
@@ -98,16 +99,18 @@ export const pidOf = (p) => `${p.obj}:${p.key}`;
 /** 这一行的原文（跟着算的东西记着它；行首的 & 不要） */
 const lineOf = (c) => String(c.src ?? '').trim().replace(/^&\s*/, '');
 /** 整样东西挪一挪（另起一列、show 摆回来）：origin 是左上角（x），式子是横着的中线（cx）；别的位置都跟着 origin 算 */
-// 样子写给老师的一句（第八轮补）：样子：话 带框、大字；q 不带框
-const STYLE_WORDS = { frame: { on: '带框', off: '不带框' }, size: { s: '小字', m: '中字', l: '大字', xl: '特大字' }, weight: { bold: '粗体', normal: '常规粗细' }, align: { left: '靠左', center: '居中' } };
-const STYLE_NAMES = { say: '话', goals: '挑战', all: '全部' };
-function styleLine(sc) {
-  const parts = [];
-  for (const [n, st] of sc.styles) {
-    if (!['say', 'goals', 'all'].includes(n) && !sc.objects.has(n) && !sc.labels.has(n)) continue;
-    const bits = Object.entries(st).map(([k, v]) => (k === 'color' ? `${v} 色` : STYLE_WORDS[k]?.[v] || `${k}=${v}`));
-    if (bits.length) parts.push(`${STYLE_NAMES[n] || n} ${bits.join('、')}`);
+// 样子写给老师的一句（第九轮）：样子：q 不带框；话 卡片、字 24（老师写过的，按目标并起来；指着没了的东西的不写）
+function lookLine(sc) {
+  const seen = new Map();
+  for (const l of sc.looks) {
+    const obj = parseRef(l.target)?.obj;
+    if (l.rank >= 2 && !FIXED.includes(l.target) && !sc.objects.has(l.target) && !sc.labels.has(l.target) && !(obj && sc.objects.has(obj)) && !sc.drawings?.has(l.target)) continue;
+    const cur = seen.get(l.target) || { props: {}, hide: null };
+    Object.assign(cur.props, l.props);
+    if (l.hide != null) cur.hide = l.hide;
+    seen.set(l.target, cur);
   }
+  const parts = [...seen].map(([t, v]) => `${lookName(t)} ${lookWords(v.props, v.hide)}`.trim()).filter((x) => !/ $/.test(x));
   return parts.length ? `样子：${parts.join('；')}` : '';
 }
 function shiftObject(o, dx, dy) {
@@ -242,8 +245,8 @@ export class Scene {
     this.focus = null; // null = 全部；或者部件的写法
     // 构图意图（第八轮）：老师写的 place / say near= 存成关系，id → [rel]（rel 的样子见 compose/solve.js）；'say' 是这一轮的话
     this.layout = new Map();
-    // 样子（第八轮补）：名字（say / goals / all / 东西 / 贴的字）→ { frame, size, color, weight, align }，画面照它画
-    this.styles = new Map();
+    // 样子（第九轮：画面归老师）：老师写的 look，一条 { target, rank, props, hide }，按写的先后（look/spec.js 的 resolveLook 合并）
+    this.looks = [];
     this.say = '';
     this.words = []; // 这一句话里能飞走的 [词]
     this.waiting = null; // { kind, refs, prompt, button, expect, answer, pre（预写的行挂的：课堂循环看学生手上还有没有事用）, exam / like（真题题号）, shownAt }
@@ -297,7 +300,8 @@ export class Scene {
     s.binds = this.binds.map((b) => ({ ...b }));
     s.focus = this.focus ? [...this.focus] : null;
     s.layoutInfo = this.layoutInfo ? [...this.layoutInfo] : null;
-    s.styles = new Map([...this.styles].map(([k, v]) => [k, { ...v }]));
+    s.looks = this.looks.map((l) => ({ ...l, props: { ...l.props } }));
+    s.lookNote = this.lookNote || '';
     s.layout = new Map([...this.layout].map(([k, rs]) => [k, rs.map((r) => ({ ...r, ...(Array.isArray(r.a) ? { a: [...r.a] } : {}) }))]));
     s.say = this.say;
     s.words = [...this.words];
@@ -1881,25 +1885,33 @@ export class Scene {
         }
         return { moved };
       }
+      case 'look': {
+        // look say frame=none text=24 / look card frame=none / look s.3 color=g2 / look goals hide / look * frame=none always：
+        // 画面上每样东西长什么样都由老师定（第九轮）。只改画法，不改内容、不改位置；画面照它画（look/apply.js）
+        const has = {
+          object: (w) => this.objects.has(w), label: (w) => this.labels.has(w), draw: (w) => !!this.drawings?.has(w),
+          part: (w) => { const r = parseRef(w); if (!r?.mark || !this.objects.has(r.obj)) return false; try { return this.parts(w).length > 0; } catch { return false; } },
+        };
+        const L = parseLook(words, opts, has);
+        if (L.hide != null) for (const t of L.targets) if (this.objects.has(t.name) || t.rank === 3) throw new Error(`东西藏起来、摆出来用 ${L.hide ? 'hide' : 'show'} ${t.name}（底座的写法：照样算、现状照写）；look 的 hide 只给 say goals、贴的字、画的东西`);
+        const entries = L.targets.map((t) => ({ target: t.name, rank: t.rank, props: { ...L.props }, hide: L.hide }));
+        if (L.reset) {
+          const names = new Set(L.targets.map((t) => t.name));
+          this.looks = this.looks.filter((l) => !names.has(l.target));
+        } else this.looks.push(...entries);
+        return { look: { targets: L.targets.map((t) => t.name), reset: L.reset, ...(L.always ? { always: entries.map(({ target, props, hide }) => ({ target, props, hide })) } : {}) } };
+      }
       case 'style': {
-        // style say frame=off size=l / style q n frame=off / style all frame=off：样子也由老师定（第八轮补，2026-11-13 学生说字旁边都有框不舒服，
-        // 老师只能说「那是页面画的，我改不了」）。只改画法，不改内容、不改位置
-        const names = words;
-        if (!names.length || !Object.keys(opts).length) throw new Error('要写成 style 名字… frame=on/off size=s/m/l/xl color=ink/muted/brand/g1…g6 weight=normal/bold align=left/center（名字写 say、goals、all、东西或贴的字的名字）');
-        const TEXTY = (n) => n === 'say' || n === 'goals' || n === 'all' || this.labels.has(n) || this.objects.get(n)?.type === 'card';
-        for (const n of names) {
-          if (n !== 'say' && n !== 'goals' && n !== 'all' && !this.objects.has(n) && !this.labels.has(n)) throw new Error(`style 写的「${n}」：舞台上没有「${n}」（写 say、goals、all，或者东西、贴的字的名字）`);
-          if ((opts.size != null || opts.color != null || opts.weight != null || opts.align != null) && !TEXTY(n)) throw new Error(`size= color= weight= align= 只能用在话（say）、挑战（goals）、贴的字、题卡上：「${n}」多大由它自己的内容定（要凑近看用 camera ${n}）；它能写 frame=`);
+        // 第八轮补的写法：照旧收，换成等价的 look（frame on/off → card/none，size s/m/l/xl → 字 15/19/24/30）
+        const map = { frame: { on: 'card', off: 'none' }, size: { s: '15', m: '19', l: '24', xl: '30' } };
+        const o2 = {};
+        for (const [k, v] of Object.entries(opts)) {
+          if (k === 'size') o2.text = map.size[v] ?? v;
+          else if (k === 'frame') o2.frame = map.frame[v] ?? v;
+          else o2[k] = v;
         }
-        const VALUES = { frame: ['on', 'off'], size: ['s', 'm', 'l', 'xl'], color: ['ink', 'muted', 'brand', ...COLORS], weight: ['normal', 'bold'], align: ['left', 'center'] };
-        const got = {};
-        for (const [k, list] of Object.entries(VALUES)) {
-          if (opts[k] == null) continue;
-          if (!list.includes(opts[k])) throw new Error(`${k}= 只能写 ${list.join(' / ')}`);
-          got[k] = opts[k];
-        }
-        for (const n of names) this.styles.set(n, { ...(this.styles.get(n) || {}), ...got });
-        return { style: names };
+        const ws = words.map((w) => (w === 'all' ? '*' : w));
+        return this.applyOne({ ...c, cmd: 'look', args: ws.map((v) => ({ t: 'word', v })), opts: o2 });
       }
       case 'preview': {
         // preview：这一轮排好先给老师看一眼示意图（第八轮），画面上不演什么
@@ -2057,7 +2069,8 @@ export class Scene {
 
   dropObject(id, { keepLabels = false, keepPlace = false, keepSaves = false } = {}) {
     // 构图里指着它的关系跟着没了（row / col 只剩一样就不算了）
-    if (!keepPlace) this.styles.delete(id);
+    // 指着它（或它的部件）的样子跟着没了
+    if (!keepPlace) this.looks = this.looks.filter((l) => l.target !== id && parseRef(l.target)?.obj !== id);
     if (!keepPlace && this.layout.size) {
       const next = new Map();
       for (const rs of this.layout.values()) for (const r0 of rs) {
@@ -2443,8 +2456,9 @@ export class Scene {
     if (!this.objects.size) lines.push('舞台上还是空的。');
     // 版面（第八轮）：页面的求解器摆成了什么样（舞台每次摆完写在 layoutInfo 上）
     else if (this.layoutInfo?.length) lines.push(...this.layoutInfo);
-    const looks = styleLine(this);
+    const looks = lookLine(this);
     if (looks) lines.push(looks);
+    if (this.lookNote) lines.push(this.lookNote);
     const hints = new Set();
     for (const o of this.objects.values()) { const t = typeOf(o); if (t.hint) hints.add(t.hint); }
     for (const h of hints) lines.push(h);

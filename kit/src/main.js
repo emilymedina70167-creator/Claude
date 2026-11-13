@@ -20,6 +20,7 @@ import huobanCss from './huoban/huoban.css';
 import stageCss from './stage/stage.css';
 import stageClassCss from './stage/class.css';
 import { viewCss as stageViewCss } from './stage/types/views.js';
+import { stageStyles } from './stage/look/css.js';
 import classIosCss from './class/ios.css';
 import { themeOf, storedTheme, applyTheme, DESK_DEFAULT } from './theme.js';
 import { VERSION } from './version.js';
@@ -60,7 +61,7 @@ function injectStyles() {
   document.body.insertAdjacentHTML('afterbegin', CHALK_FILTER);
   const style = document.createElement('style');
   style.id = 'la-kit-style';
-  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + deskCss + '\n' + huobanCss + '\n' + stageCss + '\n' + stageViewCss() + '\n' + stageClassCss + '\n' + themesCss + '\n' + classIosCss;
+  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + deskCss + '\n' + huobanCss + '\n' + stageStyles(stageCss + '\n' + stageViewCss()) + '\n' + stageClassCss + '\n' + themesCss + '\n' + classIosCss;
   document.head.appendChild(style);
   if (!document.querySelector('meta[name="viewport"]')) {
     const m = document.createElement('meta');

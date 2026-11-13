@@ -14,7 +14,7 @@ const TALK = ['say', 'ask'];
 const HAND = ['open', 'close', 'goal', 'watch', 'follow', 'keep', 'back', 'pick', 'unpick', 'press'];
 const TIDY = ['remove', 'clear', 'ungoal', 'hide', 'scene'];
 // 第八轮的构图：摆哪、先看一眼，都是搭
-const LAYOUT = ['place', 'preview', 'pos', 'style'];
+const LAYOUT = ['place', 'preview', 'pos', 'style', 'look'];
 const SHOW = [
   'glow', 'lift', 'drop', 'paint', 'link', 'pulse', 'label', 'retext', 'camera', 'wait', 'fly', 'dim', 'cover', 'uncover', 'show', 'compare', 'dial', 'set',
   'hop', 'ptr', 'group', 'pivot', 'stairs', 'tag', 'bf', 'heights', 'deg', 'mark', 'tally', 'magnify', 'strike', 'span', 'visit', 'choose', 'search', 'tick', 'cross',

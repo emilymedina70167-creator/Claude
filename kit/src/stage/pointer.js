@@ -62,6 +62,13 @@ export class PointerRouter {
     for (const [id, t] of this.targets) { let rect = null; try { rect = t.rect(); } catch { rect = null; } if (rect) cands.push({ id, t, prio: t.prio || 0, rect }); }
     // 同一处（同一个框、同一档 prio）挂着的几种按法，每种取先挂的那一个（和以前 pickTarget 一样谁先挂谁先）；
     // 正在等的那一问的点挑中了、手指又按在低一档的拖的框里：拖也算这一处的一种按法（layout.js 的 pressGroup）
+    // 手指正按在一样东西的一个部件上、而它没交给学生（表里给定的格、句子里没开的词）：不往旁边找（按偏的宽容只给按在空处的一下）。
+    // 第八轮起字号固定一档、东西挨得近，以前按在给定的格上会被算成旁边的空格（主线第三轮的真手指检查）
+    const inside = cands.filter((c) => pt.x >= c.rect.x && pt.x <= c.rect.x + c.rect.w && pt.y >= c.rect.y && pt.y <= c.rect.y + c.rect.h);
+    if (!inside.length && typeof document !== 'undefined') {
+      const under = document.elementFromPoint?.(e.clientX, e.clientY)?.closest?.('[data-obj]');
+      if (under?.__pid) return;
+    }
     const g = pressGroup(pt, cands, { radius: e.pointerType === 'touch' ? FINGER : PEN });
     if (!g) return;
     const { hit, by } = g;

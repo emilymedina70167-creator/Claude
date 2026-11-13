@@ -73,7 +73,7 @@ export async function renderStageClass(root, meta = {}, desk) {
 
   const sink = readOnly ? null : createSink(store, { evidence: (rec) => ({ session: sid, block: desk.block, turn: rec?.turn }) });
   // 幕条放在顶上那一条里（课名和「下课」之间，本来就空着；主线第六轮 3.4）
-  const stage = new Stage($('.sc-stage'), { input: !readOnly, onAct: (a) => onAct(a), scenesHost: $('.sc-scenes-slot') });
+  const stage = new Stage($('.sc-stage'), { input: !readOnly, onAct: (a) => onAct(a), scenesHost: $('.sc-scenes-slot'), eyes: !readOnly });
   stage.lessonTitle = meta.unit || desk.title || '开头';
   window.LAStage = stage;
   // 这门课的考试资料（desk.js 按门课读，不等它）：读到了以后 exam= / like= 写了库里没有、留作模考的当场报
