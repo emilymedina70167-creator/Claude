@@ -322,7 +322,7 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 - 预览：老师写 `preview`，演完页面把版面（几行 + 一格一个字的图）当一条交回、马上再叫老师（`why: preview`，一节课最多 6 次）。
 - 验收：`tests/stage-compose-*.test.js`；四个时刻的试演 `evals/stage-gaps/new8/m1–m4.txt`；e2e 的 stage 段多「测试:预览」。
 
-## 第九轮（2026-11-13 第一、二批做完）：画面归老师（和 CLAUDE.md 里的「课堂助手」是两件事）
+## 第九轮（2026-11-13 三批做完）：画面归老师（和 CLAUDE.md 里的「课堂助手」是两件事）
 
 设计 `docs/superpowers/specs/2026-11-13-stage-canvas-design.md`，计划 `docs/superpowers/plans/2026-11-13-stage-canvas.md`。起因：第八轮真课里话、题卡都带框，学生说不舒服，老师只能说「那是页面画的，我改不了」。
 
@@ -332,7 +332,7 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 - 顺手修的第八轮毛病：乘积和两个因子当一块摆（`composeInput` 的 `tiedOf`）；已经摆好的不被「能让就让」拽来拽去（`W_STAB` 1e3）；按在没交出去的部件上不算成旁边的（`pointer.js`）。
 - 检查：`tests/stage-snap / stage-look-spec / stage-look-css / stage-compose-pin`，`tools/stage-look-check.mjs`（进 `npm run check:stage`），e2e 舞台段查老师每轮收到图。
 - 第二批（做完）：`scale`（每个节点 CSS 的 scale，场景的 `worldPartBox` / `worldObjectBox` / `toLocal`，拖的落点换回去）、`draw` / `erase`（`stage/draw.js`）、一直用的样子（`look … always` → `meta/look`，开课叠上，管理 → 样子里能删）、`look bar`。第六轮的收放栏代码留着（自由构图时开不起来）。修的：去框只去像框的（轴这种用底色画的线留着）；能挪的压着挪不动的去四边里有空地的那一边。
-- 第三批：设计要求单 30 条（`evals/stage-canvas/requests.json`，`tools/stage-canvas-eval.mjs prepare|apply`）。
+- 第三批（做完）：设计要求单 30 条（`evals/stage-canvas/requests.json`，`tools/stage-canvas-eval.mjs prepare|apply`），三个评卷人看前后两张截图：20 → 27 / 30，剩下的 3 条修了两条、一条是老师的理解（`evals/stage-canvas/results.md`）。这一批修的：挨着的那一样钉着放不下时一起重排或先让开、没照办的方向一直写着、`place say` 留着、题卡能折窄、放大放不下往回收并照实说、圈一小格只圈中间、「出了屏幕」照画布真的大小算。
 
 ## ③ ④ 建议的顺序
 
