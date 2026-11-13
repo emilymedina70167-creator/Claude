@@ -47,3 +47,6 @@ body.is-stage-class .ink-fab, body.is-stage-class .la-tray { display: none !impo
 .sc-scenes-slot { flex: 1 1 auto; min-width: 0; display: flex; justify-content: center; }
 .sc-scenes-slot:empty, .sc-scenes-slot:has(> .st-scenes[hidden]) { flex: 0 0 0; }
 .sc-top:has(.st-scenes:not([hidden])) .sc-title { flex: 0 1 auto; max-width: 24%; }
+/* 舞台课整屏（2026-11-13 我说还是挤在中间）：课堂开在学习台的 .la-lesson 里，它带着学习台的最大宽（860，横屏 1120）和左右留白，
+   position: fixed 的整块课堂也被它卡成中间一条。课堂里不要这几条 */
+.la-lesson.sc-root, .la-lesson.is-desk.sc-root { max-width: none; width: auto; margin: 0; padding: 0; }
