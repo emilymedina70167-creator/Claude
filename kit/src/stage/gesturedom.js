@@ -149,7 +149,8 @@ export function armGesture(stage, e, view, done) {
     return popup;
   };
   // 挂到 pointer.js 上的一个：name 是把手的 key（检查脚本找 ✕、钩的点区用），how 是按法（同一处几种时 pointer.js 照它分）
-  const add = (grip, kind, t) => stage.pointer.add({ prio: 1, rect: () => rectOf(stage, grip), name: grip.key, how: PRESS_OF[kind] || 'tap', ...t });
+  // obj：拖的落点换到这样东西自己的坐标（scale 过的东西，第九轮）
+  const add = (grip, kind, t) => stage.pointer.add({ prio: 1, rect: () => rectOf(stage, grip), name: grip.key, how: PRESS_OF[kind] || 'tap', obj: e.obj, ...t });
 
   // —— 点一下（tap）、点一格写一个值（write）——
   const tapTarget = (grip, kind) => add(grip, kind, {

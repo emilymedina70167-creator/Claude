@@ -17,7 +17,7 @@ export const COMMANDS = new Set([
   'label', 'retext', 'unlabel', 'dial', 'set', 'camera', 'wait', 'ask', 'clear', 'fly', 'remove',
   'dim', 'undim', 'cover', 'uncover',
   'open', 'close', 'goal', 'ungoal', 'watch', 'follow', 'hide', 'show', 'pick', 'unpick', 'keep', 'back', 'press',
-  'scene', 'place', 'preview', 'pos', 'style', 'look', 'arrange',
+  'scene', 'place', 'preview', 'pos', 'style', 'look', 'arrange', 'scale', 'draw', 'erase',
 ]);
 export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
 
@@ -33,6 +33,7 @@ export const OPTIONS = {
   // 样子也由老师定（第八轮补）：带不带框、多大、什么颜色、粗细、对齐
   style: ['frame', 'size', 'color', 'weight', 'align'],
   // 第九轮：画面上每样东西的样子（look/spec.js 的 PROPS）
+  draw: ['from', 'to', 'on', 'under', 'over', 'at', 'color'],
   look: ['frame', 'bg', 'edge', 'radius', 'shadow', 'pad', 'text', 'font', 'weight', 'color', 'align', 'opacity'], dial: ['range', 'at', 'options'], pick: ['reveal'], keep: ['after'],
   open: ['back', 'wrong', 'call', 'undo', 'input', 'range', 'choices'],
   // exam= / like=：这一问、这条挑战是哪一道真题 / 对标哪一道真题（考情第 4 批；写法在「这一块在考试里」那一节里，不进 stageDoc）

@@ -322,6 +322,17 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 - 预览：老师写 `preview`，演完页面把版面（几行 + 一格一个字的图）当一条交回、马上再叫老师（`why: preview`，一节课最多 6 次）。
 - 验收：`tests/stage-compose-*.test.js`；四个时刻的试演 `evals/stage-gaps/new8/m1–m4.txt`；e2e 的 stage 段多「测试:预览」。
 
+## 第九轮（2026-11-13 第一批做完）：画面归老师
+
+设计 `docs/superpowers/specs/2026-11-13-stage-canvas-design.md`，计划 `docs/superpowers/plans/2026-11-13-stage-canvas.md`。起因：第八轮真课里话、题卡都带框，学生说不舒服，老师只能说「那是页面画的，我改不了」。
+
+- **眼**：每轮叫老师时带一张这一刻的画面图（`stage/snap.js`，html2canvas-pro；画面静下来后台拍，要发时画面又变了当场拍、最多等 0.5 秒；拍不出来写一句、附字画版面）。只在真叫老师的地方拍（`new Stage(…, { eyes: true })`：课堂、样子页的 Opus 上课）。花费记 `cost.img`。iPad Safari 实测 93 毫秒。
+- **样子**：`look 目标… 属性=值… [hide|show] [always] [reset]`（`stage/look/spec.js`：目标 `*` < 种类名 < 东西、贴的字、say goals dock bar < 部件；属性 frame bg edge radius shadow pad text font weight color align opacity，值都是有名字的档）。`look/apply.js` 写成行内样式；底座的反馈规则另抄一份加 !important（`look/css.js` 的 `stageStyles`），老师的样子盖不掉反馈。话默认不带框（`DEFAULT_LOOK`）。底线 1：底下那一条、交给学生的部件不能藏、不能淡到 0.6 以下，不照办并在现状写一句。第八轮补的 `style` 照旧收（换成等价的 look）。
+- **位置**：`place` 过的东西钉住（`o.pinned`），页面不挪；`arrange [名字…]` 才重排；钉住的压着、出了屏幕在「版面」里照实写；学生要点的部件被盖住时放开挡着的那一样挪最少（`stage.floorNudge`）。台上有钉住的东西时页面不整台缩。
+- 顺手修的第八轮毛病：乘积和两个因子当一块摆（`composeInput` 的 `tiedOf`）；已经摆好的不被「能让就让」拽来拽去（`W_STAB` 1e3）；按在没交出去的部件上不算成旁边的（`pointer.js`）。
+- 检查：`tests/stage-snap / stage-look-spec / stage-look-css / stage-compose-pin`，`tools/stage-look-check.mjs`（进 `npm run check:stage`），e2e 舞台段查老师每轮收到图。
+- 第二批（还没做）：`scale`、`draw`、一直用的样子存 `meta/look`、顶上那一条、删第六轮的收放栏；第三批：设计要求单 30 条。
+
 ## ③ ④ 建议的顺序
 
 量出来的两件事改了原来的想法：搭的字只占 6%，等的时间九成在出第一个字之前。所以接下来不按「哪种搭的字多」排，按「老师想教却教不成的」和「页面还在说不准的」排。

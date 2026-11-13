@@ -623,6 +623,9 @@ const SUITES = {
     check((await turns()).some((x) => x.role === 'student' && /\[预览\][\s\S]*版面（48 列/.test(x.msg || '')), '预览交回老师的那一条里没有版面');
     check(await t.page.evaluate(() => /版面（48 列/.test(window.LAStage.scene.stateText())), '舞台现状里没有「版面」');
     await t.waitFor(() => t.page.evaluate(() => window.LAStage?.scene.waiting?.button === '看好了'), { timeout: 30000, what: '预览以后的那一轮演完、等学生点「看好了」' });
+    // 一直用的样子（第九轮）：老师写 look * frame=none always → meta/look 记下了
+    await said('测试:不要框');
+    await t.waitFor(async () => ((await t.db())['meta/look']?.looks || []).some((l) => l.target === '*' && l.props?.frame === 'none'), { timeout: 30000, what: 'look * frame=none always 存进 meta/look' });
     // 老师的眼睛（第九轮）：每轮调用都带着一张画面图，花费里记了图多大
     check(await t.page.evaluate(() => window.LAStageDev?.lastImages === 1), `老师那一轮没收到画面图（收到 ${await t.page.evaluate(() => window.LAStageDev?.lastImages)} 张）`);
     check((await turns()).some((x) => x.role === 'claude' && x.cost?.img > 0), '花费里没记画面图');

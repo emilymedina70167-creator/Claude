@@ -104,3 +104,27 @@ export function lookWords(props, hide) {
   return bits.join('、');
 }
 export const lookName = (t) => NAMES[t] || t;
+
+/** 一直用的样子（look … always）这一条是哪一档（* 0、种类名 1、固定的几块 2） */
+export const alwaysRank = (target) => (target === '*' ? 0 : KINDS.includes(target) ? 1 : 2);
+
+/**
+ * 一直用的样子（存在 meta/look，每节课开课先叠上）：prev 是 [{ target, props, hide }]；change 是 look 那一行交出来的
+ * { always: [同样子的几条], reset, targets }。加的同一个目标合并，reset 撤掉那几个目标。纯函数
+ */
+export function alwaysLooks(prev = [], change = {}) {
+  let next = prev.map((l) => ({ ...l, props: { ...(l.props || {}) } }));
+  if (change.reset) {
+    const gone = new Set(change.targets || (change.always || []).map((x) => x.target));
+    return next.filter((l) => !gone.has(l.target));
+  }
+  for (const a of change.always || []) {
+    if (alwaysRank(a.target) === 2 && !FIXED.includes(a.target)) continue;
+    const cur = next.find((l) => l.target === a.target);
+    if (cur) { Object.assign(cur.props, a.props || {}); if (a.hide != null) cur.hide = a.hide; }
+    else next.push({ target: a.target, props: { ...(a.props || {}) }, hide: a.hide ?? null });
+  }
+  return next;
+}
+/** 存着的一直用的样子 → 叠在默认样式表上的那几条（带档） */
+export const baseLooksOf = (list = []) => list.map((l) => ({ target: l.target, rank: alwaysRank(l.target), props: { ...(l.props || {}) }, hide: l.hide ?? null, base: true }));

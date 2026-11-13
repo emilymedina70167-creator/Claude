@@ -4,7 +4,7 @@
 // 底线 1：学生要点的东西（底下那一条、交出去的部件）不能藏、不能淡到 0.6 以下——那一项不写，记进 refused 告诉老师。
 
 import { resolveLook, DEFAULT_LOOK, lookName } from './spec.js';
-import { lookStyle } from './css.js';
+import { lookStyle, COLOR_VAR } from './css.js';
 
 const SVG = (n) => typeof SVGElement !== 'undefined' && n instanceof SVGElement;
 
@@ -31,7 +31,7 @@ export function applyLooks(stage) {
   };
   // 学生要点的部件：交出去的（open）、这一问点的
   const needed = new Set();
-  for (const e of sc.opens?.values?.() || []) for (const r of e.refs || []) { try { for (const p of sc.parts(r)) needed.add(stage.nodeOf?.(p)); } catch { /* 没了 */ } }
+  for (const e of sc.opens?.values?.() || []) for (const r of e.refs?.length ? e.refs : [e.obj]) { try { for (const p of sc.parts(r)) needed.add(stage.nodeOf?.(p)); } catch { /* 没了 */ } }
   const floor = (name, props) => {
     if (props.opacity && Number(props.opacity) < 0.6) { refused.push(`${lookName(name)} 不能淡到 ${props.opacity}（学生要点它；最淡 0.6）`); const { opacity, ...rest } = props; return rest; }
     return props;
@@ -66,6 +66,15 @@ export function applyLooks(stage) {
     delete st['font-size'];
     write(stage.dock, st);
   }
+  // 顶上那一条（课堂里才有）：返回、下课在上面——不能藏、不能太淡
+  if (stage.barEl) {
+    let { props, hide } = resolveLook(looks, { name: 'bar' });
+    if (hide) refused.push('顶上那一条不能藏（上面有回学习台、下课）');
+    props = floor('bar', props);
+    const st = lookStyle(props, 'block');
+    delete st['font-size'];
+    write(stage.barEl, st);
+  }
   // 贴的字、拨盘
   for (const [id, cur] of stage.labelNodes || []) {
     const lab = sc.labels.get(id);
@@ -77,6 +86,18 @@ export function applyLooks(stage) {
     if (hide && !lab.dial) st.visibility = 'hidden';
     if (hide && lab.dial) refused.push(`拨盘 ${id} 不能藏（学生要拨它）`);
     write(cur.node, st);
+  }
+  // 老师画的（draw）：颜色、粗细、淡、藏
+  for (const [name, g] of stage.drawNodes || []) {
+    const { props, hide } = resolveLook(looks, { name, kind: 'draw' });
+    const st = {};
+    const c = props.color || props.edge;
+    if (c && COLOR_VAR[c]) st.color = COLOR_VAR[c];
+    if (props.edge === 'thick') st['--draw-w'] = '3.6';
+    if (props.edge === 'thin') st['--draw-w'] = '1.6';
+    if (props.opacity) st.opacity = props.opacity;
+    if (hide) st.visibility = 'hidden';
+    write(g, st);
   }
   // 东西的每个节点（部件的盖在整样东西上）
   const partLooks = looks.filter((l) => l.rank === 3);

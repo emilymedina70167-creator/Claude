@@ -53,7 +53,7 @@ export function stageStyles(css) {
   return `${css}\n/* 底座的反馈永远在老师的样子上面（look/css.js） */\n${importantState(splitState(css).state)}`;
 }
 
-const COLOR_VAR = { ink: 'var(--st-ink)', muted: 'var(--st-muted)', brand: 'var(--st-brand)', gold: 'var(--st-gold)', red: 'var(--st-red)',
+export const COLOR_VAR = { ink: 'var(--st-ink)', muted: 'var(--st-muted)', brand: 'var(--st-brand)', gold: 'var(--st-gold)', red: 'var(--st-red)',
   g1: 'var(--st-g1)', g2: 'var(--st-g2)', g3: 'var(--st-g3)', g4: 'var(--st-g4)', g5: 'var(--st-g5)', g6: 'var(--st-g6)' };
 const DROP = '0 10px 26px -18px rgb(var(--shade-rgb, 25 45 40) / 0.45)';
 const FONT = { sans: 'var(--sans, sans-serif)', serif: 'var(--display, serif)', hand: 'var(--hand, cursive)', mono: 'ui-monospace, "SF Mono", Menlo, monospace' };

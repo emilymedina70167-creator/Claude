@@ -32,6 +32,7 @@ import { textbookForClass } from '../books/textbook.js';
 import { reportError } from '../errlog.js';
 import { choose } from '../dialog.js';
 import { stageMock } from './devteacher.js';
+import { alwaysLooks, baseLooksOf } from './look/spec.js';
 import { VERSION } from '../version.js';
 import { supRuns, escapeHtml } from '../render.js';
 
@@ -73,7 +74,7 @@ export async function renderStageClass(root, meta = {}, desk) {
 
   const sink = readOnly ? null : createSink(store, { evidence: (rec) => ({ session: sid, block: desk.block, turn: rec?.turn }) });
   // 幕条放在顶上那一条里（课名和「下课」之间，本来就空着；主线第六轮 3.4）
-  const stage = new Stage($('.sc-stage'), { input: !readOnly, onAct: (a) => onAct(a), scenesHost: $('.sc-scenes-slot'), eyes: !readOnly });
+  const stage = new Stage($('.sc-stage'), { input: !readOnly, onAct: (a) => onAct(a), scenesHost: $('.sc-scenes-slot'), barEl: $('.sc-top'), eyes: !readOnly });
   stage.lessonTitle = meta.unit || desk.title || '开头';
   window.LAStage = stage;
   // 这门课的考试资料（desk.js 按门课读，不等它）：读到了以后 exam= / like= 写了库里没有、留作模考的当场报
@@ -325,6 +326,15 @@ export async function renderStageClass(root, meta = {}, desk) {
   const live = history.filter((t) => !t.discarded);
   const closingTurn = live.find((t) => t.kind === 'closing');
   const log = live.filter((t) => t.role === 'claude' || t.role === 'student').flatMap((t) => logOf(t).map((r) => ({ ...r, turn: t.seq })));
+  // 一直用的样子（第九轮：look … always 存在 meta/look）：先叠上再放回这节课，题卡一出来就是学生要的样子
+  try { stage.baseLooks = baseLooksOf((await desk.look?.read?.()) || []); } catch { stage.baseLooks = []; }
+  if (!readOnly && desk.look?.write) stage.onLookAlways = async (change) => {
+    try {
+      const next = alwaysLooks((await desk.look.read()) || [], change);
+      await desk.look.write(next);
+      stage.baseLooks = baseLooksOf(next);
+    } catch (err) { reportError(err, { what: '存一直用的样子（meta/look）' }); }
+  };
   if (log.length) await stage.replay(log);
   if (closingTurn) {
     ended = true;

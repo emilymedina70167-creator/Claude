@@ -410,3 +410,13 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-talk-line .st-ch { white-space: pre; }
 .st-talk-line.is-ask { font-weight: 650; }
 .st-talk-sep { border: 0; border-top: .5px solid var(--st-line); margin: 10px 0; }
+
+/* 老师自己画的（draw，第九轮）：手绘的线、字、示意图；颜色写名字（data-color），look 能改 */
+.st-draw { color: var(--st-ink); }
+.st-draw[data-color="brand"] { color: var(--st-brand); } .st-draw[data-color="red"] { color: var(--st-red); } .st-draw[data-color="gold"] { color: var(--st-gold); }
+.st-draw[data-color="muted"] { color: var(--st-muted); } .st-draw[data-color="g1"] { color: var(--st-g1); } .st-draw[data-color="g2"] { color: var(--st-g2); }
+.st-draw[data-color="g3"] { color: var(--st-g3); } .st-draw[data-color="g4"] { color: var(--st-g4); } .st-draw[data-color="g5"] { color: var(--st-g5); } .st-draw[data-color="g6"] { color: var(--st-g6); }
+.st-draw > path { fill: none; stroke: currentColor; stroke-width: var(--draw-w, 2.4); stroke-linecap: round; stroke-linejoin: round; }
+.st-draw > text { fill: currentColor; stroke: none; font: 600 18px/1 var(--sans, sans-serif); }
+.st-draw .sk { fill: none; stroke: currentColor; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.st-draw .sk-text, .st-draw .sk-fill { fill: currentColor; }

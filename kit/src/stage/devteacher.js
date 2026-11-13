@@ -57,6 +57,11 @@ preview`;
 const AFTER_PREVIEW = `say "排好了，接着讲。"
 ask next "看好了点这里" button="看好了"`;
 
+// 学生说「测试:不要框」：模拟老师写一直用的样子（第九轮：look … always 存 meta/look，以后每节课开课先叠上）
+const NOFRAME = `look * frame=none always
+say "好，以后都不带框。"
+ask next "看好了点这里" button="看好了"`;
+
 const END = `say "那今天就到这里。"
 ask end "今天先到这里？"`;
 
@@ -74,7 +79,7 @@ export function stageMock({ pace = 60 } = {}) {
     const last = String(messages.at(-1)?.content || '');
     const k = messages.filter((m) => m.role === 'assistant').length;
     // 学生说「测试:下课」：模拟老师照说明把「下课吗？」递给学生（ask end，e2e 的 stage 段）
-    const text = /舞台课：小结写成几行字/.test(last) ? CLOSING : /学生说：「测试:下课」/.test(last) ? END : /学生说：「测试:分幕」/.test(last) ? SCENE : /学生说：「测试:预览」/.test(last) ? PREVIEW : /\[预览\]/.test(last) ? AFTER_PREVIEW : TURNS[Math.min(k, TURNS.length - 1)](last);
+    const text = /舞台课：小结写成几行字/.test(last) ? CLOSING : /学生说：「测试:下课」/.test(last) ? END : /学生说：「测试:分幕」/.test(last) ? SCENE : /学生说：「测试:预览」/.test(last) ? PREVIEW : /学生说：「测试:不要框」/.test(last) ? NOFRAME : /\[预览\]/.test(last) ? AFTER_PREVIEW : TURNS[Math.min(k, TURNS.length - 1)](last);
     // ?dev&think=4：模拟老师先想 4 秒再写（真课出第一个字前要等十几秒：看等的那一阵画面上是什么）
     const lag = typeof location !== 'undefined' && /[?&]think=(\d+)/.test(location.search) ? Number(location.search.match(/[?&]think=(\d+)/)[1]) * 1000 : 300;
     await new Promise((r) => setTimeout(r, lag));

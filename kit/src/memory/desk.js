@@ -74,6 +74,9 @@ import { createExamCard } from '../exam/examview.js';
 import { createExamPage } from '../exam/exampage.js';
 import { priority } from '../exam/priority.js';
 import { renderStageClass } from '../stage/classroom.js';
+import { lookName, lookWords } from '../stage/look/spec.js';
+// 种类名给我看的叫法（一直用的样子按种类存）
+const KIND_NAMES = { card: '题卡', sentence: '句子', array: '一排格子', matrix: '矩阵', tree: '树', graph: '图', table: '表', timeline: '时间轴', plane: '平面', tex: '式子', node: '结点', label: '贴的字', dial: '拨盘', draw: '画的' };
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
 import { renderGuided } from '../guided.js';
@@ -1423,7 +1426,10 @@ export async function renderDesk(root, meta) {
       <p class="dk-sub muted dk-look-mnote"></p>
       <p class="dk-look-k">首页的版式</p>
       <div class="dk-spaces dk-look-layout" role="tablist" aria-label="首页的版式">${[['list', '书页'], ['grid', '小组件']].map(([v, t]) => `<button type="button" class="dk-space dk-look-l" data-layout="${v}">${t}</button>`).join('')}</div>
-      <p class="dk-sub muted dk-look-lnote"></p>`;
+      <p class="dk-sub muted dk-look-lnote"></p>
+      <p class="dk-look-k">上课的画面</p>
+      <div class="dk-look-class"></div>`;
+      paintClassLook();
     }
     body.querySelectorAll('.dk-look-m').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === cur)));
     body.querySelectorAll('.dk-look-l').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.layout === wantLayout)));
@@ -1432,9 +1438,29 @@ export async function renderDesk(root, meta) {
     if (!lookSync) lookSync = [wireThumb($('.dk-look-mode'), () => $('.dk-look-m[aria-selected="true"]')), wireThumb($('.dk-look-layout'), () => $('.dk-look-l[aria-selected="true"]'))];
     else lookSync.forEach((f) => f());
   }
+  // 上课的画面里一直用的样子（舞台第九轮：老师写 look … always 存在 meta/look）：列出来，能删
+  async function paintClassLook() {
+    const box = $('.dk-look .dk-look-class');
+    if (!box) return;
+    let looks = [];
+    try { const d = await db.doc('meta/look').get(); looks = d.exists ? d.data().looks || [] : []; } catch { looks = []; }
+    box.innerHTML = looks.length
+      ? looks.map((l, i) => `<div class="dk-row dk-look-row"><span class="dk-row-t">${escapeHtml(lookName(l.target) === l.target && l.target !== '*' ? `所有${KIND_NAMES[l.target] || l.target}` : lookName(l.target))}：${escapeHtml(lookWords(l.props || {}, l.hide))}</span><button type="button" class="btn dk-look-del" data-i="${i}">不要了</button></div>`).join('')
+      : '<p class="dk-sub muted">还没有。上课时说「不要框」「字大一点」，老师会记住，以后每节课都那样。</p>';
+  }
   paintLook();
   if (typeof matchMedia === 'function') matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => paintLook());
-  $('.dk-look').addEventListener('click', (e) => {
+  $('.dk-look').addEventListener('click', async (e) => {
+    const del = e.target.closest('.dk-look-del');
+    if (del) {
+      try {
+        const d = await db.doc('meta/look').get();
+        const looks = (d.exists ? d.data().looks || [] : []).filter((_, i) => i !== Number(del.dataset.i));
+        await db.doc('meta/look').set({ looks, at: Date.now() });
+      } catch (err) { reportError(err, { what: '删一直用的样子' }); }
+      paintClassLook();
+      return;
+    }
     const l = e.target.closest('.dk-look-l');
     if (l) {
       if (l.dataset.layout === wantLayout) return;
@@ -1643,6 +1669,11 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
       memo: readOnly ? null : { ops, view: createMemoView({ db, ops, nameOf: nameIn(() => mem) }) },
       review: doc.review || null,
       opening: doc.opening || null,
+      // 一直用的样子（舞台第九轮：老师写 look … always 存这里，每节舞台课开课先叠上；管理 → 样子里能删）
+      look: {
+        read: () => within(db.doc('meta/look').get().then((s) => (s.exists ? s.data().looks || [] : [])), 3000, []).catch(() => []),
+        write: readOnly ? null : (looks) => db.doc('meta/look').set({ looks, at: Date.now() }),
+      },
     });
   }
   if (readOnly) {

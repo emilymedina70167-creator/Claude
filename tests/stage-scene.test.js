@@ -1977,7 +1977,7 @@ test('复审 N9：认得的选项表按指令是全的（真的演一遍）—�
   for (const l of STAGE_DOC.split('\n').map(firstOf)) feed(base, l);
   // 上面没演到的、有表的指令：这里补（新加一条带选项的指令，例子和说明里都没有的话加在这里）
   // 说明里的一整行中文现在当成话照演（主线第七轮的写法容错），话换掉了：fly 之前把要指的那句话再说一遍
-  feed(base, 'array b = 1 2 3\nsay "看 [不稳定]"\nfly say.1 -> n1 b.1 side=top\nlabel n2 b.2 "字" side=left tone=note\nkeep b "一开始" after=swap\npick b.1 b.2 reveal=on\nplace b right-of a gap=s align=top weight=weak\nplace b at=1,1-9,3\nsay "看" near=b.1\nsay "看" at=1,1-9,3\nlook say frame=card bg=soft edge=thin radius=8 shadow=off pad=s text=20 font=serif weight=bold color=g2 align=center opacity=0.8\nscene "二" keep=b');
+  feed(base, 'array b = 1 2 3\nsay "看 [不稳定]"\nfly say.1 -> n1 b.1 side=top\nlabel n2 b.2 "字" side=left tone=note\nkeep b "一开始" after=swap\npick b.1 b.2 reveal=on\nplace b right-of a gap=s align=top weight=weak\nplace b at=1,1-9,3\nsay "看" near=b.1\nsay "看" at=1,1-9,3\nlook say frame=card bg=soft edge=thin radius=8 shadow=off pad=s text=20 font=serif weight=bold color=g2 align=center opacity=0.8\nstyle say frame=off size=l color=brand weight=bold align=center\ndraw d1 arrow from=b.1 to=b.2 color=g2\ndraw d2 circle on=b.1\ndraw d3 brace under=b.1-2 \"x\"\ndraw d4 brace over=b.1\ndraw d5 text at=1,1-9,3 \"字\"\nscene "二" keep=b');
   const miss = [];
   for (const [label, seen] of reads) {
     const names = tables.get(label);

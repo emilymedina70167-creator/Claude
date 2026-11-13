@@ -12,14 +12,15 @@ const SIDE_KEY = 'la-stage-side'; // 解析栏点开还是收着（这台设备�
 const storedSide = () => { try { if (typeof location !== 'undefined' && /[?&]side=open\b/.test(location.search)) return true; return localStorage.getItem(SIDE_KEY) === 'open'; } catch { return false; } };
 import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHold } from './motion.js';
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM, tooSmall, pickSide } from './layout.js';
-import { gridOf, typeScaleOf } from './compose/grid.js';
+import { gridOf, typeScaleOf, fromCells } from './compose/grid.js';
+import { drawGeometry, drawObjects } from './draw.js';
 import { layoutLines } from './compose/report.js';
 import { sketchText } from './compose/sketch.js';
 import { createSnapper } from './snap.js';
 import { applyLooks } from './look/apply.js';
 import { solveLayout } from './compose/solve.js';
 import { canvasOf, composeInput, posLine, SENTENCE_WIDTHS } from './compose/apply.js';
-import { parseScript, parseRich, richLength } from './script.js';
+import { parseScript, parseRich, richLength, parseRef } from './script.js';
 import { Scene, compareValues, COLOR_NAMES, pidOf, expectHit, pickAnswer, tapAnswer, pickText, unplayedNotes, compareFact, compareNote, mergeFact, chipTextOf, tapValueOf } from './scene.js';
 import { goalMark, shapeText } from './goal.js';
 import { measureShown, rulesOf } from './rules.js';
@@ -107,7 +108,8 @@ export function helpLine(q, hasGoals, hasWork = false) {
 export { COLOR_NAMES };
 
 export class Stage {
-  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false, scenesHost = null, side = null, eyes = false } = {}) {
+  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false, scenesHost = null, side = null, eyes = false, barEl = null } = {}) {
+    this.barEl = barEl; // 顶上那一条（课堂给；look bar 改它的样子，第九轮）
     this.eyes = eyes; // 每轮给老师看画面（第九轮）：只在真叫老师的地方开（课堂、样子页的 Opus 上课）；检查、试演工具不拍
     this.sideForce = side; // 'open'：栏一直开着、没有把手（回看用）
     this.scenesHost = scenesHost; // 幕条放哪（课堂给顶上那一条里留的位置；不给放在舞台自己顶上）
@@ -702,7 +704,7 @@ export class Stage {
     const pid = pidOf(part);
     const mark = (on) => this.nodes.get(pid)?.classList.toggle('is-drag', on);
     mark(true);
-    const off = this.pointer.add({ kind: 'drag', prio, spec, done, rect: () => spec.rect?.() || this.screenRect(this.nodes.get(pid)) });
+    const off = this.pointer.add({ kind: 'drag', prio, spec, done, obj: part.obj, rect: () => spec.rect?.() || this.screenRect(this.nodes.get(pid)) });
     return () => { off(); mark(false); };
   }
 
@@ -741,7 +743,7 @@ export class Stage {
     }
     const pre = this.capture();
     // 这一行之前东西都在哪（镜头先走的时候连「之前」一起框，见 keepInView 的 extra）
-    const before = this.instant || !this.scene.objects.size ? null : bbox(this.scene.shownIds().map((id) => this.scene.objectBox(id)));
+    const before = this.instant || !this.scene.objects.size ? null : bbox(this.scene.shownIds().map((id) => this.scene.worldObjectBox(id)));
     // open 也交给场景：老师写的 keep … after=place 认学生这一下是从哪一项来的
     const fx = this.scene.apply(c, by === 'student' ? { by: 'student', judged: judged ?? null, open } : { by: this.instant || by !== 'teacher' ? null : by });
     this.execTurn = turn;
@@ -754,6 +756,8 @@ export class Stage {
     if (c.cmd === 'scene' && fx?.scene != null) this.afterScene();
     // 这一轮老师讲的那样东西（话默认贴着它）：摆位置、挑战、说话的行不算
     if (fx?.arrange) this.arrangeNext = fx.arrange; // 帮我重排（第九轮）：下一次摆的时候这几样不当钉子
+    // 一直用的样子（look … always）：交给课堂存进 meta/look（重放、回看不存：那是以前写过的）
+    if (fx?.look?.always && by === 'teacher' && !this.instant) this.onLookAlways?.(fx.look);
     if (by === 'teacher' && !c.on && !['place', 'preview', 'pos', 'goal', 'watch', 'say', 'ask', 'scene', 'remove'].includes(c.cmd)) { const t = fx?.created ? fx.id : this.targetOf(c)?.id; if (t) this.lastTouched = t; }
     if (fx?.created) this.sideDirty = true; // 造了新东西：横屏栏宽重算一次
     if (by === 'teacher' && !this.instant) {
@@ -987,7 +991,7 @@ export class Stage {
       const { w, h } = this.viewSize();
       const c = this.cam;
       out = sc.shownIds().filter((id) => {
-        const b = sc.objectBox(id);
+        const b = sc.worldObjectBox(id);
         const x = b.x * c.s + c.tx, y = b.y * c.s + c.ty;
         return x < (this.sideOn ? this.sideW : 0) - 2 || y < -2 || x + b.w * c.s > w + 2 || y + b.h * c.s > h + 2;
       });
@@ -1124,7 +1128,7 @@ export class Stage {
     const c = this.cam;
     for (const id of this.scene.shownIds()) {
       if (id === except) continue;
-      const b = this.scene.objectBox(id);
+      const b = this.scene.worldObjectBox(id);
       out.push({ x: b.x * c.s + c.tx, y: b.y * c.s + c.ty, w: b.w * c.s, h: b.h * c.s });
     }
     for (const l of this.labelNodes.values()) if (l.box) out.push({ x: l.box.x * c.s + c.tx, y: l.box.y * c.s + c.ty, w: l.box.w * c.s, h: l.box.h * c.s });
@@ -1456,7 +1460,7 @@ export class Stage {
       return;
     }
     const { a, b, sign } = fx;
-    const A = this.scene.partBox(a), B = this.scene.partBox(b);
+    const A = this.scene.worldPartBox(a), B = this.scene.worldPartBox(b);
     const badge = el('div', 'st-compare', this.layer);
     badge.innerHTML = '<span></span><b></b><span></span>';
     badge.children[0].textContent = this.chipText(a);
@@ -1501,17 +1505,19 @@ export class Stage {
     const moves = [];
     // 藏着的不画：它的节点这一遍没碰到，下面照「没了的」淡掉；show 以后照新造的画出来
     for (const o of sc.objects.values()) if (!o.hidden) moves.push(...(VIEWS[o.type]?.sync(this, o, ctx) || []));
+    this.applyScale(); // 新画的节点也照 scale 放大（第九轮）
     this.syncGoals();
     this.syncMeasures();
     // 整样东西挪了地方（大小没变：乘积把 A、B 排成一行、下面的东西被推下去）：它的每一部分同一时间、同样快地走，
     // 不按先后错开——错开的话括号已经到了、数还在半路，压到旁边那一样上（2026-11-06 量出来的）。错开只留给里面的重排（分组、排序）
-    const boxes = new Map(sc.shownIds().map((id) => [id, sc.objectBox(id)]));
+    // 画面上的框（scale 过的按系数放大）：整块挪的距离照画面上算（CSS 的 translate 在 scale 外面）；和部件自己的挪动比时换回不缩放的距离
+    const boxes = new Map(sc.shownIds().map((id) => [id, sc.worldObjectBox(id)]));
     const rigid = new Map();
     for (const [id, b] of boxes) {
       const was = this.lastBoxes?.get(id);
       if (!was || Math.abs(was.w - b.w) > 1 || Math.abs(was.h - b.h) > 1) continue;
-      const dx = b.x - was.x, dy = b.y - was.y;
-      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) rigid.set(id, { dx, dy });
+      const dx = b.x - was.x, dy = b.y - was.y, k = sc.objects.get(id)?.k || 1;
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) rigid.set(id, { dx, dy, ldx: dx / k, ldy: dy / k });
     }
     this.lastBoxes = boxes;
     const rigidJobs = [];
@@ -1520,7 +1526,7 @@ export class Stage {
         // 这一样的部件自己的挪动不要了（直接放到最后的地方），换成整块一起走
         for (let k = moves.length - 1; k >= 0; k--) {
           const m = moves[k];
-          if (m.part.obj !== id || Math.abs(m.to.x - m.from.x - r.dx) > 1 || Math.abs(m.to.y - m.from.y - r.dy) > 1) continue;
+          if (m.part.obj !== id || Math.abs(m.to.x - m.from.x - r.ldx) > 1 || Math.abs(m.to.y - m.from.y - r.ldy) > 1) continue;
           const n = this.nodeOf(m.part);
           if (n) { n.__box = { ...m.to }; n.style.transform = tr(m.to.x, m.to.y); }
           moves.splice(k, 1);
@@ -1537,6 +1543,7 @@ export class Stage {
       await this.hideLinks(moves.map((m) => m.part));
       await Promise.all(moves.map((m) => this.moveNode(m.part, [{ transform: tr(m.from.x, m.from.y) }, { transform: tr(m.to.x, m.to.y) }], m.to, { duration: m.duration || moveDuration(Math.abs(m.from.x - m.to.x) + Math.abs(m.from.y - m.to.y)), delay: m.order === 0 ? 0 : stagger(m.order ?? 0, { step: 70, max: 500 }) })));
     }
+    this.syncDrawings(); // 老师自己画的（第九轮）：照部件现在的地方重画
     // 连线
     const linkJobs = [];
     let drawn = 0;
@@ -1579,14 +1586,14 @@ export class Stage {
     const sc = this.scene;
     // 连到整样东西的那一头（link AB BA、link f.l1 AA）：一道弧，那一头用 objectBox；上下摆着的从中间的空当连过去
     if (l.whole) {
-      const end = (e) => (e.key == null ? (sc.objects.has(e.obj) ? sc.objectBox(e.obj) : null) : (() => { const p = sc.partOf(e.obj, e.key); return p ? sc.partBox(p) : null; })());
+      const end = (e) => (e.key == null ? (sc.objects.has(e.obj) ? sc.worldObjectBox(e.obj) : null) : (() => { const p = sc.partOf(e.obj, e.key); return p ? sc.worldPartBox(p) : null; })());
       const A = end(l.a), B = end(l.b);
       return A && B ? wholeLinkGeom(A, B, { tier: l.tier || 0 }) : { d: '', box: null, rail: false };
     }
     const a = sc.partOf(l.a.obj, l.a.key), b = sc.partOf(l.b.obj, l.b.key);
     if (!a || !b) return { d: '', box: null, rail: false };
     const rail = !!(VIEWS[sc.objects.get(a.obj).type]?.rail?.(sc.objects.get(a.obj), a) || VIEWS[sc.objects.get(b.obj).type]?.rail?.(sc.objects.get(b.obj), b));
-    return linkGeom(sc.partBox(a), sc.partBox(b), { tier: l.tier || 0, rail });
+    return linkGeom(sc.worldPartBox(a), sc.worldPartBox(b), { tier: l.tier || 0, rail });
   }
 
   // 部件挪了：连着它的线先淡掉（挪完 sync 照新位置画，再淡进来）
@@ -1660,7 +1667,7 @@ export class Stage {
     let mine = [];
     try { mine = sc.objects.has(l.refs[0]) ? [] : sc.parts(l.refs[0]).map((p) => p.key); } catch { mine = []; }
     const t = sc.type(o);
-    if (t.parts(o).some((p) => !mine.includes(p.key) && overlaps(grow(box, 2), t.partBox(o, p)))) return true;
+    if (t.parts(o).some((p) => !mine.includes(p.key) && overlaps(grow(box, 2), sc.scaled(o, t.partBox(o, p))))) return true;
     // 贴在一个部件上：那样东西自己的轴（时间轴的轴、刻度的字，nearObstacles）也是让不开的——小人在轴下面、字写 side=above，
     // 以前只比部件，字照样压在轴和「过去之后」上（主线第六轮，时态课截图）
     if (!mine.length) return false;
@@ -1677,7 +1684,7 @@ export class Stage {
     for (const r of l.refs) {
       if (sc.labels.has(r)) { const n = this.labelNodes.get(r); if (n?.box) boxes.push(n.box); continue; }
       if (!this.isShown(String(r).match(/^[A-Za-z_]\w*/)?.[0])) continue; // 藏着的不当锚
-      try { boxes.push(...(sc.objects.has(r) ? [sc.objectBox(r)] : sc.parts(r).map((x) => sc.partBox(x)))); } catch { /* 锚没了 */ }
+      try { boxes.push(...(sc.objects.has(r) ? [sc.worldObjectBox(r)] : sc.parts(r).map((x) => sc.worldPartBox(x)))); } catch { /* 锚没了 */ }
     }
     return boxes.length ? grow(bbox(boxes), 4) : null;
   }
@@ -1709,7 +1716,7 @@ export class Stage {
       if (l.dial) cur.node.__paint?.();
       // 什么都没贴的（拨盘没写 at=）：自由构图时贴着它归的那样东西（不然贴在整台外面，跑出画布）
       const loose = !this.anchorOf(l) && this.free ? this.labelOwner(l) : null;
-      const anchor = this.anchorOf(l) || (loose ? grow(sc.objectBox(loose), 4) : null) || bbox(sc.shownIds().map((id) => sc.objectBox(id))) || { x: 0, y: 0, w: 1, h: 1 };
+      const anchor = this.anchorOf(l) || (loose ? grow(sc.worldObjectBox(loose), 4) : null) || bbox(sc.shownIds().map((id) => sc.worldObjectBox(id))) || { x: 0, y: 0, w: 1, h: 1 };
       const size = { w: cur.node.offsetWidth || 80, h: cur.node.offsetHeight || 32 };
       const obs = this.obstacles(l.id);
       // 东西变矮了（泳道 merge 回一排）也要重摆：以前只看左上角和宽，贴在它下面的字、拨盘留在老地方（D1-11）
@@ -1959,9 +1966,16 @@ export class Stage {
   /** 一样东西连同只贴在它身上的字占的世界框（求解器把它们当一体摆） */
   unionBox(id) {
     const sc = this.scene;
-    const b = sc.objectBox(id);
+    const b = sc.worldObjectBox(id);
     // 贴在它身上的字、拨盘（贴在几样上的算第一样的；什么都没贴的拨盘算这一轮讲的那样的，syncLabels 的 owner）：和它当一体摆，不然不进排版，压着别的、出屏幕
     const own = [...this.labelNodes].filter(([lid, n]) => n.box && n.owner === id && sc.labels.has(lid) && this.labelShown(sc.labels.get(lid))).map(([, n]) => n.box);
+    // 画在它身上的（圈、括号、下划线：只指着它这一样的）也和它当一体摆
+    if (this.layoutState) for (const d of sc.drawings.values()) {
+      const objs = drawObjects(d);
+      if (!objs.length || objs.some((x) => x !== id)) continue;
+      const geo = drawGeometry(d, (ref) => this.refBox(ref), { grid: this.layoutState.grid, s: this.baseCam?.s || 1 });
+      if (geo.bbox) own.push(geo.bbox);
+    }
     return bbox([b, ...own]);
   }
   /** 一张字、一个拨盘归哪样东西（排版时和它一起摆）：贴着的第一样；什么都没贴（拨盘没写 at=）归这一轮讲的那样 */
@@ -1974,6 +1988,63 @@ export class Stage {
     }
     const shown = sc.shownIds();
     return shown.includes(this.lastTouched) ? this.lastTouched : shown.at(-1) || null;
+  }
+  /**
+   * scale 过的东西（第九轮）：它的每个节点用 CSS 的 scale 属性放大，transform-origin 放在它自己算的框的左上角——
+   * 节点本来照不缩放的坐标摆（transform: translate），scale 属性叠在外面，整样东西就以左上角为中心放大；动画的 translate 也在外面，照旧对。
+   * SVG 里的（树的边、括号、连线）用 view-box 当原点的坐标系
+   */
+  applyScale() {
+    const sc = this.scene;
+    for (const n of this.root.querySelectorAll('[data-obj]')) {
+      const o = sc.objects.get(n.dataset.obj);
+      const k = o?.k && o.k !== 1 ? o.k : null;
+      if (!k) { if (n.__k) { n.style.removeProperty('scale'); n.style.removeProperty('transform-origin'); n.style.removeProperty('transform-box'); n.__k = null; } continue; }
+      const pv = sc.type(o).objectBox(o);
+      const origin = `${pv.x}px ${pv.y}px`;
+      if (n.__k === k && n.__ko === origin) continue;
+      n.style.setProperty('scale', String(k));
+      n.style.setProperty('transform-origin', origin);
+      if (n instanceof SVGElement) n.style.setProperty('transform-box', 'view-box');
+      n.__k = k; n.__ko = origin;
+    }
+  }
+  /**
+   * 老师自己画的（draw，第九轮）：一笔一个 <g>，画在最上面那层 SVG 里（世界坐标）；照部件现在在画面上的框重画，
+   * 东西挪了、放大了、学生拖了都跟着。手指点不到它们（那层 SVG 不接手指）
+   */
+  syncDrawings() {
+    const sc = this.scene;
+    this.drawNodes ||= new Map();
+    for (const [name, g] of this.drawNodes) if (!sc.drawings.has(name)) { g.remove(); this.drawNodes.delete(name); }
+    if (!sc.drawings.size) return;
+    const grid = this.layoutState?.grid || gridOf({ w: this.viewSize().w, h: this.viewSize().h });
+    const s = this.baseCam?.s || 1;
+    for (const spec of sc.drawings.values()) {
+      const geo = drawGeometry(spec, (ref) => this.refBox(ref), { grid, s });
+      let g = this.drawNodes.get(spec.name);
+      if (!g) {
+        g = svg('g', { class: 'st-draw', 'data-draw': spec.name }, this.ink);
+        this.drawNodes.set(spec.name, g);
+        if (!this.instant) this.tween(g, [{ opacity: 0 }, { opacity: 1 }], { duration: 420, easing: EASE.out });
+      }
+      const sig = JSON.stringify([geo.strokes, geo.texts, geo.markup, geo.box, spec.color]);
+      if (g.__sig === sig) continue;
+      g.__sig = sig;
+      g.dataset.color = spec.color || '';
+      const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+      const box = geo.box;
+      g.innerHTML = geo.strokes.map((d) => `<path d="${d}"/>`).join('')
+        + geo.texts.map((t) => `<text x="${t.x}" y="${t.y}" text-anchor="${t.anchor}">${esc(t.text)}</text>`).join('')
+        + (geo.markup && box ? `<svg x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" viewBox="0 0 100 100" preserveAspectRatio="none" overflow="visible">${geo.markup}</svg>` : '');
+    }
+  }
+  /** 部件 / 东西现在在画面上的框（世界坐标，scale 过的照放大的）；没有就 null */
+  refBox(ref) {
+    const sc = this.scene;
+    const r = parseRef(ref);
+    if (!r || !sc.objects.has(r.obj)) return null;
+    try { return r.mark ? bbox(sc.parts(ref).map((p) => sc.worldPartBox(p))) : sc.worldObjectBox(r.obj); } catch { return null; }
   }
   /** 照老师写的 look 画（look/apply.js）；没照办的（底线 1）写进现状。返回有没有变（变了大小要重量） */
   applyLooks() {
@@ -1991,7 +2062,8 @@ export class Stage {
     const out = [];
     for (const width of SENTENCE_WIDTHS) {
       const b = t.objectBox({ ...o, width });
-      const a = { w: b.w + (u.w - est.w), h: b.h + (u.h - est.h), width };
+      const k = o.k || 1;
+      const a = { w: (b.w + (u.w / k - est.w)) * k, h: (b.h + (u.h / k - est.h)) * k, width };
       if (!out.some((x) => Math.abs(x.w - a.w) < 2 && Math.abs(x.h - a.h) < 2)) out.push(a);
     }
     return out.length > 1 ? out : null;
@@ -2034,6 +2106,7 @@ export class Stage {
   }
   async composeOnce({ animate }) {
     const sc = this.scene;
+    this.applyScale();
     // 老师写的样子先画上（大小变了要先重量一遍再排）
     if (this.applyLooks()) {
       this.composeQuiet = true;
@@ -2064,7 +2137,9 @@ export class Stage {
       // 挑战默认在画布左上角一条（老师 place goals … 了照老师的）
       if (g) extras.push({ id: 'goals', ...g, ...(sc.layout.has('goals') ? (prevBox('goals') ? { prev: prevBox('goals') } : {}) : { fixed: { x: 0, y: 0, w: g.w, h: g.h } }) });
     }
-    const partBox = (ref) => { try { return bbox(sc.parts(ref).map((p) => sc.partBox(p))); } catch { return null; } };
+    // 画在格子上的字、示意图：钉在那里的一块，别的东西绕开它
+    for (const d of sc.drawings.values()) if (d.at) { const b = fromCells(d.at, grid); extras.push({ id: `draw:${d.name}`, w: b.w, h: b.h, fixed: b }); }
+    const partBox = (ref) => { try { return bbox(sc.parts(ref).map((p) => sc.worldPartBox(p))); } catch { return null; } };
     const { items, relations } = composeInput(sc, { ts, camS: baseS, grid, boxOf: (id) => this.unionBox(id), altsOf: (id) => this.altsOf(id), partBox, extras, lastTouched: this.lastTouched, tiedOf: (id) => { const o = sc.objects.get(id); return o ? sc.type(o).anchors?.(o) || [] : []; } });
     if (!items.length) { this.layoutState = { boxes: new Map(), unmet: [], scale: 1, grid, canvas: cv }; sc.layoutInfo = null; return false; }
     const arrange = this.arrangeNext === 'all' ? 'all' : this.arrangeNext ? new Set(this.arrangeNext) : null;
@@ -2136,6 +2211,7 @@ export class Stage {
       } else if (!this.world.style.transform) this.world.style.transform = to;
       this.noteClipped();
     }
+    this.syncDrawings();
     if (moves.length) {
       this.composeQuiet = true;
       try { await this.sync({}); } finally { this.composeQuiet = false; }
@@ -2157,7 +2233,7 @@ export class Stage {
     const out = new Set();
     const itemOf = new Map();
     for (const it of items) for (const m of it.members || [it.id]) itemOf.set(m, it);
-    const refs = [...(sc.opens?.values?.() || [])].flatMap((e) => e.refs || []);
+    const refs = [...(sc.opens?.values?.() || [])].flatMap((e) => (e.refs?.length ? e.refs : [e.obj]));
     for (const r of refs) {
       let parts = [];
       try { parts = sc.parts(r); } catch { parts = []; }
@@ -2166,7 +2242,7 @@ export class Stage {
         const B = own && res.boxes.get(own.id);
         if (!B) continue;
         const U = bbox((own.members || [own.id]).map((m) => this.unionBox(m)));
-        const pb = sc.partBox(p), k = ts * res.scale;
+        const pb = sc.worldPartBox(p), k = ts * res.scale;
         const box = { x: B.x + (pb.x - U.x) * k, y: B.y + (pb.y - U.y) * k, w: pb.w * k, h: pb.h * k };
         if (box.x < -2 || box.y < -2 || box.x + box.w > cv.w + 2 || box.y + box.h > cv.h + 2) { if (own.pinned) out.add(own.id); continue; }
         for (const it of items) {
@@ -2268,11 +2344,11 @@ export class Stage {
     const sc = this.scene;
     const boxes = [];
     if (!sc.focus) {
-      for (const id of sc.shownIds()) boxes.push(sc.objectBox(id));
+      for (const id of sc.shownIds()) boxes.push(sc.worldObjectBox(id));
       for (const l of this.labelNodes.values()) if (l.box) boxes.push(l.box);
       for (const l of sc.links.values()) { if (!this.linkShown(l)) continue; const g = this.linkGeo(l); if (g.box) boxes.push(g.box); }
     } else {
-      for (const r of sc.focus) { try { boxes.push(...(sc.objects.has(r) ? [sc.objectBox(r)] : sc.parts(r).map((x) => sc.partBox(x)))); } catch { /* 没了 */ } }
+      for (const r of sc.focus) { try { boxes.push(...(sc.objects.has(r) ? [sc.worldObjectBox(r)] : sc.parts(r).map((x) => sc.worldPartBox(x)))); } catch { /* 没了 */ } }
       // 对准几样东西：只带贴在这几样上的字。以前台上所有贴的字都算进来——camera tl 时贴在句子 p 下面的译文也算，
       // 话贴着它的上沿摆，正好压在句子上（时态课截图第 1 条）
       const on = new Set(sc.focus.filter((r) => sc.objects.has(r)));

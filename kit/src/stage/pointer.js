@@ -51,6 +51,11 @@ export class PointerRouter {
   // 有能拖的东西时整块舞台不让浏览器拿去滚动、缩放（舞台本来就不滚动），手势就不会把拖到一半的东西取消掉
   paint() { this.stage.view.classList.toggle('has-drag', [...this.targets.values()].some((t) => t.kind === 'drag')); }
 
+  /** 屏幕上的一点 → 拖的那样东西自己的坐标（scale 过的东西换回不缩放的坐标，第九轮；没缩放的就是世界坐标） */
+  at(t, clientX, clientY) {
+    const w = this.stage.toWorldLive(clientX, clientY);
+    return t?.obj ? this.stage.scene.toLocal?.(t.obj, w) ?? w : w;
+  }
   local(e) { const r = this.stage.view.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
 
   down(e) {
@@ -121,8 +126,8 @@ export class PointerRouter {
     s.dragging = true;
     try {
       // held：等满 HOLD_MS 才托起来的（同一处还能点、滑）——画面让拎起来的那一份「弹」一下，看得出已经托起来了
-      c.t.spec.start(this.stage.toWorldLive(s.c0.x, s.c0.y), { held: !!s.mixed && k === 'hold' });
-      if (s.moved && this.s === s) c.t.spec.move(this.stage.toWorldLive(s.last.x, s.last.y));
+      c.t.spec.start(this.at(c.t, s.c0.x, s.c0.y), { held: !!s.mixed && k === 'hold' });
+      if (s.moved && this.s === s) c.t.spec.move(this.at(c.t, s.last.x, s.last.y));
     } catch (err) { this.abort(); this.stage.errors?.push({ line: 0, src: '', error: `拖的时候出错：${err.message}` }); }
   }
 
@@ -142,7 +147,7 @@ export class PointerRouter {
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
       if (this.s !== s) return;
-      try { s.t.spec.move(this.stage.toWorldLive(s.last.x, s.last.y)); } catch { /* 这一帧不跟 */ }
+      try { s.t.spec.move(this.at(s.t, s.last.x, s.last.y)); } catch { /* 这一帧不跟 */ }
     });
   }
 
@@ -161,7 +166,7 @@ export class PointerRouter {
       // 松手（或者浏览器取消了这一下）：在哪松就算拖到哪，不让东西无声地掉回去
       const at = cancelled ? s.last : { x: e.clientX, y: e.clientY };
       let r = null;
-      try { s.t.spec.move(this.stage.toWorldLive(at.x, at.y)); r = s.t.spec.drop(this.stage.toWorldLive(at.x, at.y)); } catch { r = null; }
+      try { s.t.spec.move(this.at(s.t, at.x, at.y)); r = s.t.spec.drop(this.at(s.t, at.x, at.y)); } catch { r = null; }
       this.stage.endDrag();
       if (r) s.t.done(r.act, r.src); else s.t.spec.cancel?.();
       return;

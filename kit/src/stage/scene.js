@@ -15,7 +15,8 @@ import { parseScript, parseRef, parseRich, addCommands, OPTIONS, optionError } f
 import { TYPES, typeOf, CREATE } from './types/index.js';
 import { bbox, columnSlot, cameraRoom } from './layout.js';
 import { parseAt, COLS } from './compose/grid.js';
-import { parseLook, lookWords, lookName, FIXED } from './look/spec.js';
+import { parseLook, lookWords, lookName, FIXED, COLOR as LOOK_COLORS } from './look/spec.js';
+import { parseDraw, drawObjects, drawText } from './draw.js';
 // numOf：数（整数、小数、分数 -3/4，′ 和真的减号也认），比大小用；和挑战判数是同一个
 import { splitPicks, checkPick, varText, pickDeps, wordDialError, VERB, verbFact } from './pick.js';
 import { parseGoal, parseWhen, evalGoal, evalWhen, altsOf, goalStatus, checkPreds, clauseKey, clauseMarks, sameMeasure, numOf, isExpr, exprMeasure } from './goal.js';
@@ -247,6 +248,8 @@ export class Scene {
     this.layout = new Map();
     // 样子（第九轮：画面归老师）：老师写的 look，一条 { target, rank, props, hide }，按写的先后（look/spec.js 的 resolveLook 合并）
     this.looks = [];
+    // 老师自己画的（draw，第九轮）：名字 → { name, kind, from, to, on, under, over, at, text, svg, color }（draw.js）
+    this.drawings = new Map();
     this.say = '';
     this.words = []; // 这一句话里能飞走的 [词]
     this.waiting = null; // { kind, refs, prompt, button, expect, answer, pre（预写的行挂的：课堂循环看学生手上还有没有事用）, exam / like（真题题号）, shownAt }
@@ -302,6 +305,7 @@ export class Scene {
     s.layoutInfo = this.layoutInfo ? [...this.layoutInfo] : null;
     s.looks = this.looks.map((l) => ({ ...l, props: { ...l.props } }));
     s.lookNote = this.lookNote || '';
+    s.drawings = new Map([...this.drawings].map(([k, v]) => [k, { ...v }]));
     s.layout = new Map([...this.layout].map(([k, rs]) => [k, rs.map((r) => ({ ...r, ...(Array.isArray(r.a) ? { a: [...r.a] } : {}) }))]));
     s.say = this.say;
     s.words = [...this.words];
@@ -355,7 +359,26 @@ export class Scene {
   refOf(p) { return typeOf(this.objects.get(p.obj)).ref(p); }
   /** 学生点的那一个写给老师的名字：有位置的（一排格子、句子的词）写第几个（a.3，和老师写 ask、expect 的写法一样），别的照那种东西的写法 */
   tapRef(p) { return p.slot != null ? `${p.obj}.${p.slot}` : this.refOf(p); }
+  // partBox / objectBox 是不缩放的框：画法、规则、底座都用它，和以前一样。scale 过的东西每个节点自己用 CSS 的 scale 放大（stage.js 的 applyScale），
+  // 页面那几处要知道它在画面上真占哪儿的（贴字、连线、排版、镜头）用 worldPartBox / worldObjectBox
   partBox(p) { const o = this.objects.get(p.obj); return typeOf(o).partBox(o, p); }
+  worldPartBox(p) { return this.scaled(this.objects.get(p.obj), this.partBox(p)); }
+  worldObjectBox(id) { return this.scaled(this.objects.get(id), this.objectBox(id)); }
+  /** 整样东西放大缩小（scale，第九轮）：按它自己算的框的左上角乘系数（世界坐标 ↔ 它自己的坐标：toLocal） */
+  scaled(o, b) {
+    const k = o?.k;
+    if (!k || k === 1 || !b) return b;
+    const pv = typeOf(o).objectBox(o);
+    return { ...b, x: pv.x + (b.x - pv.x) * k, y: pv.y + (b.y - pv.y) * k, w: b.w * k, h: b.h * k };
+  }
+  /** 画面上的一点（世界坐标）换到这样东西自己的坐标（拖 scale 过的东西时，手势照它自己的坐标算） */
+  toLocal(id, pt) {
+    const o = this.objects.get(id);
+    const k = o?.k;
+    if (!k || k === 1 || !pt) return pt;
+    const pv = typeOf(o).objectBox(o);
+    return { ...pt, x: pv.x + (pt.x - pv.x) / k, y: pv.y + (pt.y - pv.y) / k };
+  }
   cellBox(p) { return this.partBox(p); }
   /**
    * 一样东西占的地方：那种东西自己算的（按字数估的、按格子数算的）再加上画面量出来多出去的（o.ext，stage.js 的 measure 写回）。
@@ -1875,6 +1898,46 @@ export class Scene {
         for (const n of names) { const o = this.objects.get(n); if (o) o.pinned = true; }
         return { place: names };
       }
+      case 'draw': {
+        // draw d1 arrow from=s.3 to=tl.fr / circle on= / box on= / brace under= "字" / underline on= / text at= "字" / svg at= "<path …/>"（第九轮）
+        const has = (ref) => {
+          const r = parseRef(ref);
+          if (!r || !this.objects.has(r.obj)) throw new Error(`draw 写的「${ref}」：舞台上没有「${r?.obj ?? ref}」`);
+          if (r.mark) this.parts(ref);
+        };
+        const spec = parseDraw(words, opts, h.strs, has);
+        if (spec.color && !LOOK_COLORS.includes(spec.color)) throw new Error(`color= 只能写 ${LOOK_COLORS.join(' / ')}`);
+        if (this.objects.has(spec.name)) throw new Error(`「${spec.name}」已经是舞台上一样东西的名字，画的换一个名字`);
+        this.drawings.set(spec.name, spec);
+        return { draw: spec.name };
+      }
+      case 'erase': {
+        // erase d1 d2：擦掉画的；只写 erase 擦掉全部
+        const names = words.length ? words : [...this.drawings.keys()];
+        for (const n of names) if (!this.drawings.has(n)) throw new Error(`没有画过「${n}」（画的有：${[...this.drawings.keys()].join('、') || '没有'}）`);
+        for (const n of names) this.drawings.delete(n);
+        this.looks = this.looks.filter((l) => !names.includes(l.target));
+        return { erase: names };
+      }
+      case 'scale': {
+        // scale s 1.4：整样东西放大缩小（0.5～2.5），点、拖、贴字、排版都跟着（第九轮）；scale s 1 回到原样
+        const id = words[0];
+        if (!id || !this.objects.has(id)) throw new Error(`scale 写的「${id ?? ''}」：舞台上没有「${id ?? ''}」（写成 scale 名字 1.4）`);
+        const k = Number(words[1]);
+        if (!Number.isFinite(k) || k < 0.5 || k > 2.5) throw new Error('scale 的系数写 0.5 到 2.5（1 是原样）');
+        const o = this.objects.get(id);
+        // 底线 1：交给学生的部件不能小到手指点不中（44 像素）
+        for (const e of this.opens.values()) {
+          if (e.obj !== id) continue;
+          // refs 空着是整样东西都交了出去
+          for (const r of e.refs?.length ? e.refs : [id]) for (const p of (() => { try { return this.parts(r); } catch { return []; } })()) {
+            const b = typeOf(o).partBox(o, p);
+            if (Math.min(b.w, b.h) * k < 44) throw new Error(`scale ${id} ${k} 不照办：学生要点 ${id} 的部件，缩到这么小手指点不中（最小 44 像素；最多缩到 ${Math.ceil((44 / Math.min(b.w, b.h)) * 100) / 100}）`);
+          }
+        }
+        if (k === 1) delete o.k; else o.k = k;
+        return { scale: id, k };
+      }
       case 'arrange': {
         // arrange / arrange s q：帮我重排——照所有关系把这几样（不写是全部）整个重排一遍，排完照样钉住（第九轮）
         for (const n of words) if (!this.objects.has(n)) throw new Error(`arrange 写的「${n}」：舞台上没有「${n}」`);
@@ -2078,6 +2141,8 @@ export class Scene {
     // 构图里指着它的关系跟着没了（row / col 只剩一样就不算了）
     // 指着它（或它的部件）的样子跟着没了
     if (!keepPlace) this.looks = this.looks.filter((l) => l.target !== id && parseRef(l.target)?.obj !== id);
+    // 画在它身上的跟着没了（画在格子上的留着）
+    if (!keepPlace) for (const [k, d] of this.drawings) if (drawObjects(d).includes(id)) this.drawings.delete(k);
     if (!keepPlace && this.layout.size) {
       const next = new Map();
       for (const rs of this.layout.values()) for (const r0 of rs) {
@@ -2466,6 +2531,7 @@ export class Scene {
     const looks = lookLine(this);
     if (looks) lines.push(looks);
     if (this.lookNote) lines.push(this.lookNote);
+    if (this.drawings.size) lines.push(`画的：${[...this.drawings.values()].map(drawText).join('；')}`);
     const hints = new Set();
     for (const o of this.objects.values()) { const t = typeOf(o); if (t.hint) hints.add(t.hint); }
     for (const h of hints) lines.push(h);
@@ -2474,6 +2540,7 @@ export class Scene {
       const d = t.describe(o, this);
       if (o.hidden && d.length) d[0] = `（藏着，画面上不摆）${d[0]}`;
       lines.push(...d);
+      if (o.k && o.k !== 1) lines.push(`  ${o.id} ${o.k > 1 ? '放大' : '缩小'}到 ${o.k} 倍（scale）`);
       // 页面数得出的量（rules.js 的 measures）和那种东西自己交的几句（树的 avl / bst），老师不用自己数
       const ml = measureLine(this, o, t.pageBits?.(o, this) || []);
       if (ml) lines.push(`  ${ml}`);
