@@ -381,12 +381,14 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 }
 .st-card-family { padding: 12px 16px; border-radius: 16px; background: color-mix(in srgb, var(--st-card) 82%, transparent);
   box-shadow: 0 0 0 .5px var(--st-line), 0 10px 26px -18px rgb(var(--shade-rgb, 25 45 40) / 0.45); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
-.st-stage.is-free .st-caption { right: auto; bottom: auto; box-sizing: border-box; padding: 12px 16px; border-radius: 16px; align-items: stretch; justify-content: flex-start; gap: 4px;
-  background: color-mix(in srgb, var(--st-card) 82%, transparent); box-shadow: 0 0 0 .5px var(--st-line), 0 10px 26px -18px rgb(var(--shade-rgb, 25 45 40) / 0.45);
-  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); z-index: 3; }
+/* 话默认不带框：字直接写在画面上（2026-11-13 学生说字旁边都是框看着不舒服）；老师 style say frame=on 才是一张卡 */
+.st-stage.is-free .st-caption { right: auto; bottom: auto; box-sizing: border-box; padding: 4px 2px; align-items: stretch; justify-content: flex-start; gap: 4px; z-index: 3; }
+.st-stage.is-free .st-caption.st-framed { padding: 12px 16px; border-radius: 16px; background: color-mix(in srgb, var(--st-card) 82%, transparent);
+  box-shadow: 0 0 0 .5px var(--st-line), 0 10px 26px -18px rgb(var(--shade-rgb, 25 45 40) / 0.45); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.st-stage.is-free .st-line { text-wrap: wrap; max-width: none; }
 .st-stage.is-free .st-caption[hidden] { display: none; }
-.st-stage.is-free .st-line { width: auto; font-size: var(--st-fs-talk); line-height: 1.55; }
-.st-stage.is-free .st-line.is-past { font-size: var(--st-fs-body); color: var(--st-muted); }
+.st-stage.is-free .st-line { width: auto; font-size: calc(var(--st-fs-talk) * var(--look-k, 1)); line-height: 1.55; }
+.st-stage.is-free .st-line.is-past { font-size: calc(var(--st-fs-body) * var(--look-k, 1)); color: var(--st-muted); }
 .st-stage.is-free .st-line[data-kind="ask"]:not(.is-past) { font-weight: 650; }
 .st-stage.is-free .st-line.is-out { left: 16px; right: 16px; bottom: 12px; }
 .st-stage.is-free .st-how { margin: 4px 0 0; font: 500 calc(15px * var(--ts, 1))/1.5 var(--sans, sans-serif); color: var(--st-muted); }
@@ -410,3 +412,17 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-talk-line .st-ch { white-space: pre; }
 .st-talk-line.is-ask { font-weight: 650; }
 .st-talk-sep { border: 0; border-top: .5px solid var(--st-line); margin: 10px 0; }
+
+/* 老师写的样子（style，第八轮补）：不带框、大小、颜色、粗细、对齐。名字是含义，颜色走主题变量 */
+.st-stage.is-free .st-noframe:not(.st-caption):not([data-paint]) { background: transparent !important; box-shadow: none !important; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.st-stage.is-free .st-goals.st-noframe .st-goal { background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; padding-left: 0; }
+[data-look-size="s"] { --look-k: .85; } [data-look-size="m"] { --look-k: 1; } [data-look-size="l"] { --look-k: 1.25; } [data-look-size="xl"] { --look-k: 1.6; }
+.st-stage.is-free .st-label[data-look-size] { font-size: calc(17px * var(--look-k)); max-width: calc(21em / var(--look-k) * 1.2); }
+.st-stage.is-free .st-goals[data-look-size] .st-goal { font-size: calc(var(--st-fs-body) * var(--look-k)); }
+.st-stage.is-free .st-cline[data-look-size] { font-size: calc(18px * var(--look-k)); line-height: calc(30px * var(--look-k)); }
+[data-look-color="ink"] { color: var(--st-ink); } [data-look-color="muted"] { color: var(--st-muted); } [data-look-color="brand"] { color: var(--st-brand); }
+[data-look-color="g1"] { color: var(--st-g1); } [data-look-color="g2"] { color: var(--st-g2); } [data-look-color="g3"] { color: var(--st-g3); }
+[data-look-color="g4"] { color: var(--st-g4); } [data-look-color="g5"] { color: var(--st-g5); } [data-look-color="g6"] { color: var(--st-g6); }
+.st-caption[data-look-color] .st-line, .st-caption[data-look-color] .st-line.is-past { color: inherit; }
+[data-look-weight="bold"], [data-look-weight="bold"] .st-line { font-weight: 700; } [data-look-weight="normal"], [data-look-weight="normal"] .st-line { font-weight: 500; }
+[data-look-align="center"], [data-look-align="center"] .st-line { text-align: center; } [data-look-align="left"] { text-align: left; }

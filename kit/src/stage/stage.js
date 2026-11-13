@@ -71,6 +71,7 @@ function svgBox(n, depth = 0) {
 // 节点行内的 translate（最后摆的地方；动画走的是 WAAPI，不改行内）
 const transOf = (n) => { const m = String(n.style?.transform || '').match(/translate\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px\)/); return m ? { x: Number(m[1]), y: Number(m[2]) } : null; };
 const CAPTION_MAX = 3; // 话最多留几句在画面上（这一轮说过的，旧的淡一点）
+const DOCK_ROOM = 96; // 自由构图时底下那一条（输入框、按钮）一直留的高
 export const DONE_BTN = '做好了'; // 没有挑战、学生手上有没做完的东西时，页面替老师挂的那个按钮（helpLine）
 export const HELP = '给个提示'; // 挑战还没做到时，页面替老师挂的那一问的按钮
 
@@ -1697,7 +1698,9 @@ export class Stage {
         cur.node.querySelectorAll('.st-var').forEach((s) => { const x = sc.vars.get(s.dataset.var); const v = x ? varText(x) : s.dataset.var; if (s.textContent !== v) s.textContent = v; });
       }
       if (l.dial) cur.node.__paint?.();
-      const anchor = this.anchorOf(l) || bbox(sc.shownIds().map((id) => sc.objectBox(id))) || { x: 0, y: 0, w: 1, h: 1 };
+      // 什么都没贴的（拨盘没写 at=）：自由构图时贴着它归的那样东西（不然贴在整台外面，跑出画布）
+      const loose = !this.anchorOf(l) && this.free ? this.labelOwner(l) : null;
+      const anchor = this.anchorOf(l) || (loose ? grow(sc.objectBox(loose), 4) : null) || bbox(sc.shownIds().map((id) => sc.objectBox(id))) || { x: 0, y: 0, w: 1, h: 1 };
       const size = { w: cur.node.offsetWidth || 80, h: cur.node.offsetHeight || 32 };
       const obs = this.obstacles(l.id);
       // 东西变矮了（泳道 merge 回一排）也要重摆：以前只看左上角和宽，贴在它下面的字、拨盘留在老地方（D1-11）
@@ -1729,6 +1732,7 @@ export class Stage {
       const sideWas = cur.side;
       cur.box = { x: p.x, y: p.y, ...size };
       cur.anchor = anchor;
+      cur.owner = this.free ? this.labelOwner(l) : null;
       // 画在了哪一边：马上记下、写回场景（和写的 side= 不一样时舞台现状照实说，排版检查也报）。
       // 以前只在下面最后才记，新贴的字（先藏着摆好的那一支）走不到那里，一直不知道自己换了边
       cur.side = p.side;
@@ -1947,8 +1951,52 @@ export class Stage {
   unionBox(id) {
     const sc = this.scene;
     const b = sc.objectBox(id);
-    const own = (sc.labelRects || []).filter((r) => r.objs.length === 1 && r.objs[0] === id);
+    // 贴在它身上的字、拨盘（贴在几样上的算第一样的；什么都没贴的拨盘算这一轮讲的那样的，syncLabels 的 owner）：和它当一体摆，不然不进排版，压着别的、出屏幕
+    const own = [...this.labelNodes].filter(([lid, n]) => n.box && n.owner === id && sc.labels.has(lid) && this.labelShown(sc.labels.get(lid))).map(([, n]) => n.box);
     return bbox([b, ...own]);
+  }
+  /** 一张字、一个拨盘归哪样东西（排版时和它一起摆）：贴着的第一样；什么都没贴（拨盘没写 at=）归这一轮讲的那样 */
+  labelOwner(l) {
+    const sc = this.scene;
+    for (const r of l.refs || []) {
+      if (sc.labels.has(r)) { const o = this.labelNodes.get(r)?.owner; if (o) return o; continue; }
+      const id = String(r).match(/^[A-Za-z_]\w*/)?.[0];
+      if (id && sc.objects.has(id) && this.isShown(id)) return id;
+    }
+    const shown = sc.shownIds();
+    return shown.includes(this.lastTouched) ? this.lastTouched : shown.at(-1) || null;
+  }
+  /** 样子（老师的 style；all 垫底）：名字 → { frame, size, color, weight, align } */
+  styleOf(name) { return { ...(this.scene.styles?.get('all') || {}), ...(this.scene.styles?.get(name) || {}) }; }
+  /**
+   * 照老师写的 style 画：带不带框、多大、什么颜色、粗细、对齐（画面上的东西的样子都归老师定；默认话不带框，别的照原样带框）。
+   * 返回有没有变（变了大小要重量）
+   */
+  applyStyles() {
+    if (!this.free) return false;
+    let changed = false;
+    const put = (node, st, frameDefault) => {
+      if (!node) return;
+      const frame = st.frame || frameDefault;
+      const sig = `${frame}|${st.size || ''}|${st.color || ''}|${st.weight || ''}|${st.align || ''}`;
+      if (node.__look === sig) return;
+      node.__look = sig;
+      changed = true;
+      node.classList.toggle('st-noframe', frame === 'off');
+      node.classList.toggle('st-framed', frame === 'on');
+      for (const k of ['size', 'color', 'weight', 'align']) {
+        const key = `look${k[0].toUpperCase()}${k.slice(1)}`;
+        if (st[k]) node.dataset[key] = st[k]; else delete node.dataset[key];
+      }
+    };
+    put(this.caption, this.styleOf('say'), 'off');
+    put(this.goalsEl, this.styleOf('goals'), 'on');
+    for (const [id, cur] of this.labelNodes) if (!this.scene.labels.get(id)?.dial) put(cur.node, this.styleOf(id), 'on');
+    for (const id of this.scene.shownIds()) {
+      const st = this.styleOf(id);
+      for (const n of this.root.querySelectorAll(`[data-obj="${CSS.escape(id)}"]`)) if (n.parentElement === this.layer) put(n, st, 'on');
+    }
+    return changed;
   }
   /** 能折行的东西（句子）折成几种宽时的世界大小；不能折、折了一样大的给 null */
   altsOf(id) {
@@ -2001,8 +2049,14 @@ export class Stage {
   }
   async composeOnce({ animate }) {
     const sc = this.scene;
+    // 老师写的样子先画上（大小变了要先重量一遍再排）
+    if (this.applyStyles()) {
+      this.composeQuiet = true;
+      try { await this.sync({}); this.measure(); } finally { this.composeQuiet = false; }
+    }
     const { w, h } = this.viewSize();
-    const dockH = this.dock.childElementCount ? this.dock.offsetHeight + 8 : 24;
+    // 底下那一条留一个固定的高（输入框出来、收起时画布不跟着变，东西就不上下晃）；比它高时照量的
+    const dockH = Math.max(DOCK_ROOM, this.dock.childElementCount ? this.dock.offsetHeight + 8 : 0);
     const cv = canvasOf({ w, h, dockH });
     const grid = gridOf(cv);
     const ts = typeScaleOf({ w });

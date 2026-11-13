@@ -17,7 +17,7 @@ export const COMMANDS = new Set([
   'label', 'retext', 'unlabel', 'dial', 'set', 'camera', 'wait', 'ask', 'clear', 'fly', 'remove',
   'dim', 'undim', 'cover', 'uncover',
   'open', 'close', 'goal', 'ungoal', 'watch', 'follow', 'hide', 'show', 'pick', 'unpick', 'keep', 'back', 'press',
-  'scene', 'place', 'preview', 'pos',
+  'scene', 'place', 'preview', 'pos', 'style',
 ]);
 export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
 
@@ -29,7 +29,9 @@ export function addCommands(list) { for (const c of list) COMMANDS.add(c); }
 export const OPTIONS = {
   label: ['side', 'tone'], fly: ['side'], scene: ['keep'],
   // 第八轮的构图：place 的轻重、间距、对齐、精确到格子；话也能贴着一处、放在格子上
-  place: ['align', 'gap', 'weight', 'at'], say: ['at', 'near'], dial: ['range', 'at', 'options'], pick: ['reveal'], keep: ['after'],
+  place: ['align', 'gap', 'weight', 'at'], say: ['at', 'near'],
+  // 样子也由老师定（第八轮补）：带不带框、多大、什么颜色、粗细、对齐
+  style: ['frame', 'size', 'color', 'weight', 'align'], dial: ['range', 'at', 'options'], pick: ['reveal'], keep: ['after'],
   open: ['back', 'wrong', 'call', 'undo', 'input', 'range', 'choices'],
   // exam= / like=：这一问、这条挑战是哪一道真题 / 对标哪一道真题（考情第 4 批；写法在「这一块在考试里」那一节里，不进 stageDoc）
   goal: ['when', 'call', 'on', 'collect', 'n', 'exam', 'like'], watch: ['when'],
