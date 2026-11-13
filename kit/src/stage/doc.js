@@ -62,9 +62,8 @@ label n dial:d "{d} 组" side=right   字可以贴在拨数旁边
 set d 5                            你来拨
 unlabel dial:d                     收起拨数
 
-摆哪、长什么样都归你定（学生嫌不好看就改，别说改不了）：
-place a main / place g right-of a align=top gap=s / place A B row / at=6,4-30,12；say "…" near=a.2  页面排；现状「版面」写每样占哪几格（48 列）
-style say frame=off size=l color=brand weight=bold align=center  框、字号；名字写 say、goals、all、东西、贴的字（size 只给话、goals、贴的字、题卡）；话默认无框
+place a main / place g right-of a align=top gap=s / place A B row / at=6,4-30,12；say "…" near=a.2  摆哪由你定；现状「版面」写每样占哪几格（48 列）
+style say frame=off size=l color=brand weight=bold align=center  样子也由你定（框、字号；say goals all 东西 贴的字）
 preview  先看一眼排成什么样（多等一轮）
 镜头：camera a.1-7（凑近）/ camera all；wait 600（毫秒）
 

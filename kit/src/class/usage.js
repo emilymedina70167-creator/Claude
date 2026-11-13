@@ -17,12 +17,14 @@ export const WHY_TEXT = { lint: '重写', images: '看原图', tools: '工具', 
 
 /** 一次调用的花费，记在 class_turns 那一轮上 */
 // ms：从发出到写完一共多久（学生等了多久）；first：从发出到黑板上出现第一个字（边写边显示时学生先看到东西的时候）
-export function callCost({ bytes, why = 'turn', tools = 0, ms, first, spec }) {
+export function callCost({ bytes, why = 'turn', tools = 0, ms, first, spec, img }) {
   const t = (v) => (Number.isFinite(v) && v >= 0 ? Math.round(v) : undefined);
   return {
     bytes: Math.max(0, Math.round(Number(bytes) || 0)), why: WHY.includes(why) ? why : 'turn', ...(tools > 0 ? { tools: Math.round(tools) } : {}),
     ...(t(ms) !== undefined ? { ms: t(ms) } : {}), ...(t(first) !== undefined ? { first: t(first) } : {}),
     ...(spec === 'hit' ? { spec: 'hit' } : {}),
+    // img：这一次带的画面图多少字节（舞台第九轮：每轮把画面截图给老师）
+    ...(Number(img) > 0 ? { img: Math.round(img) } : {}),
   };
 }
 

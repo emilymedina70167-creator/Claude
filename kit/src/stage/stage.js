@@ -15,6 +15,7 @@ import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, C
 import { gridOf, typeScaleOf } from './compose/grid.js';
 import { layoutLines } from './compose/report.js';
 import { sketchText } from './compose/sketch.js';
+import { createSnapper } from './snap.js';
 import { solveLayout } from './compose/solve.js';
 import { canvasOf, composeInput, posLine, SENTENCE_WIDTHS } from './compose/apply.js';
 import { parseScript, parseRich, richLength } from './script.js';
@@ -193,8 +194,13 @@ export class Stage {
     this.pointer = new PointerRouter(this); // 点、拖都走它（pointer.js）
     this.ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => requestAnimationFrame(() => { this.noteView(); this.refocus(false); })) : null;
     this.ro?.observe(this.view);
+    // 老师的眼睛（第九轮）：画面一变记一笔，静下来以后后台拍一张（snap.js）；嵌在别处的一小块舞台（自己练）不拍
+    if (this.free && typeof MutationObserver === 'function' && typeof document !== 'undefined') {
+      this.snapper = createSnapper(this);
+      new MutationObserver(() => { if (!this.instant) this.snapper.dirty(); }).observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
+    }
   }
-  destroy() { this.ro?.disconnect(); this.resetOpens(); this.root.remove(); this.scenesEl?.remove(); this.talkBtn?.remove(); this.keysPop?.remove(); this.cancelWait?.(); this.cancelBeat?.(); }
+  destroy() { this.snapper?.stop(); this.ro?.disconnect(); this.resetOpens(); this.root.remove(); this.scenesEl?.remove(); this.talkBtn?.remove(); this.keysPop?.remove(); this.cancelWait?.(); this.cancelBeat?.(); }
   setPace(p) {
     if (!PACES[p]) return;
     this.pace = p;

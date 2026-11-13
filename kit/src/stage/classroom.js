@@ -165,6 +165,8 @@ export async function renderStageClass(root, meta = {}, desk) {
   const sigOf = makeSigger();
   const loop = createLoop({
     stage, call, mock: !!mock, model: MODEL, teach: TEACH, quietMs, readOnly,
+    // 能不能带图（第九轮：每轮把画面截图给老师）：平台给了看图的能力、或者本地的模拟老师
+    images: !!(ai?.images || mock),
     messages: ({ next } = {}) => messages(null, { next }),
     addTurn, putTurn,
     runMemo: (text, seq0) => runMemo(text, seq0),

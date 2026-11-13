@@ -14,6 +14,7 @@
 //   report?(err, info)             出错记一笔
 //   evidence?.goal(id, goal, seq) / evidence?.act(a, seq)   记成证据（学习台）
 //   mock、model、teach（叫老师的参数）、quietMs、readOnly
+import { snapNote } from './snap.js';
 import { HELP, DONE_BTN, stageLines } from './stage.js';
 import { turnMessage, gridsOf } from './doc.js';
 import { eventOf, triggers, eventsText, tryCount, hasWork, undoneOf, TRY_MAX, QUIET_MS } from './events.js';
@@ -74,6 +75,20 @@ export function createLoop(host) {
 
   // —— 叫老师写一轮：边写边演 → 核验 → 记忆块 → 演完存好。学生答了什么不在这里等：事件来了 flush 再叫 ——
   // pre：提前想好的那一轮（spec）接上来，写过的先演、接着流式演
+  /**
+   * 这一条带上画面（第九轮）：能带图时拿截图（画面没再变就是后台拍好的那张，变了当场拍、最多等 0.5 秒），最后一条消息末尾写一句；
+   * 拍不出来照常发，那一句说没截到并附字画的版面。返回 { input, images, img（字节） }
+   */
+  async function eyeFor(input) {
+    if (!host.images || !stage.snapper || !Array.isArray(input) || !input.length) return { input };
+    let shot = null;
+    try { shot = await stage.snapper.fresh(500); } catch { shot = null; }
+    const note = shot ? snapNote({ ok: true, ageMs: Date.now() - shot.at }) : `${snapNote({ ok: false, reason: stage.snapper.lastError() || '还没拍好' })}\n${stage.previewText?.() || ''}`;
+    const last = input[input.length - 1];
+    const next = [...input.slice(0, -1), { ...last, content: `${last.content}\n\n${note}` }];
+    return shot ? { input: next, images: [shot.blob], img: shot.blob.size || 0 } : { input: next };
+  }
+
   async function teach(why = 'turn', pre = null) {
     if (!host.call) { host.note?.('这里调不了 Claude：要在 claude.ai 里打开这节课。'); return null; }
     S.busy = true;
@@ -98,8 +113,15 @@ export function createLoop(host) {
         turn.push(text);
       };
       let res;
+      let imgBytes = 0;
       try {
-        res = pre ? await pre.attach(onText) : await host.call(input, { ...host.teach, cache: false, onText });
+        if (pre) res = await pre.attach(onText);
+        else {
+          // 老师的眼睛（第九轮）：这一刻的画面图跟着这一条发（只发最新一张；拍不出来写一句、附字画的版面）
+          const eye = await eyeFor(input);
+          if (eye.img) imgBytes = eye.img;
+          res = await host.call(eye.input, { ...host.teach, cache: false, onText, ...(eye.images ? { images: eye.images } : {}) });
+        }
       } catch (err) {
         S.flight = null;
         if (f.playing) { await turn.abort(); dropNotes(turn.turn); } else turn.drop();
@@ -114,7 +136,7 @@ export function createLoop(host) {
       }
       S.flight = null;
       if (S.ended) { turn.drop(); host.thinking?.(false); S.busy = false; return null; }
-      const cost = { ...host.cost({ bytes: nb, why, ms: performance.now() - t0, first: first ? first - t0 : undefined }), ...(pre?.spec ? { spec: 'hit' } : {}) };
+      const cost = { ...host.cost({ bytes: nb, why, ms: performance.now() - t0, first: first ? first - t0 : undefined, img: imgBytes }), ...(pre?.spec ? { spec: 'hit' } : {}) };
       pre = null;
       // 学生在老师想的时候又做了要老师接的事、这一轮还一行没演：不演了（学生这期间动过的不退），带上新的再要
       if (f.stale && !f.playing) {
@@ -444,7 +466,8 @@ export function createLoop(host) {
     const input = host.messages({ next: msg });
     const s = S.spec = { msg, input, text: '', res: null, err: null, listeners: [], t0: performance.now(), dead: false, done: false, adopted: false };
     s.record = () => host.addTurn({ role: 'system', kind: 'spec', discarded: true, text: '提前想好的下一轮没用上（学生做的和预想的不一样）', cost: host.cost({ bytes: inBytes(input), why: 'spec', ms: performance.now() - s.t0 }) });
-    s.wait = host.call(input, { ...host.teach, cache: false, onText: ({ text }) => { s.text = text; for (const fn of s.listeners) fn({ text }); } })
+    // 提前想的那一轮也带上画面（学生点了「接着」接上的那一轮老师照样看得见）
+    s.wait = eyeFor(input).then((eye) => host.call(eye.input, { ...host.teach, cache: false, ...(eye.images ? { images: eye.images } : {}), onText: ({ text }) => { s.text = text; for (const fn of s.listeners) fn({ text }); } }))
       .then((r) => { s.res = r; }, (e) => { s.err = e; })
       .then(() => { s.done = true; if (s.dead) s.record(); });
   }

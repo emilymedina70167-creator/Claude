@@ -69,6 +69,8 @@ position next="折半查找的判定树和 ASL"
 
 export function stageMock({ pace = 60 } = {}) {
   return async (messages, opts = {}) => {
+    // 收到几张画面图（第九轮：e2e 看老师每轮都带着图）
+    if (typeof window !== 'undefined') (window.LAStageDev ||= {}).lastImages = (opts.images || []).length;
     const last = String(messages.at(-1)?.content || '');
     const k = messages.filter((m) => m.role === 'assistant').length;
     // 学生说「测试:下课」：模拟老师照说明把「下课吗？」递给学生（ask end，e2e 的 stage 段）
