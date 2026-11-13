@@ -755,7 +755,11 @@ export class Stage {
     if (forgiven && by === 'teacher' && !this.instant) this.errors.push({ line: c.line, src: c.src?.trim(), kept: true, error: FORGIVEN[forgiven] });
     if (c.cmd === 'scene' && fx?.scene != null) this.afterScene();
     // 这一轮老师讲的那样东西（话默认贴着它）：摆位置、挑战、说话的行不算
-    if (fx?.arrange) this.arrangeNext = fx.arrange; // 帮我重排（第九轮）：下一次摆的时候这几样不当钉子
+    // 帮我重排（第九轮）：下一次摆的时候这几样不当钉子；老师又 place 了一样已经摆过的，也照新写的重摆它（设计要求单 r14～r16、r30）
+    // （重放时不记：那时的位置 log 里的 pos 已经放回去了，刷新不该重摆）
+    const again = this.instant ? null : fx?.arrange || (fx?.place && by === 'teacher' ? fx.place.filter((n) => this.scene.objects.has(n)) : null);
+    if (again) this.arrangeNext = again === 'all' || this.arrangeNext === 'all' ? 'all' : [...new Set([...(this.arrangeNext || []), ...again])];
+    if (by && !this.instant) this.lastBy = by;
     // 一直用的样子（look … always）：交给课堂存进 meta/look（重放、回看不存：那是以前写过的）
     if (fx?.look?.always && by === 'teacher' && !this.instant) this.onLookAlways?.(fx.look);
     if (by === 'teacher' && !c.on && !['place', 'preview', 'pos', 'goal', 'watch', 'say', 'ask', 'scene', 'remove'].includes(c.cmd)) { const t = fx?.created ? fx.id : this.targetOf(c)?.id; if (t) this.lastTouched = t; }
@@ -2147,6 +2151,15 @@ export class Stage {
     let res = solveLayout({ canvas: cv, grid, items, relations, arrange });
     // 底线 1（第九轮）：学生要点的部件被钉住的东西盖着、或者出了屏幕：放开挡着的那一样（或者它自己）挪最少的距离，告诉老师
     const nudged = this.floorNudge(res, items, cv, ts);
+    // 老师这一轮自己的改动（放大、画、换字号）让两样钉住的压在一起：这一轮里放开后摆的那一样挪最少（设计要求单 r23、r25、r08）；
+    // 学生动手时照旧不挪
+    if (this.lastBy === 'teacher') {
+      const pins = items.filter((it) => it.pinned && !it.rigid);
+      for (let i = 0; i < pins.length; i++) for (let j = i + 1; j < pins.length; j++) {
+        const A = res.boxes.get(pins[i].id), B = res.boxes.get(pins[j].id);
+        if (A && B && A.x < B.x + B.w - 1 && B.x < A.x + A.w - 1 && A.y < B.y + B.h - 1 && B.y < A.y + A.h - 1) nudged.add(pins[j].id);
+      }
+    }
     if (nudged.size) res = solveLayout({ canvas: cv, grid, items, relations, arrange, release: nudged });
     const s = ts * res.scale;
     // 东西挪到算出来的地方

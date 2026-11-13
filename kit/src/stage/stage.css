@@ -420,3 +420,9 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-draw > text { fill: currentColor; stroke: none; font: 600 18px/1 var(--sans, sans-serif); }
 .st-draw .sk { fill: none; stroke: currentColor; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .st-draw .sk-text, .st-draw .sk-fill { fill: currentColor; }
+
+/* 话里的小块（{s.4}）：话不带框时也不带框，写成那个部件的颜色、加粗（2026-11-13 设计要求单 r01：学生说字旁边都是框）；
+   老师 look say frame=card / line 时照旧是小卡（look/apply.js 给话加 lk-boxed） */
+.st-stage.is-free .st-caption:not(.lk-boxed) .st-chip { background: none; box-shadow: none; min-width: 0; height: auto; margin: 0 .06em; padding: 0; vertical-align: baseline; font: inherit; font-weight: 700; color: var(--c, var(--st-brand)); }
+/* 话的字体跟着 look say font=（每一行自己写了字体，所以走变量） */
+.st-stage.is-free .st-line { font-family: var(--lk-font, var(--sans, sans-serif)); }

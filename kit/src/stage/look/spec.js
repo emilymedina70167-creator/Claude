@@ -4,7 +4,7 @@
 // < 部件（s.3、a.2-5）。同一档按写的先后，后写的盖前写的。属性只写有名字的档（不写 CSS 原文：免得写错、免得把要点的地方压坏），
 // 颜色只写名字，每种风格自己定是什么颜色。页面自己的默认样子（DEFAULT_LOOK）也是这种写法，所以没有老师改不了的地方。
 
-export const FIXED = ['say', 'goals', 'dock', 'bar', '*'];
+export const FIXED = ['say', 'goals', 'dock', 'bar', 'page', '*'];
 export const KINDS = ['card', 'sentence', 'array', 'matrix', 'tree', 'graph', 'table', 'timeline', 'plane', 'tex', 'node', 'label', 'dial', 'draw'];
 export const COLOR = ['ink', 'muted', 'brand', 'gold', 'red', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 
@@ -31,7 +31,7 @@ export const DEFAULT_LOOK = [{ target: 'say', rank: 2, props: { frame: 'none' },
 const ALIAS = {
   frame: { off: 'none', no: 'none', on: 'card', box: 'card', thin: 'line' },
   shadow: { none: 'off', no: 'off', yes: 'on' },
-  bg: { white: 'card', transparent: 'none', off: 'none', clear: 'none' },
+  bg: { white: 'card', transparent: 'none', off: 'none', clear: 'none', plain: 'none' },
   edge: { off: 'none', no: 'none' },
   font: { song: 'serif', 宋体: 'serif', 黑体: 'sans', 手写: 'hand' },
   weight: { 700: 'bold', 500: 'normal', regular: 'normal' },
@@ -102,7 +102,7 @@ const WORDS = {
   frame: { none: '不带框', line: '细线框', card: '卡片' }, shadow: { on: '有影子', off: '没影子' }, weight: { bold: '粗体', normal: '常规粗细' },
   align: { left: '靠左', center: '居中', right: '靠右' }, font: { sans: '黑体', serif: '宋体', hand: '手写体', mono: '等宽' },
 };
-const NAMES = { say: '话', goals: '挑战', dock: '底下那一条', bar: '顶上那一条', '*': '全部' };
+const NAMES = { say: '话', goals: '挑战', dock: '底下那一条', bar: '顶上那一条', page: '画面的底', '*': '全部' };
 export function lookWords(props, hide) {
   const bits = Object.entries(props).map(([k, v]) => {
     if (WORDS[k]?.[v]) return WORDS[k][v];

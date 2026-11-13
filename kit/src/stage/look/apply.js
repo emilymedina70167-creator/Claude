@@ -60,8 +60,10 @@ export function applyLooks(stage) {
     delete st['font-size'];
     if (props.text) { st['--st-fs-talk'] = `calc(${props.text}px * var(--ts, 1))`; st['--st-fs-body'] = `calc(${Math.round(props.text * 0.8)}px * var(--ts, 1))`; }
     if ((props.frame === 'card' || props.frame === 'line') && !props.pad) st.padding = '10px 14px';
+    if (props.font) st['--lk-font'] = st['font-family'];
     if (hide) st.visibility = 'hidden';
     write(stage.caption, st);
+    stage.caption.classList.toggle('lk-boxed', props.frame === 'card' || props.frame === 'line');
   }
   // 挑战：框在每一条上，字号在整块上
   {
@@ -81,6 +83,13 @@ export function applyLooks(stage) {
     const st = lookStyle(props, 'block');
     delete st['font-size'];
     write(stage.dock, st);
+  }
+  // 整个画面的底（look page bg=…，设计要求单 r21：「背景干净一点」）
+  {
+    const { props } = resolveLook(looks, { name: 'page' });
+    const st = {};
+    if (props.bg) st.background = lookStyle({ bg: props.bg }, 'box').background;
+    write(stage.root, st);
   }
   // 顶上那一条（课堂里才有）：返回、下课在上面——不能藏、不能太淡
   if (stage.barEl) {
