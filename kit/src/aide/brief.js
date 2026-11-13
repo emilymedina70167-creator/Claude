@@ -6,7 +6,7 @@
 import { hashOf } from '../memory/lab.js';
 import { todayReviews } from '../memory/views.js';
 import { positionId } from '../memory/space.js';
-import { cardText } from './card.js';
+import { cardText, cardIdsFor } from './card.js';
 
 export const BRIEF_MAX_BYTES = 6144;
 export const BRIEF_HEAD = '你在给下一节课的老师准备这节课要知道的事';
@@ -94,4 +94,22 @@ export function guessBlocks(mem = {}, space = '', packs = {}) {
   }
   const pos = list(mem.position).find((p) => p?.id === positionId(space));
   return pos?.block ? [String(pos.block)] : [];
+}
+
+/**
+ * 老师这一轮带什么（舞台课 classroom.js 的 system() 每一轮现算）：这一块附近的学生卡（cardIdsFor 那几张，按那个先后），
+ * 档案能用（给这几块写的、那几张卡一张没变、Opus 写的）才带。blocks：这节课的块（复现课几块），不给就是 [block]。
+ * 返回 { brief: briefText 的字（不能用就空）, cards: [cardText 的字] }
+ */
+export function aideForTurn({ block = '', blocks = null, cards = [], brief = null, curriculum = [], space = '' } = {}) {
+  const want = blocks?.length ? blocks : block ? [block] : [];
+  const ids = [...new Set(want.flatMap((b) => cardIdsFor(b, curriculum, space)))];
+  const byId = new Map(list(cards).map((c) => [String(c.id), c]));
+  const near = ids.map((id) => byId.get(id)).filter(Boolean);
+  if (!near.length) return { brief: '', cards: [] };
+  const title = (id) => list(curriculum).find((d) => d.id === id)?.title || '';
+  return {
+    brief: briefUsable(brief, { blocks: want, cards: near }) ? briefText(brief) : '',
+    cards: near.map((c) => cardText(c, { title: title(c.block) })),
+  };
 }

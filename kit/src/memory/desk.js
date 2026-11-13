@@ -75,6 +75,8 @@ import { createExamPage } from '../exam/exampage.js';
 import { priority } from '../exam/priority.js';
 import { renderStageClass } from '../stage/classroom.js';
 import { createAideDesk } from '../aide/aidedesk.js';
+import { loadCards, loadBrief } from '../aide/load.js';
+import { cardIdsFor } from '../aide/card.js';
 import { suggestBlock } from '../books/plan.js';
 import { renderLive } from '../live/live.js';
 import { renderGuided } from '../guided.js';
@@ -1638,7 +1640,15 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   examLoad?.then((ex) => { if (ex) examIdx = examIndexOf(ex, examYears()); });
   // 舞台课（kind: stage，docs/stage-plan.md D 段）：整屏一块舞台，自己的控制器；记忆、教材、证据、报告照旧
   if (kind === 'stage') {
+    // 课堂助手（aide/，第九轮）：这一块附近的学生卡、这一科的课前档案（各 3 秒读不到当没有，不等）；
+    // 档案不能用（给别的块写的、卡变了）时课堂在开课那一刻和老师第一轮同时写一份（refresh，不排在讲课后面）
+    const asp = block ? spaceOfId(block) : space;
+    const aideOn = !!doc.aide && !!block;
+    const [aideCards, aideBrief] = aideOn ? await Promise.all([within(loadCards(db, cardIdsFor(block, mem.curriculum || [], asp)), 3000, []), within(loadBrief(db, asp), 3000, null)]) : [[], null];
+    const aideAI = store.dev ? async () => (await getAI()) || createDevAI() : getAI;
+    const aideHere = aideOn && !readOnly ? createAideDesk({ db, getData: () => mem, ops, ai: aideAI, packs: () => ({}) }) : null;
     return renderStageClass(root, { ...meta, unit: doc.title || meta.unit }, {
+      aide: aideOn ? { cards: aideCards, brief: aideBrief, space: asp, refresh: () => aideHere?.briefFor(asp, [block], { now: true }) || Promise.resolve(null) } : null,
       store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, subject: doc.subject || '', mem, books, prevRead, readOnly,
       // 这一门课的考试资料（exam/load.js，按门课读、不读整类）：不等它，课堂读到了再用（「这一块在考试里」、exam= 当场核）
       exam: examLoad, reserve: examYears,

@@ -17,6 +17,7 @@ import { examCheckOf } from '../exam/fields.js';
 import { toDate } from '../memory/schema.js';
 import { examForBlock } from '../exam/block.js';
 import { examForClass } from '../exam/context.js';
+import { aideForTurn } from '../aide/brief.js';
 import { targetOf } from '../exam/target.js';
 import { fitHistory } from './history.js';
 import { getAI } from '../ai.js';
@@ -124,7 +125,22 @@ export async function renderStageClass(root, meta = {}, desk) {
   // 说明只带这门课用得上的那几种东西：块 → 资料包 → 这节课记着的科目 → 空间，推不出来（408 的课既没块也没记科目）发全带的那份
   function system() {
     const subject = stageSubject({ block: desk.block, pack, session: { subject: desk.subject }, space: desk.space });
-    return buildStageSystem({ pack: packWithBooks(), memory: desk.mem ? { mem: desk.mem, block: desk.block, space: desk.space, session: sid } : null, title: meta.unit || '', subject, exam: examSection() });
+    return buildStageSystem({ pack: packWithBooks(), memory: desk.mem ? { mem: desk.mem, block: desk.block, space: desk.space, session: sid } : null, title: meta.unit || '', subject, exam: examSection(), aide: aideSection() });
+  }
+  // 课堂助手（aide/，第九轮）：这一块附近的学生卡、能用的课前档案，放进「你对学生的了解」那一节（总量不变）。
+  // 开课时档案不能用：和老师第一轮同时写一份（desk.aide.refresh），写好了从下一轮起带上；写不成就一直是代码挑的那一套
+  let aideBrief = desk.aide?.brief || null;
+  let aideAsked = false;
+  function aideSection() {
+    const a = desk.aide;
+    if (!a || !desk.block) return null;
+    const curriculum = desk.mem?.curriculum || [];
+    const got = aideForTurn({ block: desk.block, cards: a.cards, brief: aideBrief, curriculum, space: a.space });
+    if (!got.brief && !aideAsked && !readOnly && a.cards?.length) {
+      aideAsked = true;
+      a.refresh?.().then((b) => { if (b) aideBrief = b; }, () => {});
+    }
+    return got.brief || got.cards.length ? got : null;
   }
   // 「这一块在考试里」（exam/context.js）：这门课的考试资料读到了、这一块挂了考点才有；学生的真题情况读记忆库里页面算的 exam_bar。
   // 老师这节课用 exam= / like= 写过的题号挪进代表题（下一轮有全文）
