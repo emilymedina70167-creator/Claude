@@ -34,3 +34,22 @@ export function fitHistory(msgs, { max, sysBytes = 0, keep = 3 } = {}) {
   }
   return { msgs, stripped, dropped };
 }
+
+/**
+ * 页面要告诉老师、又不是一轮对话的话（第十一轮：老师写的 memo 没收的那一条，role: system, kind: note）：
+ * 拼在紧跟着的那一条学生消息前面发出去。返回 Map(学生那一轮的 seq → 前缀)。只在发的时候拼，不进 row.msg（抢跑比的是它）
+ */
+export function notesBefore(history = []) {
+  const out = new Map();
+  let pending = [];
+  for (const t of history) {
+    if (!t || t.discarded) continue;
+    if (t.role === 'system' && t.kind === 'note' && t.text) pending.push(String(t.text).replace(/^\[系统\]\s*/, '[页面] '));
+    else if (t.role === 'claude') pending = [];
+    else if (t.role === 'student' && !t.pending) {
+      if (pending.length) out.set(t.seq, pending.join('\n'));
+      pending = [];
+    }
+  }
+  return out;
+}

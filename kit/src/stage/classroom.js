@@ -25,7 +25,7 @@ import { transcriptText } from '../memory/debrief.js';
 import { buildCorpus } from '../memory/guard.js';
 import { createDevAI } from '../books/devmock.js';
 import { targetOf } from '../exam/target.js';
-import { fitHistory } from './history.js';
+import { fitHistory, notesBefore } from './history.js';
 import { getAI } from '../ai.js';
 import { createSink } from '../live/sync.js';
 import { sayEvidence, observationRecord } from '../memory/session.js';
@@ -187,9 +187,11 @@ export async function renderStageClass(root, meta = {}, desk) {
     const msgs = [];
     // 连着两条学生的（老师那一轮过时作废了）并成一条：一问一答交替
     const user = (content) => { if (msgs.at(-1)?.role === 'user') msgs.at(-1).content += `\n\n${content}`; else msgs.push({ role: 'user', content }); };
+    // 老师上一轮记的 memo 没收（守卫拒了、写法不对）：拼进紧跟着的学生消息前面告诉它（第十一轮，history.js 的 notesBefore）
+    const notes = notesBefore(history);
     for (const t of live) {
       if (t.role === 'claude') { if (!msgs.length) user(OPENING); msgs.push({ role: 'assistant', content: t.text }); }
-      else user(t.msg || t.text);
+      else user(notes.has(t.seq) ? `${notes.get(t.seq)}\n\n${t.msg || t.text}` : t.msg || t.text);
     }
     if (!msgs.length) user(OPENING);
     if (next) user(next);
