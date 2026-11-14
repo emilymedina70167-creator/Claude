@@ -32,6 +32,8 @@ place g below v gap=m
 look g frame=none text=14 opacity=0.55
 say "这段回答一个问题：动词前面加上 can、must 这类词，后面的动词会变成什么样？"
 ask say "两个拨盘都拨一遍，拨完说说：加了 can 这些词以后，supplement 有什么变化？"
+自查:
+place say at=4,0-44,3
 学生: say 你先优化好你的交互
 # —— 老师 000007 ——
 say "说得对：刚才只有一句，要靠记，还挤在一起。改成上下两句对照。"
@@ -52,9 +54,10 @@ arrange
 ask tap c "两个拨盘随便拨，对照上下两句，点出你看到的那一条" expect=c.4
 自查:
 remove g
-place a at=4,1-44,5
-place v at=4,7-44,11
-place c at=8,13-40,21
+place say at=4,0-44,3
+place a at=4,4-44,7
+place v at=4,9-44,12
+place c at=8,14-40,22
 学生: say 我的天，你这是什么排版
 # —— 老师 000010 ——
 say "排版是我没摆好，压在一起了。重排了：上下两句对照，拨盘贴在句子旁边。"

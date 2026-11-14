@@ -346,6 +346,8 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 - **C 交卷前自查**（核心）：老师一轮演完先 `stage.sightCheck()`（收尾排一遍、等动画、量），量完才算演完（量的时候学生的动作排队）；压着、出了屏幕就 `stage.veil(true)` 盖一层「老师在调画面」（挡点、挡打字，截图不拍它），记事件 `sight` 马上叫老师（`events.js` 写成「[画面自查] … 只改画面 … 那一问还挂着，不用重写」，截图本来就跟着发），花费 `why: 'sight'`；改完再量，干净揭开；一轮最多 `SIGHT_MAX`（2）次，还不行照样交给学生。画面没问题一次都不多叫。`host.selfCheck: false` 关（以前的试演文件不开，基线不变；`STAGE_TRY_SIGHT=1` 或文件里写了 `自查:` 段才开）。`tests/stage-sight-loop.test.js`。
 - **D/E**：幕条藏着时「说过的」不再被压成 0 宽的竖条（`class.css`）；老师说明「画面」一节写明页面会先量、加几条排版的依据（正在讲的最大放中间、从上往下、有关系的挨着、一屏只留现在要用的、放不下换一幕不缩字）。
 - 尺子：① 量得到（重演）；② `node tools/stage-sight.mjs`（`evals/stage-sight/*-fixed.txt`：同一节课接上改画面的段，学生拿到手的每一帧都没压着）；③ `tools/stage-sight-eval.mjs prepare|apply`：真课的坏画面交给扮老师的 Opus 改（结果 `evals/stage-sight/results.md`）；e2e 舞台段「放不下的长卡」：盖上、交回、拿掉、揭开。
+- 只读审查（一个没参与开发的 Opus）找到的 11 处修了：镜头凑近、正拖着时不量；量的那一会儿学生已经答了照常讲；没演上时不另外自查；换幕要重写那一问；不白等一直循环的动画；Pencil 那一条排版也躲；改不掉的同一组不每轮来回；盖层保底 45 秒揭开、盖着不提前想不算很久没动（`tests/stage-sight-loop.test.js`）。
+- 尺子 3 量出来、页面画不出老师意思的几处也修了：`at=` 定宽（题卡、句子照给的宽排）、跟着拨盘变的句子换宽时重算占地（`sentence.js` 的 `setWidth` / `widthBox`）、`place` 能摆拨盘（`place m below v` / `at=`）。结果 `evals/stage-sight/results.md`：真老师两次以内改好 10 / 10。
 - 顺带发现、这一轮没改：老师的字一行一行流过来时，钉住又放不下的东西会让页面每来一行就重排、播一次挪动动画，演得很慢（e2e 里 20 秒才演到第三行）。
 
 ## ③ ④ 建议的顺序
