@@ -85,3 +85,11 @@ test('够快', () => {
   for (let i = 0; i < 3; i++) { const c0 = process.cpuUsage(); forecastBoard(m, { today: '2026-11-14' }); const c = process.cpuUsage(c0); ms = Math.min(ms, (c.user + c.system) / 1000); }
   assert.ok(ms < 120, `用了 ${ms.toFixed(0)} 毫秒`);
 });
+
+test('各块的期望分加起来就是这一科的平均分', () => {
+  const f = forecast({ curriculum }, OPT);
+  for (const sub of f.subjects) {
+    const sum = Object.values(f.units).filter((u) => u.subject === sub.key).reduce((n, u) => n + u.exp, 0);
+    assert.ok(Math.abs(sum - sub.mean) < 1e-6, sub.key);
+  }
+});

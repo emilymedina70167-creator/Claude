@@ -98,6 +98,7 @@ export function forecast(mem = {}, { day = toDate(Date.now()), exam = null, asOf
     const index = new Map(us.map((u, i) => [u.id, i]));
     const states = us.map((u) => st.get(u.id));
     const ks = new Float64Array(us.length);
+    const unitSum = new Float64Array(us.length); // 每一块抽卷时拿到的分，平均下来是这一块的期望分（面板上各块加起来就是这一科的平均分）
     const parts = [...new Set(us.map((u) => u.part))];
     const partOf = us.map((u) => parts.indexOf(u.part));
     const shift = new Float64Array(parts.length);
@@ -116,14 +117,18 @@ export function forecast(mem = {}, { day = toDate(Date.now()), exam = null, asOf
           ks[i] = x.w > 0 ? 1 / (1 + Math.exp(-(Math.log(k0 / (1 - k0)) + x.w * shift[partOf[i]]))) : k0;
         }
         const know = ks[i] * x.r * tau;
-        if (PARTIAL.has(it.type)) sum += (it.points * steps(Math.max(1, Math.round(2 * it.points)), know, rand)) / Math.max(1, Math.round(2 * it.points));
+        let got = 0;
+        if (PARTIAL.has(it.type)) { const m = Math.max(1, Math.round(2 * it.points)); got = (it.points * steps(m, know, rand)) / m; }
         else {
           const g = GUESS[it.type] ?? 0;
-          if (rand() < g + (1 - g) * know) sum += it.points;
+          if (rand() < g + (1 - g) * know) got = it.points;
         }
+        sum += got;
+        unitSum[i] += got;
       }
       scores[d] = sum;
     }
+    us.forEach((u, i) => { unitsOut[u.id].exp = unitSum[i] / draws; });
     perSubject.push({ s, scores });
   }
   const total = new Float64Array(draws);
@@ -168,6 +173,6 @@ export function forecastBoard(mem = {}, { today = toDate(Date.now()), exam = nul
   const atExam = forecast(mem, { day: examDay > today ? examDay : today, exam, seed, draws, ev: ev0 });
   const day7 = addDays(today, -7);
   const then = forecast(mem, { day: day7, exam, seed, draws, ev: upTo(ev0, day7) });
-  const gain = Object.entries(now.units).map(([id, u]) => ({ id, title: u.title, subject: u.subject, part: u.part, points: u.points, gain: Math.max(0, u.points * (1 - u.p)) })).sort((a, b) => b.gain - a.gain);
+  const gain = Object.entries(now.units).map(([id, u]) => ({ id, title: u.title, subject: u.subject, part: u.part, points: u.points, gain: Math.max(0, u.points - u.exp) })).sort((a, b) => b.gain - a.gain);
   return { goal: now.goal, now, exam: atExam, examDay, week: { delta: now.total.median - then.total.median, then: then.total }, measured: now.measured, gain };
 }

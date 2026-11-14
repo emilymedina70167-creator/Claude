@@ -215,21 +215,27 @@ const SUITES = {
   },
 
   // 要想起来的：评分写失败一次再点，只记一条证据；第一张写「第一次想」；评完数量归零；评分途中点「先到这」不再翻出下一张
-  // 410 分的进度（score.js）：首页那张卡、掌握一变数字跟着变、点开面板、关上
+  // 410 分（forecast/，第十轮的测量）：首页那张卡写「如果今天考」、作答一多数字跟着变、点开面板、关上
   async score(browser) {
     const t = await seeded(browser);
     const num = async () => Number((await t.text('.dk-score-n b')) || NaN);
     const n0 = await t.waitFor(async () => { const n = await num(); return Number.isFinite(n) ? n : null; }, { what: '首页的 410 卡画出来' });
-    check((await t.text('.dk-score'))?.includes('410'), '410 卡上没写目标');
-    // 一块写成复现通过 30 天那档（替身数据库直接放进去，刷新一下读到）：分跟着涨
-    const db = await t.db();
-    await plant(t, { 'mastery/L2.2.2': { ...(db['mastery/L2.2.2'] || {}), state: '复现通过', tier: 30 } });
+    const card = await t.text('.dk-score');
+    check(card?.includes('如果今天考') && card?.includes('410'), '410 卡上没写「如果今天考」和目标');
+    check(/范围 \d+–\d+/.test(card || ''), '410 卡上没写范围');
+    check(/测出来|估的/.test(card || ''), '410 卡上没写几成是测出来的');
+    // 一块做对三道真题级的题（替身数据库直接放进去，刷新一下读到）：预测分跟着涨
+    const at = Date.now() - 3600e3;
+    const ev = (i) => ({ src: 'record', comp: `e2e-q${i}`, q: '题', ok: true, attempts: 1, final: true, at: at + i * 60e3, kind: 'answer', session: 'c-e2e-score', block: 'L2.2.2', tags: ['L2.2.2'], exam: `Q-301-2015-0${i}` });
+    await plant(t, Object.fromEntries([1, 2, 3].map((i) => [`evidence/ev-e2e-score-${i}`, { id: `ev-e2e-score-${i}`, ...ev(i) }])));
     await t.page.reload(); await sleep(1500);
-    const n1 = await t.waitFor(async () => { const n = await num(); return n > n0 ? n : null; }, { what: '掌握升档以后 410 卡上的分涨了' });
+    const n1 = await t.waitFor(async () => { const n = await num(); return n > n0 ? n : null; }, { what: '做对了真题级的题以后 410 卡上的分涨了' });
     check(n1 > n0, `分没涨：${n0} → ${n1}`);
     await t.page.click('.dk-score-btn'); await sleep(900);
     check(await t.page.$('.fl-panel .dk-sc-how'), '点 410 卡没出面板（或面板里没有「怎么算的」）');
-    check((await t.text('.fl-panel'))?.includes('学习台里还没有这一部分'), '面板里没标出学习台里还没有的部分');
+    const panel = await t.text('.fl-panel');
+    check(panel?.includes('学习台里还没有'), '面板里没标出学习台里还没有的部分');
+    check(panel?.includes('到考试那天'), '面板里没有「不再学到考试那天」');
     await t.page.click('.fl-close'); await sleep(800);
     check(!(await t.page.$('.fl-panel')), '410 的面板关不上');
     return t;
