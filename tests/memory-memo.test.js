@@ -249,7 +249,7 @@ test('一轮记了什么：板顶下面那一行；改动单的标题', () => {
   assert.equal(nextSlipId([{ id: 'S-20261027-1-2' }], SID, TODAY), 'S-20261027-1-3');
 });
 
-test('数据库这一层：直接写的马上写；同一道题不记两次；一块最多 12 条', async () => {
+test('数据库这一层：直接写的马上写；同一道题不记两次；一个 memo 块最多 12 条', async () => {
   const db = fakeDb('memo-test');
   db._clear();
   const seed = sampleMemory(TODAY);
@@ -277,11 +277,10 @@ test('数据库这一层：直接写的马上写；同一道题不记两次；�
   assert.ok(mem.profile.some((p) => p.text === '先看图'));
   assert.ok(mem.errors.some((e) => e.id === 'L2-08'));
   assert.ok(mem.rules.some((r) => r.id === 'rule-c1'));
-  // 一节课里一种最多几条（观察 3 条）：多的不收
+  // 一节课里一种记几条不再按条数挡：说的不是同一件事就都收
   const notes = parseMemoLines(['甲乙丙', '丁戊己', '庚辛壬', '子丑寅'].map((t, i) => `note text="第 ${i} 条：${t.repeat(4)}的观察"`).join('\n')).entries;
   const capped = await ops.applyMemo(notes, { session: SID, block: 'L2.2.2', turn: 7 });
-  assert.equal(capped.pds.length, 3);
-  assert.match(capped.rejected[0].error, /一节课最多 3 条/);
+  assert.equal(capped.pds.length, 4);
   // 一个 memo 块最多 12 条（归纳守则不算；不在课上的不按一节课数）
   const many = parseMemoLines(Array.from({ length: 14 }, (_, i) => `note text="观察 ${'子丑寅卯辰巳午未申酉戌亥'.slice(i % 12)}${i}${'金木水火土'.repeat(i % 5 + 1)}"`).join('\n')).entries;
   const big = await ops.applyMemo(many, { session: null, block: 'L2.2.2', turn: 7 });

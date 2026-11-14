@@ -115,6 +115,14 @@ const goto = (hash) => {
   if (from) zoomInto(from, go); else go();
 };
 
+// 删课：一次并发删几条；正在删的课记在这台设备上（课本身的 deleting 是给别的设备看的）
+const PURGE_PAR = 8;
+const PURGE_KEY = 'la-purging';
+async function pool(items, n, fn) {
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) { const k = i++; await fn(items[k]); } }));
+}
+
 export async function renderDesk(root, meta) {
   session.mode = 'desk';
   session.live = true;
@@ -122,6 +130,10 @@ export async function renderDesk(root, meta) {
   if (inClass) return openClassSafely(root, meta, inClass);
   const viewing = viewHash();
   if (viewing) return openClassSafely(root, meta, viewing, { readOnly: true });
+  // 正在删的课（这台设备上点了「删掉」、后台还没删完的）和正在跑的删课
+  const purging = new Set((() => { try { return JSON.parse(localStorage.getItem(PURGE_KEY) || '[]'); } catch { return []; } })());
+  const savePurging = () => { try { localStorage.setItem(PURGE_KEY, JSON.stringify([...purging])); } catch { /* 存不了：课上的 deleting 照样认 */ } };
+  const purgeRunning = new Set();
   root.classList.add('is-desk');
   root.dataset.layout = loadLayout();
   const unit = meta.unit || session.title || '学习台';
@@ -294,6 +306,11 @@ export async function renderDesk(root, meta) {
   for (const c of MEMORY_COLLECTIONS) {
     db.collection(c).onSnapshot((snap) => {
       data[c] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      // 正在删的课（点了「删掉」、后台还在删）：不进列表；上次没删完的（带着 deleting）接着删
+      if (c === 'sessions') {
+        for (const d of data.sessions) if ((d.deleting || purging.has(d.id)) && !purgeRunning.has(d.id)) setTimeout(() => runPurge(d.id), 0);
+        data.sessions = data.sessions.filter((d) => !d.deleting && !purging.has(d.id));
+      }
       loaded.add(c);
       failed.delete(c);
       if (c === 'sessions' || c === 'position') paintClass();
@@ -719,7 +736,7 @@ export async function renderDesk(root, meta) {
         toast(`${sid} 下课了，课后报告马上补上`);
       } catch (err) { toast(`没结束成：${err?.message || err}`); btn.disabled = false; }
     }));
-    box.querySelectorAll('.dk-purge').forEach((b) => b.addEventListener('click', (e) => purgeClass(e.currentTarget.dataset.sid, e.currentTarget)));
+    box.querySelectorAll('.dk-purge').forEach((b) => b.addEventListener('click', (e) => purgeClass(e.currentTarget.dataset.sid)));
     box.querySelector('.dk-prep-go')?.addEventListener('click', async () => {
       const id = box.querySelector('.dk-prep-block').value;
       const pages = box.querySelector('.dk-prep-pages')?.value || '';
@@ -737,13 +754,31 @@ export async function renderDesk(root, meta) {
 
   // —— 删掉一节课（purge.js）：测试开的、不要的课，连黑板、对话、证据、这节课记下的笔记一起删 ——
   // 删之前先把自检的指纹里这几条去掉：不然自检会把「历史被删了」当成不守规矩报出来
-  async function purgeClass(sid, btn) {
+  // 删课（2026-11-14 我说：点了要马上删，以前一条一条删要等很久、还常删不掉）：点了这节课马上从列表里拿掉，
+  // 课上先记 deleting，后台一次并发删好几条；中途断了，下次打开学习台照 deleting 接着删完，不用再点
+  async function purgeClass(sid) {
     const x = data.sessions.find((d) => d.id === sid);
     if (!x) { toast('找不到这节课'); return; }
     const plan = purgePlan(data, sid);
     const title = `${String(x.date || '').slice(5).replace('-', '/')} ${x.title || blockTitle(x.block) || sid}`.trim();
     if (!await ask(purgeText(plan, { title }), { ok: '删掉', danger: true })) return;
-    if (btn) btn.disabled = true;
+    purging.add(sid);
+    savePurging();
+    data.sessions = data.sessions.filter((d) => d.id !== sid);
+    paintClass();
+    if (location.hash.slice(1) === `classes/${sid}`) location.hash = 'classes';
+    else pagesView?.refresh?.();
+    toast(`删掉了：${title}`);
+    const { id: _id, ...rest } = x;
+    db.doc(`sessions/${sid}`).set({ ...rest, deleting: Date.now() }).catch(() => {}); // 别的设备也马上不显示
+    runPurge(sid, plan);
+  }
+  async function runPurge(sid, given = null) {
+    if (purgeRunning.has(sid)) return;
+    // 接着删（打开学习台时）：等记忆库各类都读到了再算删哪些，不然这节课的作答证据、笔记会漏删
+    if (!given && !MEMORY_COLLECTIONS.every((c) => loaded.has(c))) { setTimeout(() => runPurge(sid), 1500); return; }
+    const plan = given || purgePlan(data, sid);
+    purgeRunning.add(sid);
     const role = (c) => (COLLECTIONS[c]?.writers.includes('me') ? 'me' : 'page');
     try {
       if (ledger?.hist && (plan.ledger.length || plan.unlink.length)) {
@@ -756,27 +791,25 @@ export async function renderDesk(root, meta) {
         await put('meta', 'ledger', { ...ledger, at: Date.now() });
       }
       const rows = (snap) => (snap ? snap.docs.map((d) => d.id) : []);
-      for (const c of plan.scoped) {
-        const ids = await db.collection(`sessions/${sid}/${c}`).get().then(rows, () => []);
-        for (const id of ids) await db.doc(`sessions/${sid}/${c}/${id}`).delete();
-      }
-      for (const u of plan.unlink) { const c = u.path.split('/')[0]; assertWrite(role(c), c); await db.doc(u.path).set(u.doc); }
-      // 课本身最后删：中途断了，课还在列表里，能再点一次删
-      for (const path of plan.docs) {
-        const c = path.split('/')[0];
-        assertWrite(role(c), c);
-        await db.doc(path).delete();
-      }
+      // 这节课底下的几类（每一轮、黑板、报告……）一起读、一起删，一次 8 条
+      const scoped = (await Promise.all(plan.scoped.map((c) => db.collection(`sessions/${sid}/${c}`).get().then(rows, () => []).then((ids) => ids.map((id) => `sessions/${sid}/${c}/${id}`))))).flat();
+      await pool(scoped, PURGE_PAR, (path) => db.doc(path).delete());
+      await pool(plan.unlink, PURGE_PAR, (u) => { const c = u.path.split('/')[0]; assertWrite(role(c), c); return db.doc(u.path).set(u.doc); });
+      const last = `sessions/${sid}`;
+      await pool(plan.docs.filter((p) => p !== last), PURGE_PAR, (path) => { const c = path.split('/')[0]; assertWrite(role(c), c); return db.doc(path).delete(); });
       // 删掉的课用过的教案：退回「还没用」，可以再按它开一节
       for (const k of SPACE_KEYS) {
         const m = packs[k].main;
         if (m?.usedBy === sid) { const { usedBy: _u, usedAt: _a, ...rest } = m; await db.doc(`pack/${packIds(k).main}`).set(rest).catch(() => {}); }
       }
-      toast(`删掉了：${title}`);
-      if (location.hash.slice(1) === `classes/${sid}`) location.hash = 'classes';
-    } catch (err) {
-      toast(`没删完：${err?.message || err}（再点一次接着删）`);
-      if (btn) btn.disabled = false;
+      // 课本身最后删：中途断了，它还带着 deleting，下次打开接着删
+      await db.doc(last).delete();
+      purging.delete(sid);
+      savePurging();
+    } catch {
+      // 断网、限流：不报错，课上还带着 deleting，下次打开学习台接着删（删课不该让我看到一条「出错」）
+    } finally {
+      purgeRunning.delete(sid);
     }
   }
 
@@ -1488,7 +1521,7 @@ export async function renderDesk(root, meta) {
   });
 
   // —— 首页以外的页面：课程地图、弱点表、错题本、以前的课、统计（pages.js，换页不刷新）——
-  const pagesView = createPages($('.dk-pages'), { getData: sv, db, ops, goto, purge: (sid, btn) => purgeClass(sid, btn) });
+  const pagesView = createPages($('.dk-pages'), { getData: sv, db, ops, goto, purge: (sid) => purgeClass(sid) });
   // 页面的先后（首页、课程地图……管理）：往后的从右边进来，往前的从左边
   const ORDER = ['', ...Object.keys(PAGES), 'manage'];
   let lastAt = -1;

@@ -66,12 +66,12 @@ test('并进已有的一条：改写 text（记 log）、加上失误、hits 增
   assert.equal(u.writes[0].doc.hits, 2);
 });
 
-test('不累加：和已有一条几乎一样的新守则不收；一科满 20 条要先合并；合并 retired + into', () => {
+test('不累加：和已有一条几乎一样的新守则不收；满了也照收（条数只叫下课整理）；合并 retired + into', () => {
   const dup = plan('lesson text="出一组练习之前，逐题列出要用到的规则，没讲过的先讲完；讲不了的那题不出"');
   assert.match(dup.error, /和 T-1.*同一件事/);
   const many = base();
   for (let i = 2; i <= LESSONS_MAX + 1; i++) many.lessons.push({ id: `T-${i}`, text: `第 ${i} 条守则：${'甲乙丙丁戊己庚辛'.slice(i % 8)}${i}`, since: TODAY, status: i === LESSONS_MAX + 1 ? 'retired' : 'active', into: 'T-1' });
-  assert.match(plan('lesson text="写完板先自己读一遍有没有没讲过的词"', ctx(many)).error, /已经有 20 条.*先把意思重复的合并/);
+  assert.ok(!plan('lesson text="写完板先自己读一遍有没有没讲过的词"', ctx(many)).error);
   // 别的科的守则不占这一科的名额
   const other = base();
   for (let i = 2; i <= LESSONS_MAX + 1; i++) other.lessons.push({ id: `T-${i}`, text: `数学守则 ${i}`, since: TODAY, status: 'active', space: 'math' });

@@ -48,11 +48,11 @@ test('几乎一样的不收：弱点、复现组、偏好、规则；改那一�
   assert.equal(run('weakness title="分块时行列数对不上" scope=局部 level=L0 basis=q-b5').target, 'W20');
 });
 
-test('每类有上限：到了就不收新的，要先合并；overCaps 报出来', () => {
+test('每类到了那个数：照样收新的（2026-11-14 起不挡），overCaps 报出来让下课整理', () => {
   const mem = sampleMemory(TODAY);
   for (let i = 0; i < CAPS.weaknesses; i++) mem.weaknesses.push({ id: `W${100 + i}`, title: `毛病 ${i} ${'甲乙丙丁戊己庚辛'.repeat(i % 3 + 1)}${i}`, scope: '局部', level: 'L0', status: 'active', blocks: ['L2.2.1'] });
   assert.ok(liveDocs(mem, 'weaknesses', 'math').length > CAPS.weaknesses);
-  assert.match(run('weakness title="完全不同的一件事" scope=局部 level=L0 basis=q-b5', mem).error, /最多 20/);
+  assert.ok(!run('weakness title="完全不同的一件事" scope=局部 level=L0 basis=q-b5', mem).error);
   assert.deepEqual(overCaps(mem, 'math').map((x) => x.coll), ['weaknesses']);
   assert.deepEqual(overCaps(mem, 'cs'), []); // 408 的弱点不算数学的
 });
@@ -157,7 +157,7 @@ test('待确认分批：同一批凑够三条合成一组；给我看的标题�
   assert.equal(pendingTitle(err(1, 'c'), () => ''), '错题：把内积当外积');
 });
 
-test('别一丁点小事都记、别反复累加：一节课每种有上限，同一件事不另记，列表不越堆越长', async () => {
+test('别一丁点小事都记、别反复累加：同一件事不另记，列表不越堆越长；一节课的条数不挡（2026-11-14）', async () => {
   const { SESSION_CAPS, LIST_CAPS } = await import('../kit/src/memory/memo.js');
   let mem = sampleMemory(TODAY);
   // 同一个毛病一节课只记一道错题
@@ -166,11 +166,12 @@ test('别一丁点小事都记、别反复累加：一节课每种有上限，�
   // 失误和已有的一条说的是同一件事
   ({ mem } = write(mem, 'slip text="出题前没先把要用到的规则讲完，学生撞墙后才补"'));
   assert.match(run('slip text="出题前没把规则讲完，学生撞墙了才补"', mem).error, /已经记过了|守则/);
-  // 观察一节课最多 3 条，和已经记的一样的不收
+  // 观察：和已经记的一样的不收；说的是不同的事，第四条照样收
   ({ mem } = write(mem, 'note text="形状判断要停很久，先数行列再判断"'));
   assert.match(run('note text="形状判断停很久，先数行列"', mem).error, /同一件事/);
   for (const t of ['换括号那一步总要提示', '图看懂了但写不出式子']) ({ mem } = write(mem, `note text="${t}"`));
-  assert.match(run('note text="完全不同的第四条观察内容在这里"', mem).error, new RegExp(`最多 ${SESSION_CAPS.note} 条`));
+  assert.ok(!run('note text="完全不同的第四条观察内容在这里"', mem).error);
+  assert.ok(SESSION_CAPS.note > 0);
   // 待办一样的不收
   ({ mem } = write(mem, 'todo text="学生问了相似对角化的几何意义"'));
   assert.match(run('todo text="学生问相似对角化的几何意义是什么"', mem).error, /一样的待办/);

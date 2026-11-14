@@ -1018,11 +1018,19 @@ const SUITES = {
     const sid = await t.inClass();
     await t.open(); await t.page.waitForSelector('.dk-class .dk-purge', { state: 'attached', timeout: 15000 });
     // 删课留下来的东西还记着这个课号：挂在弱点上的错题删课时留着（purge.js），模拟一条
-    await t.page.evaluate((s) => { const k = [...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).find((x) => x.startsWith('la-devdb:')); const all = JSON.parse(localStorage.getItem(k)); all['errors/L2-99'] = { source: '课上', q: '删课以后留下的错题', mine: '错的', step: '第 1 步', cause: '自动测试', date: '2026-11-04', session: s, block: 'L2.1.1' }; const w = Object.keys(all).find((x) => x.startsWith('weaknesses/')); all[w] = { ...all[w], errors: [...(all[w].errors || []), 'L2-99'] }; localStorage.setItem(k, JSON.stringify(all)); }, sid);
+    await t.page.evaluate((s) => { const k = [...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).find((x) => x.startsWith('la-devdb:')); const all = JSON.parse(localStorage.getItem(k)); all['errors/L2-99'] = { source: '课上', q: '删课以后留下的错题', mine: '错的', step: '第 1 步', cause: '自动测试', date: '2026-11-04', session: s, block: 'L2.1.1' }; for (let i = 1; i <= 20; i++) all[`sessions/${s}/class_turns/${String(i).padStart(6, '0')}`] = { seq: i, role: 'student', text: `第 ${i} 轮`, session: s }; const w = Object.keys(all).find((x) => x.startsWith('weaknesses/')); all[w] = { ...all[w], errors: [...(all[w].errors || []), 'L2-99'] }; localStorage.setItem(k, JSON.stringify(all)); }, sid);
     await t.page.reload(); await t.page.waitForSelector('.dk-class .dk-purge', { state: 'attached', timeout: 15000 });
+    // 删课要快（2026-11-14）：点了「删掉」马上从首页消失；后台删到一半关掉了页面（写数据库调慢、半路刷新），刷新以后接着删完
+    await t.page.evaluate(() => window.LAKitDev.slowWrites(1500));
     await t.page.evaluate(() => document.querySelector('.dk-class .dk-purge').click());
     await t.answer('删掉');
-    await t.waitFor(async () => !(await t.docs('sessions')).some((x) => x.id === sid), { what: '这节课删掉' });
+    await sleep(500);
+    check(!(await t.page.$('.dk-class .dk-purge')), '点了「删掉」半秒以后这节课还挂在首页');
+    await sleep(2200);
+    const sdoc = (await t.docs('sessions')).find((x) => x.id === sid);
+    check(sdoc?.deleting, `删到一半，课上没记 deleting（关了页面就接不上）：${JSON.stringify(sdoc)?.slice(0, 200)}；出错：${JSON.stringify((await t.db())['meta/errors']?.list?.map((e) => e.msg))?.slice(0, 300)}`);
+    await t.page.reload();
+    await t.waitFor(async () => !(await t.docs('sessions')).some((x) => x.id === sid), { timeout: 20000, what: '刷新以后接着把这节课删完' });
     await sleep(800);
     await t.page.click('.dk-class .dk-new');
     const again = await t.inClass();

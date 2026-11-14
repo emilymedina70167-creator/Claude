@@ -11,7 +11,7 @@ const { Scene } = await import('../kit/src/stage/scene.js');
 const { parseScript } = await import('../kit/src/stage/script.js');
 await import('../kit/src/stage/types/index.js');
 const { asksBack } = await import('../kit/src/stage/answer.js');
-const { parseMemoLines, planEntry, CAPS, PROFILE_SPILL } = await import('../kit/src/memory/memo.js');
+const { parseMemoLines, planEntry, CAPS } = await import('../kit/src/memory/memo.js');
 
 test('没写 at= 的拨盘记一笔 auto（画面改挂到用它的句子旁边）；写了 at= 的不记', () => {
   const sc = new Scene();
@@ -28,14 +28,15 @@ test('答案是英文、学生写了一整句中文：是对老师说话，不�
   assert.equal(asksBack('过去将来时', { answer: '过去将来时' }), false); // 答案本来就是中文：照常判
 });
 
-test('关于学生满了：学生亲口说的偏好（basis=say）还收，别的照旧拒', () => {
+test('关于学生满了也照收（条数只叫下课整理），和已有的说同一件事的照旧不收', () => {
   const profile = Array.from({ length: CAPS.profile }, (_, i) => ({ id: `p-${i}`, topic: '偏好', text: `第 ${i} 条完全不同的偏好 ${'甲乙丙丁戊己庚辛壬癸'[i % 10]}${i * 7}`, status: 'active' }));
   const ctx = { mem: { profile, evidence: [] }, evidence: [{ id: 'ev-s', src: 'say', kind: 'say', text: '排版不许重叠', session: 'c-1', at: 1 }], session: 'c-1', block: 'EN-L1.2.1', date: '2026-11-14' };
   const said = planEntry(parseMemoLines('pref topic=偏好 text="画面上主角放正中，题卡放角落缩小" basis=say').entries[0], ctx);
   assert.ok(!said.error, said.error);
   const other = planEntry(parseMemoLines('pref topic=偏好 text="喜欢先看例子再看定义的讲法" basis=ev-s').entries[0], ctx);
-  assert.match(other.error || '', /最多 30/);
-  assert.ok(PROFILE_SPILL > 0);
+  assert.ok(!other.error, other.error);
+  const dup = planEntry(parseMemoLines(`pref topic=偏好 text="${profile[3].text}" basis=say`).entries[0], ctx);
+  assert.ok(dup.error);
 });
 
 const { layoutLines } = await import('../kit/src/stage/compose/report.js');

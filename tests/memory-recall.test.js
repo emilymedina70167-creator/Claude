@@ -52,7 +52,7 @@ test('rateRecall：想起来了升一档（30 天那档再想起来算记牢了�
   assert.match(recallLine(K('K1', { lapses: 2 }), TODAY), /问K1 → 答K1.*没想起过 2 次/);
 });
 
-test('memo 的 recall：新的一条从明天排；几乎一样的不收；能改问法、能停掉；一节课最多几条', () => {
+test('memo 的 recall：新的一条从明天排；几乎一样的不收；能改问法、能停掉；一节课记几条不按条数挡', () => {
   const mem = sampleMemory(TODAY);
   mem.recall = [K('K1', { q: '快速排序稳定吗', a: '不稳定', block: 'L2.2.2', space: 'math' })];
   const ctx = { mem, evidence: [], session: SID, block: 'L2.2.2', date: TODAY };
@@ -75,9 +75,9 @@ test('memo 的 recall：新的一条从明天排；几乎一样的不收；能�
   const m2 = { ...mem, recall: [...mem.recall, { id: 'K2', ...doc }] };
   assert.deepEqual(checkMemory(m2, { today: TODAY }).problems.filter((p) => p.coll === 'recall' && !p.soft), []);
   assert.match(pendingTitle({ ...pd, status: 'done' }), /记忆点：向量组线性相关的定义 → 存在/);
-  // 一节课最多 SESSION_CAPS.recall 条
+  // 一节课记满 SESSION_CAPS.recall 条以后，不一样的照收
   const full = { ...ctx, mem: { ...mem, recall: Array.from({ length: SESSION_CAPS.recall }, (_, i) => K(`K${i + 10}`, { q: `第${i}条完全不同的问法${'甲乙丙丁戊己庚辛壬癸'[i]}`, session: SID })) } };
-  assert.match(planEntry(parseMemoLines('recall q="又一条" a="x"').entries[0], full).error, /最多 8 条/);
+  assert.ok(!planEntry(parseMemoLines('recall q="又一条" a="x"').entries[0], full).error);
   // 停掉的不当真
   assert.ok(voidedIds({ recall: [K('K1', { status: 'void' })] }).has('recall/K1'));
 });
