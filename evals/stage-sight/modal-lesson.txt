@@ -1,0 +1,144 @@
+# 2026-11-14 真课 c-20261114-2（情态）：老师每一轮原样、学生的动作简化。量每一轮演完以后画面上有没有压着
+# —— 老师 000001 ——
+say "上节没稳的两个点，各测一题，测完接着讲情态。"
+card q = "In 2019 the factory announced that it ____ (close) the next year." "announce 宣布"
+place q main
+look q.1 text=28 weight=bold
+look q.2 text=14 opacity=0.6
+sentence s = "Online sales have nearly doubled since 2020." key="[S Online sales] [V have nearly doubled] [A since 2020]." hide=on
+place s below q gap=s
+look s text=28
+@ask.right show s
+@ask.right say "对。第二题：点出这句的谓语，几个词都点上。"
+@ask.right ask pick s "谓语是哪几个词？都点出来" button="点好了" expect="s.have s.doubled"
+ask value "空里填什么？（填两个词）" answer="would close" type=en wrong="will close=没看出出发点在过去;would closed=过去标了两次;closed=没表达出过去的之后"
+学生: say 直接进入新内容学习
+# —— 老师 000003 ——
+say "好，直接讲情态。上节那道 would 填空，等会儿放进情态里一起做。"
+hide q
+remove s
+dial m = 现在 options="现在 can must should would"
+dial n = 单 options="单 复"
+sentence v = "{n: Online education | Online courses} {verb: supplement | m | 一般 | n} the traditional kind."
+place v main
+look v text=32 weight=bold
+label lm dial:m "前面加什么" side=left tone=soft
+label ln dial:n "主语单数 / 复数" side=left tone=soft
+look lm frame=none
+look ln frame=none
+card g = "supplement 补充　the traditional kind 传统的那种（教育）" "原句：2018 阅读 Text 1"
+place g below v gap=m
+look g frame=none text=14 opacity=0.55
+say "这段回答一个问题：动词前面加上 can、must 这类词，后面的动词会变成什么样？"
+ask say "两个拨盘都拨一遍，拨完说说：加了 can 这些词以后，supplement 有什么变化？"
+学生: say 你先优化好你的交互
+# —— 老师 000007 ——
+say "说得对：刚才只有一句，要靠记，还挤在一起。改成上下两句对照。"
+remove v
+dial m = can options="can must should would"
+set n 单
+sentence a = "{n: Online education | Online courses} {verb: supplement | 现在 | 一般 | n} the traditional kind."
+sentence v = "{n: Online education | Online courses} {verb: supplement | m | 一般 | n} the traditional kind."
+place a main
+place v below a gap=s
+look v text=32 weight=bold
+paint a.3 g4
+& paint v.4 g4
+card c = "加上 {v.3} 这类词以后，金色的那个动词：" "跟着主语变，单数加 -s" "变成过去式" "一直是原形，不加 -s"
+place c below v gap=m
+arrange
+@ask.right say "对。上面单数要加 -s，下面拨成什么都是原形。"
+ask tap c "两个拨盘随便拨，对照上下两句，点出你看到的那一条" expect=c.4
+学生: say 我的天，你这是什么排版
+# —— 老师 000010 ——
+say "排版是我没摆好，压在一起了。重排了：上下两句对照，拨盘贴在句子旁边。"
+unlabel
+remove g
+place say at=6,0-42,3
+place a at=4,4-40,7
+place v at=4,9-40,12
+look a text=28 weight=bold
+look v text=28 weight=bold
+dial n = 单 options="单 复" at=a
+dial m = can options="can must should would" at=v
+place c at=8,14-40,21
+look c text=18
+@ask.right say "对。上面单数要加 -s，下面拨成什么都是原形。"
+ask tap c "两个拨盘随便拨，对照上下两句，点出你看到的那一条" expect=c.4
+学生: tap c.2
+# —— 老师 000015 ——
+paint a.3 g1
+set n 单
+glow a.3 v.4
+say "主语拨回单数，看两处：上面蓝的成了 {a.3}，下面金的是 {v.4}。"
+wait 900
+set n 复
+wait 900
+set n 单
+@ask.right say "对。主语单数复数都一样，情态动词后面一律用原形。"
+ask tap c "卡片问的只是金色那个词。再点一次" expect=c.4
+学生: tap c.4
+# —— 老师 000018 ——
+remove c
+unglow a.3 v.4
+place say at=4,0-44,4
+place a at=4,5-40,8
+place v at=4,9-40,12
+card k = "重点：情态动词（modal verb）+ 动词原形" "主语单数、复数都一样，原形不加 -s" "考研常见：can、could、will、would、may、might、must、should"
+place k at=4,13-44,16
+look k text=16
+look k.1 text=20 weight=bold color=g4
+show q
+place q at=4,17-44,21
+look q.1 text=22 weight=bold
+say "这条规则叫：情态动词 + 动词原形。上节那道填空，就用它再做一次。"
+@ask.right say "对。过去已经由 would 表示了，后面的 close 保持原形。"
+ask value "空里填什么？（填两个词）" answer="would close" type=en wrong="will close=没看出出发点在过去;would closed=情态后没用原形，过去标了两次;closed=没表达出过去的之后"
+学生: say 不是，让你做到排版不重叠看起来清晰有那么难吗
+# —— 老师 000022 ——
+remove a
+remove v
+unlabel dial:n
+unlabel dial:m
+place say at=4,0-44,3
+place k at=4,4-44,10
+place q at=4,12-44,18
+look k text=16
+look k.1 text=20 weight=bold color=g4
+look q.1 text=24 weight=bold
+say "是我没核版面。用完的两句和拨盘收掉了，只留规则和这道题。"
+@ask.right say "对。过去已经由 would 表示了，后面的 close 保持原形。"
+ask value "空里填什么？（填两个词）" answer="would close" type=en wrong="will close=没看出出发点在过去;would closed=情态后没用原形，过去标了两次;closed=没表达出过去的之后"
+学生: say 我不知道
+# —— 老师 000024 ——
+say "这题考的是上节的过去将来时，放在情态下面是我放乱了。"
+remove k
+rewrite q.1 "In 2019 the factory announced that it would close the next year."
+place say at=4,0-44,3
+place q at=4,4-8,44
+place q at=4,4-44,8
+timeline tl = 2019 2020 现在 now=现在
+event tl ann = 2019 "announced"
+event tl cl = 2020 "close"
+place tl at=4,9-44,13
+paint tl.ann g1
+& paint tl.cl g4
+card r = "重点：过去将来时 = would + 动词原形" "站在过去的一个点，说那之后的事" "站在现在说之后的事 → will + 动词原形"
+place r at=4,14-44,19
+look r.1 text=20 weight=bold color=g4
+say "2019 年宣布，关厂在之后的 2020 年。站在过去说之后的事，用 would close。"
+@ask.right say "对。出发点是现在，所以用 will。"
+ask value "换成 Today the factory announces that it ____ (close) next year，填什么？" answer="will close" type=en wrong="would close=没看出出发点换成了现在;closes=没表达出将来;will closes=情态后没用原形"
+学生: say 你重叠这件事情要犯几次？
+# —— 老师 000026 ——
+say "又压住了：长题目压在例句上，是我没留位置。新题单独放一张卡。"
+place say at=4,0-44,3
+place q at=4,6-44,9
+place tl at=4,10-44,13
+place r at=4,14-44,18
+look q.1 text=20 weight=bold
+card p = "Today the factory announces that it ____ (close) next year."
+place p at=4,19-44,22
+look p.1 text=20 weight=bold
+@ask.right say "对。出发点是现在，所以用 will。"
+ask value "最下面那句，空里填什么？" answer="will close" type=en wrong="would close=没看出出发点换成了现在;closes=没表达出将来;will closes=情态后没用原形"

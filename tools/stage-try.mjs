@@ -28,7 +28,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PAGE = join(ROOT, 'proto/stage/dist/local.html');
 const EXAMPLES = join(ROOT, 'tools/stage-try-examples');
 // STAGE_TRY_VIEWS=竖屏：只演一种朝向（模拟课 tools/stage-sim.mjs 用：学生只有一块屏）
-const VIEWS = [{ w: 820, h: 1180, tag: '竖屏' }, { w: 1180, h: 820, tag: '横屏' }].filter((v) => !process.env.STAGE_TRY_VIEWS || process.env.STAGE_TRY_VIEWS.split(',').includes(v.tag));
+// STAGE_TRY_SIZE=1180x734：照真课里记下的屏幕大小演（class_turns 的 view.win；Safari 地址栏占掉一截，比 820 矮）
+const VIEWS = process.env.STAGE_TRY_SIZE
+  ? [{ w: Number(process.env.STAGE_TRY_SIZE.split('x')[0]), h: Number(process.env.STAGE_TRY_SIZE.split('x')[1]), tag: process.env.STAGE_TRY_SIZE }]
+  : [{ w: 820, h: 1180, tag: '竖屏' }, { w: 1180, h: 820, tag: '横屏' }].filter((v) => !process.env.STAGE_TRY_VIEWS || process.env.STAGE_TRY_VIEWS.split(',').includes(v.tag));
 const SETTLE = 900; // 动画走完再量、再截图
 const IDLE_MAX = 30000; // 等课堂循环停下来最多多久
 

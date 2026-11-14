@@ -39,10 +39,24 @@ export function freeRects(boxes, grid, max = 3) {
 }
 
 /** 舞台现状里「版面」那几行 */
-export function layoutLines({ boxes, grid, unmet = [], scale = 1 }) {
+// sight：量出来的问题（sight.js 的 measureStage，第十轮）。给了就照它写「压着」「出了屏幕」——boxes 这时也是量出来的框——
+// 不再按排版时分的格子自己比（那样后来加的这一问、长高的卡都算不进去：2026-11-14 真课屏幕上压着、这里写「没压着」）
+export function layoutLines({ boxes, grid, unmet = [], scale = 1, sight = null }) {
   const lines = [];
   const parts = [...boxes].map(([id, b]) => `${NAME[id] || id} ${cellText(toCells(b, grid))}`);
   lines.push(`版面（${grid.cols} 列 × ${grid.rows} 行）：${parts.join('；') || '空'}`);
+  if (sight) {
+    const seen = new Set();
+    const over = [];
+    const out = [];
+    for (const x of sight) {
+      if (x.what === '压着') { const k = [x.an || x.a, x.bn || x.b].sort().join('|'); if (!seen.has(k)) { seen.add(k); over.push(`${x.an || x.a} 和 ${x.bn || x.b}`); } }
+      else if (x.what === '出了屏幕' && !out.includes(x.an || x.a)) out.push(x.an || x.a);
+    }
+    if (over.length) lines.push(`压着：${over.join('；')}`);
+    if (out.length) lines.push(`出了屏幕：${out.join('、')}`);
+    return [...lines, ...tail({ boxes, grid, unmet, scale })];
+  }
   // 压着的、出了屏幕的（老师摆过的东西页面不挪：照实说，怎么改由老师定）
   const W = grid.w ?? grid.cols * grid.cell, H = grid.h ?? grid.rows * grid.cell;
   const list = [...boxes].filter(([id]) => id !== 'say' && id !== 'goals');
@@ -59,6 +73,12 @@ export function layoutLines({ boxes, grid, unmet = [], scale = 1 }) {
   // 差两个像素以内算在里面（和求解器、出了屏幕就放开的那一处同一个余量：吸到半格时会差一点）
   const out = list.filter(([, b]) => b.x < -2 || b.y < -2 || b.x + b.w > W + 2 || b.y + b.h > H + 2).map(([id]) => NAME[id] || id);
   if (out.length) lines.push(`出了屏幕：${out.join('、')}`);
+  return [...lines, ...tail({ boxes, grid, unmet, scale })];
+}
+
+/** 版面后面那几行：空着的地方、没照办的、放不下 */
+function tail({ boxes, grid, unmet, scale }) {
+  const lines = [];
   const free = freeRects(boxes, grid);
   if (free.length) lines.push(`空着：${free.map(cellText).join('；')}`);
   const why = unmet.map((u) => (typeof u === 'string' ? u : u.why)).filter(Boolean);

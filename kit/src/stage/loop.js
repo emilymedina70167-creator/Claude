@@ -268,6 +268,7 @@ export function createLoop(host) {
     const byNext = events.at(-1)?.act?.type === 'next';
     const said = eventsText(events, { goals: stage.scene.goals, secs: byNext || !S.armedAt ? null : Math.round((performance.now() - S.armedAt) / 1000) });
     // 页面核过老师上一轮的几步（不是正确的下一步的）、学生动了以后跟着变的：一起写进这一条，核过的说过就清掉
+    stage.layoutNow?.(); // 版面照屏幕上真画出来的写（第十轮）
     const msg = turnMessage({ act: said, state: stage.scene.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(events), grids: gridsOf(stage.scene), askId: askId(), aide: host.aideNote?.() || '' });
     stage.teacherAudit = [];
     const say = events.filter((e) => e.act?.type === 'say').map((e) => e.act.text).join('\n');
@@ -477,6 +478,7 @@ export function createLoop(host) {
     if (canPlay(stage.scene)) return;
     const act = { type: 'next', button: w.button || '接着' };
     const said = eventsText([...(S.pending?.events || []), eventOf(act, { help: HELP })], { goals: stage.scene.goals });
+    stage.layoutNow?.(); // 和真叫老师时同一个量法（提前想的那一份才对得上）
     const after = stage.scene.clone();
     after.waiting = null;
     const msg = turnMessage({ act: said, state: after.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(S.pending?.events || []), grids: gridsOf(stage.scene), askId: askId(), aide: host.aideNote?.() || '' });

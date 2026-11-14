@@ -15,6 +15,7 @@ import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, C
 import { gridOf, typeScaleOf, fromCells } from './compose/grid.js';
 import { drawGeometry, drawObjects } from './draw.js';
 import { layoutLines } from './compose/report.js';
+import { measureStage } from './sight.js';
 import { sketchText } from './compose/sketch.js';
 import { createStageInk } from './stageink.js';
 import { toPng, srcToPng, clipboardImages, htmlImageSrcs, addImages } from '../class/bar.js';
@@ -234,6 +235,8 @@ export class Stage {
       this.pen = createStageInk(this, { onChange: () => { this.snapper?.dirty(); this.syncSend(); } });
     }
   }
+  /** 量画面（sight.js）：每样东西在屏幕上真画在哪，压着的、出了屏幕的。visual：照动画走到哪量（排版检查 --live 用） */
+  sight({ visual = false } = {}) { return measureStage(this, visual); }
   destroy() { this.pen?.destroy(); this.snapper?.stop(); this.ro?.disconnect(); this.resetOpens(); this.root.remove(); this.scenesEl?.remove(); this.talkBtn?.remove(); this.keysPop?.remove(); this.cancelWait?.(); this.cancelBeat?.(); }
   setPace(p) {
     if (!PACES[p]) return;
@@ -2490,6 +2493,7 @@ export class Stage {
     const unmet = [...res.unmet.filter((u) => !u.rel?.auto && !dirKey(u.rel)), ...kept.values()];
     this.layoutState.unmet = unmet;
     sc.layoutInfo = layoutLines({ boxes: res.boxes, grid, unmet, scale: res.scale });
+    const noteFrom = sc.layoutInfo.length;
     // 写了 main 的那一样为了照办挨着它的关系让开了：照实说不在正中（r30：老师写「树在中间」，并排放不下时树往左让）
     for (const r of relations) {
       if (r.kind !== 'main' || r.auto || typeof r.a !== 'string') continue;
@@ -2503,6 +2507,7 @@ export class Stage {
     // 放大放不下收回去的（这一轮里一直写着，老师下一轮看得到）
     for (const n of this.scaleNotes || []) sc.layoutInfo.push(n);
     if (nudged.size) sc.layoutInfo.push(`为了让学生点得到，挪了 ${[...nudged].join('、')}（它盖着、或者让学生要点的部件出了屏幕）`);
+    this.layoutNotes = sc.layoutInfo.slice(noteFrom); // layoutNow 照量出来的重写版面时接在后面
     if (!sc.focus) {
       const from = `translate(${this.cam.tx}px, ${this.cam.ty}px) scale(${this.cam.s})`;
       const to = `translate(${this.baseCam.tx}px, ${this.baseCam.ty}px) scale(${this.baseCam.s})`;
@@ -2522,11 +2527,36 @@ export class Stage {
     }
     return moves.length > 0;
   }
+  /**
+   * 现状里的「版面」照屏幕上真画出来的写（第十轮）：每样东西占哪几格、压着、出了屏幕都是量的（sight.js），
+   * 和这一轮附的画面图是同一个样子。排版时分的格子只给求解器用。课堂循环拼给老师的那一条之前调（loop.js）
+   */
+  layoutNow() {
+    const st = this.layoutState;
+    if (!this.free || !st?.grid || this.instant) return null;
+    let got;
+    try { got = this.sight(); } catch { return null; }
+    const cv = st.canvas;
+    // 量的是画面（view）里的坐标；格子从画布左上角数（话、挑战也挂在 view 上，摆的时候就是 cv.left + 格子）
+    const dx = cv.left, dy = cv.top;
+    const union = (rs) => { if (!rs.length) return null; const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)); return { x: x - dx, y: y - dy, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y }; };
+    const boxes = new Map();
+    for (const it of got.items) if (it.kind === 'obj' && it.rects.length && this.isShown(it.id)) boxes.set(it.id, union(it.rects));
+    const say = union(got.items.filter((it) => it.kind === 'caption').flatMap((it) => it.rects));
+    if (say) boxes.set('say', say);
+    const goals = union(got.items.filter((it) => it.kind === 'goal').flatMap((it) => it.rects));
+    if (goals) boxes.set('goals', goals);
+    this.scene.layoutInfo = [...layoutLines({ boxes, grid: st.grid, unmet: st.unmet || [], scale: st.scale, sight: got.issues }), ...(this.layoutNotes || [])];
+    this.lastSight = { issues: got.issues, at: Date.now() };
+    return got;
+  }
   /** 预览交回老师的：版面那几行 + 字画的图（compose/sketch.js） */
   previewText() {
     const st = this.layoutState;
     if (!st?.boxes?.size) return '舞台上还是空的。';
-    return [...layoutLines({ boxes: st.boxes, grid: st.grid, unmet: st.unmet.filter((u) => !u.rel?.auto), scale: st.scale }), sketchText({ boxes: st.boxes, grid: st.grid })].join('\n');
+    // 量得到就照量出来的写（第十轮），量不到（不在浏览器里）照排的
+    const lines = this.layoutNow() ? this.scene.layoutInfo : layoutLines({ boxes: st.boxes, grid: st.grid, unmet: st.unmet.filter((u) => !u.rel?.auto), scale: st.scale });
+    return [...lines, sketchText({ boxes: st.boxes, grid: st.grid })].join('\n');
   }
   /**
    * 底线 1 的挪（第九轮）：老师交给学生的部件（open 的、这一问点的）在排好的版面里被别的钉住的东西盖着，或者出了画布：
