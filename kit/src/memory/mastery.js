@@ -32,6 +32,9 @@ const CLEAN = (it) => it.outcome === 'first' && it.sure !== false && !isOriginal
 // 改对了（第一次错）也算失手：考试只有一次机会
 // 试出来的选择题（report.js 的 guess）outcome 是 ok，本来就算失手
 const FAIL = (it) => ['wrong', 'giveup', 'revealed', 'ok'].includes(it.outcome);
+// 第十轮的测量（forecast/evidence.js）照同一套判法：测量和掌握说的是同一件事
+export const cleanItem = CLEAN;
+export const failItem = FAIL;
 // 同一道题（练习里抄来的组件 id 每次一样）在不同的课里做两遍，不算「两道不同的题」
 const same = (k) => String(k).split('§').pop();
 const blockOf = (id) => String(id || '').split('#')[0];

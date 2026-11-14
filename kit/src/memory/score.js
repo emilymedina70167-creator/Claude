@@ -89,10 +89,10 @@ export const stateText = (state, tier) => (state === '复现通过' && tier ? `�
 
 const list = (v) => (Array.isArray(v) ? v : []);
 const round1 = (x) => Math.round(x * 10) / 10;
-const isBlock = (b) => b?.level === 'block' || /\.\d+\.\d+$/.test(String(b?.id || ''));
-const isChapter = (b) => b?.level === 'lecture' || /^(?:[A-Z]{2}-)?L\d+$/.test(String(b?.id || ''));
+export const isBlock = (b) => b?.level === 'block' || /\.\d+\.\d+$/.test(String(b?.id || ''));
+export const isChapter = (b) => b?.level === 'lecture' || /^(?:[A-Z]{2}-)?L\d+$/.test(String(b?.id || ''));
 // 不考的章：「入门」「预备」这类（线代的第 0 讲），或者章上写了 weight: 0
-const chapterWeight = (c) => (Number.isFinite(Number(c.weight)) && c.weight !== '' && c.weight !== null && c.weight !== undefined ? Math.max(0, Number(c.weight)) : /入门|预备/.test(String(c.title || '')) ? 0 : 1);
+export const chapterWeight = (c) => (Number.isFinite(Number(c.weight)) && c.weight !== '' && c.weight !== null && c.weight !== undefined ? Math.max(0, Number(c.weight)) : /入门|预备/.test(String(c.title || '')) ? 0 : 1);
 const naturally = (a, b) => String(a).localeCompare(String(b), 'en', { numeric: true });
 
 /**
