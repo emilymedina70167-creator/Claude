@@ -50,3 +50,22 @@ test('一门课的热度排行；首页的缓存（每块平均每年几分、�
   assert.equal(c.untagged, 1);
   assert.equal(c.heat[0].id, 'G-OS-3.2');
 });
+
+test('卷面样本：主考点拿全分、有次考点时各一半；不带题面和答案', async () => {
+  const { paperSkeletons } = await import('../kit/src/exam/stats.js');
+  const syllabus = [
+    { id: 'G-OS-3.1', course: 'OS', blocks: ['OS-L3.1.1'] },
+    { id: 'G-OS-3.2', course: 'OS', blocks: ['OS-L3.1.2'] },
+    { id: 'G-OS-2.3', course: 'OS', blocks: [] },
+  ];
+  const sk = paperSkeletons([
+    { ...q('Q-408-2015-23', 2015, 2, ['G-OS-3.2']), q: '题面', answer: 'A' },
+    q('Q-408-2017-24', 2017, 2, ['G-OS-3.2', 'G-OS-3.1']),
+    q('Q-408-2017-25', 2017, 2, ['G-OS-2.3']),
+  ], syllabus, 'OS');
+  assert.deepEqual(sk[2015], [['OS-L3.1.2', 2, 'single']]);
+  assert.deepEqual(sk[2017], [['OS-L3.1.2', 1, 'single'], ['OS-L3.1.1', 1, 'single']]);
+  assert.ok(!JSON.stringify(sk).includes('题面'));
+  const c = statsCache({ course: 'OS', questions: qs, syllabus, curriculum: [], years: [] });
+  assert.ok(c.papers && typeof c.papers === 'object');
+});

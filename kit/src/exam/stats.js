@@ -86,5 +86,31 @@ export function statsCache({ course, questions = [], syllabus = [], curriculum =
   return {
     heat: courseHeat(tagged, syllabus, { years: span }).slice(0, 12), blockPerYear, blockUsable, holes: mapHoles({ syllabus, curriculum, course }),
     untagged: questions.length - tagged.length, n: questions.length, span,
+    // 卷面样本（第十轮的测量 forecast/paper.js 用）：每年每题落在哪一块、几分、什么题型
+    papers: paperSkeletons(tagged, syllabus, course),
   };
+}
+
+/**
+ * 卷面样本（docs/superpowers/specs/2026-11-14-round10-measure-design.md 6.1）：{ 年份: [[块, 分值, 题型]] }。
+ * 主考点的块拿全分；有次考点挂在别的块时，主块一半、别的块平分另一半（和统计的「次考点算一半」同一个意思）。
+ * 没挂块的考点不出现（测量那边按「还没进学习台」补齐）。只有块、分值、题型：留作模考的卷也进，题面、答案一概不带
+ */
+export function paperSkeletons(questions = [], syllabus = [], course = '') {
+  const toBlocks = new Map();
+  for (const n of syllabus) if (!course || !n.course || n.course === course) toBlocks.set(n.id, (n.blocks || []).map(String));
+  const out = {};
+  for (const q of questions) {
+    const syl = q.tags?.syl || [];
+    const year = yearOf(q);
+    const pts = Number(q.points || 0);
+    if (!syl.length || !year || !pts) continue;
+    const main = toBlocks.get(syl[0]) || [];
+    const others = [...new Set(syl.slice(1).flatMap((id) => toBlocks.get(id) || []))].filter((b) => !main.includes(b));
+    const share = others.length ? 0.5 : 1;
+    const row = out[year] || (out[year] = []);
+    for (const b of main) row.push([b, (pts * share) / main.length, q.type || '']);
+    if (others.length) for (const b of others) row.push([b, (pts * 0.5) / others.length, q.type || '']);
+  }
+  return out;
 }
