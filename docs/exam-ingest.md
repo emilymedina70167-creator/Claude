@@ -17,6 +17,7 @@
 1. 照教材那一套画页（`node tools/books.mjs render …`），转写助手看图写成「大纲.txt」（`#` 章、`##` 节、`###` 小节，`-` 开头是大纲原文）。
 2. `node tools/exam.mjs syllabus --course DS --year 2026 --text 大纲.txt --out 目录`。一门课一个文件。
 3. 课程地图缺章：`node tools/exam.mjs skeleton 目录 --course CO --curriculum 课程地图.json`，照打印的 writes 用 `ArtifactData batch` 写（课程地图只有开发那边能写）。
+   **考点要落到块上**（统计、410 分的预测、老师每一轮的「这一块在考试里」都按块算；考点没挂块等于这门课在考试里是空的）：`node tools/exam.mjs blocks 考点目录 --curriculum 课程地图.json --out 目录 [--chapters 章对照.json] [--manual 手工挂.json] [--add 手工补的.json]`。课程地图里没有块的章照考点树排节和块（`from` 记着考点、`by: dev`），已经有块的章按标题挂，挂不上的打印出来——写进 `--manual` 再跑，直到 0 个。先照 `curriculum-batches.json` 一批批写课程地图，再把目录里带 `blocks`、`mapSig` 的考点记录写进 `exam_inbox`（指纹按写好以后的课程地图算，顺序反了页面会报映射过时）。
 
 ## 2. 真卷 → 一道一道
 

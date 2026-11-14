@@ -961,3 +961,11 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 .dk-exup-pick { min-height: 44px; display: inline-flex; align-items: center; cursor: pointer; }
 .dk-exup-list li { align-items: center; }
 .dk-exform .mm-f:has(input[name="reserve"]) { grid-column: 1 / -1; }
+
+/* 410 分：如果今天考（第十轮的测量）——淡的一截是 80% 范围的上头，块的明细一行一块 */
+.dk-score-seg .dk-score-rng { position: absolute; top: 0; bottom: 0; border-radius: 5px; background: rgb(var(--c) / 0.34); }
+.la-lesson .dk-sc-units { list-style: none; margin: 0 0 4px; padding: 0; }
+.dk-sc-units li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; align-items: center; padding: 8px 0; border-top: 0.5px solid rgb(var(--chalk-rgb) / 0.12); font: 14px/1.45 var(--sans); color: var(--body); }
+.dk-sc-units li small { grid-column: 1; grid-row: 2; font-size: 12.5px; }
+.dk-sc-units li b { grid-column: 2; grid-row: 1 / span 2; font-variant-numeric: tabular-nums; }
+.dk-sc-units li b small { color: var(--muted); font-weight: 400; }

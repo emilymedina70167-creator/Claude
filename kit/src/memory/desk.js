@@ -34,7 +34,7 @@ import { createPages } from './pages.js';
 import { reviewPack, deskBrief, briefId, todayReviews, reviewIdsOf, REVIEW_MAX, plainTitle } from './views.js';
 import { readOnlyDb } from './session.js';
 import { SPACES, SPACE_KEYS, DEFAULT_SPACE, filterSpace, spaceOfDoc, spaceOfId, subjectOf, positionId, packIds, prefixOf } from './space.js';
-import { dueList } from './schema.js';
+import { dueList, addDays } from './schema.js';
 import { masteryProposals, masteryPendingWrites } from './mastery.js';
 import { pickDrills, harvestDrills, drillLine, DRILL_N } from './drills.js';
 import { enterDrill, closeDrill } from './drillrun.js';
@@ -46,7 +46,9 @@ import { runRecall } from './recallrun.js';
 import { purgePlan, purgeText } from './purge.js';
 import { vocabRecalls } from './vocab.js';
 import { weekLines, progress, warmupDrills, backlogDays, daysLeft, msToNextDay } from './journey.js';
-import { scoreBoard, scoreLine, fmt as fmtScore, signed, LADDER, GOAL } from './score.js';
+import { scoreBoard, fmt as fmtScore, signed, SUBJECTS as SCORE_SUBJECTS } from './score.js';
+import { forecastBoard } from '../forecast/forecast.js';
+import { PART_PRIORS } from '../forecast/priors.js';
 import { DEFAULT_TARGET, targetOf, examDateOf, goalOf, needsDefault, schoolLine } from '../exam/target.js';
 import { needsSkills, skillsPrompt, parseSkills, skillSummary, pointCatalog, lessonLines, SKILLS_VERSION } from './skills.js';
 
@@ -152,7 +154,7 @@ export async function renderDesk(root, meta) {
     <div class="dk-col">
     <section class="dk-card dk-class" hidden aria-label="上课" data-menu="hero"><div class="dk-body"></div></section>
     <div class="dk-days-slot"></div>
-    <section class="dk-card dk-score" hidden aria-label="${GOAL} 分的进度"></section>
+    <section class="dk-card dk-score" hidden aria-label="410 分"></section>
     <section class="dk-group" aria-label="今天"><h2 class="dk-grp-h">今天</h2><div class="dk-card dk-rows"></div></section>
     <div class="dk-drawer" hidden>
     <div class="dk-part dk-today" hidden><h2 class="dk-h">复现</h2><div class="dk-body"></div></div>
@@ -1307,7 +1309,9 @@ export async function renderDesk(root, meta) {
   const rowCounts = {};
   // 下一步学什么（exam/priority.js）：每块还能攒多少分、前置先排、到期和踩过坑的加权；不调用 Claude
   function nextPlan(today = toDate(Date.now())) {
-    const b = scoreBoard(data, { today, exam: examMeta?.blockPerYear, usable: examMeta?.blockUsable });
+    // 还能多拿几分 = 这一块在卷面上的期望分值 × (1 − 现在做对的概率)：测量（forecast/）算的，「还没进学习台」的整块不排
+    const units = fcBoard(today).now.units;
+    const b = { blocks: Object.fromEntries(Object.entries(units).filter(([id]) => !id.endsWith(':*')).map(([id, u]) => [id, { points: u.points, got: u.exp, title: u.title, subject: u.subject }])) };
     const dueBlocks = new Set(dueList(data.reviews, today).filter((d) => d.days <= 0).flatMap((d) => (data.reviews.find((r) => r.id === d.id)?.blocks || []).map(String)));
     const traps = Object.fromEntries((data.exam_bar || []).filter((x) => x.traps?.length).map((x) => [x.id, x.traps]));
     return priority({ blocks: b.blocks, curriculum: data.curriculum, mastery: data.mastery, dueBlocks, traps, sessions: data.sessions, today });
@@ -1393,42 +1397,99 @@ export async function renderDesk(root, meta) {
   }
   root.addEventListener('click', (e) => { const b = e.target.closest('.dk-spine'); if (b) openDays(b); });
 
-  // —— 410 分的进度（score.js）：每一块按掌握攒几成、按大纲的分值加权，加起来是攒下的分；不调用 Claude ——
-  // 首页一张卡（攒了几分、四科一条分段的条、这 7 天攒了几分），点开是面板：这 7 天加分减分的块、每一科每一部分、怎么算的
-  function scoreBar(b, big = false) { return  `<span class="dk-score-bar${big ? ' is-big' : ''}" role="img" aria-label="${b.subjects.map((s) => `${s.label} ${fmtScore(s.got)} / ${s.target}`).join('，')}">${b.subjects.map((s) => `<span class="dk-score-seg sc-${s.rgb}" style="flex:${s.target}"><i${s.got > 0 ? ' class="is-some"' : ''} style="width:${Math.min(100, (s.got / s.target) * 100).toFixed(2)}%"></i></span>`).join('')}</span>`; }
+  // —— 410 分：如果今天考大约几分（forecast/，第十轮的测量）：每块会到什么程度、到那天还记得多少，按卷面抽很多遍卷；
+  // 不调用 Claude。首页一张卡（中位数、80% 范围、离目标差多少、这 7 天、几成是测出来的），点开是面板 ——
+  let fcCache = { key: '', b: null };
+  function fcBoard(today = toDate(Date.now())) {
+    const ev = data.evidence || [];
+    const key = [today, ev.length, ev.reduce((m, e) => Math.max(m, Number(e?.at) || 0), 0), (data.curriculum || []).length, (data.sessions || []).length, examMeta?.statsAt || 0, JSON.stringify(targetOf(data))].join('|');
+    if (fcCache.key !== key) fcCache = { key, b: forecastBoard(data, { today, exam: examMeta }) };
+    return fcCache.b;
+  }
+  const n0 = (x) => String(Math.round(x));
+  const pct = (x) => `${Math.round(x * 100)}%`;
+  function measuredText(m) {
+    const k = Math.round(m * 10);
+    return m <= 0 ? '现在全是估的' : k === 0 ? '不到 1 成是测出来的' : `约 ${k} 成是测出来的`;
+  }
+  const subjectOf = (b, key) => b.now.subjects.find((s) => s.key === key);
+  // 四科一条：每段长短是这一科的目标分，实的一截是中位数，淡的一截到 80% 范围的上头
+  function fcBar(f, big = false) {
+    return `<span class="dk-score-bar${big ? ' is-big' : ''}" role="img" aria-label="${f.subjects.map((s) => `${s.label} 约 ${n0(s.median)} / ${s.target}`).join('，')}">${f.subjects.map((s) => {
+      const w = (x) => Math.max(0, Math.min(100, (x / s.target) * 100));
+      return `<span class="dk-score-seg sc-${s.rgb}" style="flex:${s.target}"><b class="dk-score-rng" style="left:${w(s.median).toFixed(2)}%;width:${Math.max(0, w(s.hi) - w(s.median)).toFixed(2)}%"></b><i class="is-some" style="width:${w(s.median).toFixed(2)}%"></i></span>`;
+    }).join('')}</span>`;
+  }
+  // 每周一存一份快照（meta/forecast）：面板以后画走势、总教练（第十轮第 3 块）对预测准不准；读写失败不影响画卡
+  let fcSnap = null;
+  db.doc('meta/forecast').get().then((x) => { fcSnap = x?.exists ? x.data() : { weeks: [] }; paintScore(); }).catch(() => { fcSnap = null; });
+  function snapForecast(b, today) {
+    if (!fcSnap) return;
+    const dow = new Date(`${today}T12:00:00`).getDay();
+    const monday = addDays(today, -((dow + 6) % 7));
+    const weeks = Array.isArray(fcSnap.weeks) ? fcSnap.weeks : [];
+    if (weeks.some((w) => w.date === monday)) return;
+    const row = { date: monday, total: { median: b.now.total.median, lo: b.now.total.lo, hi: b.now.total.hi }, subjects: b.now.subjects.map((s) => ({ key: s.key, median: s.median, lo: s.lo, hi: s.hi })), measured: b.measured };
+    fcSnap = { weeks: [...weeks, row].slice(-80), at: Date.now() };
+    put('meta', 'forecast', fcSnap).catch((err) => reportError(err, { what: '预测分的快照没写进去' }));
+  }
   function paintScore(today = toDate(Date.now())) {
     const box = $('.dk-score');
-    if (!box || !loaded.has('mastery') || !loaded.has('curriculum')) return;
-    const b = scoreBoard(data, { today, exam: examMeta?.blockPerYear, usable: examMeta?.blockUsable });
+    if (!box || !loaded.has('evidence') || !loaded.has('curriculum')) return;
+    const b = fcBoard(today);
+    const f = b.now;
+    const d = Math.round(b.week.delta);
     box.hidden = false;
-    box.setAttribute('aria-label', `${b.goal} 分的进度`);
+    box.setAttribute('aria-label', `${b.goal} 分：如果今天考`);
     box.innerHTML = `<button type="button" class="dk-score-btn" data-open="score">
-      <span class="dk-score-k">目标 ${b.goal} 分 · 已经攒下</span>
-      <span class="dk-score-n"><b>${fmtScore(b.total)}</b><small>/ ${b.goal}</small>${Math.round(b.week.delta * 10) ? `<em class="${b.week.delta > 0 ? 'is-up' : 'is-down'}">${signed(b.week.delta)}</em>` : ''}</span>
-      ${scoreBar(b)}
-      <span class="dk-score-legend">${b.subjects.map((s) => `<span class="sc-${s.rgb}"><i></i>${escapeHtml(s.label)} ${fmtScore(s.got)}</span>`).join('')}</span>
-      <span class="dk-score-l muted">${escapeHtml(scoreLine(b))}</span><span class="dk-chev" aria-hidden="true"></span></button>`;
+      <span class="dk-score-k">如果今天考 · 目标 ${b.goal} 分</span>
+      <span class="dk-score-n"><b>${n0(f.total.median)}</b><small>分</small>${d ? `<em class="${d > 0 ? 'is-up' : 'is-down'}">这 7 天 ${signed(d)}</em>` : ''}</span>
+      ${fcBar(f)}
+      <span class="dk-score-legend">${f.subjects.map((s) => `<span class="sc-${s.rgb}"><i></i>${escapeHtml(s.label)} ${n0(s.median)}</span>`).join('')}</span>
+      <span class="dk-score-l muted">范围 ${n0(f.total.lo)}–${n0(f.total.hi)} · ${f.total.median < b.goal ? `离 ${b.goal} 差 ${n0(b.goal - f.total.median)}` : `过了 ${b.goal}`} · ${measuredText(b.measured)}</span><span class="dk-chev" aria-hidden="true"></span></button>`;
+    snapForecast(b, today);
     if (scoreBody?.isConnected) fillScore(scoreBody, b);
   }
-  function fillScore(body, b = scoreBoard(data, { today: toDate(Date.now()), exam: examMeta?.blockPerYear, usable: examMeta?.blockUsable })) {
-    const move = (x) => `<li><span>${escapeHtml(plainTitle(x.title) || x.id)}</span><small class="muted">${escapeHtml(x.from)} → ${escapeHtml(x.to)}</small><b class="${x.delta > 0 ? 'is-up' : 'is-down'}">${signed(x.delta)}</b></li>`;
-    const moves = [...b.week.ups, ...b.week.downs];
-    const part = (p) => `<div class="dk-sc-part${p.inDesk ? '' : ' is-out'}"><div class="dk-sc-row"><span>${escapeHtml(p.label)}</span><span class="dk-sc-pbar"><i style="width:${Math.min(100, (p.got / p.points) * 100).toFixed(2)}%"></i></span><b>${fmtScore(p.got)}<small> / ${fmtScore(p.points)}</small></b></div>
-      ${p.inDesk ? `<details class="dk-sc-ch"><summary class="muted">${p.chapters.length} 章${p.chapters.some((c) => !c.blocks.length) ? `，${p.chapters.filter((c) => !c.blocks.length).length} 章还没排课` : ''}</summary><ul>${p.chapters.map((c) => `<li><span>${escapeHtml(plainTitle(c.title) || c.id)}</span><small class="muted">${c.blocks.length ? `上过 ${c.done} / ${c.blocks.length} 块` : '还没排课'}</small><b>${fmtScore(c.got)}<small> / ${fmtScore(c.points)}</small></b></li>`).join('')}</ul></details>` : `<p class="dk-sc-out muted">学习台里还没有这一部分（${escapeHtml(p.basis)}）</p>`}</div>`;
+  function fillScore(body, b = fcBoard(toDate(Date.now()))) {
+    const f = b.now;
+    const partLabel = Object.fromEntries(SCORE_SUBJECTS.flatMap((s) => s.parts.map((p) => [p.key, p.label])));
+    const unitRow = (id) => {
+      const u = f.units[id];
+      const ex = b.exam.units[id];
+      const star = id.endsWith(':*');
+      const note = star ? '学习台里还没有，按你说的底子估的' : u.n ? `会 ${pct(u.k)} · 到考试那天记得 ${pct(ex?.r ?? u.r)} · ${u.n} 道题算的` : `会 ${pct(u.k)} · 还没做过这一块的题，估的`;
+      return `<li><span>${escapeHtml(plainTitle(u.title) || u.title || id)}</span><small class="muted">${escapeHtml(note)}</small><b>${fmtScore(u.exp)}<small> / ${fmtScore(u.points)}</small></b></li>`;
+    };
+    const subject = (s) => {
+      const parts = SCORE_SUBJECTS.find((x) => x.key === s.key).parts;
+      const ids = Object.keys(f.units).filter((id) => f.units[id].subject === s.key);
+      return `<section class="dk-sc-sub sc-${s.rgb}"><h3 class="dk-sc-h"><i></i>${escapeHtml(s.label)}<b>约 ${n0(s.median)}<small> / ${s.target}（${n0(s.lo)}–${n0(s.hi)}）</small></b></h3>${parts.map((p) => {
+        const mine = ids.filter((id) => f.units[id].part === p.key).sort((a, c) => (f.units[c].points - f.units[c].exp) - (f.units[a].points - f.units[a].exp));
+        const got = mine.reduce((n, id) => n + f.units[id].exp, 0);
+        const only = mine.length === 1 && mine[0].endsWith(':*'); // 这一部分整个还没进学习台：只写一行
+        const full = mine.reduce((n, id) => n + f.units[id].points, 0);
+        return `<div class="dk-sc-part"><div class="dk-sc-row"><span>${escapeHtml(p.label)}</span><span class="dk-sc-pbar"><i style="width:${Math.min(100, full ? (got / full) * 100 : 0).toFixed(2)}%"></i></span><b>${fmtScore(got)}<small> / ${fmtScore(full)}</small></b></div>
+          ${only ? '<p class="dk-sc-out muted">学习台里还没有这一部分，按你说的底子估的</p>' : `<ul class="dk-sc-units">${mine.slice(0, 5).map(unitRow).join('')}</ul>${mine.length > 5 ? `<details class="dk-sc-ch"><summary class="muted">还有 ${mine.length - 5} 块</summary><ul class="dk-sc-units">${mine.slice(5).map(unitRow).join('')}</ul></details>` : ''}`}</div>`;
+      }).join('')}</section>`;
+    };
+    const d = b.week.delta;
     body.innerHTML = `
-      <div class="dk-sc-head"><span class="dk-nju is-shield" aria-hidden="true"></span><div><small class="muted">目标 ${b.goal} 分 · 已经攒下</small><p class="dk-sc-n"><b>${fmtScore(b.total)}</b><small>/ ${b.goal}</small></p></div></div>
-      ${scoreBar(b, true)}
-      <p class="dk-sub muted">${b.pace.left > 0 ? `还差 ${Math.ceil(b.pace.left)} 分，离考研还有 ${b.pace.weeks} 周，平均每周要攒 ${fmtScore(b.pace.perWeek)} 分。` : `攒够 ${b.goal} 了。`}</p>
-      <h3 class="dk-sc-h">这 7 天 <span class="${b.week.delta >= 0 ? 'is-up' : 'is-down'}">${signed(b.week.delta)}</span></h3>
-      ${moves.length ? `<ul class="dk-sc-moves">${moves.slice(0, 8).map(move).join('')}</ul>${moves.length > 8 ? `<p class="muted">还有 ${moves.length - 8} 块</p>` : ''}` : '<p class="muted">这 7 天没有一块升档或掉档。</p>'}
-      ${b.subjects.map((s) => `<section class="dk-sc-sub sc-${s.rgb}"><h3 class="dk-sc-h"><i></i>${escapeHtml(s.label)}<b>${fmtScore(s.got)}<small> / ${s.target}</small></b></h3>${s.parts.map(part).join('')}</section>`).join('')}
+      <div class="dk-sc-head"><span class="dk-nju is-shield" aria-hidden="true"></span><div><small class="muted">如果今天考 · 目标 ${b.goal} 分</small><p class="dk-sc-n"><b>${n0(f.total.median)}</b><small>分</small></p></div></div>
+      ${fcBar(f, true)}
+      <p class="dk-sub muted">八成的可能在 ${n0(f.total.lo)}–${n0(f.total.hi)} 分之间；过 ${b.goal} 的概率 ${pct(f.pGoal)}。${f.pLines == null ? '还没有南大的单科线，没算每科也过线的概率。' : `总分过 ${b.goal}、每科也过单科线的概率 ${pct(f.pLines)}。`}${measuredText(b.measured)}。</p>
+      <ul class="dk-sc-moves">
+        <li><span>今天考</span><small class="muted">范围 ${n0(f.total.lo)}–${n0(f.total.hi)}</small><b>${n0(f.total.median)}</b></li>
+        <li><span>从今天起不再学，到考试那天（${escapeHtml(b.examDay)}）</span><small class="muted">只算遗忘、不算以后再学，是下限 · 范围 ${n0(b.exam.total.lo)}–${n0(b.exam.total.hi)}</small><b>${n0(b.exam.total.median)}</b></li>
+        <li><span>这 7 天</span><small class="muted">和 7 天前的作答用同一套算法比</small><b class="${d >= 0 ? 'is-up' : 'is-down'}">${signed(d)}</b></li>
+        <li><span>模考</span><small class="muted">还没做过。模考用留着的最近三年真卷，做了才能校准这个数</small><b>—</b></li>
+      </ul>
+      ${f.subjects.map(subject).join('')}
       <details class="dk-fold dk-sc-how"><summary><h3 class="dk-sc-h">怎么算的</h3></summary>
-        <p>不猜考多少分，只数已经攒下的分。${b.goal} 分给四科：${b.subjects.map((s) => `${escapeHtml(s.label)} ${s.target}`).join('、')}。每一科按考试大纲的分值分到各部分，一部分的分平分到课程地图里的各章，一章再平分到这一章的块。</p>
-        <p>一块攒到几成，看这一块的掌握（页面按你的作答算的，不是 Claude 说的）：</p>
-        <ul class="dk-sc-ladder">${LADDER.map((x) => `<li><span>${escapeHtml(x.text)}</span><b>${Math.round(x.credit * 100)}%</b></li>`).join('')}<li><span>以前过了、后来又错了（掉了）</span><b>10%</b></li></ul>
-        <p>有真题入库的块，要「真题级」过了（这一块的真题第一次碰到就一次做对、没看提示）才攒得满；没过最多七成。一章里的块分分数时，三成平分、七成按这一块真题平均每年考几分。</p>
-        <p class="muted">考场在几个月以后：只会当场做的题，考场上常常丢；隔了 30 天还能一次做对，才算稳拿。学习台里还没有的部分（高数、概率、组成原理、操作系统、计网、阅读、写作、政治）分照样占着、攒到的是 0，缺口在哪一眼看得到。</p>
-        <ul class="dk-sc-basis">${b.subjects.flatMap((s) => s.parts.map((p) => `<li><span>${escapeHtml(s.label)} · ${escapeHtml(p.label)}</span><small class="muted">${escapeHtml(p.basis)}</small></li>`)).join('')}</ul>
+        <p>一张卷是一串题：每题落在课程地图的哪一块、几分、什么题型。有真题入库的科目用历年真卷，没有的照卷面结构合成一张。学习台里还没有的部分（还没排块的章、没开课的科目）照样在卷上占着分。</p>
+        <p>一道题做对的概率 = 蒙对的底 + 剩下的 ×（会的程度 × 到那天还记得几成 × 考场折扣 0.9）。会的程度按你每块第一次碰到的题算：真题级的题照真题难度算；课上和练一练的题比真题容易，换算回真题难度、宁可算低；原题再做、看了提示不算。还记得几成用间隔重复里公开的记忆模型（FSRS-5 的默认参数），会做一类题比记单词忘得慢，稳定度乘 3（估的）。</p>
+        <p>整张卷抽很多遍，取中间那个数和八成的范围；各部分、各块写的是平均能拿几分，加起来是这一科的平均分（和中间那个数差一点）。同一部分的块一起高一起低（底子说高说低、学得快慢是整个人的事），所以作答少的时候范围很宽——这是实话；算法自己的假设（课上的题比真题容易多少、忘得多快）在模考校准以前也算进范围。这套算法先拿模拟学生量过：作答多了以后，数学、408 的八成范围各罩住真实分数 78%，平均往低里算 6 分左右（宁可算低）；作答很少时罩住 87%。</p>
+        <p>还没有你的作答的地方，起点是你 2026-11-14 说的底子：</p>
+        <ul class="dk-sc-basis">${Object.entries(PART_PRIORS).map(([k, p]) => `<li><span>${escapeHtml(partLabel[k] || k)} · 起点 ${pct(p.mean)}</span><small class="muted">${escapeHtml(p.basis)}</small></li>`).join('')}</ul>
       </details>`;
   }
   function openScore(src) {

@@ -8,7 +8,7 @@ import { assertWrite } from '../memory/schema.js';
 import { loadExamCourse } from './load.js';
 import { statsCache } from './stats.js';
 import { readReserve } from './reserve.js';
-import { EXAM_COURSES } from './schema.js';
+import { EXAM_COURSES, subjectOfCourse } from './schema.js';
 import { barOf, barsChanged } from './bar.js';
 import { blockSyllabus } from './mapping.js';
 import { staleProfiles, staleMaps, profileSrc } from './fresh.js';
@@ -24,6 +24,8 @@ export async function refreshStats(db, { curriculum = [], now = Date.now(), year
   const stats = {};
   const blockPerYear = {};
   const blockUsable = {};
+  // 卷面样本按科目代码合起来（408 一卷四门课）：{ 408: { 2015: [[块, 分, 题型]…] } }
+  const paperRows = {};
   const papers = new Set();
   let questions = 0, syllabus = 0;
   for (const c of EXAM_COURSES) {
@@ -43,9 +45,12 @@ export async function refreshStats(db, { curriculum = [], now = Date.now(), year
     stats[c].unverified = d.questions.filter((q) => q.verified?.how === 'none').length;
     Object.assign(blockPerYear, stats[c].blockPerYear);
     Object.assign(blockUsable, stats[c].blockUsable);
+    const code = subjectOfCourse(c);
+    for (const [y, rows] of Object.entries(stats[c].papers || {})) ((paperRows[code] ||= {})[y] ||= []).push(...rows);
+    delete stats[c].papers;
   }
   const meta = await db.doc('meta/exam').get().then((x) => (x?.exists ? x.data() : {})).catch(() => ({}));
-  const next = { ...meta, counts: { ...(meta.counts || {}), papers: papers.size, questions, syllabus }, stats, blockPerYear, blockUsable, statsAt: now };
+  const next = { ...meta, counts: { ...(meta.counts || {}), papers: papers.size, questions, syllabus }, stats, blockPerYear, blockUsable, papers: paperRows, statsAt: now };
   await db.doc('meta/exam').set(next);
   return next;
 }

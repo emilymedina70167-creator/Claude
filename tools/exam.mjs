@@ -21,6 +21,10 @@
 //   d. node tools/exam.mjs drills 目录 [--reserve 2024,2025,2026] → 每卷 drills-X-….json；每道都在两种 iPad 尺寸下画一遍
 //      （tools/check-lesson.mjs，要先 npm run build），有写法错误的不收；apply 时一起写成 kind: drills 的收件箱记录
 //   抽查：node tools/exam.mjs sample 目录 [--n 20] → 随机 n 道，一行「题号｜主考点｜考法｜坑」（给我看，我说不对的改了以后整批同类再查）
+//   排块、挂考点：node tools/exam.mjs blocks 考点目录 --curriculum 课程地图.json --out 目录 [--course DS,CO] [--chapters 章对照.json] [--manual 手工挂.json] [--add 手工补的.json]
+//      → 课程地图没有块的章照考点树排节和块、已有块的章按标题挂（blockPlan）；目录/curriculum-batches.json（ArtifactData batch 的 writes，一批 ≤ 50 条）、
+//        目录/syllabus-{门课}-{年}.json（考点带上 blocks、mapSig：课程地图写好以后的指纹，照旧写进 exam_inbox）。还挂不上的打印出来
+//      章对照：{ 门课: { 考点树的章: 课程地图的章 } }；手工挂：{ 考点: [块] }；手工补的：[{ id, level, title, parent, … }]（考点树排不出来、手工挂要用的节和块）
 //   补章：node tools/exam.mjs skeleton 考点目录 --course CO --curriculum 课程地图.json → 课程地图缺的章（ArtifactData batch 的 writes，开发那边写）
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,7 +34,8 @@ import { checkPaper } from '../kit/src/exam/structure.js';
 import { checkTags } from '../kit/src/exam/taxonomy.js';
 import { planInbox, courseOfTags } from '../kit/src/exam/inbox.js';
 import { drillOf } from '../kit/src/exam/drillgen.js';
-import { skeleton as skeletonOf } from '../kit/src/exam/skeleton.js';
+import { skeleton as skeletonOf, blockPlan } from '../kit/src/exam/skeleton.js';
+import { mapSig } from '../kit/src/exam/mapping.js';
 import { HOW } from '../kit/src/exam/taxonomy.js';
 import { reserveYears } from '../kit/src/exam/reserve.js';
 import { toDate } from '../kit/src/memory/schema.js';
@@ -260,6 +265,51 @@ function skeleton() {
   console.log(JSON.stringify(out.map(({ id, ...data }) => ({ op: 'set', collection: 'curriculum', doc_id: id, data })), null, 1));
 }
 
-const CMDS = { split, syllabus, check, apply, tagprep, tagmerge, tagapply, drills, sample, skeleton };
+function blocks() {
+  const dir = opt._[0] || need('dir');
+  const out = need('out');
+  const curriculum = readJson(need('curriculum'));
+  const chapters = opt.chapters ? readJson(opt.chapters) : {};
+  const manual = opt.manual ? readJson(opt.manual) : {};
+  const recs = fs.readdirSync(dir).filter((f) => /^syllabus-.*\.json$/.test(f)).map((f) => ({ f, j: readJson(path.join(dir, f)) }));
+  const nodes = recs.flatMap((r) => r.j.nodes || []);
+  const courses = opt.course ? String(opt.course).split(',') : [...new Set(recs.map((r) => r.j.course))];
+  const writes = opt.add ? readJson(opt.add).map((w) => ({ by: 'dev', requires: [], ...w })) : [];
+  const maps = {};
+  for (const c of courses) {
+    const r = blockPlan({ course: c, nodes, curriculum, chapters: chapters[c] || {}, manual });
+    writes.push(...r.writes);
+    maps[c] = r.map;
+    const n = (lv) => r.writes.filter((w) => w.level === lv).length;
+    console.log(`${c}：新写 ${r.writes.length} 条（章 ${n('lecture')}、节 ${n('section')}、块 ${n('block')}），挂上 ${Object.keys(r.map).length} 个考点，挂不上 ${r.unmapped.length} 个`);
+    for (const id of r.unmapped) console.log(`   挂不上 ${id} ${nodes.find((x) => x.id === id)?.title || ''}`);
+  }
+  // 指纹按课程地图写好以后的样子算（新块写进去以后页面算出来的要一样，不然一进去就报「映射过时」）
+  const after = new Map(curriculum.map((x) => [String(x.id), x]));
+  for (const w of writes) after.set(String(w.id), { ...after.get(String(w.id)), ...w });
+  const all = [...after.values()];
+  const blockIds = new Set(all.filter((x) => x.level === 'block').map((x) => String(x.id)));
+  fs.mkdirSync(out, { recursive: true });
+  let bad = 0;
+  for (const { f, j } of recs) {
+    if (!courses.includes(j.course)) continue;
+    const sig = mapSig(all, j.course);
+    const at = Date.now();
+    for (const nd of j.nodes || []) {
+      const bs = maps[j.course][nd.id];
+      if (!bs) continue;
+      for (const b of bs) if (!blockIds.has(String(b))) { console.log(`   ${nd.id} 挂的 ${b} 不是课程地图里的块`); bad++; }
+      Object.assign(nd, { blocks: bs, mapSig: sig, mapAt: at });
+    }
+    fs.writeFileSync(path.join(out, f), JSON.stringify(j));
+  }
+  const batches = [];
+  for (let i = 0; i < writes.length; i += 50) batches.push(writes.slice(i, i + 50).map(({ id, ...data }) => ({ op: 'set', collection: 'curriculum', doc_id: id, data })));
+  fs.writeFileSync(path.join(out, 'curriculum-batches.json'), JSON.stringify(batches));
+  console.log(`课程地图 ${writes.length} 条分 ${batches.length} 批 → ${path.join(out, 'curriculum-batches.json')}；考点记录写在 ${out}`);
+  if (bad) process.exit(1);
+}
+
+const CMDS = { split, syllabus, check, apply, tagprep, tagmerge, tagapply, drills, sample, skeleton, blocks };
 if (!CMDS[cmd]) { console.error('用法：node tools/exam.mjs split | syllabus | check | apply …（见文件开头）'); process.exit(2); }
 CMDS[cmd]();

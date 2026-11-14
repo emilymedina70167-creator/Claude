@@ -10,7 +10,8 @@ import { TYPES } from './taxonomy.js';
  */
 export const STRUCTURE = {
   408: [{
-    from: 2009, checked: false, total: 150, minutes: 180,
+    from: 2009, checked: true, // 2026-11-14 照 2009～2026 十八年真卷核过：每年 40 道单选 × 2 分 + 7 道综合合计 70
+     total: 150, minutes: 180,
     sections: [{ from: 1, to: 40, type: 'single', points: 2 }, { from: 41, to: 47, type: 'comp', points: null, sum: 70 }],
     // 408 一卷四门课：题号 → 门课（切题时先填，打了标签以后以主考点的门课为准）。也是草稿
     courses: [[1, 11, 'DS'], [12, 22, 'CO'], [23, 32, 'OS'], [33, 40, 'CN'], [41, 42, 'DS'], [43, 44, 'CO'], [45, 46, 'OS'], [47, 47, 'CN']],
