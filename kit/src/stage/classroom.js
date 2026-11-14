@@ -243,7 +243,7 @@ export async function renderStageClass(root, meta = {}, desk) {
         const q = w?.prompt || stage.scene.say || '';
         const ev = actEvidence(a, { comp, q, goalText: (id) => stage.scene.goals.get(id)?.text || id, sig: sigOf(w, stage.scene, at || seq), goalSig: (id) => goalSig(stage.scene.goals.get(id)), wait: w });
         for (const r of ev.records) sink.record({ ...r, turn: at });
-        if (ev.say != null) sink.put('evidence', sayEvidence(ev.say, { session: sid, block: desk.block, turn: at }));
+        if (ev.say != null) { sink.put('evidence', sayEvidence(ev.say, { session: sid, block: desk.block, turn: at })); desk.said?.poke(); } // 话的账：隔 20 秒过一次
         if (ev.event) sink.event({ type: `stage-${a.type}`, block: comp, detail: { ...a, tries: undefined }, turn: at });
       },
     } : null,

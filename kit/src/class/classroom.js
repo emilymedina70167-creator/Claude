@@ -1606,6 +1606,7 @@ export async function renderClass(root, meta, desk = null) {
       // 学习台里：学生说的话也是证据（附的图等传完再记，带上原图的 id）
       const evOf = (images = []) => sayEvidence(say, evCtx(null), images);
       if (desk && say.trim() && !imgs.length) sink.put('evidence', { ...evOf(), turn: turn.seq });
+      if (desk && say.trim()) desk.said?.poke(); // 话的账（第十一轮）：隔 20 秒过一次
       // 图直接交给 Claude，不用等它传进 assets 再开讲（截图传得慢时能省几秒）；传完再把原图的 id 补进这一轮的记录
       if (imgs.length) {
         Promise.all(imgs.map((x) => x.id)).then((all) => {

@@ -207,3 +207,26 @@ export function saidRecord({ prev = null, items = [], photos = [], lines = {}, m
   const keep = [...(prev?.once || []), ...once.filter((o) => !(prev?.once || []).some((p) => p.ev === o.ev))];
   return { upTo, seen, lines: all, missing: left, missingAt, once: keep, photos: [...new Set([...(prev?.photos || []), ...photos])], at, v: SAID_VERSION };
 }
+
+/**
+ * 课上什么时候过账：我打了一句就 poke()，隔 wait 毫秒没再打才跑一次（连着打几句一起过）；
+ * 在跑的时候又打了的，跑完再跑一次；flush() 立刻跑（下课、回首页、开别的课之前）。课堂两处共用
+ */
+export function saidTimer({ run, wait = 20000, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
+  let timer = null;
+  let running = null;
+  let again = false;
+  const go = async () => {
+    timer = null;
+    if (running) { again = true; return running; }
+    running = (async () => { try { await run(); } catch { /* 过账自己记错，这里不让它冒出来 */ } })();
+    await running;
+    running = null;
+    if (again) { again = false; return go(); }
+    return undefined;
+  };
+  return {
+    poke() { if (timer) clearTimer(timer); timer = setTimer(go, wait); timer?.unref?.(); },
+    flush() { if (timer) { clearTimer(timer); timer = null; } return go(); },
+  };
+}

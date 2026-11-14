@@ -44,48 +44,75 @@ export function createSaid({ db, getData, ops, ai, now = () => Date.now() }) {
     return !res || res.modelApplied !== SAID_MODEL ? null : res;
   }
 
+  // 读这节课要过账的：s、上一份账、新话（items）、只有图的、拼提示词要的材料。没有这节课返回 null
+  async function prepare(sid) {
+    const sRef = await db.doc(`sessions/${sid}`).get();
+    const s = sRef.exists ? sRef.data() : null;
+    if (!s) return null;
+    const prev = await db.doc(`sessions/${sid}/said/main`).get().then((r) => (r.exists ? r.data() : null)).catch(() => null);
+    const evidence = rowsOf(await db.collection('evidence').where('session', '==', sid).get());
+    const { items, photos } = saidItems(evidence, sid, 0, new Set(Object.keys(prev?.lines || {})));
+    const turns = items.length ? rowsOf(await db.collection(`sessions/${sid}/class_turns`).get().catch(() => null)) : [];
+    const asks = items.length ? rowsOf(await db.collection('asks').get()) : [];
+    const data = getData();
+    const recent = (data.sessions || []).filter((x) => x.id !== sid).flatMap((x) => (x.said?.once || []).map((t) => ({ text: t, date: x.date || '' })));
+    const base = { asks, profile: (data.profile || []).filter((p) => (p.status || 'active') === 'active'), lessons: (data.lessons || []).filter((l) => (l.status || 'active') === 'active'), turns, recent };
+    return { sid, s, prev, evidence, items, photos, base };
+  }
+  // 照读回的去处写进去：要求、关于我、这节课那一份账、sessions.said
+  async function commit(p, parsed) {
+    const { sid, s, prev, items, photos, base } = p;
+    const plan = planSaid(parsed, { items, asks: base.asks, sid, startedAt: Number(s.startedAt) || 0, today: s.date || new Date(now()).toISOString().slice(0, 10) });
+    const w = await ops.applySaid(plan, { session: sid, turns: base.turns });
+    const rec = saidRecord({ prev, items, photos, lines: parsed.lines, missing: parsed.missing, once: plan.once, at: now() });
+    await db.doc(`sessions/${sid}/said/main`).set(rec);
+    await patchSession(sid, { upTo: rec.upTo, n: Object.keys(rec.lines).length, missing: rec.missing.length, fails: 0, at: now(), once: rec.once.slice(-5).map((o) => o.text) });
+    return { plan, written: w.written, rejected: w.rejected, missing: rec.missing };
+  }
+
+  /** 教研室的单子（labdesk.js）：拼同一份提示词；没有要过账的新话返回 null */
+  async function input(sid) {
+    const p = await prepare(sid);
+    if (!p || !p.items.length) return null;
+    return { prompt: saidPrompt({ ...p.base, items: p.items, earlier: p.prev?.lines || {} }), ctx: { session: sid } };
+  }
+  /** 教研室交回来的回答：照首页同一套读、核、写。返回 { ok, took, rejected, why } */
+  async function take(sid, text) {
+    const p = await prepare(sid);
+    if (!p || !p.items.length) return { ok: false, why: '这节课已经没有要过账的话了' };
+    const parsed = parseSaid(text, { ids: new Set(p.items.map((x) => x.ev)), asks: p.base.asks });
+    const r = await commit(p, parsed);
+    return { ok: true, took: { asks: r.written.length, lines: Object.keys(parsed.lines).length }, rejected: [...parsed.problems.map((x) => ({ error: x })), ...r.rejected.map((x) => ({ error: `${x.id}：${x.error}` })), ...r.missing.map((id) => ({ error: `${id} 没有去处` }))] };
+  }
+
   /** 给一节课过账：'done'（过完了）、'none'（没有要调用的新话）、'fail'（调用不了、回的不是 Opus、出错） */
   async function runFor(sid) {
     if (running.has(sid)) return 'none';
     running.add(sid);
     try {
-      const sRef = await db.doc(`sessions/${sid}`).get();
-      const s = sRef.exists ? sRef.data() : null;
-      if (!s) return 'none';
-      const recRef = db.doc(`sessions/${sid}/said/main`);
-      const prev = await recRef.get().then((r) => (r.exists ? r.data() : null)).catch(() => null);
-      const evidence = rowsOf(await db.collection('evidence').where('session', '==', sid).get());
-      const { items, photos } = saidItems(evidence, sid, 0, new Set(Object.keys(prev?.lines || {})));
+      const p = await prepare(sid);
+      if (!p) return 'none';
+      const { s, prev, evidence, items, photos, base } = p;
       if (!items.length) {
-        if (photos.length) await recRef.set(saidRecord({ prev, photos, at: now() }));
+        if (photos.length) await db.doc(`sessions/${sid}/said/main`).set(saidRecord({ prev, photos, at: now() }));
         if (photos.length || !prev) await patchSession(sid, { upTo: Math.max(Number(s.said?.upTo) || 0, ...evidence.filter((e) => e.src === 'say').map((e) => Number(e.at || 0))), at: now() });
         return 'none';
       }
       // 调用之前先记一次「试过」：整页刷新断在半路，后面的 fail 跑不到（照 aidedesk.js 的 afterOne）
-      const fails = (Number(s.said?.fails) || 0) + 1;
-      await patchSession(sid, { fails, tryAt: now() });
-      const turns = rowsOf(await db.collection(`sessions/${sid}/class_turns`).get().catch(() => null));
-      const asks = rowsOf(await db.collection('asks').get());
-      const data = getData();
-      const recent = (data.sessions || []).filter((x) => x.id !== sid).flatMap((x) => (x.said?.once || []).map((t) => ({ text: t, date: x.date || '' })));
-      const base = { asks, profile: (data.profile || []).filter((p) => (p.status || 'active') === 'active'), lessons: (data.lessons || []).filter((l) => (l.status || 'active') === 'active'), turns, recent };
+      await patchSession(sid, { fails: (Number(s.said?.fails) || 0) + 1, tryAt: now() });
       const res = await call(saidPrompt({ ...base, items, earlier: prev?.lines || {} }));
       if (!res) return 'fail';
       const ids = new Set(items.map((x) => x.ev));
-      let parsed = parseSaid(res.text, { ids, asks });
+      let parsed = parseSaid(res.text, { ids, asks: base.asks });
       if (parsed.missing.length) {
         const left = items.filter((x) => parsed.missing.includes(x.ev));
         const again = await call(saidPrompt({ ...base, items: left, earlier: { ...(prev?.lines || {}), ...parsed.lines } }));
         if (again) {
-          const p2 = parseSaid(again.text, { ids: new Set(parsed.missing), asks });
+          const p2 = parseSaid(again.text, { ids: new Set(parsed.missing), asks: base.asks });
           parsed = { lines: { ...parsed.lines, ...p2.lines }, missing: p2.missing, problems: [...parsed.problems, ...p2.problems] };
         }
       }
-      const plan = planSaid(parsed, { items, asks, sid, startedAt: Number(s.startedAt) || 0, today: s.date || new Date(now()).toISOString().slice(0, 10) });
-      await ops.applySaid(plan, { session: sid, turns });
-      const rec = saidRecord({ prev, items, photos, lines: parsed.lines, missing: parsed.missing, once: plan.once, at: now() });
-      await recRef.set(rec);
-      await patchSession(sid, { upTo: rec.upTo, n: Object.keys(rec.lines).length, missing: rec.missing.length, fails: 0, at: now(), once: rec.once.slice(-5).map((o) => o.text) });
+      await commit(p, parsed);
       return 'done';
     } catch (err) {
       reportError(err, { what: '话的账', path: `sessions/${sid}`, soft: true });
@@ -95,5 +122,5 @@ export function createSaid({ db, getData, ops, ai, now = () => Date.now() }) {
     }
   }
 
-  return { runFor, needs, busy: () => running.size > 0 };
+  return { runFor, needs, input, take, busy: () => running.size > 0 };
 }
