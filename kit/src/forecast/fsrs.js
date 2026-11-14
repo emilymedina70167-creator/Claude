@@ -56,7 +56,8 @@ export function memoryOf(reviews = []) {
 
 /** 在已有的记忆上再走一次复习（null 是第一次学）：一块的作答按时间排好时，一路往下走，不用每次从头算 */
 export function step(m, r) {
-  if (!m) return { ...firstState(!!r.ok), last: r.day };
+  // 第一次学的那一节一律按学过起步：当堂做错是还没会（算进 K），不是忘了；不然同一次失手 K 和 R 各扣一次（审查第 3 条）
+  if (!m) return { ...firstState(true), last: r.day };
   return { ...review(m, !!r.ok, daysBetween(m.last, r.day)), last: r.day };
 }
 

@@ -34,3 +34,9 @@ test('memoryOf 照日期走；没有复习返回 null；rOn 用倍数', () => {
   assert.equal(rOn(null, '2027-12-21'), 1);
   assert.equal(rOn(m, '2026-10-01'), 1, '早于最后一次复习的那天当 0 天');
 });
+
+test('第一次学的那一节一律按学过起步：当堂做错是还没会（K 管），不是忘了（R 管）', () => {
+  assert.equal(memoryOf([{ day: '2026-11-01', ok: false }]).S, 3.173);
+  const lapse = memoryOf([{ day: '2026-11-01', ok: true }, { day: '2026-11-05', ok: false }]);
+  assert.ok(lapse.S < 3.173, '第二节起做错才算忘了');
+});

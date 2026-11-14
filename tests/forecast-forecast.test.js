@@ -93,3 +93,15 @@ test('各块的期望分加起来就是这一科的平均分', () => {
     assert.ok(Math.abs(sum - sub.mean) < 1e-6, sub.key);
   }
 });
+
+test('首页那条路上：没判分的证据、换一天不让数字乱跳；多错一道动不了大局', () => {
+  const evs = [1, 2, 3].map((i) => rec({ comp: `q${i}`, ok: true, min: i, extra: { exam: `Q-408-2015-0${i}` } }));
+  const m = { curriculum, evidence: evs };
+  const a = forecastBoard(m, { today: '2026-11-14' });
+  const say = { src: 'say', kind: 'say', text: '嗯', at: at(0, 30), id: 'ev-say', session: 'c-1' };
+  assert.equal(forecastBoard({ ...m, evidence: [...evs, say] }, { today: '2026-11-14' }).now.total.median, a.now.total.median, '多一句话');
+  // 这几块都没有复习（R 不随日子变）：换一天数字不变
+  assert.equal(forecastBoard({ curriculum }, { today: '2026-11-15' }).now.total.median, forecastBoard({ curriculum }, { today: '2026-11-16' }).now.total.median, '换一天');
+  const b = forecastBoard({ ...m, evidence: [...evs, rec({ comp: 'q9', ok: false, min: 9, block: 'L1.1.1', extra: { exam: 'Q-301-2016-01' } })] }, { today: '2026-11-14' });
+  assert.ok(Math.abs(a.now.total.median - b.now.total.median) <= a.now.units['L1.1.1'].points + 1e-9, '多错一道');
+});

@@ -9,7 +9,7 @@ const PASSED = new Set(['基础题过', '复现通过']);
 const round1 = (x) => Math.round(x * 10) / 10;
 
 /**
- * blocks：{ 块: { points, got, title, subject（math / cs / en / pol）} }（score.js 的 scoreBoard 的 blocks）；
+ * blocks：{ 块: { points, got, title, subject（math / cs / en / pol）} }（测量 forecast/ 的每块：卷面期望分值、现在平均能拿几分）；
  * curriculum（requires）、mastery、dueBlocks（到期复现组挂的块）、traps：{ 块: [坑] }（exam_bar 的 traps）、sessions（算这一周的时间）
  */
 export function priority({ blocks = {}, curriculum = [], mastery = [], dueBlocks = new Set(), traps = {}, sessions = [], today = '', n = 5 } = {}) {

@@ -1457,7 +1457,7 @@ export async function renderDesk(root, meta) {
       const u = f.units[id];
       const ex = b.exam.units[id];
       const star = id.endsWith(':*');
-      const note = star ? '学习台里还没有，按你说的底子估的' : `会 ${pct(u.k)} · 到考试那天记得 ${pct(ex?.r ?? u.r)} · ${u.n ? `${u.n} 道题算的` : '估的'}`;
+      const note = star ? '学习台里还没有，按你说的底子估的' : u.n ? `会 ${pct(u.k)} · 到考试那天记得 ${pct(ex?.r ?? u.r)} · ${u.n} 道题算的` : `会 ${pct(u.k)} · 还没做过这一块的题，估的`;
       return `<li><span>${escapeHtml(plainTitle(u.title) || u.title || id)}</span><small class="muted">${escapeHtml(note)}</small><b>${fmtScore(u.exp)}<small> / ${fmtScore(u.points)}</small></b></li>`;
     };
     const subject = (s) => {
@@ -1487,7 +1487,7 @@ export async function renderDesk(root, meta) {
       <details class="dk-fold dk-sc-how"><summary><h3 class="dk-sc-h">怎么算的</h3></summary>
         <p>一张卷是一串题：每题落在课程地图的哪一块、几分、什么题型。有真题入库的科目用历年真卷，没有的照卷面结构合成一张。学习台里还没有的部分（还没排块的章、没开课的科目）照样在卷上占着分。</p>
         <p>一道题做对的概率 = 蒙对的底 + 剩下的 ×（会的程度 × 到那天还记得几成 × 考场折扣 0.9）。会的程度按你每块第一次碰到的题算：真题级的题照真题难度算；课上和练一练的题比真题容易，换算回真题难度、宁可算低；原题再做、看了提示不算。还记得几成用间隔重复里公开的记忆模型（FSRS-5 的默认参数），会做一类题比记单词忘得慢，稳定度乘 3（估的）。</p>
-        <p>整张卷抽一千遍，取中间那个数和八成的范围；各部分、各块写的是平均能拿几分，加起来是这一科的平均分（和中间那个数差一点）。同一部分的块一起高一起低（底子说高说低、学得快慢是整个人的事），所以作答少的时候范围很宽——这是实话。这套算法先拿模拟学生量过：八成的范围罩住真实分数 78%，数据少时不往高里算。</p>
+        <p>整张卷抽很多遍，取中间那个数和八成的范围；各部分、各块写的是平均能拿几分，加起来是这一科的平均分（和中间那个数差一点）。同一部分的块一起高一起低（底子说高说低、学得快慢是整个人的事），所以作答少的时候范围很宽——这是实话；算法自己的假设（课上的题比真题容易多少、忘得多快）在模考校准以前也算进范围。这套算法先拿模拟学生量过：作答多了以后，数学、408 的八成范围各罩住真实分数 78%，平均往低里算 6 分左右（宁可算低）；作答很少时罩住 87%。</p>
         <p>还没有你的作答的地方，起点是你 2026-11-14 说的底子：</p>
         <ul class="dk-sc-basis">${Object.entries(PART_PRIORS).map(([k, p]) => `<li><span>${escapeHtml(partLabel[k] || k)} · 起点 ${pct(p.mean)}</span><small class="muted">${escapeHtml(p.basis)}</small></li>`).join('')}</ul>
       </details>`;

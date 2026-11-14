@@ -49,25 +49,45 @@ export function synthPaper(subjectKey, us, structure) {
   return out;
 }
 
-/** 卷面样本 { 年份: [[块, 分值, 题型]] } → [{ year, items: [{ unit, type, points }] }]；题分不到满分的补一题 */
-export function realPapers(skeletons = {}, us = [], subjectKey) {
+// 一卷标了标签的分不到这么多就不用它（双人打标签的时候正处在「标了一部分」：拿它当整卷，缺的分全按先验算、
+// 40 道单选的蒙对底也没了，408 的预测会从 31 掉到 6.5——审查量出来的）
+export const REAL_MIN = 0.7;
+
+/**
+ * 卷面样本 { 年份: [[块, 分值, 题型]] } → [{ year, items }]。标了的分不到 REAL_MIN 的卷不用；
+ * 用的卷缺的分照合成卷补：同样的题型和比例（留着蒙对的底），只落在还缺分的那几部分上
+ */
+export function realPapers(skeletons = {}, us = [], subjectKey, structure = null) {
   const s = SUBJECTS.find((x) => x.key === subjectKey);
   const ids = new Set(us.map((u) => u.id));
+  const partOfUnit = new Map(us.map((u) => [u.id, u.part]));
   const partOfCourse = (b) => s?.parts.find((p) => p.course === courseOf(b))?.key;
-  const stars = us.filter((u) => u.id.endsWith(':*')).sort((a, b) => b.points - a.points);
+  const full = s?.full || 0;
+  const synth = synthPaper(subjectKey, us, structure);
   const out = [];
   for (const [year, rows] of Object.entries(skeletons || {})) {
     const items = [];
+    const have = {};
     for (const [b, points, type] of list(rows)) {
       let unit = ids.has(String(b)) ? String(b) : null;
       if (!unit) { const pk = partOfCourse(b); unit = pk && ids.has(`${pk}:*`) ? `${pk}:*` : null; }
-      if (unit) items.push({ unit, type: type || 'answer', points: Number(points) || 0 });
-      else items.push({ unit: null, pool: us, type: type || 'answer', points: Number(points) || 0 });
+      const pts = Number(points) || 0;
+      if (!unit) continue; // 认不出是哪一部分的：当它缺着，下面照合成卷补
+      items.push({ unit, type: type || 'answer', points: pts });
+      have[partOfUnit.get(unit)] = (have[partOfUnit.get(unit)] || 0) + pts;
     }
     const got = items.reduce((n, x) => n + x.points, 0);
-    const gap = (s?.full || 0) - got;
-    // 标签缺了的那部分分：落在分最大的「还没进学习台」单位（没有的话按整科比例抽），不缩放、不丢卷
-    if (gap > 1e-9) items.push(stars.length ? { unit: stars[0].id, type: 'answer', points: gap } : { unit: null, pool: us, type: 'answer', points: gap });
+    if (!full || got < REAL_MIN * full) continue;
+    const gap = full - got;
+    if (gap > 1e-9 && synth.length) {
+      const short = new Set((s?.parts || []).filter((p) => p.points - (have[p.key] || 0) > 1e-9).map((p) => p.key));
+      const pool = us.filter((u) => short.has(u.part));
+      const scale = gap / full;
+      for (const it of synth) {
+        const p = it.pool.filter((u) => short.has(u.part));
+        items.push({ unit: null, pool: p.length ? p : pool.length ? pool : us, type: it.type, points: it.points * scale });
+      }
+    }
     out.push({ year: Number(year), items });
   }
   return out.sort((a, b) => a.year - b.year);

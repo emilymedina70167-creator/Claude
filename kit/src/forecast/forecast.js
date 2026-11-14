@@ -6,7 +6,7 @@ import { SUBJECTS } from '../memory/score.js';
 import { addDays, toDate } from '../memory/schema.js';
 import { targetOf, goalOf, examDateOf } from '../exam/target.js';
 import { structureOf } from '../exam/structure.js';
-import { PART_PRIORS, TAUGHT_MIN, GUESS, PARTIAL, TAU, DRAWS, MEASURED_N, PART_SPREAD, PERSON_SHARE } from './priors.js';
+import { PART_PRIORS, TAUGHT_MIN, GUESS, PARTIAL, TAU, DRAWS, MEASURED_N, PART_SPREAD, PERSON_SHARE, MODEL_FLOOR } from './priors.js';
 import { rng, seedOf } from './rng.js';
 import { memoryOf, rOn, step } from './fsrs.js';
 import { priorGrid, posterior, meanOf, GRID } from './knowledge.js';
@@ -36,8 +36,10 @@ function unitState(u, ev, day, tau) {
   for (let i = 0; i < post.length; i++) { c += post[i]; cdf[i] = c; }
   const r = rOn(memoryOf(reviews), day);
   const k = meanOf(post);
+  let v = 0;
+  for (let i = 0; i < post.length; i++) v += post[i] * (GRID[i] - k) ** 2;
   // w：这一块还有几成靠先验（部分的共同因子按它推这一块）
-  return { cdf, r, k, n: obs.length, w: pr.n / (pr.n + obs.length), measured: obs.length >= MEASURED_N, p: GUESS.single + (1 - GUESS.single) * k * r * tau };
+  return { cdf, r, k, ksd: Math.sqrt(v), n: obs.length, w: Math.max(MODEL_FLOOR, pr.n / (pr.n + obs.length)), measured: obs.length >= MEASURED_N, p: GUESS.single + (1 - GUESS.single) * k * r * tau };
 }
 
 // 按步给分：m 个半分里拿到几个（二项分布）。m 大时用正态近似（一题 20 个半分逐个抽太慢），夹在 0..m
@@ -88,12 +90,13 @@ export function forecast(mem = {}, { day = toDate(Date.now()), exam = null, asOf
     const st = new Map(us.map((u) => [u.id, unitState(u, ev, day, tau)]));
     for (const u of us) {
       const x = st.get(u.id);
-      unitsOut[u.id] = { subject: s.key, part: u.part, title: u.title, points: u.points, p: x.p, k: x.k, n: x.n, r: x.r, measured: x.measured };
+      unitsOut[u.id] = { subject: s.key, part: u.part, title: u.title, points: u.points, p: x.p, k: x.k, ksd: x.ksd, n: x.n, r: x.r, measured: x.measured };
       allPts += u.points;
       if (x.measured) measuredPts += u.points;
     }
-    const real = realPapers(exam?.papers?.[SUBJECT_CODE[s.key]] || {}, us, s.key);
-    const synth = synthPaper(s.key, us, structureOf(SUBJECT_CODE[s.key], year));
+    const structure = structureOf(SUBJECT_CODE[s.key], year);
+    const real = realPapers(exam?.papers?.[SUBJECT_CODE[s.key]] || {}, us, s.key, structure);
+    const synth = synthPaper(s.key, us, structure);
     // 单位按下标排好：抽卷的内层循环里不查 Map（一次首页要抽几千遍卷）
     const index = new Map(us.map((u, i) => [u.id, i]));
     const states = us.map((u) => st.get(u.id));
@@ -161,12 +164,12 @@ export function forecast(mem = {}, { day = toDate(Date.now()), exam = null, asOf
 
 /**
  * 首页那张卡和面板要的：今天考、不再学到考试那天（只有遗忘，是下限）、7 天前那样算的差、还能多拿几分的块。
- * 三次用同一个种子，差只来自数据，不来自随机数。
+ * 三次用同一个种子，差只来自数据，不来自随机数；同样的数据一模一样的数。
  */
 export function forecastBoard(mem = {}, { today = toDate(Date.now()), exam = null, draws = DRAWS } = {}) {
-  const ev = list(mem.evidence);
-  const lastAt = ev.reduce((m, e) => Math.max(m, Number(e?.at) || 0), 0);
-  const seed = seedOf(today, ev.length, lastAt, list(mem.curriculum).length, exam?.statsAt || 0);
+  // 常数种子：抽卷用掉的随机数个数和数据无关，种子不变就是完全的共同随机数——数字只因为数据变，不因为换了种子跳几分
+  // （以前按日期和证据条数取种子：多一句话、换一天，大数字就无故跳 3～7 分，审查量出来的）
+  const seed = seedOf('forecast');
   const examDay = examDateOf(targetOf(mem));
   const ev0 = blockEvidence(mem);
   const now = forecast(mem, { day: today, exam, seed, draws, ev: ev0 });

@@ -34,16 +34,20 @@ test('合成卷照结构', () => {
   assert.ok(en.filter((x) => x.type === 'essay').every((x) => x.pool.every((u) => u.part === 'WR')), '作文只落在写作');
 });
 
-test('真卷缺分补齐', () => {
+test('真卷标了不到七成的分不用（标签打到一半时预测不断崖）', () => {
   const us = units(curriculum, 'cs');
-  const ps = realPapers({ 2020: [['DS-L2.1.1', 100, 'single'], ['OS-L9.9.9', 0, 'single']] }, us, 'cs');
+  assert.deepEqual(realPapers({ 2020: [['DS-L2.1.1', 100, 'single']] }, us, 'cs', structureOf('408', 2020)), []);
+});
+
+test('真卷缺分补齐：照合成卷的题型补（留着蒙对的底），只落在还缺分的部分', () => {
+  const us = units(curriculum, 'cs');
+  const ps = realPapers({ 2020: [['DS-L2.1.1', 40, 'comp'], ['OS-L9.9.9', 80, 'single']] }, us, 'cs', structureOf('408', 2020));
   const items = ps[0].items;
   assert.ok(Math.abs(sum(items) - 150) < 1e-9);
-  const filler = items.at(-1);
-  assert.equal(filler.points, 50);
-  const stars = us.filter((u) => u.id.endsWith(':*')).sort((a, b) => b.points - a.points);
-  assert.equal(filler.unit, stars[0].id);
   assert.equal(items[1].unit, 'OS:*', '不在单位里的块归到它那一部分');
+  const fill = items.slice(2);
+  assert.ok(fill.some((x) => x.type === 'single'), '补的题里有单选');
+  assert.ok(fill.every((x) => x.pool.every((u) => u.part !== 'OS')), '操作系统已经够分，不往它上补');
 });
 
 test('近几年抽得多', () => {

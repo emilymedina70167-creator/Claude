@@ -156,8 +156,11 @@ export function run({ students = 240, draws = 400 } = {}) {
       if (month === 13) {
         const keep = st.evidence.filter((e, k) => (k * 2654435761 >>> 0) % 10 < 3);
         const thin = forecast({ curriculum: st.cur, evidence: keep }, { day, asOf, seed: seedOf(setting.name, i, day), draws });
-        const cs = thin.subjects.find((s) => s.key === 'cs');
-        rows.push({ setting: setting.name, month, subject: 'cs-thin', lo: cs.lo, hi: cs.hi, median: cs.median, truth: truthScore.cs, examN: 0 });
+        // 「数据越多越确定」直接量会的程度 K 的后验有多宽（讲过的 408 块平均）：按分数的范围比不出来——证据少时 K 停在
+        // 低的先验附近，接近零的地方分数本来就不怎么动；证据多了 K 到中间，同样的不确定摆出来的分更多
+        const sd = (ff) => { const us = Object.entries(ff.units).filter(([id, u]) => u.subject === 'cs' && st.truth.get(id)?.taughtOn && st.truth.get(id).taughtOn <= day); return us.reduce((n, [, u]) => n + u.ksd, 0) / Math.max(1, us.length); };
+        const full = forecast({ curriculum: st.cur, evidence: st.evidence }, { day, asOf, seed: seedOf(setting.name, i, day), draws: 1 });
+        rows.push({ setting: setting.name, month, subject: 'cs-ksd', thin: sd(thin), full: sd(full) });
       }
       const tt = Object.values(truthScore).reduce((a, b) => a + b, 0);
       rows.push({ setting: setting.name, month, subject: 'total', lo: f.total.lo, hi: f.total.hi, median: f.total.median, truth: tt, examN: 0 });
@@ -168,15 +171,21 @@ export function run({ students = 240, draws = 400 } = {}) {
 
 const stat = (rs) => ({ n: rs.length, cover: rs.filter((r) => r.truth >= r.lo && r.truth <= r.hi).length / Math.max(1, rs.length), bias: rs.reduce((n, r) => n + (r.median - r.truth), 0) / Math.max(1, rs.length), width: rs.reduce((n, r) => n + (r.hi - r.lo), 0) / Math.max(1, rs.length) });
 
-/** 合格线：数据够了的 75%～85%；第 0 个月覆盖 ≥ 80% 且不算高；同一时点证据多的范围比少的窄 */
+/** 合格线：数据够了的 75%～85%（数学、408 各自判）；第 0 个月覆盖 ≥ 80% 且不算高；同一时点证据多的，会的程度更确定 */
 export function judge(rows) {
-  const enough = stat(rows.filter((r) => !['total', 'cs-thin'].includes(r.subject) && r.examN >= 20));
+  const enough = stat(rows.filter((r) => !['total', 'cs-ksd'].includes(r.subject) && r.examN >= 20));
+  // 按科判（几科混在一起会让先验占大头的英语把数据驱动的科目盖住：审查拆开量过 math 71%、cs 66%）
+  const bySubject = Object.fromEntries(['math', 'cs'].map((k) => [k, stat(rows.filter((r) => r.subject === k && r.examN >= 20))]));
   const m0 = stat(rows.filter((r) => r.month === 0 && r.subject === 'total'));
-  const w0 = stat(rows.filter((r) => r.month === 13 && r.subject === 'cs-thin')).width;
-  const w13 = stat(rows.filter((r) => r.month === 13 && r.subject === 'cs')).width;
+  const kr = rows.filter((r) => r.subject === 'cs-ksd');
+  const w0 = kr.reduce((n, r) => n + r.thin, 0) / Math.max(1, kr.length);
+  const w13 = kr.reduce((n, r) => n + r.full, 0) / Math.max(1, kr.length);
   return {
-    enough, m0, w0, w13,
-    pass: { enough: enough.n === 0 || (enough.cover >= 0.75 && enough.cover <= 0.85), m0: m0.cover >= 0.8 && m0.bias <= 0, narrower: w13 < w0 },
+    enough, bySubject, m0, w0, w13,
+    pass: {
+      enough: Object.values(bySubject).every((x) => x.n === 0 || (x.cover >= 0.75 && x.cover <= 0.85)),
+      m0: m0.cover >= 0.8 && m0.bias <= 0, narrower: w13 < w0,
+    },
   };
 }
 
@@ -191,7 +200,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const x = stat(rows.filter((r) => r.setting === s.name && r.month === m && r.subject === sub));
     console.log(`| ${s.name} | ${m} | ${sub} | ${x.n} | ${f(x.cover)} | ${x.bias.toFixed(1)} | ${x.width.toFixed(1)} |`);
   }
-  console.log(`\n数据够了（每科 ≥ 20 道真题级）：${j.enough.n} 个，覆盖 ${f(j.enough.cover)}，偏 ${j.enough.bias.toFixed(1)} → ${j.pass.enough ? '合格' : '不合格'}`);
+  console.log(`\n数据够了（这一科 ≥ 20 道真题级），按科：${Object.entries(j.bySubject).map(([k, x]) => `${k} ${x.n} 个、覆盖 ${f(x.cover)}、偏 ${x.bias.toFixed(1)}`).join('；')} → ${j.pass.enough ? '合格' : '不合格'}（几科合起来 ${f(j.enough.cover)}）`);
   console.log(`第 0 个月总分：覆盖 ${f(j.m0.cover)}，偏 ${j.m0.bias.toFixed(1)} → ${j.pass.m0 ? '合格' : '不合格'}`);
-  console.log(`408 的范围宽（第 13 个月）：只给三成证据 ${j.w0.toFixed(1)}，全部证据 ${j.w13.toFixed(1)} → ${j.pass.narrower ? '合格' : '不合格'}`);
+  console.log(`408 讲过的块会的程度有多不确定（后验标准差，第 13 个月）：只给三成证据 ${j.w0.toFixed(3)}，全部证据 ${j.w13.toFixed(3)} → ${j.pass.narrower ? '合格' : '不合格'}`);
 }
