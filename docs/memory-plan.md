@@ -49,3 +49,8 @@
 ## 我在记忆库里改了什么
 
 9 条只给对话里 Claude 的规则加了 `for: "chat"`（文字没动）：`rule-bd-6`（实时黑板外部的做法）、`rule-i-mem`（旧的 current-state.md）、`rule-mat-1`（读材料）、`rule-out-1`（对话框不渲染 LaTeX）、`rule-pk-1`、`rule-pk-2`（资料包）、`rule-t-9`（分块、学习计划）、`rule-chk-4`（开讲前备草稿）、`rule-desk-1`（学习台是权威）。想让课堂也带，删掉 `for` 就行。
+
+
+## 第十一轮：记忆追上 claude.ai（2026-11-14）
+
+设计 `docs/superpowers/specs/2026-11-14-round11-design.md`。A1、A2 做完：「我的要求」`asks` 一类、话的账（我打的每一句都有去处，`memory/said.js` + `saiddesk.js`）、说明里「学生的要求」每次调用排在记忆最前面、删课不删我说的话。尺子 `tools/memory-ruler.mjs`，结果 `evals/memory/results.md`。下一批（A3）去掉记忆单独的 28 KiB，按剩下的地方取。

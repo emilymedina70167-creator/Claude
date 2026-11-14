@@ -138,6 +138,8 @@ export async function renderStageClass(root, meta = {}, desk) {
     const subject = stageSubject({ block: desk.block, pack, session: { subject: desk.subject }, space: desk.space });
     return buildStageSystem({ pack: packWithBooks(), memory: desk.mem ? { mem: desk.mem, block: desk.block, space: desk.space, session: sid } : null, title: meta.unit || '', subject, exam: examSection(), aide: aideSection(), factsByAide: !!desk.aide });
   }
+  // 本地 ?dev（模拟老师）时给自动测试看：现在这一轮会发给老师的整份说明（第十一轮：课上说的要求是不是马上就在里面）
+  if (mock && typeof window !== 'undefined') window.LAKitStageSystem = () => system();
   // 课堂助手（aide/，第九轮）：这一块附近的学生卡、能用的课前档案，放进「你对学生的了解」那一节（总量不变）。
   // 开课时档案不能用：和老师第一轮同时写一份（desk.aide.refresh），写好了从下一轮起带上；写不成就一直是代码挑的那一套
   let aideBrief = desk.aide?.brief || null;

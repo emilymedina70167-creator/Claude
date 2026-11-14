@@ -1017,6 +1017,35 @@ const SUITES = {
     return t;
   },
 
+  // 第十一轮 A2：我在课上说的要求，过账记成「我的要求」，老师下一次调用的说明里马上就有；删了这节课，要求和原话还在
+  async asks(browser) {
+    const t = await seeded(browser);
+    await t.page.goto(`${BASE}&said=2`);
+    await t.page.waitForSelector('.dk-class .dk-new', { timeout: 15000 });
+    await t.page.click('.dk-class .dk-new');
+    await t.page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash), { timeout: 20000 });
+    await t.page.waitForLoadState('load');
+    await t.waitFor(() => t.page.$('.sc-root .st-stage'), { timeout: 20000, what: '舞台课画出来' });
+    const sid = decodeURIComponent(new URL(t.page.url()).hash.slice(1));
+    await t.waitFor(() => t.page.$('.st-cell.is-tap'), { timeout: 30000, what: '模拟老师写出第一轮' });
+    await t.page.fill('#st-say-input', '测试:要求 以后别把字摆在画面正中间');
+    await t.page.click('.st-say-go');
+    const a = await t.waitFor(async () => (await t.docs('asks')).find((x) => (x.quotes || []).some((q) => q.session === sid)), { timeout: 40000, what: '课上说的话过账记成一条要求' });
+    check(a.quotes.find((q) => q.session === sid).text.includes('测试:要求'), `要求的原话不是我打的那句：${JSON.stringify(a.quotes)}`);
+    check(a.status === 'active' && a.text, '要求没写成在用的一条');
+    await t.waitFor(() => t.page.evaluate(() => /## 学生的要求[\s\S]*测试要求[^\n]*这节课刚说的/.test(window.LAKitStageSystem?.() || '')), { timeout: 20000, what: '老师下一次调用的说明里有这条要求（标着这节课刚说的）' });
+    const rec = (await t.db())[`sessions/${sid}/said/main`];
+    check(rec && Object.keys(rec.lines || {}).length >= 1, '这节课那一份账没写');
+    // 回首页删掉这节课：要求、原话都还在
+    await t.page.goto(BASE);
+    await t.page.waitForSelector('.dk-class .dk-purge', { state: 'attached', timeout: 15000 });
+    await t.page.evaluate(() => document.querySelector('.dk-class .dk-purge').click());
+    await t.answer('删掉');
+    await t.waitFor(async () => !(await t.db())[`sessions/${sid}`], { timeout: 30000, what: '这节课删掉了' });
+    const after = (await t.docs('asks')).find((x) => x.id === a.id);
+    check(after && after.quotes.some((q) => q.session === sid && q.text.includes('测试:要求')), '删课以后要求或原话没了');
+  },
+
   // 删掉一节课以后同一天再开课：不拿到同一个课号
   async purge(browser) {
     const t = await seeded(browser);
