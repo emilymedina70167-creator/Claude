@@ -248,6 +248,7 @@ export async function renderStageClass(root, meta = {}, desk) {
       },
     } : null,
   });
+  if (store.dev && window.LAStageClass) window.LAStageClass.loop = loop;
   function onAct(a) { loop.onAct(a); }
   const teach = (why) => loop.teach(why);
 

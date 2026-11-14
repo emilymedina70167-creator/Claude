@@ -626,6 +626,13 @@ const SUITES = {
     // 一直用的样子（第九轮）：老师写 look * frame=none always → meta/look 记下了
     await said('测试:不要框');
     await t.waitFor(async () => ((await t.db())['meta/look']?.looks || []).some((l) => l.target === '*' && l.props?.frame === 'none'), { timeout: 30000, what: 'look * frame=none always 存进 meta/look' });
+    // 交给学生之前先量（第十轮）：老师钉了一张放不下的长卡（出了屏幕、压着别的）→ 页面盖上「老师在调画面」、马上把画面交回老师（花费 why: sight），
+    // 那一条里写着量到的；老师拿掉它以后揭开，学生拿到手的画面没压着、那一问还在
+    await said('测试:压着');
+    await t.waitFor(async () => (await turns()).some((x) => x.role === 'claude' && x.cost?.why === 'sight'), { timeout: 40000, what: '量到压着以后页面马上交回老师改画面（花费记 why: sight）' }).catch(async (e) => { console.log('DBG', JSON.stringify((await turns()).slice(-5).map((x) => [x.role, x.kind, x.cost?.why, String(x.msg || x.text || '').slice(0, 300)]))); throw e; });
+    check((await turns()).some((x) => x.role === 'student' && /\[画面自查\][\s\S]*p1 (出了屏幕|和)/.test(x.msg || '')), '交回老师的那一条里没写量到的 p1 的问题');
+    await t.waitFor(() => t.page.evaluate(() => !window.LAStage.veiled && window.LAStage?.scene.waiting?.button === '看好了'), { timeout: 30000, what: '改好以后揭开、那一问还挂着' });
+    check(await t.page.evaluate(() => !window.LAStage.sight().issues.some((x) => x.what === '压着')), `揭开以后画面上还压着：${JSON.stringify(await t.page.evaluate(() => window.LAStage.sight().issues.filter((x) => x.what === '压着').map((x) => [x.an, x.bn])))}`);
     // 老师的眼睛（第九轮）：每轮调用都带着一张画面图，花费里记了图多大
     check(await t.page.evaluate(() => window.LAStageDev?.lastImages === 1), `老师那一轮没收到画面图（收到 ${await t.page.evaluate(() => window.LAStageDev?.lastImages)} 张）`);
     check((await turns()).some((x) => x.role === 'claude' && x.cost?.img > 0), '花费里没记画面图');

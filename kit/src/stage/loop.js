@@ -194,9 +194,9 @@ export function createLoop(host) {
       if (S.pending) { S.pending.base = []; savePending(true); }
       S.lastErrors = [...stage.errors];
       S.armedAt = performance.now();
-      donePlay();
       // 交给学生之前先量一遍（舞台主线第十轮）：压着、出了屏幕就盖一层「老师在调画面」，把这一刻的画面图和量到的问题马上交回给老师，
-      // 只改画面；改完再量，干净了揭开。画面没问题不多叫一次（只多一次量）。学生先看到压着、老师下一轮才知道——这是以前一直改不好的根
+      // 只改画面；改完再量，干净了揭开。画面没问题不多叫一次（只多一次量）。学生先看到压着、老师下一轮才知道——这是以前一直改不好的根。
+      // 量完才算这一轮演完（donePlay）：量的那一会儿学生点的、写的照常攒着，叫老师（flush）等量完再走，不和改画面那一轮绞在一起
       if (host.selfCheck !== false && !host.readOnly && !S.ended && stage.sightCheck) {
         const seen = await stage.sightCheck().catch(() => null);
         const must = seen ? mustOf(seen.issues) : [];
@@ -204,6 +204,7 @@ export function createLoop(host) {
           S.sightTries = (S.sightTries || 0) + 1;
           stage.veil?.(true);
           addEvent({ kind: 'sight', text: sightLines(must).join('；'), n: S.sightTries, last: S.sightTries >= SIGHT_MAX, at: Date.now() });
+          donePlay();
           flush();
           return claude;
         }
@@ -211,6 +212,7 @@ export function createLoop(host) {
         S.sightTries = 0;
         stage.veil?.(false);
       }
+      donePlay();
       // 这一轮的提问没演上、学生手上只有页面替挂的打字框：不等学生，马上带着没演的行再叫一次老师（主线第一轮 D3-3、D4-5）。
       // 连着两轮都这样就不再自动叫（免得来回空转），等学生
       // 交给学生的手（open）没演上、学生手上没东西可动（stage.handMissed，events.js 的 handMissed）：同一个规矩，马上叫老师重写（主线第七轮）

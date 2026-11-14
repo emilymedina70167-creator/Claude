@@ -12,8 +12,8 @@
 export const BYTES_PER_TOKEN = 2.8;
 export const approxTokens = (bytes) => Math.round((Number(bytes) || 0) / BYTES_PER_TOKEN);
 
-export const WHY = ['turn', 'closing', 'lint', 'images', 'stuck', 'compact', 'failed', 'spec', 'preview'];
-export const WHY_TEXT = { lint: '重写', images: '看原图', tools: '工具', stuck: '停久提醒', compact: '摘要', failed: '出错作废', spec: '抢跑没用上', preview: '老师要看版面' };
+export const WHY = ['turn', 'closing', 'lint', 'images', 'stuck', 'compact', 'failed', 'spec', 'preview', 'sight'];
+export const WHY_TEXT = { lint: '重写', images: '看原图', tools: '工具', stuck: '停久提醒', compact: '摘要', failed: '出错作废', spec: '抢跑没用上', preview: '老师要看版面', sight: '画面压着、交回老师改' };
 
 /** 一次调用的花费，记在 class_turns 那一轮上 */
 // ms：从发出到写完一共多久（学生等了多久）；first：从发出到黑板上出现第一个字（边写边显示时学生先看到东西的时候）

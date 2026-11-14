@@ -62,6 +62,17 @@ const NOFRAME = `look * frame=none always
 say "好，以后都不带框。"
 ask next "看好了点这里" button="看好了"`;
 
+// 学生说「测试:压着」：模拟老师把两张卡钉在一起压着（第十轮：页面交给学生之前量到压着、盖上、交回老师）；
+// 交回来的那一条里有 [画面自查]，模拟老师挪开下面那一张（只改画面）。别的时候页面量到压着（e2e 的屏幕上演的那几轮），模拟老师重排一次
+const OVERLAP = `card p1 = ${Array.from({ length: 12 }, (_, i) => `"放不下的第 ${i + 1} 行"`).join(' ')}
+place p1 at=32,2-46,6
+look p1 text=64
+say "一张很长的卡。"
+ask next "看好了点这里" button="看好了"`;
+const FIX_OVERLAP = `remove p1`;
+const FIX_ANY = `arrange`;
+const FIXES = new Set([FIX_OVERLAP, FIX_ANY]);
+
 const END = `say "那今天就到这里。"
 ask end "今天先到这里？"`;
 
@@ -77,9 +88,11 @@ export function stageMock({ pace = 60 } = {}) {
     // 收到几张画面图（第九轮：e2e 看老师每轮都带着图）
     if (typeof window !== 'undefined') (window.LAStageDev ||= {}).lastImages = (opts.images || []).length;
     const last = String(messages.at(-1)?.content || '');
-    const k = messages.filter((m) => m.role === 'assistant').length;
+    // 改画面的那几轮（第十轮）不算一轮课：照第几轮回的剧本不跟着往后走
+    const k = messages.filter((m) => m.role === 'assistant' && !FIXES.has(String(m.content || '').trim())).length;
     // 学生说「测试:下课」：模拟老师照说明把「下课吗？」递给学生（ask end，e2e 的 stage 段）
-    const text = /舞台课：小结写成几行字/.test(last) ? CLOSING : /学生说：「测试:下课」/.test(last) ? END : /学生说：「测试:分幕」/.test(last) ? SCENE : /学生说：「测试:预览」/.test(last) ? PREVIEW : /学生说：「测试:不要框」/.test(last) ? NOFRAME : /\[预览\]/.test(last) ? AFTER_PREVIEW : TURNS[Math.min(k, TURNS.length - 1)](last);
+    const fix = /\[画面自查\]/.test(last) ? (/p1/.test(last) ? FIX_OVERLAP : FIX_ANY) : null;
+    const text = fix || (/舞台课：小结写成几行字/.test(last) ? CLOSING : /学生说：「测试:压着」/.test(last) ? OVERLAP : /学生说：「测试:下课」/.test(last) ? END : /学生说：「测试:分幕」/.test(last) ? SCENE : /学生说：「测试:预览」/.test(last) ? PREVIEW : /学生说：「测试:不要框」/.test(last) ? NOFRAME : /\[预览\]/.test(last) ? AFTER_PREVIEW : TURNS[Math.min(k, TURNS.length - 1)](last));
     // ?dev&think=4：模拟老师先想 4 秒再写（真课出第一个字前要等十几秒：看等的那一阵画面上是什么）
     const lag = typeof location !== 'undefined' && /[?&]think=(\d+)/.test(location.search) ? Number(location.search.match(/[?&]think=(\d+)/)[1]) * 1000 : 300;
     await new Promise((r) => setTimeout(r, lag));
