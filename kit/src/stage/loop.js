@@ -107,7 +107,7 @@ export function createLoop(host) {
       const input = pre?.input || host.messages({});
       const nb = inBytes(input);
       // 老师这一轮开演以前学生手上已经开着的（提前想那里要分清：这一轮新交给学生的手才算「有东西可动」）
-      S.opensBefore = new Set(stage.scene?.opens?.keys?.() || []);
+      if (why !== 'sight') S.opensBefore = new Set(stage.scene?.opens?.keys?.() || []); // 改画面那一轮不算：上一轮新交给学生的手还算新的（审查 10）
       const turn = stage.begin();
       const mark = turn.mark;
       const t0 = pre?.t0 ?? performance.now();
@@ -197,18 +197,26 @@ export function createLoop(host) {
       // 交给学生之前先量一遍（舞台主线第十轮）：压着、出了屏幕就盖一层「老师在调画面」，把这一刻的画面图和量到的问题马上交回给老师，
       // 只改画面；改完再量，干净了揭开。画面没问题不多叫一次（只多一次量）。学生先看到压着、老师下一轮才知道——这是以前一直改不好的根。
       // 量完才算这一轮演完（donePlay）：量的那一会儿学生点的、写的照常攒着，叫老师（flush）等量完再走，不和改画面那一轮绞在一起
-      if (host.selfCheck !== false && !host.readOnly && !S.ended && stage.sightCheck) {
-        const seen = await stage.sightCheck().catch(() => null);
+      // 这一轮的提问、交给学生的手没演上（下面的 askfail / handfail）：那一次重写本来就要马上叫老师，版面里照实写着压着，一起改；不另外自查（审查 3）
+      const missedNow = (stage.askMissed || stage.handMissed) && !S.askRetried;
+      if (host.selfCheck !== false && !host.readOnly && !S.ended && stage.sightCheck && !missedNow) {
+        const seen = await Promise.race([stage.sightCheck().catch(() => null), new Promise((r) => setTimeout(() => r(null), 4000))]);
         const must = seen ? mustOf(seen.issues) : [];
-        if (must.length && (S.sightTries || 0) < SIGHT_MAX && !S.ended) {
+        const lines = sightLines(must);
+        // 上一轮改满两次还剩的同一组：老师改不掉（或者量的是假的），不再每一轮都盖、都叫（审查 8）
+        const same = lines.length && S.sightLeft === lines.join('；');
+        if (must.length && !same && (S.sightTries || 0) < SIGHT_MAX && !S.ended) {
           S.sightTries = (S.sightTries || 0) + 1;
           stage.veil?.(true);
-          addEvent({ kind: 'sight', text: sightLines(must).join('；'), n: S.sightTries, last: S.sightTries >= SIGHT_MAX, at: Date.now() });
+          // 量的那一会儿学生已经答了、点了（攒着要叫老师的事）：这一条照常是讲课的一轮，顺带改画面（审查 2）
+          const acted = !!S.pending?.events.some((e) => triggers(e) && e.kind !== 'sight');
+          addEvent({ kind: 'sight', text: lines.join('；'), n: S.sightTries, last: S.sightTries >= SIGHT_MAX, acted, at: Date.now() });
           donePlay();
           flush();
           return claude;
         }
-        if (S.sightTries) host.onSight?.({ tries: S.sightTries, left: must.length ? sightLines(must) : [] });
+        if (S.sightTries) host.onSight?.({ tries: S.sightTries, left: lines });
+        S.sightLeft = S.sightTries && lines.length ? lines.join('；') : same ? S.sightLeft : '';
         S.sightTries = 0;
         stage.veil?.(false);
       }
@@ -280,7 +288,7 @@ export function createLoop(host) {
   // 前几轮开着、一直没收的手不算——不然开过一次以后整节课都不提前想了。刷新以后不知道哪些是新开的：都算
   const canPlay = (sc) => [...(sc.vars?.values?.() || [])].some((x) => x.shown) || [...(sc.opens?.keys?.() || [])].some((k) => !S.opensBefore?.has(k));
   // 课堂助手的旁听（第九轮）：学生手上有东西可动、老师没在写、没在提前想的时候，host 照这个状态决定开不开（watchCanStart）
-  const kickAide = () => { if (host.onIdle && !S.ended && !host.readOnly) host.onIdle({ ended: S.ended, flight: S.flight, spec: S.spec, canPlay: canPlay(stage.scene), pending: S.pending?.events?.length ? eventsText(S.pending.events, { goals: stage.scene.goals }) : '' }); };
+  const kickAide = () => { if (host.onIdle && !S.ended && !host.readOnly && !stage.veiled) host.onIdle({ ended: S.ended, flight: S.flight, spec: S.spec, canPlay: canPlay(stage.scene), pending: S.pending?.events?.length ? eventsText(S.pending.events, { goals: stage.scene.goals }) : '' }); };
   // 这一问的编号（证据记在它名下，老师的记忆块 basis 写它）：学习台里上课才有（样子页不记证据）
   const askId = () => (host.evidence && S.lastClaude ? `S${S.lastClaude}` : null);
   /** 这一段做成一条学生轮（发给老师的整条在 msg 里） */
@@ -292,7 +300,9 @@ export function createLoop(host) {
     const said = eventsText(events, { goals: stage.scene.goals, secs: byNext || !S.armedAt ? null : Math.round((performance.now() - S.armedAt) / 1000) });
     // 页面核过老师上一轮的几步（不是正确的下一步的）、学生动了以后跟着变的：一起写进这一条，核过的说过就清掉
     stage.layoutNow?.(); // 版面照屏幕上真画出来的写（第十轮）
-    const msg = turnMessage({ act: said, state: stage.scene.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(events), grids: gridsOf(stage.scene), askId: askId(), aide: host.aideNote?.() || '' });
+    // 只改画面的那一条不带旁听的发现（带了就算用掉了，到不了真正讲课的那一轮：审查 10）
+    const sightOnly = events.some((e) => e.kind === 'sight') && !events.some((e) => triggers(e) && e.kind !== 'sight');
+    const msg = turnMessage({ act: said, state: stage.scene.stateText(), errors: S.lastErrors, audit: stage.teacherAudit || [], derived: derivedOf(events), grids: gridsOf(stage.scene), askId: askId(), aide: sightOnly ? '' : host.aideNote?.() || '' });
     stage.teacherAudit = [];
     const say = events.filter((e) => e.act?.type === 'say').map((e) => e.act.text).join('\n');
     clearTimeout(S.saveTimer);
@@ -466,6 +476,7 @@ export function createLoop(host) {
   }
   // 挑战还没做到、或者攒着等东西做完：很久没动叫老师（老师当场看着学生怎么试的写提示；学生照样能接着试）
   function armIdle() {
+    if (stage.veiled) return; // 盖着「老师在调画面」：学生看不到、动不了，不算很久没动、不提前想（审查 11）
     clearTimeout(S.idleTimer);
     if (S.ended || host.readOnly || S.flight || !idleWhy() || S.pending?.stuck) return;
     S.idleTimer = setTimeout(() => {
@@ -489,6 +500,7 @@ export function createLoop(host) {
 
   // —— 提前想：这一轮以「接着」结尾、学生只能点它，就趁学生看的时候先把下一轮要来（发出去的和真点了以后一字不差才接上）——
   function maybeSpec() {
+    if (stage.veiled) return; // 盖着「老师在调画面」：学生看不到、动不了，不算很久没动、不提前想（审查 11）
     if (!host.call || S.ended || host.readOnly || S.spec || S.flight || S.pending?.events.some((x) => !x.quiet)) return;
     // 课堂助手（旁听、开课时写的档案）在跑：不提前想（平台同时只跑两三个调用：老师 + 一个）
     if (host.aideBusy?.()) return;
@@ -580,6 +592,7 @@ export function createLoop(host) {
   /** 下课没下成（小结没写出来）：接着上 */
   function reopen() { S.ended = false; armIdle(); }
 
+  stage.onVeilTimeout = () => { S.sightTries = 0; }; // 盖层保底揭开（stage.js 的 veil）：下一轮从头数
   stage.onAnswer = onAnswer;
   stage.onGoal = onGoal;
   stage.onDone = onDone;

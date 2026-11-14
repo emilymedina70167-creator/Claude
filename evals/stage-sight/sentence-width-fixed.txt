@@ -1,0 +1,8 @@
+# 第十轮审查 6：句子用 at= 定宽时排出来不能比给的框宽（以前句子按词折行、算出来的宽偏大，压到旁边那张卡）
+sentence v = "She had already finished her homework by then, so she went out to play with her friends."
+card r = "过去完成时：had + 过去分词" "说「过去某个时刻之前已经」"
+place v at=2,4-24,16
+place r at=25,4-46,10
+look v text=28
+say "左边的句子，右边的规则。"
+ask next "看好了点这里" button="看好了"

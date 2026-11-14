@@ -82,3 +82,41 @@ test('selfCheck: false（以前的试演文件、没有老师的舞台）不量'
   assert.deepEqual(a.stage.veils, []);
   a.loop.close();
 });
+
+test('量的那一会儿学生已经答了：那一条照常是讲课的一轮（不写「只改画面、不要说话」）', async () => {
+  const a = sightClass([]);
+  a.stage.sightCheck = async () => { a.stage.onAnswer({ type: 'say', text: '我答了' }, null); await wait(5); return OVER; };
+  await a.loop.teach('turn');
+  await wait(80);
+  const msg = studentMsgs(a.sent).find((m) => /画面自查/.test(m));
+  assert.ok(msg, '发了画面自查');
+  assert.match(msg, /我答了/);
+  assert.match(msg, /已经接着做了/);
+  assert.doesNotMatch(msg, /不要说话/);
+  a.loop.close();
+});
+
+test('这一轮的提问没演上（askfail 要马上重写）：不另外自查', async () => {
+  const a = sightClass([CLEAN]); // 没演上那一轮不量（量了也是 OVER）；重写的那一轮量到干净
+  a.stage.askMissed = true;
+  const begin = a.stage.begin;
+  a.stage.begin = function () { const t = begin.call(this); if (a.calls.length) this.askMissed = false; return t; }; // 重写的那一轮演上了
+  await a.loop.teach('turn');
+  await wait(80);
+  assert.equal(a.calls[1], 'turn', '马上叫老师的是重写那一问（askfail），不是改画面');
+  assert.ok(!a.stage.veils.includes(true));
+  a.loop.close();
+});
+
+test('改满两次还剩的同一组问题：下一轮不再盖、不再叫（改不掉的不每轮来回）', async () => {
+  const a = sightClass([OVER, OVER, OVER, OVER]);
+  await a.loop.teach('turn');
+  await wait(120);
+  assert.deepEqual(a.calls, ['turn', 'sight', 'sight']);
+  a.stage.veils.length = 0;
+  await a.loop.teach('turn');
+  await wait(80);
+  assert.equal(a.calls.length, 4, '下一轮照常讲，没再叫改画面');
+  assert.ok(!a.stage.veils.includes(true));
+  a.loop.close();
+});

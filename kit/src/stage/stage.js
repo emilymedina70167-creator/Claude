@@ -241,11 +241,14 @@ export class Stage {
    */
   async sightCheck() {
     if (!this.free || this.instant || !this.withInput) return null;
-    try { await this.settle(); } catch { /* 量不了就照现在的量 */ }
-    // 动画（摆位置的、镜头的）走完再量：最多等 1.2 秒
+    // 老师写了 camera X 凑近（镜头放大，别的东西本来就推出去了）、学生正拖着：不量（第十轮审查 1、8：量到的都是假的）
+    if (this.scene.focus || this.dragging) return null;
+    // 收尾排一遍，最多等 2 秒（审查 9：万一卡住，课堂循环不能一直等它）
+    try { await Promise.race([this.settle(), new Promise((r) => setTimeout(r, 2000))]); } catch { /* 量不了就照现在的量 */ }
+    // 动画（摆位置的、镜头的）走完再量：最多等 1.2 秒。一直循环的（能点的格子上那一圈呼吸）不算（审查 5：以前每轮白等满 1.2 秒）
     const t0 = performance.now();
     while (performance.now() - t0 < 1200) {
-      const running = [...(this.world.getAnimations?.() || []), ...(this.view.getAnimations?.({ subtree: true }) || [])].filter((a) => a.playState === 'running');
+      const running = [...(this.world.getAnimations?.() || []), ...(this.view.getAnimations?.({ subtree: true }) || [])].filter((a) => a.playState === 'running' && a.effect?.getComputedTiming?.().iterations !== Infinity);
       if (!this.composing && !running.length) break;
       await new Promise((r) => setTimeout(r, 60));
     }
@@ -253,7 +256,10 @@ export class Stage {
   }
   /** 盖一层「老师在调画面」（第十轮）：页面量到压着、交回老师改的时候，学生看不到压着的样子，也点不了、打不了字。截图不拍它 */
   veil(on, text = '老师在调画面') {
+    clearTimeout(this.veilTimer);
     if (!on) { this.veilEl?.remove(); this.veilEl = null; return; }
+    // 保底：盖着超过 45 秒（改画面那一轮出了什么岔子）一定揭开，学生不能被锁在后面（审查 9）
+    this.veilTimer = setTimeout(() => { this.veil(false); this.onVeilTimeout?.(); }, 45000);
     if (!this.veilEl) {
       this.veilEl = el('div', 'st-veil', this.root);
       this.veilEl.innerHTML = '<div class="st-veil-card"><span class="st-veil-t"></span><span class="st-veil-dots"><i></i><i></i><i></i></span></div>';
@@ -2359,7 +2365,8 @@ export class Stage {
       if (alts.length) extras.push({ id: 'say', ...alts[0], alts, ...(prevBox('say') ? { prev: prevBox('say') } : {}) });
     }
     // 画面右上角页面自己的按钮（说过的、撤一步、回到……）：东西、话都让开它（自由排版试验：原句顶到了「说过的」旁边）
-    for (const n of [this.talkBtn?.parentNode === this.root ? this.talkBtn : null, this.undoBox]) {
+    // Pencil 写了字以后右下角那一条「撤一笔 / 擦掉」（第十轮审查 7：量画面算它，排版也得躲它，不然写过字以后每轮都量到压着）
+    for (const n of [this.talkBtn?.parentNode === this.root ? this.talkBtn : null, this.undoBox, this.root.querySelector('.st-ink-bar:not([hidden])')]) {
       if (!n || n.hidden || !n.offsetWidth) continue;
       const r = this.screenRect(n);
       if (!r) continue;
@@ -2433,7 +2440,7 @@ export class Stage {
       return { items, relations, res, nudged };
     };
     let { items, relations, res, nudged } = solveAll();
-    if (!items.length) { this.layoutState = { boxes: new Map(), unmet: [], scale: 1, grid, canvas: cv }; sc.layoutInfo = null; return false; }
+    if (!items.length) { this.layoutState = { boxes: new Map(), unmet: [], scale: 1, grid, canvas: cv }; sc.layoutInfo = null; this.layoutNotes = []; return false; }
     // 老师这一轮放大的东西放不下（压着、出了屏幕，台上有钉住的页面又不整台缩）：放大的那几样往回收一点，收到放得下为止，
     // 照实告诉老师放到了多少（和「右边放不下，放在了下面」一样：页面尽量照办、说真话；设计要求单 r23）
     const grown = this.lastBy === 'teacher' ? [...(this.scaledNow || [])].filter(([id, v]) => sc.objects.has(id) && v.to > v.was && (sc.objects.get(id).k || 1) === v.to) : [];
@@ -2484,9 +2491,13 @@ export class Stage {
       // 老师留了 40 列，卡还是折成 560 宽、比老师算的高，又压到下面（2026-11-14 画面自查的尺子里真老师改不好的那一题）
       const atBox = WIDTHS_OF[o.type] ? relations.find((r) => r.kind === 'at' && r.a === it.id)?.box : null;
       if (atBox) {
-        const t = sc.type(o), k = o.k || 1, probe = WIDTHS_OF[o.type][0];
-        const pad = t.objectBox({ ...o, width: probe }).w - probe; // 框比字宽多出来的边
-        const want = Math.round(Math.max(WIDTHS_OF[o.type].at(-1), atBox.w / s / k - pad));
+        // 找排出来不比老师给的宽的那个宽（句子按词折行，框的宽不等于给的宽：二分找，审查 6）；最窄只到最窄那一档
+        const t = sc.type(o), k = o.k || 1, target = atBox.w / s / k, min = WIDTHS_OF[o.type].at(-1);
+        const wOf = (w) => t.objectBox({ ...o, width: w }).w;
+        let lo = min, hi = Math.max(min, Math.round(target));
+        if (wOf(hi) <= target + 1) lo = hi;
+        else for (let n = 0; n < 12 && hi - lo > 4; n++) { const mid = Math.round((lo + hi) / 2); if (wOf(mid) <= target + 1) lo = mid; else hi = mid; }
+        const want = Math.round(lo);
         if (want !== (o.width || WIDTHS_OF[o.type][0])) width = want;
       } else if (it.alts) {
         const alts = this.altsOf(it.id) || [];
@@ -2570,7 +2581,8 @@ export class Stage {
    */
   layoutNow() {
     const st = this.layoutState;
-    if (!this.free || !st?.grid || this.instant) return null;
+    // 镜头凑近时（camera X）画面上的格子和 place at= 的画布格子对不上：照排的写（审查 1）
+    if (!this.free || !st?.grid || this.instant || this.scene.focus) return null;
     let got;
     try { got = this.sight(); } catch { return null; }
     const cv = st.canvas;

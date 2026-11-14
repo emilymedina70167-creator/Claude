@@ -452,7 +452,7 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
   background: rgb(var(--shade-rgb, 25 45 40) / 0.78); color: #fff; font: 600 12px/1 var(--sans, sans-serif); box-shadow: 0 0 0 2px var(--st-card); }
 .st-attach-x::after { content: ''; position: absolute; inset: -9px; } /* 按得到的地方 44 见方 */
 /* 「老师在调画面」（第十轮）：页面量到压着、交回老师改的那几秒盖住整块舞台，学生看不到压着的样子、点不了；截图不拍它 */
-.st-veil { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; touch-action: none;
+.st-veil { position: absolute; inset: 0; z-index: 60; display: grid; place-items: center; touch-action: none;
   background: color-mix(in srgb, var(--st-card) 55%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.1); backdrop-filter: blur(14px) saturate(1.1);
   animation: st-veil-in .25s ease-out both; }
 .st-veil-card { display: flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 999px; background: var(--st-card);
