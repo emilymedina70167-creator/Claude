@@ -10,7 +10,7 @@ import { PART_PRIORS, TAUGHT_MIN, GUESS, PARTIAL, TAU, DRAWS, MEASURED_N, PART_S
 import { rng, seedOf } from './rng.js';
 import { memoryOf, rOn, step } from './fsrs.js';
 import { priorGrid, posterior, meanOf, GRID } from './knowledge.js';
-import { blockEvidence } from './evidence.js';
+import { blockEvidence, upTo } from './evidence.js';
 import { SUBJECT_CODE, units as unitsOf, synthPaper, realPapers, pickPaper } from './paper.js';
 
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -167,7 +167,7 @@ export function forecastBoard(mem = {}, { today = toDate(Date.now()), exam = nul
   const now = forecast(mem, { day: today, exam, seed, draws, ev: ev0 });
   const atExam = forecast(mem, { day: examDay > today ? examDay : today, exam, seed, draws, ev: ev0 });
   const day7 = addDays(today, -7);
-  const then = forecast(mem, { day: day7, asOf: Date.parse(`${day7}T23:59:59`), exam, seed, draws });
+  const then = forecast(mem, { day: day7, exam, seed, draws, ev: upTo(ev0, day7) });
   const gain = Object.entries(now.units).map(([id, u]) => ({ id, title: u.title, subject: u.subject, part: u.part, points: u.points, gain: Math.max(0, u.points * (1 - u.p)) })).sort((a, b) => b.gain - a.gain);
   return { goal: now.goal, now, exam: atExam, examDay, week: { delta: now.total.median - then.total.median, then: then.total }, measured: now.measured, gain };
 }

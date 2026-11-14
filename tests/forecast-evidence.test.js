@@ -65,3 +65,16 @@ test('asOf 截断；讲过的块没有作答也是 taught', () => {
   assert.equal(m.get('DS-L2.1.2').taught, true);
   assert.equal(m.get('DS-L2.1.2').obs.length, 0);
 });
+
+test('upTo 截到某一天和按 asOf 重新整理一样', async () => {
+  const { upTo } = await import('../kit/src/forecast/evidence.js');
+  const evs = [rec({ comp: 'a', ok: true, session: 's1' }), rec({ comp: 'b', ok: false, d: 3, session: 's2' }), rec({ comp: 'c', ok: true, d: 6, session: 's3', block: 'DS-L2.1.2' })];
+  const m = mem(evs, [{ id: 's9', block: 'DS-L2.1.2', date: '2026-11-05' }]);
+  const cut = upTo(blockEvidence(m), '2026-11-04');
+  const fresh = blockEvidence(m, { asOf: Date.parse('2026-11-04T23:59:59') });
+  for (const b of ['DS-L2.1.1', 'DS-L2.1.2']) {
+    assert.deepEqual(cut.get(b).obs, fresh.get(b).obs, b);
+    assert.deepEqual(cut.get(b).reviews, fresh.get(b).reviews, b);
+    assert.equal(cut.get(b).taught, fresh.get(b).taught, b);
+  }
+});
