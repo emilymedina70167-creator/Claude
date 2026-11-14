@@ -27,3 +27,57 @@ export function skeleton({ course, nodes = [], curriculum = [] }) {
   }
   return out;
 }
+
+/**
+ * 按考点树给课程地图排节和块，并把每个叶子考点挂到块上（考情要落到「学生在学的哪一块」上：统计、预测、老师每一轮的「这一块在考试里」都按块算）。
+ * - chapters：{ 考点树的章: 课程地图的章 }，写明的照写（标题对不上的，比如「基本概念」↔「绪论」）；没写的按标题找，找不到新开一章
+ * - 课程地图里这一章还没有块：照考点树排——一个二级考点一节，它下面的三级考点一块一块；没有三级的，二级考点自己一块。块的 from 记着考点
+ * - 已经有块的章（备课、教材排过的）：叶子考点按标题找最像的块挂上；manual：{ 考点: [块] } 手工指定的照写；还挂不上的列进 unmapped（教研室以后挂）
+ * 返回 { writes: [{ id, level, title, from, by, parent, requires }]（要新写进课程地图的章、节、块）, map: { 考点: [块] }, unmapped: [考点] }。纯函数
+ */
+export function blockPlan({ course, nodes = [], curriculum = [], chapters: given = {}, manual = {} }) {
+  const prefix = course === 'LA' ? '' : `${course}-`;
+  const mine = nodes.filter((n) => n.course === course && n.status !== 'void');
+  const kids = (id) => mine.filter((n) => n.parent === id);
+  const re = new RegExp(`^${prefix}L(\\d+)$`);
+  const curCh = curriculum.filter((c) => re.test(String(c.id)));
+  let next = Math.max(0, ...curCh.map((c) => Number(String(c.id).match(re)[1]))) + 1;
+  const blocksUnder = (ch) => curriculum.filter((b) => b.level === 'block' && String(b.id).startsWith(`${ch}.`));
+  const writes = [];
+  const map = {};
+  const unmapped = [];
+  for (const top of mine.filter((n) => !n.parent)) {
+    let ch = given[top.id] || curCh.find((c) => alike(c.title, top.title))?.id;
+    if (!ch) {
+      ch = `${prefix}L${next}`;
+      writes.push({ id: ch, level: 'lecture', title: `第${next}章 ${top.title}`, from: top.id, by: 'dev', requires: [] });
+      next++;
+    }
+    const num = String(ch).match(/L(\d+)$/)[1];
+    const have = blocksUnder(ch);
+    const leaves = [];
+    const walk = (n) => { const k = kids(n.id); if (!k.length) leaves.push(n); else k.forEach(walk); };
+    kids(top.id).forEach(walk);
+    if (!have.length) {
+      kids(top.id).forEach((sec, i) => {
+        const sid = `${ch}.${i + 1}`;
+        writes.push({ id: sid, level: 'section', title: `${num}.${i + 1} ${sec.title}`, from: sec.id, by: 'dev', parent: ch, requires: [] });
+        const items = kids(sec.id);
+        (items.length ? items : [sec]).forEach((it, j) => {
+          const bid = `${sid}.${j + 1}`;
+          writes.push({ id: bid, level: 'block', title: it.title, from: it.id, by: 'dev', parent: sid, requires: [] });
+          map[it.id] = [bid];
+        });
+      });
+      continue;
+    }
+    for (const leaf of leaves) {
+      if (manual[leaf.id]) { map[leaf.id] = manual[leaf.id]; continue; }
+      const hit = have.find((b) => alike(b.title, leaf.title));
+      if (hit) map[leaf.id] = [String(hit.id)]; else unmapped.push(leaf.id);
+    }
+  }
+  const own = new Set(mine.map((n) => n.id));
+  for (const [id, bs] of Object.entries(manual)) if (own.has(id) && !map[id]) { map[id] = bs; const k = unmapped.indexOf(id); if (k >= 0) unmapped.splice(k, 1); }
+  return { writes, map, unmapped };
+}
