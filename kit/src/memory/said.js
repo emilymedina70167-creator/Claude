@@ -50,7 +50,8 @@ function around(turns, at) {
  * 给话的账那个 Claude 的提示词。items：saidItems 的；asks：现在的要求（只列在用的）；profile、lessons：只给标题免得重复记；
  * turns：这节课的 class_turns（找每句前后老师说了什么）；earlier：这节课前面已经过过的去处 { 证据编号: [去处] }
  */
-export function saidPrompt({ items = [], asks = [], profile = [], lessons = [], turns = [], earlier = {} } = {}) {
+// recent：最近几节课记成「这一次」的 [{ text, date }]：隔几节课又说同样的意思，就该记成要求（单看一节课看不出来）
+export function saidPrompt({ items = [], asks = [], profile = [], lessons = [], turns = [], earlier = {}, recent = [] } = {}) {
   const live = asks.filter((a) => a.status === 'active');
   const lines = items.map((x) => {
     const c = around(turns, x.at);
@@ -62,28 +63,30 @@ export function saidPrompt({ items = [], asks = [], profile = [], lessons = [], 
     '你在给一位考研学生的学习台记账。学生在课上打的每一句话，你都要给出去处：要老师以后照做的要求、纠正、期望记成「学生的要求」；关于学生自己的事实记进「关于学生」；只管这一节课的单独记；别的写不用记和为什么。',
     '学生说过：「我说了什么，下一次都肯定会改」。漏掉一句要求，学生就得再说一遍——那是失败。也别把提问、作答、闲话记成要求，记多了老师读到的全是噪音。',
     '## 怎么判断',
-    '- 新要求：学生要老师以后上课都这样做或别这样做（「只做 2-3 句就行啊，这是来学新内容还是来复习的？」→ 开场复习最多两三句；「别再出现这种格式」；「你能不能尊重我说的话」）。抱怨、反问里的要求也算。',
+    '- 新要求：学生要老师以后上课都这样做或别这样做（「例题能不能先给答案再讲啊，每次都猜半天」→ 例题先给答案再讲过程；「别每讲一步就问我懂没懂」；「字太小了我看不清」→ 字放大）。抱怨、反问里的要求也算。',
     '- 又说了：说的是已经有的一条要求。老师没照做所以学生又说，写 why=没照做；学生只是附和、重申、顺口提到，写 why=附和。',
+    '- **写新要求之前，把「现在学生的要求」一条条对一遍**：是不是同一条，这样判断——假如老师一直照那一条做，学生这一句还会不会说出来？不会，就是同一条（写又说了，哪怕换了说法、说得更宽或更窄）；会，就不是同一条，哪怕两条都沾点边（都和「别浪费时间」「版面」有关）。同一件事分成好几条，老师看不出学生说了几遍；不同的事挤进一条，老师照做了也解决不了。',
     '- 已记：这一句说的那条，就是这节课刚记下的（老师或你前面记的）。',
     '- 改了：学生改口了已有的那一条（以前说放角落，现在说放中间）。text= 写改过以后的完整要求。',
     '- 不用了：学生说那一条不用再照做了。',
-    '- 关于我：关于学生的事实，不是要老师照做的规矩（「下个月期末，只有周末有空」「我用 iPad」）。',
-    '- 这一次：只管这一节课、这一刻（「这节课先到这」「你先优化好你的交互」「直接开始学新内容」如果只是这次开课的选择——但同样的话反复说，就是要求）。',
-    '- 不用记：提问（「readers 是读者的意思吗」）、作答（翻译、填空）、闲话。why= 写一句为什么。',
+    '- 关于我：关于学生的事实，不是要老师照做的规矩（「下个月期末，只有周末有空」「我高中物理还行」）。',
+    '- 这一次：只管这一节课、这一刻的安排（「今天先到这吧」「这题先跳过」「先讲第三节」「我这节是在测试，你接着走」）：说的是现在怎么办，不是以后每节课都要怎样。写这一次之前，先看下面「最近几节课记成这一次的」：同一个意思隔了一节课以上又出现，说明不只是这一次，记成新要求（或者又说了已有的那一条）。下课、结束、继续这类本来就是此刻的安排，不算。',
+    '- 不用记：提问（「这个词什么意思」「定语从句是什么」）、作答（翻译、填空、选项）、报页面的毛病（「点了没反应」「这里卡住了」：开发会看，不是要老师照做的）、闲话、「继续」「好了」。why= 写一句为什么。',
     '- 一条消息里有几件事就写几行（一个要求加一句反问：一行新要求、一行不用记）。每条消息至少一行。',
     '- text= 用你自己的话把要求写清楚，让以后照做的老师一看就懂；不要照抄学生的原话（原话页面会自己附上）。',
     '- scope=：要求管全部科目写 all，只管一科写 math / cs / en。和画面重叠有关的要求加 measure=overlap（页面会自己量）。',
     `## 现在学生的要求（${live.length} 条）`,
     live.length ? live.map((a) => `- ${a.id}：${one(a.text, 200)}`).join('\n') : '（还没有）',
-    profile.length ? `## 关于学生已经记着的（只列标题，别重复记）\n${profile.map((p) => `- ${p.id} ${one(p.topic, 20)}：${one(p.text, 60)}`).join('\n')}` : '',
-    lessons.length ? `## 老师的守则（只列标题）\n${lessons.map((l) => `- ${l.id}：${one(l.text, 60)}`).join('\n')}` : '',
+    profile.length ? `## 关于学生已经记着的事实（只列标题，别重复记成关于我；要求不记在这里）\n${profile.map((p) => `- ${p.id} ${one(p.topic, 20)}：${one(p.text, 60)}`).join('\n')}` : '',
+    lessons.length ? `## 老师自己的守则（只列标题；学生说的要求就算守则里已经有，也照样记成学生的要求——守则是老师自己归纳的，要求是学生亲口说的）\n${lessons.map((l) => `- ${l.id}：${one(l.text, 60)}`).join('\n')}` : '',
     prev.length ? `## 这节课前面已经记过的去处\n${prev.join('\n')}` : '',
+    recent.length ? `## 最近几节课记成「这一次」的（同样的意思又出现了，就不只是这一次：记成新要求）\n${recent.slice(-20).map((o) => `- ${o.date || ''} ${one(o.text, 100)}`).join('\n')}` : '',
     `## 这一次要记的 ${items.length} 条消息`,
     lines.join('\n\n'),
     '## 回答的格式（只写这些行，一行一个去处）',
     '编号｜新要求｜text=…｜scope=all|math|cs|en｜measure=overlap（可省）',
     '编号｜又说了｜A-…｜why=没照做|附和',
-    '编号｜已记｜A-…',
+    '编号｜已记｜A-…（这一次里前面刚记成新要求的那一条还没有编号：写那一句的编号，比如 已记｜ev-…）',
     '编号｜改了｜A-…｜text=…',
     '编号｜不用了｜A-…｜why=…',
     '编号｜关于我｜topic=…｜text=…',
@@ -110,14 +113,26 @@ export function parseSaid(text = '', { ids = new Set(), asks = [] } = {}) {
       const m = r.match(/^([a-z]+)\s*=\s*([\s\S]*)$/);
       if (m) out[m[1]] = m[2].trim();
       else if (/^A-\w+$/.test(r)) out.ask = r;
+      // 这一批里前面刚记成新要求的那句（还没有编号）：用那句的证据编号指它，读完整批再核
+      else if (/^ev-/.test(r) && ids.has(r) && r !== ev) out.askEv = r;
     }
-    if (NEED_ASK.has(to) && !live.has(out.ask)) { problems.push(`${ev}：${kind}指着的 ${out.ask || '（没写编号）'} 不是在用的要求`); continue; }
+    if (NEED_ASK.has(to) && !out.askEv && !live.has(out.ask)) { problems.push(`${ev}：${kind}指着的 ${out.ask || '（没写编号）'} 不是在用的要求`); continue; }
     if ((to === 'new' || to === 'change' || to === 'me' || to === 'once') && !out.text) { problems.push(`${ev}：${kind}没写 text=`); continue; }
     if (to === 'me' && !out.topic) out.topic = '关于我';
     if (out.scope && !SCOPES.has(out.scope)) delete out.scope;
     if (out.measure && !MEASURES.has(out.measure)) delete out.measure;
     if (to === 'again' && out.why !== '没照做') out.why = '附和';
     (lines[ev] ||= []).push(out);
+  }
+  // 指着同一批里的一句的：那一句要真有一行新要求，不然不收
+  for (const [ev, ls] of Object.entries(lines)) {
+    lines[ev] = ls.filter((l) => {
+      if (!l.askEv) return true;
+      if ((lines[l.askEv] || []).some((x) => x.to === 'new')) return true;
+      problems.push(`${ev}：指着的 ${l.askEv} 在这一批里没有记成新要求`);
+      return false;
+    });
+    if (!lines[ev].length) delete lines[ev];
   }
   const missing = [...ids].filter((id) => !lines[id]);
   return { lines, missing, problems };
@@ -138,13 +153,17 @@ export function planSaid(parsed, { items = [], asks = [], sid = '', startedAt = 
   const addQuote = (a, ev) => (a.quotes || []).some((q) => q.ev === ev) ? a : { ...a, quotes: [...(a.quotes || []), quote(ev)] };
   const nextId = () => nextAskId([...cur.values()]);
   const older = (a) => !fresh.has(String(a.id)) && ((a.quotes || [])[0]?.at || 0) < startedAt;
+  const madeBy = new Map(); // 这一批里哪一句建了哪一条（同一批里指着那一句的，落到那一条上）
   for (const x of items) {
-    for (const l of parsed.lines[x.ev] || []) {
+    for (const l0 of parsed.lines[x.ev] || []) {
+      const l = l0.askEv ? { ...l0, ask: madeBy.get(l0.askEv) } : l0;
+      if (l0.askEv && !l.ask) continue;
       if (l.to === 'new') {
         const id = nextId();
         cur.set(id, { id, text: l.text, quotes: [quote(x.ev)], scope: l.scope || 'all', ...(l.measure ? { measure: l.measure } : {}), status: 'active', since: today, by, checks: [], broken: 0, log: [] });
         fresh.add(id);
         touched.set(id, 'add');
+        if (!madeBy.has(x.ev)) madeBy.set(x.ev, id);
       } else if (l.to === 'again' || l.to === 'known') {
         const a = cur.get(l.ask);
         const next = addQuote(a, x.ev);

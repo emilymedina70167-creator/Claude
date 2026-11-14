@@ -143,3 +143,22 @@ test('水位线停在缺的那句前面，照片也有去处', () => {
   assert.equal(Object.keys(rec2.lines).length, 4);
   assert.deepEqual(rec2.once, [{ text: '这次', ev: 'ev-b' }]);
 });
+
+test('同一批里指着刚记成新要求的那句（还没有编号）', () => {
+  const items = [{ ev: 'ev-a', at: 10, text: '能不能把内容弄好再展现给我看？' }, { ev: 'ev-b', at: 20, text: '为什么老是有两个星号' }];
+  const parsed = parseSaid('ev-a｜新要求｜text=内容先弄好再展示｜scope=all\nev-b｜已记｜ev-a', { ids: new Set(['ev-a', 'ev-b']), asks: [] });
+  assert.deepEqual(parsed.problems, []);
+  assert.deepEqual(parsed.missing, []);
+  const plan = planSaid(parsed, { items, asks: [], sid: 'c-1', startedAt: 0, today: '2026-11-14' });
+  assert.equal(plan.asks.length, 1);
+  assert.deepEqual(plan.asks[0].doc.quotes.map((q) => q.ev), ['ev-a', 'ev-b']);
+  // 指着这一批里没记成新要求的那句：不收
+  const bad = parseSaid('ev-a｜不用记｜why=x\nev-b｜已记｜ev-a', { ids: new Set(['ev-a', 'ev-b']), asks: [] });
+  assert.equal(bad.problems.length, 1);
+});
+
+test('最近几节课「这一次」的也给它看（隔几节课又说同样的话就是要求）', () => {
+  const p = saidPrompt({ items: [{ ev: 'ev-a', at: 10, text: '够了，我要学新内容' }], asks: [], recent: [{ text: '这节课不复习，直接开始讲新内容', date: '2026-11-05' }] });
+  assert.ok(p.includes('这节课不复习，直接开始讲新内容'));
+  assert.ok(p.includes('2026-11-05'));
+});
