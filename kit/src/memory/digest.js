@@ -222,9 +222,27 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
   const intro = `这节课在学习台里上${session ? `（${session}）` : ''}。下面是学习台记忆库里和你有关的部分。**记忆由你管**：错题、弱点、复现组、下一节从哪接、规则你都直接写（memo 块），不用等学生确认；掌握由页面按证据算。前面是和这节课直接有关的**全文**，最后是记忆库里其余东西的**目录**（一条一行）。`;
   const reserve = Math.min(CATALOG_RESERVE, Math.floor(budget * 0.3));
   const room = budget - reserve;
-  let used = utf8(intro);
+  // 学生的要求（第十一轮，asks）：学生亲口说过要老师照做的，全文、排在最前、先装（不和别的节抢，也不进目录）；
+  // 这节课刚说的标出来，这节课「这一次」的另起一节（只管这节课）
+  const askSp = block ? spaceOfId(block) : space;
+  const asks = (Array.isArray(mem0.asks) ? mem0.asks : []).filter((a) => a && a.status === 'active' && (!a.scope || a.scope === 'all' || !askSp || a.scope === askSp))
+    .sort((a, b) => (Number(b.broken) || 0) - (Number(a.broken) || 0) || cmpId(a.id, b.id));
+  const askLine = (a) => {
+    const q = Array.isArray(a.quotes) ? a.quotes : [];
+    const last = q.at(-1);
+    const fresh = session && q.some((x) => x.session === session);
+    const when = last?.at ? toDate(last.at) : a.since || '';
+    return `- ${one(a.text, 400)}（${a.id}${last?.text ? `；最近一次原话「${one(last.text, 80)}」${when ? `，${when}` : ''}` : ''}${q.length > 1 ? `；说过 ${q.length} 次` : ''}${Number(a.broken) ? `；犯过 ${a.broken} 次，学生不得不再说` : ''}）${fresh ? '【这节课刚说的】' : ''}`;
+  };
+  for (const a of asks) shown.add(`asks/${a.id}`);
+  const once = (Array.isArray(mem0.saidOnce) ? mem0.saidOnce : []).filter((o) => o?.text);
+  const asksText = [
+    asks.length ? `## 学生的要求（学生亲口说过、要你照做的；犯过的在前。每一条都要做到——学生说过「我说了什么，下一次都肯定会改」）\n\n${asks.map(askLine).join('\n')}` : '',
+    once.length ? `## 这节课学生说的（只管这节课）\n\n${once.map((o) => `- ${one(o.text, 200)}`).join('\n')}` : '',
+  ].filter(Boolean).join('\n\n');
+  let used = utf8(intro) + (asksText ? utf8(asksText) + 2 : 0);
   let rulesText = '';
-  const body = [intro];
+  const body = asksText ? [intro, asksText] : [intro];
   let srcCut = 0;
   const coreCap = Math.floor(room * CORE_SHARE);
   let coreUsed = 0;
