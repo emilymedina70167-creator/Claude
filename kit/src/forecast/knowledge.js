@@ -54,10 +54,18 @@ function betaCdf(x, a, b) {
 const EDGES = [0, ...GRID.slice(1).map((k, i) => (GRID[i] + k) / 2), 1];
 
 /** Beta(mean·n, (1−mean)·n) 落在每一格的概率质量 */
+// 先验只有十来种（每部分一个、讲过的一个），首页一次要几百个块：算过的记住（不完全 Beta 一次几十次连分式）
+const PRIOR_CACHE = new Map();
 export function priorGrid(mean, n) {
-  const a = Math.max(1e-3, mean * n), b = Math.max(1e-3, (1 - mean) * n);
-  const cdf = EDGES.map((x) => betaCdf(x, a, b));
-  return norm(Float64Array.from(GRID, (_, i) => Math.max(0, cdf[i + 1] - cdf[i])));
+  const key = `${mean}|${n}`;
+  let w = PRIOR_CACHE.get(key);
+  if (!w) {
+    const a = Math.max(1e-3, mean * n), b = Math.max(1e-3, (1 - mean) * n);
+    const cdf = EDGES.map((x) => betaCdf(x, a, b));
+    w = norm(Float64Array.from(GRID, (_, i) => Math.max(0, cdf[i + 1] - cdf[i])));
+    PRIOR_CACHE.set(key, w);
+  }
+  return Float64Array.from(w);
 }
 
 /**

@@ -25,7 +25,7 @@ test('猜对的底：单选 0.25、七选五 1/7、多选 1/11、大题 0；每�
 
 test('其余常数', () => {
   for (const k of ['math', 'cs', 'en', 'pol']) assert.equal(TAU[k], 0.9);
-  assert.equal(DELTA, 1.2); assert.equal(BLOCK_S_X, 3); assert.equal(DRAWS, 1500); assert.equal(RECENT_X, 2); assert.equal(MEASURED_N, 2);
+  assert.equal(DELTA, 1.2); assert.equal(BLOCK_S_X, 3); assert.equal(DRAWS, 1000); assert.equal(RECENT_X, 2); assert.equal(MEASURED_N, 2);
 });
 
 test('同一个种子同一串数，不同种子不同', () => {
