@@ -54,6 +54,8 @@ export function parseTry(text) {
   String(text ?? '').split('\n').forEach((raw, i) => {
     const line = raw.trim();
     if (!line || line.startsWith('#')) return;
+    // 「自查:」：下面是老师改画面的那一轮（舞台主线第十轮：页面量到压着、盖上、交回老师时，假老师交这一段）
+    if (/^自查\s*[:：]/.test(line)) { out.push(cur = { kind: 'teacher', fix: true, lines: [], line: i + 1 }); return; }
     const m = line.match(/^学生\s*[:：]\s*(\S+)\s*(.*)$/);
     if (!m) {
       if (cur) cur.lines.push(raw); else out.push(cur = { kind: 'teacher', lines: [raw], line: i + 1 });
@@ -67,7 +69,7 @@ export function parseTry(text) {
     // 翻不成手势的写法不让整个文件读不下去：错放在这一步上，试演到这一步报「没演上」
     out.push({ kind: 'student', how, cmd, args, src: line, line: i + 1, ...(GESTURE.has(cmd) || HANDS.has(cmd) ? { gesture: studentGesture(cmd, args) } : {}) });
   });
-  return out.map((s) => (s.kind === 'teacher' ? { kind: 'teacher', src: s.lines.join('\n'), line: s.line } : s));
+  return out.map((s) => (s.kind === 'teacher' ? { kind: 'teacher', src: s.lines.join('\n'), line: s.line, ...(s.fix ? { fix: true } : {}) } : s));
 }
 
 // —— 学生的一行 → 手势的输入（不看舞台：结点有没有那边的孩子、托盘里有没有这个数，页面那一半照现在的样子找）——

@@ -27,7 +27,7 @@ const text = (x) => (typeof x === 'string' ? x : x?.why || '');
  * 先不叫（叫了老师的新一轮会盖掉学生正在做的），跟着学生下一次要老师接的事一起发。
  * 试的一下本来攒着；老师在 open 那一行写了 call=wrong、学生这一下走偏了（now）：马上叫
  */
-export const triggers = (e) => !e.quiet && (!!e.now || ['answer', 'goal', 'done', 'help', 'stuck', 'tries', 'askfail', 'handfail', 'preview'].includes(e.kind));
+export const triggers = (e) => !e.quiet && (!!e.now || ['answer', 'goal', 'done', 'help', 'stuck', 'tries', 'askfail', 'handfail', 'preview', 'sight'].includes(e.kind));
 
 /**
  * 老师这一轮交给学生的手（open）没演上、学生手上没东西可动：要马上叫老师重写（主线第七轮）。
@@ -447,6 +447,8 @@ export function eventsText(events, { goals = new Map(), secs = null } = {}) {
     // 老师上一轮的提问没演上（写错了）：学生手上没事可做，页面马上叫老师重写（loop.js；主线第一轮 D3-3、D4-5）
     else if (e.kind === 'handfail') lines.push('你这一轮交给学生的手（open）没演上，学生手上没有能动的：页面马上叫了你，重写那几行（看下面没演的行）');
     else if (e.kind === 'askfail') lines.push('你上一轮的提问没演上（看下面没演的行）：学生手上只有页面替你挂的打字框，还什么都没做。把那一问重写一遍');
+    // 交给学生之前量到压着（第十轮，loop.js）：学生还没看到（盖着），这一轮只改画面
+    else if (e.kind === 'sight') lines.push(`[画面自查] 你刚摆完、还没交给学生，页面照屏幕量了一遍（附的画面图就是现在的样子；学生那边盖着「老师在调画面」，还没看到）：${e.text || ''}。这一轮只改画面，让每样东西都不压着、都在屏幕里：挪（place … / at=）、缩小（look … text= / scale）、拿掉用完的（remove）、或者换一幕（scene … keep=）；放不下就少放，不要缩字硬塞。那一问、挑战还挂着，不用重写；不要说话。${e.last ? '（这是最后一次：改完不管还压不压着，都交给学生）' : ''}`);
     // 老师写了 preview（第八轮）：页面照排好的版面画一张字画的图交回，马上再叫老师（学生还没动）
     else if (e.kind === 'preview') lines.push(`[预览] 你上一轮写了 preview，页面排成这样（一格一个字，48 列；学生已经看到了，还没动）。要挪就 place，不挪就接着讲：\n${e.text || ''}`);
     // 页面记下的一句（老师演的那一下改了学生先点的几样：stage.js 的 onNote）：不叫老师、不算「试」，照写

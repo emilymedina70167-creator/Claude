@@ -20,7 +20,8 @@ export function snapNote({ ok, ageMs = 0, reason = '' }) {
 /** 默认的拍法：html2canvas-pro 把舞台那一块画到画布上（按 fitEdge 缩好） */
 async function defaultRender(el, { scale, background }) {
   const { default: html2canvas } = await import('html2canvas-pro');
-  return html2canvas(el, { scale, backgroundColor: background, logging: false, useCORS: true });
+  // 盖着的「老师在调画面」不拍（第十轮）：交给老师看的是它摆出来的样子
+  return html2canvas(el, { scale, backgroundColor: background, logging: false, useCORS: true, ignoreElements: (n) => !!n.classList?.contains('st-veil') });
 }
 
 /**

@@ -38,31 +38,32 @@ say "从 {a.1} 往后数 5 个，落在 {a.6}。"    {a.1} 画成那个部件的
 
 对任何部件都能做：
 glow a.1 a.8 / unglow a.1 a.8      点亮（提醒注意）
-lift a.2 / drop a.2               抬起 / 放下（「这一个要动了」）
+lift a.2 / drop a.2               抬起 / 放下
 pulse a.3                         闪一下
 paint a.1 a.6 g1 / unpaint a.1    染色
-dim a.1-5 / undim a.1-5           灰掉（排除在外的部分）
-cover a / uncover a.6             扣过去看不见值 / 翻开一个（查找、比较时「只能翻开看」就这样演）
+dim a.1-5 / undim a.1-5           灰掉
+cover a / uncover a.6             扣过去看不见值 / 翻开一个
 link a.1 a.6 g1 / unlink a        连一道弧（写好几个就依次连；写整样东西就连到它身上）/ 收掉连着 a 和它部件的线
-compare a.3 a.8                   两个比大小（中间冒出「65 > 49」）；两张矩阵整张逐格比
+compare a.3 a.8                   两个比大小；两张矩阵整张逐格比
 remove a                          把一样东西拿下舞台
 scene "过去完成时" keep=a  换一批东西：上一幕整块收起（能翻回去看）；keep= 带过来的
-hide a / show a                   藏起来（照样算、现状照写，学生看不见）/ 摆出来；造的时候写 hide=on 就先藏着（同名重造不写 hide= 照旧）
+hide a / show a                   藏起来（照样算、现状照写，学生看不见）/ 摆出来；造的时候写 hide=on 就先藏着
 
 贴在图上的字（舞台上的东西，能改、能拿掉）：
 label t a#1 a#8 "一样大，先后却换了" side=below tone=note     贴在这几个旁边（side：above / below / left / right；tone：note 小字、key 重点、soft 淡）
-retext t "新的字" / unlabel t / unlabel（全拿掉）     改字 / 拿掉（拿字用 unlabel，remove 只拿东西）；贴的部件没了，字跟着消失
-fly say.1 -> k a#8 a#1           上一句话里第 1 个 [词] 飞到这几个旁边，变成贴着的字（给概念起名字时用）
+retext t "新的字" / unlabel t / unlabel（全拿掉）     改字 / 拿掉（拿字用 unlabel，remove 只拿东西）
+fly say.1 -> k a#8 a#1           上一句话里第 1 个 [词] 飞到这几个旁边，变成贴着的字
 
 能拨的数：
-dial d = 5 range=1-5 at=a         一个能拨的数，学生拨它；能写进 {式子} 里驱动任何量（格里的 {d}、整个矩阵 {d A}、array a = {d} 3 5），一拨就跟着变；rowop、transform 这类动作只照写下时的数做一次，里面不能写拨数
+dial d = 5 range=1-5 at=a         一个能拨的数，学生拨它；能写进 {式子} 里驱动任何量，一拨就跟着变；rowop、transform 这类动作只照写下时的数做一次，里面不能写拨数
 dial t = 现在 options="过去 现在 将来"  拨词的拨盘：{t} 写现在的词，when="t = 将来"，set t 将来（不是数，进不了式子）
 {t: 做过了 | 正在做 | 还没做}  照拨盘挑一段（段数 = 拨盘能拨到的个数；能套一层）：贴的字、题卡、挑战的字跟着变，话是说的那一刻
 label n dial:d "{d} 组" side=right   字可以贴在拨数旁边
 set d 5                            你来拨
 unlabel dial:d                     收起拨数
 
-画面（每轮附一张画面图，先看图再写）：
+画面（每轮附一张画面图，先看图再写；你摆完、学生看到之前页面照屏幕量一遍，压着、出了屏幕就盖住学生那边，把图交回给你只改画面）：
+排版：正在讲的最大、放视线中间；从上往下是看和想的顺序；有关系的挨着（例句和对照、题和规则）；一屏只留现在要用的，用完就 remove；放不下就换一幕（scene），不缩字硬塞
 place a main / place g right-of a align=top gap=s / place A B row / place say at=1,8-16,16（right-of left-of above below near）；say "…" near=a.2  摆过的钉住不挪；arrange 重排
 look say text=24 color=brand / look card frame=none / look a.3 color=red weight=bold / look goals hide：frame=none/line/card bg=none/soft/card/颜色 edge=none/thin/thick shadow=on/off font=sans/serif/hand/mono text=10～64 opacity=0.2～1；目标 * 种类名 东西 部件 贴的字 say goals dock bar page（画面的底）；加 always 以后每节课都这样；底下那一条、交给学生的藏不了
 scale a 1.4  放大缩小（0.5～2.5）；draw d1 arrow from=a.3 to=b.2 color=g2 / circle on= / box on= / brace under= "字" / underline on= / text at=格 "字" / svg at=格 "<path…/>"；erase d1

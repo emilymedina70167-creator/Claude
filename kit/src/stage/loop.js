@@ -18,6 +18,7 @@
 //   aideNote?() → string            旁听写的那一节（「[助手看到的]」），放进发给老师的那一条；没有就空
 //   aideBusy?() → boolean           课堂助手有调用在跑（这时不提前想）
 import { snapNote } from './snap.js';
+import { mustOf, sightLines } from './sight.js';
 import { HELP, DONE_BTN, stageLines } from './stage.js';
 import { turnMessage, gridsOf } from './doc.js';
 import { eventOf, triggers, eventsText, tryCount, hasWork, undoneOf, TRY_MAX, QUIET_MS } from './events.js';
@@ -35,6 +36,8 @@ export const RETRY = new Set(['再试一次', '再要一次']);
 
 // 一节课最多预览几次（老师写 preview：页面排好交回一张字画的版面，多等一轮）
 export const PREVIEW_MAX = 6;
+// 交给学生之前量到压着、交回老师改画面（第十轮）：一轮最多改这么几次，还不行就照现在的样子交给学生（现状里照实写还压着）
+export const SIGHT_MAX = 2;
 
 export function createLoop(host) {
   const { stage } = host;
@@ -137,6 +140,7 @@ export function createLoop(host) {
         host.addTurn({ role: 'system', kind: 'error', discarded: true, text: `调用出错：${err?.message || err?.code || err}`, cost: host.cost({ bytes: nb, why: 'failed', ms: performance.now() - t0 }) });
         host.report?.(err, { what: '舞台课调用 Claude' });
         S.busy = false;
+        S.sightTries = 0; stage.veil?.(false); // 改画面那一次没连上：先揭开（不让学生对着盖层等）
         if (S.ended) return null;
         const again = await stage.play('ask next "老师那边没连上。点一下再试。" button="再试一次"', { unpick: false });
         if (again.act?.type === 'next' && !S.ended) return teach(why);
@@ -161,6 +165,7 @@ export function createLoop(host) {
         host.addTurn({ role: 'system', kind: 'fallback', discarded: true, text: 'Opus 5.5 不可用，这一轮作废', modelApplied: res?.modelApplied || null, cost: { ...cost, why: 'failed' } });
         if (tries < 2) continue;
         S.busy = false;
+        S.sightTries = 0; stage.veil?.(false);
         const again = await stage.play('ask next "这一轮不是 Opus 5.5 写的，作废了。点一下再要一次。" button="再要一次"', { unpick: false });
         if (again.act?.type === 'next' && !S.ended) return teach(why);
         return null;
@@ -190,6 +195,22 @@ export function createLoop(host) {
       S.lastErrors = [...stage.errors];
       S.armedAt = performance.now();
       donePlay();
+      // 交给学生之前先量一遍（舞台主线第十轮）：压着、出了屏幕就盖一层「老师在调画面」，把这一刻的画面图和量到的问题马上交回给老师，
+      // 只改画面；改完再量，干净了揭开。画面没问题不多叫一次（只多一次量）。学生先看到压着、老师下一轮才知道——这是以前一直改不好的根
+      if (host.selfCheck !== false && !host.readOnly && !S.ended && stage.sightCheck) {
+        const seen = await stage.sightCheck().catch(() => null);
+        const must = seen ? mustOf(seen.issues) : [];
+        if (must.length && (S.sightTries || 0) < SIGHT_MAX && !S.ended) {
+          S.sightTries = (S.sightTries || 0) + 1;
+          stage.veil?.(true);
+          addEvent({ kind: 'sight', text: sightLines(must).join('；'), n: S.sightTries, last: S.sightTries >= SIGHT_MAX, at: Date.now() });
+          flush();
+          return claude;
+        }
+        if (S.sightTries) host.onSight?.({ tries: S.sightTries, left: must.length ? sightLines(must) : [] });
+        S.sightTries = 0;
+        stage.veil?.(false);
+      }
       // 这一轮的提问没演上、学生手上只有页面替挂的打字框：不等学生，马上带着没演的行再叫一次老师（主线第一轮 D3-3、D4-5）。
       // 连着两轮都这样就不再自动叫（免得来回空转），等学生
       // 交给学生的手（open）没演上、学生手上没东西可动（stage.handMissed，events.js 的 handMissed）：同一个规矩，马上叫老师重写（主线第七轮）
@@ -301,7 +322,7 @@ export function createLoop(host) {
       // 学生这一条附的图（舞台底下那一条）：跟着这一次叫老师发
       S.sendBlobs = [...(S.sendBlobs || []), ...(stage.takeBlobs?.() || [])];
       S.nextWhy = whyOf(row.events);
-      S.callWhy = row.events.some((e) => e.kind === 'preview') ? 'preview' : 'turn'; // 花费里记这一次为什么叫
+      S.callWhy = row.events.some((e) => e.kind === 'sight') ? 'sight' : row.events.some((e) => e.kind === 'preview') ? 'preview' : 'turn'; // 花费里记这一次为什么叫
       // 提前想好的那一轮：学生真的只点了「接着」、发出去的一字不差，接上
       if (S.spec && !S.spec.dead && S.spec.msg === row.msg) pre = adopt(S.spec);
       dropSpec();
@@ -550,6 +571,7 @@ export function createLoop(host) {
     S.ended = true;
     clearTimeout(S.idleTimer);
     dropSpec();
+    S.sightTries = 0; stage.veil?.(false);
     if (S.pending?.events.length) finalize();
   }
 

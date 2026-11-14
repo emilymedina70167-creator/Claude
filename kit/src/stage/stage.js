@@ -235,6 +235,35 @@ export class Stage {
       this.pen = createStageInk(this, { onChange: () => { this.snapper?.dirty(); this.syncSend(); } });
     }
   }
+  /**
+   * 交给学生之前量一遍（第十轮，loop.js 在老师一轮演完时调）：先收尾排一遍（这一问加在后面、话那一块长高了，
+   * 没钉住的东西照量出来的再摆；钉住的不挪），等动画走完，再照屏幕上真画出来的量。返回 layoutNow 的结果（{ issues, items }）或 null
+   */
+  async sightCheck() {
+    if (!this.free || this.instant || !this.withInput) return null;
+    try { await this.settle(); } catch { /* 量不了就照现在的量 */ }
+    // 动画（摆位置的、镜头的）走完再量：最多等 1.2 秒
+    const t0 = performance.now();
+    while (performance.now() - t0 < 1200) {
+      const running = [...(this.world.getAnimations?.() || []), ...(this.view.getAnimations?.({ subtree: true }) || [])].filter((a) => a.playState === 'running');
+      if (!this.composing && !running.length) break;
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    return this.layoutNow();
+  }
+  /** 盖一层「老师在调画面」（第十轮）：页面量到压着、交回老师改的时候，学生看不到压着的样子，也点不了、打不了字。截图不拍它 */
+  veil(on, text = '老师在调画面') {
+    if (!on) { this.veilEl?.remove(); this.veilEl = null; return; }
+    if (!this.veilEl) {
+      this.veilEl = el('div', 'st-veil', this.root);
+      this.veilEl.innerHTML = '<div class="st-veil-card"><span class="st-veil-t"></span><span class="st-veil-dots"><i></i><i></i><i></i></span></div>';
+      for (const t of ['pointerdown', 'pointerup', 'click', 'touchstart', 'keydown']) this.veilEl.addEventListener(t, (e) => { e.stopPropagation(); if (e.cancelable) e.preventDefault(); }, true);
+    }
+    this.veilEl.querySelector('.st-veil-t').textContent = text;
+    // 输入框里的焦点拿走（软键盘收起，盖着的时候打不了字）
+    if (this.root.contains(document.activeElement)) document.activeElement.blur?.();
+  }
+  get veiled() { return !!this.veilEl; }
   /** 量画面（sight.js）：每样东西在屏幕上真画在哪，压着的、出了屏幕的。visual：照动画走到哪量（排版检查 --live 用） */
   sight({ visual = false } = {}) { return measureStage(this, visual); }
   destroy() { this.pen?.destroy(); this.snapper?.stop(); this.ro?.disconnect(); this.resetOpens(); this.root.remove(); this.scenesEl?.remove(); this.talkBtn?.remove(); this.keysPop?.remove(); this.cancelWait?.(); this.cancelBeat?.(); }

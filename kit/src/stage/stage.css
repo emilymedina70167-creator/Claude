@@ -395,7 +395,7 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-stage.is-free .st-goal { font-size: var(--st-fs-body); }
 .st-stage.is-free.is-composed .st-caption, .st-stage.is-free.is-composed .st-goals { transition: left .52s cubic-bezier(.2, .7, .2, 1), top .52s cubic-bezier(.2, .7, .2, 1), width .52s cubic-bezier(.2, .7, .2, 1); }
 /* 「说过的」：顶上幕条旁边一颗胶囊，点开一张浮层 */
-.st-talk-btn { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--st-card) 70%, transparent);
+.st-talk-btn { min-height: 44px; white-space: nowrap; flex: 0 0 auto; padding: 0 16px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--st-card) 70%, transparent);
   color: var(--st-ink); font: 500 15px/1 var(--sans, sans-serif); box-shadow: 0 0 0 .5px var(--st-line); cursor: pointer; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
 .st-talk-btn[hidden] { display: none; }
 .st-talk-btn:active { scale: .95; }
@@ -451,3 +451,16 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-attach-x { position: absolute; top: -9px; right: -9px; width: 26px; height: 26px; border: 0; padding: 0; border-radius: 50%; cursor: pointer; display: grid; place-items: center;
   background: rgb(var(--shade-rgb, 25 45 40) / 0.78); color: #fff; font: 600 12px/1 var(--sans, sans-serif); box-shadow: 0 0 0 2px var(--st-card); }
 .st-attach-x::after { content: ''; position: absolute; inset: -9px; } /* 按得到的地方 44 见方 */
+/* 「老师在调画面」（第十轮）：页面量到压着、交回老师改的那几秒盖住整块舞台，学生看不到压着的样子、点不了；截图不拍它 */
+.st-veil { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; touch-action: none;
+  background: color-mix(in srgb, var(--st-card) 55%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.1); backdrop-filter: blur(14px) saturate(1.1);
+  animation: st-veil-in .25s ease-out both; }
+.st-veil-card { display: flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 999px; background: var(--st-card);
+  box-shadow: 0 0 0 0.5px var(--st-line), 0 10px 30px -16px rgb(var(--shade-rgb, 25 45 40) / 0.5); color: var(--st-muted); font: 500 16px var(--sans, sans-serif); }
+.st-veil-dots { display: inline-flex; gap: 4px; }
+.st-veil-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--st-brand); opacity: .3; animation: st-veil-dot 1.2s infinite ease-in-out; }
+.st-veil-dots i:nth-child(2) { animation-delay: .15s; }
+.st-veil-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes st-veil-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes st-veil-dot { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .st-veil, .st-veil-dots i { animation: none; } }

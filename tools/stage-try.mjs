@@ -47,17 +47,21 @@ if (!opt.files.length) opt.files = readdirSync(EXAMPLES).filter((f) => f.endsWit
 if (opt.shots) mkdirSync(opt.shots, { recursive: true });
 
 // —— 页面里的那一半：建课堂循环（老师是假的），演老师段、做学生的一下、看现在的样子 ——
-function setup(segments) {
+function setup(segments, selfCheck) {
   const st = window.LAStage;
   const { createLoop, eventsText, goalStatus } = window.LAStageDev;
-  const T = window.__try = { queue: segments.map((src, i) => ({ src, i })), played: new Map(), called: null, turns: [], seq: 0 };
-  const WHY = { answer: '答了', goal: '做到了挑战', done: '做完了', help: '点了提示', stuck: '很久没动', tries: '试了好多下', now: '走偏了（call=wrong）', reached: '到了一趟' };
+  const T = window.__try = { queue: segments.map((g, i) => ({ src: g.src, fix: !!g.fix, i })), played: new Map(), called: null, turns: [], seq: 0, fixSkipped: [] };
+  const WHY = { sight: '画面自查', answer: '答了', goal: '做到了挑战', done: '做完了', help: '点了提示', stuck: '很久没动', tries: '试了好多下', now: '走偏了（call=wrong）', reached: '到了一趟' };
   const never = new Promise(() => {});
   const host = {
-    stage: st, model: 'claude-opus-5-5', teach: {}, mock: false, quietMs: 1e9,
+    stage: st, model: 'claude-opus-5-5', teach: {}, mock: false, quietMs: 1e9, selfCheck,
     messages: ({ next } = {}) => [{ role: 'user', content: next ? 'SPEC' : 'TURN' }],
     // 叫老师：交出下一段还没演的老师行（只看不拿走：抢跑先要的那一份和真叫的那一份是同一段）；没有了就一直等
     call: async (input, { onText } = {}) => {
+      // 页面量到压着、交回老师改画面（第十轮）：交文件里紧跟着的「自查:」段；没写就交一轮空的（老师什么都没改）
+      if (T.loop.state.callWhy === 'sight') {
+        if (!T.queue[0]?.fix) return { text: '', modelApplied: 'claude-opus-5-5' };
+      } else while (T.queue[0]?.fix) T.fixSkipped.push(T.queue.shift().i); // 量过没压着：写好的改画面那一段用不上
       const seg = T.queue[0];
       if (!seg) return never;
       onText?.({ text: seg.src });
@@ -854,7 +858,9 @@ for (const file of opt.files) {
     if (!opt.json) console.log(`${formatReport(r)}\n`);
     continue;
   }
-  const segments = steps.filter((s) => s.kind === 'teacher').map((s) => s.src);
+  const segments = steps.filter((s) => s.kind === 'teacher').map((s) => ({ src: s.src, fix: !!s.fix }));
+  // 交给学生之前先量（第十轮）：文件里写了「自查:」段、或者 STAGE_TRY_SIGHT=1 才开（以前的试演文件照旧，基线不变）
+  const selfCheck = !!process.env.STAGE_TRY_SIGHT || steps.some((s) => s.fix);
   for (const v of VIEWS) {
     const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, hasTouch: true, deviceScaleFactor: 1 });
     const view = { tag: v.tag, steps: [], stopped: null };
@@ -866,7 +872,8 @@ for (const file of opt.files) {
     await page.goto(`${pathToFileURL(PAGE).href}?dev&blank`);
     await page.waitForFunction(() => window.LAStage && window.LAStageDev?.createLoop);
     await page.evaluate(`window.__measure = ${measure.toString()}`);
-    await page.evaluate(setup, segments);
+    await page.evaluate(`window.__setup = ${setup.toString()}`);
+    await page.evaluate(([g, c]) => window.__setup(g, c), [segments, selfCheck]);
     const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
     let seg = -1;
     for (let k = 0; k < steps.length; k++) {
@@ -877,7 +884,11 @@ for (const file of opt.files) {
         seg++;
         // 学生前面的动作已经让页面叫了老师，这一段就已经演了；没有的话，工具自己叫一次（报告里写明）
         const done = await page.evaluate((i) => window.__try.played.has(i), seg);
-        if (!done) {
+        if (step.fix && !done) {
+          // 改画面那一段只在页面量到压着时交（不由工具叫）：没用上照实写
+          out.note = (await page.evaluate((i) => window.__try.fixSkipped.includes(i), seg)) ? '这一段「自查:」没用上：页面量过，没压着' : '这一段「自查:」没交出去';
+          out.errors.push({ line: step.line, src: '自查:', error: out.note, kept: true });
+        } else if (!done) {
           if (k > 0) out.note = '这一段前面学生的动作没有让页面叫老师，工具自己叫了一次';
           await page.evaluate(() => { window.__try.loop.teach('turn'); });
         }
@@ -921,6 +932,7 @@ for (const file of opt.files) {
       out.events = snap.events;
       if (out.note) out.state = `（${out.note}）\n${out.state}`;
       out.issues = (await page.evaluate(() => window.__measure()))?.issues || [];
+      out.veiled = await page.evaluate(() => !!window.LAStage.veiled); // 盖着「老师在调画面」（第十轮）：学生这一刻看不到画面
       const lk = await page.evaluate(() => window.__try.look());
       if (lk != null) out.look = lk;
       if (opt.shots) { out.shot = join(opt.shots, `${basename(file, '.txt')}-${v.tag}-${k + 1}.png`); await page.screenshot({ path: out.shot }); }

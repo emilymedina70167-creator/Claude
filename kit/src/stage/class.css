@@ -45,7 +45,8 @@ body.is-stage-class .ink-fab, body.is-stage-class .la-tray { display: none !impo
 .sc-title .dk-sup, .sc-opening-title .dk-sup { font-size: 0.58em; vertical-align: 0.85em; line-height: 0; margin-left: 0.04em; font-weight: 600; }
 /* 幕条的位置（主线第六轮 3.4）：课名和「下课」之间；有幕条时课名让一让 */
 .sc-scenes-slot { flex: 1 1 auto; min-width: 0; display: flex; justify-content: center; align-items: center; gap: 8px; }
-.sc-scenes-slot:empty, .sc-scenes-slot:has(> .st-scenes[hidden]) { flex: 0 0 0; }
+/* 幕条藏着时只剩「说过的」：照它的宽（以前压成 0 宽，「说过的」被挤成一个字一行的竖条，2026-11-14 截图） */
+.sc-scenes-slot:empty, .sc-scenes-slot:has(> .st-scenes[hidden]) { flex: 0 0 auto; }
 .sc-top:has(.st-scenes:not([hidden])) .sc-title { flex: 0 1 auto; max-width: 24%; }
 /* 舞台课整屏（2026-11-13 我说还是挤在中间）：课堂开在学习台的 .la-lesson 里，它带着学习台的最大宽（860，横屏 1120）和左右留白，
    position: fixed 的整块课堂也被它卡成中间一条。课堂里不要这几条 */
