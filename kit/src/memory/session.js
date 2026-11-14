@@ -161,7 +161,8 @@ export function sayEvidence(text, ctx = {}, images = []) {
   return {
     id: `ev-${newId()}`, src: 'say', kind: images.length && !t ? 'photo' : 'say',
     text: t.length > 2000 ? t.slice(0, 1999) + '…' : t, images: images.map(String),
-    comp: null, session: ctx.session || null, block: ctx.block || null, tags: evidenceTags(ctx), at: Date.now(),
+    // 第几轮（第十一轮）：话的账按它找我这句前后老师说了什么，以前漏了（toEvidence 一直带着）
+    comp: null, session: ctx.session || null, block: ctx.block || null, tags: evidenceTags(ctx), ...turnOf(ctx), at: Date.now(),
   };
 }
 
