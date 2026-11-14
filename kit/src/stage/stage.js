@@ -2480,7 +2480,15 @@ export class Stage {
       }
       const U = this.unionBox(it.id), est = sc.type(o).objectBox(o);
       let width = null;
-      if (it.alts) {
+      // 老师用 at= 定了多宽（第十轮）：能折行的东西（题卡、句子）照这个宽排，不再只在几档里挑——以前题卡最宽 560，
+      // 老师留了 40 列，卡还是折成 560 宽、比老师算的高，又压到下面（2026-11-14 画面自查的尺子里真老师改不好的那一题）
+      const atBox = WIDTHS_OF[o.type] ? relations.find((r) => r.kind === 'at' && r.a === it.id)?.box : null;
+      if (atBox) {
+        const t = sc.type(o), k = o.k || 1, probe = WIDTHS_OF[o.type][0];
+        const pad = t.objectBox({ ...o, width: probe }).w - probe; // 框比字宽多出来的边
+        const want = Math.round(Math.max(WIDTHS_OF[o.type].at(-1), atBox.w / s / k - pad));
+        if (want !== (o.width || WIDTHS_OF[o.type][0])) width = want;
+      } else if (it.alts) {
         const alts = this.altsOf(it.id) || [];
         const k = it.alts.reduce((bi, a, i) => (Math.abs(a.w * res.scale - B.w) < Math.abs(it.alts[bi].w * res.scale - B.w) ? i : bi), 0);
         width = alts[k]?.width || null;

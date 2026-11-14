@@ -1,0 +1,11 @@
+# 第十轮：老师 at= 给了多宽，题卡就排多宽（以前题卡最宽 560、照旧折成窄的、变高，压到下面那张；画面自查尺子里改不好的那一题）
+card k = "重点：情态动词（modal verb）+ 动词原形" "主语单数、复数都一样，原形不加 -s" "考研常见：can、could、will、would、may、might、must、should"
+card q = "In 2019 the factory announced that it ____ (close) the next year." "announce 宣布"
+place say at=4,0-44,3
+place k at=4,4-44,10
+place q at=4,11-44,16
+look k text=16
+look k.1 text=20 weight=bold
+look q.1 text=22 weight=bold
+say "这条规则叫：情态动词 + 动词原形。"
+ask value "空里填什么？（填两个词）" answer="would close" type=en

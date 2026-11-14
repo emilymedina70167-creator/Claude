@@ -335,6 +335,19 @@ node tools/stage-must.mjs evals/stage-gaps/fix1 --table fix1   # 修好的页面
 - 第二把尺子（做完）：老师自己设计画面（`evals/stage-canvas/free.json`，八个开场，学生不提要求，老师先写意图再写一轮），评卷看画面是不是老师要的：1/4 → 8/8；修的是页面画不出老师意图的通用毛病（连线、贴字留地方、一组居中、放大后量占地、乘积不捆、话的位置……，详见 `evals/stage-canvas/results.md`）。
 - 第三批（做完）：设计要求单 30 条（`evals/stage-canvas/requests.json`，`tools/stage-canvas-eval.mjs prepare|apply`），三个评卷人看前后两张截图：20 → 27 / 30，剩下的 3 条修了两条、一条是老师的理解（`evals/stage-canvas/results.md`）。这一批修的：挨着的那一样钉着放不下时一起重排或先让开、没照办的方向一直写着、`place say` 留着、题卡能折窄、放大放不下往回收并照实说、圈一小格只圈中间、「出了屏幕」照画布真的大小算。
 
+## 第十轮（2026-11-14 做完）：交给学生之前，老师先看一眼自己摆的画面
+
+计划和设计 `docs/superpowers/plans/2026-11-14-stage-sight.md`。起因：情态那一节真课（c-20261114-2）我说了五次排版，老师每次认错、记失误、记偏好，下一轮照样压着。
+
+- **根**：不是记性（每轮读整节课）。① 老师看不到自己这一轮摆出来的样子：学生先看到，下一次学生动了老师才拿到截图；② 现状里的「版面 / 压着」用的是排版时分的格子，后加的那一问、长高的卡都不重量（第 24、26 轮屏幕上压着、报告写「没压着」，老师信了）；③ 屏幕矮（Safari 地址栏占掉一截，1180×734）放不下时页面照画、叠在一起。
+- **尺子**：`evals/stage-sight/modal-lesson.txt`（那节课老师每一轮原样，`STAGE_TRY_SIZE=1180x734` 照当时的屏幕演）；真实测量把我说过的每一处都量到了。
+- **A 量画面进组件库**：`kit/src/stage/sight.js`（`measureStage` 量每个节点真画在哪：东西、贴的字、拨盘、话和这一问、挑战、底下那一条、页面自己的按钮；`sightIssues` / `sightLines` 纯函数，`tests/stage-sight.test.js`），`stage.sight()`；`tools/stage-measure.mjs` 只调它（尺子只有一把）。
+- **B 版面照真的写**：`stage.layoutNow()` 在拼给老师的那一条之前量（`loop.js`），「版面」每样占的格子、「压着」「出了屏幕」都是量出来的（`compose/report.js` 的 `layoutLines({ sight })`）；预览也照它。
+- **C 交卷前自查**（核心）：老师一轮演完先 `stage.sightCheck()`（收尾排一遍、等动画、量），量完才算演完（量的时候学生的动作排队）；压着、出了屏幕就 `stage.veil(true)` 盖一层「老师在调画面」（挡点、挡打字，截图不拍它），记事件 `sight` 马上叫老师（`events.js` 写成「[画面自查] … 只改画面 … 那一问还挂着，不用重写」，截图本来就跟着发），花费 `why: 'sight'`；改完再量，干净揭开；一轮最多 `SIGHT_MAX`（2）次，还不行照样交给学生。画面没问题一次都不多叫。`host.selfCheck: false` 关（以前的试演文件不开，基线不变；`STAGE_TRY_SIGHT=1` 或文件里写了 `自查:` 段才开）。`tests/stage-sight-loop.test.js`。
+- **D/E**：幕条藏着时「说过的」不再被压成 0 宽的竖条（`class.css`）；老师说明「画面」一节写明页面会先量、加几条排版的依据（正在讲的最大放中间、从上往下、有关系的挨着、一屏只留现在要用的、放不下换一幕不缩字）。
+- 尺子：① 量得到（重演）；② `node tools/stage-sight.mjs`（`evals/stage-sight/*-fixed.txt`：同一节课接上改画面的段，学生拿到手的每一帧都没压着）；③ `tools/stage-sight-eval.mjs prepare|apply`：真课的坏画面交给扮老师的 Opus 改（结果 `evals/stage-sight/results.md`）；e2e 舞台段「放不下的长卡」：盖上、交回、拿掉、揭开。
+- 顺带发现、这一轮没改：老师的字一行一行流过来时，钉住又放不下的东西会让页面每来一行就重排、播一次挪动动画，演得很慢（e2e 里 20 秒才演到第三行）。
+
 ## ③ ④ 建议的顺序
 
 量出来的两件事改了原来的想法：搭的字只占 6%，等的时间九成在出第一个字之前。所以接下来不按「哪种搭的字多」排，按「老师想教却教不成的」和「页面还在说不准的」排。
