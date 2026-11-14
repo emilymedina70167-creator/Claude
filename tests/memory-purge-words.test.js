@@ -35,3 +35,17 @@ test('体检：正在删的课的证据不报孤儿；真孤儿里我说的话�
   assert.ok(r.notes.some((n) => n.msg.includes('c-gone')));
   assert.ok(!r.notes.some((n) => n.msg.includes('c-deleting')));
 });
+
+test('终审 5：keepWords 时这节课的账和每一轮也留着（下次过账要知道哪几句过过了、我当时在回应什么）', () => {
+  const p = purgePlan(mem, SID, { keepWords: true });
+  assert.ok(!p.scoped.includes('said'));
+  assert.ok(!p.scoped.includes('class_turns'));
+  assert.ok(purgePlan(mem, SID).scoped.includes('said'));
+});
+
+test('终审：体检只清旧的孤儿（另一台设备上新开的课，证据可能比课先到）', () => {
+  const now = 10 * 3600 * 1000;
+  const evidence = [{ id: 'ev-old', session: 'c-gone', src: 'record', at: now - 3600 * 1000 }, { id: 'ev-new', session: 'c-new', src: 'record', at: now - 60 * 1000 }];
+  const r = healthCheck({ sessions: [], evidence }, { today: '2026-11-14', now });
+  assert.deepEqual(r.orphans, ['ev-old']);
+});

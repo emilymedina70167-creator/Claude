@@ -110,7 +110,8 @@ export function healthCheck(mem = {}, { today = toDate(Date.now()), now = Date.n
   const orphan = evidence.filter((e) => e?.session && !have.has(String(e.session)) && !purging.has(String(e.session)));
   if (orphan.length) note('evidence', '', `${orphan.length} 条证据指着已经没有的课（${[...new Set(orphan.map((e) => e.session))].slice(0, 3).join('、')}）：报告、掌握算不到它们${orphan.some((e) => e.src !== 'say') ? '；不是我说的话的那几条页面清掉' : ''}`);
   // 页面清掉的（第十一轮）：删课删了一半留下的作答、动作。我说的话不清——它们可能还没过账（我的要求只认原话）
-  const orphans = orphan.filter((e) => e.src !== 'say').map((e) => String(e.id));
+  // 只清半小时以前的：另一台设备上刚开的课，证据可能比这节课先订阅到
+  const orphans = orphan.filter((e) => e.src !== 'say' && Number(e.at || 0) < now - 30 * 60000).map((e) => String(e.id));
 
   // —— 考情（只记不改：标签、映射、画像、答案的核对由开发那边和教研室补）——
   const NAME = { LA: '线代', HM: '高数', PS: '概率', DS: '数据结构', CO: '组成原理', OS: '操作系统', CN: '计网', EN: '英语', PO: '政治' };

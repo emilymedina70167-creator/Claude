@@ -162,3 +162,9 @@ test('最近几节课「这一次」的也给它看（隔几节课又说同样�
   assert.ok(p.includes('这节课不复习，直接开始讲新内容'));
   assert.ok(p.includes('2026-11-05'));
 });
+
+test('终审：已经有一条要求挂着这一句的原话（上次写了一半刷新了）：不再新建一条', () => {
+  const half = { id: 'A-1', text: '画面上的东西不能重叠', quotes: [{ ev: 'ev-a', at: 10, session: 'c-1', text: '别重叠' }], status: 'active', since: '2026-11-14' };
+  const plan = planSaid(parseSaid('ev-a｜新要求｜text=画面不许重叠', { ids: new Set(['ev-a']), asks: [half] }), { items: [{ ev: 'ev-a', at: 10, text: '别重叠' }], asks: [half], sid: 'c-1', startedAt: 0, today: '2026-11-14' });
+  assert.equal(plan.asks.length, 0);
+});

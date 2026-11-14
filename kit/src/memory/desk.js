@@ -812,7 +812,7 @@ export async function renderDesk(root, meta) {
       const left = !!sDoc && saidDesk.needs({ ...sDoc, said: { ...(sDoc.said || {}), fails: 0 } });
       if (left && saidDesk.needs(sDoc)) {
         const r = await Promise.race([saidDesk.runFor(sid), new Promise((res) => setTimeout(() => res('fail'), 60000))]);
-        keepWords = r === 'fail';
+        keepWords = r !== 'done' && r !== 'none';
       } else keepWords = left;
     }
     const plan0 = given || purgePlan(data, sid, { keepWords });
@@ -1745,6 +1745,8 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   let doc = snap.data();
   const mem = Object.fromEntries(MEMORY_FOR_CLASS.map((c) => [c, []]));
   for (const c of MEMORY_FOR_CLASS) db.collection(c).onSnapshot((s) => { mem[c] = s.docs.map((d) => ({ id: d.id, ...d.data() })); }, () => {});
+  // 话的账（saiddesk.js）在课上、首页另写 sessions.said：跟着它，免得这里整份写回去时盖成开课时的旧值
+  db.doc(`sessions/${sid}`).onSnapshot((x) => { if (x.exists && x.data().said) doc = { ...doc, said: x.data().said }; }, () => {});
   const updateSession = (patch) => {
     assertWrite('page', 'sessions');
     doc = { ...doc, ...patch };
@@ -1827,7 +1829,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   const said = saidHere ? saidTimer({
     wait: (Number(new URLSearchParams(location.search).get('said')) || 20) * 1000,
     run: async () => {
-      if ((await saidHere.runFor(sid)) !== 'done') return;
+      if (!['done', 'partial'].includes(await saidHere.runFor(sid))) return;
       mem.asks = (await db.collection('asks').get()).docs.map((d) => ({ id: d.id, ...d.data() }));
       mem.saidOnce = await saidOnceOf();
     },

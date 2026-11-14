@@ -138,7 +138,10 @@ export function createMemOps({ db, mem, exam = () => null }) {
     const rejected = [];
     const broken = new Map();
     for (const b of plan.broken || []) broken.set(b.ask, [...(broken.get(b.ask) || []), b.ev]);
-    for (const a of plan.asks || []) {
+    // 先写改动的（被换掉、不用了、补原话），再写新建的：新的那条过守卫时，它改写的旧那条已经不在用了
+    const order = [...(plan.asks || [])].sort((x, y) => (x.op === 'add') - (y.op === 'add'));
+    local.asks = [...(local.asks || [])];
+    for (const a of order) {
       let doc = { ...a.doc };
       const evs = broken.get(a.id);
       if (evs) doc = { ...doc, checks: [...(doc.checks || []), { session, result: 'broken', basis: evs, by: 'page', at: Date.now() }], broken: (Number(doc.broken) || 0) + 1 };
@@ -150,6 +153,7 @@ export function createMemOps({ db, mem, exam = () => null }) {
       if (g.verdict === 'reject' || g.verdict === 'hold') { rejected.push({ id: a.id, error: guardReason(g) }); continue; }
       if (g.verdict === 'flag') doc = { ...doc, guard: guardMark(g) };
       await db.doc(`asks/${a.id}`).set(doc);
+      local.asks = [...local.asks.filter((x) => String(x.id) !== a.id), { id: a.id, ...doc }];
       written.push(a.id);
     }
     await writeGuard(logs, [], { session, space: 'math' });

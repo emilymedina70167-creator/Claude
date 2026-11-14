@@ -105,3 +105,55 @@ test('说第二遍：那一条记一次没做到', async () => {
   assert.equal(a.checks[0].session, SID);
   assert.equal(a.quotes.length, 2);
 });
+
+// —— 终审查出来的（2026-11-14）——
+test('终审 1：改了一条要求，新的那条写进去、旧的标被换掉（以前新的被当成和旧的重复拒了，要求丢了）', async () => {
+  const old = { id: 'A-1', text: '进度提示框放在画面右上角，别挡住正在讲的例句', quotes: [{ ev: 'ev-old', at: 10, session: 'c-1', text: '放角落' }], status: 'active', since: '2026-11-05', scope: 'all', checks: [], broken: 0, log: [] };
+  const t = await setup({ says: [['ev-y', '不是角落，图放在画面中间', 1200]], asks: [old] });
+  t.reply.fn = () => 'ev-y｜改了｜A-1｜text=进度提示框放在画面左上角，别挡住正在讲的例句';
+  assert.equal(await t.said.runFor(SID), 'done');
+  const asks = await rows(t.db, 'asks');
+  assert.equal(asks.find((a) => a.id === 'A-1').status, 'replaced');
+  const neu = asks.find((a) => a.id === 'A-2');
+  assert.ok(neu, '新的那条没写进去');
+  assert.equal(neu.status, 'active');
+});
+
+test('终审 1：说过不用了的，后来又要回来：不当成重复', async () => {
+  const dropped = { id: 'A-1', text: '开场复习最多两三句', quotes: [{ ev: 'ev-old', at: 10, session: 'c-1', text: '只做两三句' }], status: 'dropped', why: 'x', since: '2026-11-05', scope: 'all', checks: [], broken: 0, log: [] };
+  const t = await setup({ says: [['ev-z', '还是只做两三句吧', 1200]], asks: [dropped] });
+  t.reply.fn = () => 'ev-z｜新要求｜text=开场复习最多两三句';
+  assert.equal(await t.said.runFor(SID), 'done');
+  assert.ok((await rows(t.db, 'asks')).some((a) => a.id === 'A-2' && a.status === 'active'));
+});
+
+test('终审 2：同一节课正在过账时又叫一次（删课）：等那一次跑完、拿它的结果，不是当成没事', async () => {
+  const t = await setup({ says: [['ev-a', '别重叠', 1200]] });
+  let release;
+  t.reply.fn = () => new Promise((r) => { release = () => r('ev-a｜新要求｜text=画面上的东西不能重叠'); });
+  const first = t.said.runFor(SID);
+  await new Promise((r) => setTimeout(r, 30));
+  const second = t.said.runFor(SID);
+  release();
+  assert.equal(await first, 'done');
+  assert.equal(await second, 'done');
+});
+
+test('终审 3：补问以后还缺句：不算过完（partial），fails 不清零', async () => {
+  const t = await setup({ says: [['ev-a', '继续', 1200], ['ev-b', '别重叠', 1300]] });
+  t.reply.fn = () => 'ev-a｜不用记｜why=继续';
+  assert.equal(await t.said.runFor(SID), 'partial');
+  const s = (await t.db.doc(`sessions/${SID}`).get()).data();
+  assert.equal(s.said.fails, 1);
+  assert.deepEqual((await t.db.doc(`sessions/${SID}/said/main`).get()).data().missing, ['ev-b']);
+});
+
+test('终审 4：守卫没收的要求：那几句不算有去处，下次再过', async () => {
+  const t = await setup({ says: [['ev-a', '别重叠', 1200]] });
+  // 课上老师在这一次调用期间先占了 A-1
+  t.reply.fn = async () => { await t.db.doc('asks/A-1').set({ text: '老师记的', quotes: [{ ev: 'ev-q', at: 1, session: SID, text: 'x' }], status: 'active', since: '2026-11-14' }); return 'ev-a｜新要求｜text=画面上的东西不能重叠'; };
+  assert.equal(await t.said.runFor(SID), 'partial');
+  const rec = (await t.db.doc(`sessions/${SID}/said/main`).get()).data();
+  assert.deepEqual(rec.missing, ['ev-a']);
+  assert.equal(rec.lines['ev-a'], undefined);
+});

@@ -16,7 +16,7 @@ const rowsOf = (snap) => (snap?.docs || []).map((d) => ({ id: d.id, ...d.data() 
  * ops：memops（applySaid）；ai()：拿到调用 Claude 的（没有就 null）
  */
 export function createSaid({ db, getData, ops, ai, now = () => Date.now() }) {
-  const running = new Set();
+  const running = new Map(); // 课号 → 正在跑的那一次
 
   function needs(s) {
     if (!s || !isTeach(s)) return false;
@@ -64,9 +64,19 @@ export function createSaid({ db, getData, ops, ai, now = () => Date.now() }) {
     const { sid, s, prev, items, photos, base } = p;
     const plan = planSaid(parsed, { items, asks: base.asks, sid, startedAt: Number(s.startedAt) || 0, today: s.date || new Date(now()).toISOString().slice(0, 10) });
     const w = await ops.applySaid(plan, { session: sid, turns: base.turns });
-    const rec = saidRecord({ prev, items, photos, lines: parsed.lines, missing: parsed.missing, once: plan.once, at: now() });
+    // 守卫没收的要求（编号被占了、对不上）：那几句不算有去处，留着下次再过（不然就再也没有下次了）
+    const here = new Set(items.map((x) => x.ev));
+    const lost = new Set();
+    for (const r of w.rejected) {
+      const a = plan.asks.find((x) => x.id === r.id);
+      for (const q of a?.doc?.quotes || []) if (q.session === sid && here.has(q.ev)) lost.add(q.ev);
+    }
+    const lines = Object.fromEntries(Object.entries(parsed.lines).filter(([ev]) => !lost.has(ev)));
+    const missing = [...new Set([...parsed.missing, ...lost])];
+    const rec = saidRecord({ prev, items, photos, lines, missing, once: plan.once, at: now() });
     await db.doc(`sessions/${sid}/said/main`).set(rec);
-    await patchSession(sid, { upTo: rec.upTo, n: Object.keys(rec.lines).length, missing: rec.missing.length, fails: 0, at: now(), once: rec.once.slice(-5).map((o) => o.text) });
+    // 还缺句：试过的次数不清零（试满两次交教研室）
+    await patchSession(sid, { upTo: rec.upTo, n: Object.keys(rec.lines).length, missing: rec.missing.length, ...(rec.missing.length ? {} : { fails: 0 }), at: now(), once: rec.once.slice(-5).map((o) => o.text) });
     return { plan, written: w.written, rejected: w.rejected, missing: rec.missing };
   }
 
@@ -85,17 +95,22 @@ export function createSaid({ db, getData, ops, ai, now = () => Date.now() }) {
     return { ok: true, took: { asks: r.written.length, lines: Object.keys(parsed.lines).length }, rejected: [...parsed.problems.map((x) => ({ error: x })), ...r.rejected.map((x) => ({ error: `${x.id}：${x.error}` })), ...r.missing.map((id) => ({ error: `${id} 没有去处` }))] };
   }
 
-  /** 给一节课过账：'done'（过完了）、'none'（没有要调用的新话）、'fail'（调用不了、回的不是 Opus、出错） */
-  async function runFor(sid) {
-    if (running.has(sid)) return 'none';
-    running.add(sid);
+  /** 给一节课过账：'done'（过完了）、'partial'（还有句子没去处，下次再过）、'none'（没有要调用的新话）、'fail'（调用不了、回的不是 Opus、出错） */
+  // 同一节课正在过账时又叫一次（删课、首页和课上同时）：等那一次跑完、拿它的结果（以前直接回 'none'，删课就把没过完的话删了）
+  function runFor(sid) {
+    if (running.has(sid)) return running.get(sid);
+    const p = runOnce(sid).finally(() => running.delete(sid));
+    running.set(sid, p);
+    return p;
+  }
+  async function runOnce(sid) {
     try {
       const p = await prepare(sid);
       if (!p) return 'none';
       const { s, prev, evidence, items, photos, base } = p;
       if (!items.length) {
         if (photos.length) await db.doc(`sessions/${sid}/said/main`).set(saidRecord({ prev, photos, at: now() }));
-        if (photos.length || !prev) await patchSession(sid, { upTo: Math.max(Number(s.said?.upTo) || 0, ...evidence.filter((e) => e.src === 'say').map((e) => Number(e.at || 0))), at: now() });
+        await patchSession(sid, { upTo: Math.max(Number(s.said?.upTo) || 0, ...evidence.filter((e) => e.src === 'say').map((e) => Number(e.at || 0))), at: now() });
         return 'none';
       }
       // 调用之前先记一次「试过」：整页刷新断在半路，后面的 fail 跑不到（照 aidedesk.js 的 afterOne）
@@ -112,13 +127,11 @@ export function createSaid({ db, getData, ops, ai, now = () => Date.now() }) {
           parsed = { lines: { ...parsed.lines, ...p2.lines }, missing: p2.missing, problems: [...parsed.problems, ...p2.problems] };
         }
       }
-      await commit(p, parsed);
-      return 'done';
+      const r = await commit(p, parsed);
+      return r.missing.length ? 'partial' : 'done';
     } catch (err) {
       reportError(err, { what: '话的账', path: `sessions/${sid}`, soft: true });
       return 'fail';
-    } finally {
-      running.delete(sid);
     }
   }
 

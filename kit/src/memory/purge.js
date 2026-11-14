@@ -63,7 +63,9 @@ export function purgePlan(mem = {}, sid, { keepWords = false } = {}) {
   }
   docs.push(`sessions/${id}`);
   const ledger = docs.filter((p) => /^(errors|observations|slips)\//.test(p));
-  return { docs, scoped: [...SESSION_SCOPED], kept, unlink, counts, ledger };
+  // keepWords：这节课的账（哪几句过过了）和每一轮（我当时在回应什么）也留着，下次过账才接得上
+  const scoped = keepWords ? SESSION_SCOPED.filter((c) => c !== 'said' && c !== 'class_turns') : [...SESSION_SCOPED];
+  return { docs, scoped, kept, unlink, counts, ledger };
 }
 
 const LABEL = { evidence: '作答和说的话', observations: '老师的笔记', pending: '改动记录', drills: '题库里的题', slips: '教学失误', errors: '错题' };

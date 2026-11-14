@@ -159,6 +159,9 @@ export function planSaid(parsed, { items = [], asks = [], sid = '', startedAt = 
       const l = l0.askEv ? { ...l0, ask: madeBy.get(l0.askEv) } : l0;
       if (l0.askEv && !l.ask) continue;
       if (l.to === 'new') {
+        // 上次写了一半（要求写进去了、这节课那一份账没写成就刷新了）：已经有一条挂着这句原话，不再新建一条
+        const had = [...cur.values()].find((a) => a.status === 'active' && (a.quotes || []).some((q) => q.ev === x.ev));
+        if (had) { if (!madeBy.has(x.ev)) madeBy.set(x.ev, had.id); continue; }
         const id = nextId();
         cur.set(id, { id, text: l.text, quotes: [quote(x.ev)], scope: l.scope || 'all', ...(l.measure ? { measure: l.measure } : {}), status: 'active', since: today, by, checks: [], broken: 0, log: [] });
         fresh.add(id);

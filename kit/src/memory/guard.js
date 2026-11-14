@@ -234,7 +234,9 @@ export function guardCandidate(cand, ctx = {}) {
   // 5. 一致：几乎一样的已经有了；和已有结论、证据矛盾
   if (!before && text && DEDUP.has(coll)) {
     const sp = doc.space || (doc.block ? spaceOfId(String(doc.block)) : '');
-    const twin = get(coll).find((o) => String(o.id) !== String(id) && o.status !== 'void' && o.status !== 'merged' && (!sp || !o.space || o.space === sp) && similarity(textOf(coll, o), text) >= 0.6);
+    // 不在用的（作废、并掉、被换掉、不用了）和它改写的那一条（我的要求改口：from 指着旧的）不算重复
+    const gone = new Set(['void', 'merged', 'replaced', 'dropped']);
+    const twin = get(coll).find((o) => String(o.id) !== String(id) && !gone.has(o.status) && doc.from !== `${coll}/${o.id}` && (!sp || !o.space || o.space === sp) && similarity(textOf(coll, o), text) >= 0.6);
     if (twin) add('consistency', 'fail', 'duplicate', `和已有的 ${twin.id} 几乎一样`);
   }
   if (coll === 'weaknesses' && (doc.status === 'closed' || doc.level === 'L3')) {
