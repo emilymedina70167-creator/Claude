@@ -82,14 +82,18 @@ export function createLoop(host) {
    * 这一条带上画面（第九轮）：能带图时拿截图（画面没再变就是后台拍好的那张，变了当场拍、最多等 0.5 秒），最后一条消息末尾写一句；
    * 拍不出来照常发，那一句说没截到并附字画的版面。返回 { input, images, img（字节） }
    */
-  async function eyeFor(input) {
-    if (!host.images || !stage.snapper || !Array.isArray(input) || !input.length) return { input };
+  // extra：学生这一条附的图（2026-11-14，舞台底下那一条附的），排在画面图后面
+  async function eyeFor(input, extra = []) {
+    if (!host.images || !Array.isArray(input) || !input.length) return { input };
+    const pics = extra.filter(Boolean);
+    if (!stage.snapper) return pics.length ? { input, images: pics, img: pics.reduce((n, b) => n + (b.size || 0), 0) } : { input };
     let shot = null;
     try { shot = await stage.snapper.fresh(500); } catch { shot = null; }
     const note = shot ? snapNote({ ok: true, ageMs: Date.now() - shot.at }) : `${snapNote({ ok: false, reason: stage.snapper.lastError() || '还没拍好' })}\n${stage.previewText?.() || ''}`;
     const last = input[input.length - 1];
-    const next = [...input.slice(0, -1), { ...last, content: `${last.content}\n\n${note}` }];
-    return shot ? { input: next, images: [shot.blob], img: shot.blob.size || 0 } : { input: next };
+    const next = [...input.slice(0, -1), { ...last, content: `${last.content}\n\n${note}${pics.length ? `\n[附图] 画面图后面还有学生附的 ${pics.length} 张图。` : ''}` }];
+    const images = [...(shot ? [shot.blob] : []), ...pics];
+    return images.length ? { input: next, images, img: images.reduce((n, b) => n + (b.size || 0), 0) } : { input: next };
   }
 
   async function teach(why = 'turn', pre = null) {
@@ -121,9 +125,10 @@ export function createLoop(host) {
         if (pre) res = await pre.attach(onText);
         else {
           // 老师的眼睛（第九轮）：这一刻的画面图跟着这一条发（只发最新一张；拍不出来写一句、附字画的版面）
-          const eye = await eyeFor(input);
+          const eye = await eyeFor(input, S.sendBlobs || []);
           if (eye.img) imgBytes = eye.img;
           res = await host.call(eye.input, { ...host.teach, cache: false, onText, ...(eye.images ? { images: eye.images } : {}) });
+          S.sendBlobs = []; // 发出去了：附的图只跟这一条走（出错重叫时还在）
         }
       } catch (err) {
         S.flight = null;
@@ -292,6 +297,8 @@ export function createLoop(host) {
       // 等的时候那件事可能已经攒起来了（预写演完，学生手上又有事：settle 把它记成 quiet）：没有要老师接的就不叫
       if (S.ended || !S.pending || S.flight || S.busy || !S.pending.events.some(triggers)) return;
       const row = finalize();
+      // 学生这一条附的图（舞台底下那一条）：跟着这一次叫老师发
+      S.sendBlobs = [...(S.sendBlobs || []), ...(stage.takeBlobs?.() || [])];
       S.nextWhy = whyOf(row.events);
       S.callWhy = row.events.some((e) => e.kind === 'preview') ? 'preview' : 'turn'; // 花费里记这一次为什么叫
       // 提前想好的那一轮：学生真的只点了「接着」、发出去的一字不差，接上

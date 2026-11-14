@@ -16,6 +16,8 @@ import { gridOf, typeScaleOf, fromCells } from './compose/grid.js';
 import { drawGeometry, drawObjects } from './draw.js';
 import { layoutLines } from './compose/report.js';
 import { sketchText } from './compose/sketch.js';
+import { createStageInk } from './stageink.js';
+import { toPng, srcToPng, clipboardImages, htmlImageSrcs, addImages } from '../class/bar.js';
 import { createSnapper } from './snap.js';
 import { applyLooks } from './look/apply.js';
 import { solveLayout, componentOf } from './compose/solve.js';
@@ -226,8 +228,13 @@ export class Stage {
       this.snapper = createSnapper(this);
       new MutationObserver(() => { if (!this.instant) this.snapper.dirty(); }).observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
     }
+    // Apple Pencil 直接写在画面上（2026-11-14）：只在老师看得到画面、学生能说话的地方开（课堂、样子页上课）；
+    // canvas 上画字不算 DOM 变动，画面图要自己记一笔重拍，发送按钮跟着换成「给老师看」
+    if (this.free && this.eyes && this.withInput && typeof document !== 'undefined') {
+      this.pen = createStageInk(this, { onChange: () => { this.snapper?.dirty(); this.syncSend(); } });
+    }
   }
-  destroy() { this.snapper?.stop(); this.ro?.disconnect(); this.resetOpens(); this.root.remove(); this.scenesEl?.remove(); this.talkBtn?.remove(); this.keysPop?.remove(); this.cancelWait?.(); this.cancelBeat?.(); }
+  destroy() { this.pen?.destroy(); this.snapper?.stop(); this.ro?.disconnect(); this.resetOpens(); this.root.remove(); this.scenesEl?.remove(); this.talkBtn?.remove(); this.keysPop?.remove(); this.cancelWait?.(); this.cancelBeat?.(); }
   setPace(p) {
     if (!PACES[p]) return;
     this.pace = p;
@@ -547,6 +554,7 @@ export class Stage {
    * 开了新的一幕（scene，主线第六轮 3.2）：场景已经把台上收干净了；画面这边收掉等着的那一问、话，舞台现状里写这是第几幕
    */
   afterScene() {
+    this.pen?.clear(); // 换一幕：学生写在画面上的字跟着上一幕收起
     this.sceneTalk = [];
     this.toggleTalk(false);
     this.syncTalkBtn();
@@ -2867,22 +2875,102 @@ export class Stage {
         }
         const go = el('button', 'st-say-go', form);
         go.type = 'submit';
-        go.textContent = asAnswer ? askButtonText(w) : '说';
+        go.textContent = go.dataset.label = asAnswer ? askButtonText(w) : '说';
+        // 附图（2026-11-14）：输入框前面一个小图标点开选图；系统截图、拷贝的图直接粘贴进输入框也行。不写提示的字
+        if (this.pen) this.armAttach(form, input);
+        input.addEventListener('input', () => this.syncSend());
         form.addEventListener('submit', (e) => {
           e.preventDefault();
           const text = input.value.trim();
-          if (!text) return;
-          let act = { type: 'say', text };
-          if (asAnswer) {
+          const inked = (this.pen?.unsent() || 0) > 0, pics = this.attached?.length || 0;
+          if (!text && !inked && !pics) return;
+          // 写在画面上的字、附的图跟着这一条走：画面图本来就拍着手写，附的图交给课堂循环一起发（loop.js 的 takeBlobs）
+          const extra = { ...(inked ? { ink: true } : {}), ...(pics ? { images: pics } : {}) };
+          if (inked || pics) { this.outBlobs = [...(this.outBlobs || []), ...(this.attached || [])]; this.attached = []; this.pen?.markSent(); this.paintAttach(); }
+          let act = { type: 'say', text, ...extra };
+          if (asAnswer && text) {
+            // 答案框里写了答案、又写了字 / 附了图：手写和图另记一条「学生说」，答案照常判
+            if (inked || pics) this.onAct?.({ type: 'say', text: '', ...extra });
             act = this.judgeValue(w, text, text);
             if (act.right === false) { form.classList.remove('is-bad'); void form.offsetWidth; form.classList.add('is-bad'); }
           }
           this.onAct?.(act);
+          this.syncSend();
+          // 只交了手写 / 图、答案框还空着：这一问还在等，框留着
+          if (asAnswer && !text) return;
           finish(act);
         });
+        this.syncSend();
         if (w.kind === 'say' || asAnswer) form.classList.add('is-main');
       }
       this.keepInView();
+    });
+  }
+
+  /** 发送按钮的字：框里没字、画面上有没交过的手写或附了图时写「给老师看」 */
+  syncSend() {
+    const go = this.dock?.querySelector('.st-say .st-say-go');
+    const input = this.dock?.querySelector('#st-say-input');
+    if (!go || !input) return;
+    const want = !input.value.trim() && ((this.pen?.unsent() || 0) > 0 || (this.attached?.length || 0) > 0) ? '给老师看' : go.dataset.label || '说';
+    if (go.textContent !== want) go.textContent = want;
+  }
+  /** 课堂循环要发给老师的附图（交了就清掉） */
+  takeBlobs() { const b = this.outBlobs || []; this.outBlobs = []; return b; }
+  /** 附图的入口：一个小图标（选图）、粘贴图片进输入框；附上的图在输入框上面一排小缩略图，点 ✕ 拿掉 */
+  armAttach(form, input) {
+    const pick = el('button', 'st-attach-btn', form);
+    pick.type = 'button';
+    pick.setAttribute('aria-label', '附图');
+    pick.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.7"/><path d="M5 17l4.5-4.5 3 3L15 13l4 4"/></svg>';
+    form.insertBefore(pick, form.firstChild);
+    const file = el('input', '', form);
+    file.type = 'file';
+    file.accept = 'image/*';
+    file.multiple = true;
+    file.hidden = true;
+    pick.addEventListener('click', () => file.click());
+    file.addEventListener('change', () => { this.addAttach([...file.files]); file.value = ''; });
+    input.addEventListener('paste', (e) => {
+      const dt = e.clipboardData;
+      const files = clipboardImages(dt);
+      const srcs = files.length ? [] : htmlImageSrcs(dt?.getData?.('text/html'));
+      if (!files.length && !srcs.length) return; // 粘的是字：照常
+      e.preventDefault();
+      this.addAttach(files, srcs);
+    });
+    this.paintAttach();
+  }
+  async addAttach(files = [], srcs = []) {
+    const out = [];
+    for (const f of files) { try { out.push(await toPng(f)); } catch (err) { reportError(err, { what: '舞台附图：解不开这张图' }); } }
+    for (const s of srcs) { try { out.push(await srcToPng(s)); } catch (err) { reportError(err, { what: '舞台附图：粘贴的图读不出来' }); } }
+    if (!out.length) return;
+    this.attached = addImages(this.attached || [], out).list;
+    this.paintAttach();
+    this.syncSend();
+  }
+  paintAttach() {
+    const form = this.dock?.querySelector('.st-say');
+    let row = this.dock?.querySelector('.st-attach-row');
+    const list = this.attached || [];
+    if (!form || !list.length) { row?.remove(); return; }
+    if (!row) { row = el('div', 'st-attach-row', this.dock); this.dock.insertBefore(row, form); }
+    for (const u of row.__urls || []) URL.revokeObjectURL(u);
+    row.replaceChildren();
+    row.__urls = [];
+    list.forEach((b, i) => {
+      const t = el('div', 'st-attach-thumb', row);
+      const im = el('img', '', t);
+      const u = URL.createObjectURL(b);
+      row.__urls.push(u);
+      im.src = u;
+      im.alt = '';
+      const x = el('button', 'st-attach-x', t);
+      x.type = 'button';
+      x.setAttribute('aria-label', '拿掉这张图');
+      x.textContent = '✕';
+      x.addEventListener('click', () => { this.attached = (this.attached || []).filter((_, k) => k !== i); this.paintAttach(); this.syncSend(); });
     });
   }
 
@@ -3068,7 +3156,11 @@ export function actText(act) {
     if (act.type === 'drag') return act.text || '学生拖了一下';
     if (act.type === 'end') return '学生点了「下课」';
     if (act.type === 'next') return `学生点了「${act.button}」${act.onGoals?.length ? `（按了才判的：${act.onGoals.map((x) => `挑战 ${x.id}：${x.met ? '做到了' : x.status}`).join('；')}）` : ''}`;
-    if (act.type === 'say') return `学生说：「${act.text}」`;
+    if (act.type === 'say') {
+      // 画面上用 Pencil 写了字、附了图（2026-11-14）：字就在附的画面图里，图附在这一条后面
+      const more = [act.ink ? '学生用 Pencil 在画面上写了字（就在附的画面图里：先认出写的是什么，再接着教）' : '', act.images ? `学生附了 ${act.images} 张图（附在画面图后面）` : ''].filter(Boolean).join('；');
+      return act.text ? `学生说：「${act.text}」${more ? `；${more}` : ''}` : more || '学生说：「」';
+    }
     if (act.type === 'value') {
       if (act.failed) return `学生填了「${act.text}」——${typeof act.failed === 'string' ? act.failed : '页面这一下没判成'}（不知道对不对，你看着判）`;
       if (act.asks) return `学生在答案框里打了一句问话：「${act.text}」（不算一次作答）`;

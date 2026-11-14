@@ -429,3 +429,25 @@ body:has(.st-stage) .keypad.kp-formula .kp-ok { background: var(--brand, #4a1b52
 .st-stage.is-free .st-caption:not(.lk-boxed) .st-chip[data-paint] { background: none !important; box-shadow: none !important; }
 /* 话的字体跟着 look say font=（每一行自己写了字体，所以走变量） */
 .st-stage.is-free .st-line { font-family: var(--lk-font, var(--sans, sans-serif)); }
+
+/* Apple Pencil 直接写在画面上（2026-11-14，stageink.js）：一张盖在东西上的 canvas，手指穿过它照常拖、点；
+   写过字才出现「撤一笔」「擦掉」两个小按钮，在底下那一条上面靠右 */
+.st-ink-canvas { position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; }
+.st-view { -webkit-user-select: none; user-select: none; }
+.st-ink-bar { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(104px + env(safe-area-inset-bottom, 0px)); z-index: 7; display: flex; gap: 8px; }
+.st-ink-bar[hidden] { display: none; }
+.st-ink-bar button { min-width: 44px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; cursor: pointer;
+  background: color-mix(in srgb, var(--st-card) 86%, transparent); color: var(--st-brand); font: 600 15px var(--sans, sans-serif);
+  box-shadow: 0 0 0 0.5px var(--st-line), 0 6px 16px -10px rgb(var(--shade-rgb, 25 45 40) / 0.5); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.st-ink-bar button:active { scale: .95; }
+/* 附图：输入框前面一个小图标；附上的图在输入框上面一排小缩略图，角上 ✕ 拿掉 */
+.st-attach-btn { flex: 0 0 auto; width: 48px; height: 48px; border: 0; border-radius: 999px; padding: 0; cursor: pointer; display: grid; place-items: center;
+  background: var(--st-card); box-shadow: 0 0 0 1px var(--st-line); color: var(--st-muted); }
+.st-attach-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.st-attach-btn:active { scale: .95; }
+.st-attach-row { pointer-events: auto; flex: 0 0 100%; display: flex; justify-content: center; gap: 8px; margin-bottom: -4px; }
+.st-attach-thumb { position: relative; width: 64px; height: 64px; border-radius: 12px; overflow: visible; box-shadow: 0 0 0 1px var(--st-line); background: var(--st-card); }
+.st-attach-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block; }
+.st-attach-x { position: absolute; top: -9px; right: -9px; width: 26px; height: 26px; border: 0; padding: 0; border-radius: 50%; cursor: pointer; display: grid; place-items: center;
+  background: rgb(var(--shade-rgb, 25 45 40) / 0.78); color: #fff; font: 600 12px/1 var(--sans, sans-serif); box-shadow: 0 0 0 2px var(--st-card); }
+.st-attach-x::after { content: ''; position: absolute; inset: -9px; } /* 按得到的地方 44 见方 */

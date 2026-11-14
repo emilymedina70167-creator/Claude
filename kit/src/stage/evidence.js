@@ -29,7 +29,8 @@ export function actEvidence(a, { comp, q = '', goalText = (id) => id, sig = null
   if (a.type === 'next' && (a.onGoals || []).some((g) => g.met === false)) {
     return { records: a.onGoals.filter((g) => g.met === false).map((g) => ({ ...rec({ q: goalText(g.id), value: 'goal', text: g.id, ok: false }), ...(goalSig?.(g.id) ? { sig: goalSig(g.id) } : {}) })), event: true };
   }
-  if (a.type === 'say') return { records: [], event: false, say: a.text };
+  // 画面上写了字、附了图：证据里那一句也写上（报告、复盘看得到学生是写了还是说了）
+  if (a.type === 'say') return { records: [], event: false, say: [a.text, a.ink ? '（在画面上用 Pencil 写了字）' : '', a.images ? `（附了 ${a.images} 张图）` : ''].filter(Boolean).join(' ') };
   return { records: [], event: true };
 }
 

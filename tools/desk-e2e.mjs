@@ -629,6 +629,32 @@ const SUITES = {
     // 老师的眼睛（第九轮）：每轮调用都带着一张画面图，花费里记了图多大
     check(await t.page.evaluate(() => window.LAStageDev?.lastImages === 1), `老师那一轮没收到画面图（收到 ${await t.page.evaluate(() => window.LAStageDev?.lastImages)} 张）`);
     check((await turns()).some((x) => x.role === 'claude' && x.cost?.img > 0), '花费里没记画面图');
+    // Apple Pencil 直接写在画面上 + 附图（2026-11-14）：Pencil 一碰画面就写（手指不写），写了字按钮变「给老师看」，
+    // 附一张图有缩略图；点了以后老师收到画面图 + 附的那张、那一条里写着手写和附图；写的字留在画面上，按钮回到「说」
+    await t.waitFor(() => t.page.$('#st-say-input'), { timeout: 20000, what: '写字之前输入框在' });
+    await sleep(800);
+    const inkC0 = await claudeTurns();
+    await t.page.evaluate(() => {
+      const v = document.querySelector('.sc-stage .st-view'), r = v.getBoundingClientRect();
+      const fire = (type, x, y, kind = 'pen', id = 7) => v.dispatchEvent(new PointerEvent(type, { pointerType: kind, pointerId: id, isPrimary: true, bubbles: true, cancelable: true, clientX: r.left + x, clientY: r.top + y, pressure: 0.5 }));
+      fire('pointerdown', 120, 140); for (let i = 1; i <= 10; i++) fire('pointermove', 120 + i * 12, 140 + i * 4); fire('pointerup', 240, 180);
+    });
+    check(await t.page.evaluate(() => window.LAStage.pen?.count() === 1), 'Pencil 在画面上写了一笔，舞台没记下');
+    check(await t.page.evaluate(() => !document.querySelector('.st-ink-bar').hidden), '写了字以后没出现「撤一笔」「擦掉」');
+    check(await t.page.$eval('.st-say .st-say-go', (b) => b.textContent) === '给老师看', '写了字以后发送按钮不是「给老师看」');
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDK+mmyAAAAABJRU5ErkJggg==', 'base64');
+    await t.page.setInputFiles('.st-say input[type=file]', { name: 'shot.png', mimeType: 'image/png', buffer: png });
+    await t.waitFor(() => t.page.$('.st-attach-thumb img'), { timeout: 8000, what: '附的图出现缩略图' });
+    await t.page.click('.st-say-go');
+    const inkTurn = await t.waitFor(async () => (await turns()).find((x) => x.role === 'student' && !x.pending && /Pencil 在画面上写了字/.test(x.msg || '') && /附了 1 张图/.test(x.msg || '')), { timeout: 20000, what: '给老师看：那一条里写着手写和附图' });
+    check(!!inkTurn, '给老师看没发出去');
+    await t.waitFor(async () => (await claudeTurns()) > inkC0, { timeout: 30000, what: '给老师看以后老师接了一轮' });
+    check(await t.page.evaluate(() => window.LAStageDev?.lastImages === 2), `给老师看那一轮老师没收到画面图和附的图两张（收到 ${await t.page.evaluate(() => window.LAStageDev?.lastImages)} 张）`);
+    check(await t.page.evaluate(() => window.LAStage.pen.count() === 1 && window.LAStage.pen.unsent() === 0), '给老师看以后写的字没留在画面上（我选的：留着，自己擦）');
+    check(!(await t.page.$('.st-attach-thumb')), '发出去以后附图的缩略图还在');
+    await t.page.click('.st-ink-clear');
+    check(await t.page.evaluate(() => window.LAStage.pen.count() === 0 && document.querySelector('.st-ink-bar').hidden), '点「擦掉」以后字没擦干净');
+    await t.waitFor(() => t.page.$('#st-say-input'), { timeout: 20000, what: '老师接完以后能打字' });
     await said('测试:下课');
     await t.waitFor(() => t.page.evaluate(() => /下课吗/.test(document.body.innerText)), { timeout: 20000, what: '老师又递了「下课吗？」' });
     await t.answer('下课');
