@@ -9,18 +9,24 @@ import { parseMemoLines } from '../memory/memo.js';
 import { MEMO_DOC } from '../class/prompt.js';
 import { parseCard, CARD_SECTIONS, CARD_MAX } from './card.js';
 import { MOVES } from './moves.js';
+import { afterSession } from '../memory/session.js';
+
+export { afterSession };
 
 export const AFTER_VERSION = 1;
 export const AFTER_HEAD = '你在给一节刚上完的舞台课做课后整理';
-export const AFTER_FAILS = 3; // 连着这么多次没成就不在首页做了，交给每晚教研室的补收尾
+// 首页试了这么多次没成就不在首页做了，交给当晚教研室（sentry.js 的 after 单子）。
+// 「试」在调用之前就记（aidedesk.js 的 afterOne）：整理要读整节课、一两分钟，学生一点进课堂整页刷新调用就断了，
+// 以前只在失败时记，断了的从来没记上，一节课一直挂着没人整理（2026-11-14 查出来的）
+export const AFTER_FAILS = 2;
 const FACT_KINDS = new Set(['error', 'weakness', 'note', 'slip', 'recall']);
 
 const list = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v === '' ? [] : [v]);
 const cut = (s, n) => { const t = String(s ?? '').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 
-/** 这节课要不要做：这一轮以后开的舞台课（aide）、下了课、报告不是暂时的、没做过或者写法改了、没连着失败 AFTER_FAILS 次 */
+/** 这节课要不要做：归下课后的助手（afterSession）、下了课、报告不是暂时的、没做过或者写法改了、没试满 AFTER_FAILS 次 */
 export function needsAfter(s) {
-  if (!s?.aide || s.status !== 'closed' || !s.report || s.report.provisional) return false;
+  if (!afterSession(s) || s.status !== 'closed' || !s.report || s.report.provisional) return false;
   if ((Number(s.after?.fails) || 0) >= AFTER_FAILS) return false;
   return !s.after?.at || (Number(s.after.v) || 0) < AFTER_VERSION;
 }

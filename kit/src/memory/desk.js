@@ -22,7 +22,7 @@ import { receiptLine } from './lab.js';
 import { getStore, getDownloads } from '../live/store.js';
 import { VERSION, KIT_URL } from '../version.js';
 import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toDate } from './schema.js';
-import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, classForm } from './session.js';
+import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, classForm, idleClose } from './session.js';
 import { buildReport, reportLine, REPORT_VERSION, lastActivity, reportText } from './report.js';
 import { needsDebrief, transcriptText, debriefTraps, debriefPrompt, parseDebrief, debriefText, debriefView, DEBRIEF_VERSION } from './debrief.js';
 import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA, EXAM_BACKUP, AIDE_BACKUP } from './backup.js';
@@ -914,6 +914,18 @@ export async function renderDesk(root, meta) {
   function fixReports() {
     const now = Date.now();
     const lastAct = (x) => lastActivity(x, data.evidence);
+    // 挂了一夜没动静的课当作下了课（session.js 的 idleClose）：下课时间记最后一个动静，报告随后按下了课重算
+    if (loaded.has('evidence')) {
+      for (const x of data.sessions.filter((d) => !fixing.has(d.id) && idleClose(d, lastAct(d), now)).slice(0, 3)) {
+        const { id } = x;
+        fixing.add(id);
+        db.doc(`sessions/${id}`).get().then((r) => {
+          const cur = r.exists ? r.data() : null;
+          if (!cur || cur.status !== 'open') return; // 别处刚下了课、刚删了
+          return db.doc(`sessions/${id}`).set({ ...cur, status: 'closed', endedAt: lastAct(x) || cur.startedAt || now, closedBy: 'idle' });
+        }).then(() => fixing.delete(id), (e) => { fixing.delete(id); reportError(e, { what: '挂着的课当作下课', path: `sessions/${id}`, soft: true }); });
+      }
+    }
     const stale = (x) => x.status === 'open' && kindOf(x) !== 'drill' && now - lastAct(x) > STALE_MS && (!x.report || lastAct(x) > (Number(x.report.at) || 0));
     const todo = data.sessions.filter((x) => !fixing.has(x.id) && ((x.status === 'closed' && (!x.report || x.report.provisional || (Number(x.report.v) || 1) < REPORT_VERSION)) || (loaded.has('evidence') && stale(x)))).slice(0, 3);
     for (const x of todo) {

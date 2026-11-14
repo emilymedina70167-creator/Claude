@@ -19,6 +19,27 @@ export const kindOf = (doc) => (SESSION_KINDS[doc?.kind] ? doc.kind : 'class');
 export const TEACH_KINDS = ['class', 'talk', 'stage'];
 export const isTeach = (doc) => TEACH_KINDS.includes(kindOf(doc));
 
+/**
+ * 这节课归不归下课后的助手：这一轮以后开的舞台课（aide），还有这一轮以前上完、一直没做成复盘的舞台课
+ * （复盘那一条也是在首页后台跑、被打断的；并进这一次，顺带把学生卡建起来）。复盘做成了的旧课不重跑
+ */
+export function afterSession(s) {
+  if (!s) return false;
+  if (s.aide) return true;
+  return s.kind === 'stage' && !s.debrief;
+}
+
+// 挂着没下课、这么久没动静的课，页面当它下了课（2026-11-14 我说的：真课一大半是这样不了了之的，课后的助手、复盘都只认下了课的，
+// 一直挂着就一直没人整理）。12 小时：当天中途走开再回来接着上不受影响，隔了一夜就是新的一节。
+// 不调用 Claude、不写小结：没有小结、整理单的课工作单里本来就交给教研室补收尾（sentry.js 的 backfill）
+export const IDLE_CLOSE_MS = 12 * 3600 * 1000;
+/** 这节课要不要当作下了课：上课的几种（不含练习、实时黑板、自学单元）、还挂着、最后一个动静（last）离 now 超过 IDLE_CLOSE_MS */
+export function idleClose(doc, last, now = Date.now()) {
+  if (!doc || doc.status !== 'open' || !isTeach(doc) || doc.deleting) return false;
+  const t = Number(last) || Number(doc.startedAt) || 0;
+  return !!t && now - t > IDLE_CLOSE_MS;
+}
+
 // 开新课一律是舞台（用画面讲课，docs/stage-plan.md）：2026-11-06 我说学习台直接用现在的舞台，黑板、一问一答的选项去掉。
 // 开课、复现课、练一练「带着开课」都开舞台。以前开的黑板 / 一问一答的课照旧能接着上、能翻看（kindOf 认得），只是不再新开。
 // 只有自动测试（?dev&form=class / talk）还能开出旧的两种：它们的代码还在给以前的课用（只读翻看、实时黑板共用的板），要有人守着

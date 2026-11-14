@@ -31,9 +31,10 @@ lesson id=T-1 again="又没等学生"
 概括｜不该写这张
 `;
 
-test('要不要做：只做这一轮以后开的舞台课，下了课、报告写好、没做过或版本旧、没连着失败三次', () => {
+test('要不要做：只做这一轮以后开的舞台课，下了课、报告写好、没做过或版本旧、没试满几次', () => {
   assert.equal(needsAfter(closed), true);
-  assert.equal(needsAfter({ ...closed, aide: undefined }), false);
+  assert.equal(needsAfter({ ...closed, aide: undefined, kind: 'class' }), false); // 黑板课照旧走复盘
+  assert.equal(needsAfter({ ...closed, aide: undefined, debrief: { v: 1 } }), false); // 以前的舞台课复盘过了不重跑
   assert.equal(needsAfter({ ...closed, after: { v: AFTER_VERSION, at: 1 } }), false);
   assert.equal(needsAfter({ ...closed, after: { v: AFTER_VERSION - 1, at: 1 } }), true);
   assert.equal(needsAfter({ ...closed, after: { fails: 3 } }), false);
@@ -43,7 +44,7 @@ test('要不要做：只做这一轮以后开的舞台课，下了课、报告�
 test('助手做的课，旧的复盘和归类不再各做一次', () => {
   assert.equal(needsDebrief(closed), false);
   assert.equal(needsSkills(closed), false);
-  assert.equal(needsDebrief({ ...closed, aide: undefined }), true);
+  assert.equal(needsDebrief({ ...closed, aide: undefined, kind: 'class' }), true);
 });
 
 test('分节', () => {

@@ -153,15 +153,19 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     const s = (getData().sessions || []).find((x) => x.id === sid);
     if (!s) return false;
     tried.after.add(sid);
-    // 失败也留着 factsAt（事实已经写了的，重做时不再写）；次数从数据库里最新的那份往上加
+    // 失败也留着 factsAt（事实已经写了的，重做时不再写）；次数从数据库里最新的那份往上加。
+    // 调用之前先记一次「试过」（after.js 的 AFTER_FAILS）：学生一点进课堂整页刷新，调用断在半路，后面的 fail 根本跑不到
+    const latest = async () => (await db.doc(`sessions/${sid}`).get().then((x) => (x.exists ? x.data() : null)).catch(() => null))?.after || s.after || {};
+    const mark = async (prev, extra) => patchSession(sid, { after: { v: AFTER_VERSION, ...(prev.factsAt ? { factsAt: prev.factsAt } : {}), ...extra } });
     const fail = async (why) => {
       console.warn('下课后的整理没做成', sid, why);
-      const cur = await db.doc(`sessions/${sid}`).get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
-      const prev = cur?.after || s.after || {};
-      await patchSession(sid, { after: { v: AFTER_VERSION, fails: (Number(prev.fails) || 0) + 1, lastFail: Date.now(), why: String(why).slice(0, 200), ...(prev.factsAt ? { factsAt: prev.factsAt } : {}) } });
+      const prev = await latest();
+      await mark(prev, { fails: Number(prev.fails) || 1, lastFail: Date.now(), why: String(why).slice(0, 200) });
       return false;
     };
     try {
+      const prev = await latest();
+      await mark(prev, { fails: (Number(prev.fails) || 0) + 1, tryAt: Date.now(), ...(prev.why ? { why: prev.why } : {}) });
       const inp = await afterInput(sid);
       if (!inp.prompt) return fail(inp.why);
       const res = await callOpus(inp.prompt);

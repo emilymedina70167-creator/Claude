@@ -1038,6 +1038,18 @@ const SUITES = {
     return t;
   },
 
+  // 挂着一夜没动静的课当作下了课（2026-11-14）：课后报告跟着按下了课重算，不再是暂时的
+  async idle(browser) {
+    const t = await seeded(browser);
+    const sid = 'c-20261101-9';
+    await t.page.evaluate((s) => { const k = [...Array(localStorage.length).keys()].map((i) => localStorage.key(i)).find((x) => x.startsWith('la-devdb:')); const all = JSON.parse(localStorage.getItem(k)); all[`sessions/${s}`] = { kind: 'stage', status: 'open', block: 'L2.1.1', space: 'math', subject: 'linear-algebra', title: '挂了一夜的课', date: '2026-11-01', startedAt: Date.now() - 2 * 86400e3 }; localStorage.setItem(k, JSON.stringify(all)); }, sid);
+    await t.page.reload();
+    await t.waitFor(async () => { const d = (await t.docs('sessions')).find((x) => x.id === sid); return d?.status === 'closed' && d.closedBy === 'idle' && d.report && !d.report.provisional; }, { timeout: 20000, what: '挂了两天的课当作下了课、报告按下了课算' });
+    const d = (await t.docs('sessions')).find((x) => x.id === sid);
+    check(d.endedAt && d.endedAt < Date.now() - 86400e3, `下课时间应当是最后一个动静，不是现在：${d.endedAt}`);
+    return t;
+  },
+
   // 备份：导出一份，原样「只补缺的」恢复回去，条数不变、页面不报错
   async backup(browser) {
     const t = await seeded(browser);

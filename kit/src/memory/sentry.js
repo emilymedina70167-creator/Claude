@@ -9,7 +9,8 @@ import { toDate, daysBetween, dueList } from './schema.js';
 import { spaceOfId } from './space.js';
 import { similarity, voidedIds, resolvedErrors } from './memo.js';
 import { lastActivity } from './report.js';
-import { isTeach } from './session.js';
+import { isTeach, afterSession } from './session.js';
+import { AFTER_FAILS } from '../aide/after.js';
 
 export const SENTRY_VERSION = 1;
 const DAY = 86400000;
@@ -99,7 +100,7 @@ export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now
   }
   // 1.5 课堂助手（第九轮）：首页连着三次没做成下课后整理的课（调用不了、回的不是 Opus、看不懂），交给教研室照同一份材料做
   for (const s of get('sessions')) {
-    if (!s.aide || s.status !== 'closed' || s.after?.at || (Number(s.after?.fails) || 0) < 3 || !s.report || s.report.provisional) continue;
+    if (!afterSession(s) || s.status !== 'closed' || s.after?.at || (Number(s.after?.fails) || 0) < AFTER_FAILS || !s.report || s.report.provisional) continue;
     items.push({ kind: 'after', space: s.space || spaceOfId(String(s.block || '')), ref: s.id, title: s.title || s.id, why: `${s.date || ''} 这节课下课后的整理首页连着 ${s.after.fails} 次没做成`, value: 85, cost: '一次 Opus 5.5（读整节课的记录写复盘、归类、事实、学生卡）' });
   }
   // 2. 待重判：后来的证据不一样了
