@@ -138,6 +138,7 @@ export async function renderDesk(root, meta) {
   const purging = new Set((() => { try { return JSON.parse(localStorage.getItem(PURGE_KEY) || '[]'); } catch { return []; } })());
   const savePurging = () => { try { localStorage.setItem(PURGE_KEY, JSON.stringify([...purging])); } catch { /* 存不了：课上的 deleting 照样认 */ } };
   const purgeRunning = new Set();
+  const purgeResumed = new Set(); // 这次打开首页已经接着删过的课
   root.classList.add('is-desk');
   root.dataset.layout = loadLayout();
   const unit = meta.unit || session.title || '学习台';
@@ -313,7 +314,8 @@ export async function renderDesk(root, meta) {
       data[c] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       // 正在删的课（点了「删掉」、后台还在删）：不进列表；上次没删完的（带着 deleting）接着删
       if (c === 'sessions') {
-        for (const d of data.sessions) if ((d.deleting || purging.has(d.id)) && !purgeRunning.has(d.id)) setTimeout(() => runPurge(d.id), 0);
+        // 这次打开首页每节只接着删一次（没删完的——过账没成、有一条删不掉——下次打开再试，不在订阅里一直转）
+        for (const d of data.sessions) if ((d.deleting || purging.has(d.id)) && !purgeRunning.has(d.id) && !purgeResumed.has(d.id)) { purgeResumed.add(d.id); setTimeout(() => runPurge(d.id), 0); }
         data.sessions = data.sessions.filter((d) => !d.deleting && !purging.has(d.id));
       }
       loaded.add(c);
@@ -489,7 +491,9 @@ export async function renderDesk(root, meta) {
     if (healthBusy) return;
     healthBusy = true;
     try {
-      const res = healthCheck(data, { today, exam: examMeta });
+      const res = healthCheck(data, { today, exam: examMeta, purging: new Set([...purging, ...purgeRunning]) });
+      // 删课删了一半留下的作答、动作（不是我说的话）：清掉（第十一轮；以前只记一笔，报告、掌握一直算不到它们）
+      if (res.orphans?.length) await pool(res.orphans.slice(0, 200), PURGE_PAR, (id) => db.doc(`evidence/${id}`).delete().catch(() => {}));
       const done = [];
       for (const f of res.fixes) {
         try {
@@ -790,15 +794,32 @@ export async function renderDesk(root, meta) {
     else pagesView?.refresh?.();
     toast(`删掉了：${title}`);
     const { id: _id, ...rest } = x;
-    db.doc(`sessions/${sid}`).set({ ...rest, deleting: Date.now() }).catch(() => {}); // 别的设备也马上不显示
-    runPurge(sid, plan);
+    // 别的设备也马上不显示；等它写进去再删（没写进去时中途断了，别的设备、下次打开就不知道要接着删）
+    await db.doc(`sessions/${sid}`).set({ ...rest, deleting: Date.now() }).catch(() => {});
+    runPurge(sid, null);
   }
   async function runPurge(sid, given = null) {
     if (purgeRunning.has(sid)) return;
     // 接着删（打开学习台时）：等记忆库各类都读到了再算删哪些，不然这节课的作答证据、笔记会漏删
     if (!given && !MEMORY_COLLECTIONS.every((c) => loaded.has(c))) { setTimeout(() => runPurge(sid), 1500); return; }
-    const plan = given || purgePlan(data, sid);
     purgeRunning.add(sid);
+    // 删之前先给这节课过账（第十一轮）：我说的话记成要求（原话抄进去）以后才删。最多等 60 秒，没成就把我说的话先留着
+    // 试满两次（SAID_FAILS）还没过成的：不再调用，我说的话一直留着、这节课先不删（不能为了删课丢我的要求）
+    let keepWords = false;
+    let sDoc = null;
+    if (saidDesk) {
+      sDoc = await db.doc(`sessions/${sid}`).get().then((r) => (r.exists ? { id: sid, ...r.data() } : null)).catch(() => null);
+      const left = !!sDoc && saidDesk.needs({ ...sDoc, said: { ...(sDoc.said || {}), fails: 0 } });
+      if (left && saidDesk.needs(sDoc)) {
+        const r = await Promise.race([saidDesk.runFor(sid), new Promise((res) => setTimeout(() => res('fail'), 60000))]);
+        keepWords = r === 'fail';
+      } else keepWords = left;
+    }
+    const plan0 = given || purgePlan(data, sid, { keepWords });
+    // 证据按课号现查（不只看手上的快照：快照读失败、还没跟上刚写的，会漏删）
+    const fresh = await db.collection('evidence').where('session', '==', sid).get().then((q) => q.docs.map((d) => ({ id: d.id, ...d.data() })), () => []);
+    const extra = fresh.filter((e) => !plan0.docs.includes(`evidence/${e.id}`) && !(keepWords && e.src === 'say')).map((e) => `evidence/${e.id}`);
+    const plan = { ...plan0, docs: [...extra, ...plan0.docs] };
     const role = (c) => (COLLECTIONS[c]?.writers.includes('me') ? 'me' : 'page');
     try {
       if (ledger?.hist && (plan.ledger.length || plan.unlink.length)) {
@@ -816,7 +837,15 @@ export async function renderDesk(root, meta) {
       await pool(scoped, PURGE_PAR, (path) => db.doc(path).delete());
       await pool(plan.unlink, PURGE_PAR, (u) => { const c = u.path.split('/')[0]; assertWrite(role(c), c); return db.doc(u.path).set(u.doc); });
       const last = `sessions/${sid}`;
-      await pool(plan.docs.filter((p) => p !== last), PURGE_PAR, (path) => { const c = path.split('/')[0]; assertWrite(role(c), c); return db.doc(path).delete(); });
+      // 一条删不掉记下来、接着删别的（以前一条永久性的错整批放弃，课却删了，证据留成孤儿）
+      const stuck = [];
+      await pool(plan.docs.filter((p) => p !== last), PURGE_PAR, (path) => { const c = path.split('/')[0]; assertWrite(role(c), c); return db.doc(path).delete().catch(() => { stuck.push(path); }); });
+      // 证据没删干净、我说的话还留着：这节课本身先不删（带着 deleting，下次打开接着删）
+      if (stuck.length || keepWords) {
+        // 只写一次（写了会触发 sessions 的订阅，订阅又会接着删：一直写就是一个圈）
+        if (keepWords && !sDoc?.keptWords) await db.doc(last).get().then((r) => (r.exists ? db.doc(last).set({ ...r.data(), keptWords: true }) : null)).catch(() => {});
+        return;
+      }
       // 删掉的课用过的教案：退回「还没用」，可以再按它开一节
       for (const k of SPACE_KEYS) {
         const m = packs[k].main;

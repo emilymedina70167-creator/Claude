@@ -36,7 +36,8 @@ export function snapTier(t) {
  * fixes 里的 doc 是改好的整份（去掉 id），照着写回去就行；状态类里要记 log 的字段（tracked）已经用 applyChange 记好。
  */
 // exam：首页缓存的 meta/exam（考情第 6 批）：没打标签的真题、没挂考点的块、过时的画像、没核过的答案、一年没核的分数线，只记不改
-export function healthCheck(mem = {}, { today = toDate(Date.now()), now = Date.now(), exam = null } = {}) {
+// purging：正在删的课（首页的列表里已经拿掉了，证据还在一条条删）：它们的证据不是孤儿
+export function healthCheck(mem = {}, { today = toDate(Date.now()), now = Date.now(), exam = null, purging = new Set() } = {}) {
   const fixes = [], notes = [];
   const get = (c) => (Array.isArray(mem[c]) ? mem[c] : []);
   const fix = (coll, d, patch, what) => {
@@ -106,8 +107,10 @@ export function healthCheck(mem = {}, { today = toDate(Date.now()), now = Date.n
 
   // —— 证据：指着已经没有的课（删课会连证据一起删；剩下的是别处出的岔子）——
   const have = new Set(sessions.map((s) => String(s.id)));
-  const orphan = evidence.filter((e) => e?.session && !have.has(String(e.session)));
-  if (orphan.length) note('evidence', '', `${orphan.length} 条证据指着已经没有的课（${[...new Set(orphan.map((e) => e.session))].slice(0, 3).join('、')}）：报告、掌握算不到它们`);
+  const orphan = evidence.filter((e) => e?.session && !have.has(String(e.session)) && !purging.has(String(e.session)));
+  if (orphan.length) note('evidence', '', `${orphan.length} 条证据指着已经没有的课（${[...new Set(orphan.map((e) => e.session))].slice(0, 3).join('、')}）：报告、掌握算不到它们${orphan.some((e) => e.src !== 'say') ? '；不是我说的话的那几条页面清掉' : ''}`);
+  // 页面清掉的（第十一轮）：删课删了一半留下的作答、动作。我说的话不清——它们可能还没过账（我的要求只认原话）
+  const orphans = orphan.filter((e) => e.src !== 'say').map((e) => String(e.id));
 
   // —— 考情（只记不改：标签、映射、画像、答案的核对由开发那边和教研室补）——
   const NAME = { LA: '线代', HM: '高数', PS: '概率', DS: '数据结构', CO: '组成原理', OS: '操作系统', CN: '计网', EN: '英语', PO: '政治' };
@@ -122,7 +125,7 @@ export function healthCheck(mem = {}, { today = toDate(Date.now()), now = Date.n
   const oldLines = (target?.lines || []).filter((l) => !l?.src?.at || now - Number(l.src.at) > 365 * 86400000);
   if (oldLines.length) note('exam', 'target', `考试档案里 ${oldLines.length} 条分数线一年多没核了（${oldLines.map((l) => `${l.year} ${l.kind}`).slice(0, 3).join('、')}）`);
 
-  return { fixes, notes };
+  return { fixes, notes, orphans };
 }
 
 /** 写进 meta/health 的那一份：这一次的提醒，加上最近修过的（最多 40 行，新的在前） */
