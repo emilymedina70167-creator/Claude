@@ -25,7 +25,7 @@ import { transcriptText } from '../memory/debrief.js';
 import { buildCorpus } from '../memory/guard.js';
 import { createDevAI } from '../books/devmock.js';
 import { targetOf } from '../exam/target.js';
-import { fitHistory } from './history.js';
+import { fitHistory, notesBefore } from './history.js';
 import { getAI } from '../ai.js';
 import { createSink } from '../live/sync.js';
 import { sayEvidence, observationRecord } from '../memory/session.js';
@@ -138,6 +138,8 @@ export async function renderStageClass(root, meta = {}, desk) {
     const subject = stageSubject({ block: desk.block, pack, session: { subject: desk.subject }, space: desk.space });
     return buildStageSystem({ pack: packWithBooks(), memory: desk.mem ? { mem: desk.mem, block: desk.block, space: desk.space, session: sid } : null, title: meta.unit || '', subject, exam: examSection(), aide: aideSection(), factsByAide: !!desk.aide });
   }
+  // 本地 ?dev（模拟老师）时给自动测试看：现在这一轮会发给老师的整份说明（第十一轮：课上说的要求是不是马上就在里面）
+  if (mock && typeof window !== 'undefined') window.LAKitStageSystem = () => system();
   // 课堂助手（aide/，第九轮）：这一块附近的学生卡、能用的课前档案，放进「你对学生的了解」那一节（总量不变）。
   // 开课时档案不能用：和老师第一轮同时写一份（desk.aide.refresh），写好了从下一轮起带上；写不成就一直是代码挑的那一套
   let aideBrief = desk.aide?.brief || null;
@@ -187,9 +189,11 @@ export async function renderStageClass(root, meta = {}, desk) {
     const msgs = [];
     // 连着两条学生的（老师那一轮过时作废了）并成一条：一问一答交替
     const user = (content) => { if (msgs.at(-1)?.role === 'user') msgs.at(-1).content += `\n\n${content}`; else msgs.push({ role: 'user', content }); };
+    // 老师上一轮记的 memo 没收（守卫拒了、写法不对）：拼进紧跟着的学生消息前面告诉它（第十一轮，history.js 的 notesBefore）
+    const notes = notesBefore(history);
     for (const t of live) {
       if (t.role === 'claude') { if (!msgs.length) user(OPENING); msgs.push({ role: 'assistant', content: t.text }); }
-      else user(t.msg || t.text);
+      else user(notes.has(t.seq) ? `${notes.get(t.seq)}\n\n${t.msg || t.text}` : t.msg || t.text);
     }
     if (!msgs.length) user(OPENING);
     if (next) user(next);
@@ -243,7 +247,7 @@ export async function renderStageClass(root, meta = {}, desk) {
         const q = w?.prompt || stage.scene.say || '';
         const ev = actEvidence(a, { comp, q, goalText: (id) => stage.scene.goals.get(id)?.text || id, sig: sigOf(w, stage.scene, at || seq), goalSig: (id) => goalSig(stage.scene.goals.get(id)), wait: w });
         for (const r of ev.records) sink.record({ ...r, turn: at });
-        if (ev.say != null) sink.put('evidence', sayEvidence(ev.say, { session: sid, block: desk.block, turn: at }));
+        if (ev.say != null) { sink.put('evidence', sayEvidence(ev.say, { session: sid, block: desk.block, turn: at })); desk.said?.poke(); } // 话的账：隔 20 秒过一次
         if (ev.event) sink.event({ type: `stage-${a.type}`, block: comp, detail: { ...a, tries: undefined }, turn: at });
       },
     } : null,

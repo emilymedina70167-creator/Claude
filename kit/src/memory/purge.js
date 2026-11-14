@@ -18,7 +18,8 @@ const of = (mem, c) => (Array.isArray(mem?.[c]) ? mem[c] : []).filter((d) => d &
  *   kept: [{ path, why }]（这节课记的、但留着的）, unlink: [{ path, doc }]（留着的、要去掉课号重写的，doc 不带 id）,
  *   counts: { 类: 条数 }, ledger: ['observations/ob-…']（自检指纹里要去掉的）}
  */
-export function purgePlan(mem = {}, sid) {
+// keepWords（第十一轮）：这节课我说的话还没过完账（话的账没做成）——我说的话（src: say）先留着，别的照删，过完账下次再删
+export function purgePlan(mem = {}, sid, { keepWords = false } = {}) {
   const id = String(sid || '');
   const docs = [];
   const kept = [];
@@ -27,7 +28,10 @@ export function purgePlan(mem = {}, sid) {
   if (!id) return { docs, scoped: [], kept, counts, ledger: [] };
   const mine = (c, f = 'session') => of(mem, c).filter((d) => String(d[f] ?? '') === id);
 
-  for (const d of mine('evidence')) del('evidence', d);
+  for (const d of mine('evidence')) {
+    if (keepWords && d.src === 'say') kept.push({ path: `evidence/${d.id}`, why: '还没过账，我说的话先留着' });
+    else del('evidence', d);
+  }
   for (const d of mine('observations')) del('observations', d);
   for (const d of mine('pending')) del('pending', d);
   for (const d of mine('drills', 'fromSession')) del('drills', d);
@@ -59,7 +63,9 @@ export function purgePlan(mem = {}, sid) {
   }
   docs.push(`sessions/${id}`);
   const ledger = docs.filter((p) => /^(errors|observations|slips)\//.test(p));
-  return { docs, scoped: [...SESSION_SCOPED], kept, unlink, counts, ledger };
+  // keepWords：这节课的账（哪几句过过了）和每一轮（我当时在回应什么）也留着，下次过账才接得上
+  const scoped = keepWords ? SESSION_SCOPED.filter((c) => c !== 'said' && c !== 'class_turns') : [...SESSION_SCOPED];
+  return { docs, scoped, kept, unlink, counts, ledger };
 }
 
 const LABEL = { evidence: '作答和说的话', observations: '老师的笔记', pending: '改动记录', drills: '题库里的题', slips: '教学失误', errors: '错题' };

@@ -11,6 +11,8 @@ import { similarity, voidedIds, resolvedErrors } from './memo.js';
 import { lastActivity } from './report.js';
 import { isTeach, afterSession } from './session.js';
 import { AFTER_FAILS } from '../aide/after.js';
+// 话的账试几次交教研室（和 saiddesk.js 的 SAID_FAILS 一样；sentry 不碰数据库，不 import 它）
+const SAID_FAILS = 2;
 
 export const SENTRY_VERSION = 1;
 const DAY = 86400000;
@@ -102,6 +104,14 @@ export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now
   for (const s of get('sessions')) {
     if (!afterSession(s) || s.status !== 'closed' || s.after?.at || (Number(s.after?.fails) || 0) < AFTER_FAILS || !s.report || s.report.provisional) continue;
     items.push({ kind: 'after', space: s.space || spaceOfId(String(s.block || '')), ref: s.id, title: s.title || s.id, why: `${s.date || ''} 这节课下课后的整理首页连着 ${s.after.fails} 次没做成`, value: 85, cost: '一次 Opus 5.5（读整节课的记录写复盘、归类、事实、学生卡）' });
+  }
+  // 1.6 话的账（第十一轮）：首页连着两次没过成账的课（还有我打的话没去处），交给教研室照同一份提示词做
+  for (const s of get('sessions')) {
+    if (!isTeach(s) || (Number(s.said?.fails) || 0) < SAID_FAILS) continue;
+    const upTo = Number(s.said?.upTo) || 0;
+    const left = get('evidence').filter((e) => e.src === 'say' && String(e.session) === String(s.id) && Number(e.at || 0) > upTo).length;
+    if (!left) continue;
+    items.push({ kind: 'said', space: s.space || spaceOfId(String(s.block || '')), ref: s.id, title: s.title || s.id, why: `${s.date || ''} 这节课我说的 ${left} 句首页连着 ${s.said.fails} 次没过成账`, value: 88, cost: '一次 Opus 5.5（把我打的每一句过一遍，要求记进我的要求）' });
   }
   // 2. 待重判：后来的证据不一样了
   const r = re || recheck(mem);

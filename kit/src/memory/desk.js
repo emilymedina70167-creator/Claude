@@ -80,6 +80,8 @@ import { lookName, lookWords } from '../stage/look/spec.js';
 // 种类名给我看的叫法（一直用的样子按种类存）
 const KIND_NAMES = { card: '题卡', sentence: '句子', array: '一排格子', matrix: '矩阵', tree: '树', graph: '图', table: '表', timeline: '时间轴', plane: '平面', tex: '式子', node: '结点', label: '贴的字', dial: '拨盘', draw: '画的' };
 import { createAideDesk } from '../aide/aidedesk.js';
+import { createSaid } from './saiddesk.js';
+import { saidTimer } from './said.js';
 import { loadCards, loadBrief } from '../aide/load.js';
 import { cardIdsFor } from '../aide/card.js';
 import { suggestBlock } from '../books/plan.js';
@@ -136,6 +138,7 @@ export async function renderDesk(root, meta) {
   const purging = new Set((() => { try { return JSON.parse(localStorage.getItem(PURGE_KEY) || '[]'); } catch { return []; } })());
   const savePurging = () => { try { localStorage.setItem(PURGE_KEY, JSON.stringify([...purging])); } catch { /* 存不了：课上的 deleting 照样认 */ } };
   const purgeRunning = new Set();
+  const purgeResumed = new Set(); // 这次打开首页已经接着删过的课
   root.classList.add('is-desk');
   root.dataset.layout = loadLayout();
   const unit = meta.unit || session.title || '学习台';
@@ -205,6 +208,7 @@ export async function renderDesk(root, meta) {
   // 改记忆（掌握直接写、我改记忆、撤销）：放在订阅前面，第一次自检算出掌握时就用得上
   const ops = createMemOps({ db, mem: () => data });
   let aideDesk = null; // 课堂助手（下面建，订阅的回调先到时还没有）
+  let saidDesk = null; // 话的账（saiddesk.js），首页那一份
   const loaded = new Set();
   const failed = new Set();
   let ledger = null;
@@ -310,16 +314,17 @@ export async function renderDesk(root, meta) {
       data[c] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       // 正在删的课（点了「删掉」、后台还在删）：不进列表；上次没删完的（带着 deleting）接着删
       if (c === 'sessions') {
-        for (const d of data.sessions) if ((d.deleting || purging.has(d.id)) && !purgeRunning.has(d.id)) setTimeout(() => runPurge(d.id), 0);
+        // 这次打开首页每节只接着删一次（没删完的——过账没成、有一条删不掉——下次打开再试，不在订阅里一直转）
+        for (const d of data.sessions) if ((d.deleting || purging.has(d.id)) && !purgeRunning.has(d.id) && !purgeResumed.has(d.id)) { purgeResumed.add(d.id); setTimeout(() => runPurge(d.id), 0); }
         data.sessions = data.sessions.filter((d) => !d.deleting && !purging.has(d.id));
       }
       loaded.add(c);
       failed.delete(c);
       if (c === 'sessions' || c === 'position') paintClass();
-      if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); aideDesk?.tick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
+      if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); backTick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
       if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
-      if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) fixReports(); if (lastRes) paintWeek(toDate(Date.now())); }
+      if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) { fixReports(); backTick(); } if (lastRes) paintWeek(toDate(Date.now())); }
       if (c === 'curriculum') { examInbox.maybeRefresh(); manualForm?.refreshBlocks(); const sel = $('.dk-radd-b'); if (sel) sel.dataset.space = ''; }
       if (['curriculum', 'weaknesses', 'observations', 'mastery'].includes(c)) { fixSkills(); fixDebriefs(); }
       schedule();
@@ -389,9 +394,24 @@ export async function renderDesk(root, meta) {
   // 云端教研室（labdesk.js、docs/lab-plan.md）：照工作单拼单子 lab_brief，收它的回答 lab_inbox（过守卫、写回执）
   // 课堂助手（aide/aidedesk.js，第九轮）：下课后整理、补学生卡、写课前档案；一次一件、走后台，记忆读齐了才动
   aideDesk = createAideDesk({ db, getData: () => data, ops, ai: deskAI, packs: () => packs, ready: () => ['sessions', 'curriculum', 'errors', 'weaknesses', 'mastery', 'observations', 'position', 'reviews'].every((c) => loaded.has(c)) });
-  lab = createLabDesk({ db, getData: () => data, packs, planner, ops, aide: aideDesk, onChange: () => paintWork() });
+  // 话的账（第十一轮，saiddesk.js）：首页先把每节课我说了、还没过账的话过一遍（下了课的、挂着的、丢下的都算），再做课后的整理
+  saidDesk = createSaid({ db, getData: () => data, ops, ai: deskAI });
+  lab = createLabDesk({ db, getData: () => data, packs, planner, ops, aide: aideDesk, said: saidDesk, onChange: () => paintWork() });
+  // 后台一件一件做：先过账（一节一节，新的课先），都过完了才轮到课后的助手（aidedesk）。这次打开首页每节只试一次
+  const saidTried = new Set();
+  let saidBusy = false;
+  async function backTick() {
+    if (saidBusy) return;
+    if (!saidDesk || !loaded.has('sessions') || !loaded.has('evidence')) { aideDesk?.tick(); return; }
+    const todo = data.sessions.filter((x) => !saidTried.has(x.id) && saidDesk.needs(x)).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+    if (!todo.length) { aideDesk?.tick(); return; }
+    saidBusy = true;
+    saidTried.add(todo[0].id);
+    try { await saidDesk.runFor(todo[0].id); } finally { saidBusy = false; }
+    setTimeout(() => backTick(), 500);
+  }
   function runSentry(today) {
-    aideDesk.tick();
+    backTick();
     // 学生卡还没读到：先读，读到了再拼工作单（不然按章合并的单子会被当成没了撤掉）
     if (!aideDesk.cards()) { aideDesk.ensureCards().then(() => runSentry(today), () => {}); return; }
     const re = sentryRecheck(data);
@@ -471,7 +491,9 @@ export async function renderDesk(root, meta) {
     if (healthBusy) return;
     healthBusy = true;
     try {
-      const res = healthCheck(data, { today, exam: examMeta });
+      const res = healthCheck(data, { today, exam: examMeta, purging: new Set([...purging, ...purgeRunning]) });
+      // 删课删了一半留下的作答、动作（不是我说的话）：清掉（第十一轮；以前只记一笔，报告、掌握一直算不到它们）
+      if (res.orphans?.length) await pool(res.orphans.slice(0, 200), PURGE_PAR, (id) => db.doc(`evidence/${id}`).delete().catch(() => {}));
       const done = [];
       for (const f of res.fixes) {
         try {
@@ -772,15 +794,32 @@ export async function renderDesk(root, meta) {
     else pagesView?.refresh?.();
     toast(`删掉了：${title}`);
     const { id: _id, ...rest } = x;
-    db.doc(`sessions/${sid}`).set({ ...rest, deleting: Date.now() }).catch(() => {}); // 别的设备也马上不显示
-    runPurge(sid, plan);
+    // 别的设备也马上不显示；等它写进去再删（没写进去时中途断了，别的设备、下次打开就不知道要接着删）
+    await db.doc(`sessions/${sid}`).set({ ...rest, deleting: Date.now() }).catch(() => {});
+    runPurge(sid, null);
   }
   async function runPurge(sid, given = null) {
     if (purgeRunning.has(sid)) return;
     // 接着删（打开学习台时）：等记忆库各类都读到了再算删哪些，不然这节课的作答证据、笔记会漏删
     if (!given && !MEMORY_COLLECTIONS.every((c) => loaded.has(c))) { setTimeout(() => runPurge(sid), 1500); return; }
-    const plan = given || purgePlan(data, sid);
     purgeRunning.add(sid);
+    // 删之前先给这节课过账（第十一轮）：我说的话记成要求（原话抄进去）以后才删。最多等 60 秒，没成就把我说的话先留着
+    // 试满两次（SAID_FAILS）还没过成的：不再调用，我说的话一直留着、这节课先不删（不能为了删课丢我的要求）
+    let keepWords = false;
+    let sDoc = null;
+    if (saidDesk) {
+      sDoc = await db.doc(`sessions/${sid}`).get().then((r) => (r.exists ? { id: sid, ...r.data() } : null)).catch(() => null);
+      const left = !!sDoc && saidDesk.needs({ ...sDoc, said: { ...(sDoc.said || {}), fails: 0 } });
+      if (left && saidDesk.needs(sDoc)) {
+        const r = await Promise.race([saidDesk.runFor(sid), new Promise((res) => setTimeout(() => res('fail'), 60000))]);
+        keepWords = r !== 'done' && r !== 'none';
+      } else keepWords = left;
+    }
+    const plan0 = given || purgePlan(data, sid, { keepWords });
+    // 证据按课号现查（不只看手上的快照：快照读失败、还没跟上刚写的，会漏删）
+    const fresh = await db.collection('evidence').where('session', '==', sid).get().then((q) => q.docs.map((d) => ({ id: d.id, ...d.data() })), () => []);
+    const extra = fresh.filter((e) => !plan0.docs.includes(`evidence/${e.id}`) && !(keepWords && e.src === 'say')).map((e) => `evidence/${e.id}`);
+    const plan = { ...plan0, docs: [...extra, ...plan0.docs] };
     const role = (c) => (COLLECTIONS[c]?.writers.includes('me') ? 'me' : 'page');
     try {
       if (ledger?.hist && (plan.ledger.length || plan.unlink.length)) {
@@ -798,7 +837,15 @@ export async function renderDesk(root, meta) {
       await pool(scoped, PURGE_PAR, (path) => db.doc(path).delete());
       await pool(plan.unlink, PURGE_PAR, (u) => { const c = u.path.split('/')[0]; assertWrite(role(c), c); return db.doc(u.path).set(u.doc); });
       const last = `sessions/${sid}`;
-      await pool(plan.docs.filter((p) => p !== last), PURGE_PAR, (path) => { const c = path.split('/')[0]; assertWrite(role(c), c); return db.doc(path).delete(); });
+      // 一条删不掉记下来、接着删别的（以前一条永久性的错整批放弃，课却删了，证据留成孤儿）
+      const stuck = [];
+      await pool(plan.docs.filter((p) => p !== last), PURGE_PAR, (path) => { const c = path.split('/')[0]; assertWrite(role(c), c); return db.doc(path).delete().catch(() => { stuck.push(path); }); });
+      // 证据没删干净、我说的话还留着：这节课本身先不删（带着 deleting，下次打开接着删）
+      if (stuck.length || keepWords) {
+        // 只写一次（写了会触发 sessions 的订阅，订阅又会接着删：一直写就是一个圈）
+        if (keepWords && !sDoc?.keptWords) await db.doc(last).get().then((r) => (r.exists ? db.doc(last).set({ ...r.data(), keptWords: true }) : null)).catch(() => {});
+        return;
+      }
       // 删掉的课用过的教案：退回「还没用」，可以再按它开一节
       for (const k of SPACE_KEYS) {
         const m = packs[k].main;
@@ -1698,6 +1745,8 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   let doc = snap.data();
   const mem = Object.fromEntries(MEMORY_FOR_CLASS.map((c) => [c, []]));
   for (const c of MEMORY_FOR_CLASS) db.collection(c).onSnapshot((s) => { mem[c] = s.docs.map((d) => ({ id: d.id, ...d.data() })); }, () => {});
+  // 话的账（saiddesk.js）在课上、首页另写 sessions.said：跟着它，免得这里整份写回去时盖成开课时的旧值
+  db.doc(`sessions/${sid}`).onSnapshot((x) => { if (x.exists && x.data().said) doc = { ...doc, said: x.data().said }; }, () => {});
   const updateSession = (patch) => {
     assertWrite('page', 'sessions');
     doc = { ...doc, ...patch };
@@ -1772,6 +1821,20 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   const examYears = () => books.reserve || reserveYears(targetOf(mem), toDate(Date.now()));
   const examLoad = kind === 'stage' && block && !readOnly ? loadExamCourse(db, courseOfBlock(block)).catch(() => null) : null;
   examLoad?.then((ex) => { if (ex) examIdx = examIndexOf(ex, examYears()); });
+  // 话的账（第十一轮）：课上我打了一句，隔 20 秒（?dev&said=2 是 2 秒）后台过一次账；写好了的要求马上放进 mem，
+  // 老师下一次调用的说明里「学生的要求」就有它（system() 每次调用都重拼）。离开课堂之前 flush（不等它，断了由首页补）
+  const saidHere = readOnly ? null : createSaid({ db, getData: () => mem, ops, ai: store.dev ? async () => (await getAI()) || createDevAI() : getAI });
+  const saidOnceOf = async () => { const r = await db.doc(`sessions/${sid}/said/main`).get().catch(() => null); return r?.exists ? r.data().once || [] : []; };
+  if (saidHere) mem.saidOnce = await within(saidOnceOf(), 3000, []).catch(() => []);
+  const said = saidHere ? saidTimer({
+    wait: (Number(new URLSearchParams(location.search).get('said')) || 20) * 1000,
+    run: async () => {
+      if (!['done', 'partial'].includes(await saidHere.runFor(sid))) return;
+      mem.asks = (await db.collection('asks').get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+      mem.saidOnce = await saidOnceOf();
+    },
+  }) : null;
+  const leave = (to) => { said?.flush(); goto(to); };
   // 舞台课（kind: stage，docs/stage-plan.md D 段）：整屏一块舞台，自己的控制器；记忆、教材、证据、报告照旧
   if (kind === 'stage') {
     // 课堂助手（aide/，第九轮）：这一块附近的学生卡、这一科的课前档案（各 3 秒读不到当没有，不等）；
@@ -1787,7 +1850,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
       store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, subject: doc.subject || '', mem, books, prevRead, readOnly,
       // 这一门课的考试资料（exam/load.js，按门课读、不读整类）：不等它，课堂读到了再用（「这一块在考试里」、exam= 当场核）
       exam: examLoad, reserve: examYears,
-      updateSession, onHome: () => goto(readOnly ? `classes/${sid}` : ''),
+      updateSession, onHome: () => leave(readOnly ? `classes/${sid}` : ''), said,
       recheck: readOnly ? {} : await within(db.doc('meta/workorder').get().then((s) => (s.exists ? s.data().recheck || {} : {})), 3000, {}).catch(() => ({})),
       writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),
       makeReport: ({ turns, steps } = {}) => makeReport(db, sid, { doc: { ...doc, endedAt: doc.endedAt || Date.now() }, turns, steps }),
@@ -1809,7 +1872,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     });
   }
   return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
-    store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => goto(''), books, prevRead,
+    store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), said, books, prevRead,
     // 一问一答（kind: talk）：同一个课堂，换成活板、一问一答（docs/talk-impl.md）；别的（教材、记忆、memo、报告、复现）全照旧
     talk: kind === 'talk',
     // 后方复查（sentry.js）首页算好的：下课整理时带给课堂 Claude 判断（只在下课那一次用，上课的每一轮不带）

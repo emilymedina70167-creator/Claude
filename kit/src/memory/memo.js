@@ -25,9 +25,12 @@ import { courseOf, prefixOf, positionId, spaceOfId, spaceOfDoc, sharedFor } from
 const neutralText = (t) => String(t ?? '').replace(/(?<![其吉利])[他她](?![们人])/g, '学生');
 import { recallSpace, nextRecallId } from './recall.js';
 import { isTeach } from './session.js';
+import { nextAskId } from './said.js';
 
 export const MEMO_KINDS = {
   pref: { tier: 'direct', coll: 'profile', label: '偏好' },
+  // 学生要老师以后照做的（要求、纠正、期望，第十一轮）：单独记进「我的要求」asks，原话页面从证据抄；pref 只记关于学生的事实
+  ask: { tier: 'direct', coll: 'asks', label: '要求' },
   slip: { tier: 'direct', coll: 'slips', label: '失误' },
   lesson: { tier: 'direct', coll: 'lessons', label: '守则' },
   note: { tier: 'direct', coll: 'observations', label: '观察' },
@@ -48,7 +51,7 @@ const NOT_YOURS = { mastery: '掌握状态由页面按证据算（课堂不能�
 // 偏好的 topic 写什么都行；这两种最常见（课堂里看得出来的讲法、习惯）
 export const PREF_TOPICS = ['讲法', '习惯'];
 // 要写依据的几种：依据是证据（规则的依据通常是 say：学生说的那句话），结论才站得住
-const NEED_BASIS = new Set(['pref', 'propose', 'error', 'weakness', 'review', 'rule']);
+const NEED_BASIS = new Set(['pref', 'ask', 'propose', 'error', 'weakness', 'review', 'rule']);
 const LIST_KEYS = new Set(['basis', 'about', 'errors', 'blocks', 'weaknesses', 'debts', 'first', 'slips']);
 // 一科最多几条守则（没退役的）：再多就要先合并，守则不会越积越多
 export const LESSONS_MAX = 20;
@@ -67,7 +70,7 @@ export const LIST_CAPS = { debts: 5, first: 3, content: 6 };
 const ALIKE = 0.3;
 
 // 还在用的（没合并、没关、没作废、没退役）
-const LIVE = { weaknesses: ['active'], reviews: ['active', 'paused'], profile: ['active'], rules: ['active'], lessons: ['active'] };
+const LIVE = { weaknesses: ['active'], reviews: ['active', 'paused'], profile: ['active'], rules: ['active'], lessons: ['active'], asks: ['active'] };
 /** coll 里这一科（共用的几类不分科）还在用的几条 */
 export function liveDocs(mem = {}, coll, space = '') {
   const docs = (Array.isArray(mem[coll]) ? mem[coll] : []).filter((d) => d && (LIVE[coll] || ['active']).includes(d.status || 'active'));
@@ -329,6 +332,34 @@ export function planEntry(entry, ctx = {}) {
       if (near && near.s >= SIMILAR) return { error: `和 ${near.d.id}（${cut(near.d.text, 40)}）说的是同一件事：改写那一条（pref id=${near.d.id} text="…"），不新加` };
       // 条数不挡（2026-11-14 真课：满 30 条以后学生亲口说的七条偏好全被拒，下一节照旧不知道）：到了 CAPS 只让下课整理时并重复的
       return { ...base, op: 'add', target: `p-c${newId()}`, data: { topic: cut(a.topic, 20), text: cut(a.text, 600), since: date, source: `课堂 ${sid || ''}`.trim(), basis, status: 'active', ...(a.space && ['math', 'cs', 'en'].includes(a.space) ? { space: a.space } : {}) } };
+    }
+    case 'ask': {
+      // 我的要求：新的一条（text、可选 scope / measure）、改写（id + text）、不用了（id + status=dropped why=…）。
+      // 原话不让老师重打：从依据里学生说的那句（src: say）的证据抄，依据里没有学生的话就不收
+      const old = a.id ? find('asks', a.id) : null;
+      if (a.id && !old) return { error: `学生的要求里没有 ${a.id}：新的一条不写 id` };
+      const says = (ctx.evidence || []).filter((e) => basis.includes(String(e.id)) && e.src === 'say' && String(e.text || '').trim());
+      const quotes = says.map((e) => ({ ev: String(e.id), at: Number(e.at || 0), session: sid, text: String(e.text).trim() }));
+      if (old) {
+        if ((old.status || 'active') !== 'active') return { error: `${old.id} 已经不在用了（${old.status}）` };
+        const patch = {};
+        if (a.status) {
+          if (a.status !== 'dropped' || !a.why) return { error: '要求不用了写 status=dropped why=…（学生说的为什么）' };
+          patch.status = 'dropped';
+          patch.why = cut(a.why, 200);
+        }
+        if (a.text && cut(a.text, 400) !== old.text) patch.text = cut(a.text, 400);
+        const more = quotes.filter((q) => !(old.quotes || []).some((x) => x.ev === q.ev));
+        if (more.length) patch.quotes = [...(old.quotes || []), ...more];
+        if (!Object.keys(patch).length) return { error: `${old.id} 没有要改的：改说法写 text="…"，学生又说了一遍挂 basis=say` };
+        return { ...base, op: 'update', target: old.id, patch };
+      }
+      if (!a.text) return { error: '要求要写 text（用你的话写清楚以后要照做什么）' };
+      if (!quotes.length) return { error: '要求要挂学生说的那句话（basis=say 或那句话的证据编号）' };
+      const near = nearest(a.text, liveDocs(mem, 'asks'));
+      if (near && near.s >= SIMILAR) return { error: `已经有 ${near.d.id}（${cut(near.d.text, 40)}）：学生又说了就写 ask id=${near.d.id} basis=say 补原话，不新加` };
+      const scope = ['all', 'math', 'cs', 'en'].includes(a.scope) ? a.scope : 'all';
+      return { ...base, op: 'add', target: nextAskId(get('asks')), data: { text: cut(a.text, 400), quotes, scope, ...(a.measure === 'overlap' ? { measure: 'overlap' } : {}), status: 'active', since: date, by: 'class', checks: [], broken: 0, log: [] } };
     }
     case 'todo': {
       // 课上被问到教案以外的内容：不现场查教材补讲（会多跑轮），记下来下次备课补

@@ -102,6 +102,7 @@ export const MEMO_DOC = doc`
 
   ˋˋˋˋboard memo
   pref topic=讲法 text="先看图再推公式" basis=say
+  ask text="开场复习最多两三句，主要时间给新内容" basis=say
   slip text="一次出了两道题，没等学生答第一道" lesson="一块板一件事"
   lesson id=T-3 again="b7 没讲划块就出了标主干的题"
   note text="换括号那一步还是要停很久" about=W19
@@ -113,7 +114,7 @@ export const MEMO_DOC = doc`
   recall q="外积 αβᵀ 的秩是多少（α、β 都不是零向量）" a="1：每一列都是 α 的倍数"
   ˋˋˋˋ
 
-  - **学习台的记忆由你管**（没有别的 Claude 来整理），都直接写，不用等学生确认（学生事后看，不对能撤销）：ˋprefˋ 关于学生的事（ˋtopicˋ 讲法、习惯、目标……；改说法写 ˋid=… text=ˋ）、ˋslipˋ 你自己这节课**新出现的**教学失误（ˋlessonˋ 写下次怎么做）、ˋlessonˋ 教学守则（见下）、ˋnoteˋ 观察、ˋproposeˋ 提议、ˋtodoˋ 待办（学生问了资料包以外的，下次备课补）、ˋerrorˋ 新错题（ˋq mine step causeˋ，ˋweakness=ˋ 挂哪个弱点，不写 ˋidˋ 页面自动编号；题面、学生的答案不写时页面从依据里那次作答补；同一道题不记两次）、ˋweaknessˋ 改已有弱点的 ˋlevel scope status errors blocksˋ（写 ˋid=ˋ），或者新弱点（ˋtitle scope levelˋ，不写 ˋidˋ）、ˋreviewˋ 复现组判结果 ˋresult=过 / 没过ˋ、加题 ˋadd="…"ˋ，或者新的一组（ˋtitle family content weaknessesˋ）、ˋpositionˋ 下一节从哪接（ˋnext block debts firstˋ）、ˋruleˋ 规则：学生在课上定下的、改了的做法（「以后都……」「别再……」），照学生的意思写，ˋrule cat=讲解 text="…" basis=sayˋ（ˋcatˋ：红线 / 掌握 / 检验 / 来源 / 讲解 / 细则 / 教法 / 黑板；只管一科写 ˋspace=math / cs / enˋ），改已有的写 ˋrule id=… text="…"ˋ，作废写 ˋrule id=… status=void why="…"ˋ。**不收**：掌握状态（页面按证据算）。
+  - **学习台的记忆由你管**（没有别的 Claude 来整理），都直接写，不用等学生确认（学生事后看，不对能撤销）：ˋprefˋ 关于学生的事实（ˋtopicˋ 讲法、习惯、目标……；改说法写 ˋid=… text=ˋ）、ˋaskˋ **学生要你以后照做的**（要求、纠正、期望，抱怨、反问里的也算：「只做 2-3 句就行啊」「别重叠」）——ˋask text="…" basis=sayˋ，用你的话写清楚要照做什么，学生的原话页面自己附上；学生又说了一遍写 ˋask id=A-… basis=sayˋ，不用了写 ˋask id=A-… status=dropped why="…"ˋ（记忆最前面「学生的要求」就是这一类；页面下课前还会把学生打的每一句再过一遍，漏了的补上）、ˋslipˋ 你自己这节课**新出现的**教学失误（ˋlessonˋ 写下次怎么做）、ˋlessonˋ 教学守则（见下）、ˋnoteˋ 观察、ˋproposeˋ 提议、ˋtodoˋ 待办（学生问了资料包以外的，下次备课补）、ˋerrorˋ 新错题（ˋq mine step causeˋ，ˋweakness=ˋ 挂哪个弱点，不写 ˋidˋ 页面自动编号；题面、学生的答案不写时页面从依据里那次作答补；同一道题不记两次）、ˋweaknessˋ 改已有弱点的 ˋlevel scope status errors blocksˋ（写 ˋid=ˋ），或者新弱点（ˋtitle scope levelˋ，不写 ˋidˋ）、ˋreviewˋ 复现组判结果 ˋresult=过 / 没过ˋ、加题 ˋadd="…"ˋ，或者新的一组（ˋtitle family content weaknessesˋ）、ˋpositionˋ 下一节从哪接（ˋnext block debts firstˋ）、ˋruleˋ 规则：学生明说要改记忆里的哪一条规则时才写（课上新说的「以后都……」「别再……」写 ˋaskˋ），照学生的意思写，ˋrule cat=讲解 text="…" basis=sayˋ（ˋcatˋ：红线 / 掌握 / 检验 / 来源 / 讲解 / 细则 / 教法 / 黑板；只管一科写 ˋspace=math / cs / enˋ），改已有的写 ˋrule id=… text="…"ˋ，作废写 ˋrule id=… status=void why="…"ˋ。**不收**：掌握状态（页面按证据算）。
   - ˋrecallˋ **要背的一条**（记忆点）：定义原文、结论、表里的一格、公式、句型搭配……会推出来、要现场想方法的不算（那是复现组管的）。ˋq="问法"ˋ 一条只问一件事，ˋa="标准答案"ˋ 写成学生能对着检查的样子，ˋblock=ˋ 不写就挂这节课的块；默写没写出的、讲过但要背的，下课前记下来。页面从明天起每天让学生在首页自己想一遍（先写再看答案，按 1 → 3 → 7 → 14 → 30 天排，想不起回到 1 天），你上课不用再专门测这些；记忆里「要记的」是这几块记过的和老想不起的，老想不起的换个讲法讲一次。改问法、答案写 ˋrecall id=K3 q="…" a="…"ˋ，不用记了 ˋrecall id=K3 status=void why="…"ˋ。一节课最多 8 条，和已有的几乎一样的页面不收。
   - **少记，只记以后用得上的**：记之前问自己「下一节课会因为这条做得不一样吗」，不会就不记。学生的每一次作答、对错、用时页面已经自动记了，不要再用 note 复述「第 1 句写对了」。已经有的（守则、失误、弱点、错题、待办）又出现就改那一条（又犯了写 ˋagainˋ、弱点改 ˋlevelˋ），不另记一条。页面在代码里卡着：一节课观察最多 3 条、失误 3 条、错题 5 道（同一个弱点只记一道）、新弱点 3 个，和已有的说的是同一件事的不收；一个 memo 块最多 12 条（合并、作废、判复现结果、position、归纳守则不算）。
   - **不冗杂**：新的和已有的一条几乎一样，页面不收（改那一条）；每一类有上限，到了先合并（下课整理时页面会告诉你怎么并）。

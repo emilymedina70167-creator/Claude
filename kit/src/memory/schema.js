@@ -46,8 +46,21 @@ export const COLLECTIONS = {
     required: ['topic', 'text'],
     enums: { status: ['active', 'merged', 'void'], space: ['math', 'cs', 'en'] },
     dates: ['since'],
-    refs: { into: 'profile' },
+    // into：并进了别的一条（关于我的另一条，或第十一轮起挪进「我的要求」asks 的那一条）
+    refs: { into: ['profile', 'asks'] },
     tracked: [],
+  },
+  asks: {
+    // 我的要求（第十一轮，docs/superpowers/specs/2026-11-14-round11-design.md 6.1）：我说过要老师以后照做的（要求、纠正、期望）。
+    // 「关于我」是事实，这一类是规矩：要照做、要查守没守、要给我看。原话（quotes）由页面从证据里抄，删课也不丢。
+    // 话的账（said.js，作者 said）、课堂里的老师（memo 的 ask）、班主任、我都写；页面替它们写（page）
+    label: '我的要求', kind: 'state', writers: ['chat', 'class', 'page', 'me'],
+    id: { re: /^A-[A-Za-z0-9_-]+$/, eg: 'A-1、A-12' },
+    required: ['text', 'quotes', 'status', 'since'],
+    enums: { status: ['active', 'replaced', 'dropped', 'void'], scope: ['all', 'math', 'cs', 'en'], measure: ['overlap'] },
+    dates: ['since'],
+    refs: { into: 'asks' },
+    tracked: ['text', 'status'],
   },
   curriculum: {
     // me：学习台上「挂课程地图」我确认了的（plan.js），页面替我写

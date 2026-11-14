@@ -52,10 +52,13 @@ export function checkMemory(data = {}, { today, ledger = null } = {}) {
         if (d[f] !== undefined && d[f] !== null && !vals.includes(d[f])) add(c, id, `${f} 只能是 ${vals.join(' / ')}，现在是「${d[f]}」`);
       }
       for (const f of spec.dates || []) if (!empty(d[f]) && !isDate(d[f])) add(c, id, `${f} 要写成 YYYY-MM-DD，现在是「${d[f]}」`);
-      for (const [f, target] of Object.entries(spec.refs || {})) {
+      for (const [f, to] of Object.entries(spec.refs || {})) {
+        // 指向的可以是几类里的任一类（profile.into：关于我的另一条，或我的要求）：任一类里找得到就算
+        const targets = Array.isArray(to) ? to : [to];
+        const target = targets[0];
         for (const ref of list(d[f])) {
           const key = String(ref);
-          if (ids[target].has(key)) continue;
+          if (targets.some((t) => ids[t].has(key))) continue;
           // 指向的那一类还整个是空的（还没迁移过来）：只提醒，不算错
           if (!ids[target].size) add(c, id, `${f} 指向的 ${key} 在 ${target} 里没有（${COLLECTIONS[target].label}还是空的）`, true);
           else add(c, id, `${f} 指向的 ${key} 在 ${target}（${COLLECTIONS[target].label}）里找不到`);

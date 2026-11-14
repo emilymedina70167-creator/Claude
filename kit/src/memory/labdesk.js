@@ -33,7 +33,8 @@ const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slic
  * planner：planview.js（备课的材料和读回答）；ops：memops.js；onChange()：回执、单子变了（管理页重画）
  */
 // aide：课堂助手（aide/aidedesk.js，第九轮）：after（下课后的整理，首页连着没做成的）、card（按章合并学生卡）两种单子的材料和写法都用它的
-export function createLabDesk({ db, getData, packs, planner, ops, aide = null, onChange = () => {} }) {
+// said：话的账（saiddesk.js 的 createSaid，第十一轮）：首页两次没过成账的课，教研室照同一份提示词做
+export function createLabDesk({ db, getData, packs, planner, ops, aide = null, said = null, onChange = () => {} }) {
   let briefs = [];
   let logs = [];
   let syncing = false;
@@ -66,6 +67,10 @@ export function createLabDesk({ db, getData, packs, planner, ops, aide = null, o
     if (item.kind === 'after' && aide) {
       const inp = await aide.afterInput(item.ref);
       return inp.prompt ? { prompt: `${LAB_HEAD_REF()}\n\n${inp.prompt}`, ctx: { session: item.ref } } : null;
+    }
+    if (item.kind === 'said' && said) {
+      const inp = await said.input(item.ref);
+      return inp ? { prompt: `${LAB_HEAD_REF()}\n\n${inp.prompt}`, ctx: inp.ctx } : null;
     }
     if (item.kind === 'card' && aide) {
       const ids = Array.isArray(item.blocks) ? item.blocks : [];
@@ -270,6 +275,10 @@ export function createLabDesk({ db, getData, packs, planner, ops, aide = null, o
     else if (brief.kind === 'prep') r = await takePrep(d, brief, meta);
     else if (brief.kind === 'profile' || brief.kind === 'map' || brief.kind === 'intel') r = await takeExam(d, brief);
     else if ((brief.kind === 'after' || brief.kind === 'card') && aide) r = await takeAide(d, brief, meta);
+    else if (brief.kind === 'said' && said) {
+      const out = await said.take(brief.ctx?.session, d.text);
+      r = out.ok ? receipt({ inbox: d, brief, result: out.rejected.length ? 'partial' : 'ok', took: out.took, rejected: out.rejected }) : receipt({ inbox: d, brief, result: 'stale', notes: [out.why] });
+    }
     else return receipt({ inbox: d, brief, result: 'error', notes: [`不认识的单子 ${brief.kind}`] });
     // 做完了的单子撤掉（下一次自检，工作单里它也就没了）；没收成的留着，教研室看了回执重做
     if (r.result === 'ok' || r.result === 'partial') await db.doc(`lab_brief/${brief.id}`).delete().catch(() => {});

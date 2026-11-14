@@ -124,6 +124,47 @@ export function createMemOps({ db, mem, exam = () => null }) {
     return { pds, rejected };
   }
 
+  /**
+   * 话的账（第十一轮，said.js 的 planSaid 算好的）写进去：我的要求一条条过守卫（作者 said：对不上直接不收），
+   * 说第二遍的那几条记一次没做到（checks、broken）；关于我的照 pref 的路写（applyMemo，作者 said）。
+   * turns：这节课的 class_turns（守卫核原话）。返回 { written: [编号], rejected: [{ id, error }] }
+   */
+  async function applySaid(plan, { session = null, turns = [] } = {}) {
+    const evidence = session ? rows(await db.collection('evidence').where('session', '==', session).get().catch(() => null)) : [];
+    const corpus = buildCorpus({ turns, evidence });
+    const local = { ...mem(), evidence: [...(mem().evidence || []), ...evidence] };
+    const logs = [];
+    const written = [];
+    const rejected = [];
+    const broken = new Map();
+    for (const b of plan.broken || []) broken.set(b.ask, [...(broken.get(b.ask) || []), b.ev]);
+    // 先写改动的（被换掉、不用了、补原话），再写新建的：新的那条过守卫时，它改写的旧那条已经不在用了
+    const order = [...(plan.asks || [])].sort((x, y) => (x.op === 'add') - (y.op === 'add'));
+    local.asks = [...(local.asks || [])];
+    for (const a of order) {
+      let doc = { ...a.doc };
+      const evs = broken.get(a.id);
+      if (evs) doc = { ...doc, checks: [...(doc.checks || []), { session, result: 'broken', basis: evs, by: 'page', at: Date.now() }], broken: (Number(doc.broken) || 0) + 1 };
+      const cur = await db.doc(`asks/${a.id}`).get().then((r) => (r.exists ? r.data() : null)).catch(() => null);
+      // 新建的编号被别处（课上老师、另一台设备）先占了：不盖掉，这一条不写，下次过账再说
+      if (a.op === 'add' && cur) { rejected.push({ id: a.id, error: '编号被占了' }); continue; }
+      const g = guardCandidate({ coll: 'asks', id: a.id, doc, before: cur, author: 'said', session, basis: (doc.quotes || []).filter((q) => q.session === session).map((q) => q.ev).filter(Boolean) }, { mem: local, corpus, exam: exam?.() || null });
+      if (g.verdict !== 'accept') logs.push(guardLog(g, { coll: 'asks', id: a.id, session, author: 'said', line: doc.text || '' }));
+      if (g.verdict === 'reject' || g.verdict === 'hold') { rejected.push({ id: a.id, error: guardReason(g) }); continue; }
+      if (g.verdict === 'flag') doc = { ...doc, guard: guardMark(g) };
+      await db.doc(`asks/${a.id}`).set(doc);
+      local.asks = [...local.asks.filter((x) => String(x.id) !== a.id), { id: a.id, ...doc }];
+      written.push(a.id);
+    }
+    await writeGuard(logs, [], { session, space: 'math' });
+    if ((plan.profile || []).length) {
+      const entries = plan.profile.map((p) => ({ kind: 'pref', attrs: { topic: p.topic, text: p.text, basis: [p.ev] }, line: `pref topic=${p.topic} text="${p.text}"` }));
+      const r = await applyMemo(entries, { session, turns, author: 'said' });
+      rejected.push(...r.rejected.map((x) => ({ id: 'profile', error: x.error })));
+    }
+    return { written, rejected };
+  }
+
   // 被守卫拒掉、暂存的那一条：从手上的副本里拿掉（同一块后面的条目别以为它已经在了）
   function undoLocal(local, ch) {
     if (ch.op === 'add') local[ch.coll] = (local[ch.coll] || []).filter((d) => String(d.id) !== String(ch.target));
@@ -214,5 +255,5 @@ export function createMemOps({ db, mem, exam = () => null }) {
     return r.pd;
   }
 
-  return { applyMemo, applyNow, confirm, reject, undo, me, release, drop };
+  return { applyMemo, applySaid, applyNow, confirm, reject, undo, me, release, drop };
 }

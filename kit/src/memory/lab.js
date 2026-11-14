@@ -21,7 +21,7 @@ export const LAB_VERSION = 5; // 单子的写法变了就加一：学习台打�
 // 一晚最多做几张（价值高的先）：补收尾的课最值，出新题其次，备课一科一张
 // profile / map / intel：考情第 6 批（exam/lab.js）
 // card / after：课堂助手（第九轮）：按章合并学生卡；首页连着没做成的下课后整理
-export const LAB_CAPS = { backfill: 2, after: 2, newproblems: 3, probe: 2, prep: 3, profile: 8, map: 4, intel: 1, card: 4 };
+export const LAB_CAPS = { backfill: 2, after: 2, said: 2, newproblems: 3, probe: 2, prep: 3, profile: 8, map: 4, intel: 1, card: 4 };
 export const BRIEF_MAX = 480 * 1024; // 一张工作单子最多多大（数据库一条文档放得下；备课带的教材最大）
 const PROBLEMS_N = 3;
 
@@ -252,6 +252,8 @@ export function srcOf(item, mem = {}, packs = {}) {
   // 考情的几种：工作单上算好了上游的指纹（考点下的题和标签、没挂的块、今天）
   if (item.kind === 'profile' || item.kind === 'map' || item.kind === 'intel' || item.kind === 'card') return String(item.key || '');
   if (item.kind === 'after') { const s = find('sessions', item.ref); return [s.id, s.status, s.report?.at, s.after?.fails, s.after?.at].join('|'); }
+  // 话的账（第十一轮）：水位线、试了几次——过了账（水位线变了）旧的回答就作废
+  if (item.kind === 'said') { const s = find('sessions', item.ref); return [s.id, s.said?.upTo, s.said?.fails].join('|'); }
   if (item.kind === 'prep') { const p = (mem.position || []).find((x) => String(x.block) === String(item.ref)) || {}; return [item.ref, p.next, item.space, packs[item.space]?.main?.at || ''].join('|'); }
   return '';
 }
