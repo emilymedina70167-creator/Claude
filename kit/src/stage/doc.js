@@ -64,7 +64,7 @@ unlabel dial:d                     收起拨数
 
 画面（每轮附一张画面图，先看图再写；你摆完、学生看到之前页面照屏幕量一遍，压着、出了屏幕就盖住学生那边、交回给你只改画面）：
 排版：正在讲的最大、放视线中间；从上往下是看的顺序；有关系的挨着；一屏只留现在要用的，用完就 remove；放不下就换一幕（scene），不缩字硬塞
-place a main / place g right-of a align=top gap=s / place A B row / place say at=1,8-16,16（right-of left-of above below near）；say "…" near=a.2  摆过的钉住不挪；arrange 重排；拨盘也能 place m below v
+place a main / place g right-of a align=top gap=s / place A B row / place say at=1,8-16,16（right-of left-of above below near）；say "…" near=a.2  摆过的钉住不挪；arrange 重排；拨盘也能 place m below v 或 at=
 look say text=24 color=brand / look card frame=none / look a.3 color=red weight=bold / look goals hide：frame=none/line/card bg=none/soft/card/颜色 edge=none/thin/thick shadow=on/off font=sans/serif/hand/mono text=10～64 opacity=0.2～1；目标 * 种类名 东西 部件 贴的字 say goals dock bar page（画面的底）；加 always 以后每节课都这样；底下那一条、交给学生的藏不了
 scale a 1.4  放大缩小（0.5～2.5）；draw d1 arrow from=a.3 to=b.2 color=g2 / circle on= / box on= / brace under= "字" / underline on= / text at=格 "字" / svg at=格 "<path…/>"；erase d1
 镜头：camera a.1-7（凑近）/ camera all；wait 600（毫秒）

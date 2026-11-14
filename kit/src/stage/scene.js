@@ -1901,10 +1901,18 @@ export class Scene {
         // 贴到那一样东西的那一边（拨盘是贴着东西的，不进求解器）
         const dialOf = names.length === 1 && !this.objects.has(names[0]) ? this.labels.get(`dial:${names[0].replace(/^dial:/, '')}`) : null;
         if (dialOf) {
+          // 钉在格子上：place m at=18,25-30,28（拨盘的左上角摆在那里；扮老师的 Opus 第二次改画面时自然就这样写）
+          if (opts.at != null) {
+            if (!parseAt(opts.at)) throw new Error(`at= 要写成 列,行-列,行（at=18,25-30,28）`);
+            const { side: _s, ...rest } = dialOf;
+            this.labels.set(dialOf.id, { ...rest, side: dialOf.side, at: String(opts.at), asked: true, auto: false });
+            return { place: [] };
+          }
           const SIDE = { above: 'above', below: 'below', 'left-of': 'left', 'right-of': 'right' };
           const to = SIDE[kind] ? ws[k + 1] : null;
-          if (!to || !this.objects.has(to)) throw new Error(`拨盘这样摆：place ${names[0]} below v（above / below / left-of / right-of 台上的一样东西）`);
-          this.labels.set(dialOf.id, { ...dialOf, refs: [to], side: SIDE[kind], asked: true, auto: false });
+          if (!to || !this.objects.has(to)) throw new Error(`拨盘这样摆：place ${names[0]} below v（above / below / left-of / right-of 台上的一样东西），或者 place ${names[0]} at=列,行-列,行`);
+          const { at: _a, ...rest } = dialOf;
+          this.labels.set(dialOf.id, { ...rest, refs: [to], side: SIDE[kind], asked: true, auto: false });
           return { place: [] };
         }
         for (const n of names) if (!this.objects.has(n) && n !== 'say' && n !== 'goals') throw new Error(`place 写的「${n}」舞台上没有`);

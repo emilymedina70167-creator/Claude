@@ -12,7 +12,7 @@ const SIDE_KEY = 'la-stage-side'; // 解析栏点开还是收着（这台设备�
 const storedSide = () => { try { if (typeof location !== 'undefined' && /[?&]side=open\b/.test(location.search)) return true; return localStorage.getItem(SIDE_KEY) === 'open'; } catch { return false; } };
 import { EASE, moveDuration, stagger, arcPoints, revealDelays, readHold, labelHold } from './motion.js';
 import { bbox, grow, fitCamera, placeLabel, overlaps, linkGeom, wholeLinkGeom, CAMERA_ROOM, tooSmall, pickSide } from './layout.js';
-import { gridOf, typeScaleOf, fromCells } from './compose/grid.js';
+import { gridOf, typeScaleOf, fromCells, parseAt } from './compose/grid.js';
 import { drawGeometry, drawObjects } from './draw.js';
 import { layoutLines } from './compose/report.js';
 import { measureStage } from './sight.js';
@@ -1854,7 +1854,7 @@ export class Stage {
       const size = { w: cur.node.offsetWidth || 80, h: cur.node.offsetHeight || 32 };
       const obs = this.obstacles(l.id);
       // 东西变矮了（泳道 merge 回一排）也要重摆：以前只看左上角和宽，贴在它下面的字、拨盘留在老地方（D1-11）
-      const stale = !cur.box || !cur.anchor || Math.abs(cur.anchor.x - anchor.x) > 1 || Math.abs(cur.anchor.y - anchor.y) > 1 || Math.abs(cur.anchor.w - anchor.w) > 1 || Math.abs((cur.anchor.h ?? anchor.h) - anchor.h) > 1 || cur.box.w !== size.w || obs.some((o) => overlaps(grow(cur.box, 1), o));
+      const stale = !cur.box || !cur.anchor || Math.abs(cur.anchor.x - anchor.x) > 1 || Math.abs(cur.anchor.y - anchor.y) > 1 || Math.abs(cur.anchor.w - anchor.w) > 1 || Math.abs((cur.anchor.h ?? anchor.h) - anchor.h) > 1 || cur.box.w !== size.w || obs.some((o) => overlaps(grow(cur.box, 1), o)) || (l.dial && (l.at || '') !== (cur.atWas || ''));
       const off = this.free && ideal.has(l.id) && cur.box && (Math.abs(ideal.get(l.id).x - cur.box.x) > 1 || Math.abs(ideal.get(l.id).y - cur.box.y) > 1);
       if (!stale && !redo.has(l.id) && !off) continue;
       if (l.dial) {
@@ -1894,6 +1894,12 @@ export class Stage {
           if (q && !q.none && !this.offView({ x: q.x, y: q.y, ...size })) { p = q; break; }
         }
       }
+      // 老师把拨盘钉在了格子上（place m at=…，第十轮）：左上角就摆在那里，不躲、不换边——压着了交给画面自查照实说
+      if (l.dial && l.at && this.free && this.layoutState?.grid && this.baseCam) {
+        const cells = parseAt(l.at);
+        if (cells) { const B = fromCells(cells, this.layoutState.grid), k = this.baseCam.s || 1; p = { x: B.x / k, y: B.y / k, side: l.side || 'below' }; }
+      }
+      cur.atWas = l.at || '';
       const from = cur.box;
       const sideWas = cur.side;
       cur.box = { x: p.x, y: p.y, ...size };
@@ -2145,7 +2151,9 @@ export class Stage {
   idealLabels(id) {
     const sc = this.scene;
     const objsOf = (l) => new Set((l.refs || []).filter((r) => !sc.labels.has(r)).map((r) => String(r).match(/^[A-Za-z_]\w*/)?.[0]).filter(Boolean));
-    const mine = [...this.labelNodes].filter(([lid, n]) => n.box && sc.labels.has(lid) && this.labelShown(sc.labels.get(lid)) && ((n.owner || null) === id || objsOf(sc.labels.get(lid)).has(id)))
+    // 老师钉在格子上的拨盘（place m at=…）和贴在它身上的字自己占一块，不算进原来那样东西（第十轮：算进去时句子在老师给的框里被挤下去）
+    const pinnedDial = (l) => (l.dial && l.at) || (l.refs || []).some((r) => sc.labels.get(r)?.dial && sc.labels.get(r)?.at);
+    const mine = [...this.labelNodes].filter(([lid, n]) => n.box && sc.labels.has(lid) && this.labelShown(sc.labels.get(lid)) && !pinnedDial(sc.labels.get(lid)) && ((n.owner || null) === id || objsOf(sc.labels.get(lid)).has(id)))
       .map(([lid, n]) => ({ l: sc.labels.get(lid), n }))
       .sort((a, b) => (b.l.dial ? 1 : 0) - (a.l.dial ? 1 : 0));
     const out = [];
@@ -2372,6 +2380,15 @@ export class Stage {
       if (!r) continue;
       const b = { x: r.x - cv.left - 6, y: Math.max(0, r.y - cv.top), w: r.w + 12, h: r.y - cv.top + r.h + 6 - Math.max(0, r.y - cv.top) };
       if (b.x < cv.w && b.y + b.h > 0) extras.push({ id: `chrome:${n.className}`, w: b.w, h: b.h, fixed: { x: Math.max(0, b.x), y: b.y, w: Math.min(b.w, cv.w - Math.max(0, b.x)), h: b.h } });
+    }
+    // 老师钉在格子上的拨盘（place m at=…）：排版当一块定死的地方躲开
+    for (const l of sc.labels.values()) {
+      if (!l.dial || !l.at || !this.labelShown(l)) continue;
+      const cells = parseAt(l.at), node = this.labelNodes.get(l.id)?.node;
+      if (!cells) continue;
+      const B = fromCells(cells, grid);
+      const w = Math.max(B.w, (node?.offsetWidth || 0) * baseS), h = Math.max(B.h, (node?.offsetHeight || 0) * baseS);
+      extras.push({ id: `chrome:dial-${l.dial}`, w, h, fixed: { x: B.x, y: B.y, w: Math.min(w, cv.w - B.x), h } });
     }
     const goalsOn = !!this.goalsEl.childElementCount && [...this.goalsEl.children].some((n) => n.offsetWidth);
     if (goalsOn) {
