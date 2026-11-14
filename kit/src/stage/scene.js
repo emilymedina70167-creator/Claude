@@ -1422,7 +1422,9 @@ export class Scene {
         const again = this.vars.has(name);
         if (again && !c.lenient) this.checkPickUsers(name, fresh);
         this.vars.set(name, fresh);
-        this.labels.set(`dial:${name}`, { id: `dial:${name}`, refs: at && (this.objects.has(at) || atPart) ? [at] : [], text: '', side: 'below', tone: 'dial', link: null, dial: name });
+        // 没写 at= 的：先挂在台上第一样东西上（老样子），auto 记一笔——画面会改挂到用它的那一样旁边（句子里写了 {md: …} 的；
+        // 2026-11-14 真课：拨盘挂到了左上角的题卡上、摆到屏幕外面，学生问「哪里有拨盘」）
+        this.labels.set(`dial:${name}`, { id: `dial:${name}`, refs: at && (this.objects.has(at) || atPart) ? [at] : [], text: '', side: 'below', tone: 'dial', link: null, dial: name, ...(opts.at ? {} : { auto: true }) });
         // at= 写的东西还没造（dial 写在 matrix M = … {k} 之前，造 M 要先有 k）：先记着，M 造出来时挂上（以前就一直浮着、不挂）
         if (at && !this.objects.has(at) && !atPart) this.dialAt.set(name, at); else this.dialAt.delete(name);
         // 重造的：跟着它的句子照新的值重排（画面照 set 演）

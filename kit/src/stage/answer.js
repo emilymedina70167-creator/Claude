@@ -583,12 +583,16 @@ export function gridShape(spec = {}, scene = null) {
  * 只看问话的字、不看有没有中文：「3次」「x=1或x=2」是正常的答案。调用的地方先判，判对了的不算问话（stage.js 的 judgeValue）
  */
 const CJK_RE = /[\u3400-\u9fff\uf900-\ufaff]/;
-const ASK_WORDS = /什么|吗|怎么|为什么|为啥|哪|啥|是不是|不懂|不会/;
+const ASK_WORDS = /什么|吗|怎么|如何|为什么|为啥|哪|啥|是不是|不懂|不会/;
 export function asksBack(text, spec = {}) {
   const t = String(text ?? '').trim();
   if (!t) return false;
   if (/[?？]$/.test(t)) return true;
-  return ASK_WORDS.test(t) && !CJK_RE.test(String(spec.answer ?? ''));
+  const ans = String(spec.answer ?? '');
+  // 答案里没有汉字（英文、数、式子），学生却写了一整句中文：是对老师说话，不是作答
+  // （2026-11-14 真课：挖空填词的框里写「就是你现在如何评价你的教学环境」，被判成填错了）
+  if (!CJK_RE.test(ans) && (t.match(/[\u3400-\u9fff]/g) || []).length >= 4) return true;
+  return ASK_WORDS.test(t) && !CJK_RE.test(ans);
 }
 
 /**

@@ -1755,8 +1755,23 @@ export class Stage {
     // 只看那种东西报的（不看画出来的全部：一排格子上面的弧也是画出来的，算进来的话写 side=above 的字一律换到下面——旧课放回量出来的）
     return (t.nearObstacles?.(o) || []).some((f) => !own.some((a) => same(a, f)) && overlaps(grow(box, 2), f));
   }
+  /** 一块（世界坐标）照现在的镜头落在画面外面（差 4 像素以内不算） */
+  offView(b) {
+    const c = this.cam, v = this.viewSize?.();
+    if (!c || !v) return false;
+    const x = b.x * c.s + c.tx, y = b.y * c.s + c.ty;
+    return x < -4 || y < -4 || x + b.w * c.s > v.w + 4 || y + b.h * c.s > v.h + 4;
+  }
+  /** 没写 at= 的拨盘：用它的那一样（句子里写了 {名字: …}、{verb: … | 名字 …}）；没有就 null */
+  dialUser(l) {
+    if (!l?.dial || !l.auto) return null;
+    const sc = this.scene;
+    return sc.shownIds().find((id) => { const o = sc.objects.get(id); return o?.picks && !o.picks.off && (o.picks.deps || []).includes(l.dial); }) || null;
+  }
   anchorOf(l) {
     const sc = this.scene;
+    const user = this.dialUser(l);
+    if (user) return grow(sc.worldObjectBox(user), 4);
     if (l.link) { const k = sc.links.get(l.link); const g = k && this.linkGeo(k); if (g?.box) return g.box; }
     const boxes = [];
     for (const r of l.refs) {
@@ -1833,6 +1848,13 @@ export class Stage {
         const mates = new Set(ideal.keys());
         const others = this.obstacles(l.id).filter((o) => ![...this.labelNodes].some(([k, n]) => mates.has(k) && n.box && Math.abs(n.box.x - o.x) < 0.5 && Math.abs(n.box.y - o.y) < 0.5));
         if (!others.some((o) => overlaps(grow(want, 1), o))) p = { x: want.x, y: want.y, side: p.side };
+      }
+      // 摆到了画面外面（东西贴着屏幕边，那一边没地方）：换一边摆（2026-11-14 真课：拨盘摆到了屏幕上沿外面，学生看不到）
+      if (this.offView({ x: p.x, y: p.y, ...size })) {
+        for (const side of ['below', 'above', 'right', 'left']) {
+          const q = placeLabel(anchor, size, obs, { prefer: [side], gap: l.dial ? 18 : 12, walls: this.wallsOf(l) });
+          if (q && !q.none && !this.offView({ x: q.x, y: q.y, ...size })) { p = q; break; }
+        }
       }
       const from = cur.box;
       const sideWas = cur.side;
@@ -2146,6 +2168,8 @@ export class Stage {
   /** 一张字、一个拨盘归哪样东西（排版时和它一起摆）：贴着的第一样；什么都没贴（拨盘没写 at=）归这一轮讲的那样 */
   labelOwner(l) {
     const sc = this.scene;
+    const user = this.dialUser(l);
+    if (user) return user;
     for (const r of l.refs || []) {
       if (sc.labels.has(r)) { const o = this.labelNodes.get(r)?.owner; if (o) return o; continue; }
       const id = String(r).match(/^[A-Za-z_]\w*/)?.[0];

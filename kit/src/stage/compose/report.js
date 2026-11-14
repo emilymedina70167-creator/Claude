@@ -49,6 +49,12 @@ export function layoutLines({ boxes, grid, unmet = [], scale = 1 }) {
   const hit = (a, b) => a.x < b.x + b.w - 1 && b.x < a.x + a.w - 1 && a.y < b.y + b.h - 1 && b.y < a.y + a.h - 1;
   const over = [];
   for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (hit(list[i][1], list[j][1])) over.push(`${list[i][0]} 和 ${list[j][0]}`);
+  // 话、挑战压着别的（老师 place say at= 写到了挑战条那一行）：也照实说（2026-11-14 真课：话压着挑战条，老师不知道，学生说了两次）
+  const blocks = [...boxes].filter(([id]) => id === 'say' || id === 'goals');
+  for (let i = 0; i < blocks.length; i++) {
+    for (const [id, b] of list) if (hit(blocks[i][1], b)) over.push(`${NAME[blocks[i][0]] || blocks[i][0]} 和 ${NAME[id] || id}`);
+    for (let j = i + 1; j < blocks.length; j++) if (hit(blocks[i][1], blocks[j][1])) over.push(`${NAME[blocks[i][0]]} 和 ${NAME[blocks[j][0]]}`);
+  }
   if (over.length) lines.push(`压着：${over.join('；')}`);
   // 差两个像素以内算在里面（和求解器、出了屏幕就放开的那一处同一个余量：吸到半格时会差一点）
   const out = list.filter(([, b]) => b.x < -2 || b.y < -2 || b.x + b.w > W + 2 || b.y + b.h > H + 2).map(([id]) => NAME[id] || id);

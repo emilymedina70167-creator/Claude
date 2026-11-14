@@ -57,6 +57,8 @@ export const RULE_CATS = ['红线', '掌握', '检验', '来源', '讲解', '细
 // 每一类在用的最多几条（弱点、复现组按科，偏好、规则全科共用）：到了上限新的不收，下课整理时先合并。
 // 2026-11-03 量的真数据：弱点 数学 20 / 408 11 / 英语 3，复现组 12 / 6 / 2，偏好 27，规则 68（docs/autonomy-plan.md）
 export const CAPS = { weaknesses: 20, reviews: 12, profile: 30, rules: 70, lessons: LESSONS_MAX };
+// 关于学生满了以后，学生当场亲口说的偏好还能再收几条（下课整理时并掉）
+export const PROFILE_SPILL = 8;
 // 一节课里每一种新加的最多几条（2026-11-03 我说：别一丁点小事都记、别反复累加）。11/2 那节课记了 27 条观察（多是把作答复述一遍，
 // 页面本来就自动记了每一次作答）、27 条失误、同一个毛病 5 道错题。到了就不收，告诉它挑要紧的、并进已有的
 // 记忆点一节课最多 8 条：只记真要背的（定义原文、结论、表里的一格），会推出来的不记
@@ -334,7 +336,10 @@ export function planEntry(entry, ctx = {}) {
       const live = liveDocs(mem, 'profile');
       const near = nearest(a.text, live);
       if (near && near.s >= SIMILAR) return { error: `和 ${near.d.id}（${cut(near.d.text, 40)}）说的是同一件事：改写那一条（pref id=${near.d.id} text="…"），不新加` };
-      if (live.length >= CAPS.profile) return { error: `关于学生的已经有 ${live.length} 条（最多 ${CAPS.profile}）：先把重复的并掉（pref id=… status=merged into=…）` };
+      // 满了：学生当场亲口说的偏好（basis=say）照样收，最多再多 PROFILE_SPILL 条，下课整理时并掉（到了上限 tidyDue 会带上目录）——
+      // 2026-11-14 真课：满 30 条以后学生说的七条偏好（主角放中间、不许重叠、回答要短……）全被拒，老师也没去并，下一节照旧不知道
+      const said = /(^|[\s,，])say($|[\s,，])/.test(String(a.basis ?? ''));
+      if (live.length >= CAPS.profile + (said ? PROFILE_SPILL : 0)) return { error: `关于学生的已经有 ${live.length} 条（最多 ${CAPS.profile}）：先把重复的并掉（pref id=… status=merged into=…）` };
       return { ...base, op: 'add', target: `p-c${newId()}`, data: { topic: cut(a.topic, 20), text: cut(a.text, 600), since: date, source: `课堂 ${sid || ''}`.trim(), basis, status: 'active', ...(a.space && ['math', 'cs', 'en'].includes(a.space) ? { space: a.space } : {}) } };
     }
     case 'todo': {
