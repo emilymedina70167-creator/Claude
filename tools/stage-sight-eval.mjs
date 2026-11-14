@@ -65,21 +65,47 @@ if (cmd === 'prepare') {
     const outF = join(dir, `${c.id}.out.txt`);
     if (!existsSync(outF)) { rows.push(`| ${c.id} | ${c.problems.join('；')} | （没写） | | |`); continue; }
     const fix = readFileSync(outF, 'utf8').trim();
+    // 第二次（页面最多交回两次）：老师看了第一次改完的样子再写的（round2 出的题）
+    const out2 = join(dir, `${c.id}.out2.txt`);
+    const fix2 = existsSync(out2) ? readFileSync(out2, 'utf8').trim() : '';
     const f = join(dir, `${c.id}.try.txt`);
-    writeFileSync(f, `${srcOf(steps.slice(0, c.upto + 1))}\n自查:\n${fix}\n`);
+    writeFileSync(f, `${srcOf(steps.slice(0, c.upto + 1))}\n自查:\n${fix}\n${fix2 ? `自查:\n${fix2}\n` : ''}`);
     mkdirSync(join(dir, 'after'), { recursive: true });
     const v = tryJson(f, { shots: join(dir, 'after') });
     const last = v.steps.at(-1);
     const bad = last.step.fix ? must(last.issues) : [{ what: '压着', an: '（改画面那一段没用上）', bn: '' }];
     const asking = /在等学生/.test(last.state || '');
     const ok = !bad.length && !last.veiled && asking;
-    rows.push(`| ${c.id} | ${c.problems.join('；')} | ${fix.split('\n').length} 行 | ${bad.length ? bad.map(lineOf).join('；') : '干净'}${asking ? '' : '；那一问没了'} | ${ok ? '✓' : '✗'} |`);
+    rows.push(`| ${c.id} | ${c.problems.join('；')} | ${fix.split('\n').length} 行${fix2 ? ` + 第二次 ${fix2.split('\n').length} 行` : ''} | ${bad.length ? bad.map(lineOf).join('；') : '干净'}${asking ? '' : '；那一问没了'} | ${ok ? '✓' : '✗'} |`);
     console.log(`${ok ? '✓' : '✗'} ${c.id}`);
   }
   const pass = rows.filter((r) => r.endsWith('✓ |')).length;
   writeFileSync(join(dir, 'results.md'), `# 画面自查：真的老师改得好不好\n\n${pass} / ${cases.length}\n\n| 题 | 页面量到的 | 老师写的 | 改完 | 过 |\n|---|---|---|---|---|\n${rows.join('\n')}\n`);
   console.log(`${pass} / ${cases.length}`);
+} else if (cmd === 'round2') {
+  // 第一次没改好的：照页面真会发的那样出第二题（改完以后的画面图、还剩的问题、第一次写的、没演上的行）
+  const dir = opt.file || opt.out;
+  const { cases, size } = JSON.parse(readFileSync(join(dir, 'cases.json'), 'utf8'));
+  opt.size = size;
+  const { eventsText } = await import(pathToFileURL(join(ROOT, 'kit/src/stage/events.js')).href);
+  mkdirSync(join(dir, 'r2'), { recursive: true });
+  for (const c of cases) {
+    const f = join(dir, `${c.id}.try.txt`);
+    if (!existsSync(f) || existsSync(join(dir, `${c.id}.out2.txt`))) continue;
+    const v = tryJson(f, { shots: join(dir, 'r2') });
+    const last = v.steps.at(-1);
+    const bad = must(last.issues);
+    if (!bad.length) continue;
+    const lines = [...new Set(bad.map(lineOf))];
+    const said = eventsText([{ kind: 'sight', text: lines.join('；'), n: 2, last: true, at: 0 }], { goals: new Map() });
+    const errs = (last.errors || []).filter((e) => !e.kept).map((e) => `- 第 ${e.line} 行 ${e.src}：${e.error}`).join('\n');
+    writeFileSync(join(dir, `${c.id}.r2.md`), [
+      `# ${c.id} 第二次`, '', '你上一轮（第一次改画面）写的：', '```', readFileSync(join(dir, `${c.id}.out.txt`), 'utf8').trim(), '```',
+      '', '页面发给你的这一条（画面图是改完以后的样子）：', '```', `[学生]\n${said}${errs ? `\n\n[上一轮没演的行]\n${errs}` : ''}\n\n[舞台现在]\n${last.state}`, '```', '', `画面图：${last.shot}`,
+    ].join('\n'));
+    console.log(`${c.id}：${lines.join('；')}`);
+  }
 } else {
-  console.error('用法：prepare 文件.txt --out 目录 [--size] | apply 目录');
+  console.error('用法：prepare 文件.txt --out 目录 [--size] | apply 目录 | round2 目录');
   process.exit(2);
 }

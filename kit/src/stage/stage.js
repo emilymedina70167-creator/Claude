@@ -2294,7 +2294,7 @@ export class Stage {
     const t = sc.type(o), est = t.objectBox(o), u = this.unionBox(id);
     const out = [];
     for (const width of widths) {
-      const b = t.objectBox({ ...o, width });
+      const b = t.widthBox ? t.widthBox(o, width, sc) : t.objectBox({ ...o, width }); // 跟着拨盘变的句子按这个宽重算占地（第十轮）
       const k = o.k || 1;
       const a = { w: (b.w + (u.w / k - est.w)) * k, h: (b.h + (u.h / k - est.h)) * k, width };
       if (!out.some((x) => Math.abs(x.w - a.w) < 2 && Math.abs(x.h - a.h) < 2)) out.push(a);
@@ -2493,7 +2493,7 @@ export class Stage {
       if (atBox) {
         // 找排出来不比老师给的宽的那个宽（句子按词折行，框的宽不等于给的宽：二分找，审查 6）；最窄只到最窄那一档
         const t = sc.type(o), k = o.k || 1, target = atBox.w / s / k, min = WIDTHS_OF[o.type].at(-1);
-        const wOf = (w) => t.objectBox({ ...o, width: w }).w;
+        const wOf = (w) => (t.widthBox ? t.widthBox(o, w, sc) : t.objectBox({ ...o, width: w })).w;
         let lo = min, hi = Math.max(min, Math.round(target));
         if (wOf(hi) <= target + 1) lo = hi;
         else for (let n = 0; n < 12 && hi - lo > 4; n++) { const mid = Math.round((lo + hi) / 2); if (wOf(mid) <= target + 1) lo = mid; else hi = mid; }

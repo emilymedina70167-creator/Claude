@@ -1897,6 +1897,16 @@ export class Scene {
         const names = k < 0 ? ws : ws.slice(0, k);
         const kind = k < 0 ? null : ws[k];
         if (!names.length) throw new Error('要写成 place 名字 main / right-of 别的 / row …（或 at=6,4-30,12）');
+        // 拨盘也能摆（第十轮：画面自查里老师写 place m below v 想把拨盘挪开，以前这一行不认、拨盘一直压在题卡上）：
+        // 贴到那一样东西的那一边（拨盘是贴着东西的，不进求解器）
+        const dialOf = names.length === 1 && !this.objects.has(names[0]) ? this.labels.get(`dial:${names[0].replace(/^dial:/, '')}`) : null;
+        if (dialOf) {
+          const SIDE = { above: 'above', below: 'below', 'left-of': 'left', 'right-of': 'right' };
+          const to = SIDE[kind] ? ws[k + 1] : null;
+          if (!to || !this.objects.has(to)) throw new Error(`拨盘这样摆：place ${names[0]} below v（above / below / left-of / right-of 台上的一样东西）`);
+          this.labels.set(dialOf.id, { ...dialOf, refs: [to], side: SIDE[kind], asked: true, auto: false });
+          return { place: [] };
+        }
         for (const n of names) if (!this.objects.has(n) && n !== 'say' && n !== 'goals') throw new Error(`place 写的「${n}」舞台上没有`);
         if (!kind && opts.at == null) throw new Error(`place ${names.join(' ')} 后面写怎么放：main / right-of 别的 / left-of / above / below / near 一处 / row / col，或 at=6,4-30,12`);
         if ((kind === 'row' || kind === 'col') && names.length < 2) throw new Error(`${kind} 前面写两样以上（place A B ${kind}）`);
@@ -2145,7 +2155,7 @@ export class Scene {
   moveObject(id, x, y, width = null) {
     const o = this.objects.get(id);
     if (!o) return;
-    if (width && (o.type === 'sentence' || o.type === 'card')) o.width = width; // 求解器挑的折行宽
+    if (width && (o.type === 'sentence' || o.type === 'card')) { const t = this.type(o); if (t.setWidth) t.setWidth(o, width, this); else o.width = width; } // 求解器挑的折行宽
     const b = this.type(o).objectBox(o);
     shiftObject(o, x - b.x, y - b.y);
     o.placed = true;

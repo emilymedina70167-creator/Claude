@@ -1010,6 +1010,18 @@ export const sentence = {
     if (!b) return { x: o.origin.x, y: o.origin.y, w: 1, h: 1 };
     return p.lift && !foldOfKey(o, p.key) ? { ...b, y: b.y - LIFT } : { ...b };
   },
+  // 换折行宽（求解器挑的、老师 at= 定的）：跟着拨盘变的句子按新宽重算「最宽最高的那种拨法」占多大（第十轮：以前一直用造的时候
+  // 那个宽算的，老师给了一整行也显得放不下，定宽时被压到最窄、折成两行）
+  setWidth(o, w, scene) {
+    o.width = w;
+    if (o.picks?.src && scene) { const room = templateRoom(scene, o, o.picks.src); if (room) o.picks.room = room; }
+  },
+  /** 照这个宽排出来的框（不改 o）：定宽时二分用 */
+  widthBox(o, w, scene) {
+    const p = { ...o, width: w };
+    if (o.picks?.src && scene) { const room = templateRoom(scene, p, o.picks.src); p.picks = { ...o.picks, room }; }
+    return this.objectBox(p);
+  },
   objectBox(o) {
     const b = layout(o).box;
     // 跟着拨盘变的句子：框照最宽最高的那种拨法（templateRoom），拨的时候不变
