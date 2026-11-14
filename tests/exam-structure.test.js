@@ -25,9 +25,12 @@ test('408 的结构：40 道单选每道 2 分，41～47 综合合计 70，共 1
   assert.match(checkPaper(paper408, [...qs408(), { n: 48, type: 'comp', points: 0 }]).problems.join(), /多了第 48 题/);
 });
 
-test('结构表还没照真卷核过：提醒一句，不算问题', () => {
+test('408 照十八年真卷核过了：不再提醒；别的科目还是草稿', async () => {
   const r = checkPaper(paper408, qs408());
-  assert.ok(r.notes.some((x) => /还没照真卷核过/.test(x)));
+  assert.ok(!r.notes.some((x) => /还没照真卷核过/.test(x)));
+  const { STRUCTURE } = await import('../kit/src/exam/structure.js');
+  assert.ok(STRUCTURE['408'].every((s) => s.checked === true));
+  for (const k of ['301', '201', '101']) assert.ok(STRUCTURE[k].every((s) => s.checked === false), k);
 });
 
 test('数学一 2021 前后结构不一样；英语一完形每题半分', () => {
