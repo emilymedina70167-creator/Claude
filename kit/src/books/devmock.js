@@ -75,6 +75,11 @@ export function createDevAI() {
   }
   const card = () => '概括｜模拟的学生卡\n先测｜模拟：换一组数再测一次';
   const brief = () => '要点｜模拟：这节课开头先测上一节没过的那一步';
+  // 话的账（memory/said.js，第十一轮）：带「测试:要求」的那句记成一条要求，别的都不用记
+  function said(prompt) {
+    const items = [...prompt.matchAll(/^### (ev-[^\s（]+)（[^）]*）\n学生打的：(.*)$/gm)];
+    return items.map(([, id, text]) => (text.includes('测试:要求') ? `${id}｜新要求｜text=测试要求：页面在课上记下的一条｜scope=all` : `${id}｜不用记｜why=模拟`)).join('\n');
+  }
   // 旁听（aide/watch.js，第 2 批）
   const watch = () => '以前｜模拟：这一步以前也停过很久';
   return {
@@ -83,7 +88,7 @@ export function createDevAI() {
     async call(prompt, opts = {}) {
       await new Promise((r) => setTimeout(r, 300));
       const p = String(prompt);
-      const text = p.startsWith('你在把一本教材的扫描页') ? transcribe(p) : p.startsWith('你在帮学生整理学习台的课程地图') ? map(p) : p.startsWith('你是这个学生的老师，现在给下一节课备课') ? prep(p) : p.startsWith('你在给学生的一节课的题归类') ? skills(p) : p.startsWith('你在给一节刚上完的课做复盘') ? debrief(p) : p.startsWith('你在课前预演一份教案') ? rehearse(p) : p.startsWith('你在给一节刚上完的舞台课做课后整理') ? after(p) : p.startsWith('你在给学生的学习台写一张学生卡') ? card(p) : p.startsWith('你在给下一节课的老师准备这节课要知道的事') ? brief(p) : p.startsWith('你在旁听一节舞台课') ? watch(p) : '{}';
+      const text = p.startsWith('你在把一本教材的扫描页') ? transcribe(p) : p.startsWith('你在帮学生整理学习台的课程地图') ? map(p) : p.startsWith('你是这个学生的老师，现在给下一节课备课') ? prep(p) : p.startsWith('你在给学生的一节课的题归类') ? skills(p) : p.startsWith('你在给一节刚上完的课做复盘') ? debrief(p) : p.startsWith('你在课前预演一份教案') ? rehearse(p) : p.startsWith('你在给一节刚上完的舞台课做课后整理') ? after(p) : p.startsWith('你在给学生的学习台写一张学生卡') ? card(p) : p.startsWith('你在给下一节课的老师准备这节课要知道的事') ? brief(p) : p.startsWith('你在旁听一节舞台课') ? watch(p) : p.startsWith('你在给一位考研学生的学习台记账') ? said(p) : '{}';
       opts.onText?.({ text, delta: text });
       return { text, truncated: false, modelApplied: opts.model || 'claude-opus-5-5', modelTierApplied: opts.modelTier || 'complex' };
     },
