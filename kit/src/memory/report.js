@@ -86,6 +86,9 @@ function itemOf(key, list, segs) {
   return {
     key,
     comp: head?.comp ?? null,
+    // 真题级的题（考情第五节；第十轮的测量按它分真题难度和课堂题）
+    exam: recs.find((r) => r.exam)?.exam ?? null,
+    like: recs.find((r) => r.like)?.like ?? null,
     kind: String(recs[0]?.kind || head?.kind || ''),
     q: cut(recs.find((r) => r.q)?.q || recs[0]?.title || '', 120),
     seg: step,
