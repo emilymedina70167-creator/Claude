@@ -6,7 +6,7 @@ import { SUBJECTS } from '../memory/score.js';
 import { addDays, toDate } from '../memory/schema.js';
 import { targetOf, goalOf, examDateOf } from '../exam/target.js';
 import { structureOf } from '../exam/structure.js';
-import { PART_PRIORS, TAUGHT_MIN, GUESS, PARTIAL, TAU, DRAWS, MEASURED_N } from './priors.js';
+import { PART_PRIORS, TAUGHT_MIN, GUESS, PARTIAL, TAU, DRAWS, MEASURED_N, PART_SPREAD, PERSON_SHARE } from './priors.js';
 import { rng, seedOf } from './rng.js';
 import { memoryOf, rOn, step } from './fsrs.js';
 import { priorGrid, posterior, meanOf, GRID } from './knowledge.js';
@@ -36,14 +36,15 @@ function unitState(u, ev, day, tau) {
   for (let i = 0; i < post.length; i++) { c += post[i]; cdf[i] = c; }
   const r = rOn(memoryOf(reviews), day);
   const k = meanOf(post);
-  return { cdf, r, k, n: obs.length, measured: obs.length >= MEASURED_N, p: GUESS.single + (1 - GUESS.single) * k * r * tau };
+  // w：这一块还有几成靠先验（部分的共同因子按它推这一块）
+  return { cdf, r, k, n: obs.length, w: pr.n / (pr.n + obs.length), measured: obs.length >= MEASURED_N, p: GUESS.single + (1 - GUESS.single) * k * r * tau };
 }
 
 // 按步给分：m 个半分里拿到几个（二项分布）。m 大时用正态近似（一题 20 个半分逐个抽太慢），夹在 0..m
+const gauss = (rand) => Math.sqrt(-2 * Math.log(Math.max(1e-12, rand()))) * Math.cos(2 * Math.PI * rand());
 function steps(m, p, rand) {
   if (m < 8) { let got = 0; for (let j = 0; j < m; j++) if (rand() < p) got++; return got; }
-  const u1 = Math.max(1e-12, rand()), u2 = rand();
-  const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  const z = gauss(rand);
   return Math.min(m, Math.max(0, Math.round(m * p + z * Math.sqrt(m * p * (1 - p)))));
 }
 
@@ -79,6 +80,8 @@ export function forecast(mem = {}, { day = toDate(Date.now()), exam = null, asOf
   const unitsOut = {};
   const perSubject = [];
   let measuredPts = 0, allPts = 0;
+  // 整个人的那一份共同因子：每一遍抽卷一个，四科共用（各科一起高一起低）
+  const person = Float64Array.from({ length: draws }, () => gauss(rand));
   for (const s of SUBJECTS) {
     const tau = TAU[s.key] ?? 0.9;
     const us = unitsOf(mem.curriculum, s.key);
@@ -95,16 +98,23 @@ export function forecast(mem = {}, { day = toDate(Date.now()), exam = null, asOf
     const index = new Map(us.map((u, i) => [u.id, i]));
     const states = us.map((u) => st.get(u.id));
     const ks = new Float64Array(us.length);
+    const parts = [...new Set(us.map((u) => u.part))];
+    const partOf = us.map((u) => parts.indexOf(u.part));
+    const shift = new Float64Array(parts.length);
     const scores = new Float64Array(draws);
     for (let d = 0; d < draws; d++) {
       const items = pickPaper(rand, real) || synth;
       ks.fill(-1); // 同一次抽里同一单位共用一个 K（会就一起会）
+      for (let j = 0; j < parts.length; j++) shift[j] = PART_SPREAD * (Math.sqrt(PERSON_SHARE) * person[d] + Math.sqrt(1 - PERSON_SHARE) * gauss(rand)); // 同一部分一起高一起低
       let sum = 0;
       for (const it of items) {
         const i = index.get(it.unit ?? pickUnit(it.pool, rand()));
         if (i === undefined) continue;
         const x = states[i];
-        if (ks[i] < 0) ks[i] = drawK(x.cdf, rand());
+        if (ks[i] < 0) {
+          const k0 = drawK(x.cdf, rand());
+          ks[i] = x.w > 0 ? 1 / (1 + Math.exp(-(Math.log(k0 / (1 - k0)) + x.w * shift[partOf[i]]))) : k0;
+        }
         const know = ks[i] * x.r * tau;
         if (PARTIAL.has(it.type)) sum += (it.points * steps(Math.max(1, Math.round(2 * it.points)), know, rand)) / Math.max(1, Math.round(2 * it.points));
         else {
