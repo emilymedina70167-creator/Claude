@@ -3,11 +3,16 @@
 // 老师的输出用真的 protocol.js 读、按真的规矩上黑板；学生看到的是去掉答案的板面；学生的作答由这里判分，
 // 用真的 actionText 写成课堂里同样的 [作答] / [动作] 行，连同真的「黑板现状」（和教学计划）发回给老师。
 //
-//   node tools/teach-sim.mjs init  <目录> <场景.json> [--no-plan]   开课：写 system.md（老师读一次）、state.json
+//   node tools/teach-sim.mjs init  <目录> <场景.json> [--system 文件] [--memory 文件] [--no-plan]   开课：写 system.md（老师读一次）、state.json
+//                                                                  （--system 原样抄成 system.md，基线那一版用；--memory 是记忆样例 JSON，照课堂的写法带进说明）
 //   node tools/teach-sim.mjs teacher <目录> <老师这一轮的输出文件>    上黑板；写 view.md（学生看的）
 //   node tools/teach-sim.mjs student <目录> <学生这一轮的 JSON 文件>  判分；写 to-teacher.md（下一轮发给老师的）
 //   node tools/teach-sim.mjs transcript <目录>                         整节课的记录 transcript.md（评卷人看）
-//   node tools/teach-sim.mjs score <目录…>                             页面能算的指标（score.json）
+//   node tools/teach-sim.mjs posttest <目录>                           写 posttest.md（只有题面）和 posttest-key.md（答案，只给评卷人）
+//   node tools/teach-sim.mjs score <目录…>                             页面能算的指标（含按学生用时算的钟）
+//
+// 钟（tools/teach-sim-lib.mjs）：一节课多长按学生用掉的时间算——读、等老师、点、写、说；到时间或老师写满 40 轮就 over，再让学生答会报错。
+// 学生的 JSON 可带 "note"：这一轮记在笔记本 notebook.md 里的话，课后测验时学生只能看这个。
 //
 // 预案（board react，docs/board-plan.md）：学生作答落在老师预写的情况里时，页面自己接、不调用老师——
 // student 命令打印「页面按预案接了」，这时**不跑老师**，学生接着看 view.md 再答一轮；接过的几轮跟着下一次发给老师。
@@ -28,6 +33,7 @@ import { calcFields, commonSpec, resolveAsks, parseAskField, checkAsk, askAnswer
 import { textAnswerSpec } from '../kit/src/textspec.js';
 import { toExact } from '../kit/src/exact.js';
 import { planLocal, markFired, reactNote, dropForSeg, armedText } from '../kit/src/class/react.js';
+import { checkScenario, newClock, tick, shownChars, lessonMetrics } from './teach-sim-lib.mjs';
 
 const [cmd, dir, arg, ...rest] = process.argv.slice(2);
 const read = (f) => fs.readFileSync(f, 'utf8');
@@ -171,7 +177,7 @@ function judgeDemo(st, act, base, attempts) {
   const { f } = st.compAt[act.comp];
   const d = demoOf(f, st);
   const title = d.fields.title || d.e.title;
-  const rec = { ...base, type: 'stepper', engine: f.lang, title };
+  const rec = { ...base, type: 'stepper', engine: f.lang, title, closed: !d.quiz && !act.giveup };
   if (d.quiz) {
     const spec = textAnswerSpec(d.quiz.type || 'seq', d.quiz.answer, { width: d.quiz.width });
     if (act.giveup) return { ...rec, q: d.quiz.q, ok: false, attempts, revealed: true, expected: spec.display, detail: '写出结果', final: true };
@@ -269,13 +275,13 @@ function judge(st, act) {
     const s = steps[k];
     if (!s) return { source: 'page', text: `[系统] ${f.id} 的步骤都揭开了` };
     const detail = `第 ${k + 1} 步`;
-    if (act.giveup) { st.progress[f.id] = k + 1; st.tries[f.id] = 0; return { source: 'event', type: 'giveup', block: f.id, step: seg.id, detail: { step: k + 1, title: s.title } }; }
+    if (act.giveup) { st.progress[f.id] = k + 1; st.tries[f.id] = 0; return { source: 'event', type: 'giveup', block: f.id, step: seg.id, detail: { step: k + 1, title: s.title }, closed: false }; }
     let ok = null;
     if (s.choices) ok = pickOption(s.choices, act.value) === s.choices.indexOf(s.answer);
     else if (s.do && s.answer) { const v = boardVars(st); ok = sameVal(evalExpr(act.value, v), evalExpr(s.answer, v)); }
     // 选择一次定（和真的 steps 一样：选错就揭开）；写的错了可以再试
     if (s.choices || ok !== false) { st.progress[f.id] = k + 1; st.tries[f.id] = 0; }
-    return { ...base, type: 'steps', title: fields.title || '', q: `${s.title}｜${s.ask || ''}`, detail, value: s.choices ? act.value : undefined, text: s.choices ? undefined : act.value, ok, attempts };
+    return { ...base, type: 'steps', title: fields.title || '', q: `${s.title}｜${s.ask || ''}`, detail, value: s.choices ? act.value : undefined, text: s.choices ? undefined : act.value, ok, attempts, closed: !!s.choices };
   }
   if (f.lang === 'quiz') {
     const { fields, options } = parseQuiz(f.body);
@@ -283,11 +289,11 @@ function judge(st, act) {
     if (!options.length && fields.answer) {
       const v = boardVars(st);
       const ok = fields.answer.split('|').map((x) => x.trim()).some((a) => { const x = sameVal(evalExpr(act.value, v), evalExpr(a, v)); return x === null ? norm(a) === norm(act.value) : x; });
-      return { ...base, type: 'quiz', q: fields.q || '', value: act.value, ok, attempts, ...(ok ? {} : { wrong: [act.value] }), final: ok };
+      return { ...base, type: 'quiz', q: fields.q || '', value: act.value, ok, attempts, ...(ok ? {} : { wrong: [act.value] }), final: ok, closed: false };
     }
     const pick = pickOption(options.map((o) => o.text), act.value);
     const ok = pick >= 0 ? options[pick].correct : false;
-    return { ...base, type: 'quiz', q: fields.q || '', ok, attempts, ...(ok ? {} : { wrong: [act.value] }), final: ok };
+    return { ...base, type: 'quiz', q: fields.q || '', ok, attempts, ...(ok ? {} : { wrong: [act.value] }), final: ok, closed: true };
   }
   if (f.lang === 'cloze') {
     const { specs } = parseCloze(field(f.body, 'text').replace(/\n\s+/g, ' '));
@@ -295,7 +301,7 @@ function judge(st, act) {
     const res = specs.map((sp, i) => matchText(vals[i] || '', sp.alts));
     const diags = specs.map((sp, i) => (res[i].ok ? null : diagnose(vals[i] || '', sp.wrongs)));
     const ok = res.every((r) => r.ok);
-    return { ...base, type: 'cloze', title: field(f.body, 'title'), q: field(f.body, 'q'), value: vals.join(' | '), ok, attempts, detail: ok ? '' : res.map((r, i) => (r.ok ? '' : `第 ${i + 1} 空${diags[i]?.why ? `：${diags[i].why}` : textHint(r, { what: '' })}`)).filter(Boolean).join('；'), misread: diags.map((d, i) => (d ? `第 ${i + 1} 空写成「${d.text}」${d.why ? `：${d.why}` : ''}` : '')).filter(Boolean).join('；') || undefined, final: ok || undefined };
+    return { ...base, type: 'cloze', title: field(f.body, 'title'), q: field(f.body, 'q'), value: vals.join(' | '), ok, attempts, detail: ok ? '' : res.map((r, i) => (r.ok ? '' : `第 ${i + 1} 空${diags[i]?.why ? `：${diags[i].why}` : textHint(r, { what: '' })}`)).filter(Boolean).join('；'), misread: diags.map((d, i) => (d ? `第 ${i + 1} 空写成「${d.text}」${d.why ? `：${d.why}` : ''}` : '')).filter(Boolean).join('；') || undefined, final: ok || undefined, closed: false };
   }
   if (f.lang === 'errfind') {
     const text = field(f.body, 'text');
@@ -309,7 +315,7 @@ function judge(st, act) {
     const fixOk = !alts.length || matchText(fix, alts).ok;
     const decoy = decoys.find((d) => d.i === pick);
     const bad = spot && !fixOk ? diagnose(fix, wrongs) : null;
-    return { ...base, type: 'errfind', q: text, value: `点了「${w}」，改成「${fix}」`, ok: spot && fixOk, attempts, detail: spot ? (fixOk ? '' : '找对了，改得不对') : '这个词没错', misread: decoy ? `点了常见的错处「${decoy.w}」：${decoy.why}` : bad ? `改成了常见的错法「${bad.text}」${bad.why ? `：${bad.why}` : ''}` : undefined, final: (spot && fixOk) || undefined };
+    return { ...base, type: 'errfind', q: text, value: `点了「${w}」，改成「${fix}」`, ok: spot && fixOk, attempts, detail: spot ? (fixOk ? '' : '找对了，改得不对') : '这个词没错', misread: decoy ? `点了常见的错处「${decoy.w}」：${decoy.why}` : bad ? `改成了常见的错法「${bad.text}」${bad.why ? `：${bad.why}` : ''}` : undefined, final: (spot && fixOk) || undefined, closed: false };
   }
   if (f.lang === 'parse') {
     const ans = parseBrackets(field(f.body, 'answer'));
@@ -332,7 +338,7 @@ function judge(st, act) {
     const target = groups ? ans.spans.filter((x) => groups[k]?.includes(x.role)) : ans.spans;
     const r = judgeSpans(groups ? mine.filter((x) => groups[k]?.includes(x.role)) : mine, target);
     if (r.ok && groups) { st.progress[f.id] = k + 1; st.tries[f.id] = 0; }
-    return { ...base, type: 'parse', q: ans.text, value: act.value, ok: r.ok, attempts, detail: groups ? `第 ${k + 1} 步（${groups[k].join('、')}）` : r.ok ? '' : spansHint(r, roles), check: groups && !r.ok ? spansHint(r, roles) : undefined };
+    return { ...base, type: 'parse', q: ans.text, value: act.value, ok: r.ok, attempts, detail: groups ? `第 ${k + 1} 步（${groups[k].join('、')}）` : r.ok ? '' : spansHint(r, roles), check: groups && !r.ok ? spansHint(r, roles) : undefined, closed: false };
   }
   if (f.lang === 'chunk') {
     const c = parseChunk(field(f.body, 'text'));
@@ -342,7 +348,7 @@ function judge(st, act) {
     let n = 0;
     for (const t of toks) { if (t.w === '/') { cuts.push(n); continue; } n++; }
     const r = judgeChunks(cuts.filter((g) => c.gaps.includes(g)), c);
-    return { ...base, type: 'chunk', q: c.text, value: chunksOf(c.tokens, cuts).join(' / '), ok: r.ok, attempts, detail: r.ok ? '' : chunkHint(r, c.tokens), final: r.ok || undefined };
+    return { ...base, type: 'chunk', q: c.text, value: chunksOf(c.tokens, cuts).join(' / '), ok: r.ok, attempts, detail: r.ok ? '' : chunkHint(r, c.tokens), final: r.ok || undefined, closed: false };
   }
   if (f.lang === 'drill') {
     const items = parseDrill(f.body.split('\n'));
@@ -351,7 +357,7 @@ function judge(st, act) {
     const r = matchText(act.value, it.alts, { sentence: true });
     const d = r.ok ? null : diagnose(act.value, it.wrongs, { sentence: true });
     if (r.ok || attempts >= 2) { st.progress[f.id] = k + 1; st.tries[f.id] = 0; }
-    return { ...base, type: 'drill', q: it.q, value: act.value, ok: r.ok, attempts, detail: r.ok ? '' : d?.why || textHint(r), misread: d ? `写成了常见的错法${d.why ? `：${d.why}` : ''}` : undefined };
+    return { ...base, type: 'drill', q: it.q, value: act.value, ok: r.ok, attempts, detail: r.ok ? '' : d?.why || textHint(r), misread: d ? `写成了常见的错法${d.why ? `：${d.why}` : ''}` : undefined, closed: false };
   }
   if (ENGINES[f.lang] && f.lang !== 'frames') {
     try { return judgeDemo(st, act, base, attempts); } catch (e) { return { source: 'page', text: `[系统] ${f.id} 判不了：${e.message}` }; }
@@ -360,9 +366,9 @@ function judge(st, act) {
     const exp = field(f.body, 'answer');
     const vars = answerVars(f.body, boardVars(st));
     const ok = exp ? sameVal(evalExpr(act.value, vars), evalExpr(exp, vars)) : null;
-    return { ...base, type: 'answer', title: field(f.body, 'title'), q: field(f.body, 'q'), value: act.value, ok: ok === null ? null : ok, attempts };
+    return { ...base, type: 'answer', title: field(f.body, 'title'), q: field(f.body, 'q'), value: act.value, ok: ok === null ? null : ok, attempts, closed: false };
   }
-  return { ...base, type: f.lang, title: field(f.body, 'title'), q: field(f.body, 'q'), value: act.value, ok: null, attempts };
+  return { ...base, type: f.lang, title: field(f.body, 'title'), q: field(f.body, 'q'), value: act.value, ok: null, attempts, closed: false };
 }
 
 /* ---------------- 黑板 ---------------- */
@@ -379,6 +385,7 @@ function apply(st, text) {
   const notes = rejected.map((r) => `[系统] 有一个 board 块看不懂：${r.error || r.header || ''}`);
   const talk = segments.filter((s) => s.type === 'speech').map((s) => s.text).join('\n\n').trim();
   let newPage = false;
+  const touched = []; // 这一轮新给学生看的段（读的钟用）
   for (const sg of segments.filter((s) => s.type === 'board')) {
     const op = sg.op || {};
     const seg = (id) => st.segs.find((s) => s.id === id);
@@ -387,11 +394,11 @@ function apply(st, text) {
         try { if (f.lang === 'steps') parseSteps(f.body); } catch (e) { notes.push(`[系统] 段 ${id} 里的 steps ${f.id} 写错了：${e.message}`); }
       }
     };
-    if (op.op === 'new') { st.cur = st.pages.length + 1; st.pages.push({ n: st.cur, title: op.title || '', talk: '' }); st.segs.push({ id: op.id, page: st.cur, title: op.title || '', md: sg.body }); newPage = true; check(sg.body, op.id); }
-    else if (op.op === 'add') { if (!st.pages.length) { st.cur = 1; st.pages.push({ n: 1, title: op.title || '', talk: '' }); } st.segs.push({ id: op.id, page: st.cur, title: op.title || '', md: sg.body, ...(op.hold ? { held: true } : {}) }); check(sg.body, op.id); }
-    else if (op.op === 'replace') { const s = seg(op.id); if (s) { s.md = sg.body; if (op.title) s.title = op.title; for (const f of fencesOf(sg.body)) { delete st.progress[f.id]; delete st.results[f.id]; } dropRules(st, op.id); check(sg.body, op.id); } else notes.push(`[系统] replace 的 ${op.id} 不在黑板上`); }
+    if (op.op === 'new') { st.cur = st.pages.length + 1; st.pages.push({ n: st.cur, title: op.title || '', talk: '' }); st.segs.push({ id: op.id, page: st.cur, title: op.title || '', md: sg.body }); newPage = true; touched.push(op.id); check(sg.body, op.id); }
+    else if (op.op === 'add') { if (!st.pages.length) { st.cur = 1; st.pages.push({ n: 1, title: op.title || '', talk: '' }); } st.segs.push({ id: op.id, page: st.cur, title: op.title || '', md: sg.body, ...(op.hold ? { held: true } : {}) }); touched.push(op.id); check(sg.body, op.id); }
+    else if (op.op === 'replace') { const s = seg(op.id); if (s) { s.md = sg.body; if (op.title) s.title = op.title; for (const f of fencesOf(sg.body)) { delete st.progress[f.id]; delete st.results[f.id]; } dropRules(st, op.id); touched.push(op.id); check(sg.body, op.id); } else notes.push(`[系统] replace 的 ${op.id} 不在黑板上`); }
     else if (op.op === 'hide') { const s = seg(op.id); if (s) s.hidden = true; dropRules(st, op.id); }
-    else if (op.op === 'show') { const s = seg(op.id); if (s) { s.held = false; s.hidden = false; } else notes.push(`[系统] show 的 ${op.id} 不在黑板上`); }
+    else if (op.op === 'show') { const s = seg(op.id); if (s) { s.held = false; s.hidden = false; touched.push(op.id); } else notes.push(`[系统] show 的 ${op.id} 不在黑板上`); }
     else if (op.op === 'react') {
       const at = st.segs.find((s) => !s.hidden && fencesOf(s.md).some((f) => f.id === op.target));
       st.reacts ||= {};
@@ -399,7 +406,7 @@ function apply(st, text) {
       else if (!op.cases.length) delete st.reacts[op.target];
       else st.reacts[op.target] = { target: op.target, seq: st.seq, seg: at.id, cases: op.cases.map((c) => ({ ...c, used: false })) };
     }
-    else if (op.op === 'pin') { const s = seg(op.id); if (s) { s.md = sg.body; s.hidden = false; if (op.title) s.title = op.title; } else st.segs.push({ id: op.id, place: 'pin', title: op.title || '', md: sg.body }); }
+    else if (op.op === 'pin') { const s = seg(op.id); if (s) { s.md = sg.body; s.hidden = false; if (op.title) s.title = op.title; } else st.segs.push({ id: op.id, place: 'pin', title: op.title || '', md: sg.body }); touched.push(op.id); }
     else if (op.op === 'unpin') { const s = seg(op.id); if (s) s.hidden = true; }
     st.ops.push(op.op || 'unknown');
   }
@@ -408,7 +415,7 @@ function apply(st, text) {
   // 组件 id → 所在段（学生作答时找）
   st.compAt = {};
   for (const s of st.segs) if (!s.hidden) for (const f of fencesOf(s.md)) if (f.id) st.compAt[f.id] = { seg: { id: s.id }, f };
-  return { talk, notes, newPage };
+  return { talk, notes, newPage, touched };
 }
 
 // 段被改写、撤回：之前几轮挂在它上面的预案作废（和课堂一样）
@@ -438,11 +445,18 @@ const docs = () => componentDocs(read(new URL('../CLAUDE-PROJECT.md', import.met
 
 if (cmd === 'init') {
   const sc = JSON.parse(read(arg));
+  const bad = checkScenario(sc);
+  if (bad.length) { console.error(`场景 ${arg} 不能用：\n${bad.map((b) => `  - ${b}`).join('\n')}`); process.exit(1); }
   const plan = !rest.includes('--no-plan');
+  const optArg = (name) => { const i = rest.indexOf(name); return i >= 0 ? rest[i + 1] : undefined; };
+  const systemFile = optArg('--system'), memoryFile = optArg('--memory');
   fs.mkdirSync(dir, { recursive: true });
-  const system = buildSystem({ componentDocs: docs(), pack: sc.pack, board: { segs: [], pages: [], cur: 0 }, subject: sc.subject, tools: false, planDoc: plan, canvas: true });
+  // 记忆样例：每类是带 id 的数组；块用场景的 block，没有就空（课堂的 memoryArg 是 { mem, block, space, session }）
+  const memory = memoryFile ? { mem: JSON.parse(read(memoryFile)), block: sc.block || '', space: sc.space || '', session: '' } : null;
+  const system = systemFile ? read(systemFile) : buildSystem({ componentDocs: docs(), pack: sc.pack, board: { segs: [], pages: [], cur: 0 }, subject: sc.subject, tools: false, memory, planDoc: plan, canvas: true });
   fs.writeFileSync(P('system.md'), system);
-  save({ scenario: sc.id, subject: sc.subject, plan, pack: sc.pack, segs: [], pages: [], cur: 0, progress: {}, tries: {}, results: {}, compAt: {}, ops: [], history: [], turns: [], seq: 0 });
+  fs.copyFileSync(arg, P('scenario.json')); // posttest 命令靠它出题面和答案
+  save({ scenario: sc.id, subject: sc.subject, plan, pack: sc.pack, segs: [], pages: [], cur: 0, progress: {}, tries: {}, results: {}, compAt: {}, ops: [], history: [], turns: [], seq: 0, clock: newClock(), minutes: sc.minutes || 40, shown: 0, over: false });
   fs.writeFileSync(P('to-teacher.md'), `${sc.opening || '学生打开了课堂：「老师好，开始吧。」'}`);
   console.log(`开课：${sc.id}（${sc.subject}，计划块${plan ? '开' : '关'}），说明 ${(bytes(system) / 1024).toFixed(1)} KiB`);
 } else if (cmd === 'teacher') {
@@ -451,15 +465,23 @@ if (cmd === 'init') {
   st.seq++;
   st.history.push({ role: 'claude', seq: st.seq, text });
   const r = apply(st, text);
+  // 这一轮新给学生看的字（藏着、撤掉的不算）加板顶的话：学生要读完才能往下
+  const seen = [...new Set(r.touched)].map((id) => st.segs.find((s) => s.id === id)).filter((s) => s && !s.hidden && !s.held);
+  const read_ = seen.reduce((a, s) => a + shownChars(studentSeg(s, st)), 0) + shownChars(r.talk);
+  st.clock = tick(st.clock, { read: read_, wait: true });
+  st.shown = (st.shown || 0) + read_;
+  const teacherTurns = st.turns.filter((t) => t.role === 'teacher').length + 1;
+  if (st.clock.s >= st.minutes * 60 || teacherTurns >= 40) st.over = true;
   const view = viewText(st, r.talk);
   fs.writeFileSync(P('view.md'), view);
   st.turns.push({ seq: st.seq, role: 'teacher', bytes: bytes(text), talk: r.talk, ops: st.ops.slice(), notes: r.notes, plan: /board[ \t]+plan/i.test(text), view });
   st.pendingNotes = r.notes;
   st.ops = [];
   save(st);
-  console.log(`第 ${st.seq} 轮老师：${bytes(text)} 字节，话 ${r.talk.length} 字，指令 ${st.turns.at(-1).ops.join(' ') || '无'}${r.notes.length ? `，${r.notes.length} 条提醒` : ''}`);
+  console.log(`第 ${st.seq} 轮老师：${bytes(text)} 字节，话 ${r.talk.length} 字，指令 ${st.turns.at(-1).ops.join(' ') || '无'}${r.notes.length ? `，${r.notes.length} 条提醒` : ''}，课上过了 ${(st.clock.s / 60).toFixed(1)} / ${st.minutes} 分钟${st.over ? '\n到时间了' : ''}`);
 } else if (cmd === 'student') {
   const st = load();
+  if (st.over) { console.error('到时间了，这节课已经结束，学生不能再答'); process.exit(1); }
   let s;
   try { s = JSON.parse(read(arg).replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch (e) { console.error('学生的回复不是 JSON：', e.message); process.exit(1); }
   st.seq++;
@@ -475,6 +497,9 @@ if (cmd === 'init') {
     acts.push(ev);
   }
   const say = String(s.say || '').trim();
+  // 钟：作答（点选 10 秒、写的按行）和说话；没有 block 的（sure、页面的系统行）不占时间
+  st.clock = tick(st.clock, { acts: acts.filter((a) => a.block && a.type !== 'sure'), say });
+  if (s.note) fs.appendFileSync(P('notebook.md'), `## 第 ${st.seq} 轮\n${String(s.note).trim()}\n\n`);
   // 预案：页面能自己接就不调用老师（trig 和课堂一样：有把握的标记跟着下一条走；答对了却没把握要叫老师）
   const items = acts.map((a) => ({ a, trig: a.type === 'sure' ? (a.sure === false && a.ok === true ? 'soon' : 'later') : 'soon' }));
   const rules = new Map(Object.entries(st.reacts || {}));
@@ -491,6 +516,10 @@ if (cmd === 'init') {
     st.history.push({ role: 'student', seq: st.seq, text: am }, { role: 'system', seq: st.seq, text: note });
     (st.localMsgs ||= []).push(am, note);
     const view = viewText(st, local.talk);
+    // 页面接的这一手揭开的段、写在板顶的话，学生也要读
+    const read_ = shownChars(local.talk) + local.show.reduce((a, id) => { const x = st.segs.find((g) => g.id === id); return a + (x ? shownChars(studentSeg(x, st)) : 0); }, 0);
+    st.clock = tick(st.clock, { read: read_ });
+    st.shown = (st.shown || 0) + read_;
     fs.writeFileSync(P('view.md'), view);
     st.turns.push({ seq: st.seq, role: 'student', say, acts: acts.map((a) => ({ comp: a.block, ok: a.ok, type: a.type })), msg: am, local: true }, { seq: st.seq, role: 'page', talk: local.talk, note, view });
     save(st);
@@ -517,6 +546,13 @@ if (cmd === 'init') {
   }
   fs.writeFileSync(P('transcript.md'), out.join('\n\n'));
   console.log(`写了 ${P('transcript.md')}`);
+} else if (cmd === 'posttest') {
+  const sc = JSON.parse(read(path.join(dir, 'scenario.json')));
+  const tests = sc.posttest;
+  const aimOf = (id) => sc.aims.find((a) => a.id === id);
+  fs.writeFileSync(P('posttest.md'), `# 课后测验\n\n${tests.map((p) => `## ${p.id}\n${p.q}`).join('\n\n')}\n`);
+  fs.writeFileSync(P('posttest-key.md'), `# 课后测验标准答案（只给评卷人）\n\n${tests.map((p) => `## ${p.id}（${p.kind}）\n题面：${p.q}\n答案：${p.answer}\n考的是：${aimOf(p.aim)?.can || p.aim}（怎样算会：${aimOf(p.aim)?.proof || ''}）`).join('\n\n')}\n`);
+  console.log(`写了 ${P('posttest.md')} 和 ${P('posttest-key.md')}（${tests.length} 道）`);
 } else if (cmd === 'score') {
   const rows = [];
   for (const d of [dir, arg, ...rest].filter(Boolean)) {
@@ -534,6 +570,7 @@ if (cmd === 'init') {
       notes: T.reduce((a, t) => a + t.notes.length, 0),
       // 页面按预案接了几轮（每一轮本来都是一次调用）
       localTurns: st.turns.filter((t) => t.role === 'page').length,
+      ...(st.clock ? lessonMetrics(st) : {}),
     });
   }
   console.log(JSON.stringify(rows, null, 1));
