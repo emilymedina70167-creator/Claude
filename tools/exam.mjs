@@ -335,7 +335,7 @@ function profprep() {
     fs.writeFileSync(path.join(out, `${id}.prompt.txt`), [PROF_HEAD, `下面有 ${b.length} 个考点，一个一个写。每个考点的回答前面单独一行写「## 考点编号」（例如 ## ${b[0].n.id}），再照那个考点的格式写。`, ...parts].join('\n\n---\n\n'));
     fs.writeFileSync(path.join(out, `${id}.json`), JSON.stringify(b.map(({ n }) => n.id)));
   });
-  fs.writeFileSync(path.join(out, 'meta.json'), JSON.stringify({ dir, syllabus: opt.syllabus, years }));
+  fs.writeFileSync(path.join(out, 'meta.json'), JSON.stringify({ dir: path.resolve(dir), syllabus: path.resolve(opt.syllabus), years }));
   console.log(`${todo.length} 个考点有能用的题（一共 ${nodes.length} 个），分 ${batches.length} 批 → ${out}`);
 }
 function profapply() {
