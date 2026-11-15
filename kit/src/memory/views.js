@@ -326,7 +326,8 @@ export function reviewPack(mem = {}, rids, { packs = [], sheets = [], today = to
  * 贴进任何一个对话就能接手：说明书在哪、学习台在哪、现在学到哪、上节课怎么样、有什么等着外部做。
  * kitUrl：组件库地址；deskUrl：学习台地址（页面不一定知道，没有就让外部问我）
  */
-export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDate(Date.now()), pack = null, space = 'math' } = {}) {
+// head：给学习台里的班主任（第十一轮 B1）——不写给外部开发的那几行（地址、怎么用 ArtifactData、「你只做开发」）
+export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDate(Date.now()), pack = null, space = 'math', head = false } = {}) {
   const pos = (mem.position || []).find((p) => p.id === positionId(space));
   const rows = classRows(mem);
   const last = rows.find((r) => r.status === 'closed' && !r.drill);
@@ -342,8 +343,8 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
   if (proposals.length) todo.push(`上一节课堂里的 Claude 留了 ${proposals.length} 条提议（observations 里 kind: proposal）：开发时参考，不用你代写记忆。`);
   if (open.length) todo.push(`还有 ${open.length} 张改动单没写进去（pending，status: open）：学习台首页打开时会自己写，不用你代写。`);
   return [
-    `【学习台 · 接手 · ${SPACES[space]?.label || ''}】`,
-    `- 学习台：${deskUrl || kitUrl || '（地址问我要：在 claude.ai 打开学习台时地址栏里的那个）'}。说明书、组件写法、记忆、每节课都在它里面：先用 Artifact 工具 action: "read"、path: "CLAUDE-PROJECT.md" 读说明书，记忆用 ArtifactData 读。`,
+    head ? `【${SPACES[space]?.label || ''}】` : `【学习台 · 接手 · ${SPACES[space]?.label || ''}】`,
+    head ? '' : `- 学习台：${deskUrl || kitUrl || '（地址问我要：在 claude.ai 打开学习台时地址栏里的那个）'}。说明书、组件写法、记忆、每节课都在它里面：先用 Artifact 工具 action: "read"、path: "CLAUDE-PROJECT.md" 读说明书，记忆用 ArtifactData 读。`,
     `- 这一科：${SPACES[space]?.label || space}（只列这一科的；学习台还有${Object.keys(SPACES).filter((k) => k !== space).map((k) => SPACES[k].label).join('、')}）。`,
     `- 今天 ${today}。${pos ? `学到 ${pos.block || '？'}；下一节：${cut(pos.next, 120)}${list(pos.debts).length ? `；欠账：${list(pos.debts).map((x) => cut(x, 60)).join('；')}` : ''}。` : '还没有 position。'}`,
     last ? `- 上一节：${last.kind === 'class' ? '' : `${{ talk: '一问一答', live: '实时黑板' }[last.kind] || '自学单元'} `}${last.id}（${last.block || '没写块'}）${last.line ? `，${last.line}` : ''}${last.summary ? `；小结开头：${last.summary}` : ''}。课后报告在 sessions/${last.id}/report/main。` : '- 还没有下过课。',
@@ -352,7 +353,7 @@ export function handoffText(mem = {}, { kitUrl = '', deskUrl = '', today = toDat
       : r.kind === 'unit' ? `- 自学单元 ${r.id}「${cut(r.title, 40)}」我还没学完。` : `- 有一节${r.kind === 'talk' ? '一问一答的课' : r.kind === 'stage' ? '舞台课' : '课堂'}还没下课：${r.id}。`)),
     due.length ? `- 到期的复现组：${due.map((d) => `${d.id}${d.days < 0 ? `（过期 ${-d.days} 天）` : ''}`).join('、')}（学习台首页能直接开复现课）。` : '',
     pack ? `- 已经备好的下一节：${cut(pack.unit || '', 60)}${pack.block ? `（${pack.block}）` : ''}。` : '',
-    todo.length ? `- 现状（学习台自己处理，你只做开发）：\n${todo.map((t) => `  - ${t}`).join('\n')}` : '',
+    todo.length && !head ? `- 现状（学习台自己处理，你只做开发）：\n${todo.map((t) => `  - ${t}`).join('\n')}` : '',
     open.length ? `- 还没写进去的改动：${open.slice(0, 6).map((p) => cut(pendingTitle(p), 50)).join('；')}${open.length > 6 ? '……' : ''}` : '',
   ].filter(Boolean).join('\n');
 }
@@ -366,13 +367,13 @@ export { OUTCOME_TEXT, daysBetween };
 // 有什么等它做，和这一科记忆库里每一样东西的编号（一条一行，要全文再按编号读），不用一类一类 list 十几次
 export const BRIEF_MAX = 24 * 1024;
 export const briefId = (space) => (space === 'math' ? 'brief' : `brief-${space}`);
-export function deskBrief(mem = {}, { space = 'math', today = toDate(Date.now()), kitUrl = '', deskUrl = '', pack = null, books = [] } = {}) {
+export function deskBrief(mem = {}, { space = 'math', today = toDate(Date.now()), kitUrl = '', deskUrl = '', pack = null, books = [], forHead = false } = {}) {
   const mine = books.filter((b) => !b.space || b.space === space);
-  const head = handoffText(filterSpace(mem, space), { kitUrl, deskUrl, today, pack, space })
+  const head = handoffText(filterSpace(mem, space), { kitUrl, deskUrl, today, pack, space, head: forHead })
     + (mine.length ? `\n- 学习台里的资料（books，条目在 books/{编号}/chunks）：${mine.map((b) => `${b.id}《${cut(b.title, 30)}》${b.chunks ? ` ${b.chunks} 条` : ''}${b.status === 'partial' ? '（没转完）' : ''}`).join('；')}。` : '');
   const view = classView(mem, { space, forClass: false });
   const cat = memoryCatalog(view, { tools: false, today, max: BRIEF_MAX - utf8(head) - 600 });
-  const how = '要哪一条的全文，用 ArtifactData 按编号读（get；同一类几条用 query 的 where id in […]）。这份是页面在学习台打开时写的（看 at）；隔了很久没打开，或者你刚写过记忆，以数据库为准。';
+  const how = forHead ? '要哪一条的全文，用 memory_read 按编号取（ids 一次取好几条）。' : '要哪一条的全文，用 ArtifactData 按编号读（get；同一类几条用 query 的 where id in […]）。这份是页面在学习台打开时写的（看 at）；隔了很久没打开，或者你刚写过记忆，以数据库为准。';
   const body = cat.text.replace(/（没放全文的）/g, '').replace(/（没放全文的，/g, '（');
   return { space, text: `${head}\n\n${how}\n\n${body.replace(/^## 目录（记忆库里没放全文的，一条一行）\n\n这个查看方式不支持工具，目录里的东西取不了全文。\n\n/, '## 这一科记忆库里有什么（一条一行）\n\n')}`, today };
 }

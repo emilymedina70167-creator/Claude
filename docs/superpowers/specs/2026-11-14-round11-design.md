@@ -251,3 +251,5 @@ C1、C2 和 A 同时做（开发这边的资料活，不碰页面代码）。每
 - **模型**：Opus 5.5 high，前台（我在等它）；回的不是 Opus 5.5 这一轮作废、照实说（和课堂一样，不加退路）。
 - **作者 `head`**：`schema.js` 的 `ROLES`、守卫的 `AUTHORS`（不严：它当场看着我的话写）、`pending.by` 和 `slips.by` 的取值、`memops.js` 那两处记作者的地方都加上。
 - **验**：e2e 新一段 `chat`（`?dev` 的模拟 Claude 认得班主任的提示词：开一段新对话、发一句、看到回答、刷新还在、带「测试:要求」那句过账进了「我的要求」、memo 块写进去的标着 `by: head`）；做完截图给我看样子。
+
+**进度（2026-11-15）**：B1 照上面做完——`kit/src/head/`（context / headdesk / chatview），`saiddesk.js` 的 `runForChat`，`deskBrief({ forHead })`，e2e 的 `chat` 一段，测试 `tests/head-*.test.js`。C1 的 408 考点画像 202 条写进了 `exam_profiles`。下一步 A3（记忆上限改成按剩下的地方给）。

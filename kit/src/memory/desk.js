@@ -48,6 +48,9 @@ import { vocabRecalls } from './vocab.js';
 import { weekLines, progress, warmupDrills, backlogDays, daysLeft, msToNextDay } from './journey.js';
 import { scoreBoard, fmt as fmtScore, signed, SUBJECTS as SCORE_SUBJECTS } from './score.js';
 import { forecastBoard } from '../forecast/forecast.js';
+import { headSystem } from '../head/context.js';
+import { createHead } from '../head/headdesk.js';
+import { createChatPage } from '../head/chatview.js';
 import { PART_PRIORS } from '../forecast/priors.js';
 import { DEFAULT_TARGET, targetOf, examDateOf, goalOf, needsDefault, schoolLine } from '../exam/target.js';
 import { needsSkills, skillsPrompt, parseSkills, skillSummary, pointCatalog, lessonLines, SKILLS_VERSION } from './skills.js';
@@ -111,7 +114,7 @@ const nameIn = (get) => (coll, id) => { const d = (get()?.[coll] || []).find((x)
 const todayLabel = (d = new Date()) => `${d.getMonth() + 1}月${d.getDate()}日 星期${'日一二三四五六'[d.getDay()]}`;
 
 // 首页以外的页面（pages.js），换页不刷新
-const PAGES = { map: '课程地图', books: '教材', exam: '考情', weak: '弱点表', errors: '错题本', classes: '以前的课', stats: '统计' };
+const PAGES = { chat: '班主任', map: '课程地图', books: '教材', exam: '考情', weak: '弱点表', errors: '错题本', classes: '以前的课', stats: '统计' };
 // 进一节课（整页刷新）之前：开着的面板或者主角卡放大铺满，不像突然换了一页（feel.js 的 zoomInto）
 const goto = (hash) => {
   const go = () => { location.hash = hash; location.reload(); };
@@ -153,6 +156,7 @@ export async function renderDesk(root, meta) {
     <div class="dk-pages" hidden></div>
     <div class="dk-bookpage" hidden></div>
     <div class="dk-exampage" hidden></div>
+    <div class="dk-chatpage" hidden></div>
     <div class="dk-home">
     <div class="dk-col">
     <section class="dk-card dk-class" hidden aria-label="上课" data-menu="hero"><div class="dk-body"></div></section>
@@ -397,6 +401,25 @@ export async function renderDesk(root, meta) {
   // 话的账（第十一轮，saiddesk.js）：首页先把每节课我说了、还没过账的话过一遍（下了课的、挂着的、丢下的都算），再做课后的整理
   saidDesk = createSaid({ db, getData: () => data, ops, ai: deskAI });
   lab = createLabDesk({ db, getData: () => data, packs, planner, ops, aide: aideDesk, said: saidDesk, onChange: () => paintWork() });
+  // 班主任（第十一轮 B1，head/）：首页上的总 Claude。每一轮的说明照首页手上的现拼（要求、三科的简报、预测分、下一步、这一周、考试）
+  function headCtx() {
+    const today = toDate(Date.now());
+    let fc = null;
+    let next = {};
+    try {
+      const b = fcBoard(today);
+      fc = { total: b.now.total, pass: b.now.pGoal, measured: b.measured, goal: b.goal, subjects: b.now.subjects };
+      const top = nextPlan(today).top || {};
+      next = Object.fromEntries(Object.entries(top).map(([k, xs]) => [k, (xs || []).map((x) => ({ title: plainTitle(x.title) || x.title, why: x.why }))]));
+    } catch (err) { reportError(err, { what: '班主任的预测分没算出来', soft: true }); }
+    return headSystem({
+      asks: data.asks || [], today, version: VERSION, forecast: fc, next,
+      week: weekLines(data, { today }), target: targetOf(data), examDays: daysLeft(today, examDate()),
+      briefs: SPACE_KEYS.map((k) => ({ space: k, text: deskBrief(data, { space: k, today, pack: packs[k].main?.usedBy ? null : packs[k].main, books: booksView.books(), forHead: true }).text })),
+    });
+  }
+  const head = createHead({ db, getData: () => data, ops, ai: deskAI, said: saidDesk, system: headCtx });
+  const chatPage = createChatPage($('.dk-chatpage'), { head });
   // 后台一件一件做：先过账（一节一节，新的课先），都过完了才轮到课后的助手（aidedesk）。这次打开首页每节只试一次
   const saidTried = new Set();
   let saidBusy = false;
@@ -1653,19 +1676,22 @@ export async function renderDesk(root, meta) {
     const home = !PAGES[page] && !manage;
     const books = page === 'books';
     const exam = page === 'exam';
+    const chat = page === 'chat';
     $('.dk-home').hidden = !home;
     $('.dk-manage').hidden = !manage;
     if (manage) examCard.paint();
-    $('.dk-pages').hidden = home || books || manage || exam;
+    $('.dk-pages').hidden = home || books || manage || exam || chat;
     $('.dk-bookpage').hidden = !books;
     $('.dk-exampage').hidden = !exam;
+    $('.dk-chatpage').hidden = !chat;
     root.querySelectorAll('.dk-nav a').forEach((a) => a.setAttribute('aria-current', String(a.getAttribute('href') === `#${home ? '' : page}`)));
     if (books) booksView.show(h);
     else if (exam) examPage.show();
+    else if (chat) chatPage.show(h);
     else if (!home) pagesView.show(h);
     syncNav();
     const at = Math.max(0, ORDER.indexOf(home ? '' : page));
-    if (lastAt >= 0 && at !== lastAt) pageIn(home ? $('.dk-home') : manage ? $('.dk-manage') : books ? $('.dk-bookpage') : exam ? $('.dk-exampage') : $('.dk-pages'), Math.sign(at - lastAt));
+    if (lastAt >= 0 && at !== lastAt) pageIn(home ? $('.dk-home') : manage ? $('.dk-manage') : books ? $('.dk-bookpage') : exam ? $('.dk-exampage') : chat ? $('.dk-chatpage') : $('.dk-pages'), Math.sign(at - lastAt));
     lastAt = at;
   }
   window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });

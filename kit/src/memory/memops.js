@@ -131,8 +131,9 @@ export function createMemOps({ db, mem, exam = () => null }) {
    * 说第二遍的那几条记一次没做到（checks、broken）；关于我的照 pref 的路写（applyMemo，作者 said）。
    * turns：这节课的 class_turns（守卫核原话）。返回 { written: [编号], rejected: [{ id, error }] }
    */
-  async function applySaid(plan, { session = null, turns = [] } = {}) {
-    const evidence = session ? rows(await db.collection('evidence').where('session', '==', session).get().catch(() => null)) : [];
+  // given：已经查好的证据（班主任的对话：我说的话不在哪节课里，按对话查好了传进来；session 是对话编号）
+  async function applySaid(plan, { session = null, turns = [], evidence: given = null } = {}) {
+    const evidence = given || (session ? rows(await db.collection('evidence').where('session', '==', session).get().catch(() => null)) : []);
     const corpus = buildCorpus({ turns, evidence });
     const local = { ...mem(), evidence: [...(mem().evidence || []), ...evidence] };
     const logs = [];
@@ -161,7 +162,7 @@ export function createMemOps({ db, mem, exam = () => null }) {
     await writeGuard(logs, [], { session, space: 'math' });
     if ((plan.profile || []).length) {
       const entries = plan.profile.map((p) => ({ kind: 'pref', attrs: { topic: p.topic, text: p.text, basis: [p.ev] }, line: `pref topic=${p.topic} text="${p.text}"` }));
-      const r = await applyMemo(entries, { session, turns, author: 'said' });
+      const r = await applyMemo(entries, given ? { turns, author: 'said', evidence: given } : { session, turns, author: 'said' });
       rejected.push(...r.rejected.map((x) => ({ id: 'profile', error: x.error })));
     }
     return { written, rejected };

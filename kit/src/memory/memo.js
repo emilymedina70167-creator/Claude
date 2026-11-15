@@ -657,7 +657,7 @@ export function pendingRecord(change, { session = null, turn = null, by = 'class
   };
 }
 
-const logMeta = (pd, date, note) => ({ date, by: ['me', 'page', 'chat', 'lab', 'aide'].includes(pd.by) ? pd.by : 'class', basis: (pd.basis || []).filter(Boolean), note });
+const logMeta = (pd, date, note) => ({ date, by: ['me', 'page', 'chat', 'lab', 'aide', 'head'].includes(pd.by) ? pd.by : 'class', basis: (pd.basis || []).filter(Boolean), note });
 
 /**
  * 执行一张改动单（直接写的那档马上执行；我确认才写的，我点「确认」时执行）。

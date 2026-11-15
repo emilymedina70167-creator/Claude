@@ -157,3 +157,24 @@ test('终审 4：守卫没收的要求：那几句不算有去处，下次再过
   assert.deepEqual(rec.missing, ['ev-a']);
   assert.equal(rec.lines['ev-a'], undefined);
 });
+
+// —— 第十一轮 B1：班主任的对话也过账 ——
+test('班主任的一段对话过账：要求进「我的要求」、账记在 chats/{编号}', async () => {
+  const t = await setup();
+  const CID = 'h-20261115-1';
+  await t.db.doc(`chats/${CID}`).set({ title: '复习太长了', startedAt: 2000, date: '2026-11-15' });
+  await t.db.doc(`chats/${CID}/turns/000001`).set({ role: 'me', text: '以后开场复习别超过三句', at: 2100 });
+  await t.db.doc(`chats/${CID}/turns/000002`).set({ role: 'head', text: '好，记下了', at: 2200 });
+  await t.db.doc('evidence/ev-h1').set({ src: 'say', kind: 'say', session: null, chat: CID, text: '以后开场复习别超过三句', at: 2100 });
+  t.reply.fn = () => 'ev-h1｜新要求｜text=开场复习最多三句｜scope=all';
+  assert.equal(await t.said.runForChat(CID), 'done');
+  const asks = await rows(t.db, 'asks');
+  assert.equal(asks.length, 1);
+  assert.equal(asks[0].quotes[0].ev, 'ev-h1');
+  assert.ok(t.calls[0].prompt.includes('好，记下了'), '提示词里有班主任前后说的');
+  assert.ok((await t.db.doc(`chats/${CID}/said/main`).get()).exists);
+  assert.equal((await t.db.doc(`chats/${CID}`).get()).data().said.upTo, 2100);
+  assert.equal(await t.said.runForChat(CID), 'none');
+  // 证据本身没被改成有 session
+  assert.equal((await t.db.doc('evidence/ev-h1').get()).data().session, null);
+});
