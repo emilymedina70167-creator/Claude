@@ -21,6 +21,11 @@
 //   d. node tools/exam.mjs drills 目录 [--reserve 2024,2025,2026] → 每卷 drills-X-….json；每道都在两种 iPad 尺寸下画一遍
 //      （tools/check-lesson.mjs，要先 npm run build），有写法错误的不收；apply 时一起写成 kind: drills 的收件箱记录
 //   抽查：node tools/exam.mjs sample 目录 [--n 20] → 随机 n 道，一行「题号｜主考点｜考法｜坑」（给我看，我说不对的改了以后整批同类再查）
+//   考点画像（第十一轮 C1，开发这边一次写完，不等教研室一晚 8 个）：
+//   a. node tools/exam.mjs profprep 目录 --syllabus 考点目录 --out 画像目录 [--per 12] [--reserve 2024,2025,2026]
+//      → 每批 bNNN.prompt.txt（几个考点的画像单子，照教研室同一份 profileBrief 拼，只用能用的题），交一个助手写 bNNN.out.txt
+//   b. node tools/exam.mjs profapply 画像目录 → 每个考点照 parseProfile 核（引的题号要在这个考点下能用的题里），
+//      写 画像目录/batches.json（ArtifactData batch 的 writes，collection exam_profiles）；没收的打印出来
 //   排块、挂考点：node tools/exam.mjs blocks 考点目录 --curriculum 课程地图.json --out 目录 [--course DS,CO] [--chapters 章对照.json] [--manual 手工挂.json] [--add 手工补的.json]
 //      → 课程地图没有块的章照考点树排节和块、已有块的章按标题挂（blockPlan）；目录/curriculum-batches.json（ArtifactData batch 的 writes，一批 ≤ 50 条）、
 //        目录/syllabus-{门课}-{年}.json（考点带上 blocks、mapSig：课程地图写好以后的指纹，照旧写进 exam_inbox）。还挂不上的打印出来
@@ -35,6 +40,8 @@ import { checkTags } from '../kit/src/exam/taxonomy.js';
 import { planInbox, courseOfTags } from '../kit/src/exam/inbox.js';
 import { drillOf } from '../kit/src/exam/drillgen.js';
 import { skeleton as skeletonOf, blockPlan } from '../kit/src/exam/skeleton.js';
+import { profileBrief, parseProfile, profileQuestions } from '../kit/src/exam/lab.js';
+import { profileSrc } from '../kit/src/exam/fresh.js';
 import { mapSig } from '../kit/src/exam/mapping.js';
 import { HOW } from '../kit/src/exam/taxonomy.js';
 import { reserveYears } from '../kit/src/exam/reserve.js';
@@ -310,6 +317,62 @@ function blocks() {
   if (bad) process.exit(1);
 }
 
-const CMDS = { split, syllabus, check, apply, tagprep, tagmerge, tagapply, drills, sample, skeleton, blocks };
+const PROF_HEAD = '你在给学习台的教研室写考点画像。学生在备考 408，学习台会把画像放进学生上这一块的每一节课的说明里给老师看。';
+function profprep() {
+  const dir = opt._[0] || need('dir');
+  const out = need('out');
+  const per = Number(opt.per && opt.per !== true ? opt.per : 12);
+  const years = String(opt.reserve || '2024,2025,2026').split(',').map(Number);
+  const nodes = nodesIn(need('syllabus')).filter((n) => n.status !== 'void');
+  const qs = papersIn(dir).flatMap((x) => x.j.questions);
+  const todo = nodes.map((n) => ({ n, q: profileQuestions(n, qs, years) })).filter((x) => x.q.length);
+  fs.mkdirSync(out, { recursive: true });
+  const batches = [];
+  for (let i = 0; i < todo.length; i += per) batches.push(todo.slice(i, i + per));
+  batches.forEach((b, i) => {
+    const id = `b${String(i).padStart(3, '0')}`;
+    const parts = b.map(({ n, q }) => `# ${n.id}\n\n${profileBrief({ node: n, questions: q })}`);
+    fs.writeFileSync(path.join(out, `${id}.prompt.txt`), [PROF_HEAD, `下面有 ${b.length} 个考点，一个一个写。每个考点的回答前面单独一行写「## 考点编号」（例如 ## ${b[0].n.id}），再照那个考点的格式写。`, ...parts].join('\n\n---\n\n'));
+    fs.writeFileSync(path.join(out, `${id}.json`), JSON.stringify(b.map(({ n }) => n.id)));
+  });
+  fs.writeFileSync(path.join(out, 'meta.json'), JSON.stringify({ dir: path.resolve(dir), syllabus: path.resolve(opt.syllabus), years }));
+  console.log(`${todo.length} 个考点有能用的题（一共 ${nodes.length} 个），分 ${batches.length} 批 → ${out}`);
+}
+function profapply() {
+  const out = opt._[0] || need('dir');
+  const meta = readJson(path.join(out, 'meta.json'));
+  const nodes = new Map(nodesIn(meta.syllabus).map((n) => [n.id, n]));
+  const qs = papersIn(meta.dir).flatMap((x) => x.j.questions);
+  const writes = [];
+  const bad = [];
+  let missing = 0;
+  for (const f of fs.readdirSync(out).filter((x) => /^b\d+\.json$/.test(x))) {
+    const ids = readJson(path.join(out, f));
+    const ans = path.join(out, f.replace('.json', '.out.txt'));
+    if (!fs.existsSync(ans)) { missing += ids.length; console.log(`${f} 还没有回答`); continue; }
+    const secs = new Map();
+    let cur = null;
+    for (const line of fs.readFileSync(ans, 'utf8').split(/\r?\n/)) {
+      const m = line.match(/^##\s*(G-[A-Z]{2}-[\d.]+)\s*$/);
+      if (m) { cur = m[1]; secs.set(cur, []); continue; }
+      if (cur) secs.get(cur).push(line);
+    }
+    for (const id of ids) {
+      const node = nodes.get(id);
+      const q = profileQuestions(node, qs, meta.years);
+      const r = parseProfile((secs.get(id) || []).join('\n'), { node, qids: new Set(q.map((x) => x.id)) });
+      if (!r.how) { bad.push(`${id}：${r.problems.join('；') || '没有回答'}`); continue; }
+      if (r.problems.length) bad.push(`${id}（收了，去掉了）：${r.problems.join('；')}`);
+      writes.push({ op: 'set', collection: 'exam_profiles', doc_id: id, data: { course: node.course, space: node.space || 'cs', how: r.how, traps: r.traps, src: profileSrc(id, qs, meta.years), by: 'chat', at: Date.now() } });
+    }
+  }
+  const batches = [];
+  for (let i = 0; i < writes.length; i += 50) batches.push(writes.slice(i, i + 50));
+  fs.writeFileSync(path.join(out, 'batches.json'), JSON.stringify(batches));
+  console.log(`收了 ${writes.length} 个画像（${batches.length} 批），还没回答的考点 ${missing} 个`);
+  for (const b of bad) console.log(`  ${b}`);
+}
+
+const CMDS = { split, syllabus, check, apply, tagprep, tagmerge, tagapply, drills, sample, skeleton, blocks, profprep, profapply };
 if (!CMDS[cmd]) { console.error('用法：node tools/exam.mjs split | syllabus | check | apply …（见文件开头）'); process.exit(2); }
 CMDS[cmd]();

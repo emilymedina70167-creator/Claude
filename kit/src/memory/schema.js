@@ -11,8 +11,9 @@
 // 两种性质：history（只增不改：写错了追加一条更正）、state（可以改，每次改都在 log 里记一条）；meta 是页面自己的。
 
 // lab：云端教研室事后补写的（docs/lab-plan.md）。它不直接写数据库（回答由页面并进来，用 class 的权限），只出现在 log 的 by、记录的 by 上
-export const ROLES = ['chat', 'class', 'page', 'me', 'lab'];
-export const ROLE_TEXT = { chat: '开发那边（以前的对话里的 Claude）', class: '课堂里的 Claude', page: '页面', me: '我（在页面上点的）', lab: '云端教研室（事后补写的）' };
+// head：班主任（第十一轮 B1，学习台首页上的总 Claude）：看着我的话当场写，和课堂里的 Claude 一样经 memo、过守卫、能撤销
+export const ROLES = ['chat', 'class', 'page', 'me', 'lab', 'head'];
+export const ROLE_TEXT = { chat: '开发那边（以前的对话里的 Claude）', class: '课堂里的 Claude', page: '页面', me: '我（在页面上点的）', lab: '云端教研室（事后补写的）', head: '班主任（学习台首页上的 Claude）' };
 // 写进去以后多久之内还能撤销（docs/desk-plan.md 4.3；我还没定，先和自检提醒保留的天数一样）
 export const UNDO_DAYS = 7;
 
@@ -138,7 +139,7 @@ export const COLLECTIONS = {
     label: '教学失误', kind: 'history', writers: ['chat', 'class', 'me'],
     id: { re: /^S-[A-Za-z0-9_-]+$/, eg: 'S-1027-1' },
     required: ['by', 'date', 'text'],
-    enums: { by: ['chat', 'class', 'lab', 'aide'], space: ['math', 'cs', 'en'] },
+    enums: { by: ['chat', 'class', 'lab', 'aide', 'head'], space: ['math', 'cs', 'en'] },
     dates: ['date'],
     refs: { session: 'sessions', corrects: 'slips' },
     tracked: [],
@@ -194,7 +195,7 @@ export const COLLECTIONS = {
     id: { re: /^pd-[A-Za-z0-9_-]+$/, eg: '页面自动编号' },
     required: ['kind', 'coll', 'op', 'status', 'at'],
     // by: page 是页面自己按证据算的提议（掌握、练习后的复现组结果），一样等我确认；by: chat 是开发那边整理数据时提的（比如一次整理规则），也等我确认
-    enums: { op: ['add', 'update'], status: ['open', 'done', 'rejected', 'undone', 'held'], tier: ['direct', 'confirm', 'me'], by: ['class', 'me', 'page', 'chat', 'lab', 'aide'] },
+    enums: { op: ['add', 'update'], status: ['open', 'done', 'rejected', 'undone', 'held'], tier: ['direct', 'confirm', 'me'], by: ['class', 'me', 'page', 'chat', 'lab', 'aide', 'head'] },
     refs: { session: 'sessions' },
     tracked: ['status'],
   },

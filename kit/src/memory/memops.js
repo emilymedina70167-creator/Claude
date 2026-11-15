@@ -45,8 +45,9 @@ export function createMemOps({ db, mem, exam = () => null }) {
    */
   // 守卫（guard.js）：每一条写进去之前看一遍。turns：这节课到现在的每一轮（课堂手上的 history，用来核原话、轮次、板上编号）；
   // closing：下课整理单——被拒的没有下一轮能告诉它了，记进 meta/guard 的 carry，下一节同一科开课时资料包里带着
-  async function applyMemo(entries, { session = null, block = null, space = null, turn = null, turns = null, closing = false, author = 'class' } = {}) {
-    const evidence = session ? rows(await db.collection('evidence').where('session', '==', session).get().catch(() => null)) : [];
+  // evidence：另外给的证据（班主任：我在对话里说的话不属于哪节课，按对话查好了传进来）
+  async function applyMemo(entries, { session = null, block = null, space = null, turn = null, turns = null, closing = false, author = 'class', evidence: extra = [] } = {}) {
+    const evidence = [...(session ? rows(await db.collection('evidence').where('session', '==', session).get().catch(() => null)) : []), ...extra];
     const corpus = buildCorpus({ turns: turns || [], evidence });
     const logs = [];
     const date = toDate(Date.now());
@@ -76,10 +77,11 @@ export function createMemOps({ db, mem, exam = () => null }) {
       if ((author === 'lab' || author === 'aide') && ch.coll === 'position') { rejected.push({ line: e.line, error: '事后补写的不写 position（下一节怎么接写在小结里）' }); continue; }
       // 教研室事后写的（lab.js）：新加的记成它写的、标「事后补写」（守卫按这个认，页面上也看得出不是课堂当场写的）
       if ((author === 'lab' || author === 'aide') && ch.op === 'add' && ch.data) ch.data = { ...ch.data, ...('by' in ch.data ? { by: author } : {}), ...(session && ['observations', 'slips', 'errors'].includes(ch.coll) ? { backfill: true } : {}) };
+      if (author === 'head' && ch.op === 'add' && ch.data && 'by' in ch.data) ch.data = { ...ch.data, by: 'head' };
       if (ch.op === 'add') local[ch.coll] = [...(local[ch.coll] || []), { id: ch.target, ...(ch.data || {}) }];
       // 同一块里对同一条改两次（守则又犯两次）：第二条要看到第一条改过的
       else if (ch.tier === 'direct') local[ch.coll] = (local[ch.coll] || []).map((d) => (String(d.id) === String(ch.target) ? { ...d, ...(ch.patch || {}) } : d));
-      let pd = pendingRecord(ch, { session, turn, by: author === 'lab' || author === 'aide' ? author : 'class', line: e.line });
+      let pd = pendingRecord(ch, { session, turn, by: ['lab', 'aide', 'head'].includes(author) ? author : 'class', line: e.line });
       if (!e.attrs.id && NEXT[ch.coll]) pd.autoId = true;
       try {
         // 先算出写进去会是什么样（直接写的、要我确认的都算一遍），守卫看的是这一份；还没写
@@ -129,8 +131,9 @@ export function createMemOps({ db, mem, exam = () => null }) {
    * 说第二遍的那几条记一次没做到（checks、broken）；关于我的照 pref 的路写（applyMemo，作者 said）。
    * turns：这节课的 class_turns（守卫核原话）。返回 { written: [编号], rejected: [{ id, error }] }
    */
-  async function applySaid(plan, { session = null, turns = [] } = {}) {
-    const evidence = session ? rows(await db.collection('evidence').where('session', '==', session).get().catch(() => null)) : [];
+  // given：已经查好的证据（班主任的对话：我说的话不在哪节课里，按对话查好了传进来；session 是对话编号）
+  async function applySaid(plan, { session = null, turns = [], evidence: given = null } = {}) {
+    const evidence = given || (session ? rows(await db.collection('evidence').where('session', '==', session).get().catch(() => null)) : []);
     const corpus = buildCorpus({ turns, evidence });
     const local = { ...mem(), evidence: [...(mem().evidence || []), ...evidence] };
     const logs = [];
@@ -159,7 +162,7 @@ export function createMemOps({ db, mem, exam = () => null }) {
     await writeGuard(logs, [], { session, space: 'math' });
     if ((plan.profile || []).length) {
       const entries = plan.profile.map((p) => ({ kind: 'pref', attrs: { topic: p.topic, text: p.text, basis: [p.ev] }, line: `pref topic=${p.topic} text="${p.text}"` }));
-      const r = await applyMemo(entries, { session, turns, author: 'said' });
+      const r = await applyMemo(entries, given ? { turns, author: 'said', evidence: given } : { session, turns, author: 'said' });
       rejected.push(...r.rejected.map((x) => ({ id: 'profile', error: x.error })));
     }
     return { written, rejected };

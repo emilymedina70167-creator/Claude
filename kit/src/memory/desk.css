@@ -969,3 +969,47 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 .dk-sc-units li small { grid-column: 1; grid-row: 2; font-size: 12.5px; }
 .dk-sc-units li b { grid-column: 2; grid-row: 1 / span 2; font-variant-numeric: tabular-nums; }
 .dk-sc-units li b small { color: var(--muted); font-weight: 400; }
+
+/* —— 班主任（#chat，第十一轮 B1）：上面一排以前的对话，中间是对话（我的话是右边南大紫的气泡、它的话是左边的毛玻璃卡），底下是输入框 —— */
+.dk-chatpage { display: block; }
+.hd-page { display: grid; gap: 12px; }
+.hd-chats { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
+.hd-chats::-webkit-scrollbar { display: none; }
+.hd-chip { flex: none; display: inline-grid; gap: 1px; align-content: center; min-height: 44px; max-width: 220px; padding: 6px 14px; border: 0; border-radius: 14px; background: var(--panel); box-shadow: var(--panel-edge); color: var(--body); font: 500 14px/1.25 var(--sans); text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.hd-chip b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hd-chip small { color: rgb(var(--chalk-rgb) / 0.55); font-size: 12px; }
+.hd-chip[aria-selected="true"] { background: var(--brand, var(--chalk)); color: var(--brand-ink, var(--accent-ink)); box-shadow: none; }
+.hd-chip[aria-selected="true"] small { color: inherit; opacity: .75; }
+.hd-new { font-weight: 600; }
+.hd-chat { display: grid; gap: 14px; padding: 18px 16px 12px; }
+.hd-msgs { display: grid; gap: 12px; align-content: start; min-height: 46vh; }
+.hd-me { display: flex; justify-content: flex-end; }
+.hd-me span { max-width: 82%; padding: 9px 15px 10px; border-radius: 20px 20px 6px 20px; background: var(--brand, var(--chalk)); color: var(--brand-ink, var(--accent-ink)); font: 16px/1.45 var(--sans); overflow-wrap: anywhere; box-shadow: 0 4px 12px -8px color-mix(in srgb, var(--brand, #000) 80%, transparent); animation: hdBubble .42s var(--spring, ease) both; transform-origin: right bottom; }
+.hd-head { position: relative; max-width: 94%; padding: 12px 16px 10px 26px; border-radius: 18px 18px 18px 6px; background: rgb(var(--card-solid-rgb, var(--chalk-rgb)) / 0.6); -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none); box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.08), 0 10px 30px -22px rgb(var(--shade-rgb, 0 0 0) / 0.35); font: 16px/1.6 var(--sans); color: var(--body); overflow-wrap: anywhere; }
+.hd-head::before { content: ''; position: absolute; left: 11px; top: 19px; width: 7px; height: 7px; border-radius: 50%; background: var(--brand, var(--yellow)); }
+.hd-head > :first-child { margin-top: 0; }
+.hd-head > :last-child { margin-bottom: 0; }
+.hd-head.is-void { opacity: .7; }
+.hd-memo { margin: 8px 0 0; font-size: 12.5px; }
+.hd-err { margin: 6px 0 0; color: var(--red); font-size: 14px; }
+.hd-dots { display: inline-flex; gap: 5px; padding: 6px 0; }
+.hd-dots i { width: 7px; height: 7px; border-radius: 50%; background: rgb(var(--chalk-rgb) / 0.4); animation: hdDot 1.2s infinite ease-in-out; }
+.hd-dots i:nth-child(2) { animation-delay: .15s; }
+.hd-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes hdDot { 0%, 60%, 100% { transform: none; opacity: .45; } 30% { transform: translateY(-4px); opacity: 1; } }
+@keyframes hdBubble { from { opacity: 0; transform: scale(.85) translateY(6px); } to { opacity: 1; transform: none; } }
+.hd-empty { display: grid; justify-items: center; gap: 10px; padding: 36px 8px 12px; text-align: center; }
+.hd-empty p { max-width: 30em; margin: 0; font-size: 15px; line-height: 1.6; }
+.hd-badge { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 15px; background: var(--brand, var(--chalk)); color: var(--brand-ink, var(--accent-ink)); font: 600 24px/1 var(--display, var(--sans)); }
+.hd-hello { margin: 0; font: 600 22px/1.2 var(--display, var(--sans)); color: var(--chalk); }
+.hd-starters { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 6px; }
+.hd-starter { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: rgb(var(--chalk-rgb) / 0.06); box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.1); color: var(--body); font: 15px/1 var(--sans); cursor: pointer; }
+.hd-form { position: sticky; bottom: 8px; display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 24px; background: rgb(var(--card-solid-rgb, var(--chalk-rgb)) / 0.85); -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none); box-shadow: 0 0 0 0.5px rgb(var(--chalk-rgb) / 0.14), 0 10px 26px -18px rgb(var(--shade-rgb, 0 0 0) / 0.4); }
+.hd-input { flex: 1; min-height: 34px; max-height: 180px; padding: 7px 0; border: 0; outline: 0; resize: none; background: transparent; color: var(--body); font: 16px/1.4 var(--sans); }
+.hd-send { flex: none; display: grid; place-items: center; width: 36px; height: 36px; margin: 4px 0; border: 0; border-radius: 50%; background: var(--brand, var(--chalk)); color: var(--brand-ink, var(--accent-ink)); font: 600 18px/1 var(--sans); cursor: pointer; }
+.hd-send:disabled { background: rgb(var(--chalk-rgb) / 0.16); color: rgb(var(--chalk-rgb) / 0.5); cursor: default; }
+.hd-stopic { width: 12px; height: 12px; border-radius: 3px; background: currentColor; }
+@media (prefers-reduced-motion: reduce) { .hd-me span, .hd-dots i { animation: none; } }
+/* 输入框在胶囊里：不要学习台输入框自己的那层淡底和细边（不然胶囊里套胶囊）；记了几条那行是小字 */
+.is-desk .hd-page .hd-form textarea.hd-input.hd-input { background: transparent !important; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; padding: 7px 0; min-height: 34px; }
+.is-desk .hd-head .hd-memo { margin-top: 8px; font: 12.5px/1.4 var(--sans); color: rgb(var(--chalk-rgb) / 0.5); }

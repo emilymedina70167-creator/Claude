@@ -16,7 +16,7 @@ export const GUARD_VERSION = 1;
  */
 // aide：课后、课上的助手（第九轮）。对不上的不暂存等我放行（我说过不要再加要我确认的东西）：证据那一道有提醒就直接不收
 // said：话的账（第十一轮，said.js）：事后照我的原话记的要求，和 aide 一样对不上直接不收
-export const AUTHORS = { class: { strict: false }, lab: { strict: true }, aide: { strict: 'drop' }, said: { strict: 'drop' }, page: { strict: false }, chat: { strict: false }, me: { strict: false } };
+export const AUTHORS = { class: { strict: false }, lab: { strict: true }, aide: { strict: 'drop' }, said: { strict: 'drop' }, head: { strict: false }, page: { strict: false }, chat: { strict: false }, me: { strict: false } };
 
 /** 每一类里是 Claude 写的话的字段（原话、轮次、组件就在这些字段里找） */
 // 会重复记的几类（掌握、位置是一块一条、一科一条，说法相近不算重复）

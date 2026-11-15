@@ -1053,6 +1053,43 @@ const SUITES = {
     check(after && after.quotes.some((q) => q.session === sid && q.text.includes('测试:要求')), '删课以后要求或原话没了');
   },
 
+  // 第十一轮 B1：首页上的班主任（#chat）：开一段新对话、发一句、边写边显示、刷新还在；说的要求经 memo 块记进「我的要求」（by: head），
+  // 我那一句也过一次话的账
+  async chat(browser) {
+    const t = await seeded(browser);
+    await t.open('chat');
+    await t.waitFor(() => t.page.$('.dk-chatpage:not([hidden]) .hd-empty'), { what: '班主任那一页画出来（空的时候有开场）' });
+    check(await t.page.$('.dk-nav a[href="#chat"][aria-current="true"]'), '导航里「班主任」没选中');
+    await t.page.fill('.hd-input', '我 408 现在怎么样');
+    await t.page.click('.hd-send');
+    await t.waitFor(() => t.page.$('.hd-msgs .hd-me'), { what: '我的话出现在右边' });
+    await t.waitFor(async () => /模拟班主任/.test(await t.text('.hd-msgs .hd-head:not(.is-live)') || ''), { timeout: 20000, what: '班主任回了一段' });
+    const chats = await t.docs('chats');
+    check(chats.length === 1 && chats[0].title === '我 408 现在怎么样', `对话没存好：${JSON.stringify(chats)}`);
+    const cid = chats[0].id;
+    check(decodeURIComponent(new URL(t.page.url()).hash) === `#chat/${cid}`, `地址没换成这段对话：${t.page.url()}`);
+    const ev = (await t.docs('evidence')).find((e) => e.chat === cid);
+    check(ev && ev.src === 'say' && ev.text === '我 408 现在怎么样', '我说的话没记成证据');
+    // 刷新：还在这段对话里
+    await t.page.reload();
+    await t.page.waitForLoadState('load');
+    await t.waitFor(async () => /模拟班主任/.test(await t.text('.hd-msgs') || ''), { what: '刷新以后对话还在' });
+    check(await t.page.$(`.hd-chip[data-cid="${cid}"][aria-selected="true"]`), '上面那排没选中这段对话');
+    // 说一条要求：班主任写 memo 块记进「我的要求」，改动单标着班主任
+    await t.page.fill('.hd-input', '测试:要求 以后开场复习只做两三句');
+    await t.page.click('.hd-send');
+    const a = await t.waitFor(async () => (await t.docs('asks')).find((x) => (x.quotes || []).some((q) => /以后开场复习只做两三句/.test(q.text || ''))), { timeout: 30000, what: '班主任记成一条要求' });
+    check(a.status === 'active', '要求没写成在用的');
+    const pd = (await t.docs('pending')).find((x) => x.coll === 'asks' && x.target === a.id);
+    check(pd && pd.by === 'head', `改动单没标班主任：${JSON.stringify(pd)}`);
+    await t.waitFor(async () => /记进记忆 1 条/.test(await t.text('.hd-msgs') || ''), { what: '回答下面那行小字' });
+    check(!/board memo/.test(await t.text('.hd-msgs') || ''), 'memo 块露在画面上');
+    await t.waitFor(async () => !!(await t.db())[`chats/${cid}/said/main`], { timeout: 40000, what: '这段对话过了一次话的账' });
+    // 新对话
+    await t.page.click('.hd-new');
+    await t.waitFor(() => t.page.$('.hd-empty'), { what: '点「新对话」回到空的' });
+  },
+
   // 删掉一节课以后同一天再开课：不拿到同一个课号
   async purge(browser) {
     const t = await seeded(browser);

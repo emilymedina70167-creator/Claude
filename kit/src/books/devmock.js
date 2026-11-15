@@ -1,6 +1,24 @@
 // 本地试用（?dev）没有页面里的 Claude：教材入库、挂课程地图、备课用这个模拟的，把整条路走通（不调用 Claude）。
 // 看图转写：照提示词里给的文字层拼出条目（「定义」「例」开头的段落当定义、例题），没有文字层就写一条「（模拟转写）」。
 // 挂课程地图：所有条目挂到第一块；备课：照这一块的范围写一份资料包，挑头两条照着讲。
+// 模拟班主任：边写边显示（分几下吐字）；我说的话里有「测试:要求」就在回答里写一个 memo 块记成要求
+async function head(turns, opts) {
+  const last = String(turns.at(-1)?.content || '');
+  const n = turns.filter((t) => t.role === 'assistant').length;
+  const ask = /测试[:：]要求/.test(last);
+  const text = ask
+    ? '明白了：以后开场复习最多两三句，主要时间给新内容。我记进「我的要求」了，下一节课的老师会读到。\n\n````board memo\nask text="开场复习最多两三句，主要时间给新内容（模拟班主任记的）" basis=say\n````'
+    : `（模拟班主任，第 ${n + 1} 轮）你说的是：「${last.replace(/^\[页面\][\s\S]*?\n\n/, '').slice(0, 60)}」。\n\n照页面算的，**408** 现在最该补的是页式存储；要看依据可以问我「为什么」。`;
+  let out = '';
+  for (const part of text.match(/[\s\S]{1,12}/g) || []) {
+    if (opts.signal?.aborted) throw { code: 'cancelled', message: '已停止', text: out };
+    out += part;
+    opts.onText?.({ text: out, delta: part });
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  return { text, truncated: false, modelApplied: opts.model || 'claude-opus-5-5', modelTierApplied: opts.modelTier || 'complex' };
+}
+
 export function createDevAI() {
   const pagesOf = (prompt) => (prompt.match(/依次是 PDF 的第 ([\d、]+) 页/)?.[1] || '1').split('、').map(Number);
   const layerOf = (prompt, n) => prompt.match(new RegExp(`【第 ${n} 页的文字层】\\n([\\s\\S]*?)(?=\\n【第 \\d+ 页的文字层】|\\n\\n只输出)`))?.[1] || '';
@@ -87,6 +105,8 @@ export function createDevAI() {
     images: { maxCount: 4, maxInputBytes: 20000000, mediaTypes: ['image/png', 'image/jpeg'] },
     async call(prompt, opts = {}) {
       await new Promise((r) => setTimeout(r, 300));
+      // 班主任（head/context.js）：传的是一轮一轮的 turns，第一条是说明
+      if (Array.isArray(prompt) && String(prompt[0]?.content || '').startsWith('你是学生学习台里的**班主任**')) return head(prompt, opts);
       const p = String(prompt);
       const text = p.startsWith('你在把一本教材的扫描页') ? transcribe(p) : p.startsWith('你在帮学生整理学习台的课程地图') ? map(p) : p.startsWith('你是这个学生的老师，现在给下一节课备课') ? prep(p) : p.startsWith('你在给学生的一节课的题归类') ? skills(p) : p.startsWith('你在给一节刚上完的课做复盘') ? debrief(p) : p.startsWith('你在课前预演一份教案') ? rehearse(p) : p.startsWith('你在给一节刚上完的舞台课做课后整理') ? after(p) : p.startsWith('你在给学生的学习台写一张学生卡') ? card(p) : p.startsWith('你在给下一节课的老师准备这节课要知道的事') ? brief(p) : p.startsWith('你在旁听一节舞台课') ? watch(p) : p.startsWith('你在给一位考研学生的学习台记账') ? said(p) : '{}';
       opts.onText?.({ text, delta: text });
