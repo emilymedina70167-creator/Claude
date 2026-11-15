@@ -40,3 +40,48 @@ test('真数据的写法：类型放在 kind 里也认', () => {
   assert.equal(isProduceEv({ src: 'record', kind: 'parse', ok: false }), true);
   assert.equal(isProduceEv({ src: 'event', kind: 'stage-dial' }), false);
 });
+
+// ---- 第二轮：对着真证据的样子改的 ----
+test('舞台记录分三种：挑战和点一下是封闭的停、不算产出；填的答案又是停又是产出', () => {
+  const goal = { src: 'record', kind: 'stage', ok: true, text: 'g1', value: 'goal' };
+  const tap = { src: 'record', kind: 'stage', ok: true, text: 'r.7', value: 'for' };
+  const typed = { src: 'record', kind: 'stage', ok: true, text: 'has been', value: 'has been' };
+  assert.deepEqual([goal, tap, typed].map(isClosedEv), [true, true, false]);
+  assert.deepEqual([goal, tap, typed].map(isProduceEv), [false, false, true]);
+  const ev = (x, i) => ({ id: `s${i}`, session: 'c-5', at: T0 + i * 20_000, ...x });
+  const b = auditLesson({ session: { id: 'c-5', kind: 'stage' }, turns: [{ seq: 1, role: 'claude', at: T0, text: 'say "好"' }], evidence: [goal, tap, typed].map(ev) });
+  assert.deepEqual(b.stops.byKind, { goal: 1, tap: 1, value: 1 });
+  assert.equal(b.stops.total, 3);
+  assert.equal(b.produce.count, 1);
+  assert.equal(b.produce.firstMin, 0.7);
+});
+test('拨盘、接着、标注不算停也不算产出；同一轮已有舞台记录时 tap / pick 动作不另算', () => {
+  const evs = [
+    { id: 'a', session: 'c-6', src: 'event', kind: 'stage-dial', at: T0 + 1000 },
+    { id: 'b', session: 'c-6', src: 'event', kind: 'stage-next', at: T0 + 2000 },
+    { id: 'c', session: 'c-6', src: 'event', kind: 'stage-mark', at: T0 + 3000 },
+    { id: 'd', session: 'c-6', src: 'event', kind: 'stage-tap', turn: 4, at: T0 + 40_000 },
+    { id: 'e', session: 'c-6', src: 'record', kind: 'stage', text: 'r.7', value: 'x', ok: true, turn: 4, at: T0 + 40_001 },
+    { id: 'f', session: 'c-6', src: 'event', kind: 'stage-pick', turn: 9, at: T0 + 90_000 },
+  ];
+  const b = auditLesson({ session: { id: 'c-6', kind: 'stage' }, turns: [], evidence: evs });
+  assert.deepEqual([b.stops.total, b.produce.count], [2, 0]);
+});
+test('没有 kind 的课按黑板课量，talk 也量', () => {
+  const t = [{ seq: 1, role: 'claude', at: T0, text: '你好啊同学' }, { seq: 2, role: 'claude', at: T0 + min, text: '再见' }];
+  assert.equal(auditLesson({ session: { id: 'c-7' }, turns: t, evidence: [] }).kind, 'class');
+  const k = auditLesson({ session: { id: 'c-8', kind: 'talk' }, turns: t, evidence: [] });
+  assert.deepEqual([k.kind, k.teacher.chars], ['talk', 7]);
+});
+test('黑板课有 ms 时白停看 ms，不看离上一件事多久', () => {
+  const mk = (id, ms, at) => ({ id, session: 'c-9', src: 'record', kind: 'quiz', ok: true, attempts: 1, wrong: [], ms, at });
+  const b = auditLesson({ session: { id: 'c-9', kind: 'class' }, turns: [{ seq: 1, role: 'claude', at: T0, text: 'x' }],
+    evidence: [mk('q1', 8000, T0 + 10 * 60_000 / 60 * 6), mk('q2', 90_000, T0 + 2 * min), mk('q3', 5000, T0 + 2 * min + 5000)] });
+  assert.deepEqual([b.stops.total, b.stops.wasted], [3, 2]);
+});
+test('产出花的时间用 ms 合计', () => {
+  const b = auditLesson({ session: { id: 'c-10', kind: 'class' }, turns: [], evidence: [
+    { id: 'p1', session: 'c-10', src: 'record', kind: 'conjecture', ok: null, ms: 60_000, text: '想了', at: T0 },
+    { id: 'p2', session: 'c-10', src: 'record', kind: 'parse', ok: false, ms: 30_000, at: T0 + min }] });
+  assert.equal(b.produce.minutes, 1.5);
+});

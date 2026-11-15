@@ -31,9 +31,19 @@ export function teacherChars(turn, kind) {
 const CLOSED = ['quiz', 'tap', 'pick', 'ask', 'stage-tap', 'stage-pick'];
 const FREE = ['conjecture', 'thinkbox', 'work', 'translate'];
 
+// 舞台课页面判的记录（kind: stage）三种：value 是 goal = 做到了一个挑战；text 是「名字.部件」= 点了一下；其余是学生打的答案
+const PART = /^[A-Za-z_]\w*[.#][\w,.\-:#]+$/;
+export function stageRecordKind(ev) {
+  if (!ev || ev.src !== 'record' || ev.kind !== 'stage') return null;
+  if (ev.value === 'goal') return 'goal';
+  return PART.test(String(ev.text ?? '')) ? 'tap' : 'value';
+}
+
 /** 点一下、选一个的作答（想的东西很少） */
 export function isClosedEv(ev) {
   if (!ev) return false;
+  const sk = stageRecordKind(ev);
+  if (sk) return sk !== 'value';
   if (has(ev, CLOSED)) return true;
   return has(ev, ['steps']) && ev.value != null && ev.value !== '' && !ev.text;
 }
@@ -59,6 +69,7 @@ export function isProduceEv(ev) {
     return t.length >= 10 && !/[？?]$/.test(t);
   }
   if (ev.src === 'event') return false;
+  if (stageRecordKind(ev) === 'value') return true;
   if (isClosedEv(ev)) return false;
   if (has(ev, FREE)) return true;
   return typeof ev.ok === 'boolean';
@@ -76,7 +87,8 @@ function activeGaps(times) {
 }
 
 export function auditLesson({ session = {}, turns = [], evidence = [] } = {}) {
-  const kind = session.kind === 'stage' ? 'stage' : 'class';
+  // 早期的课没有 kind 字段：按黑板课量；一问一答（talk）老师的字照黑板课数
+  const kind = session.kind === 'stage' ? 'stage' : session.kind === 'talk' ? 'talk' : 'class';
   const teach = turns.filter((t) => t.role === 'claude' && !t.discarded && !t.pending);
   const evs = evidence.filter((e) => e.session === session.id && num(e.at) !== null).sort((a, b) => a.at - b.at);
   // 时间线：老师的轮 + 这节课的证据
@@ -93,14 +105,26 @@ export function auditLesson({ session = {}, turns = [], evidence = [] } = {}) {
 
   // 停了几次：封闭作答；白停 = 第一次就对、离上一件事不到 FAST_S 秒
   const stops = { total: 0, wasted: 0, byKind: {} };
+  // 同一轮已有舞台记录时，tap / pick 动作是同一下的另一份，不另算
+  const stageTurns = new Set(evs.filter((e) => stageRecordKind(e) && e.turn != null).map((e) => e.turn));
   line.forEach((x, i) => {
     const e = x.ev;
-    if (!e || !isClosedEv(e)) return;
+    if (!e) return;
+    const sk = stageRecordKind(e);
+    const closed = isClosedEv(e);
+    if (!closed && sk !== 'value') return;
+    if (!sk && e.src === 'event' && e.turn != null && stageTurns.has(e.turn)) return;
     stops.total++;
-    const k = e.type && e.type !== 'answer' ? e.type : e.kind || 'answer';
+    const k = sk || (e.type && e.type !== 'answer' ? e.type : e.kind || 'answer');
     stops.byKind[k] = (stops.byKind[k] || 0) + 1;
+    if (!closed || e.ok !== true) return;
+    // 第一次就对：有 attempts 看它，没有就看有没有选错过
+    const first = e.attempts != null ? e.attempts <= 1 : !(e.wrong?.length);
+    if (!first) return;
+    // 有 ms（这道题花了多久）就用它；没有才看离上一件事多久
     const prev = i ? line[i - 1].at : null;
-    if (e.ok === true && (e.attempts == null || e.attempts <= 1) && prev !== null && (e.at - prev) / 1000 < FAST_S) stops.wasted++;
+    const secs = num(e.ms) !== null ? e.ms / 1000 : prev !== null ? (e.at - prev) / 1000 : null;
+    if (secs !== null && secs <= FAST_S) stops.wasted++;
   });
 
   const prod = evs.filter(isProduceEv);
@@ -141,7 +165,7 @@ const f = (x, unit = '') => (x === null || x === undefined ? '没记' : `${x}${u
 /** 一节课一段的文字表 */
 export function auditText(audits) {
   return audits.map((a) => [
-    `${a.id}  ${a.kind === 'stage' ? '舞台课' : '黑板课'}  ${a.space || ''} ${a.title || ''}${a.closedBy === 'idle' ? '（挂着被页面当下课）' : ''}`.trimEnd(),
+    `${a.id}  ${a.kind === 'stage' ? '舞台课' : a.kind === 'talk' ? '一问一答' : '黑板课'}  ${a.space || ''} ${a.title || ''}${a.closedBy === 'idle' ? '（挂着被页面当下课）' : ''}`.trimEnd(),
     `  时长 ${f(a.minutes, ' 分钟')}；老师 ${a.teacher.turns} 轮、${a.teacher.chars} 字（每分钟 ${f(a.teacher.charsPerMin)} 字）；出第一个字 ${f(a.teacher.firstS, ' 秒')}、写完 ${f(a.teacher.writeS, ' 秒')}、一共等了 ${f(a.teacher.waitMin, ' 分钟')}`,
     `  停了 ${a.stops.total} 次（白停 ${a.stops.wasted}）${Object.keys(a.stops.byKind).length ? '：' + Object.entries(a.stops.byKind).map(([k, v]) => `${k}×${v}`).join(' ') : ''}`,
     `  学生要想的产出 ${a.produce.count} 次；第一次在第 ${f(a.produce.firstMin)} 分钟；最长被动 ${f(a.produce.longestPassiveMin, ' 分钟')}；产出花了 ${f(a.produce.minutes, ' 分钟')}`,

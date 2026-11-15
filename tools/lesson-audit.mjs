@@ -20,7 +20,7 @@ const readColl = (p) => (existsSync(p) && statSync(p).isDirectory()
 
 const evidence = readColl(join(dir, 'evidence'));
 const sessions = readColl(join(dir, 'sessions'))
-  .filter((s) => (s.kind === 'class' || s.kind === 'stage') && (!ids.length || ids.includes(s.id)))
+  .filter((s) => (!s.kind || ['class', 'talk', 'stage'].includes(s.kind)) && (!ids.length || ids.includes(s.id)))
   .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 const audits = sessions.map((s) => auditLesson({
   session: s,
