@@ -53,6 +53,8 @@ tests 1, pass 0, fail 1
 
 最终全套：`TZ=UTC node --test --test-concurrency=2`，2390 项：2374 通过、15 失败、1 跳过。失败仍是之前报告过的 Windows URL.pathname 路径错误（no-modals 一项、teach-run-lib 十四项），本次相关用例无失败；计时测试本轮通过。队列第 3 件已经专门安排修这些测试，本分支没有提前改那一件的文件，也没有把全套说成全绿。
 
+GitHub Linux 实跑：[43871326753](https://github.com/emilymedina70167-creator/Claude/actions/runs/43871326753)，代码提交 `b9c792f`。`npm test` 共 2390 项：2388 通过、1 失败、1 跳过；唯一失败仍是已单列为队列第 3 件的 forecast「够快」（CPU 最小 152ms，原断言要求小于 120ms）。其余功能测试全部通过，CI 构建通过；旧的全套 e2e 还在运行，没有把它写成通过。
+
 `pnpm run build` 通过。浏览器验证命令：
 
 ```text
