@@ -136,6 +136,10 @@ q: 一个过程遇到已排好的序列时仍逐对比较，这是否足以说�
     tools: true,
     images: { maxCount: 4, maxInputBytes: 20000000, mediaTypes: ['image/png', 'image/jpeg'] },
     async call(prompt, opts = {}) {
+      // 自动测试要看「发给模型的字」（备课、班主任、补收尾里还有没有旧规矩）：最近 30 次调用的整份提示词留在这里。只有 ?dev 的模拟模型有
+      const seen = (globalThis.LAKitDevAI ||= []);
+      seen.push(Array.isArray(prompt) ? prompt.map((t) => String(t?.content ?? '')).join('\n\n') : String(prompt));
+      if (seen.length > 30) seen.shift();
       await new Promise((r) => setTimeout(r, 300));
       // 班主任（head/context.js）：传的是一轮一轮的 turns，第一条是说明
       if (Array.isArray(prompt) && String(prompt[0]?.content || '').startsWith('你是学生学习台里的**班主任**')) return head(prompt, opts);
