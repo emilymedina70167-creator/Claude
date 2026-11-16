@@ -263,7 +263,8 @@ export function srcOf(item, mem = {}, packs = {}) {
 export function backfillMaterial(mem, s, { turns = [], rep = null } = {}) {
   if (!s || (!turns.length && !rep)) return null;
   const sp = s.space || spaceOfId(String(s.block || ''));
-  const memory = memoryDigest(mem, { block: s.block || '', space: sp, session: s.id, tools: false, budget: 24 * 1024 }).text;
+  // use: 'all'：补收尾就是下课那一次，管记录和复现的规则也带（课堂里下课时一样）
+  const memory = memoryDigest(mem, { block: s.block || '', space: sp, session: s.id, tools: false, budget: 24 * 1024, use: 'all' }).text;
   // 黑板课（kind 是 class 或没写）照课堂里下课那样：守则不写形式（noForm）、黑板课那份 memo 说明；舞台课、一问一答照旧
   const board = !s.kind || s.kind === 'class';
   const closing = closingPrompt({ report: rep ? reportText(rep) : '（这节课没有算出课后报告：整理单按记录写，basis 写组件 id。）', review: s.review, opening: s.opening, slips: slipsToFold(mem, sp), noForm: board });
@@ -291,7 +292,7 @@ export function problemsMaterial(mem, item, { docs = '' } = {}) {
   const docText = names.map((n) => { const d = componentDoc(docs, n, subject); return d ? `#### ${n}\n\n${d}` : ''; }).filter(Boolean).join('\n\n');
   const blockInfo = blocks.map((b) => { const c = (mem.curriculum || []).find((x) => x.id === b); return c ? `- ${b} ${c.title || ''}${c.scope ? `：${String(c.scope).slice(0, 400)}` : ''}` : `- ${b}`; }).join('\n');
   // 记忆只要讲给学生的那几节（关于学生、学到哪、掌握）：开头叫课堂 Claude 写 memo 的话、最后的目录对出题没用
-  const full = memoryDigest(mem, { block: blocks[0], space: spaceOfId(blocks[0]), tools: false, budget: 10 * 1024 }).text;
+  const full = memoryDigest(mem, { block: blocks[0], space: spaceOfId(blocks[0]), tools: false, budget: 10 * 1024, use: 'all' }).text;
   const memory = full.slice(Math.max(0, full.indexOf('## ')), full.includes('\n## 目录') ? full.indexOf('\n## 目录') : undefined).trim();
   const target = { kind: isReview ? 'review' : 'weakness', id: String(t.id), title: t.title || String(t.id), blocks, level: t.level, weaknesses: weak.filter((w) => w !== t).map((w) => `${w.id} ${w.title || ''}`) };
   return { prompt: problemsBrief({ target, originals, errors, docs: docText, blockInfo, memory, subject }), ctx: { target, block: blocks[0], subject } };

@@ -18,7 +18,7 @@ import { parseOutput, PLAN_MAX } from './protocol.js';
 import {
   buildSystem, actionText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
   reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, nextPinId, bytes, PACK_BUDGET, compactionSlice, worthCompacting, draftLine,
-  lintDocs, docLookup, latestPlan,
+  lintDocs, docLookup, latestPlan, rulesUse,
 } from './prompt.js';
 import { FEATURES } from '../features.js';
 import { specFor, specKey, specDiff, SPEC_DELAY } from './spec.js';
@@ -2249,9 +2249,10 @@ export async function renderClass(root, meta, desk = null) {
     return { planDoc: true, plan: latestPlan(history) };
   }
 
-  // 学习台里：每一轮带着的记忆（页面一直订阅着记忆库，拼摘要在 prompt.js）
-  function memoryArg() {
-    return desk ? { mem: desk.mem, block: desk.block, space: desk.space, session: desk.sid } : null;
+  // 学习台里：每一轮带着的记忆（页面一直订阅着记忆库，拼摘要在 prompt.js）。
+  // use：平时只带讲课用的规则；下课那一次（all）、复现课（desk.review：这节课复现的那几组）带全部，管记录和复现的规则这时候才用得上
+  function memoryArg({ all = false } = {}) {
+    return desk ? { mem: desk.mem, block: desk.block, space: desk.space, session: desk.sid, use: rulesUse({ all, review: desk.review }) } : null;
   }
 
   // 工具记下的观察、失误：确认是 Opus 5.5 讲的这一轮才写。学习台里写进记忆库（observations、slips），单独的课堂写进 class_notes
@@ -2555,7 +2556,7 @@ export async function renderClass(root, meta, desk = null) {
       const report = repObj ? reportText(repObj) : desk ? '（这一次页面没算出课后报告：整理单按这节课的对话写，basis 写组件 id 或段 id。）' : '';
       // 这节课的一页（memory/sheet.js）：页面自己拼，写在小结那块板的下面
       const sheet = sheetMd(repObj?.sheet || lessonSheet({ steps: steps() }));
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: TALK ? talkState() : boardState(), subject: session.subject, memory: memoryArg(), canvas: CANVAS && !TALK, ...planArg(), ...(TALK ? { talk: true } : {}) });
+      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: TALK ? talkState() : boardState(), subject: session.subject, memory: memoryArg({ all: true }), canvas: CANVAS && !TALK, ...planArg(), ...(TALK ? { talk: true } : {}) });
       // 每几节课（或者某一类到了上限）顺带整理：合并重复的弱点、复现组、关于学生的记录（memo.js 的 tidyDue）
       const sp = desk?.block ? spaceOfId(desk.block) : desk?.space || spaceOfId('');
       const why = desk ? tidyDue(desk.mem, sp, desk.sid) : '';

@@ -76,7 +76,7 @@ export function createLabDesk({ db, getData, packs, planner, ops, aide = null, s
       const ids = Array.isArray(item.blocks) ? item.blocks : [];
       const cards = await loadCards(db, ids);
       if (!cards.length) return null;
-      return { prompt: cardBrief({ head: LAB_HEAD_REF(), space: item.space, chapter: item.ref, cards: cards.map((c) => ({ id: c.id, text: c.text, raw: memoryDigest(data, { block: c.block, budget: 12 * 1024, tools: false }).text })) }), ctx: { ids: cards.map((c) => c.id) } };
+      return { prompt: cardBrief({ head: LAB_HEAD_REF(), space: item.space, chapter: item.ref, cards: cards.map((c) => ({ id: c.id, text: c.text, raw: memoryDigest(data, { block: c.block, budget: 12 * 1024, tools: false, use: 'all' }).text })) }), ctx: { ids: cards.map((c) => c.id) } };
     }
     return null;
   }

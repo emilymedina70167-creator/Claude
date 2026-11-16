@@ -71,12 +71,15 @@ export function nearBlocks(curriculum, block) {
 /**
  * 课堂里的 Claude 能看到的那份记忆（这一科的；规则去掉 for: chat 的）。memoryDigest 和对话里的 Claude 的开场简报都从它出发。
  * 返回 { space, mem（过滤好的）, gone, solved, position, here（这节课的块）}
+ * use：'teach' 时去掉管记录和复现的规则（rules 的 use: record）；默认 'all' 不去（开场简报、班主任全都要）。
+ * 在这里滤，全文（memoryDigest）和目录（memoryCatalog）拿到的是同一份：讲课时用不上的规则连目录也不列，列了老师会去取
  */
-export function classView(mem0 = {}, { block = '', forClass = true, space: sp = '' } = {}) {
+export function classView(mem0 = {}, { block = '', forClass = true, space: sp = '', use = 'all' } = {}) {
   const space = sp || spaceOfId(block || (mem0.position || []).find((d) => d?.id === 'now')?.block);
   const mem = filterSpace(mem0, space);
   for (const c of ['rules', 'profile', 'slips', 'lessons']) mem[c] = sharedFor(mem[c], space, mem0);
   if (forClass) mem.rules = (mem.rules || []).filter((r) => r?.for !== 'chat');
+  if (use === 'teach') mem.rules = (mem.rules || []).filter((r) => r?.use !== 'record');
   const gone = voidedIds(mem);
   const solved = resolvedErrors(mem);
   // 作废的、更正别的条目的（作废更正、「已解决」那条）都不单独带：原条上注明
@@ -105,9 +108,11 @@ const sessionLine = (s, obs, n = 80) => {
  * 返回 { rules（给「角色和红线」那一节的规则全文）, text（全文 + 目录）, cut: [{ coll, more, ids }]（没放全文、在目录里的）, bytes }
  */
 // aide：{ brief（briefText 的字，可以空）, cards（cardText 的字的数组）}：课堂助手的两节（aide/brief.js、card.js 算好的），没有就是 null（和以前一字不差）
-export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 1024, session = '', tools = true, today = toDate(Date.now()), aide = null } = {}) {
+// use：带哪些规则。'teach'（默认，讲课的每一轮）不带 use: record 的——管记录和复现的规则讲新课时用不上，每一轮带着只是多读；
+// 'all'（下课那一次、复现课、备课、事后补写）都带。记忆库里没有 use: record 的规则时两种逐字一样
+export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 1024, session = '', tools = true, today = toDate(Date.now()), aide = null, use = 'teach' } = {}) {
   // space：没块开的课（新的一科还没选块）按这节课的科带，不落到数学
-  const view = classView(mem0, { block, space: block ? '' : space });
+  const view = classView(mem0, { block, space: block ? '' : space, use: use === 'all' ? 'all' : 'teach' });
   const { mem, get, solved, position, here } = view;
   const { cur, near } = nearBlocks(get('curriculum'), here);
   const nearIds = new Set([here, ...near.map((d) => d.id)].filter(Boolean));

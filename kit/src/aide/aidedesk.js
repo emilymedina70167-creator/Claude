@@ -211,7 +211,7 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
           prompt = crossPrompt({ space, firsts, old: old?.text || '', weaknesses: general });
         } else {
           const block = (data.curriculum || []).find((b) => b.id === id) || { id };
-          const raw = memoryDigest(data, { block: id, budget: 24 * 1024, tools: false }).text;
+          const raw = memoryDigest(data, { block: id, budget: 24 * 1024, tools: false, use: 'all' }).text;
           prompt = cardPrompt({ block: id, title: block.title || '', scope: block.scope || '', raw, old: old?.text || '' });
           const sids = (data.sessions || []).filter((s) => s.block === id || (Array.isArray(s.blocks) && s.blocks.includes(id))).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0)).map((s) => s.id);
           corpora = await corporaFor(sids);
@@ -244,7 +244,8 @@ export function createAideDesk({ db, getData, ops, ai, packs = () => ({}), ready
     const pos = (data.position || []).find((p) => p?.id === positionId(space)) || null;
     const main = packs()?.[space]?.main;
     const plan = main && blocks.includes(main.block) ? lessonPlanText(main) : '';
-    const rules = memoryDigest(data, { block: blocks[0], budget: 12 * 1024, tools: false }).rules;
+    // use: 'all'：档案也给复现课、下课那一次用，管记录和复现的规则一起看
+    const rules = memoryDigest(data, { block: blocks[0], budget: 12 * 1024, tools: false, use: 'all' }).rules;
     // 复现课（几块）：这几块挂着的复现组，档案要写「这几组以前错在哪」
     const review = blocks.length > 1 ? (data.reviews || []).filter((r) => r.status !== 'void' && (r.blocks || []).some((b) => blocks.includes(String(b)))).slice(0, 6).map((r) => `- ${r.id} ${r.title || ''}（${r.result ? `上次${r.result}` : '还没复现过'}${(r.errors || []).length ? `，错题 ${r.errors.join('、')}` : ''}）`).join('\n') : '';
     const prompt = briefPrompt({ space, blocks, cards: mine, plan, position: pos, rules, review });

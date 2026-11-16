@@ -112,7 +112,7 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     const subject = subjectOf(blockId);
     const today = toDate(Date.now());
     // 记忆：和课堂里带的同一份（全文 + 目录）；规则：全部（备课和资料包的规矩是给对话里的 Claude 的，现在备课的就是它的活）
-    const mem = memoryDigest(data, { block: blockId, budget: 24 * 1024, tools: false, today });
+    const mem = memoryDigest(data, { block: blockId, budget: 24 * 1024, tools: false, today, use: 'all' });
     const rules = sharedFor(data.rules, sp).filter((r) => r.status !== 'void').map((r) => `- ［${r.cat || ''}］${r.text}`).join('\n');
     const recent = data.sessions.filter((s) => s.status === 'closed' && s.report?.line).sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0)).slice(0, 3).map((s) => `- ${s.id}（${s.block || ''}）：${s.report.line}`).join('\n');
     const components = [...new Set([...CORE_COMPONENTS, ...allNames(COMPONENT_DOCS, subject)])];

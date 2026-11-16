@@ -749,7 +749,7 @@ export function docLookup(componentDocs, subject, name) {
 
 // tools：这个查看方式给不给课堂 Claude 工具（不给就没有 component_doc，说明里不提它）
 /**
- * memory（学习台里上课时才有）：{ mem: 记忆库各类的数组, block: 这节课的块, session: 这节课的编号 }。
+ * memory（学习台里上课时才有）：{ mem: 记忆库各类的数组, block: 这节课的块, session: 这节课的编号, use: 带哪些规则（rulesUse，原样交给 memoryDigest；不写当 teach）}。
  * 有记忆时多一节「你对学生的了解」，记忆库 rules 接在根本规则后面；记忆先占（最多 MEMORY_BUDGET），资料包用剩下的
  */
 // canvas：这节课开着版面（你自己排板，canvas.js），说明里多一节 CANVAS_DOC
@@ -786,12 +786,17 @@ export function buildSystem({ rules, componentDocs, pack, board, packBudget = PA
   let mem = null;
   if (memory) {
     const room = SYSTEM_MAX - bytes(parts('', { rules: '', text: '' })) - 16 * 1024 - 3 * 1024;
-    mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools, budget: Math.max(4 * 1024, Math.min(MEMORY_BUDGET, room)) });
+    mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools, budget: Math.max(4 * 1024, Math.min(MEMORY_BUDGET, room)), use: memory.use });
   }
   const rest = bytes(parts('', mem));
   const { text: packBody } = packText(pack, Math.max(16 * 1024, Math.min(packBudget, SYSTEM_MAX - rest - 3 * 1024)));
   return parts(packBody, mem);
 }
+/**
+ * 这一轮带哪些规则（digest.js 的 use）：下课那一次（all）、复现课的每一轮（review：这节课复现的那几组，sessions.review）
+ * 带全部——管记录和复现的规则这时候才用得上；平时上课只带讲课用的
+ */
+export const rulesUse = ({ all = false, review = null } = {}) => (all || (Array.isArray(review) ? review.length > 0 : !!review) ? 'all' : 'teach');
 // —— 一问一答（kind: talk，docs/talk-impl.md C.5）：发给老师的说明 ——
 // 顺序照旧按「多久变一次」：怎么教 → 活板的写法和对象 → 资料包 → 记忆 → 活板现状。不带黑板指令（PROTOCOL_DOC）、版面（CANVAS_DOC）、组件手册的模式
 const TALK_ROLE = doc`
