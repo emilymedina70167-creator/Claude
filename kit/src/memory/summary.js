@@ -221,3 +221,31 @@ export function needsRewrite(session, { evidence = [], now = Date.now(), since =
   if ((Number(sum.fails) || 0) >= REWRITE_FAILS && last <= (Number(sum.failUpTo) || 0)) return false;
   return true;
 }
+
+// —— 这节课学生打的话（清点第二节第 4 条）——
+// 话的账停了以后，对话一长被压缩，学生早先说的那句只剩压缩摘要里的转述（或者老师当时记了 know 才有）。
+// 页面把这节课学生自己打的每一句照抄进老师每一轮的说明：不调用模型、不改一个字，课后重写时照旧读整节课的记录。
+// 页面替学生发的快捷回答（「继续。」「开始上课。」）不是学生的话，不占地方。
+const SAID_SKIP = new Set(['继续。', '开始上课。']);
+export const SAID_NOW_MAX = 1536;
+const SAID_KEEP = 6;      // 最后几句一定留
+const SAID_ONE = 300;     // 一句最多这么多字（再长的截短：全文在对话里，这里只防它一句占满）
+
+export function saidNow(turns = [], { max = SAID_NOW_MAX } = {}) {
+  const lines = (Array.isArray(turns) ? turns : [])
+    .filter((t) => t && t.role === 'student' && String(t.say ?? '').trim() && !SAID_SKIP.has(String(t.say).trim()))
+    .map((t) => {
+      const say = String(t.say).replace(/\s+/g, ' ').trim();
+      return `第 ${t.seq} 轮：${say.length > SAID_ONE ? `${say.slice(0, SAID_ONE)}…` : say}`;
+    });
+  if (!lines.length) return '';
+  const fit = (ls, cut) => [cut ? `（更早的 ${cut} 句省略了：原话在这节课的记录里）` : '', ...ls].filter(Boolean).join('\n');
+  let cut = 0;
+  while (lines.length - cut > SAID_KEEP && utf8(fit(lines.slice(cut), cut)) > max) cut += 1;
+  let kept = lines.slice(cut);
+  // 最后几句自己就超了：一句一句再截短（最后 6 句一句不丢）
+  for (let cap = SAID_ONE; utf8(fit(kept, cut)) > max && cap > 20; cap = Math.floor(cap / 2)) {
+    kept = kept.map((l) => { const [head, ...rest] = l.split('：'); const body = rest.join('：').replace(/…$/, ''); return body.length > cap ? `${head}：${body.slice(0, cap)}…` : l; });
+  }
+  return fit(kept, cut);
+}

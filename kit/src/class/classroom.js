@@ -44,6 +44,7 @@ import { earlierClasses } from '../memory/digest.js';
 import { choose } from '../dialog.js';
 import { lessonSheet, sheetMd } from '../memory/sheet.js';
 import { slipsToFold, blockSwitch, tidyDue, tidyText, splitKnow } from '../memory/memo.js';
+import { saidNow, summaryOn } from '../memory/summary.js';
 import { createBoardEye, eyeNote } from './boardeye.js';
 import { spaceOfId, subjectOf } from '../memory/space.js';
 import { textbookForClass, readChunks, searchChunks, readHistory } from '../books/textbook.js';
@@ -2462,7 +2463,11 @@ export async function renderClass(root, meta, desk = null) {
   // 学习台里：每一轮带着的记忆（页面一直订阅着记忆库，拼摘要在 prompt.js）。
   // use：平时只带讲课用的规则；下课那一次（all）、复现课（desk.review：这节课复现的那几组）带全部，管记录和复现的规则这时候才用得上
   function memoryArg({ all = false } = {}) {
-    return desk ? { mem: desk.mem, block: desk.block, space: desk.space, session: desk.sid, use: rulesUse({ all, review: desk.review }) } : null;
+    if (!desk) return null;
+    // 有记忆摘要时：这节课学生打的每一句原话一直带着（对话被压缩以后早先那句也还在；话的账停了，summary.js 的 saidNow）。
+    // 抢跑接得上：页面替学生发的「继续。」「开始上课。」不算，两边拼出来一样
+    const said = summaryOn(desk.mem) ? saidNow(history.filter((t) => !t.discarded)) : '';
+    return { mem: desk.mem, block: desk.block, space: desk.space, session: desk.sid, use: rulesUse({ all, review: desk.review }), ...(said ? { saidNow: said } : {}) };
   }
 
   // 工具记下的观察、失误：确认是 Opus 5.5 讲的这一轮才写。学习台里写进记忆库（observations、slips），单独的课堂写进 class_notes

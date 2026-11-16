@@ -114,7 +114,7 @@ const sessionLine = (s, obs, n = 80) => {
 // aide：{ brief（briefText 的字，可以空）, cards（cardText 的字的数组）}：课堂助手的两节（aide/brief.js、card.js 算好的），没有就是 null（和以前一字不差）
 // use：带哪些规则。'teach'（默认，讲课的每一轮）不带 use: record 的——管记录和复现的规则讲新课时用不上，每一轮带着只是多读；
 // 'all'（下课那一次、复现课、备课、事后补写）都带。记忆库里没有 use: record 的规则时两种逐字一样
-export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 1024, session = '', tools = true, today = toDate(Date.now()), aide = null, use = 'teach' } = {}) {
+export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 1024, session = '', tools = true, today = toDate(Date.now()), aide = null, use = 'teach', saidNow = '' } = {}) {
   // space：没块开的课（新的一科还没选块）按这节课的科带，不落到数学
   const view = classView(mem0, { block, space: block ? '' : space, use: use === 'all' ? 'all' : 'teach' });
   const { mem, get, solved, position, here } = view;
@@ -257,9 +257,10 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
   };
   for (const a of asks) shown.add(`asks/${a.id}`);
   const once = (Array.isArray(mem0.saidOnce) ? mem0.saidOnce : []).filter((o) => o?.text);
+  // 有摘要时：话的账停了，它写的「这节课学生说的」不再带；换成页面照抄的这节课学生打的每一句（summary.js 的 saidNow）
   const asksText = sum.on ? [
     summaryText([sum.shared, sum.subject]),
-    once.length ? `## 这节课学生说的（只管这节课）\n\n${once.map((o) => `- ${one(o.text, 200)}`).join('\n')}` : '',
+    saidNow ? `## 这节课学生打的话（原话，页面照抄的；这些是当面说的）\n\n${saidNow}` : '',
   ].filter(Boolean).join('\n\n') : [
     asks.length ? `## 学生的要求（学生亲口说过、要你照做的；犯过的在前。每一条都要做到——学生说过「我说了什么，下一次都肯定会改」）\n\n${asks.map(askLine).join('\n')}` : '',
     once.length ? `## 这节课学生说的（只管这节课）\n\n${once.map((o) => `- ${one(o.text, 200)}`).join('\n')}` : '',

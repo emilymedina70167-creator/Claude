@@ -857,7 +857,7 @@ export function buildSystem({ rules, componentDocs, pack, board, packBudget = PA
   let mem = null;
   if (memory) {
     const room = SYSTEM_MAX - bytes(parts('', { rules: '', text: '' })) - 16 * 1024 - 3 * 1024;
-    mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools, budget: Math.max(4 * 1024, Math.min(MEMORY_BUDGET, room)), use: memory.use });
+    mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools, budget: Math.max(4 * 1024, Math.min(MEMORY_BUDGET, room)), use: memory.use, saidNow: memory.saidNow });
   }
   const rest = bytes(parts('', mem));
   const packRoom = Math.max(16 * 1024, Math.min(packBudget, SYSTEM_MAX - rest - 3 * 1024));
