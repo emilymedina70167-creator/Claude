@@ -72,6 +72,7 @@ import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
 import { scrubBooks, readReserve, reserveYears } from '../exam/reserve.js';
 import { createExamInbox, refreshBars } from '../exam/examdesk.js';
+import { inboxRow } from '../exam/inbox.js';
 import { loadExamCourse, courseOfBlock } from '../exam/load.js';
 import { examIndexOf } from '../exam/fields.js';
 import { blockQuestions } from '../exam/block.js';
@@ -158,6 +159,7 @@ export async function renderDesk(root, meta) {
     <div class="dk-exampage" hidden></div>
     <div class="dk-chatpage" hidden></div>
     <div class="dk-home">
+    <div class="dk-examinbox" hidden aria-live="polite"></div>
     <div class="dk-col">
     <section class="dk-card dk-class" hidden aria-label="上课" data-menu="hero"><div class="dk-body"></div></section>
     <div class="dk-days-slot"></div>
@@ -229,7 +231,22 @@ export async function renderDesk(root, meta) {
   // 考试资料的收件箱（exam/examdesk.js）：开发那边切好的真卷、考点树、标签，页面查过再并进去（只在首页挂，课堂里不挂）
   // 首页的考情缓存（meta/exam：计数、每门课的热度、每块平均每年几分）：410 分的权重、考情页读它，首页不读考试资料的整类
   let examMeta = null;
-  const examInbox = createExamInbox({ db, curriculum: () => data.curriculum });
+  // 首页那一行（paintExamInbox）：收件箱还在并、有没并进去的才出现。并入只在首页做，进了课堂就停——2026-11-15 首页开着 3 秒就进了课堂，
+  // 37 份只并进了第一份，学生什么都看不到（docs/superpowers/specs/2026-11-15-root-rulings.md）
+  const examInbox = createExamInbox({ db, curriculum: () => data.curriculum, onChange: () => paintExamInbox() });
+  let examInboxSig = '';
+  function paintExamInbox() {
+    const box = $('.dk-examinbox');
+    if (!box) return;
+    const r = inboxRow(examInbox.progress());
+    const sig = JSON.stringify(r);
+    if (sig === examInboxSig) return; // 没变不重画（点开的列表别被冲掉）
+    examInboxSig = sig;
+    box.hidden = !r;
+    if (!r) { box.innerHTML = ''; return; }
+    const open = box.querySelector('details')?.open;
+    box.innerHTML = `${r.pending ? `<p class="dk-exin-left"><span class="dk-exin-dot" aria-hidden="true"></span>${escapeHtml(r.pending)}</p>` : ''}${r.head ? `<details class="dk-exin-bad"${open ? ' open' : ''}><summary>${escapeHtml(r.head)}<span class="muted">（点开看是哪几份）</span></summary><ul>${r.failed.map((f) => `<li><b>${escapeHtml(f.name)}</b>：${escapeHtml(f.why)}</li>`).join('')}</ul><p class="muted">原因也记在出错记录里，开发那边改好会重新放进来。</p></details>` : ''}`;
+  }
   const examPage = createExamPage($('.dk-exampage'), { db, getData: () => data, getMeta: () => examMeta, getBoard: () => scoreBoard(data, { today: toDate(Date.now()), exam: examMeta?.blockPerYear, usable: examMeta?.blockUsable }), space: () => space });
   db.doc('meta/exam').onSnapshot((s) => { examMeta = s.exists ? s.data() : null; paintScore(); if (!$('.dk-exampage').hidden) examPage.refresh(); }, () => {});
   const examCard = createExamCard($('.dk-exam .dk-body'), { db, getData: () => data, assets: store.assets });
@@ -633,6 +650,7 @@ export async function renderDesk(root, meta) {
     paintWeek(today);
     paintRecall(today);
     paintRows(today);
+    paintExamInbox();
     if (daysBody?.isConnected) fillDays(daysBody); // 开着的「距考研」面板：天数、这一周跟着换
     paintScore(today);
     const total = Object.values(res.counts).reduce((a, b) => a + b, 0);

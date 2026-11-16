@@ -1,0 +1,146 @@
+// 首页的考试收件箱（exam/examdesk.js 的 createExamInbox）：进度看得见、出错不再吞掉、不合规矩的写明哪一份为什么。
+// 2026-11-15 真的学习台里 37 份只并进了第一份（第一份写完回执、还没删原件，首页就进了课堂；错误被吞了，学生什么都看不到），
+// 见 docs/superpowers/specs/2026-11-15-root-rulings.md。数据库是内存里的替身，题是现造的（tests/fixtures/exam）。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { buildPaper, parseSyllabus } from '../kit/src/exam/ingest.js';
+import { createExamInbox } from '../kit/src/exam/examdesk.js';
+import { inboxName, inboxRow } from '../kit/src/exam/inbox.js';
+
+const read = (f) => readFileSync(new URL(`./fixtures/exam/${f}`, import.meta.url), 'utf8');
+const paper = (year) => {
+  const b = buildPaper({ subject: '408', year: 2019, paperText: read('408-2019.paper.txt'), answersText: read('408-2019.answers.txt') });
+  const id = `X-408-${year}`;
+  return {
+    kind: 'paper', by: 'dev', at: 1, passages: [],
+    paper: { ...b.paper, id, year },
+    questions: b.questions.map((q) => ({ ...q, id: q.id.replace('2019', String(year)), year, paper: id })),
+  };
+};
+const syllabus = () => ({ kind: 'syllabus', course: 'DS', year: 2026, nodes: parseSyllabus(read('ds-2026.syllabus.txt'), { course: 'DS', year: 2026 }).nodes, by: 'dev', at: 1 });
+
+// fail(op, path) 返回真就让这一次写抛错；hang(op, path) 返回真就让这一次永远不回来（页面被关掉的样子）
+function memDb(init = {}, { fail = () => false, hang = () => false } = {}) {
+  const docs = new Map(Object.entries(init).map(([k, v]) => [k, structuredClone(v)]));
+  const subs = [];
+  const snap = (c) => ({ docs: [...docs].filter(([p]) => p.startsWith(`${c}/`) && p.split('/').length === 2).map(([p, d]) => ({ id: p.split('/')[1], data: () => structuredClone(d) })) });
+  const fire = () => { for (const s of subs) s.cb(snap(s.c)); };
+  const gate = async (op, p) => {
+    if (hang(op, p)) await new Promise(() => {});
+    if (fail(op, p)) throw { code: 'unavailable', message: `模拟的写入失败（${p}）` };
+  };
+  return {
+    doc: (p) => ({
+      get: async () => ({ exists: docs.has(p), data: () => structuredClone(docs.get(p)) }),
+      set: async (d) => { await gate('set', p); docs.set(p, structuredClone(d)); queueMicrotask(fire); },
+      delete: async () => { await gate('delete', p); docs.delete(p); queueMicrotask(fire); },
+    }),
+    collection: (c) => ({
+      onSnapshot: (cb) => { subs.push({ c, cb }); queueMicrotask(() => cb(snap(c))); return () => { subs.splice(subs.findIndex((s) => s.cb === cb), 1); }; },
+      get: async () => snap(c),
+      where: (f, op, v) => ({ get: async () => ({ docs: snap(c).docs.filter((d) => d.data()[f] === v) }) }),
+    }),
+    all: () => Object.fromEntries(docs),
+  };
+}
+const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now() - t < ms) { if (fn()) return true; await new Promise((r) => setTimeout(r, 5)); } return false; };
+
+test('三份：两份合规的进库、有回执、原件删了；缺必填的那份回执写明原因、progress 里列出来', async () => {
+  const bad = paper(2018);
+  delete bad.paper.total;
+  const db = memDb({ 'exam_inbox/X-408-2019': paper(2019), 'exam_inbox/X-408-2018': bad, 'exam_inbox/syllabus-DS-2026': syllabus() });
+  let changes = 0;
+  const errs = [];
+  const box = createExamInbox({ db, waits: [], again: 10, reportError: (e, c) => errs.push(c), onChange: () => { changes++; } });
+  assert.ok(await until(() => { const p = box.progress(); return p.done === 3 && !p.busy; }), JSON.stringify(box.progress()));
+  const all = db.all();
+  assert.equal(all['exam_inbox_log/X-408-2019'].ok, true);
+  assert.equal(all['exam_inbox_log/syllabus-DS-2026'].ok, true);
+  assert.ok(all['papers/X-408-2019'] && all['questions/Q-408-2019-23'], '合规的卷进了库');
+  assert.ok(Object.keys(all).some((k) => k.startsWith('syllabus/G-DS-')), '考点树进了库');
+  assert.equal(all['exam_inbox_log/X-408-2018'].ok, false);
+  assert.match(all['exam_inbox_log/X-408-2018'].problems.join(), /total/);
+  assert.ok(!all['papers/X-408-2018']);
+  for (const id of ['X-408-2019', 'X-408-2018', 'syllabus-DS-2026']) assert.ok(!all[`exam_inbox/${id}`], `${id} 的原件还在`);
+  const p = box.progress();
+  assert.equal(p.total, 3);
+  assert.equal(p.done, 3);
+  assert.equal(p.busy, false);
+  assert.deepEqual(p.failed.map((f) => f.id), ['X-408-2018']);
+  assert.match(p.failed[0].why, /total/);
+  assert.ok(changes >= 2, '进度变了要叫首页重画');
+  assert.deepEqual(errs, [], '不合规矩不是出错，不进出错记录');
+  box.stop();
+});
+
+test('第二份的写入抛错两次再成功：三份都处理完，出错记进出错记录（不再吞掉）', async () => {
+  let left = 2;
+  const db = memDb({ 'exam_inbox/X-408-2018': paper(2018), 'exam_inbox/X-408-2019': paper(2019), 'exam_inbox/syllabus-DS-2026': syllabus() }, {
+    fail: (op, p) => op === 'set' && p.startsWith('questions/Q-408-2019-') && left-- > 0,
+  });
+  const errs = [];
+  const box = createExamInbox({ db, waits: [], again: 10, reportError: (e, c) => errs.push(c) });
+  assert.ok(await until(() => { const p = box.progress(); return p.done === 3 && !p.busy; }), JSON.stringify(box.progress()));
+  const all = db.all();
+  for (const id of ['X-408-2018', 'X-408-2019', 'syllabus-DS-2026']) {
+    assert.equal(all[`exam_inbox_log/${id}`]?.ok, true, id);
+    assert.ok(!all[`exam_inbox/${id}`], `${id} 的原件还在`);
+  }
+  assert.ok(errs.length >= 1, '出错要报');
+  assert.ok(errs.every((c) => c.what === 'exam-inbox' && c.path === 'X-408-2019'), JSON.stringify(errs));
+  assert.deepEqual(box.progress().failed, [], '后来成了的不算没并进去');
+  box.stop();
+});
+
+test('一直写不进去：试几轮就停下，写明哪一份为什么，进度算处理完了（不一直挂着「还在并进来」）', async () => {
+  const db = memDb({ 'exam_inbox/X-408-2019': paper(2019), 'exam_inbox/syllabus-DS-2026': syllabus() }, { fail: (op, p) => op === 'set' && p.startsWith('questions/') });
+  const errs = [];
+  const box = createExamInbox({ db, waits: [], again: 10, reportError: (e, c) => errs.push(c) });
+  assert.ok(await until(() => { const p = box.progress(); return p.done === 2 && !p.busy && p.failed.length === 1; }), JSON.stringify(box.progress()));
+  await new Promise((r) => setTimeout(r, 60));
+  const p = box.progress();
+  assert.equal(p.failed[0].id, 'X-408-2019');
+  assert.match(p.failed[0].why, /模拟的写入失败/);
+  assert.equal(db.all()['exam_inbox_log/syllabus-DS-2026'].ok, true, '别的照并');
+  assert.ok(db.all()['exam_inbox/X-408-2019'], '没并进去的原件留着，下次打开首页再试');
+  const n = errs.length;
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(errs.length, n, '停下以后不再一直重试');
+  box.stop();
+});
+
+test('真机上的样子：第一份写完回执、删原件之前首页就离开了；下次打开首页这一份再并一遍，计数不翻倍，接着并后面的', async () => {
+  const init = { 'exam_inbox/X-408-2018': paper(2018), 'exam_inbox/X-408-2019': paper(2019) };
+  const db = memDb(init, { hang: (op, p) => op === 'delete' && p === 'exam_inbox/X-408-2018' && first });
+  let first = true;
+  const a = createExamInbox({ db, waits: [], again: 10, reportError: () => {} });
+  assert.ok(await until(() => db.all()['exam_inbox_log/X-408-2018']));
+  assert.equal(a.progress().busy, true, '删原件那一下没回来：还在忙');
+  a.stop(); // 进了课堂：整页换掉
+  first = false;
+  assert.ok(db.all()['exam_inbox/X-408-2018'] && db.all()['exam_inbox/X-408-2019'], '和真机一样：原件没删、第二份没动');
+  const b = createExamInbox({ db, waits: [], again: 10, reportError: () => {} });
+  assert.ok(await until(() => { const p = b.progress(); return p.done === 2 && !p.busy; }), JSON.stringify(b.progress()));
+  const all = db.all();
+  assert.ok(!all['exam_inbox/X-408-2018'] && !all['exam_inbox/X-408-2019']);
+  assert.equal(all['meta/exam'].counts.questions, 94, '再并一遍的那份不重复加计数');
+  b.stop();
+});
+
+test('首页那一行：卷、练习、考点树按名字叫，不堆编号', () => {
+  assert.equal(inboxName('X-408-2011'), '408 2011 年真题');
+  assert.equal(inboxName('drills-X-408-2011'), '408 2011 年真题做的练习');
+  assert.equal(inboxName('syllabus-DS-2026'), '数据结构考点树（2026 年大纲）');
+  assert.equal(inboxName('tags-408-1'), '一批真题标签');
+  assert.equal(inboxName('奇怪的'), '奇怪的');
+  assert.equal(inboxRow({ total: 37, done: 37, busy: false, failed: [] }), null, '都处理完、没有失败的：不出现');
+  assert.equal(inboxRow({ total: 0, done: 0, busy: false, failed: [] }), null);
+  const r = inboxRow({ total: 37, done: 3, busy: true, failed: [] });
+  assert.equal(r.pending, '考试资料还在并进来：3 / 37，停在这一页');
+  assert.equal(r.head, '');
+  const f = inboxRow({ total: 37, done: 37, busy: false, failed: [{ id: 'X-408-2018', why: '缺了必填的 total' }, { id: 'drills-X-408-2010', why: 'x' }] });
+  assert.equal(f.pending, '');
+  assert.equal(f.head, '有 2 份考试资料没并进去');
+  assert.deepEqual(f.failed, [{ id: 'X-408-2018', name: '408 2018 年真题', why: '缺了必填的 total' }, { id: 'drills-X-408-2010', name: '408 2010 年真题做的练习', why: 'x' }]);
+});

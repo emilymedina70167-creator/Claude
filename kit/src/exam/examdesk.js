@@ -5,6 +5,8 @@
 // 只挂在首页，课堂里不挂（不碰上课的速度）。
 import { planInbox, touches, countsAfter } from './inbox.js';
 import { assertWrite } from '../memory/schema.js';
+import { PERMANENT } from '../memory/writer.js';
+import { reportError as reportErr } from '../errlog.js';
 import { loadExamCourse } from './load.js';
 import { statsCache } from './stats.js';
 import { readReserve } from './reserve.js';
@@ -89,18 +91,33 @@ export async function refreshBars(db, { evidence = [], bars = [], now = Date.now
   return { wrote };
 }
 
-export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curriculum = () => [] } = {}) {
+// 一份试满几轮还写不进去就先停下（写明哪一份为什么，等下次打开首页再试）：以前出错的过 10 秒再读一遍、一直试下去，
+// 错误还被吞掉——学生看不到、出错记录里也没有
+export const INBOX_TRIES = 2;
+const why = (err) => `没写进数据库：${String(err?.message || err?.code || err || '').slice(0, 200)}`;
+
+/**
+ * 首页挂着的收件箱。onChange：进度变了叫一声（首页重画那一行，见 progress）；reportError：出错记进出错记录（测试里换成假的）；
+ * again：有出错的过多久再读一遍收件箱
+ */
+export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curriculum = () => [], onChange = () => {}, reportError = reportErr, again = 10000 } = {}) {
   let busy = false;
   let latest = null;
   let stopped = false;
   let tookOk = false;
-  const done = new Set();
+  // 这次打开首页处理过的（写了回执的、试满几轮放弃的）：id → 没并进去的原因（并进去了是 ''）
+  const done = new Map();
+  const tries = new Map();
+  // 收件箱里现在有的（最近一次快照）：别的设备并掉的不算进总数
+  let present = new Set();
+  const changed = () => { try { onChange(); } catch { /* 首页重画出错别打断并入 */ } };
   let lock = null;
   const awake = async () => { try { if (!lock && typeof document !== 'undefined' && document.visibilityState === 'visible') lock = await navigator.wakeLock?.request?.('screen'); } catch { lock = null; } };
   const sleepOk = () => { try { lock?.release?.(); } catch { /* */ } lock = null; };
+  // 网络抖、被限流的重试；没权限、写法不对这类重试也没用的直接抛（不然一份要白等十几秒）
   async function retry(fn) {
     for (let i = 0; ; i++) {
-      try { return await fn(); } catch (e) { if (i >= waits.length) throw e; await sleep(waits[i]); }
+      try { return await fn(); } catch (e) { if (i >= waits.length || PERMANENT.has(String(e?.code || ''))) throw e; await sleep(waits[i]); }
     }
   }
   const docsOf = (snap) => (snap?.docs || []).map((d) => ({ id: d.id, ...d.data() }));
@@ -143,7 +160,9 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curricul
       await retry(() => db.doc('meta/exam').set(countsAfter(meta, log, at))).catch(() => {});
     }
     await retry(() => db.doc(`exam_inbox/${id}`).delete());
-    done.add(id);
+    // 不合规矩的整份不收：回执写了原因，首页那一行也列出来（不是出错，不进出错记录）
+    done.set(id, log.ok ? '' : [...log.problems, ...log.rejected.map((r) => `${r.id}：${r.error}`)].slice(0, 3).join('；') || '整份不收');
+    tries.delete(id);
     if (log.ok) tookOk = true;
   }
   // 回执只留最近 40 份
@@ -154,21 +173,34 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curricul
 
   async function take(docs) {
     if (stopped) return;
+    present = new Set(docs.map((d) => d.id));
+    changed();
     if (busy) { latest = docs; return; }
     const todo = docs.filter((d) => !done.has(d.id));
     if (!todo.length) return;
     busy = true;
+    changed();
     awake();
     let failed = false;
+    // 这一轮出过错的不在同一轮里接着试（来了新快照也不）：等 again 以后那一次，网络抖的时候不至于两下就放弃
+    const failedNow = new Set();
     try {
       let list = todo;
       while (list?.length) {
         for (const d of list.sort((a, b) => (a.id < b.id ? -1 : 1))) {
           if (stopped) return;
-          if (done.has(d.id)) continue;
-          try { await takeOne(d); } catch { failed = true; }
+          if (done.has(d.id) || failedNow.has(d.id)) continue;
+          try { await takeOne(d); } catch (err) {
+            // 以前这里什么都不做（catch { failed = true; }）：错误不进出错记录，学生在首页也看不到
+            reportError(err, { what: 'exam-inbox', path: d.id });
+            const n = (tries.get(d.id) || 0) + 1;
+            tries.set(d.id, n);
+            failedNow.add(d.id);
+            if (n >= INBOX_TRIES) done.set(d.id, why(err)); else failed = true;
+          }
+          changed();
         }
-        list = latest?.filter((d) => !done.has(d.id));
+        list = latest?.filter((d) => !done.has(d.id) && !failedNow.has(d.id));
         latest = null;
       }
       await trimLogs();
@@ -176,9 +208,18 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curricul
     } finally {
       busy = false;
       sleepOk();
-      // 有出错的（被限流、网络抖）：过一会儿重新读一遍收件箱接着做
-      if (failed && !stopped) setTimeout(() => { db.collection('exam_inbox').get().then((s) => take(docsOf(s)), () => {}); }, 10000);
+      changed();
+      // 有出错的（被限流、网络抖）：过一会儿重新读一遍收件箱接着做（试满 INBOX_TRIES 轮的不再试）
+      if (failed && !stopped) setTimeout(() => { if (!stopped) db.collection('exam_inbox').get().then((s) => take(docsOf(s)), () => {}); }, again);
     }
+  }
+  /**
+   * 首页那一行要的（exam/inbox.js 的 inboxRow 写成字）：total 这次打开首页见过的份数（收件箱里现有的 + 已经处理掉的），
+   * done 处理完的（并进去的、整份不收的、试满几轮放弃的），failed 没并进去的哪一份、为什么
+   */
+  function progress() {
+    const ids = new Set([...present, ...done.keys()]);
+    return { total: ids.size, done: done.size, busy, failed: [...done].filter(([, w]) => w).map(([id, w]) => ({ id, why: w })) };
   }
   const unsub = db.collection('exam_inbox').onSnapshot((s) => take(docsOf(s)), () => {});
   // 课程地图读到以后看一眼：缓存比上次并收件箱旧（别的设备并的、从备份恢复的）就重算一遍
@@ -189,5 +230,5 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curricul
     const m = await db.doc('meta/exam').get().then((x) => (x?.exists ? x.data() : null)).catch(() => null);
     if (m && (!m.statsAt || (m.at || 0) > m.statsAt)) await refreshStats(db, { curriculum: curriculum() }).catch(() => {});
   }
-  return { stop() { stopped = true; try { unsub?.(); } catch { /* */ } }, maybeRefresh, refresh: () => refreshStats(db, { curriculum: curriculum() }) };
+  return { stop() { stopped = true; try { unsub?.(); } catch { /* */ } }, progress, maybeRefresh, refresh: () => refreshStats(db, { curriculum: curriculum() }) };
 }

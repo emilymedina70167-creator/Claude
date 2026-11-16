@@ -124,6 +124,34 @@ export function planInbox(rec = {}, { have = new Map(), at = Date.now(), syllabu
   return { writes, log };
 }
 
+// —— 首页那一行（memory/desk.js 画、examdesk.js 的 progress 给数）：学生看得见并到哪了、哪几份没并进去 ——
+// 2026-11-15 收件箱 37 份只并进了第一份：首页开着 3 秒就进了课堂，学生什么都看不到。给学生看的写名字，不堆编号
+const COURSE_NAME = { LA: '线代', HM: '高数', PS: '概率', DS: '数据结构', CO: '组成原理', OS: '操作系统', CN: '计网', EN: '英语', PO: '政治' };
+/** 收件箱里一份的名字：X-408-2011 → 408 2011 年真题；drills-X-408-2011 → …做的练习；syllabus-DS-2026 → 数据结构考点树 */
+export function inboxName(id) {
+  const s = String(id || '');
+  let m = s.match(/^(drills-)?X-(\d{3})-(\d{4})$/);
+  if (m) return `${m[2]} ${m[3]} 年真题${m[1] ? '做的练习' : ''}`;
+  m = s.match(/^syllabus-([A-Z]{2})-(\d{4})$/);
+  if (m) return `${COURSE_NAME[m[1]] || m[1]}考点树（${m[2]} 年大纲）`;
+  if (/^tags-/.test(s)) return '一批真题标签';
+  return s;
+}
+/**
+ * progress → 首页那一行要写什么；什么都不用写（都处理完、没有没并进去的）返回 null。
+ * { pending: 还在并时的一句（空串就是并完了）, head: 有没并进去的时的一句, failed: [{ id, name, why }] }
+ */
+export function inboxRow(p) {
+  const failed = (p?.failed || []).map((f) => ({ id: f.id, name: inboxName(f.id), why: String(f.why || '') }));
+  const left = (p?.total || 0) > (p?.done || 0);
+  if (!left && !failed.length) return null;
+  return {
+    pending: left ? `考试资料还在并进来：${p.done} / ${p.total}，停在这一页` : '',
+    head: failed.length ? `有 ${failed.length} 份考试资料没并进去` : '',
+    failed,
+  };
+}
+
 /** meta/exam 的计数：照回执加新加的（首页不为了计数去读整类） */
 export function countsAfter(meta, log, at = Date.now()) {
   const counts = { ...(meta?.counts || {}) };

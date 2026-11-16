@@ -1251,6 +1251,27 @@ const SUITES = {
     check(saved.split.math === 120 && saved.log.some((l) => l.by === 'me' && l.field === 'goal' && l.to === 400), `改档案没记 log：${JSON.stringify(saved.log)}`);
     await t.home();
     await t.waitFor(async () => (await t.text('.dk-score'))?.includes('目标 400 分'), { what: '首页 410 分那张卡换成目标 400 分' });
+    // 收件箱那一行（2026-11-15 真机上 37 份只并进第一份，学生什么都看不到）：放两份进来，并的时候首页写着并到哪，并完这一行消失
+    const another = (year) => {
+      const id = `X-408-${year}`;
+      return { kind: 'paper', by: 'dev', at: 1, passages: [], paper: { ...good.paper, id, year }, questions: good.questions.map((q) => ({ ...q, id: q.id.replace('2019', String(year)), year, paper: id })) };
+    };
+    check(await t.page.$eval('.dk-examinbox', (e) => e.hidden), '收件箱空着的时候首页那一行也出来了');
+    await t.page.evaluate(() => window.LAKitDev.slowWrites(250)); // 慢一点才看得到并到一半
+    await plantLive(t, { 'exam_inbox/X-408-2017': another(2017), 'exam_inbox/X-408-2016': another(2016) });
+    await t.waitFor(async () => /考试资料还在并进来：\d \/ 2，停在这一页/.test((await t.text('.dk-examinbox')) || ''), { timeout: 10000, what: '首页那一行写着并到第几份' });
+    await t.waitFor(async () => { const x = await t.db(); return !x['exam_inbox/X-408-2017'] && !x['exam_inbox/X-408-2016'] && (await t.page.$eval('.dk-examinbox', (e) => e.hidden)); }, { timeout: 30000, what: '两份都并完、首页那一行消失' });
+    await t.page.evaluate(() => window.LAKitDev.slowWrites(0));
+    // 一直写不进去：试两轮（中间隔 10 秒）就停，那一行写明哪一份没并进去、为什么；原件留着下次再试
+    t.expected = ['模拟的写入失败'];
+    await t.page.evaluate(() => window.LAKitDev.failWrites(1e9, 'questions/Q-408-2015-', 'permission_denied'));
+    await plantLive(t, { 'exam_inbox/X-408-2015': another(2015) });
+    await t.waitFor(async () => (await t.text('.dk-examinbox'))?.includes('有 1 份考试资料没并进去'), { timeout: 30000, what: '一直写不进去：首页那一行写着没并进去' });
+    await t.page.click('.dk-examinbox summary');
+    const row = await t.text('.dk-examinbox');
+    check(row.includes('408 2015 年真题') && row.includes('模拟的写入失败'), `没写明哪一份、为什么：${row}`);
+    check((await t.db())['exam_inbox/X-408-2015'], '没并进去的原件被删了');
+    await t.page.evaluate(() => window.LAKitDev.failWrites(0));
     return t;
   },
 

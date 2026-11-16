@@ -1013,3 +1013,14 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 /* 输入框在胶囊里：不要学习台输入框自己的那层淡底和细边（不然胶囊里套胶囊）；记了几条那行是小字 */
 .is-desk .hd-page .hd-form textarea.hd-input.hd-input { background: transparent !important; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; padding: 7px 0; min-height: 34px; }
 .is-desk .hd-head .hd-memo { margin-top: 8px; font: 12.5px/1.4 var(--sans); color: rgb(var(--chalk-rgb) / 0.5); }
+
+/* 考试资料的收件箱那一行（desk.js 的 paintExamInbox）：还在并、有没并进去的才出现；横跨整行，两种版式都一样 */
+.dk-home > .dk-examinbox { grid-column: 1 / -1; }
+.dk-examinbox { padding: 4px 16px; border-radius: 14px; background: var(--panel); box-shadow: var(--panel-edge), var(--lift); font: 15px/1.5 var(--sans); }
+.dk-exin-left { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0; }
+.dk-exin-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); animation: dkExinPulse 1.4s ease-in-out infinite; }
+@keyframes dkExinPulse { 50% { opacity: .35; } }
+.dk-exin-bad summary { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 44px; cursor: pointer; color: var(--red); }
+.dk-exin-bad ul { margin: 0 0 6px; padding-left: 20px; }
+.dk-exin-bad li { margin: 4px 0; overflow-wrap: anywhere; }
+.dk-exin-bad p { margin: 0 0 8px; font-size: 13.5px; }
