@@ -158,7 +158,7 @@ export { navLabel } from './pagenav.js';
 
 // stuck：「停久了提醒老师」开关 { on, onChange(on) }（不给就不显示这一项）；onHome：在学习台里上课时「回学习台」
 // actionsPending：一问一答里学生在活板上试过（拨、拖、折）、还没发的动作。有的话输入框空着也能发，发送键写「就这样 →」
-export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick, onNav, onHome = null, images = false, tag = MODEL_TAG, stuck = null, inkPending = null, actionsPending = null } = {}) {
+export function createClassBar({ onSend, onStop, onRetry, onEnd, endAsks = null, onCopy, onQuick, onNav, onHome = null, images = false, tag = MODEL_TAG, stuck = null, inkPending = null, actionsPending = null } = {}) {
   const el = document.createElement('div');
   el.className = 'class-bar';
   el.setAttribute('role', 'region');
@@ -359,7 +359,8 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, onCopy, onQuick
     endText.textContent = '下课';
   }
   on(endBtn, 'click', () => {
-    if (confirmEnd.tap() === 'fire') { disarmEnd(); setMenu(false); onEnd?.(); return; }
+    // endAsks()：课堂自己会弹一个框再问一遍（有「这节课要拿下的事」的课：框里列着每件事的状态）时，这里不用再点第二下
+    if (endAsks?.() || confirmEnd.tap() === 'fire') { disarmEnd(); setMenu(false); onEnd?.(); return; }
     endBtn.classList.add('is-armed');
     endText.textContent = '确定下课？再点一下';
     clearTimeout(endTimer);

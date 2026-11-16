@@ -19,6 +19,7 @@ import { recheck as sentryRecheck, recheckText, workOrder } from './sentry.js';
 import { guardDb } from './writer.js';
 import { subjectOf as holdSubject } from './space.js';
 import { HOLD_MAX, needsHolds, pickHolds, holdBrief, holdDocs } from './holds.js';
+import { aimId, checkAims } from '../class/aims.js';
 import { checkProblems } from './labdesk.js';
 import { componentDoc } from '../subject.js';
 import { ENGINES } from '../engines/registry.js';
@@ -2004,6 +2005,8 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     memo: { ops, view: createMemoView({ db, ops, nameOf: nameIn(() => mem) }) },
     review: doc.review || null,
     opening: doc.opening || null,
+    // 这节课要拿下的事（class/aims.js）：数组（可以是空的：还没定，课堂会让老师第一轮写）；没有这个字段的课（以前开的课、复现课）不提这回事
+    aims: Array.isArray(doc.aims) ? doc.aims : null, aimsLog: doc.aimsLog || null,
   });
 }
 
@@ -2058,6 +2061,13 @@ async function priorReads(db, sessions, { sid, block, books }) {
  * main / problems：这节课的资料包；space：没有块时算哪一科；taken：已经有的课的编号（不撞号）。返回新课的编号
  * kind：新开的都是 'stage'（舞台，session.js 的 classForm）；'class'（黑板）不写 kind（以前的课都没写，kindOf 当成课堂），'talk' 只有自动测试还开
  */
+/** 资料包里备课定的要拿下的事：编号、件数都合规才用（照课堂收 board aims 的同一把尺子 checkAims），不合规当没定 */
+export function packAims(main) {
+  const list = (Array.isArray(main?.aims) ? main.aims : []).filter((a) => a && typeof a === 'object')
+    .map((a) => ({ id: aimId(a.id), can: String(a.can ?? '').trim(), ...(a.proof ? { proof: String(a.proof).trim() } : {}), ...(a.exam ? { exam: String(a.exam).trim() } : {}) }));
+  return list.length && list.every((a) => a.id) && !checkAims(list).length ? list : [];
+}
+
 export async function createClass(db, { block = null, main = null, problems = null, space = 'math', unit = '学习台', taken = [], kind = 'stage' } = {}) {
   const today = toDate(Date.now());
   const sid = sessionId(today, taken);
@@ -2073,6 +2083,9 @@ export async function createClass(db, { block = null, main = null, problems = nu
     // 复现课（views.js 的 reviewPack，reviewClass）记 review：这节课就是复现这几组；备课写的开头复现（[{ id, how }]）记 opening
     ...(main?.reviewClass && reviewIdsOf(main.review).length ? { review: reviewIdsOf(main.review) } : {}),
     ...(!main?.reviewClass && reviewIdsOf(main?.review).length ? { opening: reviewIdsOf(main.review) } : {}),
+    // 黑板课（不是复现课）有「这节课要拿下的事」：备课定了的抄过来，没定先记空的——课堂看到空的会让老师第一轮写。
+    // 复现课、舞台课、一问一答没有这个字段，它们的课堂不提这回事
+    ...(kind !== 'talk' && kind !== 'stage' && !main?.reviewClass ? { aims: packAims(main) } : {}),
   });
   const scoped = scopeDb(db, sid);
   // 上一节这一科下课整理单里被守卫拒掉的几条（memops.js 的 carry）：带进这节课的资料包，让课堂里的 Claude 顺带补（不单独调用），带过就清掉

@@ -1356,6 +1356,64 @@ const SUITES = {
 
   // 黑板课每一轮带「这一块在考试里」（2026-11-15 的「根」）：进课堂时按门课读一次考试资料（不等它），说明里多这一节——
   // 数是页面算的、留作模考的卷不在里面；核题号的函数挂上；开课的抢跑照样接得上（考试资料读到以后才抢）
+  // 这节课要拿下的事（第十二轮，class/aims.js）：黑板课开课时文档上有空的 aims；模拟老师「测试:目标」写 board aims 两件、两道各挂一件的题；
+  // 板上方那一条出现（0/2）；答对一道变 1/2（选择题点一下算带着做到）；点开看得到两件事和状态、不显示编号；证据上带 aim；
+  // 刷新以后还在；「测试:目标改」换掉一件（算另一件事）、加一件；点下课，框里列着每件事的状态；报告里有这一节
+  async aims(browser) {
+    const t = await seeded(browser);
+    await t.openForm('class');
+    await t.page.click('.dk-class .dk-new');
+    const sid = await t.inClass();
+    check(Array.isArray((await t.docs('sessions')).find((d) => d.id === sid)?.aims), '新开的黑板课文档上没有 aims（空的也要有）');
+    await t.page.click('button:has-text("开始上课")');
+    await t.waitFor(() => t.page.$('button:has-text("一个数")'), { timeout: 30000, what: '模拟老师写出第一道题' });
+    await sleep(2500);
+    check(!(await t.page.$('.class-aims:not([hidden])')), '还没定要拿下的事，板上方那一条就出现了');
+    const sys0 = await t.page.evaluate(() => window.LAKit.classroom.lastPrompt?.system || '');
+    check(sys0.includes('这节课还没定要拿下的事') && sys0.includes('board aims'), '还没定的时候，老师的说明里没提醒先写 board aims');
+    const say = async (x) => { const input = t.page.locator('textarea:visible, [contenteditable="true"]:visible').first(); await input.click(); await t.page.keyboard.type(x); await t.page.keyboard.press('Enter'); };
+    await say('测试:目标');
+    await t.waitFor(async () => /0\/2 有证据/.test(await t.text('.class-aims') || ''), { timeout: 30000, what: '板上方出现「这节课要拿下的 · 0/2 有证据」' });
+    check((await t.docs('sessions')).find((d) => d.id === sid)?.aims?.length === 2, '老师写的两件事没存进这节课');
+    await sleep(1500);
+    await t.page.evaluate(() => [...document.querySelectorAll('.block[data-bid^="q-aim-"] .q-opt')].find((b) => b.textContent.includes('3×3 矩阵'))?.click());
+    await t.waitFor(async () => /1\/2 有证据/.test(await t.text('.class-aims') || ''), { timeout: 15000, what: '答对挂在第一件上的题以后变成 1/2' });
+    await t.page.click('.class-aims-line');
+    const list = await t.waitFor(async () => { const x = await t.text('.class-aims-list'); return x && x.length > 10 ? x : null; }, { what: '点开那一条看到清单' });
+    check(list.includes('带着做到') && list.includes('还没证据') && list.includes('判断两个向量相乘'), `清单不对：${list}`);
+    check(!/\ba[12]\b/.test(list), '清单里显示了编号');
+    // 去点别处：清单收回一行
+    await t.page.click('.class-page-title:visible'); await sleep(400);
+    check(await t.page.evaluate(() => document.querySelector('.class-aims-list')?.hidden === true), '点了别处，清单没收回去');
+    const ev = await t.waitFor(async () => Object.entries(await t.db()).filter(([k]) => k.startsWith('evidence/')).map(([, v]) => v).find((v) => v.session === sid && v.aim === 'a1'), { what: '作答的证据上带着 aim' });
+    check(!ev.tags?.includes('a1'), 'aim 进了 tags');
+    // 老师下一轮看到的黑板现状里有每件事和页面算的状态
+    await sleep(4000);
+    const sys1 = await t.page.evaluate(() => window.LAKit.classroom.lastPrompt?.system || '');
+    check(/这节课要拿下的事（状态是页面按学生的作答算的）：\n- a1（带着做到，1 道题）/.test(sys1), '老师的说明里没有要拿下的事和状态');
+    // 刷新：那一条、状态都在
+    await t.open(sid);
+    await t.waitFor(async () => /1\/2 有证据/.test(await t.text('.class-aims') || ''), { timeout: 20000, what: '刷新以后那一条还是 1/2' });
+    // 课上改：a2 换了内容、多一件
+    await sleep(1500);
+    await say('测试:目标改');
+    await t.waitFor(async () => /1\/3 有证据/.test(await t.text('.class-aims') || ''), { timeout: 30000, what: '老师改了以后变成 1/3' });
+    const doc = (await t.docs('sessions')).find((d) => d.id === sid);
+    check(doc.aims.find((a) => a.id === 'a2')?.since > 0 && !doc.aims.find((a) => a.id === 'a1').since && doc.aimsLog?.length === 2, `改了以后存的不对：${JSON.stringify(doc.aims)}`);
+    // 下课：框里列着每件事的状态，只点一次「下课」不用再点第二下
+    await sleep(2500);
+    await t.page.click('.cb-more'); await sleep(300); await t.page.click('.cb-end');
+    await t.page.waitForSelector('.la-dialog', { timeout: 5000 });
+    const dlg = await t.text('.la-dialog-text');
+    check(/下课吗/.test(dlg) && dlg.includes('带着做到') && dlg.includes('还没证据') && !/\ba[123]\b/.test(dlg), `下课的框不对：${dlg}`);
+    await t.answer('下课');
+    const s = await t.waitFor(async () => { const x = (await t.docs('sessions')).find((d) => d.id === sid); return x?.status === 'closed' && x.report?.at ? x : null; }, { timeout: 40000, what: '下课以后报告写好' });
+    const rep = (await t.db())[`sessions/${sid}/report/main`];
+    check(rep?.aims?.length === 3 && rep.aims.find((a) => a.id === 'a1')?.status === 'led' && rep.aims.find((a) => a.id === 'a2')?.status === 'none', `报告里要拿下的事不对：${JSON.stringify(rep?.aims)}`);
+    check(s.aims.length === 3, '下课以后这节课的 aims 没了');
+    return t;
+  },
+
   async classexam(browser) {
     const t = await seeded(browser);
     const q = (year, n, how) => ({ course: 'DS', space: 'cs', paper: `X-408-${year}`, year, n, type: 'single', points: 2, stem: `顺序表第 i 个位置插入要移动几个元素（${year} 年第 ${n} 题）`, options: { A: '1', B: '2', C: '3', D: '4' }, answer: 'B', analysis: '从后往前挪', tags: { syl: ['G-DS-2.1'], how } });

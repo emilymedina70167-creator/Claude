@@ -8,7 +8,9 @@ const newId = () => Date.now().toString(36) + '-' + Math.random().toString(36).s
 
 // evidence：在学习台里上课时给一个函数，返回这一条证据的 { session, block, point }。
 // 这时作答和动作只写一份进 evidence（和 answers / events 同一条写入路径，不写两遍）
-export function createSink(store, { evidence = null } = {}) {
+// onEvidence：每写一条证据（作答、动作）就把写的那一条给它看一眼（课堂按它现算「这节课要拿下的事」的状态，不为此再读一次数据库）
+export function createSink(store, { evidence = null, onEvidence = null } = {}) {
+  const putEvidence = (src, rec) => { const d = toEvidence(src, rec, evidence(rec)); try { onEvidence?.(d); } catch (e) { console.warn(e); } return put('evidence', d); };
   const pending = new Map(); // 组件 id → 正在上传的原图（Promise<id|null>）
   const failed = [];
   let badge = null;
@@ -86,7 +88,7 @@ export function createSink(store, { evidence = null } = {}) {
     pending.delete(key);
     const images = (await Promise.all(ups)).filter(Boolean);
     const rec = toAnswer(e, images);
-    return evidence ? put('evidence', toEvidence('record', rec, evidence(rec))) : put('answers', rec);
+    return evidence ? putEvidence('record', rec) : put('answers', rec);
   }
 
   return {
@@ -104,7 +106,7 @@ export function createSink(store, { evidence = null } = {}) {
 
     event(e) {
       const rec = { ...e, detail: e.detail ?? null, at: Date.now() };
-      return track(evidence ? put('evidence', toEvidence('event', rec, evidence(rec))) : put('events', rec));
+      return track(evidence ? putEvidence('event', rec) : put('events', rec));
     },
 
     /** 等手上的写入（含失败后的那一次重试）都落地；没存上的再试一遍。返回还有几条没存上 */

@@ -22,6 +22,7 @@
 // 「测试:示意图」sketch 当场画的图 + highlight + label= 标注；「测试:推导」derive 分拍板书 + figure play step；
 // 「测试:原图」image 贴讲义原图（本地用一张模拟的）；「测试:排序」演示组件 sort（快排一次划分，先猜枢轴落在哪）+ figure play step + mark；
 // 「测试:预案」board react + add … hold（答对由页面接，不再调用；答错照常调用）；「测试:拍子」一轮分四拍（说一句、写一段、圈一下……）。
+// 「测试:目标」学习台里的黑板课：board aims 定两件、两道各挂一件的题；「测试:目标改」再写一次换掉一件。
 // 「测试:守卫」学习台里：memo 块写一条对得上的、一条编原话的、一条编证据编号的、一条重复的（守卫收下 / 挂提醒 / 拒收）。
 // 一问一答的课里：「测试:写错」写一行看不懂的；「测试:写错带记」写一行算不出来的值（只有画出来才查得到）还带 memo（review R3 过），
 // 重写时原样再带（只该升一档）；
@@ -230,6 +231,49 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
           'slip text="学生说「这一块我早就会了不用讲」，我没追问" lesson="先问一句再讲"',
           'note text="（模拟老师）形状判断下次换一种题再测" basis=ev-zzzz-fake',
           `note text="学生原话「${said.replace(/"/g, '')}」，想看守卫。" basis=say`,
+        ].join('\n')),
+      ),
+    };
+  }
+
+  // 这节课要拿下的事（class/aims.js）：定两件，一块板上两道题各挂一件。答对第一道，板上方那一条变成「1/2 有证据」
+  // （选择题点一下只算「带着做到」，也算有证据）。「测试:目标改」再写一次：a2 换了内容（算另一件事）、多一件 a3
+  if (!isSystem && /测试\s*[:：]?\s*目标改/.test(said)) {
+    return { kind: 'aims', text: join('（模拟老师）发现第二件早就会了，换一件。', board('aims', [
+      'a1 ｜ 判断两个向量相乘的结果是几行几列 ｜ 独立判一道没见过的',
+      'a2 ｜ 写出秩一矩阵的每一列是谁的倍数 ｜ 独立写一道',
+      'a3 ｜ 用 $A=\\boldsymbol\\alpha\\boldsymbol\\beta^{\\mathrm T}$ 算 $A^2$ ｜ 写出每一步的依据',
+    ].join('\n'))) };
+  }
+  if (!isSystem && /测试\s*[:：]?\s*目标/.test(said)) {
+    const n = nextSeq(turns, memo);
+    return {
+      kind: 'aims',
+      text: join(
+        '（模拟老师）这节课要拿下两件事，先各做一道。',
+        board('aims', [
+          'a1 ｜ 判断两个向量相乘的结果是几行几列 ｜ 独立判一道没见过的',
+          'a2 ｜ 说出内积和外积差在哪 ｜ 用自己的话讲清一个例子',
+        ].join('\n')),
+        board(`new id=b${n} title="几行几列" aim=a1`, [
+          '```quiz',
+          `id: q-aim-${n}`,
+          String.raw`q: $\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}$（$\boldsymbol\alpha,\boldsymbol\beta$ 都是 3 维列向量）是`,
+          '- [ ] 一个数',
+          '- [x] 3×3 矩阵',
+          '- [ ] 3 维列向量',
+          '- [ ] 3 维行向量',
+          '```',
+        ].join('\n')),
+        board(`add id=b${n + 1} title="内积还是外积" aim=a2`, [
+          '```quiz',
+          `id: q-aim-${n + 1}`,
+          String.raw`q: $\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是`,
+          '- [x] 一个数',
+          '- [ ] 3×3 矩阵',
+          '- [ ] 3 维列向量',
+          '- [ ] 3 维行向量',
+          '```',
         ].join('\n')),
       ),
     };

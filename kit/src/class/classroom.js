@@ -36,7 +36,8 @@ import { strokesToBlob } from '../ink/engine.js';
 import { shouldNudge, stuckText, STUCK_MS } from './stuck.js';
 import { fromEvidence, sayEvidence, draftEvidence, observationRecord, slipRecord, memoryRead } from '../memory/session.js';
 import { callCost, usageOf, usageText } from './usage.js';
-import { reportText } from '../memory/report.js';
+import { reportText, itemsOf } from '../memory/report.js';
+import { checkAims, mergeAims, aimsSummary, aimsLine, STATUS_TEXT } from './aims.js';
 import { debriefText } from '../memory/debrief.js';
 import { earlierClasses } from '../memory/digest.js';
 import { choose } from '../dialog.js';
@@ -130,9 +131,10 @@ export async function renderClass(root, meta, desk = null) {
   }
   const { db } = store;
   // 学习台里：作答、动作写成证据，带上这节课、这一块、这一段标的知识点（point=）
-  const sink = createSink(store, desk ? { evidence: (rec) => evCtx(rec.step) } : {});
+  const sink = createSink(store, desk ? { evidence: (rec) => evCtx(rec.step), onEvidence: (d) => { aimEvs.push(d); aimsSoon(); } } : {});
   // turn：这时课堂进行到第几轮（最近一轮的 seq），课后报告按它和课堂记录对齐
-  const evCtx = (step) => ({ session: desk?.sid, block: desk?.block, point: segs.get(step)?.point, turn: turnSeq });
+  // aim：这一段的题是给这节课要拿下的哪件事用的（段上的 aim=）
+  const evCtx = (step) => ({ session: desk?.sid, block: desk?.block, point: segs.get(step)?.point, aim: segs.get(step)?.aim, turn: turnSeq });
 
   // —— 谁来讲课：claude.ai 里是真的 Claude；本地 ?dev 用模拟老师（剧本回放，不花额度）——
   const ai = await getAI();
@@ -206,6 +208,16 @@ export async function renderClass(root, meta, desk = null) {
   let committing = false; // finishTurn 正在把先画出来的段换成正式的：正式的不再播淡入（不闪一下）
   let lastVerify = { turns: 0, discarded: 0 }; // 学习台里：上次写进 sessions/{编号} 的核验轮数
   let lastUsage = ''; // 学习台里：上次写进 sessions/{编号} 的花费
+  // —— 这节课要拿下的事（class/aims.js，设计 6.2）——
+  // aims：这节课的那几件（数组，可以是空的：还没定）；null 是这节课不提这回事（以前开的课、复现课、一问一答、单独的课堂页）。
+  // 每件到了没有不由老师宣布：按这节课到现在的作答现算（aimEvs：刷新后读回来的证据 + 这一次写的每一条，不为此再读数据库）
+  let aims = !TALK && Array.isArray(desk?.aims) ? desk.aims : null;
+  const aimsLog = Array.isArray(desk?.aimsLog) ? [...desk.aimsLog] : [];
+  const aimEvs = [];
+  // live：最后一道还只是错、学生多半还在改的先不算，免得写错第一下板上方就亮「做了没到」
+  const aimsNow = ({ live = true } = {}) => (aims ? aimsSummary(aims, itemsOf(aimEvs), live ? { live: true } : {}) : null);
+  let aimsTimer = 0;
+  const aimsSoon = () => { if (!aims) return; clearTimeout(aimsTimer); aimsTimer = setTimeout(paintAims, 60); };
   let turnMemos = []; // 这一轮 memo 块里读懂的条目（执行完黑板指令、记下这一轮以后再写进记忆库）
   // 预案（react.js，docs/board-plan.md）：组件 id → { target, seq（哪一轮写的）, seg（组件所在的段）, by, cases }
   const reacts = new Map();
@@ -250,10 +262,32 @@ export async function renderClass(root, meta, desk = null) {
     onStop: () => ctl?.abort(),
     onRetry: () => retryRun(),
     onEnd: () => endClass(),
+    endAsks: () => !!aims?.length,
     onCopy: () => copyRecord(toast),
     onHome: desk?.onHome || null,
   });
   bv.attachBar(bar);
+  // 板上方的一条「这节课要拿下的 · 1/3 有证据」：收着是一行，点开是每件事和页面现算的状态（不显示编号）。
+  // 学生每次作答以后跟着变；还没定（空的）、这节课不提这回事（aims 是 null）时不出现
+  const aimsEl = aims ? document.createElement('div') : null;
+  if (aimsEl) {
+    aimsEl.className = 'class-aims';
+    aimsEl.hidden = true;
+    root.querySelector('.class-stage')?.prepend(aimsEl);
+    aimsEl.addEventListener('click', (e) => { if (e.target.closest('.class-aims-line')) { aimsEl.classList.toggle('is-open'); paintAims(); } });
+    // 点开的清单吸在板的上方、挺占地方：学生去点别处（做题、翻板）就收回一行
+    document.addEventListener('pointerdown', (e) => { if (aimsEl.classList.contains('is-open') && !aimsEl.contains(e.target)) { aimsEl.classList.remove('is-open'); paintAims(); } }, { capture: true, passive: true });
+  }
+  function paintAims() {
+    if (!aimsEl) return;
+    const sum = aimsNow() || [];
+    aimsEl.hidden = !sum.length;
+    if (!sum.length) return;
+    const open = aimsEl.classList.contains('is-open');
+    aimsEl.innerHTML = `<button type="button" class="class-aims-line" aria-expanded="${open}"><span class="class-aims-text">${escapeHtml(aimsLine(sum))}</span><span class="class-aims-chev" aria-hidden="true"></span></button>`
+      + `<ul class="class-aims-list"${open ? '' : ' hidden'}>${sum.map((a) => `<li data-status="${a.status}"><span class="class-aims-dot" aria-hidden="true"></span><span class="class-aims-can">${mdToHtml(String(a.can), { inline: true })}</span><span class="class-aims-st">${STATUS_TEXT[a.status]}</span></li>`).join('')}</ul>`;
+  }
+  paintAims();
   // 点着问（askhere.js）：点板上一行、一个公式、steps 的一步，问「为什么 / 没看懂 / 举个例子」；预写的「为什么」页面当场显示
   // 一问一答（第一批）先不挂：活板上的东西一轮轮在挪，点着问的锚点会跟着乱
   const askHere = readOnly || TALK ? null : createAskHere({
@@ -441,7 +475,7 @@ export async function renderClass(root, meta, desk = null) {
           Object.assign(bv.ensurePage(page), { lead: d.id, title: d.title || '' });
         }
         if (page) bv.ensurePage(page);
-        const seg = { id: d.id, seq: d.seq || 0, page, place, title: d.title || '', md: String(d.md || ''), hidden: !!d.hidden, held: !!d.held, failed: !!d.failed, pending: false, sec: null, ...(d.point ? { point: d.point } : {}), ...(CANVAS && d.col !== undefined ? { col: d.col } : {}), ...(Number.isFinite(d.ord) ? { ord: d.ord } : {}) };
+        const seg = { id: d.id, seq: d.seq || 0, page, place, title: d.title || '', md: String(d.md || ''), hidden: !!d.hidden, held: !!d.held, failed: !!d.failed, pending: false, sec: null, ...(d.point ? { point: d.point } : {}), ...(d.aim ? { aim: d.aim } : {}), ...(CANVAS && d.col !== undefined ? { col: d.col } : {}), ...(Number.isFinite(d.ord) ? { ord: d.ord } : {}) };
         // 一问一答的活板：每一轮的行数、回显、小字、找到的例子都存在这一段上
         if (TALK && d.id === HB_ID) Object.assign(seg, talkFields(d));
         segs.set(seg.id, seg);
@@ -469,6 +503,7 @@ export async function renderClass(root, meta, desk = null) {
       ].sort((a, b) => (a.at || 0) - (b.at || 0));
       recs.forEach((a) => { if (reportable(a)) addResult(a); });
       replayStudentWork(recs);
+      paintAims();
       if (TALK) restoreHb(recs);
     } catch (e) {
       console.error(e);
@@ -489,7 +524,9 @@ export async function renderClass(root, meta, desk = null) {
     }
     const s = await db.collection('evidence').where('session', '==', desk.sid).get();
     const an = [], ev = [];
+    aimEvs.length = 0;
     for (const d of s.docs) {
+      aimEvs.push({ id: d.id, ...d.data() });
       const x = fromEvidence({ id: d.id, ...d.data() });
       if (x.kind === 'record') an.push(x.rec);
       else if (x.kind === 'event') ev.push(x.rec);
@@ -871,6 +908,26 @@ export async function renderClass(root, meta, desk = null) {
   }
 
   // 执行一条黑板指令。返回 { op, id, ok, error?, ... }；画不出来的 new/add/replace/pin 记进 failures 等着重写
+  // 老师写 board aims：整份换掉这节课要拿下的事。合规（2～5 件、编号不重、写的真题题号能用）才存；
+  // 不合规的一件都不存、原来的不变，每条问题下一轮告诉老师（板和课照常）
+  function aimsOp(op, notes) {
+    if (!desk || TALK) return { op: 'aims', ok: false, error: 'board aims 只在学习台里上黑板课时能用' };
+    if (!aims) return { op: 'aims', ok: false, error: '这节课不定要拿下的事（复现课、这个功能以前开的课）：照资料包和学生的作答上' };
+    const problems = [...(op.errors || []), ...checkAims(op.aims, { examCheck })];
+    if (problems.length) return { op: 'aims', ok: false, error: `这节课要拿下的事没存（原来的没变），改好整份重写：\n${problems.map((x) => `  - ${x}`).join('\n')}` };
+    const m = mergeAims(aims, op.aims, Date.now());
+    const had = aims.length;
+    aims = m.aims;
+    aimsLog.push({ at: Date.now(), turn: turnSeq, n: aims.length });
+    desk.updateSession({ aims, aimsLog: aimsLog.slice(-20) });
+    // 板上还挂着已经不要了的那一件的段：以后那一段的作答哪件都不算，告诉老师
+    const lost = had ? [...segs.values()].filter((x) => x.aim && !x.hidden && !aims.some((a) => a.id === x.aim)).map((x) => `${x.id}（aim=${x.aim}）`) : [];
+    if (m.changed.length) notes.push(`要拿下的事里 ${m.changed.join('、')} 换了内容：算另一件事，以前挂在这个编号上的作答不算它的。`);
+    if (lost.length) notes.push(`板上这几段挂的那一件已经不在要拿下的事里了，段里的作答现在哪件都不算：${lost.join('、')}。要算就 board replace 那一段、写上现在的 aim=。`);
+    paintAims();
+    return { op: 'aims', ok: true, n: aims.length };
+  }
+
   function execOp(op, failures, notes) {
     if (op.warn) notes.push(`${op.op} ${op.id || ''}：${op.warn}`);
     // 教学计划：不上黑板；下一轮从对话历史里取最新的一份放进说明（prompt.js 的 latestPlan）
@@ -915,7 +972,8 @@ export async function renderClass(root, meta, desk = null) {
         }
         seg = { id: op.id, seq: ++segSeq, page, place: toPin ? 'pin' : 'board', title: '', md: '', hidden: false, failed: false, pending: false, sec: null };
       }
-      const next = { ...seg, title: op.title ?? seg.title, md: op.body || '', ...(op.point ? { point: op.point } : {}) };
+      const next = { ...seg, title: op.title ?? seg.title, md: op.body || '', ...(op.point ? { point: op.point } : {}), ...(op.aim ? { aim: op.aim } : {}) };
+      if (op.aim && !(aims || []).some((a) => a.id === op.aim)) notes.push(`${op.op} ${op.id}：aim=${op.aim} 不在这节课要拿下的事里${aims?.length ? `（现在有 ${aims.map((a) => a.id).join('、')}）` : aims ? '（还没定：先写 board aims）' : '（这节课不定要拿下的事）'}，这一段的作答哪件都不算。`);
       // 藏着的段（add … hold，等预案揭开）：改写时还藏着；写错了等重写时记着要藏
       const held = op.op === 'replace' ? !!seg.held : op.op === 'add' && (!!op.hold || !!(seg.pending && seg.held));
       const errors = [];
@@ -1033,6 +1091,7 @@ export async function renderClass(root, meta, desk = null) {
     if (op.op === 'figure') return tools.figureOp(op, notes);
     if (op.op === 'mark') return tools.markOp(op);
     if (op.op === 'unmark') return tools.unmarkOp(op);
+    if (op.op === 'aims') return aimsOp(op, notes);
     return { op: op.op, ok: false, error: '看不懂的指令' };
   }
 
@@ -1151,7 +1210,7 @@ export async function renderClass(root, meta, desk = null) {
   }
 
   function saveSeg(seg) {
-    sink.put('steps', { id: seg.id, seq: seg.seq, page: seg.page || 0, place: seg.place || 'board', md: seg.md, title: seg.title || '', hidden: !!seg.hidden, failed: !!seg.failed, ...(seg.held ? { held: true } : {}), ...(seg.col !== undefined ? { col: seg.col } : {}), ...(Number.isFinite(seg.ord) ? { ord: seg.ord } : {}), ...(seg.point ? { point: seg.point } : {}), ...(TALK && seg.id === HB_ID ? talkFields(seg) : {}), by: 'class', at: Date.now() });
+    sink.put('steps', { id: seg.id, seq: seg.seq, page: seg.page || 0, place: seg.place || 'board', md: seg.md, title: seg.title || '', hidden: !!seg.hidden, failed: !!seg.failed, ...(seg.held ? { held: true } : {}), ...(seg.col !== undefined ? { col: seg.col } : {}), ...(Number.isFinite(seg.ord) ? { ord: seg.ord } : {}), ...(seg.point ? { point: seg.point } : {}), ...(seg.aim ? { aim: seg.aim } : {}), ...(TALK && seg.id === HB_ID ? talkFields(seg) : {}), by: 'class', at: Date.now() });
   }
 
   // —— 一问一答（docs/talk-impl.md C）：活板这一段、每一轮写的行、学生的作答 ——
@@ -1477,6 +1536,8 @@ export async function renderClass(root, meta, desk = null) {
     const lessonVars = Object.entries(session.vars || {}).map(([k, v]) => { try { return `${k} = ${exactText(v)}`; } catch { return k; } });
     return {
       segs: list,
+      // 这节课要拿下的事和页面现算的状态（不提这回事的课没有这个键：说明里就没有那一节）
+      ...(aims ? { aims: aimsNow() } : {}),
       canvas: canvasState(),
       vars: lessonVars.length ? lessonVars : undefined,
       nextMark: tools.nextMark,
@@ -2188,7 +2249,7 @@ export async function renderClass(root, meta, desk = null) {
     const t = op.title ? `「${escapeHtml(op.title)}」` : '';
     const label = op.op === 'new' ? `换一块新板${t}` : op.op === 'add' ? `在这块板上加一段${t}` : op.op === 'replace' ? `改写 ${escapeHtml(op.id || '')}${t}`
       : op.op === 'hide' ? `擦掉 ${escapeHtml(op.id || '')}` : op.op === 'pin' ? `常驻栏${t || ` ${escapeHtml(op.id || '')}`}` : op.op === 'unpin' ? `从常驻栏撤下 ${escapeHtml(op.id || '')}`
-        : op.op === 'figure' ? `让图 ${escapeHtml(op.target || '')} 动一下` : op.op === 'mark' ? `在 ${escapeHtml(op.target || '板')} 上圈一下` : op.op === 'unmark' ? '擦掉标注' : op.op === 'plan' ? '想一想下一步' : op.op === 'memo' ? '记一笔' : '写黑板';
+        : op.op === 'figure' ? `让图 ${escapeHtml(op.target || '')} 动一下` : op.op === 'mark' ? `在 ${escapeHtml(op.target || '板')} 上圈一下` : op.op === 'unmark' ? '擦掉标注' : op.op === 'plan' ? '想一想下一步' : op.op === 'memo' ? '记一笔' : op.op === 'aims' ? '定目标' : '写黑板';
     return `<span class="class-draft-op${b.closed ? '' : ' is-writing'}">${label}</span>`;
   }
 
@@ -2583,6 +2644,12 @@ export async function renderClass(root, meta, desk = null) {
       if (v !== 'again') { if (v === 'show' && last.page) bv.show(last.page, { animate: true }); return; }
       if (busy) return;
     }
+    // 有要拿下的事的课：下课前把每件事现在的状态告诉学生（页面按作答算的）。只是告诉，不拦
+    if (aims?.length && last?.kind !== 'closing') {
+      const sum = aimsNow({ live: false });
+      const v = await choose(`下课吗？这节课要拿下的事：\n${sum.map((a) => `· ${a.can} —— ${STATUS_TEXT[a.status]}`).join('\n')}`, [{ label: '接着上', value: 'stay' }, { label: '下课', value: 'end', primary: true }]);
+      if (v !== 'end' || busy) return;
+    }
     finishBeats();
     exclusive(async () => {
       // 学习台里：下课那一刻还没提交的草稿记成证据（写了一半的不丢）。小结没写成、再点下课时，没变的草稿不重复记
@@ -2599,7 +2666,7 @@ export async function renderClass(root, meta, desk = null) {
       ensureDraft();
       ctl = new AbortController();
       // md、seq、point：下课时把判得了分的题抄进题库（desk.js 的 harvestSession）
-      const steps = () => [...segs.values()].filter((x) => !String(x.id).startsWith('~')).map((x) => ({ id: x.id, page: x.page, title: x.title || x.sec?.querySelector('h2')?.textContent?.trim() || '', place: x.place, md: x.md, seq: x.seq, ...(x.point ? { point: x.point } : {}), ...(x.failed ? { failed: true } : {}), ...(x.hidden ? { hidden: true } : {}) }));
+      const steps = () => [...segs.values()].filter((x) => !String(x.id).startsWith('~')).map((x) => ({ id: x.id, page: x.page, title: x.title || x.sec?.querySelector('h2')?.textContent?.trim() || '', place: x.place, md: x.md, seq: x.seq, ...(x.point ? { point: x.point } : {}), ...(x.aim ? { aim: x.aim } : {}), ...(x.failed ? { failed: true } : {}), ...(x.hidden ? { hidden: true } : {}) }));
       // 学习台里：先用代码算一份课后报告放进这次的输入，小结和整理单同一次写（docs/desk-plan.md 4.2，不多调用一次）
       const repObj = desk?.makeReport ? await desk.makeReport({ turns: history, steps: steps() }).catch(() => null) : null;
       // 在学习台里却没算出报告（读证据出错）：整理单照样要写（复现组的结果、归纳失误、下一节从哪接），只是没有报告可对照
@@ -2612,7 +2679,7 @@ export async function renderClass(root, meta, desk = null) {
       const why = desk ? tidyDue(desk.mem, sp, desk.sid) : '';
       const tidy = why ? { why, text: tidyText(desk.mem, sp) } : null;
       // 后方复查出来的（memory/sentry.js，首页算好放在 meta/workorder）：这一科以前的结论后来的证据对不上的几条，整理单里顺带判断
-      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ report, review: desk?.review, opening: desk?.opening, slips: desk ? slipsToFold(desk.mem, sp) : '', plan: FEATURES.plan === false ? null : latestPlan(history), tidy, recheck: desk?.recheck?.[sp] || '', noForm: !TALK }) }], maxBytes: promptLimit(), stub: teacher.tools && !TALK });
+      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ report, review: desk?.review, opening: desk?.opening, slips: desk ? slipsToFold(desk.mem, sp) : '', plan: FEATURES.plan === false ? null : latestPlan(history), tidy, recheck: desk?.recheck?.[sp] || '', noForm: !TALK, aims: aimsNow({ live: false }) }) }], maxBytes: promptLimit(), stub: teacher.tools && !TALK });
       // 小结边写边显示（以前要干等一两分钟才一下子出来），也记下等了多久
       const t0 = performance.now();
       firstAt = 0;
@@ -2771,6 +2838,8 @@ export async function renderClass(root, meta, desk = null) {
       get lastPrompt() { return lastPrompt; },
       get budgetLevel() { return budgetLevel; },
       // 这一轮会带的「这一块在考试里」（空的就是没有这一节）、核题号的函数（考试资料读到以前是 null）
+      // 这节课要拿下的事和页面现算的状态（不提这回事的课是 null）
+      get aims() { return aimsNow(); },
       get examSection() { return examSection(); },
       get examCheck() { return examCheck; },
     },

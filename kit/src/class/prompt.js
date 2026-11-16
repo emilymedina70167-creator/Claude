@@ -9,6 +9,7 @@ import { memoryDigest } from '../memory/digest.js';
 import { parseOutput } from './protocol.js';
 import { lessonPlanText } from '../books/plan.js';
 import { charterFor } from './charter.js';
+import { aimsText } from './aims.js';
 
 // 文档里有大量反引号和 TeX 反斜杠：先用「ˋ」代替反引号，String.raw 保留反斜杠，最后换回来
 const doc = (s, ...v) => String.raw(s, ...v).replace(/ˋ/g, '`').trim();
@@ -71,6 +72,19 @@ export const CLASS_MEMO_DOC = MEMO_DOC
   // 同一类的两句：记忆点一节课几条页面不挡（memo.js 的 recall 那一支只查和已有的像不像）；每一类到了 CAPS 页面照收，只在下课整理时叫合并
   .replace('一节课最多 8 条，和已有的几乎一样的页面不收。', '和已有的几乎一样的页面不收。')
   .replace('每一类有上限，到了先合并（下课整理时页面会告诉你怎么并）。', '哪一类攒多了，下课整理时页面会叫你合并、告诉你怎么并。');
+// 这节课要拿下的事（class/aims.js，设计 6.2）：怎么写、题怎么挂上去、状态是谁算的。只写事实和写法；
+// 「没定的时候第一轮先写」对应根本规则的保险「这节课要拿下的事开课先告诉学生」。只在学习台里上课时带（单独的课堂页存不了）
+export const AIMS_DOC = doc`
+- **这节课要拿下的事**（「黑板现状」最前面列着，学生在板的上方也看得到）：2～5 件，每件是学生下课时要能自己做出来的一件事，难度和问法照真题。还没定的时候，第一轮先写：
+
+  ˋˋˋˋboard aims
+  a1 ｜ 给一个引用串，手算 LRU 的缺页次数和换出的页 ｜ 独立做一道没见过的同类题，写出每次换出的理由 ｜ exam=Q-408-2023-45
+  a2 ｜ 说出 LRU 和 FIFO 各在什么时候吃亏 ｜ 用自己的话讲清一个反例
+  ˋˋˋˋ
+
+  一行一件，格子用全角「｜」隔开：编号 ｜ 学生要能做的事（写成动作）｜ 什么算做到 ｜ ˋexam=ˋ 对着的真题题号（后两格可以不写）。这个块不上板。课上发现缺前置、发现哪件早就会了，再写一次整份换掉：没变的那几件编号和话照旧；编号还在、话换了的算另一件事，以前的作答不算它的。
+- 板上给某一件用的题，那一段写 ˋaim=a1ˋ（ˋboard add id=b5 aim=a1ˋ），这一段里学生的作答才算到那一件上。每件到了没有由页面按作答算，只看最后一次失手以后的：学生自己写出、做出答案而且一次做对是「独立做到」；改对的、分步带着做的、演示里问一下的是「带着做到」；选择题要 4 个以上选项而且学生点了「有把握」才算独立；学生标了没把握的不算独立。讲过了、学生说懂了都不算。
+`;
 export const DESK_DOC = doc`
 ### 在学习台里上课
 
@@ -78,6 +92,7 @@ export const DESK_DOC = doc`
 ${CLASS_MEMO_DOC}
 - 不要宣布学生掌握了：掌握由页面按证据算。
 - 新写的一段可以标上练的是哪个知识点：ˋboard new id=b3 title="…" point=trˋ（ˋpoint=ˋ 写上面掌握状态里 ˋ#ˋ 后面那段名字），学生在这一段的作答就记成这个知识点的证据。没有合适的就不写。
+${AIMS_DOC}
 - 记忆分两层：前面是和这节课直接有关的全文，最后是其余东西的目录（一条一行：编号 + 一句话）。目录里的要看全文，用 ˋmemory_readˋ 按编号取：ˋcollectionˋ 写集合名，ˋidsˋ 写编号数组，**一次取好几条**（同一类的放一起）；以前的课写 ˋcollection: "sessions"ˋ，给你那节课的报告和小结。**很贵**：每用一次要多跑一整轮、整份说明再读一遍。该取的时候：学生的错像目录里某道旧错题（取来对照根因）、要提起或接着以前某节课、要按某条规则做又拿不准原文。别的时候用全文里的就够了。
 `;
 const DESK_DOC_NO_TOOLS = doc`
@@ -88,6 +103,7 @@ ${CLASS_MEMO_DOC}
 - 这个查看方式不支持工具：查不了记忆库里没放进摘要的部分。
 - 不要宣布学生掌握了：掌握由页面按证据算。
 - 新写的一段可以标上练的是哪个知识点：ˋboard new id=b3 title="…" point=trˋ（ˋpoint=ˋ 写上面掌握状态里 ˋ#ˋ 后面那段名字）。
+${AIMS_DOC}
 `;
 // 记忆摘要最多占多少（规则 + 摘要合起来）；剩下的给资料包
 // 记忆每一轮都要带，多 1 KB 每一轮都多读 1 KB：只许降、不许涨（tests/memory-digest-fit.test.js 守着）。
@@ -590,9 +606,22 @@ function segmentLines(seg, { maxResults = Infinity } = {}) {
 // 黑板现状。board 可以是：
 // - 段的数组（不分板，从上到下列出来；测试和旧版用）
 // - { segs, pages, cur, view, screen, fit }：一屏一块板。分成当前板、常驻栏、以前的板，加上屏幕大小和当前板放不放得下
+// 这节课要拿下的事那一节的标题（课后报告 memory/report.js 的 reportText 里是同一句：下课时靠它认出报告里已经列过了）
+export const AIMS_HEAD = '这节课要拿下的事（状态是页面按学生的作答算的）';
+/**
+ * 黑板现状最前面的那一节。aims 是 aimsSummary 的结果：
+ * 有几件就列出来（每件带页面算的状态）；空数组是「这节课该有、还没定」，提醒老师这一轮先写；
+ * 不是数组（旧课、复现课、单独的课堂页、别的调用的人）什么都不写。
+ */
+export function aimsStateText(aims) {
+  if (!Array.isArray(aims)) return '';
+  if (!aims.length) return '这节课还没定要拿下的事：这一轮先写 board aims（2～5 件，照真题的难度和问法），再开讲。';
+  return `${AIMS_HEAD}：\n${aimsText(aims)}`;
+}
+
 export function boardStateText(board) {
   if (typeof board === 'string') return board.trim() || '黑板是空的。新的一段用 id b1。';
-  if (board && !Array.isArray(board) && typeof board === 'object') return pagedStateText(board);
+  if (board && !Array.isArray(board) && typeof board === 'object') { const head = aimsStateText(board.aims); return `${head ? `${head}\n\n` : ''}${pagedStateText(board)}`; }
   const list = (Array.isArray(board) ? board : []).filter((s) => s && s.id !== undefined && s.id !== null);
   if (!list.length) return '黑板是空的。新的一段用 id b1。';
   const shown = list.filter((s) => !s.hidden).length;
@@ -768,7 +797,10 @@ export function buildSystem({ rules, componentDocs, pack, board, packBudget = PA
   const lookupNote = tools
     ? '要用没写到的字段时用 component_doc 工具按名字取完整写法（要多等一轮）；'
     : '';
-  const desk = memory ? (tools ? DESK_DOC : DESK_DOC_NO_TOOLS) : '';
+  // 这节课不提要拿下的事（黑板现状里没有 aims：以前开的课、复现课）时，学习台那一节里怎么写 board aims 的两条也不带：
+  // 带了老师会照着写，页面又不收
+  const hasAims = Array.isArray(board?.aims);
+  const desk = memory ? (tools ? DESK_DOC : DESK_DOC_NO_TOOLS).replace(hasAims ? '\u0000' : `\n${AIMS_DOC}`, '') : '';
   const parts = (packBody, mem = null) => {
     // 资料包（或参数）定的规则和记忆库的一样接在根本规则后面：以前整段覆盖，根本规则和保险都没了
     const base = mem?.rules ? memoryRules(subject, mem.rules) : defaultRules(subject);
@@ -1395,8 +1427,8 @@ function reviewDoc(review, opening) {
 }
 
 // noForm：黑板课的下课整理多一句「守则不写形式」（LESSON_NO_FORM）；舞台课、一问一答、教研室不传，提示一字不变
-export function closingPrompt({ report = '', review = '', opening = null, slips = '', plan = null, tidy = null, recheck = '', noForm = false } = {}) {
-  const base = doc`
+export function closingPrompt({ report = '', review = '', opening = null, slips = '', plan = null, tidy = null, recheck = '', noForm = false, aims = null } = {}) {
+  const base0 = doc`
 下课了。请写这节课的小结，给以后的课看（下一节课的你会带着它）：学生掌握得怎么样、下一节从哪里接。
 
 中文，分下面四点，每点几条短句，具体到题目、步骤和学生的原话：
@@ -1408,6 +1440,13 @@ export function closingPrompt({ report = '', review = '', opening = null, slips 
 
 不写黑板指令，不对学生说话，不要说学生「已经掌握」。提到学生时写「学生」，不用「他」「她」。
 `;
+  // 这节课要拿下的事：对每件写一行。状态是页面算的，老师不改它，只说还差什么、下一节从哪接。
+  // 下面的课后报告里已经列着每件事（reportText）时不再列一遍
+  const aimList = Array.isArray(aims) && aims.length ? aims : null;
+  const listed = aimList && String(report).includes(AIMS_HEAD);
+  const base = !aimList ? base0 : `${base0}
+
+小结的第 4 点之前，对这节课要拿下的每一件事各写一行：到了没有、还差什么（状态照页面按作答算的说，不改它；「带着做到」「还没证据」的写清差的是哪一步的证据），没到的写进下一节从哪接。${listed ? '每件事和页面算的状态在下面报告的「这节课要拿下的事」里。' : `\n\n${AIMS_HEAD}：\n${aimsText(aimList)}`}`;
   const pt = typeof plan === 'string' ? plan : plan?.text || '';
   const withPlan = pt.trim() ? `${base}
 
