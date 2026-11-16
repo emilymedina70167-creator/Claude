@@ -10,8 +10,10 @@ import { usageOf } from '../class/usage.js';
 import { aimsSummary, aimsText } from '../class/aims.js';
 
 // 2：试出来的选择题（guess）、版本号记进 sessions.report.v（旧版算的报告首页打开时按新的算法重算）
-// 3：这节课要拿下的事（aims）：每件的状态页面按作答算好写进报告。旧课重算出来只多一个空的 aims
-export const REPORT_VERSION = 3;
+// 加「这节课要拿下的事」（aims）时没有升版本号：升了首页会把每节旧课重算一遍，报告的时间一变，知识点归类就要
+// 每节再调用一次 Claude 重做（skills.js 的 needsSkills），掌握和预测分可能跟着动；而旧课重算出来只多一个空的 aims。
+// 新下课的课本来就用新代码算，自然带 aims；读的地方都当它可能没有（r.aims?.length）。给报告加 scenes 时也是这样办的。
+export const REPORT_VERSION = 2;
 export const IDLE_GAP = 10 * 60 * 1000; // 两个动静之间超过 10 分钟：算走开了，不计进时长
 export const REPORT_MAX = 200 * 1024; // 数据库一个文档最多 256 KiB，留点余量
 
@@ -94,6 +96,9 @@ function itemOf(key, list, segs) {
     like: recs.find((r) => r.like)?.like ?? null,
     // 这道题是给这节课要拿下的哪件事用的（段上的 aim=，class/aims.js）。没挂的题不写这个键：旧课重算出来的题和原来一样
     ...(aim ? { aim: String(aim) } : {}),
+    // 选择题有几个选项、是不是多选（有才写）：要拿下的事算「独立」时要看（class/aims.js 的 quizSolo）
+    ...(num(recs.find((r) => r.options)?.options) ? { options: num(recs.find((r) => r.options).options) } : {}),
+    ...(recs.some((r) => r.multi) ? { multi: true } : {}),
     kind: String(recs[0]?.kind || head?.kind || ''),
     q: cut(recs.find((r) => r.q)?.q || recs[0]?.title || '', 120),
     seg: step,

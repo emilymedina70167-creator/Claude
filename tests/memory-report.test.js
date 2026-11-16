@@ -93,7 +93,7 @@ test('课后报告：每道题的尝试序列、结果、所在的段和板、�
 
 test('课后报告：没有要拿下的事的课（旧课按新版本重算）只多一个空的 aims，题上不多 aim 这个键', () => {
   const r = buildReport({ session: sessionDoc, evidence: lesson(), turns, steps, now: min(46) });
-  assert.equal(r.v, 3);
+  assert.equal(r.v, 2);
   assert.deepEqual(r.aims, []);
   assert.ok(r.items.every((it) => !('aim' in it)));
   assert.doesNotMatch(reportText(r), /要拿下的事/);

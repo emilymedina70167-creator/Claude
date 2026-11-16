@@ -35,10 +35,10 @@ test('状态：独立做到、带着做到、做了没到、还没证据', () =>
   assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'wrong' }]), 'miss');
   assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'wrong' }, { aim: 'a1', outcome: 'ok' }]), 'led');
   assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'first', reveals: 1 }]), 'led');
-  assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'first' }]), 'solo');
+  assert.equal(aimStatus(a, [{ aim: 'a1', kind: 'answer', outcome: 'first' }]), 'solo');
 });
 test('一行摘要和给老师的几行', () => {
-  const s = aimsSummary(parseAims(body).aims, [{ aim: 'a1', outcome: 'first' }]);
+  const s = aimsSummary(parseAims(body).aims, [{ aim: 'a1', kind: 'answer', outcome: 'first' }]);
   assert.equal(aimsLine(s), '这节课要拿下的 · 1/2 有证据');
   assert.ok(aimsText(s).includes('独立做到') && aimsText(s).includes('还没证据') && aimsText(s).includes('Q-408-2023-45'));
   assert.equal(aimsLine(aimsSummary(undefined, [])), '');
@@ -54,7 +54,7 @@ test('证据带 aim，不进 tags', () => {
   assert.equal(e.aim, 'a1'); assert.deepEqual(e.tags, ['OS-L3.2.1']);
 });
 test('报告里有每件事的状态；没有要拿下的事的课是空的', () => {
-  assert.equal(REPORT_VERSION, 3);
+  assert.equal(REPORT_VERSION, 2);
   const ev = [{ id: 'e1', src: 'record', kind: 'answer', comp: 'q1', ok: true, attempts: 1, aim: 'a1', session: 'c-1', at: 2 }];
   const r = buildReport({ session: { id: 'c-1', date: '2026-11-16', aims: parseAims(body).aims }, evidence: ev, turns: [], steps: [], now: 10 });
   assert.equal(r.aims.find((x) => x.id === 'a1').status, 'solo');
@@ -117,7 +117,7 @@ test('页面没判的作答不算「做了没到」；把选项试遍了才对�
 });
 test('给老师的几行：一件一行，状态只有那四个词，不出现「他」「她」', () => {
   assert.deepEqual(Object.keys(STATUS_TEXT), ['none', 'led', 'solo', 'miss']);
-  const s = aimsSummary(parseAims(body).aims, [{ aim: 'a1', outcome: 'wrong' }, { aim: 'a1', outcome: 'first' }, { aim: 'a2', outcome: 'wrong' }]);
+  const s = aimsSummary(parseAims(body).aims, [{ aim: 'a1', outcome: 'wrong' }, { aim: 'a1', kind: 'answer', outcome: 'first' }, { aim: 'a2', outcome: 'wrong' }]);
   const lines = aimsText(s).split('\n');
   assert.equal(lines.length, 2);
   assert.equal(lines[0], '- a1（独立做到，2 道题）：给一个引用串，手算 LRU 的缺页次数｜算做到：独立做一道没见过的同类题｜对着 Q-408-2023-45');
@@ -214,18 +214,18 @@ test('只看最后一次失手以后的：先独立做对、后来另一道做�
 });
 test('没有 first 的题照传进来的先后；有的没有时，没有的留在原来的位置', () => {
   const a = { id: 'a1', can: 'x' };
-  assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'first' }, { aim: 'a1', outcome: 'wrong' }]), 'miss');
-  assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'wrong' }, { aim: 'a1', outcome: 'first' }]), 'solo');
+  assert.equal(aimStatus(a, [{ aim: 'a1', kind: 'answer', outcome: 'first' }, { aim: 'a1', outcome: 'wrong' }]), 'miss');
+  assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'wrong' }, { aim: 'a1', kind: 'answer', outcome: 'first' }]), 'solo');
   // 中间那道没有时间：留在第二个；两头有时间的按时间换了位置
-  assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'first', first: 9 }, { aim: 'a1', outcome: 'ok' }, { aim: 'a1', outcome: 'wrong', first: 3 }]), 'solo');
-  assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'wrong', first: 9 }, { aim: 'a1', outcome: 'ok' }, { aim: 'a1', outcome: 'first', first: 3 }]), 'miss');
+  assert.equal(aimStatus(a, [{ aim: 'a1', kind: 'answer', outcome: 'first', first: 9 }, { aim: 'a1', outcome: 'ok' }, { aim: 'a1', outcome: 'wrong', first: 3 }]), 'solo');
+  assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'wrong', first: 9 }, { aim: 'a1', outcome: 'ok' }, { aim: 'a1', kind: 'answer', outcome: 'first', first: 3 }]), 'miss');
 });
 test('分步例题的一步最多算带着做到（路是老师铺好的）；别的种类的题一次对才算独立', () => {
   const a = { id: 'a1', can: 'x' };
   const step = (outcome, first, more = {}) => ({ aim: 'a1', kind: 'steps', outcome, first, ...more });
   assert.equal(aimStatus(a, [step('first', 1), step('giveup', 2, { giveup: true })]), 'miss');
   assert.equal(aimStatus(a, [step('first', 1), step('first', 2)]), 'led');
-  assert.equal(aimStatus(a, [step('first', 1), { aim: 'a1', kind: 'quiz', outcome: 'first', first: 2 }]), 'solo');
+  assert.equal(aimStatus(a, [step('first', 1), { aim: 'a1', kind: 'quiz', outcome: 'first', first: 2, options: 4, sure: true }]), 'solo');
   assert.equal(aimStatus(a, [step('first', 1), { aim: 'a1', kind: 'answer', outcome: 'first', first: 2 }]), 'solo');
   // 例题的一步失手在后：前面那道独立做对的也不算了
   assert.equal(aimStatus(a, [{ aim: 'a1', kind: 'quiz', outcome: 'first', first: 1 }, step('wrong', 2)]), 'miss');
@@ -238,4 +238,68 @@ test('一次对但学生标了没把握：不算独立，算带着做到', () =>
   assert.equal(aimStatus(aim, [{ aim: 'a1', kind: 'answer', outcome: 'first', sure: false }]), 'led');
   assert.equal(aimStatus(aim, [{ aim: 'a1', kind: 'answer', outcome: 'first', sure: true }]), 'solo');
   assert.equal(aimStatus(aim, [{ aim: 'a1', kind: 'answer', outcome: 'first', sure: null }]), 'solo');
+});
+
+test('够得上独立的只有学生自己写出、做出答案的题；选择题要至少 4 个选项而且点了有把握', () => {
+  const a = { id: 'a1', can: 'x' };
+  const one = (more) => aimStatus(a, [{ aim: 'a1', outcome: 'first', ...more }]);
+  // 没写种类、没列进白名单的种类：一次对也最多带着做到
+  assert.equal(one({}), 'led');
+  assert.equal(one({ kind: 'steps' }), 'led');
+  for (const kind of ['answer', 'practice', 'code', 'derive', 'cloze', 'translate', 'errfind', 'parse', 'chunk', 'link', 'drill', 'findbug', 'recognize']) assert.equal(one({ kind }), 'solo', kind);
+  // 选择题：点一下就对不够
+  assert.equal(one({ kind: 'quiz', options: 4 }), 'led');
+  assert.equal(one({ kind: 'quiz', options: 2, sure: true }), 'led');
+  assert.equal(one({ kind: 'quiz', options: 4, sure: true }), 'solo');
+  assert.equal(one({ kind: 'quiz', multi: true, sure: true }), 'solo');
+  // 演示组件：走到某一步问一下是带着走；只给输入写出结果、自己填表是自己做
+  assert.equal(one({ kind: 'stepper', key: 'pg1|第 4 步' }), 'led');
+  assert.equal(one({ kind: 'stepper', key: 'pg1|引用串 7 0 1 2 0 3，3 个页框，FIFO 缺页几次' }), 'solo');
+});
+test('不当证据的：scene（只有对、没有错）、predict 猜错（讲之前先猜）', () => {
+  const a = { id: 'a1', can: 'x' };
+  assert.equal(aimStatus(a, [{ aim: 'a1', kind: 'scene', outcome: 'first' }]), 'none');
+  assert.equal(aimStatus(a, [{ aim: 'a1', kind: 'predict', outcome: 'wrong' }]), 'none');
+  assert.equal(aimStatus(a, [{ aim: 'a1', kind: 'predict', outcome: 'first' }]), 'led');
+  // 猜错不是失手：挡不住前面独立做对的
+  assert.equal(aimStatus(a, [{ aim: 'a1', kind: 'answer', outcome: 'first', first: 1 }, { aim: 'a1', kind: 'predict', outcome: 'wrong', first: 2 }]), 'solo');
+  // 题数照数
+  assert.deepEqual(aimsSummary([a], [{ aim: 'a1', kind: 'scene', outcome: 'first' }]).map((x) => [x.status, x.n]), [['none', 1]]);
+});
+test('按出结果的时间排：先错一下、去做对了另一道、再回来看了答案，是做了没到', () => {
+  const a = { id: 'a1', can: 'x' };
+  const X = { aim: 'a1', kind: 'answer', outcome: 'revealed', revealed: true, first: 2, end: 6 };
+  const Y = { aim: 'a1', kind: 'answer', outcome: 'first', first: 4, end: 4 };
+  assert.equal(aimStatus(a, [X, Y]), 'miss');
+  // 反过来：Y 先错一下放着、X 错了没改、回 Y 改对了 → 带着做到
+  const Y2 = { aim: 'a1', kind: 'answer', outcome: 'ok', first: 2, end: 6 };
+  const X2 = { aim: 'a1', kind: 'answer', outcome: 'wrong', first: 4, end: 4 };
+  assert.equal(aimStatus(a, [Y2, X2]), 'led');
+});
+test('走真的管道：选择题的选项数带到报告的题上；scene 不当证据', () => {
+  // rec 是 sync.js 的 toAnswer 出来的样子（组件记的 type 在那里已经改叫 kind）
+  const mk = (id, { aim0, ...rec }, at) => ({ ...toEvidence('record', rec, { session: 'c-1', block: 'OS-L3.2.1', aim: aim0 }), id, at });
+  const ev = [
+    mk('e1', { block: 'q1', kind: 'quiz', q: '换出哪一页', ok: true, attempts: 1, options: 4, aim0: 'a1' }, 2),
+    mk('e2', { block: 'sc1', kind: 'scene', q: '拖到目标', ok: true, aim0: 'a2' }, 3),
+  ];
+  const aims = [{ id: 'a1', can: '手算 LRU 的缺页次数' }, { id: 'a2', can: '画出页框的变化' }];
+  const r = buildReport({ session: { id: 'c-1', date: '2026-11-16', aims }, evidence: ev, turns: [], steps: [], now: 10 });
+  const q = r.items.find((it) => it.comp === 'q1');
+  assert.equal(q.options, 4);
+  assert.equal(q.kind, 'quiz');
+  assert.deepEqual(r.aims.map((x) => [x.id, x.status]), [['a1', 'led'], ['a2', 'none']]);
+});
+test('带竖线的数学不被切开；编号列表、加粗的编号也认', () => {
+  let r = parseAims('a1 | 算条件概率 P(A | B) | 独立做一道');
+  assert.deepEqual(r.aims, [{ id: 'a1', can: '算条件概率 P(A | B)', proof: '独立做一道' }]);
+  r = parseAims('a1 | 写出集合 {x | x > 0} 的补集');
+  assert.equal(r.aims[0].can, '写出集合 {x | x > 0} 的补集');
+  r = parseAims('a1 | 算 $P(A | B)$ 和 $|A|$ | 独立算一道');
+  assert.deepEqual(r.aims, [{ id: 'a1', can: '算 $P(A | B)$ 和 $|A|$', proof: '独立算一道' }]);
+  // 写了全角的就只按全角切
+  r = parseAims('a1｜算 A | B 的并｜独立做一道');
+  assert.deepEqual(r.aims, [{ id: 'a1', can: '算 A | B 的并', proof: '独立做一道' }]);
+  r = parseAims('1. a1 | 手算 LRU 的缺页次数\n2、**a2** | 说出 LRU 和 FIFO 差在哪');
+  assert.deepEqual(r.aims.map((x) => x.id), ['a1', 'a2']); assert.equal(r.errors.length, 0);
 });

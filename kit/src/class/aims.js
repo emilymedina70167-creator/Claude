@@ -19,6 +19,30 @@ const short = (s, n = 40) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 const len = (s) => [...String(s ?? '')].length;
 
 /**
+ * 一行里编号后面的几格。这一行写了全角的「｜」就只按它切（老师想写带竖线的数学时用它最稳）；
+ * 没写全角的，半角竖线两边都有空格才算分隔（线代里 |A| 是行列式），而且 $…$ 里面、没配上的括号里面不切：
+ * 条件概率 P(A | B)、集合 {x | x > 0} 不能被切开。
+ */
+function splitCells(rest) {
+  // 表格那样收尾的竖线（前面有空格的才是：「算出 |A|」最后那个竖线是行列式的）
+  const t = String(rest).replace(/(^|\s)[|｜]$/, '');
+  if (t.includes('｜')) return t.split(/\s*｜\s*/).map((c) => c.trim()).filter(Boolean);
+  const cells = [];
+  let cur = '', depth = 0, math = false;
+  const OPEN = '([{（［｛', CLOSE = ')]}）］｝';
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (ch === '$') math = !math;
+    else if (!math && OPEN.includes(ch)) depth++;
+    else if (!math && CLOSE.includes(ch)) depth = Math.max(0, depth - 1);
+    if (ch === '|' && !math && depth === 0 && /\s/.test(t[i - 1] ?? '') && /\s/.test(t[i + 1] ?? '')) { cells.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  cells.push(cur);
+  return cells.map((c) => c.trim()).filter(Boolean);
+}
+
+/**
  * board aims 块的正文 → { aims, errors }。一行一件，格子用「 | 」隔开：
  *   a1 | 给一个引用串，手算 LRU 的缺页次数 | 独立做一道没见过的同类题 | exam=Q-408-2023-45
  * 第一格编号，第二格能做的事，后面的格子里 exam= 开头的是对着哪道真题，别的是「什么算做到」。
@@ -28,14 +52,14 @@ export function parseAims(body) {
   const aims = [], errors = [];
   for (const raw of String(body ?? '').replace(/\r\n?/g, '\n').split('\n')) {
     // 列表记号、表格那样开头的竖线不算内容
-    const line = raw.trim().replace(/^(?:[-*•·]\s+)?(?:[|｜]\s*)?/, '');
+    // 编号列表（1. / 2、）也去掉
+    const line = raw.trim().replace(/^(?:[-*•·]\s+|\d+[.、)）]\s*)?(?:[|｜]\s*)?/, '');
     if (!line) continue;
-    // 编号后面的第一个分隔不挑空格（a1|…）；再往后半角的竖线两边都有空格才算分隔：线代里 |A| 是行列式
+    // 编号后面的第一个分隔不挑空格（a1|…）；编号加了粗（**a1**）也认
     const m = line.match(/^(\S+?)\s*[|｜]\s*(.*)$/);
-    const id = aimId(m?.[1]);
+    const id = aimId(String(m?.[1] ?? '').replace(/^\*+|\*+$/g, ''));
     if (!m || !id) { errors.push(`看不懂这一行「${short(raw.trim())}」：${HOW}`); continue; }
-    // 表格那样收尾的竖线（前面有空格的才是：「算出 |A|」最后那个竖线是行列式的）
-    const cells = m[2].replace(/(^|\s)\|$/, '').split(/\s+\|\s+|\s*｜\s*/).map((c) => c.trim()).filter(Boolean);
+    const cells = splitCells(m[2]);
     const aim = { id };
     const proof = [];
     for (const c of cells) {
@@ -81,31 +105,47 @@ export function checkAims(aims, { examCheck = null } = {}) {
 // 这道题算不算做对了：把选项试遍了才对的（report.js 的 guess）结果也是 ok，但证明不了会，掌握那边也当失手（mastery.js）。
 // 改对了（同一道题先错后对）算做对，只是够不上独立
 const right = (it) => (it.outcome === 'first' || it.outcome === 'ok') && !it.guess;
-// 这几种题一次对也最多算带着做到。steps：分步例题是老师把路铺好、一步一步带着走的，走对一步不等于自己会走。
-// 以后有别的「路是铺好的」的题，加在这里
-const LED_KINDS = new Set(['steps']);
-// 独立：第一次作答就对，没揭开过、没点想不出来，不是带着走的那几种题，学生也没标「没把握」
-// （根本规则：学生说没把握按没会处理；掌握那边没把握的一次对也不算，mastery.js）
-const solo = (it) => it.outcome === 'first' && !it.revealed && !it.giveup && !(it.reveals > 0) && it.sure !== false && !LED_KINDS.has(String(it.kind || ''));
-// 页面没判的作答（猜想、自由写的理由，outcome 是 open）既不算做到也不算没到
-const judged = (it) => it.outcome !== 'open';
+const kindOf = (it) => String(it.kind || '');
 
-// 按时间排（题上的 first：第一条证据的时间）。没有 first 的题留在原来的位置，有的在它们占的那几个位置里排：
-// 都没有时就是传进来的先后
+// 不当证据的（既不算做到也不算没到）：
+// - 页面没判的作答（猜想、自由写的理由，outcome 是 open）：页面判不了，不能替学生说「没到」；
+// - scene：拖到目标、演示看完才记，记的只有「对」，没有「错」这回事，说明不了学生会不会做；
+// - predict 猜错：讲之前先猜，本来就该猜不准，不是失手（猜对了算做对，最多带着做到）。
+const judged = (it) => it.outcome !== 'open' && kindOf(it) !== 'scene' && !(kindOf(it) === 'predict' && !right(it));
+
+// 够得上「独立」的只有学生自己写出、做出答案的题（白名单，宁可说少不可说满）。
+// 这里比的是报告题上的 kind（证据里记的种类：answer、stepper、quiz……），不是组件的名字：
+// 演示组件不管是 sort 还是 paging，kind 都是 stepper。没列的种类一次对也最多算带着做到——
+// 分步例题（steps）、演示里的先猜再揭晓是老师把路铺好、一步一步带着走的，走对一步不等于自己会走。
+const SOLO_KINDS = new Set(['answer', 'practice', 'code', 'derive', 'cloze', 'translate', 'errfind', 'parse', 'chunk', 'link', 'drill', 'findbug', 'recognize']);
+// 演示组件：走到某一步问一下的（题的键以「第 N 步」结尾）是带着走；只给输入让学生写出结果、自己填表的（mode: quiz / fill）是自己做
+const stepperAsk = (it) => /\|第 \d+ 步$/.test(String(it.key || ''));
+// 选择题点一下就对，蒙的成分不小（设计 6.8：封闭的、点一下一次对是没产生信息的停）：
+// 至少 4 个选项（或者多选），而且学生自己点了「有把握」，才算独立
+const quizSolo = (it) => it.sure === true && (it.multi === true || Number(it.options) >= 4);
+const soloKind = (it) => { const k = kindOf(it); return SOLO_KINDS.has(k) || (k === 'stepper' && !stepperAsk(it)) || (k === 'quiz' && quizSolo(it)); };
+// 独立：够得上的种类，第一次作答就对，没揭开过、没点想不出来，学生也没标「没把握」
+// （根本规则：学生说没把握按没会处理；掌握那边没把握的一次对也不算，mastery.js）
+const solo = (it) => it.outcome === 'first' && !it.revealed && !it.giveup && !(it.reveals > 0) && it.sure !== false && soloKind(it);
+
+// 按出结果的时间排（题上的 end：最后一条证据的时间；没有就用 first）。用开始的时间会排错：
+// 一道题先错一下、学生去做了另一道、再回来看了答案，这道失手是最后才定下来的。
+// 没有时间的题留在原来的位置，有的在它们占的那几个位置里排：都没有时就是传进来的先后
+const when = (it) => (Number.isFinite(it.end) ? it.end : Number.isFinite(it.first) ? it.first : null);
 function inOrder(items) {
-  const timed = (it) => Number.isFinite(it.first);
-  const sorted = items.filter(timed).sort((x, y) => x.first - y.first);
+  const timed = (it) => when(it) !== null;
+  const sorted = items.filter(timed).sort((x, y) => when(x) - when(y));
   let k = 0;
   return items.map((it) => (timed(it) ? sorted[k++] : it));
 }
 
 /**
  * 一件事现在的状态，按挂在它上面的题（报告的题：report.js 的 itemsOf）算：
- * solo 独立做到 / led 带着做到（做对了，但改过、看过提示，或者是分步例题的一步）/ miss 做了没到 / none 还没证据。
+ * solo 独立做到 / led 带着做到（做对了，但改过、看过提示，或者是带着走的那几种题）/ miss 做了没到 / none 还没证据。
  * 状态是页面对学生说的话，宁可说少不可说满：只看最后一次失手以后的（和 mastery.js 的 walk 一个道理）——
  * 前面独立做对过、后来同一件事的另一道做错了，就是做了没到；失手以后又做对了，按后面做对的那几道算。
  * 失手 = 页面判过但不算做对（错、想不出来、看了答案、把选项试遍了才对）。
- * 只有页面没判的作答时还是 none：页面判不了，不能替学生说「没到」。
+ * 只有不当证据的作答（见 judged）时还是 none。
  */
 export function aimStatus(aim, items) {
   const mine = inOrder((Array.isArray(items) ? items : []).filter((it) => it && aim?.id && it.aim === aim.id && judged(it)));
