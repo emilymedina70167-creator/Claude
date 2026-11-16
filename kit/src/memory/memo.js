@@ -266,7 +266,9 @@ export function absorbedSlips(lessons) {
  * （prompt.js 的 LESSON_NO_FORM）。失误是历史类、原条不动，所以记成一条更正：corrects 指着原条，seen: true
  */
 export function seenSlips(slips) {
-  return new Set((slips || []).filter((d) => d && d.seen && d.corrects).map((d) => String(d.corrects)));
+  // 撤销了的不算（undoPending 给「看过了」那条更正再追加一条作废的更正）：原条回到还没归纳的里面，能再标一次
+  const undone = new Set((slips || []).filter((d) => d && d.void && d.corrects).map((d) => String(d.corrects)));
+  return new Set((slips || []).filter((d) => d && d.seen && d.corrects && !d.void && !undone.has(String(d.id))).map((d) => String(d.corrects)));
 }
 /** 处理过了的失误：归纳进守则的，加上看过了、不归纳的 */
 export function settledSlips(mem = {}) {
@@ -300,8 +302,11 @@ export function planEntry(entry, ctx = {}) {
   // 依据里有找不到的（多半是讲解的段：上面没有作答，就没有证据）：还有别的依据、或者这一类本来不用依据，就去掉找不到的照记，
   // 不整条拒掉——2026-11-02 那节课下课时 position 因为 basis=b32 找不到整条没记，下一节从哪接就丢了
   if (missing.length && (NEED_BASIS.has(kind) && !basis.length)) return { error: `basis 里的 ${missing.join('、')} 找不到（写证据 id、记忆里的编号、黑板上的组件 id 或段 id，或者 say 指学生刚说的话）` };
+  // status=seen 只有一种用法：把已有的一条教学失误标成看过了（slip id=… status=seen）。别的种类写了它不当成整理——
+  // 以前算进下面的 tidy，error / review / pref … status=seen 就不用依据、当新的一条记进去了
+  if (a.status === 'seen' && kind !== 'slip') return { error: 'status=seen 只用在已有的教学失误上：slip id=S-… status=seen why="…"' };
   // 整理（合并、作废、停掉、退役）和改偏好的说法不用依据；新的结论、改证据级要
-  const tidy = ['merged', 'void', 'retired', 'done', 'seen'].includes(a.status);
+  const tidy = ['merged', 'void', 'retired', 'done'].includes(a.status);
   if (NEED_BASIS.has(kind) && !basis.length && !tidy && !(kind === 'pref' && a.id)) return { error: `${spec.label}要写依据：basis=组件 id / 证据 id / say（没有依据的结论不记）` };
   const reason = cut(a.reason || a.why || '', 300);
   // missingBasis：写了但找不到、被去掉的依据（守卫看：编了一个没有的证据编号是要提醒的）
@@ -416,8 +421,15 @@ export function planEntry(entry, ctx = {}) {
         if (!old || old.corrects) return { error: `教学失误里没有 ${a.id}（写「还没归纳的失误」里列着的编号）` };
         if (a.status !== 'seen') return { error: '已有的失误只能写 status=seen why="…"（看过了、只关乎形式，不并进守则）；要归纳就写 lesson … slips=…' };
         if (voidedIds(mem).has(`slips/${old.id}`) || settledSlips({ lessons: get('lessons'), slips: get('slips') }).has(String(old.id))) return { error: `${old.id} 已经处理过了（归纳过、看过了或作废了）` };
-        return { ...base, op: 'add', target: `${old.id}-s`, data: { by: 'class', date, text: `看过了，不归纳进守则：${cut(a.why || '只关乎形式', 300)}`, corrects: String(old.id), seen: true, ...(sid ? { session: sid } : {}) } };
+        // 编号：原条 + -s；撤销过一次那个编号还占着（作废的更正留着），再标就接着 -s2、-s3
+        const taken = new Set(get('slips').map((d) => String(d.id)));
+        let target = `${old.id}-s`;
+        for (let n = 2; taken.has(target); n++) target = `${old.id}-s${n}`;
+        // session 抄原条的（原条没有就不写），和作废的更正（voidCorrection）一个口径：原条和更正同生同删——
+        // 删原条那节课时更正跟着走（不留下指着没有的编号的 corrects），删标的那节课时它留着；分科也跟原条走
+        return { ...base, op: 'add', target, data: { by: 'class', date, text: `看过了，不归纳进守则：${cut(a.why || '只关乎形式', 300)}`, corrects: String(old.id), seen: true, ...(old.session ? { session: old.session } : {}) } };
       }
+      if (a.status === 'seen') return { error: '标看过了要写 id=（哪一条失误）：slip id=S-… status=seen why="…"' };
       if (!a.text) return { error: '失误要写 text' };
       if (layoutOnly(a.text)) return { error: '板放不下页面量得出来（稍长学生会上下滑），不用记成失误（讲法、出题、判分上的失误照记）' };
       {

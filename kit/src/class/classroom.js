@@ -1912,7 +1912,8 @@ export async function renderClass(root, meta, desk = null) {
       let op = { ...s.op, body: s.body };
       if (op.op === 'new' && ++newBoards > 1) {
         op = { ...op, op: 'add' };
-        if (newBoards === 2) notes.push('一轮只开一块新板：这一轮后面的 board new 都并到了第一块新板上。下一个点下一轮再换新板。');
+        // 只说页面做了什么（一轮只开一块是页面的限制）；以后怎么排、要不要停不由这句提醒来定（根本规则）
+        if (newBoards === 2) notes.push('页面一轮只开一块新板：这一轮后面的 board new 都并到了第一块新板上，成了它下面的段，内容都在。');
       }
       const b = play ? plan.opBeat[i] : 0;
       if (b > 0 && DEFERRED_OPS.has(op.op)) { deferred.push({ b, op }); return; }

@@ -47,7 +47,7 @@ test('守则不写形式：黑板课的记忆说明、下课整理的提示里�
 test('快捷按钮只说明是学生点的，不写怎么接', () => {
   for (const s of ['退一步', '先请学生试试', '缺思路']) assert.ok(!PROTOCOL_DOC.includes(s), s);
   assert.ok(PROTOCOL_DOC.includes('这四句是学生点底下的快捷按钮发来的'));
-  assert.ok(!PROTOCOL_DOC.includes('学生跟上了') && PROTOCOL_DOC.includes('一轮写一块'));
+  assert.ok(!PROTOCOL_DOC.includes('学生跟上了'));
 });
 
 // 一问一答、舞台课不再新开，说明一字不改：共用的常量（MEMO_DOC、MSG_QUICK……）谁动了这条就红。
@@ -85,4 +85,41 @@ test('下课整理：只关乎形式的失误有出口（标看过了），例�
 test('黑板课的记忆说明不说按条数挡', async () => {
   const { CLASS_MEMO_DOC } = await import('../kit/src/class/prompt.js');
   assert.ok(!CLASS_MEMO_DOC.includes('观察最多 3 条') && CLASS_MEMO_DOC.includes('条数本身不挡'));
+});
+
+// 复审 I1：老师一轮写了两个 board new 时页面发的 [系统] 提醒只说页面做了什么，不说以后该怎么排
+test('并板的提醒只说事实', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../kit/src/class/classroom.js', import.meta.url), 'utf8');
+  const note = src.match(/newBoards === 2\) notes\.push\('([^']+)'\)/)?.[1] || '';
+  assert.ok(note.includes('一轮只开一块新板') && note.includes('并到了第一块新板上'), note);
+  assert.ok(!note.includes('下一轮再') && !src.includes('下一轮再换新板'), note);
+});
+// 复审 M3：「一轮」只在页面的限制那一条里说一次，排板那一条不带
+test('排板那一条不说一轮写一块', () => {
+  assert.ok(!PROTOCOL_DOC.includes('一轮写一块') && PROTOCOL_DOC.includes('按顺序分两三块板，系统地往下推'));
+  assert.equal(PROTOCOL_DOC.split('一轮最多开一块新板').length, 2);
+});
+// 复审 M4：示范里讲解一段、题一段——照 replace 改讲解不会把学生在题上的作答清掉
+test('示范：讲解和 predict 分两段写', async () => {
+  const { parseOutput } = await import('../kit/src/class/protocol.js');
+  const ops = parseOutput(PROTOCOL_DOC, { final: true }).ops.slice(-2);
+  assert.deepEqual(ops.map((o) => [o.op, o.id]), [['new', 'b5'], ['add', 'b6']]);
+  assert.ok(!ops[0].body.includes('```') && ops[0].body.includes('落在哪只看'), '讲解那一段里没有组件');
+  assert.ok(ops[1].body.trim().startsWith('```predict') && ops[1].body.includes('id: pred-b6'));
+});
+// 复审 M2：关于条数的话照代码现在真做的写（memo.js 不按条数挡）；舞台课那一路不动
+test('黑板课：记忆点、守则的条数不说页面会挡', async () => {
+  const { CLASS_MEMO_DOC, MEMO_DOC, closingPrompt } = await import('../kit/src/class/prompt.js');
+  const { planEntry, parseMemoLines, LESSONS_MAX } = await import('../kit/src/memory/memo.js');
+  assert.ok(!CLASS_MEMO_DOC.includes('一节课最多 8 条') && !CLASS_MEMO_DOC.includes('每一类有上限') && CLASS_MEMO_DOC.includes('和已有的几乎一样的页面不收'));
+  assert.ok(MEMO_DOC.includes('一节课最多 8 条') && MEMO_DOC.includes('每一类有上限'));
+  const c = closingPrompt({ report: '报告', noForm: true });
+  assert.ok(!c.includes('页面不收新的') && c.includes(`一科的守则到了 ${LESSONS_MAX} 条先合并`));
+  assert.ok(closingPrompt({ report: '报告' }).includes('一科最多 20 条，到了上限页面不收新的，先合并。'));
+  // 代码真是这样：这节课已经记了 8 条记忆点，第 9 条照收
+  const names = ['秩的定义', '迹等于特征值之和', '行列式按行展开', '伴随矩阵的公式', '正交矩阵的逆', '相似的必要条件', '二次型的标准形', '施密特正交化第二步'];
+  const mem = { curriculum: [{ id: 'L2.1.1' }], recall: names.map((q, i) => ({ id: `K${i + 1}`, q, a: `答案 ${i}`, block: 'L2.1.1', tier: 1, last: '2026-11-16', lapses: 0, status: 'active', space: 'math', session: 'c-1' })) };
+  const ch = planEntry(parseMemoLines('recall q="外积 αβᵀ 的秩是多少" a="1：每一列都是 α 的倍数"').entries[0], { mem, session: 'c-1', block: 'L2.1.1', date: '2026-11-16', evidence: [] });
+  assert.ok(!ch.error && ch.target === 'K9', JSON.stringify(ch));
 });
