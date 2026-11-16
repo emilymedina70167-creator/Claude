@@ -2,17 +2,43 @@
 // 不碰子进程，tests/teach-run-lib.test.js 守着；调用命令行在 tools/teach-run.mjs，跑一整套在 tools/teach-suite.mjs。
 // 发给模型的说明里提到学生不用「他」「她」（测试守着）。
 
-// 命令行参数（2026-11-15 用 claude 2.1.325 探针定的）：--tools "" 关掉全部内置工具、--strict-mcp-config 不带任何 MCP、
-// --setting-sources "" 不读用户和项目的设置，在仓库外的空目录里跑也就读不到 CLAUDE.md（探针问过：没有工具、没看到项目说明）；
-// --resume 续上时系统提示词还在（探针里续上的那一轮仍说得出系统提示词里的暗号），所以只在第一轮带 --system-prompt-file。
+// 命令行参数（2026-11-15/16 用 claude 2.1.325 探针定的，证据在 .superpowers/sdd/2026-11-15-root-0/task-2-report.md）：
+// --tools "" 关掉全部内置工具、--strict-mcp-config 不带任何 MCP（stream-json 的 init 里 tools、mcp_servers 都是 []）、
+// --setting-sources "" 不读用户和项目的设置、--disable-slash-commands 不挂技能；在仓库外的空目录里跑也就读不到 CLAUDE.md。
+// --system-prompt-file 是整份替换：一行字的系统提示词用量约 550 token，不给它是三万多。
+// 续会话一律 --resume <上一次成功的会话> --fork-session：每次调用都分叉出一个新会话，失败的那一次只留在它自己的分叉里，
+// 重试从失败之前的那个点再分叉——作废的回复（模型不对、空的）不会进老师的上下文。续上时系统提示词还在，所以只在第一轮带文件。
 // 不带 --fallback-model：讲课的老师只能是 claude-opus-5-5，换了模型就不是同一把尺子。
 export function cliArgs({ model, effort, systemFile, resume }) {
   const a = ['-p', '--output-format', 'json', '--model', model];
   if (effort) a.push('--effort', effort);
-  if (resume) a.push('--resume', resume);
+  if (resume) a.push('--resume', resume, '--fork-session');
   else if (systemFile) a.push('--system-prompt-file', systemFile);
-  a.push('--tools', '', '--strict-mcp-config', '--setting-sources', '');
+  a.push('--tools', '', '--strict-mcp-config', '--setting-sources', '', '--disable-slash-commands');
   return a;
+}
+
+// 子进程只拿这些环境变量：跑课的命令行如果继承了开发会话自己的变量（会话编号、上报地址、用户邮箱、提交署名的规矩……），
+// 会把这些说明带进模型的上下文（实测多一千多 token），还可能往开发会话那边上报。登录用的是用户目录下存的凭据，不靠变量。
+const ENV_KEEP = ['PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TMPDIR', 'HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy', 'NO_PROXY', 'no_proxy', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'REQUESTS_CA_BUNDLE', 'ANTHROPIC_BASE_URL'];
+export function cleanEnv(env) {
+  const out = {};
+  for (const k of ENV_KEEP) if (env[k] !== undefined) out[k] = env[k];
+  return out;
+}
+
+/** 调用的报错是不是撞了用量上限（这时不重试、不算失败，停下等接着跑） */
+export const isUsageLimit = (text) => /\b429\b|rate[ _-]?limit|usage limit|hit your [^.\n]{0,40}limit|limit reached|too many requests|overloaded_error/i.test(String(text ?? ''));
+
+/** 命令行把一个目录下的会话存在 ~/.claude/projects/<目录名里非字母数字都换成 -> 下（实测 /tmp/tmp.xA6J → -tmp-tmp-xA6J） */
+export const projectDirOf = (cwd) => String(cwd).replace(/[^A-Za-z0-9]/g, '-');
+
+/** 一整套重跑时这一节怎么办：跑完了的跳过，停下的、失败了的接着跑，别的从头 */
+export function resumeAction(run, code) {
+  if (!run) return 'fresh';
+  if (run.ok === true && run.phase === 'done' && (code === undefined || code === 0)) return 'skip';
+  if (run.paused || run.failed) return 'continue';
+  return 'fresh';
 }
 
 /** 扮学生的说明：只拿人设和会什么；板面每一轮由页面给（view.md），答案它看不到 */
@@ -98,6 +124,9 @@ export function studentReply(text) {
   return { value };
 }
 
+// run（目录名）、plan（计划块开没开）可能带着是哪一版规则，评卷人不该看到
+const blindMetrics = (m) => { const { run, plan, ...rest } = m ?? {}; return rest; };
+
 /** 评卷的说明（设计 6.8 的几项）。不说是哪一版规则，评卷人只看这节课本身 */
 export function graderPrompt({ transcript, scenario, key, answers, metrics }) {
   const sc = scenario || {};
@@ -119,7 +148,7 @@ ${aims || '（没有）'}
 分钟按学生用掉的时间算（读每分钟 400 字、点一下 10 秒、写一行 30 秒、等老师每轮 8 秒）。clockByTurn 是每一轮结束时课上过了几分钟，seq 对应下面记录里的「第 N 轮」。
 
 \`\`\`json
-${JSON.stringify(metrics ?? {}, null, 1)}
+${JSON.stringify(blindMetrics(metrics), null, 1)}
 \`\`\`
 
 # 整节课的记录
@@ -176,7 +205,7 @@ export function summaryRow({ scenario, run, metrics, grade }) {
   const id = scenario?.id || run?.scenario || '?';
   if (!run?.ok || !grade || !metrics) {
     const at = Number.isInteger(run?.stoppedAt) ? `停在第 ${run.stoppedAt} 轮${run.stoppedWhat ? `（${run.stoppedWhat}）` : ''}` : run?.stoppedWhat || (run ? '没写停在哪' : '没有 run.json');
-    return { id, failed: `没跑完：${at}`, costUsd: run?.costUsd ?? null };
+    return { id, failed: `${run?.paused ? '暂停（用量上限）' : '没跑完'}：${at}`, costUsd: run?.costUsd ?? null };
   }
   const kind = new Map((scenario?.posttest || []).map((p) => [p.id, p.kind]));
   const sum = (k) => grade.post.filter((p) => kind.get(p.id) === k).reduce((a, p) => a + p.score, 0);

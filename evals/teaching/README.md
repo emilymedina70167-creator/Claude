@@ -21,15 +21,16 @@
 # 一节
 node tools/teach-run.mjs <目录> evals/teaching/scenarios/<场景>.json [--system 文件] [--memory 文件] \
   [--teacher claude-opus-5-5] [--student claude-sonnet-5-5] [--grader claude-opus-5-5]
-# 一整套（scenarios/ 下每个场景一节，几节一起跑；一节失败不影响别的）
-node tools/teach-suite.mjs <输出目录> --arm <名字> [--system-dir 目录] [--memory 文件] [--only a,b] [--parallel 3]
+node tools/teach-run.mjs <目录> --continue      # 停下的（用量上限）、失败的那一节从停下的那一步接着跑
+# 一整套（scenarios/ 下每个场景一节，几节一起跑；一节失败不影响别的；再跑一遍同一条命令就接着跑）
+node tools/teach-suite.mjs <输出目录> --arm <名字> [--system-dir 目录] [--memory 文件] [--only a,b] [--parallel 2]
 ```
 
 - `--system`：老师读这一份整份说明（旧版规则那一版：动手改之前用 `main` 生成的存在 `baseline/`）；不给就照现在的代码拼。`--system-dir` 里有 `<场景 id>.system.md` 就用它。`--memory`：记忆样例，照课堂的写法带进说明。
-- 四个会话：老师（只用 `claude-opus-5-5`、effort high，不设退路模型）、学生、课后测验的学生（新开的，只拿人设、原来会什么、上课记的笔记）、评卷人。每个都在仓库外的空临时目录里跑，关掉全部工具（`--tools "" --strict-mcp-config --setting-sources ""`）：模型读不到任何文件，学生看不到 `scenario.json` 里的答案，要的东西全在提示词里。
+- 四个会话：老师（只用 `claude-opus-5-5`、effort high，不设退路模型）、学生、课后测验的学生（新开的，只拿人设、原来会什么、上课记的笔记）、评卷人。每个都在仓库外的空临时目录里跑，关掉全部工具（`--tools "" --strict-mcp-config --setting-sources "" --disable-slash-commands`），环境变量只留登录和代理要的（`cleanEnv`）：模型读不到任何文件，学生看不到 `scenario.json` 里的答案，要的东西全在提示词里。`--system-prompt-file` 是整份替换（一行字的说明约 550 token）；命令行还会自己加一小段环境说明（目录、平台、日期、模型、账户邮箱），去不掉。续会话一律 `--resume <上一次成功的会话> --fork-session`：失败的那一次留在它自己的分叉里，重试和下一轮都从成功的点接，作废的回复不进老师的上下文。
 - 流程：`teach-sim init` → 老师读 `to-teacher.md` 写 `t-N.txt` → `teach-sim teacher` → 学生读 `view.md` 回一个 JSON 存 `s-N.json` → `teach-sim student`（打印「页面按预案接了」时不跑老师、学生接着答）→ …… 到任何一边打印「到时间了」→ `transcript` → `posttest` → 课后测验 → `score` → 评卷。
-- 出错：一次调用返回空、超时（10 分钟）、退出码非 0、用的模型不对，重试一次，再不成这节课算没跑完（`run.json` 的 `ok: false`、停在第几轮），不评卷。学生的回复不是合法 JSON 带着报错重问一次，还不成记成「学生没有作答」接着走（`studentFallbacks`）。
-- `--fake 目录`：不调用命令行，回复读 `t-N.txt` / `s-N.json` / `post.md` / `grade.txt`（测试用，`tests/teach-run-lib.test.js`）。
+- 出错：撞了用量上限（429、`rate_limit`、「hit your … limit」）不重试、不算失败：`run.json` 写 `paused: true`、停在哪一步（`phase`、`next`、`stoppedAt`）、每个角色的会话（`sessions`）、已经花的钱，退出码 2。别的错（返回空、超时 10 分钟、退出码非 0、用的模型不对）重试一次，再不成 `failed: true`、同样记下，退出码 1。两种都能 `--continue`，都不评卷。一整套里有一节停在用量上限就不再开新的课，`summary.md` 写清哪几节没跑完。跑完的一节会删掉自己的临时目录和命令行在 `~/.claude/projects/` 下存的会话；停下的不删。学生的回复不是合法 JSON 带着报错重问一次，还不成记成「学生没有作答」接着走（`studentFallbacks`）。
+- `--fake 目录`：不调用命令行，回复读 `t-N.txt` / `s-N.json` / `post.md` / `grade.txt`（一轮老师都没有不算跑完）；`--cli 命令`：换一个和 `claude` 同样参数、同样输出的程序。测试（`tests/teach-run-lib.test.js`）用这两样，不调用模型。
 
 一节课的目录里：
 
@@ -42,7 +43,7 @@ node tools/teach-suite.mjs <输出目录> --arm <名字> [--system-dir 目录] [
 | `posttest.md` / `posttest-key.md` / `posttest-answers.md` | 课后题面 / 标准答案（只给评卷人）/ 学生的作答 |
 | `metrics.json` | 页面算的数：分钟、白停、第一次动笔、最长连讲、产出几分钟…… |
 | `grade.json` | 评卷人打的分（见下） |
-| `run.json` | 成没成、停在第几轮、每次调用花了多少（`calls`、`costUsd`）、每一轮结束时第几分钟（`timeline`） |
+| `run.json` | 成没成、停下没有、停在哪一步、各角色的会话、每次调用花了多少（`calls`、`costUsd`）、每一轮结束时第几分钟（`timeline`） |
 | `*-system.md` | 学生、课后测验、评卷人的说明（事后看发了什么） |
 
 一整套的 `<输出目录>/summary.md` 一行一节：课后测验同类 / 迁移各对几道、用了几分钟、白停、第一次动笔第几分钟、最长连讲几分钟、产出几分钟、总体分；`summary.json` 是同一份数。行为的数和课后测验并排看，不单独报行为的数。结果写进 `results.md`。
