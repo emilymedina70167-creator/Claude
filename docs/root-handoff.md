@@ -26,7 +26,7 @@
 - **黑板课带「这一块在考试里」** `kit/src/class/examroom.js`。
 - **留着的题、隔天验** `kit/src/memory/holds.js`、首页「验上次学的」、`sessions.later`。
 - **新课一律开黑板**；学生正在写时页面不替他翻板、不滚（`kit/src/class/quiet.js`）。
-- **记忆库清理过了**（照学生批的去留表 `docs/superpowers/specs/2026-11-15-root-rules-map.md` 第七节）：生效的规则 67 → 48 条，其中 12 条标了 `use: 'record'`（只在下课、复现课、备课时带），平时每轮带的 31 条；守则 21 → 11 条。清理后的样子在 `evals/teaching/memory/after.json`。
+- **记忆库清理过了**（照学生批的去留表 `docs/superpowers/specs/2026-11-15-root-rules-map.md` 第七节）：生效的规则 67 → 48 条，其中 12 条标了 `use: 'record'`（只在下课、复现课、备课时带），平时每轮带的 31 条；守则 21 → 11 条。清理后的样子在 `evals/teaching/memory/after.json`。2026-11-16 写进学习台的（规则 42 条、守则 16 条，带版本号核对、一条没删）：作废的改 `status`、改写的换 `text`，每条的 `log` 里记着改之前的原文和原因，要退回某一条照 `log` 的 `from` 写回去就行。
 - 每一处做的时候我自己定的事：`docs/superpowers/specs/2026-11-15-root-rulings.md`「第 1 批」一节（20 条）。
 
 验收做过的：`npm test`、`npm run e2e` 全过（e2e 里 `aims`、`root`、`quiet`、`classexam` 是这一轮加的；`root` 是从开课到隔天验完的一整圈）、我把黑板课老师真正看到的整份说明从头读过一遍。**没做的验收**：新旧两版教学效果的对比（要模拟课）。所以根本规则的措辞还没有被任何尺子量过，学生的第一节真课是它的第一次检验。
