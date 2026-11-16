@@ -95,22 +95,20 @@ test('bytes：和 UTF-8 编码一致（中文 3、emoji 4、落单代理项 3）
   assert.equal(bytes(123), 3);
 });
 
-// —— 角色与红线、黑板指令 ——
+// —— 角色和根本规则、黑板指令 ——
 
-test('默认红线：需求 2.3 第 1 条逐条都在', () => {
+// 2026-11-15 起规则这一节是根本规则（charter.js）：三问和保险四条在，以前规定形式的红线不在
+test('默认规则：角色那一段、三问、保险四条都在，旧的形式话不在', () => {
   const must = [
     '这节课的老师',
-    '一次只推进一件事', '停下来等学生',
-    '学生没有作答，就不往下推',
-    '缺知识', '缺思路', '直接讲清楚', '给提示，不给答案',
-    '三轮', '换一道同类的题',
-    '没把握', '按没过处理',
-    '已经掌握',
-    '资料包里没有的教材内容不讲', '这个下次课讲',
-    '话要短', '主要内容写在黑板上',
-    '拖、点', '预测', '长段文字',
+    '终点：', '差距：', '动作：',
+    '事实照资料', '不宣布掌握', '这节课要拿下的事开课先告诉学生', '让页面算',
+    '没把握：按没会处理',
   ];
-  for (const m of must) assert.ok(DEFAULT_RULES.includes(m), `红线缺「${m}」`);
+  for (const m of must) assert.ok(DEFAULT_RULES.includes(m), `规则缺「${m}」`);
+  for (const m of ['一次只推进一件事', '停下来等学生', '学生没有作答，就不往下推', '给提示，不给答案', '话要短', '主要内容写在黑板上']) {
+    assert.ok(!DEFAULT_RULES.includes(m), `规则里还有「${m}」`);
+  }
 });
 
 // 文档里的 board 块：外层 4 个反引号，内层组件 3 个
@@ -122,7 +120,7 @@ test('黑板指令说明：每条规则都写到了', () => {
     '4 个反引号', '````board add id=', '````board replace id=', '````board hide id=', '````board figure target=',
     ' set ', ' play ', ' highlight ', 'play t 0 1 2s',
     '同一节课里不能重复', 'b1、b2', '每个组件都要写 `id:`',
-    '好几个指令', '先说一两句', '话要短',
+    '好几个指令',
     '[系统]', '写法错误', '`board replace`', '`board add` 同一个 id',
     '[作答]', '[动作]', '只数命令行', '从 1 开始数',
     '【到目前为止的课堂摘要】',
@@ -317,10 +315,10 @@ test('黑板现状：空黑板；下一个 id 只看 b 编号', () => {
 
 // —— 第一条消息 ——
 
-test('buildSystem：顺序是 角色与红线 → 组件说明 → 黑板指令 → 资料包 → 黑板现状', () => {
+test('buildSystem：顺序是 角色和根本规则 → 组件说明 → 黑板指令 → 资料包 → 黑板现状', () => {
   const sys = buildSystem({ componentDocs: DOCS, pack: PACK, board: BOARD });
   const marks = [
-    '# 一、你的角色和红线', DEFAULT_RULES.slice(0, 30),
+    '# 一、你的角色和根本规则', DEFAULT_RULES.slice(0, 30),
     '# 二、组件写法和黑板指令', '### scene', '### recognize', PROTOCOL_DOC.slice(0, 30),
     '# 三、这节课的资料包', '【单元】\n第2讲',
     '# 四、黑板现状', '黑板上现在有 2 段',
@@ -334,12 +332,12 @@ test('buildSystem：顺序是 角色与红线 → 组件说明 → 黑板指令 
   assert.ok(sys.includes('文中的「我」指学生'), '组件说明是写给项目 Claude 的，要提醒');
 });
 
-test('buildSystem：rules（参数或资料包里的）覆盖默认红线，空白不算', () => {
+test('buildSystem：rules（参数或资料包里的）覆盖默认规则，空白不算', () => {
   const custom = '你是助教，只出题不讲解。';
   let sys = buildSystem({ rules: custom, componentDocs: DOCS, pack: PACK, board: [] });
-  assert.ok(sys.includes(`# 一、你的角色和红线\n\n${custom}`));
+  assert.ok(sys.includes(`# 一、你的角色和根本规则\n\n${custom}`));
   assert.ok(!sys.includes(DEFAULT_RULES));
-  assert.ok(sys.includes(PROTOCOL_DOC), '覆盖的只是红线，黑板指令照常');
+  assert.ok(sys.includes(PROTOCOL_DOC), '覆盖的只是规则那一节，黑板指令照常');
 
   sys = buildSystem({ componentDocs: DOCS, pack: { ...PACK, main: { ...PACK.main, rules: custom } }, board: [] });
   assert.ok(sys.includes(custom) && !sys.includes(DEFAULT_RULES));

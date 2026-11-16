@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { subjectKey, isCS, docsForSubject, parseTag, SUBJECTS, sectionNames, componentDoc, detailNames, allNames } from '../kit/src/subject.js';
 import { componentDocs } from '../kit/build-docs.js';
 import { buildSystem, defaultRules, DEFAULT_RULES, bytes, lintDocs, docLookup, packComponents, DETAIL_BUDGET } from '../kit/src/class/prompt.js';
+import { CHARTER, SUBJECT_FACTS } from '../kit/src/class/charter.js';
 
 const PROJECT = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
 const DOCS = componentDocs(PROJECT);
@@ -65,14 +66,17 @@ test('真的组件说明：线代课没有排序，数据结构课没有 scene /
   assert.ok(bytes(ds) < bytes(DOCS), '计算机课的说明比全部的短');
 });
 
-test('教法按科目：线代照旧，计算机课不附英文、要用演示组件；都不用「他」「她」', () => {
+test('每门课的事实按科目：根本规则都一样、事实各不相同；都不用「他」「她」', () => {
   assert.equal(defaultRules('线性代数'), DEFAULT_RULES);
   assert.equal(defaultRules('概率论'), DEFAULT_RULES, '不认识的科目用线代那套');
   const cs = defaultRules('数据结构');
-  assert.notEqual(cs, DEFAULT_RULES);
-  assert.equal(cs.split('教法：')[0], DEFAULT_RULES.split('教法：')[0], '红线一样');
-  assert.match(DEFAULT_RULES, /附英文/);
-  assert.match(cs, /不用附英文/);
+  const en = defaultRules('英语');
+  for (const s of [DEFAULT_RULES, cs, en]) assert.ok(s.includes(CHARTER), '根本规则每门课都在');
+  assert.equal(new Set(Object.values(SUBJECT_FACTS)).size, 3, '三份事实各不相同');
+  assert.ok(DEFAULT_RULES.includes(SUBJECT_FACTS.线代) && cs.includes(SUBJECT_FACTS.计算机) && en.includes(SUBJECT_FACTS.英语));
+  assert.match(DEFAULT_RULES, /照资料包/);
+  assert.match(cs, /术语用中文/);
+  for (const s of [DEFAULT_RULES, cs, en]) assert.doesNotMatch(s, /附英文/, '附不附英文是学生的要求，在记忆里');
   assert.match(cs, /演示组件/);
   assert.match(cs, /王道/);
   const he = /(?<!其)[他她]/;
@@ -92,7 +96,7 @@ test('课堂说明按科目拼：每门课加上最大的资料包都不超过 1
   }
   const ds = buildSystem({ componentDocs: DOCS, pack: {}, board: [], subject: '数据结构' });
   assert.match(ds, /### 排序/);
-  assert.match(ds, /不用附英文/);
+  assert.match(ds, /王道/, '数据结构带的是计算机课的事实');
   const la = buildSystem({ componentDocs: DOCS, pack: {}, board: [] });
   assert.doesNotMatch(la, /### 排序/, '不写科目就是线代');
 });

@@ -148,7 +148,7 @@ test('一问一答的说明：怎么教在前，带活板的写法和演示对�
 });
 
 test('课堂（不是一问一答）的说明一字不变：共用的几条消息说明还在原处', () => {
-  assert.match(PROTOCOL_DOC, /- 学生打的字，原样给你。四个快捷按钮会发/);
+  assert.match(PROTOCOL_DOC, /- 学生打的字，原样给你。「没懂。」「想不出来。」「换个说法讲讲？」「继续。」这四句是学生点底下的快捷按钮发来的/);
   assert.match(PROTOCOL_DOC, /- 附了图片时，是学生的手写或截图/);
   assert.match(PROTOCOL_DOC, /「【到目前为止的课堂摘要】」是更早的对话/);
   assert.match(MEMO_DOC, /basis=q-b5/);

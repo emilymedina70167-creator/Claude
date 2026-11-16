@@ -108,7 +108,7 @@ test('记忆摘要的预算：放不下从后往前截，写明还有几条、�
 
 // —— 课堂说明里带上记忆 ——
 
-test('buildSystem：学习台里多一节「你对学生的了解」，记忆库的规则替换内置红线，资料包让一点；整份不超过 SYSTEM_MAX', () => {
+test('buildSystem：学习台里多一节「你对学生的了解」，记忆库的规则接在根本规则后面，资料包让一点；整份不超过 SYSTEM_MAX', () => {
   const pack = { main: { unit: '秩一', plan: '计划'.repeat(40000) } };
   for (const subject of ['线代', '数据结构', '操作系统', '组成原理', '计算机网络']) {
     const s = buildSystem({ componentDocs: COMPONENT_DOCS, pack, board: [], subject, memory: { mem: M(), block: 'L2.2.2', session: 'c-20261027-1' } });
@@ -117,8 +117,7 @@ test('buildSystem：学习台里多一节「你对学生的了解」，记忆库
     assert.match(s, /# 三、这节课的资料包[\s\S]*# 四、你对学生的了解（学习台的记忆库）/);
     assert.match(s, /# 三、这节课的资料包/);
     assert.match(s, /# 五、黑板现状/);
-    assert.match(s, /学生定下的规则（学习台记忆库的 rules，替换组件库内置的红线）/);
-    assert.ok(!s.includes('1. 一次只推进一件事'), '内置红线被替换了');
+    assert.match(s, /每一刻只问三件事[\s\S]*这个学生另外定的规则（学习台记忆库里的；和上面冲突时以这里为准）/, '根本规则还在，学生定的接在后面');
     assert.match(s, /不用「他」「她」/, '角色那一段照旧');
     assert.match(s, /board memo/);
     assert.match(s, /W19/);
@@ -126,12 +125,14 @@ test('buildSystem：学习台里多一节「你对学生的了解」，记忆库
   // 不在学习台里：和以前一样
   const plain = buildSystem({ componentDocs: COMPONENT_DOCS, pack: { main: { unit: 'x' } }, board: [] });
   assert.match(plain, /# 三、这节课的资料包/);
-  assert.match(plain, /1\. 一次只推进一件事/);
-  assert.ok(!plain.includes('你对学生的了解'));
-  // 记忆库里还没有规则：用内置的红线
+  assert.match(plain, /每一刻只问三件事/);
+  assert.ok(!plain.includes('你对学生的了解') && !plain.includes('这个学生另外定的规则'));
+  // 记忆库里还没有规则：只有根本规则
   const m = M();
   m.rules = [];
-  assert.match(buildSystem({ componentDocs: COMPONENT_DOCS, pack: null, board: [], memory: { mem: m, block: 'L2.2.2' } }), /1\. 一次只推进一件事/);
+  const noRules = buildSystem({ componentDocs: COMPONENT_DOCS, pack: null, board: [], memory: { mem: m, block: 'L2.2.2' } });
+  assert.match(noRules, /每一刻只问三件事/);
+  assert.ok(!noRules.includes('这个学生另外定的规则'));
   // 不支持工具：说明换成不提工具的那份
   assert.ok(!buildSystem({ componentDocs: COMPONENT_DOCS, pack: null, board: [], tools: false, memory: { mem: M(), block: 'L2.2.2' } }).includes('memory_read 工具查（'));
   assert.ok(MEMORY_BUDGET <= 40 * 1024);
