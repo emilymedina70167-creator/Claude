@@ -65,7 +65,8 @@ test('一问一答、舞台课的说明一字不差（sha256）', async () => {
 });
 test('换板只是版面的限制，不定节奏；add / new 各是干什么的；replace 能照断的那一步改讲解', () => {
   assert.ok(!PROTOCOL_DOC.includes('下一轮再换新板') && PROTOCOL_DOC.includes('不是节奏的规定') && PROTOCOL_DOC.includes('不由板来定'));
-  assert.ok(PROTOCOL_DOC.includes('不要为了少换板把内容压缩'), '按内容排板那层意思留着');
+  // 第十三轮：一块板放多少、讲多细不再规定（老师看得见板，样子和详略由它定）
+  assert.ok(!PROTOCOL_DOC.includes('不要为了少换板把内容压缩') && !PROTOCOL_DOC.includes('先讲透'));
   assert.ok(!PROTOCOL_DOC.includes('同一件事时才用') && PROTOCOL_DOC.includes('在当前板上接着写'));
   assert.ok(PROTOCOL_DOC.includes('照学生断的那一步改原来的讲解'));
   assert.ok(PROTOCOL_DOC.includes('只是指令格式的示范') && !PROTOCOL_DOC.includes('放好了点「确定」'));
@@ -97,7 +98,7 @@ test('并板的提醒只说事实', async () => {
 });
 // 复审 M3：「一轮」只在页面的限制那一条里说一次，排板那一条不带
 test('排板那一条不说一轮写一块', () => {
-  assert.ok(!PROTOCOL_DOC.includes('一轮写一块') && PROTOCOL_DOC.includes('按顺序分两三块板，系统地往下推'));
+  assert.ok(!PROTOCOL_DOC.includes('一轮写一块') && !PROTOCOL_DOC.includes('按顺序分两三块板'));
   assert.equal(PROTOCOL_DOC.split('一轮最多开一块新板').length, 2);
 });
 // 复审 M4：示范里讲解一段、题一段——照 replace 改讲解不会把学生在题上的作答清掉

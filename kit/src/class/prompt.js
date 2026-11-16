@@ -182,7 +182,6 @@ export const PROTOCOL_DOC = doc`
 
 ### 一块板放多少
 
-- **按内容排板，先讲透**：小的点一块板讲完；大的点（规则多、步骤长、要配表和例题的）按顺序分两三块板，系统地往下推。开讲一个要分几块的点时，在板顶说一句「这个点分三块讲，这是第一块：……」。**不要为了少换板把内容压缩、省步骤、讲得笼统**：漏讲、讲浅，最后吃亏的是学生。也不要一下子甩出好几块板、每块一点点（学生 2026-11-03 说过，很影响学习）。
 - 一块板稍长一点没关系，学生会上下滑；学生也能自己调黑板的字号。「黑板现状」里写着学生屏幕上一块板大约多高，用来估一块板写多少合适。
 - **一轮最多开一块新板**：这是页面的限制（ˋboard newˋ 一轮只写一个；同一轮里多写的，页面会并到这块板上），不是节奏的规定。同一轮里接着讲的内容就写在这块板上，板可以往下长，学生上下滑着看；要不要在这里停下、等学生，照根本规则那一问定，不由板来定。
 - 横屏的 iPad 上，一段里正好有一张图（ˋsceneˋ、ˋgraphˋ、ˋspaceˋ）和别的内容时，页面会自动排成左图右文。
@@ -370,6 +369,13 @@ ${MSG_IMAGES}
 ${MSG_SUMMARY}
 - 能用工具时，ˋcalcˋ 工具可以精确地算一个式子。每用一次你都要多等一整轮，所以只在改数出新题、得先知道结果才能决定怎么出时用；写上黑板的数用 ˋ\calc{…}ˋ。
 `;
+
+// —— 老师的眼睛（boardeye.js，第十三轮）：只写事实（你看得见什么、样子归谁定），不规定板该长什么样 ——
+// 以前板的样子是记忆里的规则定死的模板（每块板一行图例、重点框、粉框、红圈、黄括号），老师又看不见排出来什么样
+export const EYE_DOC = doc`
+### 你看得见板
+
+每一轮开头附着页面拍的图：学生现在看到的这块板，是学生屏幕上真实的样子（板比两屏长时只拍前两屏）。板长什么样由你设计：用哪些组件、分不分栏、哪里用图、哪里标重点、字多字少，都看这一处的内容定，没有固定的版式。上一轮排出来不对（字挤在一起、被框切掉、重点淹在字里、和你想的不一样），用 ˋreplaceˋ 改。`;
 
 // —— 版面（canvas.js，docs/canvas-plan.md）：开着时你自己排板 ——
 // 版面开着时页面不再自动左图右文（classroom.js 的 renderSeg 不 splitFigure）：这一句不带
@@ -817,7 +823,7 @@ export function docLookup(componentDocs, subject, name) {
 // exam：「这一块在考试里」那一节（exam/context.js 的 examForClass 拼好的文字，黑板课是 class/examroom.js 的 boardExam；
 // 空的就没有这一节，说明和以前一字不差）。放在资料包后面、记忆前面；它占的地方资料包让出来（算资料包的预算时它已经在），
 // 这时资料包里的教材原文留底（TEXTBOOK_FLOOR，资料包紧的时候是它这一轮预算的一半，见下面）。一问一答不带（旧的课，说明一字不变）
-export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true, memory = null, plan = null, planDoc = true, canvas = false, talk = false, exam = '' } = {}) {
+export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true, memory = null, plan = null, planDoc = true, canvas = false, talk = false, exam = '', eye = false } = {}) {
   if (talk) return buildTalkSystem({ rules, componentDocs, pack, board, packBudget, subject, tools, memory, plan, planDoc });
   const examText = String(exam || '').trim();
   const custom = asText(rules) || asText(pack?.main?.rules);
@@ -836,7 +842,7 @@ export function buildSystem({ rules, componentDocs, pack, board, packBudget = PA
     const role = custom ? `${base}\n\n这节课的资料包另外定的规则（和上面冲突时以这里为准）：\n\n${custom}` : base;
     const sections = [
       `你的角色和根本规则\n\n${role}`,
-      `组件写法和黑板指令\n\n## 组件说明\n\n下面的组件说明原本是学生写的，文中的「我」指学生、「你」指写黑板的 Claude。说到 guided 课件的关卡、小节结构的地方，课堂里不适用；课堂里的段落由你用黑板指令一段一段写。有的组件这里只写了最常用的写法（末尾写着「更多写法」）：照着写就行；${lookupNote}写错了页面会把那个组件的完整写法附在提醒里。资料包里点了名的组件，完整写法已经放在下面；点了名时，没点名的不常用组件只留了标题（要用就按名字取）。\n\n${docs || '（组件说明没有打包进来。只用最常见的组件：answer、steps、scene、predict，写法要保守。）'}\n\n## 黑板指令\n\n${canvas ? PROTOCOL_DOC.replace(`\n${SPLIT_LINE}`, '') : PROTOCOL_DOC}${canvas ? `\n\n${CANVAS_DOC}` : ''}${planDoc ? `\n\n${PLAN_DOC}` : ''}`,
+      `组件写法和黑板指令\n\n## 组件说明\n\n下面的组件说明原本是学生写的，文中的「我」指学生、「你」指写黑板的 Claude。说到 guided 课件的关卡、小节结构的地方，课堂里不适用；课堂里的段落由你用黑板指令一段一段写。有的组件这里只写了最常用的写法（末尾写着「更多写法」）：照着写就行；${lookupNote}写错了页面会把那个组件的完整写法附在提醒里。资料包里点了名的组件，完整写法已经放在下面；点了名时，没点名的不常用组件只留了标题（要用就按名字取）。\n\n${docs || '（组件说明没有打包进来。只用最常见的组件：answer、steps、scene、predict，写法要保守。）'}\n\n## 黑板指令\n\n${canvas ? PROTOCOL_DOC.replace(`\n${SPLIT_LINE}`, '') : PROTOCOL_DOC}${canvas ? `\n\n${CANVAS_DOC}` : ''}${eye ? `\n\n${EYE_DOC}` : ''}${planDoc ? `\n\n${PLAN_DOC}` : ''}`,
       // 顺序按「一节课里多久变一次」排：组件说明、资料包几乎不变，记忆（等确认的改动）偶尔变，黑板现状每轮都变。
       // 每一轮整份重发；平台要是对重复的开头打折，不变的放前面最省
       `这节课的资料包\n\n课前备好的（学习台备课、复现课由页面拼），课中也可能更新。${memory ? '在学习台里，资料包是这节课的额外安排（推进建议、备好的题），学生的情况看后面的记忆。' : ''}\n\n${packBody}`,

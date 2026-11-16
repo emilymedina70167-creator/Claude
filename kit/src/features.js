@@ -26,4 +26,6 @@ export const FEATURES = {
   // 抢跑（class/spec.js，docs/smart-plan.md 第 1 批）：一轮讲完、板上没事可做时先按「继续」调用，开课页先按「开始上课」调用；
   // 学生真点了、整份内容一字不差就直接用，不然丢掉（多花一次调用，不多等）
   spec: true,
+  // 老师的眼睛（class/boardeye.js，第十三轮）：黑板课每一轮把当前这块板的截图带给老师，板的样子由它自己设计
+  eye: true,
 };

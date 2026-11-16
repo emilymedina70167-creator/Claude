@@ -44,6 +44,7 @@ import { earlierClasses } from '../memory/digest.js';
 import { choose } from '../dialog.js';
 import { lessonSheet, sheetMd } from '../memory/sheet.js';
 import { slipsToFold, blockSwitch, tidyDue, tidyText, splitKnow } from '../memory/memo.js';
+import { createBoardEye, eyeNote } from './boardeye.js';
 import { spaceOfId, subjectOf } from '../memory/space.js';
 import { textbookForClass, readChunks, searchChunks, readHistory } from '../books/textbook.js';
 import { systemWithBooks } from './bookroom.js';
@@ -1814,7 +1815,7 @@ export async function renderClass(root, meta, desk = null) {
     const level = Math.min(budgetLevel, 3);
     // 一问一答：说明换成一问一答的那一份（talk），黑板现状换成活板现状；对话里没有 board 段可省（也没有 board_read）
     // exam：「这一块在考试里」（抢跑和真发的两次都从这里拼，一样的板、一样的考试资料拼出来一字不差）
-    const args = { rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, board: TALK ? talkState() : boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg(), canvas: CANVAS && !TALK, exam: examSection(), ...planArg(), ...(TALK ? { talk: true } : {}) };
+    const args = { rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, board: TALK ? talkState() : boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg(), canvas: CANVAS && !TALK, eye: eyeOn(), exam: examSection(), ...planArg(), ...(TALK ? { talk: true } : {}) };
     // 有教材时，说明还剩的地方补上这一块所在的整章（bookroom.js）：每取一次教材要多等一整轮，多放原文不怎么变慢
     const system = desk?.books?.chunks?.length
       ? systemWithBooks(args, (room) => packForPrompt(teacher.tools, room)).system
@@ -1841,6 +1842,20 @@ export async function renderClass(root, meta, desk = null) {
     clearTimeout(specTimer);
     specTimer = setTimeout(startSpec, delay);
   }
+  // —— 老师的眼睛（boardeye.js，第十三轮）：当前这块板的图。只读翻看、一问一答、这个查看方式发不了图时不拍 ——
+  const eye = readOnly || TALK ? null : createBoardEye({ target: () => pages.get(bv.cur)?.sec || null, viewH: () => root.querySelector('.class-stage')?.clientHeight || 0 });
+  const eyeOn = () => !!eye && !!teacher.images && FEATURES.eye !== false;
+  if (eye && typeof MutationObserver === 'function') {
+    // 板上任何变化（老师写了新段、学生作答的反馈、翻板）都算变了；静下来 0.6 秒才在后台拍，不在回话的路上
+    const box = root.querySelector('.class-pages');
+    if (box) new MutationObserver(() => { if (eyeOn()) eye.dirty(); }).observe(box, { childList: true, subtree: true, attributes: true, characterData: true });
+  }
+  // 发出去的那一份最后一条消息接上一句，说明前几张图是板（只改发出去的，不改存的轮次，也不进抢跑的指纹）
+  function withEye(turns, blobs, shot) {
+    if (!blobs?.length || !turns.length) return turns;
+    const last = turns.at(-1);
+    return [...turns.slice(0, -1), { ...last, content: `${last.content}\n${eyeNote({ n: blobs.length, more: !!shot?.more })}` }];
+  }
   function startSpec() {
     if (spec) return;
     // 一问一答：开课页的「开始上课。」照抢；开课以后不抢「继续。」（每一轮都以一问结尾，学生要先答）
@@ -1854,7 +1869,12 @@ export async function renderClass(root, meta, desk = null) {
     const s = { say, key, ctl: new AbortController(), text: '', onText: null, staged: { notes: [], slips: [], images: [], ids: [], calls: [] }, bytes: input.fit.bytes };
     const opts = { ...TEACH, cache: false, signal: s.ctl.signal, onText: (u) => { s.text = u.text; s.onText?.(u); } };
     if (teacher.tools) opts.tools = classTools(s.staged, { view: true });
-    s.promise = teacher.call(input.fit.turns, opts);
+    // 抢跑也带着板的图（手上最近拍的那一份）：真发的时候学生没附图、指纹一样就接上
+    const shot = eyeOn() ? eye.latest() : null;
+    const eyeBlobs = shot ? shot.blobs.slice(0, maxImages) : [];
+    if (eyeBlobs.length) opts.images = eyeBlobs;
+    s.eye = eyeBlobs;
+    s.promise = teacher.call(withEye(input.fit.turns, eyeBlobs, shot), opts);
     s.promise.catch(() => {}); // 没接上的抢跑出错不报
     spec = s;
   }
@@ -1909,13 +1929,19 @@ export async function renderClass(root, meta, desk = null) {
       // 工具做的事先记着，确认是 Opus 5.5 讲的才算数（退路模型记的观察、要看的图都不留）
       let staged = { notes: [], slips: [], images: [], ids: [], calls: [] };
       const opts = { ...TEACH, cache: false, signal, onText: ({ text }) => drawDraft(text) };
-      if (imgs.length && teacher.images) opts.images = imgs.slice(0, maxImages);
+      // 老师的眼睛（boardeye.js）：每一轮的第一次调用带上当前这块板的图，排在学生附的图前面；学生的图优先，放不下板的图让。
+      // 接上了抢跑的那一次用的是抢跑时带的图（板没变过，指纹才对得上）。重写、看原图的那几次不带
+      const shot = round === 0 && !pre && eyeOn() ? await eye.fresh(400) : null;
+      const eyeBlobs = pre ? pre.eye || [] : shot ? shot.blobs.slice(0, Math.max(0, maxImages - imgs.length)) : [];
+      const sendImgs = teacher.images ? [...(pre ? [] : eyeBlobs), ...imgs].slice(0, maxImages) : [];
+      if (sendImgs.length) opts.images = sendImgs;
+      const eyeBytes = eyeBlobs.reduce((n, b) => n + (Number(b?.size) || 0), 0);
       if (teacher.tools) opts.tools = classTools(staged, { view: !followed });
       let res;
       // 这一次调用花了多少：发出去的字节；它调了几次工具（每次平台多跑一整轮）
       const t0 = performance.now();
       firstAt = 0;
-      const cost = (w) => callCost({ bytes: fit.bytes, why: w, tools: staged.calls.length, ms: performance.now() - t0, first: firstAt ? firstAt - t0 : undefined, spec: adopted ? 'hit' : undefined });
+      const cost = (w) => callCost({ bytes: fit.bytes, why: w, tools: staged.calls.length, ms: performance.now() - t0, first: firstAt ? firstAt - t0 : undefined, spec: adopted ? 'hit' : undefined, img: eyeBytes });
       let adopted = false;
       if (pre) {
         // 接上抢跑：已经写出来的先画上，后面的接着画；停止按钮停它
@@ -1939,7 +1965,7 @@ export async function renderClass(root, meta, desk = null) {
         }
       }
       if (!res) try {
-        res = await teacher.call(fit.turns, opts);
+        res = await teacher.call(withEye(fit.turns, eyeBlobs, shot), opts);
       } catch (e) {
         clearDraft();
         dropPreviews({ rollback: true });
@@ -2711,7 +2737,7 @@ export async function renderClass(root, meta, desk = null) {
       const report = repObj ? reportText(repObj) : desk ? '（这一次页面没算出课后报告：整理单按这节课的对话写，basis 写组件 id 或段 id。）' : '';
       // 这节课的一页（memory/sheet.js）：页面自己拼，写在小结那块板的下面
       const sheet = sheetMd(repObj?.sheet || lessonSheet({ steps: steps() }));
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: TALK ? talkState() : boardState(), subject: session.subject, memory: memoryArg({ all: true }), canvas: CANVAS && !TALK, exam: examSection(), ...planArg(), ...(TALK ? { talk: true } : {}) });
+      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: TALK ? talkState() : boardState(), subject: session.subject, memory: memoryArg({ all: true }), canvas: CANVAS && !TALK, eye: eyeOn(), exam: examSection(), ...planArg(), ...(TALK ? { talk: true } : {}) });
       // 每几节课（或者某一类到了上限）顺带整理：合并重复的弱点、复现组、关于学生的记录（memo.js 的 tidyDue）
       const sp = desk?.block ? spaceOfId(desk.block) : desk?.space || spaceOfId('');
       const why = desk ? tidyDue(desk.mem, sp, desk.sid) : '';
