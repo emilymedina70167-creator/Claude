@@ -3,7 +3,8 @@ import { laterLine, aimLines } from '../memory/holds.js';
 // 相当于学生在 claude.ai 项目里的那个 Claude，只不过整个学习台都在它手边。这里是每一轮发给它的说明（纯函数，页面拼好材料传进来）：
 // 它是谁和三条底线 → 学生的要求（全文）→ 考试 → 预测分 → 下一步学什么 → 这一周 → 三科的开场简报 → 怎么查、怎么改记忆。
 // 整份 ≤ HEAD_MAX，放不下先截简报（简报后半是记忆库的目录，要哪条它自己 memory_read）。
-import { MEMO_DOC } from '../class/prompt.js';
+import { MEMO_DOC, SUMMARY_MEMO_DOC } from '../class/prompt.js';
+import { summaryText, SUMMARY_IDS } from '../memory/summary.js';
 
 export const HEAD_MAX = 150 * 1024;
 export const HEAD_HISTORY = 200 * 1024;
@@ -48,6 +49,16 @@ const HOW = `## 怎么查
 - \`list\`：一类按条件列（比如 \`exam_profiles\` 里 \`course == OS\`），最多 50 条。
 - \`search_chats\`：以前跟学生聊过的，按字找。`;
 
+// 有记忆摘要时的那一份（第十三轮）：关于学生的事只写 know，不再有要求、规则那几种
+const MEMO_HEAD_SUMMARY = `## 怎么改记忆
+
+和课堂老师一样，写在回答里的 \`board memo\` 块（学生看不到块本身）。下面是课堂老师的说明，照着写；在这里不同的几处：
+- \`basis=say\` 指学生**刚发的这一句**；以前说过的写证据编号（\`ev-…\`）或记忆里的编号。
+- \`know\` 默认记在三科共用的那一份；只关一科的写 \`space=math / cs / en\`。学生让你记住、让你别再怎样，都写 \`know\`，照实写学生说了什么。
+- 没有「这节课」：\`error\` \`review\` \`position\` 一般不写（那是上课时的事），除非学生明确让你改。
+
+${String(SUMMARY_MEMO_DOC).trim()}`;
+
 const MEMO_HEAD = `## 怎么改记忆
 
 和课堂老师一样，写在回答里的 \`board memo\` 块（学生看不到块本身，页面写进去以后在你的回答下面标一行小字）。下面是课堂老师的说明，照着写；在这里不同的几处：
@@ -63,7 +74,7 @@ ${String(MEMO_DOC).trim()}`;
  * forecast：{ total: { median, lo, hi }, pass, measured, goal, subjects: [{ label, median, lo, hi, target }] }（没有就不写）；
  * next：{ math: [{ title, why }], cs: …, en: … }；week：[{ text }]；target：考试档案（targetOf）；examDays：距初试几天
  */
-export function headSystem({ sessions = [], asks = [], briefs = [], forecast = null, next = {}, week = [], target = null, examDays = null, today = '', version = '', max = HEAD_MAX } = {}) {
+export function headSystem({ sessions = [], asks = [], summaries = null, briefs = [], forecast = null, next = {}, week = [], target = null, examDays = null, today = '', version = '', max = HEAD_MAX } = {}) {
   const live = (asks || []).filter((a) => a && (a.status || 'active') === 'active')
     .sort((a, b) => (Number(b.broken) || 0) - (Number(a.broken) || 0) || String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
   const askLine = (a) => {
@@ -71,7 +82,9 @@ export function headSystem({ sessions = [], asks = [], briefs = [], forecast = n
     const last = q.at(-1);
     return `- ${one(a.text, 400)}（${a.id}${a.scope && a.scope !== 'all' ? `；只管${SPACE_NAME[a.scope] || a.scope}` : ''}${last?.text ? `；最近一次原话「${one(last.text, 80)}」` : ''}${q.length > 1 ? `；说过 ${q.length} 次` : ''}${Number(a.broken) ? `；老师犯过 ${a.broken} 次` : ''}）`;
   };
-  const asksText = live.length
+  // 记忆摘要（第十三轮）：有的话四份都给，不再列一条条的要求
+  const sumDocs = SUMMARY_IDS.map((id) => (summaries || []).find((d) => d?.id === id)).filter((d) => d && (String(d.text || '').trim() || (d.notes || []).length));
+  const asksText = sumDocs.length ? summaryText(sumDocs, { lead: '这是每节课后整理出来的、对这个学生的了解（上课的老师每一轮带着共用的和那一科的）。学生在「管理 → 记忆摘要」里看得到、能直接改。' }) : live.length
     ? `## 学生的要求（学生亲口说过、要学习台照做的；全部在这里）\n\n${live.map(askLine).join('\n')}`
     : '## 学生的要求\n\n（还没有记下的要求）';
 
@@ -87,7 +100,7 @@ export function headSystem({ sessions = [], asks = [], briefs = [], forecast = n
   const weekText = (week || []).filter((x) => x?.text).map((x) => `- ${one(x.text, 200)}`).join('\n');
 
   const fixed = [
-    WHO,
+    sumDocs.length ? WHO.replace('记进「我的要求」后，下一节课的老师一定读到', '记进记忆摘要后，下一节课的老师就读得到') : WHO,
     `今天 ${today || '（没给日期）'}${version ? `；学习台版本 ${version}` : ''}。`,
     asksText,
     examText,
@@ -96,7 +109,7 @@ export function headSystem({ sessions = [], asks = [], briefs = [], forecast = n
     nextText ? `## 下一步学什么（页面按每块还能多拿几分排的，前几块）\n\n${nextText}` : '',
     weekText ? `## 这一周\n\n${weekText}` : '',
   ].filter(Boolean);
-  const tail = [HOW, MEMO_HEAD];
+  const tail = [HOW, sumDocs.length ? MEMO_HEAD_SUMMARY : MEMO_HEAD];
   const used = utf8([...fixed, ...tail].join('\n\n')) + 200;
   // 三科的简报平分剩下的地方；哪一科短，余下的给别的科
   const list = (briefs || []).filter((b) => b?.text);

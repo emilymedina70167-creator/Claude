@@ -43,7 +43,7 @@ import { debriefText } from '../memory/debrief.js';
 import { earlierClasses } from '../memory/digest.js';
 import { choose } from '../dialog.js';
 import { lessonSheet, sheetMd } from '../memory/sheet.js';
-import { slipsToFold, blockSwitch, tidyDue, tidyText } from '../memory/memo.js';
+import { slipsToFold, blockSwitch, tidyDue, tidyText, splitKnow } from '../memory/memo.js';
 import { spaceOfId, subjectOf } from '../memory/space.js';
 import { textbookForClass, readChunks, searchChunks, readHistory } from '../books/textbook.js';
 import { systemWithBooks } from './bookroom.js';
@@ -674,7 +674,7 @@ export async function renderClass(root, meta, desk = null) {
   async function runMemo(entries0, seq, pageN, { closing = false } = {}) {
     // 改讲别的块：页面自己改（sessions 记下来，之后的证据、记忆摘要都按新的块），不进改动单
     const switches = entries0.filter((e) => e.kind === 'block');
-    const entries = entries0.filter((e) => e.kind !== 'block');
+    const entries1 = entries0.filter((e) => e.kind !== 'block');
     for (const e of switches) {
       const r = blockSwitch(e, { mem: desk.mem, block: desk.block, space: desk.space });
       if (r.error) { addTurn({ role: 'system', kind: 'note', text: `[系统] memo 里「${e.line}」没生效：${r.error}` }); continue; }
@@ -687,6 +687,13 @@ export async function renderClass(root, meta, desk = null) {
       desk.updateSession({ block: r.block, blocks: desk.blocks, subject: session.subject });
       examFollowBlock();
     }
+    // 关于学生的事（know；有记忆摘要时旧的五种写法也算）：记成摘要的新笔记，不进改动单（第十三轮）
+    const { notes: knows, rest } = splitKnow(entries1, { on: !!desk.summary?.on() });
+    if (knows.length && desk.summary) {
+      const lastSay = [...history].reverse().find((t) => t && !t.discarded && t.role === 'student' && String(t.say || '').trim())?.say || '';
+      for (const k of knows) desk.summary.note({ text: k.text, quote: k.say ? lastSay : '', space: k.shared ? 'shared' : k.space || desk.space, session: desk.sid, by: 'class' }).catch((e) => console.warn('新笔记没记成', e));
+    }
+    const entries = desk.summary ? rest : entries1;
     if (!entries.length) return { pds: [], rejected: [] };
     try {
       const r = await desk.memo.ops.applyMemo(entries, { session: desk.sid, block: desk.block, space: desk.space, turn: seq, turns: history.filter((t) => !t.discarded), closing });
@@ -2710,7 +2717,7 @@ export async function renderClass(root, meta, desk = null) {
       const why = desk ? tidyDue(desk.mem, sp, desk.sid) : '';
       const tidy = why ? { why, text: tidyText(desk.mem, sp) } : null;
       // 后方复查出来的（memory/sentry.js，首页算好放在 meta/workorder）：这一科以前的结论后来的证据对不上的几条，整理单里顺带判断
-      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ report, review: desk?.review, opening: desk?.opening, slips: desk ? slipsToFold(desk.mem, sp) : '', plan: FEATURES.plan === false ? null : latestPlan(history), tidy, recheck: desk?.recheck?.[sp] || '', noForm: !TALK, aims: aimsNow({ live: false }) }) }], maxBytes: promptLimit(), stub: teacher.tools && !TALK });
+      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ summary: !!desk?.summary?.on(), report, review: desk?.review, opening: desk?.opening, slips: desk ? slipsToFold(desk.mem, sp) : '', plan: FEATURES.plan === false ? null : latestPlan(history), tidy, recheck: desk?.recheck?.[sp] || '', noForm: !TALK, aims: aimsNow({ live: false }) }) }], maxBytes: promptLimit(), stub: teacher.tools && !TALK });
       // 小结边写边显示（以前要干等一两分钟才一下子出来），也记下等了多久
       const t0 = performance.now();
       firstAt = 0;

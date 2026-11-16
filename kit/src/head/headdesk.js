@@ -4,7 +4,7 @@
 // → 回的不是 Opus 5.5 这一轮作废、照实说 → 回答里的 board memo 块过守卫写进记忆（作者 head，每条一张改动单、能撤销）
 // → 后台给这段对话过一次话的账。不碰 DOM（画面在 chatview.js）。
 import { HEAD, HEAD_MODEL, fitHistory, nextChatId, chatTitle } from './context.js';
-import { parseMemoLines } from '../memory/memo.js';
+import { parseMemoLines, splitKnow } from '../memory/memo.js';
 import { memoryRead } from '../memory/session.js';
 import { reportText } from '../memory/report.js';
 import { debriefText } from '../memory/debrief.js';
@@ -30,7 +30,8 @@ export function splitMemo(text) {
  * db：学习台的数据库；getData()：首页手上的记忆；ops：memops；ai()：调用 Claude 的；said：话的账（saiddesk.js）；
  * system()：这一轮的说明（context.js 的 headSystem，页面拼好）
  */
-export function createHead({ db, getData, ops, ai, said = null, system, now = () => Date.now() }) {
+// summary：记忆摘要那一层（summarydesk.js 的 { on, note }）；有摘要时关于学生的事记成新笔记，不过话的账
+export function createHead({ db, getData, ops, ai, said = null, summary = null, system, now = () => Date.now() }) {
   async function chats() {
     return rowsOf(await db.collection('chats').get().catch(() => null)).sort((a, b) => (b.last || 0) - (a.last || 0));
   }
@@ -216,7 +217,11 @@ export function createHead({ db, getData, ops, ai, said = null, system, now = ()
     const { shown, body } = splitMemo(full);
     let memo = null;
     if (body.trim()) {
-      const { entries, errors } = parseMemoLines(body);
+      const { entries: all, errors } = parseMemoLines(body);
+      // 关于学生的事记成记忆摘要的新笔记（第十三轮）：班主任的对话三科都管，没写哪一科就记在共用那一份
+      const { notes: knows, rest } = splitKnow(all, { on: !!summary?.on() });
+      const entries = summary ? rest : all;
+      if (summary) for (const k of knows) summary.note({ text: k.text, quote: k.say ? String(ev?.text || '') : '', space: k.space || 'shared', by: 'head' }).catch(() => {});
       try {
         const turns = history.map((t, i) => ({ seq: i + 1, role: t.role === 'head' ? 'claude' : 'student', text: t.text, at: t.at }));
         const r = entries.length ? await ops.applyMemo(entries, { author: 'head', evidence: [ev], turns }) : { pds: [], rejected: [] };
@@ -230,7 +235,7 @@ export function createHead({ db, getData, ops, ai, said = null, system, now = ()
     await db.doc(`chats/${cid}/turns/${seqId(n)}`).set(turn);
     await patchChat(cid, { last: turn.at, n });
     // 我这一句过一次话的账（后台、讲课优先；要求进「我的要求」，下一节课的老师就读到）
-    said?.runForChat(cid).catch(() => {});
+    if (!summary?.on()) said?.runForChat(cid).catch(() => {});
     return { cid, turn };
   }
 

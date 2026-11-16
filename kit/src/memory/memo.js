@@ -43,6 +43,9 @@ export const MEMO_KINDS = {
   rule: { tier: 'direct', coll: 'rules', label: '规则' },
   // 要反复记的一条（recall.js）：页面每天让学生自己想一遍，一条一条排期
   recall: { tier: 'direct', coll: 'recall', label: '记忆点' },
+  // 关于这个学生、关于怎么教这个学生，值得以后的课知道的事（第十三轮）：记成记忆摘要的新笔记（summary.js），不进改动单。
+  // classroom.js / headdesk.js 先用 splitKnow 拿出来，到不了 planEntry
+  know: { tier: 'page', coll: 'summary', label: '了解' },
   // 这节课改讲别的块（学生临时改了计划）：页面改 sessions 和之后证据挂的块，不进改动单（classroom.js 先拿出来，blockSwitch 查）
   block: { tier: 'page', coll: 'sessions', label: '这节课的块' },
 };
@@ -129,6 +132,33 @@ export function parseMemoLines(body) {
     entries.push({ kind, attrs, line: cut(line, 300) });
   }
   return { entries, errors };
+}
+
+/* ---------------- 记忆摘要的新笔记（第十三轮） ---------------- */
+
+// 有记忆摘要以后，这几种旧的写法（关于学生、要求、规则、失误、守则）不再一条条存：老师照老习惯写了，也当成一条新笔记收下
+const KNOW_LIKE = new Set(['know', 'pref', 'ask', 'rule', 'slip', 'lesson']);
+// 作废、合并旧条目的那种写法（status=dropped / void / retired / merged / seen）没有要记的新东西：丢掉
+const KNOW_GONE = new Set(['dropped', 'void', 'retired', 'merged', 'seen']);
+/**
+ * 把 memo 的条目分成两堆：进记忆摘要新笔记的（notes）和照旧走改动单的（rest）。
+ * on：这一科有没有记忆摘要。没有时只有 know 进笔记（别的五种照旧写进各自的类）。
+ * notes：[{ text, say（依据里有学生刚说的那句：页面把原话附上）, shared（三科共用）, space（写明了哪一科）, line }]
+ */
+export function splitKnow(entries = [], { on = false } = {}) {
+  const notes = [];
+  const rest = [];
+  for (const e of entries) {
+    if (!e || !(e.kind === 'know' || (on && KNOW_LIKE.has(e.kind)))) { rest.push(e); continue; }
+    const a = e.attrs || {};
+    if (KNOW_GONE.has(String(a.status || ''))) continue;
+    // 老写法里要记的话散在几个键上：text 是主体；又犯了守则写的是 again，失误的 lesson 是「下次怎么做」
+    const text = [a.topic && a.text ? `${a.topic}：${a.text}` : a.text, a.again, a.lesson, !a.text && !a.again ? a.why : ''].map((x) => String(x ?? '').trim()).filter(Boolean).join('；');
+    if (!text) continue;
+    const basis = Array.isArray(a.basis) ? a.basis : String(a.basis ?? '').split(/[,，]/);
+    notes.push({ text, say: basis.map((x) => String(x).trim()).includes('say'), shared: a.shared === '1' || a.shared === 'true' || a.space === 'all', space: ['math', 'cs', 'en'].includes(a.space) ? a.space : '', line: e.line || '' });
+  }
+  return { notes, rest };
 }
 
 /* ---------------- 依据 ---------------- */
