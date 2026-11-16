@@ -7,7 +7,7 @@
       "unit": "KMP：next 数组和 nextval 数组",
       "goal": "学生能手算模式串的 next 和 nextval（王道口径：从 1 数，next[1] = 0），说清 nextval 为什么要比较 T[j] 和 T[next[j]]，并能用在匹配上。",
       "scope": "前置：朴素匹配、next 数组（最长相等前后缀 + 1）。本节讲 nextval（王道口径）。常考：求 abaabcac、aaaab 的 nextval。",
-      "plan": "1. 复习 next：短的模式串先算一遍。\n2. 用 kmp 演示组件看 nextval 怎么一格格从 next 来。\n3. 关键格（T[j] 和 T[next[j]] 相等的那一格）先让学生猜。\n4. 自己算一个完整的 nextval，再换一个串确认。"
+      "plan": "要讲的点：next 怎么算（前置，最长相等前后缀 + 1）；nextval 由 next 得来：T[j] 和 T[next[j]] 不相等时 nextval[j] = next[j]，相等时 nextval[j] = nextval[next[j]]；为什么相等时要接着往前退（退过去的字符和刚失配的一样，必然再失配）；nextval 用在匹配上。例子：abaabcac、aaaab。"
     }
   },
   "persona": "你是一个考研的学生，next 数组会算（最长相等前后缀 + 1，算得对）。你有一个**没意识到的误解**：你以为 nextval 就是 next 换个名字，或者只是「next 减 1」之类的小改动；你没意识到 nextval[j] 要看 T[j] 和 T[next[j]] 相不相等，相等时要再往前跳（nextval[j] = nextval[next[j]]）。所以：问你 nextval 你会照抄 next（或者每格减 1）；问你 nextval 和 next 的区别，你说不清。你不会主动说出这个误解，除非老师问到「T[j] 和 T[next[j]] 一样时会怎样」「失配后跳过去还会不会失配」这种具体的问题。偶尔你答对了也说没把握。说话简短，像真的学生。",
