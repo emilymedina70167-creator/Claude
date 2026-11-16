@@ -9,6 +9,7 @@ import { parseMemoLines } from '../memory/memo.js';
 import { parseReact } from './react.js';
 import { parseWhy } from './ask.js';
 import { parseCols, parseCol } from './canvas.js';
+import { parseAims, aimId } from './aims.js';
 
 // ```board add id=b7 title="…"：行首最多 3 个空格，` 或 ~ 至少 3 个，可有空格，然后是 board 和指令
 const OPEN_RE = /^([ \t]{0,3})(`{3,}|~{3,})[ \t]*board(?=\s|$)\s*(.*)$/i;
@@ -149,7 +150,7 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // move：版面模式里把一段挪到别的栏（col=），不重画
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'show', 'move', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'show', 'move', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / plan';
+const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / plan / aims';
 
 /**
  * 解析 board 后面那一行：
@@ -195,6 +196,8 @@ export function parseCommand(header) {
   if (name === 'memo') return { op: 'memo' };
   // 老师自己的教学计划（学生看不到，docs/learning-plan.md 第 5 节）：块里是几行字
   if (name === 'plan') return { op: 'plan' };
+  // 这节课要拿下的事（aims.js）：一行一件，写在块里；不上板，页面核过存进这节课
+  if (name === 'aims') return { op: 'aims' };
   return { error: `看不懂的指令「${m[1]}」：只认 ${OP_LIST}` };
 }
 
@@ -206,6 +209,7 @@ export function blockCommand(header, body = '') {
   const op = parseCommand(header);
   if (op.op === 'memo') return memoOp(body);
   if (op.op === 'plan') return planOp(body);
+  if (op.op === 'aims') return aimsOp(body);
   if (op.op === 'react') return parseReact(op.head, body);
   if (op.op === 'why') return parseWhy(op.head, body);
   return op.op === 'mark' ? markOp(op, body) : op;
@@ -217,6 +221,14 @@ function planOp(body) {
   const t = String(body ?? '').trim();
   if (!t) return { error: 'plan 里没写内容：写这节课要到哪、你现在猜学生卡在哪、拿什么来证实、下一步' };
   return t.length > PLAN_MAX ? { op: 'plan', text: t.slice(0, PLAN_MAX), cut: t.length } : { op: 'plan', text: t };
+}
+
+// 闭合的 aims 块：一行一件（写法见 aims.js）。一件也没读出来时整块算看不懂；读懂的照收，读不懂的行放在 errors 里。
+// 件数、重号、真题题号能不能用不在这里管（checkAims，课堂执行时核：要查考试资料）
+function aimsOp(body) {
+  const r = parseAims(body);
+  if (!r.aims.length) return { error: r.errors[0] || 'aims 里一件也没写：一行一件，比如 a1 | 给一个引用串，手算 LRU 的缺页次数 | 独立做一道没见过的同类题' };
+  return { op: 'aims', aims: r.aims, errors: r.errors };
 }
 
 // 闭合的 memo 块：一行一条（写法见 memory/memo.js）。一条也没读懂时整块算看不懂；读懂的照常记，读不懂的行放在 errors 里
@@ -239,7 +251,7 @@ function markOp(op, body) {
 
 function segmentCommand(op, rest) {
   const toks = tokenize(rest);
-  let id, title, point, col, cols, hold = false;
+  let id, title, point, aim, col, cols, hold = false;
   for (let k = 0; k < toks.length; k++) {
     const t = toks[k];
     if (t.key === 'id') id = t.value;
@@ -247,6 +259,8 @@ function segmentCommand(op, rest) {
     else if (!t.key && !t.quoted && t.value === 'hold') hold = true;
     // 学习台里：这一段练的是哪个知识点（mastery 编号 # 后面那段），学生在这段的作答记成它的证据
     else if (t.key === 'point') point = t.value;
+    // 这一段的题是给这节课要拿下的哪件事用的（aims.js）：学生在这段的作答挂到那件事上
+    else if (t.key === 'aim') aim = t.value;
     // 版面（canvas.js）：放在第几栏（col=2 / col=all）；new 上写这块板分几栏（cols=7/5）
     else if (t.key === 'col') col = t.value;
     else if (t.key === 'cols') cols = t.value;
@@ -290,6 +304,12 @@ function segmentCommand(op, rest) {
     // point 写错只丢掉 point，段照常写（2026-10-28 point=复现R19 让整块板当成普通文字写在了板顶）
     if (!/^[A-Za-z0-9_-]{1,40}$/.test(point)) out.warn = `point「${point}」没用上：只能用字母、数字、- 和 _（写掌握状态编号 # 后面那段，比如 point=tr），这一段的作答没记成知识点的证据`;
     else out.point = point;
+  }
+  if (aim !== undefined && !NO_TITLE.has(op)) {
+    // 和 point 一样：写错只丢掉 aim，段照常写。这件事这节课有没有，课堂执行时才知道
+    const a = aimId(aim);
+    if (a) out.aim = a;
+    else out.warn = [out.warn, `aim「${aim}」没用上：写这节课要拿下的事的编号（board aims 里的 a1、a2），这一段的作答没挂到哪件事上`].filter(Boolean).join('；');
   }
   return out;
 }

@@ -7,9 +7,11 @@
 import { sceneSpans } from '../stage/scenes.js';
 import { lessonSheet } from './sheet.js';
 import { usageOf } from '../class/usage.js';
+import { aimsSummary, aimsText } from '../class/aims.js';
 
 // 2：试出来的选择题（guess）、版本号记进 sessions.report.v（旧版算的报告首页打开时按新的算法重算）
-export const REPORT_VERSION = 2;
+// 3：这节课要拿下的事（aims）：每件的状态页面按作答算好写进报告。旧课重算出来只多一个空的 aims
+export const REPORT_VERSION = 3;
 export const IDLE_GAP = 10 * 60 * 1000; // 两个动静之间超过 10 分钟：算走开了，不计进时长
 export const REPORT_MAX = 200 * 1024; // 数据库一个文档最多 256 KiB，留点余量
 
@@ -83,12 +85,15 @@ function itemOf(key, list, segs) {
   const step = head?.step ?? null;
   const seg = step ? segs.get(String(step)) : null;
   const at = list.map((e) => num(e.at)).filter((x) => x !== null);
+  const aim = [...list].sort(byAt).find((e) => e.aim)?.aim;
   return {
     key,
     comp: head?.comp ?? null,
     // 真题级的题（考情第五节；第十轮的测量按它分真题难度和课堂题）
     exam: recs.find((r) => r.exam)?.exam ?? null,
     like: recs.find((r) => r.like)?.like ?? null,
+    // 这道题是给这节课要拿下的哪件事用的（段上的 aim=，class/aims.js）。没挂的题不写这个键：旧课重算出来的题和原来一样
+    ...(aim ? { aim: String(aim) } : {}),
     kind: String(recs[0]?.kind || head?.kind || ''),
     q: cut(recs.find((r) => r.q)?.q || recs[0]?.title || '', 120),
     seg: step,
@@ -245,6 +250,9 @@ export function buildReport({ session = {}, evidence = [], manual = [], observat
       .filter((d, i, all) => all.findIndex((x) => String(x.word).toLowerCase() === String(d.word).toLowerCase()) === i).slice(0, 60).map((d) => ({ word: cut(d.word, 60), gloss: cut(d.gloss, 80) })),
     // 这节课的一页：记号、重点框、做错又改对的、还没拿下的（页面自己拼，不调用 Claude）
     sheet: lessonSheet({ steps, items }),
+    // 这节课要拿下的事，每件到了没有（页面按上面的题算，class/aims.js）。真课一大半是挂着被当成下了课的、没有小结，
+    // 所以状态不靠小结，写在这里；没有要拿下的事的课（旧课、练一练、复现课、舞台课）是空的
+    aims: aimsSummary(session.aims, items),
     // 舞台课分了几幕（老师写的 scene，主线第六轮 3.6）：一幕一个标题、它的重点卡。只有一幕（旧课、没写 scene）不写
     ...scenesOf(turns, session),
     at: now,
@@ -299,6 +307,8 @@ export function reportText(r, { max = 8 * 1024 } = {}) {
     `- 时长约 ${min} 分钟；做了 ${t.items || 0} 题：一次对 ${t.first || 0}、改对 ${t.ok || 0}、错 ${t.wrong || 0}、想不出来 ${t.giveup || 0}、看了答案 ${t.revealed || 0}、程序判不了 ${t.open || 0}。`];
   const tags = (r.byTag || []).filter((x) => x.tag).map((x) => `${x.tag} ${x.items} 题一次对 ${x.first}`);
   if (tags.length) head.push(`- 按块 / 知识点：${tags.join('；')}`);
+  // 排在每道题前面：题太多要截的时候截的是题，这一段一直在
+  const aims = r.aims?.length ? ['', '这节课要拿下的事（状态是页面按学生的作答算的）：', aimsText(r.aims)] : [];
   const items = (r.items || []).map((it) => `- ${it.comp}${it.seg ? `（${it.seg}）` : ''}「${cut(it.q, 60)}」：${it.seq || '·'} ${it.guess ? '把选项试遍了才对（不算会）' : OUTCOME_TEXT[it.outcome] || it.outcome}${it.sure === false ? '（学生标了没把握）' : it.sure === true ? '（有把握）' : ''}${it.last ? `，最后写的 ${cut(it.last, 40)}` : ''}${it.ms ? `，${Math.round(it.ms / 1000)} 秒` : ''}；证据 ${it.evidence.slice(-3).join(',')}`);
   const tail = [];
   if (r.drafts?.length) tail.push(`- 没交的草稿：${r.drafts.map((d) => `${d.comp || ''}「${cut(d.text, 40)}」（${d.id}）`).join('；')}`);
@@ -307,7 +317,7 @@ export function reportText(r, { max = 8 * 1024 } = {}) {
   if (r.manual?.length) tail.push(`- 学习台外面补记的：${r.manual.map((m) => `「${cut(m.text, 60)}」${m.verdict ? ` ${m.verdict}` : ''}（${m.id}）`).join('；')}`);
   const size = (xs) => new TextEncoder().encode(xs.join('\n')).length;
   let kept = items;
-  while (kept.length > 1 && size([...head, ...kept, ...tail]) > max) kept = kept.slice(1);
+  while (kept.length > 1 && size([...head, ...aims, ...kept, ...tail]) > max) kept = kept.slice(1);
   if (kept.length < items.length) head.push(`- （题太多，只列了最近的 ${kept.length} 道）`);
-  return [...head, ...(kept.length ? ['', '每道题：', ...kept] : []), ...(tail.length ? ['', ...tail] : [])].join('\n');
+  return [...head, ...aims, ...(kept.length ? ['', '每道题：', ...kept] : []), ...(tail.length ? ['', ...tail] : [])].join('\n');
 }
