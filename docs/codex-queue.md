@@ -11,7 +11,10 @@
 | 3 | 测试的卫生（见下） | 这个文件 | `codex/test-hygiene` |
 | 4 | 独立通读：黑板课老师的整份说明（只读，见下） | 这个文件 | `codex/review-charter` |
 
-后面还会加（等主控把第 2 批的计划定下来）：第 2 批里自成一块的新组件。
+| 5 | 第 2 批任务 1：老师的判（纯函数）和 `board judge` 指令 | `docs/superpowers/plans/2026-11-16-root-2.md` 的 Task 1（全文照做） | `codex/root2-judge` |
+| 6 | 第 2 批任务 3：作答区 `work` | 同一份计划的 Task 3（全文照做） | `codex/root2-work` |
+
+第 5、6 件的说明就是计划里那两个任务的全文（Files、Interfaces、每一步、测试的代码都在）；先读计划开头的「核到的差异」「要主控定的事」「Global Constraints」「Review Focus」。计划里别的任务（2、4～10）不归你：它们要接课堂和老师的说明，主控那边做。第 5 件要改 `kit/src/class/protocol.js`：只照计划加 `judge` 那几处，别的不动。每件一份报告（`docs/codex-root2-judge-report.md`、`docs/codex-root2-work-report.md`），写法同前：做了什么、和计划不一样的地方及原因、测试先红后绿、拿不准的。
 
 ---
 
