@@ -1414,6 +1414,77 @@ const SUITES = {
     return t;
   },
 
+  // 整条最小的一圈（第十二轮第 1 批）：开黑板课 → 老师定要拿下的事 → 两道题各做对 → 下课（框里有两件事）→ 回首页，后台给这节课留隔天的题
+  // （?dev 用模拟的模型）→ 当天首页没有「验上次学的」→ 这节课变成昨天上的 → 这一行出现 → 点开做完（中间写数据库失败一次）→ 这一行消失 →
+  // 那节课的文档上有 aims、holds、later →「以前的课」里那节课写着隔 1 天做没见过的题和要拿下的两件事
+  async root(browser) {
+    const t = await seeded(browser);
+    await t.openForm('class');
+    await t.page.click('.dk-class .dk-new');
+    const sid = await t.inClass();
+    await t.page.click('button:has-text("开始上课")');
+    await t.waitFor(() => t.page.$('button:has-text("一个数")'), { timeout: 30000, what: '模拟老师写出第一道题' });
+    await sleep(2500);
+    const input = t.page.locator('textarea:visible, [contenteditable="true"]:visible').first();
+    await input.click(); await t.page.keyboard.type('测试:目标'); await t.page.keyboard.press('Enter');
+    await t.waitFor(async () => /0\/2 有证据/.test(await t.text('.class-aims') || ''), { timeout: 30000, what: '板上方出现要拿下的两件事' });
+    await sleep(1500);
+    const pick = (label) => t.page.evaluate((l) => { const all = [...document.querySelectorAll('.block[data-bid^="q-aim-"]')]; for (const b of all) { if (b.querySelector('.q-opt.is-correct, .q-opt[disabled]')) continue; const o = [...b.querySelectorAll('.q-opt')].find((x) => x.textContent.includes(l)); if (o) { o.click(); return true; } } return false; }, label);
+    await pick('3×3 矩阵');
+    await t.waitFor(async () => /1\/2 有证据/.test(await t.text('.class-aims') || ''), { timeout: 15000, what: '第一件有证据' });
+    await sleep(6000); // 模拟老师回完这一轮
+    await t.page.evaluate(() => { const b = [...document.querySelectorAll('.block[data-bid^="q-aim-"]')].at(-1); [...b.querySelectorAll('.q-opt')].find((x) => x.textContent.includes('一个数'))?.click(); });
+    await t.waitFor(async () => /2\/2 有证据/.test(await t.text('.class-aims') || ''), { timeout: 15000, what: '两件都有证据' });
+    await sleep(6000);
+    await t.page.click('.cb-more'); await sleep(300); await t.page.click('.cb-end');
+    await t.page.waitForSelector('.la-dialog', { timeout: 8000 });
+    check((await t.text('.la-dialog-text')).split('带着做到').length === 3, `下课的框里应该两件都是带着做到：${await t.text('.la-dialog-text')}`);
+    await t.answer('下课');
+    await t.waitFor(async () => { const x = (await t.docs('sessions')).find((d) => d.id === sid); return x?.status === 'closed' && x.report?.at; }, { timeout: 40000, what: '下课、报告写好' });
+    // 回首页：后台抄题、留题
+    await t.open();
+    const held = await t.waitFor(async () => (await t.docs('sessions')).find((d) => d.id === sid)?.holds, { timeout: 40000, what: '首页后台给这节课留了隔天的题' });
+    check(held.ids.length >= 1 && held.ids.length === held.exam + held.made, `留着的题记得不对：${JSON.stringify(held)}`);
+    const drills = await t.docs('drills');
+    check(held.ids.every((id) => drills.some((d) => d.id === id)), '留着的题不在题库里');
+    await sleep(800);
+    check(!(await t.page.$('[data-row="later"]')), '刚下课当天就出现了「验上次学的」');
+    // 这节课变成昨天上的（页面按「今天」减下课那天算满没满一天）
+    const all = await t.db();
+    const cur = all[`sessions/${sid}`];
+    await plant(t, { [`sessions/${sid}`]: { ...cur, endedAt: cur.endedAt - 86400000, startedAt: cur.startedAt - 86400000 } });
+    await t.open();
+    await t.page.waitForSelector('[data-row="later"]', { timeout: 15000 });
+    check(!/c-\d{8}|d-hold/.test(await t.text('[data-row="later"]')), '「验上次学的」那一行显示了编号');
+    await t.page.click('[data-row="later"]'); await sleep(500);
+    await t.page.click('.dk-later-go');
+    const did = await t.inClass((h) => h !== sid);
+    check((await t.docs('sessions')).find((d) => d.id === did)?.hold === sid, '开出来的练习没记是验哪节课的');
+    // 一道一道做：填空的写答案，选择的点对的那个（模拟出的两道：a+b=5、「否」）；最后一道之前让写这节课失败一次
+    for (let i = 0; i < held.ids.length; i++) {
+      await t.waitFor(() => t.page.$('.dr-item .ans-check, .dr-item .q-opt'), { timeout: 15000, what: `第 ${i + 1} 道留着的题画出来` });
+      if (i === 0) check(/上一节课留到今天的/.test(await t.text('.dr-lead') || ''), '验上次学的练习，开头那句还写着「页面挑的、不同块混在一起」');
+      if (await t.page.$('.dr-item .ans-check')) { const box = t.page.locator('.dr-item .ans-input input, .dr-item .ans-input textarea, .dr-item .ans-input [contenteditable="true"]').first(); await box.click(); await t.page.keyboard.type('5'); await t.page.click('.dr-item .ans-check'); }
+      else await t.page.evaluate(() => [...document.querySelectorAll('.dr-item .q-opt')].find((x) => x.textContent.includes('否'))?.click());
+      await sleep(600);
+      if (i === held.ids.length - 1) await t.page.evaluate(() => window.LAKitDev.failWrites(1, 'sessions'));
+      await t.page.click('.dr-next'); await sleep(600);
+    }
+    await t.page.waitForSelector('.dr-done .dr-back', { timeout: 20000 });
+    const later = await t.waitFor(async () => (await t.docs('sessions')).find((d) => d.id === sid)?.later, { timeout: 15000, what: '做完以后结果记回那节课' });
+    check(later.n === held.ids.length && later.days === 1 && later.right <= later.n && later.drill === did, `记回去的不对：${JSON.stringify(later)}`);
+    const src = (await t.docs('sessions')).find((d) => d.id === sid);
+    check(src.aims?.length === 2 && src.holds && src.later && src.status === 'closed', '那节课的文档上 aims / holds / later 不全，或者被盖掉了别的字段');
+    await t.page.click('.dr-done .dr-back');
+    await t.page.waitForSelector('.dk-rows', { timeout: 15000 });
+    await sleep(800);
+    check(!(await t.page.$('[data-row="later"]')), '做完以后「验上次学的」还在');
+    await t.route(`classes/${sid}`);
+    const pg = await t.waitFor(async () => { const x = await t.text('.dk-pages'); return x && /隔 1 天做没见过的题/.test(x) ? x : null; }, { timeout: 15000, what: '以前的课里那节课写着课后那一行' });
+    check(pg.includes('判断两个向量相乘') && pg.includes('带着做到'), `以前的课里没列要拿下的事和状态：${pg.slice(0, 300)}`);
+    return t;
+  },
+
   async classexam(browser) {
     const t = await seeded(browser);
     const q = (year, n, how) => ({ course: 'DS', space: 'cs', paper: `X-408-${year}`, year, n, type: 'single', points: 2, stem: `顺序表第 i 个位置插入要移动几个元素（${year} 年第 ${n} 题）`, options: { A: '1', B: '2', C: '3', D: '4' }, answer: 'B', analysis: '从后往前挪', tags: { syl: ['G-DS-2.1'], how } });

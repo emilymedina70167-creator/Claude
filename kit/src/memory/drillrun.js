@@ -98,7 +98,10 @@ export async function enterDrill(root, meta, { db, store, sid, doc, readOnly = f
 
   root.innerHTML = `
     <div class="dr-stage">
-      <p class="dr-lead muted">页面挑的 ${drills.length} 道，不同块的混在一起（题目上不写是哪一章：先认出该用什么方法）。做完一道点「下一题」，页面判分，不调用 Claude。</p>
+      <p class="dr-lead muted">${doc.hold
+    // 验上次学的：这几道是那节课下课后留的，说它是「页面挑的、不同块混在一起」就是假话
+    ? `上一节课留到今天的 ${drills.length} 道，都是没做过的题：不翻笔记、不问人，自己做。做完一道点「下一题」，页面判分，不调用 Claude；全部交了，结果才记回那节课。`
+    : `页面挑的 ${drills.length} 道，不同块的混在一起（题目上不写是哪一章：先认出该用什么方法）。做完一道点「下一题」，页面判分，不调用 Claude。`}</p>
       <div class="dr-item"></div>
       <p class="dr-where muted" hidden></p>
       <div class="dr-nav"><button type="button" class="btn dr-next">下一题 →</button></div>
