@@ -11,7 +11,8 @@
 //   node tools/teach-sim.mjs posttest <目录>                           写 posttest.md（只有题面）和 posttest-key.md（答案，只给评卷人）
 //   node tools/teach-sim.mjs score <目录…>                             页面能算的指标（含按学生用时算的钟）
 //
-// 钟（tools/teach-sim-lib.mjs）：一节课多长按学生用掉的时间算——读、等老师、点、写、说；到时间或老师写满 40 轮就 over，再让学生答会报错。
+// 钟（tools/teach-sim-lib.mjs）：一节课多长按学生用掉的时间算——读、等老师、点、写、说；老师、学生两种命令算完钟都判，到时间（或老师写满 40 轮）
+// 就 over，最后一行打印「到时间了」；over 以后再调用 teacher / student 都报错。
 // 学生的 JSON 可带 "note"：这一轮记在笔记本 notebook.md 里的话，课后测验时学生只能看这个。
 //
 // 预案（board react，docs/board-plan.md）：学生作答落在老师预写的情况里时，页面自己接、不调用老师——
@@ -33,7 +34,7 @@ import { calcFields, commonSpec, resolveAsks, parseAskField, checkAsk, askAnswer
 import { textAnswerSpec } from '../kit/src/textspec.js';
 import { toExact } from '../kit/src/exact.js';
 import { planLocal, markFired, reactNote, dropForSeg, armedText } from '../kit/src/class/react.js';
-import { checkScenario, newClock, tick, shownChars, lessonMetrics } from './teach-sim-lib.mjs';
+import { checkScenario, newClock, tick, timeUp, shownChars, lessonMetrics } from './teach-sim-lib.mjs';
 
 const [cmd, dir, arg, ...rest] = process.argv.slice(2);
 const read = (f) => fs.readFileSync(f, 'utf8');
@@ -368,7 +369,8 @@ function judge(st, act) {
     const ok = exp ? sameVal(evalExpr(act.value, vars), evalExpr(exp, vars)) : null;
     return { ...base, type: 'answer', title: field(f.body, 'title'), q: field(f.body, 'q'), value: act.value, ok: ok === null ? null : ok, attempts, closed: false };
   }
-  return { ...base, type: f.lang, title: field(f.body, 'title'), q: field(f.body, 'q'), value: act.value, ok: null, attempts, closed: false };
+  // 自由作答（conjecture、thinkbox……）：真的页面把写的字记在 text 上，actionText 照它写；只给 value 时老师看到的是「没写内容」
+  return { ...base, type: f.lang, title: field(f.body, 'title'), q: field(f.body, 'q'), value: act.value, text: act.value, ok: null, attempts, closed: false };
 }
 
 /* ---------------- 黑板 ---------------- */
@@ -461,6 +463,8 @@ if (cmd === 'init') {
   console.log(`开课：${sc.id}（${sc.subject}，计划块${plan ? '开' : '关'}），说明 ${(bytes(system) / 1024).toFixed(1)} KiB`);
 } else if (cmd === 'teacher') {
   const st = load();
+  // 已经下课了还调用：跑课的脚本漏看了「到时间了」，报错比悄悄多上一轮好查
+  if (st.over) { console.error('到时间了，这节课已经结束，老师不能再写'); process.exit(1); }
   const text = read(arg);
   st.seq++;
   st.history.push({ role: 'claude', seq: st.seq, text });
@@ -471,7 +475,7 @@ if (cmd === 'init') {
   st.clock = tick(st.clock, { read: read_, wait: true });
   st.shown = (st.shown || 0) + read_;
   const teacherTurns = st.turns.filter((t) => t.role === 'teacher').length + 1;
-  if (st.clock.s >= st.minutes * 60 || teacherTurns >= 40) st.over = true;
+  if (timeUp(st.clock, st.minutes) || teacherTurns >= 40) st.over = true;
   const view = viewText(st, r.talk);
   fs.writeFileSync(P('view.md'), view);
   st.turns.push({ seq: st.seq, role: 'teacher', bytes: bytes(text), talk: r.talk, ops: st.ops.slice(), notes: r.notes, plan: /board[ \t]+plan/i.test(text), view });
@@ -520,22 +524,25 @@ if (cmd === 'init') {
     const read_ = shownChars(local.talk) + local.show.reduce((a, id) => { const x = st.segs.find((g) => g.id === id); return a + (x ? shownChars(studentSeg(x, st)) : 0); }, 0);
     st.clock = tick(st.clock, { read: read_ });
     st.shown = (st.shown || 0) + read_;
+    // 连着几轮被预案接住时老师一直不跑，只在老师那一轮判的话钟会走过头也不下课
+    if (timeUp(st.clock, st.minutes)) st.over = true;
     fs.writeFileSync(P('view.md'), view);
     st.turns.push({ seq: st.seq, role: 'student', say, acts: acts.map((a) => ({ comp: a.block, ok: a.ok, type: a.type })), msg: am, local: true }, { seq: st.seq, role: 'page', talk: local.talk, note, view });
     save(st);
-    console.log(`第 ${st.seq} 轮学生：${acts.map((a) => (a.block ? `${a.block}${a.ok === true ? '✓' : a.ok === false ? '✗' : '·'}` : a.type || '')).join(' ')}——页面按预案接了（没调用老师）：学生接着看 view.md`);
+    console.log(`第 ${st.seq} 轮学生：${acts.map((a) => (a.block ? `${a.block}${a.ok === true ? '✓' : a.ok === false ? '✗' : '·'}` : a.type || '')).join(' ')}——页面按预案接了（没调用老师）：学生接着看 view.md${st.over ? '\n到时间了' : ''}`);
     process.exit(0);
   }
   // 前面几轮页面按预案接过的，跟着这一次发给老师
   const msg = [...(st.localMsgs || []), say, actionsMessage(acts), ...(st.pendingNotes || [])].filter(Boolean).join('\n') || '（学生没有说话，也没有作答）';
   st.localMsgs = [];
+  if (timeUp(st.clock, st.minutes)) st.over = true;
   st.history.push({ role: 'student', seq: st.seq, text: msg });
   st.turns.push({ seq: st.seq, role: 'student', say, acts: acts.map((a) => ({ comp: a.block, ok: a.ok, type: a.type })), msg });
   st.pendingNotes = [];
   const state = `${st.plan ? `${planText(latestPlan(st.history))}\n\n` : ''}${boardStateText(boardForPrompt(st))}`;
   fs.writeFileSync(P('to-teacher.md'), `【页面这一轮发给你的】\n\n# 黑板现状（最新，替换说明里那份）\n\n${state}\n\n# 学生\n\n${msg}\n`);
   save(st);
-  console.log(`第 ${st.seq} 轮学生：${acts.map((a) => (a.block ? `${a.block}${a.ok === true ? '✓' : a.ok === false ? '✗' : '·'}` : a.type || '')).join(' ') || '没作答'}${say ? `，说「${say.slice(0, 30)}」` : ''}`);
+  console.log(`第 ${st.seq} 轮学生：${acts.map((a) => (a.block ? `${a.block}${a.ok === true ? '✓' : a.ok === false ? '✗' : '·'}` : a.type || '')).join(' ') || '没作答'}${say ? `，说「${say.slice(0, 30)}」` : ''}${st.over ? '\n到时间了' : ''}`);
 } else if (cmd === 'transcript') {
   const st = load();
   const out = [`# 模拟课 ${st.scenario}（${st.subject}，计划块${st.plan ? '开' : '关'}）`];

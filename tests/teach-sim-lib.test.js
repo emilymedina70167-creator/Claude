@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { COSTS, shownChars, isProduce, actSeconds, newClock, tick, lessonMetrics, checkScenario } from '../tools/teach-sim-lib.mjs';
 
 test('读 400 个字是一分钟，等一轮 8 秒', () => {
@@ -41,4 +45,45 @@ test('场景要有 2～5 件要拿下的事、3～5 道课后题、至少一道�
   assert.ok(checkScenario({ ...ok, aims: [ok.aims[0]] }).length);
   assert.ok(checkScenario({ ...ok, posttest: ok.posttest.map((p) => ({ ...p, kind: 'near' })) }).length);
   assert.ok(checkScenario({ ...ok, posttest: [{ ...ok.posttest[0], aim: 'a9' }, ...ok.posttest.slice(1)] }).length);
+});
+test('放弃一道题按点一下算（10 秒），不按写一行', () => {
+  assert.equal(actSeconds({ closed: false, giveup: true }), COSTS.pick);
+  assert.equal(actSeconds({ type: 'giveup', closed: false }), COSTS.pick);
+});
+
+// 到时间不只在老师那一轮判：学生连着几轮被预案接住、或者说了很长一段话，钟一样走到头
+const SIM = new URL('../tools/teach-sim.mjs', import.meta.url).pathname;
+test('学生那一轮用完了时间：打印「到时间了」，之后老师再调用报错', () => {
+  const D = fs.mkdtempSync(path.join(os.tmpdir(), 'tsim-'));
+  const sc = { id: 'x', subject: '操作系统', pack: { main: { unit: 'LRU' } }, persona: 'p', know: 'k', minutes: 0.2,
+    aims: [{ id: 'a1', can: 'c', proof: 'p' }, { id: 'a2', can: 'c', proof: 'p' }],
+    posttest: [{ id: 'p1', q: 'q', answer: 'a', kind: 'near', aim: 'a1' }, { id: 'p2', q: 'q', answer: 'a', kind: 'far', aim: 'a2' }, { id: 'p3', q: 'q', answer: 'a', kind: 'near', aim: 'a1' }] };
+  fs.writeFileSync(path.join(D, 'sc.json'), JSON.stringify(sc));
+  fs.writeFileSync(path.join(D, 't1.txt'), '看。\n\n```board new id=b1 title=LRU\n换最久没用的。\n```\n');
+  fs.writeFileSync(path.join(D, 's1.json'), JSON.stringify({ say: '我想再问一下这个到底是怎么回事，'.repeat(4), acts: [] }));
+  const run = D + '/run';
+  execFileSync('node', [SIM, 'init', run, D + '/sc.json']);
+  const t = execFileSync('node', [SIM, 'teacher', run, D + '/t1.txt'], { encoding: 'utf8' });
+  assert.ok(!t.includes('到时间了'));
+  const s = execFileSync('node', [SIM, 'student', run, D + '/s1.json'], { encoding: 'utf8' });
+  assert.equal(s.trim().split('\n').at(-1), '到时间了');
+  assert.equal(JSON.parse(fs.readFileSync(run + '/state.json', 'utf8')).over, true);
+  assert.equal(spawnSync('node', [SIM, 'teacher', run, D + '/t1.txt']).status, 1);
+  fs.rmSync(D, { recursive: true, force: true });
+});
+test('自由作答（conjecture）写的字原样发给老师，不是「没写内容」', () => {
+  const D = fs.mkdtempSync(path.join(os.tmpdir(), 'tsim-'));
+  const sc = { id: 'x', subject: '操作系统', pack: { main: { unit: 'LRU' } }, persona: 'p', know: 'k',
+    aims: [{ id: 'a1', can: 'c', proof: 'p' }, { id: 'a2', can: 'c', proof: 'p' }],
+    posttest: [{ id: 'p1', q: 'q', answer: 'a', kind: 'near', aim: 'a1' }, { id: 'p2', q: 'q', answer: 'a', kind: 'far', aim: 'a2' }, { id: 'p3', q: 'q', answer: 'a', kind: 'near', aim: 'a1' }] };
+  fs.writeFileSync(path.join(D, 'sc.json'), JSON.stringify(sc));
+  fs.writeFileSync(path.join(D, 't1.txt'), '说说看。\n\n````board new id=b1 title=LRU\n```conjecture\nid: cj1\nq: 为什么换 2？\n```\n````\n');
+  fs.writeFileSync(path.join(D, 's1.json'), JSON.stringify({ say: '', acts: [{ comp: 'cj1', value: '页 1 刚被访问过' }] }));
+  const run = D + '/run';
+  execFileSync('node', [SIM, 'init', run, D + '/sc.json']);
+  execFileSync('node', [SIM, 'teacher', run, D + '/t1.txt']);
+  execFileSync('node', [SIM, 'student', run, D + '/s1.json']);
+  const msg = fs.readFileSync(run + '/to-teacher.md', 'utf8');
+  assert.ok(msg.includes('页 1 刚被访问过') && !msg.includes('没写内容'), msg.slice(-300));
+  fs.rmSync(D, { recursive: true, force: true });
 });

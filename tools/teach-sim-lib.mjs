@@ -18,9 +18,9 @@ export function isProduce(rec) {
   return writtenOf(rec).length >= 2;
 }
 
-/** 这次作答花学生多少秒：点选固定；写的按每行 lineChars 个字算行，至少一行 */
+/** 这次作答花学生多少秒：点选、放弃固定（放弃就是点一下「不会」，没写东西）；写的按每行 lineChars 个字算行，至少一行 */
 export function actSeconds(rec) {
-  if (isClosed(rec)) return COSTS.pick;
+  if (isClosed(rec) || rec?.giveup || rec?.type === 'giveup') return COSTS.pick;
   return Math.max(1, Math.ceil(writtenOf(rec).length / COSTS.lineChars)) * COSTS.line;
 }
 
@@ -47,6 +47,9 @@ export function tick(clock, { read = 0, wait = false, acts = [], say = '' } = {}
   }
   return c;
 }
+
+/** 到时间了没有：老师那一轮、学生那一轮（含页面按预案接的）算完钟都要判 */
+export const timeUp = (clock, minutes) => clock.s >= minutes * 60;
 
 const r1 = (x) => Math.round(x * 10) / 10;
 

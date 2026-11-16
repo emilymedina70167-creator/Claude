@@ -15,20 +15,53 @@
 
 ## 跑一轮
 
+现在由脚本调用已经装好的 `claude` 命令行，自动跑完一节课、课后测验和评卷，不再手工轮流派子代理：
+
 ```bash
-node tools/teach-sim.mjs init evals/teaching/runs/<轮>/<场景>-plan evals/teaching/scenarios/<场景>.json
-node tools/teach-sim.mjs init evals/teaching/runs/<轮>/<场景>-noplan evals/teaching/scenarios/<场景>.json --no-plan
+# 一节
+node tools/teach-run.mjs <目录> evals/teaching/scenarios/<场景>.json [--system 文件] [--memory 文件] \
+  [--teacher claude-opus-5-5] [--student claude-sonnet-5-5] [--grader claude-opus-5-5]
+# 一整套（scenarios/ 下每个场景一节，几节一起跑；一节失败不影响别的）
+node tools/teach-suite.mjs <输出目录> --arm <名字> [--system-dir 目录] [--memory 文件] [--only a,b] [--parallel 3]
 ```
 
-1. 每个目录开一个老师子代理、一个学生子代理（说明照 `runs/1/` 那一轮的写法：老师不许看场景文件和学生那边的文件，学生不许看老师那边的）。
-2. 轮流：老师写 `t-N.txt` → `teach-sim.mjs teacher`；学生写 `s-N.json` → `teach-sim.mjs student`。每节 8 轮左右。`student` 打印「页面按预案接了」时（老师写的 `board react` 接住了这次作答，`docs/board-plan.md`）**不跑老师**，学生接着看 `view.md` 再答；接过的几轮跟着下一次发给老师。`score` 里的 `localTurns` 是页面接了几轮（每一轮本来都是一次调用）。
-3. `node tools/teach-sim.mjs transcript <目录>` 写 `transcript.md`；`node tools/teach-sim.mjs score <目录…>` 出页面能算的指标。
-4. 一个评卷子代理读 `transcript.md` 和场景的 `misconception`、`rubric`，照下面的细则打分。
-5. 结果写进 `results.md`。
+- `--system`：老师读这一份整份说明（旧版规则那一版：动手改之前用 `main` 生成的存在 `baseline/`）；不给就照现在的代码拼。`--system-dir` 里有 `<场景 id>.system.md` 就用它。`--memory`：记忆样例，照课堂的写法带进说明。
+- 四个会话：老师（只用 `claude-opus-5-5`、effort high，不设退路模型）、学生、课后测验的学生（新开的，只拿人设、原来会什么、上课记的笔记）、评卷人。每个都在仓库外的空临时目录里跑，关掉全部工具（`--tools "" --strict-mcp-config --setting-sources ""`）：模型读不到任何文件，学生看不到 `scenario.json` 里的答案，要的东西全在提示词里。
+- 流程：`teach-sim init` → 老师读 `to-teacher.md` 写 `t-N.txt` → `teach-sim teacher` → 学生读 `view.md` 回一个 JSON 存 `s-N.json` → `teach-sim student`（打印「页面按预案接了」时不跑老师、学生接着答）→ …… 到任何一边打印「到时间了」→ `transcript` → `posttest` → 课后测验 → `score` → 评卷。
+- 出错：一次调用返回空、超时（10 分钟）、退出码非 0、用的模型不对，重试一次，再不成这节课算没跑完（`run.json` 的 `ok: false`、停在第几轮），不评卷。学生的回复不是合法 JSON 带着报错重问一次，还不成记成「学生没有作答」接着走（`studentFallbacks`）。
+- `--fake 目录`：不调用命令行，回复读 `t-N.txt` / `s-N.json` / `post.md` / `grade.txt`（测试用，`tests/teach-run-lib.test.js`）。
 
-只在改了课堂的提示词、教法、协议时跑；一轮 6 节课大约相当于上一两节真课的额度（花的是开发会话的额度，不是上课的）。
+一节课的目录里：
 
-## 评卷细则（每节课）
+| 文件 | 是什么 |
+|---|---|
+| `system.md` | 老师读的整份说明 |
+| `t-N.txt` / `s-N.json` | 老师第 N 轮的输出 / 学生第 N 轮的作答 |
+| `transcript.md` | 整节课的记录（评卷人看） |
+| `notebook.md` | 学生上课记的笔记（课后测验只看它） |
+| `posttest.md` / `posttest-key.md` / `posttest-answers.md` | 课后题面 / 标准答案（只给评卷人）/ 学生的作答 |
+| `metrics.json` | 页面算的数：分钟、白停、第一次动笔、最长连讲、产出几分钟…… |
+| `grade.json` | 评卷人打的分（见下） |
+| `run.json` | 成没成、停在第几轮、每次调用花了多少（`calls`、`costUsd`）、每一轮结束时第几分钟（`timeline`） |
+| `*-system.md` | 学生、课后测验、评卷人的说明（事后看发了什么） |
+
+一整套的 `<输出目录>/summary.md` 一行一节：课后测验同类 / 迁移各对几道、用了几分钟、白停、第一次动笔第几分钟、最长连讲几分钟、产出几分钟、总体分；`summary.json` 是同一份数。行为的数和课后测验并排看，不单独报行为的数。结果写进 `results.md`。
+
+只在改了课堂的提示词、教法、协议时跑。花多少的量级（2026-11-15 实测，os-lru 按 15 分钟、说明约 61 KiB）：老师 10 轮约 $3.9（每轮 $0.3～0.5，大头）、学生 10 轮约 $0.4、课后测验和评卷合起来约 $0.2，一节约 $4.5、跑 4 分钟；老师写 17 轮的那一次老师就花了约 $7.7。按 40 分钟算一节大约 $10～15，一整套 8～10 个场景是一两百美元的量级（花的是开发会话的额度，不是上课的），先用 `--only` 跑几个。
+
+## 评卷（`grade.json`）
+
+评卷人不知道是哪一版规则，读整节课的记录、场景（设定、断点、细则、要拿下的事）、页面算的数、课后题的标准答案和学生的作答，只回一个 JSON：
+
+- `post`：每道课后题 0 / 0.5 / 1（同类 `near`、迁移 `far` 在表里分开数）。
+- `found`：老师在第几分钟用一个具体的问题把设定的断点问出来（没问出来 `null`）。
+- `targeted`：问出来以后是不是针对那一处讲（3 只讲错的那一步、用一个具体例子说服；1 整段重讲定义）；`onlyGap`：是不是只补了那一处。
+- `contentErrors`：老师讲错（或漏讲要紧的）几处。
+- `verdictAgree`：老师自己判的开放作答和评卷人判的一致几成（没判过 `null`）。
+- `skipped`：细则要看老师有没有跳过学生已经会的内容时填（半会的那种学生），否则 `null`。
+- `overall`：1～5；`why`：理由，举出轮次。
+
+## 以前手工评卷的细则（`results.md` 前几轮照它打的）
 
 - **看出误解**：第几轮老师第一次用一个具体的问题把误解暴露出来（问形状、设计出能区分两种做法的那一步……）；暴露以后第几轮老师明确说出（或在计划里写出）学生是怎么想的。没看出来记「没有」。
 - **针对着讲**：看出来以后是针对那一条讲（1–3 分：3 = 只讲错的那一步、用一个具体例子说服；1 = 整段重讲定义）。
