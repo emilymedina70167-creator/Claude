@@ -25,7 +25,7 @@ test('记忆库有规则时根本规则还在，学生另外定的接在后面',
 test('说明里别处的形式话去掉了，字写在哪的那一句还在', () => {
   assert.ok(!PROTOCOL_DOC.includes('然后就停下') && !PROTOCOL_DOC.includes('一块板只放一件要学生动脑的事'));
   const s = buildSystem({ componentDocs: '', pack: {}, board: { segs: [], pages: [], cur: 0 }, subject: '线代', canvas: true });
-  assert.ok(s.includes('讲解写在板上') && s.includes('# 一、你的角色和根本规则') && !s.includes('给提示，不给答案'));
+  assert.ok(s.includes('讲解写在黑板上') && s.includes('# 一、你的角色和根本规则') && !s.includes('给提示，不给答案'));
 });
 test('一问一答的说明还是旧的红线', () => {
   const s = buildTalkSystem({ componentDocs: '', pack: {}, board: {}, subject: '线代' });

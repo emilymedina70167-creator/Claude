@@ -4778,7 +4778,7 @@ ${o.join("\u3001")}`,"",'## \u8981\u4F60\u5199\u7684\u6559\u6848\uFF08\u53EA\u8F
 ${BYe}
 
 ${t}`}var ks=(e,...t)=>String.raw(e,...t).replace(/ˋ/g,"`").trim(),IYe=ks`
-你是这节课的老师，在给一位学生上一对一的课。学生用 iPad（常配 Apple Pencil）看黑板、在黑板上作答，在页面底部的输入框里打字跟你说话（学生说的话不显示在黑板上）。黑板一屏就是一块板：你说的话写在当前这块板的最上面，你写的公式、出的题、画的能拖的图都在板上；开了新板，旧板收进历史，学生可以翻回去看。你看不到学生本人，只看得到学生说的话和在黑板上的作答记录。对学生说话用「你」；提到学生时说「学生」，不用「他」「她」。`;function qD(e){return`${IYe}
+学生用 iPad（常配 Apple Pencil）看黑板、在黑板上作答，在页面底部的输入框里打字跟你说话（学生说的话不显示在黑板上）。黑板一屏就是一块板：你说的话写在当前这块板的最上面，你写的公式、出的题、画的能拖的图都在板上；开了新板，旧板收进历史，学生可以翻回去看。你看不到学生本人，只看得到学生说的话和在黑板上的作答记录。对学生说话用「你」；提到学生时说「学生」，不用「他」「她」。`;function qD(e){return`${IYe}
 
 ${Dpe(e)}`}var p$t=qD("\u7EBF\u4EE3");function RYe(e,t){return`${qD(e)}
 
@@ -4825,7 +4825,6 @@ ${t}`}var hd=ks`
 
 - 学生在黑板上的每个动作（作答、预测、拖动、揭开、放弃）、在输入框里说的话、附的图，页面都自动记成证据（evidence），课后看证据判断。证据你不用写，也写不了。
 ${Q9}
-- 不要宣布学生掌握了：掌握由页面按证据算。
 - 新写的一段可以标上练的是哪个知识点：ˋboard new id=b3 title="…" point=trˋ（ˋpoint=ˋ 写上面掌握状态里 ˋ#ˋ 后面那段名字），学生在这一段的作答就记成这个知识点的证据。没有合适的就不写。
 ${OD}
 - 记忆分两层：前面是和这节课直接有关的全文，最后是其余东西的目录（一条一行：编号 + 一句话）。目录里的要看全文，用 ˋmemory_readˋ 按编号取：ˋcollectionˋ 写集合名，ˋidsˋ 写编号数组，**一次取好几条**（同一类的放一起）；以前的课写 ˋcollection: "sessions"ˋ，给你那节课的报告和小结。**很贵**：每用一次要多跑一整轮、整份说明再读一遍。该取的时候：学生的错像目录里某道旧错题（取来对照根因）、要提起或接着以前某节课、要按某条规则做又拿不准原文。别的时候用全文里的就够了。
@@ -4835,7 +4834,6 @@ ${OD}
 - 学生在黑板上的每个动作、说的话、附的图，页面都自动记成证据（evidence），课后看证据判断。
 ${Q9}
 - 这个查看方式不支持工具：查不了记忆库里没放进摘要的部分。
-- 不要宣布学生掌握了：掌握由页面按证据算。
 - 新写的一段可以标上练的是哪个知识点：ˋboard new id=b3 title="…" point=trˋ（ˋpoint=ˋ 写上面掌握状态里 ˋ#ˋ 后面那段名字）。
 ${OD}
 `,Gpe=28*1024,FYe=ks`
@@ -5069,7 +5067,7 @@ ${Ype}
   - 图和讲它的话要对着看：图一栏、话另一栏（版面里页面不再自动左图右文）。要学生看右边时，板顶那句话说「看右边」。
 - 黑板现状里写着当前板的版式（几栏、每栏从上往下是哪几段、各多高）和整块板比一屏长多少。两栏差得太多时把短的那栏补上下一件事，或者改成一栏。
 - 藏着的段（ˋadd … holdˋ）揭开时出现在它那一栏它的位置上。
-- 板顶的话要短（一两句），讲解写在板上、挨着它讲的东西。要拖、要看细节的图，学生能点角上的 ⤢ 放大铺满整屏。
+- 要拖、要看细节的图，学生能点角上的 ⤢ 放大铺满整屏。
 `;function Yn(e){let t=String(e??""),r=0;for(let n=0;n<t.length;n++){let s=t.charCodeAt(n);s<128?r+=1:s<2048?r+=2:s>=55296&&s<=56319&&n+1<t.length&&(t.charCodeAt(n+1)&64512)===56320?(r+=4,n++):r+=3}return r}function Z9(e,t){if(t<=0)return"";if(Yn(e)<=t)return e;let r=0,n=0;for(;n<e.length;){let o=e.charCodeAt(n),i=o>=55296&&o<=56319&&n+1<e.length&&(e.charCodeAt(n+1)&64512)===56320,a=o<128?1:o<2048?2:i?4:3;if(r+a>t)break;r+=a,n+=i?2:1}let s=e.lastIndexOf(`
 `,n);return s>n*.8&&(n=s),e.slice(0,n).trimEnd()}function LD(e,t){let r=e.slice();if(e.reduce((o,i)=>o+i,0)<=t)return r;let n=e.map((o,i)=>i).sort((o,i)=>e[o]-e[i]),s=t;return n.forEach((o,i)=>{let a=Math.floor(s/(n.length-i));r[o]=Math.min(e[o],Math.max(0,a)),s-=r[o]}),r}var pd=e=>{if(e==null)return"";if(typeof e=="string")return e.trim();if(typeof e=="number"||typeof e=="boolean")return String(e);if(Array.isArray(e))return e.map(pd).filter(Boolean).join(`
 `);try{return JSON.stringify(e,null,2)}catch{return String(e)}},$p=104*1024,zD=32*1024,CD="\uFF08\u8D44\u6599\u5305\u592A\u957F\uFF0C\u5DF2\u622A\u65AD\uFF09",Ppe=[["unit","\u5355\u5143"],["goal","\u8FD9\u8282\u8BFE\u7684\u76EE\u6807"],["scope","\u8303\u56F4\u548C\u8BE6\u7565\uFF08\u8003\u8BD5\u53E3\u5F84\uFF1B\u8D85\u51FA\u7684\u4E0D\u8BB2\uFF09"],["route","\u7ED9\u5B66\u751F\u770B\u7684\u8DEF\u7EBF\uFF08\u5F00\u8BFE\u7B2C\u4E00\u5757\u677F\u7167\u7740\u5199\uFF0C\u53EF\u4EE5\u7F29\u77ED\uFF1B\u5B66\u751F\u8981\u6539\u5C31\u6309\u5B66\u751F\u7684\uFF09"],["review","\u5F00\u5934\u7684\u590D\u73B0"],["methods","\u8FD9\u8282\u8BFE\u8981\u7528\u7684\u53EF\u6267\u884C\u89C4\u5219\uFF08\u8BFE\u524D\u5B9A\u597D\u3001\u5199\u5B8C\u6574\u4E86\u7684\uFF1A\u8BB2\u5230\u65F6\u7167\u8FD9\u91CC\u5199\u4E0A\u9ED1\u677F\uFF0C\u5E38\u9A7B\u680F\u91CC\u653E\u4E00\u4EFD\uFF1B\u505A\u9898\u53EA\u7528\u8FD9\u91CC\u8BB2\u8FC7\u7684\uFF09"],["sequence","\u8BB2\u89E3\u987A\u5E8F\uFF08\u4E00\u6B65\u4E00\u5757\u677F\uFF1A\u4E00\u4E2A\u70B9\uFF0C\u6216\u8005\u5927\u7684\u70B9\u7684\u4E00\u90E8\u5206\uFF1B\u5927\u7684\u70B9\u5206\u51E0\u6B65\u8BB2\uFF0C\u4E0D\u538B\u7F29\uFF1B\u8BB2\u5B8C\u4E00\u4E2A\u70B9\u518D\u51FA\u8003\u5B83\u7684\u9898\uFF09"],["prepCheck","\u5907\u8BFE\u68C0\u67E5\uFF08\u9875\u9762\u6838\u51FA\u6765\u7684\u95EE\u9898\uFF1A\u4E0A\u8BFE\u65F6\u7ED5\u5F00\uFF0C\u6BD4\u5982\u5148\u8865\u8BB2\u3001\u6216\u8005\u90A3\u9053\u9898\u4E0D\u51FA\uFF09"],["rehearsal","\u8BFE\u524D\u9884\u6F14\uFF08\u5907\u8BFE\u4EE5\u540E\u6309\u5B66\u751F\u7684\u8BB0\u5F55\u628A\u6559\u6848\u8D70\u4E86\u4E00\u904D\uFF1A\u54EA\u4E00\u6B65\u591A\u534A\u4F1A\u5361\u3001\u786E\u8BA4\u9898\u66B4\u9732\u4E0D\u51FA\u8BEF\u89E3\u7684\u5730\u65B9\u3001\u80FD\u5206\u5F00\u5BF9\u9519\u60F3\u6CD5\u7684\u63A2\u9898\u3002\u662F\u53C2\u8003\uFF0C\u5B66\u751F\u5B9E\u9645\u600E\u4E48\u7B54\u7167\u65E7\u5F53\u573A\u770B\u7740\u63A5\uFF09"],["todos","\u5B66\u751F\u4EE5\u524D\u4E0A\u8BFE\u65F6\u95EE\u8FC7\u3001\u8FD9\u8282\u8BFE\u8981\u8865\u4E0A\u7684"],["carry","\u4E0A\u4E00\u8282\u4E0B\u8BFE\u6574\u7406\u5355\u91CC\u6CA1\u6536\u7684\u51E0\u6761\uFF08\u5B88\u536B\u62E6\u4E0B\u7684\uFF0C\u540E\u9762\u5199\u7740\u539F\u56E0\uFF1B\u8981\u7D27\u7684\u8FD9\u8282\u8BFE\u987A\u5E26\u8865\uFF0C\u4F9D\u636E\u5199\u5BF9\uFF1A\u5F15\u539F\u8BDD\u7167\u6284\u3001\u8F6E\u6B21\u548C\u677F\u4E0A\u7F16\u53F7\u5199\u8FD9\u8282\u8BFE\u771F\u6709\u7684\uFF09"],["textbook","\u6559\u6750\u539F\u6587\uFF08\u6559\u6750\u5185\u5BB9\u53EA\u80FD\u7528\u8FD9\u91CC\u7684\uFF09"],["plan","\u5EFA\u8BAE\u7684\u63A8\u8FDB\u987A\u5E8F\uFF08\u662F\u5EFA\u8BAE\uFF0C\u6309\u5B66\u751F\u7684\u5B9E\u9645\u60C5\u51B5\u8C03\u6574\uFF09"],["student","\u5B66\u751F\u7684\u60C5\u51B5"],["examBar","\u8FD9\u8282\u8BFE\u7ED3\u675F\u65F6\u5B66\u751F\u8981\u80FD\u505A\u7684\u771F\u9898\uFF08\u5907\u8BFE\u5B9A\u7684\uFF0C\u8003\u60C5\uFF09"]],GYe=/^(rules|updatedAt|createdAt|id|model|modelTier|effort|components|chunks|by|at|cost|date|reviewClass)$/i,KYe={sequence:"\u63A8\u8FDB\u987A\u5E8F\uFF08\u4E00\u4E2A\u70B9\u4E00\u4E2A\u70B9\u5F80\u524D\u63A8\uFF1A\u6BCF\u4E2A\u70B9\u5148\u8BA9\u5B66\u751F\u52A8\u624B\u3001\u731C\uFF0C\u7ED3\u8BBA\u4ECE\u5B66\u751F\u624B\u91CC\u51FA\u6765\uFF1B\u8BB2\u5B8C\u4E00\u4E2A\u70B9\u518D\u95EE\u8003\u5B83\u7684\u9898\uFF09"};function Sv(e,t=$p,{talk:r=!1,floors:n=null}={}){let s=e?.main&&typeof e.main=="object"?e.main:{},o={...s,...Y9(s)},i=[],a=new Set([...Ppe.map(([x])=>x),"images"]);for(let[x,w]of Ppe){let v=r&&KYe[x]||w,k=pd(o[x]);k&&i.push({key:x,label:v,body:k})}let l=Array.isArray(o.images)?o.images.filter(x=>x&&x.name):[];l.length&&i.push({label:"\u8BB2\u4E49\u539F\u56FE\uFF08\u8D34\u4E0A\u9ED1\u677F\uFF1Aimage \u7EC4\u4EF6\u5199 name: \u540D\u5B57\uFF1B\u81EA\u5DF1\u8981\u770B\uFF1Aview_image \u5DE5\u5177\uFF09",body:l.map(x=>`- ${x.name}${x.title?`\uFF1A${da(x.title,120)}`:""}`).join(`
