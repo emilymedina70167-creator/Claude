@@ -49,3 +49,11 @@ test('四道三道一次对，两道迁移对一道', () => {
 test('没交的、跳过的、别的课的题不计入课后结果', () => {
   assert.deepEqual(laterOf([{ id: '甲', outcome: 'skip' }, { id: '乙', outcome: 'open' }, { id: '别课', outcome: 'first' }], { session: { ...s, holds: { ids: ['甲', '乙'] } }, today: '2026-11-17' }), { n: 0, right: 0, days: 1, far: { n: 0, right: 0 } });
 });
+
+test('出题说明：这节课抄进题库的原题有就列全文（报告里的题面只有开头），出的题记成页面出的', () => {
+  const md = '```answer\nid: q-b3\nq: 引用串 7 0 1 2 0 3 0 4，3 个页框，LRU 缺页几次\nanswer: 6\n```';
+  const text = holdBrief({ session: s, items: [{ q: '引用串 7 0 1…' }], originals: [{ id: 'd-c1-b3', md }], subject: '操作系统' });
+  assert.ok(text.includes('LRU 缺页几次')); assert.ok(!text.includes('引用串 7 0 1…'));
+  const [it] = holdDocs(parseProblems('=== 题 1\n类型：同类\n针对：a1\n```answer\nq: 算一算\nanswer: 5\n```', { block: s.block }), { session: s, at: 1 });
+  assert.equal(it.doc.by, 'page');
+});

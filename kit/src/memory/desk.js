@@ -1083,7 +1083,8 @@ export async function renderDesk(root, meta) {
   let holdBusy = false;
   async function fixHolds() {
     if (holdBusy || heldSessions.size >= 4 || !['sessions', 'drills', 'evidence'].every(c => loaded.has(c))) return;
-    const x = data.sessions.find(d => !heldSessions.has(d.id) && needsHolds(d) && d.report && !d.report.provisional);
+    // 等报告正式写好、课上的题抄进了题库（d.drills 有了数）再留：出「同类」的题要照着课上原题的全文
+    const x = data.sessions.find(d => !heldSessions.has(d.id) && needsHolds(d) && d.report && !d.report.provisional && d.drills !== undefined);
     if (!x) return;
     holdBusy = true;
     heldSessions.add(x.id);
@@ -1110,7 +1111,7 @@ export async function renderDesk(root, meta) {
             const items = report.items || [];
             const names = [...new Set(['answer', 'quiz', ...data.drills.filter(d => d.fromSession === x.id).map(d => d.kind).filter(k => ENGINES[k])])].slice(0, 7);
             const docs = names.map(name => componentDoc(COMPONENT_DOCS, name, subject) || '').join('\n\n');
-            const prompt = holdBrief({ session: cur, aims, items, subject, n: n - ids.length, docs });
+            const prompt = holdBrief({ session: cur, aims, items, originals: data.drills.filter(d => d.fromSession === x.id && d.md && d.status !== 'void'), subject, n: n - ids.length, docs });
             const res = await ai.call(prompt, { model: 'claude-opus-5-5', effort: 'high', lane: 'bg', cache: false });
             if (res.modelApplied === 'claude-opus-5-5') {
               const checked = await checkProblems(res.text, { brief: `hold-${x.id}`, block: cur.block, target: { kind: 'hold', title: cur.title }, subject, existing: data.drills });

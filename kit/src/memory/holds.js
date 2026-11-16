@@ -29,8 +29,11 @@ export function pickHolds({ session = {}, drills = [], evidence = [], reserve = 
   return ids;
 }
 
-export function holdBrief({ session = {}, aims = session.aims || [], items = [], subject = '', n = aims.length, docs = '' } = {}) {
-  return `你在给一节刚上完的黑板课留隔天再做的题。\n\n${problemsBrief({ target: { kind: 'hold', title: session.title || session.block }, subject, n: Math.min(HOLD_MAX, n), docs, originals: items.map((it, i) => ({ id: String(i + 1), md: it.q || '' })), blockInfo: aims.map(a => `${a.id}：${a.can}${a.proof ? `；${a.proof}` : ''}`).join('\n') })}\n\n留题的额外要求（以这里为准）：
+// originals：这节课抄进题库的原题（带完整的 md）。有就用它：报告里题面只留开头一百来个字，照半截题面出不了「同类换数」；
+// 没抄出题的课（题都是页面判不了的）才退回用报告里的题面
+export function holdBrief({ session = {}, aims = session.aims || [], items = [], originals = [], subject = '', n = aims.length, docs = '' } = {}) {
+  const asked = originals.length ? originals.map((d) => ({ id: String(d.id), md: String(d.md || '').slice(0, 3000) })) : items.map((it, i) => ({ id: String(i + 1), md: it.q || '' }));
+  return `你在给一节刚上完的黑板课留隔天再做的题。\n\n${problemsBrief({ target: { kind: 'hold', title: session.title || session.block }, subject, n: Math.min(HOLD_MAX, n), docs, originals: asked, blockInfo: aims.map(a => `${a.id}：${a.can}${a.proof ? `；${a.proof}` : ''}`).join('\n') })}\n\n留题的额外要求（以这里为准）：
 - 每件要拿下的事尽量一道，最多 ${HOLD_MAX} 道；不能照抄课上题面。
 - 每道题第二行写「类型：同类」或「类型：迁移」，一半同类换数、一半迁移到新情境。
 - 再写「针对：a1」这样的目标编号，只能从上面给的目标中选。
@@ -46,7 +49,7 @@ export function holdDocs(parsed, { session, at } = {}) {
     if (seen.has(id)) return [];
     seen.add(id);
     const md = fencesOf(it.doc.md).map(f => f.lang === 'let' ? f.raw : withId(f, id)).join('\n\n');
-    return [{ id, doc: { ...it.doc, md, src: 'hold', hold: session.id, aim: it.why, far: it.far, at } }];
+    return [{ id, doc: { ...it.doc, md, src: 'hold', by: 'page', hold: session.id, aim: it.why, far: it.far, at } }];
   });
 }
 
