@@ -1031,18 +1031,21 @@ const SUITES = {
     const t = await seeded(browser);
     await t.page.goto(`${BASE}&said=2`);
     await t.page.waitForSelector('.dk-class .dk-new', { timeout: 15000 });
+    // 新课是黑板课（第十二轮）：话的账两种课共用，这里在黑板课里走
     await t.page.click('.dk-class .dk-new');
-    await t.page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash), { timeout: 20000 });
-    await t.page.waitForLoadState('load');
-    await t.waitFor(() => t.page.$('.sc-root .st-stage'), { timeout: 20000, what: '舞台课画出来' });
-    const sid = decodeURIComponent(new URL(t.page.url()).hash.slice(1));
-    await t.waitFor(() => t.page.$('.st-cell.is-tap'), { timeout: 30000, what: '模拟老师写出第一轮' });
-    await t.page.fill('#st-say-input', '测试:要求 以后别把字摆在画面正中间');
-    await t.page.click('.st-say-go');
+    const sid = await t.inClass();
+    await t.page.click('button:has-text("开始上课")');
+    await t.waitFor(() => t.page.$('button:has-text("一个数")'), { timeout: 30000, what: '模拟老师写出第一轮' });
+    await sleep(2500);
+    const say = async (x) => { const input = t.page.locator('.cb-field textarea').first(); await input.click(); await t.page.keyboard.type(x); await t.page.keyboard.press('Enter'); };
+    await say('测试:要求 以后别把字摆在画面正中间');
     const a = await t.waitFor(async () => (await t.docs('asks')).find((x) => (x.quotes || []).some((q) => q.session === sid)), { timeout: 40000, what: '课上说的话过账记成一条要求' });
     check(a.quotes.find((q) => q.session === sid).text.includes('测试:要求'), `要求的原话不是我打的那句：${JSON.stringify(a.quotes)}`);
     check(a.status === 'active' && a.text, '要求没写成在用的一条');
-    await t.waitFor(() => t.page.evaluate(() => /## 学生的要求[\s\S]*测试要求[^\n]*这节课刚说的/.test(window.LAKitStageSystem?.() || '')), { timeout: 20000, what: '老师下一次调用的说明里有这条要求（标着这节课刚说的）' });
+    // 再说一句，让老师再被调用一次：这一次的说明里有这条要求（标着这节课刚说的）
+    await sleep(4000);
+    await say('继续');
+    await t.waitFor(() => t.page.evaluate(() => /## 学生的要求[\s\S]*测试要求[^\n]*这节课刚说的/.test(window.LAKit?.classroom?.lastPrompt?.system || '')), { timeout: 30000, what: '老师下一次调用的说明里有这条要求（标着这节课刚说的）' });
     const rec = (await t.db())[`sessions/${sid}/said/main`];
     check(rec && Object.keys(rec.lines || {}).length >= 1, '这节课那一份账没写');
     // 回首页删掉这节课：要求、原话都还在
