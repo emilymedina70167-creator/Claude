@@ -47,24 +47,32 @@ const readJson = (f) => { try { return JSON.parse(read(f)); } catch { return nul
 /* ---------------- run.json：这一节跑到哪了 ---------------- */
 
 let run;
+let fresh = !cont;
+let was = null;
 if (cont) {
-  run = readJson(P('run.json'));
-  if (!run || !(run.paused || run.failed) || !run.phase) { console.error(`${P('run.json')} 不是一节停下的课，接不了`); process.exit(2); }
-  run.paused = false; run.failed = false; delete run.error; delete run.stoppedAt; delete run.stoppedWhat;
-  run.continued = (run.continued || 0) + 1;
-} else {
-  // 从头跑：上一次留下的产物先删掉，免得失败时被当成这一次的
+  was = readJson(P('run.json'));
+  if (!was || !(was.paused || was.failed) || !was.phase) { console.error(`${P('run.json')} 不是一节停下的课，接不了`); process.exit(2); }
+  // init 那一步就失败了（场景校验不过）：还没有 scenario.json，没东西可接，照上次的参数从头跑
+  if (was.phase === 'init') fresh = true;
+  else {
+    run = was;
+    run.paused = false; run.failed = false; delete run.error; delete run.stoppedAt; delete run.stoppedWhat;
+    run.continued = (run.continued || 0) + 1;
+  }
+}
+if (fresh) {
+  // 从头跑：上一次留下的产物（连同学生那几份说明，场景的人设可能改过）先删掉，免得失败时被当成这一次的
   fs.mkdirSync(dir, { recursive: true });
-  for (const f of fs.readdirSync(dir)) if (/^(t-\d+\.txt|s-\d+\.json|metrics\.json|grade\.json|run\.json|posttest-answers\.md|notebook\.md|transcript\.md)$/.test(f)) fs.rmSync(P(f));
+  for (const f of fs.readdirSync(dir)) if (/^(t-\d+\.txt|s-\d+\.json|metrics\.json|grade\.json|run\.json|posttest-answers\.md|notebook\.md|transcript\.md|(student|posttest|grader)-system\.md)$/.test(f)) fs.rmSync(P(f));
   run = {
-    ok: false, paused: false, failed: false, scenario: null, scenarioFile: path.resolve(pos[1]),
-    opts: { system: opt('--system') ? path.resolve(opt('--system')) : null, memory: opt('--memory') ? path.resolve(opt('--memory')) : null, fake: opt('--fake') ? path.resolve(opt('--fake')) : null, cli: opt('--cli') || 'claude' },
-    models: { teacher: opt('--teacher', 'claude-opus-5-5'), student: opt('--student', 'claude-sonnet-5-5'), grader: opt('--grader', 'claude-opus-5-5') },
+    ok: false, paused: false, failed: false, scenario: null, scenarioFile: was?.scenarioFile || path.resolve(pos[1]),
+    opts: was?.opts || { system: opt('--system') ? path.resolve(opt('--system')) : null, memory: opt('--memory') ? path.resolve(opt('--memory')) : null, fake: opt('--fake') ? path.resolve(opt('--fake')) : null, cli: opt('--cli') || 'claude' },
+    models: was?.models || { teacher: opt('--teacher', 'claude-opus-5-5'), student: opt('--student', 'claude-sonnet-5-5'), grader: opt('--grader', 'claude-opus-5-5') },
     phase: 'init', next: 'teacher', teacherTurns: 0, studentTurns: 0, studentFallbacks: 0,
     sessions: {}, calls: [], costUsd: 0, timeline: [], startedAt: new Date().toISOString(), ms: 0,
   };
 }
-const sc = JSON.parse(read(cont ? P('scenario.json') : run.scenarioFile));
+const sc = JSON.parse(read(fresh ? run.scenarioFile : P('scenario.json')));
 run.scenario = sc.id;
 const fake = run.opts.fake;
 const saveRun = () => fs.writeFileSync(P('run.json'), JSON.stringify(run, null, 1));
@@ -87,6 +95,15 @@ function conversation(role, model, effort, systemFile) {
   convs[role] = c;
   if (!was) run.sessions[role] = { session: null, cwd };
   return c;
+}
+/** 丢掉一个角色的会话（课后测验、评卷每次都从头开）：先把它的临时目录和命令行存的会话删掉，不然接着跑一次就多留一份 */
+function dropSession(role) {
+  const cwd = run.sessions[role]?.cwd;
+  if (cwd && path.basename(cwd).startsWith('teach-')) {
+    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(path.join(os.homedir(), '.claude', 'projects', projectDirOf(cwd)), { recursive: true, force: true });
+  }
+  delete run.sessions[role];
 }
 /** 记一个点：这个角色接下去从这个会话分叉（只在这一轮交给页面以后记，接着跑时页面和会话对得上） */
 const commit = (c) => { run.sessions[c.role] = { session: c.session, cwd: c.cwd }; };
@@ -206,7 +223,7 @@ function posttestStep() {
   // 课后测验：新开一个学生会话，只给人设、原来会的、笔记；每次都从头开（接着跑也一样，没有要续的）
   const notebook = fs.existsSync(P('notebook.md')) ? read(P('notebook.md')) : '';
   fs.writeFileSync(P('posttest-system.md'), posttestSystem(sc, notebook));
-  delete run.sessions.posttest;
+  dropSession('posttest');
   const answers = fake ? fakeReply('post.md', '课后测验') : call(conversation('posttest', run.models.student, undefined, P('posttest-system.md')), read(P('posttest.md')), '课后测验');
   fs.writeFileSync(P('posttest-answers.md'), answers);
 }
@@ -221,7 +238,7 @@ function gradeStep() {
   if (fake) grade = parseGrade(fakeReply('grade.txt', '评卷'));
   else {
     fs.writeFileSync(P('grader-system.md'), '你是教学评卷人。照用户给的细则打分，只回一个 JSON。');
-    delete run.sessions.grader;
+    dropSession('grader');
     const grader = conversation('grader', run.models.grader, 'high', P('grader-system.md'));
     grade = parseGrade(call(grader, prompt, '评卷'));
     if (!grade) grade = parseGrade(call(grader, '上一条回复读不出来：字段不对，或者分数不在 0、0.5、1 里，或者总体分不是 1～5 的整数。照细则只回一个 JSON，前后不要别的字。', '评卷（重问）'));
@@ -232,11 +249,7 @@ function gradeStep() {
 
 /** 跑完了：这一节自己的临时目录和命令行存在 ~/.claude/projects/ 下的会话都删掉（暂停、失败的不删，接着跑要用） */
 function cleanup() {
-  for (const { cwd } of Object.values(run.sessions)) {
-    if (!cwd || !path.basename(cwd).startsWith('teach-')) continue;
-    fs.rmSync(cwd, { recursive: true, force: true });
-    fs.rmSync(path.join(os.homedir(), '.claude', 'projects', projectDirOf(cwd)), { recursive: true, force: true });
-  }
+  for (const role of Object.keys(run.sessions)) dropSession(role);
 }
 
 let code = 0;

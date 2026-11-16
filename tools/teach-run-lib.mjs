@@ -27,15 +27,18 @@ export function cleanEnv(env) {
   return out;
 }
 
-/** 调用的报错是不是撞了用量上限（这时不重试、不算失败，停下等接着跑） */
-export const isUsageLimit = (text) => /\b429\b|rate[ _-]?limit|usage limit|hit your [^.\n]{0,40}limit|limit reached|too many requests|overloaded_error/i.test(String(text ?? ''));
+/** 调用的报错是不是撞了用量上限（这时不重试、不算失败，停下等接着跑）。
+ * 只认用量的措辞：「Context limit reached」这类上下文超限每次接着跑都会再撞、会把一整套挡住，
+ * overloaded_error 是服务器临时过载、重试一次通常就好——这两种走普通的「重试一次，再不行算失败」。 */
+export const isUsageLimit = (text) => /\b429\b|rate_limit_error|usage limit|hit your [^.\n]{0,40}limit|too many requests/i.test(String(text ?? ''));
 
 /** 命令行把一个目录下的会话存在 ~/.claude/projects/<目录名里非字母数字都换成 -> 下（实测 /tmp/tmp.xA6J → -tmp-tmp-xA6J） */
 export const projectDirOf = (cwd) => String(cwd).replace(/[^A-Za-z0-9]/g, '-');
 
-/** 一整套重跑时这一节怎么办：跑完了的跳过，停下的、失败了的接着跑，别的从头 */
+/** 一整套重跑时这一节怎么办：跑完了的跳过，停下的、失败了的接着跑，别的从头。
+ * 在 init 那一步失败的（场景校验不过）还没有 scenario.json、没有可接的东西：从头跑，场景改好了才跑得下去 */
 export function resumeAction(run, code) {
-  if (!run) return 'fresh';
+  if (!run || run.phase === 'init') return 'fresh';
   if (run.ok === true && run.phase === 'done' && (code === undefined || code === 0)) return 'skip';
   if (run.paused || run.failed) return 'continue';
   return 'fresh';

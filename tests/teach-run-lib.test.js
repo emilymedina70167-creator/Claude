@@ -32,10 +32,15 @@ test('认得出用量上限；会话目录名照命令行的规矩换', () => {
   assert.ok(isUsageLimit("You've hit your usage limit · resets 3am"));
   assert.ok(isUsageLimit('API Error: 429 {"type":"rate_limit_error"}'));
   assert.ok(!isUsageLimit('退出码 1：Invalid model'));
+  // 不是用量的：上下文超限每次接着跑都会再撞；过载重试一次通常就好
+  assert.ok(!isUsageLimit('退出码 1：Context limit reached · /compact or /clear to continue'));
+  assert.ok(!isUsageLimit('API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}'));
+  assert.ok(isUsageLimit('Claude AI usage limit reached|1763290000'));
   assert.equal(projectDirOf('/tmp/teach-teacher-a.B_1'), '-tmp-teach-teacher-a-B-1');
 });
 test('一整套重跑：跑完的跳过，停下、失败的接着跑，别的从头', () => {
   assert.equal(resumeAction(null), 'fresh');
+  assert.equal(resumeAction({ ok: false, failed: true, phase: 'init' }), 'fresh'); // 场景校验不过：没东西可接
   assert.equal(resumeAction({ ok: true, phase: 'done' }), 'skip');
   assert.equal(resumeAction({ ok: true, phase: 'done' }, 1), 'fresh');
   assert.equal(resumeAction({ ok: false, paused: true }), 'continue');
@@ -145,6 +150,8 @@ const args = process.argv.slice(2);
 const val = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
 const model = val('--model'), resume = val('--resume'), fork = args.includes('--fork-session'), sys = val('--system-prompt-file');
 const msg = fs.readFileSync(0, 'utf8');
+const leak = Object.keys(process.env).filter((k) => /^CLAUDE_CODE_|^CLAUDECODE$|^SESSION_INGRESS|^CCR_/.test(k));
+if (leak.length) { process.stderr.write('环境变量漏进来了：' + leak.join(',')); process.exit(3); }
 const sdir = path.join(home, 'sessions'); fs.mkdirSync(sdir, { recursive: true });
 const load = (id) => JSON.parse(fs.readFileSync(path.join(sdir, id + '.json'), 'utf8'));
 const roles = { 'system.md': 'teacher', 'student-system.md': 'student', 'posttest-system.md': 'posttest', 'grader-system.md': 'grader' };
@@ -183,8 +190,11 @@ function fakeCli(fail) {
     posttest: [{ id: 'p1', q: '换谁', answer: '1', kind: 'near', aim: 'a1' }, { id: 'p2', q: '区别', answer: '看访问', kind: 'far', aim: 'a2' }, { id: 'p3', q: '再换谁', answer: '2', kind: 'near', aim: 'a1' }] };
   fs.writeFileSync(path.join(D, 'sc.json'), JSON.stringify(scen));
   const calls = () => fs.readFileSync(path.join(D, 'calls.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-  const go = (dir, ...extra) => spawnSync('node', [RUN, path.join(D, dir), ...(extra.includes('--continue') ? [] : [path.join(D, 'sc.json')]), '--cli', cli, ...extra], { encoding: 'utf8' });
-  return { D, cli, calls, go, setFail: (f) => fs.writeFileSync(path.join(D, 'config.json'), JSON.stringify({ fail: f })) };
+  // 故意带上开发会话自己的变量：子进程要是没经过 cleanEnv，假的命令行会以退出码 3 失败
+  const env = { ...process.env, CLAUDE_CODE_SESSION_ID: 'leak', CLAUDE_CODE_USER_EMAIL: 'x@example.com', SESSION_INGRESS_URL: 'https://leak', CLAUDECODE: '1' };
+  const go = (dir, ...extra) => spawnSync('node', [RUN, path.join(D, dir), ...(extra.includes('--continue') ? [] : [path.join(D, 'sc.json')]), '--cli', cli, ...extra], { encoding: 'utf8', env });
+  const setScenario = (patch) => fs.writeFileSync(path.join(D, 'sc.json'), JSON.stringify({ ...scen, ...patch }));
+  return { D, cli, calls, go, setScenario, setFail: (f) => fs.writeFileSync(path.join(D, 'config.json'), JSON.stringify({ fail: f })) };
 }
 
 test('重试不带作废的那一轮：第 2 轮老师第一次模型不对、第二次成了，第 3 轮发出去的上下文里没有作废的回复', () => {
@@ -249,4 +259,44 @@ test('--fake 一轮老师都没有不算跑完', () => {
   assert.equal(r.status, 1);
   assert.equal(JSON.parse(fs.readFileSync(path.join(D, 'run', 'run.json'), 'utf8')).ok, false);
   fs.rmSync(D, { recursive: true, force: true }); fs.rmSync(f.D, { recursive: true, force: true });
+});
+
+test('子进程用的是 cleanEnv 过的环境：带着开发会话的变量起 teach-run，假的命令行也拿不到', () => {
+  const f = fakeCli([]);
+  const r = f.go('run');
+  assert.equal(r.status, 0, r.stderr); // 漏进来的话假的命令行退出码 3，这节课会失败
+  assert.ok(!/环境变量漏进来了/.test(r.stderr));
+  fs.rmSync(f.D, { recursive: true, force: true });
+});
+
+test('init 那一步失败的课：把场景改对以后再跑同一条命令能跑完（--continue 也是从头跑）', () => {
+  const f = fakeCli([]);
+  f.setScenario({ aims: [] }); // 校验不过：aims 要 2～5 件
+  assert.equal(f.go('run').status, 1);
+  const bad = JSON.parse(fs.readFileSync(path.join(f.D, 'run', 'run.json'), 'utf8'));
+  assert.deepEqual([bad.failed, bad.phase], [true, 'init']);
+  assert.equal(resumeAction(bad), 'fresh');
+  f.setScenario({});
+  const c = f.go('run', '--continue');
+  assert.equal(c.status, 0, c.stderr);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.D, 'run', 'run.json'), 'utf8')).ok, true);
+  f.setScenario({ aims: [] });
+  assert.equal(f.go('run2').status, 1);
+  f.setScenario({});
+  assert.equal(f.go('run2').status, 0); // 不带 --continue 的同一条命令
+  fs.rmSync(f.D, { recursive: true, force: true });
+});
+
+test('从头重跑删掉旧的学生说明（人设改过要用新的）；评卷失败后接着跑，旧的评卷目录删掉', () => {
+  const f = fakeCli([{ role: 'grader', n: 1, kind: 'model', times: 2 }]);
+  assert.equal(f.go('run').status, 1);
+  const failed = JSON.parse(fs.readFileSync(path.join(f.D, 'run', 'run.json'), 'utf8'));
+  const oldGrader = failed.sessions.grader.cwd;
+  assert.ok(fs.existsSync(oldGrader));
+  assert.equal(f.go('run', '--continue').status, 0);
+  assert.ok(!fs.existsSync(oldGrader), '旧的评卷目录还在');
+  f.setScenario({ persona: '新的人设：学过 OPT' });
+  assert.equal(f.go('run').status, 0);
+  assert.ok(fs.readFileSync(path.join(f.D, 'run', 'student-system.md'), 'utf8').includes('新的人设：学过 OPT'));
+  fs.rmSync(f.D, { recursive: true, force: true });
 });
