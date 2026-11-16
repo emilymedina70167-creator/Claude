@@ -1,8 +1,9 @@
 // 隔天再验的题：这里仅按记录挑题、拼材料和算结果，不替老师宣布学会了。
 import { usable } from '../exam/reserve.js';
 import { toDate } from './schema.js';
-import { fencesOf, withId } from './drills.js';
+import { fencesOf, withId, heldDrillIds } from './drills.js';
 import { problemsBrief } from './lab.js';
+import { aimsSummary, STATUS_TEXT } from '../class/aims.js';
 
 export const HOLD_MAX = 4;
 export const HOLD_DAY = 1;
@@ -14,11 +15,12 @@ export function needsHolds(session = {}) {
     !Object.hasOwn(session, 'holds') && (Number(session.holdTries) || 0) < 2;
 }
 
-export function pickHolds({ session = {}, drills = [], evidence = [], reserve = [] } = {}) {
+export function pickHolds({ session = {}, drills = [], evidence = [], reserve = [], sessions = [] } = {}) {
   const done = new Set(evidence.map(e => e.comp));
   const targets = new Set((session.aims || []).map(a => a.exam).filter(Boolean));
+  const held = heldDrillIds(sessions);
   const pool = drills.filter(d => d.src === 'exam' && d.block === session.block && d.status === 'active' &&
-    d.md && !d.broken && usable({ id: d.exam, reserve: d.reserve }, reserve) && !done.has(d.id) && !targets.has(d.exam));
+    d.md && !d.broken && !held.has(d.id) && usable({ id: d.exam, reserve: d.reserve }, reserve) && !done.has(d.id) && !targets.has(d.exam));
   const ids = [];
   // 有明确目标对应时先覆盖，再补同一块的题；没有对应关系不能编造考点映射。
   for (const a of session.aims || []) {
@@ -71,4 +73,42 @@ export function laterOf(rows, { session, drills = [], today } = {}) {
   const far = mine.filter(r => drills.find(d => d.id === r.id)?.far === true);
   const right = rs => rs.filter(r => r.outcome === 'first').length;
   return { n: mine.length, right: right(mine), days: daysSince(session, today), far: { n: far.length, right: right(far) } };
+}
+
+/** 课后只认完整的一次独立测验；跳过或退出的留到下次，不把半份成绩说成整节课的结果。 */
+const laterWrites = new WeakMap();
+export function writeLater(db, drillDoc, rows, options = {}) {
+  if (!drillDoc?.hold) return Promise.resolve();
+  let queue = laterWrites.get(db);
+  if (!queue) { queue = new Map(); laterWrites.set(db, queue); }
+  const key = drillDoc.hold;
+  const next = (queue.get(key) || Promise.resolve()).catch(() => {}).then(() => saveLater(db, drillDoc, rows, options));
+  queue.set(key, next);
+  next.finally(() => { if (queue.get(key) === next) queue.delete(key); }).catch(() => {});
+  return next;
+}
+async function saveLater(db, drillDoc, rows, { drills = [], today } = {}) {
+  if (!drillDoc?.hold) return;
+  const ref = db.doc(`sessions/${drillDoc.hold}`);
+  const snap = await ref.get();
+  if (!snap.exists) return;
+  const session = snap.data();
+  if (Object.hasOwn(session, 'later')) return;
+  const result = laterOf(rows, { session, drills, today });
+  if (!result.n || result.n !== new Set(session.holds?.ids || []).size) return;
+  await ref.update({ later: { ...result, at: Date.now(), drill: drillDoc.id } });
+}
+
+export function laterLine(later) {
+  if (!later?.n) return '';
+  return `隔 ${later.days} 天做没见过的题：${later.n} 道对 ${later.right} 道${later.far?.n ? `（要迁移的 ${later.far.n} 道对 ${later.far.right} 道）` : ''}`;
+}
+
+export function aimLines(session, report = null) {
+  const aims = report?.aims || aimsSummary(session?.aims, report?.items || []);
+  return aims.map(a => `${a.can}：${STATUS_TEXT[a.status] || STATUS_TEXT.none}`);
+}
+
+export function dueHolds(sessions = [], today) {
+  return sessions.filter(s => ['due', 'late'].includes(holdState(s, today))).sort((a, b) => (a.endedAt || a.startedAt || 0) - (b.endedAt || b.startedAt || 0));
 }

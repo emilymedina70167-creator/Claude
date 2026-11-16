@@ -1,3 +1,4 @@
+import { heldDrillIds } from './drills.js';
 // 学习台后方的复查和调度（docs/guard-plan.md 第 3 步）。纯函数，不调用 Claude，不改任何一条记录：
 // - recheck：已经收下的结论，后来的证据不一样了（修好了的弱点又错、复现「过」了又错、「消了」的误解又冒出来），标出来；
 //   错题后来连着一次做对、可能已经会了的，也标出来。判断交给下一次本来就有的下课整理（closingPrompt 带几行），不单独调用。
@@ -122,7 +123,8 @@ export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now
     for (const [sp, ids] of Object.entries(by)) items.push({ kind: 'resolve', space: sp, ref: ids.join(','), title: `${ids.length} 道错题可能已经会了`, why: '之后这几块连着几节课一上来就做对', value: 40, cost: '并进下一次下课整理，不另调用' });
   }
   // 3. 到期的复现组只有原题（练一练的原题不算复现通过）：缺新题
-  const drills = get('drills').filter((d) => d && d.status !== 'void' && !d.broken);
+  const held = heldDrillIds(get('sessions'));
+  const drills = get('drills').filter((d) => d && !held.has(d.id) && d.status !== 'void' && !d.broken);
   const tried = new Set(get('evidence').map((e) => String(e?.comp || '')).filter((c) => c.startsWith('d-')));
   for (const d of dueList(get('reviews'), today).filter((x) => x.days <= 0)) {
     const rv = get('reviews').find((x) => String(x.id) === d.id);

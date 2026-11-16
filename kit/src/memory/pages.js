@@ -1,3 +1,4 @@
+import { laterLine, aimLines } from './holds.js';
 // 学习台给我看的页面（docs/desk-plan.md 第 3 批，统计是第 4 批）：课程地图、弱点表、错题本、以前的课、统计。
 // 都只读、不调用 Claude；数据是首页一直订阅着的那份记忆库（desk.js 传进来），算的部分在 views.js。
 // 地址用 # 区分：#map、#weak、#errors、#classes、#classes/c-…（一节课的报告）、#stats。翻看以前的课的黑板是 #view/c-…（整页刷新进只读的课堂）。
@@ -170,7 +171,7 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
     if (!rows.length) return '<p class="muted">还没有上过课。</p>';
     return `<section class="dk-card"><h2 class="dk-h">以前的课</h2><p class="dk-sub muted">测试开的、不要的课：点进去，最下面「删掉这节课」。</p>${rows.map((r) => `<a class="dk-class-row" href="#classes/${esc(r.id)}">
       <span class="dk-cr-d"><b>${esc((r.date || '').slice(5).replace('-', '/') || r.id)}</b></span>
-      <span class="dk-cr-m">${r.kind !== 'class' ? `<span class="dk-tag is-ok">${KIND_TEXT[r.kind]}</span>` : ''}${r.review ? '<span class="dk-tag">复现课</span>' : ''}${r.drill ? '<span class="dk-tag">练习</span>' : ''}${r.status === 'open' ? '<span class="dk-tag is-warn">没下课</span>' : ''} ${inline(r.title)}<br><span class="muted">${inline(r.summary || r.line || '')}</span></span>
+      <span class="dk-cr-m">${r.kind !== 'class' ? `<span class="dk-tag is-ok">${KIND_TEXT[r.kind]}</span>` : ''}${r.review ? '<span class="dk-tag">复现课</span>' : ''}${r.drill ? '<span class="dk-tag">练习</span>' : ''}${r.status === 'open' ? '<span class="dk-tag is-warn">没下课</span>' : ''} ${inline(r.title)}<br><span class="muted">${inline(r.summary || r.line || '')}</span>${r.later ? `<br><span class="dk-later-result">${esc(laterLine(r.later))}</span>` : ''}</span>
       <span class="dk-cr-n">${r.minutes !== null ? `${r.minutes} 分钟` : ''}${r.usage?.calls ? `<br><span class="muted">${esc(tokenText(r.usage.bytes))}</span>` : ''}${r.verify ? `<br><span class="muted">核验 ${r.verify.turns}${r.verify.discarded ? ` · 作废 ${r.verify.discarded}` : ''}</span>` : ''}</span>
     </a>`).join('')}</section>`;
   }
@@ -191,6 +192,8 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
       <section class="dk-card"><h2 class="dk-h">${esc(r.date)} ${inline(r.title)}</h2>
         <p class="muted">${KIND_TEXT[r.kind]}${r.block ? ` · ${inline(blockName(r.block))}` : ''}${r.minutes !== null ? ` · ${r.minutes} 分钟` : ''}${r.usage?.calls ? ` · 调用 ${r.usage.calls} 轮，${esc(tokenText(r.usage.bytes))}` : ''}</p>
         <div class="mm-acts"><button type="button" class="btn btn-primary" data-goto="${r.status === 'open' ? esc(sid) : `view/${esc(sid)}`}">${r.status === 'open' ? (r.teach ? '接着上课' : '进去') : r.kind === 'unit' ? '翻看这个单元' : '翻看这节课的黑板'}</button>${purge ? `<button type="button" class="btn btn-danger" data-purge="${esc(sid)}">删掉这节课</button>` : ''}</div>
+        ${r.later ? `<p class="dk-later-result">${esc(laterLine(r.later))}</p>` : ''}
+        ${aimLines(r, rep).length ? `<ul class="dk-log">${aimLines(r, rep).map(line => `<li>${esc(line)}</li>`).join('')}</ul>` : ''}
         ${debriefHtml(r.debrief)}
         ${skillsHtml(r.skills)}
         ${sum ? `<div class="dk-memo-sub" role="heading" aria-level="3">下课小结</div><div class="dk-summary">${mdToHtml(sum.text || '')}</div>` : ''}

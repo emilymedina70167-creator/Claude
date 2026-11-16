@@ -171,6 +171,7 @@ export function classRows(mem = {}) {
       drill: s.kind === 'drill',
       skills: s.skills || null,
       debrief: s.debrief || null,
+      later: s.later, aims: s.aims || [],
     };
   }).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0) || cmpId(b.id, a.id));
 }

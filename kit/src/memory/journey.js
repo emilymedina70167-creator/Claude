@@ -1,3 +1,4 @@
+import { heldDrillIds } from './drills.js';
 // 学习台首页的「离考研多少天」和「这一周」（docs/journey-plan.md）。全是页面按记录算的，不调用 Claude，
 // 也不进发给课堂 Claude 的说明（不影响回复的快慢）。纯函数，有测试（tests/memory-journey.test.js）。
 //
@@ -126,7 +127,8 @@ export function progress(mem = {}) {
 export function warmupDrills(mem = {}, last = null, next = [], { n = 3 } = {}) {
   if (!last?.skills?.items || !next.length) return [];
   const want = new Set(next.map((x) => x.p));
-  const drills = new Map(list(mem.drills).filter((d) => d && d.status !== 'void' && !d.broken).map((d) => [String(d.id), d]));
+  const held = heldDrillIds(mem.sessions || []);
+  const drills = new Map(list(mem.drills).filter((d) => d && !held.has(d.id) && d.status !== 'void' && !d.broken).map((d) => [String(d.id), d]));
   const out = [];
   for (const it of last.skills.items) {
     if (out.length >= n || !want.has(it.p)) continue;
