@@ -14,6 +14,7 @@ import { filterSpace, spaceOfId, positionId, sharedFor } from './space.js';
 import { dueList, toDate } from './schema.js';
 import { recallLine } from './recall.js';
 import { isTeach } from './session.js';
+import { summaryOf, summaryText } from './summary.js';
 
 const enc = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
 export const utf8 = (s) => (enc ? enc.encode(String(s)).length : Buffer.byteLength(String(s)));
@@ -37,6 +38,9 @@ export const AIDE_SHARE = 0.25;
 export const PACK_ORDER = ['aide-brief', 'aide-cards', 'position', 'curriculum', 'weaknesses', 'mastery', 'recall', 'sessions', 'errors', 'profile', 'rules', 'lessons', 'slips', 'pending', 'source'];
 const CORE = new Set(['aide-brief', 'aide-cards', 'position', 'curriculum', 'errors', 'weaknesses', 'mastery', 'recall', 'sessions']);
 export const CORE_SHARE = 0.45;
+// 有记忆摘要时不再带的几类（全文和目录都不带）
+const SUMMARY_DROPS = new Set(['rules', 'lessons', 'profile', 'slips', 'asks']);
+const NONE = new Set();
 
 /**
  * 发给 Claude 的提示词里提到学生不用「他」「她」（我明确要求过）。以前对话里的 Claude 写进记忆的原文里有「他」
@@ -221,11 +225,22 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
   }
   sections.push({ coll: 'source', head: '## 这一块的原文（curriculum）', items: src });
 
+  // 有记忆摘要（第十三轮，summary.js）：老师对学生的了解是那一份摘要，规则、守则、关于学生、没归纳的失误不再一条条带
+  // （它们是摘要的原料，已经写进去了）。管记录和复现的规则（use: record）不是教法，是账怎么记：下课、复现课、备课那几次照旧带
+  const sum = summaryOf(mem0, view.space);
+  if (sum.on) {
+    const record = use === 'all' ? rules.filter((r) => r.use === 'record') : [];
+    for (let i = sections.length - 1; i >= 0; i--) if (SUMMARY_DROPS.has(sections[i].coll)) sections.splice(i, 1);
+    if (record.length) sections.splice(sections.findIndex((x) => x.coll === 'pending'), 0, { coll: 'record', head: '## 记录的制度（学生定的：错题、弱点、复现怎么记；只在下课整理、复现、备课时用）', items: record.map((r) => ({ key: `rules/${r.id}`, text: ruleLine(r) })) });
+  }
+
   // —— 先给目录留出位置，全文往剩下的预算里装。装的先后（PACK_ORDER）和写出来的先后不一样：
   // 先装这节课这一块的（上一节停在哪、这一块、错题、弱点、掌握、要记的、以前的课，合起来最多 CORE_SHARE），
   // 再装通用的规则、守则、关于我。2026-11-03 用真数据量出来：英语课里 55 条通用规则占了 13.7 KB，
   // 这一块的 10 道错题里 9 道、掌握整段被挤进目录，课堂 Claude 只看得到编号。一节里一条放不下，只停这一节，别的节照样装 ——
-  const intro = `这节课在学习台里上${session ? `（${session}）` : ''}。下面是学习台记忆库里和你有关的部分。**记忆由你管**：错题、弱点、复现组、下一节从哪接、规则你都直接写（memo 块），不用等学生确认；掌握由页面按证据算。前面是和这节课直接有关的**全文**，最后是记忆库里其余东西的**目录**（一条一行）。`;
+  const intro = sum.on
+    ? `这节课在学习台里上${session ? `（${session}）` : ''}。下面是学习台里和这节课有关的记忆：先是你对这个学生的了解（记忆摘要），然后是学习的账里和这一块直接有关的**全文**（上一节停在哪、弱点、错题、掌握、要记的），最后是其余东西的**目录**（一条一行）。学习的账由你记（memo 块），不用等学生确认；掌握由页面按证据算。`
+    : `这节课在学习台里上${session ? `（${session}）` : ''}。下面是学习台记忆库里和你有关的部分。**记忆由你管**：错题、弱点、复现组、下一节从哪接、规则你都直接写（memo 块），不用等学生确认；掌握由页面按证据算。前面是和这节课直接有关的**全文**，最后是记忆库里其余东西的**目录**（一条一行）。`;
   const reserve = Math.min(CATALOG_RESERVE, Math.floor(budget * 0.3));
   const room = budget - reserve;
   // 学生的要求（第十一轮，asks）：学生亲口说过要老师照做的，全文、排在最前、先装（不和别的节抢，也不进目录）；
@@ -242,7 +257,10 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
   };
   for (const a of asks) shown.add(`asks/${a.id}`);
   const once = (Array.isArray(mem0.saidOnce) ? mem0.saidOnce : []).filter((o) => o?.text);
-  const asksText = [
+  const asksText = sum.on ? [
+    summaryText([sum.shared, sum.subject]),
+    once.length ? `## 这节课学生说的（只管这节课）\n\n${once.map((o) => `- ${one(o.text, 200)}`).join('\n')}` : '',
+  ].filter(Boolean).join('\n\n') : [
     asks.length ? `## 学生的要求（学生亲口说过、要你照做的；犯过的在前。每一条都要做到——学生说过「我说了什么，下一次都肯定会改」）\n\n${asks.map(askLine).join('\n')}` : '',
     once.length ? `## 这节课学生说的（只管这节课）\n\n${once.map((o) => `- ${one(o.text, 200)}`).join('\n')}` : '',
   ].filter(Boolean).join('\n\n');
@@ -283,11 +301,11 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
     if (s.coll === 'rules') { rulesText = kept.join('\n'); continue; }
     if (kept.length) body.push(`${s.head}\n\n${kept.join('\n')}`);
   }
-  const cat = memoryCatalog(view, { shown, here, nearIds, session, today, tools, srcCut, max: Math.max(1024, budget - used - 200) });
+  const cat = memoryCatalog(view, { shown, here, nearIds, session, today, tools, srcCut, max: Math.max(1024, budget - used - 200), skip: sum.on ? SUMMARY_DROPS : NONE });
   if (cat.text) body.push(cat.text);
   const text = neutral(body.join('\n\n'));
   rulesText = neutral(rulesText);
-  return { rules: rulesText, text, cut: cat.cut, bytes: utf8(text) + utf8(rulesText) };
+  return { rules: rulesText, text, cut: cat.cut, bytes: utf8(text) + utf8(rulesText), ...(sum.on ? { summary: true } : {}) };
 }
 
 /**
@@ -295,8 +313,10 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
  * view：classView 的结果；shown：已经放了全文的（'errors/L2-07'）；max：字节上限（超了先把远处的错题、掌握收成按块的编号，再收别的）。
  * 返回 { text, cut: [{ coll, more, ids }] }
  */
-export function memoryCatalog(view, { shown = new Set(), here = view.here, nearIds = new Set([here]), session = '', today = toDate(Date.now()), tools = true, srcCut = 0, max = CATALOG_MAX } = {}) {
-  const { get, solved } = view;
+export function memoryCatalog(view, { shown = new Set(), here = view.here, nearIds = new Set([here]), session = '', today = toDate(Date.now()), tools = true, srcCut = 0, max = CATALOG_MAX, skip = NONE } = {}) {
+  const { get: get0, solved } = view;
+  // skip：这几类整类不列（有记忆摘要时的规则、守则、关于学生、失误：列了老师会去取）
+  const get = (c) => (skip.has(c) ? [] : get0(c));
   const not = (c) => (d) => !shown.has(`${c}/${d.id}`);
   const cut = [];
   const note = (coll, docs) => { if (docs.length) cut.push({ coll, more: docs.length, ids: docs.map((d) => String(d.id)) }); };
