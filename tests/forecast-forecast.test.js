@@ -79,11 +79,16 @@ test('够快', () => {
   for (let i = 0; i < 2000; i++) evs.push(rec({ comp: `q${i}`, ok: i % 3 !== 0, d: Math.floor(i / 20), session: `c-${Math.floor(i / 20)}`, block: `DS-L${1 + (i % 20)}.1.${1 + (i % 10)}` }));
   const m = { curriculum: cur, evidence: evs };
   forecastBoard(m, { today: '2026-11-14' });
-  // 量这个进程用的 CPU 时间、取三次里最少的一次：整套测试是并行跑的，别的文件抢 CPU 时墙上的用时说明不了代码本身
-  // （单独跑墙上约 75 毫秒、CPU 约 90 毫秒；iPad 的要求是 200 毫秒以内）
-  let ms = Infinity;
-  for (let i = 0; i < 3; i++) { const c0 = process.cpuUsage(); forecastBoard(m, { today: '2026-11-14' }); const c = process.cpuUsage(c0); ms = Math.min(ms, (c.user + c.system) / 1000); }
-  assert.ok(ms < 120, `用了 ${ms.toFixed(0)} 毫秒`);
+  // 量这个进程用的 CPU 时间、取三次里最少的一次：整套测试是并行跑的，别的文件抢 CPU 时墙上的用时说明不了代码本身。
+  // 不拿绝对的毫秒数卡（以前卡 120 毫秒：开发的机器上约 90，GitHub 的机器、忙的时候 130～200，稳定地红，CI 后面的检查全被跳过），
+  // 拿同一台机器上一段固定的纯计算当尺子：预测的用时是它的三倍半上下（2026-11-16 量的 3.4～3.5），超过六倍才算退化。
+  // 守的是「算法没有变慢一倍」，不是这台机器有多快；iPad 上 200 毫秒以内的要求相当于这里的五倍上下
+  const cpu = (fn) => { let ms = Infinity; for (let i = 0; i < 3; i++) { const c0 = process.cpuUsage(); fn(); const c = process.cpuUsage(c0); ms = Math.min(ms, (c.user + c.system) / 1000); } return ms; };
+  const base = () => { let s = 0; const a = new Float64Array(64); for (let i = 0; i < 3e6; i++) { a[i & 63] = Math.exp(-((i % 97) / 97)) * (1 + (i % 7)); s += a[(i * 7) & 63]; } return s; };
+  base();
+  const ms = cpu(() => forecastBoard(m, { today: '2026-11-14' }));
+  const unit = cpu(base);
+  assert.ok(ms < unit * 6, `预测用了 ${ms.toFixed(0)} 毫秒，是基准（${unit.toFixed(0)} 毫秒）的 ${(ms / unit).toFixed(1)} 倍，平时是 3.5 倍上下`);
 });
 
 test('各块的期望分加起来就是这一科的平均分', () => {
