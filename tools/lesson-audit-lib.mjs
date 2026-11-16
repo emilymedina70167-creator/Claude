@@ -136,7 +136,18 @@ export function auditLesson({ session = {}, turns = [], evidence = [], report = 
     longest = 0;
     for (let i = 1; i < pts.length; i++) longest = Math.max(longest, pts[i] - pts[i - 1]);
   }
-  const prodMs = prod.map((e) => num(e.ms)).filter((x) => x !== null);
+  // 产出花了多久：每一次产出，从上一件事（老师的一轮、上一次作答）到它交上来这一段（扣掉长空档）；组件自己记的 ms 更短就用 ms。
+  // 以前直接把每条证据的 ms 加起来：ms 是从组件画出来那一刻算起的，同一道题交几次、同一块板上几道题会重复算
+  // （2026-11-16 那节 23 分钟的课量出「产出花了 68 分钟」）
+  const prevAt = new Map();
+  line.forEach((x, i) => { if (x.ev) prevAt.set(x.ev, i ? line[i - 1].at : null); });
+  const prodMs = prod.map((e) => {
+    const own = num(e.ms);
+    const prev = prevAt.get(e);
+    if (prev == null) return own ?? 0; // 这节课的第一件事：前面没有可比的，只能信它自己记的
+    const gap = (at(e.at) - at(prev)) * MIN;
+    return Math.max(0, own !== null ? Math.min(own, gap) : gap);
+  });
 
   return {
     id: session.id ?? null, kind, title: session.title ?? null, space: session.space ?? session.subject ?? null, closedBy: session.closedBy ?? null,
@@ -147,6 +158,12 @@ export function auditLesson({ session = {}, turns = [], evidence = [], report = 
       firstS: round1(avg(firsts) === null ? null : avg(firsts) / 1000),
       writeS: round1(avg(writes) === null ? null : avg(writes) / 1000),
       waitMin: writes.length ? round1(writes.reduce((a, b) => a + b, 0) / MIN) : null,
+      // 老师的眼睛（第十三轮，class/boardeye.js）：几轮带着板的截图、拍一次平均多少毫秒
+      eyeTurns: teach.filter((t) => (num(t.cost?.img) || 0) > 0).length,
+      eyeMs: (() => { const xs = teach.map((t) => num(t.cost?.eyeMs)).filter((x) => x !== null); return xs.length ? Math.round(avg(xs)) : null; })(),
+      // 老师写了几条关于学生的新笔记（know）、几条老写法（ask / pref / rule / slip / lesson）
+      knows: teach.reduce((n, t) => n + (String(t.text || '').match(/^\s*know\s+text=/gm) || []).length, 0),
+      oldMemos: teach.reduce((n, t) => n + (String(t.text || '').match(/^\s*(ask|pref|rule|slip|lesson)\s+\w+=/gm) || []).length, 0),
     },
     stops,
     produce: {
@@ -169,6 +186,7 @@ export function auditText(audits) {
     `${a.id}  ${a.kind === 'stage' ? '舞台课' : a.kind === 'talk' ? '一问一答' : '黑板课'}  ${a.space || ''} ${a.title || ''}${a.closedBy === 'idle' ? '（挂着被页面当下课）' : ''}`.trimEnd(),
     `  时长 ${f(a.minutes, ' 分钟')}；老师 ${a.teacher.turns} 轮、${a.teacher.chars} 字（每分钟 ${f(a.teacher.charsPerMin)} 字）；出第一个字 ${f(a.teacher.firstS, ' 秒')}、写完 ${f(a.teacher.writeS, ' 秒')}、一共等了 ${f(a.teacher.waitMin, ' 分钟')}`,
     `  停了 ${a.stops.total} 次（白停 ${a.stops.wasted}）${Object.keys(a.stops.byKind).length ? '：' + Object.entries(a.stops.byKind).map(([k, v]) => `${k}×${v}`).join(' ') : ''}`,
+    `  带板的图 ${a.teacher.eyeTurns} 轮${a.teacher.eyeMs !== null ? `（拍一次约 ${a.teacher.eyeMs} 毫秒）` : ''}；关于学生的新笔记 ${a.teacher.knows} 条${a.teacher.oldMemos ? `，老写法 ${a.teacher.oldMemos} 条` : ''}`,
     `  学生要想的产出 ${a.produce.count} 次；第一次在第 ${f(a.produce.firstMin)} 分钟；最长被动 ${f(a.produce.longestPassiveMin, ' 分钟')}；产出花了 ${f(a.produce.minutes, ' 分钟')}`,
     `  要拿下的事：${a.aims?.map(x => x.can).join('；') || '没记'}`,
     `  课后验：${laterLine(a.later) || '还没验'}`,

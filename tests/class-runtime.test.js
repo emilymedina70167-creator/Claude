@@ -297,3 +297,10 @@ test('课堂模式里组件自己发起的调用：只有带图的转写能发�
     session.mode = before;
   }
 });
+
+test('actionTrigger：分步的题中间一步做对了、后面还有步，不单独叫老师；做错、最后一步照常', () => {
+  assert.equal(actionTrigger({ source: 'record', type: 'parse', ok: true, more: true }), 'later');
+  assert.equal(actionTrigger({ source: 'record', type: 'steps', ok: true, more: true }), 'later');
+  assert.equal(actionTrigger({ source: 'record', type: 'parse', ok: false, more: true }), 'soon');
+  assert.equal(actionTrigger({ source: 'record', type: 'parse', ok: true }), 'soon');
+});

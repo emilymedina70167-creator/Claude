@@ -328,3 +328,19 @@ test('课上改了要拿下的事：编号还在、话换了的是另一件事�
   // 再改一次别的：a2 的 since 留着
   assert.equal(mergeAims(m.aims, [...next, { id: 'a5', can: '说出抖动是怎么来的' }], 200).aims.find((x) => x.id === 'a2').since, 100);
 });
+
+test('课上换掉的事留着（retired），换掉以后的作答不算它的', async () => {
+  const { mergeAims: merge, aimsSummary: sum } = await import('../kit/src/class/aims.js');
+  const prev = [{ id: 'a1', can: '情态动词后面写原形' }, { id: 'a2', can: '圈全谓语' }, { id: 'a3', can: '判情态还是推测' }];
+  const next = [{ id: 'a1', can: '写出被动谓语' }, { id: 'a2', can: '圈全谓语' }];
+  const m = merge(prev, next, 5000);
+  assert.deepEqual(m.retired.map((a) => [a.id, a.can, a.until]), [['a1', '情态动词后面写原形', 5000], ['a3', '判情态还是推测', 5000]]);
+  // 报告的题：4000 做对的是原来那件的，6000 做的是新的那件的
+  const items = [{ aim: 'a1', kind: 'cloze', outcome: 'ok', start: 3000, end: 4000 }, { aim: 'a1', kind: 'cloze', outcome: 'wrong', start: 5500, end: 6000 }];
+  const past = sum(m.retired, items);
+  assert.equal(past.find((a) => a.id === 'a1').n, 1);
+  assert.equal(past.find((a) => a.id === 'a1').status, 'led');
+  assert.equal(sum(m.aims, items).find((a) => a.id === 'a1').n, 1);
+  assert.equal(sum(m.aims, items).find((a) => a.id === 'a1').status, 'miss');
+  assert.deepEqual(merge(prev, prev, 9).retired, []);
+});

@@ -72,6 +72,8 @@ export const TEACH = { model: MODEL, effort: 'high', modelTier: 'complex' };
 const DEBOUNCE = 1500;
 const MAX_REWRITES = 2;
 const GESTURE_WAIT = 4000; // 一问一答：这一轮写完时学生还按着板，最多等这么久再画
+// 老师的第一轮最多再等教材多久（开课前页面已经等过 8 秒）
+const BOOK_WAIT = 12000;
 const MAX_ROUNDS = 6; // 一次学生发言最多连着几轮（重写、看手写原图）；防止意外的死循环
 const TURN_TEXT_MAX = 200 * 1024; // 数据库一个文档最多 256 KiB
 const pad6 = (n) => String(n).padStart(6, '0');
@@ -206,6 +208,7 @@ export async function renderClass(root, meta, desk = null) {
   let examCheck = null;
   let examCourse = ''; // 现在读着 / 读到的是哪门课的考试资料（课上换了门课要重读）
   let specTimer = null;
+  let specBookWait = false; // 开课页的抢跑在等教材读完（只挂一次）
   let ended = false; // 下课小结写过了：之后不再抢跑
   let stream = null; // 边写边显示：这一轮先画出来的段（streamOps）
   let streamPage = null; // 核验过了：先开的那块新板留着，finishTurn 的 board new 直接用它
@@ -217,6 +220,8 @@ export async function renderClass(root, meta, desk = null) {
   // 每件到了没有不由老师宣布：按这节课到现在的作答现算（aimEvs：刷新后读回来的证据 + 这一次写的每一条，不为此再读数据库）
   let aims = !TALK && Array.isArray(desk?.aims) ? desk.aims : null;
   const aimsLog = Array.isArray(desk?.aimsLog) ? [...desk.aimsLog] : [];
+  // 课上被老师换掉的那几件（aims.js 的 mergeAims.retired）：留着，报告和隔天验照样算它们
+  const aimsPast = Array.isArray(desk?.aimsPast) ? [...desk.aimsPast] : [];
   const aimEvs = [];
   // live：最后一道还只是错、学生多半还在改的先不算，免得写错第一下板上方就亮「做了没到」
   const aimsNow = ({ live = true } = {}) => (aims ? aimsSummary(aims, itemsOf(aimEvs), live ? { live: true } : {}) : null);
@@ -949,7 +954,8 @@ export async function renderClass(root, meta, desk = null) {
     const had = aims.length;
     aims = m.aims;
     aimsLog.push({ at: Date.now(), turn: turnSeq, n: aims.length });
-    desk.updateSession({ aims, aimsLog: aimsLog.slice(-20) });
+    aimsPast.push(...m.retired);
+    desk.updateSession({ aims, aimsLog: aimsLog.slice(-20), ...(aimsPast.length ? { aimsPast: aimsPast.slice(-12) } : {}) });
     // 板上还挂着已经不要了的那一件的段：以后那一段的作答哪件都不算，告诉老师
     const lost = had ? [...segs.values()].filter((x) => x.aim && !x.hidden && !aims.some((a) => a.id === x.aim)).map((x) => `${x.id}（aim=${x.aim}）`) : [];
     if (m.changed.length) notes.push(`要拿下的事里 ${m.changed.join('、')} 换了内容：算另一件事，以前挂在这个编号上的作答不算它的。`);
@@ -1875,6 +1881,12 @@ export async function renderClass(root, meta, desk = null) {
   }
   function startSpec() {
     if (spec) return;
+    // 开课页的那一次：教材还在读就先不抢跑，读到了再发（2026-11-16 真课：抢跑时教材没到，老师自己调了 5 次工具去取，
+    // 学生点「开始上课」以后等了 49 秒；等教材这几秒比多跑五轮便宜得多）
+    if (!started && desk?.books?.loading) {
+      if (!specBookWait) { specBookWait = true; desk.books.ready?.then?.(() => specSoon(200), () => {}); }
+      return;
+    }
     // 一问一答：开课页的「开始上课。」照抢；开课以后不抢「继续。」（每一轮都以一问结尾，学生要先答）
     if (TALK && started) return;
     const say = specFor(specState());
@@ -1938,6 +1950,12 @@ export async function renderClass(root, meta, desk = null) {
       // 开课时取的以前的课：最多等 3 秒（一般早就取好了）。老师的第一轮（定这节课要拿下的事）考试资料也在这 3 秒里一起等：
       // 同一个 3 秒，不另加；之后的每一轮不等它（读到了下一轮自然带上）
       const opening = !history.some((t) => t && !t.discarded && t.role === 'claude');
+      // 老师的第一轮：教材还在读就再等它一会儿（最多 BOOK_WAIT）。不等的话这一轮没有教材原文，老师只能一页页用工具取
+      if (opening && desk?.books?.loading && desk.books.ready) {
+        bar.setStatus('thinking', '在读教材…');
+        await Promise.race([Promise.resolve(desk.books.ready).catch(() => {}), new Promise((r) => setTimeout(r, BOOK_WAIT))]);
+        bar.setStatus('thinking', 'Claude 在想…');
+      }
       await Promise.race([Promise.all([fetchEarlier(), opening ? examReady : null]), new Promise((r) => setTimeout(r, 3000))]);
       const { fit, system, maxBytes, level } = buildInput(history);
       lastPrompt = { bytes: fit.bytes, maxBytes, keepRecent: fit.keepRecent, dropped: fit.dropped, turns: fit.turns.length, level, ...(dev ? { system } : {}) };

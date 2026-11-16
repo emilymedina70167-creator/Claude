@@ -96,7 +96,8 @@ export function steps(el, src) {
     const fb = li.querySelector('.st-fb');
     const q = plain(`${s.title}｜${s.ask || ''}`.replace(/\$/g, ''));
     const base = { type: 'steps', title, q, detail: `第 ${k + 1} 步`, el };
-    const rec = (extra) => session.record({ ...base, ms: Date.now() - s.t0, ...extra });
+    // more：这一步答对了、后面还有步（课堂里不为它单独叫老师，见 class/prompt.js 的 actionTrigger）
+    const rec = (extra) => session.record({ ...base, ms: Date.now() - s.t0, ...extra, ...(extra?.ok === true && k < list.length - 1 ? { more: true } : {}) });
 
     const revealBtn = button(s.do ? '对照答案' : '揭开这一步', 'btn-primary st-reveal');
     revealBtn.disabled = true;

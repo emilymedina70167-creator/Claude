@@ -18,7 +18,7 @@ import { guardDebrief, buildCorpus } from './guard.js';
 import { recheck as sentryRecheck, recheckText, workOrder } from './sentry.js';
 import { guardDb } from './writer.js';
 import { subjectOf as holdSubject } from './space.js';
-import { HOLD_MAX, needsHolds, pickHolds, holdBrief, holdDocs, dueHolds } from './holds.js';
+import { HOLD_MAX, needsHolds, pickHolds, holdBrief, holdDocs, dueHolds, holdAims } from './holds.js';
 import { aimId, checkAims } from '../class/aims.js';
 import { checkProblems } from './labdesk.js';
 import { componentDoc } from '../subject.js';
@@ -1132,7 +1132,10 @@ export async function renderDesk(root, meta) {
       if (!cur || !needsHolds(cur)) return;
       const reserve = await readReserve(db, toDate(Date.now()));
       ids = pickHolds({ session: cur, drills: data.drills, evidence: data.evidence, reserve, sessions: data.sessions });
-      const n = Math.min(HOLD_MAX, cur.aims.length);
+      // 验哪几件：现在的加上课上被换掉的（holdAims；有作答的在前）。报告里有每件的状态
+      const report0 = await scopeDb(db, x.id).doc('report/main').get().then(r => (r.exists ? r.data() : null)).catch(() => null);
+      const want = holdAims(cur, report0);
+      const n = Math.min(HOLD_MAX, want.length);
       // 先记试过：页面在调用中关掉，也不会下次永远当第一次试。
       assertWrite('page', 'sessions');
       await ref.update({ holdTries: (Number(cur.holdTries) || 0) + 1 });
@@ -1143,7 +1146,7 @@ export async function renderDesk(root, meta) {
           if (ai && !ai.legacy && report) {
             const subject = holdSubject(cur.block || '');
             const covered = new Set(ids.map(id => data.drills.find(d => d.id === id)?.aim).filter(Boolean));
-            const aims = cur.aims.filter(a => !covered.has(a.id));
+            const aims = want.filter(a => !covered.has(a.id)).slice(0, HOLD_MAX);
             const items = report.items || [];
             const names = [...new Set(['answer', 'quiz', ...data.drills.filter(d => d.fromSession === x.id).map(d => d.kind).filter(k => ENGINES[k])])].slice(0, 7);
             const docs = names.map(name => componentDoc(COMPONENT_DOCS, name, subject) || '').join('\n\n');
@@ -1151,7 +1154,7 @@ export async function renderDesk(root, meta) {
             const res = await ai.call(prompt, { model: 'claude-opus-5-5', effort: 'high', lane: 'bg', cache: false });
             if (res.modelApplied === 'claude-opus-5-5') {
               const checked = await checkProblems(res.text, { brief: `hold-${x.id}`, block: cur.block, target: { kind: 'hold', title: cur.title }, subject, existing: data.drills });
-              const ready = holdDocs({ items: checked.ok }, { session: cur, at: Date.now() }).filter(it =>
+              const ready = holdDocs({ items: checked.ok }, { session: { ...cur, aims: want }, at: Date.now() }).filter(it =>
                 it.doc.kind === 'quiz' || it.doc.kind === 'answer' || (ENGINES[it.doc.kind] && /^\s*mode\s*[:：]\s*quiz\s*$/m.test(it.doc.md)));
               const fresh = await current();
               if (!fresh || Object.hasOwn(fresh, 'holds') || fresh.status !== 'closed') return;
@@ -2071,7 +2074,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     review: doc.review || null,
     opening: doc.opening || null,
     // 这节课要拿下的事（class/aims.js）：数组（可以是空的：还没定，课堂会让老师第一轮写）；没有这个字段的课（以前开的课、复现课）不提这回事
-    aims: Array.isArray(doc.aims) ? doc.aims : null, aimsLog: doc.aimsLog || null,
+    aims: Array.isArray(doc.aims) ? doc.aims : null, aimsLog: doc.aimsLog || null, aimsPast: doc.aimsPast || null,
   });
 }
 

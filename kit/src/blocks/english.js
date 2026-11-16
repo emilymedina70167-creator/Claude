@@ -372,7 +372,8 @@ function parseByStep(el, fields, ans, roles, groups) {
     tried = markup(mine);
     last = judgeSpans(mine, target());
     const hint = spansHint(last, roles);
-    session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), detail: `第 ${k + 1} 步（${stepName(k)}）`, value: tried, ok: last.ok, attempts, check: last.ok ? undefined : hint, el });
+    // more：这一步对了、后面还有步（课堂里不为它单独叫老师：学生接着做下一步，跟着下一条一起告诉老师）
+    session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), detail: `第 ${k + 1} 步（${stepName(k)}）`, value: tried, ok: last.ok, attempts, check: last.ok ? undefined : hint, more: (last.ok && k < groups.length - 1) || undefined, el });
     fb.hidden = false;
     fb.className = `q-feedback ${last.ok ? 'is-ok' : 'is-bad'}`;
     fb.innerHTML = verdict(last.ok, last.ok ? '' : hint);

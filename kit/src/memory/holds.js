@@ -9,6 +9,18 @@ export const HOLD_MAX = 4;
 export const HOLD_DAY = 1;
 export const HOLD_LATE = 3;
 
+/**
+ * 隔天验哪几件事：这节课现在的，加上课上被老师换掉的（aimsPast，编号换成 p1、p2……免得和现在的撞）。
+ * 有作答的排前面（真练过的先验），再是只讲了没做的。report：课后报告（里面有每件的状态）；没有就照原来的先后
+ */
+export function holdAims(session = {}, report = null) {
+  const st = (list, a, i) => (Array.isArray(list) ? list[i]?.status : '') || 'none';
+  const past = (Array.isArray(session.aimsPast) ? session.aimsPast : []).map((a, i) => ({ ...a, id: `p${i + 1}`, status: st(report?.aimsPast, a, i) }));
+  const cur = (Array.isArray(session.aims) ? session.aims : []).map((a, i) => ({ ...a, status: st(report?.aims, a, i) }));
+  const rank = (a) => (a.status && a.status !== 'none' ? 0 : 1);
+  return [...past, ...cur].map((a, i) => ({ a, i })).sort((x, y) => rank(x.a) - rank(y.a) || x.i - y.i).map(({ a }) => { const { status, until, ...rest } = a; return rest; });
+}
+
 export function needsHolds(session = {}) {
   return (!session.kind || session.kind === 'class') && session.status === 'closed' &&
     !!session.aims?.length && !(Array.isArray(session.review) ? session.review.length : session.review) && !session.reviews?.length &&

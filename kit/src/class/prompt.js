@@ -1561,6 +1561,9 @@ export function actionTrigger(a, { lastStep = false } = {}) {
   if (a.source === 'event' && typeOf(a) === 'gloss') return 'later';
   // 有没有把握：答对了却说没把握，老师要马上知道（根本规则：没把握按没会处理）；别的跟着下一条一起说，不单独调用
   if (a.source === 'event' && typeOf(a) === 'sure') return sureOf(a) === false && okOf(a) === true ? 'soon' : 'later';
+  // 分步的题中间一步做对了、后面还有步：学生接着做下一步，不为这一下单独叫老师（2026-11-16 真课：14 轮里 4 轮是这样叫的，
+  // 老师没什么可说，白等七八秒）。做错、整道做完、学生说话时照常叫，这一步跟着一起告诉老师
+  if (a.more && okOf(a) === true) return 'later';
   return 'soon';
 }
 

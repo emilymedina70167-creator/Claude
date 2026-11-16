@@ -258,6 +258,8 @@ export function buildReport({ session = {}, evidence = [], manual = [], observat
     // 这节课要拿下的事，每件到了没有（页面按上面的题算，class/aims.js）。真课一大半是挂着被当成下了课的、没有小结，
     // 所以状态不靠小结，写在这里；没有要拿下的事的课（旧课、练一练、复现课、舞台课）是空的
     aims: aimsSummary(session.aims, items),
+    // 课上被老师换掉的那几件（讲到下一节把整份换了）：照样算状态。没有换过的课不写这个键
+    ...(Array.isArray(session.aimsPast) && session.aimsPast.length ? { aimsPast: aimsSummary(session.aimsPast, items) } : {}),
     // 舞台课分了几幕（老师写的 scene，主线第六轮 3.6）：一幕一个标题、它的重点卡。只有一幕（旧课、没写 scene）不写
     ...scenesOf(turns, session),
     at: now,
@@ -313,7 +315,10 @@ export function reportText(r, { max = 8 * 1024 } = {}) {
   const tags = (r.byTag || []).filter((x) => x.tag).map((x) => `${x.tag} ${x.items} 题一次对 ${x.first}`);
   if (tags.length) head.push(`- 按块 / 知识点：${tags.join('；')}`);
   // 排在每道题前面：题太多要截的时候截的是题，这一段一直在
-  const aims = r.aims?.length ? ['', '这节课要拿下的事（状态是页面按学生的作答算的）：', aimsText(r.aims)] : [];
+  const aims = [
+    ...(r.aims?.length ? ['', '这节课要拿下的事（状态是页面按学生的作答算的）：', aimsText(r.aims)] : []),
+    ...(r.aimsPast?.length ? ['', '这节课前面定过、讲到后面被换掉的事（也是这节课学的）：', aimsText(r.aimsPast)] : []),
+  ];
   const items = (r.items || []).map((it) => `- ${it.comp}${it.seg ? `（${it.seg}）` : ''}「${cut(it.q, 60)}」：${it.seq || '·'} ${it.guess ? '把选项试遍了才对（不算会）' : OUTCOME_TEXT[it.outcome] || it.outcome}${it.sure === false ? '（学生标了没把握）' : it.sure === true ? '（有把握）' : ''}${it.last ? `，最后写的 ${cut(it.last, 40)}` : ''}${it.ms ? `，${Math.round(it.ms / 1000)} 秒` : ''}；证据 ${it.evidence.slice(-3).join(',')}`);
   const tail = [];
   if (r.drafts?.length) tail.push(`- 没交的草稿：${r.drafts.map((d) => `${d.comp || ''}「${cut(d.text, 40)}」（${d.id}）`).join('；')}`);

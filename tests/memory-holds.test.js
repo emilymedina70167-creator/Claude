@@ -57,3 +57,15 @@ test('出题说明：这节课抄进题库的原题有就列全文（报告里�
   const [it] = holdDocs(parseProblems('=== 题 1\n类型：同类\n针对：a1\n```answer\nq: 算一算\nanswer: 5\n```', { block: s.block }), { session: s, at: 1 });
   assert.equal(it.doc.by, 'page');
 });
+
+test('隔天验哪几件：现在的加上课上被换掉的，有作答的在前，编号不撞', async () => {
+  const { holdAims } = await import('../kit/src/memory/holds.js');
+  const session = { aims: [{ id: 'a1', can: '写出被动谓语' }, { id: 'a2', can: '认出被动谓语' }], aimsPast: [{ id: 'a1', can: '情态动词后面写原形', until: 5 }, { id: 'a3', can: '判情态还是推测', until: 5 }] };
+  const report = { aims: [{ id: 'a1', status: 'none' }, { id: 'a2', status: 'none' }], aimsPast: [{ id: 'a1', status: 'led' }, { id: 'a3', status: 'none' }] };
+  const got = holdAims(session, report);
+  assert.deepEqual(got.map((a) => [a.id, a.can]), [['p1', '情态动词后面写原形'], ['p2', '判情态还是推测'], ['a1', '写出被动谓语'], ['a2', '认出被动谓语']]);
+  assert.ok(got.every((a) => !('status' in a) && !('until' in a)));
+  assert.equal(new Set(got.map((a) => a.id)).size, 4);
+  // 没换过的课：就是现在的那几件
+  assert.deepEqual(holdAims({ aims: [{ id: 'a1', can: '甲' }] }).map((a) => a.id), ['a1']);
+});

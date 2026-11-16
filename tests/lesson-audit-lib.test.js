@@ -79,6 +79,14 @@ test('黑板课有 ms 时白停看 ms，不看离上一件事多久', () => {
     evidence: [mk('q1', 8000, T0 + 10 * 60_000 / 60 * 6), mk('q2', 90_000, T0 + 2 * min), mk('q3', 5000, T0 + 2 * min + 5000)] });
   assert.deepEqual([b.stops.total, b.stops.wasted], [3, 2]);
 });
+test('产出花的时间：同一道题交几次、组件记的 ms 从画出来算起，不重复加', () => {
+  // 一道题画出来 5 分钟以后第一次交（ms 300 秒），再过 20 秒改对（ms 320 秒）：一共花的是 5 分 20 秒，不是 10 分 20 秒
+  const b = auditLesson({ session: { id: 'c-11', kind: 'class' }, turns: [{ role: 'claude', at: T0, text: '板' }], evidence: [
+    { id: 'q1', session: 'c-11', src: 'record', kind: 'parse', ok: false, ms: 300_000, at: T0 + 5 * min },
+    { id: 'q2', session: 'c-11', src: 'record', kind: 'parse', ok: true, ms: 320_000, at: T0 + 5 * min + 20_000 }] });
+  assert.equal(b.produce.minutes, 5.3);
+});
+
 test('产出花的时间用 ms 合计', () => {
   const b = auditLesson({ session: { id: 'c-10', kind: 'class' }, turns: [], evidence: [
     { id: 'p1', session: 'c-10', src: 'record', kind: 'conjecture', ok: null, ms: 60_000, text: '想了', at: T0 },

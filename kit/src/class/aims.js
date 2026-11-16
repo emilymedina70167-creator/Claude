@@ -141,7 +141,9 @@ function inOrder(items) {
 
 // 这道题算不算这件事的：编号对得上；这件事是课上改过的（since：改成现在这句话的时间），只算改了以后做的题——
 // 老师把 a1 换成了另一件事，以前挂在 a1 上的作答证明的是原来那件，不能算到新的头上
-const mineOf = (aim, it) => !!it && !!aim?.id && it.aim === aim.id && !(Number.isFinite(aim.since) && Number.isFinite(when(it)) && when(it) < aim.since);
+// until：这件事是课上被换掉的（aimsPast）：换掉以后挂在这个编号上的作答是新的那一件的，不算它的
+const mineOf = (aim, it) => !!it && !!aim?.id && it.aim === aim.id && !(Number.isFinite(aim.since) && Number.isFinite(when(it)) && when(it) < aim.since)
+  && !(Number.isFinite(aim.until) && Number.isFinite(when(it)) && when(it) >= aim.until);
 
 /**
  * 一件事现在的状态，按挂在它上面的题（报告的题：report.js 的 itemsOf）算：
@@ -173,7 +175,9 @@ const sameCan = (x, y) => String(x ?? '').replace(/\s+/g, '') === String(y ?? ''
 /**
  * 课上老师再写一次 board aims：新的一份整份换掉旧的。编号和「能做的事」都没变的那几件原样接着算（连 since 一起留着）；
  * 编号还在、但能做的事换了一句话的，是另一件事了：记上 since = at，以前挂在这个编号上的作答不算它的。
- * 返回 { aims, changed: [换了内容的编号], dropped: [不要了的编号], added: [新加的编号] }
+ * 返回 { aims, changed: [换了内容的编号], dropped: [不要了的编号], added: [新加的编号], retired: [被换掉、不要了的那几件原样，带 until = at] }
+ * retired：老师讲到下一节常常把整份换掉（2026-11-16 真课一节课换了三次，最后只剩刚开讲的那一节的三件）。
+ * 换掉的不是没学过：页面留着（sessions.aimsPast），报告里照样算状态，隔天验的时候也验它们
  */
 export function mergeAims(prev, next, at) {
   const old = new Map((Array.isArray(prev) ? prev : []).filter((a) => a?.id).map((a) => [a.id, a]));
@@ -186,7 +190,9 @@ export function mergeAims(prev, next, at) {
     return { ...a, since: at };
   });
   const kept = new Set(aims.map((a) => a.id));
-  return { aims, changed, dropped: [...old.keys()].filter((id) => !kept.has(id)), added };
+  const dropped = [...old.keys()].filter((id) => !kept.has(id));
+  const retired = [...changed, ...dropped].map((id) => ({ ...old.get(id), until: at }));
+  return { aims, changed, dropped, added, retired };
 }
 
 // 状态是页面对学生说的话：只有这四个词
