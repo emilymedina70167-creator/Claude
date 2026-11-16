@@ -100,6 +100,11 @@ export function harvestDrills({ session = {}, steps = [], turns = [], report = n
   return out;
 }
 
+// 同一套名单供所有非课后测验入口用；真题留进 holds 后也受保护，不能只看 src。
+export function heldDrillIds(sessions = []) {
+  return new Set(sessions.filter(s => s && !s.later).flatMap(s => s.holds?.ids || []));
+}
+
 /* ---------------- 挑题 ---------------- */
 
 /** 每道题在练习里最近一次做得怎样：{ [题库编号]: { outcome, sure, day, at } } */
@@ -124,7 +129,8 @@ export function pickDrills(mem = {}, { space = 'math', today = toDate(Date.now()
   const gone = voidedIds(m);
   // 真题做的题（src: exam）：留作模考那几年的不挑（档案里改了留的年份，以前进了题库的也拦住）
   const reserve = reserveYears(targetOf(mem), today);
-  const drills = (m.drills || []).filter((d) => d && d.status !== 'void' && !d.broken && d.md && (!d.space || d.space === space) && !(d.exam && !usable({ id: d.exam }, reserve)));
+  const held = heldDrillIds(mem.sessions || []);
+  const drills = (m.drills || []).filter((d) => d && !held.has(d.id) && d.status !== 'void' && !d.broken && d.md && (!d.space || d.space === space) && !(d.exam && !usable({ id: d.exam }, reserve)));
   if (!drills.length) return { items: [], reviews: [] };
   const hist = drillHistory(mem.evidence || []);
   const solved = resolvedErrors(m);
@@ -254,7 +260,8 @@ export function reviewPendings(results, { session = null, date = toDate(Date.now
  * rows：drillOutcome 的 rows；drills：题库的文档；answers：{ 题库编号: 最后写的 }（给老师看学生是怎么答的）
  */
 export function drillPack(rows, drills, { answers = {}, mem = {} } = {}) {
-  const bad = rows.filter((x) => ['wrong', 'giveup', 'ok'].includes(x.outcome) || x.sure === false);
+  const held = heldDrillIds(mem.sessions || []);
+  const bad = rows.filter((x) => !held.has(x.id) && (['wrong', 'giveup', 'ok'].includes(x.outcome) || x.sure === false));
   if (!bad.length) return null;
   const blocks = [...new Set(bad.map((x) => x.block).filter(Boolean))];
   const cur = (mem.curriculum || []).filter((c) => blocks.includes(String(c.id)));

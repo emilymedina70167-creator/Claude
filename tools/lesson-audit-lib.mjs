@@ -1,3 +1,4 @@
+import { laterLine } from '../kit/src/memory/holds.js';
 // 量真课（纯函数，不碰文件系统）：一节课按分钟看——老师写了多少字、停了几次、
 // 学生第几分钟第一次有要想的产出、最长被动了多久。读文件的是 tools/lesson-audit.mjs。
 export const FAST_S = 15;          // 封闭作答离上一件事不到这么多秒就对了：当成白停
@@ -86,7 +87,7 @@ function activeGaps(times) {
   return { ts, gaps };
 }
 
-export function auditLesson({ session = {}, turns = [], evidence = [] } = {}) {
+export function auditLesson({ session = {}, turns = [], evidence = [], report = null } = {}) {
   // 早期的课没有 kind 字段：按黑板课量；一问一答（talk）老师的字照黑板课数
   const kind = session.kind === 'stage' ? 'stage' : session.kind === 'talk' ? 'talk' : 'class';
   const teach = turns.filter((t) => t.role === 'claude' && !t.discarded && !t.pending);
@@ -156,7 +157,7 @@ export function auditLesson({ session = {}, turns = [], evidence = [] } = {}) {
     },
     asks: { self: evs.filter(isSelfAsk).length },
     open: { count: evs.filter(isOpenEv).length },
-    aims: null, later: null,
+    aims: report?.aims || session.aims || null, later: session.later || null,
   };
 }
 
@@ -169,6 +170,8 @@ export function auditText(audits) {
     `  时长 ${f(a.minutes, ' 分钟')}；老师 ${a.teacher.turns} 轮、${a.teacher.chars} 字（每分钟 ${f(a.teacher.charsPerMin)} 字）；出第一个字 ${f(a.teacher.firstS, ' 秒')}、写完 ${f(a.teacher.writeS, ' 秒')}、一共等了 ${f(a.teacher.waitMin, ' 分钟')}`,
     `  停了 ${a.stops.total} 次（白停 ${a.stops.wasted}）${Object.keys(a.stops.byKind).length ? '：' + Object.entries(a.stops.byKind).map(([k, v]) => `${k}×${v}`).join(' ') : ''}`,
     `  学生要想的产出 ${a.produce.count} 次；第一次在第 ${f(a.produce.firstMin)} 分钟；最长被动 ${f(a.produce.longestPassiveMin, ' 分钟')}；产出花了 ${f(a.produce.minutes, ' 分钟')}`,
+    `  要拿下的事：${a.aims?.map(x => x.can).join('；') || '没记'}`,
+    `  课后验：${laterLine(a.later) || '还没验'}`,
     `  自己发起的问 ${a.asks.self} 次；没被页面判的自由作答 ${a.open.count} 次`,
   ].join('\n')).join('\n\n');
 }

@@ -18,7 +18,7 @@ import { guardDebrief, buildCorpus } from './guard.js';
 import { recheck as sentryRecheck, recheckText, workOrder } from './sentry.js';
 import { guardDb } from './writer.js';
 import { subjectOf as holdSubject } from './space.js';
-import { HOLD_MAX, needsHolds, pickHolds, holdBrief, holdDocs } from './holds.js';
+import { HOLD_MAX, needsHolds, pickHolds, holdBrief, holdDocs, dueHolds } from './holds.js';
 import { aimId, checkAims } from '../class/aims.js';
 import { checkProblems } from './labdesk.js';
 import { componentDoc } from '../subject.js';
@@ -42,7 +42,7 @@ import { readOnlyDb } from './session.js';
 import { SPACES, SPACE_KEYS, DEFAULT_SPACE, filterSpace, spaceOfDoc, spaceOfId, subjectOf, positionId, packIds, prefixOf } from './space.js';
 import { dueList, addDays } from './schema.js';
 import { masteryProposals, masteryPendingWrites } from './mastery.js';
-import { pickDrills, harvestDrills, drillLine, DRILL_N } from './drills.js';
+import { pickDrills, harvestDrills, drillLine, DRILL_N, heldDrillIds } from './drills.js';
 import { enterDrill, closeDrill } from './drillrun.js';
 import { recallToday, spaceCounts } from './recall.js';
 import { applyTheme, isAuto } from '../theme.js';
@@ -172,6 +172,7 @@ export async function renderDesk(root, meta) {
     <section class="dk-card dk-score" hidden aria-label="410 分"></section>
     <section class="dk-group" aria-label="今天"><h2 class="dk-grp-h">今天</h2><div class="dk-card dk-rows"></div></section>
     <div class="dk-drawer" hidden>
+    <div class="dk-part dk-later" hidden><h2 class="dk-h">验上次学的</h2><div class="dk-body"></div></div>
     <div class="dk-part dk-today" hidden><h2 class="dk-h">复现</h2><div class="dk-body"></div></div>
     <div class="dk-part dk-next" hidden><h2 class="dk-h">下一步学什么</h2><p class="dk-sub muted">按 410 分里每一块还能攒多少分排，页面算的。</p><div class="dk-body"></div></div>
     <div class="dk-part dk-recall" hidden><h2 class="dk-h">要记的</h2><p class="dk-sub muted">先写出来，再看答案。隔 1、3、7、14、30 天各想一遍。</p><div class="dk-body"></div><details class="dk-fold dk-radd"><summary><span class="muted">自己加一条</span></summary><div class="dk-radd-f"></div></details></div>
@@ -216,6 +217,7 @@ export async function renderDesk(root, meta) {
   // 页面只写自己的 meta（自检结果、指纹）：写之前按记忆库的规矩拦一道
   const put = (coll, id, data) => { assertWrite('page', coll); return db.doc(`${coll}/${id}`).set(data); };
 
+  const laterReports = new Map();
   const data = Object.fromEntries(MEMORY_COLLECTIONS.map((c) => [c, []]));
   // 改记忆（掌握直接写、我改记忆、撤销）：放在订阅前面，第一次自检算出掌握时就用得上
   const ops = createMemOps({ db, mem: () => data });
@@ -306,7 +308,7 @@ export async function renderDesk(root, meta) {
   const inline = (s) => { try { return mdToHtml(String(s ?? ''), { inline: true }); } catch { return escapeHtml(String(s ?? '')); } };
   const fixing = new Set(); // 正在写报告的课
   let opening = false; // 正在开一节（开新课、复现课、练一练、课前热身）：写进去那几秒首页会重画，按钮别再能点出第二节
-  const OPENERS = '.dk-new, .dk-review, .dk-drill-go, .dk-warm';
+  const OPENERS = '.dk-new, .dk-review, .dk-drill-go, .dk-warm, .dk-later-go';
   /** 开一节（写 sessions、整页跳过去）：同一时间只开一节，失败了放开按钮 */
   async function openOne(make) {
     if (opening) return;
@@ -346,6 +348,11 @@ export async function renderDesk(root, meta) {
         // 这次打开首页每节只接着删一次（没删完的——过账没成、有一条删不掉——下次打开再试，不在订阅里一直转）
         for (const d of data.sessions) if ((d.deleting || purging.has(d.id)) && !purgeRunning.has(d.id) && !purgeResumed.has(d.id)) { purgeResumed.add(d.id); setTimeout(() => runPurge(d.id), 0); }
         data.sessions = data.sessions.filter((d) => !d.deleting && !purging.has(d.id));
+      }
+      if (c === 'sessions') for (const s of data.sessions.filter(s => s.aims?.length).sort((a,b) => (b.startedAt || 0) - (a.startedAt || 0)).slice(0,5)) {
+        if (laterReports.get(s.id)?.at === s.report?.at) continue;
+        laterReports.set(s.id, { at: s.report?.at });
+        scopeDb(db, s.id).doc('report/main').get().then(r => { if (r.exists) laterReports.set(s.id, { at: s.report?.at, report: r.data() }); }).catch(() => {});
       }
       loaded.add(c);
       failed.delete(c);
@@ -439,7 +446,7 @@ export async function renderDesk(root, meta) {
       next = Object.fromEntries(Object.entries(top).map(([k, xs]) => [k, (xs || []).map((x) => ({ title: plainTitle(x.title) || x.title, why: x.why }))]));
     } catch (err) { reportError(err, { what: '班主任的预测分没算出来', soft: true }); }
     return headSystem({
-      asks: data.asks || [], today, version: VERSION, forecast: fc, next,
+      sessions: data.sessions.map(s => ({ ...s, aimReport: laterReports.get(s.id)?.report })), asks: data.asks || [], today, version: VERSION, forecast: fc, next,
       week: weekLines(data, { today }), target: targetOf(data), examDays: daysLeft(today, examDate()),
       briefs: SPACE_KEYS.map((k) => ({ space: k, text: deskBrief(data, { space: k, today, pack: packs[k].main?.usedBy ? null : packs[k].main, books: booksView.books(), forHead: true }).text })),
     });
@@ -931,7 +938,8 @@ export async function renderDesk(root, meta) {
   function paintDrill(today) {
     const box = $('.dk-drill');
     const pick = pickDrills(data, { space, today });
-    const n = data.drills.filter((d) => d.status !== 'void' && !d.broken && (!d.space || d.space === space)).length;
+    const held = heldDrillIds(data.sessions);
+    const n = data.drills.filter((d) => !held.has(d.id) && d.status !== 'void' && !d.broken && (!d.space || d.space === space)).length;
     // 题库还是空的：整张卡不出现（首页只放现在点得动的东西）
     box.hidden = !n;
     box.querySelector('.dk-body').innerHTML = !pick.items.length
@@ -1096,7 +1104,7 @@ export async function renderDesk(root, meta) {
       const cur = await current();
       if (!cur || !needsHolds(cur)) return;
       const reserve = await readReserve(db, toDate(Date.now()));
-      ids = pickHolds({ session: cur, drills: data.drills, evidence: data.evidence, reserve });
+      ids = pickHolds({ session: cur, drills: data.drills, evidence: data.evidence, reserve, sessions: data.sessions });
       const n = Math.min(HOLD_MAX, cur.aims.length);
       // 先记试过：页面在调用中关掉，也不会下次永远当第一次试。
       assertWrite('page', 'sessions');
@@ -1456,6 +1464,7 @@ export async function renderDesk(root, meta) {
   // 那几段的内容还是原来那几个函数画的（paint、paintRecall、paintDrill、paintManual），平时收在藏着的抽屉（.dk-drawer）里，
   // 打开时整段搬进面板、关上搬回去：做的事、数据一点没变
   const ROWS = {
+    later: { title: '验上次学的', ic: 'is-review' },
     today: { title: '复现', ic: 'is-review' },
     recall: { title: '要想起来的', ic: 'is-recall' },
     drill: { title: '练一练', ic: 'is-drill' },
@@ -1491,19 +1500,22 @@ export async function renderDesk(root, meta) {
   function paintRows(today = toDate(Date.now())) {
     const box = $('.dk-rows');
     if (!box) return;
+    const later = dueHolds(data.sessions, today)[0];
+    paintLater(today);
     const groups = todayReviews(data, { today });
     const nrev = groups.reduce((n, g) => n + g.total, 0);
     const rc = recallToday(data.recall, { today });
     const dpick = $('.dk-drill').hidden ? null : pickDrills(data, { space, today });
     const sub = {
+      later: later ? `${plainTitle(later.title) || '上一节课'} · ${later.holds.ids.length} 道` : '',
       today: nrev ? groups.map((g) => `${g.subject} ${g.total} 组`).join('，') : '今天没有要复现的',
       recall: rc.total ? `${spaceCounts(rc.bySpace)}。先写出来，再看答案` : '今天没有要想的',
       drill: dpick ? (dpick.items.length ? `挑好了 ${dpick.items.length} 道，不同块混着做` : '题库里的题最近都做对过') : '',
       manual: '在学习台外面做的题，写一句或贴张图',
       next: nextLine(),
     };
-    const n = { today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null, next: null };
-    const keys = Object.keys(ROWS).filter((k) => k !== 'drill' || dpick);
+    const n = { later: later?.holds.ids.length || 0, today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null, next: null };
+    const keys = Object.keys(ROWS).filter((k) => (k !== 'drill' || dpick) && (k !== 'later' || later));
     box.innerHTML = keys.map((k) => `<button type="button" class="dk-trow" data-row="${k}" data-menu="${k}"><span class="dk-ic ${ROWS[k].ic}${n[k] === 0 ? ' is-zero' : ''}"${n[k] === null ? '' : ' data-count'}>${n[k] === null ? '+' : rowCounts[k] ?? n[k]}</span><b>${ROWS[k].title}</b><small>${escapeHtml(sub[k])}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('');
     // 数字变了：往上滚过去（第一次画不滚）
     for (const k of keys) {
@@ -1513,6 +1525,22 @@ export async function renderDesk(root, meta) {
       rowCounts[k] = n[k];
     }
     panels.resync();
+  }
+  function paintLater(today) {
+    const box = $('.dk-later .dk-body');
+    const x = dueHolds(data.sessions, today)[0];
+    box.innerHTML = x ? `<p>${escapeHtml(plainTitle(x.title) || '上一节课')} · ${x.holds.ids.length} 道</p><button type="button" class="btn btn-primary dk-later-go">开始</button>` : '<p class="muted">今天没有要验的课。</p>';
+    box.querySelector('.dk-later-go')?.addEventListener('click', () => openOne(async () => {
+      // 点开面板后日子、数据可能变了，再取当前最早的一节。
+      const cur = dueHolds(data.sessions, toDate(Date.now()))[0];
+      if (!cur) return '';
+      const active = data.sessions.find(s => s.kind === 'drill' && s.hold === cur.id && s.status === 'open');
+      if (active) return active.id;
+      const sid = sessionId(toDate(Date.now()), takenIds());
+      assertWrite('page', 'sessions');
+      await db.doc(`sessions/${sid}`).set({ kind: 'drill', date: toDate(Date.now()), space: cur.space || spaceOfId(cur.block), block: cur.block || null, items: cur.holds.ids, hold: cur.id, title: '验上次学的', status: 'open', startedAt: Date.now(), reviews: [] });
+      return sid;
+    }));
   }
   function openRow(row, then) {
     const k = row.dataset.row;
@@ -1668,6 +1696,7 @@ export async function renderDesk(root, meta) {
       return [go ? { text: '接着上课', icon: 'play', run: () => go.click() } : { text: '开新课', icon: 'play', run: clickIn('.dk-class .dk-new') },
         $('.dk-prepfold') && { text: '让 Claude 备课', icon: 'spark', run: () => { const f = $('.dk-prepfold'); f.open = true; f.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }].filter(Boolean);
     }
+    if (k === 'later') return [{ text: '开始', icon: 'play', run: () => openRow(row('later'), sec => sec.querySelector('.dk-later-go')?.click()) }];
     if (k === 'today') return [$('.dk-today .dk-review') && { text: '开复现课', icon: 'play', run: clickIn('.dk-today .dk-review') }, { text: '看到期的', icon: 'list', run: () => openRow(row('today')) }].filter(Boolean);
     if (k === 'recall') return [$('.dk-recall .dk-recall-go') && { text: '开始想', icon: 'play', run: () => openRow(row('recall'), (sec) => sec.querySelector('.dk-recall-go')?.click()) }, { text: '自己加一条', icon: 'plus', run: () => openRow(row('recall'), (sec) => { const f = sec.querySelector('.dk-radd'); if (f) f.open = true; }) }].filter(Boolean);
     if (k === 'drill') return [$('.dk-drill .dk-drill-go') && { text: '开始练', icon: 'play', run: clickIn('.dk-drill .dk-drill-go') }, { text: '看挑了哪几道', icon: 'list', run: () => openRow(row('drill')) }].filter(Boolean);

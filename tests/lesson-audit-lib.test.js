@@ -85,3 +85,11 @@ test('产出花的时间用 ms 合计', () => {
     { id: 'p2', session: 'c-10', src: 'record', kind: 'parse', ok: false, ms: 30_000, at: T0 + min }] });
   assert.equal(b.produce.minutes, 1.5);
 });
+
+test('课后目标和测验结果来自报告与课文档', () => {
+ const aims = [{ id: 'a1', can: '计算缺页次数' }], later = { n: 2, right: 1, days: 1, far: { n: 1, right: 0 } };
+ assert.deepEqual(auditLesson({ session: { aims, later } }).aims, aims);
+ assert.deepEqual(auditLesson({ session: { aims, later } }).later, later);
+ const report = { aims: [{ ...aims[0], status: 'solo', n: 2 }] };
+ assert.deepEqual(auditLesson({ session: { aims }, report }).aims, report.aims);
+});

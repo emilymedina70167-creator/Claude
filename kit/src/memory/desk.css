@@ -1024,3 +1024,7 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 .dk-exin-bad ul { margin: 0 0 6px; padding-left: 20px; }
 .dk-exin-bad li { margin: 4px 0; overflow-wrap: anywhere; }
 .dk-exin-bad p { margin: 0 0 8px; font-size: 13.5px; }
+
+/* 沿用今天的行和按钮；Pencil、手指都留足点击的地方。 */
+.dk-later-go{min-height:44px}
+.dk-later-result{line-height:1.6}

@@ -1,3 +1,4 @@
+import { laterLine, aimLines } from '../memory/holds.js';
 // 班主任（第十一轮 B1，docs/superpowers/specs/2026-11-14-round11-design.md 第十三节）：学习台首页上的总 Claude，
 // 相当于学生在 claude.ai 项目里的那个 Claude，只不过整个学习台都在它手边。这里是每一轮发给它的说明（纯函数，页面拼好材料传进来）：
 // 它是谁和三条底线 → 学生的要求（全文）→ 考试 → 预测分 → 下一步学什么 → 这一周 → 三科的开场简报 → 怎么查、怎么改记忆。
@@ -62,7 +63,7 @@ ${String(MEMO_DOC).trim()}`;
  * forecast：{ total: { median, lo, hi }, pass, measured, goal, subjects: [{ label, median, lo, hi, target }] }（没有就不写）；
  * next：{ math: [{ title, why }], cs: …, en: … }；week：[{ text }]；target：考试档案（targetOf）；examDays：距初试几天
  */
-export function headSystem({ asks = [], briefs = [], forecast = null, next = {}, week = [], target = null, examDays = null, today = '', version = '', max = HEAD_MAX } = {}) {
+export function headSystem({ sessions = [], asks = [], briefs = [], forecast = null, next = {}, week = [], target = null, examDays = null, today = '', version = '', max = HEAD_MAX } = {}) {
   const live = (asks || []).filter((a) => a && (a.status || 'active') === 'active')
     .sort((a, b) => (Number(b.broken) || 0) - (Number(a.broken) || 0) || String(a.id).localeCompare(String(b.id), 'en', { numeric: true }));
   const askLine = (a) => {
@@ -91,6 +92,7 @@ export function headSystem({ asks = [], briefs = [], forecast = null, next = {},
     asksText,
     examText,
     fcText,
+    sessions.some(s => s.aims?.length) ? '## 最近几节课要拿下的事和课后验的结果\n\n' + sessions.filter(s => s.aims?.length).sort((a,b) => (b.startedAt || b.endedAt || 0) - (a.startedAt || a.endedAt || 0)).slice(0,5).map(s => `- ${one(s.title || '这节课', 80)}：${aimLines(s, s.aimReport).join('；')}\n  ${laterLine(s.later) || '还没验'}`).join('\n') : '',
     nextText ? `## 下一步学什么（页面按每块还能多拿几分排的，前几块）\n\n${nextText}` : '',
     weekText ? `## 这一周\n\n${weekText}` : '',
   ].filter(Boolean);

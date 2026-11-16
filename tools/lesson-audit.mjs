@@ -24,6 +24,7 @@ const sessions = readColl(join(dir, 'sessions'))
   .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 const audits = sessions.map((s) => auditLesson({
   session: s,
+  report: readColl(join(dir, 'sessions', s.id, 'report')).find(r => r.id === 'main') || null,
   turns: readColl(join(dir, 'sessions', s.id, 'class_turns')).sort((a, b) => (a.seq || 0) - (b.seq || 0)),
   evidence,
 }));

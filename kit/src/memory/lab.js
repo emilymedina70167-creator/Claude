@@ -1,3 +1,4 @@
+import { heldDrillIds } from './drills.js';
 // 云端教研室（docs/lab-plan.md）里不碰 DOM、不碰数据库的部分，有测试（tests/memory-lab.test.js）。
 //
 // 分工：学习台（页面）按工作单 meta/workorder 把要做的活写成**工作单子** lab_brief/{编号}——每一张自带完整的说明和材料
@@ -290,7 +291,8 @@ export function problemsMaterial(mem, item, { docs = '' } = {}) {
   const blocks = list(t.blocks).map(String);
   if (!blocks.length) return null;
   const subject = subjectOf(blocks[0]);
-  const originals = (mem.drills || []).filter((d) => d && d.status !== 'void' && blocks.includes(String(d.block || '')));
+  const held = heldDrillIds(mem.sessions || []);
+  const originals = (mem.drills || []).filter((d) => d && !held.has(d.id) && d.status !== 'void' && blocks.includes(String(d.block || '')));
   // 冲着真错过的出：挂在它上面的错题；复现组还看它挂的弱点上的错题；都没有时用这几块里没解决的
   const weak = isReview ? list(t.weaknesses).map((id) => (mem.weaknesses || []).find((w) => String(w.id) === String(id))).filter(Boolean) : [t];
   const errIds = new Set([...list(t.errors), ...weak.flatMap((w) => list(w.errors))].map(String));

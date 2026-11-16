@@ -2,6 +2,8 @@
 // 挑题、结果、复现组的提议、开课的资料包都在 drills.js（纯函数）；这里是画面：一次一道，做完看小结。
 // 作答照常进证据（组件 id 就是题库编号，按它对回块和知识点），掌握由首页照常算（mastery.js）。
 // 题目上不写是哪一块（混练要自己认出该用什么方法），判出对错以后才告诉你。
+import { writeLater } from './holds.js';
+import { heldDrillIds } from './drills.js';
 import { renderLesson, escapeHtml, mdToHtml } from '../render.js';
 import { session } from '../session.js';
 import { toast } from '../record.js';
@@ -27,7 +29,7 @@ export async function closeDrill(db, sid, { doc, drills = null, curriculum = nul
   }
   if (!curriculum) curriculum = rows(await db.collection('curriculum').get().catch(() => null));
   const evidence = rows(await db.collection('evidence').where('session', '==', sid).get().catch(() => null));
-  const mem = { reviews: rows(await db.collection('reviews').get().catch(() => null)), errors: rows(await db.collection('errors').get().catch(() => null)), curriculum };
+  const mem = { sessions: rows(await db.collection('sessions').get()), reviews: rows(await db.collection('reviews').get().catch(() => null)), errors: rows(await db.collection('errors').get().catch(() => null)), curriculum };
   // 教研室出的新题（src: lab）：以前别的课里没做过，这一次才算新题（复现组能升档）；做过的就是原题了
   const fresh = new Set();
   // 舞台题（src: stage）不算新题：换了数也是「原题换数」（我的规则 rule-rev-2），都做对档位不动，做错照样记没过
@@ -39,6 +41,8 @@ export async function closeDrill(db, sid, { doc, drills = null, curriculum = nul
   const res = drillOutcome({ drills, evidence, mem, reviews: Array.isArray(doc.reviews) ? doc.reviews : [], fresh });
   const today = toDate(Date.now());
   if (!readOnly && doc.status !== 'closed') {
+    await writeLater(db, { ...doc, id: sid }, res.rows, { drills, today });
+    mem.sessions = rows(await db.collection('sessions').get());
     const ops = createMemOps({ db, mem: () => mem });
     for (const p of reviewPendings(res.reviewResults, { session: sid, date: today, mem })) await ops.applyNow({ id: p.id, ...p.doc }).catch(() => {});
     assertWrite('page', 'sessions');
@@ -57,7 +61,8 @@ export async function enterDrill(root, meta, { db, store, sid, doc, readOnly = f
   const rows = (snap) => (snap ? snap.docs.map((d) => ({ id: d.id, ...d.data() })) : []);
   const ids = Array.isArray(doc.items) ? doc.items.map(String) : [];
   const all = rows(await db.collection('drills').get().catch(() => null));
-  const drills = ids.map((id) => all.find((d) => d.id === id)).filter(Boolean);
+  const held = heldDrillIds(rows(await db.collection('sessions').get()));
+  const drills = ids.map((id) => all.find((d) => d.id === id)).filter(d => d && (readOnly || doc.hold || !held.has(d.id)));
   const byId = new Map(drills.map((d) => [d.id, d]));
   const curriculum = rows(await db.collection('curriculum').get().catch(() => null));
   const titleOf = (b) => curriculum.find((c) => String(c.id) === String(b))?.title || '';
@@ -179,9 +184,10 @@ export async function enterDrill(root, meta, { db, store, sid, doc, readOnly = f
     const { res, mem, doc: after } = await closeDrill(db, sid, { doc, drills, curriculum, readOnly, writeReport });
     doc = after;
     const clean = res.rows.filter((x) => x.clean).length;
+    const submitted = res.rows.filter(x => !['skip', 'open'].includes(x.outcome)).length;
     const groupName = (id) => String(mem.reviews.find((r) => String(r.id) === id)?.title || id);
     out.innerHTML = `
-      <h2 class="dk-h">做完了：${clean} / ${res.rows.length} 道一次对</h2>
+      <h2 class="dk-h">${doc.hold && submitted < res.rows.length ? `这次交了 ${submitted} 道，留题还没做完` : `做完了：${clean} / ${res.rows.length} 道一次对`}</h2>
       <div class="dr-rows">${res.rows.map((x, i) => `<div class="dk-row"><b>${i + 1}</b><span>${titleOf(x.block) ? mdToHtml(titleOf(x.block), { inline: true }) : escapeHtml(x.block)}　<span class="muted">${mdToHtml(String(byId.get(x.id)?.title || '').slice(0, 60), { inline: true }) || escapeHtml(String(x.q).replace(/\\[a-zA-Z]+/g, '').slice(0, 60))}</span></span><em class="${x.clean ? 'dr-ok' : 'dr-bad'}">${escapeHtml(TEXT[x.outcome] || x.outcome)}${x.sure === false ? '（没把握）' : ''}</em></div>`).join('')}</div>
       ${res.reviewResults.length ? `<p>复现组：${res.reviewResults.map((r) => `${escapeHtml(groupName(r.id))} 没过（下次 ${r.tier} 天后）`).join('；')}，已经记下了。</p>` : ''}
       ${res.practiced?.length ? `<p class="muted">${res.practiced.map((r) => escapeHtml(groupName(r.id))).join('、')}：原题都对了。练一练的题是课上的原题，不算复现通过——要在「今天复现」里做新题才算。</p>` : ''}
