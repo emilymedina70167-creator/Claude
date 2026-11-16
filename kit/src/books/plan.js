@@ -6,7 +6,10 @@
 import { rehearsalText } from './rehearse.js';
 import { chunkLine, chunkText } from './textbook.js';
 import { fixLatexEscapes } from './ingest.js';
-import { spaceOfDoc, spaceOfId } from '../memory/space.js';
+import { spaceOfDoc, spaceOfId, sharedFor } from '../memory/space.js';
+import { memoryDigest } from '../memory/digest.js';
+import { activeLessons } from '../memory/memo.js';
+import { summaryOn } from '../memory/summary.js';
 
 const one = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const list = (v) => (Array.isArray(v) ? v : v === undefined || v === null || v === '' ? [] : [v]).map(String);
@@ -128,7 +131,26 @@ export function openTodos(mem = {}, space = '', done = []) {
 }
 
 // exam：这一块的考情（exam/context.js 拼的，备课用 8 KiB 的预算）；有的话教案多一个 examBar：这节课结束时学生要能做的那道真题
-export function prepPrompt({ block, material = [], books = [], memoryText = '', rulesText = '', components = [], subject = '', recent = '', due = '', lessons = '', todos = [], exam = '' }) {
+/**
+ * 备课要带的记忆材料（首页「让 Claude 备课」和教研室的备课单子共用）。
+ * 以前除了记忆那一节，还把全部规则、全部教学守则另外塞给备课的模型（「备课时就要照着做」）。
+ * 有记忆摘要以后（第十三轮）这两样不再塞：教案照旧规矩写、教案进资料包、老师照教案上课，旧规矩就绕了一圈回到课上。
+ * 这时记忆那一节里已经是摘要加「记录的制度」（use: 'all'）。没有摘要的记忆库和以前逐字一样。
+ * 返回 { memoryText, rulesText, lessons, summary }
+ */
+export function prepMemory(data = {}, { block = '', space = '', today = '' } = {}) {
+  const memoryText = memoryDigest(data, { block, budget: 24 * 1024, tools: false, ...(today ? { today } : {}), use: 'all' }).text;
+  if (summaryOn(data)) return { memoryText, rulesText: '', lessons: '', summary: true };
+  return {
+    memoryText,
+    rulesText: sharedFor(data.rules, space).filter((r) => r.status !== 'void').map((r) => `- ［${r.cat || ''}］${r.text}`).join('\n'),
+    lessons: activeLessons(data.lessons, space).map((l) => `- ${l.id} ${l.text}`).join('\n'),
+    summary: false,
+  };
+}
+
+// summary：有记忆摘要（prepMemory 给的）。这时不写「学生的规则」那一节（不然会印一行「（没有）」，像是规则丢了）
+export function prepPrompt({ block, material = [], books = [], memoryText = '', rulesText = '', components = [], subject = '', recent = '', due = '', lessons = '', todos = [], exam = '', summary = false }) {
   const b = block || {};
   return [
     '你是这个学生的老师，现在给下一节课备课。备好的教案交给课堂里的 Claude（也是 Opus 5.5）在学习台里照着上：它每一轮都会带着教案、学生的记忆和组件说明，现场写黑板、出题、判断学生懂没懂。它上课时来不及把整节的材料从头读一遍，所以**要讲的规则、讲的顺序、每道题用到什么，都在这里想好**：课上现编，就会出现「题目用到了没讲过的规则、学生撞墙后才补」。',
@@ -145,8 +167,7 @@ export function prepPrompt({ block, material = [], books = [], memoryText = '', 
     b.transcript ? `\n### 这一块的文稿原文（课程地图里存的）\n${String(b.transcript).slice(0, 20000)}` : '',
     '',
     exam ? `## 这一块在考试里（页面从入库的真题算的：考情的数字只用这里的）\n${exam}\n` : '',
-    '## 学生的规则（全部，包括备课和资料包的规矩）',
-    rulesText || '（没有）',
+    ...(summary ? [] : ['## 学生的规则（全部，包括备课和资料包的规矩）', rulesText || '（没有）']),
     lessons ? `\n## 教学守则（以前上课的失误归纳出来的，备课时就要照着做）\n${lessons}` : '',
     '',
     '## 学生的记忆（和这一块有关的全文 + 其余的目录）',

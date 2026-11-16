@@ -5,7 +5,7 @@
 import { escapeHtml, mdToHtml } from '../render.js';
 import { toast } from '../record.js';
 import { assertWrite, toDate, dueList } from '../memory/schema.js';
-import { mapPrompt, parseMap, mapDoc, prepPrompt, parsePrep, parsePages, openTodos } from './plan.js';
+import { mapPrompt, parseMap, mapDoc, prepPrompt, prepMemory, parsePrep, parsePages, openTodos } from './plan.js';
 import { loadBooks } from './importer.js';
 import { blockChunks, chunkLine, chunksByPages, normalizeBooks } from './textbook.js';
 import { memoryDigest } from '../memory/digest.js';
@@ -112,8 +112,10 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     const subject = subjectOf(blockId);
     const today = toDate(Date.now());
     // 记忆：和课堂里带的同一份（全文 + 目录）；规则：全部（备课和资料包的规矩是给对话里的 Claude 的，现在备课的就是它的活）
-    const mem = memoryDigest(data, { block: blockId, budget: 24 * 1024, tools: false, today, use: 'all' });
-    const rules = sharedFor(data.rules, sp).filter((r) => r.status !== 'void').map((r) => `- ［${r.cat || ''}］${r.text}`).join('\n');
+    // 有记忆摘要时不再另塞规则和守则（plan.js 的 prepMemory）
+    const pm = prepMemory(data, { block: blockId, space: sp, today });
+    const mem = { text: pm.memoryText };
+    const rules = pm.rulesText;
     const recent = data.sessions.filter((s) => s.status === 'closed' && s.report?.line).sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0)).slice(0, 3).map((s) => `- ${s.id}（${s.block || ''}）：${s.report.line}`).join('\n');
     const components = [...new Set([...CORE_COMPONENTS, ...allNames(COMPONENT_DOCS, subject)])];
     // 到期的复现组（这一科的）：从没复现过的、上次没过的在前，再按过期久排；教学守则全带
@@ -122,7 +124,7 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     const due = dueList(mine.reviews, today).filter((d) => d.days <= 0)
       .map((d) => ({ ...d, r: revs.get(d.id) })).sort((a, b) => reviewRank(a.r) - reviewRank(b.r) || a.days - b.days);
     const dueText = due.map((d) => `- ${d.id} ${d.title}（${d.days < 0 ? `过期 ${-d.days} 天` : '今天到期'}；${d.r?.result ? `上次${d.r.result}` : '从没复现过'}${d.r?.content?.length ? `；内容：${[].concat(d.r.content).slice(0, 3).join('；')}` : ''}）`).join('\n');
-    const lessons = activeLessons(data.lessons, sp).map((l) => `- ${l.id} ${l.text}`).join('\n');
+    const lessons = pm.lessons;
     // 上课时记下的待办（学生问了教案以外的）：还没补的带上，补上了的记进 meta/todos（页面自己的）
     const todoSnap = await db.doc('meta/todos').get().catch(() => null);
     const doneTodos = todoSnap?.exists ? (todoSnap.data().done || []) : [];
@@ -133,7 +135,7 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     const info = ex ? examForBlock({ block: blockId, exam: ex, years }) : null;
     const exam = info ? examForClass({ target: targetOf(data), info, bar: (data.exam_bar || []).find((b) => b.id === blockId) || null, today, budget: 8 * 1024 }) : '';
     const examIds = info ? [...info.reps, ...info.rest].map((q) => q.id) : null;
-    const prompt = prepPrompt({ block, material, books, memoryText: mem.text, rulesText: rules, components, subject, recent, due: dueText, lessons, todos, exam });
+    const prompt = prepPrompt({ block, material, books, memoryText: mem.text, rulesText: rules, components, subject, recent, due: dueText, lessons, todos, exam, summary: pm.summary });
     return { prompt, ctx: { block: blockId, sp, subject, today, range, chunkIds: material.map((c) => c.id), components, reviewIds: due.map((d) => d.id), todos, memoryText: mem.text, ...(examIds ? { examIds } : {}) } };
   }
 
