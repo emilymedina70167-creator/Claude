@@ -9,7 +9,7 @@
 // 撤销了的（status: void、有一条作废的更正指向它）不带；学生标了已解决的错题注明；还在等学生确认的改动单列出来，免得它再提一遍。
 import { weaknessHits, hitText, lessonLines, lessonLinesText, pointCatalog } from './skills.js';
 import { debriefText } from './debrief.js';
-import { voidedIds, resolvedErrors, pendingTitle, absorbedSlips } from './memo.js';
+import { voidedIds, resolvedErrors, pendingTitle, settledSlips } from './memo.js';
 import { filterSpace, spaceOfId, positionId, sharedFor } from './space.js';
 import { dueList, toDate } from './schema.js';
 import { recallLine } from './recall.js';
@@ -201,8 +201,9 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
     .sort((a, b) => (Number(b.lapses) || 0) - (Number(a.lapses) || 0) || cmpId(a.id, b.id));
   sections.push({ coll: 'recall', head: '## 要记的（recall：这几块记过的、老想不起的；学生每天在首页自己想一遍，页面按 1 → 3 → 7 → 14 → 30 天排）', limit: RECALL_FULL, items: recalls.map((k) => ({ key: `recall/${k.id}`, text: recallLine(k, today) })) });
   // 失误：已经归纳进守则的不再带（守则里有了），只带还没归纳的，最近的在前
-  const absorbed = absorbedSlips(mem.lessons);
-  const slips = get('slips').filter((s) => !absorbed.has(String(s.id))).sort(byDate('date'));
+  // 看过了、不归纳的（更正那一条 seen 和它指着的原条）也不带
+  const absorbed = settledSlips(mem);
+  const slips = get('slips').filter((s) => !s.seen && !absorbed.has(String(s.id))).sort(byDate('date'));
   sections.push({ coll: 'slips', head: '## 还没归纳进守则的教学失误（最近的在前；下课时并进守则）', limit: SLIPS_FULL, items: slips.map((s) => ({ key: `slips/${s.id}`, text: `- ${s.id}（${s.date || ''}，${s.by === 'class' ? '课堂里的 Claude' : s.by === 'lab' ? '课后补写的' : '以前对话里的 Claude'}）${one(s.text, 300)}${s.lesson ? ` → ${one(s.lesson, 200)}` : ''}` })) });
   // 还在等学生确认的改动（memo 写的错题、弱点、复现组、位置）：已经提过了，别再提
   const open = (Array.isArray(mem.pending) ? mem.pending : []).filter((p) => p && p.status === 'open').sort((a, b) => (a.at || 0) - (b.at || 0));
@@ -340,8 +341,8 @@ export function memoryCatalog(view, { shown = new Set(), here = view.here, nearI
   }
   const due = dueList(get('reviews'), today);
   if (due.length) parts.push({ head: '复现组', full: due.map((d) => `${d.id} ${one(d.title, 30)}（${d.days < 0 ? `过期 ${-d.days} 天` : d.days === 0 ? '今天到期' : `${d.due.slice(5)} 到期`}）`), short: [due.map((d) => `${d.id}${d.days <= 0 ? '（到期）' : ''}`).join('、')] });
-  const absorbed = absorbedSlips(view.mem.lessons);
-  const slips = get('slips').filter(not('slips')).filter((s) => !absorbed.has(String(s.id))).sort(byDate('date'));
+  const absorbed = settledSlips(view.mem);
+  const slips = get('slips').filter(not('slips')).filter((s) => !s.seen && !absorbed.has(String(s.id))).sort(byDate('date'));
   const lessonsLeft = get('lessons').filter((l) => (l.status || 'active') === 'active').filter(not('lessons'));
   if (lessonsLeft.length) parts.push({ head: '教学守则（没放全文的）', full: lessonsLeft.map((l) => `${l.id} ${one(l.text, 34)}`), short: [lessonsLeft.map((l) => l.id).join('、')] });
   if (slips.length) parts.push({ head: '较早的、还没归纳的教学失误', full: [slips.map((s) => s.id).join('、')], short: [`${slips.length} 条`] });

@@ -62,8 +62,8 @@ export const SUBJECT_FACTS = {
 - 题里能写常见错答（ˋ{{had started|!has started=…}}ˋ、ˋfix: is | !were=…ˋ、ˋdecoys:ˋ），学生写成那样页面给针对的提示、记录里写「页面看出来」；选择式的空 ˋ{{[that=…|*who]}}ˋ。ˋboard markˋ 在英文里能按词找：ˋphrase=ˋ ˋword=ˋ ˋwords=ˋ ˋblank=ˋ。`,
 };
 
-/** 这门课的根本规则：CHARTER、诊断的经验、这门课的事实。科目归类照 prompt.js 的 teachFor：计算机四门、英语、其余算线代 */
+/** 这门课的根本规则：CHARTER、诊断的经验、这门课的事实。科目写的就是三个键之一就用它；否则照 subject.js 归类：计算机四门、英语、其余算线代 */
 export function charterFor(subject) {
-  const facts = SUBJECT_FACTS[subject] ?? (isCS(subject) ? SUBJECT_FACTS.计算机 : isEN(subject) ? SUBJECT_FACTS.英语 : SUBJECT_FACTS.线代);
+  const facts = Object.hasOwn(SUBJECT_FACTS, subject) ? SUBJECT_FACTS[subject] : isCS(subject) ? SUBJECT_FACTS.计算机 : isEN(subject) ? SUBJECT_FACTS.英语 : SUBJECT_FACTS.线代;
   return `${CHARTER}\n\n${DIAGNOSE}\n\n${facts}`;
 }

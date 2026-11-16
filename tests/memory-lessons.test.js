@@ -125,3 +125,30 @@ test('这节课改讲别的块：block id=… 查课程地图、同一科', asyn
   assert.match(blockSwitch(e('block id=L2.1.4'), { mem, block: 'EN-L3.1.1' }).error, /不是这一科/);
   assert.match(blockSwitch(e('block'), { mem }).error, /写 block id=/);
 });
+
+// 守则只收事实和判断上的教训（prompt.js 的 LESSON_NO_FORM）：只关乎形式的失误下课时标「看过了、不归纳」，不硬并进守则
+test('失误看过了、不归纳：status=seen 记一条更正，原条不动；下课不再列、摘要不带；守卫、自检都认', async () => {
+  const { seenSlips, settledSlips } = await import('../kit/src/memory/memo.js');
+  const { guardCandidate } = await import('../kit/src/memory/guard.js');
+  const r = run('slip id=S-1102-1 status=seen why="只关乎形式：一次出了几道题"');
+  assert.ok(!r.error, r.error);
+  const fix = r.mem.slips.find((s) => s.id === 'S-1102-1-s');
+  assert.ok(fix && fix.seen === true && fix.corrects === 'S-1102-1' && /只关乎形式/.test(fix.text));
+  assert.ok(r.mem.slips.find((s) => s.id === 'S-1102-1').text.startsWith('没讲划块'), '原条不动');
+  assert.deepEqual([...seenSlips(r.mem.slips)], ['S-1102-1']);
+  assert.ok(settledSlips(r.mem).has('S-1102-1') && settledSlips(r.mem).has('S-0928-1'));
+  const t = slipsToFold(r.mem, 'en');
+  assert.match(t, /（1 条）/);
+  assert.ok(t.includes('S-1102-2') && !t.includes('S-1102-1'));
+  const d = memoryDigest(r.mem, { block: 'EN-L1.1.1', session: SID, today: TODAY });
+  assert.ok(!d.text.includes('S-1102-1') && !d.text.includes('看过了，不归纳'), '原条和更正都不带');
+  assert.deepEqual(checkMemory(r.mem, { today: TODAY }).problems.filter((p) => !p.soft && p.coll === 'slips'), []);
+  // 守卫：更正照着原条写，不算重复；格式过
+  const g = guardCandidate({ coll: 'slips', id: fix.id, doc: (({ id, ...x }) => x)(fix), author: 'class', session: SID }, { mem: base() });
+  assert.equal(g.verdict, 'accept', JSON.stringify(g.checks));
+  // 再标一次、编了一个没有的、想改原条的话：都不收
+  assert.match(run('slip id=S-1102-1 status=seen why="x"', r.mem).error, /已经处理过了/);
+  assert.match(run('slip id=S-0928-1 status=seen').error, /已经处理过了/);
+  assert.match(run('slip id=S-9999 status=seen').error, /没有 S-9999/);
+  assert.match(run('slip id=S-1102-2 text="改一改"').error, /只能写 status=seen/);
+});

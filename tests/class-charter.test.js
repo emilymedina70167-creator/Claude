@@ -5,11 +5,13 @@ import { defaultRules, memoryRules, buildSystem, PROTOCOL_DOC, buildTalkSystem }
 
 const bytes = (s) => Buffer.byteLength(s);
 test('根本规则连同诊断的经验不超过上限', () => assert.ok(bytes(CHARTER) + bytes(DIAGNOSE) <= CHARTER_MAX, `${bytes(CHARTER) + bytes(DIAGNOSE)}`));
+// 只许降不许涨：上限本身写死在这里，改大常量这条就红
+test('上限只许降不许涨', () => assert.ok(CHARTER_MAX <= 2912, `${CHARTER_MAX}`));
 test('三问、保险四条都在', () => {
   for (const s of ['终点：', '差距：', '动作：', '事实照资料', '不宣布掌握', '这节课要拿下的事开课先告诉学生', '让页面算']) assert.ok(CHARTER.includes(s), s);
 });
 test('不写规定形式、带方向的话', () => {
-  for (const s of ['一次只推进一件事', '停下来等学生', '学生没有作答，就不往下推', '话要短', '给提示，不给答案', '三轮', '必须以', '主要花在', '先让学生动手', '最多']) {
+  for (const s of ['一次只推进一件事', '停下来等学生', '学生没有作答，就不往下推', '话要短', '给提示，不给答案', '三轮', '必须以', '主要花在', '先让学生动手', '最多', '多做', '少停']) {
     assert.ok(!defaultRules('线代').includes(s) && !defaultRules('操作系统').includes(s) && !defaultRules('英语').includes(s), s);
   }
 });
@@ -46,4 +48,41 @@ test('快捷按钮只说明是学生点的，不写怎么接', () => {
   for (const s of ['退一步', '先请学生试试', '缺思路']) assert.ok(!PROTOCOL_DOC.includes(s), s);
   assert.ok(PROTOCOL_DOC.includes('这四句是学生点底下的快捷按钮发来的'));
   assert.ok(!PROTOCOL_DOC.includes('学生跟上了') && PROTOCOL_DOC.includes('一轮写一块'));
+});
+
+// 一问一答、舞台课不再新开，说明一字不改：共用的常量（MEMO_DOC、MSG_QUICK……）谁动了这条就红。
+// 指纹是 2026-11-15 根本规则这一轮之前的说明算的（改了以后核过一字不差）
+test('一问一答、舞台课的说明一字不差（sha256）', async () => {
+  const { createHash } = await import('node:crypto');
+  const { MEMO_DOC } = await import('../kit/src/class/prompt.js');
+  const { buildStageSystem, STAGE_MEMO_DOC } = await import('../kit/src/stage/doc.js');
+  const h = (x) => createHash('sha256').update(x).digest('hex');
+  assert.equal(h(buildSystem({ componentDocs: '', pack: {}, board: '', subject: '线代', talk: true })), '0868cdc33fd60b395ca09aab07a352009fa3dffb884f3c8478786ddefbc402ce', '一问一答 线代');
+  assert.equal(h(buildSystem({ componentDocs: '', pack: {}, board: '', subject: '操作系统', talk: true })), '6c6e75148e3aaf239ffa0118c7a090aa9726a8dd8a982bdf5a75ef2e7cda8285', '一问一答 操作系统');
+  assert.equal(h(buildStageSystem({ pack: {}, subject: '英语', title: '时态' })), 'fb0cbdbc9455169877f55fb546a3f11ff2a8e992ee77627986309ae9a01ad717', '舞台课');
+  assert.equal(h(MEMO_DOC), '1719f974a6ca2327bca4bddea9c43d968a6f1cce7d3e125a2e71bb5374f1e0b1', 'MEMO_DOC');
+  assert.equal(h(STAGE_MEMO_DOC), 'e6f989d1b1a65dc9873dcc22710c694bb02781775cc4a87c817366a3a391d902', '舞台课的 memo 说明');
+});
+test('换板只是版面的限制，不定节奏；add / new 各是干什么的；replace 能照断的那一步改讲解', () => {
+  assert.ok(!PROTOCOL_DOC.includes('下一轮再换新板') && PROTOCOL_DOC.includes('不是节奏的规定') && PROTOCOL_DOC.includes('不由板来定'));
+  assert.ok(PROTOCOL_DOC.includes('不要为了少换板把内容压缩'), '按内容排板那层意思留着');
+  assert.ok(!PROTOCOL_DOC.includes('同一件事时才用') && PROTOCOL_DOC.includes('在当前板上接着写'));
+  assert.ok(PROTOCOL_DOC.includes('照学生断的那一步改原来的讲解'));
+  assert.ok(PROTOCOL_DOC.includes('只是指令格式的示范') && !PROTOCOL_DOC.includes('放好了点「确定」'));
+});
+test('资料包的规则接在根本规则后面', () => {
+  const s = buildSystem({ componentDocs: '', pack: { main: { rules: '只讲例题' } }, board: [], subject: '线代' });
+  assert.ok(s.indexOf('每一刻只问三件事') >= 0 && s.indexOf('每一刻只问三件事') < s.indexOf('这节课的资料包另外定的规则（和上面冲突时以这里为准）：\n\n只讲例题'));
+  assert.ok(s.includes('不宣布掌握'));
+});
+test('下课整理：只关乎形式的失误有出口（标看过了），例子是判断上的', async () => {
+  const { closingPrompt } = await import('../kit/src/class/prompt.js');
+  const c = closingPrompt({ report: '报告', noForm: true });
+  assert.ok(c.includes('status=seen') && c.includes('只关乎形式的除外') && !c.includes('出一组题之前'));
+  const old = closingPrompt({ report: '报告' });
+  assert.ok(!old.includes('status=seen') && old.includes('出一组题之前'), '舞台课那份不变');
+});
+test('黑板课的记忆说明不说按条数挡', async () => {
+  const { CLASS_MEMO_DOC } = await import('../kit/src/class/prompt.js');
+  assert.ok(!CLASS_MEMO_DOC.includes('观察最多 3 条') && CLASS_MEMO_DOC.includes('条数本身不挡'));
 });

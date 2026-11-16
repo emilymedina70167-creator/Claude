@@ -2392,7 +2392,8 @@ export async function renderClass(root, meta, desk = null) {
       },
       ...(desk ? [{
         name: 'slip_note',
-        description: '记一条你自己这节课的教学失误（比如「一次写了三块板没等学生答」「小问的答案就印在板上」），存进学习台的 slips，以后上课会提醒你别再犯。text 写失误，lesson 写下次怎么做。',
+        // 例子是判断上的失误（守则不收形式，prompt.js 的 LESSON_NO_FORM）；一问一答不再新开，工具说明照旧
+        description: `记一条你自己这节课的教学失误（比如${TALK ? '「一次写了三块板没等学生答」' : '「没看清学生写的是哪一格就判了错」'}「小问的答案就印在板上」），存进学习台的 slips，以后上课会提醒你别再犯。text 写失误，lesson 写下次怎么做。`,
         inputSchema: { type: 'object', properties: { text: { type: 'string' }, lesson: { type: 'string' } }, required: ['text'] },
         async execute(input) {
           const text = String(input?.text ?? '').trim().slice(0, 1000);
