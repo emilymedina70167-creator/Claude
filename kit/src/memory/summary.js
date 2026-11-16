@@ -318,3 +318,15 @@ export function retryPrompt({ prompt = '', text = '', over = [], lost = [] } = {
   const why = [over.length ? '太长了' : '', lost.length ? '引号里的话对不上记录' : ''].filter(Boolean).join('，');
   return `${prompt}\n\n## 你上一次写的（${why}）\n\n${text}\n\n${asks}\n照同样的格式再整份输出一遍。`;
 }
+
+// —— 摘要开始有以前备好的教案 ——
+// 备好没上的教案（pack/main…）会在开下一节课时抄进那节课、老师每一轮照着上。摘要开始有以前备的那些，是照当时的规则、守则写的
+// （开头复现几组、一步一块板、练习固定几步……），带进课堂等于旧规矩绕回来。有摘要时这样的教案不再当「备好的下一节」：
+// 数据不删（管理页、备份里都在），首页照没备课的样子开课，要用就重新备一次。
+// 看不出哪天备的（没有 at、updatedAt）不动它。
+export function stalePack(main, mem = {}) {
+  if (!main || !summaryOn(mem)) return false;
+  const since = sinceOf(mem);
+  const at = Number(main.at) || Date.parse(main.updatedAt || '') || 0;
+  return !!since && !!at && at < since;
+}

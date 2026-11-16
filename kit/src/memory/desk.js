@@ -92,6 +92,7 @@ const KIND_NAMES = { card: '题卡', sentence: '句子', array: '一排格子', 
 import { createAideDesk } from '../aide/aidedesk.js';
 import { createSaid } from './saiddesk.js';
 import { createSummary } from './summarydesk.js';
+import { stalePack } from './summary.js';
 import { createSummaryView } from './summaryview.js';
 import { saidTimer } from './said.js';
 import { loadCards, loadBrief } from '../aide/load.js';
@@ -275,11 +276,14 @@ export async function renderDesk(root, meta) {
   // 这一科的记忆（共用的几类全给）；pack 是这一科的资料包
   const sv = () => filterSpace(data, space);
   let pack = packs[space];
+  // 给简报看的「备好的下一节」：没用过、也不是摘要开始有以前照旧规则备的
+  const unusedMain = (k) => (packs[k].main && !packs[k].main.usedBy && !stalePack(packs[k].main, data) ? packs[k].main : null);
   // 还没用过的那份资料包（开过课的算用掉了，见 newClass）
   // 以前（还没有 usedBy 的时候）开过课的教案也算用掉：sessions 里抄着它的 unit、goal、updatedAt，对得上就是同一份
   // （2026-10-28 那份英语教案连着开了 5 节课，后来讲时态了还按第三章、开头 10 分钟复现开）
   const usedBefore = (m) => data.sessions.some((x) => x.pack && x.pack.unit === (m.unit || '') && x.pack.goal === (m.goal || '') && (x.pack.updatedAt ?? null) === (m.updatedAt ?? null));
-  const livePack = () => (pack.main && !pack.main.usedBy && !usedBefore(pack.main) ? pack : { main: null, problems: null });
+  // 有记忆摘要时：摘要开始有以前备的教案是照旧规则写的，不再当「备好的下一节」（summary.js 的 stalePack）
+  const livePack = () => (pack.main && !pack.main.usedBy && !usedBefore(pack.main) && !stalePack(pack.main, data) ? pack : { main: null, problems: null });
   let lastRes = null;
   let daysBody = null; // 开着的「距考研」面板（openDays）
   let scoreBody = null; // 开着的「410 分」面板（openScore）
@@ -457,7 +461,7 @@ export async function renderDesk(root, meta) {
     return headSystem({
       sessions: data.sessions.map(s => ({ ...s, aimReport: laterReports.get(s.id)?.report })), asks: data.asks || [], summaries: data.summary || [], today, version: VERSION, forecast: fc, next,
       week: weekLines(data, { today }), target: targetOf(data), examDays: daysLeft(today, examDate()),
-      briefs: SPACE_KEYS.map((k) => ({ space: k, text: deskBrief(data, { space: k, today, pack: packs[k].main?.usedBy ? null : packs[k].main, books: booksView.books(), forHead: true }).text })),
+      briefs: SPACE_KEYS.map((k) => ({ space: k, text: deskBrief(data, { space: k, today, pack: unusedMain(k), books: booksView.books(), forHead: true }).text })),
     });
   }
   const head = createHead({ db, getData: () => data, ops, ai: deskAI, said: saidDesk, summary: sumDesk, system: headCtx });
@@ -497,7 +501,7 @@ export async function renderDesk(root, meta) {
     // 学生卡还没读到：先读，读到了再拼工作单（不然按章合并的单子会被当成没了撤掉）
     if (!aideDesk.cards()) { aideDesk.ensureCards().then(() => runSentry(today), () => {}); return; }
     const re = sentryRecheck(data);
-    const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: packs[k].main }])), re, exam: examMeta, cards: aideDesk.cards() });
+    const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: stalePack(packs[k].main, data) ? null : packs[k].main }])), re, exam: examMeta, cards: aideDesk.cards() });
     const doc = { v: 1, items, recheck: Object.fromEntries(SPACE_KEYS.map((k) => [k, recheckText(re, k)])), stale: re.stale.length, maybeSolved: re.maybeSolved.length };
     const key = JSON.stringify(doc);
     if (key === lastWork) return;
@@ -669,7 +673,7 @@ export async function renderDesk(root, meta) {
   function writeBriefs(today) {
     if (failed.size) return;
     for (const k of SPACE_KEYS) {
-      const b = deskBrief(data, { space: k, today, kitUrl: KIT_URL, deskUrl: deskUrl(), pack: packs[k].main?.usedBy ? null : packs[k].main, books: booksView.books() });
+      const b = deskBrief(data, { space: k, today, kitUrl: KIT_URL, deskUrl: deskUrl(), pack: unusedMain(k), books: booksView.books() });
       if (lastBrief[k] === b.text) continue;
       lastBrief[k] = b.text;
       put('meta', briefId(k), { space: k, text: b.text, kit: VERSION, today, at: Date.now() }).catch(() => {});

@@ -178,3 +178,19 @@ test('摘要开始有以前的课不回头并', async () => {
   assert.equal(nextDoc(d1, { text: '乙', at: 900 }).since, 100);
   assert.equal(addNote(null, noteOf({ text: '一条', at: 77 }), { id: 'cs' }).doc.since, 77);
 });
+
+// —— 摘要开始有以前备好的教案（清点时漏的一条，独立通读前查出来的）——
+test('stalePack：有摘要时，摘要开始有以前备好的教案不再当「备好的下一节」', async () => {
+  const { stalePack } = await import('../kit/src/memory/summary.js');
+  const mem = { summary: [{ id: 'shared', text: '学生在备考。', since: 2000 }, { id: 'cs', text: '在学数据结构。', since: 2500 }] };
+  assert.equal(stalePack({ unit: '希尔排序', at: 1000, by: 'lab' }, mem), true, '照旧规矩备的');
+  assert.equal(stalePack({ unit: '希尔排序', at: 3000, by: 'desk' }, mem), false, '有摘要以后备的');
+  // 对话里的 Claude 写的资料包没有 at，只有 updatedAt（ISO）
+  assert.equal(stalePack({ unit: '非谓语', updatedAt: '1970-01-01T00:00:01Z' }, mem), true);
+  assert.equal(stalePack({ unit: '非谓语', updatedAt: new Date(5000).toISOString() }, mem), false);
+  // 看不出什么时候备的：不动它
+  assert.equal(stalePack({ unit: '不知道哪天的' }, mem), false);
+  // 没有摘要：一切照旧
+  assert.equal(stalePack({ unit: '希尔排序', at: 1000 }, { summary: [] }), false);
+  assert.equal(stalePack(null, mem), false);
+});
