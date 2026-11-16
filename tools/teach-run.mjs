@@ -25,7 +25,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { cliArgs, cleanEnv, isUsageLimit, projectDirOf, studentSystem, posttestSystem, studentReply, graderPrompt, parseGrade } from './teach-run-lib.mjs';
+import { cliArgs, cleanEnv, isUsageLimit, projectDirOf, callCost, studentSystem, posttestSystem, studentReply, graderPrompt, parseGrade } from './teach-run-lib.mjs';
 
 const SIM = new URL('./teach-sim.mjs', import.meta.url).pathname;
 const TIMEOUT = 10 * 60 * 1000;
@@ -91,9 +91,10 @@ function conversation(role, model, effort, systemFile) {
   const was = run.sessions[role];
   const cwd = was?.cwd || fs.mkdtempSync(path.join(os.tmpdir(), `teach-${role}-`));
   fs.mkdirSync(cwd, { recursive: true }); // 接着跑时目录被清掉了：同一个路径再建一个，会话还在 ~/.claude/projects/ 下
-  const c = { role, model, effort, cwd, systemFile, session: was?.session || null };
+  // total：这条会话上一次成功调用时命令行报的累计花费（新会话从 0 起），这一次的花费按差值算
+  const c = { role, model, effort, cwd, systemFile, session: was?.session || null, total: was?.total || 0 };
   convs[role] = c;
-  if (!was) run.sessions[role] = { session: null, cwd };
+  if (!was) run.sessions[role] = { session: null, cwd, total: 0 };
   return c;
 }
 /** 丢掉一个角色的会话（课后测验、评卷每次都从头开）：先把它的临时目录和命令行存的会话删掉，不然接着跑一次就多留一份 */
@@ -106,7 +107,7 @@ function dropSession(role) {
   delete run.sessions[role];
 }
 /** 记一个点：这个角色接下去从这个会话分叉（只在这一轮交给页面以后记，接着跑时页面和会话对得上） */
-const commit = (c) => { run.sessions[c.role] = { session: c.session, cwd: c.cwd }; };
+const commit = (c) => { run.sessions[c.role] = { session: c.session, cwd: c.cwd, total: c.total }; };
 
 /** 调一次命令行；返回 { text, session } 或 { err, limit } */
 function callOnce(conv, message) {
@@ -126,12 +127,14 @@ function callOnce(conv, message) {
             // 讲课的老师只能是要的那个模型：平台换了模型就不算这一轮
             : Object.keys(out.modelUsage || {}).some((m) => m !== conv.model) ? `用的模型不对：${Object.keys(out.modelUsage).join(', ')}`
               : '';
-  const cost = Number(out?.total_cost_usd) || 0;
+  // 失败的那一次如果报了累计数也按差值算进去；但不往前记——重试从失败之前的那个点分叉，前身还是上一次成功的
+  const total = Number(out?.total_cost_usd) || 0;
+  const cost = callCost(total, conv.total);
   const limit = !!err && isUsageLimit(`${err}\n${r.stderr || ''}`);
-  run.calls.push({ role: conv.role, ok: !err, ms, cost, session: out?.session_id || null, ...(err ? { error: err } : {}), ...(limit ? { limit: true } : {}) });
-  run.costUsd = Math.round((run.costUsd + cost) * 1e4) / 1e4;
+  run.calls.push({ role: conv.role, ok: !err, ms, cost, total, session: out?.session_id || null, ...(err ? { error: err } : {}), ...(limit ? { limit: true } : {}) });
+  run.costUsd = Math.round((run.costUsd + cost) * 1e6) / 1e6;
   if (err) return { err, limit };
-  return { text: String(out.result), session: out.session_id || null };
+  return { text: String(out.result), session: out.session_id || null, total };
 }
 function call(conv, message, what) {
   let r = callOnce(conv, message);
@@ -141,6 +144,7 @@ function call(conv, message, what) {
   if (r.err) throw new Stop(what, r.err);
   // 成功了才换到新的分叉；失败的分叉没人再接
   if (r.session) conv.session = r.session;
+  if (r.total) conv.total = r.total; // 没报累计数的回复：不把上一次的数清掉，免得下一次多算
   return r.text;
 }
 /** 假的回复：文件没了就当到时间了（老师、学生），或者这节课失败（课后测验、评卷） */
@@ -158,6 +162,8 @@ function sim(...args) {
   if (r.status !== 0) throw new Stop(`页面 ${args[0]}`, String(r.stderr || r.stdout).trim().slice(0, 500));
   return r.stdout;
 }
+// 页面下课时最后一行打印的两句：到时间（或写满 40 轮）、下课了（学生说下课或空转停下）
+const OVER_LINES = new Set(['到时间了', '下课了']);
 const lastLine = (out) => String(out).trim().split('\n').at(-1).trim();
 const clockMin = () => { const st = readJson(P('state.json')); return st ? { seq: st.seq, min: Math.round((st.clock?.s || 0) / 6) / 10 } : {}; };
 
@@ -184,7 +190,7 @@ function lessonLoop() {
         if (teacher) commit(teacher);
         run.timeline.push({ who: 'teacher', ...clockMin() });
         saveRun();
-        if (lastLine(out) === '到时间了') throw new Over();
+        if (OVER_LINES.has(lastLine(out))) throw new Over();
       }
       // 学生答；页面按预案接住了就不跑老师，学生接着答
       const sn = run.studentTurns + 1;
@@ -207,7 +213,7 @@ function lessonLoop() {
       if (student) commit(student);
       run.timeline.push({ who: 'student', ...clockMin() });
       saveRun();
-      if (lastLine(sOut) === '到时间了') throw new Over();
+      if (OVER_LINES.has(lastLine(sOut))) throw new Over();
     }
   } catch (e) {
     if (!(e instanceof Over)) throw e;

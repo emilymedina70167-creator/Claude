@@ -66,6 +66,7 @@ ${sc.know}
   - comp 是黑板上【…】里写的那个组件 id；没有要做的题时 acts 写 []。
   - 不会做的题写 {"comp": "组件 id", "giveup": true}。
   - sure：答了的题有没有把握，没把握写 false；可以不写。
+- 老师明确说这节课到这里了、板上也没有留给你做的东西时，在 JSON 里加 "end": true（可以同时在 say 里说一句话），这节课就结束了。老师还在讲、还有题没做、你自己还有没弄懂想问的，都不要结束。
 - note 是你的笔记本。下课后有一份课后测验，那时你只能看这本笔记，看不到黑板。note 只记这一轮老师真讲了的、真让你做了的，一两句；这一轮没有就写空字符串。不要记你本来就知道的，也不要记黑板上没出现过的。
 `;
 }
@@ -124,6 +125,7 @@ export function studentReply(text) {
   const value = { say: typeof o.say === 'string' ? o.say : '', acts };
   if (o.sure && typeof o.sure === 'object' && !Array.isArray(o.sure)) value.sure = o.sure;
   if (typeof o.note === 'string' && o.note.trim()) value.note = o.note;
+  if (o.end === true) value.end = true;
   return { value };
 }
 
@@ -185,6 +187,12 @@ ${answers}
 `;
 }
 
+// 和 teach-sim-lib.mjs 的 ENDED_BY 同一份（那边不能被这里 import：会把页面的依赖拉进来）
+const ENDED_BY = { student: '学生说下课', idle: '空转停下', time: '到时间', rounds: '写满 40 轮' };
+
+/** 这一次调用花了多少：命令行返回的 total_cost_usd 是这条会话（连同分叉出来的前身）到现在的累计数，减去上一次成功调用的累计数才是这一次的 */
+export const callCost = (total, lastTotal) => Math.max(0, (Number(total) || 0) - (Number(lastTotal) || 0));
+
 const nullable = (v, ok) => v === undefined || v === null || ok(v);
 
 /** 读评卷的结果；字段不对返回 null（跑课的脚本带着「读不出」重问一次） */
@@ -216,7 +224,7 @@ export function summaryRow({ scenario, run, metrics, grade }) {
   return {
     id, near: sum('near'), nearOf: of('near'), far: sum('far'), farOf: of('far'),
     minutes: metrics.minutes, wastedStops: metrics.wastedStops, firstProduceMin: metrics.firstProduceMin,
-    longestPassiveMin: metrics.longestPassiveMin, produceMin: metrics.produceMin, overall: grade.overall,
+    longestPassiveMin: metrics.longestPassiveMin, produceMin: metrics.produceMin, endedBy: metrics.endedBy ?? null, overall: grade.overall,
     costUsd: run.costUsd ?? null,
   };
 }
@@ -226,12 +234,12 @@ export function summaryMd(rows, arm) {
   const v = (x) => (x === null || x === undefined ? '—' : x);
   const lines = [
     `# 教学尺子 · ${arm}`, '',
-    '| 场景 | 同类 | 迁移 | 分钟 | 白停 | 第一次动笔（分） | 最长连讲（分） | 产出（分） | 总体 |',
-    '|---|---|---|---|---|---|---|---|---|',
+    '| 场景 | 同类 | 迁移 | 分钟 | 白停 | 第一次动笔（分） | 最长连讲（分） | 产出（分） | 怎么下课的 | 总体 |',
+    '|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const r of rows) {
-    if (r.failed) lines.push(`| ${r.id} | ${r.failed} ||||||||`);
-    else lines.push(`| ${r.id} | ${r.near} / ${r.nearOf} | ${r.far} / ${r.farOf} | ${v(r.minutes)} | ${v(r.wastedStops)} | ${v(r.firstProduceMin)} | ${v(r.longestPassiveMin)} | ${v(r.produceMin)} | ${r.overall} |`);
+    if (r.failed) lines.push(`| ${r.id} | ${r.failed} |||||||||`);
+    else lines.push(`| ${r.id} | ${r.near} / ${r.nearOf} | ${r.far} / ${r.farOf} | ${v(r.minutes)} | ${v(r.wastedStops)} | ${v(r.firstProduceMin)} | ${v(r.longestPassiveMin)} | ${v(r.produceMin)} | ${v(ENDED_BY[r.endedBy])} | ${r.overall} |`);
   }
   const cost = rows.reduce((a, r) => a + (r.costUsd || 0), 0);
   lines.push('', `一共 ${rows.length} 节，跑完 ${rows.filter((r) => !r.failed).length} 节，花了约 $${cost.toFixed(2)}。`);

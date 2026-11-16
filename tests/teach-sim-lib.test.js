@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { COSTS, shownChars, isProduce, actSeconds, newClock, tick, lessonMetrics, checkScenario } from '../tools/teach-sim-lib.mjs';
+import { COSTS, shownChars, isProduce, actSeconds, newClock, tick, lessonMetrics, checkScenario, isIdleRound, stepIdle, IDLE_ROUNDS } from '../tools/teach-sim-lib.mjs';
 
 test('读 400 个字是一分钟，等一轮 8 秒', () => {
   const c = tick(newClock(), { read: 400, wait: true });
@@ -86,4 +86,22 @@ test('自由作答（conjecture）写的字原样发给老师，不是「没写�
   const msg = fs.readFileSync(run + '/to-teacher.md', 'utf8');
   assert.ok(msg.includes('页 1 刚被访问过') && !msg.includes('没写内容'), msg.slice(-300));
   fs.rmSync(D, { recursive: true, force: true });
+});
+
+test('空转：老师没动板、学生没作答；连着三个来回才停，钟记的是第一个来回开始之前', () => {
+  assert.equal(isIdleRound({ ops: [] }, { acts: [] }), true);
+  assert.equal(isIdleRound({ ops: ['plan', 'memo'] }, { acts: [{ comp: 'q1', type: 'sure' }] }), true); // 计划、有把握都不算
+  assert.equal(isIdleRound({ ops: ['mark'] }, { acts: [] }), false);
+  assert.equal(isIdleRound({ ops: [] }, { acts: [{ comp: 'q1', type: 'quiz' }] }), false);
+  const before = { clock: { s: 100 }, shown: 7 };
+  let r = stepIdle(null, true, before);
+  for (let i = 1; i < IDLE_ROUNDS; i++) { assert.equal(r.done, false); r = stepIdle(r.idle, true, { clock: { s: 999 }, shown: 9 }); }
+  assert.equal(r.done, true);
+  assert.deepEqual([r.idle.clock.s, r.idle.shown], [100, 7]);
+  assert.deepEqual(stepIdle(r.idle, false, before), { idle: null, done: false });
+});
+test('endedBy：下课了才有，没写原因的按到时间', () => {
+  const st = { clock: newClock(), turns: [] };
+  assert.equal(lessonMetrics(st).endedBy, null);
+  assert.equal(lessonMetrics({ ...st, over: true, overWhy: 'student' }).endedBy, 'student');
 });

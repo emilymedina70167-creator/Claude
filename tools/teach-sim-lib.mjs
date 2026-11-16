@@ -53,13 +53,39 @@ export const timeUp = (clock, minutes) => clock.s >= minutes * 60;
 
 const r1 = (x) => Math.round(x * 10) / 10;
 
+// 改板面的指令：老师这一轮有其中一种就不算空转（plan、memo、react、why 学生看不到，不算）
+const BOARD_OPS = new Set(['new', 'add', 'replace', 'show', 'pin', 'mark', 'unmark', 'figure', 'hide', 'unpin']);
+export const IDLE_ROUNDS = 3;
+
+/** 这一个来回是不是空转：老师没有任何黑板指令、学生没有任何作答（只说话、点「有把握」都不算作答） */
+export function isIdleRound(teacherTurn, studentTurn) {
+  const ops = teacherTurn?.ops || [];
+  const acts = (studentTurn?.acts || []).filter((a) => a.comp && a.type !== 'sure');
+  return !ops.some((o) => BOARD_OPS.has(o)) && !acts.length;
+}
+
+/**
+ * 空转的保险：老师讲完了、学生也不说下课时，师生互相说再见会一直转到 40 轮，把分钟数、最长连讲都撑大。
+ * idle 是 { n, clock, shown }：连着空转了几个来回、第一个空转来回开始之前的钟和读过的字。
+ * 返回新的 idle；done 时钟要退回到 idle.clock（空转的那几轮不算进这节课）。
+ */
+export function stepIdle(idle, idleRound, before) {
+  if (!idleRound) return { idle: null, done: false };
+  const next = idle ? { ...idle, n: idle.n + 1 } : { n: 1, clock: before.clock, shown: before.shown };
+  return { idle: next, done: next.n >= IDLE_ROUNDS };
+}
+
+/** 怎么下课的，给人看的中文 */
+export const ENDED_BY = { student: '学生说下课', idle: '空转停下', time: '到时间', rounds: '写满 40 轮' };
+
 /** 一节课能算的指标（分钟保留一位小数） */
 export function lessonMetrics(st) {
   const c = st.clock;
   const minutes = c.s / 60;
   return {
     minutes: r1(minutes),
-    teacherTurns: (st.turns || []).filter((t) => t.role === 'teacher').length,
+    // 空转停下时最后那几轮不算
+    teacherTurns: (st.turns || []).filter((t) => t.role === 'teacher' && !t.idle).length,
     firstProduceMin: c.firstProduce === null ? null : r1(c.firstProduce / 60),
     // 最后一次产出到下课也是一段被动
     longestPassiveMin: r1(Math.max(c.longestPassive, c.s - c.lastProduce) / 60),
@@ -67,6 +93,7 @@ export function lessonMetrics(st) {
     stops: c.stops,
     wastedStops: c.wasted,
     charsPerMin: minutes > 0 ? Math.round((st.shown || 0) / minutes) : 0,
+    endedBy: st.over ? st.overWhy || 'time' : null,
   };
 }
 

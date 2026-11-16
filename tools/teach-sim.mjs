@@ -12,14 +12,16 @@
 //   node tools/teach-sim.mjs score <目录…>                             页面能算的指标（含按学生用时算的钟）
 //
 // 钟（tools/teach-sim-lib.mjs）：一节课多长按学生用掉的时间算——读、等老师、点、写、说；老师、学生两种命令算完钟都判，到时间（或老师写满 40 轮）
-// 就 over，最后一行打印「到时间了」；over 以后再调用 teacher / student 都报错。
+// 就 over，最后一行打印「到时间了」；学生回 "end": true（老师讲完了）、或者连着 3 个来回老师没动板学生也没作答（空转，钟退回到空转之前）
+// 也 over，最后一行打印「下课了」。怎么下课的记在 state 的 overWhy（student / idle / time / rounds），score 里是 endedBy。
+// over 以后再调用 teacher / student 都报错。
 // 学生的 JSON 可带 "note"：这一轮记在笔记本 notebook.md 里的话，课后测验时学生只能看这个。
 //
 // 预案（board react，docs/board-plan.md）：学生作答落在老师预写的情况里时，页面自己接、不调用老师——
 // student 命令打印「页面按预案接了」，这时**不跑老师**，学生接着看 view.md 再答一轮；接过的几轮跟着下一次发给老师。
 //
 // 学生的 JSON：{ "say": "对老师说的话（可空）", "acts": [{ "comp": "组件 id", "value": "答案或选项的文字" } | { "comp": "…", "giveup": true }],
-//               "sure": { "组件 id": true | false } }
+//               "sure": { "组件 id": true | false }, "note": "笔记（可无）", "end": true（可无：老师说这节课到这里了） }
 import fs from 'node:fs';
 import path from 'node:path';
 import { componentDocs } from '../kit/build-docs.js';
@@ -34,7 +36,7 @@ import { calcFields, commonSpec, resolveAsks, parseAskField, checkAsk, askAnswer
 import { textAnswerSpec } from '../kit/src/textspec.js';
 import { toExact } from '../kit/src/exact.js';
 import { planLocal, markFired, reactNote, dropForSeg, armedText } from '../kit/src/class/react.js';
-import { checkScenario, newClock, tick, timeUp, shownChars, lessonMetrics } from './teach-sim-lib.mjs';
+import { checkScenario, newClock, tick, timeUp, shownChars, lessonMetrics, isIdleRound, stepIdle } from './teach-sim-lib.mjs';
 
 const [cmd, dir, arg, ...rest] = process.argv.slice(2);
 const read = (f) => fs.readFileSync(f, 'utf8');
@@ -443,6 +445,9 @@ function viewText(st, talk) {
 
 /* ---------------- 命令 ---------------- */
 
+// 下课时的最后一行：跑课的脚本认这两句。到时间、写满 40 轮是「到时间了」，学生说下课、空转停下是「下课了」
+const overLine = (st) => (!st.over ? '' : st.overWhy === 'student' || st.overWhy === 'idle' ? '\n下课了' : '\n到时间了');
+
 const docs = () => componentDocs(read(new URL('../CLAUDE-PROJECT.md', import.meta.url)));
 
 if (cmd === 'init') {
@@ -464,28 +469,31 @@ if (cmd === 'init') {
 } else if (cmd === 'teacher') {
   const st = load();
   // 已经下课了还调用：跑课的脚本漏看了「到时间了」，报错比悄悄多上一轮好查
-  if (st.over) { console.error('到时间了，这节课已经结束，老师不能再写'); process.exit(1); }
+  if (st.over) { console.error('这节课已经结束（到时间了或下课了），老师不能再写'); process.exit(1); }
   const text = read(arg);
   st.seq++;
   st.history.push({ role: 'claude', seq: st.seq, text });
   const r = apply(st, text);
+  // 空转的保险要能把钟退回到这个来回开始之前
+  st.beforeTeacher = { clock: st.clock, shown: st.shown || 0 };
   // 这一轮新给学生看的字（藏着、撤掉的不算）加板顶的话：学生要读完才能往下
   const seen = [...new Set(r.touched)].map((id) => st.segs.find((s) => s.id === id)).filter((s) => s && !s.hidden && !s.held);
   const read_ = seen.reduce((a, s) => a + shownChars(studentSeg(s, st)), 0) + shownChars(r.talk);
   st.clock = tick(st.clock, { read: read_, wait: true });
   st.shown = (st.shown || 0) + read_;
   const teacherTurns = st.turns.filter((t) => t.role === 'teacher').length + 1;
-  if (timeUp(st.clock, st.minutes) || teacherTurns >= 40) st.over = true;
+  if (timeUp(st.clock, st.minutes)) { st.over = true; st.overWhy = 'time'; }
+  else if (teacherTurns >= 40) { st.over = true; st.overWhy = 'rounds'; }
   const view = viewText(st, r.talk);
   fs.writeFileSync(P('view.md'), view);
   st.turns.push({ seq: st.seq, role: 'teacher', bytes: bytes(text), talk: r.talk, ops: st.ops.slice(), notes: r.notes, plan: /board[ \t]+plan/i.test(text), view });
   st.pendingNotes = r.notes;
   st.ops = [];
   save(st);
-  console.log(`第 ${st.seq} 轮老师：${bytes(text)} 字节，话 ${r.talk.length} 字，指令 ${st.turns.at(-1).ops.join(' ') || '无'}${r.notes.length ? `，${r.notes.length} 条提醒` : ''}，课上过了 ${(st.clock.s / 60).toFixed(1)} / ${st.minutes} 分钟${st.over ? '\n到时间了' : ''}`);
+  console.log(`第 ${st.seq} 轮老师：${bytes(text)} 字节，话 ${r.talk.length} 字，指令 ${st.turns.at(-1).ops.join(' ') || '无'}${r.notes.length ? `，${r.notes.length} 条提醒` : ''}，课上过了 ${(st.clock.s / 60).toFixed(1)} / ${st.minutes} 分钟${overLine(st)}`);
 } else if (cmd === 'student') {
   const st = load();
-  if (st.over) { console.error('到时间了，这节课已经结束，学生不能再答'); process.exit(1); }
+  if (st.over) { console.error('这节课已经结束（到时间了或下课了），学生不能再答'); process.exit(1); }
   let s;
   try { s = JSON.parse(read(arg).replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch (e) { console.error('学生的回复不是 JSON：', e.message); process.exit(1); }
   st.seq++;
@@ -501,6 +509,8 @@ if (cmd === 'init') {
     acts.push(ev);
   }
   const say = String(s.say || '').trim();
+  // 学生说下课（老师讲完了、板上没有留给学生的东西时，扮学生的模型回 end: true）
+  const endNow = s.end === true;
   // 钟：作答（点选 10 秒、写的按行）和说话；没有 block 的（sure、页面的系统行）不占时间
   st.clock = tick(st.clock, { acts: acts.filter((a) => a.block && a.type !== 'sure'), say });
   if (s.note) fs.appendFileSync(P('notebook.md'), `## 第 ${st.seq} 轮\n${String(s.note).trim()}\n\n`);
@@ -525,24 +535,38 @@ if (cmd === 'init') {
     st.clock = tick(st.clock, { read: read_ });
     st.shown = (st.shown || 0) + read_;
     // 连着几轮被预案接住时老师一直不跑，只在老师那一轮判的话钟会走过头也不下课
-    if (timeUp(st.clock, st.minutes)) st.over = true;
+    if (timeUp(st.clock, st.minutes)) { st.over = true; st.overWhy = 'time'; }
+    else if (endNow) { st.over = true; st.overWhy = 'student'; }
+    st.idle = null; // 预案接住了说明学生作答了，不是空转
     fs.writeFileSync(P('view.md'), view);
     st.turns.push({ seq: st.seq, role: 'student', say, acts: acts.map((a) => ({ comp: a.block, ok: a.ok, type: a.type })), msg: am, local: true }, { seq: st.seq, role: 'page', talk: local.talk, note, view });
     save(st);
-    console.log(`第 ${st.seq} 轮学生：${acts.map((a) => (a.block ? `${a.block}${a.ok === true ? '✓' : a.ok === false ? '✗' : '·'}` : a.type || '')).join(' ')}——页面按预案接了（没调用老师）：学生接着看 view.md${st.over ? '\n到时间了' : ''}`);
+    console.log(`第 ${st.seq} 轮学生：${acts.map((a) => (a.block ? `${a.block}${a.ok === true ? '✓' : a.ok === false ? '✗' : '·'}` : a.type || '')).join(' ')}——页面按预案接了（没调用老师）：学生接着看 view.md${overLine(st)}`);
     process.exit(0);
   }
   // 前面几轮页面按预案接过的，跟着这一次发给老师
   const msg = [...(st.localMsgs || []), say, actionsMessage(acts), ...(st.pendingNotes || [])].filter(Boolean).join('\n') || '（学生没有说话，也没有作答）';
   st.localMsgs = [];
-  if (timeUp(st.clock, st.minutes)) st.over = true;
   st.history.push({ role: 'student', seq: st.seq, text: msg });
   st.turns.push({ seq: st.seq, role: 'student', say, acts: acts.map((a) => ({ comp: a.block, ok: a.ok, type: a.type })), msg });
+  // 空转：这一个来回老师没动板、学生没作答；连着 IDLE_ROUNDS 个就下课，钟退回到空转开始之前
+  const lastT = st.turns.filter((t) => t.role === 'teacher').at(-1);
+  const idle = stepIdle(st.idle, isIdleRound(lastT, st.turns.at(-1)), st.beforeTeacher || { clock: st.clock, shown: st.shown || 0 });
+  st.idle = idle.idle;
+  if (timeUp(st.clock, st.minutes)) { st.over = true; st.overWhy = 'time'; }
+  else if (endNow) { st.over = true; st.overWhy = 'student'; }
+  else if (idle.done) {
+    st.over = true; st.overWhy = 'idle';
+    st.clock = st.idle.clock; st.shown = st.idle.shown;
+    // 空转的那几个来回不算进指标（记录里照样留着）
+    const from = st.turns.length - 2 * st.idle.n;
+    for (const t of st.turns.slice(from)) t.idle = true;
+  }
   st.pendingNotes = [];
   const state = `${st.plan ? `${planText(latestPlan(st.history))}\n\n` : ''}${boardStateText(boardForPrompt(st))}`;
   fs.writeFileSync(P('to-teacher.md'), `【页面这一轮发给你的】\n\n# 黑板现状（最新，替换说明里那份）\n\n${state}\n\n# 学生\n\n${msg}\n`);
   save(st);
-  console.log(`第 ${st.seq} 轮学生：${acts.map((a) => (a.block ? `${a.block}${a.ok === true ? '✓' : a.ok === false ? '✗' : '·'}` : a.type || '')).join(' ') || '没作答'}${say ? `，说「${say.slice(0, 30)}」` : ''}${st.over ? '\n到时间了' : ''}`);
+  console.log(`第 ${st.seq} 轮学生：${acts.map((a) => (a.block ? `${a.block}${a.ok === true ? '✓' : a.ok === false ? '✗' : '·'}` : a.type || '')).join(' ') || '没作答'}${say ? `，说「${say.slice(0, 30)}」` : ''}${overLine(st)}`);
 } else if (cmd === 'transcript') {
   const st = load();
   const out = [`# 模拟课 ${st.scenario}（${st.subject}，计划块${st.plan ? '开' : '关'}）`];
@@ -564,8 +588,9 @@ if (cmd === 'init') {
   const rows = [];
   for (const d of [dir, arg, ...rest].filter(Boolean)) {
     const st = JSON.parse(read(path.join(d, 'state.json')));
-    const T = st.turns.filter((t) => t.role === 'teacher');
-    const S = st.turns.filter((t) => t.role === 'student');
+    // 空转停下时最后那几个来回不算进指标
+    const T = st.turns.filter((t) => t.role === 'teacher' && !t.idle);
+    const S = st.turns.filter((t) => t.role === 'student' && !t.idle);
     const judged = S.flatMap((t) => t.acts).filter((a) => a.ok === true || a.ok === false);
     const interactive = T.filter((t) => /```(?:steps|quiz|answer|practice|predict|scene|recognize|cloze|errfind|parse|drill)/.test(st.history.find((h) => h.seq === t.seq)?.text || '')).length;
     rows.push({

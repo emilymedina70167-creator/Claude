@@ -28,7 +28,9 @@ node tools/teach-suite.mjs <输出目录> --arm <名字> [--system-dir 目录] [
 
 - `--system`：老师读这一份整份说明（旧版规则那一版：动手改之前用 `main` 生成的存在 `baseline/`）；不给就照现在的代码拼。`--system-dir` 里有 `<场景 id>.system.md` 就用它。`--memory`：记忆样例，照课堂的写法带进说明。
 - 四个会话：老师（只用 `claude-opus-5-5`、effort high，不设退路模型）、学生、课后测验的学生（新开的，只拿人设、原来会什么、上课记的笔记）、评卷人。每个都在仓库外的空临时目录里跑，关掉全部工具（`--tools "" --strict-mcp-config --setting-sources "" --disable-slash-commands`），环境变量只留登录和代理要的（`cleanEnv`）：模型读不到任何文件，学生看不到 `scenario.json` 里的答案，要的东西全在提示词里。`--system-prompt-file` 是整份替换（一行字的说明约 550 token）；命令行还会自己加一小段环境说明（目录、平台、日期、模型、账户邮箱），去不掉。续会话一律 `--resume <上一次成功的会话> --fork-session`：失败的那一次留在它自己的分叉里，重试和下一轮都从成功的点接，作废的回复不进老师的上下文。
-- 流程：`teach-sim init` → 老师读 `to-teacher.md` 写 `t-N.txt` → `teach-sim teacher` → 学生读 `view.md` 回一个 JSON 存 `s-N.json` → `teach-sim student`（打印「页面按预案接了」时不跑老师、学生接着答）→ …… 到任何一边打印「到时间了」→ `transcript` → `posttest` → 课后测验 → `score` → 评卷。
+- 流程：`teach-sim init` → 老师读 `to-teacher.md` 写 `t-N.txt` → `teach-sim teacher` → 学生读 `view.md` 回一个 JSON 存 `s-N.json` → `teach-sim student`（打印「页面按预案接了」时不跑老师、学生接着答）→ …… 到任何一边打印「到时间了」或「下课了」→ `transcript` → `posttest` → 课后测验 → `score` → 评卷。
+- 什么时候下课（`metrics.json` 的 `endedBy`，表里「怎么下课的」）：学生回 `"end": true`（老师说这节课到这里了、板上没有留给学生的东西，`student`）；连着 3 个来回老师没动板、学生也没作答（`idle`，钟退回到空转之前，空转的几轮不算进指标）；到时间（`time`）；老师写满 40 轮（`rounds`）。
+- 花费：命令行返回的 `total_cost_usd` 是这条会话（连同分叉出来的前身）到现在的累计数，`calls[].cost` 记和这个角色上一次成功调用的差值、`calls[].total` 记原始的累计数，`costUsd` 是差值之和。
 - 出错：撞了用量上限（429、`rate_limit`、「hit your … limit」）不重试、不算失败：`run.json` 写 `paused: true`、停在哪一步（`phase`、`next`、`stoppedAt`）、每个角色的会话（`sessions`）、已经花的钱，退出码 2。别的错（返回空、超时 10 分钟、退出码非 0、用的模型不对）重试一次，再不成 `failed: true`、同样记下，退出码 1。两种都能 `--continue`，都不评卷。一整套里有一节停在用量上限就不再开新的课，`summary.md` 写清哪几节没跑完。跑完的一节会删掉自己的临时目录和命令行在 `~/.claude/projects/` 下存的会话；停下的不删。学生的回复不是合法 JSON 带着报错重问一次，还不成记成「学生没有作答」接着走（`studentFallbacks`）。
 - `--fake 目录`：不调用命令行，回复读 `t-N.txt` / `s-N.json` / `post.md` / `grade.txt`（一轮老师都没有不算跑完）；`--cli 命令`：换一个和 `claude` 同样参数、同样输出的程序。测试（`tests/teach-run-lib.test.js`）用这两样，不调用模型。
 
@@ -48,7 +50,7 @@ node tools/teach-suite.mjs <输出目录> --arm <名字> [--system-dir 目录] [
 
 一整套的 `<输出目录>/summary.md` 一行一节：课后测验同类 / 迁移各对几道、用了几分钟、白停、第一次动笔第几分钟、最长连讲几分钟、产出几分钟、总体分；`summary.json` 是同一份数。行为的数和课后测验并排看，不单独报行为的数。结果写进 `results.md`。
 
-只在改了课堂的提示词、教法、协议时跑。花多少的量级（2026-11-15 实测，os-lru 按 15 分钟、说明约 61 KiB）：老师 10 轮约 $3.9（每轮 $0.3～0.5，大头）、学生 10 轮约 $0.4、课后测验和评卷合起来约 $0.2，一节约 $4.5、跑 4 分钟；老师写 17 轮的那一次老师就花了约 $7.7。按 40 分钟算一节大约 $10～15，一整套 8～10 个场景是一两百美元的量级（花的是开发会话的额度，不是上课的），先用 `--only` 跑几个。
+只在改了课堂的提示词、教法、协议时跑。花多少的量级（2026-11-15 实测，os-lru 按 15 分钟、老师 10 轮、说明约 61 KiB；按累计数的差值重算过，早先每次的累计数相加记多了五六倍）：老师约 $0.52、学生约 $0.07、课后测验约 $0.03、评卷约 $0.16，一节约 $0.8、跑 4 分钟。一节讲到下课的课大约一两美元，一整套 10 个场景十几到二十几美元（花的是开发会话的额度，不是上课的），先用 `--only` 跑几个。
 
 ## 评卷（`grade.json`）
 

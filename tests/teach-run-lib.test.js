@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cliArgs, studentSystem, posttestSystem, extractJson, graderPrompt, parseGrade, studentReply, summaryRow, summaryMd, cleanEnv, isUsageLimit, projectDirOf, resumeAction } from '../tools/teach-run-lib.mjs';
+import { cliArgs, studentSystem, posttestSystem, extractJson, graderPrompt, parseGrade, studentReply, summaryRow, summaryMd, callCost, cleanEnv, isUsageLimit, projectDirOf, resumeAction } from '../tools/teach-run-lib.mjs';
 
 const sc = { id: 'x', persona: '大三，学过一点操作系统', know: '知道缺页是什么；不知道 LRU', aims: [{ id: 'a1', can: '手算 LRU', proof: '独立做一道' }], misconception: '以为换出最早进来的', rubric: 'r' };
 
@@ -111,6 +111,9 @@ test('一整套的表：同类、迁移分开数；没跑完的写停在第几�
   assert.match(summaryRow({ scenario: scen, run: { ok: false, paused: true, stoppedAt: 3, stoppedWhat: '第 3 轮老师' } }).failed, /暂停（用量上限）：停在第 3 轮/);
   const md = summaryMd([r, bad], 'new');
   assert.ok(md.includes('1.5 / 2') && md.includes('没跑完：停在第 7 轮'));
+  assert.ok(md.includes('怎么下课的'));
+  const r2 = summaryRow({ scenario: scen, run: { ok: true }, metrics: { minutes: 9, endedBy: 'idle' }, grade: { post: [], overall: 3 } });
+  assert.ok(summaryMd([r2], 'x').includes('| 空转停下 |'));
 });
 
 // 用假的回复走通一节：不调用模型，确认 teach-run 把 teach-sim 的各命令接上了
@@ -165,11 +168,13 @@ const rule = (cfg.fail || []).find((f) => f.role === base.role && f.n === n);
 const key = base.role + ':' + n;
 counts[key] = (counts[key] || 0) + 1; fs.writeFileSync(cntF, JSON.stringify(counts));
 const id = resume && !fork ? resume : crypto.randomUUID();
-const save = (reply) => fs.writeFileSync(path.join(sdir, id + '.json'), JSON.stringify({ role: base.role, msgs: [...base.msgs, { u: msg }, { a: reply }] }));
+// total_cost_usd 和真的命令行一样是这条会话（连同前身）的累计数：每次调用 0.01
+const total = Math.round(((base.total || 0) + 0.01) * 1e6) / 1e6;
+const save = (reply) => fs.writeFileSync(path.join(sdir, id + '.json'), JSON.stringify({ role: base.role, total, msgs: [...base.msgs, { u: msg }, { a: reply }] }));
 if (rule && counts[key] <= (rule.times || 1)) {
   if (rule.kind === 'limit') { process.stdout.write(JSON.stringify({ is_error: true, result: "You've hit your usage limit · resets 3am", session_id: id, total_cost_usd: 0 })); process.exit(1); }
   save('作废的回复 FAILED-REPLY');
-  process.stdout.write(JSON.stringify({ is_error: false, result: '作废的回复 FAILED-REPLY', session_id: id, total_cost_usd: 0.01, modelUsage: { 'claude-other-model': {} } }));
+  process.stdout.write(JSON.stringify({ is_error: false, result: '作废的回复 FAILED-REPLY', session_id: id, total_cost_usd: total, modelUsage: { 'claude-other-model': {} } }));
   process.exit(0);
 }
 let reply;
@@ -178,7 +183,7 @@ else if (base.role === 'student') { const m = msg.match(/【选择题 (\\S+)】/
 else if (base.role === 'posttest') reply = '## p1\\n1\\n## p2\\n看访问\\n## p3\\n不会';
 else reply = JSON.stringify({ post: [{ id: 'p1', score: 1 }, { id: 'p2', score: 1 }, { id: 'p3', score: 0 }], found: null, targeted: null, onlyGap: null, contentErrors: 0, verdictAgree: null, skipped: null, overall: 3, why: '假的' });
 save(reply);
-process.stdout.write(JSON.stringify({ is_error: false, result: reply, session_id: id, total_cost_usd: 0.01, modelUsage: { [model]: {} } }));
+process.stdout.write(JSON.stringify({ is_error: false, result: reply, session_id: id, total_cost_usd: total, modelUsage: { [model]: {} } }));
 `;
 function fakeCli(fail) {
   const D = fs.mkdtempSync(path.join(os.tmpdir(), 'trun-cli-'));
@@ -299,4 +304,82 @@ test('从头重跑删掉旧的学生说明（人设改过要用新的）；评�
   assert.equal(f.go('run').status, 0);
   assert.ok(fs.readFileSync(path.join(f.D, 'run', 'student-system.md'), 'utf8').includes('新的人设：学过 OPT'));
   fs.rmSync(f.D, { recursive: true, force: true });
+});
+
+test('这一次的花费 = 这次的累计数 − 上一次的', () => {
+  assert.equal(callCost(0.0196, 0.0185).toFixed(4), '0.0011');
+  assert.equal(callCost(0.0185, 0), 0.0185);
+  assert.equal(callCost(0, 0.02), 0); // 撞上限的那次报 0：不倒扣
+});
+
+test('花费按累计数的差值记：costUsd 是各会话最后的累计数之和，不是每次的累计数相加', () => {
+  const f = fakeCli([{ role: 'teacher', n: 2, kind: 'model', times: 1 }]);
+  assert.equal(f.go('run').status, 0);
+  const run = JSON.parse(fs.readFileSync(path.join(f.D, 'run', 'run.json'), 'utf8'));
+  const ok = run.calls.filter((c) => c.ok);
+  const lastTotal = {};
+  for (const c of ok) lastTotal[c.role] = c.total;
+  const sumLast = Object.values(lastTotal).reduce((a, x) => a + x, 0);
+  const failed = run.calls.filter((c) => !c.ok).reduce((a, c) => a + c.cost, 0); // 作废的分叉也花了钱
+  assert.equal(Math.round(run.costUsd * 1e6), Math.round((sumLast + failed) * 1e6));
+  assert.ok(run.calls.every((c) => Math.abs(c.cost - 0.01) < 1e-9), JSON.stringify(run.calls.map((c) => c.cost)));
+  const naive = run.calls.reduce((a, c) => a + c.total, 0);
+  assert.ok(naive > run.costUsd * 2);
+  fs.rmSync(f.D, { recursive: true, force: true });
+});
+
+test('暂停后接着跑，花费不重复算', () => {
+  const f = fakeCli([{ role: 'teacher', n: 3, kind: 'limit', times: 1 }]);
+  assert.equal(f.go('b').status, 2);
+  assert.equal(f.go('b', '--continue').status, 0);
+  const run = JSON.parse(fs.readFileSync(path.join(f.D, 'b', 'run.json'), 'utf8'));
+  assert.ok(run.calls.filter((c) => c.ok).every((c) => Math.abs(c.cost - 0.01) < 1e-9));
+  assert.equal(Math.round(run.costUsd * 100), run.calls.filter((c) => c.ok).length);
+  fs.rmSync(f.D, { recursive: true, force: true });
+});
+
+/* ---------- 课什么时候算上完 ---------- */
+function fakeLesson(files) {
+  const D = fs.mkdtempSync(path.join(os.tmpdir(), 'trun-end-'));
+  const scen = { id: 'mini', subject: '操作系统', pack: { main: { unit: 'LRU' } }, persona: '学过 FIFO', know: '会 FIFO', misconception: 'm',
+    aims: [{ id: 'a1', can: 'c', proof: 'p' }, { id: 'a2', can: 'c', proof: 'p' }],
+    posttest: [{ id: 'p1', q: 'q', answer: '1', kind: 'near', aim: 'a1' }, { id: 'p2', q: 'q', answer: 'a', kind: 'far', aim: 'a2' }, { id: 'p3', q: 'q', answer: '2', kind: 'near', aim: 'a1' }] };
+  fs.writeFileSync(path.join(D, 'sc.json'), JSON.stringify(scen));
+  const F = path.join(D, 'fake');
+  fs.mkdirSync(F);
+  for (const [k, v] of Object.entries(files)) fs.writeFileSync(path.join(F, k), v);
+  fs.writeFileSync(path.join(F, 'post.md'), '## p1\n1');
+  fs.writeFileSync(path.join(F, 'grade.txt'), '{"post":[{"id":"p1","score":1}],"found":null,"targeted":null,"onlyGap":null,"contentErrors":0,"verdictAgree":null,"skipped":null,"overall":3,"why":"假的"}');
+  const R = path.join(D, 'run');
+  const out = execFileSync('node', [RUN, R, path.join(D, 'sc.json'), '--fake', F], { encoding: 'utf8' });
+  const j = (f) => JSON.parse(fs.readFileSync(path.join(R, f), 'utf8'));
+  return { D, R, out, run: j('run.json'), metrics: j('metrics.json') };
+}
+const quizTurn = (id) => `先做一道。\n\n\`\`\`\`board new id=b${id} title=LRU\n\`\`\`quiz\nid: q${id}\nq: LRU 换出哪一页？\n- [x] 最久没被访问的\n- [ ] 最早调进来的\n\`\`\`\n\`\`\`\`\n`;
+
+test('学生第 3 轮说下课：这节课到此结束，后面不再调用老师', () => {
+  const files = {};
+  for (let i = 1; i <= 6; i++) { files[`t-${i}.txt`] = quizTurn(i); files[`s-${i}.json`] = JSON.stringify({ say: '', acts: [{ comp: `q${i}`, value: 'A' }] }); }
+  files['s-3.json'] = JSON.stringify({ say: '谢谢老师，下课', acts: [{ comp: 'q3', value: 'A' }], end: true });
+  const L = fakeLesson(files);
+  assert.equal(L.run.ok, true);
+  assert.equal(L.run.teacherTurns, 3);
+  assert.equal(L.run.studentTurns, 3);
+  assert.ok(!fs.existsSync(path.join(L.R, 't-4.txt')));
+  assert.equal(L.metrics.endedBy, 'student');
+  assert.ok(L.out.includes('下课了'));
+  fs.rmSync(L.D, { recursive: true, force: true });
+});
+
+test('三个来回空转以后下课：分钟数等于空转之前的那个数', () => {
+  const files = { 't-1.txt': quizTurn(1), 's-1.json': JSON.stringify({ say: '', acts: [{ comp: 'q1', value: 'A' }] }) };
+  for (let i = 2; i <= 8; i++) { files[`t-${i}.txt`] = '好，今天就到这里，再见。'; files[`s-${i}.json`] = JSON.stringify({ say: '老师再见', acts: [] }); }
+  const L = fakeLesson(files);
+  assert.equal(L.run.ok, true);
+  assert.equal(L.run.teacherTurns, 4); // 第 2、3、4 轮空转，到第 4 轮学生答完就停
+  assert.equal(L.metrics.endedBy, 'idle');
+  const afterFirst = L.run.timeline.find((x) => x.who === 'student').min; // 第 1 个来回结束时
+  assert.equal(L.metrics.minutes, afterFirst);
+  assert.equal(L.metrics.teacherTurns, 1); // 空转的轮不算进指标
+  fs.rmSync(L.D, { recursive: true, force: true });
 });
