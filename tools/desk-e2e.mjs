@@ -1251,16 +1251,20 @@ const SUITES = {
     check(saved.split.math === 120 && saved.log.some((l) => l.by === 'me' && l.field === 'goal' && l.to === 400), `改档案没记 log：${JSON.stringify(saved.log)}`);
     await t.home();
     await t.waitFor(async () => (await t.text('.dk-score'))?.includes('目标 400 分'), { what: '首页 410 分那张卡换成目标 400 分' });
-    // 收件箱那一行（2026-11-15 真机上 37 份只并进第一份，学生什么都看不到）：放两份进来，并的时候首页写着并到哪，并完这一行消失
+    // 收件箱那一行（2026-11-15 真机上 37 份只并进第一份，学生什么都看不到）。上面整页刷新过：开头那份坏卷从回执里现取，照样列着
     const another = (year) => {
       const id = `X-408-${year}`;
       return { kind: 'paper', by: 'dev', at: 1, passages: [], paper: { ...good.paper, id, year }, questions: good.questions.map((q) => ({ ...q, id: q.id.replace('2019', String(year)), year, paper: id })) };
     };
-    check(await t.page.$eval('.dk-examinbox', (e) => e.hidden), '收件箱空着的时候首页那一行也出来了');
+    await t.waitFor(async () => (await t.text('.dk-examinbox'))?.includes('有 1 份考试资料没并进去'), { what: '刷新以后从回执里列出整份不收的那份' });
+    await t.page.click('.dk-examinbox summary');
+    const first = await t.text('.dk-examinbox');
+    check(first.includes('408 2018 年真题') && /total|Q-408-2018-4/.test(first), `整份不收的那份没写原因：${first}`);
+    // 放两份新的，加上改好重新放进来的那份坏卷（同号、新的 at）：并的时候写着并到哪，并完这一行消失
     await t.page.evaluate(() => window.LAKitDev.slowWrites(250)); // 慢一点才看得到并到一半
-    await plantLive(t, { 'exam_inbox/X-408-2017': another(2017), 'exam_inbox/X-408-2016': another(2016) });
-    await t.waitFor(async () => /考试资料还在并进来：\d \/ 2，停在这一页/.test((await t.text('.dk-examinbox')) || ''), { timeout: 10000, what: '首页那一行写着并到第几份' });
-    await t.waitFor(async () => { const x = await t.db(); return !x['exam_inbox/X-408-2017'] && !x['exam_inbox/X-408-2016'] && (await t.page.$eval('.dk-examinbox', (e) => e.hidden)); }, { timeout: 30000, what: '两份都并完、首页那一行消失' });
+    await plantLive(t, { 'exam_inbox/X-408-2017': another(2017), 'exam_inbox/X-408-2016': another(2016), 'exam_inbox/X-408-2018': { ...another(2018), at: 2 } });
+    await t.waitFor(async () => /考试资料还在并进来：\d \/ 3，停在这一页/.test((await t.text('.dk-examinbox')) || ''), { timeout: 10000, what: '首页那一行写着并到第几份' });
+    await t.waitFor(async () => { const x = await t.db(); return !x['exam_inbox/X-408-2017'] && !x['exam_inbox/X-408-2016'] && x['exam_inbox_log/X-408-2018']?.ok && (await t.page.$eval('.dk-examinbox', (e) => e.hidden)); }, { timeout: 30000, what: '三份都并完（改好的那份也并成了）、首页那一行消失' });
     await t.page.evaluate(() => window.LAKitDev.slowWrites(0));
     // 一直写不进去：试两轮（中间隔 10 秒）就停，那一行写明哪一份没并进去、为什么；原件留着下次再试
     t.expected = ['模拟的写入失败'];
@@ -1272,6 +1276,19 @@ const SUITES = {
     check(row.includes('408 2015 年真题') && row.includes('模拟的写入失败'), `没写明哪一份、为什么：${row}`);
     check((await t.db())['exam_inbox/X-408-2015'], '没并进去的原件被删了');
     await t.page.evaluate(() => window.LAKitDev.failWrites(0));
+    // 进了课堂接着并（学生的习惯是打开首页就进课堂）：?dev&examwait=1 开课 1 秒以后开始。先进课堂再放两份，免得首页先并了
+    await t.openForm('class&examwait=1'); // 首页这一下把刚才的 X-408-2015 并掉（不再写失败）
+    await t.waitFor(async () => !(await t.db())['exam_inbox/X-408-2015'], { timeout: 20000, what: '首页把上次没并进去的那份并掉' });
+    await t.page.click('.dk-class .dk-new');
+    const sid = await t.inClass();
+    await plantLive(t, { 'exam_inbox/X-408-2014': another(2014), 'exam_inbox/X-408-2013': another(2013) });
+    const inClassDb = await t.waitFor(async () => { const x = await t.db(); return !x['exam_inbox/X-408-2014'] && !x['exam_inbox/X-408-2013'] ? x : null; }, { timeout: 30000, what: '在课堂里把两份并完' });
+    check(inClassDb['papers/X-408-2014'] && inClassDb['papers/X-408-2013'] && inClassDb['exam_inbox_log/X-408-2014']?.ok && inClassDb['exam_inbox_log/X-408-2013']?.ok, '课堂里并的两套卷没进库');
+    check(decodeURIComponent(new URL(t.page.url()).hash.slice(1)) === sid && !(await t.page.$('.dk-examinbox')), '课堂里并的时候换了页面、画了那一行');
+    // 回到首页：课堂里都并完了，那一行不出现
+    await t.open();
+    await sleep(1500);
+    check(await t.page.$eval('.dk-examinbox', (e) => e.hidden), `回到首页那一行还在：${await t.text('.dk-examinbox')}`);
     return t;
   },
 

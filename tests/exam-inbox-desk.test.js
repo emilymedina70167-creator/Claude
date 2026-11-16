@@ -5,8 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { buildPaper, parseSyllabus } from '../kit/src/exam/ingest.js';
-import { createExamInbox } from '../kit/src/exam/examdesk.js';
-import { inboxName, inboxRow } from '../kit/src/exam/inbox.js';
+import { createExamInbox, CLASS_INBOX, CLASS_INBOX_WAIT, classInboxWait, startClassInbox } from '../kit/src/exam/examdesk.js';
+import { inboxName, inboxRow, inboxProgress, inboxSig, receiptWhy } from '../kit/src/exam/inbox.js';
 
 const read = (f) => readFileSync(new URL(`./fixtures/exam/${f}`, import.meta.url), 'utf8');
 const paper = (year) => {
@@ -143,4 +143,117 @@ test('首页那一行：卷、练习、考点树按名字叫，不堆编号', ()
   assert.equal(f.pending, '');
   assert.equal(f.head, '有 2 份考试资料没并进去');
   assert.deepEqual(f.failed, [{ id: 'X-408-2018', name: '408 2018 年真题', why: '缺了必填的 total' }, { id: 'drills-X-408-2010', name: '408 2010 年真题做的练习', why: 'x' }]);
+});
+
+// —— 审查以后改的（2026-11-16）——
+test('整份不收的那一份：刷新以后（别的设备、上一次打开时并的）从回执里照样列出来；同号后来并成了就不再列', async () => {
+  const db = memDb({
+    'exam_inbox_log/X-408-2018': { kind: 'paper', ok: false, at: 5, problems: ['真题卷 X-408-2018：缺了必填的 total'], rejected: [], src: 'X-408-2018' },
+    'exam_inbox_log/X-408-2017': { kind: 'paper', ok: true, at: 6, problems: [], rejected: [], src: 'X-408-2017' },
+  });
+  const box = createExamInbox({ db, waits: [], again: 10, reportError: () => {} });
+  assert.ok(await until(() => box.progress().failed.length === 1));
+  assert.deepEqual(box.progress().failed, [{ id: 'X-408-2018', why: '真题卷 X-408-2018：缺了必填的 total' }]);
+  assert.equal(inboxRow(box.progress()).head, '有 1 份考试资料没并进去');
+  // 改好重新放进来、并成了：回执同号盖掉
+  await db.doc('exam_inbox/X-408-2018').set(paper(2018));
+  assert.ok(await until(() => db.all()['exam_inbox_log/X-408-2018']?.ok === true && !box.progress().busy));
+  assert.deepEqual(box.progress().failed, []);
+  assert.equal(inboxRow(box.progress()), null);
+  box.stop();
+  // 课堂里不看回执
+  const quiet = createExamInbox({ db: memDb({ 'exam_inbox_log/X-408-2018': { ok: false, problems: ['x'] } }), logs: false, reportError: () => {} });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(quiet.progress().failed, []);
+  quiet.stop();
+});
+
+test('同一个编号的原件换了（重新放进来的）：这次打开里处理过也当新的一份再并', async () => {
+  const bad = paper(2018);
+  delete bad.paper.total;
+  const db = memDb({ 'exam_inbox/X-408-2018': bad });
+  const box = createExamInbox({ db, waits: [], again: 10, reportError: () => {} });
+  assert.ok(await until(() => box.progress().done === 1 && !box.progress().busy));
+  assert.equal(box.progress().failed.length, 1);
+  await db.doc('exam_inbox/X-408-2018').set({ ...paper(2018), at: 2 });
+  assert.ok(await until(() => db.all()['exam_inbox_log/X-408-2018']?.ok === true && !box.progress().busy), JSON.stringify(box.progress()));
+  assert.deepEqual(box.progress(), { total: 1, done: 1, busy: false, failed: [] });
+  box.stop();
+});
+
+test('分母不跳：正在并的那一份删了原件、还没记成处理完，也算在总数里', async () => {
+  const db = memDb({ 'exam_inbox/X-408-2018': paper(2018), 'exam_inbox/X-408-2019': paper(2019) });
+  const seen = [];
+  let box = null;
+  box = createExamInbox({ db, waits: [], again: 10, reportError: () => {}, onChange: () => { if (box) seen.push(box.progress().total); } });
+  assert.ok(await until(() => box.progress().done === 2 && !box.progress().busy));
+  assert.ok(seen.length && seen.every((n) => n === 2), `总数跳过：${seen.join(',')}`);
+  box.stop();
+});
+
+test('计数写不进 meta/exam：照样并完，但记进出错记录（不再吞掉）', async () => {
+  const db = memDb({ 'exam_inbox/X-408-2019': paper(2019) }, { fail: (op, p) => op === 'set' && p === 'meta/exam' });
+  const errs = [];
+  const box = createExamInbox({ db, waits: [], again: 10, stats: false, reportError: (e, c) => errs.push(c) });
+  assert.ok(await until(() => box.progress().done === 1 && !box.progress().busy));
+  assert.ok(!db.all()['exam_inbox/X-408-2019']);
+  assert.ok(errs.some((c) => /计数/.test(c.what) && c.path === 'X-408-2019'), JSON.stringify(errs));
+  box.stop();
+});
+
+// 一批同时写几条：写慢一点，数同时在写的最多几条
+function countingDb(init) {
+  let now = 0, max = 0;
+  const db = memDb(init);
+  const doc = db.doc;
+  db.doc = (p) => {
+    const r = doc(p);
+    return { ...r, set: async (d) => { now++; max = Math.max(max, now); await new Promise((ok) => setTimeout(ok, 2)); try { return await r.set(d); } finally { now--; } } };
+  };
+  db.max = () => max;
+  return db;
+}
+test('课堂里接着并：一批只写 5 条、不重算考情的统计；首页一批 20 条、重算', async () => {
+  assert.deepEqual(CLASS_INBOX, { parallel: 5, stats: false, logs: false });
+  const cls = countingDb({ 'exam_inbox/X-408-2019': paper(2019) });
+  const a = createExamInbox({ db: cls, waits: [], again: 10, reportError: () => {}, ...CLASS_INBOX });
+  assert.ok(await until(() => a.progress().done === 1 && !a.progress().busy));
+  assert.ok(cls.max() <= 5, `课堂里一批写了 ${cls.max()} 条`);
+  assert.equal(cls.all()['meta/exam'].counts.questions, 47, '计数照写');
+  assert.equal(cls.all()['meta/exam'].statsAt, undefined, '课堂里不重算统计（回到首页由 maybeRefresh 补：at 比 statsAt 新）');
+  a.stop();
+  const home = countingDb({ 'exam_inbox/X-408-2019': paper(2019) });
+  const b = createExamInbox({ db: home, waits: [], again: 10, reportError: () => {} });
+  assert.ok(await until(() => b.progress().done === 1 && !b.progress().busy && home.all()['meta/exam']?.statsAt));
+  assert.ok(home.max() > 5, `首页一批只写了 ${home.max()} 条`);
+  b.stop();
+});
+
+test('课堂里等多久：默认 30 秒，?dev&examwait=1 是 1 秒（不是 dev 不认）；startClassInbox 到点才挂、能停', async () => {
+  assert.equal(CLASS_INBOX_WAIT, 30000);
+  assert.equal(classInboxWait('?dev&examwait=1', true), 1000);
+  assert.equal(classInboxWait('?dev&examwait=0', true), 0);
+  assert.equal(classInboxWait('?examwait=1', false), 30000);
+  assert.equal(classInboxWait('?dev', true), 30000);
+  assert.equal(classInboxWait('?dev&examwait=x', true), 30000);
+  const db = memDb({ 'exam_inbox/X-408-2019': paper(2019) });
+  const stop = startClassInbox({ db, wait: 30, reportError: () => {} });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(db.all()['exam_inbox/X-408-2019'], '还没到点就并了');
+  assert.ok(await until(() => !db.all()['exam_inbox/X-408-2019']));
+  assert.equal(db.all()['exam_inbox_log/X-408-2019'].ok, true);
+  stop();
+  const db2 = memDb({ 'exam_inbox/X-408-2019': paper(2019) });
+  startClassInbox({ db: db2, wait: 20, reportError: () => {} })();
+  await new Promise((r) => setTimeout(r, 60));
+  assert.ok(db2.all()['exam_inbox/X-408-2019'], '停了还在并');
+});
+
+test('进度的纯函数：重新放进来的不算处理完；回执里的只补这次没处理过的', () => {
+  const done = new Map([['A', { why: '', sig: '1' }], ['B', { why: '坏', sig: '1' }]]);
+  assert.deepEqual(inboxProgress({ present: new Map([['A', '2']]), done, current: 'C', busy: true, logs: [{ id: 'B', ok: false, problems: ['旧'] }, { id: 'D', ok: false, problems: ['p1'] }, { id: 'A', ok: false }] }),
+    { total: 3, done: 1, busy: true, failed: [{ id: 'B', why: '坏' }, { id: 'D', why: 'p1' }] });
+  assert.equal(receiptWhy({ problems: [], rejected: [{ id: 'Q', error: 'e' }] }), 'Q：e');
+  assert.equal(receiptWhy({}), '整份不收');
+  assert.notEqual(inboxSig({ at: 1, questions: [1] }), inboxSig({ at: 2, questions: [1] }));
 });

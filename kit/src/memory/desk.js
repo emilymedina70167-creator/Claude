@@ -22,7 +22,7 @@ import { receiptLine } from './lab.js';
 import { getStore, getDownloads } from '../live/store.js';
 import { VERSION, KIT_URL } from '../version.js';
 import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toDate } from './schema.js';
-import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, classForm, idleClose } from './session.js';
+import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, TEACH_KINDS, classForm, idleClose } from './session.js';
 import { buildReport, reportLine, REPORT_VERSION, lastActivity, reportText } from './report.js';
 import { needsDebrief, transcriptText, debriefTraps, debriefPrompt, parseDebrief, debriefText, debriefView, DEBRIEF_VERSION } from './debrief.js';
 import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA, EXAM_BACKUP, AIDE_BACKUP } from './backup.js';
@@ -71,7 +71,7 @@ import { createDevAI } from '../books/devmock.js';
 import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
 import { scrubBooks, readReserve, reserveYears } from '../exam/reserve.js';
-import { createExamInbox, refreshBars } from '../exam/examdesk.js';
+import { createExamInbox, refreshBars, startClassInbox, classInboxWait } from '../exam/examdesk.js';
 import { inboxRow } from '../exam/inbox.js';
 import { loadExamCourse, courseOfBlock } from '../exam/load.js';
 import { examIndexOf } from '../exam/fields.js';
@@ -231,10 +231,12 @@ export async function renderDesk(root, meta) {
   // 考试资料的收件箱（exam/examdesk.js）：开发那边切好的真卷、考点树、标签，页面查过再并进去（只在首页挂，课堂里不挂）
   // 首页的考情缓存（meta/exam：计数、每门课的热度、每块平均每年几分）：410 分的权重、考情页读它，首页不读考试资料的整类
   let examMeta = null;
-  // 首页那一行（paintExamInbox）：收件箱还在并、有没并进去的才出现。并入只在首页做，进了课堂就停——2026-11-15 首页开着 3 秒就进了课堂，
-  // 37 份只并进了第一份，学生什么都看不到（docs/superpowers/specs/2026-11-15-root-rulings.md）
-  const examInbox = createExamInbox({ db, curriculum: () => data.curriculum, onChange: () => paintExamInbox() });
+  // 首页那一行（paintExamInbox）：收件箱还在并、有没并进去的才出现（整份不收的从回执里现取，刷新以后、别的设备并的也列）。
+  // 2026-11-15 第一份开始并 3 秒以后就进了课堂（推断），37 份只并进了第一份，学生什么都看不到；现在课堂里也接着并（enterClass 的 startClassInbox），
+  // 见 docs/superpowers/specs/2026-11-15-root-rulings.md
+  // 先声明再挂：真数据库的订阅要是同步回调，第一次重画就碰上还没声明的变量
   let examInboxSig = '';
+  const examInbox = createExamInbox({ db, curriculum: () => data.curriculum, onChange: () => paintExamInbox() });
   function paintExamInbox() {
     const box = $('.dk-examinbox');
     if (!box) return;
@@ -1879,6 +1881,10 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     },
   }) : null;
   const leave = (to) => { said?.flush(); goto(to); };
+  // 考试资料的收件箱在课堂里接着并（exam/examdesk.js 的 startClassInbox）：学生的习惯是打开首页就进课堂，只在首页并等不到并完。
+  // 开课 30 秒以后、一次一份、一批 5 条，不重算统计（回到首页补）、不画东西；只读翻看、练一练、实时黑板、自学单元不开（前面已经 return）。
+  // 用首页那一层出口（guardDb）写：考试资料不是课堂讲课那一边的数据。不在调用模型的路上，也不往说明里加东西
+  if (!readOnly && TEACH_KINDS.includes(kind)) startClassInbox({ db: guardDb(db), wait: classInboxWait(location.search, store.dev) });
   // 舞台课（kind: stage，docs/stage-plan.md D 段）：整屏一块舞台，自己的控制器；记忆、教材、证据、报告照旧
   if (kind === 'stage') {
     // 课堂助手（aide/，第九轮）：这一块附近的学生卡、这一科的课前档案（各 3 秒读不到当没有，不等）；

@@ -125,7 +125,7 @@ export function planInbox(rec = {}, { have = new Map(), at = Date.now(), syllabu
 }
 
 // —— 首页那一行（memory/desk.js 画、examdesk.js 的 progress 给数）：学生看得见并到哪了、哪几份没并进去 ——
-// 2026-11-15 收件箱 37 份只并进了第一份：首页开着 3 秒就进了课堂，学生什么都看不到。给学生看的写名字，不堆编号
+// 2026-11-15 收件箱 37 份只并进了第一份：第一份开始并 3 秒以后就进了课堂（推断，见 rulings），学生什么都看不到。给学生看的写名字，不堆编号
 const COURSE_NAME = { LA: '线代', HM: '高数', PS: '概率', DS: '数据结构', CO: '组成原理', OS: '操作系统', CN: '计网', EN: '英语', PO: '政治' };
 /** 收件箱里一份的名字：X-408-2011 → 408 2011 年真题；drills-X-408-2011 → …做的练习；syllabus-DS-2026 → 数据结构考点树 */
 export function inboxName(id) {
@@ -136,6 +136,30 @@ export function inboxName(id) {
   if (m) return `${COURSE_NAME[m[1]] || m[1]}考点树（${m[2]} 年大纲）`;
   if (/^tags-/.test(s)) return '一批真题标签';
   return s;
+}
+/** 整份不收的回执写成一句原因（首页那一行、progress 的 why） */
+export function receiptWhy(log) {
+  return [...(log?.problems || []), ...(log?.rejected || []).map((r) => `${r.id}：${r.error}`)].slice(0, 3).join('；') || '整份不收';
+}
+/**
+ * 收件箱里一份原件的「样子」：同一个编号重新放进来（开发那边改好再写一遍）时变——tools/exam.mjs 每次写都带新的 at。
+ * 不整份序列化：一卷一百多 KB，每来一次快照几十份都算一遍，iPad 上吃不消
+ */
+export function inboxSig(d = {}) {
+  const n = (k) => (Array.isArray(d[k]) ? d[k].length : Object.keys(d[k] || {}).length);
+  return [d.at ?? '', d.by ?? '', d.kind ?? '', n('questions'), n('drills'), n('nodes'), n('tags')].join('|');
+}
+/**
+ * 进度（纯函数，examdesk.js 的 progress）。present：收件箱里现有的 id → sig；done：这次处理过的 id → { why, sig }；
+ * current：正在并的那一份（删原件的快照先到，它也算在总数里）；logs：回执里整份不收的（ok: false），这次没处理过的照样列出来。
+ * 处理过、但原件又换了样子的（重新放进来的）不算处理完
+ */
+export function inboxProgress({ present = new Map(), done = new Map(), current = null, busy = false, logs = [] } = {}) {
+  const settled = (id) => done.has(id) && (!present.has(id) || present.get(id) === done.get(id).sig);
+  const ids = new Set([...present.keys(), ...done.keys(), ...(current ? [current] : [])]);
+  const failed = [...ids].filter((id) => settled(id) && done.get(id).why).map((id) => ({ id, why: done.get(id).why }));
+  for (const l of logs) if (l?.ok === false && l.id && !done.has(l.id) && !failed.some((f) => f.id === l.id)) failed.push({ id: l.id, why: receiptWhy(l) });
+  return { total: ids.size, done: [...ids].filter(settled).length, busy, failed };
 }
 /**
  * progress → 首页那一行要写什么；什么都不用写（都处理完、没有没并进去的）返回 null。

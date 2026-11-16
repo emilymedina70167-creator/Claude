@@ -2,8 +2,8 @@
 // 页面照 inbox.js 的 planInbox 查过再并进去；整条不对的只写回执、不进库。照教材收件箱（books/bookview.js 的 takeInbox）的做法：
 // 正在做时来了新快照接着做、出错的过一会儿重读一遍、并的时候屏幕别熄；一条一条做（一卷几十道题，同时写 20 条）。
 // 回执 exam_inbox_log/{同号}，留最近 40 份；库里有几卷几题记在 meta/exam（照回执加，首页不为了计数读整类）。
-// 只挂在首页，课堂里不挂（不碰上课的速度）。
-import { planInbox, touches, countsAfter } from './inbox.js';
+// 首页挂着；课堂里开课 30 秒以后也挂一个轻的（startClassInbox：一批 5 条、不重算统计、不画东西，不在调用模型的路上）。
+import { planInbox, touches, countsAfter, inboxSig, inboxProgress, receiptWhy } from './inbox.js';
 import { assertWrite } from '../memory/schema.js';
 import { PERMANENT } from '../memory/writer.js';
 import { reportError as reportErr } from '../errlog.js';
@@ -96,21 +96,44 @@ export async function refreshBars(db, { evidence = [], bars = [], now = Date.now
 export const INBOX_TRIES = 2;
 const why = (err) => `没写进数据库：${String(err?.message || err?.code || err || '').slice(0, 200)}`;
 
+// 课堂里接着并（2026-11-15：学生的习惯是打开首页就进课堂，只在首页并，37 份只并进了第一份）：开课 30 秒以后，
+// 一次一份、一批只写 5 条（首页 20 条），不重算考情的统计（refreshStats 要读整门课的题；回到首页由 maybeRefresh 补），
+// 不看回执、不画那一行。不在调用模型的路上，也不往说明里加东西
+export const CLASS_INBOX = { parallel: 5, stats: false, logs: false };
+export const CLASS_INBOX_WAIT = 30000;
+/** 课堂里等多久开始并：?dev&examwait=1 是 1 秒（e2e 用），别的时候 30 秒 */
+export function classInboxWait(search = '', dev = false) {
+  const raw = new URLSearchParams(String(search || '')).get('examwait');
+  return dev && raw !== null && raw !== '' && Number(raw) >= 0 ? Number(raw) * 1000 : CLASS_INBOX_WAIT;
+}
+/** 课堂页面里开一个（黑板课、舞台课、一问一答；只读翻看、练一练不开）：等 wait 毫秒再挂，返回停下的函数 */
+export function startClassInbox({ db, wait = CLASS_INBOX_WAIT, ...opts } = {}) {
+  let box = null;
+  let gone = false;
+  const t = setTimeout(() => { if (!gone) box = createExamInbox({ db, ...CLASS_INBOX, ...opts }); }, wait);
+  return () => { gone = true; clearTimeout(t); box?.stop(); };
+}
+
 /**
- * 首页挂着的收件箱。onChange：进度变了叫一声（首页重画那一行，见 progress）；reportError：出错记进出错记录（测试里换成假的）；
- * again：有出错的过多久再读一遍收件箱
+ * 首页挂着的收件箱（课堂里也挂，见 startClassInbox）。onChange：进度变了叫一声（首页重画那一行，见 progress）；
+ * reportError：出错记进出错记录（测试里换成假的）；again：有出错的过多久再读一遍收件箱；
+ * parallel：一批同时写几条；stats：并进了东西要不要重算考情的统计；logs：要不要看回执（整份不收的，刷新以后、别的设备并的也列得出来）
  */
-export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curriculum = () => [], onChange = () => {}, reportError = reportErr, again = 10000 } = {}) {
+export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curriculum = () => [], onChange = () => {}, reportError = reportErr, again = 10000, parallel = PARALLEL, stats = true, logs = true } = {}) {
   let busy = false;
   let latest = null;
   let stopped = false;
   let tookOk = false;
-  // 这次打开首页处理过的（写了回执的、试满几轮放弃的）：id → 没并进去的原因（并进去了是 ''）
+  // 这次打开处理过的（写了回执的、试满几轮放弃的）：id → { why: 没并进去的原因（并进去了是 ''）, sig: 那时原件的样子 }。
+  // 同一个编号的原件换了（改好重新放进来的）就当新的一份再并
   const done = new Map();
   const tries = new Map();
-  // 收件箱里现在有的（最近一次快照）：别的设备并掉的不算进总数
-  let present = new Set();
+  // 收件箱里现在有的（最近一次快照）：id → sig；别的设备并掉的不算进总数
+  let present = new Map();
+  let current = null; // 正在并的那一份：删原件触发的快照先把它拿掉，总数别跳一下
+  let receipts = []; // 回执里整份不收的（logs 开着才读）
   const changed = () => { try { onChange(); } catch { /* 首页重画出错别打断并入 */ } };
+  const settled = (d) => done.has(d.id) && done.get(d.id).sig === inboxSig(d);
   let lock = null;
   const awake = async () => { try { if (!lock && typeof document !== 'undefined' && document.visibilityState === 'visible') lock = await navigator.wakeLock?.request?.('screen'); } catch { lock = null; } };
   const sleepOk = () => { try { lock?.release?.(); } catch { /* */ } lock = null; };
@@ -126,8 +149,8 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curricul
   async function readHave(rec) {
     const have = new Map();
     const paths = touches(rec);
-    for (let i = 0; i < paths.length; i += PARALLEL) {
-      await Promise.all(paths.slice(i, i + PARALLEL).map(async (p) => {
+    for (let i = 0; i < paths.length; i += parallel) {
+      await Promise.all(paths.slice(i, i + parallel).map(async (p) => {
         const s = await retry(() => db.doc(p).get());
         if (s?.exists) have.set(p, s.data());
       }));
@@ -153,15 +176,16 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curricul
     const at = Date.now();
     const years = rec.kind === 'drills' ? await readReserve(db, new Date(at).toISOString().slice(0, 10)) : [];
     const { writes, log } = planInbox(rec, { have, at, syllabusIds, years });
-    for (let i = 0; i < writes.length; i += PARALLEL) await Promise.all(writes.slice(i, i + PARALLEL).map((w) => write(w.path, w.data)));
+    for (let i = 0; i < writes.length; i += parallel) await Promise.all(writes.slice(i, i + parallel).map((w) => write(w.path, w.data)));
     await write(`exam_inbox_log/${id}`, { ...log, src: id });
     if (log.ok) {
       const meta = await retry(() => db.doc('meta/exam').get()).then((s) => (s?.exists ? s.data() : null)).catch(() => null);
-      await retry(() => db.doc('meta/exam').set(countsAfter(meta, log, at))).catch(() => {});
+      // 计数写不进去不挡这一份（回执写了、库里有了），但要让人知道：首页重算统计时会照读到的改对
+      await retry(() => db.doc('meta/exam').set(countsAfter(meta, log, at))).catch((err) => reportError(err, { what: 'exam-inbox：计数没写进 meta/exam', path: id }));
     }
     await retry(() => db.doc(`exam_inbox/${id}`).delete());
     // 不合规矩的整份不收：回执写了原因，首页那一行也列出来（不是出错，不进出错记录）
-    done.set(id, log.ok ? '' : [...log.problems, ...log.rejected.map((r) => `${r.id}：${r.error}`)].slice(0, 3).join('；') || '整份不收');
+    done.set(id, { why: log.ok ? '' : receiptWhy(log), sig: inboxSig(d) });
     tries.delete(id);
     if (log.ok) tookOk = true;
   }
@@ -173,10 +197,10 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curricul
 
   async function take(docs) {
     if (stopped) return;
-    present = new Set(docs.map((d) => d.id));
+    present = new Map(docs.map((d) => [d.id, inboxSig(d)]));
     changed();
     if (busy) { latest = docs; return; }
-    const todo = docs.filter((d) => !done.has(d.id));
+    const todo = docs.filter((d) => !settled(d));
     if (!todo.length) return;
     busy = true;
     changed();
@@ -189,39 +213,41 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curricul
       while (list?.length) {
         for (const d of list.sort((a, b) => (a.id < b.id ? -1 : 1))) {
           if (stopped) return;
-          if (done.has(d.id) || failedNow.has(d.id)) continue;
+          if (settled(d) || failedNow.has(d.id)) continue;
+          // 换过的原件（重新放进来的）从头算几轮
+          if (done.has(d.id)) { done.delete(d.id); tries.delete(d.id); }
+          current = d.id;
+          changed();
           try { await takeOne(d); } catch (err) {
             // 以前这里什么都不做（catch { failed = true; }）：错误不进出错记录，学生在首页也看不到
             reportError(err, { what: 'exam-inbox', path: d.id });
             const n = (tries.get(d.id) || 0) + 1;
             tries.set(d.id, n);
             failedNow.add(d.id);
-            if (n >= INBOX_TRIES) done.set(d.id, why(err)); else failed = true;
+            if (n >= INBOX_TRIES) done.set(d.id, { why: why(err), sig: inboxSig(d) }); else failed = true;
           }
+          current = null;
           changed();
         }
-        list = latest?.filter((d) => !done.has(d.id) && !failedNow.has(d.id));
+        list = latest?.filter((d) => !settled(d) && !failedNow.has(d.id));
         latest = null;
       }
       await trimLogs();
-      if (tookOk) { tookOk = false; await refreshStats(db, { curriculum: curriculum() }).catch(() => {}); }
+      if (tookOk && stats) { tookOk = false; await refreshStats(db, { curriculum: curriculum() }).catch(() => {}); }
     } finally {
       busy = false;
+      current = null;
       sleepOk();
       changed();
       // 有出错的（被限流、网络抖）：过一会儿重新读一遍收件箱接着做（试满 INBOX_TRIES 轮的不再试）
       if (failed && !stopped) setTimeout(() => { if (!stopped) db.collection('exam_inbox').get().then((s) => take(docsOf(s)), () => {}); }, again);
     }
   }
-  /**
-   * 首页那一行要的（exam/inbox.js 的 inboxRow 写成字）：total 这次打开首页见过的份数（收件箱里现有的 + 已经处理掉的），
-   * done 处理完的（并进去的、整份不收的、试满几轮放弃的），failed 没并进去的哪一份、为什么
-   */
-  function progress() {
-    const ids = new Set([...present, ...done.keys()]);
-    return { total: ids.size, done: done.size, busy, failed: [...done].filter(([, w]) => w).map(([id, w]) => ({ id, why: w })) };
-  }
+  /** 首页那一行要的（exam/inbox.js 的 inboxProgress 算、inboxRow 写成字）：{ total, done, busy, failed: [{ id, why }] } */
+  const progress = () => inboxProgress({ present, done, current, busy, logs: receipts });
   const unsub = db.collection('exam_inbox').onSnapshot((s) => take(docsOf(s)), () => {});
+  // 回执（最多 LOG_KEEP 份，小）：整份不收的那几份刷新以后、别的设备并的也要列得出来；后来同号并成了的回执盖掉了它，就不再列
+  const unlog = logs ? db.collection('exam_inbox_log').onSnapshot((s) => { receipts = docsOf(s).filter((l) => l.ok === false); changed(); }, () => {}) : null;
   // 课程地图读到以后看一眼：缓存比上次并收件箱旧（别的设备并的、从备份恢复的）就重算一遍
   let checked = false;
   async function maybeRefresh() {
@@ -230,5 +256,5 @@ export function createExamInbox({ db, waits = [1200, 2400, 3600, 4800], curricul
     const m = await db.doc('meta/exam').get().then((x) => (x?.exists ? x.data() : null)).catch(() => null);
     if (m && (!m.statsAt || (m.at || 0) > m.statsAt)) await refreshStats(db, { curriculum: curriculum() }).catch(() => {});
   }
-  return { stop() { stopped = true; try { unsub?.(); } catch { /* */ } }, progress, maybeRefresh, refresh: () => refreshStats(db, { curriculum: curriculum() }) };
+  return { stop() { stopped = true; try { unsub?.(); unlog?.(); } catch { /* */ } }, progress, maybeRefresh, refresh: () => refreshStats(db, { curriculum: curriculum() }) };
 }
