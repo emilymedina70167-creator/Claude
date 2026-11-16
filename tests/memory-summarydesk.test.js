@@ -140,3 +140,18 @@ test('摘要开始有以前上的课不回头并', async () => {
   assert.equal(await t.sum.runFor(SID), 'skip');
   assert.equal(t.calls.length, 0);
 });
+
+test('重写回来只是太长：把那一版还给它压一遍，压进上限才写', async () => {
+  const t = await setup({ summary: [{ id: 'en', text: '旧的英语。', v: 1, notes: [], history: [] }] });
+  t.ai.fn = (prompt, n) => (n === 1 ? reply('共用。', '字'.repeat(3000)) : reply('共用。', '压过的英语，一段够长的话。'));
+  assert.equal(await t.sum.runFor(SID), 'done');
+  assert.equal(t.calls.length, 2);
+  assert.match(t.calls[1].prompt, /你上一次写的（太长了）[\s\S]*「这一科」有 9000 字节，上限 8192/);
+  assert.equal((await get(t.db, 'summary/en')).text, '压过的英语，一段够长的话。');
+  // 压了还超：不写
+  const t2 = await setup({ summary: [{ id: 'en', text: '旧的英语。', v: 1, notes: [], history: [] }] });
+  t2.ai.fn = () => reply('共用。', '字'.repeat(3000));
+  assert.equal(await t2.sum.runFor(SID), 'fail');
+  assert.equal(t2.calls.length, 2);
+  assert.equal((await get(t2.db, 'summary/en')).text, '旧的英语。');
+});

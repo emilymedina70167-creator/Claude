@@ -104,10 +104,19 @@ export function createSummary({ db, getData, ai, now = () => Date.now(), onChang
     const res = await call(prompt);
     if (!res) return 'fail';
     const both = !!space;
-    const got = parseRewrite(res.text, { both });
+    let got = parseRewrite(res.text, { both });
     if (got.problems.length) { reportError(`记忆摘要重写回来的格式不对：${got.problems.join('；')}`, { what: '记忆摘要', path: src, soft: true }); return 'fail'; }
     const [shared, subject] = await Promise.all([latest('shared'), both ? latest(space) : null]);
-    const checks = [checkRewrite({ prev: shared?.text, next: got.shared, id: 'shared' }), both ? checkRewrite({ prev: subject?.text, next: got.subject, id: space }) : { ok: true }];
+    const check = (g) => [checkRewrite({ prev: shared?.text, next: g.shared, id: 'shared' }), both ? checkRewrite({ prev: subject?.text, next: g.subject, id: space }) : { ok: true }];
+    let checks = check(got);
+    // 只是写长了（摘要一节课一节课地长，早晚会顶到上限）：把它写的那一版还给它，请它压一遍。只压一次，还超就算没成
+    const over = (g) => [utf8(g.shared) > maxOf('shared') ? `「共用」有 ${utf8(g.shared)} 字节，上限 ${maxOf('shared')}` : '', both && utf8(g.subject) > maxOf(space) ? `「这一科」有 ${utf8(g.subject)} 字节，上限 ${maxOf(space)}` : ''].filter(Boolean);
+    if (over(got).length && checks.every((c) => c.ok || /超了上限/.test(c.why))) {
+      const again = await call(`${prompt}\n\n## 你上一次写的（太长了）\n\n${res.text}\n\n上面这一版超了上限：${over(got).join('；')}（一个汉字 3 字节）。把旧的、不要紧的、说了两遍的压掉，事实和学生的原话留着，照同样的格式再整份输出一遍。`);
+      if (!again) return 'fail';
+      const g2 = parseRewrite(again.text, { both });
+      if (!g2.problems.length) { got = g2; checks = check(got); }
+    }
     const bad = checks.map((c, i) => (c.ok ? '' : `${i ? '这一科' : '共用'}那一份${c.why}`)).filter(Boolean);
     if (bad.length) { reportError(`记忆摘要重写回来的没收：${bad.join('；')}`, { what: '记忆摘要', path: src, soft: true }); return 'fail'; }
     await patch('shared', 'page', (cur) => nextDoc(cur, { id: 'shared', text: got.shared, by: 'page', at: now(), startedAt, src }));

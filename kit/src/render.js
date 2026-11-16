@@ -16,6 +16,7 @@ const HL_COLORS = { yellow: 'yellow', pink: 'pink', blue: 'blue', green: 'green'
 const MATH_RE = /(`+)[\s\S]*?\1|\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$(?!\s)((?:\\.|[^$\\\n])+?)(?<!\s)\$/g;
 
 // 把公式先换成占位符，避免被 Markdown 改坏（比如 \\ 和 _）
+const WHOLE_CHALK_TEXT = /(?<![\\$\uE000])\$\s*\\chalk\{([\w-]{1,24})\}\{\s*\\text\{([^{}$\n]{1,400})\}\s*\}\s*\$(?!\$)/g;
 function maskMath(src, store) {
   const out = [];
   let fence = null;
@@ -23,6 +24,9 @@ function maskMath(src, store) {
   const flush = () => {
     if (!buf.length) return;
     let text = buf.join('\n').replace(/\\\$/g, '\uE000');
+    // 整条公式只是一句上色的话（$\chalk{blue}{\text{一整句中文}}$）：公式里的 \text 不折行，长句子冲出框被切掉后半句
+    // （2026-11-16 真课的板上就有一行）。换成公式外面的写法，下面 forgive 画成彩色的字，照常折行
+    text = text.replace(WHOLE_CHALK_TEXT, (m, c, body) => `\\chalk{${c}}{${body}}`);
     text = text.replace(MATH_RE, (m, tick, dd, br, pr, inl) => {
       if (tick) return m;
       const display = dd !== undefined || br !== undefined;
@@ -60,7 +64,7 @@ function forgive(text, store) {
   const raw = (html) => { store.push({ raw: html }); return `\uE001${store.length - 1}\uE002`; };
   return text.split(/(`+[\s\S]*?`+)/).map((part, i) => {
     if (i % 2) return part;
-    let t = part.replace(/\\(chalk|hl)\{([\w-]{1,24})\}\{([^{}\n]{1,300})\}/g, (m, cmd, name, body) => {
+    let t = part.replace(/\\(chalk|hl)\{([\w-]{1,24})\}\{([^{}\n]{1,400})\}/g, (m, cmd, name, body) => {
       if (cmd === 'chalk' && !MARK_COLORS.includes(name)) return body;
       return raw(`<span data-${cmd === 'chalk' ? 'lkc' : 'lkmark'}="${escapeHtml(name)}">${md.renderInline(body)}</span>`);
     });
@@ -152,6 +156,13 @@ export function calcProblems(texts, vars) {
 export const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // 渲染一段 Markdown（组件内部的文字也用它），不挂载组件
+/**
+ * 一行就是一行（课堂的黑板用）：老师写板时一句一行——例句一行、译文一行——Markdown 默认把相邻的两行并成一段，
+ * 板上就连成一串（2026-11-16 真课：八个例句和译文全挤在一行里）。开了以后正文里的单个换行就是换行。
+ * 只在课堂的黑板里开（classroom.js）；课件、实时黑板、舞台照旧
+ */
+export function setLineBreaks(on) { md.set({ breaks: !!on }); }
+
 export function mdToHtml(src, { inline = false } = {}) {
   const store = [];
   const masked = maskMath(String(src ?? ''), store);
