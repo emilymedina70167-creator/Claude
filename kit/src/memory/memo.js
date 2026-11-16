@@ -156,9 +156,23 @@ export function splitKnow(entries = [], { on = false } = {}) {
     const text = [a.topic && a.text ? `${a.topic}：${a.text}` : a.text, a.again, a.lesson, !a.text && !a.again ? a.why : ''].map((x) => String(x ?? '').trim()).filter(Boolean).join('；');
     if (!text) continue;
     const basis = Array.isArray(a.basis) ? a.basis : String(a.basis ?? '').split(/[,，]/);
-    notes.push({ text, say: basis.map((x) => String(x).trim()).includes('say'), shared: a.shared === '1' || a.shared === 'true' || a.space === 'all', space: ['math', 'cs', 'en'].includes(a.space) ? a.space : '', line: e.line || '' });
+    // 老写法的 ask 用 scope 写管哪一科（all 是三科都管）
+    const sp = String(a.space || a.scope || '');
+    notes.push({ text, say: basis.map((x) => String(x).trim()).includes('say'), shared: a.shared === '1' || a.shared === 'true' || sp === 'all', space: ['math', 'cs', 'en'].includes(sp) ? sp : '', line: e.line || '' });
   }
   return { notes, rest };
+}
+
+/**
+ * 老师这一轮的记忆块分两路（黑板课、一问一答、舞台课共用）：关于学生的事 → 摘要的新笔记（就是 summarydesk.note 的参数），
+ * 别的（错题、弱点、复现组、位置……）→ rest，照旧走改动单。
+ * history：这节课的轮次（依据里写了 say 的，把学生最近打的那句原话附上）；space / session：这节课的科和编号
+ */
+export function knowNotes(entries = [], { on = false, history = [], space = '', session = '', by = 'class' } = {}) {
+  const { notes, rest } = splitKnow(entries, { on });
+  const lastSay = notes.some((k) => k.say)
+    ? String([...history].reverse().find((t) => t && !t.discarded && t.role === 'student' && String(t.say || '').trim())?.say || '').trim() : '';
+  return { rest, notes: notes.map((k) => ({ text: k.text, quote: k.say ? lastSay : '', space: k.shared ? 'shared' : k.space || space, session, by })) };
 }
 
 /* ---------------- 依据 ---------------- */

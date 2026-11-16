@@ -33,7 +33,7 @@ import { parseOutput } from '../class/protocol.js';
 import { callCost } from '../class/usage.js';
 import { closingPrompt } from '../class/prompt.js';
 import { reportText } from '../memory/report.js';
-import { slipsToFold, tidyDue, tidyText } from '../memory/memo.js';
+import { slipsToFold, tidyDue, tidyText, knowNotes } from '../memory/memo.js';
 import { spaceOfId } from '../memory/space.js';
 import { textbookForClass } from '../books/textbook.js';
 import { reportError } from '../errlog.js';
@@ -260,7 +260,12 @@ export async function renderStageClass(root, meta = {}, desk) {
   async function runMemo(text, turnSeq, { closing = false } = {}) {
     if (!desk.memo?.ops) return null;
     const out = parseOutput(text, { final: true });
-    const entries = out.ops.filter((o) => o.op === 'memo').flatMap((o) => o.entries || []).filter((e) => e.kind !== 'block');
+    const all = out.ops.filter((o) => o.op === 'memo').flatMap((o) => o.entries || []).filter((e) => e.kind !== 'block');
+    // 有记忆摘要时（第十三轮）：这种课的记忆块说明还是旧的（说明一字不动），老师写的 ask / pref / rule / slip / lesson
+    // 记成摘要的新笔记——旧的那几类已经不发给任何老师，写进去等于丢。错题、弱点、位置照旧走改动单
+    const { notes: knows, rest } = knowNotes(all, { on: !!desk.summary?.on(), history, space: desk.space, session: sid });
+    if (desk.summary) for (const k of knows) desk.summary.note(k).catch((e) => reportError(e, { what: '舞台课的新笔记没记成', soft: true }));
+    const entries = desk.summary ? rest : all;
     if (!entries.length) return null;
     try {
       const r = await desk.memo.ops.applyMemo(entries, { session: sid, block: desk.block, space: desk.space, turn: turnSeq, turns: history.filter((t) => !t.discarded), closing });

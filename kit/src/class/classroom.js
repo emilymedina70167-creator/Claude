@@ -43,7 +43,7 @@ import { debriefText } from '../memory/debrief.js';
 import { earlierClasses } from '../memory/digest.js';
 import { choose } from '../dialog.js';
 import { lessonSheet, sheetMd } from '../memory/sheet.js';
-import { slipsToFold, blockSwitch, tidyDue, tidyText, splitKnow } from '../memory/memo.js';
+import { slipsToFold, blockSwitch, tidyDue, tidyText, knowNotes } from '../memory/memo.js';
 import { saidNow, summaryOn } from '../memory/summary.js';
 import { createBoardEye, eyeNote } from './boardeye.js';
 import { spaceOfId, subjectOf } from '../memory/space.js';
@@ -697,11 +697,8 @@ export async function renderClass(root, meta, desk = null) {
       examFollowBlock();
     }
     // 关于学生的事（know；有记忆摘要时旧的五种写法也算）：记成摘要的新笔记，不进改动单（第十三轮）
-    const { notes: knows, rest } = splitKnow(entries1, { on: !!desk.summary?.on() });
-    if (knows.length && desk.summary) {
-      const lastSay = [...history].reverse().find((t) => t && !t.discarded && t.role === 'student' && String(t.say || '').trim())?.say || '';
-      for (const k of knows) desk.summary.note({ text: k.text, quote: k.say ? lastSay : '', space: k.shared ? 'shared' : k.space || desk.space, session: desk.sid, by: 'class' }).catch((e) => console.warn('新笔记没记成', e));
-    }
+    const { notes: knows, rest } = knowNotes(entries1, { on: !!desk.summary?.on(), history, space: desk.space, session: desk.sid });
+    if (desk.summary) for (const k of knows) desk.summary.note(k).catch((e) => console.warn('新笔记没记成', e));
     const entries = desk.summary ? rest : entries1;
     if (!entries.length) return { pds: [], rejected: [] };
     try {
