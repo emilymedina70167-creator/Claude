@@ -63,6 +63,10 @@ fail 0
 
 Windows 全套 `node --test` 第二轮结果：2372 项，2355 通过、16 失败、1 跳过。15 项来自原有 Windows 路径写法（no-modals.test.js 和 teach-run-lib.test.js 使用 URL.pathname，出现 `C:\C:\...`），未改这些不在本任务范围内的测试/工具。另一项 forecast 的「够快」在并发时 629ms 超时；按任务说明单独重跑全部 9 项通过，计时 279ms。时间相关用例按 UTC / Asia/Shanghai 运行，避免宿主纽约时区让既有日期断言偏一天。最终完整测试和 GitHub Linux 检查结果在交付时另行核对，不把本地全套说成全绿。
 
+最终代码的 Windows 完整复跑（`TZ=UTC node --test --test-concurrency=2`）：2375 项，2359 通过、15 项上述路径失败、1 跳过；计时测试这次也通过。
+
+GitHub Linux 的 [运行 43835048421](https://github.com/emilymedina70167-creator/Claude/actions/runs/43835048421)（代码提交 `9d6a963`）已经完成 `npm test`：2375 项，2373 通过、1 失败、1 跳过；唯一失败是任务已注明的 forecast「够快」（CPU 最小值约 202ms，大于原断言的 120ms）。本任务 37 项相关测试均通过，未修改该计时断言。该次构建成功，端到端流程仍在运行；由于前一步计时失败，「打包产物和源码一致」实际被跳过，不能把它写成已通过。
+
 ## 留给主控
 
 根本规则、aims、report、memo、digest、课堂代码和发布文档均未改。请主控按 Task 7 接首页和 later，统一构建后合并发布。此分支刻意不提交 dist，所以现有 CI 的「打包产物和源码一致」一步预期会红；这与交接里的禁止提交 dist 一致，不能据此声称已发布。
