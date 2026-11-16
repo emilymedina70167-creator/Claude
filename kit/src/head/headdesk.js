@@ -3,7 +3,7 @@
 // 发一句：先把我的话记成一条证据（src: say、chat: 编号；话的账和守卫都认它）→ 调用 Opus 5.5 high（前台，学生在等）
 // → 回的不是 Opus 5.5 这一轮作废、照实说 → 回答里的 board memo 块过守卫写进记忆（作者 head，每条一张改动单、能撤销）
 // → 后台给这段对话过一次话的账。不碰 DOM（画面在 chatview.js）。
-import { HEAD, HEAD_MODEL, fitHistory, nextChatId, chatTitle } from './context.js';
+import { HEAD, HEAD_MODEL, fitHistory, nextChatId, chatTitle, memoryReadDoc } from './context.js';
 import { parseMemoLines, splitKnow } from '../memory/memo.js';
 import { memoryRead } from '../memory/session.js';
 import { reportText } from '../memory/report.js';
@@ -74,7 +74,7 @@ export function createHead({ db, getData, ops, ai, said = null, summary = null, 
     return [
       {
         name: 'memory_read',
-        description: '查学习台的记忆库（只读）。collection：rules、profile、asks、curriculum、errors、weaknesses、mastery、reviews、recall、position、slips、lessons、observations、sessions、evidence。ids 一次取好几条全文；不写 id / ids 时列这一类（block 只要挨着这一块的）。sessions 写课的编号，给要点、课后报告、小结和复盘。evidence 按 block 或 session 查最近 30 条。',
+        description: memoryReadDoc(!!summary?.on()),
         inputSchema: { type: 'object', properties: { collection: { type: 'string' }, ids: { type: 'array', items: { type: 'string' } }, id: { type: 'string' }, block: { type: 'string' }, session: { type: 'string' } }, required: ['collection'] },
         async execute(input) {
           const q = { collection: String(input?.collection ?? '').trim(), ids: Array.isArray(input?.ids) ? input.ids.map(String) : undefined, id: input?.id, block: input?.block, session: input?.session };

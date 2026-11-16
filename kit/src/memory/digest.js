@@ -39,7 +39,7 @@ export const PACK_ORDER = ['aide-brief', 'aide-cards', 'position', 'curriculum',
 const CORE = new Set(['aide-brief', 'aide-cards', 'position', 'curriculum', 'errors', 'weaknesses', 'mastery', 'recall', 'sessions']);
 export const CORE_SHARE = 0.45;
 // 有记忆摘要时不再带的几类（全文和目录都不带）
-const SUMMARY_DROPS = new Set(['rules', 'lessons', 'profile', 'slips', 'asks']);
+export const SUMMARY_DROPS = new Set(['rules', 'lessons', 'profile', 'slips', 'asks']);
 const NONE = new Set();
 
 /**

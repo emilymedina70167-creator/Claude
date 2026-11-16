@@ -68,6 +68,12 @@ const MEMO_HEAD = `## 怎么改记忆
 
 ${String(MEMO_DOC).trim()}`;
 
+// 班主任查记忆的工具 memory_read 的说明。有记忆摘要以后（第十三轮）先讲摘要；规则、守则、要求、关于学生、失误这五类还存着，
+// 但不再给上课的老师看——不点名让它去读，学生问起「我以前定过什么」时才查
+export const memoryReadDoc = (summaryOn) => (summaryOn
+  ? '查学习台的记忆库（只读）。collection：summary（记忆摘要：shared 三科共用、math、cs、en，上课的老师带的就是它）、curriculum、errors、weaknesses、mastery、reviews、recall、position、observations、sessions、evidence。以前一条条记的 rules、lessons、asks、profile、slips 还存着，但不再给上课的老师看：学生问起以前定过什么时才查。ids 一次取好几条全文；不写 id / ids 时列这一类（block 只要挨着这一块的）。sessions 写课的编号，给要点、课后报告、小结和复盘。evidence 按 block 或 session 查最近 30 条。'
+  : '查学习台的记忆库（只读）。collection：rules、profile、asks、curriculum、errors、weaknesses、mastery、reviews、recall、position、slips、lessons、observations、sessions、evidence。ids 一次取好几条全文；不写 id / ids 时列这一类（block 只要挨着这一块的）。sessions 写课的编号，给要点、课后报告、小结和复盘。evidence 按 block 或 session 查最近 30 条。');
+
 /**
  * 拼班主任每一轮的说明。材料都是页面算好的（这里不调用、不碰数据库）：
  * asks：在用的「我的要求」；briefs：[{ space, text }] 三科的开场简报（views.js 的 deskBrief）；

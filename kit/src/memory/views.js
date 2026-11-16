@@ -5,7 +5,8 @@ import { REVIEW_TIERS, toDate, addDays, daysBetween, reviewDue, dueList } from '
 import { voidedIds, resolvedErrors, pendingTitle } from './memo.js';
 import { OUTCOME_TEXT } from './report.js';
 import { SPACES, positionId, packIds, filterSpace, courseOf, subjectOf, spaceOfId } from './space.js';
-import { classView, memoryCatalog, utf8 } from './digest.js';
+import { classView, memoryCatalog, utf8, SUMMARY_DROPS } from './digest.js';
+import { summaryOn } from './summary.js';
 import { weaknessHits, pointCatalog } from './skills.js';
 import { isTeach } from './session.js';
 
@@ -373,7 +374,8 @@ export function deskBrief(mem = {}, { space = 'math', today = toDate(Date.now())
   const head = handoffText(filterSpace(mem, space), { kitUrl, deskUrl, today, pack, space, head: forHead })
     + (mine.length ? `\n- 学习台里的资料（books，条目在 books/{编号}/chunks）：${mine.map((b) => `${b.id}《${cut(b.title, 30)}》${b.chunks ? ` ${b.chunks} 条` : ''}${b.status === 'partial' ? '（没转完）' : ''}`).join('；')}。` : '');
   const view = classView(mem, { space, forClass: false });
-  const cat = memoryCatalog(view, { tools: false, today, max: BRIEF_MAX - utf8(head) - 600 });
+  // 有记忆摘要以后（第十三轮）目录里不再列规则、守则、关于学生、失误：它们不再发给上课的老师，班主任照着读、照着答就是把旧规矩带回来
+  const cat = memoryCatalog(view, { tools: false, today, max: BRIEF_MAX - utf8(head) - 600, ...(summaryOn(mem) ? { skip: SUMMARY_DROPS } : {}) });
   const how = forHead ? '要哪一条的全文，用 memory_read 按编号取（ids 一次取好几条）。' : '要哪一条的全文，用 ArtifactData 按编号读（get；同一类几条用 query 的 where id in […]）。这份是页面在学习台打开时写的（看 at）；隔了很久没打开，或者你刚写过记忆，以数据库为准。';
   const body = cat.text.replace(/（没放全文的）/g, '').replace(/（没放全文的，/g, '（');
   return { space, text: `${head}\n\n${how}\n\n${body.replace(/^## 目录（记忆库里没放全文的，一条一行）\n\n这个查看方式不支持工具，目录里的东西取不了全文。\n\n/, '## 这一科记忆库里有什么（一条一行）\n\n')}`, today };
