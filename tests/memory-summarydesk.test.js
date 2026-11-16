@@ -133,3 +133,10 @@ test('班主任的一段对话：只重写共用那一份', async () => {
   assert.doesNotMatch(t.calls[0].prompt, /<这一科>/);
   assert.deepEqual(await t.sum.chatsToDo(), []);
 });
+
+test('摘要开始有以前上的课不回头并', async () => {
+  const t = await setup({ summary: [{ id: 'shared', text: '第一版共用。', v: 1, since: T0 + 5000, notes: [], history: [] }, { id: 'en', text: '第一版英语。', v: 1, since: T0 + 5000, notes: [], history: [] }] });
+  assert.equal(t.sum.needs(t.data().sessions[0]), false);
+  assert.equal(await t.sum.runFor(SID), 'skip');
+  assert.equal(t.calls.length, 0);
+});

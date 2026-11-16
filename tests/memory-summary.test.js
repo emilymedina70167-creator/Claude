@@ -163,3 +163,18 @@ test('记忆库多一类 summary：页面、课堂、我、开发都能写', () 
   assert.ok(COLLECTIONS.summary.id.re.test('shared'));
   assert.ok(!COLLECTIONS.summary.id.re.test('x'));
 });
+
+test('摘要开始有以前的课不回头并', async () => {
+  const { sinceOf } = await import('../kit/src/memory/summary.js');
+  assert.equal(sinceOf({}), 0);
+  assert.equal(sinceOf({ summary: [{ id: 'shared', since: 5000 }, { id: 'en', since: 3000 }, { id: 'cs' }] }), 3000);
+  const s = { id: 'c-1', kind: 'class' };
+  const now = 10 * 60 * 1000;
+  assert.equal(needsRewrite(s, { evidence: [{ session: 'c-1', at: 1000 }], now, since: 3000 }), false);
+  assert.equal(needsRewrite(s, { evidence: [{ session: 'c-1', at: 1000 }, { session: 'c-1', at: 4000 }], now, since: 3000 }), true);
+  // 第一版记下 since，以后的版本不变；当场记出来的那一份也有
+  const d1 = nextDoc(null, { id: 'en', text: '甲', at: 100 });
+  assert.equal(d1.since, 100);
+  assert.equal(nextDoc(d1, { text: '乙', at: 900 }).since, 100);
+  assert.equal(addNote(null, noteOf({ text: '一条', at: 77 }), { id: 'cs' }).doc.since, 77);
+});

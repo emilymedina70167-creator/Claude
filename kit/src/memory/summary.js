@@ -70,7 +70,7 @@ export function noteOf({ text, quote = '', session = '', by = 'class', at = Date
 /** 往一份摘要上加一条新笔记：和已有的说的是同一件事不收；满了丢最早的。doc 可以是 null（这一份还没有） */
 export function addNote(doc, note, { id = doc?.id } = {}) {
   if (!clean(note?.text)) return { doc, added: false, why: '没有内容' };
-  const base = doc || { id, text: '', v: 0, notes: [], history: [] };
+  const base = doc || { id, text: '', v: 0, since: note.at || Date.now(), notes: [], history: [] };
   const notes = Array.isArray(base.notes) ? base.notes : [];
   if (notes.some((n) => similarity(n.text, note.text) >= NOTE_ALIKE)) return { doc: base, added: false, why: '和已有的新笔记说的是同一件事' };
   return { doc: { ...base, notes: [...notes, note].slice(-NOTES_MAX) }, added: true };
@@ -85,7 +85,8 @@ export function nextDoc(prev, { id = prev?.id, text, by = 'page', at = Date.now(
   const p = prev || { id, text: '', v: 0, notes: [], history: [] };
   const history = clean(p.text) ? [{ text: p.text, at: p.at || 0, by: p.by || '', v: p.v || 0 }, ...(Array.isArray(p.history) ? p.history : [])].slice(0, HISTORY_MAX) : (Array.isArray(p.history) ? p.history : []);
   const notes = (Array.isArray(p.notes) ? p.notes : []).filter((n) => startedAt === null || (Number(n.at) || 0) > startedAt);
-  return { ...p, id, text: neutral(clean(text)), at, by, v: (Number(p.v) || 0) + 1, notes, history, ...(src ? { src } : {}) };
+  // since：这一份是什么时候开始有的（只在第一版时记）。它以前的课不再回头并（见 sinceOf）
+  return { ...p, id, text: neutral(clean(text)), at, by, v: (Number(p.v) || 0) + 1, since: Number(p.since) || at, notes, history, ...(src ? { src } : {}) };
 }
 
 /** 退回上一版（现在这一版进 history 的头上，换下来的那一版从 history 里拿掉）。没有上一版返回 null */
@@ -193,16 +194,25 @@ export function legacyText(mem = {}, space = '') {
 }
 
 /**
+ * 摘要是从什么时候开始有的（四份里最早的 since）。这以前的课、对话不回头并：第一版是照当时整个记忆库写的，
+ * 那些课已经在里面了——一节一节重并，既白花调用，又把早就淡掉的旧事重新写回来。还没有摘要时是 0（都并）
+ */
+export function sinceOf(mem = {}) {
+  const xs = (Array.isArray(mem?.summary) ? mem.summary : []).map((d) => Number(d?.since) || 0).filter((x) => x > 0);
+  return xs.length ? Math.min(...xs) : 0;
+}
+
+/**
  * 这节课要不要重写摘要：上一次并到的时间以后又有新的证据（作答、学生的话），而且静下来了。
  * 用证据的时间而不是轮次的序号：证据首页本来就订阅着，不用为了判断去读每节课的轮次。
  * session.sum：{ at, upTo（并到哪一条证据的时间）, fails, failUpTo（上次失败时最新的证据时间）}
  */
-export function needsRewrite(session, { evidence = [], now = Date.now() } = {}) {
+export function needsRewrite(session, { evidence = [], now = Date.now(), since = 0 } = {}) {
   if (!session || session.deleting) return false;
   const kind = session.kind || 'class';
   if (!['class', 'stage', 'talk'].includes(kind)) return false;
   const sum = session.sum || {};
-  const upTo = Number(sum.upTo) || 0;
+  const upTo = Math.max(Number(sum.upTo) || 0, Number(since) || 0);
   let last = 0;
   for (const e of evidence) if (e && String(e.session) === String(session.id) && (Number(e.at) || 0) > last) last = Number(e.at) || 0;
   if (last <= upTo) return false;

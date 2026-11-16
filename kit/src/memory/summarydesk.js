@@ -3,7 +3,7 @@
 // 判断都在 summary.js（纯函数）；这里只管读最新的、调用、核、写回去。首页（后台重写、管理页）、课堂（当场记）、班主任都用它。
 import {
   SUMMARY_IDS, REWRITE_FAILS, QUIET_MS, summaryOn, addNote, noteOf, nextDoc, rollback, rewritePrompt, parseRewrite, checkRewrite,
-  legacyText, needsRewrite, maxOf, utf8,
+  legacyText, needsRewrite, sinceOf, maxOf, utf8,
 } from './summary.js';
 import { transcriptText } from './debrief.js';
 import { reportText } from './report.js';
@@ -79,7 +79,7 @@ export function createSummary({ db, getData, ai, now = () => Date.now(), onChang
   /** 删一条新笔记（按它记下的时间认） */
   const dropNote = (id, at) => patch(id, 'me', (cur) => (cur && (cur.notes || []).some((n) => n.at === at) ? { ...cur, notes: cur.notes.filter((n) => n.at !== at) } : null));
 
-  const needs = (s) => needsRewrite(s, { evidence: getData().evidence || [], now: now() });
+  const needs = (s) => needsRewrite(s, { evidence: getData().evidence || [], now: now(), since: sinceOf(getData()) });
 
   async function call(prompt) {
     const c = await ai();
@@ -128,7 +128,7 @@ export function createSummary({ db, getData, ai, now = () => Date.now(), onChang
     if (!s) return 'skip';
     const evidence = rowsOf(await db.collection('evidence').where('session', '==', sid).get());
     const last = Math.max(0, ...evidence.map((e) => Number(e.at) || 0));
-    if (!last || last <= (Number(s.sum?.upTo) || 0)) return 'skip';
+    if (!last || last <= Math.max(Number(s.sum?.upTo) || 0, sinceOf(getData()))) return 'skip';
     const startedAt = now();
     // 调用之前先记一次「试过」：一两分钟的调用，学生一点进课堂整页刷新就断了，后面的 fail 记不上
     await patchDoc(`sessions/${sid}`, 'sessions', { fails: (Number(s.sum?.fails) || 0) + 1, tryAt: startedAt, failUpTo: last });
@@ -159,10 +159,11 @@ export function createSummary({ db, getData, ai, now = () => Date.now(), onChang
   async function chatsToDo() {
     const chats = rowsOf(await db.collection('chats').get().catch(() => null));
     const t = now();
+    const since = sinceOf(getData());
     return chats.filter((c) => {
       const last = Number(c.last) || 0;
       const sum = c.sum || {};
-      if (!last || last <= (Number(sum.upTo) || 0) || t - last < QUIET_MS) return false;
+      if (!last || last <= Math.max(Number(sum.upTo) || 0, since) || t - last < QUIET_MS) return false;
       return !((Number(sum.fails) || 0) >= REWRITE_FAILS && last <= (Number(sum.failUpTo) || 0));
     }).sort((a, b) => (a.last || 0) - (b.last || 0)).map((c) => c.id);
   }
@@ -177,7 +178,7 @@ export function createSummary({ db, getData, ai, now = () => Date.now(), onChang
   async function runChat(cid) {
     const c = await db.doc(`chats/${cid}`).get().then((r) => (r.exists ? r.data() : null));
     const last = Number(c?.last) || 0;
-    if (!c || last <= (Number(c.sum?.upTo) || 0)) return 'skip';
+    if (!c || last <= Math.max(Number(c.sum?.upTo) || 0, sinceOf(getData()))) return 'skip';
     const startedAt = now();
     await patchDoc(`chats/${cid}`, 'chats', { fails: (Number(c.sum?.fails) || 0) + 1, tryAt: startedAt, failUpTo: last });
     const turns = rowsOf(await db.collection(`chats/${cid}/turns`).get().catch(() => null)).filter((t) => !t.void && clean(t.text)).sort((a, b) => (a.at || 0) - (b.at || 0));
