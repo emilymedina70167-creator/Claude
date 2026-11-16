@@ -287,3 +287,34 @@ export function checkQuotes({ next = '', corpus = '' } = {}) {
   const missing = [...new Set(quotesIn(next))].filter((q) => !quoteFound(q, corpus));
   return { ok: !missing.length, missing };
 }
+
+// —— 重写回来的一份回答核一遍（页面 summarydesk.js 和尺子 tools/summary-ruler 共用，核法只有这一份）——
+/**
+ * text：模型的回答；prompt：给它的整份提示词（核引号的材料）；space：'' 是只重写共用；shared / subject：上一版。
+ * 返回 { got, format（格式不对的原因，对就是空）, over（写长了）, lost（找不到的引号）, fixable（毛病只有写长、引号对不上：值得请它重来一次）, bad（不收的原因，空就是收） }
+ */
+export function judgeRewrite({ text = '', prompt = '', space = '', shared = null, subject = null } = {}) {
+  const both = !!space;
+  const got = parseRewrite(text, { both });
+  if (got.problems.length) return { got, format: got.problems, over: [], lost: [], fixable: false, bad: [`格式不对：${got.problems.join('；')}`] };
+  const checks = [checkRewrite({ prev: shared?.text, next: got.shared, id: 'shared' }), both ? checkRewrite({ prev: subject?.text, next: got.subject, id: space }) : { ok: true }];
+  const over = [
+    utf8(got.shared) > maxOf('shared') ? `「共用」有 ${utf8(got.shared)} 字节，上限 ${maxOf('shared')}` : '',
+    both && utf8(got.subject) > maxOf(space) ? `「这一科」有 ${utf8(got.subject)} 字节，上限 ${maxOf(space)}` : '',
+  ].filter(Boolean);
+  const lost = checkQuotes({ next: `${got.shared}\n${both ? got.subject : ''}`, corpus: prompt }).missing;
+  const bad = checks.map((c, i) => (c.ok ? '' : `${i ? '这一科' : '共用'}那一份${c.why}`)).filter(Boolean);
+  const fixable = checks.every((c) => c.ok || /超了上限/.test(c.why));
+  if (lost.length) bad.push(`引号里的话在记录里找不到：${lost.map((q) => `「${q}」`).join('、')}`);
+  return { got, format: [], over, lost, fixable, bad };
+}
+
+/** 能让它自己改好的两种毛病合成同一次重来：把它写的那一版还给它，说清哪里不对 */
+export function retryPrompt({ prompt = '', text = '', over = [], lost = [] } = {}) {
+  const asks = [
+    over.length ? `上面这一版超了上限：${over.join('；')}（一个汉字 3 字节）。把旧的、不要紧的、说了两遍的压掉，事实和学生的原话留着。` : '',
+    lost.length ? `上面这一版里这几段带引号的话，在上一版摘要和这节课的记录里都找不到一模一样的：${lost.map((q) => `「${q}」`).join('、')}。引号里只放照抄的话：是原话就照记录抄，一个字不改；不是原话就去掉引号，换成你自己的转述。` : '',
+  ].filter(Boolean).join('\n');
+  const why = [over.length ? '太长了' : '', lost.length ? '引号里的话对不上记录' : ''].filter(Boolean).join('，');
+  return `${prompt}\n\n## 你上一次写的（${why}）\n\n${text}\n\n${asks}\n照同样的格式再整份输出一遍。`;
+}

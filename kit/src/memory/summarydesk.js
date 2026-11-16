@@ -2,8 +2,8 @@
 // 当场记一条新笔记、课后把一节课（或班主任的一段对话）并进摘要重写一遍、学生自己改和退回。
 // 判断都在 summary.js（纯函数）；这里只管读最新的、调用、核、写回去。首页（后台重写、管理页）、课堂（当场记）、班主任都用它。
 import {
-  SUMMARY_IDS, REWRITE_FAILS, QUIET_MS, summaryOn, addNote, noteOf, nextDoc, rollback, rewritePrompt, parseRewrite, checkRewrite,
-  legacyText, needsRewrite, sinceOf, maxOf, utf8, checkQuotes,
+  SUMMARY_IDS, REWRITE_FAILS, QUIET_MS, summaryOn, addNote, noteOf, nextDoc, rollback, rewritePrompt,
+  legacyText, needsRewrite, sinceOf, maxOf, utf8, judgeRewrite, retryPrompt,
 } from './summary.js';
 import { transcriptText } from './debrief.js';
 import { reportText } from './report.js';
@@ -16,6 +16,25 @@ export const SUMMARY_MODEL = 'claude-opus-5-5';
 export const SUMMARY_TIMEOUT = 6 * 60 * 1000;
 const rowsOf = (snap) => (snap?.docs || []).map((d) => ({ id: d.id, ...d.data() }));
 const clean = (s) => String(s ?? '').trim();
+
+/**
+ * 把一节课并进摘要的那份提示词（纯函数；页面和尺子 tools/summary-ruler 用的是同一份）。
+ * session：这节课；evidence：这节课的证据；turns：这节课的轮次；report：课后报告（没有就 null）；
+ * shared / subject：上一版两份摘要；data：手上的记忆（别的课隔天验的结果、第一次重写要的旧规则那几类）
+ */
+export function classPrompt({ session: s, space, evidence = [], turns = [], report: rep = null, shared = null, subject = null, data = {}, today = '' }) {
+  const said = evidence.filter((e) => e.src === 'say' && clean(e.text)).sort((a, b) => (a.at || 0) - (b.at || 0)).map((e) => ({ at: e.at, text: e.text }));
+  const laters = (data.sessions || []).filter((x) => x.id !== s.id && x.later?.n && (x.space || spaceOfDoc('sessions', x, data)) === space)
+    .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0)).slice(0, 5).map((x) => `- ${x.date || ''} ${x.title || ''}：${laterLine(x.later)}`).join('\n');
+  return rewritePrompt({
+    space, shared, subject, said, title: s.title || '', today,
+    transcript: transcriptText(turns), report: rep ? reportText(rep) : '',
+    aims: Array.isArray(s.aims) && s.aims.length ? aimLines(s, rep).map((l) => `- ${l}`).join('\n') : '',
+    later: laters,
+    // 这一科那一份还没有字：把以前一条条攒下的规则、守则、要求当原料给它（只给这一次）
+    legacy: clean(subject?.text) ? '' : legacyText(data, space),
+  });
+}
 
 /**
  * db：学习台的数据库（没 scope 过的）；getData()：手上的记忆（summary、sessions、evidence，还有第一次重写要的旧规则那几类）；
@@ -104,34 +123,21 @@ export function createSummary({ db, getData, ai, now = () => Date.now(), onChang
     const res = await call(prompt);
     if (!res) return 'fail';
     const both = !!space;
-    let got = parseRewrite(res.text, { both });
-    if (got.problems.length) { reportError(`记忆摘要重写回来的格式不对：${got.problems.join('；')}`, { what: '记忆摘要', path: src, soft: true }); return 'fail'; }
     const [shared, subject] = await Promise.all([latest('shared'), both ? latest(space) : null]);
-    const check = (g) => [checkRewrite({ prev: shared?.text, next: g.shared, id: 'shared' }), both ? checkRewrite({ prev: subject?.text, next: g.subject, id: space }) : { ok: true }];
-    let checks = check(got);
+    // 核法在 summary.js 的 judgeRewrite（尺子用的也是它）：读回、核长度、核引号
+    let j = judgeRewrite({ text: res.text, prompt, space, shared, subject });
+    if (j.format.length) { reportError(`记忆摘要重写回来的格式不对：${j.format.join('；')}`, { what: '记忆摘要', path: src, soft: true }); return 'fail'; }
     // 能让它自己改好的两种毛病，合成同一次重来（只重来一次）：
     // 写长了（摘要一节课一节课地长，早晚会顶到上限）——请它压一遍；
-    // 引号里的话在给它的材料里找不到一模一样的（改了字、或者编的）——请它照记录抄，不是原话就去掉引号。
-    // 材料 = 这一次的整份提示词：上一版两份摘要、新笔记、这节课的记录、学生打的每一句、课后报告都在里面
-    const over = (g) => [utf8(g.shared) > maxOf('shared') ? `「共用」有 ${utf8(g.shared)} 字节，上限 ${maxOf('shared')}` : '', both && utf8(g.subject) > maxOf(space) ? `「这一科」有 ${utf8(g.subject)} 字节，上限 ${maxOf(space)}` : ''].filter(Boolean);
-    const lost = (g) => checkQuotes({ next: `${g.shared}\n${both ? g.subject : ''}`, corpus: prompt }).missing;
-    const fixable = () => checks.every((c) => c.ok || /超了上限/.test(c.why));
-    if ((over(got).length || lost(got).length) && fixable()) {
-      const long = over(got);
-      const gone = lost(got);
-      const asks = [
-        long.length ? `上面这一版超了上限：${long.join('；')}（一个汉字 3 字节）。把旧的、不要紧的、说了两遍的压掉，事实和学生的原话留着。` : '',
-        gone.length ? `上面这一版里这几段带引号的话，在上一版摘要和这节课的记录里都找不到一模一样的：${gone.map((q) => `「${q}」`).join('、')}。引号里只放照抄的话：是原话就照记录抄，一个字不改；不是原话就去掉引号，换成你自己的转述。` : '',
-      ].filter(Boolean).join('\n');
-      const again = await call(`${prompt}\n\n## 你上一次写的（${[long.length ? '太长了' : '', gone.length ? '引号里的话对不上记录' : ''].filter(Boolean).join('，')}）\n\n${res.text}\n\n${asks}\n照同样的格式再整份输出一遍。`);
+    // 引号里的话在给它的材料里找不到一模一样的（改了字、或者编的）——请它照记录抄，不是原话就去掉引号
+    if ((j.over.length || j.lost.length) && j.fixable) {
+      const again = await call(retryPrompt({ prompt, text: res.text, over: j.over, lost: j.lost }));
       if (!again) return 'fail';
-      const g2 = parseRewrite(again.text, { both });
-      if (!g2.problems.length) { got = g2; checks = check(got); }
+      const j2 = judgeRewrite({ text: again.text, prompt, space, shared, subject });
+      if (!j2.format.length) j = j2;
     }
-    const bad = checks.map((c, i) => (c.ok ? '' : `${i ? '这一科' : '共用'}那一份${c.why}`)).filter(Boolean);
-    const gone = lost(got);
-    if (gone.length) bad.push(`引号里的话在记录里找不到：${gone.map((q) => `「${q}」`).join('、')}`);
-    if (bad.length) { reportError(`记忆摘要重写回来的没收：${bad.join('；')}`, { what: '记忆摘要', path: src, soft: true }); return 'fail'; }
+    if (j.bad.length) { reportError(`记忆摘要重写回来的没收：${j.bad.join('；')}`, { what: '记忆摘要', path: src, soft: true }); return 'fail'; }
+    const got = j.got;
     await patch('shared', 'page', (cur) => nextDoc(cur, { id: 'shared', text: got.shared, by: 'page', at: now(), startedAt, src }));
     if (both) await patch(space, 'page', (cur) => nextDoc(cur, { id: space, text: got.subject, by: 'page', at: now(), startedAt, src }));
     return 'done';
@@ -161,17 +167,7 @@ export function createSummary({ db, getData, ai, now = () => Date.now(), onChang
       db.doc(`sessions/${sid}/report/main`).get().then((r) => (r.exists ? r.data() : null), () => null),
       latest('shared'), latest(space),
     ]);
-    const said = evidence.filter((e) => e.src === 'say' && clean(e.text)).sort((a, b) => (a.at || 0) - (b.at || 0)).map((e) => ({ at: e.at, text: e.text }));
-    const laters = (data.sessions || []).filter((x) => x.id !== sid && x.later?.n && (x.space || spaceOfDoc('sessions', x, data)) === space)
-      .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0)).slice(0, 5).map((x) => `- ${x.date || ''} ${x.title || ''}：${laterLine(x.later)}`).join('\n');
-    const prompt = rewritePrompt({
-      space, shared, subject, said, title: s.title || '', today: new Date(startedAt).toISOString().slice(0, 10),
-      transcript: transcriptText(turns), report: rep ? reportText(rep) : '',
-      aims: Array.isArray(s.aims) && s.aims.length ? aimLines(s, rep).map((l) => `- ${l}`).join('\n') : '',
-      later: laters,
-      // 这一科那一份还没有字：把以前一条条攒下的规则、守则、要求当原料给它（只给这一次）
-      legacy: clean(subject?.text) ? '' : legacyText(data, space),
-    });
+    const prompt = classPrompt({ session: s, space, evidence, turns, report: rep, shared, subject, data, today: new Date(startedAt).toISOString().slice(0, 10) });
     const r = await rewrite({ space, prompt, startedAt, src: `sessions/${sid}` });
     if (r === 'done') await patchDoc(`sessions/${sid}`, 'sessions', { at: now(), upTo: last, fails: 0 });
     return r;

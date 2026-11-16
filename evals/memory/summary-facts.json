@@ -1,0 +1,22 @@
+[
+  { "id": "ipad", "what": "用 iPad 上课", "re": "iPad", "in": "shared", "from": "c-20261027-1" },
+  { "id": "pencil", "what": "用 Apple Pencil 手写", "re": "Pencil", "in": "shared", "from": "c-20261027-1" },
+  { "id": "notability", "what": "手写多半在 Notability 里写好再贴进来", "re": "Notability", "in": "shared", "from": "c-20261027-1" },
+  { "id": "self", "what": "线上自学，没有别的答疑渠道", "re": "自学|线上", "in": "shared", "from": "c-20261027-1" },
+  { "id": "lang", "what": "用中文上课", "re": "中文", "in": "shared", "from": "c-20261027-1" },
+  { "id": "example", "what": "喜欢先看具体的例子再看抽象写法", "re": "具体", "in": "any", "from": "c-20261027-1" },
+  { "id": "split", "what": "学生定的分工：输入归老师、输出归学生", "re": "输入[\\s\\S]{0,80}输出", "in": "any", "from": "c-20261027-1" },
+  { "id": "unsure", "what": "没把握的答案不猜", "re": "不猜|没把握", "in": "any", "from": "c-20261027-1" },
+  { "id": "m-book", "what": "线代照张宇的体系、30 讲", "re": "张宇", "in": "math", "from": "c-20261027-1" },
+  { "id": "m-script", "what": "学生每节给视频课的文稿", "re": "文稿", "in": "math", "from": "c-20261027-1" },
+  { "id": "m-1000", "what": "检验的难度对着《1000 题》基础篇", "re": "1000", "in": "math", "from": "c-20261027-1" },
+  { "id": "e-exam", "what": "考英语一", "re": "英语一", "in": "any", "from": "c-20261028-1" },
+  { "id": "e-book", "what": "英语教材是《句句真研》", "re": "句句真研", "in": "en", "from": "c-20261028-1" },
+  { "id": "e-vocab", "what": "英语最大的瓶颈是词汇", "re": "词汇|生词", "in": "en", "from": "c-20261028-1" },
+  { "id": "e-real", "what": "例句想用考研真题里的句子", "re": "真题", "in": "en", "from": "c-20261028-1" },
+  { "id": "e-tense", "what": "英语学过时态", "re": "时态", "in": "en", "from": "c-20261112-1" },
+  { "id": "e-modal", "what": "英语学到情态", "re": "情态", "in": "en", "from": "c-20261116-1" },
+  { "id": "c-book", "what": "408 教材是王道", "re": "王道", "in": "cs", "from": "c-20261105-3" },
+  { "id": "c-ds", "what": "408 现在在学数据结构", "re": "数据结构", "in": "cs", "from": "c-20261105-3" },
+  { "id": "c-c", "what": "C 语言基础薄", "re": "C\\s*语言", "in": "cs", "from": "c-20261105-3" }
+]
