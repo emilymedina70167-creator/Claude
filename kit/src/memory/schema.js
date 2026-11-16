@@ -53,6 +53,19 @@ export const COLLECTIONS = {
     refs: { into: ['profile', 'asks'] },
     tracked: [],
   },
+  summary: {
+    // 记忆摘要（第十三轮，docs/superpowers/specs/2026-11-16-mirror-design.md）：照 claude.ai 项目的做法，老师对学生的了解是
+    // 一份会重写的摘要（shared 三科共用、math / cs / en 每科一份），当背景给老师。有了它，规则、守则、要求、关于我不再一条条发给老师。
+    // 课后由页面后台的 Claude 整份重写（page）；课上老师当场记的新笔记（class）；我自己改、退回（me）；第一版是开发写的（chat）。
+    // 以前的版本留在这一条自己的 history 里（最近 8 版），所以不走 log（tracked 是空的）
+    label: '记忆摘要', kind: 'state', writers: ['chat', 'class', 'page', 'me'],
+    id: { re: /^(shared|math|cs|en)$/, eg: 'shared、math、cs、en' },
+    required: ['text'],
+    enums: {},
+    dates: [],
+    refs: {},
+    tracked: [],
+  },
   asks: {
     // 我的要求（第十一轮，docs/superpowers/specs/2026-11-14-round11-design.md 6.1）：我说过要老师以后照做的（要求、纠正、期望）。
     // 「关于我」是事实，这一类是规矩：要照做、要查守没守、要给我看。原话（quotes）由页面从证据里抄，删课也不丢。
