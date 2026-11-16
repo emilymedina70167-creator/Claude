@@ -149,3 +149,9 @@ test('舞台题（d-stage-…）换了数也是原题换数：不算新题（不
   markFresh(items);
   assert.deepEqual(items.map((it) => isOriginal(it)), [true, true, false, true]);
 });
+
+ test('留着的题只在第一次做的那节课算新题', async () => {
+ const { markFresh } = await import('../kit/src/memory/mastery.js');
+ const items = [{ comp: 'd-hold-c-20261116-1-1', session: 'c1', first: 1 }, { comp: 'd-hold-c-20261116-1-1', session: 'c2', first: 2 }];
+ markFresh(items); assert.equal(items[0].fresh, true); assert.equal(items[1].fresh, undefined);
+ });

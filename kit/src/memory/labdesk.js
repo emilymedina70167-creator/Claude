@@ -363,53 +363,13 @@ export function createLabDesk({ db, getData, packs, planner, ops, aide = null, s
   // 出新题：每道题先看写法（lab.js 的 problemLint）、和题库里的比（twinOf），再在页面上画一遍，有写法错误的不收
   async function takeProblems(d, brief, meta) {
     const { target, block, subject } = brief.ctx || {};
-    const got = parseProblems(d.text, { brief: brief.id, block, target, batch: Number(d.at) || Date.now() });
     const existing = (getData().drills || []).filter((x) => !String(x.id).startsWith(`d-lab-${brief.id}-`));
-    const rejected = got.problems.map((p) => ({ line: '', error: p }));
-    const kept = [];
-    for (const it of got.items) {
-      const errs = problemLint(it, { subject });
-      const twin = twinOf(it, [...existing, ...kept.map((k) => ({ id: k.id, ...k.doc }))]);
-      if (twin) errs.push(`和题库里的 ${twin.id} 几乎一样`);
-      if (!errs.length) errs.push(...(await renderCheck(it.doc.md)));
-      if (errs.length) { rejected.push({ line: `题 ${it.n}`, error: errs.join('；') }); continue; }
-      kept.push(it);
-    }
+    const { ok: kept, bad } = await checkProblems(d.text, { brief: brief.id, block, target, subject, batch: Number(d.at) || Date.now(), existing });
+    const rejected = bad.map(error => { const m = error.match(/^(题 \d+)：(.*)$/); return m ? { line: m[1], error: m[2] } : { line: '', error }; });
     assertWrite('page', 'drills');
     for (const it of kept) await db.doc(`drills/${it.id}`).set({ ...it.doc, lab: meta });
     const result = kept.length ? (rejected.length ? 'partial' : 'ok') : 'error';
     return receipt({ inbox: d, brief, result, took: { drills: kept.length }, rejected });
-  }
-
-  // 在页面上画一遍（藏在屏幕外面）：组件写法错误、取数自检不过都会进 session.problems；画完马上拿掉
-  async function renderCheck(md) {
-    if (typeof document === 'undefined') return [];
-    const host = document.createElement('div');
-    host.setAttribute('aria-hidden', 'true');
-    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:820px;visibility:hidden;pointer-events:none';
-    document.body.appendChild(host);
-    const before = kitSession.problems.length;
-    // 一道题单独画（练一练里也是一道一道画）：前面几道题 let 定义的量、登记的图不能借给这一道
-    const vars0 = kitSession.vars;
-    const scenes0 = new Map(kitSession.scenes);
-    kitSession.vars = {};
-    // 写坏的组件 render.js 会往控制台报一次错：这里本来就是在找错（收在 session.problems 里），不让它算成页面出错
-    const err0 = console.error;
-    console.error = () => {};
-    try {
-      renderLesson(String(md), host);
-      await new Promise((r) => setTimeout(r, 60));
-      return kitSession.problems.slice(before).filter((p) => !p.soft).map((p) => `写法错误：${p.msg}`).slice(0, 3);
-    } catch (err) {
-      return [`画不出来：${err?.message || err}`];
-    } finally {
-      console.error = err0;
-      host.remove();
-      kitSession.vars = vars0;
-      kitSession.scenes.clear();
-      for (const [k, v] of scenes0) kitSession.scenes.set(k, v);
-      kitSession.problems.splice(before);
-    }
   }
 
   // 备课：这期间我自己已经备好了（资料包是新的、还没用过）就不盖
@@ -426,5 +386,59 @@ export function createLabDesk({ db, getData, packs, planner, ops, aide = null, s
   }
 
   return { sync, briefs: () => briefs, logs: () => logs, take };
+}
+
+
+// 首页和收件箱共用同一把尺子，检查这一步不写库。
+export async function checkProblems(text, ctx = {}) {
+  const got = parseProblems(text, ctx);
+  const bad = [...got.problems], ok = [];
+  for (const it of got.items) {
+    const errs = problemLint(it, ctx);
+    const twin = twinOf(it, [...(ctx.existing || []), ...ok.map(k => ({ id: k.id, ...k.doc }))]);
+    if (twin) errs.push(`和题库里的 ${twin.id} 几乎一样`);
+    if (!errs.length) errs.push(...await renderCheck(it.doc.md));
+    if (errs.length) bad.push(`题 ${it.n}：${errs.join('；')}`); else ok.push(it);
+  }
+  return { ok, bad };
+}
+
+// 两处后台工作都可能验题，不能同时改组件库的临时变量和写法错误列表。
+let rendering = Promise.resolve();
+export function renderCheck(md) {
+  const result = rendering.then(() => renderOne(md));
+  rendering = result.catch(() => {});
+  return result;
+}
+
+// 在页面上画一遍（藏在屏幕外面）：组件写法错误、取数自检不过都会进 session.problems；画完马上拿掉
+async function renderOne(md) {
+  if (typeof document === 'undefined') return [];
+  const host = document.createElement('div');
+  host.setAttribute('aria-hidden', 'true');
+  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:820px;visibility:hidden;pointer-events:none';
+  document.body.appendChild(host);
+  const before = kitSession.problems.length;
+  // 一道题单独画（练一练里也是一道一道画）：前面几道题 let 定义的量、登记的图不能借给这一道
+  const vars0 = kitSession.vars;
+  const scenes0 = new Map(kitSession.scenes);
+  kitSession.vars = {};
+  // 写坏的组件 render.js 会往控制台报一次错：这里本来就是在找错（收在 session.problems 里），不让它算成页面出错
+  const err0 = console.error;
+  console.error = () => {};
+  try {
+    renderLesson(String(md), host);
+    await new Promise((r) => setTimeout(r, 60));
+    return kitSession.problems.slice(before).filter((p) => !p.soft).map((p) => `写法错误：${p.msg}`).slice(0, 3);
+  } catch (err) {
+    return [`画不出来：${err?.message || err}`];
+  } finally {
+    console.error = err0;
+    host.remove();
+    kitSession.vars = vars0;
+    kitSession.scenes.clear();
+    for (const [k, v] of scenes0) kitSession.scenes.set(k, v);
+    kitSession.problems.splice(before);
+  }
 }
 

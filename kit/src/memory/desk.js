@@ -17,6 +17,11 @@ import { healthCheck, healthRecord, sameDoc } from './health.js';
 import { guardDebrief, buildCorpus } from './guard.js';
 import { recheck as sentryRecheck, recheckText, workOrder } from './sentry.js';
 import { guardDb } from './writer.js';
+import { subjectOf as holdSubject } from './space.js';
+import { HOLD_MAX, needsHolds, pickHolds, holdBrief, holdDocs } from './holds.js';
+import { checkProblems } from './labdesk.js';
+import { componentDoc } from '../subject.js';
+import { ENGINES } from '../engines/registry.js';
 import { createLabDesk } from './labdesk.js';
 import { receiptLine } from './lab.js';
 import { getStore, getDownloads } from '../live/store.js';
@@ -344,9 +349,10 @@ export async function renderDesk(root, meta) {
       loaded.add(c);
       failed.delete(c);
       if (c === 'sessions' || c === 'position') paintClass();
-      if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); backTick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
+      if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); setTimeout(fixHolds, 500); backTick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
       if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
+      if (['drills', 'evidence'].includes(c)) setTimeout(fixHolds, 500);
       if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) { fixReports(); backTick(); } if (lastRes) paintWeek(toDate(Date.now())); }
       if (c === 'curriculum') { examInbox.maybeRefresh(); manualForm?.refreshBlocks(); const sel = $('.dk-radd-b'); if (sel) sel.dataset.space = ''; }
       if (['curriculum', 'weaknesses', 'observations', 'mastery'].includes(c)) { fixSkills(); fixDebriefs(); }
@@ -1070,6 +1076,64 @@ export async function renderDesk(root, meta) {
       skillBusy = false;
       setTimeout(fixSkills, 500);
     }
+  }
+
+  // —— 留着的题：报告写好后一次一节，先用没见过的真题，缺的在后台出；课堂不等它。
+  const heldSessions = new Set();
+  let holdBusy = false;
+  async function fixHolds() {
+    if (holdBusy || heldSessions.size >= 4 || !['sessions', 'drills', 'evidence'].every(c => loaded.has(c))) return;
+    const x = data.sessions.find(d => !heldSessions.has(d.id) && needsHolds(d) && d.report && !d.report.provisional);
+    if (!x) return;
+    holdBusy = true;
+    heldSessions.add(x.id);
+    const ref = db.doc(`sessions/${x.id}`);
+    const current = async () => { const snap = await ref.get(); return snap.exists ? { id: x.id, ...snap.data() } : null; };
+    let ids = [], made = 0;
+    try {
+      const cur = await current();
+      if (!cur || !needsHolds(cur)) return;
+      const reserve = await readReserve(db, toDate(Date.now()));
+      ids = pickHolds({ session: cur, drills: data.drills, evidence: data.evidence, reserve });
+      const n = Math.min(HOLD_MAX, cur.aims.length);
+      // 先记试过：页面在调用中关掉，也不会下次永远当第一次试。
+      assertWrite('page', 'sessions');
+      await ref.update({ holdTries: (Number(cur.holdTries) || 0) + 1 });
+      if (ids.length < n) {
+        try {
+          const ai = await deskAI();
+          const report = await scopeDb(db, x.id).doc('report/main').get().then(r => r.exists ? r.data() : null);
+          if (ai && !ai.legacy && report) {
+            const subject = holdSubject(cur.block || '');
+            const covered = new Set(ids.map(id => data.drills.find(d => d.id === id)?.aim).filter(Boolean));
+            const aims = cur.aims.filter(a => !covered.has(a.id));
+            const items = report.items || [];
+            const names = [...new Set(['answer', 'quiz', ...data.drills.filter(d => d.fromSession === x.id).map(d => d.kind).filter(k => ENGINES[k])])].slice(0, 7);
+            const docs = names.map(name => componentDoc(COMPONENT_DOCS, name, subject) || '').join('\n\n');
+            const prompt = holdBrief({ session: cur, aims, items, subject, n: n - ids.length, docs });
+            const res = await ai.call(prompt, { model: 'claude-opus-5-5', effort: 'high', lane: 'bg', cache: false });
+            if (res.modelApplied === 'claude-opus-5-5') {
+              const checked = await checkProblems(res.text, { brief: `hold-${x.id}`, block: cur.block, target: { kind: 'hold', title: cur.title }, subject, existing: data.drills });
+              const ready = holdDocs({ items: checked.ok }, { session: cur, at: Date.now() }).filter(it =>
+                it.doc.kind === 'quiz' || it.doc.kind === 'answer' || (ENGINES[it.doc.kind] && /^\s*mode\s*[:：]\s*quiz\s*$/m.test(it.doc.md)));
+              const fresh = await current();
+              if (!fresh || Object.hasOwn(fresh, 'holds') || fresh.status !== 'closed') return;
+              assertWrite('page', 'drills');
+              for (const it of ready.slice(0, n - ids.length)) {
+                await db.doc(`drills/${it.id}`).set(it.doc);
+                ids.push(it.id); made++;
+              }
+            }
+          }
+        } catch (err) { console.warn('留着的题没出成', x.id, err?.message || err); }
+      }
+      const latest = await current();
+      if (!latest || Object.hasOwn(latest, 'holds') || latest.status !== 'closed') return;
+      if (ids.length) {
+        await ref.update({ holds: { ids, at: Date.now(), exam: ids.length - made, made } });
+      }
+    } catch (err) { reportError(err, { what: '留着的题没存成', path: `sessions/${x.id}`, soft: true }); }
+    finally { holdBusy = false; setTimeout(fixHolds, 500); }
   }
 
   // —— 下课后的复盘（debrief.js，docs/smart-plan.md 第 2 批）：下了课、报告写好的课，后台调用一次 Opus 通读整节课，

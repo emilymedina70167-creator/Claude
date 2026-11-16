@@ -22,6 +22,29 @@ async function head(turns, opts) {
 export function createDevAI() {
   const pagesOf = (prompt) => (prompt.match(/依次是 PDF 的第 ([\d、]+) 页/)?.[1] || '1').split('、').map(Number);
   const layerOf = (prompt, n) => prompt.match(new RegExp(`【第 ${n} 页的文字层】\\n([\\s\\S]*?)(?=\\n【第 \\d+ 页的文字层】|\\n\\n只输出)`))?.[1] || '';
+  // 留题也走真的读法和检查；两道用不同组件，避免模拟题彼此被判成照抄。
+  function holds(prompt) {
+    const aims = [...prompt.matchAll(/^(a\d+)：/gm)].map(m => m[1]);
+    return `=== 题 1
+类型：同类
+针对：${aims[0] || 'a1'}
+\`\`\`let
+a = 2
+b = 3
+\`\`\`
+\`\`\`answer
+q: 模拟留题：算出 $2+3$。
+answer: a+b
+\`\`\`
+=== 题 2
+类型：迁移
+针对：${aims[1] || aims[0] || 'a1'}
+\`\`\`quiz
+q: 一个过程遇到已排好的序列时仍逐对比较，这是否足以说明它不稳定？
+- [ ] 是
+- [x] 否
+\`\`\``;
+  }
   function transcribe(prompt) {
     const out = [];
     for (const n of pagesOf(prompt)) {
@@ -108,7 +131,7 @@ export function createDevAI() {
       // 班主任（head/context.js）：传的是一轮一轮的 turns，第一条是说明
       if (Array.isArray(prompt) && String(prompt[0]?.content || '').startsWith('你是学生学习台里的**班主任**')) return head(prompt, opts);
       const p = String(prompt);
-      const text = p.startsWith('你在把一本教材的扫描页') ? transcribe(p) : p.startsWith('你在帮学生整理学习台的课程地图') ? map(p) : p.startsWith('你是这个学生的老师，现在给下一节课备课') ? prep(p) : p.startsWith('你在给学生的一节课的题归类') ? skills(p) : p.startsWith('你在给一节刚上完的课做复盘') ? debrief(p) : p.startsWith('你在课前预演一份教案') ? rehearse(p) : p.startsWith('你在给一节刚上完的舞台课做课后整理') ? after(p) : p.startsWith('你在给学生的学习台写一张学生卡') ? card(p) : p.startsWith('你在给下一节课的老师准备这节课要知道的事') ? brief(p) : p.startsWith('你在旁听一节舞台课') ? watch(p) : p.startsWith('你在给一位考研学生的学习台记账') ? said(p) : '{}';
+      const text = p.startsWith('你在给一节刚上完的黑板课留隔天再做的题') ? holds(p) : p.startsWith('你在把一本教材的扫描页') ? transcribe(p) : p.startsWith('你在帮学生整理学习台的课程地图') ? map(p) : p.startsWith('你是这个学生的老师，现在给下一节课备课') ? prep(p) : p.startsWith('你在给学生的一节课的题归类') ? skills(p) : p.startsWith('你在给一节刚上完的课做复盘') ? debrief(p) : p.startsWith('你在课前预演一份教案') ? rehearse(p) : p.startsWith('你在给一节刚上完的舞台课做课后整理') ? after(p) : p.startsWith('你在给学生的学习台写一张学生卡') ? card(p) : p.startsWith('你在给下一节课的老师准备这节课要知道的事') ? brief(p) : p.startsWith('你在旁听一节舞台课') ? watch(p) : p.startsWith('你在给一位考研学生的学习台记账') ? said(p) : '{}';
       opts.onText?.({ text, delta: text });
       return { text, truncated: false, modelApplied: opts.model || 'claude-opus-5-5', modelTierApplied: opts.modelTier || 'complex' };
     },

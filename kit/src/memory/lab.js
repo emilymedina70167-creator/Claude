@@ -117,6 +117,16 @@ export function parseBackfill(text, { parseOutput }) {
  * errors：挂着的错题（原文）；docs：要用到的组件的完整写法（页面按原题用的组件 + 常用的取好）；blockInfo：课程地图里这几块的标题和范围
  */
 export function problemsBrief({ target = {}, originals = [], errors = [], docs = '', blockInfo = '', memory = '', subject = '', n = PROBLEMS_N } = {}) {
+  if (target.kind === 'hold') return `## 留着的题：出 ${n} 道新题
+学生刚上完课，隔天要独立做没见过的题。不要宣布学生学会了。
+### 要拿下的事
+${blockInfo}
+### 课上出过的题面（不能重复）
+${originals.map(d => d.md || '').join('\n\n') || '（没有）'}
+### 组件的写法
+${docs}
+只出页面能判分的题；数学答案用 let 和计算式，演示组件让引擎算答案。题面不泄露答案。
+回答每道从「=== 题 1」这样的段头开始，先写类型、针对的目标编号，再写一个组件，let 放在同一段。不要写别的。`;
   const what = target.kind === 'review'
     ? `复现组「${target.title}」到期了，可题库里只有课上的原题（原题做对不算复现通过：学生记得答案，不等于会做）。要 ${n} 道**新题**：同一个机制、换数换情境，学生没见过。`
     : `弱点「${target.title}」（${target.level || ''}）好久没测了。要 ${n} 道**探题**：能直接看出这个毛病还在不在（会的人一次做对，有这个毛病的人会掉进去）。`;
@@ -173,6 +183,7 @@ export function parseProblems(text, { brief = '', block = null, target = {}, at 
     const n = Number(parts[i]);
     const body = parts[i + 1] || '';
     const why = body.match(/^\s*针对\s*[:：]\s*(.+)$/m)?.[1]?.trim() || '';
+    const type = body.match(/^\s*类型\s*[:：]\s*(同类|迁移)\s*$/m)?.[1];
     const fences = fencesOf(body);
     const lets = fences.filter((f) => f.lang === 'let');
     const main = fences.filter((f) => f.lang !== 'let');
@@ -182,7 +193,7 @@ export function parseProblems(text, { brief = '', block = null, target = {}, at 
     const md = [...lets.map((f) => f.raw), withId(main[0], id)].join('\n\n');
     const sp = block ? spaceOfId(String(block)) : '';
     out.push({
-      id, n, why, kind: main[0].lang,
+      id, n, why, ...(type ? { far: type === '迁移' } : {}), kind: main[0].lang,
       doc: {
         block, kind: main[0].lang, md, q: cut(why, 160), title: cut(target.title || '', 80), src: 'lab', by: 'lab',
         ...(target.kind === 'review' ? { review: String(target.id) } : target.kind === 'weakness' ? { weakness: String(target.id) } : {}),
