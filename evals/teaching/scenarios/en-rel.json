@@ -12,5 +12,49 @@
   },
   "persona": "你是一个考研的学生，限制性定语从句会用。你有一个**没意识到的误解**：你以为 that 和 which 在任何定语从句里都能互换，所以逗号后面（非限制性）你也常写 that，比如 \"My brother, that lives in Beijing, is a doctor.\" 你觉得没问题。问你逗号后面填什么，你多半填 that（指物）或者 that / who 都行；问你为什么，你会说「that 万能」。你不会主动说出这个误解。说话简短，像真的学生，英语句子写得不错。",
   "misconception": "以为 that 在非限制性定语从句（逗号后）也能用，that 和 which / who 处处可互换",
-  "rubric": "老师有没有出一道逗号后填关系词的题、让学生先填，暴露 that 的问题；学生填 that 后是不是问出学生为什么这么填（「that 万能」），针对这一条讲（逗号后不用 that），而不是整个讲一遍定语从句；之后有没有用新句子再确认"
+  "rubric": "老师有没有出一道逗号后填关系词的题、让学生先填，暴露 that 的问题；学生填 that 后是不是问出学生为什么这么填（「that 万能」），针对这一条讲（逗号后不用 that），而不是整个讲一遍定语从句；之后有没有用新句子再确认",
+  "block": "EN-L5.2.1",
+  "know": "你会：限制性定语从句（没有逗号的那种），关系代词 who 指人、which 指物、that 人和物都行，能填对、能翻译；英语句子写得不错，基本的句子成分（主语、谓语、宾语）分得清。你不会：非限制性定语从句的规矩（见人设里的误解）；没注意过有没有逗号意思会不一样。",
+  "aims": [
+    {
+      "id": "a1",
+      "can": "逗号后面的非限制性定语从句不用 that：指物用 which，指人用 who / whom；能在新句子里填对、改对",
+      "proof": "一道新的填空和一道新的改错，学生都做对并说出依据（逗号后不用 that）"
+    },
+    {
+      "id": "a2",
+      "can": "分清限制性和非限制性在意思上的区别：限制性挑出其中一部分，非限制性只是补充，说的是全体；并认出 which 指代前面整件事的用法",
+      "proof": "学生对一对只差逗号的句子说出意思差别，对一句 which 指前面整句的长句说出 which 指什么"
+    }
+  ],
+  "posttest": [
+    {
+      "id": "p1",
+      "kind": "near",
+      "aim": "a1",
+      "q": "填关系词：The museum, ____ was built in 1890, will be closed for repairs next year.",
+      "answer": "which。逗号后面是非限制性定语从句，先行词 the museum 是物，用 which，不能用 that。"
+    },
+    {
+      "id": "p2",
+      "kind": "near",
+      "aim": "a1",
+      "q": "改错（只有一处错）：Professor Li, that teaches us statistics, has published three books.",
+      "answer": "把 that 改成 who。逗号隔开的是非限制性定语从句，先行词 Professor Li 是人，用 who，不能用 that。"
+    },
+    {
+      "id": "p3",
+      "kind": "far",
+      "aim": "a2",
+      "q": "比较两句：(a) The students who had finished the test left early. (b) The students, who had finished the test, left early. 哪一句说的是所有学生都考完了、都提前走了？另一句是什么意思？",
+      "answer": "(b)。非限制性定语从句只是补充说明：学生们都考完了，所以（全体）提前走了。(a) 是限制性的：只有考完了的那些学生提前走了，暗示还有学生没考完。"
+    },
+    {
+      "id": "p4",
+      "kind": "far",
+      "aim": "a2",
+      "q": "He failed to show up at the meeting, which surprised everyone. 这句里的 which 指什么？能不能把 which 换成 that？",
+      "answer": "which 指前面整件事「he 没来开会」（不是指 the meeting）。不能换成 that：这是逗号后的非限制性定语从句，而且 that 不能指代前面整个句子。"
+    }
+  ]
 }
