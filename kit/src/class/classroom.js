@@ -1843,7 +1843,7 @@ export async function renderClass(root, meta, desk = null) {
     specTimer = setTimeout(startSpec, delay);
   }
   // —— 老师的眼睛（boardeye.js，第十三轮）：当前这块板的图。只读翻看、一问一答、这个查看方式发不了图时不拍 ——
-  const eye = readOnly || TALK ? null : createBoardEye({ target: () => pages.get(bv.cur)?.sec || null, viewH: () => root.querySelector('.class-stage')?.clientHeight || 0 });
+  const eye = readOnly || TALK ? null : createBoardEye({ target: () => pages.get(bv.cur)?.sec || null, viewH: () => Math.min(window.innerHeight || 0, root.querySelector('.class-stage')?.clientHeight || Infinity) || 0 });
   const eyeOn = () => !!eye && !!teacher.images && FEATURES.eye !== false;
   if (eye && typeof MutationObserver === 'function') {
     // 板上任何变化（老师写了新段、学生作答的反馈、翻板）都算变了；静下来 0.6 秒才在后台拍，不在回话的路上
@@ -1941,7 +1941,7 @@ export async function renderClass(root, meta, desk = null) {
       // 这一次调用花了多少：发出去的字节；它调了几次工具（每次平台多跑一整轮）
       const t0 = performance.now();
       firstAt = 0;
-      const cost = (w) => callCost({ bytes: fit.bytes, why: w, tools: staged.calls.length, ms: performance.now() - t0, first: firstAt ? firstAt - t0 : undefined, spec: adopted ? 'hit' : undefined, img: eyeBytes });
+      const cost = (w) => callCost({ bytes: fit.bytes, why: w, tools: staged.calls.length, ms: performance.now() - t0, first: firstAt ? firstAt - t0 : undefined, spec: adopted ? 'hit' : undefined, img: eyeBytes, eyeMs: shot?.ms });
       let adopted = false;
       if (pre) {
         // 接上抢跑：已经写出来的先画上，后面的接着画；停止按钮停它
@@ -2893,7 +2893,7 @@ export async function renderClass(root, meta, desk = null) {
   window.LAKit = {
     ...(window.LAKit || {}),
     classroom: {
-      history, segs, pages, queue, boardState, flush, specState, get spec() { return spec ? { say: spec.say, text: spec.text.length } : null; }, retry: retryRun, showPage: (n) => bv.go(n), measureFit: bv.measureFit,
+      history, segs, pages, queue, boardState, flush, specState, eyeState: () => ({ on: eyeOn(), n: eye?.latest()?.blobs.length || 0, ms: eye?.latest()?.ms, more: !!eye?.latest()?.more, err: eye?.lastError() || '' }), get spec() { return spec ? { say: spec.say, text: spec.text.length } : null; }, retry: retryRun, showPage: (n) => bv.go(n), measureFit: bv.measureFit,
       runClaude: () => exclusive(async () => converse()),
       get busy() { return busy; },
       get curPage() { return bv.cur; },

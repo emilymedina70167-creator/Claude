@@ -1420,6 +1420,66 @@ const SUITES = {
     return t;
   },
 
+  // 记忆摘要（第十三轮）：放一份摘要 → 开黑板课，老师的说明里是摘要、没有一条条的要求和规则 → 老师写 know 和老写法 ask 都进新笔记
+  // → 调用老师时带着板的图 → 下课回首页，后台把这节课并进摘要（版本加一、笔记清了、上一版留着）→ 管理页改一份、退回
+  async summary(browser) {
+    const t = await seeded(browser);
+    await plant(t, {
+      'summary/shared': { text: '学生在备考 2027 年考研。', v: 1, at: 1, by: 'chat', notes: [], history: [] },
+      'summary/math': { text: '线代用张宇 30 讲，一节一节学。', v: 1, at: 1, by: 'chat', notes: [], history: [] },
+    });
+    await t.open();
+    await t.openForm('class');
+    await t.page.click('.dk-class .dk-new');
+    const sid = await t.inClass();
+    await t.page.click('button:has-text("开始上课")');
+    await t.waitFor(() => t.page.$('button:has-text("一个数")'), { timeout: 30000, what: '模拟老师写出第一道题' });
+    await sleep(2500);
+    const say = async (x) => { const input = t.page.locator('textarea:visible, [contenteditable="true"]:visible').first(); await input.click(); await t.page.keyboard.type(x); await t.page.keyboard.press('Enter'); };
+    await say('测试:知道');
+    const notes = await t.waitFor(async () => { const d = (await t.db())['summary/math']; return d?.notes?.length >= 2 ? d.notes : null; }, { timeout: 30000, what: '老师写的 know 和 ask 都记成了这一科摘要的新笔记' });
+    check(notes[0].quote === '测试:知道' && notes.some((n) => n.text.includes('译文另起一行')), `新笔记不对：${JSON.stringify(notes)}`);
+    check(!(await t.docs('asks')).some((a) => String(a.text).includes('译文另起一行')), '有摘要了，老写法 ask 还是写进了「我的要求」');
+    await sleep(1500);
+    const sys = await t.page.evaluate(() => window.LAKit.classroom.lastPrompt?.system || '');
+    check(sys.includes('## 你对这个学生的了解（记忆摘要）') && sys.includes('线代用张宇 30 讲') && sys.includes('学生在备考 2027 年考研'), '老师的说明里没有记忆摘要');
+    check(!sys.includes('## 学生的要求') && !sys.includes('教学守则') && !sys.includes('这个学生另外定的规则'), '有摘要了，老师的说明里还有一条条的要求、守则、规则');
+    check(sys.includes('know text=') && sys.includes('### 你看得见板'), '老师的说明里没有 know 的写法或「你看得见板」');
+    // 再说一句：这一次调用带着板的图，最后一条消息写着那一句；新笔记已经在说明里
+    await say('测试:目标');
+    const call = await t.waitFor(() => t.page.evaluate(() => { const c = (window.LAKitEval?.teacher?.calls || []).filter((x) => String(x.input.at(-1).content).includes('测试:目标')).at(-1); return c ? { imgs: (c.opts.images || []).length, tail: String(c.input.at(-1).content).slice(-80), sys: String(c.input[0].content).includes('译文另起一行') } : null; }), { timeout: 20000, what: '学生说了一句以后调用老师' });
+    check(call.imgs >= 1 && /\[画面\] .*页面拍的学生现在看到的这块板/.test(call.tail), `调用老师时没带板的图：${JSON.stringify(call)}`);
+    check(call.sys, '刚记的新笔记没出现在老师下一轮的说明里');
+    await sleep(6000);
+    // 下课 → 回首页：后台把这节课并进摘要
+    // 回首页直接下课
+    await t.open(); await t.page.waitForSelector('.dk-class .dk-go', { state: 'attached', timeout: 15000 });
+    await t.page.evaluate(() => document.querySelector('.dk-class .dk-close').click());
+    await t.answer('直接下课');
+    await t.waitFor(async () => { const x = (await t.docs('sessions')).find((d) => d.id === sid); return x?.status === 'closed' && x.report?.at; }, { timeout: 40000, what: '下课、报告写好' });
+    // 两分钟内还有动静的课先不并：把这节课的证据挪到十分钟以前
+    const all = await t.db();
+    await plant(t, Object.fromEntries(Object.entries(all).filter(([k, v]) => k.startsWith('evidence/') && v.session === sid).map(([k, v]) => [k, { ...v, at: v.at - 600000 }])));
+    await t.open();
+    const done = await t.waitFor(async () => { const d = (await t.db())['summary/math']; return d?.v === 2 ? d : null; }, { timeout: 40000, what: '首页后台把这节课并进了摘要' });
+    check(done.by === 'page' && done.history?.[0]?.text === '线代用张宇 30 讲，一节一节学。' && done.notes.length === 0, `重写以后不对：${JSON.stringify({ by: done.by, h: done.history?.length, notes: done.notes })}`);
+    check(done.text.includes('线代用张宇 30 讲') && done.text.includes('做一组题之前学生想先知道一共几道'), `重写以后旧内容或新笔记没在：${done.text}`);
+    check(((await t.docs('sessions')).find((d) => d.id === sid)?.sum?.upTo || 0) > 0, '这节课没记并到哪了');
+    check(!(await t.docs('sessions')).find((d) => d.id === sid)?.said, '有摘要了还过了话的账');
+    // 管理页：四份都在，改一份、存、退回
+    await t.open('manage');
+    await t.page.waitForSelector('.sm-doc[data-id="math"] .sm-text', { timeout: 15000 });
+    const box = t.page.locator('.sm-doc[data-id="shared"] .sm-text');
+    check((await box.inputValue()).includes('学生在备考'), '管理页里共用那一份没显示');
+    await box.fill('学生在备考 2027 年考研，目标南京大学。');
+    await t.page.click('.sm-doc[data-id="shared"] .sm-save');
+    await t.waitFor(async () => (await t.db())['summary/shared']?.by === 'me', { what: '我改的那一版存进去' });
+    await t.page.click('.sm-doc[data-id="shared"] .sm-back');
+    await t.answer('退回');
+    await t.waitFor(async () => { const d = (await t.db())['summary/shared']; return d?.v >= 3 && !d.text.includes('南京大学'); }, { what: '退回上一版' });
+    return t;
+  },
+
   // 整条最小的一圈（第十二轮第 1 批）：开黑板课 → 老师定要拿下的事 → 两道题各做对 → 下课（框里有两件事）→ 回首页，后台给这节课留隔天的题
   // （?dev 用模拟的模型）→ 当天首页没有「验上次学的」→ 这节课变成昨天上的 → 这一行出现 → 点开做完（中间写数据库失败一次）→ 这一行消失 →
   // 那节课的文档上有 aims、holds、later →「以前的课」里那节课写着隔 1 天做没见过的题和要拿下的两件事

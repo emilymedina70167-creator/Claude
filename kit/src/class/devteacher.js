@@ -23,6 +23,7 @@
 // 「测试:原图」image 贴讲义原图（本地用一张模拟的）；「测试:排序」演示组件 sort（快排一次划分，先猜枢轴落在哪）+ figure play step + mark；
 // 「测试:预案」board react + add … hold（答对由页面接，不再调用；答错照常调用）；「测试:拍子」一轮分四拍（说一句、写一段、圈一下……）。
 // 「测试:目标」学习台里的黑板课：board aims 定两件、两道各挂一件的题；「测试:目标改」再写一次换掉一件。
+// 「测试:知道」学习台里：memo 块写一条 know、一条 ask（有记忆摘要时都记成摘要的新笔记）。
 // 「测试:守卫」学习台里：memo 块写一条对得上的、一条编原话的、一条编证据编号的、一条重复的（守卫收下 / 挂提醒 / 拒收）。
 // 一问一答的课里：「测试:写错」写一行看不懂的；「测试:写错带记」写一行算不出来的值（只有画出来才查得到）还带 memo（review R3 过），
 // 重写时原样再带（只该升一档）；
@@ -44,7 +45,7 @@ export function createDevTeacher({ fallback = false, pace = 1, script = null } =
 
   async function teacher(input, opts = {}) {
     opts = opts || {};
-    const reply = scripted ? scriptReply(input, memo, scripted, teacher.log) : devReply(input, memo, { images: countImages(opts.images) });
+    const reply = scripted ? scriptReply(input, memo, scripted, teacher.log) : devReply(input, memo, { images: Math.max(0, countImages(opts.images) - eyeImages(input)) });
     teacher.calls.push({ method: 'call', kind: reply.kind, input: copyInput(input), opts: cleanOpts(opts) });
     const signal = opts.signal;
     if (signal?.aborted) throw cancelled('');
@@ -238,6 +239,13 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
 
   // 这节课要拿下的事（class/aims.js）：定两件，一块板上两道题各挂一件。答对第一道，板上方那一条变成「1/2 有证据」
   // （选择题点一下只算「带着做到」，也算有证据）。「测试:目标改」再写一次：a2 换了内容（算另一件事）、多一件 a3
+  // 记忆摘要的新笔记（第十三轮）：一条新写法 know（带学生刚说的那句），一条老写法 ask（有摘要时页面也当成新笔记收下）
+  if (!isSystem && /测试\s*[:：]?\s*知道/.test(said)) {
+    return { kind: 'know', text: join('（模拟老师）记下了。', board('memo', [
+      'know text="做一组题之前学生想先知道一共几道" basis=say',
+      'ask text="例句的译文另起一行写" basis=say',
+    ].join('\n'))) };
+  }
   if (!isSystem && /测试\s*[:：]?\s*目标改/.test(said)) {
     return { kind: 'aims', text: join('（模拟老师）发现第二件早就会了，换一件。', board('aims', [
       'a1 ｜ 判断两个向量相乘的结果是几行几列 ｜ 独立判一道没见过的',
@@ -1057,6 +1065,12 @@ function sinceStudent(conv) {
 const stripImageNote = (s) => s.replace(/（附了\s*\d+\s*张图[^）]*）|（学生附了图）/g, '').trim();
 
 const countImages = (imgs) => (Array.isArray(imgs) ? imgs.length : 0);
+// 页面每一轮带的板的截图（boardeye.js）不算学生附的图：最后一条消息末尾那一句写着前几张是板
+const eyeImages = (input) => {
+  const last = Array.isArray(input) ? String(input.at(-1)?.content ?? '') : String(input ?? '');
+  const m = last.match(/\[画面\] (?:前 (\d+) 张图是|第 1 张图是)页面拍的学生现在看到的这块板/);
+  return m ? Number(m[1]) || 1 : 0;
+};
 
 function imageProblem(imgs) {
   if (!Array.isArray(imgs) || !imgs.length) return '';

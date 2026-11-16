@@ -2,13 +2,13 @@
 // 跟着每一轮发给老师。以前老师是闭着眼写的：写一段标记文字，页面排出来什么样它从没见过——例句和译文被并成一行、
 // 一行蓝字被框切掉，它都不知道；看不见画面的人不会去设计，只会写字。舞台课给老师看截图以后画面好了一大截（stage/snap.js）。
 // 拍法照舞台：html2canvas-pro 照计算后的样式画，不压在回话的路上——板静下来就在后台先拍好，要发的时候没再变就直接用。
-// 板比一屏长：照学生一屏一屏看到的切，最多 maxTiles 张（再长的写明后面没拍）。
+// 板比一屏长：照学生一屏一屏看到的切，最多 maxTiles 张（再长的写明后面没拍）。平台一次最多 4 张图，学生附的图优先。
 
 /**
  * 一块板切成几张：{ w, h } 是板的宽和总高（CSS 像素），viewH 是学生一屏看得到多高。
  * 返回 { scale（每张长边不超过 maxEdge）, tiles: [{ y, h }], more（板比拍到的还长）}
  */
-export function tilesOf({ w, h }, { viewH = 0, maxTiles = 2, maxEdge = 1280 } = {}) {
+export function tilesOf({ w, h }, { viewH = 0, maxTiles = 3, maxEdge = 1280 } = {}) {
   const W = Math.max(1, Math.round(w) || 1);
   const H = Math.max(1, Math.round(h) || 1);
   const vh = Math.max(240, Math.round(viewH) || H);
@@ -58,10 +58,10 @@ async function defaultRender(el, { viewH, maxTiles, maxEdge }) {
  * render(el, { viewH, maxTiles, maxEdge }) → { blobs, more }（测试里换假的）；timer：{ setTimeout, clearTimeout, now }。
  * 返回 { dirty(), latest(), fresh(maxWait), lastError(), stop() }
  */
-export function createBoardEye({ target, viewH = () => 0, render = defaultRender, timer = null, quietMs = 600, timeoutMs = 2500, maxTiles = 2, maxEdge = 1280 } = {}) {
+export function createBoardEye({ target, viewH = () => 0, render = defaultRender, timer = null, quietMs = 600, timeoutMs = 2500, maxTiles = 3, maxEdge = 1280 } = {}) {
   const T = timer || { setTimeout: (f, ms) => setTimeout(f, ms), clearTimeout: (t) => clearTimeout(t), now: () => Date.now() };
   let version = 0;
-  let latest = null; // { blobs, more, v, at }
+  let latest = null; // { blobs, more, v, at, ms（拍这一次花了多久）}
   let inflight = null;
   let quiet = null;
   let err = '';
@@ -73,9 +73,10 @@ export function createBoardEye({ target, viewH = () => 0, render = defaultRender
     const el = target();
     if (!el) { latest = null; return Promise.resolve(); }
     let timedOut = null;
+    const t0 = T.now();
     const limit = new Promise((_, reject) => { timedOut = T.setTimeout(() => reject(new Error('超时')), timeoutMs); });
     inflight = Promise.race([Promise.resolve().then(() => render(el, { viewH: viewH(), maxTiles, maxEdge })), limit])
-      .then((r) => { latest = r?.blobs?.length ? { blobs: r.blobs, more: !!r.more, v, at: T.now() } : null; err = ''; })
+      .then((r) => { latest = r?.blobs?.length ? { blobs: r.blobs, more: !!r.more, v, at: T.now(), ms: T.now() - t0 } : null; err = ''; })
       .catch((e) => { err = e?.message || String(e); })
       .finally(() => { T.clearTimeout(timedOut); inflight = null; if (version !== v && !stopped) schedule(); });
     return inflight;

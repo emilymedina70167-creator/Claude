@@ -2,14 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { tilesOf, eyeNote, createBoardEye } from '../kit/src/class/boardeye.js';
 
-test('一块板切成几张：一屏一张，最多两张，再长的标出来', () => {
+test('一块板切成几张：一屏一张，最多三张，再长的标出来', () => {
   assert.deepEqual(tilesOf({ w: 1180, h: 600 }, { viewH: 700 }), { scale: 1, tiles: [{ y: 0, h: 600 }], more: false });
   assert.deepEqual(tilesOf({ w: 1180, h: 710 }, { viewH: 700 }).tiles.length, 1); // 只多出一点点
   const two = tilesOf({ w: 1180, h: 1050 }, { viewH: 700 });
   assert.deepEqual(two.tiles, [{ y: 0, h: 700 }, { y: 700, h: 350 }]);
   assert.equal(two.more, false);
   const long = tilesOf({ w: 1180, h: 3600 }, { viewH: 700 });
-  assert.equal(long.tiles.length, 2);
+  assert.equal(long.tiles.length, 3);
   assert.equal(long.more, true);
   // 竖屏：一屏比宽高，按高缩
   const tall = tilesOf({ w: 820, h: 2000 }, { viewH: 1600, maxEdge: 1280 });
