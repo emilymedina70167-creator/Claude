@@ -6,7 +6,7 @@ import { toast } from '../record.js';
 import { SUMMARY_IDS, maxOf, spaceName, utf8 } from './summary.js';
 import { toDate } from './schema.js';
 
-const BY = { page: '课后页面重写的', me: '我改的', chat: '开发那边写的', class: '课上记的', head: '班主任记的' };
+const BY = { page: '课后页面重写的', me: '我改的', chat: '开发那边写的', class: '课上记的', head: '班主任记的', lab: '课后补写的' };
 const day = (at) => (at ? toDate(Number(at)).slice(5) : '');
 const chars = (bytes) => Math.round(bytes / 3);
 

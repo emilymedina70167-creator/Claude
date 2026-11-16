@@ -442,7 +442,7 @@ export async function renderDesk(root, meta) {
   // 记忆摘要（第十三轮，summarydesk.js）：有了摘要以后首页后台不再过话的账，改成把每节课并进摘要重写一遍
   sumDesk = createSummary({ db, getData: () => data, ai: deskAI, onChange: () => sumView?.paint() });
   sumView = createSummaryView({ sum: sumDesk, host: () => $('.dk-summary') });
-  lab = createLabDesk({ db, getData: () => data, packs, planner, ops, aide: aideDesk, said: saidDesk, onChange: () => paintWork() });
+  lab = createLabDesk({ db, getData: () => data, packs, planner, ops, aide: aideDesk, said: saidDesk, summary: sumDesk, onChange: () => paintWork() });
   // 班主任（第十一轮 B1，head/）：首页上的总 Claude。每一轮的说明照首页手上的现拼（要求、三科的简报、预测分、下一步、这一周、考试）
   function headCtx() {
     const today = toDate(Date.now());

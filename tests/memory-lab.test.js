@@ -105,3 +105,37 @@ test('补收尾：黑板课带 noForm 和黑板课的 memo 说明；舞台课、
     assert.ok(!p.includes(LESSON_NO_FORM) && p.includes(MEMO_DOC), k);
   }
 });
+
+// 第十三轮第 2 批任务 2：有记忆摘要时，补收尾用新的下课提示和只有 know 的记忆块说明；写回来的老写法进新笔记
+test('补收尾：有记忆摘要时不归纳守则、教它写 know；没有摘要时照旧', async () => {
+  const { backfillMaterial } = await import('../kit/src/memory/lab.js');
+  const { SUMMARY_MEMO_DOC, CLASS_MEMO_DOC } = await import('../kit/src/class/prompt.js');
+  const turns = [{ seq: 1, role: 'user', text: '好' }];
+  const s = { id: 'c-20261116-1', block: 'L2.1.1', status: 'closed', kind: 'class' };
+  const old = { sessions: [], slips: [{ id: 'S-1', text: '没看清就判错', date: '2026-11-01', by: 'class' }], lessons: [] };
+  const withSum = { ...old, summary: [{ id: 'math', text: '线代用张宇 30 讲。', v: 1, notes: [] }] };
+  const a = backfillMaterial(old, s, { turns }).prompt;
+  const b = backfillMaterial(withSum, s, { turns }).prompt;
+  assert.ok(a.includes(CLASS_MEMO_DOC) && /归纳教学失误/.test(a));
+  assert.ok(b.includes(SUMMARY_MEMO_DOC), '带的是只有 know 的那份说明');
+  assert.doesNotMatch(b, /归纳教学失误|教学守则|没看清就判错/);
+  assert.match(b, /写几行 `know`/);
+  assert.match(b, /线代用张宇 30 讲/);
+});
+
+test('补收尾写回来的整理单：有摘要时 know 和老写法都进新笔记，学习的账照旧', async () => {
+  const { backfillSplit } = await import('../kit/src/memory/lab.js');
+  const { parseMemoLines } = await import('../kit/src/memory/memo.js');
+  const { entries } = parseMemoLines(`lesson text="判错之前先看清学生写的是什么" why="没看清"
+slip text="一次出了九句"
+ask text="开场复习最多两三句" basis=say
+know text="学生嫌一次九句量太大"
+error step="第 1 步" cause="把秩和阶数混了" basis=q-b5
+position next="接着讲被动"`);
+  const on = backfillSplit(entries, { on: true });
+  assert.deepEqual(on.notes.map((n) => n.text), ['判错之前先看清学生写的是什么', '一次出了九句', '开场复习最多两三句', '学生嫌一次九句量太大']);
+  assert.deepEqual(on.rest.map((e) => e.kind), ['error', 'position']);
+  const off = backfillSplit(entries, { on: false });
+  assert.deepEqual(off.notes.map((n) => n.text), ['学生嫌一次九句量太大']);
+  assert.deepEqual(off.rest.map((e) => e.kind), ['lesson', 'slip', 'ask', 'error', 'position']);
+});

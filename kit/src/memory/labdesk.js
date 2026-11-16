@@ -9,7 +9,7 @@ import { assertWrite } from './schema.js';
 import { scopeDb } from './session.js';
 import { pendingRecord } from './memo.js';
 import { guardCandidate, buildCorpus, guardMark, guardReason, guardLog } from './guard.js';
-import { LAB_CAPS, briefId, bytesOf, BRIEF_MAX, LAB_VERSION, srcOf, backfillMaterial, problemsMaterial, briefDoc, parseBackfill, parseProblems, problemLint, twinOf, prepBrief, checkReply, receipt } from './lab.js';
+import { LAB_CAPS, briefId, bytesOf, BRIEF_MAX, LAB_VERSION, srcOf, backfillMaterial, backfillSplit, problemsMaterial, briefDoc, parseBackfill, parseProblems, problemLint, twinOf, prepBrief, checkReply, receipt } from './lab.js';
 import { reportError } from '../errlog.js';
 import { loadExamCourse } from '../exam/load.js';
 import { profileBrief, parseProfile, profileQuestions, mapBrief, parseMap, applyMap, intelBrief, parseIntel, mergeIntel } from '../exam/lab.js';
@@ -34,7 +34,8 @@ const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slic
  */
 // aide：课堂助手（aide/aidedesk.js，第九轮）：after（下课后的整理，首页连着没做成的）、card（按章合并学生卡）两种单子的材料和写法都用它的
 // said：话的账（saiddesk.js 的 createSaid，第十一轮）：首页两次没过成账的课，教研室照同一份提示词做
-export function createLabDesk({ db, getData, packs, planner, ops, aide = null, said = null, onChange = () => {} }) {
+// summary：记忆摘要那一层（summarydesk.js 的 { on, note }）：补收尾写回来的关于学生的事记成新笔记
+export function createLabDesk({ db, getData, packs, planner, ops, aide = null, said = null, summary = null, onChange = () => {} }) {
   let briefs = [];
   let logs = [];
   let syncing = false;
@@ -348,15 +349,24 @@ export function createLabDesk({ db, getData, packs, planner, ops, aide = null, s
       }
     }
     let rejected = got.errors.map((e) => ({ line: '', error: e }));
-    if (got.entries.length) {
+    // 关于学生的事进记忆摘要的新笔记（第十三轮）；有摘要时教研室照老习惯写的守则、失误、要求也进新笔记，不再写进旧的几类
+    const split = backfillSplit(got.entries, { on: !!summary?.on() });
+    const entries = summary ? split.rest : got.entries;
+    if (summary) {
+      for (const k of split.notes) {
+        const r = await summary.note({ text: k.text, space: k.shared ? 'shared' : k.space || space, session: sid, by: 'lab' }).catch(() => ({ added: false }));
+        if (r.added) took.know = (took.know || 0) + 1;
+      }
+    }
+    if (entries.length) {
       // 带 aide 的课：事实由课后助手写，补收尾只收判断（不两个作者写同一件事）
-      const r = await ops.applyMemo(cur.aide ? judgmentsOnly(got.entries) : got.entries, { session: sid, block, space, turns, author: 'lab' });
+      const r = await ops.applyMemo(cur.aide ? judgmentsOnly(entries) : entries, { session: sid, block, space, turns, author: 'lab' });
       took.memo = r.pds.length;
       held += r.rejected.filter((x) => x.held).length;
       rejected = [...rejected, ...r.rejected.filter((x) => !x.held)];
     }
     // 暂存的也算交上了（在「管理」里等我放行）：单子撤掉，不让教研室明晚再写一份
-    const result = took.summary || took.memo || held ? (rejected.length || held ? 'partial' : 'ok') : 'error';
+    const result = took.summary || took.memo || took.know || held ? (rejected.length || held ? 'partial' : 'ok') : 'error';
     return receipt({ inbox: d, brief, result, took, rejected, held, notes });
   }
 

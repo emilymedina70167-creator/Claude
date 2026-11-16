@@ -10,12 +10,13 @@ import { heldDrillIds } from './drills.js';
 // 云端再写一份就会和课堂、首页的不一样；页面拼好，教研室看到的和课堂里的 Claude 看到的是同一份东西。
 // 只拼工作单里最要紧的几张（LAB_CAPS），每张有指纹（key），材料变了才重拼，平时打开首页什么都不写。
 import { fencesOf, withId } from './drills.js';
-import { similarity, slipsToFold } from './memo.js';
+import { similarity, slipsToFold, splitKnow } from './memo.js';
+import { summaryOn } from './summary.js';
 import { spaceOfId, subjectOf } from './space.js';
 import { memoryDigest } from './digest.js';
 import { transcriptText } from './debrief.js';
 import { reportText } from './report.js';
-import { closingPrompt, MEMO_DOC, CLASS_MEMO_DOC } from '../class/prompt.js';
+import { closingPrompt, MEMO_DOC, CLASS_MEMO_DOC, SUMMARY_MEMO_DOC } from '../class/prompt.js';
 import { componentDoc, isCS, isEN } from '../subject.js';
 
 export const LAB_VERSION = 6; // 单子的写法变了就加一：学习台打开时照新写法重拼（收件箱先按旧单子收完）
@@ -271,6 +272,12 @@ export function srcOf(item, mem = {}, packs = {}) {
   return '';
 }
 
+/**
+ * 补收尾写回来的整理单分两堆：进记忆摘要新笔记的（know；有摘要时 lesson / slip / ask / pref / rule 这些老写法也算）和照旧走改动单的。
+ * 教研室是照旧的习惯写的也不丢、不再写进没人读的旧几类
+ */
+export const backfillSplit = (entries, { on = false } = {}) => splitKnow(entries, { on });
+
 /** 补收尾的单子：session 带 id；turns：这节课的 class_turns；rep：课后报告（没有就 null）。什么记录都没有时返回 null */
 export function backfillMaterial(mem, s, { turns = [], rep = null } = {}) {
   if (!s || (!turns.length && !rep)) return null;
@@ -279,8 +286,10 @@ export function backfillMaterial(mem, s, { turns = [], rep = null } = {}) {
   const memory = memoryDigest(mem, { block: s.block || '', space: sp, session: s.id, tools: false, budget: 24 * 1024, use: 'all' }).text;
   // 黑板课（kind 是 class 或没写）照课堂里下课那样：守则不写形式（noForm）、黑板课那份 memo 说明；舞台课、一问一答照旧
   const board = !s.kind || s.kind === 'class';
-  const closing = closingPrompt({ report: rep ? reportText(rep) : '（这节课没有算出课后报告：整理单按记录写，basis 写组件 id。）', review: s.review, opening: s.opening, slips: slipsToFold(mem, sp), noForm: board });
-  return { prompt: backfillBrief({ session: s, transcript: transcriptText(turns), memory, closing, memoDoc: board ? CLASS_MEMO_DOC : MEMO_DOC }), ctx: { session: s.id, block: s.block || null, space: sp } };
+  // 有记忆摘要（第十三轮）：和课堂里下课一样，不归纳守则、关于学生的事只写 know（哪种课都一样：这是教研室回答的格式，不是课上的说明）
+  const sum = summaryOn(mem);
+  const closing = closingPrompt({ summary: sum, report: rep ? reportText(rep) : '（这节课没有算出课后报告：整理单按记录写，basis 写组件 id。）', review: s.review, opening: s.opening, slips: sum ? '' : slipsToFold(mem, sp), noForm: board });
+  return { prompt: backfillBrief({ session: s, transcript: transcriptText(turns), memory, closing, memoDoc: sum ? SUMMARY_MEMO_DOC : board ? CLASS_MEMO_DOC : MEMO_DOC }), ctx: { session: s.id, block: s.block || null, space: sp } };
 }
 
 /** 出新题 / 探题的单子：item 是工作单的一项（newproblems：复现组；probe：弱点）；docs：组件说明的全文（COMPONENT_DOCS） */
