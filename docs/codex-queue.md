@@ -7,14 +7,58 @@
 | 顺序 | 做什么 | 说明 | 分支 |
 |---|---|---|---|
 | 1 | 首页「验上次学的」，结果记回那节课 | `docs/codex-root-later.md` | `codex/root-later` |
-| 2 | 测试的卫生（见下） | 这个文件 | `codex/test-hygiene` |
-| 3 | 独立通读：黑板课老师的整份说明（只读，见下） | 这个文件 | `codex/review-charter` |
+| 2 | 开课改成黑板；课堂两处不打扰；整套 e2e 跟着改（见下） | 这个文件 | `codex/root-class` |
+| 3 | 测试的卫生（见下） | 这个文件 | `codex/test-hygiene` |
+| 4 | 独立通读：黑板课老师的整份说明（只读，见下） | 这个文件 | `codex/review-charter` |
 
 后面还会加（等主控把第 2 批的计划定下来）：第 2 批里自成一块的新组件。
 
 ---
 
-## 2. 测试的卫生
+## 2. 开课改成黑板；课堂两处不打扰；整套 e2e 跟着改
+
+计划 `docs/superpowers/plans/2026-11-15-root-1.md` 的 Task 5。背景：这一轮定了黑板是课的底座，新开的课一律是黑板课（现在默认开舞台课）；学生提过一条要求——「老师一说话，页面就把我拉回板顶，打断我做题」——这一件把它修掉。行号是写计划时的，以现在的代码为准。
+
+
+
+**Files:**
+- Modify: `kit/src/memory/session.js`（`classForm` :46-52 和上面的注释）、`kit/src/memory/desk.js`（`createClass` 的默认值和 :1966 的注释）、`kit/src/class/classroom.js`（滚动 :1946-1962；`?dev` 时把整份说明挂到 `window.LAKitClassSystem`）、`kit/src/class/bar.js`（返回的对象加 `hasText()`）、`kit/src/class/boardview.js`、`kit/src/class/class.css`、`kit/src/class/ios.css`、`tools/desk-e2e.mjs`
+- Modify tests: `tests/stage-class.test.js:115-121`
+- Test: `tests/class-quiet.test.js`（新）
+
+**Interfaces:**
+- Produces：
+  - `classForm(search)`：不带 `?dev&form=` 时返回 `'class'`；`?dev&form=stage` / `talk` / `class` 照旧认；乱写的返回 `'class'`。`createClass` 的 `kind` 默认 `'class'`。
+  - `kit/src/class/quiet.js`（新，纯函数）：`shouldScroll({ writing, away }): boolean`：学生正在写（`writing`）或者翻到了别的板（`away`）时是 `false`。`writing` 由课堂算：有没发的 Pencil 笔画、当前板上有草稿、输入框里有字，三样有一样就是。
+  - 老师这一轮只说了话、没写新段，而板顶的话不在屏幕里时：话在输入条上方再显示一份（`.class-talk-echo`，点它滚回板顶，学生下一次动作或者滚到板顶以后消失）。
+  - `?dev` 时 `window.LAKitClassSystem` 是最近一次发给老师的整份说明（e2e 读它）。
+
+- **Step 1: 写失败的测试**：`tests/class-quiet.test.js`（`shouldScroll` 四种组合）；`tests/stage-class.test.js:115-121` 改成新的默认值（`classForm('') === 'class'`、`'?form=stage'` 不带 dev 时是 `'class'`、`'?dev&form=stage'` 是 `'stage'`、`'?dev&form=瞎写'` 是 `'class'`）。
+- **Step 2: 确认是红的。**
+- **Step 3: 改 `session.js`、`desk.js`、写 `quiet.js`、改 `classroom.js` / `bar.js` / `boardview.js` 和样式**，测试转绿。
+- **Step 4: 改 e2e**（`tools/desk-e2e.mjs`）：
+  - `stage`、`stagestuck`、`aide` 三段改成 `openForm('stage')` 开课（它们守的是舞台课的旧代码）；`stage` 段里「首页没有形式选项」照旧查。
+  - `class`、`guard` 两段不再需要 `openForm('class')`，直接从首页开。
+  - `asks` 段改成开黑板课，读 `window.LAKitClassSystem` 查说明里有那条要求。
+  - `prep`、`menu`、`purge`、`review` 这些直接点首页开课的段，`inClass` 的等待条件要认黑板课（先核一下黑板课开课页有没有「开始上课」，没有就加上它能等到的东西）。
+  - 新加一段 `quiet`：开黑板课，在输入框里打几个字不发，让模拟老师回一轮带新段的（现成的剧本就行），页面的滚动位置不变；清掉输入框再来一轮，滚到新段。
+- **Step 5: `npm run build && npm run e2e` 全过**（全量，不只是新段：默认的课型换了，哪一段都可能受影响）。
+- **Step 6: `npm test` 全过，提交**（不提交 `kit/dist/`）
+
+补充（主控定的）：
+
+- 这一件**可以改 `tools/desk-e2e.mjs`**（它是这一件的主要工作量：默认的课型换了，哪一段都可能受影响）。验收就是 `npm run build && npm run e2e` 全量全过、`npm test` 全过、`npm run check:pages` 过：三样的结果贴进报告。e2e 没过的段不许删、不许改成不查东西；真是旧行为不该再守的，写进报告由主控定。
+- 舞台课、一问一答的课（`?dev&form=stage / talk` 还开得出来；以前开的还能接着上、能翻看）行为一点不变：「不打扰」的两处只在黑板课生效，一问一答（`classroom.js` 里 `TALK` 为真）照旧。发给老师的说明这一件一个字都不改（`tests/class-charter.test.js` 的 sha256 守着舞台课和一问一答的；黑板课的你也不要动）。
+- `kit/src/class/classroom.js`、`boardview.js`、`class.css`、`ios.css` 主控那边同时有人在改别的地方（老师写「要拿下的事」的指令、板上方的一条）：你只改滚动那一处、加你要的那一小块，不重排、不改格式、不顺手整理。`prompt.js`、`protocol.js`、`aims.js`、`charter.js` 不要改。
+- 「学生正在写」判断错了的两种后果不对称：该滚没滚，学生可能没看到老师新写的东西——所以不滚的时候必须有看得见的提示（照说明里的 `.class-talk-echo`，或者现成的「回到当前板」那种闪一下），不能悄悄不动。报告里写清每种情况学生看到什么。
+- 界面以 iPad 为准（820×1180 / 1180×820），新加的那一小块用现成的变量和毛玻璃样式（`ios.css`），点的地方至少 44px。竖屏横屏各截一张图放进报告（或写明截图的命令）。
+- 你上一件（`codex/root-later`）如果加了浏览器验收脚本，这一件做完以后把它并成 e2e 里的一段（`later`），照 e2e 现成各段的写法。
+
+交付：`docs/codex-root-class-report.md`。
+
+---
+
+## 3. 测试的卫生
 
 两件小事，都只动测试和工具，不动 `kit/src/`。
 
@@ -26,7 +70,7 @@
 
 ---
 
-## 3. 独立通读：黑板课老师的整份说明（只读）
+## 4. 独立通读：黑板课老师的整份说明（只读）
 
 这一轮最要紧的改动是把黑板课老师（Opus）的说明从一堆「规定形式」的红线换成一份「根本规则」：每一刻只问三件事（终点 / 差距 / 动作），怎么教由老师当场判断，页面不规定形式；另有四条不许绕的保险。前面几轮开发每次都自称改了教法，结果都是换皮：形式的规定换个地方又长回来。你是另一个模型，请你当独立的审稿人把现在的整份说明从头读一遍。**只读：不改任何源码**，只交一份报告。
 
