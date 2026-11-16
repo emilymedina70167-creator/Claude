@@ -66,7 +66,7 @@ export function createMemOps({ db, mem, exam = () => null }) {
     // 一个 memo 块最多记 MEMO_MAX 条（归纳守则的 lesson 不算）：记得太多学生看不过来，挑要紧的。
     // 整理（合并、作废、停掉、关掉）、判复现结果、改 position 不算：它们让记忆变少、变准，
     // 下课整理单常常一次有好几行，算进去会把排在最后的合并、position 截掉（下课以后没人看得到被拒了）
-    const free = (e) => e.kind === 'lesson' || e.kind === 'position' || ['merged', 'void', 'retired', 'closed', 'done'].includes(e.attrs?.status) || (e.kind === 'review' && e.attrs?.result);
+    const free = (e) => e.kind === 'lesson' || e.kind === 'position' || ['merged', 'void', 'retired', 'closed', 'done', 'seen'].includes(e.attrs?.status) || (e.kind === 'review' && e.attrs?.result);
     let n = 0;
     for (const e of entries || []) {
       if (author === 'aide' && !AIDE_KINDS.has(e.kind)) { rejected.push({ line: e.line, error: '助手只写事实（错题、弱点、过程观察、讲错的地方、记忆点），这一条留给课上的老师' }); continue; }

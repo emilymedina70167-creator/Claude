@@ -9,7 +9,7 @@
 // 撤销了的（status: void、有一条作废的更正指向它）不带；学生标了已解决的错题注明；还在等学生确认的改动单列出来，免得它再提一遍。
 import { weaknessHits, hitText, lessonLines, lessonLinesText, pointCatalog } from './skills.js';
 import { debriefText } from './debrief.js';
-import { voidedIds, resolvedErrors, pendingTitle, absorbedSlips } from './memo.js';
+import { voidedIds, resolvedErrors, pendingTitle, settledSlips } from './memo.js';
 import { filterSpace, spaceOfId, positionId, sharedFor } from './space.js';
 import { dueList, toDate } from './schema.js';
 import { recallLine } from './recall.js';
@@ -71,12 +71,15 @@ export function nearBlocks(curriculum, block) {
 /**
  * 课堂里的 Claude 能看到的那份记忆（这一科的；规则去掉 for: chat 的）。memoryDigest 和对话里的 Claude 的开场简报都从它出发。
  * 返回 { space, mem（过滤好的）, gone, solved, position, here（这节课的块）}
+ * use：'teach' 时去掉管记录和复现的规则（rules 的 use: record）；默认 'all' 不去（开场简报、班主任全都要）。
+ * 在这里滤，全文（memoryDigest）和目录（memoryCatalog）拿到的是同一份：讲课时用不上的规则连目录也不列，列了老师会去取
  */
-export function classView(mem0 = {}, { block = '', forClass = true, space: sp = '' } = {}) {
+export function classView(mem0 = {}, { block = '', forClass = true, space: sp = '', use = 'all' } = {}) {
   const space = sp || spaceOfId(block || (mem0.position || []).find((d) => d?.id === 'now')?.block);
   const mem = filterSpace(mem0, space);
   for (const c of ['rules', 'profile', 'slips', 'lessons']) mem[c] = sharedFor(mem[c], space, mem0);
   if (forClass) mem.rules = (mem.rules || []).filter((r) => r?.for !== 'chat');
+  if (use === 'teach') mem.rules = (mem.rules || []).filter((r) => r?.use !== 'record');
   const gone = voidedIds(mem);
   const solved = resolvedErrors(mem);
   // 作废的、更正别的条目的（作废更正、「已解决」那条）都不单独带：原条上注明
@@ -105,9 +108,11 @@ const sessionLine = (s, obs, n = 80) => {
  * 返回 { rules（给「角色和红线」那一节的规则全文）, text（全文 + 目录）, cut: [{ coll, more, ids }]（没放全文、在目录里的）, bytes }
  */
 // aide：{ brief（briefText 的字，可以空）, cards（cardText 的字的数组）}：课堂助手的两节（aide/brief.js、card.js 算好的），没有就是 null（和以前一字不差）
-export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 1024, session = '', tools = true, today = toDate(Date.now()), aide = null } = {}) {
+// use：带哪些规则。'teach'（默认，讲课的每一轮）不带 use: record 的——管记录和复现的规则讲新课时用不上，每一轮带着只是多读；
+// 'all'（下课那一次、复现课、备课、事后补写）都带。记忆库里没有 use: record 的规则时两种逐字一样
+export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 1024, session = '', tools = true, today = toDate(Date.now()), aide = null, use = 'teach' } = {}) {
   // space：没块开的课（新的一科还没选块）按这节课的科带，不落到数学
-  const view = classView(mem0, { block, space: block ? '' : space });
+  const view = classView(mem0, { block, space: block ? '' : space, use: use === 'all' ? 'all' : 'teach' });
   const { mem, get, solved, position, here } = view;
   const { cur, near } = nearBlocks(get('curriculum'), here);
   const nearIds = new Set([here, ...near.map((d) => d.id)].filter(Boolean));
@@ -201,8 +206,9 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
     .sort((a, b) => (Number(b.lapses) || 0) - (Number(a.lapses) || 0) || cmpId(a.id, b.id));
   sections.push({ coll: 'recall', head: '## 要记的（recall：这几块记过的、老想不起的；学生每天在首页自己想一遍，页面按 1 → 3 → 7 → 14 → 30 天排）', limit: RECALL_FULL, items: recalls.map((k) => ({ key: `recall/${k.id}`, text: recallLine(k, today) })) });
   // 失误：已经归纳进守则的不再带（守则里有了），只带还没归纳的，最近的在前
-  const absorbed = absorbedSlips(mem.lessons);
-  const slips = get('slips').filter((s) => !absorbed.has(String(s.id))).sort(byDate('date'));
+  // 看过了、不归纳的（更正那一条 seen 和它指着的原条）也不带
+  const absorbed = settledSlips(mem);
+  const slips = get('slips').filter((s) => !s.seen && !absorbed.has(String(s.id))).sort(byDate('date'));
   sections.push({ coll: 'slips', head: '## 还没归纳进守则的教学失误（最近的在前；下课时并进守则）', limit: SLIPS_FULL, items: slips.map((s) => ({ key: `slips/${s.id}`, text: `- ${s.id}（${s.date || ''}，${s.by === 'class' ? '课堂里的 Claude' : s.by === 'lab' ? '课后补写的' : '以前对话里的 Claude'}）${one(s.text, 300)}${s.lesson ? ` → ${one(s.lesson, 200)}` : ''}` })) });
   // 还在等学生确认的改动（memo 写的错题、弱点、复现组、位置）：已经提过了，别再提
   const open = (Array.isArray(mem.pending) ? mem.pending : []).filter((p) => p && p.status === 'open').sort((a, b) => (a.at || 0) - (b.at || 0));
@@ -340,8 +346,8 @@ export function memoryCatalog(view, { shown = new Set(), here = view.here, nearI
   }
   const due = dueList(get('reviews'), today);
   if (due.length) parts.push({ head: '复现组', full: due.map((d) => `${d.id} ${one(d.title, 30)}（${d.days < 0 ? `过期 ${-d.days} 天` : d.days === 0 ? '今天到期' : `${d.due.slice(5)} 到期`}）`), short: [due.map((d) => `${d.id}${d.days <= 0 ? '（到期）' : ''}`).join('、')] });
-  const absorbed = absorbedSlips(view.mem.lessons);
-  const slips = get('slips').filter(not('slips')).filter((s) => !absorbed.has(String(s.id))).sort(byDate('date'));
+  const absorbed = settledSlips(view.mem);
+  const slips = get('slips').filter(not('slips')).filter((s) => !s.seen && !absorbed.has(String(s.id))).sort(byDate('date'));
   const lessonsLeft = get('lessons').filter((l) => (l.status || 'active') === 'active').filter(not('lessons'));
   if (lessonsLeft.length) parts.push({ head: '教学守则（没放全文的）', full: lessonsLeft.map((l) => `${l.id} ${one(l.text, 34)}`), short: [lessonsLeft.map((l) => l.id).join('、')] });
   if (slips.length) parts.push({ head: '较早的、还没归纳的教学失误', full: [slips.map((s) => s.id).join('、')], short: [`${slips.length} 条`] });

@@ -34,8 +34,10 @@ export const COLLECTIONS = {
     label: '规则', kind: 'state', writers: ['chat', 'class', 'me'],
     id: { re: /^rule-[A-Za-z0-9_-]+$/, eg: 'rule-01、rule-redline-3' },
     required: ['cat', 'text', 'since', 'source'],
-    // for：给谁看（课堂里的 Claude 只带 class、both 的；不写当 both）；space：只管一科时写（不写全科都带）
-    enums: { status: ['active', 'void'], for: ['class', 'chat', 'both'], space: ['math', 'cs', 'en'] },
+    // for：给谁看（课堂里的 Claude 只带 class、both 的；不写当 both）；space：只管一科时写（不写全科都带）；
+    // use：什么时候带（不写当 teach）。teach 讲课的每一轮都带；record 是管记录和复现的（错题怎么记、复现怎么算……），
+    // 讲新课时用不上，只在下课、复现课、备课、事后补写时带（digest.js 的 use）
+    enums: { status: ['active', 'void'], for: ['class', 'chat', 'both'], space: ['math', 'cs', 'en'], use: ['teach', 'record'] },
     dates: ['since'],
     refs: { voidedBy: 'rules' },
     tracked: ['text', 'status'],

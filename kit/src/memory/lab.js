@@ -14,10 +14,10 @@ import { spaceOfId, subjectOf } from './space.js';
 import { memoryDigest } from './digest.js';
 import { transcriptText } from './debrief.js';
 import { reportText } from './report.js';
-import { closingPrompt, MEMO_DOC } from '../class/prompt.js';
+import { closingPrompt, MEMO_DOC, CLASS_MEMO_DOC } from '../class/prompt.js';
 import { componentDoc, isCS, isEN } from '../subject.js';
 
-export const LAB_VERSION = 5; // 单子的写法变了就加一：学习台打开时照新写法重拼（收件箱先按旧单子收完）
+export const LAB_VERSION = 6; // 单子的写法变了就加一：学习台打开时照新写法重拼（收件箱先按旧单子收完）
 // 一晚最多做几张（价值高的先）：补收尾的课最值，出新题其次，备课一科一张
 // profile / map / intel：考情第 6 批（exam/lab.js）
 // card / after：课堂助手（第九轮）：按章合并学生卡；首页连着没做成的下课后整理
@@ -54,10 +54,11 @@ const TOOLS_NOTE = '你所在的环境有命令行（Python、Node 都能用）�
 
 /**
  * 一节没收尾的课（下课时没写成小结、或者挂着没下课）：事后照这节课的完整记录写小结和整理单。
- * closing：classroom.js 下课时用的那份 closingPrompt（页面拼好传进来，和课堂里的一字不差）；
+ * closing：那节课下课时用的那份 closingPrompt（页面拼好传进来）：黑板课和 classroom.js 下课时一样带 noForm；
+ * memoDoc：那节课老师带着的 memo 说明（黑板课 CLASS_MEMO_DOC，别的种类照旧 MEMO_DOC）；
  * transcript：debrief.js 的 transcriptText；memory：digest.js 的 memoryDigest 的文字
  */
-export function backfillBrief({ session = {}, transcript = '', memory = '', closing = '' } = {}) {
+export function backfillBrief({ session = {}, transcript = '', memory = '', closing = '', memoDoc = MEMO_DOC } = {}) {
   return `${HEAD}
 
 ## 这一张：补写一节课的小结和整理单
@@ -82,7 +83,7 @@ ${transcript || '（没有存下每一轮）'}
 
 ### memo 块的写法（课堂里的 Claude 上课时带着的同一份；「上课时」「这一轮」的话按事后补写理解）
 
-${MEMO_DOC}
+${memoDoc}
 
 ### 下课时课堂里的 Claude 收到的要求（照着写）
 
@@ -262,9 +263,12 @@ export function srcOf(item, mem = {}, packs = {}) {
 export function backfillMaterial(mem, s, { turns = [], rep = null } = {}) {
   if (!s || (!turns.length && !rep)) return null;
   const sp = s.space || spaceOfId(String(s.block || ''));
-  const memory = memoryDigest(mem, { block: s.block || '', space: sp, session: s.id, tools: false, budget: 24 * 1024 }).text;
-  const closing = closingPrompt({ report: rep ? reportText(rep) : '（这节课没有算出课后报告：整理单按记录写，basis 写组件 id。）', review: s.review, opening: s.opening, slips: slipsToFold(mem, sp) });
-  return { prompt: backfillBrief({ session: s, transcript: transcriptText(turns), memory, closing }), ctx: { session: s.id, block: s.block || null, space: sp } };
+  // use: 'all'：补收尾就是下课那一次，管记录和复现的规则也带（课堂里下课时一样）
+  const memory = memoryDigest(mem, { block: s.block || '', space: sp, session: s.id, tools: false, budget: 24 * 1024, use: 'all' }).text;
+  // 黑板课（kind 是 class 或没写）照课堂里下课那样：守则不写形式（noForm）、黑板课那份 memo 说明；舞台课、一问一答照旧
+  const board = !s.kind || s.kind === 'class';
+  const closing = closingPrompt({ report: rep ? reportText(rep) : '（这节课没有算出课后报告：整理单按记录写，basis 写组件 id。）', review: s.review, opening: s.opening, slips: slipsToFold(mem, sp), noForm: board });
+  return { prompt: backfillBrief({ session: s, transcript: transcriptText(turns), memory, closing, memoDoc: board ? CLASS_MEMO_DOC : MEMO_DOC }), ctx: { session: s.id, block: s.block || null, space: sp } };
 }
 
 /** 出新题 / 探题的单子：item 是工作单的一项（newproblems：复现组；probe：弱点）；docs：组件说明的全文（COMPONENT_DOCS） */
@@ -288,7 +292,7 @@ export function problemsMaterial(mem, item, { docs = '' } = {}) {
   const docText = names.map((n) => { const d = componentDoc(docs, n, subject); return d ? `#### ${n}\n\n${d}` : ''; }).filter(Boolean).join('\n\n');
   const blockInfo = blocks.map((b) => { const c = (mem.curriculum || []).find((x) => x.id === b); return c ? `- ${b} ${c.title || ''}${c.scope ? `：${String(c.scope).slice(0, 400)}` : ''}` : `- ${b}`; }).join('\n');
   // 记忆只要讲给学生的那几节（关于学生、学到哪、掌握）：开头叫课堂 Claude 写 memo 的话、最后的目录对出题没用
-  const full = memoryDigest(mem, { block: blocks[0], space: spaceOfId(blocks[0]), tools: false, budget: 10 * 1024 }).text;
+  const full = memoryDigest(mem, { block: blocks[0], space: spaceOfId(blocks[0]), tools: false, budget: 10 * 1024, use: 'all' }).text;
   const memory = full.slice(Math.max(0, full.indexOf('## ')), full.includes('\n## 目录') ? full.indexOf('\n## 目录') : undefined).trim();
   const target = { kind: isReview ? 'review' : 'weakness', id: String(t.id), title: t.title || String(t.id), blocks, level: t.level, weaknesses: weak.filter((w) => w !== t).map((w) => `${w.id} ${w.title || ''}`) };
   return { prompt: problemsBrief({ target, originals, errors, docs: docText, blockInfo, memory, subject }), ctx: { target, block: blocks[0], subject } };

@@ -130,7 +130,7 @@ test('黑板指令说明：每条规则都写到了', () => {
 
 test('黑板指令说明：例子本身写对了（指令格式、组件 id、图的命令、highlight 序号）', () => {
   const blocks = boardBlocks(PROTOCOL_DOC);
-  assert.equal(blocks.length, 14);
+  assert.equal(blocks.length, 15);
   const ID = '[A-Za-z0-9_\\-.~:@+]{1,64}';
   const grammar = [
     new RegExp(`^(new|add|replace|pin) id=${ID}( title=("[^"]*"|“[^”]*”))?$`),
@@ -171,7 +171,7 @@ test('黑板指令说明：例子本身写对了（指令格式、组件 id、�
 
 test('黑板指令说明：protocol.js 能把文档里的例子都解析出来', { skip: !protocol && 'protocol.js 还不存在' }, () => {
   const { ops } = protocol.parseOutput(PROTOCOL_DOC, { final: true });
-  assert.deepEqual(ops.map((o) => o.op + (o.action ? ':' + o.action : '')), ['new', 'add', 'replace', 'hide', 'figure:set', 'figure:play', 'figure:highlight', 'mark', 'mark', 'pin', 'unpin', 'react', 'why', 'new']);
+  assert.deepEqual(ops.map((o) => o.op + (o.action ? ':' + o.action : '')), ['new', 'add', 'replace', 'hide', 'figure:set', 'figure:play', 'figure:highlight', 'mark', 'mark', 'pin', 'unpin', 'react', 'why', 'new', 'add']);
   assert.equal(ops[0].id, 'b3');
   assert.equal(ops[0].title, 'Ax 落在哪');
   assert.ok(ops[0].body.includes('```scene') && ops[0].body.includes('```answer'), '内层组件留在 new 的内容里');
@@ -332,15 +332,16 @@ test('buildSystem：顺序是 角色和根本规则 → 组件说明 → 黑板�
   assert.ok(sys.includes('文中的「我」指学生'), '组件说明是写给项目 Claude 的，要提醒');
 });
 
-test('buildSystem：rules（参数或资料包里的）覆盖默认规则，空白不算', () => {
+// 资料包（或参数）定的规则接在根本规则后面，根本规则和保险还在（以前整段覆盖）
+test('buildSystem：rules（参数或资料包里的）接在根本规则后面，空白不算', () => {
   const custom = '你是助教，只出题不讲解。';
+  const tail = `这节课的资料包另外定的规则（和上面冲突时以这里为准）：\n\n${custom}`;
   let sys = buildSystem({ rules: custom, componentDocs: DOCS, pack: PACK, board: [] });
-  assert.ok(sys.includes(`# 一、你的角色和根本规则\n\n${custom}`));
-  assert.ok(!sys.includes(DEFAULT_RULES));
-  assert.ok(sys.includes(PROTOCOL_DOC), '覆盖的只是规则那一节，黑板指令照常');
+  assert.ok(sys.includes(`# 一、你的角色和根本规则\n\n${DEFAULT_RULES}\n\n${tail}`));
+  assert.ok(sys.includes(PROTOCOL_DOC), '黑板指令照常');
 
   sys = buildSystem({ componentDocs: DOCS, pack: { ...PACK, main: { ...PACK.main, rules: custom } }, board: [] });
-  assert.ok(sys.includes(custom) && !sys.includes(DEFAULT_RULES));
+  assert.ok(sys.includes(DEFAULT_RULES) && sys.includes(tail));
   assert.equal(sys.split(custom).length, 2, 'rules 不再在资料包里重复一遍');
 
   sys = buildSystem({ rules: '   \n ', componentDocs: DOCS, pack: PACK, board: [] });
@@ -609,7 +610,8 @@ test('课堂说明：一屏一块板，说的话写在板顶，学生的话不�
   assert.match(PROTOCOL_DOC, /一轮最多开一块新板/);
   assert.match(PROTOCOL_DOC, /只有当前板上和常驻栏里的图能动/);
   assert.match(DEFAULT_RULES, /输入框/);
-  assert.match(DEFAULT_RULES, /换一块新板/);
+  assert.match(DEFAULT_RULES, /开了新板，旧板收进历史/);
+  assert.doesNotMatch(DEFAULT_RULES, /讲到下一件事就/, "角色那一段只说黑板是什么样，不定节奏");
 });
 
 test('黑板现状（分板）：当前板、板顶的话、超出一屏、常驻栏、以前的板、屏幕大小、下一个 id', () => {

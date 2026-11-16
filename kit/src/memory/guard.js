@@ -232,7 +232,8 @@ export function guardCandidate(cand, ctx = {}) {
   if ((author === 'lab' || author === 'aide') && session && !doc.backfill && ['observations', 'slips', 'errors'].includes(coll) && !before) add('owner', 'warn', 'backfill', '事后替这节课写的，要标 backfill');
 
   // 5. 一致：几乎一样的已经有了；和已有结论、证据矛盾
-  if (!before && text && DEDUP.has(coll)) {
+  // 更正（corrects 指着原条：作废、看过了不归纳）本来就是照着原条写的，不算重复
+  if (!before && text && DEDUP.has(coll) && !doc.corrects) {
     const sp = doc.space || (doc.block ? spaceOfId(String(doc.block)) : '');
     // 不在用的（作废、并掉、被换掉、不用了）和它改写的那一条（我的要求改口：from 指着旧的）不算重复
     const gone = new Set(['void', 'merged', 'replaced', 'dropped']);

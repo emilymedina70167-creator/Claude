@@ -88,3 +88,20 @@ test('复查出来的几处：memo 块没闭合整份不收；段头带字也认
   const r = checkMemory({ weaknesses: [{ id: 'W1', title: 't', scope: '局部', level: 'L1', status: 'active', log: [{ date: '2026-11-05', by: 'lab', field: 'level', from: 'L0', to: 'L1' }] }] });
   assert.ok(!JSON.stringify(r).includes('by 只能是'));
 });
+
+// 补收尾的单子照那节课的种类拼：黑板课和课堂里下课一样（守则不写形式、黑板课的 memo 说明），舞台课、一问一答照旧
+test('补收尾：黑板课带 noForm 和黑板课的 memo 说明；舞台课、一问一答照旧', async () => {
+  const { backfillMaterial } = await import('../kit/src/memory/lab.js');
+  const { LESSON_NO_FORM, CLASS_MEMO_DOC, MEMO_DOC } = await import('../kit/src/class/prompt.js');
+  const mem = { sessions: [], slips: [], lessons: [] };
+  const turns = [{ seq: 1, role: 'user', text: '好' }];
+  const of = (kind) => backfillMaterial(mem, { id: 'c-20261115-1', block: 'L2.1.1', status: 'closed', ...(kind ? { kind } : {}) }, { turns }).prompt;
+  for (const k of [undefined, 'class']) {
+    const p = of(k);
+    assert.ok(p.includes(LESSON_NO_FORM) && p.includes(CLASS_MEMO_DOC), String(k));
+  }
+  for (const k of ['stage', 'talk']) {
+    const p = of(k);
+    assert.ok(!p.includes(LESSON_NO_FORM) && p.includes(MEMO_DOC), k);
+  }
+});
