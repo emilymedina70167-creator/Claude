@@ -78,3 +78,10 @@ test('教研室出的题：探弱点的题还没做就不再出；新题做过�
   const done = { ...withNew, evidence: [ev('x1', 'L2.2.2', '2026-10-30', true, { comp: 'd-lab-newproblems-R2-1' }), ev('x2', 'L2.2.2', '2026-10-30', true, { comp: 'd-lab-newproblems-R2-2' })] };
   assert.ok(workOrder(done, { today: '2026-11-05', now }).some((x) => x.kind === 'newproblems' && x.ref === 'R2'), '做过的新题成了原题，到期了还要再出');
 });
+
+test('有记忆摘要以后不再开话的账的单子', async () => {
+  const { workOrder: wo } = await import('../kit/src/memory/sentry.js');
+  const mem = { sessions: [{ id: 'c-1', kind: 'class', status: 'closed', space: 'en', said: { fails: 2, upTo: 0 } }], evidence: [{ id: 'e1', session: 'c-1', src: 'say', text: '换一个高效点的测验', at: 5 }] };
+  assert.ok(wo(mem).some((x) => x.kind === 'said'));
+  assert.ok(!wo({ ...mem, summary: [{ id: 'en', text: '英语按语法模块学。' }] }).some((x) => x.kind === 'said'));
+});

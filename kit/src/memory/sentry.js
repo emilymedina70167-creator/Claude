@@ -107,7 +107,9 @@ export function workOrder(mem = {}, { today = toDate(Date.now()), now = Date.now
     items.push({ kind: 'after', space: s.space || spaceOfId(String(s.block || '')), ref: s.id, title: s.title || s.id, why: `${s.date || ''} 这节课下课后的整理首页连着 ${s.after.fails} 次没做成`, value: 85, cost: '一次 Opus 5.5（读整节课的记录写复盘、归类、事实、学生卡）' });
   }
   // 1.6 话的账（第十一轮）：首页连着两次没过成账的课（还有我打的话没去处），交给教研室照同一份提示词做
-  for (const s of get('sessions')) {
+  // 有记忆摘要以后（第十三轮）话的账不再跑：我说的每一句由课后重写摘要来读，不再开这种单子
+  const sumOn = get('summary').some((d) => String(d.text || '').trim() || (d.notes || []).length);
+  for (const s of sumOn ? [] : get('sessions')) {
     if (!isTeach(s) || (Number(s.said?.fails) || 0) < SAID_FAILS) continue;
     const upTo = Number(s.said?.upTo) || 0;
     const left = get('evidence').filter((e) => e.src === 'say' && String(e.session) === String(s.id) && Number(e.at || 0) > upTo).length;

@@ -364,7 +364,7 @@ export async function renderDesk(root, meta) {
       if (c === 'sessions' || c === 'position') paintClass();
       if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); setTimeout(fixHolds, 500); backTick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
-      if (c === 'summary') { sumView?.paint(); backTick(); }
+      if (c === 'summary') { sumView?.paint(); backTick(); if (!$('.dk-manage').hidden) paintMine(); }
       if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
       if (['drills', 'evidence'].includes(c)) setTimeout(fixHolds, 500);
       if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) { fixReports(); backTick(); } if (lastRes) paintWeek(toDate(Date.now())); }
@@ -1269,9 +1269,13 @@ export async function renderDesk(root, meta) {
     const lessons = activeLessons(data.lessons || [], space).sort((a, b) => (Number(b.hits) || 1) - (Number(a.hits) || 1) || cmpId(a.id, b.id));
     // 每一类收成一行，点开再看、再改（一下全摊开有上百行）；编号不显示，错题去「错题本」标已解决
     const fold = (key, title, n, body) => `<details class="dk-soft dk-mine-sec" data-sec="${key}"${openSecs.has(key) ? ' open' : ''}><summary>${title}（${n}）</summary>${body}</details>`;
-    box.innerHTML = `
-      ${fold('lessons', '教学守则：老师的失误归纳出来的', lessons.length, lessons.map((l) => `<div class="dk-edit-row" data-id="${escapeHtml(l.id)}"><span>${inline(l.text)}${(Number(l.hits) || 1) > 1 ? `<span class="muted">（犯过 ${Number(l.hits)} 次）</span>` : ''}</span><button type="button" class="btn btn-sm dk-lesson">改</button><button type="button" class="btn btn-sm dk-lesson-x">不用了</button></div>`).join('') || '<p class="muted">还没有：下课时课堂里的 Claude 会把这节课的失误归纳成守则。</p>')}
-      ${fold('prefs', '关于我：讲法、习惯、目标', prefs.length, prefs.map((p) => `<div class="dk-edit-row" data-id="${escapeHtml(p.id)}"><span><span class="dk-k">${escapeHtml(p.topic || '')}</span>${inline(p.text)}</span><button type="button" class="btn btn-sm dk-pref">改</button></div>`).join('') || '<p class="muted">还没有。</p>')}
+    // 有记忆摘要以后（第十三轮），老师看的是摘要：守则、关于我这两类不再发给它，在这里改了也到不了老师那里，
+    // 所以不再列出来让我改（数据都留着），写一句去哪改
+    const sumOn = !!sumDesk?.on();
+    const keep = (key, html) => (sumOn && (key === 'lessons' || key === 'prefs') ? '' : html);
+    box.innerHTML = `${sumOn ? '<p class="dk-sub muted">老师现在看的是「记忆摘要」（上面那张卡）：关于你、关于怎么教你的事在那里看和改。这里只剩学习的账。</p>' : ''}
+      ${keep('lessons', fold('lessons', '教学守则：老师的失误归纳出来的', lessons.length, lessons.map((l) => `<div class="dk-edit-row" data-id="${escapeHtml(l.id)}"><span>${inline(l.text)}${(Number(l.hits) || 1) > 1 ? `<span class="muted">（犯过 ${Number(l.hits)} 次）</span>` : ''}</span><button type="button" class="btn btn-sm dk-lesson">改</button><button type="button" class="btn btn-sm dk-lesson-x">不用了</button></div>`).join('') || '<p class="muted">还没有：下课时课堂里的 Claude 会把这节课的失误归纳成守则。</p>'))}
+      ${keep('prefs', fold('prefs', '关于我：讲法、习惯、目标', prefs.length, prefs.map((p) => `<div class="dk-edit-row" data-id="${escapeHtml(p.id)}"><span><span class="dk-k">${escapeHtml(p.topic || '')}</span>${inline(p.text)}</span><button type="button" class="btn btn-sm dk-pref">改</button></div>`).join('') || '<p class="muted">还没有。</p>'))}
       ${fold('recall', '要记的：不用再记的停掉', recs.length, recs.map((k) => `<div class="dk-edit-row" data-id="${escapeHtml(k.id)}"><span>${inline(k.q)}<span class="muted"> → ${inline(k.a)}（${k.result ? `${Number(k.tier) || 1} 天那档` : '还没想过'}${Number(k.lapses) ? `，没想起过 ${Number(k.lapses)} 次` : ''}）</span></span><button type="button" class="btn btn-sm dk-rvoid">不用记了</button></div>`).join('') || '<p class="muted">还没有。</p>')}
       ${fold('revs', '复现组：不想做的可以先暂停', revs.length, revs.map((r) => `<div class="dk-edit-row" data-id="${escapeHtml(r.id)}"><span>${inline(r.title)}${r.status === 'paused' ? '<span class="muted">（暂停了）</span>' : ''}</span><button type="button" class="btn btn-sm dk-pause">${r.status === 'paused' ? '恢复' : '暂停'}</button></div>`).join('') || '<p class="muted">没有。</p>')}
       <p class="muted dk-mine-note">没解决的错题 ${errs.length} 道：在<a class="dk-link" href="#errors">错题本</a>里标已解决。</p>`;
