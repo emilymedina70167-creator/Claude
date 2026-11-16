@@ -45,6 +45,11 @@ import { slipsToFold, blockSwitch, tidyDue, tidyText } from '../memory/memo.js';
 import { spaceOfId, subjectOf } from '../memory/space.js';
 import { textbookForClass, readChunks, searchChunks, readHistory } from '../books/textbook.js';
 import { systemWithBooks } from './bookroom.js';
+// 这一块在考试里（黑板课每一轮都带，class/examroom.js）
+import { boardExam, examLint } from './examroom.js';
+import { examCheckOf } from '../exam/fields.js';
+import { courseOfBlock } from '../exam/load.js';
+import { toDate } from '../memory/schema.js';
 import { planLocal, markFired, reactNote, armedText, rebuildRules, dropForSeg } from './react.js';
 import { beatPlan, shouldPlay, DEFERRED_OPS } from './beats.js';
 import { ENGINES } from '../engines/registry.js';
@@ -190,6 +195,10 @@ export async function renderClass(root, meta, desk = null) {
   let firstAt = 0; // 这一次调用黑板上出现第一个字的时候（performance.now）
   // 抢跑（spec.js）：{ say, key, ctl, promise, text（已经写出来的）, onText（接上以后画黑板的）, staged, bytes }
   let spec = null;
+  // 这一块在考试里：读到的考试资料放在 desk.examData（和舞台课同名）；examCheck 核一个真题题号能不能用
+  // （exam/fields.js 的 examCheckOf：返回空字符串是能用，否则是原因），考试资料读到以前是 null——不查
+  let examCheck = null;
+  let examCourse = ''; // 现在读着 / 读到的是哪门课的考试资料（课上换了门课要重读）
   let specTimer = null;
   let ended = false; // 下课小结写过了：之后不再抢跑
   let stream = null; // 边写边显示：这一轮先画出来的段（streamOps）
@@ -354,6 +363,40 @@ export async function renderClass(root, meta, desk = null) {
   db.doc('pack/main').onSnapshot((s) => applyMain(s.exists ? s.data() : null), () => {});
   db.doc('pack/problems').onSnapshot((s) => { pack.problems = s.exists ? s.data() : null; }, () => {});
 
+  // —— 这一块在考试里（class/examroom.js；根本规则第一问「难度和问法照真题」靠它每一轮都在）——
+  // desk.exam：desk.js 开课时按门课读的考试资料（一个 Promise，开课不等它、只读这一次）；desk.reserve：留作模考的年份。
+  // 每一轮只是照读到的那一份现算（约 1 毫秒），不读数据库、不调工具。一问一答的旧课不带（说明一字不变）
+  const examYears = () => (typeof desk?.reserve === 'function' ? desk.reserve() : desk?.reserve || []);
+  function examSection() {
+    if (TALK || !desk?.examData || !desk.block) return '';
+    // 板上各段的原文（边写边显示先画的临时段不算：只在一轮中间有）：组件里 exam: / like: 写过的题号下一轮有全文
+    const mds = [...segs.values()].filter((x) => !x.preview && !x.failed).map((x) => x.md);
+    return boardExam({ exam: desk.examData, block: desk.block, years: examYears(), mem: desk.mem, mds, today: toDate(Date.now()) });
+  }
+  function takeExam(ex) {
+    if (!ex) return;
+    const before = examSection();
+    desk.examData = ex;
+    examCheck = examCheckOf(ex, examYears());
+    // 抢跑的那一份是照读到以前拼的：这一节从无到有，学生点了也一定对不上——现在就停掉、照新的重抢，别等点了才白等
+    if (spec && examSection() !== before) { dropSpec(); specSoon(300); }
+  }
+  // 课上换了块、换到另一门课（memo 的 block，DS- → OS-）：考试资料是按门课读的，换成那门课的再读一次（desk.examFor）；
+  // 读到以前这一节先没有、题号先不查（拿旧那门课的资料查，新这门课的题号全是「库里没有」）
+  function examFollowBlock() {
+    const c = courseOfBlock(desk?.block);
+    if (c === examCourse || TALK || readOnly || !desk?.examFor) return;
+    examCourse = c;
+    desk.examData = null;
+    examCheck = null;
+    Promise.resolve(desk.examFor(desk.block)).then((ex) => { if (examCourse === c) takeExam(ex); }, () => {});
+  }
+  // 开课时那一份读完了（读到没读到都算）：开课的抢跑、第一轮等它一下
+  examCourse = courseOfBlock(desk?.block);
+  const examReady = !TALK && !readOnly && desk?.exam?.then
+    ? desk.exam.then((ex) => { if (examCourse === courseOfBlock(desk.block)) takeExam(ex); }, () => {})
+    : Promise.resolve();
+
   // —— 恢复：资料包、黑板（板和段）、课堂记录、作答 ——
   await restore();
   syncUsage();
@@ -361,8 +404,9 @@ export async function renderClass(root, meta, desk = null) {
   // 打开页面之前写的板书（存在这台设备上）不再发：只发这次上课新写的
   for (const s of window.LAKit?.ink?.strokes || []) toldInk.add(s);
   inkSeeded = true;
-  // 开课页：先按「开始上课」抢跑（以前的课取好、资料包读进来以后）
-  if (!started && !readOnly) fetchEarlier().then(() => specSoon(1500));
+  // 开课页：先按「开始上课」抢跑（以前的课取好、资料包读进来以后；考试资料也等一下，最多 5 秒——
+  // 没带「这一块在考试里」拼的那一份，考试资料一到就对不上指纹，白跑一整轮）
+  if (!started && !readOnly) Promise.all([fetchEarlier(), Promise.race([examReady, new Promise((r) => setTimeout(r, 5000))])]).then(() => specSoon(1500));
 
   async function restore() {
     try {
@@ -584,6 +628,7 @@ export async function renderClass(root, meta, desk = null) {
       session.subject = subjectOf(r.block);
       desk.space = spaceOfId(r.block);
       desk.updateSession({ block: r.block, blocks: desk.blocks, subject: session.subject });
+      examFollowBlock();
     }
     if (!entries.length) return { pds: [], rejected: [] };
     try {
@@ -774,6 +819,8 @@ export async function renderClass(root, meta, desk = null) {
     errors.push(...probs.filter((p) => !p.soft));
     // 组件自检管不到的：图里写错的命令被当成续行、公式写不出来（selfcheck.js）
     errors.push(...extraProblems(sec));
+    // 组件的 exam: / like: 写了库里没有的、留作模考的题号（考试资料读到以后才查；翻看旧课、放回的段不看 errors）
+    if (!TALK) errors.push(...examLint(src, examCheck).map((msg) => ({ kind: '真题题号', msg })));
     if (seg.place !== 'pin' && !CANVAS) bv.splitFigure(sec.querySelector('.stage-body'));
     return { sec, errors, soft: probs.filter((p) => p.soft) };
   }
@@ -1677,7 +1724,8 @@ export async function renderClass(root, meta, desk = null) {
     bv.measureFit();
     const level = Math.min(budgetLevel, 3);
     // 一问一答：说明换成一问一答的那一份（talk），黑板现状换成活板现状；对话里没有 board 段可省（也没有 board_read）
-    const args = { rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, board: TALK ? talkState() : boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg(), canvas: CANVAS && !TALK, ...planArg(), ...(TALK ? { talk: true } : {}) };
+    // exam：「这一块在考试里」（抢跑和真发的两次都从这里拼，一样的板、一样的考试资料拼出来一字不差）
+    const args = { rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, board: TALK ? talkState() : boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg(), canvas: CANVAS && !TALK, exam: examSection(), ...planArg(), ...(TALK ? { talk: true } : {}) };
     // 有教材时，说明还剩的地方补上这一块所在的整章（bookroom.js）：每取一次教材要多等一整轮，多放原文不怎么变慢
     const system = desk?.books?.chunks?.length
       ? systemWithBooks(args, (room) => packForPrompt(teacher.tools, room)).system
@@ -1761,8 +1809,10 @@ export async function renderClass(root, meta, desk = null) {
         failTurn(e);
         return false;
       }
-      // 开课时取的以前的课：最多等 3 秒（一般早就取好了）
-      await Promise.race([fetchEarlier(), new Promise((r) => setTimeout(r, 3000))]);
+      // 开课时取的以前的课：最多等 3 秒（一般早就取好了）。老师的第一轮（定这节课要拿下的事）考试资料也在这 3 秒里一起等：
+      // 同一个 3 秒，不另加；之后的每一轮不等它（读到了下一轮自然带上）
+      const opening = !history.some((t) => t && !t.discarded && t.role === 'claude');
+      await Promise.race([Promise.all([fetchEarlier(), opening ? examReady : null]), new Promise((r) => setTimeout(r, 3000))]);
       const { fit, system, maxBytes, level } = buildInput(history);
       lastPrompt = { bytes: fit.bytes, maxBytes, keepRecent: fit.keepRecent, dropped: fit.dropped, turns: fit.turns.length, level, ...(dev ? { system } : {}) };
       // 抢跑（spec.js）：这一刻要发的和抢跑发的一字不差就接着用；不一样就先停掉它（让出平台的位子），照常调用
@@ -2556,7 +2606,7 @@ export async function renderClass(root, meta, desk = null) {
       const report = repObj ? reportText(repObj) : desk ? '（这一次页面没算出课后报告：整理单按这节课的对话写，basis 写组件 id 或段 id。）' : '';
       // 这节课的一页（memory/sheet.js）：页面自己拼，写在小结那块板的下面
       const sheet = sheetMd(repObj?.sheet || lessonSheet({ steps: steps() }));
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: TALK ? talkState() : boardState(), subject: session.subject, memory: memoryArg({ all: true }), canvas: CANVAS && !TALK, ...planArg(), ...(TALK ? { talk: true } : {}) });
+      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: TALK ? talkState() : boardState(), subject: session.subject, memory: memoryArg({ all: true }), canvas: CANVAS && !TALK, exam: examSection(), ...planArg(), ...(TALK ? { talk: true } : {}) });
       // 每几节课（或者某一类到了上限）顺带整理：合并重复的弱点、复现组、关于学生的记录（memo.js 的 tidyDue）
       const sp = desk?.block ? spaceOfId(desk.block) : desk?.space || spaceOfId('');
       const why = desk ? tidyDue(desk.mem, sp, desk.sid) : '';
@@ -2720,6 +2770,9 @@ export async function renderClass(root, meta, desk = null) {
       get pending() { return pendingTurn(history); },
       get lastPrompt() { return lastPrompt; },
       get budgetLevel() { return budgetLevel; },
+      // 这一轮会带的「这一块在考试里」（空的就是没有这一节）、核题号的函数（考试资料读到以前是 null）
+      get examSection() { return examSection(); },
+      get examCheck() { return examCheck; },
     },
   };
   refresh();

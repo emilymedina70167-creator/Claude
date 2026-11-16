@@ -1867,7 +1867,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   step('读这节课的资料包');
   const main = await within(scopeDb(db, sid).doc('pack/main').get().then((s) => (s.exists ? s.data() : null)), 10000, null);
   // 改记忆（memo 块、整理单、确认 / 撤销）：用没 scopeDb 过的数据库，记忆库在根上
-  // 这一门课的考试资料（舞台课才读）：守卫认题号、课堂的「这一块在考试里」用；先占个位，下面读
+  // 这一门课的考试资料（舞台课、黑板课读；一问一答的旧课不读）：守卫认题号、课堂的「这一块在考试里」用；先占个位，下面读
   let examIdx = null;
   const ops = createMemOps({ db, mem: () => mem, exam: () => examIdx });
   const block = String(doc.block || main?.block || '');
@@ -1930,8 +1930,10 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   if (books.loading) books.ready.then(fillPrev).catch(() => {}); else await fillPrev();
   step('画黑板');
   const examYears = () => books.reserve || reserveYears(targetOf(mem), toDate(Date.now()));
-  const examLoad = kind === 'stage' && block && !readOnly ? loadExamCourse(db, courseOfBlock(block)).catch(() => null) : null;
-  examLoad?.then((ex) => { if (ex) examIdx = examIndexOf(ex, examYears()); });
+  // 按门课读一次、不等它（exam/load.js：五类一个一个读，不和教材、证据挤）。黑板课也读（2026-11-15 的「根」：老师的第一问
+  // 「难度和问法照真题」，每一轮的说明里要有「这一块在考试里」）；读到了守卫才认得这门课的真题题号、拒留作模考的
+  const loadExam = (blk) => loadExamCourse(db, courseOfBlock(blk)).catch(() => null).then((ex) => { if (ex) examIdx = examIndexOf(ex, examYears()); return ex; });
+  const examLoad = (kind === 'stage' || kind === 'class') && block && !readOnly ? loadExam(block) : null;
   // 话的账（第十一轮）：课上我打了一句，隔 20 秒（?dev&said=2 是 2 秒）后台过一次账；写好了的要求马上放进 mem，
   // 老师下一次调用的说明里「学生的要求」就有它（system() 每次调用都重拼）。离开课堂之前 flush（不等它，断了由首页补）
   const saidHere = readOnly ? null : createSaid({ db, getData: () => mem, ops, ai: store.dev ? async () => (await getAI()) || createDevAI() : getAI });
@@ -1990,6 +1992,8 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), said, books, prevRead,
     // 一问一答（kind: talk）：同一个课堂，换成活板、一问一答（docs/talk-impl.md）；别的（教材、记忆、memo、报告、复现）全照旧
     talk: kind === 'talk',
+    // 这一门课的考试资料（和舞台课一样：不等它，课堂读到了再用）；examFor：课上换到另一门课时再按那门课读一次
+    exam: examLoad, reserve: examYears, examFor: kind === 'class' ? loadExam : null,
     // 后方复查（sentry.js）首页算好的：下课整理时带给课堂 Claude 判断（只在下课那一次用，上课的每一轮不带）
     recheck: await within(db.doc('meta/workorder').get().then((s) => (s.exists ? s.data().recheck || {} : {})), 3000, {}).catch(() => ({})),
     // 这节课换过的块（刷新以后接着换，前面换过的不丢）

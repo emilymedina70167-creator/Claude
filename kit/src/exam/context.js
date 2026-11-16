@@ -68,17 +68,29 @@ const USAGE = `## 这一节怎么用
 - 这一块讲完之前，让学生做一道真题级的题：用代表题原题，在那一问写 \`exam=题号\`（\`ask value "…" answer=… exam=Q-…\`；\`goal\`、\`ask tap / pick\` 也能写）；当场换数、照着出的题写 \`like=题号\`（对标哪一道）。页面按它算真题级。
 - 引考情（考了几次、哪年、几分）写题号，数字只用这一节给的；这一节没有的考情不说，不凭印象补。
 - 留作模考的卷不在这里，课上不用、不提。`;
+// 黑板课的那一份（class/examroom.js）：题是板上的组件，题号写成组件里的一行（render.js 认 exam: / like:，哪种组件都行）。
+// 只写事实和写法，不规定什么时候出题、出几道：讲多少、停不停归根本规则（class/charter.js）。
+// 真题级只按原题第一次作答算（bar.js：当场改数的题没人核过难度），照实写
+const USAGE_BOARD = `## 这一节怎么用
+- 终点照上面的真题定：这一块，学生要能自己做出代表题那样的题；难度、问法照它，不凭印象估。
+- 板上出的是真题原题：在那个组件里加一行 \`exam: 题号\`（\`answer\`、\`quiz\`、\`steps\`、演示组件……哪种组件都能加；题面、选项、答案照这一节给的原文）。照着真题换数、改编的加一行 \`like: 题号\`（对标哪一道）。页面按原题的第一次作答算真题级；题号只写这一节列着的，写了别的页面当场报错。
+- 引考情（考了几次、哪年、几分）写题号，数字只用这一节给的；这一节没有的考情不说，不凭印象补。
+- 留作模考的卷不在这里，课上不用、不提。`;
+// 两种课各自的写法：用法那一段、目录那一行里题号写在哪
+const FORMS = { stage: { usage: USAGE, used: '照题号写进 exam= / like= 用了' }, board: { usage: USAGE_BOARD, used: '照题号在组件里写了 exam: / like:' } };
 
 /**
  * 拼这一节。target：考试档案（targetOf）；info：block.js 的 examForBlock；bar：exam_bar 那一块的一条（没有就是 null）。
  * 没有考情（info 是 null，或者政治）返回 ''
  */
 // asked：这节课老师已经用 exam= / like= 写过的题号：在目录里的挪进代表题（老师照题号用了，下一轮就有全文）
-export function examForClass({ target, info: info0, bar = null, today, budget = EXAM_BUDGET, asked = [] } = {}) {
+// form：'stage'（舞台课，不写就是它，一字不变）| 'board'（黑板课：用法、目录那一行换成组件的写法）
+export function examForClass({ target, info: info0, bar = null, today, budget = EXAM_BUDGET, asked = [], form = 'stage' } = {}) {
   if (!info0 || info0.course === 'PO') return '';
+  const F = FORMS[form] || FORMS.stage;
   const want = new Set(asked);
   const info = want.size ? { ...info0, reps: [...info0.reps, ...info0.rest.filter((q) => want.has(q.id))], rest: info0.rest.filter((q) => !want.has(q.id)) } : info0;
-  const must = [head(target, info, today), sylText(info), statsText(info), mineText(info, bar), USAGE];
+  const must = [head(target, info, today), sylText(info), statsText(info), mineText(info, bar), F.usage];
   const used = bytes(must.join('\n\n'));
   let room = budget - used - 64;
   const pick = (text) => { if (!text || bytes(text) + 2 > room) return ''; room -= bytes(text) + 2; return text; };
@@ -103,6 +115,6 @@ export function examForClass({ target, info: info0, bar = null, today, budget = 
     restLines.push(l);
     room -= bytes(l) + 1;
   }
-  const rest = info.rest.length ? `## 其余能用的真题（一行一道；照题号写进 exam= / like= 用了，下一轮这里就有它的全文）\n${restLines.join('\n')}${restLines.length < info.rest.length ? `\n- ……还有 ${info.rest.length - restLines.length} 道` : ''}` : '';
+  const rest = info.rest.length ? `## 其余能用的真题（一行一道；${F.used}，下一轮这里就有它的全文）\n${restLines.join('\n')}${restLines.length < info.rest.length ? `\n- ……还有 ${info.rest.length - restLines.length} 道` : ''}` : '';
   return [must[0], must[1], must[2], prof, reps, must[3], rest, must[4]].filter(Boolean).join('\n\n');
 }

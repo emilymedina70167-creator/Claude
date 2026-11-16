@@ -3,7 +3,7 @@
 // 提到学生不用「他」「她」（tests 守着）
 import { followOf, followNames } from './follow.js';
 import { TYPES } from './types/index.js';
-import { MEMO_DOC, packText, PACK_BUDGET } from '../class/prompt.js';
+import { MEMO_DOC, packText, PACK_BUDGET, TEXTBOOK_FLOOR } from '../class/prompt.js';
 import { memoryDigest } from '../memory/digest.js';
 import { gridText } from './value.js';
 import { subjectOf } from '../memory/space.js';
@@ -378,8 +378,8 @@ ${STAGE_MEMO_DOC}
  * memory：{ mem, block, space, session }；pack：{ main, problems }（main.textbook 里可以已经放好了教材原文）
  */
 // exam：「这一块在考试里」那一节（exam/context.js 的 examForClass 拼好的；空的就没有这一节）。放在资料包后面、记忆前面，
-// 算资料包的预算时它已经在（资料包自己让出来）；资料包里的教材原文至少留 TEXTBOOK_FLOOR
-export const TEXTBOOK_FLOOR = 32 * 1024;
+// 算资料包的预算时它已经在（资料包自己让出来）；资料包里的教材原文至少留 TEXTBOOK_FLOOR（黑板课也用，定义挪到了 class/prompt.js）
+export { TEXTBOOK_FLOOR };
 // aide：课堂助手的两节（{ brief, cards }，aide/brief.js 的 aideForTurn 算好的）；没有就是 null，记忆那一节和以前一样
 // factsByAide：这节课的事实由课后助手记（aide: 1 的课），老师的记忆块说明只教判断（DESK_STAGE_JUDGE）
 export function buildStageSystem({ pack = null, memory = null, rules = '', title = '', subject = '', exam = '', aide = null, factsByAide = false } = {}) {

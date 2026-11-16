@@ -1354,6 +1354,50 @@ const SUITES = {
     return t;
   },
 
+  // 黑板课每一轮带「这一块在考试里」（2026-11-15 的「根」）：进课堂时按门课读一次考试资料（不等它），说明里多这一节——
+  // 数是页面算的、留作模考的卷不在里面；核题号的函数挂上；开课的抢跑照样接得上（考试资料读到以后才抢）
+  async classexam(browser) {
+    const t = await seeded(browser);
+    const q = (year, n, how) => ({ course: 'DS', space: 'cs', paper: `X-408-${year}`, year, n, type: 'single', points: 2, stem: `顺序表第 i 个位置插入要移动几个元素（${year} 年第 ${n} 题）`, options: { A: '1', B: '2', C: '3', D: '4' }, answer: 'B', analysis: '从后往前挪', tags: { syl: ['G-DS-2.1'], how } });
+    await plant(t, {
+      'syllabus/G-DS-2.1': { course: 'DS', space: 'cs', title: '顺序表', level: '掌握', text: '顺序表的插入和删除', year: 2026, blocks: ['DS-L2.1.1'], status: 'active' },
+      'papers/X-408-2019': { subject: '408', space: 'cs', year: 2019, count: 1, total: 150 },
+      'papers/X-408-2021': { subject: '408', space: 'cs', year: 2021, count: 1, total: 150 },
+      'papers/X-408-2025': { subject: '408', space: 'cs', year: 2025, count: 1, total: 150, reserve: true },
+      'questions/Q-408-2019-1': q(2019, 1, 'process'), 'questions/Q-408-2021-2': q(2021, 2, 'concept'), 'questions/Q-408-2025-3': q(2025, 3, 'process'),
+    });
+    await t.openForm('class');
+    await t.page.click('.dk-spaces[aria-label="科目"] .dk-space[data-space="cs"]'); await sleep(600);
+    await t.page.click('.dk-class .dk-new');
+    const sid = await t.inClass();
+    check((await t.docs('sessions')).find((d) => d.id === sid)?.block === 'DS-L2.1.1', '开出来的不是数据结构那一块的课');
+    const sec = await t.waitFor(() => t.page.evaluate(() => window.LAKit?.classroom?.examSection), { timeout: 10000, what: '黑板课读到这门课的考试资料、拼出「这一块在考试里」' });
+    check(sec.includes('### Q-408-2021-2') && sec.includes('顺序表（掌握）') && sec.includes('考了 3 次') && sec.includes('`exam: 题号`'), `这一节不对：${sec.slice(0, 300)}`);
+    check(!/Q-408-2025-3|2025 年第 3 题/.test(sec) && sec.includes('另有 1 道在留作模考的卷里'), '留作模考的卷进了这一节');
+    const why = await t.page.evaluate(() => ['Q-408-2019-1', 'Q-408-2025-3', 'Q-408-2019-9'].map((id) => window.LAKit.classroom.examCheck?.(id)));
+    check(why[0] === '' && /留作模考/.test(why[1]) && /库里没有/.test(why[2]), `核题号的函数不对：${JSON.stringify(why)}`);
+    await sleep(4500); // 等开课的抢跑发出去（考试资料读到以后 1.5 秒）
+    await t.page.click('button:has-text("开始上课")');
+    const sys = await t.waitFor(() => t.page.evaluate(() => window.LAKit.classroom.lastPrompt?.system), { timeout: 20000, what: '第一轮的说明发出去' });
+    check(/^# 四、这一块在考试里（页面从入库的真题和考试大纲算的）/m.test(sys) && sys.indexOf('这一块在考试里（') > sys.indexOf('这节课的资料包') && sys.indexOf('这一块在考试里（') < sys.indexOf('你对学生的了解（'), '说明里没有这一节，或者不在资料包后面、记忆前面');
+    check(!/Q-408-2025-3|2025 年第 3 题/.test(sys), '留作模考的卷进了说明');
+    const turns = async () => Object.entries(await t.db()).filter(([k]) => k.startsWith(`sessions/${sid}/class_turns/`)).map(([, v]) => v);
+    await t.waitFor(async () => (await turns()).some((x) => x.role === 'claude' && !x.discarded), { timeout: 30000, what: '模拟老师讲完第一轮' });
+    check((await turns()).find((x) => x.role === 'claude' && !x.discarded)?.cost?.spec === 'hit', `带着考情，开课的抢跑没接上：${JSON.stringify((await turns()).filter((x) => x.kind === 'spec').map((x) => x.diff))}`);
+    // 没入库的科目（数学）：没有这一节，不写占地方的话
+    await t.open();
+    await t.page.click('.dk-spaces[aria-label="科目"] .dk-space[data-space="math"]'); await sleep(600);
+    await t.openForm('class');
+    await t.page.evaluate(() => document.querySelector('.dk-class .dk-new').click());
+    const mid = await t.inClass((id) => id !== sid);
+    await sleep(3000);
+    check((await t.page.evaluate(() => window.LAKit?.classroom?.examSection)) === '', '数学还没入库，黑板课却有「这一块在考试里」');
+    await t.page.click('button:has-text("开始上课")');
+    const sys2 = await t.waitFor(() => t.page.evaluate(() => window.LAKit.classroom.lastPrompt?.system), { timeout: 20000, what: '数学课第一轮的说明发出去' });
+    check(!sys2.includes('这一块在考试里') && mid !== sid, '数学课的说明里有考情那一节');
+    return t;
+  },
+
   async errors(browser) {
     const t = await seeded(browser);
     // 故意制造一个没接住的错误：应该被记进 meta/errors，管理页能看到
