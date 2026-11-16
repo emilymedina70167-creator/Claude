@@ -1913,7 +1913,8 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   }
   let doc = snap.data();
   const mem = Object.fromEntries(MEMORY_FOR_CLASS.map((c) => [c, []]));
-  for (const c of MEMORY_FOR_CLASS) db.collection(c).onSnapshot((s) => { mem[c] = s.docs.map((d) => ({ id: d.id, ...d.data() })); }, () => {});
+  const memLoaded = new Set(); // 哪几类已经读到了（记忆是订阅着一类一类到的）
+  for (const c of MEMORY_FOR_CLASS) db.collection(c).onSnapshot((s) => { mem[c] = s.docs.map((d) => ({ id: d.id, ...d.data() })); memLoaded.add(c); }, () => {});
   // 话的账（saiddesk.js）在课上、首页另写 sessions.said：跟着它，免得这里整份写回去时盖成开课时的旧值
   db.doc(`sessions/${sid}`).onSnapshot((x) => { if (x.exists && x.data().said) doc = { ...doc, said: x.data().said }; }, () => {});
   const updateSession = (patch) => {
@@ -1998,12 +1999,15 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   const classAI = store.dev ? async () => (await getAI()) || createDevAI() : getAI;
   const sumHere = readOnly ? null : createSummary({ db: guardDb(db), getData: () => mem, ai: classAI });
   const summary = sumHere ? { on: sumHere.on, note: sumHere.note } : null;
-  const saidHere = readOnly || sumHere?.ready() ? null : createSaid({ db, getData: () => mem, ops, ai: store.dev ? async () => (await getAI()) || createDevAI() : getAI });
+  // 记忆是一类一类读到的：要等规则、守则、要求、摘要这四类都到了才分得清是不是走摘要（没到就先当还没换）
+  const sumMode = () => !!sumHere && ['rules', 'lessons', 'asks', 'summary'].every((c) => memLoaded.has(c)) && sumHere.ready();
+  const saidHere = readOnly ? null : createSaid({ db, getData: () => mem, ops, ai: store.dev ? async () => (await getAI()) || createDevAI() : getAI });
   const saidOnceOf = async () => { const r = await db.doc(`sessions/${sid}/said/main`).get().catch(() => null); return r?.exists ? r.data().once || [] : []; };
   if (saidHere) mem.saidOnce = await within(saidOnceOf(), 3000, []).catch(() => []);
   const said = saidHere ? saidTimer({
     wait: (Number(new URLSearchParams(location.search).get('said')) || 20) * 1000,
     run: async () => {
+      if (sumMode()) return;
       if (!['done', 'partial'].includes(await saidHere.runFor(sid))) return;
       mem.asks = (await db.collection('asks').get()).docs.map((d) => ({ id: d.id, ...d.data() }));
       mem.saidOnce = await saidOnceOf();

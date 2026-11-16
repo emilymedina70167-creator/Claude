@@ -1045,7 +1045,8 @@ function textOf(c) {
 
 export function lastUserText(input) {
   const turns = toTurns(input);
-  for (let i = turns.length - 1; i >= 0; i--) if (turns[i].role !== 'assistant') return textOf(turns[i].content).trim();
+  // 页面接在最后一条消息后面的那一句「[画面] 前几张图是……这块板」不是学生说的：去掉（不然引学生原话的地方会把它带上）
+  for (let i = turns.length - 1; i >= 0; i--) if (turns[i].role !== 'assistant') return textOf(turns[i].content).replace(/\n?\[画面\] [^\n]*页面拍的学生现在看到的这块板[^\n]*$/, '').trim();
   return '';
 }
 
