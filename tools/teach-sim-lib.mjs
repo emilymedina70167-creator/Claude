@@ -57,11 +57,16 @@ const r1 = (x) => Math.round(x * 10) / 10;
 const BOARD_OPS = new Set(['new', 'add', 'replace', 'show', 'pin', 'mark', 'unmark', 'figure', 'hide', 'unpin']);
 export const IDLE_ROUNDS = 3;
 
-/** 这一个来回是不是空转：老师没有任何黑板指令、学生没有任何作答（只说话、点「有把握」都不算作答） */
+// 学生说的话长过这个数就不是告别：是在用自己的话解释、在问问题。老师只在板顶答话、学生接着问或接着说，
+// 是真的在上课（根本规则让学生说过程，这种来回会多），不能当空转停掉、把那几分钟从钟里退掉。
+export const IDLE_SAY = 20;
+
+/** 这一个来回是不是空转：老师没有任何黑板指令、学生没有任何作答、说的话也只有一两句短的（点「有把握」不算作答） */
 export function isIdleRound(teacherTurn, studentTurn) {
   const ops = teacherTurn?.ops || [];
   const acts = (studentTurn?.acts || []).filter((a) => a.comp && a.type !== 'sure');
-  return !ops.some((o) => BOARD_OPS.has(o)) && !acts.length;
+  const said = [...String(studentTurn?.say || '').replace(/\s/g, '')].length;
+  return !ops.some((o) => BOARD_OPS.has(o)) && !acts.length && said <= IDLE_SAY;
 }
 
 /**

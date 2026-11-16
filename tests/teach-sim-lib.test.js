@@ -93,6 +93,9 @@ test('空转：老师没动板、学生没作答；连着三个来回才停，�
   assert.equal(isIdleRound({ ops: ['plan', 'memo'] }, { acts: [{ comp: 'q1', type: 'sure' }] }), true); // 计划、有把握都不算
   assert.equal(isIdleRound({ ops: ['mark'] }, { acts: [] }), false);
   assert.equal(isIdleRound({ ops: [] }, { acts: [{ comp: 'q1', type: 'quiz' }] }), false);
+  // 学生只说话：告别那样的短话算空转，用自己的话解释、问问题（长过 20 个字）不算
+  assert.equal(isIdleRound({ ops: [] }, { acts: [], say: '好的，谢谢老师，再见。' }), true);
+  assert.equal(isIdleRound({ ops: [] }, { acts: [], say: '我的想法是：确认号写的是期望收到的下一个字节，所以 1199 以前的都到了。' }), false);
   const before = { clock: { s: 100 }, shown: 7 };
   let r = stepIdle(null, true, before);
   for (let i = 1; i < IDLE_ROUNDS; i++) { assert.equal(r.done, false); r = stepIdle(r.idle, true, { clock: { s: 999 }, shown: 9 }); }
