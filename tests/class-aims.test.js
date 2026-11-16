@@ -232,3 +232,10 @@ test('分步例题的一步最多算带着做到（路是老师铺好的）；�
   // 题数照数，不因为是分步的少算
   assert.deepEqual(aimsSummary([a], [step('first', 1), step('first', 2)]).map((x) => [x.status, x.n]), [['led', 2]]);
 });
+
+test('一次对但学生标了没把握：不算独立，算带着做到', () => {
+  const aim = { id: 'a1', can: '手算 LRU 的缺页次数' };
+  assert.equal(aimStatus(aim, [{ aim: 'a1', kind: 'answer', outcome: 'first', sure: false }]), 'led');
+  assert.equal(aimStatus(aim, [{ aim: 'a1', kind: 'answer', outcome: 'first', sure: true }]), 'solo');
+  assert.equal(aimStatus(aim, [{ aim: 'a1', kind: 'answer', outcome: 'first', sure: null }]), 'solo');
+});

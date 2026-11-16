@@ -84,8 +84,9 @@ const right = (it) => (it.outcome === 'first' || it.outcome === 'ok') && !it.gue
 // 这几种题一次对也最多算带着做到。steps：分步例题是老师把路铺好、一步一步带着走的，走对一步不等于自己会走。
 // 以后有别的「路是铺好的」的题，加在这里
 const LED_KINDS = new Set(['steps']);
-// 独立：第一次作答就对，没揭开过、没点想不出来，也不是带着走的那几种题
-const solo = (it) => it.outcome === 'first' && !it.revealed && !it.giveup && !(it.reveals > 0) && !LED_KINDS.has(String(it.kind || ''));
+// 独立：第一次作答就对，没揭开过、没点想不出来，不是带着走的那几种题，学生也没标「没把握」
+// （根本规则：学生说没把握按没会处理；掌握那边没把握的一次对也不算，mastery.js）
+const solo = (it) => it.outcome === 'first' && !it.revealed && !it.giveup && !(it.reveals > 0) && it.sure !== false && !LED_KINDS.has(String(it.kind || ''));
 // 页面没判的作答（猜想、自由写的理由，outcome 是 open）既不算做到也不算没到
 const judged = (it) => it.outcome !== 'open';
 
