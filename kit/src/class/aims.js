@@ -139,6 +139,10 @@ function inOrder(items) {
   return items.map((it) => (timed(it) ? sorted[k++] : it));
 }
 
+// 这道题算不算这件事的：编号对得上；这件事是课上改过的（since：改成现在这句话的时间），只算改了以后做的题——
+// 老师把 a1 换成了另一件事，以前挂在 a1 上的作答证明的是原来那件，不能算到新的头上
+const mineOf = (aim, it) => !!it && !!aim?.id && it.aim === aim.id && !(Number.isFinite(aim.since) && Number.isFinite(when(it)) && when(it) < aim.since);
+
 /**
  * 一件事现在的状态，按挂在它上面的题（报告的题：report.js 的 itemsOf）算：
  * solo 独立做到 / led 带着做到（做对了，但改过、看过提示，或者是带着走的那几种题）/ miss 做了没到 / none 还没证据。
@@ -147,8 +151,11 @@ function inOrder(items) {
  * 失手 = 页面判过但不算做对（错、想不出来、看了答案、把选项试遍了才对）。
  * 只有不当证据的作答（见 judged）时还是 none。
  */
-export function aimStatus(aim, items) {
-  const mine = inOrder((Array.isArray(items) ? items : []).filter((it) => it && aim?.id && it.aim === aim.id && judged(it)));
+export function aimStatus(aim, items, { live = false } = {}) {
+  let mine = inOrder((Array.isArray(items) ? items : []).filter((it) => mineOf(aim, it) && judged(it)));
+  // 课上现算（live）：最后一道还只是「错」——没放弃、没看答案——学生多半还在改，先不当它出了结果：
+  // 不然学生写错第一下，板上方就亮「做了没到」，改对了又变回去。下了课算报告时不传 live，没改对的错照样是失手
+  if (live && mine.length && mine.at(-1).outcome === 'wrong') mine = mine.slice(0, -1);
   if (!mine.length) return 'none';
   const after = mine.slice(mine.findLastIndex((it) => !right(it)) + 1);
   if (after.some(solo)) return 'solo';
@@ -156,10 +163,30 @@ export function aimStatus(aim, items) {
 }
 
 /** 每件事带上状态和挂在它上面的题数 n。没有要拿下的事（旧课、练一练、复现课、舞台课）返回 [] */
-export function aimsSummary(aims, items) {
+export function aimsSummary(aims, items, opts = {}) {
   if (!Array.isArray(aims)) return [];
   const its = Array.isArray(items) ? items : [];
-  return aims.filter((a) => a && typeof a === 'object' && a.id).map((a) => ({ ...a, status: aimStatus(a, its), n: its.filter((it) => it && it.aim === a.id).length }));
+  return aims.filter((a) => a && typeof a === 'object' && a.id).map((a) => ({ ...a, status: aimStatus(a, its, opts), n: its.filter((it) => mineOf(a, it)).length }));
+}
+
+const sameCan = (x, y) => String(x ?? '').replace(/\s+/g, '') === String(y ?? '').replace(/\s+/g, '');
+/**
+ * 课上老师再写一次 board aims：新的一份整份换掉旧的。编号和「能做的事」都没变的那几件原样接着算（连 since 一起留着）；
+ * 编号还在、但能做的事换了一句话的，是另一件事了：记上 since = at，以前挂在这个编号上的作答不算它的。
+ * 返回 { aims, changed: [换了内容的编号], dropped: [不要了的编号], added: [新加的编号] }
+ */
+export function mergeAims(prev, next, at) {
+  const old = new Map((Array.isArray(prev) ? prev : []).filter((a) => a?.id).map((a) => [a.id, a]));
+  const changed = [], added = [];
+  const aims = (Array.isArray(next) ? next : []).map((a) => {
+    const o = old.get(a.id);
+    if (!o) { added.push(a.id); return a; }
+    if (sameCan(o.can, a.can)) return Number.isFinite(o.since) ? { ...a, since: o.since } : a;
+    changed.push(a.id);
+    return { ...a, since: at };
+  });
+  const kept = new Set(aims.map((a) => a.id));
+  return { aims, changed, dropped: [...old.keys()].filter((id) => !kept.has(id)), added };
 }
 
 // 状态是页面对学生说的话：只有这四个词

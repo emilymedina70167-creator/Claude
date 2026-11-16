@@ -2,7 +2,7 @@
 // 板上的题用 aim=a1 挂到某一件上，每件的状态由页面按作答算，进课后报告。这里测不碰界面的那一半。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAims, checkAims, aimStatus, aimsSummary, aimsLine, aimsText, STATUS_TEXT, AIMS_MIN, AIMS_MAX } from '../kit/src/class/aims.js';
+import { parseAims, checkAims, aimStatus, aimsSummary, aimsLine, aimsText, mergeAims, STATUS_TEXT, AIMS_MIN, AIMS_MAX } from '../kit/src/class/aims.js';
 import { parseOutput, parseCommand } from '../kit/src/class/protocol.js';
 import { toEvidence } from '../kit/src/memory/session.js';
 import { buildReport, reportText, REPORT_VERSION } from '../kit/src/memory/report.js';
@@ -302,4 +302,29 @@ test('带竖线的数学不被切开；编号列表、加粗的编号也认', ()
   assert.deepEqual(r.aims, [{ id: 'a1', can: '算 A | B 的并', proof: '独立做一道' }]);
   r = parseAims('1. a1 | 手算 LRU 的缺页次数\n2、**a2** | 说出 LRU 和 FIFO 差在哪');
   assert.deepEqual(r.aims.map((x) => x.id), ['a1', 'a2']); assert.equal(r.errors.length, 0);
+});
+
+test('课上现算：最后一道还只是错（学生多半还在改）先不算；下了课照样是失手', () => {
+  const a = { id: 'a1', can: 'x' };
+  const wrong = { aim: 'a1', kind: 'answer', outcome: 'wrong', first: 5, end: 5 };
+  assert.equal(aimStatus(a, [wrong], { live: true }), 'none');
+  assert.equal(aimStatus(a, [wrong]), 'miss');
+  // 前面做对的不受它影响；想不出来、看了答案是出了结果的，课上也马上算
+  assert.equal(aimStatus(a, [{ aim: 'a1', kind: 'answer', outcome: 'first', first: 1, end: 1 }, wrong], { live: true }), 'solo');
+  assert.equal(aimStatus(a, [{ aim: 'a1', kind: 'answer', outcome: 'giveup', giveup: true, first: 5, end: 5 }], { live: true }), 'miss');
+  assert.deepEqual(aimsSummary([a], [wrong], { live: true }).map((x) => [x.status, x.n]), [['none', 1]]);
+});
+test('课上改了要拿下的事：编号还在、话换了的是另一件事，只算改了以后的题', () => {
+  const prev = [{ id: 'a1', can: '手算 LRU 的缺页次数' }, { id: 'a2', can: '说出 LRU 和 FIFO 差在哪' }, { id: 'a3', can: '画出页框的变化' }];
+  const next = [{ id: 'a1', can: '手算  LRU 的缺页次数' }, { id: 'a2', can: '手算 CLOCK 换出哪一页' }, { id: 'a4', can: '比较三种算法的缺页率' }];
+  const m = mergeAims(prev, next, 100);
+  assert.deepEqual([m.changed, m.dropped, m.added], [['a2'], ['a3'], ['a4']]);
+  assert.equal(m.aims.find((x) => x.id === 'a1').since, undefined);
+  assert.equal(m.aims.find((x) => x.id === 'a2').since, 100);
+  const items = [{ aim: 'a2', kind: 'answer', outcome: 'first', first: 50, end: 50 }];
+  assert.deepEqual(aimsSummary(m.aims, items).filter((x) => x.id === 'a2').map((x) => [x.status, x.n]), [['none', 0]]);
+  items.push({ aim: 'a2', kind: 'answer', outcome: 'first', first: 150, end: 150 });
+  assert.deepEqual(aimsSummary(m.aims, items).filter((x) => x.id === 'a2').map((x) => [x.status, x.n]), [['solo', 1]]);
+  // 再改一次别的：a2 的 since 留着
+  assert.equal(mergeAims(m.aims, [...next, { id: 'a5', can: '说出抖动是怎么来的' }], 200).aims.find((x) => x.id === 'a2').since, 100);
 });
