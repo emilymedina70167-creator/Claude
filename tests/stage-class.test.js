@@ -111,14 +111,15 @@ test('课堂推科目（说明只带这门课的那一份）：块 → 资料包
   assert.ok(buildStageSystem({ subject: stageSubject({ space: 'cs' }) }).includes(STAGE_DOC));
 });
 
-test('开新课一律是舞台；只有自动测试（?dev&form=）还能开出旧的两种；舞台课算讲课的课（报告、复盘、掌握照黑板课那样算）', () => {
-  assert.equal(classForm(''), 'stage');
-  assert.equal(classForm('?form=class'), 'stage', '不是 ?dev 的地址不认 form');
-  assert.equal(classForm('?dev&form=class'), 'class');
+test('开新课一律是黑板；只有自动测试（?dev&form=）还能开出舞台、一问一答；舞台课算讲课的课（报告、复盘、掌握照黑板课那样算）', () => {
+  assert.equal(classForm(''), 'class');
+  assert.equal(classForm('?form=stage'), 'class', '不是 ?dev 的地址不认 form');
+  assert.equal(classForm('?dev&form=stage'), 'stage');
   assert.equal(classForm('?dev&form=talk'), 'talk');
-  assert.equal(classForm('?dev&form=瞎写'), 'stage');
-  // node 里没有 location：不传就读全局的，也是舞台
-  assert.equal(classForm(), 'stage');
+  assert.equal(classForm('?dev&form=class'), 'class');
+  assert.equal(classForm('?dev&form=瞎写'), 'class');
+  // node 里没有 location：不传就读全局的，也是黑板
+  assert.equal(classForm(), 'class');
   assert.equal(SESSION_KINDS.stage, '舞台');
   assert.ok(isTeach({ kind: 'stage' }));
 });

@@ -2088,7 +2088,7 @@ async function priorReads(db, sessions, { sid, block, books }) {
 /**
  * 开一节课堂：sessions/{编号}，资料包抄一份进去。首页「开新课」「开复现课」、练习做完「带着没过的开课」共用。
  * main / problems：这节课的资料包；space：没有块时算哪一科；taken：已经有的课的编号（不撞号）。返回新课的编号
- * kind：新开的都是 'stage'（舞台，session.js 的 classForm）；'class'（黑板）不写 kind（以前的课都没写，kindOf 当成课堂），'talk' 只有自动测试还开
+ * kind：新开的都是 'class'（黑板，session.js 的 classForm；不写 kind：以前的黑板课都没写，kindOf 当成课堂）；'stage'、'talk' 只有自动测试还开得出来
  */
 /** 资料包里备课定的要拿下的事：编号、件数都合规才用（照课堂收 board aims 的同一把尺子 checkAims），不合规当没定 */
 export function packAims(main) {
@@ -2097,7 +2097,7 @@ export function packAims(main) {
   return list.length && list.every((a) => a.id) && !checkAims(list).length ? list : [];
 }
 
-export async function createClass(db, { block = null, main = null, problems = null, space = 'math', unit = '学习台', taken = [], kind = 'stage' } = {}) {
+export async function createClass(db, { block = null, main = null, problems = null, space = 'math', unit = '学习台', taken = [], kind = 'class' } = {}) {
   const today = toDate(Date.now());
   const sid = sessionId(today, taken);
   assertWrite('page', 'sessions');

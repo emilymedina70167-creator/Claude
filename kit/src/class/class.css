@@ -354,3 +354,8 @@ body.class-on .dev-body { max-height: calc(100svh - var(--class-bar-h, 96px) - 1
 .class-aims-list li[data-status="led"] .class-aims-dot { background: var(--yellow); }
 .class-aims-list li[data-status="miss"] .class-aims-dot { background: var(--red); }
 .class-aims-list li[data-status="solo"] .class-aims-st { color: var(--green); }
+
+/* —— 不打扰：新内容不在眼前时，输入条上方的一小条（class/quiet.js）。点它才过去 —— */
+.class-talk-echo { position: fixed; left: 50%; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 12px; max-width: min(92vw, 720px); min-height: 44px; padding: 8px 10px 8px 16px; border: 0; border-radius: 22px; background: rgb(var(--shade-rgb) / 0.9); color: var(--body); font: 15px/1.45 var(--sans); text-align: left; cursor: pointer; box-shadow: 0 6px 20px rgb(0 0 0 / 0.18); }
+.class-talk-echo-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.class-talk-echo-go { flex: none; padding: 5px 12px; border-radius: 14px; background: var(--yellow); color: var(--accent-ink); font: 600 14px/1.3 var(--sans); }

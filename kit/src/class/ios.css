@@ -339,3 +339,5 @@
 
 /* 板上方「这节课要拿下的事」那一条：毛玻璃 + 细线，和板顶的话、底部输入条一个质感 */
 [data-theme^="ink"] .class-aims { background: var(--panel); box-shadow: var(--panel-edge), var(--lift); -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none); }
+[data-theme^="ink"] .class-talk-echo { background: var(--panel); box-shadow: var(--panel-edge), var(--lift); -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none); }
+[data-theme^="ink"] .class-talk-echo-go { background: var(--brand); color: var(--brand-ink, #fff); }

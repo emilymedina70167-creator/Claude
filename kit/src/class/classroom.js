@@ -38,6 +38,7 @@ import { fromEvidence, sayEvidence, draftEvidence, observationRecord, slipRecord
 import { callCost, usageOf, usageText } from './usage.js';
 import { reportText, itemsOf } from '../memory/report.js';
 import { checkAims, mergeAims, aimsSummary, aimsLine, STATUS_TEXT } from './aims.js';
+import { shouldScroll } from './quiet.js';
 import { debriefText } from '../memory/debrief.js';
 import { earlierClasses } from '../memory/digest.js';
 import { choose } from '../dialog.js';
@@ -288,6 +289,25 @@ export async function renderClass(root, meta, desk = null) {
       + `<ul class="class-aims-list"${open ? '' : ' hidden'}>${sum.map((a) => `<li data-status="${a.status}"><span class="class-aims-dot" aria-hidden="true"></span><span class="class-aims-can">${mdToHtml(String(a.can), { inline: true })}</span><span class="class-aims-st">${STATUS_TEXT[a.status]}</span></li>`).join('')}</ul>`;
   }
   paintAims();
+  // —— 不打扰：新内容不在眼前时，输入条上方的一小条 ——
+  // 学生正在写（class/quiet.js）：输入框里有字、当前板上有没发的 Pencil 笔画、当前板上有写了没交的草稿
+  const isWriting = () => !!bar.hasText?.() || !!hasFreshInk() || allDrafts().length > 0;
+  let echoEl = null;
+  function hideEcho() { echoEl?.remove(); echoEl = null; }
+  // text：老师这一轮说的话（没说话、只写了板是空的）。点它：翻到当前板、滚到板顶，然后消失；学生自己滚到了、发了下一条也消失
+  function showEcho(text, fallback = '老师在板上写了新的内容') {
+    hideEcho();
+    echoEl = document.createElement('button');
+    echoEl.type = 'button';
+    echoEl.className = 'class-talk-echo';
+    const said = String(text || '').trim();
+    echoEl.innerHTML = `<span class="class-talk-echo-text">${said ? mdToHtml(said, { inline: true }) : fallback}</span><span class="class-talk-echo-go">去看</span>`;
+    echoEl.style.bottom = `${(bar.height || 0) + 10}px`;
+    echoEl.addEventListener('click', () => { hideEcho(); bv.show(bv.cur, { animate: true }); window.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' }); });
+    document.body.appendChild(echoEl);
+  }
+  // 学生自己回到了当前板的板顶：那一小条没用了
+  window.addEventListener('scroll', () => { if (echoEl && bv.view === bv.cur && window.scrollY < 40) hideEcho(); }, { passive: true });
   // 点着问（askhere.js）：点板上一行、一个公式、steps 的一步，问「为什么 / 没看懂 / 举个例子」；预写的「为什么」页面当场显示
   // 一问一答（第一批）先不挂：活板上的东西一轮轮在挪，点着问的锚点会跟着乱
   const askHere = readOnly || TALK ? null : createAskHere({
@@ -1641,6 +1661,7 @@ export async function renderClass(root, meta, desk = null) {
   }
 
   function enqueueStudent(text, images = [], urgent = true) {
+    hideEcho();
     if (!teacher.available) return;
     if (text) queue.texts.push(text);
     for (const blob of images) queue.images.push({ blob, id: uploadImage(blob) });
@@ -2060,18 +2081,26 @@ export async function renderClass(root, meta, desk = null) {
     // 换了新板：翻过去、从头看。只改了当前板：回到当前板（学生翻到以前的板去作答时也拉回来）；
     // 这一轮在当前板上新写、改写的段露不全，就滚到刚好露出来（滚得最少，板顶尽量留着）；没写段时，板顶的话不在视野里就滚上去
     const smooth = reduceMotion() ? 'auto' : 'smooth';
-    if (turnedPage) bv.show(bv.cur, { animate: true });
+    // 不打扰（class/quiet.js，学生的要求：老师一说话别把人拉回板顶）：学生正在写、翻到了别的板时，页面不替学生翻板、不滚；
+    // 老师只说了话、没写新段时也不滚回板顶。这几种情况新内容不在眼前，用输入条上方的一小条告诉学生（echo），点它才过去。
+    // 一问一答照旧（它的活板自己管滚动）
+    // away：学生在看的既不是这一轮之前的当前板、也不是现在的当前板（边写边显示时可能已经翻到新板了，那不算走开）
+    const quiet = !TALK && !shouldScroll({ writing: isWriting(), away: bv.view !== pageBefore && bv.view !== bv.cur });
+    let unseen = false;
+    if (turnedPage) { if (bv.view === bv.cur) { /* 边写边显示时已经翻过来了 */ } else if (quiet) unseen = true; else bv.show(bv.cur, { animate: true }); }
     else if (pages.has(bv.cur)) {
-      if (bv.view !== bv.cur) bv.show(bv.cur, { animate: true });
+      if (bv.view !== bv.cur) { if (quiet) unseen = true; else bv.show(bv.cur, { animate: true }); }
       const fresh = boardOps.filter((o) => o.ok && (o.op === 'add' || o.op === 'replace') && o.page === bv.cur).map((o) => segs.get(o.id)?.sec).filter((sec) => sec && !sec.hidden && !sec.classList.contains('beat-wait')).at(-1);
-      if (fresh) {
+      if (unseen) { /* 学生在别的板上：不动 */ }
+      else if (fresh) {
         const r = fresh.getBoundingClientRect();
-        if (r.bottom > window.innerHeight - bar.height || r.top < 0) fresh.scrollIntoView({ behavior: smooth, block: 'nearest' });
+        if (r.bottom > window.innerHeight - bar.height || r.top < 0) { if (quiet) unseen = true; else fresh.scrollIntoView({ behavior: smooth, block: 'nearest' }); }
       } else if (talkPage) {
         const t = pages.get(bv.cur).talkEl;
-        if (t.getBoundingClientRect().top < 0) t.scrollIntoView({ behavior: smooth, block: 'start' });
+        if (t.getBoundingClientRect().top < 0) { if (TALK) t.scrollIntoView({ behavior: smooth, block: 'start' }); else unseen = true; }
       }
     }
+    if (unseen) showEcho(talkPage ? pages.get(talkPage)?.talk : ''); else hideEcho();
     const told = addTurn({ role: 'claude', text: res.text, boardOps, page: bv.cur || undefined, talkPage, modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined, cost });
     if (beat) { beat.told = told; focusBeat(pages.get(beat.page), 0, { scroll: false }); }
     askHere?.clearAsked();
@@ -2285,10 +2314,12 @@ export async function renderClass(root, meta, desk = null) {
     if (op.op === 'replace' && !existing?.sec) return false;
     let page = existing?.page;
     if (op.op === 'new' && !stream.page) {
+      // 不打扰（class/quiet.js）：学生正在写、翻到了别的板时，老师边写边开的新板先不翻过去，输入条上方出一小条
+      const stay = !TALK && !shouldScroll({ writing: isWriting(), away: bv.view !== bv.cur });
       const p = bv.addPage({ lead: op.id, title: op.title || '', ...(CANVAS ? { cols: op.cols || [1] } : {}) });
       p.preview = true;
       stream.page = p;
-      bv.show(p.n, { animate: true });
+      if (stay) showEcho('', '老师在写新的一块板'); else bv.show(p.n, { animate: true });
     }
     if (!page) page = stream.page?.n || (pages.get(bv.cur)?.kind === 'closing' ? 0 : bv.cur);
     if (!page) return false;

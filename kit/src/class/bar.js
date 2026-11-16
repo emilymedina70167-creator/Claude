@@ -733,6 +733,8 @@ export function createClassBar({ onSend, onStop, onRetry, onEnd, endAsks = null,
       syncQuick();
     },
     get height() { return el.offsetHeight; },
+    // 输入框里有没有打了没发的字（课堂用它判断学生是不是正在写：class/quiet.js）
+    hasText() { return !!ta.value.trim(); },
     // 测试和热重载用：撤掉输入框和它挂的监听
     destroy() {
       cleanups.forEach((f) => f());

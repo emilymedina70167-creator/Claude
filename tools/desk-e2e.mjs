@@ -94,7 +94,7 @@ async function openPage(browser, { clock = null } = {}) {
     async home() { await page.evaluate(() => { location.hash = ''; }); await sleep(600); },
     /** 整页打开到某个地址（先离开，免得和页面自己的 location.reload 撞在一起） */
     async open(hash = '') { await page.goto('about:blank'); await page.goto(`${BASE}${hash ? `#${hash}` : ''}`); await page.waitForLoadState('load'); await sleep(800); },
-    /** 开新课一律是舞台；旧的黑板 / 一问一答只有 ?dev&form=class / talk 还开得出来（它们的代码还在给以前的课用）：整页换成带 form 的首页 */
+    /** 开新课一律是黑板（第十二轮）；舞台 / 一问一答只有 ?dev&form=stage / talk 还开得出来（它们的代码还在给以前的课用）：整页换成带 form 的首页 */
     async openForm(f) {
       await page.goto('about:blank'); await page.goto(`${BASE}&form=${f}`); await page.waitForLoadState('load');
       await t.waitFor(async () => (await t.text('.dk-class'))?.includes('开新课'), { what: `带 form=${f} 的首页画好` });
@@ -502,6 +502,7 @@ const SUITES = {
   async stage(browser) {
     const t = await seeded(browser);
     check(!(await t.page.$('.dk-form, [data-form]')), '首页还有「黑板 / 一问一答 / 舞台」的选项');
+    await t.openForm('stage'); // 新课一律开黑板了（第十二轮）；这一段守的是舞台课的代码（以前开的舞台课还要能接着上、能翻看）
     await t.page.click('.dk-class .dk-new');
     await t.page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash), { timeout: 20000 });
     await t.page.waitForLoadState('load');
@@ -689,6 +690,7 @@ const SUITES = {
   // 舞台课卡住了：挑战还没做到、学生一直没动，页面自己叫老师（?dev&quiet=3 把等待缩成 3 秒），发过去的写着「几秒没动」
   async stagestuck(browser) {
     const t = await seeded(browser);
+    await t.openForm('stage');
     await t.page.click('.dk-class .dk-new');
     await t.page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash), { timeout: 20000 });
     await t.page.waitForLoadState('load');
@@ -1343,6 +1345,7 @@ const SUITES = {
     const card = await t.waitFor(async () => (await t.db())['cards/L2.2.2'], { timeout: 10000, what: '这一块的学生卡写上' });
     check(card.by === 'aide' && /概括｜/.test(card.text), `学生卡不对：${JSON.stringify(card)}`);
     // 开一节新的舞台课：记 aide，说明里「你对学生的了解」带上学生卡
+    await t.openForm('stage');
     await t.page.click('.dk-class .dk-new');
     await t.page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash), { timeout: 20000 });
     await t.page.waitForLoadState('load');
@@ -1482,6 +1485,34 @@ const SUITES = {
     await t.route(`classes/${sid}`);
     const pg = await t.waitFor(async () => { const x = await t.text('.dk-pages'); return x && /隔 1 天做没见过的题/.test(x) ? x : null; }, { timeout: 15000, what: '以前的课里那节课写着课后那一行' });
     check(pg.includes('判断两个向量相乘') && pg.includes('带着做到'), `以前的课里没列要拿下的事和状态：${pg.slice(0, 300)}`);
+    return t;
+  },
+
+  // 不打扰（第十二轮，class/quiet.js）：学生在输入框里打了字没发，老师这一轮写的新内容不在眼前——页面不替学生滚、不翻板，
+  // 输入条上方出一小条，点它才过去；没在写的时候照常翻到新板
+  async quiet(browser) {
+    const t = await seeded(browser);
+    await t.page.click('.dk-class .dk-new');
+    const sid = await t.inClass();
+    check(!(await t.docs('sessions')).find((d) => d.id === sid)?.kind, '首页开出来的新课不是黑板课');
+    await t.page.click('button:has-text("开始上课")');
+    await t.waitFor(() => t.page.$('button:has-text("一个数")'), { timeout: 30000, what: '模拟老师写出第一道题' });
+    await sleep(2500);
+    // 发一句让模拟老师换一块新板的暗号，老师还在写的时候马上在输入框里打几个字不发
+    const input = t.page.locator('.cb-field textarea').first();
+    await input.click(); await t.page.keyboard.type('测试:教具'); await t.page.keyboard.press('Enter');
+    await sleep(300);
+    await input.click(); await t.page.keyboard.type('我想问');
+    const view0 = await t.page.evaluate(() => document.querySelector('.class-page:not([hidden]) .class-page-title')?.textContent);
+    await t.waitFor(() => t.page.$('.class-talk-echo'), { timeout: 30000, what: '老师写了新的一块板，输入条上方出现那一小条' });
+    const view1 = await t.page.evaluate(() => document.querySelector('.class-page:not([hidden]) .class-page-title')?.textContent);
+    check(view0 === view1, `学生正在打字，页面还是翻走了：${view0} → ${view1}`);
+    check((await input.inputValue()) === '我想问', '打了一半的字没了');
+    check(((await t.page.locator('.class-talk-echo').boundingBox())?.height || 0) >= 44, '那一小条不够 44px 高');
+    await t.page.click('.class-talk-echo');
+    await sleep(800);
+    const view2 = await t.page.evaluate(() => document.querySelector('.class-page:not([hidden]) .class-page-title')?.textContent);
+    check(!(await t.page.$('.class-talk-echo')) && view2 !== view1, `点了那一小条没翻到新板：${view1} → ${view2}`);
     return t;
   },
 
