@@ -410,6 +410,9 @@ const asText = (v) => {
 
 // 104 KiB：原来是 120 KiB，教具（mark、matrix、\calc、derive、sketch……）的说明加进来以后，整份说明要给对话留够地方（≤ 160 KiB）
 export const PACK_BUDGET = 104 * 1024;
+// 带着「这一块在考试里」的课，资料包让出考情占的地方以后教材原文至少留这么多（舞台课一直这样，stage/doc.js 从这里引；
+// 黑板课第一问「难度和问法照真题」要考情每一轮都在，但不能把教材原文挤没：事实照资料讲。黑板课资料包紧的时候留一半，见 buildSystem）
+export const TEXTBOOK_FLOOR = 32 * 1024;
 export const CUT_NOTE = '（资料包太长，已截断）';
 const PACK_FIELDS = [
   ['unit', '单元'],
@@ -754,8 +757,12 @@ export function docLookup(componentDocs, subject, name) {
  */
 // canvas：这节课开着版面（你自己排板，canvas.js），说明里多一节 CANVAS_DOC
 // talk：一问一答的课（docs/talk-impl.md C.5）：说明换成「怎么教 + 活板的写法 + 活板对象」，board 是 talkStateText 写好的活板现状
-export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true, memory = null, plan = null, planDoc = true, canvas = false, talk = false } = {}) {
+// exam：「这一块在考试里」那一节（exam/context.js 的 examForClass 拼好的文字，黑板课是 class/examroom.js 的 boardExam；
+// 空的就没有这一节，说明和以前一字不差）。放在资料包后面、记忆前面；它占的地方资料包让出来（算资料包的预算时它已经在），
+// 这时资料包里的教材原文留底（TEXTBOOK_FLOOR，资料包紧的时候是它这一轮预算的一半，见下面）。一问一答不带（旧的课，说明一字不变）
+export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true, memory = null, plan = null, planDoc = true, canvas = false, talk = false, exam = '' } = {}) {
   if (talk) return buildTalkSystem({ rules, componentDocs, pack, board, packBudget, subject, tools, memory, plan, planDoc });
+  const examText = String(exam || '').trim();
   const custom = asText(rules) || asText(pack?.main?.rules);
   const { docs } = systemDocs(componentDocs, subject, packComponents(pack), { lookup: tools });
   const lookupNote = tools
@@ -772,6 +779,8 @@ export function buildSystem({ rules, componentDocs, pack, board, packBudget = PA
       // 顺序按「一节课里多久变一次」排：组件说明、资料包几乎不变，记忆（等确认的改动）偶尔变，黑板现状每轮都变。
       // 每一轮整份重发；平台要是对重复的开头打折，不变的放前面最省
       `这节课的资料包\n\n课前备好的（学习台备课、复现课由页面拼），课中也可能更新。${memory ? '在学习台里，资料包是这节课的额外安排（推进建议、备好的题），学生的情况看后面的记忆。' : ''}\n\n${packBody}`,
+      // 考情：这一块考什么、怎么考、代表题（页面算的；一节课里只在老师用了新题号、学生做了真题时变）
+      ...(examText ? [`这一块在考试里（页面从入库的真题和考试大纲算的）\n\n${examText}`] : []),
       ...(memory ? [`你对学生的了解（学习台的记忆库）\n\n${mem?.text || ''}\n\n${desk}`] : []),
       `黑板现状\n\n${planDoc ? `${planText(plan)}\n\n` : ''}${boardStateText(board)}`,
     ];
@@ -789,7 +798,12 @@ export function buildSystem({ rules, componentDocs, pack, board, packBudget = PA
     mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools, budget: Math.max(4 * 1024, Math.min(MEMORY_BUDGET, room)), use: memory.use });
   }
   const rest = bytes(parts('', mem));
-  const { text: packBody } = packText(pack, Math.max(16 * 1024, Math.min(packBudget, SYSTEM_MAX - rest - 3 * 1024)));
+  const packRoom = Math.max(16 * 1024, Math.min(packBudget, SYSTEM_MAX - rest - 3 * 1024));
+  // 考情占了地方时教材原文留底（不带考情的课一个字节都不变）：TEXTBOOK_FLOOR，但不超过这一轮资料包预算的一半。
+  // 黑板课的组件说明比舞台课长三四十 KiB，记忆装满时资料包连考情只有五十 KiB 上下（数据结构最紧）：整 32 KiB 都留给教材原文，
+  // 教案（规则清单、讲解顺序、以前的课）就只剩几 KiB——教材还能按编号再取，教案取不回来
+  const floors = examText ? { textbook: Math.min(TEXTBOOK_FLOOR, Math.floor(packRoom / 2)) } : null;
+  const { text: packBody } = packText(pack, packRoom, { floors });
   return parts(packBody, mem);
 }
 /**
