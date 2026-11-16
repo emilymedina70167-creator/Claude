@@ -117,7 +117,7 @@ test('页面没判的作答不算「做了没到」；把选项试遍了才对�
 });
 test('给老师的几行：一件一行，状态只有那四个词，不出现「他」「她」', () => {
   assert.deepEqual(Object.keys(STATUS_TEXT), ['none', 'led', 'solo', 'miss']);
-  const s = aimsSummary(parseAims(body).aims, [{ aim: 'a1', outcome: 'first' }, { aim: 'a1', outcome: 'wrong' }, { aim: 'a2', outcome: 'wrong' }]);
+  const s = aimsSummary(parseAims(body).aims, [{ aim: 'a1', outcome: 'wrong' }, { aim: 'a1', outcome: 'first' }, { aim: 'a2', outcome: 'wrong' }]);
   const lines = aimsText(s).split('\n');
   assert.equal(lines.length, 2);
   assert.equal(lines[0], '- a1（独立做到，2 道题）：给一个引用串，手算 LRU 的缺页次数｜算做到：独立做一道没见过的同类题｜对着 Q-408-2023-45');
@@ -186,4 +186,49 @@ test('挂的那件事这节课没有（aim= 写了不存在的编号）：题照
   const r = buildReport({ session: { id: 'c-1', date: '2026-11-16', aims: parseAims(body).aims }, evidence: ev, turns: [], steps: [], now: 10 });
   assert.equal(r.items[0].aim, 'a9');
   assert.deepEqual(r.aims.map((x) => [x.status, x.n]), [['none', 0], ['none', 0]]);
+});
+
+/* ---------- 宁可说少不可说满：只看最后一次失手以后的；分步例题的一步最多算带着做到 ---------- */
+
+test('只看最后一次失手以后的：先独立做对、后来另一道做错是做了没到；先错后对按后面那道算', () => {
+  const a = { id: 'a1', can: 'x' };
+  const it = (outcome, first, more = {}) => ({ aim: 'a1', kind: 'answer', outcome, first, ...more });
+  assert.equal(aimStatus(a, [it('first', 1), it('wrong', 2)]), 'miss');
+  assert.equal(aimStatus(a, [it('wrong', 1), it('first', 2)]), 'solo');
+  assert.equal(aimStatus(a, [it('wrong', 1), it('ok', 2)]), 'led');
+  // 改对了（同一道题先错后对）算做对、不算失手，够不上独立；它前面独立做对的那道照样算数
+  assert.equal(aimStatus(a, [it('first', 1), it('ok', 2)]), 'solo');
+  assert.equal(aimStatus(a, [it('ok', 1)]), 'led');
+  // 想不出来、看了答案、把选项试遍了才对，都是失手
+  assert.equal(aimStatus(a, [it('first', 1), it('giveup', 2, { giveup: true })]), 'miss');
+  assert.equal(aimStatus(a, [it('first', 1), it('revealed', 2, { revealed: true })]), 'miss');
+  assert.equal(aimStatus(a, [it('first', 1), it('ok', 2, { guess: true })]), 'miss');
+  assert.equal(aimStatus(a, [it('first', 1), it('ok', 2, { guess: true }), it('first', 3, { reveals: 1 })]), 'led');
+  // 页面没判的不算失手，也挡不住前面做对的
+  assert.equal(aimStatus(a, [it('first', 1), it('open', 2)]), 'solo');
+  // 按时间排，不按传进来的先后（题上的 first 是第一条证据的时间）
+  assert.equal(aimStatus(a, [it('wrong', 9), it('first', 3)]), 'miss');
+  assert.equal(aimStatus(a, [it('first', 9), it('wrong', 3)]), 'solo');
+  // 别的事上的失手不相干
+  assert.equal(aimStatus(a, [it('first', 1), { ...it('wrong', 2), aim: 'a2' }]), 'solo');
+});
+test('没有 first 的题照传进来的先后；有的没有时，没有的留在原来的位置', () => {
+  const a = { id: 'a1', can: 'x' };
+  assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'first' }, { aim: 'a1', outcome: 'wrong' }]), 'miss');
+  assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'wrong' }, { aim: 'a1', outcome: 'first' }]), 'solo');
+  // 中间那道没有时间：留在第二个；两头有时间的按时间换了位置
+  assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'first', first: 9 }, { aim: 'a1', outcome: 'ok' }, { aim: 'a1', outcome: 'wrong', first: 3 }]), 'solo');
+  assert.equal(aimStatus(a, [{ aim: 'a1', outcome: 'wrong', first: 9 }, { aim: 'a1', outcome: 'ok' }, { aim: 'a1', outcome: 'first', first: 3 }]), 'miss');
+});
+test('分步例题的一步最多算带着做到（路是老师铺好的）；别的种类的题一次对才算独立', () => {
+  const a = { id: 'a1', can: 'x' };
+  const step = (outcome, first, more = {}) => ({ aim: 'a1', kind: 'steps', outcome, first, ...more });
+  assert.equal(aimStatus(a, [step('first', 1), step('giveup', 2, { giveup: true })]), 'miss');
+  assert.equal(aimStatus(a, [step('first', 1), step('first', 2)]), 'led');
+  assert.equal(aimStatus(a, [step('first', 1), { aim: 'a1', kind: 'quiz', outcome: 'first', first: 2 }]), 'solo');
+  assert.equal(aimStatus(a, [step('first', 1), { aim: 'a1', kind: 'answer', outcome: 'first', first: 2 }]), 'solo');
+  // 例题的一步失手在后：前面那道独立做对的也不算了
+  assert.equal(aimStatus(a, [{ aim: 'a1', kind: 'quiz', outcome: 'first', first: 1 }, step('wrong', 2)]), 'miss');
+  // 题数照数，不因为是分步的少算
+  assert.deepEqual(aimsSummary([a], [step('first', 1), step('first', 2)]).map((x) => [x.status, x.n]), [['led', 2]]);
 });

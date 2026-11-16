@@ -78,23 +78,40 @@ export function checkAims(aims, { examCheck = null } = {}) {
   return out;
 }
 
-// 这道题算不算做对了：把选项试遍了才对的（report.js 的 guess）结果也是 ok，但证明不了会，掌握那边也当失手（mastery.js）
+// 这道题算不算做对了：把选项试遍了才对的（report.js 的 guess）结果也是 ok，但证明不了会，掌握那边也当失手（mastery.js）。
+// 改对了（同一道题先错后对）算做对，只是够不上独立
 const right = (it) => (it.outcome === 'first' || it.outcome === 'ok') && !it.guess;
-// 独立：第一次作答就对，没揭开过、没点想不出来
-const solo = (it) => it.outcome === 'first' && !it.revealed && !it.giveup && !(it.reveals > 0);
+// 这几种题一次对也最多算带着做到。steps：分步例题是老师把路铺好、一步一步带着走的，走对一步不等于自己会走。
+// 以后有别的「路是铺好的」的题，加在这里
+const LED_KINDS = new Set(['steps']);
+// 独立：第一次作答就对，没揭开过、没点想不出来，也不是带着走的那几种题
+const solo = (it) => it.outcome === 'first' && !it.revealed && !it.giveup && !(it.reveals > 0) && !LED_KINDS.has(String(it.kind || ''));
 // 页面没判的作答（猜想、自由写的理由，outcome 是 open）既不算做到也不算没到
 const judged = (it) => it.outcome !== 'open';
 
+// 按时间排（题上的 first：第一条证据的时间）。没有 first 的题留在原来的位置，有的在它们占的那几个位置里排：
+// 都没有时就是传进来的先后
+function inOrder(items) {
+  const timed = (it) => Number.isFinite(it.first);
+  const sorted = items.filter(timed).sort((x, y) => x.first - y.first);
+  let k = 0;
+  return items.map((it) => (timed(it) ? sorted[k++] : it));
+}
+
 /**
  * 一件事现在的状态，按挂在它上面的题（报告的题：report.js 的 itemsOf）算：
- * solo 独立做到 / led 带着做到（做对了，但改过、看过提示）/ miss 做了没到 / none 还没证据。
+ * solo 独立做到 / led 带着做到（做对了，但改过、看过提示，或者是分步例题的一步）/ miss 做了没到 / none 还没证据。
+ * 状态是页面对学生说的话，宁可说少不可说满：只看最后一次失手以后的（和 mastery.js 的 walk 一个道理）——
+ * 前面独立做对过、后来同一件事的另一道做错了，就是做了没到；失手以后又做对了，按后面做对的那几道算。
+ * 失手 = 页面判过但不算做对（错、想不出来、看了答案、把选项试遍了才对）。
  * 只有页面没判的作答时还是 none：页面判不了，不能替学生说「没到」。
  */
 export function aimStatus(aim, items) {
-  const mine = (Array.isArray(items) ? items : []).filter((it) => it && aim?.id && it.aim === aim.id);
-  if (mine.some(solo)) return 'solo';
-  if (mine.some(right)) return 'led';
-  return mine.some(judged) ? 'miss' : 'none';
+  const mine = inOrder((Array.isArray(items) ? items : []).filter((it) => it && aim?.id && it.aim === aim.id && judged(it)));
+  if (!mine.length) return 'none';
+  const after = mine.slice(mine.findLastIndex((it) => !right(it)) + 1);
+  if (after.some(solo)) return 'solo';
+  return after.some(right) ? 'led' : 'miss';
 }
 
 /** 每件事带上状态和挂在它上面的题数 n。没有要拿下的事（旧课、练一练、复现课、舞台课）返回 [] */
