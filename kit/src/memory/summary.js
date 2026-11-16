@@ -274,6 +274,8 @@ export function quoteFound(q, corpus) {
   const hay = bare(corpus);
   const parts = squash(q).split(/\.{3,}/).map(bare).filter(Boolean);
   if (!parts.length) return true;
+  // 用省略号拆开的每一段太短（「我……不……懂」），在几十 KB 的材料里按先后几乎一定找得到，等于没核：一段不到 3 个字就不算找到
+  if (parts.length > 1 && parts.some((p) => [...p].length < 3)) return false;
   let from = 0;
   for (const p of parts) {
     const i = hay.indexOf(p, from);

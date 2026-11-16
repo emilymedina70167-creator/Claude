@@ -103,3 +103,10 @@ test('对话被压缩成摘要以后，早先那句原话仍在老师的说明�
   });
   assert.match(system, /第 3 轮：别再一上来给我九句话，先给我结论/);
 });
+
+test('学生打的话逐字照抄：原话里说别人的「他」「她」不换成「学生」', () => {
+  const mem = withSummary();
+  const said = saidNow([stu(3, '他为什么用过去时？她不是现在才来吗'), tea(4)]);
+  const d = memoryDigest(mem, { block: 'L5-01', space: 'math', session: 'c-1', saidNow: said });
+  assert.match(d.text, /第 3 轮：他为什么用过去时？她不是现在才来吗/);
+});

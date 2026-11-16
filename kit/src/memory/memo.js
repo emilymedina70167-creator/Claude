@@ -82,8 +82,13 @@ export function liveDocs(mem = {}, coll, space = '') {
   return sharedFor(docs, space, mem);
 }
 /** 到了上限的几类：[{ coll, n, max }]（下课整理时要先合并） */
+// 有记忆摘要时（第十三轮）：规则、守则、关于学生、要求、失误不再发给老师，下课整理也不再管它们（不列目录、不按它们的条数叫整理）。
+// 判断和 summary.js 的 summaryOn 一样；这里不 import 它（summary.js 引着 memo.js，免得循环引用）
+const OLD_FIVE = new Set(['rules', 'lessons', 'profile', 'asks', 'slips']);
+const sumOn = (mem = {}) => (Array.isArray(mem?.summary) ? mem.summary : []).some((d) => d && ['shared', 'math', 'cs', 'en'].includes(d.id) && (String(d.text ?? '').trim() || (d.notes || []).length));
 export function overCaps(mem = {}, space = '') {
-  return Object.entries(CAPS).map(([coll, max]) => ({ coll, n: liveDocs(mem, coll, ['weaknesses', 'reviews', 'lessons'].includes(coll) ? space : '').length, max })).filter((x) => x.n >= x.max);
+  const on = sumOn(mem);
+  return Object.entries(CAPS).filter(([coll]) => !(on && OLD_FIVE.has(coll))).map(([coll, max]) => ({ coll, n: liveDocs(mem, coll, ['weaknesses', 'reviews', 'lessons'].includes(coll) ? space : '').length, max })).filter((x) => x.n >= x.max);
 }
 // 新的一条和已有的哪一条几乎一样（拦照抄；换个说法的重复靠下课时合并）
 function nearest(text, docs, field = 'text') {
@@ -171,7 +176,11 @@ export function splitKnow(entries = [], { on = false } = {}) {
 export function knowNotes(entries = [], { on = false, history = [], space = '', session = '', by = 'class' } = {}) {
   const { notes, rest } = splitKnow(entries, { on });
   const lastSay = notes.some((k) => k.say)
-    ? String([...history].reverse().find((t) => t && !t.discarded && t.role === 'student' && String(t.say || '').trim())?.say || '').trim() : '';
+    ? (() => {
+      // 黑板课的学生轮有 say（学生打的那句）；舞台课的只有 text（就是学生打的那句）
+      const t = [...history].reverse().find((x) => x && !x.discarded && x.role === 'student' && String(x.say ?? (x.text || '')).trim());
+      return String(t ? t.say ?? t.text ?? '' : '').trim();
+    })() : '';
   return { rest, notes: notes.map((k) => ({ text: k.text, quote: k.say ? lastSay : '', space: k.shared ? 'shared' : k.space || space, session, by })) };
 }
 
@@ -241,7 +250,7 @@ export function tidyDue(mem = {}, space = '', sid = '') {
 export function tidyText(mem = {}, space = '') {
   const w = liveDocs(mem, 'weaknesses', space).sort((a, b) => cmpNum(a.id, b.id));
   const r = liveDocs(mem, 'reviews', space).sort((a, b) => cmpNum(a.id, b.id));
-  const p = liveDocs(mem, 'profile', space);
+  const p = sumOn(mem) ? [] : liveDocs(mem, 'profile', space);
   const rows = [];
   if (w.length) rows.push(`弱点（${w.length} 条）`, ...w.map((x) => `- ${x.id} ${cut(x.title, 90)}［${x.scope || ''} ${x.level || ''}${(x.errors || []).length ? `，${x.errors.length} 道错题` : ''}${x.last ? `，最近 ${x.last}` : ''}］`));
   if (r.length) rows.push(`复现组（${r.length} 组）`, ...r.map((x) => `- ${x.id} ${cut(x.title, 70)}${x.family ? `［${cut(x.family, 30)}］` : ''}（第 ${x.tier || 1} 天那档${x.result ? `，上次${x.result}` : ''}${x.status === 'paused' ? '，学生暂停了' : ''}${(x.weaknesses || []).length ? `，盯 ${x.weaknesses.join('、')}` : ''}）`));
@@ -249,6 +258,17 @@ export function tidyText(mem = {}, space = '') {
   return rows.join('\n');
 }
 const cmpNum = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true });
+
+/**
+ * 下课那一次随下课提示一起带的：没归纳的失误（slips）、顺带整理的目录（tidy）。黑板课、舞台课共用。
+ * 有记忆摘要时不再把失误归纳成守则（slips 是空的），整理目录只剩弱点、复现组
+ */
+export function closingExtras(mem = {}, space = '', sid = '', { summary = false } = {}) {
+  const why = mem ? tidyDue(mem, space, sid) : '';
+  const text = why ? tidyText(mem, space) : '';
+  // 没有摘要时和以前一字不差（目录空着也带）；有摘要时目录空了就不带
+  return { slips: summary ? '' : slipsToFold(mem, space), tidy: why && (text || !summary) ? { why, text } : null };
+}
 
 /**
  * 这节课改讲别的块：memo 的 block id=EN-L1.1.1。查一下课程地图里有没有、是不是同一科。

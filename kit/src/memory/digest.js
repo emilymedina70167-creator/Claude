@@ -114,6 +114,8 @@ const sessionLine = (s, obs, n = 80) => {
 // aide：{ brief（briefText 的字，可以空）, cards（cardText 的字的数组）}：课堂助手的两节（aide/brief.js、card.js 算好的），没有就是 null（和以前一字不差）
 // use：带哪些规则。'teach'（默认，讲课的每一轮）不带 use: record 的——管记录和复现的规则讲新课时用不上，每一轮带着只是多读；
 // 'all'（下课那一次、复现课、备课、事后补写）都带。记忆库里没有 use: record 的规则时两种逐字一样
+// 「这节课学生打的话」的占位：一串不会出现在记忆里的字，neutral 也不碰它
+const SAID_SLOT = '\u0000学生打的话\u0000';
 export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 1024, session = '', tools = true, today = toDate(Date.now()), aide = null, use = 'teach', saidNow = '' } = {}) {
   // space：没块开的课（新的一科还没选块）按这节课的科带，不落到数学
   const view = classView(mem0, { block, space: block ? '' : space, use: use === 'all' ? 'all' : 'teach' });
@@ -260,12 +262,14 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
   // 有摘要时：话的账停了，它写的「这节课学生说的」不再带；换成页面照抄的这节课学生打的每一句（summary.js 的 saidNow）
   const asksText = sum.on ? [
     summaryText([sum.shared, sum.subject]),
-    saidNow ? `## 这节课学生打的话（原话，页面照抄的；这些是当面说的）\n\n${saidNow}` : '',
+    // 学生的原话不过 neutral（下面整段替换「他」「她」）：原话里说的是别人（例句的主语、书里的人），换成「学生」意思就错了。先放占位，替换完再放回
+    saidNow ? `## 这节课学生打的话（原话，页面照抄的；这些是当面说的）\n\n${SAID_SLOT}` : '',
   ].filter(Boolean).join('\n\n') : [
     asks.length ? `## 学生的要求（学生亲口说过、要你照做的；犯过的在前。每一条都要做到——学生说过「我说了什么，下一次都肯定会改」）\n\n${asks.map(askLine).join('\n')}` : '',
     once.length ? `## 这节课学生说的（只管这节课）\n\n${once.map((o) => `- ${one(o.text, 200)}`).join('\n')}` : '',
   ].filter(Boolean).join('\n\n');
-  let used = utf8(intro) + (asksText ? utf8(asksText) + 2 : 0);
+  // 原话是放占位算的（见 SAID_SLOT）：把差的字节补上，免得超了预算
+  let used = utf8(intro) + (asksText ? utf8(asksText) + 2 : 0) + (sum.on && saidNow ? utf8(saidNow) - utf8(SAID_SLOT) : 0);
   let rulesText = '';
   const body = asksText ? [intro, asksText] : [intro];
   let srcCut = 0;
@@ -304,7 +308,7 @@ export function memoryDigest(mem0 = {}, { block = '', space = '', budget = 24 * 
   }
   const cat = memoryCatalog(view, { shown, here, nearIds, session, today, tools, srcCut, max: Math.max(1024, budget - used - 200), skip: sum.on ? SUMMARY_DROPS : NONE });
   if (cat.text) body.push(cat.text);
-  const text = neutral(body.join('\n\n'));
+  const text = neutral(body.join('\n\n')).replace(SAID_SLOT, () => saidNow);
   rulesText = neutral(rulesText);
   return { rules: rulesText, text, cut: cat.cut, bytes: utf8(text) + utf8(rulesText), ...(sum.on ? { summary: true } : {}) };
 }
@@ -389,7 +393,7 @@ export function memoryCatalog(view, { shown = new Set(), here = view.here, nearI
   if (srcCut) parts.push({ head: '这一块的原文', full: [`${here} 的文稿原文、教材原文还有 ${srcCut} 段没放进来`], short: [`${here} 还有 ${srcCut} 段原文`] });
 
   const how = tools
-    ? '要看哪一条的全文，用 memory_read 按编号取，**一次可以取好几条**（ids 写编号数组，比如 ["L2-31","W23"]，同一类的放一起）；以前的课写 collection: "sessions"、id 写课的编号，给你那节课的报告和小结。每调用一次要多跑一整轮（整份说明再读一遍），所以：学生的错像目录里某道旧错题、要提起以前的课、要按某条规则做又拿不准原文时才取，一次取够，不要一条一条取。'
+    ? `要看哪一条的全文，用 memory_read 按编号取，**一次可以取好几条**（ids 写编号数组，比如 ["L2-31","W23"]，同一类的放一起）；以前的课写 collection: "sessions"、id 写课的编号，给你那节课的报告和小结。每调用一次要多跑一整轮（整份说明再读一遍），所以：学生的错像目录里某道旧错题、要提起以前的课${skip.has('rules') ? '' : '、要按某条规则做又拿不准原文'}时才取，一次取够，不要一条一条取。`
     : '这个查看方式不支持工具，目录里的东西取不了全文。';
   const render = (mode) => ['## 目录（记忆库里没放全文的，一条一行）', how, ...parts.map((p, i) => `**${p.head}**：\n${(mode[i] ? p.short : p.full).map((l) => `- ${l}`).join('\n')}`)].join('\n\n');
   // 放不下：从后往前（课程地图、失误、复现组、掌握、错题……）一节节换成省的写法

@@ -15,7 +15,7 @@ import { getStore, isDev, assetUrl } from '../live/store.js';
 import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX } from './protocol.js';
-import {
+import { classMemoryReadDoc,
   buildSystem, actionText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
   reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, nextPinId, bytes, PACK_BUDGET, compactionSlice, worthCompacting, draftLine,
   lintDocs, docLookup, latestPlan, rulesUse,
@@ -43,7 +43,7 @@ import { debriefText } from '../memory/debrief.js';
 import { earlierClasses } from '../memory/digest.js';
 import { choose } from '../dialog.js';
 import { lessonSheet, sheetMd } from '../memory/sheet.js';
-import { slipsToFold, blockSwitch, tidyDue, tidyText, knowNotes } from '../memory/memo.js';
+import { blockSwitch, closingExtras, knowNotes } from '../memory/memo.js';
 import { saidNow, summaryOn } from '../memory/summary.js';
 import { createBoardEye, eyeNote } from './boardeye.js';
 import { spaceOfId, subjectOf } from '../memory/space.js';
@@ -2619,7 +2619,8 @@ export async function renderClass(root, meta, desk = null) {
         },
       }, {
         name: 'memory_read',
-        description: '查学习台的记忆库（只读）。collection 写集合名：rules、profile、curriculum、errors、weaknesses、mastery、reviews、recall、position、slips、lessons、observations、sessions、evidence。ids 写编号数组，一次取好几条的全文（比如 collection errors、ids ["L2-07","L2-31"]；同一类的放一起取）；id 取一条。sessions 写课的编号，给那节课的要点、课后报告和小结。不写 id / ids 时列出这一类（可以写 block 只要挨着这一块的）。evidence 按 block 或 session（这节课是 ' + desk.sid + '）查最近的 30 条。每调用一次你要多等一整轮：照记忆里的目录挑准了编号，一次取够。',
+        // 有记忆摘要时说明换一份（旧五类不再给老师，prompt.js 的 classMemoryReadDoc）
+        description: classMemoryReadDoc(desk.sid, !!desk.summary?.on()),
         inputSchema: { type: 'object', properties: { collection: { type: 'string' }, ids: { type: 'array', items: { type: 'string' } }, id: { type: 'string' }, block: { type: 'string' }, session: { type: 'string' } }, required: ['collection'] },
         async execute(input) {
           const q = { collection: String(input?.collection ?? '').trim(), ids: Array.isArray(input?.ids) ? input.ids.map(String) : undefined, id: input?.id, block: input?.block, session: input?.session };
@@ -2777,10 +2778,10 @@ export async function renderClass(root, meta, desk = null) {
       const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: TALK ? talkState() : boardState(), subject: session.subject, memory: memoryArg({ all: true }), canvas: CANVAS && !TALK, eye: eyeOn(), exam: examSection(), ...planArg(), ...(TALK ? { talk: true } : {}) });
       // 每几节课（或者某一类到了上限）顺带整理：合并重复的弱点、复现组、关于学生的记录（memo.js 的 tidyDue）
       const sp = desk?.block ? spaceOfId(desk.block) : desk?.space || spaceOfId('');
-      const why = desk ? tidyDue(desk.mem, sp, desk.sid) : '';
-      const tidy = why ? { why, text: tidyText(desk.mem, sp) } : null;
+      const ex = desk ? closingExtras(desk.mem, sp, desk.sid, { summary: !!desk.summary?.on() }) : { slips: '', tidy: null };
+      const tidy = ex.tidy;
       // 后方复查出来的（memory/sentry.js，首页算好放在 meta/workorder）：这一科以前的结论后来的证据对不上的几条，整理单里顺带判断
-      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ summary: !!desk?.summary?.on(), report, review: desk?.review, opening: desk?.opening, slips: desk ? slipsToFold(desk.mem, sp) : '', plan: FEATURES.plan === false ? null : latestPlan(history), tidy, recheck: desk?.recheck?.[sp] || '', noForm: !TALK, aims: aimsNow({ live: false }) }) }], maxBytes: promptLimit(), stub: teacher.tools && !TALK });
+      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ summary: !!desk?.summary?.on(), report, review: desk?.review, opening: desk?.opening, slips: ex.slips, plan: FEATURES.plan === false ? null : latestPlan(history), tidy, recheck: desk?.recheck?.[sp] || '', noForm: !TALK, aims: aimsNow({ live: false }) }) }], maxBytes: promptLimit(), stub: teacher.tools && !TALK });
       // 小结边写边显示（以前要干等一两分钟才一下子出来），也记下等了多久
       const t0 = performance.now();
       firstAt = 0;

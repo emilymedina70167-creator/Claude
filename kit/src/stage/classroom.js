@@ -33,7 +33,7 @@ import { parseOutput } from '../class/protocol.js';
 import { callCost } from '../class/usage.js';
 import { closingPrompt } from '../class/prompt.js';
 import { reportText } from '../memory/report.js';
-import { slipsToFold, tidyDue, tidyText, knowNotes } from '../memory/memo.js';
+import { closingExtras, knowNotes } from '../memory/memo.js';
 import { spaceOfId } from '../memory/space.js';
 import { textbookForClass } from '../books/textbook.js';
 import { reportError } from '../errlog.js';
@@ -295,9 +295,10 @@ export async function renderStageClass(root, meta = {}, desk) {
     const repObj = desk.makeReport ? await desk.makeReport({ turns: history, steps: [] }).catch(() => null) : null;
     const report = repObj ? reportText(repObj) : '（这一次页面没算出课后报告：整理单按这节课的对话写，basis 写 S 开头的那一问的编号。）';
     const sp = desk.block ? spaceOfId(desk.block) : desk.space;
-    const why = desk.mem ? tidyDue(desk.mem, sp, sid) : '';
-    const tidy = why ? { why, text: tidyText(desk.mem, sp) } : null;
-    const closing = closingPrompt({ report, review: desk.review, opening: desk.opening, slips: desk.mem ? slipsToFold(desk.mem, sp) : '', tidy, recheck: desk.recheck?.[sp] || '' })
+    // 有记忆摘要时（第十三轮）：和黑板课下课一样，不把失误归纳成守则、整理目录不列旧几类（memo.js 的 closingExtras）
+    const summary = !!desk.summary?.on();
+    const ex = desk.mem ? closingExtras(desk.mem, sp, sid, { summary }) : { slips: '', tidy: null };
+    const closing = closingPrompt({ summary, report, review: desk.review, opening: desk.opening, slips: ex.slips, tidy: ex.tidy, recheck: desk.recheck?.[sp] || '' })
       + '\n\n（舞台课：小结写成几行字，不写镜头指令；整理单照旧写在 ````board memo 块里。）';
     const input = messages(closing);
     const t0 = performance.now();

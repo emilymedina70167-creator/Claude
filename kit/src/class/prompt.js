@@ -810,6 +810,15 @@ export function docLookup(componentDocs, subject, name) {
 
 // tools：这个查看方式给不给课堂 Claude 工具（不给就没有 component_doc，说明里不提它）
 /**
+ * 黑板课老师查记忆的工具说明（classroom.js 每次调用现拼）。没有摘要时和以前一字不差；
+ * 有摘要时先说 summary，旧的规则、守则、关于学生、要求、失误写明不再给老师、不是规程（第十三轮）
+ */
+export function classMemoryReadDoc(sid = '', summaryOn = false) {
+  if (!summaryOn) return '查学习台的记忆库（只读）。collection 写集合名：rules、profile、curriculum、errors、weaknesses、mastery、reviews、recall、position、slips、lessons、observations、sessions、evidence。ids 写编号数组，一次取好几条的全文（比如 collection errors、ids ["L2-07","L2-31"]；同一类的放一起取）；id 取一条。sessions 写课的编号，给那节课的要点、课后报告和小结。不写 id / ids 时列出这一类（可以写 block 只要挨着这一块的）。evidence 按 block 或 session（这节课是 ' + sid + '）查最近的 30 条。每调用一次你要多等一整轮：照记忆里的目录挑准了编号，一次取够。';
+  return '查学习台的记忆库（只读）。collection 写集合名：summary（记忆摘要：shared 三科共用、math、cs、en；你说明里「你对这个学生的了解」就是它）、curriculum、errors、weaknesses、mastery、reviews、recall、position、observations、sessions、evidence。以前一条条记的 rules、lessons、asks、profile、slips 还存着，但已经并进摘要、不再给你，也不是规程：学生问起以前定过什么时才查。ids 写编号数组，一次取好几条的全文（比如 collection errors、ids ["L2-07","L2-31"]；同一类的放一起取）；id 取一条。sessions 写课的编号，给那节课的要点、课后报告和小结。不写 id / ids 时列出这一类（可以写 block 只要挨着这一块的）。evidence 按 block 或 session（这节课是 ' + sid + '）查最近的 30 条。每调用一次你要多等一整轮：照记忆里的目录挑准了编号，一次取够。';
+}
+
+/**
  * memory（学习台里上课时才有）：{ mem: 记忆库各类的数组, block: 这节课的块, session: 这节课的编号, use: 带哪些规则（rulesUse，原样交给 memoryDigest；不写当 teach）}。
  * 有记忆时多一节「你对学生的了解」，记忆库 rules 接在根本规则后面；记忆先占（最多 MEMORY_BUDGET），资料包用剩下的
  */
@@ -998,7 +1007,7 @@ export function buildTalkSystem({ rules, componentDocs, pack, board, packBudget 
   let mem = null;
   if (memory) {
     const room = SYSTEM_MAX - bytes(parts('', { rules: '', text: '' })) - 16 * 1024 - 3 * 1024;
-    mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools, budget: Math.max(4 * 1024, Math.min(MEMORY_BUDGET, room)) });
+    mem = memoryDigest(memory.mem || {}, { block: memory.block, space: memory.space, session: memory.session, tools, budget: Math.max(4 * 1024, Math.min(MEMORY_BUDGET, room)), saidNow: memory.saidNow });
   }
   const rest = bytes(parts('', mem));
   const { text: packBody } = packText(pack, Math.max(16 * 1024, Math.min(packBudget, SYSTEM_MAX - rest - 3 * 1024)), { talk: true });

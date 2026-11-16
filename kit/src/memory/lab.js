@@ -19,7 +19,7 @@ import { reportText } from './report.js';
 import { closingPrompt, MEMO_DOC, CLASS_MEMO_DOC, SUMMARY_MEMO_DOC } from '../class/prompt.js';
 import { componentDoc, isCS, isEN } from '../subject.js';
 
-export const LAB_VERSION = 6; // 单子的写法变了就加一：学习台打开时照新写法重拼（收件箱先按旧单子收完）
+export const LAB_VERSION = 7; // 7：有记忆摘要时补收尾、备课的单子换了写法（2026-11-16e）。单子的写法变了就加一：学习台打开时照新写法重拼（收件箱先按旧单子收完）
 // 一晚最多做几张（价值高的先）：补收尾的课最值，出新题其次，备课一科一张
 // profile / map / intel：考情第 6 批（exam/lab.js）
 // card / after：课堂助手（第九轮）：按章合并学生卡；首页连着没做成的下课后整理
