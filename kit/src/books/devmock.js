@@ -45,6 +45,15 @@ q: 一个过程遇到已排好的序列时仍逐对比较，这是否足以说�
 - [x] 否
 \`\`\``;
   }
+  // 课后重写记忆摘要（memory/summary.js）：把现在的那一份原样留着，后面接一句这节课并进来的（新笔记、学生的话各带一条）
+  function summary(prompt) {
+    const cur = (head) => { const m = prompt.match(new RegExp(`## 现在的摘要：${head}[^\\n]*\\n\\n([\\s\\S]*?)(?=\\n\\n## |$)`)); const t = (m?.[1] || '').trim(); return t === '（还没有）' ? '' : t; };
+    const note = prompt.match(/## 还没并进摘要的新笔记\n\n- (?:[\d-]+：)?([^\n（]+)/)?.[1] || '';
+    const say = prompt.match(/学生打的每一句\n\n- (?:[\d-]+ )?「([^」\n]+)」/)?.[1] || '';
+    const add = `（模拟）这节课并进来的：${[note && `新笔记「${note.trim()}」`, say && `学生说过「${say}」`].filter(Boolean).join('；') || '没有新的'}。`;
+    const both = prompt.includes('<这一科>');
+    return `<共用>\n${cur('共用') || '（模拟）学生在备考研究生入学考试。'}\n</共用>${both ? `\n<这一科>\n${[cur('这一科'), add].filter(Boolean).join('\n\n')}\n</这一科>` : ''}`;
+  }
   function transcribe(prompt) {
     const out = [];
     for (const n of pagesOf(prompt)) {
@@ -131,7 +140,7 @@ q: 一个过程遇到已排好的序列时仍逐对比较，这是否足以说�
       // 班主任（head/context.js）：传的是一轮一轮的 turns，第一条是说明
       if (Array.isArray(prompt) && String(prompt[0]?.content || '').startsWith('你是学生学习台里的**班主任**')) return head(prompt, opts);
       const p = String(prompt);
-      const text = p.startsWith('你在给一节刚上完的黑板课留隔天再做的题') ? holds(p) : p.startsWith('你在把一本教材的扫描页') ? transcribe(p) : p.startsWith('你在帮学生整理学习台的课程地图') ? map(p) : p.startsWith('你是这个学生的老师，现在给下一节课备课') ? prep(p) : p.startsWith('你在给学生的一节课的题归类') ? skills(p) : p.startsWith('你在给一节刚上完的课做复盘') ? debrief(p) : p.startsWith('你在课前预演一份教案') ? rehearse(p) : p.startsWith('你在给一节刚上完的舞台课做课后整理') ? after(p) : p.startsWith('你在给学生的学习台写一张学生卡') ? card(p) : p.startsWith('你在给下一节课的老师准备这节课要知道的事') ? brief(p) : p.startsWith('你在旁听一节舞台课') ? watch(p) : p.startsWith('你在给一位考研学生的学习台记账') ? said(p) : '{}';
+      const text = p.startsWith('你在替一个备考研究生入学考试的学生维护「记忆摘要」') ? summary(p) : p.startsWith('你在给一节刚上完的黑板课留隔天再做的题') ? holds(p) : p.startsWith('你在把一本教材的扫描页') ? transcribe(p) : p.startsWith('你在帮学生整理学习台的课程地图') ? map(p) : p.startsWith('你是这个学生的老师，现在给下一节课备课') ? prep(p) : p.startsWith('你在给学生的一节课的题归类') ? skills(p) : p.startsWith('你在给一节刚上完的课做复盘') ? debrief(p) : p.startsWith('你在课前预演一份教案') ? rehearse(p) : p.startsWith('你在给一节刚上完的舞台课做课后整理') ? after(p) : p.startsWith('你在给学生的学习台写一张学生卡') ? card(p) : p.startsWith('你在给下一节课的老师准备这节课要知道的事') ? brief(p) : p.startsWith('你在旁听一节舞台课') ? watch(p) : p.startsWith('你在给一位考研学生的学习台记账') ? said(p) : '{}';
       opts.onText?.({ text, delta: text });
       return { text, truncated: false, modelApplied: opts.model || 'claude-opus-5-5', modelTierApplied: opts.modelTier || 'complex' };
     },

@@ -91,6 +91,8 @@ import { lookName, lookWords } from '../stage/look/spec.js';
 const KIND_NAMES = { card: '题卡', sentence: '句子', array: '一排格子', matrix: '矩阵', tree: '树', graph: '图', table: '表', timeline: '时间轴', plane: '平面', tex: '式子', node: '结点', label: '贴的字', dial: '拨盘', draw: '画的' };
 import { createAideDesk } from '../aide/aidedesk.js';
 import { createSaid } from './saiddesk.js';
+import { createSummary } from './summarydesk.js';
+import { createSummaryView } from './summaryview.js';
 import { saidTimer } from './said.js';
 import { loadCards, loadBrief } from '../aide/load.js';
 import { cardIdsFor } from '../aide/card.js';
@@ -188,6 +190,7 @@ export async function renderDesk(root, meta) {
     <div class="dk-manage" hidden>
     <section class="dk-card dk-look"><h2 class="dk-h">样子</h2><p class="dk-sub muted">紫藤：学习台和课堂一起，跟着 iPad 的白天晚上换，也可以固定一种。这台设备记着。</p><div class="dk-body"></div></section>
     <section class="dk-card dk-exam"><h2 class="dk-h">考试</h2><p class="dk-sub muted">考哪个学校哪个专业、目标多少分、哪天考。410 分的进度、距考研都照这里算。</p><div class="dk-body"></div></section>
+    <section class="dk-card dk-summary"><h2 class="dk-h">记忆摘要</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-recent"><h2 class="dk-h">最近记下的</h2><p class="dk-sub muted">课堂里的 Claude 和页面直接写进记忆的，不对就撤销（7 天内）。</p><div class="dk-pdone"></div></section>
     <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-backup" hidden><h2 class="dk-h">备份</h2><div class="dk-body"></div></section>
@@ -223,6 +226,8 @@ export async function renderDesk(root, meta) {
   const ops = createMemOps({ db, mem: () => data });
   let aideDesk = null; // 课堂助手（下面建，订阅的回调先到时还没有）
   let saidDesk = null; // 话的账（saiddesk.js），首页那一份
+  let sumDesk = null; // 记忆摘要（summarydesk.js），首页那一份
+  let sumView = null; // 「管理 → 记忆摘要」的画面
   const loaded = new Set();
   const failed = new Set();
   let ledger = null;
@@ -359,6 +364,7 @@ export async function renderDesk(root, meta) {
       if (c === 'sessions' || c === 'position') paintClass();
       if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); setTimeout(fixHolds, 500); backTick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
+      if (c === 'summary') { sumView?.paint(); backTick(); }
       if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
       if (['drills', 'evidence'].includes(c)) setTimeout(fixHolds, 500);
       if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) { fixReports(); backTick(); } if (lastRes) paintWeek(toDate(Date.now())); }
@@ -433,6 +439,9 @@ export async function renderDesk(root, meta) {
   aideDesk = createAideDesk({ db, getData: () => data, ops, ai: deskAI, packs: () => packs, ready: () => ['sessions', 'curriculum', 'errors', 'weaknesses', 'mastery', 'observations', 'position', 'reviews'].every((c) => loaded.has(c)) });
   // 话的账（第十一轮，saiddesk.js）：首页先把每节课我说了、还没过账的话过一遍（下了课的、挂着的、丢下的都算），再做课后的整理
   saidDesk = createSaid({ db, getData: () => data, ops, ai: deskAI });
+  // 记忆摘要（第十三轮，summarydesk.js）：有了摘要以后首页后台不再过话的账，改成把每节课并进摘要重写一遍
+  sumDesk = createSummary({ db, getData: () => data, ai: deskAI, onChange: () => sumView?.paint() });
+  sumView = createSummaryView({ sum: sumDesk, host: () => $('.dk-summary') });
   lab = createLabDesk({ db, getData: () => data, packs, planner, ops, aide: aideDesk, said: saidDesk, onChange: () => paintWork() });
   // 班主任（第十一轮 B1，head/）：首页上的总 Claude。每一轮的说明照首页手上的现拼（要求、三科的简报、预测分、下一步、这一周、考试）
   function headCtx() {
@@ -446,18 +455,35 @@ export async function renderDesk(root, meta) {
       next = Object.fromEntries(Object.entries(top).map(([k, xs]) => [k, (xs || []).map((x) => ({ title: plainTitle(x.title) || x.title, why: x.why }))]));
     } catch (err) { reportError(err, { what: '班主任的预测分没算出来', soft: true }); }
     return headSystem({
-      sessions: data.sessions.map(s => ({ ...s, aimReport: laterReports.get(s.id)?.report })), asks: data.asks || [], today, version: VERSION, forecast: fc, next,
+      sessions: data.sessions.map(s => ({ ...s, aimReport: laterReports.get(s.id)?.report })), asks: data.asks || [], summaries: data.summary || [], today, version: VERSION, forecast: fc, next,
       week: weekLines(data, { today }), target: targetOf(data), examDays: daysLeft(today, examDate()),
       briefs: SPACE_KEYS.map((k) => ({ space: k, text: deskBrief(data, { space: k, today, pack: packs[k].main?.usedBy ? null : packs[k].main, books: booksView.books(), forHead: true }).text })),
     });
   }
-  const head = createHead({ db, getData: () => data, ops, ai: deskAI, said: saidDesk, system: headCtx });
+  const head = createHead({ db, getData: () => data, ops, ai: deskAI, said: saidDesk, summary: sumDesk, system: headCtx });
   const chatPage = createChatPage($('.dk-chatpage'), { head });
   // 后台一件一件做：先过账（一节一节，新的课先），都过完了才轮到课后的助手（aidedesk）。这次打开首页每节只试一次
   const saidTried = new Set();
+  const sumTried = new Set();
   let saidBusy = false;
   async function backTick() {
     if (saidBusy) return;
+    // 有记忆摘要（或者记忆库里本来就没有旧的规则、要求）：不过话的账，把有新动静的课、班主任的对话一节一节并进摘要
+    if (sumDesk && loaded.has('summary') && ['rules', 'lessons', 'asks'].every((c) => loaded.has(c)) && sumDesk.ready()) {
+      if (!loaded.has('sessions') || !loaded.has('evidence')) { aideDesk?.tick(); return; }
+      const next = data.sessions.filter((x) => !sumTried.has(x.id) && sumDesk.needs(x)).sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0))[0];
+      saidBusy = true;
+      try {
+        if (next) { sumTried.add(next.id); await sumDesk.runFor(next.id); } else {
+          const cid = (await sumDesk.chatsToDo()).find((c) => !sumTried.has(c));
+          if (!cid) { aideDesk?.tick(); return; }
+          sumTried.add(cid);
+          await sumDesk.runForChat(cid);
+        }
+      } finally { saidBusy = false; }
+      setTimeout(() => backTick(), 500);
+      return;
+    }
     if (!saidDesk || !loaded.has('sessions') || !loaded.has('evidence')) { aideDesk?.tick(); return; }
     const todo = data.sessions.filter((x) => !saidTried.has(x.id) && saidDesk.needs(x)).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
     if (!todo.length) { aideDesk?.tick(); return; }
@@ -864,7 +890,8 @@ export async function renderDesk(root, meta) {
     // 试满两次（SAID_FAILS）还没过成的：不再调用，我说的话一直留着、这节课先不删（不能为了删课丢我的要求）
     let keepWords = false;
     let sDoc = null;
-    if (saidDesk) {
+    // 有记忆摘要以后不等过账：我说的话由课后重写读，删课不为它等（第十三轮）
+    if (saidDesk && !sumDesk?.on()) {
       sDoc = await db.doc(`sessions/${sid}`).get().then((r) => (r.exists ? { id: sid, ...r.data() } : null)).catch(() => null);
       const left = !!sDoc && saidDesk.needs({ ...sDoc, said: { ...(sDoc.said || {}), fails: 0 } });
       if (left && saidDesk.needs(sDoc)) {
@@ -1794,6 +1821,7 @@ export async function renderDesk(root, meta) {
     const chat = page === 'chat';
     $('.dk-home').hidden = !home;
     $('.dk-manage').hidden = !manage;
+    if (manage) sumView?.paint();
     if (manage) examCard.paint();
     $('.dk-pages').hidden = home || books || manage || exam || chat;
     $('.dk-bookpage').hidden = !books;
@@ -1966,7 +1994,11 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   const examLoad = (kind === 'stage' || kind === 'class') && block && !readOnly ? loadExam(block) : null;
   // 话的账（第十一轮）：课上我打了一句，隔 20 秒（?dev&said=2 是 2 秒）后台过一次账；写好了的要求马上放进 mem，
   // 老师下一次调用的说明里「学生的要求」就有它（system() 每次调用都重拼）。离开课堂之前 flush（不等它，断了由首页补）
-  const saidHere = readOnly ? null : createSaid({ db, getData: () => mem, ops, ai: store.dev ? async () => (await getAI()) || createDevAI() : getAI });
+  // 记忆摘要（第十三轮）：老师当场记的新笔记写进摘要；有摘要（或新的数据库）时课上不再过话的账
+  const classAI = store.dev ? async () => (await getAI()) || createDevAI() : getAI;
+  const sumHere = readOnly ? null : createSummary({ db: guardDb(db), getData: () => mem, ai: classAI });
+  const summary = sumHere ? { on: sumHere.on, note: sumHere.note } : null;
+  const saidHere = readOnly || sumHere?.ready() ? null : createSaid({ db, getData: () => mem, ops, ai: store.dev ? async () => (await getAI()) || createDevAI() : getAI });
   const saidOnceOf = async () => { const r = await db.doc(`sessions/${sid}/said/main`).get().catch(() => null); return r?.exists ? r.data().once || [] : []; };
   if (saidHere) mem.saidOnce = await within(saidOnceOf(), 3000, []).catch(() => []);
   const said = saidHere ? saidTimer({
@@ -1997,7 +2029,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
       store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, subject: doc.subject || '', mem, books, prevRead, readOnly,
       // 这一门课的考试资料（exam/load.js，按门课读、不读整类）：不等它，课堂读到了再用（「这一块在考试里」、exam= 当场核）
       exam: examLoad, reserve: examYears,
-      updateSession, onHome: () => leave(readOnly ? `classes/${sid}` : ''), said,
+      updateSession, onHome: () => leave(readOnly ? `classes/${sid}` : ''), said, summary,
       recheck: readOnly ? {} : await within(db.doc('meta/workorder').get().then((s) => (s.exists ? s.data().recheck || {} : {})), 3000, {}).catch(() => ({})),
       writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),
       makeReport: ({ turns, steps } = {}) => makeReport(db, sid, { doc: { ...doc, endedAt: doc.endedAt || Date.now() }, turns, steps }),
@@ -2019,7 +2051,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     });
   }
   return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
-    store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), said, books, prevRead,
+    store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), said, summary, books, prevRead,
     // 一问一答（kind: talk）：同一个课堂，换成活板、一问一答（docs/talk-impl.md）；别的（教材、记忆、memo、报告、复现）全照旧
     talk: kind === 'talk',
     // 这一门课的考试资料（和舞台课一样：不等它，课堂读到了再用）；examFor：课上换到另一门课时再按那门课读一次
