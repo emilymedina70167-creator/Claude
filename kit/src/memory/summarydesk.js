@@ -3,7 +3,7 @@
 // 判断都在 summary.js（纯函数）；这里只管读最新的、调用、核、写回去。首页（后台重写、管理页）、课堂（当场记）、班主任都用它。
 import {
   SUMMARY_IDS, REWRITE_FAILS, QUIET_MS, summaryOn, addNote, noteOf, nextDoc, rollback, rewritePrompt, parseRewrite, checkRewrite,
-  legacyText, needsRewrite, sinceOf, maxOf, utf8,
+  legacyText, needsRewrite, sinceOf, maxOf, utf8, checkQuotes,
 } from './summary.js';
 import { transcriptText } from './debrief.js';
 import { reportText } from './report.js';
@@ -109,15 +109,28 @@ export function createSummary({ db, getData, ai, now = () => Date.now(), onChang
     const [shared, subject] = await Promise.all([latest('shared'), both ? latest(space) : null]);
     const check = (g) => [checkRewrite({ prev: shared?.text, next: g.shared, id: 'shared' }), both ? checkRewrite({ prev: subject?.text, next: g.subject, id: space }) : { ok: true }];
     let checks = check(got);
-    // 只是写长了（摘要一节课一节课地长，早晚会顶到上限）：把它写的那一版还给它，请它压一遍。只压一次，还超就算没成
+    // 能让它自己改好的两种毛病，合成同一次重来（只重来一次）：
+    // 写长了（摘要一节课一节课地长，早晚会顶到上限）——请它压一遍；
+    // 引号里的话在给它的材料里找不到一模一样的（改了字、或者编的）——请它照记录抄，不是原话就去掉引号。
+    // 材料 = 这一次的整份提示词：上一版两份摘要、新笔记、这节课的记录、学生打的每一句、课后报告都在里面
     const over = (g) => [utf8(g.shared) > maxOf('shared') ? `「共用」有 ${utf8(g.shared)} 字节，上限 ${maxOf('shared')}` : '', both && utf8(g.subject) > maxOf(space) ? `「这一科」有 ${utf8(g.subject)} 字节，上限 ${maxOf(space)}` : ''].filter(Boolean);
-    if (over(got).length && checks.every((c) => c.ok || /超了上限/.test(c.why))) {
-      const again = await call(`${prompt}\n\n## 你上一次写的（太长了）\n\n${res.text}\n\n上面这一版超了上限：${over(got).join('；')}（一个汉字 3 字节）。把旧的、不要紧的、说了两遍的压掉，事实和学生的原话留着，照同样的格式再整份输出一遍。`);
+    const lost = (g) => checkQuotes({ next: `${g.shared}\n${both ? g.subject : ''}`, corpus: prompt }).missing;
+    const fixable = () => checks.every((c) => c.ok || /超了上限/.test(c.why));
+    if ((over(got).length || lost(got).length) && fixable()) {
+      const long = over(got);
+      const gone = lost(got);
+      const asks = [
+        long.length ? `上面这一版超了上限：${long.join('；')}（一个汉字 3 字节）。把旧的、不要紧的、说了两遍的压掉，事实和学生的原话留着。` : '',
+        gone.length ? `上面这一版里这几段带引号的话，在上一版摘要和这节课的记录里都找不到一模一样的：${gone.map((q) => `「${q}」`).join('、')}。引号里只放照抄的话：是原话就照记录抄，一个字不改；不是原话就去掉引号，换成你自己的转述。` : '',
+      ].filter(Boolean).join('\n');
+      const again = await call(`${prompt}\n\n## 你上一次写的（${[long.length ? '太长了' : '', gone.length ? '引号里的话对不上记录' : ''].filter(Boolean).join('，')}）\n\n${res.text}\n\n${asks}\n照同样的格式再整份输出一遍。`);
       if (!again) return 'fail';
       const g2 = parseRewrite(again.text, { both });
       if (!g2.problems.length) { got = g2; checks = check(got); }
     }
     const bad = checks.map((c, i) => (c.ok ? '' : `${i ? '这一科' : '共用'}那一份${c.why}`)).filter(Boolean);
+    const gone = lost(got);
+    if (gone.length) bad.push(`引号里的话在记录里找不到：${gone.map((q) => `「${q}」`).join('、')}`);
     if (bad.length) { reportError(`记忆摘要重写回来的没收：${bad.join('；')}`, { what: '记忆摘要', path: src, soft: true }); return 'fail'; }
     await patch('shared', 'page', (cur) => nextDoc(cur, { id: 'shared', text: got.shared, by: 'page', at: now(), startedAt, src }));
     if (both) await patch(space, 'page', (cur) => nextDoc(cur, { id: space, text: got.subject, by: 'page', at: now(), startedAt, src }));
