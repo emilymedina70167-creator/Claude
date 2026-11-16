@@ -126,6 +126,8 @@
 /* 两栏差得太多：页面改成一栏（classroom.js 的 balanceBand），先左栏、再右栏，不画竖线 */
 .cv-band.is-stacked { grid-template-columns: minmax(0, 1fr) !important; row-gap: 18px; }
 .cv-band.is-stacked > .cv-col + .cv-col::before { display: none; }
+/* 两栏高矮差得多、长的那栏是宽的：分栏留着，短的那栏钉在屏幕上跟着走（classroom.js 的 balanceBand） */
+.cv-band.is-follow > .cv-col.cv-follow { position: sticky; top: 14px; align-self: start; }
 /* 板上的东西直接写在黑板上，不框成一块块（2026-11-03 我说：每块都被框着，感觉还是一块块）：段没有底色、没有边，
    靠留白分开；段里组件自带的卡片框也拿掉（题、步骤、选择题只留自己的输入框和按钮） */
 .class-page-body.is-canvas .class-seg {

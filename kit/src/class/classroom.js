@@ -1181,8 +1181,21 @@ export async function renderClass(root, meta, desk = null) {
     const screen = Math.max(200, window.innerHeight - top - (bar?.height || 110));
     // 只有长的那栏超出一屏（学生往下滑时一边空着、一边还在往下长）才改：一屏之内一栏短一点，像黑板上留白，不用改
     // 差得特别多（一栏只有几行、另一栏一大段）时长到快一屏就改；差得没那么多时要明显超出一屏才改（只多出一点点，滑一下就完了）
-    const stack = hi - lo > screen * 0.3 && (hi > lo * 3 && hi > screen * 0.8 || hi > lo * STACK_RATIO && hi > screen * 1.15);
+    const uneven = hi - lo > screen * 0.3 && (hi > lo * 3 && hi > screen * 0.8 || hi > lo * STACK_RATIO && hi > screen * 1.15);
+    // 差得多有两种（第十三轮：老师看得见板以后，分栏是它设计的，页面尽量照办）：
+    // - 长的那栏是窄的（窄窄一条往下长，像看书；另一边空一大片）：照旧改成一栏；
+    // - 长的那栏本来就是宽的（左边讲解、右边几道题）：分栏留着，短的那栏钉在屏幕上跟着学生往下走——滑到下面右边不空着，
+    //   题一直在手边。短的那栏自己要一屏放得下，放不下还是改成一栏
+    const ws = cols.map((c) => c.getBoundingClientRect().width);
+    const iLong = hs.indexOf(hi), iShort = hs.indexOf(lo);
+    // 钉住以后它贴着屏幕顶，能用的高比「这一层在板上露出来多高」多：按整屏减去底部那条算
+    const room = window.innerHeight - 28 - (bar?.height || 110);
+    const follow = uneven && cols.length === 2 && ws[iLong] >= ws[iShort] - 1 && lo <= room;
+    const stack = uneven && !follow;
     el.classList.toggle('is-stacked', stack);
+    el.classList.toggle('is-follow', follow);
+    cols.forEach((c, i) => c.classList.toggle('cv-follow', follow && i === iShort));
+    if (follow) el.dataset.cvFollow = String(iShort); else delete el.dataset.cvFollow;
     el.dataset.cvH = hs.map(Math.round).join('/');
     if (stack !== was) el._cvMuteUntil = performance.now() + 120;
   }
@@ -1236,7 +1249,9 @@ export async function renderClass(root, meta, desk = null) {
     const screen = window.innerHeight - top - (bar?.height || 110);
     const total = p.sec.hidden ? 0 : p.bodyEl.getBoundingClientRect().height;
     const info = (id) => { const x = segs.get(id); return { h: x?.sec && !x.sec.hidden ? x.sec.getBoundingClientRect().height : 0, held: !!x?.held }; };
-    return { text: layoutText({ cols, bands, info, widths, screen, total, stacked }) };
+    // 短的那栏钉在屏幕上的层（分栏照老师排的留着）
+    const follow = [...p.bodyEl.querySelectorAll(':scope > .cv-band')].map((el, i) => (el.classList.contains('is-follow') ? { i, col: Number(el.dataset.cvFollow) || 0, h: el.dataset.cvH || '' } : null)).filter(Boolean);
+    return { text: layoutText({ cols, bands, info, widths, screen, total, stacked, follow }) };
   }
 
   function saveSeg(seg) {

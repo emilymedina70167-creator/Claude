@@ -64,3 +64,9 @@ test('layoutText：页面因为两栏差太多改成一栏时告诉 Claude', () 
   const t = layoutText({ cols: [1, 1], bands, stacked: [{ i: 0, h: '300/1400' }] });
   assert.match(t, /这块板两栏差得太多（左栏 300、右栏 1400），页面改成了一栏：先左栏、再右栏/);
 });
+
+test('layoutText：两栏高矮差得多但分栏留着时，照实说短的那栏钉在屏幕上', () => {
+  const t = layoutText({ cols: [7, 5], bands: bandsOf([{ id: 'b1', col: 1 }, { id: 'b2', col: 2 }], [7, 5]), widths: [640, 440], screen: 700, total: 1200, follow: [{ i: 0, col: 1, h: '1200/420' }] });
+  assert.match(t, /两栏高矮差得多（左栏 1200、右栏 420）：分栏照你排的留着，短的右栏钉在屏幕上/);
+  assert.doesNotMatch(t, /改成了一栏/);
+});

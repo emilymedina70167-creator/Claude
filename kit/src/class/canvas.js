@@ -59,7 +59,8 @@ const COL_NAME = (i, n) => (n === 2 ? ['左栏', '右栏'][i] : n === 3 ? ['左�
  * bands：bandsOf 的结果；info(id) → { h（像素）, held, hidden }；widths：每栏大约多宽（像素）；screen：一屏能看多高；total：内容一共多高
  */
 // stacked：页面因为两栏差得太多改成了一栏的层 [{ i（第几层，从 0 数）, h（两栏原来多高，「300/1400」）}]
-export function layoutText({ cols = [1], bands = [], info = () => ({}), widths = [], screen = 0, total = 0, stacked = [] } = {}) {
+// follow：两栏高矮差得多、但页面照老师排的留着分栏的层 [{ i, col（短的是第几栏，从 0 数）, h }]：短的那栏钉在屏幕上跟着走
+export function layoutText({ cols = [1], bands = [], info = () => ({}), widths = [], screen = 0, total = 0, stacked = [], follow = [] } = {}) {
   const n = Array.isArray(cols) ? cols.length : 1;
   const lines = [];
   const seg = (id) => {
@@ -74,6 +75,7 @@ export function layoutText({ cols = [1], bands = [], info = () => ({}), widths =
     lines.push(`- ${head ? `${head}（分栏）：` : ''}${b.cols.map((c, k) => `${COL_NAME(k, b.cols.length)} ${c.map(seg).join(' → ') || '（空）'}`).join('；')}`);
   });
   for (const s of stacked) lines.push(`（${bands.length > 1 ? `第 ${s.i + 1} 层` : '这块板'}两栏差得太多${s.h ? `（${s.h.split('/').map((x, k) => `${COL_NAME(k, n)} ${x}`).join('、')}）` : ''}，页面改成了一栏：先左栏、再右栏。分栏只给两边都短、差不多高的东西；长的讲解、长句子、大段英文用一栏。）`);
+  for (const f of follow) lines.push(`（${bands.length > 1 ? `第 ${f.i + 1} 层` : '这块板'}两栏高矮差得多${f.h ? `（${f.h.split('/').map((x, k) => `${COL_NAME(k, n)} ${x}`).join('、')}）` : ''}：分栏照你排的留着，短的${COL_NAME(f.col, n)}钉在屏幕上，学生往下滑时它一直在旁边。）`);
   if (screen > 0 && total > 0) lines.push(total > screen + 24 ? `内容一共高约 ${Math.round(total)}，一屏能看约 ${Math.round(screen)}：学生要往下滑${total > screen * 1.6 ? '好几下' : '一下'}。` : `内容一共高约 ${Math.round(total)}，一屏放得下（约 ${Math.round(screen)}）。`);
   return lines.join('\n');
 }
