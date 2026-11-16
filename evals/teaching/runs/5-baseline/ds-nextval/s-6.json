@@ -1,0 +1,13 @@
+{
+ "say": "用 next：4→3→2→1，b 还要比 T[3]、T[2]、T[1] 三次，都失配，然后 j 到 0。用 nextval：nextval[4]=0，直接到 0，不用再比。",
+ "acts": [
+  {
+   "comp": "q-b5",
+   "value": "用 next 还要比 3 次（T[3]、T[2]、T[1]）；用 nextval 0 次，直接 j=0、主串指针后移。"
+  }
+ ],
+ "sure": {
+  "q-b5": true
+ },
+ "note": "第5块：匹配流程不变，失配时查 nextval。aaaab 对主串 aaabaaaab，第4个 b 失配后，用 next 还要多比3次(T[3]、T[2]、T[1])，用 nextval 0次，因为 nextval[4]=0 直接后移。"
+}

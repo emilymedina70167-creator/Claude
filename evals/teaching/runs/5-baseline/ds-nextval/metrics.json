@@ -1,0 +1,23 @@
+{
+ "run": "ds-nextval",
+ "scenario": "ds-nextval",
+ "plan": true,
+ "teacherTurns": 7,
+ "avgOutBytes": 1317,
+ "avgTalkChars": 115,
+ "planWrites": 1,
+ "boards": 5,
+ "turnsWithTask": 1,
+ "studentActs": 6,
+ "studentRight": 6,
+ "notes": 0,
+ "localTurns": 0,
+ "minutes": 16.1,
+ "firstProduceMin": 1.2,
+ "longestPassiveMin": 3.7,
+ "produceMin": 3.5,
+ "stops": 5,
+ "wastedStops": 0,
+ "charsPerMin": 217,
+ "endedBy": "student"
+}

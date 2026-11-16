@@ -1,0 +1,13 @@
+{
+ "say": "j=2、3、4 都是 a 跟前面的 a 相同，一路抄 0；j=5 是 b，跟 T[4]=a 不同，就是 next[5]=4。",
+ "acts": [
+  {
+   "comp": "q-b4",
+   "value": "0 0 0 0 4"
+  }
+ ],
+ "sure": {
+  "q-b4": true
+ },
+ "note": "第4块：公式：nextval[1]=0；k=next[j]，T[j]≠T[k] 则 nextval[j]=next[j]；T[j]=T[k] 则 nextval[j]=nextval[k]（抄已算好的 nextval）。aaaab 的 nextval = 0 0 0 0 4。"
+}

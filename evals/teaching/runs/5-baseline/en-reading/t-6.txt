@@ -1,0 +1,63 @@
+D 对，对象被换成了种树的花费。下面是最后一道 Q2。它是推断题，正确项的样子和 Q1 不一样，所以先讲推断题怎么判，再做 4 道。
+
+````board new id=b10 title="Q2：推断题怎么判"
+图例：$\chalk{pink}{\text{粉色 = 要背}}$，$\chalk{blue}{\text{蓝字 = 要理解}}$。
+
+这段要回答：题干里出现 imply（暗示）、suggest、infer 时，正确项长什么样，和「推得过头」的界线在哪。
+
+```key
+title: 重点：推断题的正确项
+1. 题干有 ==imply / suggest / infer==：正确项**不是**原句换个说法，而是把原句**没有明说、但一定成立**的那层意思说出来。
+2. 判断标准：$\chalk{blue}{\text{只靠原句本身就能得出，不用再添原文没有的前提}}$，就是合理推断；得再添一条原文没说的前提才成立，就是推得过头或无中生有。
+3. 定位时先认准**说话的人**：题干问谁的话，就只拿谁的那一句比。
+```
+
+```example
+title: 例（第 1 段）
+原文：street trees were … the first item to be cut when budgets grew tight.
+合理推断：Planners did not see trees as essential.（钱一紧最先砍掉，说明不被当成必需的，这一步只靠原句就能得出）
+推得过头：Planners disliked trees.（「讨厌」得再添一条前提：最先砍 = 讨厌，原文没有）
+```
+
+**第 3 段原文（后半）**
+
+Critics point out that such programmes are costly. Supporters reply that the true cost lies in doing nothing, since the price of a heatwave is paid in health, not in budgets.
+
+**Q2** The supporters' reply in the last paragraph implies that
+
+[A] tree-care programmes will soon pay for themselves.
+[B] city budgets should be spent on hospitals instead of trees.
+[C] the expense of inaction is real even if it does not appear in budgets.
+[D] heatwaves cost cities more money than tree programmes do.
+
+```gloss
+implies = 暗示；意味着
+pay for themselves = 收回成本
+inaction = 不作为；什么都不做
+expense = 代价；花费
+```
+
+```recognize
+id: rec-q2
+title: Q2 每个选项是怎么造出来的？（共 4 道，做完这节课就停）
+methods: 同义改写（对） | 合理推断（对） | 偷换 | 无中生有 | 意思相反 | 推得过头
+reason: true
+shuffle: false
+
+item: [A] tree-care programmes will soon pay for themselves.
+answer: 无中生有 | 推得过头
+why: 支持者只说「什么都不做才真正有代价」，没说这些项目会回本；「很快收回成本」原文里没有。
+
+item: [B] city budgets should be spent on hospitals instead of trees.
+answer: 偷换 | 无中生有
+why: health、budgets 是原词，但原文没有建议把钱花在医院上，是把原词拼成了一条新建议。
+
+item: [C] the expense of inaction is real even if it does not appear in budgets.
+answer: 合理推断（对） | 同义改写（对）
+why: the true cost lies in doing nothing → 什么都不做也有代价；paid in health, not in budgets → 这个代价不出现在预算里。只靠原句就能得出。
+
+item: [D] heatwaves cost cities more money than tree programmes do.
+answer: 偷换 | 意思相反
+why: heatwave、cost 是原词，但原文说热浪的代价付在健康上、不在预算上，选项偷换成了钱数上的比较。
+```
+````

@@ -1,0 +1,13 @@
+{
+ "say": "这六道我一起写了。第6道我不太确定，选项的词跟原文对不上。",
+ "acts": [
+  {
+   "comp": "rec-b4",
+   "value": "1. 同义改写（对）：原文有 measurable work，词对得上。2. 偷换：fewer visits 和 dense canopies 的关系倒过来了。3. 意思相反：原文说降温十度，选项说 little difference。4. 推得过头：原文是 fewer，选项说 eliminate。5. 无中生有：原文没提 cooling centres 和 cheaper。6. 无中生有：原文说 survival rates have risen，选项里的 helped more of them survive 原文没这么说。"
+  }
+ ],
+ "sure": {
+  "rec-b4": false
+ },
+ "note": "老师讲了错误项四种造法：偷换（对象/关系/说话的人）、无中生有、意思相反、推得过头；原词只用来定位，判对错要看意思。做了6道判断题。"
+}

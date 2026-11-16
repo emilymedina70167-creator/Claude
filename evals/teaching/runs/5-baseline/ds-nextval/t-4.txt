@@ -1,0 +1,44 @@
+不是碰巧，有一般规律；nextval 也确实是「next 改一下」，改哪几格由这个规律决定。看下面。
+
+````board new id=b3 title="什么时候白比，白比了怎么办"
+**这一块要回答：** 什么时候按 next 退了还是白比；白比了退到哪；nextval 跟 next 差在哪。
+
+**不是碰巧。** 在 T[j] 处失配时，我们手里只有一条信息：==主串这个字符 ≠ T[j]==。按 next 退到 k = next[j]，下一次拿它去比 T[k]，只有两种情况：
+
+| T[k] 和 T[j] | 这次比较 | abaabcac 里的例子 |
+|---|---|---|
+| **相同** | 一定失配，白比 | j = 5：T[5] = b，k = 2，T[2] = b |
+| **不同** | 结果不知道，必须比 | j = 6：T[6] = c，k = 3，T[3] = a。主串字符 ≠ c，但可能就是 a |
+
+**白比了就接着退**，直到不白比为止：
+
+1. 从 k = next[j] 开始，比 T[k] 和 T[j]
+2. 不同：停，答案就是 k
+3. 相同：这一格白比，令 k = next[k]，回到第 1 步；k 退到 0 就停，答案是 0（0 的意思和 next 里一样：主串指针后移一位，j 从 1 重新比）
+
+```derive
+id: d-b3
+title: 例：j = 5
+\text{从 } k=\text{next}[5]=2:\ T[2]=\mathrm b=T[5]   // 相同，白比，接着退
+\text{再退 } k=\text{next}[2]=1:\ T[1]=\mathrm a\ne \mathrm b   // 不同，停
+\text{nextval}[5]=1
+```
+
+```remember
+title: nextval 是什么
+==nextval[j]：在 j 处失配时，跳过所有白比的位置之后真正该退到的位置。== 和 next 一样长、从 next 算出来；只在 T[j] = T[next[j]] 的那几格和 next 不同。匹配过程完全不变，只是失配时查 nextval 不查 next。
+```
+
+```kmp
+id: q-b3
+title: 按上面的步骤写 nextval
+pattern: abaabcac
+show: nextval
+mode: quiz
+```
+````
+
+````board mark target=b3 li=1-3 style=brace color=yellow note="照着做"
+````
+
+这块就一题：按黄括号里的三步，把 abaabcac 的 nextval 全写出来（next 是 0 1 1 2 2 3 1 2）。

@@ -1,0 +1,73 @@
+这节课分三块：① 首部的整体样子和前三行（端口、序号、确认号）；② 第 4、5 行（数据偏移、控制位、窗口、校验和、紧急指针）；③ 选项，首部最长 60 字节怎么来，最后读一段十六进制首部。这是第一块，看完左边，在右边点「下一步」走一遍。
+
+````board plan
+目标：学生默写 5 行字段和位数、说出用途，由数据偏移推出 60/40，能读十六进制首部
+猜：确认号当成"收到的最后一个字节"（写 1199 而不是 1200）；序号当成"报文段编号"而不是字节编号
+证实：第二块开头出一道换数的题：给序号和数据长度，让学生写对方的确认号并说一句理由
+````
+
+````board new id=b1 title="首部的样子和前三行" cols=7/5
+**这块要回答：TCP 首部长什么样，前三行记的是什么。**
+
+TCP 报文段（segment）= 首部（header）+ 数据。首部的==前 20 字节是固定的==，习惯上按 32 位（4 字节）一行画，正好 5 行；后面还可以跟长度可变的选项。
+
+```sketch
+id: sk-hdr
+title: TCP 首部（按 32 位一行）
+width: 740
+height: 300
+<text x="336" y="14" text-anchor="middle" class="small">一行 32 位（4 字节）</text>
+<text x="80" y="34" class="small faint">0</text>
+<text x="336" y="34" text-anchor="middle" class="small faint">16</text>
+<text x="592" y="34" text-anchor="end" class="small faint">31</text>
+<rect x="80" y="40" width="256" height="40" class="blue fill"/>
+<rect x="336" y="40" width="256" height="40" class="blue fill"/>
+<text x="208" y="65" text-anchor="middle">源端口 16 位</text>
+<text x="464" y="65" text-anchor="middle">目的端口 16 位</text>
+<rect x="80" y="80" width="512" height="40" class="yellow fill"/>
+<text x="336" y="105" text-anchor="middle">序号 32 位</text>
+<rect x="80" y="120" width="512" height="40" class="yellow fill"/>
+<text x="336" y="145" text-anchor="middle">确认号 32 位</text>
+<rect x="80" y="160" width="64" height="40" class="faint"/>
+<rect x="144" y="160" width="96" height="40" class="faint"/>
+<rect x="240" y="160" width="96" height="40" class="faint"/>
+<rect x="336" y="160" width="256" height="40" class="faint"/>
+<text x="112" y="185" text-anchor="middle" class="small faint">数据偏移</text>
+<text x="192" y="185" text-anchor="middle" class="small faint">保留</text>
+<text x="288" y="185" text-anchor="middle" class="small faint">控制位</text>
+<text x="464" y="185" text-anchor="middle" class="small faint">窗口</text>
+<rect x="80" y="200" width="256" height="40" class="faint"/>
+<rect x="336" y="200" width="256" height="40" class="faint"/>
+<text x="208" y="225" text-anchor="middle" class="small faint">校验和</text>
+<text x="464" y="225" text-anchor="middle" class="small faint">紧急指针</text>
+<rect x="80" y="240" width="512" height="40" class="dashed faint"/>
+<text x="336" y="265" text-anchor="middle" class="small faint">选项（长度可变）+ 填充</text>
+<path d="M 604 42 Q 616 42 616 60 L 616 110 Q 616 120 626 120 Q 616 120 616 130 L 616 180 Q 616 198 604 198" class="thick"/>
+<text x="632" y="116">固定 20 字节</text>
+<text x="632" y="138" class="small">5 行 × 4 字节</text>
+<text x="40" y="225" text-anchor="middle" class="small faint">下一块</text>
+```
+
+**第 1 行：两个端口**　源端口（source port）、目的端口（destination port）各 16 位，指出是两台主机上的哪个应用进程在通信。16 位能表示 $0\sim\calc{2^16-1}$。
+
+**第 2 行：序号（sequence number），32 位**
+TCP 面向字节流：要发的数据，**每个字节**都编了号。
+==序号 = 本报文段所发送数据的第一个字节的编号==。
+例：这段装的是第 $1000\sim\calc{1000+200-1}$ 号字节，序号就是 $1000$。
+
+**第 3 行：确认号（acknowledgment number），32 位**
+==确认号 = 期望收到对方下一个报文段数据的第一个字节的编号==，只有 ACK = 1 时才有效（ACK 是第 4 行里的一个控制位，下一块讲）。
+例：B 收到了 $1000\sim\calc{1000+200-1}$，回给 A 的确认号是 $\calc{1000+200}$，意思是「$\calc{1000+200-1}$ 及以前都收到了，下一个要 $\calc{1000+200}$」。
+=={red}确认号写的是「下一个要的」，不是「收到的最后一个」==。
+````
+
+````board add id=b2 title="走一遍：序号和确认号" col=2
+A 先发一段 200 字节、再发一段 300 字节，第一段从第 1000 号字节开始。每点一次「下一步」，看这一段的序号是哪来的、B 回的确认号是哪来的。
+
+```tcp
+id: tcp-b2
+title: A 给 B 发两段数据
+seq: 1000
+lens: 200 300
+```
+````

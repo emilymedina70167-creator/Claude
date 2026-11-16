@@ -1,0 +1,13 @@
+{
+ "say": "next 是 0 1 1 2 2 3 1 2",
+ "acts": [
+  {
+   "comp": "q-next1",
+   "value": "0 1 1 2 2 3 1 2"
+  }
+ ],
+ "sure": {
+  "q-next1": true
+ },
+ "note": "第1块：写了 abaabcac 的 next = 0 1 1 2 2 3 1 2。"
+}

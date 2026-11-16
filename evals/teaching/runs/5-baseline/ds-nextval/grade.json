@@ -1,0 +1,24 @@
+{
+ "post": [
+  {
+   "id": "p1",
+   "score": 1
+  },
+  {
+   "id": "p2",
+   "score": 1
+  },
+  {
+   "id": "p3",
+   "score": 1
+  }
+ ],
+ "found": 5.4,
+ "targeted": 2,
+ "onlyGap": true,
+ "contentErrors": 0,
+ "verdictAgree": 1,
+ "skipped": null,
+ "overall": 4,
+ "why": "第3轮用 j=5（T[5]=T[2]=b）这一格设计了概念题，第5轮追问学生「怎么想的」，第6轮学生说出「是不是 next 改一下」；第7轮围绕「同字符必然白比」讲，并举了 j=5/j=6 的对比，第11轮又换 aaaab 让学生自己算，课后三题全对。扣分的地方：没有先让学生自己算 nextval，没看到他照抄 next 的错法就直接引导；第7、9轮把规则、链式推导和公式都讲了一遍，篇幅偏多。"
+}

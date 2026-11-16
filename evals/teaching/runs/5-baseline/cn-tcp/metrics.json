@@ -1,0 +1,23 @@
+{
+ "run": "cn-tcp",
+ "scenario": "cn-tcp",
+ "plan": true,
+ "teacherTurns": 9,
+ "avgOutBytes": 2293,
+ "avgTalkChars": 66,
+ "planWrites": 2,
+ "boards": 6,
+ "turnsWithTask": 4,
+ "studentActs": 6,
+ "studentRight": 6,
+ "notes": 0,
+ "localTurns": 0,
+ "minutes": 38.5,
+ "firstProduceMin": 9.2,
+ "longestPassiveMin": 12.7,
+ "produceMin": 11,
+ "stops": 7,
+ "wastedStops": 1,
+ "charsPerMin": 207,
+ "endedBy": "student"
+}

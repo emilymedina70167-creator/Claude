@@ -1,0 +1,65 @@
+2～5 题对了。第 1 题和第 6 题错，而且错在同一个地方：两题都是按词判的。第 1 题看到词对得上就判对，第 6 题看到词对不上就判无中生有。判对错要比的是意思，先看下面这两题的对照，再做 3 道新的，做完进入 Q1。
+
+````board new id=b5 title="比意思块，不比词" cols=1/1
+这段要回答：词对得上的选项为什么会错，词对不上的为什么会对。
+````
+
+````board add id=b6 title="第 1 题：词对得上，错" col=1
+| 原文 | 选项 |
+|---|---|
+| A growing body of research suggests … | City planners' own studies show … |
+| trees do measurable work | trees do measurable work |
+
+后半句一字不差，但**说这话的人**换了：原文里说「树有实际作用」的是研究；规划者几十年来恰恰把树当装饰品。这是偷换说话的人。
+````
+
+````board add id=b7 title="第 6 题：词对不上，对" col=2
+| 原文 | 选项 |
+|---|---|
+| pay local residents | paying residents |
+| look after | care for |
+| newly planted trees | young trees |
+| survival rates have risen | more of them survive |
+
+每一块都能一一对上，意思一样，只是换了说法，所以是同义改写。无中生有说的是**原文里找不到这条信息**，不是**原文里找不到这几个词**。
+````
+
+````board add id=b8 title="再判 3 道" col=all
+```key
+title: 重点
+把原句和选项**切成意思块**（谁、做什么、对谁、多少、谁说的），一块一块对：$\chalk{blue}{\text{块块意思都对得上，就算对；有一块变了，就是错。词一样不一样，不作数。}}$
+```
+
+**要用到的原文**
+
+第 1 段：For decades, city planners treated street trees as decoration … A growing body of research suggests that trees do measurable work.
+
+第 2 段：Simply planting more saplings will not close that gap. … nearly a third die within their first five years when no one is responsible for them.
+
+```recognize
+id: rec-b8
+title: 这个选项是怎么造出来的？（共 3 道）
+methods: 同义改写（对） | 偷换 | 无中生有 | 意思相反 | 推得过头
+reason: true
+shuffle: true
+
+item: Adding young trees by itself won't even out tree cover between rich and poor areas.
+answer: 同义改写（对）
+why: simply planting more saplings → adding young trees by itself；will not close that gap → won't even out tree cover between rich and poor areas。
+
+item: Research has long treated street trees as decoration.
+answer: 偷换
+why: 偷换了说话的人：把树当装饰品的是 city planners，研究说的正相反。
+
+item: Most young trees fail to survive their early years when left uncared for.
+answer: 推得过头
+why: 原文是 nearly a third（将近三分之一），选项说 most（大多数），程度升了级。
+```
+````
+
+````board memo
+weakness title="按词面重合判选项对错：词对得上就判对，词对不上就判无中生有" scope=阅读选项判断 level=L0 basis=rec-b4
+error q="rec-b4 第 1、6 题" mine="1 判同义改写（理由：词对得上）；6 判无中生有（理由：词对不上）" step="比选项和原句" cause="按词面重合判对错，没有按意思块对照" basis=rec-b4
+````
+
+每道选一个造法，再写一句是哪一块变了，或者哪几块对上了。

@@ -1,0 +1,13 @@
+{
+ "say": "这回我是一块一块对的。",
+ "acts": [
+  {
+   "comp": "rec-b8",
+   "value": "1. 同义改写（对）：Simply planting more saplings 对 adding young trees by itself，not close that gap 对 won't even out 富区和穷区的树木覆盖差距，每块意思都对得上。2. 偷换：把树当装饰的是 city planners，选项换成了 research，说话的人变了。3. 推得过头：原文是 nearly a third die，选项说 most fail，程度从三分之一升成了大多数。"
+  }
+ ],
+ "sure": {
+  "rec-b8": true
+ },
+ "note": "老师讲了：判对错要把原句和选项切成意思块（谁、做什么、对谁、多少、谁说的）逐块对，不看词一不一样。词对得上也可能是偷换（如 research 换成 city planners）；词对不上但块块意思一致就是同义改写。无中生有是原文找不到这条信息，不是找不到这几个词。"
+}

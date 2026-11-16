@@ -1,0 +1,16 @@
+对：用 next 时 b 依次撞 T[3]、T[2]、T[1]，三次全是白比；nextval[4] = 0，主串直接后移。两张表的演示放在下面，想对照可以点着走。
+
+到这里这节课的三块都讲完了。按你在板上的作答，你现在能做的是：给一个模式串，手算 next 和 nextval（王道口径）；说出 T[j] = T[next[j]] 时为什么那一次比较必然失配、为什么可以直接抄 nextval[next[j]]；匹配时用 nextval 代替 next 来退 j。下次课前用一个新模式串复现一题 nextval。
+
+````board show id=b6
+````
+
+````board react target=q-b5
+````
+
+````board memo
+recall q="nextval[j] 怎么由 next 算（王道口径，k = next[j]）" a="nextval[1] = 0；T[j] ≠ T[k] 时 nextval[j] = next[j]；T[j] = T[k] 时 nextval[j] = nextval[k]（抄前面已算好的 nextval，不是 next）"
+recall q="为什么 T[j] = T[next[j]] 时按 next 退的那次比较一定失配" a="失配说明主串字符 ≠ T[j]；T[next[j]] 和 T[j] 是同一个字符，所以主串字符也 ≠ T[next[j]]，这次比较是白比"
+review title="KMP next / nextval" family=串的模式匹配 content="手算 next、nextval（王道口径，从 1 数）；相等时为什么退到 nextval[k]；匹配时失配后 j 退到 nextval[j]" basis=q-next1,q-b3,q-b4,q-b5
+position next="KMP nextval 讲完；下次课前复现一题：换一个新模式串（如 ababaaab）求 next 和 nextval，并问一处相等格为什么抄 nextval[k]"
+````

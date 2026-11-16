@@ -1,0 +1,21 @@
+{
+ "arm": "baseline",
+ "at": "2026-11-16T07:34:31.278Z",
+ "rows": [
+  {
+   "id": "cn-tcp",
+   "near": 3,
+   "nearOf": 3,
+   "far": 1,
+   "farOf": 1,
+   "minutes": 38.5,
+   "wastedStops": 1,
+   "firstProduceMin": 9.2,
+   "longestPassiveMin": 12.7,
+   "produceMin": 11,
+   "endedBy": "student",
+   "overall": 4,
+   "costUsd": 1.487188
+  }
+ ]
+}

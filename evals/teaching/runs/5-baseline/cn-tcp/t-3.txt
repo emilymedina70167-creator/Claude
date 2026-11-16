@@ -1,0 +1,89 @@
+确认号、序号这两个定义你用得对。第二块讲第 4、5 行里的控制位、窗口、校验和、紧急指针；第 4 行开头的数据偏移和保留，跟选项、首部最长多少是一件事，挪到第三块一起讲。
+
+````board plan
+目标：学生默写 5 行字段和位数、说出用途，由数据偏移推出 60/40，能读十六进制首部
+猜：窗口当成"自己能发多少"（方向反了）；URG=0 时仍按紧急指针读
+证实：b5 多选题：URG=0 带紧急指针、窗口方向两个干扰项分开两种想法
+````
+
+````board new id=b4 title="控制位和第 5 行" cols=6/6
+**这块要回答：第 4 行的六个控制位、窗口，和第 5 行的校验和、紧急指针，各管什么。**
+
+```sketch
+id: sk-row45
+title: 第 4、5 行（上面一排是控制位放大）
+width: 740
+height: 190
+<rect x="96" y="20" width="72" height="36" class="pink fill"/>
+<rect x="168" y="20" width="72" height="36" class="pink fill"/>
+<rect x="240" y="20" width="72" height="36" class="pink fill"/>
+<rect x="312" y="20" width="72" height="36" class="pink fill"/>
+<rect x="384" y="20" width="72" height="36" class="pink fill"/>
+<rect x="456" y="20" width="72" height="36" class="pink fill"/>
+<text x="132" y="43" text-anchor="middle">URG</text>
+<text x="204" y="43" text-anchor="middle">ACK</text>
+<text x="276" y="43" text-anchor="middle">PSH</text>
+<text x="348" y="43" text-anchor="middle">RST</text>
+<text x="420" y="43" text-anchor="middle">SYN</text>
+<text x="492" y="43" text-anchor="middle">FIN</text>
+<text x="540" y="43" class="small">各 1 位</text>
+<line x1="240" y1="100" x2="96" y2="56" class="dashed faint"/>
+<line x1="336" y1="100" x2="528" y2="56" class="dashed faint"/>
+<rect x="80" y="100" width="64" height="40" class="faint"/>
+<rect x="144" y="100" width="96" height="40" class="faint"/>
+<rect x="240" y="100" width="96" height="40" class="pink fill"/>
+<rect x="336" y="100" width="256" height="40" class="blue fill"/>
+<text x="112" y="125" text-anchor="middle" class="small faint">数据偏移</text>
+<text x="192" y="125" text-anchor="middle" class="small faint">保留</text>
+<text x="288" y="125" text-anchor="middle" class="small">控制位 6</text>
+<text x="464" y="125" text-anchor="middle">窗口 16 位</text>
+<rect x="80" y="140" width="256" height="40" class="yellow fill"/>
+<rect x="336" y="140" width="256" height="40" class="yellow fill"/>
+<text x="208" y="165" text-anchor="middle">校验和 16 位</text>
+<text x="464" y="165" text-anchor="middle">紧急指针 16 位</text>
+<text x="604" y="125" class="small">第 4 行</text>
+<text x="604" y="165" class="small">第 5 行</text>
+<text x="40" y="125" text-anchor="middle" class="small faint">第三块</text>
+```
+````
+
+````board add id=b5 title="六个控制位" col=1
+控制位各占 1 位，置 1 才表示下面这件事：
+
+```remember
+title: 六个控制位（按首部里从左到右的顺序）
+| 位 | 置 1 表示 |
+|---|---|
+| URG（urgent） | 紧急指针字段有效 |
+| ACK（acknowledgment） | 确认号字段有效；连接建立以后的报文段都置 1 |
+| PSH（push） | 接收方尽快交付给应用进程 |
+| RST（reset） | 连接出了严重差错，要释放连接、再重新建立 |
+| SYN（synchronize） | 建立连接时，用来同步序号 |
+| FIN（finish） | 数据发完了，要求释放连接 |
+```
+
+注意前两个：URG、ACK 不是自己干一件事，而是==给某个字段「开开关」==：URG = 0，紧急指针写着什么都不算数；ACK = 0，确认号写着什么都不算数。
+````
+
+````board add id=b6 title="窗口、校验和、紧急指针" col=2
+**窗口（window），16 位**
+发这一段的一方，把**自己的接收窗口**写进来，告诉对方：现在允许你给我发多少字节。
+=={red}写的是「我还能收多少」，不是「我还能发多少」==。
+
+**校验和（checksum），16 位**
+首部和数据**一起**检验。计算时要在前面加上 12 字节的伪首部（pseudo header）一起算。伪首部里装的是什么，不在这节的范围。
+
+**紧急指针（urgent pointer），16 位**
+只有 URG = 1 时才有效，指出紧急数据有多少字节；紧急数据放在数据部分的最前面。
+
+```quiz
+id: q-b6
+q: A 收到 B 发来的一段，首部里写着：URG = 0，ACK = 1，确认号 = 1200，窗口 = 500，紧急指针 = 30。下面哪些是 A 应该得出的？（多选）
+- [x] B 已经收到了 A 发的 1199 号及以前的字节
+- [ ] 这段数据最前面 30 字节是紧急数据
+- [x] B 现在允许 A 给它发 500 字节
+- [ ] B 自己现在最多还能给 A 发 500 字节
+- [ ] 校验和只检验首部，数据错了要靠别的办法发现
+explain: ACK = 1，确认号 1200 有效：1199 及以前收到了。URG = 0，紧急指针的 30 不算数。窗口写的是 B 自己的接收窗口，管的是 A 能发多少。校验和首部和数据一起检验。
+```
+````

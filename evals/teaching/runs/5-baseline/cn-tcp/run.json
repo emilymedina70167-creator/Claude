@@ -1,0 +1,302 @@
+{
+ "ok": true,
+ "paused": false,
+ "failed": false,
+ "scenario": "cn-tcp",
+ "scenarioFile": "/home/user/Claude/evals/teaching/scenarios/cn-tcp.json",
+ "opts": {
+  "system": "/home/user/Claude/evals/teaching/baseline/cn-tcp.system.md",
+  "memory": null,
+  "fake": null,
+  "cli": "claude"
+ },
+ "models": {
+  "teacher": "claude-opus-5-5",
+  "student": "claude-sonnet-5-5",
+  "grader": "claude-opus-5-5"
+ },
+ "phase": "done",
+ "next": "teacher",
+ "teacherTurns": 9,
+ "studentTurns": 9,
+ "studentFallbacks": 0,
+ "sessions": {
+  "teacher": {
+   "session": "955d0fd7-8204-4655-bb9e-cc4a8e2b60ce",
+   "cwd": "/tmp/teach-teacher-2fA7Rc",
+   "total": 1.1219352
+  },
+  "student": {
+   "session": "9cc78cbf-1f57-4b0e-a055-4aafba057aee",
+   "cwd": "/tmp/teach-student-Uy9gxF",
+   "total": 0.0998141
+  },
+  "posttest": {
+   "session": null,
+   "cwd": "/tmp/teach-posttest-npwQik",
+   "total": 0
+  },
+  "grader": {
+   "session": null,
+   "cwd": "/tmp/teach-grader-fr7ipR",
+   "total": 0
+  }
+ },
+ "calls": [
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 64350,
+   "cost": 0.430064,
+   "total": 0.430064,
+   "session": "8c6fb701-69dc-4dd4-8416-640339b91e4e"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 3525,
+   "cost": 0.016504,
+   "total": 0.016504,
+   "session": "b79451d7-2941-463f-b7ba-414fe692cee4"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 21277,
+   "cost": 0.09207739999999998,
+   "total": 0.5221414,
+   "session": "054e9d1c-1ec0-4348-9224-27b35bf76314"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 2840,
+   "cost": 0.0125818,
+   "total": 0.029085800000000002,
+   "session": "9ac98ae6-8a7c-4fa4-a561-e7c62bef0898"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 58528,
+   "cost": 0.141868,
+   "total": 0.6640094,
+   "session": "47a6f9b1-0f20-4f5d-a8b4-5c706453524e"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 3950,
+   "cost": 0.013568299999999998,
+   "total": 0.0426541,
+   "session": "2ec80afb-c8ac-4454-a087-8b1c539d153e"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 23398,
+   "cost": 0.10473319999999997,
+   "total": 0.7687425999999999,
+   "session": "5c77b713-5924-4925-adb5-3b6e429b5b5b"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 4794,
+   "cost": 0.009783199999999999,
+   "total": 0.0524373,
+   "session": "78eadf0f-ebd6-499f-992d-b30e01b61775"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 53285,
+   "cost": 0.12687020000000004,
+   "total": 0.8956128,
+   "session": "1a1da1fa-79f1-4727-833d-a04cbf7dcc8a"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 2674,
+   "cost": 0.008063899999999999,
+   "total": 0.0605012,
+   "session": "66e0bd72-cde0-4e69-bcbd-733a69ebb0de"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 5121,
+   "cost": 0.060824600000000006,
+   "total": 0.9564374,
+   "session": "bc4411cf-df22-4417-b723-5e283c066a8f"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 5369,
+   "cost": 0.011227999999999995,
+   "total": 0.07172919999999999,
+   "session": "b942e11a-d282-4e81-b1b3-2035fc020d96"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 5622,
+   "cost": 0.027552200000000027,
+   "total": 0.9839896,
+   "session": "047b4b04-1298-407d-9c30-e7ff9a95078e"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 2658,
+   "cost": 0.009729700000000008,
+   "total": 0.0814589,
+   "session": "928f8903-83a2-40e7-8388-236068288eb7"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 18572,
+   "cost": 0.05544479999999996,
+   "total": 1.0394344,
+   "session": "2005167a-95ee-4e9e-8942-b41392cfe070"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 5149,
+   "cost": 0.011152599999999999,
+   "total": 0.0926115,
+   "session": "60dcc992-4d44-4264-856d-70342a77495a"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 22186,
+   "cost": 0.08250080000000004,
+   "total": 1.1219352,
+   "session": "955d0fd7-8204-4655-bb9e-cc4a8e2b60ce"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 1992,
+   "cost": 0.0072026000000000034,
+   "total": 0.0998141,
+   "session": "9cc78cbf-1f57-4b0e-a055-4aafba057aee"
+  },
+  {
+   "role": "posttest",
+   "ok": true,
+   "ms": 12255,
+   "cost": 0.025202000000000002,
+   "total": 0.025202000000000002,
+   "session": "b8ef3d8d-1f42-4541-9fc7-f52cf5cc82cb"
+  },
+  {
+   "role": "grader",
+   "ok": true,
+   "ms": 13387,
+   "cost": 0.240236,
+   "total": 0.240236,
+   "session": "044ed539-018c-4fca-8924-359513f1956c"
+  }
+ ],
+ "costUsd": 1.487188,
+ "timeline": [
+  {
+   "who": "teacher",
+   "seq": 1,
+   "min": 6.8
+  },
+  {
+   "who": "student",
+   "seq": 2,
+   "min": 7.8
+  },
+  {
+   "who": "teacher",
+   "seq": 3,
+   "min": 8.2
+  },
+  {
+   "who": "student",
+   "seq": 4,
+   "min": 9.7
+  },
+  {
+   "who": "teacher",
+   "seq": 5,
+   "min": 16.4
+  },
+  {
+   "who": "student",
+   "seq": 6,
+   "min": 17.5
+  },
+  {
+   "who": "teacher",
+   "seq": 7,
+   "min": 19.4
+  },
+  {
+   "who": "student",
+   "seq": 8,
+   "min": 20.4
+  },
+  {
+   "who": "teacher",
+   "seq": 9,
+   "min": 22.1
+  },
+  {
+   "who": "student",
+   "seq": 10,
+   "min": 22.9
+  },
+  {
+   "who": "teacher",
+   "seq": 11,
+   "min": 23.2
+  },
+  {
+   "who": "student",
+   "seq": 12,
+   "min": 25.2
+  },
+  {
+   "who": "teacher",
+   "seq": 13,
+   "min": 25.4
+  },
+  {
+   "who": "student",
+   "seq": 14,
+   "min": 26.9
+  },
+  {
+   "who": "teacher",
+   "seq": 15,
+   "min": 28.7
+  },
+  {
+   "who": "student",
+   "seq": 16,
+   "min": 36.8
+  },
+  {
+   "who": "teacher",
+   "seq": 17,
+   "min": 38.3
+  },
+  {
+   "who": "student",
+   "seq": 18,
+   "min": 38.5
+  }
+ ],
+ "startedAt": "2026-11-16T07:28:57.244Z",
+ "ms": 334002
+}

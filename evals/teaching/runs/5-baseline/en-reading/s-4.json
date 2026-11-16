@@ -1,0 +1,13 @@
+{
+ "say": "定位到第2句 largely because trees were planted where residents could afford to maintain them，拿这句比。",
+ "acts": [
+  {
+   "comp": "rec-q1",
+   "value": "A. 无中生有：原文说树种在养得起的地方，没说穷人不愿意种树，这条原因原文里没有。B. 同义改写（对）：were planted where residents could afford to maintain them 对 were placed where their upkeep could be paid for，种在哪、为什么，每块意思都对得上。C. 无中生有：原文没比较富区和穷区的树死得快不快，只说没人负责的幼树死得多。D. 偷换：twice 原文说的是富区的树木覆盖是穷区的两倍，选项把它换成了种树成本的两倍，对象变了。"
+  }
+ ],
+ "sure": {
+  "rec-q1": true
+ },
+ "note": "Q1 做法：先用题干定位词找到答题那一句（largely because...），再拿这一句把每个选项切块比。B 是同义改写（planted where could afford to maintain = placed where upkeep could be paid）；D 是偷换（twice 原指树木覆盖，被换成种树成本）；A、C 原文无此信息。"
+}

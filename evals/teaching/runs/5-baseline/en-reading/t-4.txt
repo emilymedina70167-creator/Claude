@@ -1,0 +1,50 @@
+3 道都对，每道都是按意思块对出来的。下面做 Q1：4 个选项一共 4 道，每个选项判一个造法，再写一句理由。做完这道接着做 Q2，Q2 做完这节课就停。
+
+````board new id=b9 title="Q1：逐个选项说理由"
+这段要回答：一道真题四个选项摆在一起时，怎么定位、怎么一块一块地比。
+
+**第 2 段原文**
+
+Yet the benefits are unevenly shared. In many cities, wealthier districts have twice as much tree cover as poorer ones, largely because trees were planted where residents could afford to maintain them. Simply planting more saplings will not close that gap. Young trees need years of watering and care before they provide much shade, and nearly a third die within their first five years when no one is responsible for them.
+
+**Q1** According to Paragraph 2, the gap in tree cover between districts exists mainly because
+
+[A] poorer residents are unwilling to plant trees.
+[B] trees were placed where their upkeep could be paid for.
+[C] young trees die faster in wealthier districts.
+[D] planting saplings costs twice as much in poorer areas.
+
+```gloss
+upkeep = 养护（及其费用）
+wealthier = 更富裕的
+```
+
+```key
+title: 重点：照着第一块板的三步做
+先抓题干的定位词，回第 2 段找到答题的那一句；每个选项都拿**这一句**切块比，理由里写出变的是哪一块，或者哪几块对上了。
+```
+
+```recognize
+id: rec-q1
+title: Q1 每个选项是怎么造出来的？（共 4 道）
+methods: 同义改写（对） | 偷换 | 无中生有 | 意思相反 | 推得过头
+reason: true
+shuffle: false
+
+item: [A] poorer residents are unwilling to plant trees.
+answer: 无中生有 | 偷换
+why: 原文说的是树种在居民「负担得起养护」的地方，讲的是钱够不够，没说穷人不愿意种。「不愿意」这条信息原文里没有。
+
+item: [B] trees were placed where their upkeep could be paid for.
+answer: 同义改写（对）
+why: 定位句：largely because trees were planted where residents could afford to maintain them。were planted → were placed，maintain → upkeep，could afford → could be paid for，块块对得上。
+
+item: [C] young trees die faster in wealthier districts.
+answer: 偷换 | 无中生有
+why: young trees、die 都是原词，但原文说的是「没人负责时，将近三分之一在头五年死掉」，没拿富区和穷区比死亡快慢，比较的对象换掉了。
+
+item: [D] planting saplings costs twice as much in poorer areas.
+answer: 偷换 | 无中生有
+why: twice 是原词，但原文的两倍说的是富区的树木覆盖率是穷区的两倍，不是种树苗的花费是两倍，对象被偷换了。
+```
+````

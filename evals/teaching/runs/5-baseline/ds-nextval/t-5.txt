@@ -1,0 +1,35 @@
+对，0 1 0 2 1 3 0 2。下面把你走的那条链缩成一步查表，这就是王道写的公式。
+
+````board new id=b4 title="链缩成一步：公式"
+**这一块要回答：** 相等时不用一格格往前退，为什么直接抄 nextval[next[j]] 就行。
+
+设 k = next[j]，且 T[j] = T[k]。你接着退的那条链，每一步都在「拿 T[j] 去比」：
+
+```derive
+id: d-b4
+title: 为什么等于 nextval[k]
+\text{从 } j \text{ 往前退：比 } T[j] \text{ 和 } T[\text{next}[k]],\ T[\text{next}[\text{next}[k]]],\ \dots   // 你刚才走的链
+T[j]=T[k] \Rightarrow \text{每一步换成 “比 } T[k]\text{” 结果一样}   // 字符相同，比谁都一样
+\text{这正是从 } k \text{ 往前退算 nextval}[k] \text{ 的那条链}   // 同一条链
+\text{nextval}[j]=\text{nextval}[k]   // 从左往右算，nextval[k] 已经算好了
+```
+
+例：abaabcac 的 j = 7，T[7] = a，k = next[7] = 1，T[1] = a 相同，所以 nextval[7] = nextval[1] = 0，一步查到，不用再走链。
+
+```remember
+title: nextval 的算法（王道）
+nextval[1] = 0；j 从 2 往右，设 k = next[j]：
+- ==T[j] ≠ T[k]：nextval[j] = next[j]==
+- ==T[j] = T[k]：nextval[j] = nextval[k]==（抄前面已经算好的 nextval，不是 next）
+```
+
+```kmp
+id: q-b4
+title: 求 aaaab 的 nextval
+pattern: aaaab
+show: nextval
+mode: quiz
+```
+````
+
+这块一题：用公式写 aaaab 的 nextval（它的 next 是 0 1 2 3 4）。做完这块，最后一块把 nextval 放到匹配里走一遍就收。

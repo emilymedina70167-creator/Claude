@@ -1,0 +1,25 @@
+这节课分三块：先确认 next 还记得，再讲 nextval 怎么来、为什么要那样比，最后用 aaaab 练一道、放到匹配上走一遍，走完就停。先写一个 next。
+
+````board plan
+目标：学生手算 abaabcac、aaaab 的 nextval，说清为什么 T[j]=T[next[j]] 时要继续往前退，并用到匹配上
+猜：next 可能忘了 +1，或者把前后缀取到了 T[1..j] 而不是 T[1..j−1]
+证实：b1 用 kmp quiz 写 abaabcac 的 next（答案 0 1 1 2 2 3 1 2），看页面的错法诊断；对了第二块直接讲 nextval
+````
+
+````board new id=b1 title="先确认 next"
+**这节课要回答：** next 已经能用来匹配了，nextval 改进的是什么、怎么从 next 算出来。
+
+<small>这节课三块：① 确认 next（这一块，就 1 题）　② nextval 的规则和来由（用 abaabcac）　③ aaaab 练一题 + 放到匹配里走一遍，走完就停</small>
+
+口径照王道：位置**从 1 数**，==next[1] = 0==。
+
+```kmp
+id: q-next1
+title: 写出 next 数组
+pattern: abaabcac
+show: next
+mode: quiz
+```
+````
+
+按你记得的算法写出 8 个数就行，这块只有这一题。

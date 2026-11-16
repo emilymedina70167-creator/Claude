@@ -1,0 +1,65 @@
+先说你那个习惯：用原词去原文里**找到那一句**，这样做没问题；但用「词一样」来**判断选项对不对**就不行了，因为出题人造错误项最常用的手法，恰恰就是把原词照搬过来、再把意思改掉。所以原词只能用来定位，判对错要看意思。这块板讲错误项的四种造法，最后有 6 道判断题，做完这 6 道就进入 Q1。
+
+````board new id=b4 title="错误项的四种造法"
+图例：$\chalk{pink}{\text{粉色 = 要背}}$，$\chalk{blue}{\text{蓝字 = 要理解}}$。
+
+```key
+title: 重点：错误项的四种造法（这节课的完整清单）
+| 造法 | 长什么样 | 怎么查 |
+|---|---|---|
+| **偷换** | 原词几乎都在，但其中一样被换掉了：**对象**（说的是 A，换成了 B）、**关系**（因果倒过来、条件和结果对调、比较的两样换了）、**说话的人**（研究说的变成某个群体说的；批评者的话安到支持者头上） | 逐块对照原句：谁、做什么、对谁、谁说的 |
+| **无中生有** | 选项里有一条原文根本没提到的信息：新的比较、新的原因、新的建议 | 回原句找这条信息，找不到就排除 |
+| **意思相反** | 方向反了：多 ↔ 少，升 ↔ 降，有用 ↔ 没用，加了或去掉了 not | 看动词、比较词、否定词 |
+| **推得过头** | 方向对，程度升了级：fewer → none，some → all，can → always，may → will | 看程度词、范围词 |
+```
+
+```remember
+title: 要背
+四种造法：==偷换（对象 / 关系 / 说话的人）==、==无中生有==、==意思相反==、==推得过头==
+```
+
+```warning
+title: 易错
+原词只用来**定位**那一句，不能当成选项「有出处」的证据。$\chalk{blue}{\text{词一样、意思变了，是偷换最典型的样子。}}$
+```
+
+**下面 6 道要用到的原文**
+
+第 1 段：For decades, city planners treated street trees as decoration … A growing body of research suggests that trees do measurable work. A mature tree can lower the surface temperature of the pavement beneath it by more than ten degrees, and neighbourhoods with dense canopies record fewer heat-related hospital visits during summer heatwaves.
+
+第 3 段：Some cities have therefore begun to pay local residents to look after newly planted trees. Early results are encouraging: survival rates have risen …
+
+```recognize
+id: rec-b4
+title: 这个选项是怎么造出来的？（共 6 道）
+methods: 同义改写（对） | 偷换 | 无中生有 | 意思相反 | 推得过头
+reason: true
+shuffle: true
+
+item: City planners' own studies show that trees do measurable work.
+answer: 偷换
+why: 偷换了说话的人：原文是 research suggests，规划者几十年来恰恰把树当装饰品。
+
+item: Neighbourhoods that record fewer heat-related hospital visits tend to grow dense canopies.
+answer: 偷换
+why: 偷换了关系：原文是「树冠密的街区，住院少」，选项倒过来成了「住院少的街区，树冠才密」。
+
+item: Street trees make little difference to how hot the pavement gets.
+answer: 意思相反
+why: 原文说能让路面降温十度以上，选项说几乎没影响，方向反了。
+
+item: Dense canopies can eliminate heat-related hospital visits during heatwaves.
+answer: 推得过头
+why: 原文是 fewer（更少），选项变成 eliminate（完全消除），程度升了级。
+
+item: Planting street trees is cheaper than building cooling centres.
+answer: 无中生有
+why: 原文没有拿种树和建降温中心比过价钱。
+
+item: Paying residents to care for young trees has helped more of them survive.
+answer: 同义改写（对）
+why: pay local residents to look after newly planted trees → paying residents to care for young trees；survival rates have risen → more of them survive。
+```
+````
+
+每道选一个造法，再写一句是哪一处变了。

@@ -1,0 +1,237 @@
+{
+ "ok": true,
+ "paused": false,
+ "failed": false,
+ "scenario": "en-reading",
+ "scenarioFile": "/home/user/Claude/evals/teaching/scenarios/en-reading.json",
+ "opts": {
+  "system": "/home/user/Claude/evals/teaching/baseline/en-reading.system.md",
+  "memory": null,
+  "fake": null,
+  "cli": "claude"
+ },
+ "models": {
+  "teacher": "claude-opus-5-5",
+  "student": "claude-sonnet-5-5",
+  "grader": "claude-opus-5-5"
+ },
+ "phase": "done",
+ "next": "student",
+ "teacherTurns": 7,
+ "studentTurns": 6,
+ "studentFallbacks": 0,
+ "sessions": {
+  "teacher": {
+   "session": "e71001ed-dd63-4088-82a0-1c3a75820182",
+   "cwd": "/tmp/teach-teacher-1qUrVX",
+   "total": 0.9636856
+  },
+  "student": {
+   "session": "5fb9bd99-64f9-41c7-8a51-0ac63eaccd4e",
+   "cwd": "/tmp/teach-student-aKGyDJ",
+   "total": 0.0698706
+  },
+  "posttest": {
+   "session": null,
+   "cwd": "/tmp/teach-posttest-grVQPy",
+   "total": 0
+  },
+  "grader": {
+   "session": null,
+   "cwd": "/tmp/teach-grader-Hjgzi5",
+   "total": 0
+  }
+ },
+ "calls": [
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 59805,
+   "cost": 0.406852,
+   "total": 0.406852,
+   "session": "5fbb6134-5417-40e6-9b81-3c0b9b42ee6e"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 2688,
+   "cost": 0.014338,
+   "total": 0.014338,
+   "session": "1db42691-4025-4698-a2c1-89e6f87301a5"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 38236,
+   "cost": 0.12306260000000002,
+   "total": 0.5299146,
+   "session": "e0d81718-8101-479b-b7a4-f03b9799af3f"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 7453,
+   "cost": 0.0145424,
+   "total": 0.0288804,
+   "session": "95df31e5-7d6a-4000-b39f-ce7b7d6d6905"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 38413,
+   "cost": 0.1038886,
+   "total": 0.6338032,
+   "session": "c4b4728d-d26a-4170-856d-087fd492a719"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 5126,
+   "cost": 0.011607,
+   "total": 0.0404874,
+   "session": "a2b4499e-1195-4968-a657-9f279c7a67f5"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 33977,
+   "cost": 0.1042438,
+   "total": 0.738047,
+   "session": "e6277097-7b34-4680-9c59-63a61ea3fc56"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 4783,
+   "cost": 0.009697500000000005,
+   "total": 0.050184900000000005,
+   "session": "44fffdc1-ec11-40e4-82c0-66e0fb04ac39"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 9170,
+   "cost": 0.059899000000000036,
+   "total": 0.797946,
+   "session": "9a8db3ac-788c-4307-8c89-9b25ae5c5fc5"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 2103,
+   "cost": 0.006766300000000003,
+   "total": 0.05695120000000001,
+   "session": "c52511fd-0254-43d3-aecd-940c82e19ca8"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 24985,
+   "cost": 0.0713416,
+   "total": 0.8692876,
+   "session": "97c68fc6-cd66-43ba-b9dd-1abdf3c637cf"
+  },
+  {
+   "role": "student",
+   "ok": true,
+   "ms": 6627,
+   "cost": 0.012919399999999998,
+   "total": 0.0698706,
+   "session": "5fb9bd99-64f9-41c7-8a51-0ac63eaccd4e"
+  },
+  {
+   "role": "teacher",
+   "ok": true,
+   "ms": 28560,
+   "cost": 0.09439799999999998,
+   "total": 0.9636856,
+   "session": "e71001ed-dd63-4088-82a0-1c3a75820182"
+  },
+  {
+   "role": "posttest",
+   "ok": true,
+   "ms": 11249,
+   "cost": 0.021912,
+   "total": 0.021912,
+   "session": "04828157-f3e0-4222-be9a-d8b634928cfa"
+  },
+  {
+   "role": "grader",
+   "ok": true,
+   "ms": 19377,
+   "cost": 0.220912,
+   "total": 0.220912,
+   "session": "973a538e-e23a-45a3-a09e-f912bb378e0c"
+  }
+ ],
+ "costUsd": 1.276381,
+ "timeline": [
+  {
+   "who": "teacher",
+   "seq": 1,
+   "min": 6.1
+  },
+  {
+   "who": "student",
+   "seq": 2,
+   "min": 6.7
+  },
+  {
+   "who": "teacher",
+   "seq": 3,
+   "min": 11.1
+  },
+  {
+   "who": "student",
+   "seq": 4,
+   "min": 15.3
+  },
+  {
+   "who": "teacher",
+   "seq": 5,
+   "min": 18.6
+  },
+  {
+   "who": "student",
+   "seq": 6,
+   "min": 22.3
+  },
+  {
+   "who": "teacher",
+   "seq": 7,
+   "min": 25.4
+  },
+  {
+   "who": "student",
+   "seq": 8,
+   "min": 30.6
+  },
+  {
+   "who": "teacher",
+   "seq": 9,
+   "min": 30.9
+  },
+  {
+   "who": "student",
+   "seq": 10,
+   "min": 31.6
+  },
+  {
+   "who": "teacher",
+   "seq": 11,
+   "min": 35.4
+  },
+  {
+   "who": "student",
+   "seq": 12,
+   "min": 39.9
+  },
+  {
+   "who": "teacher",
+   "seq": 13,
+   "min": 42.1
+  }
+ ],
+ "startedAt": "2026-11-16T07:37:11.500Z",
+ "ms": 294784
+}

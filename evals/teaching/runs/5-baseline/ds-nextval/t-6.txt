@@ -1,0 +1,51 @@
+对，0 0 0 0 4。最后一块：nextval 放进匹配里，到底省了什么。
+
+````board new id=b5 title="nextval 用在匹配上"
+**这一块要回答：** 匹配时把 next 换成 nextval，过程哪里变了、省下了什么。
+
+**流程一点没变**，只换了失配时查的那张表：
+
+1. 主串字符 = T[j]：i、j 都加 1
+2. 不等：==i 不动，j 退到 nextval[j]==（原来是 next[j]），再拿同一个主串字符比
+3. j 退到 0：i、j 都加 1（主串指针后移，模式串从头比）
+
+**例子：** 模式串 aaaab（next = 0 1 2 3 4，nextval = 0 0 0 0 4），主串 aaabaaaab。前 3 个 a 对上，主串第 4 个字符 **b** 和 T[4] = a 失配。
+
+```answer
+id: q-b5
+title: 同一个 b 还要比几次
+q: 主串第 4 个字符 b 和 T[4] 失配之后，到主串指针后移之前，这个 b 还要再和模式串比较几次？分别写用 next 时、用 nextval 时的次数。
+answer: [3, 0]
+before: (\text{用 next},\ \text{用 nextval}) =
+```
+````
+
+````board add id=b6 hold title="两张表对着走一遍"
+左边按 next 走、下面按 nextval 走，看 b 失配后的那几步。
+
+```kmp
+id: fig-b6a
+title: 用 next 匹配
+pattern: aaaab
+text: aaabaaaab
+show: match
+```
+
+```kmp
+id: fig-b6b
+title: 用 nextval 匹配
+pattern: aaaab
+text: aaabaaaab
+show: match
+use: nextval
+```
+````
+
+````board react target=q-b5
+right show=b6: 对。用 next 时 b 依次撞 T[3]、T[2]、T[1] 三个 a，全是白比；nextval[4] = 0 直接让主串后移。下面两个演示可以对着走一遍看。
+````
+
+````board mark target=b5 li=1-3 style=brace color=yellow note="匹配流程"
+````
+
+这块一题，填两个数。

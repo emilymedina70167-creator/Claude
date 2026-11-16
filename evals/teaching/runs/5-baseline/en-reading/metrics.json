@@ -1,0 +1,23 @@
+{
+ "run": "en-reading",
+ "scenario": "en-reading",
+ "plan": true,
+ "teacherTurns": 7,
+ "avgOutBytes": 3028,
+ "avgTalkChars": 122,
+ "planWrites": 1,
+ "boards": 6,
+ "turnsWithTask": 4,
+ "studentActs": 0,
+ "studentRight": 0,
+ "notes": 0,
+ "localTurns": 0,
+ "minutes": 42.1,
+ "firstProduceMin": 11.3,
+ "longestPassiveMin": 11.3,
+ "produceMin": 16,
+ "stops": 4,
+ "wastedStops": 0,
+ "charsPerMin": 212,
+ "endedBy": "time"
+}
