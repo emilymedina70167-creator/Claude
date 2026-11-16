@@ -14,7 +14,7 @@ import { validateExam } from '../exam/schema.js';
 import { validateAide, AIDE_COLLECTIONS } from '../aide/schema.js';
 
 // 这几种失败重试也没用
-const PERMANENT = new Set(['invalid_argument', 'permission_denied', 'not_granted', 'revoked', 'quota_exceeded', 'not_found', 'failed_precondition']);
+export const PERMANENT = new Set(['invalid_argument', 'permission_denied', 'not_granted', 'revoked', 'quota_exceeded', 'not_found', 'failed_precondition']);
 export const RETRY_WAITS = [800, 2000];
 
 /**

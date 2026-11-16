@@ -22,7 +22,7 @@ import { receiptLine } from './lab.js';
 import { getStore, getDownloads } from '../live/store.js';
 import { VERSION, KIT_URL } from '../version.js';
 import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toDate } from './schema.js';
-import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, classForm, idleClose } from './session.js';
+import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, TEACH_KINDS, classForm, idleClose } from './session.js';
 import { buildReport, reportLine, REPORT_VERSION, lastActivity, reportText } from './report.js';
 import { needsDebrief, transcriptText, debriefTraps, debriefPrompt, parseDebrief, debriefText, debriefView, DEBRIEF_VERSION } from './debrief.js';
 import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA, EXAM_BACKUP, AIDE_BACKUP } from './backup.js';
@@ -71,7 +71,8 @@ import { createDevAI } from '../books/devmock.js';
 import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
 import { scrubBooks, readReserve, reserveYears } from '../exam/reserve.js';
-import { createExamInbox, refreshBars } from '../exam/examdesk.js';
+import { createExamInbox, refreshBars, startClassInbox, classInboxWait } from '../exam/examdesk.js';
+import { inboxRow } from '../exam/inbox.js';
 import { loadExamCourse, courseOfBlock } from '../exam/load.js';
 import { examIndexOf } from '../exam/fields.js';
 import { blockQuestions } from '../exam/block.js';
@@ -158,6 +159,7 @@ export async function renderDesk(root, meta) {
     <div class="dk-exampage" hidden></div>
     <div class="dk-chatpage" hidden></div>
     <div class="dk-home">
+    <div class="dk-examinbox" hidden aria-live="polite"></div>
     <div class="dk-col">
     <section class="dk-card dk-class" hidden aria-label="上课" data-menu="hero"><div class="dk-body"></div></section>
     <div class="dk-days-slot"></div>
@@ -229,7 +231,24 @@ export async function renderDesk(root, meta) {
   // 考试资料的收件箱（exam/examdesk.js）：开发那边切好的真卷、考点树、标签，页面查过再并进去（只在首页挂，课堂里不挂）
   // 首页的考情缓存（meta/exam：计数、每门课的热度、每块平均每年几分）：410 分的权重、考情页读它，首页不读考试资料的整类
   let examMeta = null;
-  const examInbox = createExamInbox({ db, curriculum: () => data.curriculum });
+  // 首页那一行（paintExamInbox）：收件箱还在并、有没并进去的才出现（整份不收的从回执里现取，刷新以后、别的设备并的也列）。
+  // 2026-11-15 第一份开始并 3 秒以后就进了课堂（推断），37 份只并进了第一份，学生什么都看不到；现在课堂里也接着并（enterClass 的 startClassInbox），
+  // 见 docs/superpowers/specs/2026-11-15-root-rulings.md
+  // 先声明再挂：真数据库的订阅要是同步回调，第一次重画就碰上还没声明的变量
+  let examInboxSig = '';
+  const examInbox = createExamInbox({ db, curriculum: () => data.curriculum, onChange: () => paintExamInbox() });
+  function paintExamInbox() {
+    const box = $('.dk-examinbox');
+    if (!box) return;
+    const r = inboxRow(examInbox.progress());
+    const sig = JSON.stringify(r);
+    if (sig === examInboxSig) return; // 没变不重画（点开的列表别被冲掉）
+    examInboxSig = sig;
+    box.hidden = !r;
+    if (!r) { box.innerHTML = ''; return; }
+    const open = box.querySelector('details')?.open;
+    box.innerHTML = `${r.pending ? `<p class="dk-exin-left"><span class="dk-exin-dot" aria-hidden="true"></span>${escapeHtml(r.pending)}</p>` : ''}${r.head ? `<details class="dk-exin-bad"${open ? ' open' : ''}><summary>${escapeHtml(r.head)}<span class="muted">（点开看是哪几份）</span></summary><ul>${r.failed.map((f) => `<li><b>${escapeHtml(f.name)}</b>：${escapeHtml(f.why)}</li>`).join('')}</ul><p class="muted">原因也记在出错记录里，开发那边改好会重新放进来。</p></details>` : ''}`;
+  }
   const examPage = createExamPage($('.dk-exampage'), { db, getData: () => data, getMeta: () => examMeta, getBoard: () => scoreBoard(data, { today: toDate(Date.now()), exam: examMeta?.blockPerYear, usable: examMeta?.blockUsable }), space: () => space });
   db.doc('meta/exam').onSnapshot((s) => { examMeta = s.exists ? s.data() : null; paintScore(); if (!$('.dk-exampage').hidden) examPage.refresh(); }, () => {});
   const examCard = createExamCard($('.dk-exam .dk-body'), { db, getData: () => data, assets: store.assets });
@@ -633,6 +652,7 @@ export async function renderDesk(root, meta) {
     paintWeek(today);
     paintRecall(today);
     paintRows(today);
+    paintExamInbox();
     if (daysBody?.isConnected) fillDays(daysBody); // 开着的「距考研」面板：天数、这一周跟着换
     paintScore(today);
     const total = Object.values(res.counts).reduce((a, b) => a + b, 0);
@@ -1861,6 +1881,10 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     },
   }) : null;
   const leave = (to) => { said?.flush(); goto(to); };
+  // 考试资料的收件箱在课堂里接着并（exam/examdesk.js 的 startClassInbox）：学生的习惯是打开首页就进课堂，只在首页并等不到并完。
+  // 开课 30 秒以后、一次一份、一批 5 条，不重算统计（回到首页补）、不画东西；只读翻看、练一练、实时黑板、自学单元不开（前面已经 return）。
+  // 用首页那一层出口（guardDb）写：考试资料不是课堂讲课那一边的数据。不在调用模型的路上，也不往说明里加东西
+  if (!readOnly && TEACH_KINDS.includes(kind)) startClassInbox({ db: guardDb(db), wait: classInboxWait(location.search, store.dev) });
   // 舞台课（kind: stage，docs/stage-plan.md D 段）：整屏一块舞台，自己的控制器；记忆、教材、证据、报告照旧
   if (kind === 'stage') {
     // 课堂助手（aide/，第九轮）：这一块附近的学生卡、这一科的课前档案（各 3 秒读不到当没有，不等）；

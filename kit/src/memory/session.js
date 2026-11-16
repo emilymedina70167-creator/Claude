@@ -120,7 +120,8 @@ const newId = () => Date.now().toString(36) + '-' + Math.random().toString(36).s
 /**
  * 一条作答（sync.js 的 toAnswer 出来的）或一个动作（events 那样的）→ evidence 里的一条。
  * 组件的 id 原来叫 block（作答记录里），在证据里改叫 comp：evidence 的 block 是课程地图的块。
- * ctx：{ session, block（这节课的块）, point（这一段练的知识点，可选）, turn（这时课堂进行到第几轮：最近一轮的 seq，报告和时间线按它对齐课堂记录）}
+ * ctx：{ session, block（这节课的块）, point（这一段练的知识点，可选）, aim（这一段的题是给这节课要拿下的哪件事用的，可选）,
+ * turn（这时课堂进行到第几轮：最近一轮的 seq，报告和时间线按它对齐课堂记录）}
  */
 export function toEvidence(src, rec, ctx = {}) {
   const { id: _, block: comp, ...rest } = rec || {};
@@ -134,6 +135,8 @@ export function toEvidence(src, rec, ctx = {}) {
     session: ctx.session || null,
     block: ctx.block || null,
     tags: evidenceTags(ctx),
+    // 挂到这节课要拿下的哪件事上（class/aims.js）。单独一个字段，不进 tags：掌握、预测分按 tags 算，不能被它搅
+    ...(ctx.aim ? { aim: String(ctx.aim) } : {}),
     ...turnOf(ctx),
     at: rec?.at || Date.now(),
   };

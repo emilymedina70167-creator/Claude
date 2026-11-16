@@ -136,7 +136,7 @@ test('课堂：没把握的动作告诉课堂 Claude；答对了却没把握马�
   assert.equal(actionTrigger(a), 'soon');
   assert.equal(actionTrigger({ ...a, sure: true }), 'later');
   assert.equal(actionTrigger({ ...a, ok: false }), 'later');
-  assert.match(actionText(a), /b3 里的组件 q1：学生标了「没把握」——这题答对了.*红线 5/);
+  assert.match(actionText(a), /b3 里的组件 q1：学生标了「没把握」——这题答对了.*没把握按没会处理/);
   assert.match(actionText({ ...a, sure: true, ok: false }), /有把握.*误解/);
 });
 

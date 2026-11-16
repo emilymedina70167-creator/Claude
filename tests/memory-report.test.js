@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { buildReport, itemKey, activeTime, tagSummary, fitReport, reportLine, IDLE_GAP, REPORT_MAX } = await import('../kit/src/memory/report.js');
+const { buildReport, itemKey, activeTime, tagSummary, fitReport, reportLine, reportText, IDLE_GAP, REPORT_MAX } = await import('../kit/src/memory/report.js');
 const { backupFile, restoreBatches, backupProblem, backupName, BACKUP_FORMAT } = await import('../kit/src/memory/backup.js');
 const { usageOf, callCost, usageText, tokenText, approxTokens } = await import('../kit/src/class/usage.js');
 const { toEvidence, draftEvidence, manualEvidence, SESSION_SCOPED } = await import('../kit/src/memory/session.js');
@@ -89,6 +89,23 @@ test('课后报告：每道题的尝试序列、结果、所在的段和板、�
   assert.equal(r.totals.first, 2);
   // 每条题都能找回证据原文
   assert.deepEqual(tr.evidence, ['ev-r1', 'ev-r2', 'ev-r3']);
+});
+
+test('课后报告：没有要拿下的事的课（旧课按新版本重算）只多一个空的 aims，题上不多 aim 这个键', () => {
+  const r = buildReport({ session: sessionDoc, evidence: lesson(), turns, steps, now: min(46) });
+  assert.equal(r.v, 2);
+  assert.deepEqual(r.aims, []);
+  assert.ok(r.items.every((it) => !('aim' in it)));
+  assert.doesNotMatch(reportText(r), /要拿下的事/);
+  // 这节课定了要拿下的事、题挂上去以后：别的字段一个不变（tags、byTag 不被 aim 搅）
+  const aims = [{ id: 'a1', can: '求一个秩一方阵的迹' }, { id: 'a2', can: '写出秩一方阵的 n 次幂' }];
+  const hung = lesson().map((e) => (e.comp === 'q-b2' ? { ...e, aim: 'a1' } : e.comp === 'ex-b4' ? { ...e, aim: 'a2' } : e));
+  const r2 = buildReport({ session: { ...sessionDoc, aims }, evidence: hung, turns, steps, now: min(46) });
+  // 求迹改了一次才对：带着做到；例题第 1 步一次对，第 2 步想不出来：最后是失手，做了没到（分步的一步本来也只算带着）
+  assert.deepEqual(r2.aims.map((a) => [a.id, a.status, a.n]), [['a1', 'led', 1], ['a2', 'miss', 2]]);
+  assert.deepEqual(r2.items.filter((it) => it.aim === 'a2').map((it) => it.kind), ['steps', 'steps']);
+  assert.deepEqual({ ...r2, aims: [], items: r2.items.map(({ aim: _, ...it }) => it) }, r);
+  assert.match(reportText(r2), /这节课要拿下的事[^\n]*\n- a1（带着做到，1 道题）：求一个秩一方阵的迹\n- a2（做了没到，2 道题）/);
 });
 
 test('课后报告：按块、按知识点汇总；说的话、附的图、草稿、观察、失误、花费', () => {
