@@ -1,7 +1,7 @@
 // 隔天用没见过的题验：只挑合规的新题，结果按第一次作答算。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HOLD_MAX, HOLD_DAY, HOLD_LATE, needsHolds, pickHolds, holdBrief, holdDocs, holdState, laterOf } from '../kit/src/memory/holds.js';
+import { HOLD_MAX, HOLD_DAY, HOLD_LATE, needsHolds, pickHolds, holdBrief, holdDocs, holdState, laterOf, laterBrief } from '../kit/src/memory/holds.js';
 import { parseProblems } from '../kit/src/memory/lab.js';
 import { COLLECTIONS } from '../kit/src/memory/schema.js';
 import { createDevAI } from '../kit/src/books/devmock.js';
@@ -68,4 +68,29 @@ test('隔天验哪几件：现在的加上课上被换掉的，有作答的在�
   assert.equal(new Set(got.map((a) => a.id)).size, 4);
   // 没换过的课：就是现在的那几件
   assert.deepEqual(holdAims({ aims: [{ id: 'a1', can: '甲' }] }).map((a) => a.id), ['a1']);
+});
+
+test('隔天验按要拿下的事分开数，只认这节课自己出的留题', () => {
+  const ids = ['h1', 'h2', 'h3', 'x'];
+  const drills = [{ id: 'h1', hold: s.id, aim: 'a1' }, { id: 'h2', hold: s.id, aim: 'a1' }, { id: 'h3', hold: s.id, aim: 'a2' }, { id: 'x', aim: 'a2' }];
+  const rows = [{ id: 'h1', outcome: 'first' }, { id: 'h2', outcome: 'ok' }, { id: 'h3', outcome: 'first' }, { id: 'x', outcome: 'wrong' }];
+  const later = laterOf(rows, { session: { ...s, holds: { ids } }, drills, today: '2026-11-17' });
+  assert.deepEqual(later.aims, { a1: { n: 2, right: 1 }, a2: { n: 1, right: 1 } });
+  assert.equal(later.n, 4); assert.equal(later.right, 2);
+});
+test('给下一节老师的隔天验：验完逐件写、没做完照实说、没留题不写', () => {
+  const later = { n: 3, right: 1, days: 1, far: { n: 0, right: 0 }, aims: { a1: { n: 2, right: 0 }, a2: { n: 1, right: 1 } } };
+  const text = laterBrief({ ...s, holds: { ids: ['h1', 'h2', 'h3'] }, later });
+  assert.match(text, /隔 1 天做没见过的题：3 道对 1 道/);
+  assert.match(text, /手算排序的一趟：2 道对 0 道/);
+  assert.match(text, /辨认排序的稳定性：1 道对 1 道/);
+  assert.doesNotMatch(text, /[他她]/);
+  assert.match(laterBrief({ ...s, holds: { ids: ['h1', 'h2'] } }), /留了 2 道.*还没做完/);
+  assert.equal(laterBrief(s), '');
+  // 以前存的结果没有按件分：只写总数
+  assert.equal(laterBrief({ ...s, holds: { ids: ['h1'] }, later: { n: 1, right: 1, days: 2, far: { n: 0 } } }).split('\n').length, 1);
+});
+test('课上被换掉的事（p1）也认得出名字', () => {
+  const t = laterBrief({ ...s, aimsPast: [{ id: 'a1', can: '被换掉的那件' }], holds: { ids: ['h'] }, later: { n: 1, right: 0, days: 1, aims: { p1: { n: 1, right: 0 } } } });
+  assert.match(t, /被换掉的那件：1 道对 0 道/);
 });

@@ -41,6 +41,7 @@ import { checkAims, mergeAims, aimsSummary, aimsLine, STATUS_TEXT } from './aims
 import { shouldScroll } from './quiet.js';
 import { debriefText } from '../memory/debrief.js';
 import { earlierClasses } from '../memory/digest.js';
+import { laterBrief } from '../memory/holds.js';
 import { choose } from '../dialog.js';
 import { lessonSheet, sheetMd } from '../memory/sheet.js';
 import { blockSwitch, closingExtras, knowNotes } from '../memory/memo.js';
@@ -420,6 +421,7 @@ export async function renderClass(root, meta, desk = null) {
       x.report ? `- 课后报告：\n${String(x.report).slice(0, 3000)}` : '',
       // 下课后的复盘（debrief.js）：误解消了没有、这节开头先测什么
       x.debrief ? `- 下课后的复盘（教研员通读整节课写的）：\n${x.debrief}` : '',
+      x.later ? `- 隔天验（页面按学生的作答算的）：${x.later}` : '',
     ].filter(Boolean).join('\n')).join('\n\n');
   })().catch((e) => console.warn('以前的课没取到', e)) : Promise.resolve());
   if (desk && !readOnly) setTimeout(fetchEarlier, 2000);
@@ -2502,6 +2504,8 @@ export async function renderClass(root, meta, desk = null) {
         summary: obs.find((o) => o.kind === 'summary')?.text, notes: obs.filter((o) => o.kind !== 'summary').map((o) => `${o.kind}：${o.text}`).slice(0, 12),
         report: rep ? reportText(rep).slice(0, 6000) : doc.report?.line || '（这节课还没有课后报告）',
         ...(doc.debrief ? { debrief: debriefText(doc.debrief) } : {}),
+        // 隔天验（holds.js）：下课那一刻的状态之外，最硬的一条证据——隔一天、没见过的题
+        ...(laterBrief(doc) ? { later: laterBrief(doc) } : {}),
       });
     }
     return { collection: 'sessions', items: out };
