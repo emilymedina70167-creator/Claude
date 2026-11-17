@@ -1818,8 +1818,6 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), books, prevRead,
     // 这一门课的考试资料（和舞台课一样：不等它，课堂读到了再用）；examFor：课上换到另一门课时再按那门课读一次
     exam: examLoad, reserve: examYears, examFor: kind === 'class' ? loadExam : null,
-    // 后方复查（sentry.js）首页算好的：下课整理时带给课堂 Claude 判断（只在下课那一次用，上课的每一轮不带）
-    recheck: await within(db.doc('meta/workorder').get().then((s) => (s.exists ? s.data().recheck || {} : {})), 3000, {}).catch(() => ({})),
     // 这节课换过的块（刷新以后接着换，前面换过的不丢）
     ...(Array.isArray(doc.blocks) && doc.blocks.length ? { blocks: doc.blocks.map(String) } : {}),
     writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),
