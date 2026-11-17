@@ -82,3 +82,13 @@ test('工具：read 按路径读一条、list 按字段筛、search 在对话里
   assert.deepEqual([nb.path, nb.by], ['学生/408.md', 'head']);
   assert.deepEqual(used.map((u) => u.name), ['read', 'read', 'list', 'search', 'notebook']);
 });
+
+test('回的不是 Opus 5.5：这一轮作废，用 write 改的也撤回去（写回改之前的样子）', async () => {
+  const t = await setup(async (_turns, opts) => {
+    await opts.tools.find((x) => x.name === 'write').execute({ op: 'set', path: 'meta/today', data: { date: '2026-11-18', items: [] } });
+    return { text: '排好了', modelApplied: 'claude-sonnet-5-5' };
+  });
+  const r = await t.head.send(null, '帮我排一下今天');
+  assert.match(r.error, /作废/);
+  assert.equal((await t.db.doc('meta/today').get()).exists, false);
+});

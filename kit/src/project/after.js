@@ -18,7 +18,8 @@ export function needsAfter(s, { since } = {}) {
   if (!s || !isClass(s) || s.status !== 'closed' || s.deleting) return false;
   if (!Number.isFinite(since) || !(Number(s.endedAt) > since)) return false;
   const a = s.after || {};
-  if (a.at) return !!a.cont && (Number(a.rounds) || 1) < AFTER_ROUNDS;
+  // 续轮也算次数：续轮没成的一样试满 AFTER_FAILS 次就停（成了 fails 清零）
+  if (a.at) return !!a.cont && (Number(a.rounds) || 1) < AFTER_ROUNDS && (Number(a.fails) || 0) < AFTER_FAILS;
   return (Number(a.fails) || 0) < AFTER_FAILS;
 }
 

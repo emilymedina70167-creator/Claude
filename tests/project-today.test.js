@@ -54,6 +54,9 @@ test('复现组写了 due 就按它算到期，没写照档位算', () => {
   assert.equal(reviewDue(r, '2026-11-20').state, 'today');
   assert.equal(reviewDue({ ...r, due: undefined }, '2026-11-19').state, 'overdue');
   assert.ok(reviewDue({ ...r, due: '11月20' }, '2026-11-19').error);
+  // 到了它写的日子做过了（页面记了更新的 last）：due 用过了，下一次按档位算
+  assert.equal(reviewDue({ id: 'R3', tier: 3, last: '2026-11-20', due: '2026-11-20' }, '2026-11-21').state, 'later');
+  assert.equal(reviewDue({ id: 'R3', tier: 3, last: '2026-11-20', due: '2026-11-20' }, '2026-11-21').due, '2026-11-23');
 });
 
 test('masteryCalc：按作答算出参考，原来的 mastery 一条不动', () => {
@@ -93,4 +96,12 @@ test('往题库写题：页面先验一遍，不过的照写但标 broken（练�
   const good = await w.execute({ op: 'update', path: 'drills/d-1', data: { md: '```answer\n好\n```' } });
   assert.ok(!good.broken);
   assert.equal(db.docs.get('drills/d-1').broken, undefined, '改好了 broken 去掉');
+});
+
+test('开 Claude 排的那一块的课：备好的资料包是别的块的就不用', async () => {
+  const { packForBlock } = await import('../kit/src/project/today.js');
+  const pack = { main: { block: 'L3.1.1', unit: '秩' }, problems: { items: [] } };
+  assert.equal(packForBlock(pack, 'L3.1.1'), pack);
+  assert.deepEqual(packForBlock(pack, 'L2.1.1'), { main: null, problems: null });
+  assert.equal(packForBlock(pack, ''), pack, '没指定块（主角卡的「开新课」）照旧用');
 });

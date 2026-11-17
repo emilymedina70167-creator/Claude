@@ -2,7 +2,7 @@
 // 笔记本能看能写。工具的说明只写它做什么、读一次要多一轮（事实），不写该什么时候用。
 import { searchDocs } from './search.js';
 import { notebookDir, notePath } from './notebook.js';
-import { journalId } from './journal.js';
+import { journalId, undoJournal } from './journal.js';
 import { validateWrite } from '../memory/writer.js';
 import { problemLint } from '../memory/problemcheck.js';
 
@@ -131,7 +131,8 @@ export function projectTools({ db, getData = () => ({}), getBooks = () => null, 
     async execute(input) {
       const op = String(input?.op ?? '');
       const path = okPath(input?.path, true);
-      used.push({ name: 'write', input: { op, path: String(input?.path ?? '') } });
+      const mark = { name: 'write', input: { op, path: String(input?.path ?? '') } };
+      used.push(mark);
       if (!path) throw new Error('path 要是「类/编号」这样成对的路径，比如 meta/today');
       const ref = db.doc(path);
       const snap = await ref.get();
@@ -159,12 +160,31 @@ export function projectTools({ db, getData = () => ({}), getBooks = () => null, 
       }
       if (after === null) await ref.delete(); else await ref.set(after);
       const at = Date.now();
-      await db.doc(`journal/${journalId(at)}`).set({ at, by, path, op, before, after });
+      const jid = journalId(at);
+      await db.doc(`journal/${jid}`).set({ at, by, path, op, before, after });
+      mark.journal = jid;
       const problems = [...(after ? validateWrite(path, after) : []), ...drillErrs];
       return { ok: true, path, ...(drillErrs.length ? { broken: true } : {}), ...(problems.length ? { problems } : {}) };
     },
   });
   return tools;
+}
+
+/**
+ * 这一轮作废了（回的不是 Opus 5.5、出了错）：这一轮用 write 改的，从后往前照 journal 撤回去，撤的那一次也记一条（by: page）
+ */
+export async function undoWrites(db, used = [], { now = () => Date.now() } = {}) {
+  for (const u of [...used].reverse()) {
+    if (u?.name !== 'write' || !u.journal) continue;
+    const j = await db.doc(`journal/${u.journal}`).get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
+    const back = undoJournal(j);
+    if (!back) continue;
+    const cur = await db.doc(back.path).get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
+    if (back.op === 'delete') await db.doc(back.path).delete(); else await db.doc(back.path).set(back.data);
+    const at = now();
+    await db.doc(`journal/${journalId(at)}`).set({ at, by: 'page', path: back.path, op: `undo-${j.op}`, before: cur, after: back.op === 'delete' ? null : back.data, note: '这一轮作废，撤回' });
+    await db.doc(`journal/${u.journal}`).set({ ...j, undid: at });
+  }
 }
 
 /** 工具的说明写成一段（放进说明的「工具」一节）：每个一行，名字和它做什么 */

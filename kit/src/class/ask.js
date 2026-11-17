@@ -93,7 +93,7 @@ export function markHint(spot) {
 export function askMessage(spot, kind, extra = '') {
   const k = ASK_KINDS[kind] || ASK_KINDS.why;
   const hint = markHint(spot);
-  return `[指着问] ${spotText(spot)}——${k.say}${extra ? ` ${extra}` : ''}${hint ? `（要指着讲，可以 ${hint}）` : ''}`;
+  return `[指着问] ${spotText(spot)}——${k.say}${extra ? ` ${extra}` : ''}${hint ? `（那一处的标法：${hint}）` : ''}`;
 }
 
 /** 页面当场显示了预写的「为什么」：跟着下一条一起告诉 Claude（不单独调用） */

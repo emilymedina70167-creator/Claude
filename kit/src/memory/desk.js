@@ -33,7 +33,7 @@ import { createMemOps } from './memops.js';
 import { createMemoView } from './memoview.js';
 import { resolvedErrors, voidedIds, activeLessons, pendingTitle } from './memo.js';
 import { createPages } from './pages.js';
-import { reviewPack, deskBrief, briefId, todayReviews, reviewIdsOf, REVIEW_MAX, plainTitle } from './views.js';
+import { reviewPack, deskBrief, briefId, todayReviews, reviewIdsOf, plainTitle } from './views.js';
 import { readOnlyDb } from './session.js';
 import { SPACES, SPACE_KEYS, DEFAULT_SPACE, filterSpace, spaceOfDoc, spaceOfId, subjectOf, positionId, packIds, prefixOf } from './space.js';
 import { dueList, addDays } from './schema.js';
@@ -47,7 +47,7 @@ import { installNju } from './nju.js';
 import { runRecall } from './recallrun.js';
 import { purgePlan, purgeText } from './purge.js';
 import { vocabRecalls } from './vocab.js';
-import { weekLines, progress, warmupDrills, backlogDays, daysLeft, msToNextDay } from './journey.js';
+import { weekLines, progress, warmupDrills, daysLeft, msToNextDay } from './journey.js';
 import { scoreBoard, fmt as fmtScore, signed, SUBJECTS as SCORE_SUBJECTS } from './score.js';
 import { forecastBoard } from '../forecast/forecast.js';
 import { headSystem } from '../head/context.js';
@@ -57,7 +57,7 @@ import { createProjectView } from '../project/notebookview.js';
 import { catalogText } from '../project/catalog.js';
 import { toolsDoc } from '../project/tools.js';
 import { createNotebook } from '../project/notebookdesk.js';
-import { todayRows } from '../project/today.js';
+import { todayRows, packForBlock } from '../project/today.js';
 import { renderCheck } from './problemrender.js';
 import { createAfter } from '../project/afterdesk.js';
 import { needsAfter, needsOrganize } from '../project/after.js';
@@ -171,7 +171,7 @@ export async function renderDesk(root, meta) {
     <div class="dk-drawer" hidden>
     <div class="dk-part dk-later" hidden><h2 class="dk-h">验上次学的</h2><div class="dk-body"></div></div>
     <div class="dk-part dk-today" hidden><h2 class="dk-h">复现</h2><div class="dk-body"></div></div>
-    <div class="dk-part dk-next" hidden><h2 class="dk-h">下一步学什么</h2><p class="dk-sub muted">按 410 分里每一块还能攒多少分排，页面算的。</p><div class="dk-body"></div></div>
+    <div class="dk-part dk-next" hidden><h2 class="dk-h">每块还能攒几分</h2><p class="dk-sub muted">按 410 分里每一块还能攒多少分排，页面算的。</p><div class="dk-body"></div></div>
     <div class="dk-part dk-recall" hidden><h2 class="dk-h">要记的</h2><p class="dk-sub muted">先写出来，再看答案。隔 1、3、7、14、30 天各想一遍。</p><div class="dk-body"></div><details class="dk-fold dk-radd"><summary><span class="muted">自己加一条</span></summary><div class="dk-radd-f"></div></details></div>
     <div class="dk-part dk-drill" hidden><h2 class="dk-h">练一练</h2><p class="dk-sub muted">Claude 从题库里挑的题，页面判分，不调用 Claude。</p><div class="dk-body"></div></div>
     <div class="dk-part dk-manual" hidden><details class="dk-fold"><summary><h2 class="dk-h">补记</h2><span class="muted">在学习台外面做的题，写一句或贴张图</span></summary><div class="dk-body"></div><div class="dk-mlist"></div></details></div>
@@ -657,20 +657,20 @@ export async function renderDesk(root, meta) {
     const dues = dueList(mine.reviews, today);
     const soon = dues.filter((d) => d.days > 0).slice(0, 3);
     // 今天复现（views.js 的 todayReviews）：不分科，每门课一行——在学英语时也看得到线代积压了几组。
-    // 一次只开一门课的（课堂按门课带组件说明和教法），按我的规则（rule-pre-2）先挑最该做的 REVIEW_MAX 组，其余排队不丢
-    const groups = todayReviews(data, { today }).sort((a, b) => (b.space === space) - (a.space === space) || b.total - a.total);
+    // 一次只开一门课的（课堂按门课带组件说明和教法）。第十四轮：页面不替 Claude 挑「先做哪 3 组」，到期的全列出来，
+    // 每组能单开；要排先后由项目 Claude 写进 meta/today（首页最上面那几行）
+    const groups = todayReviews(data, { today, max: Infinity }).sort((a, b) => (b.space === space) - (a.space === space) || b.total - a.total);
     const allDue = groups.reduce((n, g) => n + g.total, 0);
     // 为什么排在这：从没复现过 / 上次没过（过期几天）/ 过期几天、今天到期
     const whyText = (x) => (x.rank === 2 ? (x.days < 0 ? `过期 ${-x.days} 天` : '今天到期') : `${x.why}${x.days < 0 && x.rank === 1 ? `，过期 ${-x.days} 天` : ''}`);
     const pickText = (x) => `${inline(x.title)}<span class="muted">（${escapeHtml(whyText(x))}）</span>`;
     const oneRow = (x) => `<div class="dk-row ${x.days < 0 ? 'is-over' : 'is-today'}"><span>${pickText(x)}</span><button type="button" class="btn btn-sm dk-review" data-rids="${escapeHtml(x.id)}">只复现这一组</button></div>`;
     const groupHtml = (g) => `<div class="dk-rv" data-space="${escapeHtml(g.space)}">
-        <div class="dk-rv-head"><b>${escapeHtml(g.subject)}</b><span class="muted"><span class="dk-rv-n">${g.total}</span>组到期</span><button type="button" class="btn btn-sm ${g.space === space ? 'btn-primary' : ''} dk-review" data-rids="${escapeHtml(g.pick.map((x) => x.id).join(','))}">复现这 ${g.pick.length} 组</button></div>
-        <ul class="dk-rv-pick">${g.pick.map((x) => `<li>${pickText(x)}</li>`).join('')}</ul>
-        ${g.rest.length ? `<details class="dk-soft"><summary>排着的 ${g.rest.length} 组（这几组做完再轮到）</summary>${g.rest.map(oneRow).join('')}</details>` : ''}
+        <div class="dk-rv-head"><b>${escapeHtml(g.subject)}</b><span class="muted"><span class="dk-rv-n">${g.total}</span>组到期</span><button type="button" class="btn btn-sm ${g.space === space ? 'btn-primary' : ''} dk-review" data-rids="${escapeHtml(g.pick.map((x) => x.id).join(','))}">${g.pick.length > 1 ? `一起复现这 ${g.pick.length} 组` : '复现这一组'}</button></div>
+        ${g.pick.length > 1 ? g.pick.map(oneRow).join('') : `<ul class="dk-rv-pick">${g.pick.map((x) => `<li>${pickText(x)}</li>`).join('')}</ul>`}
       </div>`;
     $('.dk-today .dk-body').innerHTML = !total ? '<p class="muted">记忆库还是空的。</p>' : `
-      <div class="dk-due">${backlogDays(allDue) ? `<p class="dk-sub muted">一共 ${allDue} 组到期：一次 3 组，${backlogDays(allDue)} 次清完（排在后面的不会丢）。</p>` : ''}${allDue ? groups.map(groupHtml).join('') : '<p class="dk-empty">今天没有要复现的。</p>'}
+      <div class="dk-due">${allDue ? groups.map(groupHtml).join('') : '<p class="dk-empty">今天没有要复现的。</p>'}
         ${soon.length ? `<p class="dk-soon muted">${SPACES[space].label}接下来：${soon.map((d) => `${inline(d.title)}（${escapeHtml(d.due.slice(5).replace('-', '/'))}）`).join('、')}</p>` : ''}</div>`;
     // 自检
     const hard = res.problems.filter((p) => !p.soft);
@@ -1243,12 +1243,14 @@ export async function renderDesk(root, meta) {
   // use：复现课用页面自己拼的资料包（views.js 的 reviewPack），不用 pack/main
   function newClass(block, use = null) { return openOne(() => makeClass(block, use)); }
   async function makeClass(block, use = null) {
-    const fresh = livePack();
+    const fresh = packForBlock(livePack(), block);
+    // Claude 在「今天」里排的课可能是别的科的块：这节课记那一块的科
+    const sp = block ? spaceOfId(String(block)) || space : space;
     const main = use ? use.main : fresh.main;
     const problems = use ? use.problems : fresh.problems;
     // 没备课时这节课的标题用块的标题（以前是学习台的名字「数学 · 408 · 英语」，以前的课列表里看不出是哪节）
     const blkTitle = block ? data.curriculum.find((d) => d.id === block)?.title || '' : '';
-    const sid = await createClass(db, { block, main, problems, space, unit: blkTitle || unit, taken: takenIds(), kind: classForm() });
+    const sid = await createClass(db, { block, main, problems, space: sp, unit: blkTitle || unit, taken: takenIds(), kind: classForm() });
     if (!use && fresh.main) {
       // 记下这份教案用掉了；教案里补上的待办这时才算补了（备了没上、重新备别的块，待办还在）
       await db.doc(`pack/${packIds(space).main}`).set({ ...fresh.main, usedBy: sid, usedAt: Date.now() }).catch(() => {});
@@ -1307,7 +1309,7 @@ export async function renderDesk(root, meta) {
     recall: { title: '要想起来的', ic: 'is-recall' },
     drill: { title: '练一练', ic: 'is-drill' },
     manual: { title: '补记', ic: 'is-plus' },
-    next: { title: '下一步学什么', ic: 'is-review' },
+    next: { title: '每块还能攒几分', ic: 'is-review' },
   };
   const rowCounts = {};
   // 下一步学什么（exam/priority.js）：每块还能攒多少分、前置先排、到期和踩过坑的加权；不调用 Claude
@@ -1327,12 +1329,8 @@ export async function renderDesk(root, meta) {
     const box = $('.dk-next .dk-body');
     if (!box) return;
     const p = nextPlan();
-    const LABEL = { math: '数学', cs: '408', en: '英语' };
     const rows = (p.top[space] || []).map((x) => `<li><span>${escapeHtml(plainTitle(x.title) || x.title)}</span><small class="muted">${escapeHtml(x.why)}</small></li>`).join('');
     box.innerHTML = `${rows ? `<ol class="ex-list">${rows}</ol>` : '<p class="muted">这一科还没有能攒分的块。</p>'}
-      <h3 class="dk-sc-h">这一周的时间怎么分</h3>
-      <p class="dk-sub muted">${Object.entries(p.split).map(([k, v]) => `${LABEL[k]} ${Math.round(v * 100)}%`).join('、')}（按每科还能攒多少分，每科至少一成）</p>
-      ${p.lag.length ? `<p class="dk-sub">${p.lag.map((x) => `${LABEL[x.space]}这 7 天学了 ${x.actual} 分钟，按分配该有 ${x.should} 分钟`).join('；')}。</p>` : ''}
       <p class="muted">「还能攒」= 这一块在 410 里值多少分 ×（1 − 现在攒到几成）。前置的块没过基础题排在前面，复现到期、复盘对上过真题的坑的加一点。</p>`;
   }
   function paintRows(today = toDate(Date.now())) {

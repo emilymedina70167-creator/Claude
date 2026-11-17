@@ -70,6 +70,12 @@ export function todayFacts(data = {}, today) {
   return [
     `- 首页「今天」：照 meta/today 画（{ date: 'YYYY-MM-DD', note, items: [{ kind: ${TODAY_KINDS.join(' | ')}, why, label, block（class 开这一块的课）, ids（review 是复现组编号、drill 是题库编号）, reviews（drill 做完的结果记到哪几组复现上） }] }）；date 不是今天时首页只列事实。`,
     `  现在：到期的复现组 ${c.due} 组、要记的 ${c.recall} 条到期、隔天验 ${c.holds} 节课留的题、题库里能练的 ${c.drills} 道（写进 drills 的题页面先画一遍，画不出来的标 broken，练一练不挑）。`,
-    '- 复现组写了 due（YYYY-MM-DD）首页按它算到期，没写按 last + tier。页面按作答算的掌握参考在 meta/mastery-calc（mastery 本身页面不改）。',
+    '- 复现组写了 due（YYYY-MM-DD）首页按它算到期；那天以后做过了（last 不早于 due）或没写，按 last + tier。页面按作答算的掌握参考在 meta/mastery-calc（mastery 本身页面不改）。',
   ].join('\n');
+}
+
+/** 开某一块的课时备好的资料包能不能用：没指定块、或者资料包就是这一块的才用（Claude 在「今天」里排的别的块不借用） */
+export function packForBlock(pack, block) {
+  if (!block || !pack?.main || String(pack.main.block || '') === String(block)) return pack;
+  return { main: null, problems: null };
 }

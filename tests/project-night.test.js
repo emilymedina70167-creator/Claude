@@ -13,3 +13,8 @@ test('每晚的提示词：项目指令、笔记本、journal、今天的写法�
   for (const w of FORBIDDEN) assert.ok(!text.includes(w), w);
   assert.ok(!/lab_brief|lab_inbox|单子/.test(text), '旧的单子做法不在了');
 });
+
+test('每晚的提示词：写明上海时间、笔记本文件的 doc_id 怎么来', () => {
+  assert.match(text, /Asia\/Shanghai/);
+  assert.match(text, /base64url/);
+});

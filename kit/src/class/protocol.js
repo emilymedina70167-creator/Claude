@@ -435,3 +435,10 @@ function toMs(v, bareIsMs = false) {
   const ms = unit === 'ms' || unit === '毫秒' ? n : unit ? n * 1000 : bareIsMs || n >= 100 ? n : n * 1000;
   return Math.round(Math.min(ms, 60000));
 }
+
+/** 下课小结放在板上的那段：输出里有 board 块（memo、note……）就只留说的话；没有说的话照原文 */
+export function closingSpeech(text) {
+  const out = parseOutput(text, { final: true });
+  if (!out.ops.length) return String(text ?? '');
+  return out.segments.filter((x) => x.type === 'speech').map((x) => x.text).join('\n\n').trim() || String(text ?? '');
+}

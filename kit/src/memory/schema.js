@@ -315,8 +315,8 @@ export function nextTier(tier, passed) {
  * 返回 { due, days（离今天还有几天，负数是过期了几天）, state: 'overdue' | 'today' | 'later' } 或 { error }
  */
 export function reviewDue(r, today) {
-  // 项目 Claude 写了 due（第十四轮）：按它写的日子到期
-  if (r?.due !== undefined && r?.due !== null && r?.due !== '') {
+  // 项目 Claude 写了 due（第十四轮）：按它写的日子到期；那天以后做过了（页面记了不早于 due 的 last），due 就用过了，照档位算下一次
+  if (r?.due !== undefined && r?.due !== null && r?.due !== '' && !(isDate(r.due) && isDate(r.last) && r.last >= r.due)) {
     if (!isDate(r.due)) return { error: 'due 要写成 YYYY-MM-DD' };
     const days = daysBetween(today, r.due);
     return { due: r.due, days, state: days < 0 ? 'overdue' : days === 0 ? 'today' : 'later' };

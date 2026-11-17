@@ -3,7 +3,7 @@
 // 发一句：先把我的话记成一条证据（src: say、chat: 编号）→ 调用 Opus 5.5 high（前台，学生在等）→ 回的不是 Opus 5.5 这一轮作废、照实说。
 // 第十四轮起班主任就是项目 Claude：工具是 project/tools.js 那一套（读、列、搜、写它的笔记本），话的账、memo 块不再有。不碰 DOM（画面在 chatview.js）。
 import { HEAD, HEAD_MODEL, fitHistory, nextChatId, chatTitle } from './context.js';
-import { projectTools } from '../project/tools.js';
+import { projectTools, undoWrites } from '../project/tools.js';
 import { toDate } from '../memory/schema.js';
 import { reportError } from '../errlog.js';
 
@@ -77,6 +77,8 @@ export function createHead({ db, getData, ai, notebook = null, getBooks = () => 
     }
     const n = before.length + 2;
     if (err || !res) {
+      // 作废的一轮（停了、出错）：这一轮用 write 改的撤回去（每一次都记在 journal 里，照它写回）
+      await undoWrites(db, used, { now }).catch(() => {});
       const partial = String(err?.text || '');
       const why = err?.code === 'cancelled' || err?.name === 'AbortError' ? '停了' : `没回成：${err?.message || err?.code || '不知道为什么'}`;
       await db.doc(`chats/${cid}/turns/${seqId(n)}`).set({ role: 'head', text: partial, at: now(), void: true, why, tools: used });
@@ -85,8 +87,9 @@ export function createHead({ db, getData, ai, notebook = null, getBooks = () => 
     }
     // 回的不是 Opus 5.5：这一轮作废（不进以后的对话），照实说
     if (res.modelApplied !== HEAD_MODEL) {
+      await undoWrites(db, used, { now }).catch(() => {});
       await db.doc(`chats/${cid}/turns/${seqId(n)}`).set({ role: 'head', text: String(res.text || ''), at: now(), void: true, model: res.modelApplied || '', why: `回的不是 Opus 5.5（是 ${res.modelApplied || '不知道哪个'}），这一轮作废`, tools: used });
-      return { cid, error: `回的不是 Opus 5.5（是 ${res.modelApplied || '不知道哪个'}），这一轮作废了，再发一次试试` };
+      return { cid, error: `回的不是 Opus 5.5（是 ${res.modelApplied || '不知道哪个'}），这一轮作废了（这一轮改的已经撤回），再发一次试试` };
     }
     const full = String(res.text || '');
     const { shown } = splitMemo(full);

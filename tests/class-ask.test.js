@@ -28,7 +28,7 @@ test('askMessage：带着位置和 mark 写法发给 Claude', () => {
   const spot = { seg: 'b5', segTitle: '推到 Aⁿ', block: 'ex-pow', kind: 'steps', step: 2, stepTitle: '再乘一次', text: 'A³ = A²·A' };
   assert.equal(spotText(spot), 'b5「推到 Aⁿ」 里的 steps ex-pow 第 2 步（再乘一次）：「A³ = A²·A」');
   assert.equal(markHint(spot), 'mark target=ex-pow step=2');
-  assert.match(askMessage(spot, 'why'), /^\[指着问\] .*——为什么？（要指着讲，可以 mark target=ex-pow step=2）$/);
+  assert.match(askMessage(spot, 'why'), /^\[指着问\] .*——为什么？（那一处的标法：mark target=ex-pow step=2）$/);
   assert.match(askMessage({ seg: 'b2', what: 'formula', text: '$A^2=3A$' }, 'example'), /b2 的公式：「\$A\^2=3A\$」——能举个具体的例子吗？/);
   assert.equal(markHint({ seg: 'b2', term: 'mid' }), 'mark target=b2 term=mid');
   assert.match(whyShownText(spot), /^\[动作\] 学生点开了你预写的「为什么」/);

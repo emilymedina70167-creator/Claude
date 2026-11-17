@@ -9,3 +9,10 @@ export function undoJournal(entry) {
   if (!entry?.path) return null;
   return entry.before == null ? { op: 'delete', path: entry.path } : { op: 'set', path: entry.path, data: entry.before };
 }
+
+// 键的先后不算（数据库读回来的键可能换了顺序）
+const canon = (v) => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])])) : v);
+/** 撤销之前：那一条现在的样子和这一次改完的不一样（后来又被改过），撤销会把后来的也盖掉 */
+export function changedSince(entry, current) {
+  return JSON.stringify(canon(current ?? null)) !== JSON.stringify(canon(entry?.after ?? null));
+}

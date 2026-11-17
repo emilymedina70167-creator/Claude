@@ -650,7 +650,7 @@ const SUITES = {
     const bar = await t.waitFor(async () => { const b = (await t.db())['exam_bar/DS-L1.1.1']; return b?.passed ? b : null; }, { timeout: 20000, what: '真题级写进 exam_bar' });
     check(bar.timed === true && bar.done[0].id === 'Q-408-2019-1', `真题级不对：${JSON.stringify(bar)}`);
     await t.page.click('.dk-trow[data-row="next"]');
-    await t.waitFor(async () => (await t.text('.fl-panel'))?.includes('这一周的时间怎么分'), { what: '「下一步学什么」的面板' });
+    await t.waitFor(async () => (await t.text('.fl-panel'))?.includes('还能攒'), { what: '「每块还能攒几分」的面板' });
     await t.page.keyboard.press('Escape').catch(() => {});
     await t.open();
     // 首页不订阅、不整类读考试的资料（收件箱除外）

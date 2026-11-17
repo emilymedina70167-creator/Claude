@@ -70,3 +70,10 @@ test('dev_requests：要改代码的事一条一条记（at、by、text、原话
   assert.ok(validateWrite('dev_requests/dr-1', { at: 1, by: 'head', status: 'open' }).some((p) => /text/.test(p)));
   assert.ok(validateWrite('dev_requests/dr-1', { at: 1, by: 'head', text: 'x', status: '要做' }).some((p) => /status/.test(p)));
 });
+
+test('下课小结：只有 board note 块、没有 memo 块时，板上也只放说的话', async () => {
+  const { closingSpeech } = await import('../kit/src/class/protocol.js');
+  const t = '今天讲完了情态动词。\n\n````board note\ncreate 学生/情态.md\n<<<\n记一笔\n>>>\n````';
+  assert.equal(closingSpeech(t), '今天讲完了情态动词。');
+  assert.equal(closingSpeech('只是一段话'), '只是一段话');
+});

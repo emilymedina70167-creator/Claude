@@ -62,3 +62,11 @@ test('str_replace：一个字符串字段里换一段，要恰好出现一次；
 test('只读的地方（课上）没有 write', () => {
   assert.ok(!projectTools({ db: fakeDb(), getData: () => ({}), write: false }).some((t) => t.name === 'write'));
 });
+
+test('撤销之前看一眼：那一条后来又被改过（不是这一次改完的样子）就说出来', async () => {
+  const { changedSince } = await import('../kit/src/project/journal.js');
+  const j = { path: 'reviews/R3', before: { tier: 3 }, after: { tier: 7 } };
+  assert.equal(changedSince(j, { tier: 7 }), false);
+  assert.equal(changedSince(j, { tier: 14, last: '2026-11-18' }), true);
+  assert.equal(changedSince({ path: 'x/y', before: null, after: null }, null), false);
+});

@@ -14,7 +14,7 @@ import { getAI, errorText, laned } from '../ai.js';
 import { getStore, isDev, assetUrl } from '../live/store.js';
 import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
-import { parseOutput, PLAN_MAX } from './protocol.js';
+import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
 import { classMemoryReadDoc,
   buildSystem, actionText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
   reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, nextPinId, bytes, PACK_BUDGET, compactionSlice, worthCompacting, draftLine,
@@ -2524,10 +2524,9 @@ export async function renderClass(root, meta, desk = null) {
         // 下课这一次写的笔记（第十四轮）：照样执行
         const noteOps = out.ops.filter((o) => o.op === 'note').flatMap((o) => o.ops || []);
         if (noteOps.length && desk?.project?.notebook) runNotes(noteOps);
-        if (memos.length) {
-          memoEntries = memos.flatMap((o) => o.entries);
-          summary = out.segments.filter((x) => x.type === 'speech').map((x) => x.text).join('\n\n').trim() || res.text;
-        }
+        if (memos.length) memoEntries = memos.flatMap((o) => o.entries);
+        // memo、note 块都不上小结的板
+        summary = closingSpeech(res.text);
       }
       if (desk) {
         const ob = observationRecord({ kind: 'summary', text: summary, session: desk.sid, block: desk.block, turn: turnSeq + 1, verify: v });
