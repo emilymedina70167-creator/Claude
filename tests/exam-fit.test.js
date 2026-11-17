@@ -6,7 +6,6 @@ import { examForClass } from '../kit/src/exam/context.js';
 import { examForBlock } from '../kit/src/exam/block.js';
 import { blockStats, spanOf } from '../kit/src/exam/stats.js';
 import { DEFAULT_TARGET } from '../kit/src/exam/target.js';
-import { buildStageSystem, STAGE_SYSTEM_MAX, TEXTBOOK_FLOOR } from '../kit/src/stage/doc.js';
 import { HOW } from '../kit/src/exam/taxonomy.js';
 import { sampleMemory } from '../kit/src/memory/sample.js';
 
@@ -26,23 +25,3 @@ function world(course) {
   return { course, syllabus, questions, profiles: syllabus.slice(0, 10).map((n) => ({ id: n.id, how: '怎么考的归纳'.repeat(40), traps: [{ id: `${n.id}#t1`, text: '一个坑'.repeat(10), qs: questions.slice(0, 3).map((q) => q.id) }] })) };
 }
 
-test('四门课的每一块：该有的都在、数字和页面算的一样、整份不超、教材原文留够、留着的卷没有', () => {
-  const years = [2024, 2025, 2026];
-  const textbook = '教材原文的一段。'.repeat(6000); // 约 120 KiB
-  for (const course of Object.keys(COURSES)) {
-    const ex = world(course);
-    const blocks = [...new Set(ex.syllabus.flatMap((n) => n.blocks))];
-    for (const block of blocks) {
-      const info = examForBlock({ block, exam: ex, years });
-      const text = examForClass({ target: DEFAULT_TARGET, info, today: '2026-11-12' });
-      const want = blockStats(ex.syllabus.filter((n) => n.blocks.includes(block)).map((n) => n.id), ex.questions, { years: spanOf(ex.questions) });
-      for (const s of ['目标：', '## 这一块挂的考点', `考了 ${want.n} 次`, '## 学生在这一块真题上的情况', '## 这一节怎么用']) assert.ok(text.includes(s), `${block}：${s}`);
-      assert.ok((text.match(/^### Q-/gm) || []).length >= 2, `${block}：至少两道代表题`);
-      assert.ok(!/RESERVED-/.test(text), `${block}：留着的卷`);
-      const sys = buildStageSystem({ pack: { main: { goal: '这一节的目标', textbook, extra1: 'x'.repeat(60000), extra2: 'y'.repeat(60000), extra3: 'z'.repeat(60000) } }, subject: '', exam: text, memory: { mem: sampleMemory('2026-11-12'), block, space: 'math' } });
-      assert.ok(bytes(sys) <= STAGE_SYSTEM_MAX, `${block}：整份 ${bytes(sys)}`);
-      const tb = sys.slice(sys.indexOf('【教材原文'), sys.indexOf('\n【', sys.indexOf('【教材原文') + 2) > 0 ? sys.indexOf('\n【', sys.indexOf('【教材原文') + 2) : undefined);
-      assert.ok(bytes(tb) >= TEXTBOOK_FLOOR, `${block}：教材原文只剩 ${bytes(tb)}`);
-    }
-  }
-});

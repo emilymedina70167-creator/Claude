@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { tidyText, tidyDue, closingExtras, knowNotes } from '../kit/src/memory/memo.js';
-import { classMemoryReadDoc, buildTalkSystem } from '../kit/src/class/prompt.js';
+import { classMemoryReadDoc } from '../kit/src/class/prompt.js';
 import { LAB_VERSION } from '../kit/src/memory/lab.js';
 import { prepPrompt } from '../kit/src/books/plan.js';
 import { memoryDigest } from '../kit/src/memory/digest.js';
@@ -27,22 +27,6 @@ test('下课的整理目录：有摘要时不列「关于学生」，旧几类�
   assert.doesNotMatch(tidyText(on, 'math'), /关于学生|讲解先给结论/);
 });
 
-test('closingExtras：黑板课和舞台课下课共用；有摘要时不带没归纳的失误、不带旧几类的目录', () => {
-  const mem = manyProfile(sampleMemory('2026-11-01'));
-  mem.slips = [{ id: 'S-1', text: '一次出了两道题', status: 'open', session: 'c-20261101-1' }];
-  const off = closingExtras(mem, 'math', 'c-x', { summary: false });
-  assert.ok(off.tidy && /关于学生/.test(off.tidy.text));
-  const on = closingExtras(withSummary(mem), 'math', 'c-x', { summary: true });
-  assert.equal(on.slips, '');
-  assert.ok(!on.tidy || !/关于学生|讲解先给结论/.test(on.tidy.text));
-  for (const f of ['kit/src/class/classroom.js', 'kit/src/stage/classroom.js']) {
-    const src = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
-    assert.match(src, /closingExtras\(/, `${f} 下课用 closingExtras`);
-    assert.doesNotMatch(src, /slipsToFold\(/, `${f} 不再自己拼没归纳的失误`);
-  }
-  // 舞台课下课也告诉 closingPrompt 有没有摘要
-  assert.match(readFileSync(new URL('../kit/src/stage/classroom.js', import.meta.url), 'utf8'), /closingPrompt\(\{\s*summary: sumOn\b/);
-});
 
 test('课堂查记忆的工具说明：有摘要时先说 summary，旧五类写明不是规程；没有摘要逐字照旧', () => {
   const old = '查学习台的记忆库（只读）。collection 写集合名：rules、profile、curriculum、errors、weaknesses、mastery、reviews、recall、position、slips、lessons、observations、sessions、evidence。ids 写编号数组，一次取好几条的全文（比如 collection errors、ids ["L2-07","L2-31"]；同一类的放一起取）；id 取一条。sessions 写课的编号，给那节课的要点、课后报告和小结。不写 id / ids 时列出这一类（可以写 block 只要挨着这一块的）。evidence 按 block 或 session（这节课是 c-1）查最近的 30 条。每调用一次你要多等一整轮：照记忆里的目录挑准了编号，一次取够。';
@@ -87,10 +71,6 @@ test('knowNotes：舞台课的轮次没有 say 字段，用学生那一轮的 te
   assert.equal(r.notes[0].quote, '画面别压着字啊');
 });
 
-test('一问一答接着上：有摘要时说明里也有「这节课学生打的话」', () => {
-  const sys = buildTalkSystem({ componentDocs: '', pack: {}, board: '', subject: '线代', memory: { mem: withSummary(), block: 'L5-01', space: 'math', session: 'c-1', saidNow: '第 3 轮：先给结论' } });
-  assert.match(sys, /这节课学生打的话[\s\S]*第 3 轮：先给结论/);
-});
 
 test('quoteFound：用省略号拆开的每一段太短，不算找到', () => {
   const corpus = '我觉得不太懂这一段，后面也是这样，懂了再说';

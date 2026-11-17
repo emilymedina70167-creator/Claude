@@ -85,10 +85,7 @@ import { blockQuestions } from '../exam/block.js';
 import { createExamCard } from '../exam/examview.js';
 import { createExamPage } from '../exam/exampage.js';
 import { priority } from '../exam/priority.js';
-import { renderStageClass } from '../stage/classroom.js';
-import { lookName, lookWords } from '../stage/look/spec.js';
 // 种类名给我看的叫法（一直用的样子按种类存）
-const KIND_NAMES = { card: '题卡', sentence: '句子', array: '一排格子', matrix: '矩阵', tree: '树', graph: '图', table: '表', timeline: '时间轴', plane: '平面', tex: '式子', node: '结点', label: '贴的字', dial: '拨盘', draw: '画的' };
 import { createAideDesk } from '../aide/aidedesk.js';
 import { createSaid } from './saiddesk.js';
 import { createSummary } from './summarydesk.js';
@@ -98,8 +95,7 @@ import { saidTimer } from './said.js';
 import { loadCards, loadBrief } from '../aide/load.js';
 import { cardIdsFor } from '../aide/card.js';
 import { suggestBlock } from '../books/plan.js';
-import { renderLive } from '../live/live.js';
-import { renderGuided } from '../guided.js';
+import { oldKind, renderOldClass } from './oldview.js';
 import { createSink } from '../live/sync.js';
 import { checkMemory, memcheckRecord, fingerprint } from './check.js';
 import { sampleMemory, sampleSpaces } from './sample.js';
@@ -789,7 +785,7 @@ export async function renderDesk(root, meta) {
     box.querySelector('.dk-body').innerHTML = `
       ${openPd.length ? `<p><a class="dk-link dk-to-pending" href="#">还有 ${openPd.length} 条以前留下的没写进去 ↓</a></p>` : ''}
       <div class="dk-hero-wrap"><div class="dk-hero">
-        <p class="dk-eyebrow">${escapeHtml(SPACES[space].label)}${open ? (kindOf(open) === 'talk' ? '这节一问一答还没下课' : '这节课还没下课') : main ? '备好的下一节' : '的下一节'}${main?.by === 'desk' ? '<span class="muted">（学习台备的）</span>' : ''}</p>
+        <p class="dk-eyebrow">${escapeHtml(SPACES[space].label)}${open ? '这节课还没下课' : main ? '备好的下一节' : '的下一节'}${main?.by === 'desk' ? '<span class="muted">（学习台备的）</span>' : ''}</p>
         <h2 class="dk-hero-t${heroLen > 26 ? ' is-xlong' : heroLen > 13 ? ' is-long' : ''}">${supRuns(inline(open ? (open.title && open.title !== unit ? open.title : (open.block && data.curriculum.find((c) => String(c.id) === String(open.block))?.title) || heroT) : heroT))}</h2>
         ${heroS ? `<p class="dk-hero-s dk-goal" title="点一下看全文">${inline(heroS)}</p>` : ''}
         ${debts.length ? `<p class="dk-owe" title="点一下看全文">还欠着：${debts.map((x) => inline(x)).join('；')}</p>` : ''}
@@ -1766,9 +1762,7 @@ export async function renderDesk(root, meta) {
       <p class="dk-look-k">首页的版式</p>
       <div class="dk-spaces dk-look-layout" role="tablist" aria-label="首页的版式">${[['list', '书页'], ['grid', '小组件']].map(([v, t]) => `<button type="button" class="dk-space dk-look-l" data-layout="${v}">${t}</button>`).join('')}</div>
       <p class="dk-sub muted dk-look-lnote"></p>
-      <p class="dk-look-k">上课的画面</p>
-      <div class="dk-look-class"></div>`;
-      paintClassLook();
+`;
     }
     body.querySelectorAll('.dk-look-m').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === cur)));
     body.querySelectorAll('.dk-look-l').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.layout === wantLayout)));
@@ -1777,29 +1771,9 @@ export async function renderDesk(root, meta) {
     if (!lookSync) lookSync = [wireThumb($('.dk-look-mode'), () => $('.dk-look-m[aria-selected="true"]')), wireThumb($('.dk-look-layout'), () => $('.dk-look-l[aria-selected="true"]'))];
     else lookSync.forEach((f) => f());
   }
-  // 上课的画面里一直用的样子（舞台第九轮：老师写 look … always 存在 meta/look）：列出来，能删
-  async function paintClassLook() {
-    const box = $('.dk-look .dk-look-class');
-    if (!box) return;
-    let looks = [];
-    try { const d = await db.doc('meta/look').get(); looks = d.exists ? d.data().looks || [] : []; } catch { looks = []; }
-    box.innerHTML = looks.length
-      ? looks.map((l, i) => `<div class="dk-row dk-look-row"><span class="dk-row-t">${escapeHtml(lookName(l.target) === l.target && l.target !== '*' ? `所有${KIND_NAMES[l.target] || l.target}` : lookName(l.target))}：${escapeHtml(lookWords(l.props || {}, l.hide))}</span><button type="button" class="btn dk-look-del" data-i="${i}">不要了</button></div>`).join('')
-      : '<p class="dk-sub muted">还没有。上课时说「不要框」「字大一点」，老师会记住，以后每节课都那样。</p>';
-  }
   paintLook();
   if (typeof matchMedia === 'function') matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => paintLook());
   $('.dk-look').addEventListener('click', async (e) => {
-    const del = e.target.closest('.dk-look-del');
-    if (del) {
-      try {
-        const d = await db.doc('meta/look').get();
-        const looks = (d.exists ? d.data().looks || [] : []).filter((_, i) => i !== Number(del.dataset.i));
-        await db.doc('meta/look').set({ looks, at: Date.now() });
-      } catch (err) { reportError(err, { what: '删一直用的样子' }); }
-      paintClassLook();
-      return;
-    }
     const l = e.target.closest('.dk-look-l');
     if (l) {
       if (l.dataset.layout === wantLayout) return;
@@ -1947,21 +1921,14 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   session.subject = block ? subjectOf(block) : doc.subject || subjectOf(prefixOf(SPACES[space]?.courses?.[0]));
   const kind = kindOf(doc);
   const title = doc.title || meta.unit;
-  // 实时黑板、自学单元是对话里的 Claude 开的：页面不写报告给课堂 Claude，用完了由谁点「用完了」都行，报告由首页补写（fixReports）
-  const finish = async () => {
-    if (!await ask(`${SESSION_KINDS[kind]}「${title}」用完了？以后在「以前的课」里还能翻看。`, { ok: '用完了' })) return;
-    // 对话里的 Claude 也可能改着这条（改标题、块）：读最新的再改，不拿开页面时那份去盖
-    const cur = await db.doc(`sessions/${sid}`).get().then((x) => (x.exists ? x.data() : doc)).catch(() => doc);
-    assertWrite('page', 'sessions');
-    await db.doc(`sessions/${sid}`).set({ ...cur, status: 'closed', endedAt: Date.now() });
-    goto('');
-  };
-  if (kind === 'live') {
+  // 被迭代掉的几种课（舞台、一问一答、实时黑板、自学单元；第十四轮搬进 archive/）：只出文字
+  if (oldKind(doc)) {
     const sc = scopeDb(db, sid);
-    return renderLive(root, { ...meta, unit: title }, {
-      store: { ...store, db: readOnly ? readOnlyDb(sc) : sc, assets: readOnly ? null : store.assets }, sid, block,
-      onHome: () => goto(readOnly ? `classes/${sid}` : ''), onEnd: readOnly || doc.status === 'closed' ? null : finish,
-    });
+    const [report, turns] = await Promise.all([
+      sc.doc('report/main').get().then((x) => (x.exists ? x.data() : null), () => null),
+      sc.collection('class_turns').get().then((x) => x.docs.map((d) => d.data()), () => []),
+    ]);
+    return renderOldClass(root, { session: { ...doc, kind }, report, turns, onHome: () => goto(`classes/${sid}`) });
   }
   if (kind === 'drill') {
     return enterDrill(root, meta, {
@@ -1973,7 +1940,6 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
       writeReport: (d) => writeReport(db, sid, { doc: d, update: (patch) => db.doc(`sessions/${sid}`).set({ ...d, ...patch }) }),
     });
   }
-  if (kind === 'unit') return enterUnit(root, meta, { db, store, sid, doc, block, title, readOnly, finish });
   // 教材（books/）：这一科的书和条目，开课时读一次。资料包点名的条目全文放进资料包，别的课堂里按需取
   step('读教材');
   // 课堂拿到的是同一个对象：8 秒没读完就先开课，读完了填进去（课堂每一轮现取 desk.books），不再整节课没有教材
@@ -2003,7 +1969,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   // 按门课读一次、不等它（exam/load.js：五类一个一个读，不和教材、证据挤）。黑板课也读（2026-11-15 的「根」：老师的第一问
   // 「难度和问法照真题」，每一轮的说明里要有「这一块在考试里」）；读到了守卫才认得这门课的真题题号、拒留作模考的
   const loadExam = (blk) => loadExamCourse(db, courseOfBlock(blk)).catch(() => null).then((ex) => { if (ex) examIdx = examIndexOf(ex, examYears()); return ex; });
-  const examLoad = (kind === 'stage' || kind === 'class') && block && !readOnly ? loadExam(block) : null;
+  const examLoad = kind === 'class' && block && !readOnly ? loadExam(block) : null;
   // 话的账（第十一轮）：课上我打了一句，隔 20 秒（?dev&said=2 是 2 秒）后台过一次账；写好了的要求马上放进 mem，
   // 老师下一次调用的说明里「学生的要求」就有它（system() 每次调用都重拼）。离开课堂之前 flush（不等它，断了由首页补）
   // 记忆摘要（第十三轮）：老师当场记的新笔记写进摘要；有摘要（或新的数据库）时课上不再过话的账
@@ -2029,46 +1995,15 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   // 开课 30 秒以后、一次一份、一批 5 条，不重算统计（回到首页补）、不画东西；只读翻看、练一练、实时黑板、自学单元不开（前面已经 return）。
   // 用首页那一层出口（guardDb）写：考试资料不是课堂讲课那一边的数据。不在调用模型的路上，也不往说明里加东西
   if (!readOnly && TEACH_KINDS.includes(kind)) startClassInbox({ db: guardDb(db), wait: classInboxWait(location.search, store.dev) });
-  // 舞台课（kind: stage，docs/stage-plan.md D 段）：整屏一块舞台，自己的控制器；记忆、教材、证据、报告照旧
-  if (kind === 'stage') {
-    // 课堂助手（aide/，第九轮）：这一块附近的学生卡、这一科的课前档案（各 3 秒读不到当没有，不等）；
-    // 档案不能用（给别的块写的、卡变了）时课堂在开课那一刻和老师第一轮同时写一份（refresh，不排在讲课后面）
-    const asp = block ? spaceOfId(block) : space;
-    const aideOn = !!doc.aide && !!block;
-    const [aideCards, aideBrief] = aideOn ? await Promise.all([within(loadCards(db, cardIdsFor(block, mem.curriculum || [], asp)), 3000, []), within(loadBrief(db, asp), 3000, null)]) : [[], null];
-    const aideAI = store.dev ? async () => (await getAI()) || createDevAI() : getAI;
-    const aideHere = aideOn && !readOnly ? createAideDesk({ db, getData: () => mem, ops, ai: aideAI, packs: () => ({}) }) : null;
-    return renderStageClass(root, { ...meta, unit: doc.title || meta.unit }, {
-      // tried：开课时读过的卡（课程地图那时可能还没读到，课堂照现在的课程地图补读缺的那几张，load）；refresh 给几块写档案（复现课几块）
-      aide: aideOn ? { cards: aideCards, brief: aideBrief, space: asp, tried: cardIdsFor(block, mem.curriculum || [], asp), load: (ids) => loadCards(db, ids), refresh: (blocks = [block]) => aideHere?.briefFor(asp, blocks, { now: true }) || Promise.resolve(null) } : null,
-      store: { ...store, db: readOnly ? readOnlyDb(scopeDb(db, sid)) : scopeDb(db, sid) }, sid, block, space, subject: doc.subject || '', mem, books, prevRead, readOnly,
-      // 这一门课的考试资料（exam/load.js，按门课读、不读整类）：不等它，课堂读到了再用（「这一块在考试里」、exam= 当场核）
-      exam: examLoad, reserve: examYears,
-      updateSession, onHome: () => leave(readOnly ? `classes/${sid}` : ''), said, summary,
-      recheck: readOnly ? {} : await within(db.doc('meta/workorder').get().then((s) => (s.exists ? s.data().recheck || {} : {})), 3000, {}).catch(() => ({})),
-      writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),
-      makeReport: ({ turns, steps } = {}) => makeReport(db, sid, { doc: { ...doc, endedAt: doc.endedAt || Date.now() }, turns, steps }),
-      memo: readOnly ? null : { ops, view: createMemoView({ db, ops, nameOf: nameIn(() => mem) }) },
-      review: doc.review || null,
-      opening: doc.opening || null,
-      // 一直用的样子（舞台第九轮：老师写 look … always 存这里，每节舞台课开课先叠上；管理 → 样子里能删）
-      look: {
-        read: () => within(db.doc('meta/look').get().then((s) => (s.exists ? s.data().looks || [] : [])), 3000, []).catch(() => []),
-        write: readOnly ? null : (looks) => db.doc('meta/look').set({ looks, at: Date.now() }),
-      },
-    });
-  }
   if (readOnly) {
     return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
-      store: { ...store, db: readOnlyDb(scopeDb(db, sid)), assets: null }, sid, block, space, mem, readOnly: true, books, talk: kind === 'talk',
+      store: { ...store, db: readOnlyDb(scopeDb(db, sid)), assets: null }, sid, block, space, mem, readOnly: true, books,
       updateSession: () => Promise.resolve(), onHome: () => goto(`classes/${sid}`),
       memo: { ops, view: createMemoView({ db, ops, nameOf: nameIn(() => mem) }) },
     });
   }
   return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
     store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), said, summary, books, prevRead,
-    // 一问一答（kind: talk）：同一个课堂，换成活板、一问一答（docs/talk-impl.md）；别的（教材、记忆、memo、报告、复现）全照旧
-    talk: kind === 'talk',
     // 这一门课的考试资料（和舞台课一样：不等它，课堂读到了再用）；examFor：课上换到另一门课时再按那门课读一次
     exam: examLoad, reserve: examYears, examFor: kind === 'class' ? loadExam : null,
     // 后方复查（sentry.js）首页算好的：下课整理时带给课堂 Claude 判断（只在下课那一次用，上课的每一轮不带）
@@ -2084,37 +2019,6 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     // 这节课要拿下的事（class/aims.js）：数组（可以是空的：还没定，课堂会让老师第一轮写）；没有这个字段的课（以前开的课、复现课）不提这回事
     aims: Array.isArray(doc.aims) ? doc.aims : null, aimsLog: doc.aimsLog || null, aimsPast: doc.aimsPast || null,
   });
-}
-
-/**
- * 自学单元（kind: unit）：对话里的 Claude 把一次写完的课件（guided）写进 sessions/{编号}/unit/main 的 md，在学习台里打开。
- * 作答进 evidence（和课堂、黑板一样），进度记在这台设备上（guided 照旧）。
- */
-async function enterUnit(root, meta, { db, store, sid, doc, block, title, readOnly, finish }) {
-  const sc = scopeDb(db, sid);
-  const u = await sc.doc('unit/main').get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
-  root.classList.add('is-desk-unit');
-  const top = document.createElement('div');
-  top.className = 'dk-unit-bar';
-  top.innerHTML = `<button type="button" class="btn btn-sm dk-u-home">← 学习台</button><span class="muted">${SESSION_KINDS.unit} · ${escapeHtml(sid)}</span>${readOnly || doc.status === 'closed' ? '' : '<button type="button" class="btn btn-sm dk-u-end">学完了</button>'}`;
-  root.before(top);
-  top.querySelector('.dk-u-home').addEventListener('click', () => goto(readOnly ? `classes/${sid}` : ''));
-  top.querySelector('.dk-u-end')?.addEventListener('click', finish);
-  if (!u?.md) {
-    root.innerHTML = `<p class="dk-status">这个自学单元还没有内容（sessions/${escapeHtml(sid)}/unit/main 是空的）。回对话里让 Claude 写进来。</p>`;
-    return;
-  }
-  session.reset(title);
-  session.subject = doc.subject || subjectOf(block);
-  if (!readOnly) {
-    const sink = createSink({ ...store, db: sc }, { evidence: () => ({ session: sid, block }) });
-    session.sink = sink;
-  }
-  // 对话里的 Claude 照着写课件的习惯，md 开头可能带一段 front matter（--- … ---）：拿掉再画，不然整段原样印在单元顶上。
-  // 里面的设置照用，theme 除外（学习台只有紫藤，写了会把它盖掉）
-  const fm = frontMatter(String(u.md));
-  const { theme: _t, mode: _m, ...extra } = fm.meta;
-  renderGuided(fm.body, root, { ...meta, ...extra, unit: u.unit || extra.unit || title });
 }
 
 /**
@@ -2135,7 +2039,7 @@ async function priorReads(db, sessions, { sid, block, books }) {
 /**
  * 开一节课堂：sessions/{编号}，资料包抄一份进去。首页「开新课」「开复现课」、练习做完「带着没过的开课」共用。
  * main / problems：这节课的资料包；space：没有块时算哪一科；taken：已经有的课的编号（不撞号）。返回新课的编号
- * kind：新开的都是 'class'（黑板，session.js 的 classForm；不写 kind：以前的黑板课都没写，kindOf 当成课堂）；'stage'、'talk' 只有自动测试还开得出来
+ * 新开的都是黑板课（不写 kind：kindOf 当成课堂）
  */
 /** 资料包里备课定的要拿下的事：编号、件数都合规才用（照课堂收 board aims 的同一把尺子 checkAims），不合规当没定 */
 export function packAims(main) {
@@ -2152,16 +2056,13 @@ export async function createClass(db, { block = null, main = null, problems = nu
   const sp = block ? spaceOfId(block) : space;
   await db.doc(`sessions/${sid}`).set({
     date: today, block: block || null, title: String(main?.unit || unit), status: 'open', startedAt: Date.now(), space: sp, ...(block ? { subject: subjectOf(block) } : {}),
-    ...(kind === 'talk' || kind === 'stage' ? { kind } : {}),
-    // 第九轮以后开的舞台课：下课后由课堂助手一次写复盘、归类、事实、学生卡（aide/after.js）；旧课照旧
-    ...(kind === 'stage' ? { aide: 1 } : {}),
     pack: main ? { unit: main.unit || '', goal: main.goal || '', updatedAt: main.updatedAt || null } : null,
     // 复现课（views.js 的 reviewPack，reviewClass）记 review：这节课就是复现这几组；备课写的开头复现（[{ id, how }]）记 opening
     ...(main?.reviewClass && reviewIdsOf(main.review).length ? { review: reviewIdsOf(main.review) } : {}),
     ...(!main?.reviewClass && reviewIdsOf(main?.review).length ? { opening: reviewIdsOf(main.review) } : {}),
     // 黑板课（不是复现课）有「这节课要拿下的事」：备课定了的抄过来，没定先记空的——课堂看到空的会让老师第一轮写。
     // 复现课、舞台课、一问一答没有这个字段，它们的课堂不提这回事
-    ...(kind !== 'talk' && kind !== 'stage' && !main?.reviewClass ? { aims: packAims(main) } : {}),
+    ...(!main?.reviewClass ? { aims: packAims(main) } : {}),
   });
   const scoped = scopeDb(db, sid);
   // 上一节这一科下课整理单里被守卫拒掉的几条（memops.js 的 carry）：带进这节课的资料包，让课堂里的 Claude 顺带补（不单独调用），带过就清掉
@@ -2186,12 +2087,9 @@ export async function harvestSession(db, sid, { doc, report = null, steps = null
     report ? report : scoped.doc('report/main').get().then((x) => (x.exists ? x.data() : null), () => null),
     steps ? steps : scoped.collection('steps').get().then(rows, () => []),
     db.collection('errors').get().then(rows, () => []),
-    // 舞台题同一块同一种只有一道（别的课抄过的也算已经有了）：按来源取
-    (kindOf(doc) === 'stage' ? db.collection('drills').where('src', '==', 'stage') : db.collection('drills').where('fromSession', '==', sid)).get().then(rows, () => []),
+    db.collection('drills').where('fromSession', '==', sid).get().then(rows, () => []),
   ]);
-  // 舞台课：抄的是老师照引擎走过的每一种，要这节课的每一轮。下课时课堂手上那份直接给（最后一轮可能还在排队写进数据库，
-  // 重读会漏掉它里面的 follow）；首页补抄时没有，从数据库读
-  const turns = kindOf(doc) !== 'stage' ? [] : given?.length ? given : await scoped.collection('class_turns').get().then(rows, () => []);
+  const turns = [];
   const out = harvestDrills({ session: { ...doc, id: sid, kind: kindOf(doc) }, steps: st, turns, report: r, mem: { errors }, existing });
   assertWrite('page', 'drills');
   for (const d of out) await db.doc(`drills/${d.id}`).set(d.doc);

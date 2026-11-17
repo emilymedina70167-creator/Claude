@@ -5,7 +5,8 @@
 // 纯函数，有测试（tests/exam-bar.test.js）。
 import { structureOf } from './structure.js';
 import { usable } from './reserve.js';
-import { HELP } from '../stage/stage.js';
+// 舞台课（第十四轮搬进 archive/）上页面替老师挂的那一问的按钮字；旧的舞台课作答里还认它
+const HELP = '给个提示';
 
 const subjectOf = (q) => String(q.subject || String(q.id || '').match(/^Q-(\d{3})-/)?.[1] || '408');
 const yearOf = (q) => Number(q.year) || Number(String(q.id || '').match(/^Q-\d{3}-(\d{4})-/)?.[1]) || 0;

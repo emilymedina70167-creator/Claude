@@ -40,8 +40,8 @@ jobs:
       - run: npm run build
       - name: 学习台整条流程
         run: node tools/desk-e2e.mjs --shots e2e-shots
-      - name: 学习台、课堂、实时黑板三个页面（两种 iPad 尺寸，不报错、不冲出版面）
-        run: node tools/check-lesson.mjs kit/examples/desk-demo.html kit/examples/class-demo.html kit/examples/live-demo.html
+      - name: 学习台、课堂两个页面（两种 iPad 尺寸，不报错、不冲出版面）
+        run: node tools/check-lesson.mjs kit/examples/desk-demo.html kit/examples/class-demo.html
       - name: 没过的截图
         if: failure()
         uses: actions/upload-artifact@v4

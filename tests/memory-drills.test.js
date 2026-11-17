@@ -139,64 +139,6 @@ const STAGE_TURNS = [
 ];
 const STAGE_SESSION = { id: 'c-20261112-1', kind: 'stage', block: 'DS-L8.2.3', space: 'cs' };
 
-test('舞台课下课：老师写过 follow 的每一种抄成一道舞台题（数据不抄，换数）；同一块同一种只有一道', async () => {
-  const { parseStageDrill, drawStageDrill } = await import('../kit/src/stagedrillspec.js');
-  const out = harvestDrills({ session: STAGE_SESSION, turns: STAGE_TURNS, report: { items: [] }, existing: [] });
-  assert.deepEqual(out.map((d) => d.id), ['d-stage-DS-L8_2_3-sort-algo_shell_gaps_5_3_1', 'd-stage-DS-L8_2_3-net-from_1_run_dijkstra']);
-  const [shell, dij] = out.map((d) => d.doc);
-  assert.deepEqual([shell.kind, shell.src, shell.block, shell.space, shell.random, shell.status], ['stage', 'stage', 'DS-L8.2.3', 'cs', true, 'active']);
-  assert.match(shell.q, /照 希尔排序（增量 5 3 1） 走一遍/);
-  // 抄出来的题读得回、取得出数；数的个数和范围照那节课那一排
-  const sp = parseStageDrill(shell.md.replace(/^```stage\n|\n```$/g, ''));
-  assert.equal(sp.id, out[0].id);
-  assert.match(sp.lines, /^array a = \{a\}\nfollow a sort shell gaps="5 3 1"\ngroup a stride=5\nopen a move$/);
-  assert.match(shell.md, /pick a = seq\(8, 13, 97\) distinct/);
-  assert.ok(!drawStageDrill(sp).error);
-  // 图的题不换数据：照原样的边，不算换数的题
-  assert.equal(dij.random, false);
-  assert.match(dij.md, /graph g = 1>2:10 1>5:5 5>2:3\nfollow g net dijkstra from=1\nopen g tag/);
-  // 作废的那一轮不看；再抄一遍、另一节课同样的 follow，都不重复
-  assert.ok(!out.some((d) => /bubble/.test(d.id)));
-  assert.deepEqual(harvestDrills({ session: STAGE_SESSION, turns: STAGE_TURNS, report: null, existing: out.map((d) => ({ id: d.id })) }), []);
-  assert.deepEqual(harvestDrills({ session: { ...STAGE_SESSION, id: 'c-20261113-1' }, turns: STAGE_TURNS.slice(0, 3), report: null, existing: [] }).map((d) => d.id), [out[0].id]);
-});
 
-test('舞台课里没 open 给学生的 follow（老师自己演的）也抄：练的时候照能动的那种手开；范围太窄放宽', () => {
-  const out = harvestDrills({ session: STAGE_SESSION, turns: [{ seq: 1, role: 'claude', text: 'array a = 3 1 2\nfollow a sort insert' }], report: null, existing: [] });
-  assert.equal(out.length, 1);
-  assert.match(out[0].doc.md, /pick a = seq\(3, 1, 99\) distinct\n---\narray a = \{a\}\nfollow a sort insert\nopen a move/);
-});
 
-test('挑题：一次练习里舞台题最多 2 道（一道舞台题比一道填空长）', () => {
-  const mk = (i, kind) => ({ id: `d-x-${kind}-${i}`, kind, block: `L2.1.${i}`, md: 'x', status: 'active', space: 'math', orig: 'wrong', at: i });
-  const mem = { drills: [...[1, 2, 3, 4, 5].map((i) => mk(i, 'stage')), ...[6, 7, 8].map((i) => mk(i, 'quiz'))], evidence: [], reviews: [], errors: [], mastery: [] };
-  const { items } = pickDrills(mem, { space: 'math', n: 8 });
-  const kinds = items.map((x) => mem.drills.find((d) => d.id === x.id).kind);
-  assert.equal(kinds.filter((k) => k === 'stage').length, 2);
-  assert.equal(kinds.filter((k) => k === 'quiz').length, 3);
-});
 
-test('舞台课里老师用引擎造过的表（table … engine=）也抄成一道舞台题：同一块同一种只有一道，数据是一长串数的换数', async () => {
-  const { parseStageDrill: parse, drawStageDrill: draw } = await import('../kit/src/stagedrillspec.js');
-  const turns = [
-    { seq: 1, role: 'claude', text: 'table T engine=paging algo=fifo frames=3 refs="7 0 1 2 0 3 0 4"\nopen T edit\nsay "填表"' },
-    { seq: 2, role: 'claude', text: 'table T engine=paging algo=fifo frames=3 refs="1 2 3 4 1 2 5 1 2 3"\nopen T edit' }, // 同一种又造了一张：只留最后一张
-    { seq: 3, role: 'claude', text: 'table U engine=paging algo=lru frames=3 refs="1 2 3 4 1 2 5 1"' }, // 另一种（algo 不一样）
-  ];
-  const out = harvestDrills({ session: STAGE_SESSION, turns, report: null, existing: [] });
-  assert.equal(out.length, 2);
-  const fifo = out.find((d) => /fifo/.test(d.id)), lru = out.find((d) => /lru/.test(d.id));
-  assert.ok(fifo && lru);
-  assert.match(fifo.id, /^d-stage-[\w-]+-table_paging-algo_fifo$/);
-  assert.equal(fifo.doc.kind, 'stage');
-  assert.match(fifo.doc.q, /填 页面置换 的过程表/);
-  // 只留最后一张（10 次访问的那张）；访问串换数（个数一样、不要求不重复）
-  assert.match(fifo.doc.md, /pick a = seq\(10, 1, 5\)\n---\ntable T engine=paging algo=fifo frames=3 refs="\{a\}"\nopen T edit/);
-  assert.equal(fifo.doc.random, true);
-  const sp = parse(fifo.doc.md.replace(/^```stage\n|\n```$/g, ''));
-  const d = draw(sp);
-  assert.ok(!d.error, d.error);
-  assert.match(d.script, /refs="\d( \d){9}"/);
-  // 再抄一遍不重复
-  assert.deepEqual(harvestDrills({ session: STAGE_SESSION, turns, report: null, existing: out.map((x) => ({ id: x.id })) }), []);
-});

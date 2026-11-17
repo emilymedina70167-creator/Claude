@@ -2,8 +2,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { barOf } from '../kit/src/exam/bar.js';
-import { Scene } from '../kit/src/stage/scene.js';
-import { parseScript } from '../kit/src/stage/script.js';
 import { examForClass } from '../kit/src/exam/context.js';
 import { examForBlock } from '../kit/src/exam/block.js';
 import { DEFAULT_TARGET } from '../kit/src/exam/target.js';
@@ -15,7 +13,6 @@ import { profileSrc } from '../kit/src/exam/fresh.js';
 import { mergeIntel } from '../kit/src/exam/lab.js';
 
 const qs = [{ id: 'Q-408-2019-26', year: 2019, points: 2 }];
-const run = (scene, src) => { for (const c of parseScript(src)) scene.apply(c); return scene; };
 
 test('审查 1：舞台上点了「给个提示」之后才做到（下一问才做到也算）：不算真题级', () => {
   const evs = [
@@ -27,10 +24,6 @@ test('审查 1：舞台上点了「给个提示」之后才做到（下一问才
   assert.equal(barOf({ block: 'b', questions: qs, evidence: before }).passed, true, '这一问亮出来之前点的提示不算');
 });
 
-test('审查 2：挑战上不收 exam=（中间试错不记作答，第一次永远是做对）；like= 照收', () => {
-  assert.throws(() => run(new Scene(), 'matrix A = 1 1 / 0 1\ngoal g1 "化成单位阵" when="A = I" exam=Q-301-2021-17'), /挑战.*exam=/);
-  assert.equal(run(new Scene(), 'matrix A = 1 1 / 0 1\ngoal g1 "化成单位阵" when="A = I" like=Q-301-2021-17').goals.get('g1').like, 'Q-301-2021-17');
-});
 
 test('审查 3：页面没判的一问（ok: null）不占「第一次」', () => {
   const evs = [{ kind: 'answer', exam: 'Q-408-2019-26', ok: null, session: 'c-1', at: 1 }, { kind: 'answer', exam: 'Q-408-2019-26', ok: true, attempts: 1, session: 'c-1', at: 2 }];

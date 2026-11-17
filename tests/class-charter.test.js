@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CHARTER, DIAGNOSE, CHARTER_MAX, SUBJECT_FACTS, charterFor } from '../kit/src/class/charter.js';
-import { defaultRules, memoryRules, buildSystem, PROTOCOL_DOC, buildTalkSystem } from '../kit/src/class/prompt.js';
+import { defaultRules, memoryRules, buildSystem, PROTOCOL_DOC } from '../kit/src/class/prompt.js';
 
 const bytes = (s) => Buffer.byteLength(s);
 test('根本规则连同诊断的经验不超过上限', () => assert.ok(bytes(CHARTER) + bytes(DIAGNOSE) <= CHARTER_MAX, `${bytes(CHARTER) + bytes(DIAGNOSE)}`));
@@ -27,10 +27,6 @@ test('说明里别处的形式话去掉了，字写在哪的那一句还在', ()
   const s = buildSystem({ componentDocs: '', pack: {}, board: { segs: [], pages: [], cur: 0 }, subject: '线代', canvas: true });
   assert.ok(s.includes('讲解写在黑板上') && s.includes('# 一、你的角色和根本规则') && !s.includes('给提示，不给答案'));
 });
-test('一问一答的说明还是旧的红线', () => {
-  const s = buildTalkSystem({ componentDocs: '', pack: {}, board: {}, subject: '线代' });
-  assert.ok(s.includes('红线') && !s.includes('每一刻只问三件事'));
-});
 
 // 设计 6.1「防止再长出来」：守则只收事实和判断上的教训，不收形式
 test('守则不写形式：黑板课的记忆说明、下课整理的提示里都有这一句', async () => {
@@ -52,17 +48,6 @@ test('快捷按钮只说明是学生点的，不写怎么接', () => {
 
 // 一问一答、舞台课不再新开，说明一字不改：共用的常量（MEMO_DOC、MSG_QUICK……）谁动了这条就红。
 // 指纹是 2026-11-15 根本规则这一轮之前的说明算的（改了以后核过一字不差）
-test('一问一答、舞台课的说明一字不差（sha256）', async () => {
-  const { createHash } = await import('node:crypto');
-  const { MEMO_DOC } = await import('../kit/src/class/prompt.js');
-  const { buildStageSystem, STAGE_MEMO_DOC } = await import('../kit/src/stage/doc.js');
-  const h = (x) => createHash('sha256').update(x).digest('hex');
-  assert.equal(h(buildSystem({ componentDocs: '', pack: {}, board: '', subject: '线代', talk: true })), '0868cdc33fd60b395ca09aab07a352009fa3dffb884f3c8478786ddefbc402ce', '一问一答 线代');
-  assert.equal(h(buildSystem({ componentDocs: '', pack: {}, board: '', subject: '操作系统', talk: true })), '6c6e75148e3aaf239ffa0118c7a090aa9726a8dd8a982bdf5a75ef2e7cda8285', '一问一答 操作系统');
-  assert.equal(h(buildStageSystem({ pack: {}, subject: '英语', title: '时态' })), 'fb0cbdbc9455169877f55fb546a3f11ff2a8e992ee77627986309ae9a01ad717', '舞台课');
-  assert.equal(h(MEMO_DOC), '1719f974a6ca2327bca4bddea9c43d968a6f1cce7d3e125a2e71bb5374f1e0b1', 'MEMO_DOC');
-  assert.equal(h(STAGE_MEMO_DOC), 'e6f989d1b1a65dc9873dcc22710c694bb02781775cc4a87c817366a3a391d902', '舞台课的 memo 说明');
-});
 test('换板只是版面的限制，不定节奏；add / new 各是干什么的；replace 能照断的那一步改讲解', () => {
   assert.ok(!PROTOCOL_DOC.includes('下一轮再换新板') && PROTOCOL_DOC.includes('不是节奏的规定') && PROTOCOL_DOC.includes('不由板来定'));
   // 第十三轮：一块板放多少、讲多细不再规定（老师看得见板，样子和详略由它定）

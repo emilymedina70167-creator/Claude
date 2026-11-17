@@ -4,23 +4,16 @@ import katexCss from 'virtual:katex-css';
 import { renderLesson, mdToHtml, frontMatter, lessonTitle } from './render.js';
 import { blocks } from './blocks/index.js';
 import { session } from './session.js';
-import { renderGuided } from './guided.js';
 import { initTutor } from './tutor.js';
 import { recordText, toast } from './record.js';
 import { escapeHtml } from './render.js';
 import { initBoardInk } from './ink/overlay.js';
-import { renderLive } from './live/live.js';
 import { renderClass } from './class/classroom.js';
 import classCss from './class/class.css';
 import classBoardCss from './class/board.css';
 import { renderDesk, classHash } from './memory/desk.js';
 import deskCss from './memory/desk.css';
 import themesCss from './themes.css';
-import huobanCss from './huoban/huoban.css';
-import stageCss from './stage/stage.css';
-import stageClassCss from './stage/class.css';
-import { viewCss as stageViewCss } from './stage/types/views.js';
-import { stageStyles } from './stage/look/css.js';
 import classIosCss from './class/ios.css';
 import { themeOf, storedTheme, applyTheme, DESK_DEFAULT } from './theme.js';
 import { VERSION } from './version.js';
@@ -61,7 +54,7 @@ function injectStyles() {
   document.body.insertAdjacentHTML('afterbegin', CHALK_FILTER);
   const style = document.createElement('style');
   style.id = 'la-kit-style';
-  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + deskCss + '\n' + huobanCss + '\n' + stageStyles(stageCss + '\n' + stageViewCss()) + '\n' + stageClassCss + '\n' + themesCss + '\n' + classIosCss;
+  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + deskCss + '\n' + themesCss + '\n' + classIosCss;
   document.head.appendChild(style);
   if (!document.querySelector('meta[name="viewport"]')) {
     const m = document.createElement('meta');
@@ -105,8 +98,7 @@ function renderAll() {
     if (/^(class|课堂)$/i.test(meta.mode || '')) renderClass(article, meta);
     // 学习台是异步的：出错了写在页面上（以前没人接，整页空白）
     else if (/^(desk|学习台)$/i.test(meta.mode || '')) Promise.resolve(renderDesk(article, meta)).catch((err) => { console.error(err); reportError(err, { what: '学习台没打开' }); article.insertAdjacentHTML('beforeend', `<div class="block-error">学习台出错了：${escapeHtml(String(err?.message || err))}<br>刷新一下；还不行就截图发给开发那边。</div>`); });
-    else if (/^(live|实时)$/i.test(meta.mode || '')) renderLive(article, meta);
-    else if (/^(guided|引导)$/i.test(meta.mode || '')) renderGuided(body, article, meta);
+    // 实时黑板（mode: live）、引导式的自学单元（mode: guided）第十四轮搬进了 archive/：写了这两种的页面照普通课件画
     else {
       session.stages = [{ title: '', src: body, el: article }];
       renderLesson(body, article);

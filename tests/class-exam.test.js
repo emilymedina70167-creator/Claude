@@ -12,7 +12,6 @@ import { askedOnBoard, boardExam, examLint } from '../kit/src/class/examroom.js'
 import { specKey } from '../kit/src/class/spec.js';
 import { componentDocs } from '../kit/build-docs.js';
 import { sampleMemory } from '../kit/src/memory/sample.js';
-import * as stageDoc from '../kit/src/stage/doc.js';
 
 const bytes = (s) => Buffer.byteLength(s);
 const board = { segs: [], pages: [], cur: 0 };
@@ -63,12 +62,6 @@ test('资料包紧的时候（记忆装满的数据结构课只剩四十来 KiB�
 test('同样的输入拼出来一字不差（抢跑要对指纹）', () => {
   const a = { componentDocs: '', pack: { main: { unit: 'u' } }, board, subject: '操作系统', exam };
   assert.equal(buildSystem(a), buildSystem({ ...a }));
-});
-test('一问一答不带考情；TEXTBOOK_FLOOR 挪到 prompt.js，舞台课照旧从 stage/doc.js 拿得到同一个数', () => {
-  const a = { componentDocs: '', pack: {}, board: '', subject: '操作系统', talk: true };
-  assert.equal(buildSystem({ ...a, exam }), buildSystem(a));
-  assert.equal(TEXTBOOK_FLOOR, 32 * 1024);
-  assert.equal(stageDoc.TEXTBOOK_FLOOR, TEXTBOOK_FLOOR);
 });
 
 // —— 接得上：考试资料 → examForBlock → examForClass → buildSystem（样例数据和 tests/exam-context.test.js 一样）——

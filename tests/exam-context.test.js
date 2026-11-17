@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import { examForClass, EXAM_BUDGET } from '../kit/src/exam/context.js';
 import { examForBlock } from '../kit/src/exam/block.js';
 import { DEFAULT_TARGET } from '../kit/src/exam/target.js';
-import { buildStageSystem } from '../kit/src/stage/doc.js';
 
 const syllabus = [{ id: 'G-OS-3.2', course: 'OS', title: '页面置换', level: '掌握', text: '掌握 FIFO、LRU 和 CLOCK 算法', blocks: ['OS-L3.2.1'] }];
 const q = (id, year, how, extra = {}) => ({ id, year, n: Number(id.split('-').at(-1)), paper: `X-408-${year}`, type: 'single', points: 2, stem: `某进程的页面引用串……（${id}）`, options: { A: '1', B: '2', C: '3', D: '4' }, answer: 'B', analysis: '用 LRU 依次换出……'.repeat(20), course: 'OS', tags: { syl: ['G-OS-3.2'], how }, ...extra });
@@ -34,16 +33,6 @@ test('真题级过了、踩过的坑：写在学生的情况里；老师用过�
   assert.match(t, /### Q-408-2015-26/);
 });
 
-test('没有考情：空的；舞台说明和不传时一样；有的话在资料包后面、记忆前面', () => {
-  assert.equal(examForClass({ target: DEFAULT_TARGET, info: null, today: '2026-11-12' }), '');
-  const a = buildStageSystem({ pack: { main: { goal: '讲置换' } }, subject: '操作系统' });
-  assert.equal(buildStageSystem({ pack: { main: { goal: '讲置换' } }, subject: '操作系统', exam: '' }), a);
-  const ex = examForClass({ target: DEFAULT_TARGET, info: info(), today: '2026-11-12' });
-  const b = buildStageSystem({ pack: { main: { goal: '讲置换' } }, subject: '操作系统', exam: ex, memory: { mem: {}, block: 'OS-L3.2.1', space: 'cs' } });
-  const i = b.indexOf('这一块在考试里');
-  assert.ok(i > b.indexOf('这节课') && i < b.indexOf('你对学生的了解'));
-  assert.ok(EXAM_BUDGET === 16 * 1024);
-});
 
 test('英语：代表题前面带它的篇章（截到 1500 字）；同一篇最多一道', () => {
   const syl = [{ id: 'G-EN-2.1', course: 'EN', title: '推断题', blocks: ['EN-L3.1.1'] }];

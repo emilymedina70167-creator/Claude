@@ -40,17 +40,8 @@ export function idleClose(doc, last, now = Date.now()) {
   return !!t && now - t > IDLE_CLOSE_MS;
 }
 
-// 开新课一律是黑板（第十二轮，docs/superpowers/specs/2026-11-15-root-design.md 6.4：黑板是课的底座，舞台以后是板里的一块活图）。
-// 2026-11-06 到 11-15 新课一律开舞台；那时开的舞台课、更早的一问一答的课照旧能接着上、能翻看（kindOf 认得），只是不再新开。
-// 只有自动测试（?dev&form=stage / talk）还能开出这两种：它们的代码还在给以前的课用，要有人守着
-export const CLASS_FORMS = { class: '黑板', talk: '一问一答', stage: '舞台' };
-export function classForm(search) {
-  try {
-    const q = new URLSearchParams(search === undefined ? globalThis.location?.search || '' : search);
-    const f = q.has('dev') ? q.get('form') : null;
-    return f && Object.hasOwn(CLASS_FORMS, f) ? f : 'class';
-  } catch { return 'class'; }
-}
+// 开新课一律是黑板。舞台、一问一答第十四轮搬进了 archive/（被迭代掉的），以前开的只在「以前的课」里出文字（memory/oldview.js）
+export function classForm() { return 'class'; }
 const SID_RE = /^c-\d{8}-\d+$/;
 export const isSessionId = (s) => SID_RE.test(String(s || ''));
 
