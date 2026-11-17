@@ -1,6 +1,6 @@
 // 学习台自己备课的画面（docs/textbook-plan.md 第 3 批）：
 // - 挂课程地图（教材页「挂到课程地图」）：Claude 看一本资料的目录和现有的课程地图，提出每块挂哪些条目、要不要加新块；我勾了才写
-// - 备课（首页「上课」卡）：选一块 → Claude 按这块的范围、挂着的原文、全部规则和记忆写资料包，写进 pack/main（这一科的），我看过再开课
+// - 备课（首页「上课」卡）：选一块 → Claude 按这块的范围、挂着的原文和记忆写资料包（没有记忆摘要时另带全部规则和守则），写进 pack/main（这一科的），我看过再开课
 // 都用 Opus 5.5（和课堂同一个模型）；一次调用，花了多少记在书 / 资料包上
 import { escapeHtml, mdToHtml } from '../render.js';
 import { toast } from '../record.js';
@@ -8,9 +8,7 @@ import { assertWrite, toDate, dueList } from '../memory/schema.js';
 import { mapPrompt, parseMap, mapDoc, prepPrompt, prepMemory, parsePrep, parsePages, openTodos } from './plan.js';
 import { loadBooks } from './importer.js';
 import { blockChunks, chunkLine, chunksByPages, normalizeBooks } from './textbook.js';
-import { memoryDigest } from '../memory/digest.js';
-import { prefixOf, packIds, subjectOf, sharedFor, spaceOfId, filterSpace, COURSES } from '../memory/space.js';
-import { activeLessons } from '../memory/memo.js';
+import { prefixOf, packIds, subjectOf, spaceOfId, filterSpace, COURSES } from '../memory/space.js';
 import { rehearsePrompt, parseRehearsal } from './rehearse.js';
 import { debriefText } from '../memory/debrief.js';
 import { reviewRank, plainTitle } from '../memory/views.js';
@@ -111,8 +109,7 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     const material = [...new Map([...blockChunks(block, chunks), ...byPage].map((c) => [c.id, c])).values()].sort((a, b) => (a.vol === b.vol ? (a.vseq || 0) - (b.vseq || 0) : String(a.vol).localeCompare(String(b.vol))));
     const subject = subjectOf(blockId);
     const today = toDate(Date.now());
-    // 记忆：和课堂里带的同一份（全文 + 目录）；规则：全部（备课和资料包的规矩是给对话里的 Claude 的，现在备课的就是它的活）
-    // 有记忆摘要时不再另塞规则和守则（plan.js 的 prepMemory）
+    // 记忆：和课堂里带的同一份（全文 + 目录）；没有记忆摘要时另带全部规则和守则，有摘要时不带（plan.js 的 prepMemory）
     const pm = prepMemory(data, { block: blockId, space: sp, today });
     const mem = { text: pm.memoryText };
     const rules = pm.rulesText;
