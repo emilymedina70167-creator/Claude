@@ -30,7 +30,7 @@ const strip = (d) => { const { id: _, ...rest } = d || {}; return rest; };
  */
 // books：{ books, chunks }，教材板块（转写要花额度，丢了重转不划算，所以备份带上文字；原页图在 assets 里，不进备份）
 // exam：{ 集合名: [{ id, ... }] }（真题、考点、篇章、画像、考情动态；原页图照旧在 assets 里）
-export function backupFile({ memory = {}, pack = {}, packs = null, sessions = {}, books = null, exam = null, aide = null, evidence = true, boards = false, kit = '', today = '', at = Date.now() } = {}) {
+export function backupFile({ memory = {}, pack = {}, packs = null, sessions = {}, books = null, exam = null, aide = null, instructions = null, evidence = true, boards = false, kit = '', today = '', at = Date.now() } = {}) {
   const docs = [];
   const counts = {};
   const add = (collection, d) => {
@@ -53,6 +53,8 @@ export function backupFile({ memory = {}, pack = {}, packs = null, sessions = {}
   } else for (const k of ['main', 'problems']) if (pack?.[k]) add('pack', { ...pack[k], id: k });
   for (const c of EXAM_BACKUP) for (const d of [...(exam?.[c] || [])].sort((a, b) => String(a.id).localeCompare(String(b.id)))) add(c, d);
   for (const c of AIDE_BACKUP) for (const d of [...(aide?.[c] || [])].sort((a, b) => String(a.id).localeCompare(String(b.id)))) add(c, d);
+  // 学生写的项目指令（第十四轮，meta/instructions）
+  if (instructions) add('meta', { ...instructions, id: 'instructions' });
   for (const b of books?.books || []) add('books', b);
   for (const c of books?.chunks || []) add(`books/${c.book}/chunks`, c);
   for (const sid of Object.keys(sessions || {}).sort()) {

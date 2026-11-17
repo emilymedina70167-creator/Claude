@@ -224,6 +224,17 @@ export const COLLECTIONS = {
     dates: ['date'],
     tracked: ['school', 'dept', 'major', 'majorCode', 'degree', 'date', 'goal', 'split', 'reserve'],
   },
+  // 笔记本（第十四轮，docs/superpowers/specs/2026-11-17-project-claude-design.md 6.3）：项目 Claude 自己的长期记忆，
+  // 一个文件一条（编号是路径的 base64url，project/notebook.js 的 noteId）。写什么、怎么分由它定；页面只存、留版本（每条自己的 history）
+  notebook: {
+    label: '笔记本', kind: 'state', writers: ['chat', 'class', 'head', 'page', 'me'],
+    id: { re: /^[A-Za-z0-9_-]+$/, eg: 'notebook.js 的 noteId(路径)' },
+    required: ['path'],
+    enums: {},
+    dates: [],
+    refs: {},
+    tracked: [],
+  },
   // 真题级（docs/exam-plan.md 第五节）：每块一条，页面按证据算的缓存（做过哪几道真题、对没对、过没过、踩过哪些坑）
   exam_bar: {
     label: '真题级', kind: 'state', writers: ['page'],
