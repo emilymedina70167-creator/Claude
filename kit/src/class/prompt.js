@@ -3,6 +3,7 @@
 // 角色和根本规则 → 组件写法 + 黑板指令 → 资料包 → 黑板现状，后面才是这节课的对话。
 
 import { isCS, isEN, docsForSubject, detailNames, componentDoc, allNames, docSections, subjectKey } from '../subject.js';
+import { projectSystem } from '../project/system.js';
 import { memoryDigest } from '../memory/digest.js';
 import { parseOutput } from './protocol.js';
 import { lessonPlanText } from '../books/plan.js';
@@ -166,7 +167,7 @@ export const PROTOCOL_DOC = doc`
 你的每一轮输出是一段文本，页面一边收一边处理：
 
 - **黑板一屏就是一块板。**学生眼前始终是「当前板」；旧板收进历史，学生可以翻回去看。每一轮你要么**换一块新板**（ˋboard newˋ），要么**在当前板上改**（ˋaddˋ、ˋreplaceˋ、ˋhideˋ、ˋfigureˋ、ˋmarkˋ），要么只说话。
-- **黑板指令以外的文字，都是对学生说的话**，也写在黑板上：写在当前这块板的最上面（这一轮换了新板，就写在新板上），下一轮你再说话就把它换掉（支持 Markdown 和 $公式$，不要写 ˋ##ˋ 标题）。要留住的内容写进板里或常驻栏，不要只放在说的话里。
+- **黑板指令以外的文字，都是对学生说的话**，也写在黑板上：写在当前这块板的最上面（这一轮换了新板，就写在新板上），下一轮你再说话就把它换掉（支持 Markdown 和 $公式$，不要写 ˋ##ˋ 标题）。
 - 学生说的话不显示在黑板上，只有你看得到。
 - **要写上黑板的内容，放在语言名为 ˋboardˋ 的围栏代码块里**。块的第一行是指令。你写的时候，学生看到你说的话一点点出现，写完的段可能先画出来（ˋholdˋ 藏着的不会）；整轮写完、确认是你（Opus 5.5）写的之后，页面按出现的顺序执行所有指令。
 - 一轮里可以有好几个指令，按出现的顺序执行。
@@ -177,8 +178,8 @@ export const PROTOCOL_DOC = doc`
 
 ### 一块板放多少
 
-- 一块板稍长一点没关系，学生会上下滑；学生也能自己调黑板的字号。「黑板现状」里写着学生屏幕上一块板大约多高，用来估一块板写多少合适。
-- **一轮最多开一块新板**：这是页面的限制（ˋboard newˋ 一轮只写一个；同一轮里多写的，页面会并到这块板上），不是节奏的规定。同一轮里接着讲的内容就写在这块板上，板可以往下长，学生上下滑着看；要不要在这里停下、等学生，照根本规则那一问定，不由板来定。
+- 板比一屏长时学生上下滑着看；学生也能自己调黑板的字号。「黑板现状」里写着学生屏幕上一块板大约多高。
+- **一轮最多开一块新板**：这是页面的限制（ˋboard newˋ 一轮只写一个；同一轮里多写的，页面会并到这块板上）。板可以往下长，学生上下滑着看。
 - 横屏的 iPad 上，一段里正好有一张图（ˋsceneˋ、ˋgraphˋ、ˋspaceˋ）和别的内容时，页面会自动排成左图右文。
 
 ### new：擦掉黑板，换一块新板
@@ -283,7 +284,7 @@ text="谓语动词加 -s" style=highlight
 $A=\boldsymbol\alpha\boldsymbol\beta^{\mathrm T}$，$\boldsymbol\alpha=(1,2)^{\mathrm T}$，$\boldsymbol\beta=(1,1)^{\mathrm T}$
 ˋˋˋˋ
 
-- 常驻栏在黑板旁边（横屏在右边一栏，竖屏在上面一条），换板也不擦，学生一直看得到。放这节课反复要用的东西：记号、定义、刚得出的关键结论。要短，一条两三行；不放题。
+- 常驻栏在黑板旁边（横屏在右边一栏，竖屏在上面一条），换板也不擦，学生一直看得到。
 - 常驻栏用另一套编号：k1、k2……；同一个 id 再 pin 一次就是改写。撤下：
 
 ˋˋˋˋboard unpin id=k1
@@ -305,11 +306,11 @@ done step=3: 例题看完了，下面这道你来。
 step=2: 因为 $\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是一个数，能挪到最前面。
 ˋˋˋˋ
 
-学生能点板上任何一处问「为什么 / 没看懂 / 举个例子」。ˋwhyˋ 只写一句这一步的**依据**（哪条性质、哪个定义），点「为什么」时页面当场显示、不调用你（ˋstep=ˋ、ˋterm=ˋ（ˋ\hlˋ 的名字）、ˋallˋ）。不写讲解：还不懂学生会问你。
+学生能点板上任何一处问「为什么 / 没看懂 / 举个例子」。ˋwhyˋ 写一句这一步的依据（哪条性质、哪个定义），点「为什么」时页面当场显示、不调用你（ˋstep=ˋ、ˋterm=ˋ（ˋ\hlˋ 的名字）、ˋallˋ）。
 
 ### 一轮输出的样子
 
-下面只是指令格式的示范：一轮写多长、在哪停，不照它，照根本规则。
+下面只是指令格式的示范。
 
 看 $A$ 的两列：它们一样，所以 $A$ 把整个平面压到了一条线上。
 
@@ -338,11 +339,11 @@ explain: $x+y=2$，$A\mathbf x = 2\cdot(1, 2) = (2, 4)$，还在 $(1, 2)$ 这条
 
 ### 写的时候注意
 
-- 板顶的话只是一两句招呼，讲解写在黑板上、挨着它讲的东西。
+- 你说的话（board 块以外的文字）写在当前板顶上。
 - 组件只能写在 ˋboard newˋ / ˋaddˋ / ˋreplaceˋ / ˋpinˋ 里面，写在外面只会显示成一段代码。不要把 board 块套在别的代码块里，也不要在 board 块里再写 board 块。
 - 围栏没闭合、指令看不懂的块，会原样当成普通文字写在板顶，黑板上什么也不会发生。
-- 当前板上已经有的图，能用 ˋfigureˋ 改就不要整段重画；要指给学生看的，用 ˋmarkˋ 圈出来，不用重写一段。
-- **黑板上的数让页面来算**：公式里写 ˋ\calc{表达式}ˋ，页面用精确分数算好再写上去，比如 ˋ$A^2=\calc{A^2}$ˋ、ˋ$\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha=\calc{b'*a}$ˋ。变量用 ˋletˋ 块定义的量（见组件说明）；说的话、题面、提示、解析里都能用。不要自己心算后把数写上黑板。
+- 当前板上已经有的图能用 ˋfigureˋ 改；板上已有的东西能用 ˋmarkˋ 圈出来。
+- **黑板上的数让页面来算**：公式里写 ˋ\calc{表达式}ˋ，页面用精确分数算好再写上去，比如 ˋ$A^2=\calc{A^2}$ˋ、ˋ$\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha=\calc{b'*a}$ˋ。变量用 ˋletˋ 块定义的量（见组件说明）；说的话、题面、提示、解析里都能用。
 - 学生在黑板上的作答，页面会自动发给你，不用让学生「做完告诉我」。
 
 ### 你会收到的消息
@@ -356,10 +357,10 @@ ${MSG_QUICK}
   - 学生拖图、揭开中间的步骤，跟着下一条一起到。
 - 以「[草稿]」开头的行，是学生在黑板上写了、**还没点「检查」「提交」**的内容（填了一半的格子、打了字的理由框、勾了还没提交的选项），跟着学生下一条说的话或作答一起到，比如：
   - [草稿] b4 里的 answer q-b4「算一个」：写着 (3, □)，还没提交
-  - 草稿不判对错，学生可能还在想：不要因为草稿打断学生，也不要把它当成最终答案。学生说「好了」「写好了」「你看看」时，就照草稿看学生写到哪了，再接着教。黑板现状里每个组件下面也列着它现在的草稿。
+  - 草稿是学生还没提交的，页面不判对错。黑板现状里每个组件下面也列着它现在的草稿。
 ${MSG_IMAGES}
-- 以「[板书]」开头的行：学生用 Apple Pencil 直接在黑板上写了东西（演算、圈画、批注），导出成图附在这一轮（白底黑字，只有学生的笔迹，排列和黑板上一样；写在哪一段旁边那行会说）。照着学生写的看思路，错在哪一步就指哪一步。
-- 「[动作] 学生在当前板上 … 分钟没有动静」：题还没做，学生却很久没点、没写、没打字。可能卡住了，也可能在纸上算。只轻轻问一句（要不要提示、卡在哪一步），不讲答案、不换板；学生说不用，就等着。学生可以在「⋯」里关掉这个提醒。
+- 以「[板书]」开头的行：学生用 Apple Pencil 直接在黑板上写了东西（演算、圈画、批注），导出成图附在这一轮（白底黑字，只有学生的笔迹，排列和黑板上一样；写在哪一段旁边那行会说）。
+- 「[动作] 学生在当前板上 … 分钟没有动静」：题还没做，学生却很久没点、没写、没打字。学生可以在「⋯」里关掉这个提醒。
 - 以「[系统]」开头的是页面发的消息。「[系统] … 写法错误」：那一段没显示，只用 ˋboard replaceˋ（id 不变；或者 ˋboard addˋ 同一个 id）把它重写对，不用对学生说别的（这时说的话不上黑板）；同一段最多重写 2 次，还不对就显示「这段没画出来」，课堂继续。ˋnewˋ / ˋaddˋ 撞了已有的 id 不会覆盖，换个新 id 再写。「[系统] 指令 … 没执行」多半是 ˋtarget=ˋ、变量名写错或图不在当前板上，对照「黑板现状」；「看不懂」「没闭合」的块已当文字写在板顶，下一轮注意写法就行。
 ${MSG_SUMMARY}
 - 能用工具时，ˋcalcˋ 工具可以精确地算一个式子。每用一次你都要多等一整轮，所以只在改数出新题、得先知道结果才能决定怎么出时用；写上黑板的数用 ˋ\calc{…}ˋ。
@@ -817,7 +818,8 @@ export function classMemoryReadDoc(sid = '', summaryOn = false) {
 // exam：「这一块在考试里」那一节（exam/context.js 的 examForClass 拼好的文字，黑板课是 class/examroom.js 的 boardExam；
 // 空的就没有这一节，说明和以前一字不差）。放在资料包后面、记忆前面；它占的地方资料包让出来（算资料包的预算时它已经在），
 // 这时资料包里的教材原文留底（TEXTBOOK_FLOOR，资料包紧的时候是它这一轮预算的一半，见下面）。一问一答不带（旧的课，说明一字不变）
-export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true, memory = null, plan = null, planDoc = true, canvas = false, exam = '', eye = false } = {}) {
+export function buildSystem({ rules, componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true, memory = null, plan = null, planDoc = true, canvas = false, exam = '', eye = false, project = null } = {}) {
+  if (project) return buildProjectClassSystem({ componentDocs, pack, board, packBudget, subject, tools, canvas, exam, eye, project });
   const examText = String(exam || '').trim();
   const custom = asText(rules) || asText(pack?.main?.rules);
   const { docs } = systemDocs(componentDocs, subject, packComponents(pack), { lookup: tools });
@@ -866,6 +868,93 @@ export function buildSystem({ rules, componentDocs, pack, board, packBudget = PA
   const { text: packBody } = packText(pack, packRoom, { floors });
   return parts(packBody, mem);
 }
+// —— 第十四轮：学习台里上课时，老师就是项目 Claude（project/system.js）——
+// 这几段只写事实（有什么写法、页面会怎么做），不写该怎么教、该记什么（底线：不替它做任何事）
+const EYE_FACT = doc`
+### 你看得见板
+
+每一轮开头附着页面拍的图：学生现在看到的这块板，是学生屏幕上真实的样子（板比三屏长时只拍前三屏）。`;
+export const PROJECT_CLASS_DOC = doc`
+### 在学习台里上课
+
+- 学生在黑板上的每个动作（作答、预测、拖动、揭开、放弃）、在输入框里说的话、附的图，页面都自动记成证据（evidence）。
+- **笔记本**也能在这一轮的输出里写（不多跑一轮），用 ˋnoteˋ 块，一行一个操作，正文写在 ˋ<<<ˋ 和 ˋ>>>ˋ 之间；页面在这一轮讲完以后执行，没改成的下一轮告诉你：
+
+  ˋˋˋˋboard note
+  create 学生/底子.md
+  <<<
+  正文
+  >>>
+  str_replace 学生/底子.md
+  <<<
+  旧的一段（要恰好出现一次）
+  ===
+  新的一段
+  >>>
+  insert 学生/底子.md 3
+  <<<
+  插在第 3 行后面
+  >>>
+  rename 学生/底子.md 学生/背景.md
+  delete 草稿.md
+  set 学生/背景.md pin=on order=1 show=off
+  ˋˋˋˋ
+
+  ˋpin=onˋ 的文件每一轮整份放进你的说明；ˋshow=onˋ 的出现在学生的「笔记」页（照课件画，组件能作答）。
+- **学习的账**用 ˋmemoˋ 块写，一行一条；首页的复现、错题本、要记的、下一节从哪接就是读这些：
+
+  ˋˋˋˋboard memo
+  error step="第 1 步换括号" cause="把 βᵀα 当成矩阵" weakness=W19 basis=q-b5
+  weakness id=W19 level=L0 basis=q-b5,q-b7
+  review id=R3 result=过 basis=q-b9
+  position next="先收 L2-08 的同类题，再推 Aⁿ" debts="例 2.3；例 2.4"
+  todo text="学生问了相似对角化的几何意义，资料包里没有"
+  recall q="外积 αβᵀ 的秩是多少" a="1：每一列都是 α 的倍数"
+  block id=EN-L1.1.1
+  ˋˋˋˋ
+
+  ˋerrorˋ 新错题（不写 ˋidˋ 页面自动编号，题面和学生的答案没写时页面从依据里那次作答补）；ˋweaknessˋ 写 ˋid=ˋ 是改已有的弱点、不写是新弱点（ˋtitle scope levelˋ）；ˋreviewˋ 复现组判 ˋresult=过 / 没过ˋ（页面照它排下一次复现）、或者新的一组（ˋtitle family contentˋ）；ˋpositionˋ 下一节从哪接；ˋtodoˋ 待办；ˋrecallˋ 一条要背的（页面每天让学生在首页先写再看答案，按 1 → 3 → 7 → 14 → 30 天排）；ˋblockˋ 这节课讲的换成课程地图里的另一块（之后的作答按那一块记）。ˋbasis=ˋ 是依据：组件 id、段 id、ˋsayˋ（学生刚说的那句）、记忆里的编号、证据 id。掌握页面按证据算，memo 里不收。写错的页面不记，下一轮告诉你原因。
+- **这节课要拿下的事**（可用可不用）：写一个 ˋaimsˋ 块，一行一件，格子用全角「｜」隔开：编号 ｜ 学生要能做的事 ｜ 什么算做到 ｜ ˋexam=ˋ 对着的真题题号（后两格可以不写）：
+
+  ˋˋˋˋboard aims
+  a1 ｜ 给一个引用串，手算 LRU 的缺页次数 ｜ 独立做一道没见过的同类题 ｜ exam=Q-408-2023-45
+  ˋˋˋˋ
+
+  写了的话：板的上方显示给学生、黑板现状最前面列着；题那一段写 ˋaim=a1ˋ，那一段的作答算到这一件上，页面按作答算每件的状态（还没证据 / 带着做到 / 独立做到 / 做了没到，只看最后一次失手以后的）；下课后页面留几道隔天做的题，结果记在这节课的 ˋlaterˋ。再写一次就整份换掉。`;
+
+/** 下课那一次多的一句（只写事实）：学生点了下课；复现课、开头复现的组写明是哪几组、页面靠 review 那一行记结果 */
+export function closingFacts({ review = [], opening = [] } = {}) {
+  const groups = [...(review || []), ...(opening || [])].filter((g) => g?.id);
+  return groups.length
+    ? `学生点了下课。这节课复现的组：${groups.map((g) => `${g.id}${g.title ? `（${g.title}）` : ''}`).join('、')}；复现结果写 memo 的 review id=… result=过 / 没过，页面才会记。`
+    : '学生点了下课。';
+}
+
+/**
+ * 学习台里上课的说明（第十四轮）：项目 Claude 的那一份（学生的指令、它的笔记本、学习台里有什么、工具）+ 课堂的几段。
+ * project：{ facts, instructions, notes, catalog, toolsDoc }；别的参数和 buildSystem 一样
+ */
+function buildProjectClassSystem({ componentDocs, pack, board, packBudget = PACK_BUDGET, subject = '线代', tools = true, canvas = false, exam = '', eye = false, project }) {
+  const { docs } = systemDocs(componentDocs, subject, packComponents(pack), { lookup: tools });
+  const lookupNote = tools ? '要用没写到的字段时用 component_doc 工具按名字取完整写法（要多等一轮）；' : '';
+  const hasAims = Array.isArray(board?.aims);
+  const deskDocNow = hasAims ? PROJECT_CLASS_DOC : PROJECT_CLASS_DOC.replace(/\n- \*\*这节课要拿下的事\*\*[\s\S]*$/, '');
+  const compSec = `## 组件说明\n\n下面的组件说明原本是学生写的，文中的「我」指学生、「你」指写黑板的 Claude。说到 guided 课件的关卡、小节结构的地方，课堂里不适用；课堂里的段落由你用黑板指令一段一段写。有的组件这里只写了最常用的写法（末尾写着「更多写法」）；${lookupNote}写错了页面会把那个组件的完整写法附在提醒里。\n\n${docs || '（组件说明没有打包进来。）'}\n\n## 黑板指令\n\n${canvas ? PROTOCOL_DOC.replace(`\n${SPLIT_LINE}`, '') : PROTOCOL_DOC}${canvas ? `\n\n${CANVAS_DOC}` : ''}${eye ? `\n\n${EYE_FACT}` : ''}\n\n${deskDocNow}`;
+  const examText = String(exam || '').trim();
+  const sections = (packBody) => [
+    { title: '组件写法和黑板指令', text: compSec },
+    { title: '这节课的资料（资料包：页面拼的复现课资料、以前备课的 Claude 写的教案、教材原文）', text: packBody || '（没有）' },
+    ...(examText ? [{ title: '这一块在考试里（页面从入库的真题和考试大纲算的）', text: examText }] : []),
+    { title: '黑板现状', text: boardStateText(board) },
+  ];
+  const sys = (packBody) => projectSystem({ ...project, sections: sections(packBody), max: SYSTEM_MAX });
+  const rest = bytes(sys('').text);
+  const packRoom = Math.max(16 * 1024, Math.min(packBudget, SYSTEM_MAX - rest - 3 * 1024));
+  const floors = examText ? { textbook: Math.min(TEXTBOOK_FLOOR, Math.floor(packRoom / 2)) } : null;
+  const { text: packBody } = packText(pack, packRoom, { floors });
+  return sys(packBody).text;
+}
+
 /**
  * 这一轮带哪些规则（digest.js 的 use）：下课那一次（all）、复现课的每一轮（review：这节课复现的那几组，sessions.review）
  * 带全部——管记录和复现的规则这时候才用得上；平时上课只带讲课用的

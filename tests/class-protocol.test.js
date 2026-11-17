@@ -306,7 +306,7 @@ test('parseCommand：new（换一块新板）/ pin（常驻栏）/ unpin', () =>
   assert.match(parseCommand('pin title="x"').error, /pin 缺少 id，比如 pin id=k1/);
   assert.match(parseCommand('page id=b1').error, /只认 new \/ add \/ replace \/ hide \/ show \/ move \/ layout \/ pin \/ unpin \/ figure/);
   // 不上板的几种也列着：memo、plan、这节课要拿下的事 aims
-  assert.match(parseCommand('page id=b1').error, /memo \/ plan \/ aims$/);
+  assert.match(parseCommand('page id=b1').error, /memo \/ note \/ plan \/ aims$/);
   assert.deepEqual(parseCommand('aims'), { op: 'aims' });
   // 段上的 aim=：这一段的题是给哪件事用的（和 point= 一样跟着段走）
   assert.deepEqual(parseCommand('add id=b5 title="练一道" aim=a2 point=lru'), { op: 'add', id: 'b5', title: '练一道', point: 'lru', aim: 'a2' });

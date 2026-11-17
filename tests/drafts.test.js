@@ -42,5 +42,5 @@ test('黑板现状：组件下面列出现在的草稿', () => {
 
 test('课堂说明讲了「[草稿]」怎么看', () => {
   assert.ok(PROTOCOL_DOC.includes('[草稿]'));
-  assert.ok(/不要因为草稿打断学生/.test(PROTOCOL_DOC));
+  assert.ok(/页面不判对错/.test(PROTOCOL_DOC));
 });

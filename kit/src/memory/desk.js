@@ -2026,7 +2026,21 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
       memo: { ops, view: createMemoView({ db, ops, nameOf: nameIn(() => mem) }) },
     });
   }
+  // 第十四轮：老师就是项目 Claude。学生写的项目指令、它的笔记本、学习台里有什么（project/），每一轮现取
+  let instr = '';
+  db.doc('meta/instructions').onSnapshot((x) => { instr = x.exists ? String(x.data().text || '') : ''; }, () => {});
+  const project = {
+    db,
+    notebook: null,
+    corpusText: () => '',
+    instructions: () => instr,
+    notes: () => mem.notebook || [],
+    facts: () => { const today = toDate(Date.now()); const t = targetOf(mem); return { today, version: VERSION, examDays: daysLeft(today, examDateOf(t)), target: [t.school, t.dept, t.major].filter(Boolean).join(' ') + (t.goal ? `，目标 ${t.goal} 分` : '') }; },
+    catalog: () => catalogText({ data: mem, books }),
+  };
+  project.notebook = createNotebook({ db, corpus: () => project.corpusText() });
   return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
+    project,
     store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), said, summary, books, prevRead,
     // 这一门课的考试资料（和舞台课一样：不等它，课堂读到了再用）；examFor：课上换到另一门课时再按那门课读一次
     exam: examLoad, reserve: examYears, examFor: kind === 'class' ? loadExam : null,

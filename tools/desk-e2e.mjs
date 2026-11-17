@@ -1182,7 +1182,8 @@ const SUITES = {
     await sleep(4500); // 等开课的抢跑发出去（考试资料读到以后 1.5 秒）
     await t.page.click('button:has-text("开始上课")');
     const sys = await t.waitFor(() => t.page.evaluate(() => window.LAKit.classroom.lastPrompt?.system), { timeout: 20000, what: '第一轮的说明发出去' });
-    check(/^# 四、这一块在考试里（页面从入库的真题和考试大纲算的）/m.test(sys) && sys.indexOf('这一块在考试里（') > sys.indexOf('这节课的资料包') && sys.indexOf('这一块在考试里（') < sys.indexOf('你对学生的了解（'), '说明里没有这一节，或者不在资料包后面、记忆前面');
+    // 第十四轮：说明是项目 Claude 的那一份，课堂的几段在后面：这一节在「这节课的资料」后面、「黑板现状」前面
+    check(/^# 这一块在考试里（页面从入库的真题和考试大纲算的）/m.test(sys) && sys.indexOf('这一块在考试里（') > sys.indexOf('# 这节课的资料') && sys.indexOf('这一块在考试里（') < sys.indexOf('# 黑板现状'), '说明里没有这一节，或者不在资料后面、黑板现状前面');
     check(!/Q-408-2025-3|2025 年第 3 题/.test(sys), '留作模考的卷进了说明');
     const turns = async () => Object.entries(await t.db()).filter(([k]) => k.startsWith(`sessions/${sid}/class_turns/`)).map(([, v]) => v);
     await t.waitFor(async () => (await turns()).some((x) => x.role === 'claude' && !x.discarded), { timeout: 30000, what: '模拟老师讲完第一轮' });
@@ -1228,6 +1229,28 @@ const SUITES = {
     await t.page.fill('.dk-notebook .dk-nb-text', '我改过了');
     await t.page.click('.dk-notebook .dk-nb-save');
     await t.waitFor(async () => { const d = (await t.db())['notebook/bm90ZS5tZA']; return d?.text === '我改过了' && d.by === 'me' && d.history?.[0]?.text === md; }, { what: '管理页里改了笔记、旧的一版留着' });
+    // 课上：老师就是项目 Claude。说明里有我写的指令、没有根本规则；它写 board note，笔记本里多了 pin 的和 show 的，对不上的下一轮告诉它
+    await t.open();
+    await t.openForm('class');
+    await t.page.click('.dk-class .dk-new');
+    await t.inClass();
+    await t.page.click('button:has-text("开始上课")');
+    await t.waitFor(() => t.page.$('button:has-text("一个数")'), { timeout: 30000, what: '模拟老师写出第一道题' });
+    await sleep(2500);
+    const sys0 = await t.page.evaluate(() => window.LAKit.classroom.lastPrompt?.system || '');
+    check(sys0.includes('老师把内容讲透，我来学。') && sys0.includes('# 学生写的项目指令'), '老师的说明里没有我写的项目指令');
+    check(!sys0.includes('你是这个学生一对一的老师') && !sys0.includes('你对学生的了解'), '老师的说明里还有根本规则或「你对学生的了解」');
+    check(sys0.includes('board note'), '老师的说明里没有 board note 的写法');
+    const say = async (x) => { const input = t.page.locator('textarea:visible, [contenteditable="true"]:visible').first(); await input.click(); await t.page.keyboard.type(x); await t.page.keyboard.press('Enter'); };
+    await say('测试:笔记');
+    const pinned = await t.waitFor(async () => (await t.docs('notebook')).find((d) => d.path === '学生/课上.md' && d.pin), { timeout: 30000, what: '老师用 board note 记了一个 pin 的笔记' });
+    check(pinned.by === 'class', `笔记的作者不是课上的老师：${pinned.by}`);
+    check((await t.docs('notebook')).some((d) => d.path === '给你/一页.md' && d.show), '老师建的 show 页面没写进去');
+    await sleep(1500);
+    await say('下一句');
+    const call = await t.waitFor(() => t.page.evaluate(() => { const c = (window.LAKitEval?.teacher?.calls || []).filter((x) => String(x.input.at(-1).content).includes('下一句')).at(-1); return c ? { sys: String(c.input[0].content), last: c.input.map((m) => String(m.content)).join('\n') } : null; }), { timeout: 20000, what: '学生又说一句以后调用老师' });
+    check(call.sys.includes('### 笔记：学生/课上.md'), '下一轮老师的说明里没有 pin 的笔记');
+    check(/笔记没改成/.test(call.last), '对不上的 str_replace 没告诉老师');
     return t;
   },
 

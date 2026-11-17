@@ -25,7 +25,7 @@ test('记忆库有规则时根本规则还在，学生另外定的接在后面',
 test('说明里别处的形式话去掉了，字写在哪的那一句还在', () => {
   assert.ok(!PROTOCOL_DOC.includes('然后就停下') && !PROTOCOL_DOC.includes('一块板只放一件要学生动脑的事'));
   const s = buildSystem({ componentDocs: '', pack: {}, board: { segs: [], pages: [], cur: 0 }, subject: '线代', canvas: true });
-  assert.ok(s.includes('讲解写在黑板上') && s.includes('# 一、你的角色和根本规则') && !s.includes('给提示，不给答案'));
+  assert.ok(s.includes('写在当前板顶上') && s.includes('# 一、你的角色和根本规则') && !s.includes('给提示，不给答案'));
 });
 
 // 设计 6.1「防止再长出来」：守则只收事实和判断上的教训，不收形式
@@ -49,7 +49,7 @@ test('快捷按钮只说明是学生点的，不写怎么接', () => {
 // 一问一答、舞台课不再新开，说明一字不改：共用的常量（MEMO_DOC、MSG_QUICK……）谁动了这条就红。
 // 指纹是 2026-11-15 根本规则这一轮之前的说明算的（改了以后核过一字不差）
 test('换板只是版面的限制，不定节奏；add / new 各是干什么的；replace 能照断的那一步改讲解', () => {
-  assert.ok(!PROTOCOL_DOC.includes('下一轮再换新板') && PROTOCOL_DOC.includes('不是节奏的规定') && PROTOCOL_DOC.includes('不由板来定'));
+  assert.ok(!PROTOCOL_DOC.includes('下一轮再换新板') && PROTOCOL_DOC.includes('这是页面的限制') && !PROTOCOL_DOC.includes('根本规则'));
   // 第十三轮：一块板放多少、讲多细不再规定（老师看得见板，样子和详略由它定）
   assert.ok(!PROTOCOL_DOC.includes('不要为了少换板把内容压缩') && !PROTOCOL_DOC.includes('先讲透'));
   assert.ok(!PROTOCOL_DOC.includes('同一件事时才用') && PROTOCOL_DOC.includes('在当前板上接着写'));

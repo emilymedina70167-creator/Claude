@@ -163,3 +163,9 @@ export function parseNoteBlock(body) {
 
 /** 正文里引号括起来的话，在 corpus（这节课的记录、学生打的话、以前的记录）里找不到的那些 */
 export const quoteNotes = (text, corpus) => checkQuotes({ next: text, corpus }).missing;
+
+/** 课上 board note 块执行完：没改成的写成一句，下一轮告诉老师（都成了就是空的） */
+export function noteResultText(results = []) {
+  const bad = (results || []).filter((r) => r && !r.ok);
+  return bad.length ? `[系统] 笔记没改成 ${bad.length} 条：\n${bad.map((r) => `- ${r.path || ''}：${r.error}`).join('\n')}` : '';
+}

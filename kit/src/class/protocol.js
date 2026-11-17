@@ -4,6 +4,7 @@
 // mark / unmark（在板上圈、框、划、写旁注）。
 // 页面在流式回调里拿到的是「到目前为止的全文」，每次整段重新解析，所以这里全是纯函数、不留状态、不碰 DOM。
 import { tokenize, unquote } from '../tokens.js';
+import { parseNoteBlock } from '../project/notebook.js';
 import { parseMarkHead, parseMarkBlock, parseUnmark } from '../markspec.js';
 import { parseMemoLines } from '../memory/memo.js';
 import { parseReact } from './react.js';
@@ -150,7 +151,7 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // move：版面模式里把一段挪到别的栏（col=），不重画
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'show', 'move', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'show', 'move', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / plan / aims';
+const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims';
 
 /**
  * 解析 board 后面那一行：
@@ -194,6 +195,8 @@ export function parseCommand(header) {
   }
   // 学习台里改记忆（memory/memo.js）：一行一条，写在块里
   if (name === 'memo') return { op: 'memo' };
+  // 项目 Claude 的笔记本（第十四轮，project/notebook.js 的 parseNoteBlock）：一行一个操作，正文写在块里
+  if (name === 'note') return { op: 'note' };
   // 老师自己的教学计划（学生看不到，docs/learning-plan.md 第 5 节）：块里是几行字
   if (name === 'plan') return { op: 'plan' };
   // 这节课要拿下的事（aims.js）：一行一件，写在块里；不上板，页面核过存进这节课
@@ -208,6 +211,7 @@ export function parseCommand(header) {
 export function blockCommand(header, body = '') {
   const op = parseCommand(header);
   if (op.op === 'memo') return memoOp(body);
+  if (op.op === 'note') { const r = parseNoteBlock(body); return r.ops.length ? { op: 'note', ops: r.ops, ...(r.errors.length ? { errors: r.errors } : {}) } : { error: r.errors[0] || 'note 里一条也没写' }; }
   if (op.op === 'plan') return planOp(body);
   if (op.op === 'aims') return aimsOp(body);
   if (op.op === 'react') return parseReact(op.head, body);

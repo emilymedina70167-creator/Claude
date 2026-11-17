@@ -607,7 +607,7 @@ test('课堂说明：一屏一块板，说的话写在板顶，学生的话不�
   assert.match(PROTOCOL_DOC, /学生说的话不显示在黑板上/);
   // 第十三轮：排板、详略不再规定，只留页面的事实（板可以比一屏长、一轮最多一块新板）
   assert.doesNotMatch(PROTOCOL_DOC, /按内容排板，先讲透|不要为了少换板把内容压缩/);
-  assert.match(PROTOCOL_DOC, /一块板稍长一点没关系/);
+  assert.match(PROTOCOL_DOC, /学生上下滑着看/);
   assert.match(PROTOCOL_DOC, /一轮最多开一块新板/);
   assert.match(PROTOCOL_DOC, /只有当前板上和常驻栏里的图能动/);
   assert.match(DEFAULT_RULES, /输入框/);

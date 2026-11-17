@@ -19,6 +19,7 @@ import { classMemoryReadDoc,
   buildSystem, actionText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
   reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, nextPinId, bytes, PACK_BUDGET, compactionSlice, worthCompacting, draftLine,
   lintDocs, docLookup, latestPlan, rulesUse,
+  closingFacts,
 } from './prompt.js';
 import { FEATURES } from '../features.js';
 import { specFor, specKey, specDiff, SPEC_DELAY } from './spec.js';
@@ -63,6 +64,8 @@ import { askMessage, matchWhy, spotText, whyShownText } from './ask.js';
 import { createAskHere } from './askhere.js';
 // 一问一答的课（kind: talk，docs/talk-impl.md）：活板就是一段 steps（id 是 hb），老师每一轮写的几行接在它后面
 import { reportError } from '../errlog.js';
+import { projectTools } from '../project/tools.js';
+import { noteResultText } from '../project/notebook.js';
 
 export const MODEL = 'claude-opus-5-5';
 // 学生明确要求：讲课只能是 Opus 5.5、effort high；modelTier 只是平台要求的退路（退路的输出会被丢弃）
@@ -221,6 +224,7 @@ export async function renderClass(root, meta, desk = null) {
   let aimsTimer = 0;
   const aimsSoon = () => { if (!aims) return; clearTimeout(aimsTimer); aimsTimer = setTimeout(paintAims, 60); };
   let turnMemos = []; // 这一轮 memo 块里读懂的条目（执行完黑板指令、记下这一轮以后再写进记忆库）
+  let turnNotes = []; // 这一轮 note 块里的笔记本操作（同上，讲完以后再写）
   // 预案（react.js，docs/board-plan.md）：组件 id → { target, seq（哪一轮写的）, seg（组件所在的段）, by, cases }
   const reacts = new Map();
   const trigs = new WeakMap(); // 排着的动作 → actionTrigger 算的（'later' 的是学生在看、在试，不用老师）
@@ -662,6 +666,18 @@ export async function renderClass(root, meta, desk = null) {
     desk.memo.view.attach(el, () => p.memo || [], { mode: 'line' });
   }
 
+  // 执行一轮里的 note 块（项目 Claude 的笔记本）：写不成的跟着下一轮的提醒告诉它
+  async function runNotes(ops) {
+    try {
+      const rs = await desk.project.notebook.runAll(ops, { by: 'class' });
+      const t = noteResultText(rs);
+      if (t) addTurn({ role: 'system', kind: 'note', text: t });
+    } catch (e) {
+      console.warn('笔记没写成', e);
+      addTurn({ role: 'system', kind: 'note', text: `[系统] 笔记没写成（${e?.message || e}），这一轮的笔记都没写。` });
+    }
+  }
+
   // 执行一轮里的 memo 块：都直接写；没记成的告诉课堂 Claude（不多跑一轮：跟着下一轮的提醒）
   // 执行 memo 块（这一轮讲完以后，不在调用 Claude 的路上）。守卫（memory/guard.js）拿这节课到现在的每一轮核原话、轮次、板上编号；
   // closing：下课整理单（被拒的记下来，下一节开课带着）
@@ -956,6 +972,13 @@ export async function renderClass(root, meta, desk = null) {
       turnMemos.push(...op.entries);
       if (op.errors?.length) notes.push(`memo 里有 ${op.errors.length} 行没读懂，没记：\n${op.errors.map((e) => `  - ${e}`).join('\n')}`);
       return { op: 'memo', ok: true, n: op.entries.length };
+    }
+    // 笔记本（第十四轮，project/notebook.js）：这一轮讲完、核验过了再执行（runNotes），没改成的下一轮告诉它
+    if (op.op === 'note') {
+      if (!desk?.project?.notebook) return { op: 'note', ok: false, error: 'note 只在学习台里上课时能用（单独的课堂没有笔记本）' };
+      turnNotes.push(...op.ops);
+      if (op.errors?.length) notes.push(`note 里有 ${op.errors.length} 处没读懂，没写：\n${op.errors.map((e) => `  - ${e}`).join('\n')}`);
+      return { op: 'note', ok: true, n: op.ops.length };
     }
     if (op.op === 'unpin') {
       const seg = segs.get(op.id);
@@ -1543,7 +1566,7 @@ export async function renderClass(root, meta, desk = null) {
     const level = Math.min(budgetLevel, 3);
     // 一问一答：说明换成一问一答的那一份（talk），黑板现状换成活板现状；对话里没有 board 段可省（也没有 board_read）
     // exam：「这一块在考试里」（抢跑和真发的两次都从这里拼，一样的板、一样的考试资料拼出来一字不差）
-    const args = { rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, memory: memoryArg(), canvas: CANVAS, eye: eyeOn(), exam: examSection(), ...planArg() };
+    const args = { rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, board: boardState(), packBudget: PACK_BUDGET >> level, subject: session.subject, tools: teacher.tools, ...(desk?.project ? { project: projectArg() } : { memory: memoryArg() }), canvas: CANVAS, eye: eyeOn(), exam: examSection(), ...planArg() };
     // 有教材时，说明还剩的地方补上这一块所在的整章（bookroom.js）：每取一次教材要多等一整轮，多放原文不怎么变慢
     const system = desk?.books?.chunks?.length
       ? systemWithBooks(args, (room) => packForPrompt(teacher.tools, room)).system
@@ -1799,6 +1822,7 @@ export async function renderClass(root, meta, desk = null) {
     const pageBefore = bv.cur;
     const boardOps = [];
     turnMemos = [];
+    turnNotes = [];
     opTurn = { seq: turnSeq + 1, by: mock ? 'mock' : res.modelApplied || '' };
     // 拍子（beats.js）：说一句、写一段、再说一句……一拍一拍地播。重写写错的段那一轮不播
     const opSegs = segments.filter(isOp);
@@ -1874,6 +1898,7 @@ export async function renderClass(root, meta, desk = null) {
     if (beat) { beat.told = told; focusBeat(pages.get(beat.page), 0, { scroll: false }); }
     askHere?.clearAsked();
     if (turnMemos.length) runMemo(turnMemos.splice(0), told.seq, talkPage || bv.cur);
+    if (turnNotes.length) runNotes(turnNotes.splice(0));
     // Claude 又说了话：重新计「停了多久」
     nudged = false;
     lastActive = Date.now();
@@ -2124,6 +2149,18 @@ export async function renderClass(root, meta, desk = null) {
     // 抢跑接得上：页面替学生发的「继续。」「开始上课。」不算，两边拼出来一样
     const said = summaryOn(desk.mem) ? saidNow(history.filter((t) => !t.discarded)) : '';
     return { mem: desk.mem, block: desk.block, space: desk.space, session: desk.sid, use: rulesUse({ all, review: desk.review }), ...(said ? { saidNow: said } : {}) };
+  }
+
+  // 学习台里（第十四轮）：老师就是项目 Claude，说明里放学生写的项目指令、它的笔记本、学习台里有什么、工具（project/system.js）。
+  // 都由开课的地方现取（desk.project），每一轮重拼，笔记本这一轮写了下一轮就在
+  // 课上写的笔记里引的话，拿这节课到现在的每一轮和学生打的话核（只记不拦）
+  if (desk?.project) desk.project.corpusText = () => history.filter((t) => !t.discarded).map((t) => String(t.text || '')).join('\n');
+  function projectArg() {
+    const pj = desk?.project;
+    if (!pj) return null;
+    const used = [];
+    const toolsNow = teacher.tools ? projectTools({ db: pj.db, getData: () => ({}), write: false, used }) : [];
+    return { facts: pj.facts(), instructions: pj.instructions(), notes: pj.notes(), catalog: pj.catalog(), toolsDoc: toolsNow.map((t) => `- ${t.name}：${t.description}`).join('\n') };
   }
 
   // 工具记下的观察、失误：确认是 Opus 5.5 讲的这一轮才写。学习台里写进记忆库（observations、slips），单独的课堂写进 class_notes
@@ -2387,8 +2424,11 @@ export async function renderClass(root, meta, desk = null) {
         },
       },
     ];
-    // 一问一答：对话里没有省略的段（整块活板的源码每一轮都在活板现状里），不给 board_read
-    const mine = tools;
+    // 学习台里（第十四轮）：老师是项目 Claude，工具是那一套（读、列、搜学习台里的一切、看笔记本）；以前记观察、失误、查记忆的三个不给了。
+    // 笔记本在课上只读（write: false）：有副作用的要等核验是 Opus 5.5 才生效，写笔记走输出里的 board note 块（这一轮讲完、核验过了再执行）
+    const mine = desk?.project
+      ? [...tools.filter((t) => !['lesson_note', 'slip_note', 'memory_read'].includes(t.name)), ...projectTools({ db: desk.project.db, getData: () => ({ ...desk.mem, notebook: desk.project.notes() }), getBooks: () => desk.books, notebook: null, by: 'class', write: false, used: staged.calls })]
+      : tools;
     // 附图的工具（看手写原图、看讲义原图）：这个查看方式发不了图、或者这一轮已经补发过图，就不给
     return view && teacher.images ? mine : mine.filter((t) => t.name !== 'view_handwriting' && t.name !== 'view_image');
   }
@@ -2436,13 +2476,18 @@ export async function renderClass(root, meta, desk = null) {
       const report = repObj ? reportText(repObj) : desk ? '（这一次页面没算出课后报告：整理单按这节课的对话写，basis 写组件 id 或段 id。）' : '';
       // 这节课的一页（memory/sheet.js）：页面自己拼，写在小结那块板的下面
       const sheet = sheetMd(repObj?.sheet || lessonSheet({ steps: steps() }));
-      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: boardState(), subject: session.subject, memory: memoryArg({ all: true }), canvas: CANVAS, eye: eyeOn(), exam: examSection(), ...planArg() });
+      const system = buildSystem({ rules: pack.main?.rules, componentDocs: COMPONENT_DOCS, pack: packForPrompt(false), board: boardState(), subject: session.subject, ...(desk?.project ? { project: projectArg() } : { memory: memoryArg({ all: true }) }), canvas: CANVAS, eye: eyeOn(), exam: examSection(), ...planArg() });
       // 每几节课（或者某一类到了上限）顺带整理：合并重复的弱点、复现组、关于学生的记录（memo.js 的 tidyDue）
       const sp = desk?.block ? spaceOfId(desk.block) : desk?.space || spaceOfId('');
       const ex = desk ? closingExtras(desk.mem, sp, desk.sid, { summary: !!desk.summary?.on() }) : { slips: '', tidy: null };
       const tidy = ex.tidy;
       // 后方复查出来的（memory/sentry.js，首页算好放在 meta/workorder）：这一科以前的结论后来的证据对不上的几条，整理单里顺带判断
-      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingPrompt({ summary: !!desk?.summary?.on(), report, review: desk?.review, opening: desk?.opening, slips: ex.slips, plan: FEATURES.plan === false ? null : latestPlan(history), tidy, recheck: desk?.recheck?.[sp] || '', noForm: true, aims: aimsNow({ live: false }) }) }], maxBytes: promptLimit(), stub: teacher.tools });
+      // 学习台里（第十四轮）：下课那一次只多一句事实（学生点了下课；复现课是哪几组、页面靠 review 那一行记），写不写小结、写什么由它定
+      const titleOf = (id) => (desk?.mem?.reviews || []).find((r) => r.id === id)?.title || '';
+      const closingText = desk?.project
+        ? closingFacts({ review: (Array.isArray(desk.review) ? desk.review : desk.review ? [desk.review] : []).map((id) => ({ id, title: titleOf(id) })), opening: (desk.opening || []).map((o) => ({ id: o.id, title: titleOf(o.id) })) })
+        : closingPrompt({ summary: !!desk?.summary?.on(), report, review: desk?.review, opening: desk?.opening, slips: ex.slips, plan: FEATURES.plan === false ? null : latestPlan(history), tidy, recheck: desk?.recheck?.[sp] || '', noForm: true, aims: aimsNow({ live: false }) });
+      const fit = fitTurns({ system, history: [...promptHistory(history), { role: 'system', text: closingText }], maxBytes: promptLimit(), stub: teacher.tools });
       // 小结边写边显示（以前要干等一两分钟才一下子出来），也记下等了多久
       const t0 = performance.now();
       firstAt = 0;
@@ -2476,6 +2521,9 @@ export async function renderClass(root, meta, desk = null) {
       if (desk?.memo) {
         const out = parseOutput(res.text, { final: true });
         const memos = out.ops.filter((o) => o.op === 'memo');
+        // 下课这一次写的笔记（第十四轮）：照样执行
+        const noteOps = out.ops.filter((o) => o.op === 'note').flatMap((o) => o.ops || []);
+        if (noteOps.length && desk?.project?.notebook) runNotes(noteOps);
         if (memos.length) {
           memoEntries = memos.flatMap((o) => o.entries);
           summary = out.segments.filter((x) => x.type === 'speech').map((x) => x.text).join('\n\n').trim() || res.text;

@@ -12,9 +12,13 @@ export function createNotebook({ db, corpus = () => '' } = {}) {
   const queues = new Map();
   const ref = (path) => db.doc(`notebook/${noteId(path)}`);
   const read = async (path) => { const s = await ref(path).get(); return s.exists ? s.data() : null; };
+  // 没有可核的原始记录（比如学生自己在管理页里改）就不核
   const stamp = (doc) => {
+    let c = '';
+    try { c = corpus() || ''; } catch { c = ''; }
+    if (!c) return doc;
     let quotes = [];
-    try { quotes = quoteNotes(doc.text, corpus() || ''); } catch { quotes = []; }
+    try { quotes = quoteNotes(doc.text, c); } catch { quotes = []; }
     return { ...doc, quotes };
   };
   const queued = (path, fn) => {
