@@ -5,8 +5,6 @@ import { writeLater } from '../kit/src/memory/holds.js';
 import { classRows } from '../kit/src/memory/views.js';
 import { pickDrills, drillPack, drillId } from '../kit/src/memory/drills.js';
 import { warmupDrills } from '../kit/src/memory/journey.js';
-import { problemsMaterial } from '../kit/src/memory/lab.js';
-import { workOrder } from '../kit/src/memory/sentry.js';
 const source = { id: 'c-20261116-1', title: '排序', block: 'DS-L1.1.1', status: 'closed', endedAt: Date.parse('2026-11-16T12:00:00Z'), holds: { ids: ['d-one', 'd-two'] }, aims: [{ id: 'a1', can: '判断排序稳定性' }] };
 const drills = source.holds.ids.map((id, i) => ({ id, src: 'hold', block: source.block, space: 'cs', status: 'active', md: '题', far: i === 1 }));
 const rows = drills.map(d => ({ id: d.id, outcome: 'first' }));
@@ -42,11 +40,4 @@ test('热身也保护留题', () => {
   const last = { ...source, skills: { items: [{ k: 'q1|题', p: 'p1' }] } };
   const mem = { sessions: [{ ...source, holds: { ids: [id] } }], drills: [{ id }] };
   assert.deepEqual(warmupDrills(mem, last, [{ p: 'p1' }]), []);
-});
-test('未验的题不进带着开课的资料包，也不当教研室的原题或可用新题', () => {
-  const reviews = [{ id: 'R1', title: '排序', tier: 1, last: '2026-11-01', blocks: [source.block] }];
-  const mem = { sessions: [source], drills: drills.map(d => ({ ...d, md: '保密题面' })), reviews };
-  assert.equal(drillPack(rows.map(r => ({ ...r, outcome: 'wrong' })), drills, { mem }), null);
-  assert.doesNotMatch(problemsMaterial(mem, { kind: 'newproblems', ref: 'R1' }).prompt, /保密题面/);
-  assert.ok(workOrder(mem, { today: '2026-11-17' }).some(x => x.kind === 'newproblems'));
 });

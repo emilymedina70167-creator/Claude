@@ -5,7 +5,6 @@ import { COLLECTIONS, canWrite } from '../kit/src/memory/schema.js';
 import { validateWrite } from '../kit/src/memory/writer.js';
 import { checkMemory } from '../kit/src/memory/check.js';
 import { AUTHORS } from '../kit/src/memory/guard.js';
-import { nextAskId } from '../kit/src/memory/said.js';
 
 const ask = { text: '开场复习最多两三句', quotes: [{ ev: 'ev-1', at: 1, session: 'c-1', text: '只做2-3句就行啊' }], status: 'active', since: '2026-11-14', scope: 'all', checks: [], broken: 0 };
 
@@ -32,7 +31,3 @@ test('作者 said 对不上直接不收', () => {
   assert.equal(AUTHORS.said.strict, 'drop');
 });
 
-test('nextAskId 接着已有的编号', () => {
-  assert.equal(nextAskId([]), 'A-1');
-  assert.equal(nextAskId([{ id: 'A-1' }, { id: 'A-3' }]), 'A-4');
-});

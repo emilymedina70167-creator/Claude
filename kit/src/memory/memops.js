@@ -98,6 +98,8 @@ export function createMemOps({ db, mem, exam = () => null }) {
         const seen = new Set((local.evidence || []).map((x) => String(x.id)));
         const g = guardCandidate({ coll: ch.coll, id: w.id, doc: w.doc, before: old ? before : null, author, session, basis: pd.basis, missingBasis: ch.missingBasis }, { mem: { ...local, evidence: [...(local.evidence || []), ...evidence.filter((x) => !seen.has(String(x.id)))] }, corpus, exam: exam?.() || null });
         if (g.verdict !== 'accept') logs.push(guardLog(g, { coll: ch.coll, id: w.id, session, author, line: e.line, closing }));
+        // 第十四轮：守卫只记不拦——看出来的问题挂在那一条上（flag），照写；guard_log 照记
+        if (g.verdict === 'reject' || g.verdict === 'hold') g.verdict = 'flag';
         if (g.verdict === 'reject') { rejected.push({ line: e.line, error: guardReason(g), guard: true }); undoLocal(local, ch); continue; }
         if (g.verdict === 'hold') {
           // 先暂存：改动单记成 held，带守卫看出来的问题；在「管理 → 自检 → 守卫」里我能放行或者不要

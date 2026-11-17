@@ -102,18 +102,3 @@ test('哪一轮带全部：下课那一次、复现课的每一轮；平时上�
   assert.match(turn, /memory: memoryArg\(\)/, '平时的每一轮');
 });
 
-test('备课、教研室、下课后的助手都带全部（它们不是在讲新课）', () => {
-  const n = (s, re) => (s.match(re) || []).length;
-  const USE = /memoryDigest\([^\n]*?use: 'all'[^\n]*?\}\)/g;
-  // 备课的那一次挪进了 books/plan.js 的 prepMemory（第十三轮第 2 批：有摘要时不再另塞规则和守则），planview.js 只调它
-  assert.equal(n(src('books/plan.js'), USE), 1, '备课');
-  assert.match(src('books/planview.js'), /prepMemory\(data, \{ block: blockId, space: sp, today \}\)/, '备课走 prepMemory');
-  assert.equal(n(src('memory/lab.js'), USE), 2, '教研室：补收尾、出新题 / 探题');
-  assert.equal(n(src('aide/aidedesk.js'), USE), 2, '助手：补卡、课前档案');
-  assert.equal(n(src('memory/labdesk.js'), USE), 1, '教研室按章补卡（和助手补卡同一份原始记录）');
-  // 这几个文件里没有漏掉的
-  for (const f of ['books/planview.js', 'books/plan.js', 'memory/lab.js', 'aide/aidedesk.js', 'memory/labdesk.js']) {
-    const code = src(f).split('\n').filter((l) => !/^\s*(\/\/|\/?\*)/.test(l)).join('\n');
-    assert.equal(n(code, /memoryDigest\(/g), n(code, USE), f);
-  }
-});

@@ -9,7 +9,6 @@ import { mapPrompt, parseMap, mapDoc, prepPrompt, prepMemory, parsePrep, parsePa
 import { loadBooks } from './importer.js';
 import { blockChunks, chunkLine, chunksByPages, normalizeBooks } from './textbook.js';
 import { prefixOf, packIds, subjectOf, spaceOfId, filterSpace, COURSES } from '../memory/space.js';
-import { rehearsePrompt, parseRehearsal } from './rehearse.js';
 import { debriefText } from '../memory/debrief.js';
 import { reviewRank, plainTitle } from '../memory/views.js';
 import { COMPONENT_DOCS } from '../class/docs.js';
@@ -146,11 +145,6 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     const ids = packIds(ctx.sp);
     await db.doc(`pack/${ids.main}`).set(main);
     await db.doc(`pack/${ids.problems}`).set(problems);
-    // 上一节（这一科）下课后的复盘：预演时对照还没消的误解
-    const mine = filterSpace(getData(), ctx.sp);
-    const lastDebrief = mine.sessions.filter((x) => x.debrief).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0]?.debrief;
-    rehearse({ main, problems, memoryText: ctx.memoryText, debrief: lastDebrief ? debriefText(lastDebrief) : '', subject: ctx.subject, packId: ids.main })
-      .catch((e) => console.warn('课前预演没做成', e?.message || e?.code || e));
     return main;
   }
 
@@ -162,32 +156,8 @@ export function createPlanner({ db, getAI, model, getData, space }) {
     const r = await ask(prompt);
     // 补上的待办等开课时才记成补了（desk.js 的 newClass）：备了没上、又重新备别的块，待办不丢
     const main = await prepFinish(r.text, ctx, { bytes: r.bytes, model: r.model });
-    onStep('备好了；后台在按你的记录把教案预演一遍（不用等，可以直接开课）');
+    onStep('备好了');
     return main;
-  }
-
-  // —— 课前预演（rehearse.js，docs/smart-plan.md 第 2 批）：备好教案以后，后台（lane: 'bg'）再调用一次 Opus 5.5 high，
-  // 按学生的记录把教案走一遍，哪一步会卡、拿什么题探，写回教案的 rehearsal。这期间又重新备了课（教案换了）就不写
-  async function rehearse({ main, problems, memoryText, debrief, subject, packId }) {
-    const ai = await getAI();
-    if (!ai) return;
-    const prompt = rehearsePrompt({ main, problems, memoryText, debrief, subject });
-    const res = await ai.call(prompt, { model, effort: 'high', modelTier: 'complex', cache: false, lane: 'bg' });
-    if (res?.modelApplied && res.modelApplied !== model) return;
-    const got = parseRehearsal(res.text);
-    if (got.problems.includes('回的不是预演')) { console.warn('预演回的不是预演', String(res.text).slice(0, 200)); return; }
-    const ref = db.doc(`pack/${packId}`);
-    const cur = await ref.get().then((r) => (r.exists ? r.data() : null));
-    if (!cur || cur.at !== main.at) return;
-    const rehearsal = { steps: got.steps, fixes: got.fixes, at: Date.now(), model: res.modelApplied || '', bytes: enc.encode(prompt).length };
-    await ref.set({ ...cur, rehearsal });
-    // 预演写好以前已经开了课（备好时就说了「不用等，可以直接开课」）：开课时抄走的是那节课自己的一份资料包，
-    // 写进那一份，课堂订阅着 pack/main，下一轮就看得到；不然这一次调用白花了
-    if (cur.usedBy) {
-      const sref = db.doc(`sessions/${cur.usedBy}/pack/main`);
-      const sp = await sref.get().then((r) => (r.exists ? r.data() : null)).catch(() => null);
-      if (sp && sp.at === main.at && !sp.rehearsal) await sref.set({ ...sp, rehearsal }).catch(() => {});
-    }
   }
 
   /** 首页「上课」卡里的备课区：选块、备课、看备好的 */

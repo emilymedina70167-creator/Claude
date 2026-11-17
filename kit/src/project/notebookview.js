@@ -73,6 +73,9 @@ export function createProjectView({ db, store, getData, notebook, charter = '', 
   function paintNotes() {
     const body = $('.dk-notebook .dk-body');
     if (!body) return;
+    // 正在改一个文件（框里有没存的字）：后台又写了笔记本也先不重画，免得把我打的字冲掉；存了以后再画
+    const open = body.querySelector('.dk-nb-text');
+    if (open && !body.querySelector('.dk-nb-save')?.disabled) return;
     const docs = (getData()?.notebook || []).filter((d) => d && d.path);
     const live = docs.filter((d) => !d.deleted).sort((a, b) => a.path.localeCompare(b.path));
     const gone = docs.filter((d) => d.deleted && !d.movedTo);
@@ -103,6 +106,7 @@ export function createProjectView({ db, store, getData, notebook, charter = '', 
           const text = card.querySelector('.dk-nb-text').value;
           const r = text === (doc.text || '') ? { ok: true } : await notebook.run({ kind: 'write', path, text }, { by: 'me' });
           toast(r.ok ? '存好了' : `没存上：${r.error}`);
+          if (r.ok) { card.querySelector('.dk-nb-save').disabled = true; paintNotes(); }
         } else if (e.target.closest('.dk-nb-hist') && doc) {
           const old = card.querySelector('.dk-nb-old');
           old.hidden = !old.hidden;

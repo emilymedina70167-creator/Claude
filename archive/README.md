@@ -13,6 +13,13 @@
 | `kit/src/huoban/`、`kit/src/blocks/huoban.js`、`proto/live-lang/`、课堂里的 `TALK` 分支和 `buildTalkSystem` | 一问一答（活板） | 被黑板课迭代掉 | 2026-11-17 | `3f18ea7` |
 | `kit/src/live/live.js` `livebar.js` `ops.js` `layout.js` `devpanel.js`、`kit/examples/live-demo.html`、`live-tools.board.json` | 实时黑板（对话里的 Claude 一段段写） | 被学习台里的课堂替代 | 2026-11-17 | `3f18ea7` |
 | `kit/src/guided.js`、`kit/examples/unit-matrix-vector.html` | 自学单元（引导模式） | 被课堂和项目 Claude 自己建的页面替代 | 2026-11-17 | `3f18ea7` |
+| `kit/src/memory/said.js` `saiddesk.js`、`tools/memory-ruler.mjs` | 话的账（每一句都过一遍、记成要求） | 被项目 Claude 自己记笔记替代 | 2026-11-17 | `6b5983c` |
+| `kit/src/memory/summarydesk.js` `summaryview.js`、`tools/summary-ruler*.mjs` | 记忆摘要的课后重写和管理页 | 被笔记本和课后那一轮替代（`summary` 数据留着，项目 Claude 读得到） | 2026-11-17 | `6b5983c` |
+| `kit/src/memory/debrief.js`（整份） | 下课后的复盘（固定岗位） | 被课后那一轮替代；`kit/src/memory/debrief.js` 只留读旧复盘的两个函数 | 2026-11-17 | `6b5983c` |
+| `kit/src/aide/`（`schema.js` 以外） | 课堂助手：学生卡、课前档案、课后助手、旁听、讲法打分 | 被项目 Claude 替代 | 2026-11-17 | `6b5983c` |
+| `kit/src/memory/lab.js` `labdesk.js` `sentry.js`、`tools/lab.mjs`、`tools/aide-audit.mjs` | 云端教研室的单子、后方的工作单 | 每晚的教研室换成项目 Claude（提示词 `docs/lab-prompt.md`）；验题的几个函数搬到 `memory/problemcheck.js`、`problemrender.js` | 2026-11-17 | `6b5983c` |
+| `kit/src/memory/holds.js`（整份） | 下课后页面自动挑真题、请 Opus 出留题 | 留不留、留什么由项目 Claude 定；`holds.js` 只留到期和算结果 | 2026-11-17 | `6b5983c` |
+| `kit/src/books/rehearse.js` | 课前预演 | 被替代 | 2026-11-17 | `6b5983c` |
 | `tools/desk-e2e-old.mjs` | 搬走以前的整条流程测试（含舞台、一问一答、实时黑板、助手几段） | 留着对照 | 2026-11-17 | `3f18ea7` |
 
 留在原处的：`kit/src/live/store.js`、`sync.js`（整个学习台的数据库和证据）；`kit/examples/en-demo.html`、`ds-8.2.3-shell-sort.html`（组件示范页，去掉了 `mode: guided`）。

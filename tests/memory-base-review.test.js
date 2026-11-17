@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { tidyText, tidyDue, closingExtras, knowNotes } from '../kit/src/memory/memo.js';
 import { classMemoryReadDoc } from '../kit/src/class/prompt.js';
-import { LAB_VERSION } from '../kit/src/memory/lab.js';
 import { prepPrompt } from '../kit/src/books/plan.js';
 import { memoryDigest } from '../kit/src/memory/digest.js';
 import { quoteFound } from '../kit/src/memory/summary.js';
@@ -38,9 +37,6 @@ test('课堂查记忆的工具说明：有摘要时先说 summary，旧五类写
   assert.match(readFileSync(new URL('../kit/src/class/classroom.js', import.meta.url), 'utf8'), /classMemoryReadDoc\(/);
 });
 
-test('教研室的单子换了写法：版本号升了，部署前拼好的旧单子会照新写法重拼', () => {
-  assert.ok(LAB_VERSION >= 7);
-});
 
 test('备课提示词：有摘要时不再规定课的形式；没有摘要逐字照旧', () => {
   const args = { block: { id: 'L5-01', title: '特征值' }, subject: '线代', memoryText: '（记忆）', components: ['answer'], due: '- R1 秩' };

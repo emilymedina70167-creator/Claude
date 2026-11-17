@@ -44,14 +44,6 @@ test('没挂学生的话不收', async () => {
   assert.ok(r.rejected[0].error.includes('say'));
 });
 
-test('几乎一样的不收，提示已有的那条', async () => {
-  const have = { id: 'A-1', text: '开场复习最多两三句，主要时间给新内容', quotes: [{ ev: 'ev-x', at: 1, session: 'c-1', text: '直接学新内容' }], status: 'active', since: '2026-11-05', scope: 'all', checks: [], broken: 0 };
-  const { ops } = await setup({ asks: [have] });
-  const { entries } = parseMemoLines('ask text="开场复习最多两三句，主要时间给新内容" basis=say');
-  const r = await ops.applyMemo(entries, { session: SID });
-  assert.equal(r.rejected.length, 1);
-  assert.ok(r.rejected[0].error.includes('A-1'));
-});
 
 test('助手不能写 ask', async () => {
   const { ops } = await setup();

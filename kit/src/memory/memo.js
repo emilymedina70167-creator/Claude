@@ -25,7 +25,9 @@ import { courseOf, prefixOf, positionId, spaceOfId, spaceOfDoc, sharedFor } from
 const neutralText = (t) => String(t ?? '').replace(/(?<![其吉利])[他她](?![们人])/g, '学生');
 import { recallSpace, nextRecallId } from './recall.js';
 import { isTeach } from './session.js';
-import { nextAskId } from './said.js';
+
+// 「我的要求」的下一个编号（以前在 said.js，话的账第十四轮搬进 archive/）
+const nextAskId = (asks = []) => `A-${Math.max(0, ...asks.map((a) => Number(String(a?.id || '').match(/^A-(\d+)$/)?.[1] || 0))) + 1}`;
 
 export const MEMO_KINDS = {
   pref: { tier: 'direct', coll: 'profile', label: '偏好' },
@@ -71,6 +73,8 @@ export const SESSION_CAPS = { note: 3, propose: 2, slip: 3, error: 5, todo: 5, p
 export const LIST_CAPS = { debts: 5, first: 3, content: 6 };
 // 和已有的一条比「像不像」：守则、失误、观察、待办、错题这类句子长，0.3 就算同一件事
 const ALIKE = 0.3;
+// 第十四轮：学习的账由项目 Claude 自己记，页面不再按「像不像」拒收（只记不拦）。similarity 还留着给下课整理、守卫当参考
+const GATE = false;
 
 // 还在用的（没合并、没关、没作废、没退役）
 const LIVE = { weaknesses: ['active'], reviews: ['active', 'paused'], profile: ['active'], rules: ['active'], lessons: ['active'], asks: ['active'] };
@@ -380,7 +384,7 @@ export function planEntry(entry, ctx = {}) {
   // 一节课记几条不再按条数挡（2026-11-14 我说：限制条数和「越来越了解我」相撞）：挡废话靠下面的「和已有的、这节课已记的说的是同一件事不收」
   // 和依据要挂得上
   // 和已有的一条说的是同一件事：不另记
-  const alike = (text, docs, field = 'text') => { const t = String(text || ''); if (t.length < 6) return null; const hit = docs.map((d) => ({ d, s: similarity(t, d[field]) })).sort((x, y) => y.s - x.s)[0]; return hit && hit.s >= ALIKE ? hit.d : null; };
+  const alike = (text, docs, field = 'text') => { const t = String(text || ''); if (!GATE || t.length < 6) return null; const hit = docs.map((d) => ({ d, s: similarity(t, d[field]) })).sort((x, y) => y.s - x.s)[0]; return hit && hit.s >= ALIKE ? hit.d : null; };
 
   switch (kind) {
     case 'pref': {
@@ -409,7 +413,7 @@ export function planEntry(entry, ctx = {}) {
       if (!a.topic || !a.text) return { error: `偏好要写 topic（${PREF_TOPICS.join(' / ')}、目标……）和 text` };
       const live = liveDocs(mem, 'profile');
       const near = nearest(a.text, live);
-      if (near && near.s >= SIMILAR) return { error: `和 ${near.d.id}（${cut(near.d.text, 40)}）说的是同一件事：改写那一条（pref id=${near.d.id} text="…"），不新加` };
+      if (GATE && near && near.s >= SIMILAR) return { error: `和 ${near.d.id}（${cut(near.d.text, 40)}）说的是同一件事：改写那一条（pref id=${near.d.id} text="…"），不新加` };
       // 条数不挡（2026-11-14 真课：满 30 条以后学生亲口说的七条偏好全被拒，下一节照旧不知道）：到了 CAPS 只让下课整理时并重复的
       return { ...base, op: 'add', target: `p-c${newId()}`, data: { topic: cut(a.topic, 20), text: cut(a.text, 600), since: date, source: `课堂 ${sid || ''}`.trim(), basis, status: 'active', ...(a.space && ['math', 'cs', 'en'].includes(a.space) ? { space: a.space } : {}) } };
     }
@@ -437,7 +441,7 @@ export function planEntry(entry, ctx = {}) {
       if (!a.text) return { error: '要求要写 text（用你的话写清楚以后要照做什么）' };
       if (!quotes.length) return { error: '要求要挂学生说的那句话（basis=say 或那句话的证据编号）' };
       const near = nearest(a.text, liveDocs(mem, 'asks'));
-      if (near && near.s >= SIMILAR) return { error: `已经有 ${near.d.id}（${cut(near.d.text, 40)}）：学生又说了就写 ask id=${near.d.id} basis=say 补原话，不新加` };
+      if (GATE && near && near.s >= SIMILAR) return { error: `已经有 ${near.d.id}（${cut(near.d.text, 40)}）：学生又说了就写 ask id=${near.d.id} basis=say 补原话，不新加` };
       const scope = ['all', 'math', 'cs', 'en'].includes(a.scope) ? a.scope : 'all';
       return { ...base, op: 'add', target: nextAskId(get('asks')), data: { text: cut(a.text, 400), quotes, scope, ...(a.measure === 'overlap' ? { measure: 'overlap' } : {}), status: 'active', since: date, by: 'class', checks: [], broken: 0, log: [] } };
     }
@@ -474,7 +478,7 @@ export function planEntry(entry, ctx = {}) {
       if (!a.text) return { error: '新规则要写 text（学生定下的做法，照原话的意思写）' };
       const live = liveDocs(mem, 'rules');
       const near = nearest(a.text, live);
-      if (near && near.s >= SIMILAR) return { error: `和 ${near.d.id}（${cut(near.d.text, 40)}）说的是同一件事：改写那一条（rule id=${near.d.id} text="…"），不新加` };
+      if (GATE && near && near.s >= SIMILAR) return { error: `和 ${near.d.id}（${cut(near.d.text, 40)}）说的是同一件事：改写那一条（rule id=${near.d.id} text="…"），不新加` };
       const n = maxNum(get('rules').map((r) => r.id), /^rule-c(\d+)$/) + 1;
       return { ...base, op: 'add', target: `rule-c${n}`, data: { cat: a.cat || '教法', text: cut(a.text, 800), since: date, source: `课堂 ${sid || ''} 学生定的`.replace(/\s+/g, ' '), status: 'active', ...(a.for ? { for: a.for } : {}), ...(a.space ? { space: a.space } : {}), basis } };
     }
@@ -548,7 +552,7 @@ export function planEntry(entry, ctx = {}) {
       if (a.again || a.status) return { error: 'again、status 要写 id=（哪一条守则）' };
       const act = activeLessons(get('lessons'), space);
       const near = act.map((l) => ({ l, s: similarity(a.text, l.text) })).sort((x, y) => y.s - x.s)[0];
-      if (near && near.s >= SIMILAR) return { error: `和 ${near.l.id}（${cut(near.l.text, 40)}）说的是同一件事：改写那一条（lesson id=${near.l.id} text="…" slips=…），或者记又犯一次（again="…"），不新加` };
+      if (GATE && near && near.s >= SIMILAR) return { error: `和 ${near.l.id}（${cut(near.l.text, 40)}）说的是同一件事：改写那一条（lesson id=${near.l.id} text="…" slips=…），或者记又犯一次（again="…"），不新加` };
       return { ...base, op: 'add', target: nextLessonId(get('lessons')), data: { text: cut(a.text, 400), ...(a.why ? { why: cut(a.why, 200) } : {}), ...(a.topic ? { topic: cut(a.topic, 20) } : {}), slips, hits: Math.max(1, slips.length), since: date, last: date, status: 'active', by: 'class', source: `课堂 ${sid || ''}`.trim(), ...(space ? { space } : {}) } };
     }
     case 'note':
@@ -634,7 +638,7 @@ export function planEntry(entry, ctx = {}) {
         const space = spaceHere(a.blocks?.[0] || ctx.block);
         const live = liveDocs(mem, 'weaknesses', space);
         const near = nearest(a.title, live, 'title');
-        if (near && near.s >= SIMILAR) return { error: `和 ${near.d.id}（${cut(near.d.title, 40)}）是同一个弱点：改那一条（weakness id=${near.d.id} level=… errors=…），不新加` };
+        if (GATE && near && near.s >= SIMILAR) return { error: `和 ${near.d.id}（${cut(near.d.title, 40)}）是同一个弱点：改那一条（weakness id=${near.d.id} level=… errors=…），不新加` };
       }
       return { ...base, op: 'add', target: nextWeaknessId(get('weaknesses')), data: { title: cut(a.title, 120), scope: a.scope, level: a.level, last: date, errors: errs, blocks: a.blocks?.length ? a.blocks : ctx.block ? [ctx.block] : [], status: 'active', basis, ...(sid ? { session: sid } : {}), ...(ctx.block || ctx.space ? { space: spaceHere(ctx.block) } : {}) } };
     }
@@ -658,7 +662,7 @@ export function planEntry(entry, ctx = {}) {
         const patch = {};
         if (a.add) {
           const was = Array.isArray(old.content) ? old.content : old.content ? [String(old.content)] : [];
-          if (was.some((c) => similarity(c, a.add) >= ALIKE)) return { error: `${old.id} 里已经有一样的题了，不另加` };
+          if (GATE && was.some((c) => similarity(c, a.add) >= ALIKE)) return { error: `${old.id} 里已经有一样的题了，不另加` };
           patch.content = [...was, cut(a.add, 300)].slice(-LIST_CAPS.content);
         }
         if (a.result) {
@@ -680,7 +684,7 @@ export function planEntry(entry, ctx = {}) {
         const space = spaceHere(a.blocks?.[0] || ctx.block);
         const live = liveDocs(mem, 'reviews', space);
         const near = nearest(`${a.title} ${a.family || ''}`, live.map((r) => ({ ...r, tf: `${r.title || ''} ${r.family || ''}` })), 'tf');
-        if (near && near.s >= SIMILAR) return { error: `和 ${near.d.id}（${cut(near.d.title, 40)}）是同一组：往那一组加题（review id=${near.d.id} add="…"），不新开` };
+        if (GATE && near && near.s >= SIMILAR) return { error: `和 ${near.d.id}（${cut(near.d.title, 40)}）是同一组：往那一组加题（review id=${near.d.id} add="…"），不新开` };
       }
       for (const w of a.weaknesses || []) if (!find('weaknesses', w)) return { error: `weaknesses 里的 ${w} 在弱点表里没有` };
       // 新的一组：从明天开始（档位 1 天，last 是今天）
@@ -710,7 +714,7 @@ export function planEntry(entry, ctx = {}) {
       const space = spaceHere(blk);
       const live = get('recall').filter((d) => (d.status || 'active') === 'active' && recallSpace(d) === space);
       const near = nearest(a.q, live, 'q');
-      if (near && near.s >= SIMILAR) return { error: `和 ${near.d.id}（${cut(near.d.q, 40)}）是同一条：要改问法、答案写 recall id=${near.d.id} q="…" a="…"，不另加` };
+      if (GATE && near && near.s >= SIMILAR) return { error: `和 ${near.d.id}（${cut(near.d.q, 40)}）是同一条：要改问法、答案写 recall id=${near.d.id} q="…" a="…"，不另加` };
       return { ...base, op: 'add', target: nextRecallId(get('recall')), data: { q: cut(a.q, 300), a: cut(a.a, 600), ...(blk ? { block: blk } : {}), tier: 1, last: date, lapses: 0, status: 'active', space, ...(basis.length ? { basis } : {}), ...(sid ? { session: sid } : {}) } };
     }
     case 'position': {

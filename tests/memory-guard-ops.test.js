@@ -31,68 +31,8 @@ async function setup() {
   return { db, ops, read, setMem: async () => { mem = await read(); } };
 }
 
-test('memo 块：原话找得到的照收；编的原话、编的证据编号照收但挂提醒（课堂当场写的不拦）；重复的拒收', async () => {
-  const { db, ops, read } = await setup();
-  const { entries } = parseMemoLines([
-    'note text="#3 学生原话「我觉得 βᵀα 是一个矩阵」，内积和外积还没分开" basis=qz-b2',
-    'slip text="#3 学生说「我早就会了」，我没追问" basis=qz-b2',
-    'note text="学生在 qz-b2 选的是一个矩阵，形状没想" basis=ev-notreal',
-    'note text="#3 学生原话「我觉得 βᵀα 是一个矩阵」，内积和外积还没分开。" basis=qz-b2',
-  ].join('\n'));
-  const r = await ops.applyMemo(entries, { session: SID, block: 'L2.2.2', turn: 5, turns });
-  assert.equal(r.pds.length, 3);
-  assert.equal(r.rejected.length, 1, '最后一条和第一条几乎一样');
-  const m = await read();
-  const ok = m.observations.find((o) => String(o.text).includes('还没分开'));
-  assert.ok(ok && !ok.guard, '对得上的不挂提醒');
-  const flagged = m.slips.find((s) => String(s.text).includes('我早就会了'));
-  assert.equal(flagged.guard.verdict, 'flag');
-  assert.equal(flagged.guard.checks[0].code, 'quote-miss');
-  assert.equal(flagged.text, '#3 学生说「我早就会了」，我没追问', 'Claude 写的话一个字没改');
-  const fakeBasis = m.observations.find((o) => String(o.text).includes('形状没想'));
-  assert.equal(fakeBasis.guard.checks[0].code, 'basis-dropped');
-  const logs = (await db.collection('guard_log').get()).docs.map((d) => d.data());
-  assert.ok(logs.filter((l) => l.verdict === 'flag').length >= 2);
-});
 
-test('事后写的（lab）对不上：先暂存；我在管理里放行就写进去', async () => {
-  const { db, ops, read, setMem } = await setup();
-  const { entries } = parseMemoLines('note text="#3 学生说「我早就会了」" basis=qz-b2');
-  const r = await ops.applyMemo(entries, { session: SID, block: 'L2.2.2', turns, author: 'lab' });
-  assert.equal(r.pds.length, 0);
-  assert.ok(r.rejected[0].held);
-  let m = await read();
-  const held = m.pending.find((p) => p.status === 'held');
-  assert.ok(held?.guard?.checks?.length);
-  assert.ok(!m.observations.some((o) => String(o.text).includes('早就会了')), '暂存的还没写进去');
-  await setMem();
-  await ops.release(held);
-  m = await read();
-  assert.ok(m.observations.some((o) => String(o.text).includes('早就会了')), '放行以后写进去了');
-  assert.equal(m.pending.find((p) => p.id === held.id).status, 'done');
-});
 
-test('教研室（lab）写对得上的：照收，新加的标「事后补写」、记成 lab 写的；改课堂写的话拒收', async () => {
-  const { ops, read, setMem } = await setup();
-  // 先有一个课堂当场写的弱点
-  const c = await ops.applyMemo(parseMemoLines('weakness title="矩阵乘法时不先看维数能不能乘" scope=局部 level=L1 blocks=L2.2.2 basis=qz-b2').entries, { session: SID, block: 'L2.2.2', turns });
-  assert.ok(c.pds.length, JSON.stringify(c.rejected));
-  const wid = c.pds[0].target;
-  await setMem();
-  const { entries } = parseMemoLines([
-    'note text="#3 学生原话「我觉得 βᵀα 是一个矩阵」，下一节先换数再测" basis=qz-b2',
-    `weakness id=${wid} title="完全换了一个说法" basis=qz-b2`,
-  ].join('\n'));
-  const r = await ops.applyMemo(entries, { session: SID, block: 'L2.2.2', turns, author: 'lab' });
-  assert.equal(r.pds.length, 1);
-  assert.equal(r.pds[0].by, 'lab');
-  const m = await read();
-  const ob = m.observations.find((o) => String(o.text).includes('下一节先换数再测'));
-  assert.equal(ob.by, 'lab');
-  assert.equal(ob.backfill, true);
-  assert.ok(!ob.guard);
-  assert.ok(r.rejected.some((x) => /不能改它的话/.test(x.error)), '课堂写的弱点，事后写的不能改它的标题');
-});
 
 test('下课整理单被拒的：记进 meta/guard 的 carry（下一节开课带着）', async () => {
   const { db, ops } = await setup();

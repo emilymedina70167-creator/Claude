@@ -15,22 +15,18 @@ import { toast } from '../record.js';
 import { attachErrlog, onError, markSeen, reportError } from '../errlog.js';
 import { healthCheck, healthRecord, sameDoc } from './health.js';
 import { guardDebrief, buildCorpus } from './guard.js';
-import { recheck as sentryRecheck, recheckText, workOrder } from './sentry.js';
 import { guardDb } from './writer.js';
 import { subjectOf as holdSubject } from './space.js';
-import { HOLD_MAX, needsHolds, pickHolds, holdBrief, holdDocs, dueHolds, holdAims } from './holds.js';
+import { dueHolds, holdAims } from './holds.js';
 import { aimId, checkAims } from '../class/aims.js';
-import { checkProblems } from './labdesk.js';
 import { componentDoc } from '../subject.js';
 import { ENGINES } from '../engines/registry.js';
-import { createLabDesk } from './labdesk.js';
-import { receiptLine } from './lab.js';
 import { getStore, getDownloads } from '../live/store.js';
 import { VERSION, KIT_URL } from '../version.js';
 import { COLLECTIONS, MEMORY_COLLECTIONS, ROLE_TEXT, UNDO_DAYS, assertWrite, toDate } from './schema.js';
 import { sessionId, isSessionId, scopeDb, manualEvidence, SESSION_SCOPED, SESSION_KINDS, kindOf, isTeach, TEACH_KINDS, classForm, idleClose } from './session.js';
 import { buildReport, reportLine, REPORT_VERSION, lastActivity, reportText } from './report.js';
-import { needsDebrief, transcriptText, debriefTraps, debriefPrompt, parseDebrief, debriefText, debriefView, DEBRIEF_VERSION } from './debrief.js';
+import { debriefText, debriefView } from './debrief.js';
 import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA, EXAM_BACKUP, AIDE_BACKUP } from './backup.js';
 import { createManualForm } from './manual.js';
 import { createMemOps } from './memops.js';
@@ -93,14 +89,7 @@ import { createExamCard } from '../exam/examview.js';
 import { createExamPage } from '../exam/exampage.js';
 import { priority } from '../exam/priority.js';
 // 种类名给我看的叫法（一直用的样子按种类存）
-import { createAideDesk } from '../aide/aidedesk.js';
-import { createSaid } from './saiddesk.js';
-import { createSummary } from './summarydesk.js';
 import { stalePack } from './summary.js';
-import { createSummaryView } from './summaryview.js';
-import { saidTimer } from './said.js';
-import { loadCards, loadBrief } from '../aide/load.js';
-import { cardIdsFor } from '../aide/card.js';
 import { suggestBlock } from '../books/plan.js';
 import { oldKind, renderOldClass } from './oldview.js';
 import { createSink } from '../live/sync.js';
@@ -197,7 +186,6 @@ export async function renderDesk(root, meta) {
     <section class="dk-card dk-exam"><h2 class="dk-h">考试</h2><p class="dk-sub muted">考哪个学校哪个专业、目标多少分、哪天考。410 分的进度、距考研都照这里算。</p><div class="dk-body"></div></section>
     <section class="dk-card dk-instr"><h2 class="dk-h">项目指令</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-notebook"><h2 class="dk-h">笔记本</h2><div class="dk-body"></div></section>
-    <section class="dk-card dk-summary"><h2 class="dk-h">记忆摘要</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-recent"><h2 class="dk-h">最近记下的</h2><p class="dk-sub muted">课堂里的 Claude 和页面直接写进记忆的，不对就撤销（7 天内）。</p><div class="dk-pdone"></div></section>
     <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-backup" hidden><h2 class="dk-h">备份</h2><div class="dk-body"></div></section>
@@ -231,10 +219,6 @@ export async function renderDesk(root, meta) {
   const data = Object.fromEntries(MEMORY_COLLECTIONS.map((c) => [c, []]));
   // 改记忆（掌握直接写、我改记忆、撤销）：放在订阅前面，第一次自检算出掌握时就用得上
   const ops = createMemOps({ db, mem: () => data });
-  let aideDesk = null; // 课堂助手（下面建，订阅的回调先到时还没有）
-  let saidDesk = null; // 话的账（saiddesk.js），首页那一份
-  let sumDesk = null; // 记忆摘要（summarydesk.js），首页那一份
-  let sumView = null; // 「管理 → 记忆摘要」的画面
   let projView = null; // 第十四轮：项目指令、笔记本、「笔记」页
   const loaded = new Set();
   const failed = new Set();
@@ -373,13 +357,11 @@ export async function renderDesk(root, meta) {
       loaded.add(c);
       failed.delete(c);
       if (c === 'sessions' || c === 'position') paintClass();
-      if (c === 'sessions') { fixReports(); fixSkills(); setTimeout(fixHolds, 500); backTick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
+      if (c === 'sessions') { fixReports(); fixSkills(); backTick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
-      if (c === 'summary') { sumView?.paint(); backTick(); if (!$('.dk-manage').hidden) paintMine(); }
       // 笔记本变了（课上、班主任、课后那一轮写的）：管理页和「笔记」页开着就重画
       if (c === 'notebook') { if (!$('.dk-manage').hidden) projView?.paintManage(); if (!$('.dk-notespage').hidden) projView?.paintPage(decodeURIComponent(String(location.hash || '').slice(1))); }
       if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
-      if (['drills', 'evidence'].includes(c)) setTimeout(fixHolds, 500);
       if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) { fixReports(); backTick(); } if (lastRes) paintWeek(toDate(Date.now())); }
       if (c === 'curriculum') { examInbox.maybeRefresh(); manualForm?.refreshBlocks(); const sel = $('.dk-radd-b'); if (sel) sel.dataset.space = ''; }
       if (['curriculum', 'weaknesses', 'observations', 'mastery'].includes(c)) { fixSkills(); }
@@ -426,7 +408,7 @@ export async function renderDesk(root, meta) {
     for (const c of failed) res.problems.unshift({ coll: c, id: '', msg: `读不到 ${c}（${COLLECTIONS[c].label}），这一次的自检不全` });
     paint(res, today);
     writeBriefs(today);
-    if (!failed.size) { flushOpen(); proposeMastery(); runHealth(today); runSentry(today); syncBars(); }
+    if (!failed.size) { flushOpen(); proposeMastery(); runHealth(today); backTick(); syncBars(); }
     const rec = memcheckRecord(res, { kit: VERSION, today });
     const json = JSON.stringify(rec);
     if (json !== lastCheck) {
@@ -443,20 +425,6 @@ export async function renderDesk(root, meta) {
     }
   }
 
-  // —— 后方的复查和工作单（sentry.js）：每次自检后算一遍，变了才写 meta/workorder；下课整理时课堂 Claude 带着这一科的复查几行 ——
-  let workDoc = null;
-  let lastWork = '';
-  let lab = null;
-  db.doc('meta/workorder').onSnapshot((s) => { workDoc = s.exists ? s.data() : null; paintWork(); }, () => {});
-  // 云端教研室（labdesk.js、docs/lab-plan.md）：照工作单拼单子 lab_brief，收它的回答 lab_inbox（过守卫、写回执）
-  // 课堂助手（aide/aidedesk.js，第九轮）：下课后整理、补学生卡、写课前档案；一次一件、走后台，记忆读齐了才动
-  aideDesk = createAideDesk({ db, getData: () => data, ops, ai: deskAI, packs: () => packs, ready: () => ['sessions', 'curriculum', 'errors', 'weaknesses', 'mastery', 'observations', 'position', 'reviews'].every((c) => loaded.has(c)) });
-  // 话的账（第十一轮，saiddesk.js）：首页先把每节课我说了、还没过账的话过一遍（下了课的、挂着的、丢下的都算），再做课后的整理
-  saidDesk = createSaid({ db, getData: () => data, ops, ai: deskAI });
-  // 记忆摘要（第十三轮，summarydesk.js）：有了摘要以后首页后台不再过话的账，改成把每节课并进摘要重写一遍
-  sumDesk = createSummary({ db, getData: () => data, ai: deskAI, onChange: () => sumView?.paint() });
-  sumView = createSummaryView({ sum: sumDesk, host: () => $('.dk-summary') });
-  lab = createLabDesk({ db, getData: () => data, packs, planner, ops, aide: aideDesk, said: saidDesk, summary: sumDesk, onChange: () => paintWork() });
   // 班主任（第十一轮 B1，head/）：首页上的总 Claude。每一轮的说明照首页手上的现拼（要求、三科的简报、预测分、下一步、这一周、考试）
   // 班主任每一轮的说明（第十四轮：就是项目 Claude 的说明，project/system.js）：事实、学生写的指令、它的笔记本、学习台里有什么、工具
   let chatCount = 0;
@@ -513,39 +481,6 @@ export async function renderDesk(root, meta) {
       setTimeout(() => backTick(), 500);
     } catch (err) { reportError(err, { what: '课后那一轮', soft: true }); } finally { afterBusy = false; }
   }
-  function runSentry(today) {
-    backTick();
-    // 学生卡还没读到：先读，读到了再拼工作单（不然按章合并的单子会被当成没了撤掉）
-    if (!aideDesk.cards()) { aideDesk.ensureCards().then(() => runSentry(today), () => {}); return; }
-    const re = sentryRecheck(data);
-    const items = workOrder(data, { today, packs: Object.fromEntries(SPACE_KEYS.map((k) => [k, { main: stalePack(packs[k].main, data) ? null : packs[k].main }])), re, exam: examMeta, cards: aideDesk.cards() });
-    const doc = { v: 1, items, recheck: Object.fromEntries(SPACE_KEYS.map((k) => [k, recheckText(re, k)])), stale: re.stale.length, maybeSolved: re.maybeSolved.length };
-    const key = JSON.stringify(doc);
-    if (key === lastWork) return;
-    lastWork = key;
-    put('meta', 'workorder', { ...doc, today, at: Date.now() }).catch((err) => reportError(err, { what: '工作单没写进去' }));
-    lab.sync(items);
-  }
-  // 教研室这一段：等它做的单子几张、最近几份回答收了什么（回执）
-  function labHtml() {
-    if (!lab) return '';
-    const bs = lab.briefs();
-    const ls = lab.logs();
-    const when = (t) => { const d = new Date(Number(t) || 0); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-    return `<p class="dk-lab"><b>云端教研室</b>　${bs.length ? `等它做的 ${bs.length} 张单子（${bs.slice(0, 4).map((b) => escapeHtml(WORK_KIND[b.kind] || b.kind)).join('、')}${bs.length > 4 ? '……' : ''}）` : '没有等它做的单子'}</p>
-      ${ls.length ? `<details class="dk-soft"><summary>它最近交回来的 ${ls.length} 份</summary><ul class="dk-errlist">${ls.map((r) => `<li>${escapeHtml(receiptLine(r))}<span class="muted">　${escapeHtml(when(r.at))}${r.rejected?.length ? `　${escapeHtml(r.rejected.map((x) => x.error).join('；').slice(0, 160))}` : ''}</span></li>`).join('')}</ul></details>` : ''}`;
-  }
-  const WORK_KIND = { backfill: '补收尾', recheck: '重判', resolve: '可能会了', newproblems: '缺新题', probe: '该测了', prep: '该备课', after: '课后整理', card: '合并学生卡' };
-  function paintWork() {
-    const box = $('.dk-work');
-    if (!box) return;
-    const items = (workDoc?.items || []).filter((x) => !x.space || x.space === space);
-    box.innerHTML = `<h3 class="dk-h3">后方的工作单</h3>
-      <p class="dk-sub muted">页面按记录算出来的、后方该做的事（这一科），价值高的在前。标「不另调用」的会并进下一次下课整理或开课。</p>
-      ${labHtml()}
-      ${items.length ? `<ul class="dk-errlist">${items.slice(0, 8).map((x) => `<li><b>${escapeHtml(WORK_KIND[x.kind] || x.kind)}</b> ${inline(x.title)}<span class="muted">　${escapeHtml(x.why)} · ${escapeHtml(x.cost)}</span></li>`).join('')}</ul>${items.length > 8 ? `<details class="dk-soft"><summary>还有 ${items.length - 8} 件</summary><ul class="dk-errlist">${items.slice(8, 40).map((x) => `<li><b>${escapeHtml(WORK_KIND[x.kind] || x.kind)}</b> ${inline(x.title)}<span class="muted">　${escapeHtml(x.why)}</span></li>`).join('')}</ul></details>` : ''}` : '<p class="dk-ok">没有要做的。</p>'}`;
-  }
-
   // —— 守卫（guard.js、memops.js）：写进记忆的每一条过六道检查。管理页「自检」里：各种结论几条、先暂存的（放行 / 不要）、最近挂提醒和拒掉的 ——
   let guardDoc = null;
   let guardLogs = [];
@@ -707,7 +642,6 @@ export async function renderDesk(root, meta) {
     paintBackup();
     paintPending();
     paintGuard();
-    paintWork();
     paintMine();
     paintDrill(today);
     paintWeek(today);
@@ -907,19 +841,7 @@ export async function renderDesk(root, meta) {
     // 接着删（打开学习台时）：等记忆库各类都读到了再算删哪些，不然这节课的作答证据、笔记会漏删
     if (!given && !MEMORY_COLLECTIONS.every((c) => loaded.has(c))) { setTimeout(() => runPurge(sid), 1500); return; }
     purgeRunning.add(sid);
-    // 删之前先给这节课过账（第十一轮）：我说的话记成要求（原话抄进去）以后才删。最多等 60 秒，没成就把我说的话先留着
-    // 试满两次（SAID_FAILS）还没过成的：不再调用，我说的话一直留着、这节课先不删（不能为了删课丢我的要求）
-    let keepWords = false;
-    let sDoc = null;
-    // 有记忆摘要以后不等过账：我说的话由课后重写读，删课不为它等（第十三轮）
-    if (saidDesk && !sumDesk?.on()) {
-      sDoc = await db.doc(`sessions/${sid}`).get().then((r) => (r.exists ? { id: sid, ...r.data() } : null)).catch(() => null);
-      const left = !!sDoc && saidDesk.needs({ ...sDoc, said: { ...(sDoc.said || {}), fails: 0 } });
-      if (left && saidDesk.needs(sDoc)) {
-        const r = await Promise.race([saidDesk.runFor(sid), new Promise((res) => setTimeout(() => res('fail'), 60000))]);
-        keepWords = r !== 'done' && r !== 'none';
-      } else keepWords = left;
-    }
+    const keepWords = false; // 话的账第十四轮搬进 archive/：删课不再等过账
     const plan0 = given || purgePlan(data, sid, { keepWords });
     // 证据按课号现查（不只看手上的快照：快照读失败、还没跟上刚写的，会漏删）
     const fresh = await db.collection('evidence').where('session', '==', sid).get().then((q) => q.docs.map((d) => ({ id: d.id, ...d.data() })), () => []);
@@ -1135,130 +1057,6 @@ export async function renderDesk(root, meta) {
     }
   }
 
-  // —— 留着的题：报告写好后一次一节，先用没见过的真题，缺的在后台出；课堂不等它。
-  const heldSessions = new Set();
-  let holdBusy = false;
-  async function fixHolds() {
-    if (holdBusy || heldSessions.size >= 4 || !['sessions', 'drills', 'evidence'].every(c => loaded.has(c))) return;
-    // 等报告正式写好、课上的题抄进了题库（d.drills 有了数）再留：出「同类」的题要照着课上原题的全文
-    const x = data.sessions.find(d => !heldSessions.has(d.id) && needsHolds(d) && d.report && !d.report.provisional && d.drills !== undefined);
-    if (!x) return;
-    holdBusy = true;
-    heldSessions.add(x.id);
-    const ref = db.doc(`sessions/${x.id}`);
-    const current = async () => { const snap = await ref.get(); return snap.exists ? { id: x.id, ...snap.data() } : null; };
-    let ids = [], made = 0;
-    try {
-      const cur = await current();
-      if (!cur || !needsHolds(cur)) return;
-      const reserve = await readReserve(db, toDate(Date.now()));
-      ids = pickHolds({ session: cur, drills: data.drills, evidence: data.evidence, reserve, sessions: data.sessions });
-      // 验哪几件：现在的加上课上被换掉的（holdAims；有作答的在前）。报告里有每件的状态
-      const report0 = await scopeDb(db, x.id).doc('report/main').get().then(r => (r.exists ? r.data() : null)).catch(() => null);
-      const want = holdAims(cur, report0);
-      const n = Math.min(HOLD_MAX, want.length);
-      // 先记试过：页面在调用中关掉，也不会下次永远当第一次试。
-      assertWrite('page', 'sessions');
-      await ref.update({ holdTries: (Number(cur.holdTries) || 0) + 1 });
-      if (ids.length < n) {
-        try {
-          const ai = await deskAI();
-          const report = await scopeDb(db, x.id).doc('report/main').get().then(r => r.exists ? r.data() : null);
-          if (ai && !ai.legacy && report) {
-            const subject = holdSubject(cur.block || '');
-            const covered = new Set(ids.map(id => data.drills.find(d => d.id === id)?.aim).filter(Boolean));
-            const aims = want.filter(a => !covered.has(a.id)).slice(0, HOLD_MAX);
-            const items = report.items || [];
-            const names = [...new Set(['answer', 'quiz', ...data.drills.filter(d => d.fromSession === x.id).map(d => d.kind).filter(k => ENGINES[k])])].slice(0, 7);
-            const docs = names.map(name => componentDoc(COMPONENT_DOCS, name, subject) || '').join('\n\n');
-            const prompt = holdBrief({ session: cur, aims, items, originals: data.drills.filter(d => d.fromSession === x.id && d.md && d.status !== 'void'), subject, n: n - ids.length, docs });
-            const res = await ai.call(prompt, { model: 'claude-opus-5-5', effort: 'high', lane: 'bg', cache: false });
-            if (res.modelApplied === 'claude-opus-5-5') {
-              const checked = await checkProblems(res.text, { brief: `hold-${x.id}`, block: cur.block, target: { kind: 'hold', title: cur.title }, subject, existing: data.drills });
-              const ready = holdDocs({ items: checked.ok }, { session: { ...cur, aims: want }, at: Date.now() }).filter(it =>
-                it.doc.kind === 'quiz' || it.doc.kind === 'answer' || (ENGINES[it.doc.kind] && /^\s*mode\s*[:：]\s*quiz\s*$/m.test(it.doc.md)));
-              const fresh = await current();
-              if (!fresh || Object.hasOwn(fresh, 'holds') || fresh.status !== 'closed') return;
-              assertWrite('page', 'drills');
-              for (const it of ready.slice(0, n - ids.length)) {
-                await db.doc(`drills/${it.id}`).set(it.doc);
-                ids.push(it.id); made++;
-              }
-            }
-          }
-        } catch (err) { console.warn('留着的题没出成', x.id, err?.message || err); }
-      }
-      const latest = await current();
-      if (!latest || Object.hasOwn(latest, 'holds') || latest.status !== 'closed') return;
-      if (ids.length) {
-        await ref.update({ holds: { ids, at: Date.now(), exam: ids.length - made, made } });
-      }
-    } catch (err) { reportError(err, { what: '留着的题没存成', path: `sessions/${x.id}`, soft: true }); }
-    finally { holdBusy = false; setTimeout(fixHolds, 500); }
-  }
-
-  // —— 下课后的复盘（debrief.js，docs/smart-plan.md 第 2 批）：下了课、报告写好的课，后台调用一次 Opus 通读整节课，
-  // 判断误解消了没有、写好下一节开头先测什么，存在 sessions/{编号}.debrief，下一节的课堂和备课带着。
-  // 新的课先复盘（下一节最要用的就是上一节的）；一次打开学习台最多 3 节；走后台（lane: 'bg'），不和别的调用抢。
-  // 讲课只用 Opus 5.5 high，复盘决定下一节怎么开场，也用它；回的不是 Opus 5.5 就不存，下次再试
-  const debriefed = new Set();
-  let debriefBusy = false;
-  async function fixDebriefs() {
-    if (debriefBusy || debriefed.size >= 3 || !['sessions', 'weaknesses', 'observations'].every((c) => loaded.has(c))) return;
-    const x = data.sessions.filter((d) => !debriefed.has(d.id) && needsDebrief(d)).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
-    if (!x) return;
-    debriefBusy = true;
-    debriefed.add(x.id);
-    try {
-      const ai = await deskAI();
-      if (!ai) return;
-      const scoped = scopeDb(db, x.id);
-      const [turns, rep] = await Promise.all([
-        scoped.collection('class_turns').get().then((s) => s.docs.map((d) => d.data()), () => []),
-        scoped.doc('report/main').get().then((r) => (r.exists ? r.data() : null), () => null),
-      ]);
-      if (!turns.length) return;
-      const sp = spaceOfDoc('sessions', x, data) || space;
-      const gone = voidedIds(data);
-      const weak = filterSpace(data, sp).weaknesses.filter((w) => !['closed', 'merged', 'void'].includes(w.status) && !gone.has(`weaknesses/${w.id}`));
-      // 上一节（同一科、比这节早）的复盘：对照误解有没有又出现
-      const prevS = data.sessions.filter((d) => d.id !== x.id && d.debrief && (spaceOfDoc('sessions', d, data) || space) === sp && (d.startedAt || 0) < (x.startedAt || 0))
-        .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
-      // 这一块真题的坑表（考情第 5 批：画像里教研室归纳的）：复盘把误解和坑对上，对上的记进 exam_bar（下一步学什么加权）
-      const ex = x.block ? await Promise.race([loadExamCourse(db, courseOfBlock(x.block)), new Promise((r) => setTimeout(() => r(null), 5000))]).catch(() => null) : null;
-      const sylIds = new Set((ex?.syllabus || []).filter((n) => (n.blocks || []).includes(x.block)).map((n) => n.id));
-      const traps = (ex?.profiles || []).filter((p) => sylIds.has(p.id)).flatMap((p) => p.traps || []);
-      const prompt = debriefPrompt({ session: x, transcript: transcriptText(turns), report: rep ? reportText(rep) : '', weaknesses: weak, prev: prevS ? debriefText(prevS.debrief) : '', subject: subjectOf(x.block || ''), traps });
-      const res = await ai.call(prompt, { model: MODEL, effort: 'high', modelTier: 'complex', cache: false, lane: 'bg' });
-      if (res?.modelApplied && res.modelApplied !== MODEL) return;
-      const got = parseDebrief(res.text);
-      if (got.problems.includes('回的不是复盘')) { console.warn('复盘回的不是复盘', x.id, String(res.text).slice(0, 200)); return; }
-      const raw = { v: DEBRIEF_VERSION, at: Date.now(), model: res.modelApplied || '', bytes: new TextEncoder().encode(prompt).length, mis: got.mis, pace: got.pace, habit: got.habit, opening: got.opening, advice: got.advice };
-      // 守卫：复盘里引的原话、轮次、板上编号要能在这节课的记录里找到；对不上的那几条先暂存（held），不进下一节的记忆摘要
-      const { debrief, held } = guardDebrief(raw, { session: x.id, mem: data, corpus: buildCorpus({ turns, evidence: data.evidence.filter((e) => e.session === x.id) }) });
-      if (held) reportError(`复盘有 ${held} 条对不上这节课的记录，先暂存了`, { what: '守卫', path: `sessions/${x.id}`, soft: true });
-      // 读最新的再写（报告、归类可能刚写过这一条）
-      const cur = await db.doc(`sessions/${x.id}`).get().then((r) => (r.exists ? r.data() : null));
-      if (!cur) return;
-      assertWrite('page', 'sessions');
-      // 复盘里写的坑只认坑表里真有的（编的去掉，先去掉再存）
-      const hit = debriefTraps(debrief, new Set(traps.map((t) => t.id)));
-      await db.doc(`sessions/${x.id}`).set({ ...cur, debrief });
-      if (hit.length) {
-        // 记进这一块的 exam_bar（不写进弱点表：弱点表的写入方没有 page）；读最新的再并
-        const ref = db.doc(`exam_bar/${x.block}`);
-        const bar = await ref.get().then((r) => (r.exists ? r.data() : null)).catch(() => null);
-        assertWrite('page', 'exam_bar');
-        await ref.set({ ...(bar || { block: x.block, done: [], passed: false, timed: false }), traps: [...new Set([...(bar?.traps || []), ...hit])], at: Date.now() });
-      }
-    } catch (err) {
-      console.warn('复盘没做成', x.id, err?.message || err?.code || err);
-    } finally {
-      debriefBusy = false;
-      setTimeout(fixDebriefs, 500);
-    }
-  }
-
   // —— 待确认：所有课的改动单（memoview.js）；我点了才写 ——
   const memoView = createMemoView({ db, ops, nameOf: nameIn(() => data) });
   let pendingWired = false;
@@ -1292,9 +1090,9 @@ export async function renderDesk(root, meta) {
     const fold = (key, title, n, body) => `<details class="dk-soft dk-mine-sec" data-sec="${key}"${openSecs.has(key) ? ' open' : ''}><summary>${title}（${n}）</summary>${body}</details>`;
     // 有记忆摘要以后（第十三轮），老师看的是摘要：守则、关于我这两类不再发给它，在这里改了也到不了老师那里，
     // 所以不再列出来让我改（数据都留着），写一句去哪改
-    const sumOn = !!sumDesk?.on();
+    const sumOn = true; // 第十四轮：守则、关于我早就不发给老师了，这里不再列
     const keep = (key, html) => (sumOn && (key === 'lessons' || key === 'prefs') ? '' : html);
-    box.innerHTML = `${sumOn ? '<p class="dk-sub muted">老师现在看的是「记忆摘要」（上面那张卡）：关于你、关于怎么教你的事在那里看和改。这里只剩学习的账。</p>' : ''}
+    box.innerHTML = `${sumOn ? '<p class="dk-sub muted">老师现在读的是它自己的笔记本（上面那张卡）和你写的项目指令。这里只剩学习的账。</p>' : ''}
       ${keep('lessons', fold('lessons', '教学守则：老师的失误归纳出来的', lessons.length, lessons.map((l) => `<div class="dk-edit-row" data-id="${escapeHtml(l.id)}"><span>${inline(l.text)}${(Number(l.hits) || 1) > 1 ? `<span class="muted">（犯过 ${Number(l.hits)} 次）</span>` : ''}</span><button type="button" class="btn btn-sm dk-lesson">改</button><button type="button" class="btn btn-sm dk-lesson-x">不用了</button></div>`).join('') || '<p class="muted">还没有：下课时课堂里的 Claude 会把这节课的失误归纳成守则。</p>'))}
       ${keep('prefs', fold('prefs', '关于我：讲法、习惯、目标', prefs.length, prefs.map((p) => `<div class="dk-edit-row" data-id="${escapeHtml(p.id)}"><span><span class="dk-k">${escapeHtml(p.topic || '')}</span>${inline(p.text)}</span><button type="button" class="btn btn-sm dk-pref">改</button></div>`).join('') || '<p class="muted">还没有。</p>'))}
       ${fold('recall', '要记的：不用再记的停掉', recs.length, recs.map((k) => `<div class="dk-edit-row" data-id="${escapeHtml(k.id)}"><span>${inline(k.q)}<span class="muted"> → ${inline(k.a)}（${k.result ? `${Number(k.tier) || 1} 天那档` : '还没想过'}${Number(k.lapses) ? `，没想起过 ${Number(k.lapses)} 次` : ''}）</span></span><button type="button" class="btn btn-sm dk-rvoid">不用记了</button></div>`).join('') || '<p class="muted">还没有。</p>')}
@@ -1828,7 +1626,6 @@ export async function renderDesk(root, meta) {
     const notes = page === 'notes';
     $('.dk-home').hidden = !home;
     $('.dk-manage').hidden = !manage;
-    if (manage) sumView?.paint();
     if (manage) examCard.paint();
     if (manage) projView.paintManage();
     $('.dk-pages').hidden = home || books || manage || exam || chat || notes;
@@ -1995,27 +1792,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   // 「难度和问法照真题」，每一轮的说明里要有「这一块在考试里」）；读到了守卫才认得这门课的真题题号、拒留作模考的
   const loadExam = (blk) => loadExamCourse(db, courseOfBlock(blk)).catch(() => null).then((ex) => { if (ex) examIdx = examIndexOf(ex, examYears()); return ex; });
   const examLoad = kind === 'class' && block && !readOnly ? loadExam(block) : null;
-  // 话的账（第十一轮）：课上我打了一句，隔 20 秒（?dev&said=2 是 2 秒）后台过一次账；写好了的要求马上放进 mem，
-  // 老师下一次调用的说明里「学生的要求」就有它（system() 每次调用都重拼）。离开课堂之前 flush（不等它，断了由首页补）
-  // 记忆摘要（第十三轮）：老师当场记的新笔记写进摘要；有摘要（或新的数据库）时课上不再过话的账
-  const classAI = store.dev ? async () => (await getAI()) || createDevAI() : getAI;
-  const sumHere = readOnly ? null : createSummary({ db: guardDb(db), getData: () => mem, ai: classAI });
-  const summary = sumHere ? { on: sumHere.on, note: sumHere.note } : null;
-  // 记忆是一类一类读到的：要等规则、守则、要求、摘要这四类都到了才分得清是不是走摘要（没到就先当还没换）
-  const sumMode = () => !!sumHere && ['rules', 'lessons', 'asks', 'summary'].every((c) => memLoaded.has(c)) && sumHere.ready();
-  const saidHere = readOnly ? null : createSaid({ db, getData: () => mem, ops, ai: store.dev ? async () => (await getAI()) || createDevAI() : getAI });
-  const saidOnceOf = async () => { const r = await db.doc(`sessions/${sid}/said/main`).get().catch(() => null); return r?.exists ? r.data().once || [] : []; };
-  if (saidHere) mem.saidOnce = await within(saidOnceOf(), 3000, []).catch(() => []);
-  const said = saidHere ? saidTimer({
-    wait: (Number(new URLSearchParams(location.search).get('said')) || 20) * 1000,
-    run: async () => {
-      if (sumMode()) return;
-      if (!['done', 'partial'].includes(await saidHere.runFor(sid))) return;
-      mem.asks = (await db.collection('asks').get()).docs.map((d) => ({ id: d.id, ...d.data() }));
-      mem.saidOnce = await saidOnceOf();
-    },
-  }) : null;
-  const leave = (to) => { said?.flush(); goto(to); };
+  const leave = (to) => goto(to);
   // 考试资料的收件箱在课堂里接着并（exam/examdesk.js 的 startClassInbox）：学生的习惯是打开首页就进课堂，只在首页并等不到并完。
   // 开课 30 秒以后、一次一份、一批 5 条，不重算统计（回到首页补）、不画东西；只读翻看、练一练、实时黑板、自学单元不开（前面已经 return）。
   // 用首页那一层出口（guardDb）写：考试资料不是课堂讲课那一边的数据。不在调用模型的路上，也不往说明里加东西
@@ -2042,7 +1819,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   project.notebook = createNotebook({ db, corpus: () => project.corpusText() });
   return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
     project,
-    store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), said, summary, books, prevRead,
+    store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), books, prevRead,
     // 这一门课的考试资料（和舞台课一样：不等它，课堂读到了再用）；examFor：课上换到另一门课时再按那门课读一次
     exam: examLoad, reserve: examYears, examFor: kind === 'class' ? loadExam : null,
     // 后方复查（sentry.js）首页算好的：下课整理时带给课堂 Claude 判断（只在下课那一次用，上课的每一轮不带）

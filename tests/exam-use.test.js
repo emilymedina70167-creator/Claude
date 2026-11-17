@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { prepPrompt, parsePrep, lessonPlanText } from '../kit/src/books/plan.js';
 import { reviewPack } from '../kit/src/memory/views.js';
 import { markFresh, isOriginal } from '../kit/src/memory/mastery.js';
-import { problemLint } from '../kit/src/memory/lab.js';
+import { problemLint } from '../kit/src/memory/problemcheck.js';
 import { packText } from '../kit/src/class/prompt.js';
 
 test('备课：带考情一节、要一个 examBar；读回只收能用的真题，不能用的报进备课检查；写成给老师的一行', () => {

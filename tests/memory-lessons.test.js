@@ -66,34 +66,7 @@ test('并进已有的一条：改写 text（记 log）、加上失误、hits 增
   assert.equal(u.writes[0].doc.hits, 2);
 });
 
-test('不累加：和已有一条几乎一样的新守则不收；满了也照收（条数只叫下课整理）；合并 retired + into', () => {
-  const dup = plan('lesson text="出一组练习之前，逐题列出要用到的规则，没讲过的先讲完；讲不了的那题不出"');
-  assert.match(dup.error, /和 T-1.*同一件事/);
-  const many = base();
-  for (let i = 2; i <= LESSONS_MAX + 1; i++) many.lessons.push({ id: `T-${i}`, text: `第 ${i} 条守则：${'甲乙丙丁戊己庚辛'.slice(i % 8)}${i}`, since: TODAY, status: i === LESSONS_MAX + 1 ? 'retired' : 'active', into: 'T-1' });
-  assert.ok(!plan('lesson text="写完板先自己读一遍有没有没讲过的词"', ctx(many)).error);
-  // 别的科的守则不占这一科的名额
-  const other = base();
-  for (let i = 2; i <= LESSONS_MAX + 1; i++) other.lessons.push({ id: `T-${i}`, text: `数学守则 ${i}`, since: TODAY, status: 'active', space: 'math' });
-  assert.ok(!plan('lesson text="写完板先自己读一遍有没有没讲过的词"', ctx(other)).error);
-  const r = run('lesson id=T-1 status=retired into=T-1');
-  assert.match(r.error, /别的守则/);
-  const m = base();
-  m.lessons.push({ id: 'T-2', text: '一块板只放一个点', since: TODAY, status: 'active' });
-  const r2 = run('lesson id=T-2 status=retired into=T-1', m);
-  assert.equal(lesson(r2.mem, 'T-2').status, 'retired');
-  assert.match(plan('lesson id=T-2 again="又犯"', ctx(r2.mem)).error, /已经并进了 T-1/);
-});
 
-test('板放不下的失误不收（页面会自动分屏）；讲法上的照收', () => {
-  assert.ok(layoutOnly('b21 超出一屏（约 617）：一句目的 + 一个带长题面和长解析的 parse 就放不下'));
-  assert.ok(!layoutOnly('k1 划块规则没写名词\'s 也算前置修饰，学生把 the 21st century\'s culture machine 拆成了两块；b22 又超出一屏'));
-  assert.match(plan('slip text="b8 超出一屏（约 915）"').error, /不用记成失误/);
-  // 和已有的守则说的是同一件事：不另记失误，改写成「又犯一次」（2026-11-03：别反复累加）
-  assert.match(plan('slip text="没讲划块就出题，学生做错了才补规则"').error, /守则 T-1.*again|已经记过了/);
-  assert.ok(!plan('slip text="判分时把学生写对的被动语态判成错，没看清助动词"').error);
-  assert.ok(similarity('一块板只讲一个概念', '一块板只讲一个概念。') > 0.9);
-});
 
 test('摘要：守则紧跟规则、全文带；已经归纳进守则的失误不再带，只带还没归纳的', () => {
   const m = base();

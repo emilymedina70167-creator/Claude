@@ -183,34 +183,25 @@ const SUITES = {
     return t;
   },
 
-  // 「我改记忆」：第一次保存写失败（网络抖），编辑框留着、按钮能再点；第二次成功，编辑框收起、新的话画出来
+  // 「项目指令」（第十四轮）：第一次保存写失败（网络抖），写的出口自己重试；一直写不进去时框里的字留着、按钮能再点；网好了再点就成
   async mine(browser) {
     const t = await seeded(browser);
     await t.route('manage');
-    await t.page.evaluate(() => { document.querySelector('.dk-mine-sec[data-sec="prefs"]').open = true; });
-    // 一次写失败（网络抖）：写的出口自己重试，像没发生过
-    await t.page.click('.dk-mine .dk-pref'); await sleep(200);
-    await t.page.fill('.dk-mine textarea', '自动测试改的第一句');
+    await t.page.waitForSelector('.dk-instr .dk-instr-text', { timeout: 15000 });
+    await t.page.fill('.dk-instr .dk-instr-text', '自动测试的第一句');
     await t.page.evaluate(() => window.LAKitDev.failWrites(1));
-    await t.page.click('.dk-mine .dk-pref-save');
-    await t.waitFor(async () => !(await t.page.$('.dk-mine .mm-f')), { timeout: 8000, what: '失败一次（自己重试成了）以后编辑框收起' });
-    check((await t.text('.dk-mine')).includes('自动测试改的第一句'), '失败一次自己重试以后列表里还是旧的话');
-    // 一直写不进去（断网）：编辑框留着、按钮能再点；网好了再点就成
+    await t.page.click('.dk-instr .dk-instr-save');
+    await t.waitFor(async () => (await t.db())['meta/instructions']?.text === '自动测试的第一句', { timeout: 8000, what: '失败一次（自己重试成了）以后存进去' });
     t.expected = ['模拟的写入失败'];
-    await t.page.evaluate(() => { document.querySelector('.dk-mine-sec[data-sec="prefs"]').open = true; });
-    await t.page.click('.dk-mine .dk-pref'); await sleep(200);
-    await t.page.fill('.dk-mine textarea', '自动测试改的一句：先让我自己试');
+    await t.page.fill('.dk-instr .dk-instr-text', '自动测试的第二句：先让我自己试');
     await t.page.evaluate(() => window.LAKitDev.failWrites(20));
-    await t.page.click('.dk-mine .dk-pref-save');
-    await t.waitFor(() => t.page.$('.dk-mine .dk-pref-save:not([disabled])'), { timeout: 10000, what: '写不进去以后「保存」放开' });
-    check(await t.page.$('.dk-mine .mm-f'), '写不进去以后编辑框没了（改的话丢了）');
+    await t.page.click('.dk-instr .dk-instr-save');
+    await t.waitFor(() => t.page.$('.dk-instr .dk-instr-save:not([disabled])'), { timeout: 10000, what: '写不进去以后「存」放开' });
+    check(await t.page.inputValue('.dk-instr .dk-instr-text') === '自动测试的第二句：先让我自己试', '写不进去以后框里的字丢了');
     await t.page.evaluate(() => window.LAKitDev.failWrites(0));
-    await t.page.click('.dk-mine .dk-pref-save');
-    await t.waitFor(async () => !(await t.page.$('.dk-mine .mm-f')), { timeout: 8000, what: '保存成功以后编辑框收起' });
-    check((await t.text('.dk-mine')).includes('自动测试改的一句'), '保存成功以后列表里还是旧的话');
+    await t.page.click('.dk-instr .dk-instr-save');
+    await t.waitFor(async () => (await t.db())['meta/instructions']?.text === '自动测试的第二句：先让我自己试', { timeout: 8000, what: '网好了再存就成' });
     await t.waitFor(async () => ((await t.db())['meta/errors']?.list || []).some((e) => String(e.msg).includes('模拟的写入失败')), { timeout: 12000, what: '写不进去的那次记进 meta/errors（攒几秒才写）' });
-    const prof = await t.docs('profile');
-    check(prof.some((p) => String(p.text).includes('自动测试改的一句')), '数据库里的「关于我」没改');
     return t;
   },
 
@@ -400,24 +391,6 @@ const SUITES = {
     return t;
   },
 
-  // 备课：首页「让 Claude 备课」（本地用模拟的 Claude），教案写进资料包；马上开课，课前预演最后也要到这节课自己的那份资料包里
-  async prep(browser) {
-    const t = await seeded(browser);
-    await t.page.evaluate(() => { const f = document.querySelector('.dk-prepfold'); if (f) f.open = true; });
-    await t.page.click('.dk-prep-go');
-    if (await t.page.$('.la-dialog')) await t.answer('重新备课');
-    const main = await t.waitFor(async () => { const m = (await t.db())['pack/main']; return m?.by === 'desk' && !m.usedBy ? m : null; }, { timeout: 30000, what: '备好的教案写进 pack/main' });
-    check(main.unit || main.goal, '备好的教案没有标题和目标');
-    await t.waitFor(() => t.page.evaluate(() => /备好的下一节/.test(document.querySelector('.dk-class')?.innerText || '')), { what: '主角卡换成「备好的下一节」' });
-    await t.page.click('.dk-class .dk-new');
-    const sid = await t.inClass();
-    const sp = await t.waitFor(async () => (await t.db())[`sessions/${sid}/pack/main`]?.rehearsal, { timeout: 30000, what: '课前预演到这节课的资料包里（开课以后才写好的也要补进去）' });
-    check(Array.isArray(sp.steps) || sp.fixes || sp.at, '课前预演是空的');
-    const root = (await t.db())['pack/main'];
-    check(root.usedBy === sid, '开了课，备好的教案没记成用掉了');
-    return t;
-  },
-
   // 主角卡的「⋯」小菜单：点开有「直接下课」「删掉这节课」，点「直接下课」走的是同一个流程
   async menu(browser) {
     const t = await seeded(browser);
@@ -459,9 +432,8 @@ const SUITES = {
     check(String(slip.text).includes('这一块我早就会了不用讲'), '挂提醒的那条，Claude 写的话被改了');
     const fake = obs.find((o) => o.session === sid && String(o.text).includes('换一种题再测'));
     check(fake?.guard?.checks?.some((c) => c.code === 'basis-dropped'), '编了证据编号的那条应该挂提醒');
-    check(!obs.some((o) => o.session === sid && String(o.text).endsWith('想看守卫。')), '和第一条几乎一样的那条应该拒收');
-    const turns = Object.entries(await t.db()).filter(([k]) => k.startsWith(`sessions/${sid}/class_turns/`)).map(([, v]) => v);
-    check(turns.some((x) => x.role === 'system' && /没记/.test(String(x.text))), '拒收的那条应该在下一轮告诉课堂 Claude');
+    // 第十四轮：学习的账只记不拦——和第一条几乎一样的那条也照收
+    check(obs.some((o) => o.session === sid && String(o.text).endsWith('想看守卫。')), '和第一条几乎一样的那条第十四轮起照收');
     await t.open('manage');
     await t.waitFor(async () => /守卫/.test(await t.text('.dk-check') || '') && /挂提醒 [1-9]/.test(await t.text('.dk-guard') || ''), { timeout: 15000, what: '管理页的守卫一段写出挂提醒几条' });
     // 下课整理单被拒的（carry）：下一节同一科开课时进资料包，带过就清掉
@@ -477,92 +449,6 @@ const SUITES = {
     check(/没收的原因：依据 ev-x/.test(pk?.carry || ''), '下一节的资料包里没有带上上一节没收的那条');
     check(!((await t.db())['meta/guard']?.carry?.math || []).length, '带过的 carry 没清掉');
     return t;
-  },
-
-  // 云端教研室（docs/lab-plan.md）：首页照工作单拼单子 lab_brief；模拟教研室交回答 lab_inbox：
-  // 补收尾（小结 + 整理单：引对了的照收、编原话的暂存）、出新题（好的进题库、写坏的不收）、备课（写进资料包），每份都有回执
-  async lab(browser) {
-    const t = await seeded(browser);
-    const sid = 'c-20261101-1';
-    const at = Date.parse('2026-11-01T10:00:00+08:00');
-    await plant(t, {
-      [`sessions/${sid}`]: { kind: 'class', status: 'closed', date: '2026-11-01', block: 'L2.2.2', space: 'math', subject: '线性代数', title: '内积', startedAt: at, endedAt: at + 1800000, report: { items: 2, activeMs: 900000, line: '两道题' } },
-      [`sessions/${sid}/class_turns/1`]: { seq: 1, role: 'student', say: '内积算出来是一个数吗', text: '内积算出来是一个数吗', at: at + 1000, session: sid },
-      [`sessions/${sid}/class_turns/2`]: { seq: 2, role: 'claude', text: '对，是一个数。看这道题。\n\n````board new id=b1 title="内积"\n```quiz\nid: qz-b1\nq: αᵀβ 是什么\n- [x] 一个数\n- [ ] 一个矩阵\n```\n````', modelApplied: 'claude-opus-5-5', at: at + 2000, session: sid },
-      'reviews/R9': { title: '内积的形状', family: '形状', tier: 3, last: '2026-10-20', result: '过', blocks: ['L2.2.2'], log: [] },
-      'evidence/ev-e2e-lab1': { kind: 'answer', session: sid, comp: 'qz-b1', block: 'L2.2.2', ok: false, value: '一个矩阵', src: 'record', at: at + 3000, turn: 2 },
-    });
-    await t.open('manage');
-    const briefs = await t.waitFor(async () => { const b = await t.docs('lab_brief'); return b.some((x) => x.kind === 'backfill') && b.some((x) => x.kind === 'newproblems' || x.kind === 'probe') ? b : null; }, { timeout: 20000, what: '首页照工作单拼出教研室的单子（补收尾、出新题）' }).catch(async (e) => { if (process.env.E2E_DEBUG) { const all = await t.db(); console.log('WO', JSON.stringify(all['meta/workorder']?.items?.map((x) => [x.kind, x.ref])), 'BR', Object.keys(all).filter((k) => k.startsWith('lab_')), t.errors, JSON.stringify(all['meta/errors'])); } throw e; });
-    const bf = briefs.find((x) => x.kind === 'backfill' && x.ref === sid);
-    check(bf && bf.prompt.includes('内积算出来是一个数吗') && bf.prompt.includes('整理单'), '补收尾的单子里没有这节课的记录或下课的要求');
-    check(!/[他她]/.test(bf.prompt.split('### 学生的记忆')[0].replace(/「[他她]」/g, '')), '单子开头的说明里称呼学生用了他 / 她');
-    const np = briefs.find((x) => x.kind === 'newproblems' || x.kind === 'probe');
-    const pp = briefs.find((x) => x.kind === 'prep');
-    const quiz = '```quiz\nid: x\nq: 两个 3 维列向量 a、b，aᵀb 的结果是什么\n- [x] 一个数\n- [ ] 一个 3×3 矩阵\n- [ ] 一个 3 维向量\n```';
-    await plantLive(t, {
-      'lab_inbox/e2e-1': { brief: bf.id, key: bf.key, by: 'lab', model: 'claude-opus-5-5', at: Date.now(), text: '1. 这节课讲了什么：讲了内积，用了一道选择题 qz-b1。\n2. 学生哪里卡住：#1 学生问「内积算出来是一个数吗」，qz-b1 选成了一个矩阵。\n3. 哪里看起来懂了但证据不够：只做过一道。\n4. 建议下一节怎么接：先换数再测一次内积的结果是什么。\n\n````board memo\nnote text="#1 学生问「内积算出来是一个数吗」，下一节开头换数再测"\nslip text="#2 学生说「我早就背熟了」，老师没追问"\n````' },
-      'lab_inbox/e2e-2': { brief: np.id, key: np.key, by: 'lab', at: Date.now() + 1, text: `=== 题 1\n针对：内积的结果是数还是矩阵\n${quiz}\n\n=== 题 2\n针对：写坏的\n\`\`\`answer\nid: y\nq: 这道题没有答案\n\`\`\`` },
-      ...(pp ? { 'lab_inbox/e2e-3': { brief: pp.id, key: pp.key, by: 'lab', at: Date.now() + 2, text: '{"unit":"内积","goal":"会算内积、知道结果是一个数","route":"先猜再算","sequence":[{"step":1,"point":"内积的定义","how":"先让学生猜"}],"problems":[]}' } } : {}),
-      'lab_inbox/e2e-4': { brief: 'backfill-nothing', key: 'x', by: 'lab', at: Date.now() + 3, text: '这张单子不存在，应该写一条过时的回执' },
-    });
-    const logs = await t.waitFor(async () => { const l = await t.docs('lab_inbox_log'); return l.length >= (pp ? 4 : 3) ? l : null; }, { timeout: 20000, what: '学习台读完教研室的回答、写回执' }).catch(async (e) => { if (process.env.E2E_DEBUG) { const all = await t.db(); console.log('KEYS', Object.keys(all).filter((k) => k.startsWith('lab_')), JSON.stringify(Object.entries(all).filter(([k]) => k.startsWith('lab_inbox_log')).map(([k, v]) => [k, v])), t.errors, JSON.stringify(all['meta/errors'])); } throw e; });
-    check(!(await t.docs('lab_inbox')).length, '读过的回答没从收件箱删掉');
-    const r1 = logs.find((x) => x.id === 'e2e-1');
-    check(r1?.result === 'partial' && r1.took?.summary === 1 && r1.held >= 1, `补收尾的回执不对：${JSON.stringify(r1)}`);
-    const obs = await t.docs('observations');
-    const sum = obs.find((o) => o.session === sid && o.kind === 'summary');
-    check(sum?.by === 'lab' && sum.backfill && String(sum.text).startsWith('1. 这节课讲了什么'), '补写的小结没写进去、或者没标事后补写');
-    check((await t.docs('sessions')).find((x) => x.id === sid)?.summary === sum.id, '这节课没记上小结');
-    const note = obs.find((o) => o.session === sid && String(o.text).includes('下一节开头换数再测'));
-    check(note?.by === 'lab' && note.backfill && !note.guard, '引对了原话的那条应该照收（标事后补写）');
-    const held = (await t.docs('pending')).find((p) => p.status === 'held' && p.by === 'lab' && String(p.line || '').includes('早就背熟了'));
-    check(held && !(await t.docs('slips')).some((x) => String(x.text).includes('早就背熟了')), '编了原话的那条应该先暂存、不写进去');
-    const r2 = logs.find((x) => x.id === 'e2e-2');
-    check(r2?.result === 'partial' && r2.took?.drills === 1 && r2.rejected?.length === 1, `出新题的回执不对：${JSON.stringify(r2)}`);
-    const dr = (await t.docs('drills')).filter((d) => d.src === 'lab');
-    check(dr.length === 1 && dr[0].md.includes(`id: ${dr[0].id}`) && dr[0].block, '好的那道新题没进题库（或者编号没换）');
-    if (pp) {
-      check(logs.find((x) => x.id === 'e2e-3')?.result === 'ok', '备课的回执不对');
-      check((await t.db())['pack/main']?.by === 'lab', '教研室备的课没写进资料包');
-    }
-    check(logs.find((x) => x.id === 'e2e-4')?.result === 'stale', '对不上单子的回答应该写过时的回执');
-    await t.waitFor(async () => /云端教研室/.test(await t.text('.dk-work') || '') && /交回来的/.test(await t.text('.dk-work') || ''), { what: '管理页「后方的工作单」里写出教研室交回来的' });
-    // 做完的单子撤掉了：补收尾那张没了
-    await t.waitFor(async () => !(await t.docs('lab_brief')).some((x) => x.id === bf.id), { what: '做完的补收尾单子撤掉' });
-    return t;
-  },
-
-  // 第十一轮 A2：我在课上说的要求，过账记成「我的要求」，老师下一次调用的说明里马上就有；删了这节课，要求和原话还在
-  async asks(browser) {
-    const t = await seeded(browser);
-    await t.page.goto(`${BASE}&said=2`);
-    await t.page.waitForSelector('.dk-class .dk-new', { timeout: 15000 });
-    // 新课是黑板课（第十二轮）：话的账两种课共用，这里在黑板课里走
-    await t.page.click('.dk-class .dk-new');
-    const sid = await t.inClass();
-    await t.page.click('button:has-text("开始上课")');
-    await t.waitFor(() => t.page.$('button:has-text("一个数")'), { timeout: 30000, what: '模拟老师写出第一轮' });
-    await sleep(2500);
-    const say = async (x) => { const input = t.page.locator('.cb-field textarea').first(); await input.click(); await t.page.keyboard.type(x); await t.page.keyboard.press('Enter'); };
-    await say('测试:要求 以后别把字摆在画面正中间');
-    const a = await t.waitFor(async () => (await t.docs('asks')).find((x) => (x.quotes || []).some((q) => q.session === sid)), { timeout: 40000, what: '课上说的话过账记成一条要求' });
-    check(a.quotes.find((q) => q.session === sid).text.includes('测试:要求'), `要求的原话不是我打的那句：${JSON.stringify(a.quotes)}`);
-    check(a.status === 'active' && a.text, '要求没写成在用的一条');
-    // 再说一句，让老师再被调用一次：这一次的说明里有这条要求（标着这节课刚说的）
-    await sleep(4000);
-    await say('继续');
-    await t.waitFor(() => t.page.evaluate(() => /## 学生的要求[\s\S]*测试要求[^\n]*这节课刚说的/.test(window.LAKit?.classroom?.lastPrompt?.system || '')), { timeout: 30000, what: '老师下一次调用的说明里有这条要求（标着这节课刚说的）' });
-    const rec = (await t.db())[`sessions/${sid}/said/main`];
-    check(rec && Object.keys(rec.lines || {}).length >= 1, '这节课那一份账没写');
-    // 回首页删掉这节课：要求、原话都还在
-    await t.page.goto(BASE);
-    await t.page.waitForSelector('.dk-class .dk-purge', { state: 'attached', timeout: 15000 });
-    await t.page.evaluate(() => document.querySelector('.dk-class .dk-purge').click());
-    await t.answer('删掉');
-    await t.waitFor(async () => !(await t.db())[`sessions/${sid}`], { timeout: 30000, what: '这节课删掉了' });
-    const after = (await t.docs('asks')).find((x) => x.id === a.id);
-    check(after && after.quotes.some((q) => q.session === sid && q.text.includes('测试:要求')), '删课以后要求或原话没了');
   },
 
   // 第十一轮 B1：首页上的班主任（#chat）：开一段新对话、发一句、边写边显示、刷新还在；说的要求经 memo 块记进「我的要求」（by: head），
@@ -653,7 +539,7 @@ const SUITES = {
     };
     await plant(t, sumDocs);
     await t.open('manage');
-    await t.page.waitForSelector('.sm-doc[data-id="math"] .sm-text', { timeout: 15000 });
+    await t.page.waitForSelector('.dk-backup .dk-bgo', { state: 'attached', timeout: 15000 });
     const [dl] = await Promise.all([t.page.waitForEvent('download', { timeout: 15000 }), t.page.click('.dk-backup .dk-bgo')]);
     const path = await dl.path();
     const body = JSON.parse(readFileSync(path, 'utf8'));
@@ -719,10 +605,6 @@ const SUITES = {
     check(Array.isArray(h.fixed) && h.fixed.some((f) => String(f.id).includes('c-20261101-1')), 'meta/health 里没记这次修了什么');
     await t.route('manage');
     check((await t.text('.dk-check'))?.includes('体检'), '管理页的自检里看不到体检的结果');
-    // 后方的工作单（sentry.js）：首页算好写进 meta/workorder，管理页列出来
-    const wo = await t.waitFor(async () => (await t.db())['meta/workorder'], { timeout: 15000, what: '工作单写进 meta/workorder' });
-    check(Array.isArray(wo.items) && wo.recheck && typeof wo.recheck.math === 'string', 'meta/workorder 的样子不对');
-    check((await t.text('.dk-work'))?.includes('后方的工作单'), '管理页看不到后方的工作单');
     return t;
   },
 
@@ -921,145 +803,6 @@ const SUITES = {
     return t;
   },
 
-  // 记忆摘要（第十三轮）：放一份摘要 → 开黑板课，老师的说明里是摘要、没有一条条的要求和规则 → 老师写 know 和老写法 ask 都进新笔记
-  // → 调用老师时带着板的图 → 下课回首页，后台把这节课并进摘要（版本加一、笔记清了、上一版留着）→ 管理页改一份、退回
-  async summary(browser) {
-    const t = await seeded(browser);
-    await plant(t, {
-      'summary/shared': { text: '学生在备考 2027 年考研。', v: 1, at: 1, by: 'chat', notes: [], history: [] },
-      'summary/math': { text: '线代用张宇 30 讲，一节一节学。', v: 1, at: 1, by: 'chat', notes: [], history: [] },
-    });
-    await t.open();
-    await t.openForm('class');
-    await t.page.click('.dk-class .dk-new');
-    const sid = await t.inClass();
-    await t.page.click('button:has-text("开始上课")');
-    await t.waitFor(() => t.page.$('button:has-text("一个数")'), { timeout: 30000, what: '模拟老师写出第一道题' });
-    await sleep(2500);
-    const say = async (x) => { const input = t.page.locator('textarea:visible, [contenteditable="true"]:visible').first(); await input.click(); await t.page.keyboard.type(x); await t.page.keyboard.press('Enter'); };
-    await say('测试:知道');
-    const notes = await t.waitFor(async () => { const d = (await t.db())['summary/math']; return d?.notes?.length >= 2 ? d.notes : null; }, { timeout: 30000, what: '老师写的 know 和 ask 都记成了这一科摘要的新笔记' });
-    check(notes[0].quote === '测试:知道' && notes.some((n) => n.text.includes('译文另起一行')), `新笔记不对：${JSON.stringify(notes)}`);
-    check(!(await t.docs('asks')).some((a) => String(a.text).includes('译文另起一行')), '有摘要了，老写法 ask 还是写进了「我的要求」');
-    await sleep(1500);
-    const sys = await t.page.evaluate(() => window.LAKit.classroom.lastPrompt?.system || '');
-    check(sys.includes('## 你对这个学生的了解（记忆摘要）') && sys.includes('线代用张宇 30 讲') && sys.includes('学生在备考 2027 年考研'), '老师的说明里没有记忆摘要');
-    check(!sys.includes('## 学生的要求') && !sys.includes('教学守则') && !sys.includes('这个学生另外定的规则'), '有摘要了，老师的说明里还有一条条的要求、守则、规则');
-    check(sys.includes('know text=') && sys.includes('### 你看得见板'), '老师的说明里没有 know 的写法或「你看得见板」');
-    // 再说一句：这一次调用带着板的图，最后一条消息写着那一句；新笔记已经在说明里
-    await say('测试:目标');
-    const call = await t.waitFor(() => t.page.evaluate(() => { const c = (window.LAKitEval?.teacher?.calls || []).filter((x) => String(x.input.at(-1).content).includes('测试:目标')).at(-1); return c ? { imgs: (c.opts.images || []).length, tail: String(c.input.at(-1).content).slice(-80), sys: String(c.input[0].content).includes('译文另起一行') } : null; }), { timeout: 20000, what: '学生说了一句以后调用老师' });
-    check(call.imgs >= 1 && /\[画面\] .*页面拍的学生现在看到的这块板/.test(call.tail), `调用老师时没带板的图：${JSON.stringify(call)}`);
-    check(call.sys, '刚记的新笔记没出现在老师下一轮的说明里');
-    await sleep(6000);
-    // 下课 → 回首页：后台把这节课并进摘要
-    // 回首页直接下课
-    await t.open(); await t.page.waitForSelector('.dk-class .dk-go', { state: 'attached', timeout: 15000 });
-    await t.page.evaluate(() => document.querySelector('.dk-class .dk-close').click());
-    await t.answer('直接下课');
-    await t.waitFor(async () => { const x = (await t.docs('sessions')).find((d) => d.id === sid); return x?.status === 'closed' && x.report?.at; }, { timeout: 40000, what: '下课、报告写好' });
-    // 两分钟内还有动静的课先不并：把这节课的证据挪到十分钟以前
-    const all = await t.db();
-    await plant(t, Object.fromEntries(Object.entries(all).filter(([k, v]) => k.startsWith('evidence/') && v.session === sid).map(([k, v]) => [k, { ...v, at: v.at - 600000 }])));
-    await t.open();
-    const done = await t.waitFor(async () => { const d = (await t.db())['summary/math']; return d?.v === 2 ? d : null; }, { timeout: 40000, what: '首页后台把这节课并进了摘要' });
-    check(done.by === 'page' && done.history?.[0]?.text === '线代用张宇 30 讲，一节一节学。' && done.notes.length === 0, `重写以后不对：${JSON.stringify({ by: done.by, h: done.history?.length, notes: done.notes })}`);
-    check(done.text.includes('线代用张宇 30 讲') && done.text.includes('做一组题之前学生想先知道一共几道'), `重写以后旧内容或新笔记没在：${done.text}`);
-    check(((await t.docs('sessions')).find((d) => d.id === sid)?.sum?.upTo || 0) > 0, '这节课没记并到哪了');
-    check(!(await t.docs('sessions')).find((d) => d.id === sid)?.said, '有摘要了还过了话的账');
-    // 管理页：四份都在，改一份、存、退回
-    await t.open('manage');
-    await t.page.waitForSelector('.sm-doc[data-id="math"] .sm-text', { timeout: 15000 });
-    const box = t.page.locator('.sm-doc[data-id="shared"] .sm-text');
-    check((await box.inputValue()).includes('学生在备考'), '管理页里共用那一份没显示');
-    await box.fill('学生在备考 2027 年考研，目标南京大学。');
-    await t.page.click('.sm-doc[data-id="shared"] .sm-save');
-    await t.waitFor(async () => (await t.db())['summary/shared']?.by === 'me', { what: '我改的那一版存进去' });
-    await t.page.click('.sm-doc[data-id="shared"] .sm-back');
-    await t.answer('退回');
-    await t.waitFor(async () => { const d = (await t.db())['summary/shared']; return d?.v >= 3 && !d.text.includes('南京大学'); }, { what: '退回上一版' });
-    return t;
-  },
-
-  // 记忆的底座（清点 docs/superpowers/specs/2026-11-16-memory-audit.md 第二节）：有摘要的库里，旧的规则、守则不再从别的门绕回来——
-  // 备课的提示词里没有旧规则原文；教研室补收尾用新的下课要求，交回的 lesson、know 都成了摘要的新笔记、守则没多；
-  // 班主任的说明里没有一条条的规则；课上学生打的每一句原话一直在老师的说明里
-  async membase(browser) {
-    const t = await seeded(browser);
-    const sid = 'c-20261101-1';
-    const at = Date.parse('2026-11-01T10:00:00+08:00');
-    // since 写成现在：以前的课不回头并进摘要（免得后台的重写和下面数新笔记抢）
-    const sum = (text) => ({ text, v: 1, at: Date.now(), since: Date.now(), by: 'chat', notes: [], history: [] });
-    await plant(t, {
-      'summary/shared': sum('学生在备考 2027 年考研，用 iPad 上课。'),
-      'summary/math': sum('线代用张宇 30 讲，一节一节学。'),
-      [`sessions/${sid}`]: { kind: 'class', status: 'closed', date: '2026-11-01', block: 'L2.2.2', space: 'math', subject: '线性代数', title: '内积', startedAt: at, endedAt: at + 1800000, report: { items: 2, activeMs: 900000, line: '两道题' } },
-      [`sessions/${sid}/class_turns/1`]: { seq: 1, role: 'student', say: '内积算出来是一个数吗', text: '内积算出来是一个数吗', at: at + 1000, session: sid },
-      [`sessions/${sid}/class_turns/2`]: { seq: 2, role: 'claude', text: '对，是一个数。', modelApplied: 'claude-opus-5-5', at: at + 2000, session: sid },
-      'evidence/ev-e2e-mb1': { kind: 'answer', session: sid, comp: 'qz-b1', block: 'L2.2.2', ok: false, value: '一个矩阵', src: 'record', at: at + 3000, turn: 2 },
-    });
-    const prompts = () => t.page.evaluate(() => window.LAKitDevAI || []);
-    const OLD = ['交互优先：能拖、能猜的先让我动手', '逐题列出要用到的规则'];   // 示例记忆里的一条规则、一条守则
-
-    // 1. 备课
-    await t.open();
-    await t.page.evaluate(() => { const f = document.querySelector('.dk-prepfold'); if (f) f.open = true; });
-    await t.page.click('.dk-prep-go');
-    if (await t.page.$('.la-dialog')) await t.answer('重新备课');
-    await t.waitFor(async () => { const m = (await t.db())['pack/main']; return m?.by === 'desk' ? m : null; }, { timeout: 30000, what: '备好的教案写进 pack/main' });
-    const prep = (await prompts()).find((p) => p.startsWith('你是这个学生的老师，现在给下一节课备课'));
-    check(prep, '没看到备课的提示词');
-    check(prep.includes('线代用张宇 30 讲') && prep.includes('学生在备考 2027 年考研'), '备课的提示词里没有记忆摘要');
-    check(!OLD.some((x) => prep.includes(x)) && !prep.includes('## 学生的规则'), '有摘要了，备课的提示词里还有旧规则、守则的原文');
-
-    // 2. 教研室补收尾：单子用新的下课要求；交回的 lesson 和 know 都记成这一科摘要的新笔记
-    await t.open('manage');
-    const bf = await t.waitFor(async () => (await t.docs('lab_brief')).find((x) => x.kind === 'backfill' && x.ref === sid), { timeout: 20000, what: '首页拼出这节课的补收尾单子' });
-    check(bf.prompt.includes('know text=') && !OLD.some((x) => bf.prompt.includes(x)), '补收尾的单子里没有 know 的写法，或者还带着旧规则、守则');
-    check(!/并进.{0,6}守则|归纳成.{0,4}守则/.test(bf.prompt), '有摘要了，补收尾的单子还要它把失误归纳成守则');
-    const before = { lessons: (await t.docs('lessons')).length, slips: (await t.docs('slips')).length };
-    await plantLive(t, {
-      'lab_inbox/e2e-mb': { brief: bf.id, key: bf.key, by: 'lab', model: 'claude-opus-5-5', at: Date.now(), text: '1. 这节课讲了什么：讲了内积。\n2. 学生哪里卡住：qz-b1 选成了一个矩阵。\n3. 哪里看起来懂了但证据不够：只做过一道。\n4. 建议下一节怎么接：换数再测一次。\n\n````board memo\nlesson text="内积的结果是数还是矩阵，先让学生自己说形状再判"\nknow text="学生会直接问结论对不对（这节课问了内积算出来是不是一个数）"\n````' },
-    });
-    const notes = await t.waitFor(async () => { const d = (await t.db())['summary/math']; return (d?.notes || []).filter((n) => n.by === 'lab').length >= 2 ? d.notes : null; }, { timeout: 30000, what: '补收尾交回的 lesson、know 都成了摘要的新笔记' });
-    check(notes.some((n) => n.text.includes('先让学生自己说形状')) && notes.some((n) => n.text.includes('会直接问结论对不对')) && notes.every((n) => n.by !== 'lab' || n.session === sid), `新笔记不对：${JSON.stringify(notes)}`);
-    check((await t.docs('lessons')).length === before.lessons && (await t.docs('slips')).length === before.slips, '有摘要了，补收尾还往守则 / 失误里写了');
-
-    // 3. 班主任：说明里是四份摘要，没有一条条的规则、守则
-    await t.open('chat');
-    await t.waitFor(() => t.page.$('.dk-chatpage:not([hidden]) .hd-input'), { what: '班主任那一页画出来' });
-    await t.page.fill('.hd-input', '我线代现在怎么样');
-    await t.page.click('.hd-send');
-    await t.waitFor(async () => /模拟班主任/.test(await t.text('.hd-msgs .hd-head:not(.is-live)') || ''), { timeout: 20000, what: '班主任回了一段' });
-    const head = (await prompts()).find((p) => p.startsWith('你是学生学习台里的**班主任**'));
-    check(head && head.includes('线代用张宇 30 讲'), '班主任的说明里没有记忆摘要');
-    check(!/规则（\d+/.test(head) && !/教学守则（\d+/.test(head) && !OLD.some((x) => head.includes(x)), '有摘要了，班主任的说明里还列着规则、守则');
-
-    // 4. 课上学生打的每一句原话一直在老师的说明里
-    await t.open();
-    await t.openForm('class');
-    await t.page.click('.dk-class .dk-new');
-    await t.inClass();
-    await t.page.click('button:has-text("开始上课")');
-    await t.waitFor(() => t.page.$('button:has-text("一个数")'), { timeout: 30000, what: '模拟老师写出第一道题' });
-    await sleep(2500);
-    const say = async (x) => { const input = t.page.locator('textarea:visible, [contenteditable="true"]:visible').first(); await input.click(); await t.page.keyboard.type(x); await t.page.keyboard.press('Enter'); };
-    const HEAD = '## 这节课学生打的话（原话，页面照抄的；这些是当面说的）';
-    const partOf = () => t.page.evaluate((h) => (window.LAKit.classroom.lastPrompt?.system || '').split(h)[1]?.split('\n## ')[0] || '', HEAD);
-    // 带着模拟老师的暗号说（不带暗号的话会让它照剧本往下走到故意写错的那一段）
-    await say('测试:目标 别一上来给我九句话，先给结论');
-    await t.waitFor(async () => (await partOf()).includes('别一上来给我九句话'), { timeout: 30000, what: '第一句原话进了老师的说明' });
-    // 老师那一轮还在写的时候回车不发：等输入框空了才算发出去
-    await sleep(3000);
-    await say('测试:知道 这个表格比一大段话好认');
-    for (let i = 0; i < 12 && /好认/.test(await t.page.evaluate(() => [...document.querySelectorAll('textarea, [contenteditable="true"]')].map((e) => e.value || e.textContent || '').join('|'))); i++) { await sleep(1500); await t.page.keyboard.press('Enter'); }
-    const part = await t.waitFor(async () => { const x = await partOf(); return x.includes('这个表格比一大段话好认') ? x : null; }, { timeout: 30000, what: '第二句原话进了老师的说明' });
-    check(part, '老师的说明里没有「这节课学生打的话」那一节');
-    check(part.includes('测试:目标 别一上来给我九句话，先给结论') && part.includes('测试:知道 这个表格比一大段话好认'), `学生打的两句原话没都在：${part.slice(0, 300)}`);
-    check(!part.includes('开始上课。'), '页面的快捷回答被当成了学生打的话');
-    return t;
-  },
-
   // 整条最小的一圈（第十二轮第 1 批）：开黑板课 → 老师定要拿下的事 → 两道题各做对 → 下课（框里有两件事）→ 回首页，后台给这节课留隔天的题
   // （?dev 用模拟的模型）→ 当天首页没有「验上次学的」→ 这节课变成昨天上的 → 这一行出现 → 点开做完（中间写数据库失败一次）→ 这一行消失 →
   // 那节课的文档上有 aims、holds、later →「以前的课」里那节课写着隔 1 天做没见过的题和要拿下的两件事
@@ -1087,12 +830,16 @@ const SUITES = {
     check((await t.text('.la-dialog-text')).split('带着做到').length === 3, `下课的框里应该两件都是带着做到：${await t.text('.la-dialog-text')}`);
     await t.answer('下课');
     await t.waitFor(async () => { const x = (await t.docs('sessions')).find((d) => d.id === sid); return x?.status === 'closed' && x.report?.at; }, { timeout: 40000, what: '下课、报告写好' });
-    // 回首页：后台抄题、留题
+    // 第十四轮：留不留、留什么由项目 Claude 定（页面不再自动出题）。这里模拟它写进题库和这节课的 holds
+    const hid = `d-hold-${sid}-1`;
+    const cur0 = (await t.docs('sessions')).find((d) => d.id === sid);
+    await plant(t, {
+      [`drills/${hid}`]: { block: cur0.block, kind: 'quiz', md: `\`\`\`quiz\nid: ${hid}\nq: 秩一矩阵能不能可逆（阶数大于 1）？\n- [ ] 是\n- [x] 否\n\`\`\``, q: '1+1', src: 'hold', by: 'head', hold: sid, aim: 'a1', far: false, status: 'active', at: Date.now() },
+      [`sessions/${sid}`]: { ...cur0, id: undefined, holds: { ids: [hid], at: Date.now(), exam: 0, made: 1 } },
+    });
     await t.open();
-    const held = await t.waitFor(async () => (await t.docs('sessions')).find((d) => d.id === sid)?.holds, { timeout: 40000, what: '首页后台给这节课留了隔天的题' });
-    check(held.ids.length >= 1 && held.ids.length === held.exam + held.made, `留着的题记得不对：${JSON.stringify(held)}`);
-    const drills = await t.docs('drills');
-    check(held.ids.every((id) => drills.some((d) => d.id === id)), '留着的题不在题库里');
+    const held = await t.waitFor(async () => (await t.docs('sessions')).find((d) => d.id === sid)?.holds, { timeout: 10000, what: '这节课记着留的题' });
+    check(held.ids.length === 1, `留着的题记得不对：${JSON.stringify(held)}`);
     await sleep(800);
     check(!(await t.page.$('[data-row="later"]')), '刚下课当天就出现了「验上次学的」');
     // 这节课变成昨天上的（页面按「今天」减下课那天算满没满一天）
@@ -1225,10 +972,11 @@ const SUITES = {
     // 管理 → 笔记本：看得到它、能改
     await t.open('manage');
     await t.page.waitForSelector('.dk-notebook .dk-nb-row', { timeout: 15000 });
-    await t.page.click('.dk-notebook .dk-nb-row');
+    await t.page.click('.dk-notebook .dk-nb-row[data-path="note.md"]');
     await t.page.fill('.dk-notebook .dk-nb-text', '我改过了');
     await t.page.click('.dk-notebook .dk-nb-save');
-    await t.waitFor(async () => { const d = (await t.db())['notebook/bm90ZS5tZA']; return d?.text === '我改过了' && d.by === 'me' && d.history?.[0]?.text === md; }, { what: '管理页里改了笔记、旧的一版留着' });
+    const nbd = await t.waitFor(async () => { const d = (await t.db())["notebook/bm90ZS5tZA"]; return d?.text === "我改过了" ? d : null; }, { what: "管理页里改了笔记" });
+    check(nbd.by === "me" && nbd.history?.[0]?.text === md, `改了以后作者或旧的一版不对：${JSON.stringify({ by: nbd.by, h: nbd.history?.[0] })}`);
     // 课上：老师就是项目 Claude。说明里有我写的指令、没有根本规则；它写 board note，笔记本里多了 pin 的和 show 的，对不上的下一轮告诉它
     await t.open();
     await t.openForm('class');
