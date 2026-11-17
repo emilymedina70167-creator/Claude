@@ -15,7 +15,7 @@
 - 教材：books/{书}/chunks/{条}。考试资料：questions、exam_profiles、syllabus；页面算好的真题统计 meta/exam。
 - 学习的账：errors、weaknesses、mastery、reviews（复现组；写了 due 首页按它算到期，做过以后（last 不早于 due）按 last + tier）、recall、position、curriculum、drills（题库）。以前一条条存的记忆：rules、lessons、asks、profile、slips、observations、summary。
 - 页面算好的事实：预测分 meta/forecast；按作答算的掌握参考 meta/mastery-calc；体检 meta/health；页面出过的错 meta/errors。
-- 首页「今天」照 meta/today 画：{ date: 'YYYY-MM-DD', note, items: [{ kind: class | review | drill | recall | later, why, label, block（class）, ids（review 是复现组编号、drill 是题库编号）, reviews（drill 做完的结果记到哪几组复现上） }] }；date 不是那一天时首页只列事实。
+- 首页「今天」照 meta/today 画：{ date: 'YYYY-MM-DD', note, items: [{ kind: class | review | drill | recall | later | coach, why, label, block（class、coach）, ids（review 是复现组编号、drill 是题库编号）, reviews（drill 做完的结果记到哪几组复现上） }] }；date 不是那一天时首页只列事实。
 - 每一类的字段写法：学习台发布的文件 CLAUDE-PROJECT.md 第七节（用 Artifact 的 read，path 是 CLAUDE-PROJECT.md）。
 - dev_requests：要改页面代码才做得到的事写在这里（{ at, by, text, quote, status: open }），开发那边每次开工先读。
 
