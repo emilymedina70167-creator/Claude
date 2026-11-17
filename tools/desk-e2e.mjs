@@ -1077,14 +1077,22 @@ const SUITES = {
     await t.waitFor(() => t.page.$('.block-quiz .q-opt'), { timeout: 20000, what: '刷新以后板放回来' });
     await sleep(1500);
     check(await nTurns() === before, `刷新以后又执行了一遍 ext_in（class_turns ${before} → ${await nTurns()}）`);
-    // 第三轮：下课
-    await plantLive(t, { [`sessions/${sid}/ext_in/003`]: { seq: 3, text: `今天就到这里。\n\n${F4}board close\n${F4}\n`, after: 2, at: Date.now() } });
+    // 第三轮：开了板边助教的一题，学生做错，助教写一句（只在这一题）
+    const ans = `${F3}answer\nid: a1\nq: 2+2 等于几？\nanswer: 4\n${F3}`;
+    await plantLive(t, { [`sessions/${sid}/ext_in/003`]: { seq: 3, text: `算一下。\n\n${F4}board add id=b4 title="算一下"\n${ans}\n${F4}\n\n${F4}board coach target=a1 upto=只提示看清是加法\n${F4}\n`, after: 2, at: Date.now() } });
+    await t.waitFor(() => t.page.$('[data-bid="a1"] .ans-check'), { timeout: 15000, what: '第三轮的题画上板' });
+    const box = t.page.locator('[data-bid="a1"] .ans-input input, [data-bid="a1"] .ans-input textarea, [data-bid="a1"] .ans-input [contenteditable="true"]').first();
+    await box.click(); await t.page.keyboard.type('5'); await t.page.click('[data-bid="a1"] .ans-check');
+    await t.waitFor(() => t.page.evaluate(() => /助教：模拟助教/.test(document.body.innerText)), { timeout: 15000, what: '做错以后板上出现助教那一句' });
+    await t.waitFor(async () => Object.entries(await db()).some(([k, v]) => k.startsWith(`sessions/${sid}/ext_out/`) && /\[助教\] 在 a1 下面写了/.test(v.text)), { timeout: 8000, what: '助教那一句写进 ext_out' });
+    // 第四轮：下课
+    await plantLive(t, { [`sessions/${sid}/ext_in/004`]: { seq: 4, text: `今天就到这里。\n\n${F4}board close\n${F4}\n`, after: 3, at: Date.now() } });
     const s = await t.waitFor(async () => { const x = (await db())[`sessions/${sid}`]; return x?.status === 'closed' && x.report?.at ? x : null; }, { timeout: 20000, what: 'board close 以后下课、出报告' });
     check(s.kind === 'ext', `下课以后 kind 被盖成了 ${s.kind}`);
     // 故意写错的那一行：渲染时控制台照例报一次（课堂里写错的组件都这样），不算页面出错
     t.errors.splice(0, t.errors.length, ...t.errors.filter((e) => !/看不懂这一行：circle 0 0 r=2 lol/.test(e)));
     const rep = (await db())[`sessions/${sid}/report/main`];
-    check(rep?.ext?.n === 2, `报告里的来回时间不对：${JSON.stringify(rep?.ext)}`);
+    check(rep?.ext?.n >= 2, `报告里的来回时间不对：${JSON.stringify(rep?.ext)}`);
     return t;
   },
 

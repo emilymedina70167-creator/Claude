@@ -16,6 +16,7 @@ import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
 import { pendingIns, outText, outSeq, seqId } from './ext.js';
+import { coachPrompt, coachSegment } from './coach.js';
 import { classMemoryReadDoc,
   buildSystem, actionText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
   reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, nextPinId, bytes, PACK_BUDGET, compactionSlice, worthCompacting, draftLine,
@@ -1424,6 +1425,8 @@ export async function renderClass(root, meta, desk = null) {
       }
       queue.actions.push(a);
     }
+    // 板边助教：外部开了这一题、学生做错了
+    if (EXT && a.source === 'record' && a.ok === false && extState.coach.has(String(a.block || ''))) runCoach(a);
     // 外部主讲的课：作答都写进 ext_out（1.5 秒合并），外部一读就是最新的；页面里的老师照旧「later 的跟着下一条说」
     if (trig === 'later' && !EXT) return; // 只是往下翻、拖一拖：跟着下一条一起说
     queue.triggered = true;
@@ -1551,7 +1554,7 @@ export async function renderClass(root, meta, desk = null) {
   let compacting = null;
   // —— 外部主 Claude 的课（第十五轮，ext.js）：外部写 ext_in，页面画上板、写 done；学生这边的现状写 ext_out ——
   // 同一条 ext_in 只执行一次（done）；刷新时有 done 的已经照 class_turns 放回了。助教（Task 4）用 extState.coach
-  const extState = { snap: false, close: false, coach: new Map(), outs: [], ins: [], lastSys: 0, running: false };
+  const extState = { snap: false, close: false, coach: new Map(), coachN: new Map(), coachLines: [], outs: [], ins: [], lastSys: 0, running: false };
   function extHead() {
     // 上一份 ext_out 以后页面记下的系统话（写错的段、没执行的指令、memo / note 没记成的）：排在下一份最前面
     const lines = history.filter((t) => t && t.role === 'system' && !t.discarded && t.seq > extState.lastSys && /^(note|lint|error)$/.test(t.kind || 'note'))
@@ -1572,7 +1575,8 @@ export async function renderClass(root, meta, desk = null) {
     // 要拿下的事还没写（空数组）时，黑板现状里那句「这一轮先写 board aims」是给页面里老师的做法：外部的课不带（写法在手册里）
     const b = boardState();
     if (Array.isArray(b?.aims) && !b.aims.length) delete b.aims;
-    const text = outText({ head: extHead(), message: turn?.text || '', state: boardStateText(b) });
+    // 助教这一阵写过的话（runCoach）排在作答前面
+    const text = outText({ head: extHead(), message: [...extState.coachLines.splice(0), turn?.text || ''].filter(Boolean).join('\n'), state: boardStateText(b) });
     const doc = { seq, text, at: Date.now(), ...(shots.length ? { shots } : {}) };
     extState.outs[extState.outs.length - 1].at = doc.at;
     await db.doc(`ext_out/${seqId(seq)}`).set(doc).catch((e) => reportError(e, { what: '写 ext_out', path: `ext_out/${seqId(seq)}` }));
@@ -1610,6 +1614,32 @@ export async function renderClass(root, meta, desk = null) {
   }
   // 这节课板上的段（下课抄题库、写报告用）
   function segSteps() { return (() => [...segs.values()].filter((x) => !String(x.id).startsWith('~')).map((x) => ({ id: x.id, page: x.page, title: x.title || x.sec?.querySelector('h2')?.textContent?.trim() || '', place: x.place, md: x.md, seq: x.seq, ...(x.point ? { point: x.point } : {}), ...(x.aim ? { aim: x.aim } : {}), ...(x.failed ? { failed: true } : {}), ...(x.hidden ? { hidden: true } : {}) })))(); }
+  // 板边助教（coach.js）：外部开了的那一题学生做错时，叫页面里的 Claude 写一句（只认 Opus 5.5，不是就不写）。
+  // 板上那一段是页面照它那一句拼的（它没有写板的指令）；写完马上写一份 ext_out，外部一读就看到
+  async function runCoach(a) {
+    const target = String(a.block || '');
+    if (!extState.coach.has(target)) return;
+    const el = board.querySelector(`[data-bid="${CSS.escape(target)}"]`);
+    const seg = [...segs.values()].find((x) => x.sec && el && x.sec.contains(el));
+    const n = (extState.coachN.get(target) || 0) + 1;
+    extState.coachN.set(target, n);
+    let res = null;
+    try { res = await teacher.call(coachPrompt({ segment: seg?.md || '', upto: extState.coach.get(target), answer: actionText(a) }), { ...TEACH, cache: false }); } catch { return; }
+    if (res?.modelApplied !== MODEL) return;
+    const line = String(res.text || '').replace(/\s+/g, ' ').trim();
+    if (!line) return;
+    const ops = parseOutput(coachSegment(target, line, n), { final: true }).ops;
+    await new Promise((resolve) => exclusive(async () => {
+      const notes = [];
+      for (const op of ops) execOp(op, [], notes);
+      layoutPage(bv.cur);
+      refresh();
+      addTurn({ role: 'system', kind: 'coach', text: `[助教] ${target}：${line}` });
+      return true;
+    }, { after: false }).finally(resolve));
+    extState.coachLines.push(`[助教] 在 ${target} 下面写了：${line}`);
+    await extWrite({ text: '' });
+  }
   function extStart() {
     db.collection('ext_out').get().then((x) => { for (const d of x.docs) extState.outs.push({ seq: Number(d.data().seq) || 0, at: d.data().at }); }, () => {});
     db.collection('ext_in').onSnapshot((x) => extRun(x.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {});

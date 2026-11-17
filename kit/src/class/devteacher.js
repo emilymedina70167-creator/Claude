@@ -31,6 +31,7 @@
 // 「测试:除零」一个能拨到 0 的量（拨到 0 以后旧行算不出来，老师下一轮写对了不该被退回）。
 // 系统发来的「[动作] … 没有动静」（察觉卡住）→ 轻轻问一句；只带「[板书]」的消息 → 说收到了。
 
+import { COACH_HEAD } from './coach.js';
 export const DEV_LIMITS = Object.freeze({ maxPromptBytes: 262144, images: Object.freeze({ maxCount: 4, maxInputBytes: 20000000, mediaTypes: Object.freeze(['image/png', 'image/jpeg']) }) });
 const THINK_MS = 600; // 第一个字出来前的停顿（模拟思考）
 const JSON_MS = 300;
@@ -134,6 +135,8 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
   const isSystem = said.startsWith('[系统]');
 
   if (/请写「?到目前为止的课堂摘要/.test(last)) return { kind: 'compact', text: compactText() };
+  // 板边助教（coach.js）：一句话
+  if (last.startsWith(COACH_HEAD)) return { kind: 'coach', text: '模拟助教：先别急着选，看看乘法的先后。' };
 
   const err = said.match(/测试\s*[:：]?\s*([a-z_]+)/);
   if (err && ERROR_CODES.includes(err[1]) && !isSystem) return { kind: 'error', code: err[1] };
