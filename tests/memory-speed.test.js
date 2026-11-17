@@ -47,13 +47,21 @@ test('汇总：只算 Opus 5.5 回的，按说明长短、对话长短分', () =
 
 // 第十四轮：量大说明（160 / 300 / 500 KB）和一次调用里能连着调几次工具
 import { echoTool, toolBenchPrompt, toolBenchSummary, ECHO_KB } from '../kit/src/memory/speed.js';
-test('量大说明：160 / 300 / 500 KB 各三次', () => {
+// 平台写明（sample.d.ts）：一次调用的文字一共最多 256 KiB。量大说明夹在这条线两边，各两次
+test('量大说明：200 / 240 / 250 / 260 KB 各两次（夹住平台写的 256 KiB）', () => {
   const c = benchConds('big');
-  assert.equal(c.length, 9);
-  assert.deepEqual(new Set(c.map((x) => x.kb)), new Set([160, 300, 500]));
+  assert.equal(c.length, 8);
+  assert.deepEqual(new Set(c.map((x) => x.kb)), new Set([200, 240, 250, 260]));
+  const near = benchMessages({ kb: 250, turns: 2 }, SRC);
+  assert.ok(inputBytes(near) < 256 * 1024, `250 KB 拼出来 ${(inputBytes(near) / 1024).toFixed(1)} KB，应在 256 KiB 以内`);
   const m = benchMessages({ kb: 500, turns: 2 }, SRC);
   const kb = inputBytes(m) / 1024;
   assert.ok(kb >= 499 && kb < 508, `500 KB 拼出来 ${kb.toFixed(1)} KB`);
+});
+test('平台给这个页面的上限写成一句', async () => {
+  const { limitsLine } = await import('../kit/src/memory/speed.js');
+  assert.equal(limitsLine({ maxPromptBytes: 262144, tools: { maxCount: 20 } }), '平台给这个页面的上限：一次最多 256 KB 文字（说明和对话加起来），一次最多带 20 个工具。');
+  assert.equal(limitsLine(null), '');
 });
 test('量工具：假工具每次回 30 KiB、记下每一次的时间；汇总出次数和间隔', async () => {
   const log = [];

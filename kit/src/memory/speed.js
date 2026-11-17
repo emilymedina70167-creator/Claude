@@ -12,7 +12,8 @@ export const RUNS_KEPT = 6;
 export function benchConds(kind) {
   if (kind === 'full') return [4, 16, 40, 100, 160].flatMap((kb) => [2, 10, 30].map((t) => ({ kb, turns: t })));
   // 第十四轮：项目 Claude 每一轮带学生的指令和它自己的笔记，整份说明要不要放大到 160 KB 以上，先量（各三次，抖动大）
-  if (kind === 'big') return [160, 300, 500].flatMap((kb) => [1, 2, 3].map(() => ({ kb, turns: 2 })));
+  // 平台写明一次调用的文字最多 256 KiB（sample.d.ts）：夹在这条线两边，各两次
+  if (kind === 'big') return [200, 240, 250, 260].flatMap((kb) => [1, 2].map(() => ({ kb, turns: 2 })));
   return [[4, 2], [40, 2], [160, 2], [4, 30], [40, 30], [160, 30]].map(([kb, turns]) => ({ kb, turns }));
 }
 
@@ -101,10 +102,18 @@ export function toolBenchSummary(log, { t0, end }) {
   return { calls: log.length, gap: gaps.length ? Math.round(avg(gaps)) : null, total: Math.round(end - t0) };
 }
 
+/** 平台给这个页面的上限（sample.limits()，不调用 Claude、不花额度）写成一句 */
+export function limitsLine(limits) {
+  const b = Number(limits?.maxPromptBytes);
+  if (!Number.isFinite(b) || b <= 0) return '';
+  const n = Number(limits?.tools?.maxCount);
+  return `平台给这个页面的上限：一次最多 ${Math.round(b / 1024)} KB 文字（说明和对话加起来）${Number.isFinite(n) ? `，一次最多带 ${n} 个工具` : ''}。`;
+}
+
 // —— 画面：管理页的「测速」一段 ——
 export function mountSpeed(box, { getAI, put, saved, padSource }) {
-  box.innerHTML = `<p class="dk-sub muted">同一个一问一答的回合，把说明加长（4～500 KB，用组件手册垫）、对话拉长（2～30 轮），各调一次 Opus 5.5 high。一次只调一个，跑的时候别离开这一页。结果存进学习台，开发那边直接读。</p>
-    <div class="dk-sp-btns"><button type="button" class="btn btn-primary dk-sp-quick">快速：6 次（约 3～5 分钟）</button><button type="button" class="btn dk-sp-full">完整：15 次（约 8～12 分钟）</button><button type="button" class="btn dk-sp-big">量大说明：9 次</button><button type="button" class="btn dk-sp-tools">量工具：连着调 20 次</button><button type="button" class="btn dk-sp-stop" hidden>停</button></div>
+  box.innerHTML = `<p class="dk-sub muted">同一个一问一答的回合，把说明加长（4～260 KB，用组件手册垫）、对话拉长（2～30 轮），各调一次 Opus 5.5 high。一次只调一个，跑的时候别离开这一页。结果存进学习台，开发那边直接读。</p>
+    <div class="dk-sp-btns"><button type="button" class="btn btn-primary dk-sp-quick">快速：6 次（约 3～5 分钟）</button><button type="button" class="btn dk-sp-full">完整：15 次（约 8～12 分钟）</button><button type="button" class="btn dk-sp-big">量大说明：8 次</button><button type="button" class="btn dk-sp-tools">量工具：连着调 20 次</button><button type="button" class="btn dk-sp-stop" hidden>停</button></div>
     <p class="dk-sp-now muted"></p><div class="dk-sp-table"></div><p class="dk-sp-sum"></p>`;
   const q = (s) => box.querySelector(s);
   let running = false, stop = false, ctl = null;
@@ -112,6 +121,16 @@ export function mountSpeed(box, { getAI, put, saved, padSource }) {
     q('.dk-sp-table').innerHTML = rows.length ? `<table class="dk-sp-t"><thead><tr><th>说明</th><th>对话</th><th>第一个字</th><th>写完</th><th>写了</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${r.kb} KB</td><td>${r.turns} 轮</td><td>${r.error ? `<span class="bad">${escapeHtml(r.error)}</span>` : sec(r.first)}</td><td>${sec(r.total)}</td><td>${r.out ?? '—'} 字${r.model && r.model !== SPEED_MODEL ? `（${escapeHtml(r.model)}）` : ''}</td></tr>`).join('')}</tbody></table>` : '';
     q('.dk-sp-sum').textContent = summaryText(benchSummary(rows));
   };
+  // 平台给的上限：一打开就读（本地的，不花额度），写进 meta/speed 的 limits，开发那边读得到
+  box.insertAdjacentHTML('afterbegin', '<p class="dk-sp-limits dk-sub"></p>');
+  getAI().then(async (ai) => {
+    const line = limitsLine(ai?.limits);
+    if (!line) return;
+    q('.dk-sp-limits').textContent = line;
+    const cur = saved?.() || {};
+    if (cur.limits?.maxPromptBytes === ai.limits.maxPromptBytes) return;
+    await put('meta', 'speed', { ...cur, limits: { maxPromptBytes: ai.limits.maxPromptBytes, tools: ai.limits.tools?.maxCount ?? null, at: new Date().toISOString() } }).catch(() => {});
+  }).catch(() => {});
   const last = saved?.()?.runs?.[0];
   if (last) { paintRows(last.rows || []); q('.dk-sp-now').textContent = `上一次：${String(last.at || '').slice(0, 16).replace('T', ' ')}，${(last.rows || []).length} 次${last.done ? '' : '（没跑完）'}`; }
 

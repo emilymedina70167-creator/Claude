@@ -992,7 +992,8 @@ export function stripPlan(text) {
 }
 
 // 每一轮的整份说明的上限（给对话留地方；CLAUDE.md 里写的 160 KiB）
-// 2026-11-17 在学习台里量过（meta/speed）：160 KB 出第一个字 4.4～5.9 秒，300 / 500 KB 平台回 prompt_too_large，所以就是 160 KiB
+// 2026-11-17 在学习台里量过（meta/speed）：160 KB 出第一个字 4.4～5.9 秒，300 / 500 KB 平台回 prompt_too_large。
+// 平台写明（sample.d.ts）：一次调用的文字一共最多 256 KiB（说明 + 对话），所以说明 160 KiB、给对话留约 96 KiB
 export const SYSTEM_MAX = 160 * 1024;
 
 // —— 学生在黑板上的动作 → 一行中文 ——
