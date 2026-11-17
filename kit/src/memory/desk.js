@@ -57,7 +57,7 @@ import { createProjectView } from '../project/notebookview.js';
 import { catalogText, examFactsOf } from '../project/catalog.js';
 import { toolsDoc } from '../project/tools.js';
 import { createNotebook } from '../project/notebookdesk.js';
-import { todayRows, packForBlock } from '../project/today.js';
+import { todayRows, packForBlock, coachPack } from '../project/today.js';
 import { latency } from '../class/ext.js';
 import { renderCheck } from './problemrender.js';
 import { createAfter } from '../project/afterdesk.js';
@@ -1330,6 +1330,7 @@ export async function renderDesk(root, meta) {
     box.innerHTML = `${rows ? `<ol class="ex-list">${rows}</ol>` : '<p class="muted">这一科还没有能攒分的块。</p>'}
       <p class="muted">「还能攒」= 这一块在 410 里值多少分 ×（1 − 现在攒到几成）。前置的块没过基础题排在前面，复现到期、复盘对上过真题的坑的加一点。</p>`;
   }
+  let lastCrows = [];
   function paintRows(today = toDate(Date.now())) {
     const box = $('.dk-rows');
     if (!box) return;
@@ -1341,7 +1342,8 @@ export async function renderDesk(root, meta) {
     const dpick = claudeDrill(today);
     // 项目 Claude 写的 meta/today：开课、复现课各一行在最上面；要记的、隔天验、练一练接在原来那一行的小字里
     const mine = todayRows(todayMeta, data, today).filter((r) => r.kind !== 'fact');
-    const crows = mine.filter((r) => r.kind === 'class' || r.kind === 'review');
+    const crows = mine.filter((r) => r.kind === 'class' || r.kind === 'review' || r.kind === 'coach');
+    lastCrows = crows;
     const whyOf = (k) => mine.find((r) => r.kind === k)?.why || '';
     const note = mine.find((r) => r.kind === 'note')?.text || '';
     const sub = {
@@ -1355,7 +1357,7 @@ export async function renderDesk(root, meta) {
     const n = { later: later?.holds.ids.length || 0, today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null, next: null };
     const keys = Object.keys(ROWS).filter((k) => (k !== 'drill' || dpick) && (k !== 'later' || later));
     for (const k of ['recall', 'later']) if (whyOf(k)) sub[k] = `${whyOf(k)}${sub[k] ? ` · ${sub[k]}` : ''}`;
-    box.innerHTML = (note ? `<p class="dk-tnote">${inline(note)}</p>` : '') + crows.map((r) => `<button type="button" class="dk-trow dk-crow" data-ckind="${r.kind}" data-cval="${escapeHtml(r.kind === 'class' ? r.block : r.ids.join(','))}"><span class="dk-ic ${r.kind === 'review' ? 'is-review' : 'is-plus'}">${r.kind === 'review' ? r.ids.length : '›'}</span><b>${inline(r.label)}</b><small>${escapeHtml(r.why || (r.kind === 'review' ? '复现课' : '开课'))}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('') + keys.map((k) => `<button type="button" class="dk-trow" data-row="${k}" data-menu="${k}"><span class="dk-ic ${ROWS[k].ic}${n[k] === 0 ? ' is-zero' : ''}"${n[k] === null ? '' : ' data-count'}>${n[k] === null ? '+' : rowCounts[k] ?? n[k]}</span><b>${ROWS[k].title}</b><small>${escapeHtml(sub[k])}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('');
+    box.innerHTML = (note ? `<p class="dk-tnote">${inline(note)}</p>` : '') + crows.map((r, ci) => `<button type="button" class="dk-trow dk-crow" data-ci="${ci}" data-ckind="${r.kind}" data-cval="${escapeHtml(r.kind === 'review' ? r.ids.join(',') : r.block)}"><span class="dk-ic ${r.kind === 'review' ? 'is-review' : 'is-plus'}">${r.kind === 'review' ? r.ids.length : '›'}</span><b>${inline(r.label)}</b><small>${escapeHtml(r.why || (r.kind === 'review' ? '复现课' : r.kind === 'coach' ? '练习' : '开课'))}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('') + keys.map((k) => `<button type="button" class="dk-trow" data-row="${k}" data-menu="${k}"><span class="dk-ic ${ROWS[k].ic}${n[k] === 0 ? ' is-zero' : ''}"${n[k] === null ? '' : ' data-count'}>${n[k] === null ? '+' : rowCounts[k] ?? n[k]}</span><b>${ROWS[k].title}</b><small>${escapeHtml(sub[k])}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('');
     // 数字变了：往上滚过去（第一次画不滚）
     for (const k of keys) {
       if (n[k] === null) continue;
@@ -1399,6 +1401,8 @@ export async function renderDesk(root, meta) {
     if (c) {
       if (c.dataset.ckind === 'review') openReview(String(c.dataset.cval || '').split(',').filter(Boolean));
       else if (c.dataset.ckind === 'class') newClass(c.dataset.cval);
+      // 练习教练：主讲在今天里排的练习，页面里的老师带着练（资料包里放主讲写的）
+      else if (c.dataset.ckind === 'coach') { const row = lastCrows[Number(c.dataset.ci)]; if (row) newClass(row.block, coachPack(row)); }
       return;
     }
     const r = e.target.closest('.dk-trow');

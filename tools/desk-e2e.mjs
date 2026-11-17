@@ -1035,6 +1035,21 @@ const SUITES = {
     return t;
   },
 
+  // 第十五轮：练习教练。主讲在 meta/today 里排一项 coach，首页出这一行，点开是页面里的老师带的课，资料包里有主讲写的
+  async coach(browser) {
+    const t = await seeded(browser);
+    const today = await t.page.evaluate(() => new Date().toLocaleDateString('sv-SE'));
+    await plant(t, { 'meta/today': { date: today, items: [{ kind: 'coach', block: 'L2.2.2', why: '到期了', focus: '把 AB 写成 BA' }] } });
+    await t.open();
+    await t.waitFor(() => t.page.$('.dk-crow[data-ckind="coach"]'), { timeout: 15000, what: '首页出现主讲排的练习那一行' });
+    await t.page.click('.dk-crow[data-ckind="coach"]');
+    const sid = await t.inClass();
+    const pk = (await t.db())[`sessions/${sid}/pack/main`];
+    check(pk?.block === 'L2.2.2' && /把 AB 写成 BA/.test(pk?.coach || ''), `练习课的资料包里没有主讲写的：${JSON.stringify(pk)}`);
+    check((await t.docs('sessions')).find((x) => x.id === sid)?.kind !== 'ext', '练习教练的课开成了外部的课');
+    return t;
+  },
+
   // 第十五轮：外部主 Claude 的课（kind: ext）。外部写 ext_in，页面画上板、写 done；学生作答页面写 ext_out；
   // 写错的进下一份 ext_out 最前面；board snap 带截图；board close 下课；刷新只放回不重复执行
   async ext(browser) {

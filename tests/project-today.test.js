@@ -105,3 +105,17 @@ test('开 Claude 排的那一块的课：备好的资料包是别的块的就不
   assert.deepEqual(packForBlock(pack, 'L2.1.1'), { main: null, problems: null });
   assert.equal(packForBlock(pack, ''), pack, '没指定块（主角卡的「开新课」）照旧用');
 });
+
+test('练习教练：coach 一项要有块，带主讲写的为什么、盯的错法、题号', async () => {
+  const rows = todayRows({ date: today, items: [{ kind: 'coach', block: 'L3.2.1', why: '到期了', focus: '把 AB 写成 BA', ids: ['d1'] }, { kind: 'coach', why: '没写块' }] }, { ...data, curriculum: [{ id: 'L3.2.1', title: '秩' }] }, today);
+  const c = rows.filter((r) => r.kind === 'coach');
+  assert.equal(c.length, 1);
+  assert.deepEqual([c[0].block, c[0].focus, c[0].ids, c[0].label], ['L3.2.1', '把 AB 写成 BA', ['d1'], '秩']);
+  const { coachPack } = await import('../kit/src/project/today.js');
+  const pack = coachPack(c[0]);
+  assert.equal(pack.main.block, 'L3.2.1');
+  const { packText } = await import('../kit/src/class/prompt.js');
+  const t = packText(pack).text;
+  assert.match(t, /主讲写的/);
+  assert.match(t, /把 AB 写成 BA/);
+});
