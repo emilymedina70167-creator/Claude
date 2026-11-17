@@ -14,7 +14,7 @@ import { undoJournal, journalId, changedSince } from './journal.js';
 
 export { saveInstructions, shownNotes };
 
-const BY = { me: '我改的', class: '课上的老师', head: '班主任', after: '课后那一轮', organize: '第一次整理', night: '每晚那一次', chat: '开发那边' };
+const BY = { me: '我改的', class: '课上的老师', head: '班主任', after: '课后那一轮', organize: '第一次整理', night: '夜班', ext: '外部主讲', chat: '开发那边' };
 const day = (at) => (at ? new Date(Number(at)).toISOString().slice(0, 10) : '');
 const fit = (ta) => { ta.style.height = 'auto'; ta.style.height = `${Math.min(ta.scrollHeight + 2, 640)}px`; };
 
