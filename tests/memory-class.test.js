@@ -177,7 +177,7 @@ test('scopeDb：课堂自己的集合放进 sessions/{编号}/ 下面并带上 s
   assert.equal((await s1.collection('steps').get()).docs[0].data().md, '第一节');
   assert.equal((await s2.doc('steps/b1').get()).data().md, '第二节');
   assert.equal((await s1.collection('steps').where('md', '==', '第一节').get()).size, 1);
-  assert.deepEqual(SESSION_SCOPED, ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report', 'talk', 'ops', 'ops_done', 'lint', 'meta', 'unit', 'said']);
+  assert.deepEqual(SESSION_SCOPED, ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report', 'talk', 'ops', 'ops_done', 'lint', 'meta', 'unit', 'said', 'ext_in', 'ext_out']);
 });
 
 // —— 证据 ——

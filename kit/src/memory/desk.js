@@ -58,6 +58,7 @@ import { catalogText, examFactsOf } from '../project/catalog.js';
 import { toolsDoc } from '../project/tools.js';
 import { createNotebook } from '../project/notebookdesk.js';
 import { todayRows, packForBlock } from '../project/today.js';
+import { latency } from '../class/ext.js';
 import { renderCheck } from './problemrender.js';
 import { createAfter } from '../project/afterdesk.js';
 import { needsAfter, needsOrganize } from '../project/after.js';
@@ -1717,10 +1718,20 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   for (const c of MEMORY_FOR_CLASS) db.collection(c).onSnapshot((s) => { mem[c] = s.docs.map((d) => ({ id: d.id, ...d.data() })); memLoaded.add(c); }, () => {});
   // 话的账（saiddesk.js）在课上、首页另写 sessions.said：跟着它，免得这里整份写回去时盖成开课时的旧值
   db.doc(`sessions/${sid}`).onSnapshot((x) => { if (x.exists && x.data().said) doc = { ...doc, said: x.data().said }; }, () => {});
+  // 外部主 Claude 也写这一条（status: closed、换块……）：拿开课时的旧副本整份写回会把它盖掉。
+  // 所以本地这份马上改（紧接着写报告的读到的是新的），写的时候一次一个排队、先读最新的，这一页自己写过的字段盖在上面
+  let mine = {};
+  let chain = Promise.resolve();
   const updateSession = (patch) => {
     assertWrite('page', 'sessions');
+    mine = { ...mine, ...patch };
     doc = { ...doc, ...patch };
-    return db.doc(`sessions/${sid}`).set(doc).catch(() => {});
+    chain = chain.then(async () => {
+      const cur = await db.doc(`sessions/${sid}`).get().then((x) => (x.exists ? x.data() : null), () => null);
+      doc = { ...(cur || doc), ...mine };
+      await db.doc(`sessions/${sid}`).set(doc).catch(() => {});
+    });
+    return chain;
   };
   // 这节课记着的块（课上 memo 换过块也记在这里）优先；没记就用资料包写的
   step('读这节课的资料包');
@@ -1784,7 +1795,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   // 按门课读一次、不等它（exam/load.js：五类一个一个读，不和教材、证据挤）。黑板课也读（2026-11-15 的「根」：老师的第一问
   // 「难度和问法照真题」，每一轮的说明里要有「这一块在考试里」）；读到了守卫才认得这门课的真题题号、拒留作模考的
   const loadExam = (blk) => loadExamCourse(db, courseOfBlock(blk)).catch(() => null).then((ex) => { if (ex) examIdx = examIndexOf(ex, examYears()); return ex; });
-  const examLoad = kind === 'class' && block && !readOnly ? loadExam(block) : null;
+  const examLoad = (kind === 'class' || kind === 'ext') && block && !readOnly ? loadExam(block) : null;
   const leave = (to) => goto(to);
   // 考试资料的收件箱在课堂里接着并（exam/examdesk.js 的 startClassInbox）：学生的习惯是打开首页就进课堂，只在首页并等不到并完。
   // 开课 30 秒以后、一次一份、一批 5 条，不重算统计（回到首页补）、不画东西；只读翻看、练一练、实时黑板、自学单元不开（前面已经 return）。
@@ -1810,11 +1821,14 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     catalog: () => catalogText({ data: mem, books, today: toDate(Date.now()) }),
   };
   project.notebook = createNotebook({ db, corpus: () => project.corpusText() });
+  // 外部主讲的课（第十五轮）：外部只写开课的那几个字段，页面补上开课平时写的（机械的活）
+  if (kind === 'ext' && (!doc.subject || !Array.isArray(doc.aims))) await updateSession({ ...(doc.subject ? {} : { subject: session.subject }), ...(Array.isArray(doc.aims) ? {} : { aims: [] }) });
   return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
     project,
+    ...(kind === 'ext' ? { ext: {} } : {}),
     store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), books, prevRead,
     // 这一门课的考试资料（和舞台课一样：不等它，课堂读到了再用）；examFor：课上换到另一门课时再按那门课读一次
-    exam: examLoad, reserve: examYears, examFor: kind === 'class' ? loadExam : null,
+    exam: examLoad, reserve: examYears, examFor: kind === 'class' || kind === 'ext' ? loadExam : null,
     // 这节课换过的块（刷新以后接着换，前面换过的不丢）
     ...(Array.isArray(doc.blocks) && doc.blocks.length ? { blocks: doc.blocks.map(String) } : {}),
     writeReport: ({ turns, steps } = {}) => writeReport(db, sid, { doc, turns, steps, update: updateSession }),
@@ -1950,8 +1964,15 @@ export async function makeReport(db, sid, { doc, turns = null, steps = null }) {
   const start = Number(doc.startedAt) || 0;
   const end = Number(doc.endedAt) || Date.now();
   const prevEnd = Math.max(0, ...sessions.filter((x) => x.id !== sid && Number(x.endedAt) && Number(x.endedAt) <= start).map((x) => Number(x.endedAt)));
-  return buildReport({
+  const report = buildReport({
     session: { ...doc, id: sid }, evidence, observations, slips, turns: t, steps: st,
     manual: manual.filter((e) => Number(e.at) > prevEnd && Number(e.at) <= end),
   });
+  // 外部主讲的课（第十五轮）：每个来回「ext_out 写好 → 对应的 ext_in 到」隔了多久
+  if (kindOf(doc) === 'ext') {
+    const [outs, ins] = await Promise.all([scoped.collection('ext_out').get().then(rows, () => []), scoped.collection('ext_in').get().then(rows, () => [])]);
+    const ext = latency(outs, ins);
+    if (ext) report.ext = ext;
+  }
+  return report;
 }

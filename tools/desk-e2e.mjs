@@ -1035,6 +1035,59 @@ const SUITES = {
     return t;
   },
 
+  // 第十五轮：外部主 Claude 的课（kind: ext）。外部写 ext_in，页面画上板、写 done；学生作答页面写 ext_out；
+  // 写错的进下一份 ext_out 最前面；board snap 带截图；board close 下课；刷新只放回不重复执行
+  async ext(browser) {
+    const t = await seeded(browser);
+    const F4 = '````', F3 = '```';
+    const today = await t.page.evaluate(() => new Date().toLocaleDateString('sv-SE'));
+    const sid = `c-${today.replace(/-/g, '')}-9`;
+    const quiz = (id) => `${F3}quiz\nid: ${id}\nq: AB 和 BA 一定相等吗？\n- [ ] 一定相等\n- [x] 不一定\n${F3}`;
+    const turn1 = `我们从可交换开始。\n\n${F4}board new id=b1 title="可交换"\n先想一想：\n\n${quiz('q1')}\n${F4}\n`;
+    await plant(t, {
+      [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', block: 'L2.1.4', title: '可交换（外部）', space: 'math', startedAt: Date.now() },
+      [`sessions/${sid}/ext_in/001`]: { seq: 1, text: turn1, model: 'claude-opus-5-5', said: '我们从可交换开始吧', at: Date.now() },
+    });
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('.block-quiz .q-opt'), { timeout: 20000, what: '外部写的第一轮画上板' });
+    const db = async () => t.db();
+    check((await db())[`sessions/${sid}/ext_in/001`]?.done, 'ext_in/001 执行完没写 done');
+    // 选择题判完了才记（先错后对）：记下来的那一条带着错过的选项
+    await t.page.click('.block-quiz .q-opt:has-text("一定相等")');
+    await t.page.click('.block-quiz .q-opt:has-text("不一定")');
+    const out1 = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_out/001`], { timeout: 10000, what: '作答以后写 ext_out/001' });
+    check(/作答/.test(out1.text) && /q1/.test(out1.text), `ext_out/001 里没有那一行作答：${out1.text.slice(0, 200)}`);
+    check((await t.docs('evidence')).some((e) => e.session === sid && e.src === 'say' && /从可交换开始/.test(e.text || '')), '外部抄进来的学生原话没记成证据');
+    // 第二轮：一段写错的组件 + board snap
+    const turn2 = `再看一个。\n\n${F4}board add id=b2 title="写错的"\n${F3}scene\ncircle 0 0 r=2 lol\n${F3}\n${F4}\n\n${F4}board add id=b3 title="再一题"\n${quiz('q2')}\n${F4}\n\n${F4}board snap\n${F4}\n`;
+    await plantLive(t, { [`sessions/${sid}/ext_in/002`]: { seq: 2, text: turn2, after: 1, at: Date.now() } });
+    await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/002`]?.done, { timeout: 15000, what: 'ext_in/002 执行' });
+    // 切到 claude.ai（分屏）：手上排着的马上写掉
+    await t.waitFor(() => t.page.$('[data-bid="q2"] .q-opt'), { timeout: 10000, what: '第二轮的题画上板' });
+    await t.page.click('[data-bid="q2"] .q-opt:has-text("不一定")');
+    await t.page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }); document.dispatchEvent(new Event('visibilitychange')); });
+    // 不等 1.5 秒的合并：切走就马上写
+    const out2 = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_out/002`], { timeout: 1200, what: '切到后台以后马上写 ext_out/002' });
+    check(/b2/.test(out2.text.split('\n')[0]), `写错的那段没排在 ext_out/002 最前面：${out2.text.slice(0, 160)}`);
+    check(Array.isArray(out2.shots) && out2.shots.length > 0, 'board snap 以后 ext_out/002 没带截图');
+    // 课上整页刷新：已经执行过的只放回，不再执行一遍
+    const nTurns = async () => Object.keys(await db()).filter((k) => k.startsWith(`sessions/${sid}/class_turns/`)).length;
+    const before = await nTurns();
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('.block-quiz .q-opt'), { timeout: 20000, what: '刷新以后板放回来' });
+    await sleep(1500);
+    check(await nTurns() === before, `刷新以后又执行了一遍 ext_in（class_turns ${before} → ${await nTurns()}）`);
+    // 第三轮：下课
+    await plantLive(t, { [`sessions/${sid}/ext_in/003`]: { seq: 3, text: `今天就到这里。\n\n${F4}board close\n${F4}\n`, after: 2, at: Date.now() } });
+    const s = await t.waitFor(async () => { const x = (await db())[`sessions/${sid}`]; return x?.status === 'closed' && x.report?.at ? x : null; }, { timeout: 20000, what: 'board close 以后下课、出报告' });
+    check(s.kind === 'ext', `下课以后 kind 被盖成了 ${s.kind}`);
+    // 故意写错的那一行：渲染时控制台照例报一次（课堂里写错的组件都这样），不算页面出错
+    t.errors.splice(0, t.errors.length, ...t.errors.filter((e) => !/看不懂这一行：circle 0 0 r=2 lol/.test(e)));
+    const rep = (await db())[`sessions/${sid}/report/main`];
+    check(rep?.ext?.n === 2, `报告里的来回时间不对：${JSON.stringify(rep?.ext)}`);
+    return t;
+  },
+
   // 照 claude.ai 的记忆（第十四轮）：笔记本空着先在后台整理一次以前的记录；之后每节下了课的课后台给项目 Claude 一轮
   async after(browser) {
     const t = await seeded(browser);
