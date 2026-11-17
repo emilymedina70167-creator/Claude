@@ -121,3 +121,6 @@ export function projectTools({ db, getData = () => ({}), getBooks = () => null, 
   ];
   return tools;
 }
+
+/** 工具的说明写成一段（放进说明的「工具」一节）：每个一行，名字和它做什么 */
+export const toolsDoc = (tools) => (tools || []).map((t) => `- ${t.name}：${t.description}`).join('\n');

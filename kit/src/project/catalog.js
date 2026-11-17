@@ -16,7 +16,8 @@ export function catalogText({ data = {}, books = null, exam = null, chats = 0 } 
   if (bk.length) {
     const per = new Map();
     for (const c of books?.chunks || []) per.set(c.book, (per.get(c.book) || 0) + 1);
-    lines.push(`- 教材（books/{书}/chunks/{条}；search 的 books）：${bk.map((b) => `${b.title || b.id}（${per.get(b.id) || 0} 条）`).join('、')}`);
+    const cnt = (b) => per.get(b.id) ?? (Number.isFinite(b.chunks) ? b.chunks : null);
+    lines.push(`- 教材（books/{书}/chunks/{条}；search 的 books）：${bk.map((b) => `${b.title || b.id}${cnt(b) === null ? '' : `（${cnt(b)} 条）`}`).join('、')}`);
   } else lines.push('- 教材：这一次没读到（books）');
   if (exam?.questions) lines.push(`- 考试资料（questions、exam_profiles、syllabus；search 的 exam）：真题 ${exam.questions} 道${exam.years?.length === 2 ? `（${exam.years[0]}–${exam.years[1]}）` : ''}${exam.profiles ? `，考点画像 ${exam.profiles} 个` : ''}`);
   const ss = data.sessions || [];

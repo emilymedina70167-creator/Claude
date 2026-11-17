@@ -27,12 +27,3 @@ test('有摘要：简报里不列规则、守则、关于学生、失误；学�
   }
 });
 
-test('班主任查记忆的工具：有摘要时说明里先讲摘要，旧的几类写明不再给老师看', async () => {
-  const { memoryReadDoc } = await import('../kit/src/head/context.js');
-  const off = memoryReadDoc(false);
-  const on = memoryReadDoc(true);
-  assert.match(off, /collection：rules、profile、asks/);
-  assert.match(on, /summary（记忆摘要/);
-  assert.match(on, /不再给上课的老师看/);
-  assert.doesNotMatch(on, /collection：rules/);
-});

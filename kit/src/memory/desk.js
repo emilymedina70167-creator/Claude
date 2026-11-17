@@ -58,6 +58,8 @@ import { headSystem } from '../head/context.js';
 import { createHead } from '../head/headdesk.js';
 import { createChatPage } from '../head/chatview.js';
 import { createProjectView } from '../project/notebookview.js';
+import { catalogText } from '../project/catalog.js';
+import { toolsDoc } from '../project/tools.js';
 import { createNotebook } from '../project/notebookdesk.js';
 import { CHARTER } from '../class/charter.js';
 import { PART_PRIORS } from '../forecast/priors.js';
@@ -453,26 +455,32 @@ export async function renderDesk(root, meta) {
   sumView = createSummaryView({ sum: sumDesk, host: () => $('.dk-summary') });
   lab = createLabDesk({ db, getData: () => data, packs, planner, ops, aide: aideDesk, said: saidDesk, summary: sumDesk, onChange: () => paintWork() });
   // 班主任（第十一轮 B1，head/）：首页上的总 Claude。每一轮的说明照首页手上的现拼（要求、三科的简报、预测分、下一步、这一周、考试）
-  function headCtx() {
+  // 班主任每一轮的说明（第十四轮：就是项目 Claude 的说明，project/system.js）：事实、学生写的指令、它的笔记本、学习台里有什么、工具
+  let chatCount = 0;
+  db.collection('chats').onSnapshot((snap) => { chatCount = snap.docs.length; }, () => {});
+  const examFacts = () => {
+    const c = examMeta?.counts || {};
+    const years = (examMeta?.papers || []).map((p) => Number(p.year)).filter(Number.isFinite);
+    return c.questions ? { questions: c.questions, years: years.length ? [Math.min(...years), Math.max(...years)] : null } : null;
+  };
+  function projectFacts() {
     const today = toDate(Date.now());
-    let fc = null;
-    let next = {};
-    try {
-      const b = fcBoard(today);
-      fc = { total: b.now.total, pass: b.now.pGoal, measured: b.measured, goal: b.goal, subjects: b.now.subjects };
-      const top = nextPlan(today).top || {};
-      next = Object.fromEntries(Object.entries(top).map(([k, xs]) => [k, (xs || []).map((x) => ({ title: plainTitle(x.title) || x.title, why: x.why }))]));
-    } catch (err) { reportError(err, { what: '班主任的预测分没算出来', soft: true }); }
+    const t = targetOf(data);
+    return { today, version: VERSION, examDays: daysLeft(today, examDate()), target: [t.school, t.dept, t.major].filter(Boolean).join(' ') + (t.goal ? `，目标 ${t.goal} 分` : '') };
+  }
+  function headCtx() {
     return headSystem({
-      sessions: data.sessions.map(s => ({ ...s, aimReport: laterReports.get(s.id)?.report })), asks: data.asks || [], summaries: data.summary || [], today, version: VERSION, forecast: fc, next,
-      week: weekLines(data, { today }), target: targetOf(data), examDays: daysLeft(today, examDate()),
-      briefs: SPACE_KEYS.map((k) => ({ space: k, text: deskBrief(data, { space: k, today, pack: unusedMain(k), books: booksView.books(), forHead: true }).text })),
+      facts: projectFacts(),
+      instructions: projView?.instructions()?.text || '',
+      notes: data.notebook || [],
+      catalog: catalogText({ data, books: { books: booksView.books() }, exam: examFacts(), chats: chatCount }),
+      toolsDoc: toolsDoc(head.tools([])),
     });
   }
-  const head = createHead({ db, getData: () => data, ops, ai: deskAI, said: saidDesk, summary: sumDesk, system: headCtx });
+  const notebook = createNotebook({ db });
+  const head = createHead({ db, getData: () => data, ai: deskAI, notebook, getBooks: () => ({ books: booksView.books() }), system: headCtx });
   const chatPage = createChatPage($('.dk-chatpage'), { head });
   // 第十四轮：项目指令、笔记本、「笔记」页（project/notebookview.js）
-  const notebook = createNotebook({ db });
   projView = createProjectView({ db, store, getData: () => data, notebook, charter: CHARTER, $ });
   // 后台一件一件做：先过账（一节一节，新的课先），都过完了才轮到课后的助手（aidedesk）。这次打开首页每节只试一次
   const saidTried = new Set();

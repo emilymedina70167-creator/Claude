@@ -1,13 +1,19 @@
 // 本地试用（?dev）没有页面里的 Claude：教材入库、挂课程地图、备课用这个模拟的，把整条路走通（不调用 Claude）。
 // 看图转写：照提示词里给的文字层拼出条目（「定义」「例」开头的段落当定义、例题），没有文字层就写一条「（模拟转写）」。
 // 挂课程地图：所有条目挂到第一块；备课：照这一块的范围写一份资料包，挑头两条照着讲。
-// 模拟班主任：边写边显示（分几下吐字）；我说的话里有「测试:要求」就在回答里写一个 memo 块记成要求
+// 模拟班主任（项目 Claude）：边写边显示（分几下吐字）；我说的话里有「测试:笔记」就用笔记本工具建一个 pin 的文件
 async function head(turns, opts) {
   const last = String(turns.at(-1)?.content || '');
   const n = turns.filter((t) => t.role === 'assistant').length;
-  const ask = /测试[:：]要求/.test(last);
-  const text = ask
-    ? '明白了：以后开场复习最多两三句，主要时间给新内容。我记进「我的要求」了，下一节课的老师会读到。\n\n````board memo\nask text="开场复习最多两三句，主要时间给新内容（模拟班主任记的）" basis=say\n````'
+  // 第十四轮：班主任是项目 Claude，「测试:笔记」时用工具在笔记本里建一个 pin 的文件（真模型自己决定写不写）
+  const note = /测试[:：]笔记/.test(last);
+  if (note) {
+    const nb = (opts.tools || []).find((t) => t.name === 'notebook');
+    await nb?.execute({ op: 'create', path: '学生/模拟.md', text: '模拟班主任记的：学生说过「测试:笔记」' }).catch(() => {});
+    await nb?.execute({ op: 'set', path: '学生/模拟.md', pin: true }).catch(() => {});
+  }
+  const text = note
+    ? '好，我记在笔记本里了（学生/模拟.md）。'
     : `（模拟班主任，第 ${n + 1} 轮）你说的是：「${last.replace(/^\[页面\][\s\S]*?\n\n/, '').slice(0, 60)}」。\n\n照页面算的，**408** 现在最该补的是页式存储；要看依据可以问我「为什么」。`;
   let out = '';
   for (const part of text.match(/[\s\S]{1,12}/g) || []) {
@@ -141,8 +147,8 @@ q: 一个过程遇到已排好的序列时仍逐对比较，这是否足以说�
       seen.push(Array.isArray(prompt) ? prompt.map((t) => String(t?.content ?? '')).join('\n\n') : String(prompt));
       if (seen.length > 30) seen.shift();
       await new Promise((r) => setTimeout(r, 300));
-      // 班主任（head/context.js）：传的是一轮一轮的 turns，第一条是说明
-      if (Array.isArray(prompt) && String(prompt[0]?.content || '').startsWith('你是学生学习台里的**班主任**')) return head(prompt, opts);
+      // 项目 Claude（班主任；第十四轮 project/system.js）：传的是一轮一轮的 turns，第一条是说明
+      if (Array.isArray(prompt) && String(prompt[0]?.content || '').startsWith('# 学习台\n\n你是学生学习台里的 Claude')) return head(prompt, opts);
       const p = String(prompt);
       const text = p.startsWith('你在替一个备考研究生入学考试的学生维护「记忆摘要」') ? summary(p) : p.startsWith('你在给一节刚上完的黑板课留隔天再做的题') ? holds(p) : p.startsWith('你在把一本教材的扫描页') ? transcribe(p) : p.startsWith('你在帮学生整理学习台的课程地图') ? map(p) : p.startsWith('你是这个学生的老师，现在给下一节课备课') ? prep(p) : p.startsWith('你在给学生的一节课的题归类') ? skills(p) : p.startsWith('你在给一节刚上完的课做复盘') ? debrief(p) : p.startsWith('你在课前预演一份教案') ? rehearse(p) : p.startsWith('你在给一节刚上完的舞台课做课后整理') ? after(p) : p.startsWith('你在给学生的学习台写一张学生卡') ? card(p) : p.startsWith('你在给下一节课的老师准备这节课要知道的事') ? brief(p) : p.startsWith('你在旁听一节舞台课') ? watch(p) : p.startsWith('你在给一位考研学生的学习台记账') ? said(p) : '{}';
       opts.onText?.({ text, delta: text });

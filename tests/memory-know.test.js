@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseMemoLines, splitKnow } from '../kit/src/memory/memo.js';
 import { buildSystem, closingPrompt, deskDoc, SUMMARY_MEMO_DOC } from '../kit/src/class/prompt.js';
-import { headSystem } from '../kit/src/head/context.js';
 import { sampleMemory } from '../kit/src/memory/sample.js';
 
 const lines = `know text="读了十分钟以后来了 9 句，学生叫停" basis=say
@@ -76,14 +75,3 @@ test('下课：有摘要时不归纳守则，叫老师写 know', () => {
   noHe(b);
 });
 
-test('班主任：有摘要时给四份摘要，不列要求；记忆块说明换成 know 那一份', () => {
-  const asks = [{ id: 'A-1', text: '开场复习最多两三句', status: 'active', quotes: [] }];
-  const a = headSystem({ asks, today: '2026-11-17' });
-  assert.match(a, /## 学生的要求/);
-  const b = headSystem({ asks, today: '2026-11-17', summaries: [{ id: 'shared', text: '学生目标南大。' }, { id: 'en', text: '英语按语法模块学。' }] });
-  assert.doesNotMatch(b, /## 学生的要求|开场复习最多两三句|ask text=/);
-  assert.match(b, /### 三科共用\n\n学生目标南大。/);
-  assert.match(b, /### 英语\n\n英语按语法模块学。/);
-  assert.match(b, /know text=/);
-  noHe(b);
-});

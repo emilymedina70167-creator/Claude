@@ -587,16 +587,18 @@ const SUITES = {
     await t.page.waitForLoadState('load');
     await t.waitFor(async () => /模拟班主任/.test(await t.text('.hd-msgs') || ''), { what: '刷新以后对话还在' });
     check(await t.page.$(`.hd-chip[data-cid="${cid}"][aria-selected="true"]`), '上面那排没选中这段对话');
-    // 说一条要求：班主任写 memo 块记进「我的要求」，改动单标着班主任
-    await t.page.fill('.hd-input', '测试:要求 以后开场复习只做两三句');
+    // 第十四轮：班主任是项目 Claude。它用工具在笔记本里记了一笔（pin），下一轮的说明里就有
+    await t.page.fill('.hd-input', '测试:笔记 以后开场复习只做两三句');
     await t.page.click('.hd-send');
-    const a = await t.waitFor(async () => (await t.docs('asks')).find((x) => (x.quotes || []).some((q) => /以后开场复习只做两三句/.test(q.text || ''))), { timeout: 30000, what: '班主任记成一条要求' });
-    check(a.status === 'active', '要求没写成在用的');
-    const pd = (await t.docs('pending')).find((x) => x.coll === 'asks' && x.target === a.id);
-    check(pd && pd.by === 'head', `改动单没标班主任：${JSON.stringify(pd)}`);
-    await t.waitFor(async () => /记进记忆 1 条/.test(await t.text('.hd-msgs') || ''), { what: '回答下面那行小字' });
-    check(!/board memo/.test(await t.text('.hd-msgs') || ''), 'memo 块露在画面上');
-    await t.waitFor(async () => !!(await t.db())[`chats/${cid}/said/main`], { timeout: 40000, what: '这段对话过了一次话的账' });
+    const nb = await t.waitFor(async () => (await t.docs('notebook')).find((d) => d.path === '学生/模拟.md' && d.pin), { timeout: 30000, what: '班主任用工具在笔记本里记了一笔' });
+    check(nb.by === 'head', `笔记的作者不是班主任：${JSON.stringify(nb)}`);
+    await t.waitFor(async () => (await t.page.locator('.hd-msgs .hd-head:not(.is-live)').count()) >= 2, { timeout: 20000, what: '班主任回了第二段' });
+    await t.page.fill('.hd-input', '下一句');
+    await t.page.click('.hd-send');
+    await t.waitFor(async () => (await t.page.locator('.hd-msgs .hd-head:not(.is-live)').count()) >= 3, { timeout: 20000, what: '班主任回了第三段' });
+    const sys = await t.waitFor(() => t.page.evaluate(() => (window.LAKitDevAI || []).findLast?.((x) => x.startsWith('# 学习台')) || ''), { what: '拿到班主任这一轮的说明' });
+    check(sys.includes('### 笔记：学生/模拟.md'), '下一轮的说明里没有 pin 的笔记');
+    check(!/学生的要求|开场简报|怎么改记忆/.test(sys), '班主任的说明里还有开发写的那几段');
     // 新对话
     await t.page.click('.hd-new');
     await t.waitFor(() => t.page.$('.hd-empty'), { what: '点「新对话」回到空的' });
