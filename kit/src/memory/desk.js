@@ -61,8 +61,6 @@ import { todayRows, packForBlock, coachPack } from '../project/today.js';
 import { factsDoc } from '../project/facts.js';
 import { latency } from '../class/ext.js';
 import { renderCheck } from './problemrender.js';
-import { createAfter } from '../project/afterdesk.js';
-import { needsAfter, needsOrganize } from '../project/after.js';
 import { CHARTER } from '../class/charter.js';
 import { PART_PRIORS } from '../forecast/priors.js';
 import { DEFAULT_TARGET, targetOf, examDateOf, goalOf, needsDefault, schoolLine } from '../exam/target.js';
@@ -156,7 +154,7 @@ export async function renderDesk(root, meta) {
       <div class="dk-brand" title="${escapeHtml(String(unit))}"><span class="dk-date">${escapeHtml(todayLabel())}</span><h1 class="dk-title">学习台</h1></div>
       <div class="dk-spaces" role="tablist" aria-label="科目">${SPACE_KEYS.map((k) => `<button type="button" role="tab" class="dk-space" data-space="${k}">${SPACES[k].label}</button>`).join('')}</div>
     </header>
-    <nav class="dk-nav" aria-label="学习台的页面"><a href="#">首页</a>${Object.entries(PAGES).map(([k, v]) => `<a href="#${k}">${v}</a>`).join('')}<a href="#manage">管理</a></nav>
+    <nav class="dk-nav" aria-label="学习台的页面"><a href="#">首页</a>${Object.entries(PAGES).filter(([k]) => k !== 'chat').map(([k, v]) => `<a href="#${k}">${v}</a>`).join('')}<a href="#manage">管理</a></nav>
     <p class="dk-status muted">正在连接记忆库…</p>
     <div class="dk-pages" hidden></div>
     <div class="dk-bookpage" hidden></div>
@@ -169,6 +167,7 @@ export async function renderDesk(root, meta) {
     <section class="dk-card dk-class" hidden aria-label="上课" data-menu="hero"><div class="dk-body"></div></section>
     <div class="dk-days-slot"></div>
     <section class="dk-card dk-score" hidden aria-label="410 分"></section>
+    <p class="dk-sub muted dk-mainline">主讲在 claude.ai 的项目对话里。</p>
     <section class="dk-group" aria-label="今天"><h2 class="dk-grp-h">今天</h2><div class="dk-card dk-rows"></div></section>
     <div class="dk-drawer" hidden>
     <div class="dk-part dk-later" hidden><h2 class="dk-h">验上次学的</h2><div class="dk-body"></div></div>
@@ -362,16 +361,15 @@ export async function renderDesk(root, meta) {
       loaded.add(c);
       failed.delete(c);
       if (c === 'sessions' || c === 'position') paintClass();
-      if (c === 'sessions') { fixReports(); fixSkills(); backTick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
+      if (c === 'sessions') { fixReports(); fixSkills(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
       // 笔记本变了（课上、班主任、课后那一轮写的）：管理页和「笔记」页开着就重画
       if (c === 'dev_requests' && !$('.dk-manage').hidden) projView?.paintDev();
       if (c === 'notebook') { if (!$('.dk-manage').hidden) projView?.paintManage(); if (!$('.dk-notespage').hidden) projView?.paintPage(decodeURIComponent(String(location.hash || '').slice(1))); }
       if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
-      if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) { fixReports(); backTick(); } if (lastRes) paintWeek(toDate(Date.now())); }
+      if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) { fixReports(); } if (lastRes) paintWeek(toDate(Date.now())); }
       if (c === 'curriculum') { examInbox.maybeRefresh(); manualForm?.refreshBlocks(); const sel = $('.dk-radd-b'); if (sel) sel.dataset.space = ''; }
       if (['curriculum', 'weaknesses', 'observations', 'mastery'].includes(c)) { fixSkills(); }
-      if (c === 'notebook') backTick();
       schedule();
     }, () => { failed.add(c); loaded.add(c); schedule(); });
   }
@@ -415,7 +413,7 @@ export async function renderDesk(root, meta) {
     paint(res, today);
     writeBriefs(today);
     writeFacts(today);
-    if (!failed.size) { flushOpen(); proposeMastery(); runHealth(today); backTick(); syncBars(); }
+    if (!failed.size) { flushOpen(); proposeMastery(); runHealth(today); syncBars(); }
     const rec = memcheckRecord(res, { kit: VERSION, today });
     const json = JSON.stringify(rec);
     if (json !== lastCheck) {
@@ -456,38 +454,10 @@ export async function renderDesk(root, meta) {
   const chatPage = createChatPage($('.dk-chatpage'), { head });
   // 第十四轮：项目指令、笔记本、「笔记」页（project/notebookview.js）
   projView = createProjectView({ db, store, getData: () => data, notebook, charter: CHARTER, $ });
-  // 照 claude.ai 的记忆（第十四轮，project/after.js）：后台一件一件给项目 Claude 一轮——笔记本空着先整理一次以前的记录，
-  // 之后每节下了课的课给一轮（早的先）。话的账、摘要重写、复盘、课后的助手不再调度。这次打开首页每节只试一次
-  let projMeta = null;
+  // 第十五轮：课后那一轮、第一次整理搬进了 archive/（外部主 Claude 是唯一写笔记本、下判断的）
   // 今天做什么（第十四轮）：项目 Claude 用 write 写 meta/today，首页照着画
   let todayMeta = null;
   db.doc('meta/today').onSnapshot((x) => { todayMeta = x.exists ? x.data() : null; if (loaded.has('sessions')) { const t = toDate(Date.now()); paintDrill(t); paintRows(t); } }, () => {});
-  db.doc('meta/project').onSnapshot((x) => { projMeta = x.exists ? x.data() : null; backTick(); }, () => {});
-  const afterDesk = createAfter({ db, ai: deskAI, getData: () => data, notebook, getBooks: () => ({ books: booksView.books() }), render: renderCheck, system: (td) => headSystem({ facts: projectFacts(), instructions: projView?.instructions()?.text || '', notes: data.notebook || [], catalog: catalogText({ data, books: { books: booksView.books() }, exam: examFacts(), chats: chatCount, today: toDate(Date.now()) }), toolsDoc: td }) });
-  const afterTried = new Set();
-  let organizeTried = false;
-  let afterBusy = false;
-  async function backTick() {
-    if (afterBusy || !['sessions', 'notebook'].every((c) => loaded.has(c))) return;
-    afterBusy = true;
-    try {
-      // 笔记本里已经有东西（班主任、课上写过）却还没记第一次整理：从现在算起，之后下课的课给课后那一轮
-      if (!projMeta?.since && !projMeta?.cont && !needsOrganize(data.notebook, projMeta)) { await db.doc('meta/project').set({ ...(projMeta || {}), since: Date.now(), organized: false }); return; }
-      // 第一次整理（笔记本空着），或者上一轮整理写了 [接着]：这次打开首页给一轮
-      if (needsOrganize(data.notebook, projMeta) || (!projMeta?.since && projMeta?.cont)) {
-        if (organizeTried) return;
-        organizeTried = true;
-        const OLD = ['rules', 'lessons', 'asks', 'profile', 'slips', 'observations', 'summary', 'errors', 'weaknesses', 'mastery', 'reviews', 'recall'];
-        await afterDesk.organize(OLD.map((c) => ({ collection: c, n: (data[c] || []).length })));
-        return;
-      }
-      const next = data.sessions.filter((x) => !afterTried.has(x.id) && needsAfter(x, { since: projMeta?.since })).sort((a, b) => (a.endedAt || 0) - (b.endedAt || 0))[0];
-      if (!next) return;
-      afterTried.add(next.id);
-      await afterDesk.after(next);
-      setTimeout(() => backTick(), 500);
-    } catch (err) { reportError(err, { what: '课后那一轮', soft: true }); } finally { afterBusy = false; }
-  }
   // —— 守卫（guard.js、memops.js）：写进记忆的每一条过六道检查。管理页「自检」里：各种结论几条、先暂存的（放行 / 不要）、最近挂提醒和拒掉的 ——
   let guardDoc = null;
   let guardLogs = [];

@@ -10,7 +10,8 @@ export function createChatPage(host, { head, goto = (h) => { location.hash = h; 
   let cid = '';
   let busy = null; // 正在回的那一次：{ ctl }
   let list = [];
-  host.innerHTML = `<div class="hd-page">
+  // 第十五轮：主讲在 claude.ai 的项目对话里；首页导航不再列这一页，以前的对话在 #chat 还能翻看、接着说
+  host.innerHTML = `<p class="dk-sub muted">主讲在 claude.ai 的项目对话里；这里是以前和学习台里的 Claude 的对话。</p><div class="hd-page">
     <div class="hd-chats" role="tablist" aria-label="以前的对话"></div>
     <section class="dk-card hd-chat" aria-label="和班主任说话">
       <div class="hd-msgs" aria-live="polite"></div>

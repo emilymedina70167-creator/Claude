@@ -459,7 +459,7 @@ const SUITES = {
     const t = await seeded(browser);
     await t.open('chat');
     await t.waitFor(() => t.page.$('.dk-chatpage:not([hidden]) .hd-empty'), { what: '班主任那一页画出来（空的时候有开场）' });
-    check(await t.page.$('.dk-nav a[href="#chat"][aria-current="true"]'), '导航里「班主任」没选中');
+    check(!(await t.page.$('.dk-nav a[href="#chat"]')), '导航里还列着「班主任」（第十五轮收起来了）');
     await t.page.fill('.hd-input', '我 408 现在怎么样');
     await t.page.click('.hd-send');
     await t.waitFor(() => t.page.$('.hd-msgs .hd-me'), { what: '我的话出现在右边' });
@@ -1115,33 +1115,6 @@ const SUITES = {
     return t;
   },
 
-  // 照 claude.ai 的记忆（第十四轮）：笔记本空着先在后台整理一次以前的记录；之后每节下了课的课后台给项目 Claude 一轮
-  async after(browser) {
-    const t = await seeded(browser);
-    // 真库里 meta/exam 的 papers 是「门课 → 年份 → 题」：第一次整理拼说明时要读得懂（2026-11-17 这里崩过）
-    await plant(t, { 'meta/exam': { counts: { questions: 3, papers: 2 }, papers: { 408: { 2009: [], 2026: [] } } } });
-    await t.open();
-    const first = await t.waitFor(async () => (await t.docs('notebook')).find((d) => d.path === '学生/底子.md' && d.pin), { timeout: 30000, what: '首页后台做了第一次整理，写了一个 pin 的笔记' });
-    check(first.by === 'organize', `第一次整理的作者不对：${first.by}`);
-    await t.waitFor(async () => (await t.db())['meta/project']?.since, { what: '第一次整理以后记下从什么时候起' });
-    await t.page.click('.dk-class .dk-new');
-    const sid = await t.inClass();
-    await t.page.click('button:has-text("开始上课")');
-    await t.waitFor(() => t.page.$('button:has-text("一个数")'), { timeout: 30000, what: '模拟老师写出第一道题' });
-    await sleep(1500);
-    await t.open(); await t.page.waitForSelector('.dk-class .dk-go', { state: 'attached', timeout: 15000 });
-    await t.page.evaluate(() => document.querySelector('.dk-class .dk-close').click());
-    await t.answer('直接下课');
-    const s = await t.waitFor(async () => { const x = (await t.docs('sessions')).find((d) => d.id === sid); return x?.after?.at ? x : null; }, { timeout: 40000, what: '下课以后后台给了项目 Claude 一轮' });
-    check(s.after.model === 'claude-opus-5-5', `课后那一轮的模型不对：${s.after.model}`);
-    const log = (await t.docs('notebook')).find((d) => d.path === '课/记录.md');
-    check(log && log.by === 'after' && log.text.includes(sid), `课后那一轮没写笔记：${JSON.stringify(log)}`);
-    // 再打开首页：同一节不再给第二次
-    await t.open(); await sleep(3000);
-    const again = (await t.docs('sessions')).find((d) => d.id === sid);
-    check(again.after.rounds === 1, `同一节课给了不止一次：${JSON.stringify(again.after)}`);
-    return t;
-  },
 
   // 被迭代掉的几种课（舞台、一问一答、实时黑板、自学单元，第十四轮搬进 archive/）：以前上过的点进去只出文字，不报错
   async oldclass(browser) {
