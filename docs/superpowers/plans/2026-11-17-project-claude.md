@@ -10,11 +10,15 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-17-project-claude-design.md`（6.10 是去留清单，9 / 9.1 是开发定的事）。
 
+## 底线（学生 2026-11-17）
+
+「你不要替他做任何事情，这是底线……你是为他创造环境，你这次任务其实就是把 Claude 项目搬进学习台就完事了，然后消除冲突内容，以及做好 Claudeai 的记忆能力。」所以：页面不替它安排流程、不替它写内容、不替它挑；说明里只写事实（有哪些工具、学习台里有什么）。以下各任务凡是和这条冲突的，以这条为准。
+
 ## Global Constraints
 
-- 讲课、班主任、课后那一轮、第一次整理、每周通读：只认 `claude-opus-5-5`、`effort: 'high'`；回的不是就作废，不加退路模型。
+- 讲课、班主任、课后那一轮、第一次整理：只认 `claude-opus-5-5`、`effort: 'high'`；回的不是就作废，不加退路模型。
 - 页面拼给 Claude 的字里提到学生不用「他」「她」；Claude 写的笔记存原样，发出去时照旧换成「学生」（`digest.js` 的 `neutral` 那一套）。
-- 页面拼的那几段（身份、工具手册、下课那句、整理和通读的提示）只写事实，不写做法：不出现「你应该」「必须」「先……再……」「根本规则」「以它为准」。
+- 页面拼的那几段（身份、工具手册、下课那句、课后和整理的提示）只写事实，不写做法：不出现「你应该」「必须」「先……再……」「根本规则」「以它为准」。
 - 项目 Claude 能读写学习台里的一切（含项目指令）；每一次写都记进 `journal`、学生能撤销。项目指令、笔记本不设长度上限。笔记本不设单独上限，只有整份说明一个总量 `SYSTEM_MAX`（先照 160 KiB，任务 1 量完再定）。
 - 后台的调用都写 `lane: 'bg'`；课上写笔记本走输出里的 `board note` 块，不走工具调用。
 - 旧数据一条不删；不用 `window.confirm` / `alert` / `prompt`；界面以 iPad 为准（触控 ≥ 44px、输入框 16px）。
@@ -130,7 +134,7 @@ set 学生/背景.md pin=on order=1 show=off
 
 **Files:**
 - Create: `kit/src/project/notebookdesk.js`
-- Modify: `kit/src/memory/schema.js`（`COLLECTIONS` 加 `notebook`、`notebook_review`；角色 `class` `head` `page` `me` 能写 `notebook`（`by` 取 `class` `head` `after` `organize` `me`；课后那一轮和整理以 `head` 的身份过 `assertWrite`），`page` 能写 `notebook_review`；`meta/instructions` 只有 `me` 能写——照 `assertWrite` 现有的写法加）、`kit/src/memory/backup.js`（备份带这两类和 `meta/instructions`）
+- Modify: `kit/src/memory/schema.js`（`COLLECTIONS` 加 `notebook`；角色 `class` `head` `page` `me` 能写 `notebook`（`by` 取 `class` `head` `after` `organize` `me`；课后那一轮和整理以 `head` 的身份过 `assertWrite`）；`meta/instructions` 先只有 `me` 能写，任务 13 放开）、`kit/src/memory/backup.js`（备份带 `notebook` 和 `meta/instructions`）
 - Test: `tests/project-notebookdesk.test.js`（用现有测试里的内存假数据库写法，`grep -l "fakeDb\|memDb" tests` 照抄）、`tests/memory-backup.test.js` 加一条
 
 **Interfaces:**
@@ -171,11 +175,11 @@ set 学生/背景.md pin=on order=1 show=off
 
 **Interfaces:**
 - Consumes: 任务 5。`render.js` 的 `renderLesson`（画 show 的文件，组件照常）；`live/sync.js` 的 `createSink(store, { evidence })`（作答记成证据，`session: 'note'`）；`class/charter.js` 的 `CHARTER` 全文（只读给学生看、可复制）。
-- Produces: `instructionsDraft(quotes: {text, at}[]): string`（纯函数：一行一句「YYYY-MM-DD：原话」，草稿不存）；`meta/instructions = { text, at, by:'me', history }`（`history` 最近 20 版）。
+- Produces: `meta/instructions = { text, at, by:'me', history }`（`history` 最近 20 版）。
 
-- [ ] **Step 1: 写测试** `instructionsDraft([{text:'老师把内容讲透，我来学', at: Date.parse('2026-11-16')}])` 含「2026-11-16：老师把内容讲透，我来学」，不含「必须」。
+- [ ] **Step 1: 写测试** `tests/project-instructions.test.js`：`saveInstructions(prev, text, at)`（纯函数）返回新文档、旧的进 `history`（最多 20 版）、`by: 'me'`。
 - [ ] **Step 2:** 跑，看它失败。
-- [ ] **Step 3:** 实现画面：项目指令一个文本框（16px）+「存」「看以前的版本」，下面收起的「以前的根本规则（开发写的，想要哪句自己抄）」；笔记本目录（每行 path、大小、pin/show、日期）→ 点开全文可改（存成 `by:'me'`）、以前的版本、退回、恢复删掉的、引号没找到的那几句标出来；「笔记」页列 show 的文件，点开照课件画；「管理 → 笔记本」底下一个开关「每周换一个 Claude 通读一次」（存 `meta/project.review: true|false`，默认开，任务 11 读它）和最近几份通读的结果。草稿的原话由开发在任务 13 里填进 `instructionsDraft` 的调用处（取学生第十二～十四轮设计文档里引的原话）。
+- [ ] **Step 3:** 实现画面：项目指令一个文本框（16px）+「存」「看以前的版本」，下面收起的「以前的根本规则（开发写的，想要哪句自己抄）」；笔记本目录（每行 path、大小、pin/show、日期）→ 点开全文可改（存成 `by:'me'`）、以前的版本、退回、恢复删掉的、引号没找到的那几句标出来；「笔记」页列 show 的文件，点开照课件画。项目指令一开始是空的，学生自己写。
 - [ ] **Step 4:** e2e `project` 段的前半：管理页写项目指令、存、刷新还在；假数据里放一个 `show:true` 的文件（含一个 `quiz`），「笔记」页打开能作答，`evidence` 多一条 `session:'note'`。
 - [ ] **Step 5: 提交** `git commit -m "管理页：项目指令、笔记本；导航多一页「笔记」"`。
 
@@ -187,7 +191,7 @@ set 学生/背景.md pin=on order=1 show=off
 
 **Interfaces:**
 - Consumes: 任务 4 的 `pinnedText`、`notebookDir`。
-- Produces: `catalogText(data, books): string`（`kit/src/project/catalog.js`，纯函数）；`projectSystem({ facts: { today, version, examDays, target }, instructions: string, notes: object[], catalog: string, toolsDoc: string, sections: { title, text }[], max: number }): { text, sizes: { total, instructions, pinned, sections }, skipped }`。顺序：身份事实一段（「你是学生学习台里的 Claude。学生在准备……，还有 N 天。今天……；学习台版本……」）→ `# 学生写的项目指令`（原样；空就写「（学生还没写）」）→ `# 你的笔记本`（pin 的原文、目录、`notebook_review` 最近一份的路径、一行用量「这一轮说明一共 X KB：项目指令 a、笔记 b、其余 c；上限 SYSTEM_MAX」）→ `# 学习台里有什么`（知识库的目录，只写事实：每本教材的书名和条数、真题入库到哪几年几道、考点画像几个、上过几节课（每科几节、最近一节哪天）、和班主任的对话几段、旧记忆每类几条、页面算好的事实放在哪些路径（课后报告、掌握、预测分、隔天验、`meta/exam`），由调用的地方传 `catalog: string`，`project/catalog.js` 的 `catalogText(data, books)` 拼）→ `# 工具` → 传进来的 `sections`。pin 的 room = `max` − 其余各段。笔记本为空时那一段写「笔记本还是空的，以前的记录在：…」（列旧的那几类和条数，`getData` 给）。发出去前对页面拼的那几段做 `neutral`。
+- Produces: `catalogText(data, books): string`（`kit/src/project/catalog.js`，纯函数）；`projectSystem({ facts: { today, version, examDays, target }, instructions: string, notes: object[], catalog: string, toolsDoc: string, sections: { title, text }[], max: number }): { text, sizes: { total, instructions, pinned, sections }, skipped }`。顺序：身份事实一段（「你是学生学习台里的 Claude。学生在准备……，还有 N 天。今天……；学习台版本……」）→ `# 学生写的项目指令`（原样；空就写「（学生还没写）」）→ `# 你的笔记本`（pin 的原文、目录、一行用量「这一轮说明一共 X KB：项目指令 a、笔记 b、其余 c；上限 SYSTEM_MAX」）→ `# 学习台里有什么`（知识库的目录，只写事实：每本教材的书名和条数、真题入库到哪几年几道、考点画像几个、上过几节课（每科几节、最近一节哪天）、和班主任的对话几段、旧记忆每类几条、页面算好的事实放在哪些路径（课后报告、掌握、预测分、隔天验、`meta/exam`），由调用的地方传 `catalog: string`，`project/catalog.js` 的 `catalogText(data, books)` 拼）→ `# 工具` → 传进来的 `sections`。pin 的 room = `max` − 其余各段。笔记本为空时那一段写「笔记本还是空的，以前的记录在：…」（列旧的那几类和条数，`getData` 给）。发出去前对页面拼的那几段做 `neutral`。
 - `FORBIDDEN = ['你应该', '必须', '根本规则', '以它为准', '照做']`（只查页面拼的那几段，不查学生的指令、笔记、`sections`）。
 
 - [ ] **Step 1: 写测试**：`catalogText` 对示例记忆含每本书名、「真题」和道数、每科上过几节；项目指令出现在身份段之后、笔记之前，原样（含一个「必须」也照留）；页面拼的部分不含 `FORBIDDEN` 任何一个；`max` 很小时 `skipped` 非空、`text` 字节数 ≤ `max`；没有 pin 时用量那一行 `pinned 0`；笔记本空时含「笔记本还是空的」；身份段不含「他」「她」。
@@ -229,11 +233,11 @@ set 学生/背景.md pin=on order=1 show=off
 - [ ] **Step 5:** 开发通读一份用 `kit/examples/desk-demo.html?dev` 的示例记忆拼出来的完整说明（`window.LAKitDevAI` 里最近一次），把还在讲做法的句子列出来删掉，删完再跑一遍。
 - [ ] **Step 6: 提交** `git commit -m "课堂的老师就是项目 Claude：学生的指令和它的笔记本；开发写的做法拿掉"`。
 
-### Task 11: 课后那一轮、第一次整理、每周通读
+### Task 11: 课后那一轮、第一次整理（照 claude.ai 的记忆：对话以后在后台整理一次）
 
 **Files:**
 - Create: `kit/src/project/after.js`（纯函数）、`kit/src/project/afterdesk.js`
-- Modify: `kit/src/memory/desk.js`（`backTick` 改成：第一次整理 → 课后那一轮（早的先）→ 每周通读；摘要重写、话的账、`aideDesk`、`fixDebriefs` 不再调度）、`kit/src/memory/lab.js` 和 `kit/src/books/plan.js`（`prepMemory`、补收尾：笔记本不空时带 `pinnedText`，空时照旧）
+- Modify: `kit/src/memory/desk.js`（`backTick` 改成：第一次整理 → 课后那一轮（早的先）；摘要重写、话的账、`aideDesk`、`fixDebriefs` 不再调度）、`kit/src/memory/lab.js` 和 `kit/src/books/plan.js`（`prepMemory`、补收尾：笔记本不空时带 `pinnedText`，空时照旧）
 - Test: `tests/project-after.test.js`；e2e `project` 段后半、`idle` 段
 
 **Interfaces:**
@@ -244,16 +248,14 @@ set 学生/背景.md pin=on order=1 show=off
   - `afterPrompt(session): string`：只写事实——「这节课（{title}，{date}）结束了。课后报告在 sessions/{id}/report/main，每一轮在 sessions/{id}/class_turns，作答在 evidence（session = {id}）。」
   - `needsOrganize(notes, meta): boolean`：笔记本里没有没删的文件且 `meta/project.since` 没有。
   - `organizePrompt(counts: {collection, n}[]): string`：「笔记本还是空的。学习台以前的记录在这些地方：…（每类几条）。」
-  - `reviewDue(lastAt, now, on = true): boolean`：开关开着、笔记本不空且距上次 ≥ `REVIEW_DAYS` 天。
-  - `reviewPrompt(): string`：「你没有对话历史。请读笔记本和原始记录，回一份：哪些过时了、哪些互相矛盾、哪些可能是从一句话推广出来的、哪些原话在记录里找不到。不要改笔记本。」（这是给通读那一轮的任务本身，按设计 6.5，不算替老师定做法。）
 - 连着调工具的次数照任务 1 量出来的上限（`meta/speed.tools`）：一轮用满了还没做完的（模型回的里面说还要接着、或者调用因为次数到了停下），记 `after.cont = true`，下一次后台再给它一轮接着做（提示多一句「上一轮没做完，做到了这里：……（它上一轮最后写的话）」），最多 3 轮。
-- `afterdesk.js`：`createAfter({ db, ai, tools, system })` → `{ organize(), after(sid), review() }`；回的不是 Opus 就作废、`sessions/{id}.after = { fails + 1 }`；成了写 `{ at, model }`；整理成了写 `meta/project.since = Date.now()`；通读写 `notebook_review/{YYYY-MM-DD}` = `{ text, at, model }`。三种调用都用 `projectSystem`（没有对话历史，用户消息就是 `*Prompt()` 的那一句）。
+- `afterdesk.js`：`createAfter({ db, ai, tools, system })` → `{ organize(), after(sid) }`；回的不是 Opus 就作废、`sessions/{id}.after = { fails + 1 }`；成了写 `{ at, model }`；整理成了写 `meta/project.since = Date.now()`。两种调用都用 `projectSystem`（没有对话历史，用户消息就是 `*Prompt()` 的那一句）。
 
-- [ ] **Step 1: 写测试**：`needsAfter` 下了课、`endedAt` 在 since 之后 → 真；`after.at` 有了 → 假；`fails: 2` → 假（Review Focus 第 4 条）；`since` 没有 → 假；`afterPrompt` 含课号和三个路径、不含 `FORBIDDEN`；`needsOrganize([], {})` 真、有一个文件时假；`reviewDue(Date.now() - 8 * 864e5, Date.now())` 真、6 天假、`on=false` 时假。
+- [ ] **Step 1: 写测试**：`needsAfter` 下了课、`endedAt` 在 since 之后 → 真；`after.at` 有了 → 假；`fails: 2` → 假（Review Focus 第 4 条）；`since` 没有 → 假；`afterPrompt` 含课号和三个路径、不含 `FORBIDDEN`；`needsOrganize([], {})` 真、有一个文件时假。
 - [ ] **Step 2:** 跑，看它失败。
 - [ ] **Step 3:** 实现；`?dev` 的模拟模型对这三种提示各回一段并用工具建一个文件（`books/devmock.js`）。
-- [ ] **Step 4:** `npm test`；e2e `project` 段后半：开首页 → 后台整理建了文件、`meta/project.since` 有了 → 上一节课下课 → 回首页，`sessions/{id}.after.at` 有了 → 模拟时间过 8 天，`notebook_review` 多一份；`idle` 段：挂 12 小时的课下课后也有 `after`。跑 `npm run e2e`。
-- [ ] **Step 5: 提交** `git commit -m "课后那一轮、第一次整理、每周通读：页面只给机会，做什么由项目 Claude 定"`。
+- [ ] **Step 4:** `npm test`；e2e `project` 段后半：开首页 → 后台整理建了文件、`meta/project.since` 有了 → 上一节课下课 → 回首页，`sessions/{id}.after.at` 有了；`idle` 段：挂 12 小时的课下课后也有 `after`。跑 `npm run e2e`。
+- [ ] **Step 5: 提交** `git commit -m "照 claude.ai 的记忆：课后在后台整理一次、第一次整理以前的记录"`。
 
 ### Task 12: 记忆的旧流程搬进 archive/，学习的账只记不拦
 
@@ -271,7 +273,7 @@ set 学生/背景.md pin=on order=1 show=off
 - [ ] **Step 4:** `npm test`；`npm run build`；`npm run e2e`。
 - [ ] **Step 5: 提交** `git commit -m "记忆的旧流程搬进 archive/：话的账、摘要重写、复盘、课后助手；学习的账只记不拦"`。
 
-### 放权（任务 13～17）
+### 放权（任务 13～16）
 
 学生 2026-11-17：「这个直接你给 Claude 所有内容的操作权限不就行了吗？他用不用的好，这个我需要他能根据我与他的交流进行改进，而不是每次在 Claude code 进行。」所以不给它一件件专门的工具，**给它整个学习台的读写权**；页面不再做决定，只照它写的东西画、照它写的东西开课。它还没写的时候页面只摆事实，不替它挑。原来做决定的代码搬进 `archive/`，原来算的部分留成它能读的参考。要撤销靠「每一次写都记下来」，不靠拦。
 
@@ -293,13 +295,13 @@ set 学生/背景.md pin=on order=1 show=off
 ### Task 14: 页面让出决定：今天、掌握、复现排期、留题
 
 **Files:**
-- Modify: `kit/src/memory/desk.js`：`proposeMastery` 不再写 `mastery`，改写参考 `meta/mastery-calc`；`fixHolds` 不再调用模型出题；「今天」照 `meta/today` 画（`{ date, note, items: { kind, why, block?, ids?, label? }[] }`，每种 kind 用现有的开法：开课、复现课、练一练（`ids` 是它挑的题）、要记的、隔天验）；`meta/today.date` 不是今天时后台给项目 Claude 一轮（提示只写事实：日期、离考试几天、到期了几组、留着没做的题、上一节课），没写成时只摆这些数；`views.js` 的到期先看 `reviews.due`（新字段，它写的），没有再按档位算；`books/planview.js` 的「让 Claude 备课」只给项目 Claude 一轮（提示「学生让你备 {块} 的下一节课」）；`plan.js` 的备课提示词和读回、`rehearse.js` 搬进 `archive/`
-- Create: `kit/src/project/today.js`（`todayFacts(data, today): string`、`todayRows(meta, data): row[]`、`needsToday(meta, today): boolean`）
+- Modify: `kit/src/memory/desk.js`：`proposeMastery` 不再写 `mastery`，改写参考 `meta/mastery-calc`；`fixHolds` 不再调用模型出题；「今天」照 `meta/today` 画（`{ date, note, items: { kind, why, block?, ids?, label? }[] }`，每种 kind 用现有的开法：开课、复现课、练一练（`ids` 是它挑的题）、要记的、隔天验）；项目 Claude 自己写了（在对话里、课后那一轮里，用 `write`）就照它画，没写就只摆事实（到期了几组、留着没做的题、上一节课），页面不替它挑；`views.js` 的到期先看 `reviews.due`（新字段，它写的），没有再按档位算；`books/planview.js` 的「让 Claude 备课」按钮拿掉（学生要备课就跟它说）；`plan.js` 的备课提示词和读回、`rehearse.js` 搬进 `archive/`
+- Create: `kit/src/project/today.js`（`todayFacts(data, today): string`、`todayRows(meta, data): row[]`）
 - Modify: 写 `drills` 时页面先过 `checkProblems` 和藏着画一遍，结果放进 `write` 的返回（不过的照写但标 `broken: true`，练一练不挑）
 - Test: `tests/project-today.test.js`
 
-- [ ] **Step 1: 写测试**：`todayRows({items:[{kind:'review', ids:['R3'], why:'到期了'}]}, data)` 一行、开的是 R3 的复现课；`needsToday({date:'2026-11-16'}, '2026-11-17')` 真；`todayFacts` 含到期组数、不含 `FORBIDDEN`；`reviews/R3.due = '2026-11-20'` 时 11-19 不到期；`proposeMastery` 跑完 `mastery` 不变、`meta/mastery-calc` 有；写一道写法错的 drill 返回 `problems`、`broken: true`。
-- [ ] **Step 2～4:** 跑失败 → 实现 → `npm test`、e2e（`root` 段改成课后那一轮里模拟老师自己写 drills 和 holds；`prep` 段改成按钮给一轮）。
+- [ ] **Step 1: 写测试**：`todayRows({items:[{kind:'review', ids:['R3'], why:'到期了'}]}, data)` 一行、开的是 R3 的复现课；`meta/today` 没有时 `todayRows` 只有事实行、没有挑出来的题；`todayFacts` 含到期组数、不含 `FORBIDDEN`；`reviews/R3.due = '2026-11-20'` 时 11-19 不到期；`proposeMastery` 跑完 `mastery` 不变、`meta/mastery-calc` 有；写一道写法错的 drill 返回 `problems`、`broken: true`。
+- [ ] **Step 2～4:** 跑失败 → 实现 → `npm test`、e2e（`root` 段改成课后那一轮里模拟老师自己写 drills 和 holds；`prep` 段搬进 `archive/`）。
 - [ ] **Step 5: 提交** `git commit -m "页面让出决定：今天、掌握、复现排期、留题、备课都由项目 Claude 写"`。
 
 ### Task 15: 每晚的教研室就是项目 Claude
@@ -314,27 +316,19 @@ set 学生/背景.md pin=on order=1 show=off
 ### Task 16: 改进来自和它的交流
 
 **Files:**
-- Modify: `kit/src/project/system.js`（身份事实里加一句：「学生让你改学习台的做法时：内容、记忆、计划、页面、你自己的指令你都能直接改；要改页面代码才做得到的（新组件、新的画面），写进 `dev_requests`，开发那边开工先读」）、`kit/src/memory/schema.js`（`dev_requests/{id} = { at, by, text, quote, status: 'open'|'done', done? }`）、`kit/src/memory/desk.js`（「管理 → 给开发的」列出来，学生能删）、`CLAUDE.md`（「开发那边每次开工先读」那一句加 `dev_requests`）
-- Test: `tests/project-system.test.js` 加一条：身份段含 `dev_requests`
+- Modify: `kit/src/project/system.js`（「学习台里有什么」里加一行事实：「`dev_requests`：写在这里的，开发那边每次开工先读」）、`kit/src/memory/schema.js`（`dev_requests/{id} = { at, by, text, quote, status: 'open'|'done', done? }`）、`kit/src/memory/desk.js`（「管理 → 给开发的」列出来，学生能删）、`CLAUDE.md`（「开发那边每次开工先读」那一句加 `dev_requests`）
+- Test: `tests/project-system.test.js` 加一条：目录里有 `dev_requests` 那一行、不含 `FORBIDDEN`
 
 - [ ] **Step 1～4:** 写测试 → 跑失败 → 实现 → `npm test`。 **Step 5: 提交** `git commit -m "学生让改的：能直接改的项目 Claude 自己改，要改代码的留给开发"`。
-
-### Task 17: 课上写的东西也不拦
-
-**Files:**
-- Modify: `kit/src/memory/memops.js` 和 `memo.js`（任务 12 已改成只记不拦，这里补 memo 的 `mastery`：课上的老师能写）、`kit/src/class/classroom.js`（`board note` 和 memo 块执行后的结果照旧下一轮告诉它）
-- Test: `tests/memory-memo.test.js` 加 `mastery` 一行能写
-
-- [ ] **Step 1～5:** 写测试 → 跑失败 → 实现 → `npm test` → 提交 `git commit -m "课上的老师也能判掌握"`。
 
 ### Task 18: 定总量、写文档、发布
 
 **Files:**
-- Modify: `kit/src/class/prompt.js`（`SYSTEM_MAX` 照 `meta/speed` 量出来的定：大说明出第一个字比 160 KB 多不到 1 秒就取量过的最大那档，否则留 160 KiB；注释写量的日期和数）、`tests/subject.test.js`（资料包至少留多少跟着新总量算）、`CLAUDE.md`（加第十四轮一条：做了什么、`archive/` 里有什么；舞台、一问一答、实时黑板、自学单元、话的账、摘要、助手那几条标「已搬进 archive/」）、`CLAUDE-PROJECT.md`（第一节自学单元、第五节实时黑板删成一句「已停用」；第七节写笔记本、项目指令、谁读什么；版本号 `2026-11-17b`）、`docs/root-handoff.md`（换成这一轮的交接）、`docs/superpowers/specs/2026-11-17-project-claude-design.md`（9.1 第 8 条写上量出来的数）、`kit/src/project/notebookview.js` 里 `instructionsDraft` 的原话清单
+- Modify: `kit/src/class/prompt.js`（`SYSTEM_MAX` 照 `meta/speed` 量出来的定：大说明出第一个字比 160 KB 多不到 1 秒就取量过的最大那档，否则留 160 KiB；注释写量的日期和数）、`tests/subject.test.js`（资料包至少留多少跟着新总量算）、`CLAUDE.md`（加第十四轮一条：做了什么、`archive/` 里有什么；舞台、一问一答、实时黑板、自学单元、话的账、摘要、助手那几条标「已搬进 archive/」）、`CLAUDE-PROJECT.md`（第一节自学单元、第五节实时黑板删成一句「已停用」；第七节写笔记本、项目指令、谁读什么；版本号 `2026-11-17b`）、`docs/root-handoff.md`（换成这一轮的交接）、`docs/superpowers/specs/2026-11-17-project-claude-design.md`（9.1 第 8 条写上量出来的数）
 - Test: 全部
 
 - [ ] **Step 1:** `ArtifactData get meta/speed` 读学生跑的结果，定 `SYSTEM_MAX`；没跑就留 160 KiB 并在交接里写明。
 - [ ] **Step 2:** 改文档和版本号；`npm test`；`npm run build`；`git status` 只剩这次改的；`npm run e2e` 全过。
 - [ ] **Step 3: 提交并推** `git commit -m "第十四轮：项目 Claude（版本 2026-11-17b）"`，`git push -u origin claude/determined-newton-dz9hrz`，再 `git push origin HEAD:main`（快进）。
 - [ ] **Step 4: 发布学习台**：`Artifact` publish `kit/desk.html` 到学习台的 URL，`files`：`la-kit.js` ← `kit/dist/la-kit.js`、`CLAUDE-PROJECT.md` ← `kit/dist/docs/CLAUDE-PROJECT.md`、`components/*.md` ← `kit/dist/docs/components/`（变了的才传）；`capabilities` 不传。
-- [ ] **Step 5:** 告诉学生：去「管理 → 项目指令」看开发列的原话草稿，删改后存；第一次整理会在打开首页后在后台做；然后上一节真课。开发读那节课、课后那一轮写的笔记、`notebook_review`。
+- [ ] **Step 5:** 告诉学生：「管理 → 项目指令」现在是空的，要写什么学生自己写；第一次整理会在打开首页后在后台做；然后上一节真课。开发读那节课、课后那一轮写的笔记。
