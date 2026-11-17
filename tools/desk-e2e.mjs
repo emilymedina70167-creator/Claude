@@ -1023,6 +1023,15 @@ const SUITES = {
     await t.page.click('.dk-jundo');
     await t.answer('撤销');
     await t.waitFor(async () => (await t.docs('errors')).find((x) => x.id === e0.id)?.cause === e0.cause, { timeout: 10000, what: '撤销以后错题的根因回到原来的' });
+    // 给开发的（dev_requests）：它记下的要改代码的事，管理页列出来，我能删
+    await plant(t, { 'dev_requests/dr-e2e': { at: Date.now(), by: 'head', text: '首页能按周排', quote: '首页按周排吧', status: 'open' } });
+    await t.open('manage');
+    await t.page.click('.dk-dev summary');
+    await t.page.waitForSelector('.dk-dev .dk-devdel', { timeout: 15000 });
+    check((await t.text('.dk-dev'))?.includes('首页按周排吧'), '管理页「给开发的」没列出原话');
+    await t.page.click('.dk-dev .dk-devdel');
+    await t.answer('删掉');
+    await t.waitFor(async () => !(await t.db())['dev_requests/dr-e2e'], { timeout: 10000, what: '「给开发的」删掉一条' });
     return t;
   },
 

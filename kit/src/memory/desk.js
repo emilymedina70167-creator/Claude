@@ -187,6 +187,7 @@ export async function renderDesk(root, meta) {
     <section class="dk-card dk-exam"><h2 class="dk-h">考试</h2><p class="dk-sub muted">考哪个学校哪个专业、目标多少分、哪天考。410 分的进度、距考研都照这里算。</p><div class="dk-body"></div></section>
     <section class="dk-card dk-instr"><h2 class="dk-h">项目指令</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-notebook"><h2 class="dk-h">笔记本</h2><div class="dk-body"></div></section>
+    <section class="dk-card dk-dev"><details class="dk-fold"><summary><h2 class="dk-h">给开发的</h2><span class="muted">要改页面代码才做得到的事，Claude 记在这里</span></summary><div class="dk-body"></div></details></section>
     <section class="dk-card dk-journal"><details class="dk-fold"><summary><h2 class="dk-h">Claude 改过的</h2><span class="muted">每一次都记着，不对就撤销</span></summary><div class="dk-body"></div></details></section>
     <section class="dk-card dk-recent"><h2 class="dk-h">最近记下的</h2><p class="dk-sub muted">课堂里的 Claude 和页面直接写进记忆的，不对就撤销（7 天内）。</p><div class="dk-pdone"></div></section>
     <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
@@ -362,6 +363,7 @@ export async function renderDesk(root, meta) {
       if (c === 'sessions') { fixReports(); fixSkills(); backTick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
       // 笔记本变了（课上、班主任、课后那一轮写的）：管理页和「笔记」页开着就重画
+      if (c === 'dev_requests' && !$('.dk-manage').hidden) projView?.paintDev();
       if (c === 'notebook') { if (!$('.dk-manage').hidden) projView?.paintManage(); if (!$('.dk-notespage').hidden) projView?.paintPage(decodeURIComponent(String(location.hash || '').slice(1))); }
       if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
       if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) { fixReports(); backTick(); } if (lastRes) paintWeek(toDate(Date.now())); }

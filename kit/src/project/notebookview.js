@@ -180,8 +180,30 @@ export function createProjectView({ db, store, getData, notebook, charter = '', 
     }
   }
 
+  // —— 管理 → 给开发的（dev_requests）：项目 Claude 记下的、要改页面代码的事；开发那边开工先读，学生能删 ——
+  function paintDev() {
+    const body = $('.dk-dev .dk-body');
+    if (!body) return;
+    const rows = [...(getData()?.dev_requests || [])].sort((a, b) => (b.at || 0) - (a.at || 0));
+    body.innerHTML = rows.length ? rows.map((r) => `<div class="dk-row"><span class="dk-row-t">${escapeHtml(r.text || '')}${r.quote ? `<br><span class="muted">你说：${escapeHtml(r.quote)}</span>` : ''}<br><span class="muted">${day(r.at)} ${escapeHtml(BY[r.by] || r.by || '')}${r.status === 'done' ? ' · 做好了' : ''}</span></span><button type="button" class="btn btn-sm dk-devdel" data-id="${escapeHtml(r.id)}">删掉</button></div>`).join('') : '<p class="muted">还没有。你在对话里让改、要改页面代码才做得到的事，Claude 会记在这里。</p>';
+    if (body.dataset.wired) return;
+    body.dataset.wired = '1';
+    body.addEventListener('click', async (e) => {
+      const b = e.target.closest('.dk-devdel');
+      if (!b || !await ask('删掉这一条？', { ok: '删掉' })) return;
+      try {
+        const ref = db.doc(`dev_requests/${b.dataset.id}`);
+        const before = await ref.get().then((x) => (x.exists ? x.data() : null));
+        await ref.delete();
+        const at = Date.now();
+        await db.doc(`journal/${journalId(at)}`).set({ at, by: 'me', path: `dev_requests/${b.dataset.id}`, op: 'delete', before, after: null });
+      } catch (err) { reportError(err, { what: '删给开发的' }); toast('没删成，再试一次'); }
+    });
+  }
+
   return {
-    paintManage() { paintInstr(); wireNotes(); paintNotes(); paintJournal(); },
+    paintDev,
+    paintManage() { paintInstr(); wireNotes(); paintNotes(); paintJournal(); paintDev(); },
     paintPage,
     instructions: () => instr,
     dir: () => notebookDir(getData()?.notebook || []),

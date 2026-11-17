@@ -63,3 +63,10 @@ test('学习台里有什么：书、真题、上过几节课、旧记忆每类�
   assert.match(t, /dev_requests/);
   for (const w of FORBIDDEN) assert.ok(!t.includes(w), w);
 });
+
+test('dev_requests：要改代码的事一条一条记（at、by、text、原话 quote、open / done），格式不对说出来', async () => {
+  const { validateWrite } = await import('../kit/src/memory/writer.js');
+  assert.deepEqual(validateWrite('dev_requests/dr-1', { at: 1, by: 'head', text: '首页能不能按周排', quote: '首页按周排吧', status: 'open' }), []);
+  assert.ok(validateWrite('dev_requests/dr-1', { at: 1, by: 'head', status: 'open' }).some((p) => /text/.test(p)));
+  assert.ok(validateWrite('dev_requests/dr-1', { at: 1, by: 'head', text: 'x', status: '要做' }).some((p) => /status/.test(p)));
+});
