@@ -38,7 +38,7 @@ test('守则不写形式：黑板课的记忆说明、下课整理的提示里�
   // 舞台课、一问一答、教研室用的那几份不变
   assert.ok(!MEMO_DOC.includes(LESSON_NO_FORM) && !closingPrompt({ report: '报告' }).includes(LESSON_NO_FORM));
   const { readFileSync } = await import('node:fs');
-  assert.match(readFileSync(new URL('../kit/src/class/classroom.js', import.meta.url), 'utf8'), /noForm: !TALK/, '黑板课下课时传 noForm');
+  assert.match(readFileSync(new URL('../kit/src/class/classroom.js', import.meta.url), 'utf8'), /noForm: true/, '黑板课下课时传 noForm');
 });
 test('快捷按钮只说明是学生点的，不写怎么接', () => {
   for (const s of ['退一步', '先请学生试试', '缺思路']) assert.ok(!PROTOCOL_DOC.includes(s), s);
