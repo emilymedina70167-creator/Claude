@@ -20,6 +20,7 @@
 | `kit/src/memory/lab.js` `labdesk.js` `sentry.js`、`tools/lab.mjs`、`tools/aide-audit.mjs` | 云端教研室的单子、后方的工作单 | 每晚的教研室换成项目 Claude（提示词 `docs/lab-prompt.md`）；验题的几个函数搬到 `memory/problemcheck.js`、`problemrender.js` | 2026-11-17 | `6b5983c` |
 | `kit/src/memory/holds.js`（整份） | 下课后页面自动挑真题、请 Opus 出留题 | 留不留、留什么由项目 Claude 定；`holds.js` 只留到期和算结果 | 2026-11-17 | `6b5983c` |
 | `kit/src/books/rehearse.js` | 课前预演 | 被替代 | 2026-11-17 | `6b5983c` |
+| `kit/src/books/plan.js` 的备课部分（`prepPrompt` `prepMemory` `parsePrep` `checkPrep` `openTodos` `suggestBlock` `parsePages`）、`kit/src/books/planview.js` 的备课画面、`tests/books-plan-summary.test.js` 和别的测试里的备课用例（`archive/tests/books-prep.test.js`） | 首页「让 Claude 备课」 | 备课学生跟项目 Claude 说；`archive/kit/src/books/` 里是搬走前的整份 | 2026-11-17 | `914a6f6` |
 | `tools/desk-e2e-old.mjs` | 搬走以前的整条流程测试（含舞台、一问一答、实时黑板、助手几段） | 留着对照 | 2026-11-17 | `3f18ea7` |
 
 留在原处的：`kit/src/live/store.js`、`sync.js`（整个学习台的数据库和证据）；`kit/examples/en-demo.html`、`ds-8.2.3-shell-sort.html`（组件示范页，去掉了 `mode: guided`）。

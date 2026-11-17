@@ -473,8 +473,9 @@ export async function renderDesk(root, meta) {
     afterBusy = true;
     try {
       // 笔记本里已经有东西（班主任、课上写过）却还没记第一次整理：从现在算起，之后下课的课给课后那一轮
-      if (!projMeta?.since && !needsOrganize(data.notebook, projMeta)) { await db.doc('meta/project').set({ ...(projMeta || {}), since: Date.now(), organized: false }); return; }
-      if (needsOrganize(data.notebook, projMeta)) {
+      if (!projMeta?.since && !projMeta?.cont && !needsOrganize(data.notebook, projMeta)) { await db.doc('meta/project').set({ ...(projMeta || {}), since: Date.now(), organized: false }); return; }
+      // 第一次整理（笔记本空着），或者上一轮整理写了 [接着]：这次打开首页给一轮
+      if (needsOrganize(data.notebook, projMeta) || (!projMeta?.since && projMeta?.cont)) {
         if (organizeTried) return;
         organizeTried = true;
         const OLD = ['rules', 'lessons', 'asks', 'profile', 'slips', 'observations', 'summary', 'errors', 'weaknesses', 'mastery', 'reviews', 'recall'];

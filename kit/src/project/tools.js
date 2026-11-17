@@ -168,4 +168,5 @@ export function projectTools({ db, getData = () => ({}), getBooks = () => null, 
 }
 
 /** 工具的说明写成一段（放进说明的「工具」一节）：每个一行，名字和它做什么 */
-export const toolsDoc = (tools) => (tools || []).map((t) => `- ${t.name}：${t.description}`).join('\n');
+// 量过的事实（2026-11-17，学习台「量工具」：meta/speed 的 tools）：一轮里第 7 次工具以后平台把工具关了，每次之间约 2.3 秒
+export const toolsDoc = (tools) => (tools || []).length ? [...tools.map((t) => `- ${t.name}：${t.description}`), '（一轮里能连着调的工具大约 7 次，2026-11-17 量过；每次之间约 2 秒多。）'].join('\n') : '';

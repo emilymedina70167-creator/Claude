@@ -41,3 +41,12 @@ test('第一次整理：笔记本空着、还没做过才做；提示列出以�
   assert.match(t, /rules 72 条/);
   for (const w of FORBIDDEN) assert.ok(!t.includes(w), w);
 });
+test('一轮工具次数有限（量过约 7 次）：它在回复末尾写 [接着] 就算没做完，页面再给一轮；提示里写着这个事实', async () => {
+  const { afterCont, TOOL_CALLS_SEEN } = await import('../kit/src/project/after.js');
+  assert.equal(afterCont({ text: '读了 7 节课，还没读完。[接着]' }), true);
+  assert.equal(afterCont({ text: '做完了' }), false);
+  assert.equal(afterCont({ text: 'x', truncated: true }), true);
+  assert.equal(TOOL_CALLS_SEEN, 7);
+  assert.match(afterPrompt(s), /\[接着\]/);
+  assert.match(organizePrompt([]), /\[接着\]/);
+});

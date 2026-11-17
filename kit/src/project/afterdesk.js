@@ -1,6 +1,6 @@
 // 课后那一轮、第一次整理（第十四轮）：首页后台（lane: 'bg'）给项目 Claude 一轮，带全部工具（读、列、搜、写笔记本）。
 // 提示只有一句事实（after.js）；它读什么、写什么、写不写都由它定。回的不是 Opus 5.5 就不算，记一次没成。不碰 DOM。
-import { afterPrompt, organizePrompt, AFTER_FAILS } from './after.js';
+import { afterPrompt, organizePrompt, afterCont, AFTER_FAILS, AFTER_ROUNDS } from './after.js';
 import { projectTools, toolsDoc } from './tools.js';
 import { HEAD, HEAD_MODEL, fitHistory } from '../head/context.js';
 import { reportError } from '../errlog.js';
@@ -38,7 +38,7 @@ export function createAfter({ db, ai, getData, notebook, getBooks = () => null, 
       return 'failed';
     }
     const text = String(r.res.text || '');
-    await ref.set({ ...cur, after: { at: now(), model: r.res.modelApplied, rounds: (Number(prev.rounds) || 0) + 1, cont: !!r.res.truncated, last: text.slice(-600), tools: r.used.length } });
+    await ref.set({ ...cur, after: { at: now(), model: r.res.modelApplied, rounds: (Number(prev.rounds) || 0) + 1, cont: afterCont(r.res), last: text.slice(-600), tools: r.used.length } });
     return 'done';
   }
 
@@ -46,14 +46,21 @@ export function createAfter({ db, ai, getData, notebook, getBooks = () => null, 
   async function organize(counts) {
     const ref = db.doc('meta/project');
     const cur = await ref.get().then((x) => (x.exists ? x.data() : {})).catch(() => ({}));
-    const r = await call(organizePrompt(counts), 'organize');
+    const r = await call(organizePrompt(counts, cur), 'organize');
     if (r.error) {
       const fails = (Number(cur.fails) || 0) + 1;
       // 试满了也写 since：不然以后每节课的课后那一轮都等着它
       await ref.set({ ...cur, fails, error: String(r.error).slice(0, 200), ...(fails >= AFTER_FAILS ? { since: now(), organized: false } : {}) }).catch(() => {});
       return 'failed';
     }
-    await ref.set({ ...cur, since: now(), organized: true, at: now(), model: r.res.modelApplied, tools: r.used.length });
+    const rounds = (Number(cur.rounds) || 0) + 1;
+    const last = String(r.res.text || '').slice(-600);
+    // 没做完（[接着] 或截断）：先不记 since，下次打开首页接着整理；轮数用满了就算做完
+    if (afterCont(r.res) && rounds < AFTER_ROUNDS) {
+      await ref.set({ ...cur, cont: true, rounds, last, at: now(), model: r.res.modelApplied, tools: r.used.length });
+      return 'cont';
+    }
+    await ref.set({ ...cur, cont: false, rounds, last, since: now(), organized: true, at: now(), model: r.res.modelApplied, tools: r.used.length });
     return 'done';
   }
 
