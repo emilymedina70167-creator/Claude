@@ -7,7 +7,7 @@ async function head(turns, opts) {
   const n = turns.filter((t) => t.role === 'assistant').length;
   // 第十四轮：第一次整理、课后那一轮也是项目 Claude（同一份说明）。模拟的：整理时建一个 pin 的文件，课后那一轮读一下报告、记一行
   const nbTool = (opts.tools || []).find((t) => t.name === 'notebook');
-  if (/^笔记本还是空的。学习台以前的记录在这些地方/.test(last)) {
+  if (/^笔记本还是空的。\s*学习台以前的记录在这些地方/.test(last)) {
     await nbTool?.execute({ op: 'create', path: '学生/底子.md', text: '模拟的第一次整理：读了以前的记录' }).catch(() => {});
     await nbTool?.execute({ op: 'set', path: '学生/底子.md', pin: true }).catch(() => {});
     return { text: '整理好了。', truncated: false, modelApplied: opts.model || 'claude-opus-5-5', modelTierApplied: opts.modelTier || 'complex' };
