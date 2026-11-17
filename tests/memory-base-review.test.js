@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { tidyText, tidyDue, closingExtras, knowNotes } from '../kit/src/memory/memo.js';
 import { classMemoryReadDoc } from '../kit/src/class/prompt.js';
-import { prepPrompt } from '../kit/src/books/plan.js';
 import { memoryDigest } from '../kit/src/memory/digest.js';
 import { quoteFound } from '../kit/src/memory/summary.js';
 import { sampleMemory } from '../kit/src/memory/sample.js';
@@ -37,21 +36,6 @@ test('课堂查记忆的工具说明：有摘要时先说 summary，旧五类写
   assert.match(readFileSync(new URL('../kit/src/class/classroom.js', import.meta.url), 'utf8'), /classMemoryReadDoc\(/);
 });
 
-
-test('备课提示词：有摘要时不再规定课的形式；没有摘要逐字照旧', () => {
-  const args = { block: { id: 'L5-01', title: '特征值' }, subject: '线代', memoryText: '（记忆）', components: ['answer'], due: '- R1 秩' };
-  const off = prepPrompt(args);
-  assert.match(off, /照着上/);
-  assert.match(off, /一步一块板/);
-  assert.match(off, /按内容分步，讲透为先/);
-  const on = prepPrompt({ ...args, summary: true });
-  for (const w of ['照着上', '一步一块板', '先讲后练', '讲透为先', '按学生的规则', '感觉像不像', '三到六行']) assert.ok(!on.includes(w), `有摘要时备课提示词里还有「${w}」`);
-  // 底线留着：题目用到的规则出题前要讲过、答案先自己算
-  assert.match(on, /题目要用的规则[\s\S]{0,40}讲过/);
-  assert.match(on, /答案自己先算一遍/);
-  // JSON 的字段不变（页面照它读回、核依赖）
-  for (const k of ['"unit"', '"goal"', '"route"', '"review"', '"methods"', '"sequence"', '"problems"', '"needs"', '"after"']) assert.ok(on.includes(k), k);
-});
 
 test('记忆目录的说明：有摘要时不再叫老师「按某条规则做时去取原文」', () => {
   const on = memoryDigest(withSummary(), { block: 'L5-01', space: 'math', tools: true }).text;

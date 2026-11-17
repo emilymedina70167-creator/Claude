@@ -1,5 +1,6 @@
 // 「学习台里有什么」（第十四轮）：像 claude.ai 项目列出项目里的文件——项目 Claude 不知道有，就不会去找。
 // 只写事实：有哪些书、真题入库到哪、上过几节课、旧记忆每类几条、页面算好的东西放在哪个路径。纯函数。
+import { todayFacts } from './today.js';
 
 const SPACE_NAME = { math: '数学', cs: '408', en: '英语' };
 const OLD = ['rules', 'lessons', 'asks', 'profile', 'slips', 'observations', 'summary'];
@@ -8,9 +9,9 @@ const n = (v) => (Array.isArray(v) ? v.length : 0);
 
 /**
  * data：学习台的数据（记忆库各类、sessions、notebook）；books：{ books, chunks }；exam：{ questions, years: [从, 到], profiles }；
- * chats：和班主任对话的段数
+ * chats：和班主任对话的段数；today：YYYY-MM-DD（给了就写首页「今天」照哪里画、现在的几个数）
  */
-export function catalogText({ data = {}, books = null, exam = null, chats = 0 } = {}) {
+export function catalogText({ data = {}, books = null, exam = null, chats = 0, today = '' } = {}) {
   const lines = [];
   const bk = books?.books || [];
   if (bk.length) {
@@ -34,6 +35,7 @@ export function catalogText({ data = {}, books = null, exam = null, chats = 0 } 
   const led = LEDGER.filter((c) => n(data[c])).map((c) => `${c} ${n(data[c])} 条`);
   if (led.length) lines.push(`- 学习的账：${led.join('、')}`);
   lines.push('- 页面算好的事实：预测分 meta/forecast；真题统计 meta/exam；每节课的「要拿下的事」和隔天验在 sessions/{编号} 的 aims、holds、later；体检 meta/health');
+  if (today) lines.push(todayFacts(data, today));
   lines.push('- 学生的项目指令：meta/instructions');
   lines.push('- dev_requests：写在这里的，开发那边每次开工先读（要改页面代码才做得到的事）');
   return lines.join('\n');

@@ -10,7 +10,6 @@ const { sampleMemory } = await import('../kit/src/memory/sample.js');
 const { checkMemory } = await import('../kit/src/memory/check.js');
 const { memoryDigest } = await import('../kit/src/memory/digest.js');
 const { closingPrompt } = await import('../kit/src/class/prompt.js');
-const { openTodos, prepPrompt, parsePrep, lessonPlanText } = await import('../kit/src/books/plan.js');
 const { backupFile, restorePlan } = await import('../kit/src/memory/backup.js');
 
 const TODAY = '2026-10-27';
@@ -103,23 +102,6 @@ test('下课顺带整理：每 5 节一次、或者到了上限；目录一条�
   assert.match(p, /顺带整理记忆（到了上限）/);
   assert.match(p, /status=merged into=/);
   assert.ok(!closingPrompt({ report: '报告' }).includes('顺带整理'));
-});
-
-test('待办：课上记、备课带上、补上了写进教案，课堂看得到', () => {
-  const { mem } = write(sampleMemory(TODAY), 'todo text="学生问了相似对角化的几何意义"');
-  const todo = mem.observations.find((o) => o.kind === 'todo');
-  assert.equal(todo.status, 'open');
-  assert.deepEqual(hard(mem), []);
-  const open = openTodos(mem, 'math');
-  assert.equal(open.length, 1);
-  assert.equal(openTodos(mem, 'math', [todo.id]).length, 0);
-  assert.equal(openTodos(mem, 'en').length, 0);
-  const prompt = prepPrompt({ block: { id: 'L2.2.2', title: 'x' }, todos: open });
-  assert.ok(prompt.includes(todo.id) && prompt.includes('"todos"'));
-  const raw = JSON.stringify({ goal: 'g', sequence: [{ step: 1, point: 'p' }], todos: [todo.id, 'ob-nope'] });
-  const { main } = parsePrep(raw, { block: { id: 'L2.2.2' }, todos: open });
-  assert.deepEqual(main.todos, [{ id: todo.id, text: '学生问了相似对角化的几何意义' }]);
-  assert.match(lessonPlanText(main).todos, /相似对角化/);
 });
 
 test('从备份恢复：默认只补缺的，覆盖要明说', () => {

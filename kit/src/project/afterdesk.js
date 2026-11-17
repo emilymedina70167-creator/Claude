@@ -7,14 +7,14 @@ import { reportError } from '../errlog.js';
 
 /**
  * db：学习台的数据库；ai()：调用 Claude 的；getData()：首页手上的数据；notebook：笔记本那一层；getBooks()：教材；
- * system(toolsDoc)：项目 Claude 这一轮的说明（headSystem，页面拼好）；now：时钟
+ * system(toolsDoc)：项目 Claude 这一轮的说明（headSystem，页面拼好）；render(md)：往题库写题时藏着画一遍（problemrender.js）；now：时钟
  */
-export function createAfter({ db, ai, getData, notebook, getBooks = () => null, system, now = () => Date.now() }) {
+export function createAfter({ db, ai, getData, notebook, getBooks = () => null, system, render = null, now = () => Date.now() }) {
   async function call(prompt, by) {
     const c = await ai();
     if (!c) return { error: '这个页面现在调用不了 Claude' };
     const used = [];
-    const tools = projectTools({ db, getData, getBooks, notebook, by, write: true, used });
+    const tools = projectTools({ db, getData, getBooks, notebook, by, write: true, used, render });
     try {
       const fit = fitHistory(system(toolsDoc(tools)), [{ role: 'me', text: prompt }]);
       const res = await c.call(fit.turns, { ...HEAD, cache: false, lane: 'bg', ...(c.tools ? { tools } : {}) });

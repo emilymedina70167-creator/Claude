@@ -327,6 +327,8 @@ const SUITES = {
       const q = (id, text) => ({ block: 'L2.2.2', kind: 'quiz', md: '```quiz\nid: ' + id + '\nq: ' + text + '\n- [x] 一个数\n- [ ] 一个矩阵\n```', q: text, title: text, src: 'board', from: { session: 'c-20261020-1', comp: id }, fromSession: 'c-20261020-1', orig: 'wrong', errors: ['L2-07'], space: 'math', status: 'active', at: Date.parse('2026-10-20T10:00:00+08:00') });
       all['drills/d-e2e-1'] = q('d-e2e-1', 'βᵀα 是什么');
       all['drills/d-e2e-2'] = q('d-e2e-2', 'αᵀβ 是什么');
+      // 第十四轮：挑哪几道由项目 Claude 写在 meta/today 里，首页照着开
+      all['meta/today'] = { date: new Date().toLocaleDateString('sv-SE'), items: [{ kind: 'drill', ids: ['d-e2e-1', 'd-e2e-2'], reviews: ['R3'], why: '上次错过' }] };
       localStorage.setItem(k, JSON.stringify(all));
     });
     await plant(); await t.open(); await sleep(1500);

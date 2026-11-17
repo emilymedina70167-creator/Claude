@@ -37,8 +37,8 @@ import { reviewPack, deskBrief, briefId, todayReviews, reviewIdsOf, REVIEW_MAX, 
 import { readOnlyDb } from './session.js';
 import { SPACES, SPACE_KEYS, DEFAULT_SPACE, filterSpace, spaceOfDoc, spaceOfId, subjectOf, positionId, packIds, prefixOf } from './space.js';
 import { dueList, addDays } from './schema.js';
-import { masteryProposals, masteryPendingWrites } from './mastery.js';
-import { pickDrills, harvestDrills, drillLine, DRILL_N, heldDrillIds } from './drills.js';
+import { masteryCalc } from './mastery.js';
+import { harvestDrills, drillLine, heldDrillIds } from './drills.js';
 import { enterDrill, closeDrill } from './drillrun.js';
 import { recallToday, spaceCounts } from './recall.js';
 import { applyTheme, isAuto } from '../theme.js';
@@ -57,6 +57,8 @@ import { createProjectView } from '../project/notebookview.js';
 import { catalogText } from '../project/catalog.js';
 import { toolsDoc } from '../project/tools.js';
 import { createNotebook } from '../project/notebookdesk.js';
+import { todayRows } from '../project/today.js';
+import { renderCheck } from './problemrender.js';
 import { createAfter } from '../project/afterdesk.js';
 import { needsAfter, needsOrganize } from '../project/after.js';
 import { CHARTER } from '../class/charter.js';
@@ -90,7 +92,6 @@ import { createExamPage } from '../exam/exampage.js';
 import { priority } from '../exam/priority.js';
 // 种类名给我看的叫法（一直用的样子按种类存）
 import { stalePack } from './summary.js';
-import { suggestBlock } from '../books/plan.js';
 import { oldKind, renderOldClass } from './oldview.js';
 import { createSink } from '../live/sync.js';
 import { checkMemory, memcheckRecord, fingerprint } from './check.js';
@@ -172,7 +173,7 @@ export async function renderDesk(root, meta) {
     <div class="dk-part dk-today" hidden><h2 class="dk-h">复现</h2><div class="dk-body"></div></div>
     <div class="dk-part dk-next" hidden><h2 class="dk-h">下一步学什么</h2><p class="dk-sub muted">按 410 分里每一块还能攒多少分排，页面算的。</p><div class="dk-body"></div></div>
     <div class="dk-part dk-recall" hidden><h2 class="dk-h">要记的</h2><p class="dk-sub muted">先写出来，再看答案。隔 1、3、7、14、30 天各想一遍。</p><div class="dk-body"></div><details class="dk-fold dk-radd"><summary><span class="muted">自己加一条</span></summary><div class="dk-radd-f"></div></details></div>
-    <div class="dk-part dk-drill" hidden><h2 class="dk-h">练一练</h2><p class="dk-sub muted">页面从以前课上的题里挑几道，不同块混着做，页面判分，不调用 Claude。</p><div class="dk-body"></div></div>
+    <div class="dk-part dk-drill" hidden><h2 class="dk-h">练一练</h2><p class="dk-sub muted">Claude 从题库里挑的题，页面判分，不调用 Claude。</p><div class="dk-body"></div></div>
     <div class="dk-part dk-manual" hidden><details class="dk-fold"><summary><h2 class="dk-h">补记</h2><span class="muted">在学习台外面做的题，写一句或贴张图</span></summary><div class="dk-body"></div><div class="dk-mlist"></div></details></div>
     </div>
     </div>
@@ -445,20 +446,23 @@ export async function renderDesk(root, meta) {
       facts: projectFacts(),
       instructions: projView?.instructions()?.text || '',
       notes: data.notebook || [],
-      catalog: catalogText({ data, books: { books: booksView.books() }, exam: examFacts(), chats: chatCount }),
+      catalog: catalogText({ data, books: { books: booksView.books() }, exam: examFacts(), chats: chatCount, today: toDate(Date.now()) }),
       toolsDoc: toolsDoc(head.tools([])),
     });
   }
   const notebook = createNotebook({ db });
-  const head = createHead({ db, getData: () => data, ai: deskAI, notebook, getBooks: () => ({ books: booksView.books() }), system: headCtx });
+  const head = createHead({ db, getData: () => data, ai: deskAI, notebook, getBooks: () => ({ books: booksView.books() }), system: headCtx, render: renderCheck });
   const chatPage = createChatPage($('.dk-chatpage'), { head });
   // 第十四轮：项目指令、笔记本、「笔记」页（project/notebookview.js）
   projView = createProjectView({ db, store, getData: () => data, notebook, charter: CHARTER, $ });
   // 照 claude.ai 的记忆（第十四轮，project/after.js）：后台一件一件给项目 Claude 一轮——笔记本空着先整理一次以前的记录，
   // 之后每节下了课的课给一轮（早的先）。话的账、摘要重写、复盘、课后的助手不再调度。这次打开首页每节只试一次
   let projMeta = null;
+  // 今天做什么（第十四轮）：项目 Claude 用 write 写 meta/today，首页照着画
+  let todayMeta = null;
+  db.doc('meta/today').onSnapshot((x) => { todayMeta = x.exists ? x.data() : null; if (loaded.has('sessions')) { const t = toDate(Date.now()); paintDrill(t); paintRows(t); } }, () => {});
   db.doc('meta/project').onSnapshot((x) => { projMeta = x.exists ? x.data() : null; backTick(); }, () => {});
-  const afterDesk = createAfter({ db, ai: deskAI, getData: () => data, notebook, getBooks: () => ({ books: booksView.books() }), system: (td) => headSystem({ facts: projectFacts(), instructions: projView?.instructions()?.text || '', notes: data.notebook || [], catalog: catalogText({ data, books: { books: booksView.books() }, exam: examFacts(), chats: chatCount }), toolsDoc: td }) });
+  const afterDesk = createAfter({ db, ai: deskAI, getData: () => data, notebook, getBooks: () => ({ books: booksView.books() }), render: renderCheck, system: (td) => headSystem({ facts: projectFacts(), instructions: projView?.instructions()?.text || '', notes: data.notebook || [], catalog: catalogText({ data, books: { books: booksView.books() }, exam: examFacts(), chats: chatCount, today: toDate(Date.now()) }), toolsDoc: td }) });
   const afterTried = new Set();
   let organizeTried = false;
   let afterBusy = false;
@@ -603,22 +607,14 @@ export async function renderDesk(root, meta) {
     if (n) toast(`以前留下的 ${n} 条改动写进记忆了（不对能在「管理」里撤销）`);
   }
 
-  // 掌握：页面按证据算（mastery.js），有变化就直接写进去（2026-11-03：不要我一条条确认），改动单记成 done，在「管理」里能撤销。
-  // 刚写的订阅还没回来时，下一次算出同样的结论别再写一遍：先记在手上
-  const myPd = new Map(); // 改动单 id → 刚写的那份
-  let masteryBusy = false;
-  async function proposeMastery() {
-    if (masteryBusy) return;
-    masteryBusy = true;
-    try {
-      const pend = [...data.pending.filter((p) => !myPd.has(p.id)), ...myPd.values()];
-      const mine = { ...data, pending: pend, mastery: [...data.mastery.filter((m) => ![...myPd.values()].some((p) => p.target === m.id)), ...[...myPd.values()].map((p) => ({ id: p.target, ...(p.data || {}), ...(p.patch || {}) }))] };
-      for (const w of masteryPendingWrites(masteryProposals(mine), pend)) {
-        myPd.set(w.id, { id: w.id, ...w.doc });
-        await ops.applyNow({ id: w.id, ...w.doc }).catch(() => myPd.delete(w.id));
-      }
-      for (const id of [...myPd.keys()]) if (data.pending.some((p) => p.id === id && p.status === 'done')) myPd.delete(id);
-    } finally { masteryBusy = false; }
+  // 掌握（第十四轮）：由项目 Claude 定，页面不改 mastery；页面按作答算的只当参考写进 meta/mastery-calc（变了才写）
+  let lastCalc = '';
+  function proposeMastery() {
+    const calc = masteryCalc(data);
+    const key = JSON.stringify(calc.items);
+    if (key === lastCalc) return;
+    lastCalc = key;
+    put('meta', 'mastery-calc', calc).catch(() => { lastCalc = ''; });
   }
 
   // 给对话里的 Claude 的开场简报（views.js 的 deskBrief）：每科一份，内容变了才写
@@ -691,9 +687,7 @@ export async function renderDesk(root, meta) {
     }).join('')}</div>`;
   }
 
-  // —— 上课：接着上没下课的那节，或者开一节新的；没备课就在这里让 Claude 备（books/planview.js）——
-  let prepBusy = false;
-  let prepMsg = '';
+  // —— 上课：接着上没下课的那节，或者开一节新的（第十四轮：备课不在首页点，学生要备课跟项目 Claude 说）——
   // 主角卡右边的签条：距考研几天，下面一枚南大的校徽；点它看还剩几周（openDays）
   const spineHtml = (widget = false) => { const n = daysLeft(toDate(Date.now()), examDate()); const [y, mo, d] = examDate().split('-').map(Number); return n < 0 ? '' : `<button type="button" class="dk-spine${widget ? ' dk-card is-widget' : ''}" data-open="days" data-menu="days" aria-label="距考研还有 ${n} 天，目标${escapeHtml(schoolLine(targetOf(data)))}"><span class="dk-tag"><span class="dk-tag-k">${n ? '距考研' : '今天'}</span><span class="dk-tag-n">${n || '考研'}</span><span class="dk-tag-u">${n ? '天' : ''}</span></span>${widget ? `<small class="dk-days-date">${y} 年<br>${mo} 月 ${d} 日</small>` : ''}<span class="dk-nju is-shield" aria-hidden="true"></span></button>`; };
   function paintClass() {
@@ -722,7 +716,6 @@ export async function renderDesk(root, meta) {
     const block = main?.block || mine.position.find((d) => d.id === positionId(space))?.block || '';
     // 等我确认的改动单；上一节还没整理完（它的整理单里还有没点的）
     const openPd = (mine.pending || []).filter((p) => p.status === 'open');
-    const blocksHere = mine.curriculum.filter((b) => (b.level || (String(b.id).replace(/^[A-Z]{2}-/, '').split('.').length === 3 ? 'block' : '')) === 'block').sort((a, b) => cmpId(a.id, b.id));
     // 主角（hero）：这一科现在到哪、下一节讲什么，一个大按钮；下面一行三个数（复现、要记的、上一节）。
     // 备课的表单收起来（还没备好的时候展开）：首页一打开不该是一张表单
     const pos = mine.position.find((d) => d.id === positionId(space));
@@ -735,7 +728,7 @@ export async function renderDesk(root, meta) {
     const heroText = String(open ? (open.title && open.title !== unit ? open.title : (open.block && data.curriculum.find((c) => String(c.id) === String(open.block))?.title) || heroT) : heroT);
     const heroLen = [...heroText.replace(/\$[^$]*\$/g, 'xxxx').replace(/[*_`]/g, '')].length;
     // 后台一写数据（补报告、归类、写掌握）就会重画这一块：正在填的备课表单（选的块、教材页、展开着）留住
-    const keep = { goal: box.querySelector('.dk-goal')?.classList.contains('is-open'), open: box.querySelector('.dk-prepfold')?.open, block: box.querySelector('.dk-prep-block')?.value, pages: box.querySelector('.dk-prep-pages')?.value };
+    const keep = { goal: box.querySelector('.dk-goal')?.classList.contains('is-open') };
     $('.dk-days-slot').innerHTML = root.dataset.layout === 'grid' ? spineHtml(true) : '';
     queueMicrotask(() => panels.resync()); // 主角卡重画了（签条也在里面）：开着的「距考研」面板关的时候缩回新的签条
     box.querySelector('.dk-body').innerHTML = `
@@ -747,24 +740,15 @@ export async function renderDesk(root, meta) {
         ${debts.length ? `<p class="dk-owe" title="点一下看全文">还欠着：${debts.map((x) => inline(x)).join('；')}</p>` : ''}
         <div class="dk-hero-acts">
           ${open ? `<button type="button" class="btn btn-primary btn-lg dk-go" data-sid="${escapeHtml(open.id)}">接着上课</button>` : ''}
-          <button type="button" class="btn ${open ? '' : 'btn-primary btn-lg'} dk-new"${prepBusy || opening ? ' disabled' : ''}>开新课</button>
+          <button type="button" class="btn ${open ? '' : 'btn-primary btn-lg'} dk-new"${opening ? ' disabled' : ''}>开新课</button>
           ${open ? `<button type="button" class="btn dk-more" data-sid="${escapeHtml(open.id)}" aria-label="这节课的更多操作" title="直接下课、删掉这节课"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/></svg></button><span hidden><button type="button" class="dk-close" data-sid="${escapeHtml(open.id)}"></button><button type="button" class="dk-purge" data-sid="${escapeHtml(open.id)}"></button></span>` : ''}
         </div>
         ${last ? `<a class="dk-lastline" href="#classes/${escapeHtml(last.id)}">上一节 ${escapeHtml(String(last.date || '').slice(5).replace('-', '/'))}${lastLine ? `：${escapeHtml(lastLine)}` : ''}</a>` : ''}
         ${lastDebrief.length ? `<p class="dk-last muted"><span class="dk-k">复盘</span>${lastDebrief.map((x) => inline(x.text)).join('；')}</p>` : ''}
         ${lastNext.length ? `<p class="dk-last muted"><span class="dk-k">下次先测</span>${lastNext.map((x) => inline(x.name)).join('；')}${warm.length && !open ? ` <button type="button" class="btn btn-sm dk-warm" title="上一节没稳的那几个点，题库里的原题；页面判分，不调用 Claude">课前热身 ${warm.length} 题</button>` : ''}</p>` : ''}
       </div>${root.dataset.layout === 'grid' ? '' : spineHtml()}</div>
-      ${others.map((x) => { const k = kindOf(x); return `<div class="dk-row dk-open is-${k}"><span class="dk-kind">${SESSION_KINDS[k]}</span><span>${inline(x.title || blockTitle(x.block) || x.id)}</span><button type="button" class="btn btn-primary dk-go" data-sid="${escapeHtml(x.id)}">${isTeach(x) ? '接着上课' : '进去'}</button><button type="button" class="btn btn-sm dk-close" data-sid="${escapeHtml(x.id)}" title="不调用 Claude：只结束这节、页面算课后报告">直接下课</button><button type="button" class="btn btn-sm btn-danger dk-purge" data-sid="${escapeHtml(x.id)}" title="测试开的、不要的课：连黑板和记录一起删掉">删掉</button></div>`; }).join('')}
-      ${blocksHere.length ? `<details class="dk-fold dk-prepfold"${prepBusy || prepMsg ? ' open' : ''}><summary><span class="dk-fold-t">${main ? '换一块 / 重新备课' : '让 Claude 备课'}</span><span class="muted">${main ? '' : '选一块，Claude 先备好教案（也可以直接开课）'}</span></summary>${planner.prepHtml({ suggested: main?.block || suggestBlock(blocksHere, pos), blocks: blocksHere, main, busy: prepBusy, msg: prepMsg })}</details>` : ''}`;
-    {
-      const fold = box.querySelector('.dk-prepfold');
-      if (fold && keep.open) fold.open = true;
-      if (keep.goal) box.querySelector('.dk-goal')?.classList.add('is-open');
-      const sel = box.querySelector('.dk-prep-block');
-      if (sel && keep.block && [...sel.options].some((o) => o.value === keep.block)) sel.value = keep.block;
-      const pg = box.querySelector('.dk-prep-pages');
-      if (pg && keep.pages !== undefined && keep.pages !== '') pg.value = keep.pages;
-    }
+      ${others.map((x) => { const k = kindOf(x); return `<div class="dk-row dk-open is-${k}"><span class="dk-kind">${SESSION_KINDS[k]}</span><span>${inline(x.title || blockTitle(x.block) || x.id)}</span><button type="button" class="btn btn-primary dk-go" data-sid="${escapeHtml(x.id)}">${isTeach(x) ? '接着上课' : '进去'}</button><button type="button" class="btn btn-sm dk-close" data-sid="${escapeHtml(x.id)}" title="不调用 Claude：只结束这节、页面算课后报告">直接下课</button><button type="button" class="btn btn-sm btn-danger dk-purge" data-sid="${escapeHtml(x.id)}" title="测试开的、不要的课：连黑板和记录一起删掉">删掉</button></div>`; }).join('')}`;
+    if (keep.goal) box.querySelector('.dk-goal')?.classList.add('is-open');
     box.querySelector('.dk-warm')?.addEventListener('click', () => openOne(async () => {
       const sid = sessionId(today, takenIds());
       assertWrite('page', 'sessions');
@@ -800,18 +784,6 @@ export async function renderDesk(root, meta) {
       } catch (err) { toast(`没结束成：${err?.message || err}`); btn.disabled = false; }
     }));
     box.querySelectorAll('.dk-purge').forEach((b) => b.addEventListener('click', (e) => purgeClass(e.currentTarget.dataset.sid)));
-    box.querySelector('.dk-prep-go')?.addEventListener('click', async () => {
-      const id = box.querySelector('.dk-prep-block').value;
-      const pages = box.querySelector('.dk-prep-pages')?.value || '';
-      if (livePack().main && !await ask(`重新备课会换掉现在备好的「${pack.main.unit || ''}」，接着？`, { ok: '重新备课' })) return;
-      prepBusy = true;
-      prepMsg = '开始备课…';
-      paintClass();
-      try { await planner.prep(id, { pages, onStep: (m) => { prepMsg = m; paintClass(); } }); prepMsg = '备好了：看一眼教案，没问题就开新课'; }
-      catch (err) { prepMsg = `没备成：${err?.message || err?.code || err}`; }
-      prepBusy = false;
-      paintClass();
-    });
     box.querySelector('.dk-new').addEventListener('click', () => newClass(block)); // openOne 管防连点和失败
   }
 
@@ -906,22 +878,28 @@ export async function renderDesk(root, meta) {
   }
 
   // —— 练一练（drills.js）：页面挑题、开一节 kind: drill 的练习 ——
+  // 练一练（第十四轮）：挑哪几道由项目 Claude 定（meta/today 里 kind: drill 的 ids），页面只开、只判分；它没挑就不出现
+  function claudeDrill(today) {
+    const it = todayRows(todayMeta, data, today).find((r) => r.kind === 'drill');
+    if (!it) return null;
+    const held = heldDrillIds(data.sessions);
+    const items = it.ids.map((id) => data.drills.find((d) => d.id === id)).filter((d) => d && !held.has(d.id) && d.status !== 'void' && !d.broken && d.md);
+    return { ...it, items, missing: it.ids.length - items.length };
+  }
   function paintDrill(today) {
     const box = $('.dk-drill');
-    const pick = pickDrills(data, { space, today });
-    const held = heldDrillIds(data.sessions);
-    const n = data.drills.filter((d) => !held.has(d.id) && d.status !== 'void' && !d.broken && (!d.space || d.space === space)).length;
-    // 题库还是空的：整张卡不出现（首页只放现在点得动的东西）
-    box.hidden = !n;
-    box.querySelector('.dk-body').innerHTML = !pick.items.length
-      ? `<p class="muted">${n ? '题库里的题最近都做对过，过一两天再来。' : '题库还是空的：上过的课下课时，页面会把课上判得了分的题抄进来（以前的课也会补抄）。'}</p>`
-      : `<p>挑好了 ${pick.items.length} 道（题库里一共 ${n} 道）${pick.reviews.length ? `，顺便复习 ${pick.reviews.length} 组到期的` : ''}：</p>
-        <ul class="dk-drill-why">${pick.items.slice(0, 4).map((x) => `<li>${blockTitle(x.block) || escapeHtml(x.block)}<span class="muted">　${escapeHtml(x.why)}</span></li>`).join('')}${pick.items.length > 4 ? '<li class="muted">……</li>' : ''}</ul>
-        <button type="button" class="btn btn-primary dk-drill-go">开始（${pick.items.length} 道）</button>`;
+    const pick = claudeDrill(today);
+    box.hidden = !pick;
+    if (!pick) return;
+    box.querySelector('.dk-body').innerHTML = `<p>${escapeHtml(pick.label)}${pick.why ? `<span class="muted">　${escapeHtml(pick.why)}</span>` : ''}</p>
+      ${pick.missing ? `<p class="muted">有 ${pick.missing} 道题库里没有、做过了还没交或画不出来，没放进来。</p>` : ''}
+      ${pick.items.length ? `<button type="button" class="btn btn-primary dk-drill-go">开始（${pick.items.length} 道）</button>` : '<p class="muted">写的这几道题库里都没有。</p>'}`;
     box.querySelector('.dk-drill-go')?.addEventListener('click', () => openOne(async () => {
-      const sid = sessionId(today, takenIds());
+      const d = toDate(Date.now());
+      const sid = sessionId(d, takenIds());
       assertWrite('page', 'sessions');
-      await db.doc(`sessions/${sid}`).set({ kind: 'drill', date: today, block: null, space, title: '练习', status: 'open', startedAt: Date.now(), items: pick.items.map((x) => x.id), reviews: pick.reviews, why: Object.fromEntries(pick.items.map((x) => [x.id, x.why])) });
+      const ids = pick.items.map((x) => x.id);
+      await db.doc(`sessions/${sid}`).set({ kind: 'drill', date: d, block: null, space: pick.items[0]?.space || space, title: pick.label || '练习', status: 'open', startedAt: Date.now(), items: ids, reviews: (pick.reviews || []).filter((rid) => data.reviews.some((r) => String(r.id) === rid)), why: Object.fromEntries(ids.map((id) => [id, pick.why || ''])) });
       return sid;
     }));
   }
@@ -1282,12 +1260,15 @@ export async function renderDesk(root, meta) {
   }
 
   // —— 复现课：到期的复现组（一组或同一门课的几组）一键开课，资料包页面自己拼（每组的内容、盯的弱点、错题原文、以前同一块的题）——
-  $('.dk-today').addEventListener('click', async (e) => {
+  $('.dk-today').addEventListener('click', (e) => {
     const b = e.target.closest('.dk-review');
-    if (!b || opening) return;
-    root.querySelectorAll('.dk-review').forEach((x) => { x.disabled = true; });
+    if (b) openReview(String(b.dataset.rids || '').split(',').filter(Boolean));
+  });
+  // 首页「复现」那一段的按钮、项目 Claude 在 meta/today 里排的复现课都走这里
+  async function openReview(rids) {
+    if (opening || !rids.length) return;
+    root.querySelectorAll('.dk-review, .dk-crow').forEach((x) => { x.disabled = true; });
     try {
-      const rids = String(b.dataset.rids || '').split(',').filter(Boolean);
       const blocks = [...new Set(rids.flatMap((rid) => { const r = data.reviews.find((x) => x.id === rid); return Array.isArray(r?.blocks) ? r.blocks.map(String) : []; }))];
       // 以前各节课的题（sessions/{编号}/pack/problems），只要同一块的
       const packs = [];
@@ -1310,9 +1291,9 @@ export async function renderDesk(root, meta) {
       await newClass(use.main.block, use);
     } catch (err) {
       toast(`没开成：${err?.message || err}`);
-      root.querySelectorAll('.dk-review').forEach((x) => { x.disabled = false; });
+      root.querySelectorAll('.dk-review, .dk-crow').forEach((x) => { x.disabled = false; });
     }
-  });
+  }
 
   // —— 首页「今天」：一行一件事（复现、要记的、练一练、补记），点一行，那一段从这一行长出来（feel.js 的面板）——
   // 那几段的内容还是原来那几个函数画的（paint、paintRecall、paintDrill、paintManual），平时收在藏着的抽屉（.dk-drawer）里，
@@ -1359,18 +1340,24 @@ export async function renderDesk(root, meta) {
     const groups = todayReviews(data, { today });
     const nrev = groups.reduce((n, g) => n + g.total, 0);
     const rc = recallToday(data.recall, { today });
-    const dpick = $('.dk-drill').hidden ? null : pickDrills(data, { space, today });
+    const dpick = claudeDrill(today);
+    // 项目 Claude 写的 meta/today：开课、复现课各一行在最上面；要记的、隔天验、练一练接在原来那一行的小字里
+    const mine = todayRows(todayMeta, data, today).filter((r) => r.kind !== 'fact');
+    const crows = mine.filter((r) => r.kind === 'class' || r.kind === 'review');
+    const whyOf = (k) => mine.find((r) => r.kind === k)?.why || '';
+    const note = mine.find((r) => r.kind === 'note')?.text || '';
     const sub = {
       later: later ? `${plainTitle(later.title) || '上一节课'} · ${later.holds.ids.length} 道` : '',
       today: nrev ? groups.map((g) => `${g.subject} ${g.total} 组`).join('，') : '今天没有要复现的',
       recall: rc.total ? `${spaceCounts(rc.bySpace)}。先写出来，再看答案` : '今天没有要想的',
-      drill: dpick ? (dpick.items.length ? `挑好了 ${dpick.items.length} 道，不同块混着做` : '题库里的题最近都做对过') : '',
+      drill: dpick ? `${dpick.label}${dpick.why ? ` · ${dpick.why}` : ''}` : '',
       manual: '在学习台外面做的题，写一句或贴张图',
       next: nextLine(),
     };
     const n = { later: later?.holds.ids.length || 0, today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null, next: null };
     const keys = Object.keys(ROWS).filter((k) => (k !== 'drill' || dpick) && (k !== 'later' || later));
-    box.innerHTML = keys.map((k) => `<button type="button" class="dk-trow" data-row="${k}" data-menu="${k}"><span class="dk-ic ${ROWS[k].ic}${n[k] === 0 ? ' is-zero' : ''}"${n[k] === null ? '' : ' data-count'}>${n[k] === null ? '+' : rowCounts[k] ?? n[k]}</span><b>${ROWS[k].title}</b><small>${escapeHtml(sub[k])}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('');
+    for (const k of ['recall', 'later']) if (whyOf(k)) sub[k] = `${whyOf(k)}${sub[k] ? ` · ${sub[k]}` : ''}`;
+    box.innerHTML = (note ? `<p class="dk-tnote">${inline(note)}</p>` : '') + crows.map((r) => `<button type="button" class="dk-trow dk-crow" data-ckind="${r.kind}" data-cval="${escapeHtml(r.kind === 'class' ? r.block : r.ids.join(','))}"><span class="dk-ic ${r.kind === 'review' ? 'is-review' : 'is-plus'}">${r.kind === 'review' ? r.ids.length : '›'}</span><b>${inline(r.label)}</b><small>${escapeHtml(r.why || (r.kind === 'review' ? '复现课' : '开课'))}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('') + keys.map((k) => `<button type="button" class="dk-trow" data-row="${k}" data-menu="${k}"><span class="dk-ic ${ROWS[k].ic}${n[k] === 0 ? ' is-zero' : ''}"${n[k] === null ? '' : ' data-count'}>${n[k] === null ? '+' : rowCounts[k] ?? n[k]}</span><b>${ROWS[k].title}</b><small>${escapeHtml(sub[k])}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('');
     // 数字变了：往上滚过去（第一次画不滚）
     for (const k of keys) {
       if (n[k] === null) continue;
@@ -1409,7 +1396,16 @@ export async function renderDesk(root, meta) {
       onClose: () => paintRows(),
     });
   }
-  $('.dk-rows').addEventListener('click', (e) => { const r = e.target.closest('.dk-trow'); if (r) openRow(r); });
+  $('.dk-rows').addEventListener('click', (e) => {
+    const c = e.target.closest('.dk-crow');
+    if (c) {
+      if (c.dataset.ckind === 'review') openReview(String(c.dataset.cval || '').split(',').filter(Boolean));
+      else if (c.dataset.ckind === 'class') newClass(c.dataset.cval);
+      return;
+    }
+    const r = e.target.closest('.dk-trow');
+    if (r) openRow(r);
+  });
 
   // —— 距考研：目标南京大学（校徽、毛笔校名），还剩多少天；一格一周，紫的是这一周，最后一格是考试 ——
   // 面板开着的时候日子换了、这一周有了新记录：paint 里用 fillDays 重画（不再放格子的动画）
@@ -1547,8 +1543,7 @@ export async function renderDesk(root, meta) {
     const row = (r) => $(`.dk-trow[data-row="${r}"]`);
     if (k === 'hero') {
       const go = $('.dk-class .dk-go');
-      return [go ? { text: '接着上课', icon: 'play', run: () => go.click() } : { text: '开新课', icon: 'play', run: clickIn('.dk-class .dk-new') },
-        $('.dk-prepfold') && { text: '让 Claude 备课', icon: 'spark', run: () => { const f = $('.dk-prepfold'); f.open = true; f.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }].filter(Boolean);
+      return [go ? { text: '接着上课', icon: 'play', run: () => go.click() } : { text: '开新课', icon: 'play', run: clickIn('.dk-class .dk-new') }];
     }
     if (k === 'later') return [{ text: '开始', icon: 'play', run: () => openRow(row('later'), sec => sec.querySelector('.dk-later-go')?.click()) }];
     if (k === 'today') return [$('.dk-today .dk-review') && { text: '开复现课', icon: 'play', run: clickIn('.dk-today .dk-review') }, { text: '看到期的', icon: 'list', run: () => openRow(row('today')) }].filter(Boolean);
@@ -1815,7 +1810,7 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     instructions: () => instr,
     notes: () => mem.notebook || [],
     facts: () => { const today = toDate(Date.now()); const t = targetOf(mem); return { today, version: VERSION, examDays: daysLeft(today, examDateOf(t)), target: [t.school, t.dept, t.major].filter(Boolean).join(' ') + (t.goal ? `，目标 ${t.goal} 分` : '') }; },
-    catalog: () => catalogText({ data: mem, books }),
+    catalog: () => catalogText({ data: mem, books, today: toDate(Date.now()) }),
   };
   project.notebook = createNotebook({ db, corpus: () => project.corpusText() });
   return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {

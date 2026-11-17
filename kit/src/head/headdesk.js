@@ -21,7 +21,7 @@ export function splitMemo(text) {
  * db：学习台的数据库；getData()：首页手上的数据；ai()：调用 Claude 的；notebook：笔记本那一层（project/notebookdesk.js）；
  * getBooks()：教材（search 用）；system()：这一轮的说明（context.js 的 headSystem，页面拼好）
  */
-export function createHead({ db, getData, ai, notebook = null, getBooks = () => null, system, now = () => Date.now() }) {
+export function createHead({ db, getData, ai, notebook = null, getBooks = () => null, system, render = null, now = () => Date.now() }) {
   async function chats() {
     return rowsOf(await db.collection('chats').get().catch(() => null)).sort((a, b) => (b.last || 0) - (a.last || 0));
   }
@@ -30,7 +30,7 @@ export function createHead({ db, getData, ai, notebook = null, getBooks = () => 
   }
 
   // —— 工具：项目 Claude 的那一套（project/tools.js）：读、列、搜学习台里的一切，写它自己的笔记本 ——
-  const tools = (used) => projectTools({ db, getData, getBooks, notebook, by: 'head', write: true, used });
+  const tools = (used) => projectTools({ db, getData, getBooks, notebook, by: 'head', write: true, used, render });
 
   // 发给它的对话：作废的轮不带（fitHistory 去掉 void）
   const callHistory = (history) => history;

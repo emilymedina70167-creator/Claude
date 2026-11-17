@@ -208,6 +208,18 @@ export function masteryProposals(mem = {}, { rule = MASTERY_RULE } = {}) {
   return out;
 }
 
+/**
+ * 页面按作答算的掌握，只当参考（第十四轮：掌握由项目 Claude 定，页面不改 mastery）：写进 meta/mastery-calc。
+ * 返回 { at, rule, items: [{ target, state, tier?, reason, basis }] }
+ */
+export function masteryCalc(mem = {}, { now = Date.now(), rule = MASTERY_RULE } = {}) {
+  const items = masteryProposals(mem, { rule }).map((p) => {
+    const v = p.patch || p.data || {};
+    return { target: p.target, state: v.state, ...(v.tier ? { tier: v.tier } : {}), reason: p.reason, basis: (p.basis || []).slice(0, 20) };
+  });
+  return { at: now, rule: rule.text, items };
+}
+
 const newId = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
 const sameValue = (a, b) => (a.state ?? null) === (b.state ?? null) && (a.tier ?? null) === (b.tier ?? null);
 const valueOf = (pd) => pd.patch || pd.data || {};

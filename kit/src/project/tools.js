@@ -4,6 +4,7 @@ import { searchDocs } from './search.js';
 import { notebookDir, notePath } from './notebook.js';
 import { journalId } from './journal.js';
 import { validateWrite } from '../memory/writer.js';
+import { problemLint } from '../memory/problemcheck.js';
 
 export const READ_MAX = 32 * 1024;
 const LIST_PAGE = 50;
@@ -28,9 +29,10 @@ const OLD = ['rules', 'lessons', 'asks', 'profile', 'slips', 'observations', 'su
 
 /**
  * db：学习台的数据库；getData()：首页 / 课堂手上的数据（记忆库各类）；getBooks()：{ chunks }；notebook：notebookdesk 的 { run }；
- * by：写笔记本时记的作者；write：能不能写笔记本；used：每调一次记一条（花费和记录用）
+ * by：写笔记本时记的作者；write：能不能写笔记本；used：每调一次记一条（花费和记录用）；
+ * render(md)：在页面上藏着画一遍题、回写法错误（碰 DOM 的那一半由调用的地方给，problemrender.js 的 renderCheck）
  */
-export function projectTools({ db, getData = () => ({}), getBooks = () => null, notebook = null, by = 'head', write = true, used = [] } = {}) {
+export function projectTools({ db, getData = () => ({}), getBooks = () => null, notebook = null, by = 'head', write = true, used = [], render = null } = {}) {
   const cache = new Map();
   const once = (key, fn) => { if (!cache.has(key)) cache.set(key, fn().catch(() => [])); return cache.get(key); };
   const collRows = (path) => once(`c:${path}`, async () => rowsOf(await db.collection(path).get()));
@@ -148,11 +150,18 @@ export function projectTools({ db, getData = () => ({}), getBooks = () => null, 
         if (n !== 1) throw new Error(n ? `old 在 ${field} 里出现了 ${n} 次：多写几个字让它只出现一次` : `old 在 ${field} 里没找到`);
         after = { ...before, [field]: cur.replace(old, () => String(input?.new ?? '')) };
       } else throw new Error('op 只能是 set / update / delete / str_replace');
+      // 题库的题先验一遍（和以前教研室出的题同一把尺子）：不过的照写，标 broken，练一练不挑；改好了去掉
+      let drillErrs = [];
+      if (after && /^drills\/[^/]+$/.test(path) && after.md) {
+        drillErrs = problemLint({ kind: after.kind, doc: after }, {});
+        if (!drillErrs.length && render) drillErrs = await render(String(after.md)).catch((e) => [`画不出来：${e?.message || e}`]);
+        if (drillErrs.length) after.broken = true; else delete after.broken;
+      }
       if (after === null) await ref.delete(); else await ref.set(after);
       const at = Date.now();
       await db.doc(`journal/${journalId(at)}`).set({ at, by, path, op, before, after });
-      const problems = after ? validateWrite(path, after) : [];
-      return { ok: true, path, ...(problems.length ? { problems } : {}) };
+      const problems = [...(after ? validateWrite(path, after) : []), ...drillErrs];
+      return { ok: true, path, ...(drillErrs.length ? { broken: true } : {}), ...(problems.length ? { problems } : {}) };
     },
   });
   return tools;

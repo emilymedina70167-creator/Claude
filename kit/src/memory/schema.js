@@ -138,7 +138,7 @@ export const COLLECTIONS = {
     required: ['title', 'tier'],
     // paused：我暂停了（不算到期）；done：停掉了；merged：并进了别的一组（into）；void：撤销了的新组
     enums: { status: ['active', 'paused', 'done', 'merged', 'void'], space: ['math', 'cs', 'en'] },
-    dates: ['last'],
+    dates: ['last', 'due'],
     refs: { weaknesses: 'weaknesses', blocks: 'curriculum', into: 'reviews' },
     tracked: ['tier', 'last', 'result', 'status'],
   },
@@ -305,6 +305,12 @@ export function nextTier(tier, passed) {
  * 返回 { due, days（离今天还有几天，负数是过期了几天）, state: 'overdue' | 'today' | 'later' } 或 { error }
  */
 export function reviewDue(r, today) {
+  // 项目 Claude 写了 due（第十四轮）：按它写的日子到期
+  if (r?.due !== undefined && r?.due !== null && r?.due !== '') {
+    if (!isDate(r.due)) return { error: 'due 要写成 YYYY-MM-DD' };
+    const days = daysBetween(today, r.due);
+    return { due: r.due, days, state: days < 0 ? 'overdue' : days === 0 ? 'today' : 'later' };
+  }
   const tier = Number(r?.tier);
   if (!REVIEW_TIERS.includes(tier)) return { error: `档位 tier 只能是 ${REVIEW_TIERS.join(' / ')}（天）` };
   if (r.last !== undefined && r.last !== null && r.last !== '' && !isDate(r.last)) return { error: 'last 要写成 YYYY-MM-DD' };

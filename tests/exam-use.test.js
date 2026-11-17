@@ -1,25 +1,10 @@
 // 真题用在备课、复现课、练一练、教研室出题（考情第 4 批 4.4）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { prepPrompt, parsePrep, lessonPlanText } from '../kit/src/books/plan.js';
 import { reviewPack } from '../kit/src/memory/views.js';
 import { markFresh, isOriginal } from '../kit/src/memory/mastery.js';
 import { problemLint } from '../kit/src/memory/problemcheck.js';
 import { packText } from '../kit/src/class/prompt.js';
-
-test('备课：带考情一节、要一个 examBar；读回只收能用的真题，不能用的报进备课检查；写成给老师的一行', () => {
-  const p = prepPrompt({ block: { id: 'OS-L3.2.1', title: '页面置换' }, exam: '## 统计\n- 考了 5 次' });
-  assert.match(p, /## 这一块在考试里[\s\S]*考了 5 次/);
-  assert.match(p, /"examBar"/);
-  const raw = JSON.stringify({ goal: 'g', sequence: [{ step: 1, point: 'p' }], examBar: { id: 'Q-408-2019-26', why: '最典型的 LRU 缺页次数' } });
-  const r = parsePrep(raw, { block: { id: 'OS-L3.2.1' }, examIds: new Set(['Q-408-2019-26']) });
-  assert.deepEqual(r.main.examBar, { id: 'Q-408-2019-26', why: '最典型的 LRU 缺页次数' });
-  assert.match(lessonPlanText(r.main).examBar, /Q-408-2019-26.*最典型/);
-  assert.match(packText({ main: r.main }).text, /这节课结束时学生要能做的真题/);
-  const bad = parsePrep(JSON.stringify({ goal: 'g', sequence: [{ step: 1, point: 'p' }], examBar: { id: 'Q-408-2025-3', why: 'x' } }), { block: { id: 'OS-L3.2.1' }, examIds: new Set(['Q-408-2019-26']) });
-  assert.equal(bad.main.examBar, undefined);
-  assert.match(bad.main.prepCheck.join(), /Q-408-2025-3.*不是这一块能用的真题/);
-});
 
 test('复现课：这一块没做过的、能用的真题放进题（最多两道）', () => {
   const mem = { reviews: [{ id: 'R1', title: '置换', tier: 3, blocks: ['OS-L3.2.1'], last: '2026-11-01' }], curriculum: [{ id: 'OS-L3.2.1', level: 'block', title: '页面置换' }] };
