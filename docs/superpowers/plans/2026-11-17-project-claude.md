@@ -43,7 +43,8 @@
 - [ ] **Step 2: 跑** `node --test tests/memory-speed.test.js`，看它失败。
 - [ ] **Step 3: 实现** `benchConds` 的 `'big'` 分支和按钮（垫长照现有做法用组件手册重复拼到指定大小）。
 - [ ] **Step 4: 跑测试通过；** `npm run build`。
-- [ ] **Step 5: 提交** `git commit -m "测速：加量 160 / 300 / 500 KB 的说明"`。这一任务合进 `main` 并发布学习台（不用问），请学生在 iPad 上「管理 → 测速 → 量大说明」点一次；结果回来以后（`ArtifactData get meta/speed`）在任务 13 定 `SYSTEM_MAX`。后面的任务不等它，照 160 KiB 做。
+- [ ] **Step 4b:** 同一页再加一个「量工具」按钮：一次调用里让 Opus 连着调一个假工具 `echo` 20 次（每次回 30 KiB），记下平台最多让它连着调几次、每次多几秒、整次多久（写进 `meta/speed.tools`）。课后那一轮和第一次整理要连着读很多东西，这个数决定能不能一轮做完、要不要分几轮。
+- [ ] **Step 5: 提交** `git commit -m "测速：加量 160 / 300 / 500 KB 的说明和连着调工具"`。这一任务合进 `main` 并发布学习台（不用问），请学生在 iPad 上「管理 → 测速 → 量大说明」点一次；结果回来以后（`ArtifactData get meta/speed`）在任务 13 定 `SYSTEM_MAX`。后面的任务不等它，照 160 KiB 做。
 
 ### Task 2: 先把共用的小件抽出来
 
@@ -152,10 +153,10 @@ set 学生/背景.md pin=on order=1 show=off
 **Interfaces:**
 - Consumes: 任务 5 的 `createNotebook`。
 - Produces:
-  - `searchDocs(sources: {path, text}[], q: string, { limit = 30 }): {path, snippet, score}[]`：q 按空白切词，大小写、全半角不分（照 `textfind.js` 的规范化）；每个词命中加 1、整句命中再加 2；`snippet` 是第一个命中前后各 60 字。
+  - `searchDocs(sources: {path, text}[], q: string, { limit = 30 }): {path, snippet, score}[]`：q 按空白切词，大小写、全半角不分（照 `textfind.js` 的规范化）；中文没有空格，每个词再切成相邻两字的片段（「希尔排序」→ 希尔、尔排、排序），命中的片段占几成就加几分，整个词命中加 1、整句命中再加 2；`snippet` 是第一个命中前后各 60 字。
   - `READ_MAX = 32 * 1024`；`projectTools({ db, getData, notebook, chats, turnsOf, write: boolean, used: object[] }): tool[]`，工具名和输入：`read { path, offset? }`（超 `READ_MAX` 给前一段和 `{ more: 剩多少字节, next: offset }`）、`list { collection, field?, value?, cursor? }`（一页 50 条，`next` 游标）、`search { q, in? }`（`in` 取 `books` `exam` `evidence` `turns` `chats` `notebook` `old` 中的几个，默认全部；`old` 是旧记忆的 rules lessons asks profile slips observations summary）、`notebook { op… }`（`write` 为假时只认 `view`）。工具的 `description` 只写做什么、读一次要多一轮（事实）。
 
-- [ ] **Step 1: 写测试**：`searchDocs([{path:'a',text:'希尔排序的增量'},{path:'b',text:'冒泡'}], '希尔 增量')[0].path === 'a'`；全角「ＡＢ」能搜到「ab」；`read` 一条 40 KiB 的文档返回 `more > 0` 和 `next`，带 `offset: next` 再读拿到剩下的；`notebook` 工具在 `write:false` 时 `create` 返回错误「这里只能 view」；`used` 里记了每次调用。
+- [ ] **Step 1: 写测试**：`searchDocs([{path:'a',text:'希尔排序的增量'},{path:'b',text:'冒泡'}], '希尔 增量')[0].path === 'a'`；不带空格的「排序增量」也能把 a 排第一；全角「ＡＢ」能搜到「ab」；`read` 一条 40 KiB 的文档返回 `more > 0` 和 `next`，带 `offset: next` 再读拿到剩下的；`notebook` 工具在 `write:false` 时 `create` 返回错误「这里只能 view」；`used` 里记了每次调用。
 - [ ] **Step 2:** 跑，看它失败。
 - [ ] **Step 3:** 实现；班主任改用它。
 - [ ] **Step 4:** `npm test`；`npm run e2e -- --only chat`。
@@ -181,15 +182,15 @@ set 学生/背景.md pin=on order=1 show=off
 ### Task 8: 拼说明的纯函数
 
 **Files:**
-- Create: `kit/src/project/system.js`
+- Create: `kit/src/project/system.js`、`kit/src/project/catalog.js`
 - Test: `tests/project-system.test.js`
 
 **Interfaces:**
 - Consumes: 任务 4 的 `pinnedText`、`notebookDir`。
-- Produces: `projectSystem({ facts: { today, version, examDays, target }, instructions: string, notes: object[], toolsDoc: string, sections: { title, text }[], max: number }): { text, sizes: { total, instructions, pinned, sections }, skipped }`。顺序：身份事实一段（「你是学生学习台里的 Claude。学生在准备……，还有 N 天。今天……；学习台版本……」）→ `# 学生写的项目指令`（原样；空就写「（学生还没写）」）→ `# 你的笔记本`（pin 的原文、目录、`notebook_review` 最近一份的路径、一行用量「这一轮说明一共 X KB：项目指令 a、笔记 b、其余 c；上限 SYSTEM_MAX」）→ `# 工具` → 传进来的 `sections`。pin 的 room = `max` − 其余各段。笔记本为空时那一段写「笔记本还是空的，以前的记录在：…」（列旧的那几类和条数，`getData` 给）。发出去前对页面拼的那几段做 `neutral`。
+- Produces: `catalogText(data, books): string`（`kit/src/project/catalog.js`，纯函数）；`projectSystem({ facts: { today, version, examDays, target }, instructions: string, notes: object[], catalog: string, toolsDoc: string, sections: { title, text }[], max: number }): { text, sizes: { total, instructions, pinned, sections }, skipped }`。顺序：身份事实一段（「你是学生学习台里的 Claude。学生在准备……，还有 N 天。今天……；学习台版本……」）→ `# 学生写的项目指令`（原样；空就写「（学生还没写）」）→ `# 你的笔记本`（pin 的原文、目录、`notebook_review` 最近一份的路径、一行用量「这一轮说明一共 X KB：项目指令 a、笔记 b、其余 c；上限 SYSTEM_MAX」）→ `# 学习台里有什么`（知识库的目录，只写事实：每本教材的书名和条数、真题入库到哪几年几道、考点画像几个、上过几节课（每科几节、最近一节哪天）、和班主任的对话几段、旧记忆每类几条、页面算好的事实放在哪些路径（课后报告、掌握、预测分、隔天验、`meta/exam`），由调用的地方传 `catalog: string`，`project/catalog.js` 的 `catalogText(data, books)` 拼）→ `# 工具` → 传进来的 `sections`。pin 的 room = `max` − 其余各段。笔记本为空时那一段写「笔记本还是空的，以前的记录在：…」（列旧的那几类和条数，`getData` 给）。发出去前对页面拼的那几段做 `neutral`。
 - `FORBIDDEN = ['你应该', '必须', '根本规则', '以它为准', '照做']`（只查页面拼的那几段，不查学生的指令、笔记、`sections`）。
 
-- [ ] **Step 1: 写测试**：项目指令出现在身份段之后、笔记之前，原样（含一个「必须」也照留）；页面拼的部分不含 `FORBIDDEN` 任何一个；`max` 很小时 `skipped` 非空、`text` 字节数 ≤ `max`；没有 pin 时用量那一行 `pinned 0`；笔记本空时含「笔记本还是空的」；身份段不含「他」「她」。
+- [ ] **Step 1: 写测试**：`catalogText` 对示例记忆含每本书名、「真题」和道数、每科上过几节；项目指令出现在身份段之后、笔记之前，原样（含一个「必须」也照留）；页面拼的部分不含 `FORBIDDEN` 任何一个；`max` 很小时 `skipped` 非空、`text` 字节数 ≤ `max`；没有 pin 时用量那一行 `pinned 0`；笔记本空时含「笔记本还是空的」；身份段不含「他」「她」。
 - [ ] **Step 2:** 跑，看它失败。
 - [ ] **Step 3:** 实现。
 - [ ] **Step 4:** 跑通过。
@@ -245,6 +246,7 @@ set 学生/背景.md pin=on order=1 show=off
   - `organizePrompt(counts: {collection, n}[]): string`：「笔记本还是空的。学习台以前的记录在这些地方：…（每类几条）。」
   - `reviewDue(lastAt, now, on = true): boolean`：开关开着、笔记本不空且距上次 ≥ `REVIEW_DAYS` 天。
   - `reviewPrompt(): string`：「你没有对话历史。请读笔记本和原始记录，回一份：哪些过时了、哪些互相矛盾、哪些可能是从一句话推广出来的、哪些原话在记录里找不到。不要改笔记本。」（这是给通读那一轮的任务本身，按设计 6.5，不算替老师定做法。）
+- 连着调工具的次数照任务 1 量出来的上限（`meta/speed.tools`）：一轮用满了还没做完的（模型回的里面说还要接着、或者调用因为次数到了停下），记 `after.cont = true`，下一次后台再给它一轮接着做（提示多一句「上一轮没做完，做到了这里：……（它上一轮最后写的话）」），最多 3 轮。
 - `afterdesk.js`：`createAfter({ db, ai, tools, system })` → `{ organize(), after(sid), review() }`；回的不是 Opus 就作废、`sessions/{id}.after = { fails + 1 }`；成了写 `{ at, model }`；整理成了写 `meta/project.since = Date.now()`；通读写 `notebook_review/{YYYY-MM-DD}` = `{ text, at, model }`。三种调用都用 `projectSystem`（没有对话历史，用户消息就是 `*Prompt()` 的那一句）。
 
 - [ ] **Step 1: 写测试**：`needsAfter` 下了课、`endedAt` 在 since 之后 → 真；`after.at` 有了 → 假；`fails: 2` → 假（Review Focus 第 4 条）；`since` 没有 → 假；`afterPrompt` 含课号和三个路径、不含 `FORBIDDEN`；`needsOrganize([], {})` 真、有一个文件时假；`reviewDue(Date.now() - 8 * 864e5, Date.now())` 真、6 天假、`on=false` 时假。
