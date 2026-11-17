@@ -77,3 +77,12 @@ test('下课小结：只有 board note 块、没有 memo 块时，板上也只�
   assert.equal(closingSpeech(t), '今天讲完了情态动词。');
   assert.equal(closingSpeech('只是一段话'), '只是一段话');
 });
+
+test('考试资料的事实：meta/exam 的 papers 是「门课 → 年份 → 题」，读出年份范围（以前当成数组，第一次整理崩了）', async () => {
+  const { examFactsOf } = await import('../kit/src/project/catalog.js');
+  const meta = { counts: { questions: 846, papers: 18 }, papers: { 408: { 2009: [1], 2026: [2], 2015: [3] } } };
+  assert.deepEqual(examFactsOf(meta), { questions: 846, years: [2009, 2026] });
+  assert.deepEqual(examFactsOf({ counts: { questions: 5 }, papers: [{ year: 2020 }] }), { questions: 5, years: [2020, 2020] });
+  assert.equal(examFactsOf(null), null);
+  assert.equal(examFactsOf({ counts: {} }), null);
+});

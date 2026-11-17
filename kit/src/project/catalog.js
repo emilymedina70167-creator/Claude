@@ -40,3 +40,16 @@ export function catalogText({ data = {}, books = null, exam = null, chats = 0, t
   lines.push('- dev_requests：写在这里的，开发那边每次开工先读（要改页面代码才做得到的事）');
   return lines.join('\n');
 }
+
+/**
+ * meta/exam 里的考试资料写成 catalogText 要的 { questions, years }。papers 是「门课 → 年份 → 题」（examdesk.js 写的）；
+ * 以前当成数组读，map 不是函数，第一次整理一上来就崩了。数组的写法也认。
+ */
+export function examFactsOf(meta) {
+  const q = Number(meta?.counts?.questions) || 0;
+  if (!q) return null;
+  const p = meta?.papers;
+  const years = (Array.isArray(p) ? p.map((x) => x?.year) : p && typeof p === 'object' ? Object.values(p).flatMap((byYear) => (byYear && typeof byYear === 'object' ? Object.keys(byYear) : [])) : [])
+    .map(Number).filter(Number.isFinite);
+  return { questions: q, years: years.length ? [Math.min(...years), Math.max(...years)] : null };
+}

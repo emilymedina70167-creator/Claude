@@ -1038,6 +1038,8 @@ const SUITES = {
   // 照 claude.ai 的记忆（第十四轮）：笔记本空着先在后台整理一次以前的记录；之后每节下了课的课后台给项目 Claude 一轮
   async after(browser) {
     const t = await seeded(browser);
+    // 真库里 meta/exam 的 papers 是「门课 → 年份 → 题」：第一次整理拼说明时要读得懂（2026-11-17 这里崩过）
+    await plant(t, { 'meta/exam': { counts: { questions: 3, papers: 2 }, papers: { 408: { 2009: [], 2026: [] } } } });
     await t.open();
     const first = await t.waitFor(async () => (await t.docs('notebook')).find((d) => d.path === '学生/底子.md' && d.pin), { timeout: 30000, what: '首页后台做了第一次整理，写了一个 pin 的笔记' });
     check(first.by === 'organize', `第一次整理的作者不对：${first.by}`);

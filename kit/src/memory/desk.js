@@ -54,7 +54,7 @@ import { headSystem } from '../head/context.js';
 import { createHead } from '../head/headdesk.js';
 import { createChatPage } from '../head/chatview.js';
 import { createProjectView } from '../project/notebookview.js';
-import { catalogText } from '../project/catalog.js';
+import { catalogText, examFactsOf } from '../project/catalog.js';
 import { toolsDoc } from '../project/tools.js';
 import { createNotebook } from '../project/notebookdesk.js';
 import { todayRows, packForBlock } from '../project/today.js';
@@ -433,11 +433,7 @@ export async function renderDesk(root, meta) {
   // 班主任每一轮的说明（第十四轮：就是项目 Claude 的说明，project/system.js）：事实、学生写的指令、它的笔记本、学习台里有什么、工具
   let chatCount = 0;
   db.collection('chats').onSnapshot((snap) => { chatCount = snap.docs.length; }, () => {});
-  const examFacts = () => {
-    const c = examMeta?.counts || {};
-    const years = (examMeta?.papers || []).map((p) => Number(p.year)).filter(Number.isFinite);
-    return c.questions ? { questions: c.questions, years: years.length ? [Math.min(...years), Math.max(...years)] : null } : null;
-  };
+  const examFacts = () => examFactsOf(examMeta);
   function projectFacts() {
     const today = toDate(Date.now());
     const t = targetOf(data);
