@@ -5,6 +5,21 @@
 async function head(turns, opts) {
   const last = String(turns.at(-1)?.content || '');
   const n = turns.filter((t) => t.role === 'assistant').length;
+  // 第十四轮：第一次整理、课后那一轮也是项目 Claude（同一份说明）。模拟的：整理时建一个 pin 的文件，课后那一轮读一下报告、记一行
+  const nbTool = (opts.tools || []).find((t) => t.name === 'notebook');
+  if (/^笔记本还是空的。学习台以前的记录在这些地方/.test(last)) {
+    await nbTool?.execute({ op: 'create', path: '学生/底子.md', text: '模拟的第一次整理：读了以前的记录' }).catch(() => {});
+    await nbTool?.execute({ op: 'set', path: '学生/底子.md', pin: true }).catch(() => {});
+    return { text: '整理好了。', truncated: false, modelApplied: opts.model || 'claude-opus-5-5', modelTierApplied: opts.modelTier || 'complex' };
+  }
+  const endM = last.match(/^这节课（([^，）]+)[^）]*）结束了。课后报告在 sessions\/(c-[\d-]+)\/report\/main/);
+  if (endM) {
+    const rd = (opts.tools || []).find((t) => t.name === 'read');
+    await rd?.execute({ path: `sessions/${endM[2]}/report/main` }).catch(() => {});
+    const has = await nbTool?.execute({ op: 'view', path: '课/记录.md' }).then(() => true, () => false);
+    await nbTool?.execute(has ? { op: 'insert', path: '课/记录.md', line: 0, text: `- ${endM[1]}（${endM[2]}）` } : { op: 'create', path: '课/记录.md', text: `- ${endM[1]}（${endM[2]}）` }).catch(() => {});
+    return { text: '记下了。', truncated: false, modelApplied: opts.model || 'claude-opus-5-5', modelTierApplied: opts.modelTier || 'complex' };
+  }
   // 第十四轮：班主任是项目 Claude，「测试:笔记」时用工具在笔记本里建一个 pin 的文件（真模型自己决定写不写）
   const note = /测试[:：]笔记/.test(last);
   if (note) {

@@ -61,6 +61,8 @@ import { createProjectView } from '../project/notebookview.js';
 import { catalogText } from '../project/catalog.js';
 import { toolsDoc } from '../project/tools.js';
 import { createNotebook } from '../project/notebookdesk.js';
+import { createAfter } from '../project/afterdesk.js';
+import { needsAfter, needsOrganize } from '../project/after.js';
 import { CHARTER } from '../class/charter.js';
 import { PART_PRIORS } from '../forecast/priors.js';
 import { DEFAULT_TARGET, targetOf, examDateOf, goalOf, needsDefault, schoolLine } from '../exam/target.js';
@@ -371,7 +373,7 @@ export async function renderDesk(root, meta) {
       loaded.add(c);
       failed.delete(c);
       if (c === 'sessions' || c === 'position') paintClass();
-      if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); setTimeout(fixHolds, 500); backTick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
+      if (c === 'sessions') { fixReports(); fixSkills(); setTimeout(fixHolds, 500); backTick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
       if (c === 'summary') { sumView?.paint(); backTick(); if (!$('.dk-manage').hidden) paintMine(); }
       // 笔记本变了（课上、班主任、课后那一轮写的）：管理页和「笔记」页开着就重画
@@ -380,7 +382,8 @@ export async function renderDesk(root, meta) {
       if (['drills', 'evidence'].includes(c)) setTimeout(fixHolds, 500);
       if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) { fixReports(); backTick(); } if (lastRes) paintWeek(toDate(Date.now())); }
       if (c === 'curriculum') { examInbox.maybeRefresh(); manualForm?.refreshBlocks(); const sel = $('.dk-radd-b'); if (sel) sel.dataset.space = ''; }
-      if (['curriculum', 'weaknesses', 'observations', 'mastery'].includes(c)) { fixSkills(); fixDebriefs(); }
+      if (['curriculum', 'weaknesses', 'observations', 'mastery'].includes(c)) { fixSkills(); }
+      if (c === 'notebook') backTick();
       schedule();
     }, () => { failed.add(c); loaded.add(c); schedule(); });
   }
@@ -482,35 +485,33 @@ export async function renderDesk(root, meta) {
   const chatPage = createChatPage($('.dk-chatpage'), { head });
   // 第十四轮：项目指令、笔记本、「笔记」页（project/notebookview.js）
   projView = createProjectView({ db, store, getData: () => data, notebook, charter: CHARTER, $ });
-  // 后台一件一件做：先过账（一节一节，新的课先），都过完了才轮到课后的助手（aidedesk）。这次打开首页每节只试一次
-  const saidTried = new Set();
-  const sumTried = new Set();
-  let saidBusy = false;
+  // 照 claude.ai 的记忆（第十四轮，project/after.js）：后台一件一件给项目 Claude 一轮——笔记本空着先整理一次以前的记录，
+  // 之后每节下了课的课给一轮（早的先）。话的账、摘要重写、复盘、课后的助手不再调度。这次打开首页每节只试一次
+  let projMeta = null;
+  db.doc('meta/project').onSnapshot((x) => { projMeta = x.exists ? x.data() : null; backTick(); }, () => {});
+  const afterDesk = createAfter({ db, ai: deskAI, getData: () => data, notebook, getBooks: () => ({ books: booksView.books() }), system: (td) => headSystem({ facts: projectFacts(), instructions: projView?.instructions()?.text || '', notes: data.notebook || [], catalog: catalogText({ data, books: { books: booksView.books() }, exam: examFacts(), chats: chatCount }), toolsDoc: td }) });
+  const afterTried = new Set();
+  let organizeTried = false;
+  let afterBusy = false;
   async function backTick() {
-    if (saidBusy) return;
-    // 有记忆摘要（或者记忆库里本来就没有旧的规则、要求）：不过话的账，把有新动静的课、班主任的对话一节一节并进摘要
-    if (sumDesk && loaded.has('summary') && ['rules', 'lessons', 'asks'].every((c) => loaded.has(c)) && sumDesk.ready()) {
-      if (!loaded.has('sessions') || !loaded.has('evidence')) { aideDesk?.tick(); return; }
-      const next = data.sessions.filter((x) => !sumTried.has(x.id) && sumDesk.needs(x)).sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0))[0];
-      saidBusy = true;
-      try {
-        if (next) { sumTried.add(next.id); await sumDesk.runFor(next.id); } else {
-          const cid = (await sumDesk.chatsToDo()).find((c) => !sumTried.has(c));
-          if (!cid) { aideDesk?.tick(); return; }
-          sumTried.add(cid);
-          await sumDesk.runForChat(cid);
-        }
-      } finally { saidBusy = false; }
+    if (afterBusy || !['sessions', 'notebook'].every((c) => loaded.has(c))) return;
+    afterBusy = true;
+    try {
+      // 笔记本里已经有东西（班主任、课上写过）却还没记第一次整理：从现在算起，之后下课的课给课后那一轮
+      if (!projMeta?.since && !needsOrganize(data.notebook, projMeta)) { await db.doc('meta/project').set({ ...(projMeta || {}), since: Date.now(), organized: false }); return; }
+      if (needsOrganize(data.notebook, projMeta)) {
+        if (organizeTried) return;
+        organizeTried = true;
+        const OLD = ['rules', 'lessons', 'asks', 'profile', 'slips', 'observations', 'summary', 'errors', 'weaknesses', 'mastery', 'reviews', 'recall'];
+        await afterDesk.organize(OLD.map((c) => ({ collection: c, n: (data[c] || []).length })));
+        return;
+      }
+      const next = data.sessions.filter((x) => !afterTried.has(x.id) && needsAfter(x, { since: projMeta?.since })).sort((a, b) => (a.endedAt || 0) - (b.endedAt || 0))[0];
+      if (!next) return;
+      afterTried.add(next.id);
+      await afterDesk.after(next);
       setTimeout(() => backTick(), 500);
-      return;
-    }
-    if (!saidDesk || !loaded.has('sessions') || !loaded.has('evidence')) { aideDesk?.tick(); return; }
-    const todo = data.sessions.filter((x) => !saidTried.has(x.id) && saidDesk.needs(x)).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
-    if (!todo.length) { aideDesk?.tick(); return; }
-    saidBusy = true;
-    saidTried.add(todo[0].id);
-    try { await saidDesk.runFor(todo[0].id); } finally { saidBusy = false; }
-    setTimeout(() => backTick(), 500);
+    } catch (err) { reportError(err, { what: '课后那一轮', soft: true }); } finally { afterBusy = false; }
   }
   function runSentry(today) {
     backTick();
