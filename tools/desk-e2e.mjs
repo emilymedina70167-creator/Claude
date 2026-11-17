@@ -1002,6 +1002,28 @@ const SUITES = {
     return t;
   },
 
+  // 第十四轮：项目 Claude 有整个学习台的读写权；每一次写都记进 journal，管理页「Claude 改过的」里能撤销
+  async write(browser) {
+    const t = await seeded(browser);
+    const errs0 = await t.docs('errors');
+    await t.open('chat');
+    await t.waitFor(() => t.page.$('.dk-chatpage:not([hidden]) .hd-input'), { what: '班主任那一页画出来' });
+    await t.page.fill('.hd-input', '测试:改');
+    await t.page.click('.hd-send');
+    const changed = await t.waitFor(async () => (await t.docs('errors')).find((x) => x.cause === '模拟班主任改的根因'), { timeout: 20000, what: '班主任用 write 改了一道错题' });
+    const e0 = errs0.find((x) => x.id === changed.id);
+    const j = (await t.docs('journal')).find((x) => x.path === `errors/${e0.id}`);
+    check(j && j.by === 'head' && j.before?.cause === e0.cause, `journal 没记下改之前的样子：${JSON.stringify(j)}`);
+    await t.open('manage');
+    await t.page.click('.dk-journal summary');
+    await t.page.waitForSelector('.dk-jrow', { timeout: 15000 });
+    await t.page.click('.dk-jrow summary');
+    await t.page.click('.dk-jundo');
+    await t.answer('撤销');
+    await t.waitFor(async () => (await t.docs('errors')).find((x) => x.id === e0.id)?.cause === e0.cause, { timeout: 10000, what: '撤销以后错题的根因回到原来的' });
+    return t;
+  },
+
   // 照 claude.ai 的记忆（第十四轮）：笔记本空着先在后台整理一次以前的记录；之后每节下了课的课后台给项目 Claude 一轮
   async after(browser) {
     const t = await seeded(browser);

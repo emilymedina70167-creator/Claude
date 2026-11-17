@@ -10,6 +10,7 @@ import { createSink } from '../live/sync.js';
 import { reportError } from '../errlog.js';
 import { notebookDir } from './notebook.js';
 import { saveInstructions, shownNotes } from './instructions.js';
+import { undoJournal, journalId } from './journal.js';
 
 export { saveInstructions, shownNotes };
 
@@ -150,8 +151,37 @@ export function createProjectView({ db, store, getData, notebook, charter = '', 
     try { renderLesson(String(cur.text || ''), host.querySelector('.dk-note-body')); } catch (err) { reportError(err, { what: '画笔记', path: cur.path }); }
   }
 
+  // —— 管理 → Claude 改过的（journal）：最近 50 条，看前后、一条一条撤销；撤销本身也记一条 ——
+  async function paintJournal() {
+    const body = $('.dk-journal .dk-body');
+    if (!body) return;
+    let rows = [];
+    try { rows = (await db.collection('journal').get()).docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 50); } catch { rows = []; }
+    const short = (v) => escapeHtml(JSON.stringify(v ?? null).slice(0, 300));
+    body.innerHTML = rows.length ? rows.map((j) => `<details class="dk-fold dk-jrow"><summary><span class="dk-row-t">${escapeHtml(j.path)} · ${escapeHtml(j.op)}<br><span class="muted">${day(j.at)} ${escapeHtml(BY[j.by] || j.by || '')}${j.undid ? ' · 已撤销' : ''}</span></span></summary><p class="muted">改之前：${short(j.before)}</p><p class="muted">改之后：${short(j.after)}</p>${j.undid || j.by === 'me' ? '' : `<button type="button" class="btn dk-jundo" data-id="${escapeHtml(j.id)}">撤销这一条</button>`}</details>`).join('') : '<p class="muted">还没有。上课的老师、班主任改了学习台里的东西，会一条条列在这里。</p>';
+    if (!body.dataset.wired) {
+      body.dataset.wired = '1';
+      body.addEventListener('click', async (e) => {
+        const b = e.target.closest('.dk-jundo');
+        if (!b) return;
+        const j = (await db.doc(`journal/${b.dataset.id}`).get()).data();
+        const u = undoJournal(j);
+        if (!u || !await ask(`撤销对「${j.path}」的这一次改动？会写回改之前的样子。`, { ok: '撤销' })) return;
+        try {
+          const now = await db.doc(u.path).get().then((x) => (x.exists ? x.data() : null));
+          if (u.op === 'delete') await db.doc(u.path).delete(); else await db.doc(u.path).set(u.data);
+          const at = Date.now();
+          await db.doc(`journal/${journalId(at)}`).set({ at, by: 'me', path: u.path, op: `undo-${j.op}`, before: now, after: u.op === 'delete' ? null : u.data });
+          await db.doc(`journal/${b.dataset.id}`).set({ ...j, undid: at });
+          toast('撤销了');
+          paintJournal();
+        } catch (err) { reportError(err, { what: '撤销 Claude 的改动' }); toast('没撤销成，再试一次'); }
+      });
+    }
+  }
+
   return {
-    paintManage() { paintInstr(); wireNotes(); paintNotes(); },
+    paintManage() { paintInstr(); wireNotes(); paintNotes(); paintJournal(); },
     paintPage,
     instructions: () => instr,
     dir: () => notebookDir(getData()?.notebook || []),

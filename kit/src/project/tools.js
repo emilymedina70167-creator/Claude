@@ -2,6 +2,8 @@
 // 笔记本能看能写。工具的说明只写它做什么、读一次要多一轮（事实），不写该什么时候用。
 import { searchDocs } from './search.js';
 import { notebookDir, notePath } from './notebook.js';
+import { journalId } from './journal.js';
+import { validateWrite } from '../memory/writer.js';
 
 export const READ_MAX = 32 * 1024;
 const LIST_PAGE = 50;
@@ -119,6 +121,40 @@ export function projectTools({ db, getData = () => ({}), getBooks = () => null, 
       },
     },
   ];
+  // 整个学习台的读写权（学生 2026-11-17：「直接你给 Claude 所有内容的操作权限不就行了吗」）：每一次写记进 journal，学生在管理页撤销
+  if (write) tools.push({
+    name: 'write',
+    description: '改学习台数据库里的任何一条（「类/编号」）。op：set（整条换成 data）、update（把 data 的字段合进去）、delete（删掉这一条）、str_replace（这一条的 field 字段里，old 换成 new，old 要恰好出现一次）。每一次写都记进 journal，学生在「管理 → Claude 改过的」里看得到、能撤销。格式和学习台认的不一样时照写，回的 problems 里写哪里不对（缺哪个字段、哪个值不认）；要看一类现在长什么样，先 list 或 read 一条。每调一次多等一整轮。',
+    inputSchema: { type: 'object', properties: { op: { type: 'string' }, path: { type: 'string' }, data: { type: 'object' }, field: { type: 'string' }, old: { type: 'string' }, new: { type: 'string' } }, required: ['op', 'path'] },
+    async execute(input) {
+      const op = String(input?.op ?? '');
+      const path = okPath(input?.path, true);
+      used.push({ name: 'write', input: { op, path: String(input?.path ?? '') } });
+      if (!path) throw new Error('path 要是「类/编号」这样成对的路径，比如 meta/today');
+      const ref = db.doc(path);
+      const snap = await ref.get();
+      const before = snap.exists ? snap.data() : null;
+      let after;
+      if (op === 'set') after = { ...(input?.data || {}) };
+      else if (op === 'update') after = { ...(before || {}), ...(input?.data || {}) };
+      else if (op === 'delete') { if (!before) throw new Error(`没有 ${path}`); after = null; }
+      else if (op === 'str_replace') {
+        if (!before) throw new Error(`没有 ${path}`);
+        const field = String(input?.field ?? '');
+        const cur = before[field];
+        if (typeof cur !== 'string') throw new Error(`${path} 的 ${field} 不是一段文字`);
+        const old = String(input?.old ?? '');
+        const n = old ? cur.split(old).length - 1 : 0;
+        if (n !== 1) throw new Error(n ? `old 在 ${field} 里出现了 ${n} 次：多写几个字让它只出现一次` : `old 在 ${field} 里没找到`);
+        after = { ...before, [field]: cur.replace(old, () => String(input?.new ?? '')) };
+      } else throw new Error('op 只能是 set / update / delete / str_replace');
+      if (after === null) await ref.delete(); else await ref.set(after);
+      const at = Date.now();
+      await db.doc(`journal/${journalId(at)}`).set({ at, by, path, op, before, after });
+      const problems = after ? validateWrite(path, after) : [];
+      return { ok: true, path, ...(problems.length ? { problems } : {}) };
+    },
+  });
   return tools;
 }
 

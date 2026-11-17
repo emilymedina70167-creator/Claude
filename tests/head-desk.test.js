@@ -48,7 +48,7 @@ test('开一段新对话：我的话记成证据（chat），回答存起来', a
   assert.equal(t.calls[0].turns[0].content, '班主任的说明');
   assert.equal(t.calls[0].opts.model, OPUS);
   assert.equal(t.calls[0].opts.effort, 'high');
-  assert.deepEqual(t.calls[0].opts.tools.map((x) => x.name), ['read', 'list', 'search', 'notebook']);
+  assert.deepEqual(t.calls[0].opts.tools.map((x) => x.name), ['read', 'list', 'search', 'notebook', 'write']);
   assert.deepEqual(shown, ['想一']);
 });
 

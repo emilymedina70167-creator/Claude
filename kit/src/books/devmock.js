@@ -20,6 +20,14 @@ async function head(turns, opts) {
     await nbTool?.execute(has ? { op: 'insert', path: '课/记录.md', line: 0, text: `- ${endM[1]}（${endM[2]}）` } : { op: 'create', path: '课/记录.md', text: `- ${endM[1]}（${endM[2]}）` }).catch(() => {});
     return { text: '记下了。', truncated: false, modelApplied: opts.model || 'claude-opus-5-5', modelTierApplied: opts.modelTier || 'complex' };
   }
+  // 「测试:改」：用 write 改记忆库里的第一道错题（看管理页能不能撤销）
+  if (/测试[:：]改/.test(last)) {
+    const ls = (opts.tools || []).find((t) => t.name === 'list');
+    const wr = (opts.tools || []).find((t) => t.name === 'write');
+    const first = (await ls?.execute({ collection: 'errors' }).catch(() => null))?.items?.[0];
+    if (first) await wr?.execute({ op: 'update', path: `errors/${first.id}`, data: { cause: '模拟班主任改的根因' } }).catch(() => {});
+    return { text: '改了一道错题的根因。', truncated: false, modelApplied: opts.model || 'claude-opus-5-5', modelTierApplied: opts.modelTier || 'complex' };
+  }
   // 第十四轮：班主任是项目 Claude，「测试:笔记」时用工具在笔记本里建一个 pin 的文件（真模型自己决定写不写）
   const note = /测试[:：]笔记/.test(last);
   if (note) {
