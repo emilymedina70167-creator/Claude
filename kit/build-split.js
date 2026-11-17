@@ -55,14 +55,14 @@ export function splitProject(markdown, { kitUrl = '' } = {}) {
   if (markDoc) files['components/mark.md'] = `${markDoc}\n`;
   const table = [
     ...index.map((x) => `- \`${x.names.join('` / `')}\`${x.tags ? `（${x.tags.join('、')}）` : ''}：${x.desc} → \`${x.file}\``),
-    ...(markDoc ? ['- **板书标注**（圈、框、大括号、下划线、波浪线、着重号、荧光笔、✓ ✗、箭头；也叫 mark、tag、highlight、圈画）：不是组件，是教具指令 `mark`（课堂里写 board mark 块，实时黑板写进 `ops`），写法见第六节「教具指令：figure、mark / unmark」 → `components/mark.md`'] : []),
+    ...(markDoc ? ['- **板书标注**（圈、框、大括号、下划线、波浪线、着重号、荧光笔、✓ ✗、箭头；也叫 mark、tag、highlight、圈画）：不是组件，是教具指令 `mark`（课堂里写 board mark 块，实时黑板写进 `ops`），写法见第四节「教具指令：figure、mark / unmark」 → `components/mark.md`'] : []),
   ].join('\n');
   const sec3new = [lines[s], '', keep.filter(Boolean).join('\n\n'), '', '### 组件一览（写法要单独读）', '', how, '', table, ''].join('\n');
   const main = [...lines.slice(0, s), sec3new, ...lines.slice(e)].join('\n');
   return { main, files, index };
 }
 
-/** 第六节里 mark / unmark 那一段（「**mark：指着讲」到 unmark 那一段结束）；找不到就是空串 */
+/** 第四节里 mark / unmark 那一段（「**mark：指着讲」到 unmark 那一段结束）；找不到就是空串 */
 export function markSection(markdown) {
   const src = String(markdown ?? '');
   const a = src.indexOf('**mark：指着讲');
@@ -70,4 +70,11 @@ export function markSection(markdown) {
   if (a < 0 || u < 0) return '';
   const end = src.indexOf('\n\n', u);
   return `# 板书标注：mark / unmark（教具指令，不是组件）\n\n${src.slice(a, end < 0 ? undefined : end).trim()}`;
+}
+
+// 第十五轮：手册第四节「黑板指令」在仓库里只留一行标记，发布时填进课堂说明里的同一份写法（prompt.js 的 PROTOCOL_DOC、
+// PROJECT_CLASS_DOC），外部和页面里的老师读到的是同一份，不会两处各改各的
+export const PROTOCOL_MARK = '<!-- 黑板指令：构建时从 kit/src/class/prompt.js 的 PROTOCOL_DOC 填进学习台发布的手册（kit/build-split.js 的 injectProtocol）。页面里的老师和外部用的是同一份 -->';
+export function injectProtocol(markdown, text) {
+  return String(markdown ?? '').replace(PROTOCOL_MARK, () => String(text ?? '').trim());
 }

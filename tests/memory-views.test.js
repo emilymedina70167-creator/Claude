@@ -181,7 +181,7 @@ test('说明书瘦身：主说明不到一半大小，别的几节原样，第�
   const { main, files, index } = splitProject(src, { kitUrl: 'https://claude.ai/artifact/KIT' });
   assert.ok(Buffer.byteLength(main) < Buffer.byteLength(src) * 0.5);
   assert.match(main, /版本：\d{4}-\d{2}-\d{2}/);
-  for (const h of ['## 一、自学单元的写法', '## 二、怎么设计一个单元', '## 六、课堂模式', '## 七、学习台']) assert.ok(main.includes(h), h);
+  for (const h of ['## 四、黑板指令', '## 五、外部的课', '## 六、页面里的 Claude', '## 七、学习台']) assert.ok(main.includes(h), h);
   assert.equal(main.slice(main.indexOf('## 七、学习台')), src.slice(src.indexOf('## 七、学习台')));
   assert.match(main, /### 组件一览/);
   assert.match(main, /### let：/); // 每节课都用的留在主说明里
