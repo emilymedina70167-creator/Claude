@@ -3,6 +3,7 @@
 // new（擦掉黑板，换一块新板）/ add / replace / hide / figure（改当前这块板）/ pin / unpin（常驻栏）/
 // mark / unmark（在板上圈、框、划、写旁注）。
 // 页面在流式回调里拿到的是「到目前为止的全文」，每次整段重新解析，所以这里全是纯函数、不留状态、不碰 DOM。
+import { parseCoach } from './ext.js';
 import { tokenize, unquote } from '../tokens.js';
 import { parseNoteBlock } from '../project/notebook.js';
 import { parseMarkHead, parseMarkBlock, parseUnmark } from '../markspec.js';
@@ -151,7 +152,7 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // move：版面模式里把一段挪到别的栏（col=），不重画
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'show', 'move', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'show', 'move', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims';
+const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach';
 
 /**
  * 解析 board 后面那一行：
@@ -197,6 +198,10 @@ export function parseCommand(header) {
   if (name === 'memo') return { op: 'memo' };
   // 项目 Claude 的笔记本（第十四轮，project/notebook.js 的 parseNoteBlock）：一行一个操作，正文写在块里
   if (name === 'note') return { op: 'note' };
+  // 外部主 Claude 的课（第十五轮，ext.js）：snap 下一份 ext_out 带上这块板的截图；close 下课；coach 开这一题的板边助教
+  if (name === 'snap') return { op: 'snap' };
+  if (name === 'close') return { op: 'close' };
+  if (name === 'coach') { const r = parseCoach(m[2] || ''); return r.error ? { error: r.error } : { op: 'coach', target: r.target, upto: r.upto }; }
   // 老师自己的教学计划（学生看不到，docs/learning-plan.md 第 5 节）：块里是几行字
   if (name === 'plan') return { op: 'plan' };
   // 这节课要拿下的事（aims.js）：一行一件，写在块里；不上板，页面核过存进这节课
