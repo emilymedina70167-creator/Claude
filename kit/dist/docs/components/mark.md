@@ -1,8 +1,8 @@
 # 板书标注：mark / unmark（教具指令，不是组件）
 
-**mark：指着讲（圈、框、划、写旁注）。**对板上**已经有的东西**做标注，留在板上直到撤掉，或者它所在的段被改写、撤回。板上一片字、没有一处突出，我不知道看哪：讲到哪儿标到哪儿，重点一定标出来。
+**mark：指着讲（圈、框、划、写旁注）。**对板上**已经有的东西**做标注，留在板上直到撤掉，或者它所在的段被改写、撤回。
 
-- 怎么选：一组要背的（几条规则、一张清单）**一个**大括号（`mark target=b5 li=1-4 style=brace color=pink note="要背"`）或一个大圈（`mark target=b5 li=1-4`），不要一项一个圈；一句里的关键词、结论 `highlight`（荧光笔，涂在字下面）或 `underline`；例外、易错圈红加旁注（`mark target=b5 text="be 动词除外" color=red note="例外"`）；着重的几个字 `dots`（着重号）；要理解的说明 `wave`；正误例句 `tick` / `cross`；约掉的项 `strike`；两处的关系画箭头（`mark target=b5 text="The boy" to="walks" note="主语 → 谓语"`）。
+- 画法和效果：一组（几条规则、一张清单）可以用**一个**大括号（`mark target=b5 li=1-4 style=brace color=pink note="要背"`）或一个大圈（`mark target=b5 li=1-4`）把整组圈在一起；一句里的关键词、结论 `highlight`（荧光笔，涂在字下面）或 `underline`；例外、易错圈红加旁注（`mark target=b5 text="be 动词除外" color=red note="例外"`）；着重的几个字 `dots`（着重号）；要理解的说明 `wave`；正误例句 `tick` / `cross`；约掉的项 `strike`；两处的关系画箭头（`mark target=b5 text="The boy" to="walks" note="主语 → 谓语"`）。
 - 一条：`mark target=b5 term=mid note="1×1：一个数"`。好几条：第一行写 `mark target=m-b6`，块里每行一条（`row 1 note="×(−1)"`、`row 2 note="×2" color=pink`），`target=`、`color=`、`style=` 不写就沿用第一行的。
 - `target=`：段的 id，或者组件的 `id:`。只能标当前板和常驻栏上的东西。
 - 标哪里（不写就是整个 target）：
@@ -18,4 +18,4 @@
 - `color=`：`yellow`（默认）`pink` `blue` `green` `orange` `purple` `red` `white`（`tick` 默认绿、`cross` 默认红）。`note="…"`：旁边写一句（要短，最多 80 个字，可以有 `$公式$`）；`side=right|left|above|below` 指定写在哪边。`id=` 不写时页面自动编 m1、m2……
 - 写板时就知道是重点的，直接写进字里：`==只有这四类==` 是要背的（粉色荧光底，不压字），`=={yellow}谓语动词加 -s==` 换一种颜色标关键说明（`yellow` `blue` `green` `red`）；公式里 `\boxed{…}`、`\cancel{…}`、彩色粉笔 `\chalk{pink}{…}`。讲着讲着才要指的，用 mark。
 
-**unmark：撤掉标注。**`unmark id=m3`（一条）、`unmark target=b5`（这个目标上的全部）、`unmark all`。换一个讲法前，把不再相关的标注撤掉，板上别越圈越乱。
+**unmark：撤掉标注。**`unmark id=m3`（一条）、`unmark target=b5`（这个目标上的全部）、`unmark all`。

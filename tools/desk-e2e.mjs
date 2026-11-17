@@ -1035,6 +1035,70 @@ const SUITES = {
     return t;
   },
 
+  // 第十五轮审查找出的几处：页面正忙时到的 ext_in 不丢、两个标签页只执行一次、预案当场接住的作答也写 ext_out、
+  // 切走时只有草稿也写、刷新以后助教还在、点「下课」不调用页面自己的模型
+  async extfix(browser) {
+    const t = await seeded(browser);
+    const F4 = '````', F3 = '```';
+    const today = await t.page.evaluate(() => new Date().toLocaleDateString('sv-SE'));
+    const sid = `c-${today.replace(/-/g, '')}-8`;
+    const db = () => t.db();
+    const ans = (id, a) => `${F3}answer\nid: ${id}\nq: ${a} 等于几？\nanswer: ${eval(a)}\n${F3}`;
+    const t1 = `第一题。\n\n${F4}board new id=b1 title="算"\n${ans('a1', '2+2')}\n${F4}\n\n${F4}board react target=a1\nright: 对了。\n${F4}\n\n${F4}board coach target=a1 upto=只提示是加法\n${F4}\n`;
+    await plant(t, {
+      [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', block: 'L2.1.4', title: '外部（审查）', space: 'math', startedAt: Date.now() },
+      [`sessions/${sid}/ext_in/001`]: { seq: 1, text: t1, at: Date.now() },
+    });
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('[data-bid="a1"] .ans-check'), { timeout: 20000, what: '第一轮画上板' });
+    // 两个标签页同时开着：后面的 ext_in 只执行一次
+    const p2 = await t.ctx.newPage();
+    await p2.goto(t.page.url());
+    await sleep(3000);
+    const nTurns = async () => Object.keys(await db()).filter((k) => k.startsWith(`sessions/${sid}/class_turns/`)).length;
+    const n0 = await nTurns();
+    await plantLive(t, { [`sessions/${sid}/ext_in/002`]: { seq: 2, text: `第二题。\n\n${F4}board add id=b2 title="再算"\n${ans('a2', '3+3')}\n${F4}\n`, at: Date.now() } });
+    await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/002`]?.done, { timeout: 15000, what: 'ext_in/002 执行' });
+    await sleep(2500);
+    check(await nTurns() === n0 + 1, `两个标签页开着，ext_in/002 执行了 ${await nTurns() - n0} 次`);
+    await p2.close();
+    // 刷新以后助教还在：a1 写错 → 助教那一句
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('[data-bid="a1"] .ans-check'), { timeout: 20000, what: '刷新以后板放回来' });
+    const typeIn = async (id, v) => { const box = t.page.locator(`[data-bid="${id}"] .ans-input input, [data-bid="${id}"] .ans-input textarea, [data-bid="${id}"] .ans-input [contenteditable="true"]`).first(); await box.click(); await t.page.keyboard.type(v); };
+    await typeIn('a1', '5'); await t.page.click('[data-bid="a1"] .ans-check');
+    await t.waitFor(() => t.page.evaluate(() => /助教：模拟助教/.test(document.body.innerText)), { timeout: 15000, what: '刷新以后助教照样在' });
+    // 预案当场接住的那一下也写进 ext_out
+    const outs = async () => Object.entries(await db()).filter(([k]) => k.startsWith(`sessions/${sid}/ext_out/`)).map(([, v]) => v);
+    const before = (await outs()).length;
+    await t.page.locator('[data-bid="a1"] .ans-input input, [data-bid="a1"] .ans-input textarea, [data-bid="a1"] .ans-input [contenteditable="true"]').first().fill('4').catch(async () => { await typeIn('a1', '\b4'); });
+    await t.page.click('[data-bid="a1"] .ans-check');
+    await t.waitFor(async () => (await outs()).length > before && (await outs()).some((o) => /a1/.test(o.text) && /对/.test(o.text)), { timeout: 8000, what: '预案接住的作答也写进 ext_out' });
+    // 只有草稿：切走时也写
+    const before2 = (await outs()).length;
+    await typeIn('a2', '7');
+    await t.page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }); document.dispatchEvent(new Event('visibilitychange')); });
+    await t.waitFor(async () => (await outs()).length > before2 && (await outs()).some((o) => /草稿|没交|7/.test(o.text)), { timeout: 4000, what: '切走时只有草稿也写进 ext_out' });
+    await t.page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); });
+    // 页面正忙（写 ext_out 慢）时外部写进来的一轮不丢
+    await t.page.evaluate(() => window.LAKitDev.slowWrites(2500));
+    await typeIn('a2', '\b\b6'); await t.page.click('[data-bid="a2"] .ans-check');
+    await sleep(1700);
+    await plantLive(t, { [`sessions/${sid}/ext_in/003`]: { seq: 3, text: `第三块。\n\n${F4}board add id=b3 title="第三块"\n这是第三块。\n${F4}\n`, at: Date.now() } });
+    await t.waitFor(() => t.page.evaluate(() => /这是第三块/.test(document.body.innerText)), { timeout: 20000, what: '页面忙的时候到的 ext_in 也画上板' });
+    await t.page.evaluate(() => window.LAKitDev.slowWrites(0));
+    // 点「下课」：不调用页面自己的模型，照直接下课
+    const calls0 = await t.page.evaluate(() => (window.LAKitEval?.teacher?.calls || []).length);
+    await t.page.click('.cb-more'); await sleep(300); await t.page.click('.cb-end'); await sleep(300); await t.page.click('.cb-end').catch(() => {});
+    await t.answer('下课').catch(() => {});
+    const s = await t.waitFor(async () => { const x = (await db())[`sessions/${sid}`]; return x?.status === 'closed' ? x : null; }, { timeout: 15000, what: '点下课以后这节课下课' });
+    const calls1 = await t.page.evaluate(() => (window.LAKitEval?.teacher?.calls || []).filter((c) => c.kind !== 'coach').length);
+    const calls0b = calls0 - (await t.page.evaluate(() => (window.LAKitEval?.teacher?.calls || []).filter((c) => c.kind === 'coach').length));
+    check(calls1 <= calls0b, `外部的课点下课调用了页面自己的模型（${calls1 - calls0b} 次）`);
+    check(s.kind === 'ext', '下课以后 kind 变了');
+    return t;
+  },
+
   // 第十五轮：练习教练。主讲在 meta/today 里排一项 coach，首页出这一行，点开是页面里的老师带的课，资料包里有主讲写的
   async coach(browser) {
     const t = await seeded(browser);

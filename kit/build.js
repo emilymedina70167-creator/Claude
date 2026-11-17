@@ -69,7 +69,9 @@ await build({
   const out = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'dist', 'docs');
   const split = splitProject(readFileSync(projectDoc, 'utf8'), { kitUrl: KIT_URL });
   // 第四节「黑板指令」填进课堂说明里的同一份写法（外部和页面里的老师读到的是同一份）
-  const main = injectProtocol(split.main, `${PROTOCOL_DOC}\n\n${PROJECT_CLASS_DOC}`);
+  // 开头一句写明哪些是页面里的老师才有的（外部的课里没有），免得外部照着找
+  const EXT_NOTE = '下面这一段和页面里的老师读到的是同一份写法。外部的课（第五节）里没有的：工具（calc、component_doc、board_read、textbook_read、view_image……）、【课堂摘要】、「分钟没有动静」的提醒、页面叫你重写写错的段（外部的课里写错的报在下一份 ext_out 最前面，自己用 board replace 改）、平台核验模型。';
+  const main = injectProtocol(split.main, `${EXT_NOTE}\n\n${PROTOCOL_DOC}\n\n${PROJECT_CLASS_DOC}`);
   const { files } = split;
   rmSync(out, { recursive: true, force: true });
   mkdirSync(path.join(out, 'components'), { recursive: true });
