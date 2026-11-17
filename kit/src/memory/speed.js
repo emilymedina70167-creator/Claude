@@ -11,6 +11,8 @@ export const RUNS_KEPT = 6;
 // 说明长短（KB）× 对话长短（轮）
 export function benchConds(kind) {
   if (kind === 'full') return [4, 16, 40, 100, 160].flatMap((kb) => [2, 10, 30].map((t) => ({ kb, turns: t })));
+  // 第十四轮：项目 Claude 每一轮带学生的指令和它自己的笔记，整份说明要不要放大到 160 KB 以上，先量（各三次，抖动大）
+  if (kind === 'big') return [160, 300, 500].flatMap((kb) => [1, 2, 3].map(() => ({ kb, turns: 2 })));
   return [[4, 2], [40, 2], [160, 2], [4, 30], [40, 30], [160, 30]].map(([kb, turns]) => ({ kb, turns }));
 }
 
@@ -77,10 +79,32 @@ export function summaryText(s) {
   return `出第一个字平均——说明 ${kb}；对话 ${tu}。${s.notOpus ? `有 ${s.notOpus} 次不是 Opus 5.5 回的。` : ''}${s.failed ? `${s.failed} 次没调成。` : ''}`;
 }
 
+// —— 一次调用里能连着调几次工具（第十四轮）：课后整理、第一次整理要连着读很多东西 ——
+export const ECHO_KB = 30;
+const ECHO_BODY = '这是一段垫长用的资料，没有别的意思。'.repeat(2000);
+/** 假工具 echo：每次回 ECHO_KB 那么长的一段，log 里记下第几次、什么时候调的（now 给测试换时钟） */
+export function echoTool(log, now = () => performance.now()) {
+  return {
+    name: 'echo',
+    description: '测速用的假工具：回一段固定的长文字。',
+    inputSchema: { type: 'object', properties: { n: { type: 'number' } }, required: ['n'] },
+    async execute(input) {
+      log.push({ n: Number(input?.n) || log.length + 1, at: now() });
+      return `第 ${log.length} 次。${padText(ECHO_KB, ECHO_BODY)}`;
+    },
+  };
+}
+export const toolBenchPrompt = (n) => `这是测速。请调用 echo 工具 ${n} 次，一次一次地调（n 从 1 写到 ${n}），每次看完结果再调下一次。调完以后只回一句「调完了，一共 N 次」。`;
+/** 连着调了几次、相邻两次平均隔多久、整次多久（毫秒） */
+export function toolBenchSummary(log, { t0, end }) {
+  const gaps = log.slice(1).map((x, i) => x.at - log[i].at);
+  return { calls: log.length, gap: gaps.length ? Math.round(avg(gaps)) : null, total: Math.round(end - t0) };
+}
+
 // —— 画面：管理页的「测速」一段 ——
 export function mountSpeed(box, { getAI, put, saved, padSource }) {
-  box.innerHTML = `<p class="dk-sub muted">同一个一问一答的回合，把说明加长（4～160 KB，用组件手册垫）、对话拉长（2～30 轮），各调一次 Opus 5.5 high。一次只调一个，跑的时候别离开这一页。结果存进学习台，开发那边直接读。</p>
-    <div class="dk-sp-btns"><button type="button" class="btn btn-primary dk-sp-quick">快速：6 次（约 3～5 分钟）</button><button type="button" class="btn dk-sp-full">完整：15 次（约 8～12 分钟）</button><button type="button" class="btn dk-sp-stop" hidden>停</button></div>
+  box.innerHTML = `<p class="dk-sub muted">同一个一问一答的回合，把说明加长（4～500 KB，用组件手册垫）、对话拉长（2～30 轮），各调一次 Opus 5.5 high。一次只调一个，跑的时候别离开这一页。结果存进学习台，开发那边直接读。</p>
+    <div class="dk-sp-btns"><button type="button" class="btn btn-primary dk-sp-quick">快速：6 次（约 3～5 分钟）</button><button type="button" class="btn dk-sp-full">完整：15 次（约 8～12 分钟）</button><button type="button" class="btn dk-sp-big">量大说明：9 次</button><button type="button" class="btn dk-sp-tools">量工具：连着调 20 次</button><button type="button" class="btn dk-sp-stop" hidden>停</button></div>
     <p class="dk-sp-now muted"></p><div class="dk-sp-table"></div><p class="dk-sp-sum"></p>`;
   const q = (s) => box.querySelector(s);
   let running = false, stop = false, ctl = null;
@@ -96,14 +120,14 @@ export function mountSpeed(box, { getAI, put, saved, padSource }) {
     const ai = await getAI();
     if (!ai || ai.legacy) { q('.dk-sp-now').textContent = '这里调不了 Claude（要在 claude.ai 里打开学习台）。'; return; }
     running = true; stop = false;
-    q('.dk-sp-quick').disabled = q('.dk-sp-full').disabled = true; q('.dk-sp-stop').hidden = false;
+    q('.dk-sp-quick').disabled = q('.dk-sp-full').disabled = q('.dk-sp-big').disabled = q('.dk-sp-tools').disabled = true; q('.dk-sp-stop').hidden = false;
     const at = new Date().toISOString();
     const runId = at.replace(/[-:.TZ]/g, '').slice(0, 14);
     const list = shuffled(benchConds(kind), Date.now());
     const rows = [];
     const save = async (done) => {
       const prev = (saved?.()?.runs || []).filter((r) => r.run !== runId);
-      try { await put('meta', 'speed', { runs: [{ run: runId, at, kind, done, ua: navigator.userAgent.slice(0, 160), rows }, ...prev].slice(0, RUNS_KEPT) }); } catch { /* 存不进去也照样显示 */ }
+      try { await put('meta', 'speed', { ...(saved?.()?.tools ? { tools: saved().tools } : {}), runs: [{ run: runId, at, kind, done, ua: navigator.userAgent.slice(0, 160), rows }, ...prev].slice(0, RUNS_KEPT) }); } catch { /* 存不进去也照样显示 */ }
     };
     for (let i = 0; i < list.length && !stop; i++) {
       const c = list[i];
@@ -128,9 +152,30 @@ export function mountSpeed(box, { getAI, put, saved, padSource }) {
     await save(!stop);
     q('.dk-sp-now').textContent = stop ? '停了。跑完的几次存下来了。' : `跑完了，${rows.length} 次都存进了学习台。`;
     running = false;
-    q('.dk-sp-quick').disabled = q('.dk-sp-full').disabled = false; q('.dk-sp-stop').hidden = true;
+    q('.dk-sp-quick').disabled = q('.dk-sp-full').disabled = q('.dk-sp-big').disabled = q('.dk-sp-tools').disabled = false; q('.dk-sp-stop').hidden = true;
+  }
+  // 一次调用连着调 echo：平台最多让它调几次、每次多几秒；结果写 meta/speed 的 tools
+  async function runTools() {
+    if (running) return;
+    const ai = await getAI();
+    if (!ai || ai.legacy || !ai.tools) { q('.dk-sp-now').textContent = '这里调不了带工具的 Claude（要在 claude.ai 里打开学习台）。'; return; }
+    running = true;
+    const log = [];
+    const t0 = performance.now();
+    const tick = setInterval(() => { q('.dk-sp-now').textContent = `连着调工具：已经调了 ${log.length} 次 · ${sec(performance.now() - t0)}`; }, 250);
+    let res = null, error = '';
+    ctl = new AbortController();
+    try { res = await ai.call([{ role: 'user', content: toolBenchPrompt(20) }], { model: SPEED_MODEL, effort: 'high', modelTier: 'complex', cache: false, signal: ctl.signal, tools: [echoTool(log)] }); }
+    catch (e) { error = e?.code || String(e?.message || e).slice(0, 80); }
+    finally { clearInterval(tick); }
+    const sum = { ...toolBenchSummary(log, { t0, end: performance.now() }), model: res?.modelApplied || res?.modelTierApplied || '', text: String(res?.text || '').slice(0, 200), error, at: new Date().toISOString() };
+    try { await put('meta', 'speed', { ...(saved?.() || {}), tools: sum }); } catch { /* 存不进去也照样显示 */ }
+    q('.dk-sp-now').textContent = `连着调工具：${sum.calls} 次，相邻两次平均隔 ${sec(sum.gap)}，整次 ${sec(sum.total)}${error ? `；停在：${error}` : ''}。存进学习台了。`;
+    running = false;
   }
   q('.dk-sp-quick').addEventListener('click', () => run('quick'));
   q('.dk-sp-full').addEventListener('click', () => run('full'));
+  q('.dk-sp-big').addEventListener('click', () => run('big'));
+  q('.dk-sp-tools').addEventListener('click', () => runTools());
   q('.dk-sp-stop').addEventListener('click', () => { stop = true; ctl?.abort(); });
 }

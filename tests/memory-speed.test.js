@@ -44,3 +44,29 @@ test('汇总：只算 Opus 5.5 回的，按说明长短、对话长短分', () =
   assert.deepEqual(s.byTurns.map((g) => [g.turns, g.first]), [[2, 7000], [30, 11000]]);
   assert.match(summaryText(s), /4 KB 5\.0 秒.*160 KB 10\.0 秒/);
 });
+
+// 第十四轮：量大说明（160 / 300 / 500 KB）和一次调用里能连着调几次工具
+import { echoTool, toolBenchPrompt, toolBenchSummary, ECHO_KB } from '../kit/src/memory/speed.js';
+test('量大说明：160 / 300 / 500 KB 各三次', () => {
+  const c = benchConds('big');
+  assert.equal(c.length, 9);
+  assert.deepEqual(new Set(c.map((x) => x.kb)), new Set([160, 300, 500]));
+  const m = benchMessages({ kb: 500, turns: 2 }, SRC);
+  const kb = inputBytes(m) / 1024;
+  assert.ok(kb >= 499 && kb < 508, `500 KB 拼出来 ${kb.toFixed(1)} KB`);
+});
+test('量工具：假工具每次回 30 KiB、记下每一次的时间；汇总出次数和间隔', async () => {
+  const log = [];
+  const t = echoTool(log, () => 1000 + log.length * 500);
+  assert.equal(t.name, 'echo');
+  const out = await t.execute({ n: 1 });
+  assert.ok(new TextEncoder().encode(out).length >= ECHO_KB * 1024);
+  await t.execute({ n: 2 });
+  assert.equal(log.length, 2);
+  const s = toolBenchSummary(log, { t0: 0, end: 4000 });
+  assert.equal(s.calls, 2);
+  assert.equal(s.total, 4000);
+  assert.equal(s.gap, 500);
+  assert.match(toolBenchPrompt(20), /20/);
+  assert.ok(!/[他她]/.test(toolBenchPrompt(20)));
+});
