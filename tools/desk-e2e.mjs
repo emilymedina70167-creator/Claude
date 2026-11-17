@@ -1199,6 +1199,36 @@ const SUITES = {
     return t;
   },
 
+  // 第十四轮：项目指令（我写的，每一轮原样给项目 Claude）、笔记本（它写的，我看改退回）、「笔记」页（它标 show 的能作答）
+  async project(browser) {
+    const t = await seeded(browser);
+    await t.open('manage');
+    await t.page.waitForSelector('.dk-instr .dk-instr-text', { timeout: 15000 });
+    await t.page.fill('.dk-instr .dk-instr-text', '老师把内容讲透，我来学。');
+    await t.page.click('.dk-instr .dk-instr-save');
+    await t.waitFor(async () => (await t.db())['meta/instructions']?.text === '老师把内容讲透，我来学。', { what: '项目指令存进去' });
+    await t.open('manage');
+    await t.page.waitForSelector('.dk-instr .dk-instr-text', { timeout: 15000 });
+    check(await t.page.inputValue('.dk-instr .dk-instr-text') === '老师把内容讲透，我来学。', '刷新以后项目指令不在了');
+    // 它建的一个给我看的页面（show），里面有一道题
+    const md = '# 情态动词一页\n\n```quiz\nq: may 后面接什么？\n- [x] 动词原形\n- [ ] 过去式\n```';
+    await plant(t, { 'notebook/bm90ZS5tZA': { path: 'note.md', text: md, show: true, pin: false, v: 1, at: Date.now(), by: 'head', history: [] } });
+    await t.open('notes');
+    await t.page.waitForSelector('.dk-notespage a.dk-row', { timeout: 15000 });
+    await t.page.click('.dk-notespage a.dk-row');
+    await t.page.waitForSelector('.dk-note-body .q-opt', { timeout: 15000 });
+    await t.page.click('.dk-note-body .q-opt:has-text("动词原形")');
+    await t.waitFor(async () => (await t.docs('evidence')).some((e) => e.session === 'note'), { timeout: 15000, what: '「笔记」页的作答记成证据（session: note）' });
+    // 管理 → 笔记本：看得到它、能改
+    await t.open('manage');
+    await t.page.waitForSelector('.dk-notebook .dk-nb-row', { timeout: 15000 });
+    await t.page.click('.dk-notebook .dk-nb-row');
+    await t.page.fill('.dk-notebook .dk-nb-text', '我改过了');
+    await t.page.click('.dk-notebook .dk-nb-save');
+    await t.waitFor(async () => { const d = (await t.db())['notebook/bm90ZS5tZA']; return d?.text === '我改过了' && d.by === 'me' && d.history?.[0]?.text === md; }, { what: '管理页里改了笔记、旧的一版留着' });
+    return t;
+  },
+
   // 被迭代掉的几种课（舞台、一问一答、实时黑板、自学单元，第十四轮搬进 archive/）：以前上过的点进去只出文字，不报错
   async oldclass(browser) {
     const t = await seeded(browser);

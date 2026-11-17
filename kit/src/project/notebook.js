@@ -34,7 +34,7 @@ const countOf = (hay, needle) => { let n = 0, i = 0; while (needle && (i = hay.i
 
 /**
  * 对一个文件做一次操作。doc：现在的样子（没有就是 null）。返回 { doc, error?, moved? }；有 error 时 doc 是原样。
- * kind：create / str_replace / insert / delete / rename / set / restore
+ * kind：create / write / str_replace / insert / delete / rename / set / restore
  */
 export function applyNoteOp(doc, op, { at = Date.now(), by = '' } = {}) {
   const path = notePath(op?.path);
@@ -52,6 +52,10 @@ export function applyNoteOp(doc, op, { at = Date.now(), by = '' } = {}) {
       if (n > 1) return fail(`${path} 里要换的那一段出现了 ${n} 次：多写几个字让它只出现一次`);
       return { doc: withText(doc, String(doc.text).replace(String(op.old), () => String(op.new ?? '')), { at, by }) };
     }
+    case 'write':
+      // 整篇换掉（学生在管理页里改的时候用）；没有就新建
+      if (!live) return applyNoteOp(doc, { ...op, kind: 'create' }, { at, by });
+      return { doc: withText(doc, String(op.text ?? ''), { at, by }) };
     case 'insert': {
       if (!live) return fail(`没有 ${path}`);
       const lines = String(doc.text ?? '').split('\n');

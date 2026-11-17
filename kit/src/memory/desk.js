@@ -57,6 +57,9 @@ import { forecastBoard } from '../forecast/forecast.js';
 import { headSystem } from '../head/context.js';
 import { createHead } from '../head/headdesk.js';
 import { createChatPage } from '../head/chatview.js';
+import { createProjectView } from '../project/notebookview.js';
+import { createNotebook } from '../project/notebookdesk.js';
+import { CHARTER } from '../class/charter.js';
 import { PART_PRIORS } from '../forecast/priors.js';
 import { DEFAULT_TARGET, targetOf, examDateOf, goalOf, needsDefault, schoolLine } from '../exam/target.js';
 import { needsSkills, skillsPrompt, parseSkills, skillSummary, pointCatalog, lessonLines, SKILLS_VERSION } from './skills.js';
@@ -120,7 +123,7 @@ const nameIn = (get) => (coll, id) => { const d = (get()?.[coll] || []).find((x)
 const todayLabel = (d = new Date()) => `${d.getMonth() + 1}月${d.getDate()}日 星期${'日一二三四五六'[d.getDay()]}`;
 
 // 首页以外的页面（pages.js），换页不刷新
-const PAGES = { chat: '班主任', map: '课程地图', books: '教材', exam: '考情', weak: '弱点表', errors: '错题本', classes: '以前的课', stats: '统计' };
+const PAGES = { chat: '班主任', notes: '笔记', map: '课程地图', books: '教材', exam: '考情', weak: '弱点表', errors: '错题本', classes: '以前的课', stats: '统计' };
 // 进一节课（整页刷新）之前：开着的面板或者主角卡放大铺满，不像突然换了一页（feel.js 的 zoomInto）
 const goto = (hash) => {
   const go = () => { location.hash = hash; location.reload(); };
@@ -163,6 +166,7 @@ export async function renderDesk(root, meta) {
     <div class="dk-bookpage" hidden></div>
     <div class="dk-exampage" hidden></div>
     <div class="dk-chatpage" hidden></div>
+    <div class="dk-notespage" hidden></div>
     <div class="dk-home">
     <div class="dk-examinbox" hidden aria-live="polite"></div>
     <div class="dk-col">
@@ -187,6 +191,8 @@ export async function renderDesk(root, meta) {
     <div class="dk-manage" hidden>
     <section class="dk-card dk-look"><h2 class="dk-h">样子</h2><p class="dk-sub muted">紫藤：学习台和课堂一起，跟着 iPad 的白天晚上换，也可以固定一种。这台设备记着。</p><div class="dk-body"></div></section>
     <section class="dk-card dk-exam"><h2 class="dk-h">考试</h2><p class="dk-sub muted">考哪个学校哪个专业、目标多少分、哪天考。410 分的进度、距考研都照这里算。</p><div class="dk-body"></div></section>
+    <section class="dk-card dk-instr"><h2 class="dk-h">项目指令</h2><div class="dk-body"></div></section>
+    <section class="dk-card dk-notebook"><h2 class="dk-h">笔记本</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-summary"><h2 class="dk-h">记忆摘要</h2><div class="dk-body"></div></section>
     <section class="dk-card dk-recent"><h2 class="dk-h">最近记下的</h2><p class="dk-sub muted">课堂里的 Claude 和页面直接写进记忆的，不对就撤销（7 天内）。</p><div class="dk-pdone"></div></section>
     <section class="dk-card dk-mine" hidden><h2 class="dk-h">我改记忆</h2><div class="dk-body"></div></section>
@@ -225,6 +231,7 @@ export async function renderDesk(root, meta) {
   let saidDesk = null; // 话的账（saiddesk.js），首页那一份
   let sumDesk = null; // 记忆摘要（summarydesk.js），首页那一份
   let sumView = null; // 「管理 → 记忆摘要」的画面
+  let projView = null; // 第十四轮：项目指令、笔记本、「笔记」页
   const loaded = new Set();
   const failed = new Set();
   let ledger = null;
@@ -365,6 +372,8 @@ export async function renderDesk(root, meta) {
       if (c === 'sessions') { fixReports(); fixSkills(); fixDebriefs(); setTimeout(fixHolds, 500); backTick(); if (loaded.has('drills') && loaded.has('errors')) fixDrills(); }
       if (c === 'drills' && loaded.has('sessions')) fixDrills();
       if (c === 'summary') { sumView?.paint(); backTick(); if (!$('.dk-manage').hidden) paintMine(); }
+      // 笔记本变了（课上、班主任、课后那一轮写的）：管理页和「笔记」页开着就重画
+      if (c === 'notebook') { if (!$('.dk-manage').hidden) projView?.paintManage(); if (!$('.dk-notespage').hidden) projView?.paintPage(decodeURIComponent(String(location.hash || '').slice(1))); }
       if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
       if (['drills', 'evidence'].includes(c)) setTimeout(fixHolds, 500);
       if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) { fixReports(); backTick(); } if (lastRes) paintWeek(toDate(Date.now())); }
@@ -462,6 +471,9 @@ export async function renderDesk(root, meta) {
   }
   const head = createHead({ db, getData: () => data, ops, ai: deskAI, said: saidDesk, summary: sumDesk, system: headCtx });
   const chatPage = createChatPage($('.dk-chatpage'), { head });
+  // 第十四轮：项目指令、笔记本、「笔记」页（project/notebookview.js）
+  const notebook = createNotebook({ db });
+  projView = createProjectView({ db, store, getData: () => data, notebook, charter: CHARTER, $ });
   // 后台一件一件做：先过账（一节一节，新的课先），都过完了才轮到课后的助手（aidedesk）。这次打开首页每节只试一次
   const saidTried = new Set();
   const sumTried = new Set();
@@ -1392,7 +1404,7 @@ export async function renderDesk(root, meta) {
       // 考试的资料不订阅（不进记忆库），导出时现读一次
       const exam = Object.fromEntries(await Promise.all(EXAM_BACKUP.map(async (c) => [c, await db.collection(c).get().then((x) => x.docs.map((d) => ({ id: d.id, ...d.data() })), () => [])])));
       const aide = Object.fromEntries(await Promise.all(AIDE_BACKUP.map(async (c) => [c, await db.collection(c).get().then((x) => x.docs.map((d) => ({ id: d.id, ...d.data() })), () => [])])));
-      const file = backupFile({ memory: data, packs, sessions, books, exam, aide, evidence, boards, kit: VERSION, today });
+      const file = backupFile({ memory: data, packs, sessions, books, exam, aide, instructions: projView.instructions(), evidence, boards, kit: VERSION, today });
       const blob = new Blob([JSON.stringify(file, null, 1)], { type: 'application/json' });
       await dl.save({ filename: backupName(today), data: blob });
       note.textContent = `导出了 ${file.docs.length} 条（${mb(blob.size)}）。`;
@@ -1804,11 +1816,14 @@ export async function renderDesk(root, meta) {
     const books = page === 'books';
     const exam = page === 'exam';
     const chat = page === 'chat';
+    const notes = page === 'notes';
     $('.dk-home').hidden = !home;
     $('.dk-manage').hidden = !manage;
     if (manage) sumView?.paint();
     if (manage) examCard.paint();
-    $('.dk-pages').hidden = home || books || manage || exam || chat;
+    if (manage) projView.paintManage();
+    $('.dk-pages').hidden = home || books || manage || exam || chat || notes;
+    $('.dk-notespage').hidden = !notes;
     $('.dk-bookpage').hidden = !books;
     $('.dk-exampage').hidden = !exam;
     $('.dk-chatpage').hidden = !chat;
@@ -1816,10 +1831,11 @@ export async function renderDesk(root, meta) {
     if (books) booksView.show(h);
     else if (exam) examPage.show();
     else if (chat) chatPage.show(h);
+    else if (notes) projView.paintPage(h);
     else if (!home) pagesView.show(h);
     syncNav();
     const at = Math.max(0, ORDER.indexOf(home ? '' : page));
-    if (lastAt >= 0 && at !== lastAt) pageIn(home ? $('.dk-home') : manage ? $('.dk-manage') : books ? $('.dk-bookpage') : exam ? $('.dk-exampage') : chat ? $('.dk-chatpage') : $('.dk-pages'), Math.sign(at - lastAt));
+    if (lastAt >= 0 && at !== lastAt) pageIn(home ? $('.dk-home') : manage ? $('.dk-manage') : books ? $('.dk-bookpage') : exam ? $('.dk-exampage') : chat ? $('.dk-chatpage') : notes ? $('.dk-notespage') : $('.dk-pages'), Math.sign(at - lastAt));
     lastAt = at;
   }
   window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });

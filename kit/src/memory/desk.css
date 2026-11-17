@@ -1048,3 +1048,11 @@ html.fl-vt-circle::view-transition-old(root), html.fl-vt-circle::view-transition
 .sm-notes ul { list-style: none; margin: 0; padding: 0; }
 .sm-notes li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 0.5px solid rgb(var(--chalk-rgb) / 0.1); line-height: 1.5; }
 .sm-notes .btn { min-height: 44px; min-width: 44px; flex: none; }
+
+/* 第十四轮：项目指令、笔记本、「笔记」页、旧课的文字（project/notebookview.js、memory/oldview.js） */
+.dk-pre, .dk-oldclass-text { white-space: pre-wrap; word-break: break-word; font: 15px/1.6 var(--sans); color: var(--chalk); margin: 8px 0; }
+.dk-nb-row { width: 100%; background: none; border: 0; border-bottom: 1px solid rgb(var(--chalk-rgb) / 0.08); text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.dk-nb-row.is-open { background: rgb(var(--chalk-rgb) / 0.05); }
+.dk-oldclass-bar { display: flex; align-items: center; gap: 12px; padding: 8px 16px; }
+.dk-oldclass { padding: 0 16px 40px; }
+.dk-note-body { padding: 0 16px 40px; }

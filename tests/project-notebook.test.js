@@ -121,3 +121,10 @@ test('引号核：找得到的不报，找不到的列出来（只记不拦）',
   assert.deepEqual(quoteNotes('学生说「换一个高效点的测验」', '……换一个高效点的测验……'), []);
   assert.deepEqual(quoteNotes('学生说「以后每次都要用表格讲」', '别的话'), ['以后每次都要用表格讲']);
 });
+
+test('write：整篇换掉（管理页里我改的时候用），版本照留；没有就新建', () => {
+  const doc = { path: 'a.md', text: '旧', v: 1, history: [] };
+  const w = applyNoteOp(doc, { kind: 'write', path: 'a.md', text: '新' }, by).doc;
+  assert.deepEqual([w.text, w.v, w.history[0].text], ['新', 2, '旧']);
+  assert.equal(applyNoteOp(null, { kind: 'write', path: 'b.md', text: 'x' }, by).doc.text, 'x');
+});
