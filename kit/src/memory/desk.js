@@ -58,6 +58,7 @@ import { catalogText, examFactsOf } from '../project/catalog.js';
 import { toolsDoc } from '../project/tools.js';
 import { createNotebook } from '../project/notebookdesk.js';
 import { todayRows, packForBlock, coachPack } from '../project/today.js';
+import { factsDoc } from '../project/facts.js';
 import { latency } from '../class/ext.js';
 import { renderCheck } from './problemrender.js';
 import { createAfter } from '../project/afterdesk.js';
@@ -413,6 +414,7 @@ export async function renderDesk(root, meta) {
     for (const c of failed) res.problems.unshift({ coll: c, id: '', msg: `读不到 ${c}（${COLLECTIONS[c].label}），这一次的自检不全` });
     paint(res, today);
     writeBriefs(today);
+    writeFacts(today);
     if (!failed.size) { flushOpen(); proposeMastery(); runHealth(today); backTick(); syncBars(); }
     const rec = memcheckRecord(res, { kit: VERSION, today });
     const json = JSON.stringify(rec);
@@ -619,6 +621,16 @@ export async function renderDesk(root, meta) {
 
   // 给对话里的 Claude 的开场简报（views.js 的 deskBrief）：每科一份，内容变了才写
   const lastBrief = {};
+  // 页面能算的事实（project/facts.js）和「学习台里有什么」写进 meta/facts、meta/catalog：外部主 Claude 要就读，变了才写
+  let lastFacts = '', lastCatalog = '';
+  function writeFacts(today) {
+    if (failed.size) return;
+    const f = factsDoc(data, today, { health: (healthDoc?.notes || []).length });
+    const fk = JSON.stringify(f);
+    if (fk !== lastFacts) { lastFacts = fk; put('meta', 'facts', { ...f, at: Date.now() }).catch(() => { lastFacts = ''; }); }
+    const c = catalogText({ data, books: { books: booksView.books() }, exam: examFacts(), chats: chatCount, today });
+    if (c !== lastCatalog) { lastCatalog = c; put('meta', 'catalog', { text: c, at: Date.now() }).catch(() => { lastCatalog = ''; }); }
+  }
   function writeBriefs(today) {
     if (failed.size) return;
     for (const k of SPACE_KEYS) {

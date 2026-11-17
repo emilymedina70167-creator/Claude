@@ -1042,6 +1042,10 @@ const SUITES = {
     await plant(t, { 'meta/today': { date: today, items: [{ kind: 'coach', block: 'L2.2.2', why: '到期了', focus: '把 AB 写成 BA' }] } });
     await t.open();
     await t.waitFor(() => t.page.$('.dk-crow[data-ckind="coach"]'), { timeout: 15000, what: '首页出现主讲排的练习那一行' });
+    // 页面算的事实、学习台里有什么：首页写好给外部读
+    const facts = await t.waitFor(async () => (await t.db())['meta/facts'], { what: '首页写 meta/facts' });
+    check(facts.today === today && facts.spaces?.math, `meta/facts 不对：${JSON.stringify(facts).slice(0, 200)}`);
+    check(/meta\/today/.test((await t.db())['meta/catalog']?.text || ''), 'meta/catalog 里没有「学习台里有什么」');
     await t.page.click('.dk-crow[data-ckind="coach"]');
     const sid = await t.inClass();
     const pk = (await t.db())[`sessions/${sid}/pack/main`];
