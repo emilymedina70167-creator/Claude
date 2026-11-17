@@ -296,9 +296,9 @@ export async function renderStageClass(root, meta = {}, desk) {
     const report = repObj ? reportText(repObj) : '（这一次页面没算出课后报告：整理单按这节课的对话写，basis 写 S 开头的那一问的编号。）';
     const sp = desk.block ? spaceOfId(desk.block) : desk.space;
     // 有记忆摘要时（第十三轮）：和黑板课下课一样，不把失误归纳成守则、整理目录不列旧几类（memo.js 的 closingExtras）
-    const summary = !!desk.summary?.on();
-    const ex = desk.mem ? closingExtras(desk.mem, sp, sid, { summary }) : { slips: '', tidy: null };
-    const closing = closingPrompt({ summary, report, review: desk.review, opening: desk.opening, slips: ex.slips, tidy: ex.tidy, recheck: desk.recheck?.[sp] || '' })
+    const sumOn = !!desk.summary?.on();
+    const ex = desk.mem ? closingExtras(desk.mem, sp, sid, { summary: sumOn }) : { slips: '', tidy: null };
+    const closing = closingPrompt({ summary: sumOn, report, review: desk.review, opening: desk.opening, slips: ex.slips, tidy: ex.tidy, recheck: desk.recheck?.[sp] || '' })
       + '\n\n（舞台课：小结写成几行字，不写镜头指令；整理单照旧写在 ````board memo 块里。）';
     const input = messages(closing);
     const t0 = performance.now();

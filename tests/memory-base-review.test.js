@@ -41,7 +41,7 @@ test('closingExtras：黑板课和舞台课下课共用；有摘要时不带没�
     assert.doesNotMatch(src, /slipsToFold\(/, `${f} 不再自己拼没归纳的失误`);
   }
   // 舞台课下课也告诉 closingPrompt 有没有摘要
-  assert.match(readFileSync(new URL('../kit/src/stage/classroom.js', import.meta.url), 'utf8'), /closingPrompt\(\{\s*summary\b/);
+  assert.match(readFileSync(new URL('../kit/src/stage/classroom.js', import.meta.url), 'utf8'), /closingPrompt\(\{\s*summary: sumOn\b/);
 });
 
 test('课堂查记忆的工具说明：有摘要时先说 summary，旧五类写明不是规程；没有摘要逐字照旧', () => {
