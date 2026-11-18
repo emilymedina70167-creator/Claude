@@ -32,7 +32,8 @@ export function fingerprint(doc) {
  * data：{ 集合名: [{ id, ...字段 }] }（缺的集合当空的）；today：YYYY-MM-DD；ledger：上次的 meta/ledger（没有就是 null）。
  * 返回 { counts, problems: [{ coll, id, msg, soft? }], due（复现组到期，按先后）, ledger（新的，要写回）}
  */
-export function checkMemory(data = {}, { today, ledger = null } = {}) {
+// deleted：meta/deleted（删课记下的编号，dr-memcheck 1）：这些「被删掉了」是学生认可的，不报
+export function checkMemory(data = {}, { today, ledger = null, deleted = null } = {}) {
   const problems = [];
   const add = (coll, id, msg, soft = false) => problems.push({ coll, id: String(id ?? ''), msg, ...(soft ? { soft: true } : {}) });
   const docs = {};
@@ -106,7 +107,8 @@ export function checkMemory(data = {}, { today, ledger = null } = {}) {
   // —— 指纹：历史类有没有被改、状态类改了有没有记 log ——
   const next = { hist: {}, state: {}, flags: [] };
   const prev = ledger && typeof ledger === 'object' ? ledger : null;
-  const flags = (prev?.flags || []).filter((f) => f && f.date && isDate(f.date) && daysBetween(f.date, today) < FLAG_DAYS);
+  const gone = new Set(Object.keys(deleted?.keys || {}));
+  const flags = (prev?.flags || []).filter((f) => f && f.date && isDate(f.date) && daysBetween(f.date, today) < FLAG_DAYS && !gone.has(f.key));
   const flag = (key, msg) => { if (!flags.some((f) => f.key === key && f.msg === msg)) flags.push({ key, msg, date: today }); };
   for (const c of LEDGER_HISTORY) {
     for (const d of docs[c]) {
@@ -118,7 +120,7 @@ export function checkMemory(data = {}, { today, ledger = null } = {}) {
     }
   }
   for (const key of Object.keys(prev?.hist || {})) {
-    if (!(key in next.hist)) flag(key, `${key} 被删掉了：${COLLECTIONS[key.split('/')[0]]?.label || ''}只增不改，不删`);
+    if (!(key in next.hist) && !gone.has(key)) flag(key, `${key} 被删掉了：${COLLECTIONS[key.split('/')[0]]?.label || ''}只增不改，不删`);
   }
   for (const c of MEMORY_COLLECTIONS) {
     const tracked = COLLECTIONS[c].tracked;
@@ -140,7 +142,8 @@ export function checkMemory(data = {}, { today, ledger = null } = {}) {
     }
   }
   next.flags = flags;
-  for (const f of flags) add(f.key.split('/')[0], f.key.split('/').slice(1).join('/'), `${f.msg}（${f.date} 发现）`);
+  // 「只增不改」的提醒留 7 天，算软的（dr-memcheck 4：ok 只在硬错误时为 false）
+  for (const f of flags) add(f.key.split('/')[0], f.key.split('/').slice(1).join('/'), `${f.msg}（${f.date} 发现）`, true);
 
   const counts = Object.fromEntries(MEMORY_COLLECTIONS.map((c) => [c, docs[c].length]));
   return { counts, problems, due: dueList(docs.reviews, today), ledger: next };

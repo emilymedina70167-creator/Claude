@@ -80,6 +80,8 @@ import { createBooksView } from '../books/bookview.js';
 import { createPlanner } from '../books/planview.js';
 import { createDevAI } from '../books/devmock.js';
 import { startJobs } from '../project/jobdesk.js';
+import { SPACES as TRAIL_SPACES, cursorId, sinceId, sinceAnalysis, cursorLine, snapshotLine } from '../project/trail.js';
+import { deskState } from './state.js';
 import { jobCounts } from '../project/jobs.js';
 import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
@@ -408,8 +410,10 @@ export async function renderDesk(root, meta) {
   async function run() {
     if (loaded.size < MEMORY_COLLECTIONS.length) return;
     await ledgerReady;
+    await deletedReady;
     const today = toDate(Date.now());
-    const res = checkMemory(data, { today, ledger });
+    const res = checkMemory(data, { today, ledger, deleted });
+    trailSoon();
     // 有哪一类没读到：这一次不更新指纹（不然没读到的条目会被当成删掉了）
     for (const c of failed) res.problems.unshift({ coll: c, id: '', msg: `读不到 ${c}（${COLLECTIONS[c].label}），这一次的自检不全` });
     paint(res, today);
@@ -459,6 +463,29 @@ export async function renderDesk(root, meta) {
   // 第十五轮：课后那一轮、第一次整理搬进了 archive/（外部主 Claude 是唯一写笔记本、下判断的）
   // 今天做什么（第十四轮）：项目 Claude 用 write 写 meta/today，首页照着画
   let todayMeta = null;
+  // dr-learning-trail：讲过的记录（coverage）、外部的分析游标（meta/cursor-{科}）；删课记下的编号（meta/deleted，自检认它）
+  let coverage = [];
+  const cursors = {};
+  let deleted = null;
+  db.collection('coverage').onSnapshot((x) => { coverage = x.docs.map((d) => ({ ...d.data(), id: d.data()?.id || d.id })); trailSoon(); }, () => {});
+  // 回调里再推迟一下：替身数据库会同步回调，那时首页后面的变量（lastBrief……）还没定义
+  for (const k of TRAIL_SPACES) db.doc(`meta/${cursorId(k)}`).onSnapshot((x) => { cursors[k] = x.exists ? x.data() : null; trailSoon(); setTimeout(() => { lastBrief[k] = ''; writeBriefs(toDate(Date.now())); }, 0); }, () => {});
+  const deletedReady = db.doc('meta/deleted').get().then((x) => { deleted = x.exists ? x.data() : null; }).catch(() => {});
+  // meta/since-analysis-{科}、meta/state-{科}：证据、讲过、掌握一变就重算，内容变了才写（最多 3 秒一次）
+  const lastTrail = {};
+  let trailTimer = 0;
+  function trailSoon() { clearTimeout(trailTimer); trailTimer = setTimeout(writeTrail, 3000); }
+  function writeTrail() {
+    if (failed.size || !['evidence', 'sessions', 'mastery'].every((c) => loaded.has(c))) return;
+    const today = toDate(Date.now());
+    for (const k of TRAIL_SPACES) {
+      const since = sinceAnalysis({ evidence: data.evidence, sessions: data.sessions, cursor: cursors[k], space: k });
+      const st = deskState({ mem: data, coverage, space: k, today });
+      const sk = `${since.from}|${since.n}|${since.text.length}`;
+      if (lastTrail[`s-${k}`] !== sk) { lastTrail[`s-${k}`] = sk; put('meta', sinceId(k), { ...since, at: Date.now() }).catch(() => { lastTrail[`s-${k}`] = ''; }); }
+      if (lastTrail[`t-${k}`] !== st.text) { lastTrail[`t-${k}`] = st.text; put('meta', `state-${k}`, { space: k, text: st.text, rows: st.rows, conflicts: st.conflicts, today, at: Date.now() }).catch(() => { lastTrail[`t-${k}`] = ''; }); }
+    }
+  }
   db.doc('meta/today').onSnapshot((x) => { todayMeta = x.exists ? x.data() : null; if (loaded.has('sessions')) { const t = toDate(Date.now()); paintDrill(t); paintRows(t); } }, () => {});
   // —— 守卫（guard.js、memops.js）：写进记忆的每一条过六道检查。管理页「自检」里：各种结论几条、先暂存的（放行 / 不要）、最近挂提醒和拒掉的 ——
   let guardDoc = null;
@@ -609,7 +636,10 @@ export async function renderDesk(root, meta) {
   function writeBriefs(today) {
     if (failed.size) return;
     for (const k of SPACE_KEYS) {
-      const b = deskBrief(data, { space: k, today, kitUrl: KIT_URL, deskUrl: deskUrl(), pack: unusedMain(k), books: booksView.books() });
+      const b0 = deskBrief(data, { space: k, today, kitUrl: KIT_URL, deskUrl: deskUrl(), pack: unusedMain(k), books: booksView.books() });
+      // 最前面两行（dr-memcheck 3、dr-learning-trail T3）：现状快照是几天前写的、上次分析以后还有几条证据没分析
+      const n = sinceAnalysis({ evidence: data.evidence, sessions: data.sessions, cursor: cursors?.[k], space: k }).n;
+      const b = { ...b0, text: `${snapshotLine(data.notebook || [], today)}\n${cursorLine({ cursor: cursors?.[k], n, space: k })}\n\n${b0.text}` };
       if (lastBrief[k] === b.text) continue;
       lastBrief[k] = b.text;
       put('meta', briefId(k), { space: k, text: b.text, kit: VERSION, today, at: Date.now() }).catch(() => {});
@@ -809,6 +839,13 @@ export async function renderDesk(root, meta) {
     const plan = { ...plan0, docs: [...extra, ...plan0.docs] };
     const role = (c) => (COLLECTIONS[c]?.writers.includes('me') ? 'me' : 'page');
     try {
+      // dr-memcheck 1：删课是学生认可的操作，删掉的历史类编号记进 meta/deleted，自检认它，不再报「被删掉了」
+      if (plan.ledger.length) {
+        const keys = { ...(deleted?.keys || {}) };
+        for (const k of plan.ledger) keys[k] = { at: Date.now(), session: sid };
+        deleted = { ...(deleted || {}), keys };
+        await put('meta', 'deleted', { keys, at: Date.now() });
+      }
       if (ledger?.hist && (plan.ledger.length || plan.unlink.length)) {
         const hist = { ...ledger.hist };
         for (const k of plan.ledger) delete hist[k];

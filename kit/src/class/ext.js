@@ -41,7 +41,7 @@ export function parseCoach(head = '') {
  * 执行完一条 ext_in 当场写在它上面的 result（需求 R3：外部不用等学生动一下才知道画成了什么样）。
  * boardOps：这一轮每条指令执行的结果；retry：写错没显示的段（和原因）；notes：别的提醒；error：整条没执行成
  */
-export function inResult({ boardOps = [], retry = [], notes = [], error = '', shots = [], shotNote = '', at = Date.now() } = {}) {
+export function inResult({ boardOps = [], retry = [], notes = [], error = '', shots = [], shotNote = '', memo = [], at = Date.now() } = {}) {
   const ops = (boardOps || []).filter(Boolean).map((o) => ({
     op: o.op, ...(o.id ? { id: o.id } : {}), ...(o.target ? { target: o.target } : {}), ok: !!o.ok,
     ...(o.error ? { error: String(o.error).slice(0, 600) } : {}), ...(o.page ? { page: o.page } : {}),
@@ -51,7 +51,7 @@ export function inResult({ boardOps = [], retry = [], notes = [], error = '', sh
     at, ok: !error && !(retry || []).length && ops.every((o) => o.ok),
     summary: error ? `没执行成：${error}` : `执行了 ${done} 条指令${ops.length - done ? `，${ops.length - done} 条没执行` : ''}${(retry || []).length ? `，${retry.length} 段写错没显示` : ''}`,
     ops, ...(retry?.length ? { errors: retry.map(String) } : {}), ...(notes?.length ? { notes: notes.map(String) } : {}),
-    ...(error ? { error: String(error) } : {}), ...(shots?.length ? { shots } : {}), ...(shotNote ? { shotNote: String(shotNote) } : {}),
+    ...(error ? { error: String(error) } : {}), ...(shots?.length ? { shots } : {}), ...(shotNote ? { shotNote: String(shotNote) } : {}), ...(memo?.length ? { memo } : {}),
   };
 }
 
@@ -109,4 +109,25 @@ export function sinceDoc({ ins = [], outs = [], at = Date.now() } = {}) {
     shots: list.flatMap((o) => o.shots || []),
     text: list.map((o) => `[ext_out ${seqId(numOf(o))}]\n${strip(o.text) || '（只有截图）'}`).join('\n\n') || '外部上一条 ext_in 执行完以后，学生这边还没有新的事。',
   };
+}
+
+/**
+ * ext_in.said（dr-learning-trail T1）：以前是一个字符串；现在也收数组 [{ text, at, images }]（学生在 claude.ai 对话里说的每一句、贴的每张图）。
+ * 返回 [{ text, at（毫秒，没写是 null）, images: [asset 编号] }]，空的去掉
+ */
+export function saidItems(said) {
+  const list = Array.isArray(said) ? said : said == null ? [] : [said];
+  return list.map((x) => (typeof x === 'string' ? { text: x } : x && typeof x === 'object' ? x : null)).filter(Boolean)
+    .map((x) => ({ text: String(x.text ?? '').trim(), at: Number.isFinite(Number(x.at)) && Number(x.at) > 0 ? Number(x.at) : null, images: (Array.isArray(x.images) ? x.images : x.images ? [x.images] : []).map(String).filter(Boolean) }))
+    .filter((x) => x.text || x.images.length);
+}
+
+/** 这一轮 memo 每一行记成没有（T2）：runMemo 的结果 { pds, rejected, extra } → [{ line, ok, id, error }] */
+export function memoLines(r) {
+  if (!r) return [];
+  return [
+    ...(r.extra || []),
+    ...(r.pds || []).map((pd) => ({ line: String(pd.line || ''), ok: true, id: `${pd.coll}/${pd.target}`, ...(pd.status && pd.status !== 'done' ? { status: pd.status } : {}) })),
+    ...(r.rejected || []).map((x) => ({ line: String(x.line || ''), ok: false, error: String(x.error || '') })),
+  ];
 }

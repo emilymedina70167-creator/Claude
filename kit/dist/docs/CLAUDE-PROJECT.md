@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-18c**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-18d**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -452,7 +452,7 @@ explain: $x+y=2$，$A\mathbf x = 2\cdot(1, 2) = (2, 4)$，还在 $(1, 2)$ 这条
 
 - `text`：说的话 + `board` 块，写法见第四节（话写在板顶，块里是板的内容和指令）。
 - `after`：读过的最后一份 `ext_out` 的序号（页面拿它算来回时间）。
-- `said`（可选）：学生在对话里说的原话，页面记成学生说的话（证据 `src: say`）。
+- `said`（可选）：学生在对话里说的原话，页面记成学生说的话（证据 `src: say, via: "chat"`）。一个字符串，或者每一句一条 `[{ "text": "…", "at": 毫秒, "images": ["asset 编号"] }]`（`at` 照写进证据，图是外部用 `upload_asset` 传的）；都进课后报告。
 - `model`（可选）：照存进这一轮的记录，报告里看得到；板上不标。
 - 页面按序号执行，执行完在那一条上写 `done: { at }` 和 `got`（收到的时刻）；同一条只执行一次，刷新、开两个标签页都不重复。
 
@@ -464,10 +464,25 @@ explain: $x+y=2$，$A\mathbf x = 2\cdot(1, 2) = (2, 4)$，还在 $(1, 2)$ 这条
 
 **执行完当场回报**（不用等学生动一下）：
 
-- 页面执行完一条 `ext_in`，在那一条上写 `result` = `{ at, ok, summary, ops: [{ op, id, target, ok, error, page }], errors: [写错没显示的段和原因], notes: [别的提醒], shots: [asset 编号], shotNote }`。这一轮写了 `board snap` 时，页面先等这块板画好（字体载完、段的淡入和别的动画走完、舞台演完、板上 0.35 秒不再变，最多等 6 秒）再拍，整块板拍成一张长图（比 4800 像素还高才切，`shotNote` 写切成几张、各是哪一段；等满 6 秒还在变也写一句）；下一份 `ext_out` 也带同几张。
+- 页面执行完一条 `ext_in`，在那一条上写 `result` = `{ at, ok, summary, ops: [{ op, id, target, ok, error, page }], errors: [写错没显示的段和原因], notes: [别的提醒], memo: [{ line, ok, id, error }], shots: [asset 编号], shotNote }`。`memo` 是这一轮 `board memo` 块的每一行：写进去了的 `ok: true`、`id` 是写成的那一条（`errors/L2-60`、`sessions/{编号}.block`、`summary（新笔记）`），没写成的 `ok: false`、`error` 是为什么（读不懂、守卫拒了、超了条数）。这一轮写了 `board snap` 时，页面先等这块板画好（字体载完、段的淡入和别的动画走完、舞台演完、板上 0.35 秒不再变，最多等 6 秒）再拍，整块板拍成一张长图（比 4800 像素还高才切，`shotNote` 写切成几张、各是哪一段；等满 6 秒还在变也写一句）；下一份 `ext_out` 也带同几张。
 - `sessions/{编号}/meta/now` = `{ at, text, board }`：黑板现状，`board` 是结构化的（每块板、每段、组件 id、每张图能改的变量、标注、草稿、作答、舞台现状、预备板、助手、屏幕）。板一变就覆盖写（最多一秒一次；写 `ext_out` 的那一刻也跟着写一份）；学生没动也读得到。
 - `sessions/{编号}/meta/since` = `{ at, from（外部上一条执行完的 ext_in 的编号）, fromAt, outs: [序号], shots, text }`：那一条执行完以后写的全部 `ext_out` 按先后拼成一份，一次 get 读完；下一条 `ext_in` 执行完时从头攒。
 - 屏幕照这个页面真有的地方报（`visualViewport`）：分屏时写「横屏 860×734（分屏：这个页面只占屏幕的一部分，整个屏幕 1180×820）」，`meta/now.board.screen` 里是 `{ w, h, landscape, split, full }`。
+
+**分析游标和这一科没分析的证据**（证据一条都不丢、每一条都被分析过）：
+
+- `meta/cursor-{math|cs|en}` = `{ "at": 毫秒, "by": "ext", "note": "…" }`：外部写，分析到这一刻为止。
+- `meta/since-analysis-{科}` = `{ at, from, n, shown, more, text }`：页面写。游标以后这一科的全部证据（课堂、外部的课、复现课、练一练、页面里的老师和助手、补记、要记的），按先后一条一行（开头是证据编号），一次 get 读完；太长（200 KiB）放不下的照实写还有几条，挪了游标再读。
+- 开场简报 `meta/brief*` 最前面两行：笔记本「现状/总览.md」是几天前写的（超过 7 天写「该重写了」）、上次分析以后这一科还有几条证据没分析。
+- 和 `sessions/{编号}/meta/since`（一节外部的课里，上一条 `ext_in` 以后的 `ext_out`）是一套：一个按课，一个按科。
+
+**讲过和会了**：
+
+- 板上的段写 `block=L2.1.4`（课程地图的编号）就是这一段讲的块，不写是这节课的块；段画上了页面就记 `coverage/{编号}`（`#` 换成 `~`）= `{ id, kind: block | point, block, space, sessions, first, last, segs }`，有 `point=` 的另记一条知识点。
+- 掌握状态（`mastery`）页面只认核得上的：最近一条改 `state` 的 log 要写 `basis`，编号在证据里找得到；`基础题过` / `复现通过` 还要依据里有做对的作答。核不上的照存，`meta/state-{科}` 里写「依据核不上，不算」。
+- `meta/state-{科}` = `{ text, rows: [{ block, title, taught, mastery: { state, ok, why }, recent（最近 3 条作答）, lastSlip（最近一次失手）, nextReview }], conflicts: [{ kind, block, text }] }`：页面写，每块一行。`conflicts` 是记录之间对不上的，只报不改：`slipped`（掌握写着过了，之后同块做错了）、`maybeKnown`（写着未学 / 讲过，隔天的新题一次做对了）、`weakness`（弱点 L1 以上以后又有挂它的错题）、`review`（复现组判过，依据里没有一次做对的作答）、`untaught`（没讲过却写了掌握）、`unverified`（掌握的依据核不上）。
+
+**页面里的 Claude 说的话**也记成证据 `src: "helper"`（`role`：`helper` 外部叫来的助手、`coach` 板边助教、`teacher` 练习教练和复现课里页面里的老师；`text` 说的话，`did` 执行了哪些，`target` 哪一题），进 `since-analysis`。
 
 **整节课的设置**：`board set upload=on|off`——组件下面的「截图」入口（`answer` 的截图作答、写理由的框里的「截图」）。外部的课默认 `off`；一个组件单独写 `upload: on` / `upload: off` 盖过整节课的。之后画的段照新的设置，刷新以后照旧。
 
@@ -821,12 +836,16 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 - 复现结果由课堂里的 Claude 在下课整理单里判（`review id=… result=…`），练一练由页面判；开发那边手工修数据时照这个改：过了升一档（30 天那档过了还是 30），没过回到 1 天；`last` 改成这次的日期，`result` 写结果，`log` 里记 `tier`、`last`、`result` 各改成了什么、依据哪几条证据。
 - 今天哪些到期：看 `meta/memcheck` 的 `due`，或者自己按上面的公式算。
 
+### 删掉的课：`meta/deleted`（页面写，你读）
+
+学生用「删掉这节课」删课时，连带删掉的历史类（错题、观察、失误）编号记在 `meta/deleted.keys`（`{ "observations/ob-…": { at, session } }`），自检认它，不报「被删掉了」。
+
 ### 自检结果：`meta/memcheck`
 
 页面打开时、数据库一有变化就查一遍，写进 `collection: "meta"`，`doc_id: "memcheck"`：
 
 （同一个页面还写开场简报 `meta/brief`、`meta/brief-cs`、`meta/brief-en`，见下文「平时怎么用」。）
 
-- `ok`：有没有硬的错；`problems`：一条一行，比如 `weaknesses/W19：level 从「L1」改成了「L0」，log 里没记：补一条 { date, by, field: "level", from, to, basis }`、`errors/L2-07：错题档案只增不改，L2-07 的内容被改了……`。开头写着「[提醒]」的不算错（比如课程地图还空着时指向块的 id）。
+- `ok`：有没有硬的错；`problems`：一条一行，比如 `weaknesses/W19：level 从「L1」改成了「L0」，log 里没记：补一条 { date, by, field: "level", from, to, basis }`、`errors/L2-07：错题档案只增不改，L2-07 的内容被改了……`。开头写着「[提醒]」的不算错（比如课程地图还空着时指向块的 id；历史类被改了、被删了的提醒留 7 天，也算提醒）。log 的 `by` 只能是 `chat` / `class` / `page` / `me` / `lab` / `head` / `ext`。
 - `counts`：每一类有几条；`due`：复现组的到期日（`days` 是离今天几天，负数是过期了几天）；`today`：页面那边的日期；`kit`：组件库版本；`at`：查的时间。
 - 我没打开学习台，它就不会更新（看 `at`）。

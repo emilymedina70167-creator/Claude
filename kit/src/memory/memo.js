@@ -756,7 +756,8 @@ export function pendingRecord(change, { session = null, turn = null, by = 'class
   };
 }
 
-const logMeta = (pd, date, note) => ({ date, by: ['me', 'page', 'chat', 'lab', 'aide', 'head'].includes(pd.by) ? pd.by : 'class', basis: (pd.basis || []).filter(Boolean), note });
+// log 的 by 只能是 schema.js 的 ROLES：课堂助手（aide，第九轮，已收进 archive）写的是「事后写的」，记 lab（dr-memcheck 2）
+const logMeta = (pd, date, note) => ({ date, by: ['me', 'page', 'chat', 'lab', 'head', 'ext'].includes(pd.by) ? pd.by : pd.by === 'aide' ? 'lab' : 'class', basis: (pd.basis || []).filter(Boolean), note });
 
 /**
  * 执行一张改动单（直接写的那档马上执行；我确认才写的，我点「确认」时执行）。
