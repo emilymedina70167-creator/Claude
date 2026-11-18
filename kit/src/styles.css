@@ -2574,3 +2574,21 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .block-stagedrill .sd-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
 .block-stagedrill .sd-bar .btn { min-height: 44px; font: 15px var(--sans); }
 .block-stagedrill .sd-note { margin-top: 8px; min-height: 1.5em; color: rgb(var(--chalk-rgb) / 0.85); font: 15px/1.6 var(--sans); }
+
+/* widget：外部设计的交互（blocks/widget.js） */
+.block-widget .wg-body { display: flex; flex-direction: column; gap: 12px; }
+.block-widget .wg-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.block-widget .wg-btn { min-height: 44px; }
+.block-widget .wg-input { min-height: 44px; font-size: 16px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--field, rgb(var(--chalk-rgb) / 0.06)); box-shadow: var(--field-edge, none); color: var(--body); }
+.block-widget .wg-drag { display: flex; flex-direction: column; gap: 14px; }
+.block-widget .wg-slots, .block-widget .wg-tray { display: flex; flex-wrap: wrap; gap: 10px; min-height: 56px; }
+.block-widget .wg-tray { padding: 8px; border-radius: 12px; background: rgb(var(--chalk-rgb) / 0.04); }
+.block-widget .wg-slot { position: relative; display: flex; align-items: center; justify-content: center; min-width: 84px; min-height: 56px; padding: 4px; border-radius: 12px; border: 1.5px dashed rgb(var(--chalk-rgb) / 0.3); }
+.block-widget .wg-slot[data-label]::before { content: attr(data-label); position: absolute; top: -18px; left: 4px; font: 12px var(--sans); color: var(--muted); }
+.wg-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 64px; min-height: 48px; padding: 4px 14px; border-radius: 10px; background: var(--card-solid, rgb(var(--chalk-rgb) / 0.1)); box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); color: var(--body); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.wg-chip.is-picked { outline: 2px solid var(--yellow); }
+.wg-chip.is-lifted { opacity: 0.35; }
+.wg-ghost { position: fixed; left: 0; top: 0; z-index: 1000; pointer-events: none; box-shadow: 0 8px 24px rgb(0 0 0 / 0.25); }
+.block-widget .wg-say { font: 15px/1.5 var(--sans); color: var(--muted); }
+.block-widget .wg-say.is-ok { color: var(--green); }
+.block-widget .wg-say.is-bad { color: var(--red); }

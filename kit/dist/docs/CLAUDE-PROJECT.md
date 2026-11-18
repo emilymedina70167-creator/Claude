@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-18**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-18b**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -454,11 +454,78 @@ explain: $x+y=2$，$A\mathbf x = 2\cdot(1, 2) = (2, 4)$，还在 $(1, 2)$ 这条
 - `model`（可选）：照存进这一轮的记录，报告里看得到；板上不标。
 - 页面按序号执行，执行完在那一条上写 `done: { at }` 和 `got`（收到的时刻）；同一条只执行一次，刷新、开两个标签页都不重复。
 
-**只在外部的课里有用的三条指令**（board 块的第一行）：
+**只在外部的课里有用的指令**（board 块的第一行；下面三条，加上后面几节的 `queue`、`edit`、`claude`、`claude-off`、`set`）：
 
 - `board snap`：下一份 `ext_out` 带这块板的截图（`shots`：asset 编号，用读图的工具取）。不写不拍。
 - `board close`：这一轮画完就下课（不调用 Claude、不写小结）：页面写 `status: closed`、`closedBy: "ext"`，算课后报告 `sessions/{编号}/report/main`（里面 `ext: { n, median, p90 }` 是来回的毫秒数）。学生在页面上点「下课」也一样。
 - `board coach target=题的 id upto=…`：开这一题的板边助教（第六节）。不写就没有。
+
+**执行完当场回报**（不用等学生动一下）：
+
+- 页面执行完一条 `ext_in`，在那一条上写 `result` = `{ at, ok, summary, ops: [{ op, id, target, ok, error, page }], errors: [写错没显示的段和原因], notes: [别的提醒], shots: [asset 编号] }`。这一轮写了 `board snap` 时，`shots` 是执行完当场拍的这块板（下一份 `ext_out` 也带同几张）。
+- `sessions/{编号}/meta/now` = `{ at, text, board }`：黑板现状，`text` 和 `ext_out` 最后一段一样，`board` 是结构化的（每块板、每段、组件 id、每张图能改的变量、标注、草稿、作答、预备板、助手）。有变化就覆盖写，最多一秒一次；学生没动也读得到。
+
+**整节课的设置**：`board set upload=on|off`——组件下面的「截图」入口（`answer` 的截图作答、写理由的框里的「截图」）。外部的课默认 `off`；一个组件单独写 `upload: on` / `upload: off` 盖过整节课的。之后画的段照新的设置，刷新以后照旧。
+
+**一轮几块新板、预备板**：
+
+- 一轮里 `board new` 可以写几次，每次开一块新板，最后一块是当前板。
+- `board queue id=b5 title="…" after=…`：块里是那块板第一段的内容。先存着、不显示；`after=q-b4:right`（q-b4 答对）、`q-b4:done`（steps 揭开最后一步）、`q-b4:submit`（交了作答）、`button`（板上方出「下一块 →」，学生点）几个用 `|` 连着写，哪个先到就开。开的时候页面照 `board new` 画、翻过去，写进下一份 `ext_out`（`[页面] 预备板 b5 开了`）。没开的列在黑板现状「外部的课里页面记着的」。
+
+**指以前的板**：`mark`、`figure`、`replace`、`edit`、`hide` 的目标在以前的板上也执行；学生不在那块板上时，板上方出一条「主讲在第 N 块板上标了东西 →」，学生点了翻过去。
+
+**改字不丢作答**：`board edit id=b3`，块里写一处或几处
+
+```
+<<<
+原来的字
+===
+新的字
+>>>
+```
+
+旧字要在那一段里正好出现一次。只改那段的文字；改完以后原文一字没变的组件（按 `id:` 对）留着学生的作答、草稿、拖过的图。改到了的组件照 `replace` 重画。
+
+**预案**（`board react`，写法见第四节）：外部的课里除了 `right`、`done`，还收：
+
+- `wrong: …`：答错；`wrong match="x=3": …` 学生的答案里有这一段（不管空格、大小写、全角半角）才用这一条，`match="/正则/"` 照正则；同一题先找对得上 `match` 的，再用没写 `match` 的。
+- `misread "错法": …`（页面认出来的错法）、`giveup: …`（想不出来、看了答案）。
+- `stuck=90s: …`：那一题这么久没有作答（至少 10s）。
+- 每条只用一次；页面接了不调用，写进下一份 `ext_out`（`（预案当场接了：…）`）。
+
+**叫页面里的 Claude 来接：`board claude`**（Opus 5.5 high；平台回的不是它，那一次作废、不写）：
+
+````
+````board claude id=cl1 on=wrong target=q1 to=board turns=2
+see: target, board, evidence=last3
+can: say, mark
+<<<
+（写给它的话，任意长）
+>>>
+````
+````
+
+- 什么时候叫：不写 `on=` 就是执行这一轮时马上叫一次；`on=` 写学生在 `target` 那题上的事，几件用 `|` 连：`submit`（交了）、`wrong`（答错）、`right`（答对）、`giveup`（想不出来 / 看了答案）、`draft`（写着还没交，写的变了就算一次）、`say`（学生在输入框打了字，不用 `target`）；`stuck=90s`（那题这么久没动静）。
+- `see:` 给它看的（不写就是 `target`）：`target`（那道题在板上的原文和学生在上面的全部作答）、`board`（黑板现状）、`evidence=last3`（学生最近几次作答和动作）、`ext`（这节课外部写过的每一段）、`memory=集合/编号,集合/编号`（学习台里那几条，原样）、`books=条目范围`（告诉它用 `textbook_read` 取）。学生这一次的作答总是带着。
+- `can:` 它这一次能做的（不写就是 `say`）：`say`（说的话写在板顶）、`add`、`replace`、`hide`、`mark`、`figure`、`react`、`new`、`stage`、`widget`、`memo`、`note`。不在里面的指令页面不执行，写进 `ext_out` 的「没执行（越权）」；`pin`、`aims`、`close`、`claude` 这些它一律不能写。
+- `to=`：`board`（默认，照 `can` 执行到板上）、`ext`（不上板，全文只写进 `ext_out`）、`db:集合/文档`（全文存进那一条的 `text`，不上板，记一条 `journal`，`by: "ext-delegate"`）。
+- `turns=`：这一条最多被叫几次（`on=` 的默认 3，马上叫的默认 1，最多 20）；`until=right`（学生答对那题以后不再叫）/ `turns`（默认，次数用完）/ `me`（外部收回为止）。`board claude-off id=cl1` 收回一条，`board claude-off all` 全收。同一个 `id` 再写一次就换成新的那条（次数从 0 数）。
+- 它能用的工具和页面里的老师一样（`calc`、`board_read`、`get_answers`、`view_handwriting`、`textbook_read`、`component_doc`……）。它判断超出了外部给的范围时，最后写一行 `[交回] 原因`：不回学生，板顶写「主讲会接着讲。」，原因进 `ext_out`。
+- 每叫一次，下一份 `ext_out` 里有 `[助手 cl1]（wrong q1） 回了：` 加它的全文、执行了哪些、越权没执行的、用量（发出多少、等了几秒、调了几次工具）。黑板现状里列着每一条助手叫过几次、收起没有。
+- 学生这边：板上方一直有「叫主讲」；有开着的助手时多一颗「停掉助手」。学生点了以后页面不再叫助手（写进 `ext_out`，这节课记着 `helperOff`），外部再写一条 `board claude` 就重新打开。
+
+**后台的活：`ext_jobs`**：写 `ext_jobs/{id}`（全局）或 `sessions/{编号}/ext_jobs/{id}` = `{ "prompt": "…", "see": ["books/B43/chunks/B43-1", …], "out": "集合/文档", "tools": ["read", "list", "search"], "at": 毫秒 }`：
+
+- 学习台开着时跑：首页开着跑全局的；进了课堂跑全局的和这节课的。一件一件跑（等讲课的调用跑完再发），Opus 5.5 high；`see` 里的几条（最多 12 条）先读好放进给它的话；`tools` 是只读的 `read`、`list`、`search`（不写就三个都给）。
+- 状态写回那一件：`queued` → `running`（`startedAt`）→ `done`（`endedAt`、`ms`）或 `failed`（`error`）。`running` 了 10 分钟没写完（页面关了）的下次重跑。
+- 结果存进 `out` = `{ text, job, by: "ext-delegate", model, at, from }`，记一条 `journal`（能撤销）。`meta/facts.jobs` 是 `{ queued, running, done, failed }`。
+- `board add id=b5 from=集合/文档`（`new`、`replace`、`pin` 也行）：执行前页面把那一条的 `text`（没有就 `md`）换进块里；块里原来写的字留在前面。读不到的那一块照原样执行、`ext_out` 里说一句。
+
+**外部设计的交互：`board stage`、`board widget`**（底座的完整清单在 `components/stage.md`、`components/widget.md`）：
+
+- `board stage id=s1 title="…"`：块里是舞台的镜头指令（东西、交给学生的手、挑战、预写的反应），页面包成 `stage` 组件画在当前板上（一段一块舞台，没有老师、不调用）。学生每一下、挑战做到没做到、叫老师的事都记成作答 / 动作进 `ext_out`。外部的课里预写的反应除了 `@名字` / `.done` / `.right`，还收 `.wrong`（交了 / 动了但没做到）、`.miss`（走偏：被裁判判成错法、手势被弹回）。
+- `board widget id=w1 title="…"`：块里是一小段 JS，调用 `la.*`（画文字公式矩阵、拖着排、按钮、输入、精确计算、式子相等的判定、记作答、动画、给标注留锚点）。在这一段里跑：一上来就跑不起来（语法错、抛错）这一段不显示、像组件写错一样报；点按钮以后出的错记一条动作 `widget-error` 进 `ext_out`，只坏这一段。
+- 两种都是一段：`replace`、`hide`、`edit`、`mark target=s1` 照常用；组件的 `id` 就是段的 `id`。
 
 **学生这边**：页面写 `sessions/{编号}/ext_out/{三位数序号}` = `{ "seq": 1, "text": "…", "shots": ["asset 编号"], "at": 毫秒 }`：
 
@@ -468,9 +535,19 @@ explain: $x+y=2$，$A\mathbf x = 2\cdot(1, 2) = (2, 4)$，还在 $(1, 2)$ 这条
 
 **写错了**：写错的那一段不显示，板上原样，下一份 `ext_out` 最前面写清是哪一段、哪一行、为什么；`board replace id=…` 改那一段。
 
-**预检工具**（仓库里，给外部在自己的沙盒里用）：`node tools/ext-check.mjs --next 这一轮.txt [--session 存数据的目录] [--sid 课号] [--shots 目录]`。把这节课已有的 `ext_in` / `ext_out`（`ArtifactData` 的 `out_dir` 存下来的目录）加上这一轮，用和学习台同一份组件库（`kit/dist/la-kit.js`，要先 `npm run build`）在真的浏览器里跑一遍，出 iPad 竖屏、横屏的截图和问题列表；开头打出组件库的版本号，和学习台底部的版本号对得上才是同一版。Playwright、Chromium 用沙盒里预装的。
+**预检工具**（仓库 `emilymedina70167-creator/Claude` 里，给外部在自己的沙盒里用；`kit/dist/la-kit.js` 提交在仓库里，就是学习台发布的那一份，不用 build）：
 
-**平台的事实**（2026-11-17 实测）：外部每一轮第一次写学习台会弹一次「Allow once」，没有「一直允许」；同一轮里后面的写没再弹。删除要带 `shared_live: "deletes_rows"`。这一轮的记忆改动可以写在同一条 `ext_in` 的 `memo` / `note` 块里，页面拆出来执行。
+```bash
+git clone https://github.com/emilymedina70167-creator/Claude && cd Claude && npm install
+node tools/ext-check.mjs --next 这一轮.txt --lint
+node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
+```
+
+- `--lint`：不开浏览器，一秒以内只查写法——board 块的围栏和指令、组件名、组件 id 重复、指令的 `target` 存不存在、`\calc` 算不算得出、`stage` / `widget` 段的写法。
+- 不带 `--lint`：用和学习台同一份组件库在真的浏览器里跑一遍，出 iPad 竖屏、横屏的截图和问题列表；开头打出组件库的版本号，和学习台底部的版本号对得上才是同一版。Playwright、Chromium 用沙盒里预装的。
+- 都可以加 `--session 存数据的目录 [--sid 课号]`：这节课已有的 `ext_in` / `ext_out`（`ArtifactData` 的 `out_dir` 存下来的目录），认得已有的段和组件 id。
+
+**平台的事实**（2026-11-17 实测）：外部每一轮第一次写学习台会弹一次「Allow once」，没有「一直允许」；同一轮里后面的写没再弹。删除要带 `shared_live: "deletes_rows"`。这一轮的记忆改动可以写在同一条 `ext_in` 的 `memo` / `note` 块里，页面拆出来执行。学习台叫不醒外部：claude.ai 的对话只在学生发消息时才跑，页面没有办法通知它（「叫主讲」只是让 `ext_out` 最前面写「学生在等你」，外部醒来一眼看到）；`board claude`、预案、预备板是页面当场接的办法。「Allow once」是 claude.ai 的权限设置，学习台改不了。
 
 **改别的数据**（`meta/today`、`reviews`、`drills`、`notebook`……）：直接写，格式见第七节；写的时候在同一次写里多写一条 `journal/j-{毫秒时间戳的 36 进制}-{5 位随机}` = `{ "at", "by": "ext", "path", "op", "before", "after" }`，学生在「管理 → Claude 改过的」里看得到、能撤销。页面不拦外部的写，格式不对照存、在 `meta/health` 里照实报。
 

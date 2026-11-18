@@ -154,7 +154,7 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // move：版面模式里把一段挪到别的栏（col=），不重画
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'show', 'move', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'show', 'move', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set / claude / claude-off / queue / edit';
+const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set / claude / claude-off / queue / edit / stage / widget';
 
 /**
  * 解析 board 后面那一行：
@@ -170,6 +170,8 @@ export function parseCommand(header) {
   const m = h.match(/^(\S+)\s*([\s\S]*)$/);
   const name = m[1].toLowerCase();
   if (SEGMENT_OPS.includes(name)) return segmentCommand(name, m[2]);
+  // 外部设计的交互（需求 R5）：一段，块里是舞台的镜头指令（stage）或调用 la.* 的 JS（widget）；页面包成那个组件画在当前板上
+  if (name === 'stage' || name === 'widget') { const r = segmentCommand('add', m[2]); return r.error ? { error: r.error.replace(/^add/, name) } : { ...r, op: name }; }
   if (name === 'figure') return figureCommand(m[2]);
   if (name === 'mark') {
     const r = parseMarkHead(m[2]);

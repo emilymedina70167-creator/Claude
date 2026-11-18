@@ -1038,6 +1038,12 @@ export async function renderClass(root, meta, desk = null) {
       if (op.op === 'coach') extState.coach.set(String(op.target), String(op.upto || ''));
       return { op: op.op, ok: true, ...(op.target ? { target: op.target, upto: op.upto } : {}) };
     }
+    // 外部设计的交互（需求 R5）：包成 stage / widget 组件，照 add 画（id 就是组件的 id，mark、figure、作答都按它）
+    if (op.op === 'stage' || op.op === 'widget') {
+      const fence = '~~~~~';
+      const body = `${fence}${op.op}\nid: ${op.id}\n${op.op === 'widget' ? '---\n' : ''}${String(op.body || '').replace(/^\s*\n/, '')}\n${fence}`;
+      return { ...execOp({ ...op, op: segs.has(op.id) ? 'replace' : 'add', body }, failures, notes), op: op.op };
+    }
     // 预备板（需求 R7）：先存着，条件到了页面自己开那块板、翻过去
     if (op.op === 'queue') {
       if (!EXT) return { op: 'queue', id: op.id, ok: false, error: 'queue 只在外部主讲的课里有用' };

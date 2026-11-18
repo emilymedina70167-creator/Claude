@@ -1101,6 +1101,13 @@ function conjectureRecord(a) {
 
 function recordText(a, type) {
   switch (type) {
+    // 外部设计的交互（board widget 的 la.record / la.goal、board stage 的挑战）：q 是那一件事，value 是学生给的
+    case 'widget':
+    case 'stage': {
+      const v = a.value !== undefined && a.value !== null && a.value !== '' ? `给了 ${val(a.value)}` : '';
+      const wrong = Array.isArray(a.wrong) && a.wrong.length ? `（${a.wrong.map((x) => short(String(x), 80)).join('；')}）` : '';
+      return `[作答] ${where(a, type)}：${a.q ? `「${short(a.q, 120)}」` : ''}${tail([v, a.ok === true ? '做到了' : a.ok === false ? '没做到' : '', a.giveup ? '放弃了' : ''].filter(Boolean).join('，') + wrong, a.text ? `说明：${short(a.text, 200)}` : '', duration(a.ms))}`;
+    }
     case 'steps': return stepsRecord(a);
     case 'answer':
     case 'practice': return answerRecord(a, type);
@@ -1189,6 +1196,12 @@ function eventText(a, type) {
   const stepTitle = typeof d.title === 'string' ? d.title : typeof a.title === 'string' ? a.title : '';
   const subText = sub ? ` 第 ${sub} 步${stepTitle ? `（${short(stepTitle, 24)}）` : ''}` : '';
   switch (type) {
+    // 外部设计的交互、舞台里学生的动作和叫老师的事（detail.text 是页面写好的一句）
+    case 'widget':
+    case 'widget-error':
+    case 'stage-act':
+    case 'stage-call':
+      return `[动作] ${where(a, type.startsWith('stage') ? 'stage' : 'widget', { title: false })}${type === 'widget-error' ? ' 出错了' : type === 'stage-call' ? ' 叫主讲' : ''}：${short(String(get('text') ?? get('why') ?? get('msg') ?? ''), 400)}`;
     case 'giveup': return `[动作] ${where(a, 'steps', { title: false })}${subText}：想不出来，直接揭开了`;
     case 'reveal': return `[动作] ${where(a, 'steps', { title: false })}：揭开第 ${sub ?? '?'} 步${stepTitle ? `（${short(stepTitle, 24)}）` : ''}`;
     case 'drag':
