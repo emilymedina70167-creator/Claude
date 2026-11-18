@@ -301,7 +301,8 @@ s4 conclude: A^n = [[1,n],[0,1]]
 
 <!-- 完整写法 -->
 
-- 交上来的那一下记成作答 `type: solve`（`value` 是打的字，`photos` 是照片的 asset 编号）；判了以后另一条 `judged: true, steps: [{ id, ok: true | false | "missing", why, tag }]`，`ok` 是整道题对不对。刷新以后打的字和判定都放回来。
+- 交上来的那一下记成作答 `type: solve`（`value` 是打的字，`photos` 是照片的 asset 编号）；判了以后另一条 `judged: true, steps: [{ id, ok: true | false | "missing" | null, unsure, why, tag }]`（`ok: null` 加 `unsure: true` 是判的人拿不准、待核；只有 `ok: null` 是没判），`ok` 是整道题对不对。刷新以后打的字和判定都放回来。
+- `solve`、`board judge`、证据里的 `steps` 这几样的写法和字段名是定下来的，以后的探题也照它们用。
 
 ### context：给页面里 Claude 的背景资料（不显示）
 
@@ -2449,7 +2450,7 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 
 - **`sessions`**：编号 `c-20261027-1`（日期 - 当天第几节，三种课共用一套编号）。`kind`：`class` 课堂（黑板课，不写 kind 就是它；页面开，2026-11-16 起新开的课都是它。这种课有 `aims`：这节课要拿下的 2～5 件事 `[{ id, can, proof?, exam? }]`，老师课上定、页面按我的作答算每件到了没有，状态在课后报告的 `aims` 里；下课后页面留几道隔天做的题 `holds: { ids, at, exam, made }`，我隔天在首页「验上次学的」做完以后记 `later: { n, right, days, far }`——这三个字段都是页面写的，你不要改）、`stage` 舞台课（2026-11-06 到 11-15 新开的课是它：用画面讲课，每一轮的 `class_turns` 带 `log`，作答的组件 id 是 `S5` 这种；不再新开）和 `talk` 一问一答（更早的课，不再新开）、`ext` 外部的课（外部主 Claude 开、讲，第五节；`sessions/{编号}/ext_in`、`ext_out`）、`live` 实时黑板、`unit` 自学单元（停用了，以前的能翻看）。`date`、`block`（这节课的块）、`space`、`title`、`status`（`open` 还在上 / `closed` 下课了、用完了）、`startedAt`、`endedAt`、`pack`（开课时资料包的 `unit`、`goal`）、`verify`（核验了几轮、作废了几轮）、`summary`（下课小结那条观察的 id）、`usage`（这节课调用 Claude 花了多少：每一轮的 `cost` 在 `class_turns` 上）、`report`（课后报告的要点：`line` 一行字、`items` 做了几题、`first` 一次对几题、`at`、`v`、`provisional`）、`skills`（知识点归类，第七节「课后报告」后面）。这节课的东西都在 `sessions/{编号}/` 下面（课堂：`steps`、`class_turns`、`class_pages`、`pack`；实时黑板：`steps`、`talk`、`ops`、`ops_done`、`meta`、`lint`、`uploads`；自学单元：`unit`；三种都有课后报告 `report`）。
 - **`evidence`**：编号 `ev-…`，页面自动编。每条都有 `session`、`block`（这节课的块）、`tags`（知识点标签：`["L2.2.1", "L2.2.1#tr"]`，后一个来自课堂里的 Claude 给那一段标的 `point=`）、`kind`、`src`、`at`：
-  - `src: "record"`：一次作答。`kind` 是组件（`answer`、`practice`、`quiz`、`predict`、`steps`、`conjecture`……），`comp` 是组件的 id，`step` 是黑板上的段，`q` 题面，`text` / `value` 我写的、选的，`ok` 程序判的对错（判不了是 null），`attempts` 第几次，`ms` 用时（课堂里：这题出现在我屏幕上到第一次交，切走、锁屏、翻到别的板、滚出屏幕的时间不算），`msTotal`（到这一次交，同样扣掉不在屏幕上的），`giveup` 想不出来，`final` 这道题的最终结果，`images` 手写原图，`transcript` 转写。解答题（`kind: "solve"`）：交的那一条 `value` 是打的字、`photos` 是照片的 asset id；判了的那一条 `judged: true`、`by`（`ext` / `helper` / `teacher`）、`steps: [{ id, ok: true | false | "missing", why, tag }]`。
+  - `src: "record"`：一次作答。`kind` 是组件（`answer`、`practice`、`quiz`、`predict`、`steps`、`conjecture`……），`comp` 是组件的 id，`step` 是黑板上的段，`q` 题面，`text` / `value` 我写的、选的，`ok` 程序判的对错（判不了是 null），`attempts` 第几次，`ms` 用时（课堂里：这题出现在我屏幕上到第一次交，切走、锁屏、翻到别的板、滚出屏幕的时间不算），`msTotal`（到这一次交，同样扣掉不在屏幕上的），`giveup` 想不出来，`final` 这道题的最终结果，`images` 手写原图，`transcript` 转写。解答题（`kind: "solve"`）：交的那一条 `value` 是打的字、`photos` 是照片的 asset id；判了的那一条 `judged: true`、`by`（`ext` / `helper` / `teacher`）、`steps: [{ id, ok: true | false | "missing" | null, unsure, why, tag }]`（`unsure: true`：判的人拿不准，待核，不进错题本）。
   - `src: "event"`：一个动作。`kind` 是 `reveal`（揭开一步）、`giveup`、`drag`（拖动，`detail` 里是变量、松手时的值、`from` 从哪拖起、`path` 中途停过 0.5 秒以上的点（最多 8 个）、`ms` 拖了多久）、`guess-drag`（`predict` 里拖猜测点，还没点「确定」，同样带过程）、`sure`（我点的「有把握 / 没把握」，`detail.sure` 是 true / false，`detail.key` 是课后报告里那道题的键，`detail.ok` 那题判的对错）、`open`（打开）、`end`（下课）等。
   - `src: "say"`：我在课堂输入框里说的话（`kind: "say"`，`text`），在实时黑板上「交截图」交的图和那句说明，附的图（`kind: "photo"`，`images` 是 asset id，用 `Artifact` 工具 `action: "read"`、`path` 填 id 看原图；`ink: 2` 表示最后 2 张是我在黑板上用 Pencil 写的板书导出的图）。`turn` 是课堂第几轮。
   - `src: "draft"`（`kind: "draft"`）：点「下课」那一刻我在黑板上写了、还没交的草稿：`comp` 组件 id、`compKind` 组件、`step` 段、`label` 第几步、`text` 写着什么。

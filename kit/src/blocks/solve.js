@@ -8,7 +8,7 @@ import { session } from '../session.js';
 import { markDraft } from '../drafts.js';
 import { photoPicker } from '../photo.js';
 
-const MARK = { true: '✓', false: '✗', missing: '缺', null: '·' };
+const MARK = { true: '✓', false: '✗', missing: '缺', null: '·', unsure: '？' };
 
 export function solve(el, src) {
   const spec = parseSolve(src, { ext: !!session.extPrewrite });
@@ -71,7 +71,8 @@ export function solve(el, src) {
     judgedEl.hidden = false;
     judgedEl.innerHTML = `<div class="sv-jhead">${by === 'helper' ? '页面里的 Claude' : by === 'teacher' ? '老师' : '主讲'}一步一步判的：</div><ol class="sv-steps">${steps.map((s) => {
       const j = js.find((x) => x.id === s.id) || { ok: null };
-      return `<li class="sv-step is-${j.ok === true ? 'ok' : j.ok === false ? 'bad' : j.ok === 'missing' ? 'miss' : 'none'}"><span class="sv-mark">${MARK[String(j.ok)]}</span> <span class="sv-ref">${mdToHtml(s.text, { inline: true })}</span><span class="muted"> · ${escapeHtml(STEP_KINDS[s.kind] || s.kind)}</span>${j.ok !== true && (j.tag || j.why) ? `<div class="sv-why">${escapeHtml([j.tag, j.why].filter(Boolean).join('：'))}</div>` : ''}</li>`;
+      // 拿不准的步（unsure）：「？待外部核」
+      return `<li class="sv-step is-${j.unsure ? 'unsure' : j.ok === true ? 'ok' : j.ok === false ? 'bad' : j.ok === 'missing' ? 'miss' : 'none'}"><span class="sv-mark">${MARK[j.unsure ? 'unsure' : String(j.ok)]}</span>${j.unsure ? '<span class="sv-unsure">待外部核</span> ' : ''} <span class="sv-ref">${mdToHtml(s.text, { inline: true })}</span><span class="muted"> · ${escapeHtml(STEP_KINDS[s.kind] || s.kind)}</span>${j.ok !== true && (j.tag || j.why) ? `<div class="sv-why">${escapeHtml([j.tag, j.why].filter(Boolean).join('：'))}</div>` : ''}</li>`;
     }).join('')}</ol>`;
   }
 

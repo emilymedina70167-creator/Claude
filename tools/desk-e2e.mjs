@@ -1306,13 +1306,13 @@ const SUITES = {
     await t.page.locator('[data-bid="p1"] .sv-text').fill('A^n = E^n + B^n = E + B');
     await t.page.click('[data-bid="p1"] .sv-send');
     await t.waitFor(async () => /交了整道题：打字：「A\^n = E\^n \+ B\^n = E \+ B」/.test(await outs()), { timeout: 10000, what: '解答题交了写进 ext_out' });
-    await plantLive(t, { [`sessions/${sid}/ext_in/007`]: { seq: 7, text: `${F4}board judge target=p1\ns1 ok\ns2 ok\ns3 wrong tag=规则用错 why="把 (E+B)^n 写成 E^n+B^n"\ns4 missing\n${F4}`, after: 1, at: Date.now() } });
+    await plantLive(t, { [`sessions/${sid}/ext_in/007`]: { seq: 7, text: `${F4}board judge target=p1\ns1 ok\ns2 unsure why="照片里看不清"\ns3 wrong tag=规则用错 why="把 (E+B)^n 写成 E^n+B^n"\ns4 missing\n${F4}`, after: 1, at: Date.now() } });
     const r7 = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/007`]?.result, { timeout: 15000, what: 'ext_in/007 执行' });
     check(r7.ops.some((o) => o.op === 'judge' && o.ok), `board judge 没执行：${JSON.stringify(r7.ops)}`);
     const jtxt = await t.page.evaluate(() => [...document.querySelectorAll('[data-bid="p1"] .sv-judged')].map((x) => `${x.hidden}|${x.innerText}`).join(' ## '));
     check(/规则用错/.test(jtxt), `题下面没画出逐步的判定：${jtxt.slice(0, 200)}`);
     const judged = await t.waitFor(async () => (await t.docs('evidence')).find((e) => e.session === sid && e.kind === 'solve' && e.judged), { timeout: 8000, what: '判定记成证据' });
-    check(judged.steps?.[2]?.ok === false && judged.steps[2].tag === '规则用错' && judged.steps[3].ok === 'missing', `证据里的逐步结论不对：${JSON.stringify(judged.steps)}`);
+    check(judged.steps?.[1]?.unsure === true && judged.steps[1].ok === null && judged.steps?.[2]?.ok === false && judged.steps[2].tag === '规则用错' && judged.steps[3].ok === 'missing' && /第 2 步 待核/.test(judged.value || ''), `证据里的逐步结论不对：${JSON.stringify(judged.steps)}`);
     const err = await t.waitFor(async () => (await t.docs('errors')).find((e) => e.session === sid && Array.isArray(e.steps)), { timeout: 10000, what: '错题本按步骤记' });
     check(/第 3 步（规则用错）/.test(err.step) && /E\^n\+B\^n/.test(err.cause), `错题本那一条不对：${JSON.stringify(err).slice(0, 300)}`);
     await t.waitFor(async () => /\[页面\] 解答题 p1：错题本记了/.test(await outs()), { timeout: 10000, what: '错题本记了写进 ext_out' });

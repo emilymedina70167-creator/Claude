@@ -14,7 +14,9 @@
 //   judge: ext
 //   ```
 //
-// 判定（board judge target=p1）一行一步：`s1 ok`、`s3 wrong tag=规则用错 why="把 (A+B)² 当成 A²+2AB+B²"`、`s4 missing`。
+// 判定（board judge target=p1）一行一步：`s1 ok`、`s3 wrong tag=规则用错 why="把 (A+B)² 当成 A²+2AB+B²"`、`s4 missing`、
+// `s2 unsure why="照片里看不清"`（拿不准：画成「？待外部核」，ok 记 null、unsure: true，不进错题本；外部审 plan 时加的）。
+// 计划 2 的「全过程」探题直接用 solve、board judge、证据里的 steps：这几样的写法和字段名不改（手册第三、四、七节）。
 
 import { tokenize } from './tokens.js';
 
@@ -78,7 +80,7 @@ export function parseSolve(src, { ext = false } = {}) {
   return { fields, steps, judge: JUDGES.includes(judge) ? judge : (ext ? 'ext' : 'claude'), problems };
 }
 
-const OK_WORDS = { ok: true, right: true, '对': true, '✓': true, wrong: false, bad: false, '错': false, '✗': false, missing: 'missing', miss: 'missing', '缺': 'missing', '没写': 'missing' };
+const OK_WORDS = { ok: true, right: true, '对': true, '✓': true, wrong: false, bad: false, '错': false, '✗': false, missing: 'missing', miss: 'missing', '缺': 'missing', '没写': 'missing', unsure: 'unsure', '?': 'unsure', '？': 'unsure', '待核': 'unsure' };
 
 /**
  * 读 board judge 块里的行：一行一步 `s3 wrong tag=规则用错 why="…"`。refSteps：这道题的参考步骤（核编号）。
@@ -94,14 +96,16 @@ export function parseJudge(body, refSteps = []) {
     const toks = tokenize(line);
     const id = toks[0] && !toks[0].key ? toks[0].value : '';
     const word = toks[1] && !toks[1].key ? toks[1].value.toLowerCase() : '';
-    if (!id || !(word in OK_WORDS)) { errors.push(`「${line.slice(0, 50)}」：写成 s3 wrong tag=… why="…"（ok / wrong / missing）`); continue; }
+    if (!id || !(word in OK_WORDS)) { errors.push(`「${line.slice(0, 50)}」：写成 s3 wrong tag=… why="…"（ok / wrong / missing / unsure）`); continue; }
     if (ids.length && !ids.includes(id)) { errors.push(`参考步骤里没有 ${id}（有 ${ids.join('、')}）`); continue; }
     const kv = Object.fromEntries(toks.slice(2).filter((t) => t.key).map((t) => [t.key, t.value]));
-    const ok = OK_WORDS[word];
+    const w = OK_WORDS[word];
+    // 拿不准（unsure）：ok 记 null，另带 unsure: true（和「没判」分开）
+    const ok = w === 'unsure' ? null : w;
     const tag = kv.tag ? String(kv.tag) : ok === 'missing' ? '步骤缺' : '';
     if (tag && !STEP_TAGS.includes(tag)) notes.push(`${id} 的 tag「${tag}」不在常用的几种里（${STEP_TAGS.join('、')}），照存`);
     if (ok === false && !kv.why) notes.push(`${id} 判了错，没写 why：错题本里只记得到 tag`);
-    got.set(id, { id, ok, why: String(kv.why || '').slice(0, 400), tag });
+    got.set(id, { id, ok, ...(w === 'unsure' ? { unsure: true } : {}), why: String(kv.why || '').slice(0, 400), tag });
   }
   const steps = (ids.length ? ids : [...got.keys()]).map((id) => got.get(id) || { id, ok: null, why: '', tag: '' });
   if (ids.length && got.size && got.size < ids.length) notes.push(`没判的步：${ids.filter((x) => !got.has(x)).join('、')}（记成没判）`);
@@ -119,11 +123,11 @@ const nth = (steps, id) => Math.max(0, steps.findIndex((s) => s.id === id)) + 1;
 export function judgedLine(steps = []) {
   const bad = steps.map((s, i) => ({ ...s, n: i + 1 })).filter((s) => s.ok !== true);
   if (!bad.length) return steps.length ? `${steps.length} 步都对` : '';
-  return bad.map((s) => (s.ok === null ? `第 ${s.n} 步 没判` : s.ok === 'missing' ? `第 ${s.n} 步 缺${s.why ? `：${s.why}` : ''}` : `第 ${s.n} 步${s.tag ? ` ${s.tag}` : ' 错'}${s.why ? `：${s.why}` : ''}`)).join('；');
+  return bad.map((s) => (s.unsure ? `第 ${s.n} 步 待核${s.why ? `：${s.why}` : ''}` : s.ok === null ? `第 ${s.n} 步 没判` : s.ok === 'missing' ? `第 ${s.n} 步 缺${s.why ? `：${s.why}` : ''}` : `第 ${s.n} 步${s.tag ? ` ${s.tag}` : ' 错'}${s.why ? `：${s.why}` : ''}`)).join('；');
 }
 
 /**
- * 判出来有错 / 缺的步：记一道错题要写的几样（memo.js 的 error 那一条路）。没有错的返回 null。
+ * 判出来有错 / 缺的步：记一道错题要写的几样（memo.js 的 error 那一条路）。没有错的返回 null；待核（unsure）的步不算。
  * 返回 { step: '第 3 步（规则用错）', cause, tag, steps }
  */
 export function errorOfJudged(steps = [], refSteps = []) {

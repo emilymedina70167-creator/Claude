@@ -2611,4 +2611,6 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .block-solve .sv-mark { display: inline-block; min-width: 1.6em; font-weight: 600; }
 .block-solve .sv-step.is-ok .sv-mark { color: var(--ok); }
 .block-solve .sv-step.is-bad .sv-mark, .block-solve .sv-step.is-miss .sv-mark { color: var(--bad); }
+.block-solve .sv-step.is-unsure .sv-mark, .block-solve .sv-unsure { color: var(--yellow); }
+.block-solve .sv-unsure { font-size: 14px; }
 .block-solve .sv-why { margin-top: 2px; color: rgb(var(--chalk-rgb) / 0.75); font-size: 15px; }
