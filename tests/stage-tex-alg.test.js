@@ -91,3 +91,20 @@ test('@e.miss：学生走偏（被弹回）时演（prewrite: all）', () => {
   assert.equal(j.apply, false);
   assert.deepEqual(s.slipReactions('e', j.verdict, { blocked: true }).map((r) => r.src), ['say "AB 和 BA 能合并吗？"']);
 });
+
+// dr-ncalg-strict：舞台上的式子判相等也严；老师故意写的错式子学生照样能动
+import { algParse as ap2, equalsTo as eqTo2, judge as judge2, expand as expand2, merge as merge2 } from '../kit/src/stage/types/tex.alg.js';
+test('舞台的式子：equals= 默认严，alg=loose 才宽', () => {
+  assert.equal(eqTo2(ap2('(A-E)(A-2E)'), 'A^2-3A+2'), false);
+  assert.equal(eqTo2(ap2('(A-E)(A-2E)'), 'A^2-3A+2E'), true);
+  const loose = ap2('(A-E)(A-2E)'); loose.loose = true;
+  assert.equal(eqTo2(loose, 'A^2-3A+2'), true);
+});
+test('展开 (A-E)(A-2E) 合法，出来的是 2E；混写的式子照样能合并', () => {
+  const a = ap2('(A-E)(A-2E)');
+  const r = expand2(a, 't1');
+  assert.equal(judge2(a, r.alg).legal, true);
+  const b = ap2('A^2-3A+2-1');
+  const m = merge2(b, 't3', 't4');
+  assert.equal(judge2(b, m.alg).legal, true);
+});

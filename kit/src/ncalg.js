@@ -186,7 +186,7 @@ const one = () => ({ c: q(1n), sc: [], w: [] });
 function mulMono(a, b) {
   const sc = new Map(a.sc);
   for (const [v, e] of b.sc) sc.set(v, (sc.get(v) || 0) + e);
-  return { c: qmul(a.c, b.c), sc: [...sc].sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0)), w: [...a.w, ...b.w] };
+  return { c: qmul(a.c, b.c), sc: [...sc].sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0)), w: [...a.w, ...b.w], ...(a.mat || b.mat ? { mat: true } : {}) };
 }
 /** 一个因子 → 几项（不合并：展开括号时学生要看见每一项从哪来） */
 function factorTerms(f) {
@@ -195,8 +195,9 @@ function factorTerms(f) {
   else if (f.t === 'sym') {
     const n = f.name;
     if (n === 'O') base = [];
-    else if (n === 'E' || n === 'I') base = [one()];
-    else if (isMatrix(n)) base = [{ ...one(), w: [n] }];
+    // mat：乘进过单位矩阵、矩阵（只剩数时写回成 kE：(A-E)(A-2E) 展开出来的是 2E，不是 2）
+    else if (n === 'E' || n === 'I') base = [{ ...one(), mat: true }];
+    else if (isMatrix(n)) base = [{ ...one(), w: [n], mat: true }];
     else base = [{ ...one(), sc: [[n, 1]] }];
   } else base = sumTerms(f.body);
   if (f.pow == null) return base;
@@ -227,7 +228,7 @@ function combine(terms) {
   for (const m of terms) {
     const k = keyOf(m);
     const had = map.get(k);
-    if (had) had.c = qadd(had.c, m.c); else map.set(k, { ...m });
+    if (had) { had.c = qadd(had.c, m.c); if (m.mat) had.mat = true; } else map.set(k, { ...m });
   }
   for (const [k, m] of map) if (qzero(m.c)) map.delete(k);
   return map;
@@ -242,15 +243,65 @@ export function polyOf(src) {
   return guard(() => ({ ok: true, poly: combine(sumTerms(p.ast)) }));
 }
 
+// —— 严的判法（dr-ncalg-strict，2026-11-18 外部验收时查出来的）：矩阵的式子里单独写一个数（A^2-3A+2 的 2、A-A=0 的 0），
+// 宽的判法当成 2E、O 算是相等，可这正是学生「矩阵和数混在一起」的弱点（W19），页面判对等于替学生盖过去。
+// 所以默认严：一个式子里有矩阵时，加法的每一项都得是矩阵（带 E / I / O 或矩阵字母）；两边一边是矩阵、一边是数也不相等。
+// 外部要宽的判法（比如数和单位矩阵就是想混着写）自己开 { loose: true }。
+// 一个节点是不是矩阵：矩阵字母、E / I / O 是；数、小写字母不是；括号看里面；乘积有一个因子是矩阵就是
+function typeOf(node, bad) {
+  if (node.t === 'num') return false;
+  if (node.t === 'sym') return isMatrix(node.name);
+  if (node.t === 'group') return typeOf(node.body, bad);
+  if (node.t === 'prod') return node.factors.map((f) => typeOf(f, bad)).some(Boolean);
+  // 加法：先看每一项，有矩阵的项就整个是矩阵；这时单独的数项就是少了 E（数 0 是零矩阵写成了数）
+  const kinds = node.items.map((it) => typeOf(it.prod, bad));
+  if (kinds.some(Boolean)) {
+    node.items.forEach((it, k) => {
+      if (kinds[k]) return;
+      const zero = it.prod.factors.length === 1 && it.prod.factors[0].t === 'num' && qzero(it.prod.factors[0].v);
+      bad.push(zero ? 'zero' : 'scalar');
+    });
+  }
+  return kinds.some(Boolean);
+}
+/** 一个式子的类型（严的判法用）：{ ok, matrix, bad: ['scalar' | 'zero'] }；读不懂 { ok: false } */
+export function typeCheck(src) {
+  const p = typeof src === 'string' ? parse(src) : { ok: true, ast: src };
+  if (!p.ok) return p;
+  const bad = [];
+  const matrix = typeOf(p.ast, bad);
+  // 整个式子就是一个数 0、另一边是矩阵：在 equivalent 里比两边时再说
+  const zero = !matrix && p.ast.items.length === 1 && p.ast.items[0].prod.factors.length === 1 && p.ast.items[0].prod.factors[0].t === 'num' && qzero(p.ast.items[0].prod.factors[0].v);
+  return { ok: true, matrix, bad, zero };
+}
+const BAD_TEXT = { scalar: '常数项少了 E：矩阵和数不能直接相加（数 k 要写成 kE）', zero: '零矩阵写成了数 0：要写 O' };
+/** 严的判法下为什么不相等（类型对不上）：一句话；类型没问题是 null */
+export function strictWhy(a, b) {
+  const ta = typeCheck(a), tb = typeCheck(b);
+  if (!ta.ok || !tb.ok) return null;
+  for (const t of [ta, tb]) if (t.bad.length) return BAD_TEXT[t.bad[0]];
+  if (ta.matrix !== tb.matrix) return (ta.matrix ? tb : ta).zero ? BAD_TEXT.zero : '一边是矩阵、一边是数：两样东西不相等';
+  return null;
+}
+
 /**
  * 两个式子数学上相等吗（对所有矩阵、所有标量都成立）：true / false / 'unknown'（含逆、转置、函数、读不懂）。
- * 矩阵不交换：AB + BA 和 2AB 不相等；标量、单位矩阵和谁都交换：kA = Ak、(kE)A = A(kE)、AE = A
+ * 矩阵不交换：AB + BA 和 2AB 不相等；标量、单位矩阵和谁都交换：kA = Ak、(kE)A = A(kE)、AE = A。
+ * 默认严（strictWhy）：矩阵的式子里单独的数不当 kE、数 0 不当 O；{ loose: true } 照宽的判法
  */
-export function equivalent(a, b) {
+export function equivalent(a, b, { loose = false } = {}) {
   const pa = polyOf(a), pb = polyOf(b);
   if (!pa.ok || !pb.ok) return 'unknown';
+  if (!loose && strictWhy(a, b)) return false;
   const d = combine([...pa.poly.values(), ...[...pb.poly.values()].map((m) => ({ ...m, c: qneg(m.c) }))]);
   return d.size === 0;
+}
+
+/** 不相等的原因（equivalent 回 false 时写给读的人）：类型对不上的那一句，或「展开、合并以后不一样」；相等或判不了是 null */
+export function whyNot(a, b, opts = {}) {
+  const r = equivalent(a, b, opts);
+  if (r !== false) return null;
+  return (!opts.loose && strictWhy(a, b)) || '展开、合并同类项以后两边不一样';
 }
 
 /** 判不了的原因（equivalent 回 'unknown' 时写给读的人）；判得了是 null */
@@ -275,7 +326,8 @@ function wordText(w) {
 export function monoText(m, { sign = false } = {}) {
   const neg = m.c.n < 0n;
   const c = neg ? qneg(m.c) : m.c;
-  const body = `${scKey(m.sc).replace(/·/g, '')}${wordText(m.w)}`;
+  // 乘进过矩阵、只剩标量的一项（2E、kE）：E 写出来
+  const body = `${scKey(m.sc).replace(/·/g, '')}${wordText(m.w)}${m.mat && !m.w.length ? 'E' : ''}`;
   const cs = qtext(c);
   const head = body ? (cs === '1' ? '' : cs.includes('/') ? `(${cs})` : cs) : cs;
   return `${sign && neg ? '-' : ''}${head}${body}`;

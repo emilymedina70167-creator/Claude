@@ -7,7 +7,7 @@ import { parseWidget, compareOrder } from '../widgetspec.js';
 import { session } from '../session.js';
 import { mdToHtml, tex2html, escapeHtml, calcScope } from './common.js';
 import { calcValue, exactText } from '../exact.js';
-import { equivalent } from '../ncalg.js';
+import { equivalent, whyNot } from '../ncalg.js';
 
 // 文字里 $…$ 是公式：整段只有一个公式的直接排成公式，别的走 Markdown
 const show = (s) => {
@@ -116,8 +116,10 @@ export function widgetBlock(el, src) {
     },
     /** 精确计算（和 \calc 同一套，整节课 let 的量也能用）：{ tex, text } */
     calc: (src) => { const r = calcValue(String(src), calcScope()); return { tex: r.tex, text: r.text ?? exactText(r.value) }; },
-    /** 两个式子是不是相等（矩阵不交换、标量交换、E 是单位矩阵）：true / false / 'unknown'（判不了） */
-    same: (a, b) => equivalent(String(a), String(b)),
+    /** 两个式子是不是相等（矩阵不交换、标量交换、E 是单位矩阵）：true / false / 'unknown'（判不了）。
+     *  默认严：矩阵的式子里单独的数不当 kE、数 0 不当 O；{ loose: true } 才宽。不相等的原因：la.whyNot(a, b) */
+    same: (a, b, opts = {}) => equivalent(String(a), String(b), { loose: !!opts.loose }),
+    whyNot: (a, b, opts = {}) => whyNot(String(a), String(b), { loose: !!opts.loose }),
     /** 比顺序：{ ok, right, n, first（第一处不对的格，从 0 数） } */
     compare: (got, want) => compareOrder(got, want),
     /** 一件事做到没有：记一条作答（进证据、进 ext_out），板上显示 ✓ / ✗ 和一句话。返回 ok */

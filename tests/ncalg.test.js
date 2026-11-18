@@ -77,3 +77,30 @@ test('同类项：AB 和 BA 不是；2AB 和 -AB 是', () => {
 test('写成 LaTeX', () => {
   assert.equal(toTex('A^2 + (1/2)AB'), 'A^{2} + \\tfrac{1}{2}AB');
 });
+
+// dr-ncalg-strict（2026-11-18 外部验收）：矩阵的式子里单独的数不当 kE、数 0 不当 O；loose 才宽
+import { equivalent as eq2, whyNot, strictWhy, expandTerm as ex2, expandText as et2 } from '../kit/src/ncalg.js';
+test('严：常数项少了 E、零矩阵写成了数 0', () => {
+  assert.equal(eq2('(A-E)(A-2E)', 'A^2-3A+2'), false);
+  assert.match(whyNot('(A-E)(A-2E)', 'A^2-3A+2'), /常数项少了 E/);
+  assert.equal(eq2('(A-E)(A-2E)', 'A^2-3A+2E'), true);
+  assert.equal(eq2('A-A', '0'), false);
+  assert.match(whyNot('A-A', '0'), /零矩阵写成了数 0/);
+  assert.equal(eq2('A-A', 'O'), true);
+  assert.equal(eq2('A+0', 'A'), false);
+  assert.match(strictWhy('A', '2'), /一边是矩阵、一边是数/);
+  // 标量的式子照常
+  assert.equal(eq2('(a+b)^2', 'a^2+2ab+b^2'), true);
+  assert.equal(eq2('(kE)A', 'A(kE)'), true);
+  assert.equal(whyNot('AB+BA', '2AB'), '展开、合并同类项以后两边不一样');
+});
+test('宽：loose 照以前的判法', () => {
+  assert.equal(eq2('(A-E)(A-2E)', 'A^2-3A+2', { loose: true }), true);
+  assert.equal(eq2('A-A', '0', { loose: true }), true);
+  assert.equal(whyNot('A-A', '0', { loose: true }), null);
+});
+test('展开出来只剩数的项写成 kE', () => {
+  assert.deepEqual(ex2('(A-E)(A-2E)').map((t) => t.text), ['A^2', '2A', 'A', '2E']);
+  assert.equal(et2('(A-E)(A-2E)'), 'A^2 - 3A + 2E');
+  assert.deepEqual(ex2('(a+b)(a-b)').map((t) => t.text), ['a^2', 'ab', 'ab', 'b^2']);
+});
