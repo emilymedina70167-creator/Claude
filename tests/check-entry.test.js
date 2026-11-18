@@ -49,3 +49,10 @@ test('board check 指令', () => {
   assert.ok(blockCommand('check id=k1', '```recall\nid: p1\n```').error);
   assert.match(parseCommand('check').error, /id/);
 });
+
+test('since-analysis 的一行认 src: check', async () => {
+  const { evidenceLine } = await import('../kit/src/project/trail.js');
+  const line = evidenceLine({ src: 'check', kind: 'recall', check: 'k1', probe: 'p3', block: 'L2.1.4', target: 'L2-56', session: 'c-1', outcome: 'fail', final: 'fixed', items: [{ id: 'm1', ok: 'missing' }], sure: 'maybe', ms: 80000, teach: 'default', at: 1795000000000 });
+  assert.match(line, /检验 k1 · recall p3（L2\.1\.4，打 L2-56）第一次没过 → 补上/);
+  assert.match(line, /\[c-1 · L2\.1\.4/);
+});

@@ -2,6 +2,7 @@
 // 那以后这一科还有哪些证据没分析（meta/since-analysis-{科}，一次 get 读完）。只算、不下结论。纯函数，tests/project-trail.test.js
 import { spaceOfId } from '../memory/space.js';
 import { toDate } from '../memory/schema.js';
+import { checkLine } from '../check/record.js';
 
 export const SPACES = ['math', 'cs', 'en'];
 export const cursorId = (space) => `cursor-${space}`;
@@ -49,6 +50,8 @@ export function evidenceLine(ev, { sessionTitle = '' } = {}) {
     case 'helper': return `${head} 页面里的 Claude（${{ helper: '外部叫来的助手', coach: '板边助教', teacher: '页面里的老师' }[ev.role] || ev.role || '助手'}）说：${clip(ev.text, 400)}${ev.did?.length ? `；执行了 ${ev.did.join('、')}` : ''}`;
     case 'draft': return `${head} 下课时没交的草稿：${clip(ev.text, 300)}`;
     case 'manual': return `${head} 补记：${clip(ev.text || ev.note, 400)}`;
+    // 检验（check/record.js）：一道题一条，第一次的作答、每一项、补讲、retry、信心、用时
+    case 'check': return `${head} ${checkLine(ev)}`;
     case 'recall': return `${head} 要记的「${clip(ev.q, 60)}」：${ev.rate || ev.result || ''}`;
     default: return `${head} ${ev.src || '证据'} ${ev.kind || ''}${ev.text ? `：${clip(ev.text, 300)}` : ''}`;
   }

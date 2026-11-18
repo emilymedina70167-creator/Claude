@@ -39,7 +39,12 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     if (dead) return;
     state = step(state, { at: now(), ...ev });
     const due = toRecord(state);
-    if (due.length) { try { record(due, state); } catch { /* 写证据的地方自己重试、报错 */ } state = step(state, { type: 'recorded', ids: due }); }
+    if (due.length) {
+      let docs = [];
+      try { docs = record(due, state) || []; } catch { /* 写证据的地方自己重试、报错 */ }
+      // 记下每道题的证据编号（刷新以后记错题、写吸收还要用）
+      state = step(state, { type: 'recorded', ids: due, evs: Object.fromEntries((Array.isArray(docs) ? docs : []).filter((d) => d?.probe && d?.id).map((d) => [d.probe, d.id])) });
+    }
     if (!quiet || now() - lastSave > 10000) { lastSave = now(); try { save(state); } catch { /* 存不上下次再存 */ } }
     paint();
     jobs();

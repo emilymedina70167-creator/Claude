@@ -75,6 +75,7 @@ import { createAskHere } from './askhere.js';
 import { reportError } from '../errlog.js';
 import { projectTools } from '../project/tools.js';
 import { noteResultText } from '../project/notebook.js';
+import { createClassCheck } from '../check/classcheck.js';
 
 export const MODEL = 'claude-opus-5-5';
 // 学生明确要求：讲课只能是 Opus 5.5、effort high；modelTier 只是平台要求的退路（退路的输出会被丢弃）
@@ -194,6 +195,7 @@ export async function renderClass(root, meta, desk = null) {
   let segSeq = 0;
   // 板（pages、当前板 bv.cur、正在看的板 bv.view、放不放得下 bv.fit）在 boardview.js；当前板是最新的那块，Claude 改的、说话写的都是它
   const rewrites = new Map(); // 段 id（或 dup:id）→ 已经要求重写了几次；画好了就清零
+  let checks = null; // 检验（check/classcheck.js）：恢复完才有
   const history = []; // { seq, role, text, kind, discarded, ... } 和数据库 class_turns 一一对应
   let turnSeq = 0;
   const results = new Map(); // 组件 id → [{ line, key }]（给课堂 Claude 看的黑板现状）
@@ -489,6 +491,14 @@ export async function renderClass(root, meta, desk = null) {
 
   // —— 恢复：资料包、黑板（板和段）、课堂记录、作答 ——
   await restore();
+  // 检验（二类组件，check/）：恢复以后才接（恢复时重放的 board check 不再开一次；没做完的照存着的进度接着做）
+  checks = createClassCheck({
+    root, db, desk, readOnly, vars: session.vars,
+    call: async (prompt) => { try { const res = await teacher.call(prompt, { ...TEACH, cache: false }); return res?.modelApplied === MODEL ? res : null; } catch { return null; } },
+    tell: (text) => { if (!text) return; if (EXT) { extState.coachLines.push(text); extWrite({ text: '' }); } else addTurn({ role: 'system', kind: 'note', text: `[系统] ${text}` }); },
+    ctx: () => ({ turn: turnSeq, turns: history.filter((t) => !t.discarded) }),
+  });
+  checks.resume().catch((e) => reportError(e, { what: '接着做检验' }));
   syncUsage();
   if (EXT) extStart();
   session.event('open', null, { title: session.title, unit: unitName, mode: 'class' });
@@ -1135,6 +1145,14 @@ export async function renderClass(root, meta, desk = null) {
       return { op: 'unqueue', id: op.id, ok: true };
     }
     // 解答题按步骤判（dr-batch4 第 1 条，solvespec.js / blocks/solve.js）：画在题下面、记一条作答；有错的步记进错题本
+    // 检验（check/）：board check 开外壳、合书；恢复时重放的不再开（checks 还没有）
+    if (op.op === 'check') return checks ? checks.start(op) : { op: 'check', id: op.id, ok: true, note: '刷新以后照存着的进度放回' };
+    if (op.op === 'judge' && checks?.has(op.target)) {
+      const r = checks.judge(op);
+      if (!r?.then) return r;
+      r.then((x) => { const t = x.ok ? `[页面] ${x.line}` : `[页面] board judge ${op.target} 没改成：${x.error}`; if (EXT) { extState.coachLines.push(t); extWrite({ text: '' }); } else addTurn({ role: 'system', kind: 'note', text: t }); });
+      return { op: 'judge', target: op.target, ok: true, line: `检验的题 ${op.target}：改判在后台写，结果写进下一份` };
+    }
     if (op.op === 'judge') {
       const el = [...board.querySelectorAll(`[data-bid="${CSS.escape(op.target)}"]`)].find((x) => x.__solve) || null;
       if (!el) return { op: 'judge', target: op.target, ok: false, error: liveBlockIds().has(op.target) ? `${op.target} 不是解答题（solve）` : `黑板上没有解答题 ${op.target}` };
@@ -1931,6 +1949,7 @@ export async function renderClass(root, meta, desk = null) {
     if (queue.triggered) schedule(false);
   }
   async function extClose() {
+    checks?.pause(); // 检验开着：照「先停下」存着，下课照常
     if (desk) for (const d of allDrafts()) sink.put('evidence', draftEvidence(d, evCtx(d.step)));
     if (queue.triggered || queue.actions.length) await flush();
     ended = true;
@@ -3097,6 +3116,7 @@ export async function renderClass(root, meta, desk = null) {
 
   // —— 下课：让课堂 Claude 写一份小结，存进 class_notes（同样只收 Opus 5.5 写的），写在最后一块板上 ——
   async function endClass() {
+    checks?.pause();
     // 外部主讲的课：不调用页面自己的模型写小结，照「直接下课」（草稿记下来、报告照算；底部的「下课」本来就要点两下）
     if (EXT) {
       while (busy) await new Promise((r) => setTimeout(r, 150));

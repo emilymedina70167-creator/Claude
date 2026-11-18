@@ -127,7 +127,7 @@ export function checkLine(ev) {
     ev.ms ? msText(ev.ms) : '',
     ev.judgedBy && ev.judgedBy !== 'page' ? `${{ claude: '页面里的 Claude', ext: '主讲', timeout: '判分超时' }[ev.judgedBy] || ev.judgedBy}判的` : '',
   ].filter(Boolean);
-  return `${ev.retryOf ? `检验 ${ev.check} · ${what}` : `${head} ${what}`}${tail.length ? ` · ${tail.join(' · ')}` : ''}`;
+  return `${ev.retryOf ? `检验 ${ev.check} · ${what}` : `${head}${what}`}${tail.length ? ` · ${tail.join(' · ')}` : ''}`;
 }
 
 /** ext_out：开始时那一行 */
