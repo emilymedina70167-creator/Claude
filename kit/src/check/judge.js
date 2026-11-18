@@ -127,6 +127,10 @@ export const JUDGE_WAIT = 90000; // 一次最多等多久：到了这道题待�
 // 外部没写 <<< >>> 时给页面里的 Claude 的话：外部在任务书里写的原话
 export const DEFAULT_FALLBACK = '指出错在哪、只补缺的那一点（不给整段答案）。';
 
+// 两条的开头（?dev 的模拟老师按它认出来，devteacher.js）
+export const VERDICT_HEAD = '学习台上，学生在课后的检验里交了一道题（合书、第一次作答）。下面是题、主讲（外部的 Claude）写好的判分要点、学生交的。页面按你回的结论接着走：过了出下一道，没过显示主讲写的补讲、再出一道同类的题。';
+export const FALLBACK_HEAD = '学习台上，学生在课后的检验里做错了一道题，主讲（外部的 Claude）写的补讲里没有对上这一次的错法。你写的话会原样显示在这道题下面当补讲，之后页面出一道同类的题让学生自己做。';
+
 /** 要它判的项的编号：solve 是参考步骤，别的是 must、may、wrong */
 export function claudeIds(probe) {
   if (probe.type === 'solve') return (probe.steps || []).map((s) => s.id);
@@ -195,7 +199,7 @@ function answerText(probe, answer = {}, images = 0) {
 
 /** 给页面里的 Claude 判分的那一条：题、要点或参考步骤、学生交的、要回的写法。只写事实 */
 export function verdictPrompt({ probe, answer = {}, ids = claudeIds(probe), images = 0 } = {}) {
-  const head = ['学习台上，学生在课后的检验里交了一道题（合书、第一次作答）。下面是题、主讲（外部的 Claude）写好的判分要点、学生交的。页面按你回的结论接着走：过了出下一道，没过显示主讲写的补讲、再出一道同类的题。', ''];
+  const head = [VERDICT_HEAD, ''];
   const q = [`题（${probe.type}）：`, probe.claim ? `命题：${probe.claim}` : '', probe.q || '', ...(probe.lines || []).map((l, i) => `第 ${i + 1} 行：${l}`)].filter(Boolean);
   const pts = [];
   if (probe.type === 'solve') {
@@ -221,7 +225,7 @@ export function verdictPrompt({ probe, answer = {}, ids = claudeIds(probe), imag
 export function fallbackPrompt({ probe, answer = {}, items = [], extPrompt = '' } = {}) {
   const failed = items.filter((x) => x.ok === false || x.ok === 'missing');
   return [
-    '学习台上，学生在课后的检验里做错了一道题，主讲（外部的 Claude）写的补讲里没有对上这一次的错法。你写的话会原样显示在这道题下面当补讲，之后页面出一道同类的题让学生自己做。',
+    FALLBACK_HEAD,
     '',
     `主讲写给你的话：${String(extPrompt || '').trim() || DEFAULT_FALLBACK}`,
     '',

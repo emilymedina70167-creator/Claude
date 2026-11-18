@@ -644,6 +644,8 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 | `sessions` | 每节课（课堂、实时黑板、自学单元）：日期、哪一种、哪一块、开课时的资料包、核验了几轮、小结 | 课堂：页面（我点「开新课」时开，上课、下课时更新）；实时黑板、自学单元：你开、你写「用完了」（我点「用完了」时页面写） |
 | `recall` | 记忆点：要背的一条（定义原文、结论、表里的一格、句型……），一条一条按 1 → 3 → 7 → 14 → 30 天排，我每天在首页自己想一遍（见下文「要记的」） | 课堂里的 Claude 直接写（memo 的 `recall`）；我能自己加、停掉；每天想的结果页面写 |
 | `drills` | 题库：以前课上页面判得了分的题，练一练用（见下文「练一练和题库」） | 页面（下课时抄）；你备课时也可以写；我能标作废 |
+| `absorb` | 吸收：每块一条，学完以后的检验（`board check`，第四节）判出来的「吸收成功 / 部分 / 未 / 待核」，和掌握分开记（见下文「检验：`absorb`、`probes`」） | 页面照最新一次检验写（`checked: false`，待你核）；你核过写 `checked: true` |
+| `probes` | 检验题库：`board check` 里的每道题（含 retry、spare），复测从没见过的同类题里挑 | 页面（执行 `board check` 时存）；你和夜班也能直接写题 |
 | `pending` | 改动单：课堂里的 Claude 每一条要改记忆的、我在学习台上自己改的，都先记一张（见下文「改动单」） | 页面（替课堂里的 Claude 和我写），只读 |
 
 - **历史类只增不改**（`evidence`、`errors`、`observations`、`slips`）：写错了就追加一条更正（新编号，`corrects` 指向原条），原条不改、不删。页面记着每条的指纹，改了、删了会在自检里报。
@@ -814,6 +816,18 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 **知识点归类**（`sessions/{编号}.skills`，页面写，你读）：报告写好以后，页面调用一次 Claude 把每道题归到一个具体的知识点（`块#短名`，例如 `EN-L1.1.1#dobj-oc`「双宾和宾补的区分」），做错了而且正是某个弱点说的那件事的挂上弱点。字段：`items`（`k` 报告里那道题的 `key`、`p` 知识点、`w` 弱点）、`points`（这节课新起的知识点和标题）、`sum`（每个知识点 `n` 几道、`first` 一次对、`fail` 失手、`end` 最后一道 `clean` / `fail`、`w` 挂上的弱点）。用处：掌握按知识点、按真正讲的块算（证据上记的块不一定对：课上可能改讲了别的块）；弱点表写着每个弱点出现过几次、最近哪天、之后做对过几道；「以前的课」和首页写着这节课会了的、还不稳的、下次先测的。课堂里的 Claude 的记忆摘要里带着上一节的「下次先测」。你写掌握、弱点时可以照这份看。
 
 **删课**：测试开的、不要的课，我在「以前的课」点进去「删掉这节课」（首页没下课的那一行也有「删掉」）：这节课的黑板、对话、报告、证据、观察、失误、改动单、抄进题库的题、错题一起删；守则用到的失误、弱点挂着的错题留着（失误去掉课号，记 `wasSession`）。你不用替我删。
+
+### 检验：`absorb`、`probes`（页面写，你核）
+
+一次检验（`board check`）里每道题的作答是一条证据 `src: "check"`（字段见「证据」）。做完以后每块写一条吸收：
+
+- `absorb/{块}`（知识点 `#` 换 `~`）= `{ block, space, state: "成功" | "部分" | "未" | "待核", facets: { "重建" | "能用" | "边界" | "能辨": "ok" | "fixed" | "fail" | "pending" }, by: "page", checked: false, check（检验 id）, session, at, date, probes: [证据编号], confidentWrong: [题 id], debt: [target…], families, retests: [{ days: 1, due, done, ok }, { days: 7, … }], retryOwed: [题库编号], history: [以前几次（最多 5 次）], log }`。状态类：`state`、`checked` 改了在 `log` 里记一条（`{ date, by, field, from, to, basis, note }`）。
+- 页面怎么判：这一块必做和做了的可选都一次过、不是「蒙的」、不超时 → `成功`；有补上的（retry 做对、蒙对了再确认、超时以后做对）→ `部分`；有 retry 用完、想不出来又没补上的 → `未`；没有「未」但有拿不准的 → `待核`。没做完的块不写。
+- 你核：直接写 `state`、`checked: true`、`by: "ext"`，`log` 加一条。再做一次同一块的检验：`state` 照最新的一次，前几次进 `history`，复测重新排。
+- 复测：检验那天以后 1 天、7 天（`retests`），到期的写进 `meta/facts` 和首页「今天」的事实（「复测：L2.1.4（隔 1 天）」），`meta/today` 的 `kind` 能写 `retest`。学生点了开一节 `kind: "check"` 的课（`sessions/{编号}`：`{ kind: "check", retest: [{ block, days }], items: [题库编号], … }`），没有主讲；题从 `probes` 里每个 `family` 挑一道没见过的（不挑那次检验里的 retry），挑不到写「缺新题」。复测的证据带 `retest: 1 | 7`、`bank`（题库编号），进掌握的参考，不改吸收。
+- 检验里最后没过的（retry 用完、想不出来又没补上）和「很确定却错了」的题，页面各记一道错题（`errors`，带 `check`、`probe`、`target`、`items`；同一个 `target` 一次检验一道），能在「管理 → 最近记下的」撤销；补上了的、待核的不记。
+
+`probes/{pr-…}` = `{ fence（题的围栏原文）, type: "recall" | "construct" | "claim" | "discriminate" | "locate" | "solve", block, target, level: "基础" | "方法" | "核心", facet, family, retryBank: [题库编号], src: "ext" | "lab", from: { session, check, as: "probe" | "retry" | "spare" }, seen: [{ at, session, as }], at }`。同一道题（去掉 `id:`、`retry:` 两行以后原文一样）一个编号；`retry:` 写的局部 id 存成 `retryBank`（题库编号）。你写新题：`fence` 照 `board check` 里的一道写，编号照 `pr-` 加 12 位十六进制随便取一个没用过的。
 
 ### 练一练和题库：`drills`（页面写，你也可以写）
 

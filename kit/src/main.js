@@ -15,6 +15,10 @@ import { renderDesk, classHash } from './memory/desk.js';
 import deskCss from './memory/desk.css';
 import themesCss from './themes.css';
 import classIosCss from './class/ios.css';
+import checkCss from './check/check.css';
+import { mountCheck } from './check/shell.js';
+import { parseCheck } from './check/spec.js';
+import { demoCheck } from './check/demo.js';
 // 舞台（2026-11-18 从 archive/ 恢复）：黑板组件 stage 嵌一块没有老师的舞台，画法和样子照舞台课那时一样
 import stageCss from './stage/stage.css';
 import { viewCss as stageViewCss } from './stage/types/views.js';
@@ -58,7 +62,7 @@ function injectStyles() {
   document.body.insertAdjacentHTML('afterbegin', CHALK_FILTER);
   const style = document.createElement('style');
   style.id = 'la-kit-style';
-  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + deskCss + '\n' + stageStyles(stageCss + '\n' + stageViewCss()) + '\n' + themesCss + '\n' + classIosCss;
+  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + deskCss + '\n' + stageStyles(stageCss + '\n' + stageViewCss()) + '\n' + themesCss + '\n' + classIosCss + '\n' + checkCss;
   document.head.appendChild(style);
   if (!document.querySelector('meta[name="viewport"]')) {
     const m = document.createElement('meta');
@@ -140,4 +144,4 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 else renderAll();
 
 // 留给高级用法：window.LAKit.render(markdown, element)
-window.LAKit = { ...(window.LAKit || {}), version: VERSION, render: (md, el) => { injectStyles(); el.classList.add('la-lesson'); renderLesson(md, el); }, mdToHtml, blocks: Object.keys(blocks), session, recordText };
+window.LAKit = { ...(window.LAKit || {}), version: VERSION, render: (md, el) => { injectStyles(); el.classList.add('la-lesson'); renderLesson(md, el); }, mdToHtml, blocks: Object.keys(blocks), session, recordText, check: { mount: (host, o) => { injectStyles(); return mountCheck(host, o); }, parse: parseCheck, demo: (host, o) => { injectStyles(); return demoCheck(host, o); } } };

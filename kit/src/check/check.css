@@ -1,0 +1,44 @@
+/* 检验（kit/src/check/shell.js）：一张一张卡，照现有组件的样子（面板、按钮、输入框），颜色全走变量 */
+.ck-shell { display: flex; flex-direction: column; gap: 12px; max-width: 860px; margin: 0 auto; padding: 8px 0 24px; font-family: var(--sans); color: var(--chalk); }
+.ck-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; min-height: 44px; }
+.ck-title { font-family: var(--hand); font-size: 22px; }
+.ck-meta { font-size: 15px; color: rgb(var(--chalk-rgb) / 0.7); }
+.ck-head .ck-pause { margin-left: auto; min-height: 44px; }
+.ck-card { background: var(--panel); box-shadow: var(--panel-edge), var(--lift, none); border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.ck-card h3 { margin: 0; font-family: var(--hand); font-size: 24px; font-weight: 600; }
+.ck-sub { font-size: 15px; color: rgb(var(--chalk-rgb) / 0.65); }
+.ck-rules { margin: 0; padding-left: 1.2em; line-height: 1.8; font-size: 16px; }
+.ck-tag { font-size: 14px; color: rgb(var(--chalk-rgb) / 0.6); }
+.ck-probe-card.is-retry .ck-tag { color: rgb(var(--yellow-rgb) / 0.9); }
+.ck-q { font-size: 18px; line-height: 1.7; }
+.ck-q2 { font-size: 16px; color: rgb(var(--chalk-rgb) / 0.8); }
+.ck-work { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.ck-field { display: flex; flex-direction: column; gap: 6px; }
+.ck-label { font-size: 15px; color: rgb(var(--chalk-rgb) / 0.7); }
+.ck-hint { margin: 0; font-size: 15px; color: rgb(var(--chalk-rgb) / 0.7); }
+.ck-text { width: 100%; box-sizing: border-box; min-height: 64px; padding: 10px 14px; resize: vertical; border: 0; border-radius: 12px; background: var(--field, rgb(var(--shade-rgb) / 0.18)); box-shadow: var(--field-edge, none); color: var(--chalk); font: 16px/1.7 var(--sans); }
+.ck-text:focus { outline: 2px solid rgb(var(--yellow-rgb) / 0.55); outline-offset: 0; }
+.ck-slots { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; }
+.ck-slot { display: flex; align-items: center; gap: 10px; }
+.ck-slot-name { font-size: 18px; }
+.ck-expr { display: flex; flex-direction: column; gap: 6px; }
+.ck-choice { display: flex; gap: 10px; flex-wrap: wrap; }
+.ck-pick, .ck-sure-btn { min-height: 44px; min-width: 72px; font-size: 16px; }
+.ck-pick.is-on, .ck-sure-btn.is-on, .ck-line.is-on { box-shadow: inset 0 0 0 2px rgb(var(--yellow-rgb) / 0.85); background: rgb(var(--yellow-rgb) / 0.14); }
+.ck-lines { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.ck-line { width: 100%; min-height: 44px; display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 8px 12px; border: 0; border-radius: 12px; background: rgb(var(--chalk-rgb) / 0.05); color: var(--chalk); font: 16px/1.6 var(--sans); cursor: pointer; }
+.ck-ln { min-width: 1.6em; color: rgb(var(--chalk-rgb) / 0.55); }
+.ck-sure { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.ck-sure-q { font-size: 15px; color: rgb(var(--chalk-rgb) / 0.7); margin-right: 4px; }
+.ck-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.ck-actions .btn { min-height: 44px; font-size: 16px; }
+.ck-warn { font-size: 15px; color: rgb(var(--chalk-rgb) / 0.65); }
+.ck-items { margin: 0; padding-left: 1.2em; line-height: 1.8; font-size: 16px; }
+.ck-item b { font-weight: 600; }
+.ck-teach-text { font-size: 17px; line-height: 1.8; padding: 10px 14px; border-radius: 12px; background: rgb(var(--yellow-rgb) / 0.1); }
+.ck-next, .ck-start, .ck-back, .ck-resume { align-self: flex-start; min-height: 44px; font-size: 16px; }
+.ck-absorb { margin: 0; padding-left: 1.2em; line-height: 2; font-size: 16px; }
+.ck-probe.is-locked { opacity: 0.6; }
+.ck-strip { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 12px; border-radius: 14px; background: var(--panel); box-shadow: var(--panel-edge); font: 15px var(--sans); }
+/* 合书：检验开着时板书、常驻栏、翻板条、整页板书收起来（调用方给 body 加 is-checking） */
+body.is-checking .class-pages, body.is-checking .class-pins, body.is-checking .cb-nav, body.is-checking .class-aims, body.is-checking .class-ext-tools, body.is-checking .ink-canvas, body.is-checking .ink-fab, body.is-checking .ink-bar, body.is-checking .ink-cursor { display: none !important; }
