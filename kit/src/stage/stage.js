@@ -134,7 +134,7 @@ export function helpLine(q, hasGoals, hasWork = false) {
 export { COLOR_NAMES };
 
 export class Stage {
-  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false, embed = false, prewrite = null, scenesHost = null, side = null, eyes = false, barEl = null } = {}) {
+  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false, embed = false, prewrite = null, talk = true, scenesHost = null, side = null, eyes = false, barEl = null } = {}) {
     this.barEl = barEl; // 顶上那一条（课堂给；look bar 改它的样子，第九轮）
     this.eyes = eyes; // 每轮给老师看画面（第九轮）：只在真叫老师的地方开（课堂、样子页的 Opus 上课）；检查、试演工具不拍
     this.sideForce = side; // 'open'：栏一直开着、没有把手（回看用）
@@ -157,6 +157,8 @@ export class Stage {
     this.speed = speed;
     this.pace = PACES[pace] ? pace : storedPace();
     this.withInput = input;
+    // talk：等学生时底下那一行「想说点什么也可以直接写」。黑板上的一块舞台不要它（学生说话走课堂底部的输入框），交给学生的手照开
+    this.talk = talk;
     this.reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.instant = false; // 重放时：不演动画、不等学生
     this.scene = new Scene();
@@ -3014,7 +3016,7 @@ export class Stage {
       // 打字：一直在（学生可以不点格子、不写式子，直接说「我不懂」「写在哪？」）；ask say / 一个输入框的 ask value 时把它放到最前面，那时它就是答案框。
       // 写式子的那几种（按格、一个式子框）以前不给这一行：学生对着一格格式子框，想说句话都没处说
       const asAnswer = w.kind === 'value' && !formula;
-      if (this.withInput || asAnswer || w.kind === 'say') {
+      if ((this.withInput && this.talk) || asAnswer || w.kind === 'say') {
         const form = el('form', 'st-say', this.dock);
         const input = el('input', '', form);
         input.type = 'text';

@@ -5,7 +5,7 @@
 // 这里没有老师可叫，同一刻记一条动作 stage-call（detail 里是那时会发给老师的那一段），外部主讲从下一份 ext_out 里看到。
 // 学生每一下记一条 stage-act；挑战做到 / 按了按钮没做到、答了那一问记成作答（type: 'stage'）。舞台现在什么样：stageBoxState(el)。
 // 刷新、重画时从头演（不放回学生动过的样子）。字段的读法和写法错误的拼法在 stageboxspec.js（纯函数，有测试）。
-import { Stage, actText } from '../stage/stage.js';
+import { Stage, actText, quoteText } from '../stage/stage.js';
 import { eventOf, eventsText, triggers, hasWork, tryCount, TRY_MAX, QUIET_MS, verdictText } from '../stage/events.js';
 import { parseStageBox, problemsOf, callLine } from '../stageboxspec.js';
 import { session } from '../session.js';
@@ -34,7 +34,7 @@ export function stage(el, src) {
   let pending = []; // 上一次「叫老师」以后学生做的事（events.js 的写法），到了要叫的那一刻写成一段
   let triedOut = false, stuckOut = false, idleTimer = null;
 
-  const st = new Stage(host, { input: false, embed: true, prewrite, onAct });
+  const st = new Stage(host, { input: true, talk: false, embed: true, prewrite, onAct });
   el.__stage = st; // 黑板现状、自动测试、调试找得到这块舞台
   const goals = () => st.scene.goals;
   const ev = (type, detail) => { if (alive) session.event(type, el, { stage: id, ...detail }); };
@@ -103,10 +103,20 @@ export function stage(el, src) {
     }
     const e = eventOf(act, { at: Date.now() });
     pending.push(e);
+    // 按了按钮、写了 on= 的挑战还没做到：舞台课那时老师接着讲、再挂一问；这里没有老师，预写演完把同一个按钮再挂上，学生改了能再交
+    if (act.type === 'next' && act.button) rehang(act.button);
     // 按了按钮才判的挑战（on=）：做没做到由 onGoal / 下面记；答对了、页面演了预写的：学生手上还有事就攒着
     if (act.reacted) { e.reacted = act.reacted; settle('answer'); return; }
     if (triggers(e)) call('answer');
   };
+  function rehang(button) {
+    Promise.resolve(st.reacting).then(() => {
+      if (!alive || st.scene.waiting) return;
+      if (![...goals().values()].some((g) => !g.met && !g.watch && g.on === button)) return;
+      const t = st.begin({ auto: false, unpick: false });
+      t.end(`ask next button=${quoteText(button)}`).catch(() => {});
+    });
+  }
   // 挑战做到了（学生做的）；老师的行、预写的行让它成立的只攒着
   st.onGoal = (ids, { by = 'student', reacted = 0, pressed = false } = {}) => {
     if (!alive) return;
