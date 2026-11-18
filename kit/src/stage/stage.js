@@ -134,15 +134,20 @@ export function helpLine(q, hasGoals, hasWork = false) {
 export { COLOR_NAMES };
 
 export class Stage {
-  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false, scenesHost = null, side = null, eyes = false, barEl = null } = {}) {
+  constructor(host, { onAct = null, onLine = null, speed = 1, input = true, pace = null, bare = false, embed = false, prewrite = null, scenesHost = null, side = null, eyes = false, barEl = null } = {}) {
     this.barEl = barEl; // 顶上那一条（课堂给；look bar 改它的样子，第九轮）
     this.eyes = eyes; // 每轮给老师看画面（第九轮）：只在真叫老师的地方开（课堂、样子页的 Opus 上课）；检查、试演工具不拍
     this.sideForce = side; // 'open'：栏一直开着、没有把手（回看用）
     this.scenesHost = scenesHost; // 幕条放哪（课堂给顶上那一条里留的位置；不给放在舞台自己顶上）
     // bare：嵌在别处的一小块舞台（自己练），没有上面的话、底下的输入条——镜头不给它们留地方
     this.bare = !!bare;
+    // embed：嵌在黑板的一段里（blocks/stagebox.js）。和 bare 一样不用自由构图、没有横屏的解析栏，但话、挑战、底下那一条照旧留地方
+    //（外部主讲预写的话要看得见，不能压在东西上）
+    this.embed = !!embed;
+    // 预写也收 @名字.wrong / .miss、@ask.wrong（prewrite: 'all'，只给黑板上外部主讲写的舞台；scene.js 的 stashSlip）
+    this.prewriteAll = prewrite === 'all';
     // 自由构图（主线第八轮）：东西摆在哪由老师的构图意图 + 页面的求解器定，镜头固定一档字号（嵌在别处的一小块舞台照旧整台缩放）
-    this.free = !this.bare;
+    this.free = !this.bare && !this.embed;
     this.baseCam = null; // 求解器摆好时的镜头（不跟着 camera X 凑近）
     this.layoutState = null; // 最近一次摆的 { boxes, unmet, scale, grid, canvas }：现状的「版面」、预览用
     this.lastTouched = null; // 这一轮老师讲的那样东西（话默认贴着它）
@@ -156,6 +161,7 @@ export class Stage {
     this.instant = false; // 重放时：不演动画、不等学生
     this.scene = new Scene();
     this.scene.examCheck = this.examCheck || null; // 考情：exam= / like= 当场核（课堂读到考试资料以后挂上）
+    this.scene.prewriteAll = this.prewriteAll;
     this.log = []; // 演过的每一行 { src, by: 'teacher' | 'student' | 'page', turn }
     this.errors = []; // 这一轮没演的行 { line, src, error }
     this.turnNo = 0;
@@ -713,6 +719,7 @@ export class Stage {
   clearAll() {
     this.scene = new Scene();
     this.scene.examCheck = this.examCheck || null; // 考情：exam= / like= 当场核（课堂读到考试资料以后挂上）
+    this.scene.prewriteAll = this.prewriteAll;
     this.noteView(); // 重放时照同一个屏幕摆（摆新东西要看屏幕多大：横屏东西多了另起一列）
     this.nodes.forEach((n) => n.remove()); this.nodes.clear();
     this.decors.forEach((m) => m.forEach((n) => n.remove())); this.decors.clear();
@@ -790,7 +797,7 @@ export class Stage {
     if (judged && !judged.apply) {
       if (act) act.blocked = true;
       told?.();
-      if (!this.instant) await this.snapBack(judged.obj);
+      if (!this.instant) { await this.snapBack(judged.obj); this.missed(judged.obj, judged.verdict); }
       return { blocked: true, judged };
     }
     const err = this.scene.check(c);
@@ -909,6 +916,15 @@ export class Stage {
     }
     return fx;
   }
+  /**
+   * 学生在 obj 上走偏、被弹回（裁判没让做、手势翻不成一行指令）：外部主讲预写的 @obj.miss（或判成不对的 @obj.wrong）、
+   * 还没做到的挑战的 @g.miss 马上演（prewrite: 'all' 的舞台才有；scene.js 的 slipReactions）
+   */
+  missed(obj, verdict = null) {
+    if (this.instant || !this.prewriteAll) return;
+    const list = this.scene.slipReactions(obj, verdict, { blocked: true });
+    if (list.length) this.react(list, this.turnNo);
+  }
   /** 没让做的那一下：拖着的部件滑回原处（场景一点没动） */
   async snapBack(id) {
     const jobs = [];
@@ -935,9 +951,10 @@ export class Stage {
   noteView() {
     const w = this.view?.clientWidth, h = this.view?.clientHeight;
     if (!(w > 0 && h > 0)) return;
-    this.setSide(w > h && !this.bare && this.sideWant && !this.free);
-    this.sideToggle.hidden = !(w > h && !this.bare) || !!this.sideForce || this.free;
-    this.root.classList.toggle('is-land', w > h && !this.bare);
+    const own = !this.bare && !this.embed; // 嵌在别处的舞台（自己练、黑板上的一段）没有横屏那一套
+    this.setSide(w > h && own && this.sideWant && !this.free);
+    this.sideToggle.hidden = !(w > h && own) || !!this.sideForce || this.free;
+    this.root.classList.toggle('is-land', w > h && own);
     this.sideToggle.textContent = this.sideOn ? '‹' : '说过的 ›';
     this.sideToggle.setAttribute('aria-label', this.sideOn ? '收起说过的话' : '点开这一幕说过的话');
     // 横屏：场景拿右边那一块摆东西、算「缩到几成」（2.8：摆新东西要不要另起一列、现状里的「字难认」都按它）
@@ -2850,12 +2867,22 @@ export class Stage {
         // 答对了这一问（页面判的：点对了、点的几样一样、填对了）：@ask.right 预写的行马上演，只演一次；课堂看学生手上还有没有事再叫老师
         const right = act.type === 'pick' ? act.same === true : act.right === true;
         let reacts = null;
+        // 答错了（页面判成不对：点错了、点的几样不一样、填错了；判不了、打了字的不算）：@ask.wrong 预写的行马上演（prewrite: 'all' 才有）
+        const wrong = act.type === 'pick' ? act.same === false : act.right === false;
         if (right && w.right?.length) {
           reacts = w.right.map((src) => ({ ask: true, src }));
           delete w.right;
           act.reacted = reacts.length;
           this.react(reacts, this.turnNo);
-        } else if (w.right || w.rightKey) this.scene.endAsk(w); // 没答对（答错、判不了、打了字、点了按钮）：这一问的 @ask.right 连同套着的拿掉
+        } else {
+          if (w.right || w.rightKey) this.scene.endAsk(w); // 没答对（答错、判不了、打了字、点了按钮）：这一问的 @ask.right 连同套着的拿掉
+          if (wrong && w.wrong?.length) {
+            reacts = w.wrong.map((src) => ({ ask: true, wrongOf: 'ask', src }));
+            delete w.wrong;
+            act.reacted = reacts.length;
+            this.react(reacts, this.turnNo);
+          }
+        }
         this.onAnswer?.(act, w, reacts ? { reacts } : {});
       }
       return act;
