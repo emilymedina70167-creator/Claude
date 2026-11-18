@@ -18,6 +18,8 @@ import { guardDebrief, buildCorpus } from './guard.js';
 import { guardDb } from './writer.js';
 import { subjectOf as holdSubject } from './space.js';
 import { dueHolds, holdAims } from './holds.js';
+import { dueRetests, pickRetest } from '../check/bank.js';
+import { enterRetest } from '../check/retestrun.js';
 import { aimId, checkAims } from '../class/aims.js';
 import { componentDoc } from '../subject.js';
 import { ENGINES } from '../engines/registry.js';
@@ -177,6 +179,7 @@ export async function renderDesk(root, meta) {
     <section class="dk-group" aria-label="今天"><h2 class="dk-grp-h">今天</h2><div class="dk-card dk-rows"></div></section>
     <div class="dk-drawer" hidden>
     <div class="dk-part dk-later" hidden><h2 class="dk-h">验上次学的</h2><div class="dk-body"></div></div>
+    <div class="dk-part dk-retest" hidden><h2 class="dk-h">复测</h2><div class="dk-body"></div></div>
     <div class="dk-part dk-today" hidden><h2 class="dk-h">复现</h2><div class="dk-body"></div></div>
     <div class="dk-part dk-next" hidden><h2 class="dk-h">每块还能攒几分</h2><p class="dk-sub muted">按 410 分里每一块还能攒多少分排，页面算的。</p><div class="dk-body"></div></div>
     <div class="dk-part dk-recall" hidden><h2 class="dk-h">要记的</h2><p class="dk-sub muted">先写出来，再看答案。隔 1、3、7、14、30 天各想一遍。</p><div class="dk-body"></div><details class="dk-fold dk-radd"><summary><span class="muted">自己加一条</span></summary><div class="dk-radd-f"></div></details></div>
@@ -319,7 +322,7 @@ export async function renderDesk(root, meta) {
   const inline = (s) => { try { return mdToHtml(String(s ?? ''), { inline: true }); } catch { return escapeHtml(String(s ?? '')); } };
   const fixing = new Set(); // 正在写报告的课
   let opening = false; // 正在开一节（开新课、复现课、练一练、课前热身）：写进去那几秒首页会重画，按钮别再能点出第二节
-  const OPENERS = '.dk-new, .dk-review, .dk-drill-go, .dk-warm, .dk-later-go';
+  const OPENERS = '.dk-new, .dk-review, .dk-drill-go, .dk-warm, .dk-later-go, .dk-retest-go';
   /** 开一节（写 sessions、整页跳过去）：同一时间只开一节，失败了放开按钮 */
   async function openOne(make) {
     if (opening) return;
@@ -1384,6 +1387,7 @@ export async function renderDesk(root, meta) {
   // 打开时整段搬进面板、关上搬回去：做的事、数据一点没变
   const ROWS = {
     later: { title: '验上次学的', ic: 'is-review' },
+    retest: { title: '复测', ic: 'is-review' },
     today: { title: '复现', ic: 'is-review' },
     recall: { title: '要想起来的', ic: 'is-recall' },
     drill: { title: '练一练', ic: 'is-drill' },
@@ -1419,6 +1423,8 @@ export async function renderDesk(root, meta) {
     if (!box) return;
     const later = dueHolds(data.sessions, today)[0];
     paintLater(today);
+    const retest = dueRetests(data.absorb || [], today);
+    paintRetest(today);
     const groups = todayReviews(data, { today });
     const nrev = groups.reduce((n, g) => n + g.total, 0);
     const rc = recallToday(data.recall, { today });
@@ -1431,6 +1437,7 @@ export async function renderDesk(root, meta) {
     const note = mine.find((r) => r.kind === 'note')?.text || '';
     const sub = {
       later: later ? `${plainTitle(later.title) || '上一节课'} · ${later.holds.ids.length} 道` : '',
+      retest: retest.length ? retest.map((r) => `${blockTitle(r.block)}（隔 ${r.days} 天）`).join('、') : '',
       today: nrev ? groups.map((g) => `${g.subject} ${g.total} 组`).join('，') : '今天没有要复现的',
       recall: rc.total ? `${spaceCounts(rc.bySpace)}。先写出来，再看答案` : '今天没有要想的',
       drill: dpick ? `${dpick.label}${dpick.why ? ` · ${dpick.why}` : ''}` : '',
@@ -1438,8 +1445,8 @@ export async function renderDesk(root, meta) {
       book: '1000 题这些：书、章、题号，每题对 / 错',
       next: nextLine(),
     };
-    const n = { later: later?.holds.ids.length || 0, today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null, book: null, next: null };
-    const keys = Object.keys(ROWS).filter((k) => (k !== 'drill' || dpick) && (k !== 'later' || later));
+    const n = { later: later?.holds.ids.length || 0, retest: retest.length, today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null, book: null, next: null };
+    const keys = Object.keys(ROWS).filter((k) => (k !== 'drill' || dpick) && (k !== 'later' || later) && (k !== 'retest' || retest.length));
     for (const k of ['recall', 'later']) if (whyOf(k)) sub[k] = `${whyOf(k)}${sub[k] ? ` · ${sub[k]}` : ''}`;
     box.innerHTML = (note ? `<p class="dk-tnote">${inline(note)}</p>` : '') + crows.map((r, ci) => `<button type="button" class="dk-trow dk-crow" data-ci="${ci}" data-ckind="${r.kind}" data-cval="${escapeHtml(r.kind === 'review' ? r.ids.join(',') : r.block)}"><span class="dk-ic ${r.kind === 'review' ? 'is-review' : 'is-plus'}">${r.kind === 'review' ? r.ids.length : '›'}</span><b>${inline(r.label)}</b><small>${escapeHtml(r.why || (r.kind === 'review' ? '复现课' : r.kind === 'coach' ? '练习' : '开课'))}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('') + keys.map((k) => `<button type="button" class="dk-trow" data-row="${k}" data-menu="${k}"><span class="dk-ic ${ROWS[k].ic}${n[k] === 0 ? ' is-zero' : ''}"${n[k] === null ? '' : ' data-count'}>${n[k] === null ? '+' : rowCounts[k] ?? n[k]}</span><b>${ROWS[k].title}</b><small>${escapeHtml(sub[k])}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('');
     // 数字变了：往上滚过去（第一次画不滚）
@@ -1450,6 +1457,27 @@ export async function renderDesk(root, meta) {
       rowCounts[k] = n[k];
     }
     panels.resync();
+  }
+  // 复测（check/bank.js）：到期的块从题库里每个同类挑一道没见过的；挑不到的照实写缺新题（页面不出题）
+  function paintRetest(today) {
+    const box = $('.dk-retest .dk-body');
+    if (!box) return;
+    const due = dueRetests(data.absorb || [], today);
+    const pick = due.length ? pickRetest({ due, bank: data.probes || [], absorbs: data.absorb || [] }) : { items: [], missing: [] };
+    box.innerHTML = !due.length ? '<p class="muted">今天没有到期的复测。</p>'
+      : `<p>${due.map((r) => `${escapeHtml(blockTitle(r.block))}（隔 ${r.days} 天）`).join('、')} · ${pick.items.length} 道</p>${pick.missing.length ? `<p class="muted">缺新题：${pick.missing.map((m) => escapeHtml(`${m.block} 的 ${String(m.family).slice(String(m.block).length + 1)} 那一类`)).join('、')}（题库里没有没见过的同类题，主讲补）</p>` : ''}${pick.items.length ? '<button type="button" class="btn btn-primary dk-retest-go">开始</button>' : ''}`;
+    box.querySelector('.dk-retest-go')?.addEventListener('click', () => openOne(async () => {
+      const d = toDate(Date.now());
+      const due2 = dueRetests(data.absorb || [], d);
+      const p2 = pickRetest({ due: due2, bank: data.probes || [], absorbs: data.absorb || [] });
+      if (!p2.items.length) return '';
+      const active = data.sessions.find((s) => s.kind === 'check' && s.status === 'open' && s.date === d);
+      if (active) return active.id;
+      const sid = sessionId(d, takenIds());
+      assertWrite('page', 'sessions');
+      await db.doc(`sessions/${sid}`).set({ kind: 'check', date: d, space: spaceOfId(due2[0].block), block: due2[0].block, retest: due2.map((r) => ({ block: r.block, days: r.days })), items: p2.items, title: '复测', status: 'open', startedAt: Date.now() });
+      return sid;
+    }));
   }
   function paintLater(today) {
     const box = $('.dk-later .dk-body');
@@ -1845,6 +1873,8 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     ]);
     return renderOldClass(root, { session: { ...doc, kind }, report, turns, onHome: () => goto(`classes/${sid}`) });
   }
+  // 检验以后的复测（check/retestrun.js）：整页是检验外壳，没有主讲
+  if (kind === 'check') return enterRetest(root, { db: guardDb(db), store, sid, doc, readOnly, goto });
   if (kind === 'drill') {
     return enterDrill(root, meta, {
       db: guardDb(db), store, sid, doc, readOnly, goto, // 练一练是页面自己的：写也走同一个出口（课堂那边不包，不碰回话的速度）

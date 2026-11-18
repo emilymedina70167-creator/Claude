@@ -18,6 +18,7 @@ import { itemsOf } from './report.js';
 import { voidedIds } from './memo.js';
 import { spaceOfId } from './space.js';
 import { retagEvidence, pointCatalog } from './skills.js';
+import { checkItems } from '../check/record.js';
 
 export const MASTERY_RULE = {
   basic: 2, // 几道不同的题干净算基础题过
@@ -161,7 +162,12 @@ export function masteryProposals(mem = {}, { rule = MASTERY_RULE } = {}) {
   // 归过类的课（skills.js）：证据换成「真正的块 + 知识点」的标签再数
   const evs = retagEvidence((mem.evidence || []).filter((e) => e && (e.src === 'record' || e.src === 'event')), mem.sessions || []);
   const catalog = pointCatalog(mem.sessions || [], mastery);
-  const items = itemsOf(evs, new Map(), { bySession: true });
+  // 检验（check/，dr-plan2）：一类组件的作答是练习。一块有了检验的证据以后，这一块只数检验和复测（第一次作答；蒙的当没把握）；
+  // 还没检验过的块照旧数练习（不然没检验过的块参考掌握全部停住，练一练、隔天验也跟着失效）
+  const checked = checkItems(mem.evidence || []);
+  const checkedBlocks = new Set(checked.flatMap((it) => it.tags || []).map(blockOf));
+  const items = [...itemsOf(evs, new Map(), { bySession: true }).filter((it) => !(it.tags || []).some((t) => checkedBlocks.has(blockOf(t)))), ...checked]
+    .sort((a, b) => (a.first ?? 0) - (b.first ?? 0));
   markFresh(items);
   const byTarget = new Map();
   for (const it of items) {

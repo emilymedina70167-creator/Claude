@@ -16,7 +16,9 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildPaper } from '../kit/src/exam/ingest.js';
-import { DEV_CHECK } from '../kit/src/check/devsample.js';
+import { DEV_CHECK, DEV_CHECK_HEAD, DEV_CHECK_BODY } from '../kit/src/check/devsample.js';
+import { parseCheck } from '../kit/src/check/spec.js';
+import { bankDocs } from '../kit/src/check/bank.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const KIT = join(ROOT, 'kit/dist/la-kit.js');
@@ -1208,6 +1210,47 @@ const SUITES = {
     check(/吸收：未/.test(await t.text('.dk-shell') || await t.page.evaluate(() => document.body.innerText)), '以前的课里没写吸收');
     await t.page.click('[data-ckreplay]');
     await t.waitFor(() => t.page.$('.ck-replay canvas'), { timeout: 8000, what: '回放画出来' });
+    return t;
+  },
+
+  // 计划 2：检验以后 1 天的复测。首页「复测」那一行 → 开 kind: check 的课 → 题库里没见过的同类题（不挑那次检验的 retry）→ 做完写 retests.done、题库记见过
+  async retest(browser) {
+    const t = await seeded(browser);
+    const today = await todayIn(t);
+    const sample = parseCheck(DEV_CHECK_HEAD, DEV_CHECK_BODY).check;
+    const bank = bankDocs(sample, { session: 'c-20261101-1', at: Date.now() });
+    const docs = Object.fromEntries(bank.map(({ id, doc }) => [`probes/${id}`, doc]));
+    // 本题 p3 见过了：复测要挑同一类（L2.1.4/L2-56）里没见过的
+    const p3 = bank.find((b) => b.doc.from.as === 'probe' && /展开/.test(b.doc.fence)).id;
+    docs[`probes/${p3}`] = { ...docs[`probes/${p3}`], seen: [{ at: 1, session: 'c-20261101-1', as: 'first' }] };
+    docs['absorb/L2.1.4'] = { block: 'L2.1.4', space: 'math', state: '部分', checked: false, by: 'page', check: 'k1', session: 'c-20261101-1', date: '2026-11-01', families: ['L2.1.4/L2-56'], retests: [{ days: 1, due: today, done: null }, { days: 7, due: '2099-01-01', done: null }], log: [{ date: '2026-11-01', by: 'page', field: 'state', from: null, to: '部分' }, { date: '2026-11-01', by: 'page', field: 'checked', from: null, to: false }] };
+    await plant(t, docs);
+    await t.page.reload();
+    await t.waitFor(() => t.page.$('.dk-trow[data-row="retest"]'), { timeout: 15000, what: '首页出现「复测」那一行' });
+    await t.page.click('.dk-trow[data-row="retest"]');
+    await t.waitFor(() => t.page.$('.dk-retest-go'), { timeout: 8000, what: '复测面板有「开始」' });
+    await t.page.click('.dk-retest-go');
+    await t.page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash), { timeout: 20000 });
+    const sid = decodeURIComponent(new URL(t.page.url()).hash.slice(1));
+    await t.waitFor(() => t.page.$('.ck-start'), { timeout: 20000, what: '复测的检验画出来' });
+    const s0 = (await t.db())[`sessions/${sid}`];
+    check(s0?.kind === 'check' && s0.items?.length === 1 && s0.items[0] !== p3, `复测挑的题不对：${JSON.stringify(s0?.items)}`);
+    await t.page.click('.ck-start');
+    // 挑到的是同一类的 locate（p6）
+    await t.waitFor(() => t.page.$('.ck-locate'), { timeout: 8000, what: '复测的题是 locate' });
+    await t.page.click('.ck-line[data-n="2"]');
+    const tab = await t.page.$('.ck-card .ck-tab[data-tab="type"]'); if (tab) await tab.click();
+    await t.page.fill('.ck-card .ck-text', 'AB 和 BA 不一定相等');
+    await t.page.click('.ck-sure-btn[data-sure="sure"]');
+    await t.page.click('.ck-submit');
+    await t.waitFor(() => t.page.$('.ck-done'), { timeout: 20000, what: '复测做完' });
+    const all = await t.waitFor(async () => { const d = await t.db(); return d['absorb/L2.1.4']?.retests?.[0]?.done ? d : null; }, { timeout: 10000, what: '复测的结果写进 absorb' });
+    check(all['absorb/L2.1.4'].retests[0].ok === true, `复测应过了：${JSON.stringify(all['absorb/L2.1.4'].retests[0])}`);
+    check(all['absorb/L2.1.4'].state === '部分', '复测不该改吸收');
+    const ev = Object.values(all).find((d) => d?.src === 'check' && d.session === sid);
+    check(ev?.retest === 1 && /^pr-/.test(ev.bank || ''), `复测的证据没带 retest、bank：${JSON.stringify({ retest: ev?.retest, bank: ev?.bank })}`);
+    check(all[`probes/${ev.bank}`]?.seen?.some((x) => x.as === 'retest'), '题库没记见过');
+    check(all[`sessions/${sid}`]?.status === 'closed', '复测的课没关');
     return t;
   },
 

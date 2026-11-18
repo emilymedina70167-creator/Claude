@@ -105,7 +105,7 @@ const OUTCOME_ITEM = { pass: 'first', fail: 'wrong', pending: 'open' };
 /** 掌握参考用的题（形状照 report.js 的 itemsOf）：本题（不要 retry）、不要外部改判追加的那条 */
 export function checkItems(evidence = []) {
   return (evidence || []).filter((e) => e?.src === 'check' && !e.retryOf && !e.rejudged && e.outcome).map((e) => ({
-    key: `${e.session || ''}§${e.comp}`, comp: e.comp, session: e.session || null, tags: e.tags || (e.block ? [e.block] : []),
+    key: `${e.session || ''}§ck:${e.session || ''}:${e.bank || e.comp}`, comp: e.comp, session: e.session || null, tags: e.tags || (e.block ? [e.block] : []),
     outcome: e.giveup ? 'giveup' : OUTCOME_ITEM[e.outcome] || 'open', sure: e.sure !== 'guess',
     first: e.at, end: e.at, evidence: [e.id], ...(e.retest ? { retest: e.retest } : {}), check: true,
   }));

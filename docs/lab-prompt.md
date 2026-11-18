@@ -12,7 +12,7 @@
    - 页面算好的事实：meta/facts（每科到期的复现组、要记的到期几条、挂着没下课的课、这 7 天学了几分钟、上一节）；学习台里有什么：meta/catalog。
    - 上过的课 sessions/{编号}（外部主讲的课 kind 是 ext，每一轮在 sessions/{编号}/ext_in，学生那边的现状在 sessions/{编号}/ext_out；每节课的课堂记录在 sessions/{编号}/class_turns，课后报告在 sessions/{编号}/report/main）；作答和学生说的话在 evidence。
    - 教材 books/{书}/chunks/{条}；考试资料 questions、exam_profiles、syllabus。
-   - 首页「今天」照 meta/today 画：{ date: 'YYYY-MM-DD', note, items: [{ kind: class | review | drill | recall | later | coach, why, label, block（class、coach）, ids（review 是复现组编号、drill 是题库编号）, reviews, focus }] }，date 不是那一天时首页只列事实。
+   - 首页「今天」照 meta/today 画：{ date: 'YYYY-MM-DD', note, items: [{ kind: class | review | drill | recall | later | coach | retest, why, label, block（class、coach）, ids（review 是复现组编号、drill 是题库编号）, reviews, focus }] }，date 不是那一天时首页只列事实。
    - 题库 drills：写进去的题页面会先画一遍，画不出来的标 broken，练一练不挑。仓库里有预检工具（tools/ext-check.mjs，说明在 CLAUDE-PROJECT.md「外部的课」）。
    - 每一类的字段写法：学习台发布的文件 CLAUDE-PROJECT.md 第七节（Artifact 的 read，path 是 CLAUDE-PROJECT.md）。
 3. 写：每写一条，先 get 那一条，写完再 set 一条 journal/j-{毫秒时间戳的 36 进制}-{5 个随机小写字母或数字}：
