@@ -13,7 +13,8 @@ const blockOf = (id) => String(id || '').split('#')[0];
 const dayOf = (at) => (Number(at) ? toDate(Number(at)) : '');
 const PASSED = new Set(['基础题过', '复现通过']);
 const LEVEL = { L0: 0, L1: 1, L2: 2, L3: 3 };
-const isRecord = (e) => e && e.src === 'record';
+// 作答：课上的作答，加上学生自己记的书上的题（src: book，dr-batch4 第 2 条）
+const isRecord = (e) => e && (e.src === 'record' || e.src === 'book');
 const firstTry = (e) => isRecord(e) && e.ok === true && !e.giveup && !e.revealed && (e.attempts == null || Number(e.attempts) <= 1);
 const safeSpace = (id) => { try { return spaceOfId(id); } catch { return null; } };
 const live = (d) => d && !['void', 'merged', 'retired'].includes(d.status);

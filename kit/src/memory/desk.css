@@ -562,8 +562,14 @@
 .dk-part:not([hidden]) ~ .dk-part:not([hidden]) { box-shadow: inset 0 0.5px 0 rgb(var(--chalk-rgb) / 0.12); }
 .la-lesson.is-desk .dk-part .dk-h { font-size: 17px; letter-spacing: 0.06em; margin-bottom: 8px; }
 .dk-part > .dk-sub { margin: -2px 0 10px; font-size: 13.5px; }
-.dk-part.dk-manual { padding: 8px 0; }
-.dk-part.dk-manual .dk-fold > summary { align-items: center; }
+.dk-part.dk-manual, .dk-part.dk-book { padding: 8px 0; }
+.dk-part.dk-manual .dk-fold > summary, .dk-part.dk-book .dk-fold > summary { align-items: center; }
+/* 记书上的题（bookqview.js）：每题一行，题号 + 四个结果 */
+.dk-bform .dk-brow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 6px 0; border-bottom: 0.5px solid rgb(var(--chalk-rgb) / 0.12); }
+.dk-bform .dk-brow b { min-width: 5.5em; }
+.dk-bform input { font-size: 16px; min-height: 44px; }
+.dk-bform .dk-bch { width: 5em; }
+.dk-bform .dk-badd summary { min-height: 44px; display: flex; align-items: center; color: var(--muted); }
 /* 复现：每门课一行（科目、几组到期、按钮），挑出来的几组在下面一行行列着；不再套一张灰卡 */
 :root .is-desk :is(.dk-group, .fl-body) .dk-rv { padding: 0; border-radius: 0; background: none; box-shadow: none; }
 :is(.dk-group, .fl-body) .dk-rv + .dk-rv { margin-top: 12px; padding-top: 12px; box-shadow: inset 0 0.5px 0 rgb(var(--chalk-rgb) / 0.08); }

@@ -16,8 +16,8 @@ import { tokenize } from '../tokens.js';
 // 学生在那一题上的事
 export const DELEGATE_EVENTS = ['submit', 'wrong', 'right', 'giveup', 'stuck', 'say', 'draft'];
 // 它这一次能做的：指令 → 归哪一种能力（不在表里的指令它一律不能写：pin、aims、close、claude……）
-export const CAN = ['say', 'add', 'replace', 'hide', 'mark', 'figure', 'react', 'new', 'stage', 'widget', 'memo', 'note'];
-const OP_CAN = { add: 'add', show: 'add', move: 'add', replace: 'replace', edit: 'replace', hide: 'hide', mark: 'mark', unmark: 'mark', figure: 'figure', react: 'react', why: 'react', new: 'new', layout: 'new', stage: 'stage', widget: 'widget', memo: 'memo', note: 'note' };
+export const CAN = ['say', 'add', 'replace', 'hide', 'mark', 'figure', 'react', 'new', 'stage', 'widget', 'memo', 'note', 'judge'];
+const OP_CAN = { add: 'add', show: 'add', move: 'add', replace: 'replace', edit: 'replace', hide: 'hide', mark: 'mark', unmark: 'mark', figure: 'figure', react: 'react', why: 'react', new: 'new', layout: 'new', stage: 'stage', widget: 'widget', memo: 'memo', note: 'note', judge: 'judge' };
 export const SEE = ['target', 'board', 'evidence', 'books', 'memory', 'ext'];
 const ID_RE = /^[A-Za-z0-9_\-.~:@+]{1,64}$/;
 export const HELPER_MAX = 20; // 同一个 id 一节课最多叫几次（turns 写得再大也到这里为止）

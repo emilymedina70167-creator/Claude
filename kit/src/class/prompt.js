@@ -1111,6 +1111,15 @@ function recordText(a, type) {
       const wrong = Array.isArray(a.wrong) && a.wrong.length ? `（${a.wrong.map((x) => short(String(x), 80)).join('；')}）` : '';
       return `[作答] ${where(a, type)}：${a.q ? `「${short(a.q, 120)}」` : ''}${tail([v, a.ok === true ? '做到了' : a.ok === false ? '没做到' : '', a.giveup ? '放弃了' : ''].filter(Boolean).join('，') + wrong, a.text ? `说明：${short(a.text, 200)}` : '', duration(a.ms))}`;
     }
+    // 解答题（dr-batch4 第 1 条，solvespec.js）：交了整道题等判；判了以后逐步的结论
+    case 'solve': {
+      if (a.judged) return `[判定] ${where(a, 'solve')}：${a.by === 'helper' ? '页面里的 Claude' : a.by === 'teacher' ? '老师' : '主讲'}一步一步判了：${a.value || ''}${a.ok === true ? '（整道题对）' : ''}`;
+      const photos = Array.isArray(a.photos) && a.photos.length ? a.photos : [];
+      const n = Number(a.nImages) || photos.length;
+      const got = [a.value ? `打字：「${short(String(a.value), 1200)}」` : '', n ? `照片 ${n} 张${photos.length ? `（asset ${photos.join('、')}，用 read_asset 看）` : ''}` : ''].filter(Boolean).join('；');
+      const who = a.judge === 'claude' ? (a.source === 'record' ? '页面里的 Claude 判（board judge）' : '') : a.judge === 'none' ? '' : '等你一步一步判（board judge target=…）';
+      return `[作答] ${where(a, 'solve')}：交了整道题${Number(a.submitted) > 1 ? `（第 ${a.submitted} 次）` : ''}：${got || '（空的）'}${who ? `；${who}` : ''}${duration(a.ms)}`;
+    }
     case 'steps': return stepsRecord(a);
     case 'answer':
     case 'practice': return answerRecord(a, type);

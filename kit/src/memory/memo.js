@@ -356,6 +356,16 @@ export function nextSlipId(slips, session, date) {
  * ctx：{ mem, evidence（这节课的）, session, block（这节课的块）, date }。
  * 这里把编号、字段、取值、依据都查一遍；查不过的不进改动单，原因写进 [系统] 提醒让它改。
  */
+// 解答题按步骤判的结论（steps：[{ id, ok, why, tag }]，tag 错法）、书上的题（book：{ title, part, subject, ch, no }）：
+// 页面拼好整条传进来（不是 memo 块里的字），照原样存（dr-batch4）
+function extraOfError(a) {
+  const out = {};
+  if (Array.isArray(a.steps)) out.steps = a.steps.slice(0, 20).map((x) => ({ id: String(x.id ?? ''), ok: x.ok === true || x.ok === false || x.ok === 'missing' ? x.ok : null, ...(x.why ? { why: cut(String(x.why), 300) } : {}), ...(x.tag ? { tag: cut(String(x.tag), 40) } : {}) }));
+  if (a.book && typeof a.book === 'object') out.book = Object.fromEntries(Object.entries(a.book).filter(([k, v]) => ['title', 'part', 'subject', 'ch', 'no'].includes(k) && v !== undefined && v !== null && v !== '').map(([k, v]) => [k, typeof v === 'number' ? v : cut(String(v), 60)]));
+  if (typeof a.tag === 'string' && a.tag) out.tag = cut(a.tag, 40);
+  return out;
+}
+
 export function planEntry(entry, ctx = {}) {
   const { kind, attrs: a } = entry;
   const spec = MEMO_KINDS[kind];
@@ -598,7 +608,7 @@ export function planEntry(entry, ctx = {}) {
         if (dupE) return { error: `和错题 ${dupE.id}（${cut(dupE.cause || dupE.q, 30)}）是同一道题、同一个错：不另记；又错了就改弱点` };
       }
       id ||= nextErrorId(get('errors'), block);
-      return { ...base, op: 'add', target: id, data: { source: cut(a.source || `课堂 ${sid || ''}`, 120), q: cut(q, 800), mine: cut(mine, 400), step: cut(a.step, 200), cause: cut(a.cause, 300), ...(a.weakness ? { weakness: a.weakness } : {}), ...(block ? { block } : {}), evidence: basis.filter((x) => x.startsWith('ev-')), date, session: sid } };
+      return { ...base, op: 'add', target: id, data: { source: cut(a.source || `课堂 ${sid || ''}`, 120), q: cut(q, 800), mine: cut(mine, 400), step: cut(a.step, 200), cause: cut(a.cause, 300), ...(a.weakness ? { weakness: a.weakness } : {}), ...(block ? { block } : {}), ...extraOfError(a), evidence: basis.filter((x) => x.startsWith('ev-')), date, session: sid } };
     }
     case 'weakness': {
       const old = a.id ? find('weaknesses', a.id) : null;
@@ -911,6 +921,14 @@ export function meChange(what, mem = {}, args = {}) {
     return pendingRecord({ kind: 'review', tier: 'me', coll: 'reviews', op: 'update', target: r.id, patch: { status: to }, label: what === 'pause' ? '暂停复现组' : '恢复复现组', reason: '我改的' }, { by: 'me' });
   }
   // 我自己加一条要记的（学习台外面看到的、自己想背的）；不用记了的停掉
+  // 学生自己记的书上的题（dr-batch4 第 2 条，bookq.js 的 bookErrorArgs）：错的、没做出的进错题本，带书名和题号
+  if (what === 'error-add') {
+    for (const k of ['q', 'mine', 'step', 'cause', 'source']) if (!String(args[k] || '').trim()) throw new Error(`错题要写 ${k}`);
+    const block = args.block ? String(args.block) : null;
+    // 一次记好几道：调用的地方按已经占了的号接着编，传 taken（这一批前面几道的编号）
+    const target = nextErrorId([...get('errors'), ...(args.taken || []).map((id) => ({ id }))], args.idBlock || block);
+    return pendingRecord({ kind: 'error', tier: 'me', coll: 'errors', op: 'add', target, data: { source: cut(args.source, 120), q: cut(args.q, 800), mine: cut(args.mine, 400), step: cut(args.step, 200), cause: cut(args.cause, 300), ...(block ? { block } : {}), ...extraOfError(args), evidence: (args.evidence || []).map(String), date }, label: '错题', reason: '我自己记的（书上的题）' }, { by: 'me' });
+  }
   if (what === 'recall-add') {
     const q = String(args.q || '').trim();
     const a = String(args.a || '').trim();

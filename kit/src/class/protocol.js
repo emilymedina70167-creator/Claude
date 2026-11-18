@@ -154,7 +154,7 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // move：版面模式里把一段挪到别的栏（col=），不重画
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'show', 'move', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'show', 'move', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set / claude / claude-off / queue / edit / stage / widget';
+const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set / claude / claude-off / queue / unqueue / edit / stage / widget / judge';
 
 /**
  * 解析 board 后面那一行：
@@ -216,6 +216,22 @@ export function parseCommand(header) {
     return { op: 'edit', id };
   }
   if (name === 'claude-off') return parseClaudeOff(m[2] || '');
+  // 预备板撤掉（dr-batch4 第 3 条）：没开的丢掉，「下一块 →」跟着收
+  if (name === 'unqueue') {
+    const t = tokenize(m[2] || '');
+    const id = t.find((x) => x.key === 'id')?.value || t.find((x) => !x.key)?.value;
+    if (!id) return { error: 'unqueue 缺少 id：board unqueue id=b9' };
+    if (!validId(id)) return { error: `id「${id}」不合法：${ID_RULE}` };
+    return { op: 'unqueue', id };
+  }
+  // 解答题按步骤判（dr-batch4 第 1 条，solvespec.js）：board judge target=题的 id，块里一行一步 s3 wrong tag=… why="…"
+  if (name === 'judge') {
+    const t = tokenize(m[2] || '');
+    const target = t.find((x) => x.key === 'target')?.value || t.find((x) => !x.key)?.value;
+    if (!target) return { error: 'judge 缺少 target：board judge target=p1（解答题的 id），块里一行一步' };
+    if (!validId(target)) return { error: `target「${target}」不合法：${ID_RULE}` };
+    return { op: 'judge', target };
+  }
   // 整节课的设置（需求 R11）：board set upload=on|off（组件下面的截图入口）
   if (name === 'set') return setCommand(m[2] || '');
   if (name === 'close') return { op: 'close' };
@@ -242,6 +258,7 @@ export function blockCommand(header, body = '') {
   if (op.op === 'claude') return parseClaude(op.head, body);
   if (op.op === 'edit') { const r = parseEdits(body); return r.error ? { error: r.error } : { ...op, edits: r.edits }; }
   if (op.op === 'why') return parseWhy(op.head, body);
+  if (op.op === 'judge') return String(body).trim() ? { ...op, body: String(body) } : { error: 'judge 块里一行一步：s1 ok / s3 wrong tag=规则用错 why="…" / s4 missing' };
   return op.op === 'mark' ? markOp(op, body) : op;
 }
 
