@@ -2574,3 +2574,7 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .block-stagedrill .sd-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
 .block-stagedrill .sd-bar .btn { min-height: 44px; font: 15px var(--sans); }
 .block-stagedrill .sd-note { margin-top: 8px; min-height: 1.5em; color: rgb(var(--chalk-rgb) / 0.85); font: 15px/1.6 var(--sans); }
+
+/* 黑板上的一块舞台（blocks/stagebox.js）：高由 height: 定（行内写），话、挑战、按钮都在这块里面 */
+.block-stage .sb-title { margin: 0 0 6px; font: 600 18px/1.4 var(--hand, var(--sans)); color: rgb(var(--chalk-rgb) / 0.95); }
+.block-stage .sb-stage { position: relative; min-height: 240px; border-radius: 16px; overflow: hidden; background: rgb(var(--chalk-rgb) / 0.04); touch-action: pan-y; }

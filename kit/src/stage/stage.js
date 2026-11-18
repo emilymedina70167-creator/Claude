@@ -797,7 +797,17 @@ export class Stage {
     if (judged && !judged.apply) {
       if (act) act.blocked = true;
       told?.();
-      if (!this.instant) { await this.snapBack(judged.obj); this.missed(judged.obj, judged.verdict); }
+      if (!this.instant) {
+        // 嵌在黑板上的舞台没有老师接着讲：这个世界做不到的那一下（式子换了以后不相等、不是同类项）当场说一句为什么
+        if (this.embed && judged.verdict?.legal === false && judged.verdict.why) {
+          let b = null;
+          try { b = this.scene.worldObjectBox(judged.obj); } catch { b = null; }
+          const c = this.cam;
+          noteAt(this, judged.verdict.why, b ? { x: b.x * c.s + c.tx, y: b.y * c.s + c.ty, w: b.w * c.s, h: b.h * c.s } : null, { ms: 3200 });
+        }
+        await this.snapBack(judged.obj);
+        this.missed(judged.obj, judged.verdict);
+      }
       return { blocked: true, judged };
     }
     const err = this.scene.check(c);
