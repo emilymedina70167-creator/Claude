@@ -2,7 +2,8 @@
 // 染色、灰掉照到 KaTeX 里那一项的字上。专门的动作：retex / next 的变形（同名的项飞过去，像 Manim 的 TransformMatchingTex）、放大、收回放大。
 // 项的位置要等 KaTeX 画出来才量得到：量好写回 o.geo（tex.js 的 geometry 读它），贴字、镜头、连线就和画面对得上
 import { EASE, moveDuration, stagger, arcPoints } from '../motion.js';
-import { texHtml, TEX_FONT, LINE_GAP, ZOOM, zoomBox } from './tex.js';
+import { texHtml, TEX_FONT, LINE_GAP, ZOOM, zoomBox, geometry } from './tex.js';
+import { screenOf } from '../gesturedom.js';
 
 const tr = (x, y, s = 1) => `translate(${x}px, ${y}px)${s !== 1 ? ` scale(${s})` : ''}`;
 const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
@@ -182,6 +183,47 @@ function placeExtras(stage, o, ctx, live) {
   for (const t of o.terms) stage.nodeOf(t)?.classList.toggle('is-zsrc', o.zoom === t.key);
 }
 
+// —— 照代数写的式子（alg=on）：学生拖项、点项的把手（规则在 tex.rules.js，手势的画面在 gesturedom.js）——
+const curGeo = (o) => { const g = geometry(o); return g.lines.find((l) => l.id === o.lines[o.lines.length - 1].id) || g.lines[g.lines.length - 1]; };
+const union = (bs) => { const xs = bs.filter(Boolean); if (!xs.length) return null; const x = Math.min(...xs.map((b) => b.x)), y = Math.min(...xs.map((b) => b.y)); return { x, y, w: Math.max(...xs.map((b) => b.x + b.w)) - x, h: Math.max(...xs.map((b) => b.y + b.h)) - y }; };
+// 拎起来的那一份：那一项的字单独一份跟着手，原处的字先藏着（放下、弹回去以后露出来）
+function liftTerm(stage, o, key) {
+  const line = stage.decor(o.id, `line:${o.lines[o.lines.length - 1].id}`);
+  const glyph = termIn(line, key);
+  const t = curGeo(o)?.terms[key];
+  if (!glyph || !t) return null;
+  const f = cloneTerm(stage, glyph);
+  f.classList.add('tx-lift');
+  const p = fit(f, t);
+  f.style.transform = tr(p.x, p.y);
+  glyph.classList.add('is-hidden');
+  return { el: f, box: { x: p.x, y: p.y, w: t.w, h: t.h }, restore: () => glyph.classList.remove('is-hidden') };
+}
+// 项之间的空隙（拖着的时候才画一道竖线）：每两项之间一个、最前最后各一个。before 是空隙后面那一项的名字（最后是 null）
+function gapGrips(stage, o) {
+  const L = curGeo(o);
+  if (!o.alg || !L) return [];
+  const boxes = o.alg.items.map((it) => union(it.factors.map((f) => L.terms[f.key])));
+  if (boxes.some((b) => !b)) return [];
+  const out = [];
+  for (let i = 0; i <= boxes.length; i++) {
+    const prev = boxes[i - 1], next = boxes[i];
+    const lx = prev ? prev.x + prev.w : next.x - 30, rx = next ? next.x : lx + 30;
+    const box = { x: lx - 8, y: L.y, w: rx - lx + 16, h: L.h };
+    let n = null;
+    out.push({
+      key: `gap:${next ? o.alg.items[i].key : 'end'}`, cls: '',
+      part: () => ({ gap: { level: 'sum', before: next ? o.alg.items[i].key : null } }),
+      node: () => n, box: () => box,
+      area: () => screenOf(stage, box),
+      show(on) {
+        if (on && !n) { n = el('div', 'st-gap', stage.layer); n.style.transform = tr((lx + rx) / 2 - 2, L.y + 4); n.style.height = `${Math.max(16, L.h - 8)}px`; } else if (!on && n) { n.remove(); n = null; }
+      },
+    });
+  }
+  return out;
+}
+
 export const texView = {
   sync(stage, o, ctx) {
     ensureCss();
@@ -221,8 +263,28 @@ export const texView = {
     await Promise.all(rows.map((n, i) => stage.tween(n, [{ opacity: 1, clipPath: 'inset(-20% 100% -20% 0)' }, { opacity: 1, clipPath: 'inset(-20% 0% -20% 0)' }], { duration: 640, delay: i * 120, easing: EASE.out }).then(() => { n.style.clipPath = ''; n.style.opacity = ''; })));
   },
 
+  // 通用手势抓哪儿（规则文件 tex.rules.js 的手势表）：一项（move 按住拖起来、当落点；expand 点它）、两项之间的空隙（move 的落点）
+  grips: {
+    term: (stage, o, e) => {
+      if (!o.alg) return [];
+      const only = e?.refs?.length ? new Set(e.refs.flatMap((r) => { try { return stage.scene.parts(r); } catch { return []; } }).map((p) => p.key)) : null;
+      return o.terms.filter((t) => !only || only.has(t.key)).map((t) => ({
+        key: `term:${t.key}`,
+        part: () => stage.scene.partOf(o.id, t.key),
+        node: () => stage.nodes.get(`${o.id}:${t.key}`),
+        box: () => stage.nodes.get(`${o.id}:${t.key}`)?.__box,
+        lift: () => liftTerm(stage, o, t.key),
+      }));
+    },
+    gap: (stage, o) => gapGrips(stage, o),
+  },
+
   choreo: {
     retex(stage, c, fx, pre) { return morph(stage, fx); },
+    // 学生（或老师）换顺序、合并、展开：和 retex 一样，同名的项飞到新位置，新的淡进来
+    reorder(stage, c, fx) { return morph(stage, fx); },
+    merge(stage, c, fx) { return morph(stage, fx); },
+    expand(stage, c, fx) { return morph(stage, fx); },
     next(stage, c, fx, pre) { return morph(stage, fx); },
     // 收回放大：那一份缩回到那一项上，淡掉
     async unmagnify(stage, c, fx) {
@@ -277,6 +339,14 @@ export const texView = {
 .tx-hit.is-tap::after { content: ""; position: absolute; inset: -5px; border-radius: 13px; border: 2px solid var(--st-brand); opacity: 0; animation: tx-breathe 1.8s ease-in-out infinite; pointer-events: none; }
 .tx-hit.is-press { background: color-mix(in srgb, var(--st-brand) 14%, transparent); }
 .tx-hit.is-flash { animation: tx-flash .7s ease-out; }
+/* 照代数写的式子（alg=on）开着 move：能拖的项底下一道虚线；拎起来的那一份、悬着能放 / 不能放 */
+.tx-hit.is-drag { z-index: 3; pointer-events: auto; cursor: grab; touch-action: none; }
+.tx-hit.is-drag::before { content: ""; position: absolute; left: 6px; right: 6px; bottom: 1px; border-bottom: 2px dotted color-mix(in srgb, var(--st-brand) 55%, transparent); }
+.tx-hit.is-press { background: color-mix(in srgb, var(--st-brand) 12%, transparent); }
+.tx-hit.is-drop { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--st-brand) 30%, transparent); }
+.tx-hit.is-over { background: color-mix(in srgb, var(--st-brand) 16%, transparent); box-shadow: 0 0 0 2px var(--st-brand); }
+.tx-hit.is-nodrop { background: color-mix(in srgb, var(--st-red) 12%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--st-red) 60%, transparent); }
+.tx-lift { z-index: 6; filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.18)); }
 @keyframes tx-breathe { 0%, 100% { opacity: 0; } 50% { opacity: .55; } }
 @keyframes tx-flash { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--st-gold) 70%, transparent); background: color-mix(in srgb, var(--st-gold) 26%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; background: transparent; } }
 @media (prefers-reduced-motion: reduce) { .tx-hit.is-tap::after { animation: none; opacity: .5; } }

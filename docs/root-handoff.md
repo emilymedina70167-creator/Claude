@@ -14,6 +14,10 @@
 4. 一步到位：做完开发就停，学生开始上课。合进 `main`、重新发布学习台不用问。
 5. 以前做的和这个方向冲突，一律让路（搬进 `archive/`，数据不删）。
 
+## 第 2 批：外部主讲的完整操控权（2026-11-18）
+
+外部第一次上课时按学生要求写了 `dev_requests/dr-ext-control`（R1–R11）。全做了，见 `CLAUDE.md` 那一条、执行计划 `docs/superpowers/plans/2026-11-18-ext-control.md`、自己定的事 `docs/superpowers/specs/2026-11-18-ext-control-rulings.md`。外部再要什么，还是先看 `dev_requests`。
+
 ## 现在做到哪
 
 全部做完、已发布（版本见 `CLAUDE-PROJECT.md` 开头）。下一步是学生用外部上一节真课。

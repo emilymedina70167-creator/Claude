@@ -182,8 +182,10 @@ test('底座的新写法都在说明里：open 的 wrong= / call= / undo=、预�
   for (const t of Object.values(TYPES)) {
     const r = rulesOf({ type: t.type });
     if (!r || !t.doc) continue;
-    for (const a of Object.keys(r.gestures)) assert.match(t.doc, new RegExp(`^open \\S+ ${a}\\b[^\\n]*= `, 'm'), `${t.label}的 open … ${a}：写学生怎么动、翻成哪一行（可以只开几个部件：open s.6 refer）`);
-    for (const p of Object.keys(r.predicates)) assert.match(t.doc, new RegExp(`^判断式[^\\n]*\\b${p}\\b`, 'm'), `${t.label}的判断式 ${p}`);
+    // docMore：只进黑板组件 stage 的手册（stageManual）的那一节（式子的 alg=on），也算写了
+    const doc = `${t.doc}\n${t.docMore || ''}`;
+    for (const a of Object.keys(r.gestures)) assert.match(doc, new RegExp(`^open \\S+ ${a}\\b[^\\n]*= `, 'm'), `${t.label}的 open … ${a}：写学生怎么动、翻成哪一行（可以只开几个部件：open s.6 refer）`);
+    for (const p of Object.keys(r.predicates)) assert.match(doc, new RegExp(`^判断式[^\\n]*\\b${p}\\b`, 'm'), `${t.label}的判断式 ${p}`);
   }
   // type= 能写的每一种
   const { ANSWER_TYPES } = await import('../kit/src/stage/answer.js');

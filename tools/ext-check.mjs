@@ -4,7 +4,9 @@
 // 出 iPad 两个尺寸的截图和问题列表。只是给外部用的东西，不是规定每一轮都要跑。
 //
 //   node tools/ext-check.mjs --next 这一轮.txt [--session 存数据的目录] [--sid c-20261118-1] [--unit 课名] [--subject 线代] [--shots 目录]
+//   node tools/ext-check.mjs --next 这一轮.txt --lint [--session …]   ← 不开浏览器，一秒以内只查写法（tools/ext-lint.js）
 //
+// kit/dist/la-kit.js 是提交在仓库里的（和学习台发布的同一份），clone 下来 npm install 就能跑，不用 build。
 // --session：用 ArtifactData 的 out_dir 存下来的那个目录（里面有 sessions/{编号}/ext_in/*.json、ext_out/*.json）；不给就只跑这一轮。
 // 不用 npm install 以外的东西：Playwright 和 Chromium 用沙盒里预装的。
 import { readFileSync, readdirSync, existsSync, writeFileSync, mkdtempSync } from 'node:fs';
@@ -24,7 +26,8 @@ function arg(name, def = '') {
 }
 const nextFile = arg('next');
 if (!nextFile) { console.error('要写 --next 这一轮.txt（这一轮要写进 ext_in 的 text）'); process.exit(2); }
-if (!existsSync(KIT)) { console.error(`没有 ${KIT}：先 npm run build`); process.exit(2); }
+const LINT = process.argv.includes('--lint');
+if (!LINT && !existsSync(KIT)) { console.error(`没有 ${KIT}：先 npm run build`); process.exit(2); }
 
 // 存下来的 JSON：ArtifactData 的 out_dir 每条一个文件，内容可能是文档本身，也可能包了一层 { data }
 const readDocs = (dir) => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => { const j = JSON.parse(readFileSync(join(dir, f), 'utf8')); return { id: f.replace(/\.json$/, ''), ...(j.data || j) }; }) : []);
@@ -38,6 +41,16 @@ function sessionDirs(root, sid) {
 
 const root = arg('session');
 const s = root ? sessionDirs(resolve(root), arg('sid')) : null;
+// --lint：只查写法，不开浏览器
+if (LINT) {
+  const { lintTurn, blockNames, priorTexts, checkers } = await import('./ext-lint.js');
+  const t0 = Date.now();
+  const extra = await checkers();
+  const r = lintTurn({ prior: priorTexts(s?.ins || []), text: readFileSync(resolve(nextFile), 'utf8'), names: await blockNames(), ...extra });
+  console.log(`写法检查：${r.segments} 段、${r.components} 个组件，${r.problems.length ? `${r.problems.length} 处问题` : '没有问题'}（${Date.now() - t0} 毫秒，没开浏览器；画出来的样子用不带 --lint 的跑）`);
+  for (const p of r.problems) console.log(`  · ${p.where}：${p.msg}`);
+  process.exit(r.problems.length ? 1 : 0);
+}
 const spec = extClass({ ins: s?.ins || [], outs: s?.outs || [], next: readFileSync(resolve(nextFile), 'utf8'), unit: arg('unit', s?.id || '外部的课'), subject: arg('subject') });
 const tmp = mkdtempSync(join(tmpdir(), 'ext-check-'));
 const file = join(tmp, `${(s?.id || 'ext').replace(/\W+/g, '-')}.class.json`);

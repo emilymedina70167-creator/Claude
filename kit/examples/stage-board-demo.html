@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>黑板上的舞台</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+subject: 线性代数
+theme: ink
+unit: 黑板上的舞台
+---
+
+# 黑板上的舞台
+
+一段写成 ```` ```stage ````：页面嵌一块舞台，照里面的镜头指令演。学生动手、挑战当场判，做到了、没做到、走偏了演写好的预写。写法见 `stageManual()`。
+
+## 把 (A+B)(A+B) 拆开的四项按先后排进格子
+
+```stage
+id: s-expand
+title: 把 (A+B)(A+B) 拆开的四项按先后排进格子
+prewrite: all
+tex e = "(A+B)(A+B)"
+array a = BA B² A² AB _ _ _ _
+array k = A² AB BA B² hide=on
+say "左边一项乘右边一项，按先后排进后四格。"
+open a move
+goal g1 "按先后排好四项" when="a.5 = k.1, a.6 = k.2, a.7 = k.3, a.8 = k.4" on="排好了"
+@g1 say "对：AB 和 BA 是两项，先后不能换。"
+@g1.wrong say "再看先后：第二项是左边的 A 乘右边的 B。"
+ask next "排好了点下面" button="排好了"
+```
+
+## 式子能动手：展开、换顺序、合并
+
+点 (A+B)² 展开；按住一项拖到两项之间换顺序、拖到另一项上合并同类项。AB 和 BA 合并、A 和 B 换先后都会弹回去。
+
+```stage
+id: s-alg
+title: 展开 (A+B)²
+prewrite: all
+height: 360
+tex e = "(A+B)^2" alg=on
+open e expand
+open e move
+goal g1 "展开以后合并能合并的" when="e expanded, e merged"
+@g1 say "四项：A² + AB + BA + B²，AB 和 BA 并不起来。"
+@e.miss say "AB 和 BA 先后不一样：矩阵乘法不交换。"
+```
+
+## 标量能交换
+
+```stage
+id: s-scalar
+title: 展开 (a+b)² 再合并
+height: 320
+tex f = "(a+b)(a+b)" alg=on
+open f expand
+open f move
+goal g1 "合并成三项" when="f merged, f same=a^2+2ab+b^2"
+@g1 say "a、b 是数：ab 和 ba 一样，能并成 2ab。"
+```
+
+## 一排格子：照引擎走
+
+```stage
+id: s-shell
+title: 希尔排序第一趟（增量 5）
+height: 380
+array a = 49 38 65 97 76 13 27 49′ 55 04
+follow a sort shell gaps="5 3 1"
+open a move
+say "隔 5 个一组，每组里小的拖到前面。"
+@a.right say "这一趟对了。"
+```
+</script>

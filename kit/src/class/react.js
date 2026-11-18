@@ -7,9 +7,12 @@
 import { tokenize } from '../tokens.js';
 
 // 情况：答对、答错、页面认出来的错法、想不出来 / 看了答案、steps 揭开了最后一步
-export const REACT_KINDS = ['right', 'wrong', 'misread', 'giveup', 'done'];
+export const REACT_KINDS = ['right', 'wrong', 'misread', 'giveup', 'done', 'stuck'];
 // 页面能替它接的：答案固定、当场写也一样的
 export const LOCAL_KINDS = ['right', 'done'];
+// 外部主讲的课（需求 R6）：外部这一刻看着题当场预写的，页面照接——答错（可按 match= 分错法）、想不出来、多久没动静也收。
+// 页面里的老师照旧只收 right / done（教学不预制，见上）
+export const EXT_KINDS = ['right', 'done', 'wrong', 'misread', 'giveup', 'stuck'];
 export const LIVE_NOTE = '答错、错法、想不出来怎么接，要看学生这一次的作答当场写（学生要实时的教学，不要预制好的引导），页面不替你接：这一行没用。预案只写答对（right）和看完（done）';
 const ALIAS = { 对: 'right', 答对: 'right', 错: 'wrong', 答错: 'wrong', 错法: 'misread', 想不出来: 'giveup', 放弃: 'giveup', 看完: 'done' };
 // 一条预案说的话最多多长：是一句接话，不是一段讲解（讲解写成藏着的段，用 show= 揭开）
@@ -23,7 +26,7 @@ const ID_RE = /^[A-Za-z0-9_\-.~:@+]{1,64}$/;
  * 返回 { op: 'react', target, cases: [{ kind, key?, step?, show: [], text }], errors? }；一条都没写就是撤掉这个组件的预案（cases 为空）。
  * 开头那行看不懂、一条也没读懂时返回 { error }。
  */
-export function parseReact(rest, body = '') {
+export function parseReact(rest, body = '', { lenient = false } = {}) {
   let target;
   for (const t of tokenize(String(rest ?? ''))) {
     if (t.key === 'target' || t.key === 'id') target = t.value;
@@ -36,7 +39,7 @@ export function parseReact(rest, body = '') {
   for (const raw of String(body ?? '').split('\n')) {
     const line = raw.trim().replace(/^[-*]\s+/, '');
     if (!line) continue;
-    const r = parseCaseLine(line);
+    const r = parseCaseLine(line, lenient);
     if (r.error) errors.push(`「${line.slice(0, 40)}」：${r.error}`);
     else cases.push(r);
   }
@@ -44,13 +47,15 @@ export function parseReact(rest, body = '') {
   return { op: 'react', target, cases, ...(errors.length ? { errors } : {}) };
 }
 
-function parseCaseLine(line) {
+function parseCaseLine(line, lenient = false) {
   // 冒号前是情况和选项，后面是说的话（话里可以再有冒号）。冒号可以写在引号里的错法关键词里，所以跳过引号找
   const at = headEnd(line);
   if (at < 0) return { error: '要写成「情况: 说的话」，比如 right: 对。' };
   const head = line.slice(0, at).trim();
   const text = line.slice(at + 1).trim();
   const toks = tokenize(head);
+  // stuck=90s：那题这么久没动静（外部的课）
+  if (toks[0]?.key?.toLowerCase() === 'stuck') toks.splice(0, 1, { value: 'stuck' }, { key: 'after', value: toks[0].value });
   if (!toks.length || toks[0].key) return { error: '开头要写情况：right / wrong / misread "…" / giveup / done' };
   const w = toks[0].value.toLowerCase();
   const kind = REACT_KINDS.includes(w) ? w : ALIAS[toks[0].value];
@@ -63,13 +68,40 @@ function parseCaseLine(line) {
       if (!(Number.isInteger(n) && n >= 1)) return { error: `step 要写第几步（从 1 数），不是「${t.value}」` };
       out.step = n;
     } else if (!t.key && kind === 'misread' && out.key === undefined) out.key = t.value;
-    else return { error: `看不懂「${t.key ? `${t.key}=` : ''}${t.value}」` };
+    // wrong match="x=3"：学生的答案里有这一段（或者 /正则/）才用这一条，好按错法分开接
+    else if (t.key === 'match' && kind === 'wrong') out.match = t.value;
+    else if ((t.key === 'after' || (!t.key && /^\d/.test(t.value))) && kind === 'stuck') {
+      const ms = msOf(t.value);
+      if (!(ms >= 10000)) return { error: 'stuck 要写多久没动静，至少 10s：比如 stuck=90s' };
+      out.after = ms;
+    } else return { error: `看不懂「${t.key ? `${t.key}=` : ''}${t.value}」` };
   }
-  if (!LOCAL_KINDS.includes(kind)) return { error: LIVE_NOTE };
+  if (kind === 'stuck' && !out.after) out.after = 90000;
+  if (!LOCAL_KINDS.includes(kind)) {
+    if (!lenient) return { error: LIVE_NOTE };
+    out.live = true; // 只在外部的课里照接；页面里的老师写了照旧告诉它不收（classroom.js）
+  }
   for (const id of out.show) if (!ID_RE.test(id)) return { error: `show 的段 id「${id}」不合法` };
   if (!out.text && !out.show.length) return { error: '冒号后面没写要说的话' };
   return out;
 }
+
+function msOf(v) {
+  const m = String(v ?? '').trim().match(/^(\d+(?:\.\d+)?)\s*(ms|s|秒|m|分钟?)?$/i);
+  if (!m) return NaN;
+  const n = Number(m[1]), u = (m[2] || 's').toLowerCase();
+  return Math.round(u === 'ms' ? n : u === 'm' || u.startsWith('分') ? n * 60000 : n * 1000);
+}
+
+// 学生的答案对不对得上 match=：/正则/ 照正则；别的不管空格、大小写、全角半角，包含就算
+const norm = (x) => String(x ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+export function matchAnswer(pattern, answer) {
+  const p = String(pattern ?? '');
+  const re = p.match(/^\/(.+)\/([a-z]*)$/);
+  if (re) { try { return new RegExp(re[1], re[2]).test(String(answer ?? '')); } catch { return false; } }
+  return !!p && norm(answer).includes(norm(p));
+}
+const answerOf = (a) => [a?.value, a?.text, a?.answer, a?.choice, a?.detail?.value].filter((x) => typeof x === 'string' || typeof x === 'number').join(' ');
 
 function headEnd(line) {
   let q = null;
@@ -113,7 +145,7 @@ export function classify(a, trig) {
   // 选择题答错不单独发（quiz 只在答对时记一条，前面错选的在 wrong 里）：错选过再对的，可能是试出来的，交给老师
   if (ok === true && type === 'quiz' && Array.isArray(a.wrong) && a.wrong.length) return null;
   if (ok === true) return { kind: 'right', step };
-  if (ok === false) return { kind: 'wrong', step, misread: typeof a.misread === 'string' ? a.misread : '' };
+  if (ok === false) return { kind: 'wrong', step, misread: typeof a.misread === 'string' ? a.misread : '', answer: answerOf(a) };
   return null;
 }
 
@@ -125,6 +157,12 @@ function pick(rule, cls, used) {
     const i = rule.cases.findIndex((c, k) => c.kind === 'misread' && ok(c, k) && low.includes(String(c.key).toLowerCase()));
     if (i >= 0) return i;
   }
+  // 写了 match= 的答错：先找对得上的那一条；对不上的不用，再找没写 match 的
+  if (cls.kind === 'wrong') {
+    const i = rule.cases.findIndex((c, k) => c.kind === 'wrong' && c.match && ok(c, k) && matchAnswer(c.match, cls.answer));
+    if (i >= 0) return i;
+    return rule.cases.findIndex((c, k) => c.kind === 'wrong' && !c.match && ok(c, k));
+  }
   return rule.cases.findIndex((c, k) => c.kind === cls.kind && ok(c, k));
 }
 
@@ -134,7 +172,8 @@ function pick(rule, cls, used) {
  * other：这一批还有学生打的字、附的图、板书 → 一定叫 Claude。present(id)：组件还在黑板上（没撤回）。
  * 返回 null（要叫 Claude）或 { fired: [{ target, index, kind, text, show }], talk, show }。不改 rules。
  */
-export function planLocal({ items = [], rules, other = false, present = () => true } = {}) {
+export function planLocal({ items = [], rules, other = false, present = () => true, ext = false } = {}) {
+  const kinds = ext ? EXT_KINDS : LOCAL_KINDS;
   if (other || !rules?.size) return null;
   const fired = [];
   const usedBy = new Map();
@@ -142,7 +181,7 @@ export function planLocal({ items = [], rules, other = false, present = () => tr
     const cls = classify(a, trig);
     if (!cls) return null;
     if (cls.kind === 'passive') continue;
-    if (!LOCAL_KINDS.includes(cls.kind)) return null; // 答错、想不出来：叫 Claude 当场看着作答写
+    if (!kinds.includes(cls.kind)) return null; // 答错、想不出来：叫 Claude 当场看着作答写（外部的课里外部预写了就照接）
     const rule = a.block ? rules.get(a.block) : null;
     if (!rule || !present(a.block)) return null;
     const used = usedBy.get(a.block) || new Set();
@@ -151,6 +190,7 @@ export function planLocal({ items = [], rules, other = false, present = () => tr
     used.add(i);
     usedBy.set(a.block, used);
     const c = rule.cases[i];
+    if (c.live && !ext) return null;
     fired.push({ target: a.block, seq: rule.seq, index: i, kind: c.kind, key: c.key, text: c.text, show: c.show || [] });
   }
   if (!fired.length) return null;
@@ -161,7 +201,7 @@ export function planLocal({ items = [], rules, other = false, present = () => tr
   };
 }
 
-const KIND_TEXT = { right: '答对', wrong: '答错', misread: '错法', giveup: '想不出来', done: '看完了' };
+const KIND_TEXT = { right: '答对', wrong: '答错', misread: '错法', giveup: '想不出来', done: '看完了', stuck: '很久没动静' };
 
 /** 页面接了以后记给 Claude 的一行（下一次调用时它看得到自己预写的哪条用掉了） */
 export function reactNote(plan) {
@@ -187,7 +227,7 @@ export function markFired(rules, plan) {
 export function armedText(rule) {
   const left = (rule?.cases || []).filter((c) => !c.used);
   if (!left.length) return '';
-  return left.map((c) => `${c.kind}${c.key ? ` "${c.key}"` : ''}${c.step ? ` step=${c.step}` : ''}${c.show?.length ? ` show=${c.show.join(',')}` : ''}`).join('、');
+  return left.map((c) => `${c.kind}${c.key ? ` "${c.key}"` : ''}${c.match ? ` match="${c.match}"` : ''}${c.after ? ` ${Math.round(c.after / 1000)}s` : ''}${c.step ? ` step=${c.step}` : ''}${c.show?.length ? ` show=${c.show.join(',')}` : ''}`).join('、');
 }
 
 /**
@@ -202,7 +242,7 @@ export function rebuildRules(history = []) {
       for (const o of t.boardOps) {
         if (!o) continue;
         if (o.op === 'react' && o.ok) {
-          if (o.cases?.length) rules.set(o.target, { target: o.target, seq: t.seq, seg: o.seg, by: o.by, cases: o.cases.map((c) => ({ ...c, used: false })) });
+          if (o.cases?.length) rules.set(o.target, { target: o.target, seq: t.seq, seg: o.seg, by: o.by, at: Number(t.at) || Date.now(), cases: o.cases.map((c) => ({ ...c, used: false })) });
           else rules.delete(o.target);
         } else if (o.ok && ['replace', 'hide', 'unpin'].includes(o.op)) dropForSeg(rules, o.id, t.seq);
       }
@@ -216,4 +256,10 @@ export function rebuildRules(history = []) {
 /** 段被改写 / 撤回：之前几轮挂在这一段组件上的预案作废（这一轮自己写的不算：常见写法是先 replace 再 react） */
 export function dropForSeg(rules, segId, seq) {
   for (const [k, r] of rules) if (r.seg === segId && r.seq < seq) rules.delete(k);
+}
+
+/** 外部的课：stuck 那一条到点了没有（组件多久没动静）。touched：组件最后一次有作答的时刻；armed：预案写下的时刻 */
+export function stuckDue(rule, { now = Date.now(), touched = 0, armed = 0 } = {}) {
+  const i = (rule?.cases || []).findIndex((c) => c.kind === 'stuck' && !c.used && now - Math.max(touched || 0, armed || 0) >= (c.after || 90000));
+  return i;
 }

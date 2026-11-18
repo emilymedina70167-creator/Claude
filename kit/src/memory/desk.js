@@ -79,6 +79,8 @@ import { COMPONENT_DOCS } from '../class/docs.js';
 import { createBooksView } from '../books/bookview.js';
 import { createPlanner } from '../books/planview.js';
 import { createDevAI } from '../books/devmock.js';
+import { startJobs } from '../project/jobdesk.js';
+import { jobCounts } from '../project/jobs.js';
 import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
 import { scrubBooks, readReserve, reserveYears } from '../exam/reserve.js';
@@ -591,11 +593,14 @@ export async function renderDesk(root, meta) {
 
   // 给对话里的 Claude 的开场简报（views.js 的 deskBrief）：每科一份，内容变了才写
   const lastBrief = {};
+  // 外部交给页面的后台活（需求 R2，project/jobdesk.js）：首页开着时跑全局的 ext_jobs；进了课堂由课堂那边跑（enterClass）
+  const jobs = startJobs({ db, getAI: deskAI, paths: ['ext_jobs'], getData: () => data, getBooks: () => ({ chunks: booksView.chunks?.() || [] }), onChange: () => { lastFacts = ''; writeFacts(toDate(Date.now())); } });
   // 页面能算的事实（project/facts.js）和「学习台里有什么」写进 meta/facts、meta/catalog：外部主 Claude 要就读，变了才写
   let lastFacts = '', lastCatalog = '';
   function writeFacts(today) {
     if (failed.size) return;
-    const f = factsDoc(data, today, { health: (healthDoc?.notes || []).length });
+    // 外部交给页面的后台活（project/jobs.js）排了几件、跑完几件
+    const f = { ...factsDoc(data, today, { health: (healthDoc?.notes || []).length }), jobs: jobCounts(jobs.docs()) };
     const fk = JSON.stringify(f);
     if (fk !== lastFacts) { lastFacts = fk; put('meta', 'facts', { ...f, at: Date.now() }).catch(() => { lastFacts = ''; }); }
     const c = catalogText({ data, books: { books: booksView.books() }, exam: examFacts(), chats: chatCount, today });
@@ -1807,11 +1812,14 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
     catalog: () => catalogText({ data: mem, books, today: toDate(Date.now()) }),
   };
   project.notebook = createNotebook({ db, corpus: () => project.corpusText() });
+  // 外部交给页面的后台活（需求 R2）：课堂开着时跑全局的和这节课的 ext_jobs（只读那节课时不跑）
+  if (!readOnly) startJobs({ db, getAI: store.dev ? async () => (await getAI()) || createDevAI() : getAI, paths: ['ext_jobs', `sessions/${sid}/ext_jobs`], getData: () => mem, getBooks: () => books });
   // 外部主讲的课（第十五轮）：外部只写开课的那几个字段，页面补上开课平时写的（机械的活）
   if (kind === 'ext' && (!doc.subject || !Array.isArray(doc.aims))) await updateSession({ ...(doc.subject ? {} : { subject: session.subject }), ...(Array.isArray(doc.aims) ? {} : { aims: [] }) });
   return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
     project,
-    ...(kind === 'ext' ? { ext: {} } : {}),
+    // 外部的课：整节课的设置（board set 写过的：截图入口 upload、停掉助手 helperOff）刷新以后照旧
+    ...(kind === 'ext' ? { ext: { upload: doc.upload || '', helperOff: !!doc.helperOff } } : {}),
     store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), books, prevRead,
     // 这一门课的考试资料（和舞台课一样：不等它，课堂读到了再用）；examFor：课上换到另一门课时再按那门课读一次
     exam: examLoad, reserve: examYears, examFor: kind === 'class' || kind === 'ext' ? loadExam : null,

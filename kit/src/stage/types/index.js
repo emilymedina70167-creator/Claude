@@ -18,6 +18,7 @@ import { arrayRules } from './array.rules.js';
 import { graphRules } from './graph.rules.js';
 import { tableRules } from './table.rules.js';
 import { timelineRules } from './timeline.rules.js';
+import { texRules } from './tex.rules.js';
 import '../follows/index.js'; // 照引擎走的对应关系（follow.js）：跟着东西的种类一起登记
 
 export const TYPES = { array, tree, graph, matrix, plane, sentence, tex, card, table, timeline };
@@ -30,6 +31,7 @@ registerRules('array', arrayRules);
 registerRules('graph', graphRules);
 registerRules('table', tableRules);
 registerRules('timeline', timelineRules);
+registerRules('tex', texRules); // 只给照代数写的式子（alg=on）：拖项换顺序、合并同类项、展开括号
 
 /** 造东西的指令 → 那种东西（array → 一排格子、tree → 树……） */
 export const CREATE = {};

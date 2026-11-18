@@ -4,6 +4,8 @@
 // mark / unmark（在板上圈、框、划、写旁注）。
 // 页面在流式回调里拿到的是「到目前为止的全文」，每次整段重新解析，所以这里全是纯函数、不留状态、不碰 DOM。
 import { parseCoach } from './ext.js';
+import { parseClaude, parseClaudeOff } from './delegate.js';
+import { parseQueue, parseEdits } from './extboard.js';
 import { tokenize, unquote } from '../tokens.js';
 import { parseNoteBlock } from '../project/notebook.js';
 import { parseMarkHead, parseMarkBlock, parseUnmark } from '../markspec.js';
@@ -152,7 +154,7 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // move：版面模式里把一段挪到别的栏（col=），不重画
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'show', 'move', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'show', 'move', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach';
+const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set / claude / claude-off / queue / edit / stage / widget';
 
 /**
  * 解析 board 后面那一行：
@@ -168,6 +170,8 @@ export function parseCommand(header) {
   const m = h.match(/^(\S+)\s*([\s\S]*)$/);
   const name = m[1].toLowerCase();
   if (SEGMENT_OPS.includes(name)) return segmentCommand(name, m[2]);
+  // 外部设计的交互（需求 R5）：一段，块里是舞台的镜头指令（stage）或调用 la.* 的 JS（widget）；页面包成那个组件画在当前板上
+  if (name === 'stage' || name === 'widget') { const r = segmentCommand('add', m[2]); return r.error ? { error: r.error.replace(/^add/, name) } : { ...r, op: name }; }
   if (name === 'figure') return figureCommand(m[2]);
   if (name === 'mark') {
     const r = parseMarkHead(m[2]);
@@ -200,6 +204,20 @@ export function parseCommand(header) {
   if (name === 'note') return { op: 'note' };
   // 外部主 Claude 的课（第十五轮，ext.js）：snap 下一份 ext_out 带上这块板的截图；close 下课；coach 开这一题的板边助教
   if (name === 'snap') return { op: 'snap' };
+  // 外部主讲叫页面里的 Claude 来接（需求 R1，delegate.js）：开头那行 + 块里的 see / can / <<<话>>>，块闭合了才读全
+  if (name === 'claude') return { op: 'claude', head: m[2].trim() };
+  // 外部的课：预备板（R7，块里是那块板第一段的内容）、改字不丢作答（R9，块里写 <<<旧 === 新>>>）
+  if (name === 'queue') return parseQueue(m[2] || '');
+  if (name === 'edit') {
+    const t = tokenize(m[2] || '');
+    const id = t.find((x) => x.key === 'id')?.value || t.find((x) => !x.key)?.value;
+    if (!id) return { error: 'edit 缺少 id：board edit id=b3，块里写 <<<旧 === 新>>>' };
+    if (!validId(id)) return { error: `id「${id}」不合法：${ID_RULE}` };
+    return { op: 'edit', id };
+  }
+  if (name === 'claude-off') return parseClaudeOff(m[2] || '');
+  // 整节课的设置（需求 R11）：board set upload=on|off（组件下面的截图入口）
+  if (name === 'set') return setCommand(m[2] || '');
   if (name === 'close') return { op: 'close' };
   if (name === 'coach') { const r = parseCoach(m[2] || ''); return r.error ? { error: r.error } : { op: 'coach', target: r.target, upto: r.upto }; }
   // 老师自己的教学计划（学生看不到，docs/learning-plan.md 第 5 节）：块里是几行字
@@ -219,9 +237,27 @@ export function blockCommand(header, body = '') {
   if (op.op === 'note') { const r = parseNoteBlock(body); return r.ops.length ? { op: 'note', ops: r.ops, ...(r.errors.length ? { errors: r.errors } : {}) } : { error: r.errors[0] || 'note 里一条也没写' }; }
   if (op.op === 'plan') return planOp(body);
   if (op.op === 'aims') return aimsOp(body);
-  if (op.op === 'react') return parseReact(op.head, body);
+  // 读得宽一点（外部的课里收 wrong / giveup / stuck）；页面里的老师写的那几条课堂执行时照旧不收（classroom.js）
+  if (op.op === 'react') return parseReact(op.head, body, { lenient: true });
+  if (op.op === 'claude') return parseClaude(op.head, body);
+  if (op.op === 'edit') { const r = parseEdits(body); return r.error ? { error: r.error } : { ...op, edits: r.edits }; }
   if (op.op === 'why') return parseWhy(op.head, body);
   return op.op === 'mark' ? markOp(op, body) : op;
+}
+
+// board set 能改的整节课设置：名字 → 能取的值
+export const SETTINGS = { upload: ['on', 'off'] };
+function setCommand(rest) {
+  const out = {};
+  for (const t of tokenize(rest)) {
+    if (!t.key) return { error: `看不懂「${t.value}」：set 后面写 名字=值，比如 board set upload=on` };
+    const k = t.key.toLowerCase(), v = String(t.value).toLowerCase();
+    if (!SETTINGS[k]) return { error: `set 没有「${t.key}」这一项：能改的是 ${Object.keys(SETTINGS).join('、')}` };
+    if (!SETTINGS[k].includes(v)) return { error: `${k} 只能是 ${SETTINGS[k].join(' / ')}` };
+    out[k] = v;
+  }
+  if (!Object.keys(out).length) return { error: 'set 后面要写 名字=值，比如 board set upload=on' };
+  return { op: 'set', values: out };
 }
 
 // 教学计划最多多长：每一轮都放进说明，长了白费额度

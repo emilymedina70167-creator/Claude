@@ -1180,6 +1180,103 @@ const SUITES = {
   },
 
 
+  // 外部主讲的操控权（dev_requests/dr-ext-control）：截图入口关着（R11）、执行完当场回报和 meta/now（R3）、
+  // board claude 答错时叫页面里的 Claude、越权的不执行、停掉助手（R1）、预案收 wrong match=（R6）、ext_jobs 后台活和 from=（R2）、
+  // board edit 改字不丢作答（R9）、一轮两块新板（R7）、指以前的板（R8）、预备板「下一块」（R7）、叫主讲（R10）
+  async extctl(browser) {
+    const t = await seeded(browser);
+    const F4 = '````', F3 = '```';
+    const today = await t.page.evaluate(() => new Date().toLocaleDateString('sv-SE'));
+    const sid = `c-${today.replace(/-/g, '')}-8`;
+    const db = async () => t.db();
+    const ans = (id, q, a) => `${F3}answer\nid: ${id}\nq: ${q}\nanswer: ${a}\n${F3}`;
+    const turn1 = [
+      '先做两题。',
+      `${F4}board new id=b1 title="第一题"\n第一题先算：\n\n${ans('q1', '2+3 等于几？', '5')}\n\n${ans('q2', '3+4 等于几？', '7')}\n${F4}`,
+      `${F4}board claude id=cl1 on=wrong target=q1 turns=2\nsee: target, board\ncan: say, mark\n<<<\n学生错了就指出看哪一步，一句话。\n>>>\n${F4}`,
+      `${F4}board react target=q2\nwrong match="12": 是不是把加号看成乘号了？\nwrong: 再算一遍。\n${F4}`,
+      `${F4}board queue id=b9 title="预备的一块" after=button\n预备好的下一块板。\n${F4}`,
+      `${F4}board snap\n${F4}`,
+    ].join('\n\n');
+    await plant(t, {
+      [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', block: 'L2.1.4', title: '操控权（外部）', space: 'math', startedAt: Date.now() },
+      [`sessions/${sid}/ext_in/001`]: { seq: 1, text: turn1, at: Date.now() },
+    });
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('[data-bid="q1"] .ans-check'), { timeout: 20000, what: '外部的第一轮画上板' });
+    // R3：执行完当场写结果、截图；meta/now 有黑板现状
+    const r1 = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/001`]?.result, { timeout: 10000, what: 'ext_in/001 写 result' });
+    check(r1.ok && r1.ops.some((o) => o.op === 'claude' && o.ok) && r1.ops.some((o) => o.op === 'queue' && o.ok), `result 不对：${JSON.stringify(r1).slice(0, 300)}`);
+    check(Array.isArray(r1.shots) && r1.shots.length > 0, 'board snap 以后 result 里没有截图');
+    const now = await t.waitFor(async () => (await db())[`sessions/${sid}/meta/now`], { timeout: 8000, what: '写 meta/now' });
+    check(/q1/.test(now.text) && Array.isArray(now.board?.segs), `meta/now 不对：${String(now.text).slice(0, 200)}`);
+    // R11：外部的课里组件下面没有截图入口
+    check(!(await t.page.$('[data-bid="q1"] .ph-btn')), '外部的课里 answer 下面还有「截图作答」');
+    const type = async (id, v) => { const box = t.page.locator(`[data-bid="${id}"] .ans-input input, [data-bid="${id}"] .ans-input textarea, [data-bid="${id}"] .ans-input [contenteditable="true"]`).first(); await box.click(); await box.fill?.('').catch(() => {}); await t.page.keyboard.type(v); await t.page.click(`[data-bid="${id}"] .ans-check`); };
+    const outs = async () => Object.entries(await db()).filter(([k]) => k.startsWith(`sessions/${sid}/ext_out/`)).map(([, v]) => v.text).join('\n');
+    // R1：q1 答错 → 助手说一句、圈一下；越权的 new 不执行、写进 ext_out
+    await type('q1', '6');
+    await t.waitFor(() => t.page.evaluate(() => /模拟助手/.test(document.body.innerText)), { timeout: 15000, what: '答错以后板上出现助手的话' });
+    await t.waitFor(async () => /\[助手 cl1\]/.test(await outs()) && /没执行（越权）：new hb9/.test(await outs()), { timeout: 10000, what: '助手的全文和越权的写进 ext_out' });
+    check(!(await t.page.$('[data-step="hb9"]')), '越权的 board new 被执行了');
+    // 停掉助手：再答错也不叫
+    await t.page.click('.class-ext-btn[data-act="stop"]');
+    const nHelp = (await outs()).split('[助手 cl1]').length;
+    await type('q1', '7');
+    await sleep(3500);
+    check((await outs()).split('[助手 cl1]').length === nHelp, '停掉助手以后还在叫');
+    check((await db())[`sessions/${sid}`]?.helperOff === true, '停掉助手没记进这节课');
+    // R6：预写的答错按 match= 当场接（不调用）
+    await type('q2', '12');
+    await t.waitFor(() => t.page.evaluate(() => /把加号看成乘号/.test(document.body.innerText)), { timeout: 8000, what: '预写的答错当场接' });
+    // R2：后台活跑完、结果写进 out、记 journal；from= 直接上板
+    await plantLive(t, { 'ext_jobs/j1': { prompt: '改编一道加法题', see: [`sessions/${sid}`], out: 'drafts/j1', at: Date.now() } });
+    const out = await t.waitFor(async () => (await db())['drafts/j1'], { timeout: 20000, what: '后台活的结果写进 drafts/j1' });
+    check(/job-q1/.test(out.text) && out.by === 'ext-delegate', `后台活的结果不对：${JSON.stringify(out).slice(0, 200)}`);
+    check((await db())['ext_jobs/j1']?.status === 'done', '后台活没写 done');
+    check((await t.docs('journal')).some((j) => j.by === 'ext-delegate' && j.path === 'drafts/j1'), '后台活写进学习台没记 journal');
+    // R9：改字不丢作答（q1 上的作答还在）；R2 from=；R7 一轮两块新板
+    const turn2 = [
+      `${F4}board edit id=b1\n<<<\n第一题先算\n===\n第 1 题先算\n>>>\n${F4}`,
+      `${F4}board add id=b5 from=drafts/j1 title="改编的"\n${F4}`,
+      `${F4}board new id=b6 title="第二块"\n第二块。\n${F4}`,
+      `${F4}board new id=b7 title="第三块"\n第三块。\n${F4}`,
+    ].join('\n\n');
+    await plantLive(t, { [`sessions/${sid}/ext_in/002`]: { seq: 2, text: turn2, after: 1, at: Date.now() } });
+    await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/002`]?.result, { timeout: 15000, what: 'ext_in/002 执行' });
+    check(await t.page.evaluate(() => /第 1 题先算/.test(document.querySelector('[data-step="b1"]')?.innerText || '')), 'board edit 没改上字');
+    check(await t.page.evaluate(() => { const f = document.querySelector('[data-bid="q1"] .ans-feedback'); return !!f && !f.hidden; }), 'board edit 以后 q1 上的作答没了');
+    check(!!(await t.page.$('[data-bid="job-q1"]')), 'from= 的后台活结果没上板');
+    check(await t.page.evaluate(() => document.querySelectorAll('.class-page').length >= 3), '一轮两块新板没都开出来');
+    // R8：标以前的板（b1 在第 1 块），学生在别的板上：板上方一条，点了过去
+    await plantLive(t, { [`sessions/${sid}/ext_in/003`]: { seq: 3, text: `${F4}board mark target=b1 text="第 1 题"\n${F4}`, after: 1, at: Date.now() } });
+    await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/003`]?.result?.ok, { timeout: 15000, what: 'ext_in/003 标以前的板执行成' });
+    await t.waitFor(() => t.page.$('.class-ext-jump'), { timeout: 5000, what: '标了以前的板，板上方出提醒' });
+    await t.page.click('.class-ext-jump');
+    check(await t.page.evaluate(() => window.LAKit.classroom.extState().away === 0), '点了提醒以后还挂着');
+    // R7：预备板，点「下一块」页面自己开
+    await t.page.click('.class-ext-btn[data-act="next"]');
+    await t.waitFor(() => t.page.$('[data-step="b9"]:not([hidden])'), { timeout: 10000, what: '点「下一块」开预备板' });
+    // R5：board stage（舞台底座，按钮判挑战、没做到演 .wrong）、board widget（la.drag 拖着排、la.goal 记作答）
+    const stageBody = ['tex e = "(A+B)(A+B)"', 'array a = BA B² A² AB _ _ _ _', 'array k = A² AB BA B² hide=on', 'open a move',
+      'goal g1 "按先后排好四项" when="a.5 = k.1, a.6 = k.2, a.7 = k.3, a.8 = k.4" on="排好了"', '@g1 say "对。"', '@g1.wrong say "再看先后。"', 'ask next "排好了点下面" button="排好了"'].join('\n');
+    const widgetBody = "const want = ['$A^2$', '$AB$', '$BA$', '$B^2$'];\nconst d = la.drag({ items: want, slots: 4 });\nla.button('交了', () => la.goal('四项按左右顺序', la.compare(d.order(), want).ok, { value: d.order() }), { primary: true });\nla.md(la.same('AB+BA', '2AB') === false ? '判定：AB+BA 不等于 2AB' : '判定不对');";
+    await plantLive(t, { [`sessions/${sid}/ext_in/004`]: { seq: 4, text: `${F4}board new id=b20 title="动手"\n先排一排。\n${F4}\n\n${F4}board stage id=s1 title="排四项"\n${stageBody}\n${F4}\n\n${F4}board widget id=w1 title="拖着排"\n${widgetBody}\n${F4}`, after: 1, at: Date.now() } });
+    const r4 = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/004`]?.result, { timeout: 15000, what: 'ext_in/004 执行' });
+    check(r4.ok, `stage / widget 段没画成：${JSON.stringify(r4).slice(0, 400)}`);
+    check(await t.page.evaluate(() => /判定：AB\+BA 不等于 2AB/.test(document.querySelector('[data-bid="w1"]')?.innerText || '')), 'widget 里 la.same 的判定不对');
+    await t.page.locator('[data-bid="s1"] button:has-text("排好了")').first().click();
+    await t.waitFor(async () => /\[作答\][^\n]*stage[^\n]*没做到/.test(await outs()), { timeout: 10000, what: '舞台按钮没做到的作答写进 ext_out' });
+    for (let i = 0; i < 4; i++) { await t.page.click(`[data-bid="w1"] .wg-chip[data-k="${i}"]`); await t.page.click(`[data-bid="w1"] .wg-slot[data-i="${i}"]`); }
+    await t.page.locator('[data-bid="w1"] button:has-text("交了")').click();
+    await t.waitFor(async () => /\[作答\][^\n]*widget[^\n]*「四项按左右顺序」[^\n]*做到了/.test(await outs()), { timeout: 10000, what: 'widget 的作答写进 ext_out' });
+    check(/舞台现在/.test((await db())[`sessions/${sid}/meta/now`]?.text || ''), 'meta/now 里没有舞台现状');
+    // R10：叫主讲 → 马上写一份，最前面「学生在等你」
+    await t.page.click('.class-ext-btn[data-act="call"]');
+    await t.waitFor(async () => Object.entries(await db()).some(([k, v]) => k.startsWith(`sessions/${sid}/ext_out/`) && /^学生在等你/.test(v.text)), { timeout: 5000, what: '叫主讲写 ext_out' });
+    return t;
+  },
+
   // 被迭代掉的几种课（舞台、一问一答、实时黑板、自学单元，第十四轮搬进 archive/）：以前上过的点进去只出文字，不报错
   async oldclass(browser) {
     const t = await seeded(browser);

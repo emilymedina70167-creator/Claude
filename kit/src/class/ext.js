@@ -36,3 +36,58 @@ export function parseCoach(head = '') {
   if (!kv.target) return { error: '要写哪一题：board coach target=题号 upto=…' };
   return { target: kv.target, upto: kv.upto || '' };
 }
+
+/**
+ * 执行完一条 ext_in 当场写在它上面的 result（需求 R3：外部不用等学生动一下才知道画成了什么样）。
+ * boardOps：这一轮每条指令执行的结果；retry：写错没显示的段（和原因）；notes：别的提醒；error：整条没执行成
+ */
+export function inResult({ boardOps = [], retry = [], notes = [], error = '', shots = [], at = Date.now() } = {}) {
+  const ops = (boardOps || []).filter(Boolean).map((o) => ({
+    op: o.op, ...(o.id ? { id: o.id } : {}), ...(o.target ? { target: o.target } : {}), ok: !!o.ok,
+    ...(o.error ? { error: String(o.error).slice(0, 600) } : {}), ...(o.page ? { page: o.page } : {}),
+  }));
+  const done = ops.filter((o) => o.ok).length;
+  return {
+    at, ok: !error && !(retry || []).length && ops.every((o) => o.ok),
+    summary: error ? `没执行成：${error}` : `执行了 ${done} 条指令${ops.length - done ? `，${ops.length - done} 条没执行` : ''}${(retry || []).length ? `，${retry.length} 段写错没显示` : ''}`,
+    ops, ...(retry?.length ? { errors: retry.map(String) } : {}), ...(notes?.length ? { notes: notes.map(String) } : {}),
+    ...(error ? { error: String(error) } : {}), ...(shots?.length ? { shots } : {}),
+  };
+}
+
+/** sessions/{编号}/meta/now：黑板现状，文字（和 ext_out 最后一段一样）+ 结构化的（undefined 去掉，数据库收得下） */
+export function nowDoc({ text = '', board = null, at = Date.now() } = {}) {
+  return { at, text: String(text || ''), ...(board ? { board: JSON.parse(JSON.stringify(board)) } : {}) };
+}
+
+const FROM_OPEN = /^([ \t]{0,3})(`{3,}|~{3,})[ \t]*board[ \t]+(add|new|replace|pin)\b(.*?)[ \t]+from[ \t]*=[ \t]*("[^"]+"|\S+)(.*)$/i;
+/**
+ * board add id=b5 from=集合/文档（需求 R2：后台活的结果直接上板）：执行前把那一条的 text（没有就 md）换进块里。
+ * get(path) → Promise<文档或 null>。读不到的那一块原样留着、去掉 from=，返回 { text, missing: [路径] }
+ */
+export async function resolveFrom(text, get) {
+  const lines = String(text ?? '').split('\n');
+  const out = [];
+  const missing = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(FROM_OPEN);
+    if (!m) { out.push(lines[i]); continue; }
+    const [, ind, fence, op, pre, rawPath, post] = m;
+    const path = rawPath.replace(/^"|"$/g, '');
+    // 找这一块的结尾（和开头同一种、不短于它的围栏）
+    let j = i + 1;
+    const closeRe = new RegExp(`^[ \\t]{0,3}${fence[0] === '`' ? '`' : '~'}{${fence.length},}[ \\t]*$`);
+    while (j < lines.length && !closeRe.test(lines[j])) j++;
+    const inner = lines.slice(i + 1, j);
+    const doc = await Promise.resolve(get(path)).catch(() => null);
+    const body = doc && typeof doc === 'object' ? String(doc.text ?? doc.md ?? '') : '';
+    if (!body) missing.push(path);
+    const all = [...inner, ...(body ? (inner.join('').trim() ? ['', body] : [body]) : [])].join('\n');
+    // 换进来的文字里有同样长的围栏：外层加长，免得被它提前闭合
+    const longest = Math.max(0, ...[...all.matchAll(new RegExp(`${fence[0] === '`' ? '`' : '~'}+`, 'g'))].map((x) => x[0].length));
+    const f = fence[0].repeat(Math.max(fence.length, longest + 1));
+    out.push(`${ind}${f}board ${op}${pre}${post}`, ...(all ? [all] : []), `${ind}${f}`);
+    i = j;
+  }
+  return { text: out.join('\n'), missing };
+}

@@ -61,6 +61,26 @@
    说明的全文（[`CLAUDE-PROJECT.md`](CLAUDE-PROJECT.md)）跟着学习台一起发布，每次更新它也一起更新，所以项目指令里只放这一段，以后不用再改。
 3. 发资料给 Claude，或者说「备下一节」「开一块黑板讲单元 2」。问它「学习台说明是哪个版本」，答的版本号应该和学习台底部写的一样。
 
+## 外部主讲在自己的沙盒里预检（给 claude.ai 项目对话里的 Claude）
+
+仓库是 `emilymedina70167-creator/Claude`。`kit/dist/la-kit.js` 提交在仓库里，就是学习台发布的那一份，不用 build。在一个干净的 Linux 沙盒里（Playwright 和 Chromium 用沙盒预装的，`npm install` 走公共源）：
+
+```bash
+git clone https://github.com/emilymedina70167-creator/Claude && cd Claude && npm install
+```
+
+```bash
+node tools/ext-check.mjs --next 这一轮.txt --lint
+```
+
+```bash
+node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
+```
+
+- 第二条不开浏览器，一秒以内只查写法：board 块的围栏和指令、组件名、组件 id 重复、指令的 `target` 存不存在、`\calc` 算不算得出、`stage` / `widget` 段。
+- 第三条在真的浏览器里按 iPad 竖屏 820×1180、横屏 1180×820 画一遍，出截图和问题列表；开头打出组件库版本号，和学习台底部的版本号对得上就是同一版。
+- 两条都可以加 `--session 存数据的目录`（`ArtifactData` 的 `out_dir` 存下来的那个目录，里面有 `sessions/{编号}/ext_in/*.json`）：带上这节课以前写过的几轮，认得已有的段和组件 id。
+
 ## 组件
 
 | 类别 | 组件 |

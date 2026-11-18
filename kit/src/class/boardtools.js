@@ -25,7 +25,8 @@ export function applyAssigns(api, assigns = {}) {
   }
 }
 
-export function createBoardTools({ bv, segs }) {
+// anyBoard()：为真时以前板上的东西也能标、能动（外部的课，需求 R8）；结果里带 page（在第几块板上），页面去提醒学生
+export function createBoardTools({ bv, segs, anyBoard = () => false }) {
   const board = bv.board;
   const marks = new Map();
   let markSeq = 0;
@@ -49,12 +50,13 @@ export function createBoardTools({ bv, segs }) {
     const warns = [];
     for (const spec of op.marks || []) {
       const r = placeMark(spec, { animate });
-      if (r.ok) done.push({ id: r.id, seg: r.seg, spec: { ...spec, id: undefined } });
+      if (r.ok) done.push({ id: r.id, seg: r.seg, spec: { ...spec, id: undefined }, ...(r.page ? { page: r.page } : {}) });
       else errs.push(`${markWhere(spec)}：${r.error}`);
       if (r.warn) warns.push(`${r.id}：${r.warn}`);
     }
     errs.push(...(op.errors || []));
-    return { op: 'mark', id: op.target || '', ok: done.length > 0, marks: done, error: errs.length ? errs.join('；') : undefined, warn: warns.length ? warns.join('；') : undefined };
+    const away = done.find((d) => d.page)?.page;
+    return { op: 'mark', id: op.target || '', ok: done.length > 0, marks: done, ...(away ? { page: away, away: true } : {}), error: errs.length ? errs.join('；') : undefined, warn: warns.length ? warns.join('；') : undefined };
   }
 
   // 画一条标注。restore：刷新后重放（不管在不在当前板上）。返回 { ok, id, seg } 或 { ok: false, error }
@@ -76,10 +78,8 @@ export function createBoardTools({ bv, segs }) {
       root = el;
       scene = el.dataset.scene ? session.scenes.get(el.dataset.scene)?.api || null : null;
     }
-    if (!restore && !onCurrent(host)) {
-      const n = Number(host.closest('.class-page')?.dataset.page);
-      return { ok: false, error: `${t} 在第 ${n} 块板上，不在当前板上，学生现在看不到` };
-    }
+    const away = !onCurrent(host) ? Number(host.closest('.class-page')?.dataset.page) : 0;
+    if (!restore && away && !anyBoard()) return { ok: false, error: `${t} 在第 ${away} 块板上，不在当前板上，学生现在看不到` };
     bumpSeq(spec.id);
     const id = spec.id || `m${markSeq + 1}`;
     const prev = marks.get(id);
@@ -96,7 +96,7 @@ export function createBoardTools({ bv, segs }) {
     // 同一个 id 换了地方：原来那条擦掉
     if (prev && prev.host !== host) prev.host?._marks?.remove(id);
     marks.set(id, { id, seg: seg.id, spec, host });
-    return { ok: true, id, seg: seg.id, ...(r.warn ? { warn: r.warn } : {}) };
+    return { ok: true, id, seg: seg.id, ...(away && !restore ? { page: away } : {}), ...(r.warn ? { warn: r.warn } : {}) };
   }
 
   function unmarkOp(op) {
@@ -149,10 +149,9 @@ export function createBoardTools({ bv, segs }) {
       return { ...base, ok: false, error };
     }
     // 在以前的板上：学生现在看不到，动了也白动
-    if (!onCurrent(el)) {
-      const n = Number(el.closest('.class-page')?.dataset.page);
-      return { ...base, ok: false, error: `${op.target} 在第 ${n} 块板上，不在当前板上，学生现在看不到它。要用这张图，就在当前板上重新画一张（换个新 id）` };
-    }
+    const away = !onCurrent(el) ? Number(el.closest('.class-page')?.dataset.page) : 0;
+    if (away && !anyBoard()) return { ...base, ok: false, error: `${op.target} 在第 ${away} 块板上，不在当前板上，学生现在看不到它。要用这张图，就在当前板上重新画一张（换个新 id）` };
+    if (away) base.page = away, base.away = true;
     const api = sc.api;
     try {
       if (op.action === 'set') {

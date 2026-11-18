@@ -618,6 +618,8 @@ function segmentLines(seg, { maxResults = Infinity } = {}) {
       lines.push(`  - ${name}${ANSWERING.has(b.kind) ? '：还没有作答' : ''}`);
     }
     if (armed) lines.push(armed);
+    // 舞台组件（board stage）：这块舞台现在什么样（页面写的舞台现状，缩进一层）
+    if (b.stage) lines.push('    - 舞台现在：', ...String(b.stage).trim().split('\n').slice(0, 40).map((l) => `      ${l}`));
   }
   // 板上已经圈了、框了什么（board mark）：要撤就 board unmark id=…
   const marks = (Array.isArray(seg.marks) ? seg.marks : []).filter(Boolean);
@@ -703,7 +705,8 @@ function pagedStateText(board) {
   } else lines.push('常驻栏现在是空的。');
   const before = pages.filter((p) => p.n !== cur).sort((a, b) => a.n - b.n);
   if (before.length) {
-    lines.push('以前的板（学生翻回去才看得到；上面的图不能再用 figure 动）：');
+    // 外部的课（需求 R8）：以前板上的东西也能标、能动、能改，页面提醒学生翻过去
+    lines.push(board.ext ? '以前的板（学生翻回去才看得到；在上面 mark / figure / edit / replace，页面在板上方提醒学生翻过去）：' : '以前的板（学生翻回去才看得到；上面的图不能再用 figure 动）：');
     for (const p of before) {
       const segsHere = onPage(p.n);
       const title = p.title ? `「${oneLine(p.title, 40)}」` : '';
@@ -723,6 +726,8 @@ function pagedStateText(board) {
   if (vars.length) lines.push(`这节课定义的量（let 块，\\calc 和组件里都能直接用）：${vars.map((v) => oneLine(v, 200)).join('；')}`);
   lines.push(ids);
   if (board.nextMark) lines.push(`新的标注不写 id 时自动编号（下一个是 ${board.nextMark}）。`);
+  // 外部的课：页面替外部记着的（预备板、叫来的助手）
+  if (Array.isArray(board.extLines) && board.extLines.length) lines.push('外部的课里页面记着的：', ...board.extLines.map((x) => `- ${x}`));
   return lines.join('\n');
 }
 
@@ -1098,6 +1103,13 @@ function conjectureRecord(a) {
 
 function recordText(a, type) {
   switch (type) {
+    // 外部设计的交互（board widget 的 la.record / la.goal、board stage 的挑战）：q 是那一件事，value 是学生给的
+    case 'widget':
+    case 'stage': {
+      const v = a.value !== undefined && a.value !== null && a.value !== '' ? `给了 ${val(a.value)}` : '';
+      const wrong = Array.isArray(a.wrong) && a.wrong.length ? `（${a.wrong.map((x) => short(String(x), 80)).join('；')}）` : '';
+      return `[作答] ${where(a, type)}：${a.q ? `「${short(a.q, 120)}」` : ''}${tail([v, a.ok === true ? '做到了' : a.ok === false ? '没做到' : '', a.giveup ? '放弃了' : ''].filter(Boolean).join('，') + wrong, a.text ? `说明：${short(a.text, 200)}` : '', duration(a.ms))}`;
+    }
     case 'steps': return stepsRecord(a);
     case 'answer':
     case 'practice': return answerRecord(a, type);
@@ -1186,6 +1198,13 @@ function eventText(a, type) {
   const stepTitle = typeof d.title === 'string' ? d.title : typeof a.title === 'string' ? a.title : '';
   const subText = sub ? ` 第 ${sub} 步${stepTitle ? `（${short(stepTitle, 24)}）` : ''}` : '';
   switch (type) {
+    // 外部设计的交互、舞台里学生的动作和叫老师的事（detail.text 是页面写好的一句）
+    case 'widget':
+    case 'widget-error':
+    case 'stage-act':
+    case 'stage-call':
+    case 'stage-note':
+      return `[动作] ${where(a, type.startsWith('stage') ? 'stage' : 'widget', { title: false })}${type === 'widget-error' ? ' 出错了' : type === 'stage-call' ? ' 叫主讲' : ''}：${short(String(get('text') ?? get('why') ?? get('msg') ?? ''), 400)}`;
     case 'giveup': return `[动作] ${where(a, 'steps', { title: false })}${subText}：想不出来，直接揭开了`;
     case 'reveal': return `[动作] ${where(a, 'steps', { title: false })}：揭开第 ${sub ?? '?'} 步${stepTitle ? `（${short(stepTitle, 24)}）` : ''}`;
     case 'drag':
@@ -1485,10 +1504,12 @@ const okOf = (a) => (typeof a?.ok === 'boolean' ? a.ok : typeof a?.detail?.ok ==
 
 // 学生在黑板上的一个动作要不要告诉课堂 Claude。
 // 同一道题的「最终结果」只在看了答案、放弃时说（每次尝试已经说过了）；提问、提示这类不是作答
+const EXT_EVENTS = new Set(['widget', 'widget-error', 'stage-act', 'stage-call', 'stage-note']);
 export function reportable(a) {
   if (!a || typeof a !== 'object') return false;
   const type = typeOf(a);
-  if (a.source === 'event') return type === 'reveal' || type === 'drag' || type === 'sure' || type === 'gloss';
+  // 外部设计的交互（board stage / widget）记的动作也要告诉外部
+  if (a.source === 'event') return type === 'reveal' || type === 'drag' || type === 'sure' || type === 'gloss' || EXT_EVENTS.has(type);
   if (type === 'ask' || type === 'findbug-hint') return false;
   if (a.final && !a.revealed && !a.giveup) return false;
   return true;
@@ -1508,6 +1529,8 @@ export function actionTrigger(a, { lastStep = false } = {}) {
   if (a.source === 'event' && typeOf(a) === 'drag') return 'later';
   // 点开生词看意思：页面当场显示了，不单独调用，跟着下一条告诉老师（知道学生哪几个词不认识）
   if (a.source === 'event' && typeOf(a) === 'gloss') return 'later';
+  // 舞台上学生的每一下：跟着下一条说（舞台到了该叫老师的那一刻另记 stage-call）
+  if (a.source === 'event' && (typeOf(a) === 'stage-act' || typeOf(a) === 'stage-note')) return 'later';
   // 有没有把握：答对了却说没把握，老师要马上知道（根本规则：没把握按没会处理）；别的跟着下一条一起说，不单独调用
   if (a.source === 'event' && typeOf(a) === 'sure') return sureOf(a) === false && okOf(a) === true ? 'soon' : 'later';
   // 分步的题中间一步做对了、后面还有步：学生接着做下一步，不为这一下单独叫老师（2026-11-16 真课：14 轮里 4 轮是这样叫的，

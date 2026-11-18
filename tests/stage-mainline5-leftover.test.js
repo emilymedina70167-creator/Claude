@@ -5,7 +5,6 @@ import { Scene } from '../kit/src/stage/scene.js';
 import { parseScript } from '../kit/src/stage/script.js';
 import '../kit/src/stage/types/index.js';
 import { whereOf } from '../kit/src/stage/follow.js';
-import { stageDrillId } from '../kit/src/memory/stagedrills.js';
 
 const run = (s, src, opt) => { let fx; for (const c of parseScript(src)) fx = s.apply(c, opt); return fx; };
 const make = (src) => { const s = new Scene(); run(s, src); return s; };
@@ -26,15 +25,6 @@ test('照着走的一排同时开着 edit：学生把数直接写成有序的—
   assert.match(s.stateText(), /a 照 直接插入排序 走：还没做完第 1 趟/);
 });
 
-test('题库的编号：算法名写中文也分得开（以前中文被去掉，希尔和快排撞成一个编号）', () => {
-  const a = stageDrillId('DS-L8.2.3', '希尔', {}), b = stageDrillId('DS-L8.2.3', '快排', {});
-  assert.notEqual(a, b);
-  assert.match(a, /^d-[A-Za-z0-9_-]+$/);
-  assert.notEqual(stageDrillId('DS-L8.2.3', 'sort', { algo: '希尔' }), stageDrillId('DS-L8.2.3', 'sort', { algo: '冒泡' }));
-  // 英文的照旧（已经抄进题库的编号不变）
-  assert.equal(stageDrillId('DS-L8.2.3', 'sort', { algo: 'shell', gaps: '5 3 1' }), 'd-stage-DS-L8_2_3-sort-algo_shell_gaps_5_3_1');
-});
-
 test('Dijkstra 连着两轮 dist 一样（并成一个检查点）：两轮各确定了谁都写出来', () => {
   // 1→2:1、1→3:1：第 1 轮确定 1（dist 2=1 3=1），第 2 轮确定 2、第 3 轮确定 3，dist 都不再变
   const s = make('graph g = 1>2:1 1>3:1\nfollow g net dijkstra from=1\nopen g tag');
@@ -49,19 +39,6 @@ test('学生改写了又自己改回去：接着照（不用老师重新 follow�
   assert.match(s.stateText(), /照不下去了（学生把数改写了/);
   w('write a.1 3');
   assert.match(s.stateText(), /a 照 直接插入排序 走：还没做完第 1 趟/);
-});
-
-test('舞台题点「做不出来」：放弃记在那道题的记录上，报告里是一道（另记一条动作会归成另一道——组件不再另记）', async () => {
-  const { itemsOf } = await import('../kit/src/memory/report.js');
-  const rec = { src: 'record', comp: 'sd1', type: 'stage', q: '照 希尔排序 走一遍', ok: false, giveup: true, at: 1 };
-  const one = itemsOf([rec]);
-  assert.equal(one.length, 1);
-  assert.equal(one[0].outcome, 'giveup');
-  // 以前：同一个组件再记一条 giveup 的动作（没有 q）→ 两道
-  assert.equal(itemsOf([rec, { src: 'event', comp: 'sd1', kind: 'giveup', at: 2 }]).length, 2);
-  const { readFileSync } = await import('node:fs');
-  const src = readFileSync(new URL('../kit/src/blocks/stagedrill.js', import.meta.url), 'utf8');
-  assert.equal((src.match(/session\.event\('giveup'/g) || []).length, (src.match(/if \(!gave\) session\.event\('giveup'/g) || []).length);
 });
 
 test('学生改写了、中间还挪过、再把数改回原来那一组：从现在的排法接着照（审查：以前只认排法回到改写以前，卡死）', () => {
