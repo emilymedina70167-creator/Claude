@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-18f**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-18g**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -76,6 +76,7 @@ b = [1, 1, -2]
 - `practice`（数据结构）：practice 的内置题型（数据结构） → `components/practice.md`
 - `quiz`：选择题 / 填空题 → `components/quiz.md`
 - `solve`：解答题，按步骤判 → `components/solve.md`
+- `recall` / `construct` / `claim` / `discriminate` / `locate`（线代）：检验题（二类，学完以后的吸收检验） → `components/recall.md`
 - `context`：给页面里 Claude 的背景资料（不显示） → `components/context.md`
 - `draft`：草稿区（Apple Pencil 演算） → `components/draft.md`
 - `steps`：一步步揭开的例题（带着动脑） → `components/steps.md`
@@ -554,6 +555,35 @@ can: say, mark
 - 状态写回那一件：`queued` → `running`（`startedAt`）→ `done`（`endedAt`、`ms`）或 `failed`（`error`）。`running` 了 10 分钟没写完（页面关了）的下次重跑。
 - 结果存进 `out` = `{ text, job, by: "ext-delegate", model, at, from }`，记一条 `journal`（能撤销）。`meta/facts.jobs` 是 `{ queued, running, done, failed }`。
 - `board add id=b5 from=集合/文档`（`new`、`replace`、`pin` 也行）：执行前页面把那一条的 `text`（没有就 `md`）换进块里；块里原来写的字留在前面。读不到的那一块照原样执行、`ext_out` 里说一句。
+
+**检验（二类）：`board check`**（学完以后的吸收检验；页面里的老师的课也能写）：
+
+````
+````board check id=k1 title="第二讲第一节" limit=15m pause=30s
+block L2.1.1 must=p1,p2
+block L2.1.4 must=p3,p4,p5 optional=p7 fast=90s
+spare p8,p9
+<<<
+（可选）外部没写到的错法时，给页面里的 Claude 的话
+>>>
+```construct
+id: p1
+…
+```
+（题、它们的 retry、spare 都写在这个块里；题的写法见第三节「检验题」）
+````
+````
+
+- `block 块 must=… optional=… [fast=]`：一块一行，按写的先后做，块里先必做再可选；`spare`：不出现，只存进题库给复测；没排进任何一行、也不是谁的 `retry` 的题报写法错误。`limit=` 第一次作答一共多久（不写不限时），`pause=` 手写停多久算停顿（默认 30s）。
+- 执行时页面先查一遍（写法、每道题的 `example` 代进条件、必做题 retry 至少 2 道、至少 1 条 teach、retry 是同一种题型），不过的不开，原因写在 `ext_in.result`；`node tools/ext-check.mjs --next … --lint` 查的是同一份。过了就画一张开始卡，题全部存进题库 `probes`。
+- 学生点开始：板、常驻栏、翻板条、整页板书收起来（合书），做完放回来；这时来的 `ext_in` 照常执行，画好的板做完检验才看得到。一道题：作答 → 点「很确定 / 大概 / 蒙的」→ 交；没有提示和「看答案」，「想不出来」一直在。
+- 判：构造的每一条、式子、真假、能不能、哪一行、逐行证明、result、fix 页面当场判；要点、证明要点、理由、solve 的步骤每交一次调一次页面里的 Opus 5.5 high（给它题、你写的要点或参考步骤、学生交的；手写的带整页图，转写和判同一次），回的不是 Opus、读不出来、超过 90 秒都算拿不准。要它判的题交了学生马上做下一道，判回来没过的在当前这道做完时插进来。
+- 判出没过：列出没过的每一项（构造是那一条自己的话，要点是「没写到：要点原文」）→ 你写的 teach → 下一道 retry；做对算补上，又错接着下一道，retry 用完记没吸收。「蒙的」做对也出一道 retry 确认。拿不准的（`unsure`、超时、作废）不补讲、不出 retry，待你核。没有对上的 teach 时叫一次页面里的 Claude 写补讲：给它题、要点、你写的 teach、学生交的、没过的项和 `<<< >>>` 里你写的话；没写 `<<< >>>` 时默认的话是「指出错在哪、只补缺的那一点（不给整段答案）。」（你在任务书里写的那句）。它的话原样显示，记成证据 `src: helper, role: check`。
+- 可选题：这一块必做都一次过、都「很确定」、没有在判的（写了 `fast=` 的还要第一次作答都在时间里）就跳过。限时只数第一次作答（题在屏幕上、页面在前台的时间）；过了 `limit` 交的记 `late`，做对最多算补上。
+- 刷新、熄屏、切走回来照存着的进度接着做（`sessions/{编号}/check/{检验 id}`），看过没交的照旧算第一次（证据记 `resumed`）；「先停下」板放回来，那一块变成一条「接着做」；下课时还开着照「先停下」存着。没做完的块不写吸收。
+- `ext_out`：开始一份「[页面] 检验 k1「…」开始（2 块、5 道必做、限时 15 分钟）」，做完一份：每块的吸收、每道题一行（第一次的作答、没过的项、retry、信心、用时）、手写的整页图和快照的 asset 编号和时间线、待你核的题、记没记错题。中途不一道一道写。
+- 改判：任何一轮 `board judge target=题的 id`，块里一行一项（`m1 ok` / `m2 missing` / `if1 wrong why="…"` / `s3 wrong tag=…` / `m3 unsure`），加一行 `result=pass | fail` 改整道题。页面追加一条改判的证据（`rejudged: true`），重算那一块的吸收；待核的判成没过算「未」，它没用上的 retry 记进 `absorb.retryOwed`，复测先出。也可以直接写 `absorb/{块}`（第七节）。
+- 做完的那一刻（不等学生点「回到黑板」）：每块写 `absorb/{块}`（第七节），排 1 天、7 天两次复测；最后没过的、「很确定却错了」的题各记一道错题（同一个 `target` 一次检验一道，能撤销）。
 
 **外部设计的交互：`board stage`、`board widget`**（底座的完整清单在 `components/stage.md`、`components/widget.md`）：
 

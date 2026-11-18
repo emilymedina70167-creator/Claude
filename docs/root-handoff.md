@@ -30,6 +30,13 @@
 
 `dev_requests/dr-batch4`（外部定稿，学生说「这部分是计划1，计划2我要专门设计组件库提升」）和 `dr-legacy-label`，见 `CLAUDE.md` 那一条和 `docs/superpowers/plans/2026-11-18-batch4.md`。**计划 2（`dr-plan2`）是草稿，学生和外部设计好、改成 open 以前不动组件库的外观和交互。**
 
+## 第 7 批：计划 2，二类组件（学完以后的吸收检验，2026-11-18）
+
+`dev_requests/dr-plan2`：外部写的任务书，外部审过 plan（`review` 字段的两条必改：复测里的 retry 存题库编号、最后没过的进错题本）。设计 `docs/superpowers/specs/2026-11-18-check-design.md`（第六节是自己定的事和外部同意的六条），计划 `docs/superpowers/plans/2026-11-18-check.md`。代码在 `kit/src/check/`，见 `CLAUDE.md` 那一条。开工时计划 1（`dr-batch4`）已经合进 `main`：solve、`board judge`、`STEP_TAGS`、`timing.js` 直接用真的，没做替身。
+
+- 第一次真检验以后：读 `sessions/{编号}/check/{检验 id}`（进度）、`evidence` 里 `src: check` 的、`absorb/*`、`probes/*`，看判分等了多久（`judgedBy: timeout` 多不多）、待核的多不多、补讲是外部写的还是页面里的 Claude 写的；照真数据跑一遍 `deskState`。
+- 没做的：retry 写成模板每次取新数（外部列的可选，先看真写起来多费事）；408、英语的探题类型。
+
 ## 现在做到哪
 
 全部做完、已发布（版本见 `CLAUDE-PROJECT.md` 开头）。下一步是学生用外部上一节真课。
