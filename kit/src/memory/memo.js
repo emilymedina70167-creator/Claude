@@ -360,7 +360,7 @@ export function nextSlipId(slips, session, date) {
 // 页面拼好整条传进来（不是 memo 块里的字），照原样存（dr-batch4）
 function extraOfError(a) {
   const out = {};
-  if (Array.isArray(a.steps)) out.steps = a.steps.slice(0, 20).map((x) => ({ id: String(x.id ?? ''), ok: x.ok === true || x.ok === false || x.ok === 'missing' ? x.ok : null, ...(x.why ? { why: cut(String(x.why), 300) } : {}), ...(x.tag ? { tag: cut(String(x.tag), 40) } : {}) }));
+  if (Array.isArray(a.steps)) out.steps = a.steps.slice(0, 20).map((x) => ({ id: String(x.id ?? ''), ok: x.ok === true || x.ok === false || x.ok === 'missing' ? x.ok : null, ...(x.unsure ? { unsure: true } : {}), ...(x.why ? { why: cut(String(x.why), 300) } : {}), ...(x.tag ? { tag: cut(String(x.tag), 40) } : {}) }));
   if (a.book && typeof a.book === 'object') out.book = Object.fromEntries(Object.entries(a.book).filter(([k, v]) => ['title', 'part', 'subject', 'ch', 'no'].includes(k) && v !== undefined && v !== null && v !== '').map(([k, v]) => [k, typeof v === 'number' ? v : cut(String(v), 60)]));
   if (typeof a.tag === 'string' && a.tag) out.tag = cut(a.tag, 40);
   return out;

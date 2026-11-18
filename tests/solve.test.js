@@ -59,3 +59,15 @@ test('board judge / unqueue 指令', () => {
   assert.ok(blockCommand('judge', 'x').error);
   assert.deepEqual(blockCommand('unqueue id=b9', ''), { op: 'unqueue', id: 'b9' });
 });
+
+// 外部审 plan 时加的：拿不准的步 unsure → 待核，ok 记 null、不进错题本
+test('unsure：待核', () => {
+  const { steps } = parseSolve(SRC);
+  const r = parseJudge('s1 ok\ns2 unsure why="照片里看不清"\ns3 ok\ns4 ok', steps);
+  assert.deepEqual(r.steps[1], { id: 's2', ok: null, unsure: true, why: '照片里看不清', tag: '' });
+  assert.equal(allRight(r.steps), false);
+  assert.equal(judgedLine(r.steps), '第 2 步 待核：照片里看不清');
+  assert.equal(errorOfJudged(r.steps, steps), null);
+  const r2 = parseJudge('s1 ok\ns2 unsure\ns3 wrong tag=计算\ns4 ok', steps);
+  assert.match(errorOfJudged(r2.steps, steps).step, /^第 3 步（计算）/);
+});

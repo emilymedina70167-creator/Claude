@@ -2088,7 +2088,7 @@ export async function renderClass(root, meta, desk = null) {
       // 解答题（solve）：学生交的照片原图一起交给它（dr-batch4 第 1 条，can: judge 时它照参考步骤一步一步判）
       const solveEl = rule.target ? [...board.querySelectorAll(`[data-bid="${CSS.escape(String(rule.target))}"]`)].find((x) => x.__solve) : null;
       const shots = solveEl?.__solve.lastBlobs?.length && teacher.images ? solveEl.__solve.lastBlobs.slice(0, 4) : [];
-      if (solveEl) materials.push(`${rule.target} 是解答题，参考步骤（学生看不到）：\n${solveEl.__solve.spec.steps.map((s0) => `${s0.id} ${s0.kind}: ${s0.text}`).join('\n')}${shots.length ? `\n学生交的照片 ${shots.length} 张附在这一条上。` : ''}${rule.can.includes('judge') ? `\n判的写法：board judge target=${rule.target}，块里一行一步（s1 ok / s3 wrong tag=… why="…" / s4 missing），tag 用 符号、漏条件、规则用错、计算、记号、没写依据、步骤缺、别的。` : ''}`);
+      if (solveEl) materials.push(`${rule.target} 是解答题，参考步骤（学生看不到）：\n${solveEl.__solve.spec.steps.map((s0) => `${s0.id} ${s0.kind}: ${s0.text}`).join('\n')}${shots.length ? `\n学生交的照片 ${shots.length} 张附在这一条上。` : ''}${rule.can.includes('judge') ? `\n判的写法：board judge target=${rule.target}，块里一行一步（s1 ok / s3 wrong tag=… why="…" / s4 missing），tag 用 符号、漏条件、规则用错、计算、记号、没写依据、步骤缺、别的。哪一步从照片或文字里看不清、拿不准对错，就写 s3 unsure why="…"，不要猜（页面画成「？待外部核」，不进错题本）。` : ''}`);
       const input = helperPrompt({ rule, ev, materials, doc: PROTOCOL_DOC });
       bytes = new Blob([input]).size;
       res = await teacher.call(input, { ...TEACH, cache: false, ...(shots.length ? { images: shots } : {}), ...(teacher.tools ? { tools: classTools(staged) } : {}) });
