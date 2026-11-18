@@ -38,6 +38,8 @@ export function createSink(store, { evidence = null, onEvidence = null } = {}) {
 
   function put(coll, data, retry = true) {
     const body = JSON.parse(JSON.stringify(data)); // 去掉 undefined
+    // 证据记下写进学习台的时刻（dr-trail-fix 2）：外部的分析游标按它取，事件时间 at 可能早于写入（外部写的 said 带学生说话的时间）
+    if (coll === 'evidence' && body.wroteAt == null) body.wroteAt = Date.now();
     const id = body.id || newId();
     const key = `${coll}/${id}`;
     // 这个文档之前没存上的旧版本：已经被这次的新内容取代，别在「再试」时把新内容盖回去

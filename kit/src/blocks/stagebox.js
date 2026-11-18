@@ -4,10 +4,12 @@
 // 舞台课那时，学生的每一下攒着、到了要老师接的那一刻（答了、做到了、做完了、call=wrong、试了好多下、很久没动）叫老师；
 // 这里没有老师可叫，同一刻记一条动作 stage-call（detail 里是那时会发给老师的那一段），外部主讲从下一份 ext_out 里看到。
 // 学生每一下记一条 stage-act；挑战做到 / 按了按钮没做到、答了那一问记成作答（type: 'stage'）。舞台现在什么样：stageBoxState(el)。
-// 刷新、重画时从头演（不放回学生动过的样子）。字段的读法和写法错误的拼法在 stageboxspec.js（纯函数，有测试）。
+// 刷新、重画时放回刷新前的样子（dr-trail-fix 3）：舞台的 log 一变（学生动、预写的行演了、撤一步）一秒内存一份到课堂给的 session.stageLogs
+// （学习台里是 sessions/{编号}/stage_logs/{段 id}，带镜头指令的指纹）；再画这一段时指纹对得上就照 Stage.replay 瞬间放回，
+// 还在等的那一问重新挂上，不再记作答、不再叫人。字段的读法和写法错误的拼法在 stageboxspec.js（纯函数，有测试）。
 import { Stage, actText, quoteText } from '../stage/stage.js';
 import { eventOf, eventsText, triggers, hasWork, tryCount, TRY_MAX, QUIET_MS, verdictText } from '../stage/events.js';
-import { parseStageBox, problemsOf, callLine, autoHeight } from '../stageboxspec.js';
+import { parseStageBox, problemsOf, callLine, autoHeight, scriptSig, logDoc, docId } from '../stageboxspec.js';
 import { CAMERA_ROOM } from '../stage/layout.js';
 import { session } from '../session.js';
 
@@ -19,6 +21,9 @@ export function stageBoxState(el) {
   if (!st) return '';
   try { return st.scene.stateText(); } catch (e) { return `（舞台现状没写成：${e?.message || e}）`; }
 }
+
+// log 里最后挂的那一问（ask 那一行）：还在等时存下来，放回以后照它重新挂
+const lastAsk = (log) => { for (let i = log.length - 1; i >= 0; i--) if (/^ask\b/.test(String(log[i]?.src || '').trim())) return String(log[i].src).trim(); return null; };
 
 export function stage(el, src) {
   const spec = parseStageBox(src);
@@ -32,13 +37,15 @@ export function stage(el, src) {
   const prewrite = spec.prewrite || (session.extPrewrite ? 'all' : null);
   const id = spec.id || el.dataset.bid || '';
   let alive = true;
+  let quiet = false; // 放回刷新前的样子时：舞台照 log 重演，挑战成立、东西做完不再记作答、不再叫人
   let pending = []; // 上一次「叫老师」以后学生做的事（events.js 的写法），到了要叫的那一刻写成一段
   let triedOut = false, stuckOut = false, idleTimer = null;
 
   const st = new Stage(host, { input: true, talk: false, embed: true, prewrite, onAct });
   el.__stage = st; // 黑板现状、自动测试、调试找得到这块舞台
   const goals = () => st.scene.goals;
-  const ev = (type, detail) => { if (alive) session.event(type, el, { stage: id, ...detail }); };
+  const ev = (type, detail) => { if (alive && !quiet) session.event(type, el, { stage: id, ...detail }); };
+  const rec = (r) => { if (alive && !quiet) session.record(r); };
 
   // —— 叫老师的那一刻：记一条 stage-call，攒着的清掉 ——
   function call(why) {
@@ -73,7 +80,7 @@ export function stage(el, src) {
 
   // —— 学生的每一下 ——
   function onAct(a) {
-    if (!a || !alive) return;
+    if (!a || !alive || quiet) return;
     if (a.type === 'look') return; // 翻回去看一幕：只是看
     // 交给学生的手（open）、拨数是「试」：一下记一条，攒进这一段
     if (a.open || a.type === 'dial' || a.type === 'undo') {
@@ -91,16 +98,16 @@ export function stage(el, src) {
   }
   // 答了等着的那一问（ask tap / pick / value / say / next）
   st.onAnswer = (act, w) => {
-    if (!alive || act.type === 'end') return;
+    if (!alive || quiet || act.type === 'end') return;
     const right = act.type === 'pick' ? act.same ?? null : act.right ?? null;
     const judged = w && (w.kind === 'tap' || w.kind === 'pick' || w.kind === 'value');
     const answer = act.type === 'pick' ? act.words || (act.refs || []).join(' ') : act.type === 'tap' ? act.ref : act.text ?? act.button ?? '';
-    if (judged || act.type === 'say') session.record({ type: 'stage', q: w?.prompt || '（舞台上的一问）', ok: judged ? right : null, value: String(answer ?? ''), el, stage: id, text: actText(act) });
+    if (judged || act.type === 'say') rec({ type: 'stage', q: w?.prompt || '（舞台上的一问）', ok: judged ? right : null, value: String(answer ?? ''), el, stage: id, text: actText(act) });
     else ev('stage-act', { text: actText(act) });
     // 按了按钮才判的挑战（goal … on=）判成没做到：记成作答（ok: false）；做到了的由 onGoal 记
     for (const x of act.onGoals || []) {
       const g = goals().get(x.id);
-      if (!x.met && g) session.record({ type: 'stage', q: g.text, ok: false, el, stage: id, goal: x.id, text: `学生按了「${g.on}」，挑战 ${x.id}「${g.text}」${x.status || '还没做到'}` });
+      if (!x.met && g) rec({ type: 'stage', q: g.text, ok: false, el, stage: id, goal: x.id, text: `学生按了「${g.on}」，挑战 ${x.id}「${g.text}」${x.status || '还没做到'}` });
     }
     const e = eventOf(act, { at: Date.now() });
     pending.push(e);
@@ -120,12 +127,12 @@ export function stage(el, src) {
   }
   // 挑战做到了（学生做的）；老师的行、预写的行让它成立的只攒着
   st.onGoal = (ids, { by = 'student', reacted = 0, pressed = false } = {}) => {
-    if (!alive) return;
+    if (!alive || quiet) return;
     if (by !== 'student') { pending.push({ kind: 'goal-by-teacher', ids, at: Date.now() }); return; }
     const watch = ids.filter((g) => goals().get(g)?.watch);
     for (const gid of ids) {
       const g = goals().get(gid);
-      if (g && !g.watch) session.record({ type: 'stage', q: g.text, ok: true, el, stage: id, goal: gid, text: `学生做到了挑战 ${gid}「${g.text}」${reacted ? `（页面演了你预写的 ${reacted} 行）` : ''}` });
+      if (g && !g.watch) rec({ type: 'stage', q: g.text, ok: true, el, stage: id, goal: gid, text: `学生做到了挑战 ${gid}「${g.text}」${reacted ? `（页面演了你预写的 ${reacted} 行）` : ''}` });
     }
     pending.push({ kind: 'goal', ids, reacted, at: Date.now() });
     if (pressed) return; // 按了按钮才判的：那一下本身是回答，叫不叫由 onAnswer 定
@@ -134,14 +141,14 @@ export function stage(el, src) {
   };
   // 交给学生的东西做完了（规则算出没有下一步了）
   st.onDone = (ids, { by = 'student', reacted = 0, filled = [], ruled = [] } = {}) => {
-    if (!alive || by !== 'student') return;
+    if (!alive || quiet || by !== 'student') return;
     pending.push({ kind: 'done', ids, reacted, at: Date.now(), ...(filled.length ? { filled } : {}), ...(ruled.length ? { ruled } : {}) });
     const told = ids.some((x) => [...st.scene.opens.values()].some((o) => o.obj === x && o.policy?.call === 'done'));
     settle('done', told);
   };
   // 页面记下的一句（手势弹回去的那一下、预写的行没演上、老师的行改了学生点的几样）：攒着，不叫
   st.onNote = (text, { tried = false } = {}) => {
-    if (!alive || !text) return;
+    if (!alive || quiet || !text) return;
     pending.push({ kind: 'note', text, at: Date.now() });
     ev(tried ? 'stage-act' : 'stage-note', { text });
   };
@@ -165,12 +172,54 @@ export function stage(el, src) {
       } catch { /* 量不出来就照默认的高 */ }
     }
   });
-  el.__ready = ready;
+  // —— 刷新前的样子（dr-trail-fix 3）——
+  const logs = session.stageLogs || null;
+  const sig = scriptSig(id, spec.script);
+  let savedKey = '';
+  const save = () => {
+    if (!logs || !alive || quiet || !id || st.instant) return;
+    const doc = logDoc(st.log, { sig, ask: st.scene.waiting ? lastAsk(st.log) : null });
+    if (!doc) return;
+    const key = JSON.stringify([doc.rows, doc.ask]);
+    if (key === savedKey) return;
+    savedKey = key;
+    Promise.resolve(logs.put(docId(id), { ...doc, at: Date.now() })).catch(() => { savedKey = ''; });
+  };
+  const restoring = ready.then(async () => {
+    if (!logs || !id || !alive) return false;
+    const doc = await Promise.resolve(logs.get(docId(id))).catch(() => null);
+    if (!alive || !doc || doc.sig !== sig || !Array.isArray(doc.rows) || !doc.rows.some((r) => r?.by === 'student')) return false;
+    quiet = true;
+    try {
+      const waiting = st.armedP;
+      st.cancelWait?.();
+      await Promise.race([waiting, new Promise((r) => setTimeout(r, 400))]);
+      await st.replay(doc.rows.map((r) => ({ src: String(r.src || ''), by: r.by || 'teacher', ...(r.open ? { open: r.open } : {}), ...(r.pre ? { pre: true } : {}) })));
+      pending = [];
+      savedKey = JSON.stringify([logDoc(st.log, { sig, ask: doc.ask || null })?.rows, doc.ask || null]);
+    } catch (e) {
+      console.warn('舞台没放回刷新前的样子', e);
+      return false;
+    } finally {
+      quiet = false;
+    }
+    // 刷新前还在等的那一问：照原样挂回去（学生答了照常记、照常叫）
+    if (doc.ask) { const t = st.begin({ auto: false, unpick: false, anyOpts: true }); t.end(doc.ask).catch(() => {}); }
+    return true;
+  });
+  el.__ready = restoring.then(() => ready);
+  // 课堂刷新后放回作答（classroom.js 的 replayStudentWork）：舞台自己放回了就不再在下面列「刷新前的作答」；没放回（以前的课、段改过）照旧列
+  el._replay = (_recs, { fallback } = {}) => { restoring.then((ok) => { if (!ok && alive) fallback?.(); }); };
+  const flush = () => { if (document.visibilityState === 'hidden') save(); };
+  document.addEventListener('visibilitychange', flush);
+  window.addEventListener('pagehide', save);
   // 这一段被换掉、拿下黑板：舞台清掉（ResizeObserver、键盘的监听一直留着会漏）
   const timer = setInterval(() => {
-    if (el.isConnected) return;
+    if (el.isConnected) { save(); return; }
     alive = false;
     clearInterval(timer);
+    document.removeEventListener('visibilitychange', flush);
+    window.removeEventListener('pagehide', save);
     clearTimeout(idleTimer);
     try { st.destroy(); } catch { /* 已经拆过了 */ }
   }, 1000);

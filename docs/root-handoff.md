@@ -22,6 +22,10 @@
 
 `dev_requests/dr-ext-round2`（合并 `dr-ncalg-strict`、`dr-ext-live-fixes`），见 `CLAUDE.md` 那一条和 `docs/superpowers/plans/2026-11-18-ext-round2.md`。总表说以学生交来的 `ext-fixes-round2.md` 为准：那份文件没在仓库、分支、学习台里找到，照 `dev_requests` 三条的原文做的；那份到了再对一遍。
 
+## 第 4、5 批：每一步都有记录、旧记录（2026-11-18）
+
+`dev_requests/dr-learning-trail`、`dr-memcheck`（第 4 批）和外部验收第 4 批以后的 `dr-trail-fix`（第 5 批：旧记录当成没学、游标按写入时间、舞台刷新放回），见 `CLAUDE.md` 那两条和 `docs/superpowers/plans/2026-11-18-learning-trail.md`、`2026-11-18-trail-fix.md`。改 `memory/state.js` 以后照真数据跑一遍三科的 `deskState`（`ArtifactData list` 存 mastery、errors、evidence、sessions、observations、reviews、weaknesses、curriculum、coverage 到 `.superpowers/` 下），看矛盾是不是真的。
+
 ## 现在做到哪
 
 全部做完、已发布（版本见 `CLAUDE-PROJECT.md` 开头）。下一步是学生用外部上一节真课。

@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-18d**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-18e**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -471,16 +471,17 @@ explain: $x+y=2$，$A\mathbf x = 2\cdot(1, 2) = (2, 4)$，还在 $(1, 2)$ 这条
 
 **分析游标和这一科没分析的证据**（证据一条都不丢、每一条都被分析过）：
 
-- `meta/cursor-{math|cs|en}` = `{ "at": 毫秒, "by": "ext", "note": "…" }`：外部写，分析到这一刻为止。
-- `meta/since-analysis-{科}` = `{ at, from, n, shown, more, text }`：页面写。游标以后这一科的全部证据（课堂、外部的课、复现课、练一练、页面里的老师和助手、补记、要记的），按先后一条一行（开头是证据编号），一次 get 读完；太长（200 KiB）放不下的照实写还有几条，挪了游标再读。
+- `meta/cursor-{math|cs|en}` = `{ "at": 毫秒, "by": "ext", "note": "…" }`：外部写，分析到这一刻为止。比的是证据**写进学习台的时刻**（证据上的 `wroteAt`，以前的证据没有就按 `at`），不是事件时间：`said` 写的是学生说话的时候，常常早于写进来。
+- `meta/since-analysis-{科}` = `{ at, from, n, shown, more, upTo, text }`：页面写。游标以后写进来的这一科的全部证据（课堂、外部的课、复现课、练一练、页面里的老师和助手、补记、要记的），按事件时间一条一行（开头是证据编号；事件和写入差一分钟以上的那一行末尾标「写入 hh:mm」），一次 get 读完；太长（200 KiB）先放早写进来的，照实写还有几条。`upTo` 是放下的这些里最晚写进来的那一刻：分析完把游标的 `at` 写成它，没放下的下一次照样在。
 - 开场简报 `meta/brief*` 最前面两行：笔记本「现状/总览.md」是几天前写的（超过 7 天写「该重写了」）、上次分析以后这一科还有几条证据没分析。
 - 和 `sessions/{编号}/meta/since`（一节外部的课里，上一条 `ext_in` 以后的 `ext_out`）是一套：一个按课，一个按科。
 
 **讲过和会了**：
 
-- 板上的段写 `block=L2.1.4`（课程地图的编号）就是这一段讲的块，不写是这节课的块；段画上了页面就记 `coverage/{编号}`（`#` 换成 `~`）= `{ id, kind: block | point, block, space, sessions, first, last, segs }`，有 `point=` 的另记一条知识点。
-- 掌握状态（`mastery`）页面只认核得上的：最近一条改 `state` 的 log 要写 `basis`，编号在证据里找得到；`基础题过` / `复现通过` 还要依据里有做对的作答。核不上的照存，`meta/state-{科}` 里写「依据核不上，不算」。
-- `meta/state-{科}` = `{ text, rows: [{ block, title, taught, mastery: { state, ok, why }, recent（最近 3 条作答）, lastSlip（最近一次失手）, nextReview }], conflicts: [{ kind, block, text }] }`：页面写，每块一行。`conflicts` 是记录之间对不上的，只报不改：`slipped`（掌握写着过了，之后同块做错了）、`maybeKnown`（写着未学 / 讲过，隔天的新题一次做对了）、`weakness`（弱点 L1 以上以后又有挂它的错题）、`review`（复现组判过，依据里没有一次做对的作答）、`untaught`（没讲过却写了掌握）、`unverified`（掌握的依据核不上）。
+- 板上的段写 `block=L2.1.4`（课程地图的编号）就是这一段讲的块，不写是这节课的块；段画上了页面就记 `coverage/{编号}`（`#` 换成 `~`）= `{ id, kind: block | point, block, space, sessions, first, last, segs }`，有 `point=` 的另记一条知识点。一节课里做过这一块的题（证据、那节课记的错题、掌握的依据是那节课的作答）也算那节课讲过。
+- 学习台以前讲的（claude.ai 对话里的课，没有原始作答）记 `coverage/legacy-{编号}` = `{ id, kind: "legacy", block, space, first, last, sessions: [], source, by, note }`：外部写的照用；有错题、掌握的依据是旧记录、可这一块一条 legacy 都没有的，页面照错题本的日期、依据文字里的日期（「09-28」）补一条（`by: "page"`，`source` 写照什么补的）。掌握明写着「未学」的、学习台里的课记的错题不补。
+- 掌握状态（`mastery`）的依据：最近一条改 `state` 的 log 的 `basis`，编号在 `evidence`、`errors`（含 T 编号的检验记录）、`observations`、`sessions` 里找。全在证据里的是原始作答：`基础题过` / `复现通过` 还要依据里有做对的作答。依据里有错题本、观察、课的编号，或「旧记录：…」开头的文字，是**旧记录**（没有原始作答）：状态照算，`meta/state-{科}` 里写「（旧记录：错题本 L1-T01，没有原始作答）」。哪里都找不到、也不是「旧记录」开头的，照存，写「依据核不上，不算」。
+- `meta/state-{科}` = `{ text, rows: [{ block, title, taught: { first, last, sessions, legacy: { first, last, months, source } }, mastery: { state, ok, legacy, from, why, note }, recent（最近 3 条作答，含错题本里的旧错题、检验记录）, lastSlip（最近一次失手；检验记录写「不计」的不算）, nextReview }], conflicts: [{ kind, block, text }] }`：页面写，每块一行，讲过写「讲过（9 月，旧记录）」「讲过（9 月旧记录；学习台里 2026-11-18，1 节）」。`conflicts` 是记录之间对不上的，只报不改：`slipped`（掌握写着过了，之后同块做错了，或错题本里之后又记了错题）、`maybeKnown`（写着未学 / 讲过，隔天的新题一次做对了）、`weakness`（弱点 L1 以上以后又有挂它的错题）、`review`（复现组判过，依据里没有一次做对的作答）、`untaught`（没讲过却写了掌握）、`unverified`（掌握的依据核不上）。
 
 **页面里的 Claude 说的话**也记成证据 `src: "helper"`（`role`：`helper` 外部叫来的助手、`coach` 板边助教、`teacher` 练习教练和复现课里页面里的老师；`text` 说的话，`did` 执行了哪些，`target` 哪一题），进 `since-analysis`。
 
@@ -542,7 +543,7 @@ can: say, mark
 
 **外部设计的交互：`board stage`、`board widget`**（底座的完整清单在 `components/stage.md`、`components/widget.md`）：
 
-- `board stage id=s1 title="…"`：块里是舞台的镜头指令（东西、交给学生的手、挑战、预写的反应），页面包成 `stage` 组件画在当前板上（一段一块舞台，没有老师、不调用）。学生每一下、挑战做到没做到、叫老师的事都记成作答 / 动作进 `ext_out`。外部的课里预写的反应除了 `@名字` / `.done` / `.right`，还收 `.wrong`（交了 / 动了但没做到）、`.miss`（走偏：被裁判判成错法、手势被弹回）；`.miss` 能按手势分（`@e.miss merge` / `expand` / `reorder`）、按原因分（`@e.miss why=noncommute` / `noparen` / `notlike` …），先找原因对得上的、再找手势、最后用不分的。没写 `height:` 的舞台照演完以后东西实际占的高。
+- `board stage id=s1 title="…"`：块里是舞台的镜头指令（东西、交给学生的手、挑战、预写的反应），页面包成 `stage` 组件画在当前板上（一段一块舞台，没有老师、不调用）。学生每一下、挑战做到没做到、叫老师的事都记成作答 / 动作进 `ext_out`。外部的课里预写的反应除了 `@名字` / `.done` / `.right`，还收 `.wrong`（交了 / 动了但没做到）、`.miss`（走偏：被裁判判成错法、手势被弹回）；`.miss` 能按手势分（`@e.miss merge` / `expand` / `reorder`）、按原因分（`@e.miss why=noncommute` / `noparen` / `notlike` …），先找原因对得上的、再找手势、最后用不分的。没写 `height:` 的舞台照演完以后东西实际占的高。学生动过的舞台刷新以后放回刷新前的样子（页面把舞台的记录存在 `sessions/{编号}/stage_logs/{段 id}`，还在等的那一问照样挂着）；段的镜头指令改过（`board replace`、`board edit` 改了指令）就从头演，下面照旧列「刷新前的作答」。
 - 判式子相等（`la.same`、舞台上 `tex … alg=on` 的合并 / 展开 / `equals=`）默认严：矩阵的式子里单独写的数不当 `kE`（`(A-E)(A-2E)` 和 `A^2-3A+2` 不相等，`A^2-3A+2E` 才相等），数 `0` 不当零矩阵 `O`；宽的判法自己开：`la.same(a, b, { loose: true })`、`tex e = "…" alg=loose`。展开出来只剩数的项写成 `2E`。
 - `board widget id=w1 title="…"`：块里是一小段 JS，调用 `la.*`（画文字公式矩阵、拖着排、按钮、输入、精确计算、式子相等的判定、记作答、动画、给标注留锚点）。在这一段里跑：一上来就跑不起来（语法错、抛错）这一段不显示、像组件写错一样报；点按钮以后出的错记一条动作 `widget-error` 进 `ext_out`，只坏这一段。
 - 两种都是一段：`replace`、`hide`、`edit`、`mark target=s1` 照常用；组件的 `id` 就是段的 `id`。

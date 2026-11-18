@@ -81,7 +81,7 @@ import { createPlanner } from '../books/planview.js';
 import { createDevAI } from '../books/devmock.js';
 import { startJobs } from '../project/jobdesk.js';
 import { SPACES as TRAIL_SPACES, cursorId, sinceId, sinceAnalysis, cursorLine, snapshotLine } from '../project/trail.js';
-import { deskState } from './state.js';
+import { deskState, legacyCoverage } from './state.js';
 import { jobCounts } from '../project/jobs.js';
 import { loadBooks } from '../books/importer.js';
 import { normalizeBooks, readHistory } from '../books/textbook.js';
@@ -473,14 +473,22 @@ export async function renderDesk(root, meta) {
   const deletedReady = db.doc('meta/deleted').get().then((x) => { deleted = x.exists ? x.data() : null; }).catch(() => {});
   // meta/since-analysis-{科}、meta/state-{科}：证据、讲过、掌握一变就重算，内容变了才写（最多 3 秒一次）
   const lastTrail = {};
+  const wroteLegacy = new Set();
   let trailTimer = 0;
   function trailSoon() { clearTimeout(trailTimer); trailTimer = setTimeout(writeTrail, 3000); }
   function writeTrail() {
-    if (failed.size || !['evidence', 'sessions', 'mastery'].every((c) => loaded.has(c))) return;
+    if (failed.size || !['evidence', 'sessions', 'mastery', 'errors', 'observations'].every((c) => loaded.has(c))) return;
     const today = toDate(Date.now());
     for (const k of TRAIL_SPACES) {
       const since = sinceAnalysis({ evidence: data.evidence, sessions: data.sessions, cursor: cursors[k], space: k });
-      const st = deskState({ mem: data, coverage, space: k, today });
+      // dr-trail-fix 1：学习台以前讲过、却一条讲过的记录都没有的块，照错题本和依据文字里的日期补 coverage/legacy-{块}（外部写过的不动）
+      const legacy = legacyCoverage({ mem: data, coverage, space: k });
+      for (const c of legacy) {
+        if (wroteLegacy.has(c.id)) continue;
+        wroteLegacy.add(c.id);
+        put('coverage', c.id, c).catch((e) => { wroteLegacy.delete(c.id); reportError(e, { what: '补旧的讲过', path: `coverage/${c.id}`, soft: true }); });
+      }
+      const st = deskState({ mem: data, coverage: [...coverage.filter((c) => !legacy.some((l) => l.id === c.id)), ...legacy], space: k, today });
       const sk = `${since.from}|${since.n}|${since.text.length}`;
       if (lastTrail[`s-${k}`] !== sk) { lastTrail[`s-${k}`] = sk; put('meta', sinceId(k), { ...since, at: Date.now() }).catch(() => { lastTrail[`s-${k}`] = ''; }); }
       if (lastTrail[`t-${k}`] !== st.text) { lastTrail[`t-${k}`] = st.text; put('meta', `state-${k}`, { space: k, text: st.text, rows: st.rows, conflicts: st.conflicts, today, at: Date.now() }).catch(() => { lastTrail[`t-${k}`] = ''; }); }
@@ -1156,7 +1164,7 @@ export async function renderDesk(root, meta) {
           const ev = manualEvidence({ text, images, block, verdict });
           const { id, ...rest } = ev;
           assertWrite('page', 'evidence');
-          await db.doc(`evidence/${id}`).set(rest);
+          await db.doc(`evidence/${id}`).set({ ...rest, wroteAt: Date.now() });
         },
       });
     }

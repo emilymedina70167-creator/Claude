@@ -39,27 +39,42 @@ export function evidenceLine(ev, { sessionTitle = '' } = {}) {
   }
 }
 
+/** 一条证据写进学习台的时刻（dr-trail-fix 2）：页面写的带 wroteAt；以前的没有，按事件时间 at */
+export const wroteOf = (e) => Number(e?.wroteAt) || Number(e?.at) || 0;
+
 /**
- * meta/since-analysis-{科}：游标（cursor.at）以后这一科的全部证据，按先后一条一行。
- * 返回 { space, at, from, n, shown, more, text }
+ * meta/since-analysis-{科}：游标（cursor.at）以后**写进学习台的**这一科的全部证据，按事件时间 at 一条一行。
+ * 游标按写入时间 wroteAt 比（dr-trail-fix 2）：外部写的 said 带学生说话的时间，常常早于写入；按 at 比，游标已经挪过去的那一条就永远进不来。
+ * upTo：放下的这些里最晚的写入时刻——分析完把游标写成它，没放下的下一次照样在。
+ * 返回 { space, at, from, n, shown, more, upTo, text }
  */
 export function sinceAnalysis({ evidence = [], sessions = [], cursor = null, space = 'math', at = Date.now(), max = TRAIL_MAX } = {}) {
   const byId = new Map((sessions || []).map((s) => [s.id, s]));
   const from = Number(cursor?.at) || 0;
-  const list = (evidence || []).filter((e) => e && Number(e.at) > from && spaceOfEvidence(e, byId) === space).sort((a, b) => Number(a.at) - Number(b.at));
-  const lines = [];
-  let bytes = 0, shown = 0;
+  // 按写入的先后挑（放不下时先放早写进来的，游标才挪得对），再按事件时间排给外部读
+  const list = (evidence || []).filter((e) => e && wroteOf(e) > from && spaceOfEvidence(e, byId) === space).sort((a, b) => wroteOf(a) - wroteOf(b) || Number(a.at) - Number(b.at));
+  const picked = [];
+  let bytes = 0;
   for (const e of list) {
-    const l = evidenceLine(e, { sessionTitle: byId.get(e.session)?.title || '' });
+    const l = lineOf(e, byId);
     const b = new TextEncoder().encode(l).length + 1;
     if (bytes + b > max) break;
-    lines.push(`${e.id}　${l}`);
+    picked.push([e, l]);
     bytes += b;
-    shown++;
   }
-  const head = from ? `上次分析（${hhmm(from)}）以后这一科的证据 ${list.length} 条` : `这一科还没有分析游标（meta/${cursorId(space)}）：全部证据 ${list.length} 条`;
+  const shown = picked.length;
+  const upTo = shown ? Math.max(...picked.map(([e]) => wroteOf(e))) : from;
+  const lines = picked.sort(([a], [b]) => Number(a.at) - Number(b.at)).map(([e, l]) => `${e.id}　${l}`);
+  const head = from ? `上次分析（游标 ${hhmm(from)}）以后写进学习台的这一科的证据 ${list.length} 条` : `这一科还没有分析游标（meta/${cursorId(space)}）：全部证据 ${list.length} 条`;
   const more = list.length - shown;
-  return { space, at, from, n: list.length, shown, more, text: [`${head}${more ? `；放下了前 ${shown} 条，还有 ${more} 条没放下（分析完这些、把游标挪到最后一条的时刻，再读一次）` : ''}。`, ...lines].join('\n') };
+  const tail = shown ? `分析完把 meta/${cursorId(space)} 的 at 写成 ${upTo}（放下的这些里最晚写进来的那一刻；游标按写入时间比，不按事件时间）。` : '';
+  return { space, at, from, n: list.length, shown, more, upTo, text: [`${head}${more ? `；放下了先写进来的 ${shown} 条，还有 ${more} 条没放下（分析完这些、照下面把游标挪过去，再读一次）` : ''}。按事件时间排；事件和写入差得多的那一行标了「写入」。${tail}`, ...lines].join('\n') };
+}
+// 一行：事件时间在前；写入比事件晚一分钟以上的（外部补写的话、以后补的记录）标出写入的时刻
+function lineOf(e, byId) {
+  const l = evidenceLine(e, { sessionTitle: byId.get(e.session)?.title || '' });
+  const w = Number(e.wroteAt);
+  return w && Math.abs(w - Number(e.at || 0)) > 60e3 ? `${l}（写入 ${hhmm(w)}）` : l;
 }
 
 /** 开场简报最前面的一行（T3） */
