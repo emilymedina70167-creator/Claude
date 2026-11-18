@@ -20,7 +20,7 @@ la.button('排好了', () => {
 - `la.button(字, fn, { primary })`：按钮（至少 44px 高），点了跑 fn。`la.input({ placeholder, onEnter })`：输入框（16px），回车跑 `onEnter(值)`，返回 `{ el, value() }`。
 - `la.drag({ items, slots, shuffle = true, onChange })`：一张张卡（文字或 `$公式$`）拖进几个空格（`slots` 是数，或每格的小标题数组）；也能先点卡再点格子；格子里的卡能拖回下面、拖到别的格子（两张对换）。返回 `{ order()（每格里的卡原文，空格是 null）, reset() }`。
 - `la.calc(式子)`：精确计算（和 `\\calc` 同一套，整节课 `let` 的量能用），返回 `{ tex, text }`。
-- `la.same(a, b)`：两个式子相等不相等——大写字母是矩阵（不交换），小写字母和数是标量，`E` / `I` 是单位矩阵，`O` 是零矩阵；`AB+BA` 和 `2AB` 不相等、`AE` 和 `A` 相等、`(kE)A` 和 `A(kE)` 相等。返回 `true` / `false` / `'unknown'`（含逆、转置、函数、读不懂的写法：判不了）。
+- `la.same(a, b)`：两个式子相等不相等——大写字母是矩阵（不交换），小写字母和数是标量，`E` / `I` 是单位矩阵，`O` 是零矩阵；`AB+BA` 和 `2AB` 不相等、`AE` 和 `A` 相等、`(kE)A` 和 `A(kE)` 相等。返回 `true` / `false` / `'unknown'`（含逆、转置、函数、读不懂的写法：判不了）。默认严：矩阵的式子里单独写的数不当 `kE`（`(A-E)(A-2E)` 和 `A^2-3A+2` 不相等）、数 `0` 不当零矩阵（`A-A` 和 `0` 不相等），`la.same(a, b, { loose: true })` 照宽的比。`la.whyNot(a, b, { loose })`：不相等的原因（「常数项少了 E」「零矩阵写成了数 0」「展开、合并同类项以后两边不一样」），相等或判不了是 null。
 - `la.compare(got, want)`：比顺序，返回 `{ ok, right, n, first }`（`first` 是第一处不对的格，从 0 数）。
 - `la.goal(这件事, ok, { value, text, say })`：记一条作答（`type: widget`，进证据、进 `ext_out`），这一段下面显示 `say`（不写是「✓ 做到了」/「✗ 还不对」）。`la.record({ q, value, ok, text })`：只记不显示。`la.event(一句话)`：记一条动作进 `ext_out`。
 - `la.say(一句话, 'ok' | 'bad')`：这一段下面的一句话。

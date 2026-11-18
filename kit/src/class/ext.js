@@ -41,7 +41,7 @@ export function parseCoach(head = '') {
  * 执行完一条 ext_in 当场写在它上面的 result（需求 R3：外部不用等学生动一下才知道画成了什么样）。
  * boardOps：这一轮每条指令执行的结果；retry：写错没显示的段（和原因）；notes：别的提醒；error：整条没执行成
  */
-export function inResult({ boardOps = [], retry = [], notes = [], error = '', shots = [], at = Date.now() } = {}) {
+export function inResult({ boardOps = [], retry = [], notes = [], error = '', shots = [], shotNote = '', at = Date.now() } = {}) {
   const ops = (boardOps || []).filter(Boolean).map((o) => ({
     op: o.op, ...(o.id ? { id: o.id } : {}), ...(o.target ? { target: o.target } : {}), ok: !!o.ok,
     ...(o.error ? { error: String(o.error).slice(0, 600) } : {}), ...(o.page ? { page: o.page } : {}),
@@ -51,7 +51,7 @@ export function inResult({ boardOps = [], retry = [], notes = [], error = '', sh
     at, ok: !error && !(retry || []).length && ops.every((o) => o.ok),
     summary: error ? `没执行成：${error}` : `执行了 ${done} 条指令${ops.length - done ? `，${ops.length - done} 条没执行` : ''}${(retry || []).length ? `，${retry.length} 段写错没显示` : ''}`,
     ops, ...(retry?.length ? { errors: retry.map(String) } : {}), ...(notes?.length ? { notes: notes.map(String) } : {}),
-    ...(error ? { error: String(error) } : {}), ...(shots?.length ? { shots } : {}),
+    ...(error ? { error: String(error) } : {}), ...(shots?.length ? { shots } : {}), ...(shotNote ? { shotNote: String(shotNote) } : {}),
   };
 }
 
@@ -90,4 +90,23 @@ export async function resolveFrom(text, get) {
     i = j;
   }
   return { text: out.join('\n'), missing };
+}
+
+/** ext_out 末尾的一句（dr-ext-round2：黑板现状不再每份重写） */
+export const NOW_LINE = '黑板现状在这节课的 meta/now（板一变就更新）；外部上一条 ext_in 执行完以后的全部 ext_out 拼在 meta/since。';
+
+/**
+ * sessions/{编号}/meta/since（dr-ext-round2）：外部上一条 ext_in 执行完（done.at）以后写的全部 ext_out，按先后拼成一份。
+ * ins / outs：库里的 ext_in / ext_out。返回 { at, from（那条 ext_in 的编号，没有是 null）, fromAt, outs: [序号], shots, text }
+ */
+export function sinceDoc({ ins = [], outs = [], at = Date.now() } = {}) {
+  const done = (ins || []).filter((d) => d?.done?.at).sort((a, b) => Number(a.done.at) - Number(b.done.at)).at(-1) || null;
+  const fromAt = done ? Number(done.done.at) : 0;
+  const list = (outs || []).filter((o) => o && Number(o.at) > fromAt).sort((a, b) => numOf(a) - numOf(b));
+  const strip = (t) => String(t || '').replace(NOW_LINE, '').trim();
+  return {
+    at, from: done ? String(done.id ?? '') || null : null, fromAt, outs: list.map(numOf),
+    shots: list.flatMap((o) => o.shots || []),
+    text: list.map((o) => `[ext_out ${seqId(numOf(o))}]\n${strip(o.text) || '（只有截图）'}`).join('\n\n') || '外部上一条 ext_in 执行完以后，学生这边还没有新的事。',
+  };
 }

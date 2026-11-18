@@ -7,7 +7,8 @@
 // 刷新、重画时从头演（不放回学生动过的样子）。字段的读法和写法错误的拼法在 stageboxspec.js（纯函数，有测试）。
 import { Stage, actText, quoteText } from '../stage/stage.js';
 import { eventOf, eventsText, triggers, hasWork, tryCount, TRY_MAX, QUIET_MS, verdictText } from '../stage/events.js';
-import { parseStageBox, problemsOf, callLine } from '../stageboxspec.js';
+import { parseStageBox, problemsOf, callLine, autoHeight } from '../stageboxspec.js';
+import { CAMERA_ROOM } from '../stage/layout.js';
 import { session } from '../session.js';
 
 const escapeHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -153,7 +154,18 @@ export function stage(el, src) {
     for (const p of problemsOf(st.errors, spec.offset)) session.problem(el, 'stage', p.msg, { soft: p.soft });
     armIdle();
   };
-  Promise.race([turn.armed, done]).then(report);
+  // 演完（或者在等学生）以后：没写 height: 的照东西实际占的高缩（一行式子不再占半屏）；__ready 给截图等（board snap 等它演完再拍）
+  const ready = Promise.race([turn.armed, done]).then(async () => {
+    report();
+    if (!spec.heightSet && alive) {
+      try {
+        const r = st.reserve();
+        const h = autoHeight({ box: st.focusBox(), top: r.top, bottom: r.bottom, pad: CAMERA_ROOM.pad });
+        if (Math.abs(h - host.offsetHeight) > 8) { host.style.height = `${h}px`; await new Promise((x) => requestAnimationFrame(x)); await st.refocus(false); }
+      } catch { /* 量不出来就照默认的高 */ }
+    }
+  });
+  el.__ready = ready;
   // 这一段被换掉、拿下黑板：舞台清掉（ResizeObserver、键盘的监听一直留着会漏）
   const timer = setInterval(() => {
     if (el.isConnected) return;

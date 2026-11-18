@@ -106,3 +106,54 @@ export function createBoardEye({ target, viewH = () => 0, render = defaultRender
     stop() { stopped = true; if (quiet) T.clearTimeout(quiet); quiet = null; },
   };
 }
+
+// —— board snap（外部的课，dr-ext-live-fixes 1）：外部要的是「这一轮画完以后学生看到的整块板」——
+// 以前跟老师的眼睛一样板静 0.4 秒就拍：舞台还在出场、段还在淡入（半透明），切成一屏一张。现在先等画好，再拍一张长图。
+
+/** 长图怎么切：整块板一张；比 maxH 还高才切成几张（照实写各是哪一段）。返回 { scale, parts: [{ y, h }], note } */
+export function longTiles({ w, h }, { maxH = 4800, maxEdge = 1280 } = {}) {
+  const W = Math.max(1, Math.round(w) || 1), H = Math.max(1, Math.round(h) || 1);
+  const n = Math.max(1, Math.ceil(H / maxH));
+  const parts = [];
+  for (let i = 0; i < n; i++) parts.push({ y: i * maxH, h: Math.min(maxH, H - i * maxH) });
+  const note = n === 1 ? `整块板一张（${W}×${H}）` : `整块板 ${W}×${H}，太长切成 ${n} 张：${parts.map((p, i) => `第 ${i + 1} 张是 ${p.y}–${p.y + p.h}`).join('，')}`;
+  return { scale: Math.min(1, maxEdge / W), parts, note };
+}
+
+/**
+ * 等这块板画好：字体载完、这块板里的动画（段的淡入、舞台出场、拍子）走完、舞台演完（stage 组件的 __ready）、
+ * KaTeX 画好、板上一会儿不再变。最多等 max 毫秒（等不完照拍，在说明里写一句）。返回 { waited, settled }
+ */
+export async function settleBoard(el, { max = 6000, quiet = 350 } = {}) {
+  const t0 = Date.now();
+  const left = () => Math.max(0, max - (Date.now() - t0));
+  const within = (p) => Promise.race([Promise.resolve(p).catch(() => {}), new Promise((r) => setTimeout(r, left()))]);
+  try { if (document.fonts?.ready) await within(document.fonts.ready); } catch { /* */ }
+  // 舞台演完、widget 第一次跑完（组件挂 __ready）
+  await within(Promise.all([...el.querySelectorAll('.block')].map((b) => b.__ready).filter(Boolean)));
+  // 动画走完（只等有限的；无限循环的跳过）
+  const anims = () => (el.getAnimations ? el.getAnimations({ subtree: true }) : []).filter((a) => { const t = a.effect?.getTiming?.(); return t && t.iterations !== Infinity; });
+  for (let k = 0; k < 4 && anims().length && left() > 0; k++) await within(Promise.all(anims().map((a) => a.finished)));
+  // 板上一会儿不再变（MutationObserver 安静 quiet 毫秒）
+  await within(new Promise((resolve) => {
+    let timer = setTimeout(done, quiet);
+    const mo = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(done, quiet); });
+    function done() { mo.disconnect(); resolve(); }
+    mo.observe(el, { subtree: true, childList: true, attributes: true, characterData: true });
+  }));
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  return { waited: Date.now() - t0, settled: left() > 0 };
+}
+
+/** 拍一张长图（照 longTiles 切）：{ blobs, note } */
+export async function snapLong(el, { maxH = 4800, maxEdge = 1280 } = {}) {
+  const { default: html2canvas } = await import('html2canvas-pro');
+  const w = el.offsetWidth, h = el.scrollHeight;
+  const plan = longTiles({ w, h }, { maxH, maxEdge });
+  const blobs = [];
+  for (const p of plan.parts) {
+    const canvas = await html2canvas(el, { scale: plan.scale, backgroundColor: background(), logging: false, useCORS: true, width: w, height: p.h, y: el.getBoundingClientRect().top + window.scrollY + p.y, windowWidth: document.documentElement.clientWidth });
+    blobs.push(await toBlob(canvas));
+  }
+  return { blobs, note: plan.note };
+}
