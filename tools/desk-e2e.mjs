@@ -1140,11 +1140,32 @@ const SUITES = {
     await t.open(sid);
     await t.waitFor(async () => !!(await card()), { timeout: 20000, what: '刷新以后检验接着做' });
     // 照现在出来的是什么一道一道往下做，直到结束
+    // Apple Pencil 写两行、划掉第一行（合成 pointerType: pen 的事件）
+    const penWrite = async () => {
+      await t.page.click('.ck-card .ck-tab[data-tab="hand"]');
+      await t.page.waitForSelector('.ck-card .ck-pad-area canvas');
+      const line = (x0, y, n = 6) => t.page.evaluate(({ x0, y, n }) => {
+        const c = document.querySelector('.ck-card .ck-pad-area canvas');
+        const r = c.getBoundingClientRect();
+        const ev = (type, x) => c.dispatchEvent(new PointerEvent(type, { pointerType: 'pen', pointerId: 7, clientX: r.left + x, clientY: r.top + y, pressure: 0.5, bubbles: true, cancelable: true }));
+        ev('pointerdown', x0);
+        for (let i = 1; i <= n; i++) ev('pointermove', x0 + i * 12);
+        ev('pointerup', x0 + n * 12);
+      }, { x0, y, n });
+      await line(20, 40); await line(120, 44); await line(20, 120); await line(120, 118);
+      await t.page.click('.ck-card .ck-pad-strike');
+      await line(10, 42, 20);
+      await t.page.click('.ck-card .ck-pad-step');
+      await sure();
+    };
+    // 用过 Pencil 以后写字的地方默认是手写：打字的先点「打字」
+    const typeIn = async (text) => { const tab = await t.page.$('.ck-card .ck-tab[data-tab="type"]'); if (tab) await tab.click(); await t.page.fill('.ck-card .ck-text', text); };
     const answerNow = async (id) => {
-      if (/^p3/.test(id)) { await t.page.fill('.ck-card .ck-text', '(A+B)^2=A^2+AB+BA+B^2，AB=BA 时才能并'); await sure(); }
+      if (id === 'p3a') await penWrite();
+      else if (/^p3/.test(id)) { await typeIn('(A+B)^2=A^2+AB+BA+B^2，AB=BA 时才能并'); await sure(); }
       else if (/^p5/.test(id)) { await t.page.click('.ck-pick[data-v="false"]'); await fill([1, 0, 0, 0, 0, 1, 1, 0]); await sure(); }
-      else if (/^p6/.test(id)) { await t.page.click('.ck-line[data-n="2"]'); await t.page.fill('.ck-card .ck-text', 'AB 和 BA 不一定相等'); await sure(); }
-      else if (/^p7/.test(id)) { await t.page.click('.ck-pick[data-v="true"]'); await t.page.fill('.ck-card .ck-text', 'E 和任何方阵可交换'); await t.page.fill('.ck-card .fi-text', 'E+5A'); await sure(); }
+      else if (/^p6/.test(id)) { await t.page.click('.ck-line[data-n="2"]'); await typeIn('AB 和 BA 不一定相等'); await sure(); }
+      else if (/^p7/.test(id)) { await t.page.click('.ck-pick[data-v="true"]'); await typeIn('E 和任何方阵可交换'); await t.page.fill('.ck-card .fi-text', 'E+5A'); await sure(); }
       await t.page.click('.ck-submit');
     };
     for (let n = 0; n < 20; n++) {
@@ -1162,6 +1183,10 @@ const SUITES = {
     const evs = Object.values(all).filter((d) => d?.src === 'check' && d.session === sid);
     check(evs.filter((e) => e.probe === 'p3' && !e.rejudged).length === 1, `p3 记了 ${evs.filter((e) => e.probe === 'p3').length} 条证据（连点两下应只有一条）`);
     check(evs.some((e) => e.probe === 'p1' && e.final === 'fail'), 'p1 的证据没写 final: fail');
+    // 手写的那一道：证据带整页图、时间线（有划掉），笔画存了一份给回放
+    const inkEv = evs.find((e) => e.probe === 'p3a');
+    check(inkEv?.ink?.final && /划掉 L1/.test(inkEv.ink.timeline || '') && inkEv.ink.shots?.length >= 1, `手写的证据不全：${JSON.stringify(inkEv?.ink)}`);
+    check(all[`sessions/${sid}/ink/k1-p3a`]?.strokes?.length === 4, '笔画没存给回放');
     const outsNow = async () => Object.entries(await db()).filter(([k]) => k.startsWith(`sessions/${sid}/ext_out/`)).map(([, v]) => v.text).join('\n');
     const err = await t.waitFor(async () => Object.entries(await db()).find(([k, v]) => k.startsWith('errors/') && v?.check === 'k1' && v?.probe === 'p1'), { timeout: 10000, what: 'retry 用完的那道记进错题本' })
       .catch(async (e) => { throw new Error(`${e.message}；ext_out 里：${(await outsNow()).split('\n').filter((l) => /错题本|检验/.test(l)).join(' / ').slice(0, 600)}`); });
@@ -1175,6 +1200,14 @@ const SUITES = {
     check(/检验 k1「第二讲第一节」开始/.test(outs) && /检验 k1 做完了/.test(outs), 'ext_out 没写开始、做完');
     await t.page.click('.ck-back');
     check(await t.page.evaluate(() => !document.body.classList.contains('is-checking') && /板上的字/.test(document.body.innerText)), '回到黑板以后板书没放回来');
+    // 「以前的课」里这节课：检验那一节、手写的题能回放
+    await t.page.goto(BASE);
+    await t.waitFor(async () => (await t.text('.dk-class'))?.includes('开新课'), { timeout: 20000, what: '回到首页' });
+    await t.route(`#classes/${sid}`);
+    await t.waitFor(() => t.page.$('[data-ckreplay]'), { timeout: 20000, what: '以前的课里有「回放手写」' });
+    check(/吸收：未/.test(await t.text('.dk-shell') || await t.page.evaluate(() => document.body.innerText)), '以前的课里没写吸收');
+    await t.page.click('[data-ckreplay]');
+    await t.waitFor(() => t.page.$('.ck-replay canvas'), { timeout: 8000, what: '回放画出来' });
     return t;
   },
 

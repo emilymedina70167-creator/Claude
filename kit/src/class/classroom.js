@@ -494,7 +494,9 @@ export async function renderClass(root, meta, desk = null) {
   // 检验（二类组件，check/）：恢复以后才接（恢复时重放的 board check 不再开一次；没做完的照存着的进度接着做）
   checks = createClassCheck({
     root, db, desk, readOnly, vars: session.vars,
-    call: async (prompt) => { try { const res = await teacher.call(prompt, { ...TEACH, cache: false }); return res?.modelApplied === MODEL ? res : null; } catch { return null; } },
+    call: async (prompt, opts = {}) => { try { const res = await teacher.call(prompt, { ...TEACH, cache: false, ...opts }); return res?.modelApplied === MODEL ? res : null; } catch { return null; } },
+    upload: (blob) => uploadImage(blob),
+    imageOf: (id) => localImages.get(id) || null,
     tell: (text) => { if (!text) return; if (EXT) { extState.coachLines.push(text); extWrite({ text: '' }); } else addTurn({ role: 'system', kind: 'note', text: `[系统] ${text}` }); },
     ctx: () => ({ turn: turnSeq, turns: history.filter((t) => !t.discarded) }),
   });

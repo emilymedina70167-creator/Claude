@@ -16,7 +16,7 @@ const SURE = [['sure', '很确定'], ['maybe', '大概'], ['guess', '蒙的']];
 const FACET_TEXT = { ok: '✓', fixed: '补上', fail: '✗', pending: '待核' };
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
-export function mountCheck(host, { check, vars = {}, saved = null, judge, fallback, save = () => {}, record = () => {}, onEnd = () => {}, onPause = () => {}, now = () => Date.now() } = {}) {
+export function mountCheck(host, { check, vars = {}, saved = null, judge, fallback, save = () => {}, record = () => {}, onEnd = () => {}, onPause = () => {}, upload = async () => null, inkKey = () => '', onInk = () => {}, now = () => Date.now() } = {}) {
   let state = saved?.check?.id === check.id ? saved : createFlow(check);
   const root = document.createElement('div');
   root.className = 'ck-shell';
@@ -32,6 +32,8 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
   let sure = null;
   let dead = false;
   let lastSave = 0;
+  let submitting = false;
+  const images = new Map(); // 题 id → 交的时候手写的整页图（给页面里的 Claude 判；刷新以后没有了由调用方从资源里取）
   // 刷新、熄屏回来时正在做的那一道：照旧算第一次作答，证据记 resumed（设计 5.6″）
   const resumedId = saved?.phase === 'probe' ? saved.cur?.id : null;
 
@@ -59,7 +61,7 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
       const answer = state.results[id]?.answer || {};
       let done = false;
       const timeout = setTimeout(() => { if (!done) { done = true; inFlight.delete(id); dispatch({ type: 'timeout', id }); } }, JUDGE_WAIT);
-      Promise.resolve().then(() => judge(probe, answer)).then((r) => {
+      Promise.resolve().then(() => judge(probe, answer, images.get(id) || [])).then((r) => {
         if (done) return;
         done = true; clearTimeout(timeout); inFlight.delete(id);
         if (!r) { dispatch({ type: 'timeout', id }); return; }
@@ -119,7 +121,7 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
       <div class="ck-sure" role="group" aria-label="有多大把握"><span class="ck-sure-q">有多大把握？</span>${SURE.map(([k, t]) => `<button type="button" class="btn ck-sure-btn" data-sure="${k}">${t}</button>`).join('')}</div>
       <div class="ck-actions"><button type="button" class="btn btn-primary ck-submit" disabled>交</button><button type="button" class="btn ck-giveup">想不出来</button><span class="ck-warn" aria-live="polite"></span></div>`;
     main.appendChild(card);
-    pv = probeView(card.querySelector('.ck-body'), probe, { onChange: syncSubmit });
+    pv = probeView(card.querySelector('.ck-body'), probe, { onChange: syncSubmit, inkKey: inkKey(v.id) || '', pause: check.pause });
     timer.set(v.id, visible());
     card.querySelector('.ck-sure').addEventListener('click', (e) => {
       const b = e.target.closest('.ck-sure-btn');
@@ -146,15 +148,26 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     warn.textContent = blanks ? `还有 ${blanks} 格没填` : empty ? '' : !sure ? '先点有多大把握' : '';
   }
 
-  function submit(id) {
-    if (!pv || pv.blanks() || pv.empty() || !sure) { syncSubmit(); return; }
+  async function submit(id) {
+    if (submitting || !pv || pv.blanks() || pv.empty() || !sure) { syncSubmit(); return; }
+    submitting = true;
     const probe = check.probes[id];
-    const answer = pv.answer();
-    const machine = judgeMachine(probe, answer, vars);
+    const sureNow = sure;
     const t = timer.submit(id) || {};
     timer.set(id, false);
-    pv.lock();
-    dispatch({ type: 'submit', id, answer, sure, ms: t.ms ?? null, msTotal: t.msTotal ?? t.ms ?? null, machine, ...(id === resumedId ? { resumed: true } : {}) });
+    const view0 = pv;
+    view0.lock();
+    const warn = main.querySelector('.ck-warn');
+    // 手写的：整页图、快照传进资源（慢一点，先写一句）
+    let c;
+    try { if (warn) warn.textContent = '在交…'; c = await view0.collect(upload); } catch { c = { answer: view0.answer(), images: [] }; }
+    submitting = false;
+    if (dead) return;
+    if (c.images?.length) images.set(id, c.images);
+    if (c.strokes) { try { onInk(id, c.strokes, c.events); } catch { /* 回放存不上不影响作答 */ } }
+    const machine = judgeMachine(probe, c.answer, vars);
+    dispatch({ type: 'submit', id, answer: c.answer, sure: sureNow, ms: t.ms ?? null, msTotal: t.msTotal ?? t.ms ?? null, machine, ...(id === resumedId ? { resumed: true } : {}) });
+    c.clear?.();
   }
 
   // 失败的一项写成学生看得懂的一句（不露编号）：构造的条件用外部写的话；要点写「没写到：要点」；错说法写「写了常见的错说法」；步骤写第几步

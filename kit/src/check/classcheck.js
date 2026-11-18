@@ -8,6 +8,8 @@ import { mountCheck } from './shell.js';
 import { createCheckDesk } from './checkdesk.js';
 import { parseJudge } from '../solvespec.js';
 import { helperEvidence } from '../memory/session.js';
+import { fitStrokes } from './inktime.js';
+import { assetUrl } from '../live/store.js';
 
 const LIVE = ['probe', 'teach', 'wait'];
 
@@ -16,16 +18,27 @@ const LIVE = ['probe', 'teach', 'wait'];
  * call(prompt, { images })：调页面里的 Claude（课堂给：Opus 5.5 high，不是它回 null）；tell(text)：告诉主讲（外部的课写进 ext_out，页面里的老师进下一轮）；
  * ctx()：{ turn, turns }
  */
-export function createClassCheck({ root, db, desk = null, call, tell = () => {}, ctx = () => ({}), readOnly = false, vars = {} } = {}) {
+export function createClassCheck({ root, db, desk = null, call, tell = () => {}, ctx = () => ({}), readOnly = false, vars = {}, upload = async () => null, imageOf = () => null } = {}) {
   const cdesk = createCheckDesk(db, { sid: desk?.sid || null, space: desk?.space || null, memoOps: desk?.memo?.ops || null, ctx, readOnly, curriculum: () => desk?.mem?.curriculum || [] });
   let cur = null; // { id, api, host, check }
   const known = new Map(); // 题 id → 检验 id（这次打开页面以后见过的：改判用）
   const stageEl = () => root.querySelector('.class-stage') || root;
   const closedBook = (on) => document.body.classList.toggle('is-checking', !!on);
 
-  async function judge(probe, answer) {
+  // 手写的整页图：交的时候手上有；刷新以后从资源里取回来（取不到就只给文字，页面里的 Claude 看不到图的照实判不了 → 待核）
+  async function inkImages(answer, given) {
+    if (given?.length) return given;
+    const id = answer?.ink?.final;
+    if (!id) return [];
+    const local = imageOf(id);
+    if (local) return [local];
+    try { const r = await fetch(assetUrl(id)); return r.ok ? [await r.blob()] : []; } catch { return []; }
+  }
+  async function judge(probe, answer, given = []) {
     const ids = claudeIds(probe);
-    const res = await call(verdictPrompt({ probe, answer, ids, images: 0 }));
+    const images = await inkImages(answer, given);
+    if (answer?.ink?.final && !images.length && !answer.text) return null; // 手写的图取不到：不猜，待核
+    const res = await call(verdictPrompt({ probe, answer, ids, images: images.length }), images.length ? { images } : {});
     if (!res) return null;
     const r = parseVerdict(res.text, ids, { steps: probe.type === 'solve' });
     return { items: r.items, lines: r.lines, judgedBy: 'claude', text: res.text };
@@ -75,6 +88,10 @@ export function createClassCheck({ root, db, desk = null, call, tell = () => {},
         if (s.phase !== 'paused') { host.querySelector('.ck-strip')?.remove(); const sh = host.querySelector('.ck-shell'); if (sh) sh.hidden = false; }
       },
       record: (ids, s) => cdesk.record(ids, s),
+      upload,
+      inkKey: (pid) => (desk?.sid ? `la-ck-${desk.sid}-${check.id}-${pid}` : ''),
+      // 回放用的笔画：sessions/{编号}/ink/{检验 id}-{题 id}（fitStrokes 压到 200 KiB 以内）
+      onInk: (pid, strokes, events) => { if (readOnly) return; const f = fitStrokes(strokes); db.doc(`ink/${check.id}-${pid}`).set({ check: check.id, probe: pid, strokes: f.strokes, events, trimmed: f.trimmed, at: Date.now() }).catch(() => {}); },
       onPause: (s) => tell(extSummary(s, check, {})),
       onEnd: ({ state }) => {
         closedBook(false);
