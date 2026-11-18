@@ -1275,6 +1275,11 @@ const SUITES = {
     await t.page.locator('[data-bid="w1"] button:has-text("交了")').click();
     await t.waitFor(async () => /\[作答\][^\n]*widget[^\n]*「四项按左右顺序」[^\n]*做到了/.test(await outs()), { timeout: 10000, what: 'widget 的作答写进 ext_out' });
     check(/舞台现在/.test((await db())[`sessions/${sid}/meta/now`]?.text || ''), 'meta/now 里没有舞台现状');
+    // dr-ext-live-fixes 4：只有一行式子的舞台不再占 420 高
+    await plantLive(t, { [`sessions/${sid}/ext_in/005`]: { seq: 5, text: `${F4}board stage id=s2 title="一行式子"\ntex e = "(A+B)^2" alg=on\nopen e expand\n${F4}`, after: 1, at: Date.now() } });
+    await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/005`]?.result?.ok, { timeout: 15000, what: 'ext_in/005 执行' });
+    const sh = await t.waitFor(async () => { const h = await t.page.evaluate(() => document.querySelector('[data-bid="s2"] .sb-stage')?.offsetHeight || 0); return h && h < 400 ? h : null; }, { timeout: 8000, what: '一行式子的舞台按内容缩' });
+    check(sh >= 160, `舞台缩得太矮：${sh}`);
     // R10：叫主讲 → 马上写一份，最前面「学生在等你」
     await t.page.click('.class-ext-btn[data-act="call"]');
     await t.waitFor(async () => Object.entries(await db()).some(([k, v]) => k.startsWith(`sessions/${sid}/ext_out/`) && /^学生在等你/.test(v.text)), { timeout: 5000, what: '叫主讲写 ext_out' });
