@@ -189,6 +189,8 @@ const ON = {
     }
   },
   end(s, ev) { s.endedAt = ev.at ?? null; },
+  // 证据写了的题（record.js 的 toRecord 不再给）
+  recorded(s, ev) { s.recorded = [...new Set([...(s.recorded || []), ...(ev.ids || [])])]; },
 };
 
 /** 走一步：返回新的状态（不改传进来的） */
