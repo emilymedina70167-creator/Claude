@@ -4,6 +4,7 @@
 // mark / unmark（在板上圈、框、划、写旁注）。
 // 页面在流式回调里拿到的是「到目前为止的全文」，每次整段重新解析，所以这里全是纯函数、不留状态、不碰 DOM。
 import { parseCoach } from './ext.js';
+import { parseClaude, parseClaudeOff } from './delegate.js';
 import { tokenize, unquote } from '../tokens.js';
 import { parseNoteBlock } from '../project/notebook.js';
 import { parseMarkHead, parseMarkBlock, parseUnmark } from '../markspec.js';
@@ -152,7 +153,7 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // move：版面模式里把一段挪到别的栏（col=），不重画
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'show', 'move', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'show', 'move', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set';
+const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set / claude / claude-off';
 
 /**
  * 解析 board 后面那一行：
@@ -200,6 +201,9 @@ export function parseCommand(header) {
   if (name === 'note') return { op: 'note' };
   // 外部主 Claude 的课（第十五轮，ext.js）：snap 下一份 ext_out 带上这块板的截图；close 下课；coach 开这一题的板边助教
   if (name === 'snap') return { op: 'snap' };
+  // 外部主讲叫页面里的 Claude 来接（需求 R1，delegate.js）：开头那行 + 块里的 see / can / <<<话>>>，块闭合了才读全
+  if (name === 'claude') return { op: 'claude', head: m[2].trim() };
+  if (name === 'claude-off') return parseClaudeOff(m[2] || '');
   // 整节课的设置（需求 R11）：board set upload=on|off（组件下面的截图入口）
   if (name === 'set') return setCommand(m[2] || '');
   if (name === 'close') return { op: 'close' };
@@ -221,7 +225,9 @@ export function blockCommand(header, body = '') {
   if (op.op === 'note') { const r = parseNoteBlock(body); return r.ops.length ? { op: 'note', ops: r.ops, ...(r.errors.length ? { errors: r.errors } : {}) } : { error: r.errors[0] || 'note 里一条也没写' }; }
   if (op.op === 'plan') return planOp(body);
   if (op.op === 'aims') return aimsOp(body);
-  if (op.op === 'react') return parseReact(op.head, body);
+  // 读得宽一点（外部的课里收 wrong / giveup / stuck）；页面里的老师写的那几条课堂执行时照旧不收（classroom.js）
+  if (op.op === 'react') return parseReact(op.head, body, { lenient: true });
+  if (op.op === 'claude') return parseClaude(op.head, body);
   if (op.op === 'why') return parseWhy(op.head, body);
   return op.op === 'mark' ? markOp(op, body) : op;
 }

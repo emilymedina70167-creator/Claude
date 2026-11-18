@@ -51,3 +51,12 @@ test('meta/now 去掉 undefined', () => {
   const d = nowDoc3({ text: '黑板', board: { segs: [{ id: 'b1', hidden: undefined }] }, at: 1 });
   assert.deepEqual(d, { at: 1, text: '黑板', board: { segs: [{ id: 'b1' }] } });
 });
+
+import { resolveFrom } from '../kit/src/class/ext.js';
+test('board add … from=：后台活的结果换进块里，围栏加长', async () => {
+  const docs = { 'drafts/x': { text: '````answer\nid: j1\nq: 1\nanswer: 1\n````' } };
+  const r = await resolveFrom('说\n````board add id=b5 from=drafts/x title="改编"\n````\n````board add id=b6 from=drafts/none\n````', (p) => docs[p] || null);
+  assert.deepEqual(r.missing, ['drafts/none']);
+  assert.match(r.text, /^`````board add id=b5 title="改编"\n````answer\nid: j1/m);
+  assert.match(r.text, /````\n`````\n````board add id=b6\n````$/);
+});

@@ -32,6 +32,7 @@
 // 系统发来的「[动作] … 没有动静」（察觉卡住）→ 轻轻问一句；只带「[板书]」的消息 → 说收到了。
 
 import { COACH_HEAD } from './coach.js';
+import { HELPER_HEAD } from './delegate.js';
 export const DEV_LIMITS = Object.freeze({ maxPromptBytes: 262144, images: Object.freeze({ maxCount: 4, maxInputBytes: 20000000, mediaTypes: Object.freeze(['image/png', 'image/jpeg']) }) });
 const THINK_MS = 600; // 第一个字出来前的停顿（模拟思考）
 const JSON_MS = 300;
@@ -137,6 +138,12 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
   if (/请写「?到目前为止的课堂摘要/.test(last)) return { kind: 'compact', text: compactText() };
   // 板边助教（coach.js）：一句话
   if (last.startsWith(COACH_HEAD)) return { kind: 'coach', text: '模拟助教：先别急着选，看看乘法的先后。' };
+  // 外部叫来的助手（delegate.js）：说一句、圈一下题、再越权开一块新板（页面该拦下）；主讲的话里写了「交回」就交回
+  if (last.startsWith(HELPER_HEAD)) {
+    if (/测试交回/.test(last)) return { kind: 'helper', text: '[交回] 学生问的超出了这一题' };
+    const target = last.match(/学生在 (\S+) 上/)?.[1] || last.match(/原文（(\S+)）/)?.[1] || 'q1';
+    return { kind: 'helper', text: `模拟助手：先看第一步的乘法顺序。\n\n\`\`\`\`board mark target=${target} note="看这里"\n\`\`\`\`\n\n\`\`\`\`board new id=hb9 title="越权"\n不该出现\n\`\`\`\`` };
+  }
 
   const err = said.match(/测试\s*[:：]?\s*([a-z_]+)/);
   if (err && ERROR_CODES.includes(err[1]) && !isSystem) return { kind: 'error', code: err[1] };

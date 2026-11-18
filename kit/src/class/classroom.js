@@ -15,13 +15,15 @@ import { getStore, isDev, assetUrl } from '../live/store.js';
 import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
-import { pendingIns, outText, outSeq, seqId, inResult, nowDoc } from './ext.js';
+import { pendingIns, outText, outSeq, seqId, inResult, nowDoc, resolveFrom } from './ext.js';
+import { shouldFire, eventsOf, filterOps, handBack, helperPrompt, helperLines, rebuildHelpers } from './delegate.js';
+import { journalId } from '../project/journal.js';
 import { coachPrompt, coachSegment } from './coach.js';
 import { classMemoryReadDoc,
   buildSystem, actionText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
   reportable, actionTrigger, promptHistory, pendingTurn, nextSegmentId, nextPinId, bytes, PACK_BUDGET, compactionSlice, worthCompacting, draftLine,
   lintDocs, docLookup, latestPlan, rulesUse,
-  closingFacts, boardStateText,
+  closingFacts, boardStateText, PROTOCOL_DOC,
 } from './prompt.js';
 import { FEATURES } from '../features.js';
 import { specFor, specKey, specDiff, SPEC_DELAY } from './spec.js';
@@ -58,7 +60,7 @@ import { boardExam, examLint } from './examroom.js';
 import { examCheckOf } from '../exam/fields.js';
 import { courseOfBlock } from '../exam/load.js';
 import { toDate } from '../memory/schema.js';
-import { planLocal, markFired, reactNote, armedText, rebuildRules, dropForSeg } from './react.js';
+import { planLocal, markFired, reactNote, armedText, rebuildRules, dropForSeg, stuckDue, LIVE_NOTE } from './react.js';
 import { beatPlan, shouldPlay, DEFERRED_OPS } from './beats.js';
 import { ENGINES } from '../engines/registry.js';
 import { bandsOf, layoutText } from './canvas.js';
@@ -189,7 +191,7 @@ export async function renderClass(root, meta, desk = null) {
   // 外部主讲的课：开了板边助教的题（board coach）。restore 从课堂记录里放回来（extState 在后面才定义）
   const coachRules = new Map();
   // 外部主讲的课的状态（ext.js；extStart 在 restore 之后就用到，放在这里免得碰上暂时性死区）
-  const extState = { ready: Promise.resolve(), again: null, snap: false, snapped: [], close: false, coach: coachRules, coachN: new Map(), coachLines: [], outs: [], ins: [], lastSys: 0, running: false };
+  const extState = { ready: Promise.resolve(), again: null, snap: false, snapped: [], helpers: new Map(), helperOff: !!desk?.ext?.helperOff, touch: new Map(), acts: [], draftsSeen: new Map(), close: false, coach: coachRules, coachN: new Map(), coachLines: [], outs: [], ins: [], lastSys: 0, running: false };
   let lastImages = { seq: 0, blobs: [] }; // 最近一条学生发言带的原图：重试时再发一次
   let busy = false;
   let ctl = null;
@@ -520,6 +522,8 @@ export async function renderClass(root, meta, desk = null) {
       for (const [k, r] of rebuildRules(history)) reacts.set(k, r);
       // 外部主讲开过的板边助教：刷新以后照样在
       for (const t of history) for (const o of t?.boardOps || []) if (o?.op === 'coach' && o.ok && o.target) coachRules.set(String(o.target), String(o.upto || ''));
+      // 外部叫来的助手（board claude，delegate.js）：哪几条还开着、各叫过几次
+      for (const [k, r] of rebuildHelpers(history)) extState.helpers.set(k, r);
       // 预写的「为什么」：按先后放回去（后写的盖掉先写的）
       for (const t of history) {
         if (t.role !== 'claude' || t.discarded) continue;
@@ -827,7 +831,7 @@ export async function renderClass(root, meta, desk = null) {
     if (!teacher.available || busy || !queue.triggered || queue.texts.length || queue.images.length || hasFreshInk()) return false;
     const items = queue.actions.map((a) => ({ a, trig: trigs.get(a) }));
     const live = liveBlockIds();
-    const plan = planLocal({ items, rules: reacts, present: (id) => live.has(id) });
+    const plan = planLocal({ items, rules: reacts, present: (id) => live.has(id), ext: EXT });
     if (!plan) return false;
     clearTimeout(timer);
     const actions = queue.actions.splice(0);
@@ -996,6 +1000,23 @@ export async function renderClass(root, meta, desk = null) {
       if (op.op === 'coach') extState.coach.set(String(op.target), String(op.upto || ''));
       return { op: op.op, ok: true, ...(op.target ? { target: op.target, upto: op.upto } : {}) };
     }
+    // 外部叫页面里的 Claude 来接（需求 R1，delegate.js）：记下这一条；when=now 的这一轮执行完马上叫一次
+    if (op.op === 'claude' || op.op === 'claude-off') {
+      if (!EXT) return { op: op.op, ok: false, error: `${op.op} 只在外部主讲的课里有用` };
+      if (op.op === 'claude-off') {
+        const hit = [...extState.helpers.values()].filter((r) => op.id === 'all' || r.id === op.id);
+        for (const r of hit) r.off = true;
+        paintExtTools();
+        return { op: 'claude-off', id: op.id, ok: !!hit.length, ...(hit.length ? {} : { error: `没有开着的 ${op.id}` }) };
+      }
+      const { body, op: _o, ...rule } = op;
+      extState.helpers.set(rule.id, { ...rule, fired: 0, off: false, gotRight: false, armedAt: Date.now() });
+      // 学生停掉过助手：外部重新写一条就是重新打开
+      if (extState.helperOff) { extState.helperOff = false; desk?.updateSession?.({ helperOff: false }); }
+      if (rule.when === 'now') setTimeout(() => fireHelper(extState.helpers.get(rule.id), { kind: 'now' }), 0);
+      paintExtTools();
+      return { op: 'claude', id: rule.id, ok: true, rule };
+    }
     // 整节课的设置（需求 R11）：之后画的段照新的设置；学习台里记进这节课，刷新以后照旧
     if (op.op === 'set') {
       if (op.values.upload) { session.upload = op.values.upload === 'on'; desk?.updateSession?.({ upload: op.values.upload }); }
@@ -1153,9 +1174,14 @@ export async function renderClass(root, meta, desk = null) {
       if (op.errors?.length) notes.push(`react ${op.target} 里有 ${op.errors.length} 行没用：\n${op.errors.map((e) => `  - ${e}`).join('\n')}`);
       const unknown = [...new Set(op.cases.flatMap((c) => c.show || []))].filter((id) => !segs.has(id));
       if (unknown.length) notes.push(`react ${op.target} 的 show= 写了黑板上没有的段：${unknown.join('、')}（到时候揭不开）`);
-      if (!op.cases.length) { reacts.delete(op.target); return { op: 'react', target: op.target, seg, ok: true, cases: [] }; }
-      const cases = op.cases.map((c) => ({ ...c }));
-      reacts.set(op.target, { target: op.target, seq: opTurn.seq, seg, by: opTurn.by, cases: cases.map((c) => ({ ...c, used: false })) });
+      // 答错、想不出来、很久没动静（live）只在外部的课里照接；页面里的老师写了照旧不收（教学不预制，react.js）
+      const live = EXT ? [] : op.cases.filter((c) => c.live);
+      if (live.length) notes.push(`react ${op.target} 里有 ${live.length} 行没用：${LIVE_NOTE}`);
+      const kept = EXT ? op.cases : op.cases.filter((c) => !c.live);
+      if (!kept.length && live.length) return { op: 'react', target: op.target, ok: false, error: LIVE_NOTE };
+      if (!kept.length) { reacts.delete(op.target); return { op: 'react', target: op.target, seg, ok: true, cases: [] }; }
+      const cases = kept.map((c) => ({ ...c }));
+      reacts.set(op.target, { target: op.target, seq: opTurn.seq, seg, by: opTurn.by, at: Date.now(), cases: cases.map((c) => ({ ...c, used: false })) });
       return { op: 'react', target: op.target, seg, by: opTurn.by, ok: true, cases };
     }
     if (op.op === 'figure') return tools.figureOp(op, notes);
@@ -1450,6 +1476,8 @@ export async function renderClass(root, meta, desk = null) {
     }
     // 板边助教：外部开了这一题、学生做错了
     if (EXT && a.source === 'record' && a.ok === false && extState.coach.has(String(a.block || ''))) runCoach(a);
+    // 外部叫来的助手（board claude）：学生在那一题上出了外部写的那件事
+    if (EXT) helperOnAction(a);
     // 外部主讲的课：作答都写进 ext_out（1.5 秒合并），外部一读就是最新的；页面里的老师照旧「later 的跟着下一条说」
     if (trig === 'later' && !EXT) return; // 只是往下翻、拖一拖：跟着下一条一起说
     queue.triggered = true;
@@ -1464,6 +1492,7 @@ export async function renderClass(root, meta, desk = null) {
   function enqueueStudent(text, images = [], urgent = true) {
     hideEcho();
     if (!teacher.available) return;
+    if (EXT && String(text || '').trim()) helperFire({ kind: 'say', text: `学生打的字：${String(text).trim().slice(0, 600)}` });
     if (text) queue.texts.push(text);
     for (const blob of images) queue.images.push({ blob, id: uploadImage(blob) });
     queue.triggered = true;
@@ -1606,7 +1635,9 @@ export async function renderClass(root, meta, desk = null) {
     const b = boardState();
     if (Array.isArray(b?.aims) && !b.aims.length) delete b.aims;
     // 助教这一阵写过的话（runCoach）排在作答前面
-    const text = outText({ head: extHead(), message: [...extState.coachLines.splice(0), turn?.text || ''].filter(Boolean).join('\n'), state: boardStateText(b) });
+    const waiting = extState.calling ? ['学生在等你（点了「叫主讲」）'] : [];
+    extState.calling = false;
+    const text = outText({ head: [...waiting, ...extHead()], message: [...extState.coachLines.splice(0), turn?.text || ''].filter(Boolean).join('\n'), state: boardStateText(b) });
     // 序号按库里现有的算（两页同时开着、刷新以后都不撞号、不盖掉以前的）
     const have = await db.collection('ext_out').get().then((x) => x.docs.map((d) => ({ id: d.id, ...d.data() })), () => []);
     const seq = outSeq([...have, ...extState.outs]);
@@ -1664,10 +1695,13 @@ export async function renderClass(root, meta, desk = null) {
         if (desk && String(d.said || '').trim()) sink.put('evidence', sayEvidence(String(d.said), evCtx(null)));
         let error = '';
         let out = null;
+        // board add … from=集合/文档（需求 R2）：后台活的结果换进块里再执行
+        const from = /\bfrom\s*=/.test(String(d.text || '')) ? await resolveFrom(String(d.text || ''), (p) => db.doc(p).get().then((x) => (x.exists ? x.data() : null))) : { text: String(d.text || ''), missing: [] };
+        for (const p of from.missing) addTurn({ role: 'system', kind: 'note', text: `[系统] from=${p} 读不到（没有这一条，或者里面没有 text），那一块照原样执行` });
         await inTurn(async () => {
           started = true;
           try {
-            out = finishTurn({ text: String(d.text || ''), modelApplied: d.model ? String(d.model) : '', by: 'ext', extIn: d.id }, [], { cost: { why: 'ext' } });
+            out = finishTurn({ text: from.text, modelApplied: d.model ? String(d.model) : '', by: 'ext', extIn: d.id }, [], { cost: { why: 'ext' } });
             for (const line of [...(out.retry || []), ...(out.notes || [])]) addTurn({ role: 'system', kind: 'note', text: `[系统] ${line}` });
           } catch (e) {
             error = String(e?.message || e).slice(0, 300);
@@ -1723,13 +1757,183 @@ export async function renderClass(root, meta, desk = null) {
     extState.coachLines.push(`[助教] 在 ${target} 下面写了：${line}`);
     await extWrite({ text: '' });
   }
+  // —— 外部叫来的助手（需求 R1，delegate.js）——
+  function helperFire(ev, a = null) {
+    if (!EXT) return;
+    for (const r of extState.helpers.values()) {
+      if (ev.kind === 'right' && r.target && String(r.target) === String(ev.target)) r.gotRight = true;
+      if (shouldFire(r, ev, { stopped: extState.helperOff })) fireHelper(r, ev, a);
+    }
+  }
+  function helperOnAction(a) {
+    const b = String(a.block || '');
+    if (b) extState.touch.set(b, Date.now());
+    try { extState.acts.push(actionText(a)); extState.acts.splice(0, Math.max(0, extState.acts.length - 30)); } catch { /* */ }
+    for (const ev of eventsOf(a)) helperFire({ ...ev, text: `学生这次的作答：${actionText(a)}` }, a);
+  }
+  // 外部预写的 stuck（react.js，需求 R6）：那一题这么久没动静，页面照它写的接一句、揭开藏着的段
+  function reactStuckTick() {
+    if (!EXT || busy) return;
+    const live = liveBlockIds();
+    for (const [target, rule] of reacts) {
+      if (!live.has(target)) continue;
+      const i = stuckDue(rule, { touched: extState.touch.get(String(target)), armed: rule.at || 0 });
+      if (i < 0) continue;
+      const c = rule.cases[i];
+      const plan = { fired: [{ target, seq: rule.seq, index: i, kind: 'stuck', text: c.text, show: c.show || [] }], talk: c.text || '', show: c.show || [] };
+      markFired(reacts, plan);
+      const notes = [];
+      plan.show.forEach((id) => execOp({ op: 'show', id }, [], notes));
+      const cur = pages.get(bv.cur);
+      if (plan.talk && cur && cur.kind !== 'closing') setTalk(cur, plan.talk, 'pre');
+      addTurn({ role: 'system', kind: 'react', text: reactNote(plan), fired: plan.fired.map(({ target: t, seq, index, kind }) => ({ target: t, seq, index, kind })) });
+      refresh();
+      extWrite({ text: `[动作] ${target} 上 ${Math.round((c.after || 0) / 1000)} 秒没动静${plan.talk ? `\n（预案当场接了：${plan.talk}）` : ''}` });
+      return;
+    }
+  }
+  // stuck= / on=draft：每隔几秒看一次（那一题多久没动静、写着没交的变了没有）
+  function helperTick() {
+    reactStuckTick();
+    if (!EXT || extState.helperOff) return;
+    const now = Date.now();
+    for (const r of extState.helpers.values()) {
+      if (r.off || !r.target) continue;
+      if (r.on.includes('stuck') && r.stuck) {
+        const last = Math.max(extState.touch.get(String(r.target)) || 0, r.armedAt || 0);
+        if (last && now - last >= r.stuck && r.stuckAt !== last) { r.stuckAt = last; helperFire({ kind: 'stuck', target: r.target }); }
+      }
+      if (r.on.includes('draft')) {
+        const el = board.querySelector(`[data-bid="${CSS.escape(String(r.target))}"]`);
+        const text = el ? draftsIn(el).map((d) => d.text).join('；') : '';
+        if (text && extState.draftsSeen.get(r.id) !== text) { extState.draftsSeen.set(r.id, text); helperFire({ kind: 'draft', target: r.target, text: `学生写着还没交：${text.slice(0, 600)}` }); }
+      }
+    }
+  }
+  // 它能看到的：外部在 see: 里点了名的那几样，页面现拼
+  async function helperMaterials(rule, ev) {
+    const out = [];
+    const see = rule.see || { target: true };
+    const target = String(rule.target || ev?.target || '');
+    if (see.target && target) {
+      const el = board.querySelector(`[data-bid="${CSS.escape(target)}"]`);
+      const seg = [...segs.values()].find((x) => x.sec && el && x.sec.contains(el)) || segs.get(target);
+      out.push(`这道题在板上的原文（${target}）：\n${String(seg?.md || '（板上没找到）').slice(0, 12000)}`);
+      const res = (results.get(target) || []).map((r) => r.line);
+      if (res.length) out.push(`学生在 ${target} 上的作答（从早到晚）：\n${res.join('\n')}`);
+    }
+    if (see.board) { const b = boardState(); if (Array.isArray(b?.aims) && !b.aims.length) delete b.aims; out.push(`黑板现状：\n${boardStateText(b)}`); }
+    if (see.evidence) {
+      const n = Number(String(see.evidence).replace(/\D/g, '')) || 3;
+      if (extState.acts.length) out.push(`学生最近 ${Math.min(n, extState.acts.length)} 次作答 / 动作：\n${extState.acts.slice(-n).join('\n')}`);
+    }
+    if (see.ext) out.push(`这节课主讲写过的板（每一段最后的样子）：\n${[...segs.values()].filter((x) => !String(x.id).startsWith('~')).sort((x, y) => x.seq - y.seq).map((x) => `[${x.id}${x.hidden ? '，已撤回' : ''}]\n${x.md}`).join('\n\n').slice(0, 48000)}`);
+    if (see.memory && typeof see.memory === 'string') {
+      for (const path of see.memory.split(/[,，]/).map((x) => x.trim()).filter(Boolean).slice(0, 8)) {
+        const d = path.split('/').length % 2 === 0 ? await db.doc(path).get().then((x) => (x.exists ? x.data() : null), () => null) : null;
+        out.push(`学习台里的 ${path}：\n${d ? JSON.stringify(d).slice(0, 6000) : '（没有这一条，或者不是「集合/编号」的写法）'}`);
+      }
+    }
+    if (see.books && typeof see.books === 'string') out.push(`教材条目 ${see.books}：用工具 textbook_read 按编号取（ids 写这一段里的编号）。`);
+    return out;
+  }
+  async function fireHelper(rule, ev, a = null) {
+    if (!rule || rule.off || extState.helperOff || !EXT) return;
+    rule.fired = (rule.fired || 0) + 1; // 先记上：同一下不叫两次
+    paintExtTools();
+    const at = Date.now();
+    const staged = { notes: [], slips: [], images: [], ids: [], calls: [] };
+    let res = null, error = '';
+    const t0 = performance.now();
+    let bytes = 0;
+    try {
+      const input = helperPrompt({ rule, ev, materials: await helperMaterials(rule, ev), doc: PROTOCOL_DOC });
+      bytes = new Blob([input]).size;
+      res = await teacher.call(input, { ...TEACH, cache: false, ...(teacher.tools ? { tools: classTools(staged) } : {}) });
+      if (res?.modelApplied !== MODEL) { error = `平台回的模型是 ${res?.modelApplied || '不知道'}，不是 Opus 5.5，这一次作废`; res = null; }
+    } catch (e) { error = String(e?.code || e?.message || e).slice(0, 200); }
+    const usage = { bytes, ms: performance.now() - t0, tools: staged.calls.length };
+    const text = String(res?.text || '').trim();
+    const back = res ? handBack(text) : '';
+    let done = [], refused = [];
+    if (res && rule.to?.kind === 'board') {
+      const parsed = parseOutput(text.replace(/^\s*\[交回\].*$/m, ''), { final: true });
+      const f = filterOps(parsed.ops, rule.can);
+      refused = f.refused;
+      const talk = back ? '主讲会接着讲。' : rule.can.includes('say') ? parsed.segments.filter((x) => x.type === 'speech').map((x) => x.text).join('\n\n').trim() : '';
+      await inTurn(async () => {
+        const failures = [], notes = [], boardOps = [];
+        turnMemos = []; turnNotes = [];
+        opTurn = { seq: turnSeq + 1, by: 'helper' };
+        if (!back) for (const op of f.allow) boardOps.push(execOp({ ...op }, failures, notes));
+        if (talk) { const cur = pages.get(bv.cur); const p = cur && cur.kind !== 'closing' ? cur : newPage(); setTalk(p, talk, MODEL); }
+        layoutPage(bv.cur);
+        refresh();
+        const told = addTurn({ role: 'claude', kind: 'helper', helper: rule.id, by: 'helper', text, boardOps, page: bv.cur || undefined, modelApplied: res.modelApplied, cost: callCost({ bytes, why: 'helper', tools: staged.calls.length, ms: usage.ms }) });
+        if (turnMemos.length) runMemo(turnMemos.splice(0), told.seq, bv.cur);
+        if (turnNotes.length) runNotes(turnNotes.splice(0));
+        done = boardOps.filter((o) => o.ok).map((o) => `${o.op}${o.id ? ` ${o.id}` : o.target ? ` ${o.target}` : ''}`);
+        for (const o of boardOps.filter((x) => !x.ok)) refused.push({ op: o.op, id: o.id || '', why: o.error || '没执行' });
+        for (const fl of failures) refused.push({ op: 'add', id: fl.id, why: fl.errors.map((p) => p.msg).join('；') });
+        return true;
+      });
+    } else if (res) {
+      // 不上板：记一条（刷新以后叫过几次照算），to=db 的写进那一条数据
+      addTurn({ role: 'system', kind: 'helper', helper: rule.id, by: 'helper', text, modelApplied: res.modelApplied, cost: callCost({ bytes, why: 'helper', tools: staged.calls.length, ms: usage.ms }) });
+      if (rule.to?.kind === 'db') {
+        const path = rule.to.path;
+        const before = await db.doc(path).get().then((x) => (x.exists ? x.data() : null), () => null);
+        const after = { text, by: 'ext-delegate', helper: rule.id, at, ...(desk?.sid ? { session: desk.sid } : {}) };
+        await db.doc(path).set(after).then(() => done.push(`写进 ${path}`), (e) => refused.push({ op: 'db', id: path, why: String(e?.message || e).slice(0, 120) }));
+        // 写进数据的都记一条 journal（「管理 → Claude 改过的」看得到、能撤销）
+        const jid = journalId(at);
+        db.doc(`journal/${jid}`).set({ at, by: 'ext-delegate', path, op: 'set', before, after, ...(desk?.sid ? { session: desk.sid } : {}) }).catch(() => {});
+      }
+    } else addTurn({ role: 'system', kind: 'helper', helper: rule.id, discarded: true, text: `助手 ${rule.id} 没叫成：${error}` });
+    if (rule.until === 'turns' && rule.fired >= rule.turns) rule.off = true;
+    paintExtTools();
+    extState.coachLines.push(...helperLines({ id: rule.id, ev, text: rule.to?.kind === 'board' || res ? text : '', done, refused, back, usage: res ? usage : null, error }));
+    await extWrite({ text: '' });
+  }
+  // 板上一小条（需求 R1、R10）：「叫主讲」一直在；有开着的助手时「停掉助手」
+  const extTools = EXT ? document.createElement('div') : null;
+  if (extTools) {
+    extTools.className = 'class-ext-tools';
+    root.querySelector('.class-stage')?.prepend(extTools);
+    extTools.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.act === 'stop') {
+        extState.helperOff = true;
+        desk?.updateSession?.({ helperOff: true });
+        paintExtTools();
+        extState.coachLines.push('[学生] 点了「停掉助手」：页面不再替主讲叫页面里的 Claude，主讲再写一条 board claude 就重新打开');
+        extWrite({ text: '' });
+      }
+      if (b.dataset.act === 'call') callTeacherNow(b);
+    });
+  }
+  function paintExtTools() {
+    if (!extTools) return;
+    const armed = [...extState.helpers.values()].some((r) => !r.off && (r.fired || 0) < r.turns);
+    extTools.innerHTML = `<button type="button" class="class-ext-btn" data-act="call">叫主讲</button>${armed && !extState.helperOff ? '<button type="button" class="class-ext-btn" data-act="stop">停掉助手</button>' : ''}${extState.helperOff && extState.helpers.size ? '<span class="class-ext-note">助手停了</span>' : ''}`;
+  }
+  paintExtTools();
+  // 叫主讲（需求 R10）：马上写一份 ext_out，最前面「学生在等你」；手上排着的作答、草稿一起写掉
+  async function callTeacherNow(btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '已经告诉主讲'; setTimeout(() => { btn.disabled = false; btn.textContent = '叫主讲'; }, 4000); }
+    extState.calling = true;
+    queue.triggered = true;
+    await flush();
+    if (extState.calling) { extState.calling = false; await extWrite({ text: '' }); }
+  }
   function extStart() {
     extState.lastSys = turnSeq; // 刷新以前的系统话已经报过了
     extState.ready = db.collection('ext_out').get().then((x) => { for (const d of x.docs) extState.outs.push({ seq: Number(d.data().seq) || 0, at: d.data().at }); }, () => {});
     db.collection('ext_in').onSnapshot((x) => extRun(x.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {});
     // 黑板现状（meta/now）：拖图、写草稿这些不一定发 ext_out 的变化也要跟上；没变不写
     extNow();
-    setInterval(extNow, 2500);
+    setInterval(() => { extNow(); helperTick(); }, 2500);
     // 学生分屏切到 claude.ai：手上排着的作答、草稿马上写掉，外部一读就是最新的
     const now = () => { if (queue.triggered || queue.actions.length || hasFreshDraft() || hasFreshInk()) { queue.triggered = true; schedule(true); } };
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') now(); });

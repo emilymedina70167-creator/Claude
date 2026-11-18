@@ -341,3 +341,4 @@
 [data-theme^="ink"] .class-aims { background: var(--panel); box-shadow: var(--panel-edge), var(--lift); -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none); }
 [data-theme^="ink"] .class-talk-echo { background: var(--panel); box-shadow: var(--panel-edge), var(--lift); -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none); }
 [data-theme^="ink"] .class-talk-echo-go { background: var(--brand); color: var(--brand-ink, #fff); }
+[data-theme^="ink"] .class-ext-btn { background: var(--panel); box-shadow: var(--panel-edge), var(--lift); -webkit-backdrop-filter: var(--glass, none); backdrop-filter: var(--glass, none); }

@@ -59,3 +59,35 @@ export function inResult({ boardOps = [], retry = [], notes = [], error = '', sh
 export function nowDoc({ text = '', board = null, at = Date.now() } = {}) {
   return { at, text: String(text || ''), ...(board ? { board: JSON.parse(JSON.stringify(board)) } : {}) };
 }
+
+const FROM_OPEN = /^([ \t]{0,3})(`{3,}|~{3,})[ \t]*board[ \t]+(add|new|replace|pin)\b(.*?)[ \t]+from[ \t]*=[ \t]*("[^"]+"|\S+)(.*)$/i;
+/**
+ * board add id=b5 from=集合/文档（需求 R2：后台活的结果直接上板）：执行前把那一条的 text（没有就 md）换进块里。
+ * get(path) → Promise<文档或 null>。读不到的那一块原样留着、去掉 from=，返回 { text, missing: [路径] }
+ */
+export async function resolveFrom(text, get) {
+  const lines = String(text ?? '').split('\n');
+  const out = [];
+  const missing = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(FROM_OPEN);
+    if (!m) { out.push(lines[i]); continue; }
+    const [, ind, fence, op, pre, rawPath, post] = m;
+    const path = rawPath.replace(/^"|"$/g, '');
+    // 找这一块的结尾（和开头同一种、不短于它的围栏）
+    let j = i + 1;
+    const closeRe = new RegExp(`^[ \\t]{0,3}${fence[0] === '`' ? '`' : '~'}{${fence.length},}[ \\t]*$`);
+    while (j < lines.length && !closeRe.test(lines[j])) j++;
+    const inner = lines.slice(i + 1, j);
+    const doc = await Promise.resolve(get(path)).catch(() => null);
+    const body = doc && typeof doc === 'object' ? String(doc.text ?? doc.md ?? '') : '';
+    if (!body) missing.push(path);
+    const all = [...inner, ...(body ? (inner.join('').trim() ? ['', body] : [body]) : [])].join('\n');
+    // 换进来的文字里有同样长的围栏：外层加长，免得被它提前闭合
+    const longest = Math.max(0, ...[...all.matchAll(new RegExp(`${fence[0] === '`' ? '`' : '~'}+`, 'g'))].map((x) => x[0].length));
+    const f = fence[0].repeat(Math.max(fence.length, longest + 1));
+    out.push(`${ind}${f}board ${op}${pre}${post}`, ...(all ? [all] : []), `${ind}${f}`);
+    i = j;
+  }
+  return { text: out.join('\n'), missing };
+}
