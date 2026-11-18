@@ -18,6 +18,10 @@
 
 外部第一次上课时按学生要求写了 `dev_requests/dr-ext-control`（R1–R11）。全做了，见 `CLAUDE.md` 那一条、执行计划 `docs/superpowers/plans/2026-11-18-ext-control.md`、自己定的事 `docs/superpowers/specs/2026-11-18-ext-control-rulings.md`。外部再要什么，还是先看 `dev_requests`。
 
+## 第 3 批：外部验收以后的第二批修改（2026-11-18）
+
+`dev_requests/dr-ext-round2`（合并 `dr-ncalg-strict`、`dr-ext-live-fixes`），见 `CLAUDE.md` 那一条和 `docs/superpowers/plans/2026-11-18-ext-round2.md`。总表说以学生交来的 `ext-fixes-round2.md` 为准：那份文件没在仓库、分支、学习台里找到，照 `dev_requests` 三条的原文做的；那份到了再对一遍。
+
 ## 现在做到哪
 
 全部做完、已发布（版本见 `CLAUDE-PROJECT.md` 开头）。下一步是学生用外部上一节真课。

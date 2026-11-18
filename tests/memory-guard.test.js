@@ -2,6 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { guardCandidate, buildCorpus, findQuotes, normText, containment, turnRefs, compRefs, authorOf } from '../kit/src/memory/guard.js';
+// 学习台的日子按上海时间算（schema.js 的 toDate 用本机时区）：测试固定在上海，换到 UTC、纽约的机器上也一样（dr-ncalg-strict 2）
+process.env.TZ = 'Asia/Shanghai';
 
 const SID = 'c-20261102-1';
 const turns = [

@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { healthCheck, healthRecord, snapTier } from '../kit/src/memory/health.js';
 import { sampleMemory } from '../kit/src/memory/sample.js';
 import { checkMemory } from '../kit/src/memory/check.js';
+// 学习台的日子按上海时间算（schema.js 的 toDate 用本机时区）：测试固定在上海，换到 UTC、纽约的机器上也一样（dr-ncalg-strict 2）
+process.env.TZ = 'Asia/Shanghai';
 
 const TODAY = '2026-11-05';
 const NOW = Date.parse('2026-11-05T12:00:00+08:00');
