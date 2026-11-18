@@ -1118,7 +1118,7 @@ const SUITES = {
     const in1 = (await db())[`sessions/${sid}/ext_in/001`];
     check(in1?.result?.ops?.some((o) => o.op === 'check' && o.ok), `ext_in 的回报里没有 check：${JSON.stringify(in1?.result?.ops)}`);
     const probes = Object.keys(await db()).filter((k) => k.startsWith('probes/pr-'));
-    check(probes.length === 15, `题库里应有 15 道（5 道 + 各 2 道同构），有 ${probes.length}`);
+    check(probes.length === 18, `题库里应有 18 道（6 道 + 各 2 道同构），有 ${probes.length}`);
     await t.page.click('.ck-start');
     check(await t.page.evaluate(() => document.body.classList.contains('is-checking') && getComputedStyle(document.querySelector('.class-pages')).display === 'none'), '开始以后板书没收起来（合书）');
     const fill = async (vals) => { const cells = await t.page.$$('.ck-card .mi-cell'); for (let i = 0; i < vals.length; i++) await cells[i].fill(String(vals[i])); };
@@ -1133,6 +1133,10 @@ const SUITES = {
       check(/这两个相等了/.test(await t.text('.ck-teach')), '补讲没写那一条自己的话');
       await t.page.click('.ck-next');
     }
+    // p2 全过程（solve）：打字交整道题，页面里的 Claude 逐步判（模拟的都对）
+    await t.waitFor(async () => (await card()) === 'p2', { timeout: 8000, what: '全过程那一道' });
+    await t.page.fill('.ck-card .ck-text', '|-3A^T| = (-3)^3 |A^T| = -27 · (-2) = 54'); await sure();
+    await t.page.click('.ck-submit');
     // p3 recall：写「错」（模拟判没写到）；连点两下「交」
     await t.waitFor(async () => (await card()) === 'p3', { timeout: 8000, what: 'recall 那一道' });
     await t.page.fill('.ck-card .ck-text', '我写错了：(A+B)^2=A^2+2AB+B^2'); await sure('maybe');
@@ -1164,6 +1168,7 @@ const SUITES = {
     const typeIn = async (text) => { const tab = await t.page.$('.ck-card .ck-tab[data-tab="type"]'); if (tab) await tab.click(); await t.page.fill('.ck-card .ck-text', text); };
     const answerNow = async (id) => {
       if (id === 'p3a') await penWrite();
+      else if (/^p2/.test(id)) { await typeIn('|-3A^T| = (-3)^3 |A^T|（|kA| = k^n|A|）= -27 · |A|（|A^T| = |A|）= -27 · (-2) = 54'); await sure(); }
       else if (/^p3/.test(id)) { await typeIn('(A+B)^2=A^2+AB+BA+B^2，AB=BA 时才能并'); await sure(); }
       else if (/^p5/.test(id)) { await t.page.click('.ck-pick[data-v="false"]'); await fill([1, 0, 0, 0, 0, 1, 1, 0]); await sure(); }
       else if (/^p6/.test(id)) { await t.page.click('.ck-line[data-n="2"]'); await typeIn('AB 和 BA 不一定相等'); await sure(); }
