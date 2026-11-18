@@ -35,3 +35,19 @@ test('三条新指令：snap、close、coach', () => {
   assert.ok(parseCommand('coach upto=2').error);
   assert.ok(parseCoach('target=q1').target === 'q1');
 });
+
+// 需求 R3：执行完立刻回报
+import { inResult as inResult3, nowDoc as nowDoc3 } from '../kit/src/class/ext.js';
+test('ext_in 的 result：执行了哪些、没执行的、写错的段、截图', () => {
+  const r = inResult3({ boardOps: [{ op: 'new', id: 'b1', ok: true, page: 1 }, { op: 'figure', target: 'f1', ok: false, error: '没有 f1' }], retry: ['b2「例」有写法错误'], shots: ['a1'], at: 5 });
+  assert.equal(r.ok, false);
+  assert.equal(r.summary, '执行了 1 条指令，1 条没执行，1 段写错没显示');
+  assert.deepEqual(r.ops[1], { op: 'figure', target: 'f1', ok: false, error: '没有 f1' });
+  assert.deepEqual(r.shots, ['a1']);
+  assert.equal(inResult3({ boardOps: [{ op: 'add', id: 'b1', ok: true }] }).ok, true);
+  assert.match(inResult3({ error: '炸了' }).summary, /没执行成：炸了/);
+});
+test('meta/now 去掉 undefined', () => {
+  const d = nowDoc3({ text: '黑板', board: { segs: [{ id: 'b1', hidden: undefined }] }, at: 1 });
+  assert.deepEqual(d, { at: 1, text: '黑板', board: { segs: [{ id: 'b1' }] } });
+});

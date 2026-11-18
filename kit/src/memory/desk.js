@@ -1811,7 +1811,8 @@ async function enterClass(root, meta, sid, { readOnly = false, step = () => {} }
   if (kind === 'ext' && (!doc.subject || !Array.isArray(doc.aims))) await updateSession({ ...(doc.subject ? {} : { subject: session.subject }), ...(Array.isArray(doc.aims) ? {} : { aims: [] }) });
   return renderClass(root, { ...meta, unit: doc.title || meta.unit }, {
     project,
-    ...(kind === 'ext' ? { ext: {} } : {}),
+    // 外部的课：整节课的设置（board set 写过的：截图入口 upload、停掉助手 helperOff）刷新以后照旧
+    ...(kind === 'ext' ? { ext: { upload: doc.upload || '', helperOff: !!doc.helperOff } } : {}),
     store: { ...store, db: scopeDb(db, sid) }, sid, block, space, mem, updateSession, onHome: () => leave(''), books, prevRead,
     // 这一门课的考试资料（和舞台课一样：不等它，课堂读到了再用）；examFor：课上换到另一门课时再按那门课读一次
     exam: examLoad, reserve: examYears, examFor: kind === 'class' || kind === 'ext' ? loadExam : null,

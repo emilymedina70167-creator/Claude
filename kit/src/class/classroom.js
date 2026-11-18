@@ -15,7 +15,7 @@ import { getStore, isDev, assetUrl } from '../live/store.js';
 import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
-import { pendingIns, outText, outSeq, seqId } from './ext.js';
+import { pendingIns, outText, outSeq, seqId, inResult, nowDoc } from './ext.js';
 import { coachPrompt, coachSegment } from './coach.js';
 import { classMemoryReadDoc,
   buildSystem, actionText, actionsMessage, fitTurns, needsCompaction, compactionPrompt, summaryTurn, closingPrompt,
@@ -156,6 +156,8 @@ export async function renderClass(root, meta, desk = null) {
   const readOnly = !!desk?.readOnly;
   // 外部主 Claude 的课（第十五轮，ext.js）：它写 ext_in、页面画；学生作答写 ext_out。页面不去叫老师
   const EXT = !!desk?.ext && !readOnly;
+  // 截图入口（upload.js，需求 R11）：外部的课默认不放，外部写 board set upload=on 才放。翻看（只读）外部的课也一样
+  if (desk?.ext) session.upload = desk.ext.upload === 'on';
   const teacher = {
     get available() { return !readOnly && (EXT || !!(mock || (ai?.call && !legacy))); },
     // 模拟老师也走调用让路（lane.js；ai.call 自己已经走了）
@@ -187,7 +189,7 @@ export async function renderClass(root, meta, desk = null) {
   // 外部主讲的课：开了板边助教的题（board coach）。restore 从课堂记录里放回来（extState 在后面才定义）
   const coachRules = new Map();
   // 外部主讲的课的状态（ext.js；extStart 在 restore 之后就用到，放在这里免得碰上暂时性死区）
-  const extState = { ready: Promise.resolve(), again: null, snap: false, close: false, coach: coachRules, coachN: new Map(), coachLines: [], outs: [], ins: [], lastSys: 0, running: false };
+  const extState = { ready: Promise.resolve(), again: null, snap: false, snapped: [], close: false, coach: coachRules, coachN: new Map(), coachLines: [], outs: [], ins: [], lastSys: 0, running: false };
   let lastImages = { seq: 0, blobs: [] }; // 最近一条学生发言带的原图：重试时再发一次
   let busy = false;
   let ctl = null;
@@ -994,6 +996,11 @@ export async function renderClass(root, meta, desk = null) {
       if (op.op === 'coach') extState.coach.set(String(op.target), String(op.upto || ''));
       return { op: op.op, ok: true, ...(op.target ? { target: op.target, upto: op.upto } : {}) };
     }
+    // 整节课的设置（需求 R11）：之后画的段照新的设置；学习台里记进这节课，刷新以后照旧
+    if (op.op === 'set') {
+      if (op.values.upload) { session.upload = op.values.upload === 'on'; desk?.updateSession?.({ upload: op.values.upload }); }
+      return { op: 'set', ok: true, values: op.values };
+    }
     // 笔记本（第十四轮，project/notebook.js）：这一轮讲完、核验过了再执行（runNotes），没改成的下一轮告诉它
     if (op.op === 'note') {
       if (!desk?.project?.notebook) return { op: 'note', ok: false, error: 'note 只在学习台里上课时能用（单独的课堂没有笔记本）' };
@@ -1592,11 +1599,9 @@ export async function renderClass(root, meta, desk = null) {
     await extState.ready;
     const shots = [];
     for (const id of await Promise.all(imageIds)) if (id) shots.push(id);
-    if (extState.snap && eye) {
-      extState.snap = false;
-      const shot = await eye.fresh(400).catch(() => null);
-      for (const b of shot?.blobs || []) { const id = await uploadImage(b); if (id) shots.push(id); }
-    }
+    if (extState.snap) shots.push(...await extShot());
+    // board snap 已经当场拍过、写进那一条 ext_in 的 result：下一份 ext_out 也带上同几张（不再拍一次）
+    shots.push(...extState.snapped.splice(0));
     // 要拿下的事还没写（空数组）时，黑板现状里那句「这一轮先写 board aims」是给页面里老师的做法：外部的课不带（写法在手册里）
     const b = boardState();
     if (Array.isArray(b?.aims) && !b.aims.length) delete b.aims;
@@ -1608,8 +1613,32 @@ export async function renderClass(root, meta, desk = null) {
     const doc = { seq, text, at: Date.now(), ...(shots.length ? { shots } : {}) };
     extState.outs.push({ seq, at: doc.at });
     await db.doc(`ext_out/${seqId(seq)}`).set(doc).catch((e) => reportError(e, { what: '写 ext_out', path: `ext_out/${seqId(seq)}` }));
+    extNow();
     bar.setStatus('idle', '');
     return true;
+  }
+  // 拍一张这块板（board snap）：上传进 assets，返回编号；也留给下一份 ext_out
+  async function extShot() {
+    extState.snap = false;
+    if (!eye) return [];
+    const shot = await eye.fresh(400).catch(() => null);
+    const ids = [];
+    for (const b of shot?.blobs || []) { const id = await uploadImage(b); if (id) ids.push(id); }
+    extState.snapped.push(...ids);
+    return ids;
+  }
+  // sessions/{编号}/meta/now（需求 R3）：黑板现状每次变了就覆盖写，外部随时读得到（学生没动也读得到）。最多一秒一次
+  let nowLast = '', nowTimer = 0;
+  function extNow() {
+    if (!EXT || nowTimer) return;
+    nowTimer = setTimeout(() => {
+      nowTimer = 0;
+      let b, text;
+      try { b = boardState(); if (Array.isArray(b?.aims) && !b.aims.length) delete b.aims; text = boardStateText(b); } catch { return; }
+      if (text === nowLast) return;
+      nowLast = text;
+      db.doc('meta/now').set(nowDoc({ text, board: b })).catch((e) => { nowLast = ''; reportError(e, { what: '写 meta/now', path: 'meta/now', soft: true }); });
+    }, 1000);
   }
   // 先占住这一条再执行：写 claim、隔一会儿读回来，还是自己的才做（两个标签页只有一页做）；占了 30 秒还没 done 的算没人做
   async function claimIn(d) {
@@ -1634,10 +1663,11 @@ export async function renderClass(root, meta, desk = null) {
         // 外部抄进来的学生原话：记成学生说的话（证据），以后的课、守卫都看得到
         if (desk && String(d.said || '').trim()) sink.put('evidence', sayEvidence(String(d.said), evCtx(null)));
         let error = '';
+        let out = null;
         await inTurn(async () => {
           started = true;
           try {
-            const out = finishTurn({ text: String(d.text || ''), modelApplied: d.model ? String(d.model) : '', by: 'ext', extIn: d.id }, [], { cost: { why: 'ext' } });
+            out = finishTurn({ text: String(d.text || ''), modelApplied: d.model ? String(d.model) : '', by: 'ext', extIn: d.id }, [], { cost: { why: 'ext' } });
             for (const line of [...(out.retry || []), ...(out.notes || [])]) addTurn({ role: 'system', kind: 'note', text: `[系统] ${line}` });
           } catch (e) {
             error = String(e?.message || e).slice(0, 300);
@@ -1645,7 +1675,11 @@ export async function renderClass(root, meta, desk = null) {
           }
           return true;
         });
-        await db.doc(`ext_in/${d.id}`).update({ done: { at: Date.now(), ...(error ? { error } : {}) }, got }).catch(() => {});
+        // 需求 R3：执行完当场写结果（执行了哪些、哪些没执行、写错的段）；写了 board snap 就当场拍一张放进去。
+        // 同样的话照旧排进下一份 ext_out 的最前面
+        const shots = extState.snap ? await extShot() : [];
+        await db.doc(`ext_in/${d.id}`).update({ done: { at: Date.now(), ...(error ? { error } : {}) }, got, result: inResult({ boardOps: out?.boardOps, retry: out?.retry, notes: out?.notes, error, shots }) }).catch(() => {});
+        extNow();
         if (extState.close) { extState.close = false; await extClose(); }
       }
     } finally { extState.running = false; }
@@ -1693,6 +1727,9 @@ export async function renderClass(root, meta, desk = null) {
     extState.lastSys = turnSeq; // 刷新以前的系统话已经报过了
     extState.ready = db.collection('ext_out').get().then((x) => { for (const d of x.docs) extState.outs.push({ seq: Number(d.data().seq) || 0, at: d.data().at }); }, () => {});
     db.collection('ext_in').onSnapshot((x) => extRun(x.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {});
+    // 黑板现状（meta/now）：拖图、写草稿这些不一定发 ext_out 的变化也要跟上；没变不写
+    extNow();
+    setInterval(extNow, 2500);
     // 学生分屏切到 claude.ai：手上排着的作答、草稿马上写掉，外部一读就是最新的
     const now = () => { if (queue.triggered || queue.actions.length || hasFreshDraft() || hasFreshInk()) { queue.triggered = true; schedule(true); } };
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') now(); });
@@ -2112,7 +2149,7 @@ export async function renderClass(root, meta, desk = null) {
     if (talkErr.length) notes.push(`你说的话里有 ${talkErr.join('；')}（学生看到的是红框；下一轮说话时改过来）`);
     for (const r of rejected) notes.push(`有一个 board 块看不懂（${r.error}），已经当普通文字写在板顶了：board ${r.header.slice(0, 60)}`);
     for (const u of unclosed) notes.push(`有一个 board 块没有闭合，已经当普通文字写在板顶了：board ${u.header.slice(0, 60)}${res.truncated ? '（这一轮太长被截断了，下次写短一点）' : ''}`);
-    return { retry, asks: [...new Set(asks)], notes, kinds };
+    return { retry, asks: [...new Set(asks)], notes, kinds, boardOps };
   }
   // 和 parseOutput 的 ops 同一个口径：闭合了、看得懂的 board 块
   function isOp(s) { return s.type === 'board' && s.closed && s.op && !s.op.error; }

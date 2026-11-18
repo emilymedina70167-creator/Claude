@@ -152,7 +152,7 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // move：版面模式里把一段挪到别的栏（col=），不重画
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'show', 'move', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'show', 'move', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach';
+const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set';
 
 /**
  * 解析 board 后面那一行：
@@ -200,6 +200,8 @@ export function parseCommand(header) {
   if (name === 'note') return { op: 'note' };
   // 外部主 Claude 的课（第十五轮，ext.js）：snap 下一份 ext_out 带上这块板的截图；close 下课；coach 开这一题的板边助教
   if (name === 'snap') return { op: 'snap' };
+  // 整节课的设置（需求 R11）：board set upload=on|off（组件下面的截图入口）
+  if (name === 'set') return setCommand(m[2] || '');
   if (name === 'close') return { op: 'close' };
   if (name === 'coach') { const r = parseCoach(m[2] || ''); return r.error ? { error: r.error } : { op: 'coach', target: r.target, upto: r.upto }; }
   // 老师自己的教学计划（学生看不到，docs/learning-plan.md 第 5 节）：块里是几行字
@@ -222,6 +224,21 @@ export function blockCommand(header, body = '') {
   if (op.op === 'react') return parseReact(op.head, body);
   if (op.op === 'why') return parseWhy(op.head, body);
   return op.op === 'mark' ? markOp(op, body) : op;
+}
+
+// board set 能改的整节课设置：名字 → 能取的值
+export const SETTINGS = { upload: ['on', 'off'] };
+function setCommand(rest) {
+  const out = {};
+  for (const t of tokenize(rest)) {
+    if (!t.key) return { error: `看不懂「${t.value}」：set 后面写 名字=值，比如 board set upload=on` };
+    const k = t.key.toLowerCase(), v = String(t.value).toLowerCase();
+    if (!SETTINGS[k]) return { error: `set 没有「${t.key}」这一项：能改的是 ${Object.keys(SETTINGS).join('、')}` };
+    if (!SETTINGS[k].includes(v)) return { error: `${k} 只能是 ${SETTINGS[k].join(' / ')}` };
+    out[k] = v;
+  }
+  if (!Object.keys(out).length) return { error: 'set 后面要写 名字=值，比如 board set upload=on' };
+  return { op: 'set', values: out };
 }
 
 // 教学计划最多多长：每一轮都放进说明，长了白费额度

@@ -36,3 +36,26 @@ export function parseCoach(head = '') {
   if (!kv.target) return { error: '要写哪一题：board coach target=题号 upto=…' };
   return { target: kv.target, upto: kv.upto || '' };
 }
+
+/**
+ * 执行完一条 ext_in 当场写在它上面的 result（需求 R3：外部不用等学生动一下才知道画成了什么样）。
+ * boardOps：这一轮每条指令执行的结果；retry：写错没显示的段（和原因）；notes：别的提醒；error：整条没执行成
+ */
+export function inResult({ boardOps = [], retry = [], notes = [], error = '', shots = [], at = Date.now() } = {}) {
+  const ops = (boardOps || []).filter(Boolean).map((o) => ({
+    op: o.op, ...(o.id ? { id: o.id } : {}), ...(o.target ? { target: o.target } : {}), ok: !!o.ok,
+    ...(o.error ? { error: String(o.error).slice(0, 600) } : {}), ...(o.page ? { page: o.page } : {}),
+  }));
+  const done = ops.filter((o) => o.ok).length;
+  return {
+    at, ok: !error && !(retry || []).length && ops.every((o) => o.ok),
+    summary: error ? `没执行成：${error}` : `执行了 ${done} 条指令${ops.length - done ? `，${ops.length - done} 条没执行` : ''}${(retry || []).length ? `，${retry.length} 段写错没显示` : ''}`,
+    ops, ...(retry?.length ? { errors: retry.map(String) } : {}), ...(notes?.length ? { notes: notes.map(String) } : {}),
+    ...(error ? { error: String(error) } : {}), ...(shots?.length ? { shots } : {}),
+  };
+}
+
+/** sessions/{编号}/meta/now：黑板现状，文字（和 ext_out 最后一段一样）+ 结构化的（undefined 去掉，数据库收得下） */
+export function nowDoc({ text = '', board = null, at = Date.now() } = {}) {
+  return { at, text: String(text || ''), ...(board ? { board: JSON.parse(JSON.stringify(board)) } : {}) };
+}

@@ -5,12 +5,15 @@ import { getAI, errorText } from './ai.js';
 import { mdToHtml } from './render.js';
 import { FEATURES } from './features.js';
 import { imageToPng } from './flatten.js';
+import { uploadAllowed } from './upload.js';
+import { session } from './session.js';
 
 // 在 anchor 后面插入一行：按钮 + 提示 + 缩略图 + 状态。
 // onPick(files, ui) 在学生选好或粘贴图片后调用；ui.status(html, cls) 用来显示进度和结果。
 export function photoPicker(anchor, { label = '上传手写截图', root, onPick }) {
   // 关掉时（见 features.js）：不放粘贴框，也不接管粘贴、拖放
-  if (!FEATURES.photo) return { box: null, ui: { status() {}, lock() {} }, disable() {} };
+  // 外部的课默认不放（学生在 claude.ai 的对话里传截图）；组件写 upload: on 才放（upload.js）
+  if (!FEATURES.photo || !uploadAllowed(anchor, session.upload)) return { box: null, ui: { status() {}, lock() {} }, disable() {} };
   const box = document.createElement('div');
   box.className = 'ph';
   box.hidden = true;
