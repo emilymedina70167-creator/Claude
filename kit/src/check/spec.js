@@ -307,8 +307,11 @@ export function evalIfs(ifs, values, vars = {}, slots = []) {
   });
 }
 
-/** 自检：外部写的检验自己对不对（每条一句，空数组是好的） */
-export function selfCheck(check, base = {}) {
+/**
+ * 自检：外部写的检验自己对不对（每条一句，空数组是好的）。
+ * lenient：复测从题库拼的 check（bank.js 的 retestCheck）——备用题本来就可以没有 retry、teach，不按「必做题至少 2 道 retry、1 条 teach」要求
+ */
+export function selfCheck(check, base = {}, { lenient = false } = {}) {
   const out = [];
   const P = check.probes;
   const placed = new Set([...check.blocks.flatMap((b) => [...b.must, ...b.optional]), ...check.spare]);
@@ -323,7 +326,7 @@ export function selfCheck(check, base = {}) {
       if (!P[r]) out.push(`${pid} 的 retry 写了 ${r}，块里没有这道题`);
       else if (P[r].type !== p.type) out.push(`${pid} 的 retry ${r} 是 ${P[r].type}，和本题的题型 ${p.type} 不一样`);
     }
-    if (must.has(pid)) {
+    if (must.has(pid) && !lenient) {
       if (p.retry.length < RETRY_MIN) out.push(`${pid} 是必做题，retry 至少 2 道（现在 ${p.retry.length} 道）`);
       if (!Object.keys(p.teach).length) out.push(`${pid} 是必做题，至少写一条 teach（判出没过时显示的一两句）`);
     }
