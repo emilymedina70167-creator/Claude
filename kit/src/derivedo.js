@@ -12,7 +12,7 @@
 //
 // 为什么随机取几组：学生写的是一般的式子（α、β 是任意向量），只拿一组数比，碰巧相等的错式子也会被判对。
 // 每行先按 formula.js 的读法读懂（省略乘号、ᵀ、α β、上标），再用 expr.js 在每一组数上算；有一组不等就是不等。
-import { compile, isNum, isVec, isMat, valueTeX } from './expr.js';
+import { compile, isNum, isVec, isMat, valueTeX, eye } from './expr.js';
 import { normalizeFormula, formulaTeX, FORMULA_FUNCS } from './formula.js';
 
 const FIELD = /^\s*([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/;
@@ -78,19 +78,31 @@ export function sampleEnvs(spec, { seed = 'derive', base = {} } = {}) {
   for (let k = 0; k < spec.samples; k++) {
     const env = { ...base };
     for (const [name, g] of spec.vars) env[name] = draw(g, r);
+    // 单位阵（dr-batch4 第 3 条）：E、I 照 vars 里第一个方阵的阶数给（和 answer 一样认 E），自己定义了的不动
+    const sq = Object.values(env).find((v) => isMat(v) && v.length === v[0]?.length);
+    if (sq) for (const k of ['E', 'I']) if (env[k] === undefined) env[k] = eye(sq.length);
     // 学生写 α、β 也认：a ↔ alpha、b ↔ beta……（老师随便用哪种名字）
     for (const [x, y] of GREEK_ALIAS) { if (env[x] !== undefined && env[y] === undefined) env[y] = env[x]; else if (env[y] !== undefined && env[x] === undefined) env[x] = env[y]; }
     for (const [name, ex] of spec.lets) {
-      try { env[name] = compile(prep(ex, Object.keys(env)))(env); } catch (e) { throw new Error(`let ${name} 算不出来：${e.message}`); }
+      try { env[name] = compile(prep(ex, Object.keys(env), orderOf(env)))(env); } catch (e) { throw new Error(`let ${name} 算不出来：${e.message}`); }
     }
+    // 方阵是 let 算出来的（没有 vars）：单位阵照它的阶数
+    const sq2 = !isMat(env.E) && Object.values(env).find((v) => isMat(v) && v.length === v[0]?.length);
+    if (sq2) for (const k of ['E', 'I']) if (env[k] === undefined) env[k] = eye(sq2.length);
     envs.push(env);
   }
   return envs;
 }
 
-// 学生（和老师）写的式子 → expr.js 能算的
-function prep(text, names) {
-  return normalizeFormula(text, { names, funcs: FORMULA_FUNCS });
+// 学生（和老师）写的式子 → expr.js 能算的。E(2) / I(3) 这样写阶数的单位阵：阶数和题里的方阵一样就当 E；不一样照实说
+const orderOf = (env) => (isMat(env?.E) ? env.E.length : 0);
+function prep(text, names, order = 0) {
+  const t = String(text ?? '').replace(/\b([EI])\s*\(\s*(\d+)\s*\)/g, (all, k, n) => {
+    if (!order) throw new Error(`${all} 里的单位阵：题里没有方阵，页面不知道它几阶（vars 里给一个方阵，或者 let ${k} = [[1,0],[0,1]]）`);
+    if (Number(n) !== order) throw new Error(`${all} 和题里的 ${order} 阶矩阵阶数不一样`);
+    return k;
+  });
+  return normalizeFormula(t, { names, funcs: FORMULA_FUNCS });
 }
 
 const shape = (v) => (isNum(v) ? '一个数' : isVec(v) ? `${v.length} 维列向量` : isMat(v) ? `${v.length}×${v[0].length} 矩阵` : '算不出来的东西');
@@ -110,12 +122,13 @@ const compact = (s) => String(s).replace(/\s+/g, '');
  */
 export function checkLine(spec, envs, prev, line) {
   const names = Object.keys(envs[0] || {});
+  const order = orderOf(envs[0]);
   let norm;
-  try { norm = prep(line, names); } catch (e) { return { ok: false, error: e.message }; }
+  try { norm = prep(line, names, order); } catch (e) { return { ok: false, error: e.message }; }
   let tex = '';
   try { tex = formulaTeX(norm); } catch { tex = ''; }
   let p;
-  try { p = prep(prev, names); } catch (e) { return { ok: false, error: `上一行看不懂：${e.message}`, tex, norm }; }
+  try { p = prep(prev, names, order); } catch (e) { return { ok: false, error: `上一行看不懂：${e.message}`, tex, norm }; }
   for (const env of envs) {
     let a, b;
     try { a = scalarize(compile(p)(env)); } catch (e) { return { ok: false, error: `上一行算不出来：${e.message}`, tex, norm }; }
@@ -130,7 +143,7 @@ export function checkLine(spec, envs, prev, line) {
     }
   }
   let done = false;
-  if (spec.goal) { try { done = compact(prep(spec.goal, names)) === compact(norm); } catch { done = false; } }
+  if (spec.goal) { try { done = compact(prep(spec.goal, names, order)) === compact(norm); } catch { done = false; } }
   return { ok: true, tex, norm, done };
 }
 

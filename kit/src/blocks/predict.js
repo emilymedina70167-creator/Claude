@@ -50,6 +50,8 @@ export function predict(el, src) {
   markDraft(body, () => (!target && (extra.guess[0] !== start[0] || extra.guess[1] !== start[1]) ? `把猜测点拖到了 (${extra.guess.map((x) => Number(x.toFixed(1))).join(', ')})，还没点确定` : ''));
   const id = session.registerScene(el, api, titleText);
   el.dataset.scene = id;
+  // 拖猜测点的过程（dr-batch4 第 6 条）：每拖一次记一条 guess-drag（停在哪、中途停过哪、拖了多久），点「确定」那一下照旧记作答
+  api.on?.('dragend', (name, value, info = {}) => { if (name === 'guess' && !target) session.event('guess-drag', el, { name, value, ...info }); });
 
   go.addEventListener('click', async () => {
     go.disabled = true;

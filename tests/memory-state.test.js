@@ -156,3 +156,21 @@ test('分析游标按写入时间 wroteAt', () => {
   assert.equal(small.shown, 1);
   assert.equal(small.upTo, D('2026-11-18'));
 });
+
+// dr-legacy-label：学习台建好以后记的错题（日期在这一科第一节课之后、或来源写着外部黑板）不叫「旧记录」
+test('错题本的来源：旧记录 / 错题本（没有原始作答）', () => {
+  const m = {
+    sessions: [{ id: 'c-20261105-1', kind: 'class', block: 'L2.1.4', startedAt: D('2026-11-05') }],
+    errors: [
+      { id: 'L2-01', block: 'L2.1.4', date: '2026-09-20', source: '9 月对话', mine: '旧的' },
+      { id: 'L2-60', block: 'L2.1.4', date: '2026-11-05', source: '课上', mine: '新的' },
+      { id: 'L2-61', block: 'L2.1.4', date: '2026-10-26', source: '第2讲重讲（外部黑板）', mine: '黑板课' },
+    ],
+    mastery: [{ id: 'L2.1.4', state: '讲过', log: [{ field: 'state', date: '2026-11-06', by: 'ext', to: '讲过', basis: ['L2-60'] }] }],
+  };
+  const s = deskState({ mem: m, space: 'math', today: '2026-11-18' });
+  assert.match(s.text, /L2-01[^\n]*旧记录）/);
+  assert.match(s.text, /L2-60[^\n]*错题本（没有原始作答），c-20261105-1）/);
+  assert.match(s.text, /L2-61[^\n]*错题本（没有原始作答））/);
+  assert.match(s.text, /掌握 讲过（依据在错题本 L2-60，没有原始作答）/);
+});

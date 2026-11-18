@@ -259,7 +259,9 @@ export function dropForSeg(rules, segId, seq) {
 }
 
 /** 外部的课：stuck 那一条到点了没有（组件多久没动静）。touched：组件最后一次有作答的时刻；armed：预案写下的时刻 */
-export function stuckDue(rule, { now = Date.now(), touched = 0, armed = 0 } = {}) {
-  const i = (rule?.cases || []).findIndex((c) => c.kind === 'stuck' && !c.used && now - Math.max(touched || 0, armed || 0) >= (c.after || 90000));
+// quietMs：页面算好的「那题在学生屏幕上、多久没动静」（timing.js；学生不在那块板上不计时）；不给就按墙上的钟
+export function stuckDue(rule, { now = Date.now(), touched = 0, armed = 0, quietMs } = {}) {
+  const quiet = Number.isFinite(quietMs) ? quietMs : now - Math.max(touched || 0, armed || 0);
+  const i = (rule?.cases || []).findIndex((c) => c.kind === 'stuck' && !c.used && quiet >= (c.after || 90000));
   return i;
 }

@@ -388,24 +388,47 @@ export function createScene(container, src, opts = {}) {
   // 拖把手。按下时记住手指和点的偏移，点跟着手指走、不会一按就跳到指尖；
   // 只点一下（没拖出几像素）不挪点。松手时点真的挪了位置，才发 dragend（课堂 / 实时黑板记成学生的动作）
   let dragFrom = null, grab = [0, 0];
+  // 拖的过程（dr-batch4 第 6 条）：从哪拖起、中途停过的地方（手指停了 0.5 秒以上再动的那一点，最多 8 个）、拖了多久，
+  // 跟着松手那一下的 dragend 一起发（课堂记成学生的动作，外部看得到学生是一路试过来的还是一下到位）
+  let track = null;
+  const PAUSE_MS = 500;
+  const trackMove = (p) => {
+    const t = Date.now();
+    if (!track) return;
+    if (track.pos && t - track.last >= PAUSE_MS && !(track.path.length && close(track.path.at(-1), track.pos)) && track.path.length < 8) track.path.push([...track.pos]);
+    track.last = t;
+    track.pos = [...p];
+  };
+  const trackInfo = () => (track ? { from: track.from, path: track.path.map((q) => q.map((v) => Math.round(v * 100) / 100)), ms: Date.now() - track.t0 } : {});
   plane.draggable((name, [x, y], phase, moved) => {
-    if (opts.dragTargets && Object.hasOwn(opts.dragTargets, name)) { opts.dragTargets[name]([x, y]); draw(); return; }
+    if (opts.dragTargets && Object.hasOwn(opts.dragTargets, name)) {
+      // 猜测点这类（predict）：页面不管值，只记过程
+      if (phase === 'start') track = { t0: Date.now(), last: Date.now(), pos: null, path: [], from: [x, y].map((v) => Math.round(v * 100) / 100) };
+      else if (moved) trackMove([x, y]);
+      opts.dragTargets[name]([x, y]);
+      draw();
+      if (phase === 'end') { if (moved && track) ctl.emit('dragend', name, [x, y].map((v) => Math.round(v * 10) / 10), trackInfo()); track = null; }
+      return;
+    }
     const c = cmds.find((k) => k.kind === 'let' && k.name === name);
     if (!c) return;
     if (phase === 'start') {
       ctl.stop(name);
       dragFrom = valueNow(name);
       grab = isVec(dragFrom) && dragFrom.length === 2 ? [dragFrom[0] - x, dragFrom[1] - y] : [0, 0];
+      track = { t0: Date.now(), last: Date.now(), pos: null, path: [], from: isVec(dragFrom) ? dragFrom.map((v) => Math.round(v * 100) / 100) : null };
       return;
     }
-    if (!moved) { if (phase === 'end') dragFrom = null; return; }
+    if (!moved) { if (phase === 'end') { dragFrom = null; track = null; } return; }
     const step = Number(c.mods.snap) || 0.5;
     state.drag[name] = [snapTo(x + grab[0], step), snapTo(y + grab[1], step)];
+    trackMove(state.drag[name]);
     draw();
     if (phase === 'end') {
       const to = state.drag[name];
-      if (!close(to, dragFrom)) ctl.emit('dragend', name, [...to]);
+      if (!close(to, dragFrom)) ctl.emit('dragend', name, [...to], trackInfo());
       dragFrom = null;
+      track = null;
     }
   });
   // 拖动开始时点在哪（动画中途按住也按画面上的位置算）

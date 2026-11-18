@@ -58,6 +58,10 @@ export const session = {
       rest.stage ??= this.stageOf(el);
       rest.block ??= this.blockOf(el);
       rest.step ??= this.stepOf(el);
+      // 用时（dr-batch4 第 4 条）：课堂给了计时器（timing.js）就按这题在学生屏幕上的时间算——ms 到第一次交、msTotal 到这一次，
+      // 切走、锁屏、翻到别的板不算；判定（judged）不是学生交的，不算。没有计时器照旧按画出来的时刻
+      const tm = rest.ms === undefined && !rest.judged && this.timing ? this.timing.submit(rest.block) : null;
+      if (tm) Object.assign(rest, tm);
       const t0 = Number(el.closest?.('[data-t0]')?.dataset.t0);
       if (rest.ms === undefined && t0) rest.ms = Date.now() - t0;
       // 这道题是哪道真题（组件写了 exam: / like:，render.js 挂在外面）：证据带上，页面按它算真题级

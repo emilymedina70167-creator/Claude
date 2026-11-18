@@ -53,3 +53,32 @@ test('stage / widget 段的写法也查', async () => {
   assert.match(msgs, /JS 写错了/);
   assert.deepEqual(lintTurn({ text: '````board stage id=s2\narray a = 3 1 2\nopen a move\n````', names, ...extra }).problems, []);
 });
+
+// dr-batch4 第 3 条：queue 里的 derive 写了页面不认的 E(2)；预备板里的组件能当 target；ext-check 把预备板照 new 画一遍
+import { deriveDoProblems } from '../tools/ext-lint.js';
+import { queuedBoards, extClass } from '../tools/ext-class.js';
+test('预检：queue 里的 derive、预备板里的组件', async () => {
+  const names = await blockNames();
+  const bad = '````board queue id=b9 title="下一块" after=q1:right\n```derive\nid: dd1\nmode: do\nstart: (A-E(2))^2\n```\n````\n\n````board react target=dd1\ndone: 好\n````';
+  const r = lintTurn({ text: bad, names });
+  assert.ok(r.problems.some((p) => /单位阵/.test(p.msg)), JSON.stringify(r.problems));
+  assert.ok(!r.problems.some((p) => /板上没有 dd1/.test(p.msg)));
+  assert.deepEqual(deriveDoProblems('mode: do\nvars: A=mat(2,2)\nstart: (A-E)^2'), []);
+  assert.equal(queuedBoards(bad)[0].id, 'b9');
+  const spec = extClass({ next: bad });
+  assert.match(spec.turns.at(-1).teacher, /^````board new id=b9 title="下一块"\n```derive/);
+});
+
+// dr-batch4 第 5 条：出题提示（只提醒，不算写错）
+test('出题提示：没写预案、正确选项长、露答案、能绕过前面那步', async () => {
+  const names = await blockNames();
+  const F3 = '```';
+  const text = `\`\`\`\`board new id=b1 title="t"\n${F3}answer\nid: a1\nq: 2+3 等于几\nanswer: 5\n${F3}\n${F3}quiz\nid: z1\nq: 选一个\n- [x] 因为矩阵乘法一般不满足交换律所以不能这样\n- [ ] 能\n- [ ] 不一定\n${F3}\n${F3}quiz\nid: z2\nq: 上面那题得 5，对吗\n- [x] 5\n- [ ] 6\n${F3}\n\`\`\`\`\n\n\`\`\`\`board react target=a1\nwrong: 再想想\n\`\`\`\``;
+  const r = lintTurn({ text, names });
+  const hints = r.problems.filter((p) => p.level === 'hint').map((p) => p.msg).join('\n');
+  assert.doesNotMatch(hints, /a1 没写预案/);
+  assert.match(hints, /z1 没写预案/);
+  assert.match(hints, /长得多/);
+  assert.match(hints, /绕过前面那步/);
+  assert.ok(!r.problems.some((p) => p.level !== 'hint'), JSON.stringify(r.problems));
+});

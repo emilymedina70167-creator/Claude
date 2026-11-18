@@ -2,6 +2,21 @@
 // 拼成 check-lesson.mjs 认的 .class.json（{ unit, subject, turns: [{ student, teacher }] }）。tests/ext-class.test.js
 const num = (d) => Number(d?.seq) || Number(String(d?.id ?? '').replace(/\D/g, '')) || 0;
 const START = '开始上课。';
+const F = '````';
+
+/** 一轮里的 board queue：[{ id, title, body }]（只认开头那行和块里的内容，不跑页面的解析） */
+export function queuedBoards(text = '') {
+  const out = [];
+  const re = /^\s{0,3}(`{3,}|~{3,})\s*board\s+queue\b([^\n]*)\n([\s\S]*?)^\s{0,3}\1\s*$/gm;
+  for (const m of String(text).matchAll(re)) {
+    const head = m[2];
+    const id = head.match(/\bid\s*=\s*([\w\-.~:@+]+)/)?.[1];
+    if (!id) continue;
+    const title = head.match(/\btitle\s*=\s*"([^"]*)"/)?.[1] || head.match(/\btitle\s*=\s*(\S+)/)?.[1] || '';
+    out.push({ id, title, body: m[3].replace(/\n$/, '') });
+  }
+  return out;
+}
 
 export function extClass({ ins = [], outs = [], next = '', unit = '外部的课', subject = '' } = {}) {
   const outBy = new Map((outs || []).map((o) => [num(o), String(o.text || '')]));
@@ -10,6 +25,8 @@ export function extClass({ ins = [], outs = [], next = '', unit = '外部的课'
   if (next) {
     const latest = [...outBy.keys()].sort((a, b) => b - a)[0];
     turns.push({ student: latest ? outBy.get(latest) : START, teacher: String(next) });
+    // 这一轮的预备板（board queue）照 board new 画一遍（dr-batch4 第 3 条：queue 里的组件写错了，预检以前说没问题）
+    for (const q of queuedBoards(String(next))) turns.push({ student: `（预检：预备板 ${q.id} 到了开的时候）`, teacher: `${F}board new id=${q.id}${q.title ? ` title="${q.title.replace(/"/g, '＂')}"` : ''}\n${q.body}\n${F}` });
   }
   return { unit, ...(subject ? { subject } : {}), turns };
 }

@@ -34,7 +34,8 @@ export function scene(el, src) {
   if (body.querySelector('.handle')) body.querySelector('.w-side').insertAdjacentHTML('beforeend', '<div class="w-hint">拖动圆点可以移动它。</div>');
   const id = session.registerScene(el, api, titleText);
   // 学生拖完一个点（真的挪了位置才算）：课堂 / 实时黑板记成一个动作，数保留两位小数
-  api.on('dragend', (name, value) => session.event('drag', el, { name, value: round2(value) }));
+  // 带上拖的过程（dr-batch4 第 6 条）：from 从哪拖起、path 中途停过的点、ms 拖了多久
+  api.on('dragend', (name, value, info = {}) => session.event('drag', el, { name, value: round2(value), ...info }));
   if (api.goals) {
     const done = session.gate(el, titleText);
     let hit = 0;

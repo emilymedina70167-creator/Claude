@@ -18,6 +18,7 @@ import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
 import { pendingIns, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE, saidItems, memoLines } from './ext.js';
 import { queueDue, applyEdits, keptComponents, componentSources } from './extboard.js';
 import { errorOfJudged } from '../solvespec.js';
+import { watchTiming } from '../timing.js';
 import { stageBoxState } from '../blocks/stagebox.js';
 import { shouldFire, eventsOf, filterOps, handBack, helperPrompt, helperLines, rebuildHelpers } from './delegate.js';
 import { journalId } from '../project/journal.js';
@@ -169,6 +170,9 @@ export async function renderClass(root, meta, desk = null) {
   // board stage 刷新前的样子（dr-trail-fix 3）：舞台的 log 存在 stage_logs/{段 id}（学习台里换到 sessions/{编号}/ 下面），再画时放回
   // 解答题交的照片（blocks/solve.js）：先传进 assets 拿编号，作答记录带上编号给外部（read_asset）
   session.uploadImage = readOnly ? null : (blob) => uploadImage(blob);
+  // 每道题在学生屏幕上的时间（timing.js，dr-batch4 第 3、4 条）：作答的 ms / msTotal、stuck= 按它算
+  const timing = readOnly ? null : watchTiming(root).timer;
+  session.timing = timing;
   session.stageLogs = {
     get: (id) => db.doc(`stage_logs/${id}`).get().then((x) => (x.exists ? x.data() : null), () => null),
     put: (id, doc) => (readOnly ? null : db.doc(`stage_logs/${id}`).set(doc)),
@@ -589,7 +593,7 @@ export async function renderClass(root, meta, desk = null) {
     for (const d of s.docs) {
       aimEvs.push({ id: d.id, ...d.data() });
       const x = fromEvidence({ id: d.id, ...d.data() });
-      if (x.kind === 'record') an.push(x.rec);
+      if (x.kind === 'record') { an.push(x.rec); if (x.rec.block && !x.rec.judged) timing?.seedFirst(x.rec.block, Number(x.rec.at) || 0); }
       else if (x.kind === 'event') ev.push(x.rec);
     }
     return { an, ev };
@@ -2004,7 +2008,9 @@ export async function renderClass(root, meta, desk = null) {
     const live = liveBlockIds();
     for (const [target, rule] of reacts) {
       if (!live.has(target)) continue;
-      const i = stuckDue(rule, { touched: extState.touch.get(String(target)), armed: rule.at || 0 });
+      // 按那题在学生屏幕上的时间算（学生翻到别的板、切走了不算没动静）
+      const since = Math.max(extState.touch.get(String(target)) || 0, rule.at || 0);
+      const i = stuckDue(rule, { touched: extState.touch.get(String(target)), armed: rule.at || 0, ...(timing ? { quietMs: timing.visibleMs(String(target), since) } : {}) });
       if (i < 0) continue;
       const c = rule.cases[i];
       const plan = { fired: [{ target, seq: rule.seq, index: i, kind: 'stuck', text: c.text, show: c.show || [] }], talk: c.text || '', show: c.show || [] };
@@ -2028,7 +2034,8 @@ export async function renderClass(root, meta, desk = null) {
       if (r.off || !r.target) continue;
       if (r.on.includes('stuck') && r.stuck) {
         const last = Math.max(extState.touch.get(String(r.target)) || 0, r.armedAt || 0);
-        if (last && now - last >= r.stuck && r.stuckAt !== last) { r.stuckAt = last; helperFire({ kind: 'stuck', target: r.target }); }
+        const quiet = timing ? timing.visibleMs(String(r.target), last) : now - last;
+        if (last && quiet >= r.stuck && r.stuckAt !== last) { r.stuckAt = last; helperFire({ kind: 'stuck', target: r.target }); }
       }
       if (r.on.includes('draft')) {
         const el = board.querySelector(`[data-bid="${CSS.escape(String(r.target))}"]`);

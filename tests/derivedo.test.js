@@ -47,3 +47,16 @@ test('只比一组数时用 let 和整节课的量；课堂记录写清第几行
   assert.match(t, /b3 里的 derive dd-1：第 3 行写了 A（和上一行不相等：上一行等于 5，这一行等于 4），这一行第 2 次/);
   assert.match(actionText({ source: 'record', type: 'derive', block: 'dd-1', final: true, ok: true, attempts: 4, value: "a(b'a)b' = tr(A)A" }), /推完了/);
 });
+
+// dr-batch4 第 3 条：derive 认单位阵 E（阶数照 vars 里的方阵），E(n) 阶数对得上才认
+import { parseDeriveDo as pdd, sampleEnvs as se, checkLine as cl } from '../kit/src/derivedo.js';
+test('derive 认 E、E(2)', () => {
+  const sp = pdd('mode: do\nvars: A=mat(2,2)\nstart: (A-E)^2\ngoal: A^2-2A+E');
+  const envs = se(sp);
+  assert.equal(cl(sp, envs, '(A-E)^2', 'A^2-2A+E').ok, true);
+  assert.equal(cl(sp, envs, '(A-E)^2', 'A^2-2A+E(2)').ok, true);
+  assert.match(cl(sp, envs, '(A-E)^2', 'A^2-2A+E(3)').error, /阶数不一样/);
+  assert.equal(cl(sp, envs, '(A-E)^2', 'A^2-2A+1').ok, false);
+  const sp2 = pdd('mode: do\nlet A = [[1,2],[3,4]]\nstart: A*E');
+  assert.equal(cl(sp2, se(sp2), 'A*E', 'A').ok, true);
+});

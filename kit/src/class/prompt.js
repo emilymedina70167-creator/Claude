@@ -1220,7 +1220,9 @@ function eventText(a, type) {
     case 'drag':
       // 演示、分拍板书的 step：走到第几步
       if (get('name') === 'step' && get('beat') !== undefined) return `[动作] ${where(a, '演示', { title: false })}：走到第 ${val(get('value'))} 步（共 ${val(get('beat'))} 步）`;
-      return `[动作] ${where(a, '图', { title: false })}：把 ${get('name') ?? '点'} 拖到 ${val(get('value'))}`;
+      return `[动作] ${where(a, '图', { title: false })}：把 ${get('name') ?? '点'}${dragHow(get)} 拖到 ${val(get('value'))}${dragTail(get)}`;
+    // 预测题拖猜测点（dr-batch4 第 6 条）：还没点「确定」，只是试
+    case 'guess-drag': return `[动作] ${where(a, 'predict', { title: false })}：把猜测点${dragHow(get)}拖到 ${val(get('value'))}${dragTail(get)}，还没点确定`;
     case 'sure': {
       const sure = get('sure'), ok = get('ok');
       return `[动作] ${where(a, '组件', { title: false })}${subText}：学生标了「${sure ? '有把握' : '没把握'}」${sure === false && ok === true ? '——这题答对了，但没把握：没把握按没会处理' : sure === true && ok === false ? '——答错了却有把握：多半是一个误解，先弄清学生是怎么想的' : ''}`;
@@ -1242,6 +1244,14 @@ function unknownText(a, type) {
   try { json = JSON.stringify(rest); } catch { json = ''; }
   return `[动作] ${type || '操作'}${loc ? `（${loc}）` : ''}${json && json !== '{}' ? `：${clip(json.replace(/\s+/g, ' '), 200)}` : ''}`;
 }
+
+// 拖的过程（dr-batch4 第 6 条，scene.js 的 trackInfo）：从哪拖起、中途停过哪几处、拖了多久
+const dragHow = (get) => (Array.isArray(get('from')) ? ` 从 ${val(get('from'))}` : '');
+const dragTail = (get) => {
+  const path = Array.isArray(get('path')) ? get('path') : [];
+  const ms = Number(get('ms'));
+  return `${path.length ? `，中途停在 ${path.map((p) => val(p)).join('、')}` : ''}${ms > 0 ? `（拖了 ${Math.max(1, Math.round(ms / 1000))} 秒）` : ''}`;
+};
 
 export function actionText(a) {
   if (typeof a === 'string') return a;
@@ -1519,7 +1529,7 @@ export function reportable(a) {
   if (!a || typeof a !== 'object') return false;
   const type = typeOf(a);
   // 外部设计的交互（board stage / widget）记的动作也要告诉外部
-  if (a.source === 'event') return type === 'reveal' || type === 'drag' || type === 'sure' || type === 'gloss' || EXT_EVENTS.has(type);
+  if (a.source === 'event') return type === 'reveal' || type === 'drag' || type === 'guess-drag' || type === 'sure' || type === 'gloss' || EXT_EVENTS.has(type);
   if (type === 'ask' || type === 'findbug-hint') return false;
   if (a.final && !a.revealed && !a.giveup) return false;
   return true;
@@ -1536,7 +1546,7 @@ export function actionTrigger(a, { lastStep = false } = {}) {
   if (!reportable(a)) return urgent ? 'now' : null;
   if (urgent) return 'now';
   if (a.source === 'event' && typeOf(a) === 'reveal' && !lastStep) return 'later';
-  if (a.source === 'event' && typeOf(a) === 'drag') return 'later';
+  if (a.source === 'event' && (typeOf(a) === 'drag' || typeOf(a) === 'guess-drag')) return 'later';
   // 点开生词看意思：页面当场显示了，不单独调用，跟着下一条告诉老师（知道学生哪几个词不认识）
   if (a.source === 'event' && typeOf(a) === 'gloss') return 'later';
   // 舞台上学生的每一下：跟着下一条说（舞台到了该叫老师的那一刻另记 stage-call）
