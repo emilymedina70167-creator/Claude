@@ -8,6 +8,7 @@ import { parseOutput } from '../kit/src/class/protocol.js';
 import { parseLets, calcValue, letValue, expandCalc } from '../kit/src/exact.js';
 import { parseDeriveDo, sampleEnvs, checkLine } from '../kit/src/derivedo.js';
 import { parseSolve } from '../kit/src/solvespec.js';
+import { selfCheck } from '../kit/src/check/spec.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(here, '../kit/src');
@@ -87,6 +88,8 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
   for (const o of out.ops) {
     if (o.warn) problems.push({ where: `${o.op} ${o.id || ''}`, msg: o.warn });
     if (o.errors?.length) for (const e of o.errors) problems.push({ where: `${o.op}`, msg: e });
+    // 检验（计划 2，check/spec.js）：example 照条件验一遍、必做题 retry 至少 2 道、每道题都排进去了……和页面开检验之前查的同一份
+    if (o.op === 'check' && o.check) for (const msg of selfCheck(o.check)) problems.push({ where: `check id=${o.id}`, msg });
     if ((o.op === 'add' || o.op === 'new' || o.op === 'stage' || o.op === 'widget') && (segIds.has(o.id) || here.has(o.id))) problems.push({ where: `${o.op} id=${o.id}`, msg: `${o.id} 已经用过了：新的一段换一个 id，改这一段用 board replace id=${o.id}` });
     if ((o.op === 'hide' || o.op === 'show' || o.op === 'move' || o.op === 'edit') && !segIds.has(o.id) && !here.has(o.id)) problems.push({ where: `${o.op} id=${o.id}`, msg: `黑板上没有 ${o.id}` });
     if (segOps([o]).length) {
