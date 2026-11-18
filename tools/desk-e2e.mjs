@@ -1286,6 +1286,46 @@ const SUITES = {
     return t;
   },
 
+  // 每一步都有记录、每一条都被分析（dev_requests/dr-learning-trail、dr-memcheck）：对话里的话进证据（T1）、memo 记成没有（T2）、
+  // 讲过（coverage，T4）、助手的话进证据（T6）；首页写 since-analysis、state、简报最前面两行（T3、T5、memcheck 3）
+  async trail(browser) {
+    const t = await seeded(browser);
+    const F4 = '````', F3 = '```';
+    const today = await t.page.evaluate(() => new Date().toLocaleDateString('sv-SE'));
+    const sid = `c-${today.replace(/-/g, '')}-7`;
+    const db = async () => t.db();
+    const turn1 = [
+      `${F4}board new id=b1 title="可交换" block=L2.1.4\n${F3}answer\nid: q1\nq: 2+3 等于几？\nanswer: 5\n${F3}\n${F4}`,
+      `${F4}board memo\ntodo text="测试：下次补讲幂"\nfoo bar\n${F4}`,
+      `${F4}board claude id=cl1 on=wrong target=q1\n<<<\n一句话\n>>>\n${F4}`,
+    ].join('\n\n');
+    await plant(t, {
+      [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', block: 'L2.1.4', title: '记录（外部）', space: 'math', startedAt: Date.now() },
+      [`sessions/${sid}/ext_in/001`]: { seq: 1, text: turn1, said: [{ text: '对话里的第一句', at: Date.now() - 60000 }, { text: '对话里的第二句' }], at: Date.now() },
+    });
+    await t.open(sid);
+    const r = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/001`]?.result?.memo, { timeout: 20000, what: 'result.memo（memo 每一行记成没有）' });
+    check(r.some((x) => x.ok && /todo/.test(x.line)) && r.some((x) => !x.ok), `result.memo 不对：${JSON.stringify(r).slice(0, 300)}`);
+    const says = (await t.docs('evidence')).filter((e) => e.session === sid && e.src === 'say' && e.via === 'chat');
+    check(says.length === 2, `对话里的两句没都记成证据：${says.length}`);
+    await t.waitFor(async () => (await db())['coverage/L2.1.4']?.sessions?.includes(sid), { timeout: 8000, what: '板上画了 block=L2.1.4 的段，记「讲过」' });
+    const box = t.page.locator('[data-bid="q1"] .ans-input input, [data-bid="q1"] .ans-input textarea, [data-bid="q1"] .ans-input [contenteditable="true"]').first();
+    await box.click(); await t.page.keyboard.type('6'); await t.page.click('[data-bid="q1"] .ans-check');
+    await t.waitFor(async () => (await t.docs('evidence')).some((e) => e.session === sid && e.src === 'helper' && e.role === 'helper'), { timeout: 15000, what: '助手的话记成证据 src: helper' });
+    // 首页：since-analysis、state、简报最前面的两行
+    await t.open();
+    const since = await t.waitFor(async () => { const x = (await db())['meta/since-analysis-math']; return x && /对话里的第一句/.test(x.text) && /外部叫来的助手/.test(x.text) ? x : null; }, { timeout: 20000, what: 'meta/since-analysis-math 有对话里的话和助手的话' });
+    check(since.n > 0, 'since-analysis 没数到证据');
+    const st = await t.waitFor(async () => { const x = (await db())['meta/state-math']; return x?.rows?.some((r) => r.block === 'L2.1.4' && r.taught) ? x : null; }, { timeout: 15000, what: 'meta/state-math 里 L2.1.4 讲过' });
+    check(typeof st.text === 'string' && Array.isArray(st.conflicts), 'meta/state-math 不全');
+    const brief = await t.waitFor(async () => { const x = (await db())['meta/brief']; return x && /^现状快照/.test(x.text) && /分析游标/.test(x.text) ? x : null; }, { timeout: 15000, what: '开场简报最前面写快照和分析游标' });
+    // 外部挪了游标：since-analysis 跟着只剩以后的
+    await plantLive(t, { 'meta/cursor-math': { at: Date.now(), by: 'ext' } });
+    await t.waitFor(async () => (await db())['meta/since-analysis-math']?.n === 0, { timeout: 15000, what: '挪了游标以后 since-analysis 清零' });
+    check(!!brief, '');
+    return t;
+  },
+
   // 被迭代掉的几种课（舞台、一问一答、实时黑板、自学单元，第十四轮搬进 archive/）：以前上过的点进去只出文字，不报错
   async oldclass(browser) {
     const t = await seeded(browser);

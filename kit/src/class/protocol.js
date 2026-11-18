@@ -296,7 +296,7 @@ function markOp(op, body) {
 
 function segmentCommand(op, rest) {
   const toks = tokenize(rest);
-  let id, title, point, aim, col, cols, hold = false;
+  let id, title, point, aim, col, cols, blockKey, hold = false;
   for (let k = 0; k < toks.length; k++) {
     const t = toks[k];
     if (t.key === 'id') id = t.value;
@@ -306,6 +306,8 @@ function segmentCommand(op, rest) {
     else if (t.key === 'point') point = t.value;
     // 这一段的题是给这节课要拿下的哪件事用的（aims.js）：学生在这段的作答挂到那件事上
     else if (t.key === 'aim') aim = t.value;
+    // 这一段讲的是课程地图的哪一块（dr-learning-trail T4：「讲过」按段实际讲的块记；不写就是这节课的块）
+    else if (t.key === 'block') blockKey = t.value;
     // 版面（canvas.js）：放在第几栏（col=2 / col=all）；new 上写这块板分几栏（cols=7/5）
     else if (t.key === 'col') col = t.value;
     else if (t.key === 'cols') cols = t.value;
@@ -349,6 +351,10 @@ function segmentCommand(op, rest) {
     // point 写错只丢掉 point，段照常写（2026-10-28 point=复现R19 让整块板当成普通文字写在了板顶）
     if (!/^[A-Za-z0-9_-]{1,40}$/.test(point)) out.warn = `point「${point}」没用上：只能用字母、数字、- 和 _（写掌握状态编号 # 后面那段，比如 point=tr），这一段的作答没记成知识点的证据`;
     else out.point = point;
+  }
+  if (blockKey !== undefined && !NO_TITLE.has(op)) {
+    if (!/^(?:[A-Z]{2}-)?L\d+(?:\.\d+){0,2}$/.test(blockKey)) out.warn = [out.warn, `block「${blockKey}」没用上：写课程地图的编号（L2.1.4、DS-L8.2.3），这一段的「讲过」记在这节课的块上`].filter(Boolean).join('；');
+    else out.block = blockKey;
   }
   if (aim !== undefined && !NO_TITLE.has(op)) {
     // 和 point 一样：写错只丢掉 aim，段照常写。这件事这节课有没有，课堂执行时才知道

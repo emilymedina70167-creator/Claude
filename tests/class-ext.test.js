@@ -79,3 +79,25 @@ test('分屏照实写', () => {
   const t = bst2({ segs: [], pages: [], cur: 0, screen: { w: 860, h: 734, landscape: true, split: true, full: { w: 1180, h: 820 } } });
   assert.match(t, /横屏 860×734（分屏：这个页面只占屏幕的一部分，整个屏幕 1180×820）/);
 });
+
+// dr-learning-trail T1、T2、T6
+import { saidItems, memoLines, inResult as inR4 } from '../kit/src/class/ext.js';
+import { helperEvidence } from '../kit/src/memory/session.js';
+test('said：字符串或数组，每一句一条', () => {
+  assert.deepEqual(saidItems('就这样'), [{ text: '就这样', at: null, images: [] }]);
+  assert.deepEqual(saidItems([{ text: '第一句', at: 5 }, { text: '', images: ['a1'] }, { text: '  ' }, null]), [{ text: '第一句', at: 5, images: [] }, { text: '', at: null, images: ['a1'] }]);
+  assert.deepEqual(saidItems(undefined), []);
+});
+test('result.memo：每一行写成没有', () => {
+  const m = memoLines({ pds: [{ line: 'error q=…', coll: 'errors', target: 'L2-60' }], rejected: [{ line: 'weakness …', error: '守卫拒了' }], extra: [{ line: 'block L2.1.4', ok: true, id: 'sessions/c-1.block' }] });
+  assert.deepEqual(m.map((x) => [x.ok, x.id || x.error]), [[true, 'sessions/c-1.block'], [true, 'errors/L2-60'], [false, '守卫拒了']]);
+  assert.deepEqual(inR4({ memo: m }).memo.length, 3);
+  assert.deepEqual(memoLines(null), []);
+});
+test('页面里的 Claude 说的话记成证据 src: helper', () => {
+  const e = helperEvidence('看第二步', { session: 's1', block: 'L2.1.4' }, { role: 'coach', target: 'q1' });
+  assert.equal(e.src, 'helper');
+  assert.equal(e.role, 'coach');
+  assert.equal(e.target, 'q1');
+  assert.equal(e.session, 's1');
+});

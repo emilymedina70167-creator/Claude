@@ -15,7 +15,7 @@ import { getStore, isDev, assetUrl } from '../live/store.js';
 import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
-import { pendingIns, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE } from './ext.js';
+import { pendingIns, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE, saidItems, memoLines } from './ext.js';
 import { queueDue, applyEdits, keptComponents } from './extboard.js';
 import { stageBoxState } from '../blocks/stagebox.js';
 import { shouldFire, eventsOf, filterOps, handBack, helperPrompt, helperLines, rebuildHelpers } from './delegate.js';
@@ -41,7 +41,7 @@ import { markText } from '../markspec.js';
 import { calcValue, exactText } from '../exact.js';
 import { strokesToBlob } from '../ink/engine.js';
 import { shouldNudge, stuckText, STUCK_MS } from './stuck.js';
-import { fromEvidence, sayEvidence, draftEvidence, observationRecord, slipRecord, memoryRead } from '../memory/session.js';
+import { fromEvidence, sayEvidence, helperEvidence, draftEvidence, observationRecord, slipRecord, memoryRead } from '../memory/session.js';
 import { callCost, usageOf, usageText } from './usage.js';
 import { reportText, itemsOf } from '../memory/report.js';
 import { checkAims, mergeAims, aimsSummary, aimsLine, STATUS_TEXT } from './aims.js';
@@ -243,6 +243,7 @@ export async function renderClass(root, meta, desk = null) {
   const aimsNow = ({ live = true } = {}) => (aims ? aimsSummary(aims, itemsOf(aimEvs), live ? { live: true } : {}) : null);
   let aimsTimer = 0;
   const aimsSoon = () => { if (!aims) return; clearTimeout(aimsTimer); aimsTimer = setTimeout(paintAims, 60); };
+  let turnMemoBad = []; // 这一轮 memo 块里读不懂的行（外部的课写进 ext_in 的 result.memo）
   let turnMemos = []; // 这一轮 memo 块里读懂的条目（执行完黑板指令、记下这一轮以后再写进记忆库）
   let turnNotes = []; // 这一轮 note 块里的笔记本操作（同上，讲完以后再写）
   // 预案（react.js，docs/board-plan.md）：组件 id → { target, seq（哪一轮写的）, seg（组件所在的段）, by, cases }
@@ -516,7 +517,7 @@ export async function renderClass(root, meta, desk = null) {
           Object.assign(bv.ensurePage(page), { lead: d.id, title: d.title || '' });
         }
         if (page) bv.ensurePage(page);
-        const seg = { id: d.id, seq: d.seq || 0, page, place, title: d.title || '', md: String(d.md || ''), hidden: !!d.hidden, held: !!d.held, failed: !!d.failed, pending: false, sec: null, ...(d.point ? { point: d.point } : {}), ...(d.aim ? { aim: d.aim } : {}), ...(CANVAS && d.col !== undefined ? { col: d.col } : {}), ...(Number.isFinite(d.ord) ? { ord: d.ord } : {}) };
+        const seg = { id: d.id, seq: d.seq || 0, page, place, title: d.title || '', md: String(d.md || ''), hidden: !!d.hidden, held: !!d.held, failed: !!d.failed, pending: false, sec: null, ...(d.point ? { point: d.point } : {}), ...(d.block ? { block: d.block } : {}), ...(d.aim ? { aim: d.aim } : {}), ...(CANVAS && d.col !== undefined ? { col: d.col } : {}), ...(Number.isFinite(d.ord) ? { ord: d.ord } : {}) };
         // 一问一答的活板：每一轮的行数、回显、小字、找到的例子都存在这一段上
         segs.set(seg.id, seg);
         if (old) legacy.push(seg);
@@ -716,9 +717,11 @@ export async function renderClass(root, meta, desk = null) {
     // 改讲别的块：页面自己改（sessions 记下来，之后的证据、记忆摘要都按新的块），不进改动单
     const switches = entries0.filter((e) => e.kind === 'block');
     const entries1 = entries0.filter((e) => e.kind !== 'block');
+    const extra = []; // 不进改动单的几种（换块、关于学生的新笔记）也照实记成没有（dr-learning-trail T2）
     for (const e of switches) {
       const r = blockSwitch(e, { mem: desk.mem, block: desk.block, space: desk.space });
-      if (r.error) { addTurn({ role: 'system', kind: 'note', text: `[系统] memo 里「${e.line}」没生效：${r.error}` }); continue; }
+      if (r.error) { extra.push({ line: e.line, ok: false, error: r.error }); addTurn({ role: 'system', kind: 'note', text: `[系统] memo 里「${e.line}」没生效：${r.error}` }); continue; }
+      extra.push({ line: e.line, ok: true, id: `sessions/${desk.sid}.block` });
       const was = desk.block;
       desk.block = r.block;
       desk.blocks = [...new Set([...(desk.blocks || [was].filter(Boolean)), r.block])];
@@ -730,19 +733,19 @@ export async function renderClass(root, meta, desk = null) {
     }
     // 关于学生的事（know；有记忆摘要时旧的五种写法也算）：记成摘要的新笔记，不进改动单（第十三轮）
     const { notes: knows, rest } = knowNotes(entries1, { on: !!desk.summary?.on(), history, space: desk.space, session: desk.sid });
-    if (desk.summary) for (const k of knows) desk.summary.note(k).catch((e) => console.warn('新笔记没记成', e));
+    if (desk.summary) for (const k of knows) { extra.push({ line: k.line || k.text || '', ok: true, id: 'summary（新笔记）' }); desk.summary.note(k).catch((e) => console.warn('新笔记没记成', e)); }
     const entries = desk.summary ? rest : entries1;
-    if (!entries.length) return { pds: [], rejected: [] };
+    if (!entries.length) return { pds: [], rejected: [], extra };
     try {
       const r = await desk.memo.ops.applyMemo(entries, { session: desk.sid, block: desk.block, space: desk.space, turn: seq, turns: history.filter((t) => !t.discarded), closing });
       const p = pages.get(pageN);
       if (p && r.pds.length) { p.memo = [...(p.memo || []), ...r.pds.map((x) => x.id)]; savePage(p); bv.paint(p); }
       if (r.rejected.length) addTurn({ role: 'system', kind: 'note', text: `[系统] memo 里有 ${r.rejected.length} 条没记：\n${r.rejected.map((x) => `- ${x.line}\n  原因：${x.error}`).join('\n')}` });
-      return r;
+      return { ...r, extra };
     } catch (e) {
       console.warn('memo 没记成', e);
       addTurn({ role: 'system', kind: 'note', text: `[系统] memo 没记成（${e?.message || e}），这一轮的改动都没写。` });
-      return null;
+      return { pds: [], rejected: entries.map((x) => ({ line: x.line, error: `没写成：${e?.message || e}` })), extra };
     }
   }
 
@@ -996,6 +999,28 @@ export async function renderClass(root, meta, desk = null) {
     return { op: 'aims', ok: true, n: aims.length };
   }
 
+  // —— 讲过（dr-learning-trail T4）：板上画上了一段，就记这一段讲的块（段写的 block=，不写是这节课的块）、知识点（point=）讲过了。
+  // coverage/{编号}（# 换成 ~，数据库的文档名不收 #）= { id, kind, block, space, sessions, first, last, segs }。和「会不会」分开：会不会只看作答
+  const covered = new Map(); // 编号 → { sessions, first, segs }（这次打开页面以后写过的）
+  async function coverMark(seg) {
+    if (!desk?.sid || readOnly || !seg || seg.place === 'pin' || String(seg.id).startsWith('~')) return;
+    const block = seg.block || desk.block;
+    if (!block) return;
+    for (const id of [block, ...(seg.point ? [`${block}#${seg.point}`] : [])]) {
+      const doc = `coverage/${id.replace(/#/g, '~')}`;
+      let had = covered.get(id);
+      if (!had) {
+        const cur = await db.doc(doc).get().then((x) => (x.exists ? x.data() : null), () => null);
+        had = { sessions: Array.isArray(cur?.sessions) ? cur.sessions : [], first: Number(cur?.first) || Date.now(), segs: Number(cur?.segs) || 0, seen: new Set() };
+        covered.set(id, had);
+      }
+      if (had.seen.has(seg.id)) continue; // 同一段改写不重复数
+      had.seen.add(seg.id);
+      had.segs += 1;
+      if (!had.sessions.includes(desk.sid)) had.sessions = [...had.sessions, desk.sid].slice(-40);
+      db.doc(doc).set({ id, kind: id.includes('#') ? 'point' : 'block', block, space: spaceOfId(block), sessions: had.sessions, first: had.first, last: Date.now(), segs: had.segs }).catch((e) => reportError(e, { what: '写「讲过」', path: doc, soft: true }));
+    }
+  }
   function editSeg(op, failures, notes) {
     const seg = segs.get(op.id);
     if (!seg || seg.pending || seg.failed || !seg.sec) return { op: 'edit', id: op.id, ok: false, error: seg ? `${op.id} 没画出来，改不了（用 board replace）` : `黑板上没有 ${op.id}` };
@@ -1031,6 +1056,7 @@ export async function renderClass(root, meta, desk = null) {
     if (op.op === 'memo') {
       if (!desk?.memo) return { op: 'memo', ok: false, error: 'memo 只在学习台里上课时能用（单独的课堂没有记忆库）' };
       turnMemos.push(...op.entries);
+      turnMemoBad.push(...(op.errors || [])); // 读不懂的行也记成没写成（T2）
       if (op.errors?.length) notes.push(`memo 里有 ${op.errors.length} 行没读懂，没记：\n${op.errors.map((e) => `  - ${e}`).join('\n')}`);
       return { op: 'memo', ok: true, n: op.entries.length };
     }
@@ -1122,7 +1148,7 @@ export async function renderClass(root, meta, desk = null) {
         }
         seg = { id: op.id, seq: ++segSeq, page, place: toPin ? 'pin' : 'board', title: '', md: '', hidden: false, failed: false, pending: false, sec: null };
       }
-      const next = { ...seg, title: op.title ?? seg.title, md: op.body || '', ...(op.point ? { point: op.point } : {}), ...(op.aim ? { aim: op.aim } : {}) };
+      const next = { ...seg, title: op.title ?? seg.title, md: op.body || '', ...(op.point ? { point: op.point } : {}), ...(op.block ? { block: op.block } : {}), ...(op.aim ? { aim: op.aim } : {}) };
       if (op.aim && !(aims || []).some((a) => a.id === op.aim)) notes.push(`${op.op} ${op.id}：aim=${op.aim} 不在这节课要拿下的事里${aims?.length ? `（现在有 ${aims.map((a) => a.id).join('、')}）` : aims ? '（还没定：没写 board aims）' : '（这节课不定要拿下的事）'}，这一段的作答哪件都不算。`);
       // 藏着的段（add … hold，等预案揭开）：改写时还藏着；写错了等重写时记着要藏
       const held = op.op === 'replace' ? !!seg.held : op.op === 'add' && (!!op.hold || !!(seg.pending && seg.held));
@@ -1166,6 +1192,7 @@ export async function renderClass(root, meta, desk = null) {
       if (CANVAS && seg.place !== 'pin') layoutPage(seg.page);
       rewrites.delete(seg.id);
       saveSeg(seg);
+      coverMark(seg);
       // 板的第一段改了标题：板头跟着改
       const pg = pages.get(seg.page);
       if (pg && pg.lead === seg.id && op.title !== undefined && pg.title !== seg.title) { pg.title = seg.title; bv.paint(pg); savePage(pg); }
@@ -1380,7 +1407,7 @@ export async function renderClass(root, meta, desk = null) {
   }
 
   function saveSeg(seg) {
-    sink.put('steps', { id: seg.id, seq: seg.seq, page: seg.page || 0, place: seg.place || 'board', md: seg.md, title: seg.title || '', hidden: !!seg.hidden, failed: !!seg.failed, ...(seg.held ? { held: true } : {}), ...(seg.col !== undefined ? { col: seg.col } : {}), ...(Number.isFinite(seg.ord) ? { ord: seg.ord } : {}), ...(seg.point ? { point: seg.point } : {}), ...(seg.aim ? { aim: seg.aim } : {}), by: 'class', at: Date.now() });
+    sink.put('steps', { id: seg.id, seq: seg.seq, page: seg.page || 0, place: seg.place || 'board', md: seg.md, title: seg.title || '', hidden: !!seg.hidden, failed: !!seg.failed, ...(seg.held ? { held: true } : {}), ...(seg.col !== undefined ? { col: seg.col } : {}), ...(Number.isFinite(seg.ord) ? { ord: seg.ord } : {}), ...(seg.point ? { point: seg.point } : {}), ...(seg.block ? { block: seg.block } : {}), ...(seg.aim ? { aim: seg.aim } : {}), by: 'class', at: Date.now() });
   }
 
   function refresh() {
@@ -1799,8 +1826,9 @@ export async function renderClass(root, meta, desk = null) {
         if (!await claimIn(d)) continue;
         const got = Date.now();
         extState.ins.push({ id: d.id, after: d.after, got });
-        // 外部抄进来的学生原话：记成学生说的话（证据），以后的课、守卫都看得到
-        if (desk && String(d.said || '').trim()) sink.put('evidence', sayEvidence(String(d.said), evCtx(null)));
+        // 外部抄进来的学生原话（dr-learning-trail T1：一个字符串，或者每一句一条 [{ text, at, images }]）：
+        // 每一句记成学生说的话（证据 src: say, via: chat），以后的课、课后报告、守卫都看得到
+        if (desk) for (const it of saidItems(d.said)) sink.put('evidence', { ...sayEvidence(it.text, evCtx(null), it.images), via: 'chat', ...(it.at ? { at: it.at } : {}) });
         let error = '';
         let out = null;
         // board add … from=集合/文档（需求 R2）：后台活的结果换进块里再执行
@@ -1822,8 +1850,10 @@ export async function renderClass(root, meta, desk = null) {
         // 以前板上的东西被标了、动了、改了（需求 R8）：学生不在那块板上时板上方提醒一条
         const away = (out?.boardOps || []).map((o) => (o?.ok ? (o.away ? o.page : ['replace', 'edit', 'hide'].includes(o.op) ? segs.get(o.id)?.page : 0) : 0)).filter((n) => n && n !== bv.cur && n !== bv.view).at(-1);
         if (away) { extState.away = away; paintExtTools(); }
+        // T2：这一轮 memo 每一行写进去了没有（写成了哪一条、没写成为什么）
+        const memo = [...(out?.memoRun ? memoLines(await out.memoRun.catch(() => null)) : []), ...(out?.memoBad || []).map((e) => ({ line: String(e).match(/「(.*?)」/)?.[1] || String(e), ok: false, error: String(e) }))];
         const shots = extState.snap ? await extShot() : [];
-        await db.doc(`ext_in/${d.id}`).update({ done: { at: Date.now(), ...(error ? { error } : {}) }, got, result: inResult({ boardOps: out?.boardOps, retry: out?.retry, notes: out?.notes, error, shots, shotNote: shots.length || extState.snapNote ? extState.snapNote : '' }) }).catch(() => {});
+        await db.doc(`ext_in/${d.id}`).update({ done: { at: Date.now(), ...(error ? { error } : {}) }, got, result: inResult({ boardOps: out?.boardOps, retry: out?.retry, notes: out?.notes, error, shots, memo, shotNote: shots.length || extState.snapNote ? extState.snapNote : '' }) }).catch(() => {});
         extNow();
         writeSince(); // 这一条执行完：meta/since 从这里重新攒
         if (extState.close) { extState.close = false; await extClose(); }
@@ -1867,6 +1897,7 @@ export async function renderClass(root, meta, desk = null) {
       return true;
     });
     extState.coachLines.push(`[助教] 在 ${target} 下面写了：${line}`);
+    if (desk) sink.put('evidence', helperEvidence(line, evCtx(null), { role: 'coach', target, answer: actionText(a).slice(0, 600) }));
     await extWrite({ text: '' });
   }
   // —— 外部叫来的助手（需求 R1，delegate.js）——
@@ -2023,6 +2054,8 @@ export async function renderClass(root, meta, desk = null) {
         db.doc(`journal/${jid}`).set({ at, by: 'ext-delegate', path, op: 'set', before, after, ...(desk?.sid ? { session: desk.sid } : {}) }).catch(() => {});
       }
     } else addTurn({ role: 'system', kind: 'helper', helper: rule.id, discarded: true, text: `助手 ${rule.id} 没叫成：${error}` });
+    // T6：助手说的、做的都记成证据（src: helper），外部下次分析读得到
+    if (desk && res) sink.put('evidence', helperEvidence(text, evCtx(null), { role: 'helper', helper: rule.id, event: ev?.kind || 'now', ...(ev?.target ? { target: String(ev.target) } : {}), ...(done.length ? { did: done } : {}), ...(refused.length ? { refused: refused.map((r) => `${r.op} ${r.id || ''}`.trim()) } : {}), ...(back ? { back } : {}) }));
     if (rule.until === 'turns' && rule.fired >= rule.turns) rule.off = true;
     paintExtTools();
     extState.coachLines.push(...helperLines({ id: rule.id, ev, text: rule.to?.kind === 'board' || res ? text : '', done, refused, back, usage: res ? usage : null, error }));
@@ -2366,6 +2399,7 @@ export async function renderClass(root, meta, desk = null) {
     const pageBefore = bv.cur;
     const boardOps = [];
     turnMemos = [];
+    turnMemoBad = [];
     turnNotes = [];
     opTurn = { seq: turnSeq + 1, by: res.by || (mock ? 'mock' : res.modelApplied || '') };
     // 拍子（beats.js）：说一句、写一段、再说一句……一拍一拍地播。重写写错的段那一轮不播
@@ -2440,10 +2474,14 @@ export async function renderClass(root, meta, desk = null) {
       }
     }
     if (unseen) showEcho(talkPage ? pages.get(talkPage)?.talk : ''); else hideEcho();
+    // T6：页面里的老师（练习教练、复现课……；外部的课里不是它）说的话记成证据 src: helper
+    if (desk && !EXT && res.by !== 'ext' && talk && !keepTalk) sink.put('evidence', helperEvidence(talk, evCtx(null), { role: 'teacher', ops: boardOps.filter((o) => o?.ok).map((o) => `${o.op}${o.id ? ` ${o.id}` : o.target ? ` ${o.target}` : ''}`).slice(0, 20) }));
     const told = addTurn({ role: 'claude', text: res.text, boardOps, page: bv.cur || undefined, talkPage, ...(res.by ? { by: res.by } : {}), ...(res.extIn ? { extIn: res.extIn } : {}), modelApplied: res.modelApplied, truncated: !!res.truncated, tools: toolCalls.length ? toolCalls : undefined, cost });
     if (beat) { beat.told = told; focusBeat(pages.get(beat.page), 0, { scroll: false }); }
     askHere?.clearAsked();
-    if (turnMemos.length) runMemo(turnMemos.splice(0), told.seq, talkPage || bv.cur);
+    // 外部的课要把这一轮 memo 记成没有写进 ext_in 的 result（T2）：留着这一次的 Promise
+    const memoRun = turnMemos.length ? runMemo(turnMemos.splice(0), told.seq, talkPage || bv.cur) : null;
+    const memoBad = turnMemoBad.splice(0);
     if (turnNotes.length) runNotes(turnNotes.splice(0));
     // Claude 又说了话：重新计「停了多久」
     nudged = false;
@@ -2492,7 +2530,7 @@ export async function renderClass(root, meta, desk = null) {
     if (talkErr.length) notes.push(`你说的话里有 ${talkErr.join('；')}（学生看到的是红框；下一轮说话时改过来）`);
     for (const r of rejected) notes.push(`有一个 board 块看不懂（${r.error}），已经当普通文字写在板顶了：board ${r.header.slice(0, 60)}`);
     for (const u of unclosed) notes.push(`有一个 board 块没有闭合，已经当普通文字写在板顶了：board ${u.header.slice(0, 60)}${res.truncated ? '（这一轮太长被截断了，下次写短一点）' : ''}`);
-    return { retry, asks: [...new Set(asks)], notes, kinds, boardOps };
+    return { retry, asks: [...new Set(asks)], notes, kinds, boardOps, memoRun, memoBad };
   }
   // 和 parseOutput 的 ops 同一个口径：闭合了、看得懂的 board 块
   function isOp(s) { return s.type === 'board' && s.closed && s.op && !s.op.error; }

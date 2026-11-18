@@ -162,6 +162,18 @@ export function sayEvidence(text, ctx = {}, images = []) {
 }
 
 /**
+ * 页面里的 Claude 说的话、做的判断（dr-learning-trail T6）：外部叫来的助手（board claude）、板边助教、练习教练和复现课里页面里的老师。
+ * 记成证据 src: helper（role: helper / coach / teacher），外部分析时一起读到（meta/since-analysis-{科}）
+ */
+export function helperEvidence(text, ctx = {}, { role = 'helper', ...extra } = {}) {
+  const t = String(text || '').trim();
+  return {
+    id: `ev-${newId()}`, src: 'helper', kind: 'say', role, text: t.length > 4000 ? t.slice(0, 3999) + '…' : t,
+    comp: null, session: ctx.session || null, block: ctx.block || null, tags: evidenceTags(ctx), ...turnOf(ctx), at: Date.now(), ...extra,
+  };
+}
+
+/**
  * 下课那一刻还没提交的草稿（drafts.js 的 draftsIn）：记一条证据（kind: draft），免得「写了一半」丢掉。
  * d：{ step（段）, block（组件 id）, kind（组件）, title, label（第几步）, text }
  */
