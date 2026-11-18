@@ -6,6 +6,7 @@ import { mdToHtml, tex2html, escapeHtml } from '../blocks/common.js';
 import { markDraft } from '../drafts.js';
 import { pen } from '../ink/engine.js';
 import { timedPad } from './inkpad.js';
+import { uploadAll } from './judgekit.js';
 
 const shapeOf = (s) => (s.kind === 'mat' ? { kind: 'matrix', r: s.r, c: s.c } : s.kind === 'vec' ? { kind: 'vector', n: s.n } : { kind: 'number' });
 const md = (t) => mdToHtml(String(t ?? ''));
@@ -201,10 +202,10 @@ export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause
       const pad = active?.pad?.();
       if (!pad) return { answer, images: [] };
       const out = await pad.export();
-      const final = (await upload(out.final)) || null;
-      const shots = [];
-      for (const s of out.shots) shots.push({ at: s.t, why: s.why, asset: (await upload(s.blob)) || null });
-      return { answer: { ...answer, ink: { final, shots, timeline: out.timeline, lines: out.lines.length } }, images: [out.final], strokes: out.strokes, events: out.events, clear: () => pad.clear() };
+      // 整页图和快照一起传，每张最多等 10 秒；传不上的记 null（判分照样用手上的整页图）
+      const [final, ...ids] = await uploadAll([out.final, ...out.shots.map((x) => x.blob)], upload);
+      const shots = out.shots.map((x, i) => ({ at: x.t, why: x.why, asset: ids[i] }));
+      return { answer: { ...answer, ink: { final, shots, timeline: out.timeline, lines: out.lines.length } }, images: out.final ? [out.final] : [], strokes: out.strokes, events: out.events, clear: () => pad.clear() };
     },
     blanks: () => blanks(),
     empty: () => empty(),

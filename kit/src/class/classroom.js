@@ -1149,7 +1149,8 @@ export async function renderClass(root, meta, desk = null) {
     // 解答题按步骤判（dr-batch4 第 1 条，solvespec.js / blocks/solve.js）：画在题下面、记一条作答；有错的步记进错题本
     // 检验（check/）：board check 开外壳、合书；恢复时重放的不再开（checks 还没有）
     if (op.op === 'check') return checks ? checks.start(op) : { op: 'check', id: op.id, ok: true, note: '刷新以后照存着的进度放回' };
-    if (op.op === 'judge' && checks?.has(op.target)) {
+    // 板上有同一个 id 的解答题（计划 1 的 solve）时先给它；不然是检验里的题
+    if (op.op === 'judge' && checks?.has(op.target) && ![...board.querySelectorAll(`[data-bid="${CSS.escape(op.target)}"]`)].some((x) => x.__solve)) {
       const r = checks.judge(op);
       if (!r?.then) return r;
       r.then((x) => { const t = x.ok ? `[页面] ${x.line}` : `[页面] board judge ${op.target} 没改成：${x.error}`; if (EXT) { extState.coachLines.push(t); extWrite({ text: '' }); } else addTurn({ role: 'system', kind: 'note', text: t }); });
@@ -1951,7 +1952,7 @@ export async function renderClass(root, meta, desk = null) {
     if (queue.triggered) schedule(false);
   }
   async function extClose() {
-    checks?.pause(); // 检验开着：照「先停下」存着，下课照常
+    checks?.close(); // 检验开着：照「先停下」存着、没定下来的题补写证据，下课照常
     if (desk) for (const d of allDrafts()) sink.put('evidence', draftEvidence(d, evCtx(d.step)));
     if (queue.triggered || queue.actions.length) await flush();
     ended = true;
@@ -3118,7 +3119,7 @@ export async function renderClass(root, meta, desk = null) {
 
   // —— 下课：让课堂 Claude 写一份小结，存进 class_notes（同样只收 Opus 5.5 写的），写在最后一块板上 ——
   async function endClass() {
-    checks?.pause();
+    checks?.close();
     // 外部主讲的课：不调用页面自己的模型写小结，照「直接下课」（草稿记下来、报告照算；底部的「下课」本来就要点两下）
     if (EXT) {
       while (busy) await new Promise((r) => setTimeout(r, 150));

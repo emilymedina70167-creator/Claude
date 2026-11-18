@@ -10,13 +10,15 @@ import { judgeMachine, JUDGE_WAIT } from './judge.js';
 import { toRecord } from './record.js';
 import { probeView } from './probes.js';
 import { createTimer } from '../timing.js';
+import { tickMs, screenKey, tooSoon, lockState } from './shellkit.js';
+import { flushIds } from './record.js';
 import { mdToHtml, escapeHtml } from '../blocks/common.js';
 
 const SURE = [['sure', '很确定'], ['maybe', '大概'], ['guess', '蒙的']];
 const FACET_TEXT = { ok: '✓', fixed: '补上', fail: '✗', pending: '待核' };
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
-export function mountCheck(host, { check, vars = {}, saved = null, judge, fallback, save = () => {}, record = () => {}, onEnd = () => {}, onPause = () => {}, upload = async () => null, inkKey = () => '', onInk = () => {}, now = () => Date.now() } = {}) {
+export function mountCheck(host, { check, vars = {}, saved = null, judge, fallback, save = () => {}, record = () => {}, onEnd = () => {}, onPause = () => {}, upload = async () => null, inkKey = () => '', onInk = () => {}, lockKey = '', now = () => Date.now() } = {}) {
   let state = saved?.check?.id === check.id ? saved : createFlow(check);
   const root = document.createElement('div');
   root.className = 'ck-shell';
@@ -27,8 +29,10 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
   const timer = createTimer({ now });
   const inFlight = new Set();
   const writing = new Set();
-  let shown = null; // 现在画着的是哪一屏：`${show}:${id}`
+  let shown = null; // 现在画着的是哪一屏（shellkit.js 的 screenKey）
+  let shownAt = 0; // 这一屏什么时候画上的：太快的那一下点不算（tooSoon）
   let pv = null; // 当前这道题的画面
+  let kept = null; // 「先停下」时留着的那一道（{ id, card, pv }）：接着做时放回去，打的字、填的格子不丢
   let sure = null;
   let dead = false;
   let lastSave = 0;
@@ -89,10 +93,18 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
   function paint() {
     const v = view(state);
     paintHead(v);
-    const key = `${v.show}:${v.id || ''}`;
+    const key = screenKey(v);
     if (key === shown) { syncSubmit(); return; }
     shown = key;
-    if (pv && v.show !== 'probe') { timer.set(pv.el.dataset.probe, false); pv = null; }
+    shownAt = now();
+    if (pv && v.show !== 'probe') {
+      timer.set(pv.el.dataset.probe, false);
+      const card = main.querySelector('.ck-probe-card');
+      if (v.show === 'paused' && card) kept = { id: pv.el.dataset.probe, card, pv, sure };
+      else pv.destroy();
+      pv = null;
+    }
+    if (kept && !(v.show === 'paused' || (v.show === 'probe' && v.id === kept.id))) { kept.pv.destroy(); kept = null; }
     main.innerHTML = '';
     sure = null;
     if (v.show === 'intro') return paintIntro();
@@ -114,6 +126,16 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
   }
 
   function paintProbe(v) {
+    // 停下以前就在这一道：把原来那张卡放回去（不重画、不丢字）
+    if (kept && kept.id === v.id) {
+      main.appendChild(kept.card);
+      pv = kept.pv;
+      sure = kept.sure;
+      kept = null;
+      timer.set(v.id, visible());
+      syncSubmit();
+      return;
+    }
     const probe = check.probes[v.id];
     const card = document.createElement('div');
     card.className = `ck-card ck-probe-card${v.kind === 'retry' ? ' is-retry' : ''}`;
@@ -130,8 +152,9 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
       card.querySelectorAll('.ck-sure-btn').forEach((x) => x.classList.toggle('is-on', x === b));
       syncSubmit();
     });
-    card.querySelector('.ck-submit').addEventListener('click', () => submit(v.id));
+    card.querySelector('.ck-submit').addEventListener('click', () => { if (!tooSoon(shownAt, now())) submit(v.id); });
     card.querySelector('.ck-giveup').addEventListener('click', () => {
+      if (tooSoon(shownAt, now()) || submitting || state.results[v.id]?.submitted) return;
       const t = timer.submit(v.id) || {};
       dispatch({ type: 'giveup', id: v.id, ms: t.ms ?? null });
     });
@@ -192,8 +215,9 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
       <div class="ck-tag">${t.guessed ? '蒙对了' : '没过'} · ${escapeHtml(v.id)}</div>
       ${bad.length ? `<ul class="ck-items">${bad.map((it) => itemLine(check.probes[v.id], it)).join('')}</ul>` : t.failed.includes('giveup') ? '<p>想不出来。</p>' : ''}
       ${text ? `<div class="ck-teach-text">${mdToHtml(text)}</div>` : ''}
-      <button type="button" class="btn btn-primary ck-next">${t.last ? '接着做' : '做一道同类的'}</button></div>`;
-    main.querySelector('.ck-next').addEventListener('click', () => dispatch({ type: 'teachSeen', id: v.id }));
+      <button type="button" class="btn btn-primary ck-next"${t.text === null && t.key === 'claude' ? ' disabled' : ''}>${t.last ? '接着做' : '做一道同类的'}</button></div>`;
+    // 补讲还在写（页面里的 Claude）：按钮先灰着，字到了这一屏重画（screenKey 变了）
+    main.querySelector('.ck-next').addEventListener('click', () => { if (!tooSoon(shownAt, now())) dispatch({ type: 'teachSeen', id: v.id }); });
   }
 
   function paintPaused() {
@@ -214,16 +238,33 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
 
   // 计时：题在屏幕上、页面在前台才走（timing.js）；第一次作答的总时间（limit）每秒交一次 tick
   const visible = () => document.visibilityState !== 'hidden' && root.isConnected && root.getClientRects().length > 0;
-  const onVis = () => { const id = view(state).id; if (id && state.phase === 'probe') timer.set(id, visible()); };
+  const onVis = () => { last = now(); const id = view(state).id; if (id && state.phase === 'probe') timer.set(id, visible()); };
   document.addEventListener('visibilitychange', onVis);
   let last = now();
   const tickT = setInterval(() => {
     const t = now();
-    const ms = t - last;
+    const ms = tickMs(last, t); // 熄屏时定时器停住：亮屏后的第一下最多算 2 秒
     last = t;
     if (state.phase === 'probe' && visible()) dispatch({ type: 'tick', ms }, { quiet: true });
   }, 1000);
 
+  // 两个标签页：别的页刚写过心跳（这次检验在那边开着）就不开，免得各写各的进度、各记一份证据
+  // 这个标签页是谁：存在 sessionStorage（同一个标签页刷新以后还是它自己，不把自己当成别的页）
+  let tab = '';
+  try { tab = sessionStorage.getItem('la-ck-tab') || ''; if (!tab) { tab = Math.random().toString(36).slice(2, 10); sessionStorage.setItem('la-ck-tab', tab); } } catch { tab = Math.random().toString(36).slice(2, 10); }
+  const readLock = () => { try { return JSON.parse(localStorage.getItem(lockKey) || 'null'); } catch { return null; } };
+  const writeLock = () => { try { localStorage.setItem(lockKey, JSON.stringify({ id: tab, at: now() })); } catch { /* 存不了就不锁 */ } };
+  let beat = null;
+  if (lockKey && lockState(readLock(), tab, now()) === 'other') {
+    dead = true;
+    clearInterval(tickT);
+    main.innerHTML = '<div class="ck-card"><p>这次检验在另一个标签页里开着：在那边接着做（关掉那边，过几秒刷新这一页也行）。</p></div>';
+    return { el: root, state: () => state, pause() {}, resume() {}, flush() {}, rejudge() {}, absorbs: () => ({}), destroy() { root.remove(); } };
+  }
+  const release = () => { if (lockKey && readLock()?.id === tab) { try { localStorage.removeItem(lockKey); } catch { /* 无 */ } } };
+  if (lockKey) { writeLock(); beat = setInterval(writeLock, 2000); addEventListener('pagehide', release); }
+  // 还没点开始也先存一份：开始卡停着时刷新，检验照样在
+  if (!saved) { try { save(state); } catch { /* 下次再存 */ } }
   paint();
   jobs();
   return {
@@ -233,6 +274,20 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     resume() { if (state.phase === 'paused') dispatch({ type: 'resume' }); },
     rejudge(id, items, result) { dispatch({ type: 'ext', id, items, result }); },
     absorbs,
-    destroy() { dead = true; clearInterval(tickT); document.removeEventListener('visibilitychange', onVis); root.remove(); },
+    /** 停下、下课：交了还没写证据的题照现在的样子补写（final 还没定） */
+    flush() {
+      const ids = flushIds(state);
+      if (!ids.length) return;
+      let docs = [];
+      try { docs = record(ids, state, { partial: true }) || []; } catch { /* 写证据的地方自己报 */ }
+      dispatch({ type: 'recorded', ids, evs: Object.fromEntries((Array.isArray(docs) ? docs : []).filter((d) => d?.probe && d?.id).map((d) => [d.probe, d.id])) });
+    },
+    destroy() {
+      dead = true; clearInterval(tickT); clearInterval(beat); document.removeEventListener('visibilitychange', onVis);
+      pv?.destroy(); kept?.pv?.destroy();
+      release();
+      removeEventListener('pagehide', release);
+      root.remove();
+    },
   };
 }

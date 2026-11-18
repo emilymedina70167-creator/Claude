@@ -42,7 +42,7 @@ export function answerSummary(probe, answer, r = {}) {
 const itemText = (it) => `${it.id} ${it.ok === 'missing' ? '没写到' : it.ok === null ? '待核' : String(it.id).startsWith('if') ? '不满足' : '不对'}${it.why ? `：${it.why}` : ''}`;
 
 /** 一道题的一条证据。ctx：{ session, turn }；bankOf：复测时局部 id → 题库编号；retest：1 / 7 */
-export function evidenceOf(s, id, { ctx = {}, bankOf = null, retest = null, rejudged = false } = {}) {
+export function evidenceOf(s, id, { ctx = {}, bankOf = null, retest = null, rejudged = false, partial = false } = {}) {
   const r = s.results[id];
   const p = s.check.probes[id];
   const orig = r.of ? s.results[r.of] : r;
@@ -51,13 +51,14 @@ export function evidenceOf(s, id, { ctx = {}, bankOf = null, retest = null, reju
     id: `ev-ck-${newId()}`, src: 'check', kind: p.type, comp: `${s.check.id}:${id}`,
     session: ctx.session || null, block: p.block, tags: p.block ? [p.block] : [], ...(Number.isFinite(ctx.turn) && ctx.turn > 0 ? { turn: ctx.turn } : {}),
     check: s.check.id, probe: id, ...(r.of ? { retryOf: r.of } : {}), target: p.target, level: p.level, facet: p.facet,
-    q: clip(p.claim || p.q, 300), first: answerSummary(p, r.answer, r), answer: r.answer ?? null,
+    // text：和课上作答的证据同一个字段（守卫核「我写的」、话的语料都读它）
+    q: clip(p.claim || p.q, 300), first: answerSummary(p, r.answer, r), text: answerSummary(p, r.answer, r), answer: r.answer ?? null,
     items: r.items || [], ...(p.type === 'solve' ? { steps: r.items || [] } : {}), ...(r.lines ? { lines: r.lines } : {}),
     outcome: r.outcome ?? null, final: r.of ? null : orig.final ?? null, ...(r.of ? {} : { retries: orig.retries || [] }),
     sure: r.sure ?? null, late: !!r.late, giveup: !!r.giveup, ...(r.resumed ? { resumed: true } : {}),
     ms: r.ms ?? null, msTotal: r.msTotal ?? null, ...teach, judgedBy: r.judgedBy || 'page',
     ...(r.answer?.ink ? { ink: r.answer.ink } : {}), ...(retest ? { retest } : {}), ...(bankOf?.[id] ? { bank: bankOf[id] } : {}),
-    ...(rejudged ? { rejudged: true } : {}),
+    ...(rejudged ? { rejudged: true } : {}), ...(partial ? { partial: true } : {}),
     at: r.at || Date.now(),
   };
 }
@@ -66,6 +67,12 @@ export function evidenceOf(s, id, { ctx = {}, bankOf = null, retest = null, reju
 export function toRecord(s) {
   const done = new Set(s.recorded || []);
   return Object.values(s.results).filter((r) => r.submitted && !done.has(r.id) && (r.of ? r.outcome && r.outcome !== 'pending' || (r.outcome === 'pending' && s.results[r.of]?.final) : r.final)).map((r) => r.id);
+}
+
+/** 停下、下课时：交了还没写证据的题（本题还没定下来、retry 在判），照现在的样子补写一条（final 是 null） */
+export function flushIds(s) {
+  const done = new Set([...(s.recorded || []), ...toRecord(s)]);
+  return Object.values(s.results).filter((r) => r.submitted && !done.has(r.id)).map((r) => r.id);
 }
 
 /**

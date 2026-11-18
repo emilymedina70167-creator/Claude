@@ -1,7 +1,7 @@
 // 检验手写板的时间线（kit/src/check/inktime.js）：行、关键时刻、某一刻的样子、时间线文字、存档瘦身
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { linesOf, keyMoments, frameAt, timelineText, fitStrokes, mmss } from '../kit/src/check/inktime.js';
+import { linesOf, keyMoments, frameAt, timelineText, fitStrokes, decodeStrokes, mmss } from '../kit/src/check/inktime.js';
 
 // 一笔：在 (x, y0..y1) 一竖，t0..t1 写的
 const stroke = (x, y0, y1, t0, t1, extra = {}) => ({ color: 'white', pts: [x, y0, 2, x + 4, (y0 + y1) / 2, 2, x + 8, y1, 2], bbox: [x - 2, y0 - 2, x + 10, y1 + 2], t0, t1, ...extra });
@@ -66,10 +66,10 @@ test('fitStrokes：三万个点也压到 200 KiB 以内', () => {
   for (let i = 0; i < 30000; i++) pts.push(100.123 + i * 0.37, 200.456 + Math.sin(i) * 30, 2.345);
   const big = [{ color: 'white', pts, bbox: [0, 0, 12000, 300], t0: 0, t1: 600000 }];
   const r = fitStrokes(big);
-  assert.ok(JSON.stringify(r.strokes).length <= 200 * 1024, `${JSON.stringify(r.strokes).length}`);
+  assert.ok(JSON.stringify(r).length <= 200 * 1024, `${JSON.stringify(r).length}`);
   assert.equal(r.trimmed, true);
-  // 小的：坐标取整，不算 trimmed
+  // 小的：坐标取整、半径一位小数，不算 trimmed
   const small = fitStrokes([stroke(0.4, 0.6, 30.2, 0, 1)]);
   assert.equal(small.trimmed, false);
-  assert.ok(small.strokes[0].pts.every((x) => Number.isInteger(x * 10)));
+  assert.ok(decodeStrokes(small)[0].pts.every((x) => Number.isInteger(x * 10)));
 });

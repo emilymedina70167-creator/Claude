@@ -18,7 +18,7 @@ import { hitText, lessonLines, pointCatalog } from './skills.js';
 import { debriefView } from './debrief.js';
 import { stateLine, checkLine } from '../check/record.js';
 import { replay } from '../check/inkrender.js';
-import { linesOf } from '../check/inktime.js';
+import { linesOf, decodeStrokes } from '../check/inktime.js';
 
 const inline = (s) => { try { return mdToHtml(String(s ?? ''), { inline: true }); } catch { return escapeHtml(String(s ?? '')); } };
 const esc = escapeHtml;
@@ -279,8 +279,9 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
       if (!slot || slot.childElementCount) return;
       const d = await scopeDb(db, t.dataset.cksid).doc(`ink/${t.dataset.ckreplay}`).get().catch(() => null);
       const ink = d?.exists ? d.data() : null;
-      if (!ink?.strokes?.length) { slot.textContent = '这道题的笔画没存下来（看证据里的整页图）。'; return; }
-      replay(slot, ink.strokes, ink.events || [], { lines: linesOf(ink.strokes) });
+      const strokes = ink ? decodeStrokes(ink) : [];
+      if (!strokes.length) { slot.textContent = '这道题的笔画没存下来（看证据里的整页图）。'; return; }
+      replay(slot, strokes, ink.events || [], { lines: linesOf(strokes) });
       return;
     }
     if (t.dataset.more) { errShown += ERR_PAGE; paint(); return; }

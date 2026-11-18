@@ -13,6 +13,8 @@ import { getAI } from '../ai.js';
 import { isDev } from '../live/store.js';
 import { createDevTeacher } from '../class/devteacher.js';
 import { reportError } from '../errlog.js';
+import { callerFor, canJudge, retestResults } from './judgekit.js';
+import { assetUrl } from '../live/store.js';
 
 const TEACH = { model: 'claude-opus-5-5', effort: 'high', modelTier: 'complex' };
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
@@ -39,10 +41,19 @@ export async function enterRetest(root, { db, store, sid, doc, readOnly = false,
   }
   const sc = scopeDb(db, sid);
   // 页面里的 Claude（判要点、写补讲）：只认 Opus 5.5 high；?dev 用模拟老师
-  const ai = isDev() || store.dev ? null : await getAI();
-  const mock = !ai ? createDevTeacher({ pace: 0.2 }) : null;
+  // 只有 ?dev 用模拟老师；claude.ai 里拿不到页面里的 Claude 就不判（待核），不拿模拟的冒充 Opus
+  const dev = isDev() || !!store.dev;
+  const ai = dev ? null : await getAI();
+  const who = callerFor({ dev, ai });
+  const mock = who === 'mock' ? createDevTeacher({ pace: 0.2 }) : null;
   const call = async (prompt, opts = {}) => {
+    if (!who) return null;
     try { const r = mock ? await mock(prompt, { ...TEACH, ...opts }) : await ai.call(prompt, { ...TEACH, cache: false, ...opts }); return r?.modelApplied === TEACH.model ? r : null; } catch { return null; }
+  };
+  // 手写的整页图：交的时候手上有；刷新以后从资源取回来（取不到又没打字 → 不判）
+  const inkImages = async (answer, given) => {
+    if (given?.length || !answer?.ink?.final) return given || [];
+    try { const r = await fetch(assetUrl(answer.ink.final)); return r.ok ? [await r.blob()] : []; } catch { return []; }
   };
   const mem = { errors: rows(await db.collection('errors').get().catch(() => null)), curriculum: rows(await db.collection('curriculum').get().catch(() => null)), weaknesses: rows(await db.collection('weaknesses').get().catch(() => null)), evidence: [] };
   const days = Number(doc.retest?.[0]?.days) || 1;
@@ -56,21 +67,23 @@ export async function enterRetest(root, { db, store, sid, doc, readOnly = false,
     if (finished || readOnly) return;
     finished = true;
     await cdesk.finish(s);
-    // 每块这一次复测过没过：必做都一次过（蒙的不算）→ ok
-    for (const r of doc.retest || []) {
-      const a = absorbOf(s, r.block);
+    // 每块这一次复测过没过：必做都一次过（蒙的不算）→ ok；待核 null；没出题的块（缺新题、题被拿掉）不记
+    const absorbs = Object.fromEntries(check.blocks.map((b) => [b.block, absorbOf(s, b.block)]));
+    for (const r of retestResults(absorbs, doc.retest || [])) {
       const path = `absorb/${String(r.block).replace(/#/g, '~')}`;
       const cur = await db.doc(path).get().then((d) => (d.exists ? d.data() : null), () => null);
       if (!cur) continue;
-      const retests = (cur.retests || []).map((x) => (x.days === r.days && !x.done ? { ...x, done: today(), ok: a?.state === '成功', session: sid } : x));
+      const retests = (cur.retests || []).map((x) => (x.days === r.days && !x.done ? { ...x, done: today(), ok: r.ok, session: sid } : x));
       await db.doc(path).update({ retests }).catch((e) => reportError(e, { what: '写复测结果', path, soft: true }));
     }
     await db.doc(`sessions/${sid}`).update({ status: 'closed', endedAt: Date.now() }).catch(() => {});
   };
   mountCheck(host, {
     check, saved,
-    judge: async (probe, answer, images = []) => {
+    judge: async (probe, answer, given = []) => {
       const ids = claudeIds(probe);
+      const images = await inkImages(answer, given);
+      if (!canJudge(answer, images)) return null;
       const res = await call(verdictPrompt({ probe, answer, ids, images: images.length }), images.length ? { images } : {});
       if (!res) return null;
       const r = parseVerdict(res.text, ids, { steps: probe.type === 'solve' });
@@ -78,7 +91,8 @@ export async function enterRetest(root, { db, store, sid, doc, readOnly = false,
     },
     fallback: async (probe, answer, items) => String((await call(fallbackPrompt({ probe, answer, items })))?.text || '').trim(),
     save: (s) => { cdesk.save(check.id, s); if (s.phase === 'done') finish(s); },
-    record: (ids, s) => cdesk.record(ids, s),
+    record: (ids, s, o) => cdesk.record(ids, s, o),
+    lockKey: `la-ck-lock-${sid}-${check.id}`,
     upload: (blob) => (store.assets ? store.assets.upload(blob, { type: blob.type || 'image/png' }).then((r) => r.id).catch(() => null) : Promise.resolve(null)),
     inkKey: (pid) => `la-ck-${sid}-${check.id}-${pid}`,
     onEnd: ({ state }) => { finish(state).finally(leave); },

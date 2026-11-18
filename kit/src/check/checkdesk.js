@@ -4,6 +4,7 @@ import { bankDocs, bankId, fenceOf, seenPatch } from './bank.js';
 import { evidenceOf, absorbDoc, errorEntries } from './record.js';
 import { absorbOf } from './flow.js';
 import { reportError } from '../errlog.js';
+import { guardDb } from '../memory/writer.js';
 
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
 
@@ -11,7 +12,9 @@ const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai'
  * sid、space：这节课；memoOps：desk.memo.ops（记错题，applyMemo）；ctx()：{ turn, turns }（这时课堂到第几轮）；
  * bankOf / retest：复测的课（局部 id → 题库编号、隔几天）
  */
-export function createCheckDesk(db, { sid = null, space = null, memoOps = null, ctx = () => ({}), bankOf = null, retest = null, readOnly = false, curriculum = () => [] } = {}) {
+export function createCheckDesk(rawDb, { sid = null, space = null, memoOps = null, ctx = () => ({}), bankOf = null, retest = null, readOnly = false, curriculum = () => [] } = {}) {
+  // 写都走同一个出口（memory/writer.js 的 guardDb）：网络抖、限流自己重试两次，学生的第一次作答不丢；读照旧
+  const db = guardDb(rawDb);
   const written = new Map(); // 检验 id → { 题 id → 证据 }
   const soft = (what, path) => (e) => reportError(e, { what, path, soft: true });
   const evsOf = (cid) => written.get(cid) || written.set(cid, {}).get(cid);
@@ -21,12 +24,12 @@ export function createCheckDesk(db, { sid = null, space = null, memoOps = null, 
     async list() { const r = await db.collection('check').get().catch(() => null); return r ? r.docs.map((d) => ({ id: d.id, ...d.data() })) : []; },
     save(cid, state) { if (readOnly) return; db.doc(`check/${cid}`).set({ state, at: Date.now() }).catch(soft('存检验的进度', `check/${cid}`)); },
     /** 写这几道题的证据（本题定下来了 / retry 判出来了），题库里记见过 */
-    record(ids, state, { rejudged = false } = {}) {
+    record(ids, state, { rejudged = false, partial = false } = {}) {
       if (readOnly) return [];
       const cid = state.check.id;
       const out = [];
       for (const id of ids) {
-        const ev = { ...evidenceOf(state, id, { ctx: { session: sid, turn: ctx().turn }, bankOf, retest, rejudged }), wroteAt: Date.now() };
+        const ev = { ...evidenceOf(state, id, { ctx: { session: sid, turn: ctx().turn }, bankOf, retest, rejudged, partial }), wroteAt: Date.now() };
         evsOf(cid)[id] = ev;
         out.push(ev);
         db.doc(`evidence/${ev.id}`).set(ev).catch(soft('写检验的证据', `evidence/${ev.id}`));

@@ -59,3 +59,6 @@ body.is-checking .class-pages, body.is-checking .class-pins, body.is-checking .c
 .ck-replay-canvas { max-width: 100%; height: auto; border-radius: 10px; }
 .ck-replay-bar { display: flex; gap: 10px; align-items: center; }
 .ck-replay-range { flex: 1; min-height: 44px; }
+
+/* 触控目标至少 44px（btn-sm 本来 38px） */
+.ck-strip .btn, .ck-replay .btn, button[data-ckreplay] { min-height: 44px; }

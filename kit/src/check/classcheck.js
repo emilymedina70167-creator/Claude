@@ -4,6 +4,8 @@ import { selfCheck } from './spec.js';
 import { step } from './flow.js';
 import { claudeIds, verdictPrompt, parseVerdict, fallbackPrompt } from './judge.js';
 import { extStart, extSummary } from './record.js';
+import { canJudge } from './judgekit.js';
+import { absorbOf } from './flow.js';
 import { mountCheck } from './shell.js';
 import { createCheckDesk } from './checkdesk.js';
 import { parseJudge } from '../solvespec.js';
@@ -37,7 +39,7 @@ export function createClassCheck({ root, db, desk = null, call, tell = () => {},
   async function judge(probe, answer, given = []) {
     const ids = claudeIds(probe);
     const images = await inkImages(answer, given);
-    if (answer?.ink?.final && !images.length && !answer.text) return null; // 手写的图取不到：不猜，待核
+    if (!canJudge(answer, images)) return null; // 手写的图取不到（上传失败、刷新以后取不回）又没打字：不猜，待核
     const res = await call(verdictPrompt({ probe, answer, ids, images: images.length }), images.length ? { images } : {});
     if (!res) return null;
     const r = parseVerdict(res.text, ids, { steps: probe.type === 'solve' });
@@ -83,16 +85,17 @@ export function createClassCheck({ root, db, desk = null, call, tell = () => {},
         cdesk.save(check.id, s);
         closedBook(LIVE.includes(s.phase));
         if (s.phase === 'done') finish(s);
-        if (s.phase !== 'intro' && !told && !saved) { told = true; tell(extStart(check)); }
+        if (s.phase !== 'intro' && !told && (!saved || saved.phase === 'intro')) { told = true; tell(extStart(check)); }
         if (s.phase === 'paused' && !host.querySelector('.ck-strip')) { host.querySelector('.ck-shell').hidden = true; host.prepend(strip(check, s)); }
         if (s.phase !== 'paused') { host.querySelector('.ck-strip')?.remove(); const sh = host.querySelector('.ck-shell'); if (sh) sh.hidden = false; }
       },
-      record: (ids, s) => cdesk.record(ids, s),
+      record: (ids, s, o) => cdesk.record(ids, s, o),
+      lockKey: desk?.sid ? `la-ck-lock-${desk.sid}-${check.id}` : '',
       upload,
       inkKey: (pid) => (desk?.sid ? `la-ck-${desk.sid}-${check.id}-${pid}` : ''),
       // 回放用的笔画：sessions/{编号}/ink/{检验 id}-{题 id}（fitStrokes 压到 200 KiB 以内）
-      onInk: (pid, strokes, events) => { if (readOnly) return; const f = fitStrokes(strokes); db.doc(`ink/${check.id}-${pid}`).set({ check: check.id, probe: pid, strokes: f.strokes, events, trimmed: f.trimmed, at: Date.now() }).catch(() => {}); },
-      onPause: (s) => tell(extSummary(s, check, {})),
+      onInk: (pid, strokes, events) => { if (readOnly) return; const f = fitStrokes(strokes); db.doc(`ink/${check.id}-${pid}`).set({ check: check.id, probe: pid, ...f, events: (events || []).slice(-300), at: Date.now() }).catch(() => {}); },
+      onPause: (s) => { api.flush(); tell(extSummary(s, check, Object.fromEntries(check.blocks.map((b) => [b.block, absorbOf(s, b.block)])))); },
       onEnd: ({ state }) => {
         closedBook(false);
         finish(state);
@@ -101,7 +104,8 @@ export function createClassCheck({ root, db, desk = null, call, tell = () => {},
         cur = null;
       },
     });
-    cur = { id: check.id, api, host, check };
+    // 做完以后外部改判：同一次检验重算吸收（不另进 history、不再记错题）
+    cur = { id: check.id, api, host, check, refinish: () => (finished ? cdesk.finish(api.state(), { errors: false }) : null) };
     return api;
   }
 
@@ -131,7 +135,7 @@ export function createClassCheck({ root, db, desk = null, call, tell = () => {},
         const items = parsed.steps.filter((x) => rest.includes(x.id));
         return { state: step(state, { type: 'ext', id: op.target, items, result, at: Date.now() }), errors: parsed.errors };
       };
-      if (cur?.id === cid) { const s = cur.api.state(); const r = apply(s); if (r.error) return { op: 'judge', target: op.target, ok: false, error: r.error }; cur.api.rejudge(op.target, r.state.results[op.target].items, result); cdesk.record([op.target], cur.api.state(), { rejudged: true }); return { op: 'judge', target: op.target, ok: true, line: `检验 ${cid} 的 ${op.target} 改判了` }; }
+      if (cur?.id === cid) { const s = cur.api.state(); const r = apply(s); if (r.error) return { op: 'judge', target: op.target, ok: false, error: r.error }; cur.api.rejudge(op.target, r.state.results[op.target].items, result); cdesk.record([op.target], cur.api.state(), { rejudged: true }); cur.refinish(); return { op: 'judge', target: op.target, ok: true, line: `检验 ${cid} 的 ${op.target} 改判了` }; }
       return (async () => {
       const saved = await cdesk.load(cid);
       if (!saved) return { op: 'judge', target: op.target, ok: false, error: `检验 ${cid} 的记录读不到` };
@@ -152,6 +156,15 @@ export function createClassCheck({ root, db, desk = null, call, tell = () => {},
       if (open) mount(open.state.check, open.state);
     },
     pause() { cur?.api?.pause(); },
+    /** 下课：开着的检验照「先停下」存着，交了没定下来的题补写证据，ext_out 写一份「先停下了」 */
+    close() {
+      if (!cur) return;
+      const { api, check } = cur;
+      api.pause();
+      api.flush();
+      const s = api.state();
+      if (s.phase !== 'done') tell(extSummary(s, check, Object.fromEntries(check.blocks.map((b) => [b.block, absorbOf(s, b.block)]))));
+    },
     current: () => cur,
   };
 }

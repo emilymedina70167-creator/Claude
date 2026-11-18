@@ -319,6 +319,13 @@ export function selfCheck(check, base = {}, { lenient = false } = {}) {
   for (const b of check.blocks) for (const pid of [...b.must, ...b.optional]) if (!P[pid]) out.push(`block ${b.block} 里的 ${pid} 没写这道题`);
   for (const pid of check.spare) if (!P[pid]) out.push(`spare 里的 ${pid} 没写这道题`);
   const retried = new Set(Object.values(P).flatMap((p) => p.retry));
+  // 一道 retry 只给一道题用；retry 不再排进 block / spare（不然出到它时已经交过，学生卡住）
+  const usedBy = new Map();
+  for (const pid of check.order) for (const r of P[pid].retry) usedBy.set(r, [...(usedBy.get(r) || []), pid]);
+  for (const [r, by] of usedBy) {
+    if (by.length > 1) out.push(`${r} 是 ${by.join('、')} 两道题的 retry：一道 retry 只给一道题用`);
+    if (placed.has(r)) out.push(`${r} 是 ${by[0]} 的 retry，又排进了 block / spare：retry 不单独出`);
+  }
   const must = new Set(check.blocks.flatMap((b) => b.must));
   for (const pid of check.order) {
     const p = P[pid];

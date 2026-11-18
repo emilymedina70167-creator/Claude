@@ -113,20 +113,36 @@ export function timelineText(strokes = [], events = [], lines = [], moments = []
 
 const r1 = (v) => Math.round(v * 10) / 10;
 
-/** 存进数据库的笔画（回放用）：坐标取一位小数；还超了就隔点取样，直到放得下。返回 { strokes, trimmed } */
+/**
+ * 存进数据库的笔画（回放用，一个文档最多 256 KiB）：一笔一个数组 [t0, t1, struck（没划是 -1）, x, y, r, x, y, r, …]，
+ * 坐标取整、半径一位小数（颜色、bbox 读回来再算，不存）；还超了就隔点取样，取到每一笔只剩头尾，直到放得下（只留最后的样子）。
+ * 返回 { v: 2, s, trimmed }；decodeStrokes 读回来
+ */
 export function fitStrokes(strokes = [], maxBytes = INK_MAX) {
-  const tidy = (s, step = 1) => {
-    const pts = [];
+  const pack = (s, step) => {
     const n = s.pts.length / 3;
-    for (let i = 0; i < n; i += step) pts.push(r1(s.pts[i * 3]), r1(s.pts[i * 3 + 1]), r1(s.pts[i * 3 + 2]));
-    if (step > 1 && (n - 1) % step) pts.push(r1(s.pts[(n - 1) * 3]), r1(s.pts[(n - 1) * 3 + 1]), r1(s.pts[(n - 1) * 3 + 2]));
-    return { color: s.color, pts, bbox: s.bbox.map(r1), t0: s.t0, t1: s.t1, ...(s.struck !== undefined && s.struck !== null ? { struck: s.struck } : {}) };
+    const out = [Math.round(s.t0 || 0), Math.round(s.t1 || 0), s.struck === undefined || s.struck === null ? -1 : Math.round(s.struck)];
+    const keep = (i) => out.push(Math.round(s.pts[i * 3]), Math.round(s.pts[i * 3 + 1]), r1(s.pts[i * 3 + 2]));
+    for (let i = 0; i < n; i += step) keep(i);
+    if (step > 1 && n > 1 && (n - 1) % step) keep(n - 1);
+    return out;
   };
   let step = 1;
-  let out = strokes.map((s) => tidy(s));
-  while (JSON.stringify(out).length > maxBytes && step < 64) {
+  let s = strokes.map((x) => pack(x, 1));
+  while (JSON.stringify(s).length > maxBytes && step < 4096) {
     step *= 2;
-    out = strokes.map((s) => tidy(s, step));
+    s = strokes.map((x) => pack(x, step));
   }
-  return { strokes: out, trimmed: step > 1 };
+  return { v: 2, s, trimmed: step > 1 };
+}
+
+/** fitStrokes 存的 → 笔画（{ color, pts, bbox, t0, t1, struck? }）；以前存的 { strokes } 照原样 */
+export function decodeStrokes(doc) {
+  if (Array.isArray(doc?.strokes)) return doc.strokes;
+  return (doc?.s || []).map((a) => {
+    const pts = a.slice(3);
+    const b = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < pts.length; i += 3) { b[0] = Math.min(b[0], pts[i] - pts[i + 2]); b[1] = Math.min(b[1], pts[i + 1] - pts[i + 2]); b[2] = Math.max(b[2], pts[i] + pts[i + 2]); b[3] = Math.max(b[3], pts[i + 1] + pts[i + 2]); }
+    return { color: 'white', pts, bbox: b, t0: a[0], t1: a[1], ...(a[2] >= 0 ? { struck: a[2] } : {}) };
+  });
 }

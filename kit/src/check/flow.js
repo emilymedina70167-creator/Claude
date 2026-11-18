@@ -187,6 +187,8 @@ const ON = {
       if (r.outcome === 'pass' && ['pending', 'fail'].includes(R.final)) R.final = 'fixed';
       if (r.outcome === 'fail' && ['pending', 'fixed'].includes(R.final)) R.final = 'fail';
     }
+    // 拿走的是「还在判」的最后一道：接着走（不停在 wait）
+    if (s.phase === 'wait' && !Object.keys(s.judging).length) advance(s);
   },
   end(s, ev) { s.endedAt = ev.at ?? null; },
   // 证据写了的题（record.js 的 toRecord 不再给）
