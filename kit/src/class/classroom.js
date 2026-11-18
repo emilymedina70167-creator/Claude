@@ -998,7 +998,10 @@ export async function renderClass(root, meta, desk = null) {
     const line = `error（解答题 ${target}：${e.step}）`;
     let msg = '';
     try {
-      const r = await desk.memo.ops.applyMemo([{ kind: 'error', attrs, line }], { session: desk.sid, block: desk.block, space: desk.space, turn: turnSeq, turns: history.filter((t) => !t.discarded) });
+      // 这节课的块不在课程地图里（还没建图的科）：不挂块照记，免得整条记不上
+      const cur = desk.mem?.curriculum || [];
+      const block = desk.block && (!cur.length || cur.some((c) => String(c.id) === String(desk.block))) ? desk.block : null;
+      const r = await desk.memo.ops.applyMemo([{ kind: 'error', attrs, line }], { session: desk.sid, block, space: desk.space, turn: turnSeq, turns: history.filter((t) => !t.discarded) });
       msg = r.rejected.length ? `错题本没记：${r.rejected[0].error}` : `错题本记了 ${r.pds.map((x) => x.target).join('、')}（${e.step}）`;
     } catch (err) { msg = `错题本没记成：${String(err?.message || err).slice(0, 120)}`; }
     if (EXT) { extState.coachLines.push(`[页面] 解答题 ${target}：${msg}`); extWrite({ text: '' }); }
