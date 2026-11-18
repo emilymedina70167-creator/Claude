@@ -26,6 +26,10 @@
 
 `dev_requests/dr-learning-trail`、`dr-memcheck`（第 4 批）和外部验收第 4 批以后的 `dr-trail-fix`（第 5 批：旧记录当成没学、游标按写入时间、舞台刷新放回），见 `CLAUDE.md` 那两条和 `docs/superpowers/plans/2026-11-18-learning-trail.md`、`2026-11-18-trail-fix.md`。改 `memory/state.js` 以后照真数据跑一遍三科的 `deskState`（`ArtifactData list` 存 mastery、errors、evidence、sessions、observations、reviews、weaknesses、curriculum、coverage 到 `.superpowers/` 下），看矛盾是不是真的。
 
+## 第 6 批：计划 1（2026-11-18）
+
+`dev_requests/dr-batch4`（外部定稿，学生说「这部分是计划1，计划2我要专门设计组件库提升」）和 `dr-legacy-label`，见 `CLAUDE.md` 那一条和 `docs/superpowers/plans/2026-11-18-batch4.md`。**计划 2（`dr-plan2`）是草稿，学生和外部设计好、改成 open 以前不动组件库的外观和交互。**
+
 ## 现在做到哪
 
 全部做完、已发布（版本见 `CLAUDE-PROJECT.md` 开头）。下一步是学生用外部上一节真课。

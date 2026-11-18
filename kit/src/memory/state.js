@@ -13,7 +13,8 @@ const blockOf = (id) => String(id || '').split('#')[0];
 const dayOf = (at) => (Number(at) ? toDate(Number(at)) : '');
 const PASSED = new Set(['基础题过', '复现通过']);
 const LEVEL = { L0: 0, L1: 1, L2: 2, L3: 3 };
-const isRecord = (e) => e && e.src === 'record';
+// 作答：课上的作答，加上学生自己记的书上的题（src: book，dr-batch4 第 2 条）
+const isRecord = (e) => e && (e.src === 'record' || e.src === 'book');
 const firstTry = (e) => isRecord(e) && e.ok === true && !e.giveup && !e.revealed && (e.attempts == null || Number(e.attempts) <= 1);
 const safeSpace = (id) => { try { return spaceOfId(id); } catch { return null; } };
 const live = (d) => d && !['void', 'merged', 'retired'].includes(d.status);
@@ -58,7 +59,7 @@ export function verifyMastery(doc, idx = new Map()) {
   const from = [...recs.map(([b, h]) => `${RECORD_NAME[h.coll]} ${b}`), ...(texts.length ? [`旧记录的文字 ${texts.length} 条`] : [])];
   if (!orig.length && !from.length) return { ok: false, why: `依据 ${missing.slice(0, 3).join('、')} 在证据、错题本、观察、课里都找不到` };
   const note = missing.length ? `依据里 ${missing.length} 条找不到（${missing.slice(0, 3).join('、')}）` : '';
-  if (from.length) return { ok: true, legacy: true, from, ...(note ? { note } : {}) };
+  if (from.length) return { ok: true, legacy: true, from, refs: recs.map(([b, h]) => ({ coll: h.coll, id: b, date: h.doc?.date || '', session: h.doc?.session || null, source: h.doc?.source || '' })), texts: texts.length, ...(note ? { note } : {}) };
   if (PASSED.has(state) && !orig.some((e) => e.ok === true)) return { ok: false, why: '依据里没有做对的作答' };
   return { ok: true, ...(note ? { note } : {}) };
 }
@@ -120,7 +121,9 @@ const monthsOf = (first, last) => {
   return m1 === m2 && a.getFullYear() === b.getFullYear() ? `${m1} 月` : `${m1}–${m2} 月`;
 };
 const errorAt = (e) => (e?.date ? atOf(e.date) : 0);
-const errorLine = (e) => `${e.date || '?'} ${/-T\d/.test(String(e.id)) ? '检验记录' : '错题本'} ${e.id}${e.q ? `「${clip(e.q, 60)}」` : ''}${e.mine ? ` 写的：${clip(e.mine, 120)}` : ''}（${e.result ? clip(e.result, 20) : '错'}，旧记录）`;
+// 错题来自哪（dr-legacy-label）：学习台以前的课是「旧记录」；学习台建好以后记的（日期在这一科第一节课、第一条证据之后），
+// 只是没有原始作答，叫「错题本（没有原始作答）」，那天正好有这一科的课的挂上课号。origin(e) → { label, session }
+const errorLine = (e, origin = () => ({ label: '旧记录' })) => { const o = origin(e); return `${e.date || '?'} ${/-T\d/.test(String(e.id)) ? '检验记录' : '错题本'} ${e.id}${e.q ? `「${clip(e.q, 60)}」` : ''}${e.mine ? ` 写的：${clip(e.mine, 120)}` : ''}（${e.result ? clip(e.result, 20) : '错'}，${o.label}${o.session ? `，${o.session}` : ''}）`; };
 
 /**
  * 这一科每一块的现状和矛盾。mem：记忆库（mastery、reviews、weaknesses、errors、observations、sessions、curriculum、evidence）；coverage：讲过的记录（含 kind: legacy）。
@@ -177,6 +180,18 @@ export function deskState({ mem = {}, coverage = [], space = 'math', today = toD
   const blocks = [...new Set([...taught.keys(), ...legacy.keys(), ...byBlock.keys(), ...errByBlock.keys(), ...mastery.map((m) => blockOf(m.id))])].sort();
   const reviews = (mem.reviews || []).filter((r) => r && (r.status || 'active') === 'active');
   const conflicts = [];
+  // 这一科在学习台里开始的那一天：最早的一节课、最早的一条证据
+  const starts = [...sessions.filter((x) => inSpace(x.block) && Number(x.startedAt)).map((x) => Number(x.startedAt)), ...ev.filter((e) => inSpace(blockOf(e.block)) && Number(e.at)).map((e) => Number(e.at))];
+  const deskDay = starts.length ? dayOf(Math.min(...starts)) : '';
+  const sessionOn = (day) => sessions.find((x) => inSpace(x.block) && x.id && dayOf(Number(x.startedAt)) === day)?.id || null;
+  const origin = (e) => {
+    const sid = sessionOfError(e);
+    if (sid) return { label: '错题本（没有原始作答）', session: sid };
+    // 来源写着是学习台上的课（外部黑板、实时黑板、学习台）：那几节课的记录没留下来，也不是学习台以前的
+    if (/外部黑板|实时黑板|学习台|黑板课/.test(String(e?.source || ''))) return { label: '错题本（没有原始作答）', session: e?.date ? sessionOn(e.date) : null };
+    if (deskDay && e?.date && e.date >= deskDay) return { label: '错题本（没有原始作答）', session: sessionOn(e.date) };
+    return { label: '旧记录' };
+  };
   const rows = blocks.map((b) => {
     const t = taught.get(b);
     const lg = legacy.get(b);
@@ -186,7 +201,7 @@ export function deskState({ mem = {}, coverage = [], space = 'math', today = toD
     const errs = errByBlock.get(b) || [];
     const basisSet = new Set(m ? [...(lastLog(m, 'state')?.basis || []), ...(Array.isArray(m.basis) ? m.basis : [])].map(String) : []);
     // 作答和错题本按先后拼成一条（旧的错题没有时刻，按那天中午算）
-    const trail = [...recs.map((e) => ({ at: Number(e.at) || 0, line: evidenceLine(e), slip: e.ok === false })), ...errs.map((e) => ({ at: errorAt(e), line: errorLine(e), slip: !passedRecord(e) && !neutralRecord(e) }))].sort((a, c) => a.at - c.at);
+    const trail = [...recs.map((e) => ({ at: Number(e.at) || 0, line: evidenceLine(e), slip: e.ok === false })), ...errs.map((e) => ({ at: errorAt(e), line: errorLine(e, origin), slip: !passedRecord(e) && !neutralRecord(e) }))].sort((a, c) => a.at - c.at);
     const slip = [...trail].reverse().find((x) => x.slip);
     const due = reviews.filter((r) => (r.blocks || []).includes(b)).map((r) => reviewDue(r, today)).filter((d) => d && d.due).map((d) => d.due).sort()[0] || null;
     // T5 矛盾（只报，不改）
@@ -196,7 +211,7 @@ export function deskState({ mem = {}, coverage = [], space = 'math', today = toD
       const wrong = recs.find((e) => e.ok === false && dayOf(e.at) > since);
       const wrongOld = errs.find((e) => e.date && since && e.date > since && !passedRecord(e) && !neutralRecord(e) && !basisSet.has(String(e.id)));
       if (since && wrong) conflicts.push({ kind: 'slipped', block: b, text: `${b} 掌握写着「${m.state}」（${since}），之后 ${dayOf(wrong.at)} 同块做错了：${evidenceLine(wrong)}` });
-      else if (since && wrongOld) conflicts.push({ kind: 'slipped', block: b, text: `${b} 掌握写着「${m.state}」（${since}），之后错题本 ${wrongOld.date} 同块记了错题：${errorLine(wrongOld)}` });
+      else if (since && wrongOld) conflicts.push({ kind: 'slipped', block: b, text: `${b} 掌握写着「${m.state}」（${since}），之后错题本 ${wrongOld.date} 同块记了错题：${errorLine(wrongOld, origin)}` });
     }
     const firstAt = Math.min(t && Number.isFinite(t.first) ? t.first : Infinity, lg && Number.isFinite(lg.first) ? lg.first : Infinity);
     if ((!m || m.state === '未学' || m.state === '讲过') && Number.isFinite(firstAt)) {
@@ -215,7 +230,7 @@ export function deskState({ mem = {}, coverage = [], space = 'math', today = toD
     return {
       block: b, title: titleOf.get(b) || '',
       taught: taughtRow,
-      mastery: m ? { state: m.state, ok: !!v?.ok, ...(v?.legacy ? { legacy: true, from: v.from } : {}), ...(v && !v.ok ? { why: v.why } : {}), ...(v?.note ? { note: v.note } : {}) } : null,
+      mastery: m ? { state: m.state, ok: !!v?.ok, ...(v?.legacy ? { legacy: !v.texts && (v.refs || []).every((r) => r.coll === 'errors' && origin(r).label !== '旧记录') ? 'book' : true, from: v.from } : {}), ...(v && !v.ok ? { why: v.why } : {}), ...(v?.note ? { note: v.note } : {}) } : null,
       recent: trail.slice(-3).map((x) => x.line),
       lastSlip: slip ? slip.line : null,
       nextReview: due,
@@ -246,7 +261,7 @@ export function deskState({ mem = {}, coverage = [], space = 'math', today = toD
     if (lg) return `讲过（${lg.months || '学习台以前'}，旧记录）`;
     return `讲过（${now}）`;
   };
-  const masteryText = (x) => (!x ? '没写' : `${x.state}${!x.ok ? `（依据核不上，不算：${x.why}）` : x.legacy ? `（旧记录：${x.from.join('、')}，没有原始作答）` : ''}${x.note ? `（${x.note}）` : ''}`);
+  const masteryText = (x) => (!x ? '没写' : `${x.state}${!x.ok ? `（依据核不上，不算：${x.why}）` : x.legacy === 'book' ? `（依据在${x.from.join('、')}，没有原始作答）` : x.legacy ? `（旧记录：${x.from.join('、')}，没有原始作答）` : ''}${x.note ? `（${x.note}）` : ''}`);
   const line = (r) => `${r.block}${r.title ? `「${r.title}」` : ''}：${taughtText(r.taught)}；掌握 ${masteryText(r.mastery)}${r.nextReview ? `；下次复现 ${r.nextReview}` : ''}${r.taught?.legacy?.source ? `\n    旧的讲过：${clip(r.taught.legacy.source, 160)}` : ''}${r.lastSlip ? `\n    最近一次失手：${r.lastSlip}` : ''}${r.recent.length ? `\n    最近的作答：\n${r.recent.map((x) => `      ${x}`).join('\n')}` : ''}`;
   const text = [`这一科 ${rows.length} 块（讲过的、有作答的、写了掌握的、错题本里有的）；矛盾 ${conflicts.length} 条。旧记录 = 学习台以前的课（claude.ai 对话），只有错题本、检验记录和记下的文字，没有原始作答。`, ...(conflicts.length ? ['矛盾（只报，不改）：', ...conflicts.map((c) => `- ${c.text}`)] : []), '每一块：', ...rows.map(line)].join('\n');
   return { space, rows, conflicts, text };

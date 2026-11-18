@@ -308,6 +308,17 @@ step=2: 因为 $\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是一个数，�
 
 学生能点板上任何一处问「为什么 / 没看懂 / 举个例子」。ˋwhyˋ 写一句这一步的依据（哪条性质、哪个定义），点「为什么」时页面当场显示、不调用你（ˋstep=ˋ、ˋterm=ˋ（ˋ\hlˋ 的名字）、ˋallˋ）。
 
+### judge：解答题一步一步判
+
+ˋˋˋˋboard judge target=p1
+s1 ok
+s3 wrong tag=规则用错 why="把 (A+B)² 写成 A²+2AB+B²"
+s4 missing
+ˋˋˋˋ
+
+- ˋtarget=ˋ 是 ˋsolveˋ 组件的 ˋid:ˋ；一行一步，写参考步骤的编号和 ˋokˋ / ˋwrongˋ / ˋmissingˋ（没写这一步）；ˋtag=ˋ 错法：符号、漏条件、规则用错、计算、记号、没写依据、步骤缺、别的；ˋwhy=ˋ 一句为什么。没写的步记成没判。
+- 页面把每一步的结论画在题下面（参考步骤这时才给学生看）、记一条作答（ˋsteps: [{ id, ok, why, tag }]ˋ）；有错或缺的步页面记一道错题（第几步、tag、why；同一道题记过的不另记）。
+
 ### 一轮输出的样子
 
 下面只是指令格式的示范。
@@ -1111,6 +1122,15 @@ function recordText(a, type) {
       const wrong = Array.isArray(a.wrong) && a.wrong.length ? `（${a.wrong.map((x) => short(String(x), 80)).join('；')}）` : '';
       return `[作答] ${where(a, type)}：${a.q ? `「${short(a.q, 120)}」` : ''}${tail([v, a.ok === true ? '做到了' : a.ok === false ? '没做到' : '', a.giveup ? '放弃了' : ''].filter(Boolean).join('，') + wrong, a.text ? `说明：${short(a.text, 200)}` : '', duration(a.ms))}`;
     }
+    // 解答题（dr-batch4 第 1 条，solvespec.js）：交了整道题等判；判了以后逐步的结论
+    case 'solve': {
+      if (a.judged) return `[判定] ${where(a, 'solve')}：${a.by === 'helper' ? '页面里的 Claude' : a.by === 'teacher' ? '老师' : '主讲'}一步一步判了：${a.value || ''}${a.ok === true ? '（整道题对）' : ''}`;
+      const photos = Array.isArray(a.photos) && a.photos.length ? a.photos : [];
+      const n = Number(a.nImages) || photos.length;
+      const got = [a.value ? `打字：「${short(String(a.value), 1200)}」` : '', n ? `照片 ${n} 张${photos.length ? `（asset ${photos.join('、')}，用 read_asset 看）` : ''}` : ''].filter(Boolean).join('；');
+      const who = a.judge === 'claude' ? (a.source === 'record' ? '页面里的 Claude 判（board judge）' : '') : a.judge === 'none' ? '' : '等你一步一步判（board judge target=…）';
+      return `[作答] ${where(a, 'solve')}：交了整道题${Number(a.submitted) > 1 ? `（第 ${a.submitted} 次）` : ''}：${got || '（空的）'}${who ? `；${who}` : ''}${duration(a.ms)}`;
+    }
     case 'steps': return stepsRecord(a);
     case 'answer':
     case 'practice': return answerRecord(a, type);
@@ -1211,7 +1231,9 @@ function eventText(a, type) {
     case 'drag':
       // 演示、分拍板书的 step：走到第几步
       if (get('name') === 'step' && get('beat') !== undefined) return `[动作] ${where(a, '演示', { title: false })}：走到第 ${val(get('value'))} 步（共 ${val(get('beat'))} 步）`;
-      return `[动作] ${where(a, '图', { title: false })}：把 ${get('name') ?? '点'} 拖到 ${val(get('value'))}`;
+      return `[动作] ${where(a, '图', { title: false })}：把 ${get('name') ?? '点'}${dragHow(get)} 拖到 ${val(get('value'))}${dragTail(get)}`;
+    // 预测题拖猜测点（dr-batch4 第 6 条）：还没点「确定」，只是试
+    case 'guess-drag': return `[动作] ${where(a, 'predict', { title: false })}：把猜测点${dragHow(get)}拖到 ${val(get('value'))}${dragTail(get)}，还没点确定`;
     case 'sure': {
       const sure = get('sure'), ok = get('ok');
       return `[动作] ${where(a, '组件', { title: false })}${subText}：学生标了「${sure ? '有把握' : '没把握'}」${sure === false && ok === true ? '——这题答对了，但没把握：没把握按没会处理' : sure === true && ok === false ? '——答错了却有把握：多半是一个误解，先弄清学生是怎么想的' : ''}`;
@@ -1233,6 +1255,14 @@ function unknownText(a, type) {
   try { json = JSON.stringify(rest); } catch { json = ''; }
   return `[动作] ${type || '操作'}${loc ? `（${loc}）` : ''}${json && json !== '{}' ? `：${clip(json.replace(/\s+/g, ' '), 200)}` : ''}`;
 }
+
+// 拖的过程（dr-batch4 第 6 条，scene.js 的 trackInfo）：从哪拖起、中途停过哪几处、拖了多久
+const dragHow = (get) => (Array.isArray(get('from')) ? ` 从 ${val(get('from'))}` : '');
+const dragTail = (get) => {
+  const path = Array.isArray(get('path')) ? get('path') : [];
+  const ms = Number(get('ms'));
+  return `${path.length ? `，中途停在 ${path.map((p) => val(p)).join('、')}` : ''}${ms > 0 ? `（拖了 ${Math.max(1, Math.round(ms / 1000))} 秒）` : ''}`;
+};
 
 export function actionText(a) {
   if (typeof a === 'string') return a;
@@ -1510,7 +1540,7 @@ export function reportable(a) {
   if (!a || typeof a !== 'object') return false;
   const type = typeOf(a);
   // 外部设计的交互（board stage / widget）记的动作也要告诉外部
-  if (a.source === 'event') return type === 'reveal' || type === 'drag' || type === 'sure' || type === 'gloss' || EXT_EVENTS.has(type);
+  if (a.source === 'event') return type === 'reveal' || type === 'drag' || type === 'guess-drag' || type === 'sure' || type === 'gloss' || EXT_EVENTS.has(type);
   if (type === 'ask' || type === 'findbug-hint') return false;
   if (a.final && !a.revealed && !a.giveup) return false;
   return true;
@@ -1527,7 +1557,7 @@ export function actionTrigger(a, { lastStep = false } = {}) {
   if (!reportable(a)) return urgent ? 'now' : null;
   if (urgent) return 'now';
   if (a.source === 'event' && typeOf(a) === 'reveal' && !lastStep) return 'later';
-  if (a.source === 'event' && typeOf(a) === 'drag') return 'later';
+  if (a.source === 'event' && (typeOf(a) === 'drag' || typeOf(a) === 'guess-drag')) return 'later';
   // 点开生词看意思：页面当场显示了，不单独调用，跟着下一条告诉老师（知道学生哪几个词不认识）
   if (a.source === 'event' && typeOf(a) === 'gloss') return 'later';
   // 舞台上学生的每一下：跟着下一条说（舞台到了该叫老师的那一刻另记 stage-call）

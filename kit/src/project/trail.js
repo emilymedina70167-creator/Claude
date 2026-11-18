@@ -22,13 +22,28 @@ const clip = (t, n) => { const s = String(t ?? '').replace(/\s+/g, ' ').trim(); 
 const okText = (ok) => (ok === true ? '对' : ok === false ? '错' : '没判');
 const hhmm = (at) => { const d = new Date(Number(at) || 0); return `${toDate(Number(at) || 0)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
+// 一道题用了多久（dr-batch4 第 4 条）：ms 是出现在屏幕上到第一次交，msTotal 到这一次交（切走、锁屏、翻到别的板不算）
+const secs = (ms) => { const s = Math.round(Number(ms) / 1000); return s >= 60 ? `${Math.floor(s / 60)} 分 ${s % 60} 秒` : `${s} 秒`; };
+export function timeText(ev) {
+  const a = Number(ev?.ms), b = Number(ev?.msTotal);
+  if (!(a > 0) && !(b > 0)) return '';
+  return `，用时${a > 0 ? ` 首次 ${secs(a)}` : ''}${b > 0 && Math.abs(b - a) >= 1000 ? `${a > 0 ? '、' : ' '}到这次 ${secs(b)}` : ''}`;
+}
+// 书上的题的书名题号（和 memory/bookq.js 的 bookLabel 同一种写法；这里不 import 它，免得 trail.js 拖进学习台的模块）
+const bookLine = (b = {}) => [String(b.title || '').replace(/^张宇\s*/, ''), b.part, b.subject, b.ch ? `第 ${b.ch} 章` : '', b.no ? `第 ${b.no} 题` : ''].filter(Boolean).join(' ');
+
 /** 一条证据写成一行（给外部读，不是给学生看的） */
 export function evidenceLine(ev, { sessionTitle = '' } = {}) {
   const where = [ev.session ? `${ev.session}${sessionTitle ? `「${clip(sessionTitle, 20)}」` : ''}` : '', ev.block || '', ev.comp || ''].filter(Boolean).join(' · ');
   const head = `${hhmm(ev.at)}${where ? ` [${where}]` : ''}`;
   const val = ev.value !== undefined && ev.value !== null && ev.value !== '' ? ` 填了「${clip(typeof ev.value === 'string' ? ev.value : JSON.stringify(ev.value), 120)}」` : '';
+  const took = timeText(ev);
   switch (ev.src) {
-    case 'record': return `${head} 作答 ${ev.kind || ''}${ev.q ? `「${clip(ev.q, 80)}」` : ''}${val}（${okText(ev.ok)}${ev.attempts ? `，第 ${ev.attempts} 次` : ''}${ev.giveup ? '，放弃了' : ''}${ev.revealed ? '，看了答案' : ''}）${ev.misread ? ` 像是：${clip(ev.misread, 80)}` : ''}${ev.text ? ` 写的：${clip(ev.text, 200)}` : ''}`;
+    // 解答题（dr-batch4 第 1 条）：交了整道题、判了以后逐步的结论（「第 3 步 规则用错：…」）
+    case 'record': if (ev.kind === 'solve') return ev.judged ? `${head} 解答题判定（${{ helper: '页面里的 Claude', teacher: '老师' }[ev.by] || '主讲'}）：${clip(ev.value, 400) || '（空）'}${ev.ok === true ? '（整道题对）' : ''}` : `${head} 交了解答题${ev.q ? `「${clip(ev.q, 80)}」` : ''}：${ev.value ? `打字「${clip(ev.value, 200)}」` : ''}${ev.photos?.length || ev.images?.length ? `${ev.value ? '；' : ''}照片 ${(ev.photos || ev.images).length} 张（${(ev.photos || ev.images).join('、')}）` : ''}${took}`;
+      return `${head} 作答 ${ev.kind || ''}${ev.q ? `「${clip(ev.q, 80)}」` : ''}${val}（${okText(ev.ok)}${ev.attempts ? `，第 ${ev.attempts} 次` : ''}${ev.giveup ? '，放弃了' : ''}${ev.revealed ? '，看了答案' : ''}）${ev.misread ? ` 像是：${clip(ev.misread, 80)}` : ''}${ev.text ? ` 写的：${clip(ev.text, 200)}` : ''}${took}`;
+    // 书上的题（dr-batch4 第 2 条）：「1000 题 基础篇 线代 第 2 章 第 15 题：错」
+    case 'book': return `${head} 书上的题 ${bookLine(ev.book)}：${ev.verdict || okText(ev.ok)}${ev.text ? ` 写的：${clip(ev.text, 200)}` : ''}${ev.images?.length ? `（照片 ${ev.images.length} 张：${ev.images.join('、')}）` : ''}${ev.block ? '' : '（还没归块）'}`;
     case 'event': return `${head} 动作 ${ev.kind || ev.type || ''}${ev.text || ev.detail?.text ? `：${clip(ev.text || ev.detail.text, 200)}` : ''}`;
     case 'say': return `${head} 学生${ev.via === 'chat' ? '在对话里' : ''}说：${clip(ev.text, 400) || '（只有图）'}${ev.images?.length ? `（附图 ${ev.images.length} 张：${ev.images.join('、')}）` : ''}`;
     case 'helper': return `${head} 页面里的 Claude（${{ helper: '外部叫来的助手', coach: '板边助教', teacher: '页面里的老师' }[ev.role] || ev.role || '助手'}）说：${clip(ev.text, 400)}${ev.did?.length ? `；执行了 ${ev.did.join('、')}` : ''}`;

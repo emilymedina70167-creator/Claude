@@ -2595,3 +2595,20 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 /* 黑板上的一块舞台（blocks/stagebox.js）：高由 height: 定（行内写），话、挑战、按钮都在这块里面 */
 .block-stage .sb-title { margin: 0 0 6px; font: 600 18px/1.4 var(--hand, var(--sans)); color: rgb(var(--chalk-rgb) / 0.95); }
 .block-stage .sb-stage { position: relative; min-height: 240px; border-radius: 16px; overflow: hidden; background: rgb(var(--chalk-rgb) / 0.04); touch-action: pan-y; }
+
+/* 解答题 solve（blocks/solve.js，dr-batch4）：打字框、交照片、逐步的判定 */
+.block-solve .sv-text { width: 100%; min-height: 120px; padding: 10px 14px; resize: vertical; border: 0; border-radius: 12px; background: rgb(var(--shade-rgb) / calc(0.18 * var(--well-k, 1))); color: var(--chalk); font: 17px/1.7 var(--sans); outline: 2px dashed rgb(var(--chalk-rgb) / 0.28); outline-offset: -2px; box-sizing: border-box; }
+.block-solve .sv-text:focus { outline-color: rgb(var(--yellow-rgb) / 0.7); }
+.block-solve .ans-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+.block-solve .sv-send { min-height: 44px; }
+.block-solve .sv-status { font: 15px/1.5 var(--sans); }
+.block-solve .sv-status.is-ok { color: var(--ok); }
+.block-solve .sv-status.is-bad { color: var(--bad); }
+.block-solve .sv-judged { margin-top: 12px; }
+.block-solve .sv-jhead { font: 15px/1.5 var(--sans); color: rgb(var(--chalk-rgb) / 0.7); margin-bottom: 6px; }
+.block-solve .sv-steps { margin: 0; padding-left: 1.6em; display: flex; flex-direction: column; gap: 6px; }
+.block-solve .sv-step { font: 16px/1.6 var(--sans); }
+.block-solve .sv-mark { display: inline-block; min-width: 1.6em; font-weight: 600; }
+.block-solve .sv-step.is-ok .sv-mark { color: var(--ok); }
+.block-solve .sv-step.is-bad .sv-mark, .block-solve .sv-step.is-miss .sv-mark { color: var(--bad); }
+.block-solve .sv-why { margin-top: 2px; color: rgb(var(--chalk-rgb) / 0.75); font-size: 15px; }

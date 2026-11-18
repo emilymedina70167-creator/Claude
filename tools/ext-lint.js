@@ -6,6 +6,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseOutput } from '../kit/src/class/protocol.js';
 import { parseLets, calcValue, letValue, expandCalc } from '../kit/src/exact.js';
+import { parseDeriveDo, sampleEnvs, checkLine } from '../kit/src/derivedo.js';
+import { parseSolve } from '../kit/src/solvespec.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(here, '../kit/src');
@@ -113,6 +115,9 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
         if (f.name === 'stage' && stageCheck) for (const msg of stageCheck(f.body)) problems.push({ where, msg });
         if (f.name === 'widget' && widgetCheck) for (const msg of widgetCheck(f.body)) problems.push({ where, msg });
         if (f.name === 'let') { try { parseLets(f.body); } catch (e) { problems.push({ where, msg: e.message }); } addLets(f.body); }
+        // derive 的学生版（dr-batch4 第 3 条：queue 里写了页面不认的 E(2)，预检说没问题）：start / goal / let 照页面同一份读一遍、算一遍
+        if (f.name === 'derive' && /^\s*mode\s*[:：]\s*do\s*$/m.test(f.body)) for (const msg of deriveDoProblems(f.body)) problems.push({ where, msg });
+        if (f.name === 'solve') for (const msg of parseSolve(f.body, { ext: true }).problems) problems.push({ where, msg });
         if (f.body.includes('\\calc')) for (const e of expandCalc(f.body, (x) => calcValue(x, vars).tex).errors) problems.push({ where, msg: `\\calc{${e.expr}} 算不出来：${e.msg}` });
       }
       // 组件外面的正文里的 \calc（整节课的量）
@@ -127,7 +132,75 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
     if (segIds.has(t) || here.has(t) || compIds.has(t)) continue;
     problems.push({ where: `${o.op} target=${t}`, msg: `板上没有 ${t}（段 id 或组件的 id:）` });
   }
+  problems.push(...designHints({ out, prior, here }));
   return { problems, segments, components };
+}
+
+// —— 替外部挡出题错误（dr-batch4 第 5 条）：只是提示（level: 'hint'），不算写错 ——
+// 页面判得了对错的组件（演示组件的 mode: do / quiz / fill 也算）
+const GRADED = new Set(['answer', 'quiz', 'steps', 'cloze', 'errfind', 'parse', 'drill', 'chunk', 'translate', 'recognize', 'findbug', 'code', 'practice', 'link']);
+const LIVE_KINDS = new Set(['wrong', 'giveup', 'stuck', 'misread']);
+const graded = (f) => GRADED.has(f.name) || (/^\s*mode\s*[:：]\s*(do|quiz|fill)\s*$/m.test(f.body) && f.name !== 'frames');
+const fieldOf = (body, k) => body.match(new RegExp(`^\\s*${k}\\s*[:：]\\s*(.+)$`, 'm'))?.[1]?.trim() || '';
+const quizOptions = (body) => [...String(body).matchAll(/^\s*-\s*\[([ xX])\]\s*(.*)$/gm)].map((m) => ({ correct: m[1].toLowerCase() === 'x', text: m[2].trim() }));
+const plain = (t) => String(t || '').replace(/[$\\{}\s*_`]/g, '').toLowerCase();
+const INTERACTIVE = new Set(['answer', 'steps', 'derive', 'elim', 'predict', 'recognize', 'scene', 'sort', 'cloze', 'parse', 'solve']);
+
+export function designHints({ out, prior = [], here = new Map() } = {}) {
+  const hints = [];
+  const hint = (where, msg) => hints.push({ where, msg, level: 'hint' });
+  // 这一轮和以前几轮写的预案、助手：target → 有没有接答错 / 想不出来 / 很久没动
+  const covered = new Set();
+  const scan = (ops) => { for (const o of ops) { if (o.op === 'react' && (o.cases || []).some((c) => LIVE_KINDS.has(c.kind))) covered.add(String(o.target)); if (o.op === 'claude' && o.target) covered.add(String(o.target)); } };
+  for (const t of prior || []) scan(parseOutput(String(t || ''), { final: true }).ops);
+  scan(out.ops);
+  for (const [segId, o] of here) {
+    if (o.op === 'stage' || o.op === 'widget' || o.op === 'edit') continue;
+    const fs = fencesOf(o.body);
+    fs.forEach((f, i) => {
+      const id = idOf(f.body);
+      const where = `${o.op} id=${segId} ${f.name}${id ? ` ${id}` : ''}`;
+      if (id && graded(f) && !covered.has(id)) hint(where, `学生答错要等你：${id} 没写预案（board react 的 wrong / stuck / giveup），也没挂 board claude`);
+      if (f.name !== 'quiz') return;
+      const opts = quizOptions(f.body);
+      const right = opts.filter((x) => x.correct), wrong = opts.filter((x) => !x.correct);
+      // 正确选项明显比别的长：学生看长短就能猜
+      if (right.length === 1 && wrong.length >= 2) {
+        const long = Math.max(...wrong.map((x) => plain(x.text).length));
+        if (plain(right[0].text).length >= Math.max(8, long * 1.5)) hint(where, `正确选项比别的选项长得多（${plain(right[0].text).length} 对 ${long} 个字）：学生看长短就能猜`);
+      }
+      // 正确选项的字露在题干、或这一段别的组件里（explain 不算）
+      const stem = plain(fieldOf(f.body, 'q') || fieldOf(f.body, 'question'));
+      for (const r of right) {
+        const a = plain(r.text);
+        if (a.length < 4) continue;
+        if (stem.includes(a)) hint(where, `正确选项「${r.text.slice(0, 30)}」原样写在题干里`);
+        else if (fs.some((g, j) => j !== i && g.name !== 'let' && plain(g.body.replace(/^\s*explain\s*[:：].*$/gm, '')).includes(a))) hint(where, `正确选项「${r.text.slice(0, 30)}」原样写在这一段别的组件里：学生不用想就能对上`);
+      }
+      // 能绕过前面那步：前面让学生自己做的组件的答案，原样出现在这道题的选项或题干里
+      for (const g of fs.slice(0, i)) {
+        if (!INTERACTIVE.has(g.name)) continue;
+        const ans = plain(fieldOf(g.body, 'answer') || fieldOf(g.body, 'goal'));
+        if (!ans) continue;
+        // 短的答案（一个数）只认选项整个就是它；长的认原样出现在题干、选项里
+        const inStem = ans.length >= 3 && stem.includes(ans);
+        if (inStem || opts.some((x) => plain(x.text) === ans || (ans.length >= 3 && plain(x.text).includes(ans)))) hint(where, `这题能绕过前面那步：前面 ${g.name}${idOf(g.body) ? ` ${idOf(g.body)}` : ''} 要学生自己得出的「${(fieldOf(g.body, 'answer') || fieldOf(g.body, 'goal')).slice(0, 30)}」写在这道题的${inStem ? '题干' : '选项'}里`);
+      }
+    });
+  }
+  return hints;
+}
+
+/** derive mode: do 的写法查一遍：读得懂、取得了数、start 算得出、goal 读得懂（和页面 blocks/derivedo.js 同一份函数） */
+export function deriveDoProblems(body) {
+  let spec, envs;
+  try { spec = parseDeriveDo(body); } catch (e) { return [e.message]; }
+  try { envs = sampleEnvs(spec); } catch (e) { return [e.message]; }
+  const out = [];
+  const self = checkLine(spec, envs, spec.start, spec.start);
+  if (!self.ok) out.push(`start: ${spec.start} ${self.error || self.why || '算不出来'}`);
+  if (spec.goal) { const g = checkLine(spec, envs, spec.goal, spec.goal); if (!g.ok) out.push(`goal: ${spec.goal} ${g.error || g.why || '算不出来'}`); }
+  return out;
 }
 
 /** 存下来的这节课（ext_in 的文档）按序号排好，取 text */

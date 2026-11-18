@@ -82,7 +82,10 @@ function itemOf(key, list, segs) {
   const revealed = !giveup && (!!final?.revealed || (recs.some((r) => r.revealed) && !(final?.ok === true)));
   const lastOk = typeof final?.ok === 'boolean' ? final.ok : tries.length ? tries.at(-1) : null;
   const outcome = giveup ? 'giveup' : revealed ? 'revealed' : lastOk === true ? (tries[0] === true && attempts <= 1 ? 'first' : 'ok') : lastOk === false ? 'wrong' : 'open';
-  const ms = Math.max(0, ...recs.map((r) => num(r.ms) || 0)) || null;
+  // 用时：有屏幕计时的（dr-batch4 第 4 条，带 msTotal）取第一次交的 ms（首次）和最后一次的 msTotal（一共）；以前的记录照旧取最大的 ms
+  const timed = recs.filter((r) => num(r.msTotal));
+  const ms = timed.length ? num([...timed].sort(byAt)[0].ms) || null : Math.max(0, ...recs.map((r) => num(r.ms) || 0)) || null;
+  const msTotal = timed.length ? Math.max(...timed.map((r) => num(r.msTotal) || 0)) || null : null;
   const step = head?.step ?? null;
   const seg = step ? segs.get(String(step)) : null;
   const at = list.map((e) => num(e.at)).filter((x) => x !== null);
@@ -116,6 +119,7 @@ function itemOf(key, list, segs) {
     // 有没有把握（学生点的，最后一次为准）：true / false / null（没点）
     sure: sureOf(evs),
     ms,
+    ...(msTotal ? { msTotal } : {}),
     last: cut(final?.last ?? recs.at(-1)?.value ?? recs.at(-1)?.text ?? '', 200),
     // 写错的那几次写了什么（选择题记在 wrong 里）：这节课的一页（sheet.js）里「当时是怎么错的」
     wrongs: uniq([...recs.filter((r) => r.ok === false).map((r) => cut(r.value ?? r.text ?? '', 80)), ...recs.flatMap((r) => (Array.isArray(r.wrong) ? r.wrong.map((w) => cut(w, 80)) : []))].filter(Boolean)).slice(0, 3),
@@ -310,7 +314,7 @@ export function reportText(r, { max = 8 * 1024 } = {}) {
     ...(r.aims?.length ? ['', '这节课要拿下的事（状态是页面按学生的作答算的）：', aimsText(r.aims)] : []),
     ...(r.aimsPast?.length ? ['', '这节课前面定过、讲到后面被换掉的事（也是这节课学的）：', aimsText(r.aimsPast)] : []),
   ];
-  const items = (r.items || []).map((it) => `- ${it.comp}${it.seg ? `（${it.seg}）` : ''}「${cut(it.q, 60)}」：${it.seq || '·'} ${it.guess ? '把选项试遍了才对（不算会）' : OUTCOME_TEXT[it.outcome] || it.outcome}${it.sure === false ? '（学生标了没把握）' : it.sure === true ? '（有把握）' : ''}${it.last ? `，最后写的 ${cut(it.last, 40)}` : ''}${it.ms ? `，${Math.round(it.ms / 1000)} 秒` : ''}；证据 ${it.evidence.slice(-3).join(',')}`);
+  const items = (r.items || []).map((it) => `- ${it.comp}${it.seg ? `（${it.seg}）` : ''}「${cut(it.q, 60)}」：${it.seq || '·'} ${it.guess ? '把选项试遍了才对（不算会）' : OUTCOME_TEXT[it.outcome] || it.outcome}${it.sure === false ? '（学生标了没把握）' : it.sure === true ? '（有把握）' : ''}${it.last ? `，最后写的 ${cut(it.last, 40)}` : ''}${it.ms ? `，${it.msTotal && it.msTotal - it.ms >= 1000 ? `首次 ${Math.round(it.ms / 1000)} 秒、一共 ${Math.round(it.msTotal / 1000)} 秒` : `${Math.round(it.ms / 1000)} 秒`}` : ''}；证据 ${it.evidence.slice(-3).join(',')}`);
   const tail = [];
   if (r.drafts?.length) tail.push(`- 没交的草稿：${r.drafts.map((d) => `${d.comp || ''}「${cut(d.text, 40)}」（${d.id}）`).join('；')}`);
   if (r.says?.length) tail.push(`- 学生说的话：${r.says.filter((s) => s.text).slice(-12).map((s) => `「${cut(s.text, 60)}」（${s.id}）`).join('；')}`);

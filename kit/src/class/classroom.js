@@ -16,7 +16,9 @@ import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
 import { pendingIns, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE, saidItems, memoLines } from './ext.js';
-import { queueDue, applyEdits, keptComponents } from './extboard.js';
+import { queueDue, applyEdits, keptComponents, componentSources } from './extboard.js';
+import { errorOfJudged } from '../solvespec.js';
+import { watchTiming } from '../timing.js';
 import { stageBoxState } from '../blocks/stagebox.js';
 import { shouldFire, eventsOf, filterOps, handBack, helperPrompt, helperLines, rebuildHelpers } from './delegate.js';
 import { journalId } from '../project/journal.js';
@@ -166,6 +168,11 @@ export async function renderClass(root, meta, desk = null) {
   // 舞台组件（board stage）里外部预写的「没做到」「走偏」（.wrong / .miss）：外部的课整节课都收
   session.extPrewrite = !!desk?.ext;
   // board stage 刷新前的样子（dr-trail-fix 3）：舞台的 log 存在 stage_logs/{段 id}（学习台里换到 sessions/{编号}/ 下面），再画时放回
+  // 解答题交的照片（blocks/solve.js）：先传进 assets 拿编号，作答记录带上编号给外部（read_asset）
+  session.uploadImage = readOnly ? null : (blob) => uploadImage(blob);
+  // 每道题在学生屏幕上的时间（timing.js，dr-batch4 第 3、4 条）：作答的 ms / msTotal、stuck= 按它算
+  const timing = readOnly ? null : watchTiming(root).timer;
+  session.timing = timing;
   session.stageLogs = {
     get: (id) => db.doc(`stage_logs/${id}`).get().then((x) => (x.exists ? x.data() : null), () => null),
     put: (id, doc) => (readOnly ? null : db.doc(`stage_logs/${id}`).set(doc)),
@@ -202,6 +209,9 @@ export async function renderClass(root, meta, desk = null) {
   // 外部主讲的课：开了板边助教的题（board coach）。restore 从课堂记录里放回来（extState 在后面才定义）
   const coachRules = new Map();
   // 外部主讲的课的状态（ext.js；extStart 在 restore 之后就用到，放在这里免得碰上暂时性死区）
+  // 预案挂在还没开的预备板里的组件上（dr-batch4 第 3 条）：组件 id → { queue }，开板时把那条预案接到画出来的段上
+  const pendingTargets = new Map();
+  const queuedOwner = (target) => [...extState.queue.values()].find((q) => !q.opened && componentSources(q.md).has(String(target))) || null;
   const extState = { ready: Promise.resolve(), chain: Promise.resolve(), again: null, snap: false, snapped: [], queue: new Map(), away: 0, helpers: new Map(), helperOff: !!desk?.ext?.helperOff, touch: new Map(), acts: [], draftsSeen: new Map(), close: false, coach: coachRules, coachN: new Map(), coachLines: [], outs: [], ins: [], lastSys: 0, running: false };
   let nowLast = '', nowTimer = 0; // meta/now 上次写的、节流的计时（extNow）
   let extTools = null; // 外部的课：板上方那一小条（paintExtTools；在这里先有值，免得 restore 时碰上暂时性死区）
@@ -583,7 +593,7 @@ export async function renderClass(root, meta, desk = null) {
     for (const d of s.docs) {
       aimEvs.push({ id: d.id, ...d.data() });
       const x = fromEvidence({ id: d.id, ...d.data() });
-      if (x.kind === 'record') an.push(x.rec);
+      if (x.kind === 'record') { an.push(x.rec); if (x.rec.block && !x.rec.judged) timing?.seedFirst(x.rec.block, Number(x.rec.at) || 0); }
       else if (x.kind === 'event') ev.push(x.rec);
     }
     return { an, ev };
@@ -977,6 +987,26 @@ export async function renderClass(root, meta, desk = null) {
   }
 
   // 黑板上（看得到的段里，所有板和常驻栏）已经有的组件 id → 所在段
+  // 解答题判出来有错的步：照 memo 的 error 那一条路记一道错题（「第 3 步（规则用错）」，带全部逐步结论 steps），
+  // 「管理 → 最近记下的」能撤销。先等作答写进证据（依据挂那一题的作答）；同一道题记过的照 memo 的规矩不另记，原因照实回报
+  async function fileSolveError(target, api, steps) {
+    const e = errorOfJudged(steps, api.spec.steps);
+    if (!e || !desk?.memo?.ops) return;
+    await sink.settled?.().catch(() => {});
+    const mine = api.lastText || (api.lastBlobs?.length ? `交的是照片 ${api.lastBlobs.length} 张（看证据里的 images）` : '（板上没交，照外部看到的判）');
+    const attrs = { q: String(api.spec.fields.q).replace(/\s+/g, ' ').slice(0, 600), mine, step: e.step, cause: e.cause, basis: [target], source: `解答题 ${target}（${desk.sid || ''}）`, steps: e.steps, ...(e.tag ? { tag: e.tag } : {}) };
+    const line = `error（解答题 ${target}：${e.step}）`;
+    let msg = '';
+    try {
+      // 这节课的块不在课程地图里（还没建图的科）：不挂块照记，免得整条记不上
+      const cur = desk.mem?.curriculum || [];
+      const block = desk.block && (!cur.length || cur.some((c) => String(c.id) === String(desk.block))) ? desk.block : null;
+      const r = await desk.memo.ops.applyMemo([{ kind: 'error', attrs, line }], { session: desk.sid, block, space: desk.space, turn: turnSeq, turns: history.filter((t) => !t.discarded) });
+      msg = r.rejected.length ? `错题本没记：${r.rejected[0].error}` : `错题本记了 ${r.pds.map((x) => x.target).join('、')}（${e.step}）`;
+    } catch (err) { msg = `错题本没记成：${String(err?.message || err).slice(0, 120)}`; }
+    if (EXT) { extState.coachLines.push(`[页面] 解答题 ${target}：${msg}`); extWrite({ text: '' }); }
+    else addTurn({ role: 'system', kind: 'note', text: `[系统] 解答题 ${target}：${msg}` });
+  }
   function liveBlockIds(exceptSeg) {
     const out = new Map();
     for (const s of segs.values()) {
@@ -1094,6 +1124,27 @@ export async function renderClass(root, meta, desk = null) {
     }
     // 改字不丢作答（需求 R9）：只改那段的文字，原文没变的组件留着学生的作答和草稿
     if (op.op === 'edit') return editSeg(op, failures, notes);
+    // 预备板撤掉（dr-batch4 第 3 条）：没开的丢掉，「下一块 →」跟着收
+    if (op.op === 'unqueue') {
+      const q = extState.queue.get(op.id);
+      if (!q) return { op: 'unqueue', id: op.id, ok: false, error: `没有预备板 ${op.id}` };
+      if (q.opened) return { op: 'unqueue', id: op.id, ok: false, error: `预备板 ${op.id} 已经开了：要撤回板上的段用 board hide` };
+      extState.queue.delete(op.id);
+      for (const k of [...pendingTargets.keys()]) if (pendingTargets.get(k).queue === op.id) { pendingTargets.delete(k); reacts.delete(k); }
+      paintExtTools();
+      return { op: 'unqueue', id: op.id, ok: true };
+    }
+    // 解答题按步骤判（dr-batch4 第 1 条，solvespec.js / blocks/solve.js）：画在题下面、记一条作答；有错的步记进错题本
+    if (op.op === 'judge') {
+      const el = [...board.querySelectorAll(`[data-bid="${CSS.escape(op.target)}"]`)].find((x) => x.__solve) || null;
+      if (!el) return { op: 'judge', target: op.target, ok: false, error: liveBlockIds().has(op.target) ? `${op.target} 不是解答题（solve）` : `黑板上没有解答题 ${op.target}` };
+      const by = opTurn.by === 'helper' ? 'helper' : EXT ? 'ext' : 'teacher';
+      const r = el.__solve.judge(op.body, { by });
+      if (!r.ok) return { op: 'judge', target: op.target, ok: false, error: r.errors.join('；') };
+      for (const n of [...r.notes, ...r.errors]) notes.push(`judge ${op.target}：${n}`);
+      if (!r.right && desk && !readOnly) fileSolveError(op.target, el.__solve, r.steps);
+      return { op: 'judge', target: op.target, ok: true, right: r.right, line: r.line };
+    }
     // 外部叫页面里的 Claude 来接（需求 R1，delegate.js）：记下这一条；when=now 的这一轮执行完马上叫一次
     if (op.op === 'claude' || op.op === 'claude-off') {
       if (!EXT) return { op: op.op, ok: false, error: `${op.op} 只在外部主讲的课里有用` };
@@ -1265,7 +1316,9 @@ export async function renderClass(root, meta, desk = null) {
     // 预案：学生在这个组件上作答以后页面当场接的话（react.js）
     if (op.op === 'react') {
       const seg = liveBlockIds().get(op.target);
-      if (!seg) return { op: 'react', target: op.target, ok: false, error: `黑板上没有组件 ${op.target}（target 写组件的 id:，不是段的 id）` };
+      const owner = seg ? null : queuedOwner(op.target);
+      if (!seg && !owner) return { op: 'react', target: op.target, ok: false, error: `黑板上没有组件 ${op.target}（target 写组件的 id:，不是段的 id）` };
+      if (owner) { pendingTargets.set(String(op.target), { queue: owner.id }); notes.push(`react ${op.target} 挂在预备板 ${owner.id} 的组件上：开板时挂上`); }
       if (op.errors?.length) notes.push(`react ${op.target} 里有 ${op.errors.length} 行没用：\n${op.errors.map((e) => `  - ${e}`).join('\n')}`);
       const unknown = [...new Set(op.cases.flatMap((c) => c.show || []))].filter((id) => !segs.has(id));
       if (unknown.length) notes.push(`react ${op.target} 的 show= 写了黑板上没有的段：${unknown.join('、')}（到时候揭不开）`);
@@ -1589,6 +1642,11 @@ export async function renderClass(root, meta, desk = null) {
         if (i >= 0) queue.actions.splice(i, 1);
       }
       queue.actions.push(a);
+      // 解答题交了照片（页面里的老师判，judge: claude）：照片原图跟着这一条交给老师
+      if (!EXT && a.source === 'record' && a.type === 'solve' && !a.judged && a.block) {
+        const sv = [...board.querySelectorAll(`[data-bid="${CSS.escape(a.block)}"]`)].find((x) => x.__solve)?.__solve;
+        (sv?.lastBlobs || []).slice(0, 4).forEach((blob, i) => queue.images.push({ blob, id: Promise.resolve(a.photos?.[i] || null) }));
+      }
     }
     // 板边助教：外部开了这一题、学生做错了
     if (EXT && a.source === 'record' && a.ok === false && extState.coach.has(String(a.block || ''))) runCoach(a);
@@ -1934,6 +1992,9 @@ export async function renderClass(root, meta, desk = null) {
     await inTurn(async () => {
       const failures = [], notes = [];
       r = execOp({ op: 'new', id: q.id, title: q.title, body: q.md }, failures, notes);
+      // 挂在这块预备板里的预案：接到刚画出来的段上（段被改写、撤回时照常作废）
+      const live = liveBlockIds();
+      for (const [t, p] of [...pendingTargets]) if (p.queue === q.id) { const rule = reacts.get(t); if (rule && live.has(t)) rule.seg = live.get(t); pendingTargets.delete(t); }
       addTurn({ role: 'system', kind: 'queue', queue: q.id, text: `[系统] 预备板 ${q.id} 开了（${why}）${r.ok ? '' : `，但没画出来：${r.error}`}` });
       layoutPage(bv.cur);
       refresh();
@@ -1950,7 +2011,9 @@ export async function renderClass(root, meta, desk = null) {
     const live = liveBlockIds();
     for (const [target, rule] of reacts) {
       if (!live.has(target)) continue;
-      const i = stuckDue(rule, { touched: extState.touch.get(String(target)), armed: rule.at || 0 });
+      // 按那题在学生屏幕上的时间算（学生翻到别的板、切走了不算没动静）
+      const since = Math.max(extState.touch.get(String(target)) || 0, rule.at || 0);
+      const i = stuckDue(rule, { touched: extState.touch.get(String(target)), armed: rule.at || 0, ...(timing ? { quietMs: timing.visibleMs(String(target), since) } : {}) });
       if (i < 0) continue;
       const c = rule.cases[i];
       const plan = { fired: [{ target, seq: rule.seq, index: i, kind: 'stuck', text: c.text, show: c.show || [] }], talk: c.text || '', show: c.show || [] };
@@ -1974,7 +2037,8 @@ export async function renderClass(root, meta, desk = null) {
       if (r.off || !r.target) continue;
       if (r.on.includes('stuck') && r.stuck) {
         const last = Math.max(extState.touch.get(String(r.target)) || 0, r.armedAt || 0);
-        if (last && now - last >= r.stuck && r.stuckAt !== last) { r.stuckAt = last; helperFire({ kind: 'stuck', target: r.target }); }
+        const quiet = timing ? timing.visibleMs(String(r.target), last) : now - last;
+        if (last && quiet >= r.stuck && r.stuckAt !== last) { r.stuckAt = last; helperFire({ kind: 'stuck', target: r.target }); }
       }
       if (r.on.includes('draft')) {
         const el = board.querySelector(`[data-bid="${CSS.escape(String(r.target))}"]`);
@@ -2020,9 +2084,14 @@ export async function renderClass(root, meta, desk = null) {
     const t0 = performance.now();
     let bytes = 0;
     try {
-      const input = helperPrompt({ rule, ev, materials: await helperMaterials(rule, ev), doc: PROTOCOL_DOC });
+      const materials = await helperMaterials(rule, ev);
+      // 解答题（solve）：学生交的照片原图一起交给它（dr-batch4 第 1 条，can: judge 时它照参考步骤一步一步判）
+      const solveEl = rule.target ? [...board.querySelectorAll(`[data-bid="${CSS.escape(String(rule.target))}"]`)].find((x) => x.__solve) : null;
+      const shots = solveEl?.__solve.lastBlobs?.length && teacher.images ? solveEl.__solve.lastBlobs.slice(0, 4) : [];
+      if (solveEl) materials.push(`${rule.target} 是解答题，参考步骤（学生看不到）：\n${solveEl.__solve.spec.steps.map((s0) => `${s0.id} ${s0.kind}: ${s0.text}`).join('\n')}${shots.length ? `\n学生交的照片 ${shots.length} 张附在这一条上。` : ''}${rule.can.includes('judge') ? `\n判的写法：board judge target=${rule.target}，块里一行一步（s1 ok / s3 wrong tag=… why="…" / s4 missing），tag 用 符号、漏条件、规则用错、计算、记号、没写依据、步骤缺、别的。` : ''}`);
+      const input = helperPrompt({ rule, ev, materials, doc: PROTOCOL_DOC });
       bytes = new Blob([input]).size;
-      res = await teacher.call(input, { ...TEACH, cache: false, ...(teacher.tools ? { tools: classTools(staged) } : {}) });
+      res = await teacher.call(input, { ...TEACH, cache: false, ...(shots.length ? { images: shots } : {}), ...(teacher.tools ? { tools: classTools(staged) } : {}) });
       if (res?.modelApplied !== MODEL) { error = `平台回的模型是 ${res?.modelApplied || '不知道'}，不是 Opus 5.5，这一次作废`; res = null; }
     } catch (e) { error = String(e?.code || e?.message || e).slice(0, 200); }
     const usage = { bytes, ms: performance.now() - t0, tools: staged.calls.length };

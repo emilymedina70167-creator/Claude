@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-18e**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-18f**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -75,6 +75,7 @@ b = [1, 1, -2]
 - `practice`（线代）：practice 的内置题型（线代） → `components/practice.md`
 - `practice`（数据结构）：practice 的内置题型（数据结构） → `components/practice.md`
 - `quiz`：选择题 / 填空题 → `components/quiz.md`
+- `solve`：解答题，按步骤判 → `components/solve.md`
 - `context`：给页面里 Claude 的背景资料（不显示） → `components/context.md`
 - `draft`：草稿区（Apple Pencil 演算） → `components/draft.md`
 - `steps`：一步步揭开的例题（带着动脑） → `components/steps.md`
@@ -304,6 +305,17 @@ step=2: 因为 $\boldsymbol\beta^{\mathrm T}\boldsymbol\alpha$ 是一个数，�
 
 学生能点板上任何一处问「为什么 / 没看懂 / 举个例子」。`why` 写一句这一步的依据（哪条性质、哪个定义），点「为什么」时页面当场显示、不调用你（`step=`、`term=`（`\hl` 的名字）、`all`）。
 
+### judge：解答题一步一步判
+
+````board judge target=p1
+s1 ok
+s3 wrong tag=规则用错 why="把 (A+B)² 写成 A²+2AB+B²"
+s4 missing
+````
+
+- `target=` 是 `solve` 组件的 `id:`；一行一步，写参考步骤的编号和 `ok` / `wrong` / `missing`（没写这一步）；`tag=` 错法：符号、漏条件、规则用错、计算、记号、没写依据、步骤缺、别的；`why=` 一句为什么。没写的步记成没判。
+- 页面把每一步的结论画在题下面（参考步骤这时才给学生看）、记一条作答（`steps: [{ id, ok, why, tag }]`）；有错或缺的步页面记一道错题（第几步、tag、why；同一道题记过的不另记）。
+
 ### 一轮输出的样子
 
 下面只是指令格式的示范。
@@ -491,6 +503,8 @@ explain: $x+y=2$，$A\mathbf x = 2\cdot(1, 2) = (2, 4)$，还在 $(1, 2)$ 这条
 
 - 一轮里 `board new` 可以写几次，每次开一块新板，最后一块是当前板。
 - `board queue id=b5 title="…" after=…`：块里是那块板第一段的内容。先存着、不显示；`after=q-b4:right`（q-b4 答对）、`q-b4:done`（steps 揭开最后一步）、`q-b4:submit`（交了作答）、`button`（板上方出「下一块 →」，学生点）几个用 `|` 连着写，哪个先到就开。开的时候页面照 `board new` 画、翻过去，写进下一份 `ext_out`（`[页面] 预备板 b5 开了`）。没开的列在黑板现状「外部的课里页面记着的」。
+- `board react` 的 `target` 可以是还没开的预备板里的组件：先存着（`result` 里写「挂在预备板 b5 的组件上：开板时挂上」），开板时挂上。
+- `board unqueue id=b5`：没开的预备板丢掉，挂在它上面的预案一起丢，「下一块 →」跟着收；开过的报「已经开了」（要撤板上的段用 `board hide`）。
 
 **指以前的板**：`mark`、`figure`、`replace`、`edit`、`hide` 的目标在以前的板上也执行；学生不在那块板上时，板上方出一条「主讲在第 N 块板上标了东西 →」，学生点了翻过去。
 
@@ -510,7 +524,7 @@ explain: $x+y=2$，$A\mathbf x = 2\cdot(1, 2) = (2, 4)$，还在 $(1, 2)$ 这条
 
 - `wrong: …`：答错；`wrong match="x=3": …` 学生的答案里有这一段（不管空格、大小写、全角半角）才用这一条，`match="/正则/"` 照正则；同一题先找对得上 `match` 的，再用没写 `match` 的。
 - `misread "错法": …`（页面认出来的错法）、`giveup: …`（想不出来、看了答案）。
-- `stuck=90s: …`：那一题这么久没有作答（至少 10s）。
+- `stuck=90s: …`：那一题这么久没有作答（至少 10s）。只算那题在学生屏幕上的时间：学生翻到别的板、切到别的程序、锁屏的时间不算（`board claude … stuck=` 也一样）。
 - 每条只用一次；页面接了不调用，写进下一份 `ext_out`（`（预案当场接了：…）`）。
 
 **叫页面里的 Claude 来接：`board claude`**（Opus 5.5 high；平台回的不是它，那一次作废、不写）：
@@ -527,7 +541,7 @@ can: say, mark
 
 - 什么时候叫：不写 `on=` 就是执行这一轮时马上叫一次；`on=` 写学生在 `target` 那题上的事，几件用 `|` 连：`submit`（交了）、`wrong`（答错）、`right`（答对）、`giveup`（想不出来 / 看了答案）、`draft`（写着还没交，写的变了就算一次）、`say`（学生在输入框打了字，不用 `target`）；`stuck=90s`（那题这么久没动静）。
 - `see:` 给它看的（不写就是 `target`）：`target`（那道题在板上的原文和学生在上面的全部作答）、`board`（黑板现状）、`evidence=last3`（学生最近几次作答和动作）、`ext`（这节课外部写过的每一段）、`memory=集合/编号,集合/编号`（学习台里那几条，原样）、`books=条目范围`（告诉它用 `textbook_read` 取）。学生这一次的作答总是带着。
-- `can:` 它这一次能做的（不写就是 `say`）：`say`（说的话写在板顶）、`add`、`replace`、`hide`、`mark`、`figure`、`react`、`new`、`stage`、`widget`、`memo`、`note`。不在里面的指令页面不执行，写进 `ext_out` 的「没执行（越权）」；`pin`、`aims`、`close`、`claude` 这些它一律不能写。
+- `can:` 它这一次能做的（不写就是 `say`）：`say`（说的话写在板顶）、`add`、`replace`、`hide`、`mark`、`figure`、`react`、`new`、`stage`、`widget`、`memo`、`note`、`judge`（解答题一步一步判，写 `board judge`；`target` 是 `solve` 时学生交的照片原图一起交给它，参考步骤也在它的材料里）。不在里面的指令页面不执行，写进 `ext_out` 的「没执行（越权）」；`pin`、`aims`、`close`、`claude` 这些它一律不能写。
 - `to=`：`board`（默认，照 `can` 执行到板上）、`ext`（不上板，全文只写进 `ext_out`）、`db:集合/文档`（全文存进那一条的 `text`，不上板，记一条 `journal`，`by: "ext-delegate"`）。
 - `turns=`：这一条最多被叫几次（`on=` 的默认 3，马上叫的默认 1，最多 20）；`until=right`（学生答对那题以后不再叫）/ `turns`（默认，次数用完）/ `me`（外部收回为止）。`board claude-off id=cl1` 收回一条，`board claude-off all` 全收。同一个 `id` 再写一次就换成新的那条（次数从 0 数）。
 - 它能用的工具和页面里的老师一样（`calc`、`board_read`、`get_answers`、`view_handwriting`、`textbook_read`、`component_doc`……）。它判断超出了外部给的范围时，最后写一行 `[交回] 原因`：不回学生，板顶写「主讲会接着讲。」，原因进 `ext_out`。
@@ -554,6 +568,8 @@ can: say, mark
 - `text` 只写这一批新发生的：最前面是页面要报的（写错没显示的段和原因、没执行的指令、memo / note 没记成的、截图的说明）；然后是这一批的作答、草稿、学生打的字、助教和助手写的话；末尾一句指向 `meta/now`、`meta/since`。黑板现状不在 `ext_out` 里（在 `meta/now`）。
 - 每一份只写到它那一刻为止；外部上一条 `ext_in` 以后的全部在 `meta/since`。
 
+**解答题**（第三节 `solve`）：学生交了整道题，下一份 `ext_out` 里是 `[作答] … 交了整道题：打字：「…」；照片 2 张（asset …，用 read_asset 看）；等你一步一步判`。外部写 `board judge target=p1`（第四节），页面画出逐步的结论、记作答、有错的步记一道错题，`ext_out` 里接着一行 `[页面] 解答题 p1：错题本记了 L2-57（第 3 步（规则用错）…）` 或没记的原因。照片入口照 `board set upload=on`。
+
 **写错了**：写错的那一段不显示，板上原样，下一份 `ext_out` 最前面写清是哪一段、哪一行、为什么；`board replace id=…` 改那一段。
 
 **预检工具**（仓库 `emilymedina70167-creator/Claude` 里，给外部在自己的沙盒里用；`kit/dist/la-kit.js` 提交在仓库里，就是学习台发布的那一份，不用 build）：
@@ -564,8 +580,9 @@ node tools/ext-check.mjs --next 这一轮.txt --lint
 node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 ```
 
-- `--lint`：不开浏览器，一秒以内只查写法——board 块的围栏和指令、组件名、组件 id 重复、指令的 `target` 存不存在、`\calc` 算不算得出、`stage` / `widget` 段的写法。
-- 不带 `--lint`：用和学习台同一份组件库在真的浏览器里跑一遍，出 iPad 竖屏、横屏的截图和问题列表；开头打出组件库的版本号，和学习台底部的版本号对得上才是同一版。Playwright、Chromium 用沙盒里预装的。
+- `--lint`：不开浏览器，一秒以内只查写法——board 块的围栏和指令、组件名、组件 id 重复、指令的 `target` 存不存在（预备板里的组件也认）、`\calc` 算不算得出、`stage` / `widget` 段的写法、`derive` 的 `mode: do` 的 `start` / `goal` / `let` 读不读得懂、算不算得出（`E(2)` 这一类也查）、`solve` 的写法。
+- `--lint` 还打出**出题提示**（只是提醒，不算写错、不影响退出码）：页面判得了对错的题没写预案（`react` 的 wrong / stuck / giveup）也没挂 `board claude`（「学生答错要等你」）；`quiz` 的正确选项比别的长得多、原样写在题干或这一段别的组件里；同一段里一道 `quiz` 的题干或选项原样写着前面那道要学生自己得出的答案（「这题能绕过前面那步」，只查原样出现）。
+- 不带 `--lint`：用和学习台同一份组件库在真的浏览器里跑一遍，出 iPad 竖屏、横屏的截图和问题列表；这一轮的预备板（`board queue`）也照 `board new` 画一遍。开头打出组件库的版本号，和学习台底部的版本号对得上才是同一版。Playwright、Chromium 用沙盒里预装的。
 - 都可以加 `--session 存数据的目录 [--sid 课号]`：这节课已有的 `ext_in` / `ext_out`（`ArtifactData` 的 `out_dir` 存下来的目录），认得已有的段和组件 id。`--session` 也可以是一个文件：每行一条 `{ "id": "sessions/{编号}/ext_in/001", "data": {…} }`，或者整个文件一个这样的数组（`id` 不是路径时写 `"coll": "ext_in"` / `"ext_out"`，或者照字段认：有 `done` / `after` 的是 `ext_in`）。
 
 **平台的事实**（2026-11-17 实测）：外部每一轮第一次写学习台会弹一次「Allow once」，没有「一直允许」；同一轮里后面的写没再弹。删除要带 `shared_live: "deletes_rows"`。这一轮的记忆改动可以写在同一条 `ext_in` 的 `memo` / `note` 块里，页面拆出来执行。学习台叫不醒外部：claude.ai 的对话只在学生发消息时才跑，页面没有办法通知它（「叫主讲」只是让 `ext_out` 最前面写「学生在等你」，外部醒来一眼看到）；`board claude`、预案、预备板是页面当场接的办法。「Allow once」是 claude.ai 的权限设置，学习台改不了。
@@ -675,7 +692,7 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 { "curriculum": { "id": "L2.2.1", "level": "block", "title": "行成比例 → 秩一", "parent": "L2.2", "scope": "认出秩一方阵，写成 αβᵀ", "depth": "重点，例题两道", "exam": "小题：直接写出 Aⁿ", "points": ["先看行成比例", "拆成 αβᵀ"], "requires": [] } }
 ```
 
-**`errors`**：编号沿用 `L2-07`、`L2-T03`（第几讲 - 第几题，T 是检验题）。`source` 出处、`q` 题面、`mine` 我怎么答的、`step` 错在哪一步、`cause` 根因、`weakness` 挂哪个弱点、`block`、`evidence` 证据 id（数组）、`date`。更正：新的一条，`corrects` 写原来的编号。
+**`errors`**：编号沿用 `L2-07`、`L2-T03`（第几讲 - 第几题，T 是检验题）。`source` 出处、`q` 题面、`mine` 我怎么答的、`step` 错在哪一步、`cause` 根因、`weakness` 挂哪个弱点、`block`、`evidence` 证据 id（数组）、`date`。解答题判出来的还有 `steps`（全部逐步结论）、`tag`（错法）；书上的题还有 `book`（同证据里的写法），编号照块，没选块照门课和章（线代第 2 章 `L2-nn`、高数 `HM-L2-nn`、概率 `PS-L2-nn`）。`drills` 也收 `book`：外部出题写上就能对上同一道书题。`meta/state` 的作答行里，学习台建好以后记的、没有原始作答的错题写「错题本（没有原始作答）」（那天有这一科的课的挂上课号），学习台以前的写「旧记录」。更正：新的一条，`corrects` 写原来的编号。
 
 ```json
 { "errors": { "id": "L2-07", "source": "第2讲例2.1", "q": "求 A²，A = αβᵀ", "mine": "写成 ααᵀββᵀ", "step": "第 1 步：换括号", "cause": "没看出 βᵀα 是一个数", "weakness": "W19", "block": "L2.2.1", "date": "2026-10-21" } }
@@ -770,11 +787,12 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 
 - **`sessions`**：编号 `c-20261027-1`（日期 - 当天第几节，三种课共用一套编号）。`kind`：`class` 课堂（黑板课，不写 kind 就是它；页面开，2026-11-16 起新开的课都是它。这种课有 `aims`：这节课要拿下的 2～5 件事 `[{ id, can, proof?, exam? }]`，老师课上定、页面按我的作答算每件到了没有，状态在课后报告的 `aims` 里；下课后页面留几道隔天做的题 `holds: { ids, at, exam, made }`，我隔天在首页「验上次学的」做完以后记 `later: { n, right, days, far }`——这三个字段都是页面写的，你不要改）、`stage` 舞台课（2026-11-06 到 11-15 新开的课是它：用画面讲课，每一轮的 `class_turns` 带 `log`，作答的组件 id 是 `S5` 这种；不再新开）和 `talk` 一问一答（更早的课，不再新开）、`ext` 外部的课（外部主 Claude 开、讲，第五节；`sessions/{编号}/ext_in`、`ext_out`）、`live` 实时黑板、`unit` 自学单元（停用了，以前的能翻看）。`date`、`block`（这节课的块）、`space`、`title`、`status`（`open` 还在上 / `closed` 下课了、用完了）、`startedAt`、`endedAt`、`pack`（开课时资料包的 `unit`、`goal`）、`verify`（核验了几轮、作废了几轮）、`summary`（下课小结那条观察的 id）、`usage`（这节课调用 Claude 花了多少：每一轮的 `cost` 在 `class_turns` 上）、`report`（课后报告的要点：`line` 一行字、`items` 做了几题、`first` 一次对几题、`at`、`v`、`provisional`）、`skills`（知识点归类，第七节「课后报告」后面）。这节课的东西都在 `sessions/{编号}/` 下面（课堂：`steps`、`class_turns`、`class_pages`、`pack`；实时黑板：`steps`、`talk`、`ops`、`ops_done`、`meta`、`lint`、`uploads`；自学单元：`unit`；三种都有课后报告 `report`）。
 - **`evidence`**：编号 `ev-…`，页面自动编。每条都有 `session`、`block`（这节课的块）、`tags`（知识点标签：`["L2.2.1", "L2.2.1#tr"]`，后一个来自课堂里的 Claude 给那一段标的 `point=`）、`kind`、`src`、`at`：
-  - `src: "record"`：一次作答。`kind` 是组件（`answer`、`practice`、`quiz`、`predict`、`steps`、`conjecture`……），`comp` 是组件的 id，`step` 是黑板上的段，`q` 题面，`text` / `value` 我写的、选的，`ok` 程序判的对错（判不了是 null），`attempts` 第几次，`ms` 用时，`giveup` 想不出来，`final` 这道题的最终结果，`images` 手写原图，`transcript` 转写。
-  - `src: "event"`：一个动作。`kind` 是 `reveal`（揭开一步）、`giveup`、`drag`（拖动，`detail` 里是变量和松手时的值）、`sure`（我点的「有把握 / 没把握」，`detail.sure` 是 true / false，`detail.key` 是课后报告里那道题的键，`detail.ok` 那题判的对错）、`open`（打开）、`end`（下课）等。
+  - `src: "record"`：一次作答。`kind` 是组件（`answer`、`practice`、`quiz`、`predict`、`steps`、`conjecture`……），`comp` 是组件的 id，`step` 是黑板上的段，`q` 题面，`text` / `value` 我写的、选的，`ok` 程序判的对错（判不了是 null），`attempts` 第几次，`ms` 用时（课堂里：这题出现在我屏幕上到第一次交，切走、锁屏、翻到别的板、滚出屏幕的时间不算），`msTotal`（到这一次交，同样扣掉不在屏幕上的），`giveup` 想不出来，`final` 这道题的最终结果，`images` 手写原图，`transcript` 转写。解答题（`kind: "solve"`）：交的那一条 `value` 是打的字、`photos` 是照片的 asset id；判了的那一条 `judged: true`、`by`（`ext` / `helper` / `teacher`）、`steps: [{ id, ok: true | false | "missing", why, tag }]`。
+  - `src: "event"`：一个动作。`kind` 是 `reveal`（揭开一步）、`giveup`、`drag`（拖动，`detail` 里是变量、松手时的值、`from` 从哪拖起、`path` 中途停过 0.5 秒以上的点（最多 8 个）、`ms` 拖了多久）、`guess-drag`（`predict` 里拖猜测点，还没点「确定」，同样带过程）、`sure`（我点的「有把握 / 没把握」，`detail.sure` 是 true / false，`detail.key` 是课后报告里那道题的键，`detail.ok` 那题判的对错）、`open`（打开）、`end`（下课）等。
   - `src: "say"`：我在课堂输入框里说的话（`kind: "say"`，`text`），在实时黑板上「交截图」交的图和那句说明，附的图（`kind: "photo"`，`images` 是 asset id，用 `Artifact` 工具 `action: "read"`、`path` 填 id 看原图；`ink: 2` 表示最后 2 张是我在黑板上用 Pencil 写的板书导出的图）。`turn` 是课堂第几轮。
   - `src: "draft"`（`kind: "draft"`）：点「下课」那一刻我在黑板上写了、还没交的草稿：`comp` 组件 id、`compKind` 组件、`step` 段、`label` 第几步、`text` 写着什么。
   - `src: "manual"`（`kind: "manual"`）：我在学习台首页「补记」的，学习台外面做的（纸上、Notability、和你的对话里）：`text`、`images`（截图）、`block`（挂到哪一块，可能没有）、`verdict`：`对` / `错` / `不会`（没标就没有；`ok` 跟着是 true / false / null，`不会` 还有 `giveup: true`）。没有 `session`；下一节课的课后报告的 `manual` 里会列出来。
+  - `src: "book"`（`kind: "book"`）：我在首页「记书上的题」记的纸上做的题，一题一条：`book: { title, part, subject, ch, no }`（「张宇 1000 题 / 基础篇 / 线代 / 第 2 章 / 第 15 题」）、`verdict`：`对` / `错` / `拿不准` / `没做出`（`ok` 跟着是 true / false / null / false，`没做出` 还有 `giveup: true`，`拿不准` 还有 `sure: false`）、`text` 一句话、`images` 照片（附在错的、没做出的那几道上）、`block`（我选了才有，没选的等你归块）。错的、没做出的同时进错题本（见 `errors`）。书单是默认的「张宇 1000 题」（基础篇 / 强化篇 × 高数 / 线代 / 概率）加上 `meta/problem-books` = `{ books: [{ title, parts, subjects }] }` 里我加的。
   - 作答、动作、草稿的 `turn` 是它发生时课堂进行到第几轮（那时最新一轮的 `seq`），对照 `class_turns` 就知道它跟着哪一条发给了课堂里的 Claude。
   - 判断过没过、记错题时，`basis` 里写这些证据的 id。
 

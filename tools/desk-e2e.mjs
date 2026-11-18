@@ -1291,6 +1291,31 @@ const SUITES = {
     await t.page.waitForSelector('[data-bid="s2"] .sb-stage', { timeout: 15000 });
     await t.waitFor(async () => (await exprOf()) === after, { timeout: 10000, what: `刷新以后舞台放回展开过的样子（${after.slice(0, 80)}）` });
     check(!(await t.page.$('[data-bid="s2"] .class-prev')), '舞台放回了还列「刷新前的作答」');
+    // dr-batch4 第 1、3 条：解答题交了 → 外部 board judge 逐步判 → 证据、错题本按步骤；预案挂在预备板里的组件上；unqueue
+    const solveBody = `${F3}solve\nid: p1\nq: 设 $A=E+B$，$B^2=O$，求 $A^n$。\nsteps:\ns1 setup: 写成 A = E + B\ns2 rule: E 和 B 可交换，用二项式定理\ns3 calc: A^n = E + nB\ns4 conclude: 写出 A^n\n${F3}`;
+    const turn6 = [
+      `${F4}board new id=b30 title="解答题"\n${solveBody}\n${F4}`,
+      `${F4}board queue id=b31 title="预备 1" after=button\n${ans('q31', '1+1 等于几？', '2')}\n${F4}`,
+      `${F4}board react target=q31\nwrong: 再数一遍。\n${F4}`,
+      `${F4}board queue id=b32 title="预备 2" after=button\n不要了的一块。\n${F4}`,
+      `${F4}board unqueue id=b32\n${F4}`,
+    ].join('\n\n');
+    await plantLive(t, { [`sessions/${sid}/ext_in/006`]: { seq: 6, text: turn6, after: 1, at: Date.now() } });
+    const r6 = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/006`]?.result, { timeout: 15000, what: 'ext_in/006 执行' });
+    check(r6.ok && r6.ops.some((o) => o.op === 'react' && o.ok) && r6.ops.some((o) => o.op === 'unqueue' && o.ok), `预备板里的预案 / unqueue 没成：${JSON.stringify(r6.ops).slice(0, 400)}`);
+    await t.page.locator('[data-bid="p1"] .sv-text').fill('A^n = E^n + B^n = E + B');
+    await t.page.click('[data-bid="p1"] .sv-send');
+    await t.waitFor(async () => /交了整道题：打字：「A\^n = E\^n \+ B\^n = E \+ B」/.test(await outs()), { timeout: 10000, what: '解答题交了写进 ext_out' });
+    await plantLive(t, { [`sessions/${sid}/ext_in/007`]: { seq: 7, text: `${F4}board judge target=p1\ns1 ok\ns2 ok\ns3 wrong tag=规则用错 why="把 (E+B)^n 写成 E^n+B^n"\ns4 missing\n${F4}`, after: 1, at: Date.now() } });
+    const r7 = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/007`]?.result, { timeout: 15000, what: 'ext_in/007 执行' });
+    check(r7.ops.some((o) => o.op === 'judge' && o.ok), `board judge 没执行：${JSON.stringify(r7.ops)}`);
+    const jtxt = await t.page.evaluate(() => [...document.querySelectorAll('[data-bid="p1"] .sv-judged')].map((x) => `${x.hidden}|${x.innerText}`).join(' ## '));
+    check(/规则用错/.test(jtxt), `题下面没画出逐步的判定：${jtxt.slice(0, 200)}`);
+    const judged = await t.waitFor(async () => (await t.docs('evidence')).find((e) => e.session === sid && e.kind === 'solve' && e.judged), { timeout: 8000, what: '判定记成证据' });
+    check(judged.steps?.[2]?.ok === false && judged.steps[2].tag === '规则用错' && judged.steps[3].ok === 'missing', `证据里的逐步结论不对：${JSON.stringify(judged.steps)}`);
+    const err = await t.waitFor(async () => (await t.docs('errors')).find((e) => e.session === sid && Array.isArray(e.steps)), { timeout: 10000, what: '错题本按步骤记' });
+    check(/第 3 步（规则用错）/.test(err.step) && /E\^n\+B\^n/.test(err.cause), `错题本那一条不对：${JSON.stringify(err).slice(0, 300)}`);
+    await t.waitFor(async () => /\[页面\] 解答题 p1：错题本记了/.test(await outs()), { timeout: 10000, what: '错题本记了写进 ext_out' });
     // R10：叫主讲 → 马上写一份，最前面「学生在等你」
     await t.page.click('.class-ext-btn[data-act="call"]');
     await t.waitFor(async () => Object.entries(await db()).some(([k, v]) => k.startsWith(`sessions/${sid}/ext_out/`) && /^学生在等你/.test(v.text)), { timeout: 5000, what: '叫主讲写 ext_out' });
@@ -1323,6 +1348,9 @@ const SUITES = {
     const box = t.page.locator('[data-bid="q1"] .ans-input input, [data-bid="q1"] .ans-input textarea, [data-bid="q1"] .ans-input [contenteditable="true"]').first();
     await box.click(); await t.page.keyboard.type('6'); await t.page.click('[data-bid="q1"] .ans-check');
     await t.waitFor(async () => (await t.docs('evidence')).some((e) => e.session === sid && e.src === 'helper' && e.role === 'helper'), { timeout: 15000, what: '助手的话记成证据 src: helper' });
+    // dr-batch4 第 4 条：作答带这题在屏幕上的时间（ms 到第一次交、msTotal 到这一次）
+    const rec = (await t.docs('evidence')).find((e) => e.session === sid && e.src === 'record' && e.comp === 'q1');
+    check(Number(rec?.ms) >= 0 && Number(rec?.msTotal) >= Number(rec?.ms), `作答没带屏幕计时：${JSON.stringify({ ms: rec?.ms, msTotal: rec?.msTotal })}`);
     // 首页：since-analysis、state、简报最前面的两行
     await t.open();
     const since = await t.waitFor(async () => { const x = (await db())['meta/since-analysis-math']; return x && /对话里的第一句/.test(x.text) && /外部叫来的助手/.test(x.text) ? x : null; }, { timeout: 20000, what: 'meta/since-analysis-math 有对话里的话和助手的话' });
@@ -1351,6 +1379,34 @@ const SUITES = {
     check(!old.conflicts.some((c) => /^L1\.1\.[12]$/.test(c.block)), `旧记录的块还报矛盾：${JSON.stringify(old.conflicts).slice(0, 300)}`);
     const lg = (await db())['coverage/legacy-L1.1.2'];
     check(lg?.kind === 'legacy' && lg.by === 'page', `页面没补 coverage/legacy-L1.1.2：${JSON.stringify(lg)}`);
+    return t;
+  },
+
+  // 记书上的题（dev_requests/dr-batch4 第 2 条）：首页一行 → 选书章题号 → 每题对 / 错 / 拿不准，错的附照片；
+  // 每题一条证据 src: book，错的进错题本（带书名题号），meta/state 的作答行写书名题号
+  async bookq(browser) {
+    const t = await seeded(browser);
+    await t.page.click('.dk-trow[data-row="book"]');
+    await t.waitFor(() => t.page.$('.dk-bform .dk-bnos'), { timeout: 8000, what: '「记书上的题」面板打开' });
+    await t.page.fill('.dk-bform .dk-bch', '2');
+    await t.page.fill('.dk-bform .dk-bnos', '3, 4-5');
+    await t.waitFor(() => t.page.$$eval('.dk-bform .dk-brow', (l) => l.length === 3), { timeout: 4000, what: '题号展开成三行' });
+    for (const [no, v] of [[3, 'right'], [4, 'wrong'], [5, 'unsure']]) await t.page.click(`.dk-bform .dk-brow[data-no="${no}"] .dk-mv[data-v="${v}"]`);
+    await t.page.fill('.dk-bform .dk-mtext', '第 4 题第二步符号错');
+    // 一张照片（附在错的那一道上）
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    await t.page.setInputFiles('.dk-bform .dk-mfile', { name: 'p.png', mimeType: 'image/png', buffer: png });
+    await t.waitFor(() => t.page.$('.dk-bform .dk-mthumbs img'), { timeout: 5000, what: '照片附上' });
+    await t.page.click('.dk-bform .dk-bsave');
+    await t.waitFor(async () => /记下了 3 道/.test(await t.text('.dk-bform .dk-mnote') || ''), { timeout: 10000, what: '记下了 3 道' });
+    const evs = (await t.docs('evidence')).filter((e) => e.src === 'book');
+    check(evs.length === 3 && evs.every((e) => e.book?.title === '张宇 1000 题' && e.book.ch === 2), `书上的题的证据不对：${JSON.stringify(evs.map((e) => e.book))}`);
+    const wrong = evs.find((e) => e.book.no === 4);
+    check(wrong.ok === false && wrong.images?.length === 1 && evs.find((e) => e.book.no === 3).images.length === 0, `照片没附在错的那道上：${JSON.stringify(evs.map((e) => [e.book.no, e.images?.length]))}`);
+    check(evs.find((e) => e.book.no === 5).ok === null, '拿不准的 ok 不是 null');
+    const errs = (await t.docs('errors')).filter((e) => e.book);
+    check(errs.length === 1 && errs[0].book.no === 4 && /^L2-\d+$/.test(errs[0].id) && errs[0].evidence?.[0] === wrong.id, `错题本那一条不对：${JSON.stringify(errs)}`);
+    await t.waitFor(async () => /1000 题 基础篇 线代 第 2 章 第 4 题：错/.test((await t.db())['meta/state-math']?.text || '') || /1000 题 基础篇 线代 第 2 章 第 4 题：错/.test((await t.db())['meta/since-analysis-math']?.text || ''), { timeout: 15000, what: 'meta/state 或 since-analysis 写书名题号' });
     return t;
   },
 

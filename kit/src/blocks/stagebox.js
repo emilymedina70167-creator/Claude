@@ -39,7 +39,10 @@ export function stage(el, src) {
   let alive = true;
   let quiet = false; // 放回刷新前的样子时：舞台照 log 重演，挑战成立、东西做完不再记作答、不再叫人
   let pending = []; // 上一次「叫老师」以后学生做的事（events.js 的写法），到了要叫的那一刻写成一段
-  let triedOut = false, stuckOut = false, idleTimer = null;
+  let triedOut = false, idleTimer = null;
+  // 很久没动（dr-batch4 第 3 条）：同一个挑战只记一次（学生又动了以后另算）；只算这块舞台在学生屏幕上的时间（timing.js），翻到别的板、切走了不算
+  const stuckFor = new Set();
+  let quietFrom = Date.now();
 
   const st = new Stage(host, { input: true, talk: false, embed: true, prewrite, onAct });
   el.__stage = st; // 黑板现状、自动测试、调试找得到这块舞台
@@ -49,13 +52,11 @@ export function stage(el, src) {
 
   // —— 叫老师的那一刻：记一条 stage-call，攒着的清掉 ——
   function call(why) {
-    clearTimeout(idleTimer);
     const text = eventsText(pending, { goals: goals() });
     pending = [];
     triedOut = false;
-    stuckOut = false;
     ev('stage-call', { why, text: callLine(id, why, text) });
-    armIdle();
+    armIdle({ fresh: false });
   }
   // 做到了、答对了、做完了：等预写的行演完再看学生手上还有没有事（有就攒着，跟着下一件要接的事一起记）；call=now 马上记
   function settle(why, now = false) {
@@ -66,22 +67,29 @@ export function stage(el, src) {
       call(why);
     });
   }
-  // 挑战还没做到、学生很久没动（QUIET_MS）：记一次（舞台课那时叫老师）
-  function armIdle() {
-    clearTimeout(idleTimer);
-    if (!alive || stuckOut || !st.pendingGoals().length) return;
-    idleTimer = setTimeout(() => {
-      if (!alive || !el.isConnected || !st.pendingGoals().length) return;
-      stuckOut = true;
-      pending.push({ kind: 'stuck', text: `学生 ${Math.round(QUIET_MS / 1000)} 秒没动，挑战 ${st.pendingGoals().map((g) => g.id).join('、')} 还没做到`, at: Date.now() });
+  // 挑战还没做到、学生很久没动（QUIET_MS）：记一次（舞台课那时叫老师）。每 2 秒看一眼：这块舞台在屏幕上没动的时间够了、
+  // 还有没记过的挑战才记；fresh：学生刚动了一下，从这一刻重新算
+  function armIdle({ fresh = true } = {}) {
+    if (fresh) quietFrom = Date.now();
+    if (idleTimer || !alive) return;
+    idleTimer = setInterval(() => {
+      if (!alive || quiet || !el.isConnected) return;
+      const ids = st.pendingGoals().map((g) => g.id).filter((g) => !stuckFor.has(g));
+      if (!ids.length) return;
+      const bid = el.dataset.bid;
+      const still = session.timing && bid ? session.timing.visibleMs(bid, quietFrom) : (document.visibilityState === 'hidden' ? 0 : Date.now() - quietFrom);
+      if (still < QUIET_MS) return;
+      ids.forEach((g) => stuckFor.add(g));
+      pending.push({ kind: 'stuck', text: `学生 ${Math.round(QUIET_MS / 1000)} 秒没动，挑战 ${ids.join('、')} 还没做到`, at: Date.now() });
       call('stuck');
-    }, QUIET_MS);
+    }, 2000);
   }
 
   // —— 学生的每一下 ——
   function onAct(a) {
     if (!a || !alive || quiet) return;
     if (a.type === 'look') return; // 翻回去看一幕：只是看
+    stuckFor.clear(); // 学生又动了：没做到的挑战之后再很久没动，另记一次
     // 交给学生的手（open）、拨数是「试」：一下记一条，攒进这一段
     if (a.open || a.type === 'dial' || a.type === 'undo') {
       ev('stage-act', { text: `${actText(a)}${verdictText(a)}`, ...(a.line ? { line: a.line } : {}), ...(a.verdict?.right != null ? { ok: a.verdict.right } : {}), ...(a.blocked ? { blocked: true } : {}) });
@@ -218,6 +226,7 @@ export function stage(el, src) {
     if (el.isConnected) { save(); return; }
     alive = false;
     clearInterval(timer);
+    clearInterval(idleTimer);
     document.removeEventListener('visibilitychange', flush);
     window.removeEventListener('pagehide', save);
     clearTimeout(idleTimer);

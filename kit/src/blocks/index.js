@@ -26,6 +26,7 @@ import { cloze, errfind, parse, drill, chunk, link as enLink, translate } from '
 import { gloss } from './gloss.js';
 import { stage } from './stagebox.js';
 import { widgetBlock } from './widget.js';
+import { solve } from './solve.js';
 import { stepperBlock } from '../stepper.js';
 import { ENGINES } from '../engines/registry.js';
 import { elimEngine } from '../engines/elim.js';
@@ -46,6 +47,8 @@ export const blocks = {
   stage,
   // 外部设计的交互：一小段 JS 调 la.*（blocks/widget.js）
   widget: widgetBlock,
+  // 解答题：按步骤判（blocks/solve.js，dr-batch4）
+  solve,
   // 一步步走的演示（stepper.js 外壳 + engines/ 里的纯函数引擎，名字在 engines/registry.js）
   ...Object.fromEntries(Object.entries(ENGINES).filter(([k]) => k !== 'elim' && k !== 'pv').map(([k, e]) => [k, stepperBlock(e)])),
   elim: elimBlock(),

@@ -50,9 +50,11 @@ if (LINT) {
   const t0 = Date.now();
   const extra = await checkers();
   const r = lintTurn({ prior: priorTexts(s?.ins || []), text: readFileSync(resolve(nextFile), 'utf8'), names: await blockNames(), ...extra });
-  console.log(`写法检查：${r.segments} 段、${r.components} 个组件，${r.problems.length ? `${r.problems.length} 处问题` : '没有问题'}（${Date.now() - t0} 毫秒，没开浏览器；画出来的样子用不带 --lint 的跑）`);
-  for (const p of r.problems) console.log(`  · ${p.where}：${p.msg}`);
-  process.exit(r.problems.length ? 1 : 0);
+  const errs = r.problems.filter((p) => p.level !== 'hint'), hints = r.problems.filter((p) => p.level === 'hint');
+  console.log(`写法检查：${r.segments} 段、${r.components} 个组件，${errs.length ? `${errs.length} 处问题` : '没有问题'}${hints.length ? `；${hints.length} 条出题提示` : ''}（${Date.now() - t0} 毫秒，没开浏览器；画出来的样子用不带 --lint 的跑）`);
+  for (const p of errs) console.log(`  · ${p.where}：${p.msg}`);
+  if (hints.length) { console.log('出题提示（只是提醒，不算写错）：'); for (const p of hints) console.log(`  · ${p.where}：${p.msg}`); }
+  process.exit(errs.length ? 1 : 0);
 }
 const spec = extClass({ ins: s?.ins || [], outs: s?.outs || [], next: readFileSync(resolve(nextFile), 'utf8'), unit: arg('unit', s?.id || '外部的课'), subject: arg('subject') });
 const tmp = mkdtempSync(join(tmpdir(), 'ext-check-'));

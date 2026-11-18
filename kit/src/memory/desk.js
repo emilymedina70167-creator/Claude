@@ -29,6 +29,8 @@ import { buildReport, reportLine, REPORT_VERSION, lastActivity, reportText } fro
 import { debriefText, debriefView } from './debrief.js';
 import { backupFile, backupName, restorePlan, BOARD_COLLECTIONS, SESSION_EXTRA, EXAM_BACKUP, AIDE_BACKUP } from './backup.js';
 import { createManualForm } from './manual.js';
+import { createBookForm } from './bookqview.js';
+import { bookEvidence, bookErrorArgs, TO_ERRORS, bookLabel } from './bookq.js';
 import { createMemOps } from './memops.js';
 import { createMemoView } from './memoview.js';
 import { resolvedErrors, voidedIds, activeLessons, pendingTitle } from './memo.js';
@@ -179,6 +181,7 @@ export async function renderDesk(root, meta) {
     <div class="dk-part dk-next" hidden><h2 class="dk-h">每块还能攒几分</h2><p class="dk-sub muted">按 410 分里每一块还能攒多少分排，页面算的。</p><div class="dk-body"></div></div>
     <div class="dk-part dk-recall" hidden><h2 class="dk-h">要记的</h2><p class="dk-sub muted">先写出来，再看答案。隔 1、3、7、14、30 天各想一遍。</p><div class="dk-body"></div><details class="dk-fold dk-radd"><summary><span class="muted">自己加一条</span></summary><div class="dk-radd-f"></div></details></div>
     <div class="dk-part dk-drill" hidden><h2 class="dk-h">练一练</h2><p class="dk-sub muted">Claude 从题库里挑的题，页面判分，不调用 Claude。</p><div class="dk-body"></div></div>
+    <div class="dk-part dk-book" hidden><details class="dk-fold"><summary><h2 class="dk-h">记书上的题</h2><span class="muted">1000 题这些纸上做的：书、章、题号，每题对 / 错 / 拿不准 / 没做出</span></summary><div class="dk-body"></div><div class="dk-mlist"></div></details></div>
     <div class="dk-part dk-manual" hidden><details class="dk-fold"><summary><h2 class="dk-h">补记</h2><span class="muted">在学习台外面做的题，写一句或贴张图</span></summary><div class="dk-body"></div><div class="dk-mlist"></div></details></div>
     </div>
     </div>
@@ -371,7 +374,7 @@ export async function renderDesk(root, meta) {
       if (c === 'dev_requests' && !$('.dk-manage').hidden) projView?.paintDev();
       if (c === 'notebook') { if (!$('.dk-manage').hidden) projView?.paintManage(); if (!$('.dk-notespage').hidden) projView?.paintPage(decodeURIComponent(String(location.hash || '').slice(1))); }
       if (c === 'exam') { ensureTarget(); paintScore(); if (!$('.dk-manage').hidden) examCard.paint(); }
-      if (c === 'evidence') { paintManual(); if (loaded.has('sessions')) { fixReports(); } if (lastRes) paintWeek(toDate(Date.now())); }
+      if (c === 'evidence') { paintManual(); paintBook(); if (loaded.has('sessions')) { fixReports(); } if (lastRes) paintWeek(toDate(Date.now())); }
       if (c === 'curriculum') { examInbox.maybeRefresh(); manualForm?.refreshBlocks(); const sel = $('.dk-radd-b'); if (sel) sel.dataset.space = ''; }
       if (['curriculum', 'weaknesses', 'observations', 'mastery'].includes(c)) { fixSkills(); }
       schedule();
@@ -657,10 +660,11 @@ export async function renderDesk(root, meta) {
   function paint(res, today) {
     lastRes = res;
     status.hidden = true;
-    for (const s of ['.dk-today', '.dk-check', '.dk-colls', '.dk-manual', '.dk-backup', '.dk-mine']) $(s).hidden = false;
+    for (const s of ['.dk-today', '.dk-check', '.dk-colls', '.dk-manual', '.dk-book', '.dk-backup', '.dk-mine']) $(s).hidden = false;
     pagesView.refresh();
     paintClass();
     paintManual();
+    paintBook();
     paintBackup();
     paintPending();
     paintGuard();
@@ -1172,6 +1176,52 @@ export async function renderDesk(root, meta) {
     box.querySelector('.dk-mlist').innerHTML = recent.length ? `<p class="dk-k">最近补记的</p>${recent.map((e) => `<div class="dk-row"><b>${escapeHtml(toDate(e.at).slice(5))}</b><span>${escapeHtml(String(e.text || '').slice(0, 80)) || '（截图）'}${e.images?.length ? `<span class="muted">（${e.images.length} 张图）</span>` : ''}${e.block ? `<span class="muted"> · ${escapeHtml(e.block)}</span>` : ''}</span>${e.verdict ? `<em>${escapeHtml(e.verdict)}</em>` : ''}</div>`).join('')}` : '';
   }
 
+  // —— 记书上的题（dr-batch4 第 2 条，bookq.js）：每题一条证据 src: book；错的、没做出的进错题本（me 写，带书名题号）——
+  let bookForm = null;
+  let problemBooks = [];
+  db.doc('meta/problem-books').onSnapshot((x) => { problemBooks = x.exists ? (x.data()?.books || []) : []; bookForm?.refreshBooks(); }, () => {});
+  function paintBook() {
+    const box = $('.dk-book');
+    if (!box || box.hidden) return;
+    if (!bookForm) {
+      bookForm = createBookForm(box.querySelector('.dk-body'), {
+        images: !!store.assets,
+        books: () => problemBooks,
+        blocks: () => sv().curriculum.filter((b) => b.level === 'block' || String(b.id).split('.').length === 3).sort((a, b) => cmpId(a.id, b.id)).map((b) => ({ id: String(b.id), title: b.title })),
+        onAddBook: async (b) => { await put('meta', 'problem-books', { books: [...problemBooks.filter((x) => x.title !== b.title), b], at: Date.now() }); },
+        onSave: async ({ items, text, blobs, block }) => {
+          const images = [];
+          for (const b of blobs) {
+            const r = await store.assets.upload(b, { type: 'image/png' }).catch(() => null);
+            if (!r?.id) throw new Error('图没传上去，再试一次');
+            images.push(r.id);
+          }
+          // 照片附在错的、没做出的那几道上；都没错就附在全部上
+          const bad = items.filter((it) => TO_ERRORS.has(it.verdict));
+          const withPics = new Set((bad.length ? bad : items).map((it) => it.book.no));
+          const taken = [];
+          const notes = [];
+          let errs = 0;
+          for (const it of items) {
+            const ev = bookEvidence({ book: it.book, verdict: it.verdict, text, images: withPics.has(it.book.no) ? images : [], block });
+            const { id, ...rest } = ev;
+            assertWrite('page', 'evidence');
+            await db.doc(`evidence/${id}`).set({ ...rest, wroteAt: Date.now() });
+            if (!TO_ERRORS.has(it.verdict)) continue;
+            try {
+              const pd = await ops.me('error-add', { ...bookErrorArgs({ book: it.book, verdict: it.verdict, text, block, evidence: id }), taken });
+              taken.push(pd.target);
+              errs++;
+            } catch (e) { notes.push(`${bookLabel(it.book)} 没进错题本：${e?.message || e}`); }
+          }
+          return { errors: errs, notes };
+        },
+      });
+    }
+    const recent = data.evidence.filter((e) => e.src === 'book').sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 6);
+    box.querySelector('.dk-mlist').innerHTML = recent.length ? `<p class="dk-k">最近记的</p>${recent.map((e) => `<div class="dk-row"><b>${escapeHtml(toDate(e.at).slice(5))}</b><span>${escapeHtml(bookLabel(e.book || {}))}${e.images?.length ? `<span class="muted">（${e.images.length} 张图）</span>` : ''}</span><em>${escapeHtml(e.verdict || '')}</em></div>`).join('')}` : '';
+  }
+
   // —— 备份和用量：导出整个记忆库（backup.js），看 assets 用了多少 ——
   let assetUsage = null;
   let backupWired = false;
@@ -1338,6 +1388,7 @@ export async function renderDesk(root, meta) {
     recall: { title: '要想起来的', ic: 'is-recall' },
     drill: { title: '练一练', ic: 'is-drill' },
     manual: { title: '补记', ic: 'is-plus' },
+    book: { title: '记书上的题', ic: 'is-plus' },
     next: { title: '每块还能攒几分', ic: 'is-review' },
   };
   const rowCounts = {};
@@ -1384,9 +1435,10 @@ export async function renderDesk(root, meta) {
       recall: rc.total ? `${spaceCounts(rc.bySpace)}。先写出来，再看答案` : '今天没有要想的',
       drill: dpick ? `${dpick.label}${dpick.why ? ` · ${dpick.why}` : ''}` : '',
       manual: '在学习台外面做的题，写一句或贴张图',
+      book: '1000 题这些：书、章、题号，每题对 / 错',
       next: nextLine(),
     };
-    const n = { later: later?.holds.ids.length || 0, today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null, next: null };
+    const n = { later: later?.holds.ids.length || 0, today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null, book: null, next: null };
     const keys = Object.keys(ROWS).filter((k) => (k !== 'drill' || dpick) && (k !== 'later' || later));
     for (const k of ['recall', 'later']) if (whyOf(k)) sub[k] = `${whyOf(k)}${sub[k] ? ` · ${sub[k]}` : ''}`;
     box.innerHTML = (note ? `<p class="dk-tnote">${inline(note)}</p>` : '') + crows.map((r, ci) => `<button type="button" class="dk-trow dk-crow" data-ci="${ci}" data-ckind="${r.kind}" data-cval="${escapeHtml(r.kind === 'review' ? r.ids.join(',') : r.block)}"><span class="dk-ic ${r.kind === 'review' ? 'is-review' : 'is-plus'}">${r.kind === 'review' ? r.ids.length : '›'}</span><b>${inline(r.label)}</b><small>${escapeHtml(r.why || (r.kind === 'review' ? '复现课' : r.kind === 'coach' ? '练习' : '开课'))}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('') + keys.map((k) => `<button type="button" class="dk-trow" data-row="${k}" data-menu="${k}"><span class="dk-ic ${ROWS[k].ic}${n[k] === 0 ? ' is-zero' : ''}"${n[k] === null ? '' : ' data-count'}>${n[k] === null ? '+' : rowCounts[k] ?? n[k]}</span><b>${ROWS[k].title}</b><small>${escapeHtml(sub[k])}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('');
@@ -1584,6 +1636,7 @@ export async function renderDesk(root, meta) {
     if (k === 'recall') return [$('.dk-recall .dk-recall-go') && { text: '开始想', icon: 'play', run: () => openRow(row('recall'), (sec) => sec.querySelector('.dk-recall-go')?.click()) }, { text: '自己加一条', icon: 'plus', run: () => openRow(row('recall'), (sec) => { const f = sec.querySelector('.dk-radd'); if (f) f.open = true; }) }].filter(Boolean);
     if (k === 'drill') return [$('.dk-drill .dk-drill-go') && { text: '开始练', icon: 'play', run: clickIn('.dk-drill .dk-drill-go') }, { text: '看挑了哪几道', icon: 'list', run: () => openRow(row('drill')) }].filter(Boolean);
     if (k === 'manual') return [{ text: '写一条', icon: 'plus', run: () => openRow(row('manual')) }];
+    if (k === 'book') return [{ text: '记几道', icon: 'plus', run: () => openRow(row('book')) }];
     if (k === 'days') return [{ text: '看还剩几周', icon: 'grid', run: () => openDays(el) }];
     return [];
   }, { layer: $('.dk-layer') });
