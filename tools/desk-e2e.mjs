@@ -1280,6 +1280,17 @@ const SUITES = {
     await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/005`]?.result?.ok, { timeout: 15000, what: 'ext_in/005 执行' });
     const sh = await t.waitFor(async () => { const h = await t.page.evaluate(() => document.querySelector('[data-bid="s2"] .sb-stage')?.offsetHeight || 0); return h && h < 400 ? h : null; }, { timeout: 8000, what: '一行式子的舞台按内容缩' });
     check(sh >= 160, `舞台缩得太矮：${sh}`);
+    // dr-trail-fix 3：学生展开过的式子，刷新以后照样是展开的（不回到 (A+B)²）
+    const exprOf = () => t.page.evaluate(() => document.querySelector('[data-bid="s2"]')?.__stage?.scene.stateText().split('\n').find((l) => /^\s*现在：/.test(l)) || '');
+    const before = await exprOf();
+    // 学生点一项展开（舞台的手指走 pointerType: touch；这里照真手指那一下最后交给舞台的那一行走 studentDo，和舞台自己的手指检查一样）
+    await t.page.evaluate(async () => { const st = document.querySelector('[data-bid="s2"]').__stage; await st.studentDo('expand e t1', { type: 'expand', obj: 'e', key: 't1', open: 'expand', line: 'expand e t1' }); });
+    const after = await t.waitFor(async () => { const x = await exprOf(); return x && x !== before ? x : null; }, { timeout: 8000, what: '点一项展开括号' });
+    await t.waitFor(async () => (await db())[`sessions/${sid}/stage_logs/s2`]?.rows?.some((r) => r.by === 'student'), { timeout: 5000, what: '舞台的 log 存进 stage_logs' });
+    await t.page.reload();
+    await t.page.waitForSelector('[data-bid="s2"] .sb-stage', { timeout: 15000 });
+    await t.waitFor(async () => (await exprOf()) === after, { timeout: 10000, what: `刷新以后舞台放回展开过的样子（${after.slice(0, 80)}）` });
+    check(!(await t.page.$('[data-bid="s2"] .class-prev')), '舞台放回了还列「刷新前的作答」');
     // R10：叫主讲 → 马上写一份，最前面「学生在等你」
     await t.page.click('.class-ext-btn[data-act="call"]');
     await t.waitFor(async () => Object.entries(await db()).some(([k, v]) => k.startsWith(`sessions/${sid}/ext_out/`) && /^学生在等你/.test(v.text)), { timeout: 5000, what: '叫主讲写 ext_out' });
@@ -1323,6 +1334,23 @@ const SUITES = {
     await plantLive(t, { 'meta/cursor-math': { at: Date.now(), by: 'ext' } });
     await t.waitFor(async () => (await db())['meta/since-analysis-math']?.n === 0, { timeout: 15000, what: '挪了游标以后 since-analysis 清零' });
     check(!!brief, '');
+    // dr-trail-fix 2：外部补写的话（at 是学生说话的时候，早于游标）照写入时间进 since-analysis，不漏
+    await t.open(sid);
+    await plantLive(t, { [`sessions/${sid}/ext_in/002`]: { seq: 2, text: '接着说。', said: [{ text: '十分钟前说的那句', at: Date.now() - 600000 }], at: Date.now() } });
+    await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/002`]?.done, { timeout: 15000, what: 'ext_in/002 执行' });
+    await t.open();
+    const late = await t.waitFor(async () => { const x = (await db())['meta/since-analysis-math']; return x && /十分钟前说的那句.*（写入/.test(x.text) ? x : null; }, { timeout: 20000, what: '游标以前说的、游标以后写进来的话进 since-analysis' });
+    check(late.upTo > Number((await db())['meta/cursor-math'].at), `since-analysis 的 upTo 不对：${late.upTo}`);
+    // dr-trail-fix 1：学习台以前的课（错题本、「旧记录」的依据）：讲过照旧记录算、掌握照算标旧记录；页面补 coverage/legacy-…
+    await plantLive(t, {
+      'errors/L1-T91': { block: 'L1.1.1', date: '2026-09-27', result: '没过', q: '测试的检验题', mine: '测试', source: '复习对话' },
+      'mastery/L1.1.1': { state: '掉了', log: [{ field: 'state', date: '2026-10-27', by: 'chat', from: null, to: '掉了', basis: ['L1-T91'] }] },
+      'mastery/L1.1.2': { state: '基础题过', log: [{ field: 'state', date: '2026-10-27', by: 'chat', from: null, to: '基础题过', basis: ['旧记录：复习对话 块1（09-28 当堂题对）'] }] },
+    });
+    const old = await t.waitFor(async () => { const x = (await db())['meta/state-math']; return x && /L1\.1\.2[^\n]*讲过（9 月，旧记录）；掌握 基础题过（旧记录/.test(x.text) && /L1\.1\.1[^\n]*讲过（9 月，旧记录）；掌握 掉了（旧记录：错题本 L1-T91/.test(x.text) ? x : null; }, { timeout: 20000, what: 'meta/state-math 把学习台以前的课写成「讲过（9 月，旧记录）」' });
+    check(!old.conflicts.some((c) => /^L1\.1\.[12]$/.test(c.block)), `旧记录的块还报矛盾：${JSON.stringify(old.conflicts).slice(0, 300)}`);
+    const lg = (await db())['coverage/legacy-L1.1.2'];
+    check(lg?.kind === 'legacy' && lg.by === 'page', `页面没补 coverage/legacy-L1.1.2：${JSON.stringify(lg)}`);
     return t;
   },
 

@@ -165,6 +165,11 @@ export async function renderClass(root, meta, desk = null) {
   if (desk?.ext) session.upload = desk.ext.upload === 'on';
   // 舞台组件（board stage）里外部预写的「没做到」「走偏」（.wrong / .miss）：外部的课整节课都收
   session.extPrewrite = !!desk?.ext;
+  // board stage 刷新前的样子（dr-trail-fix 3）：舞台的 log 存在 stage_logs/{段 id}（学习台里换到 sessions/{编号}/ 下面），再画时放回
+  session.stageLogs = {
+    get: (id) => db.doc(`stage_logs/${id}`).get().then((x) => (x.exists ? x.data() : null), () => null),
+    put: (id, doc) => (readOnly ? null : db.doc(`stage_logs/${id}`).set(doc)),
+  };
   const teacher = {
     get available() { return !readOnly && (EXT || !!(mock || (ai?.call && !legacy))); },
     // 模拟老师也走调用让路（lane.js；ai.call 自己已经走了）
@@ -598,7 +603,7 @@ export async function renderClass(root, meta, desk = null) {
         const el = on(bid);
         if (!el?._replay) continue;
         const mine = el.classList.contains('block-steps') ? list.filter((r) => r.type === 'steps' || (r.source === 'event' && r.type === 'reveal')) : list;
-        try { el._replay(mine); } catch (e) { console.warn('作答没能重放', e); }
+        try { el._replay(mine, { fallback: () => prevList(bid, el) }); } catch (e) { console.warn('作答没能重放', e); }
       }
       restoreFigures(recs);
     } finally {
@@ -607,10 +612,14 @@ export async function renderClass(root, meta, desk = null) {
     for (const [bid] of byBlock) {
       const el = on(bid);
       if (!el || el._replay || ['block-steps', 'block-scene', 'block-graph', 'block-space'].some((c) => el.classList.contains(c))) continue;
-      const lines = (results.get(bid) || []).map((r) => r.line.replace(/^[^：]*：/, '')).filter(Boolean);
-      if (!lines.length) continue;
-      el.insertAdjacentHTML('beforeend', `<div class="class-prev"><div class="class-prev-tag">刷新前的作答</div><ul>${lines.slice(-4).map((l) => `<li>${mdToHtml(l, { inline: true })}</li>`).join('')}</ul></div>`);
+      prevList(bid, el);
     }
+  }
+  // 组件下面注明刷新前学生已经怎么作答的（组件自己放不回去的；board stage 放回了就不列）
+  function prevList(bid, el) {
+    const lines = (results.get(bid) || []).map((r) => r.line.replace(/^[^：]*：/, '')).filter(Boolean);
+    if (!lines.length || el.querySelector(':scope > .class-prev')) return;
+    el.insertAdjacentHTML('beforeend', `<div class="class-prev"><div class="class-prev-tag">刷新前的作答</div><ul>${lines.slice(-4).map((l) => `<li>${mdToHtml(l, { inline: true })}</li>`).join('')}</ul></div>`);
   }
 
   function restoreFigures(recs) {

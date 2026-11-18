@@ -87,7 +87,7 @@ export function runRecall(host, { items = [], db, titleOf = () => '', onDone = (
       evIds.set(k.id, evId);
       assertWrite('page', 'evidence');
       assertWrite('page', 'recall');
-      await db.doc(`evidence/${evId}`).set(evDoc);
+      await db.doc(`evidence/${evId}`).set({ ...evDoc, wroteAt: Date.now() });
       await db.doc(`recall/${k.id}`).set(applyChange(base, patch, { date: today, by: 'page', basis: [evId], note: `我自己想了一遍：${note}` }));
       tally[rating]++;
       // 评完那张飞走：想起来了往右、没想起往左、模糊往上

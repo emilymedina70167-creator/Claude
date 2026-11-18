@@ -58,7 +58,7 @@ export function createHead({ db, getData, ai, notebook = null, getBooks = () => 
     const at = now();
     const ev = { id: `ev-${at.toString(36)}-${Math.random().toString(36).slice(2, 7)}`, src: 'say', kind: 'say', session: null, chat: cid, text: say.slice(0, 4000), at };
     const { id: evId, ...evDoc } = ev;
-    await db.doc(`evidence/${evId}`).set(evDoc);
+    await db.doc(`evidence/${evId}`).set({ ...evDoc, wroteAt: Date.now() });
     const before = await turnsOf(cid);
     const meTurn = { role: 'me', text: say, at, ev: evId };
     await db.doc(`chats/${cid}/turns/${seqId(before.length + 1)}`).set(meTurn);

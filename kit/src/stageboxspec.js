@@ -87,3 +87,23 @@ export function autoHeight({ box = null, top = 0, bottom = 0, pad = 28 } = {}) {
   if (!box || !(box.h > 0)) return HEIGHT.def;
   return Math.round(Math.min(HEIGHT.max, Math.max(HEIGHT.auto, box.h + top + bottom + 2 * pad)));
 }
+
+// —— 刷新前的样子（dr-trail-fix 3）：board stage 的舞台 log 存一份，再画时照它放回 ——
+
+/** 这一段镜头指令的指纹：段被改过（replace、edit 改了指令）就对不上，照旧从头演 */
+export function scriptSig(id, script) {
+  let h = 5381;
+  const s = `${id}\n${String(script ?? '').trim()}`;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return `${s.length.toString(36)}-${h.toString(36)}`;
+}
+
+/** 舞台的 log → 存进数据库的那一份：{ sig, rows: [{ src, by, open?, pre? }], ask }；学生一下都没动过就不存（null） */
+export function logDoc(log, { sig = '', ask = null } = {}) {
+  const rows = (log || []).filter((r) => r && typeof r.src === 'string').map((r) => ({ src: r.src, by: r.by || 'teacher', ...(r.open ? { open: r.open } : {}), ...(r.pre ? { pre: true } : {}) }));
+  if (!rows.some((r) => r.by === 'student')) return null;
+  return { sig, rows, ask: ask || null };
+}
+
+/** 段 id → 文档 id（数据库的路径段只收字母数字和 _ - . ~） */
+export const docId = (id) => String(id || '').replace(/[^A-Za-z0-9_\-.~]/g, '_').slice(0, 120) || '_';
