@@ -703,7 +703,8 @@ function pagedStateText(board) {
   } else lines.push('常驻栏现在是空的。');
   const before = pages.filter((p) => p.n !== cur).sort((a, b) => a.n - b.n);
   if (before.length) {
-    lines.push('以前的板（学生翻回去才看得到；上面的图不能再用 figure 动）：');
+    // 外部的课（需求 R8）：以前板上的东西也能标、能动、能改，页面提醒学生翻过去
+    lines.push(board.ext ? '以前的板（学生翻回去才看得到；在上面 mark / figure / edit / replace，页面在板上方提醒学生翻过去）：' : '以前的板（学生翻回去才看得到；上面的图不能再用 figure 动）：');
     for (const p of before) {
       const segsHere = onPage(p.n);
       const title = p.title ? `「${oneLine(p.title, 40)}」` : '';
@@ -723,6 +724,8 @@ function pagedStateText(board) {
   if (vars.length) lines.push(`这节课定义的量（let 块，\\calc 和组件里都能直接用）：${vars.map((v) => oneLine(v, 200)).join('；')}`);
   lines.push(ids);
   if (board.nextMark) lines.push(`新的标注不写 id 时自动编号（下一个是 ${board.nextMark}）。`);
+  // 外部的课：页面替外部记着的（预备板、叫来的助手）
+  if (Array.isArray(board.extLines) && board.extLines.length) lines.push('外部的课里页面记着的：', ...board.extLines.map((x) => `- ${x}`));
   return lines.join('\n');
 }
 

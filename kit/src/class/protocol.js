@@ -5,6 +5,7 @@
 // 页面在流式回调里拿到的是「到目前为止的全文」，每次整段重新解析，所以这里全是纯函数、不留状态、不碰 DOM。
 import { parseCoach } from './ext.js';
 import { parseClaude, parseClaudeOff } from './delegate.js';
+import { parseQueue, parseEdits } from './extboard.js';
 import { tokenize, unquote } from '../tokens.js';
 import { parseNoteBlock } from '../project/notebook.js';
 import { parseMarkHead, parseMarkBlock, parseUnmark } from '../markspec.js';
@@ -153,7 +154,7 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // move：版面模式里把一段挪到别的栏（col=），不重画
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'show', 'move', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'show', 'move', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set / claude / claude-off';
+const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set / claude / claude-off / queue / edit';
 
 /**
  * 解析 board 后面那一行：
@@ -203,6 +204,15 @@ export function parseCommand(header) {
   if (name === 'snap') return { op: 'snap' };
   // 外部主讲叫页面里的 Claude 来接（需求 R1，delegate.js）：开头那行 + 块里的 see / can / <<<话>>>，块闭合了才读全
   if (name === 'claude') return { op: 'claude', head: m[2].trim() };
+  // 外部的课：预备板（R7，块里是那块板第一段的内容）、改字不丢作答（R9，块里写 <<<旧 === 新>>>）
+  if (name === 'queue') return parseQueue(m[2] || '');
+  if (name === 'edit') {
+    const t = tokenize(m[2] || '');
+    const id = t.find((x) => x.key === 'id')?.value || t.find((x) => !x.key)?.value;
+    if (!id) return { error: 'edit 缺少 id：board edit id=b3，块里写 <<<旧 === 新>>>' };
+    if (!validId(id)) return { error: `id「${id}」不合法：${ID_RULE}` };
+    return { op: 'edit', id };
+  }
   if (name === 'claude-off') return parseClaudeOff(m[2] || '');
   // 整节课的设置（需求 R11）：board set upload=on|off（组件下面的截图入口）
   if (name === 'set') return setCommand(m[2] || '');
@@ -228,6 +238,7 @@ export function blockCommand(header, body = '') {
   // 读得宽一点（外部的课里收 wrong / giveup / stuck）；页面里的老师写的那几条课堂执行时照旧不收（classroom.js）
   if (op.op === 'react') return parseReact(op.head, body, { lenient: true });
   if (op.op === 'claude') return parseClaude(op.head, body);
+  if (op.op === 'edit') { const r = parseEdits(body); return r.error ? { error: r.error } : { ...op, edits: r.edits }; }
   if (op.op === 'why') return parseWhy(op.head, body);
   return op.op === 'mark' ? markOp(op, body) : op;
 }
