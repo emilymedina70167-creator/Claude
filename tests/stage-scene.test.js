@@ -1961,7 +1961,7 @@ test('复审 N9：认得的选项表按指令是全的（真的演一遍）—�
       try { sc.apply({ ...c0, opts, lenient: true }); ran.add(table.label); } catch { /* 这一行在这个舞台上演不了 */ }
     }
   };
-  const dir = new URL('../tools/stage-try-examples/', import.meta.url);
+  const dir = new URL('./fixtures/stage-try-examples/', import.meta.url);
   for (const f of readdirSync(dir).filter((x) => x.endsWith('.txt'))) {
     const sc = new Scene();
     for (const l of readFileSync(new URL(f, dir), 'utf8').split('\n')) feed(sc, l.replace(/^学生:\s*/, ''));

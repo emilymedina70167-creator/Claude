@@ -76,16 +76,3 @@ test('给老师的字：走完以后又动了、挪开以后不说「一上来�
   assert.match(stageDoc('数据结构'), /@a\.right 到一趟时演（只演一次，下一趟再写）/);
 });
 
-test('抄进题库的题先试一遍：课上 group 写的是拨盘名（题里没有拨盘）——去掉那一行照抄，不抄一道出不了的题', async () => {
-  const { harvestDrills } = await import('../kit/src/memory/drills.js');
-  const { parseStageDrill, drawStageDrill } = await import('../kit/src/stagedrillspec.js');
-  const turns = [{ seq: 1, role: 'claude', text: `${WD}\ndial d = 5 range=1-5\nfollow a sort shell gaps="5 3 1"\ngroup a stride=d\nopen a move` }];
-  const out = harvestDrills({ session: { id: 'c-1', kind: 'stage', block: 'DS-L8.2.3' }, turns, report: null, existing: [] });
-  assert.equal(out.length, 1);
-  assert.doesNotMatch(out[0].doc.md, /stride=d/);
-  assert.ok(!drawStageDrill(parseStageDrill(out[0].doc.md.replace(/^```stage\n|\n```$/g, ''))).error);
-  // 分组写了几次（5、3、1）：只留最后一次
-  const many = harvestDrills({ session: { id: 'c-2', kind: 'stage', block: 'DS-L8.2.3' }, turns: [{ seq: 1, role: 'claude', text: `${WD}\nfollow a sort shell gaps="5 3 1"\ngroup a stride=5\ngroup a stride=3\nopen a move` }], report: null, existing: [] });
-  assert.equal((many[0].doc.md.match(/group a/g) || []).length, 1);
-  assert.match(many[0].doc.md, /group a stride=3/);
-});

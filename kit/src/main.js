@@ -15,6 +15,10 @@ import { renderDesk, classHash } from './memory/desk.js';
 import deskCss from './memory/desk.css';
 import themesCss from './themes.css';
 import classIosCss from './class/ios.css';
+// 舞台（2026-11-18 从 archive/ 恢复）：黑板组件 stage 嵌一块没有老师的舞台，画法和样子照舞台课那时一样
+import stageCss from './stage/stage.css';
+import { viewCss as stageViewCss } from './stage/types/views.js';
+import { stageStyles } from './stage/look/css.js';
 import { themeOf, storedTheme, applyTheme, DESK_DEFAULT } from './theme.js';
 import { VERSION } from './version.js';
 import { installErrlog, reportError } from './errlog.js';
@@ -54,7 +58,7 @@ function injectStyles() {
   document.body.insertAdjacentHTML('afterbegin', CHALK_FILTER);
   const style = document.createElement('style');
   style.id = 'la-kit-style';
-  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + deskCss + '\n' + themesCss + '\n' + classIosCss;
+  style.textContent = katexCss + '\n' + css + '\n' + classCss + '\n' + classBoardCss + '\n' + deskCss + '\n' + stageStyles(stageCss + '\n' + stageViewCss()) + '\n' + themesCss + '\n' + classIosCss;
   document.head.appendChild(style);
   if (!document.querySelector('meta[name="viewport"]')) {
     const m = document.createElement('meta');

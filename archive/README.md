@@ -24,4 +24,6 @@
 | `kit/src/project/after.js` `afterdesk.js`、`tests/project-after*.test.js` | 第十四轮的「课后那一轮」「第一次整理」（下课后页面里的 Claude 写笔记本） | 第十五轮外部主 Claude 是唯一写笔记本、下判断的（外部主 Claude 的修改意见第 2 节，学生授权） | 2026-11-18 | `4f232bb` |
 | `tools/desk-e2e-old.mjs` | 搬走以前的整条流程测试（含舞台、一问一答、实时黑板、助手几段） | 留着对照 | 2026-11-17 | `3f18ea7` |
 
+**2026-11-18 恢复回去的**（外部主讲要求「底座写好基本功」，学生定的是不重做、从这里恢复）：舞台引擎 `kit/src/stage/`（`Stage` 类、场景、各种东西、规则、手势、挑战、照引擎走、构图）和它的测试回到 `kit/src/stage/`、`tests/`，嵌进黑板组件 `stage`（`kit/src/blocks/stagebox.js`）；测试用的试演例子挪到 `tests/fixtures/stage-try-examples/`。舞台课的课堂循环没恢复，还在这里：`kit/src/stage/classroom.js` `loop.js` `devteacher.js` `history.js` `class.css`，和只测它们（或测舞台题、旧记忆）的几份测试 `tests/stage-class` `stage-cost` `stage-feel` `stage-gaps` `stage-sight-loop` `stage-try` `stage-mainline7` `stage-memo-note` `stage-memo-summary` `stagedrillspec`。
+
 留在原处的：`kit/src/live/store.js`、`sync.js`（整个学习台的数据库和证据）；`kit/examples/en-demo.html`、`ds-8.2.3-shell-sort.html`（组件示范页，去掉了 `mode: guided`）。

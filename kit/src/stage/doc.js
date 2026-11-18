@@ -409,3 +409,148 @@ export function buildStageSystem({ pack = null, memory = null, rules = '', title
   return parts(packBody || '（这节课没有备好的资料包：按课程地图的这一块讲。）', mem);
 }
 
+
+// —— 黑板组件 stage 的手册（2026-11-18 舞台恢复进黑板，外部主讲用）：第 1 层完整清单 ——
+// 只写能做什么、写法、页面会怎么做（tests/stage-manual.test.js 守着：没有讲做法的词、每个 ```stage 例子照抄能演）。
+// 各种东西那一节照 types/ 的 doc（+ docMore）拼，和舞台课的说明同一份来源；「叫老师」在这里是记一条 stage-call
+const SAY_NEUTRAL = (t) => String(t).replace(/照做/g, '执行').replace(/推荐/g, '可选').replace(/ {3,}/g, '  ');
+/** 例子包成能照抄的一段 */
+const fenced = (body, head = '') => `\`\`\`stage\n${head}${body}\n\`\`\``;
+
+/** 把 (A+B)(A+B) 拆开的四项排进格子：不超过 40 行，换成 (A−B)² 只改那几行的字 */
+export const MANUAL_ORDER_EXAMPLE = `id: s-expand
+title: 把 (A+B)(A+B) 拆开的四项按先后排进格子
+prewrite: all
+tex e = "(A+B)(A+B)"
+array a = BA B² A² AB _ _ _ _
+array k = A² AB BA B² hide=on
+say "左边一项乘右边一项，按先后排进后四格。"
+open a move
+goal g1 "按先后排好四项" when="a.5 = k.1, a.6 = k.2, a.7 = k.3, a.8 = k.4" on="排好了"
+@g1 say "对：AB 和 BA 是两项，先后不能换。"
+@g1.wrong say "再看先后：第二项是左边的 A 乘右边的 B。"
+ask next "排好了点下面" button="排好了"`;
+
+/** 式子能动手：展开、换顺序、合并都过非交换多项式的判定 */
+export const MANUAL_ALG_EXAMPLE = `id: s-alg
+title: 展开 (A+B)²
+prewrite: all
+tex e = "(A+B)^2" alg=on
+open e expand
+open e move
+goal g1 "展开以后合并能合并的" when="e expanded, e merged"
+@g1 say "四项：A² + AB + BA + B²，AB 和 BA 并不起来。"
+@e.miss say "AB 和 BA 先后不一样：矩阵乘法不交换。"`;
+
+export function stageManual() {
+  const types = Object.values(TYPES).filter((t) => t.doc && t.create.length);
+  const follows = followNames().map(followOf).filter((a) => a.doc);
+  const engines = [...new Set(Object.values(ENGINE_TABLES).flat().map((eg) => `${eg.split(' ')[0]}(${[...eg.matchAll(/(\w+)=/g)].map((m) => m[1]).join(' ')})`))];
+  const parts = [
+    `# 黑板组件 stage：在一段里嵌一块舞台
+
+黑板上的一段写成一个 \`\`\`\`stage\`\`\`\` 围栏（board add / new / replace 的段里照写），页面在这一段里嵌一块舞台，照里面的镜头指令一行一行演。学生在舞台上点、拖、拨、填，页面当场算、当场判，演写好的预写；这一块里没有页面的老师。
+
+${fenced('array a = 49 38 65 97 76\nopen a move\ngoal g1 "把小的拖到前面" when="a.1 < a.2"\n@g1 say "对。"', 'id: s1\ntitle: 先排两个\n')}
+
+开头几行是字段（都能不写），从第一行不是字段的起往下全是镜头指令：
+- \`id:\` 这一块的名字（作答、动作按它记；同一节课里不重复）
+- \`title:\` 写在舞台上方的一行字
+- \`prewrite: all\` 预写也收「没做到」「走偏」（\`@名字.wrong\`、\`@名字.miss\`、\`@ask.wrong\`，见「预写」）；不写时只收做到了、做对一步、答对、做完了。整节课开着时（课堂设了 session.extPrewrite）每一段都收
+- \`height:\` 舞台多高（像素，240～900，默认 420）；东西多了镜头整块缩小，放得下就不缩
+
+页面会怎么做：
+- 写错的行不演、别的行照演；每一行错在哪（这一段的第几行、原文、为什么）报成这一段的写法错误
+- 学生做的每一下、挑战做到 / 没做到、答了等着的那一问都记下来（见「页面记下的事」）；这块舞台现在什么样，见「舞台现在」
+- 刷新、这一段重画时从头演（学生动过的样子不放回）`,
+    `## 共用的指令（一行一个动作，页面一行一行演；行首写 & 就和上一行一起演）
+部件的写法：名字（整个）、名字.部件（每种东西自己的写法，见各节）
+颜色：g1 蓝、g2 粉、g3 绿、g4 金、g5 紫、g6 橙
+跟着算的 {式子}：引号外面的 {…} 由页面现算（格子里的数、矩阵、向量、边权、answer=）。能用拨数 k、矩阵 A、一格 A.1,2、平面上的 p.u，能写 + -、乘（A v、2A）、A^-1、A'、det(A)。依赖一变页面当场重算；学生动不了它；算不出来停在上一次的数。引号里（say、label、题卡）的 {a.3}、{d} 是话里的小块
+量：页面数的数，写成 名字(东西或部件)（每种东西有哪几个见它那一节）。舞台现在里都写出来；能写进 when=、answer={…}，话和贴的字里写 say "秩是 {rank(m)}" 画成现在的数、跟着变；数不了时挑战写「判不了」、字画「?」
+
+说话（在舞台上方一个字一个字写出来）：
+say "从 {a.1} 往后数 5 个，落在 {a.6}。"  {a.1} 画成那个部件的小块（扣着的不露值）；{d} 是拨的数的值；$d$ 是斜体字母（不排公式）
+
+对任何部件都能做：
+glow a.1 a.8 / unglow a.1 a.8  点亮
+lift a.2 / drop a.2  抬起 / 放下
+pulse a.3  闪一下
+paint a.1 a.6 g1 / unpaint a.1  染色
+dim a.1-5 / undim a.1-5  灰掉
+cover a / uncover a.6  扣过去看不见值 / 翻开一个
+link a.1 a.6 g1 / unlink a  连一道弧 / 收掉连着 a 的线
+compare a.3 a.8  两个比大小；两张矩阵整张逐格比
+remove a  拿下舞台
+scene "第二幕" keep=a  上一幕整块收起，keep= 带过来
+hide a / show a  藏起来（照样算、现状照写，学生看不见）/ 摆出来；造的时候写 hide=on 就先藏着（藏着的一排能当挑战里比的答案）
+
+贴在图上的字：
+label t a#1 a#8 "一样大，先后却换了" side=below tone=note  side：above / below / left / right；tone：note 小字、key 重点、soft 淡
+retext t "新的字" / unlabel t / unlabel  改字 / 拿掉一张 / 全拿掉
+
+能拨的数：
+dial d = 5 range=1-5 at=a  学生拨它；写进 {式子} 里驱动任何量
+dial t = 现在 options="过去 现在 将来"  拨词的拨盘：{t} 写现在的词，when="t = 将来"
+{t: 做过了 | 正在做 | 还没做}  照拨盘挑一段（贴的字、题卡、挑战的字跟着变）
+set d 5  页面替学生拨到 5
+camera a.1-7 / camera all  镜头凑近 / 看全部；wait 600  停 600 毫秒
+
+舞台课整屏构图用的几种（place、arrange、preview、look、scale、draw）在这块舞台里写了不报错，东西照摆新东西的规矩自己排、镜头整块缩放，画面不一定照这几行办。`,
+    `## 交给学生动、挑战
+open a  交给学生直接动（每种东西能 open 的动作、学生怎么动、翻成哪一行，见各节）；close a 收回（close a 动作：只收那一种）
+同一处按法不一样的（点、滑、按住再拖）能一起开；按法一样的第二项当场报错
+页面判对错的动作（树的 rotate insert place、矩阵的 rowop、句子的 mark refer）在 open 那一行写：wrong=quiet 执行、只记下（默认）/ wrong=mark 执行、淡淡圈一下 / wrong=block 不让做、弹回去；call=wrong 一走偏就记一条 stage-call / call=done 做完马上记
+做不到的一下（这个世界的规矩不让：式子换了以后不相等、不是同类项、空格子拖不动）弹回去，舞台上浮出一句为什么
+undo=on（哪种 open 都能写）：右上角「撤一步」，学生撤回自己的上一下
+keep a "换之前" / back a "换之前" / open a back="换之前"  存下样子 / 回到那一刻 / 学生那边一个「回到换之前」按钮
+goal g1 "把 {a} 拖成从小到大" when="a sorted"  挑战（左上角一条）；写下就已经成立的不收；做到过就一直算
+when= 两边写数、部件、东西的名字、拨数、量、O（零矩阵）、I（单位矩阵）、{式子}，部件比部件也行（a.5 = k.1，k 可以是藏着的一排答案）；比较 = != < <= > >=；a sorted（desc 从大到小）；每种东西自己的判断式写「名字 判断式 [参数]」（见各节）；逗号连着的都要成立，| 隔开的有一组成立就算
+挑战后面还能写：call=now 做到就马上记一条 stage-call（不写是学生手上还有事就先攒着）；on="排好了" 学生按这个按钮才判（按了没做到也记下）；collect=a n=3 收齐几种不一样的
+watch w1 when="a.1 = 13"  只记事的条件：成立时记一条 stage-call；学生看不到
+ungoal g1  拿掉挑战`,
+    `## 预写（学生做到某件事的那一刻页面马上演的行）
+@g1 say "排好了！"  学生做到 g1 的那一刻演：一句话、下一个挑战、一个 ask 都行；写过的一直留着到做到为止；@g1 里出的 goal g2 能接着写 @g2，最多三层
+@t.done / @t.right  t 做完了（页面算出没有下一步）/ 学生在 t 上做对一步（页面判对错的动作）时演，只演一次
+@ask.right say "对。"  写在最后那个 ask 前面：学生答对它时演；那一问要页面判得了对错（tap、pick 写了 expect=，value 写了 answer=）
+开了 prewrite: all 还收这几种（都只演一次；挑战做到了，它的 .wrong / .miss 拿掉）：
+@g1.wrong say "…"  学生按了 g1 的按钮、判成没做到时演（g1 要写 on="按钮上的字"）
+@g1.miss say "…"  g1 还没做到时学生走偏一下（裁判看出像哪种错法、这一下被弹回）时演
+@t.wrong say "…"  学生在 t 上做错一步时演（页面判对错的动作）
+@t.miss say "…"  学生在 t 上走偏时演：裁判看出像哪种错法、做不到的一下被弹回（没写 .miss 时，像错法的那一下演 .wrong）
+@ask.wrong say "…"  写在最后那个 ask 前面：学生答错它时演
+预写的行写下时就在现在的舞台上试一遍：演不了的写不进去（报成写法错误）`,
+    `## 等学生（一段最多挂一问，写在最后；也可以不写 ask，以一个还没做到的挑战结尾）
+ask tap a "那 {a.2} 和谁一组？" expect=a.7  学生点一个（写 a 是哪一个都能点）；expect= 是预期的那一个，页面判点对没点对
+ask pick a "哪几格会动？" button="猜好了" expect="a.2 a.6"  学生点几个、按按钮交，页面比多点、漏点（order=on 连先后一起比；reveal=on 之后变了的圈变实线）
+ask drag a#1 a#6 "把小的拖到前面"  学生拖
+ask next "拨一下 $d$，看出规律点下面" button="看出来了"  学生看完点按钮
+ask say "你觉得为什么？"  学生写一句话
+ask value "一共比较了几次？" answer=4  学生填一个答案，页面当场判；type= 选判法：num 数、formula 含 n 的式子（加 free=n）、matrix 矩阵（1 2 / 0 1）、set 数集、equation 方程、seq 序列、en 英文；answer={式子} 照舞台现算；wrong="错答=说明"（几条用 ; 隔开）只进记录，学生只看到对不对`,
+    `## 舞台上能放的东西
+${types.map((t) => `${t.doc}${t.docMore ? `\n${t.docMore}` : ''}`).join('\n\n')}`,
+    `## 引擎的过程表
+${ETABLE_DOC}
+table T engine=${ENGINE_TABLES['数据结构'][0]}  别的 名字=值 是引擎的字段（和黑板的演示组件一样；写错了页面说是哪个）
+能造表的引擎：${engines.join(' ')}`,
+    `## 照引擎走
+${follows.map((a) => a.doc).join('\n')}
+照着走的东西：现状里写着每一趟做完该是什么样；学生做到一趟页面当场知道对不对、像哪种错法（进记录，一趟中间不判）。量 pass(a)，判断式 a pass=2、a done；每到一趟记一条 stage-call（follow … call=done：走完才记）；@a.right 到一趟时演（只演一次），@a.done 走完演；follow a off 不照了`,
+    `## 舞台现在
+黑板现状里这一块写的：每样东西现在的样子（一排格子的每一格、树的结构、矩阵的数、式子现在一行和它的每一项……）、页面算的量、藏着的东西、贴着的字、拨数现在是几、最后说的话、在等学生做什么（哪一问、哪个按钮）、学生能直接动的（哪样东西、哪种动作、怎么按）、每个挑战做没做到、预写的还有哪几组没演、照引擎走的到了第几趟、存着的样子。`,
+    `## 页面记下的事
+- 作答（\`type: 'stage'\`）：学生做到一个挑战（\`ok: true\`，\`q\` 是挑战的话，\`goal\` 是挑战的名字）、按了 on= 的按钮没做到（\`ok: false\`）、答了等着的那一问（\`q\` 是问的话，\`value\` 是学生答的，\`ok\` 是页面判的对错，判不了是 null）；\`text\` 是写成一句的样子，\`stage\` 是这一块的 id
+- 动作 \`stage-act\`：学生的每一下（\`text\`：做了什么、页面判这一下对不对、做不到时为什么；\`line\` 是翻成的那一行指令；\`ok\` 页面判的对错；\`blocked\` 被弹回）
+- 动作 \`stage-call\`：舞台课那时会叫老师的那一刻（\`why\`：answer 答了那一问、goal 做到了挑战、done 做完了、watch 盯着的条件成立、wrong 写了 call=wrong 又走偏、tries 试了好多下还没做到、stuck 很久没动挑战还没做到），\`text\` 是从上一次以后学生怎么试的一段（拨了哪一格、从几拨到几、拖成什么样）
+- 动作 \`stage-note\`：页面记下的一句（预写的行没演上……）`,
+    `## 例子（照抄能演）
+${fenced(MANUAL_ORDER_EXAMPLE)}
+
+换成 (A−B)²：tex 那一行写 "(A-B)(A-B)"，两排格子换成这几项（array a = A² -BA B² -AB _ _ _ _、array k = A² -AB -BA B²），话改一句。
+
+${fenced(MANUAL_ALG_EXAMPLE)}
+
+${types.filter((t) => t.example).map((t) => fenced(t.example)).join('\n\n')}`,
+  ];
+  return SAY_NEUTRAL(parts.join('\n\n'));
+}

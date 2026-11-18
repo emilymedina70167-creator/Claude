@@ -2592,3 +2592,6 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .block-widget .wg-say { font: 15px/1.5 var(--sans); color: var(--muted); }
 .block-widget .wg-say.is-ok { color: var(--green); }
 .block-widget .wg-say.is-bad { color: var(--red); }
+/* 黑板上的一块舞台（blocks/stagebox.js）：高由 height: 定（行内写），话、挑战、按钮都在这块里面 */
+.block-stage .sb-title { margin: 0 0 6px; font: 600 18px/1.4 var(--hand, var(--sans)); color: rgb(var(--chalk-rgb) / 0.95); }
+.block-stage .sb-stage { position: relative; min-height: 240px; border-radius: 16px; overflow: hidden; background: rgb(var(--chalk-rgb) / 0.04); touch-action: pan-y; }

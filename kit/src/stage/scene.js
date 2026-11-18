@@ -42,11 +42,14 @@ export const PREWRITE_DEPTH = 3;
 const BARE_NAME = /^[A-Za-z_]\w*$/;
 /** @ask.right 跟着的那一问页面判不了对错（或者没有那一问）时报的话 */
 export const ASK_RIGHT_ERROR = '@ask.right 要跟着一个页面判得了对错的 ask';
+export const ASK_WRONG_ERROR = '@ask.wrong 要跟着一个页面判得了对错的 ask';
 /** 这一问页面判不判得了对错：点（写了 expect=）、点几样（写了 expect=）、填一个答案（写了 answer=） */
 export const judgeable = (w) => !!w && ((w.kind === 'tap' && !!w.expect) || (w.kind === 'pick' && !!w.expect?.length) || (w.kind === 'value' && w.answer != null && w.answer !== ''));
 /** 一组预写在什么时候演（套着的预写写给老师「g1 做到时才出」）：g1 → g1 做到，t.done → t 做完，ask.right#N → 学生答对那一问 */
 function groupText(k) {
   const [id, kind] = String(k).split('.');
+  if (kind === 'wrong') return id === 'ask' ? '学生答错那一问' : `${id} 判成不对`;
+  if (kind === 'miss') return `学生在 ${id} 上走偏`;
   return kind == null ? `${id} 做到` : id === 'ask' ? '学生答对那一问' : kind === 'done' ? `${id} 做完` : `学生在 ${id} 上做对一步`;
 }
 /** 一行预写里写出的挑战名（goal g2 "…" when=…）；不是 goal 那一行是 null */
@@ -263,6 +266,10 @@ export class Scene {
     // from 是写出 goal g2 的那一组预写（g1、t.done、ask.right 或者另一个还没有的挑战），depth 是 @g2 的行是第几层
     this.ahead = new Map(); // 挑战 id → { lines, depth, from }
     this.askRight = null; // @ask.right 的行：下一个 ask 拿走（waiting.right），学生答对那一问时页面马上演
+    // 预写也收「没做到」「走偏」（@名字.wrong / .miss、@ask.wrong）：只在嵌在黑板上、由外部主讲写的舞台里开（blocks/stagebox.js 的 prewrite: all）。
+    // 舞台课里老师看着学生写纠错（「教学不预制」），默认不收
+    this.prewriteAll = false;
+    this.askWrong = null; // @ask.wrong 的行：下一个 ask 拿走（waiting.wrong），学生答错那一问时页面马上演
     // 拿走 @ask.right 的那一问记一个编号（waiting.rightKey = ask.right#N）：它里面套着的预写（ahead 的 from）跟着这一问，
     // 这一问没答对就收尾、整组拿掉，不和下一问的 @ask.right 混在一起
     this.askSeq = 0;
@@ -310,13 +317,15 @@ export class Scene {
     s.say = this.say;
     s.words = [...this.words];
     // ask pick 的 refs、expect 是数组：各拷一份（改副本的不动原来的）
-    s.waiting = this.waiting ? { ...this.waiting, refs: [...this.waiting.refs], ...(Array.isArray(this.waiting.expect) ? { expect: [...this.waiting.expect] } : {}), ...(this.waiting.right ? { right: [...this.waiting.right] } : {}) } : null;
+    s.waiting = this.waiting ? { ...this.waiting, refs: [...this.waiting.refs], ...(Array.isArray(this.waiting.expect) ? { expect: [...this.waiting.expect] } : {}), ...(this.waiting.right ? { right: [...this.waiting.right] } : {}), ...(this.waiting.wrong ? { wrong: [...this.waiting.wrong] } : {}) } : null;
     for (const [k, v] of this.opens) s.opens.set(k, { ...v, refs: [...v.refs], ...(v.policy ? { policy: { ...v.policy } } : {}) });
     for (const [k, g] of this.goals) s.goals.set(k, structuredClone(g));
     for (const [k, r] of this.reactions) s.reactions.set(k, [...r]);
     // 套着的预写、@ask.right：@g2 先过 check、预写试演都在副本上跑，副本上没有就报「先写 goal g2」
     for (const [k, a] of this.ahead) s.ahead.set(k, { ...a, lines: [...a.lines] });
     s.askRight = this.askRight ? [...this.askRight] : null;
+    s.prewriteAll = this.prewriteAll;
+    s.askWrong = this.askWrong ? [...this.askWrong] : null;
     s.askSeq = this.askSeq;
     for (const [k, p] of this.preRight) s.preRight.set(k, { ...p, lines: [...p.lines] });
     s.loose = this.loose.map((x) => ({ ...x }));
@@ -410,7 +419,7 @@ export class Scene {
   hiddenIn(refs) { return [...new Set(refs.map((r) => parseRef(r)?.obj).filter((id) => this.objects.get(id)?.hidden))]; }
   /** 挑战的条件里提到的舞台上的东西（M、M.1,1、rank(M)、M same B） */
   /** 拿掉几条挑战（ungoal 和 scene 共用）：连同它们的预写 */
-  ungoalIds(ids) { ids.forEach((k) => { this.goals.delete(k); this.reactions.delete(k); this.dropAhead(k); }); }
+  ungoalIds(ids) { ids.forEach((k) => { this.goals.delete(k); for (const x of [k, `${k}.wrong`, `${k}.miss`]) { this.reactions.delete(x); this.dropAhead(x); } }); }
   /** 收掉几张贴的字（unlabel 和 scene 共用）：拨盘的字收了拨盘就不显示；贴在收掉的那几样（拨数、别的字）上面的字一起收（主线第一轮 D1-5） */
   unlabelIds(ids) {
     const out = [...ids];
@@ -643,6 +652,8 @@ export class Scene {
       if (j.mark && o) this.slip(j.obj, c, j.act);
       // 学生做对一步：老师预写的确认、下一小问（@t.right，只演一次）
       if (j.by === 'student' && j.verdict?.right === true) reactions.push(...this.pull(`${j.obj}.right`, { right: j.obj }));
+      // 学生做错一步（照做了，没拦）：外部主讲预写的 @t.wrong；像哪种错法（misread）时先找 @t.miss，还有还没做到的挑战的 @g.miss
+      if (j.by === 'student' && j.verdict?.right === false) reactions.push(...this.slipReactions(j.obj, j.verdict));
     }
     // 点了以后第一次改了那样东西（谁改的都算，跟着拨数重算的也算）：哪几个真变了，和学生先点的比（fx.pickDiff：学生的一下写进事实，
     // 老师的一下画面交给课堂记一句）。规则交的 changed 说变了哪些；点过的部件这一下没了也算变了
@@ -686,7 +697,11 @@ export class Scene {
     if (met.length) {
       fx.goalsMet = met;
       reactions.push(...met.flatMap((id) => fire(id, { goal: id, ...keep(id) })));
+      // 做到了：没做到、走偏时演的那几行用不上了
+      for (const id of met) for (const k of [`${id}.wrong`, `${id}.miss`]) if (this.reactions.has(k)) { this.reactions.delete(k); this.dropAhead(k); }
     }
+    // 学生按了按钮、写了 on= 的挑战判成没做到：@g1.wrong 的行（只在 prewrite: all 的舞台里收得进来）
+    if (student && this.prewriteAll) for (const x of fx.onGoals || []) if (!x.met) reactions.push(...this.pull(`${x.id}.wrong`, { wrongOf: x.id }));
     // 收集型挑战收了一张、还没收齐：@g1 的行每次都演（只看不拿）
     const more = got.collected.filter((id) => !met.includes(id));
     if (more.length) {
@@ -774,12 +789,15 @@ export class Scene {
   /** 这一轮演完 @ask.right 没着落（askRightProblem）：还没被拿走的、跟着一问判不了对错的，连同里面套着的拿掉 */
   dropAskRight() {
     if (this.askRight) { this.askRight = null; this.dropAhead('ask.right'); }
+    this.askWrong = null;
     const w = this.waiting;
     if (w?.right && !judgeable(w)) this.endAsk(w);
+    if (w?.wrong && !judgeable(w)) delete w.wrong;
   }
   /** 刷新重放跳过一问（ask 不重放）：它拿走的 @ask.right 连同里面套着的一并丢掉（F2） */
   skipAsk() {
     this.askRight = null;
+    this.askWrong = null;
     this.dropAhead('ask.right');
   }
   /**
@@ -1074,8 +1092,10 @@ export class Scene {
    */
   stashOn(c) {
     const [name, kind] = String(c.on).split('.');
-    if (kind === 'wrong') throw new Error('走偏以后怎么讲要等你看着学生写，不能预写');
+    const slipKind = kind === 'wrong' || kind === 'miss';
+    if (kind === 'wrong' && !this.prewriteAll) throw new Error('走偏以后怎么讲要等你看着学生写，不能预写');
     if (name === 'ask') return this.stashAsk(c, kind);
+    if (slipKind && this.prewriteAll) return this.stashSlip(c, name, kind);
     if (kind !== 'done' && kind !== 'right') throw new Error(`@${name}. 后面只能写 done（做完了）或 right（学生做对一步），没有「${kind}」`);
     const o = this.objects.get(name);
     if (!o) throw new Error(this.goals.has(name) ? `${name} 是挑战：做到了演的行写 @${name}，@名字.${kind} 写在舞台上的东西上` : `舞台上没有「${name}」`);
@@ -1103,11 +1123,58 @@ export class Scene {
     return { stashed: key };
   }
   /**
+   * @名字.wrong / @名字.miss（只在 prewrite: all 的舞台里收，黑板上外部主讲写的舞台）：
+   *   - 挑战 g1：.wrong 是学生按了按钮、g1 判成没做到（g1 要写 on=，不然页面没有「交了」的那一刻）；.miss 是 g1 还没做到时学生走偏一下
+   *   - 东西 t：.wrong 是学生在 t 上做错一步（页面判对错的动作）；.miss 是走偏（裁判看出像哪种错法、这一下被弹回去）
+   * 都只演一次；挑战做到了，它的 .wrong / .miss 拿掉
+   */
+  stashSlip(c, name, kind) {
+    const g = this.goals.get(name);
+    const o = this.objects.get(name);
+    if (!g && !o) throw new Error(`舞台上没有「${name}」（@名字.${kind} 写挑战或者舞台上的东西）`);
+    if (g) {
+      if (g.watch) throw new Error(`watch 成立时页面只叫你，不演预写的行：@${name}.${kind} 写在挑战上`);
+      if (g.met) throw new Error(`挑战 ${name} 已经做到了，@${name}.${kind} 的行不会演`);
+      if (kind === 'wrong' && g.on == null) throw new Error(`@${name}.wrong 要挑战写了 on="按钮上的字"：学生按了它、判成没做到时演（不写 on= 的挑战每动一下都在判，没有「交了」的那一刻）`);
+    } else {
+      const rules = rulesOf(o);
+      const mine = [...this.opens.values()].filter((e) => e.obj === name);
+      if (!mine.length) throw new Error(`先把 ${name} 交给学生（open ${name} …），@${name}.${kind} 的行才会演`);
+      if (kind === 'wrong' && !(rules?.judges || []).some((a) => mine.some((e) => e.action === a))) throw new Error(`${typeOf(o).label}现在开着的动作页面不判对错，@${name}.wrong 的行不会演${rules?.judges?.length ? `（判对错的动作：${rules.judges.map((a) => `open ${name} ${a}`).join(' / ')}）` : '；要「走偏、被弹回」时演写 @' + name + '.miss'}`);
+    }
+    const key = `${name}.${kind}`;
+    const list = this.reactions.get(key) || [];
+    this.tryPrewrite(key, [...list, c.body], c);
+    this.reactions.set(key, [...list, c.body]);
+    return { stashed: key };
+  }
+  /**
+   * 学生在 obj 上做错一步、走偏一下时演的预写（prewrite: all 才有）：像哪种错法（misread）或被弹回（blocked）先找 @obj.miss，
+   * 没写 .miss、这一下是判成不对的（right === false）找 @obj.wrong；还没做到的挑战写了 .miss 的也一起演。都只演一次
+   */
+  slipReactions(obj, verdict = null, { blocked = false } = {}) {
+    if (!this.prewriteAll) return [];
+    const out = [];
+    const has = (k) => !!this.reactions.get(k)?.length;
+    const missy = blocked || !!verdict?.misread || verdict?.legal === false;
+    if (missy && has(`${obj}.miss`)) out.push(...this.pull(`${obj}.miss`, { missOf: obj }));
+    else if (verdict?.right === false && has(`${obj}.wrong`)) out.push(...this.pull(`${obj}.wrong`, { wrongOf: obj }));
+    if (missy) for (const g of this.goals.values()) if (!g.met && !g.watch && has(`${g.id}.miss`)) out.push(...this.pull(`${g.id}.miss`, { missOf: g.id }));
+    return out;
+  }
+  /**
    * @ask.right 开头的行：写在这一轮的 ask 前面，下一个 ask 拿走（waiting.right），学生答对那一问（ask tap / pick 写了 expect=、
    * ask value 写了 answer=）那一刻页面马上演，只演一次。跟着的那一问页面判不了对错，这一轮演完舞台报 ASK_RIGHT_ERROR（askRightProblem）
    */
   stashAsk(c, kind) {
-    if (kind !== 'right') throw new Error(`@ask. 后面只能写 right（学生答对下一问时页面马上演），没有「${kind}」`);
+    // @ask.wrong：学生答错这一问时演（只在 prewrite: all 的舞台里收）
+    if (kind === 'wrong' && this.prewriteAll) {
+      const list = this.askWrong || [];
+      this.tryPrewrite('ask.wrong', [...list, c.body], c);
+      this.askWrong = [...list, c.body];
+      return { stashed: 'ask.wrong' };
+    }
+    if (kind !== 'right') throw new Error(`@ask. 后面只能写 right（学生答对下一问时页面马上演）${this.prewriteAll ? ' 或 wrong（答错时）' : ''}，没有「${kind}」`);
     const list = this.askRight || [];
     this.tryPrewrite('ask.right', [...list, c.body], c);
     this.askRight = [...list, c.body];
@@ -1121,6 +1188,7 @@ export class Scene {
     if (this.askRight?.length) return ASK_RIGHT_ERROR;
     const w = this.waiting;
     if (w?.right?.length && !judgeable(w)) return ASK_RIGHT_ERROR;
+    if (this.askWrong?.length || (w?.wrong?.length && !judgeable(w))) return ASK_WRONG_ERROR;
     return null;
   }
   /**
@@ -1528,6 +1596,9 @@ export class Scene {
         // 预写里的那一问跟着的 @ask.right（写在它前面、跟到这一组里的：bindRight）由舞台演这一行时交来（preRight）
         const right = c.preRight?.length ? c.preRight : !c.prewrite && this.askRight?.length ? this.askRight : null;
         if (!c.prewrite) this.askRight = null;
+        // @ask.wrong 一样：这一轮最后那一问拿走（预写里的 ask 不拿）
+        const wrong = !c.prewrite && this.askWrong?.length ? this.askWrong : null;
+        if (!c.prewrite) this.askWrong = null;
         // 换掉的那一问还没答：它的 @ask.right（连同套着的）不会再演了
         if (this.waiting) this.endAsk(this.waiting);
         let rightKey = null;
@@ -1537,7 +1608,7 @@ export class Scene {
           for (const a of this.ahead.values()) if (a.from === 'ask.right') a.from = rightKey;
         } else if (!c.prewrite) this.dropAhead('ask.right');
         const ex = this.examOpts(opts, c);
-        this.waiting = { ...ex, shownAt: Date.now(), kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, ...(order ? { order: true } : {}), answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.grid ? { grid: spec.grid } : {}), ...(spec?.solve != null ? { solve: spec.solve } : {}), ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}), ...(c.prewrite ? { pre: true } : {}) };
+        this.waiting = { ...ex, shownAt: Date.now(), kind, refs, prompt: str ?? '', button: opts.button || null, expect: kind === 'pick' ? expects : opts.expect || null, ...(order ? { order: true } : {}), answer: opts.answer ?? null, type: spec?.type ?? null, wrongs: spec?.wrongs ?? null, free: spec?.free ?? null, ...(spec?.grid ? { grid: spec.grid } : {}), ...(spec?.solve != null ? { solve: spec.solve } : {}), ...(spec?.lenient ? { lenient: true } : {}), ...(kind === 'pick' ? { reveal } : {}), ...(right ? { right, rightKey } : {}), ...(wrong ? { wrong } : {}), ...(c.prewrite ? { pre: true } : {}) };
         if (opts.expect && kind !== 'pick') this.parts(opts.expect);
         return { kind };
       }
@@ -2677,10 +2748,18 @@ export class Scene {
     if (this.slips.size) lines.push(`淡淡圈着（学生走偏的那一下，照你写的 wrong=mark；那样东西再变就收掉）：${[...this.slips.values()].map((x) => `${x.refs.join(' ')}（${x.src}）`).join('；')}`);
     // 现在就是做完的样子（写在平了的树上、学生删了再修：reopenable）：照实说什么时候才演
     const now = (id) => (this.doneState.get(id) ? '（现在就是做完的样子：学生动了它、又做完时才演）' : '');
-    const pre = [...this.reactions].filter(([k, r]) => k.includes('.') && r.length).map(([k, r]) => { const [id, kind] = k.split('.'); return `${id} ${kind === 'done' ? '做完了' : '学生做对一步'}页面马上演你预写的 ${r.length} 行${kind === 'done' ? now(id) : ''}`; });
+    const WHEN = { done: '做完了', right: '学生做对一步', wrong: '学生做错一步', miss: '学生走偏（像错法、被弹回）' };
+    const pre = [...this.reactions].filter(([k, r]) => k.includes('.') && r.length).map(([k, r]) => {
+      const [id, kind] = k.split('.');
+      const g = this.goals.get(id);
+      const when = g ? (kind === 'wrong' ? `学生按「${g.on}」判成没做到` : '还没做到时学生走偏') : WHEN[kind] || kind;
+      return `${g ? `挑战 ${id}` : id} ${when}页面马上演你预写的 ${r.length} 行${kind === 'done' ? now(id) : ''}`;
+    });
     // @ask.right：跟着这一问（等着的那一问拿走了）、还没被拿走（下一问）
     if (this.waiting?.right?.length) pre.push(`学生答对这一问时页面马上演你预写的 ${this.waiting.right.length} 行`);
     if (this.askRight?.length) pre.push(`下一问学生答对时页面马上演你预写的 ${this.askRight.length} 行`);
+    if (this.waiting?.wrong?.length) pre.push(`学生答错这一问时页面马上演你预写的 ${this.waiting.wrong.length} 行`);
+    if (this.askWrong?.length) pre.push(`下一问学生答错时页面马上演你预写的 ${this.askWrong.length} 行`);
     for (const [k, p] of this.preRight) pre.push(`${groupText(k)}时出的那一问，学生答对时页面马上演你预写的 ${p.lines.length} 行`);
     // 套着的预写：挑战还没出（前一层演出 goal 那一刻才出），做到了演的行先记着
     for (const [id, a] of this.ahead) if (a.lines.length) pre.push(`挑战 ${id} 还没出（${groupText(a.from)}时才出），做到了页面马上演你预写的 ${a.lines.length} 行（第 ${a.depth} 层）`);
