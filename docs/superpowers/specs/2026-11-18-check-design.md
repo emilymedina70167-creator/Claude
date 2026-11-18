@@ -167,7 +167,7 @@ m3 unsure why="第 3 行看不清是 AB 还是 BA"
 ### 5.5 记录
 
 **证据**：每道探题（含 retry）一条，`src: "check"`（照现在的习惯：`src` 是来源、`kind` 是题型），`kind` 是题型，另有：
-`check`（检验 id）、`probe`（题 id）、`retryOf`（retry 的才有）、`block`、`target`、`level`、`facet`、`first`（第一次交的作答原文；手写的是转写和 asset 编号）、`items: [{ id, ok, why, tag }]`（每一项的结论：if / m / s / truth / can / line）、`steps`（solve 的，和计划 1 一样）、`outcome: pass | fail | pending`、`sure: sure | maybe | guess`、`late`、`giveup`、`ms`、`msTotal`、`teach`（显示了哪一条补讲的键，Claude 写的存全文）、`judgedBy: page | claude | ext`、`ink: { final, shots: [{ at, why, asset }], timeline }`、`retest`（复测的才有：1 / 7）。
+`check`（检验 id）、`probe`（题 id）、`retryOf`（retry 的才有）、`block`、`target`、`level`、`facet`、`first`（第一次交的作答原文；手写的是转写和 asset 编号）、`items: [{ id, ok, why, tag }]`（每一项的结论：if / m / s / truth / can / line）、`steps`（solve 的，和计划 1 一样）、`outcome: pass | fail | pending`、`sure: sure | maybe | guess`、`late`、`giveup`、`ms`、`msTotal`、`teach`（显示了哪一条补讲的键，Claude 写的存全文）、`judgedBy: page | claude | ext`、`ink: { final, shots: [{ at, why, asset }], timeline }`、`retest`（复测的才有：1 / 7）、`bank`（这道题在题库里的编号）。
 
 **吸收**：新集合 `absorb/{块}`（`#` 换 `~`），状态类，改 `state` / `checked` 记 log：
 
@@ -186,7 +186,7 @@ m3 unsure why="第 3 行看不清是 AB 还是 BA"
 
 **练习和掌握**（任务书：一类的作答记成练习，不改吸收和掌握）：吸收只看 `src: check`。页面算的掌握参考（`mastery.js` 的 `masteryCalc` → `meta/mastery-calc`）分两种情况：这一块有了检验的证据以后，只数检验和复测（第一次作答；「蒙的」当没把握）；还没有的块照旧数练习，`meta/state` 写「（按练习算，这一块还没检验过）」。不这样分的话，所有没检验过的块参考掌握全部停住，练一练、隔天验也跟着失效。`mastery` 文档照旧由外部写。`forecast`（预测分）这一批不动。
 
-**题库**：新集合 `probes/{pr-…}`：`{ fence（原文）, type, block, target, level, facet, family, src: "ext" | "lab", from: { session, check }, seen: [{ at, session, as: "first" | "retry" | "retest" }], at }`。`board check` 执行时页面把里面每道题（含 retry、spare）存进去，同一道题（原文一样）不存两份；学生见过就记 `seen`。外部、夜班也可以直接往里写题（写法同 `board check` 里的一道）。
+**题库**：新集合 `probes/{pr-…}`：`{ fence（原文）, type, block, target, level, facet, family, retryBank: [题库编号], src: "ext" | "lab", from: { session, check, as: "probe" | "retry" | "spare" }, seen: [{ at, session, as: "first" | "retry" | "retest" }], at }`。`retry:` 写的是一次检验里的局部 id（`p1a`），换了检验就对不上、不同检验的 `p1` 还会撞：所以存进题库时 retry 的关系改存成题库编号 `retryBank`（外部 review 必改 1）。`board check` 执行时页面把里面每道题（含 retry、spare）存进去，同一道题（原文一样）不存两份；学生见过就记 `seen`。外部、夜班也可以直接往里写题（写法同 `board check` 里的一道）。
 
 **`ext_out`**：开始时一行「[页面] 检验 k1 开始（2 块、6 道必做、限时 15 分钟）」；做完一份整体的：每块的吸收、每道题一行（第一次的作答、每一项、信心、用时、补讲、retry 的结果、谁判的、拿不准的）、手写的 asset 编号和时间线。中途不一道一道写（外部这时接不上，写了也只是刷屏）。证据照旧进 `since-analysis`（`trail.js` 的 `evidenceLine` 多一种 `check` 的写法）。
 
@@ -194,6 +194,8 @@ m3 unsure why="第 3 行看不清是 AB 还是 BA"
 
 - 每块检验完写两次复测：1 天、7 天（上海的日期）。到期的写进 `meta/facts` 和「今天」的事实一行「复测：L2.1.4（隔 1 天）」；`meta/today` 的 `kind` 多一种 `retest`（外部写今天时能排它）。
 - 点了开一节 `kind: check` 的课（`sessions/{编号}`：`{ kind: "check", retest: [{ block, days }], items: [题库编号], … }`）：整页是检验外壳，没有主讲；题从题库里挑——这一块每个必做的 `family` 挑一道没见过的；没有没见过的就不挑，`meta/facts` 写「缺新题：L2.1.4 的 L2-56 那一类」（页面、页面里的 Claude 都不出题，外部或夜班补）。
+- **复测拼一条 check**（外部 review 必改 1）：挑出来的每道题连它的 `retryBank` 一起从题库取出，按挑的先后重新起局部 id（第一道 `r1`，它的 retry `r1a` `r1b`；第二道 `r2`……），题原文里的 `id:` 和 `retry:` 照新 id 改写，拼出来的 check 先过一遍 `selfCheck`（必须为空，不为空这道题不挑、记进「缺新题」的那一行写原因）。证据里记 `bank: pr-…`（这道题在题库里的编号），`absorb.retryOwed` 存的也是题库编号。
+- 7 天那次复测过了，`meta/state` 那一块写一句「7 天复测过了，进不进复现由外部定」。
 - 复测的证据带 `retest: 1 | 7`，进掌握参考，不改吸收（任务书：「掌握是以后隔 1 天、7 天……跟这次分开记」）。补讲、retry 照常有。
 
 ### 5.6′ 判分不让学生干等
@@ -250,7 +252,7 @@ m3 unsure why="第 3 行看不清是 AB 还是 BA"
 6. 证据用 `src: check`（任务书写的是 `kind: check`）。
 7. 快照的文字不另调用（5.4）；手写的转写和判是同一次调用。
 8. 掌握参考分两种情况（5.5）；`forecast` 不动。
-9. 检验失败不自动记错题本（计划 1 的 solve 在检验外照旧记）：吸收的 `debt`、证据都在，外部决定记不记。欠账不写 `position.debts`。
+9. **（外部 review 必改 2，改了原来的「不自动记」）检验里最后没过的自动进错题本**：`final: fail`（retry 用完、想不出来又没补上）和「很确定却错了」的题，页面照 memo 的 `error` 那条路（`memops.js` 的 `applyMemo`，`author: 'class'`，和课上老师写 memo 同一处、过守卫、记进「管理 → 最近记下的」能撤销）各记一道错题：`q` 是题面、`mine` 是第一次的作答（手写的是转写）、`step` 是错的那几项（「if1 不满足：…；m2 没写到」）、`cause` 是 `target`，另带 `check`、`probe`、`target`、`items`，`basis` 是那条检验证据；同一个 `target` 一次检验只记一道；`fixed`（补上了）和 `pending` 不记。理由（外部原话）：错题本是复现和弱点的来源，外部叫不醒、不一定每次都及时读到，学生最怕的就是「丢内容」。欠账照旧不写 `position.debts`。
 10. `ext_out` 只在开始和做完各写一次。
 11. 复测在 1 天、7 天；缺新题照实报，不自动出题。
 12. 外部没写 `<<< >>>` 时，页面里的 Claude 的默认话用任务书里外部写的那句。
@@ -261,12 +263,14 @@ m3 unsure why="第 3 行看不清是 AB 还是 BA"
 17. 复测挑「没见过的同类题」时不算这次检验里的 retry（同构小题测掌握偏弱），`spare` 和别的检验、题库里的算。
 18. 检验的证据算进课后报告（单独一节「检验」）和「讲过」（做过这一块的检验就是讲过）；不算进这节课「要拿下的事」的状态（那是课上的事，检验在课后），也不算隔天验。
 
-**要外部看一眼的**（我先照这样做，外部说换就换）：
+**外部 2026-11-18 13:15 审过：下面六条都同意**（`dr-plan2.review`），两条必改已经加进第 5.5、5.6 节和第 9 条：
 
 - 第 11 条、5.6：复测是另一条线（`absorb.retests`、「今天」里单独一行「复测」），不进复现组 `reviews`，不推复现组的档位；7 天那次以后不再排复测，以后的复现交给复现组和外部。任务书写的是「自动排进复现」：要是外部要的是「建一个复现组」，就改成检验完页面写一条 `reviews`（档位从 1 天起），首页照复现组显示——那样会和外部自己排的复现组混在一起。
 - 第 8 条：掌握参考分两种情况。
 - 第 15 条：外部改判成没过算「未」。
 - 第 18 条：检验不算进「要拿下的事」。
+
+**外部列的可选（不阻塞）**：retry 能不能复用 `practice` custom 的 `pick` / `where`（一道写成模板，每次取新数）。这一批不做：先让外部照现在的写法写几次真检验，看 retry 写起来到底多费事再定；以后做的话加在 spec.js 读 retry 那一处，别的不动。
 
 ## 七、留给做的人
 
