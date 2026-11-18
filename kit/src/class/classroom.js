@@ -15,7 +15,7 @@ import { getStore, isDev, assetUrl } from '../live/store.js';
 import { createSink } from '../live/sync.js';
 import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
-import { pendingIns, outText, outSeq, seqId, inResult, nowDoc, resolveFrom } from './ext.js';
+import { pendingIns, outText, outSeq, seqId, inResult, nowDoc, resolveFrom, sinceDoc, NOW_LINE } from './ext.js';
 import { queueDue, applyEdits, keptComponents } from './extboard.js';
 import { stageBoxState } from '../blocks/stagebox.js';
 import { shouldFire, eventsOf, filterOps, handBack, helperPrompt, helperLines, rebuildHelpers } from './delegate.js';
@@ -53,6 +53,7 @@ import { choose } from '../dialog.js';
 import { lessonSheet, sheetMd } from '../memory/sheet.js';
 import { blockSwitch, closingExtras, knowNotes } from '../memory/memo.js';
 import { saidNow, summaryOn } from '../memory/summary.js';
+import { settleBoard, snapLong } from './boardeye.js';
 import { createBoardEye, eyeNote } from './boardeye.js';
 import { spaceOfId, subjectOf } from '../memory/space.js';
 import { textbookForClass, readChunks, searchChunks, readHistory } from '../books/textbook.js';
@@ -1419,6 +1420,15 @@ export async function renderClass(root, meta, desk = null) {
     return c.trimEnd() + '…';
   }
 
+  // 屏幕：这个页面的大小、横竖、分屏（整个屏幕比页面宽一截）
+  function screenOf(vw, vh, extra = {}) {
+    const sw = Number(window.screen?.width) || 0, sh = Number(window.screen?.height) || 0;
+    const long = Math.max(sw, sh), short = Math.min(sw, sh);
+    const landscape = vw > vh || (long && window.matchMedia?.('(orientation: landscape)').matches);
+    const full = long ? (landscape ? { w: long, h: short } : { w: short, h: long }) : null;
+    const split = !!full && vw < full.w - 40;
+    return { w: vw, h: vh, landscape: !!landscape, ...(split ? { split: true, full } : {}), ...extra };
+  }
   // 外部的课：预备板、叫来的助手现在什么样（黑板现状里写给外部）
   function extLines() {
     const out = [];
@@ -1444,7 +1454,9 @@ export async function renderClass(root, meta, desk = null) {
       const segMarks = seg.hidden ? [] : [...marks.values()].filter((m) => m.seg === seg.id).map((m) => markText(m.id, m.spec));
       return { id: seg.id, page: seg.page || 0, place: seg.place || 'board', title: seg.title || seg.sec?.querySelector('h2')?.textContent?.trim() || '', summary, hidden: seg.hidden, held: !!seg.held,  pending: !!seg.pending, failed: !!seg.failed, blocks, marks: segMarks.length ? segMarks : undefined };
     });
-    const vw = window.innerWidth, vh = window.innerHeight;
+    // 照真的可用的大小报（dr-ext-round2：以前 ext_out 写 1180×734、meta/now 写 860，分屏时没说）：visualViewport 是这个页面
+    // 现在真有的地方；整个屏幕（screen 的长边、短边）比它宽一截就是分屏，照实写
+    const vw = Math.round(window.visualViewport?.width || window.innerWidth), vh = Math.round(window.visualViewport?.height || window.innerHeight);
     // 这节课的量（let 块）：课堂说明被压缩成摘要以后，Claude 也知道有哪些量、值是多少
     const lessonVars = Object.entries(session.vars || {}).map(([k, v]) => { try { return `${k} = ${exactText(v)}`; } catch { return k; } });
     return {
@@ -1458,7 +1470,7 @@ export async function renderClass(root, meta, desk = null) {
       pages: [...pages.values()].sort((a, b) => a.n - b.n).map((p) => ({ n: p.n, title: p.title, talk: p.talk, kind: p.kind })),
       cur: bv.cur,
       view: bv.view,
-      screen: { w: vw, h: vh, landscape: vw > vh, board: bv.fit ? { w: bv.fit.w, h: bv.fit.avail } : null },
+      screen: screenOf(vw, vh, { board: bv.fit ? { w: bv.fit.w, h: bv.fit.avail } : null }),
       fit: bv.fit && pages.has(bv.cur) ? { fits: bv.fit.fits, need: bv.fit.need, avail: bv.fit.avail, ...(bv.fit.screens ? { screens: bv.fit.screens } : {}) } : null,
     };
   }
@@ -1711,30 +1723,53 @@ export async function renderClass(root, meta, desk = null) {
     // 助教这一阵写过的话（runCoach）排在作答前面
     const waiting = extState.calling ? ['学生在等你（点了「叫主讲」）'] : [];
     extState.calling = false;
-    const text = outText({ head: [...waiting, ...extHead()], message: [...extState.coachLines.splice(0), turn?.text || ''].filter(Boolean).join('\n'), state: boardStateText(b) });
+    // dr-ext-round2：ext_out 只写这一批新发生的（写错的、没执行的、作答、草稿、学生打的字、助手的话）；
+    // 黑板现状不再每份重写（以前每份约 3 KB，十份就是三四十 KB 重复），只在 meta/now，末尾一句指过去
+    const snapLine = extState.snapNote && shots.length ? [`[截图] ${extState.snapNote}`] : [];
+    if (shots.length) extState.snapNote = '';
+    const text = outText({ head: [...waiting, ...extHead(), ...snapLine], message: [...extState.coachLines.splice(0), turn?.text || ''].filter(Boolean).join('\n'), state: NOW_LINE });
     // 序号按库里现有的算（两页同时开着、刷新以后都不撞号、不盖掉以前的）
     const have = await db.collection('ext_out').get().then((x) => x.docs.map((d) => ({ id: d.id, ...d.data() })), () => []);
     const seq = outSeq([...have, ...extState.outs]);
     const doc = { seq, text, at: Date.now(), ...(shots.length ? { shots } : {}) };
     extState.outs.push({ seq, at: doc.at });
     await db.doc(`ext_out/${seqId(seq)}`).set(doc).catch((e) => reportError(e, { what: '写 ext_out', path: `ext_out/${seqId(seq)}` }));
-    extNow();
+    // meta/since：外部上一条 ext_in 执行完以后的全部 ext_out 拼成一份（一次 get 读完）；照库里算，刷新、两页开着都对
+    writeSince([...have.filter((o) => Number(o.seq) !== seq), doc]);
+    extNow({ now: true });
     bar.setStatus('idle', '');
     return true;
   }
+  // meta/since（dr-ext-round2）：外部上一条 ext_in 执行完以后的全部 ext_out 拼成一份；照库里现有的算（刷新、两页开着都对）
+  async function writeSince(outs = null) {
+    const rows = (c) => db.collection(c).get().then((x) => x.docs.map((d) => ({ id: d.id, ...d.data() })), () => []);
+    const [ins, os] = await Promise.all([rows('ext_in'), outs ? Promise.resolve(outs) : rows('ext_out')]);
+    await db.doc('meta/since').set(sinceDoc({ ins, outs: os })).catch((e) => reportError(e, { what: '写 meta/since', path: 'meta/since', soft: true }));
+  }
   // 拍一张这块板（board snap）：上传进 assets，返回编号；也留给下一份 ext_out
+  // board snap（dr-ext-live-fixes 1）：等这块板画好（字体、淡入、舞台演完、widget 跑完、不再变）再拍一张长图；
+  // 太长才切，切成几张、各是哪一段写在 extState.snapNote（进 result.shotNote、ext_out）
   async function extShot() {
     extState.snap = false;
-    if (!eye) return [];
-    const shot = await eye.fresh(400).catch(() => null);
+    const el = pages.get(bv.cur)?.sec;
+    if (!el || readOnly) return [];
+    let shot = null;
+    try {
+      const s = await settleBoard(el);
+      shot = await snapLong(el);
+      extState.snapNote = `${shot.note}${s.settled ? '' : '；等了 6 秒板还在变，照当时的样子拍的'}`;
+    } catch (e) { extState.snapNote = `没拍成：${String(e?.message || e).slice(0, 120)}`; return []; }
     const ids = [];
     for (const b of shot?.blobs || []) { const id = await uploadImage(b); if (id) ids.push(id); }
     extState.snapped.push(...ids);
     return ids;
   }
   // sessions/{编号}/meta/now（需求 R3）：黑板现状每次变了就覆盖写，外部随时读得到（学生没动也读得到）。最多一秒一次
-  function extNow() {
-    if (!EXT || nowTimer) return;
+  function extNow({ now = false } = {}) {
+    if (!EXT) return;
+    // now：写 ext_out 的那一刻跟着写一份（外部读 ext_out 再读 meta/now，两份对得上）
+    if (now) { clearTimeout(nowTimer); nowTimer = 0; }
+    else if (nowTimer) return;
     nowTimer = setTimeout(() => {
       nowTimer = 0;
       let b, text;
@@ -1742,7 +1777,7 @@ export async function renderClass(root, meta, desk = null) {
       if (text === nowLast) return;
       nowLast = text;
       db.doc('meta/now').set(nowDoc({ text, board: b })).catch((e) => { nowLast = ''; reportError(e, { what: '写 meta/now', path: 'meta/now', soft: true }); });
-    }, 1000);
+    }, now ? 0 : 1000);
   }
   // 先占住这一条再执行：写 claim、隔一会儿读回来，还是自己的才做（两个标签页只有一页做）；占了 30 秒还没 done 的算没人做
   async function claimIn(d) {
@@ -1788,8 +1823,9 @@ export async function renderClass(root, meta, desk = null) {
         const away = (out?.boardOps || []).map((o) => (o?.ok ? (o.away ? o.page : ['replace', 'edit', 'hide'].includes(o.op) ? segs.get(o.id)?.page : 0) : 0)).filter((n) => n && n !== bv.cur && n !== bv.view).at(-1);
         if (away) { extState.away = away; paintExtTools(); }
         const shots = extState.snap ? await extShot() : [];
-        await db.doc(`ext_in/${d.id}`).update({ done: { at: Date.now(), ...(error ? { error } : {}) }, got, result: inResult({ boardOps: out?.boardOps, retry: out?.retry, notes: out?.notes, error, shots }) }).catch(() => {});
+        await db.doc(`ext_in/${d.id}`).update({ done: { at: Date.now(), ...(error ? { error } : {}) }, got, result: inResult({ boardOps: out?.boardOps, retry: out?.retry, notes: out?.notes, error, shots, shotNote: shots.length || extState.snapNote ? extState.snapNote : '' }) }).catch(() => {});
         extNow();
+        writeSince(); // 这一条执行完：meta/since 从这里重新攒
         if (extState.close) { extState.close = false; await extClose(); }
       }
     } finally { extState.running = false; }

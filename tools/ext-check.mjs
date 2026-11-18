@@ -5,17 +5,18 @@
 //
 //   node tools/ext-check.mjs --next 这一轮.txt [--session 存数据的目录] [--sid c-20261118-1] [--unit 课名] [--subject 线代] [--shots 目录]
 //   node tools/ext-check.mjs --next 这一轮.txt --lint [--session …]   ← 不开浏览器，一秒以内只查写法（tools/ext-lint.js）
+//   --session 也可以是一个文件：每行一条 { id, data }（id 写 sessions/{编号}/ext_in/001 这样的路径），或者整个文件一个数组
 //
 // kit/dist/la-kit.js 是提交在仓库里的（和学习台发布的同一份），clone 下来 npm install 就能跑，不用 build。
 // --session：用 ArtifactData 的 out_dir 存下来的那个目录（里面有 sessions/{编号}/ext_in/*.json、ext_out/*.json）；不给就只跑这一轮。
 // 不用 npm install 以外的东西：Playwright 和 Chromium 用沙盒里预装的。
-import { readFileSync, readdirSync, existsSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, writeFileSync, mkdtempSync, statSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from './playwright.mjs';
-import { extClass } from './ext-class.js';
+import { extClass, sessionFromFile } from './ext-class.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const KIT = resolve(here, '../kit/dist/la-kit.js');
@@ -40,7 +41,9 @@ function sessionDirs(root, sid) {
 }
 
 const root = arg('session');
-const s = root ? sessionDirs(resolve(root), arg('sid')) : null;
+// --session 是一个文件（每行一条 { id, data }，或一个数组）也认（dr-ext-round2）
+const asFile = root && existsSync(resolve(root)) && statSync(resolve(root)).isFile();
+const s = !root ? null : asFile ? (() => { const r = sessionFromFile(readFileSync(resolve(root), 'utf8')); if (r.bad.length) console.error(`--session 文件里第 ${r.bad.join('、')} 行读不懂（每行一条 { id, data }，或整个文件一个数组），跳过了`); return { id: arg('sid') || r.id || '外部的课', ins: r.ins, outs: r.outs }; })() : sessionDirs(resolve(root), arg('sid'));
 // --lint：只查写法，不开浏览器
 if (LINT) {
   const { lintTurn, blockNames, priorTexts, checkers } = await import('./ext-lint.js');

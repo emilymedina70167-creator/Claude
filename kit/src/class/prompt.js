@@ -662,7 +662,8 @@ function screenLine(screen) {
   if (!screen || !(screen.w > 0)) return '';
   const orient = screen.landscape ? '横屏' : '竖屏';
   const room = screen.board?.w > 0 && screen.board?.h > 0 ? `，一块板能用的地方大约 ${screen.board.w}×${screen.board.h}（宽×高，像素）` : '';
-  return `学生的屏幕：${orient} ${screen.w}×${screen.h}${room}。`;
+  const split = screen.split && screen.full?.w ? `（分屏：这个页面只占屏幕的一部分，整个屏幕 ${screen.full.w}×${screen.full.h}）` : '';
+  return `学生的屏幕：${orient} ${screen.w}×${screen.h}${split}${room}。`;
 }
 
 function pagedStateText(board) {

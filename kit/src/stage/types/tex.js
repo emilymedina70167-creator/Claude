@@ -174,6 +174,7 @@ function nextLine(scene, c, h, cmd) {
 // retex / next 在 alg=on 的式子上：新的一行也照代数写（next 开头写的 = 照画），项重新起名字（接着编号，不和旧的撞）
 function algLine(o, str, { lead = '' } = {}) {
   const alg = algParse(String(str).replace(/^\s*=\s*/, ''), o.alg?.n || 0);
+  if (o.alg?.loose) alg.loose = true;
   return { alg, line: parseLine(algLatex(alg, { lead })) };
 }
 /** 模型换成 alg 以后，现在这一行换成它画的样子（同名的部件从旧位置滑过去，像 retex） */
@@ -209,8 +210,10 @@ export const tex = {
   hint: '（式子：名字.a 是用 \\hl{a}{…} 起了名字的那一项；只有最下面那一行（现在的式子）的项能指）',
   make(scene, c, h, old) {
     if (!h.args.some((a) => a.t === 'eq') || h.str == null) throw new Error('要写成 tex 名字 = "公式"（给一项起名字：\\hl{a}{x^2}，部件写 名字.a）');
-    if (h.opts.alg != null && !/^(on|off)$/i.test(String(h.opts.alg))) throw new Error(`alg= 只能写 on（照代数写、学生能拖项换顺序、合并、展开）或 off，没有「${h.opts.alg}」`);
-    const alg = /^on$/i.test(String(h.opts.alg ?? '')) ? algParse(h.str) : null;
+    if (h.opts.alg != null && !/^(on|off|loose)$/i.test(String(h.opts.alg))) throw new Error(`alg= 只能写 on（照代数写、学生能拖项换顺序、合并、展开）、loose（同 on，判相等时矩阵式子里单独的数当 kE、数 0 当 O）或 off，没有「${h.opts.alg}」`);
+    const alg = /^(on|loose)$/i.test(String(h.opts.alg ?? '')) ? algParse(h.str) : null;
+    // 判相等默认严（ncalg.js 的 strictWhy）：alg=loose 才宽
+    if (alg && /^loose$/i.test(String(h.opts.alg))) alg.loose = true;
     const line = parseLine(alg ? algLatex(alg) : h.str);
     const id = h.words[0];
     const est = estimateLine(line);
@@ -397,6 +400,7 @@ expand e t1                         展开 t1 的括号（展开出的项分开�
 open e move    学生按住一项拖：放到两项之间 = reorder e t3 t1（换顺序），放到另一项上 = merge e t1 t3（合并同类项），一个因子放到同一项的另一个因子上 = reorder e t2f2 t2f1（换先后）
 open e expand  学生点一项 = expand e t1（展开它的括号）
 数学上相等才让动（非交换多项式的判定：AB+BA 不能并成 2AB、矩阵的因子不能换先后，标量和 E 能）；不相等弹回去、说为什么；含逆、转置、函数的判不了，照实说判不了、弹回去
+判相等默认严：矩阵的式子里单独写的数不当 kE、数 0 不当 O（e equals=A^2-3A+2 对 (A-E)(A-2E) 不成立，要写 2E）；造的时候写 alg=loose 照宽的比。展开出来只剩数的项写成 2E
 判断式：e expanded（都展开了）、e merged（都展开了、没有同类项）、e same=A^2+AB+BA+B^2（一项一项、照先后和它一样）、e equals=…（数学上相等）`,
   example: `tex f = "\\hl{a}{x^2} + \\hl{b}{2x} + \\hl{c}{1}"
 paint f.a g1

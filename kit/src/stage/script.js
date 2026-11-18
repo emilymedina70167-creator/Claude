@@ -152,13 +152,19 @@ export function parseScript(src) {
     // @g1 开头：挑战 g1 做到了的那一刻页面马上演的行（先记着，不演）；@t.done / @t.right：t 做完了、学生做对一步时（scene.js 的 stash 再查后半截）
     let on = null;
     const at = line.match(/^@([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s+(.+)$/);
-    const body = at ? at[2].trim() : null;
+    let body = at ? at[2].trim() : null;
+    // @t.miss merge / @t.miss why=noncommute（dr-ext-live-fixes 2）：.miss 按手势、按原因分，那一截拿下来记在 missFilter，后面照常是一行指令
+    let missFilter = '';
+    if (at && /\.miss$/.test(at[1])) {
+      const m = body.match(/^(?:(merge|expand|reorder|move|tap|insert|write|drag|edit|choose)|why\s*=\s*([a-z]+))\s+(.+)$/i);
+      if (m) { missFilter = m[1] ? `:${m[1].toLowerCase()}` : `?${m[2].toLowerCase()}`; body = m[3].trim(); }
+    }
     if (at) { on = at[1]; line = body; } else if (line.startsWith('@')) { out.push({ cmd: null, error: '要写成 @挑战的名字 一行指令（比如 @g1 say "对！"），或 @东西.done / @东西.right 一行指令', line: k + 1, src: raw }); return; }
     let par = false;
     if (line.startsWith('&')) { par = true; line = line.slice(1).trim(); }
     // 写法容错：老师把一整句话写成一行、忘了写 say（第一节真课：「would 选对了：搬家在说话之后……」整句被跳过，学生没看到这句纠正）。
     // 只认开头不是指令、整行没有引号和 =、一半以上是中文的：拼错的指令（lable a.1 "x"）照旧报错，不猜
-    if (speechLine(line)) { out.push({ cmd: 'say', args: [{ t: 'str', v: line }], opts: {}, par, line: k + 1, src: raw, forgiven: 'say', ...(on ? { on, body } : {}) }); return; }
+    if (speechLine(line)) { out.push({ cmd: 'say', args: [{ t: 'str', v: line }], opts: {}, par, line: k + 1, src: raw, forgiven: 'say', ...(on ? { on, body, ...(missFilter ? { missFilter } : {}) } : {}) }); return; }
     try {
       const toks = tokenize(line);
       const head = toks.shift();
@@ -171,7 +177,7 @@ export function parseScript(src) {
       // lead：紧跟指令的那个词是 名字=值（matrix A=1 2 的「A=1」）。等号两边没空格时页面把名字读成了选项，
       // 查选项名的地方（scene.js 的 checkOptions）照它说「= 两边要空格」（复审 N5）
       const lead = toks[0]?.t === 'opt' ? toks[0].k : null;
-      out.push({ cmd, args, opts, par, line: k + 1, src: raw, ...(on ? { on, body } : {}), ...(lead != null ? { lead } : {}) });
+      out.push({ cmd, args, opts, par, line: k + 1, src: raw, ...(on ? { on, body, ...(missFilter ? { missFilter } : {}) } : {}), ...(lead != null ? { lead } : {}) });
     } catch (err) {
       out.push({ cmd: null, error: err.message, line: k + 1, src: raw });
     }

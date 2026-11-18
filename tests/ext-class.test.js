@@ -19,3 +19,20 @@ test('没有以前的轮：只有 next', () => {
   const spec = extClass({ next: 'x' });
   assert.deepEqual(spec.turns, [{ student: '开始上课。', teacher: 'x' }]);
 });
+
+import { sessionFromFile } from '../tools/ext-class.js';
+test('--session 一个文件：JSON Lines 或数组，按路径 / 字段分 ext_in、ext_out', () => {
+  const lines = [
+    JSON.stringify({ id: 'sessions/c-20261118-1/ext_in/001', data: { seq: 1, text: '````board new id=b1\nx\n````', done: { at: 1 } } }),
+    JSON.stringify({ id: 'sessions/c-20261118-1/ext_out/001', data: { seq: 1, text: '[作答] q1 对' } }),
+    'not json',
+    JSON.stringify({ id: '002', data: { seq: 2, text: 'y', after: 1 } }),
+  ].join('\n');
+  const r = sessionFromFile(lines);
+  assert.equal(r.id, 'c-20261118-1');
+  assert.deepEqual(r.ins.map((x) => x.id), ['001', '002']);
+  assert.deepEqual(r.outs.map((x) => x.id), ['001']);
+  assert.deepEqual(r.bad, [3]);
+  const a = sessionFromFile(JSON.stringify([{ id: 'x', coll: 'ext_out', data: { seq: 1, text: 'z' } }]));
+  assert.equal(a.outs.length, 1);
+});

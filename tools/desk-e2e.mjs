@@ -1207,7 +1207,7 @@ const SUITES = {
     // R3：执行完当场写结果、截图；meta/now 有黑板现状
     const r1 = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/001`]?.result, { timeout: 10000, what: 'ext_in/001 写 result' });
     check(r1.ok && r1.ops.some((o) => o.op === 'claude' && o.ok) && r1.ops.some((o) => o.op === 'queue' && o.ok), `result 不对：${JSON.stringify(r1).slice(0, 300)}`);
-    check(Array.isArray(r1.shots) && r1.shots.length > 0, 'board snap 以后 result 里没有截图');
+    check(Array.isArray(r1.shots) && r1.shots.length === 1 && /整块板一张/.test(r1.shotNote || ''), `board snap 以后 result 里不是一张长图：${JSON.stringify({ n: r1.shots?.length, note: r1.shotNote })}`);
     const now = await t.waitFor(async () => (await db())[`sessions/${sid}/meta/now`], { timeout: 8000, what: '写 meta/now' });
     check(/q1/.test(now.text) && Array.isArray(now.board?.segs), `meta/now 不对：${String(now.text).slice(0, 200)}`);
     // R11：外部的课里组件下面没有截图入口
@@ -1218,6 +1218,10 @@ const SUITES = {
     await type('q1', '6');
     await t.waitFor(() => t.page.evaluate(() => /模拟助手/.test(document.body.innerText)), { timeout: 15000, what: '答错以后板上出现助手的话' });
     await t.waitFor(async () => /\[助手 cl1\]/.test(await outs()) && /没执行（越权）：new hb9/.test(await outs()), { timeout: 10000, what: '助手的全文和越权的写进 ext_out' });
+    // dr-ext-round2：ext_out 只写增量（黑板现状在 meta/now）；meta/since 攒着 ext_in/001 执行完以后的全部
+    check(!/黑板现在是第/.test(await outs()), 'ext_out 里还在重写黑板现状');
+    const since = await t.waitFor(async () => { const x = (await db())[`sessions/${sid}/meta/since`]; return x && /助手 cl1/.test(x.text) ? x : null; }, { timeout: 8000, what: 'meta/since 攒着新的事' });
+    check(since.from === '001', `meta/since 从哪一条算起不对：${since.from}`);
     check(!(await t.page.$('[data-step="hb9"]')), '越权的 board new 被执行了');
     // 停掉助手：再答错也不叫
     await t.page.click('.class-ext-btn[data-act="stop"]');
@@ -1271,6 +1275,11 @@ const SUITES = {
     await t.page.locator('[data-bid="w1"] button:has-text("交了")').click();
     await t.waitFor(async () => /\[作答\][^\n]*widget[^\n]*「四项按左右顺序」[^\n]*做到了/.test(await outs()), { timeout: 10000, what: 'widget 的作答写进 ext_out' });
     check(/舞台现在/.test((await db())[`sessions/${sid}/meta/now`]?.text || ''), 'meta/now 里没有舞台现状');
+    // dr-ext-live-fixes 4：只有一行式子的舞台不再占 420 高
+    await plantLive(t, { [`sessions/${sid}/ext_in/005`]: { seq: 5, text: `${F4}board stage id=s2 title="一行式子"\ntex e = "(A+B)^2" alg=on\nopen e expand\n${F4}`, after: 1, at: Date.now() } });
+    await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/005`]?.result?.ok, { timeout: 15000, what: 'ext_in/005 执行' });
+    const sh = await t.waitFor(async () => { const h = await t.page.evaluate(() => document.querySelector('[data-bid="s2"] .sb-stage')?.offsetHeight || 0); return h && h < 400 ? h : null; }, { timeout: 8000, what: '一行式子的舞台按内容缩' });
+    check(sh >= 160, `舞台缩得太矮：${sh}`);
     // R10：叫主讲 → 马上写一份，最前面「学生在等你」
     await t.page.click('.class-ext-btn[data-act="call"]');
     await t.waitFor(async () => Object.entries(await db()).some(([k, v]) => k.startsWith(`sessions/${sid}/ext_out/`) && /^学生在等你/.test(v.text)), { timeout: 5000, what: '叫主讲写 ext_out' });

@@ -808,7 +808,7 @@ export class Stage {
           noteAt(this, judged.verdict.why, b ? { x: b.x * c.s + c.tx, y: b.y * c.s + c.ty, w: b.w * c.s, h: b.h * c.s } : null, { ms: 3200 });
         }
         await this.snapBack(judged.obj);
-        this.missed(judged.obj, judged.verdict);
+        this.missed(judged.obj, judged.verdict, { gesture: open });
       }
       return { blocked: true, judged };
     }
@@ -932,9 +932,9 @@ export class Stage {
    * 学生在 obj 上走偏、被弹回（裁判没让做、手势翻不成一行指令）：外部主讲预写的 @obj.miss（或判成不对的 @obj.wrong）、
    * 还没做到的挑战的 @g.miss 马上演（prewrite: 'all' 的舞台才有；scene.js 的 slipReactions）
    */
-  missed(obj, verdict = null) {
+  missed(obj, verdict = null, { gesture = null } = {}) {
     if (this.instant || !this.prewriteAll) return;
-    const list = this.scene.slipReactions(obj, verdict, { blocked: true });
+    const list = this.scene.slipReactions(obj, verdict, { blocked: true, gesture });
     if (list.length) this.react(list, this.turnNo);
   }
   /** 没让做的那一下：拖着的部件滑回原处（场景一点没动） */

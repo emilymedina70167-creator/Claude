@@ -60,3 +60,22 @@ test('board add … from=：后台活的结果换进块里，围栏加长', asyn
   assert.match(r.text, /^`````board add id=b5 title="改编"\n````answer\nid: j1/m);
   assert.match(r.text, /````\n`````\n````board add id=b6\n````$/);
 });
+
+// dr-ext-round2：meta/since、ext_out 只写增量、屏幕照真的报
+import { sinceDoc, NOW_LINE } from '../kit/src/class/ext.js';
+import { boardStateText as bst2 } from '../kit/src/class/prompt.js';
+test('meta/since：外部上一条 ext_in 执行完以后的全部 ext_out', () => {
+  const ins = [{ id: '001', done: { at: 100 } }, { id: '002', done: { at: 300 } }, { id: '003' }];
+  const outs = [{ seq: 1, at: 150, text: '早的' }, { seq: 2, at: 350, text: `[作答] q1 对\n\n${NOW_LINE}`, shots: ['a1'] }, { seq: 3, at: 400, text: '[作答] q2 错' }];
+  const d = sinceDoc({ ins, outs, at: 500 });
+  assert.equal(d.from, '002');
+  assert.deepEqual(d.outs, [2, 3]);
+  assert.deepEqual(d.shots, ['a1']);
+  assert.match(d.text, /\[ext_out 002\]\n\[作答\] q1 对/);
+  assert.doesNotMatch(d.text, /meta\/now/);
+  assert.match(sinceDoc({ ins, outs: [] }).text, /还没有新的事/);
+});
+test('分屏照实写', () => {
+  const t = bst2({ segs: [], pages: [], cur: 0, screen: { w: 860, h: 734, landscape: true, split: true, full: { w: 1180, h: 820 } } });
+  assert.match(t, /横屏 860×734（分屏：这个页面只占屏幕的一部分，整个屏幕 1180×820）/);
+});

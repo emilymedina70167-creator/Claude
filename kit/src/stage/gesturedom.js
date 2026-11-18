@@ -127,7 +127,7 @@ export function armGesture(stage, e, view, done) {
   const blocked = (src) => wouldBlock(stage.scene, e, src);
   // 当场弹回的那一下（翻不成一行指令：这个世界做不到）记一句给老师，跟着下一条走（不叫老师；同一句不重复记）
   // 外部主讲预写了 @东西.miss（走偏、被弹回时演）：这一下也算（stage.js 的 missed）
-  const told = (ctx, r) => { const t = bounceText(stage.scene, e, ctx, r); if (t) { stage.onNote?.(t, { tried: true }); stage.missed?.(e.obj); } };
+  const told = (ctx, r) => { const t = bounceText(stage.scene, e, ctx, r); if (t) { stage.onNote?.(t, { tried: true }); stage.missed?.(e.obj, null, { gesture: e.action }); } };
   // 一下手势要先问一个值：数字键盘、一排选项；问到了再翻成指令（翻不成就在那块上说为什么，不收）。
   // 浮出来的那一块不比手势活得久：这一项收起了（off）一起收；按「确定」时这一项已经不是开着的那一项、东西重造过了，悄悄收起、不交
   let popup = null;

@@ -77,8 +77,18 @@ function actOf(o, c, h, { by = null, open = null } = {}) {
 }
 
 /** 这一下做不做得到（right 永远是 null：页面不判学生化得好不好）；why 写这一下做了什么、为什么没让做 */
-function check(o, act) {
-  const no = (why) => ({ legal: false, right: null, misread: null, why, next: null });
+// 没让做的原因（外部主讲的 @e.miss why=… 按它挑）：不交换、没有括号、不是同类项、还有括号没展开、判不了、不相等
+export function reasonOf(why = '') {
+  const w = String(why);
+  if (/判不了/.test(w)) return 'unknown';
+  if (/不交换/.test(w)) return 'noncommute';
+  if (/没有括号可展开/.test(w)) return 'noparen';
+  if (/括号没展开/.test(w)) return 'unexpanded';
+  if (/不是同类项/.test(w)) return 'notlike';
+  return 'unequal';
+}
+function check(o, act, scene = null) {
+  const no = (why) => ({ legal: false, right: null, misread: null, why, next: null, reason: reasonOf(why) });
   const ok = (why) => ({ legal: true, right: null, misread: null, why, next: null });
   if (!o.alg) return ok(null);
   if (act.type === 'reorder') {
@@ -98,7 +108,9 @@ function check(o, act) {
   }
   if (act.type === 'expand') {
     const r = expand(o.alg, act.key);
-    if (r.error) return no(r.error);
+    // 展开完了还在点（dr-ext-live-fixes 3：学生连点 13 下，一次都没发现能按住拖）：开了 move 时告诉学生能按住拖去合并
+    const canMove = !!scene && [...(scene.opens?.values?.() || [])].some((e) => e.obj === o.id && e.action === 'move');
+    if (r.error) return no(r.error === '这一项没有括号可展开' && canMove ? '这一项没有括号可展开；要合并就按住这一项拖到另一项上' : r.error);
     const j = judge(o.alg, r.alg, { what: '展开' });
     if (!j.legal) return no(j.why);
     return ok(`${shownItem(locate(o.alg, act.key).item)} 展开成 ${r.count} 项；现在是 ${algText(r.alg)}`);

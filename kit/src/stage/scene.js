@@ -419,7 +419,7 @@ export class Scene {
   hiddenIn(refs) { return [...new Set(refs.map((r) => parseRef(r)?.obj).filter((id) => this.objects.get(id)?.hidden))]; }
   /** 挑战的条件里提到的舞台上的东西（M、M.1,1、rank(M)、M same B） */
   /** 拿掉几条挑战（ungoal 和 scene 共用）：连同它们的预写 */
-  ungoalIds(ids) { ids.forEach((k) => { this.goals.delete(k); for (const x of [k, `${k}.wrong`, `${k}.miss`]) { this.reactions.delete(x); this.dropAhead(x); } }); }
+  ungoalIds(ids) { ids.forEach((k) => { this.goals.delete(k); this.reactions.delete(k); this.dropAhead(k); this.dropSlips(k); }); }
   /** 收掉几张贴的字（unlabel 和 scene 共用）：拨盘的字收了拨盘就不显示；贴在收掉的那几样（拨数、别的字）上面的字一起收（主线第一轮 D1-5） */
   unlabelIds(ids) {
     const out = [...ids];
@@ -698,7 +698,7 @@ export class Scene {
       fx.goalsMet = met;
       reactions.push(...met.flatMap((id) => fire(id, { goal: id, ...keep(id) })));
       // 做到了：没做到、走偏时演的那几行用不上了
-      for (const id of met) for (const k of [`${id}.wrong`, `${id}.miss`]) if (this.reactions.has(k)) { this.reactions.delete(k); this.dropAhead(k); }
+      for (const id of met) this.dropSlips(id);
     }
     // 学生按了按钮、写了 on= 的挑战判成没做到：@g1.wrong 的行（只在 prewrite: all 的舞台里收得进来）
     if (student && this.prewriteAll) for (const x of fx.onGoals || []) if (!x.met) reactions.push(...this.pull(`${x.id}.wrong`, { wrongOf: x.id }));
@@ -1142,24 +1142,38 @@ export class Scene {
       if (!mine.length) throw new Error(`先把 ${name} 交给学生（open ${name} …），@${name}.${kind} 的行才会演`);
       if (kind === 'wrong' && !(rules?.judges || []).some((a) => mine.some((e) => e.action === a))) throw new Error(`${typeOf(o).label}现在开着的动作页面不判对错，@${name}.wrong 的行不会演${rules?.judges?.length ? `（判对错的动作：${rules.judges.map((a) => `open ${name} ${a}`).join(' / ')}）` : '；要「走偏、被弹回」时演写 @' + name + '.miss'}`);
     }
-    const key = `${name}.${kind}`;
+    // .miss 能按手势、按原因分（dr-ext-live-fixes 2）：@e.miss merge say "…"、@e.miss why=noncommute say "…"；不写是全部
+    const body = c.body, sub = kind === 'miss' ? c.missFilter || '' : '';
+    const key = `${name}.${kind}${sub}`;
     const list = this.reactions.get(key) || [];
-    this.tryPrewrite(key, [...list, c.body], c);
-    this.reactions.set(key, [...list, c.body]);
+    this.tryPrewrite(key, [...list, body], c);
+    this.reactions.set(key, [...list, body]);
     return { stashed: key };
+  }
+  /** 这一下走偏对得上的 .miss：先按原因（?why）、再按手势（:merge）、最后不分的那一组；都没有是 null */
+  missKey(name, verdict = null, gesture = null) {
+    const has = (k) => !!this.reactions.get(k)?.length;
+    const why = verdict?.reason, g = verdict?.gesture || gesture, open = gesture;
+    for (const k of [why && `${name}.miss?${why}`, g && `${name}.miss:${g}`, open && open !== g && `${name}.miss:${open}`, `${name}.miss`]) if (k && has(k)) return k;
+    return null;
+  }
+  /** 一个名字的 .wrong / .miss（含分开写的几组）全拿掉 */
+  dropSlips(name) {
+    for (const k of [...this.reactions.keys()]) if (k === `${name}.wrong` || k === `${name}.miss` || k.startsWith(`${name}.miss:`) || k.startsWith(`${name}.miss?`)) { this.reactions.delete(k); this.dropAhead(k); }
   }
   /**
    * 学生在 obj 上做错一步、走偏一下时演的预写（prewrite: all 才有）：像哪种错法（misread）或被弹回（blocked）先找 @obj.miss，
    * 没写 .miss、这一下是判成不对的（right === false）找 @obj.wrong；还没做到的挑战写了 .miss 的也一起演。都只演一次
    */
-  slipReactions(obj, verdict = null, { blocked = false } = {}) {
+  slipReactions(obj, verdict = null, { blocked = false, gesture = null } = {}) {
     if (!this.prewriteAll) return [];
     const out = [];
     const has = (k) => !!this.reactions.get(k)?.length;
     const missy = blocked || !!verdict?.misread || verdict?.legal === false;
-    if (missy && has(`${obj}.miss`)) out.push(...this.pull(`${obj}.miss`, { missOf: obj }));
+    const mk = missy ? this.missKey(obj, verdict, gesture) : null;
+    if (mk) out.push(...this.pull(mk, { missOf: obj }));
     else if (verdict?.right === false && has(`${obj}.wrong`)) out.push(...this.pull(`${obj}.wrong`, { wrongOf: obj }));
-    if (missy) for (const g of this.goals.values()) if (!g.met && !g.watch && has(`${g.id}.miss`)) out.push(...this.pull(`${g.id}.miss`, { missOf: g.id }));
+    if (missy) for (const g of this.goals.values()) { if (g.met || g.watch) continue; const gk = this.missKey(g.id, verdict, gesture); if (gk) out.push(...this.pull(gk, { missOf: g.id })); }
     return out;
   }
   /**

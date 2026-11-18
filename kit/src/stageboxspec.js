@@ -9,7 +9,7 @@
 // array a = …（往下全是舞台的镜头指令，写法见 stage/doc.js 的 stageManual）
 // ```
 
-export const HEIGHT = { min: 240, max: 900, def: 420 };
+export const HEIGHT = { min: 240, max: 900, def: 420, auto: 160 };
 const FIELD = /^\s*(id|title|prewrite|height)\s*[:：]\s*(.*)$/i;
 
 /**
@@ -18,7 +18,7 @@ const FIELD = /^\s*(id|title|prewrite|height)\s*[:：]\s*(.*)$/i;
  */
 export function parseStageBox(src) {
   const lines = String(src ?? '').replace(/\r\n?/g, '\n').split('\n');
-  const out = { id: '', title: '', prewrite: null, height: HEIGHT.def, script: '', offset: 1, problems: [] };
+  const out = { id: '', title: '', prewrite: null, height: HEIGHT.def, heightSet: false, script: '', offset: 1, problems: [] };
   let i = 0;
   for (; i < lines.length; i++) {
     const l = lines[i];
@@ -34,7 +34,7 @@ export function parseStageBox(src) {
     } else if (k === 'height') {
       const n = Number(v.replace(/px$/i, ''));
       if (!Number.isFinite(n)) out.problems.push(`height: 写像素（比如 height: 420），没有「${v}」`);
-      else out.height = Math.round(Math.min(HEIGHT.max, Math.max(HEIGHT.min, n)));
+      else { out.height = Math.round(Math.min(HEIGHT.max, Math.max(HEIGHT.min, n))); out.heightSet = true; }
     }
   }
   out.offset = i + 1;
@@ -77,4 +77,13 @@ export function callLine(id, why, text) {
   const head = `[舞台${id ? ` ${id}` : ''}] ${CALL_WHY[why] || why}`;
   const body = String(text || '').trim();
   return body ? `${head}：\n${body}` : head;
+}
+
+/**
+ * 没写 height: 时舞台多高（dr-ext-live-fixes 4：一行式子的舞台以前也占 420，分屏时一块板放不下）：
+ * 演完以后东西实际占的高（box.h，镜头一倍时的像素）加上面让给挑战和话的、下面让给按钮的、四边的留白，夹在 [160, 900]
+ */
+export function autoHeight({ box = null, top = 0, bottom = 0, pad = 28 } = {}) {
+  if (!box || !(box.h > 0)) return HEIGHT.def;
+  return Math.round(Math.min(HEIGHT.max, Math.max(HEIGHT.auto, box.h + top + bottom + 2 * pad)));
 }

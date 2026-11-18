@@ -24,7 +24,9 @@ export function judge(scene, objId, act, policy = {}, { by = 'student', open = n
   if (!rules) return out; // 没有规则：照旧能用，只是不判
 
   const v = rules.check(o, act, scene, { by, open }) || {};
-  const verdict = { legal: v.legal !== false, right: v.right ?? null, misread: v.misread ?? null, why: v.why ?? null, next: v.next ?? null };
+  // gesture / reason（dr-ext-live-fixes 2）：这一下是哪种动作、为什么没让做（noncommute / noparen …）：外部主讲预写的 @e.miss merge、
+  // @e.miss why=noncommute 照它们挑对得上的那一句
+  const verdict = { legal: v.legal !== false, right: v.right ?? null, misread: v.misread ?? null, why: v.why ?? null, next: v.next ?? null, gesture: act?.type ?? null, ...(v.reason ? { reason: v.reason } : {}) };
   out.verdict = verdict;
   const wrong = verdict.right === false;
 

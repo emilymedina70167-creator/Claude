@@ -4,7 +4,7 @@
 //
 // 模型 o.alg = { items: [{ key: 't1', sign: 1 | -1, factors: [{ key, text }] }], n }：一项（加减分开的一段）是几个因子的积。
 // 一项只有一个因子时它自己是部件（f.t1）；有几个因子时每个因子是部件（f.t2f1、f.t2f2），这一项整个跟着它的因子走
-import { splitTerms, expandTerm, likeTerms, mergedText, equivalent, unknownWhy, toTex, polyOf, monoText } from '../../ncalg.js';
+import { splitTerms, expandTerm, likeTerms, mergedText, equivalent, unknownWhy, toTex, polyOf, monoText, strictWhy } from '../../ncalg.js';
 
 /** 一行代数 → 模型；读不懂（含逆、转置……）抛错，话给老师看 */
 export function algParse(src, n0 = 0) {
@@ -56,7 +56,7 @@ export function locate(alg, key) {
 }
 /** 写给人看的一项（带正负号，照学生看到的样子） */
 const shown = (it, first = false) => `${it.sign < 0 ? '-' : first ? '' : '+'}${it.factors.map((f) => f.text).join('')}`;
-const clone = (alg) => ({ n: alg.n, items: alg.items.map((it) => ({ ...it, factors: it.factors.map((f) => ({ ...f })) })) });
+const clone = (alg) => ({ n: alg.n, ...(alg.loose ? { loose: true } : {}), items: alg.items.map((it) => ({ ...it, factors: it.factors.map((f) => ({ ...f })) })) });
 
 /**
  * 换顺序：key 挪到 before 前面（before 是 null 就挪到最后）。key 是一项（或那一项里的一个因子，挪的是整项）就在项之间挪；
@@ -137,7 +137,10 @@ export function expand(alg, key) {
  * 换顺序换出来不相等（矩阵的因子换了先后）、合并的不是同类项弹回去；判不了照实说
  */
 export function judge(before, after, { what = '这一下' } = {}) {
-  const r = equivalent(algText(before), algText(after));
+  // 判的是这一下手势变没变值：原来的式子自己就是矩阵和数混写的（老师故意写的错式子），照宽的比，不然什么都动不了
+  const b = algText(before);
+  const loose = !!before.loose || !!strictWhy(b, b);
+  const r = equivalent(b, algText(after), { loose });
   if (r === true) return { legal: true };
   if (r === 'unknown') return { legal: false, unknown: true, why: `判不了：${unknownWhy(algText(before), algText(after)) || '式子里有页面算不了的东西'}（${what}页面没让做）` };
   return { legal: false, why: `${what}以后和原来不相等` };
@@ -176,6 +179,7 @@ export function sameForm(alg, target) {
 }
 /** 和 target 数学上相等（判不了是 null） */
 export function equalsTo(alg, target) {
-  const r = equivalent(algText(alg), target);
+  // 默认严：矩阵的式子里单独的数不当 kE、数 0 不当 O（alg=loose 才宽）
+  const r = equivalent(algText(alg), target, { loose: !!alg.loose });
   return r === 'unknown' ? null : r;
 }
