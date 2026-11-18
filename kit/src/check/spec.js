@@ -272,7 +272,8 @@ export function parseCheck(head, body) {
     p.family = p.family || `${p.block}/${p.target}`;
   }
   const check = { id, title: kv.title || '', limit: limit || 0, pause: pause || PAUSE_DEFAULT, blocks, spare, prompt: promptLines.join('\n').trim(), probes, order, src: String(body ?? '') };
-  return { check: errors.length && !order.length && !blocks.length ? null : check, errors };
+  // 没有 block 行就没法开：整条不收（别的写法错误照列，check 照给，外壳不开、预检照报）
+  return { check: blocks.length ? check : null, errors };
 }
 
 /** 题里的量：let 一行一行算（浮点，和 answer 的条件一样），base 是整节课的量 */

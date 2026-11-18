@@ -6,6 +6,7 @@
 import { parseCoach } from './ext.js';
 import { parseClaude, parseClaudeOff } from './delegate.js';
 import { parseQueue, parseEdits } from './extboard.js';
+import { parseCheck } from '../check/spec.js';
 import { tokenize, unquote } from '../tokens.js';
 import { parseNoteBlock } from '../project/notebook.js';
 import { parseMarkHead, parseMarkBlock, parseUnmark } from '../markspec.js';
@@ -154,7 +155,7 @@ const tidy = (s) => s.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
 // move：版面模式里把一段挪到别的栏（col=），不重画
 export const SEGMENT_OPS = ['new', 'add', 'replace', 'hide', 'show', 'move', 'pin', 'unpin'];
 const NO_TITLE = new Set(['hide', 'show', 'move', 'unpin']);
-const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set / claude / claude-off / queue / unqueue / edit / stage / widget / judge';
+const OP_LIST = 'new / add / replace / hide / show / move / layout / pin / unpin / figure / mark / unmark / react / why / memo / note / plan / aims / snap / close / coach / set / claude / claude-off / queue / unqueue / edit / stage / widget / judge / check';
 
 /**
  * 解析 board 后面那一行：
@@ -234,6 +235,13 @@ export function parseCommand(header) {
   }
   // 整节课的设置（需求 R11）：board set upload=on|off（组件下面的截图入口）
   if (name === 'set') return setCommand(m[2] || '');
+  // 检验（二类组件，dev_requests/dr-plan2，check/spec.js）：块里是 block / spare 行和探题，块闭合了才读全
+  if (name === 'check') {
+    const id = tokenize(m[2] || '').find((x) => x.key === 'id')?.value || tokenize(m[2] || '').find((x) => !x.key)?.value;
+    if (!id) return { error: 'check 缺少 id：board check id=k1 limit=15m，块里写 block 行和探题' };
+    if (!validId(id)) return { error: `id「${id}」不合法：${ID_RULE}` };
+    return { op: 'check', id, head: m[2].trim() };
+  }
   if (name === 'close') return { op: 'close' };
   if (name === 'coach') { const r = parseCoach(m[2] || ''); return r.error ? { error: r.error } : { op: 'coach', target: r.target, upto: r.upto }; }
   // 老师自己的教学计划（学生看不到，docs/learning-plan.md 第 5 节）：块里是几行字
@@ -258,6 +266,7 @@ export function blockCommand(header, body = '') {
   if (op.op === 'claude') return parseClaude(op.head, body);
   if (op.op === 'edit') { const r = parseEdits(body); return r.error ? { error: r.error } : { ...op, edits: r.edits }; }
   if (op.op === 'why') return parseWhy(op.head, body);
+  if (op.op === 'check') { const r = parseCheck(op.head, body); return r.check ? { op: 'check', id: op.id, check: r.check, errors: r.errors } : { error: r.errors[0] || 'check 读不懂' }; }
   if (op.op === 'judge') return String(body).trim() ? { ...op, body: String(body) } : { error: 'judge 块里一行一步：s1 ok / s3 wrong tag=规则用错 why="…" / s4 missing' };
   return op.op === 'mark' ? markOp(op, body) : op;
 }

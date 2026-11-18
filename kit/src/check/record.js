@@ -73,8 +73,14 @@ export function toRecord(s) {
  */
 export function absorbDoc(prev, result, { check, session = null, space = null, at = Date.now(), today, families = [], owed = [], evidence = [] } = {}) {
   const history = prev ? [...(prev.history || []), { check: prev.check, session: prev.session, at: prev.at, state: prev.state, facets: prev.facets }].slice(-5) : [];
-  const changed = !prev || prev.state !== result.state || prev.checked !== false;
-  const log = [...(prev?.log || []), ...(changed ? [{ at, state: result.state, checked: false, by: 'page', note: `检验 ${check.id}${session ? `（${session}）` : ''}` }] : [])];
+  // 状态类的 log：改了的字段一条一条记（schema.js 的 lastLog，自检要 to 是新值）
+  const note = `检验 ${check.id}${session ? `（${session}）` : ''}`;
+  const log = [...(prev?.log || [])];
+  for (const [field, to] of [['state', result.state], ['checked', false]]) {
+    const from = prev ? prev[field] ?? null : null;
+    if (prev && from === to) continue;
+    log.push({ date: today, by: 'page', field, from, to, basis: evidence.slice(0, 20), note });
+  }
   return {
     block: result.block || prev?.block || check.blocks.find((b) => b.must.some((id) => result.probes?.includes(id)))?.block || null,
     space, state: result.state, facets: result.facets, by: 'page', checked: false, check: check.id, session, at, date: today,

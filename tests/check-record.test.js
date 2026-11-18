@@ -69,12 +69,13 @@ test('absorbDoc：第一次、第二次（旧的进 history、log 记变化）�
   assert.equal(d1.by, 'page');
   assert.equal(d1.date, '2026-11-18');
   assert.deepEqual(d1.retests.map((x) => x.due), ['2026-11-19', '2026-11-25']);
-  assert.equal(d1.log.length, 1);
+  assert.deepEqual(d1.log.map((x) => [x.field, x.from, x.to, x.by]), [['state', null, '未', 'page'], ['checked', null, false, 'page']]);
   assert.deepEqual(d1.history, []);
   const d2 = absorbDoc(d1, { ...res, state: '部分' }, { check, session: 'c-2', space: 'math', at: 2, today: '2026-11-20', families: [], owed: ['p1a'], evidence: [] });
   assert.equal(d2.history.length, 1);
   assert.equal(d2.history[0].state, '未');
-  assert.equal(d2.log.length, 2);
+  assert.equal(d2.log.length, 3);
+  assert.deepEqual(d2.log.at(-1), { date: '2026-11-20', by: 'page', field: 'state', from: '未', to: '部分', basis: [], note: '检验 k1（c-2）' });
   assert.deepEqual(d2.retryOwed, [bankId(fenceOf(check.probes.p1a))]);
   let d = d2;
   for (let i = 0; i < 6; i++) d = absorbDoc(d, res, { check, session: `c-${i}`, space: 'math', at: 3 + i, today: '2026-11-21', families: [], owed: [], evidence: [] });

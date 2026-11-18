@@ -108,7 +108,7 @@ const CHECK_DELAY = 800;
 const STALE_MS = 3 * 3600 * 1000; // 一次 batch 写进来好几类：停一下再查，不要每到一类查一遍
 // 课堂每一轮要带的记忆（证据条数多、按需查，不订阅）。sessions 要带：记忆摘要里有「以前学这一块的课」、目录里有以前的课
 // 题库（drills）课堂里用不上，不订阅
-const MEMORY_FOR_CLASS = MEMORY_COLLECTIONS.filter((c) => c !== 'evidence' && c !== 'drills');
+const MEMORY_FOR_CLASS = MEMORY_COLLECTIONS.filter((c) => c !== 'evidence' && c !== 'drills' && c !== 'probes');
 
 /** 地址后面的 #c-20261027-1：进这节课（刷新也还在这节课里） */
 export const classHash = () => { const h = decodeURIComponent(String(location.hash || '').slice(1)); return isSessionId(h) ? h : ''; };
