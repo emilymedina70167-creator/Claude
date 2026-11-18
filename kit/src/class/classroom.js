@@ -17,6 +17,7 @@ import { copyRecord, toast } from '../record.js';
 import { parseOutput, PLAN_MAX, closingSpeech } from './protocol.js';
 import { pendingIns, outText, outSeq, seqId, inResult, nowDoc, resolveFrom } from './ext.js';
 import { queueDue, applyEdits, keptComponents } from './extboard.js';
+import { stageBoxState } from '../blocks/stagebox.js';
 import { shouldFire, eventsOf, filterOps, handBack, helperPrompt, helperLines, rebuildHelpers } from './delegate.js';
 import { journalId } from '../project/journal.js';
 import { coachPrompt, coachSegment } from './coach.js';
@@ -161,6 +162,8 @@ export async function renderClass(root, meta, desk = null) {
   const EXT = !!desk?.ext && !readOnly;
   // 截图入口（upload.js，需求 R11）：外部的课默认不放，外部写 board set upload=on 才放。翻看（只读）外部的课也一样
   if (desk?.ext) session.upload = desk.ext.upload === 'on';
+  // 舞台组件（board stage）里外部预写的「没做到」「走偏」（.wrong / .miss）：外部的课整节课都收
+  session.extPrewrite = !!desk?.ext;
   const teacher = {
     get available() { return !readOnly && (EXT || !!(mock || (ai?.call && !legacy))); },
     // 模拟老师也走调用让路（lane.js；ai.call 自己已经走了）
@@ -1433,6 +1436,8 @@ export async function renderClass(root, meta, desk = null) {
         results: (results.get(b.dataset.bid) || []).slice(-6).map((r) => r.line),
         draft: draftsIn(b).map((d) => (d.label ? `${d.label}：${d.text}` : d.text)).join('；'),
         react: armedText(reacts.get(b.dataset.bid)) || undefined,
+        // 舞台组件（board stage）：这块舞台现在什么样（东西、开着的手、挑战、预写）
+        stage: b.classList.contains('block-stage') ? stageBoxState(b) || undefined : undefined,
       })) : [];
       const text = texText(seg.sec?.querySelector('.stage-body > p'));
       const summary = [clipTex(text, 140), seg.softNotes?.length ? `（${seg.softNotes.join('；')}）` : ''].filter(Boolean).join(' ');

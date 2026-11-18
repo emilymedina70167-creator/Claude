@@ -1257,6 +1257,20 @@ const SUITES = {
     // R7：预备板，点「下一块」页面自己开
     await t.page.click('.class-ext-btn[data-act="next"]');
     await t.waitFor(() => t.page.$('[data-step="b9"]:not([hidden])'), { timeout: 10000, what: '点「下一块」开预备板' });
+    // R5：board stage（舞台底座，按钮判挑战、没做到演 .wrong）、board widget（la.drag 拖着排、la.goal 记作答）
+    const stageBody = ['tex e = "(A+B)(A+B)"', 'array a = BA B² A² AB _ _ _ _', 'array k = A² AB BA B² hide=on', 'open a move',
+      'goal g1 "按先后排好四项" when="a.5 = k.1, a.6 = k.2, a.7 = k.3, a.8 = k.4" on="排好了"', '@g1 say "对。"', '@g1.wrong say "再看先后。"', 'ask next "排好了点下面" button="排好了"'].join('\n');
+    const widgetBody = "const want = ['$A^2$', '$AB$', '$BA$', '$B^2$'];\nconst d = la.drag({ items: want, slots: 4 });\nla.button('交了', () => la.goal('四项按左右顺序', la.compare(d.order(), want).ok, { value: d.order() }), { primary: true });\nla.md(la.same('AB+BA', '2AB') === false ? '判定：AB+BA 不等于 2AB' : '判定不对');";
+    await plantLive(t, { [`sessions/${sid}/ext_in/004`]: { seq: 4, text: `${F4}board new id=b20 title="动手"\n先排一排。\n${F4}\n\n${F4}board stage id=s1 title="排四项"\n${stageBody}\n${F4}\n\n${F4}board widget id=w1 title="拖着排"\n${widgetBody}\n${F4}`, after: 1, at: Date.now() } });
+    const r4 = await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/004`]?.result, { timeout: 15000, what: 'ext_in/004 执行' });
+    check(r4.ok, `stage / widget 段没画成：${JSON.stringify(r4).slice(0, 400)}`);
+    check(await t.page.evaluate(() => /判定：AB\+BA 不等于 2AB/.test(document.querySelector('[data-bid="w1"]')?.innerText || '')), 'widget 里 la.same 的判定不对');
+    await t.page.locator('[data-bid="s1"] button:has-text("排好了")').first().click();
+    await t.waitFor(async () => /\[作答\][^\n]*stage[^\n]*没做到/.test(await outs()), { timeout: 10000, what: '舞台按钮没做到的作答写进 ext_out' });
+    for (let i = 0; i < 4; i++) { await t.page.click(`[data-bid="w1"] .wg-chip[data-k="${i}"]`); await t.page.click(`[data-bid="w1"] .wg-slot[data-i="${i}"]`); }
+    await t.page.locator('[data-bid="w1"] button:has-text("交了")').click();
+    await t.waitFor(async () => /\[作答\][^\n]*widget[^\n]*「四项按左右顺序」[^\n]*做到了/.test(await outs()), { timeout: 10000, what: 'widget 的作答写进 ext_out' });
+    check(/舞台现在/.test((await db())[`sessions/${sid}/meta/now`]?.text || ''), 'meta/now 里没有舞台现状');
     // R10：叫主讲 → 马上写一份，最前面「学生在等你」
     await t.page.click('.class-ext-btn[data-act="call"]');
     await t.waitFor(async () => Object.entries(await db()).some(([k, v]) => k.startsWith(`sessions/${sid}/ext_out/`) && /^学生在等你/.test(v.text)), { timeout: 5000, what: '叫主讲写 ext_out' });

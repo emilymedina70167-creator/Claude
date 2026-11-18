@@ -25,6 +25,7 @@ import { code } from './code.js';
 import { cloze, errfind, parse, drill, chunk, link as enLink, translate } from './english.js';
 import { gloss } from './gloss.js';
 import { stage } from './stagebox.js';
+import { widgetBlock } from './widget.js';
 import { stepperBlock } from '../stepper.js';
 import { ENGINES } from '../engines/registry.js';
 import { elimEngine } from '../engines/elim.js';
@@ -43,6 +44,8 @@ export const blocks = {
   cloze, errfind, parse, drill, chunk, link: enLink, translate, gloss,
   // 黑板上的一块舞台（2026-11-18 从 archive/ 恢复的舞台引擎）：外部主讲写镜头指令，学生动手、挑战当场判、预写当场演
   stage,
+  // 外部设计的交互：一小段 JS 调 la.*（blocks/widget.js）
+  widget: widgetBlock,
   // 一步步走的演示（stepper.js 外壳 + engines/ 里的纯函数引擎，名字在 engines/registry.js）
   ...Object.fromEntries(Object.entries(ENGINES).filter(([k]) => k !== 'elim' && k !== 'pv').map(([k, e]) => [k, stepperBlock(e)])),
   elim: elimBlock(),

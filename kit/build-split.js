@@ -20,7 +20,7 @@ const strip = (lines) => lines.filter((l) => !/^\s*<!--\s*(科目|完整写法)\
  * markdown：整份 CLAUDE-PROJECT.md；kitUrl：组件库地址（告诉外部去哪读组件文件）。
  * 返回 { main（主说明）, files: { 'components/answer.md': 内容, … }, index: [{ names, file, desc, tags }] }
  */
-export function splitProject(markdown, { kitUrl = '' } = {}) {
+export function splitProject(markdown, { kitUrl = '', extra = {} } = {}) {
   const lines = String(markdown ?? '').split('\n');
   const s = lines.findIndex((l) => START.test(l));
   const e = lines.findIndex((l, i) => i > s && NEXT.test(l));
@@ -51,6 +51,9 @@ export function splitProject(markdown, { kitUrl = '' } = {}) {
   if (files['components/stepper.md']) {
     for (const x of index) if (x.file !== 'components/stepper.md' && x.names.some((n) => ENGINES[n]) && !files[x.file].includes('components/stepper.md')) files[x.file] += '\n这是演示组件：先猜再揭晓（`ask`）、`mode: quiz` / `fill`、`vary:` 滑块、课堂里 `figure … set step=` 这些共用写法见 `components/stepper.md`。\n';
   }
+  // 外部设计交互的底座（第十五轮第 2 批）：舞台（stage/doc.js 的 stageManual）和 widget（widgetspec.js）的写法，构建时现生成
+  if (extra.stage) { files['components/stage.md'] = `${extra.stage.trim()}\n`; index.push({ names: ['stage'], file: 'components/stage.md', desc: '在一段里嵌一块舞台：东西、交给学生的手、挑战当场判、预写的反应（外部的课里 board stage）' }); }
+  if (extra.widget) { files['components/widget.md'] = `${extra.widget.trim()}\n`; index.push({ names: ['widget'], file: 'components/widget.md', desc: '一小段 JS 调 la.*：拖着排、按钮、输入、式子相等的判定、记作答（外部的课里 board widget）' }); }
   const markDoc = markSection(markdown);
   if (markDoc) files['components/mark.md'] = `${markDoc}\n`;
   const table = [

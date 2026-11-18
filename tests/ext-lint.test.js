@@ -42,3 +42,14 @@ test('let 的量给后面的 \\calc 用', async () => {
 test('fencesOf：没闭合的组件报出来', () => {
   assert.equal(fencesOf('```answer\nid: q\n').at(0).unclosed, true);
 });
+
+import { checkers } from '../tools/ext-lint.js';
+test('stage / widget 段的写法也查', async () => {
+  const names = await blockNames();
+  const extra = await checkers();
+  const text = '````board stage id=s1\narray a = 3 1 2\nopen a fly\n````\n````board widget id=w1\nla.say((\n````';
+  const msgs = lintTurn({ text, names, ...extra }).problems.map((p) => p.msg).join('\n');
+  assert.match(msgs, /没有「fly」/);
+  assert.match(msgs, /JS 写错了/);
+  assert.deepEqual(lintTurn({ text: '````board stage id=s2\narray a = 3 1 2\nopen a move\n````', names, ...extra }).problems, []);
+});

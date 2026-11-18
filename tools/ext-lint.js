@@ -90,8 +90,8 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
     if (segOps([o]).length) {
       here.set(o.id, o);
       segments++;
-      if (o.op === 'stage' && stageCheck) for (const msg of stageCheck(o.body)) problems.push({ where: `stage id=${o.id}`, msg });
-      if (o.op === 'widget' && widgetCheck) for (const msg of widgetCheck(o.body)) problems.push({ where: `widget id=${o.id}`, msg });
+      if (o.op === 'stage' && stageCheck) for (const msg of stageCheck(`id: ${o.id}\n${o.body}`)) problems.push({ where: `stage id=${o.id}`, msg });
+      if (o.op === 'widget' && widgetCheck) for (const msg of widgetCheck(`id: ${o.id}\n---\n${o.body}`)) problems.push({ where: `widget id=${o.id}`, msg });
       if (o.op === 'stage' || o.op === 'widget' || o.op === 'edit') continue;
       const seen = new Set();
       for (const f of fencesOf(o.body)) {
@@ -110,6 +110,8 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
           seen.add(id);
           compIds.set(id, o.id);
         }
+        if (f.name === 'stage' && stageCheck) for (const msg of stageCheck(f.body)) problems.push({ where, msg });
+        if (f.name === 'widget' && widgetCheck) for (const msg of widgetCheck(f.body)) problems.push({ where, msg });
         if (f.name === 'let') { try { parseLets(f.body); } catch (e) { problems.push({ where, msg: e.message }); } addLets(f.body); }
         if (f.body.includes('\\calc')) for (const e of expandCalc(f.body, (x) => calcValue(x, vars).tex).errors) problems.push({ where, msg: `\\calc{${e.expr}} 算不出来：${e.msg}` });
       }

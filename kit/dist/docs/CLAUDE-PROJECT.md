@@ -152,6 +152,8 @@ b = [1, 1, -2]
 - `translate`（英语）：翻译（页面按要点判） → `components/translate.md`
 - `gloss`（英语）：生词（点一下看意思） → `components/gloss.md`
 - `drill`（英语）：句型操练（一题一题做，页面判分） → `components/drill.md`
+- `stage`：在一段里嵌一块舞台：东西、交给学生的手、挑战当场判、预写的反应（外部的课里 board stage） → `components/stage.md`
+- `widget`：一小段 JS 调 la.*：拖着排、按钮、输入、式子相等的判定、记作答（外部的课里 board widget） → `components/widget.md`
 - **板书标注**（圈、框、大括号、下划线、波浪线、着重号、荧光笔、✓ ✗、箭头；也叫 mark、tag、highlight、圈画）：不是组件，是教具指令 `mark`（课堂里写 board mark 块，实时黑板写进 `ops`），写法见第四节「教具指令：figure、mark / unmark」 → `components/mark.md`
 
 ## 四、黑板指令（`board` 块）
