@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-18f**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-18g**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -303,6 +303,54 @@ s4 conclude: A^n = [[1,n],[0,1]]
 
 - 交上来的那一下记成作答 `type: solve`（`value` 是打的字，`photos` 是照片的 asset 编号）；判了以后另一条 `judged: true, steps: [{ id, ok: true | false | "missing" | null, unsure, why, tag }]`（`ok: null` 加 `unsure: true` 是判的人拿不准、待核；只有 `ok: null` 是没判），`ok` 是整道题对不对。刷新以后打的字和判定都放回来。
 - `solve`、`board judge`、证据里的 `steps` 这几样的写法和字段名是定下来的，以后的探题也照它们用。
+
+### recall、construct、claim、discriminate、locate：检验题（二类，学完以后的吸收检验）
+
+<!-- 科目：线代 -->
+
+五种探题和 `solve` 只在 `board check`（第五节）里能作答，单独写在板上只画预览；字段在完整写法里。
+
+<!-- 完整写法 -->
+
+合书、第一次作答算数、没有提示和「看答案」，错了显示你写的补讲再出一道同构题。每道题都要写 `target`（打的哪个典型错法）、`level`，必做题至少 2 道 `retry`、至少 1 条 `teach`。
+
+共用的字段：
+
+| 字段 | 意思 |
+|---|---|
+| `id` | 这一次检验里唯一 |
+| `q` | 题面（Markdown，可以有 `$公式$`）；claim 的命题写 `claim:` |
+| `target` | 打的是哪个典型错法：错题、误解的编号或一句话 |
+| `level` | `基础` / `方法` / `核心` |
+| `facet` | 测吸收的哪一面：`重建` / `能用` / `边界` / `能辨`。不写按题型：recall 重建、construct 能用、claim 边界、solve 能用、discriminate 能辨、locate 能辨 |
+| `teach 键: 话` | 判出这一项没过时显示的一两句。键是没过的那一项：`if2`、`m1`、`s3`、`tag=规则用错`、`truth`、`can`、`line`、`fix`、`result`、`giveup`（想不出来）、`default`（兜底）。先按编号找，再按 tag，最后 default；都没有时页面里的 Claude 写（第五节） |
+| `retry` | 同构小题的 id（写在同一个 `board check` 块里、同一种题型），按先后用 |
+| `family` | 同类的键，复测按它挑没见过的题；不写是 `块/target` |
+| `let 名字 = 式子` | 题里用的量（写法同 `answer`） |
+
+各题型：
+
+- **recall**：`must m1: 要点`（每题最多 3 条）、`may m4: 可选要点`（不影响过没过）、`wrong w1: 常见错说法`、`answer: 参考答案`（判完给我看）。编号不写页面自动编（m1、m2…，w1…）。我打字或手写；页面里的 Claude 照要点判。过 = `must` 全写到、没写 `wrong` 里的错说法。
+- **construct**：`slots: A=mat(2) B=mat(2)`（`mat(r,c)` `vec(n)` `num`）；`if: 条件 => 不满足时说的话`，一行一条，编号 if1、if2…（条件写法同 `answer` 的 `check:`，名字是 slots 里的；`O`、`E` 没定义时是第一个方阵那么大的零矩阵、单位矩阵）；`expr 标签: 标准式子`（要我再写一个用 slots 名字的式子，按非交换多项式严格判相等，编号 e1…）；`example:`（必填：一组满足全部条件的，页面先验一遍）。页面逐条核，每条不满足的显示那一条自己的话、全部列出来；格子没填完交不了。
+- **claim**：`claim: 命题`、`truth: 真 | 假`。我先点「真」或「假」：判假要给反例（字段同 construct：`slots` `if` `example`）；判真要写证明要点（`must` `may` `wrong`），或 `proof: derive` 配 `start:` `goal:` `vars:`（逐行核，同 `derive mode: do`）。过 = 真假对、依据也过。
+- **solve**：照上面 `solve` 的写法（`q` `steps`），加共用的字段。在检验里一律由页面里的 Claude 逐步判（结论是 `steps`），我打字或手写，不交照片。
+- **discriminate**：`can: 能 | 不能`、`must m1: 理由要点`（「为什么」「能用怎么用 / 不能用用什么」都写成要点）、`result: 式子`（可选，最后结果，精确判）。过 = 能不能对、理由过、result 对；能不能对、理由没过 = 没过。
+- **locate**：`line:` 几行、`bug: 第几行`、`must m1: 为什么错的要点`、`fix: 式子`（可选，改成什么）。过 = 哪一行对、理由过、fix 对。
+
+```construct
+id: p4
+q: 造一组 2 阶 $A$、$B$，使 $(A+B)(A-B) \ne A^2-B^2$，并写出两边差的那一项
+target: L2-56
+level: 核心
+slots: A=mat(2) B=mat(2)
+if: (A+B)*(A-B) != A^2-B^2 => 这一组两边相等了：A、B 可交换
+expr 两边差: (A+B)*(A-B) - (A^2-B^2)
+example: A=[[0,1],[0,0]] B=[[1,0],[0,0]]
+teach if1: 可交换的两个矩阵两边一定相等，换一组不可交换的。
+retry: p4a, p4b
+```
+
+我写字的地方有「手写 / 打字」两个页签（这台设备用过 Pencil 默认手写）。手写板记每一笔的时间；改错用「划掉」（留痕），「撤一下」只撤 5 秒内的一笔、3 秒内的划掉；「下一步」记一个分步的时刻；「加一页」往下加。交的时候页面从笔画算：整页图（划掉的灰色带线、左边行号 L1、L2…）、关键时刻的快照（停顿超过 `pause`、每次划掉之前、每次下一步，最多 6 张）、一段时间线文字，图传进 assets。
 
 ### context：给页面里 Claude 的背景资料（不显示）
 
@@ -2218,6 +2266,35 @@ can: say, mark
 - 结果存进 `out` = `{ text, job, by: "ext-delegate", model, at, from }`，记一条 `journal`（能撤销）。`meta/facts.jobs` 是 `{ queued, running, done, failed }`。
 - `board add id=b5 from=集合/文档`（`new`、`replace`、`pin` 也行）：执行前页面把那一条的 `text`（没有就 `md`）换进块里；块里原来写的字留在前面。读不到的那一块照原样执行、`ext_out` 里说一句。
 
+**检验（二类）：`board check`**（学完以后的吸收检验；页面里的老师的课也能写）：
+
+````
+````board check id=k1 title="第二讲第一节" limit=15m pause=30s
+block L2.1.1 must=p1,p2
+block L2.1.4 must=p3,p4,p5 optional=p7 fast=90s
+spare p8,p9
+<<<
+（可选）外部没写到的错法时，给页面里的 Claude 的话
+>>>
+```construct
+id: p1
+…
+```
+（题、它们的 retry、spare 都写在这个块里；题的写法见第三节「检验题」）
+````
+````
+
+- `block 块 must=… optional=… [fast=]`：一块一行，按写的先后做，块里先必做再可选；`spare`：不出现，只存进题库给复测；没排进任何一行、也不是谁的 `retry` 的题报写法错误。`limit=` 第一次作答一共多久（不写不限时），`pause=` 手写停多久算停顿（默认 30s）。
+- 执行时页面先查一遍（写法、每道题的 `example` 代进条件、必做题 retry 至少 2 道、至少 1 条 teach、retry 是同一种题型），不过的不开，原因写在 `ext_in.result`；`node tools/ext-check.mjs --next … --lint` 查的是同一份。过了就画一张开始卡，题全部存进题库 `probes`。
+- 学生点开始：板、常驻栏、翻板条、整页板书收起来（合书），做完放回来；这时来的 `ext_in` 照常执行，画好的板做完检验才看得到。一道题：作答 → 点「很确定 / 大概 / 蒙的」→ 交；没有提示和「看答案」，「想不出来」一直在。
+- 判：构造的每一条、式子、真假、能不能、哪一行、逐行证明、result、fix 页面当场判；要点、证明要点、理由、solve 的步骤每交一次调一次页面里的 Opus 5.5 high（给它题、你写的要点或参考步骤、学生交的；手写的带整页图，转写和判同一次），回的不是 Opus、读不出来、超过 90 秒都算拿不准。要它判的题交了学生马上做下一道，判回来没过的在当前这道做完时插进来。
+- 判出没过：列出没过的每一项（构造是那一条自己的话，要点是「没写到：要点原文」）→ 你写的 teach → 下一道 retry；做对算补上，又错接着下一道，retry 用完记没吸收。「蒙的」做对也出一道 retry 确认。拿不准的（`unsure`、超时、作废）不补讲、不出 retry，待你核。没有对上的 teach 时叫一次页面里的 Claude 写补讲：给它题、要点、你写的 teach、学生交的、没过的项和 `<<< >>>` 里你写的话；没写 `<<< >>>` 时默认的话是「指出错在哪、只补缺的那一点（不给整段答案）。」（你在任务书里写的那句）。它的话原样显示，记成证据 `src: helper, role: check`。
+- 可选题：这一块必做都一次过、都「很确定」、没有在判的（写了 `fast=` 的还要第一次作答都在时间里）就跳过。限时只数第一次作答（题在屏幕上、页面在前台的时间）；过了 `limit` 交的记 `late`，做对最多算补上。
+- 刷新、熄屏、切走回来照存着的进度接着做（`sessions/{编号}/check/{检验 id}`），看过没交的照旧算第一次（证据记 `resumed`）；「先停下」板放回来，那一块变成一条「接着做」；下课时还开着照「先停下」存着。没做完的块不写吸收。
+- `ext_out`：开始一份「[页面] 检验 k1「…」开始（2 块、5 道必做、限时 15 分钟）」，做完一份：每块的吸收、每道题一行（第一次的作答、没过的项、retry、信心、用时）、手写的整页图和快照的 asset 编号和时间线、待你核的题、记没记错题。中途不一道一道写。
+- 改判：任何一轮 `board judge target=题的 id`，块里一行一项（`m1 ok` / `m2 missing` / `if1 wrong why="…"` / `s3 wrong tag=…` / `m3 unsure`），加一行 `result=pass | fail` 改整道题。页面追加一条改判的证据（`rejudged: true`），重算那一块的吸收；待核的判成没过算「未」，它没用上的 retry 记进 `absorb.retryOwed`，复测先出。也可以直接写 `absorb/{块}`（第七节）。
+- 做完的那一刻（不等学生点「回到黑板」）：每块写 `absorb/{块}`（第七节），排 1 天、7 天两次复测；最后没过的、「很确定却错了」的题各记一道错题（同一个 `target` 一次检验一道，能撤销）。
+
 **外部设计的交互：`board stage`、`board widget`**（底座的完整清单在 `components/stage.md`、`components/widget.md`）：
 
 - `board stage id=s1 title="…"`：块里是舞台的镜头指令（东西、交给学生的手、挑战、预写的反应），页面包成 `stage` 组件画在当前板上（一段一块舞台，没有老师、不调用）。学生每一下、挑战做到没做到、叫老师的事都记成作答 / 动作进 `ext_out`。外部的课里预写的反应除了 `@名字` / `.done` / `.right`，还收 `.wrong`（交了 / 动了但没做到）、`.miss`（走偏：被裁判判成错法、手势被弹回）；`.miss` 能按手势分（`@e.miss merge` / `expand` / `reorder`）、按原因分（`@e.miss why=noncommute` / `noparen` / `notlike` …），先找原因对得上的、再找手势、最后用不分的。没写 `height:` 的舞台照演完以后东西实际占的高。学生动过的舞台刷新以后放回刷新前的样子（页面把舞台的记录存在 `sessions/{编号}/stage_logs/{段 id}`，还在等的那一问照样挂着）；段的镜头指令改过（`board replace`、`board edit` 改了指令）就从头演，下面照旧列「刷新前的作答」。
@@ -2307,6 +2384,8 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 | `sessions` | 每节课（课堂、实时黑板、自学单元）：日期、哪一种、哪一块、开课时的资料包、核验了几轮、小结 | 课堂：页面（我点「开新课」时开，上课、下课时更新）；实时黑板、自学单元：你开、你写「用完了」（我点「用完了」时页面写） |
 | `recall` | 记忆点：要背的一条（定义原文、结论、表里的一格、句型……），一条一条按 1 → 3 → 7 → 14 → 30 天排，我每天在首页自己想一遍（见下文「要记的」） | 课堂里的 Claude 直接写（memo 的 `recall`）；我能自己加、停掉；每天想的结果页面写 |
 | `drills` | 题库：以前课上页面判得了分的题，练一练用（见下文「练一练和题库」） | 页面（下课时抄）；你备课时也可以写；我能标作废 |
+| `absorb` | 吸收：每块一条，学完以后的检验（`board check`，第四节）判出来的「吸收成功 / 部分 / 未 / 待核」，和掌握分开记（见下文「检验：`absorb`、`probes`」） | 页面照最新一次检验写（`checked: false`，待你核）；你核过写 `checked: true` |
+| `probes` | 检验题库：`board check` 里的每道题（含 retry、spare），复测从没见过的同类题里挑 | 页面（执行 `board check` 时存）；你和夜班也能直接写题 |
 | `pending` | 改动单：课堂里的 Claude 每一条要改记忆的、我在学习台上自己改的，都先记一张（见下文「改动单」） | 页面（替课堂里的 Claude 和我写），只读 |
 
 - **历史类只增不改**（`evidence`、`errors`、`observations`、`slips`）：写错了就追加一条更正（新编号，`corrects` 指向原条），原条不改、不删。页面记着每条的指纹，改了、删了会在自检里报。
@@ -2477,6 +2556,18 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 **知识点归类**（`sessions/{编号}.skills`，页面写，你读）：报告写好以后，页面调用一次 Claude 把每道题归到一个具体的知识点（`块#短名`，例如 `EN-L1.1.1#dobj-oc`「双宾和宾补的区分」），做错了而且正是某个弱点说的那件事的挂上弱点。字段：`items`（`k` 报告里那道题的 `key`、`p` 知识点、`w` 弱点）、`points`（这节课新起的知识点和标题）、`sum`（每个知识点 `n` 几道、`first` 一次对、`fail` 失手、`end` 最后一道 `clean` / `fail`、`w` 挂上的弱点）。用处：掌握按知识点、按真正讲的块算（证据上记的块不一定对：课上可能改讲了别的块）；弱点表写着每个弱点出现过几次、最近哪天、之后做对过几道；「以前的课」和首页写着这节课会了的、还不稳的、下次先测的。课堂里的 Claude 的记忆摘要里带着上一节的「下次先测」。你写掌握、弱点时可以照这份看。
 
 **删课**：测试开的、不要的课，我在「以前的课」点进去「删掉这节课」（首页没下课的那一行也有「删掉」）：这节课的黑板、对话、报告、证据、观察、失误、改动单、抄进题库的题、错题一起删；守则用到的失误、弱点挂着的错题留着（失误去掉课号，记 `wasSession`）。你不用替我删。
+
+### 检验：`absorb`、`probes`（页面写，你核）
+
+一次检验（`board check`）里每道题的作答是一条证据 `src: "check"`（字段见「证据」）。做完以后每块写一条吸收：
+
+- `absorb/{块}`（知识点 `#` 换 `~`）= `{ block, space, state: "成功" | "部分" | "未" | "待核", facets: { "重建" | "能用" | "边界" | "能辨": "ok" | "fixed" | "fail" | "pending" }, by: "page", checked: false, check（检验 id）, session, at, date, probes: [证据编号], confidentWrong: [题 id], debt: [target…], families, retests: [{ days: 1, due, done, ok }, { days: 7, … }], retryOwed: [题库编号], history: [以前几次（最多 5 次）], log }`。状态类：`state`、`checked` 改了在 `log` 里记一条（`{ date, by, field, from, to, basis, note }`）。
+- 页面怎么判：这一块必做和做了的可选都一次过、不是「蒙的」、不超时 → `成功`；有补上的（retry 做对、蒙对了再确认、超时以后做对）→ `部分`；有 retry 用完、想不出来又没补上的 → `未`；没有「未」但有拿不准的 → `待核`。没做完的块不写。
+- 你核：直接写 `state`、`checked: true`、`by: "ext"`，`log` 加一条。再做一次同一块的检验：`state` 照最新的一次，前几次进 `history`，复测重新排。
+- 复测：检验那天以后 1 天、7 天（`retests`），到期的写进 `meta/facts` 和首页「今天」的事实（「复测：L2.1.4（隔 1 天）」），`meta/today` 的 `kind` 能写 `retest`。学生点了开一节 `kind: "check"` 的课（`sessions/{编号}`：`{ kind: "check", retest: [{ block, days }], items: [题库编号], … }`），没有主讲；题从 `probes` 里每个 `family` 挑一道没见过的（不挑那次检验里的 retry），挑不到写「缺新题」。复测的证据带 `retest: 1 | 7`、`bank`（题库编号），进掌握的参考，不改吸收。
+- 检验里最后没过的（retry 用完、想不出来又没补上）和「很确定却错了」的题，页面各记一道错题（`errors`，带 `check`、`probe`、`target`、`items`；同一个 `target` 一次检验一道），能在「管理 → 最近记下的」撤销；补上了的、待核的不记。
+
+`probes/{pr-…}` = `{ fence（题的围栏原文）, type: "recall" | "construct" | "claim" | "discriminate" | "locate" | "solve", block, target, level: "基础" | "方法" | "核心", facet, family, retryBank: [题库编号], src: "ext" | "lab", from: { session, check, as: "probe" | "retry" | "spare" }, seen: [{ at, session, as }], at }`。同一道题（去掉 `id:`、`retry:` 两行以后原文一样）一个编号；`retry:` 写的局部 id 存成 `retryBank`（题库编号）。你写新题：`fence` 照 `board check` 里的一道写，编号照 `pr-` 加 12 位十六进制随便取一个没用过的。
 
 ### 练一练和题库：`drills`（页面写，你也可以写）
 

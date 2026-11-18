@@ -177,7 +177,7 @@ test('scopeDb：课堂自己的集合放进 sessions/{编号}/ 下面并带上 s
   assert.equal((await s1.collection('steps').get()).docs[0].data().md, '第一节');
   assert.equal((await s2.doc('steps/b1').get()).data().md, '第二节');
   assert.equal((await s1.collection('steps').where('md', '==', '第一节').get()).size, 1);
-  assert.deepEqual(SESSION_SCOPED, ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report', 'talk', 'ops', 'ops_done', 'lint', 'meta', 'unit', 'said', 'ext_in', 'ext_out', 'stage_logs']);
+  assert.deepEqual(SESSION_SCOPED, ['steps', 'class_pages', 'class_turns', 'pack', 'uploads', 'report', 'talk', 'ops', 'ops_done', 'lint', 'meta', 'unit', 'said', 'ext_in', 'ext_out', 'stage_logs', 'check', 'ink']);
 });
 
 // —— 证据 ——
@@ -292,7 +292,7 @@ test('一个学习台：实时黑板、自学单元也是 sessions 里的一节�
   assert.equal(kindOf({}), 'class');
   assert.equal(kindOf({ kind: 'live' }), 'live');
   assert.equal(kindOf({ kind: 'nope' }), 'class');
-  assert.deepEqual(Object.keys(SESSION_KINDS), ['class', 'ext', 'talk', 'stage', 'live', 'unit', 'drill']);
+  assert.deepEqual(Object.keys(SESSION_KINDS), ['class', 'ext', 'talk', 'stage', 'live', 'unit', 'drill', 'check']);
   const seen = [];
   const fake = { doc: (p) => { seen.push(p); return { set: async () => {} }; }, collection: (p) => { seen.push(p); return { doc: () => ({ set: async () => {} }) }; } };
   const sc = scopeDb(fake, 'c-20261029-1');

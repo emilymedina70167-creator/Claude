@@ -363,6 +363,9 @@ function extraOfError(a) {
   if (Array.isArray(a.steps)) out.steps = a.steps.slice(0, 20).map((x) => ({ id: String(x.id ?? ''), ok: x.ok === true || x.ok === false || x.ok === 'missing' ? x.ok : null, ...(x.unsure ? { unsure: true } : {}), ...(x.why ? { why: cut(String(x.why), 300) } : {}), ...(x.tag ? { tag: cut(String(x.tag), 40) } : {}) }));
   if (a.book && typeof a.book === 'object') out.book = Object.fromEntries(Object.entries(a.book).filter(([k, v]) => ['title', 'part', 'subject', 'ch', 'no'].includes(k) && v !== undefined && v !== null && v !== '').map(([k, v]) => [k, typeof v === 'number' ? v : cut(String(v), 60)]));
   if (typeof a.tag === 'string' && a.tag) out.tag = cut(a.tag, 40);
+  // 检验里最后没过的题（check/record.js 的 errorEntries，外部 review 必改 2）：哪次检验、哪道题、打的哪个错法、每一项的结论
+  for (const k of ['check', 'probe', 'target']) if (typeof a[k] === 'string' && a[k]) out[k] = cut(a[k], 120);
+  if (Array.isArray(a.items)) out.items = a.items.slice(0, 20).map((x) => ({ id: String(x.id ?? ''), ok: x.ok === true || x.ok === false || x.ok === 'missing' ? x.ok : null, ...(x.unsure ? { unsure: true } : {}), ...(x.why ? { why: cut(String(x.why), 300) } : {}), ...(x.tag ? { tag: cut(String(x.tag), 40) } : {}) }));
   return out;
 }
 

@@ -177,7 +177,7 @@ export const COLLECTIONS = {
     label: '每节课', kind: 'state', writers: ['page', 'chat', 'ext'],
     id: { re: /^c-[A-Za-z0-9_-]+$/, eg: 'c-20261028-2（当天第几节）' },
     required: ['date'],
-    enums: { space: ['math', 'cs', 'en'], kind: ['class', 'ext', 'talk', 'stage', 'live', 'unit', 'drill'], status: ['open', 'closed'] },
+    enums: { space: ['math', 'cs', 'en'], kind: ['class', 'ext', 'talk', 'stage', 'live', 'unit', 'drill', 'check'], status: ['open', 'closed'] },
     dates: ['date'],
     refs: { block: 'curriculum' },
     tracked: [],
@@ -244,6 +244,26 @@ export const COLLECTIONS = {
     enums: { status: ['open', 'done'] },
     dates: [],
     refs: {},
+    tracked: [],
+  },
+  // 吸收（检验，dev_requests/dr-plan2，kit/src/check/）：每块一条，页面照最新一次检验判（checked: false = 待外部核），
+  // 外部核过写 checked: true、by: ext（log 加一行）。掌握（mastery）那一套不动，这是另一个字段
+  absorb: {
+    label: '吸收', kind: 'state', writers: ['page', 'chat', 'me'],
+    id: { re: /^(?:[A-Z]{2}-)?L\d+(?:\.\d+){0,2}(?:~[A-Za-z0-9_-]+)?$/, eg: '块的编号：L2.1.4（知识点 # 换 ~）' },
+    required: ['block', 'state'],
+    enums: { state: ['成功', '部分', '未', '待核'], space: ['math', 'cs', 'en'], by: ['page', 'ext', 'chat', 'me'] },
+    refs: { block: 'curriculum', session: 'sessions' },
+    tracked: ['state', 'checked'],
+  },
+  // 检验题库（kit/src/check/bank.js）：board check 里的每道题（含 retry、spare）存一份，复测从没见过的同类题里挑。
+  // 页面写（seen 会追加，所以是状态类）；外部、夜班也能直接写题（写法同 board check 里的一道）
+  probes: {
+    label: '检验题库', kind: 'state', writers: ['page', 'chat'],
+    id: { re: /^pr-[0-9a-f]{12}$/, eg: 'pr- + 12 位十六进制（bank.js 的 bankId）' },
+    required: ['fence', 'type', 'block'],
+    enums: { type: ['recall', 'construct', 'claim', 'discriminate', 'locate', 'solve'], level: ['基础', '方法', '核心'] },
+    refs: { block: 'curriculum' },
     tracked: [],
   },
   // 真题级（docs/exam-plan.md 第五节）：每块一条，页面按证据算的缓存（做过哪几道真题、对没对、过没过、踩过哪些坑）

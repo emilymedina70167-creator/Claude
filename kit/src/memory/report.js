@@ -7,6 +7,7 @@
 import { lessonSheet } from './sheet.js';
 import { usageOf } from '../class/usage.js';
 import { aimsSummary, aimsText } from '../class/aims.js';
+import { checkLine } from '../check/record.js';
 
 // 2：试出来的选择题（guess）、版本号记进 sessions.report.v（旧版算的报告首页打开时按新的算法重算）
 // 加「这节课要拿下的事」（aims）时没有升版本号：升了首页会把每节旧课重算一遍，报告的时间一变，知识点归类就要
@@ -263,6 +264,8 @@ export function buildReport({ session = {}, evidence = [], manual = [], observat
     aims: aimsSummary(session.aims, items),
     // 课上被老师换掉的那几件（讲到下一节把整份换了）：照样算状态。没有换过的课不写这个键
     ...(Array.isArray(session.aimsPast) && session.aimsPast.length ? { aimsPast: aimsSummary(session.aimsPast, items) } : {}),
+    // 检验（check/，dr-plan2）：这节课做的检验每道题一行（第一次的作答、每一项、补讲、retry、信心、用时）；没做检验的课不写这个键
+    ...(evs.some((e) => e.src === 'check' && !e.rejudged) ? { checks: evs.filter((e) => e.src === 'check' && !e.rejudged).sort((a, b) => (a.at || 0) - (b.at || 0)).slice(0, 60).map((e) => cut(checkLine(e), 400)) } : {}),
     // 舞台课分了几幕（老师写的 scene，主线第六轮 3.6）：一幕一个标题、它的重点卡。只有一幕（旧课、没写 scene）不写
     at: now,
   };

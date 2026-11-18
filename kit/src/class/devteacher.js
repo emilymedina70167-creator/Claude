@@ -33,6 +33,7 @@
 
 import { COACH_HEAD } from './coach.js';
 import { HELPER_HEAD } from './delegate.js';
+import { DEV_CHECK, devVerdict, isVerdict, isFallback } from '../check/devsample.js';
 export const DEV_LIMITS = Object.freeze({ maxPromptBytes: 262144, images: Object.freeze({ maxCount: 4, maxInputBytes: 20000000, mediaTypes: Object.freeze(['image/png', 'image/jpeg']) }) });
 const THINK_MS = 600; // 第一个字出来前的停顿（模拟思考）
 const JSON_MS = 300;
@@ -136,6 +137,9 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
   const isSystem = said.startsWith('[系统]');
 
   if (/请写「?到目前为止的课堂摘要/.test(last)) return { kind: 'compact', text: compactText() };
+  // 检验（check/）：页面里的 Claude 判要点、写补讲
+  if (isVerdict(last)) return { kind: 'check-judge', text: devVerdict(last) };
+  if (isFallback(last)) return { kind: 'check-teach', text: '模拟补讲：先把两个括号乘开，四项都写出来。' };
   // 板边助教（coach.js）：一句话
   if (last.startsWith(COACH_HEAD)) return { kind: 'coach', text: '模拟助教：先别急着选，看看乘法的先后。' };
   // 外部叫来的助手（delegate.js）：说一句、圈一下题、再越权开一块新板（页面该拦下）；主讲的话里写了「交回」就交回
@@ -145,6 +149,7 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
     return { kind: 'helper', text: `模拟助手：先看第一步的乘法顺序。\n\n\`\`\`\`board mark target=${target} note="看这里"\n\`\`\`\`\n\n\`\`\`\`board new id=hb9 title="越权"\n不该出现\n\`\`\`\`` };
   }
 
+  if (!isSystem && /测试\s*[:：]?\s*检验/.test(said)) return { kind: 'check', text: join('（模拟老师）做一次检验。', DEV_CHECK) };
   const err = said.match(/测试\s*[:：]?\s*([a-z_]+)/);
   if (err && ERROR_CODES.includes(err[1]) && !isSystem) return { kind: 'error', code: err[1] };
 

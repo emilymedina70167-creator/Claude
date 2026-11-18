@@ -8,6 +8,7 @@
 import { spaceOfId } from './space.js';
 import { toDate, reviewDue, lastLog } from './schema.js';
 import { evidenceLine } from '../project/trail.js';
+import { stateLine } from '../check/record.js';
 
 const blockOf = (id) => String(id || '').split('#')[0];
 const dayOf = (at) => (Number(at) ? toDate(Number(at)) : '');
@@ -161,7 +162,7 @@ export function deskState({ mem = {}, coverage = [], space = 'math', today = toD
   const teachingSession = (sid) => { const s = sById.get(sid); return s && teachKinds.has(s.kind || 'class') ? s : null; };
   for (const s of sessions) if (teachKinds.has(s.kind || 'class')) for (const b of [s.block, ...(s.blocks || [])]) teach(b, Number(s.startedAt) || 0, s.id);
   // 在一节课里做过这一块的题（证据、那节课记的错题）：这一块那节课讲过
-  for (const e of ev) if (isRecord(e) && e.session && teachingSession(e.session)) teach(blockOf(e.block), Number(e.at) || 0, e.session);
+  for (const e of ev) if ((isRecord(e) || e.src === 'check') && e.session && teachingSession(e.session)) teach(blockOf(e.block), Number(e.at) || 0, e.session);
   for (const e of mem.errors || []) { const sid = live(e) ? sessionOfError(e) : null; if (sid && teachingSession(sid)) teach(blockOf(e.block), errorAt(e), sid); }
   // 掌握的依据是一节课里的作答（页面按知识点归过类，作答原本挂在别的块上）：这一块也在那节课里讲过
   for (const m of mem.mastery || []) {
@@ -177,7 +178,9 @@ export function deskState({ mem = {}, coverage = [], space = 'math', today = toD
   for (const l of errByBlock.values()) l.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   const mastery = (mem.mastery || []).filter((m) => m && m.status !== 'void' && inSpace(blockOf(m.id)));
   const mByBlock = new Map(mastery.filter((m) => !String(m.id).includes('#')).map((m) => [String(m.id), m]));
-  const blocks = [...new Set([...taught.keys(), ...legacy.keys(), ...byBlock.keys(), ...errByBlock.keys(), ...mastery.map((m) => blockOf(m.id))])].sort();
+  // 吸收（检验，check/）：每块一条，和掌握分开
+  const absorbs = new Map((mem.absorb || []).filter((a) => a && inSpace(blockOf(a.block || a.id))).map((a) => [blockOf(a.block || a.id), a]));
+  const blocks = [...new Set([...taught.keys(), ...legacy.keys(), ...byBlock.keys(), ...errByBlock.keys(), ...mastery.map((m) => blockOf(m.id)), ...absorbs.keys()])].sort();
   const reviews = (mem.reviews || []).filter((r) => r && (r.status || 'active') === 'active');
   const conflicts = [];
   // 这一科在学习台里开始的那一天：最早的一节课、最早的一条证据
@@ -227,9 +230,12 @@ export function deskState({ mem = {}, coverage = [], space = 'math', today = toD
       ...(lg ? { legacy: { first: Number.isFinite(lg.first) ? dayOf(lg.first) : '', last: lg.last ? dayOf(lg.last) : '', months: Number.isFinite(lg.first) ? monthsOf(lg.first, lg.last) : '', source: lg.source.join('；'), by: [...lg.by].join('、') } } : {}),
     } : null;
     if (taughtRow && !t) { taughtRow.first = ''; taughtRow.last = ''; }
+    const checks = (byBlock.get(b) || []).filter((e) => e.src === 'check' && !e.rejudged);
     return {
       block: b, title: titleOf.get(b) || '',
       taught: taughtRow,
+      absorb: absorbs.has(b) ? stateLine(absorbs.get(b)) : null,
+      checks: checks.slice(-3).map((e) => evidenceLine(e)),
       mastery: m ? { state: m.state, ok: !!v?.ok, ...(v?.legacy ? { legacy: !v.texts && (v.refs || []).every((r) => r.coll === 'errors' && origin(r).label !== '旧记录') ? 'book' : true, from: v.from } : {}), ...(v && !v.ok ? { why: v.why } : {}), ...(v?.note ? { note: v.note } : {}) } : null,
       recent: trail.slice(-3).map((x) => x.line),
       lastSlip: slip ? slip.line : null,
@@ -262,7 +268,9 @@ export function deskState({ mem = {}, coverage = [], space = 'math', today = toD
     return `讲过（${now}）`;
   };
   const masteryText = (x) => (!x ? '没写' : `${x.state}${!x.ok ? `（依据核不上，不算：${x.why}）` : x.legacy === 'book' ? `（依据在${x.from.join('、')}，没有原始作答）` : x.legacy ? `（旧记录：${x.from.join('、')}，没有原始作答）` : ''}${x.note ? `（${x.note}）` : ''}`);
-  const line = (r) => `${r.block}${r.title ? `「${r.title}」` : ''}：${taughtText(r.taught)}；掌握 ${masteryText(r.mastery)}${r.nextReview ? `；下次复现 ${r.nextReview}` : ''}${r.taught?.legacy?.source ? `\n    旧的讲过：${clip(r.taught.legacy.source, 160)}` : ''}${r.lastSlip ? `\n    最近一次失手：${r.lastSlip}` : ''}${r.recent.length ? `\n    最近的作答：\n${r.recent.map((x) => `      ${x}`).join('\n')}` : ''}`;
+  // 吸收：检验判的（和掌握分开）；还没检验过的写明掌握的参考是按练习算的（mastery.js：有了检验以后只看检验）
+  const absorbText = (r) => r.absorb || (r.checks.length ? '吸收：还没写（检验没做完）' : '没检验过（掌握的参考按练习算）');
+  const line = (r) => `${r.block}${r.title ? `「${r.title}」` : ''}：${taughtText(r.taught)}；掌握 ${masteryText(r.mastery)}；${absorbText(r)}${r.nextReview ? `；下次复现 ${r.nextReview}` : ''}${r.taught?.legacy?.source ? `\n    旧的讲过：${clip(r.taught.legacy.source, 160)}` : ''}${r.lastSlip ? `\n    最近一次失手：${r.lastSlip}` : ''}${r.checks.length ? `\n    最近的检验：\n${r.checks.map((x) => `      ${x}`).join('\n')}` : ''}${r.recent.length ? `\n    最近的作答（练习）：\n${r.recent.map((x) => `      ${x}`).join('\n')}` : ''}`;
   const text = [`这一科 ${rows.length} 块（讲过的、有作答的、写了掌握的、错题本里有的）；矛盾 ${conflicts.length} 条。旧记录 = 学习台以前的课（claude.ai 对话），只有错题本、检验记录和记下的文字，没有原始作答。`, ...(conflicts.length ? ['矛盾（只报，不改）：', ...conflicts.map((c) => `- ${c.text}`)] : []), '每一块：', ...rows.map(line)].join('\n');
   return { space, rows, conflicts, text };
 }

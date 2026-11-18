@@ -3,9 +3,11 @@
 import { dueList } from '../memory/schema.js';
 import { recallToday } from '../memory/recall.js';
 import { dueHolds } from '../memory/holds.js';
+import { dueRetests, pickRetest } from '../check/bank.js';
 
 // coach：外部主讲排的一节练习，页面里的老师带着练（第十五轮）
-export const TODAY_KINDS = ['class', 'review', 'drill', 'recall', 'later', 'coach'];
+// retest：检验以后 1 天、7 天的复测（check/bank.js）
+export const TODAY_KINDS = ['class', 'review', 'drill', 'recall', 'later', 'coach', 'retest'];
 const ids = (v) => (Array.isArray(v) ? v.map(String).filter(Boolean) : []);
 const str = (v, n = 200) => String(v ?? '').trim().slice(0, n);
 const live = (d) => d && !['void', 'done', 'paused', 'merged'].includes(d.status);
@@ -16,7 +18,9 @@ function counts(data = {}, today) {
   const recall = recallToday(data.recall || [], { today }).total;
   const holds = dueHolds((data.sessions || []).filter((s) => s && !s.deleting), today).length;
   const drills = (data.drills || []).filter((d) => live(d) && !d.broken && d.md).length;
-  return { due, recall, holds, drills };
+  const retest = dueRetests(data.absorb || [], today);
+  const missing = retest.length ? pickRetest({ due: retest, bank: data.probes || [], absorbs: data.absorb || [] }).missing : [];
+  return { due, recall, holds, drills, retest, missing };
 }
 
 /** 事实行：{ kind: 'fact', text, row? }（row 是首页原来那一段：点开看全部） */
@@ -26,6 +30,9 @@ function factRows(data, today) {
   if (c.due) rows.push({ kind: 'fact', text: `到期的复现组 ${c.due} 组`, row: 'today' });
   if (c.recall) rows.push({ kind: 'fact', text: `要记的 ${c.recall} 条到期`, row: 'recall' });
   if (c.holds) rows.push({ kind: 'fact', text: `隔天验：${c.holds} 节课留的题`, row: 'later' });
+  for (const r of c.retest) rows.push({ kind: 'fact', text: `复测：${r.block}（隔 ${r.days} 天）`, row: 'retest' });
+  // 题库里没有没见过的同类题：照实写（页面、页面里的 Claude 都不出题，外部或夜班补）
+  for (const m of c.missing) rows.push({ kind: 'fact', text: `缺新题：${m.block} 的 ${String(m.family).slice(String(m.block).length + 1) || m.family} 那一类` });
   if (c.drills) rows.push({ kind: 'fact', text: `题库里能练的 ${c.drills} 道` });
   if (!rows.length) rows.push({ kind: 'fact', text: '今天没有到期的复现、要记的和留着的题' });
   return rows;
@@ -63,6 +70,7 @@ export function todayRows(meta, data = {}, today) {
       }
       if (kind === 'recall' && !row.label) row.label = '要记的';
       if (kind === 'later' && !row.label) row.label = '验上次学的';
+      if (kind === 'retest' && !row.label) row.label = '复测';
       out.push(row);
     }
   }
@@ -74,7 +82,7 @@ export function todayFacts(data = {}, today) {
   const c = counts(data, today);
   return [
     `- 首页「今天」：照 meta/today 画（{ date: 'YYYY-MM-DD', note, items: [{ kind: ${TODAY_KINDS.join(' | ')}, why, label, block（class 开这一块的课）, ids（review 是复现组编号、drill 是题库编号）, reviews（drill 做完的结果记到哪几组复现上）, focus（coach：页面里的老师带着练时放进它的资料包） }] }）；date 不是今天时首页只列事实。`,
-    `  现在：到期的复现组 ${c.due} 组、要记的 ${c.recall} 条到期、隔天验 ${c.holds} 节课留的题、题库里能练的 ${c.drills} 道（写进 drills 的题页面先画一遍，画不出来的标 broken，练一练不挑）。`,
+    `  现在：到期的复现组 ${c.due} 组、要记的 ${c.recall} 条到期、隔天验 ${c.holds} 节课留的题、复测 ${c.retest.length} 块到期${c.missing.length ? `（缺新题 ${c.missing.length} 类：probes 里没有没见过的同类题）` : ''}、题库里能练的 ${c.drills} 道（写进 drills 的题页面先画一遍，画不出来的标 broken，练一练不挑）。`,
     '- 复现组写了 due（YYYY-MM-DD）首页按它算到期；那天以后做过了（last 不早于 due）或没写，按 last + tier。页面按作答算的掌握参考在 meta/mastery-calc（mastery 本身页面不改）。',
   ].join('\n');
 }

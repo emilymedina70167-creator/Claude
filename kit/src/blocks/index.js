@@ -27,6 +27,7 @@ import { gloss } from './gloss.js';
 import { stage } from './stagebox.js';
 import { widgetBlock } from './widget.js';
 import { solve } from './solve.js';
+import { previewBlock } from '../check/preview.js';
 import { stepperBlock } from '../stepper.js';
 import { ENGINES } from '../engines/registry.js';
 import { elimEngine } from '../engines/elim.js';
@@ -49,6 +50,12 @@ export const blocks = {
   widget: widgetBlock,
   // 解答题：按步骤判（blocks/solve.js，dr-batch4）
   solve,
+  // 检验题（二类组件，check/）：单独写在板上只画预览，放进 board check 才能作答
+  recall: previewBlock('recall'),
+  construct: previewBlock('construct'),
+  claim: previewBlock('claim'),
+  discriminate: previewBlock('discriminate'),
+  locate: previewBlock('locate'),
   // 一步步走的演示（stepper.js 外壳 + engines/ 里的纯函数引擎，名字在 engines/registry.js）
   ...Object.fromEntries(Object.entries(ENGINES).filter(([k]) => k !== 'elim' && k !== 'pv').map(([k, e]) => [k, stepperBlock(e)])),
   elim: elimBlock(),

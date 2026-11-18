@@ -16,6 +16,9 @@ import {
 import { toDate } from './schema.js';
 import { hitText, lessonLines, pointCatalog } from './skills.js';
 import { debriefView } from './debrief.js';
+import { stateLine, checkLine } from '../check/record.js';
+import { replay } from '../check/inkrender.js';
+import { linesOf, decodeStrokes } from '../check/inktime.js';
 
 const inline = (s) => { try { return mdToHtml(String(s ?? ''), { inline: true }); } catch { return escapeHtml(String(s ?? '')); } };
 const esc = escapeHtml;
@@ -199,9 +202,21 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
         ${sum ? `<div class="dk-memo-sub" role="heading" aria-level="3">下课小结</div><div class="dk-summary">${mdToHtml(sum.text || '')}</div>` : ''}
         ${rep && sheetMd(rep.sheet) ? `<div class="dk-memo-sub" role="heading" aria-level="3">这节课的一页</div><div class="dk-summary dk-sheet">${mdToHtml(sheetMd(rep.sheet))}</div>` : ''}
         ${rep?.scenes?.length ? `<div class="dk-memo-sub" role="heading" aria-level="3">这节课的几幕</div><div class="dk-summary dk-scenes">${rep.scenes.map((x) => `<p><b>${esc(`${x.n}. ${x.title}`)}</b>${x.keys.map((k) => `<br>${esc(k)}`).join('')}</p>`).join('')}</div>` : ''}
+        ${checkHtml(sid)}
         ${rep ? reportHtml(rep) : rep === false ? '<p class="muted">这节课还没有课后报告（下课以后才有；回首页会补写）。</p>' : '<p class="muted">正在读课后报告…</p>'}
         ${obs.filter((o) => o.kind !== 'summary').length ? `<details class="dk-soft"><summary>老师当堂的笔记（${obs.filter((o) => o.kind !== 'summary').length} 条）</summary><ul class="dk-log">${obs.filter((o) => o.kind !== 'summary').map((o) => `<li>${o.kind === 'proposal' ? '<b>提议</b> ' : ''}${inline(o.text)}</li>`).join('')}</ul></details>` : ''}
       </section>`;
+  }
+
+  // 检验（check/）：这节课每块的吸收、每道题一行；手写的题能回放（读 sessions/{编号}/ink/{检验}-{题}，照时间重画）
+  function checkHtml(sid) {
+    const evs = (data.evidence || []).filter((e) => e?.src === 'check' && e.session === sid && !e.rejudged).sort((a, b) => (a.at || 0) - (b.at || 0));
+    if (!evs.length) return '';
+    const ab = (data.absorb || []).filter((a) => a?.session === sid);
+    return `<div class="dk-memo-sub" role="heading" aria-level="3">检验</div><ul class="dk-log">${ab.map((a) => `<li><b>${esc(a.block)}</b> ${esc(stateLine(a))}</li>`).join('')}${evs.map((e) => {
+      const k = `${e.check}-${e.probe}`;
+      return `<li>${esc(checkLine(e))}${e.ink ? ` <button type="button" class="btn btn-sm" data-ckreplay="${esc(k)}" data-cksid="${esc(sid)}">回放手写</button><div class="ck-replay-slot" data-slot="${esc(k)}"></div>` : ''}</li>`;
+    }).join('')}</ul>`;
   }
 
   // 下课后的复盘（debrief.js）：误解消了没有、思维习惯、下节先测；给老师的依据和建议收起来
@@ -256,9 +271,19 @@ export function createPages(host, { getData, db, ops, goto, purge = null }) {
   }
 
   async function onClick(e) {
-    const t = e.target.closest('[data-toggle], [data-solve], [data-goto], [data-more], [data-purge]');
+    const t = e.target.closest('[data-toggle], [data-solve], [data-goto], [data-more], [data-purge], [data-ckreplay]');
     if (!t) return;
     if (t.dataset.purge) { purge?.(t.dataset.purge, t); return; }
+    if (t.dataset.ckreplay) {
+      const slot = host.querySelector(`.ck-replay-slot[data-slot="${CSS.escape(t.dataset.ckreplay)}"]`);
+      if (!slot || slot.childElementCount) return;
+      const d = await scopeDb(db, t.dataset.cksid).doc(`ink/${t.dataset.ckreplay}`).get().catch(() => null);
+      const ink = d?.exists ? d.data() : null;
+      const strokes = ink ? decodeStrokes(ink) : [];
+      if (!strokes.length) { slot.textContent = '这道题的笔画没存下来（看证据里的整页图）。'; return; }
+      replay(slot, strokes, ink.events || [], { lines: linesOf(strokes) });
+      return;
+    }
     if (t.dataset.more) { errShown += ERR_PAGE; paint(); return; }
     if (t.dataset.goto) { goto(t.dataset.goto); return; }
     if (t.dataset.toggle) {

@@ -16,6 +16,9 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildPaper } from '../kit/src/exam/ingest.js';
+import { DEV_CHECK, DEV_CHECK_HEAD, DEV_CHECK_BODY } from '../kit/src/check/devsample.js';
+import { parseCheck } from '../kit/src/check/spec.js';
+import { bankDocs } from '../kit/src/check/bank.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const KIT = join(ROOT, 'kit/dist/la-kit.js');
@@ -1096,6 +1099,232 @@ const SUITES = {
     const calls0b = calls0 - (await t.page.evaluate(() => (window.LAKitEval?.teacher?.calls || []).filter((c) => c.kind === 'coach').length));
     check(calls1 <= calls0b, `外部的课点下课调用了页面自己的模型（${calls1 - calls0b} 次）`);
     check(s.kind === 'ext', '下课以后 kind 变了');
+    return t;
+  },
+
+  // 计划 2（检验，check/）：外部写 board check → 合书、构造题错三次（retry 用完）、recall 先做下一道判回来插补讲、刷新接着做、
+  // 连点两下「交」只记一次、做完写吸收、最后没过的记错题、ext_out 开始和做完各一份
+  async check(browser) {
+    const t = await seeded(browser);
+    const today = await todayIn(t);
+    const sid = `c-${today.replace(/-/g, '')}-7`;
+    const db = () => t.db();
+    await plant(t, {
+      [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', block: 'L2.1.4', title: '外部（检验）', space: 'math', startedAt: Date.now() },
+      [`sessions/${sid}/ext_in/001`]: { seq: 1, text: `先讲一句。\n\n\`\`\`\`board new id=b1 title="可交换"\n板上的字。\n\`\`\`\`\n\n${DEV_CHECK}\n`, at: Date.now() },
+    });
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('.ck-start'), { timeout: 20000, what: '检验的开始卡画出来' });
+    // 审查 6：开始卡停着时刷新，检验照样在
+    await sleep(500);
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('.ck-start'), { timeout: 20000, what: '开始卡停着时刷新，检验照样在' });
+    const in1 = (await db())[`sessions/${sid}/ext_in/001`];
+    check(in1?.result?.ops?.some((o) => o.op === 'check' && o.ok), `ext_in 的回报里没有 check：${JSON.stringify(in1?.result?.ops)}`);
+    const probes = Object.keys(await db()).filter((k) => k.startsWith('probes/pr-'));
+    check(probes.length === 18, `题库里应有 18 道（6 道 + 各 2 道同构），有 ${probes.length}`);
+    await t.page.click('.ck-start');
+    check(await t.page.evaluate(() => document.body.classList.contains('is-checking') && getComputedStyle(document.querySelector('.class-pages')).display === 'none'), '开始以后板书没收起来（合书）');
+    const fill = async (vals) => { const cells = await t.page.$$('.ck-card .mi-cell'); for (let i = 0; i < vals.length; i++) await cells[i].fill(String(vals[i])); };
+    const sure = (k = 'sure') => t.page.click(`.ck-sure-btn[data-sure="${k}"]`);
+    const card = () => t.page.evaluate(() => { const c = document.querySelector('.ck-teach, .ck-done, .ck-probe'); return c ? (c.classList.contains('ck-teach') ? 'teach' : c.classList.contains('ck-done') ? 'done' : c.dataset.probe) : ''; });
+    // p1 构造：两次都写成相等的，第三次想不出来（retry 用完 → 未吸收、记错题）
+    for (let i = 0; i < 2; i++) {
+      await t.waitFor(async () => /^p1/.test(await card()), { timeout: 8000, what: `第 ${i + 1} 次的构造题` });
+      await sure(); await fill([1, 0, 0, 1, 1, 0, 0, 1]);
+      await sleep(500);
+      await t.page.click('.ck-submit');
+      await t.waitFor(async () => (await card()) === 'teach', { timeout: 8000, what: '构造题错了出补讲' });
+      check(/这两个相等了/.test(await t.text('.ck-teach')), '补讲没写那一条自己的话');
+      await sleep(500); // 换屏以后马上的那一下点不算（连点防误触）
+      await t.page.click('.ck-next');
+    }
+    // 审查 3：想不出来、外部没写 giveup / default → 页面里的 Claude 写补讲，写回来要显示出来
+    await t.waitFor(async () => (await card()) === 'p1b', { timeout: 8000, what: '第三次的构造题' });
+    await sleep(500);
+    await t.page.click('.ck-giveup');
+    await t.waitFor(async () => /模拟补讲/.test(await t.text('.ck-teach') || ''), { timeout: 10000, what: '页面里的 Claude 写的补讲显示出来' });
+    await sleep(500);
+    await t.page.click('.ck-next');
+    // p2 全过程（solve）：打字交整道题，页面里的 Claude 逐步判（模拟的都对）
+    await t.waitFor(async () => (await card()) === 'p2', { timeout: 8000, what: '全过程那一道' });
+    await t.page.fill('.ck-card .ck-text', '|-3A^T| = (-3)^3 |A^T| = -27 · (-2) = 54'); await sure();
+    await sleep(500);
+    await t.page.click('.ck-submit');
+    // p3 recall：写「错」（模拟判没写到）；连点两下「交」
+    await t.waitFor(async () => (await card()) === 'p3', { timeout: 8000, what: 'recall 那一道' });
+    await t.page.fill('.ck-card .ck-text', '我写错了：(A+B)^2=A^2+2AB+B^2'); await sure('maybe');
+    await sleep(500);
+    await t.page.dblclick('.ck-submit');
+    // 在判的时候刷新：接着做（在判的那道重判一次）
+    await sleep(300);
+    await t.open(sid);
+    await t.waitFor(async () => !!(await card()), { timeout: 20000, what: '刷新以后检验接着做' });
+    // 照现在出来的是什么一道一道往下做，直到结束
+    // Apple Pencil 写两行、划掉第一行（合成 pointerType: pen 的事件）
+    const penWrite = async () => {
+      await t.page.click('.ck-card .ck-tab[data-tab="hand"]');
+      await t.page.waitForSelector('.ck-card .ck-pad-area canvas');
+      const line = (x0, y, n = 6) => t.page.evaluate(({ x0, y, n }) => {
+        const c = document.querySelector('.ck-card .ck-pad-area canvas');
+        const r = c.getBoundingClientRect();
+        const ev = (type, x) => c.dispatchEvent(new PointerEvent(type, { pointerType: 'pen', pointerId: 7, clientX: r.left + x, clientY: r.top + y, pressure: 0.5, bubbles: true, cancelable: true }));
+        ev('pointerdown', x0);
+        for (let i = 1; i <= n; i++) ev('pointermove', x0 + i * 12);
+        ev('pointerup', x0 + n * 12);
+      }, { x0, y, n });
+      await line(20, 40); await line(120, 44); await line(20, 120); await line(120, 118);
+      await t.page.click('.ck-card .ck-pad-strike');
+      await line(10, 42, 20);
+      await t.page.click('.ck-card .ck-pad-step');
+      await sure();
+    };
+    // 用过 Pencil 以后写字的地方默认是手写：打字的先点「打字」
+    const typeIn = async (text) => { const tab = await t.page.$('.ck-card .ck-tab[data-tab="type"]'); if (tab) await tab.click(); await t.page.fill('.ck-card .ck-text', text); };
+    const answerNow = async (id) => {
+      if (id === 'p3a') await penWrite();
+      else if (/^p2/.test(id)) { await typeIn('|-3A^T| = (-3)^3 |A^T|（|kA| = k^n|A|）= -27 · |A|（|A^T| = |A|）= -27 · (-2) = 54'); await sure(); }
+      else if (/^p3/.test(id)) { await typeIn('(A+B)^2=A^2+AB+BA+B^2，AB=BA 时才能并'); await sure(); }
+      else if (/^p5/.test(id)) { await t.page.click('.ck-pick[data-v="false"]'); await fill([1, 0, 0, 0, 0, 1, 1, 0]); await sure(); }
+      else if (/^p6/.test(id)) {
+        await t.page.click('.ck-line[data-n="2"]'); await typeIn('AB 和 BA 不一定相等'); await sure();
+        // 审查 15：先停下、接着做，打的字还在；审查（升格）：「接着做」至少 44px
+        await t.page.click('.ck-pause');
+        await t.waitFor(() => t.page.$('.ck-strip .btn'), { timeout: 5000, what: '停下以后有「接着做」' });
+        check(await t.page.$eval('.ck-strip .btn', (b) => b.getBoundingClientRect().height) >= 44, '「接着做」不到 44px');
+        await t.page.click('.ck-strip .btn');
+        await t.waitFor(() => t.page.$('.ck-card .ck-locate'), { timeout: 5000, what: '接着做回到 locate' });
+        check(await t.page.$eval('.ck-card .ck-text', (x) => x.value) === 'AB 和 BA 不一定相等', '先停下再接着做，打的字没了');
+        // 审查 8：写证据失败一次也不丢（自己重试）
+        await t.page.evaluate(() => window.LAKitDev.failWrites(1, 'evidence/'));
+      }
+      else if (/^p7/.test(id)) { await t.page.click('.ck-pick[data-v="true"]'); await typeIn('E 和任何方阵可交换'); await t.page.fill('.ck-card .fi-text', 'E+5A'); await sure(); }
+      await sleep(500);
+      await t.page.click('.ck-submit');
+    };
+    for (let n = 0; n < 20; n++) {
+      const c = await card();
+      if (c === 'done') break;
+      if (c === 'teach') await t.page.click('.ck-next');
+      else if (c) await answerNow(c);
+      await sleep(400);
+    }
+    await t.waitFor(async () => (await card()) === 'done', { timeout: 30000, what: '检验做完了' });
+    const all = await t.waitFor(async () => { const d = await db(); return d['absorb/L2.1.1'] && d['absorb/L2.1.4'] ? d : null; }, { timeout: 15000, what: '吸收写进去了' });
+    check(all['absorb/L2.1.1'].state === '未' && all['absorb/L2.1.1'].checked === false, `L2.1.1 应是「未」：${JSON.stringify(all['absorb/L2.1.1'].state)}`);
+    check(['部分', '待核'].includes(all['absorb/L2.1.4'].state), `L2.1.4：${all['absorb/L2.1.4'].state}`);
+    check(all['absorb/L2.1.4'].retests?.length === 2, '没排两次复测');
+    const evs = Object.values(all).filter((d) => d?.src === 'check' && d.session === sid);
+    check(evs.filter((e) => e.probe === 'p3' && !e.rejudged).length === 1, `p3 记了 ${evs.filter((e) => e.probe === 'p3').length} 条证据（连点两下应只有一条）`);
+    check(evs.some((e) => e.probe === 'p1' && e.final === 'fail'), 'p1 的证据没写 final: fail');
+    // 手写的那一道：证据带整页图、时间线（有划掉），笔画存了一份给回放
+    const inkEv = evs.find((e) => e.probe === 'p3a');
+    check(inkEv?.ink?.final && /划掉 L1/.test(inkEv.ink.timeline || '') && inkEv.ink.shots?.length >= 1, `手写的证据不全：${JSON.stringify(inkEv?.ink)}`);
+    check(all[`sessions/${sid}/ink/k1-p3a`]?.s?.length === 4, '笔画没存给回放');
+    const outsNow = async () => Object.entries(await db()).filter(([k]) => k.startsWith(`sessions/${sid}/ext_out/`)).map(([, v]) => v.text).join('\n');
+    const err = await t.waitFor(async () => Object.entries(await db()).find(([k, v]) => k.startsWith('errors/') && v?.check === 'k1' && v?.probe === 'p1'), { timeout: 10000, what: 'retry 用完的那道记进错题本' })
+      .catch(async (e) => { throw new Error(`${e.message}；ext_out 里：${(await outsNow()).split('\n').filter((l) => /错题本|检验/.test(l)).join(' / ').slice(0, 600)}`); });
+    check(err[1].target === 'L2-14', `错题的 target：${err[1].target}`);
+    // 走的是 memo 那条路：有一张改动单（「管理 → 最近记下的」照它列、能撤销）
+    const eid = err[0].split('/')[1];
+    check(Object.entries(await db()).some(([k, v]) => k.startsWith('pending/') && v?.coll === 'errors' && v?.target === eid && v?.status === 'done'), `错题 ${eid} 没有改动单（撤不了）`);
+    check(!Object.entries(await db()).some(([k, v]) => k.startsWith('errors/') && v?.check === 'k1' && v?.probe === 'p3'), '补上了的 p3 不该记错题');
+    check((await db())[`sessions/${sid}/check/k1`]?.state?.phase === 'done', '进度里不是 done');
+    const outs = Object.entries(await db()).filter(([k]) => k.startsWith(`sessions/${sid}/ext_out/`)).map(([, v]) => v.text).join('\n');
+    check(/检验 k1「第二讲第一节」开始/.test(outs) && /检验 k1 做完了/.test(outs), 'ext_out 没写开始、做完');
+    // 审查 4：结束一屏还开着时外部改判（p5 判成没过）：吸收重算；板上同名的解答题照旧给板上的（审查升格：board judge 分流）
+    await plantLive(t, { [`sessions/${sid}/ext_in/002`]: { seq: 2, text: `改判。\n\n\`\`\`\`board judge target=p5\nresult=fail\n\`\`\`\`\n`, after: 1, at: Date.now() } });
+    await t.waitFor(async () => (await db())['absorb/L2.1.4']?.state === '未', { timeout: 15000, what: '结束一屏开着时外部改判，吸收重算' });
+    await t.page.click('.ck-back');
+    check(await t.page.evaluate(() => !document.body.classList.contains('is-checking') && /板上的字/.test(document.body.innerText)), '回到黑板以后板书没放回来');
+    // 板上同一个 id 的解答题（计划 1 的 solve，p2）：board judge 给板上的，不给检验里的 p2
+    const SOLVE = '```solve\nid: p2\nq: 板上的一道\nsteps:\ns1 calc: 54\njudge: ext\n```';
+    await plantLive(t, { [`sessions/${sid}/ext_in/003`]: { seq: 3, text: `板上一道。\n\n\`\`\`\`board add id=b3 title="板上的解答题"\n${SOLVE}\n\`\`\`\`\n\n\`\`\`\`board judge target=p2\ns1 ok\n\`\`\`\`\n`, after: 2, at: Date.now() } });
+    await t.waitFor(async () => (await db())[`sessions/${sid}/ext_in/003`]?.done, { timeout: 15000, what: 'ext_in/003 执行' });
+    await sleep(1500);
+    check(!Object.values(await db()).some((d) => d?.src === 'check' && d.probe === 'p2' && d.rejudged), 'board judge 被检验抢走了（板上有同名的解答题）');
+    // 「以前的课」里这节课：检验那一节、手写的题能回放
+    await t.page.goto(BASE);
+    await t.waitFor(async () => (await t.text('.dk-class'))?.includes('开新课'), { timeout: 20000, what: '回到首页' });
+    await t.route(`#classes/${sid}`);
+    await t.waitFor(() => t.page.$('[data-ckreplay]'), { timeout: 20000, what: '以前的课里有「回放手写」' });
+    check(/吸收：未/.test(await t.text('.dk-shell') || await t.page.evaluate(() => document.body.innerText)), '以前的课里没写吸收');
+    await t.page.click('[data-ckreplay]');
+    await t.waitFor(() => t.page.$('.ck-replay canvas'), { timeout: 8000, what: '回放画出来' });
+    return t;
+  },
+
+  // 计划 2（审查 7）：检验开着时下课：交了还没定下来的题补写证据，ext_out 写「先停下了」
+  async checkclose(browser) {
+    const t = await seeded(browser);
+    const today = await todayIn(t);
+    const sid = `c-${today.replace(/-/g, '')}-6`;
+    await plant(t, {
+      [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', block: 'L2.1.4', title: '外部（检验下课）', space: 'math', startedAt: Date.now() },
+      [`sessions/${sid}/ext_in/001`]: { seq: 1, text: `检验。\n\n${DEV_CHECK}\n`, at: Date.now() },
+    });
+    await t.open(sid);
+    await t.waitFor(() => t.page.$('.ck-start'), { timeout: 20000, what: '开始卡' });
+    await sleep(500);
+    await t.page.click('.ck-start');
+    await t.waitFor(() => t.page.$('.ck-card .mi-cell'), { timeout: 8000, what: '第一道' });
+    const cells = await t.page.$$('.ck-card .mi-cell');
+    for (let i = 0; i < 8; i++) await cells[i].fill(String([1, 0, 0, 1, 1, 0, 0, 1][i]));
+    await t.page.click('.ck-sure-btn[data-sure="sure"]');
+    await sleep(500);
+    await t.page.click('.ck-submit');
+    await t.waitFor(() => t.page.$('.ck-teach'), { timeout: 8000, what: '补讲' });
+    // 下课（外部的课：点两下「下课」）
+    await t.page.click('.cb-more'); await sleep(300); await t.page.click('.cb-end'); await sleep(300); await t.page.click('.cb-end').catch(() => {});
+    await t.answer('下课').catch(() => {});
+    await t.waitFor(async () => (await t.db())[`sessions/${sid}`]?.status === 'closed', { timeout: 15000, what: '下课' });
+    const all = await t.waitFor(async () => { const d = await t.db(); return Object.values(d).some((x) => x?.src === 'check' && x.session === sid && x.probe === 'p1') ? d : null; }, { timeout: 10000, what: '下课时补写了 p1 的证据' });
+    const ev = Object.values(all).find((x) => x?.src === 'check' && x.probe === 'p1');
+    check(ev.partial === true && ev.outcome === 'fail', `补写的证据不对：${JSON.stringify({ partial: ev.partial, outcome: ev.outcome })}`);
+    const outs = Object.entries(all).filter(([k]) => k.startsWith(`sessions/${sid}/ext_out/`)).map(([, v]) => v.text).join('\n');
+    check(/检验 k1 先停下了/.test(outs), 'ext_out 没写「先停下了」');
+    return t;
+  },
+
+  // 计划 2：检验以后 1 天的复测。首页「复测」那一行 → 开 kind: check 的课 → 题库里没见过的同类题（不挑那次检验的 retry）→ 做完写 retests.done、题库记见过
+  async retest(browser) {
+    const t = await seeded(browser);
+    const today = await todayIn(t);
+    const sample = parseCheck(DEV_CHECK_HEAD, DEV_CHECK_BODY).check;
+    const bank = bankDocs(sample, { session: 'c-20261101-1', at: Date.now() });
+    const docs = Object.fromEntries(bank.map(({ id, doc }) => [`probes/${id}`, doc]));
+    // 本题 p3 见过了：复测要挑同一类（L2.1.4/L2-56）里没见过的
+    const p3 = bank.find((b) => b.doc.from.as === 'probe' && /展开/.test(b.doc.fence)).id;
+    docs[`probes/${p3}`] = { ...docs[`probes/${p3}`], seen: [{ at: 1, session: 'c-20261101-1', as: 'first' }] };
+    docs['absorb/L2.1.4'] = { block: 'L2.1.4', space: 'math', state: '部分', checked: false, by: 'page', check: 'k1', session: 'c-20261101-1', date: '2026-11-01', families: ['L2.1.4/L2-56'], retests: [{ days: 1, due: today, done: null }, { days: 7, due: '2099-01-01', done: null }], log: [{ date: '2026-11-01', by: 'page', field: 'state', from: null, to: '部分' }, { date: '2026-11-01', by: 'page', field: 'checked', from: null, to: false }] };
+    await plant(t, docs);
+    await t.page.reload();
+    await t.waitFor(() => t.page.$('.dk-trow[data-row="retest"]'), { timeout: 15000, what: '首页出现「复测」那一行' });
+    await t.page.click('.dk-trow[data-row="retest"]');
+    await t.waitFor(() => t.page.$('.dk-retest-go'), { timeout: 8000, what: '复测面板有「开始」' });
+    await t.page.click('.dk-retest-go');
+    await t.page.waitForURL((u) => /#c-\d{8}-\d+/.test(u.hash), { timeout: 20000 });
+    const sid = decodeURIComponent(new URL(t.page.url()).hash.slice(1));
+    await t.waitFor(() => t.page.$('.ck-start'), { timeout: 20000, what: '复测的检验画出来' });
+    const s0 = (await t.db())[`sessions/${sid}`];
+    check(s0?.kind === 'check' && s0.items?.length === 1 && s0.items[0] !== p3, `复测挑的题不对：${JSON.stringify(s0?.items)}`);
+    await t.page.click('.ck-start');
+    // 挑到的是同一类的 locate（p6）
+    await t.waitFor(() => t.page.$('.ck-locate'), { timeout: 8000, what: '复测的题是 locate' });
+    await t.page.click('.ck-line[data-n="2"]');
+    const tab = await t.page.$('.ck-card .ck-tab[data-tab="type"]'); if (tab) await tab.click();
+    await t.page.fill('.ck-card .ck-text', 'AB 和 BA 不一定相等');
+    await t.page.click('.ck-sure-btn[data-sure="sure"]');
+    await sleep(500);
+    await t.page.click('.ck-submit');
+    await t.waitFor(() => t.page.$('.ck-done'), { timeout: 20000, what: '复测做完' });
+    const all = await t.waitFor(async () => { const d = await t.db(); return d['absorb/L2.1.4']?.retests?.[0]?.done ? d : null; }, { timeout: 10000, what: '复测的结果写进 absorb' });
+    check(all['absorb/L2.1.4'].retests[0].ok === true, `复测应过了：${JSON.stringify(all['absorb/L2.1.4'].retests[0])}`);
+    check(all['absorb/L2.1.4'].state === '部分', '复测不该改吸收');
+    const ev = Object.values(all).find((d) => d?.src === 'check' && d.session === sid);
+    check(ev?.retest === 1 && /^pr-/.test(ev.bank || ''), `复测的证据没带 retest、bank：${JSON.stringify({ retest: ev?.retest, bank: ev?.bank })}`);
+    check(all[`probes/${ev.bank}`]?.seen?.some((x) => x.as === 'retest'), '题库没记见过');
+    check(all[`sessions/${sid}`]?.status === 'closed', '复测的课没关');
     return t;
   },
 

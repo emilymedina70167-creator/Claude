@@ -82,3 +82,16 @@ test('出题提示：没写预案、正确选项长、露答案、能绕过前�
   assert.match(hints, /绕过前面那步/);
   assert.ok(!r.problems.some((p) => p.level !== 'hint'), JSON.stringify(r.problems));
 });
+
+// 计划 2：board check 的预检（写法、example 自检、retry 至少 2 道）
+test('board check：example 不满足、retry 只有一道都报；写对的不报', async () => {
+  const names = await blockNames();
+  const { DEV_CHECK } = await import('../kit/src/check/devsample.js');
+  assert.deepEqual(lintTurn({ text: DEV_CHECK, names }).problems.filter((p) => /check/.test(p.where)), []);
+  const bad = DEV_CHECK.replace('example: A=[[1,0],[0,0]] B=[[0,0],[0,1]]', 'example: A=[[1,0],[0,0]] B=[[1,0],[0,0]]');
+  const p1 = lintTurn({ text: bad, names }).problems;
+  assert.ok(p1.some((p) => /p1/.test(p.msg) && /if1/.test(p.msg)), JSON.stringify(p1));
+  const one = DEV_CHECK.replace('retry: p3a, p3b', 'retry: p3a');
+  const p2 = lintTurn({ text: one, names }).problems;
+  assert.ok(p2.some((p) => /p3/.test(p.msg) && /至少 2 道/.test(p.msg)), JSON.stringify(p2));
+});
