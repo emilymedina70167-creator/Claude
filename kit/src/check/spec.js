@@ -15,11 +15,15 @@
 //   ````
 //
 // 题的 retry: 写同构小题的 id（也写在这个块里，开始时不出现）；没排进 block / spare、也不是谁的 retry 的题报写法错误。
+// 模板（外部 review 的可选那条）：题里写 pick / where（照 practice custom 的写法），每次用到都取一组新数——
+// retry 可以写同一个模板两次、也可以写这道题自己（retry: p1, p1）：局部 id 照用的先后叫 p1、p1~2、p1~3（template.js 的 materialize）。
 // 题目、要点、错法、补讲、同构题都由外部写；这里只读写法、拿外部写的 example 先验一遍条件（写错了页面报，不静默）。
 import { tokenize } from '../tokens.js';
 import { compile } from '../expr.js';
 import { parseConditions } from '../anscheck.js';
 import { parseSolve } from '../solvespec.js';
+import { commandLine, instantiate, pickedText } from '../practicespec.js';
+import { calcValue, expandCalc, floatVars } from '../exact.js';
 
 export const PROBE_TYPES = ['recall', 'construct', 'claim', 'discriminate', 'locate', 'solve'];
 export const FACET_OF = { recall: '重建', construct: '能用', claim: '边界', solve: '能用', discriminate: '能辨', locate: '能辨' };
@@ -37,6 +41,8 @@ const TEACH = /^\s*teach\s+(\S+?)\s*[:：]\s?(.*)$/;
 const EXPR = /^\s*expr\s+(.+?)\s*[:：]\s*(.+)$/;
 const IF = /^\s*if\s*[:：]\s*(.+)$/;
 const LET = /^\s*let\s+([A-Za-z]\w*)\s*=\s*(.+)$/;
+const TPL = /^\s*(pick|where)\s/i;
+export const TPL_ROUNDS = 8; // 模板自检取几组数
 // 共用的字段、各题型自己的字段（不在里面的报「看不懂」）
 const COMMON = ['id', 'q', 'title', 'target', 'level', 'facet', 'family', 'retry', 'note', 'exam', 'like'];
 const OWN = {
@@ -73,8 +79,8 @@ function parseSlots(src) {
   return out;
 }
 
-/** example: A=[[0,1],[0,0]] B=[[1, 0], [0, 0]] k=2（值里可以有空格：按括号配对切） */
-export function parseNamed(src) {
+/** example: A=[[0,1],[0,0]] B=[[1, 0], [0, 0]] k=2（值里可以有空格：按括号配对切）；模板里的 example 能用取到的数（vars） */
+export function parseNamed(src, vars = {}) {
   const s = String(src ?? '');
   const out = {};
   const re = /([A-Za-z]\w*)\s*=\s*/g;
@@ -88,7 +94,7 @@ export function parseNamed(src) {
   }
   starts.forEach((st, i) => {
     const raw = s.slice(st.from, i + 1 < starts.length ? starts[i + 1].at : s.length).trim();
-    out[st.name] = compile(raw)({});
+    out[st.name] = compile(raw)(vars);
   });
   return out;
 }
@@ -106,6 +112,7 @@ export function parseProbe(type, src) {
   const pts = { must: [], may: [], wrong: [] };
   const ifs = [], exprs = [], lets = [], lines = [];
   const solveLines = [];
+  const tpl = { picks: [], lets: [], wheres: [] }; // pick / where（模板）
   let last = null; // 续行接到哪里
   let n = 0; // 要点自动编号（must、may 共用 m1、m2…）
   const errors = [];
@@ -126,6 +133,7 @@ export function parseProbe(type, src) {
       ifs.push({ id: `if${ifs.length + 1}`, text: body, msg }); last = null; continue;
     }
     if ((m = raw.match(LET))) { lets.push({ name: m[1], src: m[2].trim() }); last = null; continue; }
+    if (TPL.test(raw)) { try { commandLine(raw.trim(), tpl); } catch (e) { errors.push(e.message); } last = null; continue; }
     if ((m = raw.match(FIELD))) {
       const k = m[1].toLowerCase();
       if (type === 'solve' && !COMMON.includes(k) || type === 'solve' && k === 'q') { solveLines.push(raw); last = { solve: true }; continue; }
@@ -153,16 +161,18 @@ export function parseProbe(type, src) {
   if (!LEVELS.includes(f.level)) return at(`level: 只能写 ${LEVELS.join(' / ')}`);
   if (f.facet && !FACETS.includes(f.facet)) return at(`facet: 只能写 ${FACETS.join(' / ')}`);
   if (pts.must.length > MUST_MAX && type === 'recall') return at(`must 最多 3 条（现在 ${pts.must.length} 条）`);
+  if (tpl.wheres.length && !tpl.picks.length) return at('where 要和 pick 一起写（模板：pick 取数，where 不满足就重取）');
   const probe = {
     id, type, q: f.q || '', target: f.target, level: f.level, facet: f.facet || FACET_OF[type], family: f.family || null,
-    teach, retry: list(f.retry), lets, src: String(src ?? ''),
+    teach, retry: list(f.retry), lets, src: String(src ?? ''), tpl: tpl.picks.length ? { picks: tpl.picks, wheres: tpl.wheres } : null,
   };
   try {
     if (type === 'construct' || (type === 'claim' && truthOf(f.truth, ['假', 'false', 'f', 'no', '错'], ['真', 'true', 't', 'yes', '对']) === true)) {
       if (!f.slots) return at('要写 slots:（学生填的东西，比如 A=mat(2) B=mat(2)）');
       if (!ifs.length) return at('要写 if:（一行一条条件）');
       if (!f.example) return at('要写 example:（一组满足全部条件的，页面先拿它验一遍）');
-      Object.assign(probe, { slots: parseSlots(f.slots), ifs: ifs.map((c) => ({ ...c })), exprs, example: parseNamed(f.example) });
+      // 模板的 example 用取到的数写（A=[[k,0],[0,0]]）：取了数再算（drawProbe）
+      Object.assign(probe, { slots: parseSlots(f.slots), ifs: ifs.map((c) => ({ ...c })), exprs, example: probe.tpl ? null : parseNamed(f.example), exampleSrc: f.example });
       parseConditions(ifs.map((c) => c.text).join('\n')); // 写法不对在这里抛
     }
   } catch (e) { return at(e.message); }
@@ -280,9 +290,9 @@ export function parseCheck(head, body) {
   return { check: blocks.length ? check : null, errors };
 }
 
-/** 题里的量：let 一行一行算（浮点，和 answer 的条件一样），base 是整节课的量 */
+/** 题里的量：let 一行一行算（浮点，和 answer 的条件一样），base 是整节课的量；模板取过数的题带着 vals（取到的数和算好的 let） */
 export function probeVars(probe, base = {}) {
-  const vars = { ...base };
+  const vars = { ...base, ...(probe.vals || {}) };
   for (const l of probe.lets || []) vars[l.name] = compile(l.src)(vars);
   return vars;
 }
@@ -323,12 +333,23 @@ export function selfCheck(check, base = {}, { lenient = false } = {}) {
   for (const b of check.blocks) for (const pid of [...b.must, ...b.optional]) if (!P[pid]) out.push(`block ${b.block} 里的 ${pid} 没写这道题`);
   for (const pid of check.spare) if (!P[pid]) out.push(`spare 里的 ${pid} 没写这道题`);
   const retried = new Set(Object.values(P).flatMap((p) => p.retry));
-  // 一道 retry 只给一道题用；retry 不再排进 block / spare（不然出到它时已经交过，学生卡住）
+  const isTpl = (id) => !!P[id]?.tpl;
+  // 一道 retry 只给一道题用；retry 不再排进 block / spare（不然出到它时已经交过，学生卡住）。
+  // 模板不受这两条管：每用一次都是另取一组数的一道新题（p1~2…）
   const usedBy = new Map();
-  for (const pid of check.order) for (const r of P[pid].retry) usedBy.set(r, [...(usedBy.get(r) || []), pid]);
+  for (const pid of check.order) for (const r of new Set(P[pid].retry)) usedBy.set(r, [...(usedBy.get(r) || []), pid]);
   for (const [r, by] of usedBy) {
+    if (isTpl(r)) continue;
     if (by.length > 1) out.push(`${r} 是 ${by.join('、')} 两道题的 retry：一道 retry 只给一道题用`);
     if (placed.has(r)) out.push(`${r} 是 ${by[0]} 的 retry，又排进了 block / spare：retry 不单独出`);
+  }
+  for (const pid of check.order) {
+    const rs = P[pid].retry;
+    for (const r of new Set(rs)) {
+      if (isTpl(r)) continue;
+      if (r === pid) out.push(`${pid} 的 retry 写了它自己：只有带 pick 的题（每次取新数的模板）能这么写`);
+      else if (rs.filter((x) => x === r).length > 1) out.push(`${pid} 的 retry 写了两次 ${r}：只有带 pick 的题（每次取新数的模板）能写两次`);
+    }
   }
   const must = new Set(check.blocks.flatMap((b) => b.must));
   for (const pid of check.order) {
@@ -342,17 +363,75 @@ export function selfCheck(check, base = {}, { lenient = false } = {}) {
       if (p.retry.length < RETRY_MIN) out.push(`${pid} 是必做题，retry 至少 2 道（现在 ${p.retry.length} 道）`);
       if (!Object.keys(p.teach).length) out.push(`${pid} 是必做题，至少写一条 teach（判出没过时显示的一两句）`);
     }
-    let vars;
-    try { vars = probeVars(p, base); } catch (e) { out.push(`${pid} 的 let 算不出来：${e.message}`); continue; }
-    if (p.ifs && p.example) {
-      const missing = p.slots.filter((s) => p.example[s.name] === undefined).map((s) => s.name);
-      if (missing.length) out.push(`${pid} 的 example 少了 ${missing.join('、')}`);
-      else for (const r of evalIfs(p.ifs, p.example, vars, p.slots)) if (!r.ok) out.push(`${pid} 的 example 不满足 ${r.id}（${p.ifs.find((c) => c.id === r.id).text}）${r.error ? `：${r.error}` : ''}`);
-      for (const e of p.exprs || []) {
-        try { compile(e.expected)(withDefaults({ ...vars, ...Object.fromEntries(Object.entries(p.example).map(([k, v]) => [k, toNum(v)])) }, p.slots)); } catch (err) { out.push(`${pid} 的 expr「${e.label}」算不了：${err.message}`); }
-      }
+    if (!p.tpl) { for (const msg of probeProblems(p, base)) out.push(`${pid} 的 ${msg}`); continue; }
+    // 模板：取几组数，每一组都要算得出来、example 都要满足（只报第一处）
+    let avoid = null;
+    for (let k = 0; k < TPL_ROUNDS; k++) {
+      let d;
+      try { d = drawProbe(p, { base, avoid }); } catch (e) { out.push(`${pid}：${e.message}`); break; }
+      avoid = d.raw;
+      const bad = [...d.probe.calcErrors, ...probeProblems(d.probe, base)];
+      if (bad.length) { out.push(`${pid}（取 ${d.picked} 时）的 ${bad[0]}`); break; }
     }
-    if (p.result) { try { compile(p.result)(withDefaults(vars)); } catch (e) { out.push(`${pid} 的 result 算不了：${e.message}`); } }
   }
   return out;
+}
+
+/** 一道题的量算不算得出来、example 满不满足条件（selfCheck 的那一半；每条前面由调用方加「p1 的」） */
+export function probeProblems(p, base = {}) {
+  const out = [];
+  let vars;
+  try { vars = probeVars(p, base); } catch (e) { return [`let 算不出来：${e.message}`]; }
+  if (p.ifs && p.example) {
+    const missing = p.slots.filter((s) => p.example[s.name] === undefined).map((s) => s.name);
+    if (missing.length) out.push(`example 少了 ${missing.join('、')}`);
+    else for (const r of evalIfs(p.ifs, p.example, vars, p.slots)) if (!r.ok) out.push(`example 不满足 ${r.id}（${p.ifs.find((c) => c.id === r.id).text}）${r.error ? `：${r.error}` : ''}`);
+    for (const e of p.exprs || []) {
+      try { compile(e.expected)(withDefaults({ ...vars, ...Object.fromEntries(Object.entries(p.example).map(([k, v]) => [k, toNum(v)])) }, p.slots)); } catch (err) { out.push(`expr「${e.label}」算不了：${err.message}`); }
+    }
+  } else if (p.ifs && p.exampleSrc && !p.tpl) out.push('example 算不出来');
+  if (p.result) { try { compile(p.result)(withDefaults(vars)); } catch (e) { out.push(`result 算不了：${e.message}`); } }
+  return out;
+}
+
+// 题里的文字换数：$…$ 里的 \calc 写成 TeX、外面加 {}（和 practice 一样）；公式外面的写成文字（1/2，不是 \tfrac）
+function fillMixed(text, vars) {
+  const errors = [];
+  const parts = String(text ?? '').split(/(\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/);
+  const out = parts.map((part, i) => {
+    if (!part.includes('\\calc')) return part;
+    const inMath = i % 2 === 1;
+    const r = expandCalc(part, (e) => (inMath ? calcValue(e, vars).tex : calcValue(e, vars).text), { wrap: inMath });
+    errors.push(...r.errors);
+    return r.tex;
+  }).join('');
+  return { text: out, errors };
+}
+
+/**
+ * 模板取一组数（照 practice custom：pick → let → where，不满足就重取）：返回 { probe（取了数的这一道：文字里的 \calc 换成数、
+ * example 算好、vals 是取到的数和算好的 let，lets 清空）, picked（「k=5」，记进证据）, raw（取到的原值，下一次 avoid 用）}。
+ * base：整节课的量（精确值、浮点都行）。取不到（where 太严）抛出中文原因
+ */
+export function drawProbe(probe, { base = {}, rand = Math.random, avoid = null } = {}) {
+  const { vars, picked } = instantiate({ picks: probe.tpl.picks, lets: probe.lets || [], wheres: probe.tpl.wheres }, { base, rand, avoid });
+  const own = [...probe.tpl.picks.map((x) => x.name), ...(probe.lets || []).map((x) => x.name)];
+  const vals = floatVars(Object.fromEntries(own.map((n) => [n, vars[n]])));
+  const errors = [];
+  const fill = (t) => { if (t === undefined || t === null) return t; const r = fillMixed(t, vars); errors.push(...r.errors); return r.text; };
+  const inst = { ...probe, q: fill(probe.q), lets: [], vals, tpl: null, tplOf: probe.id, picked: pickedText(picked) };
+  if (probe.claim !== undefined) inst.claim = fill(probe.claim);
+  if (probe.answer !== undefined) inst.answer = fill(probe.answer);
+  for (const k of ['must', 'may', 'wrong']) if (probe[k]) inst[k] = probe[k].map((x) => ({ ...x, text: fill(x.text) }));
+  inst.teach = Object.fromEntries(Object.entries(probe.teach || {}).map(([k, v]) => [k, fill(v)]));
+  if (probe.lines) inst.lines = probe.lines.map(fill);
+  if (probe.steps) inst.steps = probe.steps.map((x) => ({ ...x, text: fill(x.text) }));
+  if (probe.solveFields) inst.solveFields = { ...probe.solveFields, q: fill(probe.solveFields.q) };
+  if (probe.ifs) inst.ifs = probe.ifs.map((c) => ({ ...c, msg: fill(c.msg) }));
+  if (probe.exprs) inst.exprs = probe.exprs.map((e) => ({ ...e, label: fill(e.label) }));
+  if (probe.slots && probe.exampleSrc) {
+    try { inst.example = parseNamed(probe.exampleSrc, withDefaults({ ...floatVars(base), ...vals }, probe.slots)); } catch (e) { inst.example = null; errors.push({ expr: 'example', msg: e.message }); }
+  }
+  inst.calcErrors = errors.map((e) => (e.expr === 'example' ? `example 算不出来：${e.msg}` : `\\calc{${String(e.expr).trim().slice(0, 40)}} 算不出来：${e.msg}`));
+  return { probe: inst, picked: inst.picked, raw: picked };
 }

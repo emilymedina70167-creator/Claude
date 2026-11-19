@@ -1,6 +1,7 @@
 // 检验接进课堂（外部的课、页面里的老师的课）：board check 执行时开外壳、合书、判分调页面里的 Claude、写 ext_out、刷新接着做、
 // board judge 指到检验里的题时改判。classroom.js 只调这里的 start / judge / has / resume（和计划 1 同时改的文件只加入口）
 import { selfCheck } from './spec.js';
+import { materialize } from './template.js';
 import { step } from './flow.js';
 import { claudeIds, verdictPrompt, parseVerdict, fallbackPrompt } from './judge.js';
 import { extStart, extSummary } from './record.js';
@@ -113,6 +114,9 @@ export function createClassCheck({ root, db, desk = null, call, tell = () => {},
         cur = null;
       },
     });
+    // 模板取好数的那一份（接着做的是存着的）：改判、ext_out 都照它
+    check = api.check();
+    for (const pid of check.order) known.set(pid, check.id);
     // 做完以后外部改判：同一次检验重算吸收（不另进 history、不再记错题）
     cur = { id: check.id, api, host, check, refinish: () => (finished ? cdesk.finish(api.state(), { errors: false }) : null) };
     return api;
@@ -134,8 +138,11 @@ export function createClassCheck({ root, db, desk = null, call, tell = () => {},
       if (cur) return { op: 'check', id: op.id, ok: false, error: `已经有一个检验（${cur.id}）开着：做完或停下以后再开` };
       const errs = [...(op.errors || []), ...selfCheck(op.check, base())];
       if (errs.length) return { op: 'check', id: op.id, ok: false, error: errs.slice(0, 4).join('；') };
+      // 模板这一次取好数（某一组数自检不过的重取；还不行照实回）
+      const m = materialize(op.check, { base: base() });
+      if (m.errors.length) return { op: 'check', id: op.id, ok: false, error: m.errors.slice(0, 4).join('；') };
       cdesk.bankStore(op.check, base());
-      mount(op.check);
+      mount(m.check);
       return { op: 'check', id: op.id, ok: true };
     },
     has: (pid) => known.has(pid),

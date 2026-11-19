@@ -6,6 +6,7 @@
 //   fallback(probe, answer, items) → Promise<string>：外部没写到的错法，叫它写补讲
 //   save(state)：存进度（sessions/{编号}/check/{检验 id}）；record(ids, state)：写这几道的证据；onEnd({ state, absorbs })：结束、回到黑板
 import { createFlow, step, view, resumeJobs, needsFallback, absorbOf } from './flow.js';
+import { materialize } from './template.js';
 import { judgeMachine, JUDGE_WAIT } from './judge.js';
 import { toRecord } from './record.js';
 import { probeView } from './probes.js';
@@ -20,6 +21,9 @@ const FACET_TEXT = { ok: '✓', fixed: '补上', fail: '✗', pending: '待核' 
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 export function mountCheck(host, { check, vars = {}, saved = null, judge, fallback, save = () => {}, record = () => {}, onEnd = () => {}, onPause = () => {}, upload = async () => null, inkKey = () => '', onInk = () => {}, lockKey = '', now = () => Date.now() } = {}) {
+  // 接着做：照存着的那一份（模板取好的数不变）；新开：模板先取好数（template.js，已经取过的原样）
+  if (saved?.check?.id === check.id && saved.check.probes) check = saved.check;
+  else check = materialize(check, { base: vars }).check;
   let state = saved?.check?.id === check.id ? saved : createFlow(check);
   const root = document.createElement('div');
   root.className = 'ck-shell';
@@ -271,7 +275,7 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     dead = true;
     clearInterval(tickT);
     main.innerHTML = '<div class="ck-card"><p>这次检验在另一个标签页里开着：在那边接着做（关掉那边，过几秒刷新这一页也行）。</p></div>';
-    return { el: root, state: () => state, pause() {}, resume() {}, flush() {}, rejudge() {}, absorbs: () => ({}), destroy() { root.remove(); } };
+    return { el: root, state: () => state, check: () => check, pause() {}, resume() {}, flush() {}, rejudge() {}, absorbs: () => ({}), destroy() { root.remove(); } };
   }
   const release = () => { if (lockKey && readLock()?.id === tab) { try { localStorage.removeItem(lockKey); } catch { /* 无 */ } } };
   if (lockKey) { writeLock(); beat = setInterval(writeLock, 2000); addEventListener('pagehide', release); }
@@ -284,6 +288,8 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
   return {
     el: root,
     state: () => state,
+    /** 这一次检验（模板取好数的） */
+    check: () => check,
     pause() { if (!['paused', 'done', 'intro'].includes(state.phase)) dispatch({ type: 'pause' }); },
     resume() { if (state.phase === 'paused') dispatch({ type: 'resume' }); },
     rejudge(id, items, result) { dispatch({ type: 'ext', id, items, result }); },

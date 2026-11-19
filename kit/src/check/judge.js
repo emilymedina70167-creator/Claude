@@ -72,7 +72,8 @@ function exprItems(probe, exprs = {}) {
 
 function proofItem(probe, lines = []) {
   const p = probe.proof;
-  const src = [`start: ${p.start}`, `goal: ${p.goal}`, ...(p.vars ? [`vars: ${p.vars}`] : []), ...(probe.lets || []).map((l) => `let ${l.name} = ${l.src}`)].join('\n');
+  // 模板取过数的：取到的数也写成 let（derive 照它算）
+  const src = [`start: ${p.start}`, `goal: ${p.goal}`, ...(p.vars ? [`vars: ${p.vars}`] : []), ...Object.entries(probe.vals || {}).map(([k, v]) => `let ${k} = ${JSON.stringify(v)}`), ...(probe.lets || []).map((l) => `let ${l.name} = ${l.src}`)].join('\n');
   let spec, envs;
   try { spec = parseDeriveDo(src); envs = sampleEnvs(spec, { seed: probe.id }); } catch (e) { return { id: 'proof', ok: null, why: `页面算不了：${e.message}` }; }
   let prev = p.start;
