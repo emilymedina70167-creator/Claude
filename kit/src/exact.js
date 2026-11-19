@@ -329,7 +329,7 @@ const FUNCS = {
     return fact(N).div(fact(K).mul(fact(N - K)));
   },
   sqrt: (x) => { const r = sqrtQ(q(x)); if (!r) throw new Inexact('开方'); return r; },
-  norm: (v) => { const r = sqrtQ(dot(vec(v), v)); if (!r) throw new Inexact('长度'); return r; },
+  norm: (v) => { if (isQ(v)) return v.n < 0n ? v.neg() : v; const r = sqrtQ(dot(vec(v), v)); if (!r) throw new Inexact('长度'); return r; },
   // —— 计算机课：整数、进制、位运算（写法和 expr.js 一样；这里用 BigInt，64 位的地址也不丢精度）——
   // log2：2 的整数次幂（含 1/2、1/4 这种）精确，其余退回小数
   log2: (x) => {

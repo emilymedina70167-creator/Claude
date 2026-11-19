@@ -36,14 +36,19 @@ function extrapolate(hs, ys) {
 }
 
 // 一条步长上一直往一个方向变大：+∞ / −∞（回 1 / −1），不是回 0
-// （溢出成 ±Infinity 也算：e^(1/h) 到小的 h 就超出浮点了）
-function diverges(ys) {
-  const tail = ys.slice(-6);
-  if (tail.length < 6 || tail.some((y) => typeof y !== 'number' || Number.isNaN(y))) return 0;
-  const sign = Math.sign(tail.at(-1));
-  if (!sign || !tail.every((y) => Math.sign(y) === sign)) return 0;
-  for (let i = 1; i < tail.length; i++) if (Math.abs(tail[i]) <= Math.abs(tail[i - 1]) && Number.isFinite(tail[i])) return 0;
-  return Math.abs(tail.at(-1)) > 1000 * Math.max(1, Math.abs(ys[0])) ? sign : 0;
+// 溢出成 ±Infinity 也算（e^(1/h) 到小的 h 就超出浮点了）；没溢出的要像 h 的负次幂那样涨：
+// log|f| 对 log h 的斜率 ≤ −0.3，而且最后一个比开头大一千倍——趋向一个大的有限数（1500）的不算
+function diverges(pts) {
+  const tail = pts.slice(-6);
+  if (tail.length < 6) return 0;
+  const ys = tail.map((p) => p[1]);
+  const sign = Math.sign(ys.at(-1));
+  if (!sign || !ys.every((y) => Math.sign(y) === sign)) return 0;
+  for (let i = 1; i < ys.length; i++) if (Math.abs(ys[i]) <= Math.abs(ys[i - 1]) && Number.isFinite(ys[i])) return 0;
+  if (!Number.isFinite(ys.at(-1))) return sign;
+  const [h0, y0] = tail[2], [h1, y1] = tail.at(-1);
+  const slope = Math.log(Math.abs(y1) / Math.abs(y0)) / Math.log(h1 / h0);
+  return slope <= -0.3 && Math.abs(y1) > 1000 * Math.max(1, Math.abs(pts[0][1])) ? sign : 0;
 }
 
 /** 一侧：g(h) 在 h → 0⁺。回 { kind: 'finite' | '+inf' | '-inf' | null, value?, err?, why? } */
@@ -52,7 +57,7 @@ function oneSide(g) {
     const pts = [];
     for (const h of hs) { let y; try { y = g(h); } catch { y = NaN; } pts.push([h, y]); }
     const ok = pts.filter(([, y]) => fin(y));
-    return { hs: ok.map((p) => p[0]), ys: ok.map((p) => p[1]), raw: pts.map((p) => p[1]).filter((y) => !Number.isNaN(y)), got: ok.length };
+    return { hs: ok.map((p) => p[0]), ys: ok.map((p) => p[1]), raw: pts.filter(([, y]) => !Number.isNaN(y)), got: ok.length };
   };
   const A = run(SEQ_A), B = run(SEQ_B);
   const dA = diverges(A.raw), dB = diverges(B.raw);

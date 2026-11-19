@@ -137,7 +137,7 @@ export function checkFxLine(calc, prev, text, { ctx = {}, domain = [], scope = {
   try { read = readLine(text, { kind, names: Object.keys(scope) }); } catch (e) { return { ok: false, error: e.message }; }
   if (kind === 'limit') return limitLine(calc, prev, read, ctx, scope, domain);
   if (kind === 'antideriv') return antiLine(prev, read, ctx, scope);
-  const r = compareFx(prev.read.ast, read.ast, { domain: domain.length ? domain : [{ ...DEFAULT_RANGE, name: 'x' }], scope });
+  const r = compareFx(prev.read.ast, read.ast, { domain: domain.length ? domain : [{ ...DEFAULT_RANGE, name: 'x' }], scope, allowPrime: true });
   return { ok: r.ok, why: r.ok === false ? r.msg.replace(/\$/g, '') : r.ok === null ? '页面判不了这一步' : '', read, ctx };
 }
 

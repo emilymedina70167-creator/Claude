@@ -83,6 +83,7 @@ export function fxEval(ast, vars) {
   return evaluate(deriver ? deriver(node, vars) : node, vars);
 }
 
+const hasCall = (n, name) => !!n && ((n.t === 'call' && n.name === name) || ['a', 'b'].some((k) => hasCall(n[k], name)) || (n.args || n.items || []).some((m) => hasCall(m, name)));
 const isFiniteNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const flat = (v) => (Array.isArray(v) ? v.flat(Infinity) : [v]);
 const usable = (v) => flat(v).every((x) => isFiniteNum(x) && Math.abs(x) <= TOO_BIG);
@@ -105,9 +106,11 @@ export function floatScope(scope) {
  * upToConst：两个式子差一个常数也算对（不定积分），回的 shift 是那个常数。
  * 回 { ok: true | false | null, msg（给学生看，可带 $TeX$）, note（进作答记录）, checked, bad: [{ at, want, got, err }] }
  */
-export function compareFx(expected, given, { domain = [], ints = [], scope = {}, seed = 'fx', upToConst = false } = {}) {
+export function compareFx(expected, given, { domain = [], ints = [], scope = {}, seed = 'fx', upToConst = false, allowPrime = false } = {}) {
   const e = typeof expected === 'string' ? parse(expected) : expected;
   const g = typeof given === 'string' ? parse(given) : given;
+  // 学生的答案里写求导符号（把题目抄一遍加一撇）不算：要把导数算出来。derive 的推导一行行写 ' 是允许的（allowPrime）
+  if (!allowPrime && hasCall(g, 'T') && domain.length) return { ok: false, msg: "答案里不能写求导的 '：把导数算出来写。", note: "答案里写了求导的 '（没算出来）", checked: 0, bad: [] };
   const base = floatScope(scope);
   const val = (ast, pt) => { try { return fxEval(ast, { ...base, ...pt }); } catch { return NaN; } };
   const { points } = samplePoints(domain, { seed, ints, valid: (pt) => usable(val(e, pt)) });

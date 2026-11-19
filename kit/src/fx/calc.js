@@ -152,6 +152,13 @@ export function calcSelfCheck(spec, { budget = PAGE_BUDGET } = {}) {
     switch (c.kind) {
       case 'deriv': {
         if (!ans) break;
+        if (c.at !== undefined && c.order !== 'n') {
+          // f⁽ᵏ⁾(a)：一个数
+          const v = derivAt(c, spec.scope), w = valueKind(spec.expected, spec.scope);
+          if (v === null) hints.push('页面算不出这一点的导数');
+          else if (w.kind !== 'finite' || Math.abs(v - w.value) > 1e-6 * Math.max(1, Math.abs(v))) errors.push(`answer: 是 ${kindText(w)}，页面算这一点的导数得 ${showNum(v)}`);
+          break;
+        }
         if (c.order === 'n') {
           for (const n of NS) {
             if (slow()) { hints.push('页面核得太慢，没核完'); break; }
@@ -189,7 +196,7 @@ export function calcSelfCheck(spec, { budget = PAGE_BUDGET } = {}) {
         if (r.kind === null) { hints.push(`页面核不了这个极限（${r.why}）`); break; }
         const got = r.kind === 'finite' ? { kind: 'finite', value: r.value } : { kind: r.kind };
         if (got.kind === want.kind) { if (got.kind === 'finite' && Math.abs(got.value - want.value) > 1e-6 * Math.max(1, Math.abs(want.value))) errors.push(`answer: 是 ${kindText(want)}，页面算这个极限得 ${kindText(got)}`); }
-        else if (want.kind === 'inf' && (got.kind === '+inf' || got.kind === '-inf')) hints.push(`页面算出来是 ${kindText(got)}，answer: 写 ${got.kind} 更准确`);
+        else if (want.kind === 'inf' && (got.kind === '+inf' || got.kind === '-inf')) { hints.push(`页面算出来是 ${kindText(got)}，answer: 写 ${got.kind} 更准确`); spec.trueKind = got.kind; }
         else errors.push(`answer: 是 ${kindText(want)}，页面算这个极限得 ${kindText(got)}`);
         break;
       }
@@ -264,6 +271,14 @@ export function calcSelfCheck(spec, { budget = PAGE_BUDGET } = {}) {
 }
 const zeroQ = (q) => q.sub(q);
 const cmpValue = (a, b) => (Number.isFinite(a) && Number.isFinite(b) ? { ok: sameNum(a, b) } : { ok: null });
+
+// f⁽ᵏ⁾(a)：符号求导再代 a，代不进去（可去间断点）用数值极限
+function derivAt(c, scope) {
+  const D = derivOf(c), a = boundOf(c.at), base = floatScope(scope);
+  try { const v = fxEval(D, { ...base, [c.x]: a }); if (Number.isFinite(v)) return v; } catch { /* 用极限 */ }
+  const r = numLimit((t) => fxEval(D, { ...base, [c.x]: t }), a);
+  return r.kind === 'finite' ? r.value : null;
+}
 
 // 级数在一点上的和：加到项 < 1e-14 或 5000 项；不收敛回 null
 function seriesAt(c, pt, scope) {
@@ -368,6 +383,7 @@ export function judgeCalc(spec, given) {
   const opt = { domain, scope: spec.scope, seed: spec.seed };
   switch (c.kind) {
     case 'deriv': {
+      if (c.at !== undefined && c.order !== 'n') return judgeValue('deriv', valueKind(spec.expected, spec.scope), valueKind(given, spec.scope));
       if (c.order === 'n') {
         const want = expectedOf(spec);
         for (const n of NS) {
@@ -399,7 +415,7 @@ export function judgeCalc(spec, given) {
       const want = valueKind(spec.expected, spec.scope);
       const got = valueKind(given, spec.scope);
       if (got.kind === 'bad') return { ok: false, msg: '这里写一个数（或 ∞、+∞、−∞、不存在、发散）', note: '写的不是一个数' };
-      return judgeValue(c.kind, want, got);
+      return judgeValue(c.kind, want, got, spec.trueKind);
     }
     case 'equiv': {
       const f = fn(c.ofAst, c.x, spec.scope), h = fn(g, c.x, spec.scope);
@@ -433,7 +449,8 @@ export function judgeCalc(spec, given) {
 }
 
 // 一个数的答案：照审的表（+∞ 写 ∞ 对、说一句；∞ 写不存在对、说一句）
-function judgeValue(kind, want, got) {
+// trueKind：外部写的 ∞、页面算出来是 +∞（或 −∞）时，学生写那个带符号的也对
+function judgeValue(kind, want, got, trueKind = null) {
   const right = (msg = '') => ({ ok: true, msg, note: msg });
   const wrong = () => ({ ok: false, msg: `不对：你写的是 $${kindText(got)}$。`, note: `写了 ${kindText(got)}，答案是 ${kindText(want)}` });
   if (want.kind === 'finite') return got.kind === 'finite' && Math.abs(got.value - want.value) <= 1e-9 * Math.max(1, Math.abs(want.value)) ? right() : wrong();
@@ -441,6 +458,7 @@ function judgeValue(kind, want, got) {
   if (kind === 'limit') {
     if ((want.kind === '+inf' || want.kind === '-inf') && got.kind === 'inf') return right(`写 ${KIND_TEXT[want.kind]} 更准确`);
     if (want.kind === 'inf' && got.kind === 'none') return right('更准确是 ∞');
+    if (want.kind === 'inf' && trueKind && got.kind === trueKind) return right();
   }
   return wrong();
 }

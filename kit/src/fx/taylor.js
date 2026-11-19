@@ -8,6 +8,7 @@ import { Poly } from '../poly.js';
 import { diffAst } from './diff.js';
 import { numLimit } from './limit.js';
 
+const hasVar = (n, x) => !!n && ((n.t === 'var' && n.name === x) || ['a', 'b'].some((k) => hasVar(n[k], x)) || (n.args || n.items || []).some((m) => hasVar(m, x)));
 const notPoly = (why) => { throw new Error(`要写成 x 的多项式（${why}）`); };
 
 /** 多项式的精确系数：c[k] 是 (x − at)^k 的系数。不是多项式（有 sin、x 在分母、非整数次幂）抛中文原因 */
@@ -15,6 +16,14 @@ export function polyCoeffs(ast, x = 'x', at = 0) {
   const n = typeof ast === 'string' ? parse(ast) : ast;
   const shift = Q.from(at);
   const go = (m) => {
+    // 不含 x 的一块（3!、choose(5,2)）：精确地算，是有理数就是常数
+    if (m.t !== 'num' && !hasVar(m, x)) {
+      let v;
+      try { v = calcValue(m, {}).value; } catch { v = null; }
+      if (isQ(v)) return Poly.const(v);
+      if (m.t === 'var') return notPoly(`${m.name === 'pi' ? 'π' : m.name} 不是有理数`);
+      return notPoly('系数要是有理数');
+    }
     switch (m.t) {
       case 'num': return Poly.const(m.big !== undefined ? new Q(m.big) : Q.from(m.v));
       case 'var':

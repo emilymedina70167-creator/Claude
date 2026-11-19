@@ -36,6 +36,7 @@ export function normalizeFormula(text, { names = [], funcs = FORMULA_FUNCS, real
   if (!s) throw new Error('还没写式子');
   if (/^(不存在|DNE)$/i.test(s)) return '__dne';
   if (/^发散$/.test(s)) return '__div';
+  if (/!\s*!/.test(s)) throw new Error('双阶乘（!!）页面不认：写成 fact(…) 的式子，比如 (2n-1)!! = (2n)!/(2^n n!)');
   s = s.replace(/[−–—]/g, '-').replace(/[×·∙⋅]/g, '*').replace(/÷/g, '/').replace(/（/g, '(').replace(/）/g, ')').replace(/［/g, '[').replace(/］/g, ']').replace(/，/g, ',');
   // log_2 x、log_{2}(x)、log_a x：底数先记下，记号流里是 __logb0（只认一个数或一个字母当底数）
   const bases = [];
@@ -317,9 +318,9 @@ function padFor(c) {
 }
 
 // calc: 没配 formula: 时的变量（第五节第 2 条：一行就够）
-function calcFree(c) {
+function calcFree(c, scope = {}) {
   // of 里的实数变量都要取点（偏导 wrt=y 时 x 照样要有值）；n 是 n 阶导的通式自己的
-  const vars = [...new Set([...(c.wrtList || [c.x]), ...[...varsIn(c.ofAst)].filter((v) => /^[a-z]$/.test(v) && !['e', 'n'].includes(v) && !(c.kind === 'ode' && v === 'y'))])];
+  const vars = [...new Set([...(c.wrtList || [c.x]), ...[...varsIn(c.ofAst)].filter((v) => /^[a-z]$/.test(v) && !['e', 'n'].includes(v) && !(v in scope) && !(c.kind === 'ode' && v === 'y'))])];
   const n = c.order === 'n' ? ['n=1..5'] : [];
   if (c.kind === 'deriv' && c.at !== undefined) return n.length ? n[0] : '-';
   return FUNCTION_KINDS.has(c.kind) ? [...vars.map((v) => (v === 'n' ? 'n' : `${v} in (-3, 3)`)), ...n].join(', ') : '-';
@@ -419,6 +420,7 @@ export function compareFormula(expected, given, opts = {}) {
     for (const [k, v] of Object.entries(vars)) if (!(k in s)) vars[k] = atParam(v, s);
     let want;
     try { want = calcValue(eAst, vars).value; } catch { continue; } // 标准答案在这一组没定义（比如 n=0 时的负次幂）：跳过
+    if (!finite(want)) continue; // 算出来不是有限数（ln 在负数上）也是没定义
     let got, err = null;
     try { got = calcValue(gAst, vars).value; } catch (e) { err = e.message; }
     rows.push({ at: s, ok: !err && same(got, want), want, got, err });
@@ -427,7 +429,7 @@ export function compareFormula(expected, given, opts = {}) {
   const bad = rows.filter((r) => !r.ok);
   if (!bad.length) return { ok: true, msg: '', note: '', checked: rows.length };
   // 对不上的全是因为学生的式子在那几个 n 上算不出来（ln(n-1) 在 n = 1，新加的函数没定义）：页面判不了，不判错
-  if (bad.every((r) => r.err || !finite(r.got)) && usesFx(gAst)) {
+  if (bad.every((r) => r.err || !finite(r.got)) && rows.some((r) => r.ok) && usesFx(gAst)) {
     const nm = free.length === 1 ? free[0].name : '';
     return { ok: null, msg: `页面判不了：你的式子在 ${nm ? `$${nm} = ${bad.map((r) => r.at[nm]).join(',\\ ')}$` : '几组取值'} 时算不出来，别的取值都对得上，待外部核。`, note: `代值检查：${bad.length} 组算不出来（${bad[0].err}），页面判不了`, checked: rows.length, bad };
   }
@@ -481,7 +483,7 @@ function varsIn(n, out = new Set()) {
 export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
   const calc = opts.calc ? parseCalc(opts.calc) : null;
   // 只写 calc: 不写 formula:：导数、原函数、等价、泰勒的学生写 x 的式子（n 阶导通式再加 n），极限、积分、阶写一个数
-  if (calc && !String(freeSpec ?? '').trim()) freeSpec = calcFree(calc);
+  if (calc && !String(freeSpec ?? '').trim()) freeSpec = calcFree(calc, scope);
   let free = parseFree(freeSpec);
   // domain: x in (0, 1)：给实数的变量定范围（formula: 里没写这个变量就加上）
   for (const d of parseDomain(opts.domain || '')) {
@@ -505,7 +507,15 @@ export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
   const names = [...new Set([...freeNames, ...Object.keys(scope).filter((k) => /^[A-Za-z_]\w*$/.test(k))])];
   // 实数取点：写了范围、domain:、calc:，或者变量叫 x、y——但题里用到矩阵（矩阵的量、det tr rank inv、转置）时照旧整数取点（线代的 |A − xE|）
   const matrixy = Object.values(scope).some((v) => Array.isArray(v)) || /\b(det|tr|rank|inv|T)\s*\(|'/.test(src);
-  const real = free.some((f) => f.domain) || !!opts.calc || (!matrixy && free.some((f) => /^[xy]$/.test(f.name) && !f.explicit));
+  const intOnly = /\b(fact|choose|mod|div|gcd|lcm|floor|ceil|bin|hex|bit|signed|unsigned|faults|next|nextval)\s*\(|!/.test(src);
+  const explicitReal = free.some((f) => f.domain) || !!opts.calc;
+  const autoReal = !explicitReal && !matrixy && !intOnly && free.some((f) => /^[xy]$/.test(f.name) && !f.explicit);
+  let real = explicitReal || autoReal;
+  // 自动按实数（变量叫 x、y、没写范围）在 (−3, 3) 上取不到点的：退回以前的整数取点（旧课件 ln(x-3) 在 x = 4…6 能代）
+  if (autoReal) {
+    const dom = free.filter((f) => /^[xy]$/.test(f.name) && !f.explicit).map((f) => ({ ...DEFAULT_RANGE, name: f.name }));
+    if (compareFx(ast, ast, { domain: dom, ints: free.filter((f) => !dom.some((d) => d.name === f.name)), scope, seed: `${shown}|${freeSpec}` }).ok !== true) real = false;
+  }
   if (real) {
     const domain = free.filter((f) => f.domain || (/^[xy]$/.test(f.name) && !f.explicit)).map((f) => f.domain || { ...DEFAULT_RANGE, name: f.name });
     const ints = free.filter((f) => !domain.some((d) => d.name === f.name));
@@ -564,11 +574,14 @@ function splitList(s) {
 /** 逐格比：expected / given 都是 [[式子]]。返回 { ok, wrong: [格的序号（按行数）], first: { r, c, msg, bad（对不上的那几组值） } } */
 export function compareCells(expected, given, opts) {
   const wrong = [];
-  let first = null;
+  let first = null, unsure = null;
   expected.forEach((row, r) => row.forEach((e, c) => {
     const res = compareFormula(e, given[r][c], opts);
+    if (res.ok === null) { unsure ??= { r, c, msg: res.msg }; return; }
     if (!res.ok) { wrong.push(r * row.length + c); first ??= { r, c, msg: res.msg, powerBan: res.powerBan, bad: res.bad || [] }; }
   }));
+  // 有判不了的格子、别的都对：这一题判不了（计划 3：不当成对，也不当成错）
+  if (!wrong.length && unsure) return { ok: null, wrong, first: unsure };
   return { ok: !wrong.length, wrong, first };
 }
 

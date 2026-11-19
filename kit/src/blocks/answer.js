@@ -105,7 +105,7 @@ export function answerWidget(body, spec, onDone) {
       // 用的是页面读懂以后的式子（补了乘号、换了上标），学生写的原样记进记录
       try {
         if (cells) {
-          const c = compareCells(cells, given, { free: formula.free, scope: formula.scope });
+          const c = compareCells(cells, given, formula);
           r = { ok: c.ok, wrong: c.wrong, powerBan: c.first?.powerBan, msg: c.first ? `第 ${c.first.r + 1} 行第 ${c.first.c + 1} 列${c.wrong.length > 1 ? `（一共 ${c.wrong.length} 格不对）` : ''}：${c.first.msg}` : '', note: c.wrong.length ? `第 ${c.wrong.map((i) => `${Math.floor(i / cells[0].length) + 1},${(i % cells[0].length) + 1}`).join('、')} 格不对` : '' };
         } else r = compareFormula(formula.expected, given, formula);
         // form:：值对了，再看写成什么样（3^9A、因式分解）
@@ -125,10 +125,11 @@ export function answerWidget(body, spec, onDone) {
     else if (!formula) r = check(given, spec.answer, spec.type);
     spec.onTry?.({ text: input.text(), ok: r.ok, attempts, work, note: lastNote || undefined });
     // 页面判不了（实数取点取不到点、算不出来）：不算对也不算错，待外部核；记录里 ok 是 null（计划 3）
+    // （不锁输入框、不算做完：学生可以改了再交；交了两次以上出「看答案」）
     if (r.ok === null) {
       input.markAll('');
-      show('is-unsure', `<div class="q-verdict">？页面判不了，待外部核</div>${r.msg ? `<div>${r.msg}</div>` : ''}`);
-      finish(null, false);
+      show('is-unsure', `<div class="q-verdict">？页面判不了，待外部核</div>${r.msg ? `<div>${r.msg}</div>` : ''}<div class="muted">可以改了再交，也可以接着往下做。</div>`);
+      if (attempts >= 2) btnReveal.hidden = false;
       return;
     }
     if (r.ok) {
