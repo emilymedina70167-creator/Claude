@@ -7,13 +7,15 @@ import { parse, evaluate } from '../expr.js';
 import { compareFx, floatScope, showNum, DEFAULT_RANGE, fxEval } from './sample.js';
 import { diffAst, substitute, has } from './diff.js';
 import { numLimit, orderAt } from './limit.js';
-import { numIntegral } from './integral.js';
+import { numIntegral, numIntegral2 } from './integral.js';
+import { rng } from './sample.js';
+import { expandPrimes } from './diff.js';
 import { polyCoeffs, taylorCoeffs, nearFraction, coefTeX } from './taylor.js';
 
-export const CALC_KINDS = ['deriv', 'antideriv', 'integral', 'limit', 'equiv', 'order', 'taylor'];
+export const CALC_KINDS = ['deriv', 'antideriv', 'integral', 'limit', 'equiv', 'order', 'taylor', 'integral2', 'sum', 'ode'];
 // 只写 calc: 不写 formula: 时：这几种学生写的是 x 的式子，别的是一个数
-export const FUNCTION_KINDS = new Set(['deriv', 'antideriv', 'equiv', 'taylor']);
-const KEYS = ['of', 'at', 'side', 'from', 'to', 'order', 'C', 'wrt'];
+export const FUNCTION_KINDS = new Set(['deriv', 'antideriv', 'equiv', 'taylor', 'ode']);
+const KEYS = ['of', 'at', 'side', 'from', 'to', 'order', 'C', 'wrt', 'x', 'y', 'n', 'eq'];
 export const PAGE_BUDGET = 50; // 页面上一次自检最多花多少毫秒（iPad 上一块板几道题不能卡住画板）
 export const LINT_BUDGET = 2000; // 外部预检
 
@@ -32,12 +34,28 @@ export function parseCalc(line) {
     const v = m[2].slice(mk.index + mk[0].length, i + 1 < marks.length ? marks[i + 1].index : undefined).trim();
     out[mk[1]] = v;
   });
-  const need = { deriv: ['of'], antideriv: ['of'], integral: ['of', 'from', 'to'], limit: ['of', 'at'], equiv: ['of', 'at'], order: ['of', 'at'], taylor: ['of', 'order'] }[out.kind];
+  const need = { deriv: ['of'], antideriv: ['of'], integral: ['of', 'from', 'to'], limit: ['of', 'at'], equiv: ['of', 'at'], order: ['of', 'at'], taylor: ['of', 'order'], integral2: ['of', 'x', 'y'], sum: ['of', 'n'], ode: ['eq'] }[out.kind];
   for (const k of need) if (!out[k]) throw new Error(`calc: ${out.kind} 要写 ${k}=`);
   if (out.C && !['need', 'any', 'no'].includes(out.C)) throw new Error('calc: antideriv 的 C= 写 need（要写 +C，默认）、any（写不写都行）或 no（不写）');
   if (out.side && !['+', '-'].includes(out.side)) throw new Error('side= 写 + 或 -');
   if (out.order !== undefined && out.order !== 'n' && !/^\d+$/.test(out.order)) throw new Error('order= 写一个整数，或者 n（n 阶导的通式）');
   if (out.kind === 'taylor' && Number(out.order) > 8) throw new Error('taylor 的 order 最多写 8');
+  if (out.kind === 'ode') {
+    // 微分方程：eq=y''-3y'+2y=e^x，y 是 x 的函数，' 是求导；order 不写就数 y 后面最多几撇
+    const [l, r = '0'] = out.eq.split('=');
+    out.eqAst = { t: 'bin', op: '-', a: parse(l), b: parse(r) };
+    if (!out.order) out.order = String(Math.max(1, ...[...out.eq.matchAll(/y('+)/g)].map((m) => m[1].length)));
+    out.ofAst = out.eqAst;
+    out.x = 'x';
+    return out;
+  }
+  // 二重积分 x=0..1 y=0..x、级数 n=1..inf：范围
+  for (const k of ['x', 'y', 'n']) {
+    if (out[k] === undefined) continue;
+    const m2 = /^(.+?)\s*\.\.\s*(.+)$/.exec(out[k]);
+    if (!m2) throw new Error(`${k}= 写成 ${k}=0..1 这样（下限..上限）`);
+    out[`${k}Range`] = [m2[1].trim(), m2[2].trim()];
+  }
   out.ofAst = parse(out.of);
   out.wrtList = out.wrt ? out.wrt.split(/[,，\s]+/).filter(Boolean) : null;
   out.x = out.wrtList?.[0] || (has(out.ofAst, 'x') || !has(out.ofAst, 'n') ? 'x' : 'n');
@@ -190,6 +208,45 @@ export function calcSelfCheck(spec, { budget = PAGE_BUDGET } = {}) {
         else if (want.kind !== 'finite' || Math.abs(k - want.value) > 0.05) errors.push(`answer: 是 ${kindText(want)}，页面估出来是 ${showNum(k)} 阶`);
         break;
       }
+      case 'integral2': {
+        const want = valueKind(spec.expected, spec.scope);
+        const base = floatScope(spec.scope);
+        const [x0, x1] = c.xRange.map(boundOf);
+        const [ylo, yhi] = c.yRange.map((t) => { const a = /^[+-]?inf$|^∞$/.test(t.trim()) ? boundOf(t) : null; const ast = a === null ? parse(t) : null; return (x) => (a !== null ? a : fxEval(ast, { ...base, x })); });
+        const r = numIntegral2((x, y) => fxEval(c.ofAst, { ...base, x, y }), [x0, x1], [ylo, yhi]);
+        if (r.ok !== true) hints.push(`页面核不了这个二重积分（${r.why}）`);
+        else if (want.kind !== 'finite' || Math.abs(r.value - want.value) > 1e-6 * Math.max(1, Math.abs(want.value))) errors.push(`answer: 是 ${kindText(want)}，页面算这个二重积分得 ${showNum(r.value)}`);
+        break;
+      }
+      case 'sum': {
+        const pts = spec.domain?.length ? null : [{}];
+        if (pts) {
+          const r = seriesAt(c, {}, spec.scope);
+          const want = valueKind(spec.expected, spec.scope);
+          if (r === null) hints.push('级数加到 5000 项还没收敛，页面核不了');
+          else if (want.kind !== 'finite' || Math.abs(r - want.value) > 1e-6 * Math.max(1, Math.abs(want.value))) errors.push(`answer: 是 ${kindText(want)}，页面加这个级数得 ${showNum(r)}`);
+          break;
+        }
+        // 和函数：在取的点上直接加，和 answer: 比
+        let bad = null, n = 0;
+        for (const pt of samplePts(spec)) {
+          const r = seriesAt(c, pt, spec.scope);
+          if (r === null) continue;
+          n++;
+          const w = fxEval(ans, { ...floatScope(spec.scope), ...pt });
+          if (!(Math.abs(r - w) <= 1e-7 * Math.max(1, Math.abs(r)))) { bad = { pt, r, w }; break; }
+        }
+        if (bad) errors.push(`answer: 和级数对不上：x = ${showNum(bad.pt.x)} 时级数加起来是 ${showNum(bad.r)}，answer 得 ${showNum(bad.w)}`);
+        else if (n < 6) hints.push('级数在取的点上加不收敛，页面核不了（formula: x in (…) 给一个收敛域里面的范围）');
+        break;
+      }
+      case 'ode': {
+        if (!ans) break;
+        const r = odeCheck(c, ans, spec);
+        if (r.ok === false) errors.push(`answer: 不满足方程：${r.msg}`);
+        else if (r.ok === null) hints.push(`页面核不了这个通解（${r.note}）`);
+        break;
+      }
       case 'taylor': {
         if (!ans) break;
         const order = Number(c.order), at = c.at !== undefined ? boundOf(c.at) : 0;
@@ -207,6 +264,76 @@ export function calcSelfCheck(spec, { budget = PAGE_BUDGET } = {}) {
 }
 const zeroQ = (q) => q.sub(q);
 const cmpValue = (a, b) => (Number.isFinite(a) && Number.isFinite(b) ? { ok: sameNum(a, b) } : { ok: null });
+
+// 级数在一点上的和：加到项 < 1e-14 或 5000 项；不收敛回 null
+function seriesAt(c, pt, scope) {
+  const base = { ...floatScope(scope), ...pt };
+  const lo = Number(fxEval(parse(c.nRange[0]), base)), hiT = c.nRange[1].trim();
+  const hi = /^[+]?inf$|^∞$/.test(hiT) ? Infinity : Number(fxEval(parse(hiT), base));
+  let sum = 0, small = 0;
+  for (let n = lo, k = 0; n <= hi && k < 5000; n++, k++) {
+    const t = fxEval(c.ofAst, { ...base, n });
+    if (!Number.isFinite(t)) return null;
+    sum += t;
+    small = Math.abs(t) < 1e-14 ? small + 1 : 0;
+    if (small >= 3) return sum;
+  }
+  return hi === Infinity ? null : sum;
+}
+// 和函数在哪些点上核：formula / domain 的范围里取 16 个
+function samplePts(spec) {
+  const r = rng(`${spec.seed}|sum`);
+  const d = spec.domain;
+  return Array.from({ length: 16 }, () => Object.fromEntries(d.map((v) => [v.name, Number.isFinite(v.lo) && Number.isFinite(v.hi) ? v.lo + (0.05 + 0.9 * r()) * (v.hi - v.lo) : (r() - 0.5) * 4])));
+}
+
+// 微分方程的解（必加 12）：随机取几组常数代进方程，残差 ≈ 0；常数要够 order 个、而且独立（∂y/∂C_i 在几个点上满秩）。
+// 常数认 C_1 C_2 …、C1 C2 …，只有一个常数时也认 C
+const CONSTS_RE = /^C_?\d$|^C$/;
+function odeCheck(c, yAst, spec) {
+  const names = [...collectVars(yAst)].filter((v) => CONSTS_RE.test(v) && !(v in (spec.scope || {})));
+  const order = Number(c.order) || 1;
+  const r = rng(`${spec.seed}|ode`);
+  const domain = domainFor(spec, ['x']);
+  for (let k = 0; k < 3; k++) {
+    const vals = Object.fromEntries(names.map((nm) => [nm, Math.round((r() * 4 - 2) * 100) / 100 || 0.5]));
+    let y = yAst;
+    for (const [nm, v] of Object.entries(vals)) y = substitute(y, nm, N(v));
+    const res = expandPrimes(substitute(c.eqAst, 'y', y), 'x');
+    const t = compareFx(N(0), res, { domain, scope: spec.scope, seed: `${spec.seed}|ode${k}` });
+    if (t.ok === null) return { ok: null, msg: '页面判不了，待外部核。', note: '代进方程算不出来' };
+    if (t.ok === false) return { ok: false, msg: `代进方程不成立（常数取 ${Object.entries(vals).map(([a, b]) => `${a}=${b}`).join('、') || '—'} 时，${t.msg.replace('你的式子得', '左边减右边得').replace(/应该是 \$0\$/, '应该是 0')}）`, note: '不满足方程' };
+  }
+  if (order > 0 && names.length !== order) return { ok: false, msg: `通解要 ${order} 个独立常数（写 C_1、C_2），你写了 ${names.length} 个`, note: `常数个数 ${names.length}，应是 ${order}` };
+  // 独立：∂y/∂C_i 在 order + 2 个点上组成的矩阵满秩
+  const base = floatScope(spec.scope);
+  const xs = [0.3, 0.9, 1.4, -0.6, 2.1, -1.3].slice(0, order + 2);
+  const M = xs.map((x) => names.map((nm) => { try { return fxEval(diffAst(yAst, nm), { ...base, x, ...Object.fromEntries(names.map((m) => [m, 0.7])) }); } catch { return NaN; } }));
+  if (M.flat().some((v) => !Number.isFinite(v))) return { ok: null, msg: '页面判不了，待外部核。', note: '常数独立性算不出来' };
+  if (rankOf(M) < names.length) return { ok: false, msg: `这几个常数不独立（合起来其实是更少的常数）：通解要 ${order} 个独立常数`, note: '常数不独立' };
+  return { ok: true, msg: '', note: '' };
+}
+function collectVars(n, out = new Set()) {
+  if (!n) return out;
+  if (n.t === 'var') out.add(n.name);
+  ['a', 'b'].forEach((k) => collectVars(n[k], out));
+  (n.args || n.items || []).forEach((m) => collectVars(m, out));
+  return out;
+}
+function rankOf(M) {
+  const A = M.map((r) => r.slice());
+  let rank = 0;
+  for (let c = 0; c < (A[0]?.length || 0); c++) {
+    let p = -1, best = 0;
+    for (let i = rank; i < A.length; i++) if (Math.abs(A[i][c]) > best) { best = Math.abs(A[i][c]); p = i; }
+    const scale = Math.max(1, ...A.map((r) => Math.abs(r[c])));
+    if (p < 0 || best <= 1e-9 * scale) continue;
+    [A[rank], A[p]] = [A[p], A[rank]];
+    for (let i = 0; i < A.length; i++) if (i !== rank) { const f = A[i][c] / A[rank][c]; A[i] = A[i].map((v, j) => v - f * A[rank][j]); }
+    rank++;
+  }
+  return rank;
+}
 
 // 数列极限：of 里只有 n（没有 x）。有 ! 或 (-1)^n 的不硬算（审的小条）
 function isSequence(c) {
@@ -263,7 +390,12 @@ export function judgeCalc(spec, given) {
       if (policy === 'no' && hadC) return { ok: false, msg: '这一题不写 +C', note: '多写了 +C' };
       return r;
     }
-    case 'integral': case 'limit': case 'order': {
+    case 'sum': {
+      if (!spec.domain?.length) return judgeValue('sum', valueKind(spec.expected, spec.scope), valueKind(given, spec.scope));
+      return compareFx(expectedOf(spec), g, opt);
+    }
+    case 'ode': return odeCheck(c, g, spec);
+    case 'integral': case 'limit': case 'order': case 'integral2': {
       const want = valueKind(spec.expected, spec.scope);
       const got = valueKind(given, spec.scope);
       if (got.kind === 'bad') return { ok: false, msg: '这里写一个数（或 ∞、+∞、−∞、不存在、发散）', note: '写的不是一个数' };

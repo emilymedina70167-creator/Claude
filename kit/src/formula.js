@@ -319,7 +319,7 @@ function padFor(c) {
 // calc: 没配 formula: 时的变量（第五节第 2 条：一行就够）
 function calcFree(c) {
   // of 里的实数变量都要取点（偏导 wrt=y 时 x 照样要有值）；n 是 n 阶导的通式自己的
-  const vars = [...new Set([...(c.wrtList || [c.x]), ...[...varsIn(c.ofAst)].filter((v) => /^[a-z]$/.test(v) && !['e', 'n'].includes(v))])];
+  const vars = [...new Set([...(c.wrtList || [c.x]), ...[...varsIn(c.ofAst)].filter((v) => /^[a-z]$/.test(v) && !['e', 'n'].includes(v) && !(c.kind === 'ode' && v === 'y'))])];
   const n = c.order === 'n' ? ['n=1..5'] : [];
   if (c.kind === 'deriv' && c.at !== undefined) return n.length ? n[0] : '-';
   return FUNCTION_KINDS.has(c.kind) ? [...vars.map((v) => (v === 'n' ? 'n' : `${v} in (-3, 3)`)), ...n].join(', ') : '-';
@@ -498,7 +498,9 @@ export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
     try { expected = normalizeFormula(shown, { names: [...freeNames, ...Object.keys(scope)] }); ast = parse(expected); } catch { throw new Error(`answer: ${shown} 写错了：${e.message}`); }
   }
   const used = [...varsIn(ast)].filter((v) => !freeNames.includes(v));
-  const missing = used.filter((v) => !(v in scope) && !['I', 'E', 'pi', 'e', 'inf', '__dne', '__div'].includes(v));
+  // 微分方程的 answer: 里的常数 C_1、C_2 不算没定义的量
+  const odeC = calc?.kind === 'ode' ? ['C', 'C_1', 'C_2', 'C_3', 'C1', 'C2', 'C3'] : [];
+  const missing = used.filter((v) => !(v in scope) && !['I', 'E', 'pi', 'e', 'inf', '__dne', '__div', ...odeC].includes(v));
   if (missing.length) throw new Error(`answer: 里的 ${missing.join('、')} 没有定义：在 let 里给出它的值`);
   const names = [...new Set([...freeNames, ...Object.keys(scope).filter((k) => /^[A-Za-z_]\w*$/.test(k))])];
   // 实数取点：写了范围、domain:、calc:，或者变量叫 x、y——但题里用到矩阵（矩阵的量、det tr rank inv、转置）时照旧整数取点（线代的 |A − xE|）
@@ -511,7 +513,7 @@ export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
     const keys = [...freeNames, ...used.filter((v) => !['pi', 'e', 'inf', '__dne', '__div'].includes(v))];
     if (calc) {
       // 学生写 +C、o(x^3)：输入框读法里认这几个名字，判的时候在语法树上去掉（fx/calc.js 的 stripTail）
-      const extra = calc.kind === 'antideriv' ? CONST_NAMES.filter((c) => !(c in scope)) : [];
+      const extra = calc.kind === 'antideriv' ? CONST_NAMES.filter((c) => !(c in scope)) : calc.kind === 'ode' ? ['C', 'C_1', 'C_2', 'C_3', 'C1', 'C2', 'C3'].filter((c) => !(c in scope)) : [];
       const spec = { expected, free, scope, names: [...names, ...extra], keys, display: shown, real: true, domain, ints, seed, calc, pad: padFor(calc),
         read: { names: [...names, ...extra], real: domain.length > 0, ...(calc.kind === 'taylor' ? { funcs: [...FORMULA_FUNCS, 'o', 'O'] } : {}) } };
       const { errors, hints } = calcSelfCheck(spec, { budget: opts.budget ?? PAGE_BUDGET });
