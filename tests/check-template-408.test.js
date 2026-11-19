@@ -208,3 +208,41 @@ ${F}`;
 test('英语、code 不做模板：照旧报', () => {
   assert.match(parseProbe('code', 'id: c\nq: 写\ntarget: x\nlevel: 核心\npick k = int(1, 3)\ntests:\nf(1) -> 1\nref: int f(int x){return x;}').error || '', /模板/);
 });
+
+test('复查：self × 不写数、超过 6 报；probeIssues 分成 hard / redraw；式子里非整数的数加括号', async () => {
+  const { probeIssues, SELF_MAX } = await import('../kit/src/check/spec.js');
+  const body = (r) => ['block DS-L8.3 must=p1', SHELL('p1', { retry: r })].join('\n');
+  assert.ok(parseCheck('check id=k1', body('self ×')).errors.some((e) => e.includes('self × 后面写个数')));
+  assert.ok(parseCheck('check id=k1', body('self x, p1c')).errors.some((e) => e.includes('self × 后面写个数')));
+  assert.equal(SELF_MAX, 6);
+  assert.deepEqual(parseCheck('check id=k1', body('self × 6')).check.probes.p1.retry.length, 6);
+  assert.ok(parseCheck('check id=k1', body('self × 7')).errors.some((e) => e.includes('self × 最多 6')));
+  // 每一组都并列：分进 redraw；probeProblems 是两种合起来
+  const allTie = OPT('p2').replace('pick v = seq(10, 1, 4)', 'pick v = int(5, 9)').replaceAll('\\calc{list(v)}', '\\calc{v}').replace('refs="\\calc{v}"', 'refs="1 2 3 \\calc{v}"');
+  const inst = drawProbe(parseCheck('check id=k1', ['block OS-L3.4 must=p2', allTie].join('\n')).check.probes.p2, { rand: () => 0 }).probe;
+  const is = probeIssues(inst);
+  assert.deepEqual(is.hard, []);
+  assert.ok(is.redraw.some((m) => /victims/.test(m) && /并列/.test(m)));
+  assert.deepEqual(probeProblems(inst), [...is.hard, ...is.redraw]);
+  assert.ok(Array.isArray(is.redraw) && !('redraw' in probeProblems(inst)));
+  // 式子字段：h = 1/3 → (1/3)，负数加括号，整数、一串数不加；run 的字段不加
+  const pr = `${F}predict
+id: p3
+pick k = int(1, 1)
+let h = 1/3
+let g = -2
+q: 算
+target: x
+level: 方法
+run r: paging algo=fifo frames=3 refs="1 2 \\calc{k} 3"
+expect 值: 2^\\calc{h} + r.faults - \\calc{g} + \\calc{k}
+wrong w1: \\calc{h} * r.faults => 乘错了
+teach default: 想。
+${F}`;
+  const pi = drawProbe(parseCheck('check id=k1', ['block OS-L3.4 must=p3', pr].join('\n')).check.probes.p3, { rand: () => 0 }).probe;
+  assert.equal(pi.expects[0].value, '2^(1/3) + r.faults - (-2) + 1');
+  assert.equal(pi.expects[0].wrongs[0].expr, '(1/3) * r.faults');
+  assert.equal(pi.runs[0].fields.refs, '1 2 1 3');
+  const sv = `${F}calc\nid: s1\npick a = int(2, 2)\nlet h = a/3\nq: 求\ntarget: x\nlevel: 核心\nresult: \\calc{h}\nsteps:\ns1 calc: 算\n${F}`;
+  assert.equal(drawProbe(parseCheck('check id=k1', ['block L2.1.1 must=s1', sv].join('\n')).check.probes.s1, { rand: () => 0 }).probe.result, '(2/3)');
+});

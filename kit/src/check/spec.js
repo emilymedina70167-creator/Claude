@@ -118,13 +118,16 @@ export function msOf(v) {
 const list = (v) => String(v ?? '').split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean);
 // retry: self × 2（× x * 都认，有无空格都行；单写 self 是一次）= 写两次这道题自己：只给带 pick 的模板（每次另取一组数）。
 // 照写的先后展开（retry: p1c, self × 2 → p1c, p1, p1）；N 不是正整数、没有 pick 的题写 self 抛中文原因
-const SELF = /(?<![\w~.-])self(?:\s*[×xX*]\s*(\d+))?(?![\w~.-])/g;
+const SELF = /(?<![\w~.-])self(?:\s*([×xX*])\s*(\d*))?(?![\w~.-])/g;
+export const SELF_MAX = 6; // self × N 最多几次：再多一道题拆得太碎，学生一直在做同一种
 function retryOf(v, id, isTpl) {
   let bad = null;
-  const text = String(v ?? '').replace(SELF, (all, n) => {
+  const text = String(v ?? '').replace(SELF, (all, times, n) => {
+    if (times !== undefined && n === '') { bad = 'self × 后面写个数'; return ' '; }
     const k = n === undefined ? 1 : Number(n);
     if (!(k >= 1)) bad = `retry 的「${all.trim()}」：self × N 的 N 写 1 以上`;
-    return ` ${Array(Math.max(k, 0)).fill('\u0000').join(' ')} `;
+    else if (k > SELF_MAX) bad = `self × 最多 ${SELF_MAX}`;
+    return ` ${Array(Math.min(Math.max(k, 0), SELF_MAX)).fill('\u0000').join(' ')} `;
   });
   if (bad) throw new Error(bad);
   const out = list(text);
@@ -900,11 +903,11 @@ export function selfCheck(check, base = {}, { lenient = false } = {}) {
         let d;
         try { d = drawProbe(p, { base, avoid, rand }); } catch (e) { out.push(`${pid}：${e.message}`); break rounds; }
         avoid = d.raw;
-        const pp = probeProblems(d.probe, base);
-        const hard = [...d.probe.calcErrors, ...pp.filter((m) => !pp.redraw?.has(m))];
+        const is = probeIssues(d.probe, base);
+        const hard = [...d.probe.calcErrors, ...is.hard];
         if (hard.length) { out.push(`${pid}（取 ${d.picked} 时）的 ${hard[0]}`); break rounds; }
-        if (!pp.length) continue rounds;
-        if (t === DRAW_TRIES - 1) { out.push(`${pid}（取 ${d.picked} 时）的 ${pp[0]}（连着取了 ${DRAW_TRIES} 组都这样）`); break rounds; }
+        if (!is.redraw.length) continue rounds;
+        if (t === DRAW_TRIES - 1) { out.push(`${pid}（取 ${d.picked} 时）的 ${is.redraw[0]}（连着取了 ${DRAW_TRIES} 组都这样）`); break rounds; }
       }
     }
   }
@@ -924,15 +927,25 @@ export function seeded(str) {
   };
 }
 
-/**
- * 一道题的量算不算得出来、example 满不满足条件（selfCheck 的那一半；每条前面由调用方加「p1 的」）。
- * 返回的数组带 redraw（Set）：其中靠这组数本身的那几条——用到的量有并列、against 的错法分不开（或这组数上没列出来）。
- * 模板取到这样的数当成 where 不满足、重取（materialize、selfCheck 的模板那一段）；固定的题照样是写法错误
- */
+/** 一道题的量算不算得出来、example 满不满足条件（selfCheck 的那一半；每条前面由调用方加「p1 的」）：probeIssues 的两种合起来 */
 export function probeProblems(p, base = {}) {
-  const out = [];
+  const { hard, redraw } = probeIssues(p, base);
+  return [...hard, ...redraw];
+}
+
+/**
+ * 同 probeProblems，分成两种：{ hard, redraw }。redraw 是靠这组数本身的那几条——用到的量有并列、against 的错法分不开
+ * （或这组数上没列出来）：模板取到这样的数当成 where 不满足、重取（materialize、selfCheck 的模板那一段）；固定的题两种都是写法错误
+ */
+export function probeIssues(p, base = {}) {
   const soft = new Set();
-  Object.defineProperty(out, 'redraw', { value: soft }); // 不可枚举：比数组的地方（deepEqual）照旧只比那几句
+  const all = problemsOf(p, base, soft);
+  return { hard: all.filter((m) => !soft.has(m)), redraw: all.filter((m) => soft.has(m)) };
+}
+
+// 全部问题一句一句排；靠这组数的那几条同时放进 soft
+function problemsOf(p, base, soft) {
+  const out = [];
   let vars;
   try { vars = probeVars(p, base); } catch (e) { return [`let 算不出来：${e.message}`]; }
   const runOut = runProblems(p);
@@ -1189,14 +1202,20 @@ function traceProblems(p, soft = new Set()) {
   return out;
 }
 
-// 题里的文字换数：$…$ 里的 \calc 写成 TeX、外面加 {}（和 practice 一样）；公式外面的写成文字（1/2，不是 \tfrac）
-function fillMixed(text, vars) {
+// 题里的文字换数：$…$ 里的 \calc 写成 TeX、外面加 {}（和 practice 一样）；公式外面的写成文字（1/2，不是 \tfrac）。
+// expr：要当式子算的字段（expect 的值、wrong 的式子、result）——不是非负整数的单个数加括号（2^\calc{h}、h=1/3 → 2^(1/3)，
+// 负数也加：x - \calc{h} 不写成 x - -1）；一串数（list(v)）、矩阵照原样
+function fillMixed(text, vars, { expr = false } = {}) {
   const errors = [];
   const parts = String(text ?? '').split(/(\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/);
   const out = parts.map((part, i) => {
     if (!part.includes('\\calc')) return part;
     const inMath = i % 2 === 1;
-    const r = expandCalc(part, (e) => (inMath ? calcValue(e, vars).tex : calcValue(e, vars).text), { wrap: inMath });
+    const r = expandCalc(part, (e) => {
+      const c = calcValue(e, vars);
+      if (inMath) return c.tex;
+      return expr && !Array.isArray(c.value) && !/^\d+$/.test(c.text) ? `(${c.text})` : c.text;
+    }, { wrap: inMath });
     errors.push(...r.errors);
     return r.tex;
   }).join('');
@@ -1214,7 +1233,9 @@ export function drawProbe(probe, { base: lesson = {}, rand = Math.random, avoid 
   const own = [...probe.tpl.picks.map((x) => x.name), ...(probe.lets || []).map((x) => x.name)];
   const vals = floatVars(Object.fromEntries(own.map((n) => [n, vars[n]])));
   const errors = [];
-  const fill = (t) => { if (t === undefined || t === null) return t; const r = fillMixed(t, vars); errors.push(...r.errors); return r.text; };
+  const fillWith = (t, expr) => { if (t === undefined || t === null) return t; const r = fillMixed(t, vars, { expr }); errors.push(...r.errors); return r.text; };
+  const fill = (t) => fillWith(t, false);
+  const fillExpr = (t) => fillWith(t, true); // 式子：非整数的数加括号
   const inst = { ...probe, q: fill(probe.q), lets: [], vals, tpl: null, tplOf: probe.id, picked: pickedText(picked) };
   if (probe.claim !== undefined) inst.claim = fill(probe.claim);
   if (probe.answer !== undefined) inst.answer = fill(probe.answer);
@@ -1231,8 +1252,8 @@ export function drawProbe(probe, { base: lesson = {}, rand = Math.random, avoid 
   if (probe.runs) inst.runs = probe.runs.map((r) => ({ ...r, fields: fillAll(r.fields) }));
   if (probe.fields) inst.fields = fillAll(probe.fields);
   if (probe.fill) inst.fill = fillAll(probe.fill);
-  if (probe.expects) inst.expects = probe.expects.map((e) => ({ ...e, label: fill(e.label), value: fill(e.value), wrongs: e.wrongs.map((w) => ({ ...w, expr: fill(w.expr), msg: fill(w.msg) })) }));
-  if (probe.result !== undefined) inst.result = fill(probe.result);
+  if (probe.expects) inst.expects = probe.expects.map((e) => ({ ...e, label: fill(e.label), value: fillExpr(e.value), wrongs: e.wrongs.map((w) => ({ ...w, expr: fillExpr(w.expr), msg: fill(w.msg) })) }));
+  if (probe.result !== undefined) inst.result = fillExpr(probe.result);
   if (probe.text !== undefined) inst.text = fill(probe.text);
   if (probe.slots && probe.exampleSrc) {
     // seq / text / procs 的格子收原文：先把 \calc 换成数（S=\calc{list(v)} 5），矩阵、数的格子照旧用取到的量算
