@@ -2,7 +2,7 @@
 // 下面每一张「对的表」「错法的表」都是照引擎跑出来再抄的（希尔 49 38 65 97 76 13 27 49′、增量 4 2 1 和王道的例子一样）
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseProbe, parseCheck, selfCheck, traceTable } from '../kit/src/check/spec.js';
+import { parseProbe, parseCheck, selfCheck, traceTable, ENGINE_CHECK_FIELDS } from '../kit/src/check/spec.js';
 import { judgeMachine, teachFor, outcomeOf, itemLabel, fallbackPrompt } from '../kit/src/check/judge.js';
 import { sortPass } from '../kit/src/engines/measures.js';
 
@@ -254,4 +254,53 @@ test('散列表：表下面那几格（ASL）表都对了才判，叫外部写�
   const fp = fallbackPrompt({ probe: ins, answer: bad, items: j.items });
   assert.match(fp, /第 2 趟：2 \| 1 \| 3/);
   assert.doesNotMatch(fp, /[他她]/);
+});
+
+// —— 复查修正 ——
+
+test('OPT 有并列的那几列空着：不是另一种做法，照常判没写（没过，不是待核）', () => {
+  const opt = P(OPT_SRC);
+  const blank = OPT_ROWS.map((r, k) => (k < 9 ? r.slice() : ['', '', '', '', '']));
+  const r = judgeMachine(opt, { cells: blank });
+  assert.equal(item(r, 'r10').ok, false);
+  assert.match(item(r, 'r10').why, /还空着/);
+  assert.equal(outcomeOf(opt, r.items).outcome, 'fail');
+});
+
+test('引擎的字段和检验的撞名：写成 use.名字: 交给引擎；只写了检验那一个时报怎么写', () => {
+  const s = P('id: s1\ntarget: RR 的时间片\nlevel: 方法\nuse: sched\nalgo: rr\nuse.q: 2\nprocs: P1 0 3, P2 1 2');
+  assert.deepEqual(s.fields, { algo: 'rr', q: '2', procs: 'P1 0 3, P2 1 2' });
+  assert.equal(s.q, '');
+  assert.deepEqual(traceTable(s).table.rows.map((r) => r.cells.map((c) => c.v)), [['5', '5', '5/3', '2'], ['4', '3', '3/2', '1']]);
+  assert.match(parseProbe('trace', 'id: t1\ntarget: x\nlevel: A B C\nuse: tree').error, /level 是检验的字段；引擎的 level 写成 use\.level:/);
+  assert.match(parseProbe('trace', 'id: t1\ntarget: x\nlevel: 基础\nuse: tree\nlevel: A B C').error, /level 写了两次.*use\.level:/);
+  // 引擎缺了被检验拿走的字段：自检的话里提醒
+  const { check } = parseCheck('check id=k1', ['block OS-L2.2 must=s2', '```trace', 'id: s2\ntarget: x\nlevel: 基础\nuse: sched\nalgo: rr\nprocs: P1 0 3, P2 1 2', '```'].join('\n'));
+  assert.ok(selfCheck(check, {}, { lenient: true }).some((m) => /q 是检验的字段；引擎的 q 写成 use\.q:/.test(m)));
+});
+
+test('ENGINE_CHECK_FIELDS 照引擎的源码：每一项那个引擎真读这个字段', async () => {
+  const { readFileSync } = await import('node:fs');
+  const reg = readFileSync(new URL('../kit/src/engines/registry.js', import.meta.url), 'utf8');
+  const fileOf = {};
+  for (const m of reg.matchAll(/import \{([^}]+)\} from '\.\/([\w]+\.js)'/g)) for (const n of m[1].split(',')) fileOf[n.trim()] = m[2];
+  for (const [e, ks] of Object.entries(ENGINE_CHECK_FIELDS)) {
+    const src = readFileSync(new URL(`../kit/src/engines/${fileOf[`${e}Engine`]}`, import.meta.url), 'utf8');
+    for (const k of ks) assert.ok(new RegExp(`fields\\.${k}\\b`).test(src), `${e} 的 ${k}`);
+  }
+});
+
+test('后面的行空着、读不懂：照实说，不说「推也不对」；并列的提示留着 rows: a-b 的起点；rows 写错不算字段读不懂', () => {
+  const bad1 = '49 13 27 49 76 38 97 65';
+  const r = judgeMachine(SHELL, { cells: [row(bad1), ['', '', '', '', '', '', '', ''], row('1 2 x 4 5 6 7 8')] });
+  assert.match(item(r, 'r2').why, /第 2 趟（d = 2）还空着/);
+  assert.match(item(r, 'r3').why, /第 3 趟（d = 1）读不懂/);
+  const msgs = (src) => {
+    const { check } = parseCheck('check id=k1', ['block OS-L3.2 must=o1', '```trace', src.trim(), '```'].join('\n'));
+    return selfCheck(check, {}, { lenient: true });
+  };
+  assert.ok(msgs(`${OPT_SRC}\nrows: 2-12`).some((m) => /rows: 2-9/.test(m)), msgs(`${OPT_SRC}\nrows: 2-12`).join('\n'));
+  const over = msgs(`${OPT_SRC}\nrows: 2-13`);
+  assert.ok(over.some((m) => /^o1 的 rows: 写到第 13 列/.test(m)), over.join('\n'));
+  assert.ok(over.every((m) => !/字段读不懂/.test(m)));
 });

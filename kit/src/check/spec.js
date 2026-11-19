@@ -227,6 +227,8 @@ export function parseProbe(type, src) {
     if (!raw.trim()) { last = null; continue; }
     let m;
     if ((m = raw.match(TEACH))) { teach[m[1]] = m[2].trim(); last = { into: teach, key: m[1] }; continue; }
+    // trace：引擎的字段和检验的撞名（tree 的 level、sched 的 q、kmp 的 use……）写成 use.名字:，原样交给引擎
+    if (base === 'trace' && (m = raw.match(USE_FIELD))) { const k = m[1].toLowerCase(); efields[k] = m[2].trim(); last = { into: efields, key: k }; continue; }
     // run 行只在 construct、predict 里认：别的题型（英语的 recall）里「run out: …」这样的续行照旧是续行
     if ((base === 'construct' || base === 'predict') && (m = raw.match(RUN))) {
       const [, name, engine, rest] = m;
@@ -277,6 +279,8 @@ export function parseProbe(type, src) {
       if (k === 'line' && base === 'locate') { lines.push(m[2].trim()); last = { line: lines.length - 1 }; continue; }
       // trace：不是检验的字段都是引擎的（algo: shell、array: …、refs: …），原样交给引擎
       if (base === 'trace' && !COMMON.includes(k) && !OWN.trace.includes(k)) { efields[k] = m[2].trim(); last = { into: efields, key: k }; continue; }
+      // trace 里检验的字段写了两次：多半第二个是引擎的同名字段
+      if (base === 'trace' && f[k] !== undefined) { errors.push(`${k} 写了两次：${k} 是检验的字段；引擎的 ${k} 写成 use.${k}:`); continue; }
       if (!COMMON.includes(k) && !OWN[base].includes(k)) { errors.push(`看不懂「${raw.trim().slice(0, 40)}」：${type} 的字段是 ${[...COMMON, ...OWN[base]].join('、')}、must / may / wrong / teach / let / if / expr${base === 'construct' || base === 'predict' ? ' / run' : ''}${base === 'predict' ? ' / expect' : ''}`); continue; }
       f[k] = m[2].trim(); last = { into: f, key: k }; continue;
     }
@@ -294,11 +298,13 @@ export function parseProbe(type, src) {
   if (twice) return { error: `${f.id || type}：要点编号 ${twice} 用了两次（自动编号和手写编号撞了：要么都写编号，要么都不写）` };
   const id = f.id || '';
   if (!id) return { error: `${type} 要写 id:` };
-  if (!ID_RE.test(id)) return { error: `id「${id}」不合法：只能用字母、数字和 _ - . ~ : @ +` };
+  // trace 的引擎正好有这个名字的字段（tree 的 level）：检验读不懂时提醒一句怎么交给引擎
+  const clash = (k) => (base === 'trace' && engineHas(f.use, k) ? `；${k} 是检验的字段；引擎的 ${k} 写成 use.${k}:` : '');
+  if (!ID_RE.test(id)) return { error: `id「${id}」不合法：只能用字母、数字和 _ - . ~ : @ +${clash('id')}` };
   const at = (msg) => ({ error: `${id}：${msg}` });
   if (!f.target) return at('要写 target:（打的是哪个典型错法：错题、误解的编号或一句话）');
-  if (!LEVELS.includes(f.level)) return at(`level: 只能写 ${LEVELS.join(' / ')}`);
-  if (f.facet && !FACETS.includes(f.facet)) return at(`facet: 只能写 ${FACETS.join(' / ')}`);
+  if (!LEVELS.includes(f.level)) return at(`level: 只能写 ${LEVELS.join(' / ')}${clash('level')}`);
+  if (f.facet && !FACETS.includes(f.facet)) return at(`facet: 只能写 ${FACETS.join(' / ')}${clash('facet')}`);
   if (pts.must.length > MUST_MAX && base === 'recall') return at(`must 最多 3 条（现在 ${pts.must.length} 条）`);
   const xIds = expects.map((e) => e.id);
   const xTwice = xIds.find((x, i) => xIds.indexOf(x) !== i);
@@ -729,7 +735,7 @@ export function selfCheck(check, base = {}, { lenient = false } = {}) {
     const p = P[pid];
     if (!placed.has(pid) && !retried.has(pid)) out.push(`${pid} 没排进任何一块，也不是谁的 retry（不出现的题写进 spare）`);
     for (const r of p.retry) {
-      if (!P[r]) out.push(`${pid} 的 retry 写了 ${r}，块里没有这道题`);
+      if (!P[r]) out.push(`${pid} 的 retry 写了 ${r}，块里没有这道题${p.type === 'trace' && engineHas(p.use, 'retry') ? '；retry 是检验的字段；引擎的 retry 写成 use.retry:' : ''}`);
       else if (P[r].type !== p.type) out.push(`${pid} 的 retry ${r} 是 ${P[r].type}，和本题的题型 ${p.type} 不一样`);
     }
     if (must.has(pid) && !lenient) {
@@ -864,6 +870,15 @@ function predictProblems(p, base, tieLines) {
 const NO_TRACE = new Set(['elim', 'det', 'eig', 'schmidt', 'quad']);
 const traceable = (use) => !!ENGINES[use]?.table && !NO_TRACE.has(use);
 const TRACE_HINT = 'sort、paging、disk、sched、tree、hash、banker';
+const USE_FIELD = /^\s*use\.([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/;
+// 引擎自己有、名字和检验的字段一样的（tests/check-trace.test.js 照引擎的源码核这张表）：写成 use.名字:
+export const ENGINE_CHECK_FIELDS = {
+  sched: ['q'], memexp: ['target'], util: ['target'], tree: ['level'], thread: ['level'],
+  csma: ['retry'], mem: ['retry'], net: ['use'], kmp: ['use'],
+};
+const engineHas = (use, k) => (ENGINE_CHECK_FIELDS[String(use ?? '').trim().toLowerCase()] || []).includes(k);
+// rows / given / cols 写的不对（不是引擎的字段）：自检照原话报，不加「字段读不懂」
+const specError = (msg) => Object.assign(new Error(msg), { spec: true });
 
 // rows: 2（只填前 2 行）/ rows: 2-3（第 1 行直接给出，只填第 2～3 行）→ { from, to }；写错 null
 function rowsOf(v) {
@@ -904,14 +919,14 @@ export function traceTable(probe) {
   const spec = {};
   const fill = probe.fill || {};
   if (fill.rows) {
-    if (fill.rows.to > full.rows.length) throw new Error(`rows: 写到第 ${fill.rows.to} ${unit}，这张表只有 ${full.rows.length} ${unit}`);
+    if (fill.rows.to > full.rows.length) throw specError(`rows: 写到第 ${fill.rows.to} ${unit}，这张表只有 ${full.rows.length} ${unit}`);
     spec.rows = String(fill.rows.to);
     if (fill.rows.from > 1) spec.given = String(fill.rows.from - 1);
   }
   if (fill.given !== undefined) spec.given = fill.given;
   if (fill.cols !== undefined) spec.cols = fill.cols;
   const made = fillSpec(full, spec);
-  if (made.errors.length) throw new Error(made.errors[0]);
+  if (made.errors.length) throw specError(made.errors[0]);
   const table = made.table;
   // 错法：每一种照它的输入再跑一遍、出同样套过 rows / given / cols 的表（算不了的那种跳过）
   const variants = [];
@@ -954,12 +969,21 @@ const valuesOf = (t) => Object.assign(t.rows.map((row) => row.cells.map((c) => {
 // trace：字段读得懂、没有写错名字的字段、要填的行没有并列、against 的错法这组数分得开
 function traceProblems(p) {
   let T;
-  try { T = traceTable(p); } catch (e) { return [`${p.use} 的字段读不懂：${e.message}`]; }
+  try { T = traceTable(p); } catch (e) {
+    if (e.spec) return [e.message]; // rows / given / cols 写的不对，不是引擎的字段
+    // 引擎要的字段可能被检验拿走了（sched 的 q、memexp 的 target）：没写 use.名字: 的提醒一句
+    const lost = (ENGINE_CHECK_FIELDS[p.use] || []).filter((k) => p.fields?.[k] === undefined).map((k) => `${k} 是检验的字段；引擎的 ${k} 写成 use.${k}:`);
+    return [`${p.use} 的字段读不懂：${e.message}${lost.length ? `（${lost.join('；')}）` : ''}`];
+  }
   const out = [...T.unknown];
   const tied = traceRows(T.table).filter((x) => T.ties.includes(x.r));
   if (tied.length) {
     const first = tied[0].r;
-    out.push(`${traceRowName(T.table, first)}起有并列（几种做法一样好，页面判不了）：换一组数${first ? `，或者用 rows: ${first} 只填前 ${first} ${T.table.dir === 'col' ? '列' : '行'}` : ''}`);
+    // 写了 rows: 2-9 这种的，提示照样从原来那一行起
+    const from = p.fill?.rows?.from || 1;
+    const unit = T.table.dir === 'col' ? '列' : '行';
+    const fix = first < from ? '' : from > 1 ? `，或者用 rows: ${from}-${first} 只填第 ${from}～${first} ${unit}` : `，或者用 rows: ${first} 只填前 ${first} ${unit}`;
+    out.push(`${traceRowName(T.table, first)}起有并列（几种做法一样好，页面判不了）：换一组数${fix}`);
   }
   for (const a of p.against || []) {
     const v = T.variants.find((x) => x.key === a);

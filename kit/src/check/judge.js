@@ -224,7 +224,8 @@ function traceItems(probe, answer = {}) {
     const res = checkFill({ ...table, rows: [table.rows[x.r]], extra: [] }, [cells[x.r]]);
     if (res.ok) { items.push({ id: x.id, ok: true, why: '' }); continue; }
     // 靠并列定的那几步：学生写的可能是另一种也对的做法——待核，后面的行照常核
-    if (ties.includes(x.r)) { items.push({ id: x.id, ok: null, why: TRACE_TIE }); continue; }
+    // 空着的格不是「另一种做法」：照常判没写
+    if (ties.includes(x.r) && !res.first.empty) { items.push({ id: x.id, ok: null, why: TRACE_TIE }); continue; }
     bad = { ...x, first: res.first };
     break;
   }
@@ -253,7 +254,10 @@ function traceItems(probe, answer = {}) {
       const mine = nums(x.r);
       let ok = false;
       if (prev && mine) { const want = sortPass(input.algo, prev, x.r + 1, { gaps: input.gaps, n }); ok = want.length === mine.length && want.every((v, i) => v === mine[i]); }
-      later.push({ id: x.id, ok, carried: true, why: ok ? '' : !prev ? '上一行读不成一排数，接着核不了' : `${traceRowName(table, x.r)}按你写的上一行推也不对` });
+      const name = traceRowName(table, x.r);
+      const blank = table.rows[x.r].cells.some((c, j) => !c.given && normCell(cells[x.r][j]) === '');
+      const why = ok ? '' : blank ? `${name}还空着` : !mine ? `${name}读不懂：写一排数` : !prev ? '上一行读不成一排数，接着核不了' : `${name}按你写的上一行推也不对`;
+      later.push({ id: x.id, ok, carried: true, why });
       prev = mine;
     }
   }
