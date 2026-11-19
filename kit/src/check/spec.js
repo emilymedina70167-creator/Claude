@@ -40,6 +40,7 @@ import { ENGINES } from '../engines/registry.js';
 import { fillSpec, checkFill, normCell, trackFields } from '../stepperspec.js';
 import { spaceOfId } from '../memory/space.js';
 import { parseBrackets, parseRoles, ROLES, findWrong, parseDecoys, parseAnswer, normText } from '../entext.js';
+import { bigO } from './values.js'; // values.js 也 import 这里：互相只在函数里用，不在模块顶层调用
 
 // 408、英语一的题型（计划 4，docs/superpowers/plans/2026-11-19-check-408-en.md）：trace predict code parse translate rewrite errfind 是新的，
 // tradeoff 是 recall 的别名、calc 是 solve 的别名（读法、判法照原来的，type 存自己的名字，BASE_OF / baseType）
@@ -362,7 +363,7 @@ export function parseProbe(type, src) {
   if (!f.target) return at('要写 target:（打的是哪个典型错法：错题、误解的编号或一句话）');
   if (!LEVELS.includes(f.level)) return at(`level: 只能写 ${LEVELS.join(' / ')}${clash('level')}`);
   if (f.facet && !FACETS.includes(f.facet)) return at(`facet: 只能写 ${FACETS.join(' / ')}${clash('facet')}`);
-  if (pts.must.length > MUST_MAX && base === 'recall') return at(`must 最多 3 条（现在 ${pts.must.length} 条）`);
+  if (pts.must.length > MUST_MAX && (base === 'recall' || base === 'translate')) return at(`must 最多 3 条（现在 ${pts.must.length} 条）`);
   const xIds = expects.map((e) => e.id);
   const xTwice = xIds.find((x, i) => xIds.indexOf(x) !== i);
   if (xTwice) return at(`expect 的编号 ${xTwice} 用了两次`);
@@ -526,6 +527,8 @@ function englishProbe(base, f, pts, hasNot, tpl) {
   }
   if (base === 'rewrite') {
     if (!hasNot.has.length && !hasNot.not.length) return { error: '要写 has: 片段 => 话（改写以后一定有的字，一行一条；不该有的写 not:）' };
+    // 只写 not: 的：随便写一句没有那些字的都「过」了——要么写一条 has:，要么写 must 交给页面里的 Claude 判
+    if (!hasNot.has.length && !pts.must.length) return { error: 'rewrite 至少写一条 has:（要出现的写法）；只写 not: 时要写 must' };
     if (!f.example) return { error: '要写 example:（一句满足全部 has、没有 not 的改写，页面先拿它验一遍）' };
     for (const k of ['has', 'not']) {
       const bad = hasNot[k].find((h) => !fragRe(h.frag));
@@ -702,7 +705,8 @@ export function runFields(probe, run, slotValues = {}) {
  * 题里的量加上每个 run 跑出来的量（r__faults、r__pass2……）：{ vars, ties, notes, error? }。
  *   ties：靠并列定下来的量（'r.victims'）；用到它的那一项页面判不了（待核，不当过也不当错）
  *   notes：页面替学生做了的事（「页面把第二个 49 记成 49′」），作答下面写一行
- *   error：{ run, msg }——引擎不收这组输入（AVL 里有重复的数），msg 是引擎原话；这一项判没过，后面的 run 不再跑
+ *   error：{ run, msg }——引擎不收这组输入（AVL 里有重复的数），msg 是引擎原话；这一项判没过，后面的 run 不再跑；
+ *          { run, msg, page: true }——不是引擎的话（TypeError 这些）：页面这边算不了，判的时候待核
  * slotValues：学生写的（seq / text / procs 是原文）；base：整节课的量
  */
 export function runVars(probe, slotValues = {}, base = {}) {
@@ -710,7 +714,11 @@ export function runVars(probe, slotValues = {}, base = {}) {
   const ties = [], notes = [];
   for (const run of probe.runs || []) {
     let m;
-    try { m = measure(run.engine, runFields(probe, run, slotValues)); } catch (e) { return { vars, ties, notes, error: { run: run.name, msg: e.message } }; }
+    try { m = measure(run.engine, runFields(probe, run, slotValues)); } catch (e) {
+      // 引擎不收这组数时抛的是普通的 Error（中文原话）；TypeError、ReferenceError 这些是页面这边的毛病，记 page：判的时候待核，不怪学生
+      const page = !(e instanceof Error) || e.constructor !== Error;
+      return { vars, ties, notes, error: { run: run.name, msg: e?.message ?? String(e), ...(page ? { page: true } : {}) } };
+    }
     for (const [k, v] of Object.entries(m.values)) vars[`${run.name}__${k}`] = v;
     for (const t of m.ties) ties.push(`${run.name}.${t}`);
     if (m.marked && !notes.includes(m.marked)) notes.push(m.marked);
@@ -824,6 +832,8 @@ function numOf(slot, v) {
   if (STR_KINDS.has(slot?.kind)) return v;
   return toNum(v);
 }
+/** 题里的量 + 格子里写的（seq 读成一排数）：条件、expr 代进去算的那一份（judge.js 的 construct 408 也用） */
+export const slotScope = (values, vars, slots) => scopeOf(values, vars, slots);
 const scopeOf = (values, vars, slots) => {
   const by = Object.fromEntries(slots.map((x) => [x.name, x]));
   return withDefaults({ ...vars, ...Object.fromEntries(Object.entries(values).map(([k, v]) => [k, numOf(by[k], v)])) }, slots);
@@ -976,6 +986,7 @@ function problemsOf(p, base, soft) {
         for (const r of evalIfs(p.ifs, p.example, rv.vars, p.slots)) if (!r.ok) out.push(`example 不满足 ${r.id}（${p.ifs.find((c) => c.id === r.id).text}）${r.error ? `：${r.error}` : ''}`);
         const names = (p.runs || []).map((r) => r.name);
         for (const e of p.exprs || []) {
+          if (oUnread(e.expected)) { out.push(`expr「${e.label}」「${e.expected}」：${O_UNREAD}`); continue; }
           try { compile(runRefs(e.expected, names))(scopeOf(p.example, rv.vars, p.slots)); } catch (err) { out.push(`expr「${e.label}」算不了：${err.message}`); }
         }
       }
@@ -1034,6 +1045,10 @@ function runProblems(p) {
   return out;
 }
 
+// 写成 O(…) 的复杂度页面读不懂：学生写对了也判不过（values.js 的 valueMatch 退回去比字），交之前报给外部
+const O_UNREAD = '复杂度写法页面读不懂：写成 O(n log n)、O(n^2) 这样化简后的';
+const oUnread = (v) => typeof v === 'string' && /^\s*[oOΘθ]\s*[(（]/.test(v) && bigO(v) === null;
+
 // predict：照固定的字段跑一遍，每个 expect、wrong 的式子都算得出来；用到的量没有并列；against 的错法在、这组数分得开
 function predictProblems(p, base, tieLines, soft = new Set()) {
   const out = [];
@@ -1054,11 +1069,16 @@ function predictProblems(p, base, tieLines, soft = new Set()) {
   for (const e of p.expects) {
     const b = bare(e.value);
     if (b) out.push(`expect ${e.id}（${e.label}）的 ${b}`);
-    else { try { right[e.id] = expectValue(e.value, rv.vars, names); } catch (err) { out.push(`expect ${e.id}（${e.label}）算不出来：${err.message}`); } }
+    else {
+      try { right[e.id] = expectValue(e.value, rv.vars, names); } catch (err) { out.push(`expect ${e.id}（${e.label}）算不出来：${err.message}`); }
+      if (oUnread(right[e.id])) out.push(`expect ${e.id}（${e.label}）「${right[e.id]}」：${O_UNREAD}`);
+    }
     for (const w of e.wrongs) {
       const bw = bare(w.expr);
       if (bw) { out.push(`wrong ${w.id} 的 ${bw}`); continue; }
-      try { expectValue(w.expr, rv.vars, names); } catch (err) { out.push(`wrong ${w.id} 算不出来：${err.message}`); }
+      let wv;
+      try { wv = expectValue(w.expr, rv.vars, names); } catch (err) { out.push(`wrong ${w.id} 算不出来：${err.message}`); continue; }
+      if (oUnread(wv)) out.push(`wrong ${w.id}「${wv}」：${O_UNREAD}`);
     }
   }
   if (!p.against?.length) return out;

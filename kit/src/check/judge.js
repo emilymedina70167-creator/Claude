@@ -9,7 +9,7 @@ import { equivalent } from '../ncalg.js';
 import { normalizeFormula, FORMULA_FUNCS } from '../formula.js';
 import { compareFx, DEFAULT_RANGE } from '../fx/sample.js';
 import { parseDeriveDo, sampleEnvs, checkLine } from '../derivedo.js';
-import { baseType, probeVars, evalIfs, withDefaults, runVars, runFields, measuresUsed, expectValue, traceTable, traceRows, traceRowName, rewriteHits } from './spec.js';
+import { baseType, probeVars, evalIfs, withDefaults, runVars, runFields, measuresUsed, expectValue, runRefs, slotScope, traceTable, traceRows, traceRowName, rewriteHits } from './spec.js';
 import { ROLES, matchText, diagnose, normText, joinWords, spanText, tokenizeSentence } from '../entext.js';
 import { variantsOf, variantValues, sortPass } from '../engines/measures.js';
 import { checkFill, cellOk, normCell, misreadFill } from '../stepperspec.js';
@@ -126,7 +126,13 @@ const tiedIn = (probe, texts, ties) => measuresUsed({ runs: probe.runs, ifs: tex
 function construct408(probe, answer = {}, base = {}) {
   const raw = answer.slots || {};
   let rv;
-  try { rv = runVars(probe, raw, base); } catch (e) { return { items: [{ id: 'run', ok: null, why: `页面算不了：${e.message}` }], needsClaude: false, stop: true }; }
+  try { rv = runVars(probe, raw, base); } catch (e) { rv = { error: { msg: e.message, page: true } }; }
+  // 页面这边的毛病（不是引擎的原话）：每一条条件、每个 expr 待核，不当成学生错
+  if (rv.error?.page) {
+    const why = `页面算不了：${rv.error.msg}`;
+    const items = [...(probe.ifs || []), ...(probe.exprs || [])].map((x) => ({ id: x.id, ok: null, why }));
+    return { items: items.length ? items : [{ id: 'run', ok: null, why }], needsClaude: false, stop: true };
+  }
   if (rv.error) return { items: [{ id: 'run', ok: false, why: rv.error.msg }], needsClaude: false, stop: true, notes: rv.notes };
   const values = {};
   for (const s of probe.slots || []) {
@@ -140,9 +146,30 @@ function construct408(probe, answer = {}, base = {}) {
     if (tiedIn(probe, [c.text], rv.ties)) return { id: r.id, ok: null, why: TIE_WHY };
     return { id: r.id, ok: r.ok, why: r.ok ? '' : r.error ? `代进去算不了：${r.error}` : c.msg || `不满足 ${c.text}` };
   });
-  items.push(...exprItems(probe, answer.exprs));
+  // 用到 run 的量的 expr（比较次数: r.cmp）：照学生这组数跑出来的值比（selfCheck 也是照 run 的量验的）；
+  // 不碰 run 的照旧走非交换多项式 / 实数取点那条路（计划 3）
+  const names = runNames(probe);
+  const touches = (e) => runRefs(e.expected, names) !== e.expected;
+  const plain = (probe.exprs || []).filter((e) => !touches(e));
+  const plainItems = exprItems({ ...probe, exprs: plain }, answer.exprs);
+  for (const e of probe.exprs || []) {
+    if (!touches(e)) { items.push(plainItems.shift()); continue; }
+    items.push(runExprItem(probe, e, answer.exprs, raw, rv, names));
+  }
   if (rv.notes.length && items[0]) items[0].why = [items[0].why, ...rv.notes].filter(Boolean).join('；');
   return { items, needsClaude: false, stop: false, notes: rv.notes };
+}
+
+// construct 408 里用到 run 的量的一个 expr：学生写的值 vs 照学生这组数跑出来的值。并列、算不了是待核，不当过
+function runExprItem(probe, e, exprs, raw, rv, names) {
+  if (tiedIn(probe, [e.expected], rv.ties)) return { id: e.id, ok: null, why: TIE_WHY };
+  let right;
+  try { right = expectValue(e.expected, slotScope(raw, rv.vars, probe.slots || []), names); } catch (err) { return { id: e.id, ok: null, why: `页面算不了这一项：${err.message}` }; }
+  if (right === undefined || (typeof right === 'number' && !Number.isFinite(right))) return { id: e.id, ok: null, why: '页面算不了这一项：算出来不是一个数' };
+  const s = String(exprs?.[e.id] ?? '').trim();
+  if (!s) return { id: e.id, ok: false, why: `没写${e.label}` };
+  const m = valueMatch(s, right);
+  return m === true ? { id: e.id, ok: true, why: '' } : { id: e.id, ok: false, why: m === null ? unreadWhy(right) : `${e.label}不对` };
 }
 
 // 一个 run 的错法：[{ key, label, vars }]（vars 是把这个 run 的量换成错法算出来的那一份）；against 写了只要那几种
@@ -279,9 +306,33 @@ function traceItems(probe, answer = {}) {
       prev = mine;
     }
   }
-  // 错法（写了 against 只认那几种）：错的地方一半以上和照那种错法填的表对得上
+  // 错法（写了 against 只认那几种）：错的地方一半以上和照那种错法填的表对得上（misreadFill）；
+  // 而且第一处错的那一行要像那种错法：整行和错法的那一行一样，或者这一行错的格里至少 2 格是照错法填的、
+  // 而且这一行像错法的格比像对的多——不然两个数写反（错的两格里正好一格、两格和错法碰上）也会被说成那种错法
   const want = probe.against || [];
-  const vlist = T.variants.filter((v) => !want.length || want.includes(v.key));
+  // 一行按「判分的单位」切：一格，或一组不管先后的几格（页框这样的 group），和 misreadFill 一样
+  const units = [];
+  const seenG = new Set();
+  table.rows[bad.r].cells.forEach((c, j, all) => {
+    if (c.given) return;
+    if (c.group === undefined) { units.push([j]); return; }
+    if (seenG.has(c.group)) return;
+    seenG.add(c.group);
+    units.push(all.map((x, i) => (x.group === c.group && !x.given ? i : -1)).filter((i) => i >= 0));
+  });
+  const bag = (xs) => xs.map(normCell).filter(Boolean).sort().join('|');
+  const mine = cells[bad.r];
+  const unitIs = (row, u) => !!row && (u.length === 1 && row.cells[u[0]]?.group === undefined
+    ? !!row.cells[u[0]] && cellOk(row.cells[u[0]], mine[u[0]] ?? '')
+    : bag(u.map((j) => [].concat(row.cells[j]?.v ?? '')[0])) === bag(u.map((j) => mine[j] ?? '')));
+  const looksLike = (v) => {
+    const vr = v.table?.rows?.[bad.r], cr = table.rows[bad.r];
+    if (!vr) return false;
+    if (units.every((u) => unitIs(vr, u))) return true;
+    const wrongHits = units.filter((u) => !unitIs(cr, u) && unitIs(vr, u)).length;
+    return wrongHits >= 2 && units.filter((u) => unitIs(vr, u)).length > units.filter((u) => unitIs(cr, u)).length;
+  };
+  const vlist = T.variants.filter((v) => (!want.length || want.includes(v.key)) && looksLike(v));
   const label = misreadFill(table, cells, vlist);
   const hitV = label ? vlist.find((v) => v.label === label) : null;
   if (hitV) Object.assign(it, { tag: hitV.key, why: `${it.why}；${hitV.label}`, keys: [`tag=${hitV.key}`, it.id] });

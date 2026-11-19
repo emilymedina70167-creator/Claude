@@ -60,7 +60,8 @@ export function answerSummary(probe, answer, r = {}) {
   return parts.filter(Boolean).join('；') || '（空的）';
 }
 
-const itemText = (it) => `${it.id} ${it.ok === 'missing' ? '没写到' : it.ok === null ? '待核' : String(it.id).startsWith('if') ? '不满足' : '不对'}${it.why ? `：${it.why}` : ''}`;
+// trace 接着核的后几行（carried）：对错是对学生自己写的上一行而言，前面写明，读的人不当成和标准表比的
+const itemText = (it) => `${it.id} ${it.ok === 'missing' ? '没写到' : it.ok === null ? '待核' : String(it.id).startsWith('if') ? '不满足' : '不对'}${it.why || it.carried ? `：${it.carried ? '（按你写的上一行）' : ''}${it.why || ''}` : ''}`;
 
 /** 一道题的一条证据。ctx：{ session, turn }；bankOf：复测时局部 id → 题库编号；retest：1 / 7 */
 export function evidenceOf(s, id, { ctx = {}, bankOf = null, retest = null, rejudged = false, partial = false, renumbered = false } = {}) {

@@ -83,4 +83,6 @@ body.is-checking .class-pages, body.is-checking .class-pins, body.is-checking .c
 .ck-fill .sv-fill-wrap { margin: 0; }
 .ck-fill .sv-fill-copy { min-height: 44px; }
 .ck-fill .sv-fill-in:disabled { opacity: 1; -webkit-text-fill-color: currentColor; }
+/* 检验的过程表一格一格点着写：触控目标至少 44px（一类演示的填表照旧 40px，不动） */
+.ck-probe .sv-fill-in { min-height: 44px; height: 44px; }
 .ck-errfind .en-words, .ck-parse .en-words { margin: 2px 0 4px; }
