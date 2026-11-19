@@ -235,15 +235,18 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     return `<li class="ck-item">${html}</li>`;
   }
 
+  // 构造题的 notes 判的时候也接在第一项的 why 后面（证据里留着）：画面上另起一行写，项里不重复
+  const dropNotes = (why, notes) => notes.reduce((w, n) => String(w ?? '').split('；').filter((x) => x !== n).join('；'), why);
+
   function paintTeach(v) {
     const t = v.teach;
     const bad = (t.items || []).filter((x) => x.ok !== true && t.failed.includes(x.id));
-    // 页面替学生做了的事（408 的构造题：「页面把第二个 49 记成 49′」）写在对了的项的 why 里：也写出来
-    const notes = (t.items || []).filter((x) => x.ok === true && x.why).map((x) => x.why);
+    // 页面替学生做了的事（408 的构造题：「页面把第二个 49 记成 49′」）：机器判交出来的 notes，flow 存在这道题的结果上
+    const notes = state.results[v.id]?.notes || [];
     const text = t.guessed ? '蒙对的不算吸收：再做一道同类的确认一下。' : t.text === null && t.key === 'claude' ? '页面在写补讲…' : t.text ? t.text : '';
     main.innerHTML = `<div class="ck-card ck-teach">
       <div class="ck-tag">${t.guessed ? '蒙对了' : '没过'} · ${escapeHtml(v.id)}</div>
-      ${bad.length ? `<ul class="ck-items">${bad.map((it) => itemLine(check.probes[v.id], it)).join('')}</ul>` : t.failed.includes('giveup') ? '<p>想不出来。</p>' : ''}
+      ${bad.length ? `<ul class="ck-items">${bad.map((it) => itemLine(check.probes[v.id], { ...it, why: dropNotes(it.why, notes) })).join('')}</ul>` : t.failed.includes('giveup') ? '<p>想不出来。</p>' : ''}
       ${notes.length ? `<p class="ck-note">${notes.map((x) => escapeHtml(x)).join('；')}</p>` : ''}
       ${text ? `<div class="ck-teach-text">${mdToHtml(text)}</div>` : ''}
       <button type="button" class="btn btn-primary ck-next"${t.text === null && t.key === 'claude' ? ' disabled' : ''}>${t.last ? '接着做' : '做一道同类的'}</button></div>`;

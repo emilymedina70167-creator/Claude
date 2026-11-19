@@ -34,7 +34,8 @@ export function answerSummary(probe, answer, r = {}) {
     try {
       const { table } = traceTable(probe);
       const rowsOf = traceRows(table).map((x) => `${traceRowName(table, x.r)}：${table.rows[x.r].cells.map((c, j) => (c.given ? '（给出）' : String(a.cells?.[x.r]?.[j] ?? '').trim() || '空')).join(' | ')}`);
-      const extra = Array.isArray(a.cells?.extra) && a.cells.extra.some((x) => String(x ?? '').trim()) ? [`表下面：${a.cells.extra.map((x) => String(x ?? '').trim() || '空').join(' | ')}`] : [];
+      const ex = a.extra ?? a.cells?.extra; // 表下面那几格：现在写在 answer.extra（以前挂在 cells 上）
+      const extra = Array.isArray(ex) && ex.some((x) => String(x ?? '').trim()) ? [`表下面：${ex.map((x) => String(x ?? '').trim() || '空').join(' | ')}`] : [];
       parts.push(...rowsOf, ...extra);
     } catch { /* 表都出不来：没有可写的 */ }
   }

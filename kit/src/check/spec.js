@@ -176,7 +176,7 @@ function parseSlots(src) {
 
 const NUM_MARK = /^-?\d+(?:\.\d+)?['’′_]*$/;
 const stripBrackets = (raw) => String(raw ?? '').trim().replace(/^\[([\s\S]*)\]$/, '$1').trim();
-const seqTokens = (raw) => stripBrackets(raw).split(/[\s,，、;；]+/).filter(Boolean);
+export const seqTokens = (raw) => stripBrackets(raw).split(/[\s,，、;；]+/).filter(Boolean);
 const procEntries = (raw) => stripBrackets(raw).split(/[;；\n]+|,(?=\s*[A-Za-z一-龥])/).map((x) => x.trim()).filter(Boolean);
 
 /**

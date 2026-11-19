@@ -37,14 +37,14 @@ test('parse：读 key 的括号写法，每个成分一项（按句子先后）�
   assert.equal(judgeSpans(KEY, parseBrackets(p.src.match(/key: (.*)/)[1]).spans).ok, true);
 });
 
-test('parse：被动谓语只标了 were → V 没标出来（说范围不对）、多标一项', () => {
+test('parse：被动谓语只标了 were → V 没标出来（说范围不对），那一段不再另列在「多标了」里', () => {
   const p = P('parse', PARSE);
   const mine = KEY.map((s) => (s.role === 'V' ? { role: 'V', from: 5, to: 5 } : s));
   const r = judgeMachine(p, { spans: mine });
   assert.equal(item(r, 'V').ok, 'missing');
   assert.match(item(r, 'V').why, /谓语的范围不对.*were/);
-  assert.equal(item(r, 'extra').ok, false);
-  assert.match(item(r, 'extra').why, /多标了.*were/);
+  assert.equal(item(r, 'extra'), undefined);
+  assert.equal(r.items.filter((x) => x.id === 'V').length, 1);
   assert.equal(item(r, 'S').ok, true);
   assert.equal(r.stop, true);
   assert.equal(outcomeOf(p, r.items).outcome, 'fail');

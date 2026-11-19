@@ -12,7 +12,7 @@ import { timedPad } from './inkpad.js';
 import { uploadAll } from './judgekit.js';
 import { notReady } from './judge.js';
 import { hasInk, dropInk } from './inkstore.js';
-import { baseType, slotProblems, traceTable } from './spec.js';
+import { baseType, slotProblems, seqTokens, traceTable } from './spec.js';
 import { markDuplicates } from '../engines/measures.js';
 import { parseCodeSpec } from '../codejudge.js';
 import { tokenizeSentence } from '../entext.js';
@@ -69,7 +69,8 @@ function slotBoxes(host, slots) {
     grid.appendChild(cell);
     const box = cell.querySelector('.ck-slot-box');
     // 408 的格子：一排数（下面回显切成几个、数一数）、一段字、几个进程（一行一个）
-    if (s.kind === 'seq') textAnswerInput(box, { kind: 'seq' });
+    // 一排数的回显和交之前的格式检查用同一个切法（spec.js 的 seqTokens：括号、全角逗号、顿号都一样），数出来的个数才对得上
+    if (s.kind === 'seq') textAnswerInput(box, { kind: 'line', ph: '按顺序写，用空格或逗号隔开', echo: (v) => { const t = seqTokens(v); return t.length ? `${t.join(' → ')}　${t.length} 个` : ''; } });
     else if (s.kind === 'text') textAnswerInput(box, { kind: 'line', ph: '写在这里' });
     else if (s.kind === 'procs') { cell.classList.add('ck-slot-wide'); textArea(box, { rows: Math.min(10, s.n + 1), placeholder: `一行一个进程：名字 到达时间 运行时间${s.prio ? ' 优先级' : ''}（比如 P1 0 3${s.prio ? ' 2' : ''}）` }); }
     else mathInput(box, shapeOf(s));
@@ -199,7 +200,8 @@ export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause
     if (T) {
       const ft = fillTable(work, T, { onChange: changed });
       locks.push(ft);
-      get = () => ({ cells: ft.values() });
+      // 表下面那几格单独放（数组上挂的 extra 存进 JSON 会丢）
+      get = () => { const v = ft.values(); return { cells: v.map((row) => [...row]), extra: [...v.extra] }; };
       problem = () => { const n = ft.blanks(); return n ? `还有 ${n} 格没填（该空着的格写 -）` : ''; };
       empty = () => ft.empty();
     } else { problem = () => '这道题画不出来'; empty = () => true; }
@@ -223,8 +225,7 @@ export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause
     // Tab 写缩进（外接键盘），不跳出去
     ta.addEventListener('keydown', (e) => { if (e.key !== 'Tab' || e.shiftKey) return; e.preventDefault(); const a = ta.selectionStart; ta.setRangeText('    ', a, ta.selectionEnd, 'end'); changed(); });
     get = () => ({ code: ta.value });
-    problem = () => (starter && ta.value.trim() === starter.trim() ? '代码还没改' : '');
-    empty = () => !ta.value.trim();
+    empty = () => !ta.value.trim() || (!!starter && ta.value.trim() === starter.trim()); // 还是原样的起头代码：算没写
   } else if (probe.type === 'parse') {
     const sp = spanPicker(work, { tokens: probe.tokens || [], roles: probe.roles || [], onChange: changed });
     locks.push(sp);

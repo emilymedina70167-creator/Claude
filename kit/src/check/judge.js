@@ -199,7 +199,7 @@ function predictItems(probe, answer = {}, base = {}) {
 
 // —— 408 的 trace（计划 4 Task 4）：学生填引擎的那张表，整张一次判 ——
 // answer.cells 和 stepperspec.js 的 checkFill 收的一样：cells[r][c] 是 table.rows[r] 第 c 格学生写的（直接给出的格可以不写），
-// cells.extra[i] 是表下面那几格（散列表的 ASL）。r 是 traceTable(probe).table.rows 的下标（rows: 2-3 时第 1 行是直接给出的那一行）
+// 表下面那几格（散列表的 ASL）写在 answer.extra[i]（数组上挂的 cells.extra 存进 JSON 会丢：以前的作答照旧认）。r 是 traceTable(probe).table.rows 的下标（rows: 2-3 时第 1 行是直接给出的那一行）
 
 // 每一趟只看上一趟的序列的四种排序：第一处错以后照「对的这一趟作用在学生写的上一行上」接着核，分开笔误和不会
 const CARRY = new Set(['insert', 'shell', 'bubble', 'select']);
@@ -218,7 +218,8 @@ function traceItems(probe, answer = {}) {
   const raw = answer.cells || [];
   // 排序的格子认 49、49'、49’、49′（引擎的格子收 49 和 49′、49'）：学生写的撇号先统一成 ′
   const fix = (v) => (sort ? String(v ?? '').replace(/['’_]/g, '′') : String(v ?? ''));
-  const cells = Object.assign(table.rows.map((row, r) => row.cells.map((_, c) => fix(raw[r]?.[c]))), { extra: (table.extra || []).map((_, i) => String(raw.extra?.[i] ?? '')) });
+  const rawExtra = answer.extra ?? raw.extra ?? [];
+  const cells = Object.assign(table.rows.map((row, r) => row.cells.map((_, c) => fix(raw[r]?.[c]))), { extra: (table.extra || []).map((_, i) => String(rawExtra[i] ?? '')) });
   const rows = traceRows(table);
   const items = [];
   let bad = null;
@@ -350,16 +351,19 @@ function parseItems(probe, answer = {}) {
     if (k >= 0) { used.add(k); res.set(id, { id, ok: false, why: `这是${roleName(probe, span.role)}，标成了${roleName(probe, mine[k].role)}` }); }
   }
   const left = mine.filter((_, k) => !used.has(k));
+  const nearUsed = new Set();
   const text = (s) => spanText(probe.tokens, s);
   const items = ids.map(({ id, span }) => {
     const keys = [id, ...(id !== span.role ? [span.role] : []), `role=${span.role}`];
     if (res.has(id)) { const it = res.get(id); return it.ok ? it : { ...it, keys }; }
     // 同一种成分标了，范围不对（被动的谓语只标了 were）：照旧是没标到，说一句范围不对
-    const near = left.find((m) => m.role === span.role && m.from <= span.to && m.to >= span.from);
+    const near = left.find((m) => m.role === span.role && m.from <= span.to && m.to >= span.from && !nearUsed.has(m));
+    if (near) nearUsed.add(near); // 这一段已经说成「范围不对」了，不再另列在「多标了」里
     const name = roleName(probe, span.role);
     return { id, ok: 'missing', why: near ? `${name}的范围不对：标了「${text(near)}」` : `没标出${name}`, keys };
   });
-  if (left.length) items.push({ id: 'extra', ok: false, why: `多标了：${left.map((m) => `「${text(m)}」（${roleName(probe, m.role)}）`).join('、')}`, keys: ['extra'] });
+  const rest = left.filter((m) => !nearUsed.has(m));
+  if (rest.length) items.push({ id: 'extra', ok: false, why: `多标了：${rest.map((m) => `「${text(m)}」（${roleName(probe, m.role)}）`).join('、')}`, keys: ['extra'] });
   return { items, needsClaude: false, stop: items.some((x) => x.ok === false || x.ok === 'missing') };
 }
 
