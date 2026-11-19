@@ -7,6 +7,7 @@
 //     直接插入、希尔里 if (A[i] < A[i-dk]) 和循环第一次 A[0] < A[j] 是同一对关键字，算一次；哨兵 A[0] 让循环停下的那次照算；
 //     j > 0、low < high 这种下标的比较不算；移动是元素的每一次赋值（进出 A[0] 也算；一次交换算 3 次）。
 //     另数的每一趟要和引擎画的一样（测试拿随机数组对），对不上说明另数的不是引擎演示的那个算法。
+//     快排的比较照教材「一趟划分比较 n−1 次」：m 个元素的区间比 m−1 次（不照字面数填坑代码，见 COUNTERS.quick）。
 //   - 归并每执行一次 B[i] <= B[j] 算一次（不交移动）；趟照引擎：段长 1、2、4……自底向上，落单的一段不比。
 //   - 堆向下调整：有两个孩子的一层比 2 次、只有一个孩子的一层比 1 次；向上调整一层 1 次。另交每个操作各自的（cmp1、cmp2……）。
 //   - 并列：靠「两个一样好」定下来的量写进 ties（OPT 换页时以后都不再用的页有两页以上 → victims；SSTF 两个请求离磁头一样远 → order，
@@ -22,7 +23,8 @@ export const MEASURES = {
   sort: ['passes', 'pass#', 'final', 'cmp', 'move', 'swap', 'unstable', 'flipped'],
   // 二叉排序树（bst:）：height leaves aslSucc；堆（heap:）：cmp cmp# swaps final pass#
   tree: ['height', 'leaves', 'aslSucc', 'cmp', 'cmp#', 'swaps', 'final', 'pass#'],
-  avl: ['rot', 'LL', 'RR', 'LR', 'RL', 'root'],
+  // rot：调整几次（LR 算 1 次）；turns：单旋几次（LL、RR 1 次，LR、RL 2 次）
+  avl: ['rot', 'turns', 'LL', 'RR', 'LR', 'RL', 'root'],
   paging: ['faults', 'hits', 'rate', 'victims'],
   sched: ['avgTurn', 'avgWait', 'avgWeighted', 'order'],
   disk: ['dist', 'avg', 'order'],
@@ -156,16 +158,19 @@ const COUNTERS = {
     return { cmp, move: 3 * swap, swap, passes };
   },
   // Partition：pivot=A[low]; while(low<high){ while(low<high&&A[high]>=pivot) --high; A[low]=A[high]; while(low<high&&A[low]<=pivot) ++low; A[high]=A[low]; } A[low]=pivot
-  // low < high 不算比较，只数和枢轴的比较
+  // 比较次数照教材「一趟划分比较 n−1 次」：区间里除了枢轴，每个元素和枢轴比一次，m 个元素的区间比 m−1 次。
+  // 不照字面数代码：填坑以后刚挪过去的那个元素在另一头会再和枢轴比一次（[2 1] 字面是 2 次），学生和考题的答案都不这样算。
+  // 有序时两种数法一样（n(n−1)/2）。序列照代码走，每一趟要和引擎的一样
   quick(a) {
     const A = a.slice(), passes = [];
     let cmp = 0;
     const part = (lo, hi) => {
+      cmp += hi - lo;
       const pivot = A[lo];
       while (lo < hi) {
-        while (lo < hi) { cmp++; if (A[hi] >= pivot) hi--; else break; }
+        while (lo < hi && A[hi] >= pivot) hi--;
         A[lo] = A[hi];
-        while (lo < hi) { cmp++; if (A[lo] <= pivot) lo++; else break; }
+        while (lo < hi && A[lo] <= pivot) lo++;
         A[hi] = A[lo];
       }
       A[lo] = pivot;
@@ -341,13 +346,14 @@ const MEASURERS = {
     const types = run.log.flatMap((r) => r.types);
     const count = (t) => types.filter((x) => x === t).length;
     const root = run.final.root === null ? '' : numOr(run.final.nodes[run.final.root].key);
-    return { values: { rot: types.length, LL: count('LL'), RR: count('RR'), LR: count('LR'), RL: count('RL'), root } };
+    const turns = types.reduce((a, t) => a + (t === 'LR' || t === 'RL' ? 2 : 1), 0);
+    return { values: { rot: types.length, turns, LL: count('LL'), RR: count('RR'), LR: count('LR'), RL: count('RL'), root } };
   },
   paging(input, run) {
     const n = input.refs.length;
     let faults = run.faults;
-    // 错法「一开始调入不算缺页」：引擎照常跑，少算开头填空块的那几次
-    if (input.noInitial) faults -= run.steps.filter((s) => s.view.k >= 0 && !s.view.end && s.view.cols.at(-1).fault && s.view.cols.at(-1).victim === null).length;
+    // 错法「一开始调入不算缺页」：引擎照常跑，少算开头调入的那几次（和引擎的 quiz、结尾那句一样：min(物理块数, 不同的页数)）
+    if (input.noInitial && !input.init) faults -= Math.min(input.frames, new Set(input.refs).size);
     const values = { faults, hits: n - run.faults, rate: faults / n, victims: run.victims.slice() };
     // OPT：换页时以后都不再用的页有两页以上，换哪一页靠并列定（缺页次数不受影响：那几页以后都不用）
     const tieAt = [];
@@ -462,6 +468,18 @@ function keyOf(name, base, v) {
   return changed[0] || 'variant';
 }
 
+// 短名撞了（两种错法照上面的规则取出同一个名字）：后备的名字只从这一种错法自己来，不看它排第几——
+// 外部写的 against: 不会因为引擎多列了一种错法就指到别的上。先拼上变了的别的字段，再不行拼说明的短指纹
+function keyCandidates(name, base, v, label) {
+  const key = keyOf(name, base, v);
+  const changed = Object.keys(v).filter((k) => !same(v[k], base[k]));
+  const out = [key, ...changed.map((k) => `${key}${cap(k)}`).filter((k) => k !== key)];
+  let h = 5381;
+  for (const ch of String(label || '')) h = ((h * 33) ^ ch.codePointAt(0)) >>> 0;
+  out.push(`${key}-${h.toString(36).slice(0, 5)}`);
+  return out;
+}
+
 /** 引擎的常见错法，每种一个短名：[{ key, label, input }]（这组数上和对的一样的引擎自己已经去掉了） */
 export function variantsOf(name, fields) {
   const engine = ENGINES[name];
@@ -471,8 +489,9 @@ export function variantsOf(name, fields) {
   const input = engine.parse(f, '');
   const used = new Set();
   return (engine.variants(input, f) || []).map((x) => {
-    let key = keyOf(name, input, x.input);
-    if (used.has(key)) { let i = 2; while (used.has(`${key}${i}`)) i++; key = `${key}${i}`; }
+    const cands = keyCandidates(name, input, x.input, x.label);
+    let key = cands.find((k) => !used.has(k));
+    if (!key) { const last = cands.at(-1); let i = 2; while (used.has(`${last}${i}`)) i++; key = `${last}${i}`; } // 连说明都一样，几乎不会有
     used.add(key);
     return { key, label: x.label, input: x.input };
   });

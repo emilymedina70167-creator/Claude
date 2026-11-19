@@ -51,6 +51,36 @@ test('和教材公式一致：n = 2…8 的顺序和倒序', () => {
   }
 });
 
+test('乱序的输入也钉住：希尔 4 3 2 1 gaps 2 1、直接插入 3 1 2、冒泡 3 1 2', () => {
+  // 希尔 d=2：i=3 (2<4) 比 1 移 3，i=4 (1<3) 比 1 移 3 → 2 1 4 3；d=1：i=2 (1<2) 比 1 移 3，i=3 (4<2 不成立) 比 1，i=4 (3<4) 比 2 移 3
+  const sh = wangdaoSort('shell', [4, 3, 2, 1], { gaps: [2, 1] });
+  assert.equal(sh.cmp, 6);
+  assert.equal(sh.move, 12);
+  // 直接插入 3 1 2：i=2 比 1<3、和哨兵比，移 3；i=3 比 2<3、2<1 不成立，移 3
+  const ins = wangdaoSort('insert', [3, 1, 2]);
+  assert.equal(ins.cmp, 4);
+  assert.equal(ins.move, 6);
+  // 冒泡 3 1 2：第 1 趟比 (1,2) 不换、(3,1) 换；第 2 趟比 (3,2) 换
+  const bu = wangdaoSort('bubble', [3, 1, 2]);
+  assert.equal(bu.cmp, 3);
+  assert.equal(bu.swap, 2);
+  assert.equal(bu.move, 6);
+  assert.equal(bu.passes.length, 2);
+});
+
+test('快排：一趟划分 m 个元素比 m−1 次（不照字面再比挪过去的那个）', () => {
+  assert.equal(wangdaoSort('quick', [2, 1]).cmp, 1);
+  // 3 1 2：第 1 次划分 3 个元素比 2 次 → 2 1 3；第 2 次划分 [2 1] 比 1 次
+  const q = wangdaoSort('quick', [3, 1, 2]);
+  assert.equal(q.cmp, 3);
+  assert.deepEqual(q.passes, runEngine('sort', { algo: 'quick', array: '3 1 2' }).run.passes);
+  // 一般的：每次划分的区间长度 − 1 加起来（王道的例子划分 4 次：8 个 → 27 38 13 | 49 | 76 97 65 49′，
+  // 左边 3 个 → 13 27 38，右边 4 个 → 49′ 65 76 97，再划 [49′ 65] 2 个：7 + 2 + 3 + 1）
+  const wd = measure('sort', { algo: 'quick', array: "49 38 65 97 76 13 27 49'" }).values;
+  assert.equal(wd.passes, 4);
+  assert.equal(wd.cmp, 13);
+});
+
 test('归并：每次 B[i] <= B[j] 算一次（照引擎的每一趟另数，passes 和引擎一样）', () => {
   // 1 2 3 4：第 1 趟 (1,2)(3,4) 各比 1 次；第 2 趟 (1 2)(3 4) 比 2 次（1≤3、2≤3，左边用完）
   assert.equal(wangdaoSort('merge', [1, 2, 3, 4]).cmp, 4);
@@ -200,6 +230,8 @@ test('AVL：3 2 1 一次 LL、root 2；3 1 2 一次 LR；有重复的数抛引�
   assert.equal(a.values.root, 2);
   const b = measure('avl', { avl: '3 1 2' });
   assert.equal(b.values.rot, 1);
+  assert.equal(b.values.turns, 2);
+  assert.equal(a.values.turns, 1);
   assert.equal(b.values.LR, 1);
   assert.equal(b.values.LL, 0);
   let msg = '';
@@ -267,6 +299,26 @@ test('variantsOf：sort shell 有 shellBlock；paging lru 有 fifo、noInitial�
   const rk = variantsOf('sched', { procs: 'P1 0 3, P2 1 4, P3 2 2', algo: 'rr q=2' }).map((v) => v.key);
   assert.ok(rk.includes('rrOld'));
   assert.ok(rk.includes('fcfs'));
+});
+
+test('variantsOf：每个引擎的短名不重复、没有 undefined；同一种错法的短名不看它排第几', () => {
+  const inputs = {
+    sort: ['insert', 'shell', 'bubble', 'select', 'quick', 'merge', 'radix'].map((algo) => ({ algo, array: "49 38 65 97 76 13 27 49'" })),
+    tree: [{ bst: '45 24 53 12 37 93', ops: 'delete 45' }, { heap: '53 17 78 09 45 65 87 32', ops: 'build, sort' }, { nodes: 'A(B(D, E), C(, F))', walk: 'inorder' }],
+    avl: [{ avl: '15 3 7 10 9 8' }, { avl: '3 1 2' }],
+    paging: ['fifo', 'lru', 'opt', 'clock', 'eclock'].map((algo) => ({ refs: '7 0 1 2 0 3 0 4 2 3 0 3 2 1 2 0 1 7 0 1', frames: '3', algo })),
+    sched: [{ procs: 'P1 0 3 2, P2 1 4 1, P3 2 2 3', algo: 'rr q=2' }, { procs: 'P1 0 3 2, P2 1 4 1, P3 2 2 3', algo: 'prio' }],
+    disk: ['fcfs', 'sstf', 'scan', 'cscan', 'look', 'clook'].map((algo) => ({ requests: '98 183 37 122 14 124 65 67', head: '53', algo })),
+    hash: [{ hash: '19 14 23 01 68 20 84 27 55 11 10 79', p: '13', size: '16' }, { hash: '19 14 23 01 68', p: '13', probe: 'quadratic', size: '19' }, { hash: '19 14 23 01 68', p: '13', probe: 'chain' }],
+  };
+  assert.deepEqual(Object.keys(inputs).sort(), Object.keys(MEASURES).sort());
+  for (const [name, list] of Object.entries(inputs)) for (const f of list) {
+    const keys = variantsOf(name, f).map((v) => v.key);
+    for (const k of keys) assert.ok(typeof k === 'string' && k && !k.includes('undefined'), `${name} ${JSON.stringify(f)}：${k}`);
+    assert.equal(new Set(keys).size, keys.length, `${name} ${JSON.stringify(f)}：${keys.join(' ')}`);
+    // 每种错法都算得出量
+    for (const k of keys) assert.ok(variantValues(name, f, k), `${name} ${k}`);
+  }
 });
 
 test('MEASURES 里每个名字 measure 都交出来了（没有 undefined）', () => {
