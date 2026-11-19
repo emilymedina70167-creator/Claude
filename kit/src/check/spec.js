@@ -23,6 +23,7 @@
 // 引擎跑一遍，engines/measures.js 交的量在条件里写 r.unstable、r.flipped）；条件多比大小（>= <= > <）和字的 == != in
 // （P in r.flipped：不论先后、不管空格逗号大小写撇号）。predict 写 run、expect 标签: 值、带 => 的 wrong（错答案，挂在上面最近的
 // expect）、against:（这组数要分得开的引擎错法）。固定的数用到靠并列定的量（OPT 的 victims）自检报，学生造的那组有并列交 judge 待核。
+// trace 写 use: 演示组件 + 它自己的字段（algo: shell、array: …）+ 可选 rows / given / cols / against：学生填引擎 mode: fill 的那张表（traceTable）。
 import { tokenize } from '../tokens.js';
 import { compile } from '../expr.js';
 import { parseConditions } from '../anscheck.js';
@@ -30,6 +31,8 @@ import { parseSolve } from '../solvespec.js';
 import { commandLine, instantiate, pickedText } from '../practicespec.js';
 import { calcValue, expandCalc, floatVars } from '../exact.js';
 import { MEASURES, measure, markDuplicates, variantsOf, variantValues } from '../engines/measures.js';
+import { ENGINES } from '../engines/registry.js';
+import { fillSpec, checkFill, normCell, trackFields } from '../stepperspec.js';
 import { spaceOfId } from '../memory/space.js';
 
 // 408、英语一的题型（计划 4，docs/superpowers/plans/2026-11-19-check-408-en.md）：trace predict code parse translate rewrite errfind 是新的，
@@ -39,8 +42,8 @@ export const PROBE_TYPES = ['recall', 'construct', 'claim', 'discriminate', 'loc
 export const BASE_OF = { tradeoff: 'recall', calc: 'solve' };
 /** 一道题照哪一种读、判：别名换成原来的那一种 */
 export const baseType = (probe) => BASE_OF[probe?.type] || probe?.type;
-// 还没接上的题型（计划 4 的 Task 4～6 补）：读到就报，不静默当成别的
-const PENDING = ['trace', 'code', 'parse', 'translate', 'rewrite', 'errfind'];
+// 还没接上的题型（计划 4 的 Task 5～6 补）：读到就报，不静默当成别的
+const PENDING = ['code', 'parse', 'translate', 'rewrite', 'errfind'];
 export const FACET_OF = {
   recall: '重建', construct: '能用', claim: '边界', solve: '能用', discriminate: '能辨', locate: '能辨',
   trace: '能用', predict: '能用', tradeoff: '重建', code: '能用', calc: '能用', parse: '能用', translate: '能用', rewrite: '能用', errfind: '边界',
@@ -79,6 +82,8 @@ const OWN = {
   recall: ['answer'],
   construct: ['slots', 'example', 'against'],
   predict: ['answer', 'against'],
+  // trace：use 写演示组件的名字，rows / given / cols 照 mode: fill（rows 还能写 2-3：只填第 2～3 行）；别的字段一律交给引擎
+  trace: ['use', 'against', 'rows', 'given', 'cols'],
   claim: ['claim', 'truth', 'slots', 'example', 'proof', 'start', 'goal', 'vars'],
   discriminate: ['can', 'result'],
   locate: ['line', 'bug', 'fix'],
@@ -212,6 +217,7 @@ export function parseProbe(type, src) {
   const ifs = [], exprs = [], lets = [], lines = [];
   const solveLines = [];
   const runs = [], expects = []; // run 行（construct、predict）；predict 的 expect
+  const efields = {}; // trace：交给引擎的字段
   let ewrongs = 0; // 挂在 expect 下面的错答案几条（和理由里的 wrong 共用 w1、w2…）
   const tpl = { picks: [], lets: [], wheres: [] }; // pick / where（模板）
   let last = null; // 续行接到哪里
@@ -269,6 +275,8 @@ export function parseProbe(type, src) {
       const k = m[1].toLowerCase();
       if (base === 'solve' && !COMMON.includes(k) || base === 'solve' && k === 'q') { solveLines.push(raw); last = { solve: true }; continue; }
       if (k === 'line' && base === 'locate') { lines.push(m[2].trim()); last = { line: lines.length - 1 }; continue; }
+      // trace：不是检验的字段都是引擎的（algo: shell、array: …、refs: …），原样交给引擎
+      if (base === 'trace' && !COMMON.includes(k) && !OWN.trace.includes(k)) { efields[k] = m[2].trim(); last = { into: efields, key: k }; continue; }
       if (!COMMON.includes(k) && !OWN[base].includes(k)) { errors.push(`看不懂「${raw.trim().slice(0, 40)}」：${type} 的字段是 ${[...COMMON, ...OWN[base]].join('、')}、must / may / wrong / teach / let / if / expr${base === 'construct' || base === 'predict' ? ' / run' : ''}${base === 'predict' ? ' / expect' : ''}`); continue; }
       f[k] = m[2].trim(); last = { into: f, key: k }; continue;
     }
@@ -352,6 +360,24 @@ export function parseProbe(type, src) {
     if (!runs.length) return at('要写 run 行：run r: 引擎 字段=值 …（比如 run r: paging algo=lru frames=3 refs="1 2 3 4"）');
     if (!expects.length) return at('要写 expect：expect 缺页次数: r.faults（一行一个要学生写出来的结果）');
     Object.assign(probe, { expects, against: list(f.against) }, points(), f.answer ? { answer: f.answer } : {});
+  }
+  if (base === 'trace') {
+    if (pts.must.length || pts.may.length || pts.wrong.length) return at('trace 不写 must / may / wrong：整张表由页面照引擎判');
+    if (ifs.length || exprs.length) return at('trace 不写 if / expr：整张表由页面照引擎判');
+    const use = String(f.use || '').trim().toLowerCase();
+    if (!use) return at('要写 use:（演示组件的名字：sort、paging、disk……，下面接它自己的字段）');
+    if (!ENGINES[use]) return at(`use: 不认识「${f.use}」：写演示组件的名字（${TRACE_HINT}）`);
+    if (!traceable(use)) return at(`${use} 没有填表：trace 照 408 演示组件 mode: fill 的那张表判（${TRACE_HINT}……）`);
+    const fill = {};
+    if (f.rows !== undefined) {
+      const r = rowsOf(f.rows);
+      if (!r) return at(`rows: 写只填前几行（rows: 2），或第几到第几行（rows: 2-3），现在是「${f.rows}」`);
+      if (r.from > 1 && f.given !== undefined) return at('rows: 写了从第几行起，就不再写 given:（前面的行直接给出）');
+      fill.rows = r;
+    }
+    if (f.given !== undefined) fill.given = f.given;
+    if (f.cols !== undefined) fill.cols = f.cols;
+    Object.assign(probe, { use, fields: efields, fill, against: list(f.against) });
   }
   if (base === 'solve') {
     const r = parseSolve([`id: ${id}`, ...solveLines].join('\n'));
@@ -766,6 +792,7 @@ export function probeProblems(p, base = {}) {
     }
   } else if (p.ifs && p.exampleSrc && !p.tpl) out.push('example 算不出来');
   if (p.expects) out.push(...predictProblems(p, base, tieLines));
+  if (p.use) out.push(...traceProblems(p));
   if (p.result) { try { compile(p.result)(withDefaults(vars)); } catch (e) { out.push(`result 算不了：${e.message}`); } }
   return out;
 }
@@ -827,6 +854,117 @@ function predictProblems(p, base, tieLines) {
       try { const x = expectValue(e.value, vv, names); return x !== undefined && !sameValue(x, right[e.id]); } catch { return false; }
     });
     if (!apart) out.push(`against 的 ${a} 这组数分不开：照这种错法算，${p.expects.map((e) => e.id).join('、')} 都和对的一样（换一组数）`);
+  }
+  return out;
+}
+
+// —— trace 手推：学生填引擎的那张表（stepperspec.js 的 mode: fill），页面整张一次判 ——
+
+// 线代的演示组件也有 table（求秩、求逆写结果的表），不是一步步的过程：trace 不接；trace、frames 没有填表
+const NO_TRACE = new Set(['elim', 'det', 'eig', 'schmidt', 'quad']);
+const traceable = (use) => !!ENGINES[use]?.table && !NO_TRACE.has(use);
+const TRACE_HINT = 'sort、paging、disk、sched、tree、hash、banker';
+
+// rows: 2（只填前 2 行）/ rows: 2-3（第 1 行直接给出，只填第 2～3 行）→ { from, to }；写错 null
+function rowsOf(v) {
+  const s = String(v ?? '').trim();
+  let m = /^(\d+)$/.exec(s);
+  if (m) return Number(m[1]) >= 1 ? { from: 1, to: Number(m[1]) } : null;
+  m = /^(\d+)\s*[-–—~～到]\s*(\d+)$/.exec(s);
+  if (!m) return null;
+  const from = Number(m[1]), to = Number(m[2]);
+  return from >= 1 && from <= to ? { from, to } : null;
+}
+
+// 有并列的那一步以后，块里放着什么、磁头接着去哪都看前面选了哪一种：从第一处并列起往后都算有并列（只要这几个引擎能对上表的行）
+const TIE_ROWS = {
+  paging: (tieAt) => tieAt.victims, // 第几个访问 = 第几列
+  disk: (tieAt) => tieAt.order, // 第几个服务 = 第几行
+};
+
+const traceCache = new WeakMap();
+/**
+ * trace 的那张表：照 probe.use 的引擎跑 probe.fields，取引擎的 table（mode: fill 那一张），套上 rows / given / cols。
+ * 返回 { table, variants: [{ key, label, table }]（引擎的错法，短名照 measures.js 的 variantsOf）, ties（有并列的行：table.rows 的下标，从 0 数）,
+ *   input（引擎读出来的输入）, unknown（写了却没用上的字段）}。字段读不懂、引擎不收、rows 超出抛中文原因
+ */
+export function traceTable(probe) {
+  if (traceCache.has(probe)) return traceCache.get(probe);
+  const use = probe.use;
+  const engine = ENGINES[use];
+  if (!engine || !traceable(use)) throw new Error(`${use} 没有填表`);
+  const raw = { ...probe.fields };
+  if (use === 'sort' && raw.array !== undefined) raw.array = markDuplicates(raw.array).text; // 和 measure 一样先标撇号
+  const tracked = trackFields(raw);
+  const input = engine.parse(tracked.fields, '');
+  const run = engine.run(input);
+  const full = engine.table(input, run, tracked.fields);
+  if (!full) throw new Error(`${use} 这组字段没有填表（换一种写法，或者用 predict 问结果）`);
+  const unit = full.dir === 'col' ? '列' : '行';
+  const spec = {};
+  const fill = probe.fill || {};
+  if (fill.rows) {
+    if (fill.rows.to > full.rows.length) throw new Error(`rows: 写到第 ${fill.rows.to} ${unit}，这张表只有 ${full.rows.length} ${unit}`);
+    spec.rows = String(fill.rows.to);
+    if (fill.rows.from > 1) spec.given = String(fill.rows.from - 1);
+  }
+  if (fill.given !== undefined) spec.given = fill.given;
+  if (fill.cols !== undefined) spec.cols = fill.cols;
+  const made = fillSpec(full, spec);
+  if (made.errors.length) throw new Error(made.errors[0]);
+  const table = made.table;
+  // 错法：每一种照它的输入再跑一遍、出同样套过 rows / given / cols 的表（算不了的那种跳过）
+  const variants = [];
+  let list = [];
+  try { list = variantsOf(use, probe.fields); } catch { list = []; }
+  for (const v of list) {
+    try {
+      const vt = engine.table(v.input, engine.run(v.input), tracked.fields);
+      if (vt) variants.push({ key: v.key, label: v.label, table: fillSpec(vt, spec).table });
+    } catch { /* 这种错法在这组数上算不了 */ }
+  }
+  let ties = [];
+  if (TIE_ROWS[use]) {
+    let tieAt = {};
+    try { tieAt = measure(use, probe.fields).tieAt || {}; } catch { tieAt = {}; }
+    const at = TIE_ROWS[use](tieAt) || [];
+    if (at.length) { const from = Math.min(...at); ties = table.rows.map((_, r) => r).filter((r) => r >= from); }
+  }
+  const out = { table, variants, ties, input, unknown: tracked.unknown() };
+  traceCache.set(probe, out);
+  return out;
+}
+
+/** 这张表的第 k 个要填的行（r1、r2…从 1 数，只数有要填的格的行）：[{ r（table.rows 的下标）, id }] */
+export function traceRows(table) {
+  return table.rows.map((row, r) => ({ r, row })).filter((x) => x.row.cells.some((c) => !c.given)).map((x, k) => ({ r: x.r, id: `r${k + 1}` }));
+}
+
+/** 一行叫什么：引擎写的行名（「第 2 趟（d = 2）」）；横着写的表（每一步一列）是「第 10 列「3」」；没有名字「第 k 行」 */
+export function traceRowName(table, r) {
+  const label = table.rows[r]?.label;
+  const has = label !== undefined && String(label) !== '';
+  if (table.dir === 'col') return has ? `第 ${r + 1} 列「${label}」` : `第 ${r + 1} 列`;
+  return has ? String(label) : `第 ${r + 1} 行`;
+}
+
+// 照某张表填出来的作答（每格取第一个答案；打勾的格写 √）：看错法和对的分不分得开
+const valuesOf = (t) => Object.assign(t.rows.map((row) => row.cells.map((c) => { const a = [].concat(c.v)[0]; return c.mark ? (normCell(a) ? '√' : '') : String(a ?? ''); })), { extra: (t.extra || []).map((x) => String([].concat(x.v)[0] ?? '')) });
+
+// trace：字段读得懂、没有写错名字的字段、要填的行没有并列、against 的错法这组数分得开
+function traceProblems(p) {
+  let T;
+  try { T = traceTable(p); } catch (e) { return [`${p.use} 的字段读不懂：${e.message}`]; }
+  const out = [...T.unknown];
+  const tied = traceRows(T.table).filter((x) => T.ties.includes(x.r));
+  if (tied.length) {
+    const first = tied[0].r;
+    out.push(`${traceRowName(T.table, first)}起有并列（几种做法一样好，页面判不了）：换一组数${first ? `，或者用 rows: ${first} 只填前 ${first} ${T.table.dir === 'col' ? '列' : '行'}` : ''}`);
+  }
+  for (const a of p.against || []) {
+    const v = T.variants.find((x) => x.key === a);
+    if (!v) { out.push(`against 写了「${a}」：要么不是 ${p.use} 的错法，要么这组数上照它做和对的一样（分不开）；这组数列出来的错法有 ${T.variants.map((x) => x.key).join('、') || '（没有：这组数上每种错法都和对的一样）'}`); continue; }
+    if (checkFill(T.table, valuesOf(v.table)).ok) out.push(`against 的 ${a} 这组数分不开：照这种错法填出来，要填的格子都和对的一样（换一组数，或者多填几${T.table.dir === 'col' ? '列' : '行'}）`);
   }
   return out;
 }

@@ -34,7 +34,7 @@ test('常量：PROBE_TYPES 多了 408、英语的题型；tradeoff、calc 是别
 });
 
 test('还没接上的题型报「这一种还没接上」；tradeoff 照 recall 读、type 存 tradeoff', () => {
-  for (const t of ['trace', 'code', 'parse', 'translate', 'rewrite', 'errfind']) {
+  for (const t of ['code', 'parse', 'translate', 'rewrite', 'errfind']) {
     assert.match(parseProbe(t, 'id: q\ntarget: x\nlevel: 基础').error, new RegExp(`${t}：这一种还没接上`));
   }
   const p = probeOf('tradeoff', 'id: q\nq: 链表和顺序表各好在哪\ntarget: x\nlevel: 方法\nmust: 随机存取');

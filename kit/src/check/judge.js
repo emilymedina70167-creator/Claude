@@ -8,8 +8,9 @@ import { readCell } from '../anscheck.js';
 import { equivalent } from '../ncalg.js';
 import { normalizeFormula, FORMULA_FUNCS } from '../formula.js';
 import { parseDeriveDo, sampleEnvs, checkLine } from '../derivedo.js';
-import { probeVars, evalIfs, withDefaults, runVars, runFields, measuresUsed, expectValue } from './spec.js';
-import { variantsOf, variantValues } from '../engines/measures.js';
+import { probeVars, evalIfs, withDefaults, runVars, runFields, measuresUsed, expectValue, traceTable, traceRows, traceRowName } from './spec.js';
+import { variantsOf, variantValues, sortPass } from '../engines/measures.js';
+import { checkFill, cellOk, normCell, misreadFill } from '../stepperspec.js';
 import { valueMatch, sameResult, unreadWhy } from './values.js';
 import { parseJudge, STEP_KINDS, STEP_TAGS } from '../solvespec.js';
 
@@ -194,9 +195,93 @@ function predictItems(probe, answer = {}, base = {}) {
   return { items, needsClaude: !stop && (probe.must || []).length > 0, stop };
 }
 
-/** 一项在画面上叫什么（不露编号）：predict 的 expect 是外部写的标签，run 是「跑引擎」；别的 null（外壳照旧） */
+// —— 408 的 trace（计划 4 Task 4）：学生填引擎的那张表，整张一次判 ——
+// answer.cells 和 stepperspec.js 的 checkFill 收的一样：cells[r][c] 是 table.rows[r] 第 c 格学生写的（直接给出的格可以不写），
+// cells.extra[i] 是表下面那几格（散列表的 ASL）。r 是 traceTable(probe).table.rows 的下标（rows: 2-3 时第 1 行是直接给出的那一行）
+
+// 每一趟只看上一趟的序列的四种排序：第一处错以后照「对的这一趟作用在学生写的上一行上」接着核，分开笔误和不会
+const CARRY = new Set(['insert', 'shell', 'bubble', 'select']);
+const TRACE_TIE = '这一步有并列（几种做法都对），页面判不了';
+const plainNum = (x) => { const t = String(x ?? '').trim().replace(/['’′_]+$/, ''); return /^-?\d+(?:\.\d+)?$/.test(t) ? Number(t) : NaN; };
+
+// 笔误只认「一个数写错、或两个数写反」：错的那一行和对的最多差 2 格。希尔最后一趟 d = 1、怎么写都排得齐，
+// 不加这一条的话倒数第二趟整行做错（第 2 趟当成直接插入一趟排完）后面也「按上一行推都对」，会被说成笔误
+const nearMiss = (row, mine) => row.cells.filter((c, j) => !c.given && !cellOk(c, mine?.[j] ?? '')).length <= 2;
+
+function traceItems(probe, answer = {}) {
+  let T;
+  try { T = traceTable(probe); } catch (e) { return { items: [{ id: 'run', ok: null, why: `页面跑不了：${e.message}` }], needsClaude: false, stop: true }; }
+  const { table, ties, input } = T;
+  const sort = probe.use === 'sort';
+  const raw = answer.cells || [];
+  // 排序的格子认 49、49'、49’、49′（引擎的格子收 49 和 49′、49'）：学生写的撇号先统一成 ′
+  const fix = (v) => (sort ? String(v ?? '').replace(/['’_]/g, '′') : String(v ?? ''));
+  const cells = Object.assign(table.rows.map((row, r) => row.cells.map((_, c) => fix(raw[r]?.[c]))), { extra: (table.extra || []).map((_, i) => String(raw.extra?.[i] ?? '')) });
+  const rows = traceRows(table);
+  const items = [];
+  let bad = null;
+  for (const x of rows) {
+    const res = checkFill({ ...table, rows: [table.rows[x.r]], extra: [] }, [cells[x.r]]);
+    if (res.ok) { items.push({ id: x.id, ok: true, why: '' }); continue; }
+    // 靠并列定的那几步：学生写的可能是另一种也对的做法——待核，后面的行照常核
+    if (ties.includes(x.r)) { items.push({ id: x.id, ok: null, why: TRACE_TIE }); continue; }
+    bad = { ...x, first: res.first };
+    break;
+  }
+  if (!bad) {
+    // 表都对（或只有待核的）了才看表下面那几格
+    if (!items.some((x) => x.ok === null)) (table.extra || []).forEach((cell, i) => {
+      const s = cells.extra[i];
+      const ok = normCell(s) !== '' && cellOk(cell, s);
+      items.push({ id: `x${i + 1}`, ok, why: ok ? '' : `「${cell.label}」${normCell(s) === '' ? '还空着' : '不对'}` });
+    });
+    return { items, needsClaude: false, stop: items.some((x) => x.ok === false) };
+  }
+  const head = table.head?.[bad.first.c];
+  const where = /^\d+$/.test(String(head ?? '')) ? `第 ${head} 格` : head !== undefined ? `的「${head}」` : `第 ${bad.first.c + 1} 格`;
+  const it = { id: bad.id, ok: false, why: `${traceRowName(table, bad.r)}${where}${bad.first.empty ? '还空着' : '不对'}` };
+  // 后面的行：只有那四种排序接着核（carried：ok 是对学生自己的上一行而言；这道题照样没过）；别的引擎错行后面的不列
+  const later = [];
+  if (sort && CARRY.has(input.algo)) {
+    const n = input.items.length;
+    const nums = (r) => {
+      const xs = table.rows[r].cells.map((c, j) => plainNum(c.given ? [].concat(c.v)[0] : cells[r][j]));
+      return xs.length === n && xs.every(Number.isFinite) ? xs : null;
+    };
+    let prev = nums(bad.r);
+    for (const x of rows.filter((y) => y.r > bad.r)) {
+      const mine = nums(x.r);
+      let ok = false;
+      if (prev && mine) { const want = sortPass(input.algo, prev, x.r + 1, { gaps: input.gaps, n }); ok = want.length === mine.length && want.every((v, i) => v === mine[i]); }
+      later.push({ id: x.id, ok, carried: true, why: ok ? '' : !prev ? '上一行读不成一排数，接着核不了' : `${traceRowName(table, x.r)}按你写的上一行推也不对` });
+      prev = mine;
+    }
+  }
+  // 错法（写了 against 只认那几种）：错的地方一半以上和照那种错法填的表对得上
+  const want = probe.against || [];
+  const vlist = T.variants.filter((v) => !want.length || want.includes(v.key));
+  const label = misreadFill(table, cells, vlist);
+  const hitV = label ? vlist.find((v) => v.label === label) : null;
+  if (hitV) Object.assign(it, { tag: hitV.key, why: `${it.why}；${hitV.label}`, keys: [`tag=${hitV.key}`, it.id] });
+  else if (later.length && later.every((y) => y.ok === true) && nearMiss(table.rows[bad.r], cells[bad.r])) {
+    Object.assign(it, { tag: 'slip', why: `后面按你自己的上一行推都对，第 ${bad.r + 1} 趟这一处写错了`, keys: ['slip', 'tag=slip', it.id] });
+  } else it.keys = [it.id];
+  return { items: [...items, it, ...later], needsClaude: false, stop: true };
+}
+
+/**
+ * 一项在画面上叫什么（不露编号）：predict 的 expect 是外部写的标签，run 是「跑引擎」；trace 的 r1… 是那张表的行名
+ * （「第 2 趟（d = 2）」「第 10 列「3」」「第 k 行」），x1… 是表下面那几格的名字；别的 null（外壳照旧）
+ */
 export function itemLabel(probe, id) {
   if (id === 'run') return '跑引擎';
+  if (probe?.type === 'trace' && /^[rx]\d+$/.test(id)) {
+    let T;
+    try { T = traceTable(probe); } catch { return null; }
+    if (id[0] === 'x') return T.table.extra?.[Number(id.slice(1)) - 1]?.label ?? null;
+    const x = traceRows(T.table).find((y) => y.id === id);
+    return x ? traceRowName(T.table, x.r) : null;
+  }
   const e = (probe?.expects || []).find((x) => x.id === id);
   return e ? e.label : null;
 }
@@ -219,6 +304,8 @@ export function judgeMachine(probe, answer = {}, base = {}) {
       return { items, needsClaude: false, stop: false };
     case 'predict':
       return predictItems(probe, answer, base);
+    case 'trace':
+      return traceItems(probe, answer);
     case 'claim': {
       const ok = answer.truth === probe.truth;
       items.push({ id: 'truth', ok, why: ok ? '' : `这个命题是${probe.truth ? '真' : '假'}的` });
@@ -329,6 +416,14 @@ function answerText(probe, answer = {}, images = 0) {
   if (probe.type === 'discriminate') out.push(`学生判：${answer.can ? '能' : '不能'}用`, ...(answer.result ? [`学生写的结果：${answer.result}`] : []));
   if (probe.type === 'locate') out.push(`学生点的错的那一行：第 ${answer.line} 行`, ...(answer.fix ? [`学生写的改法：${answer.fix}`] : []));
   if (probe.type === 'predict') for (const e of probe.expects || []) out.push(`学生写的「${e.label}」：${String(answer.expects?.[e.id] ?? '').trim() || '（没写）'}`);
+  if (probe.type === 'trace') {
+    // 学生填的表：一行一行照写的抄（直接给出的行不抄）
+    try {
+      const { table } = traceTable(probe);
+      out.push(`学生填的表（${(table.head || []).join(' | ')}）：`);
+      for (const x of traceRows(table)) out.push(`${traceRowName(table, x.r)}：${table.rows[x.r].cells.map((c, j) => (c.given ? '（给出）' : String(answer.cells?.[x.r]?.[j] ?? '').trim() || '（空）')).join(' | ')}`);
+    } catch { /* 表都出不来：判的那一项已经待核 */ }
+  }
   if (answer.text) out.push('学生打的字：', '<<<', String(answer.text), '>>>');
   if (images) out.push(`附图 ${images} 张：学生在页面上手写的整页（左边淡色的 L1、L2… 是页面写的行号；灰色带一道线的是学生划掉的）。`);
   if (!answer.text && !images) out.push('学生这次没写字。');
