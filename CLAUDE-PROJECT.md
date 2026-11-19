@@ -428,7 +428,7 @@ retry: p5, p5
 
 我写字的地方有「手写 / 打字」两个页签（这台设备用过 Pencil 默认手写）。手写板记每一笔的时间；改错用「划掉」（留痕），「撤一下」只撤 5 秒内的一笔、3 秒内的划掉；「下一步」记一个分步的时刻；「加一页」往下加。交的时候页面从笔画算：整页图（划掉的灰色带线、左边行号 L1、L2…）、关键时刻的快照（停顿超过 `pause`、每次划掉之前、每次下一步，最多 6 张）、一段时间线文字，图传进 assets。
 
-### trace、predict、construct、tradeoff、code、calc：408 的检验题
+### tradeoff、calc：408 的检验题（块里的 trace、predict、construct、code 也在这一节）
 
 <!-- 科目：数据结构 操作系统 组成原理 计网 -->
 
@@ -606,7 +606,7 @@ teach default: 走到一半就停：再往后换，前面换好的又换回去�
 ````
 `````
 
-### parse、translate、rewrite、discriminate、errfind、recall：英语的检验题
+### rewrite：英语的检验题（块里的 parse、translate、discriminate、errfind 也在这一节）
 
 <!-- 科目：英语 -->
 
@@ -2658,7 +2658,8 @@ id: p1
 ````
 ````
 
-- 块里每个围栏的名字就是探题的题型：`recall` `construct` `claim` `discriminate` `locate` `solve`，408 的 `trace` `predict` `construct` `tradeoff` `code` `calc`，英语的 `parse` `translate` `rewrite` `discriminate` `errfind` `recall`（写法见第三节「检验题」「408 的检验题」「英语的检验题」：`components/recall.md`、`components/trace.md`、`components/parse.md`）。`trace` `predict` `code` `parse` `translate` `errfind` `solve` 单独写在板上是一类组件（第三节同名的那一节）；别的单独写在板上只画预览。
+- 块里每个围栏的名字就是探题的题型：`recall` `construct` `claim` `discriminate` `locate` `solve`，408 的 `trace` `predict` `construct` `tradeoff` `code` `calc`，英语的 `parse` `translate` `rewrite` `discriminate` `errfind` `recall`（写法见第三节「检验题」「408 的检验题」「英语的检验题」）。`trace` `predict` `code` `parse` `translate` `errfind` `solve` 单独写在板上是一类组件（第三节同名的那一节）；别的单独写在板上只画预览。
+- 检验题的写法：数学的见 `recall` 那一份，408 的见 `tradeoff` 那一份，英语的见 `rewrite` 那一份（`components/recall.md`、`components/tradeoff.md`、`components/rewrite.md`）。
 - `block 块 must=… optional=… [fast=]`：一块一行，按写的先后做，块里先必做再可选；`spare`：不出现，只存进题库给复测；没排进任何一行、也不是谁的 `retry` 的题报写法错误。`limit=` 第一次作答一共多久（不写不限时），`pause=` 手写停多久算停顿（默认 30s）。
 - 执行时页面先查一遍（写法、每道题的 `example` 代进条件（带着这节课 `let` 过的量；模板先取几组数）、必做题 retry 至少 2 道、至少 1 条 teach、retry 是同一种题型），不过的不开，原因写在 `ext_in.result`；`node tools/ext-check.mjs --next … --lint` 查的是同一份。过了就画一张开始卡，题全部存进题库 `probes`。
 - 学生点开始：板、常驻栏、翻板条、整页板书收起来（合书），做完放回来；这时来的 `ext_in` 照常执行，画好的板做完检验才看得到。一道题：作答 → 点「很确定 / 大概 / 蒙的」→ 交；没有提示和「看答案」，「想不出来」一直在。

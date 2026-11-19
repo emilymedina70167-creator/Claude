@@ -171,8 +171,7 @@ test('每个演示组件在手册里都有说明，quiz、fill、错法诊断都
   const { docSections } = await import('../kit/src/subject.js');
   const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
   const secs = docSections(componentDocs(md));
-  // 标题里有这个名字的小节都算（同 componentDoc：「408 的检验题」的标题里也有 trace）
-  const textOf = (name) => { const ss = secs.filter((x) => x.names.includes(name)); return ss.length ? ss.flatMap((s) => [...s.body, ...(s.detail || [])]).join('\n') : null; };
+  const textOf = (name) => { const s = secs.find((x) => x.names.includes(name)); return s ? [...s.body, ...(s.detail || [])].join('\n') : null; };
   const missing = [], gaps = [];
   // 说明还在 docs/drafts/ 里、没并进手册的组件（子任务正在做）：并说明的时候把这里清空，之后不许再有
   const PENDING_DOCS = new Set([]);

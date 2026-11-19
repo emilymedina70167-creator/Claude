@@ -78,8 +78,8 @@ b = [1, 1, -2]
 - `quiz`：选择题 / 填空题 → `components/quiz.md`
 - `solve`：解答题，按步骤判 → `components/solve.md`
 - `recall` / `construct` / `claim` / `discriminate` / `locate`（线代）：检验题（二类，学完以后的吸收检验） → `components/recall.md`
-- `trace` / `predict` / `construct` / `tradeoff` / `code` / `calc`（数据结构、操作系统、组成原理、计网）：408 的检验题 → `components/trace.md`
-- `parse` / `translate` / `rewrite` / `discriminate` / `errfind` / `recall`（英语）：英语的检验题 → `components/parse.md`
+- `tradeoff` / `calc`（数据结构、操作系统、组成原理、计网）：408 的检验题（块里的 trace、predict、construct、code 也在这一节） → `components/tradeoff.md`
+- `rewrite`（英语）：英语的检验题（块里的 parse、translate、discriminate、errfind 也在这一节） → `components/rewrite.md`
 - `context`：给页面里 Claude 的背景资料（不显示） → `components/context.md`
 - `draft`：草稿区（Apple Pencil 演算） → `components/draft.md`
 - `steps`：一步步揭开的例题（带着动脑） → `components/steps.md`
@@ -577,7 +577,8 @@ id: p1
 ````
 ````
 
-- 块里每个围栏的名字就是探题的题型：`recall` `construct` `claim` `discriminate` `locate` `solve`，408 的 `trace` `predict` `construct` `tradeoff` `code` `calc`，英语的 `parse` `translate` `rewrite` `discriminate` `errfind` `recall`（写法见第三节「检验题」「408 的检验题」「英语的检验题」：`components/recall.md`、`components/trace.md`、`components/parse.md`）。`trace` `predict` `code` `parse` `translate` `errfind` `solve` 单独写在板上是一类组件（第三节同名的那一节）；别的单独写在板上只画预览。
+- 块里每个围栏的名字就是探题的题型：`recall` `construct` `claim` `discriminate` `locate` `solve`，408 的 `trace` `predict` `construct` `tradeoff` `code` `calc`，英语的 `parse` `translate` `rewrite` `discriminate` `errfind` `recall`（写法见第三节「检验题」「408 的检验题」「英语的检验题」）。`trace` `predict` `code` `parse` `translate` `errfind` `solve` 单独写在板上是一类组件（第三节同名的那一节）；别的单独写在板上只画预览。
+- 检验题的写法：数学的见 `recall` 那一份，408 的见 `tradeoff` 那一份，英语的见 `rewrite` 那一份（`components/recall.md`、`components/tradeoff.md`、`components/rewrite.md`）。
 - `block 块 must=… optional=… [fast=]`：一块一行，按写的先后做，块里先必做再可选；`spare`：不出现，只存进题库给复测；没排进任何一行、也不是谁的 `retry` 的题报写法错误。`limit=` 第一次作答一共多久（不写不限时），`pause=` 手写停多久算停顿（默认 30s）。
 - 执行时页面先查一遍（写法、每道题的 `example` 代进条件（带着这节课 `let` 过的量；模板先取几组数）、必做题 retry 至少 2 道、至少 1 条 teach、retry 是同一种题型），不过的不开，原因写在 `ext_in.result`；`node tools/ext-check.mjs --next … --lint` 查的是同一份。过了就画一张开始卡，题全部存进题库 `probes`。
 - 学生点开始：板、常驻栏、翻板条、整页板书收起来（合书），做完放回来；这时来的 `ext_in` 照常执行，画好的板做完检验才看得到。一道题：作答 → 点「很确定 / 大概 / 蒙的」→ 交；没有提示和「看答案」，「想不出来」一直在。

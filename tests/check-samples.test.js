@@ -157,3 +157,25 @@ test('手册里 408、英语的 board check 例子：照抄就能过执行前的
   }
   for (const t of ['trace', 'predict', 'construct', 'tradeoff', 'calc', 'code', 'parse', 'translate', 'rewrite', 'discriminate', 'errfind']) assert.ok(types.has(t), `例子里没有 ${t}`);
 });
+
+// 检验题的小节标题冒号前面只写检验自己的名字（tradeoff、calc / rewrite）：一类组件 trace、parse… 的写法、资料包点了它们时的完整写法都不带检验那一节
+test('手册：一类组件的名字不会拉进检验题那两节；点 tradeoff / rewrite 才带', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { componentDocs } = await import('../kit/build-docs.js');
+  const { componentDoc } = await import('../kit/src/subject.js');
+  const { systemDocs } = await import('../kit/src/class/prompt.js');
+  const { splitProject } = await import('../kit/build-split.js');
+  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const docs = componentDocs(md);
+  const C408 = '**引擎交的量**', CEN = '片段按整词比';
+  for (const n of ['trace', 'code', 'predict', 'construct']) assert.ok(!(componentDoc(docs, n, '数据结构') || '').includes(C408), n);
+  for (const n of ['parse', 'translate', 'errfind', 'discriminate']) assert.ok(!(componentDoc(docs, n, '英语') || '').includes(CEN), n);
+  assert.ok(!systemDocs(docs, '数据结构', ['trace', 'code', 'predict']).docs.includes(C408));
+  assert.ok(!systemDocs(docs, '英语', ['parse', 'translate', 'errfind']).docs.includes(CEN));
+  assert.ok(componentDoc(docs, 'tradeoff', '数据结构').includes(C408));
+  assert.ok(componentDoc(docs, 'rewrite', '英语').includes(CEN));
+  const { files, main } = splitProject(md);
+  assert.ok(files['components/tradeoff.md'].includes(C408) && !files['components/trace.md'].includes(C408));
+  assert.ok(files['components/rewrite.md'].includes(CEN) && !files['components/parse.md'].includes(CEN));
+  assert.ok(!/^### tradeoff/m.test(main), '408 那一节不留进主说明（标题里的 calc 不是公式里的 \\calc）');
+});
