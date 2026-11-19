@@ -41,10 +41,10 @@ export function createCheckDesk(rawDb, { sid = null, space = null, memoOps = nul
       }
       return out;
     },
-    /** 执行 board check 时把题存进题库（同一个编号不写第二次） */
-    async bankStore(check) {
+    /** 执行 board check 时把题存进题库（同一个编号不写第二次）；base：这节课 let 的量（浮点），题里用到的抄进 lets */
+    async bankStore(check, base = {}) {
       if (readOnly || bankOf) return;
-      for (const { id, doc } of bankDocs(check, { session: sid, at: Date.now() })) {
+      for (const { id, doc } of bankDocs(check, { session: sid, at: Date.now(), base })) {
         const had = await db.doc(`probes/${id}`).get().catch(() => null);
         if (!had?.exists) db.doc(`probes/${id}`).set(doc).catch(soft('存进检验题库', `probes/${id}`));
       }

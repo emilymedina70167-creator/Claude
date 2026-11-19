@@ -1,11 +1,12 @@
 // 检验手写板（设计 5.4）：只在检验里出现（features.js 的 handwriting 照旧关着，这块板不看它）。
 // 每一笔记 t0 / t1；没有橡皮，改错用「划掉」（留痕，和真考试一样）；「撤一笔」只撤 5 秒内写的最后一笔（笔误），划掉 3 秒内能撤；
 // 「下一步」记一个分步的时刻；写满了「加一页」往下加 600px。只认 Pencil 和鼠标写，手指照常滚动（照 ink/pad.js）。
-// 交的时候 export()：整页图、关键时刻的快照、时间线文字（inktime.js 从数据算，不当场截图）。没交的存在这台设备上（key），交了删
+// 交的时候 export()：整页图、关键时刻的快照、时间线文字（inktime.js 从数据算，不当场截图）。没交的存在这台设备上（key，inkstore.js：空的不存），交了删
 import { radiusOf, beginStroke, addPoint, drawStroke, drawTail, drawEnd, hitStroke, samples, pen } from '../ink/engine.js';
 import { markPen } from '../ink/pad.js';
 import { linesOf, keyMoments, frameAt, timelineText, PAUSE } from './inktime.js';
 import { renderFrame } from './inkrender.js';
+import { saveInk, loadInk, dropInk } from './inkstore.js';
 
 const UNDO_STROKE = 5000;
 const UNDO_STRIKE = 3000;
@@ -13,7 +14,8 @@ const PAGE = 600;
 const SIZE = 2.4;
 
 export function timedPad(host, { key = '', pause = PAUSE, now = () => Date.now(), height = 420 } = {}) {
-  const saved = load(key);
+  const store = (() => { try { return localStorage; } catch { return null; } })();
+  const saved = loadInk(store, key);
   const strokes = saved?.strokes || [];
   const events = saved?.events || [];
   // 时间接着上一次（刷新、熄屏回来）：从存着的最后一刻往后数
@@ -67,7 +69,7 @@ export function timedPad(host, { key = '', pause = PAUSE, now = () => Date.now()
     el.querySelector('.ck-pad-strike').classList.toggle('is-on', mode === 'strike');
     save();
   }
-  function save() { if (!key) return; try { localStorage.setItem(key, JSON.stringify({ strokes, events, at: t(), h })); } catch { /* 存不下就不存 */ } }
+  function save() { saveInk(store, key, { strokes, events, at: t(), h }); }
 
   const local = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const usable = (e) => e.pointerType === 'pen' || e.pointerType === 'mouse' || (e.pointerType === 'touch' && !pen.seen);
@@ -147,12 +149,8 @@ export function timedPad(host, { key = '', pause = PAUSE, now = () => Date.now()
       for (const m of moments) shots.push({ t: m.t, why: m.why, blob: await renderFrame(frameAt(strokes, m.t), { lines, box }) });
       return { final, shots, timeline: timelineText(strokes, events, lines, moments, { pause }), lines, strokes: strokes.map((s) => ({ ...s })), events: events.map((x) => ({ ...x })) };
     },
-    clear() { if (key) try { localStorage.removeItem(key); } catch { /* 无 */ } },
+    clear() { dropInk(store, key); },
     destroy() { clearInterval(tick); ro.disconnect(); el.remove(); },
   };
 }
 
-function load(key) {
-  if (!key) return null;
-  try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return v && Array.isArray(v.strokes) ? v : null; } catch { return null; }
-}

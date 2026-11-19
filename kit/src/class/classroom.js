@@ -493,7 +493,7 @@ export async function renderClass(root, meta, desk = null) {
   await restore();
   // 检验（二类组件，check/）：恢复以后才接（恢复时重放的 board check 不再开一次；没做完的照存着的进度接着做）
   checks = createClassCheck({
-    root, db, desk, readOnly, vars: session.vars,
+    root, db, desk, readOnly, vars: () => session.vars,
     call: async (prompt, opts = {}) => { try { const res = await teacher.call(prompt, { ...TEACH, cache: false, ...opts }); return res?.modelApplied === MODEL ? res : null; } catch { return null; } },
     upload: (blob) => uploadImage(blob),
     imageOf: (id) => localImages.get(id) || null,

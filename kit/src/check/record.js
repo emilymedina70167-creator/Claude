@@ -82,15 +82,17 @@ export function absorbDoc(prev, result, { check, session = null, space = null, a
   const history = prev ? [...(prev.history || []), { check: prev.check, session: prev.session, at: prev.at, state: prev.state, facets: prev.facets }].slice(-5) : [];
   // 状态类的 log：改了的字段一条一条记（schema.js 的 lastLog，自检要 to 是新值）
   const note = `检验 ${check.id}${session ? `（${session}）` : ''}`;
+  // 同一次检验重算（外部改判、刷新以后补写）而且结论没变：主讲核过的照旧算核过（不被页面改回待核）
+  const keep = !!(prev && prev.check === check.id && prev.session === session && prev.checked && prev.state === result.state);
   const log = [...(prev?.log || [])];
-  for (const [field, to] of [['state', result.state], ['checked', false]]) {
+  for (const [field, to] of [['state', result.state], ['checked', keep]]) {
     const from = prev ? prev[field] ?? null : null;
     if (prev && from === to) continue;
     log.push({ date: today, by: 'page', field, from, to, basis: evidence.slice(0, 20), note });
   }
   return {
     block: result.block || prev?.block || check.blocks.find((b) => b.must.some((id) => result.probes?.includes(id)))?.block || null,
-    space, state: result.state, facets: result.facets, by: 'page', checked: false, check: check.id, session, at, date: today,
+    space, state: result.state, facets: result.facets, by: keep ? prev.by || 'page' : 'page', checked: keep, check: check.id, session, at, date: today,
     probes: evidence, confidentWrong: result.confidentWrong || [], debt: result.debt || [], families,
     retests: retestDates(today), retryOwed: owed.filter((x) => check.probes[x]).map((x) => bankId(fenceOf(check.probes[x]))),
     history, log,

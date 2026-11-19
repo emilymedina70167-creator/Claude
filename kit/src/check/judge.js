@@ -17,6 +17,23 @@ export function blankCells(v) {
   return v === null || v === undefined || String(v).trim() === '' ? 1 : 0;
 }
 
+const readable = (x) => { try { readCell(x); return true; } catch { return false; } };
+
+/**
+ * 交之前还差什么（构造题、判假的反例）：没填的格、读不懂的格（「1/」这种）、空着的式子框。'' 是能交了。
+ * 只管格子和式子框（真假、能不能、哪一行、写字的地方由外壳另看）
+ */
+export function notReady(probe, answer = {}) {
+  if (!probe?.slots || !answer?.slots) return '';
+  const blank = probe.slots.reduce((n, s) => n + blankCells(answer.slots[s.name] ?? ''), 0);
+  if (blank) return `还有 ${blank} 格没填`;
+  const bad = probe.slots.filter((s) => [answer.slots[s.name]].flat(2).some((x) => String(x ?? '').trim() && !readable(x))).map((s) => s.name);
+  if (bad.length) return `${bad.join('、')} 里有格子读不懂：写数、分数（1/2）或根号（√2）`;
+  const empty = (probe.exprs || []).filter((e) => !String(answer.exprs?.[e.id] ?? '').trim()).map((e) => e.label);
+  if (empty.length) return `${empty.join('、')}还没写`;
+  return '';
+}
+
 // 学生格子里写的（'1/2'、'√2'、数）→ 数
 const cellNum = (x) => (Array.isArray(x) ? x.map(cellNum) : typeof x === 'number' ? x : Number(readCell(x)));
 

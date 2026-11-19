@@ -183,9 +183,15 @@ const ON = {
         R.final = 'fail';
         for (const x of probeOf(s, orig).retry) if (!usedRetries(s, orig).includes(x) && !s.owed.includes(x)) s.owed.push(x);
       }
-    } else {
-      if (r.outcome === 'pass' && ['pending', 'fail'].includes(R.final)) R.final = 'fixed';
-      if (r.outcome === 'fail' && ['pending', 'fixed'].includes(R.final)) R.final = 'fail';
+    } else if (R.final !== 'pass') {
+      // 改的是一道 retry：本题的结论照全部用过的 retry 重算（改判中间那一道没过，后面那道补上了的照样算补上）
+      const rs = usedRetries(s, orig).map((x) => s.results[x]).filter((x) => x?.submitted);
+      if (rs.some((x) => x.outcome === 'pass')) R.final = 'fixed';
+      else if (rs.some((x) => x.outcome === 'pending')) R.final = 'pending';
+      else if (rs.length) {
+        R.final = 'fail';
+        for (const x of probeOf(s, orig).retry) if (!usedRetries(s, orig).includes(x) && !s.owed.includes(x)) s.owed.push(x);
+      }
     }
     // 拿走的是「还在判」的最后一道：接着走（不停在 wait）
     if (s.phase === 'wait' && !Object.keys(s.judging).length) advance(s);

@@ -731,8 +731,8 @@ export async function renderDesk(root, meta) {
     const opens = mine.sessions.filter((x) => x.status === 'open').sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
     const open = opens.find(isTeach);
     // 上一节（这一科下了课的最近一节）：课后报告的要点、花了多少
-    // 练一练、课前热身不算一节课：不然做完热身，「上一节」就成了那节练习，「下次先测」也跟着没了
-    const last = mine.sessions.filter((x) => x.status === 'closed' && kindOf(x) !== 'drill').sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0))[0];
+    // 练一练、课前热身、复测（kind: check）不算一节课：不然做完热身，「上一节」就成了那节练习，「下次先测」也跟着没了
+    const last = mine.sessions.filter((x) => x.status === 'closed' && kindOf(x) !== 'drill' && kindOf(x) !== 'check').sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0))[0];
     // 上一节：日期 + 报告那一行（做了几题、对了几题）；花了多少额度在「以前的课」里看，首页不放
     const lastLine = last ? String(last.report?.line || '') : '';
     // 上一节没稳的知识点（归过类才有）：这节开头先测
@@ -1447,7 +1447,7 @@ export async function renderDesk(root, meta) {
     };
     const n = { later: later?.holds.ids.length || 0, retest: retest.length, today: nrev, recall: rc.total, drill: dpick?.items.length ?? 0, manual: null, book: null, next: null };
     const keys = Object.keys(ROWS).filter((k) => (k !== 'drill' || dpick) && (k !== 'later' || later) && (k !== 'retest' || retest.length));
-    for (const k of ['recall', 'later']) if (whyOf(k)) sub[k] = `${whyOf(k)}${sub[k] ? ` · ${sub[k]}` : ''}`;
+    for (const k of ['recall', 'later', 'retest']) if (whyOf(k)) sub[k] = `${whyOf(k)}${sub[k] ? ` · ${sub[k]}` : ''}`;
     box.innerHTML = (note ? `<p class="dk-tnote">${inline(note)}</p>` : '') + crows.map((r, ci) => `<button type="button" class="dk-trow dk-crow" data-ci="${ci}" data-ckind="${r.kind}" data-cval="${escapeHtml(r.kind === 'review' ? r.ids.join(',') : r.block)}"><span class="dk-ic ${r.kind === 'review' ? 'is-review' : 'is-plus'}">${r.kind === 'review' ? r.ids.length : '›'}</span><b>${inline(r.label)}</b><small>${escapeHtml(r.why || (r.kind === 'review' ? '复现课' : r.kind === 'coach' ? '练习' : '开课'))}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('') + keys.map((k) => `<button type="button" class="dk-trow" data-row="${k}" data-menu="${k}"><span class="dk-ic ${ROWS[k].ic}${n[k] === 0 ? ' is-zero' : ''}"${n[k] === null ? '' : ' data-count'}>${n[k] === null ? '+' : rowCounts[k] ?? n[k]}</span><b>${ROWS[k].title}</b><small>${escapeHtml(sub[k])}</small><span class="dk-chev" aria-hidden="true"></span></button>`).join('');
     // 数字变了：往上滚过去（第一次画不滚）
     for (const k of keys) {

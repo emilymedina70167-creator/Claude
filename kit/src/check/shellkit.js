@@ -15,6 +15,12 @@ export function screenKey(v = {}) {
 /** 换屏以后太快的那一下点（第二下点到了新的一屏上） */
 export const tooSoon = (shownAt, now) => (Number(now) || 0) - (Number(shownAt) || 0) < CLICK_GUARD;
 
+/**
+ * 做完了、吸收和错题还没写完（finishedAt 没记上）的检验：做完那一刻刷新、关页，下次打开课堂补写（finish 可以重入：
+ * 同一次检验重算吸收不另进 history，错题照 memo 的规矩不记两次）
+ */
+export const toFinish = (rows = []) => rows.filter((r) => r?.state?.phase === 'done' && !r.state.finishedAt);
+
 /** 这次检验现在归哪个标签页：别的页心跳还新鲜 → 'other'，不然 'mine' */
 export function lockState(stored, me, now) {
   if (!stored || stored.id === me) return 'mine';

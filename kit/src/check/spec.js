@@ -141,6 +141,10 @@ export function parseProbe(type, src) {
     errors.push(`看不懂这一行：「${raw.trim().slice(0, 40)}」`);
   }
   if (errors.length) return { error: errors[0] };
+  // 自动编号（must: …）和手写编号（must m1: …）撞了：报出来，不静默出两个 m1（teach、判分都按编号对）
+  const pointIds = [...pts.must, ...pts.may, ...pts.wrong].map((x) => x.id);
+  const twice = pointIds.find((x, i) => pointIds.indexOf(x) !== i);
+  if (twice) return { error: `${f.id || type}：要点编号 ${twice} 用了两次（自动编号和手写编号撞了：要么都写编号，要么都不写）` };
   const id = f.id || '';
   if (!id) return { error: `${type} 要写 id:` };
   if (!ID_RE.test(id)) return { error: `id「${id}」不合法：只能用字母、数字和 _ - . ~ : @ +` };

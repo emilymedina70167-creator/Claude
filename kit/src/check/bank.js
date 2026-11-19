@@ -27,8 +27,23 @@ export function bankId(fence) {
   return `pr-${a}${b}`;
 }
 
-/** 一次检验里的每道题 → 题库的文档：[{ id, doc }] */
-export function bankDocs(check, { session = null, at = Date.now() } = {}) {
+// 题里用到的课上的量（let 块定义的，不是题自己 let 的）：存进题库时抄下来，复测时写回成题里的 let（复测那一页没有那节课的量）。
+// 值是浮点（检验本来就按浮点判，和 base 一样）；带参数的（Sym）、算不出 JSON 的不抄，复测那道照实自检不过、拿掉
+function lessonLets(probe, base = {}) {
+  const own = new Set((probe.lets || []).map((l) => l.name));
+  const used = new Set(String(probe.src ?? '').match(/[A-Za-z_]\w*/g) || []);
+  const out = {};
+  for (const name of Object.keys(base || {}).sort()) {
+    if (own.has(name) || !used.has(name)) continue;
+    const v = base[name];
+    const ok = (x) => (Array.isArray(x) ? x.every(ok) : typeof x === 'number' && Number.isFinite(x));
+    if (ok(v)) out[name] = JSON.stringify(v);
+  }
+  return out;
+}
+
+/** 一次检验里的每道题 → 题库的文档：[{ id, doc }]。base：这节课 let 的量（浮点，classcheck.js 给） */
+export function bankDocs(check, { session = null, at = Date.now(), base = {} } = {}) {
   const placed = new Set(check.blocks.flatMap((b) => [...b.must, ...b.optional]));
   const spare = new Set(check.spare || []);
   const idOf = Object.fromEntries(check.order.map((pid) => [pid, bankId(fenceOf(check.probes[pid]))]));
@@ -39,6 +54,7 @@ export function bankDocs(check, { session = null, at = Date.now() } = {}) {
       id: idOf[pid],
       doc: {
         fence: fenceOf(p), type: p.type, block: p.block, target: p.target, level: p.level, facet: p.facet, family: p.family,
+        ...(Object.keys(lessonLets(p, base)).length ? { lets: lessonLets(p, base) } : {}),
         retryBank: p.retry.map((r) => idOf[r]).filter(Boolean),
         src: 'ext', from: { session, check: check.id, as }, seen: [], at,
       },
@@ -95,10 +111,12 @@ export function pickRetest({ due = [], bank = [], absorbs = [] } = {}) {
   return { items, missing };
 }
 
-// 改写围栏里的 id:、retry: 两行
-function rewrite(fence, id, retry) {
+// 改写围栏里的 id:、retry: 两行；lets（存题库时抄下的课上的量）写成题自己的 let，放在最前面（题里的 let 可能用到它）
+function rewrite(fence, id, retry, lets = {}) {
   const lines = String(fence).split('\n').filter((l) => !/^\s*retry\s*[:：]/.test(l)).map((l) => (/^\s*id\s*[:：]/.test(l) ? `id: ${id}` : l));
   if (retry.length) lines.splice(lines.length - 1, 0, `retry: ${retry.join(', ')}`);
+  const extra = Object.entries(lets || {}).map(([k, v]) => `let ${k} = ${v}`);
+  if (extra.length) lines.splice(1, 0, ...extra);
   return lines.join('\n');
 }
 
@@ -118,7 +136,7 @@ export function retestCheck({ id = 'rt', title = '复测', items = [], bank = []
     if (lost.length) { dropped.push({ id: bid, why: `retry 的 ${lost.join('、')} 题库里没有` }); continue; }
     const local = `r${k + 1}`;
     const rids = (doc.retryBank || []).map((_, i) => `${local}${String.fromCharCode(97 + i)}`);
-    const fences = [rewrite(doc.fence, local, rids), ...(doc.retryBank || []).map((r, i) => rewrite(byId.get(r).fence, rids[i], []))];
+    const fences = [rewrite(doc.fence, local, rids, doc.lets), ...(doc.retryBank || []).map((r, i) => rewrite(byId.get(r).fence, rids[i], [], byId.get(r).lets))];
     const map = { [local]: bid, ...Object.fromEntries((doc.retryBank || []).map((r, i) => [rids[i], r])) };
     const block = doc.block;
     const one = parseCheck(`check id=${id}`, [`block ${block} must=${local}`, ...fences].join('\n'));

@@ -11,6 +11,7 @@ import { toRecord } from './record.js';
 import { probeView } from './probes.js';
 import { createTimer } from '../timing.js';
 import { tickMs, screenKey, tooSoon, lockState } from './shellkit.js';
+import { sweepInk } from './inkstore.js';
 import { flushIds } from './record.js';
 import { mdToHtml, escapeHtml } from '../blocks/common.js';
 
@@ -81,13 +82,23 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     }
   }
 
+  // 页头：每秒的 tick 只改那一行字，按钮不重建（以前每秒整个重画，iPad 上「先停下」偶尔点不中）
+  let headKey = null;
   function paintHead(v) {
     const total = check.blocks.reduce((n, b) => n + b.must.length, 0);
     const done = check.blocks.reduce((n, b) => n + b.must.filter((id) => state.results[id]?.submitted).length, 0);
-    head.innerHTML = `<span class="ck-title">检验${check.title ? ` · ${escapeHtml(check.title)}` : ''}</span>`
-      + (v.show === 'intro' || v.show === 'done' ? '' : `<span class="ck-meta">必做 ${done}/${total}${v.left !== null ? ` · 剩 ${mmss(v.left)}` : ''}${state.late ? ' · 时间到了' : ''}${v.waiting ? ` · 在判 ${v.waiting} 道` : ''}</span>`)
-      + (['probe', 'teach', 'wait'].includes(v.show) ? '<button type="button" class="btn btn-sm ck-pause">先停下</button>' : '');
-    head.querySelector('.ck-pause')?.addEventListener('click', () => { dispatch({ type: 'pause' }); onPause(state); });
+    const meta = v.show === 'intro' || v.show === 'done' ? null : `必做 ${done}/${total}${v.left !== null ? ` · 剩 ${mmss(v.left)}` : ''}${state.late ? ' · 时间到了' : ''}${v.waiting ? ` · 在判 ${v.waiting} 道` : ''}`;
+    const pause = ['probe', 'teach', 'wait'].includes(v.show);
+    const key = `${meta !== null}:${pause}`;
+    if (key !== headKey) {
+      headKey = key;
+      head.innerHTML = `<span class="ck-title">检验${check.title ? ` · ${escapeHtml(check.title)}` : ''}</span>`
+        + (meta !== null ? '<span class="ck-meta"></span>' : '')
+        + (pause ? '<button type="button" class="btn btn-sm ck-pause">先停下</button>' : '');
+      head.querySelector('.ck-pause')?.addEventListener('click', () => { if (!['probe', 'teach', 'wait'].includes(state.phase)) return; dispatch({ type: 'pause' }); onPause(state); });
+    }
+    const m = head.querySelector('.ck-meta');
+    if (m && m.textContent !== meta) m.textContent = meta;
   }
 
   function paint() {
@@ -156,6 +167,7 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     card.querySelector('.ck-giveup').addEventListener('click', () => {
       if (tooSoon(shownAt, now()) || submitting || state.results[v.id]?.submitted) return;
       const t = timer.submit(v.id) || {};
+      pv?.clearInk?.();
       dispatch({ type: 'giveup', id: v.id, ms: t.ms ?? null });
     });
     syncSubmit();
@@ -165,14 +177,14 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     const btn = main.querySelector('.ck-submit');
     if (!btn || !pv) return;
     const warn = main.querySelector('.ck-warn');
-    const blanks = pv.blanks();
+    const problem = pv.problem();
     const empty = pv.empty();
-    btn.disabled = !sure || empty || blanks > 0;
-    warn.textContent = blanks ? `还有 ${blanks} 格没填` : empty ? '' : !sure ? '先点有多大把握' : '';
+    btn.disabled = !sure || empty || !!problem;
+    warn.textContent = problem || (empty ? '' : !sure ? '先点有多大把握' : '');
   }
 
   async function submit(id) {
-    if (submitting || !pv || pv.blanks() || pv.empty() || !sure) { syncSubmit(); return; }
+    if (submitting || !pv || pv.problem() || pv.empty() || !sure) { syncSubmit(); return; }
     submitting = true;
     const probe = check.probes[id];
     const sureNow = sure;
@@ -190,7 +202,7 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     if (c.strokes) { try { onInk(id, c.strokes, c.events); } catch { /* 回放存不上不影响作答 */ } }
     const machine = judgeMachine(probe, c.answer, vars);
     dispatch({ type: 'submit', id, answer: c.answer, sure: sureNow, ms: t.ms ?? null, msTotal: t.msTotal ?? t.ms ?? null, machine, ...(id === resumedId ? { resumed: true } : {}) });
-    c.clear?.();
+    view0.clearInk?.();
   }
 
   // 失败的一项写成学生看得懂的一句（不露编号）：构造的条件用外部写的话；要点写「没写到：要点」；错说法写「写了常见的错说法」；步骤写第几步
@@ -263,6 +275,8 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
   }
   const release = () => { if (lockKey && readLock()?.id === tab) { try { localStorage.removeItem(lockKey); } catch { /* 无 */ } } };
   if (lockKey) { writeLock(); beat = setInterval(writeLock, 2000); addEventListener('pagehide', release); }
+  // 这台设备上存了 7 天以上、没交的手写（做到一半不做了的）清掉
+  try { sweepInk(localStorage, now()); } catch { /* 无 */ }
   // 还没点开始也先存一份：开始卡停着时刷新，检验照样在
   if (!saved) { try { save(state); } catch { /* 下次再存 */ } }
   paint();
