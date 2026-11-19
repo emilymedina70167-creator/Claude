@@ -8,7 +8,9 @@ import { readCell } from '../anscheck.js';
 import { equivalent } from '../ncalg.js';
 import { normalizeFormula, FORMULA_FUNCS } from '../formula.js';
 import { parseDeriveDo, sampleEnvs, checkLine } from '../derivedo.js';
-import { probeVars, evalIfs, withDefaults } from './spec.js';
+import { probeVars, evalIfs, withDefaults, runVars, runFields, measuresUsed, expectValue } from './spec.js';
+import { variantsOf, variantValues } from '../engines/measures.js';
+import { valueMatch, sameResult, unreadWhy } from './values.js';
 import { parseJudge, STEP_KINDS, STEP_TAGS } from '../solvespec.js';
 
 /** 还有几格没填（空串、只有空白、null） */
@@ -88,9 +90,119 @@ function proofItem(probe, lines = []) {
   return done ? { id: 'proof', ok: true, why: '' } : { id: 'proof', ok: false, why: `没推到 ${p.goal}` };
 }
 
+// —— 408 的 construct、predict（计划 4 Task 3）：先照学生写的跑引擎、再比 ——
+
+const STR_SLOTS = new Set(['seq', 'text', 'procs']);
+const TIE_WHY = '这组输入有并列，页面判不了';
+// 有 run 行、或有 seq / text / procs 格子的是 408 的构造题；数学的照旧走上面的 ifItems
+const is408 = (probe) => (probe.runs || []).length > 0 || (probe.slots || []).some((s) => STR_SLOTS.has(s.kind));
+const runNames = (probe) => (probe.runs || []).map((r) => r.name);
+// 一段式子 / 条件用到的、带并列的量
+const tiedIn = (probe, texts, ties) => measuresUsed({ runs: probe.runs, ifs: texts.map((text) => ({ text })) }).some((m) => ties.includes(m.key));
+
+/**
+ * 408 的构造题：学生的格子代进 run 跑一遍，再逐条判。格式（slotProblems）交之前外壳已经挡住了，这里只保证不抛：
+ * 引擎不收（AVL 里有重复的数）→ 一项 run、引擎原话、停下（判没过，不算待核）；条件用到的量有并列 → 那一项 null；
+ * 页面替学生加的撇号（notes）接在第一项 why 后面，也单独交出去
+ */
+function construct408(probe, answer = {}, base = {}) {
+  const raw = answer.slots || {};
+  let rv;
+  try { rv = runVars(probe, raw, base); } catch (e) { return { items: [{ id: 'run', ok: null, why: `页面算不了：${e.message}` }], needsClaude: false, stop: true }; }
+  if (rv.error) return { items: [{ id: 'run', ok: false, why: rv.error.msg }], needsClaude: false, stop: true, notes: rv.notes };
+  const values = {};
+  for (const s of probe.slots || []) {
+    const v = raw[s.name];
+    if (STR_SLOTS.has(s.kind)) { values[s.name] = String(v ?? ''); continue; }
+    try { values[s.name] = cellNum(v); } catch { values[s.name] = NaN; }
+  }
+  const vars = withDefaults(rv.vars, probe.slots || []);
+  const items = evalIfs(probe.ifs || [], values, vars, probe.slots || [], { runs: runNames(probe) }).map((r) => {
+    const c = probe.ifs.find((x) => x.id === r.id);
+    if (tiedIn(probe, [c.text], rv.ties)) return { id: r.id, ok: null, why: TIE_WHY };
+    return { id: r.id, ok: r.ok, why: r.ok ? '' : r.error ? `代进去算不了：${r.error}` : c.msg || `不满足 ${c.text}` };
+  });
+  items.push(...exprItems(probe, answer.exprs));
+  if (rv.notes.length && items[0]) items[0].why = [items[0].why, ...rv.notes].filter(Boolean).join('；');
+  return { items, needsClaude: false, stop: false, notes: rv.notes };
+}
+
+// 一个 run 的错法：[{ key, label, vars }]（vars 是把这个 run 的量换成错法算出来的那一份）；against 写了只要那几种
+function variantVars(probe, run, vars) {
+  let list;
+  const fields = runFields(probe, run, {});
+  try { list = variantsOf(run.engine, fields); } catch { return []; }
+  const want = probe.against || [];
+  return list.filter((v) => !want.length || want.includes(v.key)).flatMap((v) => {
+    let vv;
+    try { vv = variantValues(run.engine, fields, v.key); } catch { return []; }
+    if (!vv) return [];
+    const out = { ...vars };
+    for (const k of Object.keys(out)) if (k.startsWith(`${run.name}__`)) delete out[k]; // 错法没交的量不拿对的顶上
+    for (const [k, x] of Object.entries(vv.values)) out[`${run.name}__${k}`] = x;
+    return [{ key: v.key, label: v.label, vars: out, ties: vv.ties.map((t) => `${run.name}.${t}`) }];
+  });
+}
+
+/**
+ * predict：每个 expect 一项（x1…）。不对时依次认：引擎的错法（against 的，没写看全部）→ tag、why 是错法的说法；
+ * 外部写的错答案（wrong w1: 式子 => 说明）→ hit、why 是说明；错法、错答案这组数上算出来和对的一样的不用。
+ * 不对的项带 keys（补讲照它找：tag=… → w1 → x1）。有一项不对就停下；都对、写了 must → 理由交页面里的 Claude
+ */
+function predictItems(probe, answer = {}, base = {}) {
+  const names = runNames(probe);
+  let rv;
+  try { rv = runVars(probe, {}, base); } catch (e) { rv = { error: { msg: e.message } }; }
+  if (rv.error) return { items: [{ id: 'run', ok: null, why: `页面跑不了：${rv.error.msg}` }], needsClaude: false, stop: true };
+  const got = answer.expects || {};
+  let variants = null; // 用到再算（错法要把引擎再跑几遍）
+  const allVariants = () => (variants ??= (probe.runs || []).map((run) => ({ run: run.name, list: variantVars(probe, run, rv.vars) })));
+  const items = (probe.expects || []).map((e) => {
+    if (tiedIn(probe, [e.value], rv.ties)) return { id: e.id, ok: null, why: TIE_WHY };
+    let right;
+    try { right = expectValue(e.value, rv.vars, names); } catch (err) { return { id: e.id, ok: null, why: `页面算不了这一项：${err.message}` }; }
+    const s = String(got[e.id] ?? '').trim();
+    if (!s) return { id: e.id, ok: false, why: `没写${e.label}`, keys: [e.id] };
+    const m = valueMatch(s, right);
+    if (m === true) return { id: e.id, ok: true, why: '' };
+    if (m === null) return { id: e.id, ok: false, why: unreadWhy(right), keys: [e.id] };
+    const it = { id: e.id, ok: false, why: '' };
+    const used = new Set(measuresUsed({ runs: probe.runs, expects: [{ value: e.value, wrongs: [] }] }).map((x) => x.run));
+    for (const { run, list } of allVariants()) {
+      if (!used.has(run) || it.tag) continue;
+      for (const v of list) {
+        if (tiedIn(probe, [e.value], v.ties)) continue;
+        let wv;
+        try { wv = expectValue(e.value, v.vars, names); } catch { continue; }
+        if (sameResult(wv, right)) continue;
+        if (valueMatch(s, wv) === true) { it.tag = v.key; it.why = v.label; break; }
+      }
+    }
+    for (const w of e.wrongs || []) {
+      let wv;
+      try { wv = expectValue(w.expr, rv.vars, names); } catch { continue; }
+      if (sameResult(wv, right)) continue;
+      if (valueMatch(s, wv) === true) { it.hit = w.id; it.why = it.why || w.msg; break; }
+    }
+    if (!it.why) it.why = `${e.label}不对`;
+    it.keys = [...(it.tag ? [`tag=${it.tag}`] : []), ...(it.hit ? [it.hit] : []), e.id];
+    return it;
+  });
+  const stop = items.some((x) => x.ok === false);
+  return { items, needsClaude: !stop && (probe.must || []).length > 0, stop };
+}
+
+/** 一项在画面上叫什么（不露编号）：predict 的 expect 是外部写的标签，run 是「跑引擎」；别的 null（外壳照旧） */
+export function itemLabel(probe, id) {
+  if (id === 'run') return '跑引擎';
+  const e = (probe?.expects || []).find((x) => x.id === id);
+  return e ? e.label : null;
+}
+
 /**
  * 页面机器判的那一半。answer 的样子见 Task 2：construct { slots, exprs }；claim { truth, slots?, exprs?, text?, ink?, proof? }；
- * discriminate { can, text?, ink?, result? }；locate { line, text?, ink?, fix? }；recall / solve { text?, ink? }。
+ * discriminate { can, text?, ink?, result? }；locate { line, text?, ink?, fix? }；recall / solve { text?, ink? }；
+ * 408 的 construct 的 seq / text / procs 格子是学生写的原文；predict { expects: { x1: '10', … }, text?, ink? }。
  * 返回 { items, needsClaude（还有要点 / 步骤要页面里的 Claude 判）, stop（判断错了：真假、能不能、哪一行，后面不用判了）}
  */
 export function judgeMachine(probe, answer = {}, base = {}) {
@@ -100,8 +212,11 @@ export function judgeMachine(probe, answer = {}, base = {}) {
   const hasPoints = (probe.must || []).length > 0;
   switch (probe.type) {
     case 'construct':
+      if (is408(probe)) return construct408(probe, answer, base);
       items.push(...ifItems(probe, answer.slots, vars), ...exprItems(probe, answer.exprs));
       return { items, needsClaude: false, stop: false };
+    case 'predict':
+      return predictItems(probe, answer, base);
     case 'claim': {
       const ok = answer.truth === probe.truth;
       items.push({ id: 'truth', ok, why: ok ? '' : `这个命题是${probe.truth ? '真' : '假'}的` });
@@ -191,11 +306,13 @@ export function outcomeOf(probe, items = [], { sure } = {}) {
   return { outcome, failed, guessed: outcome === 'pass' && sure === 'guess' };
 }
 
-/** 判出没过以后显示哪一条补讲：先按失败项的编号，再按失败项的 tag=…，想不出来时 giveup，最后 default；都没有 null */
+/** 判出没过以后显示哪一条补讲：失败项带 keys 的先照 keys，再按失败项的编号，再按失败项的 tag=…，想不出来时 giveup，最后 default；都没有 null */
 export function teachFor(probe, failed = [], items = [], { giveup = false } = {}) {
   const t = probe.teach || {};
   const hit = (key) => (t[key] ? { key, text: t[key] } : null);
   if (giveup) return hit('giveup') || hit('default');
+  // 项自己带了查找的先后（predict：tag=… → w1 → x1）：先照它找；没带 keys 的项照下面的老办法
+  for (const id of failed) for (const k of items.find((x) => x.id === id)?.keys || []) { const h = hit(k); if (h) return h; }
   for (const id of failed) { const h = hit(id); if (h) return h; }
   for (const it of items) if (failed.includes(it.id) && it.tag) { const h = hit(`tag=${it.tag}`); if (h) return h; }
   return hit('default');
@@ -209,6 +326,7 @@ function answerText(probe, answer = {}, images = 0) {
   if (probe.type === 'claim') out.push(`学生判这个命题是：${answer.truth ? '真' : '假'}`);
   if (probe.type === 'discriminate') out.push(`学生判：${answer.can ? '能' : '不能'}用`, ...(answer.result ? [`学生写的结果：${answer.result}`] : []));
   if (probe.type === 'locate') out.push(`学生点的错的那一行：第 ${answer.line} 行`, ...(answer.fix ? [`学生写的改法：${answer.fix}`] : []));
+  if (probe.type === 'predict') for (const e of probe.expects || []) out.push(`学生写的「${e.label}」：${String(answer.expects?.[e.id] ?? '').trim() || '（没写）'}`);
   if (answer.text) out.push('学生打的字：', '<<<', String(answer.text), '>>>');
   if (images) out.push(`附图 ${images} 张：学生在页面上手写的整页（左边淡色的 L1、L2… 是页面写的行号；灰色带一道线的是学生划掉的）。`);
   if (!answer.text && !images) out.push('学生这次没写字。');
