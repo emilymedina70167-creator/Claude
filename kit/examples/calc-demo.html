@@ -75,6 +75,39 @@ answer: (-1)^(n-1)*fact(n-1)/(1+x)^n
 calc: deriv of=ln(1+x) order=n
 ```
 
+## 一行行求极限（任务书验收：加减里乱用等价替换，错的那一行被指出来）
+
+```derive
+id: dd-lim
+mode: do
+title: 求极限
+q: 求 $\lim\limits_{x\to0}\dfrac{\tan x-\sin x}{x^3}$，一行一行往下写。
+calc: limit at=0
+start: (tan(x) - sin(x))/x^3
+goal: 1/2
+```
+
+## 分部积分、换元
+
+```derive
+id: dd-int
+mode: do
+title: 分部积分
+q: 求 $\int x e^x\,dx$。
+calc: antideriv
+start: ∫ x e^x dx
+goal: x*e^x - e^x
+```
+
+```derive
+id: dd-sub
+mode: do
+title: 换元
+q: 求 $\int\sqrt{1-x^2}\,dx$（先写一行「令 x = sin t」）。
+calc: antideriv
+start: ∫ sqrt(1-x^2) dx
+```
+
 ## 概率
 
 ```answer

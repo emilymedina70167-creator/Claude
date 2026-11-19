@@ -4,7 +4,7 @@
 //   judgeCalc：判学生的（学生的字先照输入框读好，和 compareFormula 收的一样）。
 // 判学生时外部的 answer: 是标准（外部是主讲）；页面算的只用来核外部。判不了一律 ok: null。
 import { parse, evaluate } from '../expr.js';
-import { compareFx, floatScope, showNum, DEFAULT_RANGE } from './sample.js';
+import { compareFx, floatScope, showNum, DEFAULT_RANGE, fxEval } from './sample.js';
 import { diffAst, substitute, has } from './diff.js';
 import { numLimit, orderAt } from './limit.js';
 import { numIntegral } from './integral.js';
@@ -75,7 +75,8 @@ const kindText = (k) => (k.kind === 'finite' ? showNum(k.value) : KIND_TEXT[k.ki
 const sameNum = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
 
 // 学生写的 x 的式子在 x 上的函数
-const fn = (ast, x, scope) => { const base = floatScope(scope); return (t) => evaluate(ast, { ...base, [x]: t }); };
+// （走 fxEval：of= 里写了变限积分 int(g, t, 0, x) 也能求值）
+const fn = (ast, x, scope) => { const base = floatScope(scope); return (t) => fxEval(ast, { ...base, [x]: t }); };
 
 // —— 不定积分的 +C、泰勒的 o(x^n)：在语法树最外层的和式里去掉 ——
 function terms(n, sign = 1, out = []) {

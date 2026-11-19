@@ -5,8 +5,9 @@
 //   expandPrimes：实数题里 f' 是求导（T 调用换成导数），∫ 留给 int 自己
 //   int(g) / int(g, t)：不定积分「g 的一个原函数」，对它的变量求导就是 g；
 //   int(g, t, a, b)：变限积分，莱布尼茨：g 不含 x 时导数是 g(b)·b′ − g(a)·a′，含 x 的求不了导
-import { parse } from '../expr.js';
+import { parse, evaluate } from '../expr.js';
 import { useDeriver } from './sample.js';
+import { numIntegral } from './integral.js';
 
 const N = (v) => ({ t: 'num', v });
 const V = (name) => ({ t: 'var', name });
@@ -59,10 +60,12 @@ const sq = (a) => pow(a, N(2));
 export function has(n, x) {
   if (!n) return false;
   if (n.t === 'var') return n.name === x;
-  if (n.t === 'call' && n.name === 'int' && n.args.length >= 2 && n.args[1].t === 'var') {
+  // 变限积分 int(g, t, a, b)：积分变量 t 是约束变量，看 g（t 以外）和上下限；不定积分 int(g, t) 是 t 的函数
+  if (n.t === 'call' && n.name === 'int' && n.args.length === 4 && n.args[1].t === 'var') {
     const [g, t, ...rest] = n.args;
     return (t.name !== x && has(g, x)) || rest.some((r) => has(r, x));
   }
+  if (n.t === 'call' && n.name === 'int' && n.args[1]?.t === 'var') return n.args[1].name === x || has(n.args[0], x);
   return ['a', 'b'].some((k) => has(n[k], x)) || (n.args || n.items || []).some((m) => has(m, x));
 }
 
@@ -179,13 +182,38 @@ export function expandPrimes(n, x = 'x') {
   return out;
 }
 
-// 树里有 T 调用吗
+// 树里有 T 调用吗、有变限积分吗
 const hasPrime = (n) => !!n && ((n.t === 'call' && n.name === 'T') || ['a', 'b'].some((k) => hasPrime(n[k])) || (n.args || n.items || []).some(hasPrime));
+const hasInt = (n) => !!n && ((n.t === 'call' && n.name === 'int' && n.args.length === 4) || ['a', 'b'].some((k) => hasInt(n[k])) || (n.args || n.items || []).some(hasInt));
+
+/** 变限积分 int(g, t, a, b) 在这一组取值上换成数值（数值积分；算不出来是 NaN，判的时候这一点跳过） */
+export function evalInts(n, vars) {
+  if (!n || n.t === 'num' || n.t === 'var') return n;
+  if (n.t === 'call' && n.name === 'int' && n.args.length === 4 && n.args[1].t === 'var') {
+    const [g, tv, lo, hi] = n.args.map((m, i) => (i === 1 ? m : evalInts(m, vars)));
+    let v = NaN;
+    try {
+      const a = evaluate(lo, vars), b = evaluate(hi, vars);
+      const r = numIntegral((t) => evaluate(g, { ...vars, [tv.name]: t }), a, b);
+      v = r.ok === true ? r.value : NaN;
+    } catch { v = NaN; }
+    return { t: 'num', v };
+  }
+  const out = { ...n };
+  if (n.a) out.a = evalInts(n.a, vars);
+  if (n.b) out.b = evalInts(n.b, vars);
+  if (n.args) out.args = n.args.map((m) => evalInts(m, vars));
+  if (n.items) out.items = n.items.map((m) => evalInts(m, vars));
+  return out;
+}
 
 // fxEval（fx/sample.js）求值前先把 ' 换成导数：对哪个变量求，按这一组取值里有的——有 x 用 x，否则只有一个实数变量就用它
 useDeriver((node, vars = {}) => {
-  if (!hasPrime(node)) return node;
-  const names = Object.keys(vars).filter((k) => typeof vars[k] === 'number' && !['e', 'pi'].includes(k));
-  const x = 'x' in vars || !names.length ? 'x' : names.length === 1 ? names[0] : 'x';
-  return expandPrimes(node, x);
+  let out = node;
+  if (hasPrime(out)) {
+    const names = Object.keys(vars).filter((k) => typeof vars[k] === 'number' && !['e', 'pi'].includes(k));
+    const x = 'x' in vars || !names.length ? 'x' : names.length === 1 ? names[0] : 'x';
+    out = expandPrimes(out, x);
+  }
+  return hasInt(out) ? evalInts(out, vars) : out;
 });

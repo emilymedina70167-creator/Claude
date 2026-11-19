@@ -255,6 +255,7 @@ function tex(n) {
       if (TEX_FN[n.name]) return `${TEX_FN[n.name]}\\left(${args}\\right)`;
       if (n.name === 'log' && n.args.length === 2) return `\\log_{${tex(n.args[1])}}\\left(${tex(n.args[0])}\\right)`;
       if (n.name === 'fact') return `${wrap(n.args[0], 9)}!`;
+      if (n.name === 'int') return `\\int${n.args.length === 4 ? `_{${tex(n.args[2])}}^{${tex(n.args[3])}}` : ''} ${tex(n.args[0])}${n.args[1] ? `\\,\\mathrm{d}${tex(n.args[1])}` : ''}`;
       if (n.name === 'choose' && n.args.length === 2) return `\\binom{${tex(n.args[0])}}{${tex(n.args[1])}}`;
       return `\\operatorname{${n.name}}\\left(${args}\\right)`;
     }

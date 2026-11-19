@@ -2,6 +2,7 @@
 // 不相等就告诉学生「取哪组数时上一行等于什么、这一行等于什么」，学生改；老师看到的记录精确到第几行、两边各等于什么。
 // 判断都在 derivedo.js（纯函数）。
 import { parseDeriveDo, sampleEnvs, checkLine } from '../derivedo.js';
+import { readLine } from '../fx/deriveline.js';
 import { formulaTeX } from '../formula.js';
 import { normalizeFormula, FORMULA_FUNCS } from '../formula.js';
 import { session } from '../session.js';
@@ -15,7 +16,8 @@ export function deriveDo(el, src) {
   const id = el.closest?.('[data-bid]')?.dataset.bid || el.dataset.bid || 'derive';
   const envs = sampleEnvs(spec, { seed: id, base: floatVars(session.vars) });
   const names = Object.keys(envs[0] || {});
-  const texOf = (s) => { try { return formulaTeX(normalizeFormula(s, { names, funcs: FORMULA_FUNCS })); } catch { return ''; } };
+  // 高数的推导（计划 3）照 fx/deriveline.js 的读法（∫ … dx、lim、函数不带括号）；别的照线代的读法
+  const texOf = (s) => { try { return formulaTeX(spec.fx ? readLine(s, { kind: spec.calc?.kind }).src : normalizeFormula(s, { names, funcs: FORMULA_FUNCS })); } catch { return ''; } };
   // 第一行先查一遍算不算得出来：老师写错了要在页面上报出来，不能等学生写了才发现
   const first = checkLine(spec, envs, spec.start, spec.start);
   if (first.error) throw new Error(`start: ${first.error}`);
@@ -40,6 +42,9 @@ export function deriveDo(el, src) {
   const fb = $('.dd-fb');
   const preview = $('.dd-preview');
   const lines = [spec.start];
+  // 高数的推导（计划 3）：换元、每一行的极限变量和点接着往下传（fx/deriveline.js 的 ctx）；说明行（令 t = 1/x）不算上一行
+  let state = {};
+  let prevMath = spec.start;
   let tries = 0, total = 0, closed = false;
   const t0 = Date.now();
   const q = String(fields.q || title).replace(/\$/g, '').slice(0, 300);
@@ -56,19 +61,34 @@ export function deriveDo(el, src) {
     if (closed) return;
     const text = input.value.trim();
     if (!text) { input.focus(); return; }
-    const r = checkLine(spec, envs, lines.at(-1), text);
+    const r = checkLine(spec, envs, prevMath, text, state);
     if (r.error) { show('bad', `看不懂这一行：${r.error}`); return; } // 写法问题不算一次尝试
-    tries++; total++;
+    if (r.ctx) state = { ctx: r.ctx };
     const k = lines.length + 1;
-    session.record({ type: 'derive', liveOnly: true, title, q, detail: `第 ${k} 行`, value: text, ok: r.ok, attempts: tries, check: r.ok ? undefined : r.why, ms: Date.now() - t0, el });
-    if (!r.ok) { show('bad', `这一行和上一行不相等：${r.why}`); return; }
+    // 换元的说明行：照写上去，不判，下一行还是和它前面那一行比
+    if (r.note) {
+      lines.push(text);
+      tbody.insertAdjacentHTML('beforeend', `<tr class="dv-line is-new"><td class="dv-r muted">${escapeHtml(text)}</td><td class="dv-note muted">说明</td></tr>`);
+      session.record({ type: 'derive', liveOnly: true, title, q, detail: `第 ${k} 行（换元的说明）`, value: text, ok: true, attempts: 0, check: '换元的说明行，不判', ms: Date.now() - t0, el });
+      input.value = ''; preview.innerHTML = '';
+      show('ok', '记下了，接着往下写');
+      return;
+    }
+    tries++; total++;
+    // same: 'limit'：和上一行不恒等、只是极限一样——记进 check，带两行的原文（外部要能逐行看是正当的替换还是碰巧，审的定 5）
+    const check = r.ok === true ? (r.same === 'limit' ? `只是极限一样（不恒等）：上一行「${prevMath}」，这一行「${text}」` : undefined) : r.why;
+    session.record({ type: 'derive', liveOnly: true, title, q, detail: `第 ${k} 行`, value: text, ok: r.ok, attempts: tries, check, ms: Date.now() - t0, el });
+    if (r.ok === false) { show('bad', spec.fx ? `这一行不对：${r.why}` : `这一行和上一行不相等：${r.why}`); return; }
     lines.push(text);
-    tbody.insertAdjacentHTML('beforeend', `<tr class="dv-line is-new"><td class="dv-r">= ${tex2html(r.tex)}</td><td class="dv-note">✓</td></tr>`);
+    prevMath = text;
+    const mark = r.ok === null ? '？' : '✓';
+    tbody.insertAdjacentHTML('beforeend', `<tr class="dv-line is-new${r.ok === null ? ' is-unsure' : ''}"><td class="dv-r">= ${tex2html(r.tex)}</td><td class="dv-note">${mark}</td></tr>`);
     input.value = '';
     preview.innerHTML = '';
     tries = 0;
     if (r.done) finish(true);
-    else show('ok', '对，接着往下写');
+    else if (r.ok === null) show('mid', `页面判不了这一行（${r.why || '待外部核'}），可以接着往下写`);
+    else show('ok', r.same === 'limit' ? '和上一行的极限一样，接着往下写' : '对，接着往下写');
   }
 
   function show(kind, msg) {
