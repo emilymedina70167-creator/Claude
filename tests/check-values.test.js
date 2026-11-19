@@ -20,7 +20,7 @@ test('numMatch：0.75、75%、3/4 不管位数都对；百分数换成小数以�
   for (const s of ['0.75', '75%', '3/4', '.75', '75.0%', '75％']) assert.equal(numMatch(s, 0.75), true, s);
   assert.equal(numMatch('53.33%', 0.53333), true);
   assert.equal(numMatch('53.33%', 8 / 15), true);
-  assert.equal(numMatch('53%', 8 / 15), true); // 换成小数是 0.53：2 位
+  assert.equal(numMatch('53%', 8 / 15), false); // 换成小数是 0.53：2 位小数，但只有 2 位有效数字
   assert.equal(numMatch('53.3%', 8 / 15), true);
   assert.equal(numMatch('54%', 8 / 15), false);
   assert.equal(numMatch('0.5', 8 / 15), false);
@@ -29,6 +29,22 @@ test('numMatch：0.75、75%、3/4 不管位数都对；百分数换成小数以�
   assert.equal(numMatch('10.0', 10), true);
   assert.equal(numMatch('9', 10), false);
   assert.equal(numMatch('-2', -2), true);
+});
+
+test('numMatch：不一样的小数还要至少 3 位有效数字；一模一样的照旧不管', () => {
+  assert.equal(numMatch('5%', 0.0533), false);
+  assert.equal(numMatch('0.05', 0.0533), false);
+  assert.equal(numMatch('0.0533', 0.0533), true);
+  assert.equal(numMatch('0.0533', 0.05333), true);
+  assert.equal(numMatch('5.33%', 0.0533), true);
+  assert.equal(numMatch('5.33%', 0.05333), true);
+  assert.equal(numMatch('0.00', 0.004), false);
+  assert.equal(numMatch('0%', 0.004), false);
+  assert.equal(numMatch('0.004', 0.004), true);
+  assert.equal(numMatch('5.30', 5.3), true); // 一模一样
+  assert.equal(numMatch('0.5', 0.5), true);
+  assert.equal(numMatch('75%', 0.75), true);
+  assert.equal(numMatch('3/4', 0.75), true);
 });
 
 test('numMatch：读不懂是 null', () => {
@@ -48,6 +64,11 @@ test('bigO：log 的底、lg、空格、上标、乘号都不管', () => {
   assert.notEqual(bigO('O(nlogn)'), bigO('O(n^2)'));
   assert.equal(bigO('O(1)'), 'O(1)');
   assert.equal(bigO('O(2n)'), 'O(n)');
+  // 跟在变量、log 后面的数读不懂（不当成系数放过）
+  assert.equal(bigO('O(n2)'), null);
+  assert.equal(bigO('O(n 2)'), null);
+  assert.equal(bigO('O(logn2)'), null);
+  assert.equal(bigO('O(n+2)'), 'O(1+n)'); // 另起一项的数照旧
   assert.equal(bigO('O(n+e)'), bigO('O(e + n)'));
   assert.equal(bigO('O(|V|+|E|)'), bigO('O(e+v)'));
   assert.equal(bigO('O(log²n)'), bigO('O((log n)^2)'));

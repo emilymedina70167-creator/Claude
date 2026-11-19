@@ -223,6 +223,15 @@ test('predict：答案是序列、复杂度、小数', () => {
   assert.equal(item(judgeMachine(rate, { expects: { x1: '0.8' } }), 'x1').ok, false);
 });
 
+test('predict：外部写的式子算出来不是数（除以 0）→ ok: null，不怪学生', () => {
+  const p = P('predict', `id: q\ntarget: x\nlevel: 基础\nrun r: paging algo=lru frames=3 refs="${REFS}"\nexpect 怪的: r.faults / 0`);
+  const r = judgeMachine(p, { expects: { x1: '10' } });
+  assert.equal(item(r, 'x1').ok, null);
+  assert.match(item(r, 'x1').why, /页面算不了/);
+  assert.equal(r.stop, false);
+  assert.equal(outcomeOf(p, r.items).outcome, 'pending');
+});
+
 test('predict：用到的量有并列 → ok: null', () => {
   const p = P('predict', `id: q\ntarget: x\nlevel: 方法\nrun r: paging algo=opt frames=3 refs="${REFS}"\nexpect 换出的页: r.victims\nexpect 缺页: r.faults`);
   const r = judgeMachine(p, { expects: { x1: '3 4 1 2', x2: '7' } });

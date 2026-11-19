@@ -161,6 +161,8 @@ function predictItems(probe, answer = {}, base = {}) {
     if (tiedIn(probe, [e.value], rv.ties)) return { id: e.id, ok: null, why: TIE_WHY };
     let right;
     try { right = expectValue(e.value, rv.vars, names); } catch (err) { return { id: e.id, ok: null, why: `页面算不了这一项：${err.message}` }; }
+    // 外部写的式子算出了不是数的数（除以 0）：是题的毛病，不怪学生——待核
+    if (typeof right === 'number' && !Number.isFinite(right)) return { id: e.id, ok: null, why: '页面算不了这一项：算出来不是一个数' };
     const s = String(got[e.id] ?? '').trim();
     if (!s) return { id: e.id, ok: false, why: `没写${e.label}`, keys: [e.id] };
     const m = valueMatch(s, right);
