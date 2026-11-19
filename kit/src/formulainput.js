@@ -14,7 +14,8 @@ const SHOW = { alpha: 'α', beta: 'β', gamma: 'γ', lambda: 'λ', mu: 'μ', the
 
 /** names：式子里能用的量（自由变量在前，比如 n、A、alpha）；keys：小键盘上放哪几个（默认 names 的前几个） */
 // read：normalizeFormula 的选项（实数题 formulaSpec 给 { names, real }，读不准的写法照实说）；不给就只用 names
-export function formulaInput(container, { names = [], keys = names, placeholder = '', read = null } = {}) {
+// pad：实数题多一排函数键（计划 3：sin cos ln e π √，极限题 ∞ +∞ −∞ 不存在，积分题 发散；formulaSpec 的 pad）
+export function formulaInput(container, { names = [], keys = names, placeholder = '', read = null, pad: fnKeys = [] } = {}) {
   const opts = read || { names };
   const root = document.createElement('div');
   root.className = 'fi';
@@ -44,7 +45,7 @@ export function formulaInput(container, { names = [], keys = names, placeholder 
     // Apple Pencil 点进来：用系统的「随手写」直接手写成文字，不弹小键盘
     if (lastPointer === 'pen') { inp.setAttribute('inputmode', 'text'); return; }
     inp.setAttribute('inputmode', 'none');
-    showPad(keys);
+    showPad(keys, fnKeys);
   });
 
   return {
@@ -78,7 +79,10 @@ if (typeof document !== 'undefined') {
   });
 }
 
-function showPad(names) {
+// 函数键按下插什么：sin 插 sin(，别的照写
+const FN_INSERT = { sin: 'sin(', cos: 'cos(', tan: 'tan(', ln: 'ln(', arctan: 'arctan(', '√': '√(', 'e^': 'e^(', '∫': '∫ ', dx: ' dx' };
+
+function showPad(names, fns = []) {
   if (!pad) {
     pad = document.createElement('div');
     pad.className = 'keypad kp-formula';
@@ -99,8 +103,11 @@ function showPad(names) {
     ['1', '1'], ['2', '2'], ['3', '3'], ['0', '0'], ["'", 'ᵀ'], ['→', '→']];
   // 量不满一行时补空位，数字区对齐
   const fill = (6 - ((vars.length + 3) % 6)) % 6;
+  // 函数键一排六个，放在量那一排下面，不够的补空位
+  const fnRow = fns.map((f) => [`fn:${f}`, f, 'kp-fn']);
+  const fnFill = fnRow.length ? (6 - (fnRow.length % 6)) % 6 : 0;
   pad.querySelector('.kp-keys').innerHTML = keys.slice(0, vars.length + 3).map(btn).join('')
-    + '<span></span>'.repeat(fill) + keys.slice(vars.length + 3).map(btn).join('');
+    + '<span></span>'.repeat(fill) + fnRow.map(btn).join('') + '<span></span>'.repeat(fnFill) + keys.slice(vars.length + 3).map(btn).join('');
   pad.classList.add('show');
   document.body.classList.add('has-keypad');
   setTimeout(() => target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50);
@@ -128,6 +135,7 @@ function press(k) {
     else if (a > 0) { inp.value = s.slice(0, a - 1) + s.slice(a); inp.setSelectionRange(a - 1, a - 1); inp.dispatchEvent(new Event('input', { bubbles: true })); }
   } else if (k === '←') inp.setSelectionRange(Math.max(0, a - 1), Math.max(0, a - 1));
   else if (k === '→') inp.setSelectionRange(Math.min(s.length, a + 1), Math.min(s.length, a + 1));
+  else if (k.startsWith('fn:')) { const f = k.slice(3); put(FN_INSERT[f] ?? f); }
   else if (k === 'ok') { const host = inp.closest('.fi'); hidePad(); host?.dispatchEvent(new CustomEvent('mi-enter')); }
   // 多个字母的量（alpha）写成希腊字母，前后不用加乘号：页面会补
   else put(SHOW[k] || k);

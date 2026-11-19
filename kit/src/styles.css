@@ -508,6 +508,8 @@ body.has-keypad { padding-bottom: 250px; }
 .kp-formula .kp-keys { grid-template-columns: repeat(6, minmax(44px, 64px)); }
 .kp-formula .kp-side { grid-template-rows: 1fr; }
 .kp-formula .kp-var { font-style: italic; font-family: KaTeX_Math, "Times New Roman", serif; font-size: 23px; color: var(--yellow); }
+/* 实数题的函数键（计划 3）：sin、ln、∞、不存在……字多的缩一点，按键照样 44px 以上 */
+.kp-formula .kp-fn { font: 600 16px/1 var(--sans); color: rgb(var(--chalk-rgb) / 0.9); min-height: 44px; padding: 0 2px; white-space: nowrap; }
 
 /* —— 猜想 —— */
 .cj-text {

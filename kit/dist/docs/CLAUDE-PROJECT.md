@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-19**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-19b**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -28,7 +28,7 @@
 
 ### 表达式（所有组件通用）
 
-**表达式**：数、向量 `[1, 2]`、矩阵按行写 `[[1, 2], [3, 4]]`，运算 `+ - * / ^`（`A^-1` 是逆），`A'` 是转置，`2u` 可以省略乘号。函数：`det` `inv` `T` `col(A, j)` `row(A, i)`（从 1 开始数）、`dot` `norm` `|v|` `proj(u, v)` `cross` `rot(角度)` `lerp(a, b, t)` `mat(列1, 列2, …)`（由列组成矩阵）、`I`（单位矩阵）、`sqrt` `abs` `sin` `cos` `tan`（角度制）、`exp` `ln` `log` `floor` `min` `max` `round`，常数 `pi` `e`。比较 `<` `<=` `>` `>=` `==` 成立得 1、不成立得 0（可以写分段函数 `(x>0)*x`）。概率：`choose(n, k)` `fact(n)` `normpdf(x, μ, σ)` `normcdf(x, μ, σ)` `binompmf(k, n, p)` `poissonpmf(k, λ)` `exppdf(x, λ)` `unifpdf(x, a, b)`。矩阵：`tr`（迹）`rank`（秩）`rref`（行最简形）`diag(1, 2, 3)`（对角矩阵）、`I(3)` 也可以写成 `E(3)`（教材的记号；只写 `I`、`E` 是 2 阶）。`dec(x, 2)` 把数四舍五入写成小数（`\calc{dec(61/4)}` 写出 15.25，默认 2 位，末尾的 0 不写），只能直接写出来、不能再算。
+**表达式**：数、向量 `[1, 2]`、矩阵按行写 `[[1, 2], [3, 4]]`，运算 `+ - * / ^`（`A^-1` 是逆），`A'` 是转置，`2u` 可以省略乘号。函数：`det` `inv` `T` `col(A, j)` `row(A, i)`（从 1 开始数）、`dot` `norm` `|v|` `proj(u, v)` `cross` `rot(角度)` `lerp(a, b, t)` `mat(列1, 列2, …)`（由列组成矩阵）、`I`（单位矩阵）、`sqrt` `abs` `sin` `cos` `tan`（弧度；scene、space 里角度）、`exp` `ln` `log` `floor` `min` `max` `round`，常数 `pi` `e`。比较 `<` `<=` `>` `>=` `==` 成立得 1、不成立得 0（可以写分段函数 `(x>0)*x`）。概率：`choose(n, k)` `fact(n)` `normpdf(x, μ, σ)` `normcdf(x, μ, σ)` `binompmf(k, n, p)` `poissonpmf(k, λ)` `exppdf(x, λ)` `unifpdf(x, a, b)`。矩阵：`tr`（迹）`rank`（秩）`rref`（行最简形）`diag(1, 2, 3)`（对角矩阵）、`I(3)` 也可以写成 `E(3)`（教材的记号；只写 `I`、`E` 是 2 阶）。`dec(x, 2)` 把数四舍五入写成小数（`\calc{dec(61/4)}` 写出 15.25，默认 2 位，末尾的 0 不写），只能直接写出来、不能再算。
 
 **向量都是列向量**，转置的规则处处一样：`a'` 是 1×n 的行，`a'*b` 是一个数（内积，也可以写 `dot(a, b)`），`a*b'` 是 n×n 矩阵（外积），`A*a` 是矩阵乘列向量。两个向量直接写 `a*b` 会报错，免得分不清是内积还是外积。
 
@@ -69,6 +69,7 @@ b = [1, 1, -2]
 - `answer`：自己算、自己填，自动判分 → `components/answer.md`
 - `answer`（数据结构、操作系统、组成原理、计网）：二进制、十六进制 → `components/answer.md`
 - `answer`（线代）：基、特征向量、含 n 的式子 → `components/answer.md`
+- `answer`（高数、概率）：函数式、导数、积分、极限、泰勒 → `components/answer.md`
 - `conjecture`：说出你的发现（由页面里的 Claude 批改；`grade: off` 只记录不批改） → `components/conjecture.md`
 - `practice`：程序出题、程序判分 → `components/practice.md`
 - `practice` / `use`（数据结构、操作系统、组成原理、计网）：演示组件当练习题 → `components/practice.md`

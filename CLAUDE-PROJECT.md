@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-19**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-19b**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -28,7 +28,7 @@
 
 ### 表达式（所有组件通用）
 
-**表达式**：数、向量 `[1, 2]`、矩阵按行写 `[[1, 2], [3, 4]]`，运算 `+ - * / ^`（`A^-1` 是逆），`A'` 是转置，`2u` 可以省略乘号。函数：`det` `inv` `T` `col(A, j)` `row(A, i)`（从 1 开始数）、`dot` `norm` `|v|` `proj(u, v)` `cross` `rot(角度)` `lerp(a, b, t)` `mat(列1, 列2, …)`（由列组成矩阵）、`I`（单位矩阵）、`sqrt` `abs` `sin` `cos` `tan`（角度制）、`exp` `ln` `log` `floor` `min` `max` `round`，常数 `pi` `e`。比较 `<` `<=` `>` `>=` `==` 成立得 1、不成立得 0（可以写分段函数 `(x>0)*x`）。概率：`choose(n, k)` `fact(n)` `normpdf(x, μ, σ)` `normcdf(x, μ, σ)` `binompmf(k, n, p)` `poissonpmf(k, λ)` `exppdf(x, λ)` `unifpdf(x, a, b)`。矩阵：`tr`（迹）`rank`（秩）`rref`（行最简形）`diag(1, 2, 3)`（对角矩阵）、`I(3)` 也可以写成 `E(3)`（教材的记号；只写 `I`、`E` 是 2 阶）。`dec(x, 2)` 把数四舍五入写成小数（`\calc{dec(61/4)}` 写出 15.25，默认 2 位，末尾的 0 不写），只能直接写出来、不能再算。
+**表达式**：数、向量 `[1, 2]`、矩阵按行写 `[[1, 2], [3, 4]]`，运算 `+ - * / ^`（`A^-1` 是逆），`A'` 是转置，`2u` 可以省略乘号。函数：`det` `inv` `T` `col(A, j)` `row(A, i)`（从 1 开始数）、`dot` `norm` `|v|` `proj(u, v)` `cross` `rot(角度)` `lerp(a, b, t)` `mat(列1, 列2, …)`（由列组成矩阵）、`I`（单位矩阵）、`sqrt` `abs` `sin` `cos` `tan`（弧度；scene、space 里角度）、`exp` `ln` `log` `floor` `min` `max` `round`，常数 `pi` `e`。比较 `<` `<=` `>` `>=` `==` 成立得 1、不成立得 0（可以写分段函数 `(x>0)*x`）。概率：`choose(n, k)` `fact(n)` `normpdf(x, μ, σ)` `normcdf(x, μ, σ)` `binompmf(k, n, p)` `poissonpmf(k, λ)` `exppdf(x, λ)` `unifpdf(x, a, b)`。矩阵：`tr`（迹）`rank`（秩）`rref`（行最简形）`diag(1, 2, 3)`（对角矩阵）、`I(3)` 也可以写成 `E(3)`（教材的记号；只写 `I`、`E` 是 2 阶）。`dec(x, 2)` 把数四舍五入写成小数（`\calc{dec(61/4)}` 写出 15.25，默认 2 位，末尾的 0 不写），只能直接写出来、不能再算。
 
 **向量都是列向量**，转置的规则处处一样：`a'` 是 1×n 的行，`a'*b` 是一个数（内积，也可以写 `dot(a, b)`），`a*b'` 是 n×n 矩阵（外积），`A*a` 是矩阵乘列向量。两个向量直接写 `a*b` 会报错，免得分不清是内积还是外积。
 
@@ -173,6 +173,60 @@ check: A*ans == b => 代回去，$A\mathbf x$ 不等于 $\mathbf b$
 正交矩阵：`check: ans'*ans == E(3) => 列不是两两正交的单位向量`；对角化：`check: det(ans) != 0; inv(ans)*A*ans == [[2,0],[0,-1]]`。条件里比的是数值（误差 $10^{-6}$）。
 
 `formula:` 的范围可以改：`formula: n=0..5`；几个变量：`formula: n, k`；别的变量也行：特征多项式写 `formula: λ`、`answer: (λ-1)(λ-2)^2`（展开、因式分解的写法都认）。
+
+### answer 的高数写法：函数式、导数、积分、极限、泰勒
+
+<!-- 科目：高数 概率 -->
+
+```answer
+id: q-int
+q: 求 $\int x e^x\,dx$。
+answer: x*e^x - e^x
+calc: antideriv of=x*e^x
+```
+
+- 三角函数一律**弧度**（`answer`、`\calc`、`let`、`graph`、`derive`、`practice`、检验题都是；`scene`、`space` 的图形命令里是角度，`rot(角度)` 是角度）。
+- 我能写的函数：`sin cos tan cot sec csc arcsin arccos arctan ln lg exp sqrt abs`，`log_2 x`（底数）、`e^x`、`e^{2x}`、`π`、`|x|`、`n!`、`C(n, k)`、`Φ(x)`（标准正态分布函数）、`φ(x)`（标准正态密度）。不带括号的函数吃后面的「系数 + 一个名字（带它的指数）」：`sin 2x` 是 $\sin(2x)$，`sin x^2` 是 $\sin(x^2)$，`sinx/x` 是 $\sin(x)/x$，`sin^2 x` 是 $(\sin x)^2$；框下面的预览里函数的参数一律带括号。读不准的不读、照实说：`e^2x`（「写 e^(2x) 或 e^2·x」）、`sin xy`、没写底数的 `log x`、`sin^-1 x`、嵌套的 `||x|-1|`。题里自己定义了 `e`、`C`、`φ` 的，照题里的。
+- 外部写的 `answer:`、`of=`、`let` 照表达式的写法（乘号写 `*`）；函数也多了上面这些。
+- **函数式作答**：`formula: x`（变量叫 `x`、`y` 时按实数取点），或者写范围 `formula: x in (0, 1)`、`domain: x in (0, inf)`；别的名字（`n`、`λ`、`t`）照旧整数 1…6，题里用到矩阵时 `x` 也照旧整数。页面在范围里随机取点比值：没写范围取 $(-3, 3)$；$(a, +\infty)$ 取 $a + 10^{u}$、$u\in(-2, 1.5)$；同一道题每次取的点一样；答案在那一点没定义、不是有限数、绝对值超过 $10^8$ 的点跳过，接着取到 16 个有效点（最多试 200 个），不到 6 个是「页面判不了」；误差 $10^{-7}$（相对）；答案有定义、我的式子没定义的点算错（$(-3,3)$ 上 `ln x` 不是 `ln|x|`，写 `domain: x in (0, 3)` 就对）。
+- **`calc:` 一行就够**（不用再配 `formula:`），页面自己核你写的 `answer:`，对不上报写法错误，页面核不了的只在预检里提醒：
+
+| `calc:` | 我写 | 页面怎么判 |
+|---|---|---|
+| `deriv of=f`（`order=2`、`wrt=y`、`wrt=x,y`） | 导数的式子 | 和 `answer:` 实数取点比 |
+| `deriv of=f order=n`（可加 `at=0`） | 含 n、x 的通式 | n = 1…5 各求一次导数比 |
+| `antideriv of=f`（`C=need` 默认 / `any` / `no`） | 原函数，`+C`、`+c`、`+C_1` 都认 | 和 `answer:` 差一个常数就对；`need` 时少了 +C 判错，说「少写了 +C」 |
+| `integral of=f from=0 to=inf` | 一个数，或 `发散` | 和 `answer:` 比 |
+| `limit of=f at=0`（`side=+`、`at=inf` / `+inf` / `-inf`） | 一个数，或 `∞` `+∞` `-∞` `不存在` | 和 `answer:` 比 |
+| `equiv of=f at=0` | g（x→0 时和 f 等价） | f/g 的极限是 1 就对 |
+| `order of=f at=0` | 一个数（可以是 `3/2`） | 和 `answer:` 比 |
+| `taylor of=f at=0 order=3` | 多项式（`+o(x^3)` 认了扔掉） | 一项项比系数，说哪一项错 |
+
+- 极限：`at=inf` 是 $|x|\to\infty$（两侧都算），`+inf`、`-inf` 是单侧。`answer:` 写 `inf`（无符号 ∞）、`+inf`、`-inf`、`不存在`。答案是 +∞ 时我写 ∞ 也对（提一句「写 +∞ 更准确」）；答案是 ∞ 时我写不存在也对（提一句「更准确是 ∞」）。`of=` 里只有 `n` 是数列极限，按 $n\to+\infty$ 核；有 `!`、`(-1)^n` 的页面核不了。
+- 答案是 $e^2$、$\pi/4$ 这种数：`formula: -`（没有变量的式子作答），我写 `e^2`、`π/4`。
+- 页面判不了的一律写「？页面判不了，待外部核」，记录里 `ok: null`，不算对也不算错。
+
+<!-- 完整写法 -->
+
+怎么核的：导数用符号求导（链式法则，每个初等函数一条），泰勒系数是 $f^{(k)}(a)/k!$ 再找回分数（系数不是有理数的展开页面判不了：自检报错）。极限：每一侧取两组步长 $h = 0.2\cdot 2^{-k}$（$k=0\dots14$）和 $0.2\cdot 3^{-k}$（$k=0\dots8$），各外推到 $h=0$，两组都收敛（估计误差 $\le 10^{-6}$）而且对得上才算这个数；一直变大、超过开头一千倍的是 ±∞；两侧一侧 +∞ 一侧 −∞ 是 ∞，两侧不同的数、一侧无穷一侧有限是不存在。振荡的（$\sin\frac1x$）、不是 $h$ 的幂级数的（$x\ln x$、$x^x$ 在 $0^+$、$x^{1/x}$ 在 $+\infty$）页面判不了。阶：解析的看第一个不为 0 的泰勒系数，不然看 $\log|f(h)|/\log h$ 的斜率（差 0.05 以内）。积分：自适应 Gauss–Kronrod（15 点），误差 $10^{-10}$，最多 2000 段，不收敛的判不了；无穷限换 $x = a + t/(1-t)$。页面上一道题的自检最多 50 ms，超了不核；外部预检 `node tools/ext-check.mjs --next 一轮.txt --lint` 完整地核（上限 2 s）。
+
+泰勒、极限的例子：
+
+```answer
+id: q-lim
+q: 求 $\lim\limits_{x\to0}\dfrac{\tan x-\sin x}{x^3}$。
+answer: 1/2
+calc: limit of=(tan(x)-sin(x))/x^3 at=0
+```
+
+```answer
+id: q-taylor
+q: 把 $\ln(1+x)$ 展开到 $x^3$。
+answer: x - x^2/2 + x^3/3
+calc: taylor of=ln(1+x) at=0 order=3
+```
+
+概率：`answer:` 里能用 `normpdf(x, μ, σ)`、`normcdf`、`binompmf(k, n, p)`、`poissonpmf(k, λ)`、`exppdf(x, λ)`、`unifpdf(x, a, b)`、`Phi`、`phi`；我写 `Φ(1.96)`、`C(5,2)0.3^2 0.7^3` 这类。
 
 ### conjecture：说出你的发现（由页面里的 Claude 批改；`grade: off` 只记录不批改）
 

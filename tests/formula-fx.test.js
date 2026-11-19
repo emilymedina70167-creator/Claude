@@ -15,7 +15,7 @@ function near(student, want, vars = [{ x: 0.7 }, { x: 1.3 }], opts = R) {
 }
 
 const CASES = [
-  ['sinx', 'sin(x)'], ['sin x', 'sin(x)'], ['sin(x)', 'sin(x)'], ['sin 2x', 'sin(2*x)'], ['sin x^2', 'sin(x^2)'],
+  ['sinx', 'sin(x)'], ['sin2x', 'sin(2*x)'], ['cos3x', 'cos(3*x)'], ['ln2x', 'ln(2*x)'], ['sin2xcosx', 'sin(2*x)*cos(x)'], ['sin x', 'sin(x)'], ['sin(x)', 'sin(x)'], ['sin 2x', 'sin(2*x)'], ['sin x^2', 'sin(x^2)'],
   ['sin πx', 'sin(pi*x)'], ['sin 2πx', 'sin(2*pi*x)'], ['sin -x', 'sin(-x)'],
   ['sinx cosx', 'sin(x)*cos(x)'], ['sinxcosx', 'sin(x)*cos(x)'], ['2sinxcosx', '2*sin(x)*cos(x)'], ['sin^2 x', 'sin(x)^2'], ['sin^2(x)', 'sin(x)^2'],
   ['sinx/x', 'sin(x)/x'], ['sin x e^x', 'sin(x)*e^x'], ['sinx·x', 'sin(x)*x'], ['sin x + 1', 'sin(x)+1'],

@@ -66,6 +66,11 @@ export function normalizeFormula(text, { names = [], funcs = FORMULA_FUNCS, real
       if (lb) { toks.push({ k: 'fn', v: 'log', base: bases[+lb[1]], sp }); continue; }
       // C(n, k)：组合数（题里没定义 C、后面紧跟括号时）
       if (w === 'C' && !known.has('C') && /^\s*\(/.test(s.slice(i))) { toks.push({ k: 'fn', v: 'choose', isC: true, sp }); continue; }
+      // sin2x、ln3x：函数名后面紧跟数字（分词时连成了一个词），拆开，后面的从数字那里重新读
+      if (!all.has(w) && !fn.has(w)) {
+        const f = [...fn].sort((a, b) => b.length - a.length).find((g) => g !== 'log' && w.startsWith(g) && /^\d/.test(w.slice(g.length))); // log 写底数用 log_2（log2 照旧不认）
+        if (f) { toks.push({ k: 'fn', v: f, sp }); i -= w.length - f.length; continue; }
+      }
       splitName(w, all, fn).forEach((t, j) => toks.push({ ...t, cst: t.k === 'name' && cst.has(t.v), sp: j === 0 && sp }));
     } else toks.push({ k: 'op', v: m[3] === '**' ? '^' : m[3], sp });
   }
@@ -302,6 +307,14 @@ export function parseFree(spec) {
   });
 }
 
+// 小键盘多的那一排：极限题能写无穷和不存在，积分题能写发散，别的是常用函数
+function padFor(c) {
+  if (c && c.kind === 'limit') return ['∞', '+∞', '-∞', '不存在', 'e', 'π'];
+  if (c && c.kind === 'integral') return ['发散', 'e', 'π', '√', 'ln', '∞'];
+  if (c && c.kind === 'order') return [];
+  return ['sin', 'cos', 'ln', 'e^', 'π', '√', ...(c?.kind === 'antideriv' ? ['C', 'arctan'] : [])];
+}
+
 // calc: 没配 formula: 时的变量（第五节第 2 条：一行就够）
 function calcFree(c) {
   // of 里的实数变量都要取点（偏导 wrt=y 时 x 照样要有值）；n 是 n 阶导的通式自己的
@@ -498,7 +511,7 @@ export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
     if (calc) {
       // 学生写 +C、o(x^3)：输入框读法里认这几个名字，判的时候在语法树上去掉（fx/calc.js 的 stripTail）
       const extra = calc.kind === 'antideriv' ? CONST_NAMES.filter((c) => !(c in scope)) : [];
-      const spec = { expected, free, scope, names: [...names, ...extra], keys, display: shown, real: true, domain, ints, seed, calc,
+      const spec = { expected, free, scope, names: [...names, ...extra], keys, display: shown, real: true, domain, ints, seed, calc, pad: padFor(calc),
         read: { names: [...names, ...extra], real: domain.length > 0, ...(calc.kind === 'taylor' ? { funcs: [...FORMULA_FUNCS, 'o', 'O'] } : {}) } };
       const { errors, hints } = calcSelfCheck(spec, { budget: opts.budget ?? PAGE_BUDGET });
       if (errors.length) throw new Error(errors.join('；'));
@@ -507,7 +520,7 @@ export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
     }
     const self = compareFx(ast, ast, { domain, ints, scope, seed });
     if (self.ok !== true) throw new Error(`answer: ${shown} 在给的范围里算不出来（${self.note}）：检查式子，或用 domain: x in (…) 给范围`);
-    return { expected, free, scope, names, keys, display: shown, real: true, domain, ints, seed, read: { names, real: true } };
+    return { expected, free, scope, names, keys, display: shown, real: true, domain, ints, seed, read: { names, real: true }, pad: padFor(null) };
   }
   const self = compareFormula(ast, ast, { free, scope });
   if (!self.ok) throw new Error(`answer: ${src} 代不进去：${self.msg}`);
