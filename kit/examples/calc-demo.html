@@ -1,0 +1,119 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>高数的式子</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+unit: 高数、概率的式子（计划 3）
+---
+
+# 高数、概率的式子
+
+## 不定积分（任务书验收）
+
+写 `xe^x-e^x+C` 对，写 `xe^x+e^x` 错，少了 `+C` 说「少写了 +C」。
+
+```answer
+id: q-int
+q: 求 $\int x e^x\,dx$。
+answer: x*e^x - e^x
+calc: antideriv of=x*e^x
+```
+
+## 极限（任务书验收）
+
+```answer
+id: q-lim
+q: 求 $\lim\limits_{x\to0}\dfrac{\tan x-\sin x}{x^3}$。
+answer: 1/2
+calc: limit of=(tan(x)-sin(x))/x^3 at=0
+```
+
+## 泰勒（任务书验收）
+
+```answer
+id: q-taylor
+q: 把 $\ln(1+x)$ 展开到 $x^3$。
+answer: x - x^2/2 + x^3/3
+calc: taylor of=ln(1+x) at=0 order=3
+```
+
+## 极限是无穷
+
+```answer
+id: q-inf
+q: 求 $\lim\limits_{x\to0}\dfrac{1}{x}$。
+answer: inf
+calc: limit of=1/x at=0
+```
+
+## 函数式、弧度
+
+块里的 `let` 按弧度：$a = \sin\frac{\pi}{6} = \calc{sin(pi/6)}$。
+
+```answer
+id: q-fx
+q: 化简 $2\sin x\cos x$（$a$ 是 $\sin\frac\pi6$）。
+let a = sin(pi/6)
+answer: 2*a*sin(2*x)
+formula: x
+```
+
+## 偏导、n 阶导
+
+```answer
+id: q-partial
+q: $z = x^2y + \sin x$，求 $\dfrac{\partial z}{\partial y}$。
+answer: x^2
+calc: deriv of=x^2*y + sin(x) wrt=y
+```
+
+```answer
+id: q-nth
+q: 求 $\ln(1+x)$ 的 $n$ 阶导数。
+answer: (-1)^(n-1)*fact(n-1)/(1+x)^n
+calc: deriv of=ln(1+x) order=n
+```
+
+## 一行行求极限（任务书验收：加减里乱用等价替换，错的那一行被指出来）
+
+```derive
+id: dd-lim
+mode: do
+title: 求极限
+q: 求 $\lim\limits_{x\to0}\dfrac{\tan x-\sin x}{x^3}$，一行一行往下写。
+calc: limit at=0
+start: (tan(x) - sin(x))/x^3
+goal: 1/2
+```
+
+## 分部积分、换元
+
+```derive
+id: dd-int
+mode: do
+title: 分部积分
+q: 求 $\int x e^x\,dx$。
+calc: antideriv
+start: ∫ x e^x dx
+goal: x*e^x - e^x
+```
+
+```derive
+id: dd-sub
+mode: do
+title: 换元
+q: 求 $\int\sqrt{1-x^2}\,dx$（先写一行「令 x = sin t」）。
+calc: antideriv
+start: ∫ sqrt(1-x^2) dx
+```
+
+## 概率
+
+```answer
+id: q-prob
+q: $X\sim N(0,1)$，求 $P(X\le 1.96)$（用 $\Phi$ 写）。
+answer: normcdf(1.96)
+formula: -
+```
+</script>

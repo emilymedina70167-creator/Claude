@@ -128,3 +128,18 @@ test('blankCells 数空的格', () => {
   assert.equal(blankCells(3), 0);
   assert.equal(blankCells(''), 1);
 });
+
+// 计划 3（dr-calc-base Task 8）：检验题的式子能写高数的函数式
+test('discriminate 的 result、locate 的 fix、construct 的式子能写函数式', () => {
+  const d = P('discriminate', 'id: q\nq: 能不能用\ncan: 能\ntarget: x\nlevel: 核心\nmust m1: 分部积分\nresult: x*e^x - e^x');
+  assert.equal(item(judgeMachine(d, { can: true, result: '(x-1)e^x' }), 'result').ok, true);
+  assert.equal(item(judgeMachine(d, { can: true, result: 'xe^x' }), 'result').ok, false);
+  const l = P('locate', 'id: q\nq: 错在哪\ntarget: x\nlevel: 方法\nline: 一\nline: 二\nbug: 2\nmust m1: 为什么\nfix: 2*sin(x)*cos(x)');
+  assert.equal(item(judgeMachine(l, { line: 2, fix: 'sin 2x' }), 'fix').ok, true);
+  const c = P('construct', `${HEAD}slots: a=num\nif: a != 0 => 不能是 0\nexpr 化简: sin(2*x)\nexample: a=1`);
+  assert.equal(item(judgeMachine(c, { slots: { a: '1' }, exprs: { e1: '2sinxcosx' } }), 'e1').ok, true);
+});
+test('线代的式子照旧走非交换的判法', () => {
+  const r = judgeMachine(construct, { slots: { A: [[1, 0], [0, 0]], B: [[0, 1], [0, 0]] }, exprs: { e1: 'B*A-A*B' } });
+  assert.equal(item(r, 'e1').ok, true);
+});

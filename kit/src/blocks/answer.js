@@ -47,7 +47,7 @@ export function answerWidget(body, spec, onDone) {
   // 标准答案按格写的矩阵（Aⁿ 每个元素含 n）：每格一个式子框，逐格判
   const cells = formula ? matrixCells(formula.expected) : null;
   const input = cells ? formulaGrid(box, { rows: cells.length, cols: cells[0].length, names: formula.names, keys: formula.keys })
-    : formula ? formulaInput(box, { names: formula.names, keys: formula.keys }) : text ? textAnswerInput(box, shape) : mathInput(box, shape);
+    : formula ? formulaInput(box, { names: formula.names, keys: formula.keys, read: formula.read, pad: formula.pad }) : text ? textAnswerInput(box, shape) : mathInput(box, shape);
   const fb = body.querySelector('.ans-feedback');
   const btnCheck = body.querySelector('.ans-check');
   const btnHint = body.querySelector('.ans-hint');
@@ -105,9 +105,9 @@ export function answerWidget(body, spec, onDone) {
       // 用的是页面读懂以后的式子（补了乘号、换了上标），学生写的原样记进记录
       try {
         if (cells) {
-          const c = compareCells(cells, given, { free: formula.free, scope: formula.scope });
+          const c = compareCells(cells, given, formula);
           r = { ok: c.ok, wrong: c.wrong, powerBan: c.first?.powerBan, msg: c.first ? `第 ${c.first.r + 1} 行第 ${c.first.c + 1} 列${c.wrong.length > 1 ? `（一共 ${c.wrong.length} 格不对）` : ''}：${c.first.msg}` : '', note: c.wrong.length ? `第 ${c.wrong.map((i) => `${Math.floor(i / cells[0].length) + 1},${(i % cells[0].length) + 1}`).join('、')} 格不对` : '' };
-        } else r = compareFormula(formula.expected, given, { free: formula.free, scope: formula.scope });
+        } else r = compareFormula(formula.expected, given, formula);
         // form:：值对了，再看写成什么样（3^9A、因式分解）
         if (r.ok && spec.form) { const fm = checkForm(given, spec.form, formula); if (!fm.ok) r = { ok: false, msg: fm.msg, note: `值对了，写法不是要的样子（${spec.form}）` }; }
       } catch (e) { show('is-bad', e.message); return; }
@@ -124,6 +124,14 @@ export function answerWidget(body, spec, onDone) {
     else if (spec.cond) r = checkConditions(spec.cond, given, (typeof spec.vars === 'function' ? spec.vars() : spec.vars) || {});
     else if (!formula) r = check(given, spec.answer, spec.type);
     spec.onTry?.({ text: input.text(), ok: r.ok, attempts, work, note: lastNote || undefined });
+    // 页面判不了（实数取点取不到点、算不出来）：不算对也不算错，待外部核；记录里 ok 是 null（计划 3）
+    // （不锁输入框、不算做完：学生可以改了再交；交了两次以上出「看答案」）
+    if (r.ok === null) {
+      input.markAll('');
+      show('is-unsure', `<div class="q-verdict">？页面判不了，待外部核</div>${r.msg ? `<div>${r.msg}</div>` : ''}<div class="muted">可以改了再交，也可以接着往下做。</div>`);
+      if (attempts >= 2) btnReveal.hidden = false;
+      return;
+    }
     if (r.ok) {
       input.markAll('is-right');
       show('is-ok', `<div class="q-verdict">✓ 正确${attempts > 1 ? `（第 ${attempts} 次）` : ''}</div>${r.msg ? `<div>${r.msg}</div>` : ''}${spec.explain ? mdToHtml(spec.explain) : ''}`);
@@ -246,10 +254,11 @@ export function answer(el, src) {
   if (!fields.answer) throw new Error('answer 需要 answer:（标准答案或表达式）');
   // 块里可以先 let 定义变量，再用表达式算答案；整节课的量（let 块）也能直接用
   const vars = floatVars(session.vars);
-  for (const c of cmds) if (c.kind === 'let') vars[c.name] = c.expr(vars);
+  // let 照弧度重新编译：parseScene 是 scene 的解析，它按角度编译（画图用），answer 的量是答案，按弧度（计划 3）
+  for (const c of cmds) if (c.kind === 'let') vars[c.name] = compile(c.src)(vars);
   const scope = letScope(cmds, session.vars);
   // formula: n —— 答案是含 n 的式子：学生写式子，页面代几组 n 比较
-  const formula = fields.formula ? formulaSpec(fields.answer, fields.formula, scope) : null;
+  const formula = fields.formula || fields.calc ? formulaSpec(fields.answer, fields.formula, scope, { domain: fields.domain, calc: fields.calc }) : null;
   // form: 要求写成什么样：标准答案自己先要满足
   if (fields.form && !formula) session.problem(el, 'answer', 'form:（要求写成什么样）要配 formula:（没有变量写 formula: -）');
   // 标准答案写成 det(A) 这种（页面算）就不查写法，只查写出来的式子

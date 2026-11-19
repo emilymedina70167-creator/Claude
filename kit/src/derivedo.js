@@ -12,11 +12,13 @@
 //
 // 为什么随机取几组：学生写的是一般的式子（α、β 是任意向量），只拿一组数比，碰巧相等的错式子也会被判对。
 // 每行先按 formula.js 的读法读懂（省略乘号、ᵀ、α β、上标），再用 expr.js 在每一组数上算；有一组不等就是不等。
-import { compile, isNum, isVec, isMat, valueTeX, eye } from './expr.js';
+import { compile, evaluate, isNum, isVec, isMat, valueTeX, eye } from './expr.js';
 import { normalizeFormula, formulaTeX, FORMULA_FUNCS } from './formula.js';
+import { parseDeriveCalc, checkFxLine, readLine } from './fx/deriveline.js';
+import { parseDomain, compareFx, DEFAULT_RANGE } from './fx/sample.js';
 
 const FIELD = /^\s*([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/;
-const FIELDS = new Set(['id', 'title', 'q', 'mode', 'vars', 'start', 'goal', 'note', 'hint', 'samples']);
+const FIELDS = new Set(['id', 'title', 'q', 'mode', 'vars', 'start', 'goal', 'note', 'hint', 'samples', 'calc', 'domain']);
 export const SAMPLES = 4;
 const GREEK_ALIAS = [['a', 'alpha'], ['b', 'beta'], ['c', 'gamma'], ['l', 'lambda'], ['x', 'xi']];
 
@@ -28,7 +30,9 @@ function generator(spec) {
   if ((m = s.match(/^mat\(\s*(\d+)\s*,\s*(\d+)\s*\)$/))) return { kind: 'mat', m: +m[1], n: +m[2] };
   if ((m = s.match(/^int\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)$/))) return { kind: 'int', lo: +m[1], hi: +m[2] };
   if (/^num$/.test(s)) return { kind: 'int', lo: -5, hi: 5 };
-  throw new Error(`vars 里的「${s}」看不懂：写 vec(3)、mat(2,3)、int(1,5) 或 num`);
+  // 实数（计划 3）：x=real(-2, 2)
+  if ((m = s.match(/^real\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)$/))) return { kind: 'real', lo: +m[1], hi: +m[2] };
+  throw new Error(`vars 里的「${s}」看不懂：写 vec(3)、mat(2,3)、int(1,5)、num 或 real(-2, 2)`);
 }
 
 // 种子随机数（同一道题每次取的数一样：刷新后、老师和学生看到的同一组）
@@ -43,6 +47,7 @@ function draw(g, r) {
   const nz = () => { let x = 0; while (x === 0) x = pick(r, -4, 4); return x; };
   if (g.kind === 'vec') return Array.from({ length: g.n }, nz);
   if (g.kind === 'mat') return Array.from({ length: g.m }, () => Array.from({ length: g.n }, nz));
+  if (g.kind === 'real') return g.lo + (0.05 + 0.9 * r()) * (g.hi - g.lo);
   let x = pick(r, g.lo, g.hi);
   if (x === 0 && g.lo < 0 && g.hi > 0) x = g.hi;
   return x;
@@ -68,7 +73,11 @@ export function parseDeriveDo(src) {
     vars.push([m[1], generator(m[2])]);
   }
   const samples = Math.max(1, Math.min(8, Number(fields.samples) || (vars.length ? SAMPLES : 1)));
-  return { fields, vars, lets, start: fields.start, goal: fields.goal || '', samples };
+  // 高数（计划 3）：写了 calc:、domain: 或者有实数的变量，就按实数取点、交给 fx/deriveline.js 判
+  const calc = parseDeriveCalc(fields.calc);
+  const domain = [...vars.filter(([, g]) => g.kind === 'real').map(([name, g]) => ({ name, lo: g.lo, hi: g.hi, openLo: true, openHi: true })), ...parseDomain(fields.domain || '')];
+  const fx = !!calc || domain.length > 0;
+  return { fields, vars, lets, start: fields.start, goal: fields.goal || '', samples, ...(fx ? { fx: true, calc, domain } : {}) };
 }
 
 /** 每一组取值（vars 随机取、let 接着算）；base：整节课的量 */
@@ -120,7 +129,8 @@ const compact = (s) => String(s).replace(/\s+/g, '');
  * 查一行：prev 是上一行（式子），line 是学生写的这一行。envs：sampleEnvs 的结果。
  * 返回 { ok, tex（这一行写成公式）, norm（读懂以后的写法）, error?（看不懂 / 算不出来）, why?（不等时：哪一组数、两边各等于什么）, done?（推到 goal 了）}
  */
-export function checkLine(spec, envs, prev, line) {
+export function checkLine(spec, envs, prev, line, state = {}) {
+  if (spec.fx) return checkFx(spec, prev, line, state);
   const names = Object.keys(envs[0] || {});
   const order = orderOf(envs[0]);
   let norm;
@@ -146,6 +156,32 @@ export function checkLine(spec, envs, prev, line) {
   if (spec.goal) { try { done = compact(prep(spec.goal, names, order)) === compact(norm); } catch { done = false; } }
   return { ok: true, tex, norm, done };
 }
+
+// 高数的一行（fx/deriveline.js）。state.ctx：换元、每一行的极限变量和点（blocks/derivedo.js 存着、接着传）
+function checkFx(spec, prev, line, state) {
+  const kind = spec.calc?.kind || null;
+  const ctx = state.ctx || (kind === 'limit' ? { lim: { v: spec.calc.v, at: spec.calc.at, side: spec.calc.side || 'both' } } : {});
+  let prevRead;
+  try { prevRead = readLine(prev, { kind }); } catch (e) { return { ok: false, error: `上一行看不懂：${e.message}` }; }
+  const r = checkFxLine(spec.calc, { read: prevRead, lim: ctx.lim }, line, { ctx, domain: spec.domain });
+  if (r.error) return { ok: false, error: r.error };
+  let tex = '';
+  try { tex = r.read ? formulaTeX(r.read.src) : ''; } catch { tex = ''; }
+  const out = { ok: r.ok, tex, norm: r.read?.src || line, ctx: r.ctx || ctx, ...(r.note ? { note: true } : {}), ...(r.same ? { same: r.same } : {}), ...(r.ok !== true ? { why: r.why } : {}) };
+  if (r.ok === true && !r.note && spec.goal) out.done = reachedGoal(spec, r.read, kind);
+  return out;
+}
+// 推到 goal 了吗：极限题是一个数（值一样）；不定积分是没有 ∫ 的那一行和 goal 差一个常数；别的恒等
+function reachedGoal(spec, read, kind) {
+  try {
+    const g = readLine(spec.goal, { kind });
+    if (kind === 'limit') return !read.vars.length && !g.vars.length && Math.abs(evalNum(read.ast) - evalNum(g.ast)) <= 1e-9 * Math.max(1, Math.abs(evalNum(g.ast)));
+    if (kind === 'antideriv' && /\bint\(/.test(read.src)) return false;
+    const r = compareFx(g.ast, read.ast, { domain: spec.domain.length ? spec.domain : [{ ...DEFAULT_RANGE, name: 'x' }], upToConst: kind === 'antideriv' });
+    return r.ok === true;
+  } catch { return false; }
+}
+const evalNum = (ast) => { const v = evaluate(ast, {}); return typeof v === 'number' ? v : NaN; };
 
 /** 值写成一行文字（给老师的记录用）：[[1, 2], [3, 4]]、5 */
 export function valueText(v) {

@@ -25,7 +25,7 @@ export function scene(el, src) {
   const { fields } = api;
   const titleText = fields.title || '探索 Explore';
   // 文字里的 \calc 用图里自己的 let（按初始值）加上整节课的量
-  const scope = letScope(parsed.cmds, session.vars);
+  const scope = letScope(parsed.cmds, session.vars, { deg: true });
   for (const msg of calcProblems([fields.title, fields.q, fields.note], scope)) session.problem(el, 'scene', msg);
   const md = (t, o) => withCalcScope(scope, () => mdToHtml(t, o));
   el.querySelector('.widget').insertAdjacentHTML('afterbegin', `<div class="w-title">${md(titleText, { inline: true })}</div>`);

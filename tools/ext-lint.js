@@ -9,6 +9,8 @@ import { parseLets, calcValue, letValue, expandCalc, floatVars } from '../kit/sr
 import { parseDeriveDo, sampleEnvs, checkLine } from '../kit/src/derivedo.js';
 import { parseSolve } from '../kit/src/solvespec.js';
 import { selfCheck } from '../kit/src/check/spec.js';
+import { formulaSpec } from '../kit/src/formula.js';
+import { LINT_BUDGET } from '../kit/src/fx/calc.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(here, '../kit/src');
@@ -122,6 +124,8 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
         // derive 的学生版（dr-batch4 第 3 条：queue 里写了页面不认的 E(2)，预检说没问题）：start / goal / let 照页面同一份读一遍、算一遍
         if (f.name === 'derive' && /^\s*mode\s*[:：]\s*do\s*$/m.test(f.body)) for (const msg of deriveDoProblems(f.body)) problems.push({ where, msg });
         if (f.name === 'solve') for (const msg of parseSolve(f.body, { ext: true }).problems) problems.push({ where, msg });
+        // answer 的 formula: / calc:（计划 3）：和页面同一个 formulaSpec，外部写的答案先核；页面核不了的是提示
+        if (f.name === 'answer') for (const p of answerProblems(f.body, vars)) problems.push({ where, ...p });
         if (f.body.includes('\\calc')) for (const e of expandCalc(f.body, (x) => calcValue(x, vars).tex).errors) problems.push({ where, msg: `\\calc{${e.expr}} 算不出来：${e.msg}` });
       }
       // 组件外面的正文里的 \calc（整节课的量）
@@ -193,6 +197,26 @@ export function designHints({ out, prior = [], here = new Map() } = {}) {
     });
   }
   return hints;
+}
+
+// 答案、formula:、calc:、domain: 读一遍、算一遍（页面上自检限 50 ms，这里给 2 s：外部写错的答案页面来不及核时也有人核）。
+// 回 [{ msg, level? }]
+const one = (body, k) => body.match(new RegExp(`^\\s*${k}\\s*[:：]\\s*(.*)$`, 'm'))?.[1]?.trim();
+// 函数名：整数取点的变量出现在这些函数里，提醒一句（审的定 2）
+const REAL_FNS = /\b(ln|sqrt|arcsin|arccos|arctan|sin|cos|tan|log)\s*\(|\be\s*\^|√/;
+export function answerProblems(body, vars = {}) {
+  const fields = { answer: one(body, 'answer'), formula: one(body, 'formula'), calc: one(body, 'calc'), domain: one(body, 'domain') };
+  if (!fields.answer || (!fields.formula && !fields.calc)) return [];
+  const scope = { ...vars };
+  for (const m of String(body).matchAll(/^\s*let\s+([A-Za-z_]\w*)\s*=\s*(.+)$/gm)) { try { scope[m[1]] = calcValue(m[2], scope).value; } catch { /* 页面会报 */ } }
+  let spec;
+  try { spec = formulaSpec(fields.answer, fields.formula, scope, { calc: fields.calc, domain: fields.domain, budget: LINT_BUDGET }); } catch (e) { return [{ msg: e.message }]; }
+  const out = (spec.hints || []).map((msg) => ({ msg, level: 'hint' }));
+  for (const f of spec.free || []) {
+    if (!f.values || !REAL_FNS.test(fields.answer) || !new RegExp(`\\b${f.name}\\b`).test(fields.answer)) continue;
+    out.push({ msg: `${f.name} 按整数 ${f.values[0]}…${f.values.at(-1)} 取点；要实数写 formula: ${f.name} in (…)`, level: 'hint' });
+  }
+  return out;
 }
 
 /** derive mode: do 的写法查一遍：读得懂、取得了数、start 算得出、goal 读得懂（和页面 blocks/derivedo.js 同一份函数） */
