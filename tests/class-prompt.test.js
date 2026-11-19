@@ -46,8 +46,9 @@ test('组件说明：从 CLAUDE-PROJECT.md 截出第三节，示例和表格都�
   // 课堂每一轮只带「通用 + 这门课」的那几节（subject.js），每门课的说明要短；整节打包进 la-kit.js，宽一点
   for (const subject of SUBJECTS) assert.ok(bytes(docsForSubject(DOCS, subject)) < 40 * KiB, `${subject}的组件说明太长：${bytes(docsForSubject(DOCS, subject))} 字节`);
   // 整节（含完整写法）只打包进 la-kit.js，不会整个进说明（每一轮只带这门课的精简版 + 点名的完整写法）：上限管的是包的大小。
-  // 2026-11-03 加 practice 的 use、vary、答案的新写法后到了 160 KiB，放宽到 176 KiB
-  assert.ok(bytes(DOCS) < 176 * KiB, `组件说明整节太长：${bytes(DOCS)} 字节`);
+  // 2026-11-03 加 practice 的 use、vary、答案的新写法后到了 160 KiB，放宽到 176 KiB；
+  // 2026-11-19 计划 3 加「answer 的高数写法」（任务书要把取点、误差写进手册）到了 179 KiB，放宽到 192 KiB（也给计划 4 的检验题型留地方）
+  assert.ok(bytes(DOCS) < 192 * KiB, `组件说明整节太长：${bytes(DOCS)} 字节`);
 });
 
 test('组件说明：围栏里的「## 」不算节标题，代码块里的空行原样保留', () => {

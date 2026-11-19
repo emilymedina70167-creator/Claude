@@ -2,7 +2,7 @@
 // 画手绘风格的圈、框、下划线、涂色、划掉、箭头（markdraw.js），旁边写旁注。
 // 宿主变大小、图重画、矩阵动起来时跟着重新摆；找不到要标的地方时返回中文原因（课堂报给 Claude，组件报成写法错误）。
 import { mdToHtml } from './render.js';
-import { compile, isVec } from './expr.js';
+import { compile as compileRad, isVec } from './expr.js';
 import { shapeFor, arrowPath, arcPath, sameLine, leaderPath, placeNote, union, strokeObstacles, roomAround } from './markdraw.js';
 
 // 同一行两处之间的箭头拱起来：旁注写在拱的那一边
@@ -13,6 +13,9 @@ function arcOf(from, to, obs) {
 import { wordsIn, wordSpan, phraseHasPunct } from './entext.js';
 import { findText, pickHit, textPreview } from './textfind.js';
 import { ENCLOSE_STYLES } from './markspec.js';
+
+// 画图的地方三角函数按角度（curve … for s 0 360、滑块的角度）：计划 3 以后表达式默认弧度，这里明着要角度（tests/expr-rad.test.js）
+const compile = (src) => compileRad(src, { deg: true });
 
 const NS = 'http://www.w3.org/2000/svg';
 // 颜色都从主题变量取（不同风格的黑板颜色不一样）

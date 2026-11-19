@@ -38,6 +38,15 @@
 - 2026-11-19 补齐：审查留下的小毛病、retry 模板（`check/template.js`），见 `CLAUDE.md` 第 8 批那一条。
 - 没做的：408、英语的探题类型——设计稿在 `docs/superpowers/specs/2026-11-19-probes-408-en-design.md` 和学习台 `dev_requests/dr-probes-408-en`（`status: design`），等外部在 `review` 字段写意见、改成 `open` 再做。同一个模板在两节课里配了不同的课上的量，题库只记第一次的 `lets`（编号照原文算，见 `bank.js` 的 `lessonLets`）；复测时它们挂在题上（`probe.base`，`attachBases`）。
 
+## 第 9 批：计划 3，高数、概率的式子底座（2026-11-19）
+
+`dev_requests/dr-calc-base`：外部写的任务书，外部审过（`review`：有条件通过，必改 1–6、必加 7–12，改完直接开工），我的回复在 `reviewReply`（三处歧义我的理解）。执行计划 `docs/superpowers/plans/2026-11-19-calc-base.md`，第六节那张表是照审改的、以它为准。分两次合进 `main`：
+
+- 全部做完、两批一起合进 `main`、发布（原定分两次合，学生说做好直接执行）。见 `CLAUDE.md` 第 9 批那一条。
+- 第一节用到高数的真课以后：读 `evidence` 里 `ok: null` 的作答（页面判不了的）和 `check` 里「只是极限一样」的行，看是阈值太严还是写法没认。
+- 判错要比判对更有把握（计划第五节第 1 条）：改 `fx/limit.js`、`fx/sample.js` 的阈值以前先跑 `tests/fx-limit.test.js` 的经典极限。
+- 弧度：新加调用 `compile` / `evaluate` / `calcValue` 的文件要在 `tests/expr-rad.test.js` 里归类。
+
 ## 现在做到哪
 
 全部做完、已发布（版本见 `CLAUDE-PROJECT.md` 开头）。下一步是学生用外部上一节真课。

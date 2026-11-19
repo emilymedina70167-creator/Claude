@@ -55,9 +55,9 @@ export function steps(el, src) {
   const { fields, steps: list } = parseSteps(src);
   // formula: n —— 这一步的答案是含 n 的式子：学生写式子，页面代值比较（只用在 do: true 的步）
   list.forEach((s, i) => {
-    if (!s.formula) return;
+    if (!s.formula && !s.calc) return;
     if (!s.do || s.choices) throw new Error(`第 ${i + 1} 步的 formula: 只用在 do: true 的步里（学生自己写出式子）`);
-    s.fspec = formulaSpec(s.answer, s.formula, { ...session.vars });
+    s.fspec = formulaSpec(s.answer, s.formula, { ...session.vars }, { domain: s.domain, calc: s.calc });
     s.num = null;
   });
   const title = fields.title || '一步一步来';
