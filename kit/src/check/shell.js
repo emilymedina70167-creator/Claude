@@ -7,7 +7,7 @@
 //   save(state)：存进度（sessions/{编号}/check/{检验 id}）；record(ids, state)：写这几道的证据；onEnd({ state, absorbs })：结束、回到黑板
 import { createFlow, step, view, resumeJobs, needsFallback, absorbOf } from './flow.js';
 import { materialize } from './template.js';
-import { judgeMachine, JUDGE_WAIT } from './judge.js';
+import { judgeMachine, JUDGE_WAIT, itemLabel } from './judge.js';
 import { toRecord } from './record.js';
 import { probeView } from './probes.js';
 import { createTimer } from '../timing.js';
@@ -211,8 +211,18 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     if (state.results[id]?.submitted) view0.clearInk?.();
   }
 
-  // 失败的一项写成学生看得懂的一句（不露编号）：构造的条件用外部写的话；要点写「没写到：要点」；错说法写「写了常见的错说法」；步骤写第几步
+  // 失败的一项写成学生看得懂的一句（不露编号）：构造的条件用外部写的话；要点写「没写到：要点」；错说法写「写了常见的错说法」；步骤写第几步。
+  // 408、英语的项先问 judge.js 的 itemLabel（「第 2 趟（d = 2）」「缺页次数」「谓语」「测试 2」）；按学生自己的上一行推对了的（carried）不列
   function itemLine(probe, it) {
+    if (it.carried && it.ok === true) return '';
+    const lab = itemLabel(probe, it.id);
+    if (lab) {
+      const w = it.why ? mdToHtml(it.why, { inline: true }) : '';
+      const html = it.ok === null ? `${escapeHtml(lab)}：页面拿不准，主讲会核${w ? `（${w}）` : ''}`
+        : it.why && (it.why.includes(lab) || it.why.includes(lab.replace(/的$/, ''))) ? w // why 里已经说了是哪一项（「第 2 趟……」「多标了……」）
+        : `${escapeHtml(lab)}${w ? `：${w}` : it.ok === 'missing' ? '没写' : '不对'}`;
+      return `<li class="ck-item">${html}</li>`;
+    }
     const pt = [...(probe.must || []), ...(probe.may || [])].find((x) => x.id === it.id);
     const wr = (probe.wrong || []).find((x) => x.id === it.id);
     const stepN = (probe.steps || []).findIndex((x) => x.id === it.id);
@@ -228,10 +238,13 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
   function paintTeach(v) {
     const t = v.teach;
     const bad = (t.items || []).filter((x) => x.ok !== true && t.failed.includes(x.id));
+    // 页面替学生做了的事（408 的构造题：「页面把第二个 49 记成 49′」）写在对了的项的 why 里：也写出来
+    const notes = (t.items || []).filter((x) => x.ok === true && x.why).map((x) => x.why);
     const text = t.guessed ? '蒙对的不算吸收：再做一道同类的确认一下。' : t.text === null && t.key === 'claude' ? '页面在写补讲…' : t.text ? t.text : '';
     main.innerHTML = `<div class="ck-card ck-teach">
       <div class="ck-tag">${t.guessed ? '蒙对了' : '没过'} · ${escapeHtml(v.id)}</div>
       ${bad.length ? `<ul class="ck-items">${bad.map((it) => itemLine(check.probes[v.id], it)).join('')}</ul>` : t.failed.includes('giveup') ? '<p>想不出来。</p>' : ''}
+      ${notes.length ? `<p class="ck-note">${notes.map((x) => escapeHtml(x)).join('；')}</p>` : ''}
       ${text ? `<div class="ck-teach-text">${mdToHtml(text)}</div>` : ''}
       <button type="button" class="btn btn-primary ck-next"${t.text === null && t.key === 'claude' ? ' disabled' : ''}>${t.last ? '接着做' : '做一道同类的'}</button></div>`;
     // 补讲还在写（页面里的 Claude）：按钮先灰着，字到了这一屏重画（screenKey 变了）

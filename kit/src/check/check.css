@@ -62,3 +62,25 @@ body.is-checking .class-pages, body.is-checking .class-pins, body.is-checking .c
 
 /* 触控目标至少 44px（btn-sm 本来 38px） */
 .ck-strip .btn, .ck-replay .btn, button[data-ckreplay] { min-height: 44px; }
+
+/* 计划 4：408、英语的作答（probes.js、filltable.js）。输入框 16px、按钮 44px，颜色都走变量 */
+.ck-in { width: 100%; box-sizing: border-box; min-height: 44px; padding: 8px 14px; border: 0; border-radius: 12px; background: var(--field, rgb(var(--shade-rgb) / 0.18)); box-shadow: var(--field-edge, none); color: var(--chalk); font: 16px/1.5 var(--sans); }
+.ck-in:focus { outline: 2px solid rgb(var(--yellow-rgb) / 0.55); outline-offset: 0; }
+.ck-line-field { max-width: 640px; }
+.ck-slot-str { flex: 1 1 320px; align-items: flex-start; }
+.ck-slot-str .ck-slot-box { flex: 1; min-width: 0; }
+.ck-slot-str .ti { width: 100%; }
+.ck-slot-wide { flex-basis: 100%; }
+.ck-slot-str .ck-slot-name { padding-top: 9px; }
+.ck-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.ck-clear { min-height: 44px; font-size: 16px; }
+.ck-note { margin: 0; font-size: 15px; color: rgb(var(--yellow-rgb) / 0.95); }
+.ck-orig { font: 18px/1.7 var(--sans); padding: 8px 14px; border-radius: 12px; background: rgb(var(--chalk-rgb) / 0.05); }
+.ck-code { font: 16px/1.6 var(--mono); tab-size: 4; white-space: pre; overflow-x: auto; }
+.ck-fixrow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.ck-fixrow .ck-line-field { flex: 1 1 260px; }
+.ck-del { min-height: 44px; font-size: 16px; }
+.ck-fill .sv-fill-wrap { margin: 0; }
+.ck-fill .sv-fill-copy { min-height: 44px; }
+.ck-fill .sv-fill-in:disabled { opacity: 1; -webkit-text-fill-color: currentColor; }
+.ck-errfind .en-words, .ck-parse .en-words { margin: 2px 0 4px; }
