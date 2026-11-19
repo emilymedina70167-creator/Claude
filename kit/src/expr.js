@@ -1,5 +1,9 @@
 // 小型表达式语言：数、向量 [1, 2]、矩阵 [[1, 2], [3, 4]]（按行写），
-// 支持 + - * / ^、转置 '、函数 det inv T col row dot norm proj rot lerp 等。
+// 支持 + - * / ^、转置 '、阶乘 !、函数 det inv T col row dot norm proj rot lerp 等。
+//
+// 三角函数默认弧度（计划 3，dr-calc-base：答案、\calc、let、graph、derive、检验都是弧度）；
+// 画图的几处（scene、space、图上的标注、figure set、predict）要的是角度，调用时明着写 { deg: true }。
+// rot(角度) 名字就写着是角度，两种都按角度。哪个文件用哪种，tests/expr-rad.test.js 列着。
 // 数值用浮点；判分时再转成分数比较。要精确值（\calc、matrix 组件、课堂的 calc 工具）用 exact.js，写法一样。
 //
 // 向量是列向量：a' 是一行（1×n 矩阵），a'*b 是一个数，a*b' 是外积（n×n 矩阵）。exact.js 用同样的规则。
@@ -17,7 +21,7 @@ const FUNCS = {
   col: (M, j) => asMat(M).map((r) => r[idx(j, asMat(M)[0].length)]),
   row: (M, i) => asMat(M)[idx(i, asMat(M).length)].slice(),
   dot: (u, v) => dot(asVec(u), asVec(v)),
-  norm: (v) => Math.hypot(...asVec(v)),
+  norm: (v) => (isNum(v) ? Math.abs(v) : Math.hypot(...asVec(v))), // |x| 写在数上就是绝对值
   proj: (u, v) => scale(dot(asVec(u), asVec(v)) / dot(asVec(v), asVec(v)), asVec(v)),
   cross: (u, v) => { const [a, b, c] = asVec(u), [d, e, f] = asVec(v); return [b * f - c * e, c * d - a * f, a * e - b * d]; },
   rot: (deg) => { const r = (num(deg) * Math.PI) / 180; return [[Math.cos(r), -Math.sin(r)], [Math.sin(r), Math.cos(r)]]; },
@@ -26,16 +30,23 @@ const FUNCS = {
   I: (n = 2) => eye(num(n)),
   sqrt: (x) => Math.sqrt(num(x)),
   abs: (x) => Math.abs(num(x)),
-  sin: (deg) => Math.sin((num(deg) * Math.PI) / 180),
-  cos: (deg) => Math.cos((num(deg) * Math.PI) / 180),
+  sin: (x) => Math.sin(num(x)),
+  cos: (x) => Math.cos(num(x)),
+  tan: (x) => Math.tan(num(x)),
+  cot: (x) => 1 / Math.tan(num(x)),
+  sec: (x) => 1 / Math.cos(num(x)),
+  csc: (x) => 1 / Math.sin(num(x)),
+  arcsin: (x) => Math.asin(num(x)),
+  arccos: (x) => Math.acos(num(x)),
+  arctan: (x) => Math.atan(num(x)),
+  atan2: (y, x) => Math.atan2(num(y), num(x)),
   min: (...a) => Math.min(...a.map(num)),
   max: (...a) => Math.max(...a.map(num)),
   round: (x, n = 0) => { const k = 10 ** num(n); return Math.round(num(x) * k) / k; },
-  tan: (deg) => Math.tan((num(deg) * Math.PI) / 180),
-  atan2: (y, x) => (Math.atan2(num(y), num(x)) * 180) / Math.PI, // 角度（度）
   exp: (x) => Math.exp(num(x)),
   ln: (x) => Math.log(num(x)),
   log: (x, b = 10) => Math.log(num(x)) / Math.log(num(b)),
+  lg: (x) => Math.log10(num(x)),
   floor: (x) => Math.floor(num(x)),
   ceil: (x) => Math.ceil(num(x)),
   sign: (x) => Math.sign(num(x)),
@@ -48,6 +59,9 @@ const FUNCS = {
   poissonpmf: (k, l) => (Number.isInteger(num(k)) && num(k) >= 0 ? Math.exp(-num(l)) * num(l) ** num(k) / fact(num(k)) : 0),
   exppdf: (x, l = 1) => (num(x) < 0 ? 0 : num(l) * Math.exp(-num(l) * num(x))),
   unifpdf: (x, a = 0, b = 1) => (num(x) >= num(a) && num(x) <= num(b) ? 1 / (num(b) - num(a)) : 0),
+  // 标准正态：Φ（分布函数）、φ（密度）。学生写 Φ(1.96)
+  Phi: (x) => 0.5 * (1 + erf(num(x) / Math.SQRT2)),
+  phi: (x) => Math.exp(-(num(x) ** 2) / 2) / Math.sqrt(2 * Math.PI),
   // 计算机课：整数、进制、位运算（位运算只对非负整数；负数先用 unsigned(x, n) 换成 n 位的无符号数）
   log2: (x) => Math.log2(num(x)),
   mod: (a, b) => { const m = intOf(b, '模'); if (m === 0) throw new Error('mod 的模不能是 0'); return ((intOf(a, 'mod') % m) + m) % m; },
@@ -68,6 +82,18 @@ const FUNCS = {
   hex: (x, n) => radixText(x, n, 16),
   dec: (x, k = 2) => decText(x, k),
 };
+
+// 画图的地方用角度：只盖这四个（新加的 arcsin 这些只有弧度：画图里用不到，写了也说得清）
+const DEG = {
+  ...FUNCS,
+  sin: (d) => Math.sin((num(d) * Math.PI) / 180),
+  cos: (d) => Math.cos((num(d) * Math.PI) / 180),
+  tan: (d) => Math.tan((num(d) * Math.PI) / 180),
+  atan2: (y, x) => (Math.atan2(num(y), num(x)) * 180) / Math.PI,
+};
+const tableOf = (opts) => (opts?.deg ? DEG : FUNCS);
+/** 学生在实数的题里能写的初等函数（formula.js 读学生的写法、fx/ 认「这是实数的函数」用） */
+export const FX_NAMES = ['sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'ln', 'lg', 'exp', 'sqrt', 'abs', 'Phi', 'phi'];
 
 function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) [a, b] = [b, a % b]; return a; }
 function intOf(x, what) {
@@ -130,9 +156,12 @@ export function decText(x, k = 2) {
   const t = (Math.round((Math.abs(x) + Number.EPSILON) * 10 ** k) / 10 ** k).toFixed(k).replace(/\.?0+$/, '');
   return new Dec(x < 0 && Number(t) !== 0 ? `-${t}` : t);
 }
-const CONSTS = { pi: Math.PI, e: Math.E };
+const CONSTS = { pi: Math.PI, e: Math.E, inf: Infinity };
 
-function fact(n) { let r = 1; for (let i = 2; i <= n; i++) r *= i; return r; }
+function fact(n) {
+  if (!Number.isInteger(n) || n < 0) throw new Error(`阶乘要非负整数（现在是 ${n}）`);
+  let r = 1; for (let i = 2; i <= n; i++) r *= i; return r;
+}
 function choose(n, k) { if (k < 0 || k > n) return 0; let r = 1; for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i; return r; }
 // 误差函数（Abramowitz–Stegun 7.1.26，误差 < 1.5e-7）
 function erf(x) {
@@ -141,9 +170,9 @@ function erf(x) {
   return x >= 0 ? y : -y;
 }
 
-// src 可以是表达式原文，也可以是 parse 出来的语法树
-export function evaluate(src, vars = {}) {
-  return run(typeof src === 'string' ? parse(src) : src, vars);
+// src 可以是表达式原文，也可以是 parse 出来的语法树。opts.deg：三角函数按角度（画图的地方）
+export function evaluate(src, vars = {}, opts) {
+  return run(typeof src === 'string' ? parse(src) : src, vars, tableOf(opts));
 }
 
 // 解析成语法树（exact.js 用同一棵树精确求值）
@@ -154,11 +183,12 @@ export function parse(src) {
   return ast;
 }
 
-export function compile(src) {
+export function compile(src, opts) {
   const p = new Parser(String(src));
   const ast = p.parseExpr();
   p.expectEnd();
-  return (vars = {}) => run(ast, vars);
+  const fns = tableOf(opts);
+  return (vars = {}) => run(ast, vars, fns);
 }
 
 // 表达式里用到的变量名（用于找依赖）
@@ -230,8 +260,11 @@ class Parser {
   }
   parsePostfix() {
     let a = this.parsePrimary();
-    while (this.eat("'")) a = { t: 'call', name: 'T', args: [a] };
-    return a;
+    for (;;) {
+      if (this.eat("'")) a = { t: 'call', name: 'T', args: [a] };
+      else if (this.eat('!')) a = { t: 'call', name: 'fact', args: [a] };
+      else return a;
+    }
   }
   parsePrimary() {
     const tok = this.next();
@@ -264,7 +297,7 @@ class Parser {
 
 function tokenize(s) {
   const out = [];
-  const re = /\s*(?:(0[xX][0-9A-Fa-f][0-9A-Fa-f_]*|0[bB][01][01_]*)|(\d+\.?\d*|\.\d+)|([A-Za-z_Ͱ-Ͽ][\wͰ-Ͽ]*)|(\*\*|<=|>=|==|!=|[-+*/^()[\],'|·<>]))/y;
+  const re = /\s*(?:(0[xX][0-9A-Fa-f][0-9A-Fa-f_]*|0[bB][01][01_]*)|(\d+\.?\d*|\.\d+)|([A-Za-z_Ͱ-Ͽ][\wͰ-Ͽ]*)|(\*\*|<=|>=|==|!=|[-+*/^()[\],'|·<>!]))/y;
   let m;
   let pos = 0;
   s = s.replace(/−/g, '-').replace(/×/g, '*').replace(/≤/g, '<=').replace(/≥/g, '>=').replace(/≠/g, '!=');
@@ -286,7 +319,7 @@ function tokenize(s) {
 }
 
 // —— 求值 ——
-function run(n, vars) {
+function run(n, vars, fns = FUNCS) {
   switch (n.t) {
     case 'num': return n.v;
     case 'var': {
@@ -295,15 +328,15 @@ function run(n, vars) {
       if (n.name === 'I' || n.name === 'E') return eye(2);
       throw new Error(`未定义的变量 ${n.name}`);
     }
-    case 'neg': return scale(-1, run(n.a, vars));
-    case 'list': return n.items.map((x) => run(x, vars));
+    case 'neg': return scale(-1, run(n.a, vars, fns));
+    case 'list': return n.items.map((x) => run(x, vars, fns));
     case 'call': {
-      const f = FUNCS[n.name];
+      const f = fns[n.name];
       if (!f) throw new Error(`没有函数 ${n.name}()`);
-      return f(...n.args.map((x) => run(x, vars)));
+      return f(...n.args.map((x) => run(x, vars, fns)));
     }
     case 'bin': {
-      const a = run(n.a, vars), b = run(n.b, vars);
+      const a = run(n.a, vars, fns), b = run(n.b, vars, fns);
       if (isRadix(a) || isRadix(b)) throw new Error('bin()、hex()、dec() 的结果只能直接写出来，不能再算（要算就对原来的数算）');
       if (n.op === '+') return add(a, b);
       if (n.op === '-') return add(a, scale(-1, b));
@@ -365,12 +398,22 @@ export function mul(a, b) {
 }
 function power(a, k) {
   num(k);
-  if (isNum(a)) return a ** k;
+  if (isNum(a)) return realPow(a, k);
   asMat(a);
   if (k === -1) return inv(a);
   if (!Number.isInteger(k) || k < 0) throw new Error('矩阵只能做非负整数次幂或 ^-1');
   let r = eye(a.length);
   for (let i = 0; i < k; i++) r = mul(r, a);
+  return r;
+}
+// 负数的分数次方：分母是奇数时取实数（x^(1/3) 在 x = −8 是 −2；JS 的 ** 回 NaN）
+function realPow(a, k) {
+  const r = a ** k;
+  if (!(a < 0) || Number.isInteger(k) || !Number.isNaN(r)) return r;
+  for (let q = 3; q <= 99; q += 2) {
+    const p = Math.round(k * q);
+    if (Math.abs(p - k * q) < 1e-9) return (p % 2 ? -1 : 1) * Math.abs(a) ** k;
+  }
   return r;
 }
 export const dot = (u, v) => { if (u.length !== v.length) throw new Error('维数不同'); return u.reduce((s, x, i) => s + x * v[i], 0); };

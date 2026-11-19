@@ -3,9 +3,12 @@
 // 这里只管在板上执行：找目标、只动当前板和常驻栏、记下板上现有的标注（段改写、撤回时一起擦掉）。
 // 画法在 marks.js，写法在 markspec.js / protocol.js。
 import { session } from '../session.js';
-import { compile } from '../expr.js';
+import { compile as compileRad } from '../expr.js';
 import { markLayer } from '../marks.js';
 import { markWhere } from '../markspec.js';
+
+// 画图的地方三角函数按角度（curve … for s 0 360、滑块的角度）：计划 3 以后表达式默认弧度，这里明着要角度（tests/expr-rad.test.js）
+const compile = (src) => compileRad(src, { deg: true });
 
 const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 

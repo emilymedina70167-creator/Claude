@@ -481,7 +481,7 @@ function radix(x, n, base) {
 }
 
 // 这些函数 expr.js 有、但结果一般不是有理数：交给小数去算
-const FLOAT_ONLY = new Set(['rot', 'sin', 'cos', 'tan', 'atan2', 'exp', 'ln', 'log', 'normpdf', 'normcdf', 'binompmf', 'poissonpmf', 'exppdf', 'unifpdf']);
+const FLOAT_ONLY = new Set(['rot', 'sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'atan2', 'exp', 'ln', 'lg', 'log', 'normpdf', 'normcdf', 'binompmf', 'poissonpmf', 'exppdf', 'unifpdf', 'Phi', 'phi']);
 /** 式子里认得的函数名（det、rank、inv……、算法函数、只能算小数的 sin 这些）：舞台的 {…} 里这些照旧交给这里算，不换成量（stage/value.js） */
 export const isExactFunc = (name) => Object.hasOwn(FUNCS, name) || Object.hasOwn(EXTRA, name) || FLOAT_ONLY.has(name);
 
@@ -492,7 +492,7 @@ function run(n, vars) {
       if (n.name in vars && vars[n.name] instanceof Sym) throw new NeedSymbolic();
       if (n.name in vars) return toExact(vars[n.name]);
       if (n.name === 'param') return new Sym(null);
-      if (n.name === 'pi' || n.name === 'e') throw new Inexact(n.name === 'pi' ? 'π ' : 'e ');
+      if (n.name === 'pi' || n.name === 'e' || n.name === 'inf') throw new Inexact(n.name === 'pi' ? 'π ' : n.name === 'e' ? 'e ' : '∞ ');
       if (n.name === 'I' || n.name === 'E') return eye(2);
       throw new Error(`未定义的变量 ${n.name}`);
     }
@@ -576,10 +576,10 @@ function approxTeX(x) {
 const approxText = (x) => (isNum(x) ? String(Number(x.toPrecision(6))) : Array.isArray(x) ? `[${x.map(approxText).join(', ')}]` : '?');
 
 /**
- * 算一个表达式：先精确算；算不出精确值的（开方、三角……）退回小数。
+ * 算一个表达式：先精确算；算不出精确值的（开方、三角……）退回小数（三角函数弧度；opts.deg 按角度，图自己的 let 用）。
  * vars：精确的值或 JS 的数 / 数组都行。返回 { value, exact, tex, text, float }；写错了抛出 Error（中文原因）
  */
-export function calcValue(src, vars = {}) {
+export function calcValue(src, vars = {}, opts) {
   const ast = typeof src === 'string' ? parse(src) : src;
   try {
     const value = run(ast, vars || {});
@@ -594,7 +594,7 @@ export function calcValue(src, vars = {}) {
   }
   const fv = {};
   for (const [k, v] of Object.entries(vars || {})) if (!(v instanceof Sym)) fv[k] = toFloat(v);
-  const value = evaluateFloat(ast, fv);
+  const value = evaluateFloat(ast, fv, opts);
   // dec(sqrt(2), 3) 这种：小数算出来以后照 dec 写好了，按它写的位数（不再截成 4 位有效数字）
   if (isRadix(value)) return { value, exact: false, tex: value.toTeX(), text: value.digits, float: value.base === 10 ? Number(value.digits) : NaN };
   return { value, exact: false, tex: approxTeX(value), text: approxText(value), float: value };
@@ -604,11 +604,11 @@ export function calcValue(src, vars = {}) {
  * 组件自己的 let（parseScene 解析出的命令，带 src）接在 base（整节课的量）后面精确地算一遍，给 \calc 当变量。
  * 算不出来的跳过（组件自己会报错）
  */
-export function letScope(cmds, base = {}) {
+export function letScope(cmds, base = {}, opts) {
   const scope = { ...base };
   for (const c of cmds || []) {
     if (c?.kind !== 'let' || !c.src) continue;
-    try { scope[c.name] = letValue(c.name, calcValue(c.src, scope).value); } catch { /* 组件画的时候会报 */ }
+    try { scope[c.name] = letValue(c.name, calcValue(c.src, scope, opts).value); } catch { /* 组件画的时候会报 */ }
   }
   return scope;
 }

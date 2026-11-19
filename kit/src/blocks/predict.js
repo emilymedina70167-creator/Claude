@@ -1,10 +1,13 @@
 // predict：先猜再看。拖动问号点到你认为的位置 → 确定 → 显示真实位置（可配合动画）
 import { createScene, parseScene } from '../scene.js';
-import { compile, numText } from '../expr.js';
+import { compile as compileRad, numText } from '../expr.js';
 import { session } from '../session.js';
 import { widget, mdToHtml, tex2html, withCalcScope, calcProblems } from './common.js';
 import { markDraft } from '../drafts.js';
 import { letScope, floatVars } from '../exact.js';
+
+// 画图的地方三角函数按角度（curve … for s 0 360、滑块的角度）：计划 3 以后表达式默认弧度，这里明着要角度（tests/expr-rad.test.js）
+const compile = (src) => compileRad(src, { deg: true });
 
 export function predict(el, src) {
   const parsed = parseScene(src);
@@ -17,7 +20,7 @@ export function predict(el, src) {
   const extra = { t: 0, guess: [0.5, 0.5] };
   let target = null;
   // 文字里的 \calc：图里自己的 let（初始值）+ 整节课的量；解析要到揭晓才显示，现在就查
-  const scope = letScope(parsed.cmds, session.vars);
+  const scope = letScope(parsed.cmds, session.vars, { deg: true });
   for (const msg of calcProblems([fields.title, fields.q, fields.explain], scope)) session.problem(el, 'predict', msg);
   const md = (t, o) => withCalcScope(scope, () => mdToHtml(t, o));
   const base = floatVars(session.vars);

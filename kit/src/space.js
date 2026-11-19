@@ -10,11 +10,14 @@
 //   box u, v, [0, 0, 1]                  # 平行六面体（体积 = |det|）
 //   show $\det = {det(mat(u, v, [0,0,1]))}$
 //   quadric [[2,0,0],[0,3,2],[0,2,3]] = 6     # 二次曲面 xᵀAx = 6 的线框（在主轴上参数化，quadric.js）
-import { compile, isNum, isVec } from './expr.js';
+import { compile as compileRad, isNum, isVec } from './expr.js';
 import { splitMods, splitTop, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { sliderText, figureControls } from './plot.js';
 import { quadricLines } from './quadric.js';
+
+// 画图的地方三角函数按角度（curve … for s 0 360、滑块的角度）：计划 3 以后表达式默认弧度，这里明着要角度（tests/expr-rad.test.js）
+const compile = (src) => compileRad(src, { deg: true });
 
 const NS = 'http://www.w3.org/2000/svg';
 const SIZE = 480;

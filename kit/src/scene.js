@@ -9,12 +9,15 @@
 //   vector A*x color=green label=Ax
 //   show $A\mathbf x = {A*x}$
 //   goal A*x = [3, 2] msg="命中！"
-import { compile, isNum, isVec, isMat, valueTeX, numText } from './expr.js';
+import { compile as compileRad, isNum, isVec, isMat, valueTeX, numText } from './expr.js';
 import { createPlane, snap as snapTo, figureControls, sliderText } from './plot.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { session } from './session.js';
 import { splitMods, splitTop } from './mods.js';
 import { conicLines } from './quadric.js';
+
+// 画图的地方三角函数按角度（curve … for s 0 360、滑块的角度）：计划 3 以后表达式默认弧度，这里明着要角度（tests/expr-rad.test.js）
+const compile = (src) => compileRad(src, { deg: true });
 
 export { splitMods, splitTop };
 
