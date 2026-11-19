@@ -263,7 +263,9 @@ export const COLLECTIONS = {
     label: '检验题库', kind: 'state', writers: ['page', 'chat'],
     id: { re: /^pr-[0-9a-f]{12}$/, eg: 'pr- + 12 位十六进制（bank.js 的 bankId）' },
     required: ['fence', 'type', 'block'],
-    enums: { type: ['recall', 'construct', 'claim', 'discriminate', 'locate', 'solve'], level: ['基础', '方法', '核心'] },
+    // 题型和 check/spec.js 的 PROBE_TYPES 一样（计划 4 加了 408、英语的；tests/check-samples.test.js 守着两边对得上）
+    enums: { type: ['recall', 'construct', 'claim', 'discriminate', 'locate', 'solve',
+      'trace', 'predict', 'tradeoff', 'code', 'calc', 'parse', 'translate', 'rewrite', 'errfind'], level: ['基础', '方法', '核心'] },
     refs: { block: 'curriculum' },
     tracked: [],
   },

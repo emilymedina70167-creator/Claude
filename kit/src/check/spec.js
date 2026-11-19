@@ -569,12 +569,18 @@ export function parseCheck(head, body) {
   const promptLines = [];
   let inPrompt = false, fence = null;
   const dup = new Set();
+  const broken = [];
   for (const raw of String(body ?? '').replace(/\r/g, '').split('\n')) {
     if (fence) {
       if (/^\s*```\s*$/.test(raw)) {
         const r = parseProbe(fence.type, fence.lines.join('\n'));
-        if (r.error) errors.push(r.error);
-        else if (probes[r.probe.id]) dup.add(r.probe.id);
+        if (r.error) {
+          errors.push(r.error);
+          // 读不懂的题记下 id 和 retry：自检不再因为它连带报「没写这道题」「没排进任何一块」（一处写错只报一条）
+          const bid = fence.lines.map((l) => l.match(/^\s*id\s*[:：]\s*(\S+)/)?.[1]).find(Boolean);
+          const br = fence.lines.map((l) => l.match(/^\s*retry\s*[:：]\s*(.+)$/)?.[1]).find(Boolean);
+          if (bid) broken.push({ id: bid, retry: br ? br.split(/[,，、\s]+/).filter((x) => /^[A-Za-z]/.test(x) && x !== 'self') : [] });
+        } else if (probes[r.probe.id]) dup.add(r.probe.id);
         else { probes[r.probe.id] = r.probe; order.push(r.probe.id); }
         fence = null;
       } else fence.lines.push(raw);
@@ -617,6 +623,7 @@ export function parseCheck(head, body) {
     p.family = p.family || `${p.block}/${p.target}`;
   }
   const check = { id, title: kv.title || '', limit: limit || 0, pause: pause || PAUSE_DEFAULT, blocks, spare, prompt: promptLines.join('\n').trim(), probes, order, src: String(body ?? '') };
+  if (broken.length) check.broken = broken;
   // 没有 block 行就没法开：整条不收（别的写法错误照列，check 照给，外壳不开、预检照报）
   return { check: blocks.length ? check : null, errors };
 }
@@ -861,10 +868,11 @@ export function expectValue(text, vars = {}, runNames = runNamesIn(vars)) {
 export function selfCheck(check, base = {}, { lenient = false } = {}) {
   const out = [];
   const P = check.probes;
+  const bad = new Set((check.broken || []).map((b) => b.id)); // 读不懂、已经报过的题
   const placed = new Set([...check.blocks.flatMap((b) => [...b.must, ...b.optional]), ...check.spare]);
-  for (const b of check.blocks) for (const pid of [...b.must, ...b.optional]) if (!P[pid]) out.push(`block ${b.block} 里的 ${pid} 没写这道题`);
-  for (const pid of check.spare) if (!P[pid]) out.push(`spare 里的 ${pid} 没写这道题`);
-  const retried = new Set(Object.values(P).flatMap((p) => p.retry));
+  for (const b of check.blocks) for (const pid of [...b.must, ...b.optional]) if (!P[pid] && !bad.has(pid)) out.push(`block ${b.block} 里的 ${pid} 没写这道题`);
+  for (const pid of check.spare) if (!P[pid] && !bad.has(pid)) out.push(`spare 里的 ${pid} 没写这道题`);
+  const retried = new Set([...Object.values(P).flatMap((p) => p.retry), ...(check.broken || []).flatMap((b) => b.retry)]);
   const isTpl = (id) => !!P[id]?.tpl;
   // 一道 retry 只给一道题用；retry 不再排进 block / spare（不然出到它时已经交过，学生卡住）。
   // 模板不受这两条管：每用一次都是另取一组数的一道新题（p1~2…）
@@ -888,6 +896,7 @@ export function selfCheck(check, base = {}, { lenient = false } = {}) {
     const p = P[pid];
     if (!placed.has(pid) && !retried.has(pid)) out.push(`${pid} 没排进任何一块，也不是谁的 retry（不出现的题写进 spare）`);
     for (const r of p.retry) {
+      if (!P[r] && bad.has(r)) continue;
       if (!P[r]) out.push(`${pid} 的 retry 写了 ${r}，块里没有这道题${p.type === 'trace' && engineHas(p.use, 'retry') ? '；retry 是检验的字段；引擎的 retry 写成 use.retry:' : ''}`);
       else if (P[r].type !== p.type) out.push(`${pid} 的 retry ${r} 是 ${P[r].type}，和本题的题型 ${p.type} 不一样`);
     }

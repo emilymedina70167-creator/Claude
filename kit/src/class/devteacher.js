@@ -33,7 +33,7 @@
 
 import { COACH_HEAD } from './coach.js';
 import { HELPER_HEAD } from './delegate.js';
-import { DEV_CHECK, devVerdict, isVerdict, isFallback } from '../check/devsample.js';
+import { DEV_CHECK, DEV_CHECK_408, DEV_CHECK_EN, devVerdict, isVerdict, isFallback } from '../check/devsample.js';
 export const DEV_LIMITS = Object.freeze({ maxPromptBytes: 262144, images: Object.freeze({ maxCount: 4, maxInputBytes: 20000000, mediaTypes: Object.freeze(['image/png', 'image/jpeg']) }) });
 const THINK_MS = 600; // 第一个字出来前的停顿（模拟思考）
 const JSON_MS = 300;
@@ -149,6 +149,9 @@ export function devReply(input, memo = { seq: 0, broken: 0 }, { images = 0 } = {
     return { kind: 'helper', text: `模拟助手：先看第一步的乘法顺序。\n\n\`\`\`\`board mark target=${target} note="看这里"\n\`\`\`\`\n\n\`\`\`\`board new id=hb9 title="越权"\n不该出现\n\`\`\`\`` };
   }
 
+  // 计划 4 的两份样板：「测试:检验408」希尔排序（trace / construct / predict / tradeoff），「测试:检验英语」语态（parse / rewrite / discriminate / errfind）
+  if (!isSystem && /测试\s*[:：]?\s*检验\s*408/.test(said)) return { kind: 'check', text: join('（模拟老师）做一次 408 的检验。', DEV_CHECK_408) };
+  if (!isSystem && /测试\s*[:：]?\s*检验\s*英语/.test(said)) return { kind: 'check', text: join('（模拟老师）做一次英语的检验。', DEV_CHECK_EN) };
   if (!isSystem && /测试\s*[:：]?\s*检验/.test(said)) return { kind: 'check', text: join('（模拟老师）做一次检验。', DEV_CHECK) };
   const err = said.match(/测试\s*[:：]?\s*([a-z_]+)/);
   if (err && ERROR_CODES.includes(err[1]) && !isSystem) return { kind: 'error', code: err[1] };
