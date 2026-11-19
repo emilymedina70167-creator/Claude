@@ -388,11 +388,12 @@ function errfindItems(probe, answer = {}) {
   if (at !== probe.wordAt) {
     const decoy = (probe.decoys || []).find((d) => d.i === at);
     const w = toks[at]?.w;
-    const why = at < 0 || !w ? '没点错的词' : decoy ? `「${w}」用得没错：${decoy.why}` : `「${w}」用得没错，错的是别的词`;
+    const why = at < 0 || !w || !toks[at].word ? '没点错的词' : decoy ? `「${w}」用得没错：${decoy.why}` : `「${w}」用得没错，错的是别的词`;
     return { items: [{ id: 'word', ok: false, why, keys: [...(decoy ? [`decoy=${decoy.w}`] : []), 'word'] }], needsClaude: false, stop: true };
   }
   const items = [{ id: 'word', ok: true, why: '' }];
-  const s = String(answer.fix ?? '').trim();
+  // 学生把改法用引号括起来（"known"、‘known’）不算错
+  const s = String(answer.fix ?? '').trim().replace(/^["“”‘’']+|["“”‘’']+$/g, '').trim();
   const fixes = (probe.fix || []).map(delNorm);
   const m = s ? matchText(delNorm(s), fixes, FIX_OPTS) : { ok: false, empty: true };
   if (m.ok) items.push({ id: 'fix', ok: true, why: '' });
@@ -597,7 +598,7 @@ function answerText(probe, answer = {}, images = 0) {
   if (probe.type === 'parse') out.push(`学生标的：${(answer.spans || []).length ? bracketText(probe.tokens, answer.spans) : '（一处都没标）'}`);
   if (probe.type === 'errfind') {
     const k = answer.word === undefined || answer.word === null || answer.word === '' ? -1 : Number(answer.word);
-    const w = tokenOf(probe)[k]?.w;
+    const w = tokenOf(probe)[k]?.word ? tokenOf(probe)[k].w : '';
     out.push(w ? `学生点的词：「${w}」（第 ${tokenOf(probe).filter((t) => t.word && t.i <= k).length} 个词）` : '学生没点词', `学生写的改法：${String(answer.fix ?? '').trim() || '（没写）'}`);
   }
   if (probe.type === 'locate') out.push(`学生点的错的那一行：第 ${answer.line} 行`, ...(answer.fix ? [`学生写的改法：${answer.fix}`] : []));

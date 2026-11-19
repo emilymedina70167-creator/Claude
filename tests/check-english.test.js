@@ -329,3 +329,49 @@ test('五种英语题放进 board check 里能过自检', () => {
   assert.deepEqual(errors, []);
   assert.deepEqual(selfCheck(check), []);
 });
+
+// —— 复查修正：整词比、点了标点、改法带引号、要点编号和页面判的项撞了 ——
+
+test('rewrite：has / not 按整词比（is 不对上 This、…ed 只接在挨着的词上、they 认 They\'re、was not 认 wasn\'t）', async () => {
+  const { fragRe } = await import('../kit/src/check/spec.js');
+  const mk = (lines) => P('rewrite', `id: r9\ntext: x\n${lines}\nexample: The houses were painted.\ntarget: x\nlevel: 基础`);
+  const is = mk('has: is\nhas: houses');
+  assert.equal(item(judgeMachine(is, { text: 'This house was red.' }), 'h1').ok, false);
+  assert.equal(item(judgeMachine(is, { text: 'This house is red.' }), 'h1').ok, true);
+  const were = mk('has: were …ed');
+  assert.equal(item(judgeMachine(were, { text: 'This house were given a red card.' }), 'h1').ok, false);
+  assert.equal(item(judgeMachine(were, { text: 'The houses were painted.' }), 'h1').ok, true);
+  assert.equal(item(judgeMachine(mk('has: were ...ed'), { text: 'The houses were painted.' }), 'h1').ok, true);
+  const they = mk('has: houses\nnot: they');
+  assert.equal(item(judgeMachine(they, { text: 'They’re painted, the houses.' }), 'n1').ok, false);
+  assert.equal(item(judgeMachine(they, { text: 'These houses were painted.' }), 'n1').ok, true, 'these 不是 they');
+  const was = mk('has: houses\nnot: was not');
+  assert.equal(item(judgeMachine(was, { text: "The houses wasn't painted." }), 'n1').ok, false);
+  // 单独的 … 是中间隔 0～3 个词；| 是几种写法
+  const gap = mk('has: were … painted | was … painted');
+  assert.equal(item(judgeMachine(gap, { text: 'The houses were all freshly painted.' }), 'h1').ok, true);
+  assert.equal(item(judgeMachine(gap, { text: 'The house was painted.' }), 'h1').ok, true);
+  assert.equal(item(judgeMachine(gap, { text: 'The houses were one two three four painted.' }), 'h1').ok, false);
+  assert.equal(fragRe('…'), null);
+  assert.match(E('rewrite', 'id: r\ntext: x\nhas: …\nexample: y\ntarget: x\nlevel: 基础'), /片段里没有字/);
+});
+
+test('errfind：点了标点当没点词；改法带引号照认', () => {
+  const p = P('errfind', ERR);
+  const r = judgeMachine(p, { word: 8, fix: 'known' }); // 8 是逗号
+  assert.equal(item(r, 'word').why, '没点错的词');
+  const vp = verdictPrompt({ probe: { ...p, must: [{ id: 'm1', text: 'x' }] }, answer: { word: 8, fix: 'known' } });
+  assert.match(vp, /学生没点词/);
+  assert.doesNotMatch(vp, /学生点的词/);
+  for (const f of ['"known"', '“known”', '‘known’', "'Known.'"]) assert.equal(item(judgeMachine(p, { word: 2, fix: f }), 'fix').ok, true, f);
+});
+
+test('手写的要点编号和页面判的项撞了报错', () => {
+  assert.match(E('rewrite', `${REWRITE}\nmust h1: 被动`), /要点编号 h1 和页面判的项撞了/);
+  assert.match(E('rewrite', `${REWRITE}\nwrong n2: 写了 they`), /要点编号 n2 和页面判的项撞了/);
+  assert.match(E('errfind', `${ERR}\nmust word: have 后面接过去分词`), /要点编号 word 和页面判的项撞了/);
+  assert.match(E('errfind', `${ERR}\nmust fix: x`), /要点编号 fix/);
+  assert.match(E('discriminate', `${DIS}\nmust pick: x`), /要点编号 pick/);
+  assert.match(E('parse', `${PARSE}\nmust extra: x`), /要点编号 extra/);
+  assert.equal(E('rewrite', `${REWRITE}\nmust m1: 被动`), '');
+});

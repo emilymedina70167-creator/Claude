@@ -38,7 +38,7 @@ import { MEASURES, measure, markDuplicates, variantsOf, variantValues } from '..
 import { ENGINES } from '../engines/registry.js';
 import { fillSpec, checkFill, normCell, trackFields } from '../stepperspec.js';
 import { spaceOfId } from '../memory/space.js';
-import { parseBrackets, parseRoles, ROLES, findWrong, parseDecoys, parseAnswer, parsePoints, judgeTranslation, normText } from '../entext.js';
+import { parseBrackets, parseRoles, ROLES, findWrong, parseDecoys, parseAnswer, normText } from '../entext.js';
 
 // 408、英语一的题型（计划 4，docs/superpowers/plans/2026-11-19-check-408-en.md）：trace predict code parse translate rewrite errfind 是新的，
 // tradeoff 是 recall 的别名、calc 是 solve 的别名（读法、判法照原来的，type 存自己的名字，BASE_OF / baseType）
@@ -75,6 +75,7 @@ const RUN = /^\s*run\s+(\S+?)\s*[:：]\s*([A-Za-z]\w*)\s*(.*)$/;
 const RUN_NAME = /^[A-Za-z][A-Za-z0-9]*$/;
 // predict 的 expect 标签: 值（标签前可以写编号 x1）
 const EXPECT = /^\s*expect(?:\s+([^:：]*?))?\s*[:：]\s*(.*)$/;
+const RESERVED_IDS = { rewrite: /^[hn]\d+$/, errfind: /^(?:word|fix)$/, discriminate: /^pick$/, parse: /^extra$/ };
 // rewrite 的 has: 片段 => 话 / not: 片段 => 话（一行一条，h1、n1…）
 const HASNOT = /^\s*(has|not)\s*[:：]\s?(.*)$/;
 // 模板的命令只认小写、整行像命令的（pick 名字 = …；where 带比较或是一个函数调用）：英语题的续行
@@ -327,6 +328,9 @@ export function parseProbe(type, src) {
   const pointIds = [...pts.must, ...pts.may, ...pts.wrong, ...expects.flatMap((e) => e.wrongs)].map((x) => x.id);
   const twice = pointIds.find((x, i) => pointIds.indexOf(x) !== i);
   if (twice) return { error: `${f.id || type}：要点编号 ${twice} 用了两次（自动编号和手写编号撞了：要么都写编号，要么都不写）` };
+  // 手写的要点编号和页面判的项撞了（rewrite 的 h1 / n1、errfind 的 word / fix、两个按钮的 pick、parse 的 extra）：补讲、判分都按编号对
+  const clashId = RESERVED_IDS[base] && pointIds.find((x) => RESERVED_IDS[base].test(x));
+  if (clashId) return { error: `${f.id || type}：要点编号 ${clashId} 和页面判的项撞了，换一个（m1、w1 这样）` };
   const id = f.id || '';
   if (!id) return { error: `${type} 要写 id:` };
   // trace 的引擎正好有这个名字的字段（tree 的 level）：检验读不懂时提醒一句怎么交给引擎
@@ -449,16 +453,33 @@ export function parseProbe(type, src) {
 }
 
 // —— 英语的四种（计划 4 Task 6）：读法照一类组件（entext.js），宽严一样 ——
-// rewrite 的片段：先照 normText 规范（大小写、弯引号、缩写、多空格），再用 translate 采分点的写法比（…是中间隔几个字）
-const fragLine = (h) => `- ${h.id} = ${normText(h.frag)}`;
-export function fragPoints(list) {
-  if (!list.length) return { points: [], problems: [] };
-  return parsePoints(list.map(fragLine));
+// rewrite 的片段按整词比：先照 normText 规范（大小写、弯引号、缩写展开、句末标点），再去掉标点、空白压成一个，
+// 片段里贴着字母的 … 是这个词里的几个字母（…ed 是以 ed 结尾的词、be…ing），单独的 … 是中间隔 0～3 个词，| 隔开几种写法；
+// 整段两头不能接着字母、数字、撇号（has: is 不会对上 This）
+const WCH = "[\\p{L}\\p{N}']";
+const GAP = `(?: ${WCH}+){0,3}`;
+const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const wordsOnly = (t) => t.replace(/[^\p{L}\p{N}'…]+/gu, ' ').replace(/\s+/g, ' ').trim();
+/** rewrite 的一个片段 → 整词比的正则；片段里一个词都没有 null */
+export function fragRe(frag) {
+  const alts = String(frag ?? '').replace(/\.{3,}|⋯+/g, '…').split(/[|｜]/).flatMap((alt) => {
+    const toks = wordsOnly(normText(alt, { sentence: true })).replace(/…+/g, '…').split(' ').filter(Boolean);
+    while (toks[0] === '…') toks.shift();
+    while (toks.at(-1) === '…') toks.pop();
+    if (!toks.length) return [];
+    let out = '';
+    for (const t of toks) {
+      if (t === '…') { if (!out.endsWith(GAP)) out += GAP; continue; }
+      out += `${out ? ' ' : ''}${t.split('…').map(esc).join(`${WCH}*`)}`;
+    }
+    return [out];
+  });
+  return alts.length ? new RegExp(`(?<!${WCH})(?:${alts.join('|')})(?!${WCH})`, 'u') : null;
 }
 /** rewrite：学生写的（或 example）对上了哪几条 has、哪几条 not：{ has: [bool], not: [bool] } */
 export function rewriteHits(probe, text) {
-  const t = normText(text, { sentence: true });
-  const hit = (list) => { if (!list?.length) return []; const { points } = fragPoints(list); return judgeTranslation(t, { points }).hits.map((x) => (t ? x : false)); };
+  const t = wordsOnly(normText(text, { sentence: true })).replace(/…/g, ' ').replace(/\s+/g, ' ').trim();
+  const hit = (list) => (list || []).map((h) => !!t && !!fragRe(h.frag)?.test(t));
   return { has: hit(probe.has), not: hit(probe.not) };
 }
 
@@ -483,8 +504,8 @@ function englishProbe(base, f, pts, hasNot, tpl) {
     if (!hasNot.has.length && !hasNot.not.length) return { error: '要写 has: 片段 => 话（改写以后一定有的字，一行一条；不该有的写 not:）' };
     if (!f.example) return { error: '要写 example:（一句满足全部 has、没有 not 的改写，页面先拿它验一遍）' };
     for (const k of ['has', 'not']) {
-      const { problems } = fragPoints(hasNot[k]);
-      if (problems.length) return { error: `${k}: 的片段里没有字（${hasNot[k].map((h) => h.frag).join('、')}）` };
+      const bad = hasNot[k].find((h) => !fragRe(h.frag));
+      if (bad) return { error: `${k}: 的片段里没有字（${bad.frag}）` };
     }
     return { fields: { text: f.text, has: hasNot.has, not: hasNot.not, example: f.example } };
   }
