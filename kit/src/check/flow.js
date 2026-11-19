@@ -122,6 +122,8 @@ const ON = {
       ...(s.results[ev.id] || {}), id: ev.id, kind: c.kind, block: c.block, ...(c.of ? { of: c.of } : {}),
       submitted: true, answer: ev.answer ?? null, sure: ev.sure || null, ms: ev.ms ?? null, msTotal: ev.msTotal ?? ev.ms ?? null,
       late: c.kind !== 'retry' && s.late, items: [...(m.items || [])], judgedBy: 'page', at: ev.at ?? null, ...(ev.resumed ? { resumed: true } : {}),
+      // 页面替学生做了的事（「页面把第二个 49 记成 49′」）：只是记下来给画面写，流程不看
+      ...(m.notes?.length ? { notes: [...m.notes] } : {}),
     };
     if (c.of) s.results[c.of].retries = [...usedRetries(s, c.of), ev.id].filter((x, i, a) => a.indexOf(x) === i);
     if (m.needsClaude && !m.stop) s.judging[ev.id] = ev.at ?? 0;

@@ -12,7 +12,7 @@ const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai'
  * sid、space：这节课；memoOps：desk.memo.ops（记错题，applyMemo）；ctx()：{ turn, turns }（这时课堂到第几轮）；
  * bankOf / retest：复测的课（局部 id → 题库编号、隔几天）
  */
-export function createCheckDesk(rawDb, { sid = null, space = null, memoOps = null, ctx = () => ({}), bankOf = null, retest = null, readOnly = false, curriculum = () => [] } = {}) {
+export function createCheckDesk(rawDb, { sid = null, space = null, memoOps = null, ctx = () => ({}), bankOf = null, retest = null, renumbered = null, readOnly = false, curriculum = () => [] } = {}) {
   // 写都走同一个出口（memory/writer.js 的 guardDb）：网络抖、限流自己重试两次，学生的第一次作答不丢；读照旧
   const db = guardDb(rawDb);
   const written = new Map(); // 检验 id → { 题 id → 证据 }
@@ -29,7 +29,7 @@ export function createCheckDesk(rawDb, { sid = null, space = null, memoOps = nul
       const cid = state.check.id;
       const out = [];
       for (const id of ids) {
-        const ev = { ...evidenceOf(state, id, { ctx: { session: sid, turn: ctx().turn }, bankOf, retest, rejudged, partial }), wroteAt: Date.now() };
+        const ev = { ...evidenceOf(state, id, { ctx: { session: sid, turn: ctx().turn }, bankOf, retest, rejudged, partial, renumbered: !!renumbered?.has?.(id) }), wroteAt: Date.now() };
         evsOf(cid)[id] = ev;
         out.push(ev);
         db.doc(`evidence/${ev.id}`).set(ev).catch(soft('写检验的证据', `evidence/${ev.id}`));

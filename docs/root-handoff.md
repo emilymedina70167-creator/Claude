@@ -36,7 +36,7 @@
 
 - 第一次真检验以后：读 `sessions/{编号}/check/{检验 id}`（进度）、`evidence` 里 `src: check` 的、`absorb/*`、`probes/*`，看判分等了多久（`judgedBy: timeout` 多不多）、待核的多不多、补讲是外部写的还是页面里的 Claude 写的；照真数据跑一遍 `deskState`。
 - 2026-11-19 补齐：审查留下的小毛病、retry 模板（`check/template.js`），见 `CLAUDE.md` 第 8 批那一条。
-- 没做的：408、英语的探题类型——设计稿在 `docs/superpowers/specs/2026-11-19-probes-408-en-design.md` 和学习台 `dev_requests/dr-probes-408-en`（`status: design`），等外部在 `review` 字段写意见、改成 `open` 再做。同一个模板在两节课里配了不同的课上的量，题库只记第一次的 `lets`（编号照原文算，见 `bank.js` 的 `lessonLets`）；复测时它们挂在题上（`probe.base`，`attachBases`）。
+- 没做的（第 10 批做了）：408、英语的探题类型——设计稿在 `docs/superpowers/specs/2026-11-19-probes-408-en-design.md` 和学习台 `dev_requests/dr-probes-408-en`（`status: design`），等外部在 `review` 字段写意见、改成 `open` 再做。同一个模板在两节课里配了不同的课上的量，题库只记第一次的 `lets`（编号照原文算，见 `bank.js` 的 `lessonLets`）；复测时它们挂在题上（`probe.base`，`attachBases`）。
 
 ## 第 9 批：计划 3，高数、概率的式子底座（2026-11-19）
 
@@ -46,6 +46,18 @@
 - 第一节用到高数的真课以后：读 `evidence` 里 `ok: null` 的作答（页面判不了的）和 `check` 里「只是极限一样」的行，看是阈值太严还是写法没认。
 - 判错要比判对更有把握（计划第五节第 1 条）：改 `fx/limit.js`、`fx/sample.js` 的阈值以前先跑 `tests/fx-limit.test.js` 的经典极限。
 - 弧度：新加调用 `compile` / `evaluate` / `calcValue` 的文件要在 `tests/expr-rad.test.js` 里归类。
+
+## 第 10 批：计划 4，408、英语的检验题（2026-11-19）
+
+`dev_requests/dr-plan4`：外部写的任务书，外部审过（`review`：必须改 1–6，都照改了）。执行计划 `docs/superpowers/plans/2026-11-19-check-408-en.md`，第二节是定下来的做法（以它为准）；做的时候自己定的事记在计划的执行记录里（`.superpowers/sdd/2026-11-19-check-408-en/progress.md` 的 Ruling 行，要告诉外部的：外部 review 给的 OPT 串 `7 0 1 2 0 3 0 4 2 3 0 3 2 1 2 0 1 7 0 1` 没有并列，并列的例子换成 `1 2 3 4 1 2 5 1 2 3 4 5`；快排一趟数 m−1；非精确的小数另要 ≥ 3 位有效数字；王道 `49 38 65 97 76 13 27 49` 做希尔是稳定的）。见 `CLAUDE.md` 第 10 批那一条，手册第三节「408 的检验题」「英语的检验题」（发布的拆成 `components/tradeoff.md`、`components/rewrite.md`：标题冒号前面只写检验自己的名字，一类组件的 trace、parse 不会拉进它们）。
+
+- 第一次 408 / 英语真检验以后读什么：
+  - `evidence` 里 `src: check` 的：每道题的 `items`（`tag` 是对上的错法短名还是 `slip`，`carried` 的那几行学生自己的上一行推得对不对）、`ok: null` 的项（并列、你那边算不出来、页面里的 Claude 拿不准）、`picked` / `template`（模板取了什么数）、复测的 `renumbered`（同类只剩换数的模板，外部要补新的固定题）。
+  - `absorb/{块}`：`state`、`facets`（408 的块里 construct 测的是边界）、`retests[].renumbered`；`meta/state` 那一块写没写「复测用的是换了数的同一道题」。
+  - `judgedBy`：`timeout` 的多不多（tradeoff、calc、translate、predict 的理由、discriminate 的为什么交页面里的 Opus，超过 90 秒算拿不准）；`claude` 判的要点和学生写的对不对得上。
+  - 格式挡住的那几次不记作答：学生说「交不了」时先看是不是格式（`seq(8)` 写了 7 个、`procs` 少一格）。
+- 改计数、值怎么比、并列以前先跑 `node --test tests/engines-measures.test.js tests/check-values.test.js tests/check-trace.test.js`；样板 `devsample.js` 和手册里的两个 `board check` 例子要一直能过执行前的检查（`tests/check-samples.test.js`）。
+- `tests/engines-common.test.js` 扫手册里的演示组件例子时跳过 `board check` 块（块里的 `trace` 是探题）。手册第三节小节的组件名只看标题冒号前面（`subject.js` 的 `headNames`，和 `build-split.js` 一样），英文的名字不按标题全文找。
 
 ## 现在做到哪
 

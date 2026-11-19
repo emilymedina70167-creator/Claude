@@ -95,3 +95,34 @@ test('board check：example 不满足、retry 只有一道都报；写对的不�
   const p2 = lintTurn({ text: one, names }).problems;
   assert.ok(p2.some((p) => /p3/.test(p.msg) && /至少 2 道/.test(p.msg)), JSON.stringify(p2));
 });
+
+// 计划 4：408、英语的样板当一轮外部写的写进来，预检干净；改坏三处（example 不满足 if、拼错的量、两个按钮写了三个）各报一条
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+test('board check 的 408、英语样板：ext-check --lint 退出码 0；改坏三处各报一条', async () => {
+  const names = await blockNames();
+  const { DEV_CHECK_408, DEV_CHECK_EN } = await import('../kit/src/check/devsample.js');
+  const dir = mkdtempSync(join(tmpdir(), 'ext-lint-'));
+  const run = (text) => { const f = join(dir, `t${Math.random().toString(36).slice(2)}.txt`); writeFileSync(f, text); return spawnSync(process.execPath, ['tools/ext-check.mjs', '--next', f, '--lint'], { encoding: 'utf8' }); };
+  const ok = run(`这一轮做个检验。\n\n${DEV_CHECK_408}\n\n${DEV_CHECK_EN}`);
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  assert.match(ok.stdout, /没有问题/);
+  const errs = (text) => lintTurn({ text, names }).problems.filter((p) => p.level !== 'hint');
+  assert.deepEqual(errs(DEV_CHECK_408), []);
+  assert.deepEqual(errs(DEV_CHECK_EN), []);
+  const ex = errs(DEV_CHECK_408.replace("example: A=4 7 4 1 2 5 7 8 P=4 4'", 'example: A=4 7 4 1 2 5 7 8 P=7 7'));
+  assert.equal(ex.length, 1, JSON.stringify(ex));
+  assert.match(ex[0].msg, /p2 的 example 不满足 if2/);
+  const meas = errs(DEV_CHECK_408.replace('if: r.unstable >= 1', 'if: r.fault >= 1'));
+  assert.equal(meas.length, 1, JSON.stringify(meas));
+  assert.match(meas[0].msg, /r\.fault 不是 sort 的量/);
+  const three = DEV_CHECK_EN.replace('options: 谓语 | 非谓语', 'options: 谓语 | 非谓语 | 都不是');
+  const opt = errs(three);
+  assert.equal(opt.length, 1, JSON.stringify(opt)); // 读不懂的那道题不再连带报「没写这道题」「retry 没排进去」
+  assert.match(opt[0].msg, /p3：options: 只收两个/);
+  const bad = run(three);
+  assert.equal(bad.status, 1, bad.stdout);
+  assert.match(bad.stdout, /1 处问题/);
+});

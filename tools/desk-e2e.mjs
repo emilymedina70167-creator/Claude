@@ -16,8 +16,10 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildPaper } from '../kit/src/exam/ingest.js';
-import { DEV_CHECK, DEV_CHECK_HEAD, DEV_CHECK_BODY } from '../kit/src/check/devsample.js';
-import { parseCheck } from '../kit/src/check/spec.js';
+import { DEV_CHECK, DEV_CHECK_HEAD, DEV_CHECK_BODY, DEV_CHECK_408, DEV_CHECK_EN, DEV_CHECK_EN_HEAD, DEV_CHECK_EN_BODY } from '../kit/src/check/devsample.js';
+import { parseCheck, traceTable } from '../kit/src/check/spec.js';
+import { parseItemIds } from '../kit/src/check/judge.js';
+import { measure, variantValues } from '../kit/src/engines/measures.js';
 import { bankDocs } from '../kit/src/check/bank.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -134,6 +136,109 @@ async function plant(t, docs) {
     localStorage.setItem(k, JSON.stringify(all));
   }, docs);
 }
+// 计划 4：408、英语的检验样板（devsample.js；?dev 的暗号「测试:检验408」「测试:检验英语」写的就是这两条）放进一节外部的课，做完一遍
+const ckCard = (t) => t.page.evaluate(() => { const c = document.querySelector('.ck-teach, .ck-done, .ck-probe'); return c ? (c.classList.contains('ck-teach') ? 'teach' : c.classList.contains('ck-done') ? 'done' : c.dataset.probe) : ''; });
+const ckSure = (t) => t.page.click('.ck-sure-btn[data-sure="sure"]');
+async function ckSubmit(t) { await sleep(500); await t.page.click('.ck-submit'); }
+async function ckType(t, sel, text) { const tab = await t.page.$('.ck-card .ck-tab[data-tab="type"]'); if (tab) await tab.click(); await t.page.fill(sel, text); }
+async function ckOpen(t, sid, today, block, space, text) {
+  // 页面开着（上一段停在「以前的课」）：从另一页写，免得开着的那页拿手上的旧副本盖掉
+  await plantLive(t, {
+    [`sessions/${sid}`]: { date: today, kind: 'ext', status: 'open', block, title: `外部（检验 ${space}）`, space, startedAt: Date.now() },
+    [`sessions/${sid}/ext_in/001`]: { seq: 1, text: `检验。\n\n${text}\n`, at: Date.now() },
+  });
+  await t.open(sid);
+  await t.waitFor(() => t.page.$('.ck-start'), { timeout: 20000, what: '检验的开始卡' });
+  await sleep(500);
+  await t.page.click('.ck-start');
+}
+async function ckDone(t, sid, cid, block) {
+  await t.waitFor(async () => (await ckCard(t)) === 'done', { timeout: 30000, what: `检验 ${cid} 做完了` });
+  const key = `absorb/${block.replace(/#/g, '~')}`;
+  const all = await t.waitFor(async () => { const d = await t.db(); return d[key] ? d : null; }, { timeout: 15000, what: `${key} 写进去了` });
+  const evs = Object.values(all).filter((d) => d?.src === 'check' && d.session === sid && d.check === cid);
+  const outs = await t.waitFor(async () => { const o = Object.entries(await t.db()).filter(([k]) => k.startsWith(`sessions/${sid}/ext_out/`)).map(([, v]) => v.text).join('\n'); return new RegExp(`检验 ${cid}.*做完了`).test(o) ? o : null; }, { timeout: 10000, what: `ext_out 写了检验 ${cid} 做完了` });
+  return { all, evs, absorb: all[key], outs };
+}
+const ckState = async (t, sid, cid) => (await t.db())[`sessions/${sid}/check/${cid}`]?.state || null;
+async function check408(t, today) {
+  const sid = `c-${today.replace(/-/g, '')}-5`;
+  await ckOpen(t, sid, today, 'DS-L8.2.3', 'cs', DEV_CHECK_408);
+  await t.waitFor(async () => (await ckCard(t)) === 'p1', { timeout: 8000, what: '408：trace 那一道' });
+  // 模板取的数在存着的进度里：照它算整张表（和页面同一个 traceTable）
+  const st = await t.waitFor(async () => { const s = await ckState(t, sid, 'k408'); return s?.check?.probes?.p1 ? s : null; }, { timeout: 8000, what: '检验的进度存下来了' });
+  const rows = traceTable(st.check.probes.p1).table.rows;
+  for (let r = 0; r < rows.length; r++) for (let c = 0; c < rows[r].cells.length; c++) {
+    const cell = rows[r].cells[c];
+    if (cell.given || cell.mark) continue;
+    const v = [].concat(cell.v)[0];
+    await t.page.fill(`.ck-card .sv-fill-in[data-r="${r}"][data-c="${c}"]`, v === '' ? '-' : String(v));
+  }
+  await ckSure(t); await ckSubmit(t);
+  // construct：一排有序的数（排完稳定）→ 补讲；retry p2a 写两个 49 → 作答下面写「页面把第二个 49 记成 49′」，过了
+  await t.waitFor(async () => (await ckCard(t)) === 'p2', { timeout: 8000, what: '408：construct 那一道' });
+  const slots = async (a, p) => { const ins = await t.page.$$('.ck-card .ck-slot input'); await ins[0].fill(a); await ins[1].fill(p); };
+  await slots('1 2 3 4 5 6 7 8', '1 1'); await ckSure(t); await ckSubmit(t);
+  await t.waitFor(async () => (await ckCard(t)) === 'teach', { timeout: 8000, what: 'construct 错了出补讲' });
+  check(/相同的数先后没变/.test(await t.text('.ck-teach')), 'construct 的补讲没写外部的那句');
+  await sleep(500); await t.page.click('.ck-next');
+  await t.waitFor(async () => (await ckCard(t)) === 'p2a', { timeout: 8000, what: 'construct 的 retry' });
+  await slots('13 97 49 49 27 38', '49 49');
+  check(/记成 49′/.test((await t.text('.ck-card .ck-note')) || ''), '一排数里有两个 49，作答下面没写「页面把第二个 49 记成 49′」');
+  await ckSure(t); await ckSubmit(t);
+  // predict：数组写成「相邻的分成一组」算出来的 → 页面认出错法（tag shellBlock），补讲照 teach tag=shellBlock
+  await t.waitFor(async () => (await ckCard(t)) === 'p3', { timeout: 8000, what: '408：predict 那一道' });
+  const pass1 = (p, key) => { const f = { algo: 'shell', gaps: '3', array: p.runs[0].fields.array }; return [].concat(key ? variantValues('sort', f, key).values.pass1 : measure('sort', f).values.pass1).join(' '); };
+  const predict = async (x2, why) => { const ins = await t.page.$$('.ck-card .ck-in'); await ins[0].fill('2 5 8'); await ins[1].fill(x2); await ckType(t, '.ck-card .ck-text', why); };
+  await predict(pass1((await ckState(t, sid, 'k408')).check.probes.p3, 'shellBlock'), '相隔 3 的是一组'); await ckSure(t); await ckSubmit(t);
+  await t.waitFor(async () => (await ckCard(t)) === 'teach', { timeout: 8000, what: 'predict 写了错法的数组出补讲' });
+  check(/不是连着的一段/.test(await t.text('.ck-teach')), `predict 认出错法以后补讲不是 tag=shellBlock 那一条：${(await t.text('.ck-teach')).slice(0, 200)}`);
+  await sleep(500); await t.page.click('.ck-next');
+  await t.waitFor(async () => (await ckCard(t)) === 'p3~2', { timeout: 8000, what: 'predict 的 retry（换一组数的同一道）' });
+  await predict(pass1((await ckState(t, sid, 'k408')).check.probes['p3~2']), '相隔 3 的是一组：第 2、5、8 个'); await ckSure(t); await ckSubmit(t);
+  // tradeoff：要点交页面里的 Claude（模拟的都对）
+  await t.waitFor(async () => (await ckCard(t)) === 'p4', { timeout: 15000, what: '408：tradeoff 那一道' });
+  await ckType(t, '.ck-card .ck-text', '大间隔先消掉离得远的逆序，最后一趟几乎不用挪；链表不能按下标隔 d 取元素'); await ckSure(t); await ckSubmit(t);
+  const { evs, absorb } = await ckDone(t, sid, 'k408', 'DS-L8.2.3');
+  check(['部分', '待核'].includes(absorb.state), `DS-L8.2.3 的吸收：${absorb.state}`);
+  for (const id of ['p1', 'p2', 'p2a', 'p3', 'p3~2', 'p4']) check(evs.some((e) => e.probe === id), `408 的 ${id} 没写证据（src: check）`);
+  const ev3 = evs.find((e) => e.probe === 'p3');
+  check(ev3?.items?.find((x) => x.id === 'x2')?.tag === 'shellBlock', `predict 的证据没认出错法：${JSON.stringify(ev3?.items)}`);
+  check(evs.find((e) => e.probe === 'p1')?.picked, 'trace 模板的证据没记取的数');
+}
+async function checkEn(t, today) {
+  const sid = `c-${today.replace(/-/g, '')}-4`;
+  const en = parseCheck(DEV_CHECK_EN_HEAD, DEV_CHECK_EN_BODY).check;
+  await ckOpen(t, sid, today, 'EN-L1.2.3', 'en', DEV_CHECK_EN);
+  // parse：先点头一个词、再点尾一个词、再点成分
+  await t.waitFor(async () => (await ckCard(t)) === 'p1', { timeout: 8000, what: '英语：parse 那一道' });
+  for (const { span } of parseItemIds(en.probes.p1)) {
+    await t.page.click(`.ck-card .pz-w[data-i="${span.from}"]`);
+    await t.page.click(`.ck-card .pz-w[data-i="${span.to}"]`);
+    await t.page.click(`.ck-card .pz-role[data-role="${span.role}"]`);
+  }
+  await ckSure(t); await ckSubmit(t);
+  await t.waitFor(async () => (await ckCard(t)) === 'p2', { timeout: 8000, what: '英语：rewrite 那一道' });
+  await ckType(t, '.ck-card .ck-text', 'The bridge was built by the villagers in 1990.'); await ckSure(t); await ckSubmit(t);
+  await t.waitFor(async () => (await ckCard(t)) === 'p3', { timeout: 15000, what: '英语：discriminate 那一道' });
+  await t.page.click('.ck-card .ck-pick[data-v="非谓语"]'); await ckType(t, '.ck-card .ck-text', '谓语是 show，collected 修饰 data'); await ckSure(t); await ckSubmit(t);
+  // errfind：点对了词、改成常见的错法 knew → 补讲；retry 点对改对
+  const errfind = async (id, fix) => {
+    await t.waitFor(async () => (await ckCard(t)) === id, { timeout: 15000, what: `英语：errfind ${id}` });
+    await t.page.click(`.ck-card .en-word[data-i="${en.probes[id].wordAt}"]`);
+    await t.page.fill('.ck-card .ck-fixrow .ck-in', fix); await ckSure(t); await ckSubmit(t);
+  };
+  await errfind('p4', 'knew');
+  await t.waitFor(async () => (await ckCard(t)) === 'teach', { timeout: 8000, what: 'errfind 改成 knew 出补讲' });
+  check(/known/.test(await t.text('.ck-teach')), 'errfind 的补讲不是外部写的那一条');
+  await sleep(500); await t.page.click('.ck-next');
+  await errfind('p4a', 'written');
+  const { evs, absorb } = await ckDone(t, sid, 'ken', 'EN-L1.2.3');
+  check(['部分', '待核'].includes(absorb.state), `EN-L1.2.3 的吸收：${absorb.state}`);
+  for (const id of ['p1', 'p2', 'p3', 'p4', 'p4a']) check(evs.some((e) => e.probe === id), `英语的 ${id} 没写证据（src: check）`);
+  check(evs.find((e) => e.probe === 'p1')?.outcome === 'pass', 'parse 一次过的证据不是 pass');
+}
+
 /** 页面开着的时候往替身数据库里放（像别的设备写的）：在同一个站点的另一页里写，开着的那页收到 storage 事件重读，不会被它手上的旧副本盖掉 */
 async function plantLive(t, docs) {
   const p = await t.ctx.newPage();
@@ -1251,6 +1356,8 @@ const SUITES = {
     check(/吸收：未/.test(await t.text('.dk-shell') || await t.page.evaluate(() => document.body.innerText)), '以前的课里没写吸收');
     await t.page.click('[data-ckreplay]');
     await t.waitFor(() => t.page.$('.ck-replay canvas'), { timeout: 8000, what: '回放画出来' });
+    await check408(t, today);
+    await checkEn(t, today);
     return t;
   },
 

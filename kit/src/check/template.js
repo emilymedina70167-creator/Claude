@@ -5,10 +5,11 @@
 // 局部 id：模板排进 block / spare 的那一次叫它自己（p1），retry 里每多用一次叫 p1~2、p1~3（只当 retry 用的，第一次叫它自己）；
 // 外部自己写了 p1~2 这样的 id 时让开（接着往后数）。同一个模板的几次（复测里拆成了几道同一份原文的题也算）两两不取一样的数。
 // 每一道取好数的题 src 还是模板的原文：题库编号照旧（见过一次就算见过：换数不算新题，rule-rev-2）。
-import { drawProbe, probeProblems } from './spec.js';
+import { drawProbe, probeProblems, DRAW_TRIES } from './spec.js';
 import { bankId, fenceOf } from './bank.js';
 
-export const DRAW_TRIES = 20; // 一道取了数自检不过（某一组数下 example 不满足、\calc 算不出来），最多重取几次
+// 一道取了数自检不过（example 不满足、\calc 算不出来、用到的量有并列、against 的错法分不开）最多重取几次：和自检共用一个数
+export { DRAW_TRIES };
 
 /** 一条 check 里的模板都取好数：返回 { check（没有模板的原样还回去）, errors } */
 export function materialize(check, { base = {}, rand = Math.random } = {}) {

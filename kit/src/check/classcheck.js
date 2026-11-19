@@ -1,6 +1,6 @@
 // 检验接进课堂（外部的课、页面里的老师的课）：board check 执行时开外壳、合书、判分调页面里的 Claude、写 ext_out、刷新接着做、
 // board judge 指到检验里的题时改判。classroom.js 只调这里的 start / judge / has / resume（和计划 1 同时改的文件只加入口）
-import { selfCheck } from './spec.js';
+import { selfCheck, baseType } from './spec.js';
 import { materialize } from './template.js';
 import { step } from './flow.js';
 import { claudeIds, verdictPrompt, parseVerdict, fallbackPrompt } from './judge.js';
@@ -46,7 +46,7 @@ export function createClassCheck({ root, db, desk = null, call, tell = () => {},
     if (!canJudge(answer, images)) return null; // 手写的图取不到（上传失败、刷新以后取不回）又没打字：不猜，待核
     const res = await call(verdictPrompt({ probe, answer, ids, images: images.length }), images.length ? { images } : {});
     if (!res) return null;
-    const r = parseVerdict(res.text, ids, { steps: probe.type === 'solve' });
+    const r = parseVerdict(res.text, ids, { steps: baseType(probe) === 'solve' });
     return { items: r.items, lines: r.lines, judgedBy: 'claude', text: res.text };
   }
   async function fallback(probe, answer, items) {

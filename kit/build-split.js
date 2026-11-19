@@ -37,7 +37,8 @@ export function splitProject(markdown, { kitUrl = '', extra = {} } = {}) {
     const names = sectionNames(sec.head.split(/[：:]/)[0]);
     if (names.length) sec.names = names;
     // let、公式里的 \calc / \hl / \chalk 每节课都用：主说明里也留一份
-    if (sec.names.some((n) => INLINE.includes(n))) keep.push(strip(sec.body));
+    // 只看第一个名字：「408 的检验题」的标题里也有 calc（探题的题型），那一节不是公式里的 \calc
+    if (INLINE.includes(sec.names[0])) keep.push(strip(sec.body));
     const file = fileOf(sec);
     const text = strip([...sec.body, ...(sec.detail || [])]);
     files[file] = files[file] ? `${files[file]}\n\n${text}` : `${text}\n`;

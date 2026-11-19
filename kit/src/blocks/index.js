@@ -56,6 +56,10 @@ export const blocks = {
   claim: previewBlock('claim'),
   discriminate: previewBlock('discriminate'),
   locate: previewBlock('locate'),
+  // 408、英语的检验题里只有这三种单独写在板上画预览；trace predict code parse translate errfind 单独写照旧是一类组件
+  tradeoff: previewBlock('tradeoff'),
+  rewrite: previewBlock('rewrite'),
+  calc: previewBlock('calc'),
   // 一步步走的演示（stepper.js 外壳 + engines/ 里的纯函数引擎，名字在 engines/registry.js）
   ...Object.fromEntries(Object.entries(ENGINES).filter(([k]) => k !== 'elim' && k !== 'pv').map(([k, e]) => [k, stepperBlock(e)])),
   elim: elimBlock(),

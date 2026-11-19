@@ -81,7 +81,7 @@ export function docSections(docs) {
     if (f) { open = f; into(line); continue; }
     if (/^#{1,3}\s/.test(line)) {
       push();
-      cur = { head: line, names: /^###\s/.test(line) ? sectionNames(line) : [], tags: null, body: [line], detail: null };
+      cur = { head: line, names: /^###\s/.test(line) ? headNames(line) : [], tags: null, body: [line], detail: null };
       continue;
     }
     const tag = parseTag(line);
@@ -137,6 +137,10 @@ export function detailNames(docs, subject) {
   return docSections(docs).filter((s) => s.detail && forSubject(s, key)).flatMap((s) => s.names);
 }
 
+// 小节的组件名只看标题冒号前面那段（和发布拆分 kit/build-split.js 一样）：「### tradeoff、calc：408 的检验题（块里的 trace、predict…也在这一节）」
+// 后面提到的 trace 不算，component_doc trace 只给一类组件那一节；冒号前面没有英文词的（「公式里的三个工具：`\calc`…」）才看整行
+const headNames = (line) => { const before = sectionNames(String(line).split(/[：:]/)[0]); return before.length ? before : sectionNames(line); };
+
 /**
  * 一个组件的完整说明（精简版 + 完整写法）：标题里有这个名字的小节都算（answer 和「answer 的线代写法」），
  * 只要这门课的。找不到返回 null。
@@ -148,7 +152,8 @@ export function componentDoc(docs, name, subject) {
   const all = docSections(docs).filter((s) => forSubject(s, key));
   let secs = all.filter((s) => s.names.includes(n));
   // 中文的名字（「演示组件」「表达式」）：标题里有就算
-  if (!secs.length) secs = all.filter((s) => /^###\s/.test(s.head) && s.head.toLowerCase().includes(n));
+  // （英文的组件名不走这条：「408 的检验题」的标题后半提到 trace、predict，不能当成它们的说明）
+  if (!secs.length && !/^[a-z][\w-]*$/.test(n)) secs = all.filter((s) => /^###\s/.test(s.head) && s.head.toLowerCase().includes(n));
   if (!secs.length) return null;
   return secs.map((s) => tidy([...s.body, ...(s.detail || [])])).join('\n\n');
 }

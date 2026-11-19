@@ -11,6 +11,7 @@ import {
   parsePoints, judgeTranslation, translationHint,
 } from '../entext.js';
 import { getAI } from '../ai.js';
+import { bracketHtml, spanPicker, wordPicker } from './enpick.js';
 
 // 复核用的模型：和课堂讲课一样只用 Opus 5.5（课堂里不许别的模型「讲课」），回来的不是它就当没复核
 const REGRADE_MODEL = 'claude-opus-5-5';
@@ -110,7 +111,7 @@ export function errfind(el, src) {
   const body = widget(el, { title, cls: 'en-errfind' });
   body.innerHTML = `
     ${fields.q ? `<div class="w-q">${mdToHtml(fields.q)}</div>` : '<div class="w-q">点出用错的那个词。</div>'}
-    <div class="en-words">${toks.map((t) => (t.word ? `<button type="button" class="en-word" data-i="${t.i}">${escapeHtml(t.w)}</button>` : `<span class="en-punct">${escapeHtml(t.w)}</span>`)).join(' ')}</div>
+    <div class="en-pick"></div>
     ${fixes.length ? `<label class="en-fix" hidden><span>改成</span><input class="en-fix-in" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${canDelete ? '改成什么；多了就写「删」' : ''}"><button type="button" class="btn btn-sm en-del">删掉这个词</button></label>` : ''}
     <div class="ans-actions"><button type="button" class="btn btn-primary en-check" disabled>提交</button><button type="button" class="btn en-show" hidden>看答案</button></div>
     <div class="q-feedback" hidden></div>`;
@@ -121,17 +122,22 @@ export function errfind(el, src) {
   const word = (i) => toks[i]?.w || '';
   const now = () => `点了「${word(pick)}」${fixIn ? `，改成「${fixIn.value.trim()}」` : ''}`;
   markDraft(body, () => (!closed && pick >= 0 && now() !== tried ? `${now()}，还没提交` : ''));
-  body.querySelectorAll('.en-word').forEach((b) => b.addEventListener('click', () => {
-    if (closed) return;
-    pick = +b.dataset.i;
-    body.querySelectorAll('.en-word').forEach((x) => x.classList.toggle('is-picked', x === b));
-    if (fixIn) { body.querySelector('.en-fix').hidden = false; fixIn.focus({ preventScroll: true }); }
-    body.querySelector('.en-check').disabled = false;
-  }));
+  // 点词（enpick.js，检验里的 errfind 也用它）：换成一排词放回原来的位置
+  const holder = body.querySelector('.en-pick');
+  const words = wordPicker(holder, toks, {
+    onPick: (i) => {
+      if (closed) return;
+      pick = i;
+      if (fixIn) { body.querySelector('.en-fix').hidden = false; fixIn.focus({ preventScroll: true }); }
+      body.querySelector('.en-check').disabled = false;
+    },
+  });
+  holder.replaceWith(words.el);
   const finish = (ok, revealed = false) => {
     if (closed) return;
     closed = true;
     done();
+    words.lock();
     session.record({ type: 'errfind', final: true, title, q: short(text, 200), ok, attempts, revealed: revealed || undefined, value: pick >= 0 ? now() : '', expected: `${word(wrongAt)}${fixes.length ? ` → ${fixes[0]}` : ''}`, el });
   };
   const check = () => {
@@ -145,7 +151,8 @@ export function errfind(el, src) {
     const badFix = spot && !fixR.ok && fixIn ? diagnose(fixIn.value, fixWrongs) : null;
     const misread = decoy ? `点了常见的错处「${decoy.w}」：${decoy.why}` : badFix ? `改成了常见的错法「${badFix.text}」${badFix.why ? `：${badFix.why}` : ''}` : '';
     session.record({ type: 'errfind', liveOnly: true, title, q: short(text, 200), value: tried, ok, attempts, detail: spot ? (fixR.ok ? '' : '找对了，改得不对') : '这个词没错', misread: misread || undefined, el });
-    body.querySelectorAll('.en-word').forEach((x) => { x.classList.toggle('is-wrong', +x.dataset.i === pick && !spot); x.classList.toggle('is-right', +x.dataset.i === pick && spot); });
+    words.toggle('is-wrong', (i) => i === pick && !spot);
+    words.toggle('is-right', (i) => i === pick && spot);
     fb.hidden = false;
     fb.className = `q-feedback ${ok ? 'is-ok' : 'is-bad'}`;
     fb.innerHTML = verdict(ok, ok ? '' : !spot ? `「${word(pick)}」用得没错${decoy ? `：${decoy.why}` : '，错的是别的词'}` : fixR.empty ? '找对了，写一下改成什么' : `找对了，改得不对${badFix?.why ? `：${badFix.why}` : ''}`) + (ok && fields.explain ? mdToHtml(fields.explain) : '');
@@ -156,7 +163,7 @@ export function errfind(el, src) {
   fixIn?.addEventListener('keydown', (e) => { if (e.key === 'Enter') check(); });
   body.querySelector('.en-del')?.addEventListener('click', () => { if (!closed && fixIn) { fixIn.value = '（删掉）'; fixIn.focus({ preventScroll: true }); } });
   body.querySelector('.en-show').addEventListener('click', () => {
-    body.querySelectorAll('.en-word').forEach((x) => x.classList.toggle('is-answer', +x.dataset.i === wrongAt));
+    words.toggle('is-answer', (i) => i === wrongAt);
     fb.hidden = false;
     fb.className = 'q-feedback is-reveal';
     fb.innerHTML = `<div>错在「${escapeHtml(word(wrongAt))}」${fixes.length ? `，改成「${escapeHtml(fixes.join(' / '))}」` : ''}</div>${fields.explain ? mdToHtml(fields.explain) : ''}`;
@@ -166,19 +173,6 @@ export function errfind(el, src) {
 }
 
 /* ---------------- parse：句子成分标注 ---------------- */
-
-// 一句话按成分画成「[主语 The man [定语从句 who lives next door]] [谓语 gave] …」：括号随着换行走，套几层都看得清
-function bracketHtml(tokens, spans, roles, { cls = () => '' } = {}) {
-  const color = (k) => `pz-c${Math.max(0, roles.findIndex((r) => r.key === k)) % 6}`;
-  const name = (k) => roles.find((r) => r.key === k)?.name || k;
-  const out = [];
-  tokens.forEach((t, i) => {
-    for (const s of spans.filter((x) => x.from === i).sort((a, b) => b.to - a.to)) out.push(`<span class="pz-open ${color(s.role)} ${cls(s)}">[<small>${escapeHtml(name(s.role))}</small></span>`);
-    out.push(t.word ? `<button type="button" class="pz-w" data-i="${i}">${escapeHtml(t.w)}</button>` : `<span class="en-punct">${escapeHtml(t.w)}</span>`);
-    for (const s of spans.filter((x) => x.to === i).sort((a, b) => a.from - b.from)) out.push(`<span class="pz-close ${color(s.role)} ${cls(s)}">]</span>`);
-  });
-  return out.join(' ');
-}
 
 export function parse(el, src) {
   const { fields } = parseFields(src);
@@ -198,15 +192,18 @@ export function parse(el, src) {
   const body = widget(el, { title, cls: 'en-parse' });
   body.innerHTML = `
     ${fields.q ? `<div class="w-q">${mdToHtml(fields.q)}</div>` : ''}
-    <div class="pz-help muted">点一个词定起点，再点一个词定终点，然后点成分；点板上的「[成分」能去掉那一段。从句里的成分可以再标一层。</div>
-    <div class="pz-sent en-words"></div>
-    <div class="pz-roles">${roles.map((r, k) => `<button type="button" class="btn btn-sm pz-role pz-c${k % 6}" data-role="${escapeHtml(r.key)}" disabled>${escapeHtml(r.name)}</button>`).join('')}</div>
+    <div class="pz-slot"></div>
     <div class="ans-actions"><button type="button" class="btn btn-primary en-check" disabled>检查</button><button type="button" class="btn pz-clear">清空</button><button type="button" class="btn en-show" hidden>看答案</button></div>
     <div class="q-feedback" hidden></div>`;
-  const sent = body.querySelector('.pz-sent');
   const fb = body.querySelector('.q-feedback');
   const done = session.gate(el, title);
-  let mine = [], sel = null, attempts = 0, closed = false, last = null, tried = '';
+  let attempts = 0, closed = false, last = null, tried = '';
+  // 点词标成分（enpick.js，检验里的 parse 也用它）：说明、句子、成分按钮放回原来的位置
+  const slot = body.querySelector('.pz-slot');
+  const pick = spanPicker(slot, { tokens: ans.tokens, roles, onChange: () => { last = null; sync(); } });
+  slot.replaceWith(...pick.el.childNodes);
+  const sync = () => { body.querySelector('.en-check').disabled = closed || pick.empty(); };
+  const mine = () => pick.raw();
   const markup = (spans) => {
     // 学生标的写回括号写法（记录、草稿里给老师看）
     const words = ans.tokens.map((t) => t.w);
@@ -214,67 +211,27 @@ export function parse(el, src) {
     for (const s of [...spans].sort((a, b) => a.from - b.from || b.to - a.to)) { open[s.from].push(s.role); close[s.to]++; }
     return joinWords(words.map((w, i) => `${open[i].map((r) => `[${r} `).join('')}${w}${']'.repeat(close[i])}`));
   };
-  markDraft(body, () => (!closed && mine.length && markup(mine) !== tried ? `标了 ${markup(mine)}，还没检查` : ''));
-  function draw() {
-    const cls = (s) => (last ? (last.right.includes(s) ? 'is-right' : 'is-wrong') : '');
-    sent.innerHTML = bracketHtml(ans.tokens, mine, roles, { cls });
-    sent.querySelectorAll('.pz-w').forEach((b) => {
-      const i = +b.dataset.i;
-      b.classList.toggle('is-sel', !!sel && i >= sel.from && i <= (sel.to ?? sel.from));
-    });
-    body.querySelectorAll('.pz-role').forEach((b) => { b.disabled = closed || !sel || sel.to === undefined; });
-    body.querySelector('.en-check').disabled = closed || !mine.length;
-  }
-  sent.addEventListener('click', (e) => {
-    if (closed) return;
-    const open = e.target.closest('.pz-open');
-    if (open) {
-      // 去掉这一段：按它在板上的位置找（同一个词前面可能开了几段）
-      const opens = [...sent.querySelectorAll('.pz-open')];
-      const k = opens.indexOf(open);
-      const order = [...mine].sort((a, b) => a.from - b.from || b.to - a.to);
-      mine = mine.filter((s) => s !== order[k]);
-      last = null;
-      draw();
-      return;
-    }
-    const w = e.target.closest('.pz-w');
-    if (!w) return;
-    const i = +w.dataset.i;
-    if (!sel || sel.to !== undefined) sel = { from: i };
-    else sel = { from: Math.min(sel.from, i), to: Math.max(sel.from, i) };
-    draw();
-  });
-  body.querySelector('.pz-roles').addEventListener('click', (e) => {
-    const b = e.target.closest('.pz-role');
-    if (!b || closed || !sel || sel.to === undefined) return;
-    // 头尾的标点不算进去
-    let { from, to } = sel;
-    while (from < to && !ans.tokens[from].word) from++;
-    while (to > from && !ans.tokens[to].word) to--;
-    mine = [...mine.filter((s) => !(s.from === from && s.to === to)), { role: b.dataset.role, from, to }];
-    sel = null;
-    last = null;
-    draw();
-  });
-  body.querySelector('.pz-clear').addEventListener('click', () => { if (closed) return; mine = []; sel = null; last = null; draw(); });
+  markDraft(body, () => (!closed && mine().length && markup(mine()) !== tried ? `标了 ${markup(mine())}，还没检查` : ''));
+  body.querySelector('.pz-clear').addEventListener('click', () => { if (!closed) pick.clear(); });
   const finish = (ok, revealed = false) => {
     if (closed) return;
     closed = true;
     done();
-    session.record({ type: 'parse', final: true, title, q: short(ans.text, 200), ok, attempts, revealed: revealed || undefined, value: markup(mine), expected: markup(ans.spans), el });
-    draw();
+    session.record({ type: 'parse', final: true, title, q: short(ans.text, 200), ok, attempts, revealed: revealed || undefined, value: markup(mine()), expected: markup(ans.spans), el });
+    pick.lock();
+    sync();
   };
   body.querySelector('.en-check').addEventListener('click', () => {
-    if (closed || !mine.length) return;
+    if (closed || pick.empty()) return;
     attempts++;
-    tried = markup(mine);
-    last = judgeSpans(mine, ans.spans);
+    tried = markup(mine());
+    last = judgeSpans(mine(), ans.spans);
     session.record({ type: 'parse', liveOnly: true, title, q: short(ans.text, 200), value: tried, ok: last.ok, attempts, detail: spansHint(last, roles), el });
     fb.hidden = false;
     fb.className = `q-feedback ${last.ok ? 'is-ok' : 'is-bad'}`;
     fb.innerHTML = verdict(last.ok, last.ok ? '' : spansHint(last, roles)) + (last.ok && fields.explain ? mdToHtml(fields.explain) : '');
-    draw();
+    const res = last;
+    pick.mark((s) => (res.right.includes(s) ? 'is-right' : 'is-wrong'));
     if (last.ok) finish(true);
     else if (attempts >= 2) body.querySelector('.en-show').hidden = false;
   });
@@ -285,7 +242,7 @@ export function parse(el, src) {
     body.querySelector('.en-show').hidden = true;
     finish(false, true);
   });
-  draw();
+  sync();
 }
 
 // 分步拆句：第 k 步只标 groups[k] 里的成分；前面几步的答案固定在句子上（不能删）。哪一步错了停在哪一步

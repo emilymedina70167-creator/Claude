@@ -1465,7 +1465,7 @@ export async function renderDesk(root, meta) {
     const due = dueRetests(data.absorb || [], today);
     const pick = due.length ? pickRetest({ due, bank: data.probes || [], absorbs: data.absorb || [] }) : { items: [], missing: [] };
     box.innerHTML = !due.length ? '<p class="muted">今天没有到期的复测。</p>'
-      : `<p>${due.map((r) => `${escapeHtml(blockTitle(r.block))}（隔 ${r.days} 天）`).join('、')} · ${pick.items.length} 道</p>${pick.missing.length ? `<p class="muted">缺新题：${pick.missing.map((m) => escapeHtml(`${m.block} 的 ${String(m.family).slice(String(m.block).length + 1)} 那一类`)).join('、')}（题库里没有没见过的同类题，主讲补）</p>` : ''}${pick.items.length ? '<button type="button" class="btn btn-primary dk-retest-go">开始</button>' : ''}`;
+      : `<p>${due.map((r) => `${escapeHtml(blockTitle(r.block))}（隔 ${r.days} 天）`).join('、')} · ${pick.items.length} 道</p>${pick.missing.length ? `<p class="muted">缺新题：${pick.missing.map((m) => escapeHtml(`${m.block} 的 ${String(m.family).slice(String(m.block).length + 1)} 那一类${m.why === '只剩换数的模板' ? '（只剩见过的模板：复测换一组数做，主讲补新题）' : '（题库里没有没见过的同类题，主讲补）'}`)).join('、')}</p>` : ''}${pick.items.length ? '<button type="button" class="btn btn-primary dk-retest-go">开始</button>' : ''}`;
     box.querySelector('.dk-retest-go')?.addEventListener('click', () => openOne(async () => {
       const d = toDate(Date.now());
       const due2 = dueRetests(data.absorb || [], d);
@@ -1475,7 +1475,7 @@ export async function renderDesk(root, meta) {
       if (active) return active.id;
       const sid = sessionId(d, takenIds());
       assertWrite('page', 'sessions');
-      await db.doc(`sessions/${sid}`).set({ kind: 'check', date: d, space: spaceOfId(due2[0].block), block: due2[0].block, retest: due2.map((r) => ({ block: r.block, days: r.days })), items: p2.items, title: '复测', status: 'open', startedAt: Date.now() });
+      await db.doc(`sessions/${sid}`).set({ kind: 'check', date: d, space: spaceOfId(due2[0].block), block: due2[0].block, retest: due2.map((r) => ({ block: r.block, days: r.days })), items: p2.items, ...(p2.renumbered?.length ? { renumbered: p2.renumbered } : {}), title: '复测', status: 'open', startedAt: Date.now() });
       return sid;
     }));
   }

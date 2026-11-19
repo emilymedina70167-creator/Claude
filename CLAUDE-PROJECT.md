@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-19c**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-19d**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -409,7 +409,7 @@ teach if1: 可交换的两个矩阵两边一定相等，换一组不可交换的
 retry: p4a, p4b
 ```
 
-**换数的模板**：题里写 `pick` / `where`（写法同 `practice` 的 `type: custom`：`pick k = int(2, 5)`，还有 `choice` `vec` `mat`；`where 条件` 不满足就重取；`let` 能用取到的数，按精确值算），这道题就是模板，每用一次另取一组数。题面、要点、`teach`、`if` 的话里写 `\calc{k}`（`$…$` 里的写成 TeX，公式外面的写成数）；`example` 用取到的数写（`A=[[k,0],[0,0]]`）。执行时页面先取几组数验一遍，开检验时每一处都取好数存进进度（刷新、改判照它，不再变）。`retry` 能写同一个模板两次，也能写这道题自己（`retry: p5, p5`：数字不同、结构一样的同构题）；用到的局部 id 是 `p5`、`p5~2`、`p5~3`（`board judge target=p5~2` 照它）。证据里多 `picked`（取到的数，「k=3」）和 `template`（模板的 id）。题库里一个模板是一道题：见过一次就算见过，复测不再挑它（换数不算新题）；复测出的题，它的 retry 是模板的照样另取数。
+**换数的模板**：题里写 `pick` / `where`（写法同 `practice` 的 `type: custom`：`pick k = int(2, 5)`，还有 `choice` `vec` `mat`；`where 条件` 不满足就重取；`let` 能用取到的数，按精确值算），这道题就是模板，每用一次另取一组数。题面、要点、`teach`、`if` 的话里写 `\calc{k}`（`$…$` 里的写成 TeX，公式外面的写成数）；`example` 用取到的数写（`A=[[k,0],[0,0]]`）。执行时页面先取几组数验一遍，开检验时每一处都取好数存进进度（刷新、改判照它，不再变）。`retry` 能写同一个模板两次，也能写这道题自己（`retry: p5, p5`，也写成 `retry: self × 2`，N 最多 6：数字不同、结构一样的同构题）；用到的局部 id 是 `p5`、`p5~2`、`p5~3`（`board judge target=p5~2` 照它）。证据里多 `picked`（取到的数，「k=3」）和 `template`（模板的 id）。题库里一个模板是一道题：见过一次就算见过，复测不再挑它（换数不算新题）；复测出的题，它的 retry 是模板的照样另取数。
 
 ```construct
 id: p5
@@ -427,6 +427,289 @@ retry: p5, p5
 ```
 
 我写字的地方有「手写 / 打字」两个页签（这台设备用过 Pencil 默认手写）。手写板记每一笔的时间；改错用「划掉」（留痕），「撤一下」只撤 5 秒内的一笔、3 秒内的划掉；「下一步」记一个分步的时刻；「加一页」往下加。交的时候页面从笔画算：整页图（划掉的灰色带线、左边行号 L1、L2…）、关键时刻的快照（停顿超过 `pause`、每次划掉之前、每次下一步，最多 6 张）、一段时间线文字，图传进 assets。
+
+### tradeoff、calc：408 的检验题（块里的 trace、predict、construct、code 也在这一节）
+
+<!-- 科目：数据结构 操作系统 组成原理 计网 -->
+
+只在 `board check`（第五节）里能作答；字段、引擎交的量、计数口径在完整写法里。
+
+<!-- 完整写法 -->
+
+外壳和数学的检验题（`recall` 那一节）一样：合书、第一次作答算数、没有提示和「看答案」，错了显示你写的 teach 再出一道 retry。
+
+共用的字段：`id`、`q`、`target`（打的哪个典型错法）、`level`（`基础` / `方法` / `核心`）、`facet`（`重建` / `能用` / `边界` / `能辨`；408 的块（`DS-` `OS-` `CO-` `CN-`）里不写时：trace、predict、code、calc 能用，construct 边界，tradeoff 重建）、`teach 键: 话`、`retry`（同一种题型的同构小题；必做题至少 2 道，至少 1 条 teach）、`family`、`let`、模板的 `pick` / `where`。teach 先按这一项自己的查找顺序找（下面各题型写着），再按编号、`tag=`，最后 `default`；都没有时页面里的 Claude 写补讲。
+
+各题型：
+
+- **trace**（手推）：`use: 演示组件名`，下面原样写那个组件自己的字段（`algo: shell`、`array: …`、`gaps: …`，写法见那个组件）；我填的就是它 `mode: fill` 的那张表。可选 `rows: 2`（只填前 2 行）或 `rows: 2-3`（第 1 行给出、填第 2～3 行）、`given:` `cols:`（同 `mode: fill`）、`against: 错法短名`。组件的字段名和检验的字段撞了（sched 的 `q`、tree / thread 的 `level`、net / kmp 的 `use`、csma / mem 的 `retry`、memexp / util 的 `target`）写 `use.名字:`（`use.q: 2`）。elim、det、eig、schmidt、quad 不收（那是结果表，不是过程）。
+  - 判：整张表交一次一起判，一行一项（`r1`、`r2`…，表下面的格是 `x1`…）。第一处错的那一行没过，对上了引擎的错法 `tag` 是错法短名、话后面接错法的说法。直接插入、希尔、冒泡、简单选择：错的那一行后面每一行，页面拿「对的这一趟作用在我写的上一行上」再核（证据里那几项带 `carried: true`，`ok` 是对我自己的上一行而言；这道题照样没过）；后面全对、没对上错法、错的那一行和对的最多差 2 格，那一项 `tag: slip`，话是「后面按你自己的上一行推都对，第 k 趟这一处写错了」。别的引擎错行后面的不列。
+  - teach 键：对上错法的先找 `tag=错法短名`，笔误先找 `slip`，再找那一行（`r2`），最后 `default`。格子没填完交不了（该空着的格写 `-`）。
+- **predict**（不推，直接写结果）：`run r: 引擎 字段=值 …`（一行一个，名字只用字母和数字；值有空格加引号：`refs="1 2 3"`）；`expect [x1] 标签: 式子`（一个要我写的结果一行，编号不写自动编 x1、x2…；式子能用 `r.faults`、`r.pass1`、`let` 和模板的量，`"2 5 8"` 是字）；`wrong [w1]: 式子 => 说明`（带 `=>` 的是错答案，挂在它上面最近的那个 `expect`）；不带 `=>` 的 `wrong` 是理由里的常见错说法；`against: 错法短名, …`；可选 `must` / `may`（理由要点，页面里的 Claude 判）、`answer:`。至少一个 run、一个 expect。
+  - 判：每个 expect 一项，页面比值（见「值怎么比」）。值不对时：等于某个错法算出来的（写了 `against:` 只看那几个，没写看这个引擎全部）→ `tag` 是错法短名，话是错法的说法；等于 `wrong … =>` 的式子 → 话是那条说明；都没对上 →「标签不对」。值都对了才把理由交页面里的 Claude。某组数上错法和对的算出来一样，那个错法这组数不比。
+  - teach 键：`tag=错法短名` → `w1` → `x1` → `default`。
+- **construct**（408 的格子和量）：在数学的写法（`slots` `if` `expr` `example`，见 `recall` 那一节）上多三种格子：`seq(8)`（8 个数；不写个数最多 24 个）、`text`（一行字）、`procs(3)` / `procs(3, prio)`（3 个进程，一行一个「名字 到达时间 运行时间[ 优先级]」）；多 `run` 行（同 predict，值写格子名就换成我写的：`array=A`）；条件里用量：`r.unstable >= 1`、`P in r.flipped`（我写的这一对是 `r.flipped` 里的一对，先后不论）、`r.order == "P2 P1 P3"`。比大小 `>=` `<=` `>` `<`；比字 `==` `!=` `in`，不管空格、逗号、大小写、撇号的写法。一串（序列、字）只和格子、量、`"字"` 比，不和一个数比（`r.flipped != 0` 报写法错误，写 `r.unstable >= 1`）。不写 `against:`。teach 键 `if1`、`e1`、`run`（引擎不收我造的输入）、`default`。
+- **tradeoff**（讲取舍）：写法、判法同 `recall`（`must` 每题最多 3 条、`may`、`wrong`、`answer`），页面里的 Claude 照要点判。
+- **calc**（过程 + 最后的值）：写法同 `solve`（`q`、`steps:` 一行一步 `编号 setup|rule|calc|conclude: 内容`），多可选的 `run` 行和 `result: 式子`（最后的值，页面判，能用 `r.xxx`）。我写整道题的过程（打字或手写）和一行「最后的值」。步骤一律页面里的 Claude 逐步判，最后的值错了步骤照样判。teach 键 `result`、`s2`、`default`。照考试样子写的算法设计题（思想、代码、复杂度，手写）用 calc：`s1 setup: 思想…`、`s2 calc: 代码…`、`s3 conclude: 时间、空间复杂度`。
+- **code**（补一两行、改错）：字段同第三节 `code`（`fn` `tests` `ref` `starter` `call` `scale` `check` `check_call`）；页面真跑测试，不调页面里的 Claude。iPad 上是软键盘，这一种用来补一两行、改一处：`starter:` 写好大半、留要补 / 要改的地方，框里还是 `starter` 原样时交不了。写了 `ref:` 页面先拿它跑一遍自己的测试；没写 `ref:` 每个测试都要写 `-> 期望`。一个测试一项（`t1`…：想要什么、得到什么，或运行出错、死循环和行号），编译不过一项 `compile`。`check:` 或 `ref` 在我的输出上自己出错 → 那一项待核。不写 `must` / `may` / `wrong`，不做模板。teach 键 `t2`、`compile`、`default`。
+
+**引擎交的量**（`run` 的条件、`expect`、`result` 里写 `r.名字`；trace 的错法也照这张表的引擎）：
+
+| 引擎 | 量 | 错法短名（`against:`） |
+|---|---|---|
+| `sort` | `passes` 几趟（快排是几次划分）、`pass1` `pass2`…（第 k 趟以后的序列）、`final`、`cmp` 比较次数、`move` 移动次数（快排、归并不交）、`swap` 交换次数（只有冒泡、简单选择）、`unstable`（排完换了先后的相同数有几对）、`flipped`（那几对，「49 49′」） | 直接插入 `insertCount`；希尔 `shellBlock`；冒泡 `bubbleFront` `bubbleMin`；简单选择 `selectMax` `selectShift`；快排 `quickSwap` `quickLast`；基数 `radixMSD` `radixLIFO`；归并没有 |
+| `tree`（`bst:`） | `height`（根在第 1 层）、`leaves`、`aslSucc` | `mirror`；带 `ops: delete …` 还有 `replace` |
+| `tree`（`heap:`） | `cmp`（全部操作的比较）、`cmp1` `cmp2`…（第 k 个操作的）、`swaps`、`final`、`pass1`…（`ops` 里有 `sort` 时：堆排序第 k 趟以后） | `minHeap` / `maxHeap`、`insertBuild` |
+| `tree`（`nodes:` + `walk:`） | 不交量 | `preorder` `postorder` `levelorder` `inorder`（写的不是的那几种） |
+| `avl` | `rot`（调整几次，LR、RL 算 1 次）、`turns`（单旋几次：LL、RR 1 次，LR、RL 2 次）、`LL` `RR` `LR` `RL`、`root` | `lr2ll` `bfsign` `topmost` |
+| `paging` | `faults`、`hits`、`rate`（缺页率）、`victims`（依次换出的页） | `fifo` `lru` `opt` `clock`（写的不是的那几种）、`noInitial`；`eclock` 还有 `clearFirst` |
+| `sched` | `avgTurn`、`avgWait`、`avgWeighted`、`order`（CPU 上依次运行的进程） | `fcfs` `sjf` `srtf` `hrrn` `prio` `pprio`（写的不是的那几种）、RR 的 `rrOld` |
+| `disk` | `dist`（移动的磁道总数）、`avg`、`order`（依次访问的磁道） | `fcfs` `sstf` `scan` `cscan` `look` `clook`（写的不是的那几种）、`reverse`、C-SCAN / C-LOOK 的 `jump` |
+| `hash` | `aslSucc`、`aslFail`、`clashes`（碰到过冲突的关键字有几个） | 开放定址 `modSize` `linear` / `quadratic` `failNoEmpty` `failBySize` `failByN`；拉链 `nullCounted` `failByN` |
+
+错法短名照这组数列：某组数上和对的算出来一样的那个错法不列。写错的名字页面报，后面列着这组数有的。别的引擎（rbt、btree、huffman、kmp、bsearch、banker、组成原理、计网）不交量，trace 照样能用（只要那个组件有 `mode: fill` 的表）。
+
+**计数的口径**（照王道的代码数，和教材的公式对得上）：
+
+- 直接插入、希尔：`if (A[i] < A[i-dk])` 和循环第一次 `A[0] < A[j]` 是同一对关键字，算一次；哨兵 `A[0]` 让循环停下的那次照算；`j > 0`、`low < high` 这种下标的比较不算。移动是元素的每一次赋值（进出 `A[0]`、`pivot` 都算；一次交换算 3 次）。直接插入最坏（倒序）比较 (n+2)(n−1)/2、移动 (n+4)(n−1)/2，最好（顺序）比较 n−1、移动 0。
+- 冒泡：倒序比较 n(n−1)/2、交换 n(n−1)/2、移动 3n(n−1)/2；顺序比较 n−1、1 趟。简单选择：比较总是 n(n−1)/2。
+- 快排：一次划分 m 个元素比 m−1 次（每个不是枢轴的元素和枢轴比一次）；顺序时比较 n(n−1)/2、划分 n−1 次。
+- 归并：`Merge` 里每执行一次 `B[i] <= B[j]` 算一次（下标的比较不算）；趟是段长 1、2、4……自底向上，落单的一段不比。
+- 堆：向下调整时有两个孩子的一层比 2 次（两个孩子比一次、大的（小根堆是小的）和双亲比一次），只有一个孩子的一层比 1 次；向上调整（插入）一层比 1 次。建堆、删堆顶（`ops: delete`）、插入都数。
+- SJF 运行时间一样的按到达先后，不算并列。
+
+**并列**：靠「两个一样好」定下来的量——OPT 换页时有两页以上以后都不再用（`victims`）、SSTF 两个请求离磁头一样远（`order`；走法不同总距离也不同时还有 `dist` `avg`）——页面判不了。固定的题里 `expect`、条件、`result` 用到带并列的量，或者 trace 要填的行有并列，执行前的检查报写法错误（trace 的话里写着用 `rows:` 只填到哪一行）；模板取到并列就重取；我自己造的输入有并列、条件又用到那个量，那一项待核。trace 里从第一处并列起往后的行都不硬判（写了另一种对的走法是待核，不是错；空着的格照样算没填）。例子：OPT、3 个物理块、引用串 `1 2 3 4 1 2 5 1 2 3 4 5`，第 10、11 次访问换页时有并列；王道那串 `7 0 1 2 0 3 0 4 2 3 0 3 2 1 2 0 1 7 0 1` 没有并列。
+
+**相同的数**：我写的序列里有一样的数（`49 38 49`），排序跑之前页面把后出现的记成 `49′`，作答下面写一行「页面把第二个 49 记成 49′」；`'` `’` `′` 都认，`49 49`、`49 49'`、`49 49′` 是一个意思。王道那组 `49 38 65 97 76 13 27 49` 做希尔（增量 4、2、1）是稳定的；不稳定的例子：`4 7 4 1 2 5 7 8`（增量 4、2、1，`flipped` 是「4 4′」）。
+
+**值怎么比**：
+
+- 不是整数的量（`avgTurn` `avgWait` `avgWeighted` `avg` `rate` `aslSucc` `aslFail`）：分数、小数、百分数都认。和对的值一模一样的（`3/4`、`0.75`、`75%`）不管写几位都对；不是一模一样的小数，要至少 2 位小数、至少 3 位有效数字，按写出来的位数四舍五入比（16/3 写 `5.33` 对、`5.3` 不对；百分数换成小数再数位数，`83.33%` 是 4 位；0.0533 写 `5%` 不对）。
+- 复杂度：`O(nlogn)` `O(n log₂n)` `O(nlgn)` `O(n log n)` 一样，`O(n^2)` `O(n²)` `O(n*n)` 一样，系数不算（`O(2n)` 就是 `O(n)`）；写化简以后的样子（`O(n^2+n)` 不认）；`expect`、`wrong`、`expr` 里写了页面读不懂的 `O(…)`（`O(n/2)` 这样），自检就报。
+- 序列、字：按先后逐个比，不管空格、逗号、大小写、撇号的写法。
+
+**交之前和判不了的**：
+
+- 格式不对交不了、不算第一次作答，页面说哪里不对（「A：要 8 个数，写了 7 个」「P2 少一格」「「x」不是数」）。
+- 格式对了引擎不收（AVL 里有重复的数、增量比元素个数还大）判没过，那一项（`run`）写引擎的原话。
+- 你那边出的问题（固定的字段引擎跑不了、`expect` 算不出来、`let` 出错、`check:` 出错）那一项待核，不算我错，也不算过。
+
+**模板**（写法同 `recall` 那一节的「换数的模板」：`pick` / `where`、`\calc{…}`，`$…$` 里的写成 TeX，公式外面的写成数）：
+
+- 408 的字段里也能写 `\calc{…}`：`run` 行、trace 的组件字段（`array: \calc{list(v)}`）、`expect`、`wrong` 的式子、`result`、`example`。`seq(8, 10, 99) distinct` 取 8 个 10～99 里不重复的数，`list(v)` 写成一排。
+- `retry: self × 2`（`×` `x` `*` 都认，N 最多 6）= 写 2 次这道题自己，每次另取一组数；能和别的一起写（`retry: self × 2, p1c`）；没有 `pick` 的题不能写 `self`。
+- 取到的数分不开 `against:` 的错法、用到的量有并列，和 `where` 不满足一样重取；执行前的检查取几组数验一遍，连着取 20 组都这样才报。
+- 复测：见过的模板换一组数不算新题。同一个 `family` 没有没见过的题时，复测退回见过的模板换一组数，证据和 `absorb.retests` 那一次记 `renumbered: true`，`meta/state` 那一块写「复测用的是换了数的同一道题」，掌握参考把它当原题，照样记一条「缺新题（只剩换数的模板）」。
+
+下面是一个能照抄的 `board check`（第五节）：p1、p2 是必做题，带 `retry: self × 2`；别的写成可选题只为例子短。
+
+`````
+````board check id=k408 title="希尔排序、LRU" limit=20m
+block DS-L8.2.3 must=p1 optional=p3,p4,p6,p7
+block OS-L3.2.2 must=p2 optional=p5
+```trace
+id: p1
+pick v = seq(8, 10, 99) distinct
+q: 对 \calc{list(v)} 做希尔排序（增量 4、2、1），写出每一趟以后的序列
+target: 希尔排序分组
+level: 方法
+use: sort
+algo: shell
+array: \calc{list(v)}
+gaps: 4 2 1
+against: shellBlock
+teach tag=shellBlock: 相隔 d 的元素才是一组：第 1、1+d、1+2d……个，不是连着的一段。
+teach slip: 后面几趟照你写的上一行推都对，是这一处写错了：再对一遍这一趟。
+teach default: 一组一组地做直接插入：d = 4 时第 1、5 个一组，第 2、6 个一组……
+retry: self × 2
+```
+```predict
+id: p2
+pick v = seq(12, 1, 5)
+q: 3 个物理块，引用串 \calc{list(v)}，LRU 置换。不画表，写缺页几次、依次换出哪几页，再写一句理由
+target: LRU 当成了 FIFO
+level: 方法
+run r: paging algo=lru frames=3 refs="\calc{list(v)}"
+expect x1 缺页次数: r.faults
+wrong w1: r.faults - 3 => 一开始调入的 3 次没算缺页
+expect x2 换出的页: r.victims
+against: fifo
+must m1: 换出的是往前看最久没被访问的那一页，不是最早调入的
+teach tag=fifo: LRU 往前看谁最久没被访问，不看谁先进来。
+teach w1: 一开始物理块是空的，调入的那几次也是缺页。
+teach default: 每次缺页往前数：块里最久没访问的那一页换出。
+retry: self × 2
+```
+```construct
+id: p3
+q: 造一个 8 个数的序列，使希尔排序（增量 4、2、1）不稳定；再写出换了先后的那两个相同的数（比如 49 49）
+target: 希尔排序不稳定
+level: 核心
+slots: A=seq(8) P=seq(2)
+run r: sort algo=shell gaps="4 2 1" array=A
+if: r.unstable >= 1 => 这一组排完，相同的数先后没变（还是稳定的）
+if: P in r.flipped => 写的这一对没有换先后
+example: A=4 7 4 1 2 5 7 8 P=4 4'
+teach if1: 让两个相同的数分在不同的组里，后面那个所在的组把它往前挪过前面那个。
+teach if2: 排完看相同的两个数谁在前：先后反过来的那一对才是。
+```
+```tradeoff
+id: p4
+q: 为什么希尔排序先做几趟大间隔的，会比直接插入快？为什么链表上不适合做希尔排序？
+target: 希尔排序的取舍
+level: 核心
+must m1: 大间隔的几趟让元素一次跨好几位，序列先基本有序；最后 d = 1 的直接插入每个元素只挪很少几步
+must m2: 要按下标隔 d 取元素（随机访问），链表只能从头顺着走
+wrong w1: 希尔排序是稳定的
+```
+```calc
+id: p5
+q: 4 个物理块，引用串 1 2 3 4 1 2 5 1 2 3 4 5，FIFO 置换。写出过程，最后写缺页率
+target: 缺页率的分母
+level: 方法
+run r: paging algo=fifo frames=4 refs="1 2 3 4 1 2 5 1 2 3 4 5"
+result: r.rate
+steps:
+s1 setup: 画出每次访问以后 4 个物理块里的页，缺页打勾
+s2 calc: 数出缺页 10 次，访问 12 次
+s3 conclude: 缺页率 10/12 = 5/6 ≈ 83.33%
+```
+```calc
+id: p6
+q: 设计算法，判断带头结点的单链表 L 是否递增有序。（1）思想（2）用 C 写出算法（3）时间、空间复杂度
+target: 相邻比较漏了尾结点
+level: 核心
+steps:
+s1 setup: 思想：p 从第一个结点起，依次比较 p 和 p->next 的值，有一处 p->data > p->next->data 就不是递增
+s2 calc: 代码：for (p = L->next; p && p->next; p = p->next) if (p->data > p->next->data) return 0; return 1;
+s3 conclude: 时间复杂度 O(n)，空间复杂度 O(1)
+```
+```code
+id: p7
+q: 下面的 Reverse 想把数组原地逆置，跑完数组没变。改一处让它对
+target: 循环走到 n 又换回来
+level: 基础
+fn: void Reverse(int A[], int n)
+starter:
+void Reverse(int A[], int n) {
+    int i, t;
+    for (i = 0; i < n; i++) {
+        t = A[i]; A[i] = A[n - 1 - i]; A[n - 1 - i] = t;
+    }
+}
+tests:
+A = [1, 2, 3, 4, 5], n = 5 -> A = [5, 4, 3, 2, 1]
+A = [7, 8], n = 2 -> A = [8, 7]
+A = [9], n = 1 -> A = [9]
+teach default: 走到一半就停：再往后换，前面换好的又换回去了。
+```
+````
+`````
+
+### rewrite：英语的检验题（块里的 parse、translate、discriminate、errfind 也在这一节）
+
+<!-- 科目：英语 -->
+
+只在 `board check`（第五节）里能作答：parse 标成分、translate 翻译、rewrite 改写、discriminate 二选一配理由、errfind 改错；字段在完整写法里。
+
+<!-- 完整写法 -->
+
+外壳、共用的字段（`id` `q` `target` `level` `facet` `teach` `retry` `family`）和数学的检验题（`recall` 那一节）一样；必做题至少 2 道 retry、至少 1 条 teach。英语题不做模板（不写 `pick`）。不写 `facet` 时：parse、translate、rewrite 能用，discriminate 能辨，errfind 边界，recall 重建。
+
+各题型：
+
+- **parse**（标成分）：`key:` 括号写法同第三节 `parse`（`[S …] [V …]`，能套 `[RC …]`），可选 `roles:`（不写照 key 里用到的）。不写 `must` / `may` / `wrong`。我点词标成分，页面照 key 逐个成分判（宽严同一类 `parse`）：一个成分一项，按句子先后，编号是成分名（同一种的第二个是 `RC2`）；话是「这是主语，标成了宾语」「没标出谓语」「谓语的范围不对：标了「were」」；多标的合成一项 `extra`（「多标了：…」）。teach 键：成分名（`V`；`RC2` 找不到退回 `RC`）→ `role=SC` → `default`。
+- **translate**（翻译）：`text:` 原句、`must` 采分点（最多 3 条）、可选 `may` `wrong`、`answer:` 参考译文（判完给我看）。页面里的 Claude 照采分点判；我打字或手写。
+- **rewrite**（改写）：`text:` 原句；`has: 片段 => 话`（要有的写法，一行一条，h1、h2…）、`not: 片段 => 话`（不该有的，n1…），`=> 话` 可选；`example:`（必填：一句对的改写，页面先拿它验 has / not）；可选 `must`（规则本身，交页面里的 Claude）。至少一条 `has:`；只写 `not:` 时要写 `must`（不然随便一句没有那些字的都算过）。
+  - 片段按整词比：大小写、弯引号、缩写（`wasn't` 就是 `was not`）、句末标点、多的空格都不算；`|` 隔开几种写法；贴着字母的 `…`（`…ed`）是一个以 ed 结尾的词，单独的 `…` 是中间隔 0～3 个词；`were …ed` 中间留空格（`were…ed` 是一个词）。`has: is` 不会对上 this。
+  - has / not 有一条没过就没过、不交 Claude；都过了、写了 `must` 再交。teach 键 `h1`、`n1`、`default`。
+- **discriminate**（两个里选一个）：`options: 谓语 | 非谓语`（只收两个）、`answer:`（两个里的一个）、`must` 理由要点（必填）；不和 `can:` 一起写，不写 `result:`。我点一个、写为什么。选错就没过（理由不判）；选对了理由交页面里的 Claude；选对、理由没过 = 没过。teach 键 `pick`（选错）、`m1`、`default`。
+- **errfind**（改错）：`text:` 句子、`word:` 错的那个词（同一个词出现几次：`are#2` 是第二个 are）、`fix:` 改成什么（`known | !knew=为什么`：`|` 隔开几种对的，`!` 开头是常见的错改法和提示；`删掉` 是这个词多了）、可选 `decoys:`（常被误点的对的词：`have=为什么没错; were=…`）、可选 `must`（为什么错，交页面里的 Claude）。我点一个词、写改成什么。点错词：`word` 没过（点的是 decoys 里的显示那句）；词对了再判改法 `fix`（大小写、句末标点、外面的引号不算；写成 `!` 的错改法显示那句提示）。teach 键 `decoy=have`、`word`、`fix`、`default`。
+- **recall**：同数学（`must` `may` `wrong` `answer`）。
+
+下面是一个能照抄的 `board check`（第五节）：p1 是必做题，带两道 retry；别的写成可选题只为例子短。
+
+`````
+````board check id=ken title="被动语态" limit=15m
+block EN-L1.2.3 must=p1 optional=p2,p3,p4,p5
+```errfind
+id: p1
+q: 点出用错的那个词，再写改成什么
+text: He was know as the best teacher in the town.
+word: know
+fix: known | !knew=knew 是过去式，被动要过去分词
+decoys: was=被动的 be 没错，错在它后面的动词
+target: 被动的过去分词
+level: 基础
+teach word: 被动是 be + 过去分词：be 后面的动词原形是错的。
+teach fix: know 的过去分词是 known，不是 knew。
+teach decoy=was: was 没错，错在 was 后面那个词。
+retry: p1a, p1b
+```
+```errfind
+id: p1a
+q: 点出用错的那个词，再写改成什么
+text: The letter was write in English.
+word: write
+fix: written | !wrote=wrote 是过去式，被动要过去分词
+target: 被动的过去分词
+level: 基础
+```
+```errfind
+id: p1b
+q: 点出用错的那个词，再写改成什么
+text: The windows were break by the storm.
+word: break
+fix: broken | !broke=broke 是过去式，被动要过去分词
+target: 被动的过去分词
+level: 基础
+```
+```parse
+id: p2
+q: 标出这句的主语和谓语（谓语连着助动词一起标），从句也标出来
+key: [S The houses [RC that we saw]] [V were painted] in 1990.
+roles: S V RC
+target: 被动语态的谓语
+level: 方法
+teach V: 被动的谓语是 be + 过去分词，几个词一起标成谓语。
+teach RC: that we saw 修饰 houses，是主语里的定语从句。
+teach default: 先找谓语动词（带上前面的 be），再往前找主语。
+```
+```rewrite
+id: p3
+q: 把这句改成被动语态，时态不变
+text: The villagers built the bridge in 1990.
+has: was …ed | was built => 时态要和原句一样：be 的过去式 + 过去分词
+not: built the bridge => 还留着主动的谓语
+example: The bridge was built by the villagers in 1990.
+must m1: be 的时态跟原句（一般过去时用 was / were）+ 过去分词
+target: 主动改被动
+level: 方法
+teach h1: 原句是一般过去时，被动写成 was / were + 过去分词。
+```
+```discriminate
+id: p4
+q: “The data collected last year show a clear trend.” 里 collected 是谓语还是非谓语？为什么？
+options: 谓语 | 非谓语
+answer: 非谓语
+must m1: 句子的谓语是 show；collected 是过去分词作后置定语（= which were collected）
+target: 过去分词作定语
+level: 核心
+teach pick: 一句话一个谓语：先找真正的谓语，剩下的 -ed 是定语。
+```
+```translate
+id: p5
+q: 翻译成中文
+text: It is not until you lose your health that you realize how important it is.
+must m1: 「直到……才……」的强调句译出来
+must m2: how important it is 译成「它有多重要」
+wrong w1: 译成「直到你失去健康，你意识到……」（没有「才」）
+answer: 直到失去健康，你才意识到它有多重要。
+target: 强调句没译出「才」
+level: 核心
+```
+````
+`````
 
 ### context：给页面里 Claude 的背景资料（不显示）
 
@@ -2375,10 +2658,12 @@ id: p1
 ````
 ````
 
+- 块里每个围栏的名字就是探题的题型：`recall` `construct` `claim` `discriminate` `locate` `solve`，408 的 `trace` `predict` `construct` `tradeoff` `code` `calc`，英语的 `parse` `translate` `rewrite` `discriminate` `errfind` `recall`（写法见第三节「检验题」「408 的检验题」「英语的检验题」）。`trace` `predict` `code` `parse` `translate` `errfind` `solve` 单独写在板上是一类组件（第三节同名的那一节）；别的单独写在板上只画预览。
+- 检验题的写法：数学的见 `recall` 那一份，408 的见 `tradeoff` 那一份，英语的见 `rewrite` 那一份（`components/recall.md`、`components/tradeoff.md`、`components/rewrite.md`）。
 - `block 块 must=… optional=… [fast=]`：一块一行，按写的先后做，块里先必做再可选；`spare`：不出现，只存进题库给复测；没排进任何一行、也不是谁的 `retry` 的题报写法错误。`limit=` 第一次作答一共多久（不写不限时），`pause=` 手写停多久算停顿（默认 30s）。
 - 执行时页面先查一遍（写法、每道题的 `example` 代进条件（带着这节课 `let` 过的量；模板先取几组数）、必做题 retry 至少 2 道、至少 1 条 teach、retry 是同一种题型），不过的不开，原因写在 `ext_in.result`；`node tools/ext-check.mjs --next … --lint` 查的是同一份。过了就画一张开始卡，题全部存进题库 `probes`。
 - 学生点开始：板、常驻栏、翻板条、整页板书收起来（合书），做完放回来；这时来的 `ext_in` 照常执行，画好的板做完检验才看得到。一道题：作答 → 点「很确定 / 大概 / 蒙的」→ 交；没有提示和「看答案」，「想不出来」一直在。
-- 判：构造的每一条、式子、真假、能不能、哪一行、逐行证明、result、fix 页面当场判；要点、证明要点、理由、solve 的步骤每交一次调一次页面里的 Opus 5.5 high（给它题、你写的要点或参考步骤、学生交的；手写的带整页图，转写和判同一次），回的不是 Opus、读不出来、超过 90 秒都算拿不准。要它判的题交了学生马上做下一道，判回来没过的在当前这道做完时插进来。
+- 判：构造的每一条、式子、真假、能不能、哪一行、逐行证明、result、fix，408 的表、结果、测试，英语的成分、has / not、选哪个、点的词和改法页面当场判；要点、证明要点、理由、solve 的步骤每交一次调一次页面里的 Opus 5.5 high（给它题、你写的要点或参考步骤、学生交的；手写的带整页图，转写和判同一次），回的不是 Opus、读不出来、超过 90 秒都算拿不准。要它判的题交了学生马上做下一道，判回来没过的在当前这道做完时插进来。
 - 判出没过：列出没过的每一项（构造是那一条自己的话，要点是「没写到：要点原文」）→ 你写的 teach → 下一道 retry；做对算补上，又错接着下一道，retry 用完记没吸收。「蒙的」做对也出一道 retry 确认。拿不准的（`unsure`、超时、作废）不补讲、不出 retry，待你核。没有对上的 teach 时叫一次页面里的 Claude 写补讲：给它题、要点、你写的 teach、学生交的、没过的项和 `<<< >>>` 里你写的话；没写 `<<< >>>` 时默认的话是「指出错在哪、只补缺的那一点（不给整段答案）。」（你在任务书里写的那句）。它的话原样显示，记成证据 `src: helper, role: check`。
 - 可选题：这一块必做都一次过、都「很确定」、没有在判的（写了 `fast=` 的还要第一次作答都在时间里）就跳过。限时只数第一次作答（题在屏幕上、页面在前台的时间）；过了 `limit` 交的记 `late`，做对最多算补上。
 - 刷新、熄屏、切走回来照存着的进度接着做（`sessions/{编号}/check/{检验 id}`），看过没交的照旧算第一次（证据记 `resumed`）；「先停下」板放回来，那一块变成一条「接着做」；下课时还开着照「先停下」存着。没做完的块不写吸收。
@@ -2650,15 +2935,15 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 
 ### 检验：`absorb`、`probes`（页面写，你核）
 
-一次检验（`board check`）里每道题的作答是一条证据 `src: "check"`（字段见「证据」）。做完以后每块写一条吸收：
+一次检验（`board check`）里每道题的作答是一条证据 `src: "check"`：`kind`（题型）、`comp`（`检验 id:题 id`）、`check`、`probe`、`retryOf`、`target`、`level`、`facet`、`q`、`text`（我交的，写成字）、`answer`（原样）、`items`（每一项 `{ id, ok: true | false | "missing" | null, why, tag, carried }`：`tag` 是对上的错法短名或 `slip`，`carried` 是 trace 按我自己的上一行核的那几行）、`outcome`、`final`、`retries`、`sure`、`late`、`giveup`、`ms`、`msTotal`、`teach`、`judgedBy`（`page` / `claude` / `ext` / `timeout`）、`picked` / `template`（模板）、`retest` / `bank` / `renumbered`（复测）。做完以后每块写一条吸收：
 
-- `absorb/{块}`（知识点 `#` 换 `~`）= `{ block, space, state: "成功" | "部分" | "未" | "待核", facets: { "重建" | "能用" | "边界" | "能辨": "ok" | "fixed" | "fail" | "pending" }, by: "page", checked: false, check（检验 id）, session, at, date, probes: [证据编号], confidentWrong: [题 id], debt: [target…], families, retests: [{ days: 1, due, done, ok }, { days: 7, … }], retryOwed: [题库编号], history: [以前几次（最多 5 次）], log }`。状态类：`state`、`checked` 改了在 `log` 里记一条（`{ date, by, field, from, to, basis, note }`）。
+- `absorb/{块}`（知识点 `#` 换 `~`）= `{ block, space, state: "成功" | "部分" | "未" | "待核", facets: { "重建" | "能用" | "边界" | "能辨": "ok" | "fixed" | "fail" | "pending" }, by: "page", checked: false, check（检验 id）, session, at, date, probes: [证据编号], confidentWrong: [题 id], debt: [target…], families, retests: [{ days: 1, due, done, ok, renumbered }, { days: 7, … }], retryOwed: [题库编号], history: [以前几次（最多 5 次）], log }`。状态类：`state`、`checked` 改了在 `log` 里记一条（`{ date, by, field, from, to, basis, note }`）。
 - 页面怎么判：这一块必做和做了的可选都一次过、不是「蒙的」、不超时 → `成功`；有补上的（retry 做对、蒙对了再确认、超时以后做对）→ `部分`；有 retry 用完、想不出来又没补上的 → `未`；没有「未」但有拿不准的 → `待核`。没做完的块不写。
 - 你核：直接写 `state`、`checked: true`、`by: "ext"`，`log` 加一条。再做一次同一块的检验：`state` 照最新的一次，前几次进 `history`，复测重新排。
-- 复测：检验那天以后 1 天、7 天（`retests`），到期的写进 `meta/facts` 和首页「今天」的事实（「复测：L2.1.4（隔 1 天）」），`meta/today` 的 `kind` 能写 `retest`。学生点了开一节 `kind: "check"` 的课（`sessions/{编号}`：`{ kind: "check", retest: [{ block, days }], items: [题库编号], … }`），没有主讲；题从 `probes` 里每个 `family` 挑一道没见过的（不挑那次检验里的 retry），挑不到写「缺新题」。复测的证据带 `retest: 1 | 7`、`bank`（题库编号），进掌握的参考，不改吸收。
+- 复测：检验那天以后 1 天、7 天（`retests`），到期的写进 `meta/facts` 和首页「今天」的事实（「复测：L2.1.4（隔 1 天）」），`meta/today` 的 `kind` 能写 `retest`。学生点了开一节 `kind: "check"` 的课（`sessions/{编号}`：`{ kind: "check", retest: [{ block, days }], items: [题库编号], … }`），没有主讲；题从 `probes` 里每个 `family` 挑一道没见过的（不挑那次检验里的 retry），挑不到写「缺新题」。复测的证据带 `retest: 1 | 7`、`bank`（题库编号），进掌握的参考，不改吸收。同一个 `family` 只剩见过的模板（带 `pick` 的题）时，复测退回它、换一组数做：那一条证据和 `absorb.retests` 那一次记 `renumbered: true`，`meta/state` 那一块写「复测用的是换了数的同一道题」，掌握参考把它当原题，同时照样记「缺新题」（只剩换数的模板）。
 - 检验里最后没过的（retry 用完、想不出来又没补上）和「很确定却错了」的题，页面各记一道错题（`errors`，带 `check`、`probe`、`target`、`items`；同一个 `target` 一次检验一道），能在「管理 → 最近记下的」撤销；补上了的、待核的不记。
 
-`probes/{pr-…}` = `{ fence（题的围栏原文）, type: "recall" | "construct" | "claim" | "discriminate" | "locate" | "solve", block, target, level: "基础" | "方法" | "核心", facet, family, retryBank: [题库编号], lets: { 名字: "值" }（题里用到的这节课 let 的量，浮点；复测时当这道题自己带的量，`pick` 之前就有）, src: "ext" | "lab", from: { session, check, as: "probe" | "retry" | "spare" }, seen: [{ at, session, as }], at }`。同一道题（去掉 `id:`、`retry:` 两行以后原文一样）一个编号；`retry:` 写的局部 id 存成 `retryBank`（题库编号）。你写新题：`fence` 照 `board check` 里的一道写，编号照 `pr-` 加 12 位十六进制随便取一个没用过的。
+`probes/{pr-…}` = `{ fence（题的围栏原文）, type: "recall" | "construct" | "claim" | "discriminate" | "locate" | "solve" | "trace" | "predict" | "tradeoff" | "code" | "calc" | "parse" | "translate" | "rewrite" | "errfind", block, target, level: "基础" | "方法" | "核心", facet, family, retryBank: [题库编号], lets: { 名字: "值" }（题里用到的这节课 let 的量，浮点；复测时当这道题自己带的量，`pick` 之前就有）, src: "ext" | "lab", from: { session, check, as: "probe" | "retry" | "spare" }, seen: [{ at, session, as }], at }`。同一道题（去掉 `id:`、`retry:` 两行以后原文一样）一个编号；`retry:` 写的局部 id 存成 `retryBank`（题库编号）。你写新题：`fence` 照 `board check` 里的一道写，编号照 `pr-` 加 12 位十六进制随便取一个没用过的。
 
 ### 练一练和题库：`drills`（页面写，你也可以写）
 

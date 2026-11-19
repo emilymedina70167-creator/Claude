@@ -8,5 +8,7 @@ export const previewBlock = (type) => (el, src) => {
   if (r.error) throw new Error(r.error);
   const p = r.probe;
   const body = widget(el, { title: '检验题（预览）', cls: 'ck-preview' });
-  body.innerHTML = `<div class="ck-q">${mdToHtml(p.type === 'claim' ? `**判断：**${p.claim}` : p.q)}</div><p class="ck-hint">这是检验题（${p.type}，打 ${p.target}，${p.level}）：放进 board check 才能作答。</p>`;
+  // rewrite 的原句写在 text: 里（不在题面上）：预览也带上
+  const orig = p.text && p.type === 'rewrite' ? `<div class="ck-orig">${mdToHtml(p.text)}</div>` : '';
+  body.innerHTML = `<div class="ck-q">${mdToHtml(p.type === 'claim' ? `**判断：**${p.claim}` : p.q)}</div>${orig}<p class="ck-hint">这是检验题（${p.type}，打 ${p.target}，${p.level}）：放进 board check 才能作答。</p>`;
 };

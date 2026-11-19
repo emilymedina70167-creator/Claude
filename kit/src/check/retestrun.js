@@ -1,7 +1,7 @@
 // 复测的课（kind: check，设计 5.6）：检验以后 1 天、7 天，从题库里挑没见过的同类题，整页是检验外壳，没有主讲。
 // 题和它的 retry 一起从题库取出来、局部 id 重起（bank.js 的 retestCheck），证据带 bank 和 retest；进掌握的参考，不改吸收。
 // 做完在 absorb/{块}.retests 那一次写 done / ok；没过的照样记错题（外部 review 必改 2）
-import { parseCheck } from './spec.js';
+import { parseCheck, baseType } from './spec.js';
 import { retestCheck, attachBases } from './bank.js';
 import { claudeIds, verdictPrompt, parseVerdict, fallbackPrompt } from './judge.js';
 import { absorbOf } from './flow.js';
@@ -41,6 +41,9 @@ export async function enterRetest(root, { db, store, sid, doc, readOnly = false,
     if (errors.length) reportError(new Error(errors[0]), { what: '拼复测', soft: true });
     return;
   }
+  // 退回换了数的模板题（开课时 pickRetest 记在 sessions.renumbered，题库编号）：证据和这一次复测都记 renumbered
+  const renumberedBank = new Set((Array.isArray(doc.renumbered) ? doc.renumbered : []).map(String));
+  const renumberedLocal = new Set(Object.entries(built.bankOf).filter(([, b]) => renumberedBank.has(b)).map(([l]) => l));
   const sc = scopeDb(db, sid);
   // 页面里的 Claude（判要点、写补讲）：只认 Opus 5.5 high；?dev 用模拟老师
   // 只有 ?dev 用模拟老师；claude.ai 里拿不到页面里的 Claude 就不判（待核），不拿模拟的冒充 Opus
@@ -59,7 +62,7 @@ export async function enterRetest(root, { db, store, sid, doc, readOnly = false,
   };
   const mem = { errors: rows(await db.collection('errors').get().catch(() => null)), curriculum: rows(await db.collection('curriculum').get().catch(() => null)), weaknesses: rows(await db.collection('weaknesses').get().catch(() => null)), evidence: [] };
   const days = Number(doc.retest?.[0]?.days) || 1;
-  const cdesk = createCheckDesk(sc, { sid, space: doc.space || 'math', memoOps: readOnly ? null : createMemOps({ db, mem }), bankOf: built.bankOf, retest: days, readOnly, curriculum: () => mem.curriculum });
+  const cdesk = createCheckDesk(sc, { sid, space: doc.space || 'math', memoOps: readOnly ? null : createMemOps({ db, mem }), bankOf: built.bankOf, retest: days, renumbered: renumberedLocal, readOnly, curriculum: () => mem.curriculum });
   const saved = await cdesk.load(check.id);
   root.innerHTML = '';
   const host = document.createElement('div');
@@ -75,7 +78,7 @@ export async function enterRetest(root, { db, store, sid, doc, readOnly = false,
       const path = `absorb/${String(r.block).replace(/#/g, '~')}`;
       const cur = await db.doc(path).get().then((d) => (d.exists ? d.data() : null), () => null);
       if (!cur) continue;
-      const retests = (cur.retests || []).map((x) => (x.days === r.days && !x.done ? { ...x, done: today(), ok: r.ok, session: sid } : x));
+      const retests = (cur.retests || []).map((x) => (x.days === r.days && !x.done ? { ...x, done: today(), ok: r.ok, session: sid, ...(check.blocks.find((b) => b.block === r.block)?.must.some((id) => renumberedLocal.has(id)) ? { renumbered: true } : {}) } : x));
       await db.doc(path).update({ retests }).catch((e) => reportError(e, { what: '写复测结果', path, soft: true }));
     }
     await db.doc(`sessions/${sid}`).update({ status: 'closed', endedAt: Date.now() }).catch(() => {});
@@ -88,7 +91,7 @@ export async function enterRetest(root, { db, store, sid, doc, readOnly = false,
       if (!canJudge(answer, images)) return null;
       const res = await call(verdictPrompt({ probe, answer, ids, images: images.length }), images.length ? { images } : {});
       if (!res) return null;
-      const r = parseVerdict(res.text, ids, { steps: probe.type === 'solve' });
+      const r = parseVerdict(res.text, ids, { steps: baseType(probe) === 'solve' });
       return { items: r.items, lines: r.lines, judgedBy: 'claude', text: res.text };
     },
     fallback: async (probe, answer, items) => String((await call(fallbackPrompt({ probe, answer, items })))?.text || '').trim(),
