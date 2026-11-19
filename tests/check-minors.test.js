@@ -8,7 +8,7 @@ import { absorbDoc } from '../kit/src/check/record.js';
 import { toFinish } from '../kit/src/check/shellkit.js';
 import { judgeOp } from '../kit/src/check/judgekit.js';
 import { saveInk, loadInk, hasInk, sweepInk, INK_PREFIX } from '../kit/src/check/inkstore.js';
-import { bankDocs, retestCheck } from '../kit/src/check/bank.js';
+import { bankDocs, retestCheck, attachBases } from '../kit/src/check/bank.js';
 import { lintTurn } from '../tools/ext-lint.js';
 
 const F = '```';
@@ -159,7 +159,7 @@ test('小 11：复测从题库出题时带着当时课上的量（存题库时�
   const bank = docs.map((d) => ({ id: d.id, ...d.doc }));
   const r = retestCheck({ items: [p1.id], bank, retests: [{ block: 'L2.1.1', days: 1 }] });
   assert.deepEqual(r.dropped, []);
-  const rc = parseCheck(r.head, r.body).check;
+  const rc = attachBases(parseCheck(r.head, r.body).check, r.bases);
   assert.deepEqual(selfCheck(rc, {}, { lenient: true }), []);
-  assert.ok(rc.probes.r1.lets.some((l) => l.name === 'M'));
+  assert.deepEqual(rc.probes.r1.base, { M: [[1, 2], [3, 4]] }); // 这道题自己带着（不是写成 let：pick 之前就要有）
 });

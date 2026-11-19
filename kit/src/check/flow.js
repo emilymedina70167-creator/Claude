@@ -33,10 +33,17 @@ const origOf = (s, id) => s.results[id]?.of || id;
 const usedRetries = (s, orig) => s.results[orig]?.retries || [];
 const nextRetry = (s, orig) => probeOf(s, orig).retry.find((r) => !usedRetries(s, orig).includes(r)) || null;
 
+// 本题的结论：外部改判过本题（byExt）以后，后面 retry 怎么走都不再改它
+function setFinal(s, orig, v) { if (!s.results[orig].byExt) s.results[orig].final = v; }
+
 function finalPass(s, orig) {
-  const r = s.results[orig];
-  r.final = r.late ? 'fixed' : 'pass';
+  setFinal(s, orig, s.results[orig].late ? 'fixed' : 'pass');
 }
+
+// 这道题的 retry 链还在走：在补讲、在做 retry、排着补讲、retry 在判
+const chainLive = (s, orig) => s.cur?.of === orig || s.teaching?.of === orig || s.queue.some((q) => q.of === orig) || usedRetries(s, orig).some((x) => s.judging[x] !== undefined);
+// 外部把哪一道 retry 改判成了对（链走完时最后一道又错，照外部的算补上）
+const extPassed = (s, orig) => usedRetries(s, orig).some((x) => s.results[x]?.judgedBy === 'ext' && s.results[x]?.outcome === 'pass');
 
 /** 判出没过（或蒙对）：排进补讲的队 */
 function enqueue(s, id, { guessed = false } = {}) {
@@ -44,14 +51,14 @@ function enqueue(s, id, { guessed = false } = {}) {
   const orig = origOf(s, id);
   const last = !nextRetry(s, orig);
   if (guessed) {
-    if (last) { s.results[orig].final = 'fixed'; return; } // 蒙对了、没有 retry 能确认：最多算补上
+    if (last) { setFinal(s, orig, 'fixed'); return; } // 蒙对了、没有 retry 能确认：最多算补上
     r.teach = { key: 'guess', text: null };
   } else {
     const own = teachFor(probeOf(s, id), r.failed, r.items, { giveup: r.giveup });
     const fromOrig = id !== orig ? teachFor(probeOf(s, orig), r.failed, r.items, { giveup: r.giveup }) : null;
     r.teach = own || fromOrig || { key: 'claude', text: null };
   }
-  if (last && !guessed) s.results[orig].final = 'fail';
+  if (last && !guessed) setFinal(s, orig, extPassed(s, orig) ? 'fixed' : 'fail');
   s.queue.push({ id, of: orig, guessed, last });
 }
 
@@ -64,10 +71,10 @@ function resolve(s, id) {
   r.failed = r.giveup ? ['giveup'] : o.failed;
   r.guessed = !r.giveup && o.guessed;
   const orig = origOf(s, id);
-  if (r.outcome === 'pending') { s.results[orig].final ??= 'pending'; if (id !== orig) s.results[orig].final = 'pending'; return; }
+  if (r.outcome === 'pending') { if (id !== orig || !s.results[orig].final) setFinal(s, orig, 'pending'); return; }
   if (r.outcome === 'pass' && !r.guessed) {
     if (id === orig) finalPass(s, orig);
-    else s.results[orig].final = 'fixed';
+    else setFinal(s, orig, 'fixed');
     return;
   }
   enqueue(s, id, { guessed: r.guessed });
@@ -155,7 +162,7 @@ const ON = {
     s.teaching = null;
     if (last) { advance(s); return; }
     const rid = nextRetry(s, of);
-    if (!rid) { s.results[of].final = 'fail'; advance(s); return; }
+    if (!rid) { setFinal(s, of, extPassed(s, of) ? 'fixed' : 'fail'); advance(s); return; }
     s.cur = { id: rid, kind: 'retry', of, block: s.results[of].block };
     s.phase = 'probe';
   },
@@ -178,12 +185,13 @@ const ON = {
     const orig = origOf(s, ev.id);
     const R = s.results[orig];
     if (ev.id === orig) {
-      if (r.outcome === 'pass' && R.final !== 'fixed') R.final = R.late ? 'fixed' : 'pass';
-      if (r.outcome === 'fail' && R.final !== 'fixed') {
-        R.final = 'fail';
+      // 改判成对：本题过了（后面还在走的 retry 照走，不再改它）；改判成没过：retry 链还在走就让它走完再定，走完了才定成没吸收、没用上的 retry 欠着
+      if (r.outcome === 'pass' && R.final !== 'fixed') { R.final = R.late ? 'fixed' : 'pass'; R.byExt = true; }
+      if (r.outcome === 'fail' && R.final !== 'fixed' && !chainLive(s, orig)) {
+        R.final = 'fail'; R.byExt = true;
         for (const x of probeOf(s, orig).retry) if (!usedRetries(s, orig).includes(x) && !s.owed.includes(x)) s.owed.push(x);
       }
-    } else if (R.final !== 'pass') {
+    } else if (R.final !== 'pass' && !R.byExt && !chainLive(s, orig)) {
       // 改的是一道 retry：本题的结论照全部用过的 retry 重算（改判中间那一道没过，后面那道补上了的照样算补上）
       const rs = usedRetries(s, orig).map((x) => s.results[x]).filter((x) => x?.submitted);
       if (rs.some((x) => x.outcome === 'pass')) R.final = 'fixed';

@@ -123,9 +123,9 @@ export function createClassCheck({ root, db, desk = null, call, tell = () => {},
   }
 
   // 写吸收、记错题、告诉主讲，一次检验一次；写完回那一刻（失败回 null，下次打开课堂再补）
-  async function finishOnce(check, st) {
+  async function finishOnce(check, st, { late = false } = {}) {
     try {
-      const { absorbs, errors } = await cdesk.finish(st);
+      const { absorbs, errors } = await cdesk.finish(st, { late });
       tell([extSummary(st, check, absorbs), ...errors.map((x) => `[页面] 检验 ${check.id}：${x}`)].join('\n'));
       return Date.now();
     } catch { return null; }
@@ -176,7 +176,15 @@ export function createClassCheck({ root, db, desk = null, call, tell = () => {},
       const rows = await cdesk.list();
       for (const row of rows) for (const pid of row.state?.check?.order || []) known.set(pid, row.id);
       // 做完那一刻刷新、关了页：吸收、错题、ext_out 那一份补写（finish 可以重入）
-      for (const row of toFinish(rows)) finishOnce(row.state.check, step(row.state, { type: 'end', at: row.state.endedAt || Date.now() })).then((at) => { if (at) cdesk.save(row.id, { ...row.state, finishedAt: at }); });
+      // 一次一个、先早后晚（不同时抢同一块的吸收）；写完从库里现读再记 finishedAt（期间外部改判存的不被盖掉）
+      (async () => {
+        for (const row of toFinish(rows).sort((a, b) => (a.state.endedAt || 0) - (b.state.endedAt || 0))) {
+          const at = await finishOnce(row.state.check, step(row.state, { type: 'end', at: row.state.endedAt || Date.now() }), { late: true });
+          if (!at) continue;
+          const fresh = await cdesk.load(row.id).catch(() => null);
+          cdesk.save(row.id, { ...(fresh || row.state), finishedAt: at });
+        }
+      })();
       const open = rows.filter((x) => x.state && !x.state.closed && x.state.phase !== 'done').sort((a, b) => (b.at || 0) - (a.at || 0))[0];
       if (open) mount(open.state.check, open.state);
     },

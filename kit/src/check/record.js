@@ -101,6 +101,16 @@ export function absorbDoc(prev, result, { check, session = null, space = null, a
   };
 }
 
+/**
+ * 补写以前做完的检验（刷新以后 classcheck.js 的 toFinish）时，这一块的吸收已经是别的检验、比它晚写的：不盖回去
+ * （prev 是 absorb/{块} 现在的样子，cur：{ check, session, endedAt }）
+ */
+export function absorbStale(prev, { check, session, endedAt } = {}) {
+  if (!prev) return false;
+  if (prev.check === check && prev.session === session) return false;
+  return (Number(prev.at) || 0) > (Number(endedAt) || 0);
+}
+
 /** meta/state-{科} 那一块的一行 */
 export function stateLine(a) {
   if (!a?.state) return '';

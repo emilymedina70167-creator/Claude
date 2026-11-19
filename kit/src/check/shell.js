@@ -171,8 +171,9 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     card.querySelector('.ck-giveup').addEventListener('click', () => {
       if (tooSoon(shownAt, now()) || submitting || state.results[v.id]?.submitted) return;
       const t = timer.submit(v.id) || {};
-      pv?.clearInk?.();
+      const view1 = pv;
       dispatch({ type: 'giveup', id: v.id, ms: t.ms ?? null });
+      if (state.results[v.id]?.submitted) view1?.clearInk?.();
     });
     syncSubmit();
   }
@@ -206,7 +207,8 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     if (c.strokes) { try { onInk(id, c.strokes, c.events); } catch { /* 回放存不上不影响作答 */ } }
     const machine = judgeMachine(probe, c.answer, vars);
     dispatch({ type: 'submit', id, answer: c.answer, sure: sureNow, ms: t.ms ?? null, msTotal: t.msTotal ?? t.ms ?? null, machine, ...(id === resumedId ? { resumed: true } : {}) });
-    view0.clearInk?.();
+    // 交上了才删本地的笔画（传图的那几秒里点了「先停下」，这一下交不进去，笔画得留着）
+    if (state.results[id]?.submitted) view0.clearInk?.();
   }
 
   // 失败的一项写成学生看得懂的一句（不露编号）：构造的条件用外部写的话；要点写「没写到：要点」；错说法写「写了常见的错说法」；步骤写第几步

@@ -36,7 +36,7 @@
 
 - 第一次真检验以后：读 `sessions/{编号}/check/{检验 id}`（进度）、`evidence` 里 `src: check` 的、`absorb/*`、`probes/*`，看判分等了多久（`judgedBy: timeout` 多不多）、待核的多不多、补讲是外部写的还是页面里的 Claude 写的；照真数据跑一遍 `deskState`。
 - 2026-11-19 补齐：审查留下的小毛病、retry 模板（`check/template.js`），见 `CLAUDE.md` 第 8 批那一条。
-- 没做的：408、英语的探题类型——设计稿在 `docs/superpowers/specs/2026-11-19-probes-408-en-design.md` 和学习台 `dev_requests/dr-probes-408-en`（`status: design`），等外部在 `review` 字段写意见、改成 `open` 再做。同一个模板在两节课里配了不同的课上的量，题库只记第一次的 `lets`（编号照原文算，见 `bank.js` 的 `lessonLets`）。
+- 没做的：408、英语的探题类型——设计稿在 `docs/superpowers/specs/2026-11-19-probes-408-en-design.md` 和学习台 `dev_requests/dr-probes-408-en`（`status: design`），等外部在 `review` 字段写意见、改成 `open` 再做。同一个模板在两节课里配了不同的课上的量，题库只记第一次的 `lets`（编号照原文算，见 `bank.js` 的 `lessonLets`）；复测时它们挂在题上（`probe.base`，`attachBases`）。
 
 ## 现在做到哪
 

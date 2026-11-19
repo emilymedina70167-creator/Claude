@@ -1,6 +1,6 @@
 // 检验手写板没交的笔画存在这台设备上（localStorage），刷新、熄屏回来接着写（inkpad.js）。不碰 DOM，tests/check-minors.test.js。
 // 空的不存（以前每秒存一份空的：题一打开就占一个 key，下次打开这道题还被当成「写过」硬切到手写）；
-// 交了、想不出来了删掉（shell.js）；剩下的（做到一半不做了）存了 7 天就清。
+// 交了、想不出来了删掉（shell.js）；剩下的（做到一半不做了）存了 7 天就清（上一版存的没有 wall：补上现在，从现在算）。
 export const INK_PREFIX = 'la-ck-';
 export const INK_KEEP = 7 * 86400000;
 
@@ -38,7 +38,9 @@ export function sweepInk(storage, now = Date.now(), keep = INK_KEEP) {
       let v = null;
       try { v = JSON.parse(storage.getItem(k) || 'null'); } catch { v = null; }
       if (!v || !Array.isArray(v.strokes)) continue;
-      if (!live(v.strokes) || (Number(v.wall) || 0) < now - keep) storage.removeItem(k);
+      if (!live(v.strokes)) { storage.removeItem(k); continue; }
+      if (!Number(v.wall)) { storage.setItem(k, JSON.stringify({ ...v, wall: now })); continue; }
+      if (Number(v.wall) < now - keep) storage.removeItem(k);
     }
   } catch { /* 读不了就不清 */ }
 }

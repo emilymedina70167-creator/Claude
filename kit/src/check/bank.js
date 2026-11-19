@@ -27,10 +27,11 @@ export function bankId(fence) {
   return `pr-${a}${b}`;
 }
 
-// 题里用到的课上的量（let 块定义的，不是题自己 let 的）：存进题库时抄下来，复测时写回成题里的 let（复测那一页没有那节课的量）。
+// 题里用到的课上的量（let 块定义的，不是题自己 let、pick 的）：存进题库时抄下来，复测时当这道题自己带的量（probe.base，
+// 在 pick 之前就有：pick k = int(1, n) 的 n 也取得到；复测那一页没有那节课的量）。
 // 值是浮点（检验本来就按浮点判，和 base 一样）；带参数的（Sym）、算不出 JSON 的不抄，复测那道照实自检不过、拿掉
 function lessonLets(probe, base = {}) {
-  const own = new Set((probe.lets || []).map((l) => l.name));
+  const own = new Set([...(probe.lets || []).map((l) => l.name), ...(probe.tpl?.picks || []).map((x) => x.name)]);
   const used = new Set(String(probe.src ?? '').match(/[A-Za-z_]\w*/g) || []);
   const out = {};
   for (const name of Object.keys(base || {}).sort()) {
@@ -111,18 +112,26 @@ export function pickRetest({ due = [], bank = [], absorbs = [] } = {}) {
   return { items, missing };
 }
 
-// 改写围栏里的 id:、retry: 两行；lets（存题库时抄下的课上的量）写成题自己的 let，放在最前面（题里的 let 可能用到它）
-function rewrite(fence, id, retry, lets = {}) {
+// 改写围栏里的 id:、retry: 两行
+function rewrite(fence, id, retry) {
   const lines = String(fence).split('\n').filter((l) => !/^\s*retry\s*[:：]/.test(l)).map((l) => (/^\s*id\s*[:：]/.test(l) ? `id: ${id}` : l));
   if (retry.length) lines.splice(lines.length - 1, 0, `retry: ${retry.join(', ')}`);
-  const extra = Object.entries(lets || {}).map(([k, v]) => `let ${k} = ${v}`);
-  if (extra.length) lines.splice(1, 0, ...extra);
   return lines.join('\n');
+}
+
+// 题库里存的 lets（{ 名字: JSON 文字 }）→ 值；读不了的那一个不要（自检照实报算不出来）
+const basesOfDoc = (doc) => Object.fromEntries(Object.entries(doc?.lets || {}).flatMap(([k, v]) => { try { return [[k, JSON.parse(v)]]; } catch { return []; } }));
+
+/** 复测拼出来的 check：每道题挂上它自己带的课上的量（retestCheck 回的 bases：{ 局部 id: { 名字: 值 } }） */
+export function attachBases(check, bases = {}) {
+  if (!check) return check;
+  for (const [id, b] of Object.entries(bases || {})) if (check.probes[id] && Object.keys(b).length) check.probes[id].base = b;
+  return check;
 }
 
 /**
  * 复测拼一条 check：每道挑出来的题连它的 retryBank 一起取，局部 id 重起；每道单独过一遍写法和自检，不过的连它的 retry 拿掉记 dropped。
- * retests：[{ block, days }]（block 行照它们，题照题库里写的块）。返回 { head, body, bankOf: { 局部 id: 题库编号 }, dropped: [{ id, why }] }
+ * retests：[{ block, days }]（block 行照它们，题照题库里写的块）。返回 { head, body, bankOf: { 局部 id: 题库编号 }, bases（每道题带的课上的量，attachBases 挂上）, dropped: [{ id, why }] }
  */
 export function retestCheck({ id = 'rt', title = '复测', items = [], bank = [], retests = [] } = {}) {
   const byId = new Map(bank.map((d) => [d.id, d]));
@@ -136,13 +145,14 @@ export function retestCheck({ id = 'rt', title = '复测', items = [], bank = []
     if (lost.length) { dropped.push({ id: bid, why: `retry 的 ${lost.join('、')} 题库里没有` }); continue; }
     const local = `r${k + 1}`;
     const rids = (doc.retryBank || []).map((_, i) => `${local}${String.fromCharCode(97 + i)}`);
-    const fences = [rewrite(doc.fence, local, rids, doc.lets), ...(doc.retryBank || []).map((r, i) => rewrite(byId.get(r).fence, rids[i], [], byId.get(r).lets))];
+    const fences = [rewrite(doc.fence, local, rids), ...(doc.retryBank || []).map((r, i) => rewrite(byId.get(r).fence, rids[i], []))];
     const map = { [local]: bid, ...Object.fromEntries((doc.retryBank || []).map((r, i) => [rids[i], r])) };
+    const bases = { [local]: basesOfDoc(doc), ...Object.fromEntries((doc.retryBank || []).map((r, i) => [rids[i], basesOfDoc(byId.get(r))])) };
     const block = doc.block;
     const one = parseCheck(`check id=${id}`, [`block ${block} must=${local}`, ...fences].join('\n'));
-    const errs = [...one.errors, ...(one.check ? selfCheck(one.check, {}, { lenient: true }) : [])];
+    const errs = [...one.errors, ...(one.check ? selfCheck(attachBases(one.check, bases), {}, { lenient: true }) : [])];
     if (errs.length) { dropped.push({ id: bid, why: errs[0] }); continue; }
-    kept.push({ block, local, fences, map });
+    kept.push({ block, local, fences, map, bases });
     k++;
   }
   const blocks = [...new Set([...retests.map((r) => r.block), ...kept.map((x) => x.block)])].filter((b) => kept.some((x) => x.block === b));
@@ -150,5 +160,5 @@ export function retestCheck({ id = 'rt', title = '复测', items = [], bank = []
     ...blocks.map((b) => `block ${b} must=${kept.filter((x) => x.block === b).map((x) => x.local).join(',')}`),
     ...kept.flatMap((x) => x.fences),
   ].join('\n');
-  return { head: `check id=${id} title="${String(title).replace(/"/g, '')}"`, body, bankOf: Object.assign({}, ...kept.map((x) => x.map)), dropped };
+  return { head: `check id=${id} title="${String(title).replace(/"/g, '')}"`, body, bankOf: Object.assign({}, ...kept.map((x) => x.map)), bases: Object.assign({}, ...kept.map((x) => x.bases)), dropped };
 }

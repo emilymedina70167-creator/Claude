@@ -41,7 +41,9 @@ const TEACH = /^\s*teach\s+(\S+?)\s*[:：]\s?(.*)$/;
 const EXPR = /^\s*expr\s+(.+?)\s*[:：]\s*(.+)$/;
 const IF = /^\s*if\s*[:：]\s*(.+)$/;
 const LET = /^\s*let\s+([A-Za-z]\w*)\s*=\s*(.+)$/;
-const TPL = /^\s*(pick|where)\s/i;
+// 模板的命令只认小写、整行像命令的（pick 名字 = …；where 带比较或是一个函数调用）：英语题的续行
+// 「Where did you go?」「where the river meets the sea」照旧是续行
+const TPL = /^\s*(?:pick\s+[A-Za-z_]\w*\s*=\s*\S|where\s+(?=.*(?:[=!<>]=|[<>]))\S|where\s+[A-Za-z_]\w*\s*\(.*\)\s*$)/;
 export const TPL_ROUNDS = 8; // 模板自检取几组数
 // 共用的字段、各题型自己的字段（不在里面的报「看不懂」）
 const COMMON = ['id', 'q', 'title', 'target', 'level', 'facet', 'family', 'retry', 'note', 'exam', 'like'];
@@ -290,9 +292,12 @@ export function parseCheck(head, body) {
   return { check: blocks.length ? check : null, errors };
 }
 
-/** 题里的量：let 一行一行算（浮点，和 answer 的条件一样），base 是整节课的量；模板取过数的题带着 vals（取到的数和算好的 let） */
+/**
+ * 题里的量：let 一行一行算（浮点，和 answer 的条件一样），base 是整节课的量；probe.base 是这道题自己带的课上的量
+ * （复测从题库出的题：存题库时抄下的，bank.js 的 attachBases）；模板取过数的题带着 vals（取到的数和算好的 let）
+ */
 export function probeVars(probe, base = {}) {
-  const vars = { ...base, ...(probe.vals || {}) };
+  const vars = { ...base, ...(probe.base || {}), ...(probe.vals || {}) };
   for (const l of probe.lets || []) vars[l.name] = compile(l.src)(vars);
   return vars;
 }
@@ -364,17 +369,31 @@ export function selfCheck(check, base = {}, { lenient = false } = {}) {
       if (!Object.keys(p.teach).length) out.push(`${pid} 是必做题，至少写一条 teach（判出没过时显示的一两句）`);
     }
     if (!p.tpl) { for (const msg of probeProblems(p, base)) out.push(`${pid} 的 ${msg}`); continue; }
-    // 模板：取几组数，每一组都要算得出来、example 都要满足（只报第一处）
+    // 模板：取几组数，每一组都要算得出来、example 都要满足（只报第一处）。按检验 id 和题 id 取数：预检和页面开检验时结论一样
     let avoid = null;
+    const rand = seeded(`${check.id}:${pid}`);
     for (let k = 0; k < TPL_ROUNDS; k++) {
       let d;
-      try { d = drawProbe(p, { base, avoid }); } catch (e) { out.push(`${pid}：${e.message}`); break; }
+      try { d = drawProbe(p, { base, avoid, rand }); } catch (e) { out.push(`${pid}：${e.message}`); break; }
       avoid = d.raw;
       const bad = [...d.probe.calcErrors, ...probeProblems(d.probe, base)];
       if (bad.length) { out.push(`${pid}（取 ${d.picked} 时）的 ${bad[0]}`); break; }
     }
   }
   return out;
+}
+
+/** 固定种子的随机数（mulberry32，种子是字符串的 FNV-1a） */
+export function seeded(str) {
+  let a = 2166136261 >>> 0;
+  for (let i = 0; i < String(str).length; i++) { a ^= String(str).charCodeAt(i); a = Math.imul(a, 16777619) >>> 0; }
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 /** 一道题的量算不算得出来、example 满不满足条件（selfCheck 的那一半；每条前面由调用方加「p1 的」） */
@@ -413,7 +432,8 @@ function fillMixed(text, vars) {
  * example 算好、vals 是取到的数和算好的 let，lets 清空）, picked（「k=5」，记进证据）, raw（取到的原值，下一次 avoid 用）}。
  * base：整节课的量（精确值、浮点都行）。取不到（where 太严）抛出中文原因
  */
-export function drawProbe(probe, { base = {}, rand = Math.random, avoid = null } = {}) {
+export function drawProbe(probe, { base: lesson = {}, rand = Math.random, avoid = null } = {}) {
+  const base = { ...lesson, ...(probe.base || {}) };
   const { vars, picked } = instantiate({ picks: probe.tpl.picks, lets: probe.lets || [], wheres: probe.tpl.wheres }, { base, rand, avoid });
   const own = [...probe.tpl.picks.map((x) => x.name), ...(probe.lets || []).map((x) => x.name)];
   const vals = floatVars(Object.fromEntries(own.map((n) => [n, vars[n]])));
