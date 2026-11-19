@@ -4,65 +4,186 @@
 //   normalizeFormula：学生的写法 → 表达式（补乘号、上标、希腊字母、连写的名字拆开）
 //   formulaTeX：表达式 → TeX（输入框下面的预览，学生看得到自己写的是什么）
 //   compareFormula：代值比较
-import { parse } from './expr.js';
+import { parse, FX_NAMES } from './expr.js';
 import { calcValue, exactTeX, isQ, isQMat, toFloat, Q } from './exact.js';
 
-// 学生能用的函数（和 expr.js / exact.js 一致的常用那些）
-export const FORMULA_FUNCS = ['tr', 'det', 'rank', 'inv', 'T', 'sqrt', 'abs', 'dot', 'norm', 'choose', 'fact'];
-const GREEK = { α: 'alpha', β: 'beta', γ: 'gamma', δ: 'delta', λ: 'lambda', μ: 'mu', θ: 'theta', ξ: 'xi', η: 'eta' };
+// 学生能用的函数（和 expr.js / exact.js 一致的常用那些）。计划 3 加了初等函数（FX_NAMES）和带底数的 log
+const OLD_FUNCS = ['tr', 'det', 'rank', 'inv', 'T', 'sqrt', 'abs', 'dot', 'norm', 'choose', 'fact'];
+export const FORMULA_FUNCS = [...OLD_FUNCS, ...FX_NAMES.filter((f) => !OLD_FUNCS.includes(f)), 'log'];
+// 不带括号时吃整个「单项」（sin 2x → sin(2x)）的：新加的初等函数；sqrt、abs 只在实数的题里这样读（线代的 sqrt2 照旧）
+const MONO = new Set(FX_NAMES.filter((f) => f !== 'sqrt' && f !== 'abs'));
+const TRIG = ['sin', 'cos', 'tan', 'cot', 'sec', 'csc'];
+const GREEK = { α: 'alpha', β: 'beta', γ: 'gamma', δ: 'delta', λ: 'lambda', μ: 'mu', θ: 'theta', ξ: 'xi', η: 'eta', φ: 'phi', Φ: 'Phi' };
 const SUP = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', 'ⁿ': 'n', '⁻': '-', '⁺': '+' };
+// 题里没定义时当常数的名字（题里定义了 e，e 就是题里的）
+const CONSTS = ['e', 'pi', 'inf'];
 
 /**
  * 学生写的式子 → 能交给 expr.js / exact.js 的表达式。names：式子里能用的量（n、A、alpha……）。
  * 认：省略乘号（3A、2n、(n-1)A、nA）、·×÷−、上标（A²、3ⁿ⁻¹）、ᵀ 和 ^T（转置）、希腊字母（α → alpha）、
- * 函数后面直接跟名字（trA → tr(A)）。看不懂时抛出中文原因
+ * 函数后面直接跟名字（trA → tr(A)）。计划 3：e、π、∞、√、|x|、n!、C(n,k)、log_2 x、Φ；
+ * 初等函数不带括号时吃后面的「系数 + 一个名字（带它的指数）」（sin 2x、sin x^2、sin πx），sin^2 x 是 (sin x)²；
+ * 整段只写「不存在」「发散」读成 __dne、__div。
+ * real：实数取点的题，读不准的不读（e^2x、sin xy），照实说。看不懂时抛出中文原因
  */
-export function normalizeFormula(text, { names = [], funcs = FORMULA_FUNCS } = {}) {
+export function normalizeFormula(text, { names = [], funcs = FORMULA_FUNCS, real = false } = {}) {
   const known = new Set(names);
   const fn = new Set(funcs);
   let s = String(text ?? '').trim();
   if (!s) throw new Error('还没写式子');
+  if (/^(不存在|DNE)$/i.test(s)) return '__dne';
+  if (/^发散$/.test(s)) return '__div';
   s = s.replace(/[−–—]/g, '-').replace(/[×·∙⋅]/g, '*').replace(/÷/g, '/').replace(/（/g, '(').replace(/）/g, ')').replace(/［/g, '[').replace(/］/g, ']').replace(/，/g, ',');
+  // log_2 x、log_{2}(x)、log_a x：底数先记下，记号流里是 __logb0（只认一个数或一个字母当底数）
+  const bases = [];
+  s = s.replace(/log_\s*(\{[^}]*\}|\([^)]*\)|\d+(?:\.\d+)?|[A-Za-z])/g, (all, b) => { bases.push(b.replace(/^[{(]\s*|\s*[})]$/g, '')); return ` __logb${bases.length - 1} `; });
+  if (new RegExp(`\\b(${TRIG.join('|')})\\s*\\^\\s*[({]?\\s*-\\s*1\\b`).test(s)) throw new Error('反三角写 arcsin、arccos、arctan（不写 sin^-1）');
+  s = s.replace(/[{]/g, '(').replace(/[}]/g, ')');
   s = s.replace(/ᵀ/g, "'");
   // 连着的上标字符：A²³ → A^(23)，3ⁿ⁻¹ → 3^(n-1)
   s = s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ⁻⁺]+/g, (m) => `^(${[...m].map((c) => SUP[c]).join('')})`);
-  s = s.replace(/[αβγδλμθξη]/g, (c) => (known.has(GREEK[c]) || !known.has(c) ? ` ${GREEK[c]} ` : c));
-  const toks = [];
-  const re = /\s*(?:(\d+(?:\.\d+)?|\.\d+)|([A-Za-z_][A-Za-z_0-9]*)|(\*\*|[-+*/^()[\],'|]))/y;
+  s = s.replace(/[αβγδλμθξηφΦ]/g, (c) => (known.has(GREEK[c]) || !known.has(c) ? ` ${GREEK[c]} ` : c));
+  s = s.replace(/π/g, ' pi ').replace(/∞/g, ' inf ').replace(/√/g, ' sqrt ');
+  const cst = new Set(CONSTS.filter((c) => !known.has(c)));
+  const all = new Set([...known, ...cst]);
+  let toks = [];
+  const re = /\s*(?:(\d+(?:\.\d+)?|\.\d+)|([A-Za-z_][A-Za-z_0-9]*)|(\*\*|!=|[-+*/^()[\],'|!]))/y;
   let i = 0;
   while (i < s.length) {
     if (/\s/.test(s[i])) { i++; continue; }
+    const sp = i > 0 && /\s/.test(s[i - 1]);
     re.lastIndex = i;
     const m = re.exec(s);
     if (!m) throw new Error(`看不懂「${s.slice(i, i + 6)}」`);
     i = re.lastIndex;
-    if (m[1] !== undefined) toks.push({ k: 'num', v: m[1] });
-    else if (m[2] !== undefined) toks.push(...splitName(m[2], known, fn));
-    else toks.push({ k: 'op', v: m[3] === '**' ? '^' : m[3] });
+    if (m[1] !== undefined) toks.push({ k: 'num', v: m[1], sp });
+    else if (m[2] !== undefined) {
+      const w = m[2];
+      const lb = /^__logb(\d+)$/.exec(w);
+      if (lb) { toks.push({ k: 'fn', v: 'log', base: bases[+lb[1]], sp }); continue; }
+      // C(n, k)：组合数（题里没定义 C、后面紧跟括号时）
+      if (w === 'C' && !known.has('C') && /^\s*\(/.test(s.slice(i))) { toks.push({ k: 'fn', v: 'choose', isC: true, sp }); continue; }
+      splitName(w, all, fn).forEach((t, j) => toks.push({ ...t, cst: t.k === 'name' && cst.has(t.v), sp: j === 0 && sp }));
+    } else toks.push({ k: 'op', v: m[3] === '**' ? '^' : m[3], sp });
   }
   // ^T：转置（T 不是题里的量时）
   for (let k = 0; k + 1 < toks.length; k++) {
     if (toks[k].v === '^' && toks[k + 1].v === 'T' && toks[k + 1].k !== 'num' && !known.has('T')) { toks.splice(k, 2, { k: 'op', v: "'" }); }
   }
-  // 函数后面直接跟名字或数：trA → tr(A)
-  for (let k = 0; k + 1 < toks.length; k++) {
-    if (toks[k].k === 'fn' && toks[k + 1].v !== '(' && (toks[k + 1].k === 'name' || toks[k + 1].k === 'num')) {
-      toks.splice(k + 1, 1, { k: 'op', v: '(' }, toks[k + 1], { k: 'op', v: ')' });
-    }
-  }
+  toks = absGroups(toks);
+  if (real) checkExponents(toks);
+  toks = wrapArgs(toks, { real });
   // 省略的乘号
   const out = [];
   toks.forEach((t, k) => {
     const prev = toks[k - 1];
-    const endsValue = prev && (prev.k === 'num' || prev.k === 'name' || prev.v === ')' || prev.v === ']' || prev.v === "'");
+    const endsValue = prev && (prev.k === 'num' || prev.k === 'name' || prev.v === ')' || prev.v === ']' || prev.v === "'" || prev.v === '!');
     const startsValue = t.k === 'num' || t.k === 'name' || t.k === 'fn' || t.v === '(' || t.v === '[';
     if (endsValue && startsValue) out.push('*');
     out.push(t.v);
   });
-  const src = out.join(' ').replace(/ ' /g, "' ").replace(/ '$/, "'");
+  const src = out.join(' ').replace(/ ' /g, "' ").replace(/ '$/, "'").replace(/ !/g, '!');
   try { parse(src); } catch (e) { throw new Error(`式子不完整或写错了：${e.message}`); }
   return src;
 }
+
+// |…| → norm(…)（abs 写在数上就是绝对值，写在向量上是长度，和以前 expr.js 读 |…| 一样）。
+// 一对竖线：前面是一个值的结尾才是「关」，所以 |x-1||x+1| 是两个相乘；关之前又遇到「开」就是嵌套，不猜
+function absGroups(toks) {
+  if (!toks.some((t) => t.v === '|')) return toks;
+  const out = [];
+  let open = false;
+  for (const t of toks) {
+    if (t.v !== '|') { out.push(t); continue; }
+    const prev = out[out.length - 1];
+    const ends = prev && (prev.k === 'num' || prev.k === 'name' || prev.v === ')' || prev.v === ']' || prev.v === "'" || prev.v === '!');
+    if (open && ends) { out.push({ k: 'op', v: ')' }); open = false; continue; }
+    if (open) throw new Error('嵌套的绝对值写 abs(…)，比如 abs(abs(x)-1)');
+    out.push({ k: 'fn', v: 'norm', absGroup: true, sp: t.sp }, { k: 'op', v: '(' });
+    open = true;
+  }
+  if (open) throw new Error('绝对值的竖线没写完');
+  return out;
+}
+
+// 实数的题：不带括号的指数是「数字紧跟字母」（e^2x、e^-2x、x^2y）不读——读成 e²·x 再判错就是把对的判成错
+function checkExponents(toks) {
+  for (let k = 0; k < toks.length; k++) {
+    if (toks[k].v !== '^') continue;
+    let j = k + 1;
+    if (toks[j]?.v === '-' || toks[j]?.v === '+') j++;
+    if (toks[j]?.k === 'num' && toks[j + 1]?.k === 'name' && !toks[j + 1].sp) throw new Error('指数写不清：写 e^(2x) 或 e^2·x（不带括号的指数只读到数字为止）');
+  }
+}
+
+// 和 k 处的「(」配对的「)」的下标
+function closeOf(toks, k) {
+  let d = 0;
+  for (let j = k; j < toks.length; j++) {
+    if (toks[j].v === '(' || toks[j].v === '[') d++;
+    else if (toks[j].v === ')' || toks[j].v === ']') { d--; if (!d) return j; }
+  }
+  throw new Error('括号没配对');
+}
+// 指数：一个括号、或（带负号的）一个数 / 名字。回指数结束的下一个下标
+function exponentEnd(toks, j) {
+  if (toks[j]?.v === '(') return closeOf(toks, j) + 1;
+  if (toks[j]?.v === '-' || toks[j]?.v === '+') j++;
+  if (toks[j]?.k === 'num' || toks[j]?.k === 'name') return j + 1;
+  throw new Error('^ 后面要写指数');
+}
+const P = (v) => ({ k: 'op', v });
+
+// 函数的参数：带括号的照旧；不带括号的，新函数吃「系数（数、π）+ 一个名字（带它的指数）」，老函数照旧只吃一个记号（trA → tr(A)）
+function wrapArgs(toks, { real }) {
+  for (let k = 0; k < toks.length; k++) {
+    const t = toks[k];
+    if (t.k !== 'fn') continue;
+    const name = t.v === 'log' && t.base !== undefined ? `log_${t.base}` : t.v;
+    if (t.v === 'log' && t.base === undefined) throw new Error('log 要写底数：写 ln x、lg x 或 log_2 x');
+    const mono = MONO.has(t.v) || t.v === 'log' || (real && (t.v === 'sqrt' || t.v === 'abs'));
+    // sin^2 x：(sin x)²
+    let power = null;
+    if (mono && toks[k + 1]?.v === '^') {
+      const e = exponentEnd(toks, k + 2);
+      power = toks.splice(k + 1, e - k - 1).slice(1);
+    }
+    let end; // 参数结束的下一个下标（参数是 toks[k+1 .. end)）
+    if (toks[k + 1]?.v === '(') {
+      end = closeOf(toks, k + 1) + 1;
+      if (t.isC) { const inner = toks.slice(k + 2, end - 1); if (!topComma(inner)) throw new Error('C(n, k) 是组合数，要写两个数：C(5, 2)'); }
+    } else if (mono) {
+      let j = k + 1;
+      if (toks[j]?.v === '-') j++;
+      const from = j;
+      while (toks[j] && (toks[j].k === 'num' || (toks[j].k === 'name' && toks[j].cst && toks[j].v === 'pi'))) j++;
+      if (toks[j]?.k === 'name' && !toks[j].cst) {
+        j++;
+        if (toks[j]?.v === '^') j = exponentEnd(toks, j + 1);
+      } else if (j === from && toks[j]?.k === 'fn' && toks[j].absGroup) j = closeOf(toks, j + 1) + 1; // ln|x|
+      if (j === from) throw new Error(`${name} 后面要写它作用在什么上，比如 ${name}(x)`);
+      if (toks[j]?.k === 'name' && !toks[j].cst) {
+        const a = toks.slice(from, j).map((x) => x.v).join('');
+        throw new Error(`写 ${name}(${a}${toks[j].v}) 或 ${name}(${a})·${toks[j].v}`);
+      }
+      toks.splice(j, 0, P(')'));
+      toks.splice(k + 1, 0, P('('));
+      end = j + 2;
+    } else if (toks[k + 1] && (toks[k + 1].k === 'name' || toks[k + 1].k === 'num')) {
+      toks.splice(k + 1, 1, P('('), toks[k + 1], P(')'));
+      end = k + 4;
+    } else continue;
+    // log_2 x：底数接在参数后面（expr.js 的 log(x, 底数)）
+    if (t.base !== undefined) { toks.splice(end - 1, 0, P(','), { k: /^\d/.test(t.base) ? 'num' : 'name', v: t.base }); end += 2; }
+    if (power) {
+      toks.splice(end, 0, P(')'), P('^'), ...power);
+      toks.splice(k, 0, P('('));
+      k++;
+    }
+  }
+  return toks;
+}
+const topComma = (ts) => { let d = 0; return ts.some((x) => { if (x.v === '(' || x.v === '[') d++; else if (x.v === ')' || x.v === ']') d--; return d === 0 && x.v === ','; }); };
 
 // 一个不认识的名字：试着拆成认识的几个（nA → n、A；trA → tr、A）；拆不开就报错
 function splitName(w, known, fn) {
@@ -84,12 +205,14 @@ function splitName(w, known, fn) {
   };
   const parts = go(w);
   if (parts) return parts;
-  const list = [...known].filter((x) => x.length <= 8);
+  const list = [...known].filter((x) => x.length <= 8 && !CONSTS.includes(x));
   throw new Error(`不认识「${w}」：式子里能用 ${list.join('、') || '题里给的量'}${fn.size ? `，以及 ${[...fn].filter((f) => f !== 'T').slice(0, 5).join('、')} 这些函数` : ''}`);
 }
 
 // —— 表达式 → TeX（预览）——
-const TEX_NAME = { alpha: '\\alpha', beta: '\\beta', gamma: '\\gamma', delta: '\\delta', lambda: '\\lambda', mu: '\\mu', theta: '\\theta', xi: '\\xi', eta: '\\eta' };
+const TEX_NAME = { alpha: '\\alpha', beta: '\\beta', gamma: '\\gamma', delta: '\\delta', lambda: '\\lambda', mu: '\\mu', theta: '\\theta', xi: '\\xi', eta: '\\eta', phi: '\\varphi', Phi: '\\Phi', pi: '\\pi', inf: '\\infty', __dne: '\\text{不存在}', __div: '\\text{发散}' };
+// 初等函数的写法：参数一律画括号，学生交之前看得见页面是怎么读的（sin 2x → \sin(2x)）
+const TEX_FN = { sin: '\\sin', cos: '\\cos', tan: '\\tan', cot: '\\cot', sec: '\\sec', csc: '\\csc', arcsin: '\\arcsin', arccos: '\\arccos', arctan: '\\arctan', ln: '\\ln', lg: '\\lg', exp: '\\exp', Phi: '\\Phi', phi: '\\varphi' };
 const PREC = { '+': 1, '-': 1, '*': 2, '/': 2, neg: 2.5, '^': 3 };
 
 export function formulaTeX(src) {
@@ -121,6 +244,10 @@ function tex(n) {
       if (n.name === 'sqrt') return `\\sqrt{${args}}`;
       if (n.name === 'abs' || n.name === 'norm') return `\\left|${args}\\right|`;
       if (n.name === 'det') return `\\det\\left(${args}\\right)`;
+      if (TEX_FN[n.name]) return `${TEX_FN[n.name]}\\left(${args}\\right)`;
+      if (n.name === 'log' && n.args.length === 2) return `\\log_{${tex(n.args[1])}}\\left(${tex(n.args[0])}\\right)`;
+      if (n.name === 'fact') return `${wrap(n.args[0], 9)}!`;
+      if (n.name === 'choose' && n.args.length === 2) return `\\binom{${tex(n.args[0])}}{${tex(n.args[1])}}`;
       return `\\operatorname{${n.name}}\\left(${args}\\right)`;
     }
     case 'bin': {
