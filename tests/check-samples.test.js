@@ -142,3 +142,18 @@ test('记忆库的检验题库认全部题型（和 PROBE_TYPES 一样）：408�
   const { PROBE_TYPES } = await import('../kit/src/check/spec.js');
   assert.deepEqual([...COLLECTIONS.probes.enums.type].sort(), [...PROBE_TYPES].sort());
 });
+
+// 手册（CLAUDE-PROJECT.md 第三节「408 的检验题」「英语的检验题」）里的 board check 例子：外部照抄的就是它们，执行前的检查要干净
+test('手册里 408、英语的 board check 例子：照抄就能过执行前的检查', async () => {
+  const { readFileSync } = await import('node:fs');
+  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const found = [...md.matchAll(/^````board (check id=k(?:408|en)\b[^\n]*)\n([\s\S]*?)^````\s*$/gm)];
+  assert.equal(found.length, 2, '手册里找不到 k408、ken 两个例子');
+  const types = new Set();
+  for (const [, head, body] of found) {
+    const c = load(head, body);
+    assert.deepEqual(selfCheck(c), [], head);
+    for (const p of Object.values(c.probes)) types.add(p.type);
+  }
+  for (const t of ['trace', 'predict', 'construct', 'tradeoff', 'calc', 'code', 'parse', 'translate', 'rewrite', 'discriminate', 'errfind']) assert.ok(types.has(t), `例子里没有 ${t}`);
+});

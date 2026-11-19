@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-19c**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-19d**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -78,6 +78,8 @@ b = [1, 1, -2]
 - `quiz`：选择题 / 填空题 → `components/quiz.md`
 - `solve`：解答题，按步骤判 → `components/solve.md`
 - `recall` / `construct` / `claim` / `discriminate` / `locate`（线代）：检验题（二类，学完以后的吸收检验） → `components/recall.md`
+- `trace` / `predict` / `construct` / `tradeoff` / `code` / `calc`（数据结构、操作系统、组成原理、计网）：408 的检验题 → `components/trace.md`
+- `parse` / `translate` / `rewrite` / `discriminate` / `errfind` / `recall`（英语）：英语的检验题 → `components/parse.md`
 - `context`：给页面里 Claude 的背景资料（不显示） → `components/context.md`
 - `draft`：草稿区（Apple Pencil 演算） → `components/draft.md`
 - `steps`：一步步揭开的例题（带着动脑） → `components/steps.md`
@@ -575,10 +577,11 @@ id: p1
 ````
 ````
 
+- 块里每个围栏的名字就是探题的题型：`recall` `construct` `claim` `discriminate` `locate` `solve`，408 的 `trace` `predict` `construct` `tradeoff` `code` `calc`，英语的 `parse` `translate` `rewrite` `discriminate` `errfind` `recall`（写法见第三节「检验题」「408 的检验题」「英语的检验题」：`components/recall.md`、`components/trace.md`、`components/parse.md`）。`trace` `predict` `code` `parse` `translate` `errfind` `solve` 单独写在板上是一类组件（第三节同名的那一节）；别的单独写在板上只画预览。
 - `block 块 must=… optional=… [fast=]`：一块一行，按写的先后做，块里先必做再可选；`spare`：不出现，只存进题库给复测；没排进任何一行、也不是谁的 `retry` 的题报写法错误。`limit=` 第一次作答一共多久（不写不限时），`pause=` 手写停多久算停顿（默认 30s）。
 - 执行时页面先查一遍（写法、每道题的 `example` 代进条件（带着这节课 `let` 过的量；模板先取几组数）、必做题 retry 至少 2 道、至少 1 条 teach、retry 是同一种题型），不过的不开，原因写在 `ext_in.result`；`node tools/ext-check.mjs --next … --lint` 查的是同一份。过了就画一张开始卡，题全部存进题库 `probes`。
 - 学生点开始：板、常驻栏、翻板条、整页板书收起来（合书），做完放回来；这时来的 `ext_in` 照常执行，画好的板做完检验才看得到。一道题：作答 → 点「很确定 / 大概 / 蒙的」→ 交；没有提示和「看答案」，「想不出来」一直在。
-- 判：构造的每一条、式子、真假、能不能、哪一行、逐行证明、result、fix 页面当场判；要点、证明要点、理由、solve 的步骤每交一次调一次页面里的 Opus 5.5 high（给它题、你写的要点或参考步骤、学生交的；手写的带整页图，转写和判同一次），回的不是 Opus、读不出来、超过 90 秒都算拿不准。要它判的题交了学生马上做下一道，判回来没过的在当前这道做完时插进来。
+- 判：构造的每一条、式子、真假、能不能、哪一行、逐行证明、result、fix，408 的表、结果、测试，英语的成分、has / not、选哪个、点的词和改法页面当场判；要点、证明要点、理由、solve 的步骤每交一次调一次页面里的 Opus 5.5 high（给它题、你写的要点或参考步骤、学生交的；手写的带整页图，转写和判同一次），回的不是 Opus、读不出来、超过 90 秒都算拿不准。要它判的题交了学生马上做下一道，判回来没过的在当前这道做完时插进来。
 - 判出没过：列出没过的每一项（构造是那一条自己的话，要点是「没写到：要点原文」）→ 你写的 teach → 下一道 retry；做对算补上，又错接着下一道，retry 用完记没吸收。「蒙的」做对也出一道 retry 确认。拿不准的（`unsure`、超时、作废）不补讲、不出 retry，待你核。没有对上的 teach 时叫一次页面里的 Claude 写补讲：给它题、要点、你写的 teach、学生交的、没过的项和 `<<< >>>` 里你写的话；没写 `<<< >>>` 时默认的话是「指出错在哪、只补缺的那一点（不给整段答案）。」（你在任务书里写的那句）。它的话原样显示，记成证据 `src: helper, role: check`。
 - 可选题：这一块必做都一次过、都「很确定」、没有在判的（写了 `fast=` 的还要第一次作答都在时间里）就跳过。限时只数第一次作答（题在屏幕上、页面在前台的时间）；过了 `limit` 交的记 `late`，做对最多算补上。
 - 刷新、熄屏、切走回来照存着的进度接着做（`sessions/{编号}/check/{检验 id}`），看过没交的照旧算第一次（证据记 `resumed`）；「先停下」板放回来，那一块变成一条「接着做」；下课时还开着照「先停下」存着。没做完的块不写吸收。
@@ -850,15 +853,15 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 
 ### 检验：`absorb`、`probes`（页面写，你核）
 
-一次检验（`board check`）里每道题的作答是一条证据 `src: "check"`（字段见「证据」）。做完以后每块写一条吸收：
+一次检验（`board check`）里每道题的作答是一条证据 `src: "check"`：`kind`（题型）、`comp`（`检验 id:题 id`）、`check`、`probe`、`retryOf`、`target`、`level`、`facet`、`q`、`text`（我交的，写成字）、`answer`（原样）、`items`（每一项 `{ id, ok: true | false | "missing" | null, why, tag, carried }`：`tag` 是对上的错法短名或 `slip`，`carried` 是 trace 按我自己的上一行核的那几行）、`outcome`、`final`、`retries`、`sure`、`late`、`giveup`、`ms`、`msTotal`、`teach`、`judgedBy`（`page` / `claude` / `ext` / `timeout`）、`picked` / `template`（模板）、`retest` / `bank` / `renumbered`（复测）。做完以后每块写一条吸收：
 
-- `absorb/{块}`（知识点 `#` 换 `~`）= `{ block, space, state: "成功" | "部分" | "未" | "待核", facets: { "重建" | "能用" | "边界" | "能辨": "ok" | "fixed" | "fail" | "pending" }, by: "page", checked: false, check（检验 id）, session, at, date, probes: [证据编号], confidentWrong: [题 id], debt: [target…], families, retests: [{ days: 1, due, done, ok }, { days: 7, … }], retryOwed: [题库编号], history: [以前几次（最多 5 次）], log }`。状态类：`state`、`checked` 改了在 `log` 里记一条（`{ date, by, field, from, to, basis, note }`）。
+- `absorb/{块}`（知识点 `#` 换 `~`）= `{ block, space, state: "成功" | "部分" | "未" | "待核", facets: { "重建" | "能用" | "边界" | "能辨": "ok" | "fixed" | "fail" | "pending" }, by: "page", checked: false, check（检验 id）, session, at, date, probes: [证据编号], confidentWrong: [题 id], debt: [target…], families, retests: [{ days: 1, due, done, ok, renumbered }, { days: 7, … }], retryOwed: [题库编号], history: [以前几次（最多 5 次）], log }`。状态类：`state`、`checked` 改了在 `log` 里记一条（`{ date, by, field, from, to, basis, note }`）。
 - 页面怎么判：这一块必做和做了的可选都一次过、不是「蒙的」、不超时 → `成功`；有补上的（retry 做对、蒙对了再确认、超时以后做对）→ `部分`；有 retry 用完、想不出来又没补上的 → `未`；没有「未」但有拿不准的 → `待核`。没做完的块不写。
 - 你核：直接写 `state`、`checked: true`、`by: "ext"`，`log` 加一条。再做一次同一块的检验：`state` 照最新的一次，前几次进 `history`，复测重新排。
-- 复测：检验那天以后 1 天、7 天（`retests`），到期的写进 `meta/facts` 和首页「今天」的事实（「复测：L2.1.4（隔 1 天）」），`meta/today` 的 `kind` 能写 `retest`。学生点了开一节 `kind: "check"` 的课（`sessions/{编号}`：`{ kind: "check", retest: [{ block, days }], items: [题库编号], … }`），没有主讲；题从 `probes` 里每个 `family` 挑一道没见过的（不挑那次检验里的 retry），挑不到写「缺新题」。复测的证据带 `retest: 1 | 7`、`bank`（题库编号），进掌握的参考，不改吸收。
+- 复测：检验那天以后 1 天、7 天（`retests`），到期的写进 `meta/facts` 和首页「今天」的事实（「复测：L2.1.4（隔 1 天）」），`meta/today` 的 `kind` 能写 `retest`。学生点了开一节 `kind: "check"` 的课（`sessions/{编号}`：`{ kind: "check", retest: [{ block, days }], items: [题库编号], … }`），没有主讲；题从 `probes` 里每个 `family` 挑一道没见过的（不挑那次检验里的 retry），挑不到写「缺新题」。复测的证据带 `retest: 1 | 7`、`bank`（题库编号），进掌握的参考，不改吸收。同一个 `family` 只剩见过的模板（带 `pick` 的题）时，复测退回它、换一组数做：那一条证据和 `absorb.retests` 那一次记 `renumbered: true`，`meta/state` 那一块写「复测用的是换了数的同一道题」，掌握参考把它当原题，同时照样记「缺新题」（只剩换数的模板）。
 - 检验里最后没过的（retry 用完、想不出来又没补上）和「很确定却错了」的题，页面各记一道错题（`errors`，带 `check`、`probe`、`target`、`items`；同一个 `target` 一次检验一道），能在「管理 → 最近记下的」撤销；补上了的、待核的不记。
 
-`probes/{pr-…}` = `{ fence（题的围栏原文）, type: "recall" | "construct" | "claim" | "discriminate" | "locate" | "solve", block, target, level: "基础" | "方法" | "核心", facet, family, retryBank: [题库编号], lets: { 名字: "值" }（题里用到的这节课 let 的量，浮点；复测时当这道题自己带的量，`pick` 之前就有）, src: "ext" | "lab", from: { session, check, as: "probe" | "retry" | "spare" }, seen: [{ at, session, as }], at }`。同一道题（去掉 `id:`、`retry:` 两行以后原文一样）一个编号；`retry:` 写的局部 id 存成 `retryBank`（题库编号）。你写新题：`fence` 照 `board check` 里的一道写，编号照 `pr-` 加 12 位十六进制随便取一个没用过的。
+`probes/{pr-…}` = `{ fence（题的围栏原文）, type: "recall" | "construct" | "claim" | "discriminate" | "locate" | "solve" | "trace" | "predict" | "tradeoff" | "code" | "calc" | "parse" | "translate" | "rewrite" | "errfind", block, target, level: "基础" | "方法" | "核心", facet, family, retryBank: [题库编号], lets: { 名字: "值" }（题里用到的这节课 let 的量，浮点；复测时当这道题自己带的量，`pick` 之前就有）, src: "ext" | "lab", from: { session, check, as: "probe" | "retry" | "spare" }, seen: [{ at, session, as }], at }`。同一道题（去掉 `id:`、`retry:` 两行以后原文一样）一个编号；`retry:` 写的局部 id 存成 `retryBank`（题库编号）。你写新题：`fence` 照 `board check` 里的一道写，编号照 `pr-` 加 12 位十六进制随便取一个没用过的。
 
 ### 练一练和题库：`drills`（页面写，你也可以写）
 

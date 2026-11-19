@@ -50,6 +50,9 @@ import { csmaEngine, switchEngine } from '../kit/src/engines/netmac.js';
 import { dvEngine } from '../kit/src/engines/netdv.js';
 import { utilEngine, rttEngine } from '../kit/src/engines/netperf.js';
 import { pvEngine } from '../kit/src/engines/pv.js';
+
+// board check 块里的围栏是检验题（trace 写 use: sort，是探题，第三节「408 的检验题」），不是演示组件的例子
+const withoutChecks = (md) => md.replace(/^(`{4,})board check[^\n]*\n[\s\S]*?^\1\s*$/gm, '');
 import { fillSpec, fillOrder } from '../kit/src/stepperspec.js';
 
 const ENGINES = Object.fromEntries([sortEngine, treeEngine, kmpEngine, hashEngine, bsearchEngine, netEngine, traceEngine, schedEngine, pagingEngine, bankerEngine, diskEngine, addrEngine, bitsEngine, cacheEngine, pipeEngine, subnetEngine, tcpEngine, windowEngine, elimEngine, detEngine, eigEngine, schmidtEngine, quadEngine, framesEngine,
@@ -90,7 +93,7 @@ test('每个演示：第 0 步没有问题；填表的表每一行格子数和�
 // 解析得了、走得完、ask: 写的种类都问得到、mode / given / rows / cols 都对
 test('说明里的演示组件例子：照抄就能用（ask 的种类都有、填表的字段都对）', async () => {
   const { resolveAsks, commonSpec, trackFields } = await import('../kit/src/stepperspec.js');
-  const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
+  const md = withoutChecks(readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8'));
   const found = [];
   for (const m of md.matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)) if (ENGINES[m[2]]) found.push([m[2], m[3]]);
   assert.ok(found.length >= 12, `说明里只找到 ${found.length} 个演示组件的例子`);
@@ -135,7 +138,7 @@ test('quiz 的答案、填表的标准答案：照着填都判对（示例页 + 
   const { readdirSync } = await import('node:fs');
   const all = [...blocks];
   const pages = ['CLAUDE-PROJECT.md', ...readdirSync('kit/examples').filter((f) => f.endsWith('.html')).map((f) => `kit/examples/${f}`)];
-  for (const f of pages) for (const m of readFileSync(f, 'utf8').matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)) if (ENGINES[m[2]]) all.push([m[2], m[3]]);
+  for (const f of pages) for (const m of withoutChecks(readFileSync(f, 'utf8')).matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)) if (ENGINES[m[2]]) all.push([m[2], m[3]]);
   let quizzes = 0, tables = 0;
   for (const [name, src] of all) {
     const e = ENGINES[name];
@@ -168,7 +171,8 @@ test('每个演示组件在手册里都有说明，quiz、fill、错法诊断都
   const { docSections } = await import('../kit/src/subject.js');
   const md = readFileSync(new URL('../CLAUDE-PROJECT.md', import.meta.url), 'utf8');
   const secs = docSections(componentDocs(md));
-  const textOf = (name) => { const s = secs.find((x) => x.names.includes(name)); return s ? [...s.body, ...(s.detail || [])].join('\n') : null; };
+  // 标题里有这个名字的小节都算（同 componentDoc：「408 的检验题」的标题里也有 trace）
+  const textOf = (name) => { const ss = secs.filter((x) => x.names.includes(name)); return ss.length ? ss.flatMap((s) => [...s.body, ...(s.detail || [])]).join('\n') : null; };
   const missing = [], gaps = [];
   // 说明还在 docs/drafts/ 里、没并进手册的组件（子任务正在做）：并说明的时候把这里清空，之后不许再有
   const PENDING_DOCS = new Set([]);
@@ -190,7 +194,7 @@ test('quiz、fill 的题面看得到输入（画着开始的样子，或者文�
   const { readdirSync } = await import('node:fs');
   const all = [...blocks];
   const pages = ['CLAUDE-PROJECT.md', ...readdirSync('kit/examples').filter((f) => f.endsWith('.html')).map((f) => `kit/examples/${f}`)];
-  for (const f of pages) for (const m of readFileSync(f, 'utf8').matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)) if (ENGINES[m[2]]) all.push([m[2], m[3]]);
+  for (const f of pages) for (const m of withoutChecks(readFileSync(f, 'utf8')).matchAll(/^(`{3,})(\w+)\n([\s\S]*?)^\1\s*$/gm)) if (ENGINES[m[2]]) all.push([m[2], m[3]]);
   const norm = (x) => String(x ?? '').replace(/<[^>]*>|[\s,，、$\\{}]/g, '').toLowerCase();
   const SKIP = new Set(['id', 'title', 'q', 'note', 'ask', 'mode', 'quiz', 'want', 'algo', 'show', 'given', 'rows', 'cols', 'start', 'speed', 'hint', 'link']);
   const bad = [];
