@@ -42,8 +42,8 @@
 
 `dev_requests/dr-calc-base`：外部写的任务书，外部审过（`review`：有条件通过，必改 1–6、必加 7–12，改完直接开工），我的回复在 `reviewReply`（三处歧义我的理解）。执行计划 `docs/superpowers/plans/2026-11-19-calc-base.md`，第六节那张表是照审改的、以它为准。分两次合进 `main`：
 
-- 第一次（做完、已发布）：弧度默认、学生的读法、实数取点、符号求导、数值极限 / 积分、`calc:` 字段、小键盘、预检、手册、示例页。见 `CLAUDE.md` 第 9 批那一条。
-- 第二次（没做）：Task 7（derive 推极限、换元积分，必改 5、6）、7b（变限积分的学生写法 `∫_0^x … dt`，必加 7）、Task 8（检验题的式子，`check/judge.js` 两处——计划 4 改得多就改成在 `dr-plan4` 上留 `compareFx` 的接口）、Task 9（`integral2`、`sum`）、9b（微分方程通解 `ode`）、数列极限的手册。
+- 全部做完、两批一起合进 `main`、发布（原定分两次合，学生说做好直接执行）。见 `CLAUDE.md` 第 9 批那一条。
+- 第一节用到高数的真课以后：读 `evidence` 里 `ok: null` 的作答（页面判不了的）和 `check` 里「只是极限一样」的行，看是阈值太严还是写法没认。
 - 判错要比判对更有把握（计划第五节第 1 条）：改 `fx/limit.js`、`fx/sample.js` 的阈值以前先跑 `tests/fx-limit.test.js` 的经典极限。
 - 弧度：新加调用 `compile` / `evaluate` / `calcValue` 的文件要在 `tests/expr-rad.test.js` 里归类。
 
