@@ -282,3 +282,19 @@ test('expect / wrong 少写了 r.（expect 缺页: faults）：selfCheck 报「�
 test('runFields：字段值碰巧是 toString 这类名字不当成格子', () => {
   assert.deepEqual(runFields({ slots: [] }, { fields: { array: 'toString' } }), { array: 'toString' });
 });
+
+test('seq 格子和一个数比（A != 0、A != k）：报写法，不静默算满足', () => {
+  const p = probeOf('construct', 'id: q\ntarget: x\nlevel: 基础\nslots: A=seq(3)\nlet k = 2\nif: A != 0\nif: A != k\nexample: A=3 1 2');
+  const r = evalIfs(p.ifs, p.example, { k: 2 }, p.slots);
+  assert.deepEqual(r.map((x) => x.ok), [false, false]);
+  for (const x of r) assert.match(x.error, /A 是一串/);
+  const e = errsOf(`block DS-L8.2 optional=q\n${fence('construct', 'id: q\ntarget: x\nlevel: 基础\nslots: A=seq(3)\nlet k = 2\nif: A != 0\nexample: A=3 1 2')}`);
+  assert.ok(e.some((x) => /if1/.test(x) && /是一串/.test(x)), e.join('\n'));
+  // 和 "字" 比、和量比照旧
+  const t = probeOf('construct', 'id: q\ntarget: x\nlevel: 基础\nslots: A=seq(3)\nif: A != "1 2 3"\nexample: A=3 1 2');
+  assert.deepEqual(evalIfs(t.ifs, t.example, {}, t.slots).map((x) => x.ok), [true]);
+});
+
+test('expect 引号里的字碰巧是量名不报', () => {
+  assert.deepEqual(errsOf(wrap('predict', LRU('p2').replace('expect x2 最后换出的页: 2', 'expect x2 最后换出的页: "faults"'))), []);
+});

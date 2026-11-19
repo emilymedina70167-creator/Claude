@@ -592,8 +592,10 @@ function condOk(text, scope, values, kinds, runNames) {
   }
   const both = SIMPLE.test(sp.lhs) && SIMPLE.test(sp.rhs);
   // 一串（r.flipped、r.victims、r.final）和一个数比：close 永远不等，r.flipped != 0 会一直算满足——不静默，报写法
-  // （只管用到 run 的量的条件：数学的条件照旧）
+  // （只管用到 run 的量、或 seq / text / procs 格子的条件：数学的格子、矩阵和数比的照旧）
   const isRun = (side) => runRefs(side, runNames) !== side;
+  const strSlotIn = (side) => [...String(side).matchAll(/(?<![.\w])([A-Za-z_]\w*)/g)].some((m) => isStrSlot(m[1]));
+  const touches = (side) => isRun(side) || strSlotIn(side);
   const isSeq = (v) => Array.isArray(v) || typeof v === 'string';
   const mixed = (a, b) => {
     if (isSeq(a) === isSeq(b)) return;
@@ -602,15 +604,16 @@ function condOk(text, scope, values, kinds, runNames) {
   };
   if ((sp.op === '==' || sp.op === '!=') && both) {
     const a = val(sp.lhs), b = val(sp.rhs);
-    const str = QUOTED.test(sp.lhs) || QUOTED.test(sp.rhs) || isStrSlot(sp.lhs) || isStrSlot(sp.rhs);
-    if (!str && (isRun(sp.lhs) || isRun(sp.rhs))) mixed(a, b);
+    const quoted = QUOTED.test(sp.lhs) || QUOTED.test(sp.rhs);
+    const str = quoted || isStrSlot(sp.lhs) || isStrSlot(sp.rhs);
+    if (!quoted && (touches(sp.lhs) || touches(sp.rhs))) mixed(a, b);
     const asText = str || hasStr(a) || hasStr(b);
     return (asText ? sameToks(normTokens(a), normTokens(b)) : close(toNum(a), toNum(b))) === (sp.op === '==');
   }
   if (sp.op === '==' || sp.op === '!=') {
     const [cond] = parseConditions(runRefs(text, runNames));
     const a = cond.lhs(scope), b = cond.rhs(scope);
-    if (isRun(sp.lhs) || isRun(sp.rhs)) {
+    if (touches(sp.lhs) || touches(sp.rhs)) {
       mixed(a, b);
       if (hasStr(a) || hasStr(b)) throw new Error(`${hasStr(a) ? sp.lhs : sp.rhs} 是字，算式里不能算：直接写 ${hasStr(a) ? sp.lhs : sp.rhs} == "…" 或 P == ${hasStr(a) ? sp.lhs : sp.rhs}`);
     }
@@ -790,7 +793,8 @@ function predictProblems(p, base, tieLines) {
   const right = {};
   // 少写了「r.」的量名（expect 缺页: faults）会被当成字面的字，判的时候永远对不上：报出来
   const bare = (text) => {
-    for (const m of String(text ?? '').matchAll(/(?<![.\w])([A-Za-z_]\w*)/g)) {
+    const plain = String(text ?? '').replace(/"[^"]*"|“[^”]*”|「[^」]*」/g, ' '); // 引号里的是字，不查
+    for (const m of plain.matchAll(/(?<![.\w])([A-Za-z_]\w*)/g)) {
       const run = p.runs.find((r) => measureKnown(r.engine, m[1]));
       if (run && rv.vars[m[1]] === undefined) return `${m[1]} 是量的名字：写 ${run.name}.${m[1]}`;
     }
