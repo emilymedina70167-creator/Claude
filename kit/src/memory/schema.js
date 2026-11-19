@@ -241,7 +241,8 @@ export const COLLECTIONS = {
     label: '给开发的', kind: 'state', writers: ['chat', 'class', 'head', 'page', 'me'],
     id: { re: /^[A-Za-z0-9_-]+$/, eg: 'dr-1' },
     required: ['text'],
-    enums: { status: ['open', 'done'] },
+    // design：开发写的设计稿、外部写的任务书草稿，学生和外部审过、改成 open 才动手
+    enums: { status: ['open', 'design', 'done'] },
     dates: [],
     refs: {},
     tracked: [],
