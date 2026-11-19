@@ -38,13 +38,13 @@ export function answerSummary(probe, answer, r = {}) {
       parts.push(...rowsOf, ...extra);
     } catch { /* 表都出不来：没有可写的 */ }
   }
-  if (probe.type === 'predict' && a.expects) parts.push((probe.expects || []).map((e) => `${e.label || e.id}：${String(a.expects[e.id] ?? '').trim() || '空'}`).join('；'));
+  if (probe.type === 'predict' && a.expects) parts.push((probe.expects || []).map((e) => `${e.label || e.id}：${String(a.expects[e.id] ?? '').trim() || '空'}`).join('；') || '');
   if (probe.type === 'code' && a.code) parts.push(clip(String(a.code).replace(/\s+$/, ''), 300));
   if (probe.type === 'parse') parts.push((a.spans || []).length ? bracketText(probe.tokens || [], a.spans) : '（一处都没标）');
   if (probe.type === 'errfind') {
     const k = a.word === undefined || a.word === null || a.word === '' ? -1 : Number(a.word);
     const w = k >= 0 ? tokenizeSentence(probe.text || '')[k]?.w : '';
-    parts.push(w ? `点了 ${w}，改成 ${String(a.fix ?? '').trim() || '（没写）'}` : '没点词');
+    parts.push(w ? `点了 ${w}，改成 ${String(a.fix ?? '').trim() || '（没写）'}` : `没点词${String(a.fix ?? '').trim() ? `，改成 ${String(a.fix).trim()}` : ''}`);
   }
   if (probe.type === 'claim') parts.push(`判${a.truth ? '真' : '假'}`);
   if (probe.type === 'discriminate') parts.push(probe.options ? String(a.pick ?? '').trim() || '（没选）' : a.can ? '能用' : '不能用');
@@ -56,7 +56,7 @@ export function answerSummary(probe, answer, r = {}) {
   if (a.result) parts.push(`结果：${a.result}`);
   if (a.fix && probe.type !== 'errfind') parts.push(`改成：${a.fix}`);
   if (a.ink?.final) parts.push(`（手写，整页图 ${a.ink.final}）`);
-  return parts.join('；') || '（空的）';
+  return parts.filter(Boolean).join('；') || '（空的）';
 }
 
 const itemText = (it) => `${it.id} ${it.ok === 'missing' ? '没写到' : it.ok === null ? '待核' : String(it.id).startsWith('if') ? '不满足' : '不对'}${it.why ? `：${it.why}` : ''}`;

@@ -112,3 +112,20 @@ test('trace：写错的那一行进 first；错题本 mine 和证据 first 一�
     assert.doesNotMatch(es[0].attrs.step, /r2/);
   }
 });
+
+test('errfind 没点词也写了改法；predict 全没填不留空段', () => {
+  const ef = P('errfind', { text: 'He go to school .' });
+  assert.equal(answerSummary(ef, { word: 99, fix: 'goes' }), '没点词，改成 goes');
+  const pr = P('predict', { expects: [] });
+  assert.equal(answerSummary(pr, { expects: {}, text: '想想' }), '想想');
+});
+
+test('掌握：换了数的复测通过不算新题通过，同样的证据不带 renumbered 就算', async () => {
+  const { masteryProposals } = await import('../kit/src/memory/mastery.js');
+  const ev = (n, extra = {}) => ({ id: `ev-ck-${n}`, src: 'check', kind: 'recall', comp: `k1:p${n}`, session: 'c-9', block: 'L2.1.4', tags: ['L2.1.4'], outcome: 'pass', final: 'pass', sure: 'sure', bank: `pr-${n}`, at: 1000 + n, ...extra });
+  const mem = (r) => ({ curriculum: [{ id: 'L2.1.4', level: 'block' }], mastery: [], evidence: [ev(1, r), ev(2, r)], sessions: [] });
+  const plain = masteryProposals(mem({}));
+  const ren = masteryProposals(mem({ renumbered: true }));
+  assert.ok(plain.length > 0, '没 renumbered 的有提议');
+  assert.equal(ren.filter((p) => (p.patch || p.data || {}).state === '基础题过').length, 0);
+});
