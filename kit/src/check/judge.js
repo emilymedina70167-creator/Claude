@@ -7,6 +7,7 @@ import { compile } from '../expr.js';
 import { readCell } from '../anscheck.js';
 import { equivalent } from '../ncalg.js';
 import { normalizeFormula, FORMULA_FUNCS } from '../formula.js';
+import { compareFx, DEFAULT_RANGE } from '../fx/sample.js';
 import { parseDeriveDo, sampleEnvs, checkLine } from '../derivedo.js';
 import { probeVars, evalIfs, withDefaults } from './spec.js';
 import { parseJudge, STEP_KINDS, STEP_TAGS } from '../solvespec.js';
@@ -49,6 +50,18 @@ function sameValue(student, expected, vars) {
     const s = compile(normalizeFormula(String(student), { names, funcs: FORMULA_FUNCS }))(vars);
     const e = compile(normalizeFormula(String(expected), { names, funcs: FORMULA_FUNCS }))(vars);
     return close(s, e);
+  } catch { return fxSame(student, expected, vars); }
+}
+
+// 式子里有自变量 x、y（题里没给值）：高数的函数式，在 (−3, 3) 上取点比（计划 3，fx/sample.js）；判不了是 null
+function fxSame(student, expected, vars = {}) {
+  try {
+    const names = [...new Set([...Object.keys(vars), 'x', 'y'])];
+    const s = normalizeFormula(String(student), { names, real: true });
+    const e = normalizeFormula(String(expected), { names, real: true });
+    const free = ['x', 'y'].filter((v) => !(v in vars) && new RegExp(`\\b${v}\\b`).test(`${s} ${e}`));
+    if (!free.length) return null;
+    return compareFx(e, s, { domain: free.map((name) => ({ ...DEFAULT_RANGE, name })), scope: vars, seed: String(expected) }).ok;
   } catch { return null; }
 }
 
@@ -65,7 +78,9 @@ function exprItems(probe, exprs = {}) {
   return (probe.exprs || []).map((e) => {
     const s = String(exprs?.[e.id] ?? '').trim();
     if (!s) return { id: e.id, ok: false, why: `没写${e.label}` };
-    const v = equivalent(s, e.expected);
+    // 非交换多项式判不了的（sin、ln 这些函数式）：交给实数取点（计划 3）；还判不了是 null
+    let v = equivalent(s, e.expected);
+    if (v === 'unknown') { const f = fxSame(s, e.expected); if (f !== null) v = f; }
     return { id: e.id, ok: v === 'unknown' ? null : v, why: v === true ? '' : v === 'unknown' ? '页面判不了这个式子' : `${e.label}不对` };
   });
 }
