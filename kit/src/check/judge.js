@@ -8,7 +8,8 @@ import { readCell } from '../anscheck.js';
 import { equivalent } from '../ncalg.js';
 import { normalizeFormula, FORMULA_FUNCS } from '../formula.js';
 import { parseDeriveDo, sampleEnvs, checkLine } from '../derivedo.js';
-import { baseType, probeVars, evalIfs, withDefaults, runVars, runFields, measuresUsed, expectValue, traceTable, traceRows, traceRowName } from './spec.js';
+import { baseType, probeVars, evalIfs, withDefaults, runVars, runFields, measuresUsed, expectValue, traceTable, traceRows, traceRowName, rewriteHits } from './spec.js';
+import { ROLES, matchText, diagnose, normText, joinWords, spanText, tokenizeSentence } from '../entext.js';
 import { variantsOf, variantValues, sortPass } from '../engines/measures.js';
 import { checkFill, cellOk, normCell, misreadFill } from '../stepperspec.js';
 import { valueMatch, sameResult, unreadWhy } from './values.js';
@@ -308,6 +309,108 @@ function resultItem(probe, answer = {}, base = {}) {
   return m === true ? { id: 'result', ok: true, why: '' } : { id: 'result', ok: false, why: m === null ? unreadWhy(right) : '最后的值不对' };
 }
 
+// —— 英语（计划 4 Task 6）：parse、rewrite、errfind、discriminate 的两个按钮页面判；translate 照 recall 全交页面里的 Claude ——
+
+const roleName = (probe, role) => probe.roles?.find((r) => r.key === role)?.name || ROLES[role] || role;
+
+/** parse 的 key 每个成分的编号（按句子先后；同一种第二个起 RC2、RC3…）：[{ id, span }] */
+export function parseItemIds(probe) {
+  const seen = {};
+  return (probe.spans || []).map((span) => {
+    seen[span.role] = (seen[span.role] || 0) + 1;
+    return { id: seen[span.role] > 1 ? `${span.role}${seen[span.role]}` : span.role, span };
+  });
+}
+
+/** 词和成分写回括号写法：[S The man [RC who called]] [V met] …（外面的先开、里面的先关） */
+export function bracketText(tokens = [], spans = []) {
+  const sorted = [...spans].sort((a, b) => a.from - b.from || b.to - a.to);
+  const words = tokens.map((t, i) => {
+    const open = sorted.filter((s) => s.from === i).map((s) => `[${s.role} `).join('');
+    const close = ']'.repeat(sorted.filter((s) => s.to === i).length);
+    return `${open}${t.w}${close}`;
+  });
+  return joinWords(words);
+}
+
+/**
+ * parse：学生标的 vs key，宽严和一类 parse 的 judgeSpans 一样（范围一模一样才算标到；标点不算进头尾）。
+ * 先配范围和角色都一样的，再配范围一样角色不一样的（false「这是 X，标成了 Y」），key 剩下的 missing，学生剩下的并成一项 extra
+ */
+function parseItems(probe, answer = {}) {
+  const mine = (answer.spans || []).map((s) => ({ role: s.role, from: Number(s.from), to: Number(s.to) }));
+  const used = new Set();
+  const ids = parseItemIds(probe);
+  const res = new Map();
+  const take = (span, same) => mine.findIndex((m, k) => !used.has(k) && m.from === span.from && m.to === span.to && (!same || m.role === span.role));
+  for (const { id, span } of ids) { const k = take(span, true); if (k >= 0) { used.add(k); res.set(id, { id, ok: true, why: '' }); } }
+  for (const { id, span } of ids) {
+    if (res.has(id)) continue;
+    const k = take(span, false);
+    if (k >= 0) { used.add(k); res.set(id, { id, ok: false, why: `这是${roleName(probe, span.role)}，标成了${roleName(probe, mine[k].role)}` }); }
+  }
+  const left = mine.filter((_, k) => !used.has(k));
+  const text = (s) => spanText(probe.tokens, s);
+  const items = ids.map(({ id, span }) => {
+    const keys = [id, ...(id !== span.role ? [span.role] : []), `role=${span.role}`];
+    if (res.has(id)) { const it = res.get(id); return it.ok ? it : { ...it, keys }; }
+    // 同一种成分标了，范围不对（被动的谓语只标了 were）：照旧是没标到，说一句范围不对
+    const near = left.find((m) => m.role === span.role && m.from <= span.to && m.to >= span.from);
+    const name = roleName(probe, span.role);
+    return { id, ok: 'missing', why: near ? `${name}的范围不对：标了「${text(near)}」` : `没标出${name}`, keys };
+  });
+  if (left.length) items.push({ id: 'extra', ok: false, why: `多标了：${left.map((m) => `「${text(m)}」（${roleName(probe, m.role)}）`).join('、')}`, keys: ['extra'] });
+  return { items, needsClaude: false, stop: items.some((x) => x.ok === false || x.ok === 'missing') };
+}
+
+/** rewrite：has 每条一项（h1…）、not 每条一项（n1…，写了就是 false）；有一项不过停下；都过、写了 must 交页面里的 Claude */
+function rewriteItems(probe, answer = {}) {
+  const text = String(answer.text ?? '');
+  const r = rewriteHits(probe, text);
+  const empty = !text.trim();
+  const items = [
+    ...(probe.has || []).map((h, i) => ({ id: h.id, ok: r.has[i] === true, why: r.has[i] ? '' : empty ? '还没写' : h.msg || '没有用到要求的写法' })),
+    ...(probe.not || []).map((h, i) => ({ id: h.id, ok: !empty && !r.not[i], why: empty ? '还没写' : r.not[i] ? h.msg || `写了不该有的「${h.frag}」` : '' })),
+  ];
+  const stop = items.some((x) => !x.ok);
+  return { items, needsClaude: !stop && (probe.must || []).length > 0, stop };
+}
+
+// errfind 的改法：删掉 / 删 / del / - 都当「（删掉）」（和一类 errfind 一样）
+const DEL = /^[（(]?\s*(删掉|删去|删除|删|去掉|delete|del|-|—)\s*[)）]?$/i;
+const delNorm = (s) => (DEL.test(String(s ?? '').trim()) ? '（删掉）' : String(s ?? ''));
+const FIX_OPTS = { sentence: true };
+
+/** errfind：点的词一项 word（点了 decoys 里的，why 写那条、补讲找 decoy=词）、改法一项 fix（常见的错改法 why 写那条）；不对停下 */
+function errfindItems(probe, answer = {}) {
+  const toks = tokenOf(probe);
+  const at = answer.word === undefined || answer.word === null || answer.word === '' ? -1 : Number(answer.word);
+  if (at !== probe.wordAt) {
+    const decoy = (probe.decoys || []).find((d) => d.i === at);
+    const w = toks[at]?.w;
+    const why = at < 0 || !w ? '没点错的词' : decoy ? `「${w}」用得没错：${decoy.why}` : `「${w}」用得没错，错的是别的词`;
+    return { items: [{ id: 'word', ok: false, why, keys: [...(decoy ? [`decoy=${decoy.w}`] : []), 'word'] }], needsClaude: false, stop: true };
+  }
+  const items = [{ id: 'word', ok: true, why: '' }];
+  const s = String(answer.fix ?? '').trim();
+  const fixes = (probe.fix || []).map(delNorm);
+  const m = s ? matchText(delNorm(s), fixes, FIX_OPTS) : { ok: false, empty: true };
+  if (m.ok) items.push({ id: 'fix', ok: true, why: '' });
+  else {
+    const bad = s ? diagnose(s, probe.fixWrongs || [], FIX_OPTS) : null;
+    items.push({ id: 'fix', ok: false, why: !s ? '没写改成什么' : bad ? `改成了常见的错法「${bad.text}」${bad.why ? `：${bad.why}` : ''}` : '找对了，改得不对', keys: ['fix'] });
+  }
+  const stop = items.some((x) => !x.ok);
+  return { items, needsClaude: !stop && (probe.must || []).length > 0, stop };
+}
+
+// errfind 的句子切成的词（和一类 errfind、findWrong 的下标一样）
+const tokCache = new WeakMap();
+function tokenOf(probe) {
+  if (!tokCache.has(probe)) tokCache.set(probe, tokenizeSentence(probe.text));
+  return tokCache.get(probe);
+}
+
 /**
  * 一项在画面上叫什么（不露编号）：predict 的 expect 是外部写的标签，run 是「跑引擎」；trace 的 r1… 是那张表的行名
  * （「第 2 趟（d = 2）」「第 10 列「3」」「第 k 行」），x1… 是表下面那几格的名字；别的 null（外壳照旧）
@@ -315,6 +418,21 @@ function resultItem(probe, answer = {}, base = {}) {
 export function itemLabel(probe, id) {
   if (probe?.type === 'code') return id === 'compile' ? '编译' : /^t\d+$/.test(id) ? `测试 ${id.slice(1)}` : null;
   if (id === 'run') return '跑引擎';
+  if (probe?.type === 'parse') {
+    if (id === 'extra') return '多标的';
+    const x = parseItemIds(probe).find((y) => y.id === id);
+    if (!x) return null;
+    const n = Number(id.slice(x.span.role.length)) || 1;
+    return `${roleName(probe, x.span.role)}${n > 1 ? `（第 ${n} 个）` : ''}`;
+  }
+  if (probe?.type === 'rewrite' && /^[hn]\d+$/.test(id)) {
+    const list = id[0] === 'h' ? probe.has || [] : probe.not || [];
+    const k = Number(id.slice(1));
+    const what = id[0] === 'h' ? '要有的写法' : '不该有的写法';
+    return k >= 1 && k <= list.length ? `${what}${list.length > 1 ? ` ${k}` : ''}` : null;
+  }
+  if (probe?.type === 'errfind') return id === 'word' ? '错的词' : id === 'fix' ? '改法' : null;
+  if (probe?.type === 'discriminate' && id === 'pick') return '选哪个';
   if (id === 'result' && baseType(probe) === 'solve') return '最后的值';
   if (probe?.type === 'trace' && /^[rx]\d+$/.test(id)) {
     let T;
@@ -331,6 +449,8 @@ export function itemLabel(probe, id) {
  * 页面机器判的那一半。answer 的样子见 Task 2：construct { slots, exprs }；claim { truth, slots?, exprs?, text?, ink?, proof? }；
  * discriminate { can, text?, ink?, result? }；locate { line, text?, ink?, fix? }；recall / solve { text?, ink? }；
  * 408 的 construct 的 seq / text / procs 格子是学生写的原文；predict { expects: { x1: '10', … }, text?, ink? }。
+ * 英语：parse { spans: [{ role, from, to }] }（下标照 probe.tokens）；rewrite { text }；translate { text?, ink? }（同 recall）；
+ * errfind { word（点的词在 probe.text 切出来的第几个记号，tokenizeSentence 的下标）, fix, text? }；discriminate 的两个按钮 { pick（选的那个字）, text?, ink? }。
  * 返回 { items, needsClaude（还有要点 / 步骤要页面里的 Claude 判）, stop（判断错了：真假、能不能、哪一行，后面不用判了）}
  */
 export function judgeMachine(probe, answer = {}, base = {}) {
@@ -356,6 +476,12 @@ export function judgeMachine(probe, answer = {}, base = {}) {
       return { items, needsClaude: hasPoints, stop: false };
     }
     case 'discriminate': {
+      if (probe.options) { // 两个按钮：选对了理由交页面里的 Claude，选错了停下
+        const ok = normText(answer.pick ?? '') !== '' && normText(answer.pick) === normText(probe.answer);
+        items.push({ id: 'pick', ok, why: ok ? '' : answer.pick ? `这里是「${probe.answer}」` : '没选' });
+        if (!ok) return { items, needsClaude: false, stop: true };
+        return { items, needsClaude: hasPoints, stop: false };
+      }
       const ok = answer.can === probe.can;
       items.push({ id: 'can', ok, why: ok ? '' : `这里${probe.can ? '能' : '不能'}用` });
       if (!ok) return { items, needsClaude: false, stop: true };
@@ -379,6 +505,12 @@ export function judgeMachine(probe, answer = {}, base = {}) {
     }
     case 'code':
       return codeItems(probe, answer);
+    case 'parse':
+      return parseItems(probe, answer);
+    case 'rewrite':
+      return rewriteItems(probe, answer);
+    case 'errfind':
+      return errfindItems(probe, answer);
     case 'solve': { // solve / calc：写了 result 的先核最后的值，步骤照旧全交页面里的 Claude
       const it = resultItem(probe, answer, base);
       return { items: it ? [it] : [], needsClaude: true, stop: false };
@@ -460,7 +592,14 @@ const OK_TEXT = { must: '必写要点', may: '可选要点（不影响过没过�
 function answerText(probe, answer = {}, images = 0) {
   const out = [];
   if (probe.type === 'claim') out.push(`学生判这个命题是：${answer.truth ? '真' : '假'}`);
-  if (probe.type === 'discriminate') out.push(`学生判：${answer.can ? '能' : '不能'}用`, ...(answer.result ? [`学生写的结果：${answer.result}`] : []));
+  if (probe.type === 'discriminate' && probe.options) out.push(`学生选的：${String(answer.pick ?? '').trim() || '（没选）'}`);
+  else if (probe.type === 'discriminate') out.push(`学生判：${answer.can ? '能' : '不能'}用`, ...(answer.result ? [`学生写的结果：${answer.result}`] : []));
+  if (probe.type === 'parse') out.push(`学生标的：${(answer.spans || []).length ? bracketText(probe.tokens, answer.spans) : '（一处都没标）'}`);
+  if (probe.type === 'errfind') {
+    const k = answer.word === undefined || answer.word === null || answer.word === '' ? -1 : Number(answer.word);
+    const w = tokenOf(probe)[k]?.w;
+    out.push(w ? `学生点的词：「${w}」（第 ${tokenOf(probe).filter((t) => t.word && t.i <= k).length} 个词）` : '学生没点词', `学生写的改法：${String(answer.fix ?? '').trim() || '（没写）'}`);
+  }
   if (probe.type === 'locate') out.push(`学生点的错的那一行：第 ${answer.line} 行`, ...(answer.fix ? [`学生写的改法：${answer.fix}`] : []));
   if (baseType(probe) === 'solve' && probe.result) out.push(`学生写的最后的值：${String(answer.result ?? '').trim() || '（没写）'}`);
   if (probe.type === 'predict') for (const e of probe.expects || []) out.push(`学生写的「${e.label}」：${String(answer.expects?.[e.id] ?? '').trim() || '（没写）'}`);
@@ -478,10 +617,22 @@ function answerText(probe, answer = {}, images = 0) {
   return out;
 }
 
+// 英语题给页面里的 Claude 的事实：原句、两个选项、参考译文 / 改写、错的词和改法（判理由时用）
+function englishFacts(probe) {
+  const out = [];
+  if (probe.type === 'parse') out.push(`原句：${probe.text}`, `主讲标的成分：${bracketText(probe.tokens, probe.spans)}`);
+  else if (['translate', 'rewrite', 'errfind'].includes(probe.type) && probe.text) out.push(`原句：${probe.text}`);
+  if (probe.type === 'translate' && probe.answer) out.push(`参考译文：${probe.answer}`);
+  if (probe.type === 'rewrite' && probe.example) out.push(`一句对的改写：${probe.example}`);
+  if (probe.type === 'errfind') out.push(`错的词：「${tokenOf(probe)[probe.wordAt]?.w}」，改成：${(probe.fix || []).join(' / ')}`);
+  if (probe.type === 'discriminate' && probe.options) out.push(`两个选项：${probe.options.join(' | ')}；对的是「${probe.answer}」`);
+  return out;
+}
+
 /** 给页面里的 Claude 判分的那一条：题、要点或参考步骤、学生交的、要回的写法。只写事实 */
 export function verdictPrompt({ probe, answer = {}, ids = claudeIds(probe), images = 0 } = {}) {
   const head = [VERDICT_HEAD, ''];
-  const q = [`题（${probe.type}）：`, probe.claim ? `命题：${probe.claim}` : '', probe.q || '', ...(probe.lines || []).map((l, i) => `第 ${i + 1} 行：${l}`)].filter(Boolean);
+  const q = [`题（${probe.type}）：`, probe.claim ? `命题：${probe.claim}` : '', probe.q || '', ...(probe.lines || []).map((l, i) => `第 ${i + 1} 行：${l}`), ...englishFacts(probe)].filter(Boolean);
   const pts = [];
   if (baseType(probe) === 'solve') {
     pts.push('参考步骤：', ...(probe.steps || []).map((s) => `${s.id}（${STEP_KINDS[s.kind] || s.kind}）：${s.text}`));
@@ -511,6 +662,7 @@ export function fallbackPrompt({ probe, answer = {}, items = [], extPrompt = '' 
     `主讲写给你的话：${String(extPrompt || '').trim() || DEFAULT_FALLBACK}`,
     '',
     `题（${probe.type}）：${probe.claim || probe.q || ''}`,
+    ...englishFacts(probe),
     ...['must', 'may', 'wrong'].flatMap((k) => (probe[k] || []).map((x) => `${OK_TEXT[k]} ${x.id}：${x.text}`)),
     ...(probe.steps || []).map((s) => `参考步骤 ${s.id}：${s.text}`),
     ...Object.entries(probe.teach || {}).map(([k, v]) => `主讲写的补讲（${k}）：${v}`),

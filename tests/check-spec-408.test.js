@@ -33,9 +33,12 @@ test('常量：PROBE_TYPES 多了 408、英语的题型；tradeoff、calc 是别
   assert.equal(baseType({ type: 'construct' }), 'construct');
 });
 
-test('还没接上的题型报「这一种还没接上」；tradeoff 照 recall 读、type 存 tradeoff', () => {
-  for (const t of ['parse', 'translate', 'rewrite', 'errfind']) {
-    assert.match(parseProbe(t, 'id: q\ntarget: x\nlevel: 基础').error, new RegExp(`${t}：这一种还没接上`));
+test('英语的四种都接上了（缺字段报缺的那个，不再是「还没接上」）；tradeoff 照 recall 读、type 存 tradeoff', () => {
+  const need = { parse: /key:/, translate: /text:/, rewrite: /text:/, errfind: /text:/ };
+  for (const [t, re] of Object.entries(need)) {
+    const err = parseProbe(t, 'id: q\ntarget: x\nlevel: 基础').error;
+    assert.doesNotMatch(err, /还没接上/);
+    assert.match(err, re);
   }
   const p = probeOf('tradeoff', 'id: q\nq: 链表和顺序表各好在哪\ntarget: x\nlevel: 方法\nmust: 随机存取');
   assert.equal(p.type, 'tradeoff');

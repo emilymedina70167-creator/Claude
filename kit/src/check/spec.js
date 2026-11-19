@@ -23,6 +23,9 @@
 // 引擎跑一遍，engines/measures.js 交的量在条件里写 r.unstable、r.flipped）；条件多比大小（>= <= > <）和字的 == != in
 // （P in r.flipped：不论先后、不管空格逗号大小写撇号）。predict 写 run、expect 标签: 值、带 => 的 wrong（错答案，挂在上面最近的
 // expect）、against:（这组数要分得开的引擎错法）。固定的数用到靠并列定的量（OPT 的 victims）自检报，学生造的那组有并列交 judge 待核。
+// 英语（Task 6）：parse 写 key:（括号写法）+ 可选 roles:；translate 写 text: + must / may / wrong + answer:（参考译文）；rewrite 写 text: +
+// has: 片段 => 话 / not: 片段 => 话 + example:（自检用）+ 可选 must；errfind 写 text: word:（are#2）fix:（a | !错的=为什么 | 删掉）+ 可选 decoys: must；
+// discriminate 多 options: A | B（只收两个）+ answer:，和 can: 只写一个。英语题不做模板。
 // trace 写 use: 演示组件 + 它自己的字段（algo: shell、array: …）+ 可选 rows / given / cols / against：学生填引擎 mode: fill 的那张表（traceTable）。
 import { tokenize } from '../tokens.js';
 import { compile } from '../expr.js';
@@ -35,6 +38,7 @@ import { MEASURES, measure, markDuplicates, variantsOf, variantValues } from '..
 import { ENGINES } from '../engines/registry.js';
 import { fillSpec, checkFill, normCell, trackFields } from '../stepperspec.js';
 import { spaceOfId } from '../memory/space.js';
+import { parseBrackets, parseRoles, ROLES, findWrong, parseDecoys, parseAnswer, parsePoints, judgeTranslation, normText } from '../entext.js';
 
 // 408、英语一的题型（计划 4，docs/superpowers/plans/2026-11-19-check-408-en.md）：trace predict code parse translate rewrite errfind 是新的，
 // tradeoff 是 recall 的别名、calc 是 solve 的别名（读法、判法照原来的，type 存自己的名字，BASE_OF / baseType）
@@ -43,8 +47,6 @@ export const PROBE_TYPES = ['recall', 'construct', 'claim', 'discriminate', 'loc
 export const BASE_OF = { tradeoff: 'recall', calc: 'solve' };
 /** 一道题照哪一种读、判：别名换成原来的那一种 */
 export const baseType = (probe) => BASE_OF[probe?.type] || probe?.type;
-// 还没接上的题型（计划 4 的 Task 5～6 补）：读到就报，不静默当成别的
-const PENDING = ['parse', 'translate', 'rewrite', 'errfind'];
 export const FACET_OF = {
   recall: '重建', construct: '能用', claim: '边界', solve: '能用', discriminate: '能辨', locate: '能辨',
   trace: '能用', predict: '能用', tradeoff: '重建', code: '能用', calc: '能用', parse: '能用', translate: '能用', rewrite: '能用', errfind: '边界',
@@ -73,6 +75,8 @@ const RUN = /^\s*run\s+(\S+?)\s*[:：]\s*([A-Za-z]\w*)\s*(.*)$/;
 const RUN_NAME = /^[A-Za-z][A-Za-z0-9]*$/;
 // predict 的 expect 标签: 值（标签前可以写编号 x1）
 const EXPECT = /^\s*expect(?:\s+([^:：]*?))?\s*[:：]\s*(.*)$/;
+// rewrite 的 has: 片段 => 话 / not: 片段 => 话（一行一条，h1、n1…）
+const HASNOT = /^\s*(has|not)\s*[:：]\s?(.*)$/;
 // 模板的命令只认小写、整行像命令的（pick 名字 = …；where 带比较或是一个函数调用）：英语题的续行
 // 「Where did you go?」「where the river meets the sea」照旧是续行
 const TPL = /^\s*(?:pick\s+[A-Za-z_]\w*\s*=\s*\S|where\s+(?=.*(?:[=!<>]=|[<>]))\S|where\s+[A-Za-z_]\w*\s*\(.*\)\s*$)/;
@@ -86,11 +90,17 @@ const OWN = {
   // trace：use 写演示组件的名字，rows / given / cols 照 mode: fill（rows 还能写 2-3：只填第 2～3 行）；别的字段一律交给引擎
   trace: ['use', 'against', 'rows', 'given', 'cols'],
   claim: ['claim', 'truth', 'slots', 'example', 'proof', 'start', 'goal', 'vars'],
-  discriminate: ['can', 'result'],
+  // 英语的两个按钮（谓语 / 非谓语）：options: A | B + answer:，和 can: 只写一个
+  discriminate: ['can', 'result', 'options', 'answer'],
   locate: ['line', 'bug', 'fix'],
   solve: ['result'],
   // code：字段照 blocks/code.js（codejudge.js 的 parseCodeSpec 读）；ref / starter / check / tests 是几行的代码
   code: ['fn', 'call', 'tests', 'ref', 'starter', 'scale', 'check', 'check_call'],
+  // 英语（计划 4 Task 6）：parse 的句子从 key: 的括号里取；translate、rewrite、errfind 的原句写 text:；errfind 错的词写 word:（are#2）
+  parse: ['key', 'roles'],
+  translate: ['text', 'answer'],
+  rewrite: ['text', 'example'],
+  errfind: ['text', 'word', 'fix', 'decoys'],
 };
 const CODE_MULTI = new Set(['tests', 'ref', 'starter', 'check']);
 
@@ -213,7 +223,6 @@ const truthOf = (v, yes, no) => { const t = String(v ?? '').trim().toLowerCase()
  */
 export function parseProbe(type, src) {
   if (!PROBE_TYPES.includes(type)) return { error: `不认识的题型「${type}」：只认 ${PROBE_TYPES.join(' / ')}` };
-  if (PENDING.includes(type)) return { error: `${type}：这一种还没接上` };
   const base = BASE_OF[type] || type; // 别名照原来的那一种读
   const f = {};
   const teach = {};
@@ -221,6 +230,7 @@ export function parseProbe(type, src) {
   const ifs = [], exprs = [], lets = [], lines = [];
   const solveLines = [];
   const runs = [], expects = []; // run 行（construct、predict）；predict 的 expect
+  const hasNot = { has: [], not: [] }; // rewrite
   const efields = {}; // trace：交给引擎的字段
   let ewrongs = 0; // 挂在 expect 下面的错答案几条（和理由里的 wrong 共用 w1、w2…）
   const tpl = { picks: [], lets: [], wheres: [] }; // pick / where（模板）
@@ -252,6 +262,14 @@ export function parseProbe(type, src) {
         fields[t.key] = t.value;
       }
       runs.push({ name, engine, fields }); last = null; continue;
+    }
+    if (base === 'rewrite' && (m = raw.match(HASNOT))) {
+      const kind = m[1];
+      const at = m[2].indexOf('=>');
+      const frag = (at < 0 ? m[2] : m[2].slice(0, at)).trim();
+      if (!frag) { errors.push(`${kind}: 后面写一段字：${kind}: were …ed => 被动语态的谓语是 be + 过去分词`); continue; }
+      hasNot[kind].push({ id: `${kind === 'has' ? 'h' : 'n'}${hasNot[kind].length + 1}`, frag, msg: at < 0 ? '' : m[2].slice(at + 2).trim() });
+      last = null; continue;
     }
     if (base === 'predict' && (m = raw.match(EXPECT))) {
       const head = (m[1] || '').trim();
@@ -362,7 +380,20 @@ export function parseProbe(type, src) {
       Object.assign(probe, points());
     }
   }
-  if (type === 'discriminate') {
+  if (type === 'discriminate' && f.options !== undefined) {
+    // 两个按钮（谓语 / 非谓语、真 / 假）：只收两个、只配理由（不出选择题）
+    if (f.can !== undefined) return at('options: 和 can: 只写一个（can: 是能 / 不能，options: 是自己写的两个按钮）');
+    const options = f.options.split(/[|｜]/).map((x) => x.trim()).filter(Boolean);
+    if (options.length !== 2) return at(`options: 只收两个（谓语 | 非谓语 这样的两个按钮，配理由），现在 ${options.length} 个`);
+    if (normText(options[0]) === normText(options[1])) return at('options: 两个按钮写成了一样的');
+    if (f.answer === undefined || !f.answer.trim()) return at('要写 answer:（两个选项里对的那一个）');
+    const pick = options.find((o) => normText(o) === normText(f.answer));
+    if (!pick) return at(`answer: 写两个选项里的一个（${options.join(' 或 ')}），现在是「${f.answer}」`);
+    if (f.result !== undefined) return at('options: 不和 result: 一起写（result: 只给 can: 的题）');
+    if (!pts.must.length) return at('要写理由的要点 must:');
+    Object.assign(probe, { options, answer: pick }, points());
+  } else if (type === 'discriminate') {
+    if (f.answer !== undefined) return at('answer: 只和 options: 一起写（两个按钮里对的那一个）；can: 的题不写 answer:');
     const can = truthOf(f.can, ['能', 'yes', 'true', '可以'], ['不能', 'no', 'false', '不可以']);
     if (can === null) return at('can: 写 能 或 不能');
     if (!pts.must.length) return at('要写理由的要点 must:');
@@ -409,7 +440,65 @@ export function parseProbe(type, src) {
     try { parseCodeSpec(fields); } catch (e) { return at(e.message); }
     Object.assign(probe, { code: fields });
   }
+  if (['parse', 'translate', 'rewrite', 'errfind'].includes(base)) {
+    const r = englishProbe(base, f, pts, hasNot, tpl);
+    if (r.error) return at(r.error);
+    Object.assign(probe, r.fields, points());
+  }
   return { probe };
+}
+
+// —— 英语的四种（计划 4 Task 6）：读法照一类组件（entext.js），宽严一样 ——
+// rewrite 的片段：先照 normText 规范（大小写、弯引号、缩写、多空格），再用 translate 采分点的写法比（…是中间隔几个字）
+const fragLine = (h) => `- ${h.id} = ${normText(h.frag)}`;
+export function fragPoints(list) {
+  if (!list.length) return { points: [], problems: [] };
+  return parsePoints(list.map(fragLine));
+}
+/** rewrite：学生写的（或 example）对上了哪几条 has、哪几条 not：{ has: [bool], not: [bool] } */
+export function rewriteHits(probe, text) {
+  const t = normText(text, { sentence: true });
+  const hit = (list) => { if (!list?.length) return []; const { points } = fragPoints(list); return judgeTranslation(t, { points }).hits.map((x) => (t ? x : false)); };
+  return { has: hit(probe.has), not: hit(probe.not) };
+}
+
+function englishProbe(base, f, pts, hasNot, tpl) {
+  if (tpl.picks.length || tpl.wheres.length) return { error: `${base} 不做模板（不写 pick / where）` };
+  const pointsAny = pts.must.length || pts.may.length || pts.wrong.length;
+  if (base === 'parse') {
+    if (pointsAny) return { error: 'parse 不写 must / may / wrong：成分由页面照 key 判（要问理由另出一道 recall）' };
+    if (!f.key) return { error: '要写 key:（括号写法：[S The man [RC who lives next door]] [V gave] [O me] [O a book].）' };
+    let ans;
+    try { ans = parseBrackets(f.key); } catch (e) { return { error: `key: ${e.message}` }; }
+    const roles = parseRoles(f.roles, [...new Set(ans.spans.map((s) => s.role))]);
+    for (const s of ans.spans) if (!roles.some((r) => r.key === s.role)) roles.push({ key: s.role, name: ROLES[s.role] || s.role });
+    return { fields: { text: ans.text, tokens: ans.tokens, spans: ans.spans, roles } };
+  }
+  if (!f.text) return { error: `要写 text:（${base === 'translate' ? '要翻译的英文原句' : base === 'rewrite' ? '要改写的原句' : '有一处错的英文句子'}）` };
+  if (base === 'translate') {
+    if (!pts.must.length) return { error: '要写采分点 must:（一行一条，页面里的 Claude 照它判）' };
+    return { fields: { text: f.text, answer: f.answer || '' } };
+  }
+  if (base === 'rewrite') {
+    if (!hasNot.has.length && !hasNot.not.length) return { error: '要写 has: 片段 => 话（改写以后一定有的字，一行一条；不该有的写 not:）' };
+    if (!f.example) return { error: '要写 example:（一句满足全部 has、没有 not 的改写，页面先拿它验一遍）' };
+    for (const k of ['has', 'not']) {
+      const { problems } = fragPoints(hasNot[k]);
+      if (problems.length) return { error: `${k}: 的片段里没有字（${hasNot[k].map((h) => h.frag).join('、')}）` };
+    }
+    return { fields: { text: f.text, has: hasNot.has, not: hasNot.not, example: f.example } };
+  }
+  // errfind
+  if (!f.word) return { error: '要写 word:（句子里用错的那个词，第二次出现的写 are#2）' };
+  if (!f.fix) return { error: '要写 fix:（改成什么：known | !knew=为什么错；多了一个词写 删掉）' };
+  let wordAt, decoys, fix;
+  const asWord = (e) => String(e.message).replace(/wrong:/g, 'word:');
+  try { wordAt = findWrong(f.text, f.word); } catch (e) { return { error: asWord(e) }; }
+  try { fix = parseAnswer(f.fix, { sentence: true }); } catch (e) { return { error: `fix: ${e.message}` }; }
+  if (!fix.alts.length) return { error: 'fix: 要写对的改法（! 开头的是常见的错改法）' };
+  try { decoys = parseDecoys(f.text, f.decoys); } catch (e) { return { error: asWord(e) }; }
+  if (decoys.some((d) => d.i === wordAt)) return { error: `decoys 里的「${f.word}」就是错的那个词` };
+  return { fields: { text: f.text, word: f.word, wordAt, fix: fix.alts, fixWrongs: fix.wrongs, decoys } };
 }
 
 const tok = (head) => {
@@ -818,6 +907,7 @@ export function probeProblems(p, base = {}) {
   } else if (p.ifs && p.exampleSrc && !p.tpl) out.push('example 算不出来');
   if (p.expects) out.push(...predictProblems(p, base, tieLines));
   if (p.use) out.push(...traceProblems(p));
+  if (p.type === 'rewrite') out.push(...rewriteProblems(p));
   if (p.code) out.push(...codeProblems(p));
   else if (p.result && baseType(p) === 'solve' && p.runs?.length) out.push(...solveResultProblems(p, base, vars, tieLines));
   else if (p.result) { try { compile(p.result)(withDefaults(vars)); } catch (e) { out.push(`result 算不了：${e.message}`); } }
@@ -834,6 +924,15 @@ function solveResultProblems(p, base, vars, tieLines) {
     if (typeof v === 'number' && !Number.isFinite(v)) out.push('result 算出来不是一个数');
   } catch (e) { out.push(`result 算不了：${e.message}`); }
   return out;
+}
+
+// rewrite：example 要对上每一条 has、一条 not 都不写（不然学生写对了也判不过）
+function rewriteProblems(p) {
+  const r = rewriteHits(p, p.example);
+  return [
+    ...p.has.filter((_, i) => !r.has[i]).map((h) => `example 不满足 ${h.id}（${h.frag}）`),
+    ...p.not.filter((_, i) => r.not[i]).map((h) => `example 写了 ${h.id} 不该有的（${h.frag}）`),
+  ];
 }
 
 // code：没 ref 时每个测试要写期望；ref 要过自己的全部测试（否则题本身错了）
