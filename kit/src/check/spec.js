@@ -17,6 +17,7 @@
 // 题的 retry: 写同构小题的 id（也写在这个块里，开始时不出现）；没排进 block / spare、也不是谁的 retry 的题报写法错误。
 // 模板（外部 review 的可选那条）：题里写 pick / where（照 practice custom 的写法），每次用到都取一组新数——
 // retry 可以写同一个模板两次、也可以写这道题自己（retry: p1, p1）：局部 id 照用的先后叫 p1、p1~2、p1~3（template.js 的 materialize）。
+// retry: self × 2（× x * 都认）就是 retry: p1, p1；取到的数分不开 against 的错法、用到的量有并列，和 where 不满足一样重取。
 // 题目、要点、错法、补讲、同构题都由外部写；这里只读写法、拿外部写的 example 先验一遍条件（写错了页面报，不静默）。
 //
 // 408（计划 4）：construct 多 seq(n) / text / procs(n[, prio]) 格子和 run 行（run r: sort algo=shell array=A：格子名换成学生写的，
@@ -82,6 +83,7 @@ const HASNOT = /^\s*(has|not)\s*[:：]\s?(.*)$/;
 // 「Where did you go?」「where the river meets the sea」照旧是续行
 const TPL = /^\s*(?:pick\s+[A-Za-z_]\w*\s*=\s*\S|where\s+(?=.*(?:[=!<>]=|[<>]))\S|where\s+[A-Za-z_]\w*\s*\(.*\)\s*$)/;
 export const TPL_ROUNDS = 8; // 模板自检取几组数
+export const DRAW_TRIES = 20; // 一道取了数自检不过（某一组数下 example 不满足、\calc 算不出来、有并列、分不开错法），最多重取几次
 // 共用的字段、各题型自己的字段（不在里面的报「看不懂」）
 const COMMON = ['id', 'q', 'title', 'target', 'level', 'facet', 'family', 'retry', 'note', 'exam', 'like'];
 const OWN = {
@@ -114,6 +116,21 @@ export function msOf(v) {
 }
 
 const list = (v) => String(v ?? '').split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean);
+// retry: self × 2（× x * 都认，有无空格都行；单写 self 是一次）= 写两次这道题自己：只给带 pick 的模板（每次另取一组数）。
+// 照写的先后展开（retry: p1c, self × 2 → p1c, p1, p1）；N 不是正整数、没有 pick 的题写 self 抛中文原因
+const SELF = /(?<![\w~.-])self(?:\s*[×xX*]\s*(\d+))?(?![\w~.-])/g;
+function retryOf(v, id, isTpl) {
+  let bad = null;
+  const text = String(v ?? '').replace(SELF, (all, n) => {
+    const k = n === undefined ? 1 : Number(n);
+    if (!(k >= 1)) bad = `retry 的「${all.trim()}」：self × N 的 N 写 1 以上`;
+    return ` ${Array(Math.max(k, 0)).fill('\u0000').join(' ')} `;
+  });
+  if (bad) throw new Error(bad);
+  const out = list(text);
+  if (out.includes('\u0000') && !isTpl) throw new Error('self 只能写在带 pick 的题里（每次另取一组数）');
+  return out.map((x) => (x === '\u0000' ? id : x));
+}
 
 /** slots: A=mat(2) B=mat(2,3) v=vec(3) k=num；408 的 S=seq(8)（不写个数最多 24 个）、T=text、Q=procs(3) / procs(3, prio) */
 export const SEQ_MAX = 24;
@@ -345,9 +362,11 @@ export function parseProbe(type, src) {
   const xTwice = xIds.find((x, i) => xIds.indexOf(x) !== i);
   if (xTwice) return at(`expect 的编号 ${xTwice} 用了两次`);
   if (tpl.wheres.length && !tpl.picks.length) return at('where 要和 pick 一起写（模板：pick 取数，where 不满足就重取）');
+  let retry;
+  try { retry = retryOf(f.retry, id, tpl.picks.length > 0); } catch (e) { return at(e.message); }
   const probe = {
     id, type, q: f.q || '', target: f.target, level: f.level, facet: f.facet || FACET_OF[type], family: f.family || null,
-    teach, retry: list(f.retry), lets, src: String(src ?? ''), tpl: tpl.picks.length ? { picks: tpl.picks, wheres: tpl.wheres } : null,
+    teach, retry, lets, src: String(src ?? ''), tpl: tpl.picks.length ? { picks: tpl.picks, wheres: tpl.wheres } : null,
   };
   const runNames = runs.map((r) => r.name);
   if (runs.length) probe.runs = runs;
@@ -872,15 +891,21 @@ export function selfCheck(check, base = {}, { lenient = false } = {}) {
       if (!Object.keys(p.teach).length) out.push(`${pid} 是必做题，至少写一条 teach（判出没过时显示的一两句）`);
     }
     if (!p.tpl) { for (const msg of probeProblems(p, base)) out.push(`${pid} 的 ${msg}`); continue; }
-    // 模板：取几组数，每一组都要算得出来、example 都要满足（只报第一处）。按检验 id 和题 id 取数：预检和页面开检验时结论一样
+    // 模板：取几组数，每一组都要算得出来、example 都要满足（只报第一处）。按检验 id 和题 id 取数：预检和页面开检验时结论一样。
+    // 只靠这组数的（用到的量有并列、against 的错法分不开）当成 where 不满足：重取，最多 DRAW_TRIES 次（和 materialize 一样），一直这样才报
     let avoid = null;
     const rand = seeded(`${check.id}:${pid}`);
-    for (let k = 0; k < TPL_ROUNDS; k++) {
-      let d;
-      try { d = drawProbe(p, { base, avoid, rand }); } catch (e) { out.push(`${pid}：${e.message}`); break; }
-      avoid = d.raw;
-      const bad = [...d.probe.calcErrors, ...probeProblems(d.probe, base)];
-      if (bad.length) { out.push(`${pid}（取 ${d.picked} 时）的 ${bad[0]}`); break; }
+    rounds: for (let k = 0; k < TPL_ROUNDS; k++) {
+      for (let t = 0; t < DRAW_TRIES; t++) {
+        let d;
+        try { d = drawProbe(p, { base, avoid, rand }); } catch (e) { out.push(`${pid}：${e.message}`); break rounds; }
+        avoid = d.raw;
+        const pp = probeProblems(d.probe, base);
+        const hard = [...d.probe.calcErrors, ...pp.filter((m) => !pp.redraw?.has(m))];
+        if (hard.length) { out.push(`${pid}（取 ${d.picked} 时）的 ${hard[0]}`); break rounds; }
+        if (!pp.length) continue rounds;
+        if (t === DRAW_TRIES - 1) { out.push(`${pid}（取 ${d.picked} 时）的 ${pp[0]}（连着取了 ${DRAW_TRIES} 组都这样）`); break rounds; }
+      }
     }
   }
   return out;
@@ -899,15 +924,21 @@ export function seeded(str) {
   };
 }
 
-/** 一道题的量算不算得出来、example 满不满足条件（selfCheck 的那一半；每条前面由调用方加「p1 的」） */
+/**
+ * 一道题的量算不算得出来、example 满不满足条件（selfCheck 的那一半；每条前面由调用方加「p1 的」）。
+ * 返回的数组带 redraw（Set）：其中靠这组数本身的那几条——用到的量有并列、against 的错法分不开（或这组数上没列出来）。
+ * 模板取到这样的数当成 where 不满足、重取（materialize、selfCheck 的模板那一段）；固定的题照样是写法错误
+ */
 export function probeProblems(p, base = {}) {
   const out = [];
+  const soft = new Set();
+  Object.defineProperty(out, 'redraw', { value: soft }); // 不可枚举：比数组的地方（deepEqual）照旧只比那几句
   let vars;
   try { vars = probeVars(p, base); } catch (e) { return [`let 算不出来：${e.message}`]; }
   const runOut = runProblems(p);
   if (runOut.length) return runOut; // 引擎、量名不对，后面代进去算也是白算
   const used = measuresUsed(p).map((x) => x.key);
-  const tieLines = (ties, what) => [...new Set(used.filter((k) => ties.includes(k)))].map((k) => `${what}用到的 ${k} 这组数有并列（几种做法一样好，页面判不了）：换一组数，或者不问 ${k}`);
+  const tieLines = (ties, what) => [...new Set(used.filter((k) => ties.includes(k)))].map((k) => `${what}用到的 ${k} 这组数有并列（几种做法一样好，页面判不了）：换一组数，或者不问 ${k}`).map((m) => (soft.add(m), m));
   if (p.ifs && p.example) {
     const missing = p.slots.filter((s) => p.example[s.name] === undefined).map((s) => s.name);
     const fmt = p.slots.flatMap((s) => (missing.includes(s.name) ? [] : slotProblems(s, p.example[s.name]).map((m) => `example 的 ${s.name}：${m}`)));
@@ -926,8 +957,8 @@ export function probeProblems(p, base = {}) {
       }
     }
   } else if (p.ifs && p.exampleSrc && !p.tpl) out.push('example 算不出来');
-  if (p.expects) out.push(...predictProblems(p, base, tieLines));
-  if (p.use) out.push(...traceProblems(p));
+  if (p.expects) out.push(...predictProblems(p, base, tieLines, soft));
+  if (p.use) out.push(...traceProblems(p, soft));
   if (p.type === 'rewrite') out.push(...rewriteProblems(p));
   if (p.code) out.push(...codeProblems(p));
   else if (p.result && baseType(p) === 'solve' && p.runs?.length) out.push(...solveResultProblems(p, base, vars, tieLines));
@@ -980,7 +1011,7 @@ function runProblems(p) {
 }
 
 // predict：照固定的字段跑一遍，每个 expect、wrong 的式子都算得出来；用到的量没有并列；against 的错法在、这组数分得开
-function predictProblems(p, base, tieLines) {
+function predictProblems(p, base, tieLines, soft = new Set()) {
   const out = [];
   const rv = runVars(p, {}, base);
   if (rv.error) return [`run ${rv.error.run} 跑不了：${rv.error.msg}`];
@@ -1008,13 +1039,14 @@ function predictProblems(p, base, tieLines) {
   }
   if (!p.against?.length) return out;
   // 错法照第一个 run 认：换成那种错法跑出来的量，看有没有哪一个 expect 和对的不一样
+  const again = (m) => (soft.add(m), m); // 靠这组数的：模板重取
   const r0 = p.runs[0];
   const fields = runFields(p, r0, {});
   let keys = [];
   try { keys = variantsOf(r0.engine, fields).map((v) => v.key); } catch { keys = []; }
   for (const a of p.against) {
     // 引擎只列这组数上和对的不一样的错法、没有整张错法名单：不在里面的，要么不是这个引擎的错法，要么这组数分不开，两种都说
-    if (!keys.includes(a)) { out.push(`against 写了「${a}」：要么不是 ${r0.engine} 的错法，要么这组数上照它算和对的做法一样（分不开）；${r0.name}（${r0.engine}）这组数列出来的错法有 ${keys.join('、') || '（没有：这组数上每种错法都和对的一样）'}`); continue; }
+    if (!keys.includes(a)) { out.push(again(`against 写了「${a}」：要么不是 ${r0.engine} 的错法，要么这组数上照它算和对的做法一样（分不开）；${r0.name}（${r0.engine}）这组数列出来的错法有 ${keys.join('、') || '（没有：这组数上每种错法都和对的一样）'}`)); continue; }
     const wv = variantValues(r0.engine, fields, a);
     const vv = Object.fromEntries(Object.entries(rv.vars).filter(([k]) => !k.startsWith(`${r0.name}__`)));
     for (const [k, v] of Object.entries(wv?.values || {})) vv[`${r0.name}__${k}`] = v;
@@ -1022,7 +1054,7 @@ function predictProblems(p, base, tieLines) {
       if (!(e.id in right)) return false;
       try { const x = expectValue(e.value, vv, names); return x !== undefined && !sameValue(x, right[e.id]); } catch { return false; }
     });
-    if (!apart) out.push(`against 的 ${a} 这组数分不开：照这种错法算，${p.expects.map((e) => e.id).join('、')} 都和对的一样（换一组数）`);
+    if (!apart) out.push(again(`against 的 ${a} 这组数分不开：照这种错法算，${p.expects.map((e) => e.id).join('、')} 都和对的一样（换一组数）`));
   }
   return out;
 }
@@ -1130,7 +1162,8 @@ export function traceRowName(table, r) {
 const valuesOf = (t) => Object.assign(t.rows.map((row) => row.cells.map((c) => { const a = [].concat(c.v)[0]; return c.mark ? (normCell(a) ? '√' : '') : String(a ?? ''); })), { extra: (t.extra || []).map((x) => String([].concat(x.v)[0] ?? '')) });
 
 // trace：字段读得懂、没有写错名字的字段、要填的行没有并列、against 的错法这组数分得开
-function traceProblems(p) {
+function traceProblems(p, soft = new Set()) {
+  const again = (m) => (soft.add(m), m); // 靠这组数的（并列、分不开）：模板重取
   let T;
   try { T = traceTable(p); } catch (e) {
     if (e.spec) return [e.message]; // rows / given / cols 写的不对，不是引擎的字段
@@ -1146,12 +1179,12 @@ function traceProblems(p) {
     const from = p.fill?.rows?.from || 1;
     const unit = T.table.dir === 'col' ? '列' : '行';
     const fix = first < from ? '' : from > 1 ? `，或者用 rows: ${from}-${first} 只填第 ${from}～${first} ${unit}` : `，或者用 rows: ${first} 只填前 ${first} ${unit}`;
-    out.push(`${traceRowName(T.table, first)}起有并列（几种做法一样好，页面判不了）：换一组数${fix}`);
+    out.push(again(`${traceRowName(T.table, first)}起有并列（几种做法一样好，页面判不了）：换一组数${fix}`));
   }
   for (const a of p.against || []) {
     const v = T.variants.find((x) => x.key === a);
-    if (!v) { out.push(`against 写了「${a}」：要么不是 ${p.use} 的错法，要么这组数上照它做和对的一样（分不开）；这组数列出来的错法有 ${T.variants.map((x) => x.key).join('、') || '（没有：这组数上每种错法都和对的一样）'}`); continue; }
-    if (checkFill(T.table, valuesOf(v.table)).ok) out.push(`against 的 ${a} 这组数分不开：照这种错法填出来，要填的格子都和对的一样（换一组数，或者多填几${T.table.dir === 'col' ? '列' : '行'}）`);
+    if (!v) { out.push(again(`against 写了「${a}」：要么不是 ${p.use} 的错法，要么这组数上照它做和对的一样（分不开）；这组数列出来的错法有 ${T.variants.map((x) => x.key).join('、') || '（没有：这组数上每种错法都和对的一样）'}`)); continue; }
+    if (checkFill(T.table, valuesOf(v.table)).ok) out.push(again(`against 的 ${a} 这组数分不开：照这种错法填出来，要填的格子都和对的一样（换一组数，或者多填几${T.table.dir === 'col' ? '列' : '行'}）`));
   }
   return out;
 }
@@ -1192,8 +1225,19 @@ export function drawProbe(probe, { base: lesson = {}, rand = Math.random, avoid 
   if (probe.solveFields) inst.solveFields = { ...probe.solveFields, q: fill(probe.solveFields.q) };
   if (probe.ifs) inst.ifs = probe.ifs.map((c) => ({ ...c, msg: fill(c.msg) }));
   if (probe.exprs) inst.exprs = probe.exprs.map((e) => ({ ...e, label: fill(e.label) }));
+  // 408 的新字段（计划 4 Task 7）：都在公式外面，\calc 写成纯文字（refs="\calc{list(v)}" → refs="3 1 4 …"）。
+  // 每一道是新的对象、新的 fields：traceTable 按 probe 对象缓存，换了数不能读到模板那一份
+  const fillAll = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === 'string' ? fill(v) : v]));
+  if (probe.runs) inst.runs = probe.runs.map((r) => ({ ...r, fields: fillAll(r.fields) }));
+  if (probe.fields) inst.fields = fillAll(probe.fields);
+  if (probe.fill) inst.fill = fillAll(probe.fill);
+  if (probe.expects) inst.expects = probe.expects.map((e) => ({ ...e, label: fill(e.label), value: fill(e.value), wrongs: e.wrongs.map((w) => ({ ...w, expr: fill(w.expr), msg: fill(w.msg) })) }));
+  if (probe.result !== undefined) inst.result = fill(probe.result);
+  if (probe.text !== undefined) inst.text = fill(probe.text);
   if (probe.slots && probe.exampleSrc) {
-    try { inst.example = parseNamed(probe.exampleSrc, withDefaults({ ...floatVars(base), ...vals }, probe.slots), probe.slots); } catch (e) { inst.example = null; errors.push({ expr: 'example', msg: e.message }); }
+    // seq / text / procs 的格子收原文：先把 \calc 换成数（S=\calc{list(v)} 5），矩阵、数的格子照旧用取到的量算
+    inst.exampleSrc = fill(probe.exampleSrc);
+    try { inst.example = parseNamed(inst.exampleSrc, withDefaults({ ...floatVars(base), ...vals }, probe.slots), probe.slots); } catch (e) { inst.example = null; errors.push({ expr: 'example', msg: e.message }); }
   }
   inst.calcErrors = errors.map((e) => (e.expr === 'example' ? `example 算不出来：${e.msg}` : `\\calc{${String(e.expr).trim().slice(0, 40)}} 算不出来：${e.msg}`));
   return { probe: inst, picked: inst.picked, raw: picked };
