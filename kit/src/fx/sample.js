@@ -80,7 +80,7 @@ let deriver = null;
 export function useDeriver(fn) { deriver = fn; }
 export function fxEval(ast, vars) {
   const node = typeof ast === 'string' ? parse(ast) : ast;
-  return evaluate(deriver ? deriver(node) : node, vars);
+  return evaluate(deriver ? deriver(node, vars) : node, vars);
 }
 
 const isFiniteNum = (v) => typeof v === 'number' && Number.isFinite(v);

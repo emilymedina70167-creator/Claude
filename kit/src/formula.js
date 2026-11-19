@@ -7,6 +7,7 @@
 import { parse, FX_NAMES } from './expr.js';
 import { calcValue, exactTeX, isQ, isQMat, toFloat, Q } from './exact.js';
 import { parseDomain, compareFx, DEFAULT_RANGE } from './fx/sample.js';
+import './fx/diff.js'; // 实数题里 f' 是求导（fx/diff.js 接到 fxEval 上）
 
 // 学生能用的函数（和 expr.js / exact.js 一致的常用那些）。计划 3 加了初等函数（FX_NAMES）和带底数的 log
 const OLD_FUNCS = ['tr', 'det', 'rank', 'inv', 'T', 'sqrt', 'abs', 'dot', 'norm', 'choose', 'fact'];
