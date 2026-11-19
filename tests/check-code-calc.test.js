@@ -171,3 +171,14 @@ test('code：写法不对读时就报', () => {
   assert.match(parseProbe('code', 'id: k\nq: x\ntarget: y\nlevel: 核心\nfn: Reverse\ntests: A = [1]').error, /fn: 写函数的样子/);
   assert.match(parseProbe('code', 'id: k\nq: x\ntarget: y\nlevel: 核心\nfn: void f(int n)').error, /tests/);
 });
+
+test('code 不写要点：must / may / wrong 不管写在哪都报；starter 里只有空格的行留着', () => {
+  const head = 'id: k\nq: x\ntarget: y\nlevel: 核心\nfn: void f(int n)\ntests: n = 1 -> n = 1\n';
+  for (const line of ['must: 想到双指针', 'may m2: x', 'wrong: y']) {
+    assert.match(parseProbe('code', `${head}starter: void f(int n) {\n${line}\n}`).error, /code 不写要点/);
+    assert.match(parseProbe('code', `${head}${line}`).error, /code 不写要点/);
+  }
+  const p = P('code', `${head}starter: void f(int n) {\n    \n}`);
+  assert.equal(p.code.starter, 'void f(int n) {\n    \n}');
+  assert.equal(itemLabel(P('code', CODE), 'run'), null);
+});

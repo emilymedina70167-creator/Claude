@@ -230,10 +230,11 @@ export function parseProbe(type, src) {
   for (const raw of String(src ?? '').replace(/\r/g, '').split('\n')) {
     if (!raw.trim()) {
       // code 的几行代码里的空行留着（起始代码、参考解法里隔开两段）
-      if (base === 'code' && last?.into === f && CODE_MULTI.has(last.key)) f[last.key] += '\n'; else last = null;
+      if (base === 'code' && last?.into === f && CODE_MULTI.has(last.key)) f[last.key] += `\n${raw}`; else last = null; // 只有空格的行也照原样留（光标缩进）
       continue;
     }
     let m;
+    if (base === 'code' && POINT.test(raw)) { errors.push('code 不写要点：要判思路写成 calc（s1 思想、s2 代码、s3 复杂度）'); continue; }
     if (base === 'code' && last?.into === f && CODE_MULTI.has(last.key) && (m = raw.match(FIELD)) && !COMMON.includes(m[1].toLowerCase()) && !OWN.code.includes(m[1].toLowerCase())) {
       f[last.key] += `\n${raw.replace(/\s+$/, '')}`; continue; // default: / case 1: / 标号这样像字段的代码行
     }

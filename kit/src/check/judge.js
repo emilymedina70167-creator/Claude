@@ -313,8 +313,8 @@ function resultItem(probe, answer = {}, base = {}) {
  * （「第 2 趟（d = 2）」「第 10 列「3」」「第 k 行」），x1… 是表下面那几格的名字；别的 null（外壳照旧）
  */
 export function itemLabel(probe, id) {
-  if (id === 'run') return '跑引擎';
   if (probe?.type === 'code') return id === 'compile' ? '编译' : /^t\d+$/.test(id) ? `测试 ${id.slice(1)}` : null;
+  if (id === 'run') return '跑引擎';
   if (id === 'result' && baseType(probe) === 'solve') return '最后的值';
   if (probe?.type === 'trace' && /^[rx]\d+$/.test(id)) {
     let T;
