@@ -8,11 +8,12 @@ import { readCell } from '../anscheck.js';
 import { equivalent } from '../ncalg.js';
 import { normalizeFormula, FORMULA_FUNCS } from '../formula.js';
 import { parseDeriveDo, sampleEnvs, checkLine } from '../derivedo.js';
-import { probeVars, evalIfs, withDefaults, runVars, runFields, measuresUsed, expectValue, traceTable, traceRows, traceRowName } from './spec.js';
+import { baseType, probeVars, evalIfs, withDefaults, runVars, runFields, measuresUsed, expectValue, traceTable, traceRows, traceRowName } from './spec.js';
 import { variantsOf, variantValues, sortPass } from '../engines/measures.js';
 import { checkFill, cellOk, normCell, misreadFill } from '../stepperspec.js';
 import { valueMatch, sameResult, unreadWhy } from './values.js';
 import { parseJudge, STEP_KINDS, STEP_TAGS } from '../solvespec.js';
+import { parseCodeSpec, runTests } from '../codejudge.js';
 
 /** 还有几格没填（空串、只有空白、null） */
 export function blankCells(v) {
@@ -273,12 +274,48 @@ function traceItems(probe, answer = {}) {
   return { items: [...items, it, ...later], needsClaude: false, stop: true };
 }
 
+// —— 408 的 code（计划 4 Task 5）：真跑老师给的测试，一个测试一项；编译错一项 compile ——
+// 学生的代码死循环、越界、编译错都按测试点判没过、写原因（codejudge 里有步数上限，不卡页面）；
+// 老师这边的毛病（检查函数 / 参考解法出错）判不了，待核（null），不怪学生
+const codeWhy = (r) => (r.error ? `${r.error}${r.errLine ? `（第 ${r.errLine} 行）` : ''}` : (r.diff || []).map((d) => `${d.what}：想要 ${d.want}，得到 ${d.got}`).join('；') || '结果不对');
+function codeItems(probe, answer = {}) {
+  const src = String(answer.code ?? '');
+  let spec;
+  try { spec = parseCodeSpec(probe.code || {}); } catch (e) { return { items: [{ id: 'run', ok: null, why: `页面读不了这道题的测试：${e.message}` }], needsClaude: false, stop: true }; }
+  const all = (why) => ({ items: spec.tests.map((_, i) => ({ id: `t${i + 1}`, ok: false, why })), needsClaude: false, stop: true });
+  if (!src.trim()) return all('没写代码');
+  let res;
+  try { res = runTests(src, spec); } catch (e) { return all(`跑不起来：${e.message}`); }
+  if (res.some((r) => r.compile)) return { items: [{ id: 'compile', ok: false, why: codeWhy(res.find((r) => r.compile)) }], needsClaude: false, stop: true };
+  const items = res.map((r, i) => ({ id: `t${i + 1}`, ok: r.ok ? true : r.teacher ? null : false, why: r.ok ? '' : codeWhy(r) }));
+  return { items, needsClaude: false, stop: items.some((x) => x.ok === false) };
+}
+
+// solve / calc 的 result：用 run 算出的量或式子比学生写的最后的值；并列、算不了都是待核
+function resultItem(probe, answer = {}, base = {}) {
+  if (!probe.result) return null;
+  const names = runNames(probe);
+  let rv;
+  try { rv = runVars(probe, {}, base); } catch (e) { return { id: 'result', ok: null, why: `页面算不了：${e.message}` }; }
+  if (rv.error) return { id: 'result', ok: null, why: `页面跑不了：${rv.error.msg}` };
+  if (tiedIn(probe, [probe.result], rv.ties)) return { id: 'result', ok: null, why: TIE_WHY };
+  let right;
+  try { right = expectValue(probe.result, rv.vars, names); } catch (e) { return { id: 'result', ok: null, why: `页面算不了最后的值：${e.message}` }; }
+  if (typeof right === 'number' && !Number.isFinite(right)) return { id: 'result', ok: null, why: '页面算不了最后的值：算出来不是一个数' };
+  const s = String(answer.result ?? '').trim();
+  if (!s) return { id: 'result', ok: false, why: '没写最后的值' };
+  const m = valueMatch(s, right);
+  return m === true ? { id: 'result', ok: true, why: '' } : { id: 'result', ok: false, why: m === null ? unreadWhy(right) : '最后的值不对' };
+}
+
 /**
  * 一项在画面上叫什么（不露编号）：predict 的 expect 是外部写的标签，run 是「跑引擎」；trace 的 r1… 是那张表的行名
  * （「第 2 趟（d = 2）」「第 10 列「3」」「第 k 行」），x1… 是表下面那几格的名字；别的 null（外壳照旧）
  */
 export function itemLabel(probe, id) {
   if (id === 'run') return '跑引擎';
+  if (probe?.type === 'code') return id === 'compile' ? '编译' : /^t\d+$/.test(id) ? `测试 ${id.slice(1)}` : null;
+  if (id === 'result' && baseType(probe) === 'solve') return '最后的值';
   if (probe?.type === 'trace' && /^[rx]\d+$/.test(id)) {
     let T;
     try { T = traceTable(probe); } catch { return null; }
@@ -301,7 +338,7 @@ export function judgeMachine(probe, answer = {}, base = {}) {
   try { vars = withDefaults(probeVars(probe, base), probe.slots || []); } catch { vars = withDefaults({ ...base }, probe.slots || []); }
   const items = [];
   const hasPoints = (probe.must || []).length > 0;
-  switch (probe.type) {
+  switch (baseType(probe)) {
     case 'construct':
       if (is408(probe)) return construct408(probe, answer, base);
       items.push(...ifItems(probe, answer.slots, vars), ...exprItems(probe, answer.exprs));
@@ -340,7 +377,13 @@ export function judgeMachine(probe, answer = {}, base = {}) {
       }
       return { items, needsClaude: hasPoints, stop: false };
     }
-    default: // recall、solve：全交给页面里的 Claude
+    case 'code':
+      return codeItems(probe, answer);
+    case 'solve': { // solve / calc：写了 result 的先核最后的值，步骤照旧全交页面里的 Claude
+      const it = resultItem(probe, answer, base);
+      return { items: it ? [it] : [], needsClaude: true, stop: false };
+    }
+    default: // recall：全交给页面里的 Claude
       return { items, needsClaude: true, stop: false };
   }
 }
@@ -359,7 +402,7 @@ export const FALLBACK_HEAD = '学习台上，学生在课后的检验里做错�
 
 /** 要它判的项的编号：solve 是参考步骤，别的是 must、may、wrong */
 export function claudeIds(probe) {
-  if (probe.type === 'solve') return (probe.steps || []).map((s) => s.id);
+  if (baseType(probe) === 'solve') return (probe.steps || []).map((s) => s.id);
   return [...(probe.must || []), ...(probe.may || []), ...(probe.wrong || [])].map((x) => x.id);
 }
 
@@ -419,6 +462,7 @@ function answerText(probe, answer = {}, images = 0) {
   if (probe.type === 'claim') out.push(`学生判这个命题是：${answer.truth ? '真' : '假'}`);
   if (probe.type === 'discriminate') out.push(`学生判：${answer.can ? '能' : '不能'}用`, ...(answer.result ? [`学生写的结果：${answer.result}`] : []));
   if (probe.type === 'locate') out.push(`学生点的错的那一行：第 ${answer.line} 行`, ...(answer.fix ? [`学生写的改法：${answer.fix}`] : []));
+  if (baseType(probe) === 'solve' && probe.result) out.push(`学生写的最后的值：${String(answer.result ?? '').trim() || '（没写）'}`);
   if (probe.type === 'predict') for (const e of probe.expects || []) out.push(`学生写的「${e.label}」：${String(answer.expects?.[e.id] ?? '').trim() || '（没写）'}`);
   if (probe.type === 'trace') {
     // 学生填的表：一行一行照写的抄（直接给出的行不抄）
@@ -439,7 +483,7 @@ export function verdictPrompt({ probe, answer = {}, ids = claudeIds(probe), imag
   const head = [VERDICT_HEAD, ''];
   const q = [`题（${probe.type}）：`, probe.claim ? `命题：${probe.claim}` : '', probe.q || '', ...(probe.lines || []).map((l, i) => `第 ${i + 1} 行：${l}`)].filter(Boolean);
   const pts = [];
-  if (probe.type === 'solve') {
+  if (baseType(probe) === 'solve') {
     pts.push('参考步骤：', ...(probe.steps || []).map((s) => `${s.id}（${STEP_KINDS[s.kind] || s.kind}）：${s.text}`));
     pts.push(`错法的词（tag=）：${STEP_TAGS.join('、')}`);
   } else {
@@ -450,7 +494,7 @@ export function verdictPrompt({ probe, answer = {}, ids = claudeIds(probe), imag
     ...(images ? ['[转写]', '照图一行一行写，行号照图左边的；划掉的行在行号后面写 [划掉]，比如：', 'L1: …', 'L2 [划掉]: …'] : []),
     '[判]',
     `每个编号一行（${ids.join('、')}）：`,
-    probe.type === 'solve'
+    baseType(probe) === 'solve'
       ? '`s1 ok`（这一步写了、对）、`s3 wrong tag=规则用错 why="…"`（写了、错）、`s4 missing`（没写这一步）'
       : '`m1 ok`（写到了、写对了）、`m2 missing`（没写到）、`m3 wrong why="…"`（写了、写错了）；常见错说法 w 开头的：`w1 ok` 是学生没写这个错说法，`w1 wrong why="…"` 是写了',
     '看不清、拿不准对错的写 unsure，页面会标待主讲核：`m2 unsure why="…"`。',

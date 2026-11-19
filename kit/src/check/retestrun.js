@@ -1,7 +1,7 @@
 // 复测的课（kind: check，设计 5.6）：检验以后 1 天、7 天，从题库里挑没见过的同类题，整页是检验外壳，没有主讲。
 // 题和它的 retry 一起从题库取出来、局部 id 重起（bank.js 的 retestCheck），证据带 bank 和 retest；进掌握的参考，不改吸收。
 // 做完在 absorb/{块}.retests 那一次写 done / ok；没过的照样记错题（外部 review 必改 2）
-import { parseCheck } from './spec.js';
+import { parseCheck, baseType } from './spec.js';
 import { retestCheck, attachBases } from './bank.js';
 import { claudeIds, verdictPrompt, parseVerdict, fallbackPrompt } from './judge.js';
 import { absorbOf } from './flow.js';
@@ -88,7 +88,7 @@ export async function enterRetest(root, { db, store, sid, doc, readOnly = false,
       if (!canJudge(answer, images)) return null;
       const res = await call(verdictPrompt({ probe, answer, ids, images: images.length }), images.length ? { images } : {});
       if (!res) return null;
-      const r = parseVerdict(res.text, ids, { steps: probe.type === 'solve' });
+      const r = parseVerdict(res.text, ids, { steps: baseType(probe) === 'solve' });
       return { items: r.items, lines: r.lines, judgedBy: 'claude', text: res.text };
     },
     fallback: async (probe, answer, items) => String((await call(fallbackPrompt({ probe, answer, items })))?.text || '').trim(),

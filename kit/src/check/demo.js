@@ -1,5 +1,5 @@
 // 示例页（kit/examples/check-demo.html）：不进课堂，单独开一次检验看样子、走流程。判分用 ?dev 的模拟（devsample.js），不调用 Claude
-import { parseCheck } from './spec.js';
+import { parseCheck, baseType } from './spec.js';
 import { parseVerdict, claudeIds, verdictPrompt } from './judge.js';
 import { mountCheck } from './shell.js';
 import { absorbOf } from './flow.js';
@@ -14,7 +14,7 @@ export function demoCheck(host, { delay = 600 } = {}) {
   const judge = (probe, answer) => new Promise((res) => setTimeout(() => {
     const ids = claudeIds(probe);
     const text = devVerdict(verdictPrompt({ probe, answer, ids }));
-    const r = parseVerdict(text, ids, { steps: probe.type === 'solve' });
+    const r = parseVerdict(text, ids, { steps: baseType(probe) === 'solve' });
     res({ items: r.items, lines: r.lines, judgedBy: 'claude', text });
   }, delay));
   const api = mountCheck(host, {

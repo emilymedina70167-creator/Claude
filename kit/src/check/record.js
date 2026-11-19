@@ -4,6 +4,7 @@
 // 证据什么时候写：本题的结论定下来（final：过了、补上了、retry 用完、待核）时写一条；retry 判出来就写一条。
 // 一条证据里有第一次的作答原文、每一项的结论、信心、用时、补讲、谁判的——外部看 since-analysis 就够，不用再来回问。
 import { retestDates, bankId, fenceOf } from './bank.js';
+import { baseType } from './spec.js';
 
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const clip = (t, n) => { const s = String(t ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
@@ -53,7 +54,7 @@ export function evidenceOf(s, id, { ctx = {}, bankOf = null, retest = null, reju
     check: s.check.id, probe: id, ...(r.of ? { retryOf: r.of } : {}), target: p.target, level: p.level, facet: p.facet,
     // text：和课上作答的证据同一个字段（守卫核「我写的」、话的语料都读它）
     q: clip(p.claim || p.q, 300), first: answerSummary(p, r.answer, r), text: answerSummary(p, r.answer, r), answer: r.answer ?? null,
-    items: r.items || [], ...(p.type === 'solve' ? { steps: r.items || [] } : {}), ...(r.lines ? { lines: r.lines } : {}),
+    items: r.items || [], ...(baseType(p) === 'solve' ? { steps: (r.items || []).filter((x) => x.id !== 'result') } : {}), ...(r.lines ? { lines: r.lines } : {}),
     outcome: r.outcome ?? null, final: r.of ? null : orig.final ?? null, ...(r.of ? {} : { retries: orig.retries || [] }),
     sure: r.sure ?? null, late: !!r.late, giveup: !!r.giveup, ...(r.resumed ? { resumed: true } : {}),
     ms: r.ms ?? null, msTotal: r.msTotal ?? null, ...teach, judgedBy: r.judgedBy || 'page',

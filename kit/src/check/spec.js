@@ -28,6 +28,7 @@ import { tokenize } from '../tokens.js';
 import { compile } from '../expr.js';
 import { parseConditions } from '../anscheck.js';
 import { parseSolve } from '../solvespec.js';
+import { parseCodeSpec, runTests } from '../codejudge.js';
 import { commandLine, instantiate, pickedText } from '../practicespec.js';
 import { calcValue, expandCalc, floatVars } from '../exact.js';
 import { MEASURES, measure, markDuplicates, variantsOf, variantValues } from '../engines/measures.js';
@@ -43,7 +44,7 @@ export const BASE_OF = { tradeoff: 'recall', calc: 'solve' };
 /** 一道题照哪一种读、判：别名换成原来的那一种 */
 export const baseType = (probe) => BASE_OF[probe?.type] || probe?.type;
 // 还没接上的题型（计划 4 的 Task 5～6 补）：读到就报，不静默当成别的
-const PENDING = ['code', 'parse', 'translate', 'rewrite', 'errfind'];
+const PENDING = ['parse', 'translate', 'rewrite', 'errfind'];
 export const FACET_OF = {
   recall: '重建', construct: '能用', claim: '边界', solve: '能用', discriminate: '能辨', locate: '能辨',
   trace: '能用', predict: '能用', tradeoff: '重建', code: '能用', calc: '能用', parse: '能用', translate: '能用', rewrite: '能用', errfind: '边界',
@@ -87,8 +88,11 @@ const OWN = {
   claim: ['claim', 'truth', 'slots', 'example', 'proof', 'start', 'goal', 'vars'],
   discriminate: ['can', 'result'],
   locate: ['line', 'bug', 'fix'],
-  solve: [],
+  solve: ['result'],
+  // code：字段照 blocks/code.js（codejudge.js 的 parseCodeSpec 读）；ref / starter / check / tests 是几行的代码
+  code: ['fn', 'call', 'tests', 'ref', 'starter', 'scale', 'check', 'check_call'],
 };
+const CODE_MULTI = new Set(['tests', 'ref', 'starter', 'check']);
 
 /** 2s / 90s / 15m / 1500ms / 15分钟 → 毫秒；读不懂 NaN */
 export function msOf(v) {
@@ -224,13 +228,20 @@ export function parseProbe(type, src) {
   let n = 0; // 要点自动编号（must、may 共用 m1、m2…）
   const errors = [];
   for (const raw of String(src ?? '').replace(/\r/g, '').split('\n')) {
-    if (!raw.trim()) { last = null; continue; }
+    if (!raw.trim()) {
+      // code 的几行代码里的空行留着（起始代码、参考解法里隔开两段）
+      if (base === 'code' && last?.into === f && CODE_MULTI.has(last.key)) f[last.key] += '\n'; else last = null;
+      continue;
+    }
     let m;
+    if (base === 'code' && last?.into === f && CODE_MULTI.has(last.key) && (m = raw.match(FIELD)) && !COMMON.includes(m[1].toLowerCase()) && !OWN.code.includes(m[1].toLowerCase())) {
+      f[last.key] += `\n${raw.replace(/\s+$/, '')}`; continue; // default: / case 1: / 标号这样像字段的代码行
+    }
     if ((m = raw.match(TEACH))) { teach[m[1]] = m[2].trim(); last = { into: teach, key: m[1] }; continue; }
     // trace：引擎的字段和检验的撞名（tree 的 level、sched 的 q、kmp 的 use……）写成 use.名字:，原样交给引擎
     if (base === 'trace' && (m = raw.match(USE_FIELD))) { const k = m[1].toLowerCase(); efields[k] = m[2].trim(); last = { into: efields, key: k }; continue; }
     // run 行只在 construct、predict 里认：别的题型（英语的 recall）里「run out: …」这样的续行照旧是续行
-    if ((base === 'construct' || base === 'predict') && (m = raw.match(RUN))) {
+    if ((base === 'construct' || base === 'predict' || base === 'solve') && (m = raw.match(RUN))) {
       const [, name, engine, rest] = m;
       if (!RUN_NAME.test(name)) { errors.push(`run 的名字「${name}」只用字母和数字（r、t1）`); continue; }
       if (runs.some((r) => r.name === name)) { errors.push(`run ${name} 写了两次`); continue; }
@@ -275,6 +286,7 @@ export function parseProbe(type, src) {
     if (TPL.test(raw)) { try { commandLine(raw.trim(), tpl); } catch (e) { errors.push(e.message); } last = null; continue; }
     if ((m = raw.match(FIELD))) {
       const k = m[1].toLowerCase();
+      if (base === 'solve' && k === 'result') { f[k] = m[2].trim(); last = { into: f, key: k }; continue; }
       if (base === 'solve' && !COMMON.includes(k) || base === 'solve' && k === 'q') { solveLines.push(raw); last = { solve: true }; continue; }
       if (k === 'line' && base === 'locate') { lines.push(m[2].trim()); last = { line: lines.length - 1 }; continue; }
       // trace：不是检验的字段都是引擎的（algo: shell、array: …、refs: …），原样交给引擎
@@ -286,7 +298,7 @@ export function parseProbe(type, src) {
     }
     // 续行
     if (last?.solve) { solveLines.push(raw); continue; }
-    if (last?.into) { last.into[last.key] += `\n${raw.trim()}`; continue; }
+    if (last?.into) { last.into[last.key] += `\n${base === 'code' && last.into === f && CODE_MULTI.has(last.key) ? raw.replace(/\s+$/, '') : raw.trim()}`; continue; }
     if (last?.item) { last.item.text += `\n${raw.trim()}`; continue; }
     if (last?.line !== undefined) { lines[last.line] += `\n${raw.trim()}`; continue; }
     errors.push(`看不懂这一行：「${raw.trim().slice(0, 40)}」`);
@@ -388,7 +400,13 @@ export function parseProbe(type, src) {
   if (base === 'solve') {
     const r = parseSolve([`id: ${id}`, ...solveLines].join('\n'));
     if (r.problems.length) return at(r.problems[0]);
-    Object.assign(probe, { q: r.fields.q, steps: r.steps, solveFields: r.fields });
+    Object.assign(probe, { q: r.fields.q, steps: r.steps, solveFields: r.fields }, f.result ? { result: f.result } : {});
+  }
+  if (base === 'code') {
+    if (tpl.picks.length || tpl.wheres.length) return at('code 不做模板（不写 pick / where）');
+    const fields = Object.fromEntries(OWN.code.filter((k) => f[k] !== undefined).map((k) => [k, f[k]]));
+    try { parseCodeSpec(fields); } catch (e) { return at(e.message); }
+    Object.assign(probe, { code: fields });
   }
   return { probe };
 }
@@ -799,8 +817,32 @@ export function probeProblems(p, base = {}) {
   } else if (p.ifs && p.exampleSrc && !p.tpl) out.push('example 算不出来');
   if (p.expects) out.push(...predictProblems(p, base, tieLines));
   if (p.use) out.push(...traceProblems(p));
-  if (p.result) { try { compile(p.result)(withDefaults(vars)); } catch (e) { out.push(`result 算不了：${e.message}`); } }
+  if (p.code) out.push(...codeProblems(p));
+  else if (p.result && baseType(p) === 'solve' && p.runs?.length) out.push(...solveResultProblems(p, base, vars, tieLines));
+  else if (p.result) { try { compile(p.result)(withDefaults(vars)); } catch (e) { out.push(`result 算不了：${e.message}`); } }
   return out;
+}
+
+// solve / calc 的 result 带 run：照固定的字段跑一遍，算得出来、用到的量没有并列
+function solveResultProblems(p, base, vars, tieLines) {
+  const rv = runVars(p, {}, base);
+  if (rv.error) return [`跑不了 run ${rv.error.run}：${rv.error.msg}`];
+  const out = tieLines(rv.ties, 'result ');
+  try {
+    const v = expectValue(p.result, rv.vars, p.runs.map((r) => r.name));
+    if (typeof v === 'number' && !Number.isFinite(v)) out.push('result 算出来不是一个数');
+  } catch (e) { out.push(`result 算不了：${e.message}`); }
+  return out;
+}
+
+// code：没 ref 时每个测试要写期望；ref 要过自己的全部测试（否则题本身错了）
+function codeProblems(p) {
+  let spec;
+  try { spec = parseCodeSpec(p.code); } catch (e) { return [e.message]; }
+  if (!spec.ref) return spec.tests.some((t) => !t.expect) ? ['没写 ref:（参考解法）时，每个测试都要写 -> 期望，页面才知道对的是什么'] : [];
+  let res;
+  try { res = runTests(p.code.ref, spec); } catch (e) { return [`ref 跑不了：${e.message}`]; }
+  return res.flatMap((r, i) => (r.ok ? [] : [`ref（参考解法）过不了自己的测试 t${i + 1}：${r.error || (r.diff || []).map((d) => `${d.what} 想要 ${d.want}，得到 ${d.got}`).join('；')}`]));
 }
 
 // run 行自己的：引擎交不交量、题里用到的量是不是这个引擎的
