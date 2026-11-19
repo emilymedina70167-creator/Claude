@@ -78,6 +78,6 @@ function callers(dir = 'kit/src', out = []) {
   return out;
 }
 test('每个调用的地方都归了类', () => {
-  const missing = callers().filter((f) => !DEG.has(f) && !RAD.has(f));
+  const missing = callers().filter((f) => !DEG.has(f) && !RAD.has(f) && !f.startsWith('fx/')); // fx/ 下全是弧度（计划 3 的实数取点）
   assert.deepEqual(missing, [], `这些文件用到了求值，要在 tests/expr-rad.test.js 里归进 DEG（画图、角度）或 RAD（答案、弧度）`);
 });

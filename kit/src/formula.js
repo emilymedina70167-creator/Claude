@@ -6,6 +6,7 @@
 //   compareFormula：代值比较
 import { parse, FX_NAMES } from './expr.js';
 import { calcValue, exactTeX, isQ, isQMat, toFloat, Q } from './exact.js';
+import { parseDomain, compareFx, DEFAULT_RANGE } from './fx/sample.js';
 
 // 学生能用的函数（和 expr.js / exact.js 一致的常用那些）。计划 3 加了初等函数（FX_NAMES）和带底数的 log
 const OLD_FUNCS = ['tr', 'det', 'rank', 'inv', 'T', 'sqrt', 'abs', 'dot', 'norm', 'choose', 'fact'];
@@ -283,15 +284,33 @@ const greekNames = (t) => String(t ?? '').replace(/[αβγδλμθξη]/g, (c) =
 export function parseFree(spec) {
   // formula: -：式子作答、没有变量（3^9A 这种：页面比值，配 form: 要求写成什么样）
   if (/^\s*(-|none|无|没有)\s*$/i.test(String(spec ?? ''))) return [];
-  const parts = greekNames(spec).split(/[,，;；]/).map((x) => x.trim()).filter(Boolean);
+  const parts = splitTop(greekNames(spec)).map((x) => x.trim()).filter(Boolean);
   if (!parts.length) throw new Error('formula: 后面写式子里的变量，比如 formula: n');
   return parts.map((p) => {
+    // 实数的变量：x in (0, 1)（计划 3：在这个范围里随机取点比）
+    if (/\s(in|∈)\s*[([]/.test(` ${p}`)) { const [d] = parseDomain(p); return { name: d.name, domain: d }; }
     const m = p.match(/^([A-Za-z_]\w*)\s*(?:[=＝]\s*(-?\d+)\s*(?:\.\.|…|~|到)\s*(-?\d+))?$/);
-    if (!m) throw new Error(`formula: 的写法：formula: n，或者 formula: n=1..8（看不懂「${p}」）`);
+    if (!m) throw new Error(`formula: 的写法：formula: n，或者 formula: n=1..8，实数写 formula: x in (0, 1)（看不懂「${p}」）`);
     const lo = m[2] !== undefined ? Number(m[2]) : 1, hi = m[3] !== undefined ? Number(m[3]) : 6;
     if (!(hi >= lo) || hi - lo > 30) throw new Error(`${m[1]} 的范围写成 ${m[1]}=1..8 这样，最多 30 个值`);
-    return { name: m[1], values: Array.from({ length: hi - lo + 1 }, (_, k) => lo + k) };
+    // explicit：写了整数范围（x=1..5）的 x 照整数取点
+    const f = { name: m[1], values: Array.from({ length: hi - lo + 1 }, (_, k) => lo + k) };
+    if (m[2] !== undefined) Object.defineProperty(f, 'explicit', { value: true }); // 不可枚举：旧的比较、存档里照旧没有它
+    return f;
   });
+}
+
+// 按最外层的逗号、分号切（x in (0, 1), a in [1, 3] 里括号里的逗号不算）
+function splitTop(s) {
+  const out = [];
+  let d = 0, cur = '';
+  for (const c of String(s)) {
+    if ('([{'.includes(c)) d++;
+    else if (')]}'.includes(c)) d--;
+    if (d === 0 && /[,，;；]/.test(c)) { out.push(cur); cur = ''; } else cur += c;
+  }
+  out.push(cur);
+  return out;
 }
 
 // 几个变量的取值组合（最多 12 组：每个变量取前几个值的笛卡尔积，太多就截断）
@@ -350,7 +369,10 @@ function matrixPowerIn(ast, freeNames, scope) {
  * free：parseFree 的结果；scope：题里的量（精确值）。
  * 返回 { ok, msg（给学生看的，可以有 $TeX$）, note（记进作答记录的一句话）, checked（代了几组）}
  */
-export function compareFormula(expected, given, { free, scope = {} } = {}) {
+export function compareFormula(expected, given, opts = {}) {
+  // 实数取点的题（formula: x、x in (…)、domain:、calc:）：fx/sample.js 判
+  if (opts.real) return compareFx(expected, given, { domain: opts.domain, ints: opts.ints, scope: opts.scope, seed: opts.seed });
+  const { free, scope = {} } = opts;
   const freeNames = new Set(free.map((f) => f.name));
   const eAst = typeof expected === 'string' ? parse(expected) : expected;
   const gAst = typeof given === 'string' ? parse(given) : given;
@@ -377,6 +399,11 @@ export function compareFormula(expected, given, { free, scope = {} } = {}) {
   if (!rows.length) throw new Error('标准答案在这些取值上都算不出来，检查 formula: 的范围');
   const bad = rows.filter((r) => !r.ok);
   if (!bad.length) return { ok: true, msg: '', note: '', checked: rows.length };
+  // 对不上的全是因为学生的式子在那几个 n 上算不出来（ln(n-1) 在 n = 1，新加的函数没定义）：页面判不了，不判错
+  if (bad.every((r) => r.err || !finite(r.got)) && usesFx(gAst)) {
+    const nm = free.length === 1 ? free[0].name : '';
+    return { ok: null, msg: `页面判不了：你的式子在 ${nm ? `$${nm} = ${bad.map((r) => r.at[nm]).join(',\\ ')}$` : '几组取值'} 时算不出来，别的取值都对得上，待外部核。`, note: `代值检查：${bad.length} 组算不出来（${bad[0].err}），页面判不了`, checked: rows.length, bad };
+  }
   const good = rows.filter((r) => r.ok);
   const b = bad[0];
   // 「n = 1、2 时」：一个变量时只列值；几个变量时一组一组列
@@ -392,6 +419,14 @@ export function compareFormula(expected, given, { free, scope = {} } = {}) {
   const note = `代值检查：${good.length ? `${list(good)} 对，` : ''}${list(bad, 4)} 不对`;
   // bad：对不上的那几组（{ at, want, got, err }）：舞台写给老师「代 n = 3 是 4.5，该是 3」要用两边的值
   return { ok: false, msg, note, checked: rows.length, bad };
+}
+
+const finite = (v) => { try { const f = toFloat(v); return (Array.isArray(f) ? f.flat(Infinity) : [f]).every(Number.isFinite); } catch { return false; } };
+// 树里用到了计划 3 新加的初等函数
+function usesFx(n) {
+  if (!n) return false;
+  if (n.t === 'call' && FX_NAMES.includes(n.name)) return true;
+  return ['a', 'b'].some((k) => usesFx(n[k])) || (n.args || n.items || []).some(usesFx);
 }
 
 // 含参数的多项式（paramcalc.js 算出来、记着参数名 param）在这一组值上的值；别的原样
@@ -416,8 +451,13 @@ function varsIn(n, out = new Set()) {
  * 返回 { expected, free, scope, names（式子里能用的名字）, keys（小键盘上放的：自由变量 + 答案里用到的量）, display }。
  * 标准答案自己代不进去（变量没定义之类）时抛出中文原因
  */
-export function formulaSpec(answer, freeSpec, scope = {}) {
-  const free = parseFree(freeSpec);
+export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
+  let free = parseFree(freeSpec);
+  // domain: x in (0, 1)：给实数的变量定范围（formula: 里没写这个变量就加上）
+  for (const d of parseDomain(opts.domain || '')) {
+    const k = free.findIndex((f) => f.name === d.name);
+    if (k >= 0) free[k] = { name: d.name, domain: d }; else free = [...free, { name: d.name, domain: d }];
+  }
   const shown = String(answer ?? '').trim();
   const src = greekNames(shown).replace(/\s+/g, ' ').trim();
   if (!src) throw new Error('formula: 的题要写 answer:（标准答案的式子，比如 3^(n-1)*A）');
@@ -428,14 +468,27 @@ export function formulaSpec(answer, freeSpec, scope = {}) {
     try { expected = normalizeFormula(shown, { names: [...freeNames, ...Object.keys(scope)] }); ast = parse(expected); } catch { throw new Error(`answer: ${shown} 写错了：${e.message}`); }
   }
   const used = [...varsIn(ast)].filter((v) => !freeNames.includes(v));
-  const missing = used.filter((v) => !(v in scope) && !['I', 'E', 'pi', 'e'].includes(v));
+  const missing = used.filter((v) => !(v in scope) && !['I', 'E', 'pi', 'e', 'inf', '__dne', '__div'].includes(v));
   if (missing.length) throw new Error(`answer: 里的 ${missing.join('、')} 没有定义：在 let 里给出它的值`);
+  const names = [...new Set([...freeNames, ...Object.keys(scope).filter((k) => /^[A-Za-z_]\w*$/.test(k))])];
+  // 实数取点：写了范围、domain:、calc:，或者变量叫 x、y——但题里用到矩阵（矩阵的量、det tr rank inv、转置）时照旧整数取点（线代的 |A − xE|）
+  const matrixy = Object.values(scope).some((v) => Array.isArray(v)) || /\b(det|tr|rank|inv|T)\s*\(|'/.test(src);
+  const real = free.some((f) => f.domain) || !!opts.calc || (!matrixy && free.some((f) => /^[xy]$/.test(f.name) && !f.explicit));
+  if (real) {
+    const domain = free.filter((f) => f.domain || (/^[xy]$/.test(f.name) && !f.explicit)).map((f) => f.domain || { ...DEFAULT_RANGE, name: f.name });
+    const ints = free.filter((f) => !domain.some((d) => d.name === f.name));
+    const seed = `${shown}|${freeSpec}`;
+    if (!opts.calc) {
+      const self = compareFx(ast, ast, { domain, ints, scope, seed });
+      if (self.ok !== true) throw new Error(`answer: ${shown} 在给的范围里算不出来（${self.note}）：检查式子，或用 domain: x in (…) 给范围`);
+    }
+    return { expected, free, scope, names, keys: [...freeNames, ...used.filter((v) => !['pi', 'e', 'inf'].includes(v))], display: shown, real: true, domain, ints, seed, read: { names, real: true } };
+  }
   const self = compareFormula(ast, ast, { free, scope });
   if (!self.ok) throw new Error(`answer: ${src} 代不进去：${self.msg}`);
   // 只在一两个值上算得出来，比不出对错（比如 A^(1/n)）
   if (self.checked < Math.min(2, free.length ? 2 : 1)) throw new Error(`answer: ${src} 代不进去：只有 ${self.checked} 组值算得出来，检查式子或 formula: 的范围`);
-  const names = [...new Set([...freeNames, ...Object.keys(scope).filter((k) => /^[A-Za-z_]\w*$/.test(k))])];
-  return { expected, free, scope, names, keys: [...freeNames, ...used], display: shown };
+  return { expected, free, scope, names, keys: [...freeNames, ...used], display: shown, read: { names } };
 }
 
 /**

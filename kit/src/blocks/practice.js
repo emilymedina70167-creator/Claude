@@ -92,13 +92,13 @@ function templatePractice(el, fields, tpls) {
   const base = { ...session.vars };
   const kits = tpls.map(({ tpl, name }) => {
     const f = tpl.fields;
-    const formulaOf = (vars) => (f.formula ? formulaSpec(f.answer, f.formula, vars) : null);
+    const formulaOf = (vars) => (f.formula || f.calc ? formulaSpec(f.answer, f.formula, vars, { domain: f.domain, calc: f.calc }) : null);
     // check: bin / hex：答案写成二进制 / 十六进制（width: 要求几位）。序列答案要逐题算，自定义题型里先不支持
     const check = (f.check || '').toLowerCase().trim();
     if (/^(seq|sequence|order)$/.test(check)) throw new Error('practice 的自定义题型还不支持 check: seq（序列答案请用 answer 组件的 type: seq）');
     const textOf = (vars) => textAnswerSpec(check, f.answer, { scope: vars, width: f.width });
     // 先取几组数试一遍：模板写错（算不出来、条件取不到）现在就报，别等学生做到那一题
-    const errors = checkTemplate(tpl, { base, formulaCheck: f.formula ? (vars) => formulaOf(vars) : /^(bin|hex)$/.test(check) ? textOf : null });
+    const errors = checkTemplate(tpl, { base, formulaCheck: f.formula || f.calc ? (vars) => formulaOf(vars) : /^(bin|hex)$/.test(check) ? textOf : null });
     if (errors.length) throw new Error(errors.slice(0, 2).join('；'));
     return { tpl, f, name, check, formulaOf, textOf, prev: null };
   });

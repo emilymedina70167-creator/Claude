@@ -399,10 +399,10 @@ table.mx.mx-click td { cursor: pointer; }
 .q-verdict { font: 700 17px/1.4 var(--sans); margin-bottom: 4px; }
 .is-ok { --fb: rgb(var(--green-rgb) / 0.75); }
 .is-bad { --fb: rgb(var(--coral-rgb) / 0.75); }
-.is-mid { --fb: rgb(var(--yellow-rgb) / 0.75); }
+.is-mid, .is-unsure { --fb: rgb(var(--yellow-rgb) / 0.75); }
 .is-ok .q-verdict { color: var(--green); }
 .is-bad .q-verdict { color: var(--coral); }
-.is-mid .q-verdict { color: var(--yellow); }
+.is-mid .q-verdict, .is-unsure .q-verdict { color: var(--yellow); } /* 页面判不了、待外部核（计划 3） */
 .is-reveal { --fb: rgb(var(--blue-rgb) / 0.6); }
 .cj-feedback.is-wait { color: var(--muted); font: 15.5px/1.5 var(--sans); }
 .cj-follow { margin-top: 10px; color: var(--pink); }

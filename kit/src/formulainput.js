@@ -13,7 +13,9 @@ function texHtml(tex) {
 const SHOW = { alpha: 'α', beta: 'β', gamma: 'γ', lambda: 'λ', mu: 'μ', theta: 'θ' };
 
 /** names：式子里能用的量（自由变量在前，比如 n、A、alpha）；keys：小键盘上放哪几个（默认 names 的前几个） */
-export function formulaInput(container, { names = [], keys = names, placeholder = '' } = {}) {
+// read：normalizeFormula 的选项（实数题 formulaSpec 给 { names, real }，读不准的写法照实说）；不给就只用 names
+export function formulaInput(container, { names = [], keys = names, placeholder = '', read = null } = {}) {
+  const opts = read || { names };
   const root = document.createElement('div');
   root.className = 'fi';
   const v = keys[0] ? SHOW[keys[0]] || keys[0] : 'n';
@@ -29,7 +31,7 @@ export function formulaInput(container, { names = [], keys = names, placeholder 
     preview.classList.remove('is-bad');
     if (!t) { preview.innerHTML = ''; return; }
     try {
-      preview.innerHTML = texHtml(formulaTeX(normalizeFormula(t, { names })));
+      preview.innerHTML = texHtml(formulaTeX(normalizeFormula(t, opts)));
     } catch (e) {
       preview.textContent = e.message;
       preview.classList.add('is-bad');
@@ -50,7 +52,7 @@ export function formulaInput(container, { names = [], keys = names, placeholder 
     read() {
       const t = inp.value.trim();
       if (!t) { inp.focus(); throw new Error('还没写式子'); }
-      try { return normalizeFormula(t, { names }); } catch (e) { inp.classList.add('is-wrong'); throw e; }
+      try { return normalizeFormula(t, opts); } catch (e) { inp.classList.add('is-wrong'); throw e; }
     },
     text() { return inp.value.trim() || '（没写）'; },
     partial() { return inp.value.trim(); },
