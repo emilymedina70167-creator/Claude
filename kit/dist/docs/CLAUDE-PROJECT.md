@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-18g**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-19**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -575,7 +575,7 @@ id: p1
 ````
 
 - `block 块 must=… optional=… [fast=]`：一块一行，按写的先后做，块里先必做再可选；`spare`：不出现，只存进题库给复测；没排进任何一行、也不是谁的 `retry` 的题报写法错误。`limit=` 第一次作答一共多久（不写不限时），`pause=` 手写停多久算停顿（默认 30s）。
-- 执行时页面先查一遍（写法、每道题的 `example` 代进条件、必做题 retry 至少 2 道、至少 1 条 teach、retry 是同一种题型），不过的不开，原因写在 `ext_in.result`；`node tools/ext-check.mjs --next … --lint` 查的是同一份。过了就画一张开始卡，题全部存进题库 `probes`。
+- 执行时页面先查一遍（写法、每道题的 `example` 代进条件（带着这节课 `let` 过的量；模板先取几组数）、必做题 retry 至少 2 道、至少 1 条 teach、retry 是同一种题型），不过的不开，原因写在 `ext_in.result`；`node tools/ext-check.mjs --next … --lint` 查的是同一份。过了就画一张开始卡，题全部存进题库 `probes`。
 - 学生点开始：板、常驻栏、翻板条、整页板书收起来（合书），做完放回来；这时来的 `ext_in` 照常执行，画好的板做完检验才看得到。一道题：作答 → 点「很确定 / 大概 / 蒙的」→ 交；没有提示和「看答案」，「想不出来」一直在。
 - 判：构造的每一条、式子、真假、能不能、哪一行、逐行证明、result、fix 页面当场判；要点、证明要点、理由、solve 的步骤每交一次调一次页面里的 Opus 5.5 high（给它题、你写的要点或参考步骤、学生交的；手写的带整页图，转写和判同一次），回的不是 Opus、读不出来、超过 90 秒都算拿不准。要它判的题交了学生马上做下一道，判回来没过的在当前这道做完时插进来。
 - 判出没过：列出没过的每一项（构造是那一条自己的话，要点是「没写到：要点原文」）→ 你写的 teach → 下一道 retry；做对算补上，又错接着下一道，retry 用完记没吸收。「蒙的」做对也出一道 retry 确认。拿不准的（`unsure`、超时、作废）不补讲、不出 retry，待你核。没有对上的 teach 时叫一次页面里的 Claude 写补讲：给它题、要点、你写的 teach、学生交的、没过的项和 `<<< >>>` 里你写的话；没写 `<<< >>>` 时默认的话是「指出错在哪、只补缺的那一点（不给整段答案）。」（你在任务书里写的那句）。它的话原样显示，记成证据 `src: helper, role: check`。
@@ -657,7 +657,7 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 | `profile` | 和教学有关的我（目标、术语附英文、用 iPad 和 Notability……），不放生活信息 | 课堂里的 Claude（新的、改说法、并掉重复的）；我在学习台上能改文字 |
 | `asks` | 我的要求：我说过要老师以后怎样的（要求、纠正、期望），原话页面从证据抄，删课也不丢 | 有记忆摘要以后不再往里写（话的账停了；老师写的 `ask` 记成摘要的新笔记）。以前：话的账、课堂里的 Claude（memo 的 `ask`） |
 | `notebook` | **笔记本**（2026-11-17 起，第十四轮）：项目 Claude 自己的长期记忆，一个文件一条（`path`、`text`、`pin` 每一轮整份放进它的说明、`show` 出现在学生的「笔记」页、`order`、`v`、`history` 最近 20 版、`quotes` 引号在记录里没找到的几句）。写什么、怎么分由它定 | 外部主 Claude（`ext`）、页面里的老师（课上的 `board note` 块）、夜班；我在「管理 → 笔记本」里看、改、退回 |
-| `dev_requests` | **给开发的**（第十四轮）：学生让改、要改页面代码才做得到的事，一件一条（`at`、`by`、`text`、学生的原话 `quote`、`status` 只能是 `open` / `done`）。开发那边每次开工先读 | 项目 Claude（课堂老师、班主任、课后那一轮）；我在「管理 → 给开发的」里看、删 |
+| `dev_requests` | **给开发的**（第十四轮）：学生让改、要改页面代码才做得到的事，一件一条（`at`、`by`、`text`、学生的原话 `quote`、`status` 只能是 `open` / `design` / `done`；`design` 是还没定的设计稿或任务书草稿，审过改成 `open` 开发才做）。开发那边每次开工先读 | 项目 Claude（课堂老师、班主任、课后那一轮）；我在「管理 → 给开发的」里看、删 |
 | `journal` | **Claude 改过的**（第十四轮）：项目 Claude 的每一次写一条（`at`、`by`：`ext`（外部主 Claude）/ `class` / `head` / `night` / `me` / `page`（以前还有 `after`、`organize`）、`path`、`op`、`before`、`after`），编号 `j-{毫秒时间戳 36 进制}-{5 位随机}`；撤销就是把 `before` 写回去 | 页面（`write` 工具、`board note`）；每晚的那一次自己写；我在「管理 → Claude 改过的」里撤销 |
 | `meta/instructions` · `meta/today` · `meta/mastery-calc` | 我写的项目指令（`text`）；首页「今天」照着画的那一份（`{ date, note, items: [{ kind: class / review / drill / recall / later / coach, why, label, block, ids, reviews, focus }] }`，`date` 不是今天时只列事实）；页面按作答算的掌握参考（`{ at, rule, items: [{ target, state, tier, reason, basis }] }`，`mastery` 本身页面不改）。复现组（`reviews`）写了 `due`（YYYY-MM-DD）首页按它算到期，那天以后做过了（`last` 不早于 `due`）照 `last` + `tier` | 指令我写；`today` 外部主 Claude 写（夜班照它的计划也写）；`mastery-calc` 页面算 |
 | `summary` | **记忆摘要**（2026-11-16 起，照 claude.ai 项目的记忆）：老师对我的了解是一份会重写的摘要，四条：`shared` 三科共用、`math`、`cs`、`en`。上课的老师每一轮带着共用的和那一科的，当背景，不是规矩。**有了它，上面的规则、关于我、要求和下面的守则、失误不再发给上课的老师**（数据都留着） | 页面每节课后在后台把这节课并进去、整份重写；课堂里的 Claude 当场记新笔记（memo 的 `know`）；我在「管理 → 记忆摘要」里看全文、直接改、退回上一版 |
@@ -857,7 +857,7 @@ node tools/ext-check.mjs --next 这一轮.txt --shots 截图目录
 - 复测：检验那天以后 1 天、7 天（`retests`），到期的写进 `meta/facts` 和首页「今天」的事实（「复测：L2.1.4（隔 1 天）」），`meta/today` 的 `kind` 能写 `retest`。学生点了开一节 `kind: "check"` 的课（`sessions/{编号}`：`{ kind: "check", retest: [{ block, days }], items: [题库编号], … }`），没有主讲；题从 `probes` 里每个 `family` 挑一道没见过的（不挑那次检验里的 retry），挑不到写「缺新题」。复测的证据带 `retest: 1 | 7`、`bank`（题库编号），进掌握的参考，不改吸收。
 - 检验里最后没过的（retry 用完、想不出来又没补上）和「很确定却错了」的题，页面各记一道错题（`errors`，带 `check`、`probe`、`target`、`items`；同一个 `target` 一次检验一道），能在「管理 → 最近记下的」撤销；补上了的、待核的不记。
 
-`probes/{pr-…}` = `{ fence（题的围栏原文）, type: "recall" | "construct" | "claim" | "discriminate" | "locate" | "solve", block, target, level: "基础" | "方法" | "核心", facet, family, retryBank: [题库编号], src: "ext" | "lab", from: { session, check, as: "probe" | "retry" | "spare" }, seen: [{ at, session, as }], at }`。同一道题（去掉 `id:`、`retry:` 两行以后原文一样）一个编号；`retry:` 写的局部 id 存成 `retryBank`（题库编号）。你写新题：`fence` 照 `board check` 里的一道写，编号照 `pr-` 加 12 位十六进制随便取一个没用过的。
+`probes/{pr-…}` = `{ fence（题的围栏原文）, type: "recall" | "construct" | "claim" | "discriminate" | "locate" | "solve", block, target, level: "基础" | "方法" | "核心", facet, family, retryBank: [题库编号], lets: { 名字: "值" }（题里用到的这节课 let 的量，浮点；复测时当这道题自己带的量，`pick` 之前就有）, src: "ext" | "lab", from: { session, check, as: "probe" | "retry" | "spare" }, seen: [{ at, session, as }], at }`。同一道题（去掉 `id:`、`retry:` 两行以后原文一样）一个编号；`retry:` 写的局部 id 存成 `retryBank`（题库编号）。你写新题：`fence` 照 `board check` 里的一道写，编号照 `pr-` 加 12 位十六进制随便取一个没用过的。
 
 ### 练一练和题库：`drills`（页面写，你也可以写）
 

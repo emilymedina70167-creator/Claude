@@ -1,5 +1,28 @@
-// 判分、传图、复测几处共用的小判断（整体审查查出来的几处，tests/check-review.test.js）
+// 判分、传图、复测几处共用的小判断（整体审查查出来的几处，tests/check-review.test.js、check-minors.test.js）
+import { step } from './flow.js';
+import { claudeIds } from './judge.js';
+import { parseJudge } from '../solvespec.js';
+
 export const UPLOAD_WAIT = 10000; // 一张图最多等多久
+
+/**
+ * 外部的 board judge target=题（检验里的那道）：一行一项（计划 1 的写法），result=pass|fail 改整道题。
+ * 返回 { state（改判以后的进度）, items, result, errors（写错、没读懂的行：照实回报，不静默丢）} 或 { error }
+ */
+export function judgeOp(op, state, { at = Date.now() } = {}) {
+  const r = state?.results?.[op.target];
+  if (!r?.submitted) return { error: `${op.target} 还没交` };
+  const lines = String(op.body || '').split('\n');
+  const result = lines.map((l) => l.trim().match(/^result\s*=\s*(pass|fail)$/i)?.[1]?.toLowerCase()).find(Boolean) || null;
+  const rest = lines.filter((l) => !/^\s*result\s*=/.test(l)).join('\n');
+  const ids = [...new Set([...(r.items || []).map((x) => x.id), ...claudeIds(state.check.probes[op.target])])];
+  const parsed = rest.trim() ? parseJudge(rest, ids.map((id) => ({ id }))) : { steps: [], errors: [] };
+  // 只收写到了的那几项（parseJudge 把没写的补成 null，那是「没判」，不是外部改判成待核）
+  const named = new Set(rest.split('\n').map((l) => l.trim().replace(/^[-*]\s+/, '').split(/\s+/)[0]).filter(Boolean));
+  const items = parsed.steps.filter((x) => named.has(x.id));
+  if (!items.length && !result) return { error: `board judge ${op.target} 里没有读得懂的一行：${(parsed.errors || []).slice(0, 2).join('；') || '写成 m1 ok / s3 wrong why="…"，或 result=pass'}` };
+  return { state: step(state, { type: 'ext', id: op.target, items, result, at }), items, result, errors: parsed.errors || [] };
+}
 
 /** 页面里的 Claude 用谁：claude.ai 里是真的（ai），?dev 才用模拟老师；都没有就不判（待核，不拿模拟的冒充） */
 export const callerFor = ({ dev = false, ai = null } = {}) => (dev ? 'mock' : ai?.call ? 'ai' : null);

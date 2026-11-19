@@ -1,7 +1,7 @@
 // 检验的数据库那一层（设计 5.5、5.6″）：进度、证据、题库、吸收、记错题。课堂里的检验和复测的课共用。
 // db 是这节课的（scopeDb：check、ink 在 sessions/{编号}/ 下面；evidence、probes、absorb、errors 是全局的）。
 import { bankDocs, bankId, fenceOf, seenPatch } from './bank.js';
-import { evidenceOf, absorbDoc, errorEntries } from './record.js';
+import { evidenceOf, absorbDoc, errorEntries, absorbStale } from './record.js';
 import { absorbOf } from './flow.js';
 import { reportError } from '../errlog.js';
 import { guardDb } from '../memory/writer.js';
@@ -41,19 +41,20 @@ export function createCheckDesk(rawDb, { sid = null, space = null, memoOps = nul
       }
       return out;
     },
-    /** 执行 board check 时把题存进题库（同一个编号不写第二次） */
-    async bankStore(check) {
+    /** 执行 board check 时把题存进题库（同一个编号不写第二次）；base：这节课 let 的量（浮点），题里用到的抄进 lets */
+    async bankStore(check, base = {}) {
       if (readOnly || bankOf) return;
-      for (const { id, doc } of bankDocs(check, { session: sid, at: Date.now() })) {
+      for (const { id, doc } of bankDocs(check, { session: sid, at: Date.now(), base })) {
         const had = await db.doc(`probes/${id}`).get().catch(() => null);
         if (!had?.exists) db.doc(`probes/${id}`).set(doc).catch(soft('存进检验题库', `probes/${id}`));
       }
     },
     /**
      * 做完（或外部改判以后）：每块写吸收（复测的课不写），最后没过的、很确定却错了的记错题（同一道题记过的 memo 照规矩不另记）。
+ * late：刷新以后补写的（那一块已经有更晚的检验写的吸收就跳过）
      * 返回 { absorbs: { 块: absorbOf }, errors: [回报的一句] }
      */
-    async finish(state, { errors = true } = {}) {
+    async finish(state, { errors = true, late = false } = {}) {
       const check = state.check;
       const absorbs = Object.fromEntries(check.blocks.map((b) => [b.block, absorbOf(state, b.block)]));
       if (readOnly) return { absorbs, errors: [] };
@@ -70,6 +71,8 @@ export function createCheckDesk(rawDb, { sid = null, space = null, memoOps = nul
           if (!a?.state) continue;
           const path = `absorb/${b.block.replace(/#/g, '~')}`;
           const prev = await db.doc(path).get().then((d) => (d.exists ? d.data() : null), () => null);
+          // 补写（刷新以后才写的）：这一块已经有更晚的检验写的吸收，不盖回去
+          if (late && absorbStale(prev, { check: check.id, session: sid, endedAt: state.endedAt })) continue;
           const ids = a.probes.map((pid) => evs[pid]?.id).filter(Boolean);
           const doc = absorbDoc(prev, { ...a, block: b.block }, {
             check, session: sid, space, at: Date.now(), today: today(), families: b.must.map((pid) => check.probes[pid].family), owed: state.owed || [], evidence: ids.length ? ids : prev?.probes || [],

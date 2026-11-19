@@ -1,5 +1,5 @@
 // 检验里一道题的画面（设计 5.1、5.2）：六种探题各怎么作答。输入框照现有的（mathInput、formulaInput、findbug 的行），不另起一套。
-// 不判对错（judge.js 判）；这里只收作答：answer() 给 judge.js 的样子，blanks() 还有几格没填，empty() 一个字也没写。
+// 不判对错（judge.js 判）；这里只收作答：answer() 给 judge.js 的样子，problem() 交之前还差什么（judge.js 的 notReady），empty() 一个字也没写。
 import { mathInput } from '../mathinput.js';
 import { formulaInput } from '../formulainput.js';
 import { mdToHtml, tex2html, escapeHtml } from '../blocks/common.js';
@@ -7,6 +7,8 @@ import { markDraft } from '../drafts.js';
 import { pen } from '../ink/engine.js';
 import { timedPad } from './inkpad.js';
 import { uploadAll } from './judgekit.js';
+import { notReady } from './judge.js';
+import { hasInk, dropInk } from './inkstore.js';
 
 const shapeOf = (s) => (s.kind === 'mat' ? { kind: 'matrix', r: s.r, c: s.c } : s.kind === 'vec' ? { kind: 'vector', n: s.n } : { kind: 'number' });
 const md = (t) => mdToHtml(String(t ?? ''));
@@ -74,7 +76,7 @@ function exprBoxes(host, exprs, names) {
 }
 
 /**
- * 画一道题。host 里画；vars 是题里的量（题面的 \calc 用）。返回 { answer(), blanks(), empty(), lock(), destroy(), el }。
+ * 画一道题。host 里画；vars 是题里的量（题面的 \calc 用）。返回 { answer(), problem(), empty(), lock(), destroy(), el }。
  * onChange：作答变了（外壳拿它决定「交」亮不亮、登记草稿）
  */
 export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause } = {}) {
@@ -89,13 +91,18 @@ export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause
   el.addEventListener('input', changed);
   el.addEventListener('click', (e) => { if (e.target.closest('.ck-pick, .ck-line')) changed(); });
   let get = () => ({});
-  let blanks = () => 0;
+  let problem = () => ''; // 交之前还差什么（格子没填、读不懂、式子框空着）：'' 是能交
   let empty = () => false;
 
   // 写字的地方：「手写 / 打字」两个页签（手写是检验手写板 inkpad.js，记每一笔的时间、划掉留痕）。
   // 见过 Pencil 默认手写，不然默认打字；逐行推的证明只能打字（页面要逐行核）
   let active = null; // 现在要交的那一个写字的地方（claim 换了判断会换一个）
-  const writer = (opts, { hand = true } = {}) => {
+  const keys = new Set(); // 这道题用过的本地存档（交了、想不出来了都删）
+  const store = (() => { try { return localStorage; } catch { return null; } })();
+  // claim 判真、判假各一块手写板：各存各的（以前共用一个 key，换了判断，另一边写的字跑过来）
+  const writer = (opts, { hand = true, part = '' } = {}) => {
+    const key = inkKey ? `${inkKey}${part ? `-${part}` : ''}` : '';
+    if (key) keys.add(key);
     const wrap = document.createElement('div');
     wrap.className = 'ck-writer';
     work.appendChild(wrap);
@@ -108,14 +115,14 @@ export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause
     const ta = textArea(wrap, opts);
     const taWrap = ta.closest('.ck-field');
     const show = () => {
-      if (useHand && !pad) pad = timedPad(wrap, { key: inkKey, ...(pause ? { pause } : {}) });
+      if (useHand && !pad) pad = timedPad(wrap, { key, ...(pause ? { pause } : {}) });
       if (pad) pad.el.hidden = !useHand;
       taWrap.hidden = useHand;
       wrap.querySelectorAll('.ck-tab').forEach((b) => b.classList.toggle('is-on', (b.dataset.tab === 'hand') === useHand));
       changed();
     };
     // 这台设备上存着没交的笔画：直接打开手写
-    if (hand && inkKey) { try { if (localStorage.getItem(inkKey)) useHand = true; } catch { /* 无 */ } }
+    if (hand && hasInk(store, key)) useHand = true;
     show();
     const w = {
       text: () => ta.value.trim(),
@@ -132,7 +139,7 @@ export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause
     const names = probe.slots.map((s) => s.name);
     const ex = exprBoxes(work, probe.exprs || [], names);
     get = () => ({ slots: Object.fromEntries(Object.entries(boxes).map(([k, b]) => [k, rawCells(b.box, b.slot)])), exprs: Object.fromEntries(Object.entries(ex).map(([k, f]) => [k, f.partial()])) });
-    blanks = () => Object.values(boxes).reduce((n, b) => n + rawCells(b.box, b.slot).flat().filter((x) => x === '').length, 0);
+    problem = () => notReady(probe, get());
   } else if (probe.type === 'claim') {
     const area = document.createElement('div');
     let boxes = null, ex = null, w = null;
@@ -147,7 +154,7 @@ export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause
         ex = exprBoxes(area, probe.exprs || [], probe.slots.map((s) => s.name));
       } else if (v === 'true' && probe.proof) {
         w = writer({ label: `从 ${probe.proof.start} 一行一行推（一行一个式子）`, rows: 5 }, { hand: false });
-      } else w = writer({ label: v === 'true' ? '为什么成立（证明的要点）' : '反例（写出来、说明为什么不成立）', rows: 5 });
+      } else w = writer({ label: v === 'true' ? '为什么成立（证明的要点）' : '反例（写出来、说明为什么不成立）', rows: 5 }, { part: v });
       if (w) area.appendChild(work.querySelector(':scope > .ck-writer:last-child'));
     });
     work.appendChild(area);
@@ -158,7 +165,7 @@ export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause
       if (w) { if (probe.proof && truth) out.proof = w.text().split('\n').map((x) => x.trim()).filter(Boolean); else out.text = w.text(); }
       return out;
     };
-    blanks = () => (boxes ? Object.values(boxes).reduce((n, b) => n + rawCells(b.box, b.slot).flat().filter((x) => x === '').length, 0) : 0);
+    problem = () => (boxes ? notReady({ ...probe, exprs: probe.exprs || [] }, get()) : '');
     empty = () => pick.value === null || (w && w.blank());
   } else if (probe.type === 'discriminate') {
     const pick = choice(work, [['true', '能'], ['false', '不能']]);
@@ -205,9 +212,11 @@ export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause
       // 整页图和快照一起传，每张最多等 10 秒；传不上的记 null（判分照样用手上的整页图）
       const [final, ...ids] = await uploadAll([out.final, ...out.shots.map((x) => x.blob)], upload);
       const shots = out.shots.map((x, i) => ({ at: x.t, why: x.why, asset: ids[i] }));
-      return { answer: { ...answer, ink: { final, shots, timeline: out.timeline, lines: out.lines.length } }, images: out.final ? [out.final] : [], strokes: out.strokes, events: out.events, clear: () => pad.clear() };
+      return { answer: { ...answer, ink: { final, shots, timeline: out.timeline, lines: out.lines.length } }, images: out.final ? [out.final] : [], strokes: out.strokes, events: out.events };
     },
-    blanks: () => blanks(),
+    problem: () => problem(),
+    /** 交了、想不出来了：这道题在这台设备上存着的笔画都删掉（交了打字版也删，不再越积越多） */
+    clearInk() { for (const k of keys) dropInk(store, k); },
     empty: () => empty(),
     lock() { locked = true; el.classList.add('is-locked'); el.querySelectorAll('input, textarea, button').forEach((x) => { x.disabled = true; }); },
     destroy() { active?.destroy?.(); el.remove(); },

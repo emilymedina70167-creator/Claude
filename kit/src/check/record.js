@@ -59,6 +59,8 @@ export function evidenceOf(s, id, { ctx = {}, bankOf = null, retest = null, reju
     ms: r.ms ?? null, msTotal: r.msTotal ?? null, ...teach, judgedBy: r.judgedBy || 'page',
     ...(r.answer?.ink ? { ink: r.answer.ink } : {}), ...(retest ? { retest } : {}), ...(bankOf?.[id] ? { bank: bankOf[id] } : {}),
     ...(rejudged ? { rejudged: true } : {}), ...(partial ? { partial: true } : {}),
+    // 模板取了数的题：取到的数、是哪个模板（外部照数核、看是不是换了数还错）
+    ...(p.picked ? { picked: p.picked, template: p.tplOf || id } : {}),
     at: r.at || Date.now(),
   };
 }
@@ -82,19 +84,31 @@ export function absorbDoc(prev, result, { check, session = null, space = null, a
   const history = prev ? [...(prev.history || []), { check: prev.check, session: prev.session, at: prev.at, state: prev.state, facets: prev.facets }].slice(-5) : [];
   // 状态类的 log：改了的字段一条一条记（schema.js 的 lastLog，自检要 to 是新值）
   const note = `检验 ${check.id}${session ? `（${session}）` : ''}`;
+  // 同一次检验重算（外部改判、刷新以后补写）而且结论没变：主讲核过的照旧算核过（不被页面改回待核）
+  const keep = !!(prev && prev.check === check.id && prev.session === session && prev.checked && prev.state === result.state);
   const log = [...(prev?.log || [])];
-  for (const [field, to] of [['state', result.state], ['checked', false]]) {
+  for (const [field, to] of [['state', result.state], ['checked', keep]]) {
     const from = prev ? prev[field] ?? null : null;
     if (prev && from === to) continue;
     log.push({ date: today, by: 'page', field, from, to, basis: evidence.slice(0, 20), note });
   }
   return {
     block: result.block || prev?.block || check.blocks.find((b) => b.must.some((id) => result.probes?.includes(id)))?.block || null,
-    space, state: result.state, facets: result.facets, by: 'page', checked: false, check: check.id, session, at, date: today,
+    space, state: result.state, facets: result.facets, by: keep ? prev.by || 'page' : 'page', checked: keep, check: check.id, session, at, date: today,
     probes: evidence, confidentWrong: result.confidentWrong || [], debt: result.debt || [], families,
     retests: retestDates(today), retryOwed: owed.filter((x) => check.probes[x]).map((x) => bankId(fenceOf(check.probes[x]))),
     history, log,
   };
+}
+
+/**
+ * 补写以前做完的检验（刷新以后 classcheck.js 的 toFinish）时，这一块的吸收已经是别的检验、比它晚写的：不盖回去
+ * （prev 是 absorb/{块} 现在的样子，cur：{ check, session, endedAt }）
+ */
+export function absorbStale(prev, { check, session, endedAt } = {}) {
+  if (!prev) return false;
+  if (prev.check === check && prev.session === session) return false;
+  return (Number(prev.at) || 0) > (Number(endedAt) || 0);
 }
 
 /** meta/state-{科} 那一块的一行 */
@@ -130,6 +144,7 @@ export function checkLine(ev) {
     ev.teach ? `补讲 ${ev.teach}` : '',
     ev.retries?.length ? `retry ${ev.retries.join('、')}` : '',
     SURE_TEXT[ev.sure] || (ev.giveup ? '想不出来' : ''),
+    ev.picked ? `取 ${ev.picked}` : '',
     ev.late ? '超时以后交的' : '',
     ev.ms ? msText(ev.ms) : '',
     ev.judgedBy && ev.judgedBy !== 'page' ? `${{ claude: '页面里的 Claude', ext: '主讲', timeout: '判分超时' }[ev.judgedBy] || ev.judgedBy}判的` : '',
@@ -157,7 +172,7 @@ export function extSummary(s, check, absorbs = {}) {
     if (r.skipped) { out.push(`- ${id}：可选，跳过了（必做都一次过、很确定）`); continue; }
     const p = check.probes[id];
     const bad = (r.items || []).filter((x) => x.ok !== true);
-    out.push(`- ${id}（${p.type}，打 ${p.target}）：${FINAL_TEXT[r.final] || '没做完'}${r.sure === 'sure' && r.outcome === 'fail' ? '，很确定却错了' : ''} · 第一次：${clip(answerSummary(p, r.answer, r), 200)}${bad.length ? ` · ${bad.map(itemText).join('；')}` : ''}${r.retries?.length ? ` · retry ${r.retries.map((x) => `${x} ${s.results[x]?.outcome === 'pass' ? '对' : s.results[x]?.outcome === 'pending' ? '待核' : '没过'}`).join('、')}` : ''} · ${SURE_TEXT[r.sure] || (r.giveup ? '想不出来' : '')} · ${msText(r.ms)}`);
+    out.push(`- ${id}（${p.type}，打 ${p.target}${p.picked ? `，取 ${p.picked}` : ''}）：${FINAL_TEXT[r.final] || '没做完'}${r.sure === 'sure' && r.outcome === 'fail' ? '，很确定却错了' : ''} · 第一次：${clip(answerSummary(p, r.answer, r), 200)}${bad.length ? ` · ${bad.map(itemText).join('；')}` : ''}${r.retries?.length ? ` · retry ${r.retries.map((x) => `${x}${check.probes[x]?.picked ? `（取 ${check.probes[x].picked}）` : ''} ${s.results[x]?.outcome === 'pass' ? '对' : s.results[x]?.outcome === 'pending' ? '待核' : '没过'}`).join('、')}` : ''} · ${SURE_TEXT[r.sure] || (r.giveup ? '想不出来' : '')} · ${msText(r.ms)}`);
     const ink = r.answer?.ink;
     if (ink) out.push(`  手写：整页图 ${ink.final}${ink.shots?.length ? `；快照 ${ink.shots.map((x) => `${x.asset}（${x.why}）`).join('、')}` : ''}${ink.timeline ? `\n  ${ink.timeline}` : ''}`);
   }

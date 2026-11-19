@@ -6,11 +6,13 @@
 //   fallback(probe, answer, items) → Promise<string>：外部没写到的错法，叫它写补讲
 //   save(state)：存进度（sessions/{编号}/check/{检验 id}）；record(ids, state)：写这几道的证据；onEnd({ state, absorbs })：结束、回到黑板
 import { createFlow, step, view, resumeJobs, needsFallback, absorbOf } from './flow.js';
+import { materialize } from './template.js';
 import { judgeMachine, JUDGE_WAIT } from './judge.js';
 import { toRecord } from './record.js';
 import { probeView } from './probes.js';
 import { createTimer } from '../timing.js';
 import { tickMs, screenKey, tooSoon, lockState } from './shellkit.js';
+import { sweepInk } from './inkstore.js';
 import { flushIds } from './record.js';
 import { mdToHtml, escapeHtml } from '../blocks/common.js';
 
@@ -19,6 +21,9 @@ const FACET_TEXT = { ok: '✓', fixed: '补上', fail: '✗', pending: '待核' 
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 export function mountCheck(host, { check, vars = {}, saved = null, judge, fallback, save = () => {}, record = () => {}, onEnd = () => {}, onPause = () => {}, upload = async () => null, inkKey = () => '', onInk = () => {}, lockKey = '', now = () => Date.now() } = {}) {
+  // 接着做：照存着的那一份（模板取好的数不变）；新开：模板先取好数（template.js，已经取过的原样）
+  if (saved?.check?.id === check.id && saved.check.probes) check = saved.check;
+  else check = materialize(check, { base: vars }).check;
   let state = saved?.check?.id === check.id ? saved : createFlow(check);
   const root = document.createElement('div');
   root.className = 'ck-shell';
@@ -81,13 +86,23 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     }
   }
 
+  // 页头：每秒的 tick 只改那一行字，按钮不重建（以前每秒整个重画，iPad 上「先停下」偶尔点不中）
+  let headKey = null;
   function paintHead(v) {
     const total = check.blocks.reduce((n, b) => n + b.must.length, 0);
     const done = check.blocks.reduce((n, b) => n + b.must.filter((id) => state.results[id]?.submitted).length, 0);
-    head.innerHTML = `<span class="ck-title">检验${check.title ? ` · ${escapeHtml(check.title)}` : ''}</span>`
-      + (v.show === 'intro' || v.show === 'done' ? '' : `<span class="ck-meta">必做 ${done}/${total}${v.left !== null ? ` · 剩 ${mmss(v.left)}` : ''}${state.late ? ' · 时间到了' : ''}${v.waiting ? ` · 在判 ${v.waiting} 道` : ''}</span>`)
-      + (['probe', 'teach', 'wait'].includes(v.show) ? '<button type="button" class="btn btn-sm ck-pause">先停下</button>' : '');
-    head.querySelector('.ck-pause')?.addEventListener('click', () => { dispatch({ type: 'pause' }); onPause(state); });
+    const meta = v.show === 'intro' || v.show === 'done' ? null : `必做 ${done}/${total}${v.left !== null ? ` · 剩 ${mmss(v.left)}` : ''}${state.late ? ' · 时间到了' : ''}${v.waiting ? ` · 在判 ${v.waiting} 道` : ''}`;
+    const pause = ['probe', 'teach', 'wait'].includes(v.show);
+    const key = `${meta !== null}:${pause}`;
+    if (key !== headKey) {
+      headKey = key;
+      head.innerHTML = `<span class="ck-title">检验${check.title ? ` · ${escapeHtml(check.title)}` : ''}</span>`
+        + (meta !== null ? '<span class="ck-meta"></span>' : '')
+        + (pause ? '<button type="button" class="btn btn-sm ck-pause">先停下</button>' : '');
+      head.querySelector('.ck-pause')?.addEventListener('click', () => { if (!['probe', 'teach', 'wait'].includes(state.phase)) return; dispatch({ type: 'pause' }); onPause(state); });
+    }
+    const m = head.querySelector('.ck-meta');
+    if (m && m.textContent !== meta) m.textContent = meta;
   }
 
   function paint() {
@@ -156,7 +171,9 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     card.querySelector('.ck-giveup').addEventListener('click', () => {
       if (tooSoon(shownAt, now()) || submitting || state.results[v.id]?.submitted) return;
       const t = timer.submit(v.id) || {};
+      const view1 = pv;
       dispatch({ type: 'giveup', id: v.id, ms: t.ms ?? null });
+      if (state.results[v.id]?.submitted) view1?.clearInk?.();
     });
     syncSubmit();
   }
@@ -165,14 +182,14 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     const btn = main.querySelector('.ck-submit');
     if (!btn || !pv) return;
     const warn = main.querySelector('.ck-warn');
-    const blanks = pv.blanks();
+    const problem = pv.problem();
     const empty = pv.empty();
-    btn.disabled = !sure || empty || blanks > 0;
-    warn.textContent = blanks ? `还有 ${blanks} 格没填` : empty ? '' : !sure ? '先点有多大把握' : '';
+    btn.disabled = !sure || empty || !!problem;
+    warn.textContent = problem || (empty ? '' : !sure ? '先点有多大把握' : '');
   }
 
   async function submit(id) {
-    if (submitting || !pv || pv.blanks() || pv.empty() || !sure) { syncSubmit(); return; }
+    if (submitting || !pv || pv.problem() || pv.empty() || !sure) { syncSubmit(); return; }
     submitting = true;
     const probe = check.probes[id];
     const sureNow = sure;
@@ -190,7 +207,8 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     if (c.strokes) { try { onInk(id, c.strokes, c.events); } catch { /* 回放存不上不影响作答 */ } }
     const machine = judgeMachine(probe, c.answer, vars);
     dispatch({ type: 'submit', id, answer: c.answer, sure: sureNow, ms: t.ms ?? null, msTotal: t.msTotal ?? t.ms ?? null, machine, ...(id === resumedId ? { resumed: true } : {}) });
-    c.clear?.();
+    // 交上了才删本地的笔画（传图的那几秒里点了「先停下」，这一下交不进去，笔画得留着）
+    if (state.results[id]?.submitted) view0.clearInk?.();
   }
 
   // 失败的一项写成学生看得懂的一句（不露编号）：构造的条件用外部写的话；要点写「没写到：要点」；错说法写「写了常见的错说法」；步骤写第几步
@@ -259,10 +277,12 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
     dead = true;
     clearInterval(tickT);
     main.innerHTML = '<div class="ck-card"><p>这次检验在另一个标签页里开着：在那边接着做（关掉那边，过几秒刷新这一页也行）。</p></div>';
-    return { el: root, state: () => state, pause() {}, resume() {}, flush() {}, rejudge() {}, absorbs: () => ({}), destroy() { root.remove(); } };
+    return { el: root, state: () => state, check: () => check, pause() {}, resume() {}, flush() {}, rejudge() {}, absorbs: () => ({}), destroy() { root.remove(); } };
   }
   const release = () => { if (lockKey && readLock()?.id === tab) { try { localStorage.removeItem(lockKey); } catch { /* 无 */ } } };
   if (lockKey) { writeLock(); beat = setInterval(writeLock, 2000); addEventListener('pagehide', release); }
+  // 这台设备上存了 7 天以上、没交的手写（做到一半不做了的）清掉
+  try { sweepInk(localStorage, now()); } catch { /* 无 */ }
   // 还没点开始也先存一份：开始卡停着时刷新，检验照样在
   if (!saved) { try { save(state); } catch { /* 下次再存 */ } }
   paint();
@@ -270,6 +290,8 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
   return {
     el: root,
     state: () => state,
+    /** 这一次检验（模板取好数的） */
+    check: () => check,
     pause() { if (!['paused', 'done', 'intro'].includes(state.phase)) dispatch({ type: 'pause' }); },
     resume() { if (state.phase === 'paused') dispatch({ type: 'resume' }); },
     rejudge(id, items, result) { dispatch({ type: 'ext', id, items, result }); },

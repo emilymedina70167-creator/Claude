@@ -2,7 +2,7 @@
 // 题和它的 retry 一起从题库取出来、局部 id 重起（bank.js 的 retestCheck），证据带 bank 和 retest；进掌握的参考，不改吸收。
 // 做完在 absorb/{块}.retests 那一次写 done / ok；没过的照样记错题（外部 review 必改 2）
 import { parseCheck } from './spec.js';
-import { retestCheck } from './bank.js';
+import { retestCheck, attachBases } from './bank.js';
 import { claudeIds, verdictPrompt, parseVerdict, fallbackPrompt } from './judge.js';
 import { absorbOf } from './flow.js';
 import { mountCheck } from './shell.js';
@@ -33,7 +33,9 @@ export async function enterRetest(root, { db, store, sid, doc, readOnly = false,
   // retry 的题也要读（retryBank）
   for (const b of [...bank]) for (const r of b.retryBank || []) if (!bank.some((x) => x.id === r)) { const d = await db.doc(`probes/${r}`).get().catch(() => null); if (d?.exists) bank.push({ id: r, ...d.data() }); }
   const built = retestCheck({ id: `rt-${sid}`, title: '复测', items, bank, retests: doc.retest || [] });
-  const { check, errors } = parseCheck(built.head, built.body);
+  const { check: raw, errors } = parseCheck(built.head, built.body);
+  // 每道题带着存题库时抄下的课上的量（复测这一页没有那节课的量）
+  const check = attachBases(raw, built.bases);
   if (!check || !check.order.length) {
     root.innerHTML = `<p class="dk-status">这次复测没有能出的题${built.dropped.length ? `（${built.dropped.map((x) => x.why).join('；')}）` : ''}。回学习台看「缺新题」。</p>`;
     if (errors.length) reportError(new Error(errors[0]), { what: '拼复测', soft: true });

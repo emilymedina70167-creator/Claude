@@ -188,7 +188,7 @@ export function createProjectView({ db, store, getData, notebook, charter = '', 
     const body = $('.dk-dev .dk-body');
     if (!body) return;
     const rows = [...(getData()?.dev_requests || [])].sort((a, b) => (b.at || 0) - (a.at || 0));
-    body.innerHTML = rows.length ? rows.map((r) => `<div class="dk-row"><span class="dk-row-t">${escapeHtml(r.text || '')}${r.quote ? `<br><span class="muted">你说：${escapeHtml(r.quote)}</span>` : ''}<br><span class="muted">${day(r.at)} ${escapeHtml(BY[r.by] || r.by || '')}${r.status === 'done' ? ' · 做好了' : ''}</span></span><button type="button" class="btn btn-sm dk-devdel" data-id="${escapeHtml(r.id)}">删掉</button></div>`).join('') : '<p class="muted">还没有。你在对话里让改、要改页面代码才做得到的事，Claude 会记在这里。</p>';
+    body.innerHTML = rows.length ? rows.map((r) => `<div class="dk-row"><span class="dk-row-t">${escapeHtml(r.text || '')}${r.quote ? `<br><span class="muted">你说：${escapeHtml(r.quote)}</span>` : ''}<br><span class="muted">${day(r.at)} ${escapeHtml(BY[r.by] || r.by || '')}${r.status === 'done' ? ' · 做好了' : r.status === 'design' ? ' · 设计稿，等你和主讲审' : ''}</span></span><button type="button" class="btn btn-sm dk-devdel" data-id="${escapeHtml(r.id)}">删掉</button></div>`).join('') : '<p class="muted">还没有。你在对话里让改、要改页面代码才做得到的事，Claude 会记在这里。</p>';
     if (body.dataset.wired) return;
     body.dataset.wired = '1';
     body.addEventListener('click', async (e) => {
