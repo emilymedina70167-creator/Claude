@@ -4,7 +4,9 @@
 // 证据什么时候写：本题的结论定下来（final：过了、补上了、retry 用完、待核）时写一条；retry 判出来就写一条。
 // 一条证据里有第一次的作答原文、每一项的结论、信心、用时、补讲、谁判的——外部看 since-analysis 就够，不用再来回问。
 import { retestDates, bankId, fenceOf } from './bank.js';
-import { baseType } from './spec.js';
+import { baseType, traceTable, traceRows, traceRowName } from './spec.js';
+import { bracketText } from './judge.js';
+import { tokenizeSentence } from '../entext.js';
 
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const clip = (t, n) => { const s = String(t ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
@@ -27,15 +29,32 @@ export function answerSummary(probe, answer, r = {}) {
   const exprs = a.exprs ? (probe.exprs || []).filter((e) => a.exprs[e.id]).map((e) => `${e.label}：${a.exprs[e.id]}`).join('；') : '';
   const written = r.lines?.length ? r.lines.map((l) => `L${l.n}${l.struck ? '（划掉）' : ''}：${l.text}`).join('\n') : String(a.text ?? '').trim();
   const parts = [];
+  if (probe.type === 'trace') {
+    // 学生填的表：一行一行照写的抄（直接给出的行不抄；空格子写「空」）
+    try {
+      const { table } = traceTable(probe);
+      const rowsOf = traceRows(table).map((x) => `${traceRowName(table, x.r)}：${table.rows[x.r].cells.map((c, j) => (c.given ? '（给出）' : String(a.cells?.[x.r]?.[j] ?? '').trim() || '空')).join(' | ')}`);
+      const extra = Array.isArray(a.cells?.extra) && a.cells.extra.some((x) => String(x ?? '').trim()) ? [`表下面：${a.cells.extra.map((x) => String(x ?? '').trim() || '空').join(' | ')}`] : [];
+      parts.push(...rowsOf, ...extra);
+    } catch { /* 表都出不来：没有可写的 */ }
+  }
+  if (probe.type === 'predict' && a.expects) parts.push((probe.expects || []).map((e) => `${e.label || e.id}：${String(a.expects[e.id] ?? '').trim() || '空'}`).join('；'));
+  if (probe.type === 'code' && a.code) parts.push(clip(String(a.code).replace(/\s+$/, ''), 300));
+  if (probe.type === 'parse') parts.push((a.spans || []).length ? bracketText(probe.tokens || [], a.spans) : '（一处都没标）');
+  if (probe.type === 'errfind') {
+    const k = a.word === undefined || a.word === null || a.word === '' ? -1 : Number(a.word);
+    const w = k >= 0 ? tokenizeSentence(probe.text || '')[k]?.w : '';
+    parts.push(w ? `点了 ${w}，改成 ${String(a.fix ?? '').trim() || '（没写）'}` : '没点词');
+  }
   if (probe.type === 'claim') parts.push(`判${a.truth ? '真' : '假'}`);
-  if (probe.type === 'discriminate') parts.push(a.can ? '能用' : '不能用');
+  if (probe.type === 'discriminate') parts.push(probe.options ? String(a.pick ?? '').trim() || '（没选）' : a.can ? '能用' : '不能用');
   if (probe.type === 'locate') parts.push(`错在第 ${a.line} 行`);
   if (slots) parts.push(slots);
   if (exprs) parts.push(exprs);
   if (a.proof?.length) parts.push(a.proof.join(' = '));
   if (written) parts.push(written);
   if (a.result) parts.push(`结果：${a.result}`);
-  if (a.fix) parts.push(`改成：${a.fix}`);
+  if (a.fix && probe.type !== 'errfind') parts.push(`改成：${a.fix}`);
   if (a.ink?.final) parts.push(`（手写，整页图 ${a.ink.final}）`);
   return parts.join('；') || '（空的）';
 }
@@ -43,7 +62,7 @@ export function answerSummary(probe, answer, r = {}) {
 const itemText = (it) => `${it.id} ${it.ok === 'missing' ? '没写到' : it.ok === null ? '待核' : String(it.id).startsWith('if') ? '不满足' : '不对'}${it.why ? `：${it.why}` : ''}`;
 
 /** 一道题的一条证据。ctx：{ session, turn }；bankOf：复测时局部 id → 题库编号；retest：1 / 7 */
-export function evidenceOf(s, id, { ctx = {}, bankOf = null, retest = null, rejudged = false, partial = false } = {}) {
+export function evidenceOf(s, id, { ctx = {}, bankOf = null, retest = null, rejudged = false, partial = false, renumbered = false } = {}) {
   const r = s.results[id];
   const p = s.check.probes[id];
   const orig = r.of ? s.results[r.of] : r;
@@ -59,7 +78,7 @@ export function evidenceOf(s, id, { ctx = {}, bankOf = null, retest = null, reju
     sure: r.sure ?? null, late: !!r.late, giveup: !!r.giveup, ...(r.resumed ? { resumed: true } : {}),
     ms: r.ms ?? null, msTotal: r.msTotal ?? null, ...teach, judgedBy: r.judgedBy || 'page',
     ...(r.answer?.ink ? { ink: r.answer.ink } : {}), ...(retest ? { retest } : {}), ...(bankOf?.[id] ? { bank: bankOf[id] } : {}),
-    ...(rejudged ? { rejudged: true } : {}), ...(partial ? { partial: true } : {}),
+    ...(renumbered && !r.of ? { renumbered: true } : {}), ...(rejudged ? { rejudged: true } : {}), ...(partial ? { partial: true } : {}),
     // 模板取了数的题：取到的数、是哪个模板（外部照数核、看是不是换了数还错）
     ...(p.picked ? { picked: p.picked, template: p.tplOf || id } : {}),
     at: r.at || Date.now(),
@@ -119,7 +138,7 @@ export function stateLine(a) {
   const facets = Object.entries(a.facets || {}).map(([k, v]) => `${k} ${FACET_TEXT[v] || v}`).join(' ');
   const rts = (a.retests || []).map((r) => `${md(r.due)}${r.done ? ` ${r.ok === false ? '✗' : '✓'}` : ''}`).join('、');
   const seven = (a.retests || []).find((r) => r.days === 7 && r.done && r.ok !== false);
-  return [`吸收：${a.state}（${a.checked ? '主讲核过' : '页面判，待主讲核'}）`, md(a.date), facets, rts ? `复测 ${rts}${seven ? '（7 天复测过了，进不进复现由外部定）' : ''}` : ''].filter(Boolean).join(' · ').replace('） · ', '）· ');
+  return [`吸收：${a.state}（${a.checked ? '主讲核过' : '页面判，待主讲核'}）`, md(a.date), facets, rts ? `复测 ${rts}${(a.retests || []).some((r) => r.renumbered) ? '（复测用的是换了数的同一道题）' : ''}${seven ? '（7 天复测过了，进不进复现由外部定）' : ''}` : ''].filter(Boolean).join(' · ').replace('） · ', '）· ');
 }
 
 const OUTCOME_ITEM = { pass: 'first', fail: 'wrong', pending: 'open' };
@@ -129,7 +148,7 @@ export function checkItems(evidence = []) {
   return (evidence || []).filter((e) => e?.src === 'check' && !e.retryOf && !e.rejudged && e.outcome).map((e) => ({
     key: `${e.session || ''}§ck:${e.session || ''}:${e.bank || e.comp}`, comp: e.comp, session: e.session || null, tags: e.tags || (e.block ? [e.block] : []),
     outcome: e.giveup ? 'giveup' : OUTCOME_ITEM[e.outcome] || 'open', sure: e.sure !== 'guess',
-    first: e.at, end: e.at, evidence: [e.id], ...(e.retest ? { retest: e.retest } : {}), check: true,
+    first: e.at, end: e.at, evidence: [e.id], ...(e.retest ? { retest: e.retest } : {}), ...(e.renumbered ? { renumbered: true } : {}), check: true,
   }));
 }
 

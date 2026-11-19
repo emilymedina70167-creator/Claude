@@ -82,6 +82,8 @@ const HASNOT = /^\s*(has|not)\s*[:：]\s?(.*)$/;
 // 模板的命令只认小写、整行像命令的（pick 名字 = …；where 带比较或是一个函数调用）：英语题的续行
 // 「Where did you go?」「where the river meets the sea」照旧是续行
 const TPL = /^\s*(?:pick\s+[A-Za-z_]\w*\s*=\s*\S|where\s+(?=.*(?:[=!<>]=|[<>]))\S|where\s+[A-Za-z_]\w*\s*\(.*\)\s*$)/;
+/** 一道题的围栏原文里有 pick / where（模板：每次用另取一组数）：题库里不用另存标记 */
+export const isTplFence = (fence) => String(fence ?? '').split('\n').some((l) => TPL.test(l));
 export const TPL_ROUNDS = 8; // 模板自检取几组数
 export const DRAW_TRIES = 20; // 一道取了数自检不过（某一组数下 example 不满足、\calc 算不出来、有并列、分不开错法），最多重取几次
 // 共用的字段、各题型自己的字段（不在里面的报「看不懂」）

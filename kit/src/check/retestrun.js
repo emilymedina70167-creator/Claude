@@ -41,6 +41,9 @@ export async function enterRetest(root, { db, store, sid, doc, readOnly = false,
     if (errors.length) reportError(new Error(errors[0]), { what: '拼复测', soft: true });
     return;
   }
+  // 退回换了数的模板题（开课时 pickRetest 记在 sessions.renumbered，题库编号）：证据和这一次复测都记 renumbered
+  const renumberedBank = new Set((Array.isArray(doc.renumbered) ? doc.renumbered : []).map(String));
+  const renumberedLocal = new Set(Object.entries(built.bankOf).filter(([, b]) => renumberedBank.has(b)).map(([l]) => l));
   const sc = scopeDb(db, sid);
   // 页面里的 Claude（判要点、写补讲）：只认 Opus 5.5 high；?dev 用模拟老师
   // 只有 ?dev 用模拟老师；claude.ai 里拿不到页面里的 Claude 就不判（待核），不拿模拟的冒充 Opus
@@ -59,7 +62,7 @@ export async function enterRetest(root, { db, store, sid, doc, readOnly = false,
   };
   const mem = { errors: rows(await db.collection('errors').get().catch(() => null)), curriculum: rows(await db.collection('curriculum').get().catch(() => null)), weaknesses: rows(await db.collection('weaknesses').get().catch(() => null)), evidence: [] };
   const days = Number(doc.retest?.[0]?.days) || 1;
-  const cdesk = createCheckDesk(sc, { sid, space: doc.space || 'math', memoOps: readOnly ? null : createMemOps({ db, mem }), bankOf: built.bankOf, retest: days, readOnly, curriculum: () => mem.curriculum });
+  const cdesk = createCheckDesk(sc, { sid, space: doc.space || 'math', memoOps: readOnly ? null : createMemOps({ db, mem }), bankOf: built.bankOf, retest: days, renumbered: renumberedLocal, readOnly, curriculum: () => mem.curriculum });
   const saved = await cdesk.load(check.id);
   root.innerHTML = '';
   const host = document.createElement('div');
@@ -75,7 +78,7 @@ export async function enterRetest(root, { db, store, sid, doc, readOnly = false,
       const path = `absorb/${String(r.block).replace(/#/g, '~')}`;
       const cur = await db.doc(path).get().then((d) => (d.exists ? d.data() : null), () => null);
       if (!cur) continue;
-      const retests = (cur.retests || []).map((x) => (x.days === r.days && !x.done ? { ...x, done: today(), ok: r.ok, session: sid } : x));
+      const retests = (cur.retests || []).map((x) => (x.days === r.days && !x.done ? { ...x, done: today(), ok: r.ok, session: sid, ...(check.blocks.find((b) => b.block === r.block)?.must.some((id) => renumberedLocal.has(id)) ? { renumbered: true } : {}) } : x));
       await db.doc(path).update({ retests }).catch((e) => reportError(e, { what: '写复测结果', path, soft: true }));
     }
     await db.doc(`sessions/${sid}`).update({ status: 'closed', endedAt: Date.now() }).catch(() => {});

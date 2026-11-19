@@ -3,7 +3,7 @@
 // 题库 probes/{pr-…}：board check 执行时页面把里面每道题（含 retry、spare）存进去，同一道题（去掉局部 id 以后原文一样）一个编号。
 // retry: 写的是一次检验里的局部 id（p1a），换了检验就对不上、不同检验的 p1 还会撞：存进题库时改存成题库编号 retryBank。
 // 复测从题库拼一条 check：题连它的 retryBank 一起取出来，局部 id 重起（r1、r1a、r1b、r2…），证据里记 bank（题库编号）。
-import { parseCheck, selfCheck } from './spec.js';
+import { parseCheck, selfCheck, isTplFence } from './spec.js';
 
 export const RETEST_DAYS = [1, 7];
 
@@ -85,13 +85,16 @@ export function dueRetests(absorbs = [], today) {
 }
 
 const unseen = (d) => !(Array.isArray(d.seen) && d.seen.length) && !d.broken;
+// 见过的模板题：同类没有没见过的时退回它（换一组数再出；规则 rule-rev-2：新题不是原题换数，所以记 renumbered、掌握不拿它升）
+const reusable = (d) => !d.broken && (d.template === true || isTplFence(d.fence));
 
 /**
  * 给到期的块挑题：每个 family 一道没见过的（不挑这块最新一次检验里的 retry：同构小题测掌握偏弱）；retryOwed 先放（外部改判以后欠着的）。
- * 返回 { items: [题库编号], missing: [{ block, family, why }] }
+ * 返回 { items: [题库编号], missing: [{ block, family, why }], renumbered: [题库编号]（退回换数的模板的那几道） }；
+ * 同类只剩见过的模板：items 里放它（renumbered 记着），missing 照记一条「只剩换数的模板」
  */
 export function pickRetest({ due = [], bank = [], absorbs = [] } = {}) {
-  const items = [], missing = [];
+  const items = [], missing = [], renumbered = [];
   const byId = new Map(bank.map((d) => [d.id, d]));
   for (const d of due) {
     const a = absorbs.find((x) => x.block === d.block);
@@ -105,11 +108,14 @@ export function pickRetest({ due = [], bank = [], absorbs = [] } = {}) {
       if (covered.has(fam)) continue;
       const cand = bank.find((x) => x.family === fam && unseen(x) && !items.includes(x.id)
         && !(x.from?.as === 'retry' && x.from?.check === a.check && x.from?.session === a.session));
-      if (cand) items.push(cand.id);
+      if (cand) { items.push(cand.id); continue; }
+      const again = bank.find((x) => x.family === fam && reusable(x) && !items.includes(x.id)
+        && !(x.from?.as === 'retry' && x.from?.check === a.check && x.from?.session === a.session));
+      if (again) { items.push(again.id); renumbered.push(again.id); missing.push({ block: d.block, family: fam, why: '只剩换数的模板' }); }
       else missing.push({ block: d.block, family: fam, why: '题库里没有没见过的同类题' });
     }
   }
-  return { items, missing };
+  return { items, missing, renumbered };
 }
 
 // 改写围栏里的 id:、retry: 两行

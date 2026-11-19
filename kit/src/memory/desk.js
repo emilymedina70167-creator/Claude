@@ -1475,7 +1475,7 @@ export async function renderDesk(root, meta) {
       if (active) return active.id;
       const sid = sessionId(d, takenIds());
       assertWrite('page', 'sessions');
-      await db.doc(`sessions/${sid}`).set({ kind: 'check', date: d, space: spaceOfId(due2[0].block), block: due2[0].block, retest: due2.map((r) => ({ block: r.block, days: r.days })), items: p2.items, title: '复测', status: 'open', startedAt: Date.now() });
+      await db.doc(`sessions/${sid}`).set({ kind: 'check', date: d, space: spaceOfId(due2[0].block), block: due2[0].block, retest: due2.map((r) => ({ block: r.block, days: r.days })), items: p2.items, ...(p2.renumbered?.length ? { renumbered: p2.renumbered } : {}), title: '复测', status: 'open', startedAt: Date.now() });
       return sid;
     }));
   }
