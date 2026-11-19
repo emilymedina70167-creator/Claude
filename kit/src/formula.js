@@ -8,6 +8,7 @@ import { parse, FX_NAMES } from './expr.js';
 import { calcValue, exactTeX, isQ, isQMat, toFloat, Q } from './exact.js';
 import { parseDomain, compareFx, DEFAULT_RANGE } from './fx/sample.js';
 import './fx/diff.js'; // 实数题里 f' 是求导（fx/diff.js 接到 fxEval 上）
+import { parseCalc, calcSelfCheck, judgeCalc, FUNCTION_KINDS, CONST_NAMES, PAGE_BUDGET } from './fx/calc.js';
 
 // 学生能用的函数（和 expr.js / exact.js 一致的常用那些）。计划 3 加了初等函数（FX_NAMES）和带底数的 log
 const OLD_FUNCS = ['tr', 'det', 'rank', 'inv', 'T', 'sqrt', 'abs', 'dot', 'norm', 'choose', 'fact'];
@@ -301,6 +302,15 @@ export function parseFree(spec) {
   });
 }
 
+// calc: 没配 formula: 时的变量（第五节第 2 条：一行就够）
+function calcFree(c) {
+  // of 里的实数变量都要取点（偏导 wrt=y 时 x 照样要有值）；n 是 n 阶导的通式自己的
+  const vars = [...new Set([...(c.wrtList || [c.x]), ...[...varsIn(c.ofAst)].filter((v) => /^[a-z]$/.test(v) && !['e', 'n'].includes(v))])];
+  const n = c.order === 'n' ? ['n=1..5'] : [];
+  if (c.kind === 'deriv' && c.at !== undefined) return n.length ? n[0] : '-';
+  return FUNCTION_KINDS.has(c.kind) ? [...vars.map((v) => (v === 'n' ? 'n' : `${v} in (-3, 3)`)), ...n].join(', ') : '-';
+}
+
 // 按最外层的逗号、分号切（x in (0, 1), a in [1, 3] 里括号里的逗号不算）
 function splitTop(s) {
   const out = [];
@@ -371,6 +381,8 @@ function matrixPowerIn(ast, freeNames, scope) {
  * 返回 { ok, msg（给学生看的，可以有 $TeX$）, note（记进作答记录的一句话）, checked（代了几组）}
  */
 export function compareFormula(expected, given, opts = {}) {
+  // calc:（导数、不定积分、极限……）：fx/calc.js 判
+  if (opts.calc) return judgeCalc(opts, given);
   // 实数取点的题（formula: x、x in (…)、domain:、calc:）：fx/sample.js 判
   if (opts.real) return compareFx(expected, given, { domain: opts.domain, ints: opts.ints, scope: opts.scope, seed: opts.seed });
   const { free, scope = {} } = opts;
@@ -453,6 +465,9 @@ function varsIn(n, out = new Set()) {
  * 标准答案自己代不进去（变量没定义之类）时抛出中文原因
  */
 export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
+  const calc = opts.calc ? parseCalc(opts.calc) : null;
+  // 只写 calc: 不写 formula:：导数、原函数、等价、泰勒的学生写 x 的式子（n 阶导通式再加 n），极限、积分、阶写一个数
+  if (calc && !String(freeSpec ?? '').trim()) freeSpec = calcFree(calc);
   let free = parseFree(freeSpec);
   // domain: x in (0, 1)：给实数的变量定范围（formula: 里没写这个变量就加上）
   for (const d of parseDomain(opts.domain || '')) {
@@ -479,11 +494,20 @@ export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
     const domain = free.filter((f) => f.domain || (/^[xy]$/.test(f.name) && !f.explicit)).map((f) => f.domain || { ...DEFAULT_RANGE, name: f.name });
     const ints = free.filter((f) => !domain.some((d) => d.name === f.name));
     const seed = `${shown}|${freeSpec}`;
-    if (!opts.calc) {
-      const self = compareFx(ast, ast, { domain, ints, scope, seed });
-      if (self.ok !== true) throw new Error(`answer: ${shown} 在给的范围里算不出来（${self.note}）：检查式子，或用 domain: x in (…) 给范围`);
+    const keys = [...freeNames, ...used.filter((v) => !['pi', 'e', 'inf', '__dne', '__div'].includes(v))];
+    if (calc) {
+      // 学生写 +C、o(x^3)：输入框读法里认这几个名字，判的时候在语法树上去掉（fx/calc.js 的 stripTail）
+      const extra = calc.kind === 'antideriv' ? CONST_NAMES.filter((c) => !(c in scope)) : [];
+      const spec = { expected, free, scope, names: [...names, ...extra], keys, display: shown, real: true, domain, ints, seed, calc,
+        read: { names: [...names, ...extra], real: domain.length > 0, ...(calc.kind === 'taylor' ? { funcs: [...FORMULA_FUNCS, 'o', 'O'] } : {}) } };
+      const { errors, hints } = calcSelfCheck(spec, { budget: opts.budget ?? PAGE_BUDGET });
+      if (errors.length) throw new Error(errors.join('；'));
+      spec.hints = hints;
+      return spec;
     }
-    return { expected, free, scope, names, keys: [...freeNames, ...used.filter((v) => !['pi', 'e', 'inf'].includes(v))], display: shown, real: true, domain, ints, seed, read: { names, real: true } };
+    const self = compareFx(ast, ast, { domain, ints, scope, seed });
+    if (self.ok !== true) throw new Error(`answer: ${shown} 在给的范围里算不出来（${self.note}）：检查式子，或用 domain: x in (…) 给范围`);
+    return { expected, free, scope, names, keys, display: shown, real: true, domain, ints, seed, read: { names, real: true } };
   }
   const self = compareFormula(ast, ast, { free, scope });
   if (!self.ok) throw new Error(`answer: ${src} 代不进去：${self.msg}`);
