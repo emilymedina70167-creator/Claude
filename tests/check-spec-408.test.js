@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseCheck, parseProbe, selfCheck, PROBE_TYPES, BASE_OF, baseType, facetDefault,
-  slotProblems, runVars, evalIfs, parseNamed,
+  slotProblems, runVars, runFields, evalIfs, parseNamed,
 } from '../kit/src/check/spec.js';
 
 const F = '```';
@@ -245,7 +245,7 @@ teach default: 往后看谁最晚再用。
 
 test('against：名字不是这个引擎的错法、这组数分不开，各报一条', () => {
   const e1 = errsOf(wrap('predict', LRU('p2').replace('against: fifo, noInitial', 'against: fifoo')));
-  assert.ok(e1.some((x) => /fifoo/.test(x) && /fifo、opt、clock、noInitial/.test(x)), e1.join('\n'));
+  assert.ok(e1.some((x) => /fifoo/.test(x) && /不是 paging 的错法/.test(x) && /分不开/.test(x) && /fifo、opt、clock、noInitial/.test(x)), e1.join('\n'));
   // 1 2 3 4 2 5：LRU 和 FIFO 都缺 5 次（换出的页不一样，但这道题只问次数）
   const same = LRU('p2').replace('refs="1 2 3 4 1 2 5 1 2 3 4 5"', 'refs="1 2 3 4 2 5"').replace('expect x2 最后换出的页: 2\n', '').replace('against: fifo, noInitial', 'against: fifo');
   const e2 = errsOf(wrap('predict', same));
@@ -257,4 +257,28 @@ test('run 行只在 construct、predict 里认：英语 recall 的续行「run o
   assert.equal(r.answer, 'we\nrun out: of time');
   const p = probeOf('predict', 'id: q\ntarget: x\nlevel: 基础\nrun r: sort algo=shell gaps="4 2 1" array="49 38 65 97 76 13 27 49"\nexpect x3 第二趟: r.pass2\nexpect 名: "P1 P2"');
   assert.deepEqual(p.expects.map((e) => [e.id, e.label]), [['x3', '第二趟'], ['x2', '名']]);
+});
+
+test('一串的量和一个数比（r.flipped != 0）：不静默算满足，报写法；example 上 selfCheck 报出来', () => {
+  const p = probeOf('construct', SHELL('p1').replace('r.unstable >= 1', 'r.flipped != 0'));
+  const v = runVars(p, { A: '49 38 65 97 76 13 27 49', P: '49 49' }); // 稳定：flipped 是 []
+  const [r] = evalIfs(p.ifs, { A: '49 38 65 97 76 13 27 49', P: '49 49' }, v.vars, p.slots);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /r\.flipped 是一串/);
+  const e = errsOf(['block DS-L8.2 optional=p1', fence('construct', SHELL('p1').replace('r.unstable >= 1', 'r.flipped != r.unstable'))].join('\n'));
+  assert.ok(e.some((x) => /if1/.test(x) && /是一串/.test(x)), e.join('\n'));
+  // 数学的条件照旧：矩阵和一个 let 的数比不报
+  const m = probeOf('construct', 'id: q\ntarget: x\nlevel: 基础\nslots: A=mat(2)\nlet k = 2\nif: A != k\nexample: A=[[1,0],[0,0]]');
+  assert.equal(evalIfs(m.ifs, m.example, { k: 2 }, m.slots)[0].error, undefined);
+});
+
+test('expect / wrong 少写了 r.（expect 缺页: faults）：selfCheck 报「是量的名字」', () => {
+  const e = errsOf(wrap('predict', LRU('p2').replace('expect 缺页次数: r.faults', 'expect 缺页次数: faults')));
+  assert.ok(e.some((x) => /x1/.test(x) && /faults 是量的名字：写 r\.faults/.test(x)), e.join('\n'));
+  const w = errsOf(wrap('predict', LRU('p2').replace('wrong w1: r.faults - 3', 'wrong w1: faults - 3')));
+  assert.ok(w.some((x) => /wrong w1/.test(x) && /写 r\.faults/.test(x)), w.join('\n'));
+});
+
+test('runFields：字段值碰巧是 toString 这类名字不当成格子', () => {
+  assert.deepEqual(runFields({ slots: [] }, { fields: { array: 'toString' } }), { array: 'toString' });
 });

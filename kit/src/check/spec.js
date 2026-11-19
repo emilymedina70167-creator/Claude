@@ -503,7 +503,7 @@ function fieldOf(slot, raw) {
 /** 一个 run 照学生写的（或 example）代进去以后的字段 */
 export function runFields(probe, run, slotValues = {}) {
   const slots = Object.fromEntries((probe.slots || []).map((x) => [x.name, x]));
-  return Object.fromEntries(Object.entries(run.fields).map(([k, v]) => [k, slots[v] ? fieldOf(slots[v], slotValues[v]) : v]));
+  return Object.fromEntries(Object.entries(run.fields).map(([k, v]) => [k, Object.hasOwn(slots, v) ? fieldOf(slots[v], slotValues[v]) : v]));
 }
 
 /**
@@ -591,14 +591,30 @@ function condOk(text, scope, values, kinds, runNames) {
     return list.some((x) => sameToks(sorted(normTokens(x)), want));
   }
   const both = SIMPLE.test(sp.lhs) && SIMPLE.test(sp.rhs);
+  // 一串（r.flipped、r.victims、r.final）和一个数比：close 永远不等，r.flipped != 0 会一直算满足——不静默，报写法
+  // （只管用到 run 的量的条件：数学的条件照旧）
+  const isRun = (side) => runRefs(side, runNames) !== side;
+  const isSeq = (v) => Array.isArray(v) || typeof v === 'string';
+  const mixed = (a, b) => {
+    if (isSeq(a) === isSeq(b)) return;
+    const side = isSeq(a) ? sp.lhs : sp.rhs;
+    throw new Error(`${side} 是一串，和格子、量或 "字" 比（比如 P in ${side}），不和一个数比`);
+  };
   if ((sp.op === '==' || sp.op === '!=') && both) {
     const a = val(sp.lhs), b = val(sp.rhs);
-    const str = QUOTED.test(sp.lhs) || QUOTED.test(sp.rhs) || isStrSlot(sp.lhs) || isStrSlot(sp.rhs) || hasStr(a) || hasStr(b);
-    return (str ? sameToks(normTokens(a), normTokens(b)) : close(toNum(a), toNum(b))) === (sp.op === '==');
+    const str = QUOTED.test(sp.lhs) || QUOTED.test(sp.rhs) || isStrSlot(sp.lhs) || isStrSlot(sp.rhs);
+    if (!str && (isRun(sp.lhs) || isRun(sp.rhs))) mixed(a, b);
+    const asText = str || hasStr(a) || hasStr(b);
+    return (asText ? sameToks(normTokens(a), normTokens(b)) : close(toNum(a), toNum(b))) === (sp.op === '==');
   }
   if (sp.op === '==' || sp.op === '!=') {
     const [cond] = parseConditions(runRefs(text, runNames));
-    return close(cond.lhs(scope), cond.rhs(scope)) === (cond.op === '==');
+    const a = cond.lhs(scope), b = cond.rhs(scope);
+    if (isRun(sp.lhs) || isRun(sp.rhs)) {
+      mixed(a, b);
+      if (hasStr(a) || hasStr(b)) throw new Error(`${hasStr(a) ? sp.lhs : sp.rhs} 是字，算式里不能算：直接写 ${hasStr(a) ? sp.lhs : sp.rhs} == "…" 或 P == ${hasStr(a) ? sp.lhs : sp.rhs}`);
+    }
+    return close(a, b) === (cond.op === '==');
   }
   return !!compile(runRefs(text, runNames))(scope);
 }
@@ -772,9 +788,23 @@ function predictProblems(p, base, tieLines) {
   out.push(...tieLines(rv.ties, ''));
   const names = p.runs.map((r) => r.name);
   const right = {};
+  // 少写了「r.」的量名（expect 缺页: faults）会被当成字面的字，判的时候永远对不上：报出来
+  const bare = (text) => {
+    for (const m of String(text ?? '').matchAll(/(?<![.\w])([A-Za-z_]\w*)/g)) {
+      const run = p.runs.find((r) => measureKnown(r.engine, m[1]));
+      if (run && rv.vars[m[1]] === undefined) return `${m[1]} 是量的名字：写 ${run.name}.${m[1]}`;
+    }
+    return null;
+  };
   for (const e of p.expects) {
-    try { right[e.id] = expectValue(e.value, rv.vars, names); } catch (err) { out.push(`expect ${e.id}（${e.label}）算不出来：${err.message}`); }
-    for (const w of e.wrongs) { try { expectValue(w.expr, rv.vars, names); } catch (err) { out.push(`wrong ${w.id} 算不出来：${err.message}`); } }
+    const b = bare(e.value);
+    if (b) out.push(`expect ${e.id}（${e.label}）的 ${b}`);
+    else { try { right[e.id] = expectValue(e.value, rv.vars, names); } catch (err) { out.push(`expect ${e.id}（${e.label}）算不出来：${err.message}`); } }
+    for (const w of e.wrongs) {
+      const bw = bare(w.expr);
+      if (bw) { out.push(`wrong ${w.id} 的 ${bw}`); continue; }
+      try { expectValue(w.expr, rv.vars, names); } catch (err) { out.push(`wrong ${w.id} 算不出来：${err.message}`); }
+    }
   }
   if (!p.against?.length) return out;
   // 错法照第一个 run 认：换成那种错法跑出来的量，看有没有哪一个 expect 和对的不一样
@@ -783,7 +813,8 @@ function predictProblems(p, base, tieLines) {
   let keys = [];
   try { keys = variantsOf(r0.engine, fields).map((v) => v.key); } catch { keys = []; }
   for (const a of p.against) {
-    if (!keys.includes(a)) { out.push(`against 写了「${a}」：${r0.name}（${r0.engine}）这组数的错法只有 ${keys.join('、') || '（没有，这组数上每种错法都和对的一样）'}`); continue; }
+    // 引擎只列这组数上和对的不一样的错法、没有整张错法名单：不在里面的，要么不是这个引擎的错法，要么这组数分不开，两种都说
+    if (!keys.includes(a)) { out.push(`against 写了「${a}」：要么不是 ${r0.engine} 的错法，要么这组数上照它算和对的做法一样（分不开）；${r0.name}（${r0.engine}）这组数列出来的错法有 ${keys.join('、') || '（没有：这组数上每种错法都和对的一样）'}`); continue; }
     const wv = variantValues(r0.engine, fields, a);
     const vv = Object.fromEntries(Object.entries(rv.vars).filter(([k]) => !k.startsWith(`${r0.name}__`)));
     for (const [k, v] of Object.entries(wv?.values || {})) vv[`${r0.name}__${k}`] = v;
