@@ -18,15 +18,38 @@
 // 模板（外部 review 的可选那条）：题里写 pick / where（照 practice custom 的写法），每次用到都取一组新数——
 // retry 可以写同一个模板两次、也可以写这道题自己（retry: p1, p1）：局部 id 照用的先后叫 p1、p1~2、p1~3（template.js 的 materialize）。
 // 题目、要点、错法、补讲、同构题都由外部写；这里只读写法、拿外部写的 example 先验一遍条件（写错了页面报，不静默）。
+//
+// 408（计划 4）：construct 多 seq(n) / text / procs(n[, prio]) 格子和 run 行（run r: sort algo=shell array=A：格子名换成学生写的，
+// 引擎跑一遍，engines/measures.js 交的量在条件里写 r.unstable、r.flipped）；条件多比大小（>= <= > <）和字的 == != in
+// （P in r.flipped：不论先后、不管空格逗号大小写撇号）。predict 写 run、expect 标签: 值、带 => 的 wrong（错答案，挂在上面最近的
+// expect）、against:（这组数要分得开的引擎错法）。固定的数用到靠并列定的量（OPT 的 victims）自检报，学生造的那组有并列交 judge 待核。
 import { tokenize } from '../tokens.js';
 import { compile } from '../expr.js';
 import { parseConditions } from '../anscheck.js';
 import { parseSolve } from '../solvespec.js';
 import { commandLine, instantiate, pickedText } from '../practicespec.js';
 import { calcValue, expandCalc, floatVars } from '../exact.js';
+import { MEASURES, measure, markDuplicates, variantsOf, variantValues } from '../engines/measures.js';
+import { spaceOfId } from '../memory/space.js';
 
-export const PROBE_TYPES = ['recall', 'construct', 'claim', 'discriminate', 'locate', 'solve'];
-export const FACET_OF = { recall: '重建', construct: '能用', claim: '边界', solve: '能用', discriminate: '能辨', locate: '能辨' };
+// 408、英语一的题型（计划 4，docs/superpowers/plans/2026-11-19-check-408-en.md）：trace predict code parse translate rewrite errfind 是新的，
+// tradeoff 是 recall 的别名、calc 是 solve 的别名（读法、判法照原来的，type 存自己的名字，BASE_OF / baseType）
+export const PROBE_TYPES = ['recall', 'construct', 'claim', 'discriminate', 'locate', 'solve',
+  'trace', 'predict', 'tradeoff', 'code', 'calc', 'parse', 'translate', 'rewrite', 'errfind'];
+export const BASE_OF = { tradeoff: 'recall', calc: 'solve' };
+/** 一道题照哪一种读、判：别名换成原来的那一种 */
+export const baseType = (probe) => BASE_OF[probe?.type] || probe?.type;
+// 还没接上的题型（计划 4 的 Task 4～6 补）：读到就报，不静默当成别的
+const PENDING = ['trace', 'code', 'parse', 'translate', 'rewrite', 'errfind'];
+export const FACET_OF = {
+  recall: '重建', construct: '能用', claim: '边界', solve: '能用', discriminate: '能辨', locate: '能辨',
+  trace: '能用', predict: '能用', tradeoff: '重建', code: '能用', calc: '能用', parse: '能用', translate: '能用', rewrite: '能用', errfind: '边界',
+};
+/** 没写 facet 时默认测哪一面：408 的块（DS- OS- CO- CN-）里的 construct 测边界（造一组让算法露出毛病的输入），别的照 FACET_OF */
+export function facetDefault(type, block) {
+  if (type === 'construct' && block && spaceOfId(block) === 'cs') return '边界';
+  return FACET_OF[type];
+}
 export const FACETS = ['重建', '能用', '边界', '能辨'];
 export const LEVELS = ['基础', '方法', '核心'];
 export const MUST_MAX = 3; // recall 每题最多几条必写要点（任务书：只问 2～3 个关键点）
@@ -41,6 +64,11 @@ const TEACH = /^\s*teach\s+(\S+?)\s*[:：]\s?(.*)$/;
 const EXPR = /^\s*expr\s+(.+?)\s*[:：]\s*(.+)$/;
 const IF = /^\s*if\s*[:：]\s*(.+)$/;
 const LET = /^\s*let\s+([A-Za-z]\w*)\s*=\s*(.+)$/;
+// run r: sort algo=shell gaps="4 2 1" array=A（名字不带下划线：量写成 r__faults，下划线留给它）
+const RUN = /^\s*run\s+(\S+?)\s*[:：]\s*([A-Za-z]\w*)\s*(.*)$/;
+const RUN_NAME = /^[A-Za-z][A-Za-z0-9]*$/;
+// predict 的 expect 标签: 值（标签前可以写编号 x1）
+const EXPECT = /^\s*expect(?:\s+([^:：]*?))?\s*[:：]\s*(.*)$/;
 // 模板的命令只认小写、整行像命令的（pick 名字 = …；where 带比较或是一个函数调用）：英语题的续行
 // 「Where did you go?」「where the river meets the sea」照旧是续行
 const TPL = /^\s*(?:pick\s+[A-Za-z_]\w*\s*=\s*\S|where\s+(?=.*(?:[=!<>]=|[<>]))\S|where\s+[A-Za-z_]\w*\s*\(.*\)\s*$)/;
@@ -49,7 +77,8 @@ export const TPL_ROUNDS = 8; // 模板自检取几组数
 const COMMON = ['id', 'q', 'title', 'target', 'level', 'facet', 'family', 'retry', 'note', 'exam', 'like'];
 const OWN = {
   recall: ['answer'],
-  construct: ['slots', 'example'],
+  construct: ['slots', 'example', 'against'],
+  predict: ['answer', 'against'],
   claim: ['claim', 'truth', 'slots', 'example', 'proof', 'start', 'goal', 'vars'],
   discriminate: ['can', 'result'],
   locate: ['line', 'bug', 'fix'],
@@ -66,23 +95,89 @@ export function msOf(v) {
 
 const list = (v) => String(v ?? '').split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean);
 
-/** slots: A=mat(2) B=mat(2,3) v=vec(3) k=num */
+/** slots: A=mat(2) B=mat(2,3) v=vec(3) k=num；408 的 S=seq(8)（不写个数最多 24 个）、T=text、Q=procs(3) / procs(3, prio) */
+export const SEQ_MAX = 24;
+const STR_KINDS = new Set(['seq', 'text', 'procs']);
+const SLOT_HELP = '写 A=mat(2)、M=mat(2,3)、v=vec(3)、k=num、S=seq(8)、T=text、Q=procs(3) 或 procs(3, prio)';
 function parseSlots(src) {
   const out = [];
-  for (const part of String(src).trim().split(/\s+/).filter(Boolean)) {
-    const m = part.match(/^([A-Za-z]\w*)\s*=\s*(mat|vec|num)(?:\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\))?$/);
-    if (!m) throw new Error(`slots 里「${part}」看不懂：写 A=mat(2)、M=mat(2,3)、v=vec(3)、k=num`);
-    const [, name, kind, a, b] = m;
-    if (kind === 'mat') { if (!a) throw new Error(`${name}=mat 要写阶数：mat(2) 或 mat(2,3)`); out.push({ name, kind, r: Number(a), c: Number(b || a) }); }
-    else if (kind === 'vec') { if (!a) throw new Error(`${name}=vec 要写维数：vec(3)`); out.push({ name, kind, n: Number(a) }); }
-    else out.push({ name, kind });
+  const s = String(src).trim();
+  const re = /([A-Za-z]\w*)\s*=\s*([A-Za-z]+)(?:\s*\(([^)]*)\))?(?=\s|$)/y;
+  let i = 0;
+  while (i < s.length) {
+    while (i < s.length && /\s/.test(s[i])) i++;
+    if (i >= s.length) break;
+    re.lastIndex = i;
+    const m = re.exec(s);
+    if (!m) throw new Error(`slots 里「${s.slice(i).split(/\s+/)[0]}」看不懂：${SLOT_HELP}`);
+    i = re.lastIndex;
+    const [all, name, kind] = m;
+    const args = m[3] === undefined ? [] : m[3].split(/[,，]/).map((x) => x.trim()).filter(Boolean);
+    const int = (x) => (/^\d+$/.test(x) ? Number(x) : NaN);
+    const [a, b] = args.map(int);
+    if ((kind === 'mat' || kind === 'vec') && args.some((x) => !(int(x) >= 1))) throw new Error(`slots 里「${all.trim()}」看不懂：${SLOT_HELP}`);
+    if (kind === 'mat') { if (!args.length) throw new Error(`${name}=mat 要写阶数：mat(2) 或 mat(2,3)`); out.push({ name, kind, r: a, c: args[1] ? b : a }); }
+    else if (kind === 'vec') { if (!args.length) throw new Error(`${name}=vec 要写维数：vec(3)`); out.push({ name, kind, n: a }); }
+    else if (kind === 'num' && !args.length) out.push({ name, kind });
+    else if (kind === 'seq' && args.length <= 1) {
+      if (args.length && !(a >= 1 && a <= SEQ_MAX)) throw new Error(`${name}=seq(n) 的 n 写 1 到 ${SEQ_MAX}`);
+      out.push({ name, kind, n: args.length ? a : null });
+    } else if (kind === 'text' && !args.length) out.push({ name, kind });
+    else if (kind === 'procs') {
+      if (!(a >= 1 && a <= 10) || args.length > 2 || (args[1] && args[1] !== 'prio')) throw new Error(`${name}=procs 写几个进程（1 到 10）：procs(3)，要优先级写 procs(3, prio)`);
+      out.push({ name, kind, n: a, prio: args[1] === 'prio' });
+    } else throw new Error(`slots 里「${all.trim()}」看不懂：${SLOT_HELP}`);
   }
   if (!out.length) throw new Error('slots: 要写学生填的东西，比如 A=mat(2) B=mat(2)');
   return out;
 }
 
-/** example: A=[[0,1],[0,0]] B=[[1, 0], [0, 0]] k=2（值里可以有空格：按括号配对切）；模板里的 example 能用取到的数（vars） */
-export function parseNamed(src, vars = {}) {
+const NUM_MARK = /^-?\d+(?:\.\d+)?['’′_]*$/;
+const stripBrackets = (raw) => String(raw ?? '').trim().replace(/^\[([\s\S]*)\]$/, '$1').trim();
+const seqTokens = (raw) => stripBrackets(raw).split(/[\s,，、;；]+/).filter(Boolean);
+const procEntries = (raw) => stripBrackets(raw).split(/[;；\n]+|,(?=\s*[A-Za-z一-龥])/).map((x) => x.trim()).filter(Boolean);
+
+/**
+ * 408 的格子学生写的格式对不对（只查格式：对了才交、才算第一次作答；格式对而引擎不收的另判没过）。
+ * 返回要说的话（空数组是对的）；矩阵、向量、数的格子不归这里管（返回空）
+ */
+export function slotProblems(slot, raw) {
+  if (!STR_KINDS.has(slot?.kind)) return [];
+  const out = [];
+  if (slot.kind === 'text') return stripBrackets(raw) ? [] : ['要写'];
+  if (slot.kind === 'seq') {
+    const toks = seqTokens(raw);
+    if (slot.n && toks.length !== slot.n) out.push(`要 ${slot.n} 个数，写了 ${toks.length} 个`);
+    else if (!slot.n && toks.length > SEQ_MAX) out.push(`最多 ${SEQ_MAX} 个数，写了 ${toks.length} 个`);
+    else if (!toks.length) out.push('要写数');
+    const bad = toks.find((t) => !NUM_MARK.test(t));
+    if (bad !== undefined) out.push(`「${bad}」不是数`);
+    return out;
+  }
+  // procs：一个进程一组「名字 到达时间 运行时间 [优先级]」，逗号、分号或换行隔开（和 sched 的 procs: 一样）
+  const entries = procEntries(raw);
+  const want = slot.prio ? 4 : 3;
+  const cols = slot.prio ? '名字 到达时间 运行时间 优先级' : '名字 到达时间 运行时间';
+  if (entries.length !== slot.n) out.push(`要 ${slot.n} 个进程，写了 ${entries.length} 个`);
+  const names = [];
+  for (const e of entries) {
+    const t = e.split(/[\s,，]+/).filter(Boolean);
+    names.push(t[0]);
+    if (t.length < want) out.push(`${t[0]} 少一格：一个进程写 ${cols}`);
+    else if (t.length > want) out.push(`${t[0]} 多写了一格：一个进程写 ${cols}`);
+    else { const bad = t.slice(1).find((x) => !/^\d+(?:\.\d+)?$/.test(x)); if (bad) out.push(`${t[0]} 的「${bad}」不是数`); }
+  }
+  const twice = names.find((x, k) => names.indexOf(x) !== k);
+  if (twice) out.push(`进程名字 ${twice} 写了两次`);
+  return out;
+}
+
+/**
+ * example: A=[[0,1],[0,0]] B=[[1, 0], [0, 0]] k=2（值里可以有空格：按括号配对切）；模板里的 example 能用取到的数（vars）。
+ * slots 里 seq / text / procs 的格子收原文（[ ] 可写可不写）：A=49 38 65 P=[49 49']
+ */
+export function parseNamed(src, vars = {}, slots = []) {
+  const asText = new Set(slots.filter((x) => STR_KINDS.has(x.kind)).map((x) => x.name));
   const s = String(src ?? '');
   const out = {};
   const re = /([A-Za-z]\w*)\s*=\s*/g;
@@ -96,7 +191,7 @@ export function parseNamed(src, vars = {}) {
   }
   starts.forEach((st, i) => {
     const raw = s.slice(st.from, i + 1 < starts.length ? starts[i + 1].at : s.length).trim();
-    out[st.name] = compile(raw)(vars);
+    out[st.name] = asText.has(st.name) ? stripBrackets(raw) : compile(raw)(vars);
   });
   return out;
 }
@@ -109,11 +204,15 @@ const truthOf = (v, yes, no) => { const t = String(v ?? '').trim().toLowerCase()
  */
 export function parseProbe(type, src) {
   if (!PROBE_TYPES.includes(type)) return { error: `不认识的题型「${type}」：只认 ${PROBE_TYPES.join(' / ')}` };
+  if (PENDING.includes(type)) return { error: `${type}：这一种还没接上` };
+  const base = BASE_OF[type] || type; // 别名照原来的那一种读
   const f = {};
   const teach = {};
   const pts = { must: [], may: [], wrong: [] };
   const ifs = [], exprs = [], lets = [], lines = [];
   const solveLines = [];
+  const runs = [], expects = []; // run 行（construct、predict）；predict 的 expect
+  let ewrongs = 0; // 挂在 expect 下面的错答案几条（和理由里的 wrong 共用 w1、w2…）
   const tpl = { picks: [], lets: [], wheres: [] }; // pick / where（模板）
   let last = null; // 续行接到哪里
   let n = 0; // 要点自动编号（must、may 共用 m1、m2…）
@@ -122,9 +221,39 @@ export function parseProbe(type, src) {
     if (!raw.trim()) { last = null; continue; }
     let m;
     if ((m = raw.match(TEACH))) { teach[m[1]] = m[2].trim(); last = { into: teach, key: m[1] }; continue; }
+    // run 行只在 construct、predict 里认：别的题型（英语的 recall）里「run out: …」这样的续行照旧是续行
+    if ((base === 'construct' || base === 'predict') && (m = raw.match(RUN))) {
+      const [, name, engine, rest] = m;
+      if (!RUN_NAME.test(name)) { errors.push(`run 的名字「${name}」只用字母和数字（r、t1）`); continue; }
+      if (runs.some((r) => r.name === name)) { errors.push(`run ${name} 写了两次`); continue; }
+      const fields = {};
+      for (const t of tokenize(rest)) {
+        if (!t.key) { errors.push(`run ${name} 里「${t.value}」看不懂：写 字段=值，比如 run r: sort algo=shell array=A`); continue; }
+        fields[t.key] = t.value;
+      }
+      runs.push({ name, engine, fields }); last = null; continue;
+    }
+    if (base === 'predict' && (m = raw.match(EXPECT))) {
+      const head = (m[1] || '').trim();
+      const own = head.match(/^(x\d+)(?:\s+(.*))?$/);
+      let k = expects.length + 1;
+      while (expects.some((e) => e.id === `x${k}`)) k++; // 手写过的编号跳过
+      const id = own ? own[1] : `x${k}`;
+      const label = own ? (own[2] || '').trim() : head;
+      expects.push({ id, label: label || id, value: m[2].trim(), wrongs: [] }); last = null; continue;
+    }
     if ((m = raw.match(POINT))) {
       const kind = m[1];
-      const id = m[2] || (kind === 'wrong' ? `w${pts.wrong.length + 1}` : `m${++n}`);
+      // predict 里带 => 的 wrong 是错答案（式子 => 说明），挂在上面最近的 expect；不带的照旧是理由里的常见错说法
+      if (kind === 'wrong' && base === 'predict' && m[3].includes('=>')) {
+        const id = m[2] || `w${pts.wrong.length + ewrongs + 1}`;
+        if (!expects.length) { errors.push(`wrong ${id} 带 => 的是错答案，要写在某个 expect 下面`); continue; }
+        const at = m[3].indexOf('=>');
+        const item = { id, expr: m[3].slice(0, at).trim(), msg: m[3].slice(at + 2).trim() };
+        expects.at(-1).wrongs.push(item); ewrongs++;
+        last = { into: item, key: 'msg' }; continue;
+      }
+      const id = m[2] || (kind === 'wrong' ? `w${pts.wrong.length + ewrongs + 1}` : `m${++n}`);
       if (m[2] && kind !== 'wrong') { const k = Number(String(m[2]).replace(/^\D+/, '')); if (k > n) n = k; }
       const item = { id, text: m[3].trim() };
       pts[kind].push(item); last = { item }; continue;
@@ -138,9 +267,9 @@ export function parseProbe(type, src) {
     if (TPL.test(raw)) { try { commandLine(raw.trim(), tpl); } catch (e) { errors.push(e.message); } last = null; continue; }
     if ((m = raw.match(FIELD))) {
       const k = m[1].toLowerCase();
-      if (type === 'solve' && !COMMON.includes(k) || type === 'solve' && k === 'q') { solveLines.push(raw); last = { solve: true }; continue; }
-      if (k === 'line' && type === 'locate') { lines.push(m[2].trim()); last = { line: lines.length - 1 }; continue; }
-      if (!COMMON.includes(k) && !OWN[type].includes(k)) { errors.push(`看不懂「${raw.trim().slice(0, 40)}」：${type} 的字段是 ${[...COMMON, ...OWN[type]].join('、')}、must / may / wrong / teach / let / if / expr`); continue; }
+      if (base === 'solve' && !COMMON.includes(k) || base === 'solve' && k === 'q') { solveLines.push(raw); last = { solve: true }; continue; }
+      if (k === 'line' && base === 'locate') { lines.push(m[2].trim()); last = { line: lines.length - 1 }; continue; }
+      if (!COMMON.includes(k) && !OWN[base].includes(k)) { errors.push(`看不懂「${raw.trim().slice(0, 40)}」：${type} 的字段是 ${[...COMMON, ...OWN[base]].join('、')}、must / may / wrong / teach / let / if / expr${base === 'construct' || base === 'predict' ? ' / run' : ''}${base === 'predict' ? ' / expect' : ''}`); continue; }
       f[k] = m[2].trim(); last = { into: f, key: k }; continue;
     }
     // 续行
@@ -152,7 +281,7 @@ export function parseProbe(type, src) {
   }
   if (errors.length) return { error: errors[0] };
   // 自动编号（must: …）和手写编号（must m1: …）撞了：报出来，不静默出两个 m1（teach、判分都按编号对）
-  const pointIds = [...pts.must, ...pts.may, ...pts.wrong].map((x) => x.id);
+  const pointIds = [...pts.must, ...pts.may, ...pts.wrong, ...expects.flatMap((e) => e.wrongs)].map((x) => x.id);
   const twice = pointIds.find((x, i) => pointIds.indexOf(x) !== i);
   if (twice) return { error: `${f.id || type}：要点编号 ${twice} 用了两次（自动编号和手写编号撞了：要么都写编号，要么都不写）` };
   const id = f.id || '';
@@ -162,24 +291,33 @@ export function parseProbe(type, src) {
   if (!f.target) return at('要写 target:（打的是哪个典型错法：错题、误解的编号或一句话）');
   if (!LEVELS.includes(f.level)) return at(`level: 只能写 ${LEVELS.join(' / ')}`);
   if (f.facet && !FACETS.includes(f.facet)) return at(`facet: 只能写 ${FACETS.join(' / ')}`);
-  if (pts.must.length > MUST_MAX && type === 'recall') return at(`must 最多 3 条（现在 ${pts.must.length} 条）`);
+  if (pts.must.length > MUST_MAX && base === 'recall') return at(`must 最多 3 条（现在 ${pts.must.length} 条）`);
+  const xIds = expects.map((e) => e.id);
+  const xTwice = xIds.find((x, i) => xIds.indexOf(x) !== i);
+  if (xTwice) return at(`expect 的编号 ${xTwice} 用了两次`);
   if (tpl.wheres.length && !tpl.picks.length) return at('where 要和 pick 一起写（模板：pick 取数，where 不满足就重取）');
   const probe = {
     id, type, q: f.q || '', target: f.target, level: f.level, facet: f.facet || FACET_OF[type], family: f.family || null,
     teach, retry: list(f.retry), lets, src: String(src ?? ''), tpl: tpl.picks.length ? { picks: tpl.picks, wheres: tpl.wheres } : null,
   };
+  const runNames = runs.map((r) => r.name);
+  if (runs.length) probe.runs = runs;
   try {
+    if (type === 'construct' && f.against !== undefined) return at('construct 不写 against:（认错法只给 predict、trace）');
     if (type === 'construct' || (type === 'claim' && truthOf(f.truth, ['假', 'false', 'f', 'no', '错'], ['真', 'true', 't', 'yes', '对']) === true)) {
       if (!f.slots) return at('要写 slots:（学生填的东西，比如 A=mat(2) B=mat(2)）');
       if (!ifs.length) return at('要写 if:（一行一条条件）');
       if (!f.example) return at('要写 example:（一组满足全部条件的，页面先拿它验一遍）');
       // 模板的 example 用取到的数写（A=[[k,0],[0,0]]）：取了数再算（drawProbe）
-      Object.assign(probe, { slots: parseSlots(f.slots), ifs: ifs.map((c) => ({ ...c })), exprs, example: probe.tpl ? null : parseNamed(f.example), exampleSrc: f.example });
-      parseConditions(ifs.map((c) => c.text).join('\n')); // 写法不对在这里抛
+      const slots = parseSlots(f.slots);
+      const clash = runNames.find((r) => slots.some((x) => x.name === r));
+      if (clash) return at(`run ${clash} 和格子 ${clash} 撞名了：换一个名字`);
+      Object.assign(probe, { slots, ifs: ifs.map((c) => ({ ...c })), exprs, example: probe.tpl ? null : parseNamed(f.example, {}, slots), exampleSrc: f.example });
+      for (const c of ifs) checkCond(c.text, runNames); // 写法不对在这里抛
     }
   } catch (e) { return at(e.message); }
   const points = () => ({ must: pts.must, may: pts.may, wrong: pts.wrong });
-  if (type === 'recall') {
+  if (base === 'recall') {
     if (!pts.must.length) return at('要写 must:（必写要点）');
     Object.assign(probe, points(), { answer: f.answer || '' });
   }
@@ -210,7 +348,12 @@ export function parseProbe(type, src) {
     if (!pts.must.length) return at('要写为什么错的要点 must:');
     Object.assign(probe, { lines, bug }, points(), f.fix ? { fix: f.fix } : {});
   }
-  if (type === 'solve') {
+  if (base === 'predict') {
+    if (!runs.length) return at('要写 run 行：run r: 引擎 字段=值 …（比如 run r: paging algo=lru frames=3 refs="1 2 3 4"）');
+    if (!expects.length) return at('要写 expect：expect 缺页次数: r.faults（一行一个要学生写出来的结果）');
+    Object.assign(probe, { expects, against: list(f.against) }, points(), f.answer ? { answer: f.answer } : {});
+  }
+  if (base === 'solve') {
     const r = parseSolve([`id: ${id}`, ...solveLines].join('\n'));
     if (r.problems.length) return at(r.problems[0]);
     Object.assign(probe, { q: r.fields.q, steps: r.steps, solveFields: r.fields });
@@ -285,6 +428,7 @@ export function parseCheck(head, body) {
   for (const pid of order) {
     const p = probes[pid];
     p.block = blockOf[pid] || blocks[0]?.block || null;
+    if (!/^\s*facet\s*[:：]/m.test(p.src)) p.facet = facetDefault(p.type, p.block); // 没写 facet：照这一块是哪一科
     p.family = p.family || `${p.block}/${p.target}`;
   }
   const check = { id, title: kv.title || '', limit: limit || 0, pause: pause || PAUSE_DEFAULT, blocks, spare, prompt: promptLines.join('\n').trim(), probes, order, src: String(body ?? '') };
@@ -318,13 +462,192 @@ const close = (a, b) => {
 };
 const toNum = (x) => (Array.isArray(x) ? x.map(toNum) : Number(x));
 
-/** 一组值逐条代进 if 里：[{ id, ok, error? }]（judge.js 判学生的也用它） */
-export function evalIfs(ifs, values, vars = {}, slots = []) {
-  const scope = withDefaults({ ...vars, ...Object.fromEntries(Object.entries(values).map(([k, v]) => [k, toNum(v)])) }, slots);
+// —— run 行跑出来的量：条件里写 r.faults，读之前换成变量 r__faults ——
+
+/** 条件、式子里的 r.faults 换成 r__faults（只换 run 声明过的名字；0.5 这种小数不碰） */
+export function runRefs(text, runNames = []) {
+  return String(text ?? '').replace(/\b([A-Za-z]\w*)\.([A-Za-z_]\w*)/g, (all, a, b) => (runNames.includes(a) ? `${a}__${b}` : all));
+}
+// vars 里有哪些 run（r__faults → r）：调用方没给 runs 时照它认
+const runNamesIn = (vars = {}) => [...new Set(Object.keys(vars).map((k) => /^([A-Za-z][A-Za-z0-9]*)__[A-Za-z]/.exec(k)?.[1]).filter(Boolean))];
+
+/** 题里用到了哪些量：[{ run, name, key: 'r.faults' }]（条件、expr、expect、wrong 的式子、result；去重） */
+export function measuresUsed(probe) {
+  const names = (probe.runs || []).map((r) => r.name);
+  const texts = [
+    ...(probe.ifs || []).map((c) => c.text), ...(probe.exprs || []).map((e) => e.expected),
+    ...(probe.expects || []).flatMap((e) => [e.value, ...e.wrongs.map((w) => w.expr)]), probe.result,
+  ];
+  const out = new Map();
+  for (const t of texts) for (const m of String(t ?? '').matchAll(/\b([A-Za-z]\w*)\.([A-Za-z_]\w*)/g)) {
+    if (names.includes(m[1])) out.set(`${m[1]}.${m[2]}`, { run: m[1], name: m[2], key: `${m[1]}.${m[2]}` });
+  }
+  return [...out.values()];
+}
+
+/** 这个引擎交不交这个量（pass2、cmp3 算在 pass#、cmp# 那一族里） */
+export function measureKnown(engine, name) {
+  const all = MEASURES[engine];
+  if (!all) return false;
+  if (all.includes(name)) return true;
+  const fam = /^([A-Za-z]+)\d+$/.exec(name);
+  return !!fam && all.includes(`${fam[1]}#`);
+}
+
+// run 的字段值写的是格子名：换成学生写的原文（[ ] 去掉；seq 的分隔统一成空格，撇号留着给 markDuplicates）
+function fieldOf(slot, raw) {
+  if (slot.kind === 'seq') return seqTokens(raw).join(' ');
+  if (STR_KINDS.has(slot.kind)) return stripBrackets(raw);
+  return String(raw ?? '');
+}
+/** 一个 run 照学生写的（或 example）代进去以后的字段 */
+export function runFields(probe, run, slotValues = {}) {
+  const slots = Object.fromEntries((probe.slots || []).map((x) => [x.name, x]));
+  return Object.fromEntries(Object.entries(run.fields).map(([k, v]) => [k, slots[v] ? fieldOf(slots[v], slotValues[v]) : v]));
+}
+
+/**
+ * 题里的量加上每个 run 跑出来的量（r__faults、r__pass2……）：{ vars, ties, notes, error? }。
+ *   ties：靠并列定下来的量（'r.victims'）；用到它的那一项页面判不了（待核，不当过也不当错）
+ *   notes：页面替学生做了的事（「页面把第二个 49 记成 49′」），作答下面写一行
+ *   error：{ run, msg }——引擎不收这组输入（AVL 里有重复的数），msg 是引擎原话；这一项判没过，后面的 run 不再跑
+ * slotValues：学生写的（seq / text / procs 是原文）；base：整节课的量
+ */
+export function runVars(probe, slotValues = {}, base = {}) {
+  const vars = probeVars(probe, base);
+  const ties = [], notes = [];
+  for (const run of probe.runs || []) {
+    let m;
+    try { m = measure(run.engine, runFields(probe, run, slotValues)); } catch (e) { return { vars, ties, notes, error: { run: run.name, msg: e.message } }; }
+    for (const [k, v] of Object.entries(m.values)) vars[`${run.name}__${k}`] = v;
+    for (const t of m.ties) ties.push(`${run.name}.${t}`);
+    if (m.marked && !notes.includes(m.marked)) notes.push(m.marked);
+  }
+  return { vars, ties, notes };
+}
+
+// —— 比字：r.flipped、r.order、r.victims 这类量，seq / text / procs 的格子 ——
+
+/**
+ * 一个值切成比较用的词：不管空格、逗号、括号、大小写；' ’ ′ _ 都写成 ′；全是数时一样的数后出现的记成 49′（和跑排序前一样），
+ * 所以 49 49、49 49'、49 49’、49 49′ 是一个意思
+ */
+export function normTokens(v) {
+  const s = (Array.isArray(v) ? v.flat(Infinity) : [v]).map((x) => String(x ?? '')).join(' ');
+  let toks = s.replace(/[[\]()（）【】"“”「」]/g, ' ').split(/[\s,，、;；]+/).filter(Boolean).map((t) => t.replace(/['’′_]/g, '′').toLowerCase());
+  if (toks.length && toks.every((t) => NUM_MARK.test(t))) {
+    toks = markDuplicates(toks.join(' ')).text.split(' ').map((t) => t.replace(/^-?\d+(?:\.\d+)?/, (x) => String(Number(x))));
+  }
+  return toks;
+}
+const sameToks = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+const sorted = (a) => [...a].sort();
+const hasStr = (v) => (Array.isArray(v) ? v.some(hasStr) : typeof v === 'string');
+/** 两个值一样不一样：都是数（或数组）照浮点比，有字的照 normTokens 比（先后算数） */
+export function sameValue(a, b) {
+  if (!hasStr(a) && !hasStr(b)) { try { return close(toNum(a), toNum(b)); } catch { return false; } }
+  return sameToks(normTokens(a), normTokens(b));
+}
+
+const QUOTED = /^(?:"[^"]*"|“[^”]*”|「[^」]*」)$/;
+const SIMPLE = /^(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?|"[^"]*"|“[^”]*”|「[^」]*」)$/;
+// 条件切成两边：in（有空格隔开的词）→ == / != → >= <= > <；引号里的不算
+function condParts(text) {
+  const s = String(text ?? '');
+  const masked = s.replace(/"[^"]*"|“[^”]*”|「[^」]*」/g, (m) => '\u0001'.repeat(m.length));
+  let m = /\s+in\s+/.exec(masked);
+  if (m) return { lhs: s.slice(0, m.index).trim(), op: 'in', rhs: s.slice(m.index + m[0].length).trim() };
+  m = /==|!=/.exec(masked) || /<=|>=|<|>/.exec(masked);
+  if (!m) return null;
+  return { lhs: s.slice(0, m.index).trim(), op: m[0], rhs: s.slice(m.index + m[0].length).trim() };
+}
+
+/** 读的时候先验一遍条件的写法（不对就抛）：== != 两边式子；>= <= > < 比大小；字的 ==、!=、in */
+export function checkCond(text, runNames = []) {
+  const sp = condParts(text);
+  if (!sp || !sp.lhs || !sp.rhs) throw new Error(`「${text}」要写成「式子 == 式子」「式子 != 式子」、比大小（r.cmp >= 10），或「P in r.flipped」`);
+  const simple = SIMPLE.test(sp.lhs) && SIMPLE.test(sp.rhs);
+  if (sp.op === 'in') { if (!simple) throw new Error(`「${text}」：in 两边写格子、量或 "字"，比如 P in r.flipped`); return; }
+  if (simple) return;
+  if (QUOTED.test(sp.lhs) || QUOTED.test(sp.rhs)) throw new Error(`「${text}」：和 "字" 比时另一边只写格子或量`);
+  if (sp.op === '==' || sp.op === '!=') parseConditions(runRefs(text, runNames));
+  else compile(runRefs(text, runNames));
+}
+
+// 一条条件代进去：对 true、不对 false（算不了抛）
+function condOk(text, scope, values, kinds, runNames) {
+  const sp = condParts(text);
+  if (!sp) throw new Error(`「${text}」看不懂`);
+  const isStrSlot = (side) => STR_KINDS.has(kinds[side]);
+  const val = (side) => {
+    if (QUOTED.test(side)) return side.slice(1, -1);
+    if (isStrSlot(side)) return values[side];
+    return compile(runRefs(side, runNames))(scope);
+  };
+  if (sp.op === 'in') {
+    const want = sorted(normTokens(val(sp.lhs)));
+    const pool = val(sp.rhs);
+    const list = Array.isArray(pool) ? pool : String(pool ?? '').split('|');
+    return list.some((x) => sameToks(sorted(normTokens(x)), want));
+  }
+  const both = SIMPLE.test(sp.lhs) && SIMPLE.test(sp.rhs);
+  if ((sp.op === '==' || sp.op === '!=') && both) {
+    const a = val(sp.lhs), b = val(sp.rhs);
+    const str = QUOTED.test(sp.lhs) || QUOTED.test(sp.rhs) || isStrSlot(sp.lhs) || isStrSlot(sp.rhs) || hasStr(a) || hasStr(b);
+    return (str ? sameToks(normTokens(a), normTokens(b)) : close(toNum(a), toNum(b))) === (sp.op === '==');
+  }
+  if (sp.op === '==' || sp.op === '!=') {
+    const [cond] = parseConditions(runRefs(text, runNames));
+    return close(cond.lhs(scope), cond.rhs(scope)) === (cond.op === '==');
+  }
+  return !!compile(runRefs(text, runNames))(scope);
+}
+
+// 格子的值放进算式里：seq 全是数时成一排数（撇号去掉），text / procs 留原文；别的照旧换成浮点
+function numOf(slot, v) {
+  if (slot?.kind === 'seq') {
+    const toks = Array.isArray(v) ? null : seqTokens(v);
+    if (toks && toks.length && toks.every((t) => NUM_MARK.test(t))) return toks.map((t) => Number(t.replace(/['’′_]+$/, '')));
+    return Array.isArray(v) ? toNum(v) : v;
+  }
+  if (STR_KINDS.has(slot?.kind)) return v;
+  return toNum(v);
+}
+const scopeOf = (values, vars, slots) => {
+  const by = Object.fromEntries(slots.map((x) => [x.name, x]));
+  return withDefaults({ ...vars, ...Object.fromEntries(Object.entries(values).map(([k, v]) => [k, numOf(by[k], v)])) }, slots);
+};
+
+/**
+ * 一组值逐条代进 if 里：[{ id, ok, error? }]（judge.js 判学生的也用它）。
+ * vars 里有 run 跑出来的量（runVars 的 vars）时，条件里的 r.faults 照它读；runs 不给就从 vars 的 r__… 认
+ */
+export function evalIfs(ifs, values, vars = {}, slots = [], { runs } = {}) {
+  const runNames = runs ?? runNamesIn(vars);
+  const kinds = Object.fromEntries(slots.map((x) => [x.name, x.kind]));
+  const scope = scopeOf(values, vars, slots);
   return ifs.map((c) => {
-    const [cond] = parseConditions(c.text);
-    try { return { id: c.id, ok: close(cond.lhs(scope), cond.rhs(scope)) === (cond.op === '==') }; } catch (e) { return { id: c.id, ok: false, error: e.message }; }
+    try { return { id: c.id, ok: condOk(c.text, scope, values, kinds, runNames) }; } catch (e) { return { id: c.id, ok: false, error: e.message }; }
   });
+}
+
+/**
+ * predict 的 expect（和挂着的 wrong 式子）算出来的值：一个量照原样（数、序列、字），式子照算，
+ * 都不是的当字面的数 / 序列 / 字（7 1 0、"P1 P2"）。用到了 run 的量却算不出来就抛
+ */
+export function expectValue(text, vars = {}, runNames = runNamesIn(vars)) {
+  const src = String(text ?? '').trim();
+  if (QUOTED.test(src)) return src.slice(1, -1);
+  const key = runRefs(src, runNames);
+  const usesRun = key !== src;
+  if (usesRun && /^[A-Za-z_]\w*$/.test(key)) {
+    if (vars[key] === undefined) throw new Error(`${src} 这组数没算出来`);
+    return vars[key];
+  }
+  try { return compile(key)(vars); } catch (e) {
+    if (usesRun) throw e;
+    return stripBrackets(src);
+  }
 }
 
 /**
@@ -401,15 +724,75 @@ export function probeProblems(p, base = {}) {
   const out = [];
   let vars;
   try { vars = probeVars(p, base); } catch (e) { return [`let 算不出来：${e.message}`]; }
+  const runOut = runProblems(p);
+  if (runOut.length) return runOut; // 引擎、量名不对，后面代进去算也是白算
+  const used = measuresUsed(p).map((x) => x.key);
+  const tieLines = (ties, what) => [...new Set(used.filter((k) => ties.includes(k)))].map((k) => `${what}用到的 ${k} 这组数有并列（几种做法一样好，页面判不了）：换一组数，或者不问 ${k}`);
   if (p.ifs && p.example) {
     const missing = p.slots.filter((s) => p.example[s.name] === undefined).map((s) => s.name);
+    const fmt = p.slots.flatMap((s) => (missing.includes(s.name) ? [] : slotProblems(s, p.example[s.name]).map((m) => `example 的 ${s.name}：${m}`)));
     if (missing.length) out.push(`example 少了 ${missing.join('、')}`);
-    else for (const r of evalIfs(p.ifs, p.example, vars, p.slots)) if (!r.ok) out.push(`example 不满足 ${r.id}（${p.ifs.find((c) => c.id === r.id).text}）${r.error ? `：${r.error}` : ''}`);
-    for (const e of p.exprs || []) {
-      try { compile(e.expected)(withDefaults({ ...vars, ...Object.fromEntries(Object.entries(p.example).map(([k, v]) => [k, toNum(v)])) }, p.slots)); } catch (err) { out.push(`expr「${e.label}」算不了：${err.message}`); }
+    else if (fmt.length) out.push(...fmt);
+    else {
+      const rv = p.runs ? runVars(p, p.example, base) : { vars, ties: [] };
+      if (rv.error) out.push(`example 跑不了 run ${rv.error.run}：${rv.error.msg}`);
+      else {
+        out.push(...tieLines(rv.ties, 'example '));
+        for (const r of evalIfs(p.ifs, p.example, rv.vars, p.slots)) if (!r.ok) out.push(`example 不满足 ${r.id}（${p.ifs.find((c) => c.id === r.id).text}）${r.error ? `：${r.error}` : ''}`);
+        const names = (p.runs || []).map((r) => r.name);
+        for (const e of p.exprs || []) {
+          try { compile(runRefs(e.expected, names))(scopeOf(p.example, rv.vars, p.slots)); } catch (err) { out.push(`expr「${e.label}」算不了：${err.message}`); }
+        }
+      }
     }
   } else if (p.ifs && p.exampleSrc && !p.tpl) out.push('example 算不出来');
+  if (p.expects) out.push(...predictProblems(p, base, tieLines));
   if (p.result) { try { compile(p.result)(withDefaults(vars)); } catch (e) { out.push(`result 算不了：${e.message}`); } }
+  return out;
+}
+
+// run 行自己的：引擎交不交量、题里用到的量是不是这个引擎的
+function runProblems(p) {
+  const out = [];
+  for (const r of p.runs || []) if (!MEASURES[r.engine]) out.push(`run ${r.name} 的引擎 ${r.engine} 不交量：run 只认 ${Object.keys(MEASURES).join('、')}`);
+  if (out.length) return out;
+  const engineOf = Object.fromEntries((p.runs || []).map((r) => [r.name, r.engine]));
+  for (const u of measuresUsed(p)) {
+    const e = engineOf[u.run];
+    if (!measureKnown(e, u.name)) out.push(`${u.key} 不是 ${e} 的量：${u.run}（${e}）的量有 ${MEASURES[e].join('、')}（pass#、cmp# 写成 pass2、cmp1）`);
+  }
+  return out;
+}
+
+// predict：照固定的字段跑一遍，每个 expect、wrong 的式子都算得出来；用到的量没有并列；against 的错法在、这组数分得开
+function predictProblems(p, base, tieLines) {
+  const out = [];
+  const rv = runVars(p, {}, base);
+  if (rv.error) return [`run ${rv.error.run} 跑不了：${rv.error.msg}`];
+  out.push(...tieLines(rv.ties, ''));
+  const names = p.runs.map((r) => r.name);
+  const right = {};
+  for (const e of p.expects) {
+    try { right[e.id] = expectValue(e.value, rv.vars, names); } catch (err) { out.push(`expect ${e.id}（${e.label}）算不出来：${err.message}`); }
+    for (const w of e.wrongs) { try { expectValue(w.expr, rv.vars, names); } catch (err) { out.push(`wrong ${w.id} 算不出来：${err.message}`); } }
+  }
+  if (!p.against?.length) return out;
+  // 错法照第一个 run 认：换成那种错法跑出来的量，看有没有哪一个 expect 和对的不一样
+  const r0 = p.runs[0];
+  const fields = runFields(p, r0, {});
+  let keys = [];
+  try { keys = variantsOf(r0.engine, fields).map((v) => v.key); } catch { keys = []; }
+  for (const a of p.against) {
+    if (!keys.includes(a)) { out.push(`against 写了「${a}」：${r0.name}（${r0.engine}）这组数的错法只有 ${keys.join('、') || '（没有，这组数上每种错法都和对的一样）'}`); continue; }
+    const wv = variantValues(r0.engine, fields, a);
+    const vv = Object.fromEntries(Object.entries(rv.vars).filter(([k]) => !k.startsWith(`${r0.name}__`)));
+    for (const [k, v] of Object.entries(wv?.values || {})) vv[`${r0.name}__${k}`] = v;
+    const apart = p.expects.some((e) => {
+      if (!(e.id in right)) return false;
+      try { const x = expectValue(e.value, vv, names); return x !== undefined && !sameValue(x, right[e.id]); } catch { return false; }
+    });
+    if (!apart) out.push(`against 的 ${a} 这组数分不开：照这种错法算，${p.expects.map((e) => e.id).join('、')} 都和对的一样（换一组数）`);
+  }
   return out;
 }
 
@@ -450,7 +833,7 @@ export function drawProbe(probe, { base: lesson = {}, rand = Math.random, avoid 
   if (probe.ifs) inst.ifs = probe.ifs.map((c) => ({ ...c, msg: fill(c.msg) }));
   if (probe.exprs) inst.exprs = probe.exprs.map((e) => ({ ...e, label: fill(e.label) }));
   if (probe.slots && probe.exampleSrc) {
-    try { inst.example = parseNamed(probe.exampleSrc, withDefaults({ ...floatVars(base), ...vals }, probe.slots)); } catch (e) { inst.example = null; errors.push({ expr: 'example', msg: e.message }); }
+    try { inst.example = parseNamed(probe.exampleSrc, withDefaults({ ...floatVars(base), ...vals }, probe.slots), probe.slots); } catch (e) { inst.example = null; errors.push({ expr: 'example', msg: e.message }); }
   }
   inst.calcErrors = errors.map((e) => (e.expr === 'example' ? `example 算不出来：${e.msg}` : `\\calc{${String(e.expr).trim().slice(0, 40)}} 算不出来：${e.msg}`));
   return { probe: inst, picked: inst.picked, raw: picked };

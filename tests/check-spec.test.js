@@ -130,8 +130,9 @@ const SAMPLE_BODY = [
   R3r('p8'),
 ].join('\n');
 
-test('常量：六种题型、每种默认测哪一面、三档', () => {
-  assert.deepEqual(PROBE_TYPES, ['recall', 'construct', 'claim', 'discriminate', 'locate', 'solve']);
+test('常量：题型（数学六种在前，408、英语的接在后面）、每种默认测哪一面、三档', () => {
+  assert.deepEqual(PROBE_TYPES, ['recall', 'construct', 'claim', 'discriminate', 'locate', 'solve',
+    'trace', 'predict', 'tradeoff', 'code', 'calc', 'parse', 'translate', 'rewrite', 'errfind']);
   assert.equal(FACET_OF.recall, '重建');
   assert.equal(FACET_OF.discriminate, '能辨');
   assert.deepEqual(LEVELS, ['基础', '方法', '核心']);
