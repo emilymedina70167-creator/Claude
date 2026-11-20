@@ -155,14 +155,17 @@ test('predict 的数也用同一个读法：十六进制、式子', () => {
 
 // —— 裁定（第二次提交）：后缀的进制和单位分不清时待核；带撇号的量不拿来算 ——
 
-test('100B、5h：按进制对不上、当十进制对得上 → 待核 null；按进制对得上 → 对；都对不上 → 错', () => {
+test('100B、10h：按进制对得上 → 对；按进制对不上、当十进制对得上 → 待核 null；都对不上 → 错', () => {
   const r = (right, s) => item(judgeMachine(HEXQ(String(right)), { text: '…', result: s }), 'result');
   assert.equal(r(100, '100B').ok, null);
   assert.match(r(100, '100B').why, /「100B」是二进制还是 100 个字节？页面判不了，主讲会核/);
   assert.equal(r(4, '100B').ok, true);
   assert.equal(r(7, '100B').ok, false);
-  assert.equal(r(5, '5h').ok, null);
-  assert.match(r(5, '5h').why, /十六进制还是 5 小时/);
+  assert.equal(r(5, '5h').ok, true, '按十六进制读已经对得上');
+  assert.equal(r(10, '10B').ok, null);
+  assert.equal(r(2, '10B').ok, true);
+  assert.equal(r(10, '10h').ok, null);
+  assert.match(r(10, '10h').why, /十六进制还是 10 小时/);
   assert.equal(r(16, '10H').ok, true);
   assert.equal(r(100, '0b100').ok, false, '带前缀的不含糊');
   const lru = P('predict', `${HEAD}run r: paging algo=lru frames=3 refs="1 2 3 4 1 2 5 1 2 3 4 5"\nexpect 缺页次数: r.faults`);

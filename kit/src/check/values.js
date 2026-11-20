@@ -57,7 +57,7 @@ function readOther(student) {
   const t = s.replace(/\s+/g, '');
   if (!t) return null;
   let m;
-  // 后缀的写法（王道的 1011B、3A3CH）另记「同样的数字当十进制读」plain：100B 也可能是 100 个字节、5h 是 5 小时（numMatch 看）
+  // 后缀的写法（王道的 1011B、3A3CH）另记「同样的数字当十进制读」plain：100B 也可能是 100 个字节、10h 是 10 小时（numMatch 看）
   const plainOf = (digits) => (digits !== undefined && /^\d+$/.test(digits) ? Number(digits) : undefined);
   if ((m = BIN.exec(t))) return { v: parseInt(m[1] ?? m[2], 2), plain: plainOf(m[2]), unit: 'B' };
   if ((m = HEX.exec(t))) return { v: parseInt(m[1] ?? m[2], 16), plain: plainOf(m[2]), unit: 'H' };
@@ -80,10 +80,11 @@ export function numMatch(student, value) {
   if (!r || !Number.isFinite(r.v)) {
     const o = readOther(student);
     if (!o) return null;
-    // 后缀的二进制、十六进制按进制读对不上、同样的数字当十进制读却对得上（对的值 100 写 100B；5 写 5h）：
+    // 后缀的二进制、十六进制按进制读对不上、同样的数字当十进制读却对得上（对的值 100 写 100B；10 写 10h；按进制读对得上的照常对）：
     // 分不清是进制还是单位，回 UNSURE（判的时候待核，不当对也不当错；ambiguousWhy 说）
+    if (exactly(o.v, value)) return true;
     if (o.plain !== undefined && exactly(o.plain, value)) return UNSURE;
-    return exactly(o.v, value);
+    return false;
   }
   if (exactly(r.v, value)) return true;
   if (r.frac || r.digits < 2 || r.sig < 3) return false;
@@ -148,7 +149,7 @@ export function seqMatch(a, b, { set = false } = {}) {
   return sameSeq(cleanSide(a), cleanSide(b), { set });
 }
 
-/** numMatch / valueMatch 的第四种结论：读得懂，但分不清是进制还是单位（100B、5h），判的时候待核 */
+/** numMatch / valueMatch 的第四种结论：读得懂，但分不清是进制还是单位（100B、10h），判的时候待核 */
 export const UNSURE = 'unsure';
 /** UNSURE 时那一项写什么 */
 export function ambiguousWhy(student) {
