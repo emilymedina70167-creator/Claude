@@ -8,6 +8,7 @@
 //
 // 向量是列向量：a' 是一行（1×n 矩阵），a'*b 是一个数，a*b' 是外积（n×n 矩阵）。exact.js 用同样的规则。
 
+import { DIST } from './fx/special.js';
 const FUNCS = {
   det: (M) => det(asMat(M)),
   inv: (M) => inv(asMat(M)),
@@ -63,6 +64,8 @@ const FUNCS = {
   Phi: (x) => 0.5 * (1 + erf(num(x) / Math.SQRT2)),
   phi: (x) => Math.exp(-(num(x) ** 2) / 2) / Math.sqrt(2 * Math.PI),
   // 计算机课：整数、进制、位运算（位运算只对非负整数；负数先用 unsigned(x, n) 换成 n 位的无符号数）
+  // 概率统计的特殊函数：Γ、B，χ² / t / F 的密度、分布函数、分位点，几何、超几何（fx/special.js）
+  ...DIST,
   log2: (x) => Math.log2(num(x)),
   mod: (a, b) => { const m = intOf(b, '模'); if (m === 0) throw new Error('mod 的模不能是 0'); return ((intOf(a, 'mod') % m) + m) % m; },
   div: (a, b) => { const d = intOf(b, '除数'); if (d === 0) throw new Error('除以 0 了'); return Math.floor(intOf(a, 'div') / d); },
