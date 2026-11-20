@@ -1064,7 +1064,21 @@ pick "点出 $f$ 的全部极值点" on f(x) at roots(f'(x), x, -2.5, 2.5) tol=0
 plot f'(x) color=pink dashed label="f′" after
 ```
 
-**起名字**：`riemann S = f(x) from 0 to 1 n=n mid`、`area A = f(x), g(x) from -1 to 2`，后面的 `show`、`goal` 里 `S`（黎曼和）、`A`（面积 $\int|f-g|$）是一个数。
+```graph
+id: g-osc
+title: 曲率圆
+equal: on
+x: -3 3
+y: -0.5 4.5
+f(x) = x^2
+let a = 0.7 drag on=f(x) snap=0.05
+plot f(x) color=blue
+osc K = f(x) at a color=yellow label=曲率中心
+show $K = {dec(K, 3)}$，$R = {dec(1/K, 3)}$
+goal a = 0 tol=0.03 msg="顶点处曲率最大"
+```
+
+**起名字**：`riemann S = f(x) from 0 to 1 n=n mid`、`area A = f(x), g(x) from -1 to 2`，后面的 `show`、`goal` 里 `S`（黎曼和）、`A`（面积 $\int|f-g|$）是一个数。`osc K = f(x) at a`：曲线在 a 处的曲率圆（圆、圆心、到切点的半径），`K` 是曲率；$f'' = 0$ 的地方没有圆、`K` 是 0。
 
 ```graph
 id: g-riemann
@@ -1135,7 +1149,7 @@ show $\chi^2_{0.05}(n) = {dec(chi2inv(0.95, n), 3)}$ after
 - `param [x(t), y(t)] for t a b`：参数曲线；`polar r(t) for t a b`：极坐标曲线。末尾 `fill` 涂面（`polar … fill` 是从极点扫过的那一块）。
 - `implicit 左 = 右`：隐函数的曲线。`contour 式子 at 值, 值, …`：等高线（一条命令最多 12 条，每条上写着它的值；值能写式子，如 `at f(P)`）。过鞍点的那一条两支交在一起。
 - `slope 式子`：$y' = $ 式子的方向场（斜率无穷的地方画竖的）；`flow 式子 from 点`：过这一点的解曲线（画到窗口边）。`field [P, Q]`：向量场的箭头；`flow [P, Q] from 点`：流线。`n=` 一排几个。
-- `vector 向量 from 点`：一个箭头（不写 `from` 从原点出发）。
+- `vector 向量 from 点`：一个箭头（不写 `from` 从原点出发）。`lineint(P, Q, x(t), y(t), t, a, b)`：$\int_L P\,dx + Q\,dy$，$L$ 是参数曲线、$t$ 从 a 到 b（P、Q 里的 x、y 是曲线上的点，$x'$、$y'$ 页面求）。
 - `region D = y from 下 to 上 for x a b`（X 型）、`region x from 左 to 右 for y c d`（Y 型）、`region r from 内 to 外 for t α β`（极坐标）；边界没定义的地方不画。`region 条件, 条件, … in D`：条件都成立的地方（`in D` 限在区域 D 里，事件 ∩ 样本空间）。`region … hide` 只起名字不画。
 - `strip D at 式子 lo=y1 hi=y2`：区域 D 里的那一条（竖条 / 横条 / 射线上的一段），`y1` `y2` 是页面读出来的上下限，后面的 `show`、`goal`、`int(…)` 里能用；那里区域没定义时读数写「—」。
 - `let P = [1, 2] drag`：平面上能拖的点（`snap=0.25`）；`drag on="x + y = 3"` 只能沿这条曲线拖（一开始不在线上的先投上去）。拖不出窗口。
@@ -1192,9 +1206,11 @@ equal: on
 x: -2.4 2.4
 y: -2.1 2.1
 slider th 0 6.28 = 1 step=0.02 label="θ"
-field [-y, x]
+P(x, y) = -y
+Q(x, y) = x
+field [P(x, y), Q(x, y)]
 param [cos(s), sin(s)] for s 0 th color=yellow
-show $\displaystyle\int_L -y\,dx + x\,dy = {dec(int(sin(s)^2 + cos(s)^2, s, 0, th), 3)}$
+show $\displaystyle\int_L P\,dx + Q\,dy = {dec(lineint(P(x, y), Q(x, y), cos(s), sin(s), s, 0, th), 3)}$，$Q_x - P_y = {Q_x(0, 0) - P_y(0, 0)}$
 ```
 
 ```graph

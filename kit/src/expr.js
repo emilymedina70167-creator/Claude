@@ -373,7 +373,7 @@ function run(n, vars, fns = FUNCS) {
 // 只有 4 个参数、而且绑定的那个位置写的是一个字母时才算：max(1, 2, 3, 4) 这样的普通调用不受影响。
 // 只在这里（浮点求值）有；exact.js 的 \calc 不认。
 export const FORM_MAX_TERMS = 20000; // 求和最多几项：滑块把 n 拖到很大时报出来，不卡住页面
-const FORM_EG = { int2: 'int2(x*y, x, 0, 1, y, 0, x)', sum: 'sum(k, 1, n, 1/k^2)', prod: 'prod(k, 1, n, k)', maxof: 'maxof(k, 1, n, 式子)', minof: 'minof(k, 1, n, 式子)', int: 'int(cos(t), t, 0, x)', maxon: 'maxon(x - x^2, x, 0, 1)', minon: 'minon(x^2, x, -1, 1)', roots: 'roots(x^3 - 3x, x, -3, 3)' };
+const FORM_EG = { lineint: 'lineint(-y, x, cos(t), sin(t), t, 0, 2pi)', int2: 'int2(x*y, x, 0, 1, y, 0, x)', sum: 'sum(k, 1, n, 1/k^2)', prod: 'prod(k, 1, n, k)', maxof: 'maxof(k, 1, n, 式子)', minof: 'minof(k, 1, n, 式子)', int: 'int(cos(t), t, 0, x)', maxon: 'maxon(x - x^2, x, 0, 1)', minon: 'minon(x^2, x, -1, 1)', roots: 'roots(x^3 - 3x, x, -3, 3)' };
 function isForm(n, sp) {
   const binds = [].concat(sp.bind);
   if (n.args.length !== (sp.arity || 4)) return false;
@@ -469,6 +469,27 @@ const SPECIAL = {
     return r.value;
   } },
   // 二重积分 ∫_a^b dx ∫_c^d 式子 dy，c、d 可以含 x（事件的概率、二重积分的值）
+  // 第二类曲线积分 ∫_L P dx + Q dy，L 是参数曲线 (x(t), y(t))，t 从 a 到 b。P、Q 里的 x、y 是曲线上的点；
+  // x′、y′ 页面用差商求（两头用单边的）。以前要主讲自己把 P·x′ + Q·y′ 推出来写成一元的积分
+  lineint: { arity: 7, bind: [4], run: (n, vars, fns) => {
+    const [P, Q, xt, yt, tv, a, b] = n.args;
+    const A = num(run(a, vars, fns)), B = num(run(b, vars, fns));
+    if (!Number.isFinite(A) || !Number.isFinite(B)) throw new Error('lineint 的参数范围要是有限的');
+    const v = Object.create(vars);
+    v[tv.name] = 0;
+    const at = (t) => { v[tv.name] = t; return [num(run(xt, v, fns)), num(run(yt, v, fns))]; };
+    const pv = Object.create(v);
+    pv.x = 0; pv.y = 0;
+    const lo = Math.min(A, B), hi = Math.max(A, B), h = 1e-5 * Math.max(1, Math.abs(A), Math.abs(B));
+    const f = (t) => {
+      const t1 = Math.max(lo, t - h), t2 = Math.min(hi, t + h), p1 = at(t1), p2 = at(t2), p = at(t);
+      pv.x = p[0]; pv.y = p[1];
+      return (num(run(P, pv, fns)) * (p2[0] - p1[0]) + num(run(Q, pv, fns)) * (p2[1] - p1[1])) / (t2 - t1);
+    };
+    const r = numIntegral(f, A, B, { maxSeg: 300 });
+    if (r.ok !== true) throw new Error(`这个曲线积分页面算不出来（${r.why || '不收敛'}）`);
+    return r.value;
+  } },
   int2: { arity: 7, bind: [1, 4], run: (n, vars, fns) => {
     const [body, xv, a, b, yv, c, d] = n.args;
     const A = num(run(a, vars, fns)), B = num(run(b, vars, fns));

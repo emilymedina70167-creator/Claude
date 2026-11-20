@@ -88,3 +88,18 @@ test('int2：二重积分，内层的上下限可以含外层的变量', () => {
   assert.throws(() => evaluate('int2(1/(x*y), x, 0, 1, y, 0, 1)'), /这个二重积分页面算不出来/);
   assert.throws(() => evaluate('int2(1, 2, 0, 1, y, 0, 1)'), /没有函数 int2|自变量/);
 });
+
+test('lineint：沿参数曲线的第二类曲线积分 ∫ P dx + Q dy（页面自己求 x′、y′）', () => {
+  const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) <= e, `${a} ≠ ${b}`);
+  near(evaluate('lineint(-y, x, cos(t), sin(t), t, 0, 2pi)'), 2 * Math.PI);
+  // 有势场：只看两头，∫ y dx + x dy = xy 从 (0,0) 到 (1,1)
+  near(evaluate('lineint(y, x, t, t^2, t, 0, 1)'), 1);
+  near(evaluate('lineint(y, x, t^3, t, t, 0, 1)'), 1);
+  near(evaluate('lineint(x^2, 0, t, t, t, 0, 2)'), 8 / 3);
+  // 外面的量照用；自变量换个名字
+  near(evaluate('lineint(a*x, 0, s, 0, s, 0, 1)', { a: 2 }), 1);
+  // 反着走变号
+  near(evaluate('lineint(-y, x, cos(t), sin(t), t, 2pi, 0)'), -2 * Math.PI);
+  assert.throws(() => evaluate('lineint(-y, x, cos(t), sin(t), 0, 2pi)'), /lineint/);
+  assert.throws(() => evaluate('lineint(1/x, 0, t, 0, t, -1, 1)'), /算不出来|不收敛|发散/);
+});

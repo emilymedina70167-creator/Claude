@@ -246,3 +246,12 @@ test('region：几个条件用逗号隔开（都成立）；in D 限在前面起
   // 别的命令上 hide 还是普通的名字
   assert.equal(parseGraph('let hide = 2\nvline hide').cmds[1].at({ hide: 2 }), 2);
 });
+
+test('osc：曲率圆，能起名字（名字是曲率）；二阶导页面求', () => {
+  const g = parseGraph('f(x) = x^2\nlet a = 1 drag on=f(x)\nosc K = f(x) at a color=yellow');
+  const c = g.cmds[1];
+  assert.equal(c.kind, 'osc'); assert.equal(c.name, 'K'); assert.equal(c.mods.color, 'yellow');
+  assert.equal(c.f({ x: 3 }), 9); assert.equal(c.df({ x: 3 }), 6); assert.equal(c.d2f({ x: 3 }), 2); assert.equal(c.at({ a: 1 }), 1);
+  assert.equal(parseGraph('osc sin(x) at 1').cmds[0].name, undefined);
+  assert.throws(() => parseGraph('osc x^2'), /osc 的写法/);
+});

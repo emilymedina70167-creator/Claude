@@ -352,12 +352,9 @@ x: -3 3
 y: -0.5 4.5
 f(x) = x^2
 let a = 0.7 drag on=f(x) snap=0.05
-let k = abs(f''(a))/(1 + f'(a)^2)^1.5
-let C = [a, f(a)] + [-f'(a), 1]/sqrt(1 + f'(a)^2)/k
 plot f(x) color=blue label="y = x²" at=0.92
-param C + [cos(s), sin(s)]/k for s 0 2pi color=yellow
-point C color=yellow label=曲率中心
-show 曲率 $K = \dfrac{|y''|}{(1 + y'^2)^{3/2}} = {dec(k, 3)}$，曲率半径 $R = \dfrac1K = {dec(1/k, 3)}$
+osc K = f(x) at a color=yellow label=曲率中心
+show 曲率 $K = \dfrac{|y''|}{(1 + y'^2)^{3/2}} = {dec(K, 3)}$，曲率半径 $R = \dfrac1K = {dec(1/K, 3)}$
 goal a = 0 tol=0.03 msg="顶点处曲率最大：$K = 2$，$R = \tfrac12$"
 ```
 
@@ -504,13 +501,16 @@ q: 让点沿单位圆逆时针走完一圈：$\oint_L -y\,dx + x\,dy$ 是多少�
 equal: on
 x: -2.4 2.4
 y: -2.1 2.1
+P(x, y) = -y
+Q(x, y) = x
 slider th 0 6.2832 = 1 step=0.02 label="走到 θ" play
-field [-y, x]
+field [P(x, y), Q(x, y)]
 param [cos(s), sin(s)] for s 0 2pi color=blue
 param [cos(s), sin(s)] for s 0 th color=yellow
-vector [-sin(th), cos(th)] from [cos(th), sin(th)] color=yellow label=F
-show $\displaystyle\int_0^\theta \mathbf F\cdot d\mathbf r = \int_0^\theta\big(\sin^2 s + \cos^2 s\big)ds = {dec(int(sin(s)^2 + cos(s)^2, s, 0, th), 3)}$
-show 格林公式：$\displaystyle\oint_L -y\,dx + x\,dy = \iint_D\left(\frac{\partial Q}{\partial x} - \frac{\partial P}{\partial y}\right)d\sigma = \iint_D 2\,d\sigma = {dec(int2(2r, t, 0, 2pi, r, 0, 1), 4)}$ after
+let A = [cos(th), sin(th)]
+vector [P(A), Q(A)] from A color=yellow label=F
+show 走到 $\theta = {dec(th, 2)}$：$\displaystyle\int_L P\,dx + Q\,dy = {dec(lineint(P(x, y), Q(x, y), cos(s), sin(s), s, 0, th), 3)}$
+show 格林公式：$\displaystyle\oint_L P\,dx + Q\,dy = \iint_D\left(\frac{\partial Q}{\partial x} - \frac{\partial P}{\partial y}\right)d\sigma = \iint_D {Q_x(0, 0) - P_y(0, 0)}\,d\sigma = {dec(int2(Q_x(x, y) - P_y(x, y), x, -1, 1, y, -sqrt(1 - x^2), sqrt(1 - x^2)), 4)}$ after
 goal th >= 6.27 msg="一圈：$2\pi$，正好是圆面积的 2 倍"
 ```
 

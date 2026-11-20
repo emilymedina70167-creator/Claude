@@ -83,6 +83,19 @@ export function placeLabels(items, box) {
 }
 
 /**
+ * y = f(x) 在 x = a 处的曲率圆：{ k 曲率, r 半径, cx, cy 圆心, x, y 切点 }。
+ * 直的地方（f″ = 0）k 是 0、r 是无穷、没有圆心；那一点没定义回 null。
+ */
+export function oscCircle(f, df, d2f, a) {
+  let y, d1, d2;
+  try { y = f(a); d1 = df(a); d2 = d2f(a); } catch { return null; }
+  if (![y, d1, d2].every(Number.isFinite)) return null;
+  const w = 1 + d1 * d1, k = Math.abs(d2) / w ** 1.5;
+  if (!(k > 1e-12)) return { k: 0, r: Infinity, x: a, y };
+  return { k, r: 1 / k, cx: a - (d1 * w) / d2, cy: y + w / d2, x: a, y };
+}
+
+/**
  * 函数在 a 处是不是光滑的（能画切线）：左右差商对得上。分段函数的尖点（|x² − 1| 在 1、(x ≥ 0)·x 在 0）
  * 符号求导会照其中一段给出一个斜率，那条「切线」是错的。span：窗口的宽（定步长）
  */

@@ -59,3 +59,18 @@ test('标签互相让开，不出框', () => {
   // 贴着边的拉回框里
   assert.deepEqual(placeLabels([{ x: 295, y: 5, w: 40, h: 20 }], box), [[280, 10]]);
 });
+
+test('曲率圆：曲率、半径、圆心（在凹的那一侧）；直的地方没有圆', async () => {
+  const { oscCircle } = await import('../kit/src/fx/graphgeom.js');
+  const near = (a, b, e = 1e-9) => assert.ok(Math.abs(a - b) <= e, `${a} ≠ ${b}`);
+  const sq = oscCircle((x) => x * x, (x) => 2 * x, () => 2, 0);
+  near(sq.k, 2); near(sq.r, 0.5); near(sq.cx, 0); near(sq.cy, 0.5);
+  const s1 = oscCircle((x) => x * x, (x) => 2 * x, () => 2, 1);
+  near(s1.k, 2 / 5 ** 1.5); near(s1.cx, -4); near(s1.cy, 3.5);
+  const sn = oscCircle(Math.sin, Math.cos, (x) => -Math.sin(x), Math.PI / 2);
+  near(sn.k, 1); near(sn.cx, Math.PI / 2); near(sn.cy, 0);
+  const ln = oscCircle((x) => x, () => 1, () => 0, 3);
+  assert.equal(ln.k, 0); assert.equal(ln.r, Infinity); assert.equal(ln.cx, undefined);
+  // 那一点没定义
+  assert.equal(oscCircle((x) => Math.sqrt(x), (x) => 0.5 / Math.sqrt(x), (x) => -0.25 * x ** -1.5, -1), null);
+});

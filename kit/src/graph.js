@@ -14,7 +14,7 @@ import { isNum } from './expr.js';
 import { parseGraph } from './graphspec.js';
 import { compileWith } from './fx/defs.js';
 import { sampleCurve, labelSpot } from './fx/curve.js';
-import { riemannRects, betweenArea, areaBetween, placeLabels, smoothAt, autoRange } from './fx/graphgeom.js';
+import { riemannRects, betweenArea, areaBetween, placeLabels, smoothAt, autoRange, oscCircle } from './fx/graphgeom.js';
 import { splitMods, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { sliderText, figureControls, dragHandles } from './plot.js';
@@ -91,6 +91,7 @@ export function createGraph(container, src, opts = {}) {
   const fn2 = (f, v) => { const vx = Object.create(v); return (x, y) => { vx.x = x; vx.y = y; const r = f(vx); if (!isNum(r)) throw new Error('这里的式子要算出一个数'); return r; }; };
   const regionOf = (name) => cmds.find((k) => k.kind === 'region' && k.name === name);
   const stripAt = (c, v) => { const r = regionOf(c.of); return r ? stripOf(r.shape, fnOf(r.lo, v, r.param), fnOf(r.hi, v, r.param), c.at(v)) : null; };
+  const oscAt = (c, v) => oscCircle(quiet(fnOf(c.f, v)), quiet(fnOf(c.df, v)), quiet(fnOf(c.d2f, v)), c.at(v));
   const env = () => {
     const v = { ...base, ...extra, ...state.slider };
     for (const c of cmds) {
@@ -108,6 +109,10 @@ export function createGraph(container, src, opts = {}) {
         v[c.name] = areaBetween(fnOf(c.f, v), fnOf(c.g, v), c.a(v), c.b(v));
       } else if (c.name && c.kind === 'riemann') {
         v[c.name] = riemannRects(fnOf(c.f, v), c.a(v), c.b(v), c.n(v), c.rule).sum;
+      } else if (c.name && c.kind === 'osc') {
+        // 起了名字的曲率圆：名字是曲率（那一点没定义是 NaN）
+        const o = oscAt(c, v);
+        v[c.name] = o ? o.k : NaN;
       } else if (c.kind === 'strip' && (c.loName || c.hiName)) {
         // 区域里的一条：上下限页面读（那里区域没定义是 NaN，读数写「?」）
         const st = stripAt(c, v);
@@ -126,7 +131,7 @@ export function createGraph(container, src, opts = {}) {
       const v = env();
       const take = (f, lo, hi, name) => { const g = quiet(fnOf(f, v, name)); for (let i = 0; i <= 80; i++) { const y = g(lo + ((hi - lo) * i) / 80); if (!Number.isNaN(y)) ys.push(y); } };
       for (const c of cmds) {
-        if (['plot', 'shade', 'tangent', 'secant', 'riemann'].includes(c.kind)) take(c.f, xr[0], xr[1]);
+        if (['plot', 'shade', 'tangent', 'secant', 'riemann', 'osc'].includes(c.kind)) take(c.f, xr[0], xr[1]);
         if (c.kind === 'area') { take(c.f, xr[0], xr[1]); take(c.g, xr[0], xr[1]); }
         if (c.kind === 'bars' || c.kind === 'dots') { const g = quiet(fnOf(c.f, v, c.param)); for (let k = Math.ceil(c.from(v)); k <= Math.min(c.to(v), c.from(v) + 2000); k++) { const y = g(k); if (!Number.isNaN(y)) ys.push(y); } }
       }
@@ -327,6 +332,20 @@ export function createGraph(container, src, opts = {}) {
             const lx = lineThrough(a, y0, k, tc, `g-line${c.mods.dashed ? ' dashed' : ''}`);
             dot(a, y0, tc, false);
             if (c.mods.label && lx !== null) want(lx, y0 + k * (lx - a), c.mods.label, tc, 0, -18);
+          } else if (c.kind === 'osc') {
+            const o = oscAt(c, v);
+            if (!o) { const why = whyThrows(fnOf(c.f, v), c.at(v)) || whyThrows(fnOf(c.d2f, v), c.at(v)); if (why) errs.push(why); continue; }
+            const oc = color(c, 'var(--yellow)');
+            dot(o.x, o.y, oc, false);
+            if (!Number.isFinite(o.r)) continue; // 直的地方：曲率 0，没有圆
+            // 圆很大时（快到拐点）只有窗口里的一段看得见：点数照样够
+            const segs = paramCurve((t) => [o.cx + o.r * Math.cos(t), o.cy + o.r * Math.sin(t)], 0, 2 * Math.PI, { n: coarse ? 160 : 500, box: box2 });
+            for (const seg of segs) el('polyline', { points: poly2(seg), class: `g-curve thin${c.mods.dashed ? ' dashed' : ''}` }, plotG).style.stroke = oc;
+            if (inside(o.cx, o.cy)) {
+              el('line', { x1: X(o.x), y1: Y(o.y), x2: X(o.cx), y2: Y(o.cy), class: 'g-ref dashed' }, plotG).style.stroke = oc;
+              dot(o.cx, o.cy, oc, false, 4);
+              if (c.mods.label) want(o.cx, o.cy, c.mods.label, oc, 12 + labelSize(c.mods.label).w / 2, -14);
+            }
           } else if (c.kind === 'secant') {
             const a = c.a(v), b = c.b(v), g = quiet(fnOf(c.f, v)), ya = g(a), yb = g(b);
             if (Number.isNaN(ya) || Number.isNaN(yb) || Math.abs(b - a) < 1e-12) { const why = whyThrows(fnOf(c.f, v), a) || whyThrows(fnOf(c.f, v), b); if (why) errs.push(why); continue; }

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseGraph } from '../kit/src/graphspec.js';
 import { subjectKey, docsForSubject, componentDoc } from '../kit/src/subject.js';
-import { riemannRects, areaBetween } from '../kit/src/fx/graphgeom.js';
+import { riemannRects, areaBetween, oscCircle } from '../kit/src/fx/graphgeom.js';
 import { stripOf } from '../kit/src/fx/plane.js';
 
 const manual = readFileSync('CLAUDE-PROJECT.md', 'utf8');
@@ -24,6 +24,7 @@ function check(src, where) {
     if (c.kind === 'let') v[c.name] = c.expr(v);
     if (c.name && c.kind === 'area') v[c.name] = areaBetween(fx(c.f), fx(c.g), c.a(v), c.b(v));
     if (c.name && c.kind === 'riemann') v[c.name] = riemannRects(fx(c.f), c.a(v), c.b(v), c.n(v), c.rule).sum;
+    if (c.name && c.kind === 'osc') v[c.name] = oscCircle(fx(c.f), fx(c.df), fx(c.d2f), c.at(v)).k;
     if (c.kind === 'strip') {
       const r = g.cmds.find((k) => k.kind === 'region' && k.name === c.of);
       const st = stripOf(r.shape, (t) => r.lo({ ...v, [r.param]: t }), (t) => r.hi({ ...v, [r.param]: t }), c.at(v));
@@ -78,9 +79,9 @@ test('手册里的函数图例子照抄就能画，新命令每样至少一个�
   for (const k of ['plot', 'shade', 'bars', 'tangent', 'secant', 'riemann', 'area', 'dots', 'goal', 'pick']) assert.ok(kinds.has(k), `手册里没有 ${k} 的例子`);
   assert.ok(inManual.some((s) => /^[A-Za-z]\w*\(x\)\s*=/m.test(s)), '手册里没有 f(x) = … 的例子');
   // 第 2 批：平面上的命令
-  for (const k of ['param', 'polar', 'implicit', 'contour', 'slope', 'field', 'flow', 'vector', 'region', 'strip']) assert.ok(kinds.has(k), `手册里没有 ${k} 的例子`);
+  for (const k of ['osc', 'param', 'polar', 'implicit', 'contour', 'slope', 'field', 'flow', 'vector', 'region', 'strip']) assert.ok(kinds.has(k), `手册里没有 ${k} 的例子`);
   assert.ok(inManual.some((s) => /^[A-Za-z]\w*\(x, y\)\s*=/m.test(s)), '手册里没有 f(x, y) = … 的例子');
-  for (const w of ['f_x', 'f_grad', 'int2', 'equal: on', 'in D', 'on="']) assert.ok(third.includes(w), `手册里没写 ${w}`);
+  for (const w of ['f_x', 'f_grad', 'int2', 'lineint', 'equal: on', 'in D', 'on="']) assert.ok(third.includes(w), `手册里没写 ${w}`);
 });
 
 test('认高数、概率两门课', () => {

@@ -19,7 +19,7 @@ import { parseDef, makeDefs, addDef, compileWith, expandSrc } from './fx/defs.js
 import { evaluate } from './expr.js';
 import { diffAst } from './fx/diff.js';
 
-export const CMDS = ['let', 'slider', 'plot', 'shade', 'bars', 'point', 'vline', 'hline', 'segment', 'text', 'show', 'area', 'riemann', 'tangent', 'secant', 'dots', 'goal', 'pick',
+export const CMDS = ['let', 'slider', 'plot', 'shade', 'bars', 'point', 'vline', 'hline', 'segment', 'text', 'show', 'area', 'riemann', 'tangent', 'secant', 'osc', 'dots', 'goal', 'pick',
   // 平面上两个变量的（第 2 批）：参数曲线、极坐标、隐函数、等高线、方向场、向量场、解曲线、箭头、区域、区域里的一条
   'param', 'polar', 'implicit', 'contour', 'slope', 'field', 'flow', 'vector', 'region', 'strip'];
 // 这几个修饰只有函数图有，而且各管各的命令（别处它们是普通的名字：let mid = 1 以后 shade x^2 a mid 的 mid 是上限）
@@ -158,6 +158,14 @@ function parseCmd(kind, rest, { C, num, defs, cmds = [] }) {
     let dAst;
     try { dAst = diffAst(expandSrc(m[1], defs), 'x', 1); } catch (e) { throw new Error(`tangent：${e.message}`); }
     return { kind, f: C(m[1]), df: (vars = {}) => evaluate(dAst, vars), at: C(m[2]), mods: md };
+  }
+  if (kind === 'osc') {
+    const { name, rest: r } = named(body);
+    const m = r.match(/^(.*\S)\s+at\s+(.+)$/);
+    if (!m) throw new Error('osc 的写法：osc f(x) at a（曲率圆；前面可以起名 osc K = f(x) at a，K 是曲率）');
+    let d1, d2;
+    try { const src = expandSrc(m[1], defs); d1 = diffAst(src, 'x', 1); d2 = diffAst(src, 'x', 2); } catch (e) { throw new Error(`osc：${e.message}`); }
+    return { kind, name, f: C(m[1]), df: (vars = {}) => evaluate(d1, vars), d2f: (vars = {}) => evaluate(d2, vars), at: C(m[2]), mods: md };
   }
   if (kind === 'secant') {
     const m = body.match(/^(.*\S)\s+at\s+(.+)$/);
