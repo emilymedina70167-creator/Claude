@@ -62,7 +62,8 @@ function renameBound(n, tag) {
 
 // f'( → __d1_f(：撇号本来是转置，「名字 + 撇号 + 括号」而且名字是定义过的函数时才当求导
 function primesToCalls(src, defs) {
-  return String(src).replace(/(?<![A-Za-z_.])([A-Za-z][A-Za-z0-9]*)('{1,3})\s*\(/g, (m, name, ps) => (defs.has(name) ? `__d${ps.length}_${name}(` : m));
+  // 从公式里抄来的 ′ ″（Unicode 的撇号）和键盘上的 ' 一样
+  return String(src).replace(/″/g, "''").replace(/′/g, "'").replace(/(?<![A-Za-z_.])([A-Za-z][A-Za-z0-9]*)('{1,3})\s*\(/g, (m, name, ps) => (defs.has(name) ? `__d${ps.length}_${name}(` : m));
 }
 
 // 把定义过的函数的调用换成它的式子
@@ -79,6 +80,8 @@ function inline(n, defs) {
     try { body = diffAst(body, def.params[0], Number(dm[1])); } catch (e) {
       throw new Error(`${def.name}${"′".repeat(Number(dm[1]))} 页面求不了导：${String(e.message).replace(/^这个式子页面求不了导：/, '')}`);
     }
+    // f 没定义的地方 f′ 也没定义：ln x 的导数 1/x 在 x < 0 算得出数，但那里没有 ln。加上 0·f，f 是 NaN 时导数也是 NaN
+    body = { t: 'bin', op: '+', a: body, b: { t: 'bin', op: '*', a: { t: 'num', v: 0 }, b: def.ast } };
   }
   return substAll(body, Object.fromEntries(def.params.map((p, i) => [p, out.args[i]])));
 }
@@ -88,7 +91,8 @@ const usesCall = (n, name) => !!n && ((n.t === 'call' && (n.name === name || n.n
 /** 式子原文 → 语法树：撇号读成求导，定义过的函数展开 */
 export function expandSrc(src, defs) {
   if (!defs || !defs.size) return parse(src);
-  return inline(parse(primesToCalls(src, defs)), defs);
+  // 自己写的求和字母先改个名：sum(a, 1, 3, p(2)) 里 p 的定义用到外面的 a 时，不被求和的 a 抓走
+  return inline(renameBound(parse(primesToCalls(src, defs)), '0'), defs);
 }
 
 /** 加一条定义（parseDef 的结果）。定义里用到的前面的函数先展开；用到自己就抛 */

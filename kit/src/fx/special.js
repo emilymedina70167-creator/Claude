@@ -129,7 +129,7 @@ function fpdf(x, m, n) {
   if (x === 0) return m < 2 ? Infinity : m === 2 ? 1 : 0;
   return Math.exp(0.5 * (m * Math.log(m * x) + n * Math.log(n) - (m + n) * Math.log(m * x + n)) - Math.log(x) - (lgamma(m / 2) + lgamma(n / 2) - lgamma((m + n) / 2)));
 }
-function fcdf(x, m, n) { dof(m, n); num(x); return x <= 0 ? 0 : betaI((m * x) / (m * x + n), m / 2, n / 2); }
+function fcdf(x, m, n) { dof(m, n); num(x); return x <= 0 ? 0 : x === Infinity ? 1 : betaI((m * x) / (m * x + n), m / 2, n / 2); }
 
 const int = (k) => Number.isInteger(num(k));
 const choose = (n, k) => { if (k < 0 || k > n) return 0; let r = 1; for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i; return r; };
@@ -142,12 +142,25 @@ export const DIST = {
   tinv: (p, n) => { dof(n); prob(p); if (p === 0.5) return 0; if (p === 0) return -Infinity; return p > 0.5 ? invert((x) => tcdf(x, n), p, 0, 1) : -invert((x) => tcdf(x, n), 1 - p, 0, 1); },
   fpdf, fcdf, finv: (p, m, n) => { dof(m, n); return invert((x) => fcdf(x, m, n), prob(p), 0, 1); },
   norminv,
-  binomcdf: (k, n, p) => { num(n); prob(p); let s = 0; for (let i = 0; i <= Math.min(Math.floor(num(k)), n); i++) s += choose(n, i) * p ** i * (1 - p) ** (n - i); return Math.min(1, s); },
-  poissoncdf: (k, l) => { num(l); let s = 0, term = Math.exp(-l); for (let i = 0; i <= Math.floor(num(k)); i++) { s += term; term *= l / (i + 1); } return Math.min(1, s); },
+  // 大的 n 逐项加会溢出成 NaN（C(2000, 1000) 放不下）：用不完全 B 函数，P(X ≤ k) = I_{1−p}(n − k, k + 1)
+  binomcdf: (k, n, p) => {
+    num(n); prob(p);
+    const m = Math.floor(num(k));
+    if (m < 0) return 0;
+    if (m >= n) return 1;
+    if (n <= 60) { let s = 0; for (let i = 0; i <= m; i++) s += choose(n, i) * p ** i * (1 - p) ** (n - i); return Math.min(1, s); }
+    return betaI(1 - p, n - m, m + 1);
+  },
+  // P(X ≤ k) = Q(k + 1, λ)：λ 大的时候 e^{−λ} 下溢成 0，逐项加出来全是 0
+  poissoncdf: (k, l) => { need(num(l) >= 0, `泊松分布的 λ 不能是负数（现在是 ${l}）`); const m = Math.floor(num(k)); return m < 0 ? 0 : l === 0 ? 1 : 1 - gammaP(m + 1, l); },
   // 几何分布：第 k 次才第一次成功（k = 1, 2, …）
   geompmf: (k, p) => { prob(p); return int(k) && k >= 1 ? (1 - p) ** (k - 1) * p : 0; },
   // 超几何：N 件里 M 件次品，取 n 件，恰有 k 件次品
-  hyperpmf: (k, N, M, n) => { [N, M, n].forEach(num); return int(k) ? (choose(M, k) * choose(N - M, n - k)) / choose(N, n) : 0; },
-  expcdf: (x, l = 1) => (num(x) < 0 ? 0 : 1 - Math.exp(-num(l) * x)),
+  hyperpmf: (k, N, M, n) => {
+    [N, M, n].forEach(num);
+    need(n <= N && M <= N && n >= 0 && M >= 0, `超几何分布：取的件数、次品数都不能比总数多（hyperpmf(k, 总数 N, 次品 M, 取 n 件)，现在是 N = ${N}、M = ${M}、n = ${n}）`);
+    return int(k) ? (choose(M, k) * choose(N - M, n - k)) / choose(N, n) : 0;
+  },
+  expcdf: (x, l = 1) => { need(num(l) > 0, `指数分布的 λ 要是正数（现在是 ${l}）`); return num(x) < 0 ? 0 : 1 - Math.exp(-l * x); },
   unifcdf: (x, a = 0, b = 1) => (num(x) <= num(a) ? 0 : x >= num(b) ? 1 : (x - a) / (b - a)),
 };

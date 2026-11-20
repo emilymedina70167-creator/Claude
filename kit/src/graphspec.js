@@ -20,15 +20,17 @@ import { evaluate } from './expr.js';
 import { diffAst } from './fx/diff.js';
 
 export const CMDS = ['let', 'slider', 'plot', 'shade', 'bars', 'point', 'vline', 'hline', 'segment', 'text', 'show', 'area', 'riemann', 'tangent', 'secant', 'dots', 'goal', 'pick'];
-// 这几个修饰只有函数图有，不放进 mods.js 的公共表（那张表 scene、space、matrix 都在用）
-const OWN_FLAGS = ['hollow', 'join', 'left', 'right', 'mid'];
-const OWN_RE = new RegExp(`\\s+(${OWN_FLAGS.join('|')})$`, 'i');
+// 这几个修饰只有函数图有，而且各管各的命令（别处它们是普通的名字：let mid = 1 以后 shade x^2 a mid 的 mid 是上限）
+const OWN_FLAGS = { riemann: ['left', 'right', 'mid'], point: ['hollow'], dots: ['join'] };
 
-// 行尾的修饰：公共的（color= label= dashed……）和自己的旗标可以混着写，先后不限
-function mods(line) {
+// 行尾的修饰：公共的（color= label= dashed……）和这条命令自己的旗标可以混着写，先后不限
+function mods(line, kind) {
   let { body, mods: m } = splitMods(line);
+  const own = OWN_FLAGS[kind];
+  if (!own) return { body, mods: m };
+  const re = new RegExp(`\\s+(${own.join('|')})$`, 'i');
   for (;;) {
-    const f = OWN_RE.exec(body);
+    const f = re.exec(body);
     if (!f) return { body, mods: m };
     m[f[1].toLowerCase()] = true;
     const more = splitMods(body.slice(0, f.index));
@@ -95,11 +97,13 @@ function parseCmd(kind, rest, { C, num, defs }) {
   if (kind === 'text') {
     const m = rest.match(/^"([^"]*)"\s+at\s+(.*)$/) || rest.match(/^“([^”]*)”\s+at\s+(.*)$/);
     if (!m) throw new Error('text 的写法：text "文字" at [x, y]');
-    const { body, mods: md } = mods(m[2]);
+    const { body, mods: md } = mods(m[2], kind);
     return { kind, label: m[1], at: C(body), mods: md };
   }
   if (kind === 'pick') return parsePick(rest, { C });
-  const { body, mods: md } = mods(rest);
+  const { body, mods: md } = mods(rest, kind);
+  // goal 自己写了 after：它要等「全做到」才出来，而「全做到」又在等它——永远出不来
+  if (kind === 'goal' && (md.after || md.before)) throw new Error('goal 不能写 after / before（它自己就是要学生做到的事）');
   if (kind === 'let') {
     const m = body.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/);
     if (!m) throw new Error('let 的写法：let 名字 = 表达式');
@@ -173,7 +177,8 @@ function parseCmd(kind, rest, { C, num, defs }) {
 
 // pick "题目" [on 式子 | on x] at 值, …
 function parsePick(rest, { C }) {
-  const { body, mods: md } = mods(rest);
+  const { body, mods: md } = mods(rest, 'pick');
+  if (md.after || md.before) throw new Error('pick 不能写 after / before（它自己就是要学生做到的事）');
   const m = body.match(/^(?:"([^"]*)"|“([^”]*)”)\s+(?:on\s+(.+?)\s+)?at\s+(.+)$/);
   if (!m) throw new Error('pick 的写法：pick "点出极值点" on f(x) at -1, 1（on x 是点在 x 轴上；不写 on 是随便点，目标写 [x, y]）');
   const on = m[3] === undefined ? 'free' : m[3].trim() === 'x' ? 'axis' : 'curve';

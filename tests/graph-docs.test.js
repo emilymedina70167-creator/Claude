@@ -26,7 +26,12 @@ function check(src, where) {
   }
   for (const c of g.cmds) {
     const at = `${where}：${c.srcLine}`;
-    if (c.kind === 'pick') assert.ok(c.targets(v).length >= 1, `${at} 的目标一个都没有`);
+    if (c.kind === 'pick') {
+      const ts = c.targets(v);
+      assert.ok(ts.length >= 1, `${at} 的目标一个都没有`);
+      // 目标要在窗口里（学生点得到）：页面上这是写法错误
+      for (const t of ts) { const x = Array.isArray(t) ? t[0] : t; assert.ok(x >= g.xr[0] && x <= g.xr[1], `${at} 的目标 ${x} 在窗口外`); }
+    }
     if (c.kind === 'goal') assert.doesNotThrow(() => (c.cond ? c.cond(v) : [c.lhs(v), c.rhs(v)]), at);
     if (c.kind === 'tangent') assert.ok(Number.isFinite(c.df({ ...v, x: c.at(v) })), at);
     if (c.kind === 'plot') assert.doesNotThrow(() => c.f({ ...v, x: (g.xr[0] + g.xr[1]) / 2 + 0.123 }), at);

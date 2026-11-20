@@ -81,3 +81,28 @@ export function placeLabels(items, box) {
   }
   return placed.map((p) => [p.x, p.y]);
 }
+
+/**
+ * 函数在 a 处是不是光滑的（能画切线）：左右差商对得上。分段函数的尖点（|x² − 1| 在 1、(x ≥ 0)·x 在 0）
+ * 符号求导会照其中一段给出一个斜率，那条「切线」是错的。span：窗口的宽（定步长）
+ */
+export function smoothAt(f, a, k, span) {
+  const h = 1e-6 * Math.max(span, 1e-9), y = val(f, a), l = val(f, a - h), r = val(f, a + h);
+  if ([y, l, r].some(Number.isNaN)) return true; // 一边没定义（定义域的端点）：不拦，照公式画
+  const dl = (y - l) / h, dr = (r - y) / h;
+  return Math.abs(dl - dr) <= 0.02 * Math.max(1, Math.abs(dl), Math.abs(dr), Math.abs(k) || 0);
+}
+
+/**
+ * y 的范围没写时怎么取：从 0 起，上面留一点头（和以前一样）。
+ * 有极点、爆掉的值时最大最小会被撑到几十万：超出中间八成的值太多的那一头，裁到「中间八成再往外两倍」
+ */
+export function autoRange(values) {
+  const ys = [0, ...values.filter(Number.isFinite)].sort((p, q) => p - q);
+  if (ys.length === 1) return [0, 1];
+  let bot = ys[0], top = ys[ys.length - 1];
+  const lo = ys[Math.floor((ys.length - 1) * 0.1)], hi = ys[Math.ceil((ys.length - 1) * 0.9)], mid = hi - lo;
+  if (mid > 0 && top - bot > 8 * mid) { bot = Math.max(bot, Math.min(0, lo - 2 * mid)); top = Math.min(top, Math.max(0, hi + 2 * mid)); }
+  if (top === bot) top = bot + 1;
+  return [bot === 0 ? 0 : bot - (top - bot) * 0.08, top * 1.15 - bot * 0.15];
+}

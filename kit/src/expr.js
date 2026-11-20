@@ -167,6 +167,7 @@ const CONSTS = { pi: Math.PI, e: Math.E, inf: Infinity };
 
 function fact(n) {
   if (!Number.isInteger(n) || n < 0) throw new Error(`阶乘要非负整数（现在是 ${n}）`);
+  if (n > 170) return Infinity; // 双精度放不下了：不白乘几千次（级数的通项里 (2k+1)! 这种，k 一大每一项都要乘）
   let r = 1; for (let i = 2; i <= n; i++) r *= i; return r;
 }
 function choose(n, k) { if (k < 0 || k > n) return 0; let r = 1; for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i; return r; }
@@ -338,9 +339,10 @@ function run(n, vars, fns = FUNCS) {
     case 'neg': return scale(-1, run(n.a, vars, fns));
     case 'list': return n.items.map((x) => run(x, vars, fns));
     case 'call': {
-      const sp = SPECIAL[n.name];
+      // hasOwn：constructor、toString 这些名字不能顺着原型摸到对象自带的方法
+      const sp = Object.hasOwn(SPECIAL, n.name) ? SPECIAL[n.name] : null;
       if (sp && isForm(n, sp)) return sp.run(n, vars, fns);
-      const f = fns[n.name];
+      const f = Object.hasOwn(fns, n.name) ? fns[n.name] : null;
       if (!f) throw new Error(`没有函数 ${n.name}()`);
       return f(...n.args.map((x) => run(x, vars, fns)));
     }
@@ -431,6 +433,8 @@ function rootsOn(n, vars, fns) {
   const small = 1e-6 * Math.max(1, mags.length ? mags[mags.length >> 1] : 1);
   const out = [];
   const push = (x) => { if (!out.some((r) => Math.abs(r - x) < 1e-7 * Math.max(1, Math.abs(x)))) out.push(Math.abs(x) < 1e-12 ? 0 : x); };
+  // 区间的端点：sin 在 ±π 算出来是 1e-16，不是正好 0，也没有变号可看——函数值够小就算根
+  for (const i of [0, N]) if (Number.isFinite(ys[i]) && ys[i] !== 0 && Math.abs(ys[i]) <= 1e-9 * Math.max(1, mags.length ? mags[mags.length >> 1] : 1)) push(xs[i]);
   for (let i = 0; i <= N; i++) {
     const y = ys[i];
     if (y === 0) { push(xs[i]); continue; }

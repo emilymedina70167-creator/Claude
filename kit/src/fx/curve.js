@@ -3,7 +3,8 @@
 // 泰勒多项式冲出窗口的部分画成一段水平线——画出来的东西是错的。这里把曲线切成连续的几段：
 //   segs   每一段是连续的一条折线（没定义的一段、跳跃、极点都断开）
 //   jumps  有限的跳跃：左右极限，函数值等于哪一边（那边画实心点，另一边空心）
-//   holes  可去间断点（那一点没定义、左右极限相等）：画空心点
+//   holes  可去间断点（那一点没定义、或者另有一个值 value，左右极限相等）：画空心点
+//   error  整条曲线一个点都算不出来时，第一次抛错的原因（式子写错了：要报出来，不能静默空白）
 // 只看得见采到的点：除了等分点，还把窗口里的整点、半整点、π/2 的整数倍放进去（间断点多半在这些地方）。
 
 export const CURVE_MAX_POINTS = 6000;
@@ -30,7 +31,9 @@ function grid(a, b, n) {
 export function sampleCurve(f, a, b, { ySpan, n = 240, maxPoints = CURVE_MAX_POINTS } = {}) {
   const out = { segs: [], jumps: [], holes: [] };
   if (!(b > a) || !Number.isFinite(a) || !Number.isFinite(b)) return out;
-  const g = (x) => { let y; try { y = f(x); } catch { return NaN; } return typeof y === 'number' && Number.isFinite(y) ? y : NaN; };
+  // 抛错的原因留一个：整条曲线一个点都算不出来时带回去（函数名写错、变量没定义、求和项太多……不能静默画成空白）
+  let firstErr = null;
+  const g = (x) => { let y; try { y = f(x); } catch (e) { firstErr ??= String(e?.message || e); return NaN; } return typeof y === 'number' && Number.isFinite(y) ? y : NaN; };
   const span = b - a;
   const xs = grid(a, b, n), ys = xs.map(g);
   if (!(ySpan > 0)) {
@@ -61,8 +64,8 @@ export function sampleCurve(f, a, b, { ySpan, n = 240, maxPoints = CURVE_MAX_POI
     return { x: lo, y: stable && Math.abs(ylo - y2) > TOL ? y2 : ylo, stable };
   }
 
-  // 相邻两点差得大、对半分到头还差得大：找出断点，看是跳跃、极点还是振荡
-  function classify(x0, y0, x1, y1) {
+  // 相邻两点差得大、对半分到头还差得大：找出断点，看是跳跃、一点另有一个值、极点还是振荡。tol：差多少算「不一样」
+  function classify(x0, y0, x1, y1, tol) {
     let lo = x0, ylo = y0, hi = x1, yhi = y1;
     for (let i = 0; i < 40; i++) {
       const m = (lo + hi) / 2, ym = g(m);
@@ -74,15 +77,20 @@ export function sampleCurve(f, a, b, { ySpan, n = 240, maxPoints = CURVE_MAX_POI
     const L1 = g(x - e1), L2 = g(x - e2), R1 = g(x + e1), R2 = g(x + e2);
     if (![L1, L2, R1, R2].every(fin)) return { kind: 'pole' };
     if (Math.max(Math.abs(L2), Math.abs(R2)) > 100 * ySpan) return { kind: 'pole' };
-    if (Math.abs(L1 - L2) > TOL || Math.abs(R1 - R2) > TOL) return { kind: 'osc' };
-    if (Math.abs(L2 - R2) <= TOL) return { kind: 'osc' };
-    const v = g(x), close = TOL * 0.05;
+    if (Math.abs(L1 - L2) > tol || Math.abs(R1 - R2) > tol) return { kind: 'osc' };
+    const v = g(x), close = tol * 0.05;
+    if (Math.abs(L2 - R2) <= tol) {
+      // 左右极限一样：函数在这一点另有一个值（或者没定义）才是可去间断点，否则就是连续的
+      return fin(v) && Math.abs(v - L2) > tol ? { kind: 'spot', x, y: (L2 + R2) / 2, value: v } : { kind: 'osc' };
+    }
     const solid = fin(v) && Math.abs(v - R2) <= close ? 'right' : fin(v) && Math.abs(v - L2) <= close ? 'left' : 'none';
     return { kind: 'jump', x, left: L2, right: R2, solid, ...(solid === 'none' && fin(v) ? { value: v } : {}) };
   }
 
   let ended = null; // 上一段是在哪个边界上停的（紧接着又从同一处开始：可去间断点，或者那一点没定义的跳跃）
-  function walk(x0, y0, x1, y1, depth, bud) {
+  // thr：相邻两点差多少算「大」（要追到底看是不是断点）；tol：断点两边差多少算跳跃。
+  // 一般的地方按窗口的高算（BIG、TOL）；台阶很小的函数（分布函数的一小步）按这一段自己的差算
+  function walk(x0, y0, x1, y1, depth, bud, thr, tol) {
     const f0 = fin(y0), f1 = fin(y1);
     if (!f0 && !f1) { cut(); return; }
     if (f0 && !f1) { const e = edge(x0, y0, x1); emit(e.x, e.y); ended = e; cut(); return; }
@@ -97,23 +105,31 @@ export function sampleCurve(f, a, b, { ySpan, n = 240, maxPoints = CURVE_MAX_POI
       cut(); emit(e.x, e.y); emit(x1, y1);
       return;
     }
-    const dy = Math.abs(y1 - y0);
-    if (depth < (dy > BIG ? JUMP_DEPTH : SMOOTH_DEPTH) && bud.n > 0 && total < maxPoints) {
+    const dy = Math.abs(y1 - y0), big = dy > thr;
+    if (depth < (big ? JUMP_DEPTH : SMOOTH_DEPTH) && bud.n > 0 && total < maxPoints) {
       const m = (x0 + x1) / 2, ym = g(m);
       bud.n--; total++;
-      if (!fin(ym) || dy > BIG || Math.abs(ym - (y0 + y1) / 2) > FLAT) { walk(x0, y0, m, ym, depth + 1, bud); walk(m, ym, x1, y1, depth + 1, bud); return; }
+      if (!fin(ym) || big || Math.abs(ym - (y0 + y1) / 2) > FLAT) { walk(x0, y0, m, ym, depth + 1, bud, thr, tol); walk(m, ym, x1, y1, depth + 1, bud, thr, tol); return; }
       emit(m, ym); emit(x1, y1);
       return;
     }
-    if (dy > BIG && depth >= JUMP_DEPTH) {
-      const j = classify(x0, y0, x1, y1);
+    if (big && depth >= JUMP_DEPTH) {
+      const j = classify(x0, y0, x1, y1, tol);
       if (j.kind === 'jump') {
         // 断点正好在窗口边上：只断开，不画点（边上那半个跳看不出是什么）
         if (j.x <= a + e1 || j.x >= b - e1) { cut(); if (j.x <= a + e1) emit(x1, y1); return; }
         emit(j.x, j.left);
         // 断点上函数另有一个值时，这个点自己也在网格里，两边各认出一次：只记一个
         if (!out.jumps.some((k) => Math.abs(k.x - j.x) < e1)) out.jumps.push({ x: j.x, left: j.left, right: j.right, solid: j.solid, ...('value' in j ? { value: j.value } : {}) });
-        cut(); emit(j.x, j.right); emit(x1, y1);
+        cut(); emit(j.x, j.right);
+        if (x1 - j.x > e1) emit(x1, y1); // x1 就是断点自己（它在网格里）：它的值不进折线
+        return;
+      }
+      if (j.kind === 'spot') {
+        // 一点另有一个值：曲线照样连过去（空心点），那个值单独画一个点，不进折线（不然是一根尖刺）
+        if (!out.holes.some((k) => Math.abs(k.x - j.x) < e1)) out.holes.push({ x: j.x, y: j.y, value: j.value });
+        emit(j.x, j.y);
+        if (x1 - j.x > e1) emit(x1, y1);
         return;
       }
       if (j.kind === 'pole') { cut(); emit(x1, y1); return; }
@@ -122,11 +138,17 @@ export function sampleCurve(f, a, b, { ySpan, n = 240, maxPoints = CURVE_MAX_POI
   }
 
   if (fin(ys[0])) emit(xs[0], ys[0]);
+  const gap = (i) => (i >= 0 && i + 1 < xs.length && fin(ys[i]) && fin(ys[i + 1]) ? Math.abs(ys[i + 1] - ys[i]) : NaN);
   for (let i = 0; i + 1 < xs.length; i++) {
     if (fin(ys[i]) && fin(ys[i + 1])) ended = null;
-    walk(xs[i], ys[i], xs[i + 1], ys[i + 1], 0, { n: PER_INTERVAL });
+    // 这一段比旁边的段跳得多得多：多半是个台阶（哪怕很小）。光滑的曲线相邻几段的差是差不多的
+    const d = gap(i), dp = gap(i - 1), dn = gap(i + 1);
+    const side = Math.min(Number.isNaN(dp) ? Infinity : dp, Number.isNaN(dn) ? Infinity : dn);
+    const suspect = d > 0.002 * ySpan && d <= BIG && side !== Infinity && d > 4 * side + 1e-12;
+    walk(xs[i], ys[i], xs[i + 1], ys[i + 1], 0, { n: PER_INTERVAL }, suspect ? d / 2 : BIG, suspect ? d / 4 : TOL);
   }
   out.segs = out.segs.filter((s) => s.length >= 2);
+  if (!out.segs.length && firstErr) out.error = firstErr;
   return out;
 }
 

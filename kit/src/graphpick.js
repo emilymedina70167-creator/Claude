@@ -15,6 +15,17 @@ export function judgePicks(picked, targets, tol, { scale = [1, 1] } = {}) {
   pairs.sort((a, b) => a[0] - b[0]);
   const usedP = new Set(), usedT = new Set();
   for (const [, i, j] of pairs) { if (usedP.has(i) || usedT.has(j)) continue; usedP.add(i); usedT.add(j); }
+  // 一条线上的点（曲线上、x 轴上）：「先配最近的」有时配不满——点 0.15、−0.2 对目标 0、0.314，
+  // 0.15 先占了 0，−0.2 就没处去了，其实 −0.2 配 0、0.15 配 0.314 都在容差里。能全配上就不该说错：
+  // 排好序从左往右配是配得最多的配法，比「先配最近的」多的时候用它
+  if (!picked.some(Array.isArray) && !targets.some(Array.isArray)) {
+    const ps = picked.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0]), ts = targets.map((v, j) => [v, j]).sort((a, b) => a[0] - b[0]);
+    const mp = new Set(), mt = new Set();
+    for (let i = 0, j = 0; i < ps.length && j < ts.length;) {
+      if (Math.abs(ps[i][0] - ts[j][0]) <= tol + 1e-12) { mp.add(ps[i][1]); mt.add(ts[j][1]); i++; j++; } else if (ps[i][0] < ts[j][0]) i++; else j++;
+    }
+    if (mp.size > usedP.size) { usedP.clear(); usedT.clear(); mp.forEach((i) => usedP.add(i)); mt.forEach((j) => usedT.add(j)); }
+  }
   const hits = [...usedP].sort((a, b) => a - b);
   const extra = picked.map((_, i) => i).filter((i) => !usedP.has(i));
   const missed = targets.length - usedT.size;

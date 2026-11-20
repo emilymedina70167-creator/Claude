@@ -14,7 +14,7 @@ import { isNum } from './expr.js';
 import { parseGraph } from './graphspec.js';
 import { compileWith } from './fx/defs.js';
 import { sampleCurve, labelSpot } from './fx/curve.js';
-import { riemannRects, betweenArea, areaBetween, placeLabels } from './fx/graphgeom.js';
+import { riemannRects, betweenArea, areaBetween, placeLabels, smoothAt, autoRange } from './fx/graphgeom.js';
 import { splitMods, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { sliderText, figureControls, dragHandles } from './plot.js';
@@ -91,7 +91,7 @@ export function createGraph(container, src, opts = {}) {
     return v;
   };
 
-  // y 的范围没写时，按曲线自动取（从 0 开始，留一点头）。有极点时最大最小会被撑到几万：那时按中间 96% 的值取
+  // y 的范围没写时，按曲线自动取（从 0 开始，留一点头；有极点时不被撑到几万，见 fx/graphgeom.js 的 autoRange）
   let yr = yrGiven;
   if (!yr) {
     const ys = [0];
@@ -104,12 +104,7 @@ export function createGraph(container, src, opts = {}) {
         if (c.kind === 'bars' || c.kind === 'dots') { const g = quiet(fnOf(c.f, v, c.param)); for (let k = Math.ceil(c.from(v)); k <= Math.min(c.to(v), c.from(v) + 2000); k++) { const y = g(k); if (!Number.isNaN(y)) ys.push(y); } }
       }
     } catch { /* 画的时候再报错 */ }
-    ys.sort((p, q) => p - q);
-    let bot = ys[0], top = ys[ys.length - 1];
-    const lo = ys[Math.floor(ys.length * 0.02)], hi = ys[Math.min(ys.length - 1, Math.ceil(ys.length * 0.98))];
-    if (top - bot > 20 * (hi - lo) && hi > lo) { bot = Math.min(0, lo - (hi - lo) * 0.5); top = Math.max(0, hi + (hi - lo) * 0.5); }
-    if (top === bot) top = bot + 1;
-    yr = [bot === 0 ? 0 : bot - (top - bot) * 0.08, top * 1.15 - bot * 0.15];
+    yr = autoRange(ys);
   }
 
   const X = (x) => ML + ((x - xr[0]) / (xr[1] - xr[0])) * (W - ML - MR);
@@ -150,7 +145,15 @@ export function createGraph(container, src, opts = {}) {
   }
 
   let lastErr = '';
-  function draw() {
+  // 一帧画得慢（几千项的求和）时：正在拖、正在播的那几帧先画粗的（点少、不加密），手停了 0.2 秒再补一张细的
+  let slow = false, lastEnd = 0, fineTimer = 0, firstDraw = true;
+  const nowMs = () => (globalThis.performance?.now?.() ?? Date.now());
+  // 式子抛错的原因（函数名写错、变量没定义……）：只是那一点没定义（NaN）不算
+  const whyThrows = (fn, x) => { try { fn(x); return null; } catch (e) { return String(e?.message || e); } };
+  function draw({ fine = false } = {}) {
+    const t0 = nowMs();
+    const coarse = !fine && slow && t0 - lastEnd < 400;
+    clearTimeout(fineTimer);
     svg.innerHTML = '';
     cur = null;
     const clip = el('clipPath', { id: clipId }, el('defs', {}));
@@ -179,8 +182,10 @@ export function createGraph(container, src, opts = {}) {
     };
     let spent = 0;
     const sample = (g, lo, hi) => {
-      const r = sampleCurve(g, lo, hi, { ySpan: yr[1] - yr[0], n: spent > FRAME_POINTS ? 120 : 240, maxPoints: Math.max(400, FRAME_POINTS - spent) });
+      const r = sampleCurve(g, lo, hi, coarse ? { ySpan: yr[1] - yr[0], n: 80, maxPoints: 0 } : { ySpan: yr[1] - yr[0], n: spent > FRAME_POINTS ? 120 : 240, maxPoints: Math.max(400, FRAME_POINTS - spent) });
       for (const s of r.segs) spent += s.length;
+      // 整条曲线一个点都算不出来、而且是抛了错：式子写错了，报出来（不静默画成空白）
+      if (r.error) errs.push(r.error);
       return r;
     };
     const path = (seg) => seg.map(([x, y]) => `${X(x).toFixed(1)},${farY(y).toFixed(1)}`).join(' ');
@@ -216,7 +221,7 @@ export function createGraph(container, src, opts = {}) {
                 dot(j.x, j.right, col, j.solid !== 'right');
                 if (j.value !== undefined) dot(j.x, j.value, col, false);
               }
-              for (const h of r.holes) dot(h.x, h.y, col, true);
+              for (const h of r.holes) { dot(h.x, h.y, col, true); if (h.value !== undefined) dot(h.x, h.value, col, false); }
             }
             if (c.mods.label) {
               // 标签挂在曲线上看得见的地方：写了 at= 用它，那里在窗口外就换一处
@@ -228,8 +233,10 @@ export function createGraph(container, src, opts = {}) {
             if (!(hi > lo)) continue;
             const r = betweenArea(fnOf(c.f, v), fnOf(c.g, v), lo, hi);
             if (r.poly.length >= 3) el('polygon', { points: path(r.poly), class: 'g-shade' }, plotG).style.fill = color(c, 'var(--yellow)');
+            else { const why = whyThrows(fnOf(c.f, v), (lo + hi) / 2) || whyThrows(fnOf(c.g, v), (lo + hi) / 2); if (why) errs.push(why); }
           } else if (c.kind === 'riemann') {
             const r = riemannRects(fnOf(c.f, v), c.a(v), c.b(v), c.n(v), c.rule);
+            if (!r.rects.length) { const why = whyThrows(fnOf(c.f, v), (c.a(v) + c.b(v)) / 2); if (why) errs.push(why); }
             const rc = color(c, 'var(--yellow)');
             for (const q of r.rects) {
               const x0 = Math.min(q.x0, q.x1), x1 = Math.max(q.x0, q.x1);
@@ -239,14 +246,15 @@ export function createGraph(container, src, opts = {}) {
             }
           } else if (c.kind === 'tangent') {
             const a = c.at(v), g = quiet(fnOf(c.f, v)), y0 = g(a), k = quiet(fnOf(c.df, v))(a);
-            if (Number.isNaN(y0) || Number.isNaN(k)) continue; // 那一点没定义、不可导：不画
+            if (Number.isNaN(y0) || Number.isNaN(k)) { const why = whyThrows(fnOf(c.f, v), a) || whyThrows(fnOf(c.df, v), a); if (why) errs.push(why); continue; } // 那一点没定义、不可导：不画（式子写错了才报）
+            if (!smoothAt(g, a, k, xr[1] - xr[0])) continue; // 尖点：左右导数不一样，没有切线
             const tc = color(c, 'var(--yellow)');
             const lx = lineThrough(a, y0, k, tc, `g-line${c.mods.dashed ? ' dashed' : ''}`);
             dot(a, y0, tc, false);
             if (c.mods.label && lx !== null) want(lx, y0 + k * (lx - a), c.mods.label, tc, 0, -18);
           } else if (c.kind === 'secant') {
             const a = c.a(v), b = c.b(v), g = quiet(fnOf(c.f, v)), ya = g(a), yb = g(b);
-            if (Number.isNaN(ya) || Number.isNaN(yb) || Math.abs(b - a) < 1e-12) continue;
+            if (Number.isNaN(ya) || Number.isNaN(yb) || Math.abs(b - a) < 1e-12) { const why = whyThrows(fnOf(c.f, v), a) || whyThrows(fnOf(c.f, v), b); if (why) errs.push(why); continue; }
             const sc = color(c, 'var(--pink)');
             const lx = lineThrough(a, ya, (yb - ya) / (b - a), sc, `g-line${c.mods.dashed ? ' dashed' : ''}`);
             dot(a, ya, sc, false); dot(b, yb, sc, false);
@@ -268,6 +276,7 @@ export function createGraph(container, src, opts = {}) {
             const g = quiet(fnOf(c.f, v, c.param)), hl = c.mods.highlight ? fnOf(compile(c.mods.highlight), v, c.param) : null;
             const ps = [];
             for (let k = a; k <= b; k++) { const y = g(k); if (!Number.isNaN(y)) ps.push([k, y]); }
+            if (!ps.length && b >= a) { const why = whyThrows(fnOf(c.f, v, c.param), a); if (why) errs.push(why); }
             if (c.mods.join && ps.length > 1) el('polyline', { points: path(ps), class: 'g-curve thin g-join' }, plotG).style.stroke = col;
             const r = ps.length > 120 ? 2.5 : ps.length > 40 ? 3.5 : 5;
             for (const [k, y] of ps) el('circle', { cx: X(k), cy: farY(y), r, class: `g-seq${hl ? (hl(k) ? ' is-hl' : ' is-dim') : ''}` }, plotG).style.fill = col;
@@ -345,7 +354,11 @@ export function createGraph(container, src, opts = {}) {
       side.querySelector('.r-show').innerHTML = cmds.map((c, i) => (c.kind === 'show' && visible(c) ? `<div data-cmd="${i + 1}">${mdToHtml(fillValues(c.text, v, errs, compile), { inline: true })}</div>` : '')).join('');
     }
     cur = null;
-    if (v) checkGoals(v, ctl.quiet);
+    // 第一次画（还没人动过）就成立的目标不算学生做到：和主讲摆上去的一样，学生挪开再回来才算
+    if (v) checkGoals(v, ctl.quiet || firstDraw, errs);
+    // 目标算不出来的（式子写错了、目标在窗口外点不到）：报出来
+    for (const i of pickIdx) { const ts = targetsOf(cmds[i], v); if (ts instanceof Error) errs.push(ts.message); }
+    firstDraw = false;
     const msg = [...new Set(errs)].join('；');
     if (msg !== lastErr) {
       lastErr = msg;
@@ -353,16 +366,20 @@ export function createGraph(container, src, opts = {}) {
       if (msg) { if (!box) { box = document.createElement('div'); box.className = 'block-error scene-error'; side.appendChild(box); } box.textContent = '图形描述有误：' + msg; } else box?.remove();
     }
     ctl.mark();
+    lastEnd = nowMs();
+    if (coarse) fineTimer = setTimeout(() => draw({ fine: true }), 220);
+    else slow = lastEnd - t0 > 45;
   }
 
   // goal：学生拖到、调到了算做到。主讲用 set / play 摆上去的（quiet）不算：记下来，学生挪开、再自己放回去才算（和 scene 一样）
   const placedByTeacher = new Set();
-  function checkGoals(v, quiet) {
+  function checkGoals(v, quiet, errs = []) {
     for (const i of goalIdx) {
       const c = cmds[i];
       if (state.goalsHit.has(i) || !visible(c)) continue;
       let ok = false;
-      try { ok = c.cond ? !!c.cond(v) : close(c.lhs(v), c.rhs(v), Number(c.mods.tol) || 0.05); } catch { ok = false; }
+      // 目标的式子算不出来（变量没定义、函数名写错）：报写法错误——不然这一关永远过不了，也没人知道为什么
+      try { ok = c.cond ? !!c.cond(v) : close(c.lhs(v), c.rhs(v), Number(c.mods.tol) || 0.05); } catch (e) { ok = false; errs.push(`goal 算不出来：${e?.message || e}`); }
       if (quiet || !ok) { if (quiet && ok) placedByTeacher.add(i); else placedByTeacher.delete(i); continue; }
       if (placedByTeacher.has(i)) continue;
       state.goalsHit.add(i);
@@ -381,7 +398,18 @@ export function createGraph(container, src, opts = {}) {
   const fmt = (p) => (Array.isArray(p) ? `(${p.map((x) => Number(x.toFixed(2))).join(', ')})` : String(Number(p.toFixed(2))));
   const tolOf = (c) => c.tol ?? (xr[1] - xr[0]) * 0.04;
   // 目标算不出来（式子写错了）：报写法错误，不让学生白点
-  const targetsOf = (c) => { try { return c.targets(env()); } catch (e) { return e; } };
+  // 学生点不到的目标也算写错：在窗口外、或者曲线在那里没定义 / 冲出了窗口——不然学生怎么点都是「还差 1 个」
+  const targetsOf = (c, v0) => {
+    try {
+      const v = v0 || env(), ts = c.targets(v);
+      const g = c.on === 'curve' ? quiet(fnOf(c.onF, v)) : null;
+      for (const t of ts) {
+        const [px, py] = c.on === 'free' ? t : [t, c.on === 'curve' ? g(t) : yr[0]];
+        if (!(px >= xr[0] && px <= xr[1]) || Number.isNaN(py) || !(py >= yr[0] && py <= yr[1])) return new Error(`pick 的目标 ${fmt(t)} 学生点不到（${Number.isNaN(py) ? '曲线在那里没有定义' : '不在窗口里'}）：改 x: / y: 的范围，或者改目标`);
+      }
+      return ts;
+    } catch (e) { return e instanceof Error ? e : new Error(String(e)); }
+  };
   function syncPicks() {
     const act = activePick();
     for (const i of pickIdx) {
@@ -429,9 +457,13 @@ export function createGraph(container, src, opts = {}) {
     plotBox.appendChild(row);
   }
   // 点图：加一个点；点在已有的点上（22px 内）是去掉它。把手、拖动不算点
+  let handleTap = false;
   if (pickIdx.length) {
+    svg.addEventListener('pointerdown', (e) => { handleTap = !!e.target.getAttribute?.('data-handle'); }, true);
     svg.addEventListener('click', (e) => {
       const i = activePick();
+      // 这一下是按在把手上的（按下时指针被 svg 接管，click 的目标是 svg 自己，认不出把手）：不算点图
+      if (handleTap) { handleTap = false; return; }
       if (i === undefined || e.target.getAttribute?.('data-handle') || svg.classList.contains('dragging')) return;
       const c = cmds[i], st = state.picks.get(i);
       const r = svg.getBoundingClientRect(), k = W / r.width;
