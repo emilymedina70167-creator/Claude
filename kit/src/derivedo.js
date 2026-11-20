@@ -119,7 +119,8 @@ const flat = (v) => (Array.isArray(v) ? v.flat(Infinity) : [v]);
 function equal(a, b) {
   if (shape(a) !== shape(b)) return false;
   const x = flat(a), y = flat(b);
-  return x.length === y.length && x.every((n, i) => Math.abs(n - y[i]) <= 1e-7 * Math.max(1, Math.abs(n), Math.abs(y[i])));
+  // 有一边不是有限数（inf*A、1/0*A）就不相等（dr-final-fix 第 1 条）
+  return x.length === y.length && x.every((n, i) => Number.isFinite(n) && Number.isFinite(y[i]) && Math.abs(n - y[i]) <= 1e-7 * Math.max(1, Math.abs(n), Math.abs(y[i])));
 }
 // 1×1 矩阵当一个数（βᵀα 算出来是 [[5]]）
 const scalarize = (v) => (isMat(v) && v.length === 1 && v[0].length === 1 ? v[0][0] : isVec(v) && v.length === 1 ? v[0] : v);
@@ -177,7 +178,12 @@ function reachedGoal(spec, read, kind) {
     const g = readLine(spec.goal, { kind });
     // goal: ∞ / 不存在（dr-calc-fix 第 5 条）
     if (kind === 'limit' && specialKind(g.src)) return !!specialKind(read.src) && sameKind(specialKind(g.src), specialKind(read.src)) !== false;
-    if (kind === 'limit') return !read.vars.length && !g.vars.length && Math.abs(evalNum(read.ast) - evalNum(g.ast)) <= 1e-9 * Math.max(1, Math.abs(evalNum(g.ast)));
+    if (kind === 'limit') {
+      if (read.vars.length || g.vars.length) return false;
+      const a = evalNum(read.ast), b = evalNum(g.ast);
+      // ∞ 只走上面按种类比的那条路：算出来不是有限数的不当推到了
+      return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));
+    }
     if (kind === 'antideriv' && /\bint\(/.test(read.src)) return false;
     const r = compareFx(g.ast, read.ast, { domain: spec.domain.length ? spec.domain : [{ ...DEFAULT_RANGE, name: 'x' }], upToConst: kind === 'antideriv' });
     return r.ok === true;

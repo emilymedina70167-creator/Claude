@@ -196,13 +196,13 @@ test('predict：哪个都没对上 → why「不对」、keys 只有 x1；第二
   assert.equal(teachFor(p, ['x2'], r2.items).key, 'x2');
 });
 
-test('predict：没写、读不懂 → false', () => {
+test('predict：没写 → false；读不懂 → 待核 null（dr-final-fix 第 4 条：读不懂不是答错）', () => {
   const p = LRU();
   const r = judgeMachine(p, { expects: { x2: '2' } });
   assert.equal(item(r, 'x1').ok, false);
   assert.match(item(r, 'x1').why, /没写缺页次数/);
   const u = judgeMachine(p, { expects: { x1: '十', x2: '2' } });
-  assert.equal(item(u, 'x1').ok, false);
+  assert.equal(item(u, 'x1').ok, null);
   assert.match(item(u, 'x1').why, /读不懂/);
 });
 

@@ -25,7 +25,8 @@ export function blankCells(v) {
 
 // 格子里写的先全角转半角（iPad 中文键盘的 １/２），再照 anscheck 的 readCell 读
 const readCellHalf = (x) => readCell(typeof x === 'string' ? halfWidth(x) : x);
-const readable = (x) => { try { readCellHalf(x); return true; } catch { return false; } };
+// 1e999 读得出来却是 Infinity：和 cellNum 一样算读不懂（交之前就挡住）
+const readable = (x) => { try { return Number.isFinite(Number(readCellHalf(x))); } catch { return false; } };
 
 /**
  * 交之前还差什么（构造题、判假的反例）：没填的格、读不懂的格（「1/」这种）、空着的式子框。'' 是能交了。
@@ -43,11 +44,18 @@ export function notReady(probe, answer = {}) {
 }
 
 // 学生格子里写的（'1/2'、'√2'、数）→ 数
-const cellNum = (x) => (Array.isArray(x) ? x.map(cellNum) : typeof x === 'number' ? x : Number(readCellHalf(x)));
+// 读出来不是有限数（1e999）算「写的不是数」：抛（调用的地方当写的不是数）
+const cellNum = (x) => {
+  if (Array.isArray(x)) return x.map(cellNum);
+  const v = typeof x === 'number' ? x : Number(readCellHalf(x));
+  if (!Number.isFinite(v)) throw new Error('不是有限数');
+  return v;
+};
 
 const close = (a, b) => {
   if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => close(x, b[i]));
-  return typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
+  // 有一边不是有限数（∞、-∞、1/0、10^400、NaN）就不相等（dr-final-fix 第 1 条）
+  return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
 };
 
 /** 学生写的式子（省乘号、上标、希腊字母都认）在 vars 上算，和标准式子比值 */
@@ -225,7 +233,8 @@ function predictItems(probe, answer = {}, base = {}) {
     if (!s) return { id: e.id, ok: false, why: `没写${e.label}`, keys: [e.id] };
     const m = valueMatch(s, right);
     if (m === true) return { id: e.id, ok: true, why: '' };
-    if (m === null) return { id: e.id, ok: false, why: unreadWhy(right), keys: [e.id] };
+    // 判的时候还读不懂（交之前没挡住的）：读不懂不是答错，待核（dr-final-fix 第 4 条）
+    if (m === null) return { id: e.id, ok: null, why: `${unreadWhy(right)}（页面读不懂，待核）` };
     const it = { id: e.id, ok: false, why: '' };
     const hits = diagnosesOf(probe, e, right, rv.vars, { names, allVariants }).filter((d) => valueMatch(s, d.value) === true);
     if (hits.length > 1) {
@@ -474,7 +483,35 @@ function resultItem(probe, answer = {}, base = {}) {
   const s = String(answer.result ?? '').trim();
   if (!s) return { id: 'result', ok: false, why: '没写最后的值' };
   const m = valueMatch(s, right);
-  return m === true ? { id: 'result', ok: true, why: '' } : { id: 'result', ok: false, why: m === null ? unreadWhy(right) : '最后的值不对' };
+  // 判的时候还读不懂（交之前没挡住的）：待核，不当答错（dr-final-fix 第 4 条）
+  if (m === null) return { id: 'result', ok: null, why: `${unreadWhy(right)}（页面读不懂，待核）` };
+  return m === true ? { id: 'result', ok: true, why: '' } : { id: 'result', ok: false, why: '最后的值不对' };
+}
+
+// solve / calc 的 result 对的值（交之前每打一个字都要查，算一次存着）；算不了 undefined（不挡，判的时候待核）
+const RESULT_RIGHT = new WeakMap();
+function resultRight(probe, base) {
+  const hit = RESULT_RIGHT.get(probe);
+  if (hit && hit.base === base) return hit.right;
+  let right;
+  try {
+    const rv = runVars(probe, {}, base);
+    if (!rv.error && !tiedIn(probe, [probe.result], rv.ties)) right = expectValue(probe.result, rv.vars, runNames(probe));
+  } catch { right = undefined; }
+  RESULT_RIGHT.set(probe, { base, right });
+  return right;
+}
+
+/**
+ * solve / calc 的「最后的值」交之前读不读得懂（和 predict 的 expectProblems 一样照对的值的样子查：带了单位、
+ * 一串数里夹了字）。读得懂、没写、页面算不出对的值都是 ''（没写另由画面说）
+ */
+export function resultProblem(probe, result, base = {}) {
+  if (!probe?.result) return '';
+  const s = String(result ?? '').trim();
+  if (!s) return '';
+  const right = resultRight(probe, base);
+  return right === undefined ? '' : readProblem(s, right, '最后的值');
 }
 
 // —— 英语（计划 4 Task 6）：parse、rewrite、errfind、discriminate 的两个按钮页面判；translate 照 recall 全交页面里的 Claude ——

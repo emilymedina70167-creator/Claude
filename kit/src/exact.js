@@ -63,6 +63,7 @@ const ZERO = new Q(0n), ONE = new Q(1n);
 
 // 连分数：分母不超过一百万、误差小到只可能是浮点误差时，就是原来那个分数
 function smallFraction(x) {
+  if (!Number.isFinite(x)) return null; // ∞、NaN 没有分数
   let h0 = 1n, h1 = 0n, k0 = 0n, k1 = 1n;
   let y = x;
   for (let i = 0; i < 40; i++) {

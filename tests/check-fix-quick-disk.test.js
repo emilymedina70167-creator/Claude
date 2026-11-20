@@ -10,6 +10,8 @@ import { judgeMachine } from '../kit/src/check/judge.js';
 
 const P = (type, src) => { const r = parseProbe(type, src.trim()); if (r.error) throw new Error(r.error); return r.probe; };
 const seq = (s) => s.split(' ').map((x) => Number(x.replace(/′/g, '')));
+// 正确的那一遍交的序列带撇号（dr-final-fix 第 3 条）：49′ 是字 '49′'，别的是数；错法那一遍只有值（照旧 seq）
+const mseq = (s) => s.split(' ').map((x) => (x.includes('′') ? x : Number(x)));
 const row = (s) => s.split(' ');
 const ARR = "49 38 65 97 76 13 27 49′";
 
@@ -17,11 +19,11 @@ const ARR = "49 38 65 97 76 13 27 49′";
 
 test('快排 round#：一层划分做完；pass# 照旧是第几次划分', () => {
   const v = measure('sort', { algo: 'quick', array: ARR }).values;
-  assert.deepEqual(v.round1, seq('27 38 13 49 76 97 65 49′'));
-  assert.deepEqual(v.round2, seq('13 27 38 49 49′ 65 76 97'));
+  assert.deepEqual(v.round1, mseq('27 38 13 49 76 97 65 49′'));
+  assert.deepEqual(v.round2, mseq('13 27 38 49 49′ 65 76 97'));
   assert.equal(v.rounds, 3); // 第 3 趟只剩 [49′ 65] 那一个子表
   // 第 2 次划分只划分了左边的子表
-  assert.deepEqual(v.pass2, seq('13 27 38 49 76 97 65 49′'));
+  assert.deepEqual(v.pass2, mseq('13 27 38 49 76 97 65 49′'));
   assert.equal(v.passes, 4);
   assert.ok(MEASURES.sort.includes('rounds') && MEASURES.sort.includes('round#'));
   // 别的排序不交 rounds

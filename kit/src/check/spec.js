@@ -179,8 +179,15 @@ function parseSlots(src) {
 
 const NUM_MARK = /^-?\d+(?:\.\d+)?['’′_]*$/;
 const stripBrackets = (raw) => String(raw ?? '').trim().replace(/^\[([\s\S]*)\]$/, '$1').trim();
+// 一串里的分隔：空格、逗号、顿号、分号，还有箭头（dr-final-fix 第 2 条：调度、磁盘的先后学生最自然的写法是 P1→P3→P2、150→160）。
+// - 不在这里：数的序列里 - 是负号（150-160 交之前照旧挡），只有字的序列（进程名）另认 - —（normTokens 的 splitDashes）
+const SEQ_SEP = /[\s,，、;；]+|->|=>|[→⇒>]/;
+export const splitSeq = (s) => String(s ?? '').split(SEQ_SEP).filter(Boolean);
+// 字的序列（有字母、汉字的词）：P1-P3-P2、P1 — P3 的 - — – 也当分隔；全是数的不拆（-5 是负数）
+const WORDY = /[A-Za-z一-龥]/;
+const splitDashes = (toks) => (toks.some((t) => WORDY.test(t)) ? toks.flatMap((t) => t.split(/[-—–]+/)).filter(Boolean) : toks);
 // 一排数、进程表读之前先全角转半角、去掉末尾的句号逗号（values.js 的 cleanInput：2 5 8。、４９ ３８）
-export const seqTokens = (raw) => stripBrackets(cleanInput(raw)).split(/[\s,，、;；]+/).filter(Boolean);
+export const seqTokens = (raw) => splitSeq(stripBrackets(cleanInput(raw)));
 const procEntries = (raw) => stripBrackets(cleanInput(raw)).split(/[;；\n]+|,(?=\s*[A-Za-z一-龥])/).map((x) => x.trim()).filter(Boolean);
 
 /**
@@ -670,7 +677,8 @@ export function withDefaults(vars, slots = []) {
 
 const close = (a, b) => {
   if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => close(x, b[i]));
-  return typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
+  // 有一边不是有限数（∞、-∞、1/0、10^400、NaN）就不相等（dr-final-fix 第 1 条）
+  return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
 };
 const toNum = (x) => (Array.isArray(x) ? x.map(toNum) : Number(x));
 
@@ -751,20 +759,37 @@ export function runVars(probe, slotValues = {}, base = {}) {
  * 所以 49 49、49 49'、49 49’、49 49′ 是一个意思
  */
 export function normTokens(v) {
-  const s = (Array.isArray(v) ? v.flat(Infinity) : [v]).map((x) => String(x ?? '')).join(' ');
-  let toks = s.replace(/[[\]()（）【】"“”「」]/g, ' ').split(/[\s,，、;；]+/).filter(Boolean).map((t) => t.replace(/['’′_]/g, '′').toLowerCase());
+  let toks = rawTokens(v);
   if (toks.length && toks.every((t) => NUM_MARK.test(t))) {
     toks = markDuplicates(toks.join(' ')).text.split(' ').map((t) => t.replace(/^-?\d+(?:\.\d+)?/, (x) => String(Number(x))));
   }
   return toks;
 }
+// 切好、撇号统一成 ′ 的词（还没补撇号）
+function rawTokens(v) {
+  const s = (Array.isArray(v) ? v.flat(Infinity) : [v]).map((x) => String(x ?? '')).join(' ');
+  return splitDashes(splitSeq(s.replace(/[[\]()（）【】"“”「」]/g, ' '))).map((t) => t.replace(/['’′_]/g, '′').toLowerCase());
+}
 const sameToks = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 const sorted = (a) => [...a].sort();
+// 写没写撇号：数后面跟着 ′（字的词不算：P1′ 不是相同的数）
+const wroteMarks = (v) => rawTokens(v).some((t) => NUM_MARK.test(t) && t.endsWith('′'));
+const unmark = (t) => (NUM_MARK.test(t) ? t.replace(/′+$/, '') : t);
+/**
+ * 两串一样不一样（dr-final-fix 第 3 条，相同的数）：有一边一个撇号都没写（学生没标，或者那一串本来没有相同的数）→ 只比数；
+ * 两边都写了撇号 → 连撇号的位置一起比（2 5′ 5 8 9 和 2 5 5′ 8 9 不一样）。set：先后不论
+ */
+export function sameSeq(a, b, { set = false } = {}) {
+  let x = normTokens(a), y = normTokens(b);
+  if (!wroteMarks(a) || !wroteMarks(b)) { x = x.map(unmark); y = y.map(unmark); }
+  if (set) { x = sorted(x); y = sorted(y); }
+  return sameToks(x, y);
+}
 const hasStr = (v) => (Array.isArray(v) ? v.some(hasStr) : typeof v === 'string');
 /** 两个值一样不一样：都是数（或数组）照浮点比，有字的照 normTokens 比（先后算数） */
 export function sameValue(a, b) {
   if (!hasStr(a) && !hasStr(b)) { try { return close(toNum(a), toNum(b)); } catch { return false; } }
-  return sameToks(normTokens(a), normTokens(b));
+  return sameSeq(a, b);
 }
 
 const QUOTED = /^(?:"[^"]*"|“[^”]*”|「[^」]*」)$/;
@@ -803,10 +828,10 @@ function condOk(text, scope, values, kinds, runNames) {
     return compile(runRefs(side, runNames))(scope);
   };
   if (sp.op === 'in') {
-    const want = sorted(normTokens(val(sp.lhs)));
+    const want = val(sp.lhs);
     const pool = val(sp.rhs);
     const list = Array.isArray(pool) ? pool : String(pool ?? '').split('|');
-    return list.some((x) => sameToks(sorted(normTokens(x)), want));
+    return list.some((x) => sameSeq(x, want, { set: true }));
   }
   const both = SIMPLE.test(sp.lhs) && SIMPLE.test(sp.rhs);
   // 一串（r.flipped、r.victims、r.final）和一个数比：close 永远不等，r.flipped != 0 会一直算满足——不静默，报写法
@@ -826,7 +851,7 @@ function condOk(text, scope, values, kinds, runNames) {
     const str = quoted || isStrSlot(sp.lhs) || isStrSlot(sp.rhs);
     if (!quoted && (touches(sp.lhs) || touches(sp.rhs))) mixed(a, b);
     const asText = str || hasStr(a) || hasStr(b);
-    return (asText ? sameToks(normTokens(a), normTokens(b)) : close(toNum(a), toNum(b))) === (sp.op === '==');
+    return (asText ? sameSeq(a, b) : close(toNum(a), toNum(b))) === (sp.op === '==');
   }
   if (sp.op === '==' || sp.op === '!=') {
     const [cond] = parseConditions(runRefs(text, runNames));

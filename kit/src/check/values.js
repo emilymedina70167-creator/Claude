@@ -3,11 +3,14 @@
 //     不一样的小数按学生写出来的位数四舍五入比，要至少 2 位小数、而且至少 3 位有效数字（16/3 写 5.33 对、5.3 不对；
 //     0.0533 写 5% 不对、5.33% 对；0.004 写 0.00 不对）；百分数换成小数以后数小数位数（53.33% 是 4 位），有效数字照写出来的数
 //   - 复杂度：O(nlogn)、O(n log₂n)、O(nlgn)、O(n log n) 一样；O(n^2)、O(n²)、O(n*n) 一样
-//   - 序列、字：照 spec.js 的 normTokens（不管空格逗号括号大小写撇号，相同的数后出现的记成 49′）
+//   - 序列、字：照 spec.js 的 normTokens（不管空格逗号括号大小写，箭头 → -> ⇒ > 也是分隔，字的序列另认 - —；相同的数后出现的记成 49′）；
+//     撇号照 sameSeq：学生一个撇号都没写只比数，写了连撇号的位置一起比（引擎交的 final、pass#、round# 带撇号）
 // 读不懂的是 null：调用方写「读不懂」判没过（格式不对本来在交之前就挡住了），不当成过。
 //   - 读之前先 cleanInput：全角转半角（NFKC：iPad 中文键盘打出来的 ０.６、3／5），去掉末尾的 。.，,；;（0.6。、12,、2 5 8。）；
 //     交之前（expectProblems、slotProblems）和判的时候用同一个，交之前挡得住的判的时候也读得懂
-import { normTokens } from './spec.js';
+import { normTokens, sameSeq } from './spec.js';
+import { normalizeFormula } from '../formula.js';
+import { evaluate } from '../expr.js';
 
 const SUP_RUN = /[⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ]+/g;
 const SUP_OF = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', 'ⁿ': 'n' };
@@ -26,7 +29,8 @@ export function cleanInput(text) {
   return t || s;
 }
 
-const exactly = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+// 有一边不是有限数就不相等（dr-final-fix 第 1 条）
+const exactly = (a, b) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
 
 // 学生写的数：{ v: 值, digits: 小数位数（百分数换成小数以后数）, sig: 有效数字几位, frac: 是不是分数 }；读不懂 null
 function readNum(student) {
@@ -40,15 +44,41 @@ function readNum(student) {
   return null;
 }
 
+// 数读不出来时的另外几种写法（dr-final-fix 第 4 条：地址、Cache、子网的答案本来就是十六进制；高数的最后结果多是 π/4、e^2）：
+//   十六进制 0x3A3C、3A3CH、3a3ch；二进制 0b1011、1011B；1e5 这样的科学计数；别的照计划 3 的读法（formula.js 的
+//   normalizeFormula(…, { real: true })，弧度）读成式子再算：π/4、e^2、ln 2、√2/2、2^10、1/√2。
+// 回 { v }（v 可能不是有限数：1/0、10^400——读得懂，判的时候不算对）；读不懂 null。
+// 两个数之间只隔着空格的（2 3）、两个小数点的（5.3.3）不当成乘：那是写了一串，不是一个数；带单位的（200ns、1KB）式子里不认识那几个字母，读不懂
+const HEX = /^(?:0x([0-9a-f]+)|([0-9a-f]+)h)$/i;
+const BIN = /^(?:0b([01]+)|([01]+)b)$/i;
+const SCI = /^-?\d+(?:\.\d+)?e[+-]?\d+$/i;
+function readOther(student) {
+  const s = cleanInput(student);
+  const t = s.replace(/\s+/g, '');
+  if (!t) return null;
+  let m;
+  if ((m = BIN.exec(t))) return { v: parseInt(m[1] ?? m[2], 2) };
+  if ((m = HEX.exec(t))) return { v: parseInt(m[1] ?? m[2], 16) };
+  if (SCI.test(t)) return { v: Number(t) };
+  if (/\d\s+\d/.test(s) || /\d*\.\d*\./.test(t)) return null; // 5.3.3 也不读成 5.3 × .3
+  try {
+    const v = evaluate(normalizeFormula(s, { real: true }), {});
+    return typeof v === 'number' && !Number.isNaN(v) ? { v } : null;
+  } catch { return null; }
+}
+
 /**
  * 学生写的一个数（字）和算出来的值（数）比：true / false；读不懂 null。
  * 一模一样（相对 1e-9 以内）的总是对；分数只认一模一样；小数、百分数要至少 2 位小数、至少 3 位有效数字，
- * 按写出来的位数四舍五入以后等于对的值才对
+ * 按写出来的位数四舍五入以后等于对的值才对。十六进制、二进制、式子（readOther）只认一模一样（相对 1e-9），算出来不是有限数的不对
  */
 export function numMatch(student, value) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   const r = readNum(student);
-  if (!r || !Number.isFinite(r.v)) return null;
+  if (!r || !Number.isFinite(r.v)) {
+    const o = readOther(student);
+    return o ? exactly(o.v, value) : null;
+  }
   if (exactly(r.v, value)) return true;
   if (r.frac || r.digits < 2 || r.sig < 3) return false;
   // 四舍五入到 digits 位等于学生写的 ⇔ 两个数差不超过半个最小位（正好在一半上两种舍法都认）
@@ -109,9 +139,7 @@ const looksBigO = (v) => typeof v === 'string' && /^\s*[oOΘθ]\s*[(（]/.test(v
 /** 两个序列一样不一样（normTokens 以后）；set：先后不论 */
 const cleanSide = (v) => (typeof v === 'string' ? cleanInput(v) : v);
 export function seqMatch(a, b, { set = false } = {}) {
-  let x = normTokens(cleanSide(a)), y = normTokens(cleanSide(b));
-  if (set) { x = [...x].sort(); y = [...y].sort(); }
-  return x.length === y.length && x.every((t, i) => t === y[i]);
+  return sameSeq(cleanSide(a), cleanSide(b), { set });
 }
 
 /**
@@ -140,7 +168,7 @@ export function readProblem(student, value, label = '') {
   const s = cleanInput(student);
   if (!s) return '';
   const name = `「${label}」`;
-  if (typeof value === 'number') return readNum(s) ? '' : `${name}只写数（分数、小数、百分数），不写单位`;
+  if (typeof value === 'number') return readNum(s) || readOther(s) ? '' : `${name}只写数（分数、小数、百分数），不写单位`;
   if (looksBigO(value)) return bigO(s) !== null ? '' : `${name}写成 O(n^2) 这样`;
   if (numSeq(value)) return normTokens(s).every((x) => NUM_TOK.test(x)) ? '' : `${name}写一串数，用空格或逗号隔开`;
   return '';

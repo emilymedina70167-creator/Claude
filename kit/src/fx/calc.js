@@ -99,7 +99,10 @@ export function valueKind(src, scope = {}) {
 }
 const KIND_TEXT = { inf: '∞', '+inf': '+∞', '-inf': '−∞', none: '不存在', div: '发散' };
 const kindText = (k) => (k.kind === 'finite' ? showNum(k.value) : KIND_TEXT[k.kind] || '?');
-const sameNum = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+// 有一边不是有限数就不相等（dr-final-fix 第 1 条）；∞ 只按种类（kind）比，不走这两个
+const sameNum = (a, b) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+// 页面算的 a 和外部写的 b 差不多吗（相对 ref，默认 b）：自检、判有限的值用
+const near = (a, b, tol, ref = b) => Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(ref) && Math.abs(a - b) <= tol * Math.max(1, Math.abs(ref));
 
 // 学生写的 x 的式子在 x 上的函数
 // （走 fxEval：of= 里写了变限积分 int(g, t, 0, x) 也能求值）
@@ -165,7 +168,7 @@ export function calcSelfCheck(spec, { budget = PAGE_BUDGET } = {}) {
           // f⁽ᵏ⁾(a)：一个数
           const v = derivAt(c, spec.scope), w = valueKind(spec.expected, spec.scope);
           if (v === null) hints.push('页面算不出这一点的导数');
-          else if (w.kind !== 'finite' || Math.abs(v - w.value) > 1e-6 * Math.max(1, Math.abs(v))) errors.push(`answer: 是 ${kindText(w)}，页面算这一点的导数得 ${showNum(v)}`);
+          else if (w.kind !== 'finite' || !near(v, w.value, 1e-6, v)) errors.push(`answer: 是 ${kindText(w)}，页面算这一点的导数得 ${showNum(v)}`);
           break;
         }
         if (c.order === 'n') {
@@ -192,7 +195,7 @@ export function calcSelfCheck(spec, { budget = PAGE_BUDGET } = {}) {
       case 'integral': {
         const want = valueKind(spec.expected, spec.scope);
         const r = numIntegral(fn(c.ofAst, c.x, spec.scope), boundOf(c.from), boundOf(c.to));
-        if (r.ok === true && want.kind === 'finite' && !sameNum(r.value, want.value) && Math.abs(r.value - want.value) > 1e-6 * Math.max(1, Math.abs(want.value))) errors.push(`answer: 是 ${kindText(want)}，页面算这个积分得 ${showNum(r.value)}`);
+        if (r.ok === true && want.kind === 'finite' && !sameNum(r.value, want.value) && !near(r.value, want.value, 1e-6)) errors.push(`answer: 是 ${kindText(want)}，页面算这个积分得 ${showNum(r.value)}`);
         else if (r.ok === true && want.kind === 'div') errors.push(`answer: 写的是发散，页面算这个积分收敛到 ${showNum(r.value)}`);
         else if (r.ok !== true) hints.push(`页面核不了这个积分（${r.why}）`);
         break;
@@ -204,7 +207,7 @@ export function calcSelfCheck(spec, { budget = PAGE_BUDGET } = {}) {
         const r = seq ? numLimit(fn(c.ofAst, 'n', spec.scope), '+inf') : numLimit(fn(c.ofAst, c.x, spec.scope), atOf(c.at), { side: c.side === '+' ? '+' : c.side === '-' ? '-' : 'both' });
         if (r.kind === null) { hints.push(`页面核不了这个极限（${r.why}）`); break; }
         const got = r.kind === 'finite' ? { kind: 'finite', value: r.value } : { kind: r.kind };
-        if (got.kind === want.kind) { if (got.kind === 'finite' && Math.abs(got.value - want.value) > 1e-6 * Math.max(1, Math.abs(want.value))) errors.push(`answer: 是 ${kindText(want)}，页面算这个极限得 ${kindText(got)}`); }
+        if (got.kind === want.kind) { if (got.kind === 'finite' && !near(got.value, want.value, 1e-6)) errors.push(`answer: 是 ${kindText(want)}，页面算这个极限得 ${kindText(got)}`); }
         else if (want.kind === 'inf' && (got.kind === '+inf' || got.kind === '-inf')) { hints.push(`页面算出来是 ${kindText(got)}，answer: 写 ${got.kind} 更准确`); spec.trueKind = got.kind; }
         else errors.push(`answer: 是 ${kindText(want)}，页面算这个极限得 ${kindText(got)}`);
         break;
@@ -231,7 +234,7 @@ export function calcSelfCheck(spec, { budget = PAGE_BUDGET } = {}) {
         const [ylo, yhi] = c.yRange.map((t) => { const a = /^[+-]?inf$|^∞$/.test(t.trim()) ? boundOf(t) : null; const ast = a === null ? parse(t) : null; return (x) => (a !== null ? a : fxEval(ast, { ...base, x })); });
         const r = numIntegral2((x, y) => fxEval(c.ofAst, { ...base, x, y }), [x0, x1], [ylo, yhi]);
         if (r.ok !== true) hints.push(`页面核不了这个二重积分（${r.why}）`);
-        else if (want.kind !== 'finite' || Math.abs(r.value - want.value) > 1e-6 * Math.max(1, Math.abs(want.value))) errors.push(`answer: 是 ${kindText(want)}，页面算这个二重积分得 ${showNum(r.value)}`);
+        else if (want.kind !== 'finite' || !near(r.value, want.value, 1e-6)) errors.push(`answer: 是 ${kindText(want)}，页面算这个二重积分得 ${showNum(r.value)}`);
         break;
       }
       case 'sum': {
@@ -240,7 +243,7 @@ export function calcSelfCheck(spec, { budget = PAGE_BUDGET } = {}) {
           const r = seriesAt(c, {}, spec.scope);
           const want = valueKind(spec.expected, spec.scope);
           if (r === null) hints.push('级数加到 5000 项还没收敛，页面核不了');
-          else if (want.kind !== 'finite' || Math.abs(r - want.value) > 1e-6 * Math.max(1, Math.abs(want.value))) errors.push(`answer: 是 ${kindText(want)}，页面加这个级数得 ${showNum(r)}`);
+          else if (want.kind !== 'finite' || !near(r, want.value, 1e-6)) errors.push(`answer: 是 ${kindText(want)}，页面加这个级数得 ${showNum(r)}`);
           break;
         }
         // 和函数：在取的点上直接加，和 answer: 比
@@ -250,7 +253,7 @@ export function calcSelfCheck(spec, { budget = PAGE_BUDGET } = {}) {
           if (r === null) continue;
           n++;
           const w = fxEval(ans, { ...floatScope(spec.scope), ...pt });
-          if (!(Math.abs(r - w) <= 1e-7 * Math.max(1, Math.abs(r)))) { bad = { pt, r, w }; break; }
+          if (!near(w, r, 1e-7, r)) { bad = { pt, r, w }; break; }
         }
         if (bad) errors.push(`answer: 和级数对不上：x = ${showNum(bad.pt.x)} 时级数加起来是 ${showNum(bad.r)}，answer 得 ${showNum(bad.w)}`);
         else if (n < 6) hints.push('级数在取的点上加不收敛，页面核不了（formula: x in (…) 给一个收敛域里面的范围）');
@@ -466,7 +469,7 @@ function judgeValue(kind, want, got, trueKind = null, gotTeX = null) {
   const right = (msg = '') => ({ ok: true, msg, note: msg });
   const wrote = gotTeX || kindText(got); // 学生写 π/2 就说 π/2，不说 1.571（dr-calc-fix）
   const wrong = () => ({ ok: false, msg: `不对：你写的是 $${wrote}$。`, note: `写了 ${kindText(got)}，答案是 ${kindText(want)}` });
-  if (want.kind === 'finite') return got.kind === 'finite' && Math.abs(got.value - want.value) <= 1e-9 * Math.max(1, Math.abs(want.value)) ? right() : wrong();
+  if (want.kind === 'finite') return got.kind === 'finite' && near(got.value, want.value, 1e-9) ? right() : wrong();
   if (want.kind === got.kind) return right();
   if (kind === 'limit') {
     if ((want.kind === '+inf' || want.kind === '-inf') && got.kind === 'inf') return right(`写 ${KIND_TEXT[want.kind]} 更准确`);

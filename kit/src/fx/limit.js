@@ -64,6 +64,8 @@ function oneSide(g) {
   if (dA && dA === dB) return { kind: dA > 0 ? '+inf' : '-inf' };
   if (A.got < 6 || B.got < 5) return { kind: null, why: '在这一点附近算不出值' };
   const a = extrapolate(A.hs, A.ys), b = extrapolate(B.hs, B.ys);
+  // 外推出来不是有限数（溢出）：不拿 ∞ 的容差去比（dr-final-fix 第 1 条）
+  if (!Number.isFinite(a.value) || !Number.isFinite(b.value)) return { kind: null, why: '算不稳（外推出来不是有限数）' };
   const scale = Math.max(1, Math.abs(a.value));
   if (!(a.err <= TOL * scale && b.err <= TOL * scale)) return { kind: null, why: '算不稳（振荡，或者收敛得太慢）' };
   if (Math.abs(a.value - b.value) > AGREE * scale) return { kind: null, why: '两种步长算出来的不一样（可能在振荡）' };
@@ -91,6 +93,7 @@ export function numLimit(f, a, { side = 'both' } = {}) {
   const [p, q] = rs;
   if (p.kind === null || q.kind === null) return { kind: null, why: (p.kind === null ? p : q).why };
   if (p.kind === 'finite' && q.kind === 'finite') {
+    if (!Number.isFinite(p.value) || !Number.isFinite(q.value)) return { kind: null, why: '算不稳（算出来不是有限数）' };
     const scale = Math.max(1, Math.abs(p.value), Math.abs(q.value));
     const gap = Math.abs(p.value - q.value);
     if (gap <= AGREE * scale) return { kind: 'finite', value: (p.value + q.value) / 2, err: Math.max(p.err, q.err, gap) };
