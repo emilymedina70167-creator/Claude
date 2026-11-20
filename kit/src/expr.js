@@ -9,6 +9,7 @@
 // 向量是列向量：a' 是一行（1×n 矩阵），a'*b 是一个数，a*b' 是外积（n×n 矩阵）。exact.js 用同样的规则。
 
 import { DIST } from './fx/special.js';
+import { numIntegral } from './fx/integral.js';
 const FUNCS = {
   det: (M) => det(asMat(M)),
   inv: (M) => inv(asMat(M)),
@@ -334,6 +335,8 @@ function run(n, vars, fns = FUNCS) {
     case 'neg': return scale(-1, run(n.a, vars, fns));
     case 'list': return n.items.map((x) => run(x, vars, fns));
     case 'call': {
+      const sp = SPECIAL[n.name];
+      if (sp && isForm(n, sp)) return sp.run(n, vars, fns);
       const f = fns[n.name];
       if (!f) throw new Error(`没有函数 ${n.name}()`);
       return f(...n.args.map((x) => run(x, vars, fns)));
@@ -358,6 +361,107 @@ function run(n, vars, fns = FUNCS) {
   }
   throw new Error('表达式错误');
 }
+
+// —— 特殊形式：参数里有一个「绑定的字母」，后面的式子要对它的每个取值各算一遍，不能像普通函数那样先把参数算好 ——
+//   sum(k, a, b, 式子)、prod、maxof、minof：整数 k 从 a 到 b
+//   int(式子, t, a, b)：数值定积分；maxon / minon(式子, x, a, b)：区间上的最值；roots(式子, x, a, b)：区间上的全部实根（向量）
+// 只有 4 个参数、而且绑定的那个位置写的是一个字母时才算：max(1, 2, 3, 4) 这样的普通调用不受影响。
+// 只在这里（浮点求值）有；exact.js 的 \calc 不认。
+export const FORM_MAX_TERMS = 20000; // 求和最多几项：滑块把 n 拖到很大时报出来，不卡住页面
+const FORM_EG = { sum: 'sum(k, 1, n, 1/k^2)', prod: 'prod(k, 1, n, k)', maxof: 'maxof(k, 1, n, 式子)', minof: 'minof(k, 1, n, 式子)', int: 'int(cos(t), t, 0, x)', maxon: 'maxon(x - x^2, x, 0, 1)', minon: 'minon(x^2, x, -1, 1)', roots: 'roots(x^3 - 3x, x, -3, 3)' };
+function isForm(n, sp) {
+  if (n.args.length !== 4) return false;
+  if (n.args[sp.bind].t === 'var') return true;
+  // 第一个位置写了数：多半是把求和写错了（max、min 没有这个问题：它们的名字是 maxof / maxon）
+  if (FORM_ONLY.has(n.name)) throw new Error(`${n.name} 的第${sp.bind ? '二' : '一'}个参数是${sp.bind ? '自变量' : '求和用'}的字母，如 ${FORM_EG[n.name]}`);
+  return false;
+}
+// 绑定一层变量：不拷贝整个对象（求和的内圈要快），读的时候顺着原型找到外面的量
+const bindVar = (vars, name) => { const v = Object.create(vars); v[name] = 0; return v; };
+function intRange(n, vars, fns) {
+  const a = run(n.args[1], vars, fns), b = run(n.args[2], vars, fns);
+  const ok = (x) => isNum(x) && Math.abs(x - Math.round(x)) < 1e-9;
+  if (!ok(a) || !ok(b)) throw new Error(`${n.name} 的上下限要是整数（现在是 ${a} 到 ${b}）`);
+  const lo = Math.round(a), hi = Math.round(b);
+  if (hi - lo + 1 > FORM_MAX_TERMS) throw new Error(`${n.name} 的项太多（${hi - lo + 1} 项），最多 ${FORM_MAX_TERMS}`);
+  return [lo, hi];
+}
+const overInts = (init, step) => (n, vars, fns) => {
+  const [lo, hi] = intRange(n, vars, fns);
+  const name = n.args[0].name, body = n.args[3], v = bindVar(vars, name);
+  let acc = init;
+  for (let k = lo; k <= hi; k++) { v[name] = k; acc = step(acc, num(run(body, v, fns)), k === lo); }
+  return acc;
+};
+// 区间上的一元函数：算不出来的点是 NaN（最值、求根跳过它们）
+function realFn(n, vars, fns) {
+  const name = n.args[1].name, body = n.args[0], v = bindVar(vars, name);
+  const a = num(run(n.args[2], vars, fns)), b = num(run(n.args[3], vars, fns));
+  const f = (x) => { v[name] = x; try { const y = run(body, v, fns); return isNum(y) ? y : NaN; } catch { return NaN; } };
+  return { f, a, b };
+}
+const GOLD = (Math.sqrt(5) - 1) / 2;
+function goldenMax(f, a, b) {
+  let c = b - GOLD * (b - a), d = a + GOLD * (b - a), fc = f(c), fd = f(d);
+  for (let i = 0; i < 80 && b - a > 1e-13 * Math.max(1, Math.abs(a) + Math.abs(b)); i++) {
+    if (fc > fd || Number.isNaN(fd)) { b = d; d = c; fd = fc; c = b - GOLD * (b - a); fc = f(c); } else { a = c; c = d; fc = fd; d = a + GOLD * (b - a); fd = f(d); }
+  }
+  return Math.max(Number.isNaN(fc) ? -Infinity : fc, Number.isNaN(fd) ? -Infinity : fd);
+}
+function extremeOn(n, vars, fns, sign) {
+  const { f, a, b } = realFn(n, vars, fns);
+  if (!(b > a)) { const y = f(a); if (Number.isNaN(y)) throw new Error(`${n.name}：式子在 ${a} 算不出来`); return y; }
+  const g = (x) => sign * f(x), N = 400, h = (b - a) / N;
+  let best = -Infinity, at = -1;
+  for (let i = 0; i <= N; i++) { const y = g(a + i * h); if (y > best) { best = y; at = i; } }
+  if (at < 0) throw new Error(`${n.name}：式子在这个区间上算不出来`);
+  const m = goldenMax(g, a + Math.max(0, at - 1) * h, a + Math.min(N, at + 1) * h);
+  return sign * Math.max(best, m);
+}
+function rootsOn(n, vars, fns) {
+  const { f, a, b } = realFn(n, vars, fns);
+  if (!(b > a)) return [];
+  const N = 800, h = (b - a) / N, xs = [], ys = [];
+  for (let i = 0; i <= N; i++) { xs.push(a + i * h); ys.push(f(xs[i])); }
+  const mags = ys.filter(Number.isFinite).map(Math.abs).sort((p, q) => p - q);
+  // 根的近旁函数值要真的小：1/x、tan x 在极点两边也变号，二分下去函数值越来越大，不是根
+  const small = 1e-6 * Math.max(1, mags.length ? mags[mags.length >> 1] : 1);
+  const out = [];
+  const push = (x) => { if (!out.some((r) => Math.abs(r - x) < 1e-7 * Math.max(1, Math.abs(x)))) out.push(Math.abs(x) < 1e-12 ? 0 : x); };
+  for (let i = 0; i <= N; i++) {
+    const y = ys[i];
+    if (y === 0) { push(xs[i]); continue; }
+    if (i === N || !Number.isFinite(y) || !Number.isFinite(ys[i + 1]) || ys[i + 1] === 0) continue;
+    if (y * ys[i + 1] < 0) {
+      let lo = xs[i], hi = xs[i + 1], flo = y;
+      for (let k = 0; k < 60 && hi - lo > 1e-13 * Math.max(1, Math.abs(lo)); k++) { const m = (lo + hi) / 2, fm = f(m); if (!Number.isFinite(fm)) break; if (fm === 0) { lo = hi = m; break; } if (fm * flo < 0) hi = m; else { lo = m; flo = fm; } }
+      const x = (lo + hi) / 2, fx = f(x);
+      if (Number.isFinite(fx) && Math.abs(fx) <= small) push(x);
+    } else if (i > 0 && Number.isFinite(ys[i - 1]) && Math.abs(y) < Math.abs(ys[i - 1]) && Math.abs(y) <= Math.abs(ys[i + 1])) {
+      // 不变号的重根（x² 在 0）：|f| 的极小值够小才算
+      const m = -goldenMax((x) => -Math.abs(f(x)), xs[i - 1], xs[i + 1]);
+      if (m <= 1e-9 * Math.max(1, mags[mags.length >> 1])) { let lo = xs[i - 1], hi = xs[i + 1]; for (let k = 0; k < 60; k++) { const c = lo + (hi - lo) / 3, d = hi - (hi - lo) / 3; if (Math.abs(f(c)) < Math.abs(f(d))) hi = d; else lo = c; } push((lo + hi) / 2); }
+    }
+  }
+  return out.sort((p, q) => p - q);
+}
+const SPECIAL = {
+  sum: { bind: 0, run: overInts(0, (s, y) => s + y) },
+  prod: { bind: 0, run: overInts(1, (s, y) => s * y) },
+  maxof: { bind: 0, run: (n, vars, fns) => { const r = overInts(-Infinity, (s, y) => Math.max(s, y))(n, vars, fns); if (r === -Infinity) throw new Error('maxof：一项都没有'); return r; } },
+  minof: { bind: 0, run: (n, vars, fns) => { const r = overInts(Infinity, (s, y) => Math.min(s, y))(n, vars, fns); if (r === Infinity) throw new Error('minof：一项都没有'); return r; } },
+  int: { bind: 1, run: (n, vars, fns) => {
+    const { f, a, b } = realFn(n, vars, fns);
+    // 图里一帧要算几百次：段数给少一点，不收敛就报（不卡住画面）
+    const r = numIntegral(f, a, b, { maxSeg: 300 });
+    if (r.ok !== true) throw new Error(`这个积分页面算不出来（${r.why || '不收敛'}）`);
+    return r.value;
+  } },
+  maxon: { bind: 1, run: (n, vars, fns) => extremeOn(n, vars, fns, 1) },
+  minon: { bind: 1, run: (n, vars, fns) => extremeOn(n, vars, fns, -1) },
+  roots: { bind: 1, run: rootsOn },
+};
+const FORM_ONLY = new Set(Object.keys(SPECIAL));
 
 export const isNum = (x) => typeof x === 'number';
 export const isVec = (x) => Array.isArray(x) && x.length > 0 && x.every(isNum);
