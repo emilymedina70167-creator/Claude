@@ -111,6 +111,7 @@ function proofItem(probe, lines = []) {
   const ls = (lines || []).map((x) => String(x).trim()).filter(Boolean);
   for (let i = 0; i < ls.length; i++) {
     const r = checkLine(spec, envs, prev, ls[i]);
+    if (r.ok === null) return { id: 'proof', ok: null, why: `第 ${i + 1} 行页面判不了：${r.why}` };
     if (!r.ok) return { id: 'proof', ok: false, why: `第 ${i + 1} 行：${r.why || r.error}` };
     prev = ls[i];
     done = r.done;

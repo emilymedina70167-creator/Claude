@@ -140,9 +140,14 @@ export function checkLine(spec, envs, prev, line, state = {}) {
   try { tex = formulaTeX(norm); } catch { tex = ''; }
   let p;
   try { p = prep(prev, names, order); } catch (e) { return { ok: false, error: `上一行看不懂：${e.message}`, tex, norm }; }
+  let checked = 0;
   for (const env of envs) {
     let a, b;
     try { a = scalarize(compile(p)(env)); } catch (e) { return { ok: false, error: `上一行算不出来：${e.message}`, tex, norm }; }
+    // 上一行在这组数上不是有限的（随机的矩阵奇异了，1/det(A)）：这一组跳过（和 formula.js 跳过没定义的取值一样），
+    // 不然对的一行（det(A)^(-1)）也被判错
+    if (!flat(a).every((x) => typeof x !== 'number' || Number.isFinite(x))) continue;
+    checked++;
     try { b = scalarize(compile(norm)(env)); } catch (e) { return { ok: false, error: `这一行算不出来：${e.message}`, tex, norm }; }
     if (!equal(a, b)) {
       const at = spec.vars.map(([n]) => `${n}=${valueText(env[n])}`).join('，');
@@ -153,6 +158,7 @@ export function checkLine(spec, envs, prev, line, state = {}) {
       };
     }
   }
+  if (!checked) return { ok: null, tex, norm, why: '取的几组数上，上一行都算不出有限的值，页面判不了这一步' };
   let done = false;
   if (spec.goal) { try { done = compact(prep(spec.goal, names, order)) === compact(norm); } catch { done = false; } }
   return { ok: true, tex, norm, done };

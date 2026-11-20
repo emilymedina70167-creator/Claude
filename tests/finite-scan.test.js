@@ -20,6 +20,10 @@ function files(dir) {
   return out;
 }
 
+// 「差不多相等」的容差写法：Math.max(1, Math.abs(…) …) 和 Math.max(Math.abs(…), 1)，空格怎么写都认。
+// 按顶层的一段查（不是按一行）：同一段里有 Number.isFinite 就算查过
+const TOL_SCALE = [/Math\.max\(\s*1\s*,\s*Math\.abs\(/, /Math\.max\(\s*Math\.abs\([^)]*\)\s*,\s*1\s*\)/];
+
 // 顶层声明从第 0 列开始（function、const、let、export、async、class）；注释、空行、闭括号不算新的一段
 const TOP = /^(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function\b|const\b|let\b|var\b|class\b)/;
 
@@ -46,7 +50,7 @@ test('kit/src 里每一段用 Math.max(1, Math.abs( 比的都带 Number.isFinite
   const bad = [];
   for (const f of files(ROOT)) {
     for (const r of regions(readFileSync(f, 'utf8'))) {
-      if (r.text.includes('Math.max(1, Math.abs(') && !r.text.includes('Number.isFinite')) bad.push(`${relative(ROOT, f)}:${r.start}`);
+      if (TOL_SCALE.some((re) => re.test(r.text)) && !r.text.includes('Number.isFinite')) bad.push(`${relative(ROOT, f)}:${r.start}`);
     }
   }
   assert.deepEqual(bad, [], `这几段比「差不多相等」却没看有限数：\n${bad.join('\n')}`);

@@ -123,7 +123,9 @@ test('高数的 solve：result: pi/4 写 π/4、e^2、ln 2、√2/2、2^10、1/�
   }
   const q = P('solve', `${HEAD}steps:\ns1 calc: 算\nresult: pi/4`);
   assert.equal(item(judgeMachine(q, { text: '…', result: 'π/3' }), 'result').ok, false);
-  assert.equal(item(judgeMachine(q, { text: '…', result: '∞' }), 'result').ok, false);
+  // ∞ 不当式子读（审查以后）：读不懂，交之前挡、判的时候待核，总之不对
+  assert.notEqual(item(judgeMachine(q, { text: '…', result: '∞' }), 'result').ok, true);
+  assert.notEqual(resultProblem(q, '∞'), '');
 });
 
 test('result: 0.85：85%、17/20 照旧对', () => {
@@ -182,4 +184,25 @@ test('自检：r.final、r.pass#、r.round# 放进算式里报写法错误，整
   assert.ok(!probeIssues(ok).hard.some((m) => /带撇号/.test(m)));
   const k = P('construct', `${HEAD}slots: A=seq(5) B=seq(5)\nrun r: sort algo=select array=A\nif: B == r.final => 不是排完的样子\nexample: A=5 8 5 2 9 B=2 5′ 5 8 9`);
   assert.ok(!probeIssues(k).hard.some((m) => /带撇号/.test(m)));
+});
+
+// —— 独立审查（第四次提交）——
+
+test('最后的值当式子读只收初等写法：det、rank、tr、norm、dot、矩阵、inf 都不收', () => {
+  const p = P('solve', `${HEAD}steps:\ns1 calc: 求 |A|\nresult: -2`);
+  for (const s of ['det([[1,2],[3,4]])', 'rank([[1,0],[0,1]]) - 4', 'tr([[-1,0],[0,-1]])', 'norm(-2)*(-1)', 'dot([1],[-2])', '[-2]', '[[-2]]']) {
+    assert.notEqual(item(judgeMachine(p, { text: '…', result: s }), 'result').ok, true, s);
+    assert.notEqual(resultProblem(p, s), '', s);
+  }
+  const six = HEXQ('6');
+  for (const s of ['6+1/inf', '6+1/∞']) assert.notEqual(item(judgeMachine(six, { text: '…', result: s }), 'result').ok, true, s);
+  const cases = [['pi/4', 'π/4'], ['e^2', 'e^2'], ['ln(2)', 'ln2'], ['sqrt(2)/2', '√2/2'], ['1024', '2^10'], ['sqrt(2)/2', '1/√2'], ['10', 'C(5,2)'], ['120', '5!'], ['3', '|-3|'], ['pi/6', 'arcsin(1/2)']];
+  for (const [result, s] of cases) assert.equal(item(judgeMachine(P('solve', `${HEAD}steps:\ns1 calc: 算\nresult: ${result}`), { text: '…', result: s }), 'result').ok, true, `${result} ${s}`);
+});
+
+test('字的序列只拆夹在两个字之间的 -：P1-P3-P2 照拆，a -1 的负号留着', () => {
+  assert.equal(valueMatch('P1-P3-P2', ['P1', 'P3', 'P2']), true);
+  assert.equal(valueMatch('P1 — P3 — P2', ['P1', 'P3', 'P2']), true);
+  assert.equal(valueMatch('a -1', ['a', '-1']), true);
+  assert.equal(valueMatch('a -1', ['a', '1']), false);
 });

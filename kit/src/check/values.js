@@ -52,6 +52,14 @@ function readNum(student) {
 const HEX = /^(?:0x([0-9a-f]+)|([0-9a-f]+)h)$/i;
 const BIN = /^(?:0b([01]+)|([01]+)b)$/i;
 const SCI = /^-?\d+(?:\.\d+)?e[+-]?\d+$/i;
+// 当式子读的只收初等的写法：数、π、e、初等函数、!、C(n,k)、^、加减乘除、括号、绝对值。矩阵、向量（[ ] ;）和
+// det rank tr norm dot inv cross 这些线代的函数不收——不然「求 |A|」写 det([[1,2],[3,4]]) 就让页面替学生算了；
+// ∞ / inf 也不收（6+1/inf 不能当 6）
+const PLAIN_NAMES = new Set(['pi', 'e', 'sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'arccot', 'ln', 'log', 'lg', 'sqrt', 'abs', 'exp', 'c']);
+function plainMath(s) {
+  if (/[[\];；∞]/.test(s)) return false;
+  return [...s.matchAll(/[A-Za-z]+/g)].every((m) => PLAIN_NAMES.has(m[0].toLowerCase()));
+}
 function readOther(student) {
   const s = cleanInput(student);
   const t = s.replace(/\s+/g, '');
@@ -63,6 +71,7 @@ function readOther(student) {
   if ((m = HEX.exec(t))) return { v: parseInt(m[1] ?? m[2], 16), plain: plainOf(m[2]), unit: 'H' };
   if (SCI.test(t)) return { v: Number(t) };
   if (/\d\s+\d/.test(s) || /\d*\.\d*\./.test(t)) return null; // 5.3.3 也不读成 5.3 × .3
+  if (!plainMath(s)) return null;
   try {
     const v = evaluate(normalizeFormula(s, { real: true }), {});
     return typeof v === 'number' && !Number.isNaN(v) ? { v } : null;

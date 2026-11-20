@@ -183,9 +183,12 @@ const stripBrackets = (raw) => String(raw ?? '').trim().replace(/^\[([\s\S]*)\]$
 // - 不在这里：数的序列里 - 是负号（150-160 交之前照旧挡），只有字的序列（进程名）另认 - —（normTokens 的 splitDashes）
 const SEQ_SEP = /[\s,，、;；]+|->|=>|[→⇒>]/;
 export const splitSeq = (s) => String(s ?? '').split(SEQ_SEP).filter(Boolean);
-// 字的序列（有字母、汉字的词）：P1-P3-P2、P1 — P3 的 - — – 也当分隔；全是数的不拆（-5 是负数）
+// 字的序列（有字母、汉字的词）：P1-P3-P2 夹在两个字之间的 - — – 也当分隔，单独一个的（P1 — P3）去掉；
+// 前面不是字的 - 是负号（a -1 的 -1 照留）；全是数的不拆（-5 是负数，150-160 交之前挡）
 const WORDY = /[A-Za-z一-龥]/;
-const splitDashes = (toks) => (toks.some((t) => WORDY.test(t)) ? toks.flatMap((t) => t.split(/[-—–]+/)).filter(Boolean) : toks);
+const splitDashes = (toks) => (toks.some((t) => WORDY.test(t))
+  ? toks.flatMap((t) => t.split(/(?<=[\p{L}\p{N}_])[-—–]+(?=[\p{L}\p{N}_])/u)).filter((t) => t && !/^[-—–]+$/.test(t))
+  : toks);
 // 一排数、进程表读之前先全角转半角、去掉末尾的句号逗号（values.js 的 cleanInput：2 5 8。、４９ ３８）
 export const seqTokens = (raw) => splitSeq(stripBrackets(cleanInput(raw)));
 const procEntries = (raw) => stripBrackets(cleanInput(raw)).split(/[;；\n]+|,(?=\s*[A-Za-z一-龥])/).map((x) => x.trim()).filter(Boolean);
