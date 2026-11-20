@@ -78,6 +78,9 @@ const RUN = /^\s*run\s+(\S+?)\s*[:：]\s*([A-Za-z]\w*)\s*(.*)$/;
 const RUN_NAME = /^[A-Za-z][A-Za-z0-9]*$/;
 // predict 的 expect 标签: 值（标签前可以写编号 x1）
 const EXPECT = /^\s*expect(?:\s+([^:：]*?))?\s*[:：]\s*(.*)$/;
+// expect / result 末尾的 as=dec：换算题（「0x3A3C 换成十进制」）只收十进制的数、分数、百分数（dr-final-fix 审查 B）
+const AS_DEC = /\s+as\s*=\s*dec\s*$/i;
+const splitAs = (v) => { const s = String(v ?? '').trim(); return AS_DEC.test(s) ? [s.replace(AS_DEC, '').trim(), 'dec'] : [s, null]; };
 const RESERVED_IDS = { rewrite: /^[hn]\d+$/, errfind: /^(?:word|fix)$/, discriminate: /^pick$/, parse: /^extra$/ };
 // rewrite 的 has: 片段 => 话 / not: 片段 => 话（一行一条，h1、n1…）
 const HASNOT = /^\s*(has|not)\s*[:：]\s?(.*)$/;
@@ -319,7 +322,8 @@ export function parseProbe(type, src) {
       while (expects.some((e) => e.id === `x${k}`)) k++; // 手写过的编号跳过
       const id = own ? own[1] : `x${k}`;
       const label = own ? (own[2] || '').trim() : head;
-      expects.push({ id, label: label || id, value: m[2].trim(), wrongs: [] }); last = null; continue;
+      const [value, as] = splitAs(m[2]);
+      expects.push({ id, label: label || id, value, wrongs: [], ...(as ? { as } : {}) }); last = null; continue;
     }
     if ((m = raw.match(POINT))) {
       const kind = m[1];
@@ -488,7 +492,8 @@ export function parseProbe(type, src) {
   if (base === 'solve') {
     const r = parseSolve([`id: ${id}`, ...solveLines].join('\n'));
     if (r.problems.length) return at(r.problems[0]);
-    Object.assign(probe, { q: r.fields.q, steps: r.steps, solveFields: r.fields }, f.result ? { result: f.result } : {});
+    const [result, as] = splitAs(f.result);
+    Object.assign(probe, { q: r.fields.q, steps: r.steps, solveFields: r.fields }, result ? { result, ...(as ? { resultAs: as } : {}) } : {});
   }
   if (base === 'code') {
     if (tpl.picks.length || tpl.wheres.length) return at('code 不做模板（不写 pick / where）');
@@ -603,6 +608,8 @@ export function parseCheck(head, body) {
   for (const raw of String(body ?? '').replace(/\r/g, '').split('\n')) {
     if (fence) {
       if (/^\s*```\s*$/.test(raw)) {
+        // 不是探题的围栏（上面已经报过「不是探题」）：收掉就完，不再拿去读、多报一句「不认识的题型」
+        if (fence.type === '_skip') { fence = null; continue; }
         const r = parseProbe(fence.type, fence.lines.join('\n'));
         if (r.error) {
           errors.push(r.error);
@@ -1201,6 +1208,7 @@ function predictProblems(p, base, tieLines, soft = new Set()) {
     else {
       try { right[e.id] = expectValue(e.value, rv.vars, names); } catch (err) { out.push(`expect ${e.id}（${e.label}）算不出来：${err.message}`); }
       if (oUnread(right[e.id])) out.push(`expect ${e.id}（${e.label}）「${right[e.id]}」：${O_UNREAD}`);
+      if (e.as === 'dec' && e.id in right && typeof right[e.id] !== 'number') out.push(`expect ${e.id}（${e.label}）写了 as=dec（只收十进制的数），对的值要是一个数，现在是「${String(right[e.id]).slice(0, 30)}」`);
     }
     for (const w of e.wrongs) {
       const bw = bare(w.expr);
@@ -1221,7 +1229,7 @@ function predictProblems(p, base, tieLines, soft = new Set()) {
       const g = groups.find((x) => sameResult(x.value, d.value));
       if (g) g.keys.push(d.key); else groups.push({ value: d.value, keys: [d.key] });
     }
-    for (const g of groups) if (g.keys.length > 1) out.push(again(`${e.id} 上 ${g.keys.slice(0, -1).join('、')} 和 ${g.keys.at(-1)} 的答案一样（学生写 ${String(g.value)} 时页面分不清是哪一种：换一组数，或者 against: 只留一种）`));
+    for (const g of groups) if (g.keys.length > 1) out.push(again(`${e.id} 上 ${g.keys.slice(0, -1).join('、')} 和 ${g.keys.at(-1)} 的答案一样（学生写 ${String(g.value)} 时页面分不清是哪一种：换一组数，或者 against: 只留一种；LRU / FIFO 的缺页次数题一般写 against: 只留要打的那一种）`));
   }
   if (!p.against?.length || !p.runs?.length) return out;
   // 错法照第一个 run 认：换成那种错法跑出来的量，看有没有哪一个 expect 和对的不一样

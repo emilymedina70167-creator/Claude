@@ -83,10 +83,12 @@ function readOther(student) {
  * 一模一样（相对 1e-9 以内）的总是对；分数只认一模一样；小数、百分数要至少 2 位小数、至少 3 位有效数字，
  * 按写出来的位数四舍五入以后等于对的值才对。十六进制、二进制、式子（readOther）只认一模一样（相对 1e-9），算出来不是有限数的不对
  */
-export function numMatch(student, value) {
+export function numMatch(student, value, { as } = {}) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   const r = readNum(student);
   if (!r || !Number.isFinite(r.v)) {
+    // as=dec（换算题）：只收十进制的数、分数、百分数；十六进制、二进制、式子当读不懂（不然写 0x3A3C 原样抄题就过了）
+    if (as === 'dec') return null;
     const o = readOther(student);
     if (!o) return null;
     // 后缀的二进制、十六进制按进制读对不上、同样的数字当十进制读却对得上（对的值 100 写 100B；10 写 10h；按进制读对得上的照常对）：
@@ -172,8 +174,8 @@ export function ambiguousWhy(student) {
  * 学生写的（字）和算出来的值比：按值的样子挑——数走 numMatch、复杂度走 bigO、数组和别的字走 seqMatch（先后算数）。
  * true / false；读不懂 null（数、复杂度才会读不懂）；分不清进制还是单位 UNSURE（numMatch）
  */
-export function valueMatch(student, value) {
-  if (typeof value === 'number') return numMatch(student, value);
+export function valueMatch(student, value, opts = {}) {
+  if (typeof value === 'number') return numMatch(student, value, opts);
   if (looksBigO(value)) {
     const s = bigO(student);
     return s === null ? null : s === bigO(value);
@@ -190,10 +192,11 @@ const numSeq = (v) => typeof v !== 'number' && !looksBigO(v) && (() => { const t
  * 交之前：学生写的读不读得懂（按对的值的样子：数、复杂度、一串数）。读得懂（或没写、或是字）是 ''，读不懂是要说的话。
  * 不说要写几个（换出的页有几个就等于说了缺页数）
  */
-export function readProblem(student, value, label = '') {
+export function readProblem(student, value, label = '', { as } = {}) {
   const s = cleanInput(student);
   if (!s) return '';
   const name = `「${label}」`;
+  if (typeof value === 'number' && as === 'dec') return readNum(s) && Number.isFinite(readNum(s).v) ? '' : `${name}写十进制的数（分数、小数、百分数也行），不写 0x、H、B，不写式子`;
   if (typeof value === 'number') return readNum(s) || readOther(s) ? '' : `${name}只写数（分数、小数、百分数），不写单位`;
   if (looksBigO(value)) return bigO(s) !== null ? '' : `${name}写成 O(n^2) 这样`;
   if (numSeq(value)) return normTokens(s).every((x) => NUM_TOK.test(x)) ? '' : `${name}写一串数，用空格或逗号隔开`;
@@ -201,7 +204,8 @@ export function readProblem(student, value, label = '') {
 }
 
 /** 读不懂时那一项写什么（按值的样子） */
-export function unreadWhy(value) {
+export function unreadWhy(value, { as } = {}) {
+  if (as === 'dec' && typeof value === 'number') return '读不懂：写十进制的数';
   return looksBigO(value) ? '读不懂：写成 O(n log n) 这样' : '读不懂：写数、分数或小数';
 }
 

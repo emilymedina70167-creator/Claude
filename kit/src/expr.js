@@ -41,6 +41,7 @@ const FUNCS = {
   arcsin: (x) => Math.asin(num(x)),
   arccos: (x) => Math.acos(num(x)),
   arctan: (x) => Math.atan(num(x)),
+  arccot: (x) => Math.PI / 2 - Math.atan(num(x)), // 考研的 arccot：值在 (0, π)
   atan2: (y, x) => Math.atan2(num(y), num(x)),
   min: (...a) => Math.min(...a.map(num)),
   max: (...a) => Math.max(...a.map(num)),
@@ -100,7 +101,7 @@ const DEG = {
 };
 const tableOf = (opts) => (opts?.deg ? DEG : FUNCS);
 /** 学生在实数的题里能写的初等函数（formula.js 读学生的写法、fx/ 认「这是实数的函数」用） */
-export const FX_NAMES = ['sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'ln', 'lg', 'exp', 'sqrt', 'abs', 'Phi', 'phi'];
+export const FX_NAMES = ['sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'arccot', 'ln', 'lg', 'exp', 'sqrt', 'abs', 'Phi', 'phi'];
 
 function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) [a, b] = [b, a % b]; return a; }
 function intOf(x, what) {

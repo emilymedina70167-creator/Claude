@@ -28,11 +28,12 @@ const CONSTS = ['e', 'pi', 'inf'];
  * 初等函数不带括号时吃后面的「系数 + 一个名字（带它的指数）」（sin 2x、sin x^2、sin πx），sin^2 x 是 (sin x)²；
  * 整段只写「不存在」「发散」读成 __dne、__div。
  * real：实数取点的题，读不准的不读（e^2x、sin xy），照实说。看不懂时抛出中文原因
+ * fx：不是矩阵的题（高数、概率、数的式子）：「不认识」的提示列 sin、ln、e、π，不列 tr、det（dr-final-fix 第 6 条；real 也算）
  */
-export function normalizeFormula(text, { names = [], funcs = FORMULA_FUNCS, real = false } = {}) {
+export function normalizeFormula(text, { names = [], funcs = FORMULA_FUNCS, real = false, fx = false } = {}) {
   const known = new Set(names);
   const fn = new Set(funcs);
-  let s = String(text ?? '').trim();
+  let s = halfWidthAscii(text).trim();
   if (!s) throw new Error('还没写式子');
   if (/^(不存在|DNE)$/i.test(s)) return '__dne';
   if (/^发散$/.test(s)) return '__div';
@@ -41,7 +42,7 @@ export function normalizeFormula(text, { names = [], funcs = FORMULA_FUNCS, real
   // log_2 x、log_{2}(x)、log_a x：底数先记下，记号流里是 __logb0（只认一个数或一个字母当底数）
   const bases = [];
   s = s.replace(/log_\s*(\{[^}]*\}|\([^)]*\)|\d+(?:\.\d+)?|[A-Za-z])/g, (all, b) => { bases.push(b.replace(/^[{(]\s*|\s*[})]$/g, '')); return ` __logb${bases.length - 1} `; });
-  if (new RegExp(`\\b(${TRIG.join('|')})\\s*\\^\\s*[({]?\\s*-\\s*1\\b`).test(s)) throw new Error('反三角写 arcsin、arccos、arctan（不写 sin^-1）');
+  if (new RegExp(`\\b(${TRIG.join('|')})\\s*\\^\\s*[({]?\\s*-\\s*1\\b`).test(s)) throw new Error('反三角写 arcsin、arccos、arctan、arccot（不写 sin^-1）');
   s = s.replace(/[{]/g, '(').replace(/[}]/g, ')');
   s = s.replace(/ᵀ/g, "'");
   // 连着的上标字符：A²³ → A^(23)，3ⁿ⁻¹ → 3^(n-1)
@@ -72,7 +73,7 @@ export function normalizeFormula(text, { names = [], funcs = FORMULA_FUNCS, real
         const f = [...fn].sort((a, b) => b.length - a.length).find((g) => g !== 'log' && w.startsWith(g) && /^\d/.test(w.slice(g.length))); // log 写底数用 log_2（log2 照旧不认）
         if (f) { toks.push({ k: 'fn', v: f, sp }); i -= w.length - f.length; continue; }
       }
-      splitName(w, all, fn).forEach((t, j) => toks.push({ ...t, cst: t.k === 'name' && cst.has(t.v), sp: j === 0 && sp }));
+      splitName(w, all, fn, { fx: real || fx }).forEach((t, j) => toks.push({ ...t, cst: t.k === 'name' && cst.has(t.v), sp: j === 0 && sp }));
     } else toks.push({ k: 'op', v: m[3] === '**' ? '^' : m[3], sp });
   }
   // ^T：转置（T 不是题里的量时）
@@ -203,8 +204,18 @@ function wrapArgs(toks, { real }) {
 }
 const topComma = (ts) => { let d = 0; return ts.some((x) => { if (x.v === '(' || x.v === '[') d++; else if (x.v === ')' || x.v === ']') d--; return d === 0 && x.v === ','; }); };
 
+const FX_HINT = 'sin、cos、ln、arctan 这些函数和 e、π';
+
+/**
+ * 全角的 ASCII 转半角（iPad 中文键盘打的 ２ｘ、ｓｉｎ（ｘ）、＋）、全角空格转空格。只换 U+FF01–FF5E：
+ * 不用 NFKC——它把 A² 变成 A2、ᵀ 变成 T，式子就读错了（dr-final-fix 第 6 条）
+ */
+export function halfWidthAscii(text) {
+  return String(text ?? '').replace(/[\uFF01-\uFF5E]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\u3000/g, ' ');
+}
+
 // 一个不认识的名字：试着拆成认识的几个（nA → n、A；trA → tr、A）；拆不开就报错
-function splitName(w, known, fn) {
+function splitName(w, known, fn, { fx = false } = {}) {
   if (known.has(w)) return [{ k: 'name', v: w }];
   if (fn.has(w)) return [{ k: 'fn', v: w }];
   const all = [...known, ...fn].sort((a, b) => b.length - a.length);
@@ -228,13 +239,15 @@ function splitName(w, known, fn) {
   const parts = go(w);
   if (parts) return parts;
   const list = [...known].filter((x) => x.length <= 8 && !CONSTS.includes(x));
-  throw new Error(`不认识「${w}」：式子里能用 ${list.join('、') || '题里给的量'}${fn.size ? `，以及 ${[...fn].filter((f) => f !== 'T').slice(0, 5).join('、')} 这些函数` : ''}`);
+  // 按题换：高数、概率、数的式子列初等函数和常数；矩阵的题照旧列 tr、det、rank、inv
+  const fns = fx ? FX_HINT : `${[...fn].filter((f) => f !== 'T').slice(0, 5).join('、')} 这些函数`;
+  throw new Error(`不认识「${w}」：式子里能用 ${list.join('、') || '题里给的量'}${fn.size ? `，以及 ${fns}` : ''}`);
 }
 
 // —— 表达式 → TeX（预览）——
 const TEX_NAME = { alpha: '\\alpha', beta: '\\beta', gamma: '\\gamma', delta: '\\delta', lambda: '\\lambda', mu: '\\mu', theta: '\\theta', xi: '\\xi', eta: '\\eta', phi: '\\varphi', Phi: '\\Phi', pi: '\\pi', inf: '\\infty', __dne: '\\text{不存在}', __div: '\\text{发散}' };
 // 初等函数的写法：参数一律画括号，学生交之前看得见页面是怎么读的（sin 2x → \sin(2x)）
-const TEX_FN = { sin: '\\sin', cos: '\\cos', tan: '\\tan', cot: '\\cot', sec: '\\sec', csc: '\\csc', arcsin: '\\arcsin', arccos: '\\arccos', arctan: '\\arctan', ln: '\\ln', lg: '\\lg', exp: '\\exp', Phi: '\\Phi', phi: '\\varphi' };
+const TEX_FN = { sin: '\\sin', cos: '\\cos', tan: '\\tan', cot: '\\cot', sec: '\\sec', csc: '\\csc', arcsin: '\\arcsin', arccos: '\\arccos', arctan: '\\arctan', arccot: '\\operatorname{arccot}', ln: '\\ln', lg: '\\lg', exp: '\\exp', Phi: '\\Phi', phi: '\\varphi' };
 const PREC = { '+': 1, '-': 1, '*': 2, '/': 2, neg: 2.5, '^': 3 };
 
 export function formulaTeX(src) {
@@ -546,7 +559,7 @@ export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
       // 学生写 +C、o(x^3)：输入框读法里认这几个名字，判的时候在语法树上去掉（fx/calc.js 的 stripTail）
       const extra = calc.kind === 'antideriv' ? CONST_NAMES.filter((c) => !(c in scope)) : calc.kind === 'ode' ? ['C', 'C_1', 'C_2', 'C_3', 'C1', 'C2', 'C3'].filter((c) => !(c in scope)) : [];
       const spec = { expected, free, scope, names: [...names, ...extra], keys, display: shown, real: true, domain, ints, seed, calc, pad: padFor(calc), placeholder: placeholderFor(calc),
-        read: { names: [...names, ...extra], real: domain.length > 0, ...(calc.kind === 'taylor' ? { funcs: [...FORMULA_FUNCS, 'o', 'O'] } : {}) } };
+        read: { names: [...names, ...extra], real: domain.length > 0, fx: true, ...(calc.kind === 'taylor' ? { funcs: [...FORMULA_FUNCS, 'o', 'O'] } : {}) } };
       const { errors, hints } = calcSelfCheck(spec, { budget: opts.budget ?? PAGE_BUDGET });
       if (errors.length) throw new Error(errors.join('；'));
       spec.hints = hints;
@@ -554,13 +567,13 @@ export function formulaSpec(answer, freeSpec, scope = {}, opts = {}) {
     }
     const self = compareFx(ast, ast, { domain, ints, scope, seed });
     if (self.ok !== true) throw new Error(`answer: ${shown} 在给的范围里算不出来（${self.note}）：检查式子，或用 domain: x in (…) 给范围`);
-    return { expected, free, scope, names, keys, display: shown, real: true, domain, ints, seed, read: { names, real: true }, pad: padFor(null), placeholder: placeholderFor(null) };
+    return { expected, free, scope, names, keys, display: shown, real: true, domain, ints, seed, read: { names, real: true, fx: true }, pad: padFor(null), placeholder: placeholderFor(null) };
   }
   const self = compareFormula(ast, ast, { free, scope });
   if (!self.ok) throw new Error(`answer: ${src} 代不进去：${self.msg}`);
   // 只在一两个值上算得出来，比不出对错（比如 A^(1/n)）
   if (self.checked < Math.min(2, free.length ? 2 : 1)) throw new Error(`answer: ${src} 代不进去：只有 ${self.checked} 组值算得出来，检查式子或 formula: 的范围`);
-  return { expected, free, scope, names, keys: [...freeNames, ...used], display: shown, read: { names } };
+  return { expected, free, scope, names, keys: [...freeNames, ...used], display: shown, read: { names, ...(matrixy ? {} : { fx: true }) } };
 }
 
 /**

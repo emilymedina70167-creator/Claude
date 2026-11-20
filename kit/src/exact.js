@@ -482,7 +482,7 @@ function radix(x, n, base) {
 }
 
 // 这些函数 expr.js 有、但结果一般不是有理数：交给小数去算
-const FLOAT_ONLY = new Set(['rot', 'sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'atan2', 'exp', 'ln', 'lg', 'log', 'normpdf', 'normcdf', 'binompmf', 'poissonpmf', 'exppdf', 'unifpdf', 'Phi', 'phi',
+const FLOAT_ONLY = new Set(['rot', 'sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'arccot', 'atan2', 'exp', 'ln', 'lg', 'log', 'normpdf', 'normcdf', 'binompmf', 'poissonpmf', 'exppdf', 'unifpdf', 'Phi', 'phi',
   'gamma', 'beta', 'chi2pdf', 'chi2cdf', 'chi2inv', 'tpdf', 'tcdf', 'tinv', 'fpdf', 'fcdf', 'finv', 'norminv', 'binomcdf', 'poissoncdf', 'geompmf', 'hyperpmf', 'expcdf', 'unifcdf']);
 /** 式子里认得的函数名（det、rank、inv……、算法函数、只能算小数的 sin 这些）：舞台的 {…} 里这些照旧交给这里算，不换成量（stage/value.js） */
 export const isExactFunc = (name) => Object.hasOwn(FUNCS, name) || Object.hasOwn(EXTRA, name) || FLOAT_ONLY.has(name);
