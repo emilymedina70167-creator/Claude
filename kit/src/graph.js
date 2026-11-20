@@ -10,83 +10,21 @@
 //   bars binompmf(k, 10, 0.3) for k 0 10 color=pink
 //   vline a color=yellow label=a
 //   show $P(X\le a) = {normcdf(a, mu, 1)}$
-import { compile, isNum } from './expr.js';
+import { isNum } from './expr.js';
+import { parseGraph } from './graphspec.js';
+import { compileWith } from './fx/defs.js';
 import { splitMods, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { sliderText, figureControls, dragHandles } from './plot.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const W = 640, H = 400, ML = 52, MR = 18, MT = 18, MB = 40;
-const CMDS = ['let', 'slider', 'plot', 'shade', 'bars', 'point', 'vline', 'hline', 'segment', 'text', 'show'];
 const COLOR = {
   blue: 'var(--blue)', pink: 'var(--pink)', yellow: 'var(--yellow)', green: 'var(--green)', purple: 'var(--lav)',
   orange: 'var(--orange)', red: 'var(--coral)', white: 'var(--chalk)', gray: 'var(--muted)', grey: 'var(--muted)',
 };
 
-export function parseGraph(src) {
-  const fields = {};
-  const cmds = [];
-  let last = null;
-  const re = new RegExp(`^(${CMDS.join('|')})\\s+(.*)$`, 'i');
-  for (const raw of String(src).split('\n')) {
-    const line = raw.replace(/\s+#\s.*$/, '').trimEnd();
-    if (!line.trim()) continue;
-    const c = line.trim().match(re);
-    if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2]), srcLine: line.trim() }); last = null; continue; }
-    const f = line.match(/^([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/);
-    if (f) { last = f[1].toLowerCase(); fields[last] = f[2]; continue; }
-    if (last) fields[last] += '\n' + line;
-    else throw new Error(`看不懂这一行：${line.trim()}`);
-  }
-  for (const k in fields) fields[k] = fields[k].trim();
-  const win = (s, d) => { const m = String(s || '').trim().split(/[\s,，]+/).map(Number); return m.length === 2 && m.every(Number.isFinite) && m[1] > m[0] ? m : d; };
-  return { fields, cmds, xr: win(fields.x, [-5, 5]), yr: fields.y ? win(fields.y, null) : null };
-}
-
-const num = (s) => (/^-?inf$/i.test(s) ? () => (s[0] === '-' ? -Infinity : Infinity) : compile(s));
-
-function parseCmd(kind, rest) {
-  if (kind === 'show') return { kind, text: rest.trim(), mods: {} };
-  if (kind === 'text') {
-    const m = rest.match(/^"([^"]*)"\s+at\s+(.*)$/) || rest.match(/^“([^”]*)”\s+at\s+(.*)$/);
-    if (!m) throw new Error('text 的写法：text "文字" at [x, y]');
-    const { body, mods } = splitMods(m[2]);
-    return { kind, label: m[1], at: compile(body), mods };
-  }
-  const { body, mods } = splitMods(rest);
-  if (kind === 'let') {
-    const m = body.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/);
-    if (!m) throw new Error('let 的写法：let 名字 = 表达式');
-    return { kind, name: m[1], expr: compile(m[2]), mods };
-  }
-  if (kind === 'slider') {
-    const m = body.match(/^([A-Za-z_]\w*)\s+(\S+)\s+(\S+)(?:\s*=\s*(\S+))?$/);
-    if (!m) throw new Error('slider 的写法：slider p 0 1 = 0.5');
-    const min = Number(m[2]), max = Number(m[3]);
-    return { kind, name: m[1], min, max, init: m[4] !== undefined ? Number(m[4]) : min, step: Number(mods.step) || (max - min) / 100, mods };
-  }
-  if (kind === 'plot') return { kind, f: compile(body), mods };
-  if (kind === 'shade') {
-    // shade f(x) a b：x 从 a 到 b，曲线和 x 轴之间涂色（a、b 可以写 -inf / inf）
-    const m = body.match(/^(.*\S)\s+(\S+)\s+(\S+)$/);
-    if (!m) throw new Error('shade 的写法：shade f(x) 下限 上限');
-    return { kind, f: compile(m[1]), a: num(m[2]), b: num(m[3]), mods };
-  }
-  if (kind === 'bars') {
-    const [what, range] = body.split(/\s+for\s+/);
-    const m = (range || '').trim().match(/^([A-Za-z_]\w*)\s+(\S+)\s+(\S+)$/);
-    if (!m) throw new Error('bars 的写法：bars binompmf(k, 10, 0.3) for k 0 10');
-    return { kind, f: compile(what), param: m[1], from: compile(m[2]), to: compile(m[3]), mods };
-  }
-  if (kind === 'vline' || kind === 'hline') return { kind, at: compile(body), mods };
-  if (kind === 'point') return { kind, at: compile(body), mods };
-  if (kind === 'segment') {
-    const parts = body.split(/\s*,\s*(?=\[)/);
-    if (parts.length !== 2) throw new Error('segment 的写法：segment [x1, y1], [x2, y2]');
-    return { kind, a: compile(parts[0]), b: compile(parts[1]), mods };
-  }
-  throw new Error(`不认识的命令 ${kind}`);
-}
+export { parseGraph };
 
 // 好看的刻度间隔：1、2、5 × 10^k
 function niceStep(span, n = 6) {
@@ -98,7 +36,9 @@ function niceStep(span, n = 6) {
 const fmtTick = (v, step) => { const d = Math.max(0, -Math.floor(Math.log10(step) + 1e-9)); return String(Number(v.toFixed(d))); };
 
 export function createGraph(container, src, opts = {}) {
-  const { fields, cmds, xr, yr: yrGiven } = typeof src === 'string' ? parseGraph(src) : src;
+  const { fields, cmds, defs, xr, yr: yrGiven } = typeof src === 'string' ? parseGraph(src) : src;
+  // 读数、highlight= 里的式子：和曲线同一套（弧度、认 f(x) 的定义）
+  const compile = (s) => compileWith(s, defs);
   const extra = opts.extraVars || {};
   const base = opts.baseVars || {};
   const state = { slider: {}, drag: {}, override: {} };
@@ -250,7 +190,7 @@ export function createGraph(container, src, opts = {}) {
         el('text', { x: X(x), y: H - MB + 4, class: 'g-handle-label', 'text-anchor': 'middle', 'pointer-events': 'none' }, top).textContent = c.mods.label || c.name;
       }
       cur = null;
-      side.querySelector('.r-show').innerHTML = cmds.map((c, i) => (c.kind === 'show' && visible(c) ? `<div data-cmd="${i + 1}">${mdToHtml(fillValues(c.text, v, errs), { inline: true })}</div>` : '')).join('');
+      side.querySelector('.r-show').innerHTML = cmds.map((c, i) => (c.kind === 'show' && visible(c) ? `<div data-cmd="${i + 1}">${mdToHtml(fillValues(c.text, v, errs, compile), { inline: true })}</div>` : '')).join('');
     }
     cur = null;
     svg.appendChild(top);

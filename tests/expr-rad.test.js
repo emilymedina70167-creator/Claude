@@ -56,7 +56,7 @@ test('图自己的 let 和画出来的一致', () => {
 // 新加一个调用、没归类，这条就红：免得以后有人在图里写 sin，没人记得这里分过两种
 const DEG = new Set(['scene.js', 'space.js', 'marks.js', 'class/boardtools.js', 'blocks/predict.js', 'blocks/scene.js']);
 const RAD = new Set([
-  'exact.js', 'formula.js', 'graph.js', 'anscheck.js', 'derivedo.js', 'practicespec.js', 'textspec.js', 'matrixspec.js',
+  'exact.js', 'formula.js', 'graph.js', 'graphspec.js', 'anscheck.js', 'derivedo.js', 'practicespec.js', 'textspec.js', 'matrixspec.js',
   'blocks/answer.js', 'blocks/steps.js', 'blocks/matrix.js', 'blocks/practice.js', 'blocks/letblock.js',
   'check/judge.js', 'check/spec.js', 'codejudge.js', 'render.js', 'stage/value.js', 'algofuncs.js', 'usespec.js',
   'anstypes.js', 'blocks/widget.js', 'class/classroom.js', 'exam/drillgen.js', 'exam/verify.js', 'stage/answer.js', 'stepperspec.js',

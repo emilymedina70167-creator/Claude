@@ -482,10 +482,11 @@ export function createScene(container, src, opts = {}) {
 
 // {表达式} 换成数值：公式里直接放 TeX，公式外自动包成 $…$。
 // 前面紧挨着字母、反斜杠、_ ^ } 的大括号属于 TeX（如 \begin{bmatrix}、x_{1}），不当作表达式
-export function fillValues(text, v, errors = []) {
+// compileFn：怎么把 {…} 里的式子编译成函数。不传是这里的角度制；函数图传它自己的（弧度、认 f(x) 的定义）
+export function fillValues(text, v, errors = [], compileFn = compile) {
   return text.replace(/(?<![\\\w}_^])\{([^{}]+)\}/g, (m, expr, at) => {
     let tex;
-    try { tex = valueTeX(compile(expr)(v)); } catch (e) { errors.push(e.message); tex = '?'; }
+    try { tex = valueTeX(compileFn(expr)(v)); } catch (e) { errors.push(e.message); tex = '?'; }
     const dollars = (text.slice(0, at).match(/(?<!\\)\$/g) || []).length;
     return dollars % 2 ? tex : `$${tex}$`;
   });
