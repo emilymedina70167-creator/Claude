@@ -103,3 +103,28 @@ test('lineint：沿参数曲线的第二类曲线积分 ∫ P dx + Q dy（页面
   assert.throws(() => evaluate('lineint(-y, x, cos(t), sin(t), 0, 2pi)'), /lineint/);
   assert.throws(() => evaluate('lineint(1/x, 0, t, 0, t, -1, 1)'), /算不出来|不收敛|发散/);
 });
+
+test('int3：三重积分（内层的上下限能含外层的变量；柱面、球面坐标自己乘雅可比）', () => {
+  const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) <= e, `${a} ≠ ${b}`);
+  near(evaluate('int3(1, x, 0, 1, y, 0, 1 - x, z, 0, 1 - x - y)'), 1 / 6);
+  near(evaluate('int3(x*y*z, x, 0, 1, y, 0, 2, z, 0, 3)'), 0.5 * 2 * 4.5);
+  near(evaluate('int3(rho^2*sin(phi), t, 0, 2pi, phi, 0, pi, rho, 0, 1)'), (4 * Math.PI) / 3);
+  // 柱面坐标：抛物面 z = r² 和 z = 4 之间
+  near(evaluate('int3(r, t, 0, 2pi, r, 0, 2, z, r^2, 4)'), 8 * Math.PI, 1e-5);
+  near(evaluate('int3(a, x, 0, 1, y, 0, 1, z, 0, 1)', { a: 2.5 }), 2.5);
+  assert.throws(() => evaluate('int3(1/z, x, 0, 1, y, 0, 1, z, -1, 1)'), /算不出来/);
+  assert.throws(() => evaluate('int3(1, x, 0, 1, y, 0, 1, 3, 0, 1)'), /int3/);
+});
+
+test('flux：通量 ∬ F·(r_u × r_v) du dv；lineint3：空间曲线上的第二类曲线积分', () => {
+  const near = (a, b, e = 1e-5) => assert.ok(Math.abs(a - b) <= e, `${a} ≠ ${b}`);
+  // 单位球面朝外（u 是 φ、v 是 θ），F = (x, y, z)：4π
+  near(evaluate('flux(x, y, z, sin(u)*cos(v), sin(u)*sin(v), cos(u), u, 0, pi, v, 0, 2pi)'), 4 * Math.PI);
+  // 换一下 u、v 的次序朝里：变号
+  near(evaluate('flux(x, y, z, sin(v)*cos(u), sin(v)*sin(u), cos(v), u, 0, 2pi, v, 0, pi)'), -4 * Math.PI);
+  // 平面片 z = 1 − x − y（x、y 从 0 到 1 的三角形）朝上，F = (0, 0, 1)：面积的投影 1/2
+  near(evaluate('flux(0, 0, 1, u, v*(1 - u), 1 - u - v*(1 - u), u, 0, 1, v, 0, 1)'), 0.5);
+  near(evaluate('lineint3(-y, x, 0, cos(t), sin(t), t, t, 0, 2pi)'), 2 * Math.PI);
+  near(evaluate('lineint3(y*z, x*z, x*y, t, t^2, t^3, t, 0, 1)'), 1); // 有势场 xyz：只看两头
+  near(evaluate('lineint3(0, 0, k, 0, 0, s, s, 0, 2)', { k: 3 }), 6);
+});

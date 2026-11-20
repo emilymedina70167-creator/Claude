@@ -1,0 +1,328 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>三维图：空间解析几何、多元微积分</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+unit: 三维图（视觉交互第 3 批）
+subject: 高数
+---
+
+# 三维图：空间解析几何、多元微积分
+
+每张图对着考纲里的一个考点。图能拖着转；交线、夹角、截痕、切平面、体积、通量都是页面算的。
+
+## 空间解析几何
+
+```space
+id: sp-meet
+title: 两个平面的交线和夹角
+q: 调 $k$，让两个平面垂直。
+range: 3
+view: 25 24
+slider k -2 2 = 0.5 step=0.1 label="k"
+plane p1 = x + y + z = 1 color=blue
+plane p2 = x - y + k*z = 0 color=pink
+meet p1, p2 color=yellow label=l
+angle p1, p2 label=θ
+show $n_1 = (1, 1, 1)$，$n_2 = (1, -1, k)$，$n_1\cdot n_2 = {dec(k, 1)}$，夹角 ${dec(angledeg(p1, p2), 1)}^\circ$
+goal angledeg(p1, p2) > 89.5 msg="$n_1\cdot n_2 = 0$：两个平面垂直"
+```
+
+```space
+id: sp-dist
+title: 点到平面的距离
+q: 点 $A$ 沿直线 $x = y = \dfrac z2$ 走（滑块 $t$）。让它到平面的距离是 $\sqrt 6$。
+range: 3.5
+view: 25 20
+slider t -1.5 1.5 = 0.2 step=0.05 label="t"
+plane p1 = x + y + 2z = 2 color=blue
+let A = [t, t, 2t]
+line [0, 0, 0] dir [1, 1, 2] color=gray dashed
+foot A on p1 color=yellow label=H
+show $A = (t, t, 2t)$，$t = {dec(t, 2)}$：$d = \dfrac{|x_0 + y_0 + 2z_0 - 2|}{\sqrt 6} = {dec(dist(A, p1), 3)}$（$\sqrt 6 = {dec(sqrt(6), 3)}$）
+goal dist(A, p1) = sqrt(6) tol=0.05 msg="$t = \tfrac43$ 或 $-\tfrac23$：平面两侧各有一个"
+```
+
+```space
+id: sp-lineplane
+title: 直线和平面的夹角
+q: 转动直线的方向（滑块 $m$），让直线和平面平行。
+range: 3
+view: -60 18
+slider m -2 2 = 1 step=0.1 label="m"
+plane p1 = x + y + z = 1 color=blue
+line l1 = [0, 0, 2] dir [1, m, 0] color=pink
+angle l1, p1 label=φ
+show $s = (1, m, 0)$，$n = (1, 1, 1)$，$\sin\varphi = \dfrac{|s\cdot n|}{|s||n|}$，$\varphi = {dec(angledeg(l1, p1), 1)}^\circ$
+goal angledeg(l1, p1) < 0.6 msg="$s\cdot n = 0$：直线和平面平行"
+```
+
+```space
+id: sp-quadric
+title: x² + y² − z² = c：单叶、锥面、双叶
+q: $c > 0$ 是单叶双曲面，$c < 0$ 是双叶双曲面。调 $c$，停在中间的那一种上。
+range: 2.5
+slider c -1 1 = 0.6 step=0.05 label="c"
+surface x^2 + y^2 - z^2 = c color=blue
+show $x^2 + y^2 - z^2 = {dec(c, 2)}$
+goal c = 0 tol=0.01 msg="$c = 0$：二次锥面"
+```
+
+```space
+id: sp-parab
+title: 椭圆抛物面的截痕
+q: 平面 $z = h$ 截出一个椭圆。调 $h$，让椭圆的面积是 $2\pi$。
+range: 2.5
+f(x, y) = x^2/4 + y^2
+slider h 0.1 2 = 0.5 step=0.05 label="h"
+surface S = z = f(x, y) for x -2.5 2.5, y -1.5 1.5 color=blue
+section z = h of S color=yellow
+show 截痕 $\dfrac{x^2}{4} + y^2 = {dec(h, 2)}$：半轴 ${dec(2sqrt(h), 2)}$ 和 ${dec(sqrt(h), 2)}$，面积 $\pi ab = {dec(2pi*h, 3)}$
+goal h = 1 tol=0.01 msg="$h = 1$：半轴 2 和 1，面积 $2\pi$"
+```
+
+```space
+id: sp-saddle
+title: 双曲抛物面（马鞍面）的截痕
+q: 平面 $x = a$ 截出开口朝下的抛物线，$y = b$ 截出开口朝上的。把两条截痕都移到过鞍点的位置。
+range: 2.2
+f(x, y) = (x^2 - y^2)/2
+slider a -2 2 = 1 step=0.05 label="x = a"
+slider b -2 2 = -0.5 step=0.05 label="y = b"
+surface S = z = f(x, y) for x -2 2, y -2 2 color=blue
+section x = a of S color=yellow
+section y = b of S color=pink
+show $x = a$：$z = \dfrac{a^2 - y^2}{2}$；$y = b$：$z = \dfrac{x^2 - b^2}{2}$
+goal abs(a) + abs(b) < 0.06 msg="鞍点：沿 $x$ 方向是极小，沿 $y$ 方向是极大"
+```
+
+```space
+id: sp-cyl
+title: 柱面被平面截出的曲线
+q: 平面 $kx + 2z = 1$ 截圆柱面 $x^2 + y^2 = 1$。调 $k$，让截痕是一个圆。
+range: 2
+slider k 0 2 = 1 step=0.05 label="k"
+surface x^2 + y^2 = 1 color=blue
+plane p1 = k*x + 2z = 1 color=pink
+curve [cos(t), sin(t), (1 - k*cos(t))/2] for t 0 2pi color=yellow
+show 交线：$x = \cos t$，$y = \sin t$，$z = \dfrac{1 - k\cos t}{2}$；平面和 $xy$ 面的夹角 ${dec(angledeg(p1, [0, 0, 1, 0]), 1)}^\circ$
+goal k = 0 tol=0.01 msg="平面水平：截痕是圆；斜着截是椭圆"
+```
+
+```space
+id: sp-helix
+title: 空间曲线的切线和法平面
+q: 螺旋线 $x = 2\cos t$，$y = 2\sin t$，$z = \dfrac t3$。移动切点，找到切线和 $x$ 轴垂直的地方。
+range: 2.5
+slider s 0.5 12 = 2 step=0.05 label="t₀"
+curve C = [2cos(t), 2sin(t), t/3] for t 0 4pi color=blue
+tangent C at s plane color=yellow
+show 切向量 $(x', y', z') = ({dec(-2sin(s), 2)},\ {dec(2cos(s), 2)},\ {dec(1/3, 2)})$
+show 法平面：$x'(t_0)(x - x_0) + y'(t_0)(y - y_0) + z'(t_0)(z - z_0) = 0$
+goal abs(sin(s)) < 0.03 msg="$x'(t_0) = -2\sin t_0 = 0$：切向量没有 $x$ 分量"
+```
+
+## 多元函数微分学
+
+```space
+id: sp-partial
+title: 偏导数是截痕的切线斜率
+q: 平面 $y = y_0$ 把曲面截出一条曲线，$f_x$ 是它的切线斜率。移动 $x_0$，找到 $f_x = 0$ 的地方。
+range: 2.5
+f(x, y) = 3 - x^2/2 - y^2/3
+slider x0 -2 2 = 1.2 step=0.05 label="x₀"
+slider y0 -2 2 = 0.8 step=0.05 label="y₀"
+surface S = z = f(x, y) for x -2.2 2.2, y -2.2 2.2 color=blue
+section y = y0 of S color=yellow
+vector [1, 0, f_x(x0, y0)]/1.2 from [x0, y0, f(x0, y0)] color=pink label=切线
+point [x0, y0, f(x0, y0)] color=pink
+show $f_x(x_0, y_0) = {dec(f_x(x0, y0), 3)}$，$f_y(x_0, y_0) = {dec(f_y(x0, y0), 3)}$
+goal f_x(x0, y0) = 0 tol=0.03 msg="$f_x = 0$：这条截痕在这里到了最高点"
+```
+
+```space
+id: sp-tplane
+title: 切平面和全微分
+q: 地面上的点 $P$ 可以拖：曲面上对应的地方画着切平面和法向量。把步长 $d$ 调小，看 $\Delta z$ 和 $dz$ 差多少。
+range: 2.5
+f(x, y) = 1.5 + x^2/4 + y^2/3
+let P = [1, 0.5] drag on=S snap=0.05
+slider d 0.02 1 = 0.8 step=0.02 label="Δx = Δy = d"
+surface S = z = f(x, y) for x -2.2 2.2, y -2.2 2.2 color=blue
+tangent S at P color=yellow
+show 法向量 $(-f_x, -f_y, 1) = {[-f_x(P), -f_y(P), 1]}$
+show $\Delta z = {dec(f(P + [d, d]) - f(P), 4)}$，$dz = f_x\,\Delta x + f_y\,\Delta y = {dec(dot(f_grad(P), [d, d]), 4)}$，差 ${dec(f(P + [d, d]) - f(P) - dot(f_grad(P), [d, d]), 4)}$
+goal abs(f(P + [d, d]) - f(P) - dot(f_grad(P), [d, d])) < 0.002 msg="$\Delta z - dz$ 是比 $\rho = \sqrt{\Delta x^2 + \Delta y^2}$ 高阶的无穷小"
+```
+
+```space
+id: sp-extreme
+title: 极值：切平面水平的地方
+q: 拖地面上的点 $P$，找到曲面的最高点。
+range: 2.5
+f(x, y) = 3 - ((x - 0.5)^2 + (y + 0.5)^2)/3
+let P = [-1.5, 1] drag on=S snap=0.05
+surface S = z = f(x, y) for x -2.2 2.2, y -2.2 2.2 color=blue
+tangent S at P color=yellow
+show $f(P) = {dec(f(P), 3)}$，$\nabla f = {f_grad(P)}$
+goal norm(f_grad(P)) < 0.12 msg="切平面水平了：$f_x = f_y = 0$，这里是驻点，也是最高点"
+```
+
+```space
+id: sp-pick
+title: 驻点：极值点和鞍点
+q: $f(x, y) = \dfrac{x^3 - 3x + y^2}{2}$。转着看这张曲面，在曲面上点出两个驻点。
+range: 2.5
+view: 20 60
+f(x, y) = (x^3 - 3x + y^2)/2
+surface S = z = f(x, y) for x -2.2 2.2, y -2 2 color=blue
+pick "在曲面上点出两个驻点" on S at [1, 0], [-1, 0] tol=0.35
+tangent S at [1, 0] color=yellow after
+tangent S at [-1, 0] color=pink after
+show $(1, 0)$：$AC - B^2 = {f_xx(1, 0)*f_yy(1, 0) - f_xy(1, 0)^2} > 0$，$A > 0$，极小；$(-1, 0)$：$AC - B^2 = {f_xx(-1, 0)*f_yy(-1, 0) - f_xy(-1, 0)^2} < 0$，鞍点。两处的切平面都是水平的 after
+```
+
+## 定积分的应用、重积分
+
+```space
+id: sp-disk
+title: 旋转体：圆盘法
+q: $y = \sqrt x$（$0 \le x \le 4$）绕 $x$ 轴转。让它转满一圈。
+range: 4
+slider th 0 6.2832 = 2 step=0.02 label="转到" play
+slider x0 0 4 = 2.5 step=0.05 label="x₀"
+revolve V = sqrt(x) for x 0 4 about x upto=th color=blue
+disk V at x0 color=yellow
+show $x_0$ 处的圆盘：半径 $\sqrt{x_0}$，面积 $\pi x_0 = {dec(pi*x0, 3)}$
+show 转到这里的体积 ${dec(V, 3)}$；转满是 $\pi\displaystyle\int_0^4 x\,dx = 8\pi = {dec(8pi, 3)}$
+goal th >= 6.27 msg="转满一圈：$V = 8\pi$"
+```
+
+```space
+id: sp-shell
+title: 旋转体：柱壳法
+q: $y = x(2 - x)$（$0 \le x \le 2$）绕 $y$ 轴转。把柱壳移到侧面积最大的地方。
+range: 2.2
+slider x0 0.1 1.9 = 0.6 step=0.02 label="x₀"
+revolve W = x*(2 - x) for x 0 2 about y color=blue
+shell W at x0 color=yellow
+show 柱壳：半径 $x_0$，高 $x_0(2 - x_0)$，侧面积 $2\pi x_0\cdot x_0(2 - x_0) = {dec(2pi*x0^2*(2 - x0), 3)}$
+show $V = 2\pi\displaystyle\int_0^2 x\cdot x(2 - x)\,dx = {dec(W, 4)}$（$\tfrac{8\pi}{3} = {dec(8pi/3, 4)}$）
+goal x0 = 4/3 tol=0.03 msg="$x_0 = \tfrac43$：$2x^2 - x^3$ 的最大值点"
+```
+
+```space
+id: sp-solid
+title: 三重积分的区域：先一后二、截面法
+q: $\Omega$ 由 $z = x^2 + y^2$ 和 $z = 4$ 围成。拖 $P$ 看竖线上 $z$ 的上下限；调 $z_0$，让截面的面积是 $2\pi$。
+range: 2.5
+let P = [1, 0.5] drag snap=0.05
+slider h 0.1 4 = 3 step=0.05 label="z₀"
+region D = r from 0 to 2 for t 0 2pi color=gray
+solid T = z from x^2 + y^2 to 4 over D color=blue
+column T at P lo=z1 hi=z2 color=pink
+slice T at h area=A color=yellow
+show 先一后二：过 $P$ 的竖线上 $z$ 从 ${dec(z1, 2)}$ 到 ${dec(z2, 2)}$
+show 截面法：$z = {dec(h, 2)}$ 的截面面积 $A(z) = {dec(A, 3)}$；$V = \displaystyle\int_0^4 A(z)\,dz = {dec(int3(r, t, 0, 2pi, r, 0, 2, z, r^2, 4), 3)}$
+goal A = 2pi tol=0.06 msg="$A(z) = \pi z$：$z_0 = 2$"
+```
+
+```space
+id: sp-tetra
+title: 四面体：投影区域和竖线
+q: $\Omega$：$x + y + z \le 1$，$x, y, z \ge 0$。拖 $P$，让竖线的长是 $\tfrac12$。
+range: 1.3
+let P = [0.2, 0.2] drag snap=0.02
+solid B = z from 0 to 1 - x - y for x 0 1, y 0 1 - x color=blue
+column B at P lo=z1 hi=z2 color=pink
+show 竖线上 $z$ 从 ${dec(z1, 2)}$ 到 ${dec(z2, 2)}$；$\displaystyle\iiint_\Omega dV = \int_0^1 dx\int_0^{1 - x} dy\int_0^{1 - x - y} dz = {dec(int3(1, x, 0, 1, y, 0, 1 - x, z, 0, 1 - x - y), 4)}$
+goal z2 = 0.5 tol=0.015 msg="$1 - x - y = \tfrac12$：$P$ 在直线 $x + y = \tfrac12$ 上"
+```
+
+```space
+id: sp-cone
+title: 柱面坐标：圆锥
+q: $\Omega$ 由 $z = \sqrt{x^2 + y^2}$ 和 $z = 2$ 围成。调 $z_0$，让截面的面积是 $\pi$。
+range: 2.5
+slider h 0.1 2 = 1.6 step=0.05 label="z₀"
+region D = r from 0 to 2 for t 0 2pi hide
+solid T = z from sqrt(x^2 + y^2) to 2 over D color=blue
+slice T at h area=A color=yellow
+show 截面 $A(z) = \pi z^2 = {dec(A, 3)}$；$V = \displaystyle\int_0^{2\pi} d\theta\int_0^2 r\,dr\int_r^2 dz = {dec(int3(r, t, 0, 2pi, r, 0, 2, z, r, 2), 4)}$（$\tfrac{8\pi}{3} = {dec(8pi/3, 4)}$）
+goal A = pi tol=0.05 msg="$z_0 = 1$"
+```
+
+```space
+id: sp-sph
+title: 球面坐标的区域
+q: $0 \le \rho \le 2$，$0 \le \varphi \le \alpha$。调 $\alpha$，让区域是上半个球。
+range: 2.3
+slider al 0.2 3.1 = 0.8 step=0.02 label="α"
+solid K = rho from 0 to 2 for phi 0 al, t 0 2pi color=blue
+show $V = \displaystyle\int_0^{2\pi} d\theta\int_0^{\alpha} \sin\varphi\,d\varphi\int_0^2 \rho^2\,d\rho = {dec(int3(rho^2*sin(phi), t, 0, 2pi, phi, 0, al, rho, 0, 2), 4)}$
+goal al = pi/2 tol=0.02 msg="$\alpha = \dfrac{\pi}{2}$：半球，$V = \dfrac{16\pi}{3}$"
+```
+
+## 曲面积分
+
+```space
+id: sp-gauss
+title: 通量和高斯公式
+q: $\mathbf F = (x, y, z)$ 穿出半径 $R$ 的球面。调 $R$，让通量是 $4\pi$。
+range: 2.4
+slider R 0.5 1.8 = 1.5 step=0.05 label="R"
+surface S = [R*sin(v)*cos(u), R*sin(v)*sin(u), R*cos(v)] for v 0 pi, u 0 2pi color=blue
+field [x, y, z] n=4 color=gray
+normals S n=4 color=yellow
+show 通量 $\displaystyle\oiint_\Sigma \mathbf F\cdot d\mathbf S = {dec(flux(x, y, z, R*sin(v)*cos(u), R*sin(v)*sin(u), R*cos(v), v, 0, pi, u, 0, 2pi), 3)}$
+show 高斯公式：$\displaystyle\iiint_\Omega \operatorname{div}\mathbf F\,dV = \iiint_\Omega 3\,dV = {dec(int3(3rho^2*sin(phi), t, 0, 2pi, phi, 0, pi, rho, 0, R), 3)}$
+goal flux(x, y, z, R*sin(v)*cos(u), R*sin(v)*sin(u), R*cos(v), v, 0, pi, u, 0, 2pi) = 4pi tol=0.2 msg="$4\pi R^3 = 4\pi$：$R = 1$"
+```
+
+```space
+id: sp-stokes
+title: 斯托克斯公式：曲面怎么鼓，通量不变
+q: $\mathbf F = (-y, x, 0)$，$\operatorname{rot}\mathbf F = (0, 0, 2)$。曲面的边界是单位圆，调 $h$ 改它鼓多高。
+range: 1.8
+slider h 0 1.5 = 0.8 step=0.05 label="h"
+surface S = [r*cos(t), r*sin(t), h*(1 - r^2)] for r 0 1, t 0 2pi color=blue
+curve [cos(t), sin(t), 0] for t 0 2pi color=yellow
+normals S n=4 color=pink
+show 边界上的环流 $\displaystyle\oint_L -y\,dx + x\,dy = {dec(lineint3(-y, x, 0, cos(t), sin(t), 0, t, 0, 2pi), 4)}$
+show 旋度穿过曲面的通量 $\displaystyle\iint_\Sigma \operatorname{rot}\mathbf F\cdot d\mathbf S = {dec(flux(0, 0, 2, r*cos(t), r*sin(t), h*(1 - r^2), r, 0, 1, t, 0, 2pi), 4)}$
+```
+
+## 线性代数
+
+```space
+id: sp-planes3
+title: 三个平面：方程组解的几何
+q: $\pi_1: y = 0$，$\pi_2: z = 0$，$\pi_3: mx + y + z = d$。调 $m$、$d$，让三个平面交于一条直线。
+range: 3
+slider m -1 1 = 0.5 step=0.1 label="m"
+slider d -2 2 = 1 step=0.25 label="d"
+plane p1 = y = 0
+plane p2 = z = 0
+plane p3 = m*x + y + z = d
+meet p1, p2, p3 color=white label=P
+show $r(A) = {rank([[0, 1, 0], [0, 0, 1], [m, 1, 1]])}$，$r(A, b) = {rank([[0, 1, 0, 0], [0, 0, 1, 0], [m, 1, 1, d]])}$
+goal abs(m) + abs(d) < 0.01 msg="$r(A) = r(A, b) = 2 < 3$：无穷多解，解是一条直线"
+```
+
+```space
+id: sp-eigen
+title: 三阶矩阵的特征方向
+q: $A = \begin{pmatrix}2&0&0\\0&3&4\\0&4&9\end{pmatrix}$。用两个角转动 $v$，让 $Av$ 和 $v$ 共线。
+range: 3
+let A = [[2, 0, 0], [0, 3, 4], [0, 4, 9]]
+slider th 0 360 = 40 step=1 label="θ"
+slider ph 0 180 = 60 step=1 label="φ"
+let v = [sin(ph)*cos(th), sin(ph)*sin(th), cos(ph)]
+eigen A
+vector 2v color=blue label=v
+vector A*v/5 color=pink label="Av/5"
+show $v = ({dec(el(v, 1), 2)},\ {dec(el(v, 2), 2)},\ {dec(el(v, 3), 2)})$，$Av = ({dec(el(A*v, 1), 2)},\ {dec(el(A*v, 2), 2)},\ {dec(el(A*v, 3), 2)})$
+goal norm(cross(A*v, v)) < 0.15 msg="$Av$ 和 $v$ 共线：$v$ 是特征向量"
+```
+</script>

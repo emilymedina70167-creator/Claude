@@ -1096,6 +1096,12 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 
 /* ===== space：三维图 ===== */
 .sp-plot { position: relative; }
+/* 上下排的三维图（用了第 3 批写法的）：图居中，别大到一屏放不下 */
+.block-space .w-body.is-stack { grid-template-columns: 1fr; gap: 12px; }
+.block-space .w-body.is-stack > .sp-plot { width: min(100%, 560px); margin: 0 auto; }
+.block-space .w-body.is-stack > .w-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 360px)); gap: 6px 22px; align-items: start; }
+.block-space .w-body.is-stack > .w-side > :is(.r-show, .goal-msg, .w-hint, .w-note, .scene-error) { grid-column: 1 / -1; }
+.block-space .w-body.is-stack > .w-side > .sliders { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 360px)); gap: 4px 22px; }
 .plane.space { touch-action: none; cursor: grab; }
 .plane.space.dragging { cursor: grabbing; }
 .plane.space .sp-axis { stroke-width: 1.6; }

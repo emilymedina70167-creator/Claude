@@ -379,7 +379,7 @@ function run(n, vars, fns = FUNCS) {
 // 只有 4 个参数、而且绑定的那个位置写的是一个字母时才算：max(1, 2, 3, 4) 这样的普通调用不受影响。
 // 只在这里（浮点求值）有；exact.js 的 \calc 不认。
 export const FORM_MAX_TERMS = 20000; // 求和最多几项：滑块把 n 拖到很大时报出来，不卡住页面
-const FORM_EG = { lineint: 'lineint(-y, x, cos(t), sin(t), t, 0, 2pi)', int2: 'int2(x*y, x, 0, 1, y, 0, x)', sum: 'sum(k, 1, n, 1/k^2)', prod: 'prod(k, 1, n, k)', maxof: 'maxof(k, 1, n, 式子)', minof: 'minof(k, 1, n, 式子)', int: 'int(cos(t), t, 0, x)', maxon: 'maxon(x - x^2, x, 0, 1)', minon: 'minon(x^2, x, -1, 1)', roots: 'roots(x^3 - 3x, x, -3, 3)' };
+const FORM_EG = { int3: 'int3(1, x, 0, 1, y, 0, 1 - x, z, 0, 1 - x - y)', flux: 'flux(x, y, z, sin(u)*cos(v), sin(u)*sin(v), cos(u), u, 0, pi, v, 0, 2pi)', lineint3: 'lineint3(-y, x, 0, cos(t), sin(t), t, t, 0, 2pi)', lineint: 'lineint(-y, x, cos(t), sin(t), t, 0, 2pi)', int2: 'int2(x*y, x, 0, 1, y, 0, x)', sum: 'sum(k, 1, n, 1/k^2)', prod: 'prod(k, 1, n, k)', maxof: 'maxof(k, 1, n, 式子)', minof: 'minof(k, 1, n, 式子)', int: 'int(cos(t), t, 0, x)', maxon: 'maxon(x - x^2, x, 0, 1)', minon: 'minon(x^2, x, -1, 1)', roots: 'roots(x^3 - 3x, x, -3, 3)' };
 function isForm(n, sp) {
   const binds = [].concat(sp.bind);
   if (![].concat(sp.arity || 4).includes(n.args.length)) return false;
@@ -432,9 +432,9 @@ function marksOf(body) {
 const isFormQuiet = (n) => { try { return isForm(n, SPECIAL[n.name]); } catch { return true; } };
 
 // 一元的：先在区间上找出断口的位置（mark 变号的地方，二分），在那里把积分分段，每段里是光滑的
-function intPieces(f, marks, a, b) {
+function intPieces(f, marks, a, b, N = 96) {
   if (!marks.length || !Number.isFinite(a) || !Number.isFinite(b) || a === b) return numIntegral(f, a, b, { maxSeg: 300 });
-  const lo = Math.min(a, b), hi = Math.max(a, b), N = 96, cuts = [];
+  const lo = Math.min(a, b), hi = Math.max(a, b), cuts = [];
   for (const g of marks) {
     const at = (x) => { try { const v = g(x); return typeof v === 'number' ? v : NaN; } catch { return NaN; } };
     const root = (x0, v0, x1, v1) => { for (let k = 0; k < 50; k++) { const m = (x0 + x1) / 2, vm = at(m); if (Number.isNaN(vm)) break; if ((vm > 0) === (v0 > 0)) { x0 = m; v0 = vm; } else { x1 = m; v1 = vm; } } return (x0 + x1) / 2; };
@@ -580,6 +580,83 @@ const SPECIAL = {
     const r = numIntegral(f, A, B, { maxSeg: 300 });
     if (r.ok !== true) throw new Error(`这个曲线积分页面算不出来（${r.why || '不收敛'}）`);
     return r.value;
+  }) },
+  // 空间曲线上的 ∫_L P dx + Q dy + R dz：和 lineint 一样，多一个分量。定义里调用时多带三个参数（曲线上的点叫什么）
+  lineint3: { arity: [9, 12], bind: [6], run: (n, vars, fns) => memoRun(n, [n.args[6].name], vars, () => {
+    const F = n.args.slice(0, 3), path = n.args.slice(3, 6), tv = n.args[6];
+    const names = [n.args[9]?.name || 'x', n.args[10]?.name || 'y', n.args[11]?.name || 'z'];
+    const A = num(run(n.args[7], vars, fns)), B = num(run(n.args[8], vars, fns));
+    if (!Number.isFinite(A) || !Number.isFinite(B)) throw new Error('lineint3 的参数范围要是有限的');
+    const v = Object.create(vars);
+    v[tv.name] = 0;
+    const at = (t) => { v[tv.name] = t; return path.map((e) => num(run(e, v, fns))); };
+    const pv = Object.create(v);
+    const lo = Math.min(A, B), hi = Math.max(A, B), h = 1e-5 * Math.max(1, Math.abs(A), Math.abs(B));
+    const f = (t) => {
+      const t1 = Math.max(lo, t - h), t2 = Math.min(hi, t + h), p1 = at(t1), p2 = at(t2), p = at(t);
+      names.forEach((nm, i) => { pv[nm] = p[i]; });
+      let s = 0;
+      for (let i = 0; i < 3; i++) s += num(run(F[i], pv, fns)) * (p2[i] - p1[i]);
+      return s / (t2 - t1);
+    };
+    const r = numIntegral(f, A, B, { maxSeg: 300 });
+    if (r.ok !== true) throw new Error(`这个曲线积分页面算不出来（${r.why || '不收敛'}）`);
+    return r.value;
+  }) },
+  // 通量 ∬_Σ P dydz + Q dzdx + R dxdy = ∬ F(r(u, v))·(r_u × r_v) du dv：Σ 是参数曲面，朝 r_u × r_v 的那一侧。
+  // r_u、r_v 页面用差商求。以前要主讲自己把法向量、面积元推出来
+  flux: { arity: [12, 15], bind: [6, 9], run: (n, vars, fns) => memoRun(n, [n.args[6].name, n.args[9].name], vars, () => {
+    const F = n.args.slice(0, 3), surf = n.args.slice(3, 6), uv = n.args[6], vv = n.args[9];
+    const names = [n.args[12]?.name || 'x', n.args[13]?.name || 'y', n.args[14]?.name || 'z'];
+    const [ua, ub, va, vb] = [7, 8, 10, 11].map((i) => num(run(n.args[i], vars, fns)));
+    if (![ua, ub, va, vb].every(Number.isFinite)) throw new Error('flux 的参数范围要是有限的');
+    const s = Object.create(vars);
+    s[uv.name] = 0; s[vv.name] = 0;
+    const at = (a, b) => { s[uv.name] = a; s[vv.name] = b; return surf.map((e) => num(run(e, s, fns))); };
+    const pv = Object.create(s);
+    const cl = (t, lo, hi) => Math.max(Math.min(lo, hi), Math.min(Math.max(lo, hi), t));
+    const hu = 1e-5 * Math.max(1, Math.abs(ua), Math.abs(ub)), hv = 1e-5 * Math.max(1, Math.abs(va), Math.abs(vb));
+    const f = (a, b) => {
+      try {
+        const a1 = cl(a - hu, ua, ub), a2 = cl(a + hu, ua, ub), b1 = cl(b - hv, va, vb), b2 = cl(b + hv, va, vb);
+        const p = at(a, b), pa1 = at(a1, b), pa2 = at(a2, b), pb1 = at(a, b1), pb2 = at(a, b2);
+        const ru = [0, 1, 2].map((i) => (pa2[i] - pa1[i]) / (a2 - a1)), rv = [0, 1, 2].map((i) => (pb2[i] - pb1[i]) / (b2 - b1));
+        const nn = [ru[1] * rv[2] - ru[2] * rv[1], ru[2] * rv[0] - ru[0] * rv[2], ru[0] * rv[1] - ru[1] * rv[0]];
+        names.forEach((nm, i) => { pv[nm] = p[i]; });
+        let d = 0;
+        for (let i = 0; i < 3; i++) d += num(run(F[i], pv, fns)) * nn[i];
+        return d;
+      } catch { return NaN; }
+    };
+    let r = numIntegral2(f, [ua, ub], [() => va, () => vb], { tol: 1e-8 });
+    if (r.ok !== true) r = cubature2(f, [ua, ub], [() => va, () => vb], {});
+    if (r.ok !== true) throw new Error(`这个曲面积分页面算不出来（${r.why || '不收敛'}）`);
+    return r.value;
+  }) },
+  // 三重积分 ∫_a^b dx ∫_c^d dy ∫_e^f 式子 dz：c、d 能含 x，e、f 能含 x、y（柱面、球面坐标把雅可比写进式子）。
+  // 最里面一层是一元的积分（有条件、绝对值的先在断口上分段），外面两层照二重积分算
+  int3: { arity: 10, bind: [1, 4, 7], run: (n, vars, fns) => memoRun(n, [n.args[1].name, n.args[4].name, n.args[7].name], vars, () => {
+    const [body, xv, a, b, yv, c, d, zv, e, g] = n.args;
+    const A = num(run(a, vars, fns)), B = num(run(b, vars, fns));
+    const v = Object.create(vars);
+    v[xv.name] = 0; v[yv.name] = 0; v[zv.name] = 0;
+    const limX = (ex) => (x) => { v[xv.name] = x; return num(run(ex, v, fns)); };
+    const marks = marksOf(body);
+    let why = '';
+    const inner = (x, y) => {
+      v[xv.name] = x; v[yv.name] = y;
+      let z0, z1;
+      try { z0 = num(run(e, v, fns)); z1 = num(run(g, v, fns)); } catch { return NaN; }
+      const f = (z) => { v[xv.name] = x; v[yv.name] = y; v[zv.name] = z; try { const r = run(body, v, fns); return isNum(r) ? r : NaN; } catch { return NaN; } };
+      const r = intPieces(f, marks.map((m) => (z) => { v[xv.name] = x; v[yv.name] = y; v[zv.name] = z; return m(v, fns); }), z0, z1, 32);
+      if (r.ok !== true) { why = r.why || '不收敛'; return NaN; }
+      return r.value;
+    };
+    // 式子里有条件（用指示函数写的区域）：里层积完是连续但有折角的，一层套一层的自适应求积在折角上分个没完——直接上四叉树，分浅一点
+    let r = marks.length ? cubature2(inner, [A, B], [limX(c), limX(d)], { base: 12, smoothDepth: 2 }) : numIntegral2(inner, [A, B], [limX(c), limX(d)], { tol: 1e-7 });
+    if (r.ok !== true && !why && !marks.length) r = cubature2(inner, [A, B], [limX(c), limX(d)], {});
+    if (r.ok === true) return r.value;
+    throw new Error(`这个三重积分页面算不出来（${why || r.why || '不收敛'}）`);
   }) },
   int2: { arity: 7, bind: [1, 4], run: (n, vars, fns) => memoRun(n, [n.args[1].name, n.args[4].name], vars, () => {
     const [body, xv, a, b, yv, c, d] = n.args;

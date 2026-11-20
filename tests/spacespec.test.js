@@ -169,3 +169,11 @@ test('field、normals、eigen、pick；这些命令让图按弧度（eigen、pic
   assert.throws(() => parseSpace('pick "x" at [0, 0] after'), /pick 不能写 after/);
   assert.equal(parseSpace('curve [t, t, t] for t 0 1').rad, true);
 });
+
+test('pick … on S：学生点在曲面上（目标还是地面上的 [x, y]）', () => {
+  const g = parseSpace('surface S = z = x*y\npick "点出鞍点" on S at [0, 0] tol=0.3');
+  assert.equal(g.cmds[1].on, 'S'); assert.deepEqual(g.cmds[1].targets({}), [[0, 0]]);
+  assert.equal(parseSpace('pick "x" at [0, 0]').cmds[0].on, undefined);
+  assert.throws(() => parseSpace('pick "x" on S at [0, 0]'), /没有叫 S 的曲面/);
+  assert.throws(() => parseSpace('surface S = x^2 + y^2 + z^2 = 1\npick "x" on S at [0, 0]'), /z = f\(x, y\)/);
+});

@@ -159,12 +159,14 @@ explain: 第一行 $2\cdot1 + (-1)\cdot2 = 0$，第二行 $1\cdot1 + 3\cdot2 = 7
 - **`check:`：答案不唯一时按条件判**（特解、基础解系的某种取法、把 $A$ 对角化的 $P$、正交矩阵 $Q$、可逆变换 $C$……）。`answer:` 仍然写一个对的答案（决定输入框的形状，「看答案」时显示它；页面先拿它验一遍条件，不满足会报）；`check:` 写条件，`ans` 是我填的，一行一个或用 `;` 隔开，`=> 提示` 是这一条不满足时告诉我的话。例：`check: A*ans == b => 代回去不等于 b`、`check: ans'*ans == E(3)`（正交矩阵）。
 - 格子里可以写根号：`1/√2`、`√3/2`、`-2/√6`（小键盘上有 √），正交矩阵、单位向量的题直接写。
 - **含参数的计算**：`let` 块里写 `a = param`（`lambda = param` 也行），之后 `\calc` 按 $a$ 精确地算：`\calc{det(A)}`、`\calc{factor(det(A))}`（写成 $-(a+2)(a-1)^2$）、`\calc{factor(det(lambda*E(3) - A))}`（特征多项式）、`A*A`、`tr`；不能除以含参数的式子、不能求逆。演示组件照样用：`elim` 写 `matrix: \calc{A}` 配 `param: a`。
-- `formula: n` 的答案按格写成矩阵（`answer: [[2^n, n*2^(n-1)], [0, 2^n]]`）时，作答框每格一个式子框，逐格判、指出哪一格不对。
-- **`form:` 要求写成什么样**（值对了以后再看写法）：`form: kA`（一个数 × 矩阵名：`answer: 3^9*A`、`formula: -`（没有变量），写乘开的矩阵或 `A^10` 都不算）、`form: factored`（因式分解：`answer: det(A)`、`formula: a`，展开的多项式不算）。
-- **引用前面的答案 `ans(编号)`**：`check:`、`answer:` 里写 `ans(q-P)`，用我在 `id: q-P` 那道题写的答案（还没做就用它的标准答案）：`answer: inv(ans(q-P))*A*ans(q-P)`，我前面选的 $P$ 不一样，这题照样按我的判。
+- 还有 `formula: n` 按格写的矩阵答案、`form:`（要求写成 kA / 因式分解）、`ans(编号)`（引用前面那道题的答案）：见完整写法。
 - **`type: interval`：一个数集**（含参讨论）：`answer: a != 1 且 a != -2`。我写区间 `(-∞, 1) ∪ (2, +∞)`、不等式 `a < 1 或 a > 2`、`a ≠ 1，a ≠ -2`、几个值 `{1, -2}`、`R`、`∅` 都认，集合一样就对；不对时只说在哪个数上不一样。**`type: equation`**：线性方程（组），`answer: x + y + z = 1`（几个用 `;`），同一个解集就对（同乘一个数、移项都算）。
 
 <!-- 完整写法 -->
+
+- `formula: n` 的答案按格写成矩阵（`answer: [[2^n, n*2^(n-1)], [0, 2^n]]`）时，作答框每格一个式子框，逐格判、指出哪一格不对。
+- **`form:` 要求写成什么样**（值对了以后再看写法）：`form: kA`（一个数 × 矩阵名：`answer: 3^9*A`、`formula: -`（没有变量），写乘开的矩阵或 `A^10` 都不算）、`form: factored`（因式分解：`answer: det(A)`、`formula: a`，展开的多项式不算）。
+- **引用前面的答案 `ans(编号)`**：`check:`、`answer:` 里写 `ans(q-P)`，用我在 `id: q-P` 那道题写的答案（还没做就用它的标准答案）：`answer: inv(ans(q-P))*A*ans(q-P)`，我前面选的 $P$ 不一样，这题照样按我的判。
 
 `check:` 的完整例子：
 
@@ -1253,16 +1255,10 @@ vector a*u + b*v color=yellow label=w drop
 show $\mathbf w = a\mathbf u + b\mathbf v = {a*u + b*v}$
 ```
 
-| 命令 | 作用 |
-|---|---|
-| `vector 表达式`（`from 点`） | 三维箭头。`drop` 加一条到地面的虚线，帮助看高度 |
-| `point P, …`、`segment P, Q`、`line P dir d` | 点、线段、直线 |
-| `span u, v` | 过原点的平面（u、v 共线时画成直线；三个向量张成全空间时注明） |
-| `plane normal n at P` | 过 P、法向量为 n 的平面（省略 `at` 则过原点） |
-| `box u, v, w` | u、v、w 张成的平行六面体 |
-| `grid M` | 地面网格（z = 0）在 3×3 矩阵 M 下的像 |
-| `quadric A = c` | 二次曲面 $\mathbf x^{\mathsf T}A\mathbf x=c$ 的线框（A 是 3×3 对称矩阵，不写 `= c` 是 1）：椭球面、单叶 / 双叶双曲面、柱面、锥面，左上角写着是什么曲面 |
-| `text "文字" at P`、`let`、`slider`、`show` | 同上 |
+- `vector 表达式`（`from 点`；`drop` 加一条到地面的虚线）、`point P, …`、`segment P, Q`、`line P dir d`、`text "文字" at P`、`let`、`slider`、`show`。
+- `span u, v`：过原点的平面（共线时是直线；三个向量张成全空间时注明）。`plane normal n at P`：过 P、法向量 n 的平面。`box u, v, w`：平行六面体。`grid M`：地面网格在 3×3 矩阵 M 下的像。
+- `quadric A = c`：二次曲面 $\mathbf x^{\mathsf T}A\mathbf x=c$ 的线框（A 是 3×3 对称矩阵），左上角写着是什么曲面。
+- 平面写方程和交线、三个平面的情形、三阶的特征方向、曲面、旋转体、积分区域、能拖的点和 `goal` / `pick`：见完整写法。
 
 字段：`range`（坐标范围，默认自动）、`view: 方位角 仰角`（默认 `-32 22`）、`spin: true`（打开时慢慢转）、`title`、`q`、`note`、`link`。
 

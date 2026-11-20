@@ -129,12 +129,13 @@ function parseCmd(kind, rest, { C, cmds = [] }) {
   if (kind === 'pick') {
     const { body, mods } = splitMods(rest);
     if (mods.after || mods.before) throw new Error('pick 不能写 after / before（它自己就是要学生做到的事）');
-    const m = body.match(/^(?:"([^"]*)"|“([^”]*)”)\s+at\s+(.+)$/);
-    if (!m) throw new Error('pick 的写法：pick "点出驻点" at [1, 0], [-1, 0]（学生在地面上点，目标写 [x, y]）');
-    const each = splitTop(m[3]).map((x) => C(x));
+    const m = body.match(/^(?:"([^"]*)"|“([^”]*)”)\s+(?:on\s+([A-Za-z_]\w*)\s+)?at\s+(.+)$/);
+    if (!m) throw new Error('pick 的写法：pick "点出驻点" at [1, 0], [-1, 0]（学生在地面上点，目标写 [x, y]；on S 是点在曲面 S 上）');
+    if (m[3]) { const S = cmds.find((x) => x.kind === 'surface' && x.name === m[3]); if (!S) throw new Error(`pick：没有叫 ${m[3]} 的曲面（前面先起名字）`); if (S.form !== 'z') throw new Error('pick … on S：S 要是 z = f(x, y) 的曲面'); }
+    const each = splitTop(m[4]).map((x) => C(x));
     const targets = (vars = {}) => each.map((e) => { const p = e(vars); if (!Array.isArray(p) || p.length !== 2 || !p.every((x) => typeof x === 'number')) throw new Error('pick 的目标要写成 [x, y]（地面上的点）'); return p; });
     targets({ __probe: 1 }); // 写成一个数的当场报（用到变量的留到画的时候）
-    return { kind, q: m[1] ?? m[2], targets, tol: mods.tol !== undefined ? Number(mods.tol) : undefined, mods };
+    return { kind, q: m[1] ?? m[2], on: m[3], targets, tol: mods.tol !== undefined ? Number(mods.tol) : undefined, mods };
   }
   let { body, mods } = splitMods(rest);
   if (kind === 'goal') {

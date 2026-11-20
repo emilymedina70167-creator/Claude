@@ -73,6 +73,9 @@ export function createSpace(container, src, opts = {}) {
 
   container.innerHTML = `<div class="w-plot sp-plot g-plot"><div class="sp-tools"><button type="button" class="btn btn-sm sp-home" title="回到开始的视角">正视角</button><button type="button" class="btn btn-sm sp-spin" title="慢慢转一圈">转一转</button></div></div><div class="w-side"><div class="sliders"></div><div class="readout r-show"></div><div class="goal-msg" hidden></div><div class="w-hint">拖动图可以旋转（手指或 Pencil 都行）。</div></div>`;
   const side = container.querySelector('.w-side');
+  // 用了第 3 批写法的图（微积分的、写方程的平面、交线、特征方向、有目标的）：上下排，图居中放大，读数在下面占一整行。
+  // 老写法的图照旧左右两栏（一张不变）
+  if (parsed.rad || pickIdx.length || goalIdx.length || cmds.some((c) => ['meet', 'angle', 'foot', 'eigen'].includes(c.kind) || (c.kind === 'plane' && c.eq))) container.classList.add('is-stack');
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('viewBox', `0 0 ${SIZE} ${SIZE}`);
   svg.setAttribute('class', 'plane space');
@@ -212,6 +215,28 @@ export function createSpace(container, src, opts = {}) {
     const x1 = (sx - SIZE / 2) / K, up = (SIZE / 2 - sy) / K;
     const y1 = (up + zc * Math.cos(b)) / Math.sin(b);
     return [x1 * Math.cos(a) + y1 * Math.sin(a), -x1 * Math.sin(a) + y1 * Math.cos(a)];
+  }
+  // 屏幕上的一点 → 过它的视线最先碰到曲面 z = f(x, y) 的地方（地面上的 [x, y]）；碰不到回 null。
+  // 学生指着曲面上看得见的那一点，比隔着曲面去点地面自然
+  function toSurface(sx, sy, S, v) {
+    const a = (state.yaw * Math.PI) / 180, b = (state.pitch * Math.PI) / 180;
+    const x1 = (sx - SIZE / 2) / K, up = (SIZE / 2 - sy) / K;
+    const f = fnXY(S.f, v), bs = baseOf(S.base, v);
+    const at = (depth) => { const y1 = up * Math.sin(b) + depth * Math.cos(b), z = up * Math.cos(b) - depth * Math.sin(b) + zc; return [x1 * Math.cos(a) + y1 * Math.sin(a), -x1 * Math.sin(a) + y1 * Math.cos(a), z]; };
+    const g = (depth) => { const p = at(depth); if (!(baseDepth(bs, p[0], p[1]) >= 0)) return NaN; return p[2] - f(p[0], p[1]); };
+    const far = R * 2.2, n = 240;
+    let d0 = -far, g0 = g(d0);
+    for (let i = 1; i <= n; i++) {
+      const d1 = -far + (2 * far * i) / n, g1 = g(d1);
+      if (!Number.isNaN(g0) && !Number.isNaN(g1) && (g0 > 0) !== (g1 > 0)) {
+        let lo = d0, hi = d1, gl = g0;
+        for (let k = 0; k < 30; k++) { const m = (lo + hi) / 2, gm = g(m); if (Number.isNaN(gm)) break; if ((gm > 0) === (gl > 0)) { lo = m; gl = gm; } else hi = m; }
+        const p = at((lo + hi) / 2);
+        return [p[0], p[1]];
+      }
+      d0 = d1; g0 = g1;
+    }
+    return null;
   }
   const color = (c, d) => COLOR[String(c.mods.color || '').toLowerCase()] || d;
   const visible = (c) => !(c.mods.from !== undefined && !((extra.step ?? 0) >= Number(c.mods.from))) && !(c.mods.until !== undefined && !((extra.step ?? 0) <= Number(c.mods.until)))
@@ -838,7 +863,12 @@ export function createSpace(container, src, opts = {}) {
       const S = c.mods.on ? find('surface', String(c.mods.on)) : null;
       if (S && S.form === 'z') {
         const z = fnXY(S.f, v)(p[0], p[1]);
-        if (!Number.isNaN(z)) { seg3([p[0], p[1], 0], [p[0], p[1], z], 'guide', hc); dot3([p[0], p[1], z], hc, 6); }
+        if (!Number.isNaN(z)) {
+          seg3([p[0], p[1], 0], [p[0], p[1], z], 'guide', hc);
+          // 曲面上的那一点也能直接抓着拖（手指指到曲面上哪，点就到哪）
+          const T = proj([p[0], p[1], z]);
+          overlay.push({ cmd: cur, fn: () => { el('circle', { cx: T[0], cy: T[1], r: 6, class: 'pt' }).style.fill = hc; el('circle', { cx: T[0], cy: T[1], r: 22, class: 'handle', 'data-handle': c.name, 'data-on': 'surface', style: `--vc:${hc}` }); } });
+        }
       }
       overlay.push({ cmd: cur, fn: () => {
         el('circle', { cx: G[0], cy: G[1], r: 5.5, class: 'pt' }).style.fill = hc;
@@ -852,15 +882,17 @@ export function createSpace(container, src, opts = {}) {
   function drawPicks(v) {
     for (const i of pickIdx) {
       const st = state.picks.get(i);
+      const onS = cmds[i].on ? find('surface', cmds[i].on) : null, fS = onS ? fnXY(onS.f, v) : null;
+      const lift = (p) => { const z = fS ? fS(p[0], p[1]) : 0; return [p[0], p[1], Number.isNaN(z) ? 0 : z]; };
       st.pts.forEach((p, k) => {
-        const G = proj([p[0], p[1], 0]);
+        const G = proj(lift(p));
         const cls = st.res ? (st.res.hits.includes(k) ? ' is-hit' : st.res.extra.includes(k) ? ' is-miss' : '') : '';
         overlay.push({ cmd: i + 1, fn: () => el('circle', { cx: G[0], cy: G[1], r: 9, class: `g-pickpt${cls}` }) });
       });
       if (st.done) {
         let ts = [];
         try { ts = cmds[i].targets(v); } catch { ts = []; }
-        for (const t of ts) { const G = proj([t[0], t[1], 0]); overlay.push({ cmd: i + 1, fn: () => el('circle', { cx: G[0], cy: G[1], r: 5, class: 'g-dot g-target' }) }); }
+        for (const t of ts) { const G = proj(lift(t)); overlay.push({ cmd: i + 1, fn: () => el('circle', { cx: G[0], cy: G[1], r: 5, class: 'g-dot g-target' }) }); }
       }
     }
   }
@@ -923,7 +955,7 @@ export function createSpace(container, src, opts = {}) {
       const bad = targetsOf(c) instanceof Error;
       row.classList.toggle('is-done', st.done);
       row.classList.toggle('is-idle', !st.done && i !== act);
-      row.querySelector('.g-pick-count').textContent = st.done ? '' : st.pts.length ? `点了 ${st.pts.length} 个` : '在地面（xy 平面）上点出来';
+      row.querySelector('.g-pick-count').textContent = st.done ? '' : st.pts.length ? `点了 ${st.pts.length} 个` : c.on ? '在曲面上点出来（可以先转一转）' : '在地面（xy 平面）上点出来';
       row.querySelector('.g-pick-check').disabled = st.done || i !== act || bad;
       row.querySelector('.g-pick-clear').hidden = st.done || !st.pts.length;
       row.querySelector('.g-pick-show').hidden = st.done || st.tries < 3;
@@ -974,9 +1006,11 @@ export function createSpace(container, src, opts = {}) {
       // 记住手指和点的偏移：点不会一按就跳到指尖
       const c = cmds.find((k) => k.kind === 'let' && k.name === name);
       let cur0; try { cur0 = env()[name]; } catch { cur0 = null; }
-      const [sx, sy] = toView(e), g = cur0 ? proj([cur0[0], cur0[1], 0]) : [sx, sy];
+      const onS = e.target.getAttribute('data-on') === 'surface' ? find('surface', String(c.mods.on)) : null;
+      let v0 = null; try { v0 = env(); } catch { v0 = null; }
+      const [sx, sy] = toView(e), g = !cur0 ? [sx, sy] : onS && v0 ? proj([cur0[0], cur0[1], fnXY(onS.f, v0)(cur0[0], cur0[1])]) : proj([cur0[0], cur0[1], 0]);
       ctl.stop(name);
-      drag = { kind: 'point', name, c, id: e.pointerId, ox: g[0] - sx, oy: g[1] - sy, from: cur0, moved: false };
+      drag = { kind: 'point', name, c, id: e.pointerId, ox: g[0] - sx, oy: g[1] - sy, from: cur0, moved: false, onS };
       return;
     }
     drag = { kind: 'view', x: e.clientX, y: e.clientY, yaw: state.yaw, pitch: state.pitch, id: e.pointerId, moved: 0 };
@@ -985,8 +1019,10 @@ export function createSpace(container, src, opts = {}) {
     if (!drag || e.pointerId !== drag.id) return;
     e.preventDefault();
     if (drag.kind === 'point') {
-      const [sx, sy] = toView(e), g = toGround(sx + drag.ox, sy + drag.oy);
-      if (!g) return; // 视线快和地面平行：不动（转一下再拖）
+      const [sx, sy] = toView(e);
+      let g = null;
+      if (drag.onS) { try { g = toSurface(sx + drag.ox, sy + drag.oy, drag.onS, env()); } catch { g = null; } } else g = toGround(sx + drag.ox, sy + drag.oy);
+      if (!g) return; // 视线快和地面平行、手指没指到曲面上：不动
       delete state.override[drag.name];
       state.drag[drag.name] = place2(drag.c, g);
       drag.moved = true;
@@ -1009,8 +1045,9 @@ export function createSpace(container, src, opts = {}) {
     // 点一下：有正在收点的 pick 就在地面上加一个点（点在已有的点上是去掉）
     const act = activePick();
     if (d.moved > 6 || act === undefined) return;
-    const g = toGround(...toView(e));
-    const st = state.picks.get(act);
+    const st = state.picks.get(act), onS = cmds[act].on ? find('surface', cmds[act].on) : null;
+    let g = null;
+    if (onS) { try { g = toSurface(...toView(e), onS, env()); } catch { g = null; } if (!g) return; } else g = toGround(...toView(e));
     if (!g) { st.msg = '视角太平了，地面上点不准：先把图转一下'; syncPicks(); return; }
     if (Math.abs(g[0]) > R || Math.abs(g[1]) > R) return;
     const near = st.pts.findIndex((p) => Math.hypot(p[0] - g[0], p[1] - g[1]) < R * 0.07);
@@ -1054,7 +1091,9 @@ export function createSpace(container, src, opts = {}) {
     row.innerHTML = `${c.mods.play ? '<button type="button" class="btn btn-sm btn-play">▶</button>' : ''}<span class="coef-name">${c.mods.label ? escapeHtml(c.mods.label) : tex2html(c.name)}</span><input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.init}" aria-label="${escapeHtml(c.name)}"><output></output>`;
     const input = row.querySelector('input');
     const out = row.querySelector('output');
-    const sync = (moving = false) => { input.value = state.slider[c.name]; out.textContent = sliderText(state.slider[c.name], moving); };
+    // 松手以后写成分数，但分母大的（6.28 写成 157/25）不如小数好认
+    const sText = (x, moving) => { const t = sliderText(x, moving), m = /\/(\d+)$/.exec(t); return m && Number(m[1]) > 12 ? String(Math.round(x * 100) / 100) : t; };
+    const sync = (moving = false) => { input.value = state.slider[c.name]; out.textContent = sText(state.slider[c.name], moving); };
     // 学生自己拖滑块时，停下正在播放的动画；拖着的时候读数写小数，松手再写成分数
     input.addEventListener('input', () => { ctl.stop(c.name); state.slider[c.name] = Number(input.value); sync(true); draw({ moving: heavyGeo }); });
     input.addEventListener('change', () => sync(false));

@@ -110,3 +110,12 @@ test('一元函数也认 f_x；带下划线的普通名字不受影响', () => {
   assert.equal(val('a_x + 1', d, { a_x: 2 }), 3);
   assert.equal(val('f_x + 1', d, { f_x: 2 }), 3); // 后面没有括号：是个普通的量
 });
+
+test('定义里的 int3 / flux / lineint3：实参里的同名字母不被抓走', () => {
+  const d = makeDefs();
+  for (const l of ['V(c) = int3(c, x, 0, 1, y, 0, 1, z, 0, 1)', 'G(a) = flux(a*x, a*y, a*z, sin(u)*cos(v), sin(u)*sin(v), cos(u), u, 0, pi, v, 0, 2pi)', 'W(k) = lineint3(-k*y, k*x, 0, cos(t), sin(t), t, t, 0, 2pi)']) addDef(d, parseDef(l));
+  const near = (a, b, e = 1e-5) => assert.ok(Math.abs(a - b) <= e, `${a} ≠ ${b}`);
+  near(compileWith('V(x)', d)({ x: 3 }), 3); near(compileWith('V(z + y)', d)({ z: 1, y: 2 }), 3);
+  near(compileWith('G(x)', d)({ x: 2 }), 8 * Math.PI); near(compileWith('G(u)', d)({ u: 0.5 }), 2 * Math.PI); near(compileWith('G(z)', d)({ z: 1 }), 4 * Math.PI);
+  near(compileWith('W(t)', d)({ t: 2 }), 4 * Math.PI); near(compileWith('W(y)', d)({ y: 0.5 }), Math.PI);
+});

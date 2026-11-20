@@ -14,11 +14,16 @@ const BINDERS = {
   // int2(式子, x, a, b, y, 下, 上)：x 管式子和内层的上下限，y 管式子
   int2: { n: 7, binds: [{ at: 1, over: [0, 5, 6] }, { at: 4, over: [0] }] },
   // lineint(P, Q, x(t), y(t), t, a, b)：t 管前四个；P、Q 里的 x、y 是曲线上的点（固定的名字，定义里换成第 8、9 个参数）
-  lineint: { n: 7, binds: [{ at: 4, over: [0, 1, 2, 3] }, { name: 'x', slot: 7, over: [0, 1] }, { name: 'y', slot: 8, over: [0, 1] }] },
+  lineint: { n: 7, more: 9, binds: [{ at: 4, over: [0, 1, 2, 3] }, { name: 'x', slot: 7, over: [0, 1] }, { name: 'y', slot: 8, over: [0, 1] }] },
+  lineint3: { n: 9, more: 12, binds: [{ at: 6, over: [0, 1, 2, 3, 4, 5] }, { name: 'x', slot: 9, over: [0, 1, 2] }, { name: 'y', slot: 10, over: [0, 1, 2] }, { name: 'z', slot: 11, over: [0, 1, 2] }] },
+  // flux(P, Q, R, x(u, v), y(u, v), z(u, v), u, a, b, v, c, d)：u、v 管前六个；P、Q、R 里的 x、y、z 是曲面上的点
+  flux: { n: 12, more: 15, binds: [{ at: 6, over: [0, 1, 2, 3, 4, 5] }, { at: 9, over: [0, 1, 2, 3, 4, 5] }, { name: 'x', slot: 12, over: [0, 1, 2] }, { name: 'y', slot: 13, over: [0, 1, 2] }, { name: 'z', slot: 14, over: [0, 1, 2] }] },
+  // int3(式子, x, a, b, y, c, d, z, e, f)：x 管式子和后面两层的上下限，y 管式子和最里层的上下限，z 管式子
+  int3: { n: 10, binds: [{ at: 1, over: [0, 5, 6, 8, 9] }, { at: 4, over: [0, 8, 9] }, { at: 7, over: [0] }] },
 };
 function binderOf(n) {
   const b = n.t === 'call' ? BINDERS[n.name] : null;
-  if (!b || (n.args.length !== b.n && !(n.name === 'lineint' && n.args.length === 9))) return null;
+  if (!b || (n.args.length !== b.n && n.args.length !== b.more)) return null;
   if (!b.binds.every((k) => k.at === undefined || n.args[k.at].t === 'var')) return null;
   // 每个绑定现在叫什么名字
   return b.binds.map((k) => ({ ...k, bound: k.at !== undefined ? n.args[k.at].name : n.args[k.slot]?.name || k.name }));
@@ -52,7 +57,8 @@ function substAll(n, map) {
   if (n.t === 'var') return Object.hasOwn(map, n.name) ? map[n.name] : n;
   const bs = binderOf(n);
   if (bs) {
-    const letters = new Set(bs.filter((k) => k.at !== undefined).map((k) => k.at).concat(n.args.length === 9 ? [7, 8] : []));
+    // 写着字母的那几个参数不替换（定义里展开过的调用，末尾几个记着点的名字的也是）
+    const letters = new Set(bs.map((k) => (k.at !== undefined ? k.at : n.args.length === BINDERS[n.name].more ? k.slot : -1)));
     return { ...n, args: n.args.map((m, i) => {
       if (letters.has(i)) return m;
       const hide = bs.filter((k) => k.over.includes(i) && Object.hasOwn(map, k.bound));
@@ -75,7 +81,7 @@ function renameBound(n, tag) {
   const args = n.args.map((m, i) => {
     const mine = fresh.find((k) => k.at === i);
     if (mine) return mine.v;
-    if (i >= 7 && n.name === 'lineint') return m;
+    if (i >= BINDERS[n.name].n) return m;
     const ren = {};
     for (const k of fresh) if (k.over.includes(i)) ren[k.bound] = k.v;
     return renameBound(Object.keys(ren).length ? substAll(m, ren) : m, tag);
