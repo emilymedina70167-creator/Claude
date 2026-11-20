@@ -229,13 +229,14 @@ test('等值线过鞍点、鞍点不在格点上（x³ − 3x + y² = 2 在 (−
   assert.ok(dist(-1, 0.04) > 0.012 && dist(-1, -0.04) > 0.012, '鞍点正上方有线');
 });
 
-test('局部加密不拖慢平常的等值线：一条直线、一个圆都不加密', () => {
+test('局部加密不拖慢平常的等值线：一条直线、一个圆都不加密（只多每个交点验的那 3 次）', () => {
+  const pts = (ls) => ls.reduce((t, l) => t + l.length, 0);
   let n = 0;
-  contourLines((x, y) => { n++; return x + y; }, 0.5, { x0: -3, x1: 3, y0: -3, y1: 3 }, { nx: 96, ny: 96 });
-  assert.ok(n <= 97 * 97 + 50, `直线算了 ${n} 次`);
+  const a = contourLines((x, y) => { n++; return x + y; }, 0.5, { x0: -3, x1: 3, y0: -3, y1: 3 }, { nx: 96, ny: 96 });
+  assert.ok(n <= 97 * 97 + 3 * pts(a) + 50, `直线算了 ${n} 次`);
   n = 0;
-  contourLines((x, y) => { n++; return x * x + y * y; }, 4, { x0: -3, x1: 3, y0: -3, y1: 3 }, { nx: 96, ny: 96 });
-  assert.ok(n <= 97 * 97 + 50, `圆算了 ${n} 次`);
+  const b = contourLines((x, y) => { n++; return x * x + y * y; }, 4, { x0: -3, x1: 3, y0: -3, y1: 3 }, { nx: 96, ny: 96 });
+  assert.ok(n <= 97 * 97 + 3 * pts(b) + 50, `圆算了 ${n} 次`);
 });
 
 test('折线上按长度取点：加密过的一小段点多，不把位置拉偏', () => {

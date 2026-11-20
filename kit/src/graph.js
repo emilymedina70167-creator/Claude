@@ -12,14 +12,14 @@
 //   show $P(X\le a) = {normcdf(a, mu, 1)}$
 import { isNum } from './expr.js';
 import { parseGraph } from './graphspec.js';
-import { compileWith } from './fx/defs.js';
+import { compileWith, heavyNames } from './fx/defs.js';
 import { sampleCurve, labelSpot } from './fx/curve.js';
 import { riemannRects, betweenArea, areaBetween, placeLabels, smoothAt, autoRange, oscCircle } from './fx/graphgeom.js';
 import { splitMods, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { sliderText, figureControls, dragHandles } from './plot.js';
 import { judgePicks, pickFeedback, snapPick } from './graphpick.js';
-import { contourLines, paramCurve, slopeMarks, fieldArrows, flowLine, flowField, typedRegion, stripOf, whereRuns, inTyped, projectTo, longestLine, indexAt } from './fx/plane.js';
+import { contourLines, paramCurve, slopeMarks, fieldArrows, flowLine, flowField, typedRegion, stripOf, whereRuns, inTyped, projectTo, nearestOn, longestLine, indexAt } from './fx/plane.js';
 import { close } from './scene.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -90,7 +90,12 @@ export function createGraph(container, src, opts = {}) {
   // 二元的式子：x、y 放进一层派生的变量里
   const fn2 = (f, v) => { const vx = Object.create(v); return (x, y) => { vx.x = x; vx.y = y; const r = f(vx); if (!isNum(r)) throw new Error('这里的式子要算出一个数'); return r; }; };
   const regionOf = (name) => cmds.find((k) => k.kind === 'region' && k.name === name);
-  const stripAt = (c, v) => { const r = regionOf(c.of); return r ? stripOf(r.shape, fnOf(r.lo, v, r.param), fnOf(r.hi, v, r.param), c.at(v)) : null; };
+  // 算一次要几十毫秒的命令（式子里有二重积分，直接写的或者藏在定义里的）：拖动中的粗帧不重算，曲线少取点
+  const heavyDefs = heavyNames(defs, ['int2']);
+  const heavyRe = new RegExp(`\\bint2\\(${heavyDefs.map((n) => `|(?<![A-Za-z0-9_])${n}(?:'{1,3}|_[A-Za-z]{1,4})?\\(`).join('')}`);
+  const heavy = cmds.map((c) => heavyRe.test(c.kind === 'show' ? c.text : c.srcLine || ''));
+  const stripAt = (c, v) => { const r = regionOf(c.of); return r ? stripOf(r.shape, fnOf(r.lo, v, r.param), fnOf(r.hi, v, r.param), c.at(v), [r.a(v), r.b(v)]) : null; };
+  let windowReady = false; // x、y 的窗口定下来没有（第一次 env() 是为了定窗口，那时还不能往窗口里夹）
   const oscAt = (c, v) => oscCircle(quiet(fnOf(c.f, v)), quiet(fnOf(c.df, v)), quiet(fnOf(c.d2f, v)), c.at(v));
   const env = () => {
     const v = { ...base, ...extra, ...state.slider };
@@ -98,11 +103,19 @@ export function createGraph(container, src, opts = {}) {
       if (c.kind === 'let') {
         v[c.name] = Object.hasOwn(state.override, c.name) ? state.override[c.name]
           : c.mods.drag && Object.hasOwn(state.drag, c.name) ? state.drag[c.name] : c.expr(v);
-        // 沿约束拖的点：一开始写的位置不在线上就先投上去；投不上（窗口里这条线没有点）是写法错误
-        if (c.onG && !Object.hasOwn(state.override, c.name) && !Object.hasOwn(state.drag, c.name) && Array.isArray(v[c.name])) {
-          const q = projectTo(quiet2(fn2(c.onG, v)), v[c.name]);
-          if (q) v[c.name] = [Number(q[0].toFixed(6)), Number(q[1].toFixed(6))];
-          else throw new Error(`${c.name} 放不到约束上：${c.mods.on} 在它附近没有点（改起点，或者改约束）`);
+        const dragged = Object.hasOwn(state.drag, c.name), set = Object.hasOwn(state.override, c.name);
+        const p = v[c.name];
+        // 平面上能拖的点一开始写在窗口外：放回窗口边上（不然把手不见了，也没人知道）
+        if (c.mods.drag && !dragged && !set && windowReady && Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)) v[c.name] = [Math.max(xr[0], Math.min(xr[1], p[0])), Math.max(yr[0], Math.min(yr[1], p[1]))];
+        // 沿约束拖的点要一直在线上：一开始写的位置不在线上先投上去；约束后来变了（滑块改了半径）跟着投回去。
+        // 一开始就投不上（窗口里这条线没有点）是写法错误；拖过以后投不上就留在原地
+        if (c.onG && !set && Array.isArray(v[c.name])) {
+          const G = quiet2(fn2(c.onG, v));
+          if (!(dragged && Math.abs(G(v[c.name][0], v[c.name][1])) < 1e-6)) {
+            const q = windowReady ? nearestOn(G, v[c.name], { x0: xr[0], x1: xr[1], y0: yr[0], y1: yr[1] }) : projectTo(G, v[c.name]);
+            if (q) v[c.name] = [Number(q[0].toFixed(6)), Number(q[1].toFixed(6))];
+            else if (!dragged) throw new Error(`${c.name} 放不到约束上：${c.mods.on} 在窗口里没有点（改约束，或者改 x: / y: 的范围）`);
+          }
         }
       } else if (c.name && c.kind === 'area') {
         // 起了名字的面积、黎曼和：后面的命令、读数、目标里是一个数
@@ -124,7 +137,7 @@ export function createGraph(container, src, opts = {}) {
   };
 
   // y 的范围没写时，按曲线自动取（从 0 开始，留一点头；有极点时不被撑到几万，见 fx/graphgeom.js 的 autoRange）
-  let yr = yrGiven;
+  let yr = yrGiven, curveY = null;
   if (!yr) {
     const ys = [0];
     try {
@@ -136,6 +149,8 @@ export function createGraph(container, src, opts = {}) {
         if (c.kind === 'bars' || c.kind === 'dots') { const g = quiet(fnOf(c.f, v, c.param)); for (let k = Math.ceil(c.from(v)); k <= Math.min(c.to(v), c.from(v) + 2000); k++) { const y = g(k); if (!Number.isNaN(y)) ys.push(y); } }
       }
     } catch { /* 画的时候再报错 */ }
+    // 曲线自己的高低（不算垫进去的 0）：等比例又没写 y 的图拿它定中心
+    if (ys.length > 1) { const cy = ys.slice(1); curveY = [Math.min(...cy), Math.max(...cy)]; }
     yr = autoRange(ys);
   }
 
@@ -145,12 +160,14 @@ export function createGraph(container, src, opts = {}) {
     const PW = W - ML - MR;
     if (yrGiven) H = Math.round(Math.max(H_EQUAL_MIN, Math.min(H_EQUAL, (PW * (yr[1] - yr[0])) / (xr[1] - xr[0]) + MT + MB)));
     const PH = H - MT - MB;
-    if (!yrGiven) yr = [-(xr[1] - xr[0]) * (PH / PW) / 2, ((xr[1] - xr[0]) * (PH / PW)) / 2];
+    // y 没写：高按 x 的比例取，中心是 0；曲线整个不在这个窗口里（y = x² + 10）就把中心挪到曲线的中间
+    if (!yrGiven) { const half = ((xr[1] - xr[0]) * (PH / PW)) / 2, mid = curveY && !(curveY[0] <= half && curveY[1] >= -half) ? (curveY[0] + curveY[1]) / 2 : 0; yr = [mid - half, mid + half]; }
     const k = Math.min(PW / (xr[1] - xr[0]), PH / (yr[1] - yr[0]));
     const grow = (r, span) => { const c = (r[0] + r[1]) / 2; return [c - span / 2, c + span / 2]; };
     xr = grow(xr, PW / k); yr = grow(yr, PH / k);
   }
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  windowReady = true;
   const X = (x) => ML + ((x - xr[0]) / (xr[1] - xr[0])) * (W - ML - MR);
   const Y = (y) => H - MB - ((y - yr[0]) / (yr[1] - yr[0])) * (H - MT - MB);
   const clampY = (y) => Math.max(MT - 4, Math.min(H - MB + 4, Y(y)));
@@ -198,7 +215,7 @@ export function createGraph(container, src, opts = {}) {
   let lastErr = '';
   // 一帧画得慢（几千项的求和）时：正在拖、正在播的那几帧先画粗的（点少、不加密），手停了 0.2 秒再补一张细的
   let slow = false, lastEnd = 0, fineTimer = 0, firstDraw = true;
-  const showCache = [];
+  const showCache = [], plotCache = [];
   const nowMs = () => (globalThis.performance?.now?.() ?? Date.now());
   // 式子抛错的原因（函数名写错、变量没定义……）：只是那一点没定义（NaN）不算
   const whyThrows = (fn, x) => { try { fn(x); return null; } catch (e) { return String(e?.message || e); } };
@@ -277,7 +294,9 @@ export function createGraph(container, src, opts = {}) {
             const lo = Math.max(xr[0], c.kind === 'shade' ? c.a(v) : c.lo ? c.lo(v) : xr[0]);
             const hi = Math.min(xr[1], c.kind === 'shade' ? c.b(v) : c.hi ? c.hi(v) : xr[1]);
             if (!(hi > lo)) continue;
-            const r = sample(fnOf(c.f, v), lo, hi);
+            // 式子里有二重积分的曲线：一个点几十毫秒，只取三十几个点、不加密；拖动中的粗帧接着用上一次画的
+            const r = heavy[i] ? (coarse && plotCache[i] ? plotCache[i] : (plotCache[i] = sampleCurve(fnOf(c.f, v), lo, hi, { ySpan: yr[1] - yr[0], n: 32, maxPoints: 0 }))) : sample(fnOf(c.f, v), lo, hi);
+            if (heavy[i] && r.error) errs.push(r.error);
             if (c.kind === 'shade') {
               const y0 = farY(0);
               for (const seg of r.segs) {
@@ -391,7 +410,7 @@ export function createGraph(container, src, opts = {}) {
               const lines = contourLines(F, lv, box2, { nx: n, ny: n });
               for (const ln of lines) { any = true; el('polyline', { points: poly2(ln), class: `g-curve${c.kind === 'contour' ? ' thin' : ''}${c.mods.dashed ? ' dashed' : ''}` }, plotG).style.stroke = col; }
               // 等高线上挂它的值：挂在最长那条线的中段
-              if (c.kind === 'contour' && lines.length) { const ln = longestLine(lines); const p = ln[indexAt(ln, 0.37)]; want(p[0], p[1], String(Number(lv.toFixed(2))), col, 0, 0, true); }
+              if (c.kind === 'contour' && lines.length) { const ln = longestLine(lines); const p = ln[indexAt(ln, 0.37)]; want(p[0], p[1], String(Number(lv.toPrecision(3))), col, 0, 0, true); }
             }
             if (!any) { const why = whyThrows(fn2(c.F, v).bind(null, (xr[0] + xr[1]) / 2 + 0.123), (yr[0] + yr[1]) / 2 + 0.077); if (why) errs.push(why); }
             if (c.kind === 'implicit' && c.mods.label && any) wantOn(longestLine(contourLines(F, 0, box2, { nx: 48, ny: 48 })), Number(c.mods.at) || 0.3, c.mods.label, col);
@@ -412,7 +431,12 @@ export function createGraph(container, src, opts = {}) {
             for (const a of arrows) arrow(a.x, a.y, a.x + a.dx, a.y + a.dy, fc, 'g-farrow');
           } else if (c.kind === 'flow') {
             const from = c.from(v);
-            const line = c.F ? flowLine(quiet2(fn2(c.F, v)), from, box2) : flowField(quiet2(fn2(c.P, v)), quiet2(fn2(c.Q, v)), from, box2);
+            if (!Array.isArray(from) || from.length !== 2 || !from.every(Number.isFinite)) throw new Error('flow 的写法：flow y - x from [0, 1]（from 后面是一个点）');
+            // 斜率无穷的地方留给 flowLine 认（那是解的尽头），不压成没定义
+            const rawF = c.F ? (() => { const g = fn2(c.F, v); return (x, y) => { try { return g(x, y); } catch { return NaN; } }; })() : null;
+            const line = c.F ? flowLine(rawF, from, box2) : flowField(quiet2(fn2(c.P, v)), quiet2(fn2(c.Q, v)), from, box2);
+            // 一步都走不动：式子写错了才报（起点正好在没定义的地方不算）
+            if (line.length < 2) { const why = c.F ? whyThrows(fn2(c.F, v).bind(null, from[0] + 0.0123), from[1] + 0.0077) : whyThrows(fn2(c.P, v).bind(null, from[0] + 0.0123), from[1] + 0.0077) || whyThrows(fn2(c.Q, v).bind(null, from[0] + 0.0123), from[1] + 0.0077); if (why) errs.push(why); }
             if (line.length > 1) el('polyline', { points: poly2(line), class: `g-curve${c.mods.dashed ? ' dashed' : ''}${c.mods.thin ? ' thin' : ''}` }, plotG).style.stroke = col;
             if (c.mods.label && line.length > 1) wantOn(line.filter(([x, y]) => inside(x, y)), 0.75, c.mods.label, col);
           } else if (c.kind === 'vector') {
@@ -432,7 +456,12 @@ export function createGraph(container, src, opts = {}) {
               if (runs.length) el('path', { d: runs.map((r) => `M${X(r.x0).toFixed(1)},${Y(r.y1).toFixed(1)}H${X(r.x1).toFixed(1)}V${Y(r.y0).toFixed(1)}H${X(r.x0).toFixed(1)}Z`).join(''), class: 'g-shade g-where' }, plotG).style.fill = rc;
               else { const why = whyThrows(C2.bind(null, 0.123), 0.077); if (why) errs.push(why); }
             } else {
-              const r = typedRegion(c.shape, fnOf(c.lo, v, c.param), fnOf(c.hi, v, c.param), c.a(v), c.b(v));
+              // 上下限、范围写了无穷（y from 0 to e^(-x) for x 0 inf）：画到窗口边（极坐标的角不能是无穷）
+              const far = c.shape === 'x' ? [xr[0] - (xr[1] - xr[0]), xr[1] + (xr[1] - xr[0])] : c.shape === 'y' ? [yr[0] - (yr[1] - yr[0]), yr[1] + (yr[1] - yr[0])] : [0, 3 * Math.hypot(xr[1] - xr[0], yr[1] - yr[0])];
+              const clampV = (g) => (t) => { const y = g(t); return y === Infinity ? far[1] : y === -Infinity ? far[0] : y; };
+              const win = c.shape === 'y' ? xr : c.shape === 'x' ? yr : null;
+              const lim = (t) => { if (Number.isFinite(t)) return t; if (!win || Number.isNaN(t)) throw new Error('region 的范围（for 后面的两个数）要是有限的'); return t > 0 ? win[1] : win[0]; };
+              const r = typedRegion(c.shape, clampV(fnOf(c.lo, v, c.param)), clampV(fnOf(c.hi, v, c.param)), lim(c.a(v)), lim(c.b(v)));
               for (const poly of r.polys) { const pg = el('polygon', { points: poly2(poly), class: 'g-shade g-region' }, plotG); pg.style.fill = rc; pg.style.stroke = rc; }
               if (!r.polys.length) { const why = whyThrows(fnOf(c.lo, v, c.param), (c.a(v) + c.b(v)) / 2) || whyThrows(fnOf(c.hi, v, c.param), (c.a(v) + c.b(v)) / 2); if (why) errs.push(why); }
             }
@@ -528,14 +557,14 @@ export function createGraph(container, src, opts = {}) {
       // 读数里有二重积分的（一次要几十到几百毫秒）：拖动中的粗帧先留着上一次的数（淡一点），手停了补细帧时再算
       side.querySelector('.r-show').innerHTML = cmds.map((c, i) => {
         if (c.kind !== 'show' || !visible(c)) return '';
-        if (coarse && /\bint2\(/.test(c.text) && showCache[i] !== undefined) return `<div data-cmd="${i + 1}" class="is-stale">${showCache[i]}</div>`;
+        if (coarse && heavy[i] && showCache[i] !== undefined) return `<div data-cmd="${i + 1}" class="is-stale">${showCache[i]}</div>`;
         showCache[i] = mdToHtml(fillValues(dashGone(c.text, v), v, errs, compile), { inline: true });
         return `<div data-cmd="${i + 1}">${showCache[i]}</div>`;
       }).join('');
     }
     cur = null;
     // 第一次画（还没人动过）就成立的目标不算学生做到：和主讲摆上去的一样，学生挪开再回来才算
-    if (v) checkGoals(v, ctl.quiet || firstDraw, errs);
+    if (v) checkGoals(v, ctl.quiet || firstDraw, errs, coarse);
     // 目标算不出来的（式子写错了、目标在窗口外点不到）：报出来
     for (const i of pickIdx) { const ts = targetsOf(cmds[i], v); if (ts instanceof Error) errs.push(ts.message); }
     firstDraw = false;
@@ -553,10 +582,11 @@ export function createGraph(container, src, opts = {}) {
 
   // goal：学生拖到、调到了算做到。主讲用 set / play 摆上去的（quiet）不算：记下来，学生挪开、再自己放回去才算（和 scene 一样）
   const placedByTeacher = new Set();
-  function checkGoals(v, quiet, errs = []) {
+  function checkGoals(v, quiet, errs = [], coarse = false) {
     for (const i of goalIdx) {
       const c = cmds[i];
       if (state.goalsHit.has(i) || !visible(c)) continue;
+      if (coarse && heavy[i]) continue; // 式子里有二重积分：拖动中的粗帧不算，手停了那一帧再看
       let ok = false;
       // 目标的式子算不出来（变量没定义、函数名写错）：报写法错误——不然这一关永远过不了，也没人知道为什么
       try { ok = c.cond ? !!c.cond(v) : close(c.lhs(v), c.rhs(v), Number(c.mods.tol) || 0.05); } catch (e) { ok = false; if (!goneIn(c.srcLine || '', v)) errs.push(`goal 算不出来：${e?.message || e}`); }
@@ -626,8 +656,8 @@ export function createGraph(container, src, opts = {}) {
       const ts = targetsOf(c);
       if (ts instanceof Error) return;
       st.tries++;
-      // 随便点的：横竖比例不一样，按屏幕上的远近算（两个方向各除以窗口的宽高，再乘回横向的宽）
-      const scale = c.on === 'free' ? [1, (yr[1] - yr[0]) / (xr[1] - xr[0])] : [1, 1];
+      // 随便点的：按屏幕上的远近算——y 方向的距离换成「横向多少个单位那么长」（每单位的像素数两个方向不一样）
+      const scale = c.on === 'free' ? [1, ((W - ML - MR) / (xr[1] - xr[0])) / ((H - MT - MB) / (yr[1] - yr[0]))] : [1, 1];
       st.res = judgePicks(st.pts, ts, tolOf(c), { scale });
       st.msg = pickFeedback(st.res);
       if (st.res.ok) { finishPick(i, false); return; }
@@ -689,8 +719,9 @@ export function createGraph(container, src, opts = {}) {
     let p = [Math.max(xr[0], Math.min(xr[1], sn(x))), Math.max(yr[0], Math.min(yr[1], sn(y)))];
     if (c?.onG) {
       let v; try { v = env(); } catch { return prev; }
-      const q = projectTo(quiet2(fn2(c.onG, v)), [Math.max(xr[0], Math.min(xr[1], x)), Math.max(yr[0], Math.min(yr[1], y))]);
-      if (!q || !inside(q[0], q[1])) return prev;
+      // 取曲线上离手指最近的点（不是从手指出发的牛顿法：那样会跳到别的一支上）
+      const q = nearestOn(quiet2(fn2(c.onG, v)), [Math.max(xr[0], Math.min(xr[1], x)), Math.max(yr[0], Math.min(yr[1], y))], { x0: xr[0], x1: xr[1], y0: yr[0], y1: yr[1] });
+      if (!q) return prev;
       p = [Number(q[0].toFixed(6)), Number(q[1].toFixed(6))];
     }
     return p;

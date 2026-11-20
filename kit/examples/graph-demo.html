@@ -397,12 +397,12 @@ q: 拖动点 $P$：过它的积分曲线是哪个圆？把它拖到 $x^2 + y^2 =
 equal: on
 x: -3.2 3.2
 y: -3 3
-let P = [1, 0.5] drag snap=0.05
+let P = [1, 0.5] drag snap=0.02
 slope -x/y
 contour x^2 + y^2 at 1, 4, 9 color=gray
 contour x^2 + y^2 at dot(P, P) color=yellow
 show 过 $P$ 的积分曲线：$x^2 + y^2 = {dec(dot(P, P), 2)}$
-goal dot(P, P) = 4 tol=0.12 msg="$C = 4$"
+goal dot(P, P) = 4 tol=0.04 msg="到了：这条积分曲线是 $x^2 + y^2 = 4$"
 ```
 
 ```graph

@@ -19,16 +19,38 @@ const FINE = 8, FINE_MAX_CELLS = 600, FLAT = 0.3;
 // 交点按「哪条格子边」记：横边 h(i, j) 是 (i, j)—(i+1, j)，竖边 v(i, j) 是 (i, j)—(i, j+1)。
 // 相邻两个格子共用一条边，按边的编号接线——按坐标接的话，同一个交点从两边各算一次会差出最后一位，线就断了
 function marchCell(G, i, j, pts, segs, mid) {
+  const fake = G.fake || (G.fake = new Set());
   const v0 = G.val(i, j), v1 = G.val(i + 1, j), v2 = G.val(i + 1, j + 1), v3 = G.val(i, j + 1); // 左下、右下、右上、左上
   if (Number.isNaN(v0) || Number.isNaN(v1) || Number.isNaN(v2) || Number.isNaN(v3)) return;
   const x0 = G.x(i), y0 = G.y(j), x1 = G.x(i + 1), y1 = G.y(j + 1);
   const hId = (a, b) => G.base + 2 * (b * G.W1 + a), vId = (a, b) => G.base + 2 * (b * G.W1 + a) + 1;
-  const cross = (id, xa, ya, va, xb, yb, vb) => { if (!pts.has(id)) { const t = va / (va - vb); pts.set(id, [xa + (xb - xa) * t, ya + (yb - ya) * t]); } return id; };
+  // 一条边两头异号不一定是线穿过去：极点（y = tan x 的渐近线）、跳跃（取整）两边也异号。
+  // 所以每个交点验一下：在这条边上二分三次，真的零点两头的值会跟着小下去（到原来的 1/8 上下）；极点、跳跃的不会。
+  // 顺手拿最后那一小段插值，位置也更准
+  const cross = (id, xa, ya, va, xb, yb, vb) => {
+    if (fake.has(id)) return null;
+    if (pts.has(id)) return id;
+    const big = Math.max(Math.abs(va), Math.abs(vb));
+    let ta = 0, tb = 1, fa = va, fb = vb;
+    if (big > 1e-9) { // 格点正好在线上的（挪开了 1e-12 的）不用验
+      for (let k = 0; k < 3; k++) {
+        const tm = (ta + tb) / 2, fm = mid(xa + (xb - xa) * tm, ya + (yb - ya) * tm);
+        if (Number.isNaN(fm)) { fake.add(id); return null; }
+        if (fm === 0) { ta = tb = tm; fa = fb = 0; break; }
+        if ((fm > 0) === (fa > 0)) { ta = tm; fa = fm; } else { tb = tm; fb = fm; }
+      }
+      if (Math.max(Math.abs(fa), Math.abs(fb)) > 0.4 * big) { fake.add(id); return null; }
+    }
+    const t = fa === fb ? ta : ta + ((tb - ta) * fa) / (fa - fb);
+    pts.set(id, [xa + (xb - xa) * t, ya + (yb - ya) * t]);
+    return id;
+  };
   const e = {};
-  if (v0 * v1 < 0) e.b = cross(hId(i, j), x0, y0, v0, x1, y0, v1);
-  if (v1 * v2 < 0) e.r = cross(vId(i + 1, j), x1, y0, v1, x1, y1, v2);
-  if (v3 * v2 < 0) e.t = cross(hId(i, j + 1), x0, y1, v3, x1, y1, v2);
-  if (v0 * v3 < 0) e.l = cross(vId(i, j), x0, y0, v0, x0, y1, v3);
+  const put = (k, id) => { if (id !== null) e[k] = id; };
+  if (v0 * v1 < 0) put('b', cross(hId(i, j), x0, y0, v0, x1, y0, v1));
+  if (v1 * v2 < 0) put('r', cross(vId(i + 1, j), x1, y0, v1, x1, y1, v2));
+  if (v3 * v2 < 0) put('t', cross(hId(i, j + 1), x0, y1, v3, x1, y1, v2));
+  if (v0 * v3 < 0) put('l', cross(vId(i, j), x0, y0, v0, x0, y1, v3));
   const ks = Object.keys(e);
   if (ks.length === 2) {
     // 两个交点都落在格点上、还是斜对着的两个角，而第三个角本来也正好在线上（xy = 0 的原点旁边）：
@@ -108,28 +130,36 @@ export function contourLines(F, level, box, { nx = 96, ny = 96 } = {}) {
 
 // 粗网格的线和加密那一块的线在交界上接起来（两边在同一条格子边上各自插值，差一点点，按距离认）
 function stitch(coarse, fine, tol) {
-  const all = [...coarse.map((l) => ({ l, fine: false })), ...fine.map((l) => ({ l, fine: true }))];
-  const d = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
-  for (let moved = true; moved;) {
-    moved = false;
-    outer: for (let a = 0; a < all.length; a++) for (let b = 0; b < all.length; b++) {
-      if (a === b || all[a].fine === all[b].fine && !all[a].mixed && !all[b].mixed) continue;
-      const A = all[a].l, B = all[b].l;
-      // A 的尾接 B 的头 / 尾
-      const tail = A[A.length - 1];
-      let joined = null;
-      if (d(tail, B[0]) <= tol) joined = [...A, ...B];
-      else if (d(tail, B[B.length - 1]) <= tol) joined = [...A, ...B.slice().reverse()];
-      else if (d(A[0], B[B.length - 1]) <= tol) joined = [...B, ...A];
-      else if (d(A[0], B[0]) <= tol) joined = [...B.slice().reverse(), ...A];
-      if (!joined) continue;
-      all[a] = { l: joined, fine: all[a].fine, mixed: true };
-      all.splice(b, 1);
-      moved = true;
-      break outer;
+  const all = [...coarse.map((l) => ({ l, fine: false, alive: true })), ...fine.map((l) => ({ l, fine: true, alive: true }))];
+  // 端点按 tol 大小的格子记下来，找邻近的端点只看周围九格（线多的时候逐对比太慢）
+  const key = (p, dx = 0, dy = 0) => `${Math.floor(p[0] / tol) + dx},${Math.floor(p[1] / tol) + dy}`;
+  const ends = new Map();
+  const note = (i) => { for (const p of [all[i].l[0], all[i].l[all[i].l.length - 1]]) { const k = key(p); if (!ends.has(k)) ends.set(k, []); ends.get(k).push(i); } };
+  all.forEach((_, i) => note(i));
+  const near = (p, self) => {
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const i of ends.get(key(p, dx, dy)) || []) {
+      const o = all[i];
+      if (i === self || !o.alive || (!o.fine && !all[self].fine)) continue; // 粗的和粗的本来就按边的编号接过了
+      const head = Math.hypot(o.l[0][0] - p[0], o.l[0][1] - p[1]) <= tol, tail = Math.hypot(o.l[o.l.length - 1][0] - p[0], o.l[o.l.length - 1][1] - p[1]) <= tol;
+      if (head || tail) return { i, head };
+    }
+    return null;
+  };
+  for (let a = 0; a < all.length; a++) {
+    if (!all[a].alive) continue;
+    for (let guard = 0; guard < all.length; guard++) {
+      const A = all[a].l;
+      const t = near(A[A.length - 1], a), h = t ? null : near(A[0], a);
+      if (!t && !h) break;
+      const hit = t || h, B = all[hit.i].l;
+      all[hit.i].alive = false;
+      // 接上以后这条线两种来源都有了：算细的（它的两头还能接着接粗的、细的）
+      all[a].l = t ? [...A, ...(hit.head ? B : B.slice().reverse())] : [...(hit.head ? B.slice().reverse() : B), ...A];
+      all[a].fine = true;
+      note(a);
     }
   }
-  return all.map((x) => x.l);
+  return all.filter((x) => x.alive).map((x) => x.l);
 }
 
 /** 折线上走到全长的 frac（0～1）处，是第几个点（按长度，不按点数） */
@@ -232,16 +262,22 @@ export function fieldArrows(P, Q, box, { nx = 15, ny = 10 } = {}) {
 }
 
 // 往一边走：state → 下一个 state 的导数由 deriv 给；出了外框、算不出来、走满就停
-function march(deriv, start, h, box, max) {
+function march(deriv, start, h, box, max, singular) {
   const padX = (box.x1 - box.x0) * 0.2, padY = (box.y1 - box.y0) * 0.2;
   const inside = ([x, y]) => x >= box.x0 - padX && x <= box.x1 + padX && y >= box.y0 - padY && y <= box.y1 + padY;
   const out = [];
-  let p = start;
+  let p = start, prev = null;
+  const back = (a, b) => a[0] * b[0] + a[1] * b[1] < 0;
   for (let i = 0; i < max; i++) {
     const k1 = deriv(p); if (!k1) break;
+    // 方向一下子掉头：切线竖起来了（y′ = −x/y 走到 y = 0），作为 y(x) 的解到这里为止；或者到了场的奇点。不接着画
+    if (prev && back(prev, k1)) break;
+    if (singular && singular(p, h)) break;
     const k2 = deriv([p[0] + (h / 2) * k1[0], p[1] + (h / 2) * k1[1]]); if (!k2) break;
     const k3 = deriv([p[0] + (h / 2) * k2[0], p[1] + (h / 2) * k2[1]]); if (!k3) break;
     const k4 = deriv([p[0] + h * k3[0], p[1] + h * k3[1]]); if (!k4) break;
+    if (back(k1, k2) || back(k1, k3) || back(k1, k4)) break; // 这一步中间就掉头了：这一步算出来的点不可信
+    prev = k1;
     const q = [p[0] + (h / 6) * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]), p[1] + (h / 6) * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1])];
     if (!Number.isFinite(q[0]) || !Number.isFinite(q[1])) break;
     if (!inside(q)) {
@@ -270,7 +306,15 @@ export function flowLine(F, from, box, opts = {}) {
   const f = val2(F);
   // 按弧长参数化：(1, F) / |(1, F)|。竖直渐近线附近 x 的步子自己变小
   const dir = (s) => ([x, y]) => { const k = f(x, y); if (Number.isNaN(k)) return null; const m = Math.hypot(1, k); return [s / m, (s * k) / m]; };
-  return bothWays(dir, from, box, opts);
+  // 方向场的奇点（y′ = y/x 的原点）：一步之内四个方向上的斜率指着差很多的方向（当直线看，夹角过 55°）。解到这里为止，不穿过去
+  const singular = ([x, y], h) => {
+    const ang = [[h, 0], [-h, 0], [0, h], [0, -h]].map(([dx, dy]) => { let k; try { k = F(x + dx, y + dy); } catch { k = NaN; } return typeof k === 'number' && !Number.isNaN(k) ? Math.atan(k) : null; });
+    if (ang.some((a) => a === null)) return false; // 旁边有没定义的点：让别的规矩（算不出来就停、掉头就停）管
+    let worst = 0;
+    for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) { const d = Math.abs(ang[i] - ang[j]); worst = Math.max(worst, Math.min(d, Math.PI - d)); }
+    return worst > (55 * Math.PI) / 180;
+  };
+  return bothWays(dir, from, box, { ...opts, singular });
 }
 
 /** 沿向量场 (P, Q) 的流线（按弧长走）；场是零的地方停 */
@@ -279,9 +323,9 @@ export function flowField(P, Q, from, box, opts = {}) {
   const dir = (s) => ([x, y]) => { const u = p(x, y), v = q(x, y), m = Math.hypot(u, v); if (Number.isNaN(m) || m < 1e-12) return null; return [(s * u) / m, (s * v) / m]; };
   return bothWays(dir, from, box, opts);
 }
-function bothWays(dir, from, box, { h, max = 4000 } = {}) {
+function bothWays(dir, from, box, { h, max = 4000, singular } = {}) {
   const step = h ?? Math.hypot(box.x1 - box.x0, box.y1 - box.y0) / 600;
-  const fwd = march(dir(1), from, step, box, max / 2), back = march(dir(-1), from, step, box, max / 2);
+  const fwd = march(dir(1), from, step, box, max / 2, singular), back = march(dir(-1), from, step, box, max / 2, singular);
   return [...back.reverse(), [from[0], from[1]], ...fwd];
 }
 
@@ -326,20 +370,24 @@ export function typedRegion(kind, lo, hi, a, b, { n = 120 } = {}) {
 /** 点 (x, y) 在不在这样的区域里（事件 ∩ 样本空间用）。极坐标的角按 2π 绕着认 */
 export function inTyped(kind, lo, hi, a, b) {
   const L = val1(lo), H = val1(hi);
+  if (a > b) [a, b] = [b, a]; // 范围写反了：画出来的是同一块，判的也按同一块
   const between = (t, r) => { const l = L(t), h = H(t); return !Number.isNaN(l) && !Number.isNaN(h) && r >= Math.min(l, h) - 1e-12 && r <= Math.max(l, h) + 1e-12; };
   if (kind === 'r') {
+    // 角挪进 [a, a + 2π)，区间超过一圈的再多试一圈
+    const sweep = (t0, r) => { for (let t = t0 + Math.ceil((a - t0) / (2 * Math.PI) - 1e-12) * 2 * Math.PI; t <= b + 1e-12; t += 2 * Math.PI) if (between(t, r)) return true; return false; };
     return (x, y) => {
       const r = Math.hypot(x, y), t0 = Math.atan2(y, x);
-      // 把角挪进 [a, a + 2π)；区间超过一圈的再多试一圈
-      for (let t = t0 + Math.ceil((a - t0) / (2 * Math.PI) - 1e-12) * 2 * Math.PI; t <= b + 1e-12; t += 2 * Math.PI) if (between(t, r)) return true;
-      return false;
+      // r 是负的那些角（玫瑰线的另外几瓣）画在对面：同一个点也是 (−r, θ + π)
+      return sweep(t0, r) || sweep(t0 + Math.PI, -r);
     };
   }
   return (x, y) => { const [t, r] = kind === 'y' ? [x, y] : [y, x]; return t >= a - 1e-12 && t <= b + 1e-12 && between(t, r); };
 }
 
-/** 区域在 t 处的那一条（竖条 / 横条 / 射线上的一段）；那里没定义回 null */
-export function stripOf(kind, lo, hi, t) {
+/** 区域在 t 处的那一条（竖条 / 横条 / 射线上的一段）；那里没定义、出了 range（[a, b]）回 null */
+export function stripOf(kind, lo, hi, t, range) {
+  // 出了区域自己的范围（for x 0 1 以外）就没有这一条
+  if (range && !(t >= Math.min(range[0], range[1]) - 1e-9 && t <= Math.max(range[0], range[1]) + 1e-9)) return null;
   const l = val1(lo)(t), h = val1(hi)(t);
   if (Number.isNaN(l) || Number.isNaN(h)) return null;
   return { from: at(kind, t, l), to: at(kind, t, h), lo: l, hi: h };
@@ -398,4 +446,24 @@ export function projectTo(G, [x, y], { tol = 1e-9, max = 30 } = {}) {
     x -= (v * gx) / n2; y -= (v * gy) / n2;
   }
   return Math.abs(g(x, y)) <= tol * 1e3 ? [x, y] : null;
+}
+
+/**
+ * 曲线 G(x, y) = 0 在窗口里离 p 最近的点（沿约束拖点用）。先把曲线画出来（等值线的折线）找最近的，再用牛顿法修到线上。
+ * 只用牛顿法从手指出发会跳到别的一支上去（y = 1/x 的另一支、三次曲线的另一段）。窗口里没有这条曲线回 null
+ */
+export function nearestOn(G, [px, py], box, { n = 64 } = {}) {
+  const lines = contourLines(G, 0, box, { nx: n, ny: n });
+  let best = null, bd = Infinity;
+  for (const l of lines) for (let i = 1; i < l.length; i++) {
+    const [ax, ay] = l[i - 1], [bx, by] = l[i], dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+    const qx = ax + t * dx, qy = ay + t * dy, d = Math.hypot(qx - px, qy - py);
+    if (d < bd) { bd = d; best = [qx, qy]; }
+  }
+  if (!best) return null;
+  const q = projectTo(G, best, { max: 8 });
+  const cell = Math.max((box.x1 - box.x0) / n, (box.y1 - box.y0) / n);
+  const inBox = (r) => r[0] >= box.x0 && r[0] <= box.x1 && r[1] >= box.y0 && r[1] <= box.y1;
+  return q && Math.hypot(q[0] - best[0], q[1] - best[1]) <= cell && inBox(q) ? q : best;
 }

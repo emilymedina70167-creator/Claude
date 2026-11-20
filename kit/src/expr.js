@@ -9,7 +9,7 @@
 // 向量是列向量：a' 是一行（1×n 矩阵），a'*b 是一个数，a*b' 是外积（n×n 矩阵）。exact.js 用同样的规则。
 
 import { DIST } from './fx/special.js';
-import { numIntegral, numIntegral2 } from './fx/integral.js';
+import { numIntegral, numIntegral2, cubature2 } from './fx/integral.js';
 const FUNCS = {
   det: (M) => det(asMat(M)),
   inv: (M) => inv(asMat(M)),
@@ -376,7 +376,7 @@ export const FORM_MAX_TERMS = 20000; // 求和最多几项：滑块把 n 拖到�
 const FORM_EG = { lineint: 'lineint(-y, x, cos(t), sin(t), t, 0, 2pi)', int2: 'int2(x*y, x, 0, 1, y, 0, x)', sum: 'sum(k, 1, n, 1/k^2)', prod: 'prod(k, 1, n, k)', maxof: 'maxof(k, 1, n, 式子)', minof: 'minof(k, 1, n, 式子)', int: 'int(cos(t), t, 0, x)', maxon: 'maxon(x - x^2, x, 0, 1)', minon: 'minon(x^2, x, -1, 1)', roots: 'roots(x^3 - 3x, x, -3, 3)' };
 function isForm(n, sp) {
   const binds = [].concat(sp.bind);
-  if (n.args.length !== (sp.arity || 4)) return false;
+  if (![].concat(sp.arity || 4).includes(n.args.length)) return false;
   if (binds.every((i) => n.args[i].t === 'var')) return true;
   // 该写字母的位置写了别的：多半是把求和、积分写错了（max、min 没有这个问题：它们的名字是 maxof / maxon）
   if (FORM_ONLY.has(n.name)) throw new Error(`${n.name} 的第${binds.length > 1 ? ` ${binds.map((i) => i + 1).join('、')} ` : binds[0] ? '二' : '一'}个参数是${binds[0] ? '自变量' : '求和用'}的字母，如 ${FORM_EG[n.name]}`);
@@ -399,6 +399,89 @@ const overInts = (init, step) => (n, vars, fns) => {
   for (let k = lo; k <= hi; k++) { v[name] = k; acc = step(acc, num(run(body, v, fns)), k === lo); }
   return acc;
 };
+// —— 被积式里的断口：条件（a ≤ b）是跳的，|e|、max、min 有折角，取整是台阶 ——
+// 自适应求积看不见比取样点还窄的支撑（条件 × 密度，支撑只占一小块）：会整段漏掉还报「收敛」。
+// 所以先把这些地方找出来：每个给一个连续的量，它的零点就是断口（fx/integral.js 的 cubature2、下面的 intPieces 用）
+const JUMP_OPS = new Set(['<', '<=', '>', '>=']);
+const markCache = new WeakMap();
+function marksOf(body) {
+  let out = markCache.get(body);
+  if (out) return out;
+  out = [];
+  const numOf = (e) => (v, fns) => { const r = run(e, v, fns); return isNum(r) ? r : NaN; };
+  const walk = (n) => {
+    if (!n || typeof n !== 'object') return;
+    if (n.t === 'call' && Object.hasOwn(SPECIAL, n.name) && isFormQuiet(n)) return; // 里面那一层自己管
+    if (n.t === 'bin' && JUMP_OPS.has(n.op)) { const a = numOf(n.a), b = numOf(n.b); out.push((v, fns) => b(v, fns) - a(v, fns)); }
+    if (n.t === 'call' && n.args.length === 1 && ['abs', 'norm', 'sign'].includes(n.name)) out.push(numOf(n.args[0]));
+    if (n.t === 'call' && n.args.length === 2 && ['max', 'min'].includes(n.name)) { const a = numOf(n.args[0]), b = numOf(n.args[1]); out.push((v, fns) => a(v, fns) - b(v, fns)); }
+    if (n.t === 'call' && n.args.length === 1 && ['floor', 'ceil', 'round'].includes(n.name)) { const a = numOf(n.args[0]), sh = n.name === 'round' ? 0.5 : 0; out.push((v, fns) => Math.sin(Math.PI * (a(v, fns) - sh))); }
+    for (const k of ['a', 'b']) walk(n[k]);
+    for (const k of ['args', 'items']) if (Array.isArray(n[k])) n[k].forEach(walk);
+  };
+  walk(body);
+  markCache.set(body, out);
+  return out;
+}
+const isFormQuiet = (n) => { try { return isForm(n, SPECIAL[n.name]); } catch { return true; } };
+
+// 一元的：先在区间上找出断口的位置（mark 变号的地方，二分），在那里把积分分段，每段里是光滑的
+function intPieces(f, marks, a, b) {
+  if (!marks.length || !Number.isFinite(a) || !Number.isFinite(b) || a === b) return numIntegral(f, a, b, { maxSeg: 300 });
+  const lo = Math.min(a, b), hi = Math.max(a, b), N = 96, cuts = [];
+  for (const g of marks) {
+    const at = (x) => { try { const v = g(x); return typeof v === 'number' ? v : NaN; } catch { return NaN; } };
+    const root = (x0, v0, x1, v1) => { for (let k = 0; k < 50; k++) { const m = (x0 + x1) / 2, vm = at(m); if (Number.isNaN(vm)) break; if ((vm > 0) === (v0 > 0)) { x0 = m; v0 = vm; } else { x1 = m; v1 = vm; } } return (x0 + x1) / 2; };
+    const scan = (x0, x1, n, deep) => {
+      let px = x0, pv = at(x0);
+      for (let i = 1; i <= n; i++) {
+        const x = x0 + ((x1 - x0) * i) / n, v = at(x);
+        if (!Number.isNaN(pv) && !Number.isNaN(v)) {
+          if ((pv > 0) !== (v > 0)) cuts.push(root(px, pv, x, v));
+          // 没变号但离 0 很近（比这一小段上的变化还小）：可能有一段比取样还窄的支撑，往细里再看一层
+          else if (deep && Math.min(Math.abs(pv), Math.abs(v)) < 1.5 * Math.abs(v - pv)) scan(px, x, 16, false);
+        }
+        px = x; pv = v;
+      }
+    };
+    scan(lo, hi, N, true);
+  }
+  const xs = [lo, ...cuts.filter((c) => c > lo && c < hi).sort((p, q) => p - q), hi];
+  let value = 0, err = 0;
+  for (let i = 1; i < xs.length; i++) {
+    if (!(xs[i] - xs[i - 1] > 1e-13 * Math.max(1, Math.abs(hi)))) continue;
+    const r = numIntegral(f, xs[i - 1], xs[i], { maxSeg: 300 });
+    if (r.ok !== true) return r;
+    value += r.value; err += r.err || 0;
+  }
+  return { value: a > b ? -value : value, ok: true, err };
+}
+
+// 算一次要几十毫秒的（二重积分、曲线积分）：同样的量再问就不重算——图里别的滑块动了、同一条读数重画，都会再问一遍。
+// 每个调用处记最近 128 组（plot 一条带二重积分的曲线是几十组）
+const memos = new WeakMap();
+function memoRun(n, bound, vars, compute) {
+  let m = memos.get(n);
+  if (!m) {
+    const names = new Set();
+    const walk = (k) => { if (!k || typeof k !== 'object') return; if (k.t === 'var') names.add(k.name); for (const c of ['a', 'b']) walk(k[c]); for (const c of ['args', 'items']) if (Array.isArray(k[c])) k[c].forEach(walk); };
+    walk(n);
+    for (const b of bound) names.delete(b);
+    m = { names: [...names], map: new Map() };
+    memos.set(n, m);
+  }
+  let key;
+  try { key = JSON.stringify(m.names.map((nm) => { const x = vars[nm]; return x === undefined ? null : x; })); } catch { return compute(); }
+  let out = m.map.get(key);
+  if (!out) {
+    try { out = { v: compute() }; } catch (e) { out = { err: e?.message || String(e) }; }
+    if (m.map.size >= 128) m.map.delete(m.map.keys().next().value);
+    m.map.set(key, out);
+  }
+  if (out.err) throw new Error(out.err);
+  return out.v;
+}
+
 // 区间上的一元函数：算不出来的点是 NaN（最值、求根跳过它们）
 function realFn(n, vars, fns) {
   const name = n.args[1].name, body = n.args[0], v = bindVar(vars, name);
@@ -406,7 +489,7 @@ function realFn(n, vars, fns) {
   const f = (x) => { v[name] = x; try { const y = run(body, v, fns); return isNum(y) ? y : NaN; } catch { return NaN; } };
   // 最值、求根是在区间上取点找的：区间要有限（积分另算，它自己换元处理无穷限）
   if (n.name !== 'int' && !(Number.isFinite(a) && Number.isFinite(b))) throw new Error(`${n.name} 的区间要是有限的（现在是 ${a} 到 ${b}）`);
-  return { f, a, b };
+  return { f, a, b, v, name };
 }
 const GOLD = (Math.sqrt(5) - 1) / 2;
 function goldenMax(f, a, b) {
@@ -462,35 +545,37 @@ const SPECIAL = {
   maxof: { bind: 0, run: (n, vars, fns) => { const r = overInts(-Infinity, (s, y) => Math.max(s, y))(n, vars, fns); if (r === -Infinity) throw new Error('maxof：一项都没有'); return r; } },
   minof: { bind: 0, run: (n, vars, fns) => { const r = overInts(Infinity, (s, y) => Math.min(s, y))(n, vars, fns); if (r === Infinity) throw new Error('minof：一项都没有'); return r; } },
   int: { bind: 1, run: (n, vars, fns) => {
-    const { f, a, b } = realFn(n, vars, fns);
-    // 图里一帧要算几百次：段数给少一点，不收敛就报（不卡住画面）
-    const r = numIntegral(f, a, b, { maxSeg: 300 });
+    const { f, a, b, v, name } = realFn(n, vars, fns);
+    // 图里一帧要算几百次：段数给少一点，不收敛就报（不卡住画面）。被积式里有条件、取整的先在断口上分段
+    const r = intPieces(f, marksOf(n.args[0]).map((g) => (x) => { v[name] = x; return g(v, fns); }), a, b);
     if (r.ok !== true) throw new Error(`这个积分页面算不出来（${r.why || '不收敛'}）`);
     return r.value;
   } },
   // 二重积分 ∫_a^b dx ∫_c^d 式子 dy，c、d 可以含 x（事件的概率、二重积分的值）
   // 第二类曲线积分 ∫_L P dx + Q dy，L 是参数曲线 (x(t), y(t))，t 从 a 到 b。P、Q 里的 x、y 是曲线上的点；
   // x′、y′ 页面用差商求（两头用单边的）。以前要主讲自己把 P·x′ + Q·y′ 推出来写成一元的积分
-  lineint: { arity: 7, bind: [4], run: (n, vars, fns) => {
+  // 定义里的 lineint 调用时多带两个参数：曲线上的点叫什么（fx/defs.js 把 x、y 换成别处写不出来的名字，实参里的 x、y 才不会被抓走）
+  lineint: { arity: [7, 9], bind: [4], run: (n, vars, fns) => memoRun(n, [n.args[4].name], vars, () => {
     const [P, Q, xt, yt, tv, a, b] = n.args;
+    const xn = n.args[7]?.name || 'x', yn = n.args[8]?.name || 'y';
     const A = num(run(a, vars, fns)), B = num(run(b, vars, fns));
     if (!Number.isFinite(A) || !Number.isFinite(B)) throw new Error('lineint 的参数范围要是有限的');
     const v = Object.create(vars);
     v[tv.name] = 0;
     const at = (t) => { v[tv.name] = t; return [num(run(xt, v, fns)), num(run(yt, v, fns))]; };
     const pv = Object.create(v);
-    pv.x = 0; pv.y = 0;
+    pv[xn] = 0; pv[yn] = 0;
     const lo = Math.min(A, B), hi = Math.max(A, B), h = 1e-5 * Math.max(1, Math.abs(A), Math.abs(B));
     const f = (t) => {
       const t1 = Math.max(lo, t - h), t2 = Math.min(hi, t + h), p1 = at(t1), p2 = at(t2), p = at(t);
-      pv.x = p[0]; pv.y = p[1];
+      pv[xn] = p[0]; pv[yn] = p[1];
       return (num(run(P, pv, fns)) * (p2[0] - p1[0]) + num(run(Q, pv, fns)) * (p2[1] - p1[1])) / (t2 - t1);
     };
     const r = numIntegral(f, A, B, { maxSeg: 300 });
     if (r.ok !== true) throw new Error(`这个曲线积分页面算不出来（${r.why || '不收敛'}）`);
     return r.value;
-  } },
-  int2: { arity: 7, bind: [1, 4], run: (n, vars, fns) => {
+  }) },
+  int2: { arity: 7, bind: [1, 4], run: (n, vars, fns) => memoRun(n, [n.args[1].name, n.args[4].name], vars, () => {
     const [body, xv, a, b, yv, c, d] = n.args;
     const A = num(run(a, vars, fns)), B = num(run(b, vars, fns));
     const v = Object.create(vars);
@@ -498,14 +583,14 @@ const SPECIAL = {
     const f = (x, y) => { v[xv.name] = x; v[yv.name] = y; try { const r = run(body, v, fns); return isNum(r) ? r : NaN; } catch { return NaN; } };
     const lim = (e) => (x) => { v[xv.name] = x; return num(run(e, v, fns)); };
     const lo = lim(c), hi = lim(d);
-    const r = numIntegral2(f, [A, B], [lo, hi]);
+    const marks = marksOf(body).map((g) => (x, y) => { v[xv.name] = x; v[yv.name] = y; return g(v, fns); });
+    // 光滑的被积式：一层套一层的自适应求积（准到 1e-8）；不收敛的（可积的奇点）再让四叉树试一次。
+    // 有条件、绝对值、取整的：直接四叉树，断口上分段（fx/integral.js 的 cubature2）。哪条路都核不准就说算不出来，不给一个可能错的数
+    let r = marks.length ? null : numIntegral2(f, [A, B], [lo, hi], { tol: 1e-8 });
+    if (!r || r.ok !== true) r = cubature2(f, [A, B], [lo, hi], { marks });
     if (r.ok === true) return r.value;
-    // 被积函数有断的地方（指示函数）自适应积分不一定报收敛：拿两种网格的中点和对一下，差不到 2e-3 就用细的那个
-    const grid = (m) => { let s = 0; const hx = (B - A) / m; for (let i = 0; i < m; i++) { const x = A + (i + 0.5) * hx, y0 = lo(x), hy = (hi(x) - y0) / m; for (let j = 0; j < m; j++) s += f(x, y0 + (j + 0.5) * hy) * hy; } return s * hx; };
-    const g1 = grid(160), g2 = grid(320);
-    if (Number.isFinite(g1) && Number.isFinite(g2) && Math.abs(g1 - g2) <= 2e-3 * Math.max(1, Math.abs(g2))) return g2;
     throw new Error(`这个二重积分页面算不出来（${r.why || '不收敛'}）`);
-  } },
+  }) },
   maxon: { bind: 1, run: (n, vars, fns) => extremeOn(n, vars, fns, 1) },
   minon: { bind: 1, run: (n, vars, fns) => extremeOn(n, vars, fns, -1) },
   roots: { bind: 1, run: rootsOn },
