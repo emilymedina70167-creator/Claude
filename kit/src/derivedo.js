@@ -119,7 +119,8 @@ const flat = (v) => (Array.isArray(v) ? v.flat(Infinity) : [v]);
 function equal(a, b) {
   if (shape(a) !== shape(b)) return false;
   const x = flat(a), y = flat(b);
-  return x.length === y.length && x.every((n, i) => Math.abs(n - y[i]) <= 1e-7 * Math.max(1, Math.abs(n), Math.abs(y[i])));
+  // 有一边不是有限数（inf*A、1/0*A）就不相等（dr-final-fix 第 1 条）
+  return x.length === y.length && x.every((n, i) => Number.isFinite(n) && Number.isFinite(y[i]) && Math.abs(n - y[i]) <= 1e-7 * Math.max(1, Math.abs(n), Math.abs(y[i])));
 }
 // 1×1 矩阵当一个数（βᵀα 算出来是 [[5]]）
 const scalarize = (v) => (isMat(v) && v.length === 1 && v[0].length === 1 ? v[0][0] : isVec(v) && v.length === 1 ? v[0] : v);
@@ -139,9 +140,14 @@ export function checkLine(spec, envs, prev, line, state = {}) {
   try { tex = formulaTeX(norm); } catch { tex = ''; }
   let p;
   try { p = prep(prev, names, order); } catch (e) { return { ok: false, error: `上一行看不懂：${e.message}`, tex, norm }; }
+  let checked = 0;
   for (const env of envs) {
     let a, b;
     try { a = scalarize(compile(p)(env)); } catch (e) { return { ok: false, error: `上一行算不出来：${e.message}`, tex, norm }; }
+    // 上一行在这组数上不是有限的（随机的矩阵奇异了，1/det(A)）：这一组跳过（和 formula.js 跳过没定义的取值一样），
+    // 不然对的一行（det(A)^(-1)）也被判错
+    if (!flat(a).every((x) => typeof x !== 'number' || Number.isFinite(x))) continue;
+    checked++;
     try { b = scalarize(compile(norm)(env)); } catch (e) { return { ok: false, error: `这一行算不出来：${e.message}`, tex, norm }; }
     if (!equal(a, b)) {
       const at = spec.vars.map(([n]) => `${n}=${valueText(env[n])}`).join('，');
@@ -152,6 +158,7 @@ export function checkLine(spec, envs, prev, line, state = {}) {
       };
     }
   }
+  if (!checked) return { ok: null, tex, norm, why: '取的几组数上，上一行都算不出有限的值，页面判不了这一步' };
   let done = false;
   if (spec.goal) { try { done = compact(prep(spec.goal, names, order)) === compact(norm); } catch { done = false; } }
   return { ok: true, tex, norm, done };
@@ -177,7 +184,12 @@ function reachedGoal(spec, read, kind) {
     const g = readLine(spec.goal, { kind });
     // goal: ∞ / 不存在（dr-calc-fix 第 5 条）
     if (kind === 'limit' && specialKind(g.src)) return !!specialKind(read.src) && sameKind(specialKind(g.src), specialKind(read.src)) !== false;
-    if (kind === 'limit') return !read.vars.length && !g.vars.length && Math.abs(evalNum(read.ast) - evalNum(g.ast)) <= 1e-9 * Math.max(1, Math.abs(evalNum(g.ast)));
+    if (kind === 'limit') {
+      if (read.vars.length || g.vars.length) return false;
+      const a = evalNum(read.ast), b = evalNum(g.ast);
+      // ∞ 只走上面按种类比的那条路：算出来不是有限数的不当推到了
+      return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));
+    }
     if (kind === 'antideriv' && /\bint\(/.test(read.src)) return false;
     const r = compareFx(g.ast, read.ast, { domain: spec.domain.length ? spec.domain : [{ ...DEFAULT_RANGE, name: 'x' }], upToConst: kind === 'antideriv' });
     return r.ok === true;

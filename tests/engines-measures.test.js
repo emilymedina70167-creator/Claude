@@ -151,7 +151,7 @@ test('希尔 gaps="2 1" 排 3 2 2\' 1：unstable 1、flipped ["2 2′"]；直接
   const s = measure('sort', { algo: 'shell', gaps: '2 1', array: "3 2 2' 1" });
   assert.equal(s.values.unstable, 1);
   assert.deepEqual(s.values.flipped, ['2 2′']);
-  assert.deepEqual(s.values.final, [1, 2, 2, 3]);
+  assert.deepEqual(s.values.final, [1, '2′', 2, 3]); // 带撇号（dr-final-fix 第 3 条）：2′ 跑到了 2 前面
   const i = measure('sort', { algo: 'insert', array: "3 2 2' 1" });
   assert.equal(i.values.unstable, 0);
   assert.deepEqual(i.values.flipped, []);

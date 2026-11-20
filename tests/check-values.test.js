@@ -48,7 +48,9 @@ test('numMatch：不一样的小数还要至少 3 位有效数字；一模一样
 });
 
 test('numMatch：读不懂是 null', () => {
-  for (const s of ['', 'abc', '1/', '1/0', '5.3.3', 'O(n)', '1 2']) assert.equal(numMatch(s, 1), null, s);
+  for (const s of ['', 'abc', '1/', '5.3.3', 'O(n)', '1 2']) assert.equal(numMatch(s, 1), null, s);
+  // 1/0 照式子读得懂、算出来不是有限数：不对（dr-final-fix 第 1、4 条），不再是读不懂
+  assert.equal(numMatch('1/0', 1), false);
   assert.equal(numMatch('1', NaN), null);
 });
 

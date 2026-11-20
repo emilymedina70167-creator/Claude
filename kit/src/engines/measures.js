@@ -302,15 +302,22 @@ function treeShape(t) {
 
 // —— 每个引擎从 { input, run } 里取量：{ values, ties, tieAt } ——
 
+// 排完、每一趟以后的序列带上撇号（dr-final-fix 第 3 条）：有撇号的元素写成 '5′'（字），别的照旧是数；一个撇号也没有的整串照旧全是数。
+// 引擎每个元素有 id（和 flipped 一样），所以 5′ 跑到 5 前面看得出来；比的规矩在 check/values.js 的 seqMatch：
+// 学生一个撇号都没写只比数，写了撇号连位置一起比。items：这一趟的元素（sort.js 的 snap 挂上的；错法那一遍没有，只有值）
+function markedSeq(vals, items = vals.items) {
+  if (!items || !items.some((x) => x?.mark)) return vals.slice();
+  return items.map((x) => (x.mark ? itemText(x) : x.v));
+}
 const passVals = (passes, values, conv = (x) => x) => { (passes || []).forEach((p, k) => { values[`pass${k + 1}`] = p.map(conv); }); };
 
 const MEASURERS = {
   sort(input, run) {
     const values = { passes: run.passes.length };
-    passVals(run.passes, values);
+    run.passes.forEach((p, k) => { values[`pass${k + 1}`] = markedSeq(p); });
     if (run.rounds) {
       values.rounds = run.rounds.length;
-      run.rounds.forEach((p, k) => { values[`round${k + 1}`] = p; });
+      run.rounds.forEach((p, k) => { values[`round${k + 1}`] = markedSeq(p); });
     }
     if (input.mistake) {
       // 错法那一遍只有每一趟的序列（引擎不演示错法），没有另数的比较和稳定性
@@ -318,7 +325,7 @@ const MEASURERS = {
       return { values };
     }
     const A = run.steps.at(-1).view.A;
-    values.final = A.map((x) => x.v);
+    values.final = markedSeq(A.map((x) => x.v), A);
     if (COUNTERS[input.algo]) {
       const c = wangdaoSort(input.algo, input.items.map((x) => x.v), { gaps: input.gaps });
       values.cmp = c.cmp;

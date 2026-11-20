@@ -191,6 +191,8 @@ function limitLine(calc, prev, read, ctx, scope, domain) {
   const why = `这一行的极限是 ${limText(b)}，上一行是 ${limText(a)}`;
   if (a.kind !== b.kind) return { ok: false, why, read, ctx: next, prevLim: limText(a), lineLim: limText(b) };
   if (a.kind !== 'finite') return { ok: true, same: 'limit', read, ctx: next };
+  // 种类是 finite 而值不是有限数（外推溢出）：判不了，不拿 ∞ 的容差去比（dr-final-fix 第 1 条）
+  if (!Number.isFinite(a.value) || !Number.isFinite(b.value)) return { ok: null, why: '页面判不了这一步（极限算出来不是有限数）', read, ctx: next };
   const scale = Math.max(1, Math.abs(a.value), Math.abs(b.value)), gap = Math.abs(a.value - b.value);
   if (gap <= AGREE * scale) return { ok: true, same: 'limit', read, ctx: next };
   if (gap > APART * scale) return { ok: false, why, read, ctx: next, prevLim: limText(a), lineLim: limText(b) };

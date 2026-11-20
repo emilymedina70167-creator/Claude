@@ -21,7 +21,7 @@ export function deriveDo(el, src) {
   // 第一行先查一遍算不算得出来：老师写错了要在页面上报出来，不能等学生写了才发现
   const first = checkLine(spec, envs, spec.start, spec.start);
   if (first.error) throw new Error(`start: ${first.error}`);
-  if (spec.goal) { const g = checkLine(spec, envs, spec.start, spec.goal); if (g.error) throw new Error(`goal: ${g.error}`); if (!g.ok) session.problem(el, 'derive', `goal: 和 start: 不相等（${g.why}）：学生永远推不到`); }
+  if (spec.goal) { const g = checkLine(spec, envs, spec.start, spec.goal); if (g.error) throw new Error(`goal: ${g.error}`); if (g.ok === false) session.problem(el, 'derive', `goal: 和 start: 不相等（${g.why}）：学生永远推不到`); }
 
   const title = fields.title || '自己推';
   const body = widget(el, { title: escapeHtml(title), cls: 'derive derive-do' });
