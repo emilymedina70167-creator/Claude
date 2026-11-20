@@ -147,7 +147,7 @@ export function independent(j) {
 }
 
 // 式子里并排写的 XY、2X 补上乘号
-const tidy = (src) => String(src ?? '').replace(/\s+/g, ' ').trim()
+export const tidy = (src) => String(src ?? '').replace(/\s+/g, ' ').trim()
   .replace(/(\d)\s*(?=[XYxy](?![A-Za-z]))/g, '$1*')
   .replace(/(?<![A-Za-z])([XYxy])\s*(?=[XYxy](?![A-Za-z]))/g, '$1*');
 function valueAt(src, x, y) {

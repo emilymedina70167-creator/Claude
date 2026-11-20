@@ -27,6 +27,10 @@ import { gloss } from './gloss.js';
 import { stage } from './stagebox.js';
 import { widgetBlock } from './widget.js';
 import { solve } from './solve.js';
+import { venn } from './venn.js';
+import { ptree } from './ptree.js';
+import { joint } from './joint.js';
+import { sim } from './sim.js';
 import { previewBlock } from '../check/preview.js';
 import { stepperBlock } from '../stepper.js';
 import { ENGINES } from '../engines/registry.js';
@@ -44,6 +48,8 @@ export const blocks = {
   let: letBlock, matrix, sketch, derive, image, code,
   // 英语（语法）：填空、改错、句子成分、句型操练（判分在 entext.js）
   cloze, errfind, parse, drill, chunk, link: enLink, translate, gloss,
+  // 概率（视觉第 4 批）：文氏图、概率树、联合分布表、抽样模拟
+  venn, ptree, joint, sim,
   // 黑板上的一块舞台（2026-11-18 从 archive/ 恢复的舞台引擎）：外部主讲写镜头指令，学生动手、挑战当场判、预写当场演
   stage,
   // 外部设计的交互：一小段 JS 调 la.*（blocks/widget.js）

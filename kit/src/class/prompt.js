@@ -1186,6 +1186,17 @@ function recordText(a, type) {
       const v = String(a.value ?? '').trim();
       return `[作答] ${where(a, '图')}：${q}${v ? `在图上点了 ${short(v, 200)}` : '一个都没点'}${mark(a.ok, a.attempts)}${a.detail && !a.ok ? `（页面说：${short(a.detail, 80)}）` : ''}`;
     }
+    // 文氏图、概率树：学生点的几块（value 写成 AB'、A'B 这样：带撇的是不发生）或者填的概率；detail 是页面说的那句，misread 是页面认出来的错法
+    case 'venn':
+    case 'ptree':
+    case 'joint':
+    case 'sim': {
+      const kind = { venn: '文氏图', ptree: '概率树', joint: '联合分布表', sim: '抽样模拟' }[type];
+      const q = a.q ? `「${short(a.q, 120)}」` : '';
+      if (a.giveup) return `[作答] ${where(a, kind)}：${q}试了 ${Number(a.attempts) || 0} 次没做对，看了答案${a.expected ? `（${short(a.expected, 120)}）` : ''}`;
+      const v = String(a.value ?? '').trim();
+      return `[作答] ${where(a, kind)}：${q}${v ? `作答 ${short(v, 200)}` : '没作答'}${mark(a.ok, a.attempts)}${a.detail && !a.ok ? `（页面说：${short(a.detail, 100)}）` : ''}${a.misread ? `；页面看出来的错法：${short(a.misread, 40)}` : ''}`;
+    }
     case 'code': {
       // 写代码题：每次运行都记一条（过了几个测试、第一个没过的、复杂度），带上代码，老师看得到写成了什么样
       const head = `[作答] ${where(a, '代码题')}：第 ${Number(a.attempts) || 1} 次运行，过了 ${Number(a.passed) || 0} / ${Number(a.total) || 0} 个测试`;

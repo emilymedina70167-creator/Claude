@@ -1,8 +1,9 @@
 // 文氏图 venn 的写法和判法（概率第 4 批）。纯函数，不碰 DOM。
 import { parseEvent, parseGiven, parseProbTerm, solveAtoms, termValue, probOf, atomsOf } from './sets.js';
-import { readQ, qTeX } from './num.js';
+import { qTeX, judgeNumber } from './num.js';
 
 const KEYS = ['title', 'q', 'note', 'sets', 'given', 'shade', 'ask', 'find', 'probs'];
+const COMMON = ['id', 'upload']; // 每个组件都能写的（render.js 认），这里不管
 const MANY = new Set(['shade', 'ask']);
 const JOIN = new Set(['given', 'find']);
 
@@ -62,6 +63,7 @@ export function parseVenn(src) {
     if (!line.trim()) continue;
     const m = /^\s*([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/.exec(line);
     const key = m ? m[1].toLowerCase() : null;
+    if (m && COMMON.includes(key)) { last = null; continue; }
     if (m && KEYS.includes(key)) {
       const val = m[2].trim();
       if (MANY.has(key)) many[key].push(val);
@@ -122,28 +124,8 @@ export function judgeRegion(ask, picked) {
   return { ok: false, text: `${parts.join('，')}。`, extra, missing };
 }
 
-// 小数：至少两位小数、三位有效数字，四舍五入对得上才算
-function decimalOk(input, value) {
-  const m = /^[+-]?(\d*)\.(\d+)$/.exec(input.replace(/\s+/g, ''));
-  if (!m) return null;
-  const places = m[2].length, sig = (m[1] + m[2]).replace(/^0+/, '').length;
-  if (places < 2 || sig < 3) return 'short';
-  const k = 10 ** places;
-  return Math.abs(Number(input) - value.toNumber()) <= 0.5 / k + 1e-12 ? 'ok' : 'off';
-}
 /** 学生填的概率对不对：{ ok: true | false | null（读不懂，不判）, text, tag? } */
-export function judgeProb(ask, input) {
-  const s = String(input ?? '').trim();
-  const v = readQ(s);
-  if (!v) return { ok: null, text: s ? '这个读不懂：写分数（2/3）、小数（0.25）或百分数（25%）。' : '还没填。' };
-  if (v.cmp(ask.value) === 0) return { ok: true, text: '对。' };
-  const trap = (ask.traps || []).find((t) => t.value.cmp(v) === 0);
-  if (trap) return { ok: false, text: trap.text, tag: trap.tag };
-  const dec = decimalOk(s, ask.value);
-  if (dec === 'ok') return { ok: true, text: '对。' };
-  if (dec === 'short' && Math.abs(v.toNumber() - ask.value.toNumber()) < 0.01) return { ok: false, text: '小数的位数不够：写成分数，或者至少三位有效数字。', tag: 'short' };
-  return { ok: false, text: '不对。' };
-}
+export const judgeProb = (ask, input) => judgeNumber(ask.value, input, ask.traps);
 
 /** find 的一条读数（带 $ 的文字，交给 mdToHtml） */
 export function readoutOf(term, v) {

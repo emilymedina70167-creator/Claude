@@ -62,3 +62,37 @@ export function qReduce(rows, N) {
   const ok = M.slice(r).every((row) => row[N].zero);
   return { M: M.slice(0, r), pivots, ok };
 }
+
+// 小数：至少两位小数、三位有效数字，四舍五入对得上才算
+function decimalOk(input, value) {
+  const m = /^[+-]?(\d*)\.(\d+)$/.exec(input.replace(/\s+/g, ''));
+  if (!m) return null;
+  const places = m[2].length, sig = (m[1] + m[2]).replace(/^0+/, '').length;
+  if (places < 2 || sig < 3) return 'short';
+  const k = 10 ** places;
+  return Math.abs(Number(input) - value.toNumber()) <= 0.5 / k + 1e-12 ? 'ok' : 'off';
+}
+/**
+ * 学生填的一个数对不对（概率组件共用）：分数、小数、百分数都认，精确比；小数要位数够、四舍五入对得上。
+ * traps：[{ value, text, tag }] 常见错法算出来的值，填了它就说那一句。回 { ok: true | false | null（读不懂，不判）, text, tag? }
+ */
+export function judgeNumber(value, input, traps = []) {
+  const s = String(input ?? '').trim();
+  const v = readQ(s);
+  if (!v) return { ok: null, text: s ? '这个读不懂：写分数（2/3）、小数（0.25）或百分数（25%）。' : '还没填。' };
+  if (v.cmp(value) === 0) return { ok: true, text: '对。' };
+  const trap = traps.find((t) => t.value.cmp(v) === 0);
+  if (trap) return { ok: false, text: trap.text, tag: trap.tag };
+  const dec = decimalOk(s, value);
+  if (dec === 'ok') return { ok: true, text: '对。' };
+  if (dec === 'short' && Math.abs(v.toNumber() - value.toNumber()) < 0.01) return { ok: false, text: '小数的位数不够：写成分数，或者至少三位有效数字。', tag: 'short' };
+  return { ok: false, text: '不对。' };
+}
+
+/** 表、树上写的数：decimal 为真（主讲写的是小数）而且除得尽的写小数，别的写分数；分母太大的写四位有效数字 */
+export function qShow(q, decimal = false) {
+  if (decimal) { let d = q.d; while (d % 2n === 0n) d /= 2n; while (d % 5n === 0n) d /= 5n; const s = String(Number(q.toNumber().toPrecision(12))); if (d === 1n && s.length <= 8) return s; }
+  return q.d > 9999n ? String(Number(q.toNumber().toPrecision(4))) : q.toString();
+}
+/** 写进公式里的数：同上，分数用 \frac */
+export const qShowTeX = (q, decimal = false) => (decimal && /^-?\d+(\.\d+)?$/.test(qShow(q, true)) ? qShow(q, true) : qTeX(q));

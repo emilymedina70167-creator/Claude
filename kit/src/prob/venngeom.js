@@ -89,8 +89,8 @@ export function vennLayout(n) {
     const k = maskAt(circles, x, y);
     let room = Math.min(x, y, w - x, h - y);
     for (const c of circles) room = Math.min(room, Math.abs(Math.hypot(x - c.cx, y - c.cy) - c.r));
-    // 圆外面那一块：字放在左下角那一带（右上留给别的），别的块取最宽的地方
-    const score = k === 0 ? Math.min(room, 30) - 0.02 * (x + (h - y)) : room;
+    // 圆外面那一块：字放在右下角那一带（右上是 Ω，左下常被页面的「板书」按钮盖住），别的块取最宽的地方
+    const score = k === 0 ? Math.min(room, 30) - 0.02 * ((w - x) + (h - y)) : room;
     if (score > (best[k].score ?? -Infinity)) best[k] = { room, x, y, score };
   }
   const atoms = border.map((arcs, k) => {
