@@ -47,7 +47,7 @@ export function answerWidget(body, spec, onDone) {
   // 标准答案按格写的矩阵（Aⁿ 每个元素含 n）：每格一个式子框，逐格判
   const cells = formula ? matrixCells(formula.expected) : null;
   const input = cells ? formulaGrid(box, { rows: cells.length, cols: cells[0].length, names: formula.names, keys: formula.keys })
-    : formula ? formulaInput(box, { names: formula.names, keys: formula.keys, read: formula.read, pad: formula.pad }) : text ? textAnswerInput(box, shape) : mathInput(box, shape);
+    : formula ? formulaInput(box, { names: formula.names, keys: formula.keys, read: formula.read, pad: formula.pad, placeholder: formula.placeholder || '' }) : text ? textAnswerInput(box, shape) : mathInput(box, shape);
   const fb = body.querySelector('.ans-feedback');
   const btnCheck = body.querySelector('.ans-check');
   const btnHint = body.querySelector('.ans-hint');

@@ -14,7 +14,7 @@
 // 每行先按 formula.js 的读法读懂（省略乘号、ᵀ、α β、上标），再用 expr.js 在每一组数上算；有一组不等就是不等。
 import { compile, evaluate, isNum, isVec, isMat, valueTeX, eye } from './expr.js';
 import { normalizeFormula, formulaTeX, FORMULA_FUNCS } from './formula.js';
-import { parseDeriveCalc, checkFxLine, readLine } from './fx/deriveline.js';
+import { parseDeriveCalc, checkFxLine, readLine, specialKind, sameKind } from './fx/deriveline.js';
 import { parseDomain, compareFx, DEFAULT_RANGE } from './fx/sample.js';
 
 const FIELD = /^\s*([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/;
@@ -167,7 +167,7 @@ function checkFx(spec, prev, line, state) {
   if (r.error) return { ok: false, error: r.error };
   let tex = '';
   try { tex = r.read ? formulaTeX(r.read.src) : ''; } catch { tex = ''; }
-  const out = { ok: r.ok, tex, norm: r.read?.src || line, ctx: r.ctx || ctx, ...(r.note ? { note: true } : {}), ...(r.same ? { same: r.same } : {}), ...(r.ok !== true ? { why: r.why } : {}) };
+  const out = { ok: r.ok, tex, norm: r.read?.src || line, ctx: r.ctx || ctx, ...(r.note ? { note: true } : {}), ...(r.same ? { same: r.same } : {}), ...(r.hint ? { hint: r.hint } : {}), ...(r.ok !== true ? { why: r.why } : {}) };
   if (r.ok === true && !r.note && spec.goal) out.done = reachedGoal(spec, r.read, kind);
   return out;
 }
@@ -175,6 +175,8 @@ function checkFx(spec, prev, line, state) {
 function reachedGoal(spec, read, kind) {
   try {
     const g = readLine(spec.goal, { kind });
+    // goal: ∞ / 不存在（dr-calc-fix 第 5 条）
+    if (kind === 'limit' && specialKind(g.src)) return !!specialKind(read.src) && sameKind(specialKind(g.src), specialKind(read.src)) !== false;
     if (kind === 'limit') return !read.vars.length && !g.vars.length && Math.abs(evalNum(read.ast) - evalNum(g.ast)) <= 1e-9 * Math.max(1, Math.abs(evalNum(g.ast)));
     if (kind === 'antideriv' && /\bint\(/.test(read.src)) return false;
     const r = compareFx(g.ast, read.ast, { domain: spec.domain.length ? spec.domain : [{ ...DEFAULT_RANGE, name: 'x' }], upToConst: kind === 'antideriv' });

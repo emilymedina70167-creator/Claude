@@ -29,7 +29,7 @@ export function deriveDo(el, src) {
     <div class="dv-scroll"><table class="dv"><tbody><tr class="dv-line"><td class="dv-r">${tex2html(texOf(spec.start))}</td><td class="dv-note muted">出发</td></tr></tbody></table></div>
     <div class="dd-row">
       <span class="dd-eq">=</span>
-      <input class="dd-input" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="下一行，比如 a(b'a)b'" aria-label="写下一行">
+      <input class="dd-input" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${escapeHtml(spec.calc?.kind === 'limit' ? '下一行，比如 (1-cos x)/x^2' : spec.calc?.kind === 'antideriv' ? '下一行，比如 x e^x - ∫ e^x dx' : spec.fx ? '下一行，比如 2x sin x + x^2 cos x' : "下一行，比如 a(b'a)b'")}" aria-label="写下一行">
       <button type="button" class="btn btn-primary dd-ok">写好了</button>
     </div>
     <div class="dd-preview muted" aria-live="polite"></div>
@@ -88,7 +88,7 @@ export function deriveDo(el, src) {
     tries = 0;
     if (r.done) finish(true);
     else if (r.ok === null) show('mid', `页面判不了这一行（${r.why || '待外部核'}），可以接着往下写`);
-    else show('ok', r.same === 'limit' ? '和上一行的极限一样，接着往下写' : '对，接着往下写');
+    else show('ok', r.hint ? `对（${r.hint}），接着往下写` : r.same === 'limit' ? '和上一行的极限一样，接着往下写' : '对，接着往下写');
   }
 
   function show(kind, msg) {
