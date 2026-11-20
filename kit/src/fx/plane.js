@@ -22,7 +22,7 @@ export function contourLines(F, level, box, { nx = 96, ny = 96 } = {}) {
   for (let j = 0; j <= ny; j++) { const row = new Float64Array(nx + 1); for (let i = 0; i <= nx; i++) row[i] = f(box.x0 + i * dx, box.y0 + j * dy) - level; g.push(row); }
   // 正好落在等值线上的格点挪开一点点：不然一条线会在格点上断成好几截、鞍点的四支分不清
   const eps = 1e-12;
-  for (const row of g) for (let i = 0; i <= nx; i++) if (row[i] === 0) row[i] = eps;
+  const zero = g.map((row) => { const z = new Uint8Array(nx + 1); for (let i = 0; i <= nx; i++) if (row[i] === 0) { z[i] = 1; row[i] = eps; } return z; });
   // 交点按「哪条格子边」记：横边 h(i, j) 是 (i, j)—(i+1, j)，竖边 v(i, j) 是 (i, j)—(i, j+1)。
   // 相邻两个格子共用一条边，按边的编号接线——按坐标接的话，同一个交点从两边各算一次会差出最后一位，线就断了
   const W1 = nx + 1;
@@ -40,7 +40,18 @@ export function contourLines(F, level, box, { nx = 96, ny = 96 } = {}) {
     if (v3 * v2 < 0) e.t = cross(hId(i, j + 1), x0, y1, v3, x1, y1, v2);
     if (v0 * v3 < 0) e.l = cross(vId(i, j), x0, y0, v0, x0, y1, v3);
     const ks = Object.keys(e);
-    if (ks.length === 2) segs.push([e[ks[0]], e[ks[1]]]);
+    if (ks.length === 2) {
+      // 两个交点都落在格点上、还是斜对着的两个角，而第三个角本来也正好在线上（xy = 0 的原点旁边）：
+      // 线是沿着格子边拐过那个角的，不是斜着切过去
+      const zc = [zero[j][i], zero[j][i + 1], zero[j + 1][i + 1], zero[j + 1][i]];
+      const nz = zc[0] + zc[1] + zc[2] + zc[3];
+      const via = nz === 3 ? [0, 1, 2, 3].find((q) => zc[q] && zc[(q + 1) % 4] && zc[(q + 3) % 4]) : -1;
+      if (via >= 0) {
+        const cid = -1 - ((j + (via >= 2 ? 1 : 0)) * W1 + i + (via === 1 || via === 2 ? 1 : 0));
+        if (!pts.has(cid)) pts.set(cid, [via === 1 || via === 2 ? x1 : x0, via >= 2 ? y1 : y0]);
+        segs.push([e[ks[0]], cid], [cid, e[ks[1]]]);
+      } else segs.push([e[ks[0]], e[ks[1]]]);
+    }
     else if (ks.length === 4) {
       // 鞍点：四条边都有交点。中心和左下角同号 → 左下角不被单独切出去
       const c = f(x0 + dx / 2, y0 + dy / 2) - level;
@@ -193,14 +204,32 @@ const at = (kind, t, r) => (kind === 'y' ? [t, r] : kind === 'x' ? [r, t] : [r *
  * 回 { poly, ok }：poly 沿下边界去、沿上边界回；有取样点没定义时 ok 是 false（那几个点跳过）
  */
 export function typedRegion(kind, lo, hi, a, b, { n = 120 } = {}) {
-  const L = val1(lo), H = val1(hi), low = [], high = [];
-  let ok = true;
+  const L = val1(lo), H = val1(hi);
+  const sample = (t) => { const l = L(t), h = H(t); return Number.isNaN(l) || Number.isNaN(h) ? null : { t, l, h }; };
+  const dt = (b - a) / n;
+  // 有定义和没定义的交界：二分找到定义域的边（不然区域停在最后一个采样点上，离真的边差半格）
+  const edge = (tIn, tOut) => { let best = null; for (let k = 0; k < 40; k++) { const m = (tIn + tOut) / 2, s = sample(m); if (s) { best = s; tIn = m; } else tOut = m; } return best; };
+  // 陡的地方（圆的两头）加密：两点之间上下限变得比步长快得多就对半分
+  const refine = (p, q, depth, out) => {
+    if (depth < 6 && Math.max(Math.abs(q.l - p.l), Math.abs(q.h - p.h)) > 2 * Math.abs(q.t - p.t) && Math.abs(q.t - p.t) > 1e-9) {
+      const m = sample((p.t + q.t) / 2);
+      if (m) { refine(p, m, depth + 1, out); out.push(m); refine(m, q, depth + 1, out); }
+    }
+  };
+  const runs = [];
+  let cur = null, prev = null, ok = true;
   for (let i = 0; i <= n; i++) {
-    const t = a + ((b - a) * i) / n, l = L(t), h = H(t);
-    if (Number.isNaN(l) || Number.isNaN(h)) { ok = false; continue; }
-    low.push(at(kind, t, l)); high.push(at(kind, t, h));
+    const t = i === n ? b : a + dt * i, s = sample(t);
+    if (!s) ok = false;
+    if (s && !cur) { cur = []; runs.push(cur); if (i > 0) { const e = edge(t, t - dt); if (e && e.t < t) { cur.push(e); refine(e, s, 0, cur); } } }
+    else if (s && prev) refine(prev, s, 0, cur);
+    if (s) cur.push(s);
+    else if (cur) { const e = edge(prev.t, t); if (e && e.t > prev.t) { refine(prev, e, 0, cur); cur.push(e); } cur = null; }
+    prev = s;
   }
-  return { poly: [...low, ...high.reverse()], ok };
+  const polys = runs.filter((r) => r.length >= 2).map((r) => [...r.map((s) => at(kind, s.t, s.l)), ...r.map((s) => at(kind, s.t, s.h)).reverse()]);
+  // poly：最大的那一块（只有一块时就是它）
+  return { polys, poly: polys.reduce((p, q) => (q.length > p.length ? q : p), []), ok };
 }
 
 /** 区域在 t 处的那一条（竖条 / 横条 / 射线上的一段）；那里没定义回 null */

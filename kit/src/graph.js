@@ -95,6 +95,12 @@ export function createGraph(container, src, opts = {}) {
       if (c.kind === 'let') {
         v[c.name] = Object.hasOwn(state.override, c.name) ? state.override[c.name]
           : c.mods.drag && Object.hasOwn(state.drag, c.name) ? state.drag[c.name] : c.expr(v);
+        // 沿约束拖的点：一开始写的位置不在线上就先投上去；投不上（窗口里这条线没有点）是写法错误
+        if (c.onG && !Object.hasOwn(state.override, c.name) && !Object.hasOwn(state.drag, c.name) && Array.isArray(v[c.name])) {
+          const q = projectTo(quiet2(fn2(c.onG, v)), v[c.name]);
+          if (q) v[c.name] = [Number(q[0].toFixed(6)), Number(q[1].toFixed(6))];
+          else throw new Error(`${c.name} 放不到约束上：${c.mods.on} 在它附近没有点（改起点，或者改约束）`);
+        }
       } else if (c.name && c.kind === 'area') {
         // 起了名字的面积、黎曼和：后面的命令、读数、目标里是一个数
         v[c.name] = areaBetween(fnOf(c.f, v), fnOf(c.g, v), c.a(v), c.b(v));
@@ -175,6 +181,13 @@ export function createGraph(container, src, opts = {}) {
     if (fields.ylabel) el('text', { x: x0 + 8, y: MT + 14, class: 'axis-label' }).textContent = fields.ylabel;
   }
 
+  // 区域里的一条在那里没定义（滑到了区域外面）：它的上下限是 NaN。读数里用到的那一格写「—」，目标不算做到——都不是写法错误
+  const stripNames = cmds.filter((c) => c.kind === 'strip').flatMap((c) => [c.loName, c.hiName]).filter(Boolean);
+  const goneIn = (text, v) => stripNames.some((n) => Number.isNaN(v[n]) && new RegExp(`(?<![\\w.])${n}(?![\\w(])`).test(text));
+  const dashGone = (text, v) => (stripNames.length ? text.replace(/(?<![\\\w}_^])\{([^{}]+)\}/g, (m, expr, at) => {
+    if (!goneIn(expr, v)) return m;
+    return (text.slice(0, at).match(/(?<!\\)\$/g) || []).length % 2 ? '\\text{—}' : '—';
+  }) : text);
   let lastErr = '';
   // 一帧画得慢（几千项的求和）时：正在拖、正在播的那几帧先画粗的（点少、不加密），手停了 0.2 秒再补一张细的
   let slow = false, lastEnd = 0, fineTimer = 0, firstDraw = true;
@@ -391,8 +404,8 @@ export function createGraph(container, src, opts = {}) {
               else { const why = whyThrows(C2.bind(null, 0.123), 0.077); if (why) errs.push(why); }
             } else {
               const r = typedRegion(c.shape, fnOf(c.lo, v, c.param), fnOf(c.hi, v, c.param), c.a(v), c.b(v));
-              if (r.poly.length >= 3) { const pg = el('polygon', { points: poly2(r.poly), class: 'g-shade g-region' }, plotG); pg.style.fill = rc; pg.style.stroke = rc; }
-              else { const why = whyThrows(fnOf(c.lo, v, c.param), (c.a(v) + c.b(v)) / 2) || whyThrows(fnOf(c.hi, v, c.param), (c.a(v) + c.b(v)) / 2); if (why) errs.push(why); }
+              for (const poly of r.polys) { const pg = el('polygon', { points: poly2(poly), class: 'g-shade g-region' }, plotG); pg.style.fill = rc; pg.style.stroke = rc; }
+              if (!r.polys.length) { const why = whyThrows(fnOf(c.lo, v, c.param), (c.a(v) + c.b(v)) / 2) || whyThrows(fnOf(c.hi, v, c.param), (c.a(v) + c.b(v)) / 2); if (why) errs.push(why); }
             }
           } else if (c.kind === 'strip') {
             const st = stripAt(c, v);
@@ -484,7 +497,7 @@ export function createGraph(container, src, opts = {}) {
       side.querySelector('.r-show').innerHTML = cmds.map((c, i) => {
         if (c.kind !== 'show' || !visible(c)) return '';
         if (coarse && /\bint2\(/.test(c.text) && showCache[i] !== undefined) return `<div data-cmd="${i + 1}" class="is-stale">${showCache[i]}</div>`;
-        showCache[i] = mdToHtml(fillValues(c.text, v, errs, compile), { inline: true });
+        showCache[i] = mdToHtml(fillValues(dashGone(c.text, v), v, errs, compile), { inline: true });
         return `<div data-cmd="${i + 1}">${showCache[i]}</div>`;
       }).join('');
     }
@@ -514,7 +527,7 @@ export function createGraph(container, src, opts = {}) {
       if (state.goalsHit.has(i) || !visible(c)) continue;
       let ok = false;
       // 目标的式子算不出来（变量没定义、函数名写错）：报写法错误——不然这一关永远过不了，也没人知道为什么
-      try { ok = c.cond ? !!c.cond(v) : close(c.lhs(v), c.rhs(v), Number(c.mods.tol) || 0.05); } catch (e) { ok = false; errs.push(`goal 算不出来：${e?.message || e}`); }
+      try { ok = c.cond ? !!c.cond(v) : close(c.lhs(v), c.rhs(v), Number(c.mods.tol) || 0.05); } catch (e) { ok = false; if (!goneIn(c.srcLine || '', v)) errs.push(`goal 算不出来：${e?.message || e}`); }
       if (quiet || !ok) { if (quiet && ok) placedByTeacher.add(i); else placedByTeacher.delete(i); continue; }
       if (placedByTeacher.has(i)) continue;
       state.goalsHit.add(i);

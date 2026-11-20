@@ -148,3 +148,38 @@ test('上限和速度', () => {
   for (let i = 0; i < 50; i++) contourLines((x, y) => x * x + 2 * y * y, 1 + i * 0.1, box);
   assert.ok(performance.now() - t0 < 1200, `${Math.round(performance.now() - t0)} ms`);
 });
+
+test('等值线沿着网格线、在格点上相交（xy = 0）：两条轴都走到原点，不在原点旁边切角', () => {
+  const ls = contourLines((x, y) => x * y, 0, { x0: -3, x1: 3, y0: -3, y1: 3 }, { nx: 96, ny: 96 });
+  let throughOrigin = 0;
+  for (const l of ls) {
+    for (let i = 1; i < l.length; i++) {
+      const dx = Math.abs(l[i][0] - l[i - 1][0]), dy = Math.abs(l[i][1] - l[i - 1][1]);
+      assert.ok(dx < 1e-9 || dy < 1e-9, `斜着切了一刀：${JSON.stringify(l[i - 1])} → ${JSON.stringify(l[i])}`);
+    }
+    if (l.some(([x, y]) => Math.abs(x) < 1e-9 && Math.abs(y) < 1e-9)) throughOrigin++;
+  }
+  assert.ok(throughOrigin >= 1, '没有一条线过原点');
+  // 四个方向都画到了
+  const far = (px, py) => ls.some((l) => l.some(([x, y]) => Math.abs(x - px) < 0.05 && Math.abs(y - py) < 0.05));
+  assert.ok(far(2.9, 0) && far(-2.9, 0) && far(0, 2.9) && far(0, -2.9));
+});
+
+test('区域的边界只在一段上有定义：画到定义域的边上（二分找边），陡的地方加密', () => {
+  const E = Math.sqrt(1.1);
+  const r = typedRegion('y', () => 0, (x) => Math.sqrt(1.1 - x * x), -2, 2);
+  assert.equal(r.polys.length, 1);
+  const xs = r.poly.map((p) => p[0]);
+  assert.ok(Math.abs(Math.min(...xs) + E) < 1e-4, `左边到 ${Math.min(...xs)}`);
+  assert.ok(Math.abs(Math.max(...xs) - E) < 1e-4, `右边到 ${Math.max(...xs)}`);
+  assert.equal(r.ok, false);
+  // 上边界（多边形的后一半）相邻两点的高差不大：圆在两头是竖的，均匀采样第一段就跳 0.26
+  const top = r.poly.filter((p) => p[1] > 1e-9 || Math.abs(Math.abs(p[0]) - E) < 1e-3);
+  for (let i = 1; i < top.length; i++) assert.ok(Math.abs(top[i][1] - top[i - 1][1]) < 0.08, `跳了 ${Math.abs(top[i][1] - top[i - 1][1])}`);
+});
+
+test('区域的边界在中间一段没定义：分成两块，不连成一块', () => {
+  const r = typedRegion('y', () => 0, (x) => Math.sqrt(x * x - 1), -2, 2);
+  assert.equal(r.polys.length, 2);
+  assert.ok(r.polys[0].every((p) => p[0] <= -1 + 1e-4) && r.polys[1].every((p) => p[0] >= 1 - 1e-4));
+});
