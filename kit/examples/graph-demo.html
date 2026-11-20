@@ -1,14 +1,14 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>函数图：一元微积分和一维概率</title>
+<title>函数图：微积分和概率</title>
 <script src="la-kit.js"></script>
 <script type="text/markdown">
 ---
-unit: 函数图（视觉交互第 1 批）
+unit: 函数图（视觉交互第 1、2 批）
 subject: 高数
 ---
 
-# 函数图：一元微积分和一维概率
+# 函数图：微积分和概率
 
 每张图对着考纲里的一个考点。式子只写题目里的量，导数、切线、面积、分位点都是页面算的。
 
@@ -291,6 +291,229 @@ plot 2*sum(k, 1, n, (-1)^(k+1)*sin(k*x)/k) color=yellow label="Sn" at=0.4
 point [pi, 0] color=pink label="S(π) = 0"
 ```
 
+## 平面上的曲线、多元函数、重积分、曲线积分
+
+`equal: on` 两个方向一样长。参数曲线、极坐标、等高线、方向场、区域都是页面照式子画的；偏导、梯度写 `f_x`、`f_grad`。
+
+```graph
+id: gp-param
+title: 参数方程：摆线上的切线
+q: 拖动 $t$，找到切线水平的地方。
+equal: on
+x: -1 13.6
+y: -1 4
+slider t 0.1 12.4 = 2 step=0.02 label="t"
+param [s - sin(s), 1 - cos(s)] for s 0 4pi color=blue label=摆线 at=0.62
+param [t + cos(s), 1 + sin(s)] for s 0 2pi color=gray thin
+let P = [t - sin(t), 1 - cos(t)]
+vector [1 - cos(t), sin(t)] from P color=yellow label="(x′, y′)"
+point P color=yellow
+show $\dfrac{dy}{dx} = \dfrac{y'(t)}{x'(t)} = \dfrac{\sin t}{1 - \cos t} = {dec(sin(t)/(1 - cos(t)), 3)}$
+goal sin(t)/(1 - cos(t)) = 0 tol=0.02 msg="$t = \pi$（或 $3\pi$）：拱顶，切线水平"
+```
+
+```graph
+id: gp-polar
+title: 极坐标：心形线扫过的面积
+q: 转动 $\theta$：扫到哪里，面积正好是整个心形的一半？
+equal: on
+x: -1 2.6
+y: -1.6 1.6
+slider th 0 6.28 = 1.2 step=0.02 label="θ"
+polar 1 + cos(t) for t 0 2pi color=blue label="r = 1 + cos θ" at=0.6
+polar 1 + cos(t) for t 0 th color=yellow fill
+vector (1 + cos(th))*[cos(th), sin(th)] color=yellow label=r
+show $\theta = {dec(th, 2)}$，扫过的面积 $\tfrac12\displaystyle\int_0^\theta r^2\,d\theta = {dec(int((1 + cos(t))^2/2, t, 0, th), 4)}$，整个心形 $\tfrac{3\pi}{2} = {dec(3pi/2, 4)}$
+goal th = pi tol=0.03 msg="$\theta = \pi$：上半个，面积 $\tfrac{3\pi}{4}$，正好一半"
+```
+
+```graph
+id: gp-cross
+title: 极坐标：两条曲线的交点和公共部分
+q: 圆 $r = 3\cos\theta$ 和心形线 $r = 1 + \cos\theta$ 围出一块公共部分。先点出它们的交点。
+equal: on
+x: -1 3.4
+y: -2 2
+polar 3cos(t) for t -pi/2 pi/2 color=pink label="r = 3cos θ" at=0.66
+polar 1 + cos(t) for t 0 2pi color=blue label="r = 1 + cos θ" at=0.25
+pick "点出两条曲线的交点（极点以外的两个）" at [3/4, 3sqrt(3)/4], [3/4, -3sqrt(3)/4] tol=0.2
+polar 1 + cos(t) for t -pi/3 pi/3 color=yellow fill after
+polar 3cos(t) for t pi/3 pi/2 color=yellow fill after
+polar 3cos(t) for t -pi/2 -pi/3 color=yellow fill after
+show 交点 $\theta = \pm\dfrac{\pi}{3}$。公共部分的面积 $\displaystyle\int_0^{\pi/3}(1 + \cos\theta)^2 d\theta + \int_{\pi/3}^{\pi/2} 9\cos^2\theta\,d\theta = {dec(int((1 + cos(t))^2, t, 0, pi/3) + int(9cos(t)^2, t, pi/3, pi/2), 4)}$（$\tfrac{5\pi}{4} = {dec(5pi/4, 4)}$） after
+```
+
+```graph
+id: gp-curv
+title: 曲率和曲率圆
+q: 沿抛物线拖动切点，找到弯得最厉害（曲率最大）的地方。
+equal: on
+x: -3 3
+y: -0.5 4.5
+f(x) = x^2
+let a = 0.7 drag on=f(x) snap=0.05
+let k = abs(f''(a))/(1 + f'(a)^2)^1.5
+let C = [a, f(a)] + [-f'(a), 1]/sqrt(1 + f'(a)^2)/k
+plot f(x) color=blue label="y = x²" at=0.92
+param C + [cos(s), sin(s)]/k for s 0 2pi color=yellow
+point C color=yellow label=曲率中心
+show 曲率 $K = \dfrac{|y''|}{(1 + y'^2)^{3/2}} = {dec(k, 3)}$，曲率半径 $R = \dfrac1K = {dec(1/k, 3)}$
+goal a = 0 tol=0.03 msg="顶点处曲率最大：$K = 2$，$R = \tfrac12$"
+```
+
+```graph
+id: gp-cauchy
+title: 柯西中值定理：参数曲线上切线平行于弦的点
+q: 曲线是 $(g(t), f(t)) = (t^2,\ 3t - \tfrac12 t^3)$，$0 \le t \le 2$。拖 $\xi$，让切线和弦平行。
+equal: on
+x: -0.5 4.5
+y: -0.5 3.5
+slider t 0.05 2 = 0.5 step=0.01 label="ξ"
+param [s^2, 3s - s^3/2] for s 0 2 color=blue
+let P = [t^2, 3t - t^3/2]
+point [0, 0] color=pink
+point [4, 2] color=pink
+segment [0, 0], [4, 2]
+vector [2t, 3 - 1.5t^2]/3 from P color=yellow
+point P color=yellow label=ξ
+show $\dfrac{f'(\xi)}{g'(\xi)} = {dec((3 - 1.5t^2)/(2t), 3)}$，弦的斜率 $\dfrac{f(2) - f(0)}{g(2) - g(0)} = {dec(2/4, 3)}$
+goal (3 - 1.5t^2)/(2t) = 2/4 tol=0.02 msg="平行了：$\dfrac{f'(\xi)}{g'(\xi)} = \dfrac{f(2) - f(0)}{g(2) - g(0)}$"
+```
+
+```graph
+id: gp-ode
+title: 方向场和解曲线：y′ = y − x
+q: 拖动初值点，解曲线跟着变。通解是 $y = x + 1 + Ce^x$：找出 $C = 0$ 的那一条。
+x: -3 3
+y: -4 6
+let P = [0, 2] drag snap=0.1
+slope y - x
+flow y - x from P color=yellow label="过 P 的解"
+show 初值 $y({el(P, 1)}) = {el(P, 2)}$，$C = (y_0 - x_0 - 1)e^{-x_0} = {dec((el(P, 2) - el(P, 1) - 1)*exp(-el(P, 1)), 3)}$
+goal el(P, 2) = el(P, 1) + 1 tol=0.06 msg="$C = 0$：这条解是直线 $y = x + 1$"
+```
+
+```graph
+id: gp-family
+title: 可分离变量：y′ = −x/y 的积分曲线族
+q: 拖动点 $P$：过它的积分曲线是哪个圆？把它拖到 $x^2 + y^2 = 4$ 上。
+equal: on
+x: -3.2 3.2
+y: -3 3
+let P = [1, 0.5] drag snap=0.05
+slope -x/y
+contour x^2 + y^2 at 1, 4, 9 color=gray
+contour x^2 + y^2 at dot(P, P) color=yellow
+show 过 $P$ 的积分曲线：$x^2 + y^2 = {dec(dot(P, P), 2)}$
+goal dot(P, P) = 4 tol=0.12 msg="$C = 4$"
+```
+
+```graph
+id: gp-grad
+title: 等高线、梯度、方向导数
+q: $f(x, y) = x^2 + 2y^2$。点 $P$ 可以拖。转动方向 $l$，让方向导数最大。
+equal: on
+x: -4 4
+y: -3.6 3.6
+f(x, y) = x^2 + 2y^2
+let P = [2, 1] drag snap=0.25
+slider th 0 6.28 = 0.2 step=0.02 label="θ"
+contour f(x, y) at 1, 3, 10, 15 color=gray
+contour f(x, y) at f(P) color=blue
+vector f_grad(P)/4 from P color=yellow label=∇f
+vector [cos(th), sin(th)] from P color=pink label=l
+show $\nabla f(P) = {f_grad(P)}$，$|\nabla f| = {dec(norm(f_grad(P)), 3)}$
+show 方向导数 $\dfrac{\partial f}{\partial l} = \nabla f\cdot l = {dec(dot(f_grad(P), [cos(th), sin(th)]), 3)}$
+goal dot(f_grad(P), [cos(th), sin(th)]) >= 0.998*norm(f_grad(P)) msg="$l$ 和 $\nabla f$ 同向：方向导数最大，就是 $|\nabla f|$；梯度和过 $P$ 的等高线垂直"
+```
+
+```graph
+id: gp-ext
+title: 二元函数的极值：在等高线图上认驻点
+q: $f(x, y) = x^3 - 3x + y^2$ 的驻点在哪？都点出来。
+equal: on
+x: -2.6 2.6
+y: -2 2
+f(x, y) = x^3 - 3x + y^2
+contour f(x, y) at -1.5, -1, 0, 1, 3, 4 color=blue
+contour f(x, y) at 2 color=pink
+pick "点出所有驻点" at [1, 0], [-1, 0] tol=0.25
+point [1, 0] color=yellow label="极小" after
+point [-1, 0] color=pink label="鞍点" after
+show $(1, 0)$：$AC - B^2 = {f_xx(1, 0)*f_yy(1, 0) - f_xy(1, 0)^2} > 0$，$A = {f_xx(1, 0)} > 0$，极小值 ${f(1, 0)}$；$(-1, 0)$：$AC - B^2 = {f_xx(-1, 0)*f_yy(-1, 0) - f_xy(-1, 0)^2} < 0$，不是极值点（粉的等高线在那里自己相交） after
+```
+
+```graph
+id: gp-lag
+title: 条件极值：约束上找 f 的最小值
+q: 在直线 $x + y = 3$ 上找 $f(x, y) = x^2 + 2y^2$ 的最小值：沿着直线拖 $P$。
+equal: on
+x: -1 4
+y: -1 4
+f(x, y) = x^2 + 2y^2
+let P = [0.5, 2.5] drag on="x + y = 3"
+implicit x + y = 3 color=pink label="x + y = 3" at=0.25
+contour f(x, y) at 2, 12, 20 color=gray
+contour f(x, y) at f(P) color=yellow
+vector f_grad(P)/8 from P color=yellow label=∇f
+vector [1, 1] from P color=pink label=∇g
+show $f(P) = {dec(f(P), 3)}$，$\nabla f = {f_grad(P)}$
+goal f(P) < 6.02 msg="过 $P$ 的等高线和约束相切：$\nabla f \parallel \nabla g$，最小值 $f(2, 1) = 6$"
+```
+
+```graph
+id: gp-dbl
+title: 二重积分：区域的两种扫法（交换积分次序）
+q: $D$ 由 $y = x$ 和 $y = x^2$ 围成。先点出两条线的交点，再拖滑块看竖条、横条的上下限。
+equal: on
+x: -0.3 1.3
+y: -0.3 1.3
+slider a 0 1 = 0.6 step=0.02 label="竖条 x"
+slider b 0 1 = 0.4 step=0.02 label="横条 y"
+region D = y from x^2 to x for x 0 1 color=yellow
+region E = x from y to sqrt(y) for y 0 1 hide
+plot x^2 color=blue thin label="y = x²" at=0.08
+plot x color=pink thin label="y = x" at=0.04
+pick "点出两条线的交点" at [0, 0], [1, 1] tol=0.08
+strip D at a lo=y1 hi=y2 color=pink after
+strip E at b lo=x1 hi=x2 color=blue after
+show 先 $y$ 后 $x$：$\displaystyle\int_0^1 dx\int_{x^2}^{x} f\,dy$，$x = {dec(a, 2)}$ 的竖条上 $y$ 从 ${dec(y1, 3)}$ 到 ${dec(y2, 3)}$ after
+show 先 $x$ 后 $y$：$\displaystyle\int_0^1 dy\int_{y}^{\sqrt y} f\,dx$，$y = {dec(b, 2)}$ 的横条上 $x$ 从 ${dec(x1, 3)}$ 到 ${dec(x2, 3)}$ after
+show 两种次序算出的面积：${dec(int2(1, x, 0, 1, y, x^2, x), 4)}$ 和 ${dec(int2(1, y, 0, 1, x, y, sqrt(y)), 4)}$ after
+```
+
+```graph
+id: gp-dpolar
+title: 二重积分：极坐标下的区域
+q: $D$：$x^2 + y^2 \le 2x$。转动射线看 $r$ 的上限怎么跟着 $\theta$ 变；转到上限是 1 的地方。
+equal: on
+x: -0.6 2.6
+y: -1.4 1.4
+slider th -1.57 1.57 = 0.4 step=0.01 label="θ"
+region D = r from 0 to 2cos(t) for t -pi/2 pi/2 color=yellow
+strip D at th hi=r2 color=pink
+show 射线 $\theta = {dec(th, 2)}$ 上 $r$ 从 $0$ 到 $2\cos\theta = {dec(r2, 3)}$；$\displaystyle\iint_D f\,d\sigma = \int_{-\pi/2}^{\pi/2} d\theta\int_0^{2\cos\theta} f\,r\,dr$
+show 面积 $\displaystyle\int_{-\pi/2}^{\pi/2} d\theta\int_0^{2\cos\theta} r\,dr = {dec(int2(r, t, -pi/2, pi/2, r, 0, 2cos(t)), 4)}$（$\pi = {dec(pi, 4)}$）
+goal r2 = 1 tol=0.02 msg="$\theta = \pm\dfrac{\pi}{3}$：$2\cos\theta = 1$"
+```
+
+```graph
+id: gp-field
+title: 曲线积分和格林公式
+q: 让点沿单位圆逆时针走完一圈：$\oint_L -y\,dx + x\,dy$ 是多少？
+equal: on
+x: -2.4 2.4
+y: -2.1 2.1
+slider th 0 6.2832 = 1 step=0.02 label="走到 θ" play
+field [-y, x]
+param [cos(s), sin(s)] for s 0 2pi color=blue
+param [cos(s), sin(s)] for s 0 th color=yellow
+vector [-sin(th), cos(th)] from [cos(th), sin(th)] color=yellow label=F
+show $\displaystyle\int_0^\theta \mathbf F\cdot d\mathbf r = \int_0^\theta\big(\sin^2 s + \cos^2 s\big)ds = {dec(int(sin(s)^2 + cos(s)^2, s, 0, th), 3)}$
+show 格林公式：$\displaystyle\oint_L -y\,dx + x\,dy = \iint_D\left(\frac{\partial Q}{\partial x} - \frac{\partial P}{\partial y}\right)d\sigma = \iint_D 2\,d\sigma = {dec(int2(2r, t, 0, 2pi, r, 0, 1), 4)}$ after
+goal th >= 6.27 msg="一圈：$2\pi$，正好是圆面积的 2 倍"
+```
+
 ## 概率：一维随机变量
 
 ```graph
@@ -367,6 +590,86 @@ plot normpdf(x) color=blue label="X 的密度" at=0.3
 plot (x>0)*chi2cdf(x, 1) color=pink label="Y 的分布函数" at=0.85
 point [y, chi2cdf(y, 1)] color=pink
 show $F_Y({y}) = P(-\sqrt{y} \le X \le \sqrt{y}) = {dec(int(normpdf(t), t, -sqrt(max(y, 0)), sqrt(max(y, 0))), 4)}$；$Y \sim \chi^2(1)$，查出来 ${dec(chi2cdf(y, 1), 4)}$
+```
+
+## 概率：二维随机变量
+
+事件是平面上的一块：`region 条件 in D`。概率是这块上密度的二重积分，页面算。
+
+```graph
+id: gp-meet
+title: 几何概型：会面问题
+q: 两人在 0 到 60 分钟之间随机到达，先到的等 $t$ 分钟就走。调 $t$，让能见面的概率是 $\tfrac34$。
+equal: on
+x: -6 66
+y: -6 66
+xlabel: 甲到的时刻 x
+ylabel: 乙到的时刻 y
+slider t 0 60 = 20 step=1 label="等 t 分钟"
+region D = y from 0 to 60 for x 0 60 color=blue
+region abs(x - y) <= t in D color=yellow
+show 能见面：$|x - y| \le {t}$，$P = \dfrac{\text{黄的面积}}{\text{正方形的面积}} = {dec(int2(abs(x - y) <= t, x, 0, 60, y, 0, 60)/3600, 3)}$
+goal 1 - (1 - t/60)^2 = 0.75 tol=0.004 msg="$t = 30$：$P = 1 - \left(\tfrac{30}{60}\right)^2 = \tfrac34$"
+```
+
+```graph
+id: gp-marg
+title: 二维连续型：边缘密度是竖条上的积分
+q: $f(x, y) = 8xy$（$0 < x < y < 1$，别处是 0）。拖动竖条看 $f_X(x)$；拖到 $f_X(x) = 1.5$ 的地方（有两处）。
+equal: on
+x: -0.2 1.3
+y: -0.2 1.2
+f(x, y) = 8x*y
+slider a 0.02 0.98 = 0.3 step=0.01 label="x"
+region D = y from x to 1 for x 0 1 color=blue
+strip D at a lo=y1 hi=y2 color=yellow
+show $x = {dec(a, 2)}$ 的竖条上 $y$ 从 ${dec(y1, 2)}$ 到 ${dec(y2, 2)}$：$f_X(x) = \displaystyle\int_{x}^{1} 8xy\,dy = {dec(int(f(a, y), y, y1, y2), 3)}$
+show 这一条上的条件密度 $f_{Y|X}(y \mid x) = \dfrac{f(x, y)}{f_X(x)} = \dfrac{2y}{1 - x^2}$；整块上 $\displaystyle\iint_D f = {dec(int2(f(x, y), x, 0, 1, y, x, 1), 4)}$
+goal int(f(a, y), y, y1, y2) = 1.5 tol=0.01 msg="$f_X(x) = 4x(1 - x^2)$"
+```
+
+```graph
+id: gp-sum
+title: Z = X + Y 的分布：直线 x + y = z 扫过去
+q: $X$、$Y$ 独立，都服从 $U(0, 1)$。$F_Z(z) = P(X + Y \le z)$ 是黄的那块上密度的积分。拖到 $F_Z(z) = \tfrac12$。
+equal: on
+x: -0.3 1.5
+y: -0.3 1.5
+slider z 0 2 = 0.6 step=0.02 label="z"
+region D = y from 0 to 1 for x 0 1 color=blue
+region x + y <= z in D color=yellow
+implicit x + y = z color=pink label="x + y = z"
+show $F_Z({dec(z, 2)}) = \displaystyle\iint_{x + y \le z} f(x, y)\,dx\,dy = {dec(int2(x + y <= z, x, 0, 1, y, 0, 1), 3)}$
+goal z = 1 tol=0.005 msg="$z = 1$：对角线把正方形分成两半"
+```
+
+```graph
+id: gp-max
+title: max(X, Y) 和 min(X, Y) 的分布
+q: $X$、$Y$ 独立，都服从 $U(0, 1)$。黄的是 $\max(X, Y) \le z$，粉的是 $\min(X, Y) > z$。拖到 $F_{\max}(z) = \tfrac14$。
+equal: on
+x: -0.3 1.5
+y: -0.3 1.5
+slider z 0 1 = 0.7 step=0.01 label="z"
+region D = y from 0 to 1 for x 0 1 color=blue
+region max(x, y) <= z in D color=yellow
+region min(x, y) > z in D color=pink
+show $F_{\max}(z) = P(X \le z, Y \le z) = {dec(int2(max(x, y) <= z, x, 0, 1, y, 0, 1), 3)}$，$F_{\min}(z) = 1 - P(X > z, Y > z) = {dec(1 - int2(min(x, y) > z, x, 0, 1, y, 0, 1), 3)}$
+goal z = 0.5 tol=0.005 msg="$F_{\max}(z) = z^2 = \tfrac14$"
+```
+
+```graph
+id: gp-binorm
+title: 二维正态：ρ 决定等高线的方向和扁的程度
+q: 调 $\rho$。什么时候等高线是圆？
+equal: on
+x: -3.2 3.2
+y: -3 3
+slider rho -0.9 0.9 = 0.6 step=0.05 label="ρ"
+contour binormpdf(x, y, 0, 0, 1, 1, rho) at 0.02, 0.06, 0.12 color=blue
+plot rho*x color=pink dashed label="y = ρx" at=0.9
+show $\rho = {dec(rho, 2)}$；$X$、$Y$ 都是 $N(0, 1)$，粉的虚线是 $E(Y \mid X = x) = \rho x$
+goal rho = 0 tol=0.01 msg="$\rho = 0$：等高线是圆，$f(x, y) = f_X(x)f_Y(y)$——二维正态里不相关就是独立"
 ```
 
 ## 概率：数理统计

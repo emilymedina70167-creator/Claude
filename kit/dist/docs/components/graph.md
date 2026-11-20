@@ -1,4 +1,4 @@
-### graph：函数图（一元微积分、概率分布）
+### graph：函数图（微积分、概率分布）
 
 式子一律弧度。导数、切线、面积由页面算；间断点自己断开（空心、实心点）。
 
@@ -23,6 +23,7 @@ goal f'(c) = (f(3) - f(0))/3 msg="平行了"
 - `bars 式子 for k 0 10`（分布律）、`dots 式子 for n 1 30`（数列）。
 - `let a = 1 drag`（可拖的竖线；`on=f(x)` 骑在曲线上）、`slider`、`show`、`vline` `hline` `point` `segment` `text`。
 - `goal 左 = 右` / `goal 条件`：学生拖到、调到算做到。`pick "题目" on f(x) at 值, …`：学生在图上点出来，页面判。
+- 平面上的（`equal: on`、`param` `polar` `contour` `slope` `field` `region`、二维的拖点）见完整写法。
 
 命令末尾的修饰：`color=` `label=` `dashed` `thin`，`point … hollow` 空心点，`riemann … left / right / mid`，`dots … join` 连线（这几个词只在各自的命令上是修饰，别处是普通的名字），`xlabel:` `ylabel:` 坐标轴的名字。`let` 块里的量能直接用。
 
@@ -120,6 +121,90 @@ plot chi2pdf(x, n) color=blue label="χ²(n)" at=0.6
 show 右边的面积 ${dec(1 - chi2cdf(c, n), 4)}$
 goal 1 - chi2cdf(c, n) = 0.05 tol=0.002 msg="这里是 $\chi^2_{0.05}(n)$"
 show $\chi^2_{0.05}(n) = {dec(chi2inv(0.95, n), 3)}$ after
+```
+
+**平面上的东西**（两个变量）。`equal: on`：两个方向每单位一样长（写了 `y:` 时画布的高跟着范围变）。参数、极角都是弧度。
+
+- `f(x, y) = 式子`：二元函数。偏导 `f_x(…)` `f_y(…)` `f_xx` `f_xy` `f_yy`，梯度 `f_grad(…)`（一个向量）；实参能给一个点：`f(P)`、`f_grad(P)`。
+- `param [x(t), y(t)] for t a b`：参数曲线；`polar r(t) for t a b`：极坐标曲线。末尾 `fill` 涂面（`polar … fill` 是从极点扫过的那一块）。
+- `implicit 左 = 右`：隐函数的曲线。`contour 式子 at 值, 值, …`：等高线（一条命令最多 12 条，每条上写着它的值；值能写式子，如 `at f(P)`）。过鞍点的那一条两支交在一起。
+- `slope 式子`：$y' = $ 式子的方向场（斜率无穷的地方画竖的）；`flow 式子 from 点`：过这一点的解曲线（画到窗口边）。`field [P, Q]`：向量场的箭头；`flow [P, Q] from 点`：流线。`n=` 一排几个。
+- `vector 向量 from 点`：一个箭头（不写 `from` 从原点出发）。
+- `region D = y from 下 to 上 for x a b`（X 型）、`region x from 左 to 右 for y c d`（Y 型）、`region r from 内 to 外 for t α β`（极坐标）；边界没定义的地方不画。`region 条件, 条件, … in D`：条件都成立的地方（`in D` 限在区域 D 里，事件 ∩ 样本空间）。`region … hide` 只起名字不画。
+- `strip D at 式子 lo=y1 hi=y2`：区域 D 里的那一条（竖条 / 横条 / 射线上的一段），`y1` `y2` 是页面读出来的上下限，后面的 `show`、`goal`、`int(…)` 里能用；那里区域没定义时读数写「—」。
+- `let P = [1, 2] drag`：平面上能拖的点（`snap=0.25`）；`drag on="x + y = 3"` 只能沿这条曲线拖（一开始不在线上的先投上去）。拖不出窗口。
+- `int2(式子, x, a, b, y, 下, 上)`：二重积分（先对后一个变量积，下、上能含前一个变量；极坐标自己乘 r）。式子里能写条件：`int2((x + y <= z)*f(x, y), x, 0, 1, y, 0, 1)`。`binormpdf(x, y, μ1, μ2, σ1, σ2, ρ)` 二维正态的密度。拖动中含 `int2` 的读数先留着上一次的数，手停了再算。
+- `pick "题目" at [x, y], …` 不写 `on`：学生在平面上点，页面按屏幕上的距离配。
+
+```graph
+id: g-polar
+title: 极坐标曲线扫过的面积
+equal: on
+x: -1 2.6
+y: -1.6 1.6
+slider th 0 6.28 = 1.2 step=0.02 label="θ"
+polar 1 + cos(t) for t 0 2pi color=blue label="r = 1 + cos θ" at=0.6
+polar 1 + cos(t) for t 0 th color=yellow fill
+param [0.3cos(s), 0.3sin(s)] for s 0 th color=pink thin
+vector (1 + cos(th))*[cos(th), sin(th)] color=yellow label=r
+show 扫过的面积 ${dec(int((1 + cos(t))^2/2, t, 0, th), 4)}$
+goal th = pi tol=0.03 msg="上半个"
+```
+
+```graph
+id: g-lagrange
+title: 条件极值
+equal: on
+x: -1 4
+y: -1 4
+f(x, y) = x^2 + 2y^2
+let P = [0.5, 2.5] drag on="x + y = 3"
+implicit x + y = 3 color=pink label="x + y = 3" at=0.25
+contour f(x, y) at 2, 12, 20 color=gray
+contour f(x, y) at f(P) color=yellow
+vector f_grad(P)/8 from P color=yellow label=∇f
+vector [1, 1] from P color=pink label=∇g
+show $f(P) = {dec(f(P), 3)}$，$f_x = {f_x(P)}$，$f_y = {f_y(P)}$
+goal f(P) < 6.02 msg="相切：最小值 6"
+```
+
+```graph
+id: g-ode
+title: 方向场和过一点的解
+x: -3 3
+y: -4 6
+let P = [0, 2] drag snap=0.1
+slope y - x
+flow y - x from P color=yellow label="过 P 的解"
+goal el(P, 2) = el(P, 1) + 1 tol=0.06 msg="这条解是直线 $y = x + 1$"
+```
+
+```graph
+id: g-field
+title: 向量场和沿曲线的积分
+equal: on
+x: -2.4 2.4
+y: -2.1 2.1
+slider th 0 6.28 = 1 step=0.02 label="θ"
+field [-y, x]
+param [cos(s), sin(s)] for s 0 th color=yellow
+show $\displaystyle\int_L -y\,dx + x\,dy = {dec(int(sin(s)^2 + cos(s)^2, s, 0, th), 3)}$
+```
+
+```graph
+id: g-region
+title: 积分区域里的竖条；事件的概率
+equal: on
+x: -0.3 1.5
+y: -0.3 1.3
+f(x, y) = 8x*y
+slider a 0.02 0.98 = 0.3 step=0.01 label="x"
+slider z 0 2 = 1 step=0.02 label="z"
+region D = y from x to 1 for x 0 1 color=blue
+region x + y <= z in D color=yellow
+strip D at a lo=y1 hi=y2 color=pink
+show 竖条上 $y$ 从 ${dec(y1, 2)}$ 到 ${dec(y2, 2)}$，$f_X = {dec(int(f(a, y), y, y1, y2), 3)}$
+show $P(X + Y \le z) = {dec(int2((x + y <= z)*f(x, y), x, 0, 1, y, x, 1), 3)}$
 ```
 
 - 上下限、`for` 的范围里能写式子（括号里的空格不拆）：`shade chi2pdf(x, n) chi2inv(1 - al, n) inf`。
