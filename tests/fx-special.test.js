@@ -89,3 +89,12 @@ test('表达式里能用', () => {
   near(evaluate('gamma(5) + beta(2, 3)'), 24 + 1 / 12, 1e-9);
   near(calcValue('tinv(0.975, 10)').float, 2.2281);
 });
+
+test('二维正态的密度', () => {
+  const { binormpdf } = DIST;
+  near(binormpdf(0, 0), 1 / (2 * Math.PI), 1e-12);
+  near(binormpdf(1, 2, 1, 2, 2, 3, 0), 1 / (2 * Math.PI * 6), 1e-12);
+  near(binormpdf(0.3, -0.2, 0, 0, 1, 1, 0.6), Math.exp(-(0.09 + 0.072 + 0.04) / (2 * 0.64)) / (2 * Math.PI * 0.8), 1e-12);
+  assert.throws(() => binormpdf(0, 0, 0, 0, 1, 1, 1), /相关系数/);
+  assert.throws(() => binormpdf(0, 0, 0, 0, 0, 1, 0), /标准差要是正数/);
+});

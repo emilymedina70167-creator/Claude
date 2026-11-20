@@ -76,3 +76,15 @@ test('el / len：向量的第几个分量、有几个（样本数据连乘、求
   assert.throws(() => evaluate('el([1, 2], 3)'), /没有第 3 个/);
   assert.throws(() => evaluate('el([1, 2], 1.5)'), /整数/);
 });
+
+// —— 视觉交互第 2 批 Task 2：二重积分 ——
+test('int2：二重积分，内层的上下限可以含外层的变量', () => {
+  near(evaluate('int2(x*y, x, 0, 1, y, 0, x)'), 1 / 8, 1e-8);
+  near(evaluate('int2(1, x, 0, 1, y, x^2, x)'), 1 / 6, 1e-8);
+  near(evaluate('int2(k*x, x, 0, 1, y, 0, 2)', { k: 3 }), 3, 1e-8);
+  // 被积函数带指示函数（事件的概率）：差不超过 2e-3
+  near(evaluate('int2((x + y <= 1)*2, x, 0, 1, y, 0, 1)'), 1, 2e-3);
+  near(evaluate('int2(binormpdf(x, y, 0, 0, 1, 1, 0.5), x, -8, 8, y, -8, 8)'), 1, 1e-4);
+  assert.throws(() => evaluate('int2(1/(x*y), x, 0, 1, y, 0, 1)'), /这个二重积分页面算不出来/);
+  assert.throws(() => evaluate('int2(1, 2, 0, 1, y, 0, 1)'), /没有函数 int2|自变量/);
+});

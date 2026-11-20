@@ -142,6 +142,14 @@ export const DIST = {
   tinv: (p, n) => { dof(n); prob(p); if (p === 0.5) return 0; if (p === 0) return -Infinity; return p > 0.5 ? invert((x) => tcdf(x, n), p, 0, 1) : -invert((x) => tcdf(x, n), 1 - p, 0, 1); },
   fpdf, fcdf, finv: (p, m, n) => { dof(m, n); return invert((x) => fcdf(x, m, n), prob(p), 0, 1); },
   norminv,
+  // 二维正态的密度：binormpdf(x, y, μ₁, μ₂, σ₁, σ₂, ρ)
+  binormpdf: (x, y, mx = 0, my = 0, sx = 1, sy = 1, rho = 0) => {
+    [x, y, mx, my, sx, sy, rho].forEach(num);
+    need(sx > 0 && sy > 0, `标准差要是正数（现在是 ${sx}、${sy}）`);
+    need(Math.abs(rho) < 1, `相关系数要在 −1 和 1 之间（现在是 ${rho}）`);
+    const u = (x - mx) / sx, w = (y - my) / sy, q = 1 - rho * rho;
+    return Math.exp(-(u * u - 2 * rho * u * w + w * w) / (2 * q)) / (2 * Math.PI * sx * sy * Math.sqrt(q));
+  },
   // 大的 n 逐项加会溢出成 NaN（C(2000, 1000) 放不下）：用不完全 B 函数，P(X ≤ k) = I_{1−p}(n − k, k + 1)
   binomcdf: (k, n, p) => {
     num(n); prob(p);

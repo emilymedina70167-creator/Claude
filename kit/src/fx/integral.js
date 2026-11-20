@@ -22,13 +22,13 @@ function gk(f, a, b) {
 }
 
 // 有限区间上的自适应积分
-function adaptive(f, a, b, maxSeg) {
+function adaptive(f, a, b, maxSeg, tol = TOL) {
   let segs = [{ a, b, ...gk(f, a, b) }];
   for (let n = 1; ; n++) {
     let total = 0, err = 0, worst = 0;
     for (let i = 0; i < segs.length; i++) { total += segs[i].value; err += segs[i].err; if (segs[i].err > segs[worst].err) worst = i; }
     if (!Number.isFinite(total) || Number.isNaN(err)) return { value: NaN, ok: null, why: '被积函数在区间里有算不出来的点' };
-    if (err <= Math.max(TOL, TOL * Math.abs(total))) return { value: total, err, ok: true };
+    if (err <= Math.max(tol, tol * Math.abs(total))) return { value: total, err, ok: true };
     if (segs.length >= maxSeg) return { value: total, err, ok: null, why: '算不收敛（可能发散，或者奇点太强）' };
     const s = segs[worst], m = (s.a + s.b) / 2;
     segs.splice(worst, 1, { a: s.a, b: m, ...gk(f, s.a, m) }, { a: m, b: s.b, ...gk(f, m, s.b) });
@@ -40,14 +40,15 @@ const safe = (f) => (x) => { let y; try { y = f(x); } catch { y = NaN; } return 
 /**
  * ∫_a^b f(x) dx。a、b 可以是 ±Infinity。回 { value, ok: true | null, err?, why? }（null 是页面判不了）
  */
-export function numIntegral(f, a, b, { maxSeg = MAX_SEGMENTS } = {}) {
+export function numIntegral(f, a, b, { maxSeg = MAX_SEGMENTS, tol = TOL } = {}) {
   const g = safe(f);
+  const o = { maxSeg, tol };
   if (a === b) return { value: 0, ok: true, err: 0 };
-  if (a > b) { const r = numIntegral(f, b, a, { maxSeg }); return { ...r, value: -r.value }; }
-  if (Number.isFinite(a) && Number.isFinite(b)) return adaptive(g, a, b, maxSeg);
-  if (Number.isFinite(a)) return adaptive((t) => g(a + t / (1 - t)) / ((1 - t) ** 2), 0, 1, maxSeg);
-  if (Number.isFinite(b)) return adaptive((t) => g(b - t / (1 - t)) / ((1 - t) ** 2), 0, 1, maxSeg);
-  const l = numIntegral(f, -Infinity, 0, { maxSeg }), r = numIntegral(f, 0, Infinity, { maxSeg });
+  if (a > b) { const r = numIntegral(f, b, a, o); return { ...r, value: -r.value }; }
+  if (Number.isFinite(a) && Number.isFinite(b)) return adaptive(g, a, b, maxSeg, tol);
+  if (Number.isFinite(a)) return adaptive((t) => g(a + t / (1 - t)) / ((1 - t) ** 2), 0, 1, maxSeg, tol);
+  if (Number.isFinite(b)) return adaptive((t) => g(b - t / (1 - t)) / ((1 - t) ** 2), 0, 1, maxSeg, tol);
+  const l = numIntegral(f, -Infinity, 0, o), r = numIntegral(f, 0, Infinity, o);
   if (l.ok !== true || r.ok !== true) return { value: l.value + r.value, ok: null, why: (l.ok !== true ? l : r).why };
   return { value: l.value + r.value, ok: true, err: l.err + r.err };
 }
@@ -63,7 +64,8 @@ export function numIntegral2(f, [x0, x1], [y0, y1]) {
     if (r.ok !== true) { bad = r.why; return NaN; }
     return r.value;
   };
-  const r = numIntegral(inner, x0, x1, { maxSeg: 400 });
+  // 外层的容差放宽到 1e-8：内层每次只准到 1e-10，外层再按 1e-10 要求，被积函数有断的地方（指示函数）永远「不收敛」，白白分到 400 段
+  const r = numIntegral(inner, x0, x1, { maxSeg: 400, tol: 1e-8 });
   if (bad) return { value: NaN, ok: null, why: `内层积分${bad}` };
   return r;
 }

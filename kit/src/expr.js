@@ -9,7 +9,7 @@
 // 向量是列向量：a' 是一行（1×n 矩阵），a'*b 是一个数，a*b' 是外积（n×n 矩阵）。exact.js 用同样的规则。
 
 import { DIST } from './fx/special.js';
-import { numIntegral } from './fx/integral.js';
+import { numIntegral, numIntegral2 } from './fx/integral.js';
 const FUNCS = {
   det: (M) => det(asMat(M)),
   inv: (M) => inv(asMat(M)),
@@ -373,12 +373,13 @@ function run(n, vars, fns = FUNCS) {
 // 只有 4 个参数、而且绑定的那个位置写的是一个字母时才算：max(1, 2, 3, 4) 这样的普通调用不受影响。
 // 只在这里（浮点求值）有；exact.js 的 \calc 不认。
 export const FORM_MAX_TERMS = 20000; // 求和最多几项：滑块把 n 拖到很大时报出来，不卡住页面
-const FORM_EG = { sum: 'sum(k, 1, n, 1/k^2)', prod: 'prod(k, 1, n, k)', maxof: 'maxof(k, 1, n, 式子)', minof: 'minof(k, 1, n, 式子)', int: 'int(cos(t), t, 0, x)', maxon: 'maxon(x - x^2, x, 0, 1)', minon: 'minon(x^2, x, -1, 1)', roots: 'roots(x^3 - 3x, x, -3, 3)' };
+const FORM_EG = { int2: 'int2(x*y, x, 0, 1, y, 0, x)', sum: 'sum(k, 1, n, 1/k^2)', prod: 'prod(k, 1, n, k)', maxof: 'maxof(k, 1, n, 式子)', minof: 'minof(k, 1, n, 式子)', int: 'int(cos(t), t, 0, x)', maxon: 'maxon(x - x^2, x, 0, 1)', minon: 'minon(x^2, x, -1, 1)', roots: 'roots(x^3 - 3x, x, -3, 3)' };
 function isForm(n, sp) {
-  if (n.args.length !== 4) return false;
-  if (n.args[sp.bind].t === 'var') return true;
-  // 第一个位置写了数：多半是把求和写错了（max、min 没有这个问题：它们的名字是 maxof / maxon）
-  if (FORM_ONLY.has(n.name)) throw new Error(`${n.name} 的第${sp.bind ? '二' : '一'}个参数是${sp.bind ? '自变量' : '求和用'}的字母，如 ${FORM_EG[n.name]}`);
+  const binds = [].concat(sp.bind);
+  if (n.args.length !== (sp.arity || 4)) return false;
+  if (binds.every((i) => n.args[i].t === 'var')) return true;
+  // 该写字母的位置写了别的：多半是把求和、积分写错了（max、min 没有这个问题：它们的名字是 maxof / maxon）
+  if (FORM_ONLY.has(n.name)) throw new Error(`${n.name} 的第${binds.length > 1 ? ` ${binds.map((i) => i + 1).join('、')} ` : binds[0] ? '二' : '一'}个参数是${binds[0] ? '自变量' : '求和用'}的字母，如 ${FORM_EG[n.name]}`);
   return false;
 }
 // 绑定一层变量：不拷贝整个对象（求和的内圈要快），读的时候顺着原型找到外面的量
@@ -466,6 +467,23 @@ const SPECIAL = {
     const r = numIntegral(f, a, b, { maxSeg: 300 });
     if (r.ok !== true) throw new Error(`这个积分页面算不出来（${r.why || '不收敛'}）`);
     return r.value;
+  } },
+  // 二重积分 ∫_a^b dx ∫_c^d 式子 dy，c、d 可以含 x（事件的概率、二重积分的值）
+  int2: { arity: 7, bind: [1, 4], run: (n, vars, fns) => {
+    const [body, xv, a, b, yv, c, d] = n.args;
+    const A = num(run(a, vars, fns)), B = num(run(b, vars, fns));
+    const v = Object.create(vars);
+    v[xv.name] = 0; v[yv.name] = 0;
+    const f = (x, y) => { v[xv.name] = x; v[yv.name] = y; try { const r = run(body, v, fns); return isNum(r) ? r : NaN; } catch { return NaN; } };
+    const lim = (e) => (x) => { v[xv.name] = x; return num(run(e, v, fns)); };
+    const lo = lim(c), hi = lim(d);
+    const r = numIntegral2(f, [A, B], [lo, hi]);
+    if (r.ok === true) return r.value;
+    // 被积函数有断的地方（指示函数）自适应积分不一定报收敛：拿两种网格的中点和对一下，差不到 2e-3 就用细的那个
+    const grid = (m) => { let s = 0; const hx = (B - A) / m; for (let i = 0; i < m; i++) { const x = A + (i + 0.5) * hx, y0 = lo(x), hy = (hi(x) - y0) / m; for (let j = 0; j < m; j++) s += f(x, y0 + (j + 0.5) * hy) * hy; } return s * hx; };
+    const g1 = grid(160), g2 = grid(320);
+    if (Number.isFinite(g1) && Number.isFinite(g2) && Math.abs(g1 - g2) <= 2e-3 * Math.max(1, Math.abs(g2))) return g2;
+    throw new Error(`这个二重积分页面算不出来（${r.why || '不收敛'}）`);
   } },
   maxon: { bind: 1, run: (n, vars, fns) => extremeOn(n, vars, fns, 1) },
   minon: { bind: 1, run: (n, vars, fns) => extremeOn(n, vars, fns, -1) },
