@@ -1140,6 +1140,9 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .plane.space .g-pickpt.is-miss { fill: var(--coral); stroke: var(--coral); }
 .plane.space .g-target { fill: var(--yellow); stroke: rgb(var(--halo-rgb)); stroke-width: 1.5; }
 .plane.space .handle { touch-action: none; }
+/* 曲面上的点被前面的曲面挡住：空心 */
+.plane.space .pt.is-behind { stroke-width: 2; stroke-dasharray: 3 2; }
+.plane.space .handle.is-behind { fill-opacity: 0; stroke-opacity: .4; }
 .r-show > .sp-auto { color: var(--muted); font-size: 15px; }
 .sp-tools { position: absolute; right: 4px; top: 4px; display: flex; gap: 6px; }
 .sp-tools .btn-sm { min-height: 32px; padding: 0 10px; font-size: 17px; --frame: rgb(var(--chalk-rgb) / 0.3); background: rgb(var(--board-3-rgb) / 0.7); }

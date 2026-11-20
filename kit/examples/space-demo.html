@@ -146,6 +146,7 @@ id: sp-tplane
 title: 切平面和全微分
 q: 地面上的点 $P$ 可以拖：曲面上对应的地方画着切平面和法向量。把步长 $d$ 调小，看 $\Delta z$ 和 $dz$ 差多少。
 range: 2.5
+view: -32 40
 f(x, y) = 1.5 + x^2/4 + y^2/3
 let P = [1, 0.5] drag on=S snap=0.05
 slider d 0.02 1 = 0.8 step=0.02 label="Δx = Δy = d"
@@ -162,7 +163,7 @@ title: 极值：切平面水平的地方
 q: 拖地面上的点 $P$，找到曲面的最高点。
 range: 2.5
 f(x, y) = 3 - ((x - 0.5)^2 + (y + 0.5)^2)/3
-let P = [-1.5, 1] drag on=S snap=0.05
+let P = [1.4, -1.5] drag on=S snap=0.05
 surface S = z = f(x, y) for x -2.2 2.2, y -2.2 2.2 color=blue
 tangent S at P color=yellow
 show $f(P) = {dec(f(P), 3)}$，$\nabla f = {f_grad(P)}$

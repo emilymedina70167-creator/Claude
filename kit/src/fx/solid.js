@@ -5,7 +5,7 @@
 // 以前三维图只有向量、平面片和二次型的线框：曲面、旋转体、积分区域都画不出来，三个平面叠在一起看不清谁在前。
 // 坐标都是数学坐标 [x, y, z]。函数算不出来（抛错、NaN、无穷）一律当没定义。
 import { contourLines } from './plane.js';
-import { numIntegral, cubature2 } from './integral.js';
+import { numIntegral } from './integral.js';
 
 export const SOLID_MAX_QUADS = 2400; // 一张图里的面片最多这么多（一帧里排得完、画得完）
 
@@ -189,6 +189,8 @@ export function revolveMesh(f, [a, b], axis = 'x', { n = 24, m = 32, upTo = 2 * 
 /** 旋转体的体积：绕 x 轴 π∫f²（圆盘法），绕 y 轴 2π∫|x f|（柱壳法）。算不出来是 NaN */
 export function revolveVolume(f, a, b, axis = 'x') {
   const F = num1(f);
+  // 绕 y 轴、x 跨过 0：左右两半转出来叠在一起，2π∫|x f| 会算两遍（画面另报写法错误）
+  if (axis === 'y' && a * b < 0) return NaN;
   const r = axis === 'y' ? numIntegral((x) => 2 * Math.PI * Math.abs(x * F(x)), a, b) : numIntegral((x) => Math.PI * F(x) ** 2, a, b);
   return r.ok === true ? Math.abs(r.value) : NaN;
 }
@@ -205,7 +207,9 @@ export function revolveArea(f, df, a, b) {
 /** 点在底里面有多深（正的在里面，0 在边上；连续的——截面的边界要拿它当等值线画） */
 export function baseDepth(base, x, y) {
   if (base.rect) return Math.min(x - base.rect[0], base.rect[1] - x, y - base.rect[2], base.rect[3] - y);
-  const lo = num1(base.lo), hi = num1(base.hi), a = Math.min(base.a, base.b), b = Math.max(base.a, base.b);
+  // 两条线之间（不论谁写在前）：画的那一块（basePoint 在两条线之间插值）、fx/plane.js 的 inTyped 都是这个口径
+  const l0 = num1(base.lo), h0 = num1(base.hi), lo = (t) => Math.min(l0(t), h0(t)), hi = (t) => Math.max(l0(t), h0(t));
+  const a = Math.min(base.a, base.b), b = Math.max(base.a, base.b);
   if (base.shape === 'r') {
     const r = Math.hypot(x, y);
     let t = Math.atan2(y, x);
@@ -262,17 +266,46 @@ export function crossSection(lo, hi, base, z0, { grid = 64 } = {}) {
   return contourLines(G, 0, box, { nx: grid, ny: grid }).map((l) => l.map(([x, y]) => [x, y, z0]));
 }
 
-/** 截面的面积（截面法里的 A(z)）：在底自己的坐标里积（极坐标的底按 θ、r 积，乘 r），上下两张曲面是断口。截不到是 0；算不出来是 NaN */
+/**
+ * 截面的面积（截面法里的 A(z)）：在底自己的坐标 (p, q) 里算（极坐标的底是 θ、r，面积元 r）——
+ * 每条 p = 常数的线上找出截面占的那几段（扫一遍、变号的地方二分），段长（带面积元）对 p 积分。
+ * 截不到是 0；算不出来是 NaN。截面正好贴着平的顶 / 底时算那一面（往里让一丁点）；
+ * 上下限没定义的地方没有立体（球写在比它大的矩形上）。比扫的间距还窄的一条（碗底、锥尖那一点）数不到，当 0
+ */
 export function sectionArea(lo, hi, base, z0) {
   const L = num1(lo), H = num1(hi);
-  // 底的坐标 (p, q) → [x, y, 面积元]
-  const map = base.rect ? (p, q) => [p, q, 1] : base.shape === 'r' ? (t, r) => [r * Math.cos(t), r * Math.sin(t), Math.abs(r)] : base.shape === 'y' ? (p, q) => [p, q, 1] : (p, q) => [q, p, 1];
+  const polar = !base.rect && base.shape === 'r';
+  const xy = base.rect || base.shape === 'y' ? (p, q) => [p, q] : polar ? (t, r) => [r * Math.cos(t), r * Math.sin(t)] : (p, q) => [q, p];
   const X = base.rect ? [base.rect[0], base.rect[1]] : [base.a, base.b];
-  const Y = base.rect ? [() => base.rect[2], () => base.rect[3]] : [num1(base.lo), num1(base.hi)];
-  const at = (g) => (p, q) => { const [x, y] = map(p, q); return g(x, y); };
-  const up = at((x, y) => H(x, y) - z0), down = at((x, y) => z0 - L(x, y));
-  const r = cubature2((p, q) => (up(p, q) > 0 && down(p, q) > 0 ? map(p, q)[2] : 0), X, Y, { marks: [up, down] });
-  return r.ok === true ? Math.abs(r.value) : NaN;
+  const yl = base.rect ? () => base.rect[2] : num1(base.lo), yh = base.rect ? () => base.rect[3] : num1(base.hi);
+  const eps = 1e-9 * Math.max(1, Math.abs(z0));
+  const inside = (p, q) => { const [x, y] = xy(p, q), h = H(x, y), l = L(x, y); return h - z0 + eps > 0 && z0 - l + eps > 0; }; // NaN 比什么都是 false：没定义的地方不在里面
+  // 一段 [q1, q2] 的「长」：直角坐标是长度，极坐标 ∫ r dr
+  const piece = polar ? (q1, q2) => Math.abs(q2 * Math.abs(q2) - q1 * Math.abs(q1)) / 2 : (q1, q2) => q2 - q1;
+  const N = 48;
+  const line = (p) => {
+    const a0 = yl(p), b0 = yh(p);
+    if (!Number.isFinite(a0 + b0)) return 0;
+    // 两头往里让一丁点：根号写的边界（y = ±√(4 − x²)）正好在边上会因舍入没定义
+    const a = Math.min(a0, b0), b = Math.max(a0, b0), d = 1e-12 * (b - a);
+    if (!(b > a)) return 0;
+    const cut = (q1, q2, in1) => { let u = q1, w = q2; for (let k = 0; k < 40; k++) { const m = (u + w) / 2; if (inside(p, m) === in1) u = m; else w = m; } return (u + w) / 2; };
+    let sum = 0, prev = a + d, was = inside(p, prev), start = was ? prev : null;
+    for (let j = 1; j <= N; j++) {
+      const q = j === N ? b - d : a + ((b - a) * j) / N, now = inside(p, q);
+      if (now !== was) { const c = cut(prev, q, was); if (was) { sum += piece(start, c); start = null; } else start = c; }
+      prev = q; was = now;
+    }
+    if (was) sum += piece(start, b - d);
+    return sum;
+  };
+  const dp = 1e-12 * Math.abs(X[1] - X[0]), x0 = Math.min(X[0], X[1]) + dp, x1 = Math.max(X[0], X[1]) - dp;
+  if (!(x1 > x0)) return 0;
+  // 对 p 积：等分成小段、每段三点高斯。线上的段长是连续的、可以有折（截面的边拐过去），不要求光滑到自适应那一套能核
+  const M = 160, g = Math.sqrt(0.6), w = (x1 - x0) / M;
+  let total = 0;
+  for (let i = 0; i < M; i++) { const c = x0 + (i + 0.5) * w; total += (w / 18) * (5 * line(c - (g * w) / 2) + 8 * line(c) + 5 * line(c + (g * w) / 2)); }
+  return Number.isFinite(total) ? total : NaN;
 }
 
 /** 平面和一个长方体盒子（{ x0, x1, y0, y1, z0, z1 }）的截面多边形（3～6 个顶点）；不相交回 null */
@@ -334,29 +367,147 @@ function nullSpace(M, tol) {
   return out;
 }
 
+// 实对称矩阵：雅可比转动。特征值、特征向量一个不丢（挨得再近也是三个互相垂直的方向）
+function jacobi3(a) {
+  const A = a.map((r) => r.slice()), V = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  for (let sweep = 0; sweep < 40; sweep++) {
+    if (Math.abs(A[0][1]) + Math.abs(A[0][2]) + Math.abs(A[1][2]) < 1e-17) break;
+    for (const [p, q] of [[0, 1], [0, 2], [1, 2]]) {
+      if (Math.abs(A[p][q]) < 1e-300) continue;
+      const th = (A[q][q] - A[p][p]) / (2 * A[p][q]);
+      const t = (th >= 0 ? 1 : -1) / (Math.abs(th) + Math.sqrt(th * th + 1)), c = 1 / Math.sqrt(t * t + 1), sn = t * c;
+      for (let k = 0; k < 3; k++) { const x = A[k][p], y = A[k][q]; A[k][p] = c * x - sn * y; A[k][q] = sn * x + c * y; }
+      for (let k = 0; k < 3; k++) { const x = A[p][k], y = A[q][k]; A[p][k] = c * x - sn * y; A[q][k] = sn * x + c * y; }
+      for (let k = 0; k < 3; k++) { const x = V[k][p], y = V[k][q]; V[k][p] = c * x - sn * y; V[k][q] = sn * x + c * y; }
+    }
+  }
+  return [0, 1, 2].map((j) => ({ value: A[j][j], vector: [V[0][j], V[1][j], V[2][j]] })).sort((x, y) => x.value - y.value);
+}
+
 /**
  * 3 × 3 实矩阵的实特征值和特征方向：[{ value, vectors（这个特征值的特征子空间的一组标准正交基：1、2 或 3 个） }]，按特征值从小到大。
- * 复的特征值不回（转动的矩阵只有转轴那一个）。重根看得出只有一个方向还是有一个平面
+ * 复的特征值不回（转动的矩阵只有转轴那一个）。重根看得出只有一个方向还是有一个平面。
+ * 对称矩阵走雅可比；别的解三次方程——三个根全是实的还是只有一个，看的是相对的量（根挨得近时判别式是差的六次方，不能拿绝对的小数去比）
  */
 export function eig3(A) {
   const s = Math.max(1e-300, ...A.flat().map(Math.abs));
   const a = A.map((r) => r.map((x) => x / s));
+  if (Math.abs(a[0][1] - a[1][0]) + Math.abs(a[0][2] - a[2][0]) + Math.abs(a[1][2] - a[2][1]) < 1e-13) {
+    const out = [];
+    for (const e of jacobi3(a)) {
+      const last = out[out.length - 1];
+      if (last && Math.abs(last.value / s - e.value) < 1e-9) last.vectors.push(e.vector); else out.push({ value: e.value * s, vectors: [e.vector] });
+    }
+    return out;
+  }
   const tr = a[0][0] + a[1][1] + a[2][2];
   const c1 = a[0][0] * a[1][1] - a[0][1] * a[1][0] + a[0][0] * a[2][2] - a[0][2] * a[2][0] + a[1][1] * a[2][2] - a[1][2] * a[2][1];
   const det = dot(a[0], cross(a[1], a[2]));
   // λ³ − tr λ² + c1 λ − det = 0，换成 t = λ − tr/3：t³ + p t + q = 0
   const p = c1 - (tr * tr) / 3, q = (-2 * tr ** 3) / 27 + (tr * c1) / 3 - det, sh = tr / 3;
-  const disc = -(4 * p ** 3 + 27 * q * q);
   let roots;
-  if (Math.abs(p) < 1e-9 && Math.abs(q) < 1e-12) roots = [0];
-  else if (disc > 1e-9) { const m = 2 * Math.sqrt(-p / 3), th = Math.acos(Math.max(-1, Math.min(1, ((3 * q) / (p * m))))) / 3; roots = [0, 1, 2].map((k) => m * Math.cos(th - (2 * Math.PI * k) / 3)); } else if (disc > -1e-9 && p < 0) roots = [(-3 * q) / (2 * p), (3 * q) / p];
-  else { const r = Math.sqrt((q * q) / 4 + p ** 3 / 27); roots = [Math.cbrt(-q / 2 + r) + Math.cbrt(-q / 2 - r)]; }
-  const vals = [...new Set(roots.map((t) => t + sh))].sort((x, y) => x - y);
+  if (p > -1e-14) roots = [p < 1e-14 ? Math.cbrt(-q) : (() => { const r = Math.sqrt((q * q) / 4 + p ** 3 / 27); return Math.cbrt(-q / 2 + r) + Math.cbrt(-q / 2 - r); })()];
+  else {
+    const m = 2 * Math.sqrt(-p / 3), arg = (3 * q) / (p * m);
+    // |arg| ≤ 1：三个实根（等于 1 是重根）。略大于 1 的当成重根试——是一对虚部很小的复根的话，下面找不到特征向量，自己就落选了
+    if (Math.abs(arg) <= 1 + 1e-9) { const th = Math.acos(Math.max(-1, Math.min(1, arg))) / 3; roots = [0, 1, 2].map((k) => m * Math.cos(th - (2 * Math.PI * k) / 3)); } else roots = [(q > 0 ? -1 : 1) * m * Math.cosh(Math.acosh(Math.abs(arg)) / 3)];
+  }
+  // 在特征多项式上再牛顿两步（三角公式在根挨得近时丢几位）
+  const poly = (x) => ((x - tr) * x + c1) * x - det, dpoly = (x) => (3 * x - 2 * tr) * x + c1;
+  const vals = roots.map((t) => { let x = t + sh; for (let k = 0; k < 2; k++) { const d = dpoly(x); if (Math.abs(d) > 1e-12) x -= poly(x) / d; } return x; }).sort((x, y) => x - y);
+  // 重根在三次方程上只准到一半的位数；它同时是导数（二次）的根，那个是准的
+  const dd = 4 * tr * tr - 12 * c1;
+  if (dd >= 0) for (let i = 0; i < vals.length; i++) for (const r of [(2 * tr + Math.sqrt(dd)) / 6, (2 * tr - Math.sqrt(dd)) / 6]) if (Math.abs(r - vals[i]) < 1e-5 && Math.abs(poly(r)) < 1e-13) vals[i] = r;
   const out = [];
   for (const lam of vals) {
-    if (out.length && Math.abs(out[out.length - 1].value / s - lam) < 1e-7) continue;
+    if (out.length && Math.abs(out[out.length - 1].value / s - lam) < 2e-6) continue;
     const vectors = nullSpace(a.map((r, i) => r.map((x, j) => x - (i === j ? lam : 0))), 1e-6);
     if (vectors.length) out.push({ value: lam * s, vectors });
   }
   return out;
+}
+
+/**
+ * 显式曲面 z = f(x, y) 在 (x, y) 的切平面：{ p: 切点, n: 法向量 [−f_x, −f_y, 1] }。那一点没定义、不可微（圆锥的顶点、|x| 的棱）回 null。
+ * 可不可微看左右差商：步长缩小八倍以后两边还是差那么多的是折角，跟着缩小的只是弯得厉害
+ */
+export function tangentPlane(f, x, y, h) {
+  const F = num1(f), z = F(x, y);
+  if (Number.isNaN(z)) return null;
+  const gap = (dx, dy, k) => { const a = F(x + dx * k, y + dy * k), b = F(x - dx * k, y - dy * k); return Number.isNaN(a) || Number.isNaN(b) ? NaN : { d: Math.abs((a - z) / k - (z - b) / k), s: Math.max(1, Math.abs((a - z) / k), Math.abs((z - b) / k)), c: (a - b) / (2 * k) }; };
+  const out = [];
+  for (const [dx, dy] of [[1, 0], [0, 1]]) {
+    const g1 = gap(dx, dy, h), g2 = gap(dx, dy, h / 8);
+    if (!g1.s || !g2.s) return null; // 有一边没定义（定义域的边上）
+    if (g2.d > 0.02 * g2.s && g2.d > 0.5 * g1.d) return null;
+    out.push(g1.c);
+  }
+  if (!Number.isFinite(out[0] + out[1])) return null;
+  return { p: [x, y, z], n: [-out[0], -out[1], 1] };
+}
+
+/** 空间曲线 P(t) 在 t 的单位切向量。那一点没定义、速度是零（尖点）、左右方向对不上（折角）回 null */
+export function curveTangent(P, t, h) {
+  const at = (u) => { let p; try { p = P(u); } catch { return null; } return fin(p) ? p : null; };
+  const p = at(t), q1 = at(t - h), q2 = at(t + h);
+  if (!p || !q1 || !q2) return null;
+  const d = sub(q2, q1), speed = len(d) / (2 * h);
+  // 速度是零：和旁边比（差商在尖点上是 h² 的量级，不会正好是 0）
+  const far = [at(t - 50 * h), at(t - 49 * h), at(t + 49 * h), at(t + 50 * h)];
+  const around = Math.max(far[0] && far[1] ? len(sub(far[1], far[0])) / h : 0, far[2] && far[3] ? len(sub(far[3], far[2])) / h : 0);
+  if (!(speed > 1e-12) || speed < 1e-3 * around) return null;
+  // 折角：左右两边的方向在更小的步长上还是对不上
+  const k = h / 8, r1 = at(t - k), r2 = at(t + k);
+  if (r1 && r2) { const u = sub(p, r1), w = sub(r2, p), lu = len(u), lw = len(w); if (lu > 0 && lw > 0 && dot(u, w) / (lu * lw) < 0.999) return null; }
+  return mul(1 / len(d), d);
+}
+
+/** 一元函数 g 在 [d0, d1] 上的变号点（等分 n 段找、二分求）：视线和曲面碰了几次、各在多深。没定义的一段两边不连成假根 */
+export function rootsAlong(g, d0, d1, n = 240) {
+  const G = num1(g), out = [];
+  let a = d0, ga = G(a);
+  for (let i = 1; i <= n; i++) {
+    const b = d0 + ((d1 - d0) * i) / n, gb = G(b);
+    if (!Number.isNaN(ga) && !Number.isNaN(gb) && (ga > 0) !== (gb > 0)) {
+      let lo = a, hi = b, gl = ga, ok = true;
+      for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2, gm = G(m); if (Number.isNaN(gm)) { ok = false; break; } if ((gm > 0) === (gl > 0)) { lo = m; gl = gm; } else hi = m; }
+      if (ok) out.push((lo + hi) / 2);
+    }
+    a = b; ga = gb;
+  }
+  return out;
+}
+
+/**
+ * 竖直方向对准哪里：{ zc: 盒子的中心, half: 内容的半高 }。zs 是内容上取的一些 z。
+ * 冲上天的那几个值（1/r² 靠近 0）不算进高度；写了范围 R、内容又比盒子高的，盒子贴着内容多的那一头
+ */
+export function frameZ(zs, R) {
+  const a = zs.filter(Number.isFinite).sort((p, q) => p - q);
+  if (!a.length) return { zc: 0, half: 0 };
+  const lo = a[Math.floor((a.length - 1) * 0.1)], hi = a[Math.ceil((a.length - 1) * 0.9)], mid = hi - lo;
+  const bot = Math.max(a[0], lo - 2 * mid), top = Math.min(a[a.length - 1], hi + 2 * mid);
+  const half = (top - bot) / 2;
+  if (!(R > 0) || half <= R) return { zc: (bot + top) / 2, half };
+  const med = a[Math.floor(a.length / 2)];
+  return { zc: Math.max(bot + R, Math.min(top - R, med)), half };
+}
+
+/** 一个多边形裁到 z0 ≤ z ≤ z1 里；整个在外面回 null */
+export function clipPolyZ(poly, z0, z1) {
+  const a = splitPolygon(poly, { n: [0, 0, 1], p0: [0, 0, z0] })[0];
+  if (!a) return null;
+  return splitPolygon(a, { n: [0, 0, -1], p0: [0, 0, z1] })[0] || null;
+}
+
+/** F(x, y, z) 是不是一次式：是就回 [a, b, c, d]（F = ax + by + cz + d），不是回 null。多探几个点（只探一个点时 x² + y 会混过去） */
+export function linearPlane(F) {
+  const d = F(0, 0, 0), a = F(1, 0, 0) - d, b = F(0, 1, 0) - d, c = F(0, 0, 1) - d;
+  if (![a, b, c, d].every(Number.isFinite)) return null; // 在原点附近没定义、是无穷：不是平面
+  const tol = 1e-9 * Math.max(1, Math.abs(d), Math.abs(a), Math.abs(b), Math.abs(c));
+  for (const [x, y, z] of [[1, 2, 3], [-2, 1, 0.5], [0.3, -0.7, 2], [-1, -1, -1], [2, 0, -3]]) {
+    const v = F(x, y, z);
+    if (!(Math.abs(v - (a * x + b * y + c * z + d)) <= tol * (1 + Math.abs(x) + Math.abs(y) + Math.abs(z)))) return null;
+  }
+  return [a, b, c, d];
 }

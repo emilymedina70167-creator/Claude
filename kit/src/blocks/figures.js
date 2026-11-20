@@ -19,6 +19,8 @@ function figure(el, src, create, { cls, title }) {
   if (fields.q) body.insertAdjacentHTML('beforebegin', `<div class="w-q">${mdToHtml(fields.q)}</div>`);
   if (fields.note) body.querySelector('.w-side').insertAdjacentHTML('beforeend', `<div class="w-note">${mdToHtml(fields.note)}</div>`);
   if (api.error) session.problem(el, cls, `图形描述有误：${api.error}`);
+  // 写得通、但多半不是本意的（弧度的图里滑块按角度写）：软提醒
+  for (const n of api.notes || []) session.problem(el, cls, n, { soft: true });
   el.dataset.scene = session.registerScene(el, api, titleText);
   // 学生拖完竖线（graph 的 let … drag）：课堂 / 实时黑板记成一个动作；三维图只能转，不发这个事件
   api.on('dragend', (name, value) => session.event('drag', el, { name, value: round2(value) }));

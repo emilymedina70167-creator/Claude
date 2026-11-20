@@ -52,7 +52,28 @@ export function parseSpace(src) {
     else throw new Error(`看不懂这一行：${t}`);
   }
   for (const k in fields) fields[k] = fields[k].trim();
-  return { fields, cmds, defs, rad };
+  return { fields, cmds, defs, rad, notes: !angle && rad ? degreeNotes(lines, cmds) : [] };
+}
+
+// 整张按弧度的图里，滑块的范围像是角度（到 90、180、360），又写进了三角函数：多半是按角度想的。只提醒，不拦
+const TRIG = /(?<![A-Za-z_])(?:sin|cos|tan|cot|sec|csc)\s*\(/g;
+function degreeNotes(lines, cmds) {
+  const inTrig = [];
+  for (const line of lines) {
+    for (const m of line.matchAll(TRIG)) {
+      let depth = 1, i = m.index + m[0].length;
+      const from = i;
+      for (; i < line.length && depth; i++) { if (line[i] === '(') depth++; else if (line[i] === ')') depth--; }
+      inTrig.push(line.slice(from, i - 1));
+    }
+  }
+  const out = [];
+  for (const c of cmds) {
+    if (c.kind !== 'slider' || !(c.max >= 45) || c.max % 15 !== 0) continue;
+    if (!inTrig.some((a) => new RegExp(`(?<![A-Za-z0-9_])${c.name}(?![A-Za-z0-9_])`).test(a))) continue;
+    out.push(`这张图的三角函数按弧度算；滑块 ${c.name} 的范围 ${c.min} 到 ${c.max} 像是角度（范围写成 0 2pi，或者式子里写 ${c.name}*pi/180；整张按角度算写 angle: deg）`);
+  }
+  return out;
 }
 
 // 像不像一条函数定义（名字撞了页面自带的函数会抛：留到正式那一遍去抛）
@@ -98,11 +119,11 @@ function parseBase(over, forStr, C, cmds, what) {
   }
   const ps = forPairs(forStr, C, what);
   if (ps.length !== 2) throw new Error(what);
-  if (ps[0].name === 'r' || ps[1].name === 't' || ps[1].name === 'theta') {
-    const r = ps.find((q) => q.name === 'r'), t = ps.find((q) => q !== r);
-    if (!r || !t) throw new Error(what);
-    return { kind: 'polar', lo: r.lo, hi: r.hi, a: t.lo, b: t.hi, param: t.name };
-  }
+  // 极坐标：一个叫 r、一个叫 t / theta，不论先写哪个（累次积分常先写 θ）。直角坐标只认 x、y——别的名字以前被静默当成 x、y 的矩形
+  const r = ps.find((q) => q.name === 'r'), t = ps.find((q) => q.name === 't' || q.name === 'theta');
+  if (r && t) return { kind: 'polar', lo: r.lo, hi: r.hi, a: t.lo, b: t.hi, param: t.name };
+  const names = ps.map((q) => q.name).sort().join();
+  if (names !== 'x,y') throw new Error(`for 后面的两个范围：直角坐标写 x、y（for x 0 1, y 0 1 - x），极坐标写 r、t（for r 0 2, t 0 2pi）；现在写的是 ${ps[0].name}、${ps[1].name}`);
   return { kind: 'xy', u: ps[0].name, v: ps[1].name, a: ps[0].lo, b: ps[0].hi, lo: ps[1].lo, hi: ps[1].hi };
 }
 const SURFACE_EG = 'surface 的写法：surface z = f(x, y)（可加 for x a b, y c d / for r 0 2, t 0 2pi / over D）、surface [x(u, v), y(u, v), z(u, v)] for u a b, v c d、surface x^2 + y^2 - z^2 = 1；前面可以起名 surface S = …';
@@ -136,7 +157,8 @@ function parseCmd(kind, rest, { C, cmds = [], defs, rad }) {
     if (m[3]) { const S = cmds.find((x) => x.kind === 'surface' && x.name === m[3]); if (!S) throw new Error(`pick：没有叫 ${m[3]} 的曲面（前面先起名字）`); if (S.form !== 'z') throw new Error('pick … on S：S 要是 z = f(x, y) 的曲面'); }
     const each = splitTop(m[4]).map((x) => C(x));
     const targets = (vars = {}) => each.map((e) => { const p = e(vars); if (!Array.isArray(p) || p.length !== 2 || !p.every((x) => typeof x === 'number')) throw new Error('pick 的目标要写成 [x, y]（地面上的点）'); return p; });
-    targets({ __probe: 1 }); // 写成一个数的当场报（用到变量的留到画的时候）
+    // 写成一个数的当场报；用到变量（滑块、能拖的点）的这里算不出来，留到画的时候
+    try { targets({ __probe: 1 }); } catch (e) { if (/^pick 的目标/.test(e.message)) throw e; }
     return { kind, q: m[1] ?? m[2], on: m[3], targets, tol: mods.tol !== undefined ? Number(mods.tol) : undefined, mods };
   }
   let { body, mods } = splitMods(rest);

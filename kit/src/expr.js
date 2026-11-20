@@ -545,6 +545,9 @@ function rootsOn(n, vars, fns) {
   }
   return out.sort((p, q) => p - q);
 }
+// 参数曲线 / 曲面上求切向量的差商步长：离参数范围的端点近了跟着缩（到端点距离的百分之一）。
+// 端点上导数无穷的参数式（半圆 y = √(1 − t²)、z = √u）固定步长会被端点夹住，√h 那一段的贡献丢掉，错在第三四位
+const nearEnd = (t, lo, hi, h0) => { const d = Math.min(t - lo, hi - t); return Math.min(h0, Math.max(d / 100, h0 * 1e-7)); }; // 贴着端点时留一个最小的步长（再小两个点就重合了）；调用的地方把两头夹在范围里
 const SPECIAL = {
   sum: { bind: 0, run: overInts(0, (s, y) => s + y) },
   prod: { bind: 0, run: overInts(1, (s, y) => s * y) },
@@ -571,9 +574,9 @@ const SPECIAL = {
     const at = (t) => { v[tv.name] = t; return [num(run(xt, v, fns)), num(run(yt, v, fns))]; };
     const pv = Object.create(v);
     pv[xn] = 0; pv[yn] = 0;
-    const lo = Math.min(A, B), hi = Math.max(A, B), h = 1e-5 * Math.max(1, Math.abs(A), Math.abs(B));
+    const lo = Math.min(A, B), hi = Math.max(A, B), h0 = 1e-5 * Math.max(1, Math.abs(A), Math.abs(B));
     const f = (t) => {
-      const t1 = Math.max(lo, t - h), t2 = Math.min(hi, t + h), p1 = at(t1), p2 = at(t2), p = at(t);
+      const h = nearEnd(t, lo, hi, h0), t1 = Math.max(lo, t - h), t2 = Math.min(hi, t + h), p1 = at(t1), p2 = at(t2), p = at(t);
       pv[xn] = p[0]; pv[yn] = p[1];
       return (num(run(P, pv, fns)) * (p2[0] - p1[0]) + num(run(Q, pv, fns)) * (p2[1] - p1[1])) / (t2 - t1);
     };
@@ -591,9 +594,9 @@ const SPECIAL = {
     v[tv.name] = 0;
     const at = (t) => { v[tv.name] = t; return path.map((e) => num(run(e, v, fns))); };
     const pv = Object.create(v);
-    const lo = Math.min(A, B), hi = Math.max(A, B), h = 1e-5 * Math.max(1, Math.abs(A), Math.abs(B));
+    const lo = Math.min(A, B), hi = Math.max(A, B), h0 = 1e-5 * Math.max(1, Math.abs(A), Math.abs(B));
     const f = (t) => {
-      const t1 = Math.max(lo, t - h), t2 = Math.min(hi, t + h), p1 = at(t1), p2 = at(t2), p = at(t);
+      const h = nearEnd(t, lo, hi, h0), t1 = Math.max(lo, t - h), t2 = Math.min(hi, t + h), p1 = at(t1), p2 = at(t2), p = at(t);
       names.forEach((nm, i) => { pv[nm] = p[i]; });
       let s = 0;
       for (let i = 0; i < 3; i++) s += num(run(F[i], pv, fns)) * (p2[i] - p1[i]);
@@ -618,7 +621,8 @@ const SPECIAL = {
     const hu = 1e-5 * Math.max(1, Math.abs(ua), Math.abs(ub)), hv = 1e-5 * Math.max(1, Math.abs(va), Math.abs(vb));
     const f = (a, b) => {
       try {
-        const a1 = cl(a - hu, ua, ub), a2 = cl(a + hu, ua, ub), b1 = cl(b - hv, va, vb), b2 = cl(b + hv, va, vb);
+        const ku = nearEnd(a, Math.min(ua, ub), Math.max(ua, ub), hu), kv = nearEnd(b, Math.min(va, vb), Math.max(va, vb), hv);
+        const a1 = cl(a - ku, ua, ub), a2 = cl(a + ku, ua, ub), b1 = cl(b - kv, va, vb), b2 = cl(b + kv, va, vb);
         const p = at(a, b), pa1 = at(a1, b), pa2 = at(a2, b), pb1 = at(a, b1), pb2 = at(a, b2);
         const ru = [0, 1, 2].map((i) => (pa2[i] - pa1[i]) / (a2 - a1)), rv = [0, 1, 2].map((i) => (pb2[i] - pb1[i]) / (b2 - b1));
         const nn = [ru[1] * rv[2] - ru[2] * rv[1], ru[2] * rv[0] - ru[0] * rv[2], ru[0] * rv[1] - ru[1] * rv[0]];

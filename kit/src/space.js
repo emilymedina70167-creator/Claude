@@ -25,6 +25,7 @@ import { typedRegion, contourLines } from './fx/plane.js';
 import {
   meshGrid, meshOver, sliceLines, planeFrom, planeMeet2, planes3, splitAll, planeInBox, revolveMesh, revolveVolume, revolveArea,
   solidBounds, columnOf, crossSection, sectionArea, fieldArrows3, eig3, baseDepth,
+  tangentPlane, curveTangent, rootsAlong, frameZ, clipPolyZ, linearPlane,
 } from './fx/solid.js';
 
 export { parseSpace };
@@ -99,8 +100,9 @@ export function createSpace(container, src, opts = {}) {
     }
     const s = Object.create(v);
     const g = (x, y, z) => { s.x = x; s.y = y; s.z = z; const r = c.eq(s); if (!isNum(r)) throw new Error('plane 的方程两边要是数'); return r; };
-    const d0 = g(0, 0, 0), a = g(1, 0, 0) - d0, b = g(0, 1, 0) - d0, cc = g(0, 0, 1) - d0;
-    if (Math.abs(g(1, 2, 3) - (d0 + a + 2 * b + 3 * cc)) > 1e-9 * Math.max(1, Math.abs(d0), Math.abs(a), Math.abs(b), Math.abs(cc))) throw new Error('plane 的方程要是 x、y、z 的一次式（曲面用 surface）');
+    const lin = linearPlane(g);
+    if (!lin) throw new Error('plane 的方程要是 x、y、z 的一次式（曲面用 surface）');
+    const [a, b, cc, d0] = lin;
     const P = planeFrom(a, b, cc, -d0);
     if (!P) throw new Error('plane：x、y、z 的系数不能都是 0');
     return P;
@@ -163,11 +165,13 @@ export function createSpace(container, src, opts = {}) {
   const zField = String(fields.z || '').trim().split(/[\s,，]+/).map(Number);
   const zGiven = zField.length === 2 && zField.every(Number.isFinite) && zField[1] > zField[0] ? zField : null;
   {
-    let m = 1, zmin = 0, zmax = 0, calc = false;
+    let m = 1, calc = false;
+    const zs = [0]; // 地面总在里面
     try {
       const v = env();
       const take = (p) => { if (isVec(p) && p.length === 3) m = Math.max(m, ...p.map(Math.abs)); };
-      const span = (p) => { if (p && p.every(Number.isFinite)) { m = Math.max(m, Math.abs(p[0]), Math.abs(p[1])); zmin = Math.min(zmin, p[2]); zmax = Math.max(zmax, p[2]); calc = true; } };
+      const span = (p) => { if (p && p.every(Number.isFinite)) { m = Math.max(m, Math.abs(p[0]), Math.abs(p[1])); zs.push(p[2]); calc = true; } };
+      const spanZ = (p) => { if (p && Number.isFinite(p[2])) { zs.push(p[2]); calc = true; } };
       R = R || 3; // 下面取样时要一个临时的范围（没写底的曲面）
       for (const c of cmds) {
         try {
@@ -177,6 +181,8 @@ export function createSpace(container, src, opts = {}) {
           // 椭球面这种有界的：整个装得下；伸到无穷远的按半轴长取一点余量
           if (c.kind === 'quadric') { const q = quadricLines(c.A(v), c.c(v), 4); for (const l of q.lines) for (const p of l) take(p.map((x) => Math.max(-4, Math.min(4, x)))); }
           if (c.kind === 'surface' && c.form === 'z' && c.base) meshOver(fnXY(c.f, v), baseOf(c.base, v), { n: 8, m: 8 }).pts.forEach(span);
+          // 没写底的曲面画满整个范围：竖直方向也要照它对准（水平范围不由它撑大）。没写 range 时按最小的范围取样
+          if (c.kind === 'surface' && c.form === 'z' && !c.base) { const r0 = Number(fields.range) || 1.5; meshOver(fnXY(c.f, v), { rect: [-r0, r0, -r0, r0] }, { n: 10, m: 10 }).pts.forEach(spanZ); }
           if (c.kind === 'surface' && c.form === 'param') meshGrid(paramFn(c, v), ...c.ranges.map((r) => [r[0](v), r[1](v)]), { nu: 10, nv: 10 }).pts.forEach(span);
           if (c.kind === 'curve') { const P = curveFn(c, v), a = c.from(v), b = c.to(v); for (let i = 0; i <= 40; i++) span(P(a + ((b - a) * i) / 40)); }
           if (c.kind === 'revolve') revolveMesh(fn1(c.f, v), [c.a(v), c.b(v)], c.axis, { n: 10, m: 8 }).pts.forEach(span);
@@ -186,12 +192,14 @@ export function createSpace(container, src, opts = {}) {
       }
     } catch { /* 画的时候再报错 */ }
     // 微积分的图：竖直方向按内容的中间对准（只在上半边的曲面不挤在上面一半里）；写了 range 也一样，z: 明着定的优先
-    if (calc && !zGiven) zc = (zmin + zmax) / 2;
+    // 冲上天的值（1/r² 靠近 0）不算进高度；内容比盒子高时盒子贴着内容多的那一头（fx/solid.js 的 frameZ）
+    const frame = frameZ(zs, Number(fields.range) || null);
     if (Number(fields.range)) R = Number(fields.range);
     else {
-      const half = calc ? Math.max(m, (zmax - zmin) / 2) : m;
+      const half = calc ? Math.max(m, frame.half) : m;
       R = Math.min(10, Math.max(1.5, Math.ceil(half * 2) / 2));
     }
+    if (calc && !zGiven) zc = frame.half > R ? frameZ(zs, R).zc : frame.zc;
     if (zGiven) { zc = (zGiven[0] + zGiven[1]) / 2; if (!Number(fields.range)) R = Math.max(R, (zGiven[1] - zGiven[0]) / 2); }
   }
   ready = true;
@@ -217,27 +225,20 @@ export function createSpace(container, src, opts = {}) {
     const y1 = (up + zc * Math.cos(b)) / Math.sin(b);
     return [x1 * Math.cos(a) + y1 * Math.sin(a), -x1 * Math.sin(a) + y1 * Math.cos(a)];
   }
-  // 屏幕上的一点 → 过它的视线最先碰到曲面 z = f(x, y) 的地方（地面上的 [x, y]）；碰不到回 null。
-  // 学生指着曲面上看得见的那一点，比隔着曲面去点地面自然
-  function toSurface(sx, sy, S, v) {
+  // 屏幕上的一点 → 过它的视线和曲面 z = f(x, y) 的交点，从近到远：[{ depth, xy }]。视线可能穿过曲面好几次（有褶的面）
+  function surfaceHits(sx, sy, S, v) {
     const a = (state.yaw * Math.PI) / 180, b = (state.pitch * Math.PI) / 180;
     const x1 = (sx - SIZE / 2) / K, up = (SIZE / 2 - sy) / K;
     const f = fnXY(S.f, v), bs = baseOf(S.base, v);
     const at = (depth) => { const y1 = up * Math.sin(b) + depth * Math.cos(b), z = up * Math.cos(b) - depth * Math.sin(b) + zc; return [x1 * Math.cos(a) + y1 * Math.sin(a), -x1 * Math.sin(a) + y1 * Math.cos(a), z]; };
     const g = (depth) => { const p = at(depth); if (!(baseDepth(bs, p[0], p[1]) >= 0)) return NaN; return p[2] - f(p[0], p[1]); };
-    const far = R * 2.2, n = 240;
-    let d0 = -far, g0 = g(d0);
-    for (let i = 1; i <= n; i++) {
-      const d1 = -far + (2 * far * i) / n, g1 = g(d1);
-      if (!Number.isNaN(g0) && !Number.isNaN(g1) && (g0 > 0) !== (g1 > 0)) {
-        let lo = d0, hi = d1, gl = g0;
-        for (let k = 0; k < 30; k++) { const m = (lo + hi) / 2, gm = g(m); if (Number.isNaN(gm)) break; if ((gm > 0) === (gl > 0)) { lo = m; gl = gm; } else hi = m; }
-        const p = at((lo + hi) / 2);
-        return [p[0], p[1]];
-      }
-      d0 = d1; g0 = g1;
-    }
-    return null;
+    return rootsAlong(g, -R * 2.2, R * 2.2, 240).map((d) => { const p = at(d); return { depth: d, xy: [p[0], p[1]] }; });
+  }
+  // 最先碰到的那一处（地面上的 [x, y]）；碰不到回 null。学生指着曲面上看得见的那一点，手指指到哪点就到哪——
+  // 拖的时候也是这样（所见即所得）：点原来在背面的，一拖就落到看得见的这一面（背面的点画成空心、写着提示，见 drawHandles）
+  function toSurface(sx, sy, S, v) {
+    const hits = surfaceHits(sx, sy, S, v);
+    return hits.length ? hits[0].xy : null;
   }
   const color = (c, d) => COLOR[String(c.mods.color || '').toLowerCase()] || d;
   const visible = (c) => !(c.mods.from !== undefined && !((extra.step ?? 0) >= Number(c.mods.from))) && !(c.mods.until !== undefined && !((extra.step ?? 0) <= Number(c.mods.until)))
@@ -659,12 +660,22 @@ export function createSpace(container, src, opts = {}) {
           const N = coarse ? 12 : 24;
           const raw = c.form === 'param' ? meshGrid(paramFn(c, v), ...c.ranges.map((r) => [r[0](v), r[1](v)]), { nu: N, nv: N })
             : meshOver(fnXY(c.f, v), baseOf(c.base, v), c.base?.kind === 'polar' || (c.base?.kind === 'region' && find('region', c.base.of).shape === 'r') ? { n: coarse ? 20 : 36, m: coarse ? 5 : 8 } : { n: N, m: N });
-          // 冲出范围很远的格子不画（1/x 这样的面）
-          const far = (p) => Math.abs(p[2] - zc) > R * 1.6 || Math.abs(p[0]) > R * 1.6 || Math.abs(p[1]) > R * 1.6;
-          return { ...raw, quads: raw.quads.filter((q) => !q.some((k) => far(raw.pts[k]))) };
+          // 水平方向冲出范围很远的格子不画；竖直方向伸出盒子的沿盒子的顶 / 底裁开（整格丢掉的话边是锯齿，1/r² 这种面就没了）
+          const z0 = zc - R, z1 = zc + R;
+          const farXY = (p) => Math.abs(p[0]) > R * 1.6 || Math.abs(p[1]) > R * 1.6;
+          const quads = [], cut = [];
+          for (const q of raw.quads) {
+            const ps = q.map((k) => raw.pts[k]);
+            if (ps.some(farXY)) continue;
+            if (ps.every((p) => p[2] >= z0 && p[2] <= z1)) { quads.push(q); continue; }
+            const part = clipPolyZ(ps, z0, z1);
+            if (part && part.length >= 3) cut.push(part);
+          }
+          return { ...raw, quads, cut };
         });
-        if (!mesh.quads.length) { const why = c.form === 'param' ? whyOf(c.p, { ...v, [c.params[0]]: c.ranges[0][0](v) + 0.0123, [c.params[1]]: c.ranges[1][0](v) + 0.0077 }) : whyOf(c.f, { ...v, x: 0.123, y: 0.077 }); if (why) throw new Error(why); }
+        if (!mesh.quads.length && !mesh.cut.length) { const why = c.form === 'param' ? whyOf(c.p, { ...v, [c.params[0]]: c.ranges[0][0](v) + 0.0123, [c.params[1]]: c.ranges[1][0](v) + 0.0077 }) : whyOf(c.f, { ...v, x: 0.123, y: 0.077 }); if (why) throw new Error(why); }
         mesh3(mesh, sc);
+        for (const poly of mesh.cut) poly3(poly, 'sp-surf', sc, 0);
         if (lab) { const p = mesh.pts.find(Boolean); if (p) { const T = proj(p); labels.push({ x: T[0], y: T[1], ux: -1, uy: -1, text: lab, col: sc, cmd: cur }); } }
         break;
       }
@@ -711,11 +722,11 @@ export function createSpace(container, src, opts = {}) {
         const S = find(['surface', 'curve'], c.of), tc = color(c, 'var(--yellow)'), at = c.at(v), h = H();
         if (S.kind === 'curve') {
           if (!isNum(at)) throw new Error('tangent 曲线：at 后面是参数的值（一个数）');
-          const P = curveFn(S, v), p = P(at), q1 = P(at - h), q2 = P(at + h);
-          if (!p || !q1 || !q2) break;
-          const d = sub(q2, q1);
-          if (len(d) < 1e-12) break; // 那一点速度是零：没有切线方向
-          const u = unit(d);
+          const P = curveFn(S, v), p = P(at);
+          if (!p) break;
+          const u = curveTangent(P, at, h);
+          // 速度是零的点（尖点）、折角：没有切线方向，不画一条假的
+          if (!u) { dot3(p, tc); notes.push('这一点上曲线没有切线（速度是零，或者是个折角）'); break; }
           seg3(sub(p, mul(R * 0.7, u)), addv(p, mul(R * 0.7, u)), 'sp-tangent', tc);
           arrow3(p, addv(p, mul(R * 0.4, u)), tc, { label: lab, width: 3.2 });
           dot3(p, tc);
@@ -723,11 +734,14 @@ export function createSpace(container, src, opts = {}) {
           if (c.mods.plane) { const { poly } = patchCorners(p, u, R * 0.45); poly3(poly, 'sp-plane sp-piece', tc, R * 0.02); }
           break;
         }
-        let p, n;
+        let p, n, off = 0;
         if (S.form === 'z') {
-          const [x, y] = vec2(at, 'tangent 的 at '), e = explicitAt(S, v, x, y);
-          if (!e.p.every(Number.isFinite) || !Number.isFinite(e.fx + e.fy)) break; // 那一点曲面没定义
-          p = e.p; n = [-e.fx, -e.fy, 1];
+          const [x, y] = vec2(at, 'tangent 的 at '), f = fnXY(S.f, v), z = f(x, y);
+          if (!Number.isFinite(z)) break; // 那一点曲面没定义
+          const tp = tangentPlane(f, x, y, h);
+          // 不可微的点（圆锥的顶点、|x| 的棱）：没有切平面，不画一张假的
+          if (!tp) { dot3([x, y, z], tc); notes.push('这一点上曲面不可微，没有切平面'); break; }
+          p = tp.p; n = tp.n;
         } else if (S.form === 'param') {
           const [a, b] = vec2(at, 'tangent 的 at '), P = paramFn(S, v), p0 = P(a, b), pu1 = P(a - h, b), pu2 = P(a + h, b), pv1 = P(a, b - h), pv2 = P(a, b + h);
           if (!p0 || !pu1 || !pu2 || !pv1 || !pv2) break;
@@ -735,9 +749,12 @@ export function createSpace(container, src, opts = {}) {
         } else {
           p = vec3(at, 'tangent 写方程的曲面：at 后面是曲面上的点 [x, y, z]，');
           const F = fnXYZ(S.F, v);
+          off = F(p[0], p[1], p[2]);
           n = [(F(p[0] + h, p[1], p[2]) - F(p[0] - h, p[1], p[2])) / (2 * h), (F(p[0], p[1] + h, p[2]) - F(p[0], p[1] - h, p[2])) / (2 * h), (F(p[0], p[1], p[2] + h) - F(p[0], p[1], p[2] - h)) / (2 * h)];
         }
         if (!n.every(Number.isFinite) || len(n) < 1e-12) break;
+        // 写方程的曲面：点要在曲面上（离曲面的距离约 |F| / |∇F|）
+        if (S.form === 'eq' && !(Math.abs(off) <= 1e-3 * len(n) * Math.max(1, R))) throw new Error(`tangent：点 [${p.map((x) => Number(x.toFixed(3))).join(', ')}] 不在曲面${S.name ? ` ${S.name} ` : ''}上（代进方程两边差 ${Number(off.toFixed(3))}）`);
         const { poly } = patchCorners(p, n, R * 0.42);
         poly3(poly, 'sp-plane sp-piece sp-tplane', tc, -R * 0.02);
         for (let k = 0; k < 4; k++) seg3(poly[k], poly[(k + 1) % 4], 'sp-plane-edge', tc);
@@ -748,6 +765,7 @@ export function createSpace(container, src, opts = {}) {
       }
       case 'revolve': {
         const f = fn1(c.f, v), a = c.a(v), b = c.b(v), rc = color(c, 'var(--blue)');
+        if (c.axis === 'y' && a * b < 0) throw new Error('revolve … about y：x 的范围不能跨过 0（左右两半绕 y 轴转出来叠在一起，体积会算两遍），写成从 0 起');
         const upTo = c.upto ? Math.max(0, Math.min(2 * Math.PI, c.upto(v))) : 2 * Math.PI;
         const mesh = geo('rev', () => revolveMesh(f, [a, b], c.axis, { n: coarse ? 10 : 20, m: Math.max(2, Math.round(((coarse ? 16 : 32) * upTo) / (2 * Math.PI))), upTo }));
         if (!mesh.quads.length && upTo > 1e-6) { const why = whyOf(c.f, { ...v, x: (a + b) / 2 }); if (why) throw new Error(why); }
@@ -868,7 +886,15 @@ export function createSpace(container, src, opts = {}) {
           seg3([p[0], p[1], 0], [p[0], p[1], z], 'guide', hc);
           // 曲面上的那一点也能直接抓着拖（手指指到曲面上哪，点就到哪）
           const T = proj([p[0], p[1], z]);
-          overlay.push({ cmd: cur, fn: () => { el('circle', { cx: T[0], cy: T[1], r: 6, class: 'pt' }).style.fill = hc; el('circle', { cx: T[0], cy: T[1], r: 22, class: 'handle', 'data-handle': c.name, 'data-on': 'surface', style: `--vc:${hc}` }); } });
+          // 这一点被前面的曲面挡住了（视线先碰到别处）：画成空心的，说一声。不然看着像在前面那一片上，一拖就「跳」
+          let behind = false;
+          try { const hits = surfaceHits(T[0], T[1], S, v); behind = hits.length > 0 && hits[0].depth < T[2] - 0.03 * R; } catch { behind = false; }
+          if (behind) notes.push(`点 ${c.mods.label && c.mods.label !== 'off' ? c.mods.label : c.name} 现在在曲面的背面（空心的圆点）：把图转一下就看得到；直接拖它会落到看得见的这一面`);
+          overlay.push({ cmd: cur, fn: () => {
+            const dot = el('circle', { cx: T[0], cy: T[1], r: 6, class: behind ? 'pt is-behind' : 'pt' });
+            if (behind) { dot.style.fill = 'none'; dot.style.stroke = hc; } else dot.style.fill = hc;
+            el('circle', { cx: T[0], cy: T[1], r: 22, class: behind ? 'handle is-behind' : 'handle', 'data-handle': c.name, 'data-on': 'surface', style: `--vc:${hc}` });
+          } });
         }
       }
       overlay.push({ cmd: cur, fn: () => {
@@ -1113,6 +1139,7 @@ export function createSpace(container, src, opts = {}) {
     fields, draw,
     goals: goalIdx.length,
     picks: pickIdx.length,
+    notes: parsed.notes || [],
     get lonelyAfter() { return !hasTasks && cmds.some((c) => c.mods.after || c.mods.before); },
     tasks() { return { goals: `${state.goalsHit.size}/${goalIdx.length}`, picks: pickIdx.map((i) => { const st = state.picks.get(i); return { q: cmds[i].q, picked: st.pts.map(fmt), tries: st.tries, done: st.done, ...(st.giveup ? { giveup: true } : {}) }; }) }; },
     animate: ctl.animate,
