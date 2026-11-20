@@ -2815,7 +2815,7 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 @media (max-width: 720px) { .jt-body { grid-template-columns: 1fr; } }
 .jt-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .jt-table { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; margin: 0; width: auto; }
-.jt-table th, .jt-table td { min-width: 60px; height: 46px; padding: 2px 8px; text-align: center; border-right: 1px solid rgb(var(--chalk-rgb) / 0.16); border-bottom: 1px solid rgb(var(--chalk-rgb) / 0.16); font: 500 16px/1.2 var(--sans); color: var(--body); background: transparent; }
+.jt-table th, .jt-table td { min-width: 52px; height: 46px; padding: 2px 6px; text-align: center; border-right: 1px solid rgb(var(--chalk-rgb) / 0.16); border-bottom: 1px solid rgb(var(--chalk-rgb) / 0.16); font: 500 16px/1.2 var(--sans); color: var(--body); background: transparent; }
 .jt-table thead th { border-bottom: 1.6px solid rgb(var(--chalk-rgb) / 0.55); }
 .jt-table tbody th, .jt-table tfoot th, .jt-ztable th { border-right: 1.6px solid rgb(var(--chalk-rgb) / 0.55); }
 .jt-table tfoot th, .jt-table tfoot td { border-top: 1.6px solid rgb(var(--chalk-rgb) / 0.55); border-bottom: 0; }
@@ -2840,7 +2840,7 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .jt-table tbody tr:has(.jt-head.is-sel) .jt-cell, .jt-table .jt-cell.is-lit { background: color-mix(in srgb, var(--zc) 30%, rgb(var(--chalk-rgb) / 0.12)); }
 .jt-ztable .jt-cell { cursor: pointer; font-weight: 700; }
 .jt-num.is-q { color: var(--coral); font-weight: 700; }
-.jt-in { width: 68px; min-height: 40px; padding: 4px 6px; text-align: center; border-radius: 8px; border: 1px solid var(--field-edge, rgb(var(--chalk-rgb) / 0.35)); background: var(--field, transparent); color: var(--body); font: 500 16px/1.2 var(--sans); }
+.jt-in { width: 58px; min-height: 40px; padding: 4px 4px; text-align: center; border-radius: 8px; border: 1px solid var(--field-edge, rgb(var(--chalk-rgb) / 0.35)); background: var(--field, transparent); color: var(--body); font: 500 16px/1.2 var(--sans); }
 .jt-in:focus { outline: 2px solid var(--yellow); outline-offset: 1px; }
 .jt-in.is-right { border-color: var(--green); color: var(--green); }
 .jt-in.is-wrong { border-color: var(--coral); color: var(--coral); }

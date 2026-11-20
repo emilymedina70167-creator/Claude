@@ -123,7 +123,9 @@ export function sim(el, src) {
     if (spec.view === 'hist') {
       // 横轴的范围：写了 x: 用它；没写的先按理论的 μ ± 4σ，攒够 30 个以后按数据定下来（之后不再跳）
       if (!spec.x && !range && data.values.length >= 30) { const a = [...data.values].sort((p, q) => p - q), lo = a[Math.floor(a.length * 0.01)], hi = a[Math.ceil(a.length * 0.99) - 1], pad = (hi - lo) * 0.35 || 1; range = [lo - pad, hi + pad]; }
-      let xr = spec.x || range || (data.values.length ? [Math.min(...data.values) - 1, Math.max(...data.values) + 1] : [v.mu - 4 * v.sigma, v.mu + 4 * v.sigma]);
+      // 还没攒够时先按这个统计量理论上的中心和散布猜一个（和、均值、标准化的各不一样）
+      const guess = spec.stat === 'sum' ? [n * v.mu - 4 * v.sigma * Math.sqrt(n), n * v.mu + 4 * v.sigma * Math.sqrt(n)] : spec.stat === 'mean' || spec.stat === 'median' ? [v.mu - 4 * v.sigma / Math.sqrt(n), v.mu + 4 * v.sigma / Math.sqrt(n)] : spec.stat === 'z' || spec.stat === 't' ? [-4, 4] : [v.mu - 4 * v.sigma, v.mu + 4 * v.sigma];
+      let xr = spec.x || range || guess;
       if (!xr.every(Number.isFinite) || !(xr[1] > xr[0])) xr = [-4, 4];
       const h = spec.discrete ? histogram(data.values, { discrete: true }) : histogram(data.values, { bins: spec.bins, range: xr });
       const heights = spec.discrete ? h.freq : h.density;

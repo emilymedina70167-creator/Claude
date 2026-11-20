@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-20g**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-20h**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -98,6 +98,10 @@ b = [1, 1, -2]
 - `findbug`：找错 → `components/findbug.md`
 - `graph`（线代、高数、概率、计网）：函数图（微积分、概率分布） → `components/graph.md`
 - `space`（线代、高数）：三维图（可以拖动旋转） → `components/space.md`
+- `venn`（概率）：文氏图（事件的关系和运算、加法公式、条件概率） → `components/venn.md`
+- `ptree`（概率）：概率树和面积图（全概率、贝叶斯） → `components/ptree.md`
+- `joint`（概率）：联合分布表（二维离散型：边缘、条件、独立、Z 的分布、协方差） → `components/joint.md`
+- `sim`（概率）：抽样模拟（大数定律、中心极限定理、抽样分布、置信区间） → `components/sim.md`
 - `stepper`：一步步走的过程 → `components/stepper.md`
 - `frames`：自己写每一步的演示（菜单上没有的过程） → `components/frames.md`
 - `elim`（线代）：初等行变换（秩、极大无关组、解方程组、含参讨论、求逆、矩阵方程） → `components/elim.md`

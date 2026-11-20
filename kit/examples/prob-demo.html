@@ -1,0 +1,420 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>概率：事件、条件概率、二维离散、抽样</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+unit: 概率的四个组件（视觉交互第 4 批）
+subject: 概率
+---
+
+# 概率：事件、条件概率、二维离散、抽样
+
+每张图对着考纲里的一个考点。概率、边缘、矩、后验都是页面算的（精确的分数）；抽样带种子，每次打开是同一组数。
+
+## 事件的关系和运算
+
+```venn
+id: pd-events
+title: 差、交、并
+q: 点图上的一块，看它是什么事件、怎么写。
+sets: A B
+shade: A - B
+shade: AB
+note: $A - B = A\overline{B}$：$A$ 发生而 $B$ 不发生。圆外面那一块是 $\overline{A}\,\overline{B}$。
+```
+
+```venn
+id: pd-demorgan
+title: 德摩根律：把式子读成区域
+q: $\overline{A \cup B} = \overline{A}\,\overline{B}$，$\overline{AB} = \overline{A} \cup \overline{B}$。
+sets: A B
+ask: ~(A + B)
+ask: "至少有一个不发生" ~(AB)
+ask: "恰好有一个发生" AB' + A'B
+```
+
+```venn
+id: pd-three
+title: 三个事件
+sets: A B C
+ask: "恰好有一个发生" AB'C' + A'BC' + A'B'C
+ask: "至少有两个发生" AB + BC + AC
+ask: "$A$ 发生，$B$、$C$ 都不发生" A - B - C
+ask: "三个不都发生" ~(ABC)
+```
+
+```venn
+id: pd-add
+title: 加法公式、减法公式
+q: $P(A) = 0.5$，$P(B) = 0.4$，$P(AB) = 0.2$。
+sets: A B
+given: P(A) = 0.5, P(B) = 0.4, P(AB) = 0.2
+ask: P(A + B)
+ask: P(A - B)
+ask: "两个都不发生的概率" P(A'B')
+```
+
+```venn
+id: pd-cond
+title: 条件概率：在 $B$ 里看 $A$ 占多少
+q: $P(A) = 0.6$，$P(B) = 0.5$，$P(A \cup B) = 0.8$。
+sets: A B
+given: P(A) = 0.6, P(B) = 0.5, P(A + B) = 0.8
+shade: B
+ask: P(AB)
+ask: P(A | B)
+ask: "$A$ 没发生时 $B$ 发生的概率" P(B | ~A)
+```
+
+```venn
+id: pd-under
+title: 条件不够的时候
+q: 只知道 $P(A) = 0.5$、$P(B) = 0.4$（没说独立、没说互斥）。
+sets: A B
+given: P(A) = 0.5, P(B) = 0.4
+find: P(A + B), P(AB), P(A | B)
+note: 定不下来的量页面写出它能取的范围：$P(AB)$ 最小是 0（互斥），最大是 $P(B)$（$B \subset A$）。
+```
+
+## 条件概率、全概率、贝叶斯
+
+```ptree
+id: pd-total
+title: 全概率和贝叶斯：三个厂的次品
+q: 零件来自甲、乙、丙三个厂，各占 50%、30%、20%，次品率 2%、1%、3%。
+A1 0.5: B 0.02
+A2 0.3: B 0.01
+A3 0.2: B 0.03
+labels: A1=甲厂 A2=乙厂 A3=丙厂 B=次品
+drag: on
+ask: "任取一个是次品的概率" P(B)
+ask: "取到的是次品，它是甲厂的概率" P(A1 | B)
+ask: "取到的是正品，它是丙厂的概率" P(A3 | ~B)
+```
+
+```ptree
+id: pd-test
+title: 化验：阳性不等于有病
+q: 患病率 1%；有病的人 95% 验出阳性，没病的人 5% 也验出阳性。
+D 0.01: T 0.95
+H 0.99: T 0.05
+labels: D=有病 H=没病 T=阳性
+drag: on
+find: P(T)
+ask: "验出阳性，真有病的概率" P(D | T)
+note: 把「有病」那一列拖宽（患病率变大），看后验怎么变。
+```
+
+```ptree
+id: pd-urn
+title: 不放回地摸两次（抽签公平）
+q: 袋里 3 红 2 白，不放回地摸两次。
+红 3/5
+  红 2/4
+  白 2/4
+白 2/5
+  红 3/4
+  白 1/4
+ask: "两次都是红" P(红, 红)
+ask: "第二次摸到红" P(_, 红)
+ask: "第二次是红的，第一次也是红的概率" P(红, _ | _, 红)
+```
+
+```ptree
+id: pd-fill
+title: 把树填完
+q: 两个箱子各有一半的机会被选中；第一箱取到白球的概率是 $\tfrac13$，第二箱是 $\tfrac14$。
+A1 1/2: B 1/3
+A2 1/2: B 1/4
+labels: A1=一箱 A2=二箱 B=白球
+blank: A1:~B, A2 B
+ask: P(B)
+ask: P(A2 | B)
+```
+
+```ptree
+id: pd-dice
+title: 先掷骰子选箱子
+q: 掷一颗骰子：1 点从一箱取，2、3 点从二箱取，4、5、6 点从三箱取；三箱里取到白球的概率是 $\tfrac12$、$\tfrac13$、$\tfrac14$。
+A1 1/6: B 1/2
+A2 2/6: B 1/3
+A3 3/6: B 1/4
+labels: A1=一箱 A2=二箱 A3=三箱 B=白球
+ask: P(B)
+ask: "取到白球，它来自三箱的概率" P(A3 | B)
+```
+
+## 二维离散型随机变量
+
+```joint
+id: pd-joint
+title: 联合、边缘、条件
+q: 点一行或一列的表头，看那个条件下的分布。
+X: 0 1 2
+Y: 0 1
+p: 1/10 1/5; 1/5 3/10; 1/10 1/10
+show: margins, moments, independent
+```
+
+```joint
+id: pd-margins
+title: 自己求边缘、判独立
+X: 0 1 2
+Y: 0 1
+p: 1/10 1/5; 1/5 3/10; 1/10 1/10
+ask: margins
+ask: independent
+ask: "已知 $Y = 0$，$X = 1$ 的概率" P(X = 1 | Y = 0)
+```
+
+```joint
+id: pd-z
+title: $Z = X + Y$ 的分布
+X: 0 1 2
+Y: 0 1
+p: 0.1 0.2; 0.2 0.3; 0.1 0.1
+z: X + Y
+ask: z
+ask: P(X + Y <= 1)
+```
+
+```joint
+id: pd-max
+title: $M = \max(X, Y)$ 的分布
+X: 0 1 2
+Y: 0 1 2
+p: 1/9 1/9 1/9; 1/9 1/9 1/9; 1/9 1/9 1/9
+z: max(X, Y)
+ask: z
+note: $X$、$Y$ 独立同分布：$P(M \le k) = P(X \le k)\,P(Y \le k)$。
+```
+
+```joint
+id: pd-uncor
+title: 不相关不等于独立
+q: $X$ 等可能取 $-1$、$0$、$1$，$Y = X^2$。
+X: -1 0 1
+Y: 0 1
+p: 0 1/3; 1/3 0; 0 1/3
+ask: E(XY)
+ask: Cov(X, Y)
+ask: independent
+```
+
+```joint
+id: pd-cov
+title: 协方差和相关系数
+X: 0 1 2
+Y: 0 1
+p: 1/10 1/5; 1/5 3/10; 1/10 1/10
+show: margins
+ask: E(X)
+ask: E(XY)
+ask: Cov(X, Y)
+ask: D(X + Y)
+```
+
+```joint
+id: pd-indep
+title: 独立时由边缘补全
+q: $X$、$Y$ 独立，$P(X = 0) = \tfrac13$。
+X: 0 1
+Y: -1 0 1
+p: 1/12 ? ?; ? 1/4 ?
+px: 1/3 2/3
+independent: on
+ask: cells
+```
+
+## 相关系数、大数定律、中心极限定理
+
+```sim
+id: pd-rho
+title: 相关系数：点云有多「斜」
+q: 把 $\rho$ 调到 0、调到接近 $\pm 1$，各抽一组。
+draw: (X, Y) ~ N2(rho)
+slider rho -0.95 0.95 = 0.6 step=0.05 label="$\rho$"
+n: 200
+view: scatter
+seed: 4
+ask: "$X$、$Y$ 都标准化了，$\operatorname{Cov}(X, Y)$ 是多少（按现在的 $\rho$）？" = rho
+```
+
+```sim
+id: pd-lln
+title: 大数定律：样本均值稳在 $\mu$ 附近
+draw: X ~ U(0, 1)
+n: 400
+view: path
+band: 0.05
+seed: 3
+show 画了 {reps} 条；抽到第 {n} 个时落在 $\mu \pm 0.05$ 里的占 {dec(inband, 3)}
+```
+
+```sim
+id: pd-cheb
+title: 切比雪夫不等式给的保证
+q: 抛硬币 $n$ 次，正面的频率离 $0.5$ 不超过 $0.1$ 的概率。
+draw: X ~ B(1, 0.5)
+slider n 50 800 = 100 step=50
+view: path
+band: 0.1
+seed: 8
+show 画了 {reps} 条，落在带子里的占 {dec(inband, 3)}；切比雪夫保证至少 $1 - \dfrac{\sigma^2}{n\varepsilon^2}$ = {dec(1 - sigma^2/(n*band^2), 3)}
+note: 切比雪夫的界很保守：真实的比例比它保证的高得多。
+ask: "切比雪夫保证的下界是多少（按现在的 $n$，$\varepsilon = 0.1$）？" = 1 - sigma^2/(n*band^2)
+```
+
+```sim
+id: pd-clt
+title: 中心极限定理
+q: 总体是指数分布（很偏）。把 $n$ 调大，标准化的样本均值越来越像标准正态。
+draw: X ~ Exp(1)
+slider n 1 60 = 2 step=1
+stat: z
+curve: normpdf(x, 0, 1) label="N(0, 1)"
+x: -4 4
+bins: 32
+seed: 7
+show 模拟了 {reps} 次；这些 $z$ 的平均 {dec(mean, 3)}、方差 {dec(var, 3)}
+ask: "$\bar X$ 的方差是多少（按现在的 $n$）？" = sigma^2/n
+```
+
+```sim
+id: pd-dml
+title: 棣莫弗–拉普拉斯：二项分布像正态
+draw: X ~ B(1, 0.3)
+slider n 5 80 = 10 step=5
+stat: sum
+discrete: on
+curve: normpdf(x, 0.3n, sqrt(0.21n)) label="N(np, npq)"
+seed: 12
+show 成功次数的平均 {dec(mean, 2)}（$np$ = {0.3n}）、方差 {dec(var, 2)}（$npq$ = {0.21n}）
+```
+
+```sim
+id: pd-pois
+title: 泊松近似：$n$ 大、$p$ 小
+draw: X ~ B(40, 0.05)
+n: 1
+stat: sum
+discrete: on
+curve: poissonpmf(x, 2) label="P(2)"
+x: -0.5 9.5
+seed: 9
+```
+
+## 抽样分布、估计
+
+```sim
+id: pd-chi
+title: $\dfrac{(n-1)S^2}{\sigma^2} \sim \chi^2(n-1)$
+draw: X ~ N(0, 1)
+slider n 2 12 = 5 step=1
+stat: chi
+curve: chi2pdf(x, n - 1) label="χ²(n − 1)"
+x: 0 20
+bins: 40
+seed: 11
+show 这些统计量的平均 {dec(mean, 2)}（$\chi^2(n-1)$ 的期望是 {n - 1}）
+ask: "$\dfrac{(n-1)S^2}{\sigma^2}$ 的方差是多少（按现在的 $n$）？" = 2(n - 1)
+```
+
+```sim
+id: pd-t
+title: $\dfrac{\bar X - \mu}{S/\sqrt n} \sim t(n-1)$，尾巴比正态厚
+draw: X ~ N(0, 1)
+slider n 2 15 = 4 step=1
+stat: t
+curve: tpdf(x, n - 1) label="t(n − 1)"
+curve: normpdf(x, 0, 1) label="N(0, 1)"
+x: -6 6
+bins: 48
+seed: 13
+```
+
+```sim
+id: pd-s2
+title: 无偏：$S^2$ 的平均就是 $\sigma^2$
+draw: X ~ N(0, 4)
+n: 5
+stat: S2
+x: 0 16
+seed: 2
+show $S^2$（除以 $n-1$）的平均 {dec(mean, 3)}，$\sigma^2 = 4$
+```
+
+```sim
+id: pd-biased
+title: 除以 $n$ 的那个偏小
+draw: X ~ N(0, 4)
+n: 5
+stat: var
+x: 0 16
+seed: 2
+show 除以 $n$ 的平均 {dec(mean, 3)}，$\dfrac{n-1}{n}\sigma^2$ = {(n - 1)/n*sigma^2}
+ask: "要把它改成无偏的，得乘上多少？" = n/(n - 1)
+```
+
+```sim
+id: pd-eff-mean
+title: 有效性：样本均值
+draw: X ~ N(0, 1)
+n: 9
+stat: mean
+x: -1.6 1.6
+bins: 32
+seed: 21
+show 样本均值的方差 {dec(var, 4)}（理论 $\sigma^2/n$ = {dec(sigma^2/n, 4)}）
+ask: "$n$ 变成 36 时，样本均值的方差是多少？" = sigma^2/36
+```
+
+```sim
+id: pd-eff-median
+title: 有效性：样本中位数（也无偏，方差大）
+draw: X ~ N(0, 1)
+n: 9
+stat: median
+x: -1.6 1.6
+bins: 32
+seed: 21
+show 样本中位数的方差 {dec(var, 4)}
+```
+
+```sim
+id: pd-consist
+title: 一致性：$n$ 越大估得越准
+draw: X ~ Exp(1)
+n: 1000
+view: path
+band: 0.1
+seed: 15
+show 画了 {reps} 条；抽到第 {n} 个时落在 $\mu \pm 0.1$ 里的占 {dec(inband, 3)}
+```
+
+```sim
+id: pd-ci
+title: 置信区间：95% 说的是这一排里盖住的比例
+draw: X ~ N(10, 4)
+n: 8
+view: intervals
+level: 0.95
+sigma: unknown
+seed: 5
+show {total} 个区间里 {miss} 个没盖住 $\mu$；盖住的占 {dec(cover, 3)}
+```
+
+```sim
+id: pd-ci-n
+title: 样本量大了区间变窄
+draw: X ~ N(10, 4)
+slider n 4 64 = 4 step=4
+view: intervals
+level: 0.95
+sigma: known
+x: 6 14
+seed: 6
+show {total} 个区间里 {miss} 个没盖住 $\mu$；$\sigma$ 已知时半宽 $1.96\,\sigma/\sqrt n$ = {dec(norminv(0.975)*sigma/sqrt(n), 3)}
+```
+</script>
