@@ -583,7 +583,11 @@ function diskParse(fields) {
   const reqs = req.map(Number);
   if ([head, ...reqs].some((x) => x < lo || x > hi)) throw new Error(`磁头和请求都要在 tracks: ${lo}-${hi} 里`);
   const dir = /^(down|小|向小|减小|内|-)$/i.test(String(fields.dir || 'up').trim()) ? -1 : 1;
-  const jump = /^(count|计|算|yes|true)$/i.test(String(fields.jump || '').trim());
+  // C-SCAN / C-LOOK 跳回去的距离算不算各书不一样：count 算、skip 不算；不写照以前不算（检验题用到距离时自检要它写明，check/spec.js）
+  const jumpSrc = String(fields.jump ?? '').trim();
+  let jump = false;
+  if (/^(count|计|算|yes|true)$/i.test(jumpSrc)) jump = true;
+  else if (jumpSrc && !/^(skip|不计|不算|no|false)$/i.test(jumpSrc)) throw new Error(`jump: 写 count（跳回去的距离算）或 skip（不算）（现在是「${jumpSrc}」）`);
   return { reqs, head, algo, lo, hi, dir, jump };
 }
 

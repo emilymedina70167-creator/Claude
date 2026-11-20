@@ -442,7 +442,7 @@ retry: p5, p5
 
 各题型：
 
-- **trace**（手推）：`use: 演示组件名`，下面原样写那个组件自己的字段（`algo: shell`、`array: …`、`gaps: …`，写法见那个组件）；我填的就是它 `mode: fill` 的那张表。可选 `rows: 2`（只填前 2 行）或 `rows: 2-3`（第 1 行给出、填第 2～3 行）、`given:` `cols:`（同 `mode: fill`）、`against: 错法短名`。组件的字段名和检验的字段撞了（sched 的 `q`、tree / thread 的 `level`、net / kmp 的 `use`、csma / mem 的 `retry`、memexp / util 的 `target`）写 `use.名字:`（`use.q: 2`）。elim、det、eig、schmidt、quad 不收（那是结果表，不是过程）。
+- **trace**（手推）：`use: 演示组件名`，下面原样写那个组件自己的字段（`algo: shell`、`array: …`、`gaps: …`，写法见那个组件）；我填的就是它 `mode: fill` 的那张表。可选 `rows: 2`（只填前 2 行）或 `rows: 2-3`（第 1 行给出、填第 2～3 行）、`given:` `cols:`（同 `mode: fill`）、`against: 错法短名`；快排（`use: sort`、`algo: quick`）能写 `by: round`：一趟（真题说的趟，一层划分做完）一行，行名「第 k 趟」，不写是一次划分一行。组件的字段名和检验的字段撞了（sched 的 `q`、tree / thread 的 `level`、net / kmp 的 `use`、csma / mem 的 `retry`、memexp / util 的 `target`）写 `use.名字:`（`use.q: 2`）。elim、det、eig、schmidt、quad 不收（那是结果表，不是过程）。
   - 判：整张表交一次一起判，一行一项（`r1`、`r2`…，表下面的格是 `x1`…）。第一处错的那一行没过，对上了引擎的错法 `tag` 是错法短名、话后面接错法的说法。直接插入、希尔、冒泡、简单选择：错的那一行后面每一行，页面拿「对的这一趟作用在我写的上一行上」再核（证据里那几项带 `carried: true`，`ok` 是对我自己的上一行而言；这道题照样没过）；后面全对、没对上错法、错的那一行和对的最多差 2 格，那一项 `tag: slip`，话是「后面按你自己的上一行推都对，第 k 趟这一处写错了」。别的引擎错行后面的不列。
   - teach 键：对上错法的先找 `tag=错法短名`，笔误先找 `slip`，再找那一行（`r2`），最后 `default`。格子没填完交不了（该空着的格写 `-`）。
 - **predict**（不推，直接写结果）：`run r: 引擎 字段=值 …`（一行一个，名字只用字母和数字；值有空格加引号：`refs="1 2 3"`）；`expect [x1] 标签: 式子`（一个要我写的结果一行，编号不写自动编 x1、x2…；式子能用 `r.faults`、`r.pass1`、`let` 和模板的量，`"2 5 8"` 是字）；`wrong [w1]: 式子 => 说明`（带 `=>` 的是错答案，挂在它上面最近的那个 `expect`）；不带 `=>` 的 `wrong` 是理由里的常见错说法；`against: 错法短名, …`；可选 `must` / `may`（理由要点，页面里的 Claude 判）、`answer:`。至少一个 run、一个 expect。
@@ -457,14 +457,14 @@ retry: p5, p5
 
 | 引擎 | 量 | 错法短名（`against:`） |
 |---|---|---|
-| `sort` | `passes` 几趟（快排是几次划分）、`pass1` `pass2`…（第 k 趟以后的序列）、`final`、`cmp` 比较次数、`move` 移动次数（快排、归并不交）、`swap` 交换次数（只有冒泡、简单选择）、`unstable`（排完换了先后的相同数有几对）、`flipped`（那几对，「49 49′」） | 直接插入 `insertCount`；希尔 `shellBlock`；冒泡 `bubbleFront` `bubbleMin`；简单选择 `selectMax` `selectShift`；快排 `quickSwap` `quickLast`；基数 `radixMSD` `radixLIFO`；归并没有 |
+| `sort` | `passes` 几趟（快排是几次划分）、`pass1` `pass2`…（第 k 趟以后的序列；快排是第 k 次划分以后）、快排另有 `rounds` 几趟、`round1` `round2`…（真题说的「第 k 趟」：一层划分做完以后的序列）、`final`、`cmp` 比较次数、`move` 移动次数（快排、归并不交）、`swap` 交换次数（只有冒泡、简单选择）、`unstable`（排完换了先后的相同数有几对）、`flipped`（那几对，「49 49′」） | 直接插入 `insertCount`；希尔 `shellBlock`；冒泡 `bubbleFront` `bubbleMin`；简单选择 `selectMax` `selectShift`；快排 `quickSwap` `quickLast`；基数 `radixMSD` `radixLIFO`；归并没有 |
 | `tree`（`bst:`） | `height`（根在第 1 层）、`leaves`、`aslSucc` | `mirror`；带 `ops: delete …` 还有 `replace` |
 | `tree`（`heap:`） | `cmp`（全部操作的比较）、`cmp1` `cmp2`…（第 k 个操作的）、`swaps`、`final`、`pass1`…（`ops` 里有 `sort` 时：堆排序第 k 趟以后） | `minHeap` / `maxHeap`、`insertBuild` |
 | `tree`（`nodes:` + `walk:`） | 不交量 | `preorder` `postorder` `levelorder` `inorder`（写的不是的那几种） |
 | `avl` | `rot`（调整几次，LR、RL 算 1 次）、`turns`（单旋几次：LL、RR 1 次，LR、RL 2 次）、`LL` `RR` `LR` `RL`、`root` | `lr2ll` `bfsign` `topmost` |
 | `paging` | `faults`、`hits`、`rate`（缺页率）、`victims`（依次换出的页） | `fifo` `lru` `opt` `clock`（写的不是的那几种）、`noInitial`；`eclock` 还有 `clearFirst` |
 | `sched` | `avgTurn`、`avgWait`、`avgWeighted`、`order`（CPU 上依次运行的进程） | `fcfs` `sjf` `srtf` `hrrn` `prio` `pprio`（写的不是的那几种）、RR 的 `rrOld` |
-| `disk` | `dist`（移动的磁道总数）、`avg`、`order`（依次访问的磁道） | `fcfs` `sstf` `scan` `cscan` `look` `clook`（写的不是的那几种）、`reverse`、C-SCAN / C-LOOK 的 `jump` |
+| `disk` | `dist`（移动的磁道总数）、`avg`、`order`（依次访问的磁道） | `fcfs` `sstf` `scan` `cscan` `look` `clook`（写的不是的那几种）、`reverse`、C-SCAN / C-LOOK 的 `jump`（写了 `jump: count` 时是 `noJump`） |
 | `hash` | `aslSucc`、`aslFail`、`clashes`（碰到过冲突的关键字有几个） | 开放定址 `modSize` `linear` / `quadratic` `failNoEmpty` `failBySize` `failByN`；拉链 `nullCounted` `failByN` |
 
 错法短名照这组数列：某组数上和对的算出来一样的那个错法不列。写错的名字页面报，后面列着这组数有的。别的引擎（rbt、btree、huffman、kmp、bsearch、banker、组成原理、计网）不交量，trace 照样能用（只要那个组件有 `mode: fill` 的表）。
@@ -474,6 +474,8 @@ retry: p5, p5
 - 直接插入、希尔：`if (A[i] < A[i-dk])` 和循环第一次 `A[0] < A[j]` 是同一对关键字，算一次；哨兵 `A[0]` 让循环停下的那次照算；`j > 0`、`low < high` 这种下标的比较不算。移动是元素的每一次赋值（进出 `A[0]`、`pivot` 都算；一次交换算 3 次）。直接插入最坏（倒序）比较 (n+2)(n−1)/2、移动 (n+4)(n−1)/2，最好（顺序）比较 n−1、移动 0。
 - 冒泡：倒序比较 n(n−1)/2、交换 n(n−1)/2、移动 3n(n−1)/2；顺序比较 n−1、1 趟。简单选择：比较总是 n(n−1)/2。
 - 快排：一次划分 m 个元素比 m−1 次（每个不是枢轴的元素和枢轴比一次）；顺序时比较 n(n−1)/2、划分 n−1 次。
+- 快排的「趟」有两种：`pass#` = 第几次划分以后；`round#` / `rounds` = 真题说的「第几趟」（2019 年第 10 题的定义：对尚未确定最终位置的所有元素进行一遍处理称为一趟，也就是这一层的子表全部划分完；只剩一个、空的子表不划分）。题里说「第二趟」用 `round2`。例：`49 38 65 97 76 13 27 49′` 的 `round1` 是 `27 38 13 49 76 97 65 49′`，`round2` 是 `13 27 38 49 49′ 65 76 97`（`pass2` 是 `13 27 38 49 76 97 65 49′`：第 2 次划分只划分了左边的子表）。trace 照真题的趟填写 `by: round`。
+- C-SCAN / C-LOOK 跳回去的那一段：各书不一样，有的算进移动距离、有的不算。`jump: count` 算，`jump: skip` 不算（演示组件不写时不算）。检验题（predict、construct、calc、trace）用到 `cscan` / `clook` 的 `dist` `avg`（trace 的表里有移动距离）又没写 `jump:`，执行前的检查报「写明 jump: count 或 jump: skip，题面也写清楚跳回去算不算」；run 行写 `jump=count` / `jump=skip`。
 - 归并：`Merge` 里每执行一次 `B[i] <= B[j]` 算一次（下标的比较不算）；趟是段长 1、2、4……自底向上，落单的一段不比。
 - 堆：向下调整时有两个孩子的一层比 2 次（两个孩子比一次、大的（小根堆是小的）和双亲比一次），只有一个孩子的一层比 1 次；向上调整（插入）一层比 1 次。建堆、删堆顶（`ops: delete`）、插入都数。
 - SJF 运行时间一样的按到达先后，不算并列。
@@ -1661,7 +1663,7 @@ ask: next
 - **`sched` 进程调度**：`procs:` 一个进程一组「名字 到达时间 运行时间 [优先级]」，逗号隔开（`P1 0 3, P2 2 6`）。`algo:` 选 `fcfs`、`sjf`（非抢占）、`srtf`（抢占式短作业优先 / 最短剩余时间）、`hrrn`（高响应比，每次调度时算出各进程的响应比写在说明里）、`prio`（优先级，非抢占）、`pprio`（优先级，抢占）、`rr q=2`（时间片轮转）。优先级默认数越小越高，写 `prio: large` 改成数越大越高。RR 的约定（王道）：同一时刻有新进程到达、又有进程用完时间片，新进程先入队。画面：甘特图（同一个进程同一种颜色）、就绪队列、进程表；最后一步算周转、带权周转、等待时间和平均值。`ask:` 能问 `next`（接下来运行谁，在就绪队列里点）、`avg`（平均周转时间，可以写分数）。`mode: quiz`：默认写 CPU 上依次运行的进程，`quiz: avg` / `quiz: wait` 写平均周转 / 平均等待时间。
 - **`paging` 页面置换**：`refs: 7 0 1 2 0 3 0 4`（页面引用串），`frames: 3`（物理块数），`algo:` 选 `fifo`、`lru`、`opt`、`clock`（简单 CLOCK：访问位、指针）、`eclock`（改进型 CLOCK：访问位 + 修改位，引用串里写访问写成 `2w`）。画成王道那张表：一列一次访问，每个物理块一行，缺页打 ✓，FIFO 下面写进入的先后、LRU 写最近使用的先后，CLOCK 标访问位和指针。一开始调入也算缺页。OPT 里以后都不用的页有几个时，换先调入的那个。`ask:` 能问 `hit`（命中还是缺页）、`victim`（换出哪一页，在表的最后一列点）、`faults`（一共缺页几次）。`mode: quiz`：缺页次数，`quiz: victims` 写依次换出的页。想看 Belady 现象，就放两个 FIFO，物理块 3 和 4。
 - **`banker` 银行家算法**：`avail: 3 3 2`，`max:` 和 `alloc:` 一行一个进程（`P0 7 5 3; P1 3 2 2; …`），可选 `request: P1 1 0 2`（某个进程提出的请求：先查是否超过 Need、是否超过 Available，再试着分配看安不安全）。表里有 Max、Allocation、Need、每个进程是第几个运行完的；安全性算法每次从编号小的开始找 Need ≤ Work 的进程（能满足的有好几个时，选哪个都对）。`ask:` 能问 `next`（下一个能运行完的进程，点进程名）、`request`（这个请求能不能分配）。`mode: quiz`：写一个安全序列（任何一个对的都算），有 `request` 时写「能」或「不能」。
-- **`disk` 磁盘调度**：`requests: 98 183 37 122 14 124 65 67`，`head: 53`，`algo:` 选 `fcfs`、`sstf`、`scan`、`cscan`、`look`、`clook`；`dir: up`（往磁道号大的方向，默认）或 `down`；`tracks: 0-199`（磁道范围，默认 0-199）。SCAN、C-SCAN 走到磁盘尽头才掉头 / 跳回，LOOK、C-LOOK 到最远的请求就掉头 / 跳回；C-SCAN、C-LOOK 跳回去的距离默认不算，`jump: count` 算上。**有的教材题目里的「SCAN」走到最远的请求就掉头，那其实是 LOOK：按题目说的选。**画面是磁头移动的折线图（纵向是时间）。`ask:` 能问 `next`（下一个去哪个磁道）、`total`（一共移动多少）。`mode: quiz`：移动的磁道总数，`quiz: order` 写服务顺序。
+- **`disk` 磁盘调度**：`requests: 98 183 37 122 14 124 65 67`，`head: 53`，`algo:` 选 `fcfs`、`sstf`、`scan`、`cscan`、`look`、`clook`；`dir: up`（往磁道号大的方向，默认）或 `down`；`tracks: 0-199`（磁道范围，默认 0-199）。SCAN、C-SCAN 走到磁盘尽头才掉头 / 跳回，LOOK、C-LOOK 到最远的请求就掉头 / 跳回；C-SCAN、C-LOOK 跳回去的距离默认不算，`jump: count` 算上（`jump: skip` 写明不算）。**有的教材题目里的「SCAN」走到最远的请求就掉头，那其实是 LOOK：按题目说的选。**画面是磁头移动的折线图（纵向是时间）。`ask:` 能问 `next`（下一个去哪个磁道）、`total`（一共移动多少）。`mode: quiz`：移动的磁道总数，`quiz: order` 写服务顺序。
 
 <!-- 完整写法 -->
 
