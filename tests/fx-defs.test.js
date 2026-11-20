@@ -79,3 +79,34 @@ test('没有定义、没有撇号时就是普通的表达式', () => {
 test('弧度', () => {
   near(val('f(pi/2)', defsOf('f(x) = sin(x)')), 1);
 });
+
+// —— 视觉交互第 2 批 Task 1：偏导、梯度、向量当实参 ——
+test('偏导：下划线后面每个字母是一个参数', () => {
+  const d = defsOf('h(x, y) = x^2*y + y^3');
+  assert.equal(val('h_x(2, 3)', d), 12);
+  assert.equal(val('h_y(2, 3)', d), 31);
+  assert.equal(val('h_xy(2, 3)', d), 4);
+  assert.equal(val('h_yx(2, 3)', d), 4);
+  assert.equal(val('h_yy(1, 2)', d), 12);
+  assert.equal(val('h_xx(5, 3)', d), 6);
+  assert.throws(() => val('h_z(1, 2)', d), /h 没有参数 z/);
+  assert.throws(() => val('h(1, 2, 3)', d), /h 要 2 个参数/);
+});
+
+test('梯度、向量当实参', () => {
+  const d = defsOf('h(x, y) = x^2*y + y^3');
+  assert.deepEqual(val('h_grad(2, 3)', d), [12, 31]);
+  assert.equal(val('h(P)', d, { P: [2, 3] }), 39);
+  assert.deepEqual(val('h_grad(P)', d, { P: [2, 3] }), [12, 31]);
+  assert.equal(val('h_x(P)', d, { P: [2, 3] }), 12);
+  assert.equal(val('h(P + [1, 0])', d, { P: [1, 3] }), 39);
+  near(val('dot(h_grad(P), [1, 0])', d, { P: [2, 3] }), 12);
+});
+
+test('一元函数也认 f_x；带下划线的普通名字不受影响', () => {
+  const d = defsOf('f(x) = x^3');
+  assert.equal(val('f_x(2)', d), 12);
+  assert.equal(val('f_xx(2)', d), 12);
+  assert.equal(val('a_x + 1', d, { a_x: 2 }), 3);
+  assert.equal(val('f_x + 1', d, { f_x: 2 }), 3); // 后面没有括号：是个普通的量
+});

@@ -63,30 +63,53 @@ function renameBound(n, tag) {
 // f'( → __d1_f(：撇号本来是转置，「名字 + 撇号 + 括号」而且名字是定义过的函数时才当求导
 function primesToCalls(src, defs) {
   // 从公式里抄来的 ′ ″（Unicode 的撇号）和键盘上的 ' 一样
-  return String(src).replace(/″/g, "''").replace(/′/g, "'").replace(/(?<![A-Za-z_.])([A-Za-z][A-Za-z0-9]*)('{1,3})\s*\(/g, (m, name, ps) => (defs.has(name) ? `__d${ps.length}_${name}(` : m));
+  return partialsToCalls(String(src).replace(/″/g, "''").replace(/′/g, "'").replace(/(?<![A-Za-z_.])([A-Za-z][A-Za-z0-9]*)('{1,3})\s*\(/g, (m, name, ps) => (defs.has(name) ? `__d${ps.length}_${name}(` : m)), defs);
 }
+
+// 偏导和梯度：f_x( → __p_x_f(，f_xy( → __p_xy_f(，f_grad( → __g_f(。
+// 下划线前面是定义过的函数、后面跟着括号时才算（a_x 这样的普通名字、没有括号的 f_x 都不动）
+function partialsToCalls(src, defs) {
+  return src.replace(/(?<![A-Za-z_.0-9])([A-Za-z][A-Za-z0-9]*)_([A-Za-z]{1,4})\s*\(/g, (m, name, sub) => {
+    const def = defs.get(name);
+    if (!def) return m;
+    if (sub === 'grad') return `__g_${name}(`;
+    const bad = [...sub].find((ch) => !def.params.includes(ch));
+    if (bad) throw new Error(`${name} 没有参数 ${bad}（${name} 的参数是 ${def.params.join('、')}；偏导写成 ${name}_${def.params[0]}(…)）`);
+    if (sub.length > 3) throw new Error(`${name}_${sub}：偏导最多求到三阶`);
+    return `__p_${sub}_${name}(`;
+  });
+}
+
+const INNER = /^__(?:d([123])|p_([A-Za-z]{1,3})|(g))_(.+)$/;
+const N0 = { t: 'num', v: 0 };
+// f 没定义的地方导数也没定义：ln x 的导数 1/x 在 x < 0 算得出数，但那里没有 ln。加上 0·f，f 是 NaN 时导数也是 NaN
+const guarded = (d, f) => ({ t: 'bin', op: '+', a: d, b: { t: 'bin', op: '*', a: N0, b: f } });
 
 // 把定义过的函数的调用换成它的式子
 function inline(n, defs) {
   if (!n || n.t === 'num' || n.t === 'var') return n;
   const out = mapKids(n, (m) => inline(m, defs));
   if (out.t !== 'call') return out;
-  const dm = /^__d([123])_(.+)$/.exec(out.name);
-  const def = defs.get(dm ? dm[2] : out.name);
+  const dm = INNER.exec(out.name);
+  const def = defs.get(dm ? dm[4] : out.name);
   if (!def) return out;
-  if (out.args.length !== def.params.length) throw new Error(`${def.name} 要 ${def.params.length} 个参数（这里写了 ${out.args.length} 个）`);
-  let body = def.ast;
-  if (dm) {
-    try { body = diffAst(body, def.params[0], Number(dm[1])); } catch (e) {
-      throw new Error(`${def.name}${"′".repeat(Number(dm[1]))} 页面求不了导：${String(e.message).replace(/^这个式子页面求不了导：/, '')}`);
+  // 多元函数只给了一个实参：当成一个点（向量），分量依次代进去——f(P)、f_grad(P)
+  let args = out.args;
+  if (def.params.length > 1 && args.length === 1 && args[0].t !== 'num') args = def.params.map((_, i) => ({ t: 'call', name: 'el', args: [args[0], { t: 'num', v: i + 1 }] }));
+  if (args.length !== def.params.length) throw new Error(`${def.name} 要 ${def.params.length} 个参数（这里写了 ${out.args.length} 个）${def.params.length > 1 ? `，或者给一个 ${def.params.length} 维的点` : ''}`);
+  const diff = (body, x, order = 1) => {
+    try { return diffAst(body, x, order); } catch (e) {
+      throw new Error(`${def.name} 页面求不了导：${String(e.message).replace(/^这个式子页面求不了导：/, '')}`);
     }
-    // f 没定义的地方 f′ 也没定义：ln x 的导数 1/x 在 x < 0 算得出数，但那里没有 ln。加上 0·f，f 是 NaN 时导数也是 NaN
-    body = { t: 'bin', op: '+', a: body, b: { t: 'bin', op: '*', a: { t: 'num', v: 0 }, b: def.ast } };
-  }
-  return substAll(body, Object.fromEntries(def.params.map((p, i) => [p, out.args[i]])));
+  };
+  let body = def.ast;
+  if (dm?.[1]) body = guarded(diff(body, def.params[0], Number(dm[1])), def.ast);
+  else if (dm?.[2]) body = guarded([...dm[2]].reduce((b, x) => diff(b, x), body), def.ast);
+  else if (dm?.[3]) body = { t: 'list', items: def.params.map((x) => guarded(diff(def.ast, x), def.ast)) };
+  return substAll(body, Object.fromEntries(def.params.map((p, i) => [p, args[i]])));
 }
 
-const usesCall = (n, name) => !!n && ((n.t === 'call' && (n.name === name || n.name.endsWith(`_${name}`) && /^__d[123]_/.test(n.name))) || ['a', 'b'].some((k) => usesCall(n[k], name)) || (n.args || n.items || []).some((m) => usesCall(m, name)));
+const usesCall = (n, name) => !!n && ((n.t === 'call' && (n.name === name || INNER.exec(n.name)?.[4] === name)) || ['a', 'b'].some((k) => usesCall(n[k], name)) || (n.args || n.items || []).some((m) => usesCall(m, name)));
 
 /** 式子原文 → 语法树：撇号读成求导，定义过的函数展开 */
 export function expandSrc(src, defs) {
