@@ -60,6 +60,7 @@ const RAD = new Set([
   'blocks/answer.js', 'blocks/steps.js', 'blocks/matrix.js', 'blocks/practice.js', 'blocks/letblock.js',
   'check/judge.js', 'check/spec.js', 'codejudge.js', 'render.js', 'stage/value.js', 'algofuncs.js', 'usespec.js',
   'anstypes.js', 'check/values.js', 'blocks/widget.js', 'class/classroom.js', 'exam/drillgen.js', 'exam/verify.js', 'stage/answer.js', 'stepperspec.js',
+  'prob/joint.js', // Z = g(X, Y) 的式子：照答案的读法，弧度
 ]);
 function callers(dir = 'kit/src', out = []) {
   for (const f of readdirSync(dir)) {
