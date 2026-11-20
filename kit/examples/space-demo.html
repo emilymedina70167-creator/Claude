@@ -192,9 +192,9 @@ q: $y = \sqrt x$（$0 \le x \le 4$）绕 $x$ 轴转。让它转满一圈。
 range: 4
 slider th 0 6.2832 = 2 step=0.02 label="转到" play
 slider x0 0 4 = 2.5 step=0.05 label="x₀"
-revolve V = sqrt(x) for x 0 4 about x upto=th color=blue
+revolve V = sqrt(x) for x 0 4 about x upto=th area=S color=blue
 disk V at x0 color=yellow
-show $x_0$ 处的圆盘：半径 $\sqrt{x_0}$，面积 $\pi x_0 = {dec(pi*x0, 3)}$
+show $x_0$ 处的圆盘：半径 $\sqrt{x_0}$，面积 $\pi x_0 = {dec(pi*x0, 3)}$；转到这里的侧面积 $2\pi\displaystyle\int f\sqrt{1 + f'^2}\,dx$ 的那一部分是 ${dec(S, 3)}$
 show 转到这里的体积 ${dec(V, 3)}$；转满是 $\pi\displaystyle\int_0^4 x\,dx = 8\pi = {dec(8pi, 3)}$
 goal th >= 6.27 msg="转满一圈：$V = 8\pi$"
 ```

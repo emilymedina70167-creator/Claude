@@ -56,21 +56,21 @@
 | 定积分的定义（黎曼和） | 高 | `graph`：`riemann … left / right / mid`、`goal` | **A**（第 1 批） | `gd-riemann` |
 | 变限积分函数 | 高 | `graph`：`F(x) = int(…, t, 0, x)`、`F'` | **A**（第 1 批） | `gd-varlimit` |
 | 定积分的几何应用：面积 | 高 | `graph`：`area f, g from a to b`、`pick` 交点 | **A**（第 1 批） | `gd-area` |
-| 旋转体体积、弧长、侧面积 | 高 | 无 | C | 没有旋转体 |
+| 旋转体体积、弧长、侧面积 | 高 | `space`：`revolve`（`upto` 转到哪、体积和侧面积页面算）、`disk`、`shell`；弧长在 `graph` 里 `param` + `int` | **A**（第 3 批） | `sp-disk`、`sp-shell` |
 | 极坐标、参数方程的曲线和面积 | 高 | `graph`：`param`、`polar`（弧度、`fill` 扫过的面）、`pick` 交点 | **A**（第 2 批） | `gp-param`、`gp-polar`、`gp-cross` |
 | 反常积分 | 中 | `graph`：拖上限、`int(…)` | **A**（第 1 批） | `gd-improper` |
 | 积分的计算技巧 | 低 | `derive` `answer` | N | |
 | 微分方程：解曲线族、方向场 | 中 | `graph`：`slope`、`flow … from P`（拖初值点）、`contour` 画积分曲线族 | **A**（第 2 批） | `gp-ode`、`gp-family` |
 | 微分方程的解法（计算） | 低 | `answer` 的 `calc: ode` | N | |
-| 空间解析几何：向量、直线、平面 | 高 | `space` | A− | 平面多了看不清，交线要手算 |
-| 二次曲面、旋转曲面、柱面 | 高 | `space` `quadric` | B | 抛物面画不出（没有一次项）；几个曲面叠着标签错 |
-| 多元函数：曲面、偏导数的几何意义、全微分 | 高 | 无 | C | 没有 z = f(x, y) |
+| 空间解析几何：向量、直线、平面 | 高 | `space`：平面写方程、`meet` 交线、`angle`、`foot`，`dist` `angledeg`；几张平面切开按远近画 | **A**（第 3 批） | `sp-meet`、`sp-dist`、`sp-lineplane`、`sp-helix` |
+| 二次曲面、旋转曲面、柱面 | 高 | `space`：`surface 方程`（按截痕画，抛物面、柱面、锥面都行）、`section` | **A**（第 3 批） | `sp-quadric`、`sp-parab`、`sp-saddle`、`sp-cyl` |
+| 多元函数：曲面、偏导数的几何意义、全微分 | 高 | `space`：`surface z = f(x, y)`、`section`、`tangent`（切平面、法向量）、曲面上能拖的点、`pick … on S` | **A**（第 3 批） | `sp-partial`、`sp-tplane`、`sp-extreme`、`sp-pick` |
 | 方向导数、梯度、等高线 | 高 | `graph`：`f(x, y) = …`、`contour`、`f_grad(P)`、二维的拖点 | **A**（第 2 批） | `gp-grad` |
 | 多元极值、条件极值（拉格朗日乘数） | 高 | `graph`：等高线上 `pick` 驻点、`f_xx` 判别；`drag on="约束"` 沿约束拖 | **A**（第 2 批） | `gp-ext`、`gp-lag` |
 | 二重积分：区域、换序、极坐标 | 高 | `graph`：`region`（X 型、Y 型、极坐标）、`strip` 读上下限、`int2` | **A**（第 2 批） | `gp-dbl`、`gp-dpolar` |
-| 三重积分：区域、柱面 / 球面坐标、截面法 | 高 | `space` `quadric` 叠 | C | 画不出「围成的区域」 |
+| 三重积分：区域、柱面 / 球面坐标、截面法 | 高 | `space`：`solid`（两张曲面之间、球面坐标）、`column` 读上下限、`slice` 截面和面积、`int3` | **A**（第 3 批） | `sp-solid`、`sp-tetra`、`sp-cone`、`sp-sph` |
 | 曲线积分、格林公式 | 中 | `graph`：`field`、`lineint(P, Q, x(t), y(t), …)`、`Q_x - P_y` 和 `int2` | **A**（第 2 批；平面上的） | `gp-field` |
-| 曲面积分、高斯、斯托克斯、散度旋度 | 中 | 无 | C | |
+| 曲面积分、高斯、斯托克斯、散度旋度 | 中 | `space`：参数曲面、`normals`、`field`，`flux` `lineint3` `int3` 页面算两边 | **A**（第 3 批） | `sp-gauss`、`sp-stokes` |
 | 数项级数：部分和、审敛 | 中 | `graph`：`dots sum(…) for n …` | **A**（第 1 批） | `gd-series` |
 | 幂级数：收敛区间 | 高 | `graph`：`sum`、滑块 n | **A**（第 1 批） | `gd-power` |
 | 傅里叶级数：周期延拓、间断点的和 | 高 | `graph`：`sum`；延拓的跳跃自己断开 | **A**（第 1 批） | `gd-fourier` |
@@ -129,9 +129,9 @@
 | 考点 | 需求 | 现状 | 评级 | 差在哪 |
 |---|---|---|---|---|
 | 含参数的行列式 | 高 | `det` | C | `det` 不收参数 |
-| 方程组解的几何：三个平面 | 中 | `space` 三个 `plane` | B | 三张半透明的面叠着看不清，交线不画，是哪种情形不说 |
+| 方程组解的几何：三个平面 | 中 | `space`：三个写方程的平面 + `meet`（交线、公共点、哪种情形和两个秩页面说） | **A**（第 3 批） | `sp-planes3` |
 | 向量空间：基变换、坐标 | 中 | `scene` `grid` | B | 坐标的分解（沿新基的两段）不画 |
-| 三阶的特征方向 | 中 | 无 | C | `space` 没有 `eigen` |
+| 三阶的特征方向 | 中 | `space`：`eigen A`（实特征方向、重根是平面还是线） | **A**（第 3 批） | `sp-eigen` |
 
 毛病：`matrix` 的 `mark … note=` 压在上一行的数上；老组件 `vectors` 画出来是空的；`elim` 的结论里下标写成 `a_(1)`；`det` 按行展开一步到底时画成 `D = −3|1|`。
 
@@ -169,7 +169,7 @@
 
 ### 第 3 批：三维图 `space`
 
-盖住高数 8 行、线代 2 行。`surface`（z = f(x, y)、参数曲面）、`curve`（空间曲线）、截痕和切平面、旋转体、两张曲面围成的区域和截面、三个平面的交线和情形、三阶的 `eigen`。
+**做完了（版本见 CLAUDE.md）**：盖住高数 6 行（空间解析几何、二次曲面、多元函数的曲面、旋转体、三重积分、曲面积分；空间曲线的切线和法平面并在第一行里）、线代 2 行，评级见第三节的表。写法在 `kit/src/spacespec.js`，几何在 `kit/src/fx/solid.js`。示例页 `kit/examples/space-demo.html` 22 张。原来写的「高数 8 行」数多了：多元极值、梯度那两行第 2 批已经在平面上做到 A，这一批只是多了三维的看法（`sp-extreme`、`sp-pick`）。
 
 ### 第 4 批：概率专门的三样
 

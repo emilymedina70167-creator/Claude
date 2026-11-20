@@ -90,6 +90,7 @@ test('三维图：老的图按角度，微积分的图按弧度', async () => {
 });
 
 test('每个调用的地方都归了类', () => {
-  const missing = callers().filter((f) => !DEG.has(f) && !RAD.has(f) && !f.startsWith('fx/')); // fx/ 下全是弧度（计划 3 的实数取点）
+  // spacespec.js 两种都有（老的三维图角度、微积分的图弧度），上面那条测试专门守着
+  const missing = callers().filter((f) => !DEG.has(f) && !RAD.has(f) && !f.startsWith('fx/') && f !== 'spacespec.js'); // fx/ 下全是弧度（计划 3 的实数取点）
   assert.deepEqual(missing, [], `这些文件用到了求值，要在 tests/expr-rad.test.js 里归进 DEG（画图、角度）或 RAD（答案、弧度）`);
 });

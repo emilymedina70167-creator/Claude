@@ -177,3 +177,11 @@ test('pick … on S：学生点在曲面上（目标还是地面上的 [x, y]）
   assert.throws(() => parseSpace('pick "x" on S at [0, 0]'), /没有叫 S 的曲面/);
   assert.throws(() => parseSpace('surface S = x^2 + y^2 + z^2 = 1\npick "x" on S at [0, 0]'), /z = f\(x, y\)/);
 });
+
+test('revolve … area=S：侧面积起名字（导数页面求）', () => {
+  const g = parseSpace('revolve V = sqrt(x) for x 0 4 about x area=S');
+  const c = g.cmds[0];
+  assert.equal(c.areaName, 'S'); near(c.df({ x: 4 }), 0.25);
+  assert.equal(parseSpace('revolve x^2 for x 0 1 about y').cmds[0].areaName, undefined);
+  assert.throws(() => parseSpace('revolve x^2 for x 0 1 about y area=S'), /侧面积只算绕 x 轴的/);
+});

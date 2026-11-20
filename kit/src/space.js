@@ -23,7 +23,7 @@ import { judgePicks, pickFeedback } from './graphpick.js';
 import { close } from './scene.js';
 import { typedRegion, contourLines } from './fx/plane.js';
 import {
-  meshGrid, meshOver, sliceLines, planeFrom, planeMeet2, planes3, splitAll, planeInBox, revolveMesh, revolveVolume,
+  meshGrid, meshOver, sliceLines, planeFrom, planeMeet2, planes3, splitAll, planeInBox, revolveMesh, revolveVolume, revolveArea,
   solidBounds, columnOf, crossSection, sectionArea, fieldArrows3, eig3, baseDepth,
 } from './fx/solid.js';
 
@@ -131,8 +131,9 @@ export function createSpace(container, src, opts = {}) {
       } else if (c.name && c.kind === 'line') {
         const l = lineOf(c, v);
         v[c.name] = [l.p, l.d];
-      } else if (c.name && c.kind === 'revolve') {
-        v[c.name] = volumeOf(c, v);
+      } else if (c.kind === 'revolve' && (c.name || c.areaName)) {
+        if (c.name) v[c.name] = volumeOf(c, v);
+        if (c.areaName) { const full = revolveArea(fn1(c.f, v), fn1(c.df, v), c.a(v), c.b(v)); v[c.areaName] = c.upto ? (full * Math.max(0, Math.min(2 * Math.PI, c.upto(v)))) / (2 * Math.PI) : full; }
       } else if (c.kind === 'column' && (c.loName || c.hiName) && ready) {
         const { col } = columnAt(c, v);
         if (c.loName) v[c.loName] = col ? col.z0 : NaN;

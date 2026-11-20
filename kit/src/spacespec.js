@@ -13,7 +13,9 @@
 // 角度还是弧度：老的三维图（线代）三角函数按角度——rot(…)、cos(60)。高数的图要弧度（曲面 z = sin x cos y 按角度画出来是平的）。
 // 规矩：图里有微积分的东西（函数定义、CALC_CMDS 里的命令）就整张按弧度，别的照旧按角度；`angle: rad` / `angle: deg` 明着定。
 import { splitMods, splitTop } from './mods.js';
-import { parseDef, makeDefs, addDef, compileWith } from './fx/defs.js';
+import { parseDef, makeDefs, addDef, compileWith, expandSrc } from './fx/defs.js';
+import { evaluate } from './expr.js';
+import { diffAst } from './fx/diff.js';
 
 export const SPACE_CMDS = ['let', 'slider', 'vector', 'point', 'segment', 'line', 'span', 'plane', 'box', 'grid', 'quadric', 'text', 'show', 'goal', 'pick',
   'meet', 'angle', 'foot', 'eigen', 'surface', 'curve', 'section', 'tangent', 'revolve', 'disk', 'shell', 'region', 'solid', 'column', 'slice', 'field', 'normals'];
@@ -41,7 +43,7 @@ export function parseSpace(src) {
   let last = null;
   for (const line of lines) {
     const t = line.trim(), c = t.match(re);
-    if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2], { C, cmds }), srcLine: t }); last = null; continue; }
+    if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2], { C, cmds, defs, rad }), srcLine: t }); last = null; continue; }
     const def = parseDef(t);
     if (def) { addDef(defs, def); last = null; continue; }
     const f = line.match(/^([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/);
@@ -106,7 +108,7 @@ function parseBase(over, forStr, C, cmds, what) {
 const SURFACE_EG = 'surface 的写法：surface z = f(x, y)（可加 for x a b, y c d / for r 0 2, t 0 2pi / over D）、surface [x(u, v), y(u, v), z(u, v)] for u a b, v c d、surface x^2 + y^2 - z^2 = 1；前面可以起名 surface S = …';
 const SOLID_EG = 'solid 的写法：solid T = z from 下 to 上 over D（或 for x a b, y c d）、solid T = rho from 0 to 2 for phi 0 pi/4, t 0 2pi（球面坐标）';
 
-function parseCmd(kind, rest, { C, cmds = [] }) {
+function parseCmd(kind, rest, { C, cmds = [], defs, rad }) {
   const need = (k, name, word) => { const c = cmds.find((x) => [].concat(k).includes(x.kind) && x.name === name); if (!c) throw new Error(`${kind}：没有叫 ${name} 的${word}（前面先起名字）`); return c; };
   // 显式曲面 z = f(x, y) [for … | over D]
   const explicitSurface = (name, r) => {
@@ -233,7 +235,14 @@ function parseCmd(kind, rest, { C, cmds = [] }) {
     const w = m ? words(m[2]) : [];
     if (w.length !== 2) throw new Error('revolve 的写法：revolve sqrt(x) for x 0 4 about x（y = f(x) 绕 x 轴转；about y 绕 y 轴；前面可以起名 revolve V = …，V 是体积）');
     if (m[3] !== 'x' && m[3] !== 'y') throw new Error('revolve：about 后面是 x 或者 y（绕哪根轴转）');
-    return { kind, name, f: C(m[1]), a: C(w[0]), b: C(w[1]), axis: m[3], upto: mods.upto !== undefined ? C(String(mods.upto)) : null, mods };
+    // area=S：侧面积 2π∫|f|√(1 + f′²)（只算绕 x 轴的；f′ 页面求）
+    let df = null;
+    if (mods.area !== undefined) {
+      if (m[3] !== 'x') throw new Error('revolve … area=：侧面积只算绕 x 轴的');
+      let d1; try { d1 = diffAst(expandSrc(m[1], defs), 'x', 1); } catch (e) { throw new Error(`revolve：${e.message}`); }
+      df = (vars = {}) => evaluate(d1, vars, rad ? undefined : { deg: true });
+    }
+    return { kind, name, f: C(m[1]), df, areaName: mods.area, a: C(w[0]), b: C(w[1]), axis: m[3], upto: mods.upto !== undefined ? C(String(mods.upto)) : null, mods };
   }
   if (kind === 'disk' || kind === 'shell') {
     const m = body.match(/^([A-Za-z_]\w*)\s+at\s+(.+)$/);
