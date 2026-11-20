@@ -7,7 +7,7 @@
 //     换元：「令 x = φ(t)」「令 t = ψ(x)」以后两行化到同一个变量上的导数比；没写「令」就冒出新变量 → null，绝不判错。
 //   不写 calc:：判恒等（求导写 '）。
 import { parse, evaluate } from '../expr.js';
-import { normalizeFormula, FORMULA_FUNCS } from '../formula.js';
+import { normalizeFormula, FORMULA_FUNCS, halfWidthAscii } from '../formula.js';
 import { compareFx, parseDomain, floatScope, showNum, DEFAULT_RANGE, fxEval } from './sample.js';
 import { diffAst, substitute, has } from './diff.js';
 import { numLimit } from './limit.js';
@@ -92,7 +92,7 @@ export function integrals(text) {
 
 /** 读一行：回 { ast, src, vars（这一行用到的变量）, lim?, hadC } */
 export function readLine(text, { kind, names = [] } = {}) {
-  let t = String(text ?? '');
+  let t = halfWidthAscii(text); // ２ｘ、ｌｉｍ：全角先转半角（dr-final-fix 第 6 条）
   let lim = null;
   if (kind === 'limit') ({ text: t, lim } = stripLims(t));
   if (kind === 'antideriv' || /∫|\\int/.test(t)) t = integrals(t);

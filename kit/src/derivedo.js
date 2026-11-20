@@ -13,7 +13,7 @@
 // 为什么随机取几组：学生写的是一般的式子（α、β 是任意向量），只拿一组数比，碰巧相等的错式子也会被判对。
 // 每行先按 formula.js 的读法读懂（省略乘号、ᵀ、α β、上标），再用 expr.js 在每一组数上算；有一组不等就是不等。
 import { compile, evaluate, isNum, isVec, isMat, valueTeX, eye } from './expr.js';
-import { normalizeFormula, formulaTeX, FORMULA_FUNCS } from './formula.js';
+import { normalizeFormula, formulaTeX, FORMULA_FUNCS, halfWidthAscii } from './formula.js';
 import { parseDeriveCalc, checkFxLine, readLine, specialKind, sameKind } from './fx/deriveline.js';
 import { parseDomain, compareFx, DEFAULT_RANGE } from './fx/sample.js';
 
@@ -106,7 +106,7 @@ export function sampleEnvs(spec, { seed = 'derive', base = {} } = {}) {
 // 学生（和老师）写的式子 → expr.js 能算的。E(2) / I(3) 这样写阶数的单位阵：阶数和题里的方阵一样就当 E；不一样照实说
 const orderOf = (env) => (isMat(env?.E) ? env.E.length : 0);
 function prep(text, names, order = 0) {
-  const t = String(text ?? '').replace(/\b([EI])\s*\(\s*(\d+)\s*\)/g, (all, k, n) => {
+  const t = halfWidthAscii(text).replace(/\b([EI])\s*\(\s*(\d+)\s*\)/g, (all, k, n) => {
     if (!order) throw new Error(`${all} 里的单位阵：题里没有方阵，页面不知道它几阶（vars 里给一个方阵，或者 let ${k} = [[1,0],[0,1]]）`);
     if (Number(n) !== order) throw new Error(`${all} 和题里的 ${order} 阶矩阵阶数不一样`);
     return k;
