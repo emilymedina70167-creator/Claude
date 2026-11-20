@@ -9,9 +9,9 @@ import { equivalent } from '../ncalg.js';
 import { normalizeFormula, FORMULA_FUNCS } from '../formula.js';
 import { compareFx, DEFAULT_RANGE } from '../fx/sample.js';
 import { parseDeriveDo, sampleEnvs, checkLine } from '../derivedo.js';
-import { baseType, probeVars, evalIfs, withDefaults, runVars, runFields, measuresUsed, expectValue, runRefs, slotScope, traceTable, traceRows, traceRowName, rewriteHits } from './spec.js';
+import { baseType, probeVars, evalIfs, withDefaults, runVars, measuresUsed, expectValue, runRefs, slotScope, traceTable, traceRows, traceRowName, rewriteHits, diagnosesOf, variantVars } from './spec.js';
 import { ROLES, matchText, diagnose, normText, joinWords, spanText, tokenizeSentence } from '../entext.js';
-import { variantsOf, variantValues, sortPass } from '../engines/measures.js';
+import { sortPass } from '../engines/measures.js';
 import { checkFill, cellOk, normCell, misreadFill } from '../stepperspec.js';
 import { valueMatch, sameResult, unreadWhy, halfWidth, readProblem } from './values.js';
 import { parseJudge, STEP_KINDS, STEP_TAGS } from '../solvespec.js';
@@ -174,67 +174,6 @@ function runExprItem(probe, e, exprs, raw, rv, names) {
   return m === true ? { id: e.id, ok: true, why: '' } : { id: e.id, ok: false, why: m === null ? unreadWhy(right) : `${e.label}不对` };
 }
 
-// 一个 run 的错法：[{ key, label, vars }]（vars 是把这个 run 的量换成错法算出来的那一份）；against 写了只要那几种
-function variantVars(probe, run, vars) {
-  let list;
-  const fields = runFields(probe, run, {});
-  try { list = variantsOf(run.engine, fields); } catch { return []; }
-  const want = probe.against || [];
-  return list.filter((v) => !want.length || want.includes(v.key)).flatMap((v) => {
-    let vv;
-    try { vv = variantValues(run.engine, fields, v.key); } catch { return []; }
-    if (!vv) return [];
-    const out = { ...vars };
-    for (const k of Object.keys(out)) if (k.startsWith(`${run.name}__`)) delete out[k]; // 错法没交的量不拿对的顶上
-    for (const [k, x] of Object.entries(vv.values)) out[`${run.name}__${k}`] = x;
-    return [{ key: v.key, label: v.label, vars: out, ties: vv.ties.map((t) => `${run.name}.${t}`) }];
-  });
-}
-
-/**
- * 一个 expect 的每一种诊断在这组数上算出来的值：[{ kind: 'tag' | 'hit', key, label, value }]。
- * 引擎的错法（against 写了只要那几种；用到并列的、和对的一样的不要）在前，外部写的错答案（wrong w1: 式子 => 说明）在后。
- * 判（predictItems）和自检（spec.js 的 predictProblems：两种诊断答案一样要报）都照它
- */
-export function diagnosesOf(probe, e, right, vars, allVariants, names = runNames(probe)) {
-  const out = [];
-  const used = new Set(measuresUsed({ runs: probe.runs, expects: [{ value: e.value, wrongs: [] }] }).map((x) => x.run));
-  for (const { run, list } of allVariants()) {
-    if (!used.has(run)) continue;
-    for (const v of list) {
-      if (tiedIn(probe, [e.value], v.ties)) continue;
-      let wv;
-      try { wv = expectValue(e.value, v.vars, names); } catch { continue; }
-      if (wv === undefined || sameResult(wv, right)) continue;
-      if (!out.some((x) => x.key === v.key)) out.push({ kind: 'tag', key: v.key, label: v.label, value: wv });
-    }
-  }
-  for (const w of e.wrongs || []) {
-    let wv;
-    try { wv = expectValue(w.expr, vars, names); } catch { continue; }
-    if (wv === undefined || sameResult(wv, right)) continue;
-    out.push({ kind: 'hit', key: w.id, label: w.msg || w.id, msg: w.msg || '', value: wv });
-  }
-  return out;
-}
-
-/** 一道 predict 的诊断（照固定的字段）：给自检用，[{ id, right, list }]；跑不了的 expect 不列 */
-export function predictDiagnoses(probe, base = {}) {
-  const names = runNames(probe);
-  let rv;
-  try { rv = runVars(probe, {}, base); } catch { return []; }
-  if (rv.error) return [];
-  let variants = null;
-  const allVariants = () => (variants ??= (probe.runs || []).map((run) => ({ run: run.name, list: variantVars(probe, run, rv.vars) })));
-  return (probe.expects || []).flatMap((e) => {
-    if (tiedIn(probe, [e.value], rv.ties)) return [];
-    let right;
-    try { right = expectValue(e.value, rv.vars, names); } catch { return []; }
-    if (typeof right === 'number' && !Number.isFinite(right)) return [];
-    return [{ id: e.id, right, list: diagnosesOf(probe, e, right, rv.vars, allVariants, names) }];
-  });
-}
-
 // 每道题对的值算一次（交之前每打一个字都要查）：probe → { base, rights }
 const RIGHTS = new WeakMap();
 function expectRights(probe, base) {
@@ -288,7 +227,7 @@ function predictItems(probe, answer = {}, base = {}) {
     if (m === true) return { id: e.id, ok: true, why: '' };
     if (m === null) return { id: e.id, ok: false, why: unreadWhy(right), keys: [e.id] };
     const it = { id: e.id, ok: false, why: '' };
-    const hits = diagnosesOf(probe, e, right, rv.vars, allVariants, names).filter((d) => valueMatch(s, d.value) === true);
+    const hits = diagnosesOf(probe, e, right, rv.vars, { names, allVariants }).filter((d) => valueMatch(s, d.value) === true);
     if (hits.length > 1) {
       // 几种诊断在这组数上答案一样（OPT 和「没算一开始调入」、外部写的 r.faults - 3 都是 9）：分不清是哪一种，都记下、不挑一种补讲
       Object.assign(it, { tags: hits.map((d) => d.key), tagFit: 'exact', why: `这几种错法在这组数上答案一样：${hits.map((d) => d.label).join('；')}`, keys: [e.id, 'default'] });
@@ -427,9 +366,11 @@ function traceJudge(probe, answer = {}) {
     });
     return { res: { items, needsClaude: false, stop: items.some((x) => x.ok === false) }, table, cells, ...marks };
   }
-  const diff = rowDiff(table, bad.r, cells[bad.r]);
+  // 靠并列定的那一步（走到这里是有格空着）：写了的格可能是另一种也对的做法，不说「应该是」、不标红，只说空着的
+  const tied = ties.includes(bad.r);
+  const diff = rowDiff(table, bad.r, cells[bad.r]).filter((d) => !tied || d.empty);
   for (const d of diff) marks.bad.add(`${bad.r}:${d.c}`);
-  const it = { id: bad.id, ok: false, why: rowDiffWhy(table, bad.r, diff) };
+  const it = { id: bad.id, ok: false, why: `${tied ? '这一步有并列；' : ''}${rowDiffWhy(table, bad.r, diff)}` };
   // 后面的行：只有那四种排序接着核（carried：ok 是对学生自己的上一行而言；这道题照样没过）；别的引擎错行后面的不列
   const later = [];
   if (sort && CARRY.has(input.algo)) {

@@ -2516,7 +2516,7 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .pz-role { min-height: 44px; }
 .pz-c0 { color: var(--yellow); } .pz-c1 { color: rgb(var(--blue-rgb)); } .pz-c2 { color: var(--pink); }
 .pz-c3 { color: var(--green); } .pz-c4 { color: var(--coral); } .pz-c5 { color: rgb(var(--chalk-rgb) / 0.85); }
-.pz-ans .pz-w { cursor: default; }
+.pz-ans .pz-w { cursor: default; min-width: 0; } /* 只读的答案不是按钮：不撑开成 44px 一格 */
 
 /* 信心标定（confidence.js）：判出对错以后问一句「有把握吗」，点不点都行 */
 .sure-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; font-family: var(--sans); font-size: 15px; color: rgb(var(--chalk-rgb) / 0.7); }

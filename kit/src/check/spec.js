@@ -1067,6 +1067,8 @@ function runProblems(p) {
     const algo = r.fields.algo ?? r.fields.algorithm;
     const literal = algo !== undefined && !slotNames.has(algo);
     // rounds / round# 只有快排有（别的排序一趟就是 pass#）；algo 是学生写的格子时页面跑出来没有就是待核
+    // 没写 algo：跑不起来以外，也说清 round# 要的是快排（不然外部补一个别的 algo 又撞上一条）
+    if (e === 'sort' && /^round(s|\d+)$/.test(u.name) && algo === undefined) out.push(`${u.key}：round# 只有快排有：写 algo: quick（别的排序一趟就是 pass#）`);
     if (e === 'sort' && /^round(s|\d+)$/.test(u.name) && literal && sortAlgo(algo) !== 'quick') out.push(`${u.key}：round#、rounds 只有快排有（真题说的趟：一层划分做完），别的排序一趟就是 pass#`);
     // algo 写成格子（学生自己选）也算：学生选了 C-SCAN 一样说不清
     if (e === 'disk' && (u.name === 'dist' || u.name === 'avg') && r.fields.jump === undefined && (jumpAlgo(algo) || (algo !== undefined && slotNames.has(algo)))) {
@@ -1080,36 +1082,49 @@ function runProblems(p) {
 const O_UNREAD = '复杂度写法页面读不懂：写成 O(n log n)、O(n^2) 这样化简后的';
 const oUnread = (v) => typeof v === 'string' && /^\s*[oOΘθ]\s*[(（]/.test(v) && bigO(v) === null;
 
-// predict 一个 expect 的诊断在固定的字段上算出来的值：[{ key, value }]，外部写的错答案（w1）在前、引擎的错法在后
-// （against 写了只要那几种；用到并列的、和对的一样的不要）——和 judge.js 判的时候认的是同一批
-function diagnosesOf(p, e, right, vars, names) {
+// 一个 run 的错法：[{ key, label, vars, ties }]（vars 是把这个 run 的量换成错法算出来的那一份）；against 写了只要那几种
+export function variantVars(probe, run, vars) {
+  let list;
+  const fields = runFields(probe, run, {});
+  try { list = variantsOf(run.engine, fields); } catch { return []; }
+  const want = probe.against || [];
+  return list.filter((v) => !want.length || want.includes(v.key)).flatMap((v) => {
+    let vv;
+    try { vv = variantValues(run.engine, fields, v.key); } catch { return []; }
+    if (!vv) return [];
+    const out = { ...vars };
+    for (const k of Object.keys(out)) if (k.startsWith(`${run.name}__`)) delete out[k]; // 错法没交的量不拿对的顶上
+    for (const [k, x] of Object.entries(vv.values)) out[`${run.name}__${k}`] = x;
+    return [{ key: v.key, label: v.label, vars: out, ties: vv.ties.map((t) => `${run.name}.${t}`) }];
+  });
+}
+
+/**
+ * 一个 expect 的每一种诊断在这组数上算出来的值：[{ kind: 'tag' | 'hit', key, label, msg?, value }]。
+ * 引擎的错法（against 写了只要那几种；用到并列的、和对的一样的不要）在前，外部写的错答案（wrong w1: 式子 => 说明）在后。
+ * 判（judge.js 的 predictItems）和自检（predictProblems：两种诊断答案一样要报）都用这一份，认的是同一批。
+ * allVariants：每个 run 的错法 [{ run, list: variantVars(…) }]，判的时候几个 expect 共用一份（错法要把引擎再跑几遍）
+ */
+export function diagnosesOf(probe, e, right, vars, { names = (probe.runs || []).map((r) => r.name), allVariants } = {}) {
+  const all = allVariants ? allVariants() : (probe.runs || []).map((run) => ({ run: run.name, list: variantVars(probe, run, vars) }));
   const out = [];
-  for (const w of e.wrongs) {
+  const usedM = measuresUsed({ runs: probe.runs, expects: [{ value: e.value, wrongs: [] }] });
+  const used = new Set(usedM.map((x) => x.run));
+  for (const { run, list } of all) {
+    if (!used.has(run)) continue;
+    for (const v of list) {
+      if (usedM.some((m) => v.ties.includes(m.key))) continue;
+      let wv;
+      try { wv = expectValue(e.value, v.vars, names); } catch { continue; }
+      if (wv === undefined || sameResult(wv, right)) continue;
+      if (!out.some((x) => x.key === v.key)) out.push({ kind: 'tag', key: v.key, label: v.label, value: wv });
+    }
+  }
+  for (const w of e.wrongs || []) {
     let wv;
     try { wv = expectValue(w.expr, vars, names); } catch { continue; }
-    if (wv !== undefined && !sameResult(wv, right)) out.push({ key: w.id, value: wv });
-  }
-  const used = new Set(measuresUsed({ runs: p.runs, expects: [{ value: e.value, wrongs: [] }] }).map((x) => x.run));
-  const want = p.against || [];
-  for (const run of p.runs || []) {
-    if (!used.has(run.name)) continue;
-    const fields = runFields(p, run, {});
-    let list = [];
-    try { list = variantsOf(run.engine, fields); } catch { list = []; }
-    for (const v of list) {
-      if (want.length && !want.includes(v.key)) continue;
-      let wv;
-      try {
-        const got = variantValues(run.engine, fields, v.key);
-        if (!got) continue;
-        const ties = got.ties.map((t) => `${run.name}.${t}`);
-        if (measuresUsed({ runs: p.runs, expects: [{ value: e.value, wrongs: [] }] }).some((m) => ties.includes(m.key))) continue;
-        const vv = Object.fromEntries(Object.entries(vars).filter(([k]) => !k.startsWith(`${run.name}__`)));
-        for (const [k, x] of Object.entries(got.values)) vv[`${run.name}__${k}`] = x;
-        wv = expectValue(e.value, vv, names);
-      } catch { continue; }
-      if (wv !== undefined && !sameResult(wv, right) && !out.some((x) => x.key === v.key)) out.push({ key: v.key, value: wv });
-    }
+    if (wv === undefined || sameResult(wv, right)) continue;
+    out.push({ kind: 'hit', key: w.id, label: w.msg || w.id, msg: w.msg || '', value: wv });
   }
   return out;
 }
@@ -1152,7 +1167,9 @@ function predictProblems(p, base, tieLines, soft = new Set()) {
   for (const e of p.expects) {
     if (!(e.id in right)) continue;
     const groups = [];
-    for (const d of diagnosesOf(p, e, right[e.id], rv.vars, names)) {
+    // 话里外部写的错答案（w1）排在引擎的错法前面
+    const ds = diagnosesOf(p, e, right[e.id], rv.vars, { names });
+    for (const d of [...ds.filter((x) => x.kind === 'hit'), ...ds.filter((x) => x.kind === 'tag')]) {
       const g = groups.find((x) => sameResult(x.value, d.value));
       if (g) g.keys.push(d.key); else groups.push({ value: d.value, keys: [d.key] });
     }
@@ -1305,7 +1322,9 @@ function traceProblems(p, soft = new Set()) {
     return [`${p.use} 的字段读不懂：${e.message}${lost.length ? `（${lost.join('；')}）` : ''}`];
   }
   const out = [...T.unknown];
-  if (p.use === 'disk' && jumpAlgo(p.fields?.algo) && p.fields?.jump === undefined) out.push(`trace 的 disk（algo: ${p.fields.algo}）要填移动距离：C-SCAN / C-LOOK 跳回去的距离算不算各书不一样，${JUMP_MSG}`);
+  // 和 runProblems 一样认 algo、algorithm 两种写法
+  const dAlgo = p.fields?.algo ?? p.fields?.algorithm;
+  if (p.use === 'disk' && jumpAlgo(dAlgo) && p.fields?.jump === undefined) out.push(`trace 的 disk（algo: ${dAlgo}）要填移动距离：C-SCAN / C-LOOK 跳回去的距离算不算各书不一样，${JUMP_MSG}`);
   const tied = traceRows(T.table).filter((x) => T.ties.includes(x.r));
   if (tied.length) {
     const first = tied[0].r;

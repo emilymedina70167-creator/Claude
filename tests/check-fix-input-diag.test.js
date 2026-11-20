@@ -191,10 +191,9 @@ const SHELL = () => P('trace', 'id: t\ntarget: 希尔分组\nlevel: 方法\nuse:
 test('trace 的 tagFit：第 1 趟写成直接插入 38 49 65 97 76 13 27 49 → 还标 shellBlock 的话是 partial、话里「可能」', () => {
   const r = judgeMachine(SHELL(), { cells: ['38 49 65 97 76 13 27 49'.split(' ')] });
   const it = r.items.find((x) => x.ok === false);
-  if (it.tag === 'shellBlock') {
-    assert.equal(it.tagFit, 'partial');
-    assert.match(it.why, /可能像是/);
-  } else assert.equal(it.tagFit, undefined);
+  assert.equal(it.tag, 'shellBlock');
+  assert.equal(it.tagFit, 'partial');
+  assert.match(it.why, /可能像是/);
 });
 
 test('trace 的 tagFit：整行和错法填的一模一样是 exact，话里没有「可能」', () => {
