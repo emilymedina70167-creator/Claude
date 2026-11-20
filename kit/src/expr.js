@@ -65,6 +65,9 @@ const FUNCS = {
   Phi: (x) => 0.5 * (1 + erf(num(x) / Math.SQRT2)),
   phi: (x) => Math.exp(-(num(x) ** 2) / 2) / Math.sqrt(2 * Math.PI),
   // 计算机课：整数、进制、位运算（位运算只对非负整数；负数先用 unsigned(x, n) 换成 n 位的无符号数）
+  // 向量的第 i 个分量（从 1 数）、有几个分量：样本数据的连乘、求和用（sum(i, 1, len(xs), el(xs, i))）
+  el: (v, i) => { const a = asVec(v), k = intOf(i, '第几个') - 1; if (k < 0 || k >= a.length) throw new Error(`没有第 ${k + 1} 个分量（一共 ${a.length} 个，从 1 数）`); return a[k]; },
+  len: (v) => asVec(v).length,
   // 概率统计的特殊函数：Γ、B，χ² / t / F 的密度、分布函数、分位点，几何、超几何（fx/special.js）
   ...DIST,
   log2: (x) => Math.log2(num(x)),

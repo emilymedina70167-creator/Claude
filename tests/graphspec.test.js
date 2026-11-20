@@ -132,6 +132,13 @@ test('上下限里可以有空格（括号里的不切开）', () => {
   assert.equal(d.to({ m: 4 }), 10);
 });
 
+test('show 末尾能写 after / before（做到以后才显示的读数）', () => {
+  const a = one('show $\\chi^2_{0.05} = {x}$ after');
+  assert.equal(a.text, '$\\chi^2_{0.05} = {x}$'); assert.equal(a.mods.after, true);
+  assert.equal(one('show 拖到这里 before').mods.before, true);
+  assert.deepEqual(one('show 之后 after 之前').mods, {}); // 句子中间的不算
+});
+
 test('看不懂的行、不认识的字段照旧报', () => {
   assert.throws(() => parseGraph('画一条线'), /看不懂这一行/);
   assert.ok(CMDS.includes('tangent') && CMDS.includes('plot'));

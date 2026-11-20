@@ -67,3 +67,12 @@ test('内圈够快：sum 2000 项求值 200 次', () => {
   for (let i = 0; i < 200; i++) f({ x: i / 50 });
   assert.ok(performance.now() - t0 < 1500, `用了 ${Math.round(performance.now() - t0)} ms`);
 });
+
+test('el / len：向量的第几个分量、有几个（样本数据连乘、求和用）', () => {
+  assert.equal(evaluate('el([3, 5, 8], 2)'), 5);
+  assert.equal(evaluate('len([3, 5, 8])'), 3);
+  near(evaluate('sum(i, 1, len(xs), el(xs, i))/len(xs)', { xs: [1, 2, 6] }), 3);
+  near(evaluate('prod(i, 1, len(xs), t*exp(-t*el(xs, i)))', { xs: [1, 2], t: 0.5 }), 0.25 * Math.exp(-1.5));
+  assert.throws(() => evaluate('el([1, 2], 3)'), /没有第 3 个/);
+  assert.throws(() => evaluate('el([1, 2], 1.5)'), /整数/);
+});

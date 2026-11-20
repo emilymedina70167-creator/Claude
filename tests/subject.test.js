@@ -19,7 +19,10 @@ test('科目的写法：中英文、简称都认，不认识的是空', () => {
   assert.equal(subjectKey('计组'), '组成原理');
   assert.equal(subjectKey('Operating Systems'), '操作系统');
   assert.equal(subjectKey('计算机网络'), '计网');
-  assert.equal(subjectKey('概率论'), '');
+  // 视觉交互第 1 批起认高数、概率两门课（以前「概率论」是不认识的科目）
+  assert.equal(subjectKey('概率论'), '概率');
+  assert.equal(subjectKey('高等数学'), '高数');
+  assert.equal(subjectKey('政治'), '');
   assert.equal(subjectKey(undefined), '');
   assert.ok(isCS('os') && !isCS('线性代数') && !isCS(''));
   assert.deepEqual(parseTag('<!-- 科目：数据结构 操作系统 -->'), ['数据结构', '操作系统']);
@@ -44,7 +47,7 @@ test('按科目挑小节：没标的通用，标了的只给那几门课；代�
   assert.doesNotMatch(os, /b 的内容/);
   assert.match(os, /^开头的话/);
   // 不认识的科目：全留着
-  const all = docsForSubject(md, '概率论');
+  const all = docsForSubject(md, '政治');
   for (const x of ['a', 'b', 'c', 'd']) assert.match(all, new RegExp(`${x} 的内容`));
   assert.doesNotMatch(all, /\n{3,}/);
 });

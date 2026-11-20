@@ -1,0 +1,431 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>函数图：一元微积分和一维概率</title>
+<script src="la-kit.js"></script>
+<script type="text/markdown">
+---
+unit: 函数图（视觉交互第 1 批）
+subject: 高数
+---
+
+# 函数图：一元微积分和一维概率
+
+每张图对着考纲里的一个考点。式子只写题目里的量，导数、切线、面积、分位点都是页面算的。
+
+## 函数、极限、连续
+
+```graph
+id: gd-inv
+title: 函数和反函数：关于 y = x 对称
+q: 拖动 $a$：$f$ 上的点 $(a, f(a))$ 和反函数上的点 $(f(a), a)$。
+x: -1 4
+y: -1 4
+f(x) = exp(x) - 1
+g(x) = ln(x + 1)
+let a = 0.8 drag on=f(x) snap=0.05
+plot f(x) color=blue label="f" at=0.4
+plot g(x) color=pink label="f⁻¹" at=0.9
+plot x color=gray dashed thin
+point [f(a), a] color=pink
+segment [a, f(a)], [f(a), a]
+show $f({a}) = {dec(f(a), 3)}$，$f^{-1}({dec(f(a), 3)}) = {dec(g(f(a)), 3)}$
+```
+
+```graph
+id: gd-seq
+title: 数列极限的 ε-N：从第 N 项以后都落在带里
+q: 把 $N$ 往右拖，直到 $N$ 后面的点全在黄色的带里。
+x: 0 41
+y: 0.4 1.6
+slider eps 0.03 0.4 = 0.1 step=0.01 label="ε"
+let N = 3 drag snap=1
+dots 1 + (-1)^n/n for n 1 40 color=blue highlight=n>N
+hline 1 + eps color=yellow
+hline 1 - eps color=yellow
+hline 1 color=gray label="a = 1"
+show $N = {N}$，$N$ 以后离 $a$ 最远的一项差 ${dec(maxof(n, N + 1, 400, abs((-1)^n/n)), 4)}$，$\varepsilon = {eps}$
+goal maxof(n, N + 1, 400, abs((-1)^n/n)) < eps msg="这个 $N$ 可以：$n > N$ 时 $|a_n - a| < \varepsilon$"
+```
+
+```graph
+id: gd-ed
+title: 函数极限的 ε-δ：把 δ 调到窗里的曲线都落在带里
+x: 0 4
+y: 0 6
+f(x) = x^2/2 + 1
+slider eps 0.2 2 = 1 step=0.1 label="ε"
+slider d 0.05 1.5 = 1.2 step=0.01 label="δ"
+plot f(x) color=blue label=f(x) at=0.95
+hline 3 + eps color=yellow
+hline 3 - eps color=yellow
+vline 2 - d color=pink
+vline 2 + d color=pink
+point [2, 3] color=yellow label=L
+show 窗里离 $L$ 最远：${dec(maxon(abs(f(x) - 3), x, 2 - d, 2 + d), 3)}$，$\varepsilon = {eps}$
+goal maxon(abs(f(x) - 3), x, 2 - d, 2 + d) < eps msg="这个 δ 可以"
+```
+
+```graph
+id: gd-small
+title: 无穷小的比较：比值在 0 附近趋于几
+q: 拖动 $a$ 靠近 0，看三个比值。
+x: -1.5 1.5
+y: -0.2 1.4
+let a = 1 drag snap=0.01
+plot sin(x)/x color=blue label="sin x / x" at=0.9
+plot (1 - cos(x))/x^2 color=pink label="(1−cos x)/x²" at=0.75
+plot (1 - cos(x))/x color=green label="(1−cos x)/x" at=0.97
+show $x = {a}$：$\dfrac{\sin x}{x} = {dec(sin(a)/a, 4)}$，$\dfrac{1-\cos x}{x^2} = {dec((1 - cos(a))/a^2, 4)}$，$\dfrac{1-\cos x}{x} = {dec((1 - cos(a))/a, 4)}$
+```
+
+```graph
+id: gd-disc
+title: 间断点：在 x 轴上点出全部间断点
+x: -3 4
+y: -4 5
+f(x) = (x<0)*(x+2) + (x>=0)*(x<2)*(x^2-1)/(x-1) + (x>=2)/(x-3)
+plot f(x) color=blue label=f(x) at=0.3
+pick "在 $x$ 轴上点出 $f$ 的全部间断点" on x at 0, 1, 2, 3 tol=0.15
+```
+
+```graph
+id: gd-asym
+title: 渐近线：铅直、水平、斜
+x: -6 8
+y: -10 14
+f(x) = (x^2 + 1)/(x - 1)
+plot f(x) color=blue label=f(x)
+slider k -1 3 = 0 step=0.05 label="k"
+slider b -3 4 = 0 step=0.05 label="b"
+plot k*x + b color=yellow dashed label="y = kx + b" at=0.9
+show $x = 6$ 处曲线和直线差 ${dec(f(6) - (6k + b), 3)}$；$x = -5$ 处差 ${dec(f(-5) - (-5k + b), 3)}$
+goal abs(k - 1) + abs(b - 1) < 0.11 msg="斜渐近线 $y = x + 1$：$k = \lim f(x)/x$，$b = \lim [f(x) - kx]$"
+```
+
+## 一元函数微分学
+
+```graph
+id: gd-deriv
+title: 导数的定义：割线到切线
+q: 把 $h$ 往 0 拖；拖动 $a$ 换一个点。
+x: -1 4
+y: -1 8
+f(x) = x^2/2
+let a = 1 drag on=f(x) snap=0.25
+slider h 0.01 2 = 1.5 step=0.01 label="h"
+plot f(x) color=blue label=f(x) at=0.95
+secant f(x) at a, a + h color=pink label=割线
+tangent f(x) at a color=yellow dashed label=切线
+show 割线斜率 $\dfrac{f(a+h)-f(a)}{h} = {dec((f(a+h) - f(a))/h, 4)}$，切线斜率 $f'(a) = {f'(a)}$
+```
+
+```graph
+id: gd-onesided
+title: 左导数和右导数：|x² − 1| 在 x = 1
+x: -0.5 2.5
+y: -0.5 3
+f(x) = abs(x^2 - 1)
+slider h -1 1 = 0.6 step=0.01 label="h"
+plot f(x) color=blue label=f(x) at=0.2
+secant f(x) at 1, 1 + h color=pink label=割线
+show $h = {h}$，割线斜率 ${dec((f(1+h) - f(1))/h, 4)}$
+```
+
+```graph
+id: gd-dy
+title: 微分：dy 是切线上的增量，Δy 是曲线上的增量
+x: 0 3
+y: 0 6
+f(x) = x^2/2 + 1
+slider dx 0.05 1.5 = 1 step=0.05 label="Δx"
+plot f(x) color=blue label=f at=0.95
+tangent f(x) at 1 color=yellow dashed
+segment [1, f(1)], [1 + dx, f(1)]
+segment [1 + dx, f(1)], [1 + dx, f(1) + f'(1)*dx] color=yellow
+segment [1 + dx, f(1) + f'(1)*dx], [1 + dx, f(1 + dx)] color=pink
+text "dy" at [1 + dx + 0.12, f(1) + f'(1)*dx/2] color=yellow
+text "Δy − dy" at [1 + dx + 0.3, (f(1) + f'(1)*dx + f(1 + dx))/2] color=pink
+show $\Delta y = {dec(f(1 + dx) - f(1), 4)}$，$dy = f'(1)\Delta x = {dec(f'(1)*dx, 4)}$，差 ${dec(f(1 + dx) - f(1) - f'(1)*dx, 4)}$
+```
+
+```graph
+id: gd-mvt
+title: 拉格朗日中值定理：找 ξ
+q: 沿着曲线拖动黄点，让切线和粉色的弦平行。
+x: -0.5 3.5
+y: -1.5 4.5
+f(x) = x^3/4 - x
+let c = 0.5 drag on=f(x) snap=0.02
+plot f(x) color=blue label=f
+secant f(x) at 0, 3 color=pink label=弦
+tangent f(x) at c color=yellow
+show 弦的斜率 ${(f(3) - f(0))/3}$，切线斜率 $f'(\xi) = {dec(f'(c), 3)}$
+goal f'(c) = (f(3) - f(0))/3 tol=0.05 msg="平行了：$f'(\xi)=\dfrac{f(b)-f(a)}{b-a}$"
+```
+
+```graph
+id: gd-ext
+title: 极值点
+x: -2.5 2.5
+y: -4 4
+f(x) = x^3 - 3x
+plot f(x) color=blue label=f
+pick "点出 $f$ 的全部极值点" on f(x) at roots(f'(x), x, -2.5, 2.5) tol=0.15
+plot f'(x) color=pink dashed label="f′" after
+```
+
+```graph
+id: gd-infl
+title: 凹凸和拐点
+x: -1 4
+y: -3 6
+f(x) = x^3/3 - 3x^2/2 + 2x + 1
+plot f(x) color=blue label=f
+pick "点出 $f$ 的拐点" on f(x) at roots(f''(x), x, -1, 4) tol=0.15
+plot f''(x) color=green dashed label="f″" after
+tangent f(x) at 1.5 color=yellow after
+```
+
+```graph
+id: gd-taylor
+title: 泰勒公式：sin x 在 0 展开到 2n + 1 次
+x: -7 7
+y: -2.5 2.5
+slider n 0 6 = 1 step=1 label="n"
+let a = 2 drag snap=0.1
+plot sin(x) color=blue label="sin x" at=0.93
+plot sum(k, 0, n, (-1)^k*x^(2k+1)/(2k+1)!) color=yellow label="Tn" at=0.6
+show $x = {a}$：$\sin x = {dec(sin(a), 5)}$，多项式 ${dec(sum(k, 0, n, (-1)^k*a^(2k+1)/(2k+1)!), 5)}$，差 ${dec(sin(a) - sum(k, 0, n, (-1)^k*a^(2k+1)/(2k+1)!), 5)}$
+```
+
+## 一元函数积分学
+
+```graph
+id: gd-riemann
+title: 定积分的定义：黎曼和
+x: -0.2 1.3
+y: 0 1.3
+f(x) = x^2
+slider n 1 60 = 5 step=1 label="n"
+plot f(x) color=blue label="y = x²"
+riemann S = f(x) from 0 to 1 n=n mid color=yellow
+show $n = {n}$，$S_n = {dec(S, 5)}$，$\displaystyle\int_0^1 x^2\,dx = {int(f(t), t, 0, 1)}$
+goal abs(S - 1/3) < 0.0005 msg="差不到 0.0005 了：分得越细，和越接近积分"
+```
+
+```graph
+id: gd-varlimit
+title: 变限积分函数 Φ(x) = ∫₀ˣ cos t dt
+q: 拖动上限 $a$：黄色的面积就是 $\Phi(a)$ 的高度。
+x: 0 7
+y: -1.5 1.5
+F(x) = int(cos(t), t, 0, x)
+let a = 2 drag snap=0.1
+shade cos(x) 0 a color=yellow
+plot cos(x) color=blue label="cos" at=0.12
+plot F(x) color=pink label="Φ" at=0.35
+point [a, F(a)] color=pink
+show $\Phi({a}) = {dec(F(a), 4)}$，$\Phi'({a}) = {dec(F'(a), 4)}$，$\cos {a} = {dec(cos(a), 4)}$
+```
+
+```graph
+id: gd-area
+title: 两条曲线围成的面积
+x: -0.6 2.6
+y: -0.6 4.6
+f(x) = x + 2
+g(x) = x^2
+area A = f(x), g(x) from -1 to 2 color=yellow
+plot f(x) color=pink label="y = x + 2" at=0.7
+plot g(x) color=blue label="y = x²" at=0.95
+pick "点出两条曲线的交点" at [-1, 1], [2, 4] tol=0.2
+show 面积 $\displaystyle\int_{-1}^{2}\big[(x+2) - x^2\big]dx = {A}$
+```
+
+```graph
+id: gd-improper
+title: 反常积分：一个收敛、一个发散
+q: 把上限 $b$ 往右拖。
+x: 0.5 40
+y: 0 1.2
+let b = 5 drag snap=0.5
+shade 1/x 1 b color=pink
+shade 1/x^2 1 b color=yellow
+plot 1/x color=pink label="1/x" at=0.2
+plot 1/x^2 color=yellow label="1/x²" at=0.08
+show $\displaystyle\int_1^{b}\frac{dx}{x^2} = {dec(int(1/t^2, t, 1, b), 4)}$（到不了 1），$\displaystyle\int_1^{b}\frac{dx}{x} = {dec(int(1/t, t, 1, b), 4)}$（一直长）
+```
+
+## 无穷级数
+
+```graph
+id: gd-series
+title: 数项级数的部分和：Σ 1/k² 收敛，Σ 1/k 发散
+x: 0 61
+y: 0 5
+dots sum(k, 1, n, 1/k^2) for n 1 60 color=blue join label="Σ 1/k²"
+dots sum(k, 1, n, 1/k) for n 1 60 color=pink join label="Σ 1/k"
+hline pi^2/6 color=blue label="π²/6"
+```
+
+```graph
+id: gd-power
+title: 幂级数只在收敛域里贴合：ln(1 + x)
+x: -1.5 2.5
+y: -3 3
+slider n 1 30 = 4 step=1 label="n"
+plot ln(1 + x) color=blue label="ln(1+x)" at=0.85
+plot sum(k, 1, n, (-1)^(k+1)*x^k/k) color=yellow label="Sn" at=0.55
+vline 1 color=pink label="x = 1"
+vline -1 color=pink label="x = −1"
+```
+
+```graph
+id: gd-fourier
+title: 傅里叶级数：周期延拓、间断点处收敛到左右极限的平均
+x: -10 10
+y: -4.5 4.5
+slider n 1 30 = 3 step=1 label="n"
+plot x - 2pi*floor((x + pi)/(2pi)) color=blue label="f" at=0.62
+plot 2*sum(k, 1, n, (-1)^(k+1)*sin(k*x)/k) color=yellow label="Sn" at=0.4
+point [pi, 0] color=pink label="S(π) = 0"
+```
+
+## 概率：一维随机变量
+
+```graph
+id: gd-cdf
+title: 离散型的分布函数：阶梯、右连续
+q: 拖动 $a$ 看 $F(a) = P(X \le a)$。
+x: -1 4
+y: 0 1.15
+F(x) = 0.2*(x>=0) + 0.5*(x>=1) + 0.3*(x>=2)
+plot F(x) color=blue label=F(x)
+let a = 1.5 drag snap=0.1
+show $F({a}) = P(X \le {a}) = {F(a)}$
+```
+
+```graph
+id: gd-pdfcdf
+title: 密度下的面积 = 分布函数的高度
+x: -1 3
+y: 0 1.2
+f(x) = (x>=0)*(x<1)*x + (x>=1)*(x<2)*(2 - x)
+F(x) = int(f(t), t, -1, x)
+let a = 1.2 drag snap=0.05
+shade f(x) -1 a color=yellow
+plot f(x) color=blue label=f(x) at=0.72
+plot F(x) color=pink label=F(x) at=0.9
+point [a, F(a)] color=pink
+show $F({a}) = \displaystyle\int_{-\infty}^{a} f(t)\,dt = {dec(F(a), 4)}$
+```
+
+```graph
+id: gd-binom
+title: 二项分布和泊松分布：n 大 p 小时很接近
+x: -1 13
+slider n 5 200 = 10 step=5 label="n"
+slider lam 0.5 5 = 2 step=0.5 label="λ"
+bars binompmf(k, n, lam/n) for k 0 12 color=blue
+bars poissonpmf(k, lam) for k 0 12 color=pink
+show $B(n, \lambda/n)$：$P(X \le 2) = {dec(binomcdf(2, n, lam/n), 4)}$；$P(\lambda)$：$P(X \le 2) = {dec(poissoncdf(2, lam), 4)}$
+```
+
+```graph
+id: gd-geom
+title: 几何分布和超几何分布
+x: 0 11
+slider p 0.1 0.9 = 0.3 step=0.05 label="p"
+bars geompmf(k, p) for k 1 10 color=blue
+bars hyperpmf(k, 20, 8, 5) for k 0 5 color=pink
+show 几何分布（蓝）：第 $k$ 次才首次成功，$EX = \tfrac1p = {dec(1/p, 3)}$；超几何（粉）：20 件里 8 件次品，取 5 件，$P(X = 2) = {dec(hyperpmf(2, 20, 8, 5), 4)}$
+```
+
+```graph
+id: gd-std
+title: 正态分布的标准化：P(a < X < b)
+q: 拖动 $a$、$b$。
+x: -2 12
+slider mu 2 8 = 5 step=0.5 label="μ"
+slider s 0.5 3 = 2 step=0.25 label="σ"
+let a = 3 drag snap=0.25
+let b = 7 drag snap=0.25
+shade normpdf(x, mu, s) a b color=yellow
+plot normpdf(x, mu, s) color=blue label="N(μ, σ²)"
+show $P({a} < X < {b}) = \Phi\!\left({dec((b - mu)/s, 2)}\right) - \Phi\!\left({dec((a - mu)/s, 2)}\right) = {dec(normcdf(b, mu, s) - normcdf(a, mu, s), 4)}$
+```
+
+```graph
+id: gd-func
+title: 随机变量函数的分布：X ~ N(0, 1)，Y = X² 的分布函数
+q: 拖动 $y$：$F_Y(y) = P(X^2 \le y)$ 是密度下 $[-\sqrt y, \sqrt y]$ 那一块。
+x: -3.5 3.5
+y: 0 1.05
+let y = 1 drag snap=0.05
+shade normpdf(x) -sqrt(max(y, 0)) sqrt(max(y, 0)) color=yellow
+plot normpdf(x) color=blue label="X 的密度" at=0.3
+plot (x>0)*chi2cdf(x, 1) color=pink label="Y 的分布函数" at=0.85
+point [y, chi2cdf(y, 1)] color=pink
+show $F_Y({y}) = P(-\sqrt{y} \le X \le \sqrt{y}) = {dec(int(normpdf(t), t, -sqrt(max(y, 0)), sqrt(max(y, 0))), 4)}$；$Y \sim \chi^2(1)$，查出来 ${dec(chi2cdf(y, 1), 4)}$
+```
+
+## 概率：数理统计
+
+```graph
+id: gd-chi2
+title: χ²(n) 的上 α 分位点
+q: 拖竖线，让右边的面积等于 0.05。
+x: 0 30
+y: 0 0.26
+slider n 1 15 = 4 step=1 label="n"
+let c = 4 drag snap=0.01
+shade chi2pdf(x, n) c inf color=yellow
+plot chi2pdf(x, n) color=blue label="χ²(n)" at=0.6
+show 右边的面积 ${dec(1 - chi2cdf(c, n), 4)}$
+goal 1 - chi2cdf(c, n) = 0.05 tol=0.002 msg="$\chi^2_{0.05}(n)$ 就是这里"
+show $\chi^2_{0.05}(n) = {dec(chi2inv(0.95, n), 3)}$ after
+```
+
+```graph
+id: gd-tf
+title: t(n) 和 F(m, n)：自由度变了形状怎么变
+x: -5 5
+y: 0 0.8
+slider n 1 30 = 2 step=1 label="n"
+slider m 1 20 = 4 step=1 label="m"
+plot normpdf(x) color=gray dashed label="N(0,1)" at=0.42
+plot tpdf(x, n) color=blue label="t(n)" at=0.62
+plot (x>0)*fpdf(x, m, n) color=pink label="F(m,n)" at=0.8
+show $t_{0.025}(n) = {dec(tinv(0.975, n), 4)}$，$F_{0.05}(m, n) = {dec(finv(0.95, m, n), 3)}$
+```
+
+```graph
+id: gd-errors
+title: 假设检验的两类错误
+q: 拖动临界值 $c$，把第一类错误的概率 $\alpha$ 控制在 0.05。
+x: -3 6
+y: 0 0.85
+slider d 0.5 3 = 2 step=0.25 label="μ₁ − μ₀"
+slider n 1 16 = 4 step=1 label="n"
+let c = 0.4 drag snap=0.01
+shade normpdf(x, 0, 1/sqrt(n)) c inf color=red
+shade normpdf(x, d, 1/sqrt(n)) -inf c color=blue
+plot normpdf(x, 0, 1/sqrt(n)) color=gray label="H₀" at=0.3
+plot normpdf(x, d, 1/sqrt(n)) color=blue label="H₁" at=0.62
+show $\alpha = P(\bar X > c \mid H_0) = {dec(1 - normcdf(c, 0, 1/sqrt(n)), 4)}$，$\beta = P(\bar X \le c \mid H_1) = {dec(normcdf(c, d, 1/sqrt(n)), 4)}$
+goal 1 - normcdf(c, 0, 1/sqrt(n)) = 0.05 tol=0.003 msg="$\alpha = 0.05$：这时 $\beta$ 是多少，看读数"
+```
+
+```graph
+id: gd-mle
+title: 最大似然估计：把 λ 拖到似然函数最高的地方
+q: 样本 $x = (0.8, 1.5, 0.4, 2.1, 1.2)$ 来自指数分布 $E(\lambda)$。
+x: 0 3
+let xs = [0.8, 1.5, 0.4, 2.1, 1.2]
+L(t) = prod(i, 1, len(xs), t*exp(-t*el(xs, i)))
+let lam = 0.4 drag on=L(x) snap=0.01
+plot L(x) color=blue label="L(λ)"
+show $\lambda = {lam}$，$L(\lambda) = {dec(L(lam), 6)}$，$\bar x = {dec(sum(i, 1, len(xs), el(xs, i))/len(xs), 3)}$
+goal lam = len(xs)/sum(i, 1, len(xs), el(xs, i)) tol=0.02 msg="$\hat\lambda = 1/\bar x$"
+```
+</script>

@@ -1,6 +1,6 @@
 # 学习台 · 手册
 
-> **版本：2026-11-20b**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
+> **版本：2026-11-20c**　学习台：https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo
 >
 > 这份手册的最新版在学习台 artifact 里（文件 `CLAUDE-PROJECT.md`）；每个组件的写法在 `components/<名字>.md`（`Artifact` 的 `action: "read"`，`path` 写 `"components/answer.md"`，`paths` 一次读好几个）。
 
@@ -34,6 +34,10 @@
 
 计算机课还有进制、取模、位运算（见下一节）。
 
+### 表达式（概率统计：分布的函数）
+
+分布函数、分位数、别的分布（图、读数、`\calc`、答案里都能写，算出来是小数）：`norminv(p, μ, σ)` `binomcdf(k, n, p)` `poissoncdf(k, λ)` `geompmf(k, p)`（第 k 次才首次成功）`hyperpmf(k, N, M, n)`（N 件里 M 件次品，取 n 件，恰 k 件次品）`expcdf(x, λ)` `unifcdf(x, a, b)`；三大抽样分布 `chi2pdf(x, n)` `chi2cdf` `chi2inv(p, n)`、`tpdf(x, n)` `tcdf` `tinv(p, n)`、`fpdf(x, m, n)` `fcdf` `finv(p, m, n)`；`gamma(x)` `beta(a, b)`。`…inv` 是下侧分位数：上 α 分位点写 `chi2inv(1 - α, n)`、`norminv(1 - α)`。
+
 ### 表达式（计算机课：进制、取模、位运算）
 
 `0x1F`、`0b1010_0011`（二进制、十六进制，可以用 `_` 分组）；`mod(a, b)`（结果和 b 同号）、`div(a, b)`（向下取整的整除）、`log2(x)`、`gcd` `lcm`；位运算 `and(a, b)` `or` `xor` `not(a, 位数)` `shl(a, k)` `shr(a, k)`（逻辑移位）`bit(a, i)`（第 i 位，从 0 数）；`signed(x, 8)`（把 8 位的位串当补码读，`signed(0xFF, 8)` 是 −1）、`unsigned(-1, 8)`（写成 8 位无符号数，255）。位运算只对非负整数，负数先用 `unsigned`。`bin(x, 8)`、`hex(x, 4)` 把数写成 8 位二进制、4 位十六进制（负数写成补码，四位一组用等宽字体），只能直接写出来（`\calc{bin(x, 8)}`），不能再拿去算。精确计算用的是大整数，64 位地址也不会丢精度。
@@ -64,8 +68,8 @@ b = [1, 1, -2]
 
 每个组件的写法（字段、例子、常见错法）单独放在学习台里，**要用哪个先读哪个**：`Artifact` 工具 `action: "read"`，`url` 是 https://claude.ai/artifact/BCAMUUkMWc2rt5hSS1ULHo，`path` 写下表里的文件（比如 `"components/answer.md"`）；一次可以用 `paths` 读好几个。没读写法就写组件，页面会报写法错误。
 
-- `scene`（线代）：可交互的图（描述式，不写代码） → `components/scene.md`
-- `predict`（线代）：先猜，再揭晓 → `components/predict.md`
+- `scene`（线代、高数、概率）：可交互的图（描述式，不写代码） → `components/scene.md`
+- `predict`（线代、高数、概率）：先猜，再揭晓 → `components/predict.md`
 - `answer`：自己算、自己填，自动判分 → `components/answer.md`
 - `answer`（数据结构、操作系统、组成原理、计网）：二进制、十六进制 → `components/answer.md`
 - `answer`（线代）：基、特征向量、含 n 的式子 → `components/answer.md`
@@ -77,13 +81,13 @@ b = [1, 1, -2]
 - `practice`（数据结构）：practice 的内置题型（数据结构） → `components/practice.md`
 - `quiz`：选择题 / 填空题 → `components/quiz.md`
 - `solve`：解答题，按步骤判 → `components/solve.md`
-- `recall` / `construct` / `claim` / `discriminate` / `locate`（线代）：检验题（二类，学完以后的吸收检验） → `components/recall.md`
+- `recall` / `construct` / `claim` / `discriminate` / `locate`（线代、高数、概率）：检验题（二类，学完以后的吸收检验） → `components/recall.md`
 - `tradeoff` / `calc`（数据结构、操作系统、组成原理、计网）：408 的检验题（块里的 trace、predict、construct、code 也在这一节） → `components/tradeoff.md`
 - `rewrite`（英语）：英语的检验题（块里的 parse、translate、discriminate、errfind 也在这一节） → `components/rewrite.md`
 - `context`：给页面里 Claude 的背景资料（不显示） → `components/context.md`
 - `draft`：草稿区（Apple Pencil 演算） → `components/draft.md`
 - `steps`：一步步揭开的例题（带着动脑） → `components/steps.md`
-- `steps`（线代）：图跟着步骤动 → `components/steps.md`
+- `steps`（线代、高数、概率）：图跟着步骤动 → `components/steps.md`
 - `matrix`（线代）：会动的矩阵 → `components/matrix.md`
 - `derive`：分拍板书（一段推导一行一行写出来） → `components/derive.md`
 - `sketch`：当场画的示意图（SVG） → `components/sketch.md`
@@ -92,8 +96,8 @@ b = [1, 1, -2]
 - `calc` / `hl` / `chalk`：`\calc`、`\hl`、`\chalk` → `components/calc.md`
 - `recognize`：认方法快练（只认方法，不计算） → `components/recognize.md`
 - `findbug`：找错 → `components/findbug.md`
-- `graph`（线代、计网）：函数图（概率分布、面积、函数性质） → `components/graph.md`
-- `space`（线代）：三维图（可以拖动旋转） → `components/space.md`
+- `graph`（线代、高数、概率、计网）：函数图（一元微积分、概率分布） → `components/graph.md`
+- `space`（线代、高数）：三维图（可以拖动旋转） → `components/space.md`
 - `stepper`：一步步走的过程 → `components/stepper.md`
 - `frames`：自己写每一步的演示（菜单上没有的过程） → `components/frames.md`
 - `elim`（线代）：初等行变换（秩、极大无关组、解方程组、含参讨论、求逆、矩阵方程） → `components/elim.md`

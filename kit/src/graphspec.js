@@ -87,7 +87,11 @@ export function parseGraph(src) {
 }
 
 function parseCmd(kind, rest, { C, num, defs }) {
-  if (kind === 'show') return { kind, text: rest.trim(), mods: {} };
+  if (kind === 'show') {
+    // 读数末尾的 after / before：做到以后才显示（或者做到以前显示）；别的修饰读数没有
+    const m = /^(.*\S)\s+(after|before)$/i.exec(rest.trim());
+    return m ? { kind, text: m[1], mods: { [m[2].toLowerCase()]: true } } : { kind, text: rest.trim(), mods: {} };
+  }
   if (kind === 'text') {
     const m = rest.match(/^"([^"]*)"\s+at\s+(.*)$/) || rest.match(/^“([^”]*)”\s+at\s+(.*)$/);
     if (!m) throw new Error('text 的写法：text "文字" at [x, y]');

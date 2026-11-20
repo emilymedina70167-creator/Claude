@@ -5,6 +5,9 @@
 // 规范的名字 → 认得的写法
 const NAMES = {
   线代: ['线代', '线性代数', 'linear algebra', 'la'],
+  // 高数、概率：数学一的另外两门。教法走数学那一套（不是计算机课、不是英语），组件说明各带各的（函数图、式子作答、三维图）
+  高数: ['高数', '高等数学', '微积分', 'calculus', 'hm'],
+  概率: ['概率', '概率论', '概率统计', '概率论与数理统计', 'probability', 'ps'],
   数据结构: ['数据结构', '数构', 'ds', 'data structure', 'data structures'],
   操作系统: ['操作系统', 'os', 'operating system', 'operating systems'],
   组成原理: ['组成原理', '计算机组成原理', '计组', '计算机组成', 'co', 'computer organization'],
@@ -15,7 +18,7 @@ export const SUBJECTS = Object.keys(NAMES);
 // 计算机四门（408）：教法、术语附不附英文和线代不一样
 export const CS = ['数据结构', '操作系统', '组成原理', '计网'];
 
-/** 课件写的科目 → 规范的名字（线代 / 数据结构 / 操作系统 / 组成原理 / 计网）；不认识的（比如概率论）返回 '' */
+/** 课件写的科目 → 规范的名字（线代 / 高数 / 概率 / 数据结构 / 操作系统 / 组成原理 / 计网 / 英语）；不认识的返回 '' */
 export function subjectKey(s) {
   const t = String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
   if (!t) return '';
