@@ -318,9 +318,86 @@ const plainNum = (x) => { const t = String(x ?? '').trim().replace(/['’′_]+$
 // 不加这一条的话倒数第二趟整行做错（第 2 趟当成直接插入一趟排完）后面也「按上一行推都对」，会被说成笔误
 const nearMiss = (row, mine) => row.cells.filter((c, j) => !c.given && !cellOk(c, mine?.[j] ?? '')).length <= 2;
 
-function traceItems(probe, answer = {}) {
+// 一行里哪几格不对（按判分的单位：一格，或一组不管先后的几格）：[{ c, mine, want, empty }]。
+// 一组格子（页框这样的 group）先把写对了的值消掉，剩下写的不在里面的格就是错的，「应该是」照剩下没对上的值依次给
+function rowDiff(table, r, mine) {
+  const row = table.rows[r];
+  const out = [];
+  const seen = new Set();
+  const want0 = (c) => [].concat(c.v)[0];
+  row.cells.forEach((cell, j) => {
+    if (cell.given) return;
+    const s = String(mine?.[j] ?? '');
+    if (cell.group === undefined) {
+      if (cellOk(cell, s)) return;
+      out.push({ c: j, mine: s.trim(), want: cell.mark ? (normCell(want0(cell)) ? '√' : '') : String(want0(cell) ?? ''), empty: !cell.mark && normCell(s) === '', mark: !!cell.mark });
+      return;
+    }
+    if (seen.has(cell.group)) return;
+    seen.add(cell.group);
+    const idx = row.cells.map((x, i) => (x.group === cell.group && !x.given ? i : -1)).filter((i) => i >= 0);
+    const left = row.cells.filter((x) => x.group === cell.group).map((x) => String(want0(x) ?? '')).filter((x) => normCell(x) !== '');
+    for (const x of row.cells.filter((y) => y.group === cell.group && y.given)) { const k = left.findIndex((w) => normCell(w) === normCell(want0(x))); if (k >= 0) left.splice(k, 1); }
+    const bad = idx.filter((i) => {
+      const v = normCell(mine?.[i] ?? '');
+      if (!v) return true;
+      const k = left.findIndex((w) => normCell(w) === v);
+      if (k < 0) return true;
+      left.splice(k, 1);
+      return false;
+    });
+    // 空着而且这一组本来就不该再有值的格不算错（组里的值比格子少）
+    for (const i of bad) {
+      const s = String(mine?.[i] ?? '');
+      const empty = normCell(s) === '';
+      const want = left.length ? left.shift() : '';
+      if (empty && !want) continue;
+      out.push({ c: i, mine: s.trim(), want, empty });
+    }
+  });
+  return out.sort((a, b) => a.c - b.c);
+}
+
+// 一行错在哪的话：「第 1 趟（d = 4）第 7、8 格：你写的 23 16，应该是 16 23」；空着的另说「第 3 格还空着」；整行空着「第 2 趟还空着」
+function rowDiffWhy(table, r, diff) {
+  const name = traceRowName(table, r);
+  const fill = table.rows[r].cells.filter((c) => !c.given && !c.mark);
+  if (fill.length && diff.filter((d) => d.empty).length >= fill.length) return `${name}还空着`;
+  const colName = (c) => { const h = table.head?.[c]; return /^\d+$/.test(String(h ?? '')) ? { n: String(h) } : h !== undefined && h !== '' ? { l: String(h) } : { n: String(c + 1) }; };
+  const cols = (ds) => {
+    const xs = ds.map((d) => colName(d.c));
+    if (xs.every((x) => x.n)) return `第 ${xs.map((x) => x.n).join('、')} 格`;
+    return `的${xs.map((x) => (x.n ? `第 ${x.n} 格` : `「${x.l}」`)).join('、')}`;
+  };
+  const list = (ds, key) => { const vs = ds.map((d) => (d[key] === '' ? '（空）' : d[key])); return vs.some((v) => /\s/.test(v)) ? vs.map((v) => `「${v}」`).join('') : vs.join(' '); };
+  // 打勾的格不说「你写的 空」：说该不该打勾
+  const written = diff.filter((d) => !d.empty && !d.mark), blank = diff.filter((d) => d.empty);
+  const tick = diff.filter((d) => d.mark && d.want), untick = diff.filter((d) => d.mark && !d.want);
+  const parts = [];
+  const more = (t) => (parts.length ? t.replace(/^的/, '') : t);
+  if (written.length) parts.push(`${cols(written)}：你写的 ${list(written, 'mine')}，应该是 ${list(written, 'want')}`);
+  if (blank.length) parts.push(`${more(cols(blank))}还空着`);
+  if (tick.length) parts.push(`${more(cols(tick))}该打勾`);
+  if (untick.length) parts.push(`${more(cols(untick))}不该打勾`);
+  return `${name}${parts.join('；') || '不对'}`;
+}
+
+function traceItems(probe, answer = {}) { return traceJudge(probe, answer).res; }
+
+/**
+ * 没过的那一屏重画学生交的表用（shell.js）：{ table, cells（统一过撇号的作答）, bad: Set('r:c')（错的格）, badExtra: Set(i), faint: Set(r)（按自己的上一行推对了的行） }；
+ * 不是 trace、页面跑不了引擎回 null
+ */
+export function traceReview(probe, answer = {}) {
+  if (baseType(probe) !== 'trace') return null;
+  const j = traceJudge(probe, answer);
+  return j.table ? { table: j.table, cells: j.cells, bad: j.bad, badExtra: j.badExtra, faint: j.faint } : null;
+}
+
+function traceJudge(probe, answer = {}) {
   let T;
-  try { T = traceTable(probe); } catch (e) { return { items: [{ id: 'run', ok: null, why: `页面跑不了：${e.message}` }], needsClaude: false, stop: true }; }
+  const marks = { bad: new Set(), badExtra: new Set(), faint: new Set() };
+  try { T = traceTable(probe); } catch (e) { return { res: { items: [{ id: 'run', ok: null, why: `页面跑不了：${e.message}` }], needsClaude: false, stop: true } }; }
   const { table, ties, input } = T;
   const sort = probe.use === 'sort';
   const raw = answer.cells || [];
@@ -345,13 +422,14 @@ function traceItems(probe, answer = {}) {
     if (!items.some((x) => x.ok === null)) (table.extra || []).forEach((cell, i) => {
       const s = cells.extra[i];
       const ok = normCell(s) !== '' && cellOk(cell, s);
-      items.push({ id: `x${i + 1}`, ok, why: ok ? '' : `「${cell.label}」${normCell(s) === '' ? '还空着' : '不对'}` });
+      if (!ok) marks.badExtra.add(i);
+      items.push({ id: `x${i + 1}`, ok, why: ok ? '' : `「${cell.label}」${normCell(s) === '' ? '还空着' : `不对：你写的 ${s.trim()}，应该是 ${[].concat(cell.v)[0]}`}` });
     });
-    return { items, needsClaude: false, stop: items.some((x) => x.ok === false) };
+    return { res: { items, needsClaude: false, stop: items.some((x) => x.ok === false) }, table, cells, ...marks };
   }
-  const head = table.head?.[bad.first.c];
-  const where = /^\d+$/.test(String(head ?? '')) ? `第 ${head} 格` : head !== undefined ? `的「${head}」` : `第 ${bad.first.c + 1} 格`;
-  const it = { id: bad.id, ok: false, why: `${traceRowName(table, bad.r)}${where}${bad.first.empty ? '还空着' : '不对'}` };
+  const diff = rowDiff(table, bad.r, cells[bad.r]);
+  for (const d of diff) marks.bad.add(`${bad.r}:${d.c}`);
+  const it = { id: bad.id, ok: false, why: rowDiffWhy(table, bad.r, diff) };
   // 后面的行：只有那四种排序接着核（carried：ok 是对学生自己的上一行而言；这道题照样没过）；别的引擎错行后面的不列
   const later = [];
   if (sort && CARRY.has(input.algo)) {
@@ -364,7 +442,13 @@ function traceItems(probe, answer = {}) {
     for (const x of rows.filter((y) => y.r > bad.r)) {
       const mine = nums(x.r);
       let ok = false;
-      if (prev && mine) { const want = sortPass(input.algo, prev, x.r + 1, { gaps: input.gaps, n }); ok = want.length === mine.length && want.every((v, i) => v === mine[i]); }
+      if (prev && mine) {
+        const want = sortPass(input.algo, prev, x.r + 1, { gaps: input.gaps, n });
+        ok = want.length === mine.length && want.every((v, i) => v === mine[i]);
+        // 画回去时标出照学生自己的上一行推也不对的格（给出的格不标）
+        if (!ok) table.rows[x.r].cells.forEach((c, j) => { if (!c.given && want[j] !== mine[j]) marks.bad.add(`${x.r}:${j}`); });
+      } else table.rows[x.r].cells.forEach((c, j) => { if (!c.given && normCell(cells[x.r][j]) === '') marks.bad.add(`${x.r}:${j}`); });
+      if (ok) marks.faint.add(x.r);
       const name = traceRowName(table, x.r);
       const blank = table.rows[x.r].cells.some((c, j) => !c.given && normCell(cells[x.r][j]) === '');
       const why = ok ? '' : blank ? `${name}还空着` : !mine ? `${name}读不懂：写一排数` : !prev ? '上一行读不成一排数，接着核不了' : `${name}按你写的上一行推也不对`;
@@ -413,9 +497,9 @@ function traceItems(probe, answer = {}) {
     const fit = fitOf(hitV);
     Object.assign(it, { tag: hitV.key, tagFit: fit, why: `${it.why}；${say(fit, hitV.label)}`, keys: [`tag=${hitV.key}`, it.id] });
   } else if (later.length && later.every((y) => y.ok === true) && nearMiss(table.rows[bad.r], cells[bad.r])) {
-    Object.assign(it, { tag: 'slip', why: `后面按你自己的上一行推都对，第 ${bad.r + 1} 趟这一处写错了`, keys: ['slip', 'tag=slip', it.id] });
+    Object.assign(it, { tag: 'slip', why: `${it.why}（后面按你自己的上一行推都对）`, keys: ['slip', 'tag=slip', it.id] });
   } else it.keys = [it.id];
-  return { items: [...items, it, ...later], needsClaude: false, stop: true };
+  return { res: { items: [...items, it, ...later], needsClaude: false, stop: true }, table, cells, ...marks };
 }
 
 // —— 408 的 code（计划 4 Task 5）：真跑老师给的测试，一个测试一项；编译错一项 compile ——

@@ -7,7 +7,8 @@
 //   save(state)：存进度（sessions/{编号}/check/{检验 id}）；record(ids, state)：写这几道的证据；onEnd({ state, absorbs })：结束、回到黑板
 import { createFlow, step, view, resumeJobs, needsFallback, absorbOf } from './flow.js';
 import { materialize } from './template.js';
-import { judgeMachine, JUDGE_WAIT, itemLabel } from './judge.js';
+import { judgeMachine, JUDGE_WAIT, itemLabel, traceReview } from './judge.js';
+import { fillTableView } from './filltable.js';
 import { toRecord } from './record.js';
 import { probeView } from './probes.js';
 import { createTimer } from '../timing.js';
@@ -248,8 +249,18 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
       <div class="ck-tag">${t.guessed ? '蒙对了' : '没过'} · ${escapeHtml(v.id)}</div>
       ${bad.length ? `<ul class="ck-items">${bad.map((it) => itemLine(check.probes[v.id], { ...it, why: dropNotes(it.why, notes) })).join('')}</ul>` : t.failed.includes('giveup') ? '<p>想不出来。</p>' : ''}
       ${notes.length ? `<p class="ck-note">${notes.map((x) => escapeHtml(x)).join('；')}</p>` : ''}
+      <div class="ck-review-slot"></div>
       ${text ? `<div class="ck-teach-text">${mdToHtml(text)}</div>` : ''}
       <button type="button" class="btn btn-primary ck-next"${t.text === null && t.key === 'claude' ? ' disabled' : ''}>${t.last ? '接着做' : '做一道同类的'}</button></div>`;
+    // 手推（trace）：把交的表只读地重画一遍，错的格标红、按自己的上一行推对了的行画淡（光看一句话找不到自己写错的那几格）
+    const slot = main.querySelector('.ck-review-slot');
+    const answer = state.results[v.id]?.answer;
+    let rv = null;
+    try { rv = answer && !t.guessed ? traceReview(check.probes[v.id], answer) : null; } catch { rv = null; }
+    if (rv) {
+      slot.innerHTML = '<div class="ck-label">你交的表</div>';
+      fillTableView(slot, rv.table, rv.cells, rv);
+    } else slot.remove();
     // 补讲还在写（页面里的 Claude）：按钮先灰着，字到了这一屏重画（screenKey 变了）
     main.querySelector('.ck-next').addEventListener('click', () => { if (!tooSoon(shownAt, now())) dispatch({ type: 'teachSeen', id: v.id }); });
   }

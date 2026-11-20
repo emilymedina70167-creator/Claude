@@ -2474,7 +2474,8 @@ g.sv-new.sv-flash > rect, g.sv-new.sv-flash > circle, g.sv-new.sv-flash > path {
 .en-choice option { color: initial; background: initial; }
 .en-choice:disabled { opacity: 1; cursor: default; }
 .en-words { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 4px; margin: 6px 0 12px; font: 18px/1.6 var(--sans); }
-.en-word, .pz-w { min-height: 44px; min-width: 36px; padding: 4px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--chalk); font: inherit; cursor: pointer; }
+/* 点词的按钮（english.js 的 errfind、parse，检验里的同一套 enpick.js）：of、in、by 这种短词也至少 44px 宽 */
+.en-word, .pz-w { min-height: 44px; min-width: 44px; padding: 4px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--chalk); font: inherit; cursor: pointer; }
 .en-word:hover, .pz-w:hover { border-color: rgb(var(--chalk-rgb) / 0.25); }
 /* 点词的句子：词和词之间不要撑得太开（读着像一个个按钮），标点贴着前一个词；每个词下面一道很淡的点线，看得出能点 */
 .en-words .en-word { padding: 4px 5px; text-decoration: underline dotted rgb(var(--chalk-rgb) / 0.28); text-decoration-thickness: 1.5px; text-underline-offset: 7px; }

@@ -1267,6 +1267,17 @@ export function traceTable(probe) {
   return out;
 }
 
+// 数字键盘：整张表要填的格的答案全是不带符号的整数（排序没有 49′、页号、块号）才给 inputmode="numeric"。
+// 按整张表定、不按一格定：一格一格定的话，哪一格弹字母键盘就等于告诉学生 49′ 落在哪儿。
+// iPad 的数字键盘打不出「-」「′」，答案里有负数、49′、字母的表一律用默认键盘；表下面那几格（缺页率这种，可能写分数）也用默认的
+/** 填表（filltable.js）给不给数字键盘 */
+export function numericTable(t) {
+  const want = t.rows.flatMap((row) => row.cells.filter((c) => !c.given && !c.mark).map((c) => [].concat(c.v)[0])); // 只看标准答案（排序的格另收 1′ 这种写法）
+  // 一行里有相同的数（排序的 49 和 49′：标准答案都记成 49，学生会想写 49′ 分开）也用默认键盘
+  const twins = t.rows.some((row) => { const xs = row.cells.map((c) => String([].concat(c.v)[0] ?? '').trim()).filter(Boolean); return new Set(xs).size < xs.length && row.cells.some((c) => [].concat(c.v).some((x) => /['′]/.test(String(x)))); });
+  return !twins && want.length > 0 && want.every((v) => /^\d+$/.test(String(v ?? '').trim()) || String(v ?? '').trim() === '');
+}
+
 /** 这张表的第 k 个要填的行（r1、r2…从 1 数，只数有要填的格的行）：[{ r（table.rows 的下标）, id }] */
 export function traceRows(table) {
   return table.rows.map((row, r) => ({ r, row })).filter((x) => x.row.cells.some((c) => !c.given)).map((x, k) => ({ r: x.r, id: `r${k + 1}` }));

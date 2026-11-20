@@ -136,18 +136,20 @@ must m1: be 的时态跟原句（一般过去时用 was / were）+ 过去分词
 teach h1: 原句是一般过去时，被动写成 was / were + 过去分词。
 teach default: 宾语提到前面当主语，谓语换成 be + 过去分词，原来的主语放到 by 后面。
 ${retry(r)}${F}`;
-const voiceDisc = (id, { q, answer, retry: r = [] }) => `${F}discriminate
+// must、teach pick 照这一句自己写（dr-plan4-fix 6：以前三道共用 p3 的「谓语是另一个动词」，p3b 答案是谓语，选对、理由写对会被判没过）
+const voiceDisc = (id, { q, answer, must, pick, retry: r = [] }) => `${F}discriminate
 id: ${id}
 q: ${q}
 options: 谓语 | 非谓语
 answer: ${answer}
 target: 过去分词作定语
 level: 核心
-must m1: 句子的谓语是另一个动词；这个词是过去分词作后置定语（= which were …）
-teach pick: 一句话一个谓语：先找真正的谓语，剩下的 -ed 是定语。
-teach default: 先找句子的谓语动词，再看这个 -ed 修饰谁。
+must m1: ${must}
+teach pick: ${pick}
+teach default: 先找句子里有没有别的谓语动词：有的话这个 -ed 才可能是定语，再看它修饰谁。
 ${retry(r)}${F}`;
-const voiceErr = (id, { text, word, fix, retry: r = [] }) => `${F}errfind
+// teach fix 照这一句的动词写（以前三道都是「know 的过去分词是 known」）
+const voiceErr = (id, { text, word, fix, teach, retry: r = [] }) => `${F}errfind
 id: ${id}
 q: 点出用错的那个词，再写改成什么
 text: ${text}
@@ -156,7 +158,7 @@ fix: ${fix}
 target: 被动的过去分词
 level: 基础
 teach word: 被动是 be + 过去分词：be 后面的动词原形是错的。
-teach fix: know 的过去分词是 known，不是 knew。
+teach fix: ${teach}
 teach default: 被动语态里 be 后面跟过去分词。
 ${retry(r)}${F}`;
 
@@ -169,11 +171,11 @@ export const DEV_CHECK_EN_BODY = [
   voiceRewrite('p2', { text: 'The villagers built the bridge in 1990.', has: 'was …ed | was built', not: 'built the bridge', example: 'The bridge was built by the villagers in 1990.', retry: ['p2a', 'p2b'] }),
   voiceRewrite('p2a', { text: 'The teacher praised the students yesterday.', has: 'were …ed | were praised', not: 'praised the students', example: 'The students were praised by the teacher yesterday.' }),
   voiceRewrite('p2b', { text: 'Tom cleaned the room last night.', has: 'was …ed | was cleaned', not: 'cleaned the room', example: 'The room was cleaned by Tom last night.' }),
-  voiceDisc('p3', { q: '“The data collected last year show a clear trend.” 里 collected 是谓语还是非谓语？为什么？', answer: '非谓语', retry: ['p3a', 'p3b'] }),
-  voiceDisc('p3a', { q: '“The man injured in the accident was taken to hospital.” 里 injured 是谓语还是非谓语？为什么？', answer: '非谓语' }),
-  voiceDisc('p3b', { q: '“The students collected the data last year.” 里 collected 是谓语还是非谓语？为什么？', answer: '谓语' }),
-  voiceErr('p4', { text: 'He was know as the best teacher in the town.', word: 'know', fix: 'known | !knew=knew 是过去式，被动要过去分词', retry: ['p4a', 'p4b'] }),
-  voiceErr('p4a', { text: 'The letter was write in English.', word: 'write', fix: 'written | !wrote=wrote 是过去式，被动要过去分词' }),
-  voiceErr('p4b', { text: 'The windows were break by the storm.', word: 'break', fix: 'broken | !broke=broke 是过去式，被动要过去分词' }),
+  voiceDisc('p3', { q: '“The data collected last year show a clear trend.” 里 collected 是谓语还是非谓语？为什么？', answer: '非谓语', must: '句子的谓语是 show；collected 是过去分词作后置定语，修饰 data（= which were collected last year）', pick: '一句话一个谓语：show 才是谓语，collected last year 修饰 data。', retry: ['p3a', 'p3b'] }),
+  voiceDisc('p3a', { q: '“The man injured in the accident was taken to hospital.” 里 injured 是谓语还是非谓语？为什么？', answer: '非谓语', must: '句子的谓语是 was taken；injured 是过去分词作后置定语，修饰 man（= who was injured in the accident）', pick: '一句话一个谓语：was taken 才是谓语，injured in the accident 修饰 man。' }),
+  voiceDisc('p3b', { q: '“The students collected the data last year.” 里 collected 是谓语还是非谓语？为什么？', answer: '谓语', must: '句中没有别的谓语，collected 是主语 students 的谓语（一般过去时）', pick: '句中没有别的谓语动词：collected 前面是主语 students、后面是宾语 the data，它就是谓语（一般过去时）。' }),
+  voiceErr('p4', { text: 'He was know as the best teacher in the town.', word: 'know', fix: 'known | !knew=knew 是过去式，被动要过去分词', teach: 'know 的过去分词是 known，不是 knew。', retry: ['p4a', 'p4b'] }),
+  voiceErr('p4a', { text: 'The letter was write in English.', word: 'write', fix: 'written | !wrote=wrote 是过去式，被动要过去分词', teach: 'write 的过去分词是 written，不是 wrote。' }),
+  voiceErr('p4b', { text: 'The windows were break by the storm.', word: 'break', fix: 'broken | !broke=broke 是过去式，被动要过去分词', teach: 'break 的过去分词是 broken，不是 broke。' }),
 ].join('\n');
 export const DEV_CHECK_EN = [`\`\`\`\`board ${DEV_CHECK_EN_HEAD}`, DEV_CHECK_EN_BODY, '````'].join('\n');

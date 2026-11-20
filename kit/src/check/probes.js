@@ -69,6 +69,7 @@ function slotBoxes(host, slots) {
     grid.appendChild(cell);
     const box = cell.querySelector('.ck-slot-box');
     // 408 的格子：一排数（下面回显切成几个、数一数）、一段字、几个进程（一行一个）
+    // 不设 inputmode：构造题的一排数要能写 49′（造不稳定的例子就靠它），iPad 的数字键盘打不出「′」「-」
     // 一排数的回显和交之前的格式检查用同一个切法（spec.js 的 seqTokens：括号、全角逗号、顿号都一样），数出来的个数才对得上
     if (s.kind === 'seq') textAnswerInput(box, { kind: 'line', ph: '按顺序写，用空格或逗号隔开', echo: (v) => { const t = seqTokens(v); return t.length ? `${t.join(' → ')}　${t.length} 个` : ''; } });
     else if (s.kind === 'text') textAnswerInput(box, { kind: 'line', ph: '写在这里' });
