@@ -462,6 +462,8 @@ const SPECIAL = {
   roots: { bind: 1, run: rootsOn },
 };
 const FORM_ONLY = new Set(Object.keys(SPECIAL));
+/** 这个名字是不是页面自带的函数（含特殊形式）：图里定义自己的函数时不能撞名 */
+export const isFuncName = (name) => Object.hasOwn(FUNCS, name) || Object.hasOwn(SPECIAL, name) || Object.hasOwn(DEG, name);
 
 export const isNum = (x) => typeof x === 'number';
 export const isVec = (x) => Array.isArray(x) && x.length > 0 && x.every(isNum);
