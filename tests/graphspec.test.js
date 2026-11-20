@@ -118,6 +118,20 @@ test('pick：在曲线上、在 x 轴上、随便点', () => {
   assert.throws(() => one('pick "交点" at 1, 2').targets({}), /\[x, y\]/);
 });
 
+test('上下限里可以有空格（括号里的不切开）', () => {
+  const sh = one('shade chi2pdf(x, n) chi2inv(1 - al, n) inf color=yellow');
+  assert.equal(sh.kind, 'shade');
+  assert.equal(sh.b({}), Infinity);
+  near(sh.a({ al: 0.05, n: 10 }), 18.307, 1e-3);
+  assert.equal(one('shade x + 1 0 2').f({ x: 1 }), 2);
+  const r = one('riemann x^2 from a - 1 to a + 1 n=4');
+  assert.equal(r.a({ a: 3 }), 2); assert.equal(r.b({ a: 3 }), 4);
+  const p = one('plot x^2 for x max(0, a) min(4, a + 2)');
+  assert.equal(p.lo({ a: 1 }), 1); assert.equal(p.hi({ a: 1 }), 3);
+  const d = one('dots 1/n for n 1 floor(2.5 * m)');
+  assert.equal(d.to({ m: 4 }), 10);
+});
+
 test('看不懂的行、不认识的字段照旧报', () => {
   assert.throws(() => parseGraph('画一条线'), /看不懂这一行/);
   assert.ok(CMDS.includes('tangent') && CMDS.includes('plot'));

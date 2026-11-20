@@ -13,6 +13,8 @@
 import { isNum } from './expr.js';
 import { parseGraph } from './graphspec.js';
 import { compileWith } from './fx/defs.js';
+import { sampleCurve, labelSpot } from './fx/curve.js';
+import { riemannRects, betweenArea, areaBetween, placeLabels } from './fx/graphgeom.js';
 import { splitMods, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { sliderText, figureControls, dragHandles } from './plot.js';
@@ -35,6 +37,14 @@ function niceStep(span, n = 6) {
 }
 const fmtTick = (v, step) => { const d = Math.max(0, -Math.floor(Math.log10(step) + 1e-9)); return String(Number(v.toFixed(d))); };
 
+let clipSeq = 0;
+// 一帧里曲线一共最多采多少个点：曲线多、滑块拖得快时，后面的曲线少采一点（不卡手）
+const FRAME_POINTS = 30000;
+// 像素坐标别太离谱：冲出窗口很远的点压到这里，再由裁剪框裁掉（斜率差不了多少，极点附近的点本来就很密）
+const FAR = 4000;
+// 标签的大小粗估（手写体 23px）：中文一个字 23，别的 12
+const labelSize = (s) => ({ w: [...String(s)].reduce((w, ch) => w + (/[⺀-鿿＀-￯]/.test(ch) ? 23 : 12), 0) + 6, h: 26 });
+
 export function createGraph(container, src, opts = {}) {
   const { fields, cmds, defs, xr, yr: yrGiven } = typeof src === 'string' ? parseGraph(src) : src;
   // 读数、highlight= 里的式子：和曲线同一套（弧度、认 f(x) 的定义）
@@ -49,36 +59,55 @@ export function createGraph(container, src, opts = {}) {
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('class', 'plane graph');
   container.querySelector('.g-plot').appendChild(svg);
+  const clipId = `g-clip-${++clipSeq}`;
+
+  // 一元函数：把自变量放进一层派生的变量里（不每个点拷贝一遍全部变量）
+  const fnOf = (f, v, name = 'x') => { const vx = Object.create(v); return (x) => { vx[name] = x; const y = f(vx); if (!isNum(y)) throw new Error('函数值要是一个数'); return y; }; };
+  const at = (f, v, x, name = 'x') => fnOf(f, v, name)(x);
+  const quiet = (g) => (x) => { try { const y = g(x); return Number.isFinite(y) ? y : NaN; } catch { return NaN; } };
 
   const env = () => {
     const v = { ...base, ...extra, ...state.slider };
     for (const c of cmds) {
-      if (c.kind !== 'let') continue;
-      v[c.name] = Object.hasOwn(state.override, c.name) ? state.override[c.name]
-        : c.mods.drag && Object.hasOwn(state.drag, c.name) ? state.drag[c.name] : c.expr(v);
+      if (c.kind === 'let') {
+        v[c.name] = Object.hasOwn(state.override, c.name) ? state.override[c.name]
+          : c.mods.drag && Object.hasOwn(state.drag, c.name) ? state.drag[c.name] : c.expr(v);
+      } else if (c.name && c.kind === 'area') {
+        // 起了名字的面积、黎曼和：后面的命令、读数、目标里是一个数
+        v[c.name] = areaBetween(fnOf(c.f, v), fnOf(c.g, v), c.a(v), c.b(v));
+      } else if (c.name && c.kind === 'riemann') {
+        v[c.name] = riemannRects(fnOf(c.f, v), c.a(v), c.b(v), c.n(v), c.rule).sum;
+      }
     }
     return v;
   };
-  const at = (f, v, x, name = 'x') => { const y = f({ ...v, [name]: x }); if (!isNum(y)) throw new Error('函数值要是一个数'); return y; };
 
-  // y 的范围没写时，按曲线自动取（从 0 开始，留一点头）
+  // y 的范围没写时，按曲线自动取（从 0 开始，留一点头）。有极点时最大最小会被撑到几万：那时按中间 96% 的值取
   let yr = yrGiven;
   if (!yr) {
-    let top = 0, bot = 0;
+    const ys = [0];
     try {
       const v = env();
+      const take = (f, lo, hi, name) => { const g = quiet(fnOf(f, v, name)); for (let i = 0; i <= 80; i++) { const y = g(lo + ((hi - lo) * i) / 80); if (!Number.isNaN(y)) ys.push(y); } };
       for (const c of cmds) {
-        if (c.kind === 'plot' || c.kind === 'shade') for (let i = 0; i <= 80; i++) { const y = at(c.f, v, xr[0] + ((xr[1] - xr[0]) * i) / 80); if (Number.isFinite(y)) { top = Math.max(top, y); bot = Math.min(bot, y); } }
-        if (c.kind === 'bars') for (let k = Math.ceil(c.from(v)); k <= c.to(v); k++) top = Math.max(top, at(c.f, v, k, c.param));
+        if (['plot', 'shade', 'tangent', 'secant', 'riemann'].includes(c.kind)) take(c.f, xr[0], xr[1]);
+        if (c.kind === 'area') { take(c.f, xr[0], xr[1]); take(c.g, xr[0], xr[1]); }
+        if (c.kind === 'bars' || c.kind === 'dots') { const g = quiet(fnOf(c.f, v, c.param)); for (let k = Math.ceil(c.from(v)); k <= Math.min(c.to(v), c.from(v) + 2000); k++) { const y = g(k); if (!Number.isNaN(y)) ys.push(y); } }
       }
     } catch { /* 画的时候再报错 */ }
+    ys.sort((p, q) => p - q);
+    let bot = ys[0], top = ys[ys.length - 1];
+    const lo = ys[Math.floor(ys.length * 0.02)], hi = ys[Math.min(ys.length - 1, Math.ceil(ys.length * 0.98))];
+    if (top - bot > 20 * (hi - lo) && hi > lo) { bot = Math.min(0, lo - (hi - lo) * 0.5); top = Math.max(0, hi + (hi - lo) * 0.5); }
     if (top === bot) top = bot + 1;
-    yr = [bot, top * 1.15 - bot * 0.15];
+    yr = [bot === 0 ? 0 : bot - (top - bot) * 0.08, top * 1.15 - bot * 0.15];
   }
 
   const X = (x) => ML + ((x - xr[0]) / (xr[1] - xr[0])) * (W - ML - MR);
   const Y = (y) => H - MB - ((y - yr[0]) / (yr[1] - yr[0])) * (H - MT - MB);
   const clampY = (y) => Math.max(MT - 4, Math.min(H - MB + 4, Y(y)));
+  const farY = (y) => Math.max(-FAR, Math.min(H + FAR, Y(y)));
+  const inside = (x, y) => x >= xr[0] - 1e-9 && x <= xr[1] + 1e-9 && y >= yr[0] - 1e-9 && y <= yr[1] + 1e-9;
   // cur：正在画第几条命令。这期间画出的元素带 data-cmd，课堂里 highlight 靠它找
   let cur = null;
   const el = (tag, attrs, parent = svg) => {
@@ -112,50 +141,126 @@ export function createGraph(container, src, opts = {}) {
   let lastErr = '';
   function draw() {
     svg.innerHTML = '';
+    cur = null;
+    const clip = el('clipPath', { id: clipId }, el('defs', {}));
+    el('rect', { x: ML, y: MT, width: W - ML - MR, height: H - MT - MB }, clip);
     axes();
     const errs = [];
     let v = null;
     try { v = env(); } catch (e) { errs.push(e.message); }
+    // 曲线、涂色、矩形裁在坐标框里（冲出窗口的不压平）；点、标签在上面一层
+    const plotG = el('g', { 'clip-path': `url(#${clipId})` });
     const top = el('g', {});
+    const labels = []; // { x, y, text, fill, cmd }：先攒着，最后一起让位
+    const want = (x, y, text, fill, dx = 0, dy = 0) => { if (text) labels.push({ x: X(x) + dx, y: clampY(y) + dy, text: String(text), fill, cmd: cur }); };
+    const dot = (x, y, fill, hollow, r = 5.5) => {
+      if (!inside(x, y)) return;
+      const c = el('circle', { cx: X(x), cy: Y(y), r, class: `g-dot${hollow ? ' is-hollow' : ''}` }, top);
+      if (hollow) c.style.stroke = fill; else c.style.fill = fill;
+    };
+    // 过 (x0, y0)、斜率 k 的直线，画满窗口
+    const lineThrough = (x0, y0, k, col, cls) => {
+      const ln = el('line', { x1: X(xr[0]), y1: farY(y0 + k * (xr[0] - x0)), x2: X(xr[1]), y2: farY(y0 + k * (xr[1] - x0)), class: cls }, plotG);
+      ln.style.stroke = col;
+      // 标签放在直线在窗口里的那一段的七成处
+      const xs = []; for (let i = 0; i <= 40; i++) { const x = xr[0] + ((xr[1] - xr[0]) * i) / 40; if (inside(x, y0 + k * (x - x0))) xs.push(x); }
+      return xs.length ? xs[Math.floor(xs.length * 0.7)] : null;
+    };
+    let spent = 0;
+    const sample = (g, lo, hi) => {
+      const r = sampleCurve(g, lo, hi, { ySpan: yr[1] - yr[0], n: spent > FRAME_POINTS ? 120 : 240, maxPoints: Math.max(400, FRAME_POINTS - spent) });
+      for (const s of r.segs) spent += s.length;
+      return r;
+    };
+    const path = (seg) => seg.map(([x, y]) => `${X(x).toFixed(1)},${farY(y).toFixed(1)}`).join(' ');
     if (v) {
-      const N = 240;
+      const nBars = cmds.filter((c) => c.kind === 'bars' && visible(c)).length;
+      let barAt = 0;
       for (const [i, c] of cmds.entries()) {
         if (!visible(c)) continue;
         cur = i + 1;
         try {
           const col = color(c, 'var(--v1)');
           if (c.kind === 'plot' || c.kind === 'shade') {
-            const lo = c.kind === 'shade' ? Math.max(xr[0], c.a(v)) : xr[0];
-            const hi = c.kind === 'shade' ? Math.min(xr[1], c.b(v)) : xr[1];
+            const lo = Math.max(xr[0], c.kind === 'shade' ? c.a(v) : c.lo ? c.lo(v) : xr[0]);
+            const hi = Math.min(xr[1], c.kind === 'shade' ? c.b(v) : c.hi ? c.hi(v) : xr[1]);
             if (!(hi > lo)) continue;
-            const pts = [];
-            for (let i = 0; i <= N; i++) {
-              const x = lo + ((hi - lo) * i) / N;
-              const y = at(c.f, v, x);
-              if (Number.isFinite(y)) pts.push(`${X(x).toFixed(1)},${clampY(y).toFixed(1)}`);
-            }
+            const r = sample(fnOf(c.f, v), lo, hi);
             if (c.kind === 'shade') {
-              const base = clampY(0);
-              const pg = el('polygon', { points: `${X(lo)},${base} ${pts.join(' ')} ${X(hi)},${base}`, class: 'g-shade' });
-              pg.style.fill = color(c, 'var(--yellow)');
-            } else {
-              const pl = el('polyline', { points: pts.join(' '), class: `g-curve${c.mods.dashed ? ' dashed' : ''}${c.mods.thin ? ' thin' : ''}` });
-              pl.style.stroke = col;
-              if (c.mods.label) {
-                const xl = xr[0] + (xr[1] - xr[0]) * (Number(c.mods.at) || 0.82);
-                const t = el('text', { x: X(xl), y: clampY(at(c.f, v, xl)) - 12, class: 'g-label', 'text-anchor': 'middle' }, top);
-                t.textContent = c.mods.label;
-                t.style.fill = col;
+              const y0 = farY(0);
+              for (const seg of r.segs) {
+                const pg = el('polygon', { points: `${X(seg[0][0]).toFixed(1)},${y0} ${path(seg)} ${X(seg.at(-1)[0]).toFixed(1)},${y0}`, class: 'g-shade' }, plotG);
+                pg.style.fill = color(c, 'var(--yellow)');
               }
+              continue;
             }
+            for (const seg of r.segs) {
+              const pl = el('polyline', { points: path(seg), class: `g-curve${c.mods.dashed ? ' dashed' : ''}${c.mods.thin ? ' thin' : ''}` }, plotG);
+              pl.style.stroke = col;
+            }
+            // 间断点：函数值在哪一边，那边实心、另一边空心；可去间断点空心（dots=off 不画）
+            if (String(c.mods.dots).toLowerCase() !== 'off') {
+              for (const j of r.jumps) {
+                dot(j.x, j.left, col, j.solid !== 'left');
+                dot(j.x, j.right, col, j.solid !== 'right');
+                if (j.value !== undefined) dot(j.x, j.value, col, false);
+              }
+              for (const h of r.holes) dot(h.x, h.y, col, true);
+            }
+            if (c.mods.label) {
+              // 标签挂在曲线上看得见的地方：写了 at= 用它，那里在窗口外就换一处
+              const fr = [Number(c.mods.at) || 0.82, 0.7, 0.9, 0.55, 0.4, 0.25, 0.1].map((t) => labelSpot(r.segs, t, { x0: xr[0], x1: xr[1] })).find((p) => p && inside(p[0], p[1]));
+              if (fr) want(fr[0], fr[1], c.mods.label, col, 0, -18);
+            }
+          } else if (c.kind === 'area') {
+            const lo = Math.max(xr[0], c.a(v)), hi = Math.min(xr[1], c.b(v));
+            if (!(hi > lo)) continue;
+            const r = betweenArea(fnOf(c.f, v), fnOf(c.g, v), lo, hi);
+            if (r.poly.length >= 3) el('polygon', { points: path(r.poly), class: 'g-shade' }, plotG).style.fill = color(c, 'var(--yellow)');
+          } else if (c.kind === 'riemann') {
+            const r = riemannRects(fnOf(c.f, v), c.a(v), c.b(v), c.n(v), c.rule);
+            const rc = color(c, 'var(--yellow)');
+            for (const q of r.rects) {
+              const x0 = Math.min(q.x0, q.x1), x1 = Math.max(q.x0, q.x1);
+              const rect = el('rect', { x: X(x0), y: Math.min(farY(q.y), farY(0)), width: Math.max(0.5, X(x1) - X(x0)), height: Math.abs(farY(0) - farY(q.y)), class: 'g-rect' }, plotG);
+              rect.style.fill = rc; rect.style.stroke = rc;
+              if (r.rects.length <= 40) el('circle', { cx: X(q.xs), cy: farY(q.y), r: 3, class: 'g-rdot' }, plotG).style.fill = rc;
+            }
+          } else if (c.kind === 'tangent') {
+            const a = c.at(v), g = quiet(fnOf(c.f, v)), y0 = g(a), k = quiet(fnOf(c.df, v))(a);
+            if (Number.isNaN(y0) || Number.isNaN(k)) continue; // 那一点没定义、不可导：不画
+            const tc = color(c, 'var(--yellow)');
+            const lx = lineThrough(a, y0, k, tc, `g-line${c.mods.dashed ? ' dashed' : ''}`);
+            dot(a, y0, tc, false);
+            if (c.mods.label && lx !== null) want(lx, y0 + k * (lx - a), c.mods.label, tc, 0, -18);
+          } else if (c.kind === 'secant') {
+            const a = c.a(v), b = c.b(v), g = quiet(fnOf(c.f, v)), ya = g(a), yb = g(b);
+            if (Number.isNaN(ya) || Number.isNaN(yb) || Math.abs(b - a) < 1e-12) continue;
+            const sc = color(c, 'var(--pink)');
+            const lx = lineThrough(a, ya, (yb - ya) / (b - a), sc, `g-line${c.mods.dashed ? ' dashed' : ''}`);
+            dot(a, ya, sc, false); dot(b, yb, sc, false);
+            if (c.mods.label && lx !== null) want(lx, ya + ((yb - ya) / (b - a)) * (lx - a), c.mods.label, sc, 0, -18);
           } else if (c.kind === 'bars') {
             const a = Math.ceil(c.from(v)), b = Math.floor(c.to(v));
-            const bw = Math.max(3, Math.min(40, ((W - ML - MR) / (xr[1] - xr[0])) * 0.62));
+            const full = Math.max(3, Math.min(40, ((W - ML - MR) / (xr[1] - xr[0])) * 0.62));
+            // 一张图里几组柱子：并排，不叠着
+            const bw = full / Math.max(1, nBars), off = -full / 2 + bw * barAt;
+            barAt++;
+            const g = fnOf(c.f, v, c.param), hl = c.mods.highlight ? fnOf(compile(c.mods.highlight), v, c.param) : null;
             for (let k = a; k <= b; k++) {
-              const y = at(c.f, v, k, c.param);
-              const r = el('rect', { x: X(k) - bw / 2, y: Math.min(clampY(y), clampY(0)), width: bw, height: Math.abs(clampY(0) - clampY(y)), class: `g-bar${c.mods.highlight && compile(c.mods.highlight)({ ...v, [c.param]: k }) ? ' is-hl' : ''}` });
+              const y = g(k);
+              const r = el('rect', { x: X(k) + off, y: Math.min(farY(y), farY(0)), width: bw, height: Math.abs(farY(0) - farY(y)), class: `g-bar${hl && hl(k) ? ' is-hl' : ''}` }, plotG);
               r.style.fill = col;
             }
+          } else if (c.kind === 'dots') {
+            const a = Math.ceil(c.from(v)), b = Math.min(Math.floor(c.to(v)), a + 4000);
+            const g = quiet(fnOf(c.f, v, c.param)), hl = c.mods.highlight ? fnOf(compile(c.mods.highlight), v, c.param) : null;
+            const ps = [];
+            for (let k = a; k <= b; k++) { const y = g(k); if (!Number.isNaN(y)) ps.push([k, y]); }
+            if (c.mods.join && ps.length > 1) el('polyline', { points: path(ps), class: 'g-curve thin g-join' }, plotG).style.stroke = col;
+            const r = ps.length > 120 ? 2.5 : ps.length > 40 ? 3.5 : 5;
+            for (const [k, y] of ps) el('circle', { cx: X(k), cy: farY(y), r, class: `g-seq${hl ? (hl(k) ? ' is-hl' : ' is-dim') : ''}` }, plotG).style.fill = col;
+            if (c.mods.label && ps.length) { const p = ps[Math.min(ps.length - 1, Math.floor(ps.length * 0.8))]; want(p[0], p[1], c.mods.label, col, 0, -18); }
           } else if (c.kind === 'vline' || c.kind === 'hline') {
             const p = c.at(v);
             const ln = c.kind === 'vline'
@@ -163,23 +268,34 @@ export function createGraph(container, src, opts = {}) {
               : el('line', { x1: ML, y1: Y(p), x2: W - MR, y2: Y(p), class: 'g-ref dashed' });
             ln.style.stroke = color(c, 'var(--muted)');
             if (c.mods.label) {
-              const t = el('text', c.kind === 'vline' ? { x: X(p), y: MT + 14, class: 'g-label', 'text-anchor': 'middle' } : { x: W - MR - 4, y: Y(p) - 8, class: 'g-label', 'text-anchor': 'end' }, top);
-              t.textContent = c.mods.label;
-              t.style.fill = color(c, 'var(--muted)');
+              if (c.kind === 'vline') labels.push({ x: X(p), y: MT + 14, text: c.mods.label, fill: color(c, 'var(--muted)'), cmd: cur });
+              else labels.push({ x: W - MR - 4 - labelSize(c.mods.label).w / 2, y: Y(p) - 14, text: c.mods.label, fill: color(c, 'var(--muted)'), cmd: cur });
             }
           } else if (c.kind === 'point') {
             const [px, py] = c.at(v);
-            el('circle', { cx: X(px), cy: clampY(py), r: 6, class: 'pt' }).style.fill = color(c, 'var(--chalk)');
-            if (c.mods.label) { const t = el('text', { x: X(px) + 10, y: clampY(py) - 10, class: 'g-label' }, top); t.textContent = c.mods.label; t.style.fill = color(c, 'var(--chalk)'); }
+            const pc = color(c, 'var(--chalk)');
+            if (c.mods.hollow) el('circle', { cx: X(px), cy: clampY(py), r: 6, class: 'g-dot is-hollow' }, top).style.stroke = pc;
+            else el('circle', { cx: X(px), cy: clampY(py), r: 6, class: 'pt' }, top).style.fill = pc;
+            if (c.mods.label) want(px, py, c.mods.label, pc, 12 + labelSize(c.mods.label).w / 2, -14);
           } else if (c.kind === 'segment') {
             const [a, b] = [c.a(v), c.b(v)];
             el('line', { x1: X(a[0]), y1: clampY(a[1]), x2: X(b[0]), y2: clampY(b[1]), class: 'g-ref' }).style.stroke = color(c, 'var(--muted)');
           } else if (c.kind === 'text') {
             const [px, py] = c.at(v);
-            el('text', { x: X(px), y: clampY(py), class: 'g-label' }, top).textContent = c.label;
+            const t = el('text', { x: X(px), y: clampY(py), class: 'g-label' }, top);
+            t.textContent = c.label;
+            t.style.fill = color(c, 'var(--chalk)');
           }
         } catch (e) { errs.push(e.message); }
       }
+      // 标签一起让位：谁也不压谁，不出坐标框
+      const spots = placeLabels(labels.map((l) => ({ x: l.x, y: l.y, ...labelSize(l.text) })), { x0: ML, y0: MT, x1: W - MR, y1: H - MB });
+      labels.forEach((l, i) => {
+        cur = l.cmd;
+        const t = el('text', { x: spots[i][0].toFixed(1), y: (spots[i][1] + 8).toFixed(1), class: 'g-label', 'text-anchor': 'middle' }, top);
+        t.textContent = l.text;
+        t.style.fill = l.fill;
+      });
       // 可以拖的竖线：let a = 1 drag（算在这条 let 上）
       for (const [i, c] of cmds.entries()) {
         if (c.kind !== 'let' || !c.mods.drag || !visible(c)) continue;
@@ -193,8 +309,7 @@ export function createGraph(container, src, opts = {}) {
       side.querySelector('.r-show').innerHTML = cmds.map((c, i) => (c.kind === 'show' && visible(c) ? `<div data-cmd="${i + 1}">${mdToHtml(fillValues(c.text, v, errs, compile), { inline: true })}</div>` : '')).join('');
     }
     cur = null;
-    svg.appendChild(top);
-    const msg = errs.join('；');
+    const msg = [...new Set(errs)].join('；');
     if (msg !== lastErr) {
       lastErr = msg;
       let box = container.querySelector('.scene-error');

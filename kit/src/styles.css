@@ -1042,7 +1042,20 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .plane.graph .g-bar.is-hl { fill-opacity: .95; }
 .plane.graph .g-ref { stroke-width: 2; }
 .plane.graph .g-ref.dashed { stroke-dasharray: 6 6; }
-.plane.graph .g-label { font-family: var(--hand); font-size: 23px; }
+.plane.graph .g-label { font-family: var(--hand); font-size: 23px; fill: var(--chalk); paint-order: stroke; stroke: rgb(var(--halo-rgb) / 0.85); stroke-width: 4px; stroke-linejoin: round; }
+/* 切线、割线：比曲线细一点的直线 */
+.plane.graph .g-line { fill: none; stroke-width: 2.6; stroke-linecap: round; }
+.plane.graph .g-line.dashed { stroke-dasharray: 9 7; }
+/* 间断点两头的点：函数值在的那头实心，另一头空心（空心的用板子的颜色填，盖住后面的线） */
+.plane.graph .g-dot { stroke: none; }
+.plane.graph .g-dot.is-hollow { fill: rgb(var(--halo-rgb)); stroke-width: 2.6; }
+/* 黎曼和的矩形 */
+.plane.graph .g-rect { fill-opacity: .2; stroke-opacity: .85; stroke-width: 1.4; }
+.plane.graph .g-rdot { stroke: none; }
+/* 数列的点 */
+.plane.graph .g-seq { stroke: none; }
+.plane.graph .g-seq.is-dim { fill-opacity: .35; }
+.plane.graph .g-join { stroke-opacity: .45; filter: none; }
 .plane.graph .g-drag-line { stroke: var(--yellow); stroke-width: 2; stroke-dasharray: 3 5; }
 .plane.graph .g-handle-label { font-family: var(--hand); font-size: 18px; fill: var(--board-3); }
 .plane.graph .handle { touch-action: none; }

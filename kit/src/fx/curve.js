@@ -26,7 +26,8 @@ function grid(a, b, n) {
   return xs.filter((x, i) => i === 0 || x - xs[i - 1] > tiny);
 }
 
-export function sampleCurve(f, a, b, { ySpan, n = 240 } = {}) {
+// maxPoints：这一条曲线最多用几个点（一张图里曲线多、滑块拖得快时，graph.js 把剩下的预算传进来）
+export function sampleCurve(f, a, b, { ySpan, n = 240, maxPoints = CURVE_MAX_POINTS } = {}) {
   const out = { segs: [], jumps: [], holes: [] };
   if (!(b > a) || !Number.isFinite(a) || !Number.isFinite(b)) return out;
   const g = (x) => { let y; try { y = f(x); } catch { return NaN; } return typeof y === 'number' && Number.isFinite(y) ? y : NaN; };
@@ -97,7 +98,7 @@ export function sampleCurve(f, a, b, { ySpan, n = 240 } = {}) {
       return;
     }
     const dy = Math.abs(y1 - y0);
-    if (depth < (dy > BIG ? JUMP_DEPTH : SMOOTH_DEPTH) && bud.n > 0 && total < CURVE_MAX_POINTS) {
+    if (depth < (dy > BIG ? JUMP_DEPTH : SMOOTH_DEPTH) && bud.n > 0 && total < maxPoints) {
       const m = (x0 + x1) / 2, ym = g(m);
       bud.n--; total++;
       if (!fin(ym) || dy > BIG || Math.abs(ym - (y0 + y1) / 2) > FLAT) { walk(x0, y0, m, ym, depth + 1, bud); walk(m, ym, x1, y1, depth + 1, bud); return; }

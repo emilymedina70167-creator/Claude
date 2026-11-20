@@ -37,6 +37,24 @@ function mods(line) {
   }
 }
 
+// 按最外层的空白切（括号里的不切）：上下限写成 chi2inv(1 - al, n) 也是一个整体
+function words(s) {
+  const out = [];
+  let depth = 0, cur = '';
+  for (const ch of String(s)) {
+    if ('([{'.includes(ch)) depth++;
+    if (')]}'.includes(ch)) depth--;
+    if (/\s/.test(ch) && depth === 0) { if (cur) out.push(cur); cur = ''; } else cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+// 「式子 下限 上限」：最后两段是上下限，前面的都是式子
+function tail2(s) {
+  const w = words(s);
+  return w.length >= 3 ? [w.slice(0, -2).join(' '), w[w.length - 2], w[w.length - 1]] : null;
+}
+
 // 前面的「名字 = 」（area S = …、riemann S = …）
 function named(body) {
   const m = /^([A-Za-z_]\w*)\s*=(?!=)\s*(.*)$/.exec(body);
@@ -90,25 +108,26 @@ function parseCmd(kind, rest, { C, num, defs }) {
     return { kind, name: m[1], min, max, init: m[4] !== undefined ? Number(m[4]) : min, step: Number(md.step) || (max - min) / 100, mods: md };
   }
   if (kind === 'plot') {
-    const m = body.match(/^(.*\S)\s+for\s+x\s+(\S+)\s+(\S+)$/);
-    return m ? { kind, f: C(m[1]), lo: num(m[2]), hi: num(m[3]), mods: md } : { kind, f: C(body), mods: md };
+    const m = body.match(/^(.*\S)\s+for\s+x\s+(.+)$/);
+    const w = m ? words(m[2]) : [];
+    return w.length === 2 ? { kind, f: C(m[1]), lo: num(w[0]), hi: num(w[1]), mods: md } : { kind, f: C(body), mods: md };
   }
   if (kind === 'shade') {
     // shade f(x) a b：x 从 a 到 b，曲线和 x 轴之间涂色（a、b 可以写 -inf / inf）
-    const m = body.match(/^(.*\S)\s+(\S+)\s+(\S+)$/);
+    const m = tail2(body);
     if (!m) throw new Error('shade 的写法：shade f(x) 下限 上限');
-    return { kind, f: C(m[1]), a: num(m[2]), b: num(m[3]), mods: md };
+    return { kind, f: C(m[0]), a: num(m[1]), b: num(m[2]), mods: md };
   }
   if (kind === 'area') {
     const { name, rest: r } = named(body);
-    const m = r.match(/^(.*\S)\s+from\s+(\S+)\s+to\s+(\S+)$/);
+    const m = r.match(/^(.*\S)\s+from\s+(.+?)\s+to\s+(.+)$/);
     const fs = m ? splitTop(m[1]) : [];
     if (!m || fs.length !== 2) throw new Error('area 的写法：area x, x^2 from 0 to 1（两条曲线之间；前面可以起名 area S = …）');
     return { kind, name, f: C(fs[0]), g: C(fs[1]), a: num(m[2]), b: num(m[3]), mods: md };
   }
   if (kind === 'riemann') {
     const { name, rest: r } = named(body);
-    const m = r.match(/^(.*\S)\s+from\s+(\S+)\s+to\s+(\S+)$/);
+    const m = r.match(/^(.*\S)\s+from\s+(.+?)\s+to\s+(.+)$/);
     if (!m || md.n === undefined) throw new Error('riemann 的写法：riemann x^2 from 0 to 1 n=8（可加 left / right / mid；前面可以起名 riemann S = …）');
     return { kind, name, f: C(m[1]), a: num(m[2]), b: num(m[3]), n: C(String(md.n)), rule: md.mid ? 'mid' : md.right ? 'right' : 'left', mods: md };
   }
@@ -127,7 +146,8 @@ function parseCmd(kind, rest, { C, num, defs }) {
   }
   if (kind === 'bars' || kind === 'dots') {
     const [what, range] = body.split(/\s+for\s+/);
-    const m = (range || '').trim().match(/^([A-Za-z_]\w*)\s+(\S+)\s+(\S+)$/);
+    const w = words(range || '');
+    const m = w.length === 3 && /^[A-Za-z_]\w*$/.test(w[0]) ? [null, ...w] : null;
     if (!m) throw new Error(kind === 'bars' ? 'bars 的写法：bars binompmf(k, 10, 0.3) for k 0 10' : 'dots 的写法：dots 1 + 1/n for n 1 30');
     return { kind, f: C(what), param: m[1], from: C(m[2]), to: C(m[3]), mods: md };
   }

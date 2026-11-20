@@ -106,6 +106,11 @@ test('振荡：加密采样，不乱报跳跃和空心点', () => {
   assert.deepEqual(r.jumps, []);
 });
 
+test('maxPoints：点数的上限可以收紧', () => {
+  const r = sampleCurve(fn('sin(1/x)'), -0.5, 0.5, { ySpan: 3, maxPoints: 400 });
+  assert.ok(pts(r) <= 400 + 96, `${pts(r)} 个点`);
+});
+
 test('算不出来的函数：空的，不抛', () => {
   const r = sampleCurve(() => { throw new Error('x'); }, 0, 1, {});
   assert.deepEqual(r.segs, []);
