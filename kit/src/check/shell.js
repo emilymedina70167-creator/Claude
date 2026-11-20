@@ -158,7 +158,7 @@ export function mountCheck(host, { check, vars = {}, saved = null, judge, fallba
       <div class="ck-sure" role="group" aria-label="有多大把握"><span class="ck-sure-q">有多大把握？</span>${SURE.map(([k, t]) => `<button type="button" class="btn ck-sure-btn" data-sure="${k}">${t}</button>`).join('')}</div>
       <div class="ck-actions"><button type="button" class="btn btn-primary ck-submit" disabled>交</button><button type="button" class="btn ck-giveup">想不出来</button><span class="ck-warn" aria-live="polite"></span></div>`;
     main.appendChild(card);
-    pv = probeView(card.querySelector('.ck-body'), probe, { onChange: syncSubmit, inkKey: inkKey(v.id) || '', pause: check.pause });
+    pv = probeView(card.querySelector('.ck-body'), probe, { onChange: syncSubmit, inkKey: inkKey(v.id) || '', pause: check.pause, base: vars });
     timer.set(v.id, visible());
     card.querySelector('.ck-sure').addEventListener('click', (e) => {
       const b = e.target.closest('.ck-sure-btn');

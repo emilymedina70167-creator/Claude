@@ -13,7 +13,7 @@ import { baseType, probeVars, evalIfs, withDefaults, runVars, runFields, measure
 import { ROLES, matchText, diagnose, normText, joinWords, spanText, tokenizeSentence } from '../entext.js';
 import { variantsOf, variantValues, sortPass } from '../engines/measures.js';
 import { checkFill, cellOk, normCell, misreadFill } from '../stepperspec.js';
-import { valueMatch, sameResult, unreadWhy } from './values.js';
+import { valueMatch, sameResult, unreadWhy, halfWidth, readProblem } from './values.js';
 import { parseJudge, STEP_KINDS, STEP_TAGS } from '../solvespec.js';
 import { parseCodeSpec, runTests } from '../codejudge.js';
 
@@ -23,7 +23,9 @@ export function blankCells(v) {
   return v === null || v === undefined || String(v).trim() === '' ? 1 : 0;
 }
 
-const readable = (x) => { try { readCell(x); return true; } catch { return false; } };
+// 格子里写的先全角转半角（iPad 中文键盘的 １/２），再照 anscheck 的 readCell 读
+const readCellHalf = (x) => readCell(typeof x === 'string' ? halfWidth(x) : x);
+const readable = (x) => { try { readCellHalf(x); return true; } catch { return false; } };
 
 /**
  * 交之前还差什么（构造题、判假的反例）：没填的格、读不懂的格（「1/」这种）、空着的式子框。'' 是能交了。
@@ -41,7 +43,7 @@ export function notReady(probe, answer = {}) {
 }
 
 // 学生格子里写的（'1/2'、'√2'、数）→ 数
-const cellNum = (x) => (Array.isArray(x) ? x.map(cellNum) : typeof x === 'number' ? x : Number(readCell(x)));
+const cellNum = (x) => (Array.isArray(x) ? x.map(cellNum) : typeof x === 'number' ? x : Number(readCellHalf(x)));
 
 const close = (a, b) => {
   if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => close(x, b[i]));
@@ -190,8 +192,80 @@ function variantVars(probe, run, vars) {
 }
 
 /**
+ * 一个 expect 的每一种诊断在这组数上算出来的值：[{ kind: 'tag' | 'hit', key, label, value }]。
+ * 引擎的错法（against 写了只要那几种；用到并列的、和对的一样的不要）在前，外部写的错答案（wrong w1: 式子 => 说明）在后。
+ * 判（predictItems）和自检（spec.js 的 predictProblems：两种诊断答案一样要报）都照它
+ */
+export function diagnosesOf(probe, e, right, vars, allVariants, names = runNames(probe)) {
+  const out = [];
+  const used = new Set(measuresUsed({ runs: probe.runs, expects: [{ value: e.value, wrongs: [] }] }).map((x) => x.run));
+  for (const { run, list } of allVariants()) {
+    if (!used.has(run)) continue;
+    for (const v of list) {
+      if (tiedIn(probe, [e.value], v.ties)) continue;
+      let wv;
+      try { wv = expectValue(e.value, v.vars, names); } catch { continue; }
+      if (wv === undefined || sameResult(wv, right)) continue;
+      if (!out.some((x) => x.key === v.key)) out.push({ kind: 'tag', key: v.key, label: v.label, value: wv });
+    }
+  }
+  for (const w of e.wrongs || []) {
+    let wv;
+    try { wv = expectValue(w.expr, vars, names); } catch { continue; }
+    if (wv === undefined || sameResult(wv, right)) continue;
+    out.push({ kind: 'hit', key: w.id, label: w.msg || w.id, msg: w.msg || '', value: wv });
+  }
+  return out;
+}
+
+/** 一道 predict 的诊断（照固定的字段）：给自检用，[{ id, right, list }]；跑不了的 expect 不列 */
+export function predictDiagnoses(probe, base = {}) {
+  const names = runNames(probe);
+  let rv;
+  try { rv = runVars(probe, {}, base); } catch { return []; }
+  if (rv.error) return [];
+  let variants = null;
+  const allVariants = () => (variants ??= (probe.runs || []).map((run) => ({ run: run.name, list: variantVars(probe, run, rv.vars) })));
+  return (probe.expects || []).flatMap((e) => {
+    if (tiedIn(probe, [e.value], rv.ties)) return [];
+    let right;
+    try { right = expectValue(e.value, rv.vars, names); } catch { return []; }
+    if (typeof right === 'number' && !Number.isFinite(right)) return [];
+    return [{ id: e.id, right, list: diagnosesOf(probe, e, right, rv.vars, allVariants, names) }];
+  });
+}
+
+// 每道题对的值算一次（交之前每打一个字都要查）：probe → { base, rights }
+const RIGHTS = new WeakMap();
+function expectRights(probe, base) {
+  const hit = RIGHTS.get(probe);
+  if (hit && hit.base === base) return hit.rights;
+  const rights = {};
+  let rv;
+  try { rv = runVars(probe, {}, base); } catch { rv = { error: true }; }
+  if (!rv.error) for (const e of probe.expects || []) { try { rights[e.id] = expectValue(e.value, rv.vars, runNames(probe)); } catch { /* 算不了的这一项不挡，判的时候待核 */ } }
+  RIGHTS.set(probe, { base, rights });
+  return rights;
+}
+
+/**
+ * predict 交之前还差什么（和 construct 的 slotProblems 一样，挡住的不算第一次作答）：没写的、读不懂的（照对的值的样子：
+ * 数带了单位、复杂度写成 O(n2)、一串数里夹了字）。全角、末尾的句号逗号不挡（values.js 的 cleanInput 读得懂）。[] 是能交了
+ */
+export function expectProblems(probe, got = {}, base = {}) {
+  const rights = expectRights(probe, base);
+  return (probe.expects || []).map((e) => {
+    const s = String(got?.[e.id] ?? '').trim();
+    if (!s) return `「${e.label}」还没写`;
+    return Object.hasOwn(rights, e.id) ? readProblem(s, rights[e.id], e.label) : '';
+  }).filter(Boolean);
+}
+
+/**
  * predict：每个 expect 一项（x1…）。不对时依次认：引擎的错法（against 的，没写看全部）→ tag、why 是错法的说法；
  * 外部写的错答案（wrong w1: 式子 => 说明）→ hit、why 是说明；错法、错答案这组数上算出来和对的一样的不用。
+ * 几种诊断都对得上（这组数上答案一样）→ tags 全记、why「这几种错法在这组数上答案一样：…」、keys [x1, default]，不挑一种；
+ * 认出来的都带 tagFit: 'exact'（值一模一样）。
  * 不对的项带 keys（补讲照它找：tag=… → w1 → x1）。有一项不对就停下；都对、写了 must → 理由交页面里的 Claude
  */
 function predictItems(probe, answer = {}, base = {}) {
@@ -214,23 +288,15 @@ function predictItems(probe, answer = {}, base = {}) {
     if (m === true) return { id: e.id, ok: true, why: '' };
     if (m === null) return { id: e.id, ok: false, why: unreadWhy(right), keys: [e.id] };
     const it = { id: e.id, ok: false, why: '' };
-    const used = new Set(measuresUsed({ runs: probe.runs, expects: [{ value: e.value, wrongs: [] }] }).map((x) => x.run));
-    for (const { run, list } of allVariants()) {
-      if (!used.has(run) || it.tag) continue;
-      for (const v of list) {
-        if (tiedIn(probe, [e.value], v.ties)) continue;
-        let wv;
-        try { wv = expectValue(e.value, v.vars, names); } catch { continue; }
-        if (sameResult(wv, right)) continue;
-        if (valueMatch(s, wv) === true) { it.tag = v.key; it.why = v.label; break; }
-      }
+    const hits = diagnosesOf(probe, e, right, rv.vars, allVariants, names).filter((d) => valueMatch(s, d.value) === true);
+    if (hits.length > 1) {
+      // 几种诊断在这组数上答案一样（OPT 和「没算一开始调入」、外部写的 r.faults - 3 都是 9）：分不清是哪一种，都记下、不挑一种补讲
+      Object.assign(it, { tags: hits.map((d) => d.key), tagFit: 'exact', why: `这几种错法在这组数上答案一样：${hits.map((d) => d.label).join('；')}`, keys: [e.id, 'default'] });
+      return it;
     }
-    for (const w of e.wrongs || []) {
-      let wv;
-      try { wv = expectValue(w.expr, rv.vars, names); } catch { continue; }
-      if (sameResult(wv, right)) continue;
-      if (valueMatch(s, wv) === true) { it.hit = w.id; it.why = it.why || w.msg; break; }
-    }
+    const [d] = hits;
+    if (d?.kind === 'tag') Object.assign(it, { tag: d.key, why: d.label, tagFit: 'exact' });
+    if (d?.kind === 'hit') Object.assign(it, { hit: d.key, why: d.msg, tagFit: 'exact' });
     if (!it.why) it.why = `${e.label}不对`;
     it.keys = [...(it.tag ? [`tag=${it.tag}`] : []), ...(it.hit ? [it.hit] : []), e.id];
     return it;
@@ -335,8 +401,18 @@ function traceItems(probe, answer = {}) {
   const vlist = T.variants.filter((v) => (!want.length || want.includes(v.key)) && looksLike(v));
   const label = misreadFill(table, cells, vlist);
   const hitV = label ? vlist.find((v) => v.label === label) : null;
-  if (hitV) Object.assign(it, { tag: hitV.key, why: `${it.why}；${hitV.label}`, keys: [`tag=${hitV.key}`, it.id] });
-  else if (later.length && later.every((y) => y.ok === true) && nearMiss(table.rows[bad.r], cells[bad.r])) {
+  // 整行和错法的那一行一样是 exact，只是大半像是 partial（话前面加「可能」：学生可能做的是另一件事）
+  const fitOf = (v) => (units.every((u) => unitIs(v.table?.rows?.[bad.r], u)) ? 'exact' : 'partial');
+  // 和 hitV 一样像的（misreadFill 两个先后都挑自己：对得上的格一样多）、而且像的程度（整行 / 大半）一样：分不清是哪一种
+  const same = hitV ? vlist.filter((v) => v === hitV || (fitOf(v) === fitOf(hitV) && misreadFill(table, cells, [v, hitV]) === v.label && misreadFill(table, cells, [hitV, v]) === hitV.label)) : [];
+  const say = (fit, text) => (fit === 'partial' ? `可能${text}` : text);
+  if (same.length > 1) {
+    const fit = fitOf(hitV);
+    Object.assign(it, { tags: same.map((v) => v.key), tagFit: fit, why: `${it.why}；${say(fit, `这几种错法在这组数上答案一样：${same.map((v) => v.label).join('；')}`)}`, keys: [it.id, 'default'] });
+  } else if (hitV) {
+    const fit = fitOf(hitV);
+    Object.assign(it, { tag: hitV.key, tagFit: fit, why: `${it.why}；${say(fit, hitV.label)}`, keys: [`tag=${hitV.key}`, it.id] });
+  } else if (later.length && later.every((y) => y.ok === true) && nearMiss(table.rows[bad.r], cells[bad.r])) {
     Object.assign(it, { tag: 'slip', why: `后面按你自己的上一行推都对，第 ${bad.r + 1} 趟这一处写错了`, keys: ['slip', 'tag=slip', it.id] });
   } else it.keys = [it.id];
   return { items: [...items, it, ...later], needsClaude: false, stop: true };

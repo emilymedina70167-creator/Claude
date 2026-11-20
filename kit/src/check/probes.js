@@ -10,7 +10,7 @@ import { markDraft } from '../drafts.js';
 import { pen } from '../ink/engine.js';
 import { timedPad } from './inkpad.js';
 import { uploadAll } from './judgekit.js';
-import { notReady } from './judge.js';
+import { notReady, expectProblems } from './judge.js';
 import { hasInk, dropInk } from './inkstore.js';
 import { baseType, slotProblems, seqTokens, traceTable } from './spec.js';
 import { markDuplicates } from '../engines/measures.js';
@@ -95,9 +95,9 @@ function exprBoxes(host, exprs, names) {
 
 /**
  * 画一道题。host 里画；vars 是题里的量（题面的 \calc 用）。返回 { answer(), problem(), empty(), lock(), destroy(), el }。
- * onChange：作答变了（外壳拿它决定「交」亮不亮、登记草稿）
+ * onChange：作答变了（外壳拿它决定「交」亮不亮、登记草稿）；base：整节课的量（predict 交之前照对的值的样子查读不读得懂）
  */
-export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause } = {}) {
+export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause, base = {} } = {}) {
   const el = document.createElement('div');
   el.className = `ck-probe ck-${probe.type}`;
   el.dataset.probe = probe.id;
@@ -179,7 +179,7 @@ export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause
       const lines = strSlots.filter((s) => s.kind === 'seq' && sortArrays.has(s.name)).map((s) => {
         const raw = rawCells(boxes[s.name].box, s);
         if (slotProblems(s, raw).length) return '';
-        const m = markDuplicates(raw);
+        const m = markDuplicates(seqTokens(raw).join(' '));
         return m.changed ? `页面把${m.notes.join('、')}` : '';
       }).filter(Boolean);
       note.textContent = lines.join('；');
@@ -210,7 +210,8 @@ export function probeView(host, probe, { onChange = () => {}, inkKey = '', pause
     const hasWhy = (probe.must || []).length || (probe.may || []).length;
     const w = hasWhy ? writer({ label: '理由', rows: 3 }) : null;
     get = () => ({ expects: Object.fromEntries(ins.map(([e, x]) => [e.id, x.value.trim()])), ...(w ? { text: w.text() } : {}) });
-    problem = () => firstOf(...ins.map(([e, x]) => (x.value.trim() ? '' : `「${e.label}」还没写`)), w && w.blank() ? '还没写理由' : '');
+    // 没写的、读不懂的（带了单位、O(n2)、一串数里夹了字）挡在交之前，不算第一次作答；全角、末尾的句号逗号照读（judge.js 的 expectProblems）
+    problem = () => firstOf(...expectProblems(probe, get().expects, base), w && w.blank() ? '还没写理由' : '');
     empty = () => ins.every(([, x]) => !x.value.trim()) && (!w || w.blank());
   } else if (probe.type === 'code') {
     let starter = '';
