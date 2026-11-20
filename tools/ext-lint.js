@@ -9,6 +9,8 @@ import { parseLets, calcValue, letValue, expandCalc, floatVars } from '../kit/sr
 import { parseDeriveDo, sampleEnvs, checkLine } from '../kit/src/derivedo.js';
 import { parseSolve } from '../kit/src/solvespec.js';
 import { selfCheck } from '../kit/src/check/spec.js';
+import { primedExpects } from '../kit/src/check/judge.js';
+import { materialize } from '../kit/src/check/template.js';
 import { formulaSpec } from '../kit/src/formula.js';
 import { LINT_BUDGET } from '../kit/src/fx/calc.js';
 
@@ -93,6 +95,7 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
     // 检验（计划 2，check/spec.js）：example 照条件验一遍、必做题 retry 至少 2 道、每道题都排进去了……和页面开检验之前查的同一份
     // 带着这节课到这里 let 过的量（以前的轮 + 这一轮前面的段），和页面开检验时一样按浮点
     if (o.op === 'check' && o.check) for (const msg of selfCheck(o.check, floatVars(vars))) problems.push({ where: `check id=${o.id}`, msg });
+    if (o.op === 'check' && o.check) for (const msg of primeHints(o.check, floatVars(vars))) problems.push({ where: `check id=${o.id}`, msg, level: 'hint' });
     if ((o.op === 'add' || o.op === 'new' || o.op === 'stage' || o.op === 'widget') && (segIds.has(o.id) || here.has(o.id))) problems.push({ where: `${o.op} id=${o.id}`, msg: `${o.id} 已经用过了：新的一段换一个 id，改这一段用 board replace id=${o.id}` });
     if ((o.op === 'hide' || o.op === 'show' || o.op === 'move' || o.op === 'edit') && !segIds.has(o.id) && !here.has(o.id)) problems.push({ where: `${o.op} id=${o.id}`, msg: `黑板上没有 ${o.id}` });
     if (segOps([o]).length) {
@@ -127,10 +130,15 @@ export function lintTurn({ prior = [], text = '', names = new Set(), stageCheck 
         // answer 的 formula: / calc:（计划 3）：和页面同一个 formulaSpec，外部写的答案先核；页面核不了的是提示
         if (f.name === 'answer') for (const p of answerProblems(f.body, vars)) problems.push({ where, ...p });
         if (f.body.includes('\\calc')) for (const e of expandCalc(f.body, (x) => calcValue(x, vars).tex).errors) problems.push({ where, msg: `\\calc{${e.expr}} 算不出来：${e.msg}` });
+        // 检验题写法的 trace（写了 use:）放在了 board check 外面：板上的 trace 是走 C 代码的演示（dr-final-fix 第 8 条）
+        if (f.name === 'trace' && /^\s*use\s*[:：]/m.test(f.body)) problems.push({ where, msg: 'trace 写了 use:，是检验题的写法：放进 board check 的块里（block / spare 行 + 探题的围栏）；单独写在板上的 trace 是走 C 代码的演示，要写 code:' });
+        // 角度的坑（dr-final-fix 第 5 条）：板上的 let、\calc、answer 按弧度算，scene / space 里才是角度
+        if (!DEG_FENCES.has(f.name)) for (const msg of radianHints(f.name === 'let' ? f.body : fenceCalcText(f), vars)) problems.push({ where, msg, level: 'hint' });
       }
       // 组件外面的正文里的 \calc（整节课的量）
       const prose = String(o.body).replace(/^\s{0,3}(`{3,}|~{3,})[\s\S]*?^\s{0,3}\1\s*$/gm, '');
       if (prose.includes('\\calc')) for (const e of expandCalc(prose, (x) => calcValue(x, vars).tex).errors) problems.push({ where: `${o.op} id=${o.id}`, msg: `\\calc{${e.expr}} 算不出来：${e.msg}` });
+      for (const msg of radianHints(calcsIn(prose).join('\n'), vars)) problems.push({ where: `${o.op} id=${o.id}`, msg, level: 'hint' });
     }
   }
   // 指令指的东西在不在：段 id 或组件 id（以前的轮、这一轮写的都算）
@@ -197,6 +205,47 @@ export function designHints({ out, prior = [], here = new Map() } = {}) {
     });
   }
   return hints;
+}
+
+// —— 角度的坑（dr-final-fix 第 5 条）：只是提示 ——
+// 画图的这几种组件里 sin cos tan 是角度（expr.js 的 DEG），别处（let、\calc、answer、derive……）是弧度
+const DEG_FENCES = new Set(['scene', 'space', 'predict', 'sketch']);
+const DEG_LIKE = (v) => Number.isInteger(v) && v >= 7;
+const RAD_CALL = /(?<![\\\w])(sin|cos|tan)\s*\(\s*([A-Za-z_]\w*|\d+(?:\.\d+)?)\s*\)/g;
+/** 一段式子里 sin(30)、cos(th)（th 是 ≥ 7 的整数）这样的：回要说的话（一种参数说一次） */
+export function radianHints(text, vars = {}) {
+  const src = String(text ?? '');
+  if (!/\b(sin|cos|tan)\b/.test(src)) return [];
+  const local = {}; // 这一段自己 let 的（let th = 30、th = 30）：照写的数
+  for (const m of src.matchAll(/^\s*(?:let\s+)?([A-Za-z_]\w*)\s*=\s*(-?\d+(?:\.\d+)?)\s*$/gm)) local[m[1]] = Number(m[2]);
+  const fl = floatVars(vars);
+  const out = [], seen = new Set();
+  for (const m of src.matchAll(RAD_CALL)) {
+    const arg = m[2];
+    const v = /^\d/.test(arg) ? Number(arg) : arg in local ? local[arg] : typeof fl[arg] === 'number' ? fl[arg] : NaN;
+    if (!DEG_LIKE(v) || seen.has(arg)) continue;
+    seen.add(arg);
+    out.push(`${m[1]}(${arg})${/^\d/.test(arg) ? '' : `（${arg} = ${v}）`}：这里按弧度算：30° 写 pi/6；scene 里才是角度`);
+  }
+  return out;
+}
+// \calc{…} 里的式子（大括号能套一层）
+const calcsIn = (text) => [...String(text ?? '').matchAll(/\\calc\{((?:[^{}]|\{[^{}]*\})*)\}/g)].map((m) => m[1]);
+// 组件里要算的：\calc{…}、let 行、answer / goal / start 这些字段（q:、标题里的字不算）
+const fenceCalcText = (f) => [...calcsIn(f.body), ...[...f.body.matchAll(/^\s*(?:let\s+.+|(?:answer|start|goal|check|calc|value|formula)\s*[:：].*)$/gm)].map((m) => m[0])].join('\n');
+
+// —— 相同的数（dr-final-fix 的独立审查 A）：predict 的 expect 对的值带撇号（r.final、pass#、round# 有相同的数）时，
+// 学生一个撇号都不写也算对（照设计：没问稳定性的题不逼学生标）。考稳定性的要另写一项——只是提示
+export function primeHints(check, base = {}) {
+  const out = [];
+  let mat = check;
+  try { let k = 7; mat = materialize(check, { base, rand: () => ((k = (k * 48271) % 2147483647) / 2147483647) }).check || check; } catch { mat = check; }
+  for (const id of mat.order || []) {
+    const p = mat.probes?.[id];
+    if (!p || p.type !== 'predict') continue;
+    for (const lab of primedExpects(p, base)) out.push(`${id} 的 expect「${lab}」对的值里有撇号（相同的数）：学生不写撇号也算对；考稳定性另写 expect: r.unstable 或 P in r.flipped`);
+  }
+  return out;
 }
 
 // 答案、formula:、calc:、domain: 读一遍、算一遍（页面上自检限 50 ms，这里给 2 s：外部写错的答案页面来不及核时也有人核）。

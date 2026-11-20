@@ -96,6 +96,7 @@ const RULES = {
   arcsin: (u) => div(N(1), C('sqrt', sub(N(1), sq(u)))),
   arccos: (u) => neg(div(N(1), C('sqrt', sub(N(1), sq(u))))),
   arctan: (u) => div(N(1), add(N(1), sq(u))),
+  arccot: (u) => neg(div(N(1), add(N(1), sq(u)))),
   ln: (u) => div(N(1), u),
   lg: (u) => div(N(1), mul(u, C('ln', N(10)))),
   exp: (u) => C('exp', u),

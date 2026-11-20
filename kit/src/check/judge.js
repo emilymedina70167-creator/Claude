@@ -9,7 +9,7 @@ import { equivalent } from '../ncalg.js';
 import { normalizeFormula, FORMULA_FUNCS } from '../formula.js';
 import { compareFx, DEFAULT_RANGE } from '../fx/sample.js';
 import { parseDeriveDo, sampleEnvs, checkLine } from '../derivedo.js';
-import { baseType, probeVars, evalIfs, withDefaults, runVars, measuresUsed, expectValue, runRefs, slotScope, traceTable, traceRows, traceRowName, rewriteHits, diagnosesOf, variantVars } from './spec.js';
+import { slotProblems, baseType, probeVars, evalIfs, withDefaults, runVars, measuresUsed, expectValue, runRefs, slotScope, traceTable, traceRows, traceRowName, rewriteHits, diagnosesOf, variantVars } from './spec.js';
 import { ROLES, matchText, diagnose, normText, joinWords, spanText, tokenizeSentence } from '../entext.js';
 import { sortPass } from '../engines/measures.js';
 import { checkFill, cellOk, normCell, misreadFill } from '../stepperspec.js';
@@ -42,6 +42,32 @@ export function notReady(probe, answer = {}) {
   if (empty.length) return `${empty.join('、')}还没写`;
   return '';
 }
+
+/**
+ * 判这一层也查格式（dr-final-fix 第 7 条：画面上 slotProblems / notReady 先挡，这里是第二道）：
+ * 格子的个数、形状、是不是数对不上（mat(2) 的格子是一个字、seq(8) 交了 7 个数、没交这一格）→ 要说的话；对的是 ''。
+ * 对不上时整道题待核（ok: null「作答的格式不对」），绝不照判——更不会判成过
+ */
+export function slotFormat(probe, slots = {}) {
+  const bad = [];
+  const cellsOk = (v, n) => Array.isArray(v) && v.length === n && v.every((x) => !Array.isArray(x) && String(x ?? '').trim() !== '' && readable(x));
+  for (const s of probe?.slots || []) {
+    const v = slots?.[s.name];
+    if (STR_SLOTS.has(s.kind)) {
+      const p = typeof v === 'string' || typeof v === 'number' ? slotProblems(s, String(v)) : ['不是一行字'];
+      if (p.length) bad.push(`${s.name}：${p[0]}`);
+    } else if (s.kind === 'mat') {
+      if (!(Array.isArray(v) && v.length === s.r && v.every((row) => cellsOk(row, s.c)))) bad.push(`${s.name}：要 ${s.r}×${s.c} 个数`);
+    } else if (s.kind === 'vec') {
+      if (!cellsOk(v, s.n)) bad.push(`${s.name}：要 ${s.n} 个数`);
+    } else if (Array.isArray(v) || String(v ?? '').trim() === '' || !readable(v)) bad.push(`${s.name}：要一个数`);
+  }
+  return bad.join('；');
+}
+const formatItems = (probe, why) => {
+  const items = [...(probe.ifs || []), ...(probe.exprs || [])].map((x) => ({ id: x.id, ok: null, why: `作答的格式不对（${why}）` }));
+  return { items: items.length ? items : [{ id: 'run', ok: null, why: `作答的格式不对（${why}）` }], needsClaude: false, stop: true };
+};
 
 // 学生格子里写的（'1/2'、'√2'、数）→ 数
 // 读出来不是有限数（1e999）算「写的不是数」：抛（调用的地方当写的不是数）
@@ -198,6 +224,16 @@ function expectRights(probe, base) {
 }
 
 /**
+ * 对的值里带撇号的 expect（排序的 final、pass#、round# 有相同的数，dr-final-fix 第 3 条）：标签的列表。
+ * 预检照它提示：学生一个撇号都不写也算对，考稳定性要另写 r.unstable / P in r.flipped（tools/ext-lint.js 的 primeHints）
+ */
+export function primedExpects(probe, base = {}) {
+  const rights = expectRights(probe, base);
+  const primed = (v) => (Array.isArray(v) ? v.some(primed) : typeof v === 'string' && /['’′]/.test(v));
+  return (probe.expects || []).filter((e) => Object.hasOwn(rights, e.id) && primed(rights[e.id])).map((e) => e.label);
+}
+
+/**
  * predict 交之前还差什么（和 construct 的 slotProblems 一样，挡住的不算第一次作答）：没写的、读不懂的（照对的值的样子：
  * 数带了单位、复杂度写成 O(n2)、一串数里夹了字）。全角、末尾的句号逗号不挡（values.js 的 cleanInput 读得懂）。[] 是能交了
  */
@@ -206,7 +242,7 @@ export function expectProblems(probe, got = {}, base = {}) {
   return (probe.expects || []).map((e) => {
     const s = String(got?.[e.id] ?? '').trim();
     if (!s) return `「${e.label}」还没写`;
-    return Object.hasOwn(rights, e.id) ? readProblem(s, rights[e.id], e.label) : '';
+    return Object.hasOwn(rights, e.id) ? readProblem(s, rights[e.id], e.label, { as: e.as }) : '';
   }).filter(Boolean);
 }
 
@@ -233,14 +269,15 @@ function predictItems(probe, answer = {}, base = {}) {
     if (typeof right === 'number' && !Number.isFinite(right)) return { id: e.id, ok: null, why: '页面算不了这一项：算出来不是一个数' };
     const s = String(got[e.id] ?? '').trim();
     if (!s) return { id: e.id, ok: false, why: `没写${e.label}`, keys: [e.id] };
-    const m = valueMatch(s, right);
+    const as = { as: e.as };
+    const m = valueMatch(s, right, as);
     if (m === true) return { id: e.id, ok: true, why: '' };
     // 100B、5h：分不清是进制还是单位，待核（dr-final-fix 第 4 条的裁定）
     if (m === UNSURE) return { id: e.id, ok: null, why: ambiguousWhy(s) };
     // 判的时候还读不懂（交之前没挡住的）：读不懂不是答错，待核（dr-final-fix 第 4 条）
-    if (m === null) return { id: e.id, ok: null, why: `${unreadWhy(right)}（页面读不懂，待核）` };
+    if (m === null) return { id: e.id, ok: null, why: `${unreadWhy(right, as)}（页面读不懂，待核）` };
     const it = { id: e.id, ok: false, why: '' };
-    const hits = diagnosesOf(probe, e, right, rv.vars, { names, allVariants }).filter((d) => valueMatch(s, d.value) === true);
+    const hits = diagnosesOf(probe, e, right, rv.vars, { names, allVariants }).filter((d) => valueMatch(s, d.value, as) === true);
     if (hits.length > 1) {
       // 几种诊断在这组数上答案一样（OPT 和「没算一开始调入」、外部写的 r.faults - 3 都是 9）：分不清是哪一种，都记下、不挑一种补讲
       Object.assign(it, { tags: hits.map((d) => d.key), tagFit: 'exact', why: `这几种错法在这组数上答案一样：${hits.map((d) => d.label).join('；')}`, keys: [e.id, 'default'] });
@@ -486,9 +523,10 @@ function resultItem(probe, answer = {}, base = {}) {
   if (typeof right === 'number' && !Number.isFinite(right)) return { id: 'result', ok: null, why: '页面算不了最后的值：算出来不是一个数' };
   const s = String(answer.result ?? '').trim();
   if (!s) return { id: 'result', ok: false, why: '没写最后的值' };
-  const m = valueMatch(s, right);
+  const as = { as: probe.resultAs };
+  const m = valueMatch(s, right, as);
   // 判的时候还读不懂（交之前没挡住的）：待核，不当答错（dr-final-fix 第 4 条）
-  if (m === null) return { id: 'result', ok: null, why: `${unreadWhy(right)}（页面读不懂，待核）` };
+  if (m === null) return { id: 'result', ok: null, why: `${unreadWhy(right, as)}（页面读不懂，待核）` };
   if (m === UNSURE) return { id: 'result', ok: null, why: ambiguousWhy(s) };
   return m === true ? { id: 'result', ok: true, why: '' } : { id: 'result', ok: false, why: '最后的值不对' };
 }
@@ -516,7 +554,7 @@ export function resultProblem(probe, result, base = {}) {
   const s = String(result ?? '').trim();
   if (!s) return '';
   const right = resultRight(probe, base);
-  return right === undefined ? '' : readProblem(s, right, '最后的值');
+  return right === undefined ? '' : readProblem(s, right, '最后的值', { as: probe.resultAs });
 }
 
 // —— 英语（计划 4 Task 6）：parse、rewrite、errfind、discriminate 的两个按钮页面判；translate 照 recall 全交页面里的 Claude ——
@@ -673,10 +711,13 @@ export function judgeMachine(probe, answer = {}, base = {}) {
   const items = [];
   const hasPoints = (probe.must || []).length > 0;
   switch (baseType(probe)) {
-    case 'construct':
+    case 'construct': {
+      const bad = slotFormat(probe, answer.slots);
+      if (bad) return formatItems(probe, bad);
       if (is408(probe)) return construct408(probe, answer, base);
       items.push(...ifItems(probe, answer.slots, vars), ...exprItems(probe, answer.exprs));
       return { items, needsClaude: false, stop: false };
+    }
     case 'predict':
       return predictItems(probe, answer, base);
     case 'trace':
@@ -685,7 +726,10 @@ export function judgeMachine(probe, answer = {}, base = {}) {
       const ok = answer.truth === probe.truth;
       items.push({ id: 'truth', ok, why: ok ? '' : `这个命题是${probe.truth ? '真' : '假'}的` });
       if (!ok) return { items, needsClaude: false, stop: true };
-      if (!probe.truth) { items.push(...ifItems(probe, answer.slots, vars), ...exprItems(probe, answer.exprs)); return { items, needsClaude: false, stop: false }; }
+      if (!probe.truth) {
+        const bad = slotFormat(probe, answer.slots);
+        if (bad) { const f = formatItems(probe, bad); return { ...f, items: [...items, ...f.items] }; }
+        items.push(...ifItems(probe, answer.slots, vars), ...exprItems(probe, answer.exprs)); return { items, needsClaude: false, stop: false }; }
       if (probe.proof) { items.push(proofItem(probe, answer.proof)); return { items, needsClaude: false, stop: false }; }
       return { items, needsClaude: hasPoints, stop: false };
     }
