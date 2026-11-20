@@ -1036,6 +1036,9 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .block-graph .w-side > :is(.goal-msg, .w-hint, .w-note, .scene-error) { grid-column: 1 / -1; }
 /* 没有滑块时读数占一整行（上面那几样跨了全部的栏，空栏不会自己收起来） */
 .block-graph .w-side > .sliders:empty + .r-show { grid-column: 1 / -1; }
+.block-graph .w-side.is-wide > .r-show { grid-column: 1 / -1; }
+.block-graph .w-side.is-wide > .sliders:not(:empty) { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 360px)); gap: 4px 22px; }
+.block-graph .w-side.is-wide > .sliders > .coef { min-width: 0; }
 .plane.graph { width: 100%; height: auto; display: block; }
 .plane.graph .tick { font: 13px var(--sans); font-variant-numeric: tabular-nums; fill: var(--muted); }
 .plane.graph .g-curve { fill: none; stroke-width: 3.4; stroke-linejoin: round; stroke-linecap: round; filter: var(--rough-v); }
@@ -1067,7 +1070,8 @@ body.has-keypad .ink-fab, body.has-keypad .ink-bar { display: none; }
 .plane.graph .g-vec line { stroke-width: 3.6; stroke-linecap: round; }
 .plane.graph .g-vec polygon { stroke: none; }
 .plane.graph .g-region { stroke-width: 1.6; stroke-opacity: .7; }
-.plane.graph .g-where { shape-rendering: crispEdges; }
+/* 条件围的区域常叠在样本空间上面：浓一点才认得出是哪一块 */
+.plane.graph .g-where { shape-rendering: crispEdges; fill-opacity: .42; }
 .plane.graph .g-strip { stroke-width: 4.5; stroke-linecap: round; }
 .r-show > .is-stale { opacity: .45; }
 .plane.graph .g-label.is-small { font: 13px var(--sans); stroke-width: 3px; }

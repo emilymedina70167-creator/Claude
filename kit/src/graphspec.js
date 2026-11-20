@@ -23,7 +23,7 @@ export const CMDS = ['let', 'slider', 'plot', 'shade', 'bars', 'point', 'vline',
   // 平面上两个变量的（第 2 批）：参数曲线、极坐标、隐函数、等高线、方向场、向量场、解曲线、箭头、区域、区域里的一条
   'param', 'polar', 'implicit', 'contour', 'slope', 'field', 'flow', 'vector', 'region', 'strip'];
 // 这几个修饰只有函数图有，而且各管各的命令（别处它们是普通的名字：let mid = 1 以后 shade x^2 a mid 的 mid 是上限）
-const OWN_FLAGS = { riemann: ['left', 'right', 'mid'], point: ['hollow'], dots: ['join'], param: ['fill'], polar: ['fill'] };
+const OWN_FLAGS = { riemann: ['left', 'right', 'mid'], point: ['hollow'], dots: ['join'], param: ['fill'], polar: ['fill'], region: ['hide'] };
 
 // 行尾的修饰：公共的（color= label= dashed……）和这条命令自己的旗标可以混着写，先后不限
 function mods(line, kind) {
@@ -59,7 +59,7 @@ function tail2(s) {
   return w.length >= 3 ? [w.slice(0, -2).join(' '), w[w.length - 2], w[w.length - 1]] : null;
 }
 
-const REGION_EG = 'region 的写法：region y from x^2 to x for x 0 1（X 型）、region x from y to sqrt(y) for y 0 1（Y 型）、region r from 0 to 1 + cos(t) for t 0 2pi（极坐标），或者一个条件 region x + y <= 1；前面可以起名 region D = …';
+const REGION_EG = 'region 的写法：region y from x^2 to x for x 0 1（X 型）、region x from y to sqrt(y) for y 0 1（Y 型）、region r from 0 to 1 + cos(t) for t 0 2pi（极坐标），或者条件 region x + y <= 1（几个条件用逗号隔开；末尾 in D 限在区域 D 里）；前面可以起名 region D = …';
 // 「左 = 右」→「(左) - (右)」（等值线、约束曲线：等于 0 的地方）。没有等号时：need 为真回 null，否则原样（就是「式子 = 0」）
 function eqToZero(src, need = false) {
   const parts = String(src).split(/(?<![<>=!])=(?!=)/);
@@ -219,7 +219,16 @@ function parseCmd(kind, rest, { C, num, defs, cmds = [] }) {
       return { kind, name, shape: t[1], lo: C(t[2]), hi: C(t[3]), param: t[4], a: C(w[0]), b: C(w[1]), mods: md };
     }
     if (/\sfrom\s/.test(r) || !/[<>]|==|!=/.test(r)) throw new Error(REGION_EG);
-    return { kind, name, shape: 'where', cond: C(r), mods: md };
+    // 条件：几个用逗号隔开（都成立）；末尾的 in D 限在前面起了名字的区域里（样本空间里的事件）
+    const im = r.match(/^(.*\S)\s+in\s+([A-Za-z_]\w*)$/);
+    const within = im ? im[2] : undefined;
+    if (within) {
+      const reg = cmds.find((c) => c.kind === 'region' && c.name === within);
+      if (!reg) throw new Error(`region … in ${within}：没有叫 ${within} 的区域（前面先写 region ${within} = y from … to … for x … …）`);
+      if (reg.shape === 'where') throw new Error(`region … in ${within}：in 后面要是写成上下限的区域（y from … to … for x … …），${within} 是条件围的；把它的条件用逗号并进来`);
+    }
+    const conds = splitTop(im ? im[1] : r).map((x) => C(x));
+    return { kind, name, shape: 'where', cond: (v) => (conds.every((c) => c(v) !== 0) ? 1 : 0), within, mods: md };
   }
   if (kind === 'strip') {
     const m = body.match(/^([A-Za-z_]\w*)\s+at\s+(.+)$/);

@@ -224,3 +224,25 @@ test('二维的拖点；on= 约束在曲线上；第 1 批的写法不变', () =
   assert.equal(g.cmds[2].onF({ x: 3 }), 9); assert.equal(g.cmds[2].onG, undefined);
   assert.equal(g.cmds[3].onG({ x: 1, y: 0 }), 0); assert.equal(g.cmds[3].onF, undefined);
 });
+
+test('region：几个条件用逗号隔开（都成立）；in D 限在前面起了名字的区域里；hide 只起名字不画', () => {
+  const one = (src) => parseGraph(src).cmds.at(-1);
+  const w = one('region x >= 0, y >= 0, x + y <= 1');
+  assert.equal(w.shape, 'where');
+  assert.equal(w.cond({ x: 0.2, y: 0.3 }) !== 0, true);
+  assert.equal(w.cond({ x: -0.2, y: 0.3 }) !== 0, false);
+  assert.equal(w.cond({ x: 0.8, y: 0.8 }) !== 0, false);
+  // 函数调用里的逗号不拆
+  const m = one('region max(x, y) <= 1, min(x, y) >= 0');
+  assert.equal(m.cond({ x: 0.5, y: 0.9 }) !== 0, true);
+  assert.equal(m.cond({ x: 0.5, y: 1.2 }) !== 0, false);
+  const g = parseGraph('region D = y from 0 to 1 for x 0 1\nregion A = x + y <= z in D color=yellow');
+  assert.equal(g.cmds[1].within, 'D'); assert.equal(g.cmds[1].name, 'A'); assert.equal(g.cmds[1].mods.color, 'yellow');
+  assert.equal(g.cmds[1].cond({ x: 0.2, y: 0.3, z: 1 }) !== 0, true);
+  assert.throws(() => parseGraph('region x + y <= 1 in D'), /没有叫 D 的区域/);
+  assert.throws(() => parseGraph('region E = x <= 1\nregion x + y <= 1 in E'), /in 后面/);
+  const h = one('region E = x from y to sqrt(y) for y 0 1 hide');
+  assert.equal(h.mods.hide, true); assert.equal(h.b({}), 1);
+  // 别的命令上 hide 还是普通的名字
+  assert.equal(parseGraph('let hide = 2\nvline hide').cmds[1].at({ hide: 2 }), 2);
+});

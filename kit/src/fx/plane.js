@@ -10,9 +10,48 @@ export const PLANE_MAX_LEVELS = 12;
 const val2 = (F) => (x, y) => { let v; try { v = F(x, y); } catch { return NaN; } return typeof v === 'number' && Number.isFinite(v) ? v : NaN; };
 const clampN = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(n)) || lo));
 
+// 正好落在等值线上的格点挪开一点点：不然一条线会在格点上断成好几截、鞍点的四支分不清
+const EPS0 = 1e-12;
+// 梯度很小的地方（鞍点、极值点旁边）一格里线拐得急，一格一条直线段接不上：这些格子每格再分 FINE × FINE
+const FINE = 8, FINE_MAX_CELLS = 600, FLAT = 0.3;
+
+// 一个格子里的线段。G：{ W1（一行几个格点）, base（边的编号从哪起）, cbase（角的编号）, val(i, j), zero(i, j), x(i), y(j) }
+// 交点按「哪条格子边」记：横边 h(i, j) 是 (i, j)—(i+1, j)，竖边 v(i, j) 是 (i, j)—(i, j+1)。
+// 相邻两个格子共用一条边，按边的编号接线——按坐标接的话，同一个交点从两边各算一次会差出最后一位，线就断了
+function marchCell(G, i, j, pts, segs, mid) {
+  const v0 = G.val(i, j), v1 = G.val(i + 1, j), v2 = G.val(i + 1, j + 1), v3 = G.val(i, j + 1); // 左下、右下、右上、左上
+  if (Number.isNaN(v0) || Number.isNaN(v1) || Number.isNaN(v2) || Number.isNaN(v3)) return;
+  const x0 = G.x(i), y0 = G.y(j), x1 = G.x(i + 1), y1 = G.y(j + 1);
+  const hId = (a, b) => G.base + 2 * (b * G.W1 + a), vId = (a, b) => G.base + 2 * (b * G.W1 + a) + 1;
+  const cross = (id, xa, ya, va, xb, yb, vb) => { if (!pts.has(id)) { const t = va / (va - vb); pts.set(id, [xa + (xb - xa) * t, ya + (yb - ya) * t]); } return id; };
+  const e = {};
+  if (v0 * v1 < 0) e.b = cross(hId(i, j), x0, y0, v0, x1, y0, v1);
+  if (v1 * v2 < 0) e.r = cross(vId(i + 1, j), x1, y0, v1, x1, y1, v2);
+  if (v3 * v2 < 0) e.t = cross(hId(i, j + 1), x0, y1, v3, x1, y1, v2);
+  if (v0 * v3 < 0) e.l = cross(vId(i, j), x0, y0, v0, x0, y1, v3);
+  const ks = Object.keys(e);
+  if (ks.length === 2) {
+    // 两个交点都落在格点上、还是斜对着的两个角，而第三个角本来也正好在线上（xy = 0 的原点旁边）：
+    // 线是沿着格子边拐过那个角的，不是斜着切过去
+    const zc = [G.zero(i, j), G.zero(i + 1, j), G.zero(i + 1, j + 1), G.zero(i, j + 1)];
+    const via = zc[0] + zc[1] + zc[2] + zc[3] === 3 ? [0, 1, 2, 3].find((q) => zc[q] && zc[(q + 1) % 4] && zc[(q + 3) % 4]) : -1;
+    if (via >= 0) {
+      const cid = -1 - (G.cbase + (j + (via >= 2 ? 1 : 0)) * G.W1 + i + (via === 1 || via === 2 ? 1 : 0));
+      if (!pts.has(cid)) pts.set(cid, [via === 1 || via === 2 ? x1 : x0, via >= 2 ? y1 : y0]);
+      segs.push([e[ks[0]], cid], [cid, e[ks[1]]]);
+    } else segs.push([e[ks[0]], e[ks[1]]]);
+  } else if (ks.length === 4) {
+    // 鞍点：四条边都有交点。中心和左下角同号 → 左下角不被单独切出去
+    const c = mid((x0 + x1) / 2, (y0 + y1) / 2);
+    if ((Number.isNaN(c) ? v0 : c) * v0 > 0) segs.push([e.b, e.r], [e.t, e.l]);
+    else segs.push([e.b, e.l], [e.t, e.r]);
+  }
+}
+
 /**
  * 等值线 F(x, y) = level：行进方格。回几条折线，每条 [[x, y], …]。
  * 格子的四个角有没定义的就跳过；鞍点的格子（对角同号）按格子中心的值决定怎么连。
+ * 线上梯度比别处小得多的格子（鞍点、极值点旁边）自动加密。
  */
 export function contourLines(F, level, box, { nx = 96, ny = 96 } = {}) {
   const f = val2(F);
@@ -20,46 +59,95 @@ export function contourLines(F, level, box, { nx = 96, ny = 96 } = {}) {
   const dx = (box.x1 - box.x0) / nx, dy = (box.y1 - box.y0) / ny;
   const g = [];
   for (let j = 0; j <= ny; j++) { const row = new Float64Array(nx + 1); for (let i = 0; i <= nx; i++) row[i] = f(box.x0 + i * dx, box.y0 + j * dy) - level; g.push(row); }
-  // 正好落在等值线上的格点挪开一点点：不然一条线会在格点上断成好几截、鞍点的四支分不清
-  const eps = 1e-12;
-  const zero = g.map((row) => { const z = new Uint8Array(nx + 1); for (let i = 0; i <= nx; i++) if (row[i] === 0) { z[i] = 1; row[i] = eps; } return z; });
-  // 交点按「哪条格子边」记：横边 h(i, j) 是 (i, j)—(i+1, j)，竖边 v(i, j) 是 (i, j)—(i, j+1)。
-  // 相邻两个格子共用一条边，按边的编号接线——按坐标接的话，同一个交点从两边各算一次会差出最后一位，线就断了
+  const zero = g.map((row) => { const z = new Uint8Array(nx + 1); for (let i = 0; i <= nx; i++) if (row[i] === 0) { z[i] = 1; row[i] = EPS0; } return z; });
+  const mid = (x, y) => f(x, y) - level;
   const W1 = nx + 1;
-  const hId = (i, j) => 2 * (j * W1 + i), vId = (i, j) => 2 * (j * W1 + i) + 1;
-  const pts = new Map();
-  const cross = (id, xa, ya, va, xb, yb, vb) => { if (!pts.has(id)) { const t = va / (va - vb); pts.set(id, [xa + (xb - xa) * t, ya + (yb - ya) * t]); } return id; };
-  const segs = [];
+  const coarse = { W1, base: 0, cbase: 0, val: (i, j) => g[j][i], zero: (i, j) => zero[j][i], x: (i) => box.x0 + i * dx, y: (j) => box.y0 + j * dy };
+
+  // 哪些格子要加密：线穿过的格子里，梯度（四个角估的）比这条线上的中位数小得多的，连同它周围一圈
+  const cut = [];
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
-    const v0 = g[j][i], v1 = g[j][i + 1], v2 = g[j + 1][i + 1], v3 = g[j + 1][i]; // 左下、右下、右上、左上
-    if (Number.isNaN(v0) || Number.isNaN(v1) || Number.isNaN(v2) || Number.isNaN(v3)) continue;
-    const x0 = box.x0 + i * dx, y0 = box.y0 + j * dy, x1 = x0 + dx, y1 = y0 + dy;
-    const e = {};
-    if (v0 * v1 < 0) e.b = cross(hId(i, j), x0, y0, v0, x1, y0, v1);
-    if (v1 * v2 < 0) e.r = cross(vId(i + 1, j), x1, y0, v1, x1, y1, v2);
-    if (v3 * v2 < 0) e.t = cross(hId(i, j + 1), x0, y1, v3, x1, y1, v2);
-    if (v0 * v3 < 0) e.l = cross(vId(i, j), x0, y0, v0, x0, y1, v3);
-    const ks = Object.keys(e);
-    if (ks.length === 2) {
-      // 两个交点都落在格点上、还是斜对着的两个角，而第三个角本来也正好在线上（xy = 0 的原点旁边）：
-      // 线是沿着格子边拐过那个角的，不是斜着切过去
-      const zc = [zero[j][i], zero[j][i + 1], zero[j + 1][i + 1], zero[j + 1][i]];
-      const nz = zc[0] + zc[1] + zc[2] + zc[3];
-      const via = nz === 3 ? [0, 1, 2, 3].find((q) => zc[q] && zc[(q + 1) % 4] && zc[(q + 3) % 4]) : -1;
-      if (via >= 0) {
-        const cid = -1 - ((j + (via >= 2 ? 1 : 0)) * W1 + i + (via === 1 || via === 2 ? 1 : 0));
-        if (!pts.has(cid)) pts.set(cid, [via === 1 || via === 2 ? x1 : x0, via >= 2 ? y1 : y0]);
-        segs.push([e[ks[0]], cid], [cid, e[ks[1]]]);
-      } else segs.push([e[ks[0]], e[ks[1]]]);
-    }
-    else if (ks.length === 4) {
-      // 鞍点：四条边都有交点。中心和左下角同号 → 左下角不被单独切出去
-      const c = f(x0 + dx / 2, y0 + dy / 2) - level;
-      if ((Number.isNaN(c) ? v0 : c) * v0 > 0) segs.push([e.b, e.r], [e.t, e.l]);
-      else segs.push([e.b, e.l], [e.t, e.r]);
+    const v0 = g[j][i], v1 = g[j][i + 1], v2 = g[j + 1][i + 1], v3 = g[j + 1][i];
+    if (Number.isNaN(v0 + v1 + v2 + v3)) continue;
+    const pos = (v0 > 0) + (v1 > 0) + (v2 > 0) + (v3 > 0);
+    if (pos === 0 || pos === 4) continue;
+    cut.push({ i, j, m: Math.hypot((v1 - v0 + v2 - v3) / (2 * dx), (v3 - v0 + v2 - v1) / (2 * dy)) });
+  }
+  const refine = new Set();
+  if (cut.length >= 8) {
+    const med = cut.map((c) => c.m).sort((a, b) => a - b)[cut.length >> 1];
+    const flat = cut.filter((c) => c.m < FLAT * med).sort((a, b) => a.m - b.m).slice(0, Math.floor(FINE_MAX_CELLS / 9));
+    for (const c of flat) for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+      const i = c.i + a, j = c.j + b;
+      if (i >= 0 && i < nx && j >= 0 && j < ny) refine.add(j * nx + i);
     }
   }
-  return joinSegs(segs).map((line) => line.map((id) => pts.get(id)));
+
+  const pts = new Map(), segs = [];
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) if (!refine.has(j * nx + i)) marchCell(coarse, i, j, pts, segs, mid);
+  const lines = joinSegs(segs).map((line) => line.map((id) => pts.get(id)));
+  if (!refine.size) return lines;
+
+  // 加密的格子：细网格上的格点值现算现记（相邻的细格共用）
+  const W1f = nx * FINE + 1, memo = new Map(), zf = new Set();
+  const fval = (I, J) => {
+    const k = J * W1f + I;
+    let v = memo.get(k);
+    if (v === undefined) { v = f(box.x0 + (I * dx) / FINE, box.y0 + (J * dy) / FINE) - level; if (v === 0) { zf.add(k); v = EPS0; } memo.set(k, v); }
+    return v;
+  };
+  const fineG = { W1: W1f, base: 2 * (nx + 1) * (ny + 1) + 2, cbase: (nx + 1) * (ny + 1) + 1, val: fval, zero: (I, J) => (fval(I, J), zf.has(J * W1f + I) ? 1 : 0), x: (I) => box.x0 + (I * dx) / FINE, y: (J) => box.y0 + (J * dy) / FINE };
+  const fpts = new Map(), fsegs = [];
+  for (const k of refine) {
+    const i = k % nx, j = (k - i) / nx;
+    for (let b = 0; b < FINE; b++) for (let a = 0; a < FINE; a++) marchCell(fineG, i * FINE + a, j * FINE + b, fpts, fsegs, mid);
+  }
+  const fineLines = joinSegs(fsegs).map((line) => line.map((id) => fpts.get(id)));
+  return stitch(lines, fineLines, 0.3 * Math.min(dx, dy));
+}
+
+// 粗网格的线和加密那一块的线在交界上接起来（两边在同一条格子边上各自插值，差一点点，按距离认）
+function stitch(coarse, fine, tol) {
+  const all = [...coarse.map((l) => ({ l, fine: false })), ...fine.map((l) => ({ l, fine: true }))];
+  const d = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+  for (let moved = true; moved;) {
+    moved = false;
+    outer: for (let a = 0; a < all.length; a++) for (let b = 0; b < all.length; b++) {
+      if (a === b || all[a].fine === all[b].fine && !all[a].mixed && !all[b].mixed) continue;
+      const A = all[a].l, B = all[b].l;
+      // A 的尾接 B 的头 / 尾
+      const tail = A[A.length - 1];
+      let joined = null;
+      if (d(tail, B[0]) <= tol) joined = [...A, ...B];
+      else if (d(tail, B[B.length - 1]) <= tol) joined = [...A, ...B.slice().reverse()];
+      else if (d(A[0], B[B.length - 1]) <= tol) joined = [...B, ...A];
+      else if (d(A[0], B[0]) <= tol) joined = [...B.slice().reverse(), ...A];
+      if (!joined) continue;
+      all[a] = { l: joined, fine: all[a].fine, mixed: true };
+      all.splice(b, 1);
+      moved = true;
+      break outer;
+    }
+  }
+  return all.map((x) => x.l);
+}
+
+/** 折线上走到全长的 frac（0～1）处，是第几个点（按长度，不按点数） */
+export function indexAt(line, frac) {
+  if (line.length < 2) return 0;
+  const acc = [0];
+  for (let i = 1; i < line.length; i++) acc.push(acc[i - 1] + Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]));
+  const want = Math.max(0, Math.min(1, frac)) * acc[acc.length - 1];
+  let k = 0;
+  while (k < acc.length - 1 && acc[k + 1] <= want) k++;
+  return k < acc.length - 1 && want - acc[k] > acc[k + 1] - want ? k + 1 : k;
+}
+
+/** 几条折线里最长的那条（按长度，不按点数：加密过的一小段点很多） */
+export function longestLine(lines) {
+  let best = null, bl = -1;
+  for (const l of lines) { let s = 0; for (let i = 1; i < l.length; i++) s += Math.hypot(l[i][0] - l[i - 1][0], l[i][1] - l[i - 1][1]); if (s > bl) { bl = s; best = l; } }
+  return best;
 }
 
 // 线段（两头是边的编号）首尾接成折线
@@ -111,12 +199,15 @@ export function paramCurve(P, a, b, { n = 400, box = null } = {}) {
  * aspect：屏幕上 y 方向每单位的像素 ÷ x 方向的（不等比例的图里，让每一段在屏幕上一样长）；不传按数学坐标。
  */
 export function slopeMarks(F, box, { nx = 17, ny = 11, aspect = 1 } = {}) {
-  const f = val2(F), out = [];
+  const out = [];
   const sx = (box.x1 - box.x0) / Math.max(1, nx - 1), sy = (box.y1 - box.y0) / Math.max(1, ny - 1);
   const len = 0.38 * Math.min(sx, sy * aspect); // 屏幕上的长度（按 x 的单位量）
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
-    const x = box.x0 + i * sx, y = box.y0 + j * sy, k = f(x, y);
-    if (Number.isNaN(k)) continue;
+    const x = box.x0 + i * sx, y = box.y0 + j * sy;
+    let k; try { k = F(x, y); } catch { continue; }
+    if (typeof k !== 'number' || Number.isNaN(k)) continue;
+    // 斜率无穷：竖的一小段（屏幕上和别的一样长）
+    if (!Number.isFinite(k)) { out.push({ x, y, dx: 0, dy: len / aspect }); continue; }
     const m = Math.hypot(1, k * aspect);
     out.push({ x, y, dx: len / m, dy: (len * k) / m });
   }
@@ -230,6 +321,21 @@ export function typedRegion(kind, lo, hi, a, b, { n = 120 } = {}) {
   const polys = runs.filter((r) => r.length >= 2).map((r) => [...r.map((s) => at(kind, s.t, s.l)), ...r.map((s) => at(kind, s.t, s.h)).reverse()]);
   // poly：最大的那一块（只有一块时就是它）
   return { polys, poly: polys.reduce((p, q) => (q.length > p.length ? q : p), []), ok };
+}
+
+/** 点 (x, y) 在不在这样的区域里（事件 ∩ 样本空间用）。极坐标的角按 2π 绕着认 */
+export function inTyped(kind, lo, hi, a, b) {
+  const L = val1(lo), H = val1(hi);
+  const between = (t, r) => { const l = L(t), h = H(t); return !Number.isNaN(l) && !Number.isNaN(h) && r >= Math.min(l, h) - 1e-12 && r <= Math.max(l, h) + 1e-12; };
+  if (kind === 'r') {
+    return (x, y) => {
+      const r = Math.hypot(x, y), t0 = Math.atan2(y, x);
+      // 把角挪进 [a, a + 2π)；区间超过一圈的再多试一圈
+      for (let t = t0 + Math.ceil((a - t0) / (2 * Math.PI) - 1e-12) * 2 * Math.PI; t <= b + 1e-12; t += 2 * Math.PI) if (between(t, r)) return true;
+      return false;
+    };
+  }
+  return (x, y) => { const [t, r] = kind === 'y' ? [x, y] : [y, x]; return t >= a - 1e-12 && t <= b + 1e-12 && between(t, r); };
 }
 
 /** 区域在 t 处的那一条（竖条 / 横条 / 射线上的一段）；那里没定义回 null */

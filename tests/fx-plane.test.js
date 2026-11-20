@@ -1,7 +1,7 @@
 // 视觉交互第 2 批 Task 3：平面上的几何（等值线、参数曲线、方向场、解曲线、区域、往曲线上投影）
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { contourLines, paramCurve, slopeMarks, fieldArrows, flowLine, flowField, typedRegion, stripOf, whereRuns, projectTo, PLANE_MAX_GRID, PLANE_MAX_LEVELS } from '../kit/src/fx/plane.js';
+import { contourLines, paramCurve, slopeMarks, fieldArrows, flowLine, flowField, typedRegion, stripOf, whereRuns, projectTo, PLANE_MAX_GRID, PLANE_MAX_LEVELS, inTyped, indexAt, longestLine } from '../kit/src/fx/plane.js';
 
 const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) <= e, `${a} ≠ ${b}（容差 ${e}）`);
 const box = { x0: -3, x1: 3, y0: -3, y1: 3 };
@@ -65,7 +65,8 @@ test('方向场：每一小段的斜率就是那一点的 F', () => {
   const L = (s) => Math.hypot(s.dx, s.dy);
   for (const s of g) near(L(s), L(g[0]), 1e-9);
   // 没定义的格点不画
-  assert.ok(slopeMarks((x, y) => 1 / (x * 0), box).length === 0);
+  assert.ok(slopeMarks(() => 0 / 0, box).length === 0);
+  assert.ok(slopeMarks(() => { throw new Error('x'); }, box).length === 0);
 });
 
 test('向量场：箭头的方向对、长度有上下限', () => {
@@ -182,4 +183,67 @@ test('区域的边界在中间一段没定义：分成两块，不连成一块',
   const r = typedRegion('y', () => 0, (x) => Math.sqrt(x * x - 1), -2, 2);
   assert.equal(r.polys.length, 2);
   assert.ok(r.polys[0].every((p) => p[0] <= -1 + 1e-4) && r.polys[1].every((p) => p[0] >= 1 - 1e-4));
+});
+
+test('点在不在写成上下限的区域里：X 型、Y 型、极坐标（角度绕一圈也认）', () => {
+  const D = inTyped('y', (x) => x * x, (x) => x, 0, 1);
+  assert.equal(D(0.5, 0.3), true); assert.equal(D(0.5, 0.6), false); assert.equal(D(1.5, 1.6), false); assert.equal(D(0.5, 0.2), false);
+  const E = inTyped('x', (y) => y, (y) => Math.sqrt(y), 0, 1);
+  assert.equal(E(0.5, 0.3), true); assert.equal(E(0.2, 0.3), false);
+  const P = inTyped('r', () => 1, () => 2, 0, Math.PI);
+  assert.equal(P(0, 1.5), true); assert.equal(P(0, -1.5), false); assert.equal(P(0.5, 0.1), false);
+  // θ 从 −π/2 到 π/2：第四象限的点 atan2 是负的，照样在
+  const C = inTyped('r', () => 0, (t) => 2 * Math.cos(t), -Math.PI / 2, Math.PI / 2);
+  assert.equal(C(1, -0.5), true); assert.equal(C(-0.2, 0), false);
+  // θ 从 0 到 2π：第三象限（atan2 是负的）加一圈以后在
+  const F = inTyped('r', () => 0, (t) => 1 + Math.cos(t), 0, 2 * Math.PI);
+  assert.equal(F(-0.1, -0.1), true); assert.equal(F(1.5, 0.1), true); assert.equal(F(-1, -1), false);
+  // 边界没定义的地方不在
+  assert.equal(inTyped('y', () => 0, (x) => Math.sqrt(1 - x * x), -2, 2)(1.5, 0), false);
+});
+
+test('方向场：斜率是无穷的地方画竖的小线段（y′ = −x/y 在 x 轴上），0/0 的地方不画', () => {
+  const ms = slopeMarks((x, y) => -x / y, { x0: -2, x1: 2, y0: -2, y1: 2 }, { nx: 5, ny: 5 });
+  const onAxis = ms.filter((m) => m.y === 0);
+  assert.equal(onAxis.length, 4, '(±1, 0)、(±2, 0) 四个竖的；原点 0/0 不画');
+  for (const m of onAxis) { assert.equal(m.dx, 0); assert.ok(m.dy > 0); }
+});
+
+test('等值线过鞍点、鞍点不在格点上（x³ − 3x + y² = 2 在 (−1, 0)）：两支真的交上，不留一格的缺口', () => {
+  const box = { x0: -2.6, x1: 2.6, y0: -2.44, y1: 2.44 };
+  const ls = contourLines((x, y) => x ** 3 - 3 * x + y * y, 2, box, { nx: 96, ny: 96 });
+  // 点到折线的距离
+  const dist = (px, py) => {
+    let best = Infinity;
+    for (const l of ls) for (let i = 1; i < l.length; i++) {
+      const [ax, ay] = l[i - 1], [bx, by] = l[i], dx = bx - ax, dy = by - ay;
+      const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
+      best = Math.min(best, Math.hypot(px - ax - t * dx, py - ay - t * dy));
+    }
+    return best;
+  };
+  assert.ok(dist(-1, 0) < 0.006, `鞍点离线 ${dist(-1, 0)}`);
+  // 四支都在：鞍点旁边斜率 ±√3 的四个方向上各有线
+  for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) assert.ok(dist(-1 + sx * 0.1, sy * 0.1 * Math.sqrt(3)) < 0.012, `(${sx}, ${sy}) 那一支离得远`);
+  // 鞍点上下不该有线（两支是交叉，不是上下两个 V 用横线连起来）
+  assert.ok(dist(-1, 0.04) > 0.012 && dist(-1, -0.04) > 0.012, '鞍点正上方有线');
+});
+
+test('局部加密不拖慢平常的等值线：一条直线、一个圆都不加密', () => {
+  let n = 0;
+  contourLines((x, y) => { n++; return x + y; }, 0.5, { x0: -3, x1: 3, y0: -3, y1: 3 }, { nx: 96, ny: 96 });
+  assert.ok(n <= 97 * 97 + 50, `直线算了 ${n} 次`);
+  n = 0;
+  contourLines((x, y) => { n++; return x * x + y * y; }, 4, { x0: -3, x1: 3, y0: -3, y1: 3 }, { nx: 96, ny: 96 });
+  assert.ok(n <= 97 * 97 + 50, `圆算了 ${n} 次`);
+});
+
+test('折线上按长度取点：加密过的一小段点多，不把位置拉偏', () => {
+  // 前 100 个点挤在长度 1 的一段里，后面 1 个点在 9 以外
+  const line = [...Array.from({ length: 101 }, (_, i) => [i / 100, 0]), [10, 0]];
+  assert.equal(indexAt(line, 0), 0);
+  assert.equal(indexAt(line, 1), line.length - 1);
+  assert.ok(line[indexAt(line, 0.05)][0] >= 0.45 && line[indexAt(line, 0.05)][0] <= 0.55);
+  assert.equal(longestLine([[[0, 0], [0.1, 0], [0.2, 0], [0.3, 0]], [[0, 0], [5, 5]]]).length, 2);
+  assert.equal(longestLine([]), null);
 });

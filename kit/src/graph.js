@@ -19,7 +19,7 @@ import { splitMods, fillValues } from './scene.js';
 import { mdToHtml, tex2html, escapeHtml } from './render.js';
 import { sliderText, figureControls, dragHandles } from './plot.js';
 import { judgePicks, pickFeedback, snapPick } from './graphpick.js';
-import { contourLines, paramCurve, slopeMarks, fieldArrows, flowLine, flowField, typedRegion, stripOf, whereRuns, projectTo } from './fx/plane.js';
+import { contourLines, paramCurve, slopeMarks, fieldArrows, flowLine, flowField, typedRegion, stripOf, whereRuns, inTyped, projectTo, longestLine, indexAt } from './fx/plane.js';
 import { close } from './scene.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -72,6 +72,8 @@ export function createGraph(container, src, opts = {}) {
   const revealed = () => hasTasks && goalIdx.every((i) => state.goalsHit.has(i)) && pickIdx.every((i) => state.picks.get(i).done);
   container.innerHTML = '<div class="w-plot g-plot"></div><div class="w-side"><div class="sliders"></div><div class="readout r-show"></div><div class="goal-msg" hidden></div></div>';
   const side = container.querySelector('.w-side');
+  // 读数长（一条很长、或者有好几条）：自己占一整行，不挤在滑块旁边的窄栏里折成好几行
+  { const shows = cmds.filter((c) => c.kind === 'show'); if (shows.length > 1 || shows.some((c) => c.text.length > 44)) side.classList.add('is-wide'); }
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('class', 'plane graph');
   container.querySelector('.g-plot').appendChild(svg);
@@ -217,7 +219,7 @@ export function createGraph(container, src, opts = {}) {
     // 斜着的曲线（参数曲线、隐函数、解曲线）上挂名字：沿法线往外让开（正上方 18px 在斜线上正好压着线）
     const wantOn = (pts, frac, text, fill) => {
       if (!text || !pts.length) return;
-      const i = Math.min(pts.length - 1, Math.floor(pts.length * frac)), p = pts[i], a = pts[Math.max(0, i - 2)], b = pts[Math.min(pts.length - 1, i + 2)];
+      const i = indexAt(pts, frac), p = pts[i], a = pts[Math.max(0, i - 2)], b = pts[Math.min(pts.length - 1, i + 2)];
       let tx = X(b[0]) - X(a[0]), ty = Y(b[1]) - Y(a[1]);
       const L = Math.hypot(tx, ty) || 1; tx /= L; ty /= L;
       // 法线取朝上的那一边（屏幕上 y 小的）
@@ -295,7 +297,11 @@ export function createGraph(container, src, opts = {}) {
             if (c.mods.label) {
               // 标签挂在曲线上看得见的地方：写了 at= 用它，那里在窗口外就换一处
               const fr = [Number(c.mods.at) || 0.82, 0.7, 0.9, 0.55, 0.4, 0.25, 0.1].map((t) => labelSpot(r.segs, t, { x0: xr[0], x1: xr[1] })).find((p) => p && inside(p[0], p[1]));
-              if (fr) want(fr[0], fr[1], c.mods.label, col, 0, -18);
+              // 等比例的图里曲线常是斜的：名字沿法线让开（正上方会压着线）；别的图照旧放在上方
+              const gq = quiet(fnOf(c.f, v)), hq = (xr[1] - xr[0]) / 200;
+              const nb = fr && equal ? [[fr[0] - hq, gq(fr[0] - hq)], fr, [fr[0] + hq, gq(fr[0] + hq)]] : null;
+              if (nb && nb.every((p) => !Number.isNaN(p[1]))) wantOn(nb, 0.5, c.mods.label, col);
+              else if (fr) want(fr[0], fr[1], c.mods.label, col, 0, -18);
             }
           } else if (c.kind === 'area') {
             const lo = Math.max(xr[0], c.a(v)), hi = Math.min(xr[1], c.b(v));
@@ -366,12 +372,13 @@ export function createGraph(container, src, opts = {}) {
               const lines = contourLines(F, lv, box2, { nx: n, ny: n });
               for (const ln of lines) { any = true; el('polyline', { points: poly2(ln), class: `g-curve${c.kind === 'contour' ? ' thin' : ''}${c.mods.dashed ? ' dashed' : ''}` }, plotG).style.stroke = col; }
               // 等高线上挂它的值：挂在最长那条线的中段
-              if (c.kind === 'contour' && lines.length) { const ln = lines.reduce((p, q) => (q.length > p.length ? q : p)); const p = ln[Math.floor(ln.length * 0.37)]; want(p[0], p[1], String(Number(lv.toFixed(2))), col, 0, 0, true); }
+              if (c.kind === 'contour' && lines.length) { const ln = longestLine(lines); const p = ln[indexAt(ln, 0.37)]; want(p[0], p[1], String(Number(lv.toFixed(2))), col, 0, 0, true); }
             }
             if (!any) { const why = whyThrows(fn2(c.F, v).bind(null, (xr[0] + xr[1]) / 2 + 0.123), (yr[0] + yr[1]) / 2 + 0.077); if (why) errs.push(why); }
-            if (c.kind === 'implicit' && c.mods.label && any) wantOn(contourLines(F, 0, box2, { nx: 48, ny: 48 }).reduce((p, q) => (q.length > p.length ? q : p)), Number(c.mods.at) || 0.3, c.mods.label, col);
+            if (c.kind === 'implicit' && c.mods.label && any) wantOn(longestLine(contourLines(F, 0, box2, { nx: 48, ny: 48 })), Number(c.mods.at) || 0.3, c.mods.label, col);
           } else if (c.kind === 'slope') {
-            const F = quiet2(fn2(c.F, v));
+            // 斜率无穷的地方（竖的）留给 slopeMarks 认，不压成没定义
+            const F = (() => { const g = fn2(c.F, v); return (x, y) => { try { return g(x, y); } catch { return NaN; } }; })();
             const aspect = ((H - MT - MB) / (yr[1] - yr[0])) / ((W - ML - MR) / (xr[1] - xr[0]));
             const marks = slopeMarks(F, box2, { nx: Number(c.mods.n) || 21, ny: Math.round((Number(c.mods.n) || 21) * (H - MT - MB) / (W - ML - MR)), aspect });
             if (!marks.length) { const why = whyThrows(fn2(c.F, v).bind(null, 0.123), 0.077); if (why) errs.push(why); }
@@ -397,9 +404,12 @@ export function createGraph(container, src, opts = {}) {
             if (c.mods.label) want(from[0] + d[0], from[1] + d[1], c.mods.label, vc, 14, -14);
           } else if (c.kind === 'region') {
             const rc = color(c, 'var(--yellow)');
+            if (c.mods.hide) continue; // 只起名字（给 strip 用）、不画
             if (c.shape === 'where') {
               const C2 = fn2(c.cond, v), n = coarse ? 48 : 96;
-              const runs = whereRuns((x, y) => C2(x, y) !== 0, box2, { nx: n, ny: Math.round(n * (H - MT - MB) / (W - ML - MR)) });
+              const wr = c.within ? regionOf(c.within) : null;
+              const inD = wr ? inTyped(wr.shape, fnOf(wr.lo, v, wr.param), fnOf(wr.hi, v, wr.param), wr.a(v), wr.b(v)) : () => true;
+              const runs = whereRuns((x, y) => inD(x, y) && C2(x, y) !== 0, box2, { nx: n, ny: Math.round(n * (H - MT - MB) / (W - ML - MR)) });
               if (runs.length) el('path', { d: runs.map((r) => `M${X(r.x0).toFixed(1)},${Y(r.y1).toFixed(1)}H${X(r.x1).toFixed(1)}V${Y(r.y0).toFixed(1)}H${X(r.x0).toFixed(1)}Z`).join(''), class: 'g-shade g-where' }, plotG).style.fill = rc;
               else { const why = whyThrows(C2.bind(null, 0.123), 0.077); if (why) errs.push(why); }
             } else {
@@ -426,6 +436,9 @@ export function createGraph(container, src, opts = {}) {
           } else if (c.kind === 'point') {
             const [px, py] = c.at(v);
             const pc = color(c, 'var(--chalk)');
+            // 跑到窗口外面的点不画（以前压在边上、名字挤在角上，看着像那里真有一个点）；贴着边的照旧
+            const mx = (xr[1] - xr[0]) * 0.03, my = (yr[1] - yr[0]) * 0.03;
+            if (!(px >= xr[0] - mx && px <= xr[1] + mx && py >= yr[0] - my && py <= yr[1] + my)) continue;
             if (c.mods.hollow) el('circle', { cx: X(px), cy: clampY(py), r: 6, class: 'g-dot is-hollow' }, top).style.stroke = pc;
             else el('circle', { cx: X(px), cy: clampY(py), r: 6, class: 'pt' }, top).style.fill = pc;
             if (c.mods.label) want(px, py, c.mods.label, pc, 12 + labelSize(c.mods.label).w / 2, -14);
@@ -664,6 +677,8 @@ export function createGraph(container, src, opts = {}) {
     return p;
   }
 
+  // 滑块旁边的数：松手以后写成分数，但分母大的（θ = 6.28 写成 157/25）不如小数好认
+  const sText = (x, moving) => { const t = sliderText(x, moving), m = /\/(\d+)$/.exec(t); return m && Number(m[1]) > 12 ? String(Math.round(x * 100) / 100) : t; };
   // 滑块（行上记下命令序号：highlight 这条 slider 时让这一行闪）
   for (const [i, c] of cmds.entries()) {
     if (c.kind !== 'slider') continue;
@@ -673,7 +688,7 @@ export function createGraph(container, src, opts = {}) {
     row.innerHTML = `${c.mods.play ? '<button type="button" class="btn btn-sm btn-play">▶</button>' : ''}<span class="coef-name">${c.mods.label ? escapeHtml(c.mods.label) : tex2html(c.name)}</span><input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.init}" aria-label="${escapeHtml(c.name)}"><output></output>`;
     const input = row.querySelector('input');
     const out = row.querySelector('output');
-    const sync = (moving = false) => { input.value = state.slider[c.name]; out.textContent = sliderText(state.slider[c.name], moving); };
+    const sync = (moving = false) => { input.value = state.slider[c.name]; out.textContent = sText(state.slider[c.name], moving); };
     // 学生自己拖滑块时，停下正在播放的动画；拖着的时候读数写小数，松手再写成分数
     input.addEventListener('input', () => { ctl.stop(c.name); state.slider[c.name] = Number(input.value); sync(true); draw(); });
     input.addEventListener('change', () => sync(false));
@@ -726,6 +741,9 @@ export function createGraph(container, src, opts = {}) {
     get lonelyAfter() { return !hasTasks && cmds.some((c) => c.mods.after || c.mods.before); },
     // 现在做到哪了：黑板现状、板边助教读
     tasks() { return { goals: `${state.goalsHit.size}/${goalIdx.length}`, picks: pickIdx.map((i) => { const st = state.picks.get(i); return { q: cmds[i].q, picked: st.pts.map(fmt), tries: st.tries, done: st.done, ...(st.giveup ? { giveup: true } : {}) }; }) }; },
+    // 实际的窗口（等比例的图会放宽一边、画布的高跟着变）和数学坐标 → viewBox 坐标：检查脚本、以后的标注用
+    view() { return { xr: [...xr], yr: [...yr], w: W, h: H }; },
+    toView: (x, y) => [X(x), Y(y)],
     animate: ctl.animate,
     on: ctl.on,
     snapshot() { return ctl.withTargets(() => { try { const v = env(); const o = {}; for (const c of cmds) if (c.kind === 'let' || c.kind === 'slider') o[c.name] = v[c.name]; return o; } catch { return {}; } }); },
