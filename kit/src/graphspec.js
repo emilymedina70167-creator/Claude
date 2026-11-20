@@ -19,9 +19,11 @@ import { parseDef, makeDefs, addDef, compileWith, expandSrc } from './fx/defs.js
 import { evaluate } from './expr.js';
 import { diffAst } from './fx/diff.js';
 
-export const CMDS = ['let', 'slider', 'plot', 'shade', 'bars', 'point', 'vline', 'hline', 'segment', 'text', 'show', 'area', 'riemann', 'tangent', 'secant', 'dots', 'goal', 'pick'];
+export const CMDS = ['let', 'slider', 'plot', 'shade', 'bars', 'point', 'vline', 'hline', 'segment', 'text', 'show', 'area', 'riemann', 'tangent', 'secant', 'dots', 'goal', 'pick',
+  // 平面上两个变量的（第 2 批）：参数曲线、极坐标、隐函数、等高线、方向场、向量场、解曲线、箭头、区域、区域里的一条
+  'param', 'polar', 'implicit', 'contour', 'slope', 'field', 'flow', 'vector', 'region', 'strip'];
 // 这几个修饰只有函数图有，而且各管各的命令（别处它们是普通的名字：let mid = 1 以后 shade x^2 a mid 的 mid 是上限）
-const OWN_FLAGS = { riemann: ['left', 'right', 'mid'], point: ['hollow'], dots: ['join'] };
+const OWN_FLAGS = { riemann: ['left', 'right', 'mid'], point: ['hollow'], dots: ['join'], param: ['fill'], polar: ['fill'] };
 
 // 行尾的修饰：公共的（color= label= dashed……）和这条命令自己的旗标可以混着写，先后不限
 function mods(line, kind) {
@@ -57,6 +59,14 @@ function tail2(s) {
   return w.length >= 3 ? [w.slice(0, -2).join(' '), w[w.length - 2], w[w.length - 1]] : null;
 }
 
+const REGION_EG = 'region 的写法：region y from x^2 to x for x 0 1（X 型）、region x from y to sqrt(y) for y 0 1（Y 型）、region r from 0 to 1 + cos(t) for t 0 2pi（极坐标），或者一个条件 region x + y <= 1；前面可以起名 region D = …';
+// 「左 = 右」→「(左) - (右)」（等值线、约束曲线：等于 0 的地方）。没有等号时：need 为真回 null，否则原样（就是「式子 = 0」）
+function eqToZero(src, need = false) {
+  const parts = String(src).split(/(?<![<>=!])=(?!=)/);
+  if (parts.length === 2 && parts[0].trim() && parts[1].trim()) return `(${parts[0]}) - (${parts[1]})`;
+  return need ? null : src;
+}
+
 // 前面的「名字 = 」（area S = …、riemann S = …）
 function named(body) {
   const m = /^([A-Za-z_]\w*)\s*=(?!=)\s*(.*)$/.exec(body);
@@ -75,7 +85,7 @@ export function parseGraph(src) {
     const line = raw.replace(/\s+#\s.*$/, '').trimEnd();
     if (!line.trim()) continue;
     const c = line.trim().match(re);
-    if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2], { C, num, defs }), srcLine: line.trim() }); last = null; continue; }
+    if (c) { cmds.push({ ...parseCmd(c[1].toLowerCase(), c[2], { C, num, defs, cmds }), srcLine: line.trim() }); last = null; continue; }
     const def = parseDef(line);
     if (def) { addDef(defs, def); last = null; continue; }
     const f = line.match(/^([A-Za-z][\w-]*)\s*[:：]\s?(.*)$/);
@@ -88,7 +98,7 @@ export function parseGraph(src) {
   return { fields, cmds, defs, xr: win(fields.x, [-5, 5]), yr: fields.y ? win(fields.y, null) : null };
 }
 
-function parseCmd(kind, rest, { C, num, defs }) {
+function parseCmd(kind, rest, { C, num, defs, cmds = [] }) {
   if (kind === 'show') {
     // 读数末尾的 after / before：做到以后才显示（或者做到以前显示）；别的修饰读数没有
     const m = /^(.*\S)\s+(after|before)$/i.exec(rest.trim());
@@ -107,7 +117,10 @@ function parseCmd(kind, rest, { C, num, defs }) {
   if (kind === 'let') {
     const m = body.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/);
     if (!m) throw new Error('let 的写法：let 名字 = 表达式');
-    return { kind, name: m[1], expr: C(m[2]), mods: md, ...(md.on ? { onF: C(md.on) } : {}) };
+    // on=：数的把手骑在曲线 y = f(x) 上（onF）；二维的点约束在曲线 G(x, y) = 0 上（onG，能写成「左 = 右」）
+    const is2d = m[2].trim().startsWith('[');
+    const on = md.on ? (is2d ? { onG: C(eqToZero(String(md.on))) } : { onF: C(md.on) }) : {};
+    return { kind, name: m[1], expr: C(m[2]), mods: md, ...on };
   }
   if (kind === 'slider') {
     const m = body.match(/^([A-Za-z_]\w*)\s+(\S+)\s+(\S+)(?:\s*=\s*(\S+))?$/);
@@ -158,6 +171,63 @@ function parseCmd(kind, rest, { C, num, defs }) {
     const m = w.length === 3 && /^[A-Za-z_]\w*$/.test(w[0]) ? [null, ...w] : null;
     if (!m) throw new Error(kind === 'bars' ? 'bars 的写法：bars binompmf(k, 10, 0.3) for k 0 10' : 'dots 的写法：dots 1 + 1/n for n 1 30');
     return { kind, f: C(what), param: m[1], from: C(m[2]), to: C(m[3]), mods: md };
+  }
+  if (kind === 'param' || kind === 'polar') {
+    const [what, range] = body.split(/\s+for\s+/);
+    const w = words(range || '');
+    if (w.length !== 3 || !/^[A-Za-z_]\w*$/.test(w[0])) throw new Error(kind === 'param' ? 'param 的写法：param [cos(t), sin(t)] for t 0 2pi（参数是弧度）' : 'polar 的写法：polar 1 + cos(t) for t 0 2pi（r 写成 t 的式子，t 是弧度）');
+    const base = { kind, param: w[0], from: C(w[1]), to: C(w[2]), mods: md };
+    return kind === 'param' ? { ...base, p: C(what) } : { ...base, r: C(what) };
+  }
+  if (kind === 'implicit') {
+    const z = eqToZero(body, true);
+    if (!z) throw new Error('implicit 的写法：implicit x^2 + y^2 = 4（一个含 x、y 的等式）');
+    return { kind, F: C(z), mods: md };
+  }
+  if (kind === 'contour') {
+    const m = body.match(/^(.*\S)\s+at\s+(.+)$/);
+    if (!m) throw new Error('contour 的写法：contour x^2 + 2y^2 at 1, 3, 6（等高线取哪几个值）');
+    const each = splitTop(m[2]).map((x) => C(x));
+    const levels = (vars = {}) => {
+      const out = each.flatMap((f) => { const v = f(vars); return Array.isArray(v) ? v : [v]; });
+      if (out.some((x) => typeof x !== 'number')) throw new Error('contour 的值要是数');
+      if (out.length > 12) throw new Error(`contour 最多 12 条（现在 ${out.length} 条）`);
+      return out;
+    };
+    return { kind, F: C(m[1]), levels, mods: md };
+  }
+  if (kind === 'slope') return { kind, F: C(body), mods: md };
+  if (kind === 'field' || kind === 'flow') {
+    const fm = kind === 'flow' ? body.match(/^(.*\S)\s+from\s+(.+)$/) : null;
+    if (kind === 'flow' && !fm) throw new Error('flow 的写法：flow y - x from [0, 2]（过这一点的解曲线 y′ = …），或者 flow [-y, x] from [1, 0]（沿向量场的流线）');
+    const what = (fm ? fm[1] : body).trim();
+    const pair = /^\[(.*)\]$/.test(what) ? splitTop(what.slice(1, -1)) : [];
+    if (kind === 'field' && pair.length !== 2) throw new Error('field 的写法：field [-y, x]（向量场的两个分量）');
+    const src = pair.length === 2 ? { P: C(pair[0]), Q: C(pair[1]) } : { F: C(what) };
+    return { kind, ...src, ...(fm ? { from: C(fm[2]) } : {}), mods: md };
+  }
+  if (kind === 'vector') {
+    const m = body.match(/^(.*\S)\s+from\s+(.+)$/);
+    return { kind, v: C(m ? m[1] : body), from: m ? C(m[2]) : () => [0, 0], mods: md };
+  }
+  if (kind === 'region') {
+    const { name, rest: r } = named(body);
+    const t = r.match(/^(y|x|r)\s+from\s+(.+?)\s+to\s+(.+?)\s+for\s+([A-Za-z_]\w*)\s+(.+)$/);
+    if (t) {
+      const w = words(t[5]);
+      if (w.length !== 2) throw new Error(REGION_EG);
+      return { kind, name, shape: t[1], lo: C(t[2]), hi: C(t[3]), param: t[4], a: C(w[0]), b: C(w[1]), mods: md };
+    }
+    if (/\sfrom\s/.test(r) || !/[<>]|==|!=/.test(r)) throw new Error(REGION_EG);
+    return { kind, name, shape: 'where', cond: C(r), mods: md };
+  }
+  if (kind === 'strip') {
+    const m = body.match(/^([A-Za-z_]\w*)\s+at\s+(.+)$/);
+    if (!m) throw new Error('strip 的写法：strip D at a（D 是前面起了名字的区域：region D = y from x^2 to x for x 0 1）');
+    const reg = cmds.find((c) => c.kind === 'region' && c.name === m[1]);
+    if (!reg) throw new Error(`strip：没有叫 ${m[1]} 的区域（前面先写 region ${m[1]} = y from … to … for x … …）`);
+    if (reg.shape === 'where') throw new Error(`strip：条件围的区域没有「一条」，区域 ${m[1]} 要写成 y from … to … for x … …`);
+    return { kind, of: m[1], at: C(m[2]), loName: md.lo, hiName: md.hi, mods: md };
   }
   if (kind === 'vline' || kind === 'hline') return { kind, at: C(body), mods: md };
   if (kind === 'point') return { kind, at: C(body), mods: md };

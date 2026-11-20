@@ -152,3 +152,75 @@ test('fillValues：可以换编译函数（函数图用弧度），不传照旧�
   assert.equal(fillValues('{sin(pi/2)}', {}, [], (s) => compile(s)), '$1$');
   assert.equal(fillValues('{sin(90)}', {}, []), '$1$');
 });
+
+// —— 视觉交互第 2 批 Task 4：平面上的命令 ——
+test('equal: on、param、polar', () => {
+  const g = parseGraph('equal: on\nx: -3 3\nparam [cos(t), sin(t)] for t 0 2pi color=blue fill\npolar 1 + cos(t) for t 0 2pi fill');
+  assert.equal(g.fields.equal, 'on');
+  const [p, q] = g.cmds;
+  assert.equal(p.kind, 'param'); assert.equal(p.param, 't'); assert.equal(p.mods.fill, true);
+  near(p.p({ t: 0 })[0], 1); near(p.from({}), 0); near(p.to({}), 2 * Math.PI);
+  assert.equal(q.kind, 'polar'); near(q.r({ t: 0 }), 2); assert.equal(q.mods.fill, true);
+  assert.throws(() => parseGraph('param [cos(t), sin(t)]'), /param 的写法/);
+  assert.throws(() => parseGraph('polar 1 + cos(t)'), /polar 的写法/);
+});
+
+test('implicit、contour', () => {
+  const i = one('implicit x^2 + y^2 = 4 color=pink');
+  assert.equal(i.kind, 'implicit'); assert.equal(i.F({ x: 2, y: 0 }), 0); assert.equal(i.F({ x: 0, y: 0 }), -4);
+  assert.throws(() => parseGraph('implicit x^2 + y^2'), /implicit 的写法/);
+  const g = parseGraph('f(x, y) = x^2 + 2y^2\nlet P = [1, 1] drag\ncontour f(x, y) at 1, 3, f(P)');
+  const c = g.cmds[1];
+  assert.equal(c.kind, 'contour'); assert.equal(c.F({ x: 1, y: 1 }), 3);
+  assert.deepEqual(c.levels({ P: [1, 1] }), [1, 3, 3]);
+  assert.deepEqual(one('contour x*y at [1, 2, 3]').levels({}), [1, 2, 3]); // 一个式子回一串就摊开
+  assert.throws(() => one('contour x*y at 1,2,3,4,5,6,7,8,9,10,11,12,13').levels({}), /最多 12 条/);
+  assert.throws(() => parseGraph('contour x*y'), /contour 的写法/);
+});
+
+test('slope、field、flow、vector', () => {
+  assert.equal(one('slope y - x').F({ x: 1, y: 3 }), 2);
+  const f = one('field [-y, x] color=gray');
+  assert.equal(f.kind, 'field'); assert.equal(f.P({ x: 1, y: 2 }), -2); assert.equal(f.Q({ x: 1, y: 2 }), 1);
+  assert.throws(() => parseGraph('field -y'), /field 的写法/);
+  const a = one('flow y - x from [0, 2] color=yellow');
+  assert.equal(a.kind, 'flow'); assert.equal(a.F({ x: 0, y: 2 }), 2); assert.deepEqual(a.from({}), [0, 2]); assert.equal(a.P, undefined);
+  const b = one('flow [-y, x] from P');
+  assert.equal(b.P({ x: 1, y: 2 }), -2); assert.deepEqual(b.from({ P: [1, 0] }), [1, 0]); assert.equal(b.F, undefined);
+  assert.throws(() => parseGraph('flow y - x'), /flow 的写法/);
+  const v = parseGraph('f(x, y) = x^2 + 2y^2\nvector f_grad(P)/4 from P color=yellow label=∇f').cmds[0];
+  assert.equal(v.kind, 'vector'); assert.deepEqual(v.v({ P: [2, 1] }), [1, 1]); assert.deepEqual(v.from({ P: [2, 1] }), [2, 1]);
+  assert.deepEqual(one('vector [1, 2]').from({}), [0, 0]);
+});
+
+test('region：X 型、Y 型、极坐标、任意条件；能起名字', () => {
+  const r = one('region D = y from x^2 to x for x 0 1 color=yellow');
+  assert.equal(r.kind, 'region'); assert.equal(r.shape, 'y'); assert.equal(r.name, 'D'); assert.equal(r.param, 'x');
+  assert.equal(r.lo({ x: 0.5 }), 0.25); assert.equal(r.hi({ x: 0.5 }), 0.5); assert.equal(r.a({}), 0); assert.equal(r.b({}), 1);
+  const y = one('region x from y to sqrt(y) for y 0 1');
+  assert.equal(y.shape, 'x'); assert.equal(y.param, 'y'); assert.equal(y.hi({ y: 0.25 }), 0.5); assert.equal(y.name, undefined);
+  const p = one('region r from 0 to 1 + cos(t) for t 0 2pi');
+  assert.equal(p.shape, 'r'); assert.equal(p.param, 't'); near(p.hi({ t: 0 }), 2);
+  const w = one('region x + y <= 1');
+  assert.equal(w.shape, 'where'); assert.equal(w.cond({ x: 0.2, y: 0.3 }), 1); assert.equal(w.cond({ x: 1, y: 1 }), 0);
+  assert.equal(one('region E = x^2 + y^2 <= 1').name, 'E');
+  assert.throws(() => parseGraph('region y from x^2 to x'), /region 的写法/);
+});
+
+test('strip：区域里的一条，上下限起名字', () => {
+  const g = parseGraph('region D = y from x^2 to x for x 0 1\nslider a 0 1 = 0.5\nstrip D at a lo=y1 hi=y2');
+  const s = g.cmds[2];
+  assert.equal(s.kind, 'strip'); assert.equal(s.of, 'D'); assert.equal(s.at({ a: 0.5 }), 0.5);
+  assert.equal(s.loName, 'y1'); assert.equal(s.hiName, 'y2');
+  assert.throws(() => parseGraph('strip E at 1'), /没有叫 E 的区域/);
+  assert.throws(() => parseGraph('region E = x + y <= 1\nstrip E at 1'), /条件围的区域没有/);
+  assert.throws(() => parseGraph('region D = y from 0 to 1 for x 0 1\nstrip D'), /strip 的写法/);
+});
+
+test('二维的拖点；on= 约束在曲线上；第 1 批的写法不变', () => {
+  const g = parseGraph('f(x) = x^2\nlet P = [1, 2] drag snap=0.25\nlet Q = [2, 1] drag on="x + y = 3"\nlet a = 1 drag on=f(x)\nlet R = [0, 1] drag on=x^2+y^2-1');
+  assert.equal(g.cmds[0].mods.drag, true); assert.equal(g.cmds[0].onG, undefined);
+  assert.equal(g.cmds[1].onG({ x: 1, y: 2 }), 0); assert.equal(g.cmds[1].onG({ x: 1, y: 1 }), -1);
+  assert.equal(g.cmds[2].onF({ x: 3 }), 9); assert.equal(g.cmds[2].onG, undefined);
+  assert.equal(g.cmds[3].onG({ x: 1, y: 0 }), 0); assert.equal(g.cmds[3].onF, undefined);
+});
